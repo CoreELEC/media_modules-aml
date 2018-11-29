@@ -279,7 +279,7 @@ static unsigned int force_sliding_margin;
 		bit[15:8]: the max count of skip frames after first I
 	3, start playing from IDR
 */
-static unsigned int first_i_policy = (15 << 8) | 2;
+static unsigned int first_i_policy = 1;
 
 /*
 	fast_output_enable:
@@ -6606,6 +6606,8 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw)
 
 	if (i_only_flag & 0x100)
 		hw->i_only = i_only_flag & 0xff;
+	if (hw->i_only)
+		hw->dpb.first_insert_frame = FirstInsertFrm_SKIPDONE;
 
 	if ((unsigned long) hw->vh264_amstream_dec_info.param
 		& 0x08)
