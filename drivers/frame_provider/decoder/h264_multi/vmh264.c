@@ -319,7 +319,7 @@ static unsigned int frmbase_cont_bitlevel2 = 0x1;
 	0x20000: vdec dw horizotal/vertical  1/2
 */
 static u32 double_write_mode;
-
+static u32 without_display_mode;
 #define IS_VDEC_DW(hw)  (hw->double_write_mode >> 16 & 0xf)
 
 static void vmh264_dump_state(struct vdec_s *vdec);
@@ -2715,8 +2715,11 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		hw->vf_pre_count++;
 		vdec->vdec_fps_detec(vdec->id);
-		vf_notify_receiver(vdec->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+		if (without_display_mode == 0) {
+			vf_notify_receiver(vdec->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+		} else
+			vh264_vf_put(vh264_vf_get(vdec), vdec);
 	}
 	if (dpb_is_debug(DECODE_ID(hw),
 		PRINT_FLAG_DUMP_BUFSPEC))
@@ -9195,6 +9198,10 @@ MODULE_PARM_DESC(double_write_mode, "\n double_write_mode\n");
 
 module_param(mem_map_mode, uint, 0664);
 MODULE_PARM_DESC(mem_map_mode, "\n mem_map_mode\n");
+
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
+
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);

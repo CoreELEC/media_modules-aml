@@ -112,6 +112,8 @@ static u32 udebug_flag;
 static unsigned int radr;
 static unsigned int rval;
 
+static u32 without_display_mode;
+
 #define VMPEG12_DEV_NUM        9
 static unsigned int max_decode_instance_num = VMPEG12_DEV_NUM;
 static unsigned int max_process_time[VMPEG12_DEV_NUM];
@@ -1331,8 +1333,14 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				hw->mm_blk_handle, index);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
-			vf_notify_receiver(vdec->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			if (without_display_mode == 0) {
+				vf_notify_receiver(vdec->vf_provider_name,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY,
+					NULL);
+			} else
+				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
+
+
 		}
 	}
 	return 0;
@@ -2785,10 +2793,15 @@ module_param_array(max_process_time, uint, &max_decode_instance_num, 0664);
 module_param(udebug_flag, uint, 0664);
 MODULE_PARM_DESC(udebug_flag, "\n ammvdec_mpeg12 udebug_flag\n");
 
+
 #ifdef AGAIN_HAS_THRESHOLD
 module_param(again_threshold, uint, 0664);
 MODULE_PARM_DESC(again_threshold, "\n again_threshold\n");
 #endif
+
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n ammvdec_mpeg12 without_display_mode\n");
+
 
 module_init(ammvdec_mpeg12_driver_init_module);
 module_exit(ammvdec_mpeg12_driver_remove_module);

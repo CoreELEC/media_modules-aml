@@ -266,6 +266,7 @@ static u32 again_threshold;
  *	0x300, if > 720p, use mode 4, else use mode 1;
  */
 static u32 double_write_mode;
+static u32 without_display_mode;
 
 #define DRIVER_NAME "amvdec_avs2"
 #define MODULE_NAME "amvdec_avs2"
@@ -4584,8 +4585,11 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			vdec_count_info(gvs, 0, stream_offset);
 	#endif
 			hw_to_vdec(dec)->vdec_fps_detec(hw_to_vdec(dec)->id);
-			vf_notify_receiver(dec->provider_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			if (without_display_mode == 0) {
+				vf_notify_receiver(dec->provider_name,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			} else
+				vavs2_vf_put(vavs2_vf_get(dec), dec);
 		}
 	}
 /*!NO_DISPLAY*/
@@ -7772,6 +7776,9 @@ MODULE_PARM_DESC(again_threshold, "\n again_threshold\n");
 module_param(force_disp_pic_index, int, 0664);
 MODULE_PARM_DESC(force_disp_pic_index,
 	"\n amvdec_h265 force_disp_pic_index\n");
+
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
 
 module_init(amvdec_avs2_driver_init_module);
 module_exit(amvdec_avs2_driver_remove_module);

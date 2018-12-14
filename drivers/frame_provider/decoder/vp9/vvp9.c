@@ -393,6 +393,8 @@ static u32 udebug_pause_val;
 
 static u32 udebug_pause_decode_idx;
 
+static u32 without_display_mode;
+
 #define DEBUG_REG
 #ifdef DEBUG_REG
 void WRITE_VREG_DBG2(unsigned int adr, unsigned int val)
@@ -6977,8 +6979,11 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vdec_count_info(gvs, 0, stream_offset);
 #endif
 			hw_to_vdec(pbi)->vdec_fps_detec(hw_to_vdec(pbi)->id);
-			vf_notify_receiver(pbi->provider_name,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			if (without_display_mode == 0) {
+				vf_notify_receiver(pbi->provider_name,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			} else
+				vvp9_vf_put(vvp9_vf_get(pbi), pbi);
 		} else {
 			pbi->stat |= VP9_TRIGGER_FRAME_DONE;
 			hevc_source_changed(VFORMAT_VP9, 196, 196, 30);
@@ -10552,6 +10557,9 @@ MODULE_PARM_DESC(udebug_pause_val, "\n udebug_pause_val\n");
 
 module_param(udebug_pause_decode_idx, uint, 0664);
 MODULE_PARM_DESC(udebug_pause_decode_idx, "\n udebug_pause_decode_idx\n");
+
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
 
 module_init(amvdec_vp9_driver_init_module);
 module_exit(amvdec_vp9_driver_remove_module);

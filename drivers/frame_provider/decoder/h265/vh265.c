@@ -535,6 +535,8 @@ static DEFINE_MUTEX(vh265_log_mutex);
 
 static struct vdec_info *gvs;
 
+static u32 without_display_mode;
+
 /**************************************************
  *
  *h265 buffer management include
@@ -8704,8 +8706,12 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		vdec_count_info(gvs, 0, stream_offset);
 #endif
 		hw_to_vdec(hevc)->vdec_fps_detec(hw_to_vdec(hevc)->id);
-		vf_notify_receiver(hevc->provider_name,
+		if (without_display_mode == 0) {
+			vf_notify_receiver(hevc->provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+		}
+		else
+			vh265_vf_put(vh265_vf_get(vdec), vdec);
 	}
 
 	return 0;
@@ -13016,6 +13022,8 @@ MODULE_PARM_DESC(disp_vframe_valve_level, "\n disp_vframe_valve_level\n");
 module_param(pic_list_debug, uint, 0664);
 MODULE_PARM_DESC(pic_list_debug, "\n pic_list_debug\n");
 
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n amvdec_h265 without_display_mode\n");
 
 module_init(amvdec_h265_driver_init_module);
 module_exit(amvdec_h265_driver_remove_module);

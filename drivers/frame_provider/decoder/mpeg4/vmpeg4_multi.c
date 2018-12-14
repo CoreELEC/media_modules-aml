@@ -147,6 +147,8 @@ static unsigned int max_decode_instance_num = VMPEG4_DEV_NUM;
 static unsigned int max_process_time[VMPEG4_DEV_NUM];
 static unsigned int decode_timeout_val = 100;
 
+static u32 without_display_mode;
+
 #undef pr_info
 #define pr_info printk
 unsigned int mpeg4_debug_mask = 0xff;
@@ -528,8 +530,11 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 			vdec->vdec_fps_detec(vdec->id);
 			hw->frame_num++;
-			vf_notify_receiver(vdec->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			if (without_display_mode == 0) {
+				vf_notify_receiver(vdec->vf_provider_name,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			} else
+				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 		}
 
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
@@ -576,8 +581,11 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vdec->vdec_fps_detec(vdec->id);
 			decoder_do_frame_check(vdec, vf);
 			hw->frame_num++;
-			vf_notify_receiver(vdec->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			if (without_display_mode == 0) {
+				vf_notify_receiver(vdec->vf_provider_name,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			} else
+				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 		}
 	} else {
 		/* progressive */
@@ -629,8 +637,12 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vdec->vdec_fps_detec(vdec->id);
 			decoder_do_frame_check(vdec, vf);
 			hw->frame_num++;
-			vf_notify_receiver(vdec->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+
+			if (without_display_mode == 0) {
+				vf_notify_receiver(vdec->vf_provider_name,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			} else
+				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 		}
 
 	}
@@ -2237,6 +2249,10 @@ MODULE_PARM_DESC(pre_decode_buf_level,
 
 module_param(udebug_flag, uint, 0664);
 MODULE_PARM_DESC(udebug_flag, "\n ammvdec_mpeg4 udebug_flag\n");
+
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n ammvdec_mpeg4 without_display_mode\n");
+
 module_init(ammvdec_mpeg4_driver_init_module);
 module_exit(ammvdec_mpeg4_driver_remove_module);
 

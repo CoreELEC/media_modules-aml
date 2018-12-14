@@ -95,6 +95,7 @@ static int vmjpeg_vf_states(struct vframe_states *states, void *);
 static int vmjpeg_event_cb(int type, void *data, void *private_data);
 static void vmjpeg_work(struct work_struct *work);
 static int pre_decode_buf_level = 0x800;
+static u32 without_display_mode;
 #undef pr_info
 #define pr_info printk
 unsigned int mmjpeg_debug_mask = 0xff;
@@ -316,9 +317,12 @@ static irqreturn_t vmjpeg_isr(struct vdec_s *vdec, int irq)
 	__func__, hw->frame_num,
 	vf->pts, vf->pts_us64, vf->duration);
 	vdec->vdec_fps_detec(vdec->id);
-	vf_notify_receiver(vdec->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY,
-			NULL);
+	if (without_display_mode == 0) {
+		vf_notify_receiver(vdec->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY,
+				NULL);
+	} else
+		vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
 
 	hw->dec_result = DEC_RESULT_DONE;
 
@@ -1316,6 +1320,9 @@ MODULE_PARM_DESC(radr, "\nradr\n");
 
 module_param(rval, uint, 0664);
 MODULE_PARM_DESC(rval, "\nrval\n");
+
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
 
 module_init(ammvdec_mjpeg_driver_init_module);
 module_exit(ammvdec_mjpeg_driver_remove_module);
