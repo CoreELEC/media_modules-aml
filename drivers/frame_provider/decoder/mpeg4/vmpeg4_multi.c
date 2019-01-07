@@ -2090,16 +2090,32 @@ static int ammvdec_mpeg4_remove(struct platform_device *pdev)
 }
 
 /****************************************/
+#ifdef CONFIG_PM
+static int mmpeg4_suspend(struct device *dev)
+{
+	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
+	return 0;
+}
+
+static int mmpeg4_resume(struct device *dev)
+{
+	amvdec_resume(to_platform_device(dev));
+	return 0;
+}
+
+static const struct dev_pm_ops mmpeg4_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(mmpeg4_suspend, mmpeg4_resume)
+};
+#endif
 
 static struct platform_driver ammvdec_mpeg4_driver = {
 	.probe = ammvdec_mpeg4_probe,
 	.remove = ammvdec_mpeg4_remove,
-#ifdef CONFIG_PM
-	.suspend = amvdec_suspend,
-	.resume = amvdec_resume,
-#endif
 	.driver = {
 		.name = DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &mmpeg4_pm_ops,
+#endif
 	}
 };
 

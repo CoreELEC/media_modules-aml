@@ -1001,16 +1001,32 @@ static int amvdec_real_remove(struct platform_device *pdev)
 }
 
 /****************************************/
+#ifdef CONFIG_PM
+static int real_suspend(struct device *dev)
+{
+	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
+	return 0;
+}
+
+static int real_resume(struct device *dev)
+{
+	amvdec_resume(to_platform_device(dev));
+	return 0;
+}
+
+static const struct dev_pm_ops real_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(real_suspend, real_resume)
+};
+#endif
 
 static struct platform_driver amvdec_real_driver = {
 	.probe = amvdec_real_probe,
 	.remove = amvdec_real_remove,
-#ifdef CONFIG_PM
-	.suspend = amvdec_suspend,
-	.resume = amvdec_resume,
-#endif
 	.driver = {
 		.name = DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &real_pm_ops,
+#endif
 	}
 };
 

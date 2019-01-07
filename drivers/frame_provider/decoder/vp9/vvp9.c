@@ -8402,16 +8402,32 @@ static int amvdec_vp9_remove(struct platform_device *pdev)
 }
 
 /****************************************/
+#ifdef CONFIG_PM
+static int vp9_suspend(struct device *dev)
+{
+	amhevc_suspend(to_platform_device(dev), dev->power.power_state);
+	return 0;
+}
+
+static int vp9_resume(struct device *dev)
+{
+	amhevc_resume(to_platform_device(dev));
+	return 0;
+}
+
+static const struct dev_pm_ops vp9_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(vp9_suspend, vp9_resume)
+};
+#endif
 
 static struct platform_driver amvdec_vp9_driver = {
 	.probe = amvdec_vp9_probe,
 	.remove = amvdec_vp9_remove,
-#ifdef CONFIG_PM
-	.suspend = amhevc_suspend,
-	.resume = amhevc_resume,
-#endif
 	.driver = {
 		.name = DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &vp9_pm_ops,
+#endif
 	}
 };
 
@@ -9514,12 +9530,11 @@ static int ammvdec_vp9_remove(struct platform_device *pdev)
 static struct platform_driver ammvdec_vp9_driver = {
 	.probe = ammvdec_vp9_probe,
 	.remove = ammvdec_vp9_remove,
-#ifdef CONFIG_PM
-	.suspend = amhevc_suspend,
-	.resume = amhevc_resume,
-#endif
 	.driver = {
 		.name = MULTI_DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &vp9_pm_ops,
+#endif
 	}
 };
 #endif

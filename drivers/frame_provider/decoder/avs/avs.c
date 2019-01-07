@@ -1818,12 +1818,32 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 }
 
 /****************************************/
+#ifdef CONFIG_PM
+static int avs_suspend(struct device *dev)
+{
+	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
+	return 0;
+}
+
+static int avs_resume(struct device *dev)
+{
+	amvdec_resume(to_platform_device(dev));
+	return 0;
+}
+
+static const struct dev_pm_ops avs_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(avs_suspend, avs_resume)
+};
+#endif
 
 static struct platform_driver amvdec_avs_driver = {
 	.probe = amvdec_avs_probe,
 	.remove = amvdec_avs_remove,
 	.driver = {
 		.name = DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &avs_pm_ops,
+#endif
 	}
 };
 

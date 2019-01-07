@@ -2155,16 +2155,32 @@ static int amvdec_mpeg12_remove(struct platform_device *pdev)
 }
 
 /****************************************/
+#ifdef CONFIG_PM
+static int mpeg12_suspend(struct device *dev)
+{
+	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
+	return 0;
+}
+
+static int mpeg12_resume(struct device *dev)
+{
+	amvdec_resume(to_platform_device(dev));
+	return 0;
+}
+
+static const struct dev_pm_ops mpeg12_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(mpeg12_suspend, mpeg12_resume)
+};
+#endif
 
 static struct platform_driver amvdec_mpeg12_driver = {
 	.probe = amvdec_mpeg12_probe,
 	.remove = amvdec_mpeg12_remove,
-#ifdef CONFIG_PM
-	.suspend = amvdec_suspend,
-	.resume = amvdec_resume,
-#endif
 	.driver = {
 		.name = DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &mpeg12_pm_ops,
+#endif
 	}
 };
 
