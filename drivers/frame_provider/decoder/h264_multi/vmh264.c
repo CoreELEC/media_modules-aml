@@ -2496,7 +2496,7 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			|| (frame->is_used == 2 && frame->bottom_field))) {
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
 				"%s Error  frame_num %d  used %d\n",
-					frame->frame_num, frame->is_used);
+				__func__, frame->frame_num, frame->is_used);
 			frame->data_flag |= ERROR_FLAG;
 	}
 
@@ -8865,16 +8865,32 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 }
 
 /****************************************/
+#ifdef CONFIG_PM
+static int mh264_suspend(struct device *dev)
+{
+	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
+	return 0;
+}
+
+static int mh264_resume(struct device *dev)
+{
+	amvdec_resume(to_platform_device(dev));
+	return 0;
+}
+
+static const struct dev_pm_ops mh264_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(mh264_suspend, mh264_resume)
+};
+#endif
 
 static struct platform_driver ammvdec_h264_driver = {
 	.probe = ammvdec_h264_probe,
 	.remove = ammvdec_h264_remove,
-#ifdef CONFIG_PM
-	.suspend = amvdec_suspend,
-	.resume = amvdec_resume,
-#endif
 	.driver = {
 		.name = DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &mh264_pm_ops,
+#endif
 	}
 };
 

@@ -11965,16 +11965,32 @@ static int amvdec_h265_remove(struct platform_device *pdev)
 	return 0;
 }
 /****************************************/
+#ifdef CONFIG_PM
+static int h265_suspend(struct device *dev)
+{
+	amhevc_suspend(to_platform_device(dev), dev->power.power_state);
+	return 0;
+}
+
+static int h265_resume(struct device *dev)
+{
+	amhevc_resume(to_platform_device(dev));
+	return 0;
+}
+
+static const struct dev_pm_ops h265_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(h265_suspend, h265_resume)
+};
+#endif
 
 static struct platform_driver amvdec_h265_driver = {
 	.probe = amvdec_h265_probe,
 	.remove = amvdec_h265_remove,
-#ifdef CONFIG_PM
-	.suspend = amhevc_suspend,
-	.resume = amhevc_resume,
-#endif
 	.driver = {
 		.name = DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &h265_pm_ops,
+#endif
 	}
 };
 
@@ -12393,12 +12409,11 @@ static int ammvdec_h265_remove(struct platform_device *pdev)
 static struct platform_driver ammvdec_h265_driver = {
 	.probe = ammvdec_h265_probe,
 	.remove = ammvdec_h265_remove,
-#ifdef CONFIG_PM
-	.suspend = amhevc_suspend,
-	.resume = amhevc_resume,
-#endif
 	.driver = {
 		.name = MULTI_DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &h265_pm_ops,
+#endif
 	}
 };
 #endif
