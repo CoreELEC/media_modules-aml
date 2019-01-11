@@ -809,7 +809,6 @@ struct vdec_h264_hw_s {
 	int wait_for_udr_send;
 #endif
 	u32 no_mem_count;
-	u32 canvas_mode;
 	bool is_used_v4l;
 	void *v4l2_ctx;
 	wait_queue_head_t wait_q;
@@ -1660,7 +1659,7 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i)
 	hw->buffer_spec[i].canvas_config[0].height =
 		hw->mb_height << 4;
 	hw->buffer_spec[i].canvas_config[0].block_mode =
-		hw->canvas_mode;
+		CANVAS_BLKMODE_32X32;
 
 	hw->buffer_spec[i].canvas_config[1].phy_addr =
 			hw->buffer_spec[i].u_addr;
@@ -1669,7 +1668,7 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i)
 	hw->buffer_spec[i].canvas_config[1].height =
 			hw->mb_height << 3;
 	hw->buffer_spec[i].canvas_config[1].block_mode =
-			hw->canvas_mode;
+			CANVAS_BLKMODE_32X32;
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 	"%s, alloc buf for bufspec%d\n",
 			__func__, i
@@ -1827,13 +1826,8 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 
 static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 {
-	int endian = 0;
-	int blkmode =  ((hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ||
-		hw->is_used_v4l) ? CANVAS_BLKMODE_LINEAR :
+	int blkmode =  hw->is_used_v4l ? CANVAS_BLKMODE_LINEAR :
 			CANVAS_BLKMODE_32X32;
-	if (blkmode == CANVAS_BLKMODE_LINEAR)
-		endian = 7;
-
 	canvas_config_ex(hw->buffer_spec[i].
 		y_canvas_index,
 		hw->buffer_spec[i].y_addr,
@@ -1841,7 +1835,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		hw->mb_height << 4,
 		CANVAS_ADDR_NOWRAP,
 		blkmode,
-		endian);
+		hw->is_used_v4l ? 7 : 0);
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) | /* canvas_blk32_wr */
@@ -1858,7 +1852,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		hw->mb_height << 3,
 		CANVAS_ADDR_NOWRAP,
 		blkmode,
-		endian);
+		hw->is_used_v4l ? 7 : 0);
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) |
@@ -2562,13 +2556,6 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 					VIDTYPE_INTERLACE_BOTTOM :
 					VIDTYPE_INTERLACE_TOP);
 			vf->duration = vf->duration/2;
-		}
-
-		if (i == 0) {
-			if (hw->mmu_enable)
-				decoder_do_frame_check(vf, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
-			else
-				decoder_do_frame_check(vf, CORE_MASK_VDEC_1);
 		}
 
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
@@ -7672,8 +7659,6 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	/* the ctx from v4l2 driver. */
 	hw->v4l2_ctx = pdata->private;
-
-	hw->canvas_mode = pdata->canvas_mode;
 
 	platform_set_drvdata(pdev, pdata);
 

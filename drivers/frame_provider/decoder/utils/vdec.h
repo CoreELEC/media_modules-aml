@@ -32,7 +32,6 @@
 /*#define CONFIG_AM_VDEC_DV*/
 
 #include "vdec_input.h"
-#include "frame_check.h"
 
 s32 vdec_dev_register(void);
 s32 vdec_dev_unregister(void);
@@ -43,8 +42,6 @@ int hevc_source_changed(int format, int width, int height, int fps);
 struct device *get_vdec_device(void);
 int vdec_module_init(void);
 void vdec_module_exit(void);
-
-#define MAX_INSTANCE_MUN  9
 
 #define VDEC_DEBUG_SUPPORT
 
@@ -183,7 +180,6 @@ struct vdec_s {
 	int flag;
 	int sched;
 	int need_more_data;
-	u32 canvas_mode;
 
 	struct completion inactive_done;
 
@@ -200,8 +196,6 @@ struct vdec_s {
 
 	/* input */
 	struct vdec_input_s input;
-
-	struct pic_check_mgr_t vfc;
 
 	/* mc cache */
 	u32 mc[4096 * 4];
@@ -436,9 +430,5 @@ unsigned char is_mult_inc(unsigned int);
 int vdec_get_status(struct vdec_s *vdec);
 
 void vdec_set_timestamp(struct vdec_s *vdec, u64 timestamp);
-
-struct vdec_s *vdec_get_with_id(unsigned id);
-
-void *vdec_get_active_vfc(int core_mask);
 
 #endif				/* VDEC_H */
