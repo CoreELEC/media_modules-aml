@@ -62,6 +62,9 @@
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/crc32.h>
 
+#include <trace/events/meson_atrace.h>
+
+
 #undef pr_info
 #define pr_info printk
 #define VDEC_DW
@@ -2660,7 +2663,7 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 				decoder_do_frame_check(hw_to_vdec(hw), vf);
 		}
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-
+		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		hw->vf_pre_count++;
 		vdec->vdec_fps_detec(vdec->id);
 		vf_notify_receiver(vdec->vf_provider_name,
@@ -2698,6 +2701,8 @@ int notify_v4l_eos(struct vdec_s *vdec)
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
 
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+
+		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 

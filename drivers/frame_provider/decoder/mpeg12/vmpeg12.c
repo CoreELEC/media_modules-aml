@@ -43,6 +43,9 @@
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/amlogic/tee.h>
 
+#include <trace/events/meson_atrace.h>
+
+
 #ifdef CONFIG_AM_VDEC_MPEG12_LOG
 #define AMLOG
 #define LOG_LEVEL_VAR       amlog_level_vmpeg
@@ -1000,6 +1003,7 @@ static irqreturn_t vmpeg12_isr(int irq, void *dev_id)
 						index);
 				kfifo_put(&display_q,
 						  (const struct vframe_s *)vf);
+				ATRACE_COUNTER(MODULE_NAME, vf->pts);
 				vf_notify_receiver(PROVIDER_NAME,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY,
 					NULL);
@@ -1085,6 +1089,7 @@ static irqreturn_t vmpeg12_isr(int irq, void *dev_id)
 						index);
 				kfifo_put(&display_q,
 						  (const struct vframe_s *)vf);
+				ATRACE_COUNTER(MODULE_NAME, vf->pts);
 				vf_notify_receiver(PROVIDER_NAME,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY,
 					NULL);
@@ -1137,6 +1142,7 @@ static irqreturn_t vmpeg12_isr(int irq, void *dev_id)
 						index);
 				kfifo_put(&display_q,
 					(const struct vframe_s *)vf);
+				ATRACE_COUNTER(MODULE_NAME, vf->pts);
 				vf_notify_receiver(PROVIDER_NAME,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY,
 					NULL);
@@ -1177,6 +1183,7 @@ static irqreturn_t vmpeg12_isr(int irq, void *dev_id)
 				} else {
 					kfifo_put(&display_q,
 						(const struct vframe_s *)vf);
+					ATRACE_COUNTER(MODULE_NAME, vf->pts);
 					vf_notify_receiver(PROVIDER_NAME,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY,
 						NULL);
