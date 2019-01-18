@@ -202,6 +202,7 @@ struct vdec_s {
 	/* input */
 	struct vdec_input_s input;
 
+	/*frame check*/
 	struct pic_check_mgr_t vfc;
 
 	/* mc cache */
@@ -441,9 +442,7 @@ int vdec_get_status(struct vdec_s *vdec);
 
 void vdec_set_timestamp(struct vdec_s *vdec, u64 timestamp);
 
-struct vdec_s *vdec_get_with_id(unsigned id);
-
-void *vdec_get_active_vfc(int core_mask);
+struct vdec_s *vdec_get_with_id(unsigned int id);
 
 extern struct vframe_qos_s *vdec_get_qos_info(void);
 #endif				/* VDEC_H */

@@ -249,6 +249,7 @@ struct vdec_mpeg12_hw_s {
 	u32 ratio_control;
 	int frameinfo_enable;
 	struct firmware_s *fw;
+	u32 canvas_mode;
 
 	struct work_struct userdata_push_work;
 	struct mutex userdata_mutex;
@@ -1458,6 +1459,7 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 				debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
 							"cpts=%d,pts64=%lld\n",
 				vf->pts, vf->pts_us64);
+				decoder_do_frame_check(hw_to_vdec(hw), vf);
 				kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 				hw->frame_num++;
@@ -1524,6 +1526,7 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 			"cpts0=%d,pts64=%lld,dur=%d, index %d , use %d\n",
 				vf->pts, vf->pts_us64, vf->duration,
 				vf->index, hw->vfbuf_use[index]);
+				decoder_do_frame_check(hw_to_vdec(hw), vf);
 				kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 				hw->frame_num++;
@@ -1971,7 +1974,9 @@ static void vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 			hw->canvas_config[i][0].height =
 			canvas_height;
 			hw->canvas_config[i][0].block_mode =
-			CANVAS_BLKMODE_32X32;
+				hw->canvas_mode;
+			hw->canvas_config[i][0].endian =
+				(hw->canvas_mode == CANVAS_BLKMODE_LINEAR)?7:0;
 
 			canvas_config_config(canvas_y(canvas),
 			&hw->canvas_config[i][0]);
@@ -1983,7 +1988,9 @@ static void vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 			hw->canvas_config[i][1].height =
 			canvas_height / 2;
 			hw->canvas_config[i][1].block_mode =
-			CANVAS_BLKMODE_32X32;
+				hw->canvas_mode;
+			hw->canvas_config[i][0].endian =
+				(hw->canvas_mode == CANVAS_BLKMODE_LINEAR)?7:0;
 
 			canvas_config_config(canvas_u(canvas),
 			&hw->canvas_config[i][1]);
@@ -2603,7 +2610,7 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		&vf_provider_ops, pdata);
 
 	platform_set_drvdata(pdev, pdata);
-
+	hw->canvas_mode = pdata->canvas_mode;
 	hw->platform_dev = pdev;
 
 	if (pdata->sys_info)
