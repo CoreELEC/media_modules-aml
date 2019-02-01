@@ -704,6 +704,7 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 				kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 				hw->frame_num++;
+				vdec->vdec_fps_detec(vdec->id);
 				vf_notify_receiver(vdec->vf_provider_name,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY,
 					NULL);
@@ -769,6 +770,7 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 				kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 				hw->frame_num++;
+				vdec->vdec_fps_detec(vdec->id);
 				vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 			}
@@ -822,6 +824,7 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 				kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 				hw->frame_num++;
+				vdec->vdec_fps_detec(vdec->id);
 				vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 			}
@@ -869,6 +872,7 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 					vf->index, hw->vfbuf_use[index]);
 					kfifo_put(&hw->display_q,
 					(const struct vframe_s *)vf);
+					vdec->vdec_fps_detec(vdec->id);
 					vf_notify_receiver(
 					vdec->vf_provider_name,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY,
