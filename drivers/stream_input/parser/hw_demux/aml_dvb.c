@@ -392,6 +392,12 @@ struct aml_dvb *aml_get_dvb_device(void)
 }
 EXPORT_SYMBOL(aml_get_dvb_device);
 
+struct dvb_adapter *aml_get_dvb_adapter(void)
+{
+	return &aml_dvb_device.dvb_adapter;
+}
+EXPORT_SYMBOL(aml_get_dvb_adapter);
+
 static int dvb_dsc_open(struct inode *inode, struct file *file)
 {
 	int err;
