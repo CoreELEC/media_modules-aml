@@ -106,6 +106,11 @@ static struct platform_device *hevc_pdev;
 
 static struct vpu_bit_firmware_info_t s_bit_firmware_info[MAX_NUM_VPU_CORE];
 
+static struct vpu_dma_cfg dma_cfg[3];
+
+static u32 vpu_src_addr_config(struct vpu_dma_buf_info_t);
+static void vpu_dma_buffer_unmap(struct vpu_dma_cfg *cfg);
+
 static void dma_flush(u32 buf_start, u32 buf_size)
 {
 	if (hevc_pdev)
@@ -427,6 +432,10 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 
 		spin_unlock_irqrestore(&s_vpu_lock, flags);
 	}
+	memset(dma_cfg, 0, sizeof(dma_cfg));
+	dma_cfg[0].fd = -1;
+	dma_cfg[1].fd = -1;
+	dma_cfg[2].fd = -1;
 Err:
 	if (r != 0)
 		s_vpu_drv_context.open_count--;
@@ -1241,10 +1250,50 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 				"[-]VDI_IOCTL_FLUSH_BUFFER\n");
 		}
 		break;
+	case VDI_IOCTL_CONFIG_DMA:
+		{
+			struct vpu_dma_buf_info_t dma_info;
+
+			enc_pr(LOG_ALL,
+				"[+]VDI_IOCTL_CONFIG_DMA\n");
+			if (copy_from_user(&dma_info,
+				(struct vpu_dma_buf_info_t *)arg,
+				sizeof(struct vpu_dma_buf_info_t)))
+				return -EFAULT;
+
+			if (vpu_src_addr_config(dma_info)) {
+				enc_pr(LOG_ERROR,
+					"src addr config error\n");
+				return -EFAULT;
+			}
+
+			enc_pr(LOG_ALL,
+				"[-]VDI_IOCTL_CONFIG_DMA %d, %d, %d\n",
+				dma_info.fd[0],
+				dma_info.fd[1],
+				dma_info.fd[2]);
+		}
+		break;
+	case VDI_IOCTL_UNMAP_DMA:
+		{
+			enc_pr(LOG_ALL,
+				"[+]VDI_IOCTL_UNMAP_DMA\n");
+
+			vpu_dma_buffer_unmap(&dma_cfg[0]);
+			if (dma_cfg[1].paddr != 0) {
+				vpu_dma_buffer_unmap(&dma_cfg[1]);
+			}
+			if (dma_cfg[2].paddr != 0) {
+				vpu_dma_buffer_unmap(&dma_cfg[2]);
+			}
+			enc_pr(LOG_ALL,
+				"[-]VDI_IOCTL_UNMAP_DMA\n");
+		}
+		break;
 	default:
 		{
 			enc_pr(LOG_ERROR,
-				"No such IOCTL, cmd is %d\n", cmd);
+				"No such IOCTL, cmd is 0x%x\n", cmd);
 			ret = -EFAULT;
 		}
 		break;
@@ -1474,6 +1523,194 @@ static s32 vpu_mmap(struct file *fp, struct vm_area_struct *vm)
 		return vpu_map_to_instance_pool_memory(fp, vm);
 
 	return vpu_map_to_physical_memory(fp, vm);
+}
+static int vpu_dma_buffer_map(struct vpu_dma_cfg *cfg)
+{
+	int ret = -1;
+	int fd = -1;
+	struct dma_buf *dbuf = NULL;
+	struct dma_buf_attachment *d_att = NULL;
+	struct sg_table *sg = NULL;
+	void *vaddr = NULL;
+	struct device *dev = NULL;
+	enum dma_data_direction dir;
+
+	if (cfg == NULL || (cfg->fd < 0) || cfg->dev == NULL) {
+		enc_pr(LOG_ERROR, "error dma param\n");
+		return -EINVAL;
+	}
+	fd = cfg->fd;
+	dev = cfg->dev;
+	dir = cfg->dir;
+
+	dbuf = dma_buf_get(fd);
+	if (dbuf == NULL) {
+		enc_pr(LOG_ERROR, "failed to get dma buffer,fd %d\n",fd);
+		return -EINVAL;
+	}
+
+	d_att = dma_buf_attach(dbuf, dev);
+	if (d_att == NULL) {
+		enc_pr(LOG_ERROR, "failed to set dma attach\n");
+		goto attach_err;
+	}
+
+	sg = dma_buf_map_attachment(d_att, dir);
+	if (sg == NULL) {
+		enc_pr(LOG_ERROR, "failed to get dma sg\n");
+		goto map_attach_err;
+	}
+	cfg->dbuf = dbuf;
+	cfg->attach = d_att;
+	cfg->vaddr = vaddr;
+	cfg->sg = sg;
+
+	return 0;
+
+map_attach_err:
+	dma_buf_detach(dbuf, d_att);
+attach_err:
+	dma_buf_put(dbuf);
+
+	return ret;
+}
+
+static void vpu_dma_buffer_unmap(struct vpu_dma_cfg *cfg)
+{
+	int fd = -1;
+	struct dma_buf *dbuf = NULL;
+	struct dma_buf_attachment *d_att = NULL;
+	struct sg_table *sg = NULL;
+	/*void *vaddr = NULL;*/
+	struct device *dev = NULL;
+	enum dma_data_direction dir;
+
+	if (cfg == NULL || (cfg->fd < 0) || cfg->dev == NULL
+			|| cfg->dbuf == NULL /*|| cfg->vaddr == NULL*/
+			|| cfg->attach == NULL || cfg->sg == NULL) {
+		enc_pr(LOG_ERROR, "unmap: Error dma param\n");
+		return;
+	}
+
+	fd = cfg->fd;
+	dev = cfg->dev;
+	dir = cfg->dir;
+	dbuf = cfg->dbuf;
+	d_att = cfg->attach;
+	sg = cfg->sg;
+
+	dma_buf_unmap_attachment(d_att, sg, dir);
+	dma_buf_detach(dbuf, d_att);
+	dma_buf_put(dbuf);
+
+	enc_pr(LOG_INFO, "vpu_dma_buffer_unmap fd %d\n",fd);
+}
+
+static int vpu_dma_buffer_get_phys(struct vpu_dma_cfg *cfg, unsigned long *addr)
+{
+	struct sg_table *sg_table;
+	struct page *page;
+	int ret;
+
+	ret = vpu_dma_buffer_map(cfg);
+	if (ret < 0) {
+		printk("vpu_dma_buffer_map failed\n");
+		return ret;
+	}
+	if (cfg->sg) {
+		sg_table = cfg->sg;
+		page = sg_page(sg_table->sgl);
+		*addr = PFN_PHYS(page_to_pfn(page));
+		ret = 0;
+	}
+	enc_pr(LOG_INFO,"vpu_dma_buffer_get_phys\n");
+
+	return ret;
+}
+
+static u32 vpu_src_addr_config(struct vpu_dma_buf_info_t info) {
+	unsigned long phy_addr_y = 0;
+	unsigned long phy_addr_u = 0;
+	unsigned long phy_addr_v = 0;
+	unsigned long Ysize = info.width * info.height;
+	unsigned long Usize = Ysize >> 2;
+	s32 ret = 0;
+	u32 core = 0;
+
+	//y
+	dma_cfg[0].dir = DMA_TO_DEVICE;
+	dma_cfg[0].fd = info.fd[0];
+	dma_cfg[0].dev = &(hevc_pdev->dev);
+	ret = vpu_dma_buffer_get_phys(&dma_cfg[0], &phy_addr_y);
+	if (ret < 0) {
+		enc_pr(LOG_ERROR, "import fd %d failed\n", info.fd[0]);
+		return -1;
+	}
+
+	//u
+	if (info.num_planes >=2) {
+		dma_cfg[1].dir = DMA_TO_DEVICE;
+		dma_cfg[1].fd = info.fd[1];
+		dma_cfg[1].dev = &(hevc_pdev->dev);
+		ret = vpu_dma_buffer_get_phys(&dma_cfg[1], &phy_addr_u);
+		if (ret < 0) {
+			enc_pr(LOG_ERROR, "import fd %d failed\n", info.fd[1]);
+			return -1;
+		}
+	}
+
+	//v
+	if (info.num_planes >=3) {
+		dma_cfg[2].dir = DMA_TO_DEVICE;
+		dma_cfg[2].fd = info.fd[2];
+		dma_cfg[2].dev = &(hevc_pdev->dev);
+		ret = vpu_dma_buffer_get_phys(&dma_cfg[2], &phy_addr_v);
+		if (ret < 0) {
+			enc_pr(LOG_ERROR, "import fd %d failed\n", info.fd[2]);
+			return -1;
+		}
+	}
+
+	enc_pr(LOG_INFO, "vpu_src_addr_config phy_addr 0x%lx, 0x%lx, 0x%lx\n",
+		phy_addr_y, phy_addr_u, phy_addr_v);
+
+	dma_cfg[0].paddr = (void *)phy_addr_y;
+	dma_cfg[1].paddr = (void *)phy_addr_u;
+	dma_cfg[2].paddr = (void *)phy_addr_v;
+
+	enc_pr(LOG_INFO, "info.num_planes %d, info.fmt %d\n",
+		info.num_planes, info.fmt);
+
+	WriteVpuRegister(W4_SRC_ADDR_Y, phy_addr_y);
+	if (info.num_planes == 1) {
+		if (info.fmt == AMVENC_YUV420) {
+			WriteVpuRegister(W4_SRC_ADDR_U, phy_addr_y + Ysize);
+			WriteVpuRegister(W4_SRC_ADDR_V, phy_addr_y + Ysize + Usize);
+		} else if (info.fmt == AMVENC_NV12 || info.fmt == AMVENC_NV21 ) {
+			WriteVpuRegister(W4_SRC_ADDR_U, phy_addr_y + Ysize);
+			WriteVpuRegister(W4_SRC_ADDR_V, phy_addr_y + Ysize);
+		} else {
+			enc_pr(LOG_ERROR, "not support fmt %d\n", info.fmt);
+		}
+
+	} else if (info.num_planes == 2) {
+		if (info.fmt == AMVENC_NV12 || info.fmt == AMVENC_NV21 ) {
+			WriteVpuRegister(W4_SRC_ADDR_U, phy_addr_u);
+			WriteVpuRegister(W4_SRC_ADDR_V, phy_addr_u);
+		} else {
+			enc_pr(LOG_ERROR, "not support fmt %d\n", info.fmt);
+		}
+
+	} else if (info.num_planes == 3) {
+		if (info.fmt == AMVENC_YUV420) {
+			WriteVpuRegister(W4_SRC_ADDR_U, phy_addr_u);
+			WriteVpuRegister(W4_SRC_ADDR_V, phy_addr_v);
+		} else {
+			enc_pr(LOG_ERROR, "not support fmt %d\n", info.fmt);
+		}
+	}
+	return 0;
+
 }
 
 static const struct file_operations vpu_fops = {

@@ -31,6 +31,8 @@
 #include <linux/amlogic/media/ge2d/ge2d.h>
 #endif
 
+#include <linux/dma-buf.h>
+
 #define AMVENC_DEVINFO_M8 "AML-M8"
 #define AMVENC_DEVINFO_G9 "AML-G9"
 #define AMVENC_DEVINFO_GXBB "AML-GXBB"
@@ -132,6 +134,7 @@ enum amvenc_mem_type_e {
 	LOCAL_BUFF = 0,
 	CANVAS_BUFF,
 	PHYSICAL_BUFF,
+	DMA_BUFF,
 	MAX_BUFF_TYPE
 };
 
@@ -181,13 +184,22 @@ enum amvenc_frame_fmt_e {
 
 struct encode_wq_s;
 
+struct enc_dma_cfg {
+	int fd;
+	void *dev;
+	void *vaddr;
+	void *paddr;
+	struct dma_buf *dbuf;
+	struct dma_buf_attachment *attach;
+	struct sg_table *sg;
+	enum dma_data_direction dir;
+};
+
 struct encode_request_s {
 	u32 quant;
 	u32 cmd;
 	u32 ucode_mode;
-
 	u32 src;
-
 	u32 framesize;
 
 	u32 me_weight;
@@ -208,6 +220,8 @@ struct encode_request_s {
 	enum amvenc_mem_type_e type;
 	enum amvenc_frame_fmt_e fmt;
 	struct encode_wq_s *parent;
+	struct enc_dma_cfg dma_cfg[3];
+	u32 plane_num;
 };
 
 struct encode_queue_item_s {
