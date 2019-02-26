@@ -4121,6 +4121,9 @@ static ssize_t vdec_status_show(struct class *class,
 			pbuf += sprintf(pbuf,
 				"%13s : %llu %s\n\n", "total data",
 				vs.total_data / 1024, "KB");
+			pbuf += sprintf(pbuf,
+				"%13s : %x\n", "ratio_control",
+				vs.ratio_control);
 
 			vdec_num++;
 		}

@@ -1672,6 +1672,7 @@ struct hevc_state_s {
 	u8 next_again_flag;
 	u32 pre_parser_wr_ptr;
 #endif
+	u32 ratio_control;
 	u32 first_pic_flag;
 	u32 decode_size;
 	struct mutex chunks_mutex;
@@ -7004,6 +7005,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 			DISP_RATIO_ASPECT_RATIO_MAX);
 		vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 	}
+	hevc->ratio_control = vf->ratio_control;
 	if (pic->aux_data_buf
 		&& pic->aux_data_size) {
 		/* parser sei */
@@ -9695,6 +9697,7 @@ int vh265_dec_status(struct vdec_info *vstatus)
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s", DRIVER_NAME);
 #endif
+	vstatus->ratio_control = hevc->ratio_control;
 	return 0;
 }
 
