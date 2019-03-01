@@ -4663,7 +4663,7 @@ static ssize_t dump_vdec_chunks_show(struct class *class,
 	else {
 		struct vdec_s *vdec;
 		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
-			pbuf += vdec_input_dump_chunks(&vdec->input,
+			pbuf += vdec_input_dump_chunks(vdec->id, &vdec->input,
 				pbuf, PAGE_SIZE - (pbuf - buf));
 		}
 	}

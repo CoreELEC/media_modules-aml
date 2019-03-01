@@ -167,7 +167,7 @@ extern void vdec_input_unlock(struct vdec_input_s *input, unsigned long lock);
 extern void vdec_input_release(struct vdec_input_s *input);
 /* return block handle and free block */
 extern u32 vdec_input_get_freed_handle(struct vdec_s *vdec);
-int vdec_input_dump_chunks(struct vdec_input_s *input,
+int vdec_input_dump_chunks(int id, struct vdec_input_s *input,
 	char *bufs, int size);
 int vdec_input_dump_blocks(struct vdec_input_s *input,
 	char *bufs, int size);
