@@ -27,6 +27,7 @@
 #include "vdec_profile.h"
 #include "vdec.h"
 
+
 #define ISA_TIMERE 0x2662
 #define ISA_TIMERE_HI 0x2663
 
@@ -224,7 +225,7 @@ EXPORT_SYMBOL(vdec_profile_more);
 
 void vdec_profile(struct vdec_s *vdec, int event)
 {
-	ATRACE_COUNTER(vdec_device_name_str(vdec), event);
+	ATRACE_COUNTER(vdec->vfm_map_id, event);
 	vdec_profile_more(vdec, event, 0 , 0);
 	if (dec_time_stat_flag == 1)
 		vdec_profile_statistics(vdec, event);

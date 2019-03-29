@@ -54,7 +54,6 @@
 #include "../utils/firmware.h"
 #include <linux/amlogic/tee.h>
 
-#include <trace/events/meson_atrace.h>
 
 
 #define DRIVER_NAME "amvdec_real"

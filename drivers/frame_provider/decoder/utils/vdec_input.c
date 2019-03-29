@@ -28,7 +28,6 @@
 #include <asm/cacheflush.h>
 #include <linux/crc32.h>
 
-#include <trace/events/meson_atrace.h>
 
 #define VFRAME_BLOCK_SIZE (512 * SZ_1K)/*512 for 1080p default init.*/
 #define VFRAME_BLOCK_SIZE_4K (2 * SZ_1M) /*2M for 4K default.*/

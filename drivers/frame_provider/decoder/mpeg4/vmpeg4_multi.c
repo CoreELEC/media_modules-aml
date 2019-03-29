@@ -46,7 +46,6 @@
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
 
-#include <trace/events/meson_atrace.h>
 
 
 #define DRIVER_NAME "ammvdec_mpeg4"
