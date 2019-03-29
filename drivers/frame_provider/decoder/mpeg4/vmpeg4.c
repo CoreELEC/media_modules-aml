@@ -42,7 +42,6 @@
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/amlogic/tee.h>
 
-#include <trace/events/meson_atrace.h>
 
 
 /* #define CONFIG_AM_VDEC_MPEG4_LOG */

@@ -46,7 +46,7 @@
 #include "../utils/config_parser.h"
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
-#include <trace/events/meson_atrace.h>
+
 
 #define CONSTRAIN_MAX_BUF_NUM
 

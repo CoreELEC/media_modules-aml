@@ -59,7 +59,6 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 
-#include <trace/events/meson_atrace.h>
 
 
 #if  0 /* MESON_CPU_TYPE == MESON_CPU_TYPE_MESON6TVD */

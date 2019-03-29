@@ -38,7 +38,6 @@
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/amlogic/tee.h>
 
-#include <trace/events/meson_atrace.h>
 
 
 #ifdef CONFIG_AM_VDEC_MJPEG_LOG

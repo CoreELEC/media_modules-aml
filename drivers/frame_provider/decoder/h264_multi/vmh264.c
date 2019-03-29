@@ -62,7 +62,6 @@
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/crc32.h>
 
-#include <trace/events/meson_atrace.h>
 
 
 #undef pr_info
