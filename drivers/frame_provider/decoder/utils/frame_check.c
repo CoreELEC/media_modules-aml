@@ -55,6 +55,7 @@
 #define YUV_MASK	0x01
 #define CRC_MASK	0x02
 
+#define MAX_YUV_SIZE (4096 * 2304)
 #define YUV_DEF_SIZE (1920*1088*3/2)
 #define YUV_DEF_NUM	 1
 
@@ -99,12 +100,28 @@ static inline void check_schedule(struct pic_check_mgr_t *mgr)
 		vdec_schedule_work(&mgr->frame_check_work);
 }
 
+static bool is_oversize(int w, int h)
+{
+	if (w <= 0 || h <= 0)
+		return true;
+
+	if (h != 0 && (w > (MAX_YUV_SIZE / h)))
+		return true;
+
+	return false;
+}
+
+
 static int get_frame_size(struct pic_check_mgr_t *pic,
 	struct vframe_s *vf)
 {
-	if ((vf->width < 1) || (vf->height < 1))
+	if (is_oversize(vf->width, vf->height)) {
+			dbg_print(FC_ERROR, "vf size err: w=%d, h=%d\n",
+				vf->width, vf->height);
 			return -1;
-	pic->size_y = vf->width* vf->height;
+	}
+
+	pic->size_y = vf->width * vf->height;
 	pic->size_uv = pic->size_y >> 1;
 	pic->size_pic = pic->size_y + pic->size_uv;
 
@@ -246,7 +263,7 @@ static struct file* file_open(int mode, const char *str, ...)
 static int write_yuv_work(struct pic_check_mgr_t *mgr)
 {
 	mm_segment_t old_fs;
-	unsigned int i, wr_size;
+	unsigned int i, wr_size, pic_num;
 	struct pic_dump_t *dump = &mgr->pic_dump;
 
 	if (dump->dump_cnt > 0) {
@@ -260,6 +277,7 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 			(dump->yuv_fp != NULL) &&
 			(dump->dump_cnt >= dump->num)) {
 
+			pic_num = dump->dump_cnt;
 			old_fs = get_fs();
 			set_fs(KERNEL_DS);
 
@@ -271,7 +289,7 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 					dbg_print(FC_ERROR, "buf failed to write yuv file\n");
 					break;
 				}
-				dump->dump_cnt--;
+				pic_num--;
 			}
 			set_fs(old_fs);
 			vfs_fsync(dump->yuv_fp, 0);
@@ -545,7 +563,7 @@ static int crc32_vmap_le(unsigned int *crc32,
 	ulong phyaddr, unsigned int size)
 {
 	void *vaddr = NULL;
-	unsigned int crc = 0;
+	unsigned int crc = *crc32;
 	unsigned int tmp_size = 0;
 
 	/*single mode cannot use codec_mm_vmap*/
@@ -1066,7 +1084,7 @@ ssize_t dump_yuv_store(struct class *class,
 			num, YUV_MAX_DUMP_NUM);
 		return size;
 	}
-	vdec = vdec_get_with_id(id);
+	vdec = vdec_get_vdec_by_id(id);
 	if (vdec == NULL) {
 		yuv_start[id] = start;
 		yuv_num[id] = num;
@@ -1141,7 +1159,7 @@ ssize_t frame_check_show(struct class *class,
 	if (fc_debug & FC_ERR_CRC_BLOCK_MODE) {
 		/* cat frame_check to next frame when block */
 		struct vdec_s *vdec = NULL;
-		vdec = vdec_get_with_id(__ffs(check_enable));
+		vdec = vdec_get_vdec_by_id(__ffs(check_enable));
 		if (vdec)
 			vdec->vfc.err_crc_block = 0;
 	}

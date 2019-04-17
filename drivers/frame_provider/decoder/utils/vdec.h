@@ -443,7 +443,5 @@ int vdec_get_status(struct vdec_s *vdec);
 
 void vdec_set_timestamp(struct vdec_s *vdec, u64 timestamp);
 
-struct vdec_s *vdec_get_with_id(unsigned int id);
-
 extern struct vframe_qos_s *vdec_get_qos_info(void);
 #endif				/* VDEC_H */

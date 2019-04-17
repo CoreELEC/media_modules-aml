@@ -2655,12 +2655,8 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->duration = vf->duration/2;
 		}
 
-		if (i == 0) {
-			if (hw->mmu_enable)
-				decoder_do_frame_check(hw_to_vdec(hw), vf);
-			else
-				decoder_do_frame_check(hw_to_vdec(hw), vf);
-		}
+		if (i == 0)
+			decoder_do_frame_check(hw_to_vdec(hw), vf);
 
 		vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);
 		vf->sar_width = vf->width;
