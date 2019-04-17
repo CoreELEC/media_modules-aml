@@ -2704,10 +2704,6 @@ static void vh264_isr(void)
 
 static void vh264_set_clk(struct work_struct *work)
 {
-	if (ucode_type != UCODE_IP_ONLY_PARAM &&
-		(clk_adj_frame_count > VDEC_CLOCK_ADJUST_FRAME) &&
-		frame_dur > 0 && saved_resolution !=
-		frame_width * frame_height * (96000 / frame_dur)) {
 		int fps = 96000 / frame_dur;
 
 		if (frame_dur < 10) /*dur is too small ,think it errors fps*/
@@ -2715,7 +2711,6 @@ static void vh264_set_clk(struct work_struct *work)
 		saved_resolution = frame_width * frame_height * fps;
 		vdec_source_changed(VFORMAT_H264,
 			frame_width, frame_height, fps);
-	}
 }
 
 static void vh264_put_timer_func(unsigned long arg)
@@ -2843,7 +2838,11 @@ static void vh264_put_timer_func(unsigned long arg)
 			stream_switching_done();
 	}
 
-	schedule_work(&set_clk_work);
+	if (ucode_type != UCODE_IP_ONLY_PARAM &&
+		(clk_adj_frame_count > VDEC_CLOCK_ADJUST_FRAME) &&
+		frame_dur > 0 && saved_resolution !=
+		frame_width * frame_height * (96000 / frame_dur))
+		schedule_work(&set_clk_work);
 
 exit:
 	timer->expires = jiffies + PUT_INTERVAL;
@@ -3689,7 +3688,6 @@ static int amvdec_h264_remove(struct platform_device *pdev)
 	cancel_work_sync(&error_wd_work);
 	cancel_work_sync(&stream_switching_work);
 	cancel_work_sync(&notify_work);
-	cancel_work_sync(&set_clk_work);
 	cancel_work_sync(&userdata_push_work);
 
 	mutex_lock(&vh264_mutex);
@@ -3710,6 +3708,7 @@ static int amvdec_h264_remove(struct platform_device *pdev)
 #endif
 	kfree(gvs);
 	gvs = NULL;
+	cancel_work_sync(&set_clk_work);
 	mutex_unlock(&vh264_mutex);
 	return 0;
 }

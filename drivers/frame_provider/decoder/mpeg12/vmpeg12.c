@@ -1288,8 +1288,7 @@ static void reset_do_work(struct work_struct *work)
 
 static void vmpeg12_set_clk(struct work_struct *work)
 {
-	if (frame_dur > 0 && saved_resolution !=
-		frame_width * frame_height * (96000 / frame_dur)) {
+	 {
 		int fps = 96000 / frame_dur;
 
 		saved_resolution = frame_width * frame_height * fps;
@@ -1353,7 +1352,9 @@ static void vmpeg_put_timer_func(unsigned long arg)
 		}
 	}
 
-	schedule_work(&set_clk_work);
+	if (frame_dur > 0 && saved_resolution !=
+		frame_width * frame_height * (96000 / frame_dur))
+		schedule_work(&set_clk_work);
 
 	timer->expires = jiffies + PUT_INTERVAL;
 
@@ -2084,7 +2085,6 @@ static int amvdec_mpeg12_remove(struct platform_device *pdev)
 	cancel_work_sync(&userdata_push_work);
 	cancel_work_sync(&notify_work);
 	cancel_work_sync(&reset_work);
-	cancel_work_sync(&set_clk_work);
 
 	if (stat & STAT_VDEC_RUN) {
 		amvdec_stop();
@@ -2101,6 +2101,7 @@ static int amvdec_mpeg12_remove(struct platform_device *pdev)
 		stat &= ~STAT_TIMER_ARM;
 	}
 
+	cancel_work_sync(&set_clk_work);
 	if (stat & STAT_VF_HOOK) {
 		if (fr_hint_status == VDEC_HINTED && !is_reset)
 			vf_notify_receiver(PROVIDER_NAME,
