@@ -1788,30 +1788,6 @@ static const char *get_dev_name(bool use_legacy_vdec, int format)
 #endif
 }
 
-struct vdec_s *vdec_get_with_id(unsigned int id)
-{
-	struct vdec_s *vdec, *ret_vdec = NULL;
-	struct vdec_core_s *core = vdec_core;
-	unsigned long flags;
-
-	if (id >= MAX_INSTANCE_MUN)
-		return NULL;
-
-	flags = vdec_core_lock(vdec_core);
-	if (!list_empty(&core->connected_vdec_list)) {
-		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
-			if (vdec->id == id) {
-				pr_info("searched avaliable vdec connected, id = %d\n", id);
-				ret_vdec = vdec;
-				break;
-			}
-		}
-	}
-	vdec_core_unlock(vdec_core, flags);
-
-	return ret_vdec;
-}
-
 /*
  *register vdec_device
  * create output, vfm or create ionvideo output
