@@ -2215,7 +2215,6 @@ static int aml_dvb_probe(struct platform_device *pdev)
 		struct device_node *node_tuner = NULL;
 		struct device_node *node_i2c = NULL;
 		u32 i2c_addr = 0xFFFFFFFF;
-		struct tuner_config *cfg = NULL;
 		u32 value = 0;
 		int j = 0;
 
@@ -2238,7 +2237,6 @@ static int aml_dvb_probe(struct platform_device *pdev)
 					s_demod_type[i] = DEMOD_INTERNAL;
 				}
 
-				memset(&cfg, 0, sizeof(struct tuner_config));
 				memset(buf, 0, 32);
 				snprintf(buf, sizeof(buf), "fe%d_tuner",i);
 				node_tuner = of_parse_phandle(pdev->dev.of_node, buf, 0);
