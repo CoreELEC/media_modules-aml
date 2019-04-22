@@ -752,7 +752,7 @@ struct vdec_h264_hw_s {
 	int dec_result;
 	struct work_struct work;
 	struct work_struct notify_work;
-
+	struct work_struct timeout_work;
 	void (*vdec_cb)(struct vdec_s *, void *);
 	void *vdec_cb_arg;
 
@@ -2767,7 +2767,7 @@ static void reset_process_time(struct vdec_h264_hw_s *hw)
 
 static void start_process_time(struct vdec_h264_hw_s *hw)
 {
-	hw->decode_timeout_count = 2;
+	hw->decode_timeout_count = 10;
 	hw->start_process_time = jiffies;
 }
 
@@ -6077,7 +6077,6 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 	release_cur_decoding_buf(hw);
 	hw->dec_result = DEC_RESULT_DONE;
 	hw->data_flag |= ERROR_FLAG;
-	reset_process_time(hw);
 	vdec_schedule_work(&hw->work);
 }
 
@@ -6306,7 +6305,10 @@ static void check_timer_func(unsigned long arg)
 				if (hw->decode_timeout_count > 0)
 					hw->decode_timeout_count--;
 				if (hw->decode_timeout_count == 0)
-					timeout_process(hw);
+				{
+					reset_process_time(hw);
+					vdec_schedule_work(&hw->timeout_work);
+				}
 			} else
 				start_process_time(hw);
 		} else if (is_in_parsing_state(dpb_status)) {
@@ -6315,7 +6317,10 @@ static void check_timer_func(unsigned long arg)
 				if (hw->decode_timeout_count > 0)
 					hw->decode_timeout_count--;
 				if (hw->decode_timeout_count == 0)
-					timeout_process(hw);
+				{
+					reset_process_time(hw);
+					vdec_schedule_work(&hw->timeout_work);
+				}
 			}
 		}
 		hw->last_vld_level =
@@ -6631,6 +6636,14 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw)
 	return;
 }
 
+static void timeout_process_work(struct work_struct *work)
+{
+	struct vdec_h264_hw_s *hw = container_of(work,
+			struct vdec_h264_hw_s, timeout_work);
+
+	timeout_process(hw);
+}
+
 static s32 vh264_init(struct vdec_h264_hw_s *hw)
 {
 	int size = -1;
@@ -6658,6 +6671,7 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 	vh264_local_init(hw);
 	INIT_WORK(&hw->work, vh264_work);
 	INIT_WORK(&hw->notify_work, vh264_notify_work);
+	INIT_WORK(&hw->timeout_work, timeout_process_work);
 #ifdef MH264_USERDATA_ENABLE
 	INIT_WORK(&hw->user_data_ready_work, user_data_ready_notify_work);
 #endif
@@ -6858,6 +6872,7 @@ static int vh264_stop(struct vdec_h264_hw_s *hw)
 #endif
 	cancel_work_sync(&hw->work);
 	cancel_work_sync(&hw->notify_work);
+	cancel_work_sync(&hw->timeout_work);
 #ifdef MH264_USERDATA_ENABLE
 	cancel_work_sync(&hw->user_data_ready_work);
 #endif
