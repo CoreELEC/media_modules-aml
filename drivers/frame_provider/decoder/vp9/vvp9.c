@@ -48,6 +48,9 @@
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+#include "../utils/vdec_profile.h"
+#endif
 
 #include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
@@ -106,6 +109,7 @@
 #define DECODE_MODE_SINGLE		((0x80 << 24) | 0)
 #define DECODE_MODE_MULTI_STREAMBASE	((0x80 << 24) | 1)
 #define DECODE_MODE_MULTI_FRAMEBASE	((0x80 << 24) | 2)
+#define DECODE_MODE_SINGLE_LOW_LATENCY ((0x80 << 24) | 3)
 
 
 #define  VP9_TRIGGER_FRAME_DONE		0x100
@@ -1139,6 +1143,8 @@ struct VP9Decoder_s {
 #endif
 	int need_cache_size;
 	u64 sc_start_time;
+	bool postproc_done;
+	int low_latency_flag;
 };
 
 static void resize_context_buffers(struct VP9Decoder_s *pbi,
@@ -2618,6 +2624,9 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 	struct VP9_Common_s *cm = &pbi->common;
 	struct PIC_BUFFER_CONFIG_s sd;
 
+	if (pbi->postproc_done)
+		return 0;
+	pbi->postproc_done = 1;
 	swap_frame_buffers(pbi);
 	if (!cm->show_existing_frame) {
 		cm->last_show_frame = cm->show_frame;
@@ -2736,6 +2745,7 @@ static u32 buffer_mode_dbg = 0xffff0000;
  */
 static u32 i_only_flag;
 
+static u32 low_latency_flag;
 
 static u32 max_decoding_time;
 /*
@@ -5689,9 +5699,12 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 	WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
 #endif
 #ifdef MULTI_INSTANCE_SUPPORT
-		if (!pbi->m_ins_flag)
-			decode_mode = DECODE_MODE_SINGLE;
-		else if (vdec_frame_based(hw_to_vdec(pbi)))
+		if (!pbi->m_ins_flag) {
+			if (pbi->low_latency_flag)
+				decode_mode = DECODE_MODE_SINGLE_LOW_LATENCY;
+			else
+				decode_mode = DECODE_MODE_SINGLE;
+		} else if (vdec_frame_based(hw_to_vdec(pbi)))
 			decode_mode = DECODE_MODE_MULTI_FRAMEBASE;
 		else
 			decode_mode = DECODE_MODE_MULTI_STREAMBASE;
@@ -7232,7 +7245,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #endif
 			{
 				reset_process_time(pbi);
-				if (pbi->vf_pre_count == 0)
+				if (pbi->vf_pre_count == 0 || pbi->low_latency_flag)
 					vp9_bufmgr_postproc(pbi);
 
 				pbi->dec_result = DEC_RESULT_DONE;
@@ -7240,6 +7253,16 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				if (mcrcc_cache_alg_flag)
 					dump_hit_rate(pbi);
 				vdec_schedule_work(&pbi->work);
+			}
+		} else {
+			if (pbi->low_latency_flag) {
+				vp9_bufmgr_postproc(pbi);
+				WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
+#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+				vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_CB);
+				if (debug & PRINT_FLAG_VDEC_DETAIL)
+					pr_info("%s VP9 frame done \n", __func__);
+#endif
 			}
 		}
 
@@ -7286,7 +7309,15 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+
 #ifdef MULTI_INSTANCE_SUPPORT
+#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+	if (pbi->m_ins_flag ==0 && pbi->low_latency_flag) {
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_RUN);
+		if (debug & PRINT_FLAG_VDEC_DETAIL)
+			pr_info("%s VP9 frame header found \n", __func__);
+	}
+#endif
 	if (pbi->m_ins_flag)
 		reset_process_time(pbi);
 #endif
@@ -7366,6 +7397,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	}
 
 	continue_decoding(pbi);
+	pbi->postproc_done = 0;
 	pbi->process_busy = 0;
 
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -8393,7 +8425,6 @@ static int amvdec_vp9_remove(struct platform_device *pdev)
 
 	hevc_source_changed(VFORMAT_VP9, 0, 0, 0);
 
-
 #ifdef DEBUG_PTS
 	pr_info("pts missed %ld, pts hit %ld, duration %d\n",
 		   pbi->pts_missed, pbi->pts_hit, pbi->frame_dur);
@@ -9123,7 +9154,7 @@ static void vp9_dump_state(struct vdec_s *vdec)
 		);
 
 	vp9_print(pbi, 0,
-		"is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d\n",
+		"is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d low_latency %d\n",
 		input_frame_based(vdec),
 		pbi->eos,
 		pbi->dec_result,
@@ -9131,7 +9162,8 @@ static void vp9_dump_state(struct vdec_s *vdec)
 		display_frame_count[pbi->index],
 		run_count[pbi->index],
 		not_run_ready[pbi->index],
-		input_empty[pbi->index]
+		input_empty[pbi->index],
+		pbi->low_latency_flag
 		);
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
@@ -9449,12 +9481,19 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			   pbi->buf_size);
 	}
 
-	if (pdata->sys_info)
+	if (pdata->sys_info) {
 		pbi->vvp9_amstream_dec_info = *pdata->sys_info;
+		if ((unsigned long) pbi->vvp9_amstream_dec_info.param
+			& 0x08){
+			pbi->low_latency_flag = 1;
+		} else
+			pbi->low_latency_flag = low_latency_flag;
+	}
 	else {
 		pbi->vvp9_amstream_dec_info.width = 0;
 		pbi->vvp9_amstream_dec_info.height = 0;
 		pbi->vvp9_amstream_dec_info.rate = 30;
+		pbi->low_latency_flag = low_latency_flag;
 	}
 
 	pbi->cma_dev = pdata->cma_dev;
@@ -9708,6 +9747,9 @@ MODULE_PARM_DESC(slice_parse_begin, "\n amvdec_vp9 slice_parse_begin\n");
 
 module_param(i_only_flag, uint, 0664);
 MODULE_PARM_DESC(i_only_flag, "\n amvdec_vp9 i_only_flag\n");
+
+module_param(low_latency_flag, uint, 0664);
+MODULE_PARM_DESC(low_latency_flag, "\n amvdec_vp9 low_latency_flag\n");
 
 module_param(error_handle_policy, uint, 0664);
 MODULE_PARM_DESC(error_handle_policy, "\n amvdec_vp9 error_handle_policy\n");
