@@ -3842,6 +3842,33 @@ static ssize_t show_maxdelay(struct class *class,
 	return size;
 }
 
+static ssize_t audio_path_store(struct class *class,
+	struct class_attribute *attr,
+	const char *buf, size_t size)
+{
+	unsigned int val = 0;
+	int i;
+	ssize_t ret;
+	struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
+	struct stream_port_s *this;
+	ret = kstrtoint(buf, 0, &val);
+	if (ret != 0)
+		return -EINVAL;
+	if (val != 1)
+		return -EINVAL;
+	for (i = 0; i < MAX_AMSTREAM_PORT_NUM; i++) {
+		if (strcmp(ports[i].name, "amstream_mpts") == 0 ||
+			strcmp(ports[i].name, "amstream_mpts_sched") == 0) {
+			this = &ports[i];
+			if ((this->flag & PORT_FLAG_AFORMAT) != 0) {
+				pr_info("audio_port_reset %s\n", ports[i].name);
+				audio_port_reset(this, pabuf);
+			}
+		}
+	}
+	return size;
+}
+
 static struct class_attribute amstream_class_attrs[] = {
 	__ATTR_RO(ports),
 	__ATTR_RO(bufs),
@@ -3851,6 +3878,8 @@ static struct class_attribute amstream_class_attrs[] = {
 	show_canuse_buferlevel, store_canuse_buferlevel),
 	__ATTR(max_buffer_delay_ms, S_IRUGO | S_IWUSR | S_IWGRP, show_maxdelay,
 	store_maxdelay),
+	__ATTR(reset_audio_port, S_IRUGO | S_IWUSR | S_IWGRP,
+	NULL, audio_path_store),
 	__ATTR_NULL
 };
 
