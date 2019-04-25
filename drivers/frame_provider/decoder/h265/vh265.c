@@ -5401,11 +5401,6 @@ static void set_aux_data(struct hevc_state_s *hevc,
 
 	if (hevc->aux_data_dirty ||
 		hevc->m_ins_flag == 0) {
-		dma_sync_single_for_cpu(
-		amports_get_dma_device(),
-		hevc->aux_phy_addr,
-		hevc->prefix_aux_size + hevc->suffix_aux_size,
-		DMA_FROM_DEVICE);
 
 		hevc->aux_data_dirty = 0;
 	}
@@ -6942,23 +6937,21 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 		uninit_detrefill_buf(hevc);
 #endif
 	if (hevc->aux_addr) {
-		dma_unmap_single(amports_get_dma_device(),
-			hevc->aux_phy_addr,
-			hevc->prefix_aux_size + hevc->suffix_aux_size,
-			DMA_FROM_DEVICE);
-		kfree(hevc->aux_addr);
+		dma_free_coherent(amports_get_dma_device(),
+				hevc->prefix_aux_size + hevc->suffix_aux_size, hevc->aux_addr,
+					hevc->aux_phy_addr);
 		hevc->aux_addr = NULL;
 	}
 	if (hevc->rpm_addr) {
-		dma_unmap_single(amports_get_dma_device(),
-			hevc->rpm_phy_addr, RPM_BUF_SIZE, DMA_FROM_DEVICE);
-		kfree(hevc->rpm_addr);
+		dma_free_coherent(amports_get_dma_device(),
+				RPM_BUF_SIZE, hevc->rpm_addr,
+					hevc->rpm_phy_addr);
 		hevc->rpm_addr = NULL;
 	}
 	if (hevc->lmem_addr) {
-		dma_unmap_single(amports_get_dma_device(),
-			hevc->lmem_phy_addr, LMEM_BUF_SIZE, DMA_FROM_DEVICE);
-		kfree(hevc->lmem_addr);
+		dma_free_coherent(amports_get_dma_device(),
+				RPM_BUF_SIZE, hevc->lmem_addr,
+					hevc->lmem_phy_addr);
 		hevc->lmem_addr = NULL;
 	}
 
@@ -7009,22 +7002,12 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 	video_signal_type = hevc->video_signal_type;
 
 	if ((get_dbg_flag(hevc) & H265_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-		hevc->rpm_addr = kmalloc(RPM_BUF_SIZE, GFP_KERNEL);
+		hevc->rpm_addr = dma_alloc_coherent(amports_get_dma_device(),
+				RPM_BUF_SIZE, &hevc->rpm_phy_addr, GFP_KERNEL);
 		if (hevc->rpm_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
 		}
-
-		hevc->rpm_phy_addr = dma_map_single(amports_get_dma_device(),
-			hevc->rpm_addr, RPM_BUF_SIZE, DMA_FROM_DEVICE);
-		if (dma_mapping_error(amports_get_dma_device(),
-			hevc->rpm_phy_addr)) {
-			pr_err("%s: failed to map rpm buffer\n", __func__);
-			kfree(hevc->rpm_addr);
-			hevc->rpm_addr = NULL;
-			return -1;
-		}
-
 		hevc->rpm_ptr = hevc->rpm_addr;
 	}
 
@@ -7035,35 +7018,18 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		hevc->prefix_aux_size = AUX_BUF_ALIGN(prefix_aux_buf_size);
 		hevc->suffix_aux_size = AUX_BUF_ALIGN(suffix_aux_buf_size);
 		aux_buf_size = hevc->prefix_aux_size + hevc->suffix_aux_size;
-		hevc->aux_addr = kmalloc(aux_buf_size, GFP_KERNEL);
+		hevc->aux_addr =dma_alloc_coherent(amports_get_dma_device(),
+				aux_buf_size, &hevc->aux_phy_addr, GFP_KERNEL);
 		if (hevc->aux_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
 		}
-
-		hevc->aux_phy_addr = dma_map_single(amports_get_dma_device(),
-			hevc->aux_addr, aux_buf_size, DMA_FROM_DEVICE);
-		if (dma_mapping_error(amports_get_dma_device(),
-			hevc->aux_phy_addr)) {
-			pr_err("%s: failed to map rpm buffer\n", __func__);
-			kfree(hevc->aux_addr);
-			hevc->aux_addr = NULL;
-			return -1;
-		}
 	}
 
-	hevc->lmem_addr = kmalloc(LMEM_BUF_SIZE, GFP_KERNEL);
+	hevc->lmem_addr = dma_alloc_coherent(amports_get_dma_device(),
+				LMEM_BUF_SIZE, &hevc->lmem_phy_addr, GFP_KERNEL);
 	if (hevc->lmem_addr == NULL) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
-		return -1;
-	}
-	hevc->lmem_phy_addr = dma_map_single(amports_get_dma_device(),
-		hevc->lmem_addr, LMEM_BUF_SIZE, DMA_FROM_DEVICE);
-	if (dma_mapping_error(amports_get_dma_device(),
-		hevc->lmem_phy_addr)) {
-		pr_err("%s: failed to map lmem buffer\n", __func__);
-		kfree(hevc->lmem_addr);
-		hevc->lmem_addr = NULL;
 		return -1;
 	}
 	hevc->lmem_ptr = hevc->lmem_addr;
@@ -9494,11 +9460,6 @@ pic_done:
 			if (get_dbg_flag(hevc) & H265_DEBUG_SEND_PARAM_WITH_REG)
 				get_rpm_param(&hevc->param);
 			else {
-				dma_sync_single_for_cpu(
-				amports_get_dma_device(),
-				hevc->rpm_phy_addr,
-				RPM_BUF_SIZE,
-				DMA_FROM_DEVICE);
 
 				for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
 					int ii;
@@ -9510,11 +9471,6 @@ pic_done:
 					}
 				}
 #ifdef SEND_LMEM_WITH_RPM
-				dma_sync_single_for_cpu(
-					amports_get_dma_device(),
-					hevc->lmem_phy_addr,
-					LMEM_BUF_SIZE,
-					DMA_FROM_DEVICE);
 				check_head_error(hevc);
 #endif
 			}
@@ -9543,11 +9499,7 @@ pic_done:
 #endif
 				aux_data_is_avaible(hevc)
 				) {
-				dma_sync_single_for_cpu(
-				amports_get_dma_device(),
-				hevc->aux_phy_addr,
-				hevc->prefix_aux_size + hevc->suffix_aux_size,
-				DMA_FROM_DEVICE);
+
 				if (get_dbg_flag(hevc) &
 					H265_DEBUG_BUFMGR_MORE)
 					dump_aux_buf(hevc);
@@ -9808,12 +9760,6 @@ static irqreturn_t vh265_isr(int irq, void *data)
 
 	debug_tag = READ_HREG(DEBUG_REG1);
 	if (debug_tag & 0x10000) {
-		dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			hevc->lmem_phy_addr,
-			LMEM_BUF_SIZE,
-			DMA_FROM_DEVICE);
-
 		hevc_print(hevc, 0,
 			"LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
 
