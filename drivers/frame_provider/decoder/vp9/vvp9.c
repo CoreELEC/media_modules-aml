@@ -6058,10 +6058,10 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 	pbi->rpm_ptr = NULL;
 	pbi->lmem_ptr = NULL;
 	if (pbi->rpm_addr) {
-		dma_unmap_single(amports_get_dma_device(),
-			pbi->rpm_phy_addr, RPM_BUF_SIZE,
-				DMA_FROM_DEVICE);
-		kfree(pbi->rpm_addr);
+		dma_free_coherent(amports_get_dma_device(),
+					RPM_BUF_SIZE,
+					pbi->rpm_addr,
+					pbi->rpm_phy_addr);
 		pbi->rpm_addr = NULL;
 	}
 	if (pbi->lmem_addr) {
@@ -6213,19 +6213,11 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 			& 0x40) >> 6;
 
 	if ((debug & VP9_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-		pbi->rpm_addr = kmalloc(RPM_BUF_SIZE, GFP_KERNEL);
+		pbi->rpm_addr = dma_alloc_coherent(amports_get_dma_device(),
+				RPM_BUF_SIZE,
+				&pbi->rpm_phy_addr, GFP_KERNEL);
 		if (pbi->rpm_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
-			return -1;
-		}
-
-		pbi->rpm_phy_addr = dma_map_single(amports_get_dma_device(),
-			pbi->rpm_addr, RPM_BUF_SIZE, DMA_FROM_DEVICE);
-		if (dma_mapping_error(amports_get_dma_device(),
-			pbi->rpm_phy_addr)) {
-			pr_err("%s: failed to map rpm buffer\n", __func__);
-			kfree(pbi->rpm_addr);
-			pbi->rpm_addr = NULL;
 			return -1;
 		}
 
@@ -6239,17 +6231,6 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
 		return -1;
 	}
-/*
- *		pbi->lmem_phy_addr = dma_map_single(amports_get_dma_device(),
- *			pbi->lmem_addr, LMEM_BUF_SIZE, DMA_BIDIRECTIONAL);
- *		if (dma_mapping_error(amports_get_dma_device(),
- *			pbi->lmem_phy_addr)) {
- *			pr_err("%s: failed to map lmem buffer\n", __func__);
- *			kfree(pbi->lmem_addr);
- *			pbi->lmem_addr = NULL;
- *			return -1;
- *		}
- */
 		pbi->lmem_ptr = pbi->lmem_addr;
 
 	pbi->prob_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
@@ -6260,16 +6241,6 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		return -1;
 	}
 	memset(pbi->prob_buffer_addr, 0, PROB_BUF_SIZE);
-/*	pbi->prob_buffer_phy_addr = dma_map_single(amports_get_dma_device(),
- *	pbi->prob_buffer_addr, PROB_BUF_SIZE, DMA_BIDIRECTIONAL);
- *	if (dma_mapping_error(amports_get_dma_device(),
- *	pbi->prob_buffer_phy_addr)) {
- *		pr_err("%s: failed to map prob_buffer\n", __func__);
- *		kfree(pbi->prob_buffer_addr);
- *		pbi->prob_buffer_addr = NULL;
- *		return -1;
- *	}
- */
 	pbi->count_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
 				COUNT_BUF_SIZE,
 				&pbi->count_buffer_phy_addr, GFP_KERNEL);
@@ -6278,16 +6249,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		return -1;
 	}
 	memset(pbi->count_buffer_addr, 0, COUNT_BUF_SIZE);
-/*	pbi->count_buffer_phy_addr = dma_map_single(amports_get_dma_device(),
-	pbi->count_buffer_addr, COUNT_BUF_SIZE, DMA_BIDIRECTIONAL);
-	if (dma_mapping_error(amports_get_dma_device(),
-		pbi->count_buffer_phy_addr)) {
-		pr_err("%s: failed to map count_buffer\n", __func__);
-		kfree(pbi->count_buffer_addr);
-		pbi->count_buffer_addr = NULL;
-		return -1;
-	}
-*/
+
 	if (pbi->mmu_enable) {
 		u32 mmu_map_size = vvp9_frame_mmu_map_size(pbi);
 		pbi->frame_mmu_map_addr =
@@ -6299,15 +6261,6 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 			return -1;
 		}
 		memset(pbi->frame_mmu_map_addr, 0, COUNT_BUF_SIZE);
-	/*	pbi->frame_mmu_map_phy_addr = dma_map_single(amports_get_dma_device(),
-		pbi->frame_mmu_map_addr, mmu_map_size, DMA_BIDIRECTIONAL);
-		if (dma_mapping_error(amports_get_dma_device(),
-		pbi->frame_mmu_map_phy_addr)) {
-			pr_err("%s: failed to map count_buffer\n", __func__);
-			kfree(pbi->frame_mmu_map_addr);
-			pbi->frame_mmu_map_addr = NULL;
-			return -1;
-		}*/
 	}
 #ifdef SUPPORT_FB_DECODING
 	if (pbi->m_ins_flag && stage_buf_num > 0) {
@@ -7379,11 +7332,6 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	if (debug & VP9_DEBUG_SEND_PARAM_WITH_REG) {
 		get_rpm_param(&vp9_param);
 	} else {
-		dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			pbi->rpm_phy_addr,
-			RPM_BUF_SIZE,
-			DMA_FROM_DEVICE);
 #ifdef SUPPORT_FB_DECODING
 		if (pbi->used_stage_buf_num > 0) {
 			reset_process_time(pbi);
@@ -7494,12 +7442,6 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 
 	debug_tag = READ_HREG(DEBUG_REG1);
 	if (debug_tag & 0x10000) {
-		dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			pbi->lmem_phy_addr,
-			LMEM_BUF_SIZE,
-			DMA_FROM_DEVICE);
-
 		pr_info("LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
 		for (i = 0; i < 0x400; i += 4) {
 			int ii;

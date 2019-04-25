@@ -3762,10 +3762,9 @@ static void avs2_local_uninit(struct AVS2Decoder_s *dec)
 	dec->rpm_ptr = NULL;
 	dec->lmem_ptr = NULL;
 	if (dec->rpm_addr) {
-		dma_unmap_single(amports_get_dma_device(),
-			dec->rpm_phy_addr, RPM_BUF_SIZE,
-				DMA_FROM_DEVICE);
-		kfree(dec->rpm_addr);
+		dma_free_coherent(amports_get_dma_device(),
+						RPM_BUF_SIZE, dec->rpm_addr,
+						dec->rpm_phy_addr);
 		dec->rpm_addr = NULL;
 	}
 	if (dec->lmem_addr) {
@@ -3875,25 +3874,15 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 			& 0x40) >> 6;
 
 	if ((debug & AVS2_DBG_SEND_PARAM_WITH_REG) == 0) {
-		dec->rpm_addr = kmalloc(RPM_BUF_SIZE, GFP_KERNEL);
+		dec->rpm_addr = dma_alloc_coherent(amports_get_dma_device(),
+			RPM_BUF_SIZE,
+			&dec->rpm_phy_addr, GFP_KERNEL);
 		if (dec->rpm_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
 		}
-
-		dec->rpm_phy_addr = dma_map_single(amports_get_dma_device(),
-			dec->rpm_addr, RPM_BUF_SIZE, DMA_FROM_DEVICE);
-		if (dma_mapping_error(amports_get_dma_device(),
-			dec->rpm_phy_addr)) {
-			pr_err("%s: failed to map rpm buffer\n", __func__);
-			kfree(dec->rpm_addr);
-			dec->rpm_addr = NULL;
-			return -1;
-		} else {
-			avs2_print(dec, AVS2_DBG_BUFMGR,
-				"rpm_phy_addr %x\n", (u32) dec->rpm_phy_addr);
-		}
-
+		avs2_print(dec, AVS2_DBG_BUFMGR,
+			"rpm_phy_addr %x\n", (u32) dec->rpm_phy_addr);
 		dec->rpm_ptr = dec->rpm_addr;
 	}
 
@@ -3907,17 +3896,7 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 		avs2_print(dec, AVS2_DBG_BUFMGR,
 			"%s, lmem_phy_addr %x\n",
 			__func__, (u32)dec->lmem_phy_addr);
-/*
-	dec->lmem_phy_addr = dma_map_single(amports_get_dma_device(),
-		dec->lmem_addr, LMEM_BUF_SIZE, DMA_BIDIRECTIONAL);
-	if (dma_mapping_error(amports_get_dma_device(),
-		dec->lmem_phy_addr)) {
-		pr_err("%s: failed to map lmem buffer\n", __func__);
-		kfree(dec->lmem_addr);
-		dec->lmem_addr = NULL;
-		return -1;
-	}
-*/
+
 	dec->lmem_ptr = dec->lmem_addr;
 
 
@@ -3930,15 +3909,6 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 		return -1;
 	}
 	memset(dec->frame_mmu_map_addr, 0, get_frame_mmu_map_size(dec));
-/*	dec->frame_mmu_map_phy_addr = dma_map_single(amports_get_dma_device(),
-	dec->frame_mmu_map_addr, FRAME_MMU_MAP_SIZE, DMA_BIDIRECTIONAL);
-	if (dma_mapping_error(amports_get_dma_device(),
-	dec->frame_mmu_map_phy_addr)) {
-		pr_err("%s: failed to map count_buffer\n", __func__);
-		kfree(dec->frame_mmu_map_addr);
-		dec->frame_mmu_map_addr = NULL;
-		return -1;
-	}*/
 #endif
 
 	ret = 0;
@@ -5417,12 +5387,6 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			get_rpm_param(
 				&dec->avs2_dec.param);
 		} else {
-			PRINT_LINE();
-			dma_sync_single_for_cpu(
-				amports_get_dma_device(),
-				dec->rpm_phy_addr,
-				RPM_BUF_SIZE,
-				DMA_FROM_DEVICE);
 
 			for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
 				int ii;
@@ -6003,12 +5967,6 @@ static void vavs2_put_timer_func(unsigned long arg)
 	}
 	if (debug & AVS2_DBG_DUMP_RPM_BUF) {
 		int i;
-		dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			dec->rpm_phy_addr,
-			RPM_BUF_SIZE,
-			DMA_FROM_DEVICE);
-
 		pr_info("RPM:\n");
 		for (i = 0; i < RPM_BUF_SIZE; i += 4) {
 			int ii;
@@ -6025,12 +5983,6 @@ static void vavs2_put_timer_func(unsigned long arg)
 	}
 	if (debug & AVS2_DBG_DUMP_LMEM_BUF) {
 		int i;
-		dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			dec->lmem_phy_addr,
-			LMEM_BUF_SIZE,
-			DMA_FROM_DEVICE);
-
 		pr_info("LMEM:\n");
 		for (i = 0; i < LMEM_BUF_SIZE; i += 4) {
 			int ii;
