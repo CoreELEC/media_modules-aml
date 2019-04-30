@@ -8162,8 +8162,13 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	if (vdec_is_support_4k() ||
 		(clk_adj_frame_count > (VDEC_CLOCK_ADJUST_FRAME - 1)))
 		vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
-	else
+	else if (pdata->sys_info->height * pdata->sys_info->width <= 1280 * 720)
+	{
+		vdec_source_changed(VFORMAT_H264, 1280, 720, 29);
+	}else
+	{
 		vdec_source_changed(VFORMAT_H264, 1920, 1080, 29);
+	}
 
 	if (vh264_init(hw) < 0) {
 		pr_info("\nammvdec_h264 init failed.\n");
