@@ -1370,9 +1370,10 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 	if (index < 0)
 		return -1;
 
-	if (vmpeg4_canvas_init(hw) < 0)
-		return -1;
-
+	if (!hw->init_flag) {
+		if (vmpeg4_canvas_init(hw) < 0)
+			return -1;
+	}
 	/* prepare REF0 & REF1
 	 * points to the past two IP buffers
 	 * prepare REC_CANVAS_ADDR and ANC2_CANVAS_ADDR
@@ -1496,6 +1497,7 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 	hw->first_i_frame_ready = 0;
 	hw->drop_frame_count = 0;
 	hw->buffer_not_ready = 0;
+	hw->init_flag = 0;
 
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++)
 		hw->vfbuf_use[i] = 0;
@@ -1634,14 +1636,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		void (*callback)(struct vdec_s *, void *), void *arg)
 {
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
-	int save_reg = READ_VREG(POWER_CTL_VLD);
 	int size, ret = 0;
 
 	hw->run_count++;
 	/* reset everything except DOS_TOP[1] and APB_CBUS[0] */
-	WRITE_VREG(DOS_SW_RESET0, 0xfffffff0);
-	WRITE_VREG(DOS_SW_RESET0, 0);
-	WRITE_VREG(POWER_CTL_VLD, save_reg);
 
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
@@ -1748,6 +1746,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	amvdec_start();
 	hw->stat |= STAT_VDEC_RUN;
+	hw->init_flag = 1;
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 }
 
@@ -1910,7 +1909,7 @@ static int ammvdec_mpeg4_remove(struct platform_device *pdev)
 	vdec_set_status(hw_to_vdec(hw), VDEC_STATUS_DISCONNECTED);
 
 	if (vdec->parallel_dec == 1) {
-		for (i = 0; i < DECODE_BUFFER_NUM_MAX - 1; i++) {
+		for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
 			vdec->free_canvas_ex(canvas_y(hw->canvas_spec[i]), vdec->id);
 			vdec->free_canvas_ex(canvas_u(hw->canvas_spec[i]), vdec->id);
 		}
