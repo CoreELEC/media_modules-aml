@@ -2196,8 +2196,7 @@ static void get_smallest_poc(struct DecodedPictureBuffer *p_Dpb, int *poc,
 		/* rain */
 		if ((*poc > p_Dpb->fs[i]->poc) &&
 			(!p_Dpb->fs[i]->is_output) &&
-			(!p_Dpb->fs[i]->pre_output) &&
-			(p_Dpb->fs[i]->is_used == 3)) {
+			(!p_Dpb->fs[i]->pre_output)) {
 #else
 		if ((*poc > p_Dpb->fs[i]->poc) && (!p_Dpb->fs[i]->is_output)) {
 #endif
@@ -2217,7 +2216,8 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 	if (!flush_flag) {
 		for (i = 0; i < p_Dpb->used_size; i++) {
 			if ((!p_Dpb->fs[i]->is_output) &&
-				(!p_Dpb->fs[i]->pre_output) && (p_Dpb->fs[i]->is_used == 3)) {
+				(!p_Dpb->fs[i]->pre_output) &&((p_Dpb->fs[i]->is_used == 3
+				||p_Dpb->fs[i]->data_flag & ERROR_FLAG )))  {
 				none_displayed_num++;
 				if ((p_H264_Dpb->first_insert_frame == FirstInsertFrm_IDLE)
 					&&  (p_Dpb->fs[i]->is_used == 3)

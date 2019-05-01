@@ -256,8 +256,8 @@ static unsigned int i_only_flag;
 	bit[9] check ERROR_STATUS_REG
 	bit[10] check reference list
 	bit[11] mark error if dpb error
-
 	bit[12] i_only when error happen
+	bit[13] 0: mark error according to last pic, 1: ignore mark error
 */
 static unsigned int error_proc_policy = 0xf36; /*0x1f14*/
 
@@ -3027,6 +3027,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 	struct Slice *pSlice = &(p_H264_Dpb->mSlice);
 	unsigned int colocate_adr_offset;
 	unsigned int val;
+	struct StorablePicture *last_pic = hw->last_dec_picture;
 
 #ifdef ONE_COLOCATE_BUF_PER_DECODE_BUF
 	int colocate_buf_index;
@@ -3155,6 +3156,20 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 	ref_reg_val = 0;
 	j = 0;
 	h264_buffer_info_data_write_count = 0;
+
+	if (last_pic)
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
+				"last_pic->data_flag %x   slice_type %x last_pic->slice_type %x\n",
+				last_pic->data_flag, pSlice->slice_type, last_pic->slice_type);
+	if (!hw->i_only && !(error_proc_policy & 0x2000) &&
+		last_pic && (last_pic->data_flag & ERROR_FLAG)
+		&& (!(last_pic->slice_type == B_SLICE))
+		&& (!(pSlice->slice_type == I_SLICE))) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
+				  "no i/idr error mark\n");
+		hw->data_flag |= ERROR_FLAG;
+		pic->data_flag |= ERROR_FLAG;
+	}
 
 	for (i = 0; i < (unsigned int)(pSlice->listXsize[0]); i++) {
 		/*ref list 0 */
@@ -6617,7 +6632,7 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw)
 	if (error_proc_policy & 0x80000000)
 		hw->send_error_frame_flag = error_proc_policy & 0x1;
 	else if ((unsigned long) hw->vh264_amstream_dec_info.param & 0x20)
-		hw->send_error_frame_flag = 1;
+		hw->send_error_frame_flag = 0; /*Don't display mark err frames*/
 
 	INIT_KFIFO(hw->display_q);
 	INIT_KFIFO(hw->newframe_q);
@@ -8359,17 +8374,8 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 		hw->vfpool[hw->cur_pool][i].index = -1; /* VF_BUF_NUM; */
 
 
-	if (hw->collocate_cma_alloc_addr) {
-		decoder_bmmu_box_free_idx(
-			hw->bmmu_box,
-			BMMU_REF_IDX);
-		hw->collocate_cma_alloc_addr = 0;
-		hw->dpb.colocated_mv_addr_start = 0;
-		hw->dpb.colocated_mv_addr_end = 0;
-	}
 	vf_notify_receiver(vdec->vf_provider_name, VFRAME_EVENT_PROVIDER_RESET, NULL);
 
-	dealloc_buf_specs(hw, 1);
 	buf_spec_init(hw);
 
 	vh264_local_init(hw);
