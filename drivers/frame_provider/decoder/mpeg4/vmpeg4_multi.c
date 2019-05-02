@@ -187,6 +187,7 @@ struct pic_info_t {
 	bool pts_valid;
 	u32 duration;
 	u32 repeat_cnt;
+	u32 pts_jumped_count;
 };
 
 struct vdec_mpeg4_hw_s {
@@ -274,6 +275,8 @@ struct vdec_mpeg4_hw_s {
 	u32 get_num;
 	u32 first_i_frame_ready;
 	u32 drop_frame_count;
+	u32 unstable_pts;
+	u32 last_decoded_pts;
 
 	struct firmware_s *fw;
 	u32 blkmode;
@@ -700,6 +703,10 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 		hw->dec_result = DEC_RESULT_DONE;
 		dec_pic = &hw->pic[index];
+		dec_pic->pts_jumped_count = 0;
+		dec_pic->pts_valid = false;
+		dec_pic->pts = 0;
+		dec_pic->pts64 = 0;
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 			"new pic: index=%d, used=%d, repeat=%d, time_inc=%d\n",
 			index, hw->vfbuf_use[index], repeat_cnt, vop_time_inc);
@@ -744,8 +751,23 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 				   READ_VREG(MP4_RATE), vop_time_inc);
 #endif
 		}
-
-		if ((I_PICTURE == picture_type) ||
+		if (hw->unstable_pts && hw->chunk) {// frame mode, and , unstable pts
+			if (I_PICTURE == picture_type) {
+				dec_pic->pts_valid = hw->chunk->pts_valid;
+				dec_pic->pts = hw->chunk->pts;
+				dec_pic->pts64 = hw->chunk->pts64;
+			} else {
+				if (hw->last_decoded_pts >= 0) {
+					u32 fcnt = (hw->chunk->pts -
+						hw->last_decoded_pts)*10/duration;
+					dec_pic->pts_jumped_count = (fcnt+5)/10;//rounding
+				 } else {
+					dec_pic->pts_jumped_count = 1;
+				 }
+			}
+			hw->last_decoded_pts = hw->chunk->pts;
+		}
+		else if ((I_PICTURE == picture_type) ||
 			(P_PICTURE == picture_type)) {
 			offset = READ_VREG(MP4_OFFSET_REG);
 			if (hw->chunk) {
@@ -863,6 +885,21 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 					hw->last_anch_pts_us64 = disp_pic->pts64;
 					hw->frame_num_since_last_anch = 0;
 				}
+			}
+		}
+		else if (hw->unstable_pts && hw->chunk) {
+			hw->frame_num_since_last_anch += disp_pic->pts_jumped_count;
+			disp_pic->pts = hw->last_anch_pts +
+				DUR2PTS(hw->frame_num_since_last_anch *
+				duration);
+			disp_pic->pts64 = hw->last_anch_pts_us64 +
+				DUR2PTS(hw->frame_num_since_last_anch *
+				duration) * 100 / 9;
+			if (hw->frame_num_since_last_anch > (1 << 15)) {
+				/* avoid overflow */
+				hw->last_anch_pts = disp_pic->pts;
+				hw->last_anch_pts_us64 = disp_pic->pts64;
+				hw->frame_num_since_last_anch = 0;
 			}
 		}
 		disp_pic->duration = duration;
@@ -1473,6 +1510,10 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 		(((unsigned long)hw->vmpeg4_amstream_dec_info.param) >> 16) & 0xffff;
 	hw->sys_mp4_rate = hw->vmpeg4_amstream_dec_info.rate;
 	hw->frame_width = hw->frame_height = hw->frame_dur = hw->frame_prog = 0;
+	hw->unstable_pts =
+	   (((unsigned long) hw->vmpeg4_amstream_dec_info.param & 0x40)
+	   >> 6);
+	hw->last_decoded_pts = -1;
 
 	hw->total_frame = 0;
 
