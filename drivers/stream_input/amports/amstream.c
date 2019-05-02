@@ -1118,6 +1118,7 @@ static ssize_t amstream_vbuf_write(struct file *file, const char *buf,
 #ifdef DATA_DEBUG
 	debug_file_write(buf, r);
 #endif
+	vdec_update_streambuff_status();
 
 	return r;
 }

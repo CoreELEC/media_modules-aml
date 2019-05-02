@@ -448,4 +448,6 @@ extern struct vframe_qos_s *vdec_get_qos_info(void);
 
 int vdec_get_frame_num(struct vdec_s *vdec);
 
+extern void vdec_update_streambuff_status(void);
+
 #endif				/* VDEC_H */
