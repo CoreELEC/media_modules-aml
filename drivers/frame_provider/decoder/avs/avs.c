@@ -580,6 +580,7 @@ static void vavs_isr(void)
 				pr_info("buffer_index %d, canvas addr %x\n",
 					   buffer_index, vf->canvas0Addr);
 			}
+			 vf->pts = (pts_valid)?pts:0;
 			vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
 			vfbuf_use[buffer_index]++;
 			vf->mem_handle =
@@ -712,11 +713,14 @@ static void vavs_isr(void)
 			vf->canvas0Addr = vf->canvas1Addr =
 				index2canvas(buffer_index);
 			vf->type_original = vf->type;
-
+			vf->pts = (pts_valid)?pts:0;
 			vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
 			if (debug_flag & AVS_DEBUG_PRINT) {
 				pr_info("buffer_index %d, canvas addr %x\n",
-					   buffer_index, vf->canvas0Addr);
+					   buffer_index, vf->canvas0Addr
+					   );
+			 pr_info("PicType = %d, PTS = 0x%x\n",
+				picture_type, vf->pts);
 			}
 
 			vfbuf_use[buffer_index]++;
