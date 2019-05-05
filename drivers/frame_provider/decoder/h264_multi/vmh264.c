@@ -59,6 +59,7 @@
 #include <linux/uaccess.h>
 #include "../utils/config_parser.h"
 #include "../../../amvdec_ports/vdec_drv_base.h"
+#include "../../../amvdec_ports/aml_vcodec_adapt.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/crc32.h>
 
@@ -1788,7 +1789,8 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 
 	ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
-		"[%d] %s(), buf size: %d\n", ctx->id, __func__,
+		"[%d] %s(), try alloc from v4l queue buf size: %d\n",
+		ctx->id, __func__,
 		(hw->mb_total << 8) + (hw->mb_total << 7));
 
 	ret = v4l_get_fb(hw->v4l2_ctx, &fb);
@@ -1845,6 +1847,7 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 
 static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 {
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	int endian = 0;
 	int blkmode =  ((hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ||
 		hw->is_used_v4l) ? CANVAS_BLKMODE_LINEAR :
@@ -1858,8 +1861,11 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		hw->mb_width << 4,
 		hw->mb_height << 4,
 		CANVAS_ADDR_NOWRAP,
-		blkmode,
-		endian);
+		hw->is_used_v4l ? CANVAS_BLKMODE_LINEAR :
+			CANVAS_BLKMODE_32X32,
+		hw->is_used_v4l && (v4l2_ctx->ada_ctx->vfm_path
+			!= FRAME_BASE_PATH_V4L_VIDEO) ? 7 : 0);
+
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) | /* canvas_blk32_wr */
@@ -1875,8 +1881,11 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		hw->mb_width << 4,
 		hw->mb_height << 3,
 		CANVAS_ADDR_NOWRAP,
-		blkmode,
-		endian);
+		hw->is_used_v4l ? CANVAS_BLKMODE_LINEAR :
+			CANVAS_BLKMODE_32X32,
+		hw->is_used_v4l && (v4l2_ctx->ada_ctx->vfm_path
+			!= FRAME_BASE_PATH_V4L_VIDEO) ? 7 : 0);
+
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) |
@@ -1884,6 +1893,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 				 (1 << 8) |
 				(hw->buffer_spec[i].u_canvas_index << 0));
 	}
+
 	WRITE_VREG(ANC0_CANVAS_ADDR + hw->buffer_spec[i].canvas_pos,
 		spec2canvas(&hw->buffer_spec[i]));
 
@@ -6387,6 +6397,7 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 {
 	int i, j;
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 
 	/* if (hw->init_flag == 0) { */
 	if (h264_debug_flag & 0x40000000) {
@@ -6451,7 +6462,8 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 #endif
 
 	/* cbcr_merge_swap_en */
-	if (hw->is_used_v4l)
+	if (hw->is_used_v4l && v4l2_ctx->ada_ctx->vfm_path
+		!= FRAME_BASE_PATH_V4L_VIDEO)
 		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
 
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 0xbf << 24);
@@ -8233,6 +8245,8 @@ static void reset(struct vdec_s *vdec)
 	struct vdec_h264_hw_s *hw =
 		(struct vdec_h264_hw_s *)vdec->private;
 
+	pr_info("vmh264 reset\n");
+
 	cancel_work_sync(&hw->work);
 	cancel_work_sync(&hw->notify_work);
 	if (hw->stat & STAT_VDEC_RUN) {
@@ -8406,12 +8420,22 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 	vh264_local_init(hw);
 	/*hw->decode_pic_count = 0;
 	hw->seq_info2 = 0;*/
-	if (vh264_set_params(hw,
+	if (!hw->is_used_v4l) {
+		if (vh264_set_params(hw,
 			hw->cfg_param1,
 			hw->cfg_param2,
 			hw->cfg_param3,
 			hw->cfg_param4) < 0)
-		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+			hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+	} else {
+		/* V4L2 decoder reset keeps decoder in same status as
+		 * after probe when there is no SPS/PPS header processed
+		 * and no buffers allocated.
+		 */
+		hw->seq_info = 0;
+		hw->seq_info2 = 0;
+	}
+
 	hw->init_flag = 1;
 	hw->reset_bufmgr_count++;
 #endif

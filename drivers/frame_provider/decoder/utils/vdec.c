@@ -850,6 +850,12 @@ int vdec_get_status(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(vdec_get_status);
 
+int vdec_get_frame_num(struct vdec_s *vdec)
+{
+	return vdec->input.have_frame_num;
+}
+EXPORT_SYMBOL(vdec_get_frame_num);
+
 void vdec_set_status(struct vdec_s *vdec, int status)
 {
 	//trace_vdec_set_status(vdec, status);/*DEBUG_TMP*/
@@ -1954,7 +1960,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				"aml_video.1 videosync.0 videopip");
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
-		} else if (p->frame_base_video_path == FRAME_BASE_PATH_V4L_VIDEO) {
+		} else if (p->frame_base_video_path == FRAME_BASE_PATH_V4L_OSD) {
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 				"%s %s", vdec->vf_provider_name,
 				vdec->vf_receiver_name);
@@ -1964,6 +1970,10 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 				"%s %s", vdec->vf_provider_name,
 				"amvideo");
+		} else if (p->frame_base_video_path == FRAME_BASE_PATH_V4L_VIDEO) {
+			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+				"%s %s %s", vdec->vf_provider_name,
+				vdec->vf_receiver_name, "amvideo");
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
 		}

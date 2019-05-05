@@ -23,7 +23,23 @@
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
+#include "../stream_input/parser/streambuf.h"
 
+#define NORe CODEC_MODE('N', 'O', 'R', 'e') // normal es
+#define NORn CODEC_MODE('N', 'O', 'R', 'n') // normal nalu
+#define DRMe CODEC_MODE('D', 'R', 'M', 'e') // drm es
+#define DRMn CODEC_MODE('D', 'R', 'M', 'n') // drm nalu
+
+struct stream_info {
+	u32 magic;
+	u32 type;
+	union {
+		struct drm_info drm;
+		u8 buf[128];
+	} m;
+	u32 length;
+	u8 data[0];
+};
 
 /**
  * struct vdec_fb_status  - decoder frame buffer status

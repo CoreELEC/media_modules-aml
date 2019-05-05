@@ -25,10 +25,9 @@
 #include "aml_vcodec_dec.h"
 #include "vdec_drv_base.h"
 #include "aml_vcodec_dec_pm.h"
-//#include "aml_vpu.h"
 
 const struct vdec_common_if *get_h264_dec_comm_if(void);
-const struct vdec_common_if *get_vp8_dec_comm_if(void);
+const struct vdec_common_if *get_hevc_dec_comm_if(void);
 const struct vdec_common_if *get_vp9_dec_comm_if(void);
 
 int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
@@ -39,12 +38,12 @@ int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
 	case V4L2_PIX_FMT_H264:
 		ctx->dec_if = get_h264_dec_comm_if();
 		break;
-	/*case V4L2_PIX_FMT_VP8:
-		ctx->dec_if = get_vp8_dec_comm_if();
+	case V4L2_PIX_FMT_HEVC:
+		ctx->dec_if = get_hevc_dec_comm_if();
 		break;
 	case V4L2_PIX_FMT_VP9:
 		ctx->dec_if = get_vp9_dec_comm_if();
-		break;*/
+		break;
 	default:
 		return -EINVAL;
 	}

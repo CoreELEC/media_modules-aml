@@ -39,6 +39,7 @@ struct aml_vdec_adapt {
 	struct stream_port_s port;
 	struct dec_sysinfo dec_prop;
 	char *recv_name;
+	int vfm_path;
 };
 
 int video_decoder_init(struct aml_vdec_adapt *ada_ctx);
@@ -60,6 +61,8 @@ int aml_codec_reset(struct aml_vdec_adapt *ada_ctx);
 extern void dump_write(const char __user *buf, size_t count);
 
 bool is_input_ready(struct aml_vdec_adapt *ada_ctx);
+
+int vdec_frame_number(struct aml_vdec_adapt *ada_ctx);
 
 #endif /* VDEC_ADAPT_H */
 
