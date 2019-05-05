@@ -42,9 +42,6 @@
 #define VDEC_IRQ_CLR	0x10
 #define VDEC_IRQ_CFG_REG	0xa4
 
-module_param(aml_v4l2_dbg_level, int, 0644);
-module_param(aml_vcodec_dbg, bool, 0644);
-
 static int fops_vcodec_open(struct file *file)
 {
 	struct aml_vcodec_dev *dev = video_drvdata(file);
@@ -340,6 +337,26 @@ static void __exit amvdec_ports_exit(void)
 module_init(amvdec_ports_init);
 module_exit(amvdec_ports_exit);
 */
+
+module_param(aml_v4l2_dbg_level, int, 0644);
+module_param(aml_vcodec_dbg, bool, 0644);
+
+bool aml_set_vfm_enable;
+EXPORT_SYMBOL(aml_set_vfm_enable);
+
+int aml_set_vfm_path;
+EXPORT_SYMBOL(aml_set_vfm_path);
+
+bool aml_set_vdec_type_enable;
+EXPORT_SYMBOL(aml_set_vdec_type_enable);
+
+int aml_set_vdec_type;
+EXPORT_SYMBOL(aml_set_vdec_type);
+
+module_param(aml_set_vdec_type_enable, bool, 0644);
+module_param(aml_set_vdec_type, int, 0644);
+module_param(aml_set_vfm_enable, bool, 0644);
+module_param(aml_set_vfm_path, int, 0644);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("AML video codec V4L2 decoder driver");

@@ -44,8 +44,25 @@ static void vdec_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct vcodec_vfm_s *vfm = (struct vcodec_vfm_s *)op_arg;
 
-	vf_put(vf, vfm->recv_name);
-	vf_notify_provider(vfm->recv_name, VFRAME_EVENT_RECEIVER_PUT, NULL);
+	/* If the video frame from amvide that means */
+	/* the data has been processed and finished, */
+	/* then push back to VDA. thus we don't put the */
+	/* buffer to the decoder directly.*/
+
+	//vf_put(vf, vfm->recv_name);
+	//vf_notify_provider(vfm->recv_name, VFRAME_EVENT_RECEIVER_PUT, NULL);
+
+	if (vfq_level(&vfm->vf_que_recycle) > POOL_SIZE - 1) {
+		pr_info("%s %d vfq full.\n", __func__, __LINE__);
+		return;
+	}
+
+	atomic_set(&vf->use_cnt, 1);
+
+	vfq_push(&vfm->vf_que_recycle, vf);
+
+	/* schedule capture work. */
+	vdec_device_vf_run(vfm->ctx);
 }
 
 static int vdec_event_cb(int type, void *data, void *private_data)
@@ -121,6 +138,7 @@ static int video_receiver_event_fun(int type, void *data, void *private_data)
 		}
 
 		vfq_init(&vfm->vf_que, POOL_SIZE + 1, &vfm->pool[0]);
+		vfq_init(&vfm->vf_que_recycle, POOL_SIZE + 1, &vfm->pool_recycle[0]);
 
 		break;
 	}
@@ -150,15 +168,15 @@ static int video_receiver_event_fun(int type, void *data, void *private_data)
 
 		vfq_push(&vfm->vf_que, vfm->vf);
 
-		/*vf_notify_receiver(vfm->prov_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);*/
+		if (vfm->ada_ctx->vfm_path == FRAME_BASE_PATH_V4L_VIDEO) {
+			vf_notify_receiver(vfm->prov_name,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			break;
+		}
 
 		/* schedule capture work. */
 		vdec_device_vf_run(vfm->ctx);
 
-		aml_v4l2_debug(2, "[%d] FROM (%s) vf: %p, idx: %d",
-			vfm->ctx->id, vf_get_provider(vfm->recv_name)->name,
-			vfm->vf, vfm->vf->index);
 		break;
 	}
 
@@ -175,12 +193,18 @@ static const struct vframe_receiver_op_s vf_receiver = {
 
 struct vframe_s *peek_video_frame(struct vcodec_vfm_s *vfm)
 {
-	return vfq_peek(&vfm->vf_que);
+	if (vfm->ada_ctx->vfm_path == FRAME_BASE_PATH_V4L_VIDEO)
+		return vfq_peek(&vfm->vf_que_recycle);
+	else
+		return vfq_peek(&vfm->vf_que);
 }
 
 struct vframe_s *get_video_frame(struct vcodec_vfm_s *vfm)
 {
-	return vfq_pop(&vfm->vf_que);
+	if (vfm->ada_ctx->vfm_path == FRAME_BASE_PATH_V4L_VIDEO)
+		return vfq_pop(&vfm->vf_que_recycle);
+	else
+		return vfq_pop(&vfm->vf_que);
 }
 
 int vcodec_vfm_init(struct vcodec_vfm_s *vfm)

@@ -23,6 +23,7 @@
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include "aml_vcodec_util.h"
 
 #define VCODEC_CAPABILITY_4K_DISABLED	0x10
 #define VCODEC_DEC_4K_CODED_WIDTH	4096U
@@ -32,6 +33,8 @@
 
 #define AML_VDEC_IRQ_STATUS_DEC_SUCCESS	0x10000
 #define V4L2_BUF_FLAG_LAST		0x00100000
+
+#define AML_V4L2_SET_DECMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
 
 /**
  * struct vdec_fb  - decoder frame buffer

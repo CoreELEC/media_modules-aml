@@ -54,7 +54,7 @@
 #define SYNC_OUTSIDE	(2)
 #define USE_V4L_PORTS	(0x80)
 
-//#define DATA_DEBUG
+#define DATA_DEBUG
 
 static int def_4k_vstreambuf_sizeM =
 	(DEFAULT_VIDEO_BUFFER_SIZE_4K >> 20);
@@ -108,28 +108,17 @@ static struct stream_buf_s bufs[BUF_MAX_NUM] = {
 	},
 };
 
-static void set_cfg_info(struct aml_vdec_adapt *vdec)
+extern int aml_set_vfm_path, aml_set_vdec_type;
+extern bool aml_set_vfm_enable, aml_set_vdec_type_enable;
+
+static void set_default_params(struct aml_vdec_adapt *vdec)
 {
 	unsigned long sync_mode = (PTS_OUTSIDE | SYNC_OUTSIDE | USE_V4L_PORTS);
-
-	vdec->port.type |= (PORT_TYPE_VIDEO | PORT_TYPE_FRAME/* | PORT_TYPE_ES*/);
-	vdec->port.flag |= PORT_FLAG_VFORMAT;
+	vdec->dec_prop.param = (void *)sync_mode;
 	vdec->dec_prop.format = vdec->format;
 	vdec->dec_prop.width = 1920;
 	vdec->dec_prop.height = 1080;
 	vdec->dec_prop.rate = 3200;
-	vdec->dec_prop.param = (void *)sync_mode;
-}
-
-static void set_vdec_mode(struct vdec_s *vdec)
-{
-	//vdec->type = VDEC_TYPE_SINGLE;
-	vdec->type = VDEC_TYPE_FRAME_BLOCK;
-}
-
-static void set_vdec_vfm(struct vdec_s *vdec)
-{
-	vdec->frame_base_video_path = FRAME_BASE_PATH_V4L_VIDEO;
 }
 
 static int enable_hardware(struct stream_port_s *port)
@@ -145,10 +134,9 @@ static int enable_hardware(struct stream_port_s *port)
 		amports_switch_gate("vdec", 1);
 
 		if (has_hevc_vdec()) {
-			if (port->type & (PORT_TYPE_MPTS | PORT_TYPE_HEVC))
+			if (port->type & PORT_TYPE_HEVC)
 				vdec_poweron(VDEC_HEVC);
-
-			if ((port->type & PORT_TYPE_HEVC) == 0)
+			else
 				vdec_poweron(VDEC_1);
 		} else {
 			if (get_cpu_type() >= MESON_CPU_MAJOR_ID_M8)
@@ -164,25 +152,14 @@ static int disable_hardware(struct stream_port_s *port)
 	if (get_cpu_type() < MESON_CPU_MAJOR_ID_M6)
 		return -1;
 
-	if ((port->type & PORT_TYPE_VIDEO)
-		&& get_cpu_type() >= MESON_CPU_MAJOR_ID_M8) {
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-		if (has_hevc_vdec())
-			vdec_poweroff(VDEC_HEVC);
-
-		vdec_poweroff(VDEC_1);
-#else
-		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX
-			&& port->vformat == VFORMAT_H264
-			&& bufs[BUF_TYPE_VIDEO].for_4k)
-			vdec_poweroff(VDEC_HEVC);
-
-		if ((port->vformat == VFORMAT_HEVC
-			|| port->vformat == VFORMAT_VP9))
+	if (port->type & PORT_TYPE_VIDEO) {
+		if (has_hevc_vdec()) {
+			if (port->type & PORT_TYPE_HEVC)
 				vdec_poweroff(VDEC_HEVC);
 			else
 				vdec_poweroff(VDEC_1);
-#endif
+		}
+
 		amports_switch_gate("vdec", 0);
 	}
 
@@ -481,73 +458,118 @@ static int vdec_ports_release(struct stream_port_s *port)
 	return 0;
 }
 
-static int vdec_ports_init(struct aml_vdec_adapt *vdec_adapt)
+static void set_vdec_properity(struct vdec_s *vdec,
+	struct aml_vdec_adapt *ada_ctx)
+{
+	vdec->sys_info	= &ada_ctx->dec_prop;
+	vdec->port	= &ada_ctx->port;
+	vdec->format	= ada_ctx->dec_prop.format;
+	vdec->sys_info_store = ada_ctx->dec_prop;
+	vdec->vf_receiver_name = ada_ctx->recv_name;
+
+	/* binding v4l2 ctx to vdec. */
+	vdec->private = ada_ctx->ctx;
+
+	/* set video format, sys info and vfm map.*/
+	vdec->port->vformat = vdec->format;
+	vdec->port->type |= PORT_TYPE_VIDEO;
+	vdec->port_flag |= PORT_FLAG_VFORMAT;
+	if (vdec->slave) {
+		vdec->slave->format = ada_ctx->dec_prop.format;
+		vdec->slave->port_flag |= PORT_FLAG_VFORMAT;
+	}
+
+	if (vdec->port->type & PORT_FLAG_DRM) {
+		vdec->type = VDEC_TYPE_STREAM_PARSER;
+		vdec->port->type |= PORT_TYPE_ES;
+		vdec->frame_base_video_path = FRAME_BASE_PATH_V4L_VIDEO;
+	} else {
+		vdec->type = VDEC_TYPE_FRAME_BLOCK;
+		vdec->port->type |= PORT_TYPE_FRAME;
+		vdec->frame_base_video_path = FRAME_BASE_PATH_V4L_OSD;
+	}
+
+	if (aml_set_vdec_type_enable) {
+		if (aml_set_vdec_type == VDEC_TYPE_STREAM_PARSER) {
+			vdec->type = VDEC_TYPE_STREAM_PARSER;
+			vdec->port->type &= ~PORT_TYPE_FRAME;
+			vdec->port->type |= PORT_TYPE_ES;
+			ada_ctx->ctx->is_stream_mode = true;
+		} else if (aml_set_vdec_type == VDEC_TYPE_FRAME_BLOCK) {
+			vdec->type = VDEC_TYPE_FRAME_BLOCK;
+			vdec->port->type &= ~PORT_TYPE_ES;
+			vdec->port->type |= PORT_TYPE_FRAME;
+			ada_ctx->ctx->is_stream_mode = false;
+		}
+	}
+
+	if (aml_set_vfm_enable)
+		vdec->frame_base_video_path = aml_set_vfm_path;
+
+	vdec->port->flag = vdec->port_flag;
+	ada_ctx->vfm_path = vdec->frame_base_video_path;
+	ada_ctx->vdec = vdec;
+}
+
+static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 {
 	int ret = -1;
 	struct stream_buf_s *pvbuf = &bufs[BUF_TYPE_VIDEO];
 	struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
 	//struct stream_buf_s *psbuf = &bufs[BUF_TYPE_SUBTITLE];
-	struct stream_port_s *port = &vdec_adapt->port;
 	struct vdec_s *vdec = NULL;
 
 	/* create the vdec instance.*/
-	vdec = vdec_create(port, NULL);
+	vdec = vdec_create(&ada_ctx->port, NULL);
 	if (IS_ERR_OR_NULL(vdec))
 		return -1;
 
-	/* set v4l2 ctx */
-	vdec->private = vdec_adapt->ctx;
+	set_vdec_properity(vdec, ada_ctx);
 
-	vdec_adapt->vdec = vdec;
-	vdec->sys_info = &vdec_adapt->dec_prop;
-	vdec->sys_info_store = vdec_adapt->dec_prop;
-	vdec->vf_receiver_name = vdec_adapt->recv_name;
-
-	/* set video format and sys info */
-	vdec_set_format(vdec, vdec_adapt->dec_prop.format);
-	set_vdec_mode(vdec);
-	set_vdec_vfm(vdec);
+	/* init hw and gate*/
+	ret = enable_hardware(vdec->port);
+	if (ret < 0) {
+		pr_info("enable hw fail.\n");
+		goto error1;
+	}
 
 	stbuf_fetch_init();
-
 	user_buffer_init();
 
-	if ((port->type & PORT_TYPE_AUDIO)
-		&& (port->flag & PORT_FLAG_AFORMAT)) {
-		ret = audio_component_init(port, pabuf);
+	if ((vdec->port->type & PORT_TYPE_AUDIO)
+		&& (vdec->port_flag & PORT_FLAG_AFORMAT)) {
+		ret = audio_component_init(vdec->port, pabuf);
 		if (ret < 0) {
 			pr_err("audio_component_init  failed\n");
 			goto error1;
 		}
 	}
 
-	if ((port->type & PORT_TYPE_VIDEO)
+	if ((vdec->port->type & PORT_TYPE_VIDEO)
 		&& (vdec->port_flag & PORT_FLAG_VFORMAT)) {
 		pvbuf->for_4k = 0;
 		if (has_hevc_vdec()) {
-			if (port->vformat == VFORMAT_HEVC
-				|| port->vformat == VFORMAT_VP9)
+			if (vdec->port->vformat == VFORMAT_HEVC
+				|| vdec->port->vformat == VFORMAT_VP9)
 				pvbuf = &bufs[BUF_TYPE_HEVC];
 		}
 
-		ret = video_component_init(port, pvbuf);
+		ret = video_component_init(vdec->port, pvbuf);
 		if (ret < 0) {
 			pr_err("video_component_init  failed\n");
 			goto error2;
 		}
-	}
 
-	/* connect vdec at the end after all HW initialization */
-	if ((port->type & PORT_TYPE_VIDEO)
-		&& (vdec->port_flag & PORT_FLAG_VFORMAT))
+		/* connect vdec at the end after all HW initialization */
 		vdec_connect(vdec);
+	}
 
 	return 0;
 
 //error3:
 	//video_component_release(port, pvbuf, 0);
 error2:
-	audio_component_release(port, pabuf, 0);
+	audio_component_release(vdec->port, pabuf, 0);
 error1:
 	return ret;
 }
@@ -557,14 +579,7 @@ int video_decoder_init(struct aml_vdec_adapt *vdec)
 	int ret = -1;
 
 	/* sets configure data */
-	set_cfg_info(vdec);
-
-	/* init hw and gate*/
-	ret = enable_hardware(&vdec->port);
-	if (ret < 0) {
-		pr_info("enable hw fail.\n");
-		goto out;
-	}
+	set_default_params(vdec);
 
 	/* init the buffer work space and connect vdec.*/
 	ret = vdec_ports_init(vdec);
@@ -623,6 +638,9 @@ int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 			ret = drm_write(ada_ctx->filp, pbuf, buf, count);
 		else
 			ret = esparser_write(ada_ctx->filp, pbuf, buf, count);
+
+		if (ret == -EAGAIN)
+			msleep(30);
 	} while (ret == -EAGAIN && try_cnt--);
 
 	if (slow_input) {
@@ -653,7 +671,7 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count, unsigned long int timestamp)
 {
 	int ret = -1;
-	int try_cnt = 10;
+	int try_cnt = 100;
 	struct vdec_s *vdec = ada_ctx->vdec;
 
 	/* set timestamp */
@@ -663,7 +681,7 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 		ret = vdec_write_vframe(vdec, buf, count);
 		if (ret == -EAGAIN) {
 			/*vdec_input_level(&vdec->input);*/
-			msleep(20);
+			msleep(30);
 		}
 	} while (ret == -EAGAIN && try_cnt--);
 
@@ -677,7 +695,7 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	dump_write(buf, count);
 #endif
 	aml_v4l2_debug(2, "[%d] write frames, vbuf: %p, size: %u, ret: %d, crc: %x",
-		ada_ctx->ctx->id, buf, count, ret, crc32(0, buf, count));
+		ada_ctx->ctx->id, buf, count, ret, crc32_le(0, buf, count));
 
 	return ret;
 }
@@ -717,4 +735,14 @@ bool is_input_ready(struct aml_vdec_adapt *ada_ctx)
 	}
 
 	return false;
+}
+
+int vdec_frame_number(struct aml_vdec_adapt *ada_ctx)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+
+	if (vdec)
+		return vdec_get_frame_num(vdec);
+	else
+		return -1;
 }

@@ -148,6 +148,7 @@ struct aml_q_data {
 	unsigned int	bytesperline[AML_VCODEC_MAX_PLANES];
 	unsigned int	sizeimage[AML_VCODEC_MAX_PLANES];
 	struct aml_video_fmt	*fmt;
+	bool resolution_changed;
 };
 
 /**
@@ -337,6 +338,8 @@ struct aml_vcodec_ctx {
 	bool has_receive_eos;
 	struct list_head capture_list;
 	struct list_head vdec_thread_list;
+	bool is_drm_mode;
+	bool is_stream_mode;
 };
 
 /**
