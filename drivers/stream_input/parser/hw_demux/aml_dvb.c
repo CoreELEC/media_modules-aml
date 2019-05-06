@@ -75,6 +75,7 @@ typedef enum __tuner_type
 	TUNER_SI2159,
 	TUNER_R842,
 	TUNER_R840,
+	TUNER_ATBM2040,
 	TUNER_MAX_NUM
 }tuner_type;
 
@@ -191,6 +192,15 @@ static int dvb_attach_tuner(struct dvb_frontend *fe, struct aml_tuner *tuner, tu
 		} else {
 			pr_inf("mxl661_attach  attach sucess\n");
 			*type = TUNER_MXL661;
+		}
+		break;
+	case AM_TUNER_ATBM2040:
+		if (!dvb_attach(atbm2040_attach, fe, i2c_adap, cfg)) {
+			pr_error("dvb attach atbm2040_attach tuner error\n");
+			return -1;
+		} else {
+			pr_inf("atbm2040_attach  attach sucess\n");
+			*type = TUNER_ATBM2040;
 		}
 		break;
 	default:
@@ -2282,6 +2292,8 @@ static int aml_dvb_probe(struct platform_device *pdev)
 							advb->tuners[j].cfg.id = AM_TUNER_R840;
 						else if (!strncmp(str, "r842_tuner", 10))
 							advb->tuners[j].cfg.id = AM_TUNER_R842;
+						else if (!strncmp(str, "atbm2040_tuner", 14))
+							advb->tuners[i].cfg.id = AM_TUNER_ATBM2040;
 						else {
 							pr_err("nonsupport tuner: %s.\n", str);
 							advb->tuners[j].cfg.id = AM_TUNER_NONE;

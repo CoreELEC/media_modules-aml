@@ -76,6 +76,11 @@ static inline struct dvb_frontend* r840_attach (struct dvb_frontend *fe, struct 
     return NULL;
 }
 
+static inline struct dvb_frontend* atbm2040_attach (struct dvb_frontend *fe, struct i2c_adapter *i2c, struct tuner_config *cfg)
+{
+	return NULL;
+}
+
 static inline struct dvb_frontend* atbm8881_attach (const struct amlfe_demod_config *config)
 {
 	return NULL;
