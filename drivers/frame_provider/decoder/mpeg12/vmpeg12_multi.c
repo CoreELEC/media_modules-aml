@@ -220,6 +220,7 @@ struct vdec_mpeg12_hw_s {
 	u64 pts64[DECODE_BUFFER_NUM_MAX];
 	bool pts_valid[DECODE_BUFFER_NUM_MAX];
 	u32 canvas_spec[DECODE_BUFFER_NUM_MAX];
+	u64 lastpts64;
 	struct canvas_config_s canvas_config[DECODE_BUFFER_NUM_MAX][2];
 	struct dec_sysinfo vmpeg12_amstream_dec_info;
 
@@ -1382,6 +1383,10 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 		pts_valid = hw->pts_valid[index];
 		pts = hw->pts[index];
 		pts_us64 = hw->pts64[index];
+		if (hw->pts_valid[index] && hw->lastpts64 == pts_us64)
+			pts_valid = false;
+		if (hw->pts_valid[index])
+			hw->lastpts64 = pts_us64;
 
 		user_data_ready_notify(hw, pts, pts_valid);
 
