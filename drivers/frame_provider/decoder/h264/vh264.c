@@ -3502,11 +3502,22 @@ int vh264_set_isreset(struct vdec_s *vdec, int isreset)
 
 static void vh264_prot_init(void)
 {
+	ulong timeout = jiffies + HZ;
 
-	while (READ_VREG(DCAC_DMA_CTRL) & 0x8000)
-		;
-	while (READ_VREG(LMEM_DMA_CTRL) & 0x8000)
-		;		/* reg address is 0x350 */
+	while (READ_VREG(DCAC_DMA_CTRL) & 0x8000) {
+		if (time_after(jiffies, timeout)) {
+			pr_info("%s DCAC_DMA_CTRL time out\n", __func__);
+			break;
+		}
+	}
+
+	timeout = jiffies + HZ;
+	while (READ_VREG(LMEM_DMA_CTRL) & 0x8000) {
+		if (time_after(jiffies, timeout)) {
+			pr_info("%s LMEM_DMA_CTRL time out\n", __func__);
+			break;
+		}
+	}
 
 #if 1				/* MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
 	WRITE_VREG(DOS_SW_RESET0, (1 << 7) | (1 << 6) | (1 << 4));
