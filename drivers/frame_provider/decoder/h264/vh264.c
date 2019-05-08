@@ -58,8 +58,6 @@
 #include <linux/uaccess.h>
 
 
-#include <trace/events/meson_atrace.h>
-
 
 #define DRIVER_NAME "amvdec_h264"
 #define MODULE_NAME "amvdec_h264"

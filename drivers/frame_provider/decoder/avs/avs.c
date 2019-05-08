@@ -46,8 +46,6 @@
 #include <linux/amlogic/tee.h>
 
 
-#include <trace/events/meson_atrace.h>
-
 #define DRIVER_NAME "amvdec_avs"
 #define MODULE_NAME "amvdec_avs"
 

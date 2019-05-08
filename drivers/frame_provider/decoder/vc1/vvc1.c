@@ -43,7 +43,7 @@
 #include "../utils/firmware.h"
 #include <linux/amlogic/tee.h>
 #include <linux/delay.h>
-#include <trace/events/meson_atrace.h>
+
 
 
 #define DRIVER_NAME "amvdec_vc1"

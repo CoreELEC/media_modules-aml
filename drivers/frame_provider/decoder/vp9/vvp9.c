@@ -55,7 +55,6 @@
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 
-#include <trace/events/meson_atrace.h>
 
 
 #define MIX_STREAM_SUPPORT

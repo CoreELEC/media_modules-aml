@@ -56,7 +56,7 @@
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/amlogic/tee.h>
-#include <trace/events/meson_atrace.h>
+
 
 #define I_ONLY_SUPPORT
 #define MIX_STREAM_SUPPORT
