@@ -3123,12 +3123,14 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			struct vdec_s *vdec;
 			int vdec_id;
 
+			mutex_lock(&amstream_mutex);
 			get_user(vdec_id, (int __user *)arg);
 			vdec = vdec_get_vdec_by_id(vdec_id);
 			if (vdec) {
 				vdec_reset_userdata_fifo(vdec, 0);
 				pr_info("reset_userdata_fifo for vdec: %d\n", vdec_id);
 			}
+			mutex_unlock(&amstream_mutex);
 		} else
 			r = -EINVAL;
 		break;
