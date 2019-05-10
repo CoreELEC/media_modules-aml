@@ -32,6 +32,8 @@
 #include "dvb_ca_en50221_cimax.h"
 #include "dvb_ringbuffer.h"
 
+#define READ_LPDU_PKT
+
 static int dvb_ca_en50221_debug = 1;
 
 module_param_named(cam_debug, dvb_ca_en50221_debug, int, 0644);
@@ -43,6 +45,9 @@ static int dvb_ca_en50221_link_size = HOST_LINK_BUF_SIZE;
 module_param_named(link_size, dvb_ca_en50221_link_size, int, 0644);
 MODULE_PARM_DESC(link_size, "debug only, no more than 0x1000");
 
+static int dvb_ca_en50221_buffer_free;
+module_param_named(buffer_free, dvb_ca_en50221_buffer_free, int, 0644);
+MODULE_PARM_DESC(buffer_free, "debug only");
 
 #define dprintk(args...)\
 	do {\
@@ -114,6 +119,12 @@ struct dvb_ca_slot {
 
 	/* if 1, the CAM supports DA IRQs */
 	u8 da_irq_supported:1;
+
+#ifdef READ_LPDU_PKT
+	/* Offset into current ringbuffer when user buffer was not big enough
+	   to return entire pkt */
+	int rx_offset;
+#endif
 
 	/* size of the buffer to use when talking to the CAM */
 	int link_buf_size;
@@ -269,7 +280,9 @@ static int dvb_ca_en50221_link_init(struct dvb_ca_private *ca, int slot)
 
 	/* we'll be determining these during this function */
 	ca->slot_info[slot].da_irq_supported = 0;
-
+#ifdef READ_LPDU_PKT
+	ca->slot_info[slot].rx_offset = 0;
+#endif
 	/* set the host link buffer size temporarily.
 	   it will be overwritten with the real negotiated size later. */
 	ca->slot_info[slot].link_buf_size = dvb_ca_en50221_link_size;
@@ -605,6 +618,7 @@ static int dvb_ca_en50221_read_data(struct dvb_ca_private *ca,
 			goto exit;
 		}
 		buf_free = dvb_ringbuffer_free(&ca->slot_info[slot].rx_buffer);
+		dvb_ca_en50221_buffer_free = buf_free;
 
 		if (buf_free < (ca->slot_info[slot].link_buf_size
 				+ DVB_RINGBUFFER_PKTHDRSIZE)) {
@@ -681,8 +695,10 @@ static int dvb_ca_en50221_read_data(struct dvb_ca_private *ca,
 		memcpy(ebuf, buf, bytes_read);
 	}
 
+#ifndef READ_LPDU_PKT
 	/* wake up readers when a last_fragment is received */
 	if ((buf[1] & 0x80) == 0x00)
+#endif
 		wake_up_interruptible(&ca->wait_queue);
 	status = bytes_read;
 
@@ -1487,7 +1503,12 @@ static int dvb_ca_en50221_io_read_condition(struct dvb_ca_private *ca,
 
 		if (ca->slot_info[slot].rx_buffer.data == NULL)
 			return 0;
-
+#ifdef READ_LPDU_PKT
+		if (ca->slot_info[slot].rx_offset != 0) {
+			*_slot = slot;
+			return 1;
+		}
+#endif
 		idx = dvb_ringbuffer_pkt_next(&ca->slot_info[slot].rx_buffer,
 				-1, &fraglen);
 		while (idx != -1) {
@@ -1496,7 +1517,10 @@ static int dvb_ca_en50221_io_read_condition(struct dvb_ca_private *ca,
 			if (connection_id == -1)
 				connection_id = hdr[0];
 			if ((hdr[0] == connection_id)
-				&& ((hdr[1] & 0x80) == 0)) {
+#ifndef READ_LPDU_PKT
+				&& ((hdr[1] & 0x80) == 0)
+#endif
+			) {
 				*_slot = slot;
 				found = 1;
 				break;
@@ -1544,6 +1568,11 @@ static ssize_t dvb_ca_en50221_io_read(struct file *file, char __user *buf,
 	int pktlen;
 	int dispose = 0;
 
+#ifdef READ_LPDU_PKT
+	int offset;
+	u8 flag = 0;
+#endif
+
 	/* dprintk("%s\n", __func__); */
 
 	/* Outgoing packet has a 2 byte header.
@@ -1581,11 +1610,46 @@ static ssize_t dvb_ca_en50221_io_read(struct file *file, char __user *buf,
 			status = -EIO;
 			goto exit;
 		}
-
+#ifdef READ_LPDU_PKT
+		offset = 2 + ca->slot_info[slot].rx_offset;
+#endif
 		dvb_ringbuffer_pkt_read(&ca->slot_info[slot].rx_buffer,
 				idx, 0, hdr, 2);
 		if (connection_id == -1)
 			connection_id = hdr[0];
+#ifdef READ_LPDU_PKT
+		flag = hdr[1];
+		if (hdr[0] == connection_id) {
+			if (pktlen < count) {
+				if ((pktlen + fraglen - offset) > (count - 2)) {
+					fraglen = (count - 2) - pktlen;
+					ca->slot_info[slot].rx_offset +=
+									fraglen;
+					/* more data for user,
+					   but cannot send,
+					   so force return to user,
+					   rather than dispose of it */
+					flag |= 0x80;
+				} else {
+					ca->slot_info[slot].rx_offset = 0;
+					fraglen -= offset;
+					dispose = 1;
+				}
+
+				status = dvb_ringbuffer_pkt_read_user(
+					&ca->slot_info[slot].rx_buffer,
+					idx,
+					offset,
+					buf + pktlen + 2,
+					fraglen);
+				if (status < 0)
+					goto exit;
+				pktlen += fraglen;
+			}
+
+			last_fragment = 1;
+		}
+#else
 		if (hdr[0] == connection_id) {
 			if (pktlen < count) {
 				if ((pktlen + fraglen - 2) > count)
@@ -1608,7 +1672,7 @@ static ssize_t dvb_ca_en50221_io_read(struct file *file, char __user *buf,
 				last_fragment = 1;
 			dispose = 1;
 		}
-
+#endif
 		idx2 = dvb_ringbuffer_pkt_next(&ca->slot_info[slot].rx_buffer,
 				idx, &fraglen);
 		if (dispose)
@@ -1627,6 +1691,17 @@ static ssize_t dvb_ca_en50221_io_read(struct file *file, char __user *buf,
 	}
 	status = pktlen;
 
+#ifdef READ_LPDU_PKT
+	hdr[0] = flag;
+	hdr[1] = 0;
+
+	status = copy_to_user(buf + 2, hdr, 2);
+	if (status) {
+		status = -EFAULT;
+		goto exit;
+	}
+	status = pktlen + 2;
+#endif
 exit:
 	return status;
 }
