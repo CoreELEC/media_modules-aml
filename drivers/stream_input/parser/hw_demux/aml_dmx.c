@@ -1310,7 +1310,7 @@ static irqreturn_t dmx_irq_handler(int irq_number, void *para)
 		if (pdts_status & (1 << VIDEO_PTS_READY)) {
 			video_pts = DMX_READ_REG(dmx->id, VIDEO_PTS_DEMUX);
 			video_pts_bit32 =
-				(status & (1 << VIDEO_PTS_BIT32)) ? 1 : 0;
+				(pdts_status & (1 << VIDEO_PTS_BIT32)) ? 1 : 0;
 			if (!first_video_pts
 			    || 0 > (int)(video_pts - first_video_pts))
 				first_video_pts = video_pts;
@@ -1319,7 +1319,7 @@ static irqreturn_t dmx_irq_handler(int irq_number, void *para)
 		if (pdts_status & (1 << AUDIO_PTS_READY)) {
 			audio_pts = DMX_READ_REG(dmx->id, AUDIO_PTS_DEMUX);
 			audio_pts_bit32 =
-				(status & (1 << AUDIO_PTS_BIT32)) ? 1 : 0;
+				(pdts_status & (1 << AUDIO_PTS_BIT32)) ? 1 : 0;
 			if (!first_audio_pts
 			    || 0 > (int)(audio_pts - first_audio_pts))
 				first_audio_pts = audio_pts;
