@@ -91,4 +91,9 @@ static inline struct dvb_frontend* si2168_attach (const struct amlfe_demod_confi
 	return NULL;
 }
 
+static inline struct dvb_frontend* avl6762_attach (const struct amlfe_demod_config *config)
+{
+	return NULL;
+}
+
 #endif	/*__AML_DEMOD_GT_H__*/
