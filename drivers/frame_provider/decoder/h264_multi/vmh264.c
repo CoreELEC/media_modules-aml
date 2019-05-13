@@ -4713,7 +4713,7 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 						FIX_FRAME_RATE_OFF;
 					hw->pts_duration = 0;
 					hw->frame_dur = frame_dur_es;
-					schedule_work(&hw->notify_work);
+					vdec_schedule_work(&hw->notify_work);
 					dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_DEC_DETAIL,
 						"frame_dur %d from timing_info\n",
@@ -6888,12 +6888,13 @@ static int vh264_stop(struct vdec_h264_hw_s *hw)
 #ifdef VDEC_DW
 	WRITE_VREG(MDEC_DOUBLEW_CFG0, 0);
 #endif
-	cancel_work_sync(&hw->work);
-	cancel_work_sync(&hw->notify_work);
-	cancel_work_sync(&hw->timeout_work);
 #ifdef MH264_USERDATA_ENABLE
 	cancel_work_sync(&hw->user_data_ready_work);
 #endif
+	cancel_work_sync(&hw->notify_work);
+	cancel_work_sync(&hw->timeout_work);
+	cancel_work_sync(&hw->work);
+
 
 	if (hw->stat & STAT_MC_LOAD) {
 		if (hw->mc_cpu_addr != NULL) {
@@ -7372,7 +7373,7 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 		p_H264_Dpb->mVideo.dec_picture->pic_struct << 12;
 
 	hw->wait_for_udr_send = 1;
-	schedule_work(&hw->user_data_ready_work);
+	vdec_schedule_work(&hw->user_data_ready_work);
 #endif
 }
 
@@ -7628,7 +7629,6 @@ static void vh264_work(struct work_struct *work)
 	struct vdec_h264_hw_s *hw = container_of(work,
 		struct vdec_h264_hw_s, work);
 	struct vdec_s *vdec = hw_to_vdec(hw);
-
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
@@ -7689,13 +7689,13 @@ static void vh264_work(struct work_struct *work)
 			int r;
 			int decode_size;
 			r = vdec_prepare_input(vdec, &hw->chunk);
-			if (r < 0) {
+			if (r < 0 && (hw_to_vdec(hw)->next_status !=
+						VDEC_STATUS_DISCONNECTED)) {
 				hw->dec_result = DEC_RESULT_GET_DATA_RETRY;
 
 				dpb_print(DECODE_ID(hw),
 					PRINT_FLAG_VDEC_DETAIL,
 					"vdec_prepare_input: Insufficient data\n");
-
 				vdec_schedule_work(&hw->work);
 				return;
 			}
@@ -7748,8 +7748,11 @@ static void vh264_work(struct work_struct *work)
 			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD);
 			start_process_time(hw);
 		} else{
-			hw->dec_result = DEC_RESULT_GET_DATA_RETRY;
-			vdec_schedule_work(&hw->work);
+			if (hw_to_vdec(hw)->next_status
+				!=	VDEC_STATUS_DISCONNECTED) {
+				hw->dec_result = DEC_RESULT_GET_DATA_RETRY;
+				vdec_schedule_work(&hw->work);
+			}
 		}
 		return;
 	} else if (hw->dec_result == DEC_RESULT_DONE) {
@@ -7801,7 +7804,8 @@ result_done:
 			stream base: stream buf empty or timeout
 			frame base: vdec_prepare_input fail
 		*/
-		if (!vdec_has_more_input(vdec)) {
+		if (!vdec_has_more_input(vdec) && (hw_to_vdec(hw)->next_status !=
+			VDEC_STATUS_DISCONNECTED)) {
 			hw->dec_result = DEC_RESULT_EOS;
 			vdec_schedule_work(&hw->work);
 			return;
@@ -7832,12 +7836,11 @@ result_done:
 		if (hw->mmu_enable)
 			amhevc_stop();
 		if (hw->stat & STAT_ISR_REG) {
-			WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
 			hw->stat &= ~STAT_ISR_REG;
 		}
 	}
-
+	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	del_timer_sync(&hw->check_timer);
 	hw->stat &= ~STAT_TIMER_ARM;
 
@@ -8675,7 +8678,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		   (u32)sei_data_buffer_remap); */
 	}
 #endif
-	pr_debug("ammvdec_h264 mem-addr=%lx,buff_offset=%x,buf_start=%lx\n",
+	dpb_print(DECODE_ID(hw), 0, "ammvdec_h264 mem-addr=%lx,buff_offset=%x,buf_start=%lx\n",
 		pdata->mem_start, hw->buf_offset, hw->cma_alloc_addr);
 
 	if (vdec_is_support_4k() ||
@@ -8730,12 +8733,13 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 
 	if (vdec->next_status == VDEC_STATUS_DISCONNECTED
 				&& (vdec->status == VDEC_STATUS_ACTIVE)) {
-			pr_info("%s  force exit %d\n", __func__, __LINE__);
+			dpb_print(DECODE_ID(hw), 0,
+				"%s  force exit %d\n", __func__, __LINE__);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);
 			wait_event_interruptible_timeout(hw->wait_q,
 				(vdec->status == VDEC_STATUS_CONNECTED),
-				msecs_to_jiffies(50));  /* wait for work done */
+				msecs_to_jiffies(1000));  /* wait for work done */
 	}
 
 	for (i = 0; i < BUFSPEC_POOL_SIZE; i++)

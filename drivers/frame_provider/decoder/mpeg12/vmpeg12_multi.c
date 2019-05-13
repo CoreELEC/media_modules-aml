@@ -399,7 +399,7 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 	else {
 		vf->duration = hw->frame_dur =
 		frame_rate_tab[(READ_VREG(MREG_SEQ_INFO) >> 4) & 0xf];
-		schedule_work(&hw->notify_work);
+		vdec_schedule_work(&hw->notify_work);
 	}
 
 	ar_bits = READ_VREG(MREG_SEQ_INFO) & 0xf;
@@ -1782,8 +1782,6 @@ static void vmpeg12_work(struct work_struct *work)
 		"%s: force exit\n", __func__);
 		if (hw->stat & STAT_ISR_REG) {
 			amvdec_stop();
-			/*disable mbox interrupt */
-			WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
 			hw->stat &= ~STAT_ISR_REG;
 		}
@@ -1802,6 +1800,8 @@ static void vmpeg12_work(struct work_struct *work)
 		amvdec_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
+	/*disable mbox interrupt */
+	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	wait_vmmpeg12_search_done(hw);
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(hw_to_vdec(hw), CORE_MASK_VDEC_1);
@@ -2248,6 +2248,8 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 	/* clear buffer IN/OUT registers */
 	WRITE_VREG(MREG_BUFFEROUT, 0);
+	/* enable mailbox interrupt */
+	WRITE_VREG(ASSIST_MBOX1_MASK, 1);
 	/* set reference width and height */
 	if ((hw->frame_width != 0) && (hw->frame_height != 0))
 		WRITE_VREG(MREG_CMD,
@@ -2714,8 +2716,8 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 		hw->stat &= ~STAT_TIMER_ARM;
 	}
 	cancel_work_sync(&hw->userdata_push_work);
-	cancel_work_sync(&hw->work);
 	cancel_work_sync(&hw->notify_work);
+	cancel_work_sync(&hw->work);
 
 	if (hw->mm_blk_handle) {
 		decoder_bmmu_box_free(hw->mm_blk_handle);

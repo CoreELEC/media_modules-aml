@@ -7763,7 +7763,7 @@ static void vvp9_put_timer_func(unsigned long arg)
 		pbi->frame_dur > 0 && pbi->saved_resolution !=
 		frame_width * frame_height *
 			(96000 / pbi->frame_dur))
-		schedule_work(&pbi->set_clk_work);
+		vdec_schedule_work(&pbi->set_clk_work);
 
 	timer->expires = jiffies + PUT_INTERVAL;
 	add_timer(timer);
@@ -8222,19 +8222,19 @@ static int vvp9_stop(struct VP9Decoder_s *pbi)
 	}
 	vp9_local_uninit(pbi);
 
+	cancel_work_sync(&pbi->set_clk_work);
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (pbi->m_ins_flag) {
-		cancel_work_sync(&pbi->work);
 #ifdef SUPPORT_FB_DECODING
 		if (pbi->used_stage_buf_num > 0)
 			cancel_work_sync(&pbi->s1_work);
 #endif
+		cancel_work_sync(&pbi->work);
 	} else
 		amhevc_disable();
 #else
 	amhevc_disable();
 #endif
-	cancel_work_sync(&pbi->set_clk_work);
 	uninit_mmu_buffers(pbi);
 
 	vfree(pbi->fw);
