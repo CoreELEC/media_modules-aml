@@ -1055,8 +1055,6 @@ static void vmjpeg_work(struct work_struct *work)
 		pr_info("%s: force exit\n", __func__);
 		if (hw->stat & STAT_ISR_REG) {
 			amvdec_stop();
-			/*disable mbox interrupt */
-			WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
 			hw->stat &= ~STAT_ISR_REG;
 		}
@@ -1075,6 +1073,8 @@ static void vmjpeg_work(struct work_struct *work)
 		amvdec_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
+	/*disable mbox interrupt */
+	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	wait_vmjpeg_search_done(hw);
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1)

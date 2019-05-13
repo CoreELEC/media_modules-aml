@@ -9599,7 +9599,7 @@ pic_done:
 						vui_num_units_in_tick,
 						vui_time_scale);
 					if (hevc->get_frame_dur != true)
-						schedule_work(
+						vdec_schedule_work(
 						&hevc->notify_work);
 
 				hevc->get_frame_dur = true;
@@ -10120,7 +10120,7 @@ static void vh265_check_timer_func(unsigned long arg)
 		hevc->frame_dur > 0 && hevc->saved_resolution !=
 		hevc->frame_width * hevc->frame_height *
 			(96000 / hevc->frame_dur))
-		schedule_work(&hevc->set_clk_work);
+		vdec_schedule_work(&hevc->set_clk_work);
 
 	mod_timer(timer, jiffies + PUT_INTERVAL);
 }
@@ -10953,9 +10953,9 @@ static int vmh265_stop(struct hevc_state_s *hevc)
 	}
 	hevc->init_flag = 0;
 	hevc->first_sc_checked = 0;
-	cancel_work_sync(&hevc->work);
 	cancel_work_sync(&hevc->notify_work);
 	cancel_work_sync(&hevc->set_clk_work);
+	cancel_work_sync(&hevc->work);
 	uninit_mmu_buffers(hevc);
 
 	vfree(hevc->fw);

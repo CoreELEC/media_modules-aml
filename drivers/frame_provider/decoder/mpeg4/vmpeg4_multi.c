@@ -59,7 +59,7 @@
 #define I_PICTURE   0
 #define P_PICTURE   1
 #define B_PICTURE   2
-#define GET_PIC_TYPE(type) ("IPB########"[type])
+#define GET_PIC_TYPE(type) ("IPB####"[type&0x3])
 
 #define ORI_BUFFER_START_ADDR   0x01000000
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
@@ -279,6 +279,7 @@ struct vdec_mpeg4_hw_s {
 
 	struct firmware_s *fw;
 	u32 blkmode;
+	wait_queue_head_t wait_q;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -683,7 +684,7 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		} else {
 			reset_process_time(hw);
 			hw->dec_result = DEC_RESULT_AGAIN;
-			schedule_work(&hw->work);
+			vdec_schedule_work(&hw->work);
 		}
 		return IRQ_HANDLED;
 	} else {
@@ -697,7 +698,7 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 			mmpeg4_debug_print(DECODE_ID(hw), 0,
 				"invalid buffer index.");
 			hw->dec_result = DEC_RESULT_ERROR;
-			schedule_work(&hw->work);
+			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
 		}
 		hw->dec_result = DEC_RESULT_DONE;
@@ -813,7 +814,7 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 		vmpeg4_save_hw_context(hw);
 		if (index < 0) {
-			schedule_work(&hw->work);
+			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
 		}
 		disp_pic = &hw->pic[index];
@@ -907,7 +908,7 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		hw->total_frame += repeat_cnt + 1;
 		hw->last_vop_time_inc = vop_time_inc;
-		schedule_work(&hw->work);
+		vdec_schedule_work(&hw->work);
 	}
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,
 		"%s: frame num:%d\n", __func__, hw->frame_num);
@@ -975,8 +976,6 @@ static void vmpeg4_work(struct work_struct *work)
 			"%s: force exit\n", __func__);
 		if (hw->stat & STAT_ISR_REG) {
 			amvdec_stop();
-			/*disable mbox interrupt */
-			WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
 			hw->stat &= ~STAT_ISR_REG;
 		}
@@ -999,6 +998,8 @@ static void vmpeg4_work(struct work_struct *work)
 		amvdec_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
+	/*disable mbox interrupt */
+	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	del_timer_sync(&hw->check_timer);
 	hw->stat &= ~STAT_TIMER_ARM;
 
@@ -1008,6 +1009,7 @@ static void vmpeg4_work(struct work_struct *work)
 	else
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
 
+	wake_up_interruptible(&hw->wait_q);
 	if (hw->vdec_cb)
 		hw->vdec_cb(vdec, hw->vdec_cb_arg);
 }
@@ -1565,6 +1567,8 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER);
 	INIT_WORK(&hw->work, vmpeg4_work);
+
+	init_waitqueue_head(&hw->wait_q);
 }
 
 static s32 vmmpeg4_init(struct vdec_mpeg4_hw_s *hw)
@@ -1692,7 +1696,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (size < 4) { /*less than start code size 00 00 01 xx*/
 		hw->input_empty++;
 		hw->dec_result = DEC_RESULT_AGAIN;
-		schedule_work(&hw->work);
+		vdec_schedule_work(&hw->work);
 		return;
 	}
 
@@ -1768,7 +1772,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
 				hw->fw->name, tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
-			schedule_work(&hw->work);
+			vdec_schedule_work(&hw->work);
 			return;
 		}
 		vdec->mc_loaded = 1;
@@ -1778,7 +1782,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hw->dec_result = DEC_RESULT_ERROR;
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"amvdec_mpeg4: error HW context restore\n");
-		schedule_work(&hw->work);
+		vdec_schedule_work(&hw->work);
 		return;
 	}
 	hw->input_empty = 0;
@@ -1830,8 +1834,6 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	struct vdec_mpeg4_hw_s *hw = NULL;
 
-	pr_info("%s [%d] probe start.\n", __func__, pdev->id);
-
 	if (pdata == NULL) {
 		pr_err("%s memory resource undefined.\n", __func__);
 		return -EFAULT;
@@ -1874,26 +1876,7 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	hw->platform_dev = pdev;
 	hw->blkmode = pdata->canvas_mode;
 
-/*
-	hw->cma_dev = pdata->cma_dev;
-	hw->cma_alloc_count = PAGE_ALIGN(DEFAULT_MEM_SIZE) / PAGE_SIZE;
-	hw->cma_alloc_addr = codec_mm_alloc_for_dma(MEM_NAME,
-				hw->cma_alloc_count,
-				4, CODEC_MM_FLAGS_FOR_VDECODER);
 
-	if (!hw->cma_alloc_addr) {
-		pr_err("codec_mm alloc failed, request buf size 0x%lx\n",
-			hw->cma_alloc_count * PAGE_SIZE);
-		hw->cma_alloc_count = 0;
-		if (hw) {
-			vfree((void *)hw);
-			hw = NULL;
-		}
-		return -ENOMEM;
-	}
-	hw->buf_start = hw->cma_alloc_addr;
-	hw->buf_size = DEFAULT_MEM_SIZE;
-*/
 	if (pdata->sys_info) {
 		hw->vmpeg4_amstream_dec_info = *pdata->sys_info;
 		if ((hw->vmpeg4_amstream_dec_info.height != 0) &&
@@ -1910,20 +1893,15 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	}
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 		"W:%d,H:%d,rate=%d\n",
-	hw->vmpeg4_amstream_dec_info.width,
-	hw->vmpeg4_amstream_dec_info.height,
-	hw->vmpeg4_amstream_dec_info.rate);
-	hw->vmpeg4_amstream_dec_info.height = 0;
-	hw->vmpeg4_amstream_dec_info.width = 0;
+		hw->vmpeg4_amstream_dec_info.width,
+		hw->vmpeg4_amstream_dec_info.height,
+		hw->vmpeg4_amstream_dec_info.rate);
+		hw->vmpeg4_amstream_dec_info.height = 0;
+		hw->vmpeg4_amstream_dec_info.width = 0;
 
 	if (vmmpeg4_init(hw) < 0) {
 		pr_err("%s init failed.\n", __func__);
-/*
-		if (hw->cma_alloc_addr) {
-			codec_mm_free_for_dma(MEM_NAME, hw->cma_alloc_addr);
-			hw->cma_alloc_count = 0;
-		}
-*/
+
 		if (hw) {
 			vfree((void *)hw);
 			hw = NULL;
@@ -1938,6 +1916,9 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 				| CORE_MASK_COMBINE);
 	}
 
+	mmpeg4_debug_print(DECODE_ID(hw), 0,
+		"%s end.\n", __func__);
+
 	return 0;
 }
 
@@ -1949,14 +1930,19 @@ static int ammvdec_mpeg4_remove(struct platform_device *pdev)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	int i;
 
-	vmpeg4_stop(hw);
-	/*
-	if (hw->cma_alloc_addr) {
-		pr_info("codec_mm release buffer 0x%lx\n", hw->cma_alloc_addr);
-		codec_mm_free_for_dma(MEM_NAME, hw->cma_alloc_addr);
-		hw->cma_alloc_count = 0;
+	if (vdec->next_status == VDEC_STATUS_DISCONNECTED
+				&& (vdec->status == VDEC_STATUS_ACTIVE)) {
+			mmpeg4_debug_print(DECODE_ID(hw), 0,
+				"%s  force exit %d\n", __func__, __LINE__);
+			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_schedule_work(&hw->work);
+			wait_event_interruptible_timeout(hw->wait_q,
+				(vdec->status == VDEC_STATUS_CONNECTED),
+				msecs_to_jiffies(1000));  /* wait for work done */
 	}
-	*/
+
+	vmpeg4_stop(hw);
+
 	if (vdec->parallel_dec == 1)
 		vdec_core_release(hw_to_vdec(hw), CORE_MASK_VDEC_1);
 	else
@@ -1970,10 +1956,7 @@ static int ammvdec_mpeg4_remove(struct platform_device *pdev)
 		}
 	}
 
-	pr_info("pts hit %d, pts missed %d, i hit %d, missed %d\n", hw->pts_hit,
-		   hw->pts_missed, hw->pts_i_hit, hw->pts_i_missed);
-	pr_info("total frame %d, rate %d\n", hw->total_frame,
-		   hw->vmpeg4_amstream_dec_info.rate);
+	mmpeg4_debug_print(DECODE_ID(hw), 0, "%s\n", __func__);
 	vfree((void *)hw);
 	hw = NULL;
 
