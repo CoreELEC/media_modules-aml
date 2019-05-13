@@ -261,8 +261,8 @@ static ssize_t _esparser_write_s(const char __user *buf,
 	u32 len = 0;
 	int ret;
 	u32 wp, buf_start, buf_end;
-	dma_addr_t buf_wp_map;
 	u32 type = stbuf->type;
+	void *vaddr = NULL;
 
 	if (type != BUF_TYPE_AUDIO)
 		BUG();
@@ -272,24 +272,20 @@ static ssize_t _esparser_write_s(const char __user *buf,
 	/*pr_info("write wp 0x%x, count %d, start 0x%x, end 0x%x\n",
 	*		 wp, (u32)count, buf_start, buf_end);*/
 	if (wp + count > buf_end) {
-		ret = copy_from_user(codec_mm_phys_to_virt(wp),
-				 p, buf_end - wp);
+		vaddr = codec_mm_phys_to_virt(wp);
+		ret = copy_from_user(vaddr, p, buf_end - wp);
 		if (ret > 0) {
 			len +=  buf_end - wp - ret;
-			buf_wp_map = dma_map_single(amports_get_dma_device(),
-				codec_mm_phys_to_virt(wp), len, DMA_TO_DEVICE);
+			codec_mm_dma_flush(vaddr, len, DMA_TO_DEVICE);
 			wp += len;
 			pr_info("copy from user not finished\n");
-			dma_unmap_single(NULL, buf_wp_map, len, DMA_TO_DEVICE);
 			set_buf_wp(type, wp);
 			goto end_write;
 		} else if (ret == 0) {
 			len += buf_end - wp;
-			buf_wp_map = dma_map_single(amports_get_dma_device(),
-				codec_mm_phys_to_virt(wp), len, DMA_TO_DEVICE);
+			codec_mm_dma_flush(vaddr, len, DMA_TO_DEVICE);
 			wp = buf_start;
 			r = count - len;
-			dma_unmap_single(NULL, buf_wp_map, len, DMA_TO_DEVICE);
 			set_buf_wp(type, wp);
 		} else {
 			pr_info("copy from user failed 1\n");
@@ -298,16 +294,15 @@ static ssize_t _esparser_write_s(const char __user *buf,
 			return -EAGAIN;
 		}
 	}
-	ret = copy_from_user(codec_mm_phys_to_virt(wp), p + len, r);
+
+	vaddr = codec_mm_phys_to_virt(wp);
+	ret = copy_from_user(vaddr, p + len, r);
 	if (ret >= 0) {
 		len += r - ret;
-		buf_wp_map = dma_map_single(amports_get_dma_device(),
-			 codec_mm_phys_to_virt(wp), r - ret, DMA_TO_DEVICE);
-
+		codec_mm_dma_flush(vaddr, r - ret, DMA_TO_DEVICE);
 		if (ret > 0)
 			pr_info("copy from user not finished 2\n");
 		wp += r - ret;
-		dma_unmap_single(NULL, buf_wp_map, r - ret, DMA_TO_DEVICE);
 		set_buf_wp(type, wp);
 	} else {
 		pr_info("copy from user failed 2\n");
