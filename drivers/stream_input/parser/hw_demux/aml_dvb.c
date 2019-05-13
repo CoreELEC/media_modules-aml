@@ -64,6 +64,7 @@ typedef enum __demod_type
 	DEMOD_INTERNAL,
 	DEMOD_ATBM8881,
 	DEMOD_SI2168,
+	DEMOD_AVL6762,
 	DEMOD_MAX_NUM
 }demod_type;
 
@@ -2436,6 +2437,16 @@ static int aml_dvb_probe(struct platform_device *pdev)
 						s_demod_type[i] = DEMOD_SI2168;
 					}
 				}
+				if (!strcmp(name,"Avl6762")) {
+					frontend[i] = dvb_attach(avl6762_attach,&config);
+					if (frontend[i] == NULL) {
+						pr_error("dvb attach demod error\n");
+						goto error_fe;
+					} else {
+						pr_inf("dtvdemod attatch sucess\n");
+						s_demod_type[i] = DEMOD_AVL6762;
+					}
+				}
 				if (frontend[i]) {
 					ret = dvb_register_frontend(&advb->dvb_adapter, frontend[i]);
 					if (ret) {
@@ -2458,6 +2469,10 @@ error_fe:
 				s_demod_type[i] = DEMOD_INVALID;
 			}else if (s_demod_type[i] == DEMOD_SI2168) {
 				dvb_detach(si2168_attach);
+				frontend[i] = NULL;
+				s_demod_type[i] = DEMOD_INVALID;
+			}else if (s_demod_type[i] == DEMOD_AVL6762) {
+				dvb_detach(avl6762_attach);
 				frontend[i] = NULL;
 				s_demod_type[i] = DEMOD_INVALID;
 			}
@@ -2517,6 +2532,8 @@ static int aml_dvb_remove(struct platform_device *pdev)
 			dvb_detach(atbm8881_attach);
 		}else if (s_demod_type[i] == DEMOD_SI2168) {
 			dvb_detach(si2168_attach);
+		}else if (s_demod_type[i] == DEMOD_AVL6762) {
+			dvb_detach(avl6762_attach);
 		}
 		if (s_tuner_type[i] == TUNER_SI2151) {
 			dvb_detach(si2151_attach);
