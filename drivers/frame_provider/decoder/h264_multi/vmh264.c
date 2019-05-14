@@ -4369,6 +4369,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	unsigned int crop_infor, crop_bottom, crop_right;
 	unsigned int used_reorder_dpb_size_margin
 		= reorder_dpb_size_margin;
+
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	if (vdec->master || vdec->slave)
 		used_reorder_dpb_size_margin =
@@ -4493,10 +4494,17 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			mb_height, mb_width, mb_total,
 			level_idc, max_reference_size);
 
+
 		p_H264_Dpb->colocated_buf_size = mb_total * 96;
 		hw->dpb.reorder_pic_num =
 			get_max_dec_frame_buf_size(level_idc,
 			max_reference_size, mb_width, mb_height);
+
+			if (hw->dpb.reorder_pic_num > MAX_VF_BUF_NUM) {
+				dpb_print(DECODE_ID(hw), 0,
+			"%s abnormal reorder_pic_num  %d\n", __func__, hw->dpb.reorder_pic_num);
+				return -1;
+				}
 
 		dpb_print(DECODE_ID(hw), 0,
 			"restriction_flag=%d, max_dec_frame_buffering=%d, reorder_pic_num=%d\n",
@@ -7642,13 +7650,9 @@ static void vh264_work(struct work_struct *work)
 		u32 param3 = READ_VREG(AV_SCRATCH_6);
 		u32 param4 = READ_VREG(AV_SCRATCH_B);
 		if (vh264_set_params(hw, param1,
-			param2, param3, param4) < 0)
-			hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
-			(hw->dpb.mDPB.size<<16) |
-			(hw->dpb.mDPB.size<<8));
-		start_process_time(hw);
-		return;
+			param2, param3, param4) < 0) {
+				goto result_done;
+			}
 	} else
 	if (((hw->dec_result == DEC_RESULT_GET_DATA) ||
 		(hw->dec_result == DEC_RESULT_GET_DATA_RETRY))
@@ -8776,6 +8780,7 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 			}
 		}
 	}
+
 	ammvdec_h264_mmu_release(hw);
 	h264_free_hw_stru(&pdev->dev, (void *)hw);
 	clk_adj_frame_count = 0;
