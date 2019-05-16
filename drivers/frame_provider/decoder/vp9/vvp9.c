@@ -78,7 +78,6 @@
 #define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
 #define HEVC_SAO_MMU_VH1_ADDR                      0x363b
 #define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-#define HEVC_SAO_MMU_STATUS                        0x3639
 
 #define VP9_10B_DEC_IDLE                           0
 #define VP9_10B_DEC_FRAME_HEADER                   1
@@ -6956,12 +6955,14 @@ static void vp9_recycle_mmu_buf_tail(struct VP9Decoder_s *pbi)
 	if (pbi->double_write_mode & 0x10)
 		return;
 	if (cm->cur_fb_idx_mmu != INVALID_IDX) {
-		if (pbi->used_4k_num == -1)
+		if (pbi->used_4k_num == -1) {
 			pbi->used_4k_num =
 			(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+			if (pbi->m_ins_flag)
+				hevc_mmu_dma_check(hw_to_vdec(pbi));
+		}
 		decoder_mmu_box_free_idx_tail(pbi->mmu_box,
 			cm->cur_fb_idx_mmu, pbi->used_4k_num);
-
 		cm->cur_fb_idx_mmu = INVALID_IDX;
 		pbi->used_4k_num = -1;
 	}
@@ -8040,7 +8041,6 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 		return 0;
 	}
 #endif
-	hevc_enable_DMC(hw_to_vdec(pbi));
 	amhevc_enable();
 
 	ret = amhevc_loadmc_ex(VFORMAT_VP9, NULL, fw->data);

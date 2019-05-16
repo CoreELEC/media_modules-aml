@@ -73,7 +73,6 @@
 #define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
 #define HEVC_SAO_MMU_VH1_ADDR                      0x363b
 #define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-#define HEVC_SAO_MMU_STATUS                        0x3639
 
 
 /*
@@ -4600,12 +4599,14 @@ static void debug_buffer_mgr_more(struct AVS2Decoder_s *dec)
 static void avs2_recycle_mmu_buf_tail(struct AVS2Decoder_s *dec)
 {
 	if (dec->cur_fb_idx_mmu != INVALID_IDX) {
-		if (dec->used_4k_num == -1)
+		if (dec->used_4k_num == -1) {
 			dec->used_4k_num =
 			(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
-		decoder_mmu_box_free_idx_tail(dec->mmu_box,
+			if (dec->m_ins_flag)
+				hevc_mmu_dma_check(hw_to_vdec(dec));
+			decoder_mmu_box_free_idx_tail(dec->mmu_box,
 			dec->cur_fb_idx_mmu, dec->used_4k_num);
-
+		}
 		dec->cur_fb_idx_mmu = INVALID_IDX;
 		dec->used_4k_num = -1;
 	}
@@ -6257,9 +6258,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 
 		return 0;
 	}
-	hevc_enable_DMC(hw_to_vdec(dec));
 	amhevc_enable();
-
 	ret = amhevc_loadmc_ex(VFORMAT_AVS2, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();

@@ -80,7 +80,6 @@
 #define HEVC_CM_HEADER_START_ADDR                  0x3628
 #define HEVC_SAO_MMU_VH1_ADDR                      0x363b
 #define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-#define HEVC_SAO_MMU_STATUS                        0x3639
 
 #define HEVC_DBLK_CFGB                             0x350b
 #define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
@@ -5609,6 +5608,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 						hevc->cur_pic->index,
 						hevc->cur_pic->scatter_alloc,
 						hevc->used_4k_num);
+						hevc_mmu_dma_check(hw_to_vdec(hevc));
 						decoder_mmu_box_free_idx_tail(
 						hevc->mmu_box,
 						hevc->cur_pic->index,
@@ -10516,7 +10516,6 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		return 0;
 	}
 #endif
-	hevc_enable_DMC(hw_to_vdec(hevc));
 	amhevc_enable();
 
 	if (hevc->mmu_enable)
@@ -11166,6 +11165,8 @@ static void vh265_work(struct work_struct *work)
 				hevc->cur_pic->index,
 				hevc->cur_pic->scatter_alloc,
 				hevc->used_4k_num);
+				if (hevc->m_ins_flag)
+					hevc_mmu_dma_check(hw_to_vdec(hevc));
 				decoder_mmu_box_free_idx_tail(
 				hevc->mmu_box,
 				hevc->cur_pic->index,

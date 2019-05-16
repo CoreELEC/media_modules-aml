@@ -458,6 +458,55 @@ static void free_canvas_ex(int index, int id)
 
 }
 
+static void vdec_disable_DMC(struct vdec_s *vdec)
+{
+	/*close first,then wait pedding end,timing suggestion from vlsi*/
+	struct vdec_input_s *input = &vdec->input;
+	unsigned long flags;
+	unsigned int mask = 0;
+
+	if (input->target == VDEC_INPUT_TARGET_VLD) {
+		mask = (1 << 13);
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+			mask = (1 << 21);
+	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+		mask = (1 << 4); /*hevc*/
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+			mask |= (1 << 8); /*hevcb */
+	}
+	spin_lock_irqsave(&vdec_spin_lock, flags);
+	codec_dmcbus_write(DMC_REQ_CTRL,
+	codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
+	spin_unlock_irqrestore(&vdec_spin_lock, flags);
+
+	while (!(codec_dmcbus_read(DMC_CHAN_STS)
+			& mask))
+			;
+
+	pr_debug("%s input->target= 0x%x\n", __func__,  input->target);
+}
+
+static void vdec_enable_DMC(struct vdec_s *vdec)
+{
+	struct vdec_input_s *input = &vdec->input;
+	unsigned long flags;
+	unsigned int mask = 0;
+
+	if (input->target == VDEC_INPUT_TARGET_VLD) {
+		mask = (1 << 13);
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+			mask = (1 << 21);
+	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+		mask = (1 << 4); /*hevc*/
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+			mask |= (1 << 8); /*hevcb */
+	}
+	spin_lock_irqsave(&vdec_spin_lock, flags);
+	codec_dmcbus_write(DMC_REQ_CTRL,
+	codec_dmcbus_read(DMC_REQ_CTRL) | mask);
+	spin_unlock_irqrestore(&vdec_spin_lock, flags);
+	pr_debug("%s input->target= 0x%x\n", __func__,  input->target);
+}
 
 
 
@@ -1423,13 +1472,19 @@ EXPORT_SYMBOL(vdec_need_more_data);
 void hevc_wait_ddr(void)
 {
 	unsigned long flags;
+	unsigned int mask = 0;
+
+	mask = 1 << 4; /* hevc */
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+		mask |= (1 << 8); /* hevcb */
+
 	spin_lock_irqsave(&vdec_spin_lock, flags);
 	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) & (~(1 << 4)));
+		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
 	while (!(codec_dmcbus_read(DMC_CHAN_STS)
-		& (1 << 4)))
+		& mask))
 		;
 }
 
@@ -1765,7 +1820,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 			vdec->format == VFORMAT_VP9) ?
 				VDEC_INPUT_TARGET_HEVC :
 				VDEC_INPUT_TARGET_VLD);
-
+	if (vdec_single(vdec))
+		vdec_enable_DMC(vdec);
 	p->cma_dev = vdec_core->cma_dev;
 	p->get_canvas = get_canvas;
 	p->get_canvas_ex = get_canvas_ex;
@@ -2044,7 +2100,8 @@ void vdec_release(struct vdec_s *vdec)
 	vdec_frame_check_exit(vdec);
 #endif
 	vdec_fps_clear(vdec->id);
-
+	if (atomic_read(&vdec_core->vdec_nr) == 1)
+		vdec_disable_DMC(vdec);
 	platform_device_unregister(vdec->dev);
 	pr_debug("vdec_release instance %p, total %d\n", vdec,
 		atomic_read(&vdec_core->vdec_nr));
@@ -2874,10 +2931,15 @@ void vdec_poweron(enum vdec_type_e core)
 			 *enable VDEC_1 DMC request
 			 */
 			unsigned long flags;
+			unsigned int mask = 0;
+
+			mask = 1 << 13;
+			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+				mask = 1 << 21;
 
 			spin_lock_irqsave(&vdec_spin_lock, flags);
 			codec_dmcbus_write(DMC_REQ_CTRL,
-				codec_dmcbus_read(DMC_REQ_CTRL) | (1 << 13));
+				codec_dmcbus_read(DMC_REQ_CTRL) | mask);
 			spin_unlock_irqrestore(&vdec_spin_lock, flags);
 		}
 	} else if (core == VDEC_2) {
@@ -3020,10 +3082,15 @@ void vdec_poweroff(enum vdec_type_e core)
 			AM_MESON_CPU_MAJOR_ID_GXBB) {
 			/* disable VDEC_1 DMC REQ*/
 			unsigned long flags;
+			unsigned int mask = 0;
+
+			mask = 1 << 13;
+			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+				mask = 1 << 21;
 
 			spin_lock_irqsave(&vdec_spin_lock, flags);
 			codec_dmcbus_write(DMC_REQ_CTRL,
-				codec_dmcbus_read(DMC_REQ_CTRL) & (~(1 << 13)));
+				codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 			spin_unlock_irqrestore(&vdec_spin_lock, flags);
 			udelay(10);
 		}
@@ -3238,43 +3305,22 @@ int vdec_source_changed(int format, int width, int height, int fps)
 
 }
 EXPORT_SYMBOL(vdec_source_changed);
-
-void vdec_disable_DMC(struct vdec_s *vdec)
-{
-	/*close first,then wait pedding end,timing suggestion from vlsi*/
-	unsigned long flags;
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) & (~(1 << 13)));
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
-
-	while (!(codec_dmcbus_read(DMC_CHAN_STS)
-		& (1 << 13)))
-		;
-}
-EXPORT_SYMBOL(vdec_disable_DMC);
-
-void vdec_enable_DMC(struct vdec_s *vdec)
-{
-	unsigned long flags;
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-	codec_dmcbus_read(DMC_REQ_CTRL) | (1 << 13));
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
-}
-
-EXPORT_SYMBOL(vdec_enable_DMC);
-
 void vdec_reset_core(struct vdec_s *vdec)
 {
 	unsigned long flags;
+	unsigned int mask = 0;
+
+	mask = 1 << 13; /*bit13: DOS VDEC interface*/
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+		mask = 1 << 21; /*bit21: DOS VDEC interface*/
+
 	spin_lock_irqsave(&vdec_spin_lock, flags);
 	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) & (~(1 << 13)));
+		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
 	while (!(codec_dmcbus_read(DMC_CHAN_STS)
-		& (1 << 13)))
+		& mask))
 		;
 	/*
 	 * 2: assist
@@ -3299,33 +3345,62 @@ void vdec_reset_core(struct vdec_s *vdec)
 
 	spin_lock_irqsave(&vdec_spin_lock, flags);
 	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) | (1 << 13));
+		codec_dmcbus_read(DMC_REQ_CTRL) | mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 }
 EXPORT_SYMBOL(vdec_reset_core);
 
-void hevc_enable_DMC(struct vdec_s *vdec)
+void hevc_mmu_dma_check(struct vdec_s *vdec)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-	codec_dmcbus_read(DMC_REQ_CTRL) | (1 << 4));
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
+	ulong timeout;
+	u32 data;
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A)
+		return;
+	timeout = jiffies + HZ/100;
+	while (1) {
+		data  = READ_VREG(HEVC_CM_CORE_STATUS);
+		if ((data & 0x1) == 0)
+			break;
+		if (time_after(jiffies, timeout)) {
+			if (debug & 0x10)
+				pr_info(" %s sao mmu dma idle\n", __func__);
+			break;
+		}
+	}
+	/*disable sao mmu dma */
+	CLEAR_VREG_MASK(HEVC_SAO_MMU_DMA_CTRL, 1 << 0);
+	timeout = jiffies + HZ/100;
+	while (1) {
+		data  = READ_VREG(HEVC_SAO_MMU_DMA_STATUS);
+		if ((data & 0x1))
+			break;
+		if (time_after(jiffies, timeout)) {
+			if (debug & 0x10)
+				pr_err("%s sao mmu dma timeout, num_buf_used = 0x%x\n",
+				__func__, (READ_VREG(HEVC_SAO_MMU_STATUS) >> 16));
+			break;
+		}
+	}
 }
-
-EXPORT_SYMBOL(hevc_enable_DMC);
+EXPORT_SYMBOL(hevc_mmu_dma_check);
 
 void hevc_reset_core(struct vdec_s *vdec)
 {
 	unsigned long flags;
+	unsigned int mask = 0;
+
+	mask = 1 << 4; /*bit4: hevc*/
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+		mask |= 1 << 8; /*bit8: hevcb*/
+
 	WRITE_VREG(HEVC_STREAM_CONTROL, 0);
 	spin_lock_irqsave(&vdec_spin_lock, flags);
 	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) & (~(1 << 4)));
+		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
 	while (!(codec_dmcbus_read(DMC_CHAN_STS)
-		& (1 << 4)))
+		& mask))
 		;
 
 	if (vdec == NULL || input_frame_based(vdec))
@@ -3356,7 +3431,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 
 	spin_lock_irqsave(&vdec_spin_lock, flags);
 	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) | (1 << 4));
+		codec_dmcbus_read(DMC_REQ_CTRL) | mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
 }
