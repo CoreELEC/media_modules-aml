@@ -861,7 +861,6 @@ static void h264_clear_dpb(struct vdec_h264_hw_s *hw);
 #define		H265_CHECK_AXI_INFO_BASE	HEVC_ASSIST_SCRATCH_8
 #define		H265_SAO_4K_SET_BASE	HEVC_ASSIST_SCRATCH_9
 #define		H265_SAO_4K_SET_COUNT	HEVC_ASSIST_SCRATCH_A
-#define		HEVC_SAO_MMU_STATUS			0x3639
 #define		HEVCD_MPP_ANC2AXI_TBL_DATA		0x3464
 
 
@@ -874,7 +873,6 @@ static void h264_clear_dpb(struct vdec_h264_hw_s *hw);
 #define		HEVCD_MPP_DECOMP_CTL3			0x34c4
 #define		HEVCD_MPP_VDEC_MCR_CTL			0x34c8
 #define           HEVC_DBLK_CFGB                             0x350b
-#define           HEVC_CM_CORE_STATUS                      0x3640
 #define		HEVC_ASSIST_MMU_MAP_ADDR	0x3009
 
 #define H265_DW_NO_SCALE
@@ -7792,7 +7790,7 @@ result_done:
 					PRINT_FLAG_MMU_DETAIL,
 					"release unused buf , used_4k_num %ld index %d\n",
 					used_4k_num, hw->hevc_cur_buf_idx);
-
+				hevc_mmu_dma_check(hw_to_vdec(hw));
 				decoder_mmu_box_free_idx_tail(
 					hw->mmu_box,
 					hw->hevc_cur_buf_idx,

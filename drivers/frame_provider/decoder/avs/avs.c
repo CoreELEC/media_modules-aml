@@ -1548,9 +1548,6 @@ static s32 vavs_init(void)
 	stat |= STAT_TIMER_INIT;
 
 	amvdec_enable();
-
-	vdec_enable_DMC(NULL);
-
 	vavs_local_init();
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM)
@@ -1803,8 +1800,6 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 
 
 	amvdec_disable();
-	vdec_disable_DMC(NULL);
-
 	pic_type = 0;
 	if (mm_blk_handle) {
 		decoder_bmmu_box_free(mm_blk_handle);
