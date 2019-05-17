@@ -211,11 +211,10 @@ static int aml_ci_slot_status(struct dvb_ca_en50221 *en50221,
 	if (ci->ci_poll_slot_status != NULL) {
 		return ci->ci_poll_slot_status(ci, slot, open);
 	} else {
-		pr_error("ci_poll_slot_status is null %s\r\n", __func__);
-		return -EINVAL;
+		/*pr_error("ci_poll_slot_status is null %s\r\n", __func__);*/
 	}
 
-	return -EINVAL;
+	return 0;
 }
 static int aml_ci_cimax_slot_reset(struct dvb_ca_en50221_cimax *en50221,
 		int slot)
@@ -271,8 +270,8 @@ static int aml_ci_cimax_ts_control(struct dvb_ca_en50221_cimax *en50221,
 	}
 	return 0;
 }
-/**\brief aml_ci_slot_status:get slot status
- * \param en50221: en50221 obj,used this data to get dvb_ci obj
+/**\brief aml_ci_cimax_slot_status:get slot status
+ * \param en50221: en50221_cimax obj,used this data to get dvb_ci obj
  * \param slot: slot index
  * \param open: no used
  * \return
@@ -289,11 +288,10 @@ static int aml_ci_cimax_slot_status(
 	if (ci->ci_poll_slot_status != NULL) {
 		return ci->ci_poll_slot_status(ci, slot, open);
 	} else {
-		pr_error("ci_poll_slot_status is null %s\r\n", __func__);
-		return -EINVAL;
+		/*pr_error("ci_poll_slot_status is null %s\r\n", __func__);*/
 	}
 
-	return -EINVAL;
+	return 0;
 }
 
 /**\brief aml_ci_read_cis: read cis
@@ -467,14 +465,14 @@ static int aml_ci_get_capbility(struct dvb_ca_en50221_cimax *en50221, int slot)
 
 	if (slot != 0) {
 		pr_error("slot !=0 %s :%d\r\n", __func__, slot);
-		return -EINVAL;
+		return 0;
 	}
 
 	if (ci->ci_get_capbility != NULL)
 		return ci->ci_get_capbility(ci, slot);
 
 	pr_error("ci_get_capbility is null %s\r\n", __func__);
-	return -EINVAL;
+	return 0;
 }
 
 

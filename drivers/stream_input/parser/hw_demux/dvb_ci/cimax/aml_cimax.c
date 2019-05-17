@@ -212,6 +212,8 @@ int aml_cimax_init(struct platform_device *pdev, struct aml_ci *ci)
 	if (ret != 0)
 		return ret;
 
+	ci->data = cimax;
+
 	ci->ci_read_cis = aml_cimax_read_cis;
 	ci->ci_write_cor = aml_cimax_write_cor;
 	ci->ci_negotiate = aml_cimax_negotiate;
@@ -225,7 +227,6 @@ int aml_cimax_init(struct platform_device *pdev, struct aml_ci *ci)
 	ci->ci_slot_ts_enable = aml_cimax_slot_ts_enable;
 	ci->ci_poll_slot_status = aml_cimax_slot_status;
 
-	ci->data = cimax;
 	return 0;
 }
 EXPORT_SYMBOL(aml_cimax_init);
@@ -233,6 +234,19 @@ EXPORT_SYMBOL(aml_cimax_init);
 int aml_cimax_exit(struct aml_ci *ci)
 {
 	struct aml_cimax *cimax = ci->data;
+
+	ci->ci_read_cis         = NULL;
+	ci->ci_write_cor        = NULL;
+	ci->ci_negotiate        = NULL;
+	ci->ci_read_lpdu        = NULL;
+	ci->ci_write_lpdu       = NULL;
+	ci->ci_read_cam_status  = NULL;
+	ci->ci_cam_reset        = NULL;
+	ci->ci_get_capbility    = NULL;
+	ci->ci_slot_reset       = NULL;
+	ci->ci_slot_shutdown    = NULL;
+	ci->ci_slot_ts_enable   = NULL;
+	ci->ci_poll_slot_status = NULL;
 
 	aml_cimax_stop(cimax);
 
