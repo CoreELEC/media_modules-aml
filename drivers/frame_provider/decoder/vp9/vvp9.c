@@ -84,6 +84,10 @@
 #define HEVC_SAO_MMU_VH0_ADDR                      0x363a
 #define HEVC_SAO_MMU_STATUS                        0x3639
 
+#define HEVC_MV_INFO                               0x310d
+#define HEVC_QP_INFO                               0x3137
+#define HEVC_SKIP_INFO                             0x3136
+
 #define VP9_10B_DEC_IDLE                           0
 #define VP9_10B_DEC_FRAME_HEADER                   1
 #define VP9_10B_DEC_SLICE_SEGMENT                  2
@@ -338,6 +342,7 @@ typedef unsigned short u16;
 #define VP9_DEBUG_REG                      0x800
 #define VP9_DEBUG_2_STAGE                  0x1000
 #define VP9_DEBUG_2_STAGE_MORE             0x2000
+#define VP9_DEBUG_QOS_INFO                 0x4000
 #define VP9_DEBUG_DIS_LOC_ERROR_PROC       0x10000
 #define VP9_DEBUG_DIS_SYS_ERROR_PROC   0x20000
 #define VP9_DEBUG_DUMP_PIC_LIST       0x40000
@@ -557,6 +562,17 @@ struct PIC_BUFFER_CONFIG_s {
 	unsigned long cma_alloc_addr;
 
 	int double_write_mode;
+
+	/* picture qos infomation*/
+	int max_qp;
+	int avg_qp;
+	int min_qp;
+	int max_skip;
+	int avg_skip;
+	int min_skip;
+	int max_mv;
+	int min_mv;
+	int avg_mv;
 } PIC_BUFFER_CONFIG;
 
 enum BITSTREAM_PROFILE {
@@ -808,6 +824,11 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 	struct PIC_BUFFER_CONFIG_s *pic_config);
 static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					struct PIC_BUFFER_CONFIG_s *pic_config);
+
+static void fill_frame_info(struct VP9Decoder_s *pbi,
+	struct PIC_BUFFER_CONFIG_s *frame,
+	unsigned int framesize,
+	unsigned int pts);
 
 static struct PIC_BUFFER_CONFIG_s *get_frame_new_buffer(struct VP9_Common_s *cm)
 {
@@ -1153,6 +1174,8 @@ struct VP9Decoder_s {
 	bool pic_list_init_done2;
 	bool is_used_v4l;
 	void *v4l2_ctx;
+	int frameinfo_enable;
+	struct vframe_qos_s vframe_qos;
 };
 
 static int v4l_get_fb(struct aml_vcodec_ctx *ctx, struct vdec_fb **out)
@@ -6644,6 +6667,7 @@ static void update_vf_memhandle(struct VP9Decoder_s *pbi,
 		 */
 	}
 }
+
 static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				struct PIC_BUFFER_CONFIG_s *pic_config)
 {
@@ -6710,6 +6734,8 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			pts_valid = 1;
 			pts_us64_valid = 1;
 		}
+
+		fill_frame_info(pbi, pic_config, frame_size, vf->pts);
 
 		pts_save = vf->pts;
 		pts_us64_save = vf->pts_us64;
@@ -7250,6 +7276,471 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 	return ret;
 }
 
+static void fill_frame_info(struct VP9Decoder_s *pbi,
+	struct PIC_BUFFER_CONFIG_s *frame,
+	unsigned int framesize,
+	unsigned int pts)
+{
+	struct vframe_qos_s *vframe_qos = &pbi->vframe_qos;
+
+	if (frame->slice_type == KEY_FRAME)
+		vframe_qos->type = 1;
+	else if (frame->slice_type == INTER_FRAME)
+		vframe_qos->type = 2;
+/*
+#define SHOW_QOS_INFO
+*/
+	vframe_qos->size = framesize;
+	vframe_qos->pts = pts;
+#ifdef SHOW_QOS_INFO
+	vp9_print(pbi, 0, "slice:%d\n", frame->slice_type);
+#endif
+	vframe_qos->max_mv = frame->max_mv;
+	vframe_qos->avg_mv = frame->avg_mv;
+	vframe_qos->min_mv = frame->min_mv;
+#ifdef SHOW_QOS_INFO
+	vp9_print(pbi, 0, "mv: max:%d,  avg:%d, min:%d\n",
+			vframe_qos->max_mv,
+			vframe_qos->avg_mv,
+			vframe_qos->min_mv);
+#endif
+	vframe_qos->max_qp = frame->max_qp;
+	vframe_qos->avg_qp = frame->avg_qp;
+	vframe_qos->min_qp = frame->min_qp;
+#ifdef SHOW_QOS_INFO
+	vp9_print(pbi, 0, "qp: max:%d,  avg:%d, min:%d\n",
+			vframe_qos->max_qp,
+			vframe_qos->avg_qp,
+			vframe_qos->min_qp);
+#endif
+	vframe_qos->max_skip = frame->max_skip;
+	vframe_qos->avg_skip = frame->avg_skip;
+	vframe_qos->min_skip = frame->min_skip;
+#ifdef SHOW_QOS_INFO
+	vp9_print(pbi, 0, "skip: max:%d,	avg:%d, min:%d\n",
+			vframe_qos->max_skip,
+			vframe_qos->avg_skip,
+			vframe_qos->min_skip);
+#endif
+	vframe_qos->num++;
+
+	if (pbi->frameinfo_enable)
+		vdec_fill_frame_info(vframe_qos, 1);
+}
+
+/* only when we decoded one field or one frame,
+we can call this function to get qos info*/
+static void get_picture_qos_info(struct VP9Decoder_s *pbi)
+{
+	struct PIC_BUFFER_CONFIG_s *frame = &pbi->cur_buf->buf;
+
+	if (!frame)
+		return;
+
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) {
+		unsigned char a[3];
+		unsigned char i, j, t;
+		unsigned long  data;
+
+		data = READ_VREG(HEVC_MV_INFO);
+		if (frame->slice_type == KEY_FRAME)
+			data = 0;
+		a[0] = data & 0xff;
+		a[1] = (data >> 8) & 0xff;
+		a[2] = (data >> 16) & 0xff;
+
+		for (i = 0; i < 3; i++) {
+			for (j = i+1; j < 3; j++) {
+				if (a[j] < a[i]) {
+					t = a[j];
+					a[j] = a[i];
+					a[i] = t;
+				} else if (a[j] == a[i]) {
+					a[i]++;
+					t = a[j];
+					a[j] = a[i];
+					a[i] = t;
+				}
+			}
+		}
+		frame->max_mv = a[2];
+		frame->avg_mv = a[1];
+		frame->min_mv = a[0];
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"mv data %x  a[0]= %x a[1]= %x a[2]= %x\n",
+			data, a[0], a[1], a[2]);
+
+		data = READ_VREG(HEVC_QP_INFO);
+		a[0] = data & 0x1f;
+		a[1] = (data >> 8) & 0x3f;
+		a[2] = (data >> 16) & 0x7f;
+
+		for (i = 0; i < 3; i++) {
+			for (j = i+1; j < 3; j++) {
+				if (a[j] < a[i]) {
+					t = a[j];
+					a[j] = a[i];
+					a[i] = t;
+				} else if (a[j] == a[i]) {
+					a[i]++;
+					t = a[j];
+					a[j] = a[i];
+					a[i] = t;
+				}
+			}
+		}
+		frame->max_qp = a[2];
+		frame->avg_qp = a[1];
+		frame->min_qp = a[0];
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"qp data %x  a[0]= %x a[1]= %x a[2]= %x\n",
+			data, a[0], a[1], a[2]);
+
+		data = READ_VREG(HEVC_SKIP_INFO);
+		a[0] = data & 0x1f;
+		a[1] = (data >> 8) & 0x3f;
+		a[2] = (data >> 16) & 0x7f;
+
+		for (i = 0; i < 3; i++) {
+			for (j = i+1; j < 3; j++) {
+				if (a[j] < a[i]) {
+					t = a[j];
+					a[j] = a[i];
+					a[i] = t;
+				} else if (a[j] == a[i]) {
+					a[i]++;
+					t = a[j];
+					a[j] = a[i];
+					a[i] = t;
+				}
+			}
+		}
+		frame->max_skip = a[2];
+		frame->avg_skip = a[1];
+		frame->min_skip = a[0];
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"skip data %x  a[0]= %x a[1]= %x a[2]= %x\n",
+			data, a[0], a[1], a[2]);
+	} else {
+		uint32_t blk88_y_count;
+		uint32_t blk88_c_count;
+		uint32_t blk22_mv_count;
+		uint32_t rdata32;
+		int32_t mv_hi;
+		int32_t mv_lo;
+		uint32_t rdata32_l;
+		uint32_t mvx_L0_hi;
+		uint32_t mvy_L0_hi;
+		uint32_t mvx_L1_hi;
+		uint32_t mvy_L1_hi;
+		int64_t value;
+		uint64_t temp_value;
+		int pic_number = frame->decode_idx;
+
+		frame->max_mv = 0;
+		frame->avg_mv = 0;
+		frame->min_mv = 0;
+
+		frame->max_skip = 0;
+		frame->avg_skip = 0;
+		frame->min_skip = 0;
+
+		frame->max_qp = 0;
+		frame->avg_qp = 0;
+		frame->min_qp = 0;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO, "slice_type:%d, poc:%d\n",
+			frame->slice_type,
+			pic_number);
+
+		/* set rd_idx to 0 */
+		WRITE_VREG(HEVC_PIC_QUALITY_CTRL, 0);
+
+		blk88_y_count = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		if (blk88_y_count == 0) {
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] NO Data yet.\n",
+			pic_number);
+
+			/* reset all counts */
+			WRITE_VREG(HEVC_PIC_QUALITY_CTRL, (1<<8));
+			return;
+		}
+		/* qp_y_sum */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] Y QP AVG : %d (%d/%d)\n",
+			pic_number, rdata32/blk88_y_count,
+			rdata32, blk88_y_count);
+
+		frame->avg_qp = rdata32/blk88_y_count;
+		/* intra_y_count */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] Y intra rate : %d%c (%d)\n",
+			pic_number, rdata32*100/blk88_y_count,
+			'%', rdata32);
+
+		/* skipped_y_count */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] Y skipped rate : %d%c (%d)\n",
+			pic_number, rdata32*100/blk88_y_count,
+			'%', rdata32);
+
+		frame->avg_skip = rdata32*100/blk88_y_count;
+		/* coeff_non_zero_y_count */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] Y ZERO_Coeff rate : %d%c (%d)\n",
+			pic_number, (100 - rdata32*100/(blk88_y_count*1)),
+			'%', rdata32);
+
+		/* blk66_c_count */
+		blk88_c_count = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		if (blk88_c_count == 0) {
+			vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+				"[Picture %d Quality] NO Data yet.\n",
+				pic_number);
+			/* reset all counts */
+			WRITE_VREG(HEVC_PIC_QUALITY_CTRL, (1<<8));
+			return;
+		}
+		/* qp_c_sum */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+				"[Picture %d Quality] C QP AVG : %d (%d/%d)\n",
+				pic_number, rdata32/blk88_c_count,
+				rdata32, blk88_c_count);
+
+		/* intra_c_count */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] C intra rate : %d%c (%d)\n",
+			pic_number, rdata32*100/blk88_c_count,
+			'%', rdata32);
+
+		/* skipped_cu_c_count */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] C skipped rate : %d%c (%d)\n",
+			pic_number, rdata32*100/blk88_c_count,
+			'%', rdata32);
+
+		/* coeff_non_zero_c_count */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] C ZERO_Coeff rate : %d%c (%d)\n",
+			pic_number, (100 - rdata32*100/(blk88_c_count*1)),
+			'%', rdata32);
+
+		/* 1'h0, qp_c_max[6:0], 1'h0, qp_c_min[6:0],
+		1'h0, qp_y_max[6:0], 1'h0, qp_y_min[6:0] */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] Y QP min : %d\n",
+			pic_number, (rdata32>>0)&0xff);
+
+		frame->min_qp = (rdata32>>0)&0xff;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] Y QP max : %d\n",
+			pic_number, (rdata32>>8)&0xff);
+
+		frame->max_qp = (rdata32>>8)&0xff;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] C QP min : %d\n",
+			pic_number, (rdata32>>16)&0xff);
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] C QP max : %d\n",
+			pic_number, (rdata32>>24)&0xff);
+
+		/* blk22_mv_count */
+		blk22_mv_count = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		if (blk22_mv_count == 0) {
+			vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+				"[Picture %d Quality] NO MV Data yet.\n",
+				pic_number);
+			/* reset all counts */
+			WRITE_VREG(HEVC_PIC_QUALITY_CTRL, (1<<8));
+			return;
+		}
+		/* mvy_L1_count[39:32], mvx_L1_count[39:32],
+		mvy_L0_count[39:32], mvx_L0_count[39:32] */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		/* should all be 0x00 or 0xff */
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MV AVG High Bits: 0x%X\n",
+			pic_number, rdata32);
+
+		mvx_L0_hi = ((rdata32>>0)&0xff);
+		mvy_L0_hi = ((rdata32>>8)&0xff);
+		mvx_L1_hi = ((rdata32>>16)&0xff);
+		mvy_L1_hi = ((rdata32>>24)&0xff);
+
+		/* mvx_L0_count[31:0] */
+		rdata32_l = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		temp_value = mvx_L0_hi;
+		temp_value = (temp_value << 32) | rdata32_l;
+
+		if (mvx_L0_hi & 0x80)
+			value = 0xFFFFFFF000000000 | temp_value;
+		else
+			value = temp_value;
+
+		value = div_s64(value, blk22_mv_count);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVX_L0 AVG : %d (%lld/%d)\n",
+			pic_number, (int)value,
+			value, blk22_mv_count);
+
+		frame->avg_mv = value;
+
+		/* mvy_L0_count[31:0] */
+		rdata32_l = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		temp_value = mvy_L0_hi;
+		temp_value = (temp_value << 32) | rdata32_l;
+
+		if (mvy_L0_hi & 0x80)
+			value = 0xFFFFFFF000000000 | temp_value;
+		else
+			value = temp_value;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVY_L0 AVG : %d (%lld/%d)\n",
+			pic_number, rdata32_l/blk22_mv_count,
+			value, blk22_mv_count);
+
+		/* mvx_L1_count[31:0] */
+		rdata32_l = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		temp_value = mvx_L1_hi;
+		temp_value = (temp_value << 32) | rdata32_l;
+		if (mvx_L1_hi & 0x80)
+			value = 0xFFFFFFF000000000 | temp_value;
+		else
+			value = temp_value;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVX_L1 AVG : %d (%lld/%d)\n",
+			pic_number, rdata32_l/blk22_mv_count,
+			value, blk22_mv_count);
+
+		/* mvy_L1_count[31:0] */
+		rdata32_l = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		temp_value = mvy_L1_hi;
+		temp_value = (temp_value << 32) | rdata32_l;
+		if (mvy_L1_hi & 0x80)
+			value = 0xFFFFFFF000000000 | temp_value;
+		else
+			value = temp_value;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVY_L1 AVG : %d (%lld/%d)\n",
+			pic_number, rdata32_l/blk22_mv_count,
+			value, blk22_mv_count);
+
+		/* {mvx_L0_max, mvx_L0_min} // format : {sign, abs[14:0]}  */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		mv_hi = (rdata32>>16)&0xffff;
+		if (mv_hi & 0x8000)
+			mv_hi = 0x8000 - mv_hi;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVX_L0 MAX : %d\n",
+			pic_number, mv_hi);
+
+		frame->max_mv = mv_hi;
+
+		mv_lo = (rdata32>>0)&0xffff;
+		if (mv_lo & 0x8000)
+			mv_lo = 0x8000 - mv_lo;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVX_L0 MIN : %d\n",
+			pic_number, mv_lo);
+
+		frame->min_mv = mv_lo;
+
+		/* {mvy_L0_max, mvy_L0_min} */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		mv_hi = (rdata32>>16)&0xffff;
+		if (mv_hi & 0x8000)
+			mv_hi = 0x8000 - mv_hi;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVY_L0 MAX : %d\n",
+			pic_number, mv_hi);
+
+		mv_lo = (rdata32>>0)&0xffff;
+		if (mv_lo & 0x8000)
+			mv_lo = 0x8000 - mv_lo;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVY_L0 MIN : %d\n",
+			pic_number, mv_lo);
+
+		/* {mvx_L1_max, mvx_L1_min} */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		mv_hi = (rdata32>>16)&0xffff;
+		if (mv_hi & 0x8000)
+			mv_hi = 0x8000 - mv_hi;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVX_L1 MAX : %d\n",
+			pic_number, mv_hi);
+
+		mv_lo = (rdata32>>0)&0xffff;
+		if (mv_lo & 0x8000)
+			mv_lo = 0x8000 - mv_lo;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVX_L1 MIN : %d\n",
+			pic_number, mv_lo);
+
+		/* {mvy_L1_max, mvy_L1_min} */
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+		mv_hi = (rdata32>>16)&0xffff;
+		if (mv_hi & 0x8000)
+			mv_hi = 0x8000 - mv_hi;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVY_L1 MAX : %d\n",
+			pic_number, mv_hi);
+
+		mv_lo = (rdata32>>0)&0xffff;
+		if (mv_lo & 0x8000)
+			mv_lo = 0x8000 - mv_lo;
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] MVY_L1 MIN : %d\n",
+			pic_number, mv_lo);
+
+		rdata32 = READ_VREG(HEVC_PIC_QUALITY_CTRL);
+
+		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
+			"[Picture %d Quality] After Read : VDEC_PIC_QUALITY_CTRL : 0x%x\n",
+			pic_number, rdata32);
+
+		/* reset all counts */
+		WRITE_VREG(HEVC_PIC_QUALITY_CTRL, (1<<8));
+	}
+}
+
 static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 {
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)data;
@@ -7302,6 +7793,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		if (pbi->m_ins_flag) {
+			get_picture_qos_info(pbi);
 #ifdef SUPPORT_FB_DECODING
 			if (pbi->used_stage_buf_num > 0) {
 				reset_process_time(pbi);
