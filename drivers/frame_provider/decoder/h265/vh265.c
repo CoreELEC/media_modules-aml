@@ -269,13 +269,13 @@ static u32 pts_unstable;
 #define H265_DEBUG_IGNORE_CONFORMANCE_WINDOW	0x2000000
 #define H265_DEBUG_WAIT_DECODE_DONE_WHEN_STOP   0x4000000
 #ifdef MULTI_INSTANCE_SUPPORT
-#define IGNORE_PARAM_FROM_CONFIG		0x08000000
-#define PRINT_FRAMEBASE_DATA            0x10000000
-#define PRINT_FLAG_VDEC_STATUS             0x20000000
-#define PRINT_FLAG_VDEC_DETAIL             0x40000000
+#define PRINT_FLAG_ERROR		0x0
+#define IGNORE_PARAM_FROM_CONFIG	0x08000000
+#define PRINT_FRAMEBASE_DATA		0x10000000
+#define PRINT_FLAG_VDEC_STATUS		0x20000000
+#define PRINT_FLAG_VDEC_DETAIL		0x40000000
+#define PRINT_FLAG_V4L_DETAIL		0x80000000
 #endif
-
-#define PRINT_FLAG_V4L_DETAIL	(0x80000000)
 
 #define BUF_POOL_SIZE	32
 #define MAX_BUF_NUM 24
@@ -1719,8 +1719,6 @@ static int v4l_get_fb(struct aml_vcodec_ctx *ctx, struct vdec_fb **out)
 
 	ret = ctx->dec_if->get_param(ctx->drv_handle,
 		GET_PARAM_FREE_FRAME_BUFFER, out);
-	if (ret)
-		pr_err("get frame buffer failed.\n");
 
 	return ret;
 }
@@ -2913,8 +2911,12 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 		buf_stru->mc_buffer_size_h = mc_buffer_size_h;
 		buf_stru->mc_buffer_size_u_v_h = mc_buffer_size_u_v_h;
 	}
-	pr_err("pic width: %d, pic height: %d, headr: %d, body: %d, size h: %d, size uvh: %d, buf size: %x\n",
-		pic_width, pic_height, losless_comp_header_size, losless_comp_body_size, mc_buffer_size_h, mc_buffer_size_u_v_h, buf_size);
+
+	hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,"[%d] pic width: %d, pic height: %d, headr: %d, body: %d, size h: %d, size uvh: %d, buf size: %x\n",
+		((struct aml_vcodec_ctx *)(hevc->v4l2_ctx))->id,
+		pic_width, pic_height, losless_comp_header_size,
+		losless_comp_body_size, mc_buffer_size_h,
+		mc_buffer_size_u_v_h, buf_size);
 
 	return buf_size;
 }
@@ -2938,7 +2940,8 @@ static int alloc_buf(struct hevc_state_s *hevc)
 			if (hevc->is_used_v4l) {
 				ret = v4l_get_fb(hevc->v4l2_ctx, &fb);
 				if (ret) {
-					pr_err("[%d] get fb fail.\n",
+					hevc_print(hevc, PRINT_FLAG_ERROR,
+						"[%d] get fb fail.\n",
 						((struct aml_vcodec_ctx *)
 						(hevc->v4l2_ctx))->id);
 					return ret;

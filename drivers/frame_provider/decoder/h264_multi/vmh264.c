@@ -1763,8 +1763,6 @@ static int v4l_get_fb(struct aml_vcodec_ctx *ctx, struct vdec_fb **out)
 
 	ret = ctx->dec_if->get_param(ctx->drv_handle,
 		GET_PARAM_FREE_FRAME_BUFFER, out);
-	if (ret)
-		pr_err("get frame buffer failed.\n");
 
 	return ret;
 }
@@ -1795,7 +1793,8 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 
 	ret = v4l_get_fb(hw->v4l2_ctx, &fb);
 	if (ret) {
-		pr_err("[%d] get fb fail.\n", ctx->id);
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+			"[%d] get fb fail.\n", ctx->id);
 		return ret;
 	}
 

@@ -350,13 +350,12 @@ typedef unsigned short u16;
 #define VP9_DEBUG_CACHE_HIT_RATE         0x2000000
 #define IGNORE_PARAM_FROM_CONFIG         0x8000000
 #ifdef MULTI_INSTANCE_SUPPORT
-#define PRINT_FLAG_ERROR				0
-#define PRINT_FLAG_VDEC_STATUS             0x20000000
-#define PRINT_FLAG_VDEC_DETAIL             0x40000000
-#define PRINT_FLAG_VDEC_DATA             0x80000000
+#define PRINT_FLAG_ERROR		0x0
+#define PRINT_FLAG_V4L_DETAIL		0x10000000
+#define PRINT_FLAG_VDEC_STATUS		0x20000000
+#define PRINT_FLAG_VDEC_DETAIL		0x40000000
+#define PRINT_FLAG_VDEC_DATA		0x80000000
 #endif
-
-#define PRINT_FLAG_V4L_DETAIL	(0)
 
 static u32 debug;
 static bool is_reset;
@@ -1162,8 +1161,6 @@ static int v4l_get_fb(struct aml_vcodec_ctx *ctx, struct vdec_fb **out)
 
 	ret = ctx->dec_if->get_param(ctx->drv_handle,
 		GET_PARAM_FREE_FRAME_BUFFER, out);
-	if (ret)
-		pr_err("get frame buffer failed.\n");
 
 	return ret;
 }
@@ -4576,7 +4573,6 @@ static int config_pic(struct VP9Decoder_s *pbi,
 	int mc_buffer_size_u_v_h = 0;
 	int dw_mode = get_double_write_mode_init(pbi);
 	struct vdec_fb *fb = NULL;
-	pr_err("---%s, %d\n", __func__, __LINE__);
 
 	pbi->lcu_total = lcu_total;
 
@@ -4625,12 +4621,12 @@ static int config_pic(struct VP9Decoder_s *pbi,
 		<= mpred_mv_end
 	) {
 #endif
-		pr_err("---%s, %d, size %d\n", __func__, __LINE__, buf_size);
 		if (buf_size > 0) {
 			if (pbi->is_used_v4l) {
 				ret = v4l_get_fb(pbi->v4l2_ctx, &fb);
 				if (ret) {
-					pr_err("[%d] get fb fail.\n",
+					vp9_print(pbi, PRINT_FLAG_ERROR,
+						"[%d] get fb fail.\n",
 						((struct aml_vcodec_ctx *)
 						(pbi->v4l2_ctx))->id);
 					return ret;
@@ -4765,7 +4761,6 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 	struct PIC_BUFFER_CONFIG_s *pic_config;
 	u32 header_size;
 	struct vdec_s *vdec = hw_to_vdec(pbi);
-	pr_err("---%s, %d\n", __func__, __LINE__);
 
 	if (pbi->mmu_enable && ((pbi->double_write_mode & 0x10) == 0)) {
 		header_size = vvp9_mmu_compress_header_size(pbi);
@@ -4803,7 +4798,6 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 		pic_config->y_crop_width = pbi->init_pic_w;
 		pic_config->y_crop_height = pbi->init_pic_h;
 		pic_config->double_write_mode = get_double_write_mode(pbi);
-		pr_err("---%s, %d\n", __func__, __LINE__);
 
 		if (pic_config->double_write_mode) {
 			set_canvas(pbi, pic_config);
@@ -6240,8 +6234,6 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		return -1;
 	}
 #endif
-	pr_err("---%s, %d\n", __func__, __LINE__);
-
 	if (pbi->save_buffer_mode)
 		pbi->used_buf_num = MAX_BUF_NUM_SAVE_BUF;
 	else
@@ -6251,9 +6243,6 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		pbi->used_buf_num = MAX_BUF_NUM;
 	if (pbi->used_buf_num > FRAME_BUFFERS)
 		pbi->used_buf_num = FRAME_BUFFERS;
-	pr_err("---%s, %d,  used_buf_num %d\n", __func__, __LINE__, pbi->used_buf_num);
-
-	//init_pic_list(pbi);
 
 	pbi->pts_unstable = ((unsigned long)(pbi->vvp9_amstream_dec_info.param)
 			& 0x40) >> 6;

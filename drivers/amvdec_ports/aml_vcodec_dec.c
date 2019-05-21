@@ -1300,7 +1300,7 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 		q_data->coded_height = ctx->picinfo.coded_height;
 
 		q_data->bytesperline[0] = ctx->picinfo.coded_width;
-		q_data->bytesperline[1] = ctx->picinfo.coded_height;
+		q_data->bytesperline[1] = ctx->picinfo.coded_width;
 
 		/*
 		 * Width and height are set to the dimensions
