@@ -289,7 +289,7 @@ static bool vdec_is_input_frame_empty(struct vdec_s *vdec) {
 	unsigned long flags;
 
 	flags = vdec_inputbuff_lock(core);
-	ret = !(vdec->core_mask && core->buff_flag);
+	ret = !(vdec->core_mask & core->buff_flag);
 	vdec_inputbuff_unlock(core, flags);
 
 	return ret;
@@ -569,14 +569,13 @@ static void vdec_update_buff_status(void)
 			if (input->have_frame_num)
 				core->buff_flag |= vdec->core_mask;
 		} else if (input_stream_based(input)) {
-			if (!(vdec->need_more_data & VDEC_NEED_MORE_DATA))
-				core->stream_buff_flag |= vdec->core_mask;
+			core->stream_buff_flag |= vdec->core_mask;
 		}
 	}
 	vdec_inputbuff_unlock(core, flags);
 }
 
-
+#if 0
 void vdec_update_streambuff_status(void)
 {
 	struct vdec_core_s *core = vdec_core;
@@ -610,6 +609,7 @@ void vdec_update_streambuff_status(void)
 	}
 }
 EXPORT_SYMBOL(vdec_update_streambuff_status);
+#endif
 
 int vdec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
@@ -2482,7 +2482,6 @@ thread_isr_done:
 
 unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 {
-	struct vdec_core_s *core = vdec_core;
 	unsigned long ready_mask;
 	struct vdec_input_s *input = &vdec->input;
 	if ((vdec->status != VDEC_STATUS_CONNECTED) &&
@@ -2525,10 +2524,7 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 			if ((level < input->prepare_level) &&
 				(pts_get_rec_num(PTS_TYPE_VIDEO,
 					vdec->input.total_rd_count) < 2)) {
-				if (debug & 8)
-					pr_info("ready to run VDEC_NEED_MORE_DATA\n");
 				vdec->need_more_data |= VDEC_NEED_MORE_DATA;
-				core->stream_buff_flag &= ~vdec->core_mask;
 #ifdef VDEC_DEBUG_SUPPORT
 				inc_profi_count(mask, vdec->input_underrun_count);
 				if (step_mode & 0x200) {
@@ -2539,7 +2535,8 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 				}
 #endif
 				return false;
-			}
+			} else if (level > input->prepare_level)
+				vdec->need_more_data &= ~VDEC_NEED_MORE_DATA;
 		}
 	}
 
