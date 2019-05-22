@@ -2912,8 +2912,7 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 		buf_stru->mc_buffer_size_u_v_h = mc_buffer_size_u_v_h;
 	}
 
-	hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,"[%d] pic width: %d, pic height: %d, headr: %d, body: %d, size h: %d, size uvh: %d, buf size: %x\n",
-		((struct aml_vcodec_ctx *)(hevc->v4l2_ctx))->id,
+	hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,"pic width: %d, pic height: %d, headr: %d, body: %d, size h: %d, size uvh: %d, buf size: %x\n",
 		pic_width, pic_height, losless_comp_header_size,
 		losless_comp_body_size, mc_buffer_size_h,
 		mc_buffer_size_u_v_h, buf_size);
