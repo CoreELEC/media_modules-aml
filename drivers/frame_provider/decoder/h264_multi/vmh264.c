@@ -831,6 +831,7 @@ struct vdec_h264_hw_s {
 	u8 frmbase_cont_flag;
 	struct vframe_qos_s vframe_qos;
 	int frameinfo_enable;
+	bool first_head_check_flag;
 };
 
 static u32 again_threshold = 0x40;
@@ -4484,12 +4485,6 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			get_max_dec_frame_buf_size(level_idc,
 			max_reference_size, mb_width, mb_height);
 
-			if (hw->dpb.reorder_pic_num > MAX_VF_BUF_NUM) {
-				dpb_print(DECODE_ID(hw), 0,
-			"%s abnormal reorder_pic_num  %d\n", __func__, hw->dpb.reorder_pic_num);
-				return -1;
-				}
-
 		dpb_print(DECODE_ID(hw), 0,
 			"restriction_flag=%d, max_dec_frame_buffering=%d, reorder_pic_num=%d\n",
 			hw->bitstream_restriction_flag,
@@ -4503,6 +4498,17 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			dpb_print(DECODE_ID(hw), 0,
 			"set reorder_pic_num to %d\n",
 			hw->dpb.reorder_pic_num);
+		}else
+		{
+			if (!hw->first_head_check_flag && level_idc == 21 &&
+				hw->frame_width == 32 && hw->frame_height == 32 &&
+				max_reference_size == 0 && hw->dpb.reorder_pic_num >
+				MAX_VF_BUF_NUM) {
+				dpb_print(DECODE_ID(hw), 0,
+					"%s warning abnormal reorder_pic  %d\n", __func__, hw->dpb.reorder_pic_num);
+				hw->first_head_check_flag = 1;
+				return -1;
+			}
 		}
 
 		active_buffer_spec_num =
@@ -8469,6 +8475,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, pdata);
 
 	hw->mmu_enable = 0;
+	hw->first_head_check_flag = 0;
 	if (force_enable_mmu && pdata->sys_info &&
 		    (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) &&
 		    (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX) &&
