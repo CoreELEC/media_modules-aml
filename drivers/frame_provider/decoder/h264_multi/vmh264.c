@@ -7919,7 +7919,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		/*avoid more buffers consumed when
 		switching resolution*/
 		if (run_ready_max_buf_num == 0xff &&
-			get_used_buf_count(hw) >=
+			get_used_buf_count(hw) >
 			hw->dpb.mDPB.size)
 			ret = 0;
 		else if (run_ready_max_buf_num &&
