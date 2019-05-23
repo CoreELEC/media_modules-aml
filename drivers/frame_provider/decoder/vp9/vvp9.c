@@ -8157,6 +8157,8 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 	hevc_enable_DMC(hw_to_vdec(pbi));
 	amhevc_enable();
 
+	init_pic_list(pbi);
+
 	ret = amhevc_loadmc_ex(VFORMAT_VP9, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();
@@ -8172,8 +8174,6 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 
 	/* enable AMRISC side protocol */
 	vvp9_prot_init(pbi, HW_MASK_FRONT | HW_MASK_BACK);
-
-	vdec_schedule_work(&pbi->work);
 
 	if (vdec_request_threaded_irq(VDEC_IRQ_0,
 				vvp9_isr,
@@ -8495,6 +8495,8 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 static int amvdec_vp9_remove(struct platform_device *pdev)
 {
 	struct VP9Decoder_s *pbi = gHevc;
+	struct vdec_s *vdec = hw_to_vdec(pbi);
+	int i;
 
 	if (debug)
 		pr_info("amvdec_vp9_remove\n");
@@ -8503,8 +8505,16 @@ static int amvdec_vp9_remove(struct platform_device *pdev)
 
 	vvp9_stop(pbi);
 
-
 	hevc_source_changed(VFORMAT_VP9, 0, 0, 0);
+
+	if (vdec->parallel_dec == 1) {
+		for (i = 0; i < FRAME_BUFFERS; i++) {
+			vdec->free_canvas_ex(pbi->common.buffer_pool->
+				frame_bufs[i].buf.y_canvas_index, vdec->id);
+			vdec->free_canvas_ex(pbi->common.buffer_pool->
+				frame_bufs[i].buf.uv_canvas_index, vdec->id);
+		}
+	}
 
 #ifdef DEBUG_PTS
 	pr_info("pts missed %ld, pts hit %ld, duration %d\n",
