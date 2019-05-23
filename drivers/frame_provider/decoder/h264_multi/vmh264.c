@@ -1859,12 +1859,20 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 {
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	int blkmode = CANVAS_BLKMODE_32X32;
 	int endian = 0;
-	int blkmode =  ((hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ||
-		hw->is_used_v4l) ? CANVAS_BLKMODE_LINEAR :
-			CANVAS_BLKMODE_32X32;
-	if (blkmode == CANVAS_BLKMODE_LINEAR)
+
+	if (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) {
+		blkmode = CANVAS_BLKMODE_LINEAR;
 		endian = 7;
+	}
+
+	if (hw->is_used_v4l) {
+		blkmode = CANVAS_BLKMODE_LINEAR;
+		if (v4l2_ctx->ada_ctx->vfm_path
+			!= FRAME_BASE_PATH_V4L_VIDEO)
+		endian = 7;
+	}
 
 	canvas_config_ex(hw->buffer_spec[i].
 		y_canvas_index,
@@ -1872,10 +1880,8 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		hw->mb_width << 4,
 		hw->mb_height << 4,
 		CANVAS_ADDR_NOWRAP,
-		hw->is_used_v4l ? CANVAS_BLKMODE_LINEAR :
-			CANVAS_BLKMODE_32X32,
-		hw->is_used_v4l && (v4l2_ctx->ada_ctx->vfm_path
-			!= FRAME_BASE_PATH_V4L_VIDEO) ? 7 : 0);
+		blkmode,
+		endian);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
@@ -1892,10 +1898,8 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		hw->mb_width << 4,
 		hw->mb_height << 3,
 		CANVAS_ADDR_NOWRAP,
-		hw->is_used_v4l ? CANVAS_BLKMODE_LINEAR :
-			CANVAS_BLKMODE_32X32,
-		hw->is_used_v4l && (v4l2_ctx->ada_ctx->vfm_path
-			!= FRAME_BASE_PATH_V4L_VIDEO) ? 7 : 0);
+		blkmode,
+		endian);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
@@ -1920,7 +1924,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 			hw->mb_height << 4,
 			CANVAS_ADDR_NOWRAP,
 			blkmode,
-			hw->is_used_v4l ? 7 : 0);
+			endian);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) |
@@ -1935,7 +1939,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 			hw->mb_height << 3,
 			CANVAS_ADDR_NOWRAP,
 			blkmode,
-			hw->is_used_v4l ? 7 : 0);
+			endian);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) |
@@ -1951,7 +1955,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 			hw->mb_height << 3,
 			CANVAS_ADDR_NOWRAP,
 			blkmode,
-			hw->is_used_v4l ? 7 : 0);
+			endian);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) |
@@ -1967,7 +1971,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 			hw->mb_height << 2,
 			CANVAS_ADDR_NOWRAP,
 			blkmode,
-			hw->is_used_v4l ? 7 : 0);
+			endian);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) |

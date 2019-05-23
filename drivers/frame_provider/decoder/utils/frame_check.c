@@ -56,7 +56,7 @@
 #define CRC_MASK	0x02
 
 #define MAX_YUV_SIZE (4096 * 2304)
-#define YUV_DEF_SIZE (1920*1088*3/2)
+#define YUV_DEF_SIZE (MAX_YUV_SIZE * 3 / 2)
 #define YUV_DEF_NUM	 1
 
 #define MAX_SIZE_AFBC_PLANES 	(4096 * 2048)
@@ -277,11 +277,11 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 			(dump->yuv_fp != NULL) &&
 			(dump->dump_cnt >= dump->num)) {
 
+			i = 0;
 			pic_num = dump->dump_cnt;
 			old_fs = get_fs();
 			set_fs(KERNEL_DS);
-
-			for (i = 0; dump->dump_cnt > 0; i++) {
+			while (pic_num > 0) {
 				wr_size = vfs_write(dump->yuv_fp,
 					(dump->buf_addr + i * mgr->size_pic),
 					mgr->size_pic, &dump->yuv_pos);
@@ -290,6 +290,7 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 					break;
 				}
 				pic_num--;
+				i++;
 			}
 			set_fs(old_fs);
 			vfs_fsync(dump->yuv_fp, 0);
