@@ -221,6 +221,7 @@ struct vdec_mpeg12_hw_s {
 	bool pts_valid[DECODE_BUFFER_NUM_MAX];
 	u32 canvas_spec[DECODE_BUFFER_NUM_MAX];
 	u64 lastpts64;
+	u32 last_chunk_pts;
 	struct canvas_config_s canvas_config[DECODE_BUFFER_NUM_MAX][2];
 	struct dec_sysinfo vmpeg12_amstream_dec_info;
 
@@ -1284,12 +1285,17 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 		/*debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
 		"ammvdec_mpeg12: error = 0x%x, offset = 0x%x\n",
 			info & PICINFO_ERROR, offset);*/
-
-		if (((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I)) {
+		if (((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) ||
+			((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)) {
 			if (hw->chunk) {
 				hw->pts_valid[index] = hw->chunk->pts_valid;
 				hw->pts[index] = hw->chunk->pts;
 				hw->pts64[index] = hw->chunk->pts64;
+				if (hw->last_chunk_pts == hw->chunk->pts) {
+					hw->pts_valid[index] = 0;
+					debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
+						"pts invalid\n");
+				}
 		debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
 		"!!!cpts=%d,pts64=%lld,size=%d,offset=%d\n",
 			hw->pts[index], hw->pts64[index],
@@ -1306,6 +1312,9 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 				}
 			}
 		} else {
+			if (hw->chunk) {
+				hw->last_chunk_pts = hw->chunk->pts;
+			}
 			hw->pts_valid[index] = false;
 		}
 		/*if (frame_prog == 0) */
