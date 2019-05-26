@@ -98,6 +98,7 @@ static int fps_clear;
 
 
 static int force_nosecure_even_drm;
+static int disable_switch_single_to_mult;
 
 static DEFINE_SPINLOCK(vdec_spin_lock);
 
@@ -723,6 +724,22 @@ static const char * const vdec_device_name[] = {
 
 #endif
 
+/*
+ * Only support time sliced decoding for frame based input,
+ * so legacy decoder can exist with time sliced decoder.
+ */
+static const char *get_dev_name(bool use_legacy_vdec, int format)
+{
+#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+	if (use_legacy_vdec)
+		return vdec_device_name[format * 2];
+	else
+		return vdec_device_name[format * 2 + 1];
+#else
+	return vdec_device_name[format];
+#endif
+}
+
 #ifdef VDEC_DEBUG_SUPPORT
 static u64 get_current_clk(void)
 {
@@ -803,6 +820,7 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 	struct vdec_s *vdec;
 	int type = VDEC_TYPE_SINGLE;
 	int id;
+
 	if (is_mult_inc(port->type))
 		type = (port->type & PORT_TYPE_FRAME) ?
 			VDEC_TYPE_FRAME_BLOCK :
@@ -855,6 +873,20 @@ int vdec_set_format(struct vdec_s *vdec, int format)
 		vdec->slave->port_flag |= PORT_FLAG_VFORMAT;
 	}
 
+	/* force switch to mult instance if supports this profile. */
+	if ((vdec->type == VDEC_TYPE_SINGLE) &&
+		!disable_switch_single_to_mult) {
+		const char *str = NULL;
+		char fmt[16] = {0};
+
+		str = strchr(get_dev_name(false, format), '_');
+		if (!str)
+			return -1;
+
+		sprintf(fmt, "m%s", ++str);
+		if (is_support_profile(fmt))
+			vdec->type = VDEC_TYPE_STREAM_PARSER;
+	}
 	//trace_vdec_set_format(vdec, format);/*DEBUG_TMP*/
 
 	return 0;
@@ -1760,22 +1792,6 @@ int vdec_destroy(struct vdec_s *vdec)
 	return 0;
 }
 EXPORT_SYMBOL(vdec_destroy);
-
-/*
- * Only support time sliced decoding for frame based input,
- * so legacy decoder can exist with time sliced decoder.
- */
-static const char *get_dev_name(bool use_legacy_vdec, int format)
-{
-#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	if (use_legacy_vdec)
-		return vdec_device_name[format * 2];
-	else
-		return vdec_device_name[format * 2 + 1];
-#else
-	return vdec_device_name[format];
-#endif
-}
 
 /*
  *register vdec_device
@@ -4667,6 +4683,7 @@ module_param(parallel_decode, int, 0664);
 module_param(fps_detection, int, 0664);
 module_param(fps_clear, int, 0664);
 module_param(force_nosecure_even_drm, int, 0664);
+module_param(disable_switch_single_to_mult, int, 0664);
 
 module_param(frameinfo_flag, int, 0664);
 MODULE_PARM_DESC(frameinfo_flag,

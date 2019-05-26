@@ -52,3 +52,19 @@ int vcodec_profile_register(const struct codec_profile_t *vdec_profile)
 }
 EXPORT_SYMBOL(vcodec_profile_register);
 
+bool is_support_profile(char *name)
+{
+	int ret = 0;
+	int i, size = ARRAY_SIZE(vcodec_profile);
+
+	for (i = 0; i < size; i++) {
+		if (!vcodec_profile[i])
+			break;
+		if (!strcmp(name, vcodec_profile[i]->name))
+			return true;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(is_support_profile);
+
+
