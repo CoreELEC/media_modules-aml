@@ -833,6 +833,8 @@ struct vdec_h264_hw_s {
 	struct vframe_qos_s vframe_qos;
 	int frameinfo_enable;
 	bool first_head_check_flag;
+	unsigned int height_aspect_ratio;
+	unsigned int width_aspect_ratio;
 };
 
 static u32 again_threshold = 0x40;
@@ -2671,9 +2673,9 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		if (i == 0)
 			decoder_do_frame_check(hw_to_vdec(hw), vf);
 
-		vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);
-		vf->sar_width = vf->width;
-		vf->sar_height = vf->height;
+		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
+		vf->sar_width = hw->width_aspect_ratio;
+		vf->sar_height = hw->height_aspect_ratio;
 
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -4760,80 +4762,95 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 
 	if (aspect_ratio_info_present_flag) {
 		if (aspect_ratio_idc == EXTEND_SAR) {
-			hw->h264_ar =
-				div_u64(256ULL *
-					p_H264_Dpb->aspect_ratio_sar_height *
-					hw->frame_height,
-					p_H264_Dpb->aspect_ratio_sar_width *
-					hw->frame_width);
+			hw->h264_ar = 0x3ff;
+			hw->height_aspect_ratio =
+				p_H264_Dpb->aspect_ratio_sar_height;
+			hw->width_aspect_ratio =
+				p_H264_Dpb->aspect_ratio_sar_width;
 		} else {
 			/* pr_info("v264dec: aspect_ratio_idc = %d\n",
 			   aspect_ratio_idc); */
 
 			switch (aspect_ratio_idc) {
 			case 1:
-				hw->h264_ar = 0x100 * hw->frame_height /
-					hw->frame_width;
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 1;
+				hw->width_aspect_ratio = 1;
 				break;
 			case 2:
-				hw->h264_ar = 0x100 * hw->frame_height * 11 /
-					(hw->frame_width * 12);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 11;
+				hw->width_aspect_ratio = 12;
 				break;
 			case 3:
-				hw->h264_ar = 0x100 * hw->frame_height * 11 /
-					(hw->frame_width * 10);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 11;
+				hw->width_aspect_ratio = 10;
 				break;
 			case 4:
-				hw->h264_ar = 0x100 * hw->frame_height * 11 /
-					(hw->frame_width * 16);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 11;
+				hw->width_aspect_ratio = 16;
 				break;
 			case 5:
-				hw->h264_ar = 0x100 * hw->frame_height * 33 /
-					(hw->frame_width * 40);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 33;
+				hw->width_aspect_ratio = 40;
 				break;
 			case 6:
-				hw->h264_ar = 0x100 * hw->frame_height * 11 /
-					(hw->frame_width * 24);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 11;
+				hw->width_aspect_ratio = 24;
 				break;
 			case 7:
-				hw->h264_ar = 0x100 * hw->frame_height * 11 /
-					(hw->frame_width * 20);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 11;
+				hw->width_aspect_ratio = 20;
 				break;
 			case 8:
-				hw->h264_ar = 0x100 * hw->frame_height * 11 /
-					(hw->frame_width * 32);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 11;
+				hw->width_aspect_ratio = 32;
 				break;
 			case 9:
-				hw->h264_ar = 0x100 * hw->frame_height * 33 /
-					(hw->frame_width * 80);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 33;
+				hw->width_aspect_ratio = 80;
 				break;
 			case 10:
-				hw->h264_ar = 0x100 * hw->frame_height * 11 /
-					(hw->frame_width * 18);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 11;
+				hw->width_aspect_ratio = 18;
 				break;
 			case 11:
-				hw->h264_ar = 0x100 * hw->frame_height * 11 /
-					(hw->frame_width * 15);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 11;
+				hw->width_aspect_ratio = 15;
 				break;
 			case 12:
-				hw->h264_ar = 0x100 * hw->frame_height * 33 /
-					(hw->frame_width * 64);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 33;
+				hw->width_aspect_ratio = 64;
 				break;
 			case 13:
-				hw->h264_ar = 0x100 * hw->frame_height * 99 /
-					(hw->frame_width * 160);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 99;
+				hw->width_aspect_ratio = 160;
 				break;
 			case 14:
-				hw->h264_ar = 0x100 * hw->frame_height * 3 /
-					(hw->frame_width * 4);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 3;
+				hw->width_aspect_ratio = 4;
 				break;
 			case 15:
-				hw->h264_ar = 0x100 * hw->frame_height * 2 /
-					(hw->frame_width * 3);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 2;
+				hw->width_aspect_ratio = 3;
 				break;
 			case 16:
-				hw->h264_ar = 0x100 * hw->frame_height * 1 /
-					(hw->frame_width * 2);
+				hw->h264_ar = 0x3ff;
+				hw->height_aspect_ratio = 1;
+				hw->width_aspect_ratio = 2;
 				break;
 			default:
 				if (hw->vh264_ratio >> 16) {
@@ -4844,9 +4861,12 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 						 hw->frame_width / 2)) /
 						((hw->vh264_ratio >> 16) *
 						 hw->frame_width);
+					hw->height_aspect_ratio = 1;
+					hw->width_aspect_ratio = 1;
 				} else {
-					hw->h264_ar = hw->frame_height * 0x100 /
-						hw->frame_width;
+					hw->h264_ar = 0x3ff;
+					hw->height_aspect_ratio = 1;
+					hw->width_aspect_ratio = 1;
 				}
 				break;
 			}
@@ -4863,9 +4883,13 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 				 hw->frame_width / 2) /
 				((hw->vh264_ratio >> 16) *
 					hw->frame_width);
-		} else
-			hw->h264_ar = hw->frame_height * 0x100 /
-				hw->frame_width;
+			hw->height_aspect_ratio = 1;
+			hw->width_aspect_ratio = 1;
+		} else {
+			hw->h264_ar = 0x3ff;
+			hw->height_aspect_ratio = 1;
+			hw->width_aspect_ratio = 1;
+		}
 	}
 
 	if (hw->pts_unstable && (hw->fixed_frame_rate_flag == 0)) {
