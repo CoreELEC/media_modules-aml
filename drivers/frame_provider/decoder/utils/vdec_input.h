@@ -105,8 +105,6 @@ struct vdec_input_s {
 	int have_frame_num;
 	int stream_cookie; /* wrap count for vld_mem and
 			      HEVC_SHIFT_BYTE_COUNT for hevc */
-	bool (*vdec_is_input_frame_empty)(struct vdec_s *);
-	void (*vdec_up)(struct vdec_s *);
 };
 
 struct vdec_input_status_s {

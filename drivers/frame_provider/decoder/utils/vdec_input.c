@@ -921,7 +921,6 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 	struct drm_info drm;
 	struct vdec_s *vdec = input->vdec;
 	unsigned long phy_buf;
-	unsigned long flags;
 
 	if (vdec_secure(vdec)) {
 		while (count > 0) {
@@ -945,11 +944,6 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 	} else {
 		ret = vdec_input_add_chunk(input, buf, count, 0);
 	}
-	flags = vdec_input_lock(input);
-	if ((input->have_frame_num == 1) &&
-		input->vdec_is_input_frame_empty(vdec))
-		input->vdec_up(vdec);
-	vdec_input_unlock(input, flags);
 	return ret;
 }
 EXPORT_SYMBOL(vdec_input_add_frame);
