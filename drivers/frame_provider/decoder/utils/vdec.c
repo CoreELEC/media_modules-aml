@@ -615,7 +615,7 @@ static void vdec_update_buff_status(void)
 	list_for_each_entry(vdec, &core->connected_vdec_list, list) {
 		struct vdec_input_s *input = &vdec->input;
 		if (input_frame_based(input)) {
-			if (input->have_frame_num)
+			if (input->have_frame_num || input->eos)
 				core->buff_flag |= vdec->core_mask;
 		} else if (input_stream_based(input)) {
 			core->stream_buff_flag |= vdec->core_mask;
@@ -1464,10 +1464,12 @@ EXPORT_SYMBOL(vdec_set_flag);
 
 void vdec_set_eos(struct vdec_s *vdec, bool eos)
 {
+	struct vdec_core_s *core = vdec_core;
 	vdec->input.eos = eos;
 
 	if (vdec->slave)
 		vdec->slave->input.eos = eos;
+	up(&core->sem);
 }
 EXPORT_SYMBOL(vdec_set_eos);
 
