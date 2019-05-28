@@ -1764,8 +1764,10 @@ static int amstream_release(struct inode *inode, struct file *file)
 #else
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
 				&& port->vformat == VFORMAT_H264
-				&& bufs[BUF_TYPE_VIDEO].for_4k)
+				&& bufs[BUF_TYPE_VIDEO].for_4k) {
 				vdec_poweroff(VDEC_HEVC);
+				bufs[BUF_TYPE_VIDEO].for_4k = 0;
+			}
 
 			if ((port->vformat == VFORMAT_HEVC
 					|| port->vformat == VFORMAT_AVS2
