@@ -115,7 +115,7 @@
 #define DECODE_MODE_MULTI_STREAMBASE	((0x80 << 24) | 1)
 #define DECODE_MODE_MULTI_FRAMEBASE	((0x80 << 24) | 2)
 #define DECODE_MODE_SINGLE_LOW_LATENCY ((0x80 << 24) | 3)
-
+#define DECODE_MODE_MULTI_FRAMEBASE_NOHEAD ((0x80 << 24) | 4)
 
 #define  VP9_TRIGGER_FRAME_DONE		0x100
 #define  VP9_TRIGGER_FRAME_ENABLE	0x200
@@ -1169,6 +1169,7 @@ struct VP9Decoder_s {
 	u64 sc_start_time;
 	bool postproc_done;
 	int low_latency_flag;
+	bool no_head;
 	bool pic_list_init_done;
 	bool pic_list_init_done2;
 	bool is_used_v4l;
@@ -2786,6 +2787,8 @@ static u32 buffer_mode_dbg = 0xffff0000;
 static u32 i_only_flag;
 
 static u32 low_latency_flag;
+
+static u32 no_head;
 
 static u32 max_decoding_time;
 /*
@@ -5762,7 +5765,9 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 			else
 				decode_mode = DECODE_MODE_SINGLE;
 		} else if (vdec_frame_based(hw_to_vdec(pbi)))
-			decode_mode = DECODE_MODE_MULTI_FRAMEBASE;
+			decode_mode = pbi->no_head ?
+				DECODE_MODE_MULTI_FRAMEBASE_NOHEAD :
+				DECODE_MODE_MULTI_FRAMEBASE;
 		else
 			decode_mode = DECODE_MODE_MULTI_STREAMBASE;
 #ifdef SUPPORT_FB_DECODING
@@ -8953,6 +8958,7 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 		pbi->vvp9_amstream_dec_info.height = 0;
 		pbi->vvp9_amstream_dec_info.rate = 30;
 	}
+	pbi->no_head = no_head;
 #ifdef MULTI_INSTANCE_SUPPORT
 	pbi->cma_dev = pdata->cma_dev;
 #else
@@ -9747,7 +9753,7 @@ static void vp9_dump_state(struct vdec_s *vdec)
 		);
 
 	vp9_print(pbi, 0,
-		"is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d low_latency %d\n",
+		"is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d low_latency %d no_head %d \n",
 		input_frame_based(vdec),
 		pbi->eos,
 		pbi->dec_result,
@@ -9756,7 +9762,8 @@ static void vp9_dump_state(struct vdec_s *vdec)
 		run_count[pbi->index],
 		not_run_ready[pbi->index],
 		input_empty[pbi->index],
-		pbi->low_latency_flag
+		pbi->low_latency_flag,
+		pbi->no_head
 		);
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
@@ -9970,6 +9977,12 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			vp9_buf_height = config_val;
 		}
 
+		if (get_config_int(pdata->config, "no_head",
+				&config_val) == 0)
+			pbi->no_head = config_val;
+		else
+			pbi->no_head = no_head;
+
 		/*use ptr config for max_pic_w, etc*/
 		if (get_config_int(pdata->config, "vp9_max_pic_w",
 				&config_val) == 0) {
@@ -10040,9 +10053,14 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->mmu_enable = 1;
 	video_signal_type = pbi->video_signal_type;
 
-	if (pdata->sys_info)
+	if (pdata->sys_info) {
 		pbi->vvp9_amstream_dec_info = *pdata->sys_info;
-	else {
+		if ((unsigned long) pbi->vvp9_amstream_dec_info.param
+				& 0x08) {
+				pbi->low_latency_flag = 1;
+			} else
+				pbi->low_latency_flag = 0;
+	} else {
 		pbi->vvp9_amstream_dec_info.width = 0;
 		pbi->vvp9_amstream_dec_info.height = 0;
 		pbi->vvp9_amstream_dec_info.rate = 30;
@@ -10057,6 +10075,9 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pbi->max_pic_h = 1080;
 	}
 
+	vp9_print(pbi, 0,
+			"no_head %d  low_latency %d\n",
+			pbi->no_head, pbi->low_latency_flag);
 #if 0
 	pbi->buf_start = pdata->mem_start;
 	pbi->buf_size = pdata->mem_end - pdata->mem_start + 1;
@@ -10280,16 +10301,26 @@ static int __init amvdec_vp9_driver_init_module(void)
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 		amvdec_vp9_profile.profile =
-				"8k, 10bit, dwrite, compressed";
+				"8k, 10bit, dwrite, compressed, no_head";
 	} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL
 		/*&& get_cpu_major_id() != MESON_CPU_MAJOR_ID_GXLX*/
 		&& get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXL) {
-		if (vdec_is_support_4k())
-			amvdec_vp9_profile.profile =
-				"4k, 10bit, dwrite, compressed";
-		else
-			amvdec_vp9_profile.profile =
-				"10bit, dwrite, compressed";
+			if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX) {
+				if (vdec_is_support_4k())
+					amvdec_vp9_profile.profile =
+						"4k, 10bit, dwrite, compressed";
+				else
+					amvdec_vp9_profile.profile =
+						"10bit, dwrite, compressed";
+			} else {
+				if (vdec_is_support_4k())
+					amvdec_vp9_profile.profile =
+						"4k, 10bit, dwrite, compressed, no_head";
+				else
+					amvdec_vp9_profile.profile =
+						"10bit, dwrite, compressed, no_head";
+			}
+
 	} else {
 		amvdec_vp9_profile.name = "vp9_unsupport";
 	}
@@ -10365,6 +10396,9 @@ MODULE_PARM_DESC(i_only_flag, "\n amvdec_vp9 i_only_flag\n");
 
 module_param(low_latency_flag, uint, 0664);
 MODULE_PARM_DESC(low_latency_flag, "\n amvdec_vp9 low_latency_flag\n");
+
+module_param(no_head, uint, 0664);
+MODULE_PARM_DESC(no_head, "\n amvdec_vp9 no_head\n");
 
 module_param(error_handle_policy, uint, 0664);
 MODULE_PARM_DESC(error_handle_policy, "\n amvdec_vp9 error_handle_policy\n");
