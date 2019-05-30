@@ -5794,12 +5794,10 @@ pic_done_proc:
 			hw->got_valid_nal = 1;
 		}
 #endif
-		if (!hw->wait_for_udr_send) {
-			hw->dec_result = DEC_RESULT_DONE;
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-				"%s wait_for_udr_send\n", __func__);
-			vdec_schedule_work(&hw->work);
-		}
+
+		hw->dec_result = DEC_RESULT_DONE;
+		vdec_schedule_work(&hw->work);
+
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	} else if (
 			(dec_dpb_status == H264_FIND_NEXT_PIC_NAL) ||
@@ -7419,13 +7417,6 @@ static void user_data_ready_notify_work(struct work_struct *work)
 	vdec_wakeup_userdata_poll(hw_to_vdec(hw));
 
 	hw->wait_for_udr_send = 0;
-	if (!hw->frmbase_cont_flag) {
-		hw->dec_result = DEC_RESULT_DONE;
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-			"%s\n", __func__);
-
-		vdec_schedule_work(&hw->work);
-	}
 }
 
 static int vmh264_user_data_read(struct vdec_s *vdec,
