@@ -834,6 +834,8 @@ struct vdec_h264_hw_s {
 	bool first_head_check_flag;
 	unsigned int height_aspect_ratio;
 	unsigned int width_aspect_ratio;
+	bool new_iframe_flag;
+	bool ref_err_flush_dpb_flag;
 };
 
 static u32 again_threshold = 0x40;
@@ -5565,6 +5567,19 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					}
 				}
 
+			if (p_H264_Dpb->mVideo.dec_picture->slice_type == I_SLICE) {
+				hw->new_iframe_flag = 1;
+			}
+			if (hw->new_iframe_flag) {
+				if (p_H264_Dpb->mVideo.dec_picture->slice_type == P_SLICE) {
+					hw->new_iframe_flag = 0;
+					hw->ref_err_flush_dpb_flag = 1;
+				}else  if (p_H264_Dpb->mVideo.dec_picture->slice_type == B_SLICE) {
+							hw->new_iframe_flag = 0;
+							hw->ref_err_flush_dpb_flag = 0;
+						}
+			}
+
 			if (error_proc_policy & 0x400) {
 				int ret = dpb_check_ref_list_error(p_H264_Dpb);
 				if (ret != 0) {
@@ -5573,7 +5588,16 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						ret,
 						hw->decode_pic_count+1,
 						hw->skip_frame_count);
-					flush_dpb(p_H264_Dpb);
+
+					if (hw->ref_err_flush_dpb_flag) {
+						flush_dpb(p_H264_Dpb);
+						p_H264_Dpb->colocated_buf_map = 0;
+						if (p_H264_Dpb->mVideo.dec_picture->colocated_buf_index >= 0) {
+							p_H264_Dpb->colocated_buf_map |= 1 <<
+								p_H264_Dpb->mVideo.dec_picture->colocated_buf_index;
+						}
+					}
+
 					hw->data_flag |= ERROR_FLAG;
 					p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
 					if ((error_proc_policy & 0x80)
@@ -5614,6 +5638,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				if (error_proc_policy & 0x2) {
 					release_cur_decoding_buf(hw);
 					/*hw->data_flag |= ERROR_FLAG;*/
+					hw->reset_bufmgr_flag = 1;
 					hw->dec_result = DEC_RESULT_DONE;
 					vdec_schedule_work(&hw->work);
 					return IRQ_HANDLED;
@@ -8497,6 +8522,8 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	hw->mmu_enable = 0;
 	hw->first_head_check_flag = 0;
+	hw->new_iframe_flag = 0;
+	hw->ref_err_flush_dpb_flag = 0;
 	if (force_enable_mmu && pdata->sys_info &&
 		    (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) &&
 		    (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX) &&
