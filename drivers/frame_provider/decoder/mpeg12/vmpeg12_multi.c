@@ -1909,7 +1909,7 @@ static void vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 			hw->canvas_config[i][1].width = canvas_width;
 			hw->canvas_config[i][1].height = canvas_height / 2;
 			hw->canvas_config[i][1].block_mode = hw->canvas_mode;
-			hw->canvas_config[i][0].endian =
+			hw->canvas_config[i][1].endian =
 				(hw->canvas_mode == CANVAS_BLKMODE_LINEAR)?7:0;
 
 			canvas_config_config(canvas_u(canvas),
@@ -2108,6 +2108,7 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 	if (!hw->init_flag)
 		vmpeg12_canvas_init(hw);
 	else {
+		WRITE_VREG(MREG_CO_MV_START, hw->buf_start);
 		for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
 			canvas_config_config(canvas_y(hw->canvas_spec[i]),
 				&hw->canvas_config[i][0]);

@@ -427,8 +427,6 @@ static void vmjpeg_canvas_init(struct vdec_s *vdec)
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
 		int canvas;
 
-
-
 		ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, i,
 				decbuf_size, DRIVER_NAME, &buf_start);
 		if (ret < 0) {
@@ -782,11 +780,25 @@ static void vmjpeg_hw_ctx_restore(struct vdec_s *vdec, int index)
 {
 	struct vdec_mjpeg_hw_s *hw =
 		(struct vdec_mjpeg_hw_s *)vdec->private;
+	struct buffer_spec_s *buff_spec;
+	u32 i;
 
 	WRITE_VREG(DOS_SW_RESET0, (1 << 7) | (1 << 6));
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
-	vmjpeg_canvas_init(vdec);
+	if (!hw->init_flag) {
+		vmjpeg_canvas_init(vdec);
+	} else {
+		for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+			buff_spec = &hw->buffer_spec[i];
+			canvas_config_config(buff_spec->y_canvas_index,
+						&buff_spec->canvas_config[0]);
+			canvas_config_config(buff_spec->u_canvas_index,
+						&buff_spec->canvas_config[1]);
+			canvas_config_config(buff_spec->v_canvas_index,
+						&buff_spec->canvas_config[2]);
+		}
+	}
 
 	/* find next decode buffer index */
 	WRITE_VREG(AV_SCRATCH_4, spec2canvas(&hw->buffer_spec[index]));

@@ -1546,7 +1546,7 @@ static void check_timer_func(unsigned long arg)
 
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 {
-	int index;
+	int index, i;
 
 	index = find_buffer(hw);
 	if (index >= DECODE_BUFFER_NUM_MAX)
@@ -1555,6 +1555,13 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 	if (!hw->init_flag) {
 		if (vmpeg4_canvas_init(hw) < 0)
 			return -1;
+	} else {
+		for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+			canvas_config_config(canvas_y(hw->canvas_spec[i]),
+						&hw->canvas_config[i][0]);
+			canvas_config_config(canvas_u(hw->canvas_spec[i]),
+						&hw->canvas_config[i][1]);
+		}
 	}
 	/* prepare REF0 & REF1
 	 * points to the past two IP buffers
