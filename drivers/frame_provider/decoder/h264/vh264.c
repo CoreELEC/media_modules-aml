@@ -543,6 +543,18 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 
 	return NULL;
 }
+static bool vf_valid_check(struct vframe_s *vf) {
+	int i;
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		if (vf == &vfpool[i])
+			return true;
+	}
+	pr_info(" invalid vf been put, vf = %p\n", vf);
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		pr_info("www valid vf[%d]= %p \n", i, &vfpool[i]);
+	}
+	return false;
+}
 
 static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 {
@@ -550,9 +562,10 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 
 	spin_lock_irqsave(&recycle_lock, flags);
 
-	if ((vf != &fense_vf[0]) && (vf != &fense_vf[1]))
-		kfifo_put(&recycle_q, (const struct vframe_s *)vf);
-
+	if ((vf != &fense_vf[0]) && (vf != &fense_vf[1])) {
+		if (vf && (vf_valid_check(vf) == true))
+			kfifo_put(&recycle_q, (const struct vframe_s *)vf);
+	}
 	spin_unlock_irqrestore(&recycle_lock, flags);
 }
 

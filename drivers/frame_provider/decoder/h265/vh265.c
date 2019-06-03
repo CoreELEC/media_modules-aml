@@ -7783,6 +7783,18 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 
 	return NULL;
 }
+static bool vf_valid_check(struct vframe_s *vf, struct hevc_state_s *hevc) {
+	int i;
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		if (vf == &hevc->vfpool[i])
+			return true;
+	}
+	pr_info(" h265 invalid vf been put, vf = %p\n", vf);
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		pr_info("www valid vf[%d]= %p \n", i, &hevc->vfpool[i]);
+	}
+	return false;
+}
 
 static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 {
@@ -7793,10 +7805,15 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 #else
 	struct hevc_state_s *hevc = (struct hevc_state_s *)op_arg;
 #endif
-	unsigned char index_top = vf->index & 0xff;
-	unsigned char index_bot = (vf->index >> 8) & 0xff;
+	unsigned char index_top;
+	unsigned char index_bot;
+
+	if (vf && (vf_valid_check(vf, hevc) == false))
+		return;
 	if (vf == (&hevc->vframe_dummy))
 		return;
+	index_top = vf->index & 0xff;
+	index_bot = (vf->index >> 8) & 0xff;
 	if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 		hevc_print(hevc, 0,
 			"%s(type %d index 0x%x)\n",
