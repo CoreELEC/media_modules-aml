@@ -3503,6 +3503,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 	int i;
 	struct PIC_s *pic;
 	struct PIC_s *pic_display = NULL;
+	struct vdec_s *vdec = hw_to_vdec(hevc);
 
 	if (hevc->i_only & 0x4) {
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
@@ -3545,6 +3546,8 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 				fast_output_enable & 0x1) {
 				/*fast output for first I picture*/
 				pic->num_reorder_pic = 0;
+				if (vdec->master || vdec->slave)
+					pic_display = pic;
 				hevc_print(hevc, 0, "VH265: output first frame\n");
 			}
 		}
@@ -9225,7 +9228,7 @@ pic_done:
 					pic->output_mark = 1;
 					pic->recon_mark = 1;
 				}
-
+force_output:
 				pic_display = output_pic(hevc, 1);
 
 				if (pic_display) {
@@ -9345,7 +9348,14 @@ pic_done:
 			reset_process_time(hevc);
 			if (aux_data_is_avaible(hevc))
 				dolby_get_meta(hevc);
-
+			if(hevc->cur_pic->slice_type == 2 &&
+				hevc->vf_pre_count == 0) {
+				hevc_print(hevc, 0,
+						"first slice_type %x no_switch_dvlayer_count %x\n",
+						hevc->cur_pic->slice_type,
+						hevc->no_switch_dvlayer_count);
+				goto  force_output;
+			}
 			vdec_schedule_work(&hevc->work);
 		}
 
