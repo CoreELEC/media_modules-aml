@@ -12397,6 +12397,10 @@ static struct codec_profile_t amvdec_h265_profile = {
 	.name = "hevc",
 	.profile = ""
 };
+
+static struct codec_profile_t amvdec_h265_profile_single,
+		amvdec_h265_profile_mult;
+
 static struct mconfig h265_configs[] = {
 	MC_PU32("use_cma", &use_cma),
 	MC_PU32("bit_depth_luma", &bit_depth_luma),
@@ -12518,6 +12522,12 @@ static int __init amvdec_h265_driver_init_module(void)
 	}
 
 	vcodec_profile_register(&amvdec_h265_profile);
+	amvdec_h265_profile_single = amvdec_h265_profile;
+	amvdec_h265_profile_single.name = "h265";
+	vcodec_profile_register(&amvdec_h265_profile_single);
+	amvdec_h265_profile_mult = amvdec_h265_profile;
+	amvdec_h265_profile_mult.name = "mh265";
+	vcodec_profile_register(&amvdec_h265_profile_mult);
 	INIT_REG_NODE_CONFIGS("media.decoder", &decoder_265_node,
 		"h265", h265_configs, CONFIG_FOR_RW);
 	return 0;

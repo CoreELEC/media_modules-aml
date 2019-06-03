@@ -6586,6 +6586,8 @@ static struct codec_profile_t amvdec_avs2_profile = {
 	.profile = ""
 };
 
+static struct codec_profile_t amvdec_avs2_profile_mult;
+
 static unsigned char get_data_check_sum
 	(struct AVS2Decoder_s *dec, int size)
 {
@@ -7522,7 +7524,6 @@ static int __init amvdec_avs2_driver_init_module(void)
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 		amvdec_avs2_profile.profile =
 				"8k, 10bit, dwrite, compressed";
-		vcodec_profile_register(&amvdec_avs2_profile);
 	} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		if (vdec_is_support_4k())
 			amvdec_avs2_profile.profile =
@@ -7530,10 +7531,14 @@ static int __init amvdec_avs2_driver_init_module(void)
 		else
 			amvdec_avs2_profile.profile =
 				"10bit, dwrite, compressed";
-		vcodec_profile_register(&amvdec_avs2_profile);
 	} else {
 		amvdec_avs2_profile.name = "avs2_unsupport";
 	}
+
+	vcodec_profile_register(&amvdec_avs2_profile);
+	amvdec_avs2_profile_mult = amvdec_avs2_profile;
+	amvdec_avs2_profile_mult.name = "mavs2";
+	vcodec_profile_register(&amvdec_avs2_profile_mult);
 
 	INIT_REG_NODE_CONFIGS("media.decoder", &avs2_node,
 		"avs2", avs2_configs, CONFIG_FOR_RW);
