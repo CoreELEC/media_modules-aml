@@ -4609,6 +4609,7 @@ static ssize_t dump_vdec_blocks_show(struct class *class,
 {
 	struct vdec_core_s *core = vdec_core;
 	char *pbuf = buf;
+	unsigned long flags = vdec_core_lock(vdec_core);
 
 	if (list_empty(&core->connected_vdec_list))
 		pbuf += sprintf(pbuf, "connected vdec list empty\n");
@@ -4619,6 +4620,7 @@ static ssize_t dump_vdec_blocks_show(struct class *class,
 				pbuf, PAGE_SIZE - (pbuf - buf));
 		}
 	}
+	vdec_core_unlock(vdec_core, flags);
 
 	return pbuf - buf;
 }
@@ -4627,6 +4629,7 @@ static ssize_t dump_vdec_chunks_show(struct class *class,
 {
 	struct vdec_core_s *core = vdec_core;
 	char *pbuf = buf;
+	unsigned long flags = vdec_core_lock(vdec_core);
 
 	if (list_empty(&core->connected_vdec_list))
 		pbuf += sprintf(pbuf, "connected vdec list empty\n");
@@ -4637,6 +4640,7 @@ static ssize_t dump_vdec_chunks_show(struct class *class,
 				pbuf, PAGE_SIZE - (pbuf - buf));
 		}
 	}
+	vdec_core_unlock(vdec_core, flags);
 
 	return pbuf - buf;
 }
