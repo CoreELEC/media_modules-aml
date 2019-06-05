@@ -4393,10 +4393,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			seq_info2,
 			mb_width,
 			mb_height);
-		WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
-			(hw->dpb.mDPB.size<<16) |
-			(hw->dpb.mDPB.size<<8));
-		return 0;
+		return -1;
 	}
 
 	if (seq_info2 != 0 &&
