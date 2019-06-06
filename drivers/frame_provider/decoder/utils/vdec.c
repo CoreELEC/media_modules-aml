@@ -809,6 +809,22 @@ int vdec_set_decinfo(struct vdec_s *vdec, struct dec_sysinfo *p)
 		sizeof(struct dec_sysinfo)))
 		return -EFAULT;
 
+	/* force switch to mult instance if supports this profile. */
+	if ((vdec->type == VDEC_TYPE_SINGLE) &&
+		!disable_switch_single_to_mult) {
+		const char *str = NULL;
+		char fmt[16] = {0};
+
+		str = strchr(get_dev_name(false, vdec->format), '_');
+		if (!str)
+			return -1;
+
+		sprintf(fmt, "m%s", ++str);
+		if (is_support_profile(fmt) &&
+			vdec->sys_info->format != VIDEO_DEC_FORMAT_H263)
+			vdec->type = VDEC_TYPE_STREAM_PARSER;
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(vdec_set_decinfo);
@@ -871,21 +887,6 @@ int vdec_set_format(struct vdec_s *vdec, int format)
 	if (vdec->slave) {
 		vdec->slave->format = format;
 		vdec->slave->port_flag |= PORT_FLAG_VFORMAT;
-	}
-
-	/* force switch to mult instance if supports this profile. */
-	if ((vdec->type == VDEC_TYPE_SINGLE) &&
-		!disable_switch_single_to_mult) {
-		const char *str = NULL;
-		char fmt[16] = {0};
-
-		str = strchr(get_dev_name(false, format), '_');
-		if (!str)
-			return -1;
-
-		sprintf(fmt, "m%s", ++str);
-		if (is_support_profile(fmt))
-			vdec->type = VDEC_TYPE_STREAM_PARSER;
 	}
 	//trace_vdec_set_format(vdec, format);/*DEBUG_TMP*/
 
