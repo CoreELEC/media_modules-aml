@@ -3073,19 +3073,19 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 				struct vdec_s *vdec;
 
 				p_userdata_param = &param;
-
 				if (copy_from_user(p_userdata_param,
 					(void __user *)arg,
 					sizeof(struct userdata_param_t))) {
 					r = -EFAULT;
 					break;
 				}
-
+				mutex_lock(&amstream_mutex);
 				vdec = vdec_get_vdec_by_id(p_userdata_param->instance_id);
 				if (vdec) {
 					if (vdec_read_user_data(vdec,
 							p_userdata_param) == 0) {
 						r = -EFAULT;
+						mutex_unlock(&amstream_mutex);
 						break;
 					}
 
@@ -3095,6 +3095,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 						r = -EFAULT;
 				} else
 					r = -EINVAL;
+				mutex_unlock(&amstream_mutex);
 			}
 		}
 		break;
