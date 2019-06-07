@@ -503,6 +503,56 @@ static void free_canvas_ex(int index, int id)
 
 }
 
+static void vdec_dmc_pipeline_reset(void)
+{
+	/*
+	 * bit15: vdec_piple
+	 * bit14: hevc_dmc_piple
+	 * bit13: hevcf_dmc_pipl
+	 * bit12: wave420_dmc_pipl
+	 * bit11: hcodec_dmc_pipl
+	 */
+
+	WRITE_RESET_REG(RESET7_REGISTER,
+		(1 << 15) | (1 << 14) | (1 << 13) |
+		(1 << 12) | (1 << 11));
+}
+
+static void vdec_stop_armrisc(int hw)
+{
+	ulong timeout = jiffies + HZ;
+
+	if (hw == VDEC_INPUT_TARGET_VLD) {
+		WRITE_VREG(MPSR, 0);
+		WRITE_VREG(CPSR, 0);
+
+		while (READ_VREG(IMEM_DMA_CTRL) & 0x8000) {
+			if (time_after(jiffies, timeout))
+				break;
+		}
+
+		timeout = jiffies + HZ;
+		while (READ_VREG(LMEM_DMA_CTRL) & 0x8000) {
+			if (time_after(jiffies, timeout))
+				break;
+		}
+	} else if (hw == VDEC_INPUT_TARGET_HEVC) {
+		WRITE_VREG(HEVC_MPSR, 0);
+		WRITE_VREG(HEVC_CPSR, 0);
+
+		while (READ_VREG(HEVC_IMEM_DMA_CTRL) & 0x8000) {
+			if (time_after(jiffies, timeout))
+				break;
+		}
+
+		timeout = jiffies + HZ/10;
+		while (READ_VREG(HEVC_LMEM_DMA_CTRL) & 0x8000) {
+			if (time_after(jiffies, timeout))
+				break;
+		}
+	}
+}
+
 static void vdec_disable_DMC(struct vdec_s *vdec)
 {
 	/*close first,then wait pedding end,timing suggestion from vlsi*/
@@ -519,9 +569,14 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
 			mask |= (1 << 8); /*hevcb */
 	}
+
+	/* need to stop armrisc. */
+	if (!IS_ERR_OR_NULL(vdec->dev))
+		vdec_stop_armrisc(input->target);
+
 	spin_lock_irqsave(&vdec_spin_lock, flags);
 	codec_dmcbus_write(DMC_REQ_CTRL,
-	codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
+		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
 	while (!(codec_dmcbus_read(DMC_CHAN_STS)
@@ -546,9 +601,14 @@ static void vdec_enable_DMC(struct vdec_s *vdec)
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
 			mask |= (1 << 8); /*hevcb */
 	}
+
+	/*must to be reset the dmc pipeline if it's g12b.*/
+	if (get_cpu_type() == AM_MESON_CPU_MAJOR_ID_G12B)
+		vdec_dmc_pipeline_reset();
+
 	spin_lock_irqsave(&vdec_spin_lock, flags);
 	codec_dmcbus_write(DMC_REQ_CTRL,
-	codec_dmcbus_read(DMC_REQ_CTRL) | mask);
+		codec_dmcbus_read(DMC_REQ_CTRL) | mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 	pr_debug("%s input->target= 0x%x\n", __func__,  input->target);
 }
@@ -3158,23 +3218,6 @@ void vdec_poweron(enum vdec_type_e core)
 #endif
 		/* reset DOS top registers */
 		WRITE_VREG(DOS_VDEC_MCRCC_STALL_CTRL, 0);
-		if (get_cpu_major_id() >=
-			AM_MESON_CPU_MAJOR_ID_GXBB) {
-			/*
-			 *enable VDEC_1 DMC request
-			 */
-			unsigned long flags;
-			unsigned int mask = 0;
-
-			mask = 1 << 13;
-			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-				mask = 1 << 21;
-
-			spin_lock_irqsave(&vdec_spin_lock, flags);
-			codec_dmcbus_write(DMC_REQ_CTRL,
-				codec_dmcbus_read(DMC_REQ_CTRL) | mask);
-			spin_unlock_irqrestore(&vdec_spin_lock, flags);
-		}
 	} else if (core == VDEC_2) {
 		if (has_vdec2()) {
 			/* vdec2 power on */
@@ -3370,22 +3413,6 @@ void vdec_poweroff(enum vdec_type_e core)
 		sleep_val = is_power_ctrl_ver2 ? 0x2 : 0xc;
 		iso_val = is_power_ctrl_ver2 ? 0x2 : 0xc0;
 
-		if (get_cpu_major_id() >=
-			AM_MESON_CPU_MAJOR_ID_GXBB) {
-			/* disable VDEC_1 DMC REQ*/
-			unsigned long flags;
-			unsigned int mask = 0;
-
-			mask = 1 << 13;
-			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-				mask = 1 << 21;
-
-			spin_lock_irqsave(&vdec_spin_lock, flags);
-			codec_dmcbus_write(DMC_REQ_CTRL,
-				codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
-			spin_unlock_irqrestore(&vdec_spin_lock, flags);
-			udelay(10);
-		}
 		/* enable vdec1 isolation */
 #ifdef CONFIG_AMLOGIC_POWER
 		if (is_support_power_ctrl()) {
