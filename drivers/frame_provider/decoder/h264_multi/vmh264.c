@@ -121,7 +121,8 @@
 #define H264_MMU
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 static int mmu_enable;
-static int force_enable_mmu = 1;
+/*mmu do not support mbaff*/
+static int force_enable_mmu = 0;
 unsigned int h264_debug_flag; /* 0xa0000000; */
 unsigned int h264_debug_mask = 0xff;
 	/*
