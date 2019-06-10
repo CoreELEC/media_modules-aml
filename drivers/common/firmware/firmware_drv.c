@@ -57,6 +57,10 @@
 #define PACK ('P' << 24 | 'A' << 16 | 'C' << 8 | 'K')
 #define CODE ('C' << 24 | 'O' << 16 | 'D' << 8 | 'E')
 
+#ifndef FIRMWARE_MAJOR
+#define FIRMWARE_MAJOR AMSTREAM_MAJOR
+#endif
+
 static DEFINE_MUTEX(mutex);
 
 static  struct ucode_file_info_s ucode_info[] = {
@@ -851,11 +855,11 @@ static int fw_driver_init(void)
 	if (IS_ERR_OR_NULL(g_dev))
 		return -ENOMEM;
 
-	g_dev->dev_no = MKDEV(AMSTREAM_MAJOR, 100);
+	g_dev->dev_no = MKDEV(FIRMWARE_MAJOR, 100);
 
 	ret = register_chrdev_region(g_dev->dev_no, 1, DEV_NAME);
 	if (ret < 0) {
-		pr_info("Can't get major number %d.\n", AMSTREAM_MAJOR);
+		pr_info("Can't get major number %d.\n", FIRMWARE_MAJOR);
 		goto err;
 	}
 
