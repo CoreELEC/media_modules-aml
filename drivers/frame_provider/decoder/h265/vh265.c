@@ -2940,6 +2940,9 @@ static int alloc_buf(struct hevc_state_s *hevc)
 	int buf_size = cal_current_buf_size(hevc, NULL);
 	struct vdec_fb *fb = NULL;
 
+	if (hevc->fatal_error & DECODER_FATAL_ERROR_NO_MEM)
+		return ret;
+
 	for (i = 0; i < BUF_POOL_SIZE; i++) {
 		if (hevc->m_BUF[i].start_adr == 0)
 			break;
@@ -2972,8 +2975,16 @@ static int alloc_buf(struct hevc_state_s *hevc)
 					VF_BUFFER_IDX(i), buf_size,
 					DRIVER_NAME,
 					&hevc->m_BUF[i].start_adr);
-				if (ret < 0)
+				if (ret < 0) {
 					hevc->m_BUF[i].start_adr = 0;
+					if (i <= 8) {
+						hevc->fatal_error |=
+							DECODER_FATAL_ERROR_NO_MEM;
+						hevc_print(hevc, PRINT_FLAG_ERROR,
+							"%s[%d], size: %d, no mem fatal err\n",
+							__func__, i, buf_size);
+					}
+				}
 			}
 
 			if (ret >= 0) {
