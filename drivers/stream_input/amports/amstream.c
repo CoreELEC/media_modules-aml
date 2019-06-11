@@ -3284,11 +3284,18 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 	}
 	case AMSTREAM_IOC_SET_DRMMODE:
 		if ((u32) arg == 1) {
-			pr_err("set drmmode\n");
+			pr_err("set drmmode, input must be secure buffer\n");
 			this->flag |= PORT_FLAG_DRM;
 			if ((this->type & PORT_TYPE_VIDEO) &&
 				(priv->vdec))
 				priv->vdec->port_flag |= PORT_FLAG_DRM;
+		} else if ((u32)arg == 2) {
+			pr_err("set drmmode, input must be normal buffer\n");
+			if ((this->type & PORT_TYPE_VIDEO) &&
+				(priv->vdec)) {
+				pr_err("vdec port_flag with drmmode\n");
+				priv->vdec->port_flag |= PORT_FLAG_DRM;
+			}
 		} else {
 			this->flag &= (~PORT_FLAG_DRM);
 			pr_err("no drmmode\n");

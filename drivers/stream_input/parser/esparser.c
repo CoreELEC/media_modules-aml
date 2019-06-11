@@ -721,7 +721,6 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 	s32 r;
 	u32 len;
 	u32 realcount, totalcount;
-	u32 re_count = count;
 	u32 havewritebytes = 0;
 	u32 leftcount = 0;
 
@@ -829,7 +828,7 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 		mutex_unlock(&esparser_mutex);
 	}
 
-	return re_count;
+	return havewritebytes;
 }
 EXPORT_SYMBOL(drm_write);
 
