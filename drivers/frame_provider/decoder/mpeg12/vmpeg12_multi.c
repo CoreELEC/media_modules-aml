@@ -289,6 +289,7 @@ struct vdec_mpeg12_hw_s {
 	int n_userdata_id;
 	u32 reference[MAX_UD_RECORDS];
 #endif
+	int tvp_flag;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -2219,7 +2220,8 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 			MAX_BMMU_BUFFER_NUM,
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
-			CODEC_MM_FLAGS_FOR_VDECODER);
+			CODEC_MM_FLAGS_FOR_VDECODER |
+			hw->tvp_flag);
 	hw->eos = 0;
 	hw->frame_width = hw->frame_height = 0;
 	hw->frame_dur = hw->frame_prog = 0;
@@ -2563,8 +2565,16 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 	hw->canvas_mode = pdata->canvas_mode;
 	hw->platform_dev = pdev;
 
+	hw->tvp_flag = vdec_secure(pdata) ? CODEC_MM_FLAGS_TVP : 0;
 	if (pdata->sys_info)
 		hw->vmpeg12_amstream_dec_info = *pdata->sys_info;
+
+	debug_print(DECODE_ID(hw), 0,
+		"%s, sysinfo: %dx%d, tvp_flag = 0x%x\n",
+		__func__,
+		hw->vmpeg12_amstream_dec_info.width,
+		hw->vmpeg12_amstream_dec_info.height,
+		hw->tvp_flag);
 
 	if (vmpeg12_init(hw) < 0) {
 		pr_info("ammvdec_mpeg12 init failed.\n");

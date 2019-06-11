@@ -145,6 +145,7 @@ static const struct vframe_operations_s vmpeg_vf_provider = {
 };
 static void *mm_blk_handle;
 static struct vframe_provider_s vmpeg_vf_prov;
+static int tvp_flag;
 
 static DECLARE_KFIFO(newframe_q, struct vframe_s *, VF_POOL_SIZE);
 static DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
@@ -1928,7 +1929,8 @@ static void vmpeg12_local_init(void)
 			MAX_BMMU_BUFFER_NUM,
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
-			CODEC_MM_FLAGS_FOR_VDECODER);
+			CODEC_MM_FLAGS_FOR_VDECODER |
+			tvp_flag);
 
 
 	frame_width = frame_height = frame_dur = frame_prog = 0;
@@ -2050,6 +2052,7 @@ static int amvdec_mpeg12_probe(struct platform_device *pdev)
 		return -EFAULT;
 	}
 
+	tvp_flag = vdec_secure(pdata) ? CODEC_MM_FLAGS_TVP : 0;
 	if (pdata->sys_info)
 		vmpeg12_amstream_dec_info = *pdata->sys_info;
 
