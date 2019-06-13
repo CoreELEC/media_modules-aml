@@ -9930,6 +9930,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	if ((debug & IGNORE_PARAM_FROM_CONFIG) == 0 &&
 			pdata->config_len) {
 #ifdef MULTI_INSTANCE_SUPPORT
+		int vp9_buf_width = 0;
+		int vp9_buf_height = 0;
 		/*use ptr config for doubel_write_mode, etc*/
 		vp9_print(pbi, 0, "pdata->config=%s\n", pdata->config);
 		if (get_config_int(pdata->config, "vp9_double_write_mode",
@@ -9943,6 +9945,14 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			pbi->save_buffer_mode = config_val;
 		else
 			pbi->save_buffer_mode = 0;
+		if (get_config_int(pdata->config, "vp9_buf_width",
+				&config_val) == 0) {
+			vp9_buf_width = config_val;
+		}
+		if (get_config_int(pdata->config, "vp9_buf_height",
+				&config_val) == 0) {
+			vp9_buf_height = config_val;
+		}
 
 		/*use ptr config for max_pic_w, etc*/
 		if (get_config_int(pdata->config, "vp9_max_pic_w",
@@ -9952,6 +9962,12 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "vp9_max_pic_h",
 				&config_val) == 0) {
 				pbi->max_pic_h = config_val;
+		}
+		if ((pbi->max_pic_w * pbi->max_pic_h)
+			< (vp9_buf_width * vp9_buf_height)) {
+			pbi->max_pic_w = vp9_buf_width;
+			pbi->max_pic_h = vp9_buf_height;
+			vp9_print(pbi, 0, "use buf resolution\n");
 		}
 #endif
 		if (get_config_int(pdata->config, "HDRStaticInfo",
