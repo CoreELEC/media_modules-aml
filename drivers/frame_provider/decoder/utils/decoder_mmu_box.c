@@ -28,6 +28,7 @@
 #include <linux/slab.h>
 #include <linux/amlogic/media/codec_mm/codec_mm_scatter.h>
 #include <linux/platform_device.h>
+
 struct decoder_mmu_box {
 	int max_sc_num;
 	const char *name;
@@ -227,13 +228,13 @@ int decoder_mmu_box_free(void *handle)
 	for (i = 0; i < box->max_sc_num; i++) {
 		sc = box->sc_list[i];
 		if (sc) {
-			codec_mm_scatter_dec_owner_user(sc, 200);
+			codec_mm_scatter_dec_owner_user(sc, 0);
 			box->sc_list[i] = NULL;
 		}
 	}
 	mutex_unlock(&box->mutex);
 	decoder_mmu_box_mgr_del_box(box);
-	codec_mm_scatter_mgt_delay_free_swith(0, 2000, 0, box->tvp_mode);
+	codec_mm_scatter_mgt_delay_free_swith(0, 0, 0, box->tvp_mode);
 	kfree(box);
 	return 0;
 }
