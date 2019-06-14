@@ -1274,7 +1274,9 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			vf->duration = vf->duration / field_num;
 			vf->duration_pulldown = (field_num == 3) ?
 				(vf->duration >> 1):0;
-			if (i == 1)
+			if (i > 0)
+				type = VIDTYPE_VIU_NV21;
+			if (i == 1) /* second field*/
 				type |= (first_field_type == VIDTYPE_INTERLACE_TOP) ?
 					VIDTYPE_INTERLACE_BOTTOM : VIDTYPE_INTERLACE_TOP;
 			else
