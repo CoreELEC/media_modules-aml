@@ -5552,10 +5552,19 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		if (p_H264_Dpb->mVideo.dec_picture) {
 			int cfg_ret = 0;
+			bool field_pic_flag = false;
+
 			if (slice_header_process_status == 1) {
-				if ((p_H264_Dpb->mSPS.profile_idc == BASELINE) ||
+				if (!p_H264_Dpb->mSPS.frame_mbs_only_flag) {
+					field_pic_flag =
+						(p_H264_Dpb->mSlice.structure == TOP_FIELD ||
+						p_H264_Dpb->mSlice.structure == BOTTOM_FIELD) ?
+						true : false;
+				}
+
+				if (!field_pic_flag && ((p_H264_Dpb->mSPS.profile_idc == BASELINE) ||
 					(((unsigned long)(hw->vh264_amstream_dec_info
-						.param)) & 0x8)) {
+						.param)) & 0x8))) {
 					p_H264_Dpb->fast_output_enable =
 					H264_OUTPUT_MODE_FAST;
 				}
