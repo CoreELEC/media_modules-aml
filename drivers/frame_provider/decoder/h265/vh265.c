@@ -1516,6 +1516,7 @@ struct hevc_state_s {
 
 	unsigned char interlace_flag;
 	unsigned char curr_pic_struct;
+	unsigned char frame_field_info_present_flag;
 
 	unsigned short sps_num_reorder_pics_0;
 	unsigned short misc_flag0;
@@ -6312,6 +6313,10 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			(rpm_param->p.profile_etc >> 2) & 0x1;
 		hevc->curr_pic_struct =
 			(rpm_param->p.sei_frame_field_info >> 3) & 0xf;
+		if (parser_sei_enable & 0x4) {
+			hevc->frame_field_info_present_flag =
+				(rpm_param->p.sei_frame_field_info >> 8) & 0x1;
+		}
 
 		if (interlace_enable == 0 || hevc->m_ins_flag)
 			hevc->interlace_flag = 0;
@@ -7290,14 +7295,17 @@ static int parse_sei(struct hevc_state_s *hevc,
 		if (p+payload_size <= sei_buf+size) {
 			switch (payload_type) {
 			case SEI_PicTiming:
-				p_sei = p;
-				hevc->curr_pic_struct = (*p_sei >> 4)&0x0f;
-				pic->pic_struct = hevc->curr_pic_struct;
-				if (get_dbg_flag(hevc) &
-					H265_DEBUG_PIC_STRUCT) {
-					hevc_print(hevc, 0,
-					"parse result pic_struct = %d\n",
-					hevc->curr_pic_struct);
+				if ((parser_sei_enable & 0x4) &&
+					hevc->frame_field_info_present_flag) {
+					p_sei = p;
+					hevc->curr_pic_struct = (*p_sei >> 4)&0x0f;
+					pic->pic_struct = hevc->curr_pic_struct;
+					if (get_dbg_flag(hevc) &
+						H265_DEBUG_PIC_STRUCT) {
+						hevc_print(hevc, 0,
+						"parse result pic_struct = %d\n",
+						hevc->curr_pic_struct);
+					}
 				}
 				break;
 			case SEI_UserDataITU_T_T35:
