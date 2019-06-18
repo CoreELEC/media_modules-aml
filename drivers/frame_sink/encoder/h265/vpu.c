@@ -1477,6 +1477,10 @@ static s32 vpu_map_to_physical_memory(
 				pgprot_noncached(vm->vm_page_prot);
 	}
 	/* vm->vm_page_prot = pgprot_writecombine(vm->vm_page_prot); */
+	if (!pfn_valid(vm->vm_pgoff)) {
+		enc_pr(LOG_ERROR, "%s invalid pfn\n", __FUNCTION__);
+		return -EAGAIN;
+	}
 	return remap_pfn_range(vm, vm->vm_start, vm->vm_pgoff,
 		vm->vm_end - vm->vm_start, vm->vm_page_prot) ? -EAGAIN : 0;
 }
