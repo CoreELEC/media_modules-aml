@@ -697,10 +697,7 @@ struct StorablePicture {
 	char listXsize[MAX_NUM_SLICES][2];
 	struct StorablePicture **listX[MAX_NUM_SLICES][2];
 	int         layer_id;
-
-	int offset_delimiter_lo;
-	int offset_delimiter_hi;
-
+	u32 	       offset_delimiter;
 	u32         pts;
 	u64         pts64;
 	u64         timestamp;
@@ -776,7 +773,7 @@ struct FrameStore {
 	int       anchor_pic_flag[2];
 #endif
 	int       layer_id;
-
+	u32 	  offset_delimiter;
 	u32       pts;
 	u64       pts64;
 	u64       timestamp;
@@ -883,6 +880,7 @@ struct h264_dpb_stru {
 	unsigned int dec_dpb_status;
 	unsigned char buf_alloc_fail;
 	unsigned int dpb_error_flag;
+	unsigned int origin_max_reference;
 	unsigned int first_insert_frame;
 	int first_output_poc;
 };
