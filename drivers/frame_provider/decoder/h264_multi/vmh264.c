@@ -727,7 +727,7 @@ struct vdec_h264_hw_s {
 	u32 first_pts;
 	u64 first_pts64;
 	bool first_pts_cached;
-
+	u64 last_pts64;
 #if 0
 	void *sei_data_buffer;
 	dma_addr_t sei_data_buffer_phys;
@@ -906,6 +906,10 @@ static int is_oversize(int w, int h)
 	return false;
 }
 
+static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
+						int frame_type,
+						u32 vpts,
+						u32 vpts_valid);
 static int  compute_losless_comp_body_size(int width,
 				int height, int bit_depth_10);
 static int  compute_losless_comp_header_size(int width, int height);
@@ -2499,7 +2503,24 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 				__func__, frame->frame_num, frame->is_used);
 			frame->data_flag |= ERROR_FLAG;
 	}
-
+	if (vdec_stream_based(vdec) && !(frame->data_flag & NODISP_FLAG)) {
+		if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
+			frame->offset_delimiter, &frame->pts, &frame->frame_size,
+			0, &frame->pts64) == 0)) {
+			hw->last_pts64 = frame->pts64;
+			hw->last_pts = frame->pts;
+		} else {
+			frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
+			frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+		}
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+		"%s error= 0x%x poc = %d  offset= 0x%x pts= 0x%x last_pts =0x%x  pts64 = %lld  last_pts64= %lld  duration = %d\n",
+		__func__, (frame->data_flag & ERROR_FLAG), frame->poc,
+		frame->offset_delimiter, frame->pts,hw->last_pts,
+		frame->pts64, hw->last_pts64, hw->frame_dur);
+		hw->last_pts64 = frame->pts64;
+		hw->last_pts = frame->pts;
+	}
 	if ((frame->data_flag & NODISP_FLAG) ||
 		(frame->data_flag & NULL_FLAG) ||
 		((!hw->send_error_frame_flag) &&
@@ -4503,6 +4524,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		reg_val = param4;
 		level_idc = reg_val & 0xff;
 		max_reference_size = (reg_val >> 8) & 0xff;
+		hw->dpb.origin_max_reference = max_reference_size;
 		dpb_print(DECODE_ID(hw), 0,
 			"mb height/widht/total: %x/%x/%x level_idc %x max_ref_num %x\n",
 			mb_height, mb_width, mb_total,
@@ -4527,17 +4549,6 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			dpb_print(DECODE_ID(hw), 0,
 			"set reorder_pic_num to %d\n",
 			hw->dpb.reorder_pic_num);
-		}else
-		{
-			if (!hw->first_head_check_flag && level_idc == 21 &&
-				hw->frame_width == 32 && hw->frame_height == 32 &&
-				max_reference_size == 0 && hw->dpb.reorder_pic_num >
-				MAX_VF_BUF_NUM) {
-				dpb_print(DECODE_ID(hw), 0,
-					"%s warning abnormal reorder_pic  %d\n", __func__, hw->dpb.reorder_pic_num);
-				hw->first_head_check_flag = 1;
-				return -1;
-			}
 		}
 
 		active_buffer_spec_num =
@@ -5277,11 +5288,6 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 	}
 }
 
-static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
-						int frame_type,
-						u32 vpts,
-						u32 vpts_valid);
-
 static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
 	int i;
@@ -5720,14 +5726,12 @@ pic_done_proc:
 				pic->pts = 0;
 				pic->pts64 = 0;
 #endif
-			} else {
+		} else {
 				struct StorablePicture *pic =
 					p_H264_Dpb->mVideo.dec_picture;
-				u32 offset = pic->offset_delimiter_lo |
-					(pic->offset_delimiter_hi << 16);
-				if (pts_lookup_offset_us64(PTS_TYPE_VIDEO,
-					offset, &pic->pts, &pic->frame_size,
-					0, &pic->pts64)) {
+				u32 offset = pic->offset_delimiter;
+				if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
+					offset, &pic->pts, 0, &pic->pts64)) {
 					pic->pts = 0;
 					pic->pts64 = 0;
 #ifdef MH264_USERDATA_ENABLE
@@ -5742,7 +5746,8 @@ pic_done_proc:
 						pic->pts, 1);
 #endif
 				}
-			}
+
+	}
 			mutex_unlock(&hw->chunks_mutex);
 			check_decoded_pic_error(hw);
 #ifdef ERROR_HANDLE_TEST
@@ -7708,8 +7713,12 @@ static void vh264_work(struct work_struct *work)
 		u32 param4 = READ_VREG(AV_SCRATCH_B);
 		if (vh264_set_params(hw, param1,
 			param2, param3, param4) < 0) {
-				goto result_done;
-			}
+			WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
+			(hw->dpb.mDPB.size<<16) |
+			(hw->dpb.mDPB.size<<8));
+			start_process_time(hw);
+			return;
+		}
 	} else
 	if (((hw->dec_result == DEC_RESULT_GET_DATA) ||
 		(hw->dec_result == DEC_RESULT_GET_DATA_RETRY))
