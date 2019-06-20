@@ -1329,6 +1329,9 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			if (i == 0)
 				decoder_do_frame_check(hw_to_vdec(hw), vf);
 			vdec->vdec_fps_detec(vdec->id);
+			vf->mem_handle =
+				decoder_bmmu_box_get_mem_handle(
+				hw->mm_blk_handle, index);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 			vf_notify_receiver(vdec->vf_provider_name,
@@ -1856,7 +1859,7 @@ static void vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 			hw->ccbuf_phyAddress_virt
 				= codec_mm_phys_to_virt(
 					hw->ccbuf_phyAddress);
-			if (!hw->ccbuf_phyAddress_virt) {
+			if ((!hw->ccbuf_phyAddress_virt) && (!hw->tvp_flag)) {
 				hw->ccbuf_phyAddress_virt
 					= codec_mm_vmap(
 						hw->ccbuf_phyAddress,

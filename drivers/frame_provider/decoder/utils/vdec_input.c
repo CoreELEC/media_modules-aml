@@ -738,11 +738,6 @@ static int	vdec_input_get_free_block(
 	return 0;
 }
 
-static void *virt_mem = NULL;
-static u32 virt_mem_size = (SZ_1M * 2);
-static u32 inoffset = 0;
-static u32 trig_error_data = 0;
-
 int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 		size_t count, u32 handle)
 {
@@ -750,7 +745,6 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	struct vframe_chunk_s *chunk;
 	struct vdec_s *vdec = input->vdec;
 	struct vframe_block_list_s *block;
-	int crc = 0;
 
 	int need_pading_size = MIN_FRAME_PADDING_SIZE;
 
@@ -800,27 +794,6 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 #endif
 		if (input_stream_based(input))
 			return -EINVAL;
-
-		if (!virt_mem) {
-			virt_mem = vmalloc(virt_mem_size);
-			if (!virt_mem)
-				pr_info("%s, vmalloc buffer failed\n", __func__);
-		}
-
-		if (virt_mem) {
-			if (count < virt_mem_size) {
-				int r = copy_from_user(virt_mem, (void *)buf, count);
-				if (r)
-					pr_info("%s copy_from_user failed\n", __func__);
-				inoffset += count;
-				crc = 0;
-				crc = crc32_le(crc, virt_mem, count);
-				//pr_info("[INPUT] crc: %x, size: %zx, offset: %x\n", crc, count, inoffset);
-			} else {
-				pr_info("%s, count(%zx) > virt_mem_size(%x)\n", __func__, count, virt_mem_size);
-			}
-		}
-		count -= trig_error_data;
 
 		if (count < PAGE_SIZE) {
 			need_pading_size = PAGE_ALIGN(count + need_pading_size) -
@@ -938,7 +911,7 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 		input->total_wr_count += 38;
 #endif
 
-	return (count + trig_error_data);
+	return count;
 }
 
 int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,

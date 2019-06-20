@@ -1754,7 +1754,7 @@ static int vmpeg12_canvas_init(void)
 				ccbuf_phyAddress_virt
 					= codec_mm_phys_to_virt(
 						ccbuf_phyAddress);
-				if (!ccbuf_phyAddress_virt) {
+				if ((!ccbuf_phyAddress_virt) && (!tvp_flag)) {
 					ccbuf_phyAddress_virt
 						= codec_mm_vmap(
 							ccbuf_phyAddress,
