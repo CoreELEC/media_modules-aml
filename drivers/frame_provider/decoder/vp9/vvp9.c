@@ -6435,13 +6435,13 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 {
 	unsigned int ar;
-
 	vf->duration = pbi->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 	vf->prop.master_display_colour = pbi->vf_dp;
 	vf->signal_type = pbi->video_signal_type;
-
+	if (vf->compWidth && vf->compHeight)
+		pbi->frame_ar = vf->compHeight * 0x100 / vf->compWidth;
 	ar = min_t(u32, pbi->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 
@@ -6889,7 +6889,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		if (pic_config->bit_depth == VPX_BITS_8)
 			vf->bitdepth |= BITDEPTH_SAVING_MODE;
 
-		set_frame_info(pbi, vf);
 		/* if((vf->width!=pic_config->width)|
 		 *	(vf->height!=pic_config->height))
 		 */
@@ -6908,6 +6907,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		}
 		vf->compWidth = pic_config->y_crop_width;
 		vf->compHeight = pic_config->y_crop_height;
+		set_frame_info(pbi, vf);
 		if (force_fps & 0x100) {
 			u32 rate = force_fps & 0xff;
 
