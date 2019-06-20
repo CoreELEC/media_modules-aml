@@ -303,6 +303,9 @@ static irqreturn_t vmjpeg_isr(struct vdec_s *vdec, int irq)
 	vf->orientation = 0;
 	hw->vfbuf_use[index]++;
 
+	vf->mem_handle =
+		decoder_bmmu_box_get_mem_handle(
+			hw->mm_blk_handle, index);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(MODULE_NAME, vf->pts);
 	hw->frame_num++;

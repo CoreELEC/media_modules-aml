@@ -6254,11 +6254,21 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		pbi->vvp9_amstream_dec_info.height :
 		pbi->work_space_buf->max_height));
 
+	/* video is not support unaligned with 64 in tl1
+	** vdec canvas mode will be linear when dump yuv is set
+	*/
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 		(pbi->double_write_mode != 0) &&
 		(((pbi->max_pic_w % 64) != 0) ||
-		(pbi->vvp9_amstream_dec_info.width % 64) != 0))
-		mem_map_mode = 2;
+		(pbi->vvp9_amstream_dec_info.width % 64) != 0)) {
+		if (hw_to_vdec(pbi)->canvas_mode !=
+			CANVAS_BLKMODE_LINEAR)
+			mem_map_mode = 2;
+		else {
+			mem_map_mode = 0;
+			pr_info("vdec blkmod linear, force mem_map_mode 0\n");
+		}
+	}
 
 #ifndef MV_USE_FIXED_BUF
 	if (init_mv_buf_list(pbi) < 0) {
@@ -6923,22 +6933,22 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		}
 		update_vf_memhandle(pbi, vf, pic_config);
 		if (!(pic_config->y_crop_width == 196
-				&& pic_config->y_crop_height == 196
-				&& (debug & VP9_DEBUG_NO_TRIGGER_FRAME) == 0
-				)) {
-		inc_vf_ref(pbi, pic_config->index);
-		decoder_do_frame_check(hw_to_vdec(pbi), vf);
-		kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(MODULE_NAME, vf->pts);
-		pbi->vf_pre_count++;
+		&& pic_config->y_crop_height == 196
+		&& (debug & VP9_DEBUG_NO_TRIGGER_FRAME) == 0
+		&& (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX))) {
+			inc_vf_ref(pbi, pic_config->index);
+			decoder_do_frame_check(hw_to_vdec(pbi), vf);
+			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
+			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+			pbi->vf_pre_count++;
 #ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-		/*count info*/
-		gvs->frame_dur = pbi->frame_dur;
-		vdec_count_info(gvs, 0, stream_offset);
+			/*count info*/
+			gvs->frame_dur = pbi->frame_dur;
+			vdec_count_info(gvs, 0, stream_offset);
 #endif
-		hw_to_vdec(pbi)->vdec_fps_detec(hw_to_vdec(pbi)->id);
-		vf_notify_receiver(pbi->provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			hw_to_vdec(pbi)->vdec_fps_detec(hw_to_vdec(pbi)->id);
+			vf_notify_receiver(pbi->provider_name,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 		} else {
 			pbi->stat |= VP9_TRIGGER_FRAME_DONE;
 			hevc_source_changed(VFORMAT_VP9, 196, 196, 30);

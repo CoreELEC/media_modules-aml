@@ -517,6 +517,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				(const struct vframe_s *)vf);
 			return 0;
 		} else {
+			vf->mem_handle =
+				decoder_bmmu_box_get_mem_handle(
+					hw->mm_blk_handle, index);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -561,6 +564,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
 		} else {
+			vf->mem_handle =
+				decoder_bmmu_box_get_mem_handle(
+					hw->mm_blk_handle, index);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -611,6 +617,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
 		} else {
+			vf->mem_handle =
+				decoder_bmmu_box_get_mem_handle(
+					hw->mm_blk_handle, index);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -1014,6 +1023,7 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 			hw->chunk_frame_count);
 		hw->last_pts = disp_pic->pts;
 		hw->last_pts64 = disp_pic->pts64;
+		hw->frame_dur = duration;
 		disp_pic->duration = duration;
 		disp_pic->repeat_cnt = repeat_cnt;
 
@@ -1212,7 +1222,8 @@ static int  vmpeg_vf_states(struct vframe_states *states, void *op_arg)
 
 static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
-	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
+	struct vdec_mpeg4_hw_s *hw =
+		(struct vdec_mpeg4_hw_s *)vdec->private;
 
 	if (!hw)
 		return -1;
@@ -1226,6 +1237,9 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 		vstatus->frame_rate = DURATION_UNIT;
 	vstatus->error_count = READ_VREG(MP4_ERR_COUNT);
 	vstatus->status = hw->stat;
+	vstatus->frame_dur = hw->frame_dur;
+	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
+			"%s", DRIVER_NAME);
 
 	return 0;
 }
