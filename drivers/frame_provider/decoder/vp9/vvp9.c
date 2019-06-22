@@ -3091,6 +3091,10 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.dblk_data = {
 			.buf_size = 0x80000*2,
 		},
+		.seg_map = {
+			/*4096x2304/64/64 *24 = 0xd800 Bytes*/
+			.buf_size = 0xd800*4,
+		},
 		.mmu_vbh = {
 			.buf_size = 0x5000*2, //2*16*(more than 2304)/4, 4K
 		},
@@ -7514,14 +7518,13 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 static void vp9_set_clk(struct work_struct *work)
 {
 	struct VP9Decoder_s *pbi = container_of(work,
-		struct VP9Decoder_s, work);
+		struct VP9Decoder_s, set_clk_work);
+	int fps = 96000 / pbi->frame_dur;
 
-		int fps = 96000 / pbi->frame_dur;
-
-		if (hevc_source_changed(VFORMAT_VP9,
-			frame_width, frame_height, fps) > 0)
-			pbi->saved_resolution = frame_width *
-			frame_height * fps;
+	if (hevc_source_changed(VFORMAT_VP9,
+		frame_width, frame_height, fps) > 0)
+		pbi->saved_resolution = frame_width *
+		frame_height * fps;
 }
 
 static void vvp9_put_timer_func(unsigned long arg)
