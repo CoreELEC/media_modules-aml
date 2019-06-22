@@ -3144,6 +3144,10 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.dblk_data = {
 			.buf_size = 0x80000*2,
 		},
+		.seg_map = {
+			/*4096x2304/64/64 *24 = 0xd800 Bytes*/
+			.buf_size = 0xd800*4,
+		},
 		.mmu_vbh = {
 			.buf_size = 0x5000*2, //2*16*(more than 2304)/4, 4K
 		},
@@ -8121,14 +8125,13 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 static void vp9_set_clk(struct work_struct *work)
 {
 	struct VP9Decoder_s *pbi = container_of(work,
-		struct VP9Decoder_s, work);
+		struct VP9Decoder_s, set_clk_work);
+	int fps = 96000 / pbi->frame_dur;
 
-		int fps = 96000 / pbi->frame_dur;
-
-		if (hevc_source_changed(VFORMAT_VP9,
-			frame_width, frame_height, fps) > 0)
-			pbi->saved_resolution = frame_width *
-			frame_height * fps;
+	if (hevc_source_changed(VFORMAT_VP9,
+		frame_width, frame_height, fps) > 0)
+		pbi->saved_resolution = frame_width *
+		frame_height * fps;
 }
 
 static void vvp9_put_timer_func(unsigned long arg)
@@ -10114,21 +10117,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pr_info("===VP9 decoder mem resource 0x%lx size 0x%x\n",
 			   pbi->buf_start,
 			   pbi->buf_size);
-	}
-
-	if (pdata->sys_info) {
-		pbi->vvp9_amstream_dec_info = *pdata->sys_info;
-		if ((unsigned long) pbi->vvp9_amstream_dec_info.param
-			& 0x08){
-			pbi->low_latency_flag = 1;
-		} else
-			pbi->low_latency_flag = low_latency_flag;
-	}
-	else {
-		pbi->vvp9_amstream_dec_info.width = 0;
-		pbi->vvp9_amstream_dec_info.height = 0;
-		pbi->vvp9_amstream_dec_info.rate = 30;
-		pbi->low_latency_flag = low_latency_flag;
 	}
 
 	pbi->cma_dev = pdata->cma_dev;
