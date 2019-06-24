@@ -1178,6 +1178,42 @@ struct VP9Decoder_s {
 	struct vframe_qos_s vframe_qos;
 };
 
+static int vp9_print(struct VP9Decoder_s *pbi,
+	int flag, const char *fmt, ...)
+{
+#define HEVC_PRINT_BUF		256
+	unsigned char buf[HEVC_PRINT_BUF];
+	int len = 0;
+
+	if (pbi == NULL ||
+		(flag == 0) ||
+		(debug & flag)) {
+		va_list args;
+
+		va_start(args, fmt);
+		if (pbi)
+			len = sprintf(buf, "[%d]", pbi->index);
+		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
+		pr_debug("%s", buf);
+		va_end(args);
+	}
+	return 0;
+}
+
+static int is_oversize(int w, int h)
+{
+	int max = (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)?
+		MAX_SIZE_8K : MAX_SIZE_4K;
+
+	if (w <= 0 || h <= 0)
+		return true;
+
+	if (h != 0 && (w > max / h))
+		return true;
+
+	return false;
+}
+
 static int v4l_get_fb(struct aml_vcodec_ctx *ctx, struct vdec_fb **out)
 {
 	int ret = 0;
@@ -1242,6 +1278,11 @@ static int setup_frame_size(
 
 	width = params->p.width;
 	height = params->p.height;
+	if (is_oversize(width, height)) {
+		vp9_print(pbi, 0, "%s, Error: Invalid frame size\n", __func__);
+		return -1;
+	}
+
 	/*vp9_read_frame_size(rb, &width, &height);*/
 	if (print_header_info)
 		pr_info(" * 16-bits w read : %d (width : %d)\n", width, height);
@@ -1361,8 +1402,8 @@ static int setup_frame_size_with_refs(
 		 */
 	}
 
-	if (width <= 0 || height <= 0) {
-		pr_err("Error: Invalid frame size\r\n");
+	if (is_oversize(width, height)) {
+		vp9_print(pbi, 0, "%s, Error: Invalid frame size\n", __func__);
 		return -1;
 	}
 
@@ -1455,32 +1496,6 @@ static int setup_frame_size_with_refs(
 						(unsigned int)cm->bit_depth;
 	pool->frame_bufs[cm->new_fb_idx].buf.color_space = cm->color_space;
 	return ret;
-}
-
-
-
-
-
-static int vp9_print(struct VP9Decoder_s *pbi,
-	int flag, const char *fmt, ...)
-{
-#define HEVC_PRINT_BUF		256
-	unsigned char buf[HEVC_PRINT_BUF];
-	int len = 0;
-
-	if (pbi == NULL ||
-		(flag == 0) ||
-		(debug & flag)) {
-		va_list args;
-
-		va_start(args, fmt);
-		if (pbi)
-			len = sprintf(buf, "[%d]", pbi->index);
-		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_debug("%s", buf);
-		va_end(args);
-	}
-	return 0;
 }
 
 static inline bool close_to(int a, int b, int m)
@@ -4747,20 +4762,6 @@ static int config_pic(struct VP9Decoder_s *pbi,
 	}
 #endif
 	return ret;
-}
-
-static int is_oversize(int w, int h)
-{
-	int max = (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)?
-		MAX_SIZE_8K : MAX_SIZE_4K;
-
-	if (w < 0 || h < 0)
-		return true;
-
-	if (h != 0 && (w > max / h))
-		return true;
-
-	return false;
 }
 
 static int vvp9_mmu_compress_header_size(struct VP9Decoder_s *pbi)
