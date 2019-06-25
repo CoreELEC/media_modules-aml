@@ -10098,17 +10098,12 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 
 	if (pdata->sys_info) {
 		pbi->vvp9_amstream_dec_info = *pdata->sys_info;
-		if ((unsigned long) pbi->vvp9_amstream_dec_info.param
-				& 0x08) {
-				pbi->low_latency_flag = 1;
-			} else
-				pbi->low_latency_flag = 0;
 	} else {
 		pbi->vvp9_amstream_dec_info.width = 0;
 		pbi->vvp9_amstream_dec_info.height = 0;
 		pbi->vvp9_amstream_dec_info.rate = 30;
 	}
-
+	pbi->low_latency_flag = 1;
 	pbi->is_used_v4l = (((unsigned long)
 		pbi->vvp9_amstream_dec_info.param & 0x80) >> 7);
 	if (pbi->is_used_v4l) {
