@@ -8403,6 +8403,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 				| VIDTYPE_VIU_NV21;
 			}
 			hevc->vf_pre_count++;
+			decoder_do_frame_check(hw_to_vdec(hevc), vf);
 			kfifo_put(&hevc->display_q,
 			(const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -8451,6 +8452,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 				| VIDTYPE_VIU_NV21;
 			}
 			hevc->vf_pre_count++;
+			decoder_do_frame_check(hw_to_vdec(hevc), vf);
 			kfifo_put(&hevc->display_q,
 			(const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -8476,6 +8478,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			process_pending_vframe(hevc,
 			pic, (pic->pic_struct == 9));
 
+			decoder_do_frame_check(hw_to_vdec(hevc), vf);
 			/* process current vf */
 			kfifo_put(&hevc->pending_q,
 			(const struct vframe_s *)vf);
@@ -8521,6 +8524,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 				VIDTYPE_VIU_NV21 | VIDTYPE_VIU_FIELD;
 				vf->index = (pic->index << 8) | 0xff;
 			}
+			decoder_do_frame_check(hw_to_vdec(hevc), vf);
 			kfifo_put(&hevc->pending_q,
 			(const struct vframe_s *)vf);
 
@@ -8563,6 +8567,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 				break;
 			}
 			hevc->vf_pre_count++;
+			decoder_do_frame_check(hw_to_vdec(hevc), vf);
 			kfifo_put(&hevc->display_q,
 			(const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -9972,7 +9977,7 @@ static irqreturn_t vh265_isr(int irq, void *data)
 static void vh265_set_clk(struct work_struct *work)
 {
 	struct hevc_state_s *hevc = container_of(work,
-		struct hevc_state_s, work);
+		struct hevc_state_s, set_clk_work);
 
 		int fps = 96000 / hevc->frame_dur;
 
