@@ -468,6 +468,8 @@ static u32 work_buf_size;
 static unsigned int force_disp_pic_index;
 static unsigned int disp_vframe_valve_level;
 static int pre_decode_buf_level = 0x1000;
+static unsigned int pic_list_debug;
+
 
 #ifdef MULTI_INSTANCE_SUPPORT
 static unsigned int max_decode_instance_num
@@ -3467,8 +3469,8 @@ static void dump_pic_list(struct hevc_state_s *hevc)
 #endif
 		 pic->decode_idx, pic->POC, pic->referenced);
 		hevc_print_cont(hevc, 0,
-			"num_reorder_pic:%d, output_mark:%d, w/h %d,%d",
-				pic->num_reorder_pic, pic->output_mark,
+			"num_reorder_pic:%d, output_mark:%d, error_mark:%d w/h %d,%d",
+				pic->num_reorder_pic, pic->output_mark, pic->error_mark,
 				pic->width, pic->height);
 		hevc_print_cont(hevc, 0,
 			"output_ready:%d, mv_wr_start %x vf_ref %d\n",
@@ -3727,7 +3729,9 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 	unsigned char is_referenced;
 	/* hevc_print(hevc, 0,
 	"%s cur_poc %d\n", __func__, cur_poc); */
-
+	if (pic_list_debug & 0x2) {
+		pr_err("cur poc %d\n", cur_poc);
+	}
 	for (ii = 0; ii < MAX_REF_PIC_NUM; ii++) {
 		pic = hevc->m_PIC[ii];
 		if (pic == NULL ||
@@ -3764,6 +3768,9 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 			put_mv_buf(hevc, pic);
 			/* hevc_print(hevc, 0,
 			"set poc %d reference to 0\n", pic->POC); */
+			if (pic_list_debug & 0x2) {
+				pr_err("set poc %d reference to 0\n", pic->POC);
+			}
 		}
 	}
 
@@ -5356,6 +5363,10 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 			new_pic->BUF_index, new_pic->decode_idx,
 			new_pic->POC);
 
+	}
+	if (pic_list_debug & 0x1) {
+		dump_pic_list(hevc);
+		pr_err("\n*******************************************\n");
 	}
 
 	return new_pic;
@@ -10968,6 +10979,8 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	struct PIC_s *pic;
 	/* recycle un-used pic */
 	int i;
+	int ref_pic = 0;
+	struct vdec_s *vdec = hw_to_vdec(hevc);
 	/*return 1 if pic_list is not initialized yet*/
 	if (hevc->pic_list_init_flag != 3)
 		return 1;
@@ -10976,6 +10989,8 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 		pic = hevc->m_PIC[i];
 		if (pic == NULL || pic->index == -1)
 			continue;
+		if (pic->referenced == 1)
+			ref_pic++;
 		if (pic->output_mark == 0 && pic->referenced == 0
 			&& pic->output_ready == 0
 			) {
@@ -10986,6 +11001,45 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 				new_pic = pic;
 		}
 	}
+
+	if ((new_pic == NULL) &&
+			(ref_pic >=
+			get_work_pic_num(hevc) -
+			hevc->sps_num_reorder_pics_0 - 1))  {
+		enum receviver_start_e state = RECEIVER_INACTIVE;
+		if (vf_get_receiver(vdec->vf_provider_name)) {
+			state =
+			vf_notify_receiver(vdec->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_QUREY_STATE,
+				NULL);
+			if ((state == RECEIVER_STATE_NULL)
+				|| (state == RECEIVER_STATE_NONE))
+				state = RECEIVER_INACTIVE;
+		}
+		if (state == RECEIVER_INACTIVE) {
+			for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+				pic = hevc->m_PIC[i];
+				if (pic == NULL || pic->index == -1)
+					continue;
+
+				if ((pic->referenced == 1) &&
+						(pic->error_mark == 1)) {
+					if (new_pic) {
+						if (pic->POC < new_pic->POC)
+							new_pic = pic;
+					} else
+						new_pic = pic;
+				}
+			}
+			if (new_pic != NULL) {
+				new_pic->referenced = 0;
+				put_mv_buf(hevc, pic);
+				if (pic_list_debug & 0x2)
+					pr_err("err ref poc :%d\n", new_pic->POC);
+			}
+		}
+	}
+
 	return (new_pic != NULL) ? 1 : 0;
 }
 
@@ -12827,6 +12881,10 @@ MODULE_PARM_DESC(udebug_pause_decode_idx, "\n udebug_pause_decode_idx\n");
 
 module_param(disp_vframe_valve_level, uint, 0664);
 MODULE_PARM_DESC(disp_vframe_valve_level, "\n disp_vframe_valve_level\n");
+
+module_param(pic_list_debug, uint, 0664);
+MODULE_PARM_DESC(pic_list_debug, "\n pic_list_debug\n");
+
 
 module_init(amvdec_h265_driver_init_module);
 module_exit(amvdec_h265_driver_remove_module);
