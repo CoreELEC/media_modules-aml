@@ -184,6 +184,7 @@ static unsigned int c_snr_gau_alp0_max = 63;
 static unsigned int c_bld_beta2alp_rate = 16;
 static unsigned int c_bld_beta_min;
 static unsigned int c_bld_beta_max = 63;
+static unsigned int qp_mode;
 
 static DEFINE_SPINLOCK(lock);
 
@@ -2159,8 +2160,13 @@ static void avc_prot_init(struct encode_wq_s *wq,
 		WRITE_HREG(HCODEC_V5_SMALL_DIFF_CNT,
 			(v5_small_diff_C<<16) |
 			(v5_small_diff_Y<<0));
-		WRITE_HREG(HCODEC_V5_SIMPLE_MB_DQUANT,
-			v5_simple_dq_setting);
+		if (qp_mode == 1) {
+			WRITE_HREG(HCODEC_V5_SIMPLE_MB_DQUANT,
+				0);
+		} else {
+			WRITE_HREG(HCODEC_V5_SIMPLE_MB_DQUANT,
+				v5_simple_dq_setting);
+		}
 		WRITE_HREG(HCODEC_V5_SIMPLE_MB_ME_WEIGHT,
 			v5_simple_me_weight_setting);
 		/* txlx can remove it */
@@ -3291,6 +3297,10 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 		break;
 	case AMVENC_AVC_IOC_MAX_INSTANCE:
 		put_user(encode_manager.max_instance, (u32 *)arg);
+		break;
+	case AMVENC_AVC_IOC_QP_MODE:
+		get_user(qp_mode, ((u32 *)arg));
+		pr_info("qp_mode %d\n", qp_mode);
 		break;
 	default:
 		r = -1;
