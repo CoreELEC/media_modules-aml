@@ -2945,7 +2945,8 @@ static int vdec_core_thread(void *data)
 				if ((core->last_vdec != vdec) &&
 					(core->last_vdec->mc_type != vdec->mc_type))
 					vdec->mc_loaded = 0;/*clear for reload firmware*/
-			}
+			} else
+				vdec->mc_loaded = 0;
 			core->last_vdec = vdec;
 			if (debug & 2)
 				vdec->mc_loaded = 0;/*alway reload firmware*/
