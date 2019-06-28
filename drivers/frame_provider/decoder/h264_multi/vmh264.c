@@ -5234,18 +5234,15 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 	unsigned mby_mbx = READ_VREG(MBY_MBX);
 	unsigned mb_total = (hw->seq_info2 >> 8) & 0xffff;
 	unsigned decode_mb_count =
-		(((mby_mbx & 0xff) + 1) *
+		((mby_mbx & 0xff) * hw->mb_width +
 		(((mby_mbx >> 8) & 0xff) + 1));
 	if (mby_mbx == 0)
 		return;
 	if (get_cur_slice_picture_struct(p_H264_Dpb) != FRAME)
 		mb_total /= 2;
 	if (error_proc_policy & 0x100) {
-		if (decode_mb_count != mb_total)
+		if (decode_mb_count < mb_total)
 			p->data_flag |= ERROR_FLAG;
-		else if (p->data_flag & MAYBE_ERROR_FLAG)
-			p->data_flag &= ~ERROR_FLAG;
-		p->data_flag &= ~MAYBE_ERROR_FLAG;
 	}
 
 	if ((error_proc_policy & 0x200) &&
@@ -5542,17 +5539,15 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				"==================> frame count %d to skip %d\n",
 				hw->decode_pic_count+1,
 				hw->skip_frame_count);
-				} else {
+				} else if (error_proc_policy & 0x100){
 					struct StorablePicture *p =
 						p_H264_Dpb->mVideo.dec_picture;
 					unsigned mby_mbx = READ_VREG(MBY_MBX);
 					unsigned decode_mb_count =
-						(((mby_mbx & 0xff) + 1) *
+						((mby_mbx & 0xff) * hw->mb_width +
 						(((mby_mbx >> 8) & 0xff) + 1));
-					if ((error_proc_policy & 0x100) &&
-						p_H264_Dpb->dpb_param.l.
-						data[FIRST_MB_IN_SLICE]
-						< decode_mb_count) {
+					if ((decode_mb_count < p_H264_Dpb->dpb_param.l.
+						data[FIRST_MB_IN_SLICE])) {
 						dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_VDEC_STATUS,
 						"Error detect! first_mb 0x%x mby_mbx 0x%x decode_mb 0x%x\n",
@@ -5560,12 +5555,10 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						data[FIRST_MB_IN_SLICE],
 						READ_VREG(MBY_MBX),
 						decode_mb_count);
-						if (!p_H264_Dpb->dpb_param.l.
-								data[FIRST_MB_IN_SLICE]) {
-							p->data_flag |= ERROR_FLAG;
-							goto pic_done_proc;
-						} else
-							p->data_flag |= MAYBE_ERROR_FLAG;
+						p->data_flag |= ERROR_FLAG;
+					} else if (!p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE] && decode_mb_count) {
+						p->data_flag |= ERROR_FLAG;
+						goto pic_done_proc;
 					}
 				}
 
