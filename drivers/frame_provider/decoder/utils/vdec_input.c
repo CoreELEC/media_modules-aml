@@ -404,6 +404,7 @@ int vdec_input_dump_blocks(struct vdec_input_s *input,
 }
 
 static int vdec_input_dump_chunk_locked(
+	int id,
 	struct vframe_chunk_s *chunk,
 	char *buf, int size)
 {
@@ -423,7 +424,8 @@ static int vdec_input_dump_chunk_locked(
 	} while (0)
 
 	BUFPRINT(
-		"\t[%lld:%p]-off=%d,size:%d,p:%d,\tpts64=%lld,addr=%p\n",
+		"\t[%d][%lld:%p]-off=%d,size:%d,p:%d,\tpts64=%lld,addr=%p\n",
+		id,
 		chunk->sequence,
 		chunk->block,
 		chunk->offset,
@@ -443,7 +445,7 @@ static int vdec_input_dump_chunk_locked(
 	return tsize;
 }
 
-int vdec_input_dump_chunks(struct vdec_input_s *input,
+int vdec_input_dump_chunks(int id, struct vdec_input_s *input,
 	char *bufs, int size)
 {
 
@@ -452,12 +454,15 @@ int vdec_input_dump_chunks(struct vdec_input_s *input,
 	char *lbuf = bufs;
 	char sbuf[256];
 	int s = 0;
+	int i = 0;
+
 	if (size <= 0)
 		return 0;
 	if (!bufs)
 		lbuf = sbuf;
-	snprintf(lbuf + s, size - s,
-		"blocks:vdec-%d id:%d,bufsize=%d,dsize=%d,frames:%d,maxframe:%d\n",
+	s = snprintf(lbuf + s, size - s,
+		"[%d]blocks:vdec-%d id:%d,bufsize=%d,dsize=%d,frames:%d,maxframe:%d\n",
+		id,
 		input->id,
 		input->block_nums,
 		input->size,
@@ -477,7 +482,10 @@ int vdec_input_dump_chunks(struct vdec_input_s *input,
 				p, struct vframe_chunk_s, list);
 		if (bufs != NULL)
 			lbuf = bufs + s;
-		s += vdec_input_dump_chunk_locked(chunk, lbuf, size - s);
+		s += vdec_input_dump_chunk_locked(id, chunk, lbuf, size - s);
+		i++;
+		if (i >= 10)
+			break;
 	}
 	vdec_input_unlock(input, flags);
 	return s;
