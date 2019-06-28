@@ -9952,6 +9952,9 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 		pbi->max_pic_w = 8192;
 		pbi->max_pic_h = 4608;
+	} else {
+		pbi->max_pic_w = 4096;
+		pbi->max_pic_h = 2304;
 	}
 #if 1
 	if ((debug & IGNORE_PARAM_FROM_CONFIG) == 0 &&
