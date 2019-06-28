@@ -130,7 +130,11 @@ unsigned int h264_debug_mask = 0xff;
 	 *	0x1xx, force decoder id of xx to be disconnected
 	 */
 unsigned int h264_debug_cmd;
-static unsigned int dec_control;
+
+static unsigned int dec_control =
+	DEC_CONTROL_FLAG_FORCE_2997_1080P_INTERLACE |
+	DEC_CONTROL_FLAG_FORCE_2500_576P_INTERLACE;
+
 static unsigned int force_rate_streambase;
 static unsigned int force_rate_framebase;
 static unsigned int force_disp_bufspec_num;
