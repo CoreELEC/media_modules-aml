@@ -6437,6 +6437,10 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
 	vstatus->status = hw->stat;
+	if (hw->h264_ar == 0x3ff)
+		hw->h264_ar = (0x100 *
+			hw->frame_height * hw->height_aspect_ratio) /
+			(hw->frame_width * hw->width_aspect_ratio);
 	ar = min_t(u32,
 			hw->h264_ar,
 			DISP_RATIO_ASPECT_RATIO_MAX);
