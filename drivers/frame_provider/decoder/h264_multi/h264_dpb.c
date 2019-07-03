@@ -1568,6 +1568,12 @@ static void dpb_combine_field(struct h264_dpb_stru *p_H264_Dpb,
 	if (fs->top_field->poc < fs->bottom_field->poc) {
 		fs->pts = fs->top_field->pts;
 		fs->pts64 = fs->top_field->pts64;
+		/*SWPL-7105 fix */
+		if ((fs->frame->slice_type == B_SLICE)
+			&& (!fs->bottom_field->pts) &&(!fs->bottom_field->pts64)) {
+			fs->pts =  0;
+			fs->pts64 = 0;
+		}
 		fs->offset_delimiter = fs->top_field->offset_delimiter;
 	} else {
 		fs->pts = fs->bottom_field->pts;
