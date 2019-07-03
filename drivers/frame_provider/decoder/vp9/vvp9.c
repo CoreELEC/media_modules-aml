@@ -162,12 +162,17 @@ static u32 work_buf_size;
 static u32 mv_buf_margin;
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
-/* double_write_mode: 0, no double write
-					  1, 1:1 ratio
-					  2, (1/4):(1/4) ratio
-					  4, (1/2):(1/2) ratio
-					0x10, double write only
-*/
+/* double_write_mode:
+ *	0, no double write;
+ *	1, 1:1 ratio;
+ *	2, (1/4):(1/4) ratio;
+ *	3, (1/4):(1/4) ratio, with both compressed frame included
+ *	4, (1/2):(1/2) ratio;
+ *	0x10, double write only
+ *	0x100, if > 1080p,use mode 4,else use mode 1;
+ *	0x200, if > 1080p,use mode 2,else use mode 1;
+ *	0x300, if > 720p, use mode 4, else use mode 1;
+ */
 static u32 double_write_mode;
 
 #define DRIVER_NAME "amvdec_vp9"
@@ -1532,43 +1537,64 @@ static int get_double_write_mode(struct VP9Decoder_s *pbi)
 {
 	u32 valid_dw_mode = get_valid_double_write_mode(pbi);
 	u32 dw;
-	if (valid_dw_mode == 0x100) {
-		struct VP9_Common_s *cm = &pbi->common;
-		struct PIC_BUFFER_CONFIG_s *cur_pic_config;
-		int w, h;
+	int w, h;
+	struct VP9_Common_s *cm = &pbi->common;
+	struct PIC_BUFFER_CONFIG_s *cur_pic_config;
 
-		if (!cm->cur_frame)
-			return 1;/*no valid frame,*/
-		cur_pic_config = &cm->cur_frame->buf;
-		w = cur_pic_config->y_crop_width;
-		h = cur_pic_config->y_crop_width;
+	if (!cm->cur_frame)
+		return 1;/*no valid frame,*/
+	cur_pic_config = &cm->cur_frame->buf;
+	w = cur_pic_config->y_crop_width;
+	h = cur_pic_config->y_crop_height;
+
+	dw = 0x1; /*1:1*/
+	switch (valid_dw_mode) {
+	case 0x100:
 		if (w > 1920 && h > 1088)
 			dw = 0x4; /*1:2*/
-		else
-			dw = 0x1; /*1:1*/
-
-		return dw;
+		break;
+	case 0x200:
+		if (w > 1920 && h > 1088)
+			dw = 0x2; /*1:4*/
+		break;
+	case 0x300:
+		if (w > 1280 && h > 720)
+			dw = 0x4; /*1:2*/
+		break;
+	default:
+		dw = valid_dw_mode;
+		break;
 	}
-
-	return valid_dw_mode;
+	return dw;
 }
 
 /* for double write buf alloc */
 static int get_double_write_mode_init(struct VP9Decoder_s *pbi)
 {
 	u32 valid_dw_mode = get_valid_double_write_mode(pbi);
-	if (valid_dw_mode == 0x100) {
-		u32 dw;
-		int w = pbi->init_pic_w;
-		int h = pbi->init_pic_h;
+	u32 dw;
+	int w = pbi->init_pic_w;
+	int h = pbi->init_pic_h;
+
+	dw = 0x1; /*1:1*/
+	switch (valid_dw_mode) {
+	case 0x100:
 		if (w > 1920 && h > 1088)
 			dw = 0x4; /*1:2*/
-		else
-			dw = 0x1; /*1:1*/
-
-		return dw;
+		break;
+	case 0x200:
+		if (w > 1920 && h > 1088)
+			dw = 0x2; /*1:4*/
+		break;
+	case 0x300:
+		if (w > 1280 && h > 720)
+			dw = 0x4; /*1:2*/
+		break;
+	default:
+		dw = valid_dw_mode;
+		break;
 	}
-	return valid_dw_mode;
+	return dw;
 }
 #endif
 
