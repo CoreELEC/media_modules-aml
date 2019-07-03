@@ -5118,7 +5118,7 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 	int payload_type;
 	int payload_size;
 	u8 *p_sei;
-	int temp;
+	int temp = 0;
 	int bit_offset;
 	int read_size;
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
