@@ -48,6 +48,8 @@ struct aml_pcmcia {
 	int (*pcmcia_plugin)(struct aml_pcmcia *pc, int plugin);
 
 	void *priv;
+	/*device type*/
+	int io_device_type;
 };
 
 int aml_pcmcia_init(struct aml_pcmcia *pc);

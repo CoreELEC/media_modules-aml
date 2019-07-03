@@ -7,6 +7,7 @@
 #include <linux/device.h>
 
 #include "aml_pcmcia.h"
+#include "aml_ci.h"
 
 static int aml_pcmcia_debug = 1;
 
@@ -90,11 +91,34 @@ static void aml_pcmcia_work(struct work_struct *work)
 	}
 }
 
+static void aml_pcmcia_detect_cam(struct aml_pcmcia *pc)
+{
+	int cd1, cd2;
+
+	if (pc == NULL) {
+		return;
+	}
+	cd1 = pc->get_cd1(pc);
+	cd2 = pc->get_cd2(pc);
+
+	if (cd1 != cd2)
+		pr_error("CAM card not inerted. check end\n");
+	else {
+		if (!cd1) {
+			pr_error("Adapter(%d) Slot(0): CAM Plugin\n", 0);
+			pcmcia_plugin(pc);
+		} else {
+			pr_error("Adapter(%d) Slot(0): CAM Unplug\n", 0);
+			pcmcia_unplug(pc);
+		}
+	}
+}
 static struct aml_pcmcia *pc_cur;
 
 int aml_pcmcia_init(struct aml_pcmcia *pc)
 {
 	int err = 0;
+	unsigned long mode;
 	pr_dbg("aml_pcmcia_init start pc->irq=%d\r\n", pc->irq);
 	pc->rst(pc, AML_L);
 	/*power on*/
@@ -104,9 +128,14 @@ int aml_pcmcia_init(struct aml_pcmcia *pc)
 
 	INIT_WORK(&pc->pcmcia_work, aml_pcmcia_work);
 
+	mode = IRQF_ONESHOT;
+	if (pc->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+		mode = mode | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
+	}
+
 	err = request_irq(pc->irq,
 	pcmcia_irq_handler,
-	IRQF_ONESHOT, "aml-pcmcia", pc);
+	mode, "aml-pcmcia", pc);
 	if (err != 0) {
 		pr_error("ERROR: IRQ registration failed ! <%d>", err);
 		return -ENODEV;
@@ -114,6 +143,11 @@ int aml_pcmcia_init(struct aml_pcmcia *pc)
 
 	pc_cur = pc;
 	pr_dbg("aml_pcmcia_init ok\r\n");
+	if (pc->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+		//mcu start very fast,so she can detect cam before soc init end.
+		//so we need add detect cam fun for first time.
+		aml_pcmcia_detect_cam(pc);
+	}
 	return 0;
 }
 EXPORT_SYMBOL(aml_pcmcia_init);

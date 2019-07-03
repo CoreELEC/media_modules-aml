@@ -21,18 +21,22 @@
 #ifndef __AML_CI_H_
 #define __AML_CI_H_
 
-#include "drivers/media/dvb-core/dvb_ca_en50221.h"
+//#include "drivers/media/dvb-core/dvb_ca_en50221.h"
+#include "cimcu/dvb_ca_en50221_cimcu.h"
 #include "cimax/dvb_ca_en50221_cimax.h"
+#include <linux/platform_device.h>
 
 enum aml_dvb_io_type_e {
 	AML_DVB_IO_TYPE_IOBUS = 0,
 	AML_DVB_IO_TYPE_SPI,
 	AML_DVB_IO_TYPE_CIMAX,
+	AML_DVB_IO_TYPE_SPI_T312,
 	AML_DVB_IO_TYPE_MAX,
 };
 
 struct aml_ci {
-	struct dvb_ca_en50221		en50221;
+//	struct dvb_ca_en50221		en50221;
+	struct dvb_ca_en50221_cimcu	en50221_cimcu;
 	struct mutex			ci_lock;
 	int				io_type;
 	void				*priv;

@@ -38,6 +38,9 @@
 #include "aml_ci.h"
 
 #define AML_MODE_NAME       "aml_dvbci_spi"
+
+#define AML_SPI_READ_LEN       16
+
 static int  AML_CI_GPIO_IRQ_BASE = 251;
 static struct aml_spi *g_spi_dev;
 static int aml_spi_debug = 1;
@@ -183,7 +186,7 @@ int aml_ci_spi_paser_bit(uint8_t value)
 * \param spi_dev: aml_spi obj,used this data to get spi obj
 * \param val: write value
 * \param len: write value len
-* \param mode: read or write
+* \param mode: cmd
 * \return
 *   - read value:ok
 *   - -EINVAL : error
@@ -194,6 +197,12 @@ static int aml_spi_io_api(struct aml_spi *spi_dev, u8 *val, int len, int mode)
 	int ret = 0;
 	int i = 0;
 	u8 rd = 0;
+	int j = 0;
+	int is_retry = 0;
+	if (spi_dev == NULL ) {
+		pr_error("%s spi_dev  is null\r\n", __func__);
+		return -EINVAL;
+	}
 	if (spi_dev->spi == NULL) {
 		pr_error("%s spi is null\r\n", __func__);
 		return -EINVAL;
@@ -201,32 +210,48 @@ static int aml_spi_io_api(struct aml_spi *spi_dev, u8 *val, int len, int mode)
 	spin_lock(&spi_dev->spi_lock);
 	if (spi_dev->cs_hold_delay)
 		udelay(spi_dev->cs_hold_delay);
+restart:
 	dirspi_start(spi_dev->spi);
 	if (spi_dev->cs_clk_delay)
 		udelay(spi_dev->cs_clk_delay);
 
-	dirspi_xfer(spi_dev->spi, val, rb, len);
-	/* wait mcu io */
+	ret = dirspi_xfer(spi_dev->spi, val, rb, len);
+	if (ret != 0)
+			pr_dbg("spi xfer value errro ret %d\r\n",  ret);
+	/* wait mcu io 1ms */
 	udelay(1000);
 	/* init rec flag */
 	G_rec_flag = AM_SPI_STEP_INIT;
 	memset(rbuf, 0, 8);
-	for (i = 0; i < 4*len; i++) {
+
+	for (i = 0; i < 4 * len; i++) {
 		udelay(50);
-		ret = dirspi_read(spi_dev->spi, &rd, 1);
-		if (ret != 0)
-			pr_dbg("spi read value timeout:%x\r\n", rd);
-		ret = aml_ci_spi_paser_bit(rd);
+		memset(rb, 0, 32);
+		ret = dirspi_read(spi_dev->spi, rb, AML_SPI_READ_LEN);
+		if (ret != 0) {
+			pr_dbg("spi read value timeout:%x ret %d\r\n", rd, ret);
+		}
+		for (j = 0; j < AML_SPI_READ_LEN; j++) {
+			/*pr_dbg("spi read value rb[%d]: 0x%2x\r\n", j, rb[j]);*/
+			ret = aml_ci_spi_paser_bit(rb[j]);
+			if (ret == 0)
+				break;
+		}
 		if (ret == 0)
 			break;
 	}
 	if (ret == 0) {
 		rd = rbuf[3];/* data */
 	} else {
-		pr_dbg("spi read value error\r\n");
-		rd = 0;
+		pr_dbg("*spi rec flag[%d]index [%d] read error[0x%x] mode[%d]addr[%d]****\r\n",
+			G_rec_flag, i,rd, mode, (val[5] << 8 | val[4]) & 0xffff);
+		dirspi_stop(spi_dev->spi);
+		//only retry once
+		if (is_retry == 0) {
+			is_retry = 1;
+			goto restart;
+		}
 	}
-
 	if (spi_dev->cs_clk_delay)
 		udelay(spi_dev->cs_clk_delay);
 
@@ -263,7 +288,7 @@ static int aml_set_gpio_out(struct gpio_desc *gpio, int val)
 	pr_dbg("dvb ci gpio out ret %d set val:%d\n", ret, val);
 	return ret;
 }
-#if 0
+#if 0//no used
 /**\brief aml_set_gpio_in:set gio in
 * \param gpio: gpio_desc obj,
 * \return
@@ -351,7 +376,7 @@ char *str, int input_output, int output_level)
 /*******             gpio api end           *************/
 /********************************************************/
 /********************************************************/
-#if 0
+#if 1
 /**\brief aml_ci_cis_test_by_spi:test cis
 * \param ci_dev: aml_ci obj,used this data to get spi_dev obj
 * \param slot: slot index
@@ -468,6 +493,76 @@ static int aml_ci_io_write_by_spi(
 }
 
 
+/**\brief aml_ci_rst_by_spi:reset cam by spi
+* \param ci_dev: aml_ci obj,used this data to get spi_dev obj
+* \param slot: slot index
+* \return
+*   - 0:ok
+*   - -EINVAL : error
+*/
+static int aml_ci_rst_by_spi(
+	struct aml_ci *ci_dev, int slot, int level)
+{
+	u8  data = (u8)level;
+	u16 addres = 0;
+	int value = 0;
+	struct aml_spi *spi_dev = ci_dev->data;
+	/*add by chl,need add time delay*/
+	mdelay(10);
+	aml_init_send_buf(AM_CI_CMD_RESET, data, addres);
+	value = aml_spi_io_api(spi_dev, sendbuf, SENDBUFLEN, AM_CI_CMD_RESET);
+	return value;
+}
+
+/**\brief aml_ci_power_by_spi:power cam by spi
+* \param ci_dev: aml_ci obj,used this data to get spi_dev obj
+* \param slot: slot index
+* \param enable: enable or disable cam
+* \return
+*   - 0:ok
+*   - -EINVAL : error
+*/
+static int aml_ci_power_by_spi(
+	struct aml_ci *ci_dev, int slot, int enable)
+{
+	u8  data = (u8)enable;
+	u16 addres = 0;
+	int value = 0;
+	struct aml_spi *spi_dev = ci_dev->data;
+	/*add by chl,need add time delay*/
+	/*power is controled by mcu*/
+	if (0) {
+		mdelay(10);
+		aml_init_send_buf(AM_CI_CMD_POWER, data, addres);
+		value = aml_spi_io_api(spi_dev, sendbuf, SENDBUFLEN, AM_CI_CMD_POWER);
+	}
+	return value;
+}
+
+/**\brief aml_ci_getcd12_by_spi:get cd12 cam by spi
+* \param ci_dev: aml_ci obj,used this data to get spi_dev obj
+* \param slot: slot index
+* \param cd12: cd1 or cd2 value
+* \return
+*   - 0:ok
+*   - -EINVAL : error
+*/
+static int aml_ci_getcd12_by_spi(
+	struct aml_ci *ci_dev, int slot, int cd12)
+{
+	u8  data = (u8)cd12;
+	u16 addres = 0;
+	int value = 0;
+	struct aml_spi *spi_dev = ci_dev->data;
+	/*add by chl,need add time delay*/
+	mdelay(10);
+	aml_init_send_buf(AM_CI_CMD_GETCD12, data, addres);
+	value = aml_spi_io_api(spi_dev, sendbuf, SENDBUFLEN, AM_CI_CMD_GETCD12);
+	return value;
+}
+
+
+
 /**\brief aml_ci_slot_reset:reset slot
 * \param ci_dev: aml_ci obj,used this data to get spi_dev obj
 * \param slot: slot index
@@ -480,7 +575,7 @@ static int aml_ci_slot_reset(struct aml_ci *ci_dev, int slot)
 	struct aml_spi *spi_dev = ci_dev->data;
 	pr_dbg("Slot(%d): Slot RESET\n", slot);
 	aml_pcmcia_reset(&spi_dev->pc);
-	dvb_ca_en50221_camready_irq(&ci_dev->en50221, 0);
+	dvb_ca_en50221_cimcu_camready_irq(&ci_dev->en50221_cimcu, 0);
 	return 0;
 }
 /**\brief aml_ci_slot_shutdown:show slot
@@ -532,7 +627,7 @@ static int aml_ci_slot_status(struct aml_ci *ci_dev, int slot, int open)
 	}
 	return -EINVAL;
 }
-#if 0
+#if 1
 /**\brief aml_ci_gio_get_irq:get gpio cam irq pin value
 * \return
 *   - irq pin value
@@ -541,7 +636,12 @@ static int aml_ci_slot_status(struct aml_ci *ci_dev, int slot, int open)
 static int aml_ci_gio_get_irq(void)
 {
 	int ret = 0;
-	ret = aml_get_gpio_value(g_spi_dev->irq_cam_pin);
+	if (g_spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI)
+		ret = aml_get_gpio_value(g_spi_dev->irq_cam_pin);
+	else if (g_spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI)
+		ret = aml_get_gpio_value(g_spi_dev->mcu_irq_pin);
+	else
+		pr_error("aml_ci_gio_get_irq io type not surport\n");
 	return ret;
 }
 #endif
@@ -567,12 +667,19 @@ static int aml_gio_power(struct aml_pcmcia *pc, int enable)
 		return -1;
 	}
 	pr_dbg("%s : %d\r\n", __func__, enable);
-	if (enable == AML_PWR_OPEN) {
+	if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI) {
+		if (enable == AML_PWR_OPEN) {
 		/*hi level ,open power*/
 		ret = aml_set_gpio_out(spi_dev->pwr_pin, AML_GPIO_HIGH);
+		} else {
+			/*low level ,close power*/
+			ret = aml_set_gpio_out(spi_dev->pwr_pin, AML_GPIO_LOW);
+		}
+	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+		//no need power cam,we power cam card on MCU.
+		aml_ci_power_by_spi((struct aml_ci *)spi_dev->priv, 0, enable);
 	} else {
-		/*low level ,close power*/
-		ret = aml_set_gpio_out(spi_dev->pwr_pin, AML_GPIO_LOW);
+		pr_dbg("aml_gio_power type [%d] enable: %d\r\n", spi_dev->io_device_type, enable);
 	}
 	return ret;
 }
@@ -588,11 +695,25 @@ static int aml_gio_reset(struct aml_pcmcia *pc, int enable)
 	/*need set hi and sleep set low*/
 	int ret = 0;
 	struct aml_spi *spi_dev = pc->priv;
-	pr_dbg("%s : %d\r\n", __func__, enable);
-	if (enable == AML_L)
-		ret = aml_set_gpio_out(spi_dev->reset_pin, AML_GPIO_LOW);
-	else
-		ret = aml_set_gpio_out(spi_dev->reset_pin, AML_GPIO_HIGH);
+
+	if (spi_dev != NULL)
+		pr_dbg("%s : %d  \r\n", __func__, enable);
+
+	pr_dbg("%s : %d  type: %d\r\n", __func__, enable, spi_dev->io_device_type);
+	if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI) {
+		if (enable == AML_L)
+			ret = aml_set_gpio_out(spi_dev->reset_pin, AML_GPIO_LOW);
+		else
+			ret = aml_set_gpio_out(spi_dev->reset_pin, AML_GPIO_HIGH);
+	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+		if (spi_dev == NULL || spi_dev->priv == NULL) {
+			pr_dbg("rst by spi-spidev-null-\r\n");
+			return -1;
+		}
+		aml_ci_rst_by_spi((struct aml_ci *)spi_dev->priv, 0, enable);
+	} else {
+		pr_dbg("aml_gio_power type [%d] enable: %d\r\n", spi_dev->io_device_type, enable);
+	}
 	return ret;
 }
 
@@ -605,17 +726,17 @@ static int aml_gio_reset(struct aml_pcmcia *pc, int enable)
 */
 /*need change*/
 static int aml_gio_init_irq(struct aml_pcmcia *pc, int flag)
-	{
+{
 		struct aml_spi *spi_dev = (struct aml_spi *)pc->priv;
-	
+
 #if 0
 		int cd1_pin = desc_to_gpio(spi_dev->cd_pin1);
-	
+
 		int irq = pc->irq-AML_CI_GPIO_IRQ_BASE;
-	
+
 		printk("----cd1_pin=%d irq=%d\r\n", cd1_pin, irq);
 		aml_set_gpio_in(spi_dev->cd_pin1);
-	
+
 		if (flag == IRQF_TRIGGER_RISING)
 			gpio_for_irq(cd1_pin,
 				AML_GPIO_IRQ(irq, FILTER_NUM7, GPIO_IRQ_RISING));
@@ -631,10 +752,15 @@ static int aml_gio_init_irq(struct aml_pcmcia *pc, int flag)
 		else
 			return -1;
 #endif
+	if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI) {
 		gpiod_to_irq(spi_dev->cd_pin1);
-	
-		return 0;
+	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+		gpiod_to_irq(spi_dev->mcu_irq_pin);
+	} else {
+		pr_dbg("aml_gio_init_irq type [%d] \r\n", spi_dev->io_device_type);
 	}
+	return 0;
+}
 
 /**\brief aml_gio_get_cd1:get gpio cd1 pin value
 * \param pc: aml_pcmcia obj,used this priv to get spi_dev obj
@@ -644,9 +770,15 @@ static int aml_gio_init_irq(struct aml_pcmcia *pc, int flag)
 */
 static int aml_gio_get_cd1(struct aml_pcmcia *pc)
 {
-	int ret = 0;
+	int ret = 1;
 	struct aml_spi *spi_dev = pc->priv;
-	ret = aml_get_gpio_value(spi_dev->cd_pin1);
+	if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI) {
+		ret = aml_get_gpio_value(spi_dev->cd_pin1);
+	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+		ret = aml_ci_getcd12_by_spi((struct aml_ci *)spi_dev->priv, 0, 0);
+	} else {
+		pr_dbg("aml_gio_get_cd1 not surport type [%d] \r\n", spi_dev->io_device_type);
+	}
 	return ret;
 }
 /**\brief aml_gio_get_cd2:get gpio cd2 pin value
@@ -659,8 +791,13 @@ static int aml_gio_get_cd2(struct aml_pcmcia *pc)
 {
 	int ret = 0;
 	struct aml_spi *spi_dev = pc->priv;
-	ret = aml_get_gpio_value(spi_dev->cd_pin2);
-	pr_dbg("%s : %d\r\n", __func__, ret);
+	if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI) {
+		ret = aml_get_gpio_value(spi_dev->cd_pin2);
+	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+		ret = aml_ci_getcd12_by_spi((struct aml_ci *)spi_dev->priv, 0, 1);
+	} else {
+		pr_dbg("aml_gio_get_cd2 not surport type [%d] \r\n", spi_dev->io_device_type);
+	}
 	return ret;
 }
 /**\brief aml_cam_plugin:notify en50221 cam card in or out
@@ -676,10 +813,10 @@ static int aml_cam_plugin(struct aml_pcmcia *pc, int plugin)
 	((struct aml_spi *)(pc->priv))->priv;
 	pr_dbg("%s : %d\r\n", __func__, plugin);
 	if (plugin) {
-		dvb_ca_en50221_camchange_irq(&ci->en50221,
+		dvb_ca_en50221_cimcu_camchange_irq(&ci->en50221_cimcu,
 			0, DVB_CA_EN50221_CAMCHANGE_INSERTED);
 	} else {
-		dvb_ca_en50221_camchange_irq(&ci->en50221,
+		dvb_ca_en50221_cimcu_camchange_irq(&ci->en50221_cimcu,
 			0, DVB_CA_EN50221_CAMCHANGE_REMOVED);
 	}
 	return 0;
@@ -706,6 +843,7 @@ static void aml_pcmcia_alloc(struct aml_spi *spi_dev,
 	(*pcmcia)->slot_state = MODULE_XTRACTED;
 	(*pcmcia)->priv = spi_dev;
 	(*pcmcia)->run_type = 0;/*0:irq;1:poll*/
+	(*pcmcia)->io_device_type = AML_DVB_IO_TYPE_CIMAX;
 }
 
 /**\brief aml_spi_get_config_from_dts:get spi config and gpio config from dts
@@ -776,62 +914,79 @@ static int aml_spi_get_config_from_dts(struct aml_spi *spi_dev)
 		spi_dev->write_check = 0;
 	else
 		spi_dev->write_check = (unsigned char)val;
-	/*get  cd1 irq num*/
-	ret = of_property_read_u32(child, "irq_cd1", &val);
-	if (ret) {
-		spi_dev->irq = 5;
+
+	//below is get cd1 cd2 pwr irq reset gpio info
+	if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI) {
+		/*get  cd1 irq num*/
+		ret = of_property_read_u32(child, "irq_cd1", &val);
+		if (ret) {
+			spi_dev->irq = 5;
+		} else {
+			/*set irq value need add
+			AML_CI_GPIO_IRQ_BASE,but
+			we need minus
+			AML_CI_GPIO_IRQ_BASE
+			when gpio request irq */
+			spi_dev->irq = val+AML_CI_GPIO_IRQ_BASE;
+		}
+
+		spi_dev->irq = irq_of_parse_and_map(
+		pdev->dev.of_node, 0);
+		AML_CI_GPIO_IRQ_BASE = spi_dev->irq - val;
+		pr_dbg("get spi irq : %d  0:%d USEDBASE:%d val:%d\r\n",
+			spi_dev->irq, INT_GPIO_0, AML_CI_GPIO_IRQ_BASE, val);
+		/*get reset pwd cd1 cd2 gpio pin*/
+		spi_dev->reset_pin = NULL;
+		ret = spi_get_gpio_by_name(spi_dev, &spi_dev->reset_pin,
+		&spi_dev->reset_pin_value, "reset_pin",
+		OUTPUT, OUTLEVEL_HIGH);
+		if (ret) {
+			pr_error("dvb ci reset pin request failed\n");
+			return -1;
+		}
+		spi_dev->cd_pin1 = NULL;
+		ret = spi_get_gpio_by_name(spi_dev,
+			&spi_dev->cd_pin1,
+			&spi_dev->cd_pin1_value, "cd_pin1",
+			INPUT, OUTLEVEL_HIGH);
+		if (ret) {
+			pr_error("dvb ci cd_pin1 pin request failed\n");
+			return -1;
+		}
+		spi_dev->cd_pin2 = spi_dev->cd_pin1;
+		spi_dev->cd_pin2_value = spi_dev->cd_pin1_value;
+		spi_dev->pwr_pin = NULL;
+		pr_dbg("spi_dev->cd_pin1_value==%d\r\n", spi_dev->cd_pin1_value);
+		ret = spi_get_gpio_by_name(spi_dev,
+			&spi_dev->pwr_pin, &spi_dev->pwr_pin_value,
+			"pwr_pin", OUTPUT, OUTLEVEL_HIGH);
+		if (ret) {
+			pr_error("dvb ci pwr_pin pin request failed\n");
+			return -1;
+		}
+		spi_dev->irq_cam_pin = NULL;
+		ret = spi_get_gpio_by_name(spi_dev,
+			&spi_dev->irq_cam_pin, &spi_dev->irq_cam_pin_value,
+			"irq_cam_pin", INPUT, OUTLEVEL_HIGH);
+		if (ret) {
+			pr_error("dvbci  irq_cam_pin pin request failed\n");
+			return -1;
+		}
+	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+		//get mcu irq gpio
+		spi_dev->mcu_irq_pin = NULL;
+		ret = spi_get_gpio_by_name(spi_dev,
+			&spi_dev->mcu_irq_pin,
+			&spi_dev->mcu_irq_pin_value, "mcu_irq_pin",
+			INPUT, OUTLEVEL_HIGH);
+		if (ret) {
+			pr_error("dvb ci mcu_irq_pin pin request failed\n");
+			return -1;
+		}
+		spi_dev->irq = gpiod_to_irq(spi_dev->mcu_irq_pin) ;
 	} else {
-		/*set irq value need add
-		AML_CI_GPIO_IRQ_BASE,but
-		we need minus
-		AML_CI_GPIO_IRQ_BASE
-		when gpio request irq */
-		spi_dev->irq = val+AML_CI_GPIO_IRQ_BASE;
+		pr_error("dvbci  io device type error [%d]\n", spi_dev->io_device_type);
 	}
-
-	spi_dev->irq = irq_of_parse_and_map(
-	pdev->dev.of_node, 0);
-	AML_CI_GPIO_IRQ_BASE = spi_dev->irq - val;
-	pr_dbg("get spi irq : %d  0:%d USEDBASE:%d val:%d\r\n",
-		spi_dev->irq, INT_GPIO_0, AML_CI_GPIO_IRQ_BASE, val);
-	/*get reset pwd cd1 cd2 gpio pin*/
-	spi_dev->reset_pin = NULL;
-	ret = spi_get_gpio_by_name(spi_dev, &spi_dev->reset_pin,
-	&spi_dev->reset_pin_value, "reset_pin",
-	OUTPUT, OUTLEVEL_HIGH);
-	if (ret) {
-		pr_error("dvb ci reset pin request failed\n");
-		return -1;
-	}
-	spi_dev->cd_pin1 = NULL;
-	ret = spi_get_gpio_by_name(spi_dev,
-		&spi_dev->cd_pin1,
-		&spi_dev->cd_pin1_value, "cd_pin1",
-		INPUT, OUTLEVEL_HIGH);
-	if (ret) {
-		pr_error("dvb ci cd_pin1 pin request failed\n");
-		return -1;
-	}
-	spi_dev->cd_pin2 = spi_dev->cd_pin1;
-	spi_dev->cd_pin2_value = spi_dev->cd_pin1_value;
-	spi_dev->pwr_pin = NULL;
-	pr_dbg("spi_dev->cd_pin1_value==%d\r\n", spi_dev->cd_pin1_value);
-	ret = spi_get_gpio_by_name(spi_dev,
-		&spi_dev->pwr_pin, &spi_dev->pwr_pin_value,
-		"pwr_pin", OUTPUT, OUTLEVEL_HIGH);
-	if (ret) {
-		pr_error("dvb ci pwr_pin pin request failed\n");
-		return -1;
-	}
-	spi_dev->irq_cam_pin = NULL;
-	ret = spi_get_gpio_by_name(spi_dev,
-		&spi_dev->irq_cam_pin, &spi_dev->irq_cam_pin_value,
-		"irq_cam_pin", INPUT, OUTLEVEL_HIGH);
-	if (ret) {
-		pr_error("dvbci  irq_cam_pin pin request failed\n");
-		return -1;
-	}
-
 	return 0;
 }
 /**\brief aml_ci_free_gpio:free ci gpio
@@ -877,7 +1032,8 @@ static void aml_ci_free_gpio(struct aml_spi *spi_dev)
 static int ci_spi_dev_probe(struct spi_device *spi)
 {
 	int ret;
-	pr_dbg("spi Dev probe--\n");
+	pr_dbg("spi Dev probe--\r\n");
+	spin_lock(&(g_spi_dev->spi_lock));
 	if (g_spi_dev)
 		g_spi_dev->spi = spi;
 	 else
@@ -886,6 +1042,7 @@ static int ci_spi_dev_probe(struct spi_device *spi)
 	ret = spi_setup(spi);
 	if (ret)
 		pr_dbg("spi setup failed\n");
+	spin_unlock(&(g_spi_dev->spi_lock));
 	return ret;
 }
 /**\brief ci_spi_dev_remove:spi remove api
@@ -933,20 +1090,26 @@ int aml_spi_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 	g_spi_dev = spi_dev;
 	spi_dev->pdev = pdev;
 	spi_dev->priv = ci_dev;
+	spi_dev->spi = NULL;
+	/*init io device type*/
+	spi_dev->io_device_type = ci_dev->io_type;
+	pr_dbg("*********spi Dev type [%d]\n", ci_dev->io_type);
 	/*get config from dts*/
 	aml_spi_get_config_from_dts(spi_dev);
+
+	/*init spi_lock*/
+	spin_lock_init(&(spi_dev->spi_lock));
 	/*regist api dev*/
-	spi_register_board_info(spi_dev->spi_bdinfo, 1);
+	pr_dbg("*********spi Dev regist**********\r\n");
+	result = spi_register_board_info(spi_dev->spi_bdinfo, 1);
+	if (result) {
+		pr_error("register amlspi_dev spi boardinfo failed\n");
+		goto fail1;
+	}
 	result = spi_register_driver(&ci_spi_dev_driver);
 	if (result) {
 		pr_error("register amlspi_dev spi driver failed\n");
 		goto fail1;
-	}
-	aml_pcmcia_alloc(spi_dev, &pc);
-	result = aml_pcmcia_init(pc);
-	if (result < 0) {
-		pr_error("aml_pcmcia_init failed\n");
-		goto fail2;
 	}
 
 	/*init ci_dev used api.*/
@@ -959,8 +1122,14 @@ int aml_spi_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 	ci_dev->ci_slot_ts_enable = aml_ci_ts_control;
 	ci_dev->ci_poll_slot_status = aml_ci_slot_status;
 	ci_dev->data = spi_dev;
-	/*init spi_lock*/
-	spin_lock_init(&(spi_dev->spi_lock));
+
+	aml_pcmcia_alloc(spi_dev, &pc);
+	pc->io_device_type = spi_dev->io_device_type;
+	result = aml_pcmcia_init(pc);
+	if (result < 0) {
+		pr_error("aml_pcmcia_init failed\n");
+		goto fail2;
+	}
 	return 0;
 fail2:
 	spi_unregister_driver(&ci_spi_dev_driver);
@@ -993,7 +1162,7 @@ int aml_spi_exit(struct aml_ci *ci)
 EXPORT_SYMBOL(aml_spi_exit);
 
 
-#if 0
+#if 1
 /********************************************************/
 /********************************************************/
 /*******        for spi test api            *************/
@@ -1545,6 +1714,7 @@ static ssize_t aml_spi_io_test(struct class *class,
 struct class_attribute *attr, const char *buf, size_t size)
 {
 	int n = 0;
+	int i = 0;
 	char *buf_orig, *ps, *token;
 	char *parm[3];
 	unsigned int addr = 0, val = 0, retval = 0;
@@ -1554,7 +1724,7 @@ struct class_attribute *attr, const char *buf, size_t size)
 	ps = buf_orig;
 	while (1) {
 		/*need set '\n' to ' \n'*/
-		token = strsep(&ps, "\n");
+		token = strsep(&ps, " ");
 		if (token == NULL)
 			break;
 		if (*token == '\0')
@@ -1563,13 +1733,13 @@ struct class_attribute *attr, const char *buf, size_t size)
 	}
 
 	if (!n || ((n > 0) && (strlen(parm[0]) != 2))) {
-		pr_err("invalid command\n");
+		pr_err("invalid command n[%x]p[%x][%s]\n", n,(int)strlen(parm[0]),parm[0]);
 		kfree(buf_orig);
 		return size;
 	}
 
 	if ((parm[0][0] == 'r')) {
-		if (n != 2) {
+		if (n > 2) {
 			pr_err("read: invalid parameter\n");
 			kfree(buf_orig);
 			return size;
@@ -1577,16 +1747,18 @@ struct class_attribute *attr, const char *buf, size_t size)
 	if (kstrtol(parm[1], 0, &value) == 0)
 		addr = (int)value;
 		pr_err("%s 0x%x\n", parm[0], addr);
-	/*	switch ((char)parm[0][1]) {
+		switch ((char)parm[0][1]) {
 			case 'i':
-				retval = aml_ci_io_read_by_spi(ci, 0, addr);
+				for (i = 0; i < 1000; i++)
+					retval = aml_ci_io_read_by_spi(ci, 0, addr);
 				break;
 			case 'a':
-				retval = aml_ci_mem_read_by_spi(ci, 0, addr);
+				for (i = 0; i < 1000; i++)
+					retval = aml_ci_mem_read_by_spi(ci, 0, addr);
 				break;
 			default:
 				break;
-		}*/
+		}
 		pr_dbg("%s: 0x%x --> 0x%x\n", parm[0], addr, retval);
 	} else if ((parm[0][0] == 'w')) {
 		if (n != 3) {
@@ -1645,20 +1817,44 @@ static struct class aml_spi_class = {
 	.class_attrs = aml_spi_class_attrs,
 };
 
-static int  aml_spi_mod_init(void)
+
+/**\brief aml_con_gpio_by_spi:control gpio by spi
+* \param gpio: the value is from AM_CON_GPIO def
+* \param level: 0: set low,1:set hight
+* \return
+*   - 0:ok
+*   - -EINVAL : error
+*/
+int aml_con_gpio_by_spi(int gpio, int level)
+{
+	u8  data = gpio;
+	u16 addres = level;
+	int value = 0;
+	struct aml_spi *spi_dev = g_spi_dev;
+	/*add by chl,need add time delay*/
+	mdelay(10);
+	aml_init_send_buf(AM_CI_CMD_CONGPIO, data, addres);
+	value = aml_spi_io_api(spi_dev, sendbuf, SENDBUFLEN, AM_CI_CMD_CONGPIO);
+	return value;
+}
+EXPORT_SYMBOL(aml_con_gpio_by_spi);
+
+int  aml_spi_mod_init(void)
 {
 	int ret;
 	pr_dbg("Amlogic DVB SPI Init\n");
 	ret = class_register(&aml_spi_class);
 	return 0;
 }
-
-static void  aml_spi_mod_exit(void)
+//EXPORT_SYMBOL(aml_spi_mod_init);
+void  aml_spi_mod_exit(void)
 {
 	pr_dbg("Amlogic DVB SPI Exit\n");
 	class_unregister(&aml_spi_class);
 }
-
+EXPORT_SYMBOL(aml_spi_mod_exit);
+#endif
+#if 0
 module_init(aml_spi_mod_init);
 module_exit(aml_spi_mod_exit);
 

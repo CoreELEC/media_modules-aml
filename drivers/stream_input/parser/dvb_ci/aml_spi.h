@@ -30,35 +30,40 @@
 aml spi dev
 */
 struct aml_spi {
-		spinlock_t spi_lock;
+	spinlock_t spi_lock;
 
-		/* add SPI DEV */
-		struct spi_board_info *spi_bdinfo;
-		struct spi_device *spi;
-		struct platform_device *pdev;
-		struct device *dev;
+	/* add SPI DEV */
+	struct spi_board_info *spi_bdinfo;
+	struct spi_device *spi;
+	struct platform_device *pdev;
+	struct device *dev;
 
-		/* spi otherconfig */
-		int cs_hold_delay;
-		int cs_clk_delay;
-		int write_check;
+	/* spi otherconfig */
+	int cs_hold_delay;
+	int cs_clk_delay;
+	int write_check;
 
-		/* add gpio pin */
-		struct gpio_desc *reset_pin;
-		int reset_pin_value;
-		struct gpio_desc *cd_pin1;
-		int cd_pin1_value;
-		struct gpio_desc *cd_pin2;
-		int cd_pin2_value;
-		struct gpio_desc *pwr_pin;
-		int pwr_pin_value;
+	/* add gpio pin */
+	struct gpio_desc *reset_pin;
+	int reset_pin_value;
+	struct gpio_desc *cd_pin1;
+	int cd_pin1_value;
+	struct gpio_desc *cd_pin2;
+	int cd_pin2_value;
+	struct gpio_desc *pwr_pin;
+	int pwr_pin_value;
 
-		/* cam and mcu irq */
-		struct gpio_desc *irq_cam_pin;
-		int irq_cam_pin_value;
-		int irq;
-		struct aml_pcmcia pc;
-		void *priv;
+	/* cam and mcu irq */
+	struct gpio_desc *irq_cam_pin;
+	int irq_cam_pin_value;
+	int irq;
+	struct aml_pcmcia pc;
+	void *priv;
+	/*for AML_DVB_IO_TYPE_SPI_T312 device*/
+	struct gpio_desc *mcu_irq_pin;
+	int mcu_irq_pin_value;
+	/*device type*/
+	int io_device_type;
 };
 enum aml_gpio_level_e {
 		AML_GPIO_LOW = 0,
@@ -74,7 +79,11 @@ enum AM_CI_CMD {
 		AM_CI_CMD_MEMR,
 		AM_CI_CMD_MEMW,
 		AM_CI_CMD_FULLTEST,
-		AM_CI_CMD_CISTEST
+		AM_CI_CMD_CISTEST,
+		AM_CI_CMD_GETCD12,
+		AM_CI_CMD_POWER,
+		AM_CI_CMD_RESET,
+		AM_CI_CMD_CONGPIO,
 };
 enum AM_SPI_RECIVERSTEP {
 		AM_SPI_STEP_INIT = 0,
@@ -87,6 +96,16 @@ enum AM_SPI_RECIVERSTEP {
 		AM_SPI_STEP_END1,
 		AM_SPI_STEP_END2
 };
+
+enum AM_CON_GPIO
+{
+	AM_CONGPIO_SEL_LVDS = 0,
+	AM_CONGPIO_SCN_EN,
+	AM_CONGPIO_LD_EN2,
+	AM_CONGPIO_2D3D,
+	AM_CONGPIO_AMP_RST,
+};
+
 extern int dirspi_xfer(struct spi_device *spi, u8 *tx_buf, u8 *rx_buf,
 		       int len);
 extern int dirspi_write(struct spi_device *spi, u8 *buf, int len);
@@ -96,5 +115,7 @@ extern void dirspi_stop(struct spi_device *spi);
 extern void dvb_ca_en50221_camready_irq(struct dvb_ca_en50221 *pubca, int slot);
 extern int aml_spi_init(struct platform_device *pdev, struct aml_ci *ci_dev);
 extern int aml_spi_exit(struct aml_ci *ci_dev);
+extern int aml_spi_mod_init(void);
+extern void aml_spi_mod_exit(void);
 
 #endif				/* __AML_SPI_H_ */

@@ -1705,7 +1705,7 @@ static void stb_enable(struct aml_dvb *dvb)
 		hiu = 0;
 	/* invert ts out clk,add ci model need add this*/
 	if (dvb->ts_out_invert) {
-		/*printk("ts out invert ---\r\n");*/
+		printk("ts out invert ---\r\n");
 		data = READ_MPEG_REG(TS_TOP_CONFIG);
 		data |= 1 << TS_OUT_CLK_INVERT;
 		WRITE_MPEG_REG(TS_TOP_CONFIG, data);
@@ -2957,6 +2957,11 @@ static int dmx_enable(struct aml_dmx *dmx)
 	case AM_TS_SRC_TS2:
 		fec_sel = 2;
 		fec_ctrl = dvb->ts[2].control;
+		record = record ? 1 : 0;
+		break;
+	case AM_TS_SRC_TS3:
+		fec_sel = 3;
+		fec_ctrl = dvb->ts[3].control;
 		record = record ? 1 : 0;
 		break;
 	case AM_TS_SRC_S_TS0:
@@ -4882,7 +4887,7 @@ int aml_dmx_hw_set_source(struct dmx_demux *demux, dmx_source_t src)
 	case DMX_SOURCE_FRONT3:
 		hw_src =
 			(dvb->ts[3].mode ==
-			 AM_TS_SERIAL) ? (dvb->ts[3].s2p_id + AM_TS_SRC_S_TS0) : AM_TS_SRC_TS2;
+			 AM_TS_SERIAL) ? (dvb->ts[3].s2p_id + AM_TS_SRC_S_TS0) : AM_TS_SRC_TS3;
 		break;
 	case DMX_SOURCE_DVR0:
 		hw_src = AM_TS_SRC_HIU;

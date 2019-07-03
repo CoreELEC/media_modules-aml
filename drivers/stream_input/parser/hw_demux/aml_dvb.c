@@ -94,6 +94,8 @@ module_param(debug_dvb, int, 0644);
 
 #define CARD_NAME "amlogic-dvb"
 
+
+
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
 MODULE_PARM_DESC(dsc_max, "max number of dsc");
@@ -1134,6 +1136,9 @@ static ssize_t demux##i##_show_source(struct class *class,  \
 	CASE_PREFIX case AM_TS_SRC_S_TS2:\
 		src = "ts2";\
 	break;\
+	CASE_PREFIX case AM_TS_SRC_TS3:\
+		src = "ts3";\
+	break;\
 	CASE_PREFIX case AM_TS_SRC_DMX0:\
 		src = "dmx0";\
 	break;\
@@ -1167,6 +1172,8 @@ static ssize_t demux##i##_store_source(struct class *class,  \
 		src = DMX_SOURCE_FRONT1;\
 	} else if (!strncmp("ts2", buf, 3)) {\
 		src = DMX_SOURCE_FRONT2;\
+	} else if (!strncmp("ts3", buf, 3)) {\
+		src = DMX_SOURCE_FRONT3;\
 	} else if (!strncmp("hiu1", buf, 4)) {\
 		src = DMX_SOURCE_DVR1;\
 	} else if (!strncmp("hiu", buf, 3)) {\
