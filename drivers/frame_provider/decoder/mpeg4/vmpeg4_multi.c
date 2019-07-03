@@ -290,6 +290,7 @@ struct vdec_mpeg4_hw_s {
 	struct firmware_s *fw;
 	u32 blkmode;
 	wait_queue_head_t wait_q;
+	u32 dec_again_cnt;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -752,7 +753,15 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 			READ_VREG(VIFF_BIT_CNT));
 
 		if (vdec_frame_based(vdec)) {
-			vmpeg4_save_hw_context(hw);
+			if (++hw->dec_again_cnt > 3) {
+				hw->dec_again_cnt = 0;
+				hw->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&hw->work);
+			} else {
+				//vmpeg4_save_hw_context(hw);
+				hw->dec_result = DEC_RESULT_AGAIN;
+				vdec_schedule_work(&hw->work);
+			}
 		} else {
 			reset_process_time(hw);
 			hw->dec_result = DEC_RESULT_AGAIN;
@@ -1083,8 +1092,7 @@ static void vmpeg4_work(struct work_struct *work)
 		vdec_vframe_dirty(vdec, hw->chunk);
 		hw->chunk = NULL;
 	} else if (hw->dec_result == DEC_RESULT_AGAIN
-	&& (vdec->next_status !=
-		VDEC_STATUS_DISCONNECTED)) {
+		&& (vdec->next_status != VDEC_STATUS_DISCONNECTED)) {
 		/*
 			stream base: stream buf empty or timeout
 			frame base: vdec_prepare_input fail
@@ -1470,7 +1478,7 @@ static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 		amvdec_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
-	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEOUT_STATUS,
+	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"%s decoder timeout\n", __func__);
 	reset_process_time(hw);
 	hw->first_i_frame_ready = 0;
@@ -1671,6 +1679,7 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 	hw->buffer_not_ready = 0;
 	hw->init_flag = 0;
 	hw->dec_result = DEC_RESULT_NONE;
+	hw->dec_again_cnt = 0;
 
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++)
 		hw->vfbuf_use[i] = 0;
