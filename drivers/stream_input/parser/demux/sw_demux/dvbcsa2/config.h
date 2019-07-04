@@ -10,11 +10,13 @@
 /* Using SSE2 bitslice. */
 /* #undef DVBCSA_USE_SSE */
 
+#if __SIZEOF_POINTER__ == 4
 /* Using 32 bits integer bitslice. */
-/* #undef DVBCSA_USE_UINT32 */
-
+#define DVBCSA_USE_UINT32  1
+#else
 /* Using 64 bits integer bitslice. */
 #define DVBCSA_USE_UINT64 1
+#endif
 
 /* Define to 1 if you have the <assert.h> header file. */
 #ifdef __KERNEL__
