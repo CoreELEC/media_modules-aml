@@ -254,12 +254,17 @@ static u32 again_threshold = 0x40;
 
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
-/* double_write_mode: 0, no double write
-					  1, 1:1 ratio
-					  2, (1/4):(1/4) ratio
-					  4, (1/2):(1/2) ratio
-					0x10, double write only
-*/
+/* double_write_mode:
+ *	0, no double write;
+ *	1, 1:1 ratio;
+ *	2, (1/4):(1/4) ratio;
+ *	3, (1/4):(1/4) ratio, with both compressed frame included
+ *	4, (1/2):(1/2) ratio;
+ *	0x10, double write only
+ *	0x100, if > 1080p,use mode 4,else use mode 1;
+ *	0x200, if > 1080p,use mode 2,else use mode 1;
+ *	0x300, if > 720p, use mode 4, else use mode 1;
+ */
 static u32 double_write_mode;
 
 #define DRIVER_NAME "amvdec_avs2"
@@ -870,37 +875,56 @@ static u32 get_valid_double_write_mode(struct AVS2Decoder_s *dec)
 static int get_double_write_mode(struct AVS2Decoder_s *dec)
 {
 	u32 valid_dw_mode = get_valid_double_write_mode(dec);
-	u32 dw;
-	if (valid_dw_mode == 0x100) {
-		int w = dec->avs2_dec.img.width;
-		int h = dec->avs2_dec.img.height;
+	int w = dec->avs2_dec.img.width;
+	int h = dec->avs2_dec.img.height;
+	u32 dw = 0x1; /*1:1*/
+	switch (valid_dw_mode) {
+	case 0x100:
 		if (w > 1920 && h > 1088)
 			dw = 0x4; /*1:2*/
-		else
-			dw = 0x1; /*1:1*/
-
-		return dw;
+		break;
+	case 0x200:
+		if (w > 1920 && h > 1088)
+			dw = 0x2; /*1:4*/
+		break;
+	case 0x300:
+		if (w > 1280 && h > 720)
+			dw = 0x4; /*1:2*/
+		break;
+	default:
+		dw = valid_dw_mode;
+		break;
 	}
-
-	return valid_dw_mode;
+	return dw;
 }
 
 /* for double write buf alloc */
 static int get_double_write_mode_init(struct AVS2Decoder_s *dec)
 {
 	u32 valid_dw_mode = get_valid_double_write_mode(dec);
-	if (valid_dw_mode == 0x100) {
-		u32 dw;
-		int w = dec->init_pic_w;
-		int h = dec->init_pic_h;
+	u32 dw;
+	int w = dec->init_pic_w;
+	int h = dec->init_pic_h;
+
+	dw = 0x1; /*1:1*/
+	switch (valid_dw_mode) {
+	case 0x100:
 		if (w > 1920 && h > 1088)
 			dw = 0x4; /*1:2*/
-		else
-			dw = 0x1; /*1:1*/
-
-		return dw;
+		break;
+	case 0x200:
+		if (w > 1920 && h > 1088)
+			dw = 0x2; /*1:4*/
+		break;
+	case 0x300:
+		if (w > 1280 && h > 720)
+			dw = 0x4; /*1:2*/
+		break;
+	default:
+		dw = valid_dw_mode;
+		break;
 	}
-	return valid_dw_mode;
+	return dw;
 }
 
 static int get_double_write_ratio(struct AVS2Decoder_s *dec,
