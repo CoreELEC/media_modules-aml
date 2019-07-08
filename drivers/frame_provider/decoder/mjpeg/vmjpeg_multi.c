@@ -109,6 +109,8 @@ unsigned int mmjpeg_debug_mask = 0xff;
 #define PRINT_FRAME_NUM               0x0080
 #define PRINT_FLAG_FORCE_DONE         0x0100
 #define PRINT_FRAMEBASE_DATA          0x0400
+#define PRINT_FLAG_TIMEOUT_STATUS     0x1000
+
 int mmjpeg_debug_print(int index, int debug_flag, const char *fmt, ...)
 {
 	if (((debug_enable & debug_flag) &&
@@ -196,7 +198,7 @@ struct vdec_mjpeg_hw_s {
 	struct firmware_s *fw;
 	struct timer_list check_timer;
 	u32 decode_timeout_count;
-	u32 start_process_time;
+	unsigned long int start_process_time;
 	u32 last_vld_level;
 	u8 eos;
 	u32 frame_num;
@@ -722,15 +724,15 @@ static void check_timer_func(unsigned long arg)
 	int timeout_val = decode_timeout_val;
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
-	"%s: status:nstatus=%d:%d\n",
-			__func__, vdec->status, vdec->next_status);
+		"%s: status:nstatus=%d:%d\n",
+		__func__, vdec->status, vdec->next_status);
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
-	"%s: %d,buftl=%x:%x:%x:%x\n",
-			__func__, __LINE__,
-			READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
-			READ_PARSER_REG(PARSER_VIDEO_WP),
-			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-			READ_VREG(VLD_MEM_VIFIFO_WP));
+		"%s: %d,buftl=%x:%x:%x:%x\n",
+		__func__, __LINE__,
+		READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
+		READ_PARSER_REG(PARSER_VIDEO_WP),
+		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+		READ_VREG(VLD_MEM_VIFIFO_WP));
 
 	if (radr != 0) {
 		if (rval != 0) {
@@ -742,13 +744,13 @@ static void check_timer_func(unsigned long arg)
 		radr = 0;
 	}
 
-	if ((debug_enable == 0) &&
-			(input_frame_based(vdec) ||
-			(READ_VREG(VLD_MEM_VIFIFO_LEVEL) > 0x100)) &&
-			(timeout_val > 0) &&
-			(hw->start_process_time > 0) &&
-			((1000 * (jiffies - hw->start_process_time) / HZ)
-				> timeout_val)) {
+	if (((debug_enable & PRINT_FLAG_TIMEOUT_STATUS) == 0) &&
+		(input_frame_based(vdec) ||
+		((u32)READ_VREG(VLD_MEM_VIFIFO_LEVEL) > 0x100)) &&
+		(timeout_val > 0) &&
+		(hw->start_process_time > 0) &&
+		((1000 * (jiffies - hw->start_process_time) / HZ)
+			> timeout_val)) {
 		if (hw->last_vld_level == READ_VREG(VLD_MEM_VIFIFO_LEVEL)) {
 			if (hw->decode_timeout_count > 0)
 				hw->decode_timeout_count--;
@@ -924,6 +926,7 @@ static unsigned long run_ready(struct vdec_s *vdec,
 			return 0;
 	}
 	hw->not_run_ready = 0;
+
 	if (vdec->parallel_dec == 1)
 		return CORE_MASK_VDEC_1;
 	else
