@@ -265,7 +265,7 @@ static unsigned int i_only_flag;
 	bit[12] i_only when error happen
 	bit[13] 0: mark error according to last pic, 1: ignore mark error
 */
-static unsigned int error_proc_policy = 0xf36; /*0x1f14*/
+static unsigned int error_proc_policy = 0xfb6; /*0x1f14*/
 
 
 /*
