@@ -151,7 +151,7 @@ static ssize_t threadrw_write_in(
 {
 	int ret = 0;
 	int off = 0;
-	int left = count;
+	size_t left = count;
 	int wait_num = 0;
 	unsigned long flags;
 
