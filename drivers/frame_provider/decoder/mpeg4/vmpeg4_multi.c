@@ -144,7 +144,7 @@ static unsigned int frmbase_cont_bitlevel = 0x40;
 #define VMPEG4_DEV_NUM        9
 static unsigned int max_decode_instance_num = VMPEG4_DEV_NUM;
 static unsigned int max_process_time[VMPEG4_DEV_NUM];
-static unsigned int decode_timeout_val = 200;
+static unsigned int decode_timeout_val = 100;
 
 #undef pr_info
 #define pr_info printk
@@ -291,7 +291,6 @@ struct vdec_mpeg4_hw_s {
 	struct firmware_s *fw;
 	u32 blkmode;
 	wait_queue_head_t wait_q;
-	u32 dec_again_cnt;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -765,15 +764,9 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 			READ_VREG(VIFF_BIT_CNT));
 
 		if (vdec_frame_based(vdec)) {
-			if (++hw->dec_again_cnt > 3) {
-				hw->dec_again_cnt = 0;
-				hw->dec_result = DEC_RESULT_DONE;
-				vdec_schedule_work(&hw->work);
-			} else {
-				//vmpeg4_save_hw_context(hw);
-				hw->dec_result = DEC_RESULT_AGAIN;
-				vdec_schedule_work(&hw->work);
-			}
+			//vmpeg4_save_hw_context(hw);
+			hw->dec_result = DEC_RESULT_DONE;
+			vdec_schedule_work(&hw->work);
 		} else {
 			reset_process_time(hw);
 			hw->dec_result = DEC_RESULT_AGAIN;
@@ -1035,8 +1028,9 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		hw->total_frame += repeat_cnt + 1;
 		hw->last_vop_time_inc = vop_time_inc;
 
-		if ((vdec_frame_based(vdec) &&
-			frmbase_cont_bitlevel != 0)) {
+		if (vdec_frame_based(vdec) &&
+			(frmbase_cont_bitlevel != 0) &&
+			(hw->first_i_frame_ready)) {
 			u32 bitcnt = READ_VREG(VIFF_BIT_CNT);
 			if (bitcnt > frmbase_cont_bitlevel) {
 				hw->dec_result = DEC_RESULT_UNFINISH;
@@ -1090,7 +1084,7 @@ static void vmpeg4_work(struct work_struct *work)
 	 */
 	if (hw->dec_result != DEC_RESULT_DONE)
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"mmpeg4: vmpeg_work,result=%d,status=%d\n",
+			"vmpeg4_work: result=%d,status=%d\n",
 			hw->dec_result, hw_to_vdec(hw)->next_status);
 
 	if (hw->dec_result == DEC_RESULT_UNFINISH) {
@@ -1485,7 +1479,7 @@ static void reset_process_time(struct vdec_mpeg4_hw_s *hw)
 }
 static void start_process_time(struct vdec_mpeg4_hw_s *hw)
 {
-	hw->decode_timeout_count = 3;
+	hw->decode_timeout_count = 2;
 	hw->start_process_time = jiffies;
 }
 
@@ -1506,7 +1500,7 @@ static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 			get_data_check_sum(hw, hw->chunk->size));
 	}
 	hw->timeout_cnt++;
-	/* timeout: data droped, frame_num not inaccurate*/
+	/* timeout: data droped, frame_num inaccurate*/
 	hw->frame_num++;
 	reset_process_time(hw);
 	hw->first_i_frame_ready = 0;
@@ -1606,6 +1600,9 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 	/* notify ucode the buffer start address */
 	workspace_buf = codec_mm_vmap(hw->buf_start, WORKSPACE_SIZE);
 	if (workspace_buf) {
+		/* clear to fix decoder timeout at first time */
+		if (!hw->init_flag)
+			memset(workspace_buf, 0, WORKSPACE_SIZE);
 		codec_mm_dma_flush(workspace_buf,
 			WORKSPACE_SIZE, DMA_TO_DEVICE);
 		codec_mm_unmap_phyaddr(workspace_buf);
@@ -1714,7 +1711,6 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 	hw->buffer_not_ready = 0;
 	hw->init_flag = 0;
 	hw->dec_result = DEC_RESULT_NONE;
-	hw->dec_again_cnt = 0;
 	hw->timeout_cnt = 0;
 
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++)
