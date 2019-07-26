@@ -253,6 +253,14 @@ static u32 bad_block_scale;
 #endif
 static u32 enable_userdata_debug;
 
+/* if not define, must clear AV_SCRATCH_J in isr when
+ * ITU_T35 code enabled in ucode, otherwise may fatal
+ * error repeatly.
+ */
+//#define ENABLE_SEI_ITU_T35
+
+
+
 static unsigned int enable_switch_fense = 1;
 #define EN_SWITCH_FENCE() (enable_switch_fense && !is_4k)
 static struct vframe_qos_s s_vframe_qos;
@@ -2576,9 +2584,8 @@ static void vh264_isr(void)
 	unsigned int  framesize;
 	u64 pts_us64;
 	bool force_interlaced_frame = false;
-#ifdef ENABLE_SEI_ITU_T35
 	unsigned int sei_itu35_flags;
-#endif
+
 	static const unsigned int idr_num =
 		FIX_FRAME_RATE_CHECK_IDRFRAME_NUM;
 	static const unsigned int flg_1080_itl =
@@ -3281,12 +3288,17 @@ static void vh264_isr(void)
 	} else if ((cpu_cmd & 0xff) == 0xB) {
 		schedule_work(&qos_work);
 	}
-#ifdef ENABLE_SEI_ITU_T35
+
 	sei_itu35_flags = READ_VREG(AV_SCRATCH_J);
 	if (sei_itu35_flags & (1 << 15)) {	/* data ready */
+#ifdef ENABLE_SEI_ITU_T35
 		schedule_work(&userdata_push_work);
-	}
+#else
+		/* necessary if enabled itu_t35 in ucode*/
+		WRITE_VREG(AV_SCRATCH_J, 0);
 #endif
+	}
+
 #ifdef HANDLE_H264_IRQ
 	return IRQ_HANDLED;
 #else

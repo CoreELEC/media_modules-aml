@@ -1579,31 +1579,35 @@ static int get_double_write_mode(struct VP9Decoder_s *pbi)
 	struct VP9_Common_s *cm = &pbi->common;
 	struct PIC_BUFFER_CONFIG_s *cur_pic_config;
 
-	if (!cm->cur_frame)
-		return 1;/*no valid frame,*/
-	cur_pic_config = &cm->cur_frame->buf;
-	w = cur_pic_config->y_crop_width;
-	h = cur_pic_config->y_crop_height;
+	/* mask for supporting double write value bigger than 0x100 */
+	if (valid_dw_mode & 0xffffff00) {
+		if (!cm->cur_frame)
+			return 1;/*no valid frame,*/
+		cur_pic_config = &cm->cur_frame->buf;
+		w = cur_pic_config->y_crop_width;
+		h = cur_pic_config->y_crop_height;
 
-	dw = 0x1; /*1:1*/
-	switch (valid_dw_mode) {
-	case 0x100:
-		if (w > 1920 && h > 1088)
-			dw = 0x4; /*1:2*/
-		break;
-	case 0x200:
-		if (w > 1920 && h > 1088)
-			dw = 0x2; /*1:4*/
-		break;
-	case 0x300:
-		if (w > 1280 && h > 720)
-			dw = 0x4; /*1:2*/
-		break;
-	default:
-		dw = valid_dw_mode;
-		break;
+		dw = 0x1; /*1:1*/
+		switch (valid_dw_mode) {
+		case 0x100:
+			if (w > 1920 && h > 1088)
+				dw = 0x4; /*1:2*/
+			break;
+		case 0x200:
+			if (w > 1920 && h > 1088)
+				dw = 0x2; /*1:4*/
+			break;
+		case 0x300:
+			if (w > 1280 && h > 720)
+				dw = 0x4; /*1:2*/
+			break;
+		default:
+			break;
+		}
+		return dw;
 	}
-	return dw;
+
+	return valid_dw_mode;
 }
 
 /* for double write buf alloc */
@@ -2738,7 +2742,7 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 	return 0;
 }
 
-struct VP9Decoder_s vp9_decoder;
+/*struct VP9Decoder_s vp9_decoder;*/
 union param_u vp9_param;
 
 /**************************************************
@@ -6283,7 +6287,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 	/* video is not support unaligned with 64 in tl1
 	** vdec canvas mode will be linear when dump yuv is set
 	*/
-	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
 		(pbi->double_write_mode != 0) &&
 		(((pbi->max_pic_w % 64) != 0) ||
 		(pbi->vvp9_amstream_dec_info.width % 64) != 0)) {
@@ -7172,6 +7176,14 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 
 	bit_depth_luma = vp9_param.p.bit_depth;
 	bit_depth_chroma = vp9_param.p.bit_depth;
+
+	if ((vp9_param.p.bit_depth >= VPX_BITS_10) &&
+		(get_double_write_mode(pbi) == 0x10)) {
+		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+		pr_err("fatal err, bit_depth %d, unsupport dw 0x10\n",
+			vp9_param.p.bit_depth);
+		return -1;
+	}
 
 	if (pbi->process_state != PROC_STATE_SENDAGAIN) {
 		ret = vp9_bufmgr_process(pbi, &vp9_param);
