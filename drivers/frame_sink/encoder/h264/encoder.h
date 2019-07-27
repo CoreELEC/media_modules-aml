@@ -42,6 +42,8 @@
 #define HCODEC_IRQ_MBOX_CLR HCODEC_ASSIST_MBOX2_CLR_REG
 #define HCODEC_IRQ_MBOX_MASK HCODEC_ASSIST_MBOX2_MASK
 
+#define H264_ENC_SVC
+
 /* M8: 2550/10 = 255M GX: 2000/10 = 200M */
 #define HDEC_L0()   WRITE_HHI_REG(HHI_VDEC_CLK_CNTL, \
 			 (2 << 25) | (1 << 16) | (1 << 24) | \
@@ -300,6 +302,11 @@ struct encode_picinfo_s {
 	u32 log2_max_pic_order_cnt_lsb;
 	u32 log2_max_frame_num;
 	u32 init_qppicture;
+#ifdef H264_ENC_SVC
+	u32 enable_svc;
+	u32 non_ref_limit;
+	u32 non_ref_cnt;
+#endif
 };
 
 struct encode_cbr_s {
@@ -432,6 +439,13 @@ extern s32 destroy_encode_work_queue(struct encode_wq_s *encode_work_queue);
 /* Bytes(Float) * 256 */
 #define H264_ENC_CBR_PREV_BYTES   HCODEC_HENC_SCRATCH_J
 #define H264_ENC_CBR_REGION_SIZE   HCODEC_HENC_SCRATCH_J
+
+/* for SVC */
+#define H264_ENC_SVC_PIC_TYPE      HCODEC_HENC_SCRATCH_K
+
+/* define for PIC  header */
+#define ENC_SLC_REF 0x8410
+#define ENC_SLC_NON_REF 0x8010
 
 /* --------------------------------------------------- */
 /* ENCODER_STATUS define */
