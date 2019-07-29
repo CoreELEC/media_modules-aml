@@ -7740,13 +7740,13 @@ static void vh264_work(struct work_struct *work)
 		u32 param3 = READ_VREG(AV_SCRATCH_6);
 		u32 param4 = READ_VREG(AV_SCRATCH_B);
 		if (vh264_set_params(hw, param1,
-			param2, param3, param4) < 0) {
-			WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
+			param2, param3, param4) < 0)
+			dpb_print(DECODE_ID(hw), 0, "set parameters error\n");
+		WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
 			(hw->dpb.mDPB.size<<16) |
 			(hw->dpb.mDPB.size<<8));
-			start_process_time(hw);
-			return;
-		}
+		start_process_time(hw);
+		return;
 	} else
 	if (((hw->dec_result == DEC_RESULT_GET_DATA) ||
 		(hw->dec_result == DEC_RESULT_GET_DATA_RETRY))
