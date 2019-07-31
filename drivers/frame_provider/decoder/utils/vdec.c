@@ -33,6 +33,7 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/video_sink/ionvideo_ext.h>
+#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include <linux/amlogic/media/vfm/vfm_ext.h>
 /*for VDEC_DEBUG_SUPPORT*/
 #include <linux/time.h>
@@ -113,6 +114,9 @@ static DEFINE_SPINLOCK(vdec_spin_lock);
 #define DISABLE_FRAME_INFO 2
 
 static int frameinfo_flag = 0;
+static int v4lvideo_add_di = 1;
+static int max_di_instance = 1;
+
 //static int path_debug = 0;
 
 static struct vframe_qos_s *frame_info_buf_in = NULL;
@@ -2247,10 +2251,46 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 				"%s %s", vdec->vf_provider_name,
 				"amvideo");
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
 		} else if (p->frame_base_video_path == FRAME_BASE_PATH_V4L_VIDEO) {
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 				"%s %s %s", vdec->vf_provider_name,
 				vdec->vf_receiver_name, "amvideo");
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
+		} else if (p->frame_base_video_path ==
+				FRAME_BASE_PATH_DI_V4LVIDEO) {
+			r = v4lvideo_assign_map(&vdec->vf_receiver_name,
+					&vdec->vf_receiver_inst);
+			if (r < 0) {
+				pr_err("V4lVideo frame receiver allocation failed.\n");
+				mutex_lock(&vdec_mutex);
+				inited_vcodec_num--;
+				mutex_unlock(&vdec_mutex);
+				goto error;
+			}
+			if (!v4lvideo_add_di || vdec_secure(vdec))
+				snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+					"%s %s", vdec->vf_provider_name,
+					vdec->vf_receiver_name);
+			else {
+				if (vdec->vf_receiver_inst == 0)
+					snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+						"%s %s %s", vdec->vf_provider_name,
+						"deinterlace",
+						vdec->vf_receiver_name);
+				else if (vdec->vf_receiver_inst < max_di_instance)
+					snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+						"%s %s%d %s", vdec->vf_provider_name,
+						"dimulti.",
+						vdec->vf_receiver_inst,
+						vdec->vf_receiver_name);
+				else
+					snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+						"%s %s", vdec->vf_provider_name,
+						vdec->vf_receiver_name);
+			}
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
 		}
@@ -5224,6 +5264,14 @@ module_param(disable_switch_single_to_mult, int, 0664);
 module_param(frameinfo_flag, int, 0664);
 MODULE_PARM_DESC(frameinfo_flag,
 				"\n frameinfo_flag\n");
+module_param(v4lvideo_add_di, int, 0664);
+MODULE_PARM_DESC(v4lvideo_add_di,
+				"\n v4lvideo_add_di\n");
+
+module_param(max_di_instance, int, 0664);
+MODULE_PARM_DESC(max_di_instance,
+				"\n max_di_instance\n");
+
 /*
 *module_init(vdec_module_init);
 *module_exit(vdec_module_exit);
