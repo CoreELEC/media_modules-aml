@@ -3316,6 +3316,59 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			tsync_set_apts(pts);
 		break;
 	}
+	case AMSTREAM_IOC_SET_CRC: {
+		struct usr_crc_info_t crc_info;
+		struct vdec_s *vdec;
+
+		if (copy_from_user(&crc_info, (void __user *)arg,
+			sizeof(struct usr_crc_info_t))) {
+			return -EFAULT;
+		}
+		/*
+		pr_info("id %d, frame %d, y_crc: %08x, uv_crc: %08x\n", crc_info.id,
+			crc_info.pic_num, crc_info.y_crc, crc_info.uv_crc);
+		*/
+		vdec = vdec_get_vdec_by_id(crc_info.id);
+		if (vdec == NULL)
+			return -ENODEV;
+		if (vdec->vfc.cmp_pool == NULL) {
+			vdec->vfc.cmp_pool =
+				vmalloc(USER_CMP_POOL_MAX_SIZE *
+					sizeof(struct usr_crc_info_t));
+			if (vdec->vfc.cmp_pool == NULL)
+				return -ENOMEM;
+		}
+		if (vdec->vfc.usr_cmp_num >= USER_CMP_POOL_MAX_SIZE) {
+			pr_info("warn: could not write any more, max %d",
+				USER_CMP_POOL_MAX_SIZE);
+			return -EFAULT;
+		}
+		memcpy(&vdec->vfc.cmp_pool[vdec->vfc.usr_cmp_num], &crc_info,
+			sizeof(struct usr_crc_info_t));
+		vdec->vfc.usr_cmp_num++;
+		break;
+	}
+	case AMSTREAM_IOC_GET_CRC_CMP_RESULT: {
+		int val, vdec_id;
+		struct vdec_s *vdec;
+
+		if (get_user(val, (int __user *)arg)) {
+			return -EFAULT;
+		}
+		vdec_id = val & 0x00ff;
+		vdec = vdec_get_vdec_by_id(vdec_id);
+		if (vdec == NULL)
+			return -ENODEV;
+		if (val & 0xff00)
+			put_user(vdec->vfc.usr_cmp_num, (int *)arg);
+		else
+			put_user(vdec->vfc.usr_cmp_result, (int *)arg);
+		/*
+		pr_info("amstream get crc32 cmpare num %d result: %d\n",
+			vdec->vfc.usr_cmp_num, vdec->vfc.usr_cmp_result);
+		*/
+		break;
+	}
 	default:
 		r = -ENOIOCTLCMD;
 		break;
