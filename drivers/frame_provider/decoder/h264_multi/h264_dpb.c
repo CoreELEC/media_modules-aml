@@ -2033,7 +2033,9 @@ static void remove_frame_from_dpb(struct h264_dpb_stru *p_H264_Dpb, int pos)
 	for (i = pos; i < p_Dpb->used_size - 1; i++)
 		p_Dpb->fs[i] = p_Dpb->fs[i + 1];
 	p_Dpb->fs[p_Dpb->used_size - 1] = tmp;
-	p_Dpb->used_size--;
+
+	if (p_Dpb->used_size)
+		p_Dpb->used_size--;
 }
 
 static int is_used_for_reference(struct FrameStore *fs)
