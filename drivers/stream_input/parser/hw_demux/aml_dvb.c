@@ -108,7 +108,7 @@ static struct class aml_stb_class;
 static struct dvb_frontend *frontend[FE_DEV_COUNT] = {NULL, NULL};
 static demod_type s_demod_type[FE_DEV_COUNT] = {DEMOD_INVALID, DEMOD_INVALID};
 static tuner_type s_tuner_type[FE_DEV_COUNT] = {TUNER_INVALID, TUNER_INVALID};
-
+static int dmx_reset_all_flag = 0;
 #if 0
 static struct reset_control *aml_dvb_demux_reset_ctl;
 static struct reset_control *aml_dvb_afifo_reset_ctl;
@@ -925,6 +925,30 @@ static ssize_t stb_store_source(struct class *class,
 	return size;
 }
 
+static ssize_t show_dmx_reset_all_flag(struct class *class,
+			       struct class_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	char *src;
+
+	if (dmx_reset_all_flag)
+		src = "1";
+	else
+		src = "0";
+	ret = sprintf(buf, "%s\n", src);
+	return ret;
+}
+static ssize_t set_dmx_reset_all_flag(struct class *class,
+				struct class_attribute *attr, const char *buf,
+				size_t size)
+{
+	if (!strncmp("0", buf, 1))
+	    dmx_reset_all_flag = 0;
+	else if (!strncmp("1", buf, 1))
+	    dmx_reset_all_flag = 1;
+
+	return size;
+}
 #define CASE_PREFIX
 
 /*Show the descrambler's input source*/
@@ -1837,6 +1861,8 @@ static struct class_attribute aml_stb_class_attrs[] = {
 	       stb_store_hw_setting),
 	__ATTR(source, 0664, stb_show_source,
 	       stb_store_source),
+	__ATTR(demux_reset_all_flag, 0664, show_dmx_reset_all_flag,
+	       set_dmx_reset_all_flag),
 	__ATTR(tso_source, 0644, tso_show_source,
 	       tso_store_source),
 #define DEMUX_SOURCE_ATTR_PCR(i)\
@@ -2734,8 +2760,12 @@ static int aml_tsdemux_reset(void)
 		struct aml_dmx *dmx = get_stb_dmx();
 
 		dvb->reset_flag = 0;
-		if (dmx)
-			dmx_reset_dmx_hw_ex_unlock(dvb, dmx, 0);
+		if (dmx) {
+			if (dmx_reset_all_flag)
+				dmx_reset_hw_ex(dvb, 0);
+			else
+				dmx_reset_dmx_hw_ex_unlock(dvb, dmx, 0);
+		}
 	}
 	spin_unlock_irqrestore(&dvb->slock, flags);
 
