@@ -43,7 +43,7 @@ struct vdec_common_if {
 	 * @res_chg : [out] resolution change happen
 	 */
 	int (*decode)(unsigned long h_vdec, struct aml_vcodec_mem *bs,
-		unsigned long int pts, bool *res_chg);
+		u64 pts, bool *res_chg);
 
 	/**
 	 * (*get_param)() - get driver's parameter
@@ -53,6 +53,15 @@ struct vdec_common_if {
 	 */
 	int (*get_param)(unsigned long h_vdec,
 		enum vdec_get_param_type type, void *out);
+
+	/**
+	 * (*set_param)() - set driver's parameter
+	 * @h_vdec : [in] driver handle
+	 * @type   : [in] input parameter type
+	 * @in    : [in] buffer to store query result
+	 */
+	int (*set_param)(unsigned long h_vdec,
+		enum vdec_set_param_type type, void *in);
 
 	/**
 	 * (*deinit)() - deinitialize driver.

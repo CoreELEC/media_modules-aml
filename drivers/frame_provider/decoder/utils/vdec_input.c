@@ -58,6 +58,18 @@ static struct vframe_block_list_s *
 	ulong phy_addr,
 	int size);
 
+static int aml_copy_from_user(void *to, const void *from, ulong n)
+{
+	int ret =0;
+
+	if (likely(access_ok(VERIFY_READ, from, n)))
+		ret = copy_from_user(to, from, n);
+	else
+		memcpy(to, from, n);
+
+	return ret;
+}
+
 static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 		u32 size, ulong phys, u32 pading, bool is_mapped)
 {
@@ -68,7 +80,7 @@ static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 	u8 *p = virts;
 
 	if (is_mapped) {
-		if (copy_from_user(p, buf, size))
+		if (aml_copy_from_user(p, buf, size))
 			return -EFAULT;
 
 		if (pading)
@@ -85,7 +97,7 @@ static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 		if (!p)
 			return -1;
 
-		if (copy_from_user(p, buf + i * span, span)) {
+		if (aml_copy_from_user(p, buf + i * span, span)) {
 			codec_mm_unmap_phyaddr(p);
 			return -EFAULT;
 		}
@@ -103,7 +115,7 @@ static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 	if (!p)
 		return -1;
 
-	if (copy_from_user(p, buf + span, remain)) {
+	if (aml_copy_from_user(p, buf + span, remain)) {
 		codec_mm_unmap_phyaddr(p);
 		return -EFAULT;
 	}
@@ -753,7 +765,6 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	struct vframe_chunk_s *chunk;
 	struct vdec_s *vdec = input->vdec;
 	struct vframe_block_list_s *block;
-
 	int need_pading_size = MIN_FRAME_PADDING_SIZE;
 
 	if (vdec_secure(vdec)) {

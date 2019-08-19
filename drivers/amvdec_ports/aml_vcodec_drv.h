@@ -323,7 +323,6 @@ struct aml_vcodec_ctx {
 	struct v4l2_ctrl_handler ctrl_hdl;
 	struct work_struct decode_work;
 	struct work_struct encode_work;
-	struct work_struct reset_work;
 	struct vdec_pic_info last_decoded_picinfo;
 	struct aml_video_dec_buf *empty_flush_buf;
 
@@ -334,12 +333,19 @@ struct aml_vcodec_ctx {
 
 	int decoded_frame_cnt;
 	struct mutex lock;
-	wait_queue_head_t wq;
+	struct completion comp;
 	bool has_receive_eos;
 	struct list_head capture_list;
 	struct list_head vdec_thread_list;
 	bool is_drm_mode;
 	bool is_stream_mode;
+	int buf_used_count;
+	bool receive_cmd_stop;
+	bool scatter_mem_enable;
+	bool param_sets_from_ucode;
+	bool v4l_codec_ready;
+	wait_queue_head_t wq;
+	spinlock_t slock;
 };
 
 /**
@@ -400,7 +406,6 @@ struct aml_vcodec_dev {
 
 	struct workqueue_struct *decode_workqueue;
 	struct workqueue_struct *encode_workqueue;
-	struct workqueue_struct *reset_workqueue;
 	int int_cond;
 	int int_type;
 	struct mutex dev_mutex;

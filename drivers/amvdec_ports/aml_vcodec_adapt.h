@@ -38,6 +38,7 @@ struct aml_vdec_adapt {
 	struct vdec_s *vdec;
 	struct stream_port_s port;
 	struct dec_sysinfo dec_prop;
+	int video_type;
 	char *recv_name;
 	int vfm_path;
 };
@@ -50,7 +51,7 @@ int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count);
 
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
-	const char *buf, unsigned int count, unsigned long int timestamp);
+	const char *buf, unsigned int count, u64 timestamp);
 
 int is_need_to_buf(struct aml_vdec_adapt *ada_ctx);
 

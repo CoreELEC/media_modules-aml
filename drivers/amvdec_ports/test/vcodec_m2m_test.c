@@ -157,6 +157,24 @@ static void* read_thread(void *arg)
 		case AV_CODEC_ID_VP9:
 			forced_codec_name = "vp9_v4l2m2m";
 			break;
+		case AV_CODEC_ID_MPEG1VIDEO:
+			forced_codec_name = "mpeg1_v4l2m2m";
+			break;
+		case AV_CODEC_ID_MPEG2VIDEO:
+			forced_codec_name = "mpeg2_v4l2m2m";
+			break;
+		case AV_CODEC_ID_VC1:
+			forced_codec_name = "vc1_v4l2m2m";
+			break;
+		case AV_CODEC_ID_H263:
+			forced_codec_name = "h263_v4l2m2m";
+			break;
+		case AV_CODEC_ID_MPEG4:
+			forced_codec_name = "mpeg4_v4l2m2m";
+			break;
+		case AV_CODEC_ID_MJPEG:
+			forced_codec_name = "mjpeg_v4l2m2m";
+			break;
 	}
 
 	codec = avcodec_find_decoder_by_name(forced_codec_name);

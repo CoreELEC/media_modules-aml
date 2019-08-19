@@ -36,7 +36,9 @@
 
 #define NAL_TYPE(value)				((value) & 0x1F)
 #define HEADER_BUFFER_SIZE			(32 * 1024)
+#define SYNC_CODE				(0x498342)
 
+extern int vp9_need_prefix;
 bool need_trigger;
 int dump_cnt = 0;
 
@@ -99,10 +101,11 @@ struct vdec_vp9_vsi {
 	int head_offset;
 	struct vdec_vp9_dec_info dec;
 	struct vdec_pic_info pic;
+	struct vdec_pic_info cur_pic;
 	struct v4l2_rect crop;
 	bool is_combine;
 	int nalu_pos;
-	struct vp9_head_info_t head;
+	struct vp9_param_sets ps;
 };
 
 /**
@@ -117,71 +120,11 @@ struct vdec_vp9_inst {
 	struct aml_vdec_adapt vdec;
 	struct vdec_vp9_vsi *vsi;
 	struct vcodec_vfm_s vfm;
+	struct completion comp;
 };
 
-struct vp9_superframe_split {
-	/*in data*/
-	u8 *data;
-	u32 data_size;
-
-	/*out data*/
-	int nb_frames;
-	int size;
-	int next_frame;
-	u32 next_frame_offset;
-	int sizes[8];
-};
-
-#if 1
-#define DUMP_FILE_NAME "/data/dump/dump.tmp"
-static struct file *filp;
-static loff_t file_pos;
-
-void dump_write(const char __user *buf, size_t count)
-{
-	mm_segment_t old_fs;
-
-	if (!filp)
-		return;
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-
-	if (count != vfs_write(filp, buf, count, &file_pos))
-		pr_err("Failed to write file\n");
-
-	set_fs(old_fs);
-}
-
-void dump_init(void)
-{
-	filp = filp_open(DUMP_FILE_NAME, O_CREAT | O_RDWR, 0644);
-	if (IS_ERR(filp)) {
-		pr_err("open dump file failed\n");
-		filp = NULL;
-	}
-}
-
-void dump_deinit(void)
-{
-	if (filp) {
-		filp_close(filp, current->files);
-		filp = NULL;
-		file_pos = 0;
-	}
-}
-
-void swap_uv(void *uv, int size)
-{
-	int i;
-	__u16 *p = uv;
-
-	size /= 2;
-
-	for (i = 0; i < size; i++, p++)
-		*p = __swab16(*p);
-}
-#endif
+static int vdec_write_nalu(struct vdec_vp9_inst *inst,
+	u8 *buf, u32 size, u64 ts);
 
 static void get_pic_info(struct vdec_vp9_inst *inst,
 			 struct vdec_pic_info *pic)
@@ -208,7 +151,7 @@ static void get_crop_info(struct vdec_vp9_inst *inst, struct v4l2_rect *cr)
 
 static void get_dpb_size(struct vdec_vp9_inst *inst, unsigned int *dpb_sz)
 {
-	*dpb_sz = 20;//inst->vsi->dec.dpb_sz;
+	*dpb_sz = inst->vsi->dec.dpb_sz;
 	aml_vcodec_debug(inst, "sz=%d", *dpb_sz);
 }
 
@@ -223,7 +166,7 @@ static int vdec_vp9_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 
 	inst->ctx = ctx;
 
-	inst->vdec.format = VFORMAT_VP9;
+	inst->vdec.video_type = VFORMAT_VP9;
 	inst->vdec.dev	= ctx->dev->vpu_plat_dev;
 	inst->vdec.filp	= ctx->dev->filp;
 	inst->vdec.ctx	= ctx;
@@ -263,6 +206,8 @@ static int vdec_vp9_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	inst->vsi->pic.c_bs_sz	= 0;
 	inst->vsi->pic.c_len_sz	= (1920 * 1088 / 2);
 
+	init_completion(&inst->comp);
+
 	aml_vcodec_debug(inst, "vp9 Instance >> %p", inst);
 
 	ctx->ada_ctx = &inst->vdec;
@@ -275,7 +220,7 @@ static int vdec_vp9_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto error_free_inst;
 	}
 
-	dump_init();
+	//dump_init();
 
 	return 0;
 
@@ -296,22 +241,16 @@ static int refer_buffer_num(int level_idc, int poc_cnt,
 }
 #endif
 
-static void fill_vdec_params(struct vdec_vp9_inst *inst)
+static void fill_vdec_params(struct vdec_vp9_inst *inst,
+	struct VP9Context *vp9_ctx)
 {
 	struct vdec_pic_info *pic = &inst->vsi->pic;
 	struct vdec_vp9_dec_info *dec = &inst->vsi->dec;
 	struct v4l2_rect *rect = &inst->vsi->crop;
-	unsigned int mb_w = 0, mb_h = 0, width, height;
-	//unsigned int crop_unit_x = 0, crop_unit_y = 0;
-	//unsigned int poc_cnt = 0;
-
-	/* calc width & height. */
-	width = 1920;
-	height = 1080;
 
 	/* fill visible area size that be used for EGL. */
-	pic->visible_width	= width;
-	pic->visible_height	= height;
+	pic->visible_width	= vp9_ctx->render_width;
+	pic->visible_height	= vp9_ctx->render_height;
 
 	/* calc visible ares. */
 	rect->left		= 0;
@@ -320,82 +259,60 @@ static void fill_vdec_params(struct vdec_vp9_inst *inst)
 	rect->height		= pic->visible_height;
 
 	/* config canvas size that be used for decoder. */
-	pic->coded_width	= ALIGN(mb_w, 4) << 4;
-	pic->coded_height	= ALIGN(mb_h, 4) << 4;
-
-	pic->coded_width = 1920;
-	pic->coded_height = 1088;//temp
+	pic->coded_width	= ALIGN(vp9_ctx->width, 32);
+	pic->coded_height	= ALIGN(vp9_ctx->height, 32);
 
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	/* calc DPB size */
-	dec->dpb_sz = 20;//refer_buffer_num(sps->level_idc, poc_cnt, mb_w, mb_h);
+	dec->dpb_sz = 5;//refer_buffer_num(sps->level_idc, poc_cnt, mb_w, mb_h);
 
-	pr_info("[%d] The stream infos, coded:(%d x %d), visible:(%d x %d), DPB: %d\n",
+	aml_vcodec_debug(inst, "[%d] The stream infos, coded:(%d x %d), visible:(%d x %d), DPB: %d\n",
 		inst->ctx->id, pic->coded_width, pic->coded_height,
 		pic->visible_width, pic->visible_height, dec->dpb_sz);
 }
 
-#if 0
-static int vp9_parse_nal_header(u32 val)
+static int stream_parse_by_ucode(struct vdec_vp9_inst *inst, u8 *buf, u32 size)
 {
-	if (val & 0x80) {
-		pr_err("the nal data is invalid.\n");
-		return -1;
+	int ret = 0;
+
+	ret = vdec_write_nalu(inst, buf, size, 0);
+	if (ret < 0) {
+		pr_err("write frame data failed. err: %d\n", ret);
+		return ret;
 	}
 
-	return (val & 0x7f) >> 1;
-}
-#endif
+	/* wait ucode parse ending. */
+	wait_for_completion_timeout(&inst->comp,
+		msecs_to_jiffies(1000));
 
-static void vp9_parse(struct vp9_head_info_t *head, u8 *buf, u32 size)
-{
-	//int ret = -1;
-	//u8 *p = buf;
-
-	head->parsed = true;
-
-	return;
+	return inst->vsi->dec.dpb_sz ? 0 : -1;
 }
 
 static int stream_parse(struct vdec_vp9_inst *inst, u8 *buf, u32 size)
 {
-	//struct vp9_stream_t s;
-	//struct vp9_SPS_t *sps;
-	//unsigned int nal_type;
-	int nal_idx = 0;
-	int real_data_pos, real_data_size;
-	bool is_combine = false;
+	int ret = 0;
+	struct vp9_param_sets *ps = NULL;
 
-	vp9_parse(&inst->vsi->head, buf, size);
+	ps = kzalloc(sizeof(struct vp9_param_sets), GFP_KERNEL);
+	if (ps == NULL)
+		return -ENOMEM;
 
-	if (!inst->vsi->head.parsed)
-		return -1;
+	ret = vp9_decode_extradata_ps(buf, size, ps);
+	if (ret) {
+		pr_err("parse extra data failed. err: %d\n", ret);
+		goto out;
+	}
 
-	/* if the st compose from csd + slice that is the combine data. */
-	inst->vsi->is_combine = is_combine;
-	inst->vsi->nalu_pos = nal_idx;
+	if (ps->head_parsed)
+		fill_vdec_params(inst, &ps->ctx);
 
-	/* start code plus nal type. */
-	real_data_pos = nal_idx + 1;
-	real_data_size = size - real_data_pos;
+	ret = ps->head_parsed ? 0 : -1;
+out:
+	kfree(ps);
 
-	//sps = kzalloc(sizeof(struct vp9_SPS_t), GFP_KERNEL);
-	//if (sps == NULL)
-		//return -ENOMEM;
-
-	/* the extra data would be parsed. */
-	//vp9_stream_set(&s, &buf[real_data_pos], real_data_size);
-	//vp9_sps_parse(&s, sps);
-	//vp9_sps_info(sps);
-
-	//fill_vdec_params(inst, sps);
-	fill_vdec_params(inst);
-
-	//kfree(sps);
-
-	return 0;
+	return ret;
 }
 
 static int vdec_vp9_probe(unsigned long h_vdec,
@@ -404,7 +321,7 @@ static int vdec_vp9_probe(unsigned long h_vdec,
 	struct vdec_vp9_inst *inst =
 		(struct vdec_vp9_inst *)h_vdec;
 	struct stream_info *st;
-	u8 *buf = (u8 *)bs->va;
+	u8 *buf = (u8 *)bs->vaddr;
 	u32 size = bs->size;
 	int ret = 0;
 
@@ -414,18 +331,23 @@ static int vdec_vp9_probe(unsigned long h_vdec,
 
 	if (st->magic == NORe || st->magic == NORn)
 		ret = stream_parse(inst, st->data, st->length);
-	else
-		ret = stream_parse(inst, buf, size);
+	else {
+		if (inst->ctx->param_sets_from_ucode)
+			ret = stream_parse_by_ucode(inst, buf, size);
+		else
+			ret = stream_parse(inst, buf, size);
+	}
+
+	inst->vsi->cur_pic = inst->vsi->pic;
 
 	return ret;
 }
 
 static void vdec_vp9_deinit(unsigned long h_vdec)
 {
+	ulong flags;
 	struct vdec_vp9_inst *inst = (struct vdec_vp9_inst *)h_vdec;
-
-	if (!inst)
-		return;
+	struct aml_vcodec_ctx *ctx = inst->ctx;
 
 	aml_vcodec_debug_enter(inst);
 
@@ -433,8 +355,9 @@ static void vdec_vp9_deinit(unsigned long h_vdec)
 
 	vcodec_vfm_release(&inst->vfm);
 
-	dump_deinit();
+	//dump_deinit();
 
+	spin_lock_irqsave(&ctx->slock, flags);
 	if (inst->vsi && inst->vsi->header_buf)
 		kfree(inst->vsi->header_buf);
 
@@ -442,22 +365,23 @@ static void vdec_vp9_deinit(unsigned long h_vdec)
 		kfree(inst->vsi);
 
 	kfree(inst);
+
+	ctx->drv_handle = 0;
+	spin_unlock_irqrestore(&ctx->slock, flags);
+
 	need_trigger = false;
 	dump_cnt = 0;
 }
 
-static int vdec_vp9_get_fb(struct vdec_vp9_inst *inst, struct vdec_fb **out)
+static int vdec_vp9_get_fb(struct vdec_vp9_inst *inst, struct vdec_v4l2_buffer **out)
 {
 	return get_fb_from_queue(inst->ctx, out);
 }
 
-static void vdec_vp9_get_vf(struct vdec_vp9_inst *inst, struct vdec_fb **out)
+static void vdec_vp9_get_vf(struct vdec_vp9_inst *inst, struct vdec_v4l2_buffer **out)
 {
 	struct vframe_s *vf = NULL;
-	struct vdec_fb *fb = NULL;
-
-	aml_vcodec_debug(inst, "%s() [%d], vfm: %p",
-		__func__, __LINE__, &inst->vfm);
+	struct vdec_v4l2_buffer *fb = NULL;
 
 	vf = peek_video_frame(&inst->vfm);
 	if (!vf) {
@@ -475,107 +399,18 @@ static void vdec_vp9_get_vf(struct vdec_vp9_inst *inst, struct vdec_fb **out)
 
 	atomic_set(&vf->use_cnt, 1);
 
-	aml_vcodec_debug(inst, "%s() [%d], vf: %p, v4l_mem_handle: %lx, idx: %d\n",
-		__func__, __LINE__, vf, vf->v4l_mem_handle, vf->index);
-
-	fb = (struct vdec_fb *)vf->v4l_mem_handle;
+	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 	fb->vf_handle = (unsigned long)vf;
 	fb->status = FB_ST_DISPLAY;
 
 	*out = fb;
 
 	//pr_info("%s, %d\n", __func__, fb->base_y.bytes_used);
-	//dump_write(fb->base_y.va, fb->base_y.bytes_used);
-	//dump_write(fb->base_c.va, fb->base_c.bytes_used);
+	//dump_write(fb->base_y.vaddr, fb->base_y.bytes_used);
+	//dump_write(fb->base_c.vaddr, fb->base_c.bytes_used);
 
 	/* convert yuv format. */
-	//swap_uv(fb->base_c.va, fb->base_c.size);
-
-	aml_vcodec_debug(inst, "%s() [%d], va: %p, phy: %x, size: %zu",
-		__func__, __LINE__, fb->base_y.va,
-		(unsigned int)virt_to_phys(fb->base_y.va), fb->base_y.size);
-	aml_vcodec_debug(inst, "%s() [%d], va: %p, phy: %x, size: %zu",
-		__func__, __LINE__, fb->base_c.va,
-		(unsigned int)virt_to_phys(fb->base_c.va), fb->base_c.size);
-}
-
-static int vp9_superframe_split_filter(struct vp9_superframe_split *s)
-{
-	int i, j, ret, marker;
-	bool is_superframe = false;
-
-	if (!s->data)
-		return -1;
-
-	marker = s->data[s->data_size - 1];
-	if ((marker & 0xe0) == 0xc0) {
-		int length_size = 1 + ((marker >> 3) & 0x3);
-		int   nb_frames = 1 + (marker & 0x7);
-		int    idx_size = 2 + nb_frames * length_size;
-
-		if (s->data_size >= idx_size &&
-			s->data[s->data_size - idx_size] == marker) {
-			s64 total_size = 0;
-			int idx = s->data_size + 1 - idx_size;
-
-			for (i = 0; i < nb_frames; i++) {
-				int frame_size = 0;
-				for (j = 0; j < length_size; j++)
-					frame_size |= s->data[idx++] << (j * 8);
-
-				total_size += frame_size;
-				if (frame_size < 0 ||
-					total_size > s->data_size - idx_size) {
-					pr_err( "Invalid frame size in a sframe: %d\n",
-						frame_size);
-					ret = -EINVAL;
-					goto fail;
-				}
-				s->sizes[i] = frame_size;
-			}
-
-			s->nb_frames         = nb_frames;
-			s->size              = total_size;
-			s->next_frame        = 0;
-			s->next_frame_offset = 0;
-			is_superframe        = true;
-		}
-	}else {
-		s->nb_frames = 1;
-		s->sizes[0]  = s->data_size;
-		s->size      = s->data_size;
-	}
-
-	/*pr_info("sframe: %d, frames: %d, IN: %x, OUT: %x\n",
-		is_superframe, s->nb_frames,
-		s->data_size, s->size);*/
-
-	/* parse uncompressed header. */
-	if (is_superframe) {
-		/* bitstream profile. */
-		/* frame type. (intra or inter) */
-		/* colorspace descriptor */
-		/* ... */
-
-		pr_info("the frame is a superframe.\n");
-	}
-
-	/*pr_err("in: %x, %d, out: %x, sizes %d,%d,%d,%d,%d,%d,%d,%d\n",
-		s->data_size,
-		s->nb_frames,
-		s->size,
-		s->sizes[0],
-		s->sizes[1],
-		s->sizes[2],
-		s->sizes[3],
-		s->sizes[4],
-		s->sizes[5],
-		s->sizes[6],
-		s->sizes[7]);*/
-
-	return 0;
-fail:
-	return ret;
+	//swap_uv(fb->base_c.vaddr, fb->base_c.size);
 }
 
 static void add_prefix_data(struct vp9_superframe_split *s,
@@ -604,7 +439,7 @@ static void add_prefix_data(struct vp9_superframe_split *s,
 		prefix = p + PREFIX_SIZE * (i - 1);
 
 		/*add amlogic frame headers.*/
-		frame_size += 4;
+		frame_size += 16;
 		prefix[0]  = (frame_size >> 24) & 0xff;
 		prefix[1]  = (frame_size >> 16) & 0xff;
 		prefix[2]  = (frame_size >> 8 ) & 0xff;
@@ -621,7 +456,7 @@ static void add_prefix_data(struct vp9_superframe_split *s,
 		prefix[13] = 'M';
 		prefix[14] = 'L';
 		prefix[15] = 'V';
-		frame_size -= 4;
+		frame_size -= 16;
 	}
 
 	*out = p;
@@ -651,6 +486,7 @@ static int vdec_write_nalu(struct vdec_vp9_inst *inst,
 	struct vp9_superframe_split s;
 	u8 *data = NULL;
 	u32 length = 0;
+	bool need_prefix = vp9_need_prefix;
 
 	memset(&s, 0, sizeof(s));
 
@@ -660,43 +496,65 @@ static int vdec_write_nalu(struct vdec_vp9_inst *inst,
 		need_trigger = true;
 	}
 
-	/*parse superframe.*/
-	s.data = buf;
-	s.data_size = size;
-	ret = vp9_superframe_split_filter(&s);
-	if (ret) {
-		pr_err("parse frames failed.\n");
-		return ret;
+	if (need_prefix) {
+		/*parse superframe.*/
+		s.data = buf;
+		s.data_size = size;
+		ret = vp9_superframe_split_filter(&s);
+		if (ret) {
+			pr_err("parse frames failed.\n");
+			return ret;
+		}
+
+		/*add headers.*/
+		add_prefix_data(&s, &data, &length);
+		ret = vdec_vframe_write(vdec, data, length, ts);
+		vfree(data);
+	} else {
+		ret = vdec_vframe_write(vdec, buf, size, ts);
 	}
 
-	/*add headers.*/
-	add_prefix_data(&s, &data, &length);
+	return ret;
+}
 
-	ret = vdec_vframe_write(vdec, data, length, ts);
+static bool monitor_res_change(struct vdec_vp9_inst *inst, u8 *buf, u32 size)
+{
+	int ret = -1;
+	u8 *p = buf;
+	int len = size;
+	u32 synccode = vp9_need_prefix ?
+		((p[1] << 16) | (p[2] << 8) | p[3]) :
+		((p[17] << 16) | (p[18] << 8) | p[19]);
 
-	aml_vcodec_debug(inst, "buf: %p, buf size: %u, write to: %d",
-		data, length, ret);
+	if (synccode == SYNC_CODE) {
+		ret = stream_parse(inst, p, len);
+		if (!ret && (inst->vsi->cur_pic.coded_width !=
+			inst->vsi->pic.coded_width ||
+			inst->vsi->cur_pic.coded_height !=
+			inst->vsi->pic.coded_height)) {
+			inst->vsi->cur_pic = inst->vsi->pic;
+			return true;
+		}
+	}
 
-	vfree(data);
-
-	return 0;
+	return false;
 }
 
 static int vdec_vp9_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
-			 unsigned long int timestamp, bool *res_chg)
+			 u64 timestamp, bool *res_chg)
 {
 	struct vdec_vp9_inst *inst = (struct vdec_vp9_inst *)h_vdec;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 	struct stream_info *st;
 	u8 *buf;
 	u32 size;
-	int ret = 0;
+	int ret = -1;
 
 	/* bs NULL means flush decoder */
 	if (bs == NULL)
-		return 0;
+		return -1;
 
-	buf = (u8 *)bs->va;
+	buf = (u8 *)bs->vaddr;
 	size = bs->size;
 	st = (struct stream_info *)buf;
 
@@ -708,8 +566,13 @@ static int vdec_vp9_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 		ret = vdec_write_nalu(inst, st->data, st->length, timestamp);
 	else if (inst->ctx->is_stream_mode)
 		ret = vdec_vbuf_write(vdec, buf, size);
-	else
+	else {
+		/*checked whether the resolution changes.*/
+		if ((*res_chg = monitor_res_change(inst, buf, size)))
+			return 0;
+
 		ret = vdec_write_nalu(inst, buf, size, timestamp);
+	}
 
 	return ret;
 }
@@ -754,12 +617,82 @@ static int vdec_vp9_get_param(unsigned long h_vdec,
 	return ret;
 }
 
+static void set_param_write_sync(struct vdec_vp9_inst *inst)
+{
+	complete(&inst->comp);
+}
+
+static void set_param_pic_info(struct vdec_vp9_inst *inst,
+	struct aml_vdec_pic_infos *info)
+{
+	struct vdec_pic_info *pic = &inst->vsi->pic;
+	struct vdec_vp9_dec_info *dec = &inst->vsi->dec;
+	struct v4l2_rect *rect = &inst->vsi->crop;
+
+	/* fill visible area size that be used for EGL. */
+	pic->visible_width	= info->visible_width;
+	pic->visible_height	= info->visible_height;
+
+	/* calc visible ares. */
+	rect->left		= 0;
+	rect->top		= 0;
+	rect->width		= pic->visible_width;
+	rect->height		= pic->visible_height;
+
+	/* config canvas size that be used for decoder. */
+	pic->coded_width	= info->coded_width;
+	pic->coded_height	= info->coded_height;
+
+	pic->y_len_sz		= pic->coded_width * pic->coded_height;
+	pic->c_len_sz		= pic->y_len_sz >> 1;
+
+	/* calc DPB size */
+	dec->dpb_sz = 5;
+
+	/*wake up*/
+	complete(&inst->comp);
+
+	pr_info("Parse from ucode, crop(%d x %d), coded(%d x %d) dpb: %d\n",
+		info->visible_width, info->visible_height,
+		info->coded_width, info->coded_height,
+		info->dpb_size);
+}
+
+static int vdec_vp9_set_param(unsigned long h_vdec,
+	enum vdec_set_param_type type, void *in)
+{
+	int ret = 0;
+	struct vdec_vp9_inst *inst = (struct vdec_vp9_inst *)h_vdec;
+
+	if (!inst) {
+		pr_err("the vp9 inst of dec is invalid.\n");
+		return -1;
+	}
+
+	switch (type) {
+	case SET_PARAM_WRITE_FRAME_SYNC:
+		set_param_write_sync(inst);
+		break;
+
+	case SET_PARAM_PIC_INFO:
+		set_param_pic_info(inst, in);
+		break;
+
+	default:
+		aml_vcodec_err(inst, "invalid set parameter type=%d", type);
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 static struct vdec_common_if vdec_vp9_if = {
-	vdec_vp9_init,
-	vdec_vp9_probe,
-	vdec_vp9_decode,
-	vdec_vp9_get_param,
-	vdec_vp9_deinit,
+	.init		= vdec_vp9_init,
+	.probe		= vdec_vp9_probe,
+	.decode		= vdec_vp9_decode,
+	.get_param	= vdec_vp9_get_param,
+	.set_param	= vdec_vp9_set_param,
+	.deinit		= vdec_vp9_deinit,
 };
 
 struct vdec_common_if *get_vp9_dec_comm_if(void);

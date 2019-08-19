@@ -43,8 +43,7 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
-
-
+#include "../utils/vdec_v4l2_buffer_ops.h"
 
 #define MEM_NAME "codec_mmjpeg"
 
@@ -111,6 +110,7 @@ unsigned int mmjpeg_debug_mask = 0xff;
 #define PRINT_FLAG_FORCE_DONE         0x0100
 #define PRINT_FRAMEBASE_DATA          0x0400
 #define PRINT_FLAG_TIMEOUT_STATUS     0x1000
+#define PRINT_FLAG_V4L_DETAIL         0x8000
 
 int mmjpeg_debug_print(int index, int debug_flag, const char *fmt, ...)
 {
@@ -143,8 +143,9 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DEC_RESULT_NONE             0
 #define DEC_RESULT_DONE             1
 #define DEC_RESULT_AGAIN            2
-#define DEC_RESULT_FORCE_EXIT       3
-#define DEC_RESULT_EOS              4
+#define DEC_RESULT_ERROR            3
+#define DEC_RESULT_FORCE_EXIT       4
+#define DEC_RESULT_EOS              5
 #define DEC_DECODE_TIMEOUT         0x21
 
 
@@ -161,6 +162,7 @@ struct buffer_spec_s {
 	unsigned long cma_alloc_addr;
 	int cma_alloc_count;
 	unsigned int buf_adr;
+	ulong v4l_ref_buf_addr;
 };
 
 #define spec2canvas(x)  \
@@ -206,9 +208,13 @@ struct vdec_mjpeg_hw_s {
 	u32 put_num;
 	u32 run_count;
 	u32	not_run_ready;
+	u32 buffer_not_ready;
 	u32	input_empty;
 	u32 peek_num;
 	u32 get_num;
+	bool is_used_v4l;
+	void *v4l2_ctx;
+	bool v4l_params_parsed;
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
@@ -278,6 +284,40 @@ static irqreturn_t vmjpeg_isr(struct vdec_s *vdec, int irq)
 		pr_info(
 		"fatal error, no available buffer slot.");
 		return IRQ_HANDLED;
+	}
+
+	if (hw->is_used_v4l) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
+		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
+			struct aml_vdec_pic_infos info;
+
+			info.visible_width	= hw->frame_width;
+			info.visible_height	= hw->frame_height;
+			info.coded_width	= ALIGN(hw->frame_width, 64);
+			info.coded_height	= ALIGN(hw->frame_height, 64);
+			info.dpb_size		= MAX_BMMU_BUFFER_NUM - 1;
+			hw->v4l_params_parsed	= true;
+			vdec_v4l_set_pic_infos(ctx, &info);
+		}
+
+		if (!ctx->v4l_codec_ready)
+			return IRQ_HANDLED;
+	}
+
+	if (hw->is_used_v4l) {
+		vf->v4l_mem_handle
+			= hw->buffer_spec[index].v4l_ref_buf_addr;
+		if (vdec_v4l_binding_fd_and_vf(vf->v4l_mem_handle, vf) < 0) {
+			mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
+				"v4l: binding vf fail.\n");
+			return -1;
+		}
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
+			"[%d] %s(), v4l mem handle: 0x%lx\n",
+			((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
+			__func__, vf->v4l_mem_handle);
 	}
 
 	vf->index = index;
@@ -415,14 +455,13 @@ static int vmjpeg_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 }
 
 /****************************************/
-static void vmjpeg_canvas_init(struct vdec_s *vdec)
+static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 {
 	int i, ret;
 	u32 canvas_width, canvas_height;
 	u32 decbuf_size, decbuf_y_size, decbuf_uv_size;
 	unsigned long buf_start, addr;
-	struct vdec_mjpeg_hw_s *hw =
-		(struct vdec_mjpeg_hw_s *)vdec->private;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	canvas_width = 1920;
 	canvas_height = 1088;
@@ -433,12 +472,16 @@ static void vmjpeg_canvas_init(struct vdec_s *vdec)
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
 		int canvas;
 
-		ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, i,
-				decbuf_size, DRIVER_NAME, &buf_start);
-		if (ret < 0) {
-			pr_err("CMA alloc failed! size 0x%d  idx %d\n",
-				decbuf_size, i);
-			return;
+		if (hw->is_used_v4l) {
+			continue;
+		} else {
+			ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, i,
+					decbuf_size, DRIVER_NAME, &buf_start);
+			if (ret < 0) {
+				pr_err("CMA alloc failed! size 0x%d  idx %d\n",
+					decbuf_size, i);
+				return;
+			}
 		}
 
 		hw->buffer_spec[i].buf_adr = buf_start;
@@ -782,27 +825,178 @@ static void check_timer_func(unsigned long arg)
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 }
 
-static void vmjpeg_hw_ctx_restore(struct vdec_s *vdec, int index)
+static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i)
 {
-	struct vdec_mjpeg_hw_s *hw =
-		(struct vdec_mjpeg_hw_s *)vdec->private;
+	int ret;
+	u32 canvas;
+	ulong decbuf_start = 0, addr;
+	int decbuf_y_size = 0, decbuf_uv_size = 0;
+	u32 canvas_width = 0, canvas_height = 0;
+	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct vdec_v4l2_buffer *fb = NULL;
+
+	if (hw->buffer_spec[i].v4l_ref_buf_addr)
+		return 0;
+
+	ret = vdec_v4l_get_buffer(hw->v4l2_ctx, &fb);
+	if (ret) {
+		mmjpeg_debug_print(DECODE_ID(hw), 0,
+			"[%d] get fb fail.\n",
+			((struct aml_vcodec_ctx *)
+			(hw->v4l2_ctx))->id);
+		return ret;
+	}
+
+	hw->buffer_spec[i].v4l_ref_buf_addr = (ulong)fb;
+	if (fb->num_planes == 1) {
+		decbuf_start	= fb->m.mem[0].addr;
+		decbuf_y_size	= fb->m.mem[0].offset;
+		decbuf_uv_size	= fb->m.mem[0].size - fb->m.mem[0].offset;
+		canvas_width	= ALIGN(hw->frame_width, 16);
+		canvas_height	= ALIGN(hw->frame_height, 16);
+		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
+	} else if (fb->num_planes == 2) {
+		decbuf_start	= fb->m.mem[0].addr;
+		decbuf_y_size	= fb->m.mem[0].size;
+		decbuf_uv_size	= fb->m.mem[1].size << 1;
+		canvas_width	= ALIGN(hw->frame_width, 16);
+		canvas_height	= ALIGN(hw->frame_height, 16);
+		fb->m.mem[0].bytes_used = decbuf_y_size;
+		fb->m.mem[1].bytes_used = decbuf_uv_size >> 1;
+	}
+
+	hw->buffer_spec[i].buf_adr = decbuf_start;
+	addr = hw->buffer_spec[i].buf_adr;
+	hw->buffer_spec[i].y_addr = addr;
+	addr += decbuf_y_size;
+	hw->buffer_spec[i].u_addr = addr;
+	addr += decbuf_uv_size;
+	hw->buffer_spec[i].v_addr = addr;
+
+	mmjpeg_debug_print(DECODE_ID(hw), 0, "[%d] %s(), v4l ref buf addr: 0x%x\n",
+		((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id, __func__, fb);
+
+	if (vdec->parallel_dec == 1) {
+		if (hw->buffer_spec[i].y_canvas_index == -1)
+			hw->buffer_spec[i].y_canvas_index =
+			vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
+		if (hw->buffer_spec[i].u_canvas_index == -1)
+			hw->buffer_spec[i].u_canvas_index =
+			vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
+		if (hw->buffer_spec[i].v_canvas_index == -1)
+			hw->buffer_spec[i].v_canvas_index =
+			vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
+	} else {
+		canvas = vdec->get_canvas(i, 3);
+		hw->buffer_spec[i].y_canvas_index = canvas_y(canvas);
+		hw->buffer_spec[i].u_canvas_index = canvas_u(canvas);
+		hw->buffer_spec[i].v_canvas_index = canvas_v(canvas);
+	}
+
+	canvas_config(hw->buffer_spec[i].y_canvas_index,
+		hw->buffer_spec[i].y_addr,
+		canvas_width,
+		canvas_height,
+		CANVAS_ADDR_NOWRAP,
+		CANVAS_BLKMODE_LINEAR);
+	hw->buffer_spec[i].canvas_config[0].phy_addr =
+		hw->buffer_spec[i].y_addr;
+	hw->buffer_spec[i].canvas_config[0].width =
+		canvas_width;
+	hw->buffer_spec[i].canvas_config[0].height =
+		canvas_height;
+	hw->buffer_spec[i].canvas_config[0].block_mode =
+		CANVAS_BLKMODE_LINEAR;
+
+	canvas_config(hw->buffer_spec[i].u_canvas_index,
+		hw->buffer_spec[i].u_addr,
+		canvas_width / 2,
+		canvas_height / 2,
+		CANVAS_ADDR_NOWRAP,
+		CANVAS_BLKMODE_LINEAR);
+	hw->buffer_spec[i].canvas_config[1].phy_addr =
+		hw->buffer_spec[i].u_addr;
+	hw->buffer_spec[i].canvas_config[1].width =
+		canvas_width / 2;
+	hw->buffer_spec[i].canvas_config[1].height =
+		canvas_height / 2;
+	hw->buffer_spec[i].canvas_config[1].block_mode =
+		CANVAS_BLKMODE_LINEAR;
+
+	canvas_config(hw->buffer_spec[i].v_canvas_index,
+		hw->buffer_spec[i].v_addr,
+		canvas_width / 2,
+		canvas_height / 2,
+		CANVAS_ADDR_NOWRAP,
+		CANVAS_BLKMODE_LINEAR);
+	hw->buffer_spec[i].canvas_config[2].phy_addr =
+		hw->buffer_spec[i].v_addr;
+	hw->buffer_spec[i].canvas_config[2].width =
+		canvas_width / 2;
+	hw->buffer_spec[i].canvas_config[2].height =
+		canvas_height / 2;
+	hw->buffer_spec[i].canvas_config[2].block_mode =
+		CANVAS_BLKMODE_LINEAR;
+
+	return 0;
+}
+
+static bool is_enough_free_buffer(struct vdec_mjpeg_hw_s *hw)
+{
+	int i;
+
+	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+		if (hw->vfbuf_use[i] == 0)
+			break;
+	}
+
+	return i == DECODE_BUFFER_NUM_MAX ? false : true;
+}
+
+static int find_free_buffer(struct vdec_mjpeg_hw_s *hw)
+{
+	int i;
+
+	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+		if (hw->vfbuf_use[i] == 0)
+			break;
+	}
+
+	if (i == DECODE_BUFFER_NUM_MAX)
+		return -1;
+
+	if (hw->is_used_v4l)
+		if (vmjpeg_v4l_alloc_buff_config_canvas(hw, i))
+			return -1;
+
+	return i;
+}
+
+static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
+{
 	struct buffer_spec_s *buff_spec;
-	u32 i;
+	u32 index, i;
+
+	index = find_free_buffer(hw);
+	if (index < 0)
+		return -1;
 
 	WRITE_VREG(DOS_SW_RESET0, (1 << 7) | (1 << 6));
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
 	if (!hw->init_flag) {
-		vmjpeg_canvas_init(vdec);
+		vmjpeg_canvas_init(hw);
 	} else {
-		for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
-			buff_spec = &hw->buffer_spec[i];
-			canvas_config_config(buff_spec->y_canvas_index,
-						&buff_spec->canvas_config[0]);
-			canvas_config_config(buff_spec->u_canvas_index,
-						&buff_spec->canvas_config[1]);
-			canvas_config_config(buff_spec->v_canvas_index,
-						&buff_spec->canvas_config[2]);
+		if (!hw->is_used_v4l) {
+			for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+				buff_spec = &hw->buffer_spec[i];
+				canvas_config_config(buff_spec->y_canvas_index,
+							&buff_spec->canvas_config[0]);
+				canvas_config_config(buff_spec->u_canvas_index,
+							&buff_spec->canvas_config[1]);
+				canvas_config_config(buff_spec->v_canvas_index,
+							&buff_spec->canvas_config[2]);
+			}
 		}
 	}
 
@@ -828,6 +1022,7 @@ static void vmjpeg_hw_ctx_restore(struct vdec_s *vdec, int index)
 #if 1/*MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6*/
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 #endif
+	return 0;
 }
 
 static s32 vmjpeg_init(struct vdec_s *vdec)
@@ -929,8 +1124,14 @@ static unsigned long run_ready(struct vdec_s *vdec,
 		if (level < pre_decode_buf_level)
 			return 0;
 	}
-	hw->not_run_ready = 0;
 
+	if (!is_enough_free_buffer(hw)) {
+		hw->buffer_not_ready++;
+		return 0;
+	}
+
+	hw->not_run_ready = 0;
+	hw->buffer_not_ready = 0;
 	if (vdec->parallel_dec == 1)
 		return CORE_MASK_VDEC_1;
 	else
@@ -998,7 +1199,13 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		return;
 	}*/
 
-	vmjpeg_hw_ctx_restore(vdec, i);
+	if (vmjpeg_hw_ctx_restore(hw) < 0) {
+		hw->dec_result = DEC_RESULT_ERROR;
+		mmjpeg_debug_print(DECODE_ID(hw), 0,
+			"amvdec_mmjpeg: error HW context restore\n");
+		vdec_schedule_work(&hw->work);
+		return;
+	}
 #if 0
 	vdec_enable_input(vdec);
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
@@ -1013,19 +1220,19 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->init_flag = 1;
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-	"%s (0x%x 0x%x 0x%x) vldcrl 0x%x bitcnt 0x%x powerctl 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-	__func__,
-	READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-	READ_VREG(VLD_MEM_VIFIFO_WP),
-	READ_VREG(VLD_MEM_VIFIFO_RP),
-	READ_VREG(VLD_DECODE_CONTROL),
-	READ_VREG(VIFF_BIT_CNT),
-	READ_VREG(POWER_CTL_VLD),
-	READ_VREG(VLD_MEM_VIFIFO_START_PTR),
-	READ_VREG(VLD_MEM_VIFIFO_CURR_PTR),
-	READ_VREG(VLD_MEM_VIFIFO_CONTROL),
-	READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
-	READ_VREG(VLD_MEM_VIFIFO_END_PTR));
+		"%s (0x%x 0x%x 0x%x) vldcrl 0x%x bitcnt 0x%x powerctl 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+		__func__,
+		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+		READ_VREG(VLD_MEM_VIFIFO_WP),
+		READ_VREG(VLD_MEM_VIFIFO_RP),
+		READ_VREG(VLD_DECODE_CONTROL),
+		READ_VREG(VIFF_BIT_CNT),
+		READ_VREG(POWER_CTL_VLD),
+		READ_VREG(VLD_MEM_VIFIFO_START_PTR),
+		READ_VREG(VLD_MEM_VIFIFO_CURR_PTR),
+		READ_VREG(VLD_MEM_VIFIFO_CONTROL),
+		READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
+		READ_VREG(VLD_MEM_VIFIFO_END_PTR));
 }
 static void wait_vmjpeg_search_done(struct vdec_mjpeg_hw_s *hw)
 {
@@ -1045,6 +1252,40 @@ static void wait_vmjpeg_search_done(struct vdec_mjpeg_hw_s *hw)
 			vld_rp = READ_VREG(VLD_MEM_VIFIFO_RP);
 		count++;
 	} while (1);
+}
+
+static int notify_v4l_eos(struct vdec_s *vdec)
+{
+	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct vframe_s *vf = NULL;
+	struct vdec_v4l2_buffer *fb = NULL;
+
+	if (hw->is_used_v4l && hw->eos) {
+		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
+			mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+				"%s fatal error, no available buffer slot.\n",
+				__func__);
+			return -1;
+		}
+
+		if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb)) {
+			pr_err("[%d] get fb fail.\n", ctx->id);
+			return -1;
+		}
+
+		vf->timestamp = ULONG_MAX;
+		vf->v4l_mem_handle = (unsigned long)fb;
+		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
+
+		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+		vf_notify_receiver(vdec->vf_provider_name,
+			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+
+		pr_info("[%d] mpeg12 EOS notify.\n", ctx->id);
+	}
+
+	return 0;
 }
 
 static void vmjpeg_work(struct work_struct *work)
@@ -1087,6 +1328,9 @@ static void vmjpeg_work(struct work_struct *work)
 			hw->stat &= ~STAT_VDEC_RUN;
 		}
 		hw->eos = 1;
+		if (hw->is_used_v4l)
+			notify_v4l_eos(vdec);
+
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
 		vdec_clean_input(hw_to_vdec(hw));
@@ -1165,6 +1409,9 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	/* the ctx from v4l2 driver. */
+	hw->v4l2_ctx = pdata->private;
+
 	pdata->private = hw;
 	pdata->dec_status = vmjpeg_dec_status;
 
@@ -1196,8 +1443,11 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 
 	hw->platform_dev = pdev;
 
-	if (pdata->sys_info)
+	if (pdata->sys_info) {
 		hw->vmjpeg_amstream_dec_info = *pdata->sys_info;
+		hw->is_used_v4l = (((unsigned long)
+			hw->vmjpeg_amstream_dec_info.param & 0x80) >> 7);
+	}
 
 	vdec_source_changed(VFORMAT_MJPEG,
 			1920, 1080, 60);
