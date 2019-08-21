@@ -6513,16 +6513,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				iPOCmsb = 0;
 			}
 			hevc->curr_POC = (iPOCmsb + iPOClsb);
-			if (hevc->curr_POC != INVALID_POC && hevc->curr_POC) {
-				if (((hevc->i_only & 0x4)  == 0) && (hevc->m_nalUnitType != NAL_UNIT_CODED_SLICE_IDR
-					&& hevc->m_nalUnitType != NAL_UNIT_CODED_SLICE_IDR_N_LP)
-					&& ((hevc->curr_POC + hevc->sps_num_reorder_pics_0) < hevc->iPrevPOC)) {
-					hevc_print(hevc, 0,
-					"Flush  .. num_reorder_pic %d  pic->POC %d  hevc->iPrevPOC %d\n",
-					hevc->sps_num_reorder_pics_0,hevc->curr_POC,hevc->iPrevPOC);
-					flush_output(hevc, get_pic_by_POC(hevc, hevc->curr_POC));
-				}
-			}
 			if ((hevc->m_temporalId - 1) == 0)
 				hevc->iPrevTid0POC = hevc->curr_POC;
 			else {
@@ -8158,7 +8148,6 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 				((struct aml_vcodec_ctx *)(hevc->v4l2_ctx))->id,
 				__func__, vf->v4l_mem_handle);
 		}
-
 
 #ifdef MULTI_INSTANCE_SUPPORT
 		if (vdec_frame_based(hw_to_vdec(hevc))) {
