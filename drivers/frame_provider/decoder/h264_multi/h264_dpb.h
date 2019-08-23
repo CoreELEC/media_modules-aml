@@ -878,6 +878,7 @@ struct h264_dpb_stru {
 	u16 max_dec_frame_buffering;
 
 	unsigned int dec_dpb_status;
+	unsigned int last_dpb_status;
 	unsigned char buf_alloc_fail;
 	unsigned int dpb_error_flag;
 	unsigned int origin_max_reference;
