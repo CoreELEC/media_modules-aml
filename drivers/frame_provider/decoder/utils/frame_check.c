@@ -42,7 +42,7 @@
 #include <linux/highmem.h>
 #include <linux/page-flags.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
-
+#include <asm/cacheflush.h>
 
 #define FC_ERROR	0x0
 
@@ -137,7 +137,7 @@ static int get_frame_size(struct pic_check_mgr_t *pic,
 			canvas_get_height(canvasY(vf->canvas0Addr));
 	} else {
 		pic->canvas_w = vf->canvas0_config[0].width;
-		pic->canvas_h = vf->canvas0_config[1].height;
+		pic->canvas_h = vf->canvas0_config[0].height;
 	}
 
 	if ((pic->canvas_h < 1) || (pic->canvas_w < 1)) {
@@ -382,6 +382,9 @@ static int memcpy_phy_to_virt(char *to_virt,
 					__func__, (unsigned int)phy_from);
 				return -1;
 			}
+			/*Fixed frame error in random position of avs code stream.
+			Called in an interrupt.*/
+			flush_dcache_page(phys_to_page(phy_from));
 			/*
 			codec_mm_dma_flush(vaddr,
 				tmp_size, DMA_FROM_DEVICE);
@@ -624,6 +627,9 @@ static int crc32_vmap_le(unsigned int *crc32,
 					__func__, (unsigned int)phyaddr);
 				return -1;
 			}
+			/*Fixed frame error in random position of avs code stream.
+			Called in an interrupt.*/
+			flush_dcache_page(phys_to_page(phyaddr));
 			/*
 			codec_mm_dma_flush(vaddr,
 				tmp_size, DMA_FROM_DEVICE);
@@ -897,9 +903,9 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 			return -2;
 		if ((mgr->y_vaddr) && (mgr->uv_vaddr)) {
 			codec_mm_dma_flush(mgr->y_vaddr,
-				mgr->size_y, DMA_FROM_DEVICE);
+				mgr->canvas_w * mgr->canvas_h, DMA_FROM_DEVICE);
 			codec_mm_dma_flush(mgr->uv_vaddr,
-				mgr->size_uv, DMA_FROM_DEVICE);
+				((mgr->canvas_w * mgr->canvas_h) >> 1), DMA_FROM_DEVICE);
 		}
 		if (mgr->enable & CRC_MASK)
 			ret = do_check_nv21(mgr, vf);
