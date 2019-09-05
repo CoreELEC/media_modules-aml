@@ -2382,7 +2382,9 @@ static int check_force_interlace(struct vdec_h264_hw_s *hw,
 	struct FrameStore *frame)
 {
 	int bForceInterlace = 0;
-
+	/* no di in secure mode, disable force di */
+	if (vdec_secure(hw_to_vdec(hw)))
+		return 0;
 	if (frame->frame) {
 		if (frame->frame->coded_frame
 			&& !frame->frame->frame_mbs_only_flag) {
