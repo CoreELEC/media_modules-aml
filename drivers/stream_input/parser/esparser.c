@@ -272,6 +272,11 @@ static ssize_t _esparser_write_s(const char __user *buf,
 	/*pr_info("write wp 0x%x, count %d, start 0x%x, end 0x%x\n",
 	*		 wp, (u32)count, buf_start, buf_end);*/
 	if (wp + count > buf_end) {
+		if (wp == buf_end) {
+			wp = buf_start;
+			set_buf_wp(type, wp);
+			return -EAGAIN;
+		}
 		vaddr = codec_mm_phys_to_virt(wp);
 		ret = copy_from_user(vaddr, p, buf_end - wp);
 		if (ret > 0) {
