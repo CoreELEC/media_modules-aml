@@ -5877,9 +5877,9 @@ static void check_pic_decoded_error(struct hevc_state_s *hevc,
 				current_lcu_idx,
 				hevc->lcu_x_num*hevc->lcu_y_num);
 			if (((hevc->i_only & 0x4)  == 0) && hevc->cur_pic->POC && ( hevc->cur_pic->slice_type == 0)
-					&& ((hevc->cur_pic->POC + hevc->sps_num_reorder_pics_0) < hevc->iPrevPOC)) {
+					&& ((hevc->cur_pic->POC + MAX_BUF_NUM) < hevc->iPrevPOC)) {
 					hevc_print(hevc, 0,
-					"Flush  .. num_reorder_pic %d  pic->POC %d  hevc->iPrevPOC %d\n",
+					"Flush.. num_reorder_pic %d  pic->POC %d  hevc->iPrevPOC %d\n",
 					hevc->sps_num_reorder_pics_0,hevc->cur_pic->POC ,hevc->iPrevPOC);
 					flush_output(hevc, get_pic_by_POC(hevc, hevc->cur_pic->POC ));
 			}
