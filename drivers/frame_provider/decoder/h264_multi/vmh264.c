@@ -667,6 +667,7 @@ struct vdec_h264_hw_s {
 	u8 config_bufmgr_done;
 	u32 max_reference_size;
 	u32 decode_pic_count;
+	u32 reflist_error_count;
 	int start_search_pos;
 	u32 reg_iqidct_control;
 	u32 reg_vcop_ctrl_reg;
@@ -5611,11 +5612,13 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if (error_proc_policy & 0x400) {
 				int ret = dpb_check_ref_list_error(p_H264_Dpb);
 				if (ret != 0) {
+					hw->reflist_error_count ++;
 					dpb_print(DECODE_ID(hw), 0,
-						"reference list error %d frame count %d to skip %d\n",
+						"reference list error %d frame count %d to skip % reflist_error_count %dd\n",
 						ret,
 						hw->decode_pic_count+1,
-						hw->skip_frame_count);
+						hw->skip_frame_count,
+						hw->reflist_error_count);
 
 					if (hw->ref_err_flush_dpb_flag) {
 						flush_dpb(p_H264_Dpb);
@@ -5626,19 +5629,20 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						}
 					}
 
-					hw->data_flag |= ERROR_FLAG;
-					p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
-					if ((error_proc_policy & 0x80)
+					p_H264_Dpb->mVideo.dec_picture->data_flag = NODISP_FLAG;
+					if (((error_proc_policy & 0x80)
 						&& ((hw->dec_flag &
-							NODISP_FLAG) == 0)) {
+							NODISP_FLAG) == 0)) ||(hw->reflist_error_count > 50)) {
 						hw->reset_bufmgr_flag = 1;
+						hw->reflist_error_count =0;
 						amvdec_stop();
 						hw->dec_result
 							= DEC_RESULT_DONE;
 						vdec_schedule_work(&hw->work);
 						return IRQ_HANDLED;
 					}
-				}
+				} else
+					hw->reflist_error_count = 0;
 			}
 			if ((error_proc_policy & 0x800)
 				&& p_H264_Dpb->dpb_error_flag != 0) {
