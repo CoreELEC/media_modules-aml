@@ -140,7 +140,7 @@ static unsigned int force_rate_framebase;
 static unsigned int force_disp_bufspec_num;
 static unsigned int fixed_frame_rate_mode;
 static unsigned int error_recovery_mode_in;
-static int start_decode_buf_level = 0x8000;
+static int start_decode_buf_level = 0x4000;
 static int pre_decode_buf_level = 0x1000;
 static int stream_mode_start_num = 4;
 
