@@ -2755,6 +2755,31 @@ static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
 			(void *)hevc->m_mv_BUF[i].start_adr,
 			hevc->m_mv_BUF[i].size);
 		}
+		if (!vdec_secure(hw_to_vdec(hevc)) && (hevc->m_mv_BUF[i].start_adr)) {
+			void *mem_start_virt;
+			mem_start_virt =
+					codec_mm_phys_to_virt(hevc->m_mv_BUF[i].start_adr);
+			if (mem_start_virt) {
+					memset(mem_start_virt, 0, hevc->m_mv_BUF[i].size);
+					codec_mm_dma_flush(mem_start_virt,
+							hevc->m_mv_BUF[i].size, DMA_TO_DEVICE);
+			} else {
+					mem_start_virt = codec_mm_vmap(
+							hevc->m_mv_BUF[i].start_adr,
+							hevc->m_mv_BUF[i].size);
+					if (mem_start_virt) {
+							memset(mem_start_virt, 0, hevc->m_mv_BUF[i].size);
+							codec_mm_dma_flush(mem_start_virt,
+									hevc->m_mv_BUF[i].size,
+									DMA_TO_DEVICE);
+							codec_mm_unmap_phyaddr(mem_start_virt);
+					} else {
+							/*not virt for tvp playing,
+							may need clear on ucode.*/
+							pr_err("ref %s	mem_start_virt failed\n", __func__);
+					}
+			}
+		}
 	}
 	/*put_cma_alloc_ref();*/ /*DEBUG_TMP*/
 	return ret;
@@ -2999,6 +3024,32 @@ static int alloc_buf(struct hevc_state_s *hevc)
 					i,
 					(void *)hevc->m_BUF[i].start_adr,
 					hevc->m_BUF[i].size);
+				}
+				/*flush the buffer make sure no cache dirty*/
+				if (!vdec_secure(hw_to_vdec(hevc)) && (hevc->m_BUF[i].start_adr)) {
+					void *mem_start_virt;
+					mem_start_virt =
+					codec_mm_phys_to_virt(hevc->m_BUF[i].start_adr);
+					if (mem_start_virt) {
+						memset(mem_start_virt, 0, hevc->m_BUF[i].size);
+						codec_mm_dma_flush(mem_start_virt,
+						hevc->m_BUF[i].size, DMA_TO_DEVICE);
+					} else {
+						mem_start_virt = codec_mm_vmap(
+						hevc->m_BUF[i].start_adr,
+						hevc->m_BUF[i].size);
+						if (mem_start_virt) {
+							memset(mem_start_virt, 0, hevc->m_BUF[i].size);
+							codec_mm_dma_flush(mem_start_virt,
+							hevc->m_BUF[i].size,
+							DMA_TO_DEVICE);
+							codec_mm_unmap_phyaddr(mem_start_virt);
+						} else {
+							/*not virt for tvp playing,
+							may need clear on ucode.*/
+							pr_err("ref %s	mem_start_virt failed\n", __func__);
+						}
+					}
 				}
 			}
 			/*put_cma_alloc_ref();*/ /*DEBUG_TMP*/
@@ -11937,6 +11988,7 @@ static int amvdec_h265_probe(struct platform_device *pdev)
 	struct vdec_dev_reg_s *pdata =
 		(struct vdec_dev_reg_s *)pdev->dev.platform_data;
 #endif
+	char *tmpbuf;
 	int ret;
 	struct hevc_state_s *hevc;
 
@@ -12000,6 +12052,29 @@ static int amvdec_h265_probe(struct platform_device *pdev)
 		return ret;
 	}
 	hevc->buf_size = work_buf_size;
+
+
+	if (!vdec_secure(pdata)) {
+			tmpbuf = (char *)codec_mm_phys_to_virt(hevc->buf_start);
+			if (tmpbuf) {
+					memset(tmpbuf, 0, work_buf_size);
+					dma_sync_single_for_device(amports_get_dma_device(),
+							hevc->buf_start,
+							work_buf_size, DMA_TO_DEVICE);
+			} else {
+					tmpbuf = codec_mm_vmap(hevc->buf_start,
+							work_buf_size);
+					if (tmpbuf) {
+							memset(tmpbuf, 0, work_buf_size);
+							dma_sync_single_for_device(
+									amports_get_dma_device(),
+									hevc->buf_start,
+									work_buf_size,
+									DMA_TO_DEVICE);
+							codec_mm_unmap_phyaddr(tmpbuf);
+					}
+			}
+	}
 
 	if (get_dbg_flag(hevc)) {
 		hevc_print(hevc, 0,
