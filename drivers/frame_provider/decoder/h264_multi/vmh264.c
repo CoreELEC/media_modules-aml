@@ -847,7 +847,7 @@ struct vdec_h264_hw_s {
 	unsigned int first_i_policy;
 };
 
-static u32 again_threshold = 0x40;
+static u32 again_threshold;
 
 static void dump_bufspec(struct vdec_h264_hw_s *hw,
 	const char *caller);

@@ -135,7 +135,7 @@ static unsigned int decode_timeout_val = 100;
 #define AGAIN_HAS_THRESHOLD
 
 #ifdef AGAIN_HAS_THRESHOLD
-u32 again_threshold = 0x40;
+u32 again_threshold;
 #endif
 
 /*

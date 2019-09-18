@@ -1730,7 +1730,7 @@ static int v4l_get_fb(struct aml_vcodec_ctx *ctx, struct vdec_fb **out)
 }
 
 #ifdef AGAIN_HAS_THRESHOLD
-u32 again_threshold = 0x40;
+u32 again_threshold;
 #endif
 #ifdef SEND_LMEM_WITH_RPM
 #define get_lmem_params(hevc, ladr) \
@@ -11718,7 +11718,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			again_threshold) {
 			int r = vdec_sync_input(vdec);
 			hevc_print(hevc,
-			PRINT_FLAG_VDEC_DETAIL, "%s buf lelvel:%x\n",  __func__, r);
+				PRINT_FLAG_VDEC_DETAIL, "%s buf lelvel:%x\n",  __func__, r);
 			return 0;
 		}
 	}

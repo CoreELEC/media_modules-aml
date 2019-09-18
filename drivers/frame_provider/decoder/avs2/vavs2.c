@@ -250,7 +250,7 @@ static u32 work_buf_size = 32 * 1024 * 1024;
 
 static u32 mv_buf_margin;
 static int pre_decode_buf_level = 0x1000;
-static u32 again_threshold = 0x40;
+static u32 again_threshold;
 
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
