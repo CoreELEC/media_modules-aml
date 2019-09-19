@@ -193,6 +193,23 @@ static const char * const vdec_status_string[] = {
 	"VDEC_STATUS_CONNECTED",
 	"VDEC_STATUS_ACTIVE"
 };
+/*
+bit [28] enable print
+bit [23:16] etc
+bit [15:12]
+	none 0 and not 0x1: force single
+	none 0 and 0x1: force multi
+bit [8]
+	1: force dual
+bit [3]
+	1: use mavs for single mode
+bit [2]
+	1: force vfm path for frame mode
+bit [1]
+	1: force esparser auto mode
+bit [0]
+	1: disable audo manual mode ??
+*/
 
 static int debugflags;
 
@@ -241,6 +258,13 @@ int vdec_get_debug_flags(void)
 	return debugflags;
 }
 EXPORT_SYMBOL(vdec_get_debug_flags);
+
+void VDEC_PRINT_FUN_LINENO(const char *fun, int line)
+{
+	if (debugflags & 0x10000000)
+		pr_info("%s, %d\n", fun, line);
+}
+EXPORT_SYMBOL(VDEC_PRINT_FUN_LINENO);
 
 unsigned char is_mult_inc(unsigned int type)
 {
@@ -932,7 +956,7 @@ static const char * const vdec_device_name[] = {
 static const char *get_dev_name(bool use_legacy_vdec, int format)
 {
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	if (use_legacy_vdec)
+	if (use_legacy_vdec && (debugflags & 0x8) == 0)
 		return vdec_device_name[format * 2];
 	else
 		return vdec_device_name[format * 2 + 1];
@@ -2121,7 +2145,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 			vdec->format == VFORMAT_VP9) ?
 				VDEC_INPUT_TARGET_HEVC :
 				VDEC_INPUT_TARGET_VLD);
-	if (vdec_single(vdec))
+	if (vdec_single(vdec) || (vdec_get_debug_flags() & 0x2))
 		vdec_enable_DMC(vdec);
 	p->cma_dev = vdec_core->cma_dev;
 	p->get_canvas = get_canvas;
@@ -2134,6 +2158,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	/* todo */
 	if (!vdec_dual(vdec))
 		p->use_vfm_path = vdec_stream_based(vdec);
+	if (debugflags & 0x4)
+		p->use_vfm_path = 1;
 	/* vdec_dev_reg.flag = 0; */
 	if (vdec->id >= 0)
 		id = vdec->id;

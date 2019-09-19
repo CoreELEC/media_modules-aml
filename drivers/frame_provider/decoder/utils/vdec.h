@@ -446,6 +446,9 @@ extern void vdec_set_step_mode(void);
 #endif
 int vdec_get_debug_flags(void);
 
+void VDEC_PRINT_FUN_LINENO(const char *fun, int line);
+
+
 unsigned char is_mult_inc(unsigned int);
 
 int vdec_get_status(struct vdec_s *vdec);
