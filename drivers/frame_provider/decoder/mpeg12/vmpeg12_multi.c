@@ -1482,9 +1482,9 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 
 		tmp = READ_VREG(MREG_PIC_HEIGHT);
-		if ((tmp > 1080) || (tmp == 0)) {
-			new_pic->height = 1080;
-			hw->frame_height = 1080;
+		if ((tmp > 1088) || (tmp == 0)) {
+			new_pic->height = 1088;
+			hw->frame_height = 1088;
 		} else {
 			new_pic->height = tmp;
 			hw->frame_height = tmp;

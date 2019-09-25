@@ -139,6 +139,7 @@ static int pre_decode_buf_level = 0x800;
 static int debug_enable;
 static unsigned int radr;
 static unsigned int rval;
+/* 0x40bit = 8byte */
 static unsigned int frmbase_cont_bitlevel = 0x40;
 
 #define VMPEG4_DEV_NUM        9
@@ -1031,15 +1032,35 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		if (vdec_frame_based(vdec) &&
 			(frmbase_cont_bitlevel != 0) &&
 			(hw->first_i_frame_ready)) {
-			u32 bitcnt = READ_VREG(VIFF_BIT_CNT);
-			if (bitcnt > frmbase_cont_bitlevel) {
-				hw->dec_result = DEC_RESULT_UNFINISH;
-				hw->chunk_offset +=
-					(hw->chunk_size - (bitcnt >> 3) - VDEC_FIFO_ALIGN);
-				hw->chunk_size = (bitcnt >> 3);
-				hw->chunk_frame_count++;
-				hw->unstable_pts = 1;
+			u32 consume_byte, res_byte, bitcnt;
+
+			bitcnt = READ_VREG(VIFF_BIT_CNT);
+			res_byte = bitcnt >> 3;
+
+			if (hw->chunk_size > res_byte) {
+				if (bitcnt > frmbase_cont_bitlevel) {
+					consume_byte = hw->chunk_size - res_byte;
+
+					mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+						"%s, size %d, consume %d, res %d\n", __func__,
+						hw->chunk_size, consume_byte, res_byte);
+
+					if (consume_byte > VDEC_FIFO_ALIGN) {
+						consume_byte -= VDEC_FIFO_ALIGN;
+						res_byte += VDEC_FIFO_ALIGN;
+					}
+					hw->chunk_offset += consume_byte;
+					hw->chunk_size = res_byte;
+					hw->dec_result = DEC_RESULT_UNFINISH;
+					hw->chunk_frame_count++;
+					hw->unstable_pts = 1;
+				} else {
+					hw->chunk_size = 0;
+					hw->chunk_offset = 0;
+				}
 			} else {
+				mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+					"error: bitbyte %d  hw->chunk_size %d\n", res_byte, hw->chunk_size);
 				hw->chunk_size = 0;
 				hw->chunk_offset = 0;
 			}
