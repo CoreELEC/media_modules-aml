@@ -5623,7 +5623,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				if (ret != 0) {
 					hw->reflist_error_count ++;
 					dpb_print(DECODE_ID(hw), 0,
-						"reference list error %d frame count %d to skip % reflist_error_count %dd\n",
+						"reference list error %d frame count %d to skip %d reflist_error_count %d\n",
 						ret,
 						hw->decode_pic_count+1,
 						hw->skip_frame_count,
