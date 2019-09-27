@@ -120,6 +120,7 @@
 
 #define H264_MMU
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
+
 static int mmu_enable;
 /*mmu do not support mbaff*/
 static int force_enable_mmu = 0;
@@ -1867,7 +1868,10 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 
 	if (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) {
 		blkmode = CANVAS_BLKMODE_LINEAR;
-		endian = 7;
+		if ((h264_debug_flag & IGNORE_PARAM_FROM_CONFIG) == 0)
+			endian = 7;
+		else
+			endian = 0;
 	}
 
 	if (hw->is_used_v4l) {
@@ -8618,7 +8622,10 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	/* the ctx from v4l2 driver. */
 	hw->v4l2_ctx = pdata->private;
 
-	hw->canvas_mode = pdata->canvas_mode;
+	if ((h264_debug_flag & IGNORE_PARAM_FROM_CONFIG) == 0)
+		hw->canvas_mode = pdata->canvas_mode;
+	else
+		hw->canvas_mode = mem_map_mode;
 
 	platform_set_drvdata(pdev, pdata);
 
