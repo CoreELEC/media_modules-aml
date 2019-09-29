@@ -735,6 +735,27 @@ static u8 UserDataHandler(struct vdec_avs_hw_s *hw)
 }
 #endif
 
+
+static inline void avs_update_gvs(struct vdec_avs_hw_s *hw)
+{
+	if (hw->gvs->frame_height != hw->frame_height) {
+		hw->gvs->frame_width = hw->frame_width;
+		hw->gvs->frame_height = hw->frame_height;
+	}
+	if (hw->gvs->frame_dur != hw->frame_dur) {
+		hw->gvs->frame_dur = hw->frame_dur;
+		if (hw->frame_dur != 0)
+			hw->gvs->frame_rate = 96000 / hw->frame_dur;
+		else
+			hw->gvs->frame_rate = -1;
+	}
+
+	hw->gvs->status = hw->stat;
+	hw->gvs->error_count = READ_VREG(AV_SCRATCH_C);
+	hw->gvs->drop_frame_count = hw->drop_frame_count;
+
+}
+
 #ifdef HANDLE_AVS_IRQ
 static irqreturn_t vavs_isr(int irq, void *dev_id)
 #else
@@ -742,7 +763,7 @@ static void vavs_isr(void)
 #endif
 {
 	u32 reg;
-	struct vframe_s *vf;
+	struct vframe_s *vf = NULL;
 	u32 dur;
 	u32 repeat_count;
 	u32 picture_type;
@@ -1164,8 +1185,9 @@ static void vavs_isr(void)
 		}
 
 		/*count info*/
-		hw->gvs->frame_dur = hw->frame_dur;
 		vdec_count_info(hw->gvs, 0, offset);
+		avs_update_gvs(hw);
+		vdec_fill_vdec_frame(hw_to_vdec(hw), NULL, hw->gvs, vf, 0);
 
 		/* pr_info("PicType = %d, PTS = 0x%x\n",
 		 *   picture_type, vf->pts);
@@ -3559,6 +3581,8 @@ static int ammvdec_avs_probe(struct platform_device *pdev)
 	hw->platform_dev = pdev;
 
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
+
+	vdec_set_vframe_comm(pdata, DRIVER_NAME);
 
 	if (pdata->parallel_dec == 1)
 		vdec_core_request(pdata, CORE_MASK_VDEC_1);

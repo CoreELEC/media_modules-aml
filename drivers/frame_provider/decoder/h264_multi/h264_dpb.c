@@ -1612,6 +1612,7 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 				  struct StorablePicture *p,
 				  unsigned char data_flag)
 {
+	struct vdec_frames_s *mvfrm = p_H264_Dpb->vdec->mvfrm;
 	struct VideoParameters *p_Vid = &p_H264_Dpb->mVideo;
 	/* InputParameters *p_Inp = p_Vid->p_Inp;
 	 *   dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
@@ -1761,6 +1762,10 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	//fs->pts64 = p->pts64;
 	}
 	fs->timestamp = p->timestamp;
+	if (mvfrm) {
+		fs->frame_size2 = mvfrm->frame_size;
+		fs->hw_decode_time = mvfrm->hw_decode_time;
+	}
 }
 
 void reset_frame_store(struct h264_dpb_stru *p_H264_Dpb,

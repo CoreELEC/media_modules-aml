@@ -809,6 +809,8 @@ struct FrameStore {
 	int min_mv;
 	int avg_mv;
 	int dpb_frame_count;
+	u32 hw_decode_time;
+	u32 frame_size2; // For recording the chunk->size in frame mode
 };
 
 
