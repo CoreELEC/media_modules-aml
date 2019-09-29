@@ -5710,7 +5710,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		hw->last_mby_mbx = 0;
 		hw->last_vld_level = 0;
 		start_process_time(hw);
-	} else if (dec_dpb_status == H264_PIC_DATA_DONE) {
+	} else if (dec_dpb_status == H264_PIC_DATA_DONE
+		||((dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
 pic_done_proc:
 		reset_process_time(hw);
 
@@ -5984,6 +5985,9 @@ empty_proc:
 						(p_H264_Dpb->last_dpb_status == H264_PIC_DATA_DONE) ||
 						((p_H264_Dpb->last_dpb_status == H264_SLICE_HEAD_DONE) &&
 						 (p_H264_Dpb->mSlice.slice_type != B_SLICE))) {
+						 dpb_print(DECODE_ID(hw),
+							PRINT_FLAG_ERROR, "%s last dpb status 0x%x need bugmgr reset \n",
+							p_H264_Dpb->last_dpb_status, __func__);
 							hw->reset_bufmgr_flag = 1;
 					}
 				}
@@ -6201,12 +6205,15 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 
 static void timeout_process(struct vdec_h264_hw_s *hw)
 {
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	hw->timeout_num++;
 	amvdec_stop();
 	if (hw->mmu_enable) {
 		hevc_set_frame_done(hw);
 		hevc_sao_wait_done(hw);
 	}
+	if (!hw->i_only && (error_proc_policy & 0x2))
+		flush_dpb(p_H264_Dpb);
 	dpb_print(DECODE_ID(hw),
 		PRINT_FLAG_ERROR, "%s decoder timeout\n", __func__);
 	release_cur_decoding_buf(hw);
