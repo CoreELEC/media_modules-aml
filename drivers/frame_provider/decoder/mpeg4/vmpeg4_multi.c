@@ -200,6 +200,8 @@ struct pic_info_t {
 	u32 duration;
 	u32 repeat_cnt;
 	ulong v4l_ref_buf_addr;
+	u32 hw_decode_time;
+	u32 frame_size; // For frame base mode;
 };
 
 struct vdec_mpeg4_hw_s {
@@ -774,6 +776,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
 		} else {
+			struct vdec_info vinfo;
+
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hw->mm_blk_handle, index);
@@ -784,6 +788,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			decoder_do_frame_check(vdec, vf);
 			hw->frame_num++;
 
+			vdec->dec_status(vdec, &vinfo);
+			vdec_fill_vdec_frame(vdec, NULL,
+				&vinfo, vf, pic->hw_decode_time);
 			if (without_display_mode == 0) {
 				vf_notify_receiver(vdec->vf_provider_name,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -949,6 +956,11 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 		hw->dec_result = DEC_RESULT_DONE;
 		dec_pic = &hw->pic[index];
+		if (vdec->mvfrm) {
+			dec_pic->frame_size = vdec->mvfrm->frame_size;
+			dec_pic->hw_decode_time =
+			local_clock() - vdec->mvfrm->hw_decode_start;
+		}
 		dec_pic->pts_valid = false;
 		dec_pic->pts = 0;
 		dec_pic->pts64 = 0;
@@ -2205,6 +2217,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		size = hw->chunk_size +
 			(hw->chunk_offset & (VDEC_FIFO_ALIGN - 1));
 		WRITE_VREG(VIFF_BIT_CNT, size * 8);
+		if (vdec->mvfrm)
+			vdec->mvfrm->frame_size = hw->chunk->size;
 	}
 	hw->input_empty = 0;
 	hw->last_vld_level = 0;
@@ -2213,6 +2227,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	/* wmb before ISR is handled */
 	wmb();
 
+	if (vdec->mvfrm)
+		vdec->mvfrm->hw_decode_start = local_clock();
 	amvdec_start();
 	hw->stat |= STAT_VDEC_RUN;
 	hw->init_flag = 1;
@@ -2347,6 +2363,8 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
+
+	vdec_set_vframe_comm(pdata, DRIVER_NAME);
 
 	if (pdata->parallel_dec == 1)
 		vdec_core_request(pdata, CORE_MASK_VDEC_1);

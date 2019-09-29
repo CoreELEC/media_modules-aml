@@ -2538,6 +2538,7 @@ static int check_force_interlace(struct vdec_h264_hw_s *hw,
 static void fill_frame_info(struct vdec_h264_hw_s *hw, struct FrameStore *frame)
 {
 	struct vframe_qos_s *vframe_qos = &hw->vframe_qos;
+
 	if (frame->slice_type == I_SLICE)
 		vframe_qos->type = 1;
 	else if (frame->slice_type == P_SLICE)
@@ -2545,7 +2546,10 @@ static void fill_frame_info(struct vdec_h264_hw_s *hw, struct FrameStore *frame)
 	else if (frame->slice_type == B_SLICE)
 		vframe_qos->type = 3;
 
-	vframe_qos->size = frame->frame_size;
+	if (input_frame_based(hw_to_vdec(hw)))
+		vframe_qos->size = frame->frame_size2;
+	else
+		vframe_qos->size = frame->frame_size;
 	vframe_qos->pts = frame->pts64;
 
 	vframe_qos->max_mv = frame->max_mv;
@@ -2578,8 +2582,6 @@ static void fill_frame_info(struct vdec_h264_hw_s *hw, struct FrameStore *frame)
 		vframe_qos->min_skip);
 */
 	vframe_qos->num++;
-	if (hw->frameinfo_enable)
-		vdec_fill_frame_info(vframe_qos, 1);
 }
 
 static int is_iframe(struct FrameStore *frame) {
@@ -2866,8 +2868,16 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->duration = vf->duration/2;
 		}
 
-		if (i == 0)
-			decoder_do_frame_check(hw_to_vdec(hw), vf);
+		if (i == 0) {
+			struct vdec_s *pvdec;
+			struct vdec_info vs;
+
+			pvdec = hw_to_vdec(hw);
+			memset(&vs, 0, sizeof(struct vdec_info));
+			pvdec->dec_status(pvdec, &vs);
+			decoder_do_frame_check(pvdec, vf);
+			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
+		}
 
 		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
 		vf->sar_width = hw->width_aspect_ratio;
@@ -5514,6 +5524,10 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int ret;
 
+	if (vdec->mvfrm)
+		vdec->mvfrm->hw_decode_time =
+		local_clock() - vdec->mvfrm->hw_decode_start;
+
 	if (input_frame_based(vdec) &&
 			(!(hw->i_only & 0x2)) &&
 			frmbase_cont_bitlevel != 0 &&
@@ -6818,8 +6832,10 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
-	if (hw->frame_dur != 0)
+	if (hw->frame_dur != 0) {
+		vstatus->frame_dur = hw->frame_dur;
 		vstatus->frame_rate = 96000 / hw->frame_dur;
+	}
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
@@ -8724,6 +8740,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		WRITE_VREG(H264_DECODE_INFO, (1<<13));
 		WRITE_VREG(H264_DECODE_SIZE, decode_size);
 		WRITE_VREG(VIFF_BIT_CNT, decode_size * 8);
+		if (vdec->mvfrm)
+			vdec->mvfrm->frame_size = hw->chunk->size;
 	} else {
 		if (size <= 0)
 			size = 0x7fffffff; /*error happen*/
@@ -8757,6 +8775,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		else
 			CLEAR_VREG_MASK(VDEC_ASSIST_MMC_CTRL1, 1 << 3);
 	}
+	if (vdec->mvfrm)
+		vdec->mvfrm->hw_decode_start = local_clock();
 	amvdec_start();
 	if (hw->mmu_enable /*&& !hw->frame_busy && !hw->frame_done*/) {
 		WRITE_VREG(HEVC_ASSIST_SCRATCH_0, 0x0);
@@ -9338,6 +9358,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 				| CORE_MASK_COMBINE);
 
 	atomic_set(&hw->vh264_active, 1);
+	vdec_set_vframe_comm(pdata, DRIVER_NAME);
 
 	return 0;
 }

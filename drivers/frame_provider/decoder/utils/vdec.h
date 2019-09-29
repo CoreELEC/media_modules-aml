@@ -121,7 +121,13 @@ extern void dma_contiguous_early_fixup(phys_addr_t base, unsigned long size);
 unsigned int get_vdec_clk_config_settings(void);
 void update_vdec_clk_config_settings(unsigned int config);
 //unsigned int get_mmu_mode(void);//DEBUG_TMP
-extern void vdec_fill_frame_info(struct vframe_qos_s *vframe_qos, int debug);
+//extern void vdec_fill_frame_info(struct vframe_qos_s *vframe_qos, int debug);
+extern void vdec_fill_vdec_frame(struct vdec_s *vdec,
+				struct vframe_qos_s *vframe_qos,
+				struct vdec_info *vinfo,
+				struct vframe_s *vf, u32 hw_dec_time);
+extern void vdec_set_vframe_comm(struct vdec_s *vdec, char *n);
+
 
 struct vdec_s;
 enum vformat_t;
@@ -265,6 +271,7 @@ struct vdec_s {
 	int parallel_dec;
 	volatile u64 isr_ns;
 	volatile u64 tfn_ns;
+	struct vdec_frames_s *mvfrm;
 };
 
 /* common decoder vframe provider name to use default vfm path */
@@ -448,7 +455,7 @@ int vdec_get_status(struct vdec_s *vdec);
 
 void vdec_set_timestamp(struct vdec_s *vdec, u64 timestamp);
 
-extern struct vframe_qos_s *vdec_get_qos_info(void);
+extern u32  vdec_get_frame_vdec(struct vdec_s *vdec,  struct vframe_counter_s *tmpbuf);
 
 int vdec_get_frame_num(struct vdec_s *vdec);
 

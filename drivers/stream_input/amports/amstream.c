@@ -1611,6 +1611,8 @@ static int amstream_open(struct inode *inode, struct file *file)
 	if (iminor(inode) >= amstream_port_num)
 		return -ENODEV;
 
+	//pr_err("%s, port name %s\n", __func__, port->name);
+	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
 	mutex_lock(&amstream_mutex);
 
 	if (port->type & PORT_TYPE_VIDEO) {
@@ -2606,16 +2608,70 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 			r = -EINVAL;
 		break;
 	case AMSTREAM_IOC_GET_QOSINFO:
+	case AMSTREAM_IOC_GET_MVDECINFO:
 		{
-			struct av_param_qosinfo_t  __user *uarg = (void *)arg;
-			struct vframe_qos_s *qos_info = vdec_get_qos_info();
-			if (this->type & PORT_TYPE_VIDEO) {
-				if (qos_info != NULL && copy_to_user((void *)uarg->vframe_qos,
-							qos_info,
-							QOS_FRAME_NUM*sizeof(struct vframe_qos_s))) {
-					r = -EFAULT;
+			u32 slots = 0;
+			u32 struct_size = 0;
+			int vdec_id = 0;
+			struct vdec_s *vdec = NULL;
+			struct vframe_counter_s tmpbuf[QOS_FRAME_NUM] = {0};
+			struct av_param_mvdec_t  __user *uarg = (void *)arg;
+
+			if (AMSTREAM_IOC_GET_MVDECINFO == cmd) {
+				if (get_user(vdec_id, &uarg->vdec_id) < 0
+				   || get_user(struct_size, &uarg->struct_size) < 0) {
+						r = -EFAULT;
+						break;
+					}
+				if (struct_size != sizeof(struct av_param_mvdec_t)) {
+					pr_err("pass in size %u != expected size %u\n",
+						struct_size, sizeof(struct av_param_mvdec_t));
+					pr_err("App using old structue,we will support it.\n");
+					//Here will add the compatibility for old structure when
+					//current struecture be substituded by newer structure.
+					//msleep(1000); let app handle it.
 					break;
 				}
+			}
+			vdec = vdec_get_vdec_by_id(vdec_id);
+			if (!vdec) {
+				r = 0;
+				break;
+			}
+
+			slots = vdec_get_frame_vdec(vdec, tmpbuf);
+			if (AMSTREAM_IOC_GET_MVDECINFO == cmd)
+				put_user(slots, &uarg->slots);
+			if (slots) {
+				if (AMSTREAM_IOC_GET_MVDECINFO == cmd) {
+					if (copy_to_user((void *)&uarg->comm,
+								&vdec->mvfrm->comm,
+								sizeof(struct vframe_comm_s))) {
+						r = -EFAULT;
+						break;
+					}
+					if (copy_to_user((void *)&uarg->minfo[0],
+								tmpbuf,
+								slots*sizeof(struct vframe_counter_s))) {
+						r = -EFAULT;
+						kfree(tmpbuf);
+						break;
+					}
+				}else { //For compatibility, only copy the qos
+					struct av_param_qosinfo_t  __user *uarg = (void *)arg;
+					int i;
+					for (i=0; i<slots; i++)
+						if (copy_to_user((void *)&uarg->vframe_qos[i],
+									&tmpbuf[i].qos,
+									sizeof(struct vframe_qos_s))) {
+							r = -EFAULT;
+							break;
+						}
+				}
+			} else {
+				/*Vdec didn't produce item,wait for 10 ms to avoid user application
+			      infinitely calling*/
+				//msleep(10); let user app handle it.
 			}
 		}
 		break;
@@ -3420,6 +3476,7 @@ static long amstream_do_ioctl(struct port_priv_s *priv,
 	case AMSTREAM_IOC_SET_PTR:
 	case AMSTREAM_IOC_SYSINFO:
 	case AMSTREAM_IOC_GET_QOSINFO:
+	case AMSTREAM_IOC_GET_MVDECINFO:
 		r = amstream_do_ioctl_new(priv, cmd, arg);
 		break;
 	default:

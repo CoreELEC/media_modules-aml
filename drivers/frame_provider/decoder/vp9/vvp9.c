@@ -582,6 +582,8 @@ struct PIC_BUFFER_CONFIG_s {
 	int min_mv;
 	int avg_mv;
 
+	u32 hw_decode_time;
+	u32 frame_size2; // For frame base mode
 	bool vframe_bound;
 } PIC_BUFFER_CONFIG;
 
@@ -7007,16 +7009,33 @@ static void update_vf_memhandle(struct VP9Decoder_s *pbi,
 	}
 }
 
+static inline void pbi_update_gvs(struct VP9Decoder_s *pbi)
+{
+	if (pbi->gvs->frame_height != frame_height) {
+		pbi->gvs->frame_width = frame_width;
+		pbi->gvs->frame_height = frame_height;
+	}
+	if (pbi->gvs->frame_dur != pbi->frame_dur) {
+		pbi->gvs->frame_dur = pbi->frame_dur;
+		if (pbi->frame_dur != 0)
+			pbi->gvs->frame_rate = 96000 / pbi->frame_dur;
+		else
+			pbi->gvs->frame_rate = -1;
+	}
+	pbi->gvs->status = pbi->stat | pbi->fatal_error;
+}
+
 static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				struct PIC_BUFFER_CONFIG_s *pic_config)
 {
 	struct vframe_s *vf = NULL;
+	struct vdec_s *pvdec = hw_to_vdec(pbi);
 	int stream_offset = pic_config->stream_offset;
 	unsigned short slice_type = pic_config->slice_type;
 	u32 pts_valid = 0, pts_us64_valid = 0;
 	u32 pts_save;
 	u64 pts_us64_save;
-	u32 frame_size;
+	u32 frame_size = 0;
 
 	if (debug & VP9_DEBUG_BUFMGR)
 		pr_info("%s index = %d\r\n", __func__, pic_config->index);
@@ -7042,7 +7061,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		}
 
 #ifdef MULTI_INSTANCE_SUPPORT
-		if (vdec_frame_based(hw_to_vdec(pbi))) {
+		if (vdec_frame_based(pvdec)) {
 			vf->pts = pic_config->pts;
 			vf->pts_us64 = pic_config->pts64;
 			vf->timestamp = pic_config->timestamp;
@@ -7260,16 +7279,19 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		&& (debug & VP9_DEBUG_NO_TRIGGER_FRAME) == 0
 		&& (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX))) {
 			inc_vf_ref(pbi, pic_config->index);
-			decoder_do_frame_check(hw_to_vdec(pbi), vf);
+			decoder_do_frame_check(pvdec, vf);
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 			pbi->vf_pre_count++;
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+			pbi_update_gvs(pbi);
 			/*count info*/
-			gvs->frame_dur = pbi->frame_dur;
-			vdec_count_info(gvs, 0, stream_offset);
-#endif
-			hw_to_vdec(pbi)->vdec_fps_detec(hw_to_vdec(pbi)->id);
+			vdec_count_info(pbi->gvs, 0, stream_offset);
+			pbi->gvs->bit_rate = bit_depth_luma;
+			pbi->gvs->frame_data = bit_depth_chroma;
+			pbi->gvs->samp_cnt = get_double_write_mode(pbi);
+			vdec_fill_vdec_frame(pvdec, &pbi->vframe_qos, pbi->gvs,
+				vf, pic_config->hw_decode_time);
+			pvdec->vdec_fps_detec(pvdec->id);
 			if (without_display_mode == 0) {
 				vf_notify_receiver(pbi->provider_name,
 						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -7665,7 +7687,10 @@ static void fill_frame_info(struct VP9Decoder_s *pbi,
 /*
 #define SHOW_QOS_INFO
 */
-	vframe_qos->size = framesize;
+	if (input_frame_based(hw_to_vdec(pbi)))
+		vframe_qos->size = frame->frame_size2;
+	else
+		vframe_qos->size = framesize;
 	vframe_qos->pts = pts;
 #ifdef SHOW_QOS_INFO
 	vp9_print(pbi, 0, "slice:%d\n", frame->slice_type);
@@ -7698,9 +7723,6 @@ static void fill_frame_info(struct VP9Decoder_s *pbi,
 			vframe_qos->min_skip);
 #endif
 	vframe_qos->num++;
-
-	if (pbi->frameinfo_enable)
-		vdec_fill_frame_info(vframe_qos, 1);
 }
 
 /* only when we decoded one field or one frame,
@@ -7708,9 +7730,15 @@ we can call this function to get qos info*/
 static void get_picture_qos_info(struct VP9Decoder_s *pbi)
 {
 	struct PIC_BUFFER_CONFIG_s *frame = &pbi->cur_buf->buf;
+	struct vdec_s *vdec = hw_to_vdec(pbi);
 
 	if (!frame)
 		return;
+	if (vdec->mvfrm) {
+		frame->frame_size2 = vdec->mvfrm->frame_size;
+		frame->hw_decode_time =
+		local_clock() - vdec->mvfrm->hw_decode_start;
+	}
 
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) {
 		unsigned char a[3];
@@ -8755,19 +8783,17 @@ int vvp9_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->error_count = 0;
 	vstatus->status = vp9->stat | vp9->fatal_error;
 	vstatus->frame_dur = vp9->frame_dur;
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	vstatus->bit_rate = gvs->bit_rate;
-	vstatus->frame_data = gvs->frame_data;
-	vstatus->total_data = gvs->total_data;
-	vstatus->frame_count = gvs->frame_count;
-	vstatus->error_frame_count = gvs->error_frame_count;
-	vstatus->drop_frame_count = gvs->drop_frame_count;
-	vstatus->total_data = gvs->total_data;
-	vstatus->samp_cnt = gvs->samp_cnt;
-	vstatus->offset = gvs->offset;
+	vstatus->bit_rate = vp9->gvs->bit_rate;
+	vstatus->frame_data = vp9->gvs->frame_data;
+	vstatus->total_data = vp9->gvs->total_data;
+	vstatus->frame_count = vp9->gvs->frame_count;
+	vstatus->error_frame_count = vp9->gvs->error_frame_count;
+	vstatus->drop_frame_count = vp9->gvs->drop_frame_count;
+	vstatus->total_data = vp9->gvs->total_data;
+	vstatus->samp_cnt = vp9->gvs->samp_cnt;
+	vstatus->offset = vp9->gvs->offset;
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s", DRIVER_NAME);
-#endif
 	return 0;
 }
 
@@ -8935,6 +8961,7 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 		pr_info("the struct of vdec status malloc failed.\n");
 		return -1;
 	}
+	vdec_set_vframe_comm(hw_to_vdec(pbi), DRIVER_NAME);
 #ifdef DEBUG_PTS
 	pbi->pts_missed = 0;
 	pbi->pts_hit = 0;
@@ -9965,6 +9992,8 @@ static void run_front(struct vdec_s *vdec)
 		WRITE_VREG(HEVC_SHIFT_BYTE_COUNT, 0);
 		size = pbi->chunk->size +
 			(pbi->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+		if (vdec->mvfrm)
+			vdec->mvfrm->frame_size = pbi->chunk->size;
 	}
 	WRITE_VREG(HEVC_DECODE_SIZE, size);
 	WRITE_VREG(HEVC_DECODE_COUNT, pbi->slice_idx);
@@ -10130,6 +10159,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx\r\n",
 		__func__, mask);
 
+	if (vdec->mvfrm)
+		vdec->mvfrm->hw_decode_start = local_clock();
 	run_count[pbi->index]++;
 	pbi->vdec_cb_arg = arg;
 	pbi->vdec_cb = callback;

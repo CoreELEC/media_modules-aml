@@ -121,10 +121,8 @@ static int max_di_instance = 2;
 
 //static int path_debug = 0;
 
-static struct vframe_qos_s *frame_info_buf_in = NULL;
-static struct vframe_qos_s *frame_info_buf_out = NULL;
-static int frame_qos_wr = 0;
-static int frame_qos_rd = 0;
+static int enable_mvdec_info = 1;
+
 int decode_underflow = 0;
 
 #define CANVAS_MAX_SIZE (AMVDEC_CANVAS_MAX1 - AMVDEC_CANVAS_START_INDEX + 1 + AMVDEC_CANVAS_MAX2 + 1)
@@ -1059,6 +1057,12 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 			vdec->master = master;
 			master->slave = vdec;
 			master->sched = 1;
+		}
+		if (enable_mvdec_info) {
+			vdec->mvfrm = (struct vdec_frames_s *)
+				vzalloc(sizeof(struct vdec_frames_s));
+			if (!vdec->mvfrm)
+				pr_err("vzalloc: vdec_frames_s failed\n");
 		}
 	}
 
@@ -2049,6 +2053,8 @@ int vdec_destroy(struct vdec_s *vdec)
 	vdec_profile_flush(vdec);
 #endif
 	ida_simple_remove(&vdec_core->ida, vdec->id);
+	if (vdec->mvfrm)
+		vfree(vdec->mvfrm);
 	vfree(vdec);
 
 	atomic_dec(&vdec_core->vdec_nr);
@@ -2068,6 +2074,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	const char *dev_name;
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
 
+	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
 	dev_name = get_dev_name(vdec_single(vdec), vdec->format);
 
 	if (dev_name == NULL)
@@ -2364,25 +2371,6 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 		vdec->sys_info->height);
 	/* vdec is now ready to be active */
 	vdec_set_status(vdec, VDEC_STATUS_DISCONNECTED);
-	if (p->use_vfm_path) {
-		frame_info_buf_in = (struct vframe_qos_s *)
-			kmalloc(QOS_FRAME_NUM*sizeof(struct vframe_qos_s), GFP_KERNEL);
-		if (!frame_info_buf_in)
-			pr_err("kmalloc: frame_info_buf_in failed\n");
-		else
-			memset(frame_info_buf_in, 0,
-					QOS_FRAME_NUM*sizeof(struct vframe_qos_s));
-
-		frame_info_buf_out = (struct vframe_qos_s *)
-			kmalloc(QOS_FRAME_NUM*sizeof(struct vframe_qos_s), GFP_KERNEL);
-		if (!frame_info_buf_out)
-			pr_err("kmalloc: frame_info_buf_out failed\n");
-		else
-			memset(frame_info_buf_out, 0,
-					QOS_FRAME_NUM*sizeof(struct vframe_qos_s));
-		frame_qos_wr = 0;
-		frame_qos_rd = 0;
-	}
 	return 0;
 
 error:
@@ -2445,14 +2433,6 @@ void vdec_release(struct vdec_s *vdec)
 	platform_device_unregister(vdec->dev);
 	pr_debug("vdec_release instance %p, total %d\n", vdec,
 		atomic_read(&vdec_core->vdec_nr));
-	if (vdec->use_vfm_path) {
-		kfree(frame_info_buf_in);
-		frame_info_buf_in = NULL;
-		kfree(frame_info_buf_out);
-		frame_info_buf_out = NULL;
-		frame_qos_wr = 0;
-		frame_qos_rd = 0;
-	}
 	vdec_destroy(vdec);
 
 	mutex_lock(&vdec_mutex);
@@ -2750,7 +2730,7 @@ static irqreturn_t vdec_thread_isr(int irq, void *dev_id)
 		vdec->tfn_ns = local_clock();
 		isr2tfn = vdec->tfn_ns - vdec->isr_ns;
 		if (isr2tfn > 10000000)
-			pr_err("!!!!!!! %s vdec_isr to %s took %uns !!!\n",
+			pr_err("!!!!!!! %s vdec_isr to %s took %u ns !!!\n",
 				vdec->vf_provider_name, __func__, isr2tfn);
 	}
 	if (c->dev_threaded_isr) {
@@ -4225,6 +4205,28 @@ static ssize_t clock_level_show(struct class *class,
 	return ret;
 }
 
+static ssize_t enable_mvdec_info_show(struct class *cla,
+				  struct class_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", enable_mvdec_info);
+}
+
+static ssize_t enable_mvdec_info_store(struct class *cla,
+				   struct class_attribute *attr,
+				   const char *buf, size_t count)
+{
+	int r;
+	int val;
+
+	r = kstrtoint(buf, 0, &val);
+	if (r < 0)
+		return -EINVAL;
+	enable_mvdec_info = val;
+
+	return count;
+}
+
+
 static ssize_t store_poweron_clock_level(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t size)
@@ -4272,6 +4274,7 @@ static ssize_t show_keep_vdec_mem(struct class *class,
 {
 	return sprintf(buf, "%d\n", keep_vdec_mem);
 }
+
 
 #ifdef VDEC_DEBUG_SUPPORT
 static ssize_t store_debug(struct class *class,
@@ -4878,6 +4881,8 @@ static struct class_attribute vdec_class_attrs[] = {
 	__ATTR_RO(amrisc_regs),
 	__ATTR_RO(dump_trace),
 	__ATTR_RO(clock_level),
+	__ATTR(enable_mvdec_info, S_IRUGO | S_IWUSR | S_IWGRP,
+	enable_mvdec_info_show, enable_mvdec_info_store),
 	__ATTR(poweron_clock_level, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_poweron_clock_level, store_poweron_clock_level),
 	__ATTR(dump_risc_mem, S_IRUGO | S_IWUSR | S_IWGRP,
@@ -5105,104 +5110,109 @@ static int __init vdec_mem_setup(struct reserved_mem *rmem)
 	return 0;
 }
 
-void vdec_fill_frame_info(struct vframe_qos_s *vframe_qos, int debug)
+
+void vdec_set_vframe_comm(struct vdec_s *vdec, char *n)
 {
-	if (frame_info_buf_in == NULL) {
-		pr_info("error,frame_info_buf_in is null\n");
-		return;
-	}
-	if (frame_info_buf_out == NULL) {
-		pr_info("error,frame_info_buf_out is null\n");
-		return;
-	}
-	if (frame_qos_wr >= QOS_FRAME_NUM)
-		frame_qos_wr = 0;
+	struct vdec_frames_s *mvfrm = vdec->mvfrm;
 
-	if (frame_qos_wr >= QOS_FRAME_NUM ||
-			frame_qos_wr < 0) {
-		pr_info("error,index :%d is error\n", frame_qos_wr);
-		return;
-	}
-	if (frameinfo_flag == DISABLE_FRAME_INFO)
+	if (!mvfrm)
 		return;
 
-	if (frameinfo_flag == PRINT_FRAME_INFO) {
-		pr_info("num %d size %d pts %d\n",
-				vframe_qos->num,
-				vframe_qos->size,
-				vframe_qos->pts);
-		pr_info("mv min_mv %d avg_mv %d max_mv %d\n",
-				vframe_qos->min_mv,
-				vframe_qos->avg_mv,
-				vframe_qos->max_mv);
-		pr_info("qp min_qp %d avg_qp %d max_qp %d\n",
-				vframe_qos->min_qp,
-				vframe_qos->avg_qp,
-				vframe_qos->max_qp);
-		pr_info("skip min_skip %d avg_skip %d max_skip %d\n",
-				vframe_qos->min_skip,
-				vframe_qos->avg_skip,
-				vframe_qos->max_skip);
-	}
-	memcpy(&frame_info_buf_in[frame_qos_wr++],
-			vframe_qos, sizeof(struct vframe_qos_s));
-	if (frame_qos_wr >= QOS_FRAME_NUM)
-		frame_qos_wr = 0;
+	mvfrm->comm.vdec_id = vdec->id;
 
-	/*pr_info("frame_qos_wr:%d\n", frame_qos_wr);*/
-
+	snprintf(mvfrm->comm.vdec_name, sizeof(mvfrm->comm.vdec_name)-1,
+		"%s", n);
+	mvfrm->comm.vdec_type = vdec->type;
 }
-EXPORT_SYMBOL(vdec_fill_frame_info);
+EXPORT_SYMBOL(vdec_set_vframe_comm);
 
-struct vframe_qos_s *vdec_get_qos_info(void)
+void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
+				struct vdec_info *vinfo,struct vframe_s *vf,
+				u32 hw_dec_time)
 {
-	int write_count = 0;
-	int qos_wr = frame_qos_wr;
+	u32 i;
+	struct vframe_counter_s *fifo_buf;
+	struct vdec_frames_s *mvfrm = vdec->mvfrm;
 
-	if (frame_info_buf_in == NULL) {
-		pr_info("error,frame_info_buf_in is null\n");
-		return NULL;
-	}
-	if (frame_info_buf_out == NULL) {
-		pr_info("error,frame_info_buf_out is null\n");
-		return NULL;
-	}
+	if (!mvfrm)
+		return;
+	fifo_buf = mvfrm->fifo_buf;
 
-
-	memset(frame_info_buf_out, 0,
-			QOS_FRAME_NUM*sizeof(struct vframe_qos_s));
-	if (frame_qos_rd > qos_wr) {
-		write_count = QOS_FRAME_NUM - frame_qos_rd;
-		if (write_count > 0 && write_count <= QOS_FRAME_NUM) {
-			memcpy(frame_info_buf_out, &frame_info_buf_in[0],
-				write_count*sizeof(struct vframe_qos_s));
-			if ((write_count + qos_wr) <= QOS_FRAME_NUM)
-				memcpy(&frame_info_buf_out[write_count], frame_info_buf_in,
-					qos_wr*sizeof(struct vframe_qos_s));
-			else
-				pr_info("get_qos_info:%d,out of range\n", __LINE__);
-		} else
-			pr_info("get_qos_info:%d,out of range\n", __LINE__);
-	} else if (frame_qos_rd < qos_wr) {
-		write_count =  qos_wr - frame_qos_rd;
-		if (write_count > 0 && write_count < QOS_FRAME_NUM)
-			memcpy(frame_info_buf_out, &frame_info_buf_in[frame_qos_rd],
-				(write_count)*sizeof(struct vframe_qos_s));
-		else
-			pr_info("get_qos_info:%d, out of range\n", __LINE__);
+	/* assume fps==60,mv->wr max value can support system running 828 days,
+	 this is enough for us */
+	i = mvfrm->wr & (NUM_FRAME_VDEC-1); //find the slot num in fifo_buf
+	mvfrm->fifo_buf[i].decode_time_cost = hw_dec_time;
+	if (vframe_qos)
+		memcpy(&fifo_buf[i].qos, vframe_qos, sizeof(struct vframe_qos_s));
+	if (vinfo) {
+		memcpy(&fifo_buf[i].frame_width, &vinfo->frame_width,
+		        ((char*)&vinfo->reserved[0] - (char*)&vinfo->frame_width));
 	}
+	if (vf) {
+		fifo_buf[i].vf_type = vf->type;
+		fifo_buf[i].signal_type = vf->signal_type;
+		fifo_buf[i].pts = vf->pts;
+		fifo_buf[i].pts_us64 = vf->pts_us64;
+	}
+	mvfrm->wr++;
+}
+EXPORT_SYMBOL(vdec_fill_vdec_frame);
+
+/* In this function,if we use copy_to_user, we may encounter sleep,
+which may block the vdec_fill_vdec_frame,this is not acceptable.
+So, we should use a tmp buffer(passed by caller) to get the content */
+u32  vdec_get_frame_vdec(struct vdec_s *vdec,  struct vframe_counter_s *tmpbuf)
+{
+	u32 toread = 0;
+	u32 slot_rd;
+	struct vframe_counter_s *fifo_buf = NULL;
+	struct vdec_frames_s *mvfrm = NULL;
+
 	/*
-	   pr_info("cnt:%d,size:%d,num:%d,rd:%d,wr:%d\n",
-	   wirte_count,
-	   frame_info_buf_out[0].size,
-	   frame_info_buf_out[0].num,
-	   frame_qos_rd,qos_wr);
+	switch (version) {
+	case version_1:
+		f1();
+	case version_2:
+		f2();
+	default:
+		break;
+	}
 	*/
-	frame_qos_rd = qos_wr;
-	return frame_info_buf_out;
-}
-EXPORT_SYMBOL(vdec_get_qos_info);
 
+	if (!vdec)
+		return 0;
+	mvfrm = vdec->mvfrm;
+	if (!mvfrm)
+		return 0;
+
+	fifo_buf = &mvfrm->fifo_buf[0];
+
+	toread = mvfrm->wr - mvfrm->rd;
+	if (toread) {
+		if (toread >= NUM_FRAME_VDEC - QOS_FRAME_NUM) {
+			/* round the fifo_buf length happens, give QOS_FRAME_NUM for buffer */
+			mvfrm->rd = mvfrm->wr - (NUM_FRAME_VDEC - QOS_FRAME_NUM);
+		}
+
+		if (toread >= QOS_FRAME_NUM) {
+			toread = QOS_FRAME_NUM; //by default, we use this num
+		}
+
+		slot_rd = mvfrm->rd &( NUM_FRAME_VDEC-1); //In this case it equals to x%y
+		if (slot_rd + toread <= NUM_FRAME_VDEC) {
+			memcpy(tmpbuf, &fifo_buf[slot_rd], toread*sizeof(struct vframe_counter_s));
+		} else {
+			u32 exeed;
+			exeed = slot_rd + toread - NUM_FRAME_VDEC;
+			memcpy(tmpbuf, &fifo_buf[slot_rd], (NUM_FRAME_VDEC - slot_rd)*sizeof(struct vframe_counter_s));
+			memcpy(&tmpbuf[NUM_FRAME_VDEC-slot_rd], &fifo_buf[0], exeed*sizeof(struct vframe_counter_s));
+		}
+
+		mvfrm->rd += toread;
+	}
+	return toread;
+}
+EXPORT_SYMBOL(vdec_get_frame_vdec);
 
 RESERVEDMEM_OF_DECLARE(vdec, "amlogic, vdec-memory", vdec_mem_setup);
 /*
