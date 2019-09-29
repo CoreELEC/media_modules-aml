@@ -94,6 +94,11 @@ static u32 no_timeout;
 static int nr_mode = -1;
 static u32 qp_table_debug;
 
+#ifdef H264_ENC_SVC
+static u32 svc_enable = 0; /* Enable sac feature or not */
+static u32 svc_ref_conf = 0; /* Continuous no reference numbers */
+#endif
+
 static u32 me_mv_merge_ctl =
 	(0x1 << 31)  |  /* [31] me_merge_mv_en_16 */
 	(0x1 << 30)  |  /* [30] me_merge_small_mv_en_16 */
@@ -1684,7 +1689,6 @@ static void avc_prot_init(struct encode_wq_s *wq,
 			(wq->cbr_info.block_h << 0));
 	}
 #endif
-
 	WRITE_HREG(HCODEC_QDCT_VLC_QUANT_CTL_0,
 		(0 << 19) | /* vlc_delta_quant_1 */
 		(i_pic_qp << 13) | /* vlc_quant_1 */
@@ -2278,7 +2282,6 @@ static void avc_prot_init(struct encode_wq_s *wq,
 			(v3_left_small_max_ie_sad << 0));
 	}
 	WRITE_HREG(HCODEC_IE_DATA_FEED_BUFF_INFO, 0);
-
 	WRITE_HREG(HCODEC_CURR_CANVAS_CTRL, 0);
 	data32 = READ_HREG(HCODEC_VLC_CONFIG);
 	data32 = data32 | (1 << 0); /* set pop_coeff_even_all_zero */
@@ -2814,11 +2817,32 @@ void amvenc_avc_start_cmd(struct encode_wq_s *wq,
 			(request->cmd == ENCODER_IDR) ? true : false);
 		avc_init_assit_buffer(wq);
 		enc_pr(LOG_INFO,
-			"begin to new frame, request->cmd: %d, ucode mode: %d, wq:%p.\n",
+			"begin to new frame, request->cmd: %d, ucode mode: %d, wq:%p\n",
 			request->cmd, request->ucode_mode, (void *)wq);
 	}
 	if ((request->cmd == ENCODER_IDR) ||
 		(request->cmd == ENCODER_NON_IDR)) {
+#ifdef H264_ENC_SVC
+		/* encode non reference frame or not */
+		if (request->cmd == ENCODER_IDR)
+			wq->pic.non_ref_cnt = 0; //IDR reset counter
+		if (wq->pic.enable_svc && wq->pic.non_ref_cnt) {
+			enc_pr(LOG_INFO,
+				"PIC is NON REF cmd %d cnt %d value 0x%x\n",
+				request->cmd, wq->pic.non_ref_cnt,
+				ENC_SLC_NON_REF);
+			WRITE_HREG(H264_ENC_SVC_PIC_TYPE, ENC_SLC_NON_REF);
+		} else {
+			enc_pr(LOG_INFO,
+				"PIC is REF cmd %d cnt %d val 0x%x\n",
+				request->cmd, wq->pic.non_ref_cnt,
+				ENC_SLC_REF);
+			WRITE_HREG(H264_ENC_SVC_PIC_TYPE, ENC_SLC_REF);
+		}
+#else
+		/* if FW defined but not defined SVC in driver here*/
+		WRITE_HREG(H264_ENC_SVC_PIC_TYPE, ENC_SLC_REF);
+#endif
 		avc_init_dblk_buffer(wq->mem.dblk_buf_canvas);
 		avc_init_reference_buffer(wq->mem.ref_buf_canvas);
 	}
@@ -3266,15 +3290,49 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 			wq->pic.pic_order_cnt_lsb = 2;
 			wq->pic.frame_number = 1;
 		} else if (amrisc_cmd == ENCODER_NON_IDR) {
+#ifdef H264_ENC_SVC
+			/* only update when there is reference frame */
+			if (wq->pic.enable_svc == 0 || wq->pic.non_ref_cnt == 0) {
+				wq->pic.frame_number++;
+				enc_pr(LOG_INFO, "Increase frame_num to %d\n",
+					wq->pic.frame_number);
+			}
+#else
 			wq->pic.frame_number++;
+#endif
+
 			wq->pic.pic_order_cnt_lsb += 2;
 			if (wq->pic.frame_number > 65535)
 				wq->pic.frame_number = 0;
 		}
+#ifdef H264_ENC_SVC
+		/* only update when there is reference frame */
+		if (wq->pic.enable_svc == 0 || wq->pic.non_ref_cnt == 0) {
+			amrisc_cmd = wq->mem.dblk_buf_canvas;
+			wq->mem.dblk_buf_canvas = wq->mem.ref_buf_canvas;
+			/* current dblk buffer as next reference buffer */
+			wq->mem.ref_buf_canvas = amrisc_cmd;
+			enc_pr(LOG_INFO,
+				"switch buffer enable %d  cnt %d\n",
+				wq->pic.enable_svc, wq->pic.non_ref_cnt);
+		}
+		if (wq->pic.enable_svc) {
+			wq->pic.non_ref_cnt ++;
+			if (wq->pic.non_ref_cnt > wq->pic.non_ref_limit) {
+				enc_pr(LOG_INFO, "Svc clear cnt %d conf %d\n",
+					wq->pic.non_ref_cnt,
+					wq->pic.non_ref_limit);
+				wq->pic.non_ref_cnt = 0;
+			} else
+			enc_pr(LOG_INFO,"Svc increase non ref counter to %d\n",
+				wq->pic.non_ref_cnt );
+		}
+#else
 		amrisc_cmd = wq->mem.dblk_buf_canvas;
 		wq->mem.dblk_buf_canvas = wq->mem.ref_buf_canvas;
 		/* current dblk buffer as next reference buffer */
 		wq->mem.ref_buf_canvas = amrisc_cmd;
+#endif
 		break;
 	case AMVENC_AVC_IOC_READ_CANVAS:
 		get_user(argV, ((u32 *)arg));
@@ -3580,6 +3638,15 @@ struct encode_wq_s *create_encode_work_queue(void)
 	encode_work_queue->pic.idr_pic_id = 0;
 	encode_work_queue->pic.frame_number = 0;
 	encode_work_queue->pic.pic_order_cnt_lsb = 0;
+#ifdef H264_ENC_SVC
+	/* Get settings from the global*/
+	encode_work_queue->pic.enable_svc = svc_enable;
+	encode_work_queue->pic.non_ref_limit = svc_ref_conf;
+	encode_work_queue->pic.non_ref_cnt = 0;
+	enc_pr(LOG_INFO, "svc conf enable %d, duration %d\n",
+		encode_work_queue->pic.enable_svc,
+		encode_work_queue->pic.non_ref_limit);
+#endif
 	encode_work_queue->ucode_index = UCODE_MODE_FULL;
 
 #ifdef H264_ENC_CBR
@@ -4444,6 +4511,13 @@ MODULE_PARM_DESC(nr_mode, "\n nr_mode option\n");
 
 module_param(qp_table_debug, uint, 0664);
 MODULE_PARM_DESC(qp_table_debug, "\n print qp table\n");
+
+#ifdef H264_ENC_SVC
+module_param(svc_enable, uint, 0664);
+MODULE_PARM_DESC(svc_enable, "\n svc enable\n");
+module_param(svc_ref_conf, uint, 0664);
+MODULE_PARM_DESC(svc_ref_conf, "\n svc reference duration config\n");
+#endif
 
 #ifdef MORE_MODULE_PARAM
 module_param(me_mv_merge_ctl, uint, 0664);
