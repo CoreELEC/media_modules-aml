@@ -35,6 +35,11 @@ struct amlfe_demod_config {
 	int i2c_addr;
 	int	reset_gpio;
 	int	reset_value;
+	int ts_out_mode; //serial or parallel; 0:serial, 1:parallel
+	int tuner0_i2c_addr;
+	int tuner1_i2c_addr;
+	int tuner0_code;
+	int tuner1_code;
 };
 
 /* For configure different tuners */
@@ -87,6 +92,11 @@ static inline struct dvb_frontend* atbm8881_attach (const struct amlfe_demod_con
 }
 
 static inline struct dvb_frontend* si2168_attach (const struct amlfe_demod_config *config)
+{
+	return NULL;
+}
+
+static inline struct dvb_frontend* si2168_attach_1 (const struct amlfe_demod_config *config)
 {
 	return NULL;
 }
