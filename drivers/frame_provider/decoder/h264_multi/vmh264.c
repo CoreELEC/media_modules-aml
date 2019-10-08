@@ -3214,6 +3214,13 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 	j = 0;
 	h264_buffer_info_data_write_count = 0;
 
+	//disable this read cache when frame width <= 64 (4MBs)
+	//IQIDCT_CONTROL, bit[16] – dcac_dma_read_cache_disable
+	if (hw->frame_width <= 64)
+		SET_VREG_MASK(IQIDCT_CONTROL,(1 << 16));
+	else
+		CLEAR_VREG_MASK(IQIDCT_CONTROL,(1 << 16));
+
 	if (last_pic)
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
 				"last_pic->data_flag %x   slice_type %x last_pic->slice_type %x\n",
