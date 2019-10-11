@@ -129,6 +129,9 @@ module_param_array(debug_dmx##_dmx##_chanpids, short, &npids, 0444)
 #define CIPLUS_OUTPUT_AUTO 8
 static int ciplus_out_sel = CIPLUS_OUTPUT_AUTO;
 static int ciplus_out_auto_mode = 1;
+static u32 ciplus = 0;
+#define CIPLUS_OUT_SEL    28
+#define CIPLUS_IN_SEL     26
 
 MOD_PARAM_DECLARE_CHANPIDS(0);
 MOD_PARAM_DECLARE_CHANPIDS(1);
@@ -1615,7 +1618,6 @@ static void stb_enable(struct aml_dvb *dvb)
 		dec_clk_en = 0;
 		break;
 	}
-
 	switch (dvb->tso_source) {
 	case AM_TS_SRC_DMX0:
 		tso_src = dvb->dmx[0].source;
@@ -1690,8 +1692,9 @@ static void stb_enable(struct aml_dvb *dvb)
 		       (en_des << ENABLE_DES_PL) |
 		       (dec_clk_en << ENABLE_DES_PL_CLK) |
 		       (invert0 << INVERT_S2P0_FEC_CLK) |
-		       (fec_s0 << S2P0_FEC_SERIAL_SEL));
-
+		       (fec_s0 << S2P0_FEC_SERIAL_SEL)|
+		       (ciplus));
+	ciplus = 0;
 
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TL1) {
 		invert2 = dvb->s2p[2].invert;
@@ -1758,6 +1761,25 @@ int dsc_set_pid(struct aml_dsc_channel *ch, int pid)
 		pr_dbg("set DSC %d ch %d PID %d\n", dsc->id, ch->id, pid);
 	else
 		pr_dbg("disable DSC %d ch %d\n", dsc->id, ch->id);
+	return 0;
+}
+
+int dsc_get_pid(struct aml_dsc_channel *ch, int *pid)
+{
+	struct aml_dsc *dsc = ch->dsc;
+	int is_dsc2 = (dsc->id == 1) ? 1 : 0;
+	u32 data;
+
+	WRITE_MPEG_REG(TS_PL_PID_INDEX,
+			((ch->id & 0x0f) >> 1)+(is_dsc2 ? 4 : 0));
+	data = READ_MPEG_REG(TS_PL_PID_DATA);
+	if (ch->id & 1) {
+		*pid = data & 0x1fff;
+	} else {
+		*pid = (data >> 16) & 0x1fff;
+	}
+
+	/*pr_dbg("%s,get DSC %d ch %d PID %d\n", __FUNCTION__,dsc->id, ch->id, *pid);*/
 	return 0;
 }
 
@@ -1931,8 +1953,6 @@ static int dsc_set_csa_key(struct aml_dsc_channel *ch, int flags,
 
 #define ENABLE_DEC_PL     7
 #define ENABLE_DES_PL_CLK 15
-#define CIPLUS_OUT_SEL    28
-#define CIPLUS_IN_SEL     26
 
 #define KEY_WR_AES_IV_B 5
 #define KEY_WR_AES_IV_A 4
@@ -3729,8 +3749,22 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 	if (reset_irq)
 		del_timer_sync(&dvb->watchdog_timer);
 #endif
+	/*RESET_TOP will clear the dsc pid , save all dsc pid that setting in TA*/
+	for (id = 0; id < DSC_DEV_COUNT; id++) {
+		struct aml_dsc *dsc = &dvb->dsc[id];
+		int n;
 
-	WRITE_MPEG_REG(RESET1_REGISTER, RESET_DEMUXSTB);
+		for (n = 0; n < DSC_COUNT; n++) {
+			struct aml_dsc_channel *ch = &dsc->channel[n];
+			/*if(ch->used)*/
+			{
+				ch->id = n;
+				dsc_get_pid(ch,&ch->pid);
+			}
+		}
+	}
+	/*WRITE_MPEG_REG(RESET1_REGISTER, RESET_DEMUXSTB);*/
+	WRITE_MPEG_REG(RESET3_REGISTER, RESET_DEMUX2|RESET_DEMUX1|RESET_DEMUX0|RESET_S2P1|RESET_S2P0|RESET_TOP);
 
 	for (id = 0; id < DMX_DEV_COUNT; id++) {
 		times = 0;
@@ -3738,6 +3772,11 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 			if (!(DMX_READ_REG(id, OM_CMD_STATUS) & 0x01))
 				break;
 		}
+	}
+	{
+		u32 data;
+		data = READ_MPEG_REG(STB_TOP_CONFIG);
+		ciplus = 0xF8000000 & data;
 	}
 
 	WRITE_MPEG_REG(STB_TOP_CONFIG, 0);
@@ -3862,13 +3901,20 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 		int n;
 
 		for (n = 0; n < DSC_COUNT; n++) {
+			int flag = 0;
 			struct aml_dsc_channel *ch = &dsc->channel[n];
-			/*if(ch->used) */
+			/*if(ch->used)*/
 			{
-				ch->id = n;
 				ch->work_mode = -1;
+				//if ta setting pid, used will 0
+				if (ch->pid != 0x1fff && !ch->used) {
+					flag = 1;
+					ch->used = 1;
+				}
 				dsc_set_pid(ch, ch->pid);
-				dsc_set_keys(ch);
+				if (flag)
+					ch->used = 0;
+				//dsc_set_keys(ch);
 			}
 		}
 	}
@@ -3920,6 +3966,11 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 	}
 
 	/*WRITE_MPEG_REG(STB_TOP_CONFIG, 0); */
+	{
+		u32 data;
+		data = READ_MPEG_REG(STB_TOP_CONFIG);
+		ciplus = 0xF8000000 & data;
+	}
 
 	{
 		u32 version, data;
@@ -4048,11 +4099,21 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 			int n;
 
 			for (n = 0; n < DSC_COUNT; n++) {
+				int flag = 0;
 				struct aml_dsc_channel *ch = &dsc->channel[n];
-				/*if(ch->used) */
+				/*if(ch->used)*/ {
+				ch->id = n;
 				ch->work_mode = -1;
+				dsc_get_pid(ch,&ch->pid);
+				if (ch->pid != 0x1fff && !ch->used) {
+					flag = 1;
+					ch->used = 1;
+				}
 				dsc_set_pid(ch, ch->pid);
-				dsc_set_keys(ch);
+				if (flag)
+					ch->used = 0;
+				//dsc_set_keys(ch);
+				}
 			}
 		}
 	}
