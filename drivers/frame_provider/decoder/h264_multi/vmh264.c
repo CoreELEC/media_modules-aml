@@ -483,6 +483,7 @@ static void vh264_vf_put(struct vframe_s *, void *);
 static int vh264_vf_states(struct vframe_states *states, void *);
 static int vh264_event_cb(int type, void *data, void *private_data);
 static void vh264_work(struct work_struct *work);
+static void vh264_timeout_work(struct work_struct *work);
 static void vh264_notify_work(struct work_struct *work);
 #ifdef MH264_USERDATA_ENABLE
 static void user_data_ready_notify_work(struct work_struct *work);
@@ -846,10 +847,13 @@ struct vdec_h264_hw_s {
 	bool new_iframe_flag;
 	bool ref_err_flush_dpb_flag;
 	unsigned int first_i_policy;
+	u32 tfn_cnt;
+	u64 tfn_ns;
 };
 
 static u32 again_threshold;
 
+static void timeout_process(struct vdec_h264_hw_s *hw);
 static void dump_bufspec(struct vdec_h264_hw_s *hw,
 	const char *caller);
 static void h264_reconfig(struct vdec_h264_hw_s *hw);
@@ -5327,6 +5331,20 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 	unsigned int dec_dpb_status = p_H264_Dpb->dec_dpb_status;
 	u32 debug_tag;
 	int ret;
+	if (++hw->tfn_cnt == 1) {
+		hw->tfn_ns = local_clock();
+	} else if (hw->tfn_cnt >= 10) {
+		u64 tenth_ns = local_clock();
+		/* Here borrow the varible debug_tag for use */
+		debug_tag = tenth_ns - hw->tfn_ns;
+		hw->tfn_cnt = 1;
+		hw->tfn_cnt = tenth_ns;
+		if (debug_tag <= 10000000) {
+			pr_err("Within 10ms 10 vh264_isr_thread_fn. Abnormal!\n");
+			timeout_process(hw);
+			return IRQ_HANDLED;
+		}
+	}
 
 	if (dec_dpb_status == H264_CONFIG_REQUEST) {
 #if 1
@@ -6210,6 +6228,13 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 
+	/*
+	 * In this very timeout point,the vh264_work arrives,
+	 * let it to handle the scenario.
+	 */
+	if (work_pending(&hw->work))
+		return;
+
 	hw->timeout_num++;
 	amvdec_stop();
 	vdec->mc_loaded = 0;
@@ -6224,7 +6249,10 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 	release_cur_decoding_buf(hw);
 	hw->dec_result = DEC_RESULT_DONE;
 	hw->data_flag |= ERROR_FLAG;
-	vdec_schedule_work(&hw->work);
+
+	if (work_pending(&hw->work))
+		return;
+	vdec_schedule_work(&hw->timeout_work);
 }
 
 static void dump_bufspec(struct vdec_h264_hw_s *hw,
@@ -6454,7 +6482,7 @@ static void check_timer_func(unsigned long arg)
 				if (hw->decode_timeout_count == 0)
 				{
 					reset_process_time(hw);
-					vdec_schedule_work(&hw->timeout_work);
+					timeout_process(hw);
 				}
 			} else
 				start_process_time(hw);
@@ -6466,7 +6494,7 @@ static void check_timer_func(unsigned long arg)
 				if (hw->decode_timeout_count == 0)
 				{
 					reset_process_time(hw);
-					vdec_schedule_work(&hw->timeout_work);
+					timeout_process(hw);
 				}
 			}
 		}
@@ -6791,14 +6819,6 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw)
 	return;
 }
 
-static void timeout_process_work(struct work_struct *work)
-{
-	struct vdec_h264_hw_s *hw = container_of(work,
-			struct vdec_h264_hw_s, timeout_work);
-
-	timeout_process(hw);
-}
-
 static s32 vh264_init(struct vdec_h264_hw_s *hw)
 {
 	int size = -1;
@@ -6826,7 +6846,7 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 	vh264_local_init(hw);
 	INIT_WORK(&hw->work, vh264_work);
 	INIT_WORK(&hw->notify_work, vh264_notify_work);
-	INIT_WORK(&hw->timeout_work, timeout_process_work);
+	INIT_WORK(&hw->timeout_work, vh264_timeout_work);
 #ifdef MH264_USERDATA_ENABLE
 	INIT_WORK(&hw->user_data_ready_work, user_data_ready_notify_work);
 #endif
@@ -7754,11 +7774,9 @@ static void vmh264_wakeup_userdata_poll(struct vdec_s *vdec)
 #endif
 
 
-static void vh264_work(struct work_struct *work)
+static void vh264_work_implement(struct vdec_h264_hw_s *hw,
+	struct vdec_s *vdec, int from)
 {
-	struct vdec_h264_hw_s *hw = container_of(work,
-		struct vdec_h264_hw_s, work);
-	struct vdec_s *vdec = hw_to_vdec(hw);
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
@@ -7992,6 +8010,17 @@ result_done:
 		vdec_set_next_sched(vdec, vdec);
 #endif
 
+	if (from == 1) {
+		/* This is a timeout work */
+		if (work_pending(&hw->work)) {
+			/*
+			 * The vh264_work arrives at the last second,
+			 * give it a chance to handle the scenario.
+			 */
+			return;
+		}
+	}
+
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1) {
 		if (hw->mmu_enable == 0)
@@ -8004,6 +8033,29 @@ result_done:
 	wake_up_interruptible(&hw->wait_q);
 	if (hw->vdec_cb)
 		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
+}
+
+
+static void vh264_work(struct work_struct *work)
+{
+	struct vdec_h264_hw_s *hw = container_of(work,
+		struct vdec_h264_hw_s, work);
+	struct vdec_s *vdec = hw_to_vdec(hw);
+
+	vh264_work_implement(hw, vdec, 0);
+}
+
+
+static void vh264_timeout_work(struct work_struct *work)
+{
+	struct vdec_h264_hw_s *hw = container_of(work,
+		struct vdec_h264_hw_s, timeout_work);
+	struct vdec_s *vdec = hw_to_vdec(hw);
+
+	if (work_pending(&hw->work))
+		return;
+
+	vh264_work_implement(hw, vdec, 1);
 }
 
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)

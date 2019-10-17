@@ -1426,6 +1426,7 @@ struct tile_s {
 #define DEC_RESULT_FORCE_EXIT       10
 
 static void vh265_work(struct work_struct *work);
+static void vh265_timeout_work(struct work_struct *work);
 static void vh265_notify_work(struct work_struct *work);
 
 #endif
@@ -1443,6 +1444,7 @@ struct hevc_state_s {
 	struct vframe_chunk_s *chunk;
 	int dec_result;
 	struct work_struct work;
+	struct work_struct timeout_work;
 	struct work_struct notify_work;
 	struct work_struct set_clk_work;
 	/* timeout handle */
@@ -10765,6 +10767,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		 */
 
 		INIT_WORK(&hevc->work, vh265_work);
+		INIT_WORK(&hevc->timeout_work, vh265_timeout_work);
 
 		hevc->fw = fw;
 
@@ -11034,6 +11037,13 @@ static void restart_process_time(struct hevc_state_s *hevc)
 
 static void timeout_process(struct hevc_state_s *hevc)
 {
+	/*
+	 * In this very timeout point,the vh265_work arrives,
+	 * let it to handle the scenario.
+	 */
+	if (work_pending(&hevc->work))
+		return;
+
 	hevc->timeout_num++;
 	amhevc_stop();
 	read_decode_info(hevc);
@@ -11046,7 +11056,10 @@ static void timeout_process(struct hevc_state_s *hevc)
 	hevc->decoding_pic = NULL;
 	hevc->dec_result = DEC_RESULT_DONE;
 	reset_process_time(hevc);
-	vdec_schedule_work(&hevc->work);
+
+	if (work_pending(&hevc->work))
+		return;
+	vdec_schedule_work(&hevc->timeout_work);
 }
 
 #ifdef CONSTRAIN_MAX_BUF_NUM
@@ -11201,6 +11214,7 @@ static int vmh265_stop(struct hevc_state_s *hevc)
 	cancel_work_sync(&hevc->notify_work);
 	cancel_work_sync(&hevc->set_clk_work);
 	cancel_work_sync(&hevc->work);
+	cancel_work_sync(&hevc->timeout_work);
 	uninit_mmu_buffers(hevc);
 
 	vfree(hevc->fw);
@@ -11266,12 +11280,9 @@ static void vh265_notify_work(struct work_struct *work)
 	return;
 }
 
-static void vh265_work(struct work_struct *work)
+static void vh265_work_implement(struct hevc_state_s *hevc,
+	struct vdec_s *vdec,int from)
 {
-	struct hevc_state_s *hevc = container_of(work,
-		struct hevc_state_s, work);
-	struct vdec_s *vdec = hw_to_vdec(hevc);
-
 	if (hevc->uninit_list) {
 		/*USE_BUF_BLOCK*/
 		uninit_pic_list(hevc);
@@ -11661,6 +11672,18 @@ static void vh265_work(struct work_struct *work)
 		vdec_set_next_sched(vdec, vdec);
 #endif
 
+	if (from == 1) {
+		/* This is a timeout work */
+		if (work_pending(&hevc->work)) {
+			/*
+			 * The vh265_work arrives at the last second,
+			 * give it a chance to handle the scenario.
+			 */
+			return;
+			//cancel_work_sync(&hevc->work);//reserved for future considraion
+		}
+	}
+
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(vdec, CORE_MASK_HEVC);
@@ -11670,6 +11693,27 @@ static void vh265_work(struct work_struct *work)
 	if (hevc->vdec_cb)
 		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg);
 }
+
+static void vh265_work(struct work_struct *work)
+{
+	struct hevc_state_s *hevc = container_of(work,
+			struct hevc_state_s, work);
+	struct vdec_s *vdec = hw_to_vdec(hevc);
+
+	vh265_work_implement(hevc, vdec, 0);
+}
+
+static void vh265_timeout_work(struct work_struct *work)
+{
+	struct hevc_state_s *hevc = container_of(work,
+		struct hevc_state_s, timeout_work);
+	struct vdec_s *vdec = hw_to_vdec(hevc);
+
+	if (work_pending(&hevc->work))
+		return;
+	vh265_work_implement(hevc, vdec, 1);
+}
+
 
 static int vh265_hw_ctx_restore(struct hevc_state_s *hevc)
 {

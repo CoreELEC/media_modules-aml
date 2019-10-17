@@ -2544,8 +2544,10 @@ static irqreturn_t vdec_isr(int irq, void *dev_id)
 			vdec = NULL;
 	}
 
-	if (vdec)
+	if (vdec) {
 		atomic_set(&vdec->inirq_flag, 1);
+		vdec->isr_ns = local_clock();
+	}
 	if (c->dev_isr) {
 		ret = c->dev_isr(irq, c->dev_id);
 		goto isr_done;
@@ -2598,8 +2600,15 @@ static irqreturn_t vdec_thread_isr(int irq, void *dev_id)
 			vdec = NULL;
 	}
 
-	if (vdec)
+	if (vdec) {
+		u32 isr2tfn = 0;
 		atomic_set(&vdec->inirq_thread_flag, 1);
+		vdec->tfn_ns = local_clock();
+		isr2tfn = vdec->tfn_ns - vdec->isr_ns;
+		if (isr2tfn > 10000000)
+			pr_err("!!!!!!! %s vdec_isr to %s took %uns !!!\n",
+				vdec->vf_provider_name, __func__, isr2tfn);
+	}
 	if (c->dev_threaded_isr) {
 		ret = c->dev_threaded_isr(irq, c->dev_id);
 		goto thread_isr_done;

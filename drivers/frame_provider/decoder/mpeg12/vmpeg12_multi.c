@@ -245,6 +245,7 @@ struct vdec_mpeg12_hw_s {
 	s32 refs[2];
 	int dec_result;
 	struct work_struct work;
+	struct work_struct timeout_work;
 	struct work_struct notify_work;
 	void (*vdec_cb)(struct vdec_s *, void *);
 	void *vdec_cb_arg;
@@ -1088,9 +1089,10 @@ static void userdata_push_do_work(struct work_struct *work)
 	}
 
 	if (hw->cur_ud_idx >= MAX_UD_RECORDS) {
-		debug_print(DECODE_ID(hw), 0,
+		debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"UD Records over: %d, skip it\n", MAX_UD_RECORDS);
 		WRITE_VREG(AV_SCRATCH_J, 0);
+		hw->cur_ud_idx = 0;
 		return;
 	}
 
@@ -1658,12 +1660,9 @@ static void flush_output(struct vdec_mpeg12_hw_s *hw)
 		prepare_display_buf(hw, &hw->pics[index]);
 }
 
-static void vmpeg12_work(struct work_struct *work)
+static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
+	struct vdec_s *vdec, int from)
 {
-	struct vdec_mpeg12_hw_s *hw =
-	container_of(work, struct vdec_mpeg12_hw_s, work);
-	struct vdec_s *vdec = hw_to_vdec(hw);
-
 	if (hw->dec_result != DEC_RESULT_DONE)
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 			"%s, result=%d, status=%d\n", __func__,
@@ -1729,6 +1728,19 @@ static void vmpeg12_work(struct work_struct *work)
 		amvdec_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
+
+	if (from == 1) {
+		/*This is a timeout work*/
+		if (work_pending(&hw->work)) {
+			pr_err("timeout work return befor finishing.");
+			/*
+			 * The vmpeg12_work arrives at the last second,
+			 * give it a chance to handle the scenario.
+			 */
+			return;
+		}
+	}
+
 	/*disable mbox interrupt */
 	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	wait_vmmpeg12_search_done(hw);
@@ -1741,6 +1753,28 @@ static void vmpeg12_work(struct work_struct *work)
 
 	if (hw->vdec_cb)
 		hw->vdec_cb(vdec, hw->vdec_cb_arg);
+}
+
+static void vmpeg12_work(struct work_struct *work)
+{
+	struct vdec_mpeg12_hw_s *hw =
+	container_of(work, struct vdec_mpeg12_hw_s, work);
+	struct vdec_s *vdec = hw_to_vdec(hw);
+
+	vmpeg12_work_implement(hw, vdec, 0);
+}
+static void vmpeg12_timeout_work(struct work_struct *work)
+{
+	struct vdec_mpeg12_hw_s *hw =
+	container_of(work, struct vdec_mpeg12_hw_s, timeout_work);
+	struct vdec_s *vdec = hw_to_vdec(hw);
+
+	if (work_pending(&hw->work)) {
+		pr_err("timeout work return befor executing.");
+		return;
+	}
+
+	vmpeg12_work_implement(hw, vdec, 1);
 }
 
 static struct vframe_s *vmpeg_vf_peek(void *op_arg)
@@ -2081,6 +2115,10 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
+	if (work_pending(&hw->work)) {
+		pr_err("timeout_process return befor do anything.");
+		return;
+	}
 	reset_process_time(hw);
 	amvdec_stop();
 	debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
@@ -2088,7 +2126,16 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 		__func__, vdec->status, READ_VREG(VLD_MEM_VIFIFO_LEVEL));
 	hw->dec_result = DEC_RESULT_DONE;
 	hw->first_i_frame_ready = 0;
-	vdec_schedule_work(&hw->work);
+
+	/*
+	 * In this very timeout point,the vmpeg12_work arrives,
+	 * let it to handle the scenario.
+	 */
+	if (work_pending(&hw->work)) {
+		pr_err("timeout_process return befor schedule.");
+		return;
+	}
+	vdec_schedule_work(&hw->timeout_work);
 }
 
 static void check_timer_func(unsigned long arg)
@@ -2312,6 +2359,7 @@ static s32 vmpeg12_init(struct vdec_mpeg12_hw_s *hw)
 
 	INIT_WORK(&hw->userdata_push_work, userdata_push_do_work);
 	INIT_WORK(&hw->work, vmpeg12_work);
+	INIT_WORK(&hw->timeout_work, vmpeg12_timeout_work);
 	INIT_WORK(&hw->notify_work, vmpeg12_notify_work);
 
 	if (NULL == hw->user_data_buffer) {
@@ -2665,6 +2713,7 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 	cancel_work_sync(&hw->userdata_push_work);
 	cancel_work_sync(&hw->notify_work);
 	cancel_work_sync(&hw->work);
+	cancel_work_sync(&hw->timeout_work);
 
 	if (hw->mm_blk_handle) {
 		decoder_bmmu_box_free(hw->mm_blk_handle);
