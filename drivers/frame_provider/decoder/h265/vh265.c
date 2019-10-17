@@ -9478,9 +9478,13 @@ pic_done:
 					pic->output_mark = 1;
 					pic->recon_mark = 1;
 				}
+				check_pic_decoded_error(hevc,
+					READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff);
+				if (hevc->cur_pic != NULL &&
+					(READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff) == 0)
+					hevc->cur_pic->error_mark = 1;
 force_output:
 				pic_display = output_pic(hevc, 1);
-
 				if (pic_display) {
 					if ((pic_display->error_mark &&
 						((hevc->ignore_bufmgr_error &
