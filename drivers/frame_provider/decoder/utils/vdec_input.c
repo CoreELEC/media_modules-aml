@@ -998,10 +998,25 @@ EXPORT_SYMBOL(vdec_input_next_input_chunk);
 void vdec_input_release_chunk(struct vdec_input_s *input,
 			struct vframe_chunk_s *chunk)
 {
+	struct vframe_chunk_s *p;
+	u32 chunk_valid = 0;
 	unsigned long flags;
 	struct vframe_block_list_s *block = chunk->block;
 	struct vframe_block_list_s *tofreeblock = NULL;
 	flags = vdec_input_lock(input);
+
+	list_for_each_entry(p, &input->vframe_chunk_list, list) {
+		if (p == chunk) {
+			chunk_valid = 1;
+			break;
+		}
+	}
+	/* 2 threads go here, the other done the deletion,so return*/
+	if (chunk_valid == 0) {
+		vdec_input_unlock(input, flags);
+		pr_err("%s chunk is deleted,so return.\n", __func__);
+		return;
+	}
 
 	list_del(&chunk->list);
 	input->have_frame_num--;
