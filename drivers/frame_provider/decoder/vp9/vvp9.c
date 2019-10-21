@@ -994,6 +994,7 @@ struct VP9Decoder_s {
 	struct vframe_chunk_s *chunk;
 	int dec_result;
 	struct work_struct work;
+	struct work_struct recycle_mmu_work;
 	struct work_struct set_clk_work;
 	u32 start_shift_bytes;
 
@@ -7450,6 +7451,14 @@ static void vp9_recycle_mmu_buf(struct VP9Decoder_s *pbi)
 		pbi->used_4k_num = -1;
 	}
 }
+
+void vp9_recycle_mmu_work(struct work_struct *work)
+{
+	struct VP9Decoder_s *pbi = container_of(work,
+		struct VP9Decoder_s, recycle_mmu_work);
+
+	vp9_recycle_mmu_buf(pbi);
+}
 #endif
 
 
@@ -7461,8 +7470,13 @@ static void dec_again_process(struct VP9Decoder_s *pbi)
 		PROC_STATE_DECODESLICE) {
 		pbi->process_state =
 		PROC_STATE_SENDAGAIN;
-		if (pbi->mmu_enable)
-			vp9_recycle_mmu_buf(pbi);
+		if (pbi->mmu_enable) {
+			/*
+			 * Because vp9_recycle_mmu_buf has sleep function,we can't
+			 * call it directly. Use a recycle_mmu_work to substitude it.
+			 */
+			vdec_schedule_work(&pbi->recycle_mmu_work);
+		}
 	}
 	reset_process_time(pbi);
 	vdec_schedule_work(&pbi->work);
@@ -9017,6 +9031,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 		pbi->stat |= STAT_ISR_REG;*/
 
 		INIT_WORK(&pbi->work, vp9_work);
+		INIT_WORK(&pbi->recycle_mmu_work, vp9_recycle_mmu_work);
 #ifdef SUPPORT_FB_DECODING
 		if (pbi->used_stage_buf_num > 0)
 			INIT_WORK(&pbi->s1_work, vp9_s1_work);
@@ -9134,6 +9149,7 @@ static int vmvp9_stop(struct VP9Decoder_s *pbi)
 	vp9_local_uninit(pbi);
 	reset_process_time(pbi);
 	cancel_work_sync(&pbi->work);
+	cancel_work_sync(&pbi->recycle_mmu_work);
 #ifdef SUPPORT_FB_DECODING
 	if (pbi->used_stage_buf_num > 0)
 		cancel_work_sync(&pbi->s1_work);
@@ -9189,6 +9205,7 @@ static int vvp9_stop(struct VP9Decoder_s *pbi)
 			cancel_work_sync(&pbi->s1_work);
 #endif
 		cancel_work_sync(&pbi->work);
+		cancel_work_sync(&pbi->recycle_mmu_work);
 	} else
 		amhevc_disable();
 #else
