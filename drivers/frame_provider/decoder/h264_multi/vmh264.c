@@ -8749,6 +8749,7 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 {
 	ulong timeout;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 #if 0
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int actual_dpb_size, max_reference_size;
@@ -8833,7 +8834,10 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 	if (first_i_policy & 0x01)
 		hw->first_i_policy = (3 << 8) | first_i_policy;
 
+	p_H264_Dpb->first_insert_frame = FirstInsertFrm_RESET;
+
 	hw->init_flag = 1;
+
 	hw->reset_bufmgr_count++;
 #endif
 }
