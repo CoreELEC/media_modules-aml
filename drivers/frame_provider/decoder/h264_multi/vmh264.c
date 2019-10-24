@@ -5513,6 +5513,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if (!is_i_slice) {
 				if (hw->has_i_frame == 0) {
 					amvdec_stop();
+					vdec->mc_loaded = 0;
 					hw->dec_result = DEC_RESULT_DONE;
 					vdec_schedule_work(&hw->work);
 					dpb_print(DECODE_ID(hw),
@@ -5659,8 +5660,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						hw->reset_bufmgr_flag = 1;
 						hw->reflist_error_count =0;
 						amvdec_stop();
-						hw->dec_result
-							= DEC_RESULT_DONE;
+						vdec->mc_loaded = 0;
+						hw->dec_result = DEC_RESULT_DONE;
 						vdec_schedule_work(&hw->work);
 						return IRQ_HANDLED;
 					}
@@ -5678,6 +5679,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					((hw->dec_flag & NODISP_FLAG) == 0)) {
 					hw->reset_bufmgr_flag = 1;
 					amvdec_stop();
+					vdec->mc_loaded = 0;
 					hw->dec_result = DEC_RESULT_DONE;
 					vdec_schedule_work(&hw->work);
 					return IRQ_HANDLED;
@@ -5963,6 +5965,7 @@ empty_proc:
 				goto send_again;
 			}
 			amvdec_stop();
+			vdec->mc_loaded = 0;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 				"%s %s\n", __func__,
 				(dec_dpb_status == H264_SEARCH_BUFEMPTY) ?
@@ -5978,7 +5981,6 @@ empty_proc:
 				hw->search_dataempty_num++;
 			else if (dec_dpb_status == H264_DECODE_TIMEOUT) {
 				hw->decode_timeout_num++;
-				amvdec_stop();
 				if (error_proc_policy & 0x4000) {
 					hw->data_flag |= ERROR_FLAG;
 					if ((p_H264_Dpb->last_dpb_status == H264_DECODE_TIMEOUT) ||
@@ -6205,9 +6207,12 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 
 static void timeout_process(struct vdec_h264_hw_s *hw)
 {
+	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+
 	hw->timeout_num++;
 	amvdec_stop();
+	vdec->mc_loaded = 0;
 	if (hw->mmu_enable) {
 		hevc_set_frame_done(hw);
 		hevc_sao_wait_done(hw);
