@@ -555,6 +555,9 @@ static void port_set_inited(struct port_priv_s *priv)
 		struct vdec_s *vdec = priv->vdec;
 
 		vdec->port_flag |= PORT_FLAG_INITED;
+		port->flag |= PORT_FLAG_INITED;
+		pr_info("vdec->port_flag=0x%x, port_flag=0x%x\n",
+			vdec->port_flag, port->flag);
 	} else
 		port->flag |= PORT_FLAG_INITED;
 }
@@ -716,23 +719,35 @@ static int audio_port_reset(struct stream_port_s *port,
 				struct stream_buf_s *pbuf)
 {
 	int r;
-
+	mutex_lock(&amstream_mutex);
 	if ((port->flag & PORT_FLAG_AFORMAT) == 0) {
 		pr_err("aformat not set\n");
+		mutex_unlock(&amstream_mutex);
 		return 0;
 	}
 
+	pr_info("audio port reset, flag:0x%x\n", port->flag);
+	if ((port->flag & PORT_FLAG_INITED) == 0) {
+		pr_info("audio port not inited,return\n");
+		mutex_unlock(&amstream_mutex);
+		return 0;
+	}
+
+	pr_info("audio_port_reset begin\n");
 	pts_stop(PTS_TYPE_AUDIO);
 
 	stbuf_release(pbuf, false);
 
 	r = stbuf_init(pbuf, NULL, false);
-	if (r < 0)
+	if (r < 0) {
+		mutex_unlock(&amstream_mutex);
 		return r;
+	}
 
 	r = adec_init(port);
 	if (r < 0) {
 		audio_port_release(port, pbuf, 2);
+		mutex_unlock(&amstream_mutex);
 		return r;
 	}
 
@@ -755,6 +770,8 @@ static int audio_port_reset(struct stream_port_s *port,
 
 	r = pts_start(PTS_TYPE_AUDIO);
 
+	pr_info("audio_port_reset done\n");
+	mutex_unlock(&amstream_mutex);
 	return r;
 }
 
