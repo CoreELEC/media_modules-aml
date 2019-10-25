@@ -106,7 +106,7 @@
 static u32 buf_size = 32 * 1024 * 1024;
 static int pre_decode_buf_level = 0x800;
 static u32 dec_control;
-static u32 error_frame_skip_level;
+static u32 error_frame_skip_level = 2;
 static u32 stat;
 static u32 udebug_flag;
 static unsigned int radr;
@@ -1409,6 +1409,15 @@ static int update_reference(struct vdec_mpeg12_hw_s *hw,
 	return index;
 }
 
+static bool is_ref_error(struct vdec_mpeg12_hw_s *hw)
+{
+	if ((hw->pics[hw->refs[0]].buffer_info & PICINFO_ERROR) ||
+		(hw->pics[hw->refs[1]].buffer_info & PICINFO_ERROR))
+		return 1;
+	return 0;
+}
+
+
 static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
 	u32 reg, index, info, seqinfo, offset, pts, frame_size, tmp;
@@ -1536,6 +1545,11 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 			((seqinfo & SEQINFO_PROG) == 0))
 			hw->frame_prog = 0;
 		force_interlace_check(hw);
+
+		if (is_ref_error(hw)) {
+			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B)
+				new_pic->buffer_info |= PICINFO_ERROR;
+		}
 
 		if (((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) ||
 			((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)) {
