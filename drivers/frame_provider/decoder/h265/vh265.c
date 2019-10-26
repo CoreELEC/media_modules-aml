@@ -8081,6 +8081,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			"top" : "bot");
 
 	if (kfifo_len(&hevc->pending_q) > 1) {
+		unsigned long flags;
 		/* do not pending more than 1 frame */
 		if (kfifo_get(&hevc->pending_q, &vf) == 0) {
 			hevc_print(hevc, 0,
@@ -8091,8 +8092,22 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			hevc_print(hevc, 0,
 			"%s warning(1), vf=>display_q: (index 0x%x)\n",
 				__func__, vf->index);
+		if ((hevc->double_write_mode == 3) &&
+				(!(IS_8K_SIZE(vf->width, vf->height)))) {
+					vf->type |= VIDTYPE_COMPRESS;
+					if (hevc->mmu_enable)
+						vf->type |= VIDTYPE_SCATTER;
+		}
 		hevc->vf_pre_count++;
-		kfifo_put(&hevc->display_q, (const struct vframe_s *)vf);
+		kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
+		spin_lock_irqsave(&lock, flags);
+		vf->index &= 0xff;
+		hevc->m_PIC[vf->index]->output_ready = 0;
+		if (hevc->wait_buf != 0)
+			WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
+				0x1);
+		spin_unlock_irqrestore(&lock, flags);
+
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 	}
 
@@ -8112,6 +8127,12 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				"%s warning(2), vf=>display_q: (index 0x%x)\n",
 				__func__, vf->index);
 			if (vf) {
+				if ((hevc->double_write_mode == 3) &&
+				(!(IS_8K_SIZE(vf->width, vf->height)))) {
+					vf->type |= VIDTYPE_COMPRESS;
+					if (hevc->mmu_enable)
+						vf->type |= VIDTYPE_SCATTER;
+				}
 				hevc->vf_pre_count++;
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
@@ -8125,8 +8146,12 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				return -1;
 			}
 			if (vf) {
-				vf->type = VIDTYPE_PROGRESSIVE
-				| VIDTYPE_VIU_NV21;
+				if ((hevc->double_write_mode == 3) &&
+				(!(IS_8K_SIZE(vf->width, vf->height)))) {
+					vf->type |= VIDTYPE_COMPRESS;
+					if (hevc->mmu_enable)
+						vf->type |= VIDTYPE_SCATTER;
+				}
 				vf->index &= 0xff;
 				vf->index |= (pair_pic->index << 8);
 				vf->canvas1Addr = spec2canvas(pair_pic);
@@ -8148,8 +8173,12 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				return -1;
 			}
 			if (vf) {
-				vf->type = VIDTYPE_PROGRESSIVE
-				| VIDTYPE_VIU_NV21;
+				if ((hevc->double_write_mode == 3) &&
+				(!(IS_8K_SIZE(vf->width, vf->height)))) {
+					vf->type |= VIDTYPE_COMPRESS;
+					if (hevc->mmu_enable)
+						vf->type |= VIDTYPE_SCATTER;
+				}
 				vf->index &= 0xff00;
 				vf->index |= pair_pic->index;
 				vf->canvas0Addr = spec2canvas(pair_pic);
@@ -8693,6 +8722,9 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 				hevc->pre_top_pic, 1);
 			}
 
+			if (hevc->vf_pre_count == 0)
+				hevc->vf_pre_count++;
+
 			/**/
 			if (pic->pic_struct == 9)
 				hevc->pre_top_pic = pic;
@@ -8724,6 +8756,8 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			decoder_do_frame_check(hw_to_vdec(hevc), vf);
 			kfifo_put(&hevc->pending_q,
 			(const struct vframe_s *)vf);
+			if (hevc->vf_pre_count == 0)
+				hevc->vf_pre_count++;
 
 			/**/
 			if (pic->pic_struct == 11)
@@ -10762,7 +10796,7 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 
 	INIT_KFIFO(hevc->display_q);
 	INIT_KFIFO(hevc->newframe_q);
-
+	INIT_KFIFO(hevc->pending_q);
 
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		const struct vframe_s *vf = &hevc->vfpool[i];
@@ -11231,11 +11265,15 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 				new_pic = pic;
 		}
 	}
-
+/*If the number of reference frames of DPB >= (the DPB buffer size - the number of reorders -3)*/
+/*and the back-end state is RECEIVER INACTIVE, it will cause the decoder have no buffer to*/
+/*decode. all reference frames are removed and setting error flag.*/
+/*3 represents 2 filed are needed for back-end display and 1 filed is needed for decoding*/
+/*when file is interlace.*/
 	if ((new_pic == NULL) &&
 			(ref_pic >=
 			get_work_pic_num(hevc) -
-			hevc->sps_num_reorder_pics_0 - 1))  {
+			hevc->sps_num_reorder_pics_0 - 3))  {
 		enum receviver_start_e state = RECEIVER_INACTIVE;
 		if (vf_get_receiver(vdec->vf_provider_name)) {
 			state =
@@ -11254,18 +11292,10 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 
 				if ((pic->referenced == 1) &&
 						(pic->error_mark == 1)) {
-					if (new_pic) {
-						if (pic->POC < new_pic->POC)
-							new_pic = pic;
-					} else
-						new_pic = pic;
+					pic->referenced = 0;
+					put_mv_buf(hevc, pic);
 				}
-			}
-			if (new_pic != NULL) {
-				new_pic->referenced = 0;
-				put_mv_buf(hevc, pic);
-				if (pic_list_debug & 0x2)
-					pr_err("err ref poc :%d\n", new_pic->POC);
+				pic->error_mark = 1;
 			}
 		}
 	}
