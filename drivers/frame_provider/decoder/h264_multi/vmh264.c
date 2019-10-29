@@ -5355,11 +5355,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		debug_tag = tenth_ns - hw->tfn_ns;
 		hw->tfn_cnt = 1;
 		hw->tfn_cnt = tenth_ns;
-		if (debug_tag <= 10000000) {
-			pr_err("Within 10ms 10 vh264_isr_thread_fn. Abnormal!\n");
-			timeout_process(hw);
-			return IRQ_HANDLED;
-		}
+		if (debug_tag <= 10000000)
+			pr_err("Within 10ms 10 vh264_isr_thread_fn!\n");
 	}
 
 	if (dec_dpb_status == H264_CONFIG_REQUEST) {

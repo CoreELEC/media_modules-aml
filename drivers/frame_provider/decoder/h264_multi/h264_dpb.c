@@ -202,7 +202,7 @@ void ref_pic_list_reordering(struct h264_dpb_stru *p_H264_Dpb,
  */
 					i >= REORDERING_COMMAND_MAX_SIZE) {
 					dpb_print(p_H264_Dpb->decoder_index,
-						PRINT_FLAG_ERROR,
+						PRINT_FLAG_DPB_DETAIL,
 						"%s error %d %d\n",
 						__func__, i,
 						currSlice->
@@ -300,7 +300,7 @@ void ref_pic_list_reordering(struct h264_dpb_stru *p_H264_Dpb,
 				/*i>currSlice->num_ref_idx_active[LIST_1] || */
 					i >= REORDERING_COMMAND_MAX_SIZE) {
 					dpb_print(p_H264_Dpb->decoder_index,
-						PRINT_FLAG_ERROR,
+						PRINT_FLAG_DPB_DETAIL,
 						"%s error %d %d\n",
 						__func__, i,
 						currSlice->
