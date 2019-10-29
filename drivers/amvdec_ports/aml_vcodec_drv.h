@@ -26,6 +26,7 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
+#include <linux/amlogic/media/vfm/vframe.h>
 #include "aml_vcodec_util.h"
 
 #define AML_VCODEC_DRV_NAME	"aml_vcodec_drv"
@@ -235,6 +236,58 @@ struct vdec_pic_info {
 	unsigned int c_len_sz;
 };
 
+struct aml_vdec_pic_infos {
+	u32 visible_width;
+	u32 visible_height;
+	u32 coded_width;
+	u32 coded_height;
+	u32 dpb_size;
+};
+
+struct aml_vdec_hdr_infos {
+	/*
+	 * bit 29   : present_flag
+	 * bit 28-26: video_format "component", "PAL", "NTSC", "SECAM", "MAC", "unspecified"
+	 * bit 25   : range "limited", "full_range"
+	 * bit 24   : color_description_present_flag
+	 * bit 23-16: color_primaries "unknown", "bt709", "undef", "bt601",
+	 *            "bt470m", "bt470bg", "smpte170m", "smpte240m", "film", "bt2020"
+	 * bit 15-8 : transfer_characteristic unknown", "bt709", "undef", "bt601",
+	 *            "bt470m", "bt470bg", "smpte170m", "smpte240m",
+	 *            "linear", "log100", "log316", "iec61966-2-4",
+	 *            "bt1361e", "iec61966-2-1", "bt2020-10", "bt2020-12",
+	 *            "smpte-st-2084", "smpte-st-428"
+	 * bit 7-0  : matrix_coefficient "GBR", "bt709", "undef", "bt601",
+	 *            "fcc", "bt470bg", "smpte170m", "smpte240m",
+	 *            "YCgCo", "bt2020nc", "bt2020c"
+	 */
+	u32 signal_type;
+	struct vframe_master_display_colour_s color_parms;
+};
+
+struct aml_dec_params {
+	u32 dec_parms_status;
+	u32 es_need_header;
+	u32 double_write_mode;
+	u32 buffer_mode;
+	u32 buffer_width;
+	u32 buffer_height;
+	u32 buffer_margin;
+	struct aml_vdec_pic_infos pic;
+	struct aml_vdec_hdr_infos hdr;
+};
+
+struct v4l2_config_parm {
+	u32 type;
+	u32 length;
+	union {
+		struct aml_dec_params dec;
+		struct aml_enc_params enc;
+		u8 data[200];
+	} parm;
+	u8 buf[4096];
+};
+
 enum aml_thread_type {
 	AML_THREAD_OUTPUT,
 	AML_THREAD_CAPTURE,
@@ -335,7 +388,6 @@ struct aml_vcodec_ctx {
 	struct mutex lock;
 	struct completion comp;
 	bool has_receive_eos;
-	struct list_head capture_list;
 	struct list_head vdec_thread_list;
 	bool is_drm_mode;
 	bool is_stream_mode;
@@ -344,8 +396,11 @@ struct aml_vcodec_ctx {
 	bool scatter_mem_enable;
 	bool param_sets_from_ucode;
 	bool v4l_codec_ready;
+	bool v4l_codec_dpb_ready;
 	wait_queue_head_t wq;
 	spinlock_t slock;
+	struct v4l2_config_parm config;
+	bool is_stream_off;
 };
 
 /**

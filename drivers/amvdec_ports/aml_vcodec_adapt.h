@@ -38,6 +38,7 @@ struct aml_vdec_adapt {
 	struct vdec_s *vdec;
 	struct stream_port_s port;
 	struct dec_sysinfo dec_prop;
+	struct v4l2_config_parm config;
 	int video_type;
 	char *recv_name;
 	int vfm_path;

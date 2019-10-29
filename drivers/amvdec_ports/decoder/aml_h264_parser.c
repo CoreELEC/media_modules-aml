@@ -100,10 +100,10 @@ static int decode_scaling_list(struct get_bits_context *gb,
 		for (i = 0; i < size; i++) {
 			if (next) {
 				int v = get_se_golomb(gb);
-				if (v < -128 || v > 127) {
+				/*if (v < -128 || v > 127) { //JM19 has not check.
 					pr_err( "delta scale %d is invalid\n", v);
 					return -1;
-				}
+				}*/
 				next = (last + v) & 0xff;
 			}
 			if (!i && !next) { /* matrix not written, we use the preset one */

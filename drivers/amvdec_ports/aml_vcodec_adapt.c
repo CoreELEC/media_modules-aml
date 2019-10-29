@@ -511,6 +511,11 @@ static void set_vdec_properity(struct vdec_s *vdec,
 
 	vdec->port->flag = vdec->port_flag;
 	ada_ctx->vfm_path = vdec->frame_base_video_path;
+
+	vdec->config_len = ada_ctx->config.length >
+		PAGE_SIZE ? PAGE_SIZE : ada_ctx->config.length;
+	memcpy(vdec->config, ada_ctx->config.buf, vdec->config_len);
+
 	ada_ctx->vdec = vdec;
 }
 
@@ -742,3 +747,12 @@ int vdec_frame_number(struct aml_vdec_adapt *ada_ctx)
 	else
 		return -1;
 }
+
+void v4l2_config_vdec_parm(struct aml_vdec_adapt *ada_ctx, u8 *data, u32 len)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+
+	vdec->config_len = len > PAGE_SIZE ? PAGE_SIZE : len;
+	memcpy(vdec->config, data, vdec->config_len);
+}
+

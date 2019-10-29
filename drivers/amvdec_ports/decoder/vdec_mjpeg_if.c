@@ -151,12 +151,12 @@ static int vdec_mjpeg_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	if (!inst)
 		return -ENOMEM;
 
-	inst->ctx = ctx;
-
-	inst->vdec.video_type = VFORMAT_MJPEG;
-	inst->vdec.dev	= ctx->dev->vpu_plat_dev;
-	inst->vdec.filp	= ctx->dev->filp;
-	inst->vdec.ctx	= ctx;
+	inst->vdec.video_type	= VFORMAT_MJPEG;
+	inst->vdec.dev		= ctx->dev->vpu_plat_dev;
+	inst->vdec.filp		= ctx->dev->filp;
+	inst->vdec.config	= ctx->config;
+	inst->vdec.ctx		= ctx;
+	inst->ctx		= ctx;
 
 	/* set play mode.*/
 	if (ctx->is_drm_mode)
@@ -194,15 +194,15 @@ static int vdec_mjpeg_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	inst->vsi->pic.visible_height	= 1080;
 	inst->vsi->pic.coded_width	= 1920;
 	inst->vsi->pic.coded_height	= 1088;
-	inst->vsi->pic.y_bs_sz	= 0;
-	inst->vsi->pic.y_len_sz	= (1920 * 1088);
-	inst->vsi->pic.c_bs_sz	= 0;
-	inst->vsi->pic.c_len_sz	= (1920 * 1088 / 2);
+	inst->vsi->pic.y_bs_sz		= 0;
+	inst->vsi->pic.y_len_sz		= (1920 * 1088);
+	inst->vsi->pic.c_bs_sz		= 0;
+	inst->vsi->pic.c_len_sz		= (1920 * 1088 / 2);
 
 	aml_vcodec_debug(inst, "mjpeg Instance >> %p", inst);
 
-	ctx->ada_ctx = &inst->vdec;
-	*h_vdec = (unsigned long)inst;
+	ctx->ada_ctx	= &inst->vdec;
+	*h_vdec		= (unsigned long)inst;
 
 	//dump_init();
 

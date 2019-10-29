@@ -39,6 +39,25 @@
 
 #define AML_V4L2_SET_DECMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
 
+/* codec types of get/set parms. */
+#define V4L2_CONFIG_PARM_ENCODE		(0)
+#define V4L2_CONFIG_PARM_DECODE		(1)
+
+/* types of decode parms. */
+#define V4L2_CONFIG_PARM_DECODE_COMMON	(1 << 0)
+#define V4L2_CONFIG_PARM_DECODE_PICINFO	(1 << 1)
+#define V4L2_CONFIG_PARM_DECODE_HDRINFO	(1 << 2)
+
+/* for video composer metafd private_data struct */
+struct file_privdata {
+	struct vframe_s vf;
+	struct vframe_s *vf_p;
+	bool is_keep;
+	int keep_id;
+	int keep_head_id;
+	bool is_install;
+};
+
 /**
  * struct vdec_fb  - decoder frame buffer
  * @mem_type	: gather or scatter memory.
@@ -83,6 +102,7 @@ struct aml_video_dec_buf {
 	struct list_head list;
 
 	struct vdec_v4l2_buffer frame_buffer;
+	struct file_privdata privdata;
 	struct codec_mm_s *mem[2];
 	char mem_onwer[32];
 	bool used;
@@ -94,17 +114,8 @@ struct aml_video_dec_buf {
 	bool error;
 };
 
-struct aml_vdec_pic_infos {
-	u32 visible_width;
-	u32 visible_height;
-	u32 coded_width;
-	u32 coded_height;
-	int dpb_size;
-};
-
 extern const struct v4l2_ioctl_ops aml_vdec_ioctl_ops;
 extern const struct v4l2_m2m_ops aml_vdec_m2m_ops;
-
 
 /*
  * aml_vdec_lock/aml_vdec_unlock are for ctx instance to
@@ -119,9 +130,7 @@ int aml_vcodec_dec_queue_init(void *priv, struct vb2_queue *src_vq,
 void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx);
 void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx);
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx);
-
 void vdec_device_vf_run(struct aml_vcodec_ctx *ctx);
-
 void try_to_capture(struct aml_vcodec_ctx *ctx);
 void aml_thread_notify(struct aml_vcodec_ctx *ctx,
 	enum aml_thread_type type);
@@ -129,5 +138,6 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 	enum aml_thread_type type, const char *thread_name);
 void aml_thread_stop(struct aml_vcodec_ctx *ctx);
 void wait_vcodec_ending(struct aml_vcodec_ctx *ctx);
+void vdec_frame_buffer_release(void *data);
 
 #endif /* _AML_VCODEC_DEC_H_ */
