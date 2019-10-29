@@ -12,11 +12,11 @@ int vdec_v4l_set_pic_infos(
 	struct aml_vcodec_ctx *ctx,
 	struct aml_vdec_pic_infos *info);
 
+int vdec_v4l_set_hdr_infos(
+	struct aml_vcodec_ctx *ctx,
+	struct aml_vdec_hdr_infos *hdr);
+
 int vdec_v4l_write_frame_sync(
 	struct aml_vcodec_ctx *ctx);
-
-int vdec_v4l_binding_fd_and_vf(
-	ulong v4l_handle,
-	void *vf);
 
 #endif

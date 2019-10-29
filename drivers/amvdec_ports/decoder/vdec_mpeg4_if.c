@@ -151,24 +151,24 @@ static int vdec_mpeg4_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	if (!inst)
 		return -ENOMEM;
 
-	inst->ctx = ctx;
-
-	inst->vdec.video_type = VFORMAT_MPEG4;
-	inst->vdec.format = VIDEO_DEC_FORMAT_MPEG4_5;
-	inst->vdec.dev	= ctx->dev->vpu_plat_dev;
-	inst->vdec.filp	= ctx->dev->filp;
-	inst->vdec.ctx	= ctx;
+	inst->vdec.video_type	= VFORMAT_MPEG4;
+	inst->vdec.format	= VIDEO_DEC_FORMAT_MPEG4_5;
+	inst->vdec.dev		= ctx->dev->vpu_plat_dev;
+	inst->vdec.filp		= ctx->dev->filp;
+	inst->vdec.config	= ctx->config;
+	inst->vdec.ctx		= ctx;
+	inst->ctx		= ctx;
 
 	/* set play mode.*/
 	if (ctx->is_drm_mode)
 		inst->vdec.port.flag |= PORT_FLAG_DRM;
 
 	/* to eable mpeg4 hw.*/
-	inst->vdec.port.type = PORT_TYPE_VIDEO;
+	inst->vdec.port.type	= PORT_TYPE_VIDEO;
 
 	/* init vfm */
-	inst->vfm.ctx	= ctx;
-	inst->vfm.ada_ctx = &inst->vdec;
+	inst->vfm.ctx		= ctx;
+	inst->vfm.ada_ctx	= &inst->vdec;
 	vcodec_vfm_init(&inst->vfm);
 
 	ret = video_decoder_init(&inst->vdec);
@@ -195,15 +195,15 @@ static int vdec_mpeg4_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	inst->vsi->pic.visible_height	= 1080;
 	inst->vsi->pic.coded_width	= 1920;
 	inst->vsi->pic.coded_height	= 1088;
-	inst->vsi->pic.y_bs_sz	= 0;
-	inst->vsi->pic.y_len_sz	= (1920 * 1088);
-	inst->vsi->pic.c_bs_sz	= 0;
-	inst->vsi->pic.c_len_sz	= (1920 * 1088 / 2);
+	inst->vsi->pic.y_bs_sz		= 0;
+	inst->vsi->pic.y_len_sz		= (1920 * 1088);
+	inst->vsi->pic.c_bs_sz		= 0;
+	inst->vsi->pic.c_len_sz		= (1920 * 1088 / 2);
 
 	aml_vcodec_debug(inst, "mpeg4 Instance >> %p", inst);
 
-	ctx->ada_ctx = &inst->vdec;
-	*h_vdec = (unsigned long)inst;
+	ctx->ada_ctx	= &inst->vdec;
+	*h_vdec		= (unsigned long)inst;
 
 	//dump_init();
 

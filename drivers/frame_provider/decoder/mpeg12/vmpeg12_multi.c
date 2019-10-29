@@ -384,7 +384,7 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 		return 0;
 
 	ret = vdec_v4l_get_buffer(hw->v4l2_ctx, &fb);
-	if (ret) {
+	if (ret < 0) {
 		debug_print(DECODE_ID(hw), 0,
 			"[%d] get fb fail.\n",
 			((struct aml_vcodec_ctx *)
@@ -1376,11 +1376,6 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		if (hw->is_used_v4l) {
 			vf->v4l_mem_handle
 				= hw->pics[index].v4l_ref_buf_addr;
-			if (vdec_v4l_binding_fd_and_vf(vf->v4l_mem_handle, vf) < 0) {
-				debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
-					"v4l: binding vf fail.\n");
-				return -1;
-			}
 			debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 				"[%d] %s(), v4l mem handle: 0x%lx\n",
 				((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,

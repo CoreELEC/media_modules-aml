@@ -68,7 +68,8 @@ enum vdec_get_param_type {
 	GET_PARAM_FREE_FRAME_BUFFER,
 	GET_PARAM_PIC_INFO,
 	GET_PARAM_CROP_INFO,
-	GET_PARAM_DPB_SIZE
+	GET_PARAM_DPB_SIZE,
+	GET_PARAM_CONFIG_INFO
 };
 
 /*
@@ -77,6 +78,7 @@ enum vdec_get_param_type {
 enum vdec_set_param_type {
 	SET_PARAM_WRITE_FRAME_SYNC,
 	SET_PARAM_PIC_INFO,
+	SET_PARAM_HDR_INFO
 };
 
 /**
