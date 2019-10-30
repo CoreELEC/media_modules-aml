@@ -1327,6 +1327,8 @@ struct PIC_s {
 	unsigned char recon_mark;
 	unsigned char output_ready;
 	unsigned char error_mark;
+	//dis_mark = 0:discard mark,dis_mark = 1:no discard mark
+	unsigned char dis_mark;
 	/**/ int slice_idx;
 	int m_aiRefPOCList0[MAX_SLICE_NUM][16];
 	int m_aiRefPOCList1[MAX_SLICE_NUM][16];
@@ -5485,6 +5487,7 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 		new_pic->output_mark = 0;
 		new_pic->recon_mark = 0;
 		new_pic->error_mark = 0;
+		new_pic->dis_mark = 0;
 		/* new_pic->output_ready = 0; */
 		new_pic->num_reorder_pic = rpm_param->p.sps_num_reorder_pics_0;
 		new_pic->losless_comp_body_size = hevc->losless_comp_body_size;
@@ -5857,6 +5860,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 
 			pic->output_mark = 1;
 			pic->recon_mark = 1;
+			pic->dis_mark = 1;
 		}
 		do {
 			pic_display = output_pic(hevc, 0);
@@ -7012,7 +7016,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				if (is_log_enable(hevc))
 					add_log(hevc,
 					"WRONG,fail to get the pic Col_POC");
-			} else if (hevc->col_pic->error_mark) {
+			} else if (hevc->col_pic->error_mark || hevc->col_pic->dis_mark == 0) {
 				hevc->cur_pic->error_mark = 1;
 				if (get_dbg_flag(hevc)) {
 					hevc_print(hevc, 0,
