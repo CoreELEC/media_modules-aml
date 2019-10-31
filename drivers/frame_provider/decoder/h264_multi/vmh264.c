@@ -4413,8 +4413,9 @@ static int get_max_dec_frame_buf_size(int level_idc,
 	size /= pic_size;
 	size = size + 1;	/* need one more buffer */
 
-	if (max_reference_frame_num < size)
+	if (max_reference_frame_num > size)
 		size = max_reference_frame_num;
+	size = imin(size, 16);
 
 	return size;
 }
@@ -8497,6 +8498,7 @@ static void h264_reconfig(struct vdec_h264_hw_s *hw)
 	int i;
 	unsigned long flags;
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 	dpb_print(DECODE_ID(hw), 0,
 	"%s\n", __func__);
 	/* after calling flush_dpb() and bufmgr_h264_remove_unused_frame(),
@@ -8520,6 +8522,24 @@ static void h264_reconfig(struct vdec_h264_hw_s *hw)
 	}
 	spin_lock_irqsave(&hw->bufspec_lock, flags);
 	for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
+		if (vdec->parallel_dec == 1) {
+			vdec->free_canvas_ex(hw->buffer_spec[i].y_canvas_index, vdec->id);
+			vdec->free_canvas_ex(hw->buffer_spec[i].u_canvas_index, vdec->id);
+			vdec->free_canvas_ex(hw->buffer_spec[i].v_canvas_index, vdec->id);
+			hw->buffer_spec[i].y_canvas_index = -1;
+			hw->buffer_spec[i].u_canvas_index = -1;
+			hw->buffer_spec[i].v_canvas_index = -1;
+#ifdef VDEC_DW
+			if (IS_VDEC_DW(hw)) {
+				vdec->free_canvas_ex(hw->buffer_spec[i].vdec_dw_y_canvas_index, vdec->id);
+				vdec->free_canvas_ex(hw->buffer_spec[i].vdec_dw_u_canvas_index, vdec->id);
+				vdec->free_canvas_ex(hw->buffer_spec[i].vdec_dw_v_canvas_index, vdec->id);
+				hw->buffer_spec[i].vdec_dw_y_canvas_index = -1;
+				hw->buffer_spec[i].vdec_dw_u_canvas_index = -1;
+				hw->buffer_spec[i].vdec_dw_v_canvas_index = -1;
+#endif
+			}
+		}
 		/*make sure buffers not put back to bufmgr when
 			vf_put is called*/
 		if (hw->buffer_spec[i].used == 2)
