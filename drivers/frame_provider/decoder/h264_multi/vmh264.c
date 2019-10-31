@@ -845,8 +845,6 @@ struct vdec_h264_hw_s {
 	bool new_iframe_flag;
 	bool ref_err_flush_dpb_flag;
 	unsigned int first_i_policy;
-	u32 tfn_cnt;
-	u64 tfn_ns;
 };
 
 static u32 again_threshold;
@@ -5347,17 +5345,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 	unsigned int dec_dpb_status = p_H264_Dpb->dec_dpb_status;
 	u32 debug_tag;
 	int ret;
-	if (++hw->tfn_cnt == 1) {
-		hw->tfn_ns = local_clock();
-	} else if (hw->tfn_cnt >= 10) {
-		u64 tenth_ns = local_clock();
-		/* Here borrow the varible debug_tag for use */
-		debug_tag = tenth_ns - hw->tfn_ns;
-		hw->tfn_cnt = 1;
-		hw->tfn_cnt = tenth_ns;
-		if (debug_tag <= 10000000)
-			pr_err("Within 10ms 10 vh264_isr_thread_fn!\n");
-	}
 
 	if (dec_dpb_status == H264_CONFIG_REQUEST) {
 #if 1
