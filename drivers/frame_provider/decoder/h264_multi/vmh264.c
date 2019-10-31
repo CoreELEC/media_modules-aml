@@ -4440,7 +4440,7 @@ static int get_max_dec_frame_buf_size(int level_idc,
 	size /= pic_size;
 	size = size + 1;	/* need one more buffer */
 
-	if (max_reference_frame_num < size)
+	if (max_reference_frame_num > size)
 		size = max_reference_frame_num;
 
 	return size;
