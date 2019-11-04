@@ -5193,7 +5193,7 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 
 
 	if (p_sei + payload_size > sei_data_buf_end) {
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
 			"%s: payload_type = %d, payload_size = %d is over\n",
 			__func__, payload_type, payload_size);
 		return read_size;
@@ -5201,7 +5201,7 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 	bit_offset = 0;
 
 	if (payload_size <= 0) {
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
 			"%s warning: this is a null sei message for payload_type = %d\n",
 			__func__, payload_type);
 		return read_size;
