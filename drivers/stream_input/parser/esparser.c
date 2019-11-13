@@ -849,6 +849,11 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 		mutex_unlock(&esparser_mutex);
 	}
 
+	if ((drm->drm_flag & TYPE_DRMINFO) && (drm->drm_hasesdata == 0)) {
+		havewritebytes = sizeof(struct drm_info);
+	} else if (drm->drm_hasesdata == 1) {
+		havewritebytes += sizeof(struct drm_info);
+	}
 	return havewritebytes;
 }
 EXPORT_SYMBOL(drm_write);
