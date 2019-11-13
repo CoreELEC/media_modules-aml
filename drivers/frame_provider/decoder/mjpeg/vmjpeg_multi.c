@@ -94,6 +94,7 @@ static int vmjpeg_vf_states(struct vframe_states *states, void *);
 static int vmjpeg_event_cb(int type, void *data, void *private_data);
 static void vmjpeg_work(struct work_struct *work);
 static int pre_decode_buf_level = 0x800;
+static int start_decode_buf_level = 0x2000;
 static u32 without_display_mode;
 #undef pr_info
 #define pr_info printk
@@ -1396,8 +1397,6 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 		return -EFAULT;
 	}
 
-	hw = (struct vdec_mjpeg_hw_s *)devm_kzalloc(&pdev->dev,
-		sizeof(struct vdec_mjpeg_hw_s), GFP_KERNEL);
 	hw =  vzalloc(sizeof(struct vdec_mjpeg_hw_s));
 	if (hw == NULL) {
 		pr_info("\nammvdec_mjpeg device data allocation failed\n");
@@ -1455,6 +1454,8 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return -ENODEV;
 	}
+	vdec_set_prepare_level(pdata, start_decode_buf_level);
+
 	if (pdata->parallel_dec == 1)
 		vdec_core_request(pdata, CORE_MASK_VDEC_1);
 	else {
@@ -1562,6 +1563,9 @@ module_param_array(max_process_time, uint, &max_decode_instance_num, 0664);
 
 module_param(radr, uint, 0664);
 MODULE_PARM_DESC(radr, "\nradr\n");
+
+module_param(start_decode_buf_level, uint, 0664);
+MODULE_PARM_DESC(start_decode_buf_level, "\nstart_decode_buf_level\n");
 
 module_param(rval, uint, 0664);
 MODULE_PARM_DESC(rval, "\nrval\n");
