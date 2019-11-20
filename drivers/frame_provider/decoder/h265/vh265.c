@@ -9481,7 +9481,8 @@ pic_done:
 				check_pic_decoded_error(hevc,
 					READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff);
 				if (hevc->cur_pic != NULL &&
-					(READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff) == 0)
+					(READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff) == 0
+					&& (hevc->lcu_x_num * hevc->lcu_y_num != 1))
 					hevc->cur_pic->error_mark = 1;
 force_output:
 				pic_display = output_pic(hevc, 1);
