@@ -5614,6 +5614,10 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			val(p_H264_Dpb->dpb_param.dpb.top_field_pic_order_cnt));
 		I_flag = (p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] == I_Slice)
 			? I_FLAG : 0;
+
+		if ((hw->i_only & 0x2) && (I_flag & I_FLAG))
+			flush_dpb(p_H264_Dpb);
+
 		if ((hw->i_only & 0x2) && (!(I_flag & I_FLAG)) &&
 			(p_H264_Dpb->mSlice.structure == FRAME)) {
 				hw->data_flag = NULL_FLAG;
@@ -5731,7 +5735,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				} else
 					hw->reflist_error_count = 0;
 			}
-			if ((error_proc_policy & 0x800)
+			if ((error_proc_policy & 0x800) && (!(hw->i_only & 0x2))
 				&& p_H264_Dpb->dpb_error_flag != 0) {
 				dpb_print(DECODE_ID(hw), 0,
 					"dpb error %d\n",
@@ -5781,6 +5785,7 @@ pic_done_proc:
 		reset_process_time(hw);
 
 		if (input_frame_based(vdec) &&
+			(!(hw->i_only & 0x2)) &&
 			frmbase_cont_bitlevel != 0 &&
 			READ_VREG(VIFF_BIT_CNT) >
 			frmbase_cont_bitlevel) {
@@ -5855,6 +5860,7 @@ pic_done_proc:
 
 	}
 			mutex_unlock(&hw->chunks_mutex);
+
 			check_decoded_pic_error(hw);
 #ifdef ERROR_HANDLE_TEST
 			if ((hw->data_flag & ERROR_FLAG)
