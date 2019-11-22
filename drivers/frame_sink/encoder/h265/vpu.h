@@ -23,6 +23,7 @@
 #include <linux/fs.h>
 #include <linux/types.h>
 #include <linux/compat.h>
+#include <linux/dma-buf.h>
 
 #define MAX_INST_HANDLE_SIZE	        (32*1024)
 #define MAX_NUM_INSTANCE                4
@@ -101,6 +102,21 @@
 	READ_HHI_REG(HHI_WAVE420L_CLK_CNTL2) \
 		& (~(1 << 8)))
 
+typedef enum
+{
+    AMVENC_YUV422_SINGLE = 0,
+    AMVENC_YUV444_SINGLE,
+    AMVENC_NV21,
+    AMVENC_NV12,
+    AMVENC_YUV420,
+    AMVENC_YUV444_PLANE,
+    AMVENC_RGB888,
+    AMVENC_RGB888_PLANE,
+    AMVENC_RGB565,
+    AMVENC_RGBA8888,
+    AMVENC_FRAME_FMT
+} AMVEncFrameFmt;
+
 #ifdef CONFIG_COMPAT
 struct compat_vpudrv_buffer_t {
 	u32 size;
@@ -162,6 +178,25 @@ struct vpudrv_instance_pool_t {
 	u8 codecInstPool[MAX_NUM_INSTANCE][MAX_INST_HANDLE_SIZE];
 };
 
+struct vpu_dma_buf_info_t {
+    u32 width;
+    u32 height;
+    AMVEncFrameFmt fmt;
+    u32 num_planes;
+    s32 fd[3];
+};
+
+struct vpu_dma_cfg {
+	int fd;
+	void *dev;
+	void *vaddr;
+	void *paddr;
+	struct dma_buf *dbuf;
+	struct dma_buf_attachment *attach;
+	struct sg_table *sg;
+	enum dma_data_direction dir;
+};
+
 #define VPUDRV_BUF_LEN struct vpudrv_buffer_t
 #define VPUDRV_BUF_LEN32 struct compat_vpudrv_buffer_t
 #define VPUDRV_INST_LEN struct vpudrv_inst_info_t
@@ -205,6 +240,12 @@ struct vpudrv_instance_pool_t {
 
 #define VDI_IOCTL_FLUSH_BUFFER \
 	_IOW(VDI_MAGIC, 13, VPUDRV_BUF_LEN)
+
+#define VDI_IOCTL_CONFIG_DMA \
+        _IOW(VDI_MAGIC, 14, struct vpu_dma_buf_info_t)
+
+#define VDI_IOCTL_UNMAP_DMA \
+        _IOW(VDI_MAGIC, 15, u32)
 
 #ifdef CONFIG_COMPAT
 #define VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY32 \
@@ -294,6 +335,10 @@ enum {
 
 #define W4_BS_RD_PTR					(W4_REG_BASE + 0x0130)
 #define W4_BS_WR_PTR					(W4_REG_BASE + 0x0134)
+#define W4_SRC_ADDR_Y                                   (W4_REG_BASE + 0x0174)
+#define W4_SRC_ADDR_U                                   (W4_REG_BASE + 0x0178)
+#define W4_SRC_ADDR_V                                   (W4_REG_BASE + 0x017C)
+
 #define W4_RET_ENC_PIC_BYTE			(W4_REG_BASE + 0x01C8)
 
 #define W4_REMAP_CODE_INDEX			 0

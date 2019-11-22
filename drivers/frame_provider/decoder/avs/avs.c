@@ -1615,12 +1615,13 @@ static s32 vavs_init(void)
 #endif
 
 	if (vavs_amstream_dec_info.rate != 0) {
-		if (!is_reset)
+		if (!is_reset) {
 			vf_notify_receiver(PROVIDER_NAME,
 					VFRAME_EVENT_PROVIDER_FR_HINT,
 					(void *)((unsigned long)
 					vavs_amstream_dec_info.rate));
-		fr_hint_status = VDEC_HINTED;
+			fr_hint_status = VDEC_HINTED;
+		}
 	} else
 		fr_hint_status = VDEC_NEED_HINT;
 
@@ -1721,6 +1722,10 @@ static int amvdec_avs_probe(struct platform_device *pdev)
 
 static int amvdec_avs_remove(struct platform_device *pdev)
 {
+	if (stat & STAT_TIMER_ARM) {
+		del_timer_sync(&recycle_timer);
+		stat &= ~STAT_TIMER_ARM;
+	}
 	cancel_work_sync(&fatal_error_wd_work);
 	atomic_set(&error_handler_run, 0);
 
@@ -1737,10 +1742,6 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 		stat &= ~STAT_ISR_REG;
 	}
 
-	if (stat & STAT_TIMER_ARM) {
-		del_timer_sync(&recycle_timer);
-		stat &= ~STAT_TIMER_ARM;
-	}
 #ifdef AVSP_LONG_CABAC
 	if (firmware_sel == 0) {
 		mutex_lock(&vavs_mutex);
@@ -1778,7 +1779,7 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 	}
 #endif
 	if (stat & STAT_VF_HOOK) {
-		if (fr_hint_status == VDEC_HINTED && !is_reset)
+		if (fr_hint_status == VDEC_HINTED)
 			vf_notify_receiver(PROVIDER_NAME,
 				VFRAME_EVENT_PROVIDER_FR_END_HINT, NULL);
 		fr_hint_status = VDEC_NO_NEED_HINT;

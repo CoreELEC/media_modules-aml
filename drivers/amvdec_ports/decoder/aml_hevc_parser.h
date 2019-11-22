@@ -1,41 +1,66 @@
+/*
+ * drivers/amvdec_ports/decoder/aml_hevc_parser.h
+ *
+ * Copyright (C) 2015 Amlogic, Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ */
+
+
 #ifndef AML_HEVC_PARSER_H
 #define AML_HEVC_PARSER_H
 
-#define MAX_DPB_SIZE 16 // A.4.1
-#define MAX_REFS 16
+#include "../utils/common.h"
 
-#define MAX_NB_THREADS 16
-#define SHIFT_CTB_WPP 2
+#define MAX_DPB_SIZE				16 // A.4.1
+#define MAX_REFS				16
+
+#define MAX_NB_THREADS				16
+#define SHIFT_CTB_WPP				2
 
 /**
  * 7.4.2.1
  */
-#define MAX_SUB_LAYERS 7
-#define MAX_VPS_COUNT 16
-#define MAX_SPS_COUNT 32
-#define MAX_PPS_COUNT 256
-#define MAX_SHORT_TERM_RPS_COUNT 64
-#define MAX_CU_SIZE 128
+#define MAX_SUB_LAYERS				7
+#define MAX_VPS_COUNT				16
+#define MAX_SPS_COUNT				32
+#define MAX_PPS_COUNT				256
+#define MAX_SHORT_TERM_RPS_COUNT 		64
+#define MAX_CU_SIZE				128
 
 //TODO: check if this is really the maximum
-#define MAX_TRANSFORM_DEPTH 5
+#define MAX_TRANSFORM_DEPTH			5
 
-#define MAX_TB_SIZE 32
-#define MAX_PB_SIZE 64
-#define MAX_LOG2_CTB_SIZE 6
-#define MAX_QP 51
-#define DEFAULT_INTRA_TC_OFFSET 2
+#define MAX_TB_SIZE				32
+#define MAX_PB_SIZE				64
+#define MAX_LOG2_CTB_SIZE			6
+#define MAX_QP					51
+#define DEFAULT_INTRA_TC_OFFSET			2
 
-#define HEVC_CONTEXTS 183
+#define HEVC_CONTEXTS				183
 
-#define MRG_MAX_NUM_CANDS     5
+#define MRG_MAX_NUM_CANDS			5
 
-#define L0 0
-#define L1 1
+#define L0					0
+#define L1					1
 
-#define EPEL_EXTRA_BEFORE 1
-#define EPEL_EXTRA_AFTER  2
-#define EPEL_EXTRA        3
+#define EPEL_EXTRA_BEFORE			1
+#define EPEL_EXTRA_AFTER			2
+#define EPEL_EXTRA				3
+
+#define FF_PROFILE_HEVC_MAIN			1
+#define FF_PROFILE_HEVC_MAIN_10			2
+#define FF_PROFILE_HEVC_MAIN_STILL_PICTURE	3
+#define FF_PROFILE_HEVC_REXT			4
 
 /**
  * Value of the luma sample at position (x, y) in the 2D array tab.
@@ -255,11 +280,6 @@ struct HEVCWindow {
 	u32 bottom_offset;
 };
 
-struct AVRational{
-	int num; ///< numerator
-	int den; ///< denominator
-};
-
 struct VUI {
 	struct AVRational sar;
 
@@ -304,35 +324,26 @@ struct VUI {
 };
 
 struct PTLCommon {
-	u8 profile_space;
-	u8 tier_flag;
-	u8 profile_idc;
-	u8 profile_compatibility_flag[32];
-	u8 level_idc;
-	u8 progressive_source_flag;
-	u8 interlaced_source_flag;
-	u8 non_packed_constraint_flag;
-	u8 frame_only_constraint_flag;
+    u8 profile_space;
+    u8 tier_flag;
+    u8 profile_idc;
+    u8 profile_compatibility_flag[32];
+    u8 level_idc;
+    u8 progressive_source_flag;
+    u8 interlaced_source_flag;
+    u8 non_packed_constraint_flag;
+    u8 frame_only_constraint_flag;
 };
 
 struct PTL {
-	int general_profile_space;
-	u8 general_tier_flag;
-	int general_profile_idc;
-	int general_profile_compatibility_flag[32];
-	int general_level_idc;
+    struct PTLCommon general_ptl;
+    struct PTLCommon sub_layer_ptl[HEVC_MAX_SUB_LAYERS];
 
-	u8 sub_layer_profile_present_flag[MAX_SUB_LAYERS];
-	u8 sub_layer_level_present_flag[MAX_SUB_LAYERS];
-
-	int sub_layer_profile_space[MAX_SUB_LAYERS];
-	u8 sub_layer_tier_flag[MAX_SUB_LAYERS];
-	int sub_layer_profile_idc[MAX_SUB_LAYERS];
-	u8 sub_layer_profile_compatibility_flags[MAX_SUB_LAYERS][32];
-	int sub_layer_level_idc[MAX_SUB_LAYERS];
+    u8 sub_layer_profile_present_flag[HEVC_MAX_SUB_LAYERS];
+    u8 sub_layer_level_present_flag[HEVC_MAX_SUB_LAYERS];
 };
 
-struct HEVCVPS {
+struct h265_VPS_t {
 	u8 vps_temporal_id_nesting_flag;
 	int vps_max_layers;
 	int vps_max_sub_layers; ///< vps_max_temporal_layers_minus1 + 1
@@ -350,9 +361,6 @@ struct HEVCVPS {
 	u8 vps_poc_proportional_to_timing_flag;
 	int vps_num_ticks_poc_diff_one; ///< vps_num_ticks_poc_diff_one_minus1 + 1
 	int vps_num_hrd_parameters;
-
-	u8 data[4096];
-	int data_size;
 };
 
 struct ScalingList {
@@ -362,8 +370,9 @@ struct ScalingList {
 	u8 sl_dc[2][6];
 };
 
-struct HEVCSPS {
+struct h265_SPS_t {
 	u8 vps_id;
+	u8 sps_id;
 	int chroma_format_idc;
 	u8 separate_colour_plane_flag;
 
@@ -380,9 +389,9 @@ struct HEVCSPS {
 
 	int max_sub_layers;
 	struct {
-	int max_dec_pic_buffering;
-	int num_reorder_pics;
-	int max_latency_increase;
+		int max_dec_pic_buffering;
+		int num_reorder_pics;
+		int max_latency_increase;
 	} temporal_layer[HEVC_MAX_SUB_LAYERS];
 	u8 temporal_id_nesting_flag;
 
@@ -404,11 +413,11 @@ struct HEVCSPS {
 	u8 num_long_term_ref_pics_sps;
 
 	struct {
-	u8 bit_depth;
-	u8 bit_depth_chroma;
-	u32 log2_min_pcm_cb_size;
-	u32 log2_max_pcm_cb_size;
-	u8 loop_filter_disable_flag;
+		u8 bit_depth;
+		u8 bit_depth_chroma;
+		u32 log2_min_pcm_cb_size;
+		u32 log2_max_pcm_cb_size;
+		u8 loop_filter_disable_flag;
 	} pcm;
 	u8 sps_temporal_mvp_enabled_flag;
 	u8 sps_strong_intra_smoothing_enable_flag;
@@ -423,13 +432,16 @@ struct HEVCSPS {
 	int max_transform_hierarchy_depth_inter;
 	int max_transform_hierarchy_depth_intra;
 
+	int sps_range_extension_flag;
 	int transform_skip_rotation_enabled_flag;
 	int transform_skip_context_enabled_flag;
 	int implicit_rdpcm_enabled_flag;
 	int explicit_rdpcm_enabled_flag;
+	int extended_precision_processing_flag;
 	int intra_smoothing_disabled_flag;
 	int high_precision_offsets_enabled_flag;
 	int persistent_rice_adaptation_enabled_flag;
+	int cabac_bypass_alignment_enabled_flag;
 
 	///< coded frame dimension in various units
 	int width;
@@ -454,7 +466,7 @@ struct HEVCSPS {
 	int data_size;
 };
 
-struct HEVCPPS {
+struct h265_PPS_t {
 	u32 sps_id; ///< seq_parameter_set_id
 
 	u8 sign_data_hiding_flag;
@@ -526,20 +538,19 @@ struct HEVCPPS {
 	int *tile_pos_rs;       ///< TilePosRS
 	int *min_tb_addr_zs;    ///< MinTbAddrZS
 	int *min_tb_addr_zs_tab;///< MinTbAddrZS
-
-	u8 data[4096];
-	int data_size;
 };
 
-struct HEVCParamSets {
+struct h265_param_sets {
 	bool vps_parsed;
 	bool sps_parsed;
 	bool pps_parsed;
 	/* currently active parameter sets */
-	struct HEVCVPS vps;
-	struct HEVCSPS sps;
-	struct HEVCPPS pps;
+	struct h265_VPS_t vps;
+	struct h265_SPS_t sps;
+	struct h265_PPS_t pps;
 };
+
+int h265_decode_extradata_ps(u8 *data, int size, struct h265_param_sets *ps);
 
 #endif /* AML_HEVC_PARSER_H */
 

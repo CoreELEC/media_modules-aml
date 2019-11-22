@@ -151,7 +151,8 @@ static ssize_t threadrw_write_in(
 {
 	int ret = 0;
 	int off = 0;
-	int left = count;
+	/* int change to size_t for buffer overflow on OTT-5057 */
+	size_t left = count;
 	int wait_num = 0;
 	unsigned long flags;
 
@@ -159,14 +160,11 @@ static ssize_t threadrw_write_in(
 		ret = threadrw_write_onece(task,
 				task->file,
 				stbuf, buf + off, left);
-		if (ret >= left) {
-			off = count;
-			left = 0;
-		} else if (ret > 0) {
-			off += ret;
-			left -= ret;
 
-		} else if (ret < 0) {
+		/* firstly check ret < 0, avoid the risk of -EAGAIN in ret
+		 * implicit convert to size_t when compare with "size_t left".
+		 */
+		if (ret < 0) {
 			if (off > 0) {
 				break;	/*have write ok some data. */
 			} else if (ret == -EAGAIN) {
@@ -183,6 +181,12 @@ static ssize_t threadrw_write_in(
 				break;
 			}
 			break;	/*to end */
+		} else if (ret >= left) {
+			off = count;
+			left = 0;
+		} else if (ret > 0) {
+			off += ret;
+			left -= ret;
 		}
 	}
 
@@ -254,7 +258,6 @@ static int do_write_work_in(struct threadrw_write_task *task)
 	if (write_len > 0) {
 		spin_lock_irqsave(&task->lock, flags);
 		task->passed_data_len += write_len;
-		task->buffered_data_size -= write_len;
 		spin_unlock_irqrestore(&task->lock, flags);
 	}
 	return need_re_write;
@@ -444,6 +447,22 @@ err1:
 /*
  *fifo data size;
  */
+
+void threadrw_update_buffer_level(struct stream_buf_s *stbuf,
+	int parsed_size)
+{
+	struct threadrw_write_task *task = stbuf->write_thread;
+	unsigned long flags;
+
+	if (task)
+	{
+		spin_lock_irqsave(&task->lock, flags);
+		task->buffered_data_size -= parsed_size;
+		spin_unlock_irqrestore(&task->lock, flags);
+	}
+
+}
+EXPORT_SYMBOL(threadrw_update_buffer_level);
 
 int threadrw_buffer_level(struct stream_buf_s *stbuf)
 {

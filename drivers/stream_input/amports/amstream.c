@@ -555,6 +555,9 @@ static void port_set_inited(struct port_priv_s *priv)
 		struct vdec_s *vdec = priv->vdec;
 
 		vdec->port_flag |= PORT_FLAG_INITED;
+		port->flag |= PORT_FLAG_INITED;
+		pr_info("vdec->port_flag=0x%x, port_flag=0x%x\n",
+			vdec->port_flag, port->flag);
 	} else
 		port->flag |= PORT_FLAG_INITED;
 }
@@ -716,23 +719,35 @@ static int audio_port_reset(struct stream_port_s *port,
 				struct stream_buf_s *pbuf)
 {
 	int r;
-
+	mutex_lock(&amstream_mutex);
 	if ((port->flag & PORT_FLAG_AFORMAT) == 0) {
 		pr_err("aformat not set\n");
+		mutex_unlock(&amstream_mutex);
 		return 0;
 	}
 
+	pr_info("audio port reset, flag:0x%x\n", port->flag);
+	if ((port->flag & PORT_FLAG_INITED) == 0) {
+		pr_info("audio port not inited,return\n");
+		mutex_unlock(&amstream_mutex);
+		return 0;
+	}
+
+	pr_info("audio_port_reset begin\n");
 	pts_stop(PTS_TYPE_AUDIO);
 
 	stbuf_release(pbuf, false);
 
 	r = stbuf_init(pbuf, NULL, false);
-	if (r < 0)
+	if (r < 0) {
+		mutex_unlock(&amstream_mutex);
 		return r;
+	}
 
 	r = adec_init(port);
 	if (r < 0) {
 		audio_port_release(port, pbuf, 2);
+		mutex_unlock(&amstream_mutex);
 		return r;
 	}
 
@@ -755,6 +770,8 @@ static int audio_port_reset(struct stream_port_s *port,
 
 	r = pts_start(PTS_TYPE_AUDIO);
 
+	pr_info("audio_port_reset done\n");
+	mutex_unlock(&amstream_mutex);
 	return r;
 }
 
@@ -3316,6 +3333,59 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			tsync_set_apts(pts);
 		break;
 	}
+	case AMSTREAM_IOC_SET_CRC: {
+		struct usr_crc_info_t crc_info;
+		struct vdec_s *vdec;
+
+		if (copy_from_user(&crc_info, (void __user *)arg,
+			sizeof(struct usr_crc_info_t))) {
+			return -EFAULT;
+		}
+		/*
+		pr_info("id %d, frame %d, y_crc: %08x, uv_crc: %08x\n", crc_info.id,
+			crc_info.pic_num, crc_info.y_crc, crc_info.uv_crc);
+		*/
+		vdec = vdec_get_vdec_by_id(crc_info.id);
+		if (vdec == NULL)
+			return -ENODEV;
+		if (vdec->vfc.cmp_pool == NULL) {
+			vdec->vfc.cmp_pool =
+				vmalloc(USER_CMP_POOL_MAX_SIZE *
+					sizeof(struct usr_crc_info_t));
+			if (vdec->vfc.cmp_pool == NULL)
+				return -ENOMEM;
+		}
+		if (vdec->vfc.usr_cmp_num >= USER_CMP_POOL_MAX_SIZE) {
+			pr_info("warn: could not write any more, max %d",
+				USER_CMP_POOL_MAX_SIZE);
+			return -EFAULT;
+		}
+		memcpy(&vdec->vfc.cmp_pool[vdec->vfc.usr_cmp_num], &crc_info,
+			sizeof(struct usr_crc_info_t));
+		vdec->vfc.usr_cmp_num++;
+		break;
+	}
+	case AMSTREAM_IOC_GET_CRC_CMP_RESULT: {
+		int val, vdec_id;
+		struct vdec_s *vdec;
+
+		if (get_user(val, (int __user *)arg)) {
+			return -EFAULT;
+		}
+		vdec_id = val & 0x00ff;
+		vdec = vdec_get_vdec_by_id(vdec_id);
+		if (vdec == NULL)
+			return -ENODEV;
+		if (val & 0xff00)
+			put_user(vdec->vfc.usr_cmp_num, (int *)arg);
+		else
+			put_user(vdec->vfc.usr_cmp_result, (int *)arg);
+		/*
+		pr_info("amstream get crc32 cmpare num %d result: %d\n",
+			vdec->vfc.usr_cmp_num, vdec->vfc.usr_cmp_result);
+		*/
+		break;
+	}
 	default:
 		r = -ENOIOCTLCMD;
 		break;
@@ -3854,6 +3924,33 @@ static ssize_t show_maxdelay(struct class *class,
 	return size;
 }
 
+static ssize_t audio_path_store(struct class *class,
+	struct class_attribute *attr,
+	const char *buf, size_t size)
+{
+	unsigned int val = 0;
+	int i;
+	ssize_t ret;
+	struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
+	struct stream_port_s *this;
+	ret = kstrtoint(buf, 0, &val);
+	if (ret != 0)
+		return -EINVAL;
+	if (val != 1)
+		return -EINVAL;
+	for (i = 0; i < MAX_AMSTREAM_PORT_NUM; i++) {
+		if (strcmp(ports[i].name, "amstream_mpts") == 0 ||
+			strcmp(ports[i].name, "amstream_mpts_sched") == 0) {
+			this = &ports[i];
+			if ((this->flag & PORT_FLAG_AFORMAT) != 0) {
+				pr_info("audio_port_reset %s\n", ports[i].name);
+				audio_port_reset(this, pabuf);
+			}
+		}
+	}
+	return size;
+}
+
 static struct class_attribute amstream_class_attrs[] = {
 	__ATTR_RO(ports),
 	__ATTR_RO(bufs),
@@ -3863,6 +3960,8 @@ static struct class_attribute amstream_class_attrs[] = {
 	show_canuse_buferlevel, store_canuse_buferlevel),
 	__ATTR(max_buffer_delay_ms, S_IRUGO | S_IWUSR | S_IWGRP, show_maxdelay,
 	store_maxdelay),
+	__ATTR(reset_audio_port, S_IRUGO | S_IWUSR | S_IWGRP,
+	NULL, audio_path_store),
 	__ATTR_NULL
 };
 

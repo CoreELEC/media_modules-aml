@@ -393,6 +393,8 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 	case VFORMAT_AVS:
 		if (!strcmp(name, "avs_no_cabac"))
 			format = VIDEO_DEC_AVS_NOCABAC;
+		else if (!strcmp(name, "avs_multi"))
+			format = VIDEO_DEC_AVS_MULTI;
 		else
 			format = VIDEO_DEC_AVS;
 		break;

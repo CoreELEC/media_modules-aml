@@ -92,6 +92,7 @@ enum aml_ts_source_t {
 	AM_TS_SRC_S_TS0,
 	AM_TS_SRC_S_TS1,
 	AM_TS_SRC_S_TS2,
+	AM_TS_SRC_S_TS3,
 
 	AM_TS_SRC_HIU,
 	AM_TS_SRC_HIU1,

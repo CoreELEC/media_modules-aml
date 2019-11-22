@@ -18,11 +18,10 @@ CONFIGS := CONFIG_AMLOGIC_MEDIA_VDEC_MPEG12=m \
 	CONFIG_AMLOGIC_MEDIA_VDEC_MJPEG_MULTI=m \
 	CONFIG_AMLOGIC_MEDIA_VDEC_REAL=m \
 	CONFIG_AMLOGIC_MEDIA_VDEC_AVS=m \
+	CONFIG_AMLOGIC_MEDIA_VDEC_AVS_MULTI=m \
 	CONFIG_AMLOGIC_MEDIA_VDEC_AVS2=m \
 	CONFIG_AMLOGIC_MEDIA_VENC_H264=m \
-	CONFIG_AMLOGIC_MEDIA_VENC_H265=m \
-	CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION=y
-        CONFIG_AMLOGIC_MEDIA_GE2D=y
+	CONFIG_AMLOGIC_MEDIA_VENC_H265=m
 
 define copy-media-modules
 $(foreach m, $(shell find $(strip $(1)) -name "*.ko"),\
@@ -61,10 +60,11 @@ $(shell cp $(MEDIA_DRIVERS)/../firmware/* $(UCODE_OUT) -rfa)
 $(shell cp $(MEDIA_DRIVERS)/* $(MEDIA_MODULES) -rfa)
 
 define media-modules
-	@$(MAKE) -C $(KDIR) M=$(MEDIA_MODULES) ARCH=$(KERNEL_ARCH) \
-	CROSS_COMPILE=$(PREFIX_CROSS_COMPILE) $(CONFIGS) \
-	EXTRA_CFLAGS+=-I$(INCLUDE) modules; \
-	find $(MEDIA_MODULES) -name "*.ko" | xargs -i cp {} $(MODS_OUT)
+	PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH \
+		$(MAKE) -C $(KDIR) M=$(MEDIA_MODULES) ARCH=$(KERNEL_ARCH) \
+		CROSS_COMPILE=$(PREFIX_CROSS_COMPILE) $(CONFIGS) \
+		EXTRA_CFLAGS+=-I$(INCLUDE) modules; \
+		find $(MEDIA_MODULES) -name "*.ko" | PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH xargs -i cp {} $(MODS_OUT)
 endef
 
 else
@@ -94,10 +94,12 @@ else
 TOOLS := /opt/gcc-linaro-5.3-2016.02-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
 endif
 
+
 modules:
-	@$(MAKE) -C $(KDIR) M=$(MEDIA_DRIVERS) ARCH=$(KERNEL_ARCH) \
-	CROSS_COMPILE=$(TOOLS) $(CONFIGS) \
-	EXTRA_CFLAGS+=-I$(INCLUDE) -j64
+	CCACHE_NODIRECT="true" PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH \
+		$(MAKE) -C $(KDIR) M=$(MEDIA_DRIVERS) ARCH=$(KERNEL_ARCH) \
+		CROSS_COMPILE=$(TOOLS) $(CONFIGS) \
+		EXTRA_CFLAGS+=-I$(INCLUDE) -j64
 
 copy-modules:
 	@echo "start copying media modules."
@@ -107,6 +109,7 @@ copy-modules:
 all: modules copy-modules
 
 clean:
-	$(MAKE) -C $(KDIR) M=$(MEDIA_DRIVERS) ARCH=$(KERNEL_ARCH) clean
+	PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH \
+		$(MAKE) -C $(KDIR) M=$(MEDIA_DRIVERS) ARCH=$(KERNEL_ARCH) clean
 
 endif

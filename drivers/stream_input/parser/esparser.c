@@ -154,7 +154,7 @@ static inline u32 buf_wp(u32 type)
 }
 
 static ssize_t _esparser_write(const char __user *buf,
-		size_t count, u32 type, int isphybuf)
+		size_t count, struct stream_buf_s *stbuf, int isphybuf)
 {
 	size_t r = count;
 	const char __user *p = buf;
@@ -164,6 +164,7 @@ static ssize_t _esparser_write(const char __user *buf,
 	int ret;
 	u32 wp;
 	dma_addr_t dma_addr = 0;
+	u32 type = stbuf->type;
 
 	if (type == BUF_TYPE_HEVC)
 		parser_type = PARSER_VIDEO;
@@ -248,17 +249,19 @@ static ssize_t _esparser_write(const char __user *buf,
 	else if (type == BUF_TYPE_AUDIO)
 		audio_data_parsed += len;
 
+	threadrw_update_buffer_level(stbuf, len);
 	return len;
 }
 
 static ssize_t _esparser_write_s(const char __user *buf,
-			size_t count, u32 type)
+			size_t count, struct stream_buf_s *stbuf)
 {
 	size_t r = count;
 	const char __user *p = buf;
 	u32 len = 0;
 	int ret;
 	u32 wp, buf_start, buf_end;
+	u32 type = stbuf->type;
 	void *vaddr = NULL;
 
 	if (type != BUF_TYPE_AUDIO)
@@ -269,6 +272,11 @@ static ssize_t _esparser_write_s(const char __user *buf,
 	/*pr_info("write wp 0x%x, count %d, start 0x%x, end 0x%x\n",
 	*		 wp, (u32)count, buf_start, buf_end);*/
 	if (wp + count > buf_end) {
+		if (wp == buf_end) {
+			wp = buf_start;
+			set_buf_wp(type, wp);
+			return -EAGAIN;
+		}
 		vaddr = codec_mm_phys_to_virt(wp);
 		ret = copy_from_user(vaddr, p, buf_end - wp);
 		if (ret > 0) {
@@ -308,7 +316,10 @@ static ssize_t _esparser_write_s(const char __user *buf,
 
 end_write:
 	if (type == BUF_TYPE_AUDIO)
+	{
 		audio_data_parsed += len;
+		threadrw_update_buffer_level(stbuf, len);
+	}
 
 	return len;
 }
@@ -345,7 +356,11 @@ s32 es_vpts_checkin(struct stream_buf_s *buf, u32 pts)
 		return 0;
 	}
 #endif
-	u32 passed = video_data_parsed + threadrw_buffer_level(buf);
+	u32 passed = 0;
+
+	mutex_lock(&esparser_mutex);
+	passed = video_data_parsed + threadrw_buffer_level(buf);
+	mutex_unlock(&esparser_mutex);
 
 	return pts_checkin_offset(PTS_TYPE_VIDEO, passed, pts);
 
@@ -361,7 +376,10 @@ s32 es_apts_checkin(struct stream_buf_s *buf, u32 pts)
 		return 0;
 	}
 #endif
-	u32 passed = audio_data_parsed + threadrw_buffer_level(buf);
+	u32 passed = 0;
+	mutex_lock(&esparser_mutex);
+	passed = audio_data_parsed + threadrw_buffer_level(buf);
+	mutex_unlock(&esparser_mutex);
 
 	return pts_checkin_offset(PTS_TYPE_AUDIO, passed, pts);
 }
@@ -429,13 +447,15 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 
 		/* reset PARSER with first esparser_init() call */
 		WRITE_RESET_REG(RESET1_REGISTER, RESET_PARSER);
-
-		/* TS data path */
+/* for recorded file and local play, this can't change the input source*/
+/* TS data path */
+/*
 #ifndef CONFIG_AM_DVB
 		WRITE_DEMUX_REG(FEC_INPUT_CONTROL, 0);
 #else
 		tsdemux_set_reset_flag();
-#endif
+#endif  */
+
 		CLEAR_DEMUX_REG_MASK(TS_HIU_CTL, 1 << USE_HI_BSF_INTERFACE);
 		CLEAR_DEMUX_REG_MASK(TS_HIU_CTL_2, 1 << USE_HI_BSF_INTERFACE);
 		CLEAR_DEMUX_REG_MASK(TS_HIU_CTL_3, 1 << USE_HI_BSF_INTERFACE);
@@ -800,12 +820,13 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 
 		if (stbuf->type != BUF_TYPE_AUDIO)
 			r = _esparser_write((const char __user *)realbuf, len,
-					stbuf->type, isphybuf);
+					stbuf, isphybuf);
 		else
 			r = _esparser_write_s((const char __user *)realbuf, len,
-					stbuf->type);
+					stbuf);
 		if (r < 0) {
 			pr_info("drm_write _esparser_write failed [%d]\n", r);
+			mutex_unlock(&esparser_mutex);
 			return r;
 		}
 		havewritebytes += r;
@@ -875,9 +896,9 @@ ssize_t esparser_write_ex(struct file *file,
 	mutex_lock(&esparser_mutex);
 
 	if (stbuf->type == BUF_TYPE_AUDIO)
-		r = _esparser_write_s(buf, len, stbuf->type);
+		r = _esparser_write_s(buf, len, stbuf);
 	else
-		r = _esparser_write(buf, len, stbuf->type, flags & 1);
+		r = _esparser_write(buf, len, stbuf, flags & 1);
 
 	mutex_unlock(&esparser_mutex);
 

@@ -37,10 +37,12 @@ typedef unsigned char u8;
 	(((u8)(a) << 24) | ((u8)(b) << 16) | ((u8)(c) << 8) | (u8)(d))
 
 struct aml_vcodec_mem {
-	size_t size;
-	void *va;
+	ulong	addr;
+	u32	size;
+	void	*vaddr;
+	u32	bytes_used;
+	u32	offset;
 	dma_addr_t dma_addr;
-	unsigned int bytes_used;
 };
 
 struct aml_vcodec_ctx;

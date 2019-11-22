@@ -41,6 +41,18 @@
 #define PRINT_FLAG_V4L_DETAIL         0x8000
 #define DISABLE_ERROR_HANDLE          0x10000
 #define DEBUG_DUMP_STAT               0x80000
+/*setting canvas mode and endian.
+  if this flag is set, value of canvas mode
+  will according to the value of mem_map_mode.
+  endian will be forced set to 0 in
+  CANVAS_BLKMODE_LINEAR mode.
+  otherwise picture will display abnormal.
+  if this flag is not set, value of canvas mode
+  will be determined by the user speace config.
+  endian will be set 7 in CANVAS_BLKMODE_LINEAR mode.
+*/
+#define IGNORE_PARAM_FROM_CONFIG      0x8000000
+
 
 #define PIC_SINGLE_FRAME			0
 #define PIC_TOP_BOT_TOP				1
@@ -878,6 +890,7 @@ struct h264_dpb_stru {
 	u16 max_dec_frame_buffering;
 
 	unsigned int dec_dpb_status;
+	unsigned int last_dpb_status;
 	unsigned char buf_alloc_fail;
 	unsigned int dpb_error_flag;
 	unsigned int origin_max_reference;

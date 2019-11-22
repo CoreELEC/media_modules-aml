@@ -253,6 +253,14 @@ static u32 bad_block_scale;
 #endif
 static u32 enable_userdata_debug;
 
+/* if not define, must clear AV_SCRATCH_J in isr when
+ * ITU_T35 code enabled in ucode, otherwise may fatal
+ * error repeatly.
+ */
+//#define ENABLE_SEI_ITU_T35
+
+
+
 static unsigned int enable_switch_fense = 1;
 #define EN_SWITCH_FENCE() (enable_switch_fense && !is_4k)
 static struct vframe_qos_s s_vframe_qos;
@@ -543,6 +551,18 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 
 	return NULL;
 }
+static bool vf_valid_check(struct vframe_s *vf) {
+	int i;
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		if (vf == &vfpool[i])
+			return true;
+	}
+	pr_info(" invalid vf been put, vf = %p\n", vf);
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		pr_info("www valid vf[%d]= %p \n", i, &vfpool[i]);
+	}
+	return false;
+}
 
 static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 {
@@ -550,9 +570,10 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 
 	spin_lock_irqsave(&recycle_lock, flags);
 
-	if ((vf != &fense_vf[0]) && (vf != &fense_vf[1]))
-		kfifo_put(&recycle_q, (const struct vframe_s *)vf);
-
+	if ((vf != &fense_vf[0]) && (vf != &fense_vf[1])) {
+		if (vf && (vf_valid_check(vf) == true))
+			kfifo_put(&recycle_q, (const struct vframe_s *)vf);
+	}
 	spin_unlock_irqrestore(&recycle_lock, flags);
 }
 
@@ -2563,9 +2584,8 @@ static void vh264_isr(void)
 	unsigned int  framesize;
 	u64 pts_us64;
 	bool force_interlaced_frame = false;
-#ifdef ENABLE_SEI_ITU_T35
 	unsigned int sei_itu35_flags;
-#endif
+
 	static const unsigned int idr_num =
 		FIX_FRAME_RATE_CHECK_IDRFRAME_NUM;
 	static const unsigned int flg_1080_itl =
@@ -3268,12 +3288,17 @@ static void vh264_isr(void)
 	} else if ((cpu_cmd & 0xff) == 0xB) {
 		schedule_work(&qos_work);
 	}
-#ifdef ENABLE_SEI_ITU_T35
+
 	sei_itu35_flags = READ_VREG(AV_SCRATCH_J);
 	if (sei_itu35_flags & (1 << 15)) {	/* data ready */
+#ifdef ENABLE_SEI_ITU_T35
 		schedule_work(&userdata_push_work);
-	}
+#else
+		/* necessary if enabled itu_t35 in ucode*/
+		WRITE_VREG(AV_SCRATCH_J, 0);
 #endif
+	}
+
 #ifdef HANDLE_H264_IRQ
 	return IRQ_HANDLED;
 #else
@@ -3502,11 +3527,22 @@ int vh264_set_isreset(struct vdec_s *vdec, int isreset)
 
 static void vh264_prot_init(void)
 {
+	ulong timeout = jiffies + HZ;
 
-	while (READ_VREG(DCAC_DMA_CTRL) & 0x8000)
-		;
-	while (READ_VREG(LMEM_DMA_CTRL) & 0x8000)
-		;		/* reg address is 0x350 */
+	while (READ_VREG(DCAC_DMA_CTRL) & 0x8000) {
+		if (time_after(jiffies, timeout)) {
+			pr_info("%s DCAC_DMA_CTRL time out\n", __func__);
+			break;
+		}
+	}
+
+	timeout = jiffies + HZ;
+	while (READ_VREG(LMEM_DMA_CTRL) & 0x8000) {
+		if (time_after(jiffies, timeout)) {
+			pr_info("%s LMEM_DMA_CTRL time out\n", __func__);
+			break;
+		}
+	}
 
 #if 1				/* MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
 	WRITE_VREG(DOS_SW_RESET0, (1 << 7) | (1 << 6) | (1 << 4));
@@ -3914,11 +3950,12 @@ static s32 vh264_init(void)
 #endif
 
 	if (frame_dur != 0) {
-		if (!is_reset)
+		if (!is_reset) {
 			vf_notify_receiver(PROVIDER_NAME,
 					VFRAME_EVENT_PROVIDER_FR_HINT,
 					(void *)((unsigned long)frame_dur));
-		fr_hint_status = VDEC_HINTED;
+			fr_hint_status = VDEC_HINTED;
+		}
 	} else
 		fr_hint_status = VDEC_NEED_HINT;
 
@@ -3970,7 +4007,7 @@ static int vh264_stop(int mode)
 
 	if (stat & STAT_VF_HOOK) {
 		if (mode == MODE_FULL) {
-			if (fr_hint_status == VDEC_HINTED && !is_reset)
+			if (fr_hint_status == VDEC_HINTED)
 				vf_notify_receiver(PROVIDER_NAME,
 					VFRAME_EVENT_PROVIDER_FR_END_HINT,
 					NULL);

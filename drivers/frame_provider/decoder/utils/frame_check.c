@@ -42,7 +42,7 @@
 #include <linux/highmem.h>
 #include <linux/page-flags.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
-
+#include <asm/cacheflush.h>
 
 #define FC_ERROR	0x0
 
@@ -137,7 +137,7 @@ static int get_frame_size(struct pic_check_mgr_t *pic,
 			canvas_get_height(canvasY(vf->canvas0Addr));
 	} else {
 		pic->canvas_w = vf->canvas0_config[0].width;
-		pic->canvas_h = vf->canvas0_config[1].height;
+		pic->canvas_h = vf->canvas0_config[0].height;
 	}
 
 	if ((pic->canvas_h < 1) || (pic->canvas_w < 1)) {
@@ -382,6 +382,9 @@ static int memcpy_phy_to_virt(char *to_virt,
 					__func__, (unsigned int)phy_from);
 				return -1;
 			}
+			/*Fixed frame error in random position of avs code stream.
+			Called in an interrupt.*/
+			flush_dcache_page(phys_to_page(phy_from));
 			/*
 			codec_mm_dma_flush(vaddr,
 				tmp_size, DMA_FROM_DEVICE);
@@ -437,20 +440,30 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 	if (dump->dump_cnt >= dump->num)
 		return 0;
 
-	if (mgr->size_pic >
-		(dump->buf_size - dump->dump_cnt * mgr->size_pic)) {
-		if (dump->buf_size) {
+	if (single_mode_vdec != NULL) {
+		if (mgr->size_pic >
+			(dump->buf_size - dump->dump_cnt * mgr->size_pic)) {
+			if (dump->buf_size) {
+				dbg_print(FC_ERROR,
+					"not enough buf, force dump less\n");
+				dump->num = dump->dump_cnt;
+				check_schedule(mgr);
+			} else
+				set_disable(mgr, YUV_MASK);
+			return -1;
+		}
+		tmp_addr = dump->buf_addr +
+			mgr->size_pic * dump->dump_cnt;
+	} else {
+		if (mgr->size_pic > dump->buf_size) {
 			dbg_print(FC_ERROR,
-				"not enough buf, force dump less\n");
-			dump->num = dump->dump_cnt;
-			check_schedule(mgr);
-		} else
-			set_disable(mgr, YUV_MASK);
-		return -1;
+				"not enough size, pic/buf size: 0x%x/0x%x\n",
+				mgr->size_pic, dump->buf_size);
+			return -1;
+		}
+		tmp_addr = dump->buf_addr;
 	}
 
-	tmp_addr = dump->buf_addr +
-		mgr->size_pic * dump->dump_cnt;
 	if ((mgr->uv_vaddr == NULL) || (mgr->y_vaddr == NULL)) {
 		y_phyaddr = mgr->y_phyaddr;
 		uv_phyaddr = mgr->uv_phyaddr;
@@ -495,11 +508,34 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 		}
 	}
 	dump->dump_cnt++;
-	dbg_print(0, "----->dump frame num: %d, dump %dst, size %x\n",
-		mgr->frame_cnt, dump->dump_cnt, mgr->size_pic);
+	dbg_print(0, "----->dump %dst, size %x (%d x %d), dec total %d\n",
+		dump->dump_cnt, mgr->size_pic, vf->width, vf->height, mgr->frame_cnt);
 
-	if (dump->dump_cnt >= dump->num)
-		check_schedule(mgr);
+	if (single_mode_vdec != NULL) {
+		/* single mode need schedule work to write*/
+		if (dump->dump_cnt >= dump->num)
+			check_schedule(mgr);
+	} else {
+		int wr_size;
+		mm_segment_t old_fs;
+
+		/* dump for dec pic not in isr */
+		if (dump->yuv_fp == NULL) {
+			dump->yuv_fp = file_open(O_CREAT | O_WRONLY | O_TRUNC,
+				"%s%s-%d-%d.yuv", YUV_PATH, comp_crc, mgr->id, mgr->file_cnt);
+			if (dump->yuv_fp == NULL)
+				return -1;
+		}
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		wr_size = vfs_write(dump->yuv_fp, dump->buf_addr,
+			mgr->size_pic, &dump->yuv_pos);
+		if (mgr->size_pic != wr_size) {
+			dbg_print(FC_ERROR, "buf failed to write yuv file\n");
+		}
+		set_fs(old_fs);
+		vfs_fsync(dump->yuv_fp, 0);
+	}
 
 	return 0;
 }
@@ -533,14 +569,17 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 		if (comp_frame == mgr->frame_cnt) {
 			if ((comp_crc_y != crc_y) || (crc_uv != comp_crc_uv)) {
 					mgr->pic_dump.start = 0;
-					mgr->pic_dump.num++;
+					if (fc_debug || mgr->pic_dump.num < 3)
+						mgr->pic_dump.num++;
 					dbg_print(0, "\n\nError: %08d: %08x %08x != %08x %08x\n\n",
 						mgr->frame_cnt, crc_y, crc_uv, comp_crc_y, comp_crc_uv);
 					do_yuv_dump(mgr, vf);
 					if (fc_debug & FC_ERR_CRC_BLOCK_MODE)
 						mgr->err_crc_block = 1;
+					mgr->usr_cmp_result = -mgr->frame_cnt;
 			}
 		} else {
+			mgr->usr_cmp_result = -mgr->frame_cnt;
 			dbg_print(0, "frame num error: frame_cnt(%d) frame_comp(%d)\n",
 				mgr->frame_cnt, comp_frame);
 		}
@@ -588,6 +627,9 @@ static int crc32_vmap_le(unsigned int *crc32,
 					__func__, (unsigned int)phyaddr);
 				return -1;
 			}
+			/*Fixed frame error in random position of avs code stream.
+			Called in an interrupt.*/
+			flush_dcache_page(phys_to_page(phyaddr));
 			/*
 			codec_mm_dma_flush(vaddr,
 				tmp_size, DMA_FROM_DEVICE);
@@ -769,6 +811,54 @@ static int fbc_check_prepare(struct pic_check_t *check,
 	return 0;
 }
 
+int load_user_cmp_crc(struct pic_check_mgr_t *mgr)
+{
+	int i;
+	struct pic_check_t *chk;
+	void *qaddr;
+
+	if (mgr == NULL ||
+		(mgr->cmp_pool == NULL)||
+		(mgr->usr_cmp_num == 0))
+		return 0;
+
+	chk = &mgr->pic_check;
+
+	if (chk->cmp_crc_cnt > 0) {
+		pr_info("cmp crc32 data is ready\n");
+		return -1;
+	}
+
+	if (chk->check_addr == NULL) {
+		pr_info("no cmp crc buf\n"); /* vmalloc again or return */
+		return -1;
+	}
+
+	if (mgr->usr_cmp_num >= USER_CMP_POOL_MAX_SIZE)
+		mgr->usr_cmp_num = USER_CMP_POOL_MAX_SIZE - 1;
+
+	for (i = 0; i < mgr->usr_cmp_num; i++) {
+		qaddr = chk->check_addr + i * SIZE_CRC;
+		dbg_print(FC_CRC_DEBUG, "%s, %8d: %08x %08x\n", __func__,
+			mgr->cmp_pool[i].pic_num,
+			mgr->cmp_pool[i].y_crc,
+			mgr->cmp_pool[i].uv_crc);
+		sprintf(qaddr, "%8d: %08x %08x\n",
+			mgr->cmp_pool[i].pic_num,
+			mgr->cmp_pool[i].y_crc,
+			mgr->cmp_pool[i].uv_crc);
+
+		kfifo_put(&chk->new_chk_q, qaddr);
+		chk->cmp_crc_cnt++;
+	}
+
+	mgr->usr_cmp_result = 0;
+
+	vfree(mgr->cmp_pool);
+	mgr->cmp_pool = NULL;
+
+	return 0;
+}
 
 
 int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
@@ -798,8 +888,12 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 
 	if (mgr->last_size_pic != mgr->size_pic) {
 		resize = 1;
-		dbg_print(0, "size changed, %x-->%x\n",
-			mgr->last_size_pic, mgr->size_pic);
+		dbg_print(0, "size changed, %x-->%x [%d x %d]\n",
+			mgr->last_size_pic, mgr->size_pic,
+			vf->width, vf->height);
+		/* for slt, if no compare crc file, use the
+		 * cmp crc from amstream ioctl write */
+		load_user_cmp_crc(mgr);
 	} else
 		resize = 0;
 	mgr->last_size_pic = mgr->size_pic;
@@ -809,9 +903,9 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 			return -2;
 		if ((mgr->y_vaddr) && (mgr->uv_vaddr)) {
 			codec_mm_dma_flush(mgr->y_vaddr,
-				mgr->size_y, DMA_FROM_DEVICE);
+				mgr->canvas_w * mgr->canvas_h, DMA_FROM_DEVICE);
 			codec_mm_dma_flush(mgr->uv_vaddr,
-				mgr->size_uv, DMA_FROM_DEVICE);
+				((mgr->canvas_w * mgr->canvas_h) >> 1), DMA_FROM_DEVICE);
 		}
 		if (mgr->enable & CRC_MASK)
 			ret = do_check_nv21(mgr, vf);
@@ -843,6 +937,10 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 		}
 	}
 	mgr->frame_cnt++;
+
+	if (mgr->usr_cmp_num > 0) {
+		mgr->usr_cmp_num -= 1;
+	}
 
 	return ret;
 }
@@ -975,7 +1073,8 @@ void frame_check_exit(struct pic_check_mgr_t *mgr)
 			cancel_work_sync(&mgr->frame_check_work);
 			atomic_set(&mgr->work_inited, 0);
 		}
-		write_yuv_work(mgr);
+		if (single_mode_vdec != NULL)
+			write_yuv_work(mgr);
 		write_crc_work(mgr);
 
 		for (i = 0; i < ARRAY_SIZE(check->fbc_planes); i++) {
@@ -987,6 +1086,11 @@ void frame_check_exit(struct pic_check_mgr_t *mgr)
 		if (check->check_addr) {
 			vfree(check->check_addr);
 			check->check_addr = NULL;
+		}
+
+		if (mgr->cmp_pool) {
+			vfree(mgr->cmp_pool);
+			mgr->cmp_pool = NULL;
 		}
 
 		if (check->check_fp) {

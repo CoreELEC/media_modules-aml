@@ -33,14 +33,16 @@
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_dec_pm.h"
-//#include "aml_vcodec_intr.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_vfm.h"
 
-#define VDEC_HW_ACTIVE	0x10
-#define VDEC_IRQ_CFG	0x11
-#define VDEC_IRQ_CLR	0x10
+#define VDEC_HW_ACTIVE		0x10
+#define VDEC_IRQ_CFG		0x11
+#define VDEC_IRQ_CLR		0x10
 #define VDEC_IRQ_CFG_REG	0xa4
+
+bool scatter_mem_enable;
+bool param_sets_from_ucode;
 
 static int fops_vcodec_open(struct file *file)
 {
@@ -73,7 +75,12 @@ static int fops_vcodec_open(struct file *file)
 	init_waitqueue_head(&ctx->queue);
 	mutex_init(&ctx->state_lock);
 	mutex_init(&ctx->lock);
+	spin_lock_init(&ctx->slock);
 	init_waitqueue_head(&ctx->wq);
+	init_completion(&ctx->comp);
+
+	ctx->scatter_mem_enable = scatter_mem_enable ? 1 : 0;
+	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
 
 	ctx->type = AML_INST_DECODER;
 	ret = aml_vcodec_dec_ctrls_setup(ctx);
@@ -136,14 +143,14 @@ static int fops_vcodec_release(struct file *file)
 	 * Second, the decoder will be flushed and all the buffers will be
 	 * returned in stop_streaming.
 	 */
-	aml_vcodec_dec_release(ctx);
+	aml_thread_stop(ctx);
+	wait_vcodec_ending(ctx);
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
+	aml_vcodec_dec_release(ctx);
 
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
 	v4l2_ctrl_handler_free(&ctx->ctrl_hdl);
-
-	aml_thread_stop(ctx);
 
 	list_del_init(&ctx->list);
 	kfree(ctx->empty_flush_buf);
@@ -227,16 +234,6 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 		goto err_event_workq;
 	}
 
-	dev->reset_workqueue =
-		alloc_ordered_workqueue("aml-vcodec-reset",
-			WQ_MEM_RECLAIM | WQ_FREEZABLE);
-	if (!dev->reset_workqueue) {
-		aml_v4l2_err("Failed to create decode workqueue");
-		ret = -EINVAL;
-		destroy_workqueue(dev->decode_workqueue);
-		goto err_event_workq;
-	}
-
 	//dev_set_name(&vdev->dev, "%s%d", name_base, vdev->num);
 
 	ret = video_register_device(vfd_dec, VFL_TYPE_GRABBER, 26);
@@ -250,7 +247,6 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 	return 0;
 
 err_dec_reg:
-	destroy_workqueue(dev->reset_workqueue);
 	destroy_workqueue(dev->decode_workqueue);
 err_event_workq:
 	v4l2_m2m_release(dev->m2m_dev_dec);
@@ -273,9 +269,6 @@ MODULE_DEVICE_TABLE(of, aml_vcodec_match);
 static int aml_vcodec_dec_remove(struct platform_device *pdev)
 {
 	struct aml_vcodec_dev *dev = platform_get_drvdata(pdev);
-
-	flush_workqueue(dev->reset_workqueue);
-	destroy_workqueue(dev->reset_workqueue);
 
 	flush_workqueue(dev->decode_workqueue);
 	destroy_workqueue(dev->decode_workqueue);
@@ -343,20 +336,34 @@ module_param(aml_vcodec_dbg, bool, 0644);
 
 bool aml_set_vfm_enable;
 EXPORT_SYMBOL(aml_set_vfm_enable);
+module_param(aml_set_vfm_enable, bool, 0644);
 
 int aml_set_vfm_path;
 EXPORT_SYMBOL(aml_set_vfm_path);
+module_param(aml_set_vfm_path, int, 0644);
 
 bool aml_set_vdec_type_enable;
 EXPORT_SYMBOL(aml_set_vdec_type_enable);
+module_param(aml_set_vdec_type_enable, bool, 0644);
 
 int aml_set_vdec_type;
 EXPORT_SYMBOL(aml_set_vdec_type);
-
-module_param(aml_set_vdec_type_enable, bool, 0644);
 module_param(aml_set_vdec_type, int, 0644);
-module_param(aml_set_vfm_enable, bool, 0644);
-module_param(aml_set_vfm_path, int, 0644);
+
+int vp9_need_prefix;
+EXPORT_SYMBOL(vp9_need_prefix);
+module_param(vp9_need_prefix, int, 0644);
+
+bool multiplanar;
+EXPORT_SYMBOL(multiplanar);
+module_param(multiplanar, bool, 0644);
+
+EXPORT_SYMBOL(scatter_mem_enable);
+module_param(scatter_mem_enable, bool, 0644);
+
+EXPORT_SYMBOL(param_sets_from_ucode);
+module_param(param_sets_from_ucode, bool, 0644);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("AML video codec V4L2 decoder driver");
+

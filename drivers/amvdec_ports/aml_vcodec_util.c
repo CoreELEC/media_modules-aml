@@ -53,18 +53,18 @@ int aml_vcodec_mem_alloc(struct aml_vcodec_ctx *data,
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)data;
 	struct device *dev = &ctx->dev->plat_dev->dev;
 
-	//mem->va = dma_alloc_coherent(dev, size, &mem->dma_addr, GFP_KERNEL);
-	mem->va = codec_mm_dma_alloc_coherent(dev_name(dev), size,
+	//mem->vaddr = dma_alloc_coherent(dev, size, &mem->dma_addr, GFP_KERNEL);
+	mem->vaddr = codec_mm_dma_alloc_coherent(dev_name(dev), size,
 			&mem->dma_addr, GFP_KERNEL, 0);
-	if (!mem->va) {
+	if (!mem->vaddr) {
 		aml_v4l2_err("%s dma_alloc size=%ld failed!", dev_name(dev),
 			     size);
 		return -ENOMEM;
 	}
 
-	memset(mem->va, 0, size);
+	memset(mem->vaddr, 0, size);
 
-	aml_v4l2_debug(4, "[%d]  - va      = %p", ctx->id, mem->va);
+	aml_v4l2_debug(4, "[%d]  - va      = %p", ctx->id, mem->vaddr);
 	aml_v4l2_debug(4, "[%d]  - dma     = 0x%lx", ctx->id,
 		       (unsigned long)mem->dma_addr);
 	aml_v4l2_debug(4, "[%d]    size = 0x%lx", ctx->id, size);
@@ -80,19 +80,19 @@ void aml_vcodec_mem_free(struct aml_vcodec_ctx *data,
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)data;
 	struct device *dev = &ctx->dev->plat_dev->dev;
 
-	if (!mem->va) {
+	if (!mem->vaddr) {
 		aml_v4l2_err("%s dma_free size=%ld failed!", dev_name(dev),
 			     size);
 		return;
 	}
 
-	aml_v4l2_debug(4, "[%d]  - va      = %p", ctx->id, mem->va);
+	aml_v4l2_debug(4, "[%d]  - va      = %p", ctx->id, mem->vaddr);
 	aml_v4l2_debug(4, "[%d]  - dma     = 0x%lx", ctx->id,
 		       (unsigned long)mem->dma_addr);
 	aml_v4l2_debug(4, "[%d]    size = 0x%lx", ctx->id, size);
 
-	dma_free_coherent(dev, size, mem->va, mem->dma_addr);
-	mem->va = NULL;
+	dma_free_coherent(dev, size, mem->vaddr, mem->dma_addr);
+	mem->vaddr = NULL;
 	mem->dma_addr = 0;
 	mem->size = 0;
 }

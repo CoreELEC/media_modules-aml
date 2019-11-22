@@ -65,6 +65,7 @@ typedef enum __demod_type
 	DEMOD_ATBM8881,
 	DEMOD_SI2168,
 	DEMOD_AVL6762,
+	DEMOD_SI2168_1,
 	DEMOD_MAX_NUM
 }demod_type;
 
@@ -76,6 +77,7 @@ typedef enum __tuner_type
 	TUNER_SI2159,
 	TUNER_R842,
 	TUNER_R840,
+	TUNER_ATBM2040,
 	TUNER_MAX_NUM
 }tuner_type;
 
@@ -93,6 +95,8 @@ module_param(debug_dvb, int, 0644);
 
 #define CARD_NAME "amlogic-dvb"
 
+
+
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
 MODULE_PARM_DESC(dsc_max, "max number of dsc");
@@ -105,7 +109,7 @@ static struct class aml_stb_class;
 static struct dvb_frontend *frontend[FE_DEV_COUNT] = {NULL, NULL};
 static demod_type s_demod_type[FE_DEV_COUNT] = {DEMOD_INVALID, DEMOD_INVALID};
 static tuner_type s_tuner_type[FE_DEV_COUNT] = {TUNER_INVALID, TUNER_INVALID};
-
+static int dmx_reset_all_flag = 0;
 #if 0
 static struct reset_control *aml_dvb_demux_reset_ctl;
 static struct reset_control *aml_dvb_afifo_reset_ctl;
@@ -192,6 +196,15 @@ static int dvb_attach_tuner(struct dvb_frontend *fe, struct aml_tuner *tuner, tu
 		} else {
 			pr_inf("mxl661_attach  attach sucess\n");
 			*type = TUNER_MXL661;
+		}
+		break;
+	case AM_TUNER_ATBM2040:
+		if (!dvb_attach(atbm2040_attach, fe, i2c_adap, cfg)) {
+			pr_error("dvb attach atbm2040_attach tuner error\n");
+			return -1;
+		} else {
+			pr_inf("atbm2040_attach  attach sucess\n");
+			*type = TUNER_ATBM2040;
 		}
 		break;
 	default:
@@ -381,6 +394,12 @@ struct aml_dvb *aml_get_dvb_device(void)
 	return &aml_dvb_device;
 }
 EXPORT_SYMBOL(aml_get_dvb_device);
+
+struct dvb_adapter *aml_get_dvb_adapter(void)
+{
+	return &aml_dvb_device.dvb_adapter;
+}
+EXPORT_SYMBOL(aml_get_dvb_adapter);
 
 static int dvb_dsc_open(struct inode *inode, struct file *file)
 {
@@ -907,6 +926,30 @@ static ssize_t stb_store_source(struct class *class,
 	return size;
 }
 
+static ssize_t show_dmx_reset_all_flag(struct class *class,
+			       struct class_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	char *src;
+
+	if (dmx_reset_all_flag)
+		src = "1";
+	else
+		src = "0";
+	ret = sprintf(buf, "%s\n", src);
+	return ret;
+}
+static ssize_t set_dmx_reset_all_flag(struct class *class,
+				struct class_attribute *attr, const char *buf,
+				size_t size)
+{
+	if (!strncmp("0", buf, 1))
+	    dmx_reset_all_flag = 0;
+	else if (!strncmp("1", buf, 1))
+	    dmx_reset_all_flag = 1;
+
+	return size;
+}
 #define CASE_PREFIX
 
 /*Show the descrambler's input source*/
@@ -1118,6 +1161,9 @@ static ssize_t demux##i##_show_source(struct class *class,  \
 	CASE_PREFIX case AM_TS_SRC_S_TS2:\
 		src = "ts2";\
 	break;\
+	CASE_PREFIX case AM_TS_SRC_TS3:\
+		src = "ts3";\
+	break;\
 	CASE_PREFIX case AM_TS_SRC_DMX0:\
 		src = "dmx0";\
 	break;\
@@ -1151,6 +1197,8 @@ static ssize_t demux##i##_store_source(struct class *class,  \
 		src = DMX_SOURCE_FRONT1;\
 	} else if (!strncmp("ts2", buf, 3)) {\
 		src = DMX_SOURCE_FRONT2;\
+	} else if (!strncmp("ts3", buf, 3)) {\
+		src = DMX_SOURCE_FRONT3;\
 	} else if (!strncmp("hiu1", buf, 4)) {\
 		src = DMX_SOURCE_DVR1;\
 	} else if (!strncmp("hiu", buf, 3)) {\
@@ -1814,6 +1862,8 @@ static struct class_attribute aml_stb_class_attrs[] = {
 	       stb_store_hw_setting),
 	__ATTR(source, 0664, stb_show_source,
 	       stb_store_source),
+	__ATTR(demux_reset_all_flag, 0664, show_dmx_reset_all_flag,
+	       set_dmx_reset_all_flag),
 	__ATTR(tso_source, 0644, tso_show_source,
 	       tso_store_source),
 #define DEMUX_SOURCE_ATTR_PCR(i)\
@@ -2283,6 +2333,8 @@ static int aml_dvb_probe(struct platform_device *pdev)
 							advb->tuners[j].cfg.id = AM_TUNER_R840;
 						else if (!strncmp(str, "r842_tuner", 10))
 							advb->tuners[j].cfg.id = AM_TUNER_R842;
+						else if (!strncmp(str, "atbm2040_tuner", 14))
+							advb->tuners[i].cfg.id = AM_TUNER_ATBM2040;
 						else {
 							pr_err("nonsupport tuner: %s.\n", str);
 							advb->tuners[j].cfg.id = AM_TUNER_NONE;
@@ -2414,6 +2466,35 @@ static int aml_dvb_probe(struct platform_device *pdev)
 					pr_error("reset_value error\n");
 					goto error_fe;
 				}
+				memset(buf, 0, 32);
+				snprintf(buf, sizeof(buf), "fe%d_tuner0_i2c_addr",i);
+				ret = of_property_read_u32(pdev->dev.of_node, buf,&config.tuner0_i2c_addr);
+				if (ret) {
+					pr_error("no tuner0 i2c_addr define\n");
+				}
+				memset(buf, 0, 32);
+				snprintf(buf, sizeof(buf), "fe%d_tuner1_i2c_addr",i);
+				ret = of_property_read_u32(pdev->dev.of_node, buf,&config.tuner1_i2c_addr);
+				if (ret) {
+					pr_error("no tuner1 addr define\n");
+				}
+				memset(buf, 0, 32);
+				snprintf(buf, sizeof(buf), "fe%d_tuner0_code",i);
+				ret = of_property_read_u32(pdev->dev.of_node, buf,&config.tuner0_code);
+				if (ret) {
+					pr_error("no tuner0_code define\n");
+				}
+				memset(buf, 0, 32);
+				snprintf(buf, sizeof(buf), "fe%d_tuner1_code",i);
+				ret = of_property_read_u32(pdev->dev.of_node, buf,&config.tuner1_code);
+				if (ret) {
+					pr_error("no tuner1_code define\n");
+				}
+				if (advb->ts[config.ts].mode == AM_TS_PARALLEL) {
+					config.ts_out_mode = 1;
+				} else {
+					config.ts_out_mode = 0;
+				}
 
 				if (!strcmp(name,"Atbm8881")) {
 					frontend[i] = dvb_attach(atbm8881_attach,&config);
@@ -2433,6 +2514,16 @@ static int aml_dvb_probe(struct platform_device *pdev)
 					} else {
 						pr_inf("dtvdemod attatch sucess\n");
 						s_demod_type[i] = DEMOD_SI2168;
+					}
+				}
+				if (!strcmp(name,"Si2168-1")) {
+					frontend[i] = dvb_attach(si2168_attach_1,&config);
+					if (frontend[i] == NULL) {
+						pr_error("dvb attach demod error\n");
+						goto error_fe;
+					} else {
+						pr_inf("si2168_1 dtvdemod attatch sucess\n");
+						s_demod_type[i] = DEMOD_SI2168_1;
 					}
 				}
 				if (!strcmp(name,"Avl6762")) {
@@ -2467,6 +2558,10 @@ error_fe:
 				s_demod_type[i] = DEMOD_INVALID;
 			}else if (s_demod_type[i] == DEMOD_SI2168) {
 				dvb_detach(si2168_attach);
+				frontend[i] = NULL;
+				s_demod_type[i] = DEMOD_INVALID;
+			}else if (s_demod_type[i] == DEMOD_SI2168_1) {
+				dvb_detach(si2168_attach_1);
 				frontend[i] = NULL;
 				s_demod_type[i] = DEMOD_INVALID;
 			}else if (s_demod_type[i] == DEMOD_AVL6762) {
@@ -2530,6 +2625,8 @@ static int aml_dvb_remove(struct platform_device *pdev)
 			dvb_detach(atbm8881_attach);
 		}else if (s_demod_type[i] == DEMOD_SI2168) {
 			dvb_detach(si2168_attach);
+		}else if (s_demod_type[i] == DEMOD_SI2168_1) {
+			dvb_detach(si2168_attach_1);
 		}else if (s_demod_type[i] == DEMOD_AVL6762) {
 			dvb_detach(avl6762_attach);
 		}
@@ -2709,8 +2806,12 @@ static int aml_tsdemux_reset(void)
 		struct aml_dmx *dmx = get_stb_dmx();
 
 		dvb->reset_flag = 0;
-		if (dmx)
-			dmx_reset_dmx_hw_ex_unlock(dvb, dmx, 0);
+		if (dmx) {
+			if (dmx_reset_all_flag)
+				dmx_reset_hw_ex(dvb, 0);
+			else
+				dmx_reset_dmx_hw_ex_unlock(dvb, dmx, 0);
+		}
 	}
 	spin_unlock_irqrestore(&dvb->slock, flags);
 

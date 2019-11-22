@@ -51,9 +51,9 @@ struct vframe_s *peek_video_frame(struct vcodec_vfm_s *vfm);
 
 struct vframe_s *get_video_frame(struct vcodec_vfm_s *vfm);
 
-int get_fb_from_queue(struct aml_vcodec_ctx *ctx, struct vdec_fb **out_fb);
-int put_fb_to_queue(struct aml_vcodec_ctx *ctx, struct vdec_fb *in_fb);
+int get_fb_from_queue(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer **out_fb);
+int put_fb_to_queue(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *in_fb);
 
-void video_vf_put(char *receiver, struct vdec_fb *fb, int id);
+void video_vf_put(char *receiver, struct vdec_v4l2_buffer *fb, int id);
 
 #endif /* __AML_VCODEC_VFM_H_ */

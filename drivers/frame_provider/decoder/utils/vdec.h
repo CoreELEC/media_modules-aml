@@ -262,6 +262,8 @@ struct vdec_s {
 	atomic_t inirq_thread_flag;
 	atomic_t inirq_flag;
 	int parallel_dec;
+	volatile u64 isr_ns;
+	volatile u64 tfn_ns;
 };
 
 /* common decoder vframe provider name to use default vfm path */

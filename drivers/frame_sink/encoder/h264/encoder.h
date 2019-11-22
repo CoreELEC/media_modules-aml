@@ -31,6 +31,8 @@
 #include <linux/amlogic/media/ge2d/ge2d.h>
 #endif
 
+#include <linux/dma-buf.h>
+
 #define AMVENC_DEVINFO_M8 "AML-M8"
 #define AMVENC_DEVINFO_G9 "AML-G9"
 #define AMVENC_DEVINFO_GXBB "AML-GXBB"
@@ -39,6 +41,8 @@
 
 #define HCODEC_IRQ_MBOX_CLR HCODEC_ASSIST_MBOX2_CLR_REG
 #define HCODEC_IRQ_MBOX_MASK HCODEC_ASSIST_MBOX2_MASK
+
+#define H264_ENC_SVC
 
 /* M8: 2550/10 = 255M GX: 2000/10 = 200M */
 #define HDEC_L0()   WRITE_HHI_REG(HHI_VDEC_CLK_CNTL, \
@@ -121,6 +125,8 @@
 #define AMVENC_AVC_IOC_GET_BUFFINFO _IOW(AMVENC_AVC_IOC_MAGIC, 0x08, u32)
 #define AMVENC_AVC_IOC_SUBMIT	_IOW(AMVENC_AVC_IOC_MAGIC, 0x09, u32)
 #define AMVENC_AVC_IOC_READ_CANVAS _IOW(AMVENC_AVC_IOC_MAGIC, 0x0a, u32)
+#define AMVENC_AVC_IOC_QP_MODE _IOW(AMVENC_AVC_IOC_MAGIC, 0x0b, u32)
+
 
 
 #define IE_PIPPELINE_BLOCK_SHIFT 0
@@ -132,6 +138,7 @@ enum amvenc_mem_type_e {
 	LOCAL_BUFF = 0,
 	CANVAS_BUFF,
 	PHYSICAL_BUFF,
+	DMA_BUFF,
 	MAX_BUFF_TYPE
 };
 
@@ -181,13 +188,22 @@ enum amvenc_frame_fmt_e {
 
 struct encode_wq_s;
 
+struct enc_dma_cfg {
+	int fd;
+	void *dev;
+	void *vaddr;
+	void *paddr;
+	struct dma_buf *dbuf;
+	struct dma_buf_attachment *attach;
+	struct sg_table *sg;
+	enum dma_data_direction dir;
+};
+
 struct encode_request_s {
 	u32 quant;
 	u32 cmd;
 	u32 ucode_mode;
-
 	u32 src;
-
 	u32 framesize;
 
 	u32 me_weight;
@@ -208,6 +224,8 @@ struct encode_request_s {
 	enum amvenc_mem_type_e type;
 	enum amvenc_frame_fmt_e fmt;
 	struct encode_wq_s *parent;
+	struct enc_dma_cfg dma_cfg[3];
+	u32 plane_num;
 };
 
 struct encode_queue_item_s {
@@ -284,6 +302,11 @@ struct encode_picinfo_s {
 	u32 log2_max_pic_order_cnt_lsb;
 	u32 log2_max_frame_num;
 	u32 init_qppicture;
+#ifdef H264_ENC_SVC
+	u32 enable_svc;
+	u32 non_ref_limit;
+	u32 non_ref_cnt;
+#endif
 };
 
 struct encode_cbr_s {
@@ -416,6 +439,13 @@ extern s32 destroy_encode_work_queue(struct encode_wq_s *encode_work_queue);
 /* Bytes(Float) * 256 */
 #define H264_ENC_CBR_PREV_BYTES   HCODEC_HENC_SCRATCH_J
 #define H264_ENC_CBR_REGION_SIZE   HCODEC_HENC_SCRATCH_J
+
+/* for SVC */
+#define H264_ENC_SVC_PIC_TYPE      HCODEC_HENC_SCRATCH_K
+
+/* define for PIC  header */
+#define ENC_SLC_REF 0x8410
+#define ENC_SLC_NON_REF 0x8010
 
 /* --------------------------------------------------- */
 /* ENCODER_STATUS define */

@@ -11,6 +11,8 @@ stream_input-objs	+=	parser/rmparser.o
 stream_input-objs	+=	subtitle/subtitle.o
 
 obj-$(CONFIG_AMLOGIC_DVB)   += parser/hw_demux/
+obj-$(CONFIG_AMLOGIC_DVB)   += parser/demux/
+obj-$(CONFIG_AMLOGIC_DVB)   += parser/dvb_ci/
 #obj-y 	+= 	tv_frontend/
 # obj-y	+=	box-frontend/avl6211/
 # obj-y	+=	box-frontend/atbm8881/

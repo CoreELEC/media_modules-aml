@@ -53,8 +53,9 @@
 #define PTS_OUTSIDE	(1)
 #define SYNC_OUTSIDE	(2)
 #define USE_V4L_PORTS	(0x80)
+#define SCATTER_MEM	(0x100)
 
-#define DATA_DEBUG
+//#define DATA_DEBUG
 
 static int def_4k_vstreambuf_sizeM =
 	(DEFAULT_VIDEO_BUFFER_SIZE_4K >> 20);
@@ -113,7 +114,9 @@ extern bool aml_set_vfm_enable, aml_set_vdec_type_enable;
 
 static void set_default_params(struct aml_vdec_adapt *vdec)
 {
-	unsigned long sync_mode = (PTS_OUTSIDE | SYNC_OUTSIDE | USE_V4L_PORTS);
+	ulong sync_mode = (PTS_OUTSIDE | SYNC_OUTSIDE | USE_V4L_PORTS);
+
+	sync_mode |= vdec->ctx->scatter_mem_enable ? SCATTER_MEM : 0;
 	vdec->dec_prop.param = (void *)sync_mode;
 	vdec->dec_prop.format = vdec->format;
 	vdec->dec_prop.width = 1920;
@@ -463,7 +466,7 @@ static void set_vdec_properity(struct vdec_s *vdec,
 {
 	vdec->sys_info	= &ada_ctx->dec_prop;
 	vdec->port	= &ada_ctx->port;
-	vdec->format	= ada_ctx->dec_prop.format;
+	vdec->format	= ada_ctx->video_type;
 	vdec->sys_info_store = ada_ctx->dec_prop;
 	vdec->vf_receiver_name = ada_ctx->recv_name;
 
@@ -668,22 +671,15 @@ int is_need_to_buf(struct aml_vdec_adapt *ada_ctx)
 }
 
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
-	const char *buf, unsigned int count, unsigned long int timestamp)
+	const char *buf, unsigned int count, u64 timestamp)
 {
 	int ret = -1;
-	int try_cnt = 100;
 	struct vdec_s *vdec = ada_ctx->vdec;
 
 	/* set timestamp */
 	vdec_set_timestamp(vdec, timestamp);
 
-	do {
-		ret = vdec_write_vframe(vdec, buf, count);
-		if (ret == -EAGAIN) {
-			/*vdec_input_level(&vdec->input);*/
-			msleep(30);
-		}
-	} while (ret == -EAGAIN && try_cnt--);
+	ret = vdec_write_vframe(vdec, buf, count);
 
 	if (slow_input) {
 		pr_info("slow_input: frame codec write size %d\n", ret);
@@ -694,7 +690,7 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	/* dump to file */
 	dump_write(buf, count);
 #endif
-	aml_v4l2_debug(2, "[%d] write frames, vbuf: %p, size: %u, ret: %d, crc: %x",
+	aml_v4l2_debug(4, "[%d] write frames, vbuf: %p, size: %u, ret: %d, crc: %x",
 		ada_ctx->ctx->id, buf, count, ret, crc32_le(0, buf, count));
 
 	return ret;

@@ -46,7 +46,6 @@
 
 
 
-
 #define DRIVER_NAME "amvdec_vc1"
 #define MODULE_NAME "amvdec_vc1"
 
@@ -54,6 +53,8 @@
 #if 1	/* //MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
 #define NV21
 #endif
+
+#define VC1_MAX_SUPPORT_SIZE (1920*1088)
 
 #define I_PICTURE   0
 #define P_PICTURE   1
@@ -1152,9 +1153,18 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 		return -EFAULT;
 	}
 
-	if (pdata->sys_info)
+	if (pdata->sys_info) {
 		vvc1_amstream_dec_info = *pdata->sys_info;
 
+		if ((vvc1_amstream_dec_info.height != 0) &&
+			(vvc1_amstream_dec_info.width >
+			(VC1_MAX_SUPPORT_SIZE/vvc1_amstream_dec_info.height))) {
+			pr_info("amvdec_vc1: over size, unsupport: %d * %d\n",
+				vvc1_amstream_dec_info.width,
+				vvc1_amstream_dec_info.height);
+			return -EFAULT;
+		}
+	}
 	pdata->dec_status = vvc1_dec_status;
 	pdata->set_isreset = vvc1_set_isreset;
 	is_reset = 0;

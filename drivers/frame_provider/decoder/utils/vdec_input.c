@@ -58,6 +58,18 @@ static struct vframe_block_list_s *
 	ulong phy_addr,
 	int size);
 
+static int aml_copy_from_user(void *to, const void *from, ulong n)
+{
+	int ret =0;
+
+	if (likely(access_ok(VERIFY_READ, from, n)))
+		ret = copy_from_user(to, from, n);
+	else
+		memcpy(to, from, n);
+
+	return ret;
+}
+
 static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 		u32 size, ulong phys, u32 pading, bool is_mapped)
 {
@@ -68,7 +80,7 @@ static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 	u8 *p = virts;
 
 	if (is_mapped) {
-		if (copy_from_user(p, buf, size))
+		if (aml_copy_from_user(p, buf, size))
 			return -EFAULT;
 
 		if (pading)
@@ -85,7 +97,7 @@ static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 		if (!p)
 			return -1;
 
-		if (copy_from_user(p, buf + i * span, span)) {
+		if (aml_copy_from_user(p, buf + i * span, span)) {
 			codec_mm_unmap_phyaddr(p);
 			return -EFAULT;
 		}
@@ -103,7 +115,7 @@ static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 	if (!p)
 		return -1;
 
-	if (copy_from_user(p, buf + span, remain)) {
+	if (aml_copy_from_user(p, buf + span, remain)) {
 		codec_mm_unmap_phyaddr(p);
 		return -EFAULT;
 	}
@@ -404,6 +416,7 @@ int vdec_input_dump_blocks(struct vdec_input_s *input,
 }
 
 static int vdec_input_dump_chunk_locked(
+	int id,
 	struct vframe_chunk_s *chunk,
 	char *buf, int size)
 {
@@ -423,7 +436,8 @@ static int vdec_input_dump_chunk_locked(
 	} while (0)
 
 	BUFPRINT(
-		"\t[%lld:%p]-off=%d,size:%d,p:%d,\tpts64=%lld,addr=%p\n",
+		"\t[%d][%lld:%p]-off=%d,size:%d,p:%d,\tpts64=%lld,addr=%p\n",
+		id,
 		chunk->sequence,
 		chunk->block,
 		chunk->offset,
@@ -443,7 +457,7 @@ static int vdec_input_dump_chunk_locked(
 	return tsize;
 }
 
-int vdec_input_dump_chunks(struct vdec_input_s *input,
+int vdec_input_dump_chunks(int id, struct vdec_input_s *input,
 	char *bufs, int size)
 {
 
@@ -452,12 +466,15 @@ int vdec_input_dump_chunks(struct vdec_input_s *input,
 	char *lbuf = bufs;
 	char sbuf[256];
 	int s = 0;
+	int i = 0;
+
 	if (size <= 0)
 		return 0;
 	if (!bufs)
 		lbuf = sbuf;
-	snprintf(lbuf + s, size - s,
-		"blocks:vdec-%d id:%d,bufsize=%d,dsize=%d,frames:%d,maxframe:%d\n",
+	s = snprintf(lbuf + s, size - s,
+		"[%d]blocks:vdec-%d id:%d,bufsize=%d,dsize=%d,frames:%d,maxframe:%d\n",
+		id,
 		input->id,
 		input->block_nums,
 		input->size,
@@ -477,7 +494,10 @@ int vdec_input_dump_chunks(struct vdec_input_s *input,
 				p, struct vframe_chunk_s, list);
 		if (bufs != NULL)
 			lbuf = bufs + s;
-		s += vdec_input_dump_chunk_locked(chunk, lbuf, size - s);
+		s += vdec_input_dump_chunk_locked(id, chunk, lbuf, size - s);
+		i++;
+		if (i >= 10)
+			break;
 	}
 	vdec_input_unlock(input, flags);
 	return s;
@@ -745,7 +765,6 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	struct vframe_chunk_s *chunk;
 	struct vdec_s *vdec = input->vdec;
 	struct vframe_block_list_s *block;
-
 	int need_pading_size = MIN_FRAME_PADDING_SIZE;
 
 	if (vdec_secure(vdec)) {
@@ -894,6 +913,9 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	list_add_tail(&chunk->list, &input->vframe_chunk_list);
 	input->data_size += chunk->size;
 	input->have_frame_num++;
+
+	if (input->have_frame_num == 1)
+		input->vdec_up(vdec);
 	ATRACE_COUNTER(MEM_NAME, input->have_frame_num);
 	if (chunk->pts_valid) {
 		input->last_inpts_u64 = chunk->pts64;
@@ -944,6 +966,7 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 	} else {
 		ret = vdec_input_add_chunk(input, buf, count, 0);
 	}
+
 	return ret;
 }
 EXPORT_SYMBOL(vdec_input_add_frame);
@@ -986,10 +1009,25 @@ EXPORT_SYMBOL(vdec_input_next_input_chunk);
 void vdec_input_release_chunk(struct vdec_input_s *input,
 			struct vframe_chunk_s *chunk)
 {
+	struct vframe_chunk_s *p;
+	u32 chunk_valid = 0;
 	unsigned long flags;
 	struct vframe_block_list_s *block = chunk->block;
 	struct vframe_block_list_s *tofreeblock = NULL;
 	flags = vdec_input_lock(input);
+
+	list_for_each_entry(p, &input->vframe_chunk_list, list) {
+		if (p == chunk) {
+			chunk_valid = 1;
+			break;
+		}
+	}
+	/* 2 threads go here, the other done the deletion,so return*/
+	if (chunk_valid == 0) {
+		vdec_input_unlock(input, flags);
+		pr_err("%s chunk is deleted,so return.\n", __func__);
+		return;
+	}
 
 	list_del(&chunk->list);
 	input->have_frame_num--;

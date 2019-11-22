@@ -26,10 +26,12 @@
 
 #define FRAME_CHECK
 
-#define YUV_MAX_DUMP_NUM  20
+#define YUV_MAX_DUMP_NUM  60
 
 #define SIZE_CRC	64
 #define SIZE_CHECK_Q 128
+
+#define USER_CMP_POOL_MAX_SIZE (SIZE_CHECK_Q)
 
 struct pic_dump_t{
 	struct file *yuv_fp;
@@ -79,6 +81,10 @@ struct pic_check_mgr_t{
 
 	struct pic_check_t pic_check;
 	struct pic_dump_t  pic_dump;
+
+	struct usr_crc_info_t *cmp_pool;
+	int usr_cmp_num;
+	int usr_cmp_result;
 };
 
 int dump_yuv_trig(struct pic_check_mgr_t *mgr,

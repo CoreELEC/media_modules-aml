@@ -58,6 +58,7 @@
 #include <linux/amlogic/tee.h>
 
 
+#define I_ONLY_SUPPORT
 #define MIX_STREAM_SUPPORT
 #define G12A_BRINGUP_DEBUG
 #define CONSTRAIN_MAX_BUF_NUM
@@ -112,6 +113,7 @@
 
 /*cmd*/
 #define AVS2_10B_DISCARD_NAL                 0xf0
+#define AVS2_SEARCH_NEW_PIC                  0xf1
 #define AVS2_ACTION_ERROR                    0xfe
 #define HEVC_ACTION_ERROR                    0xfe
 #define AVS2_ACTION_DONE                     0xff
@@ -248,7 +250,7 @@ static u32 work_buf_size = 32 * 1024 * 1024;
 
 static u32 mv_buf_margin;
 static int pre_decode_buf_level = 0x1000;
-static u32 again_threshold = 0x40;
+static u32 again_threshold;
 
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
@@ -264,6 +266,7 @@ static u32 again_threshold = 0x40;
  *	0x300, if > 720p, use mode 4, else use mode 1;
  */
 static u32 double_write_mode;
+static u32 without_display_mode;
 
 #define DRIVER_NAME "amvdec_avs2"
 #define MODULE_NAME "amvdec_avs2"
@@ -753,6 +756,9 @@ struct AVS2Decoder_s {
 	u32 pre_parser_wr_ptr;
 	int need_cache_size;
 	u64 sc_start_time;
+#ifdef I_ONLY_SUPPORT
+	u32 i_only;
+#endif
 	int frameinfo_enable;
 	struct vframe_qos_s vframe_qos;
 };
@@ -4579,8 +4585,11 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			vdec_count_info(gvs, 0, stream_offset);
 	#endif
 			hw_to_vdec(dec)->vdec_fps_detec(hw_to_vdec(dec)->id);
-			vf_notify_receiver(dec->provider_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			if (without_display_mode == 0) {
+				vf_notify_receiver(dec->provider_name,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			} else
+				vavs2_vf_put(vavs2_vf_get(dec), dec);
 		}
 	}
 /*!NO_DISPLAY*/
@@ -5619,6 +5628,11 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			dec->slice_idx++;
 
 		PRINT_LINE();
+#ifdef I_ONLY_SUPPORT
+		if ((start_code == PB_PICTURE_START_CODE) &&
+			(dec->i_only & 0x2))
+			ret = -2;
+#endif
 #ifdef AVS2_10B_MMU
 		if (ret >= 0) {
 			ret = avs2_alloc_mmu(dec,
@@ -6187,6 +6201,21 @@ static void vavs2_prot_init(struct AVS2Decoder_s *dec)
 
 }
 
+#ifdef I_ONLY_SUPPORT
+static int vavs2_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
+{
+	struct AVS2Decoder_s *dec =
+		(struct AVS2Decoder_s *)vdec->private;
+	if (i_only_flag & 0x100)
+		return 0;
+	if (trickmode == TRICKMODE_I)
+		dec->i_only = 0x3;
+	else if (trickmode == TRICKMODE_NONE)
+		dec->i_only = 0x0;
+	return 0;
+}
+#endif
+
 static int vavs2_local_init(struct AVS2Decoder_s *dec)
 {
 	int i;
@@ -6224,7 +6253,15 @@ TODO:FOR VERSION
 
 	if (dec->frame_dur == 0)
 		dec->frame_dur = 96000 / 24;
-
+#ifdef I_ONLY_SUPPORT
+	if (i_only_flag & 0x100)
+		dec->i_only = i_only_flag & 0xff;
+	else if ((unsigned long) dec->vavs2_amstream_dec_info.param
+		& 0x08)
+		dec->i_only = 0x7;
+	else
+		dec->i_only = 0x0;
+#endif
 	INIT_KFIFO(dec->display_q);
 	INIT_KFIFO(dec->newframe_q);
 
@@ -7008,7 +7045,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	vdec_enable_input(vdec);
 
-	WRITE_VREG(HEVC_DEC_STATUS_REG, AVS2_ACTION_DONE);
+	WRITE_VREG(HEVC_DEC_STATUS_REG, AVS2_SEARCH_NEW_PIC);
 
 	if (vdec_frame_based(vdec) && dec->chunk) {
 		if (debug & PRINT_FLAG_VDEC_DATA)
@@ -7235,7 +7272,9 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	}
 	pdata->private = dec;
 	pdata->dec_status = vavs2_dec_status;
-	/* pdata->set_trickmode = set_trickmode; */
+#ifdef I_ONLY_SUPPORT
+	pdata->set_trickmode = vavs2_set_trickmode;
+#endif
 	pdata->run_ready = run_ready;
 	pdata->run = run;
 	pdata->reset = reset;
@@ -7737,6 +7776,9 @@ MODULE_PARM_DESC(again_threshold, "\n again_threshold\n");
 module_param(force_disp_pic_index, int, 0664);
 MODULE_PARM_DESC(force_disp_pic_index,
 	"\n amvdec_h265 force_disp_pic_index\n");
+
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
 
 module_init(amvdec_avs2_driver_init_module);
 module_exit(amvdec_avs2_driver_remove_module);

@@ -22,16 +22,16 @@
 #include <linux/timer.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <uapi/linux/swab.h>
+
 #include "../vdec_drv_if.h"
 #include "../aml_vcodec_util.h"
 #include "../aml_vcodec_dec.h"
-//#include "../aml_vcodec_intr.h"
 #include "../aml_vcodec_adapt.h"
 #include "../vdec_drv_base.h"
 #include "../aml_vcodec_vfm.h"
-#include "h264_stream.h"
-#include "h264_parse.h"
-#include <uapi/linux/swab.h>
+#include "aml_h264_parser.h"
+#include "../utils/common.h"
 
 /* h264 NALU type */
 #define NAL_NON_IDR_SLICE			0x01
@@ -39,8 +39,9 @@
 #define NAL_H264_SEI				0x06
 #define NAL_H264_SPS				0x07
 #define NAL_H264_PPS				0x08
+#define NAL_H264_AUD				0x09
 
-#define NAL_TYPE(value)				((value) & 0x1F)
+#define AVC_NAL_TYPE(value)				((value) & 0x1F)
 
 #define BUF_PREDICTION_SZ			(64 * 1024)//(32 * 1024)
 
@@ -52,7 +53,7 @@
 #define H264_MAX_FB_NUM				17
 #define HDR_PARSING_BUF_SZ			1024
 
-#define HEADER_BUFFER_SIZE			(32 * 1024)
+#define HEADER_BUFFER_SIZE			(128 * 1024)
 
 /**
  * struct h264_fb - h264 decode frame buffer information
@@ -113,11 +114,6 @@ struct vdec_h264_dec_info {
  *                        by VPU.
  *                        AP-W/R : AP is writer/reader on this item
  *                        VPU-W/R: VPU is write/reader on this item
- * @hdr_buf      : Header parsing buffer (AP-W, VPU-R)
- * @pred_buf_dma : HW working predication buffer dma address (AP-W, VPU-R)
- * @mv_buf_dma   : HW working motion vector buffer dma address (AP-W, VPU-R)
- * @list_free    : free frame buffer ring list (AP-W/R, VPU-W)
- * @list_disp    : display frame buffer ring list (AP-R, VPU-W)
  * @dec          : decode information (AP-R, VPU-W)
  * @pic          : picture information (AP-R, VPU-W)
  * @crop         : crop information (AP-R, VPU-W)
@@ -129,10 +125,6 @@ struct vdec_h264_vsi {
 	int pps_size;
 	int sei_size;
 	int head_offset;
-	uint64_t pred_buf_dma;
-	uint64_t mv_buf_dma[H264_MAX_FB_NUM];
-	struct h264_ring_fb_list list_free;
-	struct h264_ring_fb_list list_disp;
 	struct vdec_h264_dec_info dec;
 	struct vdec_pic_info pic;
 	struct vdec_pic_info cur_pic;
@@ -155,10 +147,10 @@ struct vdec_h264_inst {
 	struct aml_vcodec_ctx *ctx;
 	struct aml_vcodec_mem pred_buf;
 	struct aml_vcodec_mem mv_buf[H264_MAX_FB_NUM];
-	//struct vdec_vpu_inst vpu;
 	struct aml_vdec_adapt vdec;
 	struct vdec_h264_vsi *vsi;
 	struct vcodec_vfm_s vfm;
+	struct completion comp;
 };
 
 #if 0
@@ -241,18 +233,6 @@ static void get_dpb_size(struct vdec_h264_inst *inst, unsigned int *dpb_sz)
 	aml_vcodec_debug(inst, "sz=%d", *dpb_sz);
 }
 
-static int find_start_code(unsigned char *data, unsigned int data_sz)
-{
-	if (data_sz > 3 && data[0] == 0 && data[1] == 0 && data[2] == 1)
-		return 3;
-
-	if (data_sz > 4 && data[0] == 0 && data[1] == 0 && data[2] == 0 &&
-	    data[3] == 1)
-		return 4;
-
-	return -1;
-}
-
 static void skip_aud_data(u8 **data, u32 *size)
 {
 	int i;
@@ -275,7 +255,7 @@ static int vdec_h264_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 
 	inst->ctx = ctx;
 
-	inst->vdec.format = VFORMAT_H264;
+	inst->vdec.video_type = VFORMAT_H264;
 	inst->vdec.dev	= ctx->dev->vpu_plat_dev;
 	inst->vdec.filp	= ctx->dev->filp;
 	inst->vdec.ctx	= ctx;
@@ -318,6 +298,8 @@ static int vdec_h264_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	inst->vsi->pic.c_bs_sz	= 0;
 	inst->vsi->pic.c_len_sz	= (1920 * 1088 / 2);
 
+	init_completion(&inst->comp);
+
 	aml_vcodec_debug(inst, "H264 Instance >> %p", inst);
 
 	ctx->ada_ctx = &inst->vdec;
@@ -336,11 +318,11 @@ error_free_inst:
 	return ret;
 }
 
-static int refer_buffer_num(int level_idc, int poc_cnt,
+#if 0
+static int refer_buffer_num(int level_idc, int max_poc_cnt,
 	int mb_width, int mb_height)
 {
-	int max_ref_num = 27;
-	int size, size_margin = 6;
+	int size;
 	int pic_size = mb_width * mb_height * 384;
 
 	switch (level_idc) {
@@ -399,51 +381,28 @@ static int refer_buffer_num(int level_idc, int poc_cnt,
 	size /= pic_size;
 	size = size + 1; /* need more buffers */
 
-	if (poc_cnt > size)
-		size = poc_cnt;
-
-	size = size + size_margin;
-	if (size > max_ref_num)
-		size = max_ref_num;
+	if (size > max_poc_cnt)
+		size = max_poc_cnt;
 
 	return size;
 }
+#endif
 
 static void fill_vdec_params(struct vdec_h264_inst *inst, struct h264_SPS_t *sps)
 {
 	struct vdec_pic_info *pic = &inst->vsi->pic;
 	struct vdec_h264_dec_info *dec = &inst->vsi->dec;
 	struct v4l2_rect *rect = &inst->vsi->crop;
-	unsigned int mb_w, mb_h, width, height;
-	unsigned int crop_unit_x = 0, crop_unit_y = 0;
-	unsigned int poc_cnt = 0;
+	u32 mb_w, mb_h, width, height;
 
-	mb_w = sps->pic_width_in_mbs_minus1 + 1;
-	mb_h = sps->pic_height_in_map_units_minus1 + 1;
+	mb_w = sps->mb_width;
+	mb_h = sps->mb_height;
 
-	width  = mb_w << 4; // 16
-	height = (2 - sps->frame_mbs_only_flag) * (mb_h << 4);
+	width  = mb_w << 4;
+	height = mb_h << 4;
 
-	if (sps->frame_cropping_flag) {
-		if (0 == sps->chroma_format_idc) {// monochrome
-			crop_unit_x = 1;
-			crop_unit_y = 2 - sps->frame_mbs_only_flag;
-		} else if (1 == sps->chroma_format_idc) {// 4:2:0
-			crop_unit_x = 2;
-			crop_unit_y = 2 * (2 - sps->frame_mbs_only_flag);
-		} else if (2 == sps->chroma_format_idc) {// 4:2:2
-			crop_unit_x = 2;
-			crop_unit_y = 2 - sps->frame_mbs_only_flag;
-		} else {// 3 == sps.chroma_format_idc   // 4:4:4
-			crop_unit_x = 1;
-			crop_unit_y = 2 - sps->frame_mbs_only_flag;
-		}
-	}
-
-	width  -= crop_unit_x * (sps->frame_crop_left_offset +
-		sps->frame_crop_right_offset);
-	height -= crop_unit_y * (sps->frame_crop_top_offset +
-		sps->frame_crop_bottom_offset);
+	width  -= (sps->crop_left + sps->crop_right);
+	height -= (sps->crop_top + sps->crop_bottom);
 
 	/* fill visible area size that be used for EGL. */
 	pic->visible_width	= width;
@@ -462,19 +421,16 @@ static void fill_vdec_params(struct vdec_h264_inst *inst, struct h264_SPS_t *sps
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	/* calc DPB size */
-	poc_cnt = sps->pic_order_cnt_type;
-	if (!poc_cnt)
-		poc_cnt = (sps->log2_max_pic_order_cnt_lsb_minus4 + 4) << 1;
-
-	dec->dpb_sz = refer_buffer_num(sps->level_idc, poc_cnt, mb_w, mb_h);
+	dec->dpb_sz = sps->ref_frame_count;
 
 	aml_vcodec_debug(inst, "[%d] The stream infos, coded:(%d x %d), visible:(%d x %d), DPB: %d\n",
 		inst->ctx->id, pic->coded_width, pic->coded_height,
 		pic->visible_width, pic->visible_height, dec->dpb_sz);
 }
 
-static void search_from_st(u8 *buf, u32 size, int *pos, bool *is_combine)
+static bool check_frame_combine(u8 *buf, u32 size, int *pos)
 {
+	bool combine = false;
 	int i = 0, j = 0, cnt = 0;
 	u8 *p = buf;
 
@@ -482,7 +438,7 @@ static void search_from_st(u8 *buf, u32 size, int *pos, bool *is_combine)
 		j = find_start_code(p, 7);
 		if (j > 0) {
 			if (++cnt > 1) {
-				*is_combine = true;
+				combine = true;
 				break;
 			}
 
@@ -494,22 +450,40 @@ static void search_from_st(u8 *buf, u32 size, int *pos, bool *is_combine)
 	}
 
 	//pr_info("nal pos: %d, is_combine: %d\n",*pos, *is_combine);
+	return combine;
+}
+
+static int stream_parse_by_ucode(struct vdec_h264_inst *inst, u8 *buf, u32 size)
+{
+	int ret = 0;
+	struct aml_vdec_adapt *vdec = &inst->vdec;
+
+	ret = vdec_vframe_write(vdec, buf, size, 0);
+	if (ret < 0) {
+		pr_err("write frame data failed. err: %d\n", ret);
+		return ret;
+	}
+
+	/* wait ucode parse ending. */
+	wait_for_completion_timeout(&inst->comp,
+		msecs_to_jiffies(1000));
+
+	return inst->vsi->dec.dpb_sz ? 0 : -1;
 }
 
 static int stream_parse(struct vdec_h264_inst *inst, u8 *buf, u32 size)
 {
-	struct h264_stream_t s;
-	struct h264_SPS_t *sps;
-	unsigned int nal_type;
+	int ret = 0;
+	struct h264_param_sets *ps;
+	u32 nal_type;
 	int nal_idx = 0;
-	int real_data_pos, real_data_size;
 	bool is_combine = false;
 
-	search_from_st(buf, size, &nal_idx, &is_combine);
+	is_combine = check_frame_combine(buf, size, &nal_idx);
 	if (nal_idx < 0)
 		return -1;
 
-	nal_type = NAL_TYPE(buf[nal_idx]);
+	nal_type = AVC_NAL_TYPE(buf[nal_idx]);
 	if (nal_type != NAL_H264_SPS)
 		return -1;
 
@@ -517,23 +491,24 @@ static int stream_parse(struct vdec_h264_inst *inst, u8 *buf, u32 size)
 	inst->vsi->is_combine = is_combine;
 	inst->vsi->nalu_pos = nal_idx;
 
-	/* start code plus nal type. */
-	real_data_pos = nal_idx + 1;
-	real_data_size = size - real_data_pos;
-
-	sps = kzalloc(sizeof(struct h264_SPS_t), GFP_KERNEL);
-	if (sps == NULL)
+	ps = kzalloc(sizeof(struct h264_param_sets), GFP_KERNEL);
+	if (ps == NULL)
 		return -ENOMEM;
 
-	h264_stream_set(&s, &buf[real_data_pos], real_data_size);
-	h264_sps_parse(&s, sps);
-	//h264_sps_info(sps);
+	ret = h264_decode_extradata_ps(buf, size, ps);
+	if (ret) {
+		pr_err("parse extra data failed. err: %d\n", ret);
+		goto out;
+	}
 
-	fill_vdec_params(inst, sps);
+	if (ps->sps_parsed)
+		fill_vdec_params(inst, &ps->sps);
 
-	kfree(sps);
+	ret = ps->sps_parsed ? 0 : -1;
+out:
+	kfree(ps);
 
-	return 0;
+	return ret;
 }
 
 static int vdec_h264_probe(unsigned long h_vdec,
@@ -542,7 +517,7 @@ static int vdec_h264_probe(unsigned long h_vdec,
 	struct vdec_h264_inst *inst =
 		(struct vdec_h264_inst *)h_vdec;
 	struct stream_info *st;
-	u8 *buf = (u8 *)bs->va;
+	u8 *buf = (u8 *)bs->vaddr;
 	u32 size = bs->size;
 	int ret = 0;
 
@@ -556,7 +531,11 @@ static int vdec_h264_probe(unsigned long h_vdec,
 	}
 
 	skip_aud_data(&buf, &size);
-	ret = stream_parse(inst, buf, size);
+
+	if (inst->ctx->param_sets_from_ucode)
+		ret = stream_parse_by_ucode(inst, buf, size);
+	else
+		ret = stream_parse(inst, buf, size);
 
 	inst->vsi->cur_pic = inst->vsi->pic;
 
@@ -565,10 +544,9 @@ static int vdec_h264_probe(unsigned long h_vdec,
 
 static void vdec_h264_deinit(unsigned long h_vdec)
 {
+	ulong flags;
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
-
-	if (!inst)
-		return;
+	struct aml_vcodec_ctx *ctx = inst->ctx;
 
 	aml_vcodec_debug_enter(inst);
 
@@ -578,6 +556,7 @@ static void vdec_h264_deinit(unsigned long h_vdec)
 
 	//dump_deinit();
 
+	spin_lock_irqsave(&ctx->slock, flags);
 	if (inst->vsi && inst->vsi->header_buf)
 		kfree(inst->vsi->header_buf);
 
@@ -585,20 +564,20 @@ static void vdec_h264_deinit(unsigned long h_vdec)
 		kfree(inst->vsi);
 
 	kfree(inst);
+
+	ctx->drv_handle = 0;
+	spin_unlock_irqrestore(&ctx->slock, flags);
 }
 
-static int vdec_h264_get_fb(struct vdec_h264_inst *inst, struct vdec_fb **out)
+static int vdec_h264_get_fb(struct vdec_h264_inst *inst, struct vdec_v4l2_buffer **out)
 {
 	return get_fb_from_queue(inst->ctx, out);
 }
 
-static void vdec_h264_get_vf(struct vdec_h264_inst *inst, struct vdec_fb **out)
+static void vdec_h264_get_vf(struct vdec_h264_inst *inst, struct vdec_v4l2_buffer **out)
 {
 	struct vframe_s *vf = NULL;
-	struct vdec_fb *fb = NULL;
-
-	aml_vcodec_debug(inst, "%s() [%d], vfm: %p",
-		__func__, __LINE__, &inst->vfm);
+	struct vdec_v4l2_buffer *fb = NULL;
 
 	vf = peek_video_frame(&inst->vfm);
 	if (!vf) {
@@ -616,28 +595,18 @@ static void vdec_h264_get_vf(struct vdec_h264_inst *inst, struct vdec_fb **out)
 
 	atomic_set(&vf->use_cnt, 1);
 
-	aml_vcodec_debug(inst, "%s() [%d], vf: %p, v4l_mem_handle: %lx, idx: %d\n",
-		__func__, __LINE__, vf, vf->v4l_mem_handle, vf->index);
-
-	fb = (struct vdec_fb *)vf->v4l_mem_handle;
+	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 	fb->vf_handle = (unsigned long)vf;
 	fb->status = FB_ST_DISPLAY;
 
 	*out = fb;
 
 	//pr_info("%s, %d\n", __func__, fb->base_y.bytes_used);
-	//dump_write(fb->base_y.va, fb->base_y.bytes_used);
-	//dump_write(fb->base_c.va, fb->base_c.bytes_used);
+	//dump_write(fb->base_y.vaddr, fb->base_y.bytes_used);
+	//dump_write(fb->base_c.vaddr, fb->base_c.bytes_used);
 
 	/* convert yuv format. */
-	//swap_uv(fb->base_c.va, fb->base_c.size);
-
-	aml_vcodec_debug(inst, "%s() [%d], va: %p, phy: %x, size: %zu",
-		__func__, __LINE__, fb->base_y.va,
-		(unsigned int)virt_to_phys(fb->base_y.va), fb->base_y.size);
-	aml_vcodec_debug(inst, "%s() [%d], va: %p, phy: %x, size: %zu",
-		__func__, __LINE__, fb->base_c.va,
-		(unsigned int)virt_to_phys(fb->base_c.va), fb->base_c.size);
+	//swap_uv(fb->base_c.vaddr, fb->base_c.size);
 }
 
 static int vdec_write_nalu(struct vdec_h264_inst *inst,
@@ -653,8 +622,8 @@ static int vdec_write_nalu(struct vdec_h264_inst *inst,
 	if (nalu_pos < 0)
 		goto err;
 
-	nal_type = NAL_TYPE(buf[nalu_pos]);
-	aml_vcodec_debug(inst, "NALU type: %d, size: %u", nal_type, size);
+	nal_type = AVC_NAL_TYPE(buf[nalu_pos]);
+	//aml_vcodec_debug(inst, "NALU type: %d, size: %u", nal_type, size);
 
 	if (nal_type == NAL_H264_SPS && !is_combine) {
 		if (inst->vsi->head_offset + size > HEADER_BUFFER_SIZE) {
@@ -686,9 +655,6 @@ static int vdec_write_nalu(struct vdec_h264_inst *inst,
 		ret = size;
 	} else if (inst->vsi->head_offset == 0) {
 		ret = vdec_vframe_write(vdec, buf, size, ts);
-
-		aml_vcodec_debug(inst, "buf: %p, buf size: %u, write to: %d",
-			buf, size, ret);
 	} else {
 		char *write_buf = vmalloc(inst->vsi->head_offset + size);
 		if (!write_buf) {
@@ -701,9 +667,6 @@ static int vdec_write_nalu(struct vdec_h264_inst *inst,
 
 		ret = vdec_vframe_write(vdec, write_buf,
 			inst->vsi->head_offset + size, ts);
-
-		aml_vcodec_debug(inst, "buf: %p, buf size: %u, write to: %d",
-			write_buf, inst->vsi->head_offset + size, ret);
 
 		memset(inst->vsi->header_buf, 0, HEADER_BUFFER_SIZE);
 		inst->vsi->head_offset = 0;
@@ -720,14 +683,46 @@ err:
 	return ret;
 }
 
+static bool monitor_res_change(struct vdec_h264_inst *inst, u8 *buf, u32 size)
+{
+	int ret = 0, i = 0, j = 0;
+	u8 *p = buf;
+	int len = size;
+	u32 type;
+
+	for (i = 4; i < size; i++) {
+		j = find_start_code(p, len);
+		if (j > 0) {
+			len = size - (p - buf);
+			type = AVC_NAL_TYPE(p[j]);
+			if (type != NAL_H264_AUD &&
+				(type > NAL_H264_PPS || type < NAL_H264_SEI))
+				break;
+
+			if (type == NAL_H264_SPS) {
+				ret = stream_parse(inst, p, len);
+				if (!ret && (inst->vsi->cur_pic.coded_width !=
+					inst->vsi->pic.coded_width ||
+					inst->vsi->cur_pic.coded_height !=
+					inst->vsi->pic.coded_height)) {
+					inst->vsi->cur_pic = inst->vsi->pic;
+					return true;
+				}
+			}
+			p += j;
+		}
+		p++;
+	}
+
+	return false;
+}
+
 static int vdec_h264_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
-			 unsigned long int timestamp, bool *res_chg)
+			 u64 timestamp, bool *res_chg)
 {
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 	struct stream_info *st;
-	int nalu_pos;
-	u32 nal_type;
 	u8 *buf;
 	u32 size;
 	int ret = -1;
@@ -736,7 +731,7 @@ static int vdec_h264_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 	if (bs == NULL)
 		return -1;
 
-	buf = (u8 *)bs->va;
+	buf = (u8 *)bs->vaddr;
 	size = bs->size;
 	st = (struct stream_info *)buf;
 
@@ -749,28 +744,10 @@ static int vdec_h264_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 	else if (inst->ctx->is_stream_mode)
 		ret = vdec_vbuf_write(vdec, buf, size);
 	else {
-		/*checked whether the resolution chagnes.*/
-		u8 *p = buf;
-		u32 l = size;
+		/*checked whether the resolution changes.*/
+		if ((*res_chg = monitor_res_change(inst, buf, size)))
+			return 0;
 
-		skip_aud_data(&p, &l);
-
-		nalu_pos = find_start_code(p, l);
-		if (nalu_pos < 0)
-			return -1;
-
-		nal_type = NAL_TYPE(p[nalu_pos]);
-		if (nal_type == NAL_H264_SPS) {
-			stream_parse(inst, p, l);
-			if (inst->vsi->cur_pic.coded_width !=
-				inst->vsi->pic.coded_width ||
-				inst->vsi->cur_pic.coded_height !=
-				inst->vsi->pic.coded_height) {
-				inst->vsi->cur_pic = inst->vsi->pic;
-				*res_chg = true;
-				return 0;
-			}
-		}
 		ret = vdec_write_nalu(inst, buf, size, timestamp);
 	}
 
@@ -817,12 +794,80 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 	return ret;
 }
 
+static void set_param_write_sync(struct vdec_h264_inst *inst)
+{
+	complete(&inst->comp);
+}
+
+static void set_param_pic_info(struct vdec_h264_inst *inst,
+	struct aml_vdec_pic_infos *info)
+{
+	struct vdec_pic_info *pic = &inst->vsi->pic;
+	struct vdec_h264_dec_info *dec = &inst->vsi->dec;
+	struct v4l2_rect *rect = &inst->vsi->crop;
+
+	/* fill visible area size that be used for EGL. */
+	pic->visible_width	= info->visible_width;
+	pic->visible_height	= info->visible_height;
+
+	/* calc visible ares. */
+	rect->left		= 0;
+	rect->top		= 0;
+	rect->width		= pic->visible_width;
+	rect->height		= pic->visible_height;
+
+	/* config canvas size that be used for decoder. */
+	pic->coded_width	= info->coded_width;
+	pic->coded_height	= info->coded_height;
+	pic->y_len_sz		= pic->coded_width * pic->coded_height;
+	pic->c_len_sz		= pic->y_len_sz >> 1;
+
+	dec->dpb_sz = info->dpb_size;
+
+	/*wake up*/
+	complete(&inst->comp);
+
+	pr_info("Parse from ucode, crop(%d x %d), coded(%d x %d) dpb: %d\n",
+		info->visible_width, info->visible_height,
+		info->coded_width, info->coded_height,
+		info->dpb_size);
+}
+
+static int vdec_h264_set_param(unsigned long h_vdec,
+	enum vdec_set_param_type type, void *in)
+{
+	int ret = 0;
+	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
+
+	if (!inst) {
+		pr_err("the h264 inst of dec is invalid.\n");
+		return -1;
+	}
+
+	switch (type) {
+	case SET_PARAM_WRITE_FRAME_SYNC:
+		set_param_write_sync(inst);
+		break;
+
+	case SET_PARAM_PIC_INFO:
+		set_param_pic_info(inst, in);
+		break;
+
+	default:
+		aml_vcodec_err(inst, "invalid set parameter type=%d", type);
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 static struct vdec_common_if vdec_h264_if = {
-	vdec_h264_init,
-	vdec_h264_probe,
-	vdec_h264_decode,
-	vdec_h264_get_param,
-	vdec_h264_deinit,
+	.init		= vdec_h264_init,
+	.probe		= vdec_h264_probe,
+	.decode		= vdec_h264_decode,
+	.get_param	= vdec_h264_get_param,
+	.set_param	= vdec_h264_set_param,
+	.deinit		= vdec_h264_deinit,
 };
 
 struct vdec_common_if *get_h264_dec_comm_if(void);
