@@ -276,11 +276,12 @@ static u32 again_threshold;
  *	4, (1/2):(1/2) ratio;
  *	8, (1/8):(1/8) ratio;
  *	0x10, double write only
- *	0x100, if > 1080p,use mode 4,else use mode 1;
- *	0x200, if > 1080p,use mode 2,else use mode 1;
- *	0x300, if > 720p, use mode 4, else use mode 1;
+ *	0x100, if > 1080p, use mode 4, else use mode 1;
+ *	0x200, if > 1080p, use mode 2, else use mode 1;
+ *	0x300, if > 720p,  use mode 4, else use mode 1;
+ *	0x2000,if > 2160p, use mode 4, else use mode 0;
  */
-static u32 double_write_mode;
+static u32 double_write_mode = 0x2000;
 static u32 without_display_mode;
 
 static u32 mv_buf_dynamic_alloc;
@@ -936,6 +937,12 @@ static int get_double_write_mode(struct AVS2Decoder_s *dec)
 		if (w * h > 1280 * 768)
 			dw = 0x4; /*1:2*/
 		break;
+	case 0x2000:
+		if (w > 3840 && h > 2176)
+			dw = 0x4; /*1:2*/
+		else
+			dw = 0x0; /*off*/
+		break;
 	default:
 		dw = valid_dw_mode;
 		break;
@@ -964,6 +971,12 @@ static int get_double_write_mode_init(struct AVS2Decoder_s *dec)
 	case 0x300:
 		if (w > 1280 && h > 768)
 			dw = 0x4; /*1:2*/
+		break;
+	case 0x2000:
+		if (w > 3840 && h > 2176)
+			dw = 0x4; /*1:2*/
+		else
+			dw = 0x0; /*off*/
 		break;
 	default:
 		dw = valid_dw_mode;
