@@ -276,8 +276,9 @@ static const char * const matrix_coeffs_names[] = {
  *	0x200, if > 1080p,use mode 2,else use mode 1;
  *	0x300, if > 720p, use mode 4, else use mode 1;
  *	0x1000,if > 1080p,use mode 3, else if > 960*540, use mode 4, else use mode 1;
+ *	0x2000,if > 2160p, use mode 4, else use mode 0;
  */
-static u32 double_write_mode;
+static u32 double_write_mode = 0x2000;
 
 /*#define DECOMP_HEADR_SURGENT*/
 
@@ -2472,6 +2473,12 @@ static int get_double_write_mode(struct hevc_state_s *hevc)
 			dw = 5;
 		else
 			dw = 1;
+		break;
+	case 0x2000:
+		if (w > 3840 && h > 2176)
+			dw = 0x4; /*1:2*/
+		else
+			dw = 0x0; /*off*/
 		break;
 	default:
 		dw = valid_dw_mode;
