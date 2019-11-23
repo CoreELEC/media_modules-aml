@@ -260,9 +260,10 @@ static u32 debug_mask = 0xffffffff;
  *	0x100, if > 1080p,use mode 4,else use mode 1;
  *	0x200, if > 1080p,use mode 2,else use mode 1;
  *	0x300, if > 720p, use mode 4, else use mode 1;
+ *	0x2000,if > 2160p, use mode 4, else use mode 0;
  *	0x10000, double write p010 enable
  */
-static u32 double_write_mode;
+static u32 double_write_mode = 0x2000;
 
 /* triple_write_mode:
  * 0, no triple write;
@@ -1075,6 +1076,12 @@ static int get_double_write_mode(struct AV1HW_s *hw)
 		if (w * h > 1280 * 768)
 			dw = 0x4; /*1:2*/
 		break;
+	case 0x2000:
+		if (w > 3840 && h > 2176)
+			dw = 0x4; /*1:2*/
+		else
+			dw = 0x0; /*off*/
+		break;
 	default:
 		dw = valid_dw_mode;
 		break;
@@ -1141,6 +1148,12 @@ static int get_double_write_mode_init(struct AV1HW_s *hw)
 	case 0x300:
 		if (w > 1280 && h > 768)
 			dw = 0x4; /*1:2*/
+		break;
+	case 0x2000:
+		if (w > 3840 && h > 2176)
+			dw = 0x4; /*1:2*/
+		else
+			dw = 0x0; /*off*/
 		break;
 	default:
 		dw = valid_dw_mode;
