@@ -33,7 +33,9 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/video_sink/ionvideo_ext.h>
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 #include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
+#endif
 #include <linux/amlogic/media/vfm/vfm_ext.h>
 /*for VDEC_DEBUG_SUPPORT*/
 #include <linux/time.h>
@@ -2217,9 +2219,13 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				"vdec-map-%d", vdec->id);
 		} else if (p->frame_base_video_path ==
 				FRAME_BASE_PATH_DI_V4LVIDEO) {
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 			r = v4lvideo_assign_map(&vdec->vf_receiver_name,
 					&vdec->vf_receiver_inst);
-			if (r < 0) {
+#else
+			r = -1;
+#endif
+			 if (r < 0) {
 				pr_err("V4lVideo frame receiver allocation failed.\n");
 				mutex_lock(&vdec_mutex);
 				inited_vcodec_num--;
