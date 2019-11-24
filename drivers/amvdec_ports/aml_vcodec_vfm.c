@@ -214,6 +214,8 @@ struct vframe_s *get_video_frame(struct vcodec_vfm_s *vfm)
 
 int vcodec_vfm_init(struct vcodec_vfm_s *vfm)
 {
+	int ret;
+
 	snprintf(vfm->recv_name, VF_NAME_SIZE, "%s-%d",
 		RECEIVER_NAME, vfm->ctx->id);
 	snprintf(vfm->prov_name, VF_NAME_SIZE, "%s-%d",
@@ -222,13 +224,16 @@ int vcodec_vfm_init(struct vcodec_vfm_s *vfm)
 	vfm->ada_ctx->recv_name = vfm->recv_name;
 
 	vf_receiver_init(&vfm->vf_recv, vfm->recv_name, &vf_receiver, vfm);
-	vf_reg_receiver(&vfm->vf_recv);
+	ret = vf_reg_receiver(&vfm->vf_recv);
 
-	return 0;
+	vfm->vfm_initialized = ret ? false : true;
+
+	return ret;
 }
 
 void vcodec_vfm_release(struct vcodec_vfm_s *vfm)
 {
-	vf_unreg_receiver(&vfm->vf_recv);
+	if (vfm->vfm_initialized)
+		vf_unreg_receiver(&vfm->vf_recv);
 }
 

@@ -8997,18 +8997,12 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 {
 	struct hevc_state_s *hw = (struct hevc_state_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	struct vframe_s *vf = NULL;
+	struct vframe_s *vf = &hw->vframe_dummy;
+	struct vdec_v4l2_buffer *fb = NULL;
 	int index = INVALID_IDX;
 	ulong expires;
 
 	if (hw->is_used_v4l && hw->eos) {
-		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
-			hevc_print(hw, 0,
-				"%s fatal error, no available buffer slot.\n",
-				__func__);
-			return -1;
-		}
-
 		expires = jiffies + msecs_to_jiffies(2000);
 		while (INVALID_IDX == (index = get_free_buf_idx(hw))) {
 			if (time_after(jiffies, expires))
@@ -9016,15 +9010,17 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		}
 
 		if (index == INVALID_IDX) {
-			pr_err("[%d] EOS get free buff fail.\n", ctx->id);
-			return -1;
+			if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb) < 0) {
+				pr_err("[%d] EOS get free buff fail.\n", ctx->id);
+				return -1;
+			}
 		}
 
 		vf->type		|= VIDTYPE_V4L_EOS;
 		vf->timestamp		= ULONG_MAX;
-		vf->v4l_mem_handle	= hw->m_BUF[index].v4l_ref_buf_addr;
 		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
-
+		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
+					hw->m_BUF[index].v4l_ref_buf_addr;
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -10042,18 +10038,18 @@ force_output:
 					(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 
 				if (ctx->param_sets_from_ucode && !hevc->v4l_params_parsed) {
-					struct aml_vdec_pic_infos info;
+					struct aml_vdec_ps_infos ps;
 
 					hevc->frame_width	= hevc->param.p.pic_width_in_luma_samples;
 					hevc->frame_height	= hevc->param.p.pic_height_in_luma_samples;
-					info.visible_width	= hevc->frame_width;
-					info.visible_height	= hevc->frame_height;
-					info.coded_width	= ALIGN(hevc->frame_width, 32);
-					info.coded_height	= ALIGN(hevc->frame_height, 32);
-					info.dpb_size		= get_work_pic_num(hevc);
+					ps.visible_width	= hevc->frame_width;
+					ps.visible_height	= hevc->frame_height;
+					ps.coded_width		= ALIGN(hevc->frame_width, 32);
+					ps.coded_height		= ALIGN(hevc->frame_height, 32);
+					ps.dpb_size		= get_work_pic_num(hevc);
 					hevc->v4l_params_parsed	= true;
 					/*notice the v4l2 codec.*/
-					vdec_v4l_set_pic_infos(ctx, &info);
+					vdec_v4l_set_ps_infos(ctx, &ps);
 				}
 			}
 

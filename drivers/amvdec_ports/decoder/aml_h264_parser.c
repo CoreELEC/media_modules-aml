@@ -495,6 +495,7 @@ static int aml_h264_parser_sps(struct get_bits_context *gb, struct h264_SPS_t *s
 		goto out;
 	}
 
+#if 0
 	/* if the maximum delay is not stored in the SPS, derive it based on the level */
 	if (!sps->bitstream_restriction_flag && sps->ref_frame_count) {
 		sps->num_reorder_frames = MAX_DELAYED_PIC_COUNT - 1;
@@ -506,6 +507,28 @@ static int aml_h264_parser_sps(struct get_bits_context *gb, struct h264_SPS_t *s
 				break;
 			}
 		}
+	}
+#endif
+
+	sps->num_reorder_frames = MAX_DELAYED_PIC_COUNT - 1;
+	for (i = 0; i < ARRAY_SIZE(level_max_dpb_mbs); i++) {
+		if (level_max_dpb_mbs[i][0] == sps->level_idc) {
+			sps->num_reorder_frames =
+				MIN(level_max_dpb_mbs[i][1] / (sps->mb_width * sps->mb_height),
+					sps->num_reorder_frames);
+			sps->num_reorder_frames += 1;
+			if (sps->max_dec_frame_buffering > sps->num_reorder_frames)
+				sps->num_reorder_frames = sps->max_dec_frame_buffering;
+			break;
+		}
+	}
+
+	if ((sps->bitstream_restriction_flag) &&
+		(sps->max_dec_frame_buffering <
+		sps->num_reorder_frames)) {
+		sps->num_reorder_frames = sps->max_dec_frame_buffering;
+		pr_info("set reorder_pic_num to %d\n",
+			sps->num_reorder_frames);
 	}
 
 	if (!sps->sar.den)

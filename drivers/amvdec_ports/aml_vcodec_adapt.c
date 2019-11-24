@@ -695,7 +695,7 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	/* dump to file */
 	dump_write(buf, count);
 #endif
-	aml_v4l2_debug(4, "[%d] write frames, vbuf: %p, size: %u, ret: %d, crc: %x",
+	aml_v4l2_debug(3, "[%d] write frames, vbuf: %p, size: %u, ret: %d, crc: %x",
 		ada_ctx->ctx->id, buf, count, ret, crc32_le(0, buf, count));
 
 	return ret;

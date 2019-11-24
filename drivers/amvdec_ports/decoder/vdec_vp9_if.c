@@ -178,66 +178,64 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 {
 	struct aml_vcodec_ctx *ctx = inst->ctx;
 
-	if (!ctx->config.length) {
-		ctx->config.type = V4L2_CONFIG_PARM_DECODE;
-		ctx->config.parm.dec.double_write_mode = 16;
-		inst->parms = ctx->config.parm.dec;
-
-		ctx->config.length =
-			vdec_config_default_parms(ctx->config.buf);
-	} else {
+	if (ctx->config.parm.dec.parms_status &
+		V4L2_CONFIG_PARM_DECODE_CFGINFO) {
 		u8 *pbuf = ctx->config.buf;
 
-		inst->parms = ctx->config.parm.dec;
 		pbuf += sprintf(pbuf, "parm_v4l_codec_enable:1;");
 		pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:%d;",
-			inst->parms.buffer_margin);
+			ctx->config.parm.dec.cfg.ref_buf_margin);
 		pbuf += sprintf(pbuf, "vp9_double_write_mode:%d;",
-			inst->parms.double_write_mode);
+			ctx->config.parm.dec.cfg.double_write_mode);
 		pbuf += sprintf(pbuf, "vp9_buf_width:%d;",
-			inst->parms.buffer_width);
+			ctx->config.parm.dec.cfg.init_width);
 		pbuf += sprintf(pbuf, "vp9_buf_height:%d;",
-			inst->parms.buffer_height);
-		pbuf += sprintf(pbuf, "save_buffer_mode:%d;",
-			inst->parms.buffer_mode);
+			ctx->config.parm.dec.cfg.init_height);
+		pbuf += sprintf(pbuf, "save_buffer_mode:0;");
 		pbuf += sprintf(pbuf, "no_head:0;");
-
-		if ((ctx->config.parm.dec.dec_parms_status &
-			V4L2_CONFIG_PARM_DECODE_HDRINFO) &&
-			inst->parms.hdr.color_parms.present_flag) {
-			pbuf += sprintf(pbuf, "mG.x:%d;",
-				inst->parms.hdr.color_parms.primaries[0][0]);
-			pbuf += sprintf(pbuf, "mG.y:%d;",
-				inst->parms.hdr.color_parms.primaries[0][1]);
-			pbuf += sprintf(pbuf, "mB.x:%d;",
-				inst->parms.hdr.color_parms.primaries[1][0]);
-			pbuf += sprintf(pbuf, "mB.y:%d;",
-				inst->parms.hdr.color_parms.primaries[1][1]);
-			pbuf += sprintf(pbuf, "mR.x:%d;",
-				inst->parms.hdr.color_parms.primaries[2][0]);
-			pbuf += sprintf(pbuf, "mR.y:%d;",
-				inst->parms.hdr.color_parms.primaries[2][1]);
-			pbuf += sprintf(pbuf, "mW.x:%d;",
-				inst->parms.hdr.color_parms.white_point[0]);
-			pbuf += sprintf(pbuf, "mW.y:%d;",
-				inst->parms.hdr.color_parms.white_point[1]);
-			pbuf += sprintf(pbuf, "mMaxDL:%d;",
-				inst->parms.hdr.color_parms.luminance[0] / 1000);
-			pbuf += sprintf(pbuf, "mMinDL:%d;",
-				inst->parms.hdr.color_parms.luminance[1]);
-			pbuf += sprintf(pbuf, "mMaxCLL:%d;",
-				inst->parms.hdr.color_parms.content_light_level.max_content);
-			pbuf += sprintf(pbuf, "mMaxFALL:%d;",
-				inst->parms.hdr.color_parms.content_light_level.max_pic_average);
-		}
-
 		ctx->config.length = pbuf - ctx->config.buf;
+	} else {
+		ctx->config.parm.dec.cfg.double_write_mode = 16;
+		ctx->config.length = vdec_config_default_parms(ctx->config.buf);
 	}
 
-	inst->vdec.config = ctx->config;
+	if ((ctx->config.parm.dec.parms_status &
+		V4L2_CONFIG_PARM_DECODE_HDRINFO) &&
+		inst->parms.hdr.color_parms.present_flag) {
+		u8 *pbuf = ctx->config.buf + ctx->config.length;
 
-	inst->parms.dec_parms_status |=
-		V4L2_CONFIG_PARM_DECODE_COMMON;
+		pbuf += sprintf(pbuf, "mG.x:%d;",
+			ctx->config.parm.dec.hdr.color_parms.primaries[0][0]);
+		pbuf += sprintf(pbuf, "mG.y:%d;",
+			ctx->config.parm.dec.hdr.color_parms.primaries[0][1]);
+		pbuf += sprintf(pbuf, "mB.x:%d;",
+			ctx->config.parm.dec.hdr.color_parms.primaries[1][0]);
+		pbuf += sprintf(pbuf, "mB.y:%d;",
+			ctx->config.parm.dec.hdr.color_parms.primaries[1][1]);
+		pbuf += sprintf(pbuf, "mR.x:%d;",
+			ctx->config.parm.dec.hdr.color_parms.primaries[2][0]);
+		pbuf += sprintf(pbuf, "mR.y:%d;",
+			ctx->config.parm.dec.hdr.color_parms.primaries[2][1]);
+		pbuf += sprintf(pbuf, "mW.x:%d;",
+			ctx->config.parm.dec.hdr.color_parms.white_point[0]);
+		pbuf += sprintf(pbuf, "mW.y:%d;",
+			ctx->config.parm.dec.hdr.color_parms.white_point[1]);
+		pbuf += sprintf(pbuf, "mMaxDL:%d;",
+			ctx->config.parm.dec.hdr.color_parms.luminance[0] / 1000);
+		pbuf += sprintf(pbuf, "mMinDL:%d;",
+			ctx->config.parm.dec.hdr.color_parms.luminance[1]);
+		pbuf += sprintf(pbuf, "mMaxCLL:%d;",
+			ctx->config.parm.dec.hdr.color_parms.content_light_level.max_content);
+		pbuf += sprintf(pbuf, "mMaxFALL:%d;",
+			ctx->config.parm.dec.hdr.color_parms.content_light_level.max_pic_average);
+		ctx->config.length	= pbuf - ctx->config.buf;
+		inst->parms.hdr		= ctx->config.parm.dec.hdr;
+		inst->parms.parms_status |= V4L2_CONFIG_PARM_DECODE_HDRINFO;
+	}
+
+	inst->vdec.config	= ctx->config;
+	inst->parms.cfg		= ctx->config.parm.dec.cfg;
+	inst->parms.parms_status |= V4L2_CONFIG_PARM_DECODE_CFGINFO;
 }
 
 static int vdec_vp9_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
@@ -267,20 +265,24 @@ static int vdec_vp9_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	/* init vfm */
 	inst->vfm.ctx		= ctx;
 	inst->vfm.ada_ctx	= &inst->vdec;
-	vcodec_vfm_init(&inst->vfm);
+	ret = vcodec_vfm_init(&inst->vfm);
+	if (ret) {
+		pr_err("%s, init vfm failed.\n", __func__);
+		goto err;
+	}
 
 	/* probe info from the stream */
 	inst->vsi = kzalloc(sizeof(struct vdec_vp9_vsi), GFP_KERNEL);
 	if (!inst->vsi) {
 		ret = -ENOMEM;
-		goto error_free_inst;
+		goto err;
 	}
 
 	/* alloc the header buffer to be used cache sps or spp etc.*/
 	inst->vsi->header_buf = kzalloc(HEADER_BUFFER_SIZE, GFP_KERNEL);
 	if (!inst->vsi) {
 		ret = -ENOMEM;
-		goto error_free_vsi;
+		goto err;
 	}
 
 	init_completion(&inst->comp);
@@ -294,17 +296,21 @@ static int vdec_vp9_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	ret = video_decoder_init(&inst->vdec);
 	if (ret) {
 		aml_vcodec_err(inst, "vdec_vp9 init err=%d", ret);
-		goto error_free_inst;
+		goto err;
 	}
 
 	//dump_init();
 
 	return 0;
-
-error_free_vsi:
-	kfree(inst->vsi);
-error_free_inst:
-	kfree(inst);
+err:
+	if (inst)
+		vcodec_vfm_release(&inst->vfm);
+	if (inst && inst->vsi && inst->vsi->header_buf)
+		kfree(inst->vsi->header_buf);
+	if (inst && inst->vsi)
+		kfree(inst->vsi);
+	if (inst)
+		kfree(inst);
 	*h_vdec = 0;
 
 	return ret;
@@ -320,9 +326,9 @@ static int refer_buffer_num(int level_idc, int poc_cnt,
 
 static int vdec_get_dw_mode(struct vdec_vp9_inst *inst, int dw_mode)
 {
-	u32 valid_dw_mode = inst->parms.double_write_mode;
-	int w = inst->parms.buffer_width;
-	int h = inst->parms.buffer_height;
+	u32 valid_dw_mode = inst->parms.cfg.double_write_mode;
+	int w = inst->parms.cfg.init_width;
+	int h = inst->parms.cfg.init_height;
 	u32 dw = 0x1; /*1:1*/
 
 	switch (valid_dw_mode) {
@@ -379,8 +385,8 @@ static void fill_vdec_params(struct vdec_vp9_inst *inst,
 	struct vdec_pic_info *pic = &inst->vsi->pic;
 	struct vdec_vp9_dec_info *dec = &inst->vsi->dec;
 	struct v4l2_rect *rect = &inst->vsi->crop;
-	int dw = inst->parms.double_write_mode;
-	int margin = inst->parms.buffer_margin;
+	int dw = inst->parms.cfg.double_write_mode;
+	int margin = inst->parms.cfg.ref_buf_margin;
 
 	/* fill visible area size that be used for EGL. */
 	pic->visible_width	= vdec_pic_scale(inst, vp9_ctx->render_width, dw);
@@ -402,12 +408,15 @@ static void fill_vdec_params(struct vdec_vp9_inst *inst,
 	/* calc DPB size */
 	dec->dpb_sz = 5 + margin;//refer_buffer_num(sps->level_idc, poc_cnt, mb_w, mb_h);
 
-	inst->parms.dec_parms_status |=
-		V4L2_CONFIG_PARM_DECODE_PICINFO;
+	inst->parms.ps.visible_width	= pic->visible_width;
+	inst->parms.ps.visible_height	= pic->visible_height;
+	inst->parms.ps.coded_width	= pic->coded_width;
+	inst->parms.ps.coded_height	= pic->coded_height;
+	inst->parms.ps.dpb_size		= dec->dpb_sz;
+	inst->parms.parms_status	|= V4L2_CONFIG_PARM_DECODE_PSINFO;
 
 	aml_vcodec_debug(inst, "[%d] The stream infos, dw: %d, coded:(%d x %d), visible:(%d x %d), DPB: %d, margin: %d\n",
-		inst->ctx->id, inst->parms.double_write_mode,
-		pic->coded_width, pic->coded_height,
+		inst->ctx->id, dw, pic->coded_width, pic->coded_height,
 		pic->visible_width, pic->visible_height,
 		dec->dpb_sz - margin, margin);
 }
@@ -719,9 +728,18 @@ static int vdec_vp9_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
  static void get_param_config_info(struct vdec_vp9_inst *inst,
 	struct aml_dec_params *parms)
  {
-	*parms = inst->parms;
+	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_CFGINFO)
+		 parms->cfg = inst->parms.cfg;
+	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_PSINFO)
+		 parms->ps = inst->parms.ps;
+	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_HDRINFO)
+		 parms->hdr = inst->parms.hdr;
+	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_CNTINFO)
+		 parms->cnt = inst->parms.cnt;
 
-	aml_vcodec_debug(inst, "parms status: %u", parms->dec_parms_status);
+	 parms->parms_status |= inst->parms.parms_status;
+
+	 aml_vcodec_debug(inst, "parms status: %u", parms->parms_status);
  }
 
 static int vdec_vp9_get_param(unsigned long h_vdec,
@@ -772,16 +790,16 @@ static void set_param_write_sync(struct vdec_vp9_inst *inst)
 	complete(&inst->comp);
 }
 
-static void set_param_pic_info(struct vdec_vp9_inst *inst,
-	struct aml_vdec_pic_infos *info)
+static void set_param_ps_info(struct vdec_vp9_inst *inst,
+	struct aml_vdec_ps_infos *ps)
 {
 	struct vdec_pic_info *pic = &inst->vsi->pic;
 	struct vdec_vp9_dec_info *dec = &inst->vsi->dec;
 	struct v4l2_rect *rect = &inst->vsi->crop;
 
 	/* fill visible area size that be used for EGL. */
-	pic->visible_width	= info->visible_width;
-	pic->visible_height	= info->visible_height;
+	pic->visible_width	= ps->visible_width;
+	pic->visible_height	= ps->visible_height;
 
 	/* calc visible ares. */
 	rect->left		= 0;
@@ -790,35 +808,46 @@ static void set_param_pic_info(struct vdec_vp9_inst *inst,
 	rect->height		= pic->visible_height;
 
 	/* config canvas size that be used for decoder. */
-	pic->coded_width	= info->coded_width;
-	pic->coded_height	= info->coded_height;
+	pic->coded_width	= ps->coded_width;
+	pic->coded_height	= ps->coded_height;
 
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	/* calc DPB size */
-	dec->dpb_sz = 5;
+	dec->dpb_sz		= 5;
 
-	inst->parms.dec_parms_status |=
-		V4L2_CONFIG_PARM_DECODE_PICINFO;
+	inst->parms.ps 	= *ps;
+	inst->parms.parms_status |=
+		V4L2_CONFIG_PARM_DECODE_PSINFO;
 
 	/*wake up*/
 	complete(&inst->comp);
 
 	pr_info("Parse from ucode, crop(%d x %d), coded(%d x %d) dpb: %d\n",
-		info->visible_width, info->visible_height,
-		info->coded_width, info->coded_height,
-		info->dpb_size);
+		ps->visible_width, ps->visible_height,
+		ps->coded_width, ps->coded_height,
+		ps->dpb_size);
 }
 
 static void set_param_hdr_info(struct vdec_vp9_inst *inst,
 	struct aml_vdec_hdr_infos *hdr)
 {
-	inst->parms.hdr = *hdr;
-	inst->parms.dec_parms_status |=
-		V4L2_CONFIG_PARM_DECODE_HDRINFO;
+	if ((inst->parms.parms_status &
+		V4L2_CONFIG_PARM_DECODE_HDRINFO)) {
+		inst->parms.hdr = *hdr;
+		inst->parms.parms_status |=
+			V4L2_CONFIG_PARM_DECODE_HDRINFO;
+		aml_vdec_dispatch_event(inst->ctx,
+			V4L2_EVENT_SRC_CH_HDRINFO);
+		pr_info("VP9 set HDR infos\n");
+	}
+}
 
-	//pr_info("VP9 set HDR infos\n");
+static void set_param_post_event(struct vdec_vp9_inst *inst, u32 *event)
+{
+		aml_vdec_dispatch_event(inst->ctx, *event);
+		pr_info("VP9 post event: %d\n", *event);
 }
 
 static int vdec_vp9_set_param(unsigned long h_vdec,
@@ -837,12 +866,16 @@ static int vdec_vp9_set_param(unsigned long h_vdec,
 		set_param_write_sync(inst);
 		break;
 
-	case SET_PARAM_PIC_INFO:
-		set_param_pic_info(inst, in);
+	case SET_PARAM_PS_INFO:
+		set_param_ps_info(inst, in);
 		break;
 
 	case SET_PARAM_HDR_INFO:
 		set_param_hdr_info(inst, in);
+		break;
+
+	case SET_PARAM_POST_EVENT:
+		set_param_post_event(inst, in);
 		break;
 	default:
 		aml_vcodec_err(inst, "invalid set parameter type=%d", type);

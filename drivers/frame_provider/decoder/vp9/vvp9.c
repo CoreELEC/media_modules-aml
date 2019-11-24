@@ -1189,6 +1189,7 @@ struct VP9Decoder_s {
 	struct vframe_qos_s vframe_qos;
 	u32 mem_map_mode;
 	u32 dynamic_buf_num_margin;
+	struct vframe_s vframe_dummy;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -6816,6 +6817,9 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)op_arg;
 	uint8_t index = vf->index & 0xff;
 
+	if (vf == (&pbi->vframe_dummy))
+		return;
+
 	kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
 	pbi->vf_put_count++;
 	if (index < pbi->used_buf_num) {
@@ -7256,18 +7260,12 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 {
 	struct VP9Decoder_s *hw = (struct VP9Decoder_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	struct vframe_s *vf = NULL;
+	struct vframe_s *vf = &hw->vframe_dummy;
+	struct vdec_v4l2_buffer *fb = NULL;
 	int index = INVALID_IDX;
 	ulong expires;
 
 	if (hw->is_used_v4l && hw->eos) {
-		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
-			vp9_print(hw, 0,
-				"%s fatal error, no available buffer slot.\n",
-				__func__);
-			return -1;
-		}
-
 		expires = jiffies + msecs_to_jiffies(2000);
 		while (INVALID_IDX == (index = get_free_fb(hw))) {
 			if (time_after(jiffies, expires))
@@ -7275,14 +7273,17 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		}
 
 		if (index == INVALID_IDX) {
-			pr_err("[%d] EOS get free buff fail.\n", ctx->id);
-			return -1;
+			if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb) < 0) {
+				pr_err("[%d] EOS get free buff fail.\n", ctx->id);
+				return -1;
+			}
 		}
 
 		vf->type		|= VIDTYPE_V4L_EOS;
 		vf->timestamp		= ULONG_MAX;
-		vf->v4l_mem_handle	= hw->m_BUF[index].v4l_ref_buf_addr;
 		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
+		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
+					hw->m_BUF[index].v4l_ref_buf_addr;
 
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		vf_notify_receiver(vdec->vf_provider_name,
@@ -8297,15 +8298,15 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		pbi->frame_width = vp9_param.p.width;
 		pbi->frame_height = vp9_param.p.height;
 		if (ctx->param_sets_from_ucode && !pbi->v4l_params_parsed) {
-			struct aml_vdec_pic_infos info;
+			struct aml_vdec_ps_infos ps;
 
-			info.visible_width	= pbi->frame_width;
-			info.visible_height	= pbi->frame_height;
-			info.coded_width	= ALIGN(pbi->frame_width, 32);
-			info.coded_height	= ALIGN(pbi->frame_height, 32);
-			info.dpb_size		= pbi->used_buf_num;
+			ps.visible_width	= pbi->frame_width;
+			ps.visible_height	= pbi->frame_height;
+			ps.coded_width		= ALIGN(pbi->frame_width, 32);
+			ps.coded_height		= ALIGN(pbi->frame_height, 32);
+			ps.dpb_size		= pbi->used_buf_num;
 			pbi->v4l_params_parsed	= true;
-			vdec_v4l_set_pic_infos(ctx, &info);
+			vdec_v4l_set_ps_infos(ctx, &ps);
 		}
 	}
 

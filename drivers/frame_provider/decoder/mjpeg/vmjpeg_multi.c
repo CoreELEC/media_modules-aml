@@ -292,15 +292,15 @@ static irqreturn_t vmjpeg_isr(struct vdec_s *vdec, int irq)
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
-			struct aml_vdec_pic_infos info;
+			struct aml_vdec_ps_infos ps;
 
-			info.visible_width	= hw->frame_width;
-			info.visible_height	= hw->frame_height;
-			info.coded_width	= ALIGN(hw->frame_width, 64);
-			info.coded_height	= ALIGN(hw->frame_height, 64);
-			info.dpb_size		= MAX_BMMU_BUFFER_NUM - 1;
+			ps.visible_width	= hw->frame_width;
+			ps.visible_height	= hw->frame_height;
+			ps.coded_width		= ALIGN(hw->frame_width, 64);
+			ps.coded_height		= ALIGN(hw->frame_height, 64);
+			ps.dpb_size		= MAX_BMMU_BUFFER_NUM - 1;
 			hw->v4l_params_parsed	= true;
-			vdec_v4l_set_pic_infos(ctx, &info);
+			vdec_v4l_set_ps_infos(ctx, &ps);
 		}
 
 		if (!ctx->v4l_codec_ready)

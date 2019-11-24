@@ -2748,18 +2748,12 @@ int notify_v4l_eos(struct vdec_s *vdec)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	struct vframe_s *vf = NULL;
+	struct vframe_s *vf = &hw->vframe_dummy;
+	struct vdec_v4l2_buffer *fb = NULL;
 	int index = INVALID_IDX;
 	ulong expires;
 
 	if (hw->is_used_v4l && hw->eos) {
-		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-				"%s fatal error, no available buffer slot.\n",
-				__func__);
-			return -1;
-		}
-
 		expires = jiffies + msecs_to_jiffies(2000);
 		while (INVALID_IDX == (index = get_free_buf_idx(vdec))) {
 			if (time_after(jiffies, expires))
@@ -2767,14 +2761,17 @@ int notify_v4l_eos(struct vdec_s *vdec)
 		}
 
 		if (index == INVALID_IDX) {
-			pr_err("[%d] EOS get free buff fail.\n", ctx->id);
-			return -1;
+			if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb) < 0) {
+				pr_err("[%d] EOS get free buff fail.\n", ctx->id);
+				return -1;
+			}
 		}
 
 		vf->type		|= VIDTYPE_V4L_EOS;
 		vf->timestamp		= ULONG_MAX;
-		vf->v4l_mem_handle	= hw->buffer_spec[index].cma_alloc_addr;
 		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
+		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
+					hw->buffer_spec[index].cma_alloc_addr;
 
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
@@ -7836,15 +7833,15 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 			if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
-				struct aml_vdec_pic_infos info;
+				struct aml_vdec_ps_infos ps;
 
-				info.visible_width	= hw->frame_width;
-				info.visible_height	= hw->frame_height;
-				info.coded_width	= ALIGN(hw->frame_width, 64);
-				info.coded_height	= ALIGN(hw->frame_height, 64);
-				info.dpb_size		= hw->dpb.mDPB.size;
+				ps.visible_width	= hw->frame_width;
+				ps.visible_height	= hw->frame_height;
+				ps.coded_width		= ALIGN(hw->frame_width, 64);
+				ps.coded_height		= ALIGN(hw->frame_height, 64);
+				ps.dpb_size		= hw->dpb.mDPB.size;
 				hw->v4l_params_parsed	= true;
-				vdec_v4l_set_pic_infos(ctx, &info);
+				vdec_v4l_set_ps_infos(ctx, &ps);
 			}
 		}
 
@@ -8204,20 +8201,20 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			get_used_buf_count(hw) >=
 			run_ready_max_buf_num)
 			ret = 0;
-
-		if (hw->is_used_v4l) {
-			struct aml_vcodec_ctx *ctx =
-				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-			if (ctx->param_sets_from_ucode &&
-				!ctx->v4l_codec_ready &&
-				hw->v4l_params_parsed) {
-				ret = 0; /*the params has parsed.*/
-			} else if (!ctx->v4l_codec_dpb_ready)
-				ret = 0;
-		}
 	}
 #endif
+	if (hw->is_used_v4l) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
+		if (ctx->param_sets_from_ucode &&
+			!ctx->v4l_codec_ready &&
+			hw->v4l_params_parsed) {
+			ret = 0; /*the params has parsed.*/
+		} else if (!ctx->v4l_codec_dpb_ready)
+			ret = 0;
+	}
+
 	if (ret)
 		not_run_ready[DECODE_ID(hw)] = 0;
 	else

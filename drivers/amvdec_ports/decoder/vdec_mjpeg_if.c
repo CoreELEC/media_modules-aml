@@ -451,8 +451,8 @@ static int vdec_mjpeg_get_param(unsigned long h_vdec,
 	return ret;
 }
 
-static void set_param_pic_info(struct vdec_mjpeg_inst *inst,
-	struct aml_vdec_pic_infos *info)
+static void set_param_ps_info(struct vdec_mjpeg_inst *inst,
+	struct aml_vdec_ps_infos *ps)
 {
 	pr_info("---%s, %d\n", __func__, __LINE__);
 }
@@ -469,8 +469,8 @@ static int vdec_mjpeg_set_param(unsigned long h_vdec,
 	}
 
 	switch (type) {
-	case SET_PARAM_PIC_INFO:
-		set_param_pic_info(inst, in);
+	case SET_PARAM_PS_INFO:
+		set_param_ps_info(inst, in);
 		break;
 
 	default:

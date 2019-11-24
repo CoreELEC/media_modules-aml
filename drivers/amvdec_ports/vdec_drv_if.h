@@ -73,12 +73,13 @@ enum vdec_get_param_type {
 };
 
 /*
- * SET_PARAM_PIC_INFO	       : set picture info, data parsed from ucode.
+ * SET_PARAM_PS_INFO	       : set picture parms, data parsed from ucode.
  */
 enum vdec_set_param_type {
 	SET_PARAM_WRITE_FRAME_SYNC,
-	SET_PARAM_PIC_INFO,
-	SET_PARAM_HDR_INFO
+	SET_PARAM_PS_INFO,
+	SET_PARAM_HDR_INFO,
+	SET_PARAM_POST_EVENT
 };
 
 /**

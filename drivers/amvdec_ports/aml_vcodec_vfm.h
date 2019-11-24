@@ -41,6 +41,7 @@ struct vcodec_vfm_s {
 	char prov_name[VF_NAME_SIZE];
 	struct vframe_provider_s vf_prov;
 	struct vframe_receiver_s vf_recv;
+	bool vfm_initialized;
 };
 
 int vcodec_vfm_init(struct vcodec_vfm_s *vfm);
