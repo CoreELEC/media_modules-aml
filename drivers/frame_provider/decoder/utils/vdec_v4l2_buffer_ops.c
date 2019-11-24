@@ -15,8 +15,8 @@ int vdec_v4l_get_buffer(struct aml_vcodec_ctx *ctx,
 }
 EXPORT_SYMBOL(vdec_v4l_get_buffer);
 
-int vdec_v4l_set_pic_infos(struct aml_vcodec_ctx *ctx,
-	struct aml_vdec_pic_infos *info)
+int vdec_v4l_set_ps_infos(struct aml_vcodec_ctx *ctx,
+	struct aml_vdec_ps_infos *ps)
 {
 	int ret = 0;
 
@@ -24,11 +24,11 @@ int vdec_v4l_set_pic_infos(struct aml_vcodec_ctx *ctx,
 		return -EIO;
 
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_PIC_INFO, info);
+		SET_PARAM_PS_INFO, ps);
 
 	return ret;
 }
-EXPORT_SYMBOL(vdec_v4l_set_pic_infos);
+EXPORT_SYMBOL(vdec_v4l_set_ps_infos);
 
 int vdec_v4l_set_hdr_infos(struct aml_vcodec_ctx *ctx,
 	struct aml_vdec_hdr_infos *hdr)
@@ -44,6 +44,20 @@ int vdec_v4l_set_hdr_infos(struct aml_vcodec_ctx *ctx,
 	return ret;
 }
 EXPORT_SYMBOL(vdec_v4l_set_hdr_infos);
+
+int vdec_v4l_post_evet(struct aml_vcodec_ctx *ctx, u32 event)
+{
+	int ret = 0;
+
+	if (ctx->drv_handle == 0)
+		return -EIO;
+
+	ret = ctx->dec_if->set_param(ctx->drv_handle,
+		SET_PARAM_POST_EVENT, &event);
+
+	return ret;
+}
+EXPORT_SYMBOL(vdec_v4l_post_evet);
 
 int vdec_v4l_write_frame_sync(struct aml_vcodec_ctx *ctx)
 {

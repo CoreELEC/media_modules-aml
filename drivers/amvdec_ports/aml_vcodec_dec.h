@@ -39,15 +39,6 @@
 
 #define AML_V4L2_SET_DECMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
 
-/* codec types of get/set parms. */
-#define V4L2_CONFIG_PARM_ENCODE		(0)
-#define V4L2_CONFIG_PARM_DECODE		(1)
-
-/* types of decode parms. */
-#define V4L2_CONFIG_PARM_DECODE_COMMON	(1 << 0)
-#define V4L2_CONFIG_PARM_DECODE_PICINFO	(1 << 1)
-#define V4L2_CONFIG_PARM_DECODE_HDRINFO	(1 << 2)
-
 /* for video composer metafd private_data struct */
 struct file_privdata {
 	struct vframe_s vf;
@@ -139,5 +130,6 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 void aml_thread_stop(struct aml_vcodec_ctx *ctx);
 void wait_vcodec_ending(struct aml_vcodec_ctx *ctx);
 void vdec_frame_buffer_release(void *data);
+void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes);
 
 #endif /* _AML_VCODEC_DEC_H_ */
