@@ -1067,6 +1067,8 @@ static int scale_frame(struct encode_wq_s *wq,
 	src_left = request->crop_left;
 	src_width = request->src_w - src_left - request->crop_right;
 	src_height = request->src_h - src_top - request->crop_bottom;
+	pr_err("request->fmt=%d, %d %d, canvas=%d\n", request->fmt, FMT_NV21, FMT_BGR888, canvas);
+
 	if (canvas) {
 		if ((request->fmt == FMT_NV21)
 			|| (request->fmt == FMT_NV12)) {
@@ -1075,6 +1077,9 @@ static int scale_frame(struct encode_wq_s *wq,
 		} else if (request->fmt == FMT_BGR888) {
 			src_canvas = src_addr & 0xffffff;
 			input_format = GE2D_FORMAT_S24_RGB; //Opposite color after ge2d
+		} else if (request->fmt == FMT_RGBA8888) {
+			src_canvas = src_addr & 0xffffff;
+			input_format = GE2D_FORMAT_S32_ABGR;
 		} else {
 			src_canvas = src_addr & 0xffffff;
 			input_format = GE2D_FORMAT_M24_YUV420;
@@ -1101,6 +1106,7 @@ static int scale_frame(struct encode_wq_s *wq,
 		} else if (request->fmt == FMT_BGR888) {
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
+
 			canvas_config(ENC_CANVAS_OFFSET + 9,
 				src_addr,
 				src_canvas_w * 3, src_h,
@@ -1108,6 +1114,18 @@ static int scale_frame(struct encode_wq_s *wq,
 				CANVAS_BLKMODE_LINEAR);
 			src_canvas = ENC_CANVAS_OFFSET + 9;
 			input_format = GE2D_FORMAT_S24_RGB; //Opposite color after ge2d
+		} else if (request->fmt == FMT_RGBA8888) {
+			src_canvas_w =
+				((request->src_w + 31) >> 5) << 5;
+			canvas_config(
+				ENC_CANVAS_OFFSET + 9,
+				src_addr,
+				src_canvas_w * 4,
+				src_h,
+				CANVAS_ADDR_NOWRAP,
+				CANVAS_BLKMODE_LINEAR);
+			src_canvas = ENC_CANVAS_OFFSET + 9;
+			input_format = GE2D_FORMAT_S32_ABGR; //Opposite color after ge2d
 		} else {
 			src_canvas_w =
 				((request->src_w + 63) >> 6) << 6;
@@ -1133,17 +1151,22 @@ static int scale_frame(struct encode_wq_s *wq,
 			input_format = GE2D_FORMAT_M24_YUV420;
 		}
 	}
+
 	dst_canvas_w =  ((dst_w + 31) >> 5) << 5;
+
 	canvas_config(ENC_CANVAS_OFFSET + 6,
 		wq->mem.scaler_buff_start_addr,
 		dst_canvas_w, dst_h,
 		CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
+
 	canvas_config(ENC_CANVAS_OFFSET + 7,
 		wq->mem.scaler_buff_start_addr + dst_canvas_w * dst_h,
 		dst_canvas_w, dst_h / 2,
 		CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
+
 	dst_canvas = ((ENC_CANVAS_OFFSET + 7) << 8) |
 		(ENC_CANVAS_OFFSET + 6);
+
 	ge2d_config->alu_const_color = 0;
 	ge2d_config->bitmask_en  = 0;
 	ge2d_config->src1_gb_alpha = 0;
@@ -1152,18 +1175,20 @@ static int scale_frame(struct encode_wq_s *wq,
 	canvas_read((src_canvas >> 8) & 0xff, &cs1);
 	canvas_read((src_canvas >> 16) & 0xff, &cs2);
 	ge2d_config->src_planes[0].addr = cs0.addr;
-	ge2d_config->src_planes[0].w = cs0.width;
-	ge2d_config->src_planes[0].h = cs0.height;
+	ge2d_config->src_planes[0].w = dst_w * 4;//cs0.width;
+	ge2d_config->src_planes[0].h = dst_h;//cs0.height;
 	ge2d_config->src_planes[1].addr = cs1.addr;
 	ge2d_config->src_planes[1].w = cs1.width;
 	ge2d_config->src_planes[1].h = cs1.height;
 	ge2d_config->src_planes[2].addr = cs2.addr;
 	ge2d_config->src_planes[2].w = cs2.width;
 	ge2d_config->src_planes[2].h = cs2.height;
+
 	canvas_read(dst_canvas & 0xff, &cd);
+
 	ge2d_config->dst_planes[0].addr = cd.addr;
-	ge2d_config->dst_planes[0].w = cd.width;
-	ge2d_config->dst_planes[0].h = cd.height;
+	ge2d_config->dst_planes[0].w = dst_w * 4;//cd.width;
+	ge2d_config->dst_planes[0].h = dst_h;//cd.height;
 	ge2d_config->src_key.key_enable = 0;
 	ge2d_config->src_key.key_mask = 0;
 	ge2d_config->src_key.key_mode = 0;
@@ -1177,8 +1202,8 @@ static int scale_frame(struct encode_wq_s *wq,
 	ge2d_config->src_para.color = 0xffffffff;
 	ge2d_config->src_para.top = 0;
 	ge2d_config->src_para.left = 0;
-	ge2d_config->src_para.width = request->src_w;
-	ge2d_config->src_para.height = request->src_h;
+	ge2d_config->src_para.width = dst_w;//request->src_w;
+	ge2d_config->src_para.height = dst_h;//request->src_h;
 	ge2d_config->src2_para.mem_type = CANVAS_TYPE_INVALID;
 	ge2d_config->dst_para.canvas_index = dst_canvas;
 	ge2d_config->dst_para.mem_type = CANVAS_TYPE_INVALID;
@@ -1200,6 +1225,7 @@ static int scale_frame(struct encode_wq_s *wq,
 	ge2d_config->dst_para.height = dst_h;
 	ge2d_config->dst_para.x_rev = 0;
 	ge2d_config->dst_para.y_rev = 0;
+
 
 	if (ge2d_context_config_ex(context, ge2d_config) < 0) {
 		pr_err("++ge2d configing error.\n");
@@ -1230,6 +1256,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 	picsize_x = ((wq->pic.encoder_width + 15) >> 4) << 4;
 	picsize_y = ((wq->pic.encoder_height + 15) >> 4) << 4;
 	oformat = 0;
+
 	if ((request->type == LOCAL_BUFF)
 		|| (request->type == PHYSICAL_BUFF)
 		|| (request->type == DMA_BUFF)) {
@@ -3235,6 +3262,7 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 				wq->mem.bufspec.max_height, (void *)wq);
 			return -1;
 		}
+		pr_err("hwenc: AMVENC_AVC_IOC_CONFIG_INIT: w:%d, h:%d\n", wq->pic.encoder_width, wq->pic.encoder_height);
 		wq->pic.encoder_width = addr_info[2];
 		wq->pic.encoder_height = addr_info[3];
 
