@@ -1564,6 +1564,7 @@ EXPORT_SYMBOL(vdec_set_flag);
 void vdec_set_eos(struct vdec_s *vdec, bool eos)
 {
 	struct vdec_core_s *core = vdec_core;
+
 	vdec->input.eos = eos;
 
 	if (vdec->slave)
@@ -2465,6 +2466,57 @@ int vdec_reset(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(vdec_reset);
 
+int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
+{
+	//trace_vdec_reset(vdec); /*DEBUG_TMP*/
+	pr_debug("vdec_v4l2_reset %d\n", flag);
+	vdec_disconnect(vdec);
+	if (flag != 2) {
+		if (vdec->vframe_provider.name)
+			vf_unreg_provider(&vdec->vframe_provider);
+
+		if ((vdec->slave) && (vdec->slave->vframe_provider.name))
+			vf_unreg_provider(&vdec->slave->vframe_provider);
+
+		if (vdec->reset) {
+			vdec->reset(vdec);
+			if (vdec->slave)
+				vdec->slave->reset(vdec->slave);
+		}
+		vdec->mc_loaded = 0;/*clear for reload firmware*/
+
+		vdec_input_release(&vdec->input);
+
+		vdec_input_init(&vdec->input, vdec);
+
+		vdec_input_prepare_bufs(&vdec->input, vdec->sys_info->width,
+			vdec->sys_info->height);
+
+		vf_reg_provider(&vdec->vframe_provider);
+		vf_notify_receiver(vdec->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_START, vdec);
+
+		if (vdec->slave) {
+			vf_reg_provider(&vdec->slave->vframe_provider);
+			vf_notify_receiver(vdec->slave->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_START, vdec->slave);
+			vdec->slave->mc_loaded = 0;/*clear for reload firmware*/
+		}
+	} else {
+		if (vdec->reset) {
+			vdec->reset(vdec);
+			if (vdec->slave)
+				vdec->slave->reset(vdec->slave);
+		}
+	}
+
+	vdec_connect(vdec);
+
+	return 0;
+}
+EXPORT_SYMBOL(vdec_v4l2_reset);
+
+
 void vdec_free_cmabuf(void)
 {
 	mutex_lock(&vdec_mutex);
@@ -2693,6 +2745,7 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 	inc_profi_count(mask, vdec->check_count);
 #endif
 	if (vdec_core_with_input(mask)) {
+
 		/* check frame based input underrun */
 		if (input && !input->eos && input_frame_based(input)
 			&& (!vdec_input_next_chunk(input))) {

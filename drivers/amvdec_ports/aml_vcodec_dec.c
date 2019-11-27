@@ -207,6 +207,13 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 {
 	struct v4l2_event event = {0};
 
+	if (ctx->receive_cmd_stop) {
+		ctx->state = AML_STATE_ABORT;
+		changes = V4L2_EVENT_REQUEST_EXIT;
+		aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ABORT)",
+				ctx->id, __func__);
+	}
+
 	switch (changes) {
 	case V4L2_EVENT_SRC_CH_RESOLUTION:
 	case V4L2_EVENT_SRC_CH_HDRINFO:
@@ -781,7 +788,7 @@ static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 		goto out;
 	}
 
-	if (aml_codec_reset(ctx->ada_ctx)) {
+	if (aml_codec_reset(ctx->ada_ctx, &ctx->reset_flag)) {
 		ctx->state = AML_STATE_ABORT;
 		aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ABORT)",
 			ctx->id, __func__);
@@ -801,6 +808,7 @@ static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 		ctx->q_data[AML_Q_DATA_SRC].resolution_changed = false;
 		v4l2_m2m_job_resume(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
 	}
+
 out:
 	complete(&ctx->comp);
 	return;
@@ -982,7 +990,7 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 		/* flush src */
 		v4l2_m2m_buf_queue(ctx->m2m_ctx, &ctx->empty_flush_buf->vb);
 		v4l2_m2m_try_schedule(ctx->m2m_ctx);//pay attention
-
+		ctx->receive_cmd_stop = true;
 		break;
 
 	case V4L2_DEC_CMD_START:
@@ -1008,9 +1016,10 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 	if (!V4L2_TYPE_IS_OUTPUT(q->type)) {
 		if (ctx->is_stream_off) {
 			mutex_lock(&ctx->state_lock);
-			if (ctx->state == AML_STATE_ACTIVE ||
+			if ((ctx->state == AML_STATE_ACTIVE ||
 				ctx->state == AML_STATE_FLUSHING ||
-				ctx->state == AML_STATE_FLUSHED) {
+				ctx->state == AML_STATE_FLUSHED) ||
+				(ctx->reset_flag == 2)) {
 				ctx->state = AML_STATE_RESET;
 				ctx->v4l_codec_ready = false;
 				ctx->v4l_codec_dpb_ready = false;
@@ -1965,7 +1974,7 @@ void vdec_device_vf_run(struct aml_vcodec_ctx *ctx)
 {
 	aml_v4l2_debug(3, "[%d] %s() [%d]", ctx->id, __func__, __LINE__);
 
-	if (ctx->state < AML_STATE_ACTIVE ||
+	if (ctx->state < AML_STATE_INIT ||
 		ctx->state > AML_STATE_FLUSHED)
 		return;
 

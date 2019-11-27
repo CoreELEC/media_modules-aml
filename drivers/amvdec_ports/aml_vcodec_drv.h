@@ -58,6 +58,8 @@
 #define V4L2_EVENT_REQUEST_RESET	(1 << 8)
 #define V4L2_EVENT_REQUEST_EXIT		(1 << 9)
 
+
+
 /**
  * enum aml_hw_reg_idx - AML hw register base index
  */
@@ -156,6 +158,7 @@ enum aml_q_type {
 	AML_Q_DATA_SRC = 0,
 	AML_Q_DATA_DST = 1,
 };
+
 
 /**
  * struct aml_q_data - Structure used to store information about queue
@@ -439,6 +442,8 @@ struct aml_vcodec_ctx {
 	spinlock_t slock;
 	struct v4l2_config_parm config;
 	bool is_stream_off;
+	int reset_flag;
+	int stop_cmd;
 };
 
 /**

@@ -360,6 +360,8 @@ extern int vdec_destroy(struct vdec_s *vdec);
 /* reset vdec */
 extern int vdec_reset(struct vdec_s *vdec);
 
+extern int vdec_v4l2_reset(struct vdec_s *vdec, int flag);
+
 extern void vdec_set_status(struct vdec_s *vdec, int status);
 
 extern void vdec_set_next_status(struct vdec_s *vdec, int status);

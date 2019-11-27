@@ -51,7 +51,8 @@ int vdec_v4l_post_evet(struct aml_vcodec_ctx *ctx, u32 event)
 
 	if (ctx->drv_handle == 0)
 		return -EIO;
-
+	if (event == 1)
+		ctx->reset_flag = 2;
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
 		SET_PARAM_POST_EVENT, &event);
 
