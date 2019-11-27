@@ -709,14 +709,16 @@ void aml_decoder_flush(struct aml_vdec_adapt *ada_ctx)
 		vdec_set_eos(vdec, true);
 }
 
-int aml_codec_reset(struct aml_vdec_adapt *ada_ctx)
+int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *flag)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
 	int ret = 0;
 
 	if (vdec) {
-		vdec_set_eos(vdec, false);
-		ret = vdec_reset(vdec);
+		if (*flag != 2)
+			vdec_set_eos(vdec, false);
+		ret = vdec_v4l2_reset(vdec, *flag);
+		*flag = 0;
 	}
 
 	return ret;

@@ -854,6 +854,7 @@ struct vdec_h264_hw_s {
 	bool ref_err_flush_dpb_flag;
 	unsigned int first_i_policy;
 	u32 reorder_dpb_size_margin;
+	bool wait_reset_done_flag;
 };
 
 static u32 again_threshold;
@@ -6365,7 +6366,7 @@ static void vmh264_dump_state(struct vdec_s *vdec)
 	}
 
 	dpb_print(DECODE_ID(hw), 0,
-	"%s, newq(%d/%d), dispq(%d/%d) vf prepare/get/put (%d/%d/%d), free_spec(%d), initdon(%d), used_size(%d/%d), unused_fr_dpb(%d)  fast_output_enable %x\n",
+	"%s, newq(%d/%d), dispq(%d/%d) vf prepare/get/put (%d/%d/%d), free_spec(%d), initdon(%d), used_size(%d/%d), unused_fr_dpb(%d)  fast_output_enable %x wait_reset_done_flag %d\n",
 	__func__,
 	kfifo_len(&hw->newframe_q),
 	VF_POOL_SIZE,
@@ -6378,7 +6379,8 @@ static void vmh264_dump_state(struct vdec_s *vdec)
 	p_H264_Dpb->mDPB.init_done,
 	p_H264_Dpb->mDPB.used_size, p_H264_Dpb->mDPB.size,
 	is_there_unused_frame_from_dpb(&p_H264_Dpb->mDPB),
-	p_H264_Dpb->fast_output_enable
+	p_H264_Dpb->fast_output_enable,
+	hw->wait_reset_done_flag
 	);
 
 	dump_dpb(&p_H264_Dpb->mDPB, 1);
@@ -8210,6 +8212,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			ret = 0; /*the params has parsed.*/
 		} else if (!ctx->v4l_codec_dpb_ready)
 			ret = 0;
+		else if (hw->wait_reset_done_flag)
+			ret = 0;
 	}
 
 	if (ret)
@@ -8276,7 +8280,19 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (hw->reset_bufmgr_flag ||
 		((error_proc_policy & 0x40) &&
 		p_H264_Dpb->buf_alloc_fail)) {
-		h264_reset_bufmgr(vdec);
+		if (!hw->is_used_v4l)
+			h264_reset_bufmgr(vdec);
+		else {
+			struct aml_vcodec_ctx *ctx =
+				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+			pr_info("v4l2 buffer reset\n");
+			hw->wait_reset_done_flag = 1;
+			hw->reset_bufmgr_flag = 0;
+			vdec_v4l_post_evet(ctx, V4L2_EVENT_REQUEST_RESET);
+			hw->dec_result = DEC_RESULT_NONE;
+			vdec_schedule_work(&hw->work);
+			return;
+		}
 		hw->reset_bufmgr_flag = 0;
 	}
 
@@ -8498,6 +8514,7 @@ static void reset(struct vdec_s *vdec)
 	hw->dec_result = DEC_RESULT_NONE;
 	reset_process_time(hw);
 	h264_reset_bufmgr(vdec);
+	hw->wait_reset_done_flag = 0;
 
 	dpb_print(DECODE_ID(hw), 0, "%s\n", __func__);
 }
@@ -8794,6 +8811,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	hw->first_head_check_flag = 0;
 	hw->new_iframe_flag = 0;
 	hw->ref_err_flush_dpb_flag = 0;
+	hw->wait_reset_done_flag = 0;
 
 	if (pdata->sys_info)
 		hw->vh264_amstream_dec_info = *pdata->sys_info;

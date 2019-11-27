@@ -58,7 +58,7 @@ int is_need_to_buf(struct aml_vdec_adapt *ada_ctx);
 
 void aml_decoder_flush(struct aml_vdec_adapt *ada_ctx);
 
-int aml_codec_reset(struct aml_vdec_adapt *ada_ctx);
+int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *flag);
 
 extern void dump_write(const char __user *buf, size_t count);
 
