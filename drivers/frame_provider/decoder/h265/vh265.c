@@ -8191,6 +8191,10 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 			(struct provider_aux_req_s *)data;
 		unsigned char index;
 
+		if (!req->vf) {
+			req->aux_size = hevc->vf_put_count;
+			return 0;
+		}
 		spin_lock_irqsave(&lock, flags);
 		index = req->vf->index & 0xff;
 		req->aux_buf = NULL;
