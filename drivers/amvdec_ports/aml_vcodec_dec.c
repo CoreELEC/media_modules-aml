@@ -257,9 +257,9 @@ static void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 		return;
 	}
 
-	if ((ctx->last_decoded_picinfo.visible_width == ctx->picinfo.visible_width) ||
+	/*if ((ctx->last_decoded_picinfo.visible_width == ctx->picinfo.visible_width) ||
 	    (ctx->last_decoded_picinfo.visible_height == ctx->picinfo.visible_height))
-		return;
+		return;*/
 
 	aml_v4l2_debug(4, "[%d]-> new(%d,%d), old(%d,%d), real(%d,%d)",
 			ctx->id, ctx->last_decoded_picinfo.visible_width,
