@@ -1070,7 +1070,7 @@ static void hevc_mcr_config_canv2axitbl(struct vdec_h264_hw_s *hw, int restore)
 	int     num_buff = hw->dpb.mDPB.size;
 	int dw_size = 0;
 	u32 dw_buffer_size_u_v_h;
-	u32 blkmode = mem_map_mode;
+	u32 blkmode = hw->canvas_mode;
 	int dw_mode =  hw->double_write_mode;
 
 	canvas_addr = ANC0_CANVAS_ADDR;
@@ -1124,7 +1124,7 @@ static void hevc_mcr_config_canv2axitbl(struct vdec_h264_hw_s *hw, int restore)
 			canvas_h = hw->frame_height /
 				get_double_write_ratio(hw);
 
-			if (mem_map_mode == 0)
+			if (hw->canvas_mode == 0)
 				canvas_w = ALIGN(canvas_w, 32);
 			else
 				canvas_w = ALIGN(canvas_w, 64);
@@ -1324,7 +1324,7 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 #endif
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
-	data32 |= (mem_map_mode << 4);
+	data32 |= (hw->canvas_mode << 4);
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
 
 	WRITE_VREG(HEVCD_MPP_DECOMP_CTL3,
@@ -1369,9 +1369,9 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	data32 |= endian;	/* Big-Endian per 64-bit */
 
 	if (hw->mmu_enable && dw_mode)
-		data32 |= ((mem_map_mode << 12));
+		data32 |= ((hw->canvas_mode << 12));
 	else
-		data32 |= ((mem_map_mode << 12)|2);
+		data32 |= ((hw->canvas_mode << 12)|2);
 
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 
@@ -1846,7 +1846,7 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 	y_canvas_cfg->phy_addr	= y_addr;
 	y_canvas_cfg->width	= hw->mb_width << 4;
 	y_canvas_cfg->height	= hw->mb_height << 4;
-	y_canvas_cfg->block_mode = CANVAS_BLKMODE_LINEAR;
+	y_canvas_cfg->block_mode = hw->canvas_mode;
 	//fb->m.mem[0].bytes_used = y_canvas_cfg->width * y_canvas_cfg->height;
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 		"[%d] %s(), y_w: %d, y_h: %d\n", ctx->id, __func__,
@@ -1855,7 +1855,7 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 	c_canvas_cfg->phy_addr	= c_addr;
 	c_canvas_cfg->width	= hw->mb_width << 4;
 	c_canvas_cfg->height	= hw->mb_height << 3;
-	c_canvas_cfg->block_mode = CANVAS_BLKMODE_LINEAR;
+	c_canvas_cfg->block_mode = hw->canvas_mode;
 	//fb->m.mem[1].bytes_used = c_canvas_cfg->width * c_canvas_cfg->height;
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 		"[%d] %s(), c_w: %d, c_h: %d\n", ctx->id, __func__,
@@ -1869,24 +1869,18 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 
 static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 {
-	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
-	int blkmode = CANVAS_BLKMODE_32X32;
+	int blkmode = hw->canvas_mode;
 	int endian = 0;
 
-	if (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) {
-		blkmode = CANVAS_BLKMODE_LINEAR;
+	if (blkmode == CANVAS_BLKMODE_LINEAR) {
 		if ((h264_debug_flag & IGNORE_PARAM_FROM_CONFIG) == 0)
 			endian = 7;
 		else
 			endian = 0;
 	}
 
-	if (hw->is_used_v4l) {
-		blkmode = CANVAS_BLKMODE_LINEAR;
-		if (v4l2_ctx->ada_ctx->vfm_path
-			!= FRAME_BASE_PATH_V4L_VIDEO)
+	if (hw->is_used_v4l)
 		endian = 7;
-	}
 
 	canvas_config_ex(hw->buffer_spec[i].
 		y_canvas_index,
@@ -1999,7 +1993,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 
 static void config_decode_canvas_ex(struct vdec_h264_hw_s *hw, int i)
 {
-	u32 blkmode = mem_map_mode;
+	u32 blkmode = hw->canvas_mode;
 	int canvas_w;
 	int canvas_h;
 
@@ -2008,7 +2002,7 @@ static void config_decode_canvas_ex(struct vdec_h264_hw_s *hw, int i)
 	canvas_h = hw->frame_height /
 		get_double_write_ratio(hw);
 
-	if (mem_map_mode == 0)
+	if (hw->canvas_mode == 0)
 		canvas_w = ALIGN(canvas_w, 32);
 	else
 		canvas_w = ALIGN(canvas_w, 64);
@@ -6816,9 +6810,6 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw)
 
 	hw->first_i_policy = first_i_policy;
 
-	if (hw->is_used_v4l)
-		mem_map_mode = CANVAS_BLKMODE_LINEAR;
-
 	pr_info("H264 sysinfo: %dx%d duration=%d, pts_outside=%d\n",
 		hw->frame_width, hw->frame_height, hw->frame_dur, hw->pts_outside);
 	pr_debug("sync_outside=%d, use_idr_framerate=%d, is_used_v4l: %d\n",
@@ -8800,11 +8791,6 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	/* the ctx from v4l2 driver. */
 	hw->v4l2_ctx = pdata->private;
 
-	if ((h264_debug_flag & IGNORE_PARAM_FROM_CONFIG) == 0)
-		hw->canvas_mode = pdata->canvas_mode;
-	else
-		hw->canvas_mode = mem_map_mode;
-
 	platform_set_drvdata(pdev, pdata);
 
 	hw->mmu_enable = 0;
@@ -8853,11 +8839,21 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			"parm_v4l_buffer_margin",
 			&config_val) == 0)
 			hw->reorder_dpb_size_margin = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_canvas_mem_mode",
+			&config_val) == 0)
+			hw->canvas_mode = config_val;
 	} else
 		hw->double_write_mode = double_write_mode;
 
-	if (!hw->is_used_v4l)
+	if (!hw->is_used_v4l) {
 		hw->reorder_dpb_size_margin = reorder_dpb_size_margin;
+		hw->canvas_mode = mem_map_mode;
+
+		if ((h264_debug_flag & IGNORE_PARAM_FROM_CONFIG) == 0)
+			hw->canvas_mode = pdata->canvas_mode;
+	}
 
 	if (hw->mmu_enable)
 			hw->double_write_mode &= 0xffff;

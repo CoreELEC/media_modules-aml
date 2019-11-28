@@ -54,7 +54,7 @@ int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count, u64 timestamp);
 
-int is_need_to_buf(struct aml_vdec_adapt *ada_ctx);
+bool vdec_input_full(struct aml_vdec_adapt *ada_ctx);
 
 void aml_decoder_flush(struct aml_vdec_adapt *ada_ctx);
 

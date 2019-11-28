@@ -156,6 +156,8 @@ static u32 vdec_config_default_parms(u8 *parm)
 	pbuf += sprintf(pbuf, "hevc_buf_width:4096;");
 	pbuf += sprintf(pbuf, "hevc_buf_height:2304;");
 	pbuf += sprintf(pbuf, "save_buffer_mode:0;");
+	pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:0;");
+	pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_endian:0;");
 
 	return parm - pbuf;
 }
@@ -176,6 +178,10 @@ static void vdec_parser_parms(struct vdec_hevc_inst *inst)
 		pbuf += sprintf(pbuf, "hevc_buf_width:4096;");
 		pbuf += sprintf(pbuf, "hevc_buf_height:2304;");
 		pbuf += sprintf(pbuf, "save_buffer_mode:0;");
+		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:%d;",
+			ctx->config.parm.dec.cfg.canvas_mem_mode);
+		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_endian:%d;",
+			ctx->config.parm.dec.cfg.canvas_mem_endian);
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
 		ctx->config.parm.dec.cfg.double_write_mode = 16;
@@ -588,9 +594,11 @@ static int vdec_hevc_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 	u32 size;
 	int ret = -1;
 
-	/* bs NULL means flush decoder */
 	if (bs == NULL)
 		return -1;
+
+	if (vdec_input_full(vdec))
+		return -EAGAIN;
 
 	buf = (u8 *)bs->vaddr;
 	size = bs->size;
