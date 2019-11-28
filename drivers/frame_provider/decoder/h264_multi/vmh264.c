@@ -3854,7 +3854,13 @@ static int vh264_event_cb(int type, void *data, void *op_arg)
 	if (type & VFRAME_EVENT_RECEIVER_GET_AUX_DATA) {
 		struct provider_aux_req_s *req =
 			(struct provider_aux_req_s *)data;
-		int buf_spec_num = BUFSPEC_INDEX(req->vf->index);
+		int buf_spec_num;
+
+		if (!req->vf) {
+			req->aux_size = hw->vf_put_count;
+			return 0;
+		}
+		buf_spec_num = BUFSPEC_INDEX(req->vf->index);
 		spin_lock_irqsave(&hw->lock, flags);
 		req->aux_buf = NULL;
 		req->aux_size = 0;
