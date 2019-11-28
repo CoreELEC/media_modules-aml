@@ -6520,8 +6520,6 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		pbi->vvp9_amstream_dec_info.height :
 		pbi->work_space_buf->max_height));
 
-	pbi->mem_map_mode = mem_map_mode ? mem_map_mode : 0;
-
 	/* video is not support unaligned with 64 in tl1
 	** vdec canvas mode will be linear when dump yuv is set
 	*/
@@ -10439,6 +10437,11 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			"parm_v4l_buffer_margin",
 			&config_val) == 0)
 			pbi->dynamic_buf_num_margin = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_canvas_mem_mode",
+			&config_val) == 0)
+			pbi->mem_map_mode = config_val;
 #endif
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
@@ -10486,6 +10489,11 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pbi->vvp9_amstream_dec_info.rate = 30;*/
 		pbi->double_write_mode = double_write_mode;
 	}
+
+	if (!pbi->is_used_v4l) {
+		pbi->mem_map_mode = mem_map_mode;
+	}
+
 	if (is_oversize(pbi->max_pic_w, pbi->max_pic_h)) {
 		pr_err("over size: %dx%d, probe failed\n",
 			pbi->max_pic_w, pbi->max_pic_h);

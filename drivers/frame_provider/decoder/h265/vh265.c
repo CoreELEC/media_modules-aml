@@ -1732,6 +1732,7 @@ struct hevc_state_s {
 	bool is_used_v4l;
 	void *v4l2_ctx;
 	bool v4l_params_parsed;
+	u32 mem_map_mode;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -5258,7 +5259,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 #if 0
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~0x3000);
-	data32 |= (mem_map_mode <<
+	data32 |= (hevc->mem_map_mode <<
 			12);
 
 /*  [13:12] axi_aformat,
@@ -5268,7 +5269,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
-	data32 |= (mem_map_mode <<
+	data32 |= (hevc->mem_map_mode <<
 			   4);
 
 /*  [5:4]    -- address_format
@@ -5279,7 +5280,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	/* m8baby test1902 */
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~0x3000);
-	data32 |= (mem_map_mode <<
+	data32 |= (hevc->mem_map_mode <<
 			   12);
 
 /*  [13:12] axi_aformat, 0-Linear,
@@ -5350,7 +5351,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
 	/* [5:4]    -- address_format 00:linear 01:32x32 10:64x32 */
-	data32 |= (mem_map_mode <<
+	data32 |= (hevc->mem_map_mode <<
 			   4);
 	data32 &= (~0xF);
 	data32 |= 0xf;  /* valid only when double write only */
@@ -7470,7 +7471,7 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 	int canvas_w = ALIGN(pic->width, 64)/4;
 	int canvas_h = ALIGN(pic->height, 32)/4;
-	int blkmode = mem_map_mode;
+	int blkmode = hevc->mem_map_mode;
 
 	/*CANVAS_BLKMODE_64X32*/
 #ifdef SUPPORT_10BIT
@@ -7480,7 +7481,7 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 		canvas_h = pic->height /
 			get_double_write_ratio(hevc, pic->double_write_mode);
 
-		if (mem_map_mode == 0)
+		if (hevc->mem_map_mode == 0)
 			canvas_w = ALIGN(canvas_w, 32);
 		else
 			canvas_w = ALIGN(canvas_w, 64);
@@ -12879,6 +12880,11 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			"parm_v4l_buffer_margin",
 			&config_val) == 0)
 			hevc->dynamic_buf_num_margin = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_canvas_mem_mode",
+			&config_val) == 0)
+			hevc->mem_map_mode = config_val;
 #endif
 	} else {
 		if (pdata->sys_info)
@@ -12895,6 +12901,8 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin -2;
 		else
 			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin;
+
+		hevc->mem_map_mode = mem_map_mode;
 	}
 
 	if (mmu_enable_force == 0) {

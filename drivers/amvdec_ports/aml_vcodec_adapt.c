@@ -665,14 +665,11 @@ int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 	return ret;
 }
 
-int is_need_to_buf(struct aml_vdec_adapt *ada_ctx)
+bool vdec_input_full(struct aml_vdec_adapt *ada_ctx)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
 
-	if (vdec->input.have_frame_num > 8)
-		return 0;
-	else
-		return 1;
+	return (vdec->input.have_frame_num > 60) ? true : false;
 }
 
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,

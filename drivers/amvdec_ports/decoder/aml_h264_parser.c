@@ -624,6 +624,7 @@ static int decode_extradata_ps(u8 *data, int size, struct h264_param_sets *ps)
 		goto out;
 
 	if (get_bits1(&gb) != 0) {
+		ret = -1;
 		pr_err("invalid h264 data,return!\n");
 		goto out;
 	}
@@ -674,6 +675,10 @@ int h264_decode_extradata_ps(u8 *buf, int size, struct h264_param_sets *ps)
 				pr_err("parse extra data failed. err: %d\n", ret);
 				return ret;
 			}
+
+			if (ps->sps_parsed)
+				break;
+
 			p += j;
 		}
 		p++;

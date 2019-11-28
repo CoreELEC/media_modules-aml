@@ -265,7 +265,8 @@ struct aml_vdec_cfg_infos {
 	u32 init_width;
 	u32 init_height;
 	u32 ref_buf_margin;
-	u32 block_mode;
+	u32 canvas_mem_mode;
+	u32 canvas_mem_endian;
 };
 
 struct aml_vdec_hdr_infos {

@@ -971,7 +971,7 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 				aml_vdec_dispatch_event(ctx, V4L2_EVENT_REQUEST_EXIT);
 				aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ABORT)",
 					ctx->id, __func__);
-				return -1;
+				return 0;
 			}
 		}
 
@@ -1496,22 +1496,18 @@ static int vidioc_enum_fmt(struct v4l2_fmtdesc *f, bool output_queue)
 	for (i = 0; i < NUM_FORMATS; i++) {
 		if (output_queue && (aml_video_formats[i].type != AML_FMT_DEC))
 			continue;
-		if (!output_queue &&
-			(aml_video_formats[i].type != AML_FMT_FRAME))
+		if (!output_queue && (aml_video_formats[i].type != AML_FMT_FRAME))
 			continue;
 
-		if (j == f->index)
-			break;
+		if (j == f->index) {
+			fmt = &aml_video_formats[i];
+			f->pixelformat = fmt->fourcc;
+			return 0;
+		}
 		++j;
 	}
 
-	if (i == NUM_FORMATS)
-		return -EINVAL;
-
-	fmt = &aml_video_formats[i];
-	f->pixelformat = fmt->fourcc;
-
-	return 0;
+	return -EINVAL;
 }
 
 static int vidioc_vdec_enum_fmt_vid_cap_mplane(struct file *file, void *pirv,

@@ -1204,6 +1204,7 @@ static int decode_extradata_ps(u8 *data, int size, struct h265_param_sets *ps)
 		goto out;
 
 	if (get_bits1(&gb) != 0) {
+		ret = -1;
 		pr_err("invalid data, return!\n");
 		goto out;
 	}
@@ -1211,8 +1212,10 @@ static int decode_extradata_ps(u8 *data, int size, struct h265_param_sets *ps)
 	nal_type	= get_bits(&gb, 6);
 	nuh_layer_id	= get_bits(&gb, 6);
 	temporal_id	= get_bits(&gb, 3) - 1;
-	if (temporal_id < 0)
+	if (temporal_id < 0) {
+		ret = -1;
 		goto out;
+	}
 
 	/*pr_info("nal_unit_type: %d(%s), nuh_layer_id: %d, temporal_id: %d\n",
 		nal_type, hevc_nal_unit_name(nal_type),
@@ -1246,7 +1249,7 @@ static int decode_extradata_ps(u8 *data, int size, struct h265_param_sets *ps)
 out:
 	vfree(rbsp_buf);
 
-	return 0;
+	return ret;
 }
 
 int h265_decode_extradata_ps(u8 *buf, int size, struct h265_param_sets *ps)
@@ -1264,6 +1267,10 @@ int h265_decode_extradata_ps(u8 *buf, int size, struct h265_param_sets *ps)
 				pr_err("parse extra data failed. err: %d\n", ret);
 				return ret;
 			}
+
+			if (ps->sps_parsed)
+				break;
+
 			p += j;
 		}
 		p++;

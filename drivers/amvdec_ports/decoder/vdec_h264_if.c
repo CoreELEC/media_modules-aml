@@ -253,6 +253,8 @@ static u32 vdec_config_default_parms(u8 *parm)
 	pbuf += sprintf(pbuf, "parm_v4l_codec_enable:1;");
 	pbuf += sprintf(pbuf, "mh264_double_write_mode:16;");
 	pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:7;");
+	pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:0;");
+	pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_endian:0;");
 
 	return parm - pbuf;
 }
@@ -270,6 +272,10 @@ static void vdec_parser_parms(struct vdec_h264_inst *inst)
 			ctx->config.parm.dec.cfg.double_write_mode);
 		pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:%d;",
 			ctx->config.parm.dec.cfg.ref_buf_margin);
+		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:%d;",
+			ctx->config.parm.dec.cfg.canvas_mem_mode);
+		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_endian:%d;",
+			ctx->config.parm.dec.cfg.canvas_mem_endian);
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
 		ctx->config.parm.dec.cfg.double_write_mode = 16;
@@ -819,9 +825,11 @@ static int vdec_h264_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 	u32 size;
 	int ret = -1;
 
-	/* bs NULL means flush decoder */
 	if (bs == NULL)
 		return -1;
+
+	if (vdec_input_full(vdec))
+		return -EAGAIN;
 
 	buf = (u8 *)bs->vaddr;
 	size = bs->size;
