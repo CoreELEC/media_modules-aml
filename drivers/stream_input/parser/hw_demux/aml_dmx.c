@@ -3273,8 +3273,11 @@ static u32 dmx_get_chan_target(struct aml_dmx *dmx, int cid)
 		case DMX_PES_PCR:
 			type = SCR_ONLY_PACKET;
 			break;
-		default:
+		case DMX_PES_AUDIO3:
 			type = OTHER_PES_PACKET;
+			break;
+		default:
+			type = BYPASS_PACKET;
 			break;
 		}
 	}
@@ -4152,6 +4155,7 @@ int dmx_alloc_chan(struct aml_dmx *dmx, int type, int pes_type, int pid)
 				id = 3;
 			break;
 		case DMX_PES_OTHER:
+		case DMX_PES_AUDIO3:
 			{
 				int i;
 
