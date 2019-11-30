@@ -314,6 +314,11 @@ int get_fb_from_queue(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer **out_
 
 	flags = aml_vcodec_ctx_lock(ctx);
 
+	if (ctx->state == AML_STATE_ABORT) {
+		aml_vcodec_ctx_unlock(ctx, flags);
+		return -1;
+	}
+
 	dst_buf = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
 	if (!dst_buf) {
 		aml_vcodec_ctx_unlock(ctx, flags);
@@ -763,23 +768,6 @@ out:
 	return;
 }
 
-void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
-{
-	struct aml_vcodec_dev *dev = ctx->dev;
-
-	/* pause inject output data to vdec. */
-	v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
-
-	/* flush worker. */
-	flush_workqueue(dev->decode_workqueue);
-
-	/* wait reset worker ending. */
-	if (ctx->state == AML_STATE_RESET) {
-		wait_for_completion_timeout(&ctx->comp,
-			msecs_to_jiffies(200));
-	}
-}
-
 static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 {
 	if (ctx->state == AML_STATE_ABORT) {
@@ -812,6 +800,24 @@ static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 out:
 	complete(&ctx->comp);
 	return;
+}
+
+void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
+{
+	struct aml_vcodec_dev *dev = ctx->dev;
+
+	/* pause inject output data to vdec. */
+	v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
+
+	/* flush worker. */
+	flush_workqueue(dev->decode_workqueue);
+
+	ctx->v4l_codec_ready = false;
+	ctx->v4l_codec_dpb_ready = false;
+
+	/* stop decoder. */
+	if (ctx->state > AML_STATE_INIT)
+		aml_vdec_reset(ctx);
 }
 
 void try_to_capture(struct aml_vcodec_ctx *ctx)
@@ -1067,11 +1073,13 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 
 void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx)
 {
+	ulong flags;
+
+	flags = aml_vcodec_ctx_lock(ctx);
 	ctx->state = AML_STATE_ABORT;
-	ctx->v4l_codec_ready = false;
-	ctx->v4l_codec_dpb_ready = false;
 	aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ABORT)",
 		ctx->id, __func__);
+	aml_vcodec_ctx_unlock(ctx, flags);
 
 	vdec_if_deinit(ctx);
 }

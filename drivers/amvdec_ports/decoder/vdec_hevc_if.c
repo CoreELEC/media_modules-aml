@@ -568,17 +568,20 @@ static bool monitor_res_change(struct vdec_hevc_inst *inst, u8 *buf, u32 size)
 
 			if (type == HEVC_NAL_SPS) {
 				ret = stream_parse(inst, p, len);
-				if (!ret && (inst->vsi->cur_pic.coded_width !=
-					inst->vsi->pic.coded_width ||
-					inst->vsi->cur_pic.coded_height !=
-					inst->vsi->pic.coded_height)) {
-					inst->vsi->cur_pic = inst->vsi->pic;
-					return true;
-				}
+				if (ret)
+					break;
 			}
 			p += j;
 		}
 		p++;
+	}
+
+	if (!ret && (inst->vsi->cur_pic.coded_width !=
+		inst->vsi->pic.coded_width ||
+		inst->vsi->cur_pic.coded_height !=
+		inst->vsi->pic.coded_height)) {
+		inst->vsi->cur_pic = inst->vsi->pic;
+		return true;
 	}
 
 	return false;
