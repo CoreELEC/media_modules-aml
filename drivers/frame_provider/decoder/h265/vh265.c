@@ -2089,7 +2089,7 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 static void hevc_init_stru(struct hevc_state_s *hevc,
 		struct BuffInfo_s *buf_spec_i)
 {
-	//int i;
+	int i;
 	INIT_LIST_HEAD(&hevc->log_list);
 	hevc->work_space_buf = buf_spec_i;
 	hevc->prefix_aux_size = 0;
@@ -2146,8 +2146,14 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 	else
 		hevc->ignore_bufmgr_error = 0x0;
 
-	/*for (i = 0; i < MAX_REF_PIC_NUM; i++)
-		hevc->m_PIC[i] = NULL;*/
+	if (hevc->is_used_v4l) {
+		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+			if (hevc->m_PIC[i] != NULL) {
+				memset(hevc->m_PIC[i], 0 ,sizeof(struct PIC_s));
+				hevc->m_PIC[i]->index = -1;
+			}
+		}
+	}
 
 	hevc->pic_num = 0;
 	hevc->lcu_x_num_pre = 0;
