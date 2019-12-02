@@ -199,7 +199,7 @@ int v4l2_alloc_fd(int *fd)
 	}
 
 	file->private_data =
-		kzalloc(sizeof(struct file_privdata), GFP_KERNEL);
+		kzalloc(sizeof(struct file_private_data), GFP_KERNEL);
 	if (!file->private_data) {
 		pr_err("%s: alloc priv data faild.\n", __func__);
 		return -ENOMEM;
