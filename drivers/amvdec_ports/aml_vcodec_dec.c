@@ -279,8 +279,8 @@ static void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 
 void vdec_frame_buffer_release(void *data)
 {
-	struct file_privdata *priv_data =
-		(struct file_privdata *) data;
+	struct file_private_data *priv_data =
+		(struct file_private_data *) data;
 	struct vframe_s *vf = &priv_data->vf;
 
 	if (decoder_bmmu_box_valide_check(vf->mm_box.bmmu_box)) {
@@ -300,7 +300,7 @@ void vdec_frame_buffer_release(void *data)
 	aml_v4l2_debug(2, "%s vf idx: %d, mmu_idx: %d, mmu_box: %p",
 		__func__, vf->index, vf->mm_box.mmu_idx, vf->mm_box.mmu_box);
 
-	memset(data, 0, sizeof(struct file_privdata));
+	memset(data, 0, sizeof(struct file_private_data));
 	kfree(data);
 }
 
@@ -491,6 +491,8 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 		/* binding vframe handle. */
 		vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
 		dstbuf->privdata.vf = *vf;
+		dstbuf->privdata.vf.omx_index =
+			dstbuf->vb.vb2_buf.index;
 
 		v4l2_m2m_buf_done(&dstbuf->vb, VB2_BUF_STATE_DONE);
 	}
@@ -1178,11 +1180,11 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 
 		file = fget(vb2_v4l2->private);
 		if (is_v4l2_buf_file(file) &&
-			!aml_buf->privdata.is_install) {
+			!aml_buf->is_install_privdata) {
 			dmabuf_fd_install_data(vb2_v4l2->private,
 				(void*)&aml_buf->privdata,
-				sizeof(struct file_privdata));
-			aml_buf->privdata.is_install = true;
+				sizeof(struct file_private_data));
+			aml_buf->is_install_privdata = true;
 		}
 		fput(file);
 		mutex_unlock(&ctx->lock);
@@ -1721,6 +1723,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		if (!buf->que_in_m2m) {
 			aml_v4l2_debug(2, "[%d] enque capture buf idx %d, %p",
 				ctx->id, vb->index, vb);
+
 			v4l2_m2m_buf_queue(ctx->m2m_ctx, vb2_v4l2);
 			buf->que_in_m2m = true;
 			buf->queued_in_vb2 = true;
@@ -1952,7 +1955,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 			buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
 			buf->frame_buffer.status = FB_ST_NORMAL;
 			buf->que_in_m2m = false;
-			buf->privdata.is_install = false;
+			buf->is_install_privdata = false;
 
 			if (vb2_v4l2->vb2_buf.state == VB2_BUF_STATE_ACTIVE)
 				v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);

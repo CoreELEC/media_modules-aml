@@ -23,6 +23,7 @@
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "aml_vcodec_util.h"
 
 #define VCODEC_CAPABILITY_4K_DISABLED	0x10
@@ -38,16 +39,6 @@
 #define VDEC_SCATTER_MEMORY_TYPE	1
 
 #define AML_V4L2_SET_DECMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
-
-/* for video composer metafd private_data struct */
-struct file_privdata {
-	struct vframe_s vf;
-	struct vframe_s *vf_p;
-	bool is_keep;
-	int keep_id;
-	int keep_head_id;
-	bool is_install;
-};
 
 /**
  * struct vdec_fb  - decoder frame buffer
@@ -93,7 +84,7 @@ struct aml_video_dec_buf {
 	struct list_head list;
 
 	struct vdec_v4l2_buffer frame_buffer;
-	struct file_privdata privdata;
+	struct file_private_data privdata;
 	struct codec_mm_s *mem[2];
 	char mem_onwer[32];
 	bool used;
@@ -103,6 +94,7 @@ struct aml_video_dec_buf {
 	bool queued_in_v4l2;
 	bool lastframe;
 	bool error;
+	bool is_install_privdata;
 };
 
 extern const struct v4l2_ioctl_ops aml_vdec_ioctl_ops;

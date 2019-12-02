@@ -449,7 +449,7 @@ static int stream_parse(struct vdec_vp9_inst *inst, u8 *buf, u32 size)
 	int ret = 0;
 	struct vp9_param_sets *ps = NULL;
 
-	ps = kzalloc(sizeof(struct vp9_param_sets), GFP_KERNEL);
+	ps = vzalloc(sizeof(struct vp9_param_sets));
 	if (ps == NULL)
 		return -ENOMEM;
 
@@ -464,7 +464,7 @@ static int stream_parse(struct vdec_vp9_inst *inst, u8 *buf, u32 size)
 
 	ret = ps->head_parsed ? 0 : -1;
 out:
-	kfree(ps);
+	vfree(ps);
 
 	return ret;
 }
