@@ -6814,6 +6814,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 		uint8_t index = vf->index & 0xff;
 		if (index < pbi->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
+			vf->index_disp = pbi->vf_get_count;
 			pbi->vf_get_count++;
 			if (debug & VP9_DEBUG_BUFMGR)
 				pr_info("%s type 0x%x w/h %d/%d, pts %d, %lld\n",

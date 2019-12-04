@@ -3766,6 +3766,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 				= frame_interval;
 		}
 		hw->last_frame_time = time;
+		vf->index_disp = hw->vf_get_count;
 		hw->vf_get_count++;
 		if (kfifo_peek(&hw->display_q, &next_vf)) {
 			vf->next_vf_pts_valid = true;

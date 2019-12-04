@@ -33,6 +33,9 @@
 #include "aml_vp9_parser.h"
 #include "vdec_vp9_trigger.h"
 
+#define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
+#include <trace/events/meson_atrace.h>
+
 #define PREFIX_SIZE	(16)
 
 #define NAL_TYPE(value)				((value) & 0x1F)
@@ -708,8 +711,10 @@ static int vdec_vp9_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 	if (bs == NULL)
 		return -1;
 
-	if (vdec_input_full(vdec))
+	if (vdec_input_full(vdec)) {
+		ATRACE_COUNTER("vdec_input_full", 0);
 		return -EAGAIN;
+	}
 
 	buf = (u8 *)bs->vaddr;
 	size = bs->size;
@@ -730,6 +735,7 @@ static int vdec_vp9_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 
 		ret = vdec_write_nalu(inst, buf, size, timestamp);
 	}
+	ATRACE_COUNTER("v4l2_decode_write", ret);
 
 	return ret;
 }

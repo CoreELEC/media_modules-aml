@@ -23,6 +23,9 @@
 #include "aml_vcodec_adapt.h"
 #include <media/v4l2-mem2mem.h>
 
+#define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_VIDEO_COMPOSER
+#include <trace/events/meson_atrace.h>
+
 #define RECEIVER_NAME	"v4l2-video"
 #define PROVIDER_NAME	"v4l2-video"
 
@@ -94,6 +97,7 @@ void video_vf_put(char *receiver, struct vdec_v4l2_buffer *fb, int id)
 
 	aml_v4l2_debug(3, "[%d] TO   (%s) vf: %p, idx: %d",
 		id, vfp->name, vf, vf->index);
+	ATRACE_COUNTER("v4l2_to", vf->index_disp);
 
 	aml_v4l2_debug(4, "[%d] TO   Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)",
 		id, fb->m.mem[0].addr, fb->m.mem[0].size,

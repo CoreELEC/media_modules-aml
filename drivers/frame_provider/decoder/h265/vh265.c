@@ -8176,6 +8176,7 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 		}
 #endif
 		hevc->show_frame_num++;
+		vf->index_disp = hevc->vf_get_count;
 		hevc->vf_get_count++;
 
 		if (kfifo_peek(&hevc->display_q, &next_vf)) {
