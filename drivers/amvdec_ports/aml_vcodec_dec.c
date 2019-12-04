@@ -37,6 +37,9 @@
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
 
+#define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
+#include <trace/events/meson_atrace.h>
+
 #define OUT_FMT_IDX	0 //default h264
 #define CAP_FMT_IDX	8 //capture nv21
 
@@ -209,6 +212,7 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 
 	if (ctx->receive_cmd_stop) {
 		ctx->state = AML_STATE_ABORT;
+		ATRACE_COUNTER("v4l2_state", ctx->state);
 		changes = V4L2_EVENT_REQUEST_EXIT;
 		aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ABORT)",
 				ctx->id, __func__);
@@ -483,6 +487,7 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 		pr_info("[%d] recevie a empty frame. idx: %d, state: %d\n",
 			ctx->id, dstbuf->vb.vb2_buf.index,
 			dstbuf->vb.vb2_buf.state);
+		ATRACE_COUNTER("v4l2_eos", 0);
 	}
 
 	aml_v4l2_debug(4, "[%d] receive vbuf idx: %d, state: %d",
@@ -492,6 +497,7 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 	if (dstbuf->vb.vb2_buf.state == VB2_BUF_STATE_ACTIVE) {
 		/* binding vframe handle. */
 		vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+		ATRACE_COUNTER("v4l2_from", vf->index_disp);
 		dstbuf->privdata.vf = *vf;
 		dstbuf->privdata.vf.omx_index =
 			dstbuf->vb.vb2_buf.index;
@@ -503,6 +509,7 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 	if (ctx->state == AML_STATE_FLUSHING &&
 		ctx->has_receive_eos) {
 		ctx->state = AML_STATE_FLUSHED;
+		ATRACE_COUNTER("v4l2_state", ctx->state);
 		aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_FLUSHED)",
 			ctx->id, __func__);
 	}
@@ -581,6 +588,7 @@ static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 		mutex_lock(&ctx->state_lock);
 		if (ctx->state == AML_STATE_PROBE) {
 			ctx->state = AML_STATE_READY;
+			ATRACE_COUNTER("v4l2_state", ctx->state);
 			ctx->v4l_codec_ready = true;
 			wake_up_interruptible(&ctx->wq);
 			aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_READY)",
@@ -594,6 +602,7 @@ static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 		if (ctx->m2m_ctx->out_q_ctx.q.streaming &&
 			ctx->m2m_ctx->cap_q_ctx.q.streaming) {
 			ctx->state = AML_STATE_ACTIVE;
+			ATRACE_COUNTER("v4l2_state", ctx->state);
 			aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ACTIVE)",
 				ctx->id, __func__);
 		}
@@ -692,6 +701,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		mutex_lock(&ctx->state_lock);
 		if (ctx->state == AML_STATE_ACTIVE) {
 			ctx->state = AML_STATE_FLUSHING;// prepare flushing
+			ATRACE_COUNTER("v4l2_state", ctx->state);
 			aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_FLUSHING-LASTFRM)",
 				ctx->id, __func__);
 		}
@@ -755,6 +765,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		mutex_lock(&ctx->state_lock);
 		if (ctx->state == AML_STATE_ACTIVE) {
 			ctx->state = AML_STATE_FLUSHING;// prepare flushing
+			ATRACE_COUNTER("v4l2_state", ctx->state);
 			aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_FLUSHING-RESCHG)",
 				ctx->id, __func__);
 		}
@@ -783,6 +794,7 @@ static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 
 	if (aml_codec_reset(ctx->ada_ctx, &ctx->reset_flag)) {
 		ctx->state = AML_STATE_ABORT;
+		ATRACE_COUNTER("v4l2_state", ctx->state);
 		aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ABORT)",
 			ctx->id, __func__);
 		goto out;
@@ -790,6 +802,7 @@ static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 
 	if (ctx->state ==  AML_STATE_RESET) {
 		ctx->state = AML_STATE_PROBE;
+		ATRACE_COUNTER("v4l2_state", ctx->state);
 		aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_PROBE)",
 			ctx->id, __func__);
 
@@ -893,6 +906,7 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 	enum aml_thread_type type, const char *thread_name)
 {
 	struct aml_vdec_thread *thread;
+	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
 	int ret = 0;
 
 	thread = kzalloc(sizeof(*thread), GFP_KERNEL);
@@ -910,6 +924,7 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 		thread->task = NULL;
 		goto err;
 	}
+	sched_setscheduler_nocheck(thread->task, SCHED_FIFO, &param);
 
 	list_add(&thread->node, &ctx->vdec_thread_list);
 
@@ -975,10 +990,12 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 				V4L2_BUF_TYPE_VIDEO_CAPTURE);
 	switch (cmd->cmd) {
 	case V4L2_DEC_CMD_STOP:
+		ATRACE_COUNTER("v4l2_stop", 0);
 		if (ctx->state != AML_STATE_ACTIVE) {
 			if (ctx->state >= AML_STATE_IDLE &&
 				ctx->state <= AML_STATE_PROBE) {
 				ctx->state = AML_STATE_ABORT;
+				ATRACE_COUNTER("v4l2_state", ctx->state);
 				aml_vdec_dispatch_event(ctx, V4L2_EVENT_REQUEST_EXIT);
 				aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ABORT)",
 					ctx->id, __func__);
@@ -1032,6 +1049,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 				ctx->state == AML_STATE_FLUSHED) ||
 				(ctx->reset_flag == 2)) {
 				ctx->state = AML_STATE_RESET;
+				ATRACE_COUNTER("v4l2_state", ctx->state);
 				ctx->v4l_codec_ready = false;
 				ctx->v4l_codec_dpb_ready = false;
 
@@ -1082,6 +1100,7 @@ void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx)
 
 	flags = aml_vcodec_ctx_lock(ctx);
 	ctx->state = AML_STATE_ABORT;
+	ATRACE_COUNTER("v4l2_state", ctx->state);
 	aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ABORT)",
 		ctx->id, __func__);
 	aml_vcodec_ctx_unlock(ctx, flags);
@@ -1135,6 +1154,7 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	q_data->bytesperline[1] = q_data->coded_width;
 
 	ctx->state = AML_STATE_IDLE;
+	ATRACE_COUNTER("v4l2_state", ctx->state);
 	aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_IDLE)",
 		ctx->id, __func__);
 }
@@ -1143,6 +1163,7 @@ static int vidioc_vdec_qbuf(struct file *file, void *priv,
 			    struct v4l2_buffer *buf)
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
+	int ret;
 
 	if (ctx->state == AML_STATE_ABORT) {
 		aml_v4l2_err("[%d] Call on QBUF after unrecoverable error, type = %s",
@@ -1151,7 +1172,15 @@ static int vidioc_vdec_qbuf(struct file *file, void *priv,
 		return -EIO;
 	}
 
-	return v4l2_m2m_qbuf(file, ctx->m2m_ctx, buf);
+	ret = v4l2_m2m_qbuf(file, ctx->m2m_ctx, buf);
+
+	if (V4L2_TYPE_IS_OUTPUT(buf->type)) {
+		if (ret == -EAGAIN)
+			ATRACE_COUNTER("v4l2_qbuf_eagain", 0);
+		else
+			ATRACE_COUNTER("v4l2_qbuf_ok", 0);
+	}
+	return ret;
 }
 
 static int vidioc_vdec_dqbuf(struct file *file, void *priv,
@@ -1169,6 +1198,15 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 	}
 
 	ret = v4l2_m2m_dqbuf(file, ctx->m2m_ctx, buf);
+	if (V4L2_TYPE_IS_OUTPUT(buf->type)) {
+		if (ret == -EAGAIN)
+			ATRACE_COUNTER("v4l2_dqin_eagain", 0);
+		else
+			ATRACE_COUNTER("v4l2_dqin_ok", 0);
+	} else if (!V4L2_TYPE_IS_OUTPUT(buf->type)) {
+		if (ret == -EAGAIN)
+			ATRACE_COUNTER("v4l2_dqout_eagain", 0);
+	}
 
 	if (!ret && !V4L2_TYPE_IS_OUTPUT(buf->type)) {
 		struct vb2_queue *vq;
@@ -1186,7 +1224,10 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 			dmabuf_fd_install_data(vb2_v4l2->private,
 				(void*)&aml_buf->privdata,
 				sizeof(struct file_private_data));
-			aml_buf->is_install_privdata = true;
+			ATRACE_COUNTER("v4l2_dqout_ok", aml_buf->privdata.vf.index_disp);
+			aml_v4l2_debug(4, "[%d] %s, disp: %d, vf: %p\n", ctx->id,
+				__func__, aml_buf->privdata.vf.index_disp,
+				v4l_get_vf_handle(vb2_v4l2->private));
 		}
 		fput(file);
 		mutex_unlock(&ctx->lock);
@@ -1454,6 +1495,7 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 				return -EINVAL;
 			}
 			ctx->state = AML_STATE_INIT;
+			ATRACE_COUNTER("v4l2_state", ctx->state);
 			aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_INIT)",
 				ctx->id, __func__);
 		}
@@ -1800,6 +1842,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	mutex_lock(&ctx->state_lock);
 	if (ctx->state == AML_STATE_INIT) {
 		ctx->state = AML_STATE_PROBE;
+		ATRACE_COUNTER("v4l2_state", ctx->state);
 		aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_PROBE)",
 			ctx->id, __func__);
 	}
@@ -1825,6 +1868,7 @@ static void vb2ops_vdec_buf_finish(struct vb2_buffer *vb)
 	if (buf_error) {
 		aml_v4l2_err("[%d] Unrecoverable error on buffer.", ctx->id);
 		ctx->state = AML_STATE_ABORT;
+		ATRACE_COUNTER("v4l2_state", ctx->state);
 		aml_v4l2_debug(1, "[%d] %s() vcodec state (AML_STATE_ABORT)",
 			ctx->id, __func__);
 	}
