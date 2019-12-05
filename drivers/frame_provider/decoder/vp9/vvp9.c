@@ -58,6 +58,7 @@
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../utils/vdec_v4l2_buffer_ops.h"
+#include <media/v4l2-mem2mem.h>
 
 #define MIX_STREAM_SUPPORT
 
@@ -9786,8 +9787,11 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			!ctx->v4l_codec_ready &&
 			pbi->v4l_params_parsed) {
 			ret = 0; /*the params has parsed.*/
-		} else if (!ctx->v4l_codec_dpb_ready)
-			ret = 0;
+		} else if (!ctx->v4l_codec_dpb_ready) {
+			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
+				run_ready_min_buf_num)
+				ret = 0;
+		}
 	}
 
 	if (ret)
