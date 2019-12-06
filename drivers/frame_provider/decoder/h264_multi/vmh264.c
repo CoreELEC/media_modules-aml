@@ -2719,6 +2719,8 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 	bForceInterlace = check_force_interlace(hw, frame);
 	if (bForceInterlace)
 		vf_count = 2;
+	if (hw->is_used_v4l)
+		vf_count = 1;
 	hw->buffer_spec[buffer_index].vf_ref = 0;
 	fill_frame_info(hw, frame);
 	for (i = 0; i < vf_count; i++) {
