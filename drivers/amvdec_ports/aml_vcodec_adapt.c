@@ -669,7 +669,7 @@ bool vdec_input_full(struct aml_vdec_adapt *ada_ctx)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
 
-	return (vdec->input.have_frame_num > 60) ? true : false;
+	return (vdec->input.have_frame_num > 600) ? true : false;
 }
 
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,

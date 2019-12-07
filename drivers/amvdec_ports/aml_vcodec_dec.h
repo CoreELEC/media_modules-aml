@@ -94,7 +94,6 @@ struct aml_video_dec_buf {
 	bool queued_in_v4l2;
 	bool lastframe;
 	bool error;
-	bool is_install_privdata;
 };
 
 extern const struct v4l2_ioctl_ops aml_vdec_ioctl_ops;
@@ -123,5 +122,6 @@ void aml_thread_stop(struct aml_vcodec_ctx *ctx);
 void wait_vcodec_ending(struct aml_vcodec_ctx *ctx);
 void vdec_frame_buffer_release(void *data);
 void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes);
+void* v4l_get_vf_handle(int fd);
 
 #endif /* _AML_VCODEC_DEC_H_ */

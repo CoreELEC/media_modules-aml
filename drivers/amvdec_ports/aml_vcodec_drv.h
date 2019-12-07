@@ -58,7 +58,15 @@
 #define V4L2_EVENT_REQUEST_RESET	(1 << 8)
 #define V4L2_EVENT_REQUEST_EXIT		(1 << 9)
 
+/* v4l buffer pool */
+#define V4L_CAP_BUFF_MAX		(32)
+#define V4L_CAP_BUFF_INVALID		(0)
+#define V4L_CAP_BUFF_IN_M2M		(1)
+#define V4L_CAP_BUFF_IN_DEC		(2)
 
+/* v4l reset mode */
+#define V4L_RESET_MODE_NORMAL		(1 << 0) /* reset vdec_input and decoder. */
+#define V4L_RESET_MODE_LIGHT		(1 << 1) /* just only reset decoder. */
 
 /**
  * enum aml_hw_reg_idx - AML hw register base index
@@ -330,6 +338,15 @@ struct v4l2_config_parm {
 	u8 buf[4096];
 };
 
+struct v4l_buff_pool {
+	/*
+	 * bit 31-16: buffer state
+	 * bit 15- 0: buffer index
+	 */
+	u32 seq[V4L_CAP_BUFF_MAX];
+	u32 in, out;
+};
+
 enum aml_thread_type {
 	AML_THREAD_OUTPUT,
 	AML_THREAD_CAPTURE,
@@ -445,6 +462,8 @@ struct aml_vcodec_ctx {
 	bool is_stream_off;
 	int reset_flag;
 	int stop_cmd;
+	u32 display_count;
+	struct v4l_buff_pool cap_pool;
 };
 
 /**
