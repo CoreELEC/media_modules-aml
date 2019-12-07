@@ -337,7 +337,7 @@ int get_fb_from_queue(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer **out_
 		pfb->mem_type		= VDEC_SCATTER_MEMORY_TYPE;
 		pfb->status		= FB_ST_NORMAL;
 	} else if (dst_buf->num_planes == 1) {
-		pfb = &dst_buf_info->frame_buffer;
+		pfb			= &dst_buf_info->frame_buffer;
 		pfb->m.mem[0].dma_addr	= vb2_dma_contig_plane_dma_addr(dst_buf, 0);
 		pfb->m.mem[0].addr	= dma_to_phys(v4l_get_dev_from_codec_mm(), pfb->m.mem[0].dma_addr);
 		pfb->m.mem[0].size	= ctx->picinfo.y_len_sz + ctx->picinfo.c_len_sz;
@@ -399,6 +399,8 @@ int get_fb_from_queue(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer **out_
 
 	info = container_of(pfb, struct aml_video_dec_buf, frame_buffer);
 
+	ctx->cap_pool.seq[ctx->cap_pool.out++] =
+		(V4L_CAP_BUFF_IN_DEC << 16 | dst_buf->index);
 	v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
 
 	aml_vcodec_ctx_unlock(ctx, flags);
@@ -511,6 +513,7 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 
 		/* make the run to stanby until new buffs to enque. */
 		ctx->v4l_codec_dpb_ready = false;
+		ctx->reset_flag = V4L_RESET_MODE_LIGHT;
 
 		/*
 		 * After all buffers containing decoded frames from
@@ -1179,8 +1182,7 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 		aml_buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
 
 		file = fget(vb2_v4l2->private);
-		if (is_v4l2_buf_file(file) &&
-			!aml_buf->is_install_privdata) {
+		if (is_v4l2_buf_file(file)) {
 			dmabuf_fd_install_data(vb2_v4l2->private,
 				(void*)&aml_buf->privdata,
 				sizeof(struct file_private_data));
@@ -1720,15 +1722,23 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			__func__, __LINE__, buf->frame_buffer.m.mem[0].addr,
 			buf->frame_buffer.vf_handle, buf->frame_buffer.status);
 
+		if (vb->index >= ctx->dpb_size) {
+			aml_v4l2_debug(2, "[%d] enque capture buf idx %d is invalid.",
+				ctx->id, vb->index);
+			return;
+		}
+
 		if (!buf->que_in_m2m) {
-			aml_v4l2_debug(2, "[%d] enque capture buf idx %d, %p",
-				ctx->id, vb->index, vb);
+			aml_v4l2_debug(2, "[%d] enque capture buf idx %d, vf: %p",
+				ctx->id, vb->index, v4l_get_vf_handle(vb2_v4l2->private));
 
 			v4l2_m2m_buf_queue(ctx->m2m_ctx, vb2_v4l2);
 			buf->que_in_m2m = true;
 			buf->queued_in_vb2 = true;
 			buf->queued_in_v4l2 = true;
 			buf->ready_to_display = false;
+			ctx->cap_pool.seq[ctx->cap_pool.in++] =
+				(V4L_CAP_BUFF_IN_M2M << 16 | vb->index);
 
 			/* check dpb ready */
 			aml_check_dpb_ready(ctx);
@@ -1950,12 +1960,15 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		while ((vb2_v4l2 = v4l2_m2m_src_buf_remove(ctx->m2m_ctx)))
 			v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
 	} else {
+		/* stop decoder. */
+		wait_vcodec_ending(ctx);
+
 		for (i = 0; i < q->num_buffers; ++i) {
 			vb2_v4l2 = to_vb2_v4l2_buffer(q->bufs[i]);
 			buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
 			buf->frame_buffer.status = FB_ST_NORMAL;
 			buf->que_in_m2m = false;
-			buf->is_install_privdata = false;
+			ctx->cap_pool.seq[i] = 0;
 
 			if (vb2_v4l2->vb2_buf.state == VB2_BUF_STATE_ACTIVE)
 				v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
@@ -1965,6 +1978,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		}
 	}
 	ctx->buf_used_count = 0;
+	ctx->cap_pool.in = 0;
+	ctx->cap_pool.out = 0;
 }
 
 static void m2mops_vdec_device_run(void *priv)

@@ -47,6 +47,7 @@
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../utils/vdec_v4l2_buffer_ops.h"
+#include <media/v4l2-mem2mem.h>
 
 #define CONSTRAIN_MAX_BUF_NUM
 
@@ -182,6 +183,8 @@ static u32 video_signal_type;
 static int start_decode_buf_level = 0x8000;
 
 static unsigned int decode_timeout_val = 200;
+
+static u32 run_ready_min_buf_num = 2;
 
 /*data_resend_policy:
 	bit 0, stream base resend data when decoding buf empty
@@ -2150,7 +2153,7 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			if (hevc->m_PIC[i] != NULL) {
 				memset(hevc->m_PIC[i], 0 ,sizeof(struct PIC_s));
-				hevc->m_PIC[i]->index = -1;
+				hevc->m_PIC[i]->index = i;
 			}
 		}
 	}
@@ -3051,10 +3054,10 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 	return buf_size;
 }
 
-static int v4l_alloc_buf(struct hevc_state_s *hevc)
+static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
-	int i;
 	int ret = -1;
+	int i = pic->index;
 	struct vdec_v4l2_buffer *fb = NULL;
 
 	if (hevc->fatal_error & DECODER_FATAL_ERROR_NO_MEM)
@@ -3066,10 +3069,6 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc)
 			((struct aml_vcodec_ctx *)(hevc->v4l2_ctx))->id);
 		return ret;
 	}
-
-	for (i = 0; i < BUF_POOL_SIZE; i++)
-		if (hevc->m_BUF[i].start_adr == 0)
-			break;
 
 	if (hevc->mmu_enable) {
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
@@ -3091,8 +3090,9 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc)
 		}
 	}
 
-	hevc->m_BUF[i].used_flag = 0;
-	hevc->m_BUF[i].v4l_ref_buf_addr = (ulong)fb;
+	hevc->m_BUF[i].used_flag	= 0;
+	hevc->m_BUF[i].v4l_ref_buf_addr	= (ulong)fb;
+	pic->cma_alloc_addr		= hevc->m_BUF[i].v4l_ref_buf_addr;
 	if (fb->num_planes == 1) {
 		hevc->m_BUF[i].start_adr = fb->m.mem[0].addr;
 		hevc->m_BUF[i].size = fb->m.mem[0].size;
@@ -3316,19 +3316,8 @@ static int get_alloc_pic_count(struct hevc_state_s *hevc)
 
 static int v4l_config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
-	int i;
+	int i = pic->index;
 	int dw_mode = get_double_write_mode(hevc);
-
-	for (i = 0; i < BUF_POOL_SIZE; i++) {
-		if (hevc->m_BUF[i].start_adr != 0 &&
-			hevc->m_BUF[i].used_flag == 0) {
-			hevc->m_BUF[i].used_flag = 1;
-			break;
-		}
-	}
-
-	if (i >= BUF_POOL_SIZE)
-		return -1;
 
 	if (hevc->mmu_enable)
 		pic->header_adr = hevc->m_BUF[i].header_addr;
@@ -5580,20 +5569,14 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 		return NULL;
 
 	if (new_pic->BUF_index < 0) {
-		ret = hevc->is_used_v4l ?
-			v4l_alloc_buf(hevc) :
-			alloc_buf(hevc);
-		if (ret < 0)
+		if (alloc_buf(hevc) < 0)
 			return NULL;
-
-		ret = hevc->is_used_v4l ?
-			v4l_config_pic(hevc, new_pic) :
-			config_pic(hevc, new_pic);
-		if (ret < 0) {
-			dealloc_pic_buf(hevc, new_pic);
-			return NULL;
+		else {
+			if (config_pic(hevc, new_pic) < 0) {
+				dealloc_pic_buf(hevc, new_pic);
+				return NULL;
+			}
 		}
-
 		new_pic->width = hevc->pic_w;
 		new_pic->height = hevc->pic_h;
 		set_canvas(hevc, new_pic);
@@ -5678,6 +5661,124 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 		dump_pic_list(hevc);
 		pr_err("\n*******************************************\n");
 	}
+
+	return new_pic;
+}
+
+static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
+		union param_u *rpm_param)
+{
+	int ret;
+	int used_buf_num = get_work_pic_num(hevc);
+	struct aml_vcodec_ctx * v4l = hevc->v4l2_ctx;
+	struct PIC_s *new_pic = NULL;
+	struct PIC_s *pic = NULL;
+	int i;
+
+	for (i = 0; i < used_buf_num; ++i) {
+		struct v4l_buff_pool *pool = &v4l->cap_pool;
+		u32 state = (pool->seq[i] >> 16);
+		u32 index = (pool->seq[i] & 0xffff);
+
+		switch (state) {
+		case V4L_CAP_BUFF_IN_DEC:
+			pic = hevc->m_PIC[i];
+			if (pic && (pic->index != -1) &&
+				(pic->output_mark == 0) &&
+				(pic->referenced == 0) &&
+				(pic->output_ready == 0) &&
+				(pic->width == hevc->pic_w) &&
+				(pic->height == hevc->pic_h) &&
+				pic->cma_alloc_addr) {
+					new_pic = pic;
+			}
+			break;
+		case V4L_CAP_BUFF_IN_M2M:
+			pic = hevc->m_PIC[index];
+			pic->width = hevc->pic_w;
+			pic->height = hevc->pic_h;
+			if ((pic->index != -1) &&
+				!v4l_alloc_buf(hevc, pic)) {
+				v4l_config_pic(hevc, pic);
+				init_pic_list_hw(hevc);
+				new_pic = pic;
+			}
+			break;
+		default:
+			pr_err("v4l buffer state err %d.\n", state);
+			break;
+		}
+
+		if (new_pic)
+			break;
+	}
+
+	if (new_pic == NULL)
+		return NULL;
+
+	new_pic->double_write_mode = get_double_write_mode(hevc);
+	if (new_pic->double_write_mode)
+		set_canvas(hevc, new_pic);
+
+	if (get_mv_buf(hevc, new_pic) < 0)
+		return NULL;
+
+	if (hevc->mmu_enable) {
+		ret = H265_alloc_mmu(hevc, new_pic,
+			rpm_param->p.bit_depth,
+			hevc->frame_mmu_map_addr);
+		if (ret != 0) {
+			put_mv_buf(hevc, new_pic);
+			hevc_print(hevc, 0,
+				"can't alloc need mmu1,idx %d ret =%d\n",
+				new_pic->decode_idx, ret);
+			return NULL;
+		}
+	}
+
+	new_pic->referenced = 1;
+	new_pic->decode_idx = hevc->decode_idx;
+	new_pic->slice_idx = 0;
+	new_pic->referenced = 1;
+	new_pic->output_mark = 0;
+	new_pic->recon_mark = 0;
+	new_pic->error_mark = 0;
+	new_pic->dis_mark = 0;
+	/* new_pic->output_ready = 0; */
+	new_pic->num_reorder_pic = rpm_param->p.sps_num_reorder_pics_0;
+	new_pic->losless_comp_body_size = hevc->losless_comp_body_size;
+	new_pic->POC = hevc->curr_POC;
+	new_pic->pic_struct = hevc->curr_pic_struct;
+
+	if (new_pic->aux_data_buf)
+		release_aux_data(hevc, new_pic);
+	new_pic->mem_saving_mode =
+		hevc->mem_saving_mode;
+	new_pic->bit_depth_luma =
+		hevc->bit_depth_luma;
+	new_pic->bit_depth_chroma =
+		hevc->bit_depth_chroma;
+	new_pic->video_signal_type =
+		hevc->video_signal_type;
+
+	new_pic->conformance_window_flag =
+		hevc->param.p.conformance_window_flag;
+	new_pic->conf_win_left_offset =
+		hevc->param.p.conf_win_left_offset;
+	new_pic->conf_win_right_offset =
+		hevc->param.p.conf_win_right_offset;
+	new_pic->conf_win_top_offset =
+		hevc->param.p.conf_win_top_offset;
+	new_pic->conf_win_bottom_offset =
+		hevc->param.p.conf_win_bottom_offset;
+	new_pic->chroma_format_idc =
+			hevc->param.p.chroma_format_idc;
+
+	hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+		"%s: index %d, buf_idx %d, decode_idx %d, POC %d\n",
+		__func__, new_pic->index,
+		new_pic->BUF_index, new_pic->decode_idx,
+		new_pic->POC);
 
 	return new_pic;
 }
@@ -6918,7 +7019,9 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			set_aux_data(hevc, hevc->cur_pic, 1, 0);
 #endif
 			/* new pic */
-			hevc->cur_pic = get_new_pic(hevc, rpm_param);
+			hevc->cur_pic = hevc->is_used_v4l ?
+				v4l_get_new_pic(hevc, rpm_param) :
+				get_new_pic(hevc, rpm_param);
 			if (hevc->cur_pic == NULL) {
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
 					dump_pic_list(hevc);
@@ -6979,7 +7082,9 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	} else {
 	if (hevc->wait_buf == 1) {
 			pic_list_process(hevc);
-			hevc->cur_pic = get_new_pic(hevc, rpm_param);
+			hevc->cur_pic = hevc->is_used_v4l ?
+				v4l_get_new_pic(hevc, rpm_param) :
+				get_new_pic(hevc, rpm_param);
 			if (hevc->cur_pic == NULL)
 				return -1;
 
@@ -12147,8 +12252,11 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			!ctx->v4l_codec_ready &&
 			hevc->v4l_params_parsed) {
 			ret = 0; /*the params has parsed.*/
-		} else if (!ctx->v4l_codec_dpb_ready)
-			ret = 0;
+		} else if (!ctx->v4l_codec_dpb_ready) {
+			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
+				run_ready_min_buf_num)
+				ret = 0;
+		}
 	}
 
 	if (ret)
@@ -12357,7 +12465,6 @@ static void aml_free_canvas(struct vdec_s *vdec)
 
 static void reset(struct vdec_s *vdec)
 {
-
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)vdec->private;
 	int i;

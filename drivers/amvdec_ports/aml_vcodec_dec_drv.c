@@ -269,6 +269,36 @@ int dmabuf_fd_install_data(int fd, void* data, u32 size)
 	return 0;
 }
 
+void* v4l_get_vf_handle(int fd)
+{
+	struct file *file;
+	struct file_private_data *data = NULL;
+	void *vf_handle = 0;
+
+	file = fget(fd);
+
+	if (!file) {
+		pr_err("%s: fget fd %d fail!, comm %s, pid %d\n",
+			__func__, fd, current->comm, current->pid);
+		return NULL;
+	}
+
+	if (!is_v4l2_buf_file(file)) {
+		fput(file);
+		pr_err("%s the buf file checked fail!\n", __func__);
+		return NULL;
+	}
+
+	data = (struct file_private_data*) file->private_data;
+	if (data)
+		vf_handle = &data->vf;
+
+	fput(file);
+
+	return vf_handle;
+}
+
+
 static long v4l2_vcodec_ioctl(struct file *file,
 			unsigned int cmd,
 			ulong arg)

@@ -1243,26 +1243,6 @@ static void resize_context_buffers(struct VP9Decoder_s *pbi,
 		}
 		pr_info("%s (%d,%d)=>(%d,%d)\r\n", __func__, cm->width,
 			cm->height, width, height);
-
-		if (pbi->is_used_v4l) {
-			struct PIC_BUFFER_CONFIG_s *pic = &cm->cur_frame->buf;
-
-			/* resolution change happend need to reconfig buffs if true. */
-			if (pic->y_crop_width != width || pic->y_crop_height != height) {
-				int i;
-				for (i = 0; i < pbi->used_buf_num; i++) {
-					pic = &cm->buffer_pool->frame_bufs[i].buf;
-					pic->y_crop_width = width;
-					pic->y_crop_height = height;
-					if (!v4l_alloc_and_config_pic(pbi, pic))
-						set_canvas(pbi, pic);
-					else
-						vp9_print(pbi, 0,
-							"v4l: reconfig buff fail.\n");
-				}
-			}
-		}
-
 		cm->width = width;
 		cm->height = height;
 	}
@@ -2156,7 +2136,6 @@ static int get_free_fb(struct VP9Decoder_s *pbi)
 {
 	struct VP9_Common_s *const cm = &pbi->common;
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
-	struct PIC_BUFFER_CONFIG_s *pic = NULL;
 	int i;
 	unsigned long flags;
 
@@ -2170,21 +2149,11 @@ static int get_free_fb(struct VP9Decoder_s *pbi)
 		}
 	}
 	for (i = 0; i < pbi->used_buf_num; ++i) {
-		pic = &frame_bufs[i].buf;
 		if ((frame_bufs[i].ref_count == 0) &&
-			(pic->vf_ref == 0) && (pic->index != -1)) {
-			if (pbi->is_used_v4l && !pic->cma_alloc_addr) {
-				pic->y_crop_width = pbi->frame_width;
-				pic->y_crop_height = pbi->frame_height;
-				if (!v4l_alloc_and_config_pic(pbi, pic)) {
-					set_canvas(pbi, pic);
-					init_pic_list_hw(pbi);
-				} else
-					i = pbi->used_buf_num;
-			}
-
+			(frame_bufs[i].buf.vf_ref == 0) &&
+			(frame_bufs[i].buf.index != -1)
+			)
 			break;
-		}
 	}
 	if (i != pbi->used_buf_num) {
 		frame_bufs[i].ref_count = 1;
@@ -2198,6 +2167,58 @@ static int get_free_fb(struct VP9Decoder_s *pbi)
 
 	unlock_buffer_pool(cm->buffer_pool, flags);
 	return i;
+}
+
+static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
+{
+	struct VP9_Common_s *const cm = &pbi->common;
+	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
+	struct aml_vcodec_ctx * v4l = pbi->v4l2_ctx;
+	struct PIC_BUFFER_CONFIG_s *pic = NULL;
+	int i, idx = INVALID_IDX;
+	ulong flags;
+
+	lock_buffer_pool(cm->buffer_pool, flags);
+
+	for (i = 0; i < pbi->used_buf_num; ++i) {
+		struct v4l_buff_pool *pool = &v4l->cap_pool;
+		u32 state = (pool->seq[i] >> 16);
+		u32 index = (pool->seq[i] & 0xffff);
+
+		switch (state) {
+		case V4L_CAP_BUFF_IN_DEC:
+			pic = &frame_bufs[i].buf;
+			if ((frame_bufs[i].ref_count == 0) &&
+				(pic->vf_ref == 0) &&
+				(pic->index != -1) &&
+				pic->cma_alloc_addr) {
+				idx = i;
+			}
+			break;
+		case V4L_CAP_BUFF_IN_M2M:
+			pic = &frame_bufs[index].buf;
+			pic->y_crop_width = pbi->frame_width;
+			pic->y_crop_height = pbi->frame_height;
+			if (!v4l_alloc_and_config_pic(pbi, pic)) {
+				set_canvas(pbi, pic);
+				init_pic_list_hw(pbi);
+				idx = index;
+			}
+			break;
+		default:
+			pr_err("v4l buffer state err %d.\n", state);
+			break;
+		}
+
+		if (idx != INVALID_IDX) {
+			frame_bufs[idx].ref_count = 1;
+			break;
+		}
+	}
+
+	unlock_buffer_pool(cm->buffer_pool, flags);
+
+	return idx;
 }
 
 static int get_free_buf_count(struct VP9Decoder_s *pbi)
@@ -2361,7 +2382,9 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 	if (debug & VP9_DEBUG_BUFMGR_DETAIL)
 		dump_pic_list(pbi);
 #endif
-	cm->new_fb_idx = get_free_fb(pbi);
+	cm->new_fb_idx = pbi->is_used_v4l ?
+		v4l_get_free_fb(pbi) :
+		get_free_fb(pbi);
 	if (cm->new_fb_idx == INVALID_IDX) {
 		pr_info("get_free_fb error\r\n");
 		return -1;
@@ -10126,7 +10149,6 @@ static void  init_frame_bufs(struct VP9Decoder_s *pbi)
 
 static void reset(struct vdec_s *vdec)
 {
-
 	struct VP9Decoder_s *pbi =
 		(struct VP9Decoder_s *)vdec->private;
 

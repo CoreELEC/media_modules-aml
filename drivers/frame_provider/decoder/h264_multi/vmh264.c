@@ -61,6 +61,7 @@
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include <linux/crc32.h>
+#include <media/v4l2-mem2mem.h>
 
 #undef pr_info
 #define pr_info printk
@@ -158,6 +159,8 @@ static u32 run_ready_display_q_num;
 	  */
 static u32 run_ready_max_buf_num = 0xff;
 #endif
+
+static u32 run_ready_min_buf_num = 2;
 
 #define VDEC_ASSIST_CANVAS_BLK32		0x5
 
@@ -8210,10 +8213,11 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			!ctx->v4l_codec_ready &&
 			hw->v4l_params_parsed) {
 			ret = 0; /*the params has parsed.*/
-		} else if (!ctx->v4l_codec_dpb_ready)
-			ret = 0;
-		else if (hw->wait_reset_done_flag)
-			ret = 0;
+		} else if (!ctx->v4l_codec_dpb_ready) {
+			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
+				run_ready_min_buf_num)
+				ret = 0;
+		}
 	}
 
 	if (ret)

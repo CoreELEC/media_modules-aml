@@ -202,6 +202,7 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
 		ctx->config.parm.dec.cfg.double_write_mode = 16;
+		ctx->config.parm.dec.cfg.ref_buf_margin = 7;
 		ctx->config.length = vdec_config_default_parms(ctx->config.buf);
 	}
 
