@@ -46,6 +46,7 @@
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
 #include "../utils/vdec_v4l2_buffer_ops.h"
+#include "../utils/config_parser.h"
 
 #define DRIVER_NAME "ammvdec_mpeg4"
 #define MODULE_NAME "ammvdec_mpeg4"
@@ -91,8 +92,9 @@
 /* values between 6 and 14 are reserved */
 #define PARC_EXTENDED              15
 
-#define VF_POOL_SIZE          16
-#define DECODE_BUFFER_NUM_MAX 8
+#define VF_POOL_SIZE          64
+#define DECODE_BUFFER_NUM_MAX 16
+#define DECODE_BUFFER_NUM_DEF 8
 #define PUT_INTERVAL        (HZ/100)
 #define MAX_BMMU_BUFFER_NUM (DECODE_BUFFER_NUM_MAX + 1)
 #define WORKSPACE_SIZE		(12*SZ_64K)
@@ -141,6 +143,7 @@ static unsigned int radr;
 static unsigned int rval;
 /* 0x40bit = 8byte */
 static unsigned int frmbase_cont_bitlevel = 0x40;
+static unsigned int dynamic_buf_num_margin;
 
 #define VMPEG4_DEV_NUM        9
 static unsigned int max_decode_instance_num = VMPEG4_DEV_NUM;
@@ -168,6 +171,7 @@ unsigned int mpeg4_debug_mask = 0xff;
 #define PRINT_FLAG_VDEC_STATUS        0x0800
 #define PRINT_FLAG_TIMEOUT_STATUS     0x1000
 #define PRINT_FLAG_V4L_DETAIL         0x8000
+#define IGNORE_PARAM_FROM_CONFIG      0x8000000
 
 int mmpeg4_debug_print(int index, int debug_flag, const char *fmt, ...)
 {
@@ -299,6 +303,8 @@ struct vdec_mpeg4_hw_s {
 	bool is_used_v4l;
 	void *v4l2_ctx;
 	bool v4l_params_parsed;
+	u32 buf_num;
+	u32 dynamic_buf_num_margin;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -331,6 +337,18 @@ static unsigned char aspect_ratio_table[16] = {
 };
 
 static void reset_process_time(struct vdec_mpeg4_hw_s *hw);
+
+
+static int vmpeg4_get_buf_num(struct vdec_mpeg4_hw_s *hw)
+{
+	int buf_num = DECODE_BUFFER_NUM_DEF;
+
+	buf_num += hw->dynamic_buf_num_margin;
+	if (buf_num > DECODE_BUFFER_NUM_MAX)
+		buf_num = DECODE_BUFFER_NUM_MAX;
+
+	return buf_num;
+}
 
 static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i)
 {
@@ -422,24 +440,24 @@ static bool is_enough_free_buffer(struct vdec_mpeg4_hw_s *hw)
 {
 	int i;
 
-	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+	for (i = 0; i < hw->buf_num; i++) {
 		if (hw->vfbuf_use[i] == 0)
 			break;
 	}
 
-	return i == DECODE_BUFFER_NUM_MAX ? false : true;
+	return i == hw->buf_num ? false : true;
 }
 
 static int find_free_buffer(struct vdec_mpeg4_hw_s *hw)
 {
 	int i;
 
-	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+	for (i = 0; i < hw->buf_num; i++) {
 		if (hw->vfbuf_use[i] == 0)
 			break;
 	}
 
-	if (i == DECODE_BUFFER_NUM_MAX)
+	if (i == hw->buf_num)
 		return -1;
 
 	if (hw->is_used_v4l)
@@ -453,7 +471,7 @@ static int spec_to_index(struct vdec_mpeg4_hw_s *hw, u32 spec)
 {
 	int i;
 
-	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+	for (i = 0; i < hw->buf_num; i++) {
 		if (hw->canvas_spec[i] == spec)
 			return i;
 	}
@@ -956,7 +974,7 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 				ps.visible_height	= hw->frame_height;
 				ps.coded_width		= ALIGN(hw->frame_width, 64);
 				ps.coded_height		= ALIGN(hw->frame_height, 64);
-				ps.dpb_size		= MAX_BMMU_BUFFER_NUM - 1;
+				ps.dpb_size			= hw->buf_num;
 				hw->v4l_params_parsed	= true;
 				vdec_v4l_set_ps_infos(ctx, &ps);
 			}
@@ -1512,14 +1530,14 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 		}
 	}
 
-	for (i = 0; i < MAX_BMMU_BUFFER_NUM; i++) {
+	for (i = 0; i < hw->buf_num + 1; i++) {
 
 		unsigned canvas;
 
-		if (i == (MAX_BMMU_BUFFER_NUM - 1))
+		if (i == hw->buf_num)
 			decbuf_size = WORKSPACE_SIZE;
 
-		if (hw->is_used_v4l && !(i == (MAX_BMMU_BUFFER_NUM - 1))) {
+		if (hw->is_used_v4l && !(i == hw->buf_num)) {
 			continue;
 		} else {
 			ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, i,
@@ -1531,7 +1549,7 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 			}
 		}
 
-		if (i == (MAX_BMMU_BUFFER_NUM - 1)) {
+		if (i == hw->buf_num) {
 			hw->buf_start = decbuf_start;
 		} else {
 			if (vdec->parallel_dec == 1) {
@@ -1591,13 +1609,14 @@ static void vmpeg4_dump_state(struct vdec_s *vdec)
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"====== %s\n", __func__);
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
-		"width/height (%d/%d), i_fram:%d, buffer_not_ready %d\n",
+		"width/height (%d/%d), i_fram:%d, buffer_not_ready %d, buf_num %d\n",
 		hw->frame_width,
 		hw->frame_height,
 		hw->first_i_frame_ready,
-		hw->buffer_not_ready
+		hw->buffer_not_ready,
+		hw->buf_num
 		);
-	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+	for (i = 0; i < hw->buf_num; i++) {
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"index %d, used %d\n", i, hw->vfbuf_use[i]);
 	}
@@ -1791,7 +1810,7 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 			return -1;
 	} else {
 		if (!hw->is_used_v4l) {
-			for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+			for (i = 0; i < hw->buf_num; i++) {
 				canvas_config_config(canvas_y(hw->canvas_spec[i]),
 							&hw->canvas_config[i][0]);
 				canvas_config_config(canvas_u(hw->canvas_spec[i]),
@@ -2235,6 +2254,7 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 {
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	struct vdec_mpeg4_hw_s *hw = NULL;
+	int config_val = 0;
 
 	if (pdata == NULL) {
 		pr_err("%s memory resource undefined.\n", __func__);
@@ -2267,6 +2287,19 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	else
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			PROVIDER_NAME ".%02x", pdev->id & 0xff);
+
+
+	if (((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0) && pdata->config_len) {
+		mmpeg4_debug_print(DECODE_ID(hw), 0, "pdata->config: %s\n", pdata->config);
+		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
+			&config_val) == 0)
+			hw->dynamic_buf_num_margin = config_val;
+		else
+			hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
+	} else {
+		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
+	}
+	hw->buf_num = vmpeg4_get_buf_num(hw);
 
 	if (pdata->parallel_dec == 1) {
 		int i;
@@ -2429,6 +2462,9 @@ MODULE_PARM_DESC(debug_enable,
 
 module_param(frmbase_cont_bitlevel, uint, 0664);
 MODULE_PARM_DESC(frmbase_cont_bitlevel, "\nfrmbase_cont_bitlevel\n");
+
+module_param(dynamic_buf_num_margin, uint, 0664);
+MODULE_PARM_DESC(dynamic_buf_num_margin, "\n dynamic_buf_num_margin\n");
 
 module_param(radr, uint, 0664);
 MODULE_PARM_DESC(radr, "\nradr\n");

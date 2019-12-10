@@ -761,6 +761,7 @@ struct AVS2Decoder_s {
 #endif
 	int frameinfo_enable;
 	struct vframe_qos_s vframe_qos;
+	u32 dynamic_buf_margin;
 };
 
 static int  compute_losless_comp_body_size(
@@ -3885,7 +3886,7 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 #ifndef AVS2_10B_MMU
 	init_buf_list(dec);
 #else
-	dec->used_buf_num = max_buf_num;
+	dec->used_buf_num = max_buf_num + dec->dynamic_buf_margin;
 	if (dec->used_buf_num > MAX_BUF_NUM)
 		dec->used_buf_num = MAX_BUF_NUM;
 	if (dec->used_buf_num > FRAME_BUFFERS)
@@ -7318,6 +7319,13 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 			dec->double_write_mode = config_val;
 		else
 			dec->double_write_mode = double_write_mode;
+
+		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
+			&config_val) == 0)
+			dec->dynamic_buf_margin = config_val;
+		else
+			dec->dynamic_buf_margin = 0;
+
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
 				&& vf_dp.present_flag == 1) {
@@ -7363,6 +7371,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		dec->vavs2_amstream_dec_info.height = 0;
 		dec->vavs2_amstream_dec_info.rate = 30;*/
 		dec->double_write_mode = double_write_mode;
+		dec->dynamic_buf_margin = dynamic_buf_num_margin;
 	}
 	video_signal_type = dec->video_signal_type;
 
