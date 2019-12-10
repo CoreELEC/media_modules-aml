@@ -117,7 +117,7 @@ static DEFINE_SPINLOCK(vdec_spin_lock);
 
 static int frameinfo_flag = 0;
 static int v4lvideo_add_di = 1;
-static int max_di_instance = 1;
+static int max_di_instance = 2;
 
 //static int path_debug = 0;
 
