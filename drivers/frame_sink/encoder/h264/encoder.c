@@ -2703,8 +2703,10 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 		wq->request.src_h = cmd_info[14];
 		wq->request.scale_enable = cmd_info[15];
 
-		pr_err("hwenc: wq->pic.encoder_width:%d, wq->pic.encoder_height:%d, request fmt=%d\n",
-				wq->pic.encoder_width, wq->pic.encoder_height, wq->request.fmt);
+		enc_pr(LOG_INFO, "hwenc: wq->pic.encoder_width %d, ",
+		      wq->pic.encoder_width);
+		enc_pr(LOG_INFO, "wq->pic.encoder_height:%d, request fmt=%d\n",
+		      wq->pic.encoder_height, wq->request.fmt);
 
 		if (wq->pic.encoder_width >= 1280 && wq->pic.encoder_height >= 720 && wq->request.fmt == FMT_RGBA8888) {
 			wq->request.scale_enable = 1;
