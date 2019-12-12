@@ -485,7 +485,7 @@ static void fill_vdec_params(struct vdec_h264_inst *inst, struct h264_SPS_t *sps
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 	pic->profile_idc	= sps->profile_idc;
-
+	pic->ref_frame_count= sps->ref_frame_count;
 	/* calc DPB size */
 	dec->dpb_sz		= sps->num_reorder_frames + margin;
 
@@ -810,7 +810,9 @@ static bool monitor_res_change(struct vdec_h264_inst *inst, u8 *buf, u32 size)
 		inst->vsi->cur_pic.coded_height !=
 		inst->vsi->pic.coded_height) ||
 		(inst->vsi->pic.profile_idc !=
-		inst->vsi->cur_pic.profile_idc))) {
+		inst->vsi->cur_pic.profile_idc) ||
+		(inst->vsi->pic.ref_frame_count !=
+		inst->vsi->cur_pic.ref_frame_count))) {
 		pr_info("res change\n");
 		inst->vsi->cur_pic = inst->vsi->pic;
 		return true;
