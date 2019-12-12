@@ -492,7 +492,7 @@ static int aml_h264_parser_sps(struct get_bits_context *gb, struct h264_SPS_t *s
 
 	if (get_bits_left(gb) < 0) {
 		pr_info("Overread %s by %d bits\n", sps->vui_parameters_present_flag ? "VUI" : "SPS", -get_bits_left(gb));
-		goto out;
+		/*goto out;*/
 	}
 
 #if 0
@@ -533,7 +533,7 @@ static int aml_h264_parser_sps(struct get_bits_context *gb, struct h264_SPS_t *s
 
 	if (!sps->sar.den)
 		sps->sar.den = 1;
-out:
+/*out:*/
 	if (1) {
 		static const char csp[4][5] = { "Gray", "420", "422", "444" };
 		pr_info("sps:%u profile:%d/%d poc:%d ref:%d %dx%d %s %s crop:%u/%u/%u/%u %s %s %d/%d b%d reo:%d\n",

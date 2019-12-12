@@ -266,6 +266,7 @@ struct vdec_pic_info {
 	unsigned int y_len_sz;
 	unsigned int c_len_sz;
 	int profile_idc;
+	int ref_frame_count;
 };
 
 struct aml_vdec_cfg_infos {
