@@ -80,6 +80,9 @@ extern void vdec_poweron(enum vdec_type_e core);
 extern void vdec_poweroff(enum vdec_type_e core);
 extern bool vdec_on(enum vdec_type_e core);
 extern void vdec_power_reset(void);
+extern void vdec_set_dmc_urgent(struct vdec_s *vdec, int urgentType);
+
+
 
 /*irq num as same as .dts*/
 

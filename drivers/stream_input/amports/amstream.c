@@ -2418,6 +2418,10 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		priv->vdec->video_id = parm.data_32;
 		pr_info("AMSTREAM_SET_VIDEO_ID video_id: %d\n", parm.data_32);
 		break;
+	case AMSTREAM_SET_DMC_URGENT:
+		vdec_set_dmc_urgent(priv->vdec, parm.data_32);
+		break;
+
 	default:
 		r = -ENOIOCTLCMD;
 		break;
