@@ -2239,6 +2239,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				"%s %s", vdec->vf_provider_name, vfm_path);
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
+#ifdef CONFIG_AMLOGIC_IONVIDEO
 		} else if (p->frame_base_video_path == FRAME_BASE_PATH_IONVIDEO) {
 #if 1
 			r = ionvideo_assign_map(&vdec->vf_receiver_name,
@@ -2270,6 +2271,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				vdec->vf_receiver_name);
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
+#endif
 		} else if (p->frame_base_video_path ==
 				FRAME_BASE_PATH_AMLVIDEO_AMVIDEO) {
 			if (vdec_secure(vdec)) {
