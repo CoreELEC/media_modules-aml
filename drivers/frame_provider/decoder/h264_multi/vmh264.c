@@ -5653,7 +5653,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						true : false;
 				}
 
-				if (!field_pic_flag && ((p_H264_Dpb->mSPS.profile_idc == BASELINE) ||
+				if (!field_pic_flag && (((p_H264_Dpb->mSPS.profile_idc == BASELINE) &&
+					(p_H264_Dpb->reorder_pic_num < 2)) ||
 					(((unsigned long)(hw->vh264_amstream_dec_info
 						.param)) & 0x8))) {
 					p_H264_Dpb->fast_output_enable =
