@@ -295,6 +295,8 @@ struct BUF_s {
 	ulong	header_addr;
 	u32 	header_size;
 	u32	luma_size;
+	ulong	chroma_addr;
+	u32	chroma_size;
 } /*BUF_t */;
 
 struct MVBUF_s {
@@ -4807,15 +4809,20 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	pic->cma_alloc_addr = fb->m.mem[0].addr;
 	if (fb->num_planes == 1) {
 		pbi->m_BUF[i].start_adr = fb->m.mem[0].addr;
-		pbi->m_BUF[i].size = fb->m.mem[0].size;
 		pbi->m_BUF[i].luma_size = fb->m.mem[0].offset;
+		pbi->m_BUF[i].size = fb->m.mem[0].size;
 		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
+		pic->dw_y_adr = pbi->m_BUF[i].start_adr;
+		pic->dw_u_v_adr = pic->dw_y_adr + pbi->m_BUF[i].luma_size;
 	} else if (fb->num_planes == 2) {
 		pbi->m_BUF[i].start_adr = fb->m.mem[0].addr;
-		pbi->m_BUF[i].size = fb->m.mem[0].size + fb->m.mem[1].size;
-		pbi->m_BUF[i].luma_size = fb->m.mem[0].size;
+		pbi->m_BUF[i].size = fb->m.mem[0].size;
+		pbi->m_BUF[i].chroma_addr = fb->m.mem[1].addr;
+		pbi->m_BUF[i].chroma_size = fb->m.mem[1].size;
 		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
 		fb->m.mem[1].bytes_used = fb->m.mem[1].size;
+		pic->dw_y_adr = pbi->m_BUF[i].start_adr;
+		pic->dw_u_v_adr = pbi->m_BUF[i].chroma_addr;
 	}
 
 	/* config frame buffer */
@@ -4828,13 +4835,8 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	pic->mc_canvas_u_v	= pic->index;
 
 	if (dw_mode & 0x10) {
-		pic->dw_y_adr	= pbi->m_BUF[i].start_adr;
-		pic->dw_u_v_adr	= pic->dw_y_adr + pbi->m_BUF[i].luma_size;
 		pic->mc_canvas_y = (pic->index << 1);
 		pic->mc_canvas_u_v = (pic->index << 1) + 1;
-	} else if (dw_mode) {
-		pic->dw_y_adr	= pbi->m_BUF[i].start_adr;
-		pic->dw_u_v_adr	= pic->dw_y_adr + pbi->m_BUF[i].luma_size;
 	}
 
 #ifdef MV_USE_FIXED_BUF

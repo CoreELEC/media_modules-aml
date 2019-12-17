@@ -1312,6 +1312,8 @@ struct BUF_s {
 	u32 	header_size;
 	int	used_flag;
 	ulong	v4l_ref_buf_addr;
+	ulong	chroma_addr;
+	u32	chroma_size;
 } /*BUF_t */;
 
 /* level 6, 6.1 maximum slice number is 800; other is 200 */
@@ -3099,15 +3101,21 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	pic->cma_alloc_addr		= hevc->m_BUF[i].v4l_ref_buf_addr;
 	if (fb->num_planes == 1) {
 		hevc->m_BUF[i].start_adr = fb->m.mem[0].addr;
-		hevc->m_BUF[i].size = fb->m.mem[0].size;
 		hevc->m_BUF[i].luma_size = fb->m.mem[0].offset;
+		hevc->m_BUF[i].size = fb->m.mem[0].size;
 		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
+		pic->dw_y_adr = hevc->m_BUF[i].start_adr;
+		pic->dw_u_v_adr = pic->dw_y_adr + hevc->m_BUF[i].luma_size;
 	} else if (fb->num_planes == 2) {
 		hevc->m_BUF[i].start_adr = fb->m.mem[0].addr;
-		hevc->m_BUF[i].size = fb->m.mem[0].size + fb->m.mem[1].size;
 		hevc->m_BUF[i].luma_size = fb->m.mem[0].size;
+		hevc->m_BUF[i].chroma_addr = fb->m.mem[1].addr;
+		hevc->m_BUF[i].chroma_size = fb->m.mem[1].size;
+		hevc->m_BUF[i].size = fb->m.mem[0].size + fb->m.mem[1].size;
 		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
 		fb->m.mem[1].bytes_used = fb->m.mem[1].size;
+		pic->dw_y_adr = hevc->m_BUF[i].start_adr;
+		pic->dw_u_v_adr = hevc->m_BUF[i].chroma_addr;
 	}
 
 	return ret;
@@ -3332,16 +3340,10 @@ static int v4l_config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 	pic->mc_canvas_u_v	= pic->index;
 
 	if (dw_mode & 0x10) {
-		pic->mc_y_adr	= hevc->m_BUF[i].start_adr;
-		pic->mc_u_v_adr	= pic->mc_y_adr + hevc->m_BUF[i].luma_size;
 		pic->mc_canvas_y = (pic->index << 1);
 		pic->mc_canvas_u_v = (pic->index << 1) + 1;
-
-		pic->dw_y_adr	= pic->mc_y_adr;
-		pic->dw_u_v_adr	= pic->mc_u_v_adr;
-	} else if (dw_mode) {
-		pic->dw_y_adr	= hevc->m_BUF[i].start_adr;
-		pic->dw_u_v_adr	= pic->dw_y_adr + hevc->m_BUF[i].luma_size;
+		pic->mc_y_adr = pic->dw_y_adr;
+		pic->mc_u_v_adr = pic->dw_u_v_adr;
 	}
 
 	return 0;
