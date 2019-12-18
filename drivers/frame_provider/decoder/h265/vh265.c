@@ -5554,6 +5554,7 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 			&& pic->output_ready == 0
 			&& pic->width == hevc->pic_w
 			&& pic->height == hevc->pic_h
+			&& pic->vf_ref == 0
 			) {
 			if (new_pic) {
 				if (new_pic->POC != INVALID_POC) {
@@ -5670,14 +5671,13 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 		union param_u *rpm_param)
 {
 	int ret;
-	int used_buf_num = get_work_pic_num(hevc);
 	struct aml_vcodec_ctx * v4l = hevc->v4l2_ctx;
+	struct v4l_buff_pool *pool = &v4l->cap_pool;
 	struct PIC_s *new_pic = NULL;
 	struct PIC_s *pic = NULL;
 	int i;
 
-	for (i = 0; i < used_buf_num; ++i) {
-		struct v4l_buff_pool *pool = &v4l->cap_pool;
+	for (i = 0; i < pool->in; ++i) {
 		u32 state = (pool->seq[i] >> 16);
 		u32 index = (pool->seq[i] & 0xffff);
 
@@ -5690,6 +5690,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 				(pic->output_ready == 0) &&
 				(pic->width == hevc->pic_w) &&
 				(pic->height == hevc->pic_h) &&
+				(pic->vf_ref == 0) &&
 				pic->cma_alloc_addr) {
 					new_pic = pic;
 			}
