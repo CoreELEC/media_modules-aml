@@ -160,6 +160,7 @@ static const struct aml_codec_framesizes aml_vdec_framesizes[] = {
 #define NUM_FORMATS ARRAY_SIZE(aml_video_formats)
 
 extern bool multiplanar;
+extern bool dump_capture_frame;
 
 extern int dmabuf_fd_install_data(int fd, void* data, u32 size);
 extern bool is_v4l2_buf_file(struct file *file);
@@ -513,6 +514,20 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 	}
 	dstbuf->vb.vb2_buf.timestamp = vf->timestamp;
 	dstbuf->ready_to_display = true;
+
+	if (dump_capture_frame) {
+		struct file *fp;
+		fp = filp_open("/data/dec_dump.raw",
+				O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
+		if (!IS_ERR(fp)) {
+			struct vb2_buffer *vb = &dstbuf->vb.vb2_buf;
+			kernel_write(fp,vb2_plane_vaddr(vb, 0),vb->planes[0].bytesused, 0);
+			if (dstbuf->frame_buffer.num_planes == 2)
+				kernel_write(fp,vb2_plane_vaddr(vb, 1),
+						vb->planes[1].bytesused, 0);
+			filp_close(fp, NULL);
+		}
+	}
 
 	if (vf->flag & VFRAME_FLAG_EMPTY_FRAME_V4L) {
 		dstbuf->lastframe = true;
@@ -1157,6 +1172,16 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d\n", __func__, q->type);
+
+	if (!V4L2_TYPE_IS_OUTPUT(rb->type)) {
+		/* driver needs match v4l buffer number with dpb_size */
+		if (rb->count > ctx->dpb_size) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
+					"reqbufs (st:%d) %d -> %d\n",
+					ctx->state, rb->count, ctx->dpb_size);
+			rb->count = ctx->dpb_size;
+		}
+	}
 
 	return v4l2_m2m_ioctl_reqbufs(file, priv, rb);
 }
@@ -1936,9 +1961,16 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	if (!V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
 		if (vb->index >= ctx->dpb_size) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-				"enque capture buf idx %d is invalid.\n", vb->index);
+				"enque capture buf idx %d/%d is invalid.\n",
+				vb->index, ctx->dpb_size);
 			return;
 		}
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+			"y_addr: %lx, vf_h: %lx, state: %d",
+			buf->frame_buffer.m.mem[0].addr,
+			buf->frame_buffer.vf_handle,
+			buf->frame_buffer.status);
 
 		if (!buf->que_in_m2m) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,

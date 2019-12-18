@@ -608,6 +608,10 @@ bool multiplanar;
 EXPORT_SYMBOL(multiplanar);
 module_param(multiplanar, bool, 0644);
 
+bool dump_capture_frame;
+EXPORT_SYMBOL(dump_capture_frame);
+module_param(dump_capture_frame, bool, 0644);
+
 EXPORT_SYMBOL(scatter_mem_enable);
 module_param(scatter_mem_enable, bool, 0644);
 
