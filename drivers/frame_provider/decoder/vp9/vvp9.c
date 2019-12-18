@@ -2174,14 +2174,14 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 	struct VP9_Common_s *const cm = &pbi->common;
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
 	struct aml_vcodec_ctx * v4l = pbi->v4l2_ctx;
+	struct v4l_buff_pool *pool = &v4l->cap_pool;
 	struct PIC_BUFFER_CONFIG_s *pic = NULL;
 	int i, idx = INVALID_IDX;
 	ulong flags;
 
 	lock_buffer_pool(cm->buffer_pool, flags);
 
-	for (i = 0; i < pbi->used_buf_num; ++i) {
-		struct v4l_buff_pool *pool = &v4l->cap_pool;
+	for (i = 0; i < pool->in; ++i) {
 		u32 state = (pool->seq[i] >> 16);
 		u32 index = (pool->seq[i] & 0xffff);
 
