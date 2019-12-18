@@ -111,6 +111,8 @@ struct vdec_mpeg12_inst {
 	struct aml_vdec_adapt vdec;
 	struct vdec_mpeg12_vsi *vsi;
 	struct vcodec_vfm_s vfm;
+	struct aml_dec_params parms;
+	struct completion comp;
 };
 
 static void get_pic_info(struct vdec_mpeg12_inst *inst,
@@ -146,6 +148,39 @@ static void get_dpb_size(struct vdec_mpeg12_inst *inst, unsigned int *dpb_sz)
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "sz=%d\n", *dpb_sz);
 }
 
+static u32 vdec_config_default_parms(u8 *parm)
+{
+	u8 *pbuf = parm;
+
+	pbuf += sprintf(pbuf, "parm_v4l_codec_enable:1;");
+	pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:0;");
+	pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:0;");
+
+	return pbuf - parm;
+}
+
+static void vdec_parser_parms(struct vdec_mpeg12_inst *inst)
+{
+	struct aml_vcodec_ctx *ctx = inst->ctx;
+
+	if (ctx->config.parm.dec.parms_status &
+		V4L2_CONFIG_PARM_DECODE_CFGINFO) {
+		u8 *pbuf = ctx->config.buf;
+
+		pbuf += sprintf(pbuf, "parm_v4l_codec_enable:1;");
+		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:%d;",
+			ctx->config.parm.dec.cfg.canvas_mem_mode);
+		pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:%d;",
+			ctx->config.parm.dec.cfg.ref_buf_margin);
+		ctx->config.length = pbuf - ctx->config.buf;
+	} else {
+		ctx->config.length = vdec_config_default_parms(ctx->config.buf);
+	}
+
+	inst->vdec.config	= ctx->config;
+	inst->parms.cfg		= ctx->config.parm.dec.cfg;
+	inst->parms.parms_status |= V4L2_CONFIG_PARM_DECODE_CFGINFO;
+}
 static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 {
 	struct vdec_mpeg12_inst *inst = NULL;
@@ -161,6 +196,8 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	inst->vdec.config	= ctx->config;
 	inst->vdec.ctx		= ctx;
 	inst->ctx		= ctx;
+
+	vdec_parser_parms(inst);
 
 	/* set play mode.*/
 	if (ctx->is_drm_mode)
@@ -242,18 +279,36 @@ static void fill_vdec_params(struct vdec_mpeg12_inst *inst,
 
 	/* config canvas size that be used for decoder. */
 	pic->coded_width	= ALIGN(dec_ps->coded_width, 64);
-	pic->coded_height	= ALIGN(dec_ps->coded_height, 64);;
+	pic->coded_height	= ALIGN(dec_ps->coded_height, 32);
 
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
-	/* calc DPB size */
-	dec->dpb_sz = 9;//refer_buffer_num(sps->level_idc, poc_cnt, mb_w, mb_h);
+	/*1(EOS) + 8(DECODE_BUFFER_NUM_DEF)*/
+	dec->dpb_sz = 9;
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
 		"The stream infos, coded:(%d x %d), visible:(%d x %d), DPB: %d\n",
 		pic->coded_width, pic->coded_height,
 		pic->visible_width, pic->visible_height, dec->dpb_sz);
+}
+
+static int stream_parse_by_ucode(struct vdec_mpeg12_inst *inst, u8 *buf, u32 size)
+{
+	int ret = 0;
+	struct aml_vdec_adapt *vdec = &inst->vdec;
+
+	ret = vdec_vframe_write(vdec, buf, size, 0);
+	if (ret < 0) {
+		pr_err("write frame data failed. err: %d\n", ret);
+		return ret;
+	}
+
+	/* wait ucode parse ending. */
+	wait_for_completion_timeout(&inst->comp,
+		msecs_to_jiffies(1000));
+
+	return inst->vsi->dec.dpb_sz ? 0 : -1;
 }
 
 static int stream_parse(struct vdec_mpeg12_inst *inst, u8 *buf, u32 size)
@@ -296,7 +351,9 @@ static int vdec_mpeg12_probe(unsigned long h_vdec,
 	if (inst->ctx->is_drm_mode && (st->magic == DRMe || st->magic == DRMn))
 		return 0;
 
-	if (st->magic == NORe || st->magic == NORn)
+	if (inst->ctx->param_sets_from_ucode)
+		ret = stream_parse_by_ucode(inst, buf, size);
+	else if (st->magic == NORe || st->magic == NORn)
 		ret = stream_parse(inst, st->data, st->length);
 	else
 		ret = stream_parse(inst, buf, size);
@@ -453,10 +510,48 @@ static int vdec_mpeg12_get_param(unsigned long h_vdec,
 	return ret;
 }
 
+static void set_param_write_sync(struct vdec_mpeg12_inst *inst)
+{
+	complete(&inst->comp);
+}
+
 static void set_param_ps_info(struct vdec_mpeg12_inst *inst,
 	struct aml_vdec_ps_infos *ps)
 {
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "\n");
+	struct vdec_pic_info *pic = &inst->vsi->pic;
+	struct vdec_mpeg12_dec_info *dec = &inst->vsi->dec;
+	struct v4l2_rect *rect = &inst->vsi->crop;
+
+	/* fill visible area size that be used for EGL. */
+	pic->visible_width	= ps->visible_width;
+	pic->visible_height	= ps->visible_height;
+
+	/* calc visible ares. */
+	rect->left		= 0;
+	rect->top		= 0;
+	rect->width		= pic->visible_width;
+	rect->height		= pic->visible_height;
+
+	/* config canvas size that be used for decoder. */
+	pic->coded_width	= ps->coded_width;
+	pic->coded_height	= ps->coded_height;
+	pic->y_len_sz		= pic->coded_width * pic->coded_height;
+	pic->c_len_sz		= pic->y_len_sz >> 1;
+
+	dec->dpb_sz		= ps->dpb_size + 1;
+
+	inst->parms.ps 	= *ps;
+	inst->parms.parms_status |=
+		V4L2_CONFIG_PARM_DECODE_PSINFO;
+
+	/*wake up*/
+	complete(&inst->comp);
+
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"Parse from ucode, crop(%d x %d), coded(%d x %d) dpb: %d\n",
+		ps->visible_width, ps->visible_height,
+		ps->coded_width, ps->coded_height,
+		dec->dpb_sz);
 }
 
 static int vdec_mpeg12_set_param(unsigned long h_vdec,
@@ -472,6 +567,9 @@ static int vdec_mpeg12_set_param(unsigned long h_vdec,
 	}
 
 	switch (type) {
+	case SET_PARAM_WRITE_FRAME_SYNC:
+		set_param_write_sync(inst);
+		break;
 	case SET_PARAM_PS_INFO:
 		set_param_ps_info(inst, in);
 		break;
