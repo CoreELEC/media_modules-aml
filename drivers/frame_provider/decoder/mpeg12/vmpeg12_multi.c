@@ -1194,7 +1194,7 @@ static void userdata_push_do_work(struct work_struct *work)
 
 
 	reg = READ_VREG(AV_SCRATCH_J);
-	hw->userdata_wp_ctx = reg;
+	hw->userdata_wp_ctx = reg & (~(1<<16));
 	meta_info.flags = ((reg >> 30) << 1);
 	meta_info.flags |= (VFORMAT_MPEG12 << 3);
 	/* check  top_field_first flag */
