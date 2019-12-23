@@ -5409,6 +5409,8 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 			/* user data length should be align with 8 bytes,
 			if not, then padding with zero*/
 			for (i = 0; i < payload_size; i += 8) {
+				if (hw->sei_itu_data_len + i >= SEI_ITU_DATA_SIZE)
+					break; // Avoid out-of-bound writing
 				for (j = 0; j < 8; j++) {
 					int index;
 
@@ -5426,6 +5428,8 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 				data_len = ((payload_size + 8) >> 3) << 3;
 
 			hw->sei_itu_data_len += data_len;
+			if (hw->sei_itu_data_len >= SEI_ITU_DATA_SIZE)
+				hw->sei_itu_data_len = SEI_ITU_DATA_SIZE;
 			/*
 			dpb_print(DECODE_ID(hw), 0,
 				"%s: user data, and len = %d:\n",

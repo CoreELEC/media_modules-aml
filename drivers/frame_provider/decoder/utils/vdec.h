@@ -261,6 +261,7 @@ struct vdec_s {
 #endif
 	atomic_t inirq_thread_flag;
 	atomic_t inirq_flag;
+	atomic_t inrelease;
 	int parallel_dec;
 	volatile u64 isr_ns;
 	volatile u64 tfn_ns;

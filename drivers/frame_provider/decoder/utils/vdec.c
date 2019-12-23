@@ -2121,6 +2121,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	p->get_canvas_ex = get_canvas_ex;
 	p->free_canvas_ex = free_canvas_ex;
 	p->vdec_fps_detec = vdec_fps_detec;
+	atomic_set(&p->inrelease, 0);
 	atomic_set(&p->inirq_flag, 0);
 	atomic_set(&p->inirq_thread_flag, 0);
 	/* todo */
@@ -2476,6 +2477,7 @@ void vdec_release(struct vdec_s *vdec)
 		}
 	}
 
+	atomic_set(&vdec->inrelease, 1);
 	while ((atomic_read(&vdec->inirq_flag) > 0)
 		|| (atomic_read(&vdec->inirq_thread_flag) > 0))
 		schedule();
@@ -2731,6 +2733,8 @@ static irqreturn_t vdec_isr(int irq, void *dev_id)
 	}
 
 	if (vdec) {
+		if (atomic_read(&vdec->inrelease) > 0)
+			return ret;
 		atomic_set(&vdec->inirq_flag, 1);
 		vdec->isr_ns = local_clock();
 	}
@@ -2788,6 +2792,8 @@ static irqreturn_t vdec_thread_isr(int irq, void *dev_id)
 
 	if (vdec) {
 		u32 isr2tfn = 0;
+		if (atomic_read(&vdec->inrelease) > 0)
+			return ret;
 		atomic_set(&vdec->inirq_thread_flag, 1);
 		vdec->tfn_ns = local_clock();
 		isr2tfn = vdec->tfn_ns - vdec->isr_ns;
