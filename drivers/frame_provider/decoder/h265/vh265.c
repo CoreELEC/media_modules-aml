@@ -9126,7 +9126,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	if (hw->is_used_v4l && hw->eos) {
 		expires = jiffies + msecs_to_jiffies(2000);
 		while (INVALID_IDX == (index = get_free_buf_idx(hw))) {
-			if (time_after(jiffies, expires))
+			if (time_after(jiffies, expires) ||
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx))
 				break;
 		}
 
