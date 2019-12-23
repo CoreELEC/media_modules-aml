@@ -2603,7 +2603,8 @@ static int get_free_buf_idx(struct hevc_state_s *hevc)
 
 		if (pic->output_mark == 0 &&
 			pic->referenced == 0 &&
-			pic->output_ready == 0) {
+			pic->output_ready == 0 &&
+			pic->cma_alloc_addr) {
 			pic->output_ready = 1;
 			index = i;
 			break;
