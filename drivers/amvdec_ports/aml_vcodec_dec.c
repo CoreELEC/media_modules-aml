@@ -559,17 +559,17 @@ static int get_display_buffer(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffe
 static void aml_check_dpb_ready(struct aml_vcodec_ctx *ctx)
 {
 	if (!ctx->v4l_codec_dpb_ready) {
-		int buf_ready_num;
-
-		/* is there enough dst bufs for decoding? */
-		buf_ready_num = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
-		if ((ctx->dpb_size) &&
-			((buf_ready_num + ctx->buf_used_count) >= ctx->dpb_size))
+		/*
+		 * make sure enough dst bufs for decoding, and
+		 * the backend maybe hold 4 frms so need to minus 4.
+		 */
+		if ((ctx->dpb_size) && (ctx->cap_pool.in >= ctx->dpb_size - 4))
 			ctx->v4l_codec_dpb_ready = true;
+
 		aml_v4l2_debug(2, "[%d] %s() dpb: %d, ready: %d, used: %d, dpb is ready: %s",
 				ctx->id, __func__, ctx->dpb_size,
-				buf_ready_num, ctx->buf_used_count,
-				ctx->v4l_codec_dpb_ready ? "yes" : "no");
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx),
+				ctx->cap_pool.out, ctx->v4l_codec_dpb_ready ? "yes" : "no");
 	}
 }
 
@@ -1047,7 +1047,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 			if ((ctx->state == AML_STATE_ACTIVE ||
 				ctx->state == AML_STATE_FLUSHING ||
 				ctx->state == AML_STATE_FLUSHED) ||
-				(ctx->reset_flag == 2)) {
+				(ctx->reset_flag == V4L_RESET_MODE_LIGHT)) {
 				ctx->state = AML_STATE_RESET;
 				ATRACE_COUNTER("v4l2_state", ctx->state);
 				ctx->v4l_codec_ready = false;
@@ -1152,6 +1152,7 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	q_data->bytesperline[0] = q_data->coded_width;
 	q_data->sizeimage[1] = q_data->sizeimage[0] / 2;
 	q_data->bytesperline[1] = q_data->coded_width;
+	ctx->reset_flag = V4L_RESET_MODE_NORMAL;
 
 	ctx->state = AML_STATE_IDLE;
 	ATRACE_COUNTER("v4l2_state", ctx->state);

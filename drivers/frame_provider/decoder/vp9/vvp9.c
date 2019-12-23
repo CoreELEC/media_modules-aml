@@ -1742,6 +1742,13 @@ static int alloc_mv_buf(struct VP9Decoder_s *pbi,
 	int i, int size)
 {
 	int ret = 0;
+
+	if (pbi->m_mv_BUF[i].start_adr &&
+		size > pbi->m_mv_BUF[i].size) {
+		dealloc_mv_bufs(pbi);
+	} else if (pbi->m_mv_BUF[i].start_adr)
+		return 0;
+
 	if (decoder_bmmu_box_alloc_buf_phy
 		(pbi->bmmu_box,
 		MV_BUFFER_IDX(i), size,
@@ -7291,7 +7298,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	if (hw->is_used_v4l && hw->eos) {
 		expires = jiffies + msecs_to_jiffies(2000);
 		while (INVALID_IDX == (index = v4l_get_free_fb(hw))) {
-			if (time_after(jiffies, expires))
+			if (time_after(jiffies, expires) ||
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx))
 				break;
 		}
 
@@ -10165,7 +10173,6 @@ static void reset(struct vdec_s *vdec)
 	}
 	pbi->dec_result = DEC_RESULT_NONE;
 	reset_process_time(pbi);
-	dealloc_mv_bufs(pbi);
 	vp9_local_uninit(pbi);
 	if (vvp9_local_init(pbi) < 0)
 		vp9_print(pbi, 0, "%s	local_init failed \r\n", __func__);

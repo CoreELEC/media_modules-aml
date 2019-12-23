@@ -120,7 +120,7 @@ static void set_default_params(struct aml_vdec_adapt *vdec)
 	vdec->dec_prop.param = (void *)sync_mode;
 	vdec->dec_prop.format = vdec->format;
 	vdec->dec_prop.width = 1920;
-	vdec->dec_prop.height = 1080;
+	vdec->dec_prop.height = 1088;
 	vdec->dec_prop.rate = 3200;
 }
 
@@ -706,16 +706,22 @@ void aml_decoder_flush(struct aml_vdec_adapt *ada_ctx)
 		vdec_set_eos(vdec, true);
 }
 
-int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *flag)
+int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *mode)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
 	int ret = 0;
 
 	if (vdec) {
-		if (*flag != 2)
-			vdec_set_eos(vdec, false);
-		ret = vdec_v4l2_reset(vdec, *flag);
-		*flag = 0;
+		vdec_set_eos(vdec, false);
+
+		if (*mode == V4L_RESET_MODE_NORMAL &&
+			vdec->input.have_frame_num == 0)
+			*mode = V4L_RESET_MODE_LIGHT;
+
+		aml_v4l2_debug(2, "%s, reset mode: %d\n", __func__, *mode);
+
+		ret = vdec_v4l2_reset(vdec, *mode);
+		*mode = V4L_RESET_MODE_NORMAL;
 	}
 
 	return ret;
