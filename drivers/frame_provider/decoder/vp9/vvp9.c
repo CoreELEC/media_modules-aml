@@ -7290,7 +7290,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	if (hw->is_used_v4l && hw->eos) {
 		expires = jiffies + msecs_to_jiffies(2000);
-		while (INVALID_IDX == (index = get_free_fb(hw))) {
+		while (INVALID_IDX == (index = v4l_get_free_fb(hw))) {
 			if (time_after(jiffies, expires))
 				break;
 		}
