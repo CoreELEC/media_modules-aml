@@ -808,6 +808,7 @@ struct FrameStore {
 	int max_mv;
 	int min_mv;
 	int avg_mv;
+	int dpb_frame_count;
 };
 
 
@@ -900,6 +901,7 @@ struct h264_dpb_stru {
 	unsigned int origin_max_reference;
 	unsigned int first_insert_frame;
 	int first_output_poc;
+	int dpb_frame_count;
 };
 
 
@@ -963,4 +965,8 @@ enum PictureStructure get_cur_slice_picture_struct(
 
 int dpb_check_ref_list_error(
 	struct h264_dpb_stru *p_H264_Dpb);
+
+void unmark_for_reference(struct DecodedPictureBuffer *p_Dpb,
+	struct FrameStore *fs);
+
 #endif

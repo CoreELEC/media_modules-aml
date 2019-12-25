@@ -1622,6 +1622,8 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	 */
 	dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 		"%s %p %p\n", __func__, fs, p);
+	p_H264_Dpb->dpb_frame_count++;
+	fs->dpb_frame_count = p_H264_Dpb->dpb_frame_count;
 #if 1
 /* rain */
 /* p->buf_spec_num = fs->index; */
@@ -1796,7 +1798,7 @@ void reset_frame_store(struct h264_dpb_stru *p_H264_Dpb,
 	}
 }
 
-static void unmark_for_reference(struct DecodedPictureBuffer *p_Dpb,
+void unmark_for_reference(struct DecodedPictureBuffer *p_Dpb,
 				 struct FrameStore *fs)
 {
 	struct h264_dpb_stru *p_H264_Dpb = container_of(p_Dpb,
@@ -2699,6 +2701,11 @@ void dump_dpb(struct DecodedPictureBuffer *p_Dpb, u8 force)
 				0,
 				"non_existing  ");
 		}
+		dpb_print_cont(p_H264_Dpb->decoder_index,
+			0,
+			"dpb_frame_count %d  ",
+			p_Dpb->fs[i]->dpb_frame_count);
+
 #if (MVC_EXTENSION_ENABLE)
 		if (p_Dpb->fs[i]->is_reference)
 			dpb_print_cont(p_H264_Dpb->decoder_index,
