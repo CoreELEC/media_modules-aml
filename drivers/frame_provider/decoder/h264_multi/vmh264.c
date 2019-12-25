@@ -275,7 +275,7 @@ static unsigned int i_only_flag;
 	bit[17] 1: If the decoded Mb count is insufficient but greater than the threshold, it is considered the correct frame.
 	bit[18] 1: time out status, store pic to dpb buffer.
 */
-static unsigned int error_proc_policy = 0x7Cfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0xCfb6; /*0x1f14*/
 
 
 /*
@@ -8211,6 +8211,22 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		/* if (!hw->ctx_valid)
 			hw->ctx_valid = 1; */
 result_done:
+		{
+			if (error_proc_policy & 0x8000) {
+				struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+				int i;
+				struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
+
+				for (i = 0; i < p_Dpb->used_size; i++) {
+					if (p_Dpb->fs[i]->dpb_frame_count + 500 < p_H264_Dpb->dpb_frame_count) {
+						dpb_print(DECODE_ID(hw),
+							0,
+							"unmark reference dpb_frame_count diffrence large in dpb\n");
+						unmark_for_reference(p_Dpb, p_Dpb->fs[i]);
+					}
+				}
+			}
+		}
 			if (hw->mmu_enable
 				&& hw->frame_busy && hw->frame_done) {
 				long used_4k_num;
