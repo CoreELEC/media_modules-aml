@@ -63,6 +63,9 @@
 #include <linux/crc32.h>
 #include <media/v4l2-mem2mem.h>
 
+#define DETECT_WRONG_MULTI_SLICE
+
+
 #undef pr_info
 #define pr_info printk
 #define VDEC_DW
@@ -310,6 +313,7 @@ static unsigned int frmbase_cont_bitlevel = 0x40;
 
 static unsigned int frmbase_cont_bitlevel2 = 0x1;
 
+static unsigned int check_slice_num = 30;
 
 static unsigned int mb_count_threshold = 10; /*percentage*/
 
@@ -863,6 +867,21 @@ struct vdec_h264_hw_s {
 	bool ref_err_flush_dpb_flag;
 	unsigned int first_i_policy;
 	u32 reorder_dpb_size_margin;
+	bool wait_reset_done_flag;
+#ifdef DETECT_WRONG_MULTI_SLICE
+	unsigned int multi_slice_pic_check_count;
+			/* multi_slice_pic_flag:
+				0, unknown;
+				1, single slice;
+				2, multi slice
+			*/
+	unsigned int multi_slice_pic_flag;
+	unsigned int picture_slice_count;
+	unsigned int cur_picture_slice_count;
+	unsigned char force_slice_as_picture_flag;
+	unsigned int last_picture_slice_count;
+	unsigned int first_pre_frame_num;
+#endif
 };
 
 static u32 again_threshold;
@@ -5518,6 +5537,153 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 	}
 }
 
+static int vh264_pic_done_proc(struct vdec_s *vdec)
+{
+	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	int ret;
+
+	if (input_frame_based(vdec) &&
+			(!(hw->i_only & 0x2)) &&
+			frmbase_cont_bitlevel != 0 &&
+			READ_VREG(VIFF_BIT_CNT) >
+			frmbase_cont_bitlevel) {
+			/*handle the case: multi pictures in one packet*/
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"%s H264_PIC_DATA_DONE decode slice count %d, continue (bitcnt 0x%x)\n",
+			__func__,
+			hw->decode_pic_count,
+			READ_VREG(VIFF_BIT_CNT));
+			hw->frmbase_cont_flag = 1;
+		} else
+			hw->frmbase_cont_flag = 0;
+
+		if (p_H264_Dpb->mVideo.dec_picture) {
+			get_picture_qos_info(p_H264_Dpb->mVideo.dec_picture);
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+			DEL_EXIST(hw,
+				p_H264_Dpb->mVideo.dec_picture) = 0;
+			if (vdec->master) {
+				struct vdec_h264_hw_s *hw_ba =
+				(struct vdec_h264_hw_s *)
+					vdec->master->private;
+				if (hw_ba->last_dec_picture)
+					DEL_EXIST(hw_ba,
+						hw_ba->last_dec_picture)
+						= 1;
+			}
+#endif
+			mutex_lock(&hw->chunks_mutex);
+			if (hw->chunk) {
+				p_H264_Dpb->mVideo.dec_picture->pts =
+					hw->chunk->pts;
+				p_H264_Dpb->mVideo.dec_picture->pts64 =
+					hw->chunk->pts64;
+				p_H264_Dpb->mVideo.dec_picture->timestamp =
+					hw->chunk->timestamp;
+#ifdef MH264_USERDATA_ENABLE
+				vmh264_udc_fill_vpts(hw,
+					p_H264_Dpb->mSlice.slice_type,
+					hw->chunk->pts, 1);
+#endif
+
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+			} else if (vdec->master) {
+				/*dv enhance layer,
+				do not checkout pts*/
+				struct StorablePicture *pic =
+					p_H264_Dpb->mVideo.dec_picture;
+				pic->pts = 0;
+				pic->pts64 = 0;
+#endif
+		} else {
+				struct StorablePicture *pic =
+					p_H264_Dpb->mVideo.dec_picture;
+				u32 offset = pic->offset_delimiter;
+				if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
+					offset, &pic->pts, 0, &pic->pts64)) {
+					pic->pts = 0;
+					pic->pts64 = 0;
+#ifdef MH264_USERDATA_ENABLE
+					vmh264_udc_fill_vpts(hw,
+						p_H264_Dpb->mSlice.slice_type,
+						pic->pts, 0);
+#endif
+				} else {
+#ifdef MH264_USERDATA_ENABLE
+					vmh264_udc_fill_vpts(hw,
+						p_H264_Dpb->mSlice.slice_type,
+						pic->pts, 1);
+#endif
+				}
+
+	}
+			mutex_unlock(&hw->chunks_mutex);
+
+			check_decoded_pic_error(hw);
+#ifdef ERROR_HANDLE_TEST
+			if ((hw->data_flag & ERROR_FLAG)
+				&& (error_proc_policy & 0x80)) {
+				release_cur_decoding_buf(hw);
+				h264_clear_dpb(hw);
+				hw->dec_flag = 0;
+				hw->data_flag = 0;
+				hw->skip_frame_count = 0;
+				hw->has_i_frame = 0;
+				hw->no_error_count = 0xfff;
+				hw->no_error_i_count = 0xf;
+			} else
+#endif
+				ret = store_picture_in_dpb(p_H264_Dpb,
+					p_H264_Dpb->mVideo.dec_picture,
+					hw->data_flag | hw->dec_flag |
+				p_H264_Dpb->mVideo.dec_picture->data_flag);
+
+
+
+			if (ret == -1) {
+				release_cur_decoding_buf(hw);
+				bufmgr_force_recover(p_H264_Dpb);
+			} else {
+			if (hw->data_flag & ERROR_FLAG) {
+				hw->no_error_count = 0;
+				hw->no_error_i_count = 0;
+			} else {
+				hw->no_error_count++;
+				if (hw->data_flag & I_FLAG)
+					hw->no_error_i_count++;
+			}
+			if (hw->mmu_enable)
+				hevc_set_unused_4k_buff_idx(hw,
+					p_H264_Dpb->mVideo.
+						dec_picture->buf_spec_num);
+			bufmgr_post(p_H264_Dpb);
+				hw->last_dec_picture =
+					p_H264_Dpb->mVideo.dec_picture;
+			p_H264_Dpb->mVideo.dec_picture = NULL;
+			/* dump_dpb(&p_H264_Dpb->mDPB); */
+			hw->has_i_frame = 1;
+			if (hw->mmu_enable)
+				hevc_set_frame_done(hw);
+			hw->decode_pic_count++;
+			p_H264_Dpb->decode_pic_count = hw->decode_pic_count;
+			if (hw->skip_frame_count > 0) {
+				/*skip n frame after first I */
+				hw->skip_frame_count--;
+				if (hw->skip_frame_count == 0)
+					hw->dec_flag &= (~NODISP_FLAG);
+			} else if (hw->skip_frame_count < -1) {
+				/*skip n frame after first I until second I */
+				hw->skip_frame_count++;
+				if (hw->skip_frame_count == -1)
+					hw->dec_flag &= (~NODISP_FLAG);
+				}
+			}
+		}
+		return 0;
+}
+
+
 static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
 	int i;
@@ -5525,7 +5691,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	unsigned int dec_dpb_status = p_H264_Dpb->dec_dpb_status;
 	u32 debug_tag;
-	int ret;
 
 	if (dec_dpb_status == H264_CONFIG_REQUEST) {
 #if 1
@@ -5576,6 +5741,20 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		reset_process_time(hw);
 		hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
 		hw->dec_result = DEC_RESULT_CONFIG_PARAM;
+#ifdef DETECT_WRONG_MULTI_SLICE
+		/*restart check count and set 'unknown'*/
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
+		"%s MULTI_SLICE_DETECT (check_count %d slice_count %d cur_slice_count %d flag %d), H264_CONFIG_REQUEST => restart check\n",
+		__func__,
+		hw->multi_slice_pic_check_count,
+		hw->picture_slice_count,
+		hw->cur_picture_slice_count,
+		hw->multi_slice_pic_flag);
+
+		hw->multi_slice_pic_check_count = 0;
+		hw->multi_slice_pic_flag = 0;
+		hw->picture_slice_count = 0;
+#endif
 		vdec_schedule_work(&hw->work);
 	} else if (dec_dpb_status == H264_SLICE_HEAD_DONE) {
 		u16 data_hight;
@@ -5599,6 +5778,37 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				return IRQ_HANDLED;
 			}
 		}
+#ifdef DETECT_WRONG_MULTI_SLICE
+		hw->cur_picture_slice_count++;
+		if (hw->multi_slice_pic_flag == 1 &&
+			hw->cur_picture_slice_count == 1 &&
+			(error_proc_policy & 0x10000)) {
+			hw->first_pre_frame_num = p_H264_Dpb->mVideo.pre_frame_num;
+		}
+		if (hw->multi_slice_pic_flag == 1 &&
+			hw->cur_picture_slice_count > 1 &&
+			(error_proc_policy & 0x10000)) {
+			dpb_print(DECODE_ID(hw), 0,
+			"%s MULTI_SLICE_DETECT (check_count %d slice_count %d cur_slice_count %d flag %d), WRONG_MULTI_SLICE detected, insert picture\n",
+			__func__,
+			hw->multi_slice_pic_check_count,
+			hw->picture_slice_count,
+			hw->cur_picture_slice_count,
+			hw->multi_slice_pic_flag);
+			if (hw->cur_picture_slice_count > hw->last_picture_slice_count)
+				vh264_pic_done_proc(vdec);
+			else {
+				if (p_H264_Dpb->mVideo.dec_picture) {
+					if (p_H264_Dpb->mVideo.dec_picture->colocated_buf_index >= 0) {
+						release_colocate_buf(p_H264_Dpb,
+						p_H264_Dpb->mVideo.dec_picture->colocated_buf_index);
+						p_H264_Dpb->mVideo.dec_picture->colocated_buf_index = -1;
+					}
+				}
+				release_cur_decoding_buf(hw);
+			}
+		}
+#endif
 
 		hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
 		hw->reg_vcop_ctrl_reg = READ_VREG(VCOP_CTRL_REG);
@@ -5820,10 +6030,10 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						READ_VREG(MBY_MBX),
 						decode_mb_count);
 						p->data_flag |= ERROR_FLAG;
-					} else if (!p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE] && decode_mb_count) {
+					}/* else if (!p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE] && decode_mb_count) {
 						p->data_flag |= ERROR_FLAG;
 						goto pic_done_proc;
-					}
+					}*/
 				}
 
 			if (p_H264_Dpb->mVideo.dec_picture->slice_type == I_SLICE) {
@@ -5920,146 +6130,37 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		start_process_time(hw);
 	} else if (dec_dpb_status == H264_PIC_DATA_DONE
 		||((dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
+#ifdef DETECT_WRONG_MULTI_SLICE
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
+				"%s MULTI_SLICE_DETECT (check_count %d slice_count %d cur_slice_count %d flag %d), H264_PIC_DATA_DONE\n",
+				__func__,
+				hw->multi_slice_pic_check_count,
+				hw->picture_slice_count,
+				hw->cur_picture_slice_count,
+				hw->multi_slice_pic_flag);
+
+				if (hw->multi_slice_pic_check_count < check_slice_num) {
+					hw->multi_slice_pic_check_count++;
+					if (hw->cur_picture_slice_count !=
+						hw->picture_slice_count) {
+						/*restart check count and set 'unknown'*/
+						hw->multi_slice_pic_check_count = 0;
+						hw->multi_slice_pic_flag = 0;
+					}
+					hw->picture_slice_count =
+						hw->cur_picture_slice_count;
+				} else if (hw->multi_slice_pic_check_count >= check_slice_num) {
+					if (hw->picture_slice_count > 1)
+						hw->multi_slice_pic_flag = 2;
+					else
+						hw->multi_slice_pic_flag = 1;
+				}
+#endif
+
 pic_done_proc:
 		reset_process_time(hw);
+		vh264_pic_done_proc(vdec);
 
-		if (input_frame_based(vdec) &&
-			(!(hw->i_only & 0x2)) &&
-			frmbase_cont_bitlevel != 0 &&
-			READ_VREG(VIFF_BIT_CNT) >
-			frmbase_cont_bitlevel) {
-			/*handle the case: multi pictures in one packet*/
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-			"%s H264_PIC_DATA_DONE decode slice count %d, continue (bitcnt 0x%x)\n",
-			__func__,
-			hw->decode_pic_count,
-			READ_VREG(VIFF_BIT_CNT));
-			hw->frmbase_cont_flag = 1;
-		} else
-			hw->frmbase_cont_flag = 0;
-
-		if (p_H264_Dpb->mVideo.dec_picture) {
-			get_picture_qos_info(p_H264_Dpb->mVideo.dec_picture);
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-			DEL_EXIST(hw,
-				p_H264_Dpb->mVideo.dec_picture) = 0;
-			if (vdec->master) {
-				struct vdec_h264_hw_s *hw_ba =
-				(struct vdec_h264_hw_s *)
-					vdec->master->private;
-				if (hw_ba->last_dec_picture)
-					DEL_EXIST(hw_ba,
-						hw_ba->last_dec_picture)
-						= 1;
-			}
-#endif
-			mutex_lock(&hw->chunks_mutex);
-			if (hw->chunk) {
-				p_H264_Dpb->mVideo.dec_picture->pts =
-					hw->chunk->pts;
-				p_H264_Dpb->mVideo.dec_picture->pts64 =
-					hw->chunk->pts64;
-				p_H264_Dpb->mVideo.dec_picture->timestamp =
-					hw->chunk->timestamp;
-#ifdef MH264_USERDATA_ENABLE
-				vmh264_udc_fill_vpts(hw,
-					p_H264_Dpb->mSlice.slice_type,
-					hw->chunk->pts, 1);
-#endif
-
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-			} else if (vdec->master) {
-				/*dv enhance layer,
-				do not checkout pts*/
-				struct StorablePicture *pic =
-					p_H264_Dpb->mVideo.dec_picture;
-				pic->pts = 0;
-				pic->pts64 = 0;
-#endif
-		} else {
-				struct StorablePicture *pic =
-					p_H264_Dpb->mVideo.dec_picture;
-				u32 offset = pic->offset_delimiter;
-				if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
-					offset, &pic->pts, 0, &pic->pts64)) {
-					pic->pts = 0;
-					pic->pts64 = 0;
-#ifdef MH264_USERDATA_ENABLE
-					vmh264_udc_fill_vpts(hw,
-						p_H264_Dpb->mSlice.slice_type,
-						pic->pts, 0);
-#endif
-				} else {
-#ifdef MH264_USERDATA_ENABLE
-					vmh264_udc_fill_vpts(hw,
-						p_H264_Dpb->mSlice.slice_type,
-						pic->pts, 1);
-#endif
-				}
-
-	}
-			mutex_unlock(&hw->chunks_mutex);
-
-			check_decoded_pic_error(hw);
-#ifdef ERROR_HANDLE_TEST
-			if ((hw->data_flag & ERROR_FLAG)
-				&& (error_proc_policy & 0x80)) {
-				release_cur_decoding_buf(hw);
-				h264_clear_dpb(hw);
-				hw->dec_flag = 0;
-				hw->data_flag = 0;
-				hw->skip_frame_count = 0;
-				hw->has_i_frame = 0;
-				hw->no_error_count = 0xfff;
-				hw->no_error_i_count = 0xf;
-			} else
-#endif
-				ret = store_picture_in_dpb(p_H264_Dpb,
-					p_H264_Dpb->mVideo.dec_picture,
-					hw->data_flag | hw->dec_flag |
-				p_H264_Dpb->mVideo.dec_picture->data_flag);
-
-
-
-			if (ret == -1) {
-				release_cur_decoding_buf(hw);
-				bufmgr_force_recover(p_H264_Dpb);
-			} else {
-			if (hw->data_flag & ERROR_FLAG) {
-				hw->no_error_count = 0;
-				hw->no_error_i_count = 0;
-			} else {
-				hw->no_error_count++;
-				if (hw->data_flag & I_FLAG)
-					hw->no_error_i_count++;
-			}
-			if (hw->mmu_enable)
-				hevc_set_unused_4k_buff_idx(hw,
-					p_H264_Dpb->mVideo.
-						dec_picture->buf_spec_num);
-			bufmgr_post(p_H264_Dpb);
-				hw->last_dec_picture =
-					p_H264_Dpb->mVideo.dec_picture;
-			p_H264_Dpb->mVideo.dec_picture = NULL;
-			/* dump_dpb(&p_H264_Dpb->mDPB); */
-			hw->has_i_frame = 1;
-			if (hw->mmu_enable)
-				hevc_set_frame_done(hw);
-			hw->decode_pic_count++;
-			p_H264_Dpb->decode_pic_count = hw->decode_pic_count;
-			if (hw->skip_frame_count > 0) {
-				/*skip n frame after first I */
-				hw->skip_frame_count--;
-				if (hw->skip_frame_count == 0)
-					hw->dec_flag &= (~NODISP_FLAG);
-			} else if (hw->skip_frame_count < -1) {
-				/*skip n frame after first I until second I */
-				hw->skip_frame_count++;
-				if (hw->skip_frame_count == -1)
-					hw->dec_flag &= (~NODISP_FLAG);
-				}
-			}
-		}
 		if (hw->frmbase_cont_flag) {
 			/*do not DEC_RESULT_GET_DATA*/
 			hw->get_data_count = 0x7fffffff;
@@ -6207,6 +6308,14 @@ empty_proc:
 			vdec_schedule_work(&hw->work);
 		} else {
 			/* WRITE_VREG(DPB_STATUS_REG, H264_ACTION_INIT); */
+#ifdef DETECT_WRONG_MULTI_SLICE
+			if (hw->multi_slice_pic_flag == 1 &&
+				hw->cur_picture_slice_count > 1 &&
+				(error_proc_policy & 0x10000)) {
+				p_H264_Dpb->mVideo.pre_frame_num = hw->first_pre_frame_num;
+			}
+			hw->last_picture_slice_count = hw->cur_picture_slice_count;
+#endif
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 				"%s DEC_RESULT_AGAIN\n", __func__);
 send_again:
@@ -6380,9 +6489,11 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 	p_H264_Dpb->dec_dpb_status = READ_VREG(DPB_STATUS_REG);
 
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
-			"%s DPB_STATUS_REG: 0x%x, ERROR_STATUS_REG 0x%x, sb (0x%x 0x%x 0x%x) bitcnt 0x%x mby_mbx 0x%x\n",
+			"%s DPB_STATUS_REG: 0x%x, run(%d) last_state (%x) ERROR_STATUS_REG 0x%x, sb (0x%x 0x%x 0x%x) bitcnt 0x%x mby_mbx 0x%x\n",
 			__func__,
 			p_H264_Dpb->dec_dpb_status,
+			run_count[DECODE_ID(hw)],
+			hw->dec_result,
 			READ_VREG(ERROR_STATUS_REG),
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(VLD_MEM_VIFIFO_WP),
@@ -6490,6 +6601,16 @@ static void vmh264_dump_state(struct vdec_s *vdec)
 		input_empty[DECODE_ID(hw)],
 		hw->reset_bufmgr_count
 		);
+
+#ifdef DETECT_WRONG_MULTI_SLICE
+		dpb_print(DECODE_ID(hw), 0,
+		"MULTI_SLICE_DETECT (check_count %d slice_count %d cur_slice_count %d flag %d)\n",
+		hw->multi_slice_pic_check_count,
+		hw->picture_slice_count,
+		hw->cur_picture_slice_count,
+		hw->multi_slice_pic_flag);
+#endif
+
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
 		enum receviver_start_e state =
@@ -8171,7 +8292,10 @@ result_done:
 	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	del_timer_sync(&hw->check_timer);
 	hw->stat &= ~STAT_TIMER_ARM;
-
+#ifdef DETECT_WRONG_MULTI_SLICE
+	if (hw->dec_result != DEC_RESULT_AGAIN)
+		hw->last_picture_slice_count = 0;
+#endif
 	wait_vmh264_search_done(hw);
 	/* mark itself has all HW resource released and input released */
 
@@ -8401,6 +8525,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc_reset_core(vdec);
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
+
+#ifdef DETECT_WRONG_MULTI_SLICE
+	hw->cur_picture_slice_count = 0;
+#endif
 
 	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
 		hw->reset_bufmgr_flag = 1;
@@ -9535,6 +9663,8 @@ MODULE_PARM_DESC(mem_map_mode, "\n mem_map_mode\n");
 module_param(without_display_mode, uint, 0664);
 MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
 
+module_param(check_slice_num, uint, 0664);
+MODULE_PARM_DESC(check_slice_num, "\n check_slice_num\n");
 
 module_param(mb_count_threshold, uint, 0664);
 MODULE_PARM_DESC(mb_count_threshold, "\n mb_count_threshold\n");
