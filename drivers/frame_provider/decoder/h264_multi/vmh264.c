@@ -2631,6 +2631,34 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		hw->last_pts64 = frame->pts64;
 		hw->last_pts = frame->pts;
 	}
+
+	/* SWPL-18973 96000/15=6400, less than 15fps check */
+	if ((!hw->duration_from_pts_done) && (hw->frame_dur > 6400ULL)) {
+		if ((check_force_interlace(hw, frame)) &&
+			(frame->slice_type == I_SLICE) &&
+			(hw->pts_outside)) {
+			if ((!hw->h264_pts_count) || (!hw->h264pts1)) {
+				hw->h264pts1 = frame->pts;
+				hw->h264_pts_count = 0;
+			} else if (frame->pts > hw->h264pts1) {
+				u32 calc_dur =
+					PTS2DUR(frame->pts - hw->h264pts1);
+				calc_dur = ((calc_dur/hw->h264_pts_count) << 1);
+				if (hw->frame_dur < (calc_dur + 200) &&
+					hw->frame_dur > (calc_dur - 200)) {
+					hw->frame_dur >>= 1;
+					vdec_schedule_work(&hw->notify_work);
+					dpb_print(DECODE_ID(hw), 0,
+						"correct frame_dur %d, calc_dur %d, count %d\n",
+						hw->frame_dur, (calc_dur >> 1), hw->h264_pts_count);
+					hw->duration_from_pts_done = 1;
+					hw->h264_pts_count = 0;
+				}
+			}
+		}
+		hw->h264_pts_count++;
+	}
+
 	if ((frame->data_flag & NODISP_FLAG) ||
 		(frame->data_flag & NULL_FLAG) ||
 		((!hw->send_error_frame_flag) &&
@@ -3313,7 +3341,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 	h264_buffer_info_data_write_count = 0;
 
 	//disable this read cache when frame width <= 64 (4MBs)
-	//IQIDCT_CONTROL, bit[16] – dcac_dma_read_cache_disable
+	//IQIDCT_CONTROL, bit[16] dcac_dma_read_cache_disable
 	if (hw->frame_width <= 64)
 		SET_VREG_MASK(IQIDCT_CONTROL,(1 << 16));
 	else
