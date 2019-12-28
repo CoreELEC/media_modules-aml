@@ -267,6 +267,9 @@ static unsigned int i_only_flag;
 	bit[12] i_only when error happen
 	bit[13] 0: mark error according to last pic, 1: ignore mark error
 	bit[14] 0: result done when timeout from ucode. 1: reset bufmgr when timeout.
+	bit[15] 1: dpb_frame_count If the dpb_frame_count difference is large, it moves out of the DPB buffer.
+	bit[16] 1: check slice header number.
+	bit[17] 1: If the decoded Mb count is insufficient but greater than the threshold, it is considered the correct frame.
 	bit[18] 1: time out status, store pic to dpb buffer.
 */
 static unsigned int error_proc_policy = 0x7Cfb6; /*0x1f14*/
@@ -307,6 +310,8 @@ static unsigned int frmbase_cont_bitlevel = 0x40;
 
 static unsigned int frmbase_cont_bitlevel2 = 0x1;
 
+
+static unsigned int mb_count_threshold = 10; /*percentage*/
 
 #define MH264_USERDATA_ENABLE
 
@@ -5441,14 +5446,20 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 		return;
 	if (get_cur_slice_picture_struct(p_H264_Dpb) != FRAME)
 		mb_total /= 2;
-	if (error_proc_policy & 0x100) {
-		if (decode_mb_count < mb_total)
-			p->data_flag |= ERROR_FLAG;
-	}
 
 	if ((error_proc_policy & 0x200) &&
 		READ_VREG(ERROR_STATUS_REG) != 0) {
 		p->data_flag |= ERROR_FLAG;
+	}
+
+	if (error_proc_policy & 0x100) {
+		if (decode_mb_count < mb_total) {
+			p->data_flag |= ERROR_FLAG;
+			if ((error_proc_policy & 0x20000) &&
+				decode_mb_count >= mb_total * (100 - mb_count_threshold) / 100) {
+				p->data_flag &= ~ERROR_FLAG;
+			}
+		}
 	}
 
 	if (p->data_flag & ERROR_FLAG) {
@@ -9527,6 +9538,9 @@ MODULE_PARM_DESC(mem_map_mode, "\n mem_map_mode\n");
 module_param(without_display_mode, uint, 0664);
 MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
 
+
+module_param(mb_count_threshold, uint, 0664);
+MODULE_PARM_DESC(mb_count_threshold, "\n mb_count_threshold\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);
