@@ -267,8 +267,9 @@ static unsigned int i_only_flag;
 	bit[12] i_only when error happen
 	bit[13] 0: mark error according to last pic, 1: ignore mark error
 	bit[14] 0: result done when timeout from ucode. 1: reset bufmgr when timeout.
+	bit[18] 1: time out status, store pic to dpb buffer.
 */
-static unsigned int error_proc_policy = 0x4fb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0x7Cfb6; /*0x1f14*/
 
 
 /*
@@ -6114,6 +6115,9 @@ pic_done_proc:
 			(dec_dpb_status == H264_DECODE_TIMEOUT)) {
 empty_proc:
 		reset_process_time(hw);
+		if ((error_proc_policy & 0x40000) &&
+			dec_dpb_status == H264_DECODE_TIMEOUT)
+			goto pic_done_proc;
 		if (!hw->frmbase_cont_flag)
 			release_cur_decoding_buf(hw);
 
