@@ -94,6 +94,8 @@ static struct StorablePicture *get_new_pic(
 	struct h264_dpb_stru *p_H264_Dpb,
 	enum PictureStructure structure, unsigned char is_output);
 
+static void update_ref_list(struct DecodedPictureBuffer *p_Dpb);
+
 static void init_dummy_fs(void)
 {
 	dummy_fs.frame = &dummy_pic;
@@ -2120,6 +2122,7 @@ static int unmark_one_error_out_frame(struct h264_dpb_stru *p_H264_Dpb)
 			unmark_for_reference(p_Dpb, p_Dpb->fs[i]);
 
 			ret = 1;
+			break;
 		}
 	}
 	return ret;
@@ -2165,6 +2168,7 @@ void bufmgr_h264_remove_unused_frame(struct h264_dpb_stru *p_H264_Dpb,
 			dpb_print(p_H264_Dpb->decoder_index,
 				0, "%s, Warnning, force unmark one frame\r\n",
 				__func__);
+			update_ref_list(p_Dpb);
 			remove_unused_frame_from_dpb(p_H264_Dpb);
 			dump_dpb(p_Dpb, 0);
 		}
@@ -2173,6 +2177,7 @@ void bufmgr_h264_remove_unused_frame(struct h264_dpb_stru *p_H264_Dpb,
 			dpb_print(p_H264_Dpb->decoder_index,
 				0, "%s, unmark error frame\r\n",
 				__func__);
+			update_ref_list(p_Dpb);
 			remove_unused_frame_from_dpb(p_H264_Dpb);
 			dump_dpb(p_Dpb, 0);
 		}
