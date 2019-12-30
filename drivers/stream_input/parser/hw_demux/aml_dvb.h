@@ -213,9 +213,16 @@ struct aml_dmx {
 	unsigned long        pes_pages;
 	unsigned long        pes_pages_map;
 	int                  pes_buf_len;
-	unsigned long        sub_pages;
-	unsigned long        sub_pages_map;
+	union {
+		unsigned long       sub_pages;
+		unsigned long       sub_buf_base;
+	};
+	union {
+		unsigned long       sub_pages_map;
+		u8                  *sub_buf_base_virt;
+	};
 	int                  sub_buf_len;
+
 	struct aml_channel   channel[CHANNEL_COUNT+1];
 	struct aml_filter    filter[FILTER_COUNT+1];
 	irq_handler_t        irq_handler;
