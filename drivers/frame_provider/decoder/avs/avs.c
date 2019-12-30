@@ -644,7 +644,6 @@ static void vavs_isr(void)
 				decoder_bmmu_box_get_mem_handle(
 					mm_blk_handle,
 					buffer_index);
-
 			kfifo_put(&display_q,
 					  (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -727,6 +726,7 @@ static void vavs_isr(void)
 					mm_blk_handle,
 					buffer_index);
 			decoder_do_frame_check(NULL, vf);
+
 			kfifo_put(&display_q,
 					  (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -1161,7 +1161,7 @@ static int vavs_prot_init(void)
 #ifdef AVSP_LONG_CABAC
 static unsigned char es_write_addr[MAX_CODED_FRAME_SIZE]  __aligned(64);
 #endif
-static void vavs_local_init(void)
+static void vavs_local_init(bool is_reset)
 {
 	int i;
 
@@ -1180,19 +1180,23 @@ static void vavs_local_init(void)
 #ifdef DEBUG_PTS
 	pts_hit = pts_missed = pts_i_hit = pts_i_missed = 0;
 #endif
-	INIT_KFIFO(display_q);
-	INIT_KFIFO(recycle_q);
-	INIT_KFIFO(newframe_q);
 
-	for (i = 0; i < VF_POOL_SIZE; i++) {
-		const struct vframe_s *vf = &vfpool[i];
+	if (!is_reset) {
+		INIT_KFIFO(display_q);
+		INIT_KFIFO(recycle_q);
+		INIT_KFIFO(newframe_q);
 
-		vfpool[i].index = vf_buf_num;
-		vfpool[i].bufWidth = 1920;
-		kfifo_put(&newframe_q, vf);
+		for (i = 0; i < VF_POOL_SIZE; i++) {
+			const struct vframe_s *vf = &vfpool[i];
+
+			vfpool[i].index = vf_buf_num;
+			vfpool[i].bufWidth = 1920;
+			kfifo_put(&newframe_q, vf);
+		}
+
+		for (i = 0; i < vf_buf_num; i++)
+			vfbuf_use[i] = 0;
 	}
-	for (i = 0; i < vf_buf_num; i++)
-		vfbuf_use[i] = 0;
 
 	cur_vfpool = vfpool;
 
@@ -1232,7 +1236,7 @@ static void vavs_ppmgr_reset(void)
 {
 	vf_notify_receiver(PROVIDER_NAME, VFRAME_EVENT_PROVIDER_RESET, NULL);
 
-	vavs_local_init();
+	vavs_local_init(true);
 
 	pr_info("vavs: vf_ppmgr_reset\n");
 }
@@ -1241,12 +1245,12 @@ static void vavs_ppmgr_reset(void)
 static void vavs_local_reset(void)
 {
 	mutex_lock(&vavs_mutex);
-	recover_flag = 1;
+	//recover_flag = 1;
 	pr_info("error, local reset\n");
 	amvdec_stop();
 	msleep(100);
 	vf_notify_receiver(PROVIDER_NAME, VFRAME_EVENT_PROVIDER_RESET, NULL);
-	vavs_local_init();
+	vavs_local_init(true);
 	vavs_recover();
 
 
@@ -1283,7 +1287,7 @@ static void vavs_fatal_error_handler(struct work_struct *work)
 		vavs_ppmgr_reset();
 #else
 		vf_light_unreg_provider(&vavs_vf_prov);
-		vavs_local_init();
+		vavs_local_init(true);
 		vf_reg_provider(&vavs_vf_prov);
 #endif
 		vavs_recover();
@@ -1341,7 +1345,7 @@ static void vavs_put_timer_func(unsigned long arg)
 				vavs_ppmgr_reset();
 #else
 				vf_light_unreg_provider(&vavs_vf_prov);
-				vavs_local_init();
+				vavs_local_init(true);
 				vf_reg_provider(&vavs_vf_prov);
 #endif
 				vavs_recover();
@@ -1409,7 +1413,6 @@ static void vavs_put_timer_func(unsigned long arg)
 				kfifo_put(&newframe_q,
 						  (const struct vframe_s *)vf);
 		}
-
 	}
 
 	if (frame_dur > 0 && saved_resolution !=
@@ -1548,7 +1551,7 @@ static s32 vavs_init(void)
 	stat |= STAT_TIMER_INIT;
 
 	amvdec_enable();
-	vavs_local_init();
+	vavs_local_init(false);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM)
 		size = get_firmware_data(VIDEO_DEC_AVS, buf);
