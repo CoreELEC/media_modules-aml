@@ -8625,7 +8625,9 @@ static void reset(struct vdec_s *vdec)
 	cancel_work_sync(&hw->work);
 	cancel_work_sync(&hw->notify_work);
 	if (hw->stat & STAT_VDEC_RUN) {
-		amhevc_stop();
+		amvdec_stop();
+		if (hw->mmu_enable)
+			amhevc_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
 
@@ -8796,6 +8798,8 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 	"%s frame count %d to skip %d\n\n",
 	__func__, hw->decode_pic_count+1,
 	hw->skip_frame_count);
+
+	flush_dpb(&hw->dpb);
 
 	timeout = jiffies + HZ;
 	while (kfifo_len(&hw->display_q) > 0) {
