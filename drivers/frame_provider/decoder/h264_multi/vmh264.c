@@ -8536,7 +8536,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			}
 			vdec->mc_type = ((1 << 16) | VFORMAT_H264);
 		}
-		vdec->mc_loaded = 1;
+		vdec->mc_loaded = 0;
 	}
 	vmh264_reset_udr_mgr(hw);
 
