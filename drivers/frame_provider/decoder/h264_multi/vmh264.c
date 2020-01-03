@@ -8958,8 +8958,6 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 		schedule();
 	}
 
-	vf_notify_receiver(vdec->vf_provider_name, VFRAME_EVENT_PROVIDER_RESET, NULL);
-
 	buf_spec_init(hw);
 
 	vh264_local_init(hw, true);
