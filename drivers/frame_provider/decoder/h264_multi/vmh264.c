@@ -8690,8 +8690,6 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 		hw->vfpool[hw->cur_pool][i].index = -1; /* VF_BUF_NUM; */
 
 
-	vf_notify_receiver(vdec->vf_provider_name, VFRAME_EVENT_PROVIDER_RESET, NULL);
-
 	buf_spec_init(hw);
 
 	vh264_local_init(hw);
