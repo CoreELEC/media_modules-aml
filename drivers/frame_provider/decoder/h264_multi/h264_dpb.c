@@ -3504,6 +3504,8 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	p_Vid->last_pic_bottom_field = (p->structure == BOTTOM_FIELD);
 	if (p->idr_flag) {
 		idr_memory_management(p_H264_Dpb, p);
+		if (p_H264_Dpb->first_insert_frame == FirstInsertFrm_OUT)
+			p_H264_Dpb->first_insert_frame = FirstInsertFrm_SKIPDONE;
 #if 0
 /* ??? */
 		/* picture error concealment */
