@@ -515,7 +515,9 @@ static int debug_print(struct vdec_avs_hw_s *hw,
 #define AVS_PRINT_BUF		256
 	unsigned char buf[AVS_PRINT_BUF];
 	int len = 0;
-	int index = hw->m_ins_flag ? DECODE_ID(hw) : 0;
+	int index = 0;
+	if (hw)
+		index = hw->m_ins_flag ? DECODE_ID(hw) : 0;
 	if (hw == NULL ||
 		(flag == 0) ||
 		((debug_mask &
@@ -538,7 +540,9 @@ static int debug_print_cont(struct vdec_avs_hw_s *hw,
 {
 	unsigned char buf[AVS_PRINT_BUF];
 	int len = 0;
-	int index = hw->m_ins_flag ? DECODE_ID(hw) : 0;
+	int index = 0;
+	if (hw)
+		index = hw->m_ins_flag ? DECODE_ID(hw) : 0;
 	if (hw == NULL ||
 		(flag == 0) ||
 		((debug_mask &
@@ -2440,7 +2444,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 	if (size < 0) {
 		amvdec_disable();
 		pr_err("get firmware fail.");
-		/*vfree(buf);*/
+		vfree(fw);
 		return -1;
 	}
 
@@ -2615,6 +2619,9 @@ static int amvdec_avs_probe(struct platform_device *pdev)
 		kfree(hw->gvs);
 		hw->gvs = NULL;
 		pdata->dec_status = NULL;
+		if (hw->fw)
+			vfree(hw->fw);
+		hw->fw = NULL;
 		return -ENODEV;
 	}
 	/*vdec = pdata;*/

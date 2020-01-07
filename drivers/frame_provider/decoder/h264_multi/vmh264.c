@@ -4286,55 +4286,55 @@ static void get_picture_qos_info(struct StorablePicture *picture)
 #endif
 		picture->min_mv = mv_lo;
 
+#ifdef DEBUG_QOS
 		/* {mvy_L0_max, mvy_L0_min} */
 	    rdata32 = READ_VREG(VDEC_PIC_QUALITY_DATA);
 	    mv_hi = (rdata32>>16)&0xffff;
 	    if (mv_hi & 0x8000)
 			mv_hi = 0x8000 - mv_hi;
-#ifdef DEBUG_QOS
 	    pr_info(" [Picture %d Quality] MVY_L0 MAX : %d\n",
 			pic_number, mv_hi);
-#endif
+
 
 	    mv_lo = (rdata32>>0)&0xffff;
 	    if (mv_lo & 0x8000)
 			mv_lo = 0x8000 - mv_lo;
-#ifdef DEBUG_QOS
+
 	    pr_info(" [Picture %d Quality] MVY_L0 MIN : %d\n",
 			pic_number, mv_lo);
-#endif
+
 
 		/* {mvx_L1_max, mvx_L1_min} */
 	    rdata32 = READ_VREG(VDEC_PIC_QUALITY_DATA);
 	    mv_hi = (rdata32>>16)&0xffff;
 	    if (mv_hi & 0x8000)
 			mv_hi = 0x8000 - mv_hi;
-#ifdef DEBUG_QOS
+
 	    pr_info(" [Picture %d Quality] MVX_L1 MAX : %d\n",
 			pic_number, mv_hi);
-#endif
+
 
 	    mv_lo = (rdata32>>0)&0xffff;
 	    if (mv_lo & 0x8000)
 			mv_lo = 0x8000 - mv_lo;
-#ifdef DEBUG_QOS
+
 	    pr_info(" [Picture %d Quality] MVX_L1 MIN : %d\n",
 			pic_number, mv_lo);
-#endif
+
 
 		/* {mvy_L1_max, mvy_L1_min} */
 	    rdata32 = READ_VREG(VDEC_PIC_QUALITY_DATA);
 	    mv_hi = (rdata32>>16)&0xffff;
 	    if (mv_hi & 0x8000)
 			mv_hi = 0x8000 - mv_hi;
-#ifdef DEBUG_QOS
+
 	    pr_info(" [Picture %d Quality] MVY_L1 MAX : %d\n",
 			pic_number, mv_hi);
-#endif
+
 	    mv_lo = (rdata32>>0)&0xffff;
 	    if (mv_lo & 0x8000)
 			mv_lo = 0x8000 - mv_lo;
-#ifdef DEBUG_QOS
+
 	    pr_info(" [Picture %d Quality] MVY_L1 MIN : %d\n",
 			pic_number, mv_lo);
 #endif

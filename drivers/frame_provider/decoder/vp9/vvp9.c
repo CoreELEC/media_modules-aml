@@ -4663,6 +4663,113 @@ static void uninit_mmu_buffers(struct VP9Decoder_s *pbi)
 	pbi->bmmu_box = NULL;
 }
 
+static int calc_luc_quantity(u32 w, u32 h)
+{
+	int lcu_size = 64; /*fixed 64*/
+	int pic_width_64 = (w + 63) & (~0x3f);
+	int pic_height_32 = (h + 31) & (~0x1f);
+	int pic_width_lcu  = (pic_width_64 % lcu_size) ?
+		pic_width_64 / lcu_size  + 1 : pic_width_64 / lcu_size;
+	int pic_height_lcu = (pic_height_32 % lcu_size) ?
+		pic_height_32 / lcu_size + 1 : pic_height_32 / lcu_size;
+
+	return pic_width_lcu * pic_height_lcu;
+}
+
+static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
+	struct PIC_BUFFER_CONFIG_s *pic)
+{
+	int ret = -1;
+	int i = pic->index;
+	int dw_mode = get_double_write_mode_init(pbi);
+	int lcu_total = calc_luc_quantity(pbi->frame_width, pbi->frame_height);
+#ifdef MV_USE_FIXED_BUF
+	u32 mpred_mv_end = pbi->work_space_buf->mpred_mv.buf_start +
+		pbi->work_space_buf->mpred_mv.buf_size;
+#endif
+	struct vdec_v4l2_buffer *fb = NULL;
+
+	if (i < 0)
+		return ret;
+
+	ret = vdec_v4l_get_buffer(pbi->v4l2_ctx, &fb);
+	if (ret < 0) {
+		vp9_print(pbi, 0, "[%d] VP9 get buffer fail.\n",
+			((struct aml_vcodec_ctx *) (pbi->v4l2_ctx))->id);
+		return ret;
+	}
+
+	if (pbi->mmu_enable) {
+		pbi->m_BUF[i].header_addr = decoder_bmmu_box_get_phy_addr(
+			pbi->bmmu_box, HEADER_BUFFER_IDX(i));
+		if (debug & VP9_DEBUG_BUFMGR_MORE) {
+			pr_info("MMU header_adr %d: %ld\n",
+				i, pbi->m_BUF[i].header_addr);
+		}
+	}
+
+#ifdef MV_USE_FIXED_BUF
+	if ((pbi->work_space_buf->mpred_mv.buf_start +
+		(((i + 1) * lcu_total) * MV_MEM_UNIT))
+		<= mpred_mv_end) {
+#endif
+	pbi->m_BUF[i].v4l_ref_buf_addr = (ulong)fb;
+	pic->cma_alloc_addr = fb->m.mem[0].addr;
+	if (fb->num_planes == 1) {
+		pbi->m_BUF[i].start_adr = fb->m.mem[0].addr;
+		pbi->m_BUF[i].size = fb->m.mem[0].size;
+		pbi->m_BUF[i].luma_size = fb->m.mem[0].offset;
+		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
+	} else if (fb->num_planes == 2) {
+		pbi->m_BUF[i].start_adr = fb->m.mem[0].addr;
+		pbi->m_BUF[i].size = fb->m.mem[0].size + fb->m.mem[1].size;
+		pbi->m_BUF[i].luma_size = fb->m.mem[0].size;
+		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
+		fb->m.mem[1].bytes_used = fb->m.mem[1].size;
+	}
+
+	/* config frame buffer */
+	if (pbi->mmu_enable)
+		pic->header_adr = pbi->m_BUF[i].header_addr;
+
+	pic->BUF_index		= i;
+	pic->lcu_total		= lcu_total;
+	pic->mc_canvas_y	= pic->index;
+	pic->mc_canvas_u_v	= pic->index;
+
+	if (dw_mode & 0x10) {
+		pic->dw_y_adr	= pbi->m_BUF[i].start_adr;
+		pic->dw_u_v_adr	= pic->dw_y_adr + pbi->m_BUF[i].luma_size;
+		pic->mc_canvas_y = (pic->index << 1);
+		pic->mc_canvas_u_v = (pic->index << 1) + 1;
+	} else if (dw_mode) {
+		pic->dw_y_adr	= pbi->m_BUF[i].start_adr;
+		pic->dw_u_v_adr	= pic->dw_y_adr + pbi->m_BUF[i].luma_size;
+	}
+
+#ifdef MV_USE_FIXED_BUF
+	pic->mpred_mv_wr_start_addr =
+		pbi->work_space_buf->mpred_mv.buf_start +
+		((pic->index * lcu_total) * MV_MEM_UNIT);
+#endif
+	if (debug) {
+		pr_info("%s index %d BUF_index %d ",
+			__func__, pic->index,
+			pic->BUF_index);
+		pr_info("comp_body_size %x comp_buf_size %x ",
+			pic->comp_body_size,
+			pic->buf_size);
+		pr_info("mpred_mv_wr_start_adr %ld\n",
+			pic->mpred_mv_wr_start_addr);
+		pr_info("dw_y_adr %d, pic_config->dw_u_v_adr =%d\n",
+			pic->dw_y_adr,
+			pic->dw_u_v_adr);
+	}
+#ifdef MV_USE_FIXED_BUF
+	}
+#endif
+	return ret;
+}
 
 static int config_pic(struct VP9Decoder_s *pbi,
 				struct PIC_BUFFER_CONFIG_s *pic_config)

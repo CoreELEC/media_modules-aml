@@ -6399,55 +6399,55 @@ static void get_picture_qos_info(struct hevc_state_s *hevc)
 #endif
 		picture->min_mv = mv_lo;
 
+#ifdef DEBUG_QOS
 		/* {mvy_L0_max, mvy_L0_min} */
 	    rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
 	    mv_hi = (rdata32>>16)&0xffff;
 	    if (mv_hi & 0x8000)
 			mv_hi = 0x8000 - mv_hi;
-#ifdef DEBUG_QOS
 	    hevc_print(hevc, 0, "[Picture %d Quality] MVY_L0 MAX : %d\n",
 			pic_number, mv_hi);
-#endif
+
 
 	    mv_lo = (rdata32>>0)&0xffff;
 	    if (mv_lo & 0x8000)
 			mv_lo = 0x8000 - mv_lo;
-#ifdef DEBUG_QOS
+
 	    hevc_print(hevc, 0, "[Picture %d Quality] MVY_L0 MIN : %d\n",
 			pic_number, mv_lo);
-#endif
+
 
 		/* {mvx_L1_max, mvx_L1_min} */
 	    rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
 	    mv_hi = (rdata32>>16)&0xffff;
 	    if (mv_hi & 0x8000)
 			mv_hi = 0x8000 - mv_hi;
-#ifdef DEBUG_QOS
+
 	    hevc_print(hevc, 0, "[Picture %d Quality] MVX_L1 MAX : %d\n",
 			pic_number, mv_hi);
-#endif
+
 
 	    mv_lo = (rdata32>>0)&0xffff;
 	    if (mv_lo & 0x8000)
 			mv_lo = 0x8000 - mv_lo;
-#ifdef DEBUG_QOS
+
 	    hevc_print(hevc, 0, "[Picture %d Quality] MVX_L1 MIN : %d\n",
 			pic_number, mv_lo);
-#endif
+
 
 		/* {mvy_L1_max, mvy_L1_min} */
 	    rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
 	    mv_hi = (rdata32>>16)&0xffff;
 	    if (mv_hi & 0x8000)
 			mv_hi = 0x8000 - mv_hi;
-#ifdef DEBUG_QOS
+
 	    hevc_print(hevc, 0, "[Picture %d Quality] MVY_L1 MAX : %d\n",
 			pic_number, mv_hi);
-#endif
+
 	    mv_lo = (rdata32>>0)&0xffff;
 	    if (mv_lo & 0x8000)
 			mv_lo = 0x8000 - mv_lo;
-#ifdef DEBUG_QOS
+
 	    hevc_print(hevc, 0, "[Picture %d Quality] MVY_L1 MIN : %d\n",
 			pic_number, mv_lo);
 #endif
@@ -7948,6 +7948,8 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	if (vf && (vf_valid_check(vf, hevc) == false))
 		return;
 	if (vf == (&hevc->vframe_dummy))
+		return;
+	if (!vf)
 		return;
 	index_top = vf->index & 0xff;
 	index_bot = (vf->index >> 8) & 0xff;
@@ -12813,10 +12815,11 @@ static int ammvdec_h265_remove(struct platform_device *pdev)
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)
 		(((struct vdec_s *)(platform_get_drvdata(pdev)))->private);
-	struct vdec_s *vdec = hw_to_vdec(hevc);
+	struct vdec_s *vdec;
 
 	if (hevc == NULL)
 		return 0;
+	vdec = hw_to_vdec(hevc);
 
 	if (get_dbg_flag(hevc))
 		hevc_print(hevc, 0, "%s\r\n", __func__);

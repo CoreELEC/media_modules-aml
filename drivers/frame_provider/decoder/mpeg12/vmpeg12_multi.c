@@ -1286,7 +1286,7 @@ static void userdata_push_do_work(struct work_struct *work)
 	psrc_data = (u8 *)hw->ccbuf_phyAddress_virt + hw->ucode_cc_last_wp;
 
 	pdata = hw->userdata_info.data_buf + hw->userdata_info.last_wp;
-	for (i = 0; i < data_length; i++) {
+	for (i = 0; i < data_length && psrc_data; i++) {
 		*pdata++ = *psrc_data++;
 		if (pdata >= hw->userdata_info.data_buf_end)
 			pdata = hw->userdata_info.data_buf;
@@ -1340,9 +1340,6 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	u32 index = pic->index;
 	u32 info = pic->buffer_info;
 	struct vdec_s *vdec = hw_to_vdec(hw);
-
-	if (hw == NULL || pic == NULL)
-		return -1;
 
 	user_data_ready_notify(hw, pic->pts, pic->pts_valid);
 #ifdef NV21
@@ -2671,7 +2668,7 @@ void (*callback)(struct vdec_s *, void *),
 #endif
 
 	size = vdec_prepare_input(vdec, &hw->chunk);
-	if (size < 0) {
+	if (size < 0 || !hw->chunk) {
 		hw->input_empty++;
 		hw->dec_result = DEC_RESULT_AGAIN;
 		vdec_schedule_work(&hw->work);
@@ -2680,11 +2677,9 @@ void (*callback)(struct vdec_s *, void *),
 	if (vdec_frame_based(vdec) && debug_enable) {
 		u8 *data = NULL;
 
-
-		if (hw->chunk)
-			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-				"run: chunk offset 0x%x, size %d\n",
-				hw->chunk->offset, hw->chunk->size);
+		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+			"run: chunk offset 0x%x, size %d\n",
+			hw->chunk->offset, hw->chunk->size);
 
 		if (!hw->chunk->block->is_mapped)
 			data = codec_mm_vmap(hw->chunk->block->start +
@@ -2937,10 +2932,9 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 		vfree(hw->fw);
 		hw->fw = NULL;
 	}
-	if (hw) {
-		vfree(hw);
-		hw = NULL;
-	}
+
+	vfree(hw);
+
 	pr_info("ammvdec_mpeg12 removed.\n");
 	memset(&gvs, 0x0, sizeof(gvs));
 
