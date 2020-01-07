@@ -4782,6 +4782,9 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 #endif
 	struct vdec_v4l2_buffer *fb = NULL;
 
+	if (i < 0)
+		return ret;
+
 	ret = vdec_v4l_get_buffer(pbi->v4l2_ctx, &fb);
 	if (ret < 0) {
 		vp9_print(pbi, 0, "[%d] VP9 get buffer fail.\n",

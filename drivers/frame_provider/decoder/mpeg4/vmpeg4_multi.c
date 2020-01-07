@@ -1530,13 +1530,8 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 			decbuf_size =
 				ALIGN(align_w * align_h * 3/2, SZ_64K);
 		} else { /*1080p*/
-			if (h > w) {
-				canvas_width = 1088;
-				canvas_height = 1920;
-			} else {
-				canvas_width = 1920;
-				canvas_height = 1088;
-			}
+			canvas_width = 1920;
+			canvas_height = 1088;
 			decbuf_y_size = 0x200000;
 			decbuf_size = 0x300000;
 		}
