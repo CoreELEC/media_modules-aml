@@ -35,6 +35,7 @@
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/aformat.h>
 
+#include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/frame_sync/tsync.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/frame_sync/timestamp.h>
@@ -120,9 +121,6 @@ static int def_4k_vstreambuf_sizeM =
 static int def_vstreambuf_sizeM =
 	(DEFAULT_VIDEO_BUFFER_SIZE >> 20);
 static int slow_input;
-
-
-
 
 /* #define DATA_DEBUG */
 static int use_bufferlevelx10000 = 10000;
