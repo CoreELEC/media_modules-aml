@@ -451,7 +451,7 @@ static u32 audio_pts_bit32 = 0;
 static u32 first_video_pts = 0;
 static u32 first_audio_pts = 0;
 static int demux_skipbyte;
-static int tsfile_clkdiv = 4;
+static int tsfile_clkdiv = 5;
 static int asyncfifo_buf_len = ASYNCFIFO_BUFFER_SIZE_DEFAULT;
 
 #define SF_DMX_ID 2
