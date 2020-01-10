@@ -275,7 +275,7 @@ static unsigned int i_only_flag;
 	bit[17] 1: If the decoded Mb count is insufficient but greater than the threshold, it is considered the correct frame.
 	bit[18] 1: time out status, store pic to dpb buffer.
 */
-static unsigned int error_proc_policy = 0xCfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0x7Cfb6; /*0x1f14*/
 
 
 /*
@@ -315,7 +315,7 @@ static unsigned int frmbase_cont_bitlevel2 = 0x1;
 
 static unsigned int check_slice_num = 30;
 
-static unsigned int mb_count_threshold = 10; /*percentage*/
+static unsigned int mb_count_threshold = 5; /*percentage*/
 
 #define MH264_USERDATA_ENABLE
 
