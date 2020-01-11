@@ -11542,6 +11542,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 			ref_pic++;
 		if (pic->output_mark == 0 && pic->referenced == 0
 			&& pic->output_ready == 0
+			&& pic->vf_ref == 0
 			) {
 			if (new_pic) {
 				if (pic->POC < new_pic->POC)
@@ -11550,15 +11551,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 				new_pic = pic;
 		}
 	}
-/*If the number of reference frames of DPB >= (the DPB buffer size - the number of reorders -3)*/
-/*and the back-end state is RECEIVER INACTIVE, it will cause the decoder have no buffer to*/
-/*decode. all reference frames are removed and setting error flag.*/
-/*3 represents 2 filed are needed for back-end display and 1 filed is needed for decoding*/
-/*when file is interlace.*/
-	if ((!hevc->is_used_v4l) && (new_pic == NULL) &&
-			(ref_pic >=
-			get_work_pic_num(hevc) -
-			hevc->sps_num_reorder_pics_0 - 3))  {
+	if (new_pic == NULL) {
 		enum receviver_start_e state = RECEIVER_INACTIVE;
 		if (vf_get_receiver(vdec->vf_provider_name)) {
 			state =
@@ -11571,20 +11564,38 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 		}
 		if (state == RECEIVER_INACTIVE) {
 			for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+				int poc = INVALID_POC;
 				pic = hevc->m_PIC[i];
 				if (pic == NULL || pic->index == -1)
-					continue;
-
-				if ((pic->referenced == 1) &&
-						(pic->error_mark == 1)) {
-					pic->referenced = 0;
-					put_mv_buf(hevc, pic);
+						continue;
+				if ((pic->referenced == 0) &&
+						(pic->error_mark == 1) &&
+						(pic->output_mark == 1)) {
+					if (poc == INVALID_POC ||  (pic->POC < poc)) {
+						new_pic = pic;
+						poc = pic->POC;
+					}
 				}
-				pic->error_mark = 1;
+			}
+		     if (new_pic)  {
+				new_pic->referenced = 0;
+				new_pic->output_mark = 0;
+				put_mv_buf(hevc, new_pic);
+				hevc_print(hevc, 0, "force release error  pic %d  recieve_state %d \n", new_pic->POC, state);
+			} else {
+				for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+					pic = hevc->m_PIC[i];
+					if (pic == NULL || pic->index == -1)
+						continue;
+					if ((pic->referenced == 1) && (pic->error_mark == 1)) {
+						flush_output(hevc, pic);
+						hevc_print(hevc, 0, "DPB error, neeed fornce flush  recieve_state %d \n", state);
+						break;
+					}
+				}
 			}
 		}
 	}
-
 	return (new_pic != NULL) ? 1 : 0;
 }
 
