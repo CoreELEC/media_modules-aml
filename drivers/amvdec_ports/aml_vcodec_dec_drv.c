@@ -117,7 +117,7 @@ static int fops_vcodec_open(struct file *file)
 	list_add(&ctx->list, &dev->ctx_list);
 
 	mutex_unlock(&dev->dev_mutex);
-	pr_info("[%d] %s decoder\n", ctx->id, dev_name(&dev->plat_dev->dev));
+	pr_info("[%d] %s decoder %lx\n", ctx->id, dev_name(&dev->plat_dev->dev), (ulong)ctx);
 
 	return ret;
 
@@ -141,7 +141,7 @@ static int fops_vcodec_release(struct file *file)
 	struct aml_vcodec_dev *dev = video_drvdata(file);
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(file->private_data);
 
-	pr_info("[%d] release decoder\n", ctx->id);
+	pr_info("[%d] release decoder %lx\n", ctx->id, (ulong) ctx);
 	mutex_lock(&dev->dev_mutex);
 
 	/*
@@ -168,8 +168,8 @@ static int fops_vcodec_release(struct file *file)
 
 static int v4l2video_file_release(struct inode *inode, struct file *file)
 {
-	aml_v4l2_debug(2,"%s: file: 0x%p, data: %p",
-		__func__, file, file->private_data);
+	aml_v4l2_debug(2,"%s: file: %lx, data: %lx",
+		__func__, (ulong) file, (ulong) file->private_data);
 
 	if (file->private_data)
 		vdec_frame_buffer_release(file->private_data);
@@ -205,7 +205,8 @@ int v4l2_alloc_fd(int *fd)
 		return -ENOMEM;
 	}
 
-	aml_v4l2_debug(2, "%s: fd %d, file %p", __func__, file_fd, file);
+	aml_v4l2_debug(2, "%s: fd %d, file %lx, data: %lx", __func__,
+		file_fd, (ulong) file, (ulong) file->private_data);
 
 	fd_install(file_fd, file);
 	*fd = file_fd;
@@ -290,8 +291,11 @@ void* v4l_get_vf_handle(int fd)
 	}
 
 	data = (struct file_private_data*) file->private_data;
-	if (data)
+	if (data) {
 		vf_handle = &data->vf;
+		aml_v4l2_debug(2, "%s: file: %lx, data: %lx",
+			__func__, (ulong) file, (ulong) data);
+	}
 
 	fput(file);
 
