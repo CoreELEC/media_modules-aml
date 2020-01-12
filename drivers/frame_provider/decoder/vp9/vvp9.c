@@ -9836,7 +9836,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			!ctx->v4l_codec_ready &&
 			pbi->v4l_params_parsed) {
 			ret = 0; /*the params has parsed.*/
-		} else if (!ctx->v4l_codec_dpb_ready) {
+		} else if (ctx->cap_pool.in < ctx->dpb_size) {
 			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
 				run_ready_min_buf_num)
 				ret = 0;
@@ -10159,6 +10159,7 @@ static void  init_frame_bufs(struct VP9Decoder_s *pbi)
 		frame_bufs[i].buf.decode_idx = 0;
 		frame_bufs[i].buf.cma_alloc_addr = 0;
 		frame_bufs[i].buf.index = i;
+		frame_bufs[i].buf.vframe_bound = 0;
 	}
 
 	if (vdec->parallel_dec == 1) {
