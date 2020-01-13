@@ -7363,7 +7363,7 @@ static int H265_alloc_mmu(struct hevc_state_s *hevc, struct PIC_s *new_pic,
 	picture_size = compute_losless_comp_body_size(hevc, new_pic->width,
 				new_pic->height, !bit_depth_10);
 	cur_mmu_4k_number = ((picture_size+(1<<12)-1) >> 12);
-	if (hevc->double_write_mode & 0x10)
+	if (get_double_write_mode(hevc) == 0x10)
 		return 0;
 	/*hevc_print(hevc, 0,
 	"alloc_mmu cur_idx : %d picture_size : %d mmu_4k_number : %d\r\n",
