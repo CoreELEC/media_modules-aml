@@ -1688,7 +1688,7 @@ int vp9_alloc_mmu(
 		pr_err("error no mmu box!\n");
 		return -1;
 	}
-	if (pbi->double_write_mode & 0x10)
+	if (get_double_write_mode(pbi) == 0x10)
 		return 0;
 	if (bit_depth >= VPX_BITS_12) {
 		pbi->fatal_error = DECODER_FATAL_ERROR_SIZE_OVERFLOW;
