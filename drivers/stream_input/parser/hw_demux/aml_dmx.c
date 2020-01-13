@@ -4139,12 +4139,12 @@ exit:
 }
 #endif
 
-int dmx_init_sub_buffer(struct aml_dmx *dmx)
+int dmx_init_sub_buffer(struct aml_dmx *dmx, unsigned long base, unsigned long virt)
 {
-	dmx->sub_buf_base = READ_MPEG_REG(PARSER_SUB_START_PTR);
+	dmx->sub_buf_base = (base)? base : READ_MPEG_REG(PARSER_SUB_START_PTR);
 	pr_inf("sub buf base: 0x%lx\n", dmx->sub_buf_base);
 
-	dmx->sub_buf_base_virt = codec_mm_phys_to_virt(dmx->sub_buf_base);
+	dmx->sub_buf_base_virt = (base)? (u8 *)virt : codec_mm_phys_to_virt(dmx->sub_buf_base);
 	pr_inf("sub buf base virt: 0x%p\n", dmx->sub_buf_base_virt);
 
 	return 0;
@@ -4842,7 +4842,7 @@ int aml_dmx_hw_start_feed(struct dvb_demux_feed *dvbdmxfeed)
 	if (dvbdmxfeed->type == DMX_TYPE_TS
 		&& (dvbdmxfeed->pes_type == DMX_PES_SUBTITLE
 			|| dvbdmxfeed->pes_type == DMX_PES_TELETEXT))
-		dmx_init_sub_buffer(dmx);
+		dmx_init_sub_buffer(dmx, 0, 0);
 
 	spin_lock_irqsave(&dvb->slock, flags);
 	ret = dmx_add_feed(dmx, dvbdmxfeed);

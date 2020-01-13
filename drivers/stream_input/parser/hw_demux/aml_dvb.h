@@ -366,6 +366,8 @@ extern void dmx_free_chan(struct aml_dmx *dmx, int cid);
 
 extern int dmx_get_ts_serial(enum aml_ts_source_t src);
 
+extern int dmx_init_sub_buffer(struct aml_dmx *dmx, unsigned long base, unsigned long virt);
+
 /*AMLogic dsc interface*/
 extern int dsc_set_pid(struct aml_dsc_channel *ch, int pid);
 extern int dsc_set_key(struct aml_dsc_channel *ch, int flags,
