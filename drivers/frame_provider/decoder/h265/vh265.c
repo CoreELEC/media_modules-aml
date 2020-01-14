@@ -3496,30 +3496,6 @@ static void init_pic_list(struct hevc_state_s *hevc)
 				set_canvas(hevc, pic);
 		}
 	}
-
-	for (; i < MAX_REF_PIC_NUM; i++) {
-		struct PIC_s *pic = hevc->m_PIC[i];
-
-		if (!pic) {
-			pic = vmalloc(sizeof(struct PIC_s));
-			if (pic == NULL) {
-				hevc_print(hevc, 0,
-					"%s: alloc pic %d fail!!!\n",
-					__func__, i);
-				break;
-			}
-			hevc->m_PIC[i] = pic;
-		}
-		memset(pic, 0, sizeof(struct PIC_s));
-
-		pic->index = -1;
-		pic->BUF_index = -1;
-		if (vdec->parallel_dec == 1) {
-			pic->y_canvas_index = -1;
-			pic->uv_canvas_index = -1;
-		}
-	}
-
 }
 
 static void uninit_pic_list(struct hevc_state_s *hevc)
@@ -3647,31 +3623,6 @@ static void init_pic_list_hw(struct hevc_state_s *hevc)
 	}
 	if (cur_pic_num == 0)
 		return;
-	for (; i < MAX_REF_PIC_NUM; i++) {
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) {
-			if (hevc->mmu_enable  && ((dw_mode & 0x10) == 0))
-				WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA,
-				hevc->m_PIC[cur_pic_num-1]->header_adr>>5);
-			else
-				WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA,
-				hevc->m_PIC[cur_pic_num-1]->mc_y_adr >> 5);
-#ifndef LOSLESS_COMPRESS_MODE
-			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA,
-				hevc->m_PIC[cur_pic_num-1]->mc_u_v_adr >> 5);
-#endif
-		} else {
-			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CMD_ADDR,
-				hevc->m_PIC[cur_pic_num-1]->mc_y_adr|
-				(hevc->m_PIC[cur_pic_num-1]->mc_canvas_y<<8)
-				| 0x1);
-#ifndef LOSLESS_COMPRESS_MODE
-			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CMD_ADDR,
-				hevc->m_PIC[cur_pic_num-1]->mc_u_v_adr|
-				(hevc->m_PIC[cur_pic_num-1]->mc_canvas_u_v<<8)
-				| 0x1);
-#endif
-		}
-	}
 
 	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
 
@@ -5939,7 +5890,7 @@ static void set_aux_data(struct hevc_state_s *hevc,
 			}
 		}
 		new_size = pic->aux_data_size + aux_count + heads_size;
-		new_buf = vmalloc(new_size);
+		new_buf = vzalloc(new_size);
 		if (new_buf) {
 			unsigned char valid_tag = 0;
 			unsigned char *h =
@@ -5948,10 +5899,13 @@ static void set_aux_data(struct hevc_state_s *hevc,
 			unsigned char *p = h + 8;
 			int len = 0;
 			int padding_len = 0;
-			memcpy(new_buf, pic->aux_data_buf,  pic->aux_data_size);
-			if (pic->aux_data_buf)
+
+			if (pic->aux_data_buf) {
+				memcpy(new_buf, pic->aux_data_buf, pic->aux_data_size);
 				vfree(pic->aux_data_buf);
+			}
 			pic->aux_data_buf = new_buf;
+
 			for (i = 0; i < aux_count; i += 4) {
 				int ii;
 				unsigned char tag = aux_adr[i + 3] >> 8;
@@ -11239,6 +11193,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		hevc->timer.expires = jiffies + PUT_INTERVAL;
 
 		hevc->fw = fw;
+		hevc->init_flag = 1;
 
 		return 0;
 	}
@@ -11674,14 +11629,6 @@ static int vmh265_stop(struct hevc_state_s *hevc)
 
 	hevc_local_uninit(hevc);
 
-	hevc->init_flag = 0;
-	hevc->first_sc_checked = 0;
-	cancel_work_sync(&hevc->notify_work);
-	cancel_work_sync(&hevc->set_clk_work);
-	cancel_work_sync(&hevc->timeout_work);
-
-	uninit_mmu_buffers(hevc);
-
 	if (use_cma) {
 		hevc->uninit_list = 1;
 		reset_process_time(hevc);
@@ -11697,7 +11644,13 @@ static int vmh265_stop(struct hevc_state_s *hevc)
 			msleep(20);
 #endif
 	}
+	hevc->init_flag = 0;
+	hevc->first_sc_checked = 0;
+	cancel_work_sync(&hevc->notify_work);
+	cancel_work_sync(&hevc->set_clk_work);
+	cancel_work_sync(&hevc->timeout_work);
 	cancel_work_sync(&hevc->work);
+	uninit_mmu_buffers(hevc);
 
 	vfree(hevc->fw);
 	hevc->fw = NULL;
@@ -11768,7 +11721,6 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 	if (hevc->dec_result == DEC_RESULT_FREE_CANVAS) {
 		/*USE_BUF_BLOCK*/
 		uninit_pic_list(hevc);
-		hevc_print(hevc, 0, "uninit list\n");
 		hevc->uninit_list = 0;
 #ifdef USE_UNINIT_SEMA
 		up(&hevc->h265_uninit_done_sema);
@@ -12549,7 +12501,6 @@ static void reset(struct vdec_s *vdec)
 	}
 	hevc->dec_result = DEC_RESULT_NONE;
 	reset_process_time(hevc);
-	hevc->init_flag = 0;
 	hevc->pic_list_init_flag = 0;
 	dealloc_mv_bufs(hevc);
 	aml_free_canvas(vdec);
@@ -13210,6 +13161,7 @@ static int ammvdec_h265_remove(struct platform_device *pdev)
 	vdec_set_status(hw_to_vdec(hevc), VDEC_STATUS_DISCONNECTED);
 
 	vfree((void *)hevc);
+
 	return 0;
 }
 
