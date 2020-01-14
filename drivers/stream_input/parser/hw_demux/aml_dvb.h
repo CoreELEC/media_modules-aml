@@ -49,7 +49,6 @@
 #include <dvb_filter.h>
 #include <dvb_net.h>
 #include <dvb_ringbuffer.h>
-#include <dvb_frontend.h>
 
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
@@ -306,12 +305,6 @@ struct aml_swfilter {
 
 	u8     wrapbuf[188];
 	int    track_dmx;
-};
-
-struct aml_tuner {
-	struct tuner_config cfg;
-	unsigned int i2c_adapter_id;
-	struct i2c_adapter *i2c_adp;
 };
 
 struct aml_dvb {
