@@ -2850,6 +2850,8 @@ void amvenc_avc_start_cmd(struct encode_wq_s *wq,
 
 	ie_me_mode = (0 & ME_PIXEL_MODE_MASK) << ME_PIXEL_MODE_SHIFT;
 	if (encode_manager.need_reset) {
+		amvenc_stop();
+		reload_flag = 1;
 		encode_manager.need_reset = false;
 		encode_manager.encode_hw_status = ENCODER_IDLE;
 		amvenc_reset();
