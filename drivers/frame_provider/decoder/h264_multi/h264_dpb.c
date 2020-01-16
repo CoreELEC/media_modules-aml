@@ -1060,14 +1060,14 @@ static void init_picture(struct h264_dpb_stru *p_H264_Dpb,
 			currSlice->picture_structure_mmco);
 	}
 
-	if (currSlice->pic_struct >= 3)
-		dec_picture->pic_struct = currSlice->pic_struct + 2;
-	else if (currSlice->pic_struct == 1)
-		dec_picture->pic_struct = PIC_TOP_BOT;
-	else if (currSlice->pic_struct >= 2)
-		dec_picture->pic_struct = PIC_BOT_TOP;
-	else
+	if (currSlice->pic_struct < PIC_INVALID) {
+		dec_picture->pic_struct = currSlice->pic_struct;
+	} else {
 		dec_picture->pic_struct = PIC_INVALID;
+	}
+
+	dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
+			  "%s pic_struct = %d\n", __func__, dec_picture->pic_struct);
 }
 
 void dump_pic(struct h264_dpb_stru *p_H264_Dpb)
