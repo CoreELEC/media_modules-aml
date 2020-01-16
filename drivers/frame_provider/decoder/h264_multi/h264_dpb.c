@@ -1060,14 +1060,14 @@ static void init_picture(struct h264_dpb_stru *p_H264_Dpb,
 			currSlice->picture_structure_mmco);
 	}
 
-	if (currSlice->pic_struct < PIC_INVALID) {
-		dec_picture->pic_struct = currSlice->pic_struct;
-	} else {
+	if (currSlice->pic_struct >= 3)
+		dec_picture->pic_struct = currSlice->pic_struct + 2;
+	else if (currSlice->pic_struct == 1)
+		dec_picture->pic_struct = PIC_TOP_BOT;
+	else if (currSlice->pic_struct >= 2)
+		dec_picture->pic_struct = PIC_BOT_TOP;
+	else
 		dec_picture->pic_struct = PIC_INVALID;
-	}
-
-	dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
-			  "%s pic_struct = %d\n", __func__, dec_picture->pic_struct);
 }
 
 void dump_pic(struct h264_dpb_stru *p_H264_Dpb)
@@ -2312,7 +2312,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 			"%s first_insert_frame %d \n", __func__, p_H264_Dpb->first_insert_frame);
 	}
-	if (prepare_display_buf(p_H264_Dpb, p_Dpb->fs[pos]) >= 0)
+	if (prepare_display_buf(p_H264_Dpb->vdec, p_Dpb->fs[pos]) >= 0)
 		p_Dpb->fs[pos]->pre_output = 1;
 	else {
 		if (h264_debug_flag & PRINT_FLAG_DPB_DETAIL) {
