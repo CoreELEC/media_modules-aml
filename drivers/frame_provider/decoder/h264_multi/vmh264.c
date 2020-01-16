@@ -2712,9 +2712,20 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 				VIDTYPE_VIU_NV21;
 
 			if (bForceInterlace) {
+				if (frame->frame != NULL && frame->frame->pic_struct == PIC_TOP_BOT) {
 				vf->type |= (i == 0 ?
 					VIDTYPE_INTERLACE_TOP :
 					VIDTYPE_INTERLACE_BOTTOM);
+				} else if (frame->frame != NULL && frame->frame->pic_struct == PIC_BOT_TOP) {
+					vf->type |= (i == 0 ?
+					VIDTYPE_INTERLACE_BOTTOM :
+					VIDTYPE_INTERLACE_TOP);
+				} else {
+					vf->type |= (i == 0 ?
+					VIDTYPE_INTERLACE_TOP :
+					VIDTYPE_INTERLACE_BOTTOM);
+				}
+
 				if (i == 1) {
 					vf->pts = 0;
 					vf->pts_us64 = 0;
