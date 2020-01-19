@@ -2884,12 +2884,10 @@ static int aml_tsdemux_set_vid(int vpid)
 	if (dmx) {
 		if (dmx->vid_chan != -1) {
 			dmx_free_chan(dmx, dmx->vid_chan);
-			dmx_init_sub_buffer(dmx, 1, 0);
 			dmx->vid_chan = -1;
 		}
 
 		if ((vpid >= 0) && (vpid < 0x1FFF)) {
-			dmx_init_sub_buffer(dmx, 0, 0);
 			dmx->vid_chan =
 			    dmx_alloc_chan(dmx, DMX_TYPE_TS,
 						DMX_PES_VIDEO, vpid);
@@ -2920,7 +2918,6 @@ static int aml_tsdemux_set_aid(int apid)
 		}
 
 		if ((apid >= 0) && (apid < 0x1FFF)) {
-			dmx_init_sub_buffer(dmx, 0, 0);
 			dmx->aud_chan =
 			    dmx_alloc_chan(dmx, DMX_TYPE_TS,
 						DMX_PES_AUDIO, apid);
@@ -2948,12 +2945,10 @@ static int aml_tsdemux_set_sid(int spid)
 	if (dmx) {
 		if (dmx->sub_chan != -1) {
 			dmx_free_chan(dmx, dmx->sub_chan);
-			dmx_init_sub_buffer(dmx, 1, 0);
 			dmx->sub_chan = -1;
 		}
 
 		if ((spid >= 0) && (spid < 0x1FFF)) {
-			dmx_init_sub_buffer(dmx, 0, 0);
 			dmx->sub_chan =
 			    dmx_alloc_chan(dmx, DMX_TYPE_TS,
 						DMX_PES_SUBTITLE, spid);
