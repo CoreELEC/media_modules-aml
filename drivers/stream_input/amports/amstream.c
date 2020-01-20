@@ -2625,7 +2625,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 					}
 				if (struct_size != sizeof(struct av_param_mvdec_t)) {
 					pr_err("pass in size %u != expected size %u\n",
-						struct_size, sizeof(struct av_param_mvdec_t));
+						struct_size, (u32)sizeof(struct av_param_mvdec_t));
 					pr_err("App using old structue,we will support it.\n");
 					//Here will add the compatibility for old structure when
 					//current struecture be substituded by newer structure.
