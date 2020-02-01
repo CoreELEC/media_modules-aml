@@ -1701,6 +1701,7 @@ static unsigned char is_buf_spec_in_disp_q(struct vdec_h264_hw_s *hw,
 
 static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i)
 {
+	struct vdec_s *vdec = hw_to_vdec(hw);
 	if (hw->mmu_enable) {
 		if (hw->buffer_spec[i].alloc_header_addr)
 			return 0;
@@ -1738,7 +1739,25 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i)
 		hw->no_mem_count = 0;
 		hw->stat &= ~DECODER_FATAL_ERROR_NO_MEM;
 	}
-
+	if (!vdec_secure(vdec)) {
+		/*init internal buf*/
+		char *tmpbuf = (char *)codec_mm_phys_to_virt(hw->buffer_spec[i].cma_alloc_addr);
+		if (tmpbuf) {
+			memset(tmpbuf, 0, PAGE_ALIGN(buf_size));
+			codec_mm_dma_flush(tmpbuf,
+				   PAGE_ALIGN(buf_size),
+				   DMA_TO_DEVICE);
+		} else {
+			tmpbuf = codec_mm_vmap(hw->buffer_spec[i].cma_alloc_addr, PAGE_ALIGN(buf_size));
+			if (tmpbuf) {
+				memset(tmpbuf, 0, PAGE_ALIGN(buf_size));
+				codec_mm_dma_flush(tmpbuf,
+					   PAGE_ALIGN(buf_size),
+					   DMA_TO_DEVICE);
+				codec_mm_unmap_phyaddr(tmpbuf);
+			}
+		}
+	}
 	hw->buffer_spec[i].buf_adr =
 	hw->buffer_spec[i].cma_alloc_addr;
 	addr = hw->buffer_spec[i].buf_adr;
@@ -3305,7 +3324,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
  *   bit 1:0 -- h264_co_mb_info_wr_ptr
  */
 #define H264_CO_MB_RW_CTL         VLD_C3D /* 0xc3d */
-
+#define DCAC_DDR_BYTE64_CTL                   0x0e1d
 	unsigned long canvas_adr;
 	unsigned int ref_reg_val;
 	unsigned int one_ref_cfg = 0;
@@ -3408,8 +3427,13 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 
 	//disable this read cache when frame width <= 64 (4MBs)
 	//IQIDCT_CONTROL, bit[16] dcac_dma_read_cache_disable
-	if (hw->frame_width <= 64)
+	if (hw->frame_width <= 64) {
 		SET_VREG_MASK(IQIDCT_CONTROL,(1 << 16));
+		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A))
+			// Disable DDR_BYTE64_CACHE
+			WRITE_VREG(DCAC_DDR_BYTE64_CTL,
+			(READ_VREG(DCAC_DDR_BYTE64_CTL) & (~0xf)) | 0xa);
+	}
 	else
 		CLEAR_VREG_MASK(IQIDCT_CONTROL,(1 << 16));
 
