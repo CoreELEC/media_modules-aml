@@ -211,11 +211,13 @@ static void get_pic_info(struct vdec_h264_inst *inst,
 {
 	*pic = inst->vsi->pic;
 
-	aml_vcodec_debug(inst, "pic(%d, %d), buf(%d, %d)",
-			 pic->visible_width, pic->visible_height,
-			 pic->coded_width, pic->coded_height);
-	aml_vcodec_debug(inst, "Y(%d, %d), C(%d, %d)", pic->y_bs_sz,
-			 pic->y_len_sz, pic->c_bs_sz, pic->c_len_sz);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"pic(%d, %d), buf(%d, %d)\n",
+		 pic->visible_width, pic->visible_height,
+		 pic->coded_width, pic->coded_height);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"Y(%d, %d), C(%d, %d)\n", pic->y_bs_sz,
+		 pic->y_len_sz, pic->c_bs_sz, pic->c_len_sz);
 }
 
 static void get_crop_info(struct vdec_h264_inst *inst, struct v4l2_rect *cr)
@@ -225,14 +227,15 @@ static void get_crop_info(struct vdec_h264_inst *inst, struct v4l2_rect *cr)
 	cr->width = inst->vsi->crop.width;
 	cr->height = inst->vsi->crop.height;
 
-	aml_vcodec_debug(inst, "l=%d, t=%d, w=%d, h=%d",
-			 cr->left, cr->top, cr->width, cr->height);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"l=%d, t=%d, w=%d, h=%d\n",
+		 cr->left, cr->top, cr->width, cr->height);
 }
 
 static void get_dpb_size(struct vdec_h264_inst *inst, unsigned int *dpb_sz)
 {
 	*dpb_sz = inst->vsi->dec.dpb_sz;
-	aml_vcodec_debug(inst, "sz=%d", *dpb_sz);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "sz=%d\n", *dpb_sz);
 }
 
 static void skip_aud_data(u8 **data, u32 *size)
@@ -314,13 +317,15 @@ static int vdec_h264_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	inst->vfm.ada_ctx	= &inst->vdec;
 	ret = vcodec_vfm_init(&inst->vfm);
 	if (ret) {
-		pr_err("%s, init vfm failed.\n", __func__);
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"init vfm failed.\n");
 		goto err;
 	}
 
 	ret = video_decoder_init(&inst->vdec);
 	if (ret) {
-		aml_vcodec_err(inst, "vdec_h264 init err=%d", ret);
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"vdec_h264 init err=%d\n", ret);
 		goto err;
 	}
 
@@ -340,7 +345,8 @@ static int vdec_h264_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 
 	init_completion(&inst->comp);
 
-	aml_vcodec_debug(inst, "H264 Instance >> %p", inst);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"H264 Instance >> %lx", (ulong) inst);
 
 	ctx->ada_ctx	= &inst->vdec;
 	*h_vdec		= (unsigned long)inst;
@@ -503,8 +509,9 @@ static void fill_vdec_params(struct vdec_h264_inst *inst, struct h264_SPS_t *sps
 
 	vdec_config_dw_mode(pic, dw);
 
-	aml_vcodec_debug(inst, "[%d] The stream infos, dw: %d, coded:(%d x %d), visible:(%d x %d), DPB: %d, margin: %d\n",
-		inst->ctx->id, dw, pic->coded_width, pic->coded_height,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"The stream infos, dw: %d, coded:(%d x %d), visible:(%d x %d), DPB: %d, margin: %d\n",
+		dw, pic->coded_width, pic->coded_height,
 		pic->visible_width, pic->visible_height,
 		dec->dpb_sz - margin, margin);
 }
@@ -559,7 +566,8 @@ static int stream_parse_by_ucode(struct vdec_h264_inst *inst, u8 *buf, u32 size)
 
 	ret = vdec_vframe_write(vdec, buf, size, 0);
 	if (ret < 0) {
-		pr_err("write frame data failed. err: %d\n", ret);
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"write frame data failed. err: %d\n", ret);
 		return ret;
 	}
 
@@ -591,7 +599,8 @@ static int stream_parse(struct vdec_h264_inst *inst, u8 *buf, u32 size)
 
 	ret = h264_decode_extradata_ps(buf, size, ps);
 	if (ret) {
-		pr_err("parse extra data failed. err: %d\n", ret);
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"parse extra data failed. err: %d\n", ret);
 		goto out;
 	}
 
@@ -642,8 +651,6 @@ static void vdec_h264_deinit(unsigned long h_vdec)
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
 	struct aml_vcodec_ctx *ctx = inst->ctx;
 
-	aml_vcodec_debug_enter(inst);
-
 	video_decoder_release(&inst->vdec);
 
 	vcodec_vfm_release(&inst->vfm);
@@ -675,14 +682,16 @@ static void vdec_h264_get_vf(struct vdec_h264_inst *inst, struct vdec_v4l2_buffe
 
 	vf = peek_video_frame(&inst->vfm);
 	if (!vf) {
-		aml_vcodec_debug(inst, "there is no vframe.");
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"there is no vframe.\n");
 		*out = NULL;
 		return;
 	}
 
 	vf = get_video_frame(&inst->vfm);
 	if (!vf) {
-		aml_vcodec_debug(inst, "the vframe is avalid.");
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"the vframe is avalid.\n");
 		*out = NULL;
 		return;
 	}
@@ -719,7 +728,7 @@ static int vdec_write_nalu(struct vdec_h264_inst *inst,
 		goto err;
 
 	nal_type = AVC_NAL_TYPE(buf[nalu_pos]);
-	//aml_vcodec_debug(inst, "NALU type: %d, size: %u", nal_type, size);
+	//v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "NALU type: %d, size: %u\n", nal_type, size);
 
 	if (nal_type == NAL_H264_SPS && !is_combine) {
 		if (inst->vsi->head_offset + size > HEADER_BUFFER_SIZE) {
@@ -775,7 +784,7 @@ static int vdec_write_nalu(struct vdec_h264_inst *inst,
 
 	return ret;
 err:
-	aml_vcodec_err(inst, "%s err(%d)", __func__, ret);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR, "err(%d)", ret);
 	return ret;
 }
 
@@ -813,7 +822,7 @@ static bool monitor_res_change(struct vdec_h264_inst *inst, u8 *buf, u32 size)
 		inst->vsi->cur_pic.profile_idc) ||
 		(inst->vsi->pic.ref_frame_count !=
 		inst->vsi->cur_pic.ref_frame_count))) {
-		pr_info("res change\n");
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "res change\n");
 		inst->vsi->cur_pic = inst->vsi->pic;
 		return true;
 	}
@@ -874,7 +883,8 @@ static void get_param_config_info(struct vdec_h264_inst *inst,
 
 	parms->parms_status |= inst->parms.parms_status;
 
-	aml_vcodec_debug(inst, "parms status: %u", parms->parms_status);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"parms status: %u\n", parms->parms_status);
 }
 
 static int vdec_h264_get_param(unsigned long h_vdec,
@@ -884,7 +894,8 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
 
 	if (!inst) {
-		pr_err("the h264 inst of dec is invalid.\n");
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"the h264 inst of dec is invalid.\n");
 		return -1;
 	}
 
@@ -913,7 +924,8 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 		get_param_config_info(inst, out);
 		break;
 	default:
-		aml_vcodec_err(inst, "invalid get parameter type=%d", type);
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"invalid get parameter type=%d\n", type);
 		ret = -EINVAL;
 	}
 
@@ -957,7 +969,8 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	/*wake up*/
 	complete(&inst->comp);
 
-	pr_info("Parse from ucode, crop(%d x %d), coded(%d x %d) dpb: %d\n",
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"Parse from ucode, crop(%d x %d), coded(%d x %d) dpb: %d\n",
 		ps->visible_width, ps->visible_height,
 		ps->coded_width, ps->coded_height,
 		dec->dpb_sz);
@@ -974,14 +987,16 @@ static void set_param_hdr_info(struct vdec_h264_inst *inst,
 			V4L2_CONFIG_PARM_DECODE_HDRINFO;
 		aml_vdec_dispatch_event(inst->ctx,
 			V4L2_EVENT_SRC_CH_HDRINFO);
-		pr_info("H264 set HDR infos\n");
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+			"H264 set HDR infos\n");
 	}
 }
 
 static void set_param_post_event(struct vdec_h264_inst *inst, u32 *event)
 {
 	aml_vdec_dispatch_event(inst->ctx, *event);
-	pr_info("H264 post event: %d\n", *event);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"H264 post event: %d\n", *event);
 }
 
 static int vdec_h264_set_param(unsigned long h_vdec,
@@ -991,7 +1006,8 @@ static int vdec_h264_set_param(unsigned long h_vdec,
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
 
 	if (!inst) {
-		pr_err("the h264 inst of dec is invalid.\n");
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"the h264 inst of dec is invalid.\n");
 		return -1;
 	}
 
@@ -1012,7 +1028,8 @@ static int vdec_h264_set_param(unsigned long h_vdec,
 		set_param_post_event(inst, in);
 		break;
 	default:
-		aml_vcodec_err(inst, "invalid set parameter type=%d", type);
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"invalid set parameter type=%d\n", type);
 		ret = -EINVAL;
 	}
 
