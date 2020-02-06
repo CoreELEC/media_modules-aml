@@ -3193,20 +3193,8 @@ static int alloc_buf(struct hevc_state_s *hevc)
 						codec_mm_dma_flush(mem_start_virt,
 						hevc->m_BUF[i].size, DMA_TO_DEVICE);
 					} else {
-						mem_start_virt = codec_mm_vmap(
-						hevc->m_BUF[i].start_adr,
-						hevc->m_BUF[i].size);
-						if (mem_start_virt) {
-							memset(mem_start_virt, 0, hevc->m_BUF[i].size);
-							codec_mm_dma_flush(mem_start_virt,
-							hevc->m_BUF[i].size,
-							DMA_TO_DEVICE);
-							codec_mm_unmap_phyaddr(mem_start_virt);
-						} else {
-							/*not virt for tvp playing,
-							may need clear on ucode.*/
-							pr_err("ref %s	mem_start_virt failed\n", __func__);
-						}
+						codec_mm_memset(hevc->m_BUF[i].start_adr,
+							0, hevc->m_BUF[i].size);
 					}
 				}
 			}
