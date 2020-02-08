@@ -1812,6 +1812,7 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			vdec->input.streaming_rp &= 0xffffffffULL << 32;
 			vdec->input.streaming_rp |= vdec->input.stream_cookie;
 			vdec->input.total_rd_count = vdec->input.streaming_rp;
+			hevc_wait_ddr();
 		}
 
 		input->swap_valid = true;
@@ -1827,8 +1828,6 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			/* pr_info("master->input.last_swap_slave = %d\n",
 				master->input.last_swap_slave); */
 		}
-
-		hevc_wait_ddr();
 	}
 }
 EXPORT_SYMBOL(vdec_save_input_context);
