@@ -2671,7 +2671,7 @@ void (*callback)(struct vdec_s *, void *),
 #endif
 
 	size = vdec_prepare_input(vdec, &hw->chunk);
-	if (size < 0) {
+	if (size < 0 || !hw->chunk) {
 		hw->input_empty++;
 		hw->dec_result = DEC_RESULT_AGAIN;
 		vdec_schedule_work(&hw->work);
