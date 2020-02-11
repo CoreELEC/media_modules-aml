@@ -4135,7 +4135,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 
 	if (kfifo_get(&dec->display_q, &vf)) {
 		uint8_t index = vf->index & 0xff;
-		if (index < dec->used_buf_num) {
+		if (index >= 0 && index < dec->used_buf_num) {
 			struct avs2_frame_s *pic = get_pic_by_index(dec, index);
 			if (pic == NULL &&
 				(debug & AVS2_DBG_PIC_LEAK)) {
@@ -4185,7 +4185,8 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 		__func__, vf->index,
 		dec->vf_put_count);
 
-	if (index < dec->used_buf_num) {
+	if (index >= 0
+		&& index < dec->used_buf_num) {
 		unsigned long flags;
 		struct avs2_frame_s *pic;
 
@@ -5131,55 +5132,55 @@ static void get_picture_qos_info(struct AVS2Decoder_s *dec)
 #endif
 		picture->min_mv = mv_lo;
 
-#ifdef DEBUG_QOS
 		/* {mvy_L0_max, mvy_L0_min} */
 	    rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
 	    mv_hi = (rdata32>>16)&0xffff;
 	    if (mv_hi & 0x8000)
 			mv_hi = 0x8000 - mv_hi;
+#ifdef DEBUG_QOS
 	    avs2_print(dec, 0, "[Picture %d Quality] MVY_L0 MAX : %d\n",
 			pic_number, mv_hi);
-
+#endif
 
 	    mv_lo = (rdata32>>0)&0xffff;
 	    if (mv_lo & 0x8000)
 			mv_lo = 0x8000 - mv_lo;
-
+#ifdef DEBUG_QOS
 	    avs2_print(dec, 0, "[Picture %d Quality] MVY_L0 MIN : %d\n",
 			pic_number, mv_lo);
-
+#endif
 
 		/* {mvx_L1_max, mvx_L1_min} */
 	    rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
 	    mv_hi = (rdata32>>16)&0xffff;
 	    if (mv_hi & 0x8000)
 			mv_hi = 0x8000 - mv_hi;
-
+#ifdef DEBUG_QOS
 	    avs2_print(dec, 0, "[Picture %d Quality] MVX_L1 MAX : %d\n",
 			pic_number, mv_hi);
-
+#endif
 
 	    mv_lo = (rdata32>>0)&0xffff;
 	    if (mv_lo & 0x8000)
 			mv_lo = 0x8000 - mv_lo;
-
+#ifdef DEBUG_QOS
 	    avs2_print(dec, 0, "[Picture %d Quality] MVX_L1 MIN : %d\n",
 			pic_number, mv_lo);
-
+#endif
 
 		/* {mvy_L1_max, mvy_L1_min} */
 	    rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
 	    mv_hi = (rdata32>>16)&0xffff;
 	    if (mv_hi & 0x8000)
 			mv_hi = 0x8000 - mv_hi;
-
+#ifdef DEBUG_QOS
 	    avs2_print(dec, 0, "[Picture %d Quality] MVY_L1 MAX : %d\n",
 			pic_number, mv_hi);
-
+#endif
 	    mv_lo = (rdata32>>0)&0xffff;
 	    if (mv_lo & 0x8000)
 			mv_lo = 0x8000 - mv_lo;
-
+#ifdef DEBUG_QOS
 	    avs2_print(dec, 0, "[Picture %d Quality] MVY_L1 MIN : %d\n",
 			pic_number, mv_lo);
 #endif
@@ -5438,7 +5439,6 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		debug_buffer_mgr_more(dec);
 		get_frame_rate(&dec->avs2_dec.param, dec);
 
-#if 0 // The video_signal_type is type of uint16_t and result false, so comment it out.
 		if (dec->avs2_dec.param.p.video_signal_type
 				& (1<<30)) {
 			union param_u *pPara;
@@ -5511,7 +5511,6 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 				"max_pic_average:0x%x\n",
 				dec->vf_dp.content_light_level.max_pic_average);
 		}
-#endif
 
 
 		if (dec->video_ori_signal_type !=
@@ -7311,7 +7310,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		dec->stat |= VP9_TRIGGER_FRAME_ENABLE;
 #if 1
 	if ((debug & IGNORE_PARAM_FROM_CONFIG) == 0 &&
-			pdata->config_len) {
+			pdata->config && pdata->config_len) {
 		/*use ptr config for doubel_write_mode, etc*/
 		avs2_print(dec, 0, "pdata->config=%s\n", pdata->config);
 		if (get_config_int(pdata->config, "avs2_double_write_mode",
@@ -7394,6 +7393,13 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	dec->first_sc_checked = 0;
 	dec->fatal_error = 0;
 	dec->show_frame_num = 0;
+	if (pdata == NULL) {
+		pr_info("\namvdec_avs2 memory resource undefined.\n");
+		uninit_mmu_buffers(dec);
+		/* devm_kfree(&pdev->dev, (void *)dec); */
+		vfree((void *)dec);
+		return -EFAULT;
+	}
 
 	if (debug) {
 		pr_info("===AVS2 decoder mem resource 0x%lx size 0x%x\n",

@@ -948,7 +948,7 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 		while (count > 0) {
 			if (count < sizeof(struct drm_info))
 				return -EIO;
-			if (copy_from_user((void*)&drm, buf + ret, sizeof(struct drm_info)))
+			if (copy_from_user(&drm, buf + ret, sizeof(struct drm_info)))
 				return -EAGAIN;
 			if (!(drm.drm_flag & TYPE_DRMINFO_V2))
 				return -EIO; /*must drm info v2 version*/
