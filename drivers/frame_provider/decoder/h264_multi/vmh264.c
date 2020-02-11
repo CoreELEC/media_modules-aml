@@ -8537,15 +8537,19 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-		if (ctx->param_sets_from_ucode &&
-			!ctx->v4l_codec_ready &&
-			hw->v4l_params_parsed) {
-			ret = 0; /*the params has parsed.*/
+		if (ctx->param_sets_from_ucode) {
+			if (hw->v4l_params_parsed) {
+				if (!ctx->v4l_codec_ready &&
+					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
+					run_ready_min_buf_num)
+					ret = 0;
+			}
 		} else if (!ctx->v4l_codec_dpb_ready) {
 			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
 				run_ready_min_buf_num)
 				ret = 0;
 		}
+
 	}
 
 	if (ret)

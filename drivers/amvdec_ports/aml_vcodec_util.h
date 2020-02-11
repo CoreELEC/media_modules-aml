@@ -34,13 +34,18 @@ typedef unsigned char		u8;
 #define CODEC_MODE(a, b, c, d)\
 	(((u8)(a) << 24) | ((u8)(b) << 16) | ((u8)(c) << 8) | (u8)(d))
 
+#define BUFF_IDX(h, i)\
+	(((ulong)(h) << 8) | (u8)(i))
+
 struct aml_vcodec_mem {
+	int	index;
 	ulong	addr;
 	u32	size;
 	void	*vaddr;
 	u32	bytes_used;
 	u32	offset;
 	dma_addr_t dma_addr;
+	u32	model;
 };
 
 struct aml_vcodec_ctx;

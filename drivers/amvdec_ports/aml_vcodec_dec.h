@@ -38,8 +38,6 @@
 #define VDEC_GATHER_MEMORY_TYPE		0
 #define VDEC_SCATTER_MEMORY_TYPE	1
 
-#define AML_V4L2_SET_DECMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
-
 /**
  * struct vdec_fb  - decoder frame buffer
  * @mem_type	: gather or scatter memory.
