@@ -788,7 +788,8 @@ static int vdec_vp9_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 		}
 	} else {
 		/*checked whether the resolution changes.*/
-		if ((*res_chg = monitor_res_change(inst, buf, size)))
+		if ((!inst->ctx->param_sets_from_ucode) &&
+			(*res_chg = monitor_res_change(inst, buf, size)))
 			return 0;
 
 		ret = vdec_write_nalu(inst, buf, size, timestamp);
@@ -891,7 +892,7 @@ static void set_param_ps_info(struct vdec_vp9_inst *inst,
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	/* calc DPB size */
-	dec->dpb_sz		= 5;
+	dec->dpb_sz		= ps->dpb_size;
 
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=

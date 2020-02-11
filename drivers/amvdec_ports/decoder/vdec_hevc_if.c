@@ -671,10 +671,11 @@ static int vdec_hevc_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 				BUFF_IDX(bs, bs->index));
 		}
 	} else {
-		/*checked whether the resolution changes.*/
-		if ((*res_chg = monitor_res_change(inst, buf, size)))
-			return 0;
-
+		if (!inst->ctx->param_sets_from_ucode) {
+			/*checked whether the resolution changes.*/
+			if ((*res_chg = monitor_res_change(inst, buf, size)))
+				return 0;
+		}
 		ret = vdec_write_nalu(inst, buf, size, timestamp);
 	}
 
@@ -767,8 +768,9 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	rect->height		= pic->visible_height;
 
 	/* config canvas size that be used for decoder. */
-	pic->coded_width	= ALIGN(ps->coded_width, 64);
-	pic->coded_height	= ALIGN(ps->coded_height, 64);
+
+	pic->coded_width 	= ps->coded_width;
+	pic->coded_height 	= ps->coded_height;
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 

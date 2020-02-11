@@ -1743,6 +1743,7 @@ struct hevc_state_s {
 	bool v4l_params_parsed;
 	u32 mem_map_mode;
 	struct vdec_info *gvs;
+	unsigned int res_ch_flag;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -1953,6 +1954,31 @@ static int get_double_write_mode(struct hevc_state_s *hevc)
 	}
 	return dw;
 }
+
+static int v4l_parser_get_double_write_mode(struct hevc_state_s *hevc, int w, int h)
+{
+	u32 valid_dw_mode = get_valid_double_write_mode(hevc);
+	u32 dw = 0x1; /*1:1*/
+	switch (valid_dw_mode) {
+	case 0x100:
+		if (w > 1920 && h > 1088)
+			dw = 0x4; /*1:2*/
+		break;
+	case 0x200:
+		if (w > 1920 && h > 1088)
+			dw = 0x2; /*1:4*/
+		break;
+	case 0x300:
+		if (w > 1280 && h > 720)
+			dw = 0x4; /*1:2*/
+		break;
+	default:
+		dw = valid_dw_mode;
+		break;
+	}
+	return dw;
+}
+
 
 static int get_double_write_ratio(struct hevc_state_s *hevc,
 	int dw_mode)
@@ -3310,10 +3336,67 @@ static int get_work_pic_num(struct hevc_state_s *hevc)
 		used_buf_num += 1;
 	}
 
+	if (hevc->is_used_v4l) {
+		/* for eos add more buffer to flush.*/
+		used_buf_num++;
+	}
+
 	if (used_buf_num > MAX_BUF_NUM)
 		used_buf_num = MAX_BUF_NUM;
 	return used_buf_num;
 }
+
+static int v4l_parser_work_pic_num(struct hevc_state_s *hevc)
+{
+	int used_buf_num = 0;
+	int sps_pic_buf_diff = 0;
+	pr_debug("margin = %d, sps_max_dec_pic_buffering_minus1_0 = %d,  sps_num_reorder_pics_0 = %d\n",
+		get_dynamic_buf_num_margin(hevc),
+		hevc->param.p.sps_max_dec_pic_buffering_minus1_0,
+		hevc->param.p.sps_num_reorder_pics_0);
+	if (get_dynamic_buf_num_margin(hevc) > 0) {
+		if ((!hevc->param.p.sps_num_reorder_pics_0) &&
+			(hevc->param.p.sps_max_dec_pic_buffering_minus1_0)) {
+			/* the range of sps_num_reorder_pics_0 is in
+			[0, sps_max_dec_pic_buffering_minus1_0] */
+			used_buf_num = get_dynamic_buf_num_margin(hevc) +
+						hevc->param.p.sps_max_dec_pic_buffering_minus1_0;
+		} else
+			used_buf_num = hevc->param.p.sps_num_reorder_pics_0
+						+ get_dynamic_buf_num_margin(hevc);
+
+		sps_pic_buf_diff = hevc->param.p.sps_max_dec_pic_buffering_minus1_0
+						- hevc->param.p.sps_num_reorder_pics_0;
+#ifdef MULTI_INSTANCE_SUPPORT
+		/*
+		need one more for multi instance, as
+		apply_ref_pic_set() has no chanch to run to
+		to clear referenced flag in some case
+		*/
+		if (hevc->m_ins_flag)
+			used_buf_num++;
+#endif
+	} else
+		used_buf_num = max_buf_num;
+
+	if (hevc->save_buffer_mode)
+		hevc_print(hevc, 0,
+			"save buf _mode : dynamic_buf_num_margin %d ----> %d \n",
+			dynamic_buf_num_margin,  hevc->dynamic_buf_num_margin);
+
+	if (sps_pic_buf_diff >= 4)
+	{
+		used_buf_num += 1;
+	}
+
+	/* for eos add more buffer to flush.*/
+	used_buf_num++;
+
+	if (used_buf_num > MAX_BUF_NUM)
+		used_buf_num = MAX_BUF_NUM;
+	return used_buf_num;
+}
+
 
 static int get_alloc_pic_count(struct hevc_state_s *hevc)
 {
@@ -6702,6 +6785,11 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	int lcu_y_num_div;
 	int Col_ref;
 	int dbg_skip_flag = 0;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+
+	if (hevc->is_used_v4l && ctx->param_sets_from_ucode)
+		hevc->res_ch_flag = 0;
 
 	if (hevc->wait_buf == 0) {
 		hevc->sps_num_reorder_pics_0 =
@@ -9479,6 +9567,59 @@ static void read_decode_info(struct hevc_state_s *hevc)
 	hevc->rps_set_id = (decode_info >> 8) & 0xff;
 }
 
+static int vh265_get_ps_info(struct hevc_state_s *hevc, int width, int height, struct aml_vdec_ps_infos *ps)
+{
+	int dw_mode = v4l_parser_get_double_write_mode(hevc, width, height);
+
+	ps->visible_width 	= width / get_double_write_ratio(hevc, dw_mode);
+	ps->visible_height 	= height / get_double_write_ratio(hevc, dw_mode);
+	ps->coded_width 	= ALIGN(width, 32) / get_double_write_ratio(hevc, dw_mode);
+	ps->coded_height 	= ALIGN(height, 32) / get_double_write_ratio(hevc, dw_mode);
+	ps->dpb_size 		= v4l_parser_work_pic_num(hevc);
+
+	return 0;
+}
+
+static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
+{
+	struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+	int ret = 0;
+
+	if (ctx->param_sets_from_ucode &&
+		hevc->res_ch_flag == 0) {
+		struct aml_vdec_ps_infos ps;
+		int width = rpm_param->p.pic_width_in_luma_samples;
+		int height = rpm_param->p.pic_height_in_luma_samples;
+		if ((hevc->pic_w != 0 &&
+			hevc->pic_h != 0) &&
+			(hevc->pic_w != width ||
+			hevc->pic_h != height)) {
+			hevc_print(hevc, 0,
+				"v4l_res_change Pic Width/Height Change (%d,%d)=>(%d,%d), interlace %d\n",
+				hevc->pic_w, hevc->pic_h,
+				width,
+				height,
+				hevc->interlace_flag);
+
+			vh265_get_ps_info(hevc, width, height, &ps);
+			vdec_v4l_set_ps_infos(ctx, &ps);
+			vdec_v4l_res_ch_event(ctx);
+			hevc->v4l_params_parsed = false;
+			hevc->res_ch_flag = 1;
+			hevc->eos = 1;
+			flush_output(hevc, NULL);
+			//del_timer_sync(&hevc->timer);
+			notify_v4l_eos(hw_to_vdec(hevc));
+
+			ret = 1;
+		}
+	}
+
+	return ret;
+}
+
+
 static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 {
 	struct hevc_state_s *hevc = (struct hevc_state_s *) data;
@@ -10160,20 +10301,33 @@ force_output:
 			if (hevc->is_used_v4l) {
 				struct aml_vcodec_ctx *ctx =
 					(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+				if (!v4l_res_change(hevc, &hevc->param)) {
+					if (ctx->param_sets_from_ucode && !hevc->v4l_params_parsed) {
+						struct aml_vdec_ps_infos ps;
+						int width = hevc->param.p.pic_width_in_luma_samples;
+						int height = hevc->param.p.pic_height_in_luma_samples;
 
-				if (ctx->param_sets_from_ucode && !hevc->v4l_params_parsed) {
-					struct aml_vdec_ps_infos ps;
+						pr_debug("set ucode parse\n");
+						vh265_get_ps_info(hevc, width, height, &ps);
+						/*notice the v4l2 codec.*/
+						vdec_v4l_set_ps_infos(ctx, &ps);
+						hevc->v4l_params_parsed = true;
+						hevc->dec_result = DEC_RESULT_AGAIN;
+						amhevc_stop();
+						restore_decode_state(hevc);
+						reset_process_time(hevc);
+						vdec_schedule_work(&hevc->work);
+						return IRQ_HANDLED;
+					}
+				}else {
+					pr_debug("resolution change\n");
+					hevc->dec_result = DEC_RESULT_AGAIN;
+					amhevc_stop();
+					restore_decode_state(hevc);
+					reset_process_time(hevc);
+					vdec_schedule_work(&hevc->work);
+					return IRQ_HANDLED;
 
-					hevc->frame_width	= hevc->param.p.pic_width_in_luma_samples;
-					hevc->frame_height	= hevc->param.p.pic_height_in_luma_samples;
-					ps.visible_width	= hevc->frame_width;
-					ps.visible_height	= hevc->frame_height;
-					ps.coded_width		= ALIGN(hevc->frame_width, 32);
-					ps.coded_height		= ALIGN(hevc->frame_height, 32);
-					ps.dpb_size		= get_work_pic_num(hevc);
-					hevc->v4l_params_parsed	= true;
-					/*notice the v4l2 codec.*/
-					vdec_v4l_set_ps_infos(ctx, &ps);
 				}
 			}
 
@@ -10550,7 +10704,8 @@ static void vh265_check_timer_func(unsigned long arg)
 		(get_dbg_flag(hevc) &
 		H265_DEBUG_WAIT_DECODE_DONE_WHEN_STOP) == 0 &&
 		hw_to_vdec(hevc)->next_status ==
-		VDEC_STATUS_DISCONNECTED) {
+		VDEC_STATUS_DISCONNECTED &&
+		!hevc->is_used_v4l) {
 		hevc->dec_result = DEC_RESULT_FORCE_EXIT;
 		vdec_schedule_work(&hevc->work);
 		hevc_print(hevc,
@@ -12261,10 +12416,18 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 
-		if (ctx->param_sets_from_ucode &&
-			!ctx->v4l_codec_ready &&
-			hevc->v4l_params_parsed) {
-			ret = 0; /*the params has parsed.*/
+		if (ctx->param_sets_from_ucode) {
+			if (hevc->v4l_params_parsed) {
+				if (!ctx->v4l_codec_dpb_ready &&
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
+				run_ready_min_buf_num)
+					ret = 0;
+			} else {
+				if ((hevc->res_ch_flag == 1) &&
+				((ctx->state <= AML_STATE_INIT) ||
+				(ctx->state >= AML_STATE_FLUSHING)))
+					ret = 0;
+			}
 		} else if (!ctx->v4l_codec_dpb_ready) {
 			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
 				run_ready_min_buf_num)

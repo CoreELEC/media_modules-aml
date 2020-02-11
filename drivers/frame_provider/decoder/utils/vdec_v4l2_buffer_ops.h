@@ -27,4 +27,7 @@ int vdec_v4l_post_evet(
 	struct aml_vcodec_ctx *ctx,
 	u32 event);
 
+int vdec_v4l_res_ch_event(
+	struct aml_vcodec_ctx *ctx);
+
 #endif

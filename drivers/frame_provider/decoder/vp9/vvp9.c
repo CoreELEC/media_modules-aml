@@ -1196,6 +1196,7 @@ struct VP9Decoder_s {
 	u32 mem_map_mode;
 	u32 dynamic_buf_num_margin;
 	struct vframe_s vframe_dummy;
+	unsigned int res_ch_flag;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -1593,6 +1594,41 @@ static u32 get_valid_double_write_mode(struct VP9Decoder_s *pbi)
 		pbi->double_write_mode :
 		(double_write_mode & 0x7fffffff);
 }
+
+static int v4l_parser_get_double_write_mode(struct VP9Decoder_s *pbi)
+{
+	u32 valid_dw_mode = get_valid_double_write_mode(pbi);
+	u32 dw;
+	int w, h;
+
+	/* mask for supporting double write value bigger than 0x100 */
+	if (valid_dw_mode & 0xffffff00) {
+		w = pbi->frame_width;
+		h = pbi->frame_height;
+
+		dw = 0x1; /*1:1*/
+		switch (valid_dw_mode) {
+		case 0x100:
+			if (w > 1920 && h > 1088)
+				dw = 0x4; /*1:2*/
+			break;
+		case 0x200:
+			if (w > 1920 && h > 1088)
+				dw = 0x2; /*1:4*/
+			break;
+		case 0x300:
+			if (w > 1280 && h > 720)
+				dw = 0x4; /*1:2*/
+			break;
+		default:
+			break;
+		}
+		return dw;
+	}
+
+	return valid_dw_mode;
+}
+
 
 static int get_double_write_mode(struct VP9Decoder_s *pbi)
 {
@@ -7514,8 +7550,11 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 	int ret;
 	int i;
 	struct VP9_Common_s *const cm = &pbi->common;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	debug_buffer_mgr_more(pbi);
 
+	if (pbi->is_used_v4l && ctx->param_sets_from_ucode)
+		pbi->res_ch_flag = 0;
 	bit_depth_luma = vp9_param.p.bit_depth;
 	bit_depth_chroma = vp9_param.p.bit_depth;
 
@@ -8149,6 +8188,54 @@ static void get_picture_qos_info(struct VP9Decoder_s *pbi)
 	}
 }
 
+static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *ps)
+{
+	int dw_mode = v4l_parser_get_double_write_mode(pbi);
+
+	ps->visible_width 	= pbi->frame_width / get_double_write_ratio(pbi, dw_mode);
+	ps->visible_height 	= pbi->frame_height / get_double_write_ratio(pbi, dw_mode);
+	ps->coded_width 	= ALIGN(pbi->frame_width, 32) / get_double_write_ratio(pbi, dw_mode);
+	ps->coded_height 	= ALIGN(pbi->frame_height, 32) / get_double_write_ratio(pbi, dw_mode);
+	ps->dpb_size 		= pbi->used_buf_num;
+
+	return 0;
+}
+
+
+static int v4l_res_change(struct VP9Decoder_s *pbi)
+{
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
+	struct VP9_Common_s *const cm = &pbi->common;
+	int ret = 0;
+
+	if (ctx->param_sets_from_ucode &&
+		pbi->res_ch_flag == 0) {
+		struct aml_vdec_ps_infos ps;
+		if ((cm->width != 0 &&
+			cm->height != 0) &&
+			(pbi->frame_width != cm->width ||
+			pbi->frame_height != cm->height)) {
+
+			vp9_print(pbi, 0, "%s (%d,%d)=>(%d,%d)\r\n", __func__, cm->width,
+				cm->height, pbi->frame_width, pbi->frame_height);
+			vvp9_get_ps_info(pbi, &ps);
+			vdec_v4l_set_ps_infos(ctx, &ps);
+			vdec_v4l_res_ch_event(ctx);
+			pbi->v4l_params_parsed = false;
+			pbi->res_ch_flag = 1;
+			pbi->eos = 1;
+			vp9_bufmgr_postproc(pbi);
+			//del_timer_sync(&pbi->timer);
+			notify_v4l_eos(hw_to_vdec(pbi));
+			ret = 1;
+		}
+	}
+
+	return ret;
+}
+
+
 static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 {
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)data;
@@ -8375,27 +8462,32 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 
 		pbi->frame_width = vp9_param.p.width;
 		pbi->frame_height = vp9_param.p.height;
-		if (ctx->param_sets_from_ucode && !pbi->v4l_params_parsed) {
-			struct aml_vdec_ps_infos ps;
 
-			ps.visible_width	= pbi->frame_width;
-			ps.visible_height	= pbi->frame_height;
-			ps.coded_width		= ALIGN(pbi->frame_width, 32);
-			ps.coded_height		= ALIGN(pbi->frame_height, 32);
-			ps.dpb_size		= pbi->used_buf_num;
-			pbi->v4l_params_parsed	= true;
-			vdec_v4l_set_ps_infos(ctx, &ps);
+		if (!v4l_res_change(pbi)) {
+			if (ctx->param_sets_from_ucode && !pbi->v4l_params_parsed) {
+				struct aml_vdec_ps_infos ps;
+
+				pr_debug("set ucode parse\n");
+				vvp9_get_ps_info(pbi, &ps);
+				/*notice the v4l2 codec.*/
+				vdec_v4l_set_ps_infos(ctx, &ps);
+				pbi->v4l_params_parsed	= true;
+				pbi->postproc_done = 0;
+				pbi->process_busy = 0;
+				dec_again_process(pbi);
+				return IRQ_HANDLED;
+			}
+		} else {
+			pbi->postproc_done = 0;
+			pbi->process_busy = 0;
+			dec_again_process(pbi);
+			return IRQ_HANDLED;
 		}
 	}
 
-	if (pbi->is_used_v4l) {
-		pbi->dec_result = DEC_V4L2_CONTINUE_DECODING;
-		vdec_schedule_work(&pbi->work);
-	} else {
-		continue_decoding(pbi);
-		pbi->postproc_done = 0;
-		pbi->process_busy = 0;
-	}
+	continue_decoding(pbi);
+	pbi->postproc_done = 0;
+	pbi->process_busy = 0;
 
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (pbi->m_ins_flag)
@@ -8567,7 +8659,8 @@ static void vvp9_put_timer_func(unsigned long arg)
 
 	if (pbi->m_ins_flag) {
 		if (hw_to_vdec(pbi)->next_status
-			== VDEC_STATUS_DISCONNECTED) {
+			== VDEC_STATUS_DISCONNECTED &&
+			!pbi->is_used_v4l) {
 #ifdef SUPPORT_FB_DECODING
 			if (pbi->run2_busy)
 				return;
@@ -9864,10 +9957,18 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 
-		if (ctx->param_sets_from_ucode &&
-			!ctx->v4l_codec_ready &&
-			pbi->v4l_params_parsed) {
-			ret = 0; /*the params has parsed.*/
+		if (ctx->param_sets_from_ucode) {
+			if (pbi->v4l_params_parsed) {
+				if ((ctx->cap_pool.in < ctx->dpb_size) &&
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
+				run_ready_min_buf_num)
+					ret = 0;
+			} else {
+				if ((pbi->res_ch_flag == 1) &&
+				((ctx->state <= AML_STATE_INIT) ||
+				(ctx->state >= AML_STATE_FLUSHING)))
+					ret = 0;
+			}
 		} else if (ctx->cap_pool.in < ctx->dpb_size) {
 			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
 				run_ready_min_buf_num)
@@ -10180,6 +10281,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 #else
 	run_front(vdec);
 #endif
+
 }
 
 static void  init_frame_bufs(struct VP9Decoder_s *pbi)

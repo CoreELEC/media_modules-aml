@@ -206,7 +206,8 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 {
 	struct v4l2_event event = {0};
 
-	if (ctx->receive_cmd_stop) {
+	if (ctx->receive_cmd_stop &&
+			!ctx->q_data[AML_Q_DATA_SRC].resolution_changed) {
 		ctx->state = AML_STATE_ABORT;
 		ATRACE_COUNTER("v4l2_state", ctx->state);
 		changes = V4L2_EVENT_REQUEST_EXIT;

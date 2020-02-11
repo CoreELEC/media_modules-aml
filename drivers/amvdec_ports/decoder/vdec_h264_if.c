@@ -903,10 +903,18 @@ static int vdec_h264_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 				BUFF_IDX(bs, bs->index));
 		}
 	} else {
-		/*checked whether the resolution changes.*/
-		if ((*res_chg = monitor_res_change(inst, buf, size)))
-			return 0;
-
+		if (inst->ctx->param_sets_from_ucode) {
+			int nal_idx = 0;
+			/* if the st compose from csd + slice that is the combine data. */
+			inst->vsi->is_combine = check_frame_combine(buf, size, &nal_idx);
+			/*if (nal_idx < 0)
+				return -1;*/
+		} else {
+			/*checked whether the resolution changes.*/
+			if ((*res_chg = monitor_res_change(inst, buf, size))) {
+				return 0;
+			}
+		}
 		ret = vdec_write_nalu(inst, buf, size, timestamp);
 	}
 
@@ -987,6 +995,7 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	struct vdec_pic_info *pic = &inst->vsi->pic;
 	struct vdec_h264_dec_info *dec = &inst->vsi->dec;
 	struct v4l2_rect *rect = &inst->vsi->crop;
+	int dw = inst->parms.cfg.double_write_mode;
 
 	/* fill visible area size that be used for EGL. */
 	pic->visible_width	= ps->visible_width;
@@ -1003,12 +1012,15 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	pic->coded_height	= ps->coded_height;
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
-
+	pic->profile_idc	= ps->profile;
+	pic->ref_frame_count	= ps->ref_frames;
 	dec->dpb_sz		= ps->dpb_size;
 
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=
 		V4L2_CONFIG_PARM_DECODE_PSINFO;
+
+	vdec_config_dw_mode(pic, dw);
 
 	/*wake up*/
 	complete(&inst->comp);
