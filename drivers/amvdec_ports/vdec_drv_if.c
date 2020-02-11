@@ -82,7 +82,7 @@ int vdec_if_decode(struct aml_vcodec_ctx *ctx, struct aml_vcodec_mem *bs,
 	int ret = 0;
 
 	if (bs) {
-		if ((bs->dma_addr & 63) != 0) {
+		if ((bs->addr & 63) != 0) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 				"bs dma_addr should 64 byte align\n");
 			return -EINVAL;

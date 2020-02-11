@@ -324,6 +324,9 @@ extern int vdec_set_receive_id(struct vdec_s *vdec, int receive_id);
 extern int vdec_write_vframe(struct vdec_s *vdec, const char *buf,
 				size_t count);
 
+extern int vdec_write_vframe_with_dma(struct vdec_s *vdec,
+	ulong addr, size_t count, u32 handle);
+
 /* mark the vframe_chunk as consumed */
 extern void vdec_vframe_dirty(struct vdec_s *vdec,
 				struct vframe_chunk_s *chunk);

@@ -453,7 +453,6 @@ struct aml_vcodec_ctx {
 	bool is_stream_mode;
 	int buf_used_count;
 	bool receive_cmd_stop;
-	bool scatter_mem_enable;
 	bool param_sets_from_ucode;
 	bool v4l_codec_ready;
 	bool v4l_codec_dpb_ready;

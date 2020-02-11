@@ -52,8 +52,6 @@
 
 #define PTS_OUTSIDE	(1)
 #define SYNC_OUTSIDE	(2)
-#define USE_V4L_PORTS	(0x80)
-#define SCATTER_MEM	(0x100)
 
 //#define DATA_DEBUG
 
@@ -114,9 +112,8 @@ extern bool aml_set_vfm_enable, aml_set_vdec_type_enable;
 
 static void set_default_params(struct aml_vdec_adapt *vdec)
 {
-	ulong sync_mode = (PTS_OUTSIDE | SYNC_OUTSIDE | USE_V4L_PORTS);
+	ulong sync_mode = (PTS_OUTSIDE | SYNC_OUTSIDE);
 
-	sync_mode |= vdec->ctx->scatter_mem_enable ? SCATTER_MEM : 0;
 	vdec->dec_prop.param = (void *)sync_mode;
 	vdec->dec_prop.format = vdec->format;
 	vdec->dec_prop.width = 1920;
@@ -475,21 +472,15 @@ static void set_vdec_properity(struct vdec_s *vdec,
 	/* set video format, sys info and vfm map.*/
 	vdec->port->vformat = vdec->format;
 	vdec->port->type |= PORT_TYPE_VIDEO;
-	vdec->port_flag |= PORT_FLAG_VFORMAT;
+	vdec->port_flag |= (vdec->port->flag | PORT_FLAG_VFORMAT);
 	if (vdec->slave) {
 		vdec->slave->format = ada_ctx->dec_prop.format;
 		vdec->slave->port_flag |= PORT_FLAG_VFORMAT;
 	}
 
-	if (vdec->port->type & PORT_FLAG_DRM) {
-		vdec->type = VDEC_TYPE_STREAM_PARSER;
-		vdec->port->type |= PORT_TYPE_ES;
-		vdec->frame_base_video_path = FRAME_BASE_PATH_V4L_VIDEO;
-	} else {
-		vdec->type = VDEC_TYPE_FRAME_BLOCK;
-		vdec->port->type |= PORT_TYPE_FRAME;
-		vdec->frame_base_video_path = FRAME_BASE_PATH_V4L_OSD;
-	}
+	vdec->type = VDEC_TYPE_FRAME_BLOCK;
+	vdec->port->type |= PORT_TYPE_FRAME;
+	vdec->frame_base_video_path = FRAME_BASE_PATH_V4L_OSD;
 
 	if (aml_set_vdec_type_enable) {
 		if (aml_set_vdec_type == VDEC_TYPE_STREAM_PARSER) {
@@ -700,6 +691,30 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	return ret;
 }
 
+int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
+	ulong addr, u32 count, u64 timestamp, u32 handle)
+{
+	int ret = -1;
+	struct vdec_s *vdec = ada_ctx->vdec;
+
+	/* set timestamp */
+	vdec_set_timestamp(vdec, timestamp);
+
+	ret = vdec_write_vframe_with_dma(vdec, addr, count, handle);
+
+	if (slow_input) {
+		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_PRINFO,
+			"slow_input: frame codec write size %d\n", ret);
+		msleep(30);
+	}
+
+	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
+		"write frames, vbuf: %lx, size: %u, ret: %d\n",
+		addr, count, ret);
+
+	return ret;
+}
+
 void aml_decoder_flush(struct aml_vdec_adapt *ada_ctx)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
@@ -762,5 +777,10 @@ void v4l2_config_vdec_parm(struct aml_vdec_adapt *ada_ctx, u8 *data, u32 len)
 
 	vdec->config_len = len > PAGE_SIZE ? PAGE_SIZE : len;
 	memcpy(vdec->config, data, vdec->config_len);
+}
+
+u32 aml_recycle_buffer(struct aml_vdec_adapt *adaptor)
+{
+	return vdec_input_get_freed_handle(adaptor->vdec);
 }
 
