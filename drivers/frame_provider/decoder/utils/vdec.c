@@ -1049,6 +1049,9 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 		INIT_LIST_HEAD(&vdec->list);
 
 		atomic_inc(&vdec_core->vdec_nr);
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
+		v4lvideo_dec_count_increase();
+#endif
 		vdec->id = id;
 		vdec_input_init(&vdec->input, vdec);
 		vdec->input.vdec_is_input_frame_empty = vdec_is_input_frame_empty;
@@ -2059,6 +2062,9 @@ int vdec_destroy(struct vdec_s *vdec)
 		vfree(vdec->mvfrm);
 	vfree(vdec);
 
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
+	v4lvideo_dec_count_decrease();
+#endif
 	atomic_dec(&vdec_core->vdec_nr);
 
 	return 0;
