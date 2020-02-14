@@ -770,6 +770,9 @@ static int audio_port_reset(struct stream_port_s *port,
 
 	r = pts_start(PTS_TYPE_AUDIO);
 
+	//clear audio break flag after reset
+	//tsync_audio_break(0);
+
 	pr_info("audio_port_reset done\n");
 	mutex_unlock(&amstream_mutex);
 	return r;
@@ -2097,7 +2100,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 			this->flag |= PORT_FLAG_AID;
 
 			if (port_get_inited(priv)) {
-				tsync_audio_break(1);
+				//tsync_audio_break(1);
 				amstream_change_avid(this);
 			}
 		} else
@@ -2773,7 +2776,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			this->flag |= PORT_FLAG_AID;
 
 			if (port_get_inited(priv)) {
-				tsync_audio_break(1);
+				//tsync_audio_break(1);
 				amstream_change_avid(this);
 			}
 		} else
