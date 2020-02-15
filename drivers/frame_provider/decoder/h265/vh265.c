@@ -187,7 +187,7 @@ static int start_decode_buf_level = 0x8000;
 static unsigned int decode_timeout_val = 200;
 
 static u32 run_ready_min_buf_num = 2;
-
+static u32 disable_ip_mode;
 /*data_resend_policy:
 	bit 0, stream base resend data when decoding buf empty
 */
@@ -1413,6 +1413,7 @@ struct PIC_s {
 	u32 hw_decode_time;
 	u32 frame_size; // For frame base mode
 	bool vframe_bound;
+	bool ip_mode;
 } /*PIC_t */;
 
 #define MAX_TILE_COL_NUM    10
@@ -1748,6 +1749,7 @@ struct hevc_state_s {
 	u32 performance_profile;
 	struct vdec_info *gvs;
 	unsigned int res_ch_flag;
+	bool ip_mode;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -3898,7 +3900,8 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 		}
 	}
 
-	if (pic_display && (hevc->vf_pre_count == 1) && (hevc->first_pic_flag == 1)) {
+	if (pic_display && pic_display->num_reorder_pic &&
+		(hevc->vf_pre_count == 1) && (hevc->first_pic_flag == 1)) {
 		pic_display = NULL;
 		hevc->first_pic_flag = 0;
 	}
@@ -5689,6 +5692,7 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 		new_pic->dis_mark = 0;
 		/* new_pic->output_ready = 0; */
 		new_pic->num_reorder_pic = rpm_param->p.sps_num_reorder_pics_0;
+		new_pic->ip_mode = (!new_pic->num_reorder_pic && !disable_ip_mode) ? true : false;
 		new_pic->losless_comp_body_size = hevc->losless_comp_body_size;
 		new_pic->POC = hevc->curr_POC;
 		new_pic->pic_struct = hevc->curr_pic_struct;
@@ -5812,6 +5816,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	new_pic->dis_mark = 0;
 	/* new_pic->output_ready = 0; */
 	new_pic->num_reorder_pic = rpm_param->p.sps_num_reorder_pics_0;
+	new_pic->ip_mode = (!new_pic->num_reorder_pic && !disable_ip_mode) ? true : false;
 	new_pic->losless_comp_body_size = hevc->losless_comp_body_size;
 	new_pic->POC = hevc->curr_POC;
 	new_pic->pic_struct = hevc->curr_pic_struct;
@@ -5885,11 +5890,8 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 				hevc->ignore_bufmgr_error |= 0x2;
 			}
 		}
-		/**/
-		if (pic->POC != INVALID_POC) {
+		if (pic->POC != INVALID_POC && !pic->ip_mode)
 			pic->output_mark = 1;
-			pic->recon_mark = 1;
-		}
 		pic->recon_mark = 1;
 	}
 	do {
@@ -6179,8 +6181,8 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 					hevc->used_4k_num = -1;
 				}
 			}
-
-			pic->output_mark = 1;
+			if (!pic->ip_mode)
+				pic->output_mark = 1;
 			pic->recon_mark = 1;
 			pic->dis_mark = 1;
 			if (vdec->mvfrm) {
@@ -6810,6 +6812,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	if (hevc->wait_buf == 0) {
 		hevc->sps_num_reorder_pics_0 =
 			rpm_param->p.sps_num_reorder_pics_0;
+		hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 && !disable_ip_mode) ? true : false;
 		hevc->m_temporalId = rpm_param->p.m_temporalId;
 		hevc->m_nalUnitType = rpm_param->p.m_nalUnitType;
 		hevc->interlace_flag =
@@ -9189,15 +9192,6 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		decoder_do_frame_check(vdec, vf);
 		kfifo_put(&hevc->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
-
-		if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
-			hevc_print(hevc, 0,
-				"%s(type %d index 0x%x poc %d/%d) pts(%d,%d) dur %d\n",
-				__func__, vf->type, vf->index,
-				get_pic_poc(hevc, vf->index & 0xff),
-				get_pic_poc(hevc, (vf->index >> 8) & 0xff),
-				vf->pts, vf->pts_us64,
-				vf->duration);
 #endif
 		/*count info*/
 		vdec_count_info(hevc->gvs, 0, stream_offset);
@@ -9207,6 +9201,14 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		hevc->gvs->samp_cnt = get_double_write_mode(hevc);
 		vdec_fill_vdec_frame(vdec, &hevc->vframe_qos, hevc->gvs, vf, pic->hw_decode_time);
 		vdec->vdec_fps_detec(vdec->id);
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
+			"%s(type %d index 0x%x poc %d/%d) pts(%d,%d) dur %d\n",
+			__func__, vf->type, vf->index,
+			get_pic_poc(hevc, vf->index & 0xff),
+			get_pic_poc(hevc, (vf->index >> 8) & 0xff),
+			vf->pts, vf->pts_us64,
+			vf->duration);
+		hw_to_vdec(hevc)->vdec_fps_detec(hw_to_vdec(hevc)->id);
 		if (without_display_mode == 0) {
 			vf_notify_receiver(hevc->provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -9870,7 +9872,7 @@ pic_done:
 
 			reset_process_time(hevc);
 
-			if (hevc->vf_pre_count == 0) {
+			if (hevc->vf_pre_count == 0 || hevc->ip_mode) {
 				decoded_poc = hevc->curr_POC;
 				pic = get_pic_by_POC(hevc, decoded_poc);
 				if (pic && (pic->POC != INVALID_POC)) {
@@ -9957,8 +9959,8 @@ force_output:
 							"Debug or err,recycle it\n");
 						}
 					} else {
-						if (pic_display->
-						slice_type != 2) {
+						if ((pic_display->
+						slice_type != 2) && !pic_display->ip_mode) {
 						pic_display->output_ready = 0;
 						} else {
 							prepare_display_buf
@@ -10492,6 +10494,7 @@ force_output:
 		} else {
 			hevc->sps_num_reorder_pics_0 =
 			hevc->param.p.sps_num_reorder_pics_0;
+			hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 && !disable_ip_mode) ? true : false;
 			hevc->pic_list_init_flag = 1;
 			if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
 				((hevc->param.p.profile_etc & 0xc) == 0x4)
@@ -12958,10 +12961,11 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		"====== %s\n", __func__);
 
 	hevc_print(hevc, 0,
-		"width/height (%d/%d), reorder_pic_num %d buf count(bufspec size) %d, video_signal_type 0x%x, is_swap %d\n",
+		"width/height (%d/%d), reorder_pic_num %d ip_mode %d buf count(bufspec size) %d, video_signal_type 0x%x, is_swap %d\n",
 		hevc->frame_width,
 		hevc->frame_height,
 		hevc->sps_num_reorder_pics_0,
+		hevc->ip_mode,
 		get_work_pic_num(hevc),
 		hevc->video_signal_type_debug,
 		hevc->is_swap
@@ -13809,6 +13813,9 @@ MODULE_PARM_DESC(without_display_mode, "\n amvdec_h265 without_display_mode\n");
 module_param(performance_profile, uint, 0664);
 MODULE_PARM_DESC(performance_profile, "\n amvdec_h265 performance_profile\n");
 #endif
+module_param(disable_ip_mode, uint, 0664);
+MODULE_PARM_DESC(disable_ip_mode, "\n amvdec_h265 disable ip_mode\n");
+
 module_init(amvdec_h265_driver_init_module);
 module_exit(amvdec_h265_driver_remove_module);
 
