@@ -3800,7 +3800,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 	{
 		u32 data;
 		data = READ_MPEG_REG(STB_TOP_CONFIG);
-		ciplus = 0xF8000000 & data;
+		ciplus = 0x7C000000 & data;
 	}
 
 	WRITE_MPEG_REG(STB_TOP_CONFIG, 0);
@@ -3995,7 +3995,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 	{
 		u32 data;
 		data = READ_MPEG_REG(STB_TOP_CONFIG);
-		ciplus = 0xF8000000 & data;
+		ciplus = 0x7C000000 & data;
 	}
 
 	{
