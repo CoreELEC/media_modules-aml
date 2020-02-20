@@ -1905,6 +1905,8 @@ EXPORT_SYMBOL(vdec_sync_input);
 
 const char *vdec_status_str(struct vdec_s *vdec)
 {
+	if (vdec->status < 0)
+		return "INVALID";
 	return vdec->status < ARRAY_SIZE(vdec_status_string) ?
 		vdec_status_string[vdec->status] : "INVALID";
 }
