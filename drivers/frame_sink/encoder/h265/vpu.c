@@ -41,6 +41,12 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/of_address.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/amlogic/cpu_version.h>
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,1)
+#include <linux/sched/signal.h>
+#endif
 
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../common/media_clock/switch/amports_gate.h"
@@ -52,6 +58,9 @@
 /* if you want to have clock gating scheme frame by frame */
 /* #define VPU_SUPPORT_CLOCK_CONTROL */
 
+#define VPU_SUPPORT_CLOCK_CONTROL
+
+
 #define VPU_PLATFORM_DEVICE_NAME "HevcEnc"
 #define VPU_DEV_NAME "HevcEnc"
 #define VPU_CLASS_NAME "HevcEnc"
@@ -59,6 +68,8 @@
 #ifndef VM_RESERVED	/*for kernel up to 3.7.0 version*/
 #define VM_RESERVED (VM_DONTEXPAND | VM_DONTDUMP)
 #endif
+
+#define MHz (1000000)
 
 #define VPU_INIT_VIDEO_MEMORY_SIZE_IN_BYTE (64 * SZ_1M)
 
@@ -108,6 +119,18 @@ static struct vpu_bit_firmware_info_t s_bit_firmware_info[MAX_NUM_VPU_CORE];
 
 static struct vpu_dma_cfg dma_cfg[3];
 
+struct vpu_clks {
+	struct clk *wave_aclk;
+	struct clk *wave_bclk;
+	struct clk *wave_cclk;
+};
+
+static struct vpu_clks s_vpu_clks;
+
+#define CHECK_RET(_ret) if (ret) {enc_pr(LOG_ERROR, \
+		"%s:%d:function call failed with result: %d\n",\
+		__FUNCTION__, __LINE__, _ret);}
+
 static u32 vpu_src_addr_config(struct vpu_dma_buf_info_t);
 static void vpu_dma_buffer_unmap(struct vpu_dma_cfg *cfg);
 
@@ -133,17 +156,72 @@ s32 vpu_hw_reset(void)
 	return 0;
 }
 
+s32 vpu_clk_prepare(struct device *dev, struct vpu_clks *clks)
+{
+	int ret;
+
+	clks->wave_aclk = devm_clk_get(dev, "wave_clk_a");
+	if (IS_ERR_OR_NULL(clks->wave_aclk)) {
+		enc_pr(LOG_ERROR, "failed to get wave aclk\n");
+		return -1;
+	}
+
+	clks->wave_bclk = devm_clk_get(dev, "wave_clk_b");
+	if (IS_ERR_OR_NULL(clks->wave_aclk)) {
+		enc_pr(LOG_ERROR, "failed to get wave aclk\n");
+		return -1;
+	}
+
+	clks->wave_cclk = devm_clk_get(dev, "wave_clk_c");
+	if (IS_ERR_OR_NULL(clks->wave_aclk)) {
+		enc_pr(LOG_ERROR, "failed to get wave aclk\n");
+		return -1;
+	}
+
+	ret = clk_set_rate(clks->wave_aclk, 400 * MHz);
+	CHECK_RET(ret);
+	ret = clk_set_rate(clks->wave_bclk, 400 * MHz);
+	CHECK_RET(ret);
+	ret = clk_set_rate(clks->wave_cclk, 400 * MHz);
+	CHECK_RET(ret);
+	ret = clk_prepare(clks->wave_aclk);
+	CHECK_RET(ret);
+	ret = clk_prepare(clks->wave_bclk);
+	CHECK_RET(ret);
+	ret = clk_prepare(clks->wave_cclk);
+	CHECK_RET(ret);
+
+	enc_pr(LOG_ERROR, "wave_clk_a: %lu MHz\n", clk_get_rate(clks->wave_aclk) / 1000000);
+	enc_pr(LOG_ERROR, "wave_clk_b: %lu MHz\n", clk_get_rate(clks->wave_bclk) / 1000000);
+	enc_pr(LOG_ERROR, "wave_clk_c: %lu MHz\n", clk_get_rate(clks->wave_cclk) / 1000000);
+
+	return 0;
+}
+
+void vpu_clk_unprepare(struct device *dev, struct vpu_clks *clks)
+{
+	clk_unprepare(clks->wave_cclk);
+	devm_clk_put(dev, clks->wave_cclk);
+
+	clk_unprepare(clks->wave_bclk);
+	devm_clk_put(dev, clks->wave_bclk);
+
+	clk_unprepare(clks->wave_aclk);
+	devm_clk_put(dev, clks->wave_aclk);
+}
+
 s32 vpu_clk_config(u32 enable)
 {
 	if (enable) {
-		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_G12A)
-			HevcEnc_MoreClock_enable();
-		HevcEnc_clock_enable(clock_level);
+		clk_enable(s_vpu_clks.wave_aclk);
+		clk_enable(s_vpu_clks.wave_bclk);
+		clk_enable(s_vpu_clks.wave_cclk);
 	} else {
-		HevcEnc_clock_disable();
-		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_G12A)
-			HevcEnc_MoreClock_disable();
+		clk_disable(s_vpu_clks.wave_cclk);
+		clk_disable(s_vpu_clks.wave_bclk);
+		clk_disable(s_vpu_clks.wave_aclk);
 	}
+
 	return 0;
 }
 
@@ -387,7 +465,7 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 			}
 			s_vpu_irq_requested = true;
 		}
-		amports_switch_gate("vdec", 1);
+
 		spin_lock_irqsave(&s_vpu_lock, flags);
 		WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
 			READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) &
@@ -415,6 +493,7 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 		READ_MPEG_REG(RESET0_REGISTER);
 		READ_MPEG_REG(RESET0_REGISTER);
 		READ_MPEG_REG(RESET0_REGISTER);
+
 #ifndef VPU_SUPPORT_CLOCK_CONTROL
 		vpu_clk_config(1);
 #endif
@@ -1436,7 +1515,6 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 				? 0x8 : (0x3<<24)));
 			udelay(10);
 			spin_unlock_irqrestore(&s_vpu_lock, flags);
-			amports_switch_gate("vdec", 0);
 		}
 	}
 	up(&s_vpu_sem);
@@ -1736,6 +1814,7 @@ static ssize_t hevcenc_status_show(struct class *cla,
 	return snprintf(buf, 40, "hevcenc_status_show\n");
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,13,1)
 static struct class_attribute hevcenc_class_attrs[] = {
 	__ATTR(encode_status,
 	S_IRUGO | S_IWUSR,
@@ -1748,6 +1827,23 @@ static struct class hevcenc_class = {
 	.name = VPU_CLASS_NAME,
 	.class_attrs = hevcenc_class_attrs,
 };
+#else /* LINUX_VERSION_CODE <= KERNEL_VERSION(4,13,1) */
+
+static CLASS_ATTR_RO(hevcenc_status);
+
+static struct attribute *hevcenc_class_attrs[] = {
+	&class_attr_hevcenc_status.attr,
+	NULL
+};
+
+ATTRIBUTE_GROUPS(hevcenc_class);
+
+static struct class hevcenc_class = {
+	.name = VPU_CLASS_NAME,
+	.class_groups = hevcenc_class_groups,
+};
+#endif /* LINUX_VERSION_CODE <= KERNEL_VERSION(4,13,1) */
+
 
 s32 init_HevcEnc_device(void)
 {
@@ -1896,8 +1992,12 @@ static s32 vpu_probe(struct platform_device *pdev)
 	s_vpu_clk = clk;
 #endif
 
-#ifdef VPU_SUPPORT_CLOCK_CONTROL
-#else
+	if (vpu_clk_prepare(&pdev->dev, &s_vpu_clks)) {
+		err = -ENOENT;
+		goto ERROR_PROVE_DEVICE;
+	}
+
+#ifndef VPU_SUPPORT_CLOCK_CONTROL
 	vpu_clk_config(1);
 #endif
 
@@ -1986,7 +2086,10 @@ ERROR_PROVE_DEVICE:
 		memset(&s_vmem, 0, sizeof(struct video_mm_t));
 	}
 
+#ifndef VPU_SUPPORT_CLOCK_CONTROL
 	vpu_clk_config(0);
+#endif
+	vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
 
 	if (s_vpu_irq_requested == true) {
 		if (s_vpu_irq >= 0) {
@@ -2040,8 +2143,10 @@ static s32 vpu_remove(struct platform_device *pdev)
 			0, sizeof(struct vpudrv_buffer_t));
 	}
 	hevc_pdev = NULL;
+#ifndef VPU_SUPPORT_CLOCK_CONTROL
 	vpu_clk_config(0);
-
+#endif
+	vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
 	uninit_HevcEnc_device();
 	return 0;
 }
@@ -2204,7 +2309,7 @@ DONE_WAKEUP:
 
 static const struct of_device_id cnm_hevcenc_dt_match[] = {
 	{
-		.compatible = "cnm, HevcEnc",
+		.compatible = "amlogic, HevcEnc",
 	},
 	{},
 };
@@ -2287,4 +2392,4 @@ MODULE_LICENSE("GPL");
 
 module_init(vpu_init);
 module_exit(vpu_exit);
-RESERVEDMEM_OF_DECLARE(cnm_hevc, "cnm, HevcEnc-memory", hevc_mem_setup);
+RESERVEDMEM_OF_DECLARE(amlogic, "amlogic, HevcEnc-memory", hevc_mem_setup);
