@@ -49,6 +49,8 @@
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include <media/v4l2-mem2mem.h>
 
+#define HEVC_8K_LFTOFFSET_FIX
+
 #define CONSTRAIN_MAX_BUF_NUM
 
 #define SWAP_HEVC_UCODE
@@ -822,7 +824,7 @@ union param_u {
 		unsigned short tiles_enabled_flag;
 		unsigned short num_tile_columns_minus1;
 		unsigned short num_tile_rows_minus1;
-		unsigned short tile_width[8];
+		unsigned short tile_width[12];
 		unsigned short tile_height[8];
 		unsigned short misc_flag0;
 		unsigned short pps_beta_offset_div2;
@@ -4429,6 +4431,13 @@ static void hevc_config_work_space_hw(struct hevc_state_s *hevc)
 				buf_spec->swap_buf.buf_start);
 	WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, buf_spec->swap_buf2.buf_start);*/
 	WRITE_VREG(HEVC_SCALELUT, buf_spec->scalelut.buf_start);
+#ifdef HEVC_8K_LFTOFFSET_FIX
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
+		WRITE_VREG(HEVC_DBLK_CFG3, 0x808020); /*offset should x2 if 8k*/
+		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+				"write HEVC_DBLK_CFG3\n");
+	}
+#endif
 	/* cfg_p_addr */
 	WRITE_VREG(HEVC_DBLK_CFG4, buf_spec->dblk_para.buf_start);
 	/* cfg_d_addr */
