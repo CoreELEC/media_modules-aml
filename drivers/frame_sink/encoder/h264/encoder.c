@@ -49,7 +49,12 @@
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../../../frame_provider/decoder/utils/firmware.h"
 #include <linux/of_reserved_mem.h>
+#include <linux/version.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,1)
+#include <uapi/linux/sched/types.h>
+#include <linux/sched/signal.h>
+#endif
 
 #ifdef CONFIG_AM_JPEG_ENCODER
 #include "jpegenc.h"
@@ -2466,22 +2471,22 @@ const u32 fix_mc[] __aligned(8) = {
  * If hcodec is not running, then a ucode is loaded and executed
  * instead.
  */
+#if 0
 void amvenc_dos_top_reg_fix(void)
 {
-	bool hcodec_on;
+	bool _hcodec_on;
 	ulong flags;
-
 	spin_lock_irqsave(&lock, flags);
 
-	hcodec_on = vdec_on(VDEC_HCODEC);
+	_hcodec_on = hcodec_on(VDEC_HCODEC);
 
-	if ((hcodec_on) && (READ_VREG(HCODEC_MPSR) & 1)) {
+	if ((_hcodec_on) && (READ_VREG(HCODEC_MPSR) & 1)) {
 		WRITE_HREG(HCODEC_CCPU_INTR_MSK, 1);
 		spin_unlock_irqrestore(&lock, flags);
 		return;
 	}
 
-	if (!hcodec_on)
+	if (!_hcodec_on)
 		vdec_poweron(VDEC_HCODEC);
 
 	amhcodec_loadmc(fix_mc);
@@ -2492,24 +2497,37 @@ void amvenc_dos_top_reg_fix(void)
 
 	amhcodec_stop();
 
-	if (!hcodec_on)
+	if (!_hcodec_on)
 		vdec_poweroff(VDEC_HCODEC);
-
 	spin_unlock_irqrestore(&lock, flags);
+}
+#endif
+
+bool hcodec_on(enum vdec_type_e core)
+{
+	bool ret = false;
+
+	if (((READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) &
+				(((get_cpu_type() >= MESON_CPU_MAJOR_ID_SM1) &&
+				(get_cpu_type() != MESON_CPU_MAJOR_ID_TL1))
+				? 0x1 : 0x3)) == 0) &&
+				(READ_HHI_REG(HHI_VDEC_CLK_CNTL) & 0x1000000))
+				ret = true;
+	return ret;
 }
 
 bool amvenc_avc_on(void)
 {
-	bool hcodec_on;
+	bool _hcodec_on;
 	ulong flags;
 
 	spin_lock_irqsave(&lock, flags);
 
-	hcodec_on = vdec_on(VDEC_HCODEC);
-	hcodec_on &= (encode_manager.wq_count > 0);
+	_hcodec_on = hcodec_on(VDEC_HCODEC);
+	_hcodec_on &= (encode_manager.wq_count > 0);
 
 	spin_unlock_irqrestore(&lock, flags);
-	return hcodec_on;
+	return _hcodec_on;
 }
 
 static s32 avc_poweron(u32 clock)
@@ -4162,7 +4180,7 @@ static ssize_t encode_status_show(struct class *cla,
 	}
 	return snprintf(buf, 40, "encode max instance: %d\n", max_instance);
 }
-
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,13,1)
 static struct class_attribute amvenc_class_attrs[] = {
 	__ATTR(encode_status,
 	S_IRUGO | S_IWUSR,
@@ -4175,7 +4193,21 @@ static struct class amvenc_avc_class = {
 	.name = CLASS_NAME,
 	.class_attrs = amvenc_class_attrs,
 };
+#else /* LINUX_VERSION_CODE <= KERNEL_VERSION(4,13,1)  */
+static CLASS_ATTR_RO(encode_status);
 
+static struct attribute *amvenc_avc_class_attrs[] = {
+	&class_attr_encode_status.attr,
+	NULL
+};
+
+ATTRIBUTE_GROUPS(amvenc_avc_class);
+
+static struct class amvenc_avc_class = {
+	.name = CLASS_NAME,
+	.class_groups = amvenc_avc_class_groups,
+};
+#endif /* LINUX_VERSION_CODE <= KERNEL_VERSION(4,13,1)  */
 s32 init_avc_device(void)
 {
 	s32  r = 0;
@@ -4373,10 +4405,12 @@ static struct platform_driver amvenc_avc_driver = {
 	}
 };
 
+#if 0
 static struct codec_profile_t amvenc_avc_profile = {
 	.name = "avc",
 	.profile = ""
 };
+#endif
 
 static s32 __init amvenc_avc_driver_init_module(void)
 {
@@ -4387,7 +4421,7 @@ static s32 __init amvenc_avc_driver_init_module(void)
 			"failed to register amvenc_avc driver\n");
 		return -ENODEV;
 	}
-	vcodec_profile_register(&amvenc_avc_profile);
+	//vcodec_profile_register(&amvenc_avc_profile);
 	return 0;
 }
 
