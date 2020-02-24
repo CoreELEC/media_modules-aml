@@ -3962,6 +3962,19 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 	return NULL;
 }
 
+static bool vf_valid_check(struct vframe_s *vf, struct vdec_h264_hw_s *hw) {
+	int i;
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		if (vf == &(hw->vfpool[hw->cur_pool][i]))
+			return true;
+	}
+	pr_info(" invalid vf been put, vf = %p\n", vf);
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		pr_info("www valid vf[%d]= %p \n", i, &(hw->vfpool[hw->cur_pool][i]));
+	}
+	return false;
+}
+
 static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct vdec_s *vdec = op_arg;
@@ -4025,7 +4038,8 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 
 	hw->vf_put_count++;
-	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
+	if (vf && (vf_valid_check(vf, hw) == true))
+		kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 
 #define ASSIST_MBOX1_IRQ_REG    VDEC_ASSIST_MBOX1_IRQ_REG
 	if (hw->buffer_empty_flag)
