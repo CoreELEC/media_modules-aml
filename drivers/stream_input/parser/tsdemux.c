@@ -967,6 +967,12 @@ ssize_t tsdemux_write(struct file *file,
 		return -EAGAIN;
 }
 
+int get_discontinue_counter(void)
+{
+	return discontinued_counter;
+}
+EXPORT_SYMBOL(get_discontinue_counter);
+
 static ssize_t show_discontinue_counter(struct class *class,
 		struct class_attribute *attr, char *buf)
 {

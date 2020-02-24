@@ -30,6 +30,7 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 
+#include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/aformat.h>
@@ -2678,6 +2679,34 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 			}
 		}
 		break;
+	case AMSTREAM_IOC_GET_AVINFO:
+		{
+			struct av_param_info_t  __user *uarg = (void *)arg;
+			struct av_info_t  av_info;
+			int delay;
+			u32 avgbps;
+			if (this->type & PORT_TYPE_VIDEO) {
+				av_info.first_pic_coming = get_first_pic_coming();
+				av_info.current_fps = -1;
+				av_info.vpts = timestamp_vpts_get();
+				av_info.vpts_err = tsync_get_vpts_error_num();
+				av_info.apts = timestamp_apts_get();
+				av_info.apts_err = tsync_get_apts_error_num();
+				av_info.ts_error = get_discontinue_counter();
+				av_info.first_vpts = timestamp_firstvpts_get();
+				av_info.toggle_frame_count = get_toggle_frame_count();
+				delay = calculation_stream_delayed_ms(
+					PTS_TYPE_VIDEO, NULL, &avgbps);
+				if (delay >= 0)
+					av_info.dec_video_bps = avgbps;
+				else
+					av_info.dec_video_bps = 0;
+			}
+			if (copy_to_user((void *)&uarg->av_info, (void *)&av_info,
+						sizeof(struct av_info_t)))
+				r = -EFAULT;
+		}
+		break;
 	default:
 		r = -ENOIOCTLCMD;
 		break;
@@ -3480,6 +3509,7 @@ static long amstream_do_ioctl(struct port_priv_s *priv,
 	case AMSTREAM_IOC_SYSINFO:
 	case AMSTREAM_IOC_GET_QOSINFO:
 	case AMSTREAM_IOC_GET_MVDECINFO:
+	case AMSTREAM_IOC_GET_AVINFO:
 		r = amstream_do_ioctl_new(priv, cmd, arg);
 		break;
 	default:
