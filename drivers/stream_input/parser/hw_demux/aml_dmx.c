@@ -395,6 +395,9 @@ static void dmxn_op_chan(int dmx, int ch, int(*op)(int, int), int ch_op)
 #undef SUB_PARSER
 #endif
 
+#define SUB_BUF_SHARED
+#define PES_BUF_SHARED
+
 #define SYS_CHAN_COUNT    (4)
 #define SEC_GRP_LEN_0     (0xc)
 #define SEC_GRP_LEN_1     (0xc)
@@ -2426,13 +2429,21 @@ static int dmx_alloc_sec_buffer(struct aml_dmx *dmx)
 
 #ifdef NO_SUB
 /*Set subtitle buffer*/
-static int dmx_alloc_sub_buffer(struct aml_dmx *dmx)
+static int dmx_alloc_sub_buffer(struct aml_dvb *dvb, struct aml_dmx *dmx)
 {
 #ifdef SUB_BUF_DMX
 	unsigned long addr;
 
 	if (dmx->sub_pages)
 		return 0;
+
+	/*check if use shared buf*/
+	if (dvb->sub_pages) {
+		dmx->sub_pages = dvb->sub_pages;
+		dmx->sub_buf_len = dvb->sub_buf_len;
+		dmx->sub_pages_map = dvb->sub_pages_map;
+		goto end_alloc;
+	}
 
 	dmx->sub_buf_len = 64 * 1024;
 	dmx->sub_pages =
@@ -2445,6 +2456,7 @@ static int dmx_alloc_sub_buffer(struct aml_dmx *dmx)
 	    dma_map_single(dmx_get_dev(dmx), (void *)dmx->sub_pages,
 					dmx->sub_buf_len, DMA_FROM_DEVICE);
 
+end_alloc:
 	addr = virt_to_phys((void *)dmx->sub_pages);
 #ifndef SUB_PARSER
 	DMX_WRITE_REG(dmx->id, SB_START, addr >> 12);
@@ -2454,15 +2466,48 @@ static int dmx_alloc_sub_buffer(struct aml_dmx *dmx)
 #endif
 	return 0;
 }
+#ifdef SUB_BUF_SHARED
+static int dmx_alloc_sub_buffer_shared(struct aml_dvb *dvb)
+{
+#ifdef SUB_BUF_DMX
+	if (dvb->sub_pages)
+		return 0;
+
+	dvb->sub_buf_len = 64 * 1024;
+	dvb->sub_pages =
+	    __get_free_pages(GFP_KERNEL, get_order(dvb->sub_buf_len));
+	if (!dvb->sub_pages) {
+		pr_error("cannot allocate subtitle buffer\n");
+		return -1;
+	}
+	dvb->sub_pages_map =
+	    dma_map_single(dvb->dev, (void *)dvb->sub_pages,
+					dvb->sub_buf_len, DMA_FROM_DEVICE);
+
+	pr_inf("sub buff shared: %lx %x\n",
+		(unsigned long)virt_to_phys((void *)dvb->sub_pages),
+		dvb->sub_buf_len);
+#endif
+	return 0;
+}
+#endif
 #endif /*NO_SUB */
 
 /*Set PES buffer*/
-static int dmx_alloc_pes_buffer(struct aml_dmx *dmx)
+static int dmx_alloc_pes_buffer(struct aml_dvb *dvb, struct aml_dmx *dmx)
 {
 	unsigned long addr;
 
 	if (dmx->pes_pages)
 		return 0;
+
+	/*check if use shared buf*/
+	if (dvb->pes_pages) {
+		dmx->pes_pages = dvb->pes_pages;
+		dmx->pes_buf_len = dvb->pes_buf_len;
+		dmx->pes_pages_map = dvb->pes_pages_map;
+		goto end_alloc;
+	}
 
 	dmx->pes_buf_len = 64 * 1024;
 	dmx->pes_pages =
@@ -2474,12 +2519,37 @@ static int dmx_alloc_pes_buffer(struct aml_dmx *dmx)
 	dmx->pes_pages_map =
 	    dma_map_single(dmx_get_dev(dmx), (void *)dmx->pes_pages,
 					dmx->pes_buf_len, DMA_FROM_DEVICE);
-
+end_alloc:
 	addr = virt_to_phys((void *)dmx->pes_pages);
 	DMX_WRITE_REG(dmx->id, OB_START, addr >> 12);
 	DMX_WRITE_REG(dmx->id, OB_LAST_ADDR, (dmx->pes_buf_len >> 3) - 1);
+
+	pr_inf("pes buff: (%d) %lx %x\n", dmx->id, addr, dmx->pes_buf_len);
 	return 0;
 }
+#ifdef PES_BUF_SHARED
+static int dmx_alloc_pes_buffer_shared(struct aml_dvb *dvb)
+{
+	if (dvb->pes_pages)
+		return 0;
+
+	dvb->pes_buf_len = 64 * 1024;
+	dvb->pes_pages =
+	    __get_free_pages(GFP_KERNEL, get_order(dvb->pes_buf_len));
+	if (!dvb->pes_pages) {
+		pr_error("cannot allocate pes buffer\n");
+		return -1;
+	}
+	dvb->pes_pages_map =
+	    dma_map_single(dvb->dev, (void *)dvb->pes_pages,
+					dvb->pes_buf_len, DMA_FROM_DEVICE);
+
+	pr_inf("pes buff shared: %lx %x\n",
+		(unsigned long)virt_to_phys((void *)dvb->pes_pages),
+		dvb->pes_buf_len);
+	return 0;
+}
+#endif
 
 /*Allocate ASYNC FIFO Buffer*/
 static unsigned long asyncfifo_alloc_buffer(int len)
@@ -2793,12 +2863,19 @@ static int dmx_init(struct aml_dmx *dmx)
 	if (dmx_alloc_sec_buffer(dmx) < 0)
 		return -1;
 #ifdef NO_SUB
-	if (dmx_alloc_sub_buffer(dmx) < 0)
+#ifdef SUB_BUF_SHARED
+	if (dmx_alloc_sub_buffer_shared(dvb) < 0)
 		return -1;
 #endif
-	if (dmx_alloc_pes_buffer(dmx) < 0)
+	if (dmx_alloc_sub_buffer(dvb, dmx) < 0)
 		return -1;
-
+#endif
+#ifdef PES_BUF_SHARED
+	if (dmx_alloc_pes_buffer_shared(dvb) < 0)
+		return -1;
+#endif
+	if (dmx_alloc_pes_buffer(dvb, dmx) < 0)
+		return -1;
 	/*Reset the hardware */
 	if (!dvb->dmx_init) {
 		init_timer(&dvb->watchdog_timer);
@@ -2851,6 +2928,15 @@ static int dmx_deinit(struct aml_dmx *dmx)
 	}
 #ifdef NO_SUB
 #ifdef SUB_BUF_DMX
+#ifdef SUB_BUF_SHARED
+	if (dvb->sub_pages) {
+		dma_unmap_single(dvb->dev, dvb->sub_pages_map,
+				dvb->sub_buf_len, DMA_FROM_DEVICE);
+		free_pages(dvb->sub_pages, get_order(dvb->sub_buf_len));
+		dvb->sub_pages = 0;
+	}
+	dmx->sub_pages = 0;
+#else
 	if (dmx->sub_pages) {
 		dma_unmap_single(dmx_get_dev(dmx), dmx->sub_pages_map,
 				dmx->sub_buf_len, DMA_FROM_DEVICE);
@@ -2859,13 +2945,23 @@ static int dmx_deinit(struct aml_dmx *dmx)
 	}
 #endif
 #endif
+#endif
+#ifdef PES_BUF_SHARED
+	if (dvb->pes_pages) {
+		dma_unmap_single(dvb->dev, dvb->pes_pages_map,
+				dvb->pes_buf_len, DMA_FROM_DEVICE);
+		free_pages(dvb->pes_pages, get_order(dvb->pes_buf_len));
+		dvb->pes_pages = 0;
+	}
+	dmx->pes_pages = 0;
+#else
 	if (dmx->pes_pages) {
 		dma_unmap_single(dmx_get_dev(dmx), dmx->pes_pages_map,
 				dmx->pes_buf_len, DMA_FROM_DEVICE);
 		free_pages(dmx->pes_pages, get_order(dmx->pes_buf_len));
 		dmx->pes_pages = 0;
 	}
-
+#endif
 	if (dmx->dmx_irq != -1) {
 		free_irq(dmx->dmx_irq, dmx);
 		tasklet_kill(&dmx->dmx_tasklet);
