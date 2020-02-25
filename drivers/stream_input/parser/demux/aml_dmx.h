@@ -22,7 +22,7 @@
 
 #include "sw_demux/swdemux.h"
 #include "hw_demux/hwdemux.h"
-#include "demux.h"
+//#include "demux.h"
 #include "dvbdev.h"
 #include <dmxdev.h>
 

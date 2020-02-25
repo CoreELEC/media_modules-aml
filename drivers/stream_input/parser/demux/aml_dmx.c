@@ -41,7 +41,7 @@
 #include <linux/crc32.h>
 #include <asm/uaccess.h>
 #include <asm/div64.h>
-
+#include <linux/sched/signal.h>
 //#include "aml_dvb.h"
 #include "aml_dmx.h"
 #include "aml_dmx_ext.h"
@@ -223,7 +223,7 @@ static void _ts_pkt_cb (SWDMX_TsPacket *pkt, SWDMX_Ptr data)
 		return ;
 	}
 	if (ts_feed->ts_cb) {
-		ts_feed->ts_cb(pkt->packet,pkt->packet_len,NULL,0,source_feed);
+		ts_feed->ts_cb(pkt->packet,pkt->packet_len,NULL,0,source_feed,0);
 	}
 }
 static void _sec_cb (SWDMX_UInt8 *sec, SWDMX_Int len, SWDMX_Ptr data)
@@ -238,13 +238,12 @@ static void _sec_cb (SWDMX_UInt8 *sec, SWDMX_Int len, SWDMX_Ptr data)
 	}
 
 	if (sec_feed->sec_cb) {
-		sec_feed->sec_cb(sec,len,NULL, 0,source_filter);
+		sec_feed->sec_cb(sec,len,NULL, 0,source_filter,0);
 	}
 }
 
 static int _dmx_ts_feed_set(struct dmx_ts_feed *ts_feed, u16 pid, int ts_type,
-			   enum dmx_ts_pes pes_type,
-			   size_t circular_buffer_size, ktime_t timeout)
+			   enum dmx_ts_pes pes_type, ktime_t timeout)
 {
 	struct sw_demux_ts_feed *feed = (struct sw_demux_ts_feed *)ts_feed;
 	struct aml_dmx *demux = (struct aml_dmx *)ts_feed->parent->priv;
@@ -391,8 +390,7 @@ static int _dmx_section_feed_allocate_filter(struct dmx_section_feed *feed,
 }
 
 static int _dmx_section_feed_set(struct dmx_section_feed *feed,
-				u16 pid, size_t circular_buffer_size,
-				int check_crc)
+				u16 pid, int check_crc)
 {
 	struct sw_demux_sec_feed *sec_feed = (struct sw_demux_sec_feed *)feed;
 	struct aml_dmx *demux = (struct aml_dmx *)feed->parent->priv;

@@ -49,9 +49,9 @@
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
-extern ssize_t stb_show_tuner_setting(struct class *class,
+extern ssize_t tuner_setting_show(struct class *class,
 				   struct class_attribute *attr, char *buf);
-extern ssize_t stb_store_tuner_setting(struct class *class,
+extern ssize_t tuner_setting_store(struct class *class,
 				    struct class_attribute *attr,
 				    const char *buf, size_t count);
 
@@ -67,7 +67,7 @@ typedef struct _ChainPath
 static ChainPath DmxChainPath[MAX_DMXCHAINPATH_NUM];
 
 #define DSC_MODE_FUNC_DECL(i)\
-static ssize_t dsc##i##_store_mode(struct class *class,\
+static ssize_t dsc##i##_mode_store(struct class *class,\
 				struct class_attribute *attr, const char *buf,size_t size) {\
 	if (!strncmp("sw", buf, 2)) {\
 		dsc_set_mode(&aml_dvb_device.dsc[i], SW_DSC_MODE);\
@@ -76,7 +76,7 @@ static ssize_t dsc##i##_store_mode(struct class *class,\
 	}\
 	return 0;\
 }\
-static ssize_t dsc##i##_show_mode(struct class *class,\
+static ssize_t dsc##i##_mode_show(struct class *class,\
 			       struct class_attribute *attr, char *buf) {\
 	int mode = 0;\
 	char *str ;\
@@ -94,7 +94,7 @@ static ssize_t dsc##i##_show_mode(struct class *class,\
 }
 
 #define DSC_PATH_FUNC_DECL(i)  \
-static ssize_t dsc##i##_store_path(struct class *class,\
+static ssize_t dsc##i##_path_store(struct class *class,\
 				struct class_attribute *attr, const char *buf,\
 				size_t size) {\
 	struct aml_dvb *dvb = &aml_dvb_device;\
@@ -122,7 +122,7 @@ ERROR:\
 	pr_error("error, such as path=0,link=1");\
 	return 0;\
 }\
-static ssize_t dsc##i##_show_path(struct class *class,\
+static ssize_t dsc##i##_path_show(struct class *class,\
 			       struct class_attribute *attr, char *buf) {\
 	int n = 0;\
 	int dsc_id = -1;\
@@ -143,7 +143,7 @@ static ssize_t dsc##i##_show_path(struct class *class,\
 }
 
 #define CHAIN_PATH_FUNC_DECL(i)\
-ssize_t chain_path##i##_store_source(struct class *class,\
+ssize_t path##i##_source_store(struct class *class,\
 			struct class_attribute *attr, const char *buf,\
 			size_t size)\
 {\
@@ -178,7 +178,7 @@ ssize_t chain_path##i##_store_source(struct class *class,\
 	}\
 	return size;\
 }\
-ssize_t chain_path##i##_show_source(struct class *class,\
+ssize_t path##i##_source_show(struct class *class,\
 			       struct class_attribute *attr, char *buf)\
 {\
 	struct aml_dvb *dvb = aml_get_dvb_device();\
@@ -224,7 +224,7 @@ ssize_t chain_path##i##_show_source(struct class *class,\
 }
 
 #define WORK_MODE_FUNC_DECL(i)\
-ssize_t chain_path##i##_store_work_mode(struct class *class,\
+ssize_t path##i##_work_mode_store(struct class *class,\
 			struct class_attribute *attr, const char *buf,\
 			size_t size)\
 {\
@@ -241,7 +241,7 @@ ssize_t chain_path##i##_store_work_mode(struct class *class,\
 		dmx_set_work_mode(&dvb->dmx[i], mode);\
 	return size;\
 }\
-ssize_t chain_path##i##_show_work_mode(struct class *class,\
+ssize_t path##i##_work_mode_show(struct class *class,\
 				   struct class_attribute *attr, char *buf)\
 {\
 	struct aml_dvb *dvb = aml_get_dvb_device();\
@@ -269,7 +269,7 @@ ssize_t chain_path##i##_show_work_mode(struct class *class,\
 }
 
 #define PATH_BUFF_STATUS_FUNC_DECL(i)\
-ssize_t path##i##_set_buf_warning_level(struct class *class,\
+ssize_t path##i##_buf_status_store(struct class *class,\
 			struct class_attribute *attr, const char *buf,\
 			size_t size)\
 {\
@@ -288,7 +288,7 @@ ssize_t path##i##_set_buf_warning_level(struct class *class,\
 	}\
 	return size;\
 }\
-ssize_t path##i##_show_buf_warning_status(struct class *class,\
+ssize_t path##i##_buf_status_show(struct class *class,\
 				   struct class_attribute *attr, char *buf)\
 {\
 	struct aml_dvb *dvb = aml_get_dvb_device();\
@@ -333,30 +333,42 @@ WORK_MODE_FUNC_DECL(1)
 PATH_BUFF_STATUS_FUNC_DECL(0)
 PATH_BUFF_STATUS_FUNC_DECL(1)
 
-static struct class_attribute aml_dvb_class_attrs[] = {
-	__ATTR(path0_source, 0664, chain_path0_show_source,
-	       chain_path0_store_source),
-	__ATTR(path1_source, 0664, chain_path1_show_source,
-	       chain_path1_store_source),
-	__ATTR(dsc0_mode, 0664, dsc0_show_mode,dsc0_store_mode),
-	__ATTR(dsc1_mode, 0664, dsc1_show_mode,dsc1_store_mode),
-	__ATTR(dsc0_path, 0664, dsc0_show_path,dsc0_store_path),
-	__ATTR(dsc1_path, 0664, dsc1_show_path,dsc1_store_path),
-	__ATTR(path0_work_mode, 0664, chain_path0_show_work_mode,\
-			chain_path0_store_work_mode),
-	__ATTR(path1_work_mode, 0664, chain_path1_show_work_mode,\
-			chain_path1_store_work_mode),
-	__ATTR(path0_buf_status, 0664, path0_show_buf_warning_status,\
-			path0_set_buf_warning_level),
-	__ATTR(path1_buf_status, 0664, path1_show_buf_warning_status,\
-			path1_set_buf_warning_level),\
-	__ATTR(tuner_setting, 0664, stb_show_tuner_setting, stb_store_tuner_setting),
-	__ATTR_NULL
+static CLASS_ATTR_RW(path0_source);
+static CLASS_ATTR_RW(path1_source);
+static CLASS_ATTR_RW(dsc0_mode);
+static CLASS_ATTR_RW(dsc1_mode);
+static CLASS_ATTR_RW(dsc0_path);
+static CLASS_ATTR_RW(dsc1_path);
+static CLASS_ATTR_RW(path0_work_mode);
+static CLASS_ATTR_RW(path1_work_mode);
+static CLASS_ATTR_RW(path0_buf_status);
+static CLASS_ATTR_RW(path1_buf_status);
+static CLASS_ATTR_RW(tuner_setting);
+
+#define DVB_ATTR(name) &class_attr_##name.attr
+
+static struct attribute *aml_dvb_class_attrs[] = {
+	DVB_ATTR(path0_source),
+	DVB_ATTR(path1_source),
+	DVB_ATTR(dsc0_mode),
+	DVB_ATTR(dsc1_mode),
+	DVB_ATTR(dsc0_path),
+	DVB_ATTR(dsc1_path),
+	DVB_ATTR(path0_work_mode),
+	DVB_ATTR(path1_work_mode),
+	DVB_ATTR(path0_buf_status),
+	DVB_ATTR(path1_buf_status),
+	DVB_ATTR(tuner_setting),
+	NULL
 };
+
+
+ATTRIBUTE_GROUPS(aml_dvb_class);
+
 
 static struct class aml_dvb_class = {
 	.name = "stb",
-	.class_attrs = aml_dvb_class_attrs,
+	.class_groups = aml_dvb_class_groups,
 };
 
 static void dmx_chain_path_init(void) {

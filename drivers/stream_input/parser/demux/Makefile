@@ -1,6 +1,6 @@
 obj-m	+= aml_swdmx.o
 
-ccflags-y += -I$(srctree)/drivers/media/dvb-core -I$(srctree)/drivers/gpio -I$(srctree)/include
+ccflags-y += -I$(srctree)/include/media -I$(srctree)/drivers/media/pci/ttpci -I$(srctree)/drivers/gpio -I$(srctree)/include
 
 aml_swdmx-objs += aml_dvb.o
 aml_swdmx-objs += aml_dsc.o

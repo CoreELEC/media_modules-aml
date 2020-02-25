@@ -304,9 +304,9 @@ loop:
 	}
 	return 0;
 }
-static void timer_asyncfifo_func(unsigned long arg)
+static void timer_asyncfifo_func(struct timer_list * timer)
 {
-	struct aml_asyncfifo *afifo = (struct aml_asyncfifo *)arg;
+	struct aml_asyncfifo *afifo = from_timer(afifo,timer,asyncfifo_timer);
 	HWDMX_Demux *pdmx;
 	struct aml_dvb *dvb = afifo->dvb;
 	u32 start_addr;
@@ -425,12 +425,17 @@ static int _async_fifo_init(struct aml_asyncfifo *afifo, int initirq,
 		pr_error("create asyncfifo task fail\n");
 	}
 	afifo->flush_time_ms = asyncfifo_flush_time;
+
+#if 0
 	init_timer(&afifo->asyncfifo_timer);
 	afifo->asyncfifo_timer.function = timer_asyncfifo_func;
 	afifo->asyncfifo_timer.expires =
 		jiffies + msecs_to_jiffies(afifo->flush_time_ms);
 	afifo->asyncfifo_timer.data = (unsigned long)afifo;
 	add_timer(&afifo->asyncfifo_timer);
+#endif
+
+	timer_setup(&afifo->asyncfifo_timer, timer_asyncfifo_func,0);
 
 	/*alloc buffer*/
 	ret = _asyncfifo_set_buffer(afifo, buf_len, buf);

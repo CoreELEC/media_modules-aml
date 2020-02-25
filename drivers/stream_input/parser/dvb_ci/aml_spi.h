@@ -20,11 +20,11 @@
 #ifndef __AML_SPI_H_
 #define __AML_SPI_H_
 
-#include <linux/amlogic/aml_gpio_consumer.h>
+//#include <linux/amlogic/aml_gpio_consumer.h>
 #include <linux/gpio/consumer.h>
 #include "aml_pcmcia.h"
 #include "aml_ci.h"
-#include "drivers/media/dvb-core/dvb_ca_en50221.h"
+#include "dvb_ca_en50221.h"
 
 /*
 aml spi dev

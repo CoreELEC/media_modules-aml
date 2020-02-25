@@ -31,7 +31,8 @@
 #include <linux/gpio/consumer.h>
 #include <linux/device.h>
 #include <linux/slab.h>
-#include <linux/amlogic/sd.h>
+//#include <linux/amlogic/sd.h>
+#include <linux/mmc/sd.h>
 #include <linux/of_irq.h>
 #include <linux/irq.h>
 #include "aml_spi.h"
@@ -933,8 +934,8 @@ static int aml_spi_get_config_from_dts(struct aml_spi *spi_dev)
 		spi_dev->irq = irq_of_parse_and_map(
 		pdev->dev.of_node, 0);
 		AML_CI_GPIO_IRQ_BASE = spi_dev->irq - val;
-		pr_dbg("get spi irq : %d  0:%d USEDBASE:%d val:%d\r\n",
-			spi_dev->irq, INT_GPIO_0, AML_CI_GPIO_IRQ_BASE, val);
+		pr_dbg("get spi irq : %d USEDBASE:%d val:%d\r\n",
+			spi_dev->irq, AML_CI_GPIO_IRQ_BASE, val);
 		/*get reset pwd cd1 cd2 gpio pin*/
 		spi_dev->reset_pin = NULL;
 		ret = spi_get_gpio_by_name(spi_dev, &spi_dev->reset_pin,
@@ -1646,7 +1647,7 @@ pr_error("Skipping unknown tupletype:0x%x L:0x%x\n",
 	return 0;
 }
 
-static ssize_t aml_spi_ci_reset_help(struct class *class,
+static ssize_t reset_show(struct class *class,
 struct class_attribute *attr, char *buf)
 {
 	int ret;
@@ -1654,7 +1655,7 @@ struct class_attribute *attr, char *buf)
 	return ret;
 }
 
-static ssize_t aml_spi_ci_reset(struct class *class,
+static ssize_t reset_store(struct class *class,
 struct class_attribute *attr, const char *buf, size_t size)
 {
 	int ret;
@@ -1663,7 +1664,7 @@ struct class_attribute *attr, const char *buf, size_t size)
 	return size;
 }
 
-static ssize_t aml_spi_ci_pwr_help(struct class *class,
+static ssize_t pwr_show(struct class *class,
 struct class_attribute *attr, char *buf)
 {
 	int ret;
@@ -1671,7 +1672,7 @@ struct class_attribute *attr, char *buf)
 	return ret;
 }
 
-static ssize_t aml_spi_ci_pwr(struct class *class,
+static ssize_t pwr_store(struct class *class,
 struct class_attribute *attr, const char *buf, size_t size)
 {
 	int ret = 0;
@@ -1682,7 +1683,7 @@ struct class_attribute *attr, const char *buf, size_t size)
 	ret = aml_gio_power(&g_spi_dev->pc, enable);
 	return size;
 }
-static ssize_t aml_spi_ci_state_show(struct class *class,
+static ssize_t status_show(struct class *class,
 struct class_attribute *attr, char *buf)
 {
 	int ret;
@@ -1692,7 +1693,7 @@ struct class_attribute *attr, char *buf)
 	return ret;
 }
 
-static ssize_t aml_spi_ci_irq_show(struct class *class,
+static ssize_t irq_show(struct class *class,
 struct class_attribute *attr, char *buf)
 {
 	int ret;
@@ -1701,7 +1702,7 @@ struct class_attribute *attr, char *buf)
 	return ret;
 }
 
-static ssize_t aml_spi_io_test_help(struct class *class,
+static ssize_t iotest_show(struct class *class,
 struct class_attribute *attr, char *buf)
 {
 	int ret;
@@ -1710,7 +1711,7 @@ struct class_attribute *attr, char *buf)
 	return ret;
 }
 
-static ssize_t aml_spi_io_test(struct class *class,
+static ssize_t iotest_store(struct class *class,
 struct class_attribute *attr, const char *buf, size_t size)
 {
 	int n = 0;
@@ -1797,26 +1798,27 @@ retval = aml_ci_mem_write_by_spi(ci, 0, addr, val);
 	kfree(buf_orig);
 	return size;
 }
+static CLASS_ATTR_RW(reset);
+static CLASS_ATTR_RW(pwr);
+static CLASS_ATTR_RO(irq);
+static CLASS_ATTR_RO(status);
+static CLASS_ATTR_RW(iotest);
 
-static struct class_attribute aml_spi_class_attrs[] = {
-	__ATTR(reset,  S_IRUGO | S_IWUSR,
-		aml_spi_ci_reset_help, aml_spi_ci_reset),
-	__ATTR(pwr,  S_IRUGO | S_IWUSR,
-		aml_spi_ci_pwr_help, aml_spi_ci_pwr),
-	__ATTR(irq,  S_IRUGO | S_IWUSR,
-		aml_spi_ci_irq_show, NULL),
-	__ATTR(status,  S_IRUGO | S_IWUSR,
-		aml_spi_ci_state_show, NULL),
-	__ATTR(iotest,  S_IRUGO | S_IWUSR,
-		aml_spi_io_test_help, aml_spi_io_test),
-	__ATTR_NULL
+static struct attribute *aml_spi_class_attrs[] = {
+	&class_attr_reset.attr,
+	&class_attr_pwr.attr,
+	&class_attr_irq.attr,
+	&class_attr_status.attr,
+	&class_attr_iotest.attr,
+	NULL
 };
+
+ATTRIBUTE_GROUPS(aml_spi_class);
 
 static struct class aml_spi_class = {
 	.name = "aml_dvb_spi_test",
-	.class_attrs = aml_spi_class_attrs,
+	.class_groups = aml_spi_class_groups,
 };
-
 
 /**\brief aml_con_gpio_by_spi:control gpio by spi
 * \param gpio: the value is from AM_CON_GPIO def

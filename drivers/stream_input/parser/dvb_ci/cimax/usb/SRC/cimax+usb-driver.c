@@ -1495,7 +1495,7 @@ static int device_tsbulk_send(struct device_s *device,
 	/*dbg("Transmit %d bytes\n",urb->transfer_buffer_length);*/
 	/*dbg_dump("txBuf",
 		urb->transfer_buffer, urb->transfer_buffer_length);*/
-	mod_timer(&(device->channel[index].StartBulkReadTimer),
+	mod_timer(&(gbulk_timer[index].StartBulkReadTimer),
 		usecs_to_jiffies(50));
 
 	if (usb_submit_urb(urb, GFP_KERNEL) < 0) {
@@ -1510,9 +1510,9 @@ static int device_tsbulk_send(struct device_s *device,
 } /* device_tsbulk_send */
 
 /* ---------------------------------------------------------- */
-static void StartBulkRead_func(unsigned long context)
+static void StartBulkRead_func(struct timer_list * timer)
 {
-	struct bulk_timer_s *bulk_time = (struct bulk_timer_s *) context;
+	struct bulk_timer_s *bulk_time = from_timer(bulk_time,timer,StartBulkReadTimer) ;
 
 	device_start_tsbulk_in(bulk_time->device, bulk_time->index);
 }
@@ -1552,9 +1552,8 @@ static int device_drv_open(struct device_s *device)
 		device->channel[index].FirstTransfer = true;
 		gbulk_timer[index].device = device;
 		gbulk_timer[index].index = index;
-		setup_timer(&device->channel[index].StartBulkReadTimer,
-			StartBulkRead_func,
-			(unsigned long)&(gbulk_timer[index]));
+		timer_setup(&gbulk_timer[index].StartBulkReadTimer,
+			StartBulkRead_func,0);
 	}
 #ifdef DEBUG_CONTINUITY
 	init_tab_cc();
@@ -1821,9 +1820,11 @@ static long device_ioctl(struct file *file,
 
 	/* Verify direction (read/write) */
 	if (_IOC_DIR(cmd) & _IOC_READ)
-		err = !access_ok(VERIFY_WRITE, (void *)arg, _IOC_SIZE(cmd));
+//		err = !access_ok(VERIFY_WRITE, (void *)arg, _IOC_SIZE(cmd));
+		err = !access_ok((void *)arg, _IOC_SIZE(cmd));
 	else if (_IOC_DIR(cmd) & _IOC_WRITE)
-		err = !access_ok(VERIFY_READ, (void *)arg, _IOC_SIZE(cmd));
+//		err = !access_ok(VERIFY_READ, (void *)arg, _IOC_SIZE(cmd));
+		err = !access_ok((void *)arg, _IOC_SIZE(cmd));
 	if (err)
 		return -EFAULT;
 

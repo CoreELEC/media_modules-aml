@@ -799,7 +799,7 @@ static int _dvb_dsc_open(struct inode *inode, struct file *file)
 
 	return 0;
 }
-static int _dsc_set_pid(struct aml_dsc *dsc, ca_pid_t *pi) {
+static int _dsc_set_pid(struct aml_dsc *dsc, struct ca_pid *pi) {
 	int i;
 	struct DescChannel *ch;
 	int ret = 0;
@@ -848,7 +848,7 @@ static int _dvb_dsc_do_ioctl(struct file *file, unsigned int cmd,
 		_dsc_reset(dsc);
 		break;
 	case CA_GET_CAP: {
-		ca_caps_t *cap = parg;
+		struct ca_caps *cap = parg;
 
 		cap->slot_num   = 1;
 		cap->slot_type  = CA_DESCR;
@@ -857,7 +857,7 @@ static int _dvb_dsc_do_ioctl(struct file *file, unsigned int cmd,
 		break;
 	}
 	case CA_GET_SLOT_INFO: {
-		ca_slot_info_t *slot = parg;
+		struct ca_slot_info *slot = parg;
 
 		slot->num   = 1;
 		slot->type  = CA_DESCR;
@@ -865,14 +865,14 @@ static int _dvb_dsc_do_ioctl(struct file *file, unsigned int cmd,
 		break;
 	}
 	case CA_GET_DESCR_INFO: {
-		ca_descr_info_t *descr = parg;
+		struct ca_descr_info *descr = parg;
 
 		descr->num  = DSC_CHANNEL_NUM;
 		descr->type = 0;
 		break;
 	}
 	case CA_SET_DESCR: {
-		ca_descr_t    *d = parg;
+		struct ca_descr    *d = parg;
 		struct ca_descr_ex  dex;
 
 		dex.index = d->index;
@@ -884,7 +884,7 @@ static int _dvb_dsc_do_ioctl(struct file *file, unsigned int cmd,
 		break;
 	}
 	case CA_SET_PID: {
-		ca_pid_t *pi = parg;
+		struct ca_pid *pi = parg;
 
 		ret = _dsc_set_pid(dsc,pi);
 

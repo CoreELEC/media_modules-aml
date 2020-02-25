@@ -25,6 +25,7 @@
 #include <dmxdev.h>
 #include <linux/device.h>
 #include "hw_demux/s2p.h"
+#include "../dvb_common.h"
 
 #define SW_DSC_MODE 0
 #define HW_DSC_MODE 1

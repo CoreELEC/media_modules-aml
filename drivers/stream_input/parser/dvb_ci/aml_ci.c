@@ -26,6 +26,8 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>
+#include <linux/sysfs.h>
+#include <linux/of.h>
 #include "aml_ci.h"
 #include "aml_spi.h"
 #include "cimax/aml_cimax.h"
@@ -621,18 +623,21 @@ void aml_ci_exit(struct aml_ci *ci)
 
 static struct aml_ci *ci_dev;
 
-static ssize_t aml_ci_ts_show(struct class *class,
+static ssize_t ts_show(struct class *class,
 	struct class_attribute *attr, char *buf)
 {
 		int ret;
 		ret = sprintf(buf, "ts%d\n", 1);
 	return ret;
 }
+static CLASS_ATTR_RO(ts);
 
-static struct class_attribute amlci_class_attrs[] = {
-	__ATTR(ts,  S_IRUGO | S_IWUSR, aml_ci_ts_show, NULL),
-	__ATTR_NULL
+static struct attribute *aml_ci_attrs[] = {
+	&class_attr_ts.attr,
+	NULL
 };
+
+ATTRIBUTE_GROUPS(aml_ci);
 
 static int aml_ci_register_class(struct aml_ci *ci)
 {
@@ -648,7 +653,7 @@ static int aml_ci_register_class(struct aml_ci *ci)
 
 	snprintf((char *)clp->name, CLASS_NAME_LEN, "amlci-%d", ci->id);
 	clp->owner = THIS_MODULE;
-	clp->class_attrs = amlci_class_attrs;
+	clp->class_groups = aml_ci_groups;
 	ret = class_register(clp);
 	if (ret)
 		kfree(clp->name);

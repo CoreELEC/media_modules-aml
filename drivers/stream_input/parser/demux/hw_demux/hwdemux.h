@@ -20,14 +20,15 @@
 #ifndef _AML_HWDMX_H_
 #define _AML_HWDMX_H_
 #include <linux/dvb/dmx.h>
-
+#include "../../dvb_common.h"
+#if 0
 enum aml_dmx_id_t {
 	AM_DMX_0 = 0,
 	AM_DMX_1,
 	AM_DMX_2,
 	AM_DMX_MAX,
 };
-
+#endif
 typedef struct HWDMX_Demux_s HWDMX_Demux;
 typedef struct HWDMX_Chan_s HWDMX_Chan;
 typedef int (*HWDMX_Cb)(char *buf, int count, void *udata);

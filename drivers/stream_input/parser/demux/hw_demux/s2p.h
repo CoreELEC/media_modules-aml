@@ -20,22 +20,6 @@
 #ifndef _S2P_H_
 #define _S2P_H_
 
-enum aml_ts_source_t {
-	AM_TS_SRC_TS0,
-	AM_TS_SRC_TS1,
-	AM_TS_SRC_TS2,
-	AM_TS_SRC_TS3,
-
-	AM_TS_SRC_S_TS0,
-	AM_TS_SRC_S_TS1,
-	AM_TS_SRC_S_TS2,
-
-	AM_TS_SRC_HIU,
-	AM_TS_SRC_DMX0,
-	AM_TS_SRC_DMX1,
-	AM_TS_SRC_DMX2
-};
-
 enum{
 	AM_TS_DISABLE,
 	AM_TS_PARALLEL,

@@ -57,7 +57,7 @@ static enum dtv_demod_type s_demod_type[FE_DEV_COUNT] = {AM_DTV_DEMOD_NONE, AM_D
 static enum tuner_type s_tuner_type[FE_DEV_COUNT] = {AM_TUNER_NONE, AM_TUNER_NONE};
 
 
-ssize_t stb_show_tuner_setting(struct class *class,
+ssize_t tuner_setting_show(struct class *class,
 				   struct class_attribute *attr, char *buf)
 {
 	struct aml_dvb *dvb = aml_get_dvb_device();
@@ -71,7 +71,7 @@ ssize_t stb_show_tuner_setting(struct class *class,
 	return 0;
 }
 
-ssize_t stb_store_tuner_setting(struct class *class,
+ssize_t tuner_setting_store(struct class *class,
 				    struct class_attribute *attr,
 				    const char *buf, size_t count)
 {

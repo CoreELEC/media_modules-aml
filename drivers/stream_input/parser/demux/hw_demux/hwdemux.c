@@ -40,7 +40,7 @@
 #include <linux/poll.h>
 #include <linux/crc32.h>
 #include <linux/clk.h>
-
+#include <linux/of_irq.h>
 #include <asm/uaccess.h>
 #include <asm/div64.h>
 
@@ -1012,8 +1012,8 @@ int hwdmx_probe(struct platform_device *pdev){
 	u32 value;
 	int i = 0;
 	int ret = 0;
-	struct resource *res;
 	struct aml_dvb *advb = aml_get_dvb_device();
+	struct device_node *node_dmx = NULL;
 
 	_hwdmx_get_base_addr(pdev);
 
@@ -1028,14 +1028,20 @@ int hwdmx_probe(struct platform_device *pdev){
 		pr_inf("%s: 0x%x\n", buf, value);
 		advb->ts_out_invert = value;
 	}
-	for (i = 0; i < DEMUX_COUNT; i++) {
-		Demux[i].dmx_irq = -1;
-		snprintf(buf, sizeof(buf), "demux%d_irq", i);
-		res = platform_get_resource_byname(pdev, IORESOURCE_IRQ, buf);
-		if (res)
-			Demux[i].dmx_irq = res->start;
+	memset(buf, 0, 32);
+	snprintf(buf, sizeof(buf), "dmx");
+	node_dmx = of_parse_phandle(advb->pdev->dev.of_node, buf, 0);
+	if (node_dmx) {
+		for (i = 0; i < DEMUX_COUNT; i++) {
+			Demux[i].dmx_irq = -1;
+			memset(buf, 0, 32);
+			snprintf(buf, sizeof(buf), "demux%d_irq", i);
+			ret = of_irq_get_byname(node_dmx, buf);
+			if (ret > 0)
+				Demux[i].dmx_irq = ret;
 
-		pr_error("%s irq num:%d \r\n", buf, Demux[i].dmx_irq);
+			pr_error("%s irq num:%d \r\n", buf, Demux[i].dmx_irq);
+		}
 	}
 	frontend_probe(pdev);
 	s2p_probe(pdev);

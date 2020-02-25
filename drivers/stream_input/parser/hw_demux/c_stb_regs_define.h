@@ -27,7 +27,7 @@
 
 #ifndef __MACH_MESON8_REG_ADDR_H_
 #define __MACH_MESON8_REG_ADDR_H_
-#include <linux/amlogic/iomap.h>
+#include <linux/amlogic/media/registers/register_map.h>
 #define CBUS_REG_ADDR(_r) aml_read_cbus(_r)
 
 

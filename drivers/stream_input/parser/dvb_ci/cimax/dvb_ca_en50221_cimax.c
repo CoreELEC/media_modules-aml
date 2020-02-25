@@ -27,6 +27,7 @@
 #include <linux/delay.h>
 #include <linux/spinlock.h>
 #include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/kthread.h>
 
 #include "dvb_ca_en50221_cimax.h"

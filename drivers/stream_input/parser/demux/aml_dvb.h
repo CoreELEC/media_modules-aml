@@ -30,7 +30,6 @@
 #define DSC_DEV_COUNT     2
 #define FE_DEV_COUNT 	  2
 
-
 struct aml_dvb {
 	struct dvb_device    dvb_dev;
 	struct dvb_adapter   dvb_adapter;

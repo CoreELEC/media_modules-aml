@@ -298,6 +298,7 @@ struct ci_bulk_s {
 /**
  *  @brief
  *    TS channel (can use isoc or bulk interface).
+ * x
  */
 struct ts_channel_s {
 	spinlock_t        inLock;
@@ -320,7 +321,6 @@ struct ts_channel_s {
 	int              nbByteSend;
 	int              nbByteRead;
 	__u8             FirstTransfer;
-	struct timer_list StartBulkReadTimer;
 
 #ifdef DEBUG_BITRATE
 	ktime_t bitrateTime
@@ -344,6 +344,7 @@ struct device_s {
 struct bulk_timer_s {
 	struct device_s *device;
 	__u8      index;
+	struct timer_list StartBulkReadTimer;
 };
 
 int cimax_usb_select_interface(struct device_s *device, unsigned long intf);

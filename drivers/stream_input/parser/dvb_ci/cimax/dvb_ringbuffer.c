@@ -31,7 +31,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/string.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 #include "dvb_ringbuffer.h"
 
@@ -70,12 +70,12 @@ ssize_t dvb_ringbuffer_free(struct dvb_ringbuffer *rbuf)
 {
 	ssize_t free;
 
-	/* ACCESS_ONCE() to load read pointer on writer side
+	/* READ_ONCE() to load read pointer on writer side
 	 * this pairs with smp_store_release() in dvb_ringbuffer_read(),
 	 * dvb_ringbuffer_read_user(), dvb_ringbuffer_flush(),
 	 * or dvb_ringbuffer_reset()
 	 */
-	free = ACCESS_ONCE(rbuf->pread) - rbuf->pwrite;
+	free = READ_ONCE(rbuf->pread) - rbuf->pwrite;
 	if (free <= 0)
 		free += rbuf->size;
 	return free-1;

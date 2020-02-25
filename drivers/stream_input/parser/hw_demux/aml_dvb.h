@@ -41,7 +41,6 @@
 #include <linux/earlysuspend.h>
 #endif
 
-
 #include <dvbdev.h>
 #include <demux.h>
 #include <dvb_demux.h>
@@ -49,6 +48,7 @@
 #include <dvb_filter.h>
 #include <dvb_net.h>
 #include <dvb_ringbuffer.h>
+#include <dvb_frontend.h>
 
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
@@ -74,31 +74,6 @@
 #define SEC_BUF_GRP_COUNT 4
 #define SEC_BUF_BUSY_SIZE 4
 #define SEC_BUF_COUNT     (SEC_BUF_GRP_COUNT*8)
-
-enum aml_dmx_id_t {
-	AM_DMX_0 = 0,
-	AM_DMX_1,
-	AM_DMX_2,
-	AM_DMX_MAX,
-};
-
-enum aml_ts_source_t {
-	AM_TS_SRC_TS0,
-	AM_TS_SRC_TS1,
-	AM_TS_SRC_TS2,
-	AM_TS_SRC_TS3,
-
-	AM_TS_SRC_S_TS0,
-	AM_TS_SRC_S_TS1,
-	AM_TS_SRC_S_TS2,
-	AM_TS_SRC_S_TS3,
-
-	AM_TS_SRC_HIU,
-	AM_TS_SRC_HIU1,
-	AM_TS_SRC_DMX0,
-	AM_TS_SRC_DMX1,
-	AM_TS_SRC_DMX2
-};
 
 struct aml_sec_buf {
 	unsigned long        addr;
@@ -368,7 +343,8 @@ extern int dsc_set_key(struct aml_dsc_channel *ch, int flags,
 					enum ca_cw_type type, u8 *key);
 extern void dsc_release(void);
 extern int aml_ciplus_hw_set_source(int src);
-
+extern int dsc_set_key_endia(int key_endia);
+extern int aml_s2p_add(int num);
 /*AMLogic ASYNC FIFO interface*/
 extern int aml_asyncfifo_hw_init(struct aml_asyncfifo *afifo);
 extern int aml_asyncfifo_hw_deinit(struct aml_asyncfifo *afifo);
