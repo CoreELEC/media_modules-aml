@@ -721,8 +721,8 @@ static void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx)
 			VB2_BUF_STATE_DONE);
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
-			"recycle buff idx: %d, vbuf: %llx\n", index,
-			vb2_dma_contig_plane_dma_addr(q->bufs[index], 0));
+			"recycle buff idx: %d, vbuf: %lx\n", index,
+			(ulong)vb2_dma_contig_plane_dma_addr(q->bufs[index], 0));
 	}
 }
 
