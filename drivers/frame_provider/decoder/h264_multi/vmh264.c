@@ -927,13 +927,11 @@ static void h264_clear_dpb(struct vdec_h264_hw_s *hw);
 /* 0:linear 1:32x32 2:64x32 ; m8baby test1902 */
 static u32 mem_map_mode = H265_MEM_MAP_MODE;
 
-#define MAX_SIZE_8K (8192 * 4608)
 #define MAX_SIZE_4K (4096 * 2304)
 
 static int is_oversize(int w, int h)
 {
-	int max = (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)?
-		MAX_SIZE_8K : MAX_SIZE_4K;
+	int max = MAX_SIZE_4K;
 
 	if (w < 0 || h < 0)
 		return true;
@@ -3963,14 +3961,19 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 }
 
 static bool vf_valid_check(struct vframe_s *vf, struct vdec_h264_hw_s *hw) {
-	int i;
+	int i,j;
+	if (hw->is_used_v4l)
+		return true;
 	for (i = 0; i < VF_POOL_SIZE; i++) {
-		if (vf == &(hw->vfpool[hw->cur_pool][i]))
-			return true;
+		for (j = 0; j < VF_POOL_NUM; j ++) {
+			if (vf == &(hw->vfpool[j][i]))
+				return true;
+		}
 	}
-	pr_info(" invalid vf been put, vf = %p\n", vf);
+	dpb_print(DECODE_ID(hw), 0, " invalid vf been put, vf = %p\n", vf);
 	for (i = 0; i < VF_POOL_SIZE; i++) {
-		pr_info("www valid vf[%d]= %p \n", i, &(hw->vfpool[hw->cur_pool][i]));
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+		"dump vf [%d]= %p\n",  i, &(hw->vfpool[hw->cur_pool][i]));
 	}
 	return false;
 }
