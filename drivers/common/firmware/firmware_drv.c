@@ -122,12 +122,16 @@ int get_data_from_name(const char *name, char *buf)
 	struct fw_mgr_s *mgr = g_mgr;
 	struct fw_info_s *info;
 	char *fw_name = __getname();
+	int len;
 
 	if (fw_name == NULL)
 		return -ENOMEM;
 
-	strcat(fw_name, name);
-	strcat(fw_name, ".bin");
+	len = snprintf(fw_name, PATH_MAX, "%s.bin", name);
+	if (len >= PATH_MAX) {
+		__putname(fw_name);
+		return -ENAMETOOLONG;
+	}
 
 	mutex_lock(&mutex);
 
