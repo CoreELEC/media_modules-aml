@@ -33,8 +33,8 @@
 /* #include <mach/am_regs.h> */
 #include <linux/delay.h>
 
-#include "../../stream_input/parser/streambuf.h"
-#include "../../stream_input/amports/amports_priv.h"
+#include "streambuf.h"
+#include "amports_priv.h"
 #include "thread_rw.h"
 
 #define BUF_NAME "fetchbuf"

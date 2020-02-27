@@ -9284,10 +9284,10 @@ static void av1_dump_state(struct vdec_s *vdec)
 		READ_VREG(HEVC_STREAM_RD_PTR));
 	av1_print(hw, 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	av1_print(hw, 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
 
 	if (input_frame_based(vdec) &&
 		(debug & PRINT_FLAG_VDEC_DATA)

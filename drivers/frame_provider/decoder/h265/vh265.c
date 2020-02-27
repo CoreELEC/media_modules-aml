@@ -9390,6 +9390,7 @@ static int hevc_recover(struct hevc_state_s *hevc)
 	unsigned int hevc_stream_control;
 	unsigned int hevc_stream_fifo_ctl;
 	unsigned int hevc_stream_buf_size;
+	struct vdec_s *vdec = hw_to_vdec(hevc);
 
 	mutex_lock(&vh265_mutex);
 #if 0
@@ -9413,8 +9414,14 @@ static int hevc_recover(struct hevc_state_s *hevc)
 	msleep(20);
 	ret = 0;
 	/* reset */
-	WRITE_PARSER_REG(PARSER_VIDEO_RP, READ_VREG(HEVC_STREAM_RD_PTR));
-	SET_PARSER_REG_MASK(PARSER_ES_CONTROL, ES_VID_MAN_RD_PTR);
+	if (vdec_stream_based(vdec)) {
+		STBUF_WRITE(&vdec->vbuf, set_rp,
+			READ_VREG(HEVC_STREAM_RD_PTR));
+
+		if (!vdec->vbuf.no_parser)
+			SET_PARSER_REG_MASK(PARSER_ES_CONTROL,
+				ES_VID_MAN_RD_PTR);
+	}
 
 	hevc_stream_start_addr = READ_VREG(HEVC_STREAM_START_ADDR);
 	hevc_stream_end_addr = READ_VREG(HEVC_STREAM_END_ADDR);
@@ -12478,8 +12485,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			&& pre_decode_buf_level != 0) {
 			u32 rp, wp, level;
 
-			rp = READ_PARSER_REG(PARSER_VIDEO_RP);
-			wp = READ_PARSER_REG(PARSER_VIDEO_WP);
+			rp = STBUF_READ(&vdec->vbuf, get_rp);
+			wp = STBUF_READ(&vdec->vbuf, get_wp);
 			if (wp < rp)
 				level = vdec->input.size + wp - rp;
 			else
@@ -12493,7 +12500,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	if (hevc->next_again_flag &&
 		(!vdec_frame_based(vdec))) {
 		u32 parser_wr_ptr =
-			READ_PARSER_REG(PARSER_VIDEO_WP);
+			STBUF_READ(&vdec->vbuf, get_wp);
 		if (parser_wr_ptr >= hevc->pre_parser_wr_ptr &&
 			(parser_wr_ptr - hevc->pre_parser_wr_ptr) <
 			again_threshold) {
@@ -12595,9 +12602,11 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hevc_reset_core(vdec);
 
 #ifdef AGAIN_HAS_THRESHOLD
-	hevc->pre_parser_wr_ptr =
-		READ_PARSER_REG(PARSER_VIDEO_WP);
-	hevc->next_again_flag = 0;
+	if (vdec_stream_based(vdec)) {
+		hevc->pre_parser_wr_ptr =
+			STBUF_READ(&vdec->vbuf, get_wp);
+		hevc->next_again_flag = 0;
+	}
 #endif
 	r = vdec_prepare_input(vdec, &hevc->chunk);
 	if (r < 0) {
@@ -12631,8 +12640,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		READ_VREG(HEVC_STREAM_LEVEL),
 		READ_VREG(HEVC_STREAM_WR_PTR),
 		READ_VREG(HEVC_STREAM_RD_PTR),
-		READ_PARSER_REG(PARSER_VIDEO_RP),
-		READ_PARSER_REG(PARSER_VIDEO_WP),
+		STBUF_READ(&vdec->vbuf, get_rp),
+		STBUF_READ(&vdec->vbuf, get_wp),
 		hevc->start_shift_bytes
 		);
 	if ((get_dbg_flag(hevc) & PRINT_FRAMEBASE_DATA) &&
@@ -13153,10 +13162,10 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		READ_VREG(HEVC_STREAM_RD_PTR));
 	hevc_print(hevc, 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	hevc_print(hevc, 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
 
 	if (input_frame_based(vdec) &&
 		(get_dbg_flag(hevc) & PRINT_FRAMEBASE_DATA)

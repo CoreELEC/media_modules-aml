@@ -39,9 +39,10 @@
 
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include <linux/amlogic/media/utils/vdec_reg.h>
-#include "streambuf_reg.h"
-#include "streambuf.h"
+#include "../amports/streambuf_reg.h"
+#include "../amports/streambuf.h"
 #include <linux/amlogic/media/utils/amports_config.h>
+#include <linux/amlogic/media/frame_sync/tsync_pcr.h>
 
 #include "tsdemux.h"
 #include <linux/reset.h>
@@ -385,6 +386,7 @@ static int reset_pcr_regs(void)
 {
 	u32 pcr_num;
 	u32 pcr_regs = 0;
+
 	if (curr_pcr_id >= 0x1FFF)
 		return 0;
 	/* set paramater to fetch pcr */
@@ -1200,5 +1202,54 @@ void tsdemux_tsync_func_init(void)
 	register_tsync_callbackfunc(
 		TSYNC_STBUF_SIZE, (void *)(stbuf_size));
 }
+
+static int tsparser_stbuf_init(struct stream_buf_s *stbuf,
+			       struct vdec_s *vdec)
+{
+	int ret = -1;
+
+	ret = stbuf_init(stbuf, vdec);
+	if (ret)
+		goto out;
+
+	ret = tsdemux_init(stbuf->pars.vid,
+			   stbuf->pars.aid,
+			   stbuf->pars.sid,
+			   stbuf->pars.pcrid,
+			   stbuf->is_hevc,
+			   vdec);
+	if (ret)
+		goto out;
+
+	tsync_pcr_start();
+
+	stbuf->flag |= BUF_FLAG_IN_USE;
+out:
+	return ret;
+}
+
+static void tsparser_stbuf_release(struct stream_buf_s *stbuf)
+{
+	tsync_pcr_stop();
+
+	tsdemux_release();
+
+	stbuf_release(stbuf);
+}
+
+static struct stream_buf_ops tsparser_stbuf_ops = {
+	.init	= tsparser_stbuf_init,
+	.release = tsparser_stbuf_release,
+	.get_wp	= parser_get_wp,
+	.set_wp	= parser_set_wp,
+	.get_rp	= parser_get_rp,
+	.set_rp	= parser_set_rp,
+};
+
+struct stream_buf_ops *get_tsparser_stbuf_ops(void)
+{
+	return &tsparser_stbuf_ops;
+}
+EXPORT_SYMBOL(get_tsparser_stbuf_ops);
 
 

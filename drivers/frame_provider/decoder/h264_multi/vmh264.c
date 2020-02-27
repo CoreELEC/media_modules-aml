@@ -49,7 +49,7 @@
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
 #include "../h264/vh264.h"
-#include "../../../stream_input/parser/streambuf.h"
+#include "../../../stream_input/amports/streambuf.h"
 #include <linux/delay.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/decoder_mmu_box.h"
@@ -6771,10 +6771,10 @@ static void vmh264_dump_state(struct vdec_s *vdec)
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 	dpb_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	dpb_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
 
 	if (input_frame_based(vdec) &&
 		dpb_is_debug(DECODE_ID(hw),
@@ -8633,8 +8633,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = READ_PARSER_REG(PARSER_VIDEO_RP);
-		wp = READ_PARSER_REG(PARSER_VIDEO_WP);
+		rp = STBUF_READ(&vdec->vbuf, get_rp);
+		wp = STBUF_READ(&vdec->vbuf, get_wp);
 		if (wp < rp)
 			level = vdec->input.size + wp - rp;
 		else
@@ -8665,8 +8665,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	}
 	if (hw->next_again_flag &&
 		(!vdec_frame_based(vdec))) {
-		u32 parser_wr_ptr =
-			READ_PARSER_REG(PARSER_VIDEO_WP);
+		u32 parser_wr_ptr = STBUF_READ(&vdec->vbuf, get_wp);
 		if (parser_wr_ptr >= hw->pre_parser_wr_ptr &&
 			(parser_wr_ptr - hw->pre_parser_wr_ptr) <
 			again_threshold) {
@@ -8791,9 +8790,11 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			kfifo_len(&hw->display_q));
 	}
 
-	hw->pre_parser_wr_ptr =
-		READ_PARSER_REG(PARSER_VIDEO_WP);
-	hw->next_again_flag = 0;
+	if (vdec_stream_based(vdec)) {
+		hw->pre_parser_wr_ptr =
+			STBUF_READ(&vdec->vbuf, get_wp);
+		hw->next_again_flag = 0;
+	}
 
 	if (hw->reset_bufmgr_flag ||
 		((error_proc_policy & 0x40) &&
@@ -8887,8 +8888,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(VLD_MEM_VIFIFO_WP),
 			READ_VREG(VLD_MEM_VIFIFO_RP),
-			READ_PARSER_REG(PARSER_VIDEO_RP),
-			READ_PARSER_REG(PARSER_VIDEO_WP),
+			STBUF_READ(&vdec->vbuf, get_rp),
+			STBUF_READ(&vdec->vbuf, get_wp),
 			size);
 
 	start_process_time(hw);

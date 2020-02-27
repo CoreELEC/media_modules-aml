@@ -43,7 +43,7 @@
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/amvdec.h"
 #include "vh264.h"
-#include "../../../stream_input/parser/streambuf.h"
+#include "../../../stream_input/amports/streambuf.h"
 #include <linux/delay.h>
 #include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/tee.h>

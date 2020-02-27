@@ -30,7 +30,7 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/utils/vdec_reg.h>
-#include "../../../stream_input/parser/streambuf_reg.h"
+#include "../../../stream_input/amports/streambuf_reg.h"
 #include "../utils/amvdec.h"
 #include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
@@ -3042,7 +3042,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		hw->again_flag &&
 		(!vdec_frame_based(vdec))) {
 		u32 parser_wr_ptr =
-			READ_PARSER_REG(PARSER_VIDEO_WP);
+			STBUF_READ(&vdec->vbuf, get_rp);
 		if (parser_wr_ptr >= hw->pre_parser_wr_ptr &&
 			(parser_wr_ptr - hw->pre_parser_wr_ptr) <
 			again_threshold) {
@@ -3380,8 +3380,8 @@ static void check_timer_func(unsigned long arg)
 				READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 				READ_VREG(VLD_MEM_VIFIFO_WP),
 				READ_VREG(VLD_MEM_VIFIFO_RP),
-				READ_PARSER_REG(PARSER_VIDEO_RP),
-				READ_PARSER_REG(PARSER_VIDEO_WP));
+				STBUF_READ(&vdec->vbuf, get_rp),
+				STBUF_READ(&vdec->vbuf, get_wp));
 		}
 	}
 
@@ -3478,9 +3478,10 @@ void (*callback)(struct vdec_s *, void *),
 	int size, ret;
 	/* reset everything except DOS_TOP[1] and APB_CBUS[0]*/
 
-	hw->pre_parser_wr_ptr =
-		READ_PARSER_REG(PARSER_VIDEO_WP);
-
+	if (vdec_stream_based(vdec)) {
+		hw->pre_parser_wr_ptr =
+			STBUF_READ(&vdec->vbuf, get_wp);
+	}
 #if 1
 #if DEBUG_MULTI_FLAG > 0
 	if (hw->decode_pic_count == 0) {
@@ -3574,8 +3575,8 @@ void (*callback)(struct vdec_s *, void *),
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(VLD_MEM_VIFIFO_WP),
 			READ_VREG(VLD_MEM_VIFIFO_RP),
-			READ_PARSER_REG(PARSER_VIDEO_RP),
-			READ_PARSER_REG(PARSER_VIDEO_WP),
+			STBUF_READ(&vdec->vbuf, get_rp),
+			STBUF_READ(&vdec->vbuf, get_wp),
 			size);
 
 
@@ -3785,10 +3786,10 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 	debug_print(hw, 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	debug_print(hw, 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
 
 	if (vdec_frame_based(vdec) &&
 		(debug &	PRINT_FRAMEBASE_DATA)

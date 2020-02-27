@@ -2,8 +2,11 @@ obj-m	+=	 stream_input.o
 
 stream_input-objs	+=	amports/amstream.o
 stream_input-objs	+=	amports/adec.o
-stream_input-objs	+=	parser/thread_rw.o
-stream_input-objs	+=	parser/streambuf.o
+stream_input-objs	+=	amports/thread_rw.o
+stream_input-objs	+=	amports/streambuf.o
+stream_input-objs	+=	amports/stream_buffer_base.o
+stream_input-objs	+=	amports/stream_buffer_interface.o
+
 stream_input-objs	+=	parser/esparser.o
 stream_input-objs	+=	parser/tsdemux.o
 stream_input-objs	+=	parser/psparser.o

@@ -45,7 +45,7 @@
 #include <linux/vmalloc.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include "../streambuf.h"
+#include "../../amports/streambuf.h"
 #include "c_stb_define.h"
 #include "c_stb_regs_define.h"
 #include "aml_dvb.h"

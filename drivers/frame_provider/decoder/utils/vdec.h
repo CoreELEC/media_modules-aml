@@ -31,6 +31,8 @@
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_VDEC
 #include <trace/events/meson_atrace.h>
 /*#define CONFIG_AM_VDEC_DV*/
+#include "../../../stream_input/amports/streambuf.h"
+#include "../../../stream_input/amports/stream_buffer_base.h"
 
 #include "vdec_input.h"
 #include "frame_check.h"
@@ -178,6 +180,7 @@ struct vdec_s {
 	struct vdec_s *master;
 	struct vdec_s *slave;
 	struct stream_port_s *port;
+	struct stream_buf_s vbuf;
 	int status;
 	int next_status;
 	int type;
@@ -459,5 +462,8 @@ void vdec_set_timestamp(struct vdec_s *vdec, u64 timestamp);
 extern u32  vdec_get_frame_vdec(struct vdec_s *vdec,  struct vframe_counter_s *tmpbuf);
 
 int vdec_get_frame_num(struct vdec_s *vdec);
+
+int show_stream_buffer_status(char *buf,
+	int (*callback) (struct stream_buf_s *, char *));
 
 #endif				/* VDEC_H */

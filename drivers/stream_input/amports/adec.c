@@ -25,7 +25,7 @@
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/registers/register.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include "../parser/streambuf.h"
+#include "../amports/streambuf.h"
 #include <linux/module.h>
 #include <linux/of.h>
 #include "amports_priv.h"

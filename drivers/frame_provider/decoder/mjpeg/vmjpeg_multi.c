@@ -721,10 +721,10 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
 	if (input_frame_based(vdec) &&
 		debug_enable & PRINT_FRAMEBASE_DATA
 		) {
@@ -802,7 +802,7 @@ static void check_timer_func(unsigned long arg)
 		"%s: %d,buftl=%x:%x:%x:%x\n",
 		__func__, __LINE__,
 		READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
-		READ_PARSER_REG(PARSER_VIDEO_WP),
+		STBUF_READ(&vdec->vbuf, get_wp),
 		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 		READ_VREG(VLD_MEM_VIFIFO_WP));
 
@@ -1151,8 +1151,8 @@ static unsigned long run_ready(struct vdec_s *vdec,
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = READ_PARSER_REG(PARSER_VIDEO_RP);
-		wp = READ_PARSER_REG(PARSER_VIDEO_WP);
+		rp = STBUF_READ(&vdec->vbuf, get_rp);
+		wp = STBUF_READ(&vdec->vbuf, get_wp);
 		if (wp < rp)
 			level = vdec->input.size + wp - rp;
 		else
@@ -1205,7 +1205,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		"%s: %d,r=%d,buftl=%x:%x:%x\n",
 			__func__, __LINE__, ret,
 			READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
-			READ_PARSER_REG(PARSER_VIDEO_WP),
+			STBUF_READ(&vdec->vbuf, get_rp),
 			READ_VREG(VLD_MEM_VIFIFO_WP));
 
 		hw->dec_result = DEC_RESULT_AGAIN;

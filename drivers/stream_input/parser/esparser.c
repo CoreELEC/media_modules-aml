@@ -35,11 +35,11 @@
 
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include <linux/amlogic/media/utils/vdec_reg.h>
-#include "streambuf_reg.h"
-#include "streambuf.h"
+#include "../amports/streambuf_reg.h"
+#include "../amports/streambuf.h"
 #include "esparser.h"
 #include "../amports/amports_priv.h"
-#include "thread_rw.h"
+#include "../amports/thread_rw.h"
 
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 
@@ -153,8 +153,7 @@ static inline u32 buf_wp(u32 type)
 	return wp;
 }
 
-static ssize_t _esparser_write(const char __user *buf,
-		size_t count, struct stream_buf_s *stbuf, int isphybuf)
+static int esparser_stbuf_write(struct stream_buf_s *stbuf, const u8 *buf, u32 count)
 {
 	size_t r = count;
 	const char __user *p = buf;
@@ -179,7 +178,7 @@ static ssize_t _esparser_write(const char __user *buf,
 	wp = buf_wp(type);
 
 	if (r > 0) {
-		if (isphybuf)
+		if (stbuf->is_phybuf)
 			len = count;
 		else {
 			len = min_t(size_t, r, (size_t) FETCHBUF_SIZE);
@@ -207,7 +206,7 @@ static ssize_t _esparser_write(const char __user *buf,
 				PARSER_AUTOSEARCH, ES_CTRL_BIT,
 				ES_CTRL_WID);
 
-		if (isphybuf) {
+		if (stbuf->is_phybuf) {
 			u32 buf_32 = (unsigned long)buf & 0xffffffff;
 			WRITE_PARSER_REG(PARSER_FETCH_ADDR, buf_32);
 		} else {
@@ -217,7 +216,7 @@ static ssize_t _esparser_write(const char __user *buf,
 		}
 
 		search_done = 0;
-		if (!(isphybuf & TYPE_PATTERN)) {
+		if (!(stbuf->is_phybuf & TYPE_PATTERN)) {
 			WRITE_PARSER_REG(PARSER_FETCH_CMD,
 				(7 << FETCH_ENDIAN) | len);
 			WRITE_PARSER_REG(PARSER_FETCH_ADDR, search_pattern_map);
@@ -238,7 +237,7 @@ static ssize_t _esparser_write(const char __user *buf,
 			} else {
 				pr_info("W Timeout, but fetch ok,");
 				pr_info("type %d len=%d,wpdiff=%d, isphy %x\n",
-				 type, len, wp - buf_wp(type), isphybuf);
+				 type, len, wp - buf_wp(type), stbuf->is_phybuf);
 			}
 		} else if (ret < 0)
 			return -ERESTARTSYS;
@@ -255,6 +254,13 @@ static ssize_t _esparser_write(const char __user *buf,
 
 	return len;
 }
+
+static ssize_t _esparser_write(const char __user *buf,
+		size_t count, struct stream_buf_s *stbuf, int isphybuf)
+{
+	return esparser_stbuf_write(stbuf, buf, count);
+}
+
 
 static ssize_t _esparser_write_s(const char __user *buf,
 			size_t count, struct stream_buf_s *stbuf)
@@ -509,6 +515,11 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 			/* set stream_fetch_enable */
 			SET_VREG_MASK(HEVC_STREAM_CONTROL, 1);
 
+			if (buf->no_parser) {
+				/*set endian for non-parser mode */
+				SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+			}
+
 			/* set stream_buffer_hole with 256 bytes */
 			SET_VREG_MASK(HEVC_STREAM_FIFO_CTL, (1 << 29));
 		} else {
@@ -523,6 +534,7 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 			vdec->input.start);
 		WRITE_PARSER_REG(PARSER_VIDEO_END_PTR,
 			vdec->input.start + vdec->input.size - 8);
+
 		if (vdec_single(vdec) || (vdec_get_debug_flags() & 0x2)) {
 			if (vdec_get_debug_flags() & 0x2)
 				pr_info("%s %d\n", __func__, __LINE__);
@@ -611,6 +623,7 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 					   PARSER_INT_HOST_EN_BIT);
 	}
 	mutex_unlock(&esparser_mutex);
+
 	if (!(vdec_get_debug_flags() & 1) &&
 		!codec_mm_video_tvp_enabled()) {
 		int block_size = (buf->type == BUF_TYPE_AUDIO) ?
@@ -624,6 +637,7 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 			(buf->type == BUF_TYPE_AUDIO) ? 1 : 0);
 			/*manul mode for audio*/
 	}
+
 	return 0;
 
 Err_2:
@@ -908,6 +922,9 @@ ssize_t esparser_write_ex(struct file *file,
 
 	mutex_lock(&esparser_mutex);
 
+	if (flags & 1)
+		stbuf->is_phybuf = true;
+
 	if (stbuf->type == BUF_TYPE_AUDIO)
 		r = _esparser_write_s(buf, len, stbuf);
 	else
@@ -982,3 +999,43 @@ void esparser_sub_reset(void)
 
 	spin_unlock_irqrestore(&lock, flags);
 }
+
+static int esparser_stbuf_init(struct stream_buf_s *stbuf,
+			       struct vdec_s *vdec)
+{
+	int ret = -1;
+
+	ret = stbuf_init(stbuf, vdec);
+	if (ret)
+		goto out;
+
+	ret = esparser_init(stbuf, vdec);
+	if (!ret)
+		stbuf->flag |= BUF_FLAG_IN_USE;
+out:
+	return ret;
+}
+
+static void esparser_stbuf_release(struct stream_buf_s *stbuf)
+{
+	esparser_release(stbuf);
+
+	stbuf_release(stbuf);
+}
+
+static struct stream_buf_ops esparser_stbuf_ops = {
+	.init	= esparser_stbuf_init,
+	.release = esparser_stbuf_release,
+	.write	= esparser_stbuf_write,
+	.get_wp	= parser_get_wp,
+	.set_wp	= parser_set_wp,
+	.get_rp	= parser_get_rp,
+	.set_rp	= parser_set_rp,
+};
+
+struct stream_buf_ops *get_esparser_stbuf_ops(void)
+{
+	return &esparser_stbuf_ops;
+}
+EXPORT_SYMBOL(get_esparser_stbuf_ops);
+

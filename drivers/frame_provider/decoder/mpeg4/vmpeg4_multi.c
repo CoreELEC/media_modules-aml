@@ -1800,10 +1800,11 @@ static void vmpeg4_dump_state(struct vdec_s *vdec)
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
+
 	if (vdec_frame_based(vdec) &&
 		debug_enable & PRINT_FRAMEBASE_DATA) {
 		int jj;
@@ -2182,8 +2183,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = READ_PARSER_REG(PARSER_VIDEO_RP);
-		wp = READ_PARSER_REG(PARSER_VIDEO_WP);
+		rp = STBUF_READ(&vdec->vbuf, get_rp);
+		wp = STBUF_READ(&vdec->vbuf, get_wp);
 		if (wp < rp)
 			level = vdec->input.size + wp - rp;
 		else
@@ -2329,8 +2330,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 		READ_VREG(VLD_MEM_VIFIFO_WP),
 		READ_VREG(VLD_MEM_VIFIFO_RP),
-		READ_PARSER_REG(PARSER_VIDEO_RP),
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_rp),
+		STBUF_READ(&vdec->vbuf, get_wp));
 
 	hw->dec_result = DEC_RESULT_NONE;
 	if (vdec->mc_loaded) {

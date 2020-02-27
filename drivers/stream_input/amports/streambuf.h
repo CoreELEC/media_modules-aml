@@ -38,8 +38,28 @@
 #define USER_DATA_SIZE  (8*1024)
 
 struct vdec_s;
+struct stream_buf_s;
+
+struct parser_args {
+	u32 vid;
+	u32 aid;
+	u32 sid;
+	u32 pcrid;
+};
+
+struct stream_buf_ops {
+	int (*init) (struct stream_buf_s *, struct vdec_s *);
+	void (*release) (struct stream_buf_s *);
+	int (*write) (struct stream_buf_s *, const u8 *, u32);
+	u32 (*get_wp) (struct stream_buf_s *);
+	void (*set_wp) (struct stream_buf_s *, u32);
+	u32 (*get_rp) (struct stream_buf_s *);
+	void (*set_rp) (struct stream_buf_s *, u32);
+};
 
 struct stream_buf_s {
+	int id;
+	u8 name[16];
 	s32 flag;
 	u32 type;
 	unsigned long buf_start;
@@ -60,6 +80,14 @@ struct stream_buf_s {
 	void *write_thread;
 	int for_4k;
 	bool is_secure;
+	bool is_multi_inst;
+	bool no_parser;
+	bool is_phybuf;
+	bool is_hevc;
+	ulong ext_buf_addr;
+	atomic_t payload;
+	struct parser_args pars;
+	struct stream_buf_ops *ops;
 } /*stream_buf_t */;
 
 struct stream_port_s {
@@ -85,6 +113,7 @@ struct stream_port_s {
 	u32 aid;
 	u32 sid;
 	u32 pcrid;
+	bool is_4k;
 } /*stream_port_t */;
 enum drm_level_e {
 	DRM_LEVEL1 = 1,
@@ -121,10 +150,9 @@ extern u32 stbuf_rp(struct stream_buf_s *buf);
 extern u32 stbuf_space(struct stream_buf_s *buf);
 extern u32 stbuf_size(struct stream_buf_s *buf);
 extern u32 stbuf_canusesize(struct stream_buf_s *buf);
-extern s32 stbuf_init(struct stream_buf_s *buf, struct vdec_s *vdec,
-		bool is_multi);
+extern s32 stbuf_init(struct stream_buf_s *buf, struct vdec_s *vdec);
 extern s32 stbuf_wait_space(struct stream_buf_s *stream_buf, size_t count);
-extern void stbuf_release(struct stream_buf_s *buf, bool is_multi);
+extern void stbuf_release(struct stream_buf_s *buf);
 extern int stbuf_change_size(struct stream_buf_s *buf, int size,
 				bool is_secure);
 extern int stbuf_fetch_init(void);
@@ -137,5 +165,10 @@ extern u32 stbuf_userdata_start_get(void);
 extern struct stream_buf_s *get_stream_buffer(int id);
 
 extern void stbuf_vdec2_init(struct stream_buf_s *buf);
+
+u32 parser_get_wp(struct stream_buf_s *vb);
+void parser_set_wp(struct stream_buf_s *vb, u32 val);
+u32 parser_get_rp(struct stream_buf_s *vb);
+void parser_set_rp(struct stream_buf_s *vb, u32 val);
 
 #endif /* STREAMBUF_H */

@@ -10463,10 +10463,10 @@ static void vp9_dump_state(struct vdec_s *vdec)
 		READ_VREG(HEVC_STREAM_RD_PTR));
 	vp9_print(pbi, 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	vp9_print(pbi, 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
 
 	if (input_frame_based(vdec) &&
 		(debug & PRINT_FLAG_VDEC_DATA)

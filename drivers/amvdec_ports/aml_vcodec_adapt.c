@@ -32,8 +32,8 @@
 #include <linux/amlogic/media/utils/aformat.h>
 #include <linux/amlogic/media/registers/register.h>
 #include "../stream_input/amports/adec.h"
-#include "../stream_input/parser/streambuf.h"
-#include "../stream_input/parser/streambuf_reg.h"
+#include "../stream_input/amports/streambuf.h"
+#include "../stream_input/amports/streambuf_reg.h"
 #include "../stream_input/parser/tsdemux.h"
 #include "../stream_input/parser/psparser.h"
 #include "../stream_input/parser/esparser.h"
@@ -202,7 +202,7 @@ static void change_vbufsize(struct vdec_s *vdec,
 		return;
 	}
 
-	if (pvbuf->for_4k) {
+	if (vdec->port->is_4k) {
 		pvbuf->buf_size = def_4k_vstreambuf_sizeM * SZ_1M;
 
 		if (vdec->port_flag & PORT_FLAG_DRM)
@@ -246,7 +246,7 @@ static void audio_component_release(struct stream_port_s *port,
 		case 3:
 			adec_release(port->vformat);
 		case 2:
-			stbuf_release(pbuf, false);
+			stbuf_release(pbuf);
 		case 1:
 			;
 	}
@@ -262,7 +262,7 @@ static int audio_component_init(struct stream_port_s *port,
 		return 0;
 	}
 
-	r = stbuf_init(pbuf, NULL, false);
+	r = stbuf_init(pbuf, NULL);
 	if (r < 0)
 		return r;
 
@@ -293,7 +293,6 @@ struct stream_buf_s *pbuf, int release_num)
 	struct vdec_s *vdec = ada_ctx->vdec;
 
 	struct vdec_s *slave = NULL;
-	bool is_multidec = !vdec_single(vdec);
 
 	switch (release_num) {
 	default:
@@ -315,7 +314,7 @@ struct stream_buf_s *pbuf, int release_num)
 
 	case 2: {
 		if ((port->type & PORT_TYPE_FRAME) == 0)
-		stbuf_release(pbuf, is_multidec);
+		stbuf_release(pbuf);
 	}
 
 	case 1:
@@ -338,15 +337,15 @@ static int video_component_init(struct stream_port_s *port,
 
 	if ((vdec->sys_info->height * vdec->sys_info->width) > 1920 * 1088
 		|| port->vformat == VFORMAT_H264_4K2K) {
-		pbuf->for_4k = 1;
+		port->is_4k = true;
 		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX
 				&& port->vformat == VFORMAT_H264)
 			vdec_poweron(VDEC_HEVC);
 	} else
-		pbuf->for_4k = 0;
+		port->is_4k = false;
 
 	if (port->type & PORT_TYPE_FRAME) {
-		ret = vdec_init(vdec, pbuf->for_4k);
+		ret = vdec_init(vdec, port->is_4k);
 		if (ret < 0) {
 			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "failed\n");
 			video_component_release(port, pbuf, 2);
@@ -367,14 +366,14 @@ static int video_component_init(struct stream_port_s *port,
 		}
 	}
 
-	ret = stbuf_init(pbuf, vdec, false);
+	ret = stbuf_init(pbuf, vdec);
 	if (ret < 0) {
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "stbuf_init failed\n");
 		return ret;
 	}
 
 	/* todo: set path based on port flag */
-	ret = vdec_init(vdec, pbuf->for_4k);
+	ret = vdec_init(vdec, port->is_4k);
 	if (ret < 0) {
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "vdec_init failed\n");
 		video_component_release(port, pbuf, 2);
@@ -382,7 +381,7 @@ static int video_component_init(struct stream_port_s *port,
 	}
 
 	if (vdec_dual(vdec)) {
-		ret = vdec_init(vdec->slave, pbuf->for_4k);
+		ret = vdec_init(vdec->slave, port->is_4k);
 		if (ret < 0) {
 			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "vdec_init failed\n");
 			video_component_release(port, pbuf, 2);
@@ -543,7 +542,7 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 
 	if ((vdec->port->type & PORT_TYPE_VIDEO)
 		&& (vdec->port_flag & PORT_FLAG_VFORMAT)) {
-		pvbuf->for_4k = 0;
+		vdec->port->is_4k = false;
 		if (has_hevc_vdec()) {
 			if (vdec->port->vformat == VFORMAT_HEVC
 				|| vdec->port->vformat == VFORMAT_VP9)

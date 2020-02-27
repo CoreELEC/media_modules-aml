@@ -2572,10 +2572,11 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 	debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
+
 	if (vdec_frame_based(vdec) &&
 		debug_enable & PRINT_FRAMEBASE_DATA
 		) {
@@ -2950,8 +2951,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = READ_PARSER_REG(PARSER_VIDEO_RP);
-		wp = READ_PARSER_REG(PARSER_VIDEO_WP);
+		rp = STBUF_READ(&vdec->vbuf, get_rp);
+		wp = STBUF_READ(&vdec->vbuf, get_wp);
 		if (wp < rp)
 			level = vdec->input.size + wp - rp;
 		else
@@ -2967,7 +2968,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		if (hw->next_again_flag&&
 			(!vdec_frame_based(vdec))) {
 			u32 parser_wr_ptr =
-				READ_PARSER_REG(PARSER_VIDEO_WP);
+				STBUF_READ(&vdec->vbuf, get_wp);
 			if (parser_wr_ptr >= hw->pre_parser_wr_ptr &&
 				(parser_wr_ptr - hw->pre_parser_wr_ptr) <
 				again_threshold) {
@@ -3056,9 +3057,11 @@ void (*callback)(struct vdec_s *, void *),
 	hw->vdec_cb = callback;
 
 #ifdef AGAIN_HAS_THRESHOLD
+	if (vdec_stream_based(vdec)) {
 		hw->pre_parser_wr_ptr =
-			READ_PARSER_REG(PARSER_VIDEO_WP);
+			STBUF_READ(&vdec->vbuf, get_wp);
 		hw->next_again_flag = 0;
+	}
 #endif
 
 	size = vdec_prepare_input(vdec, &hw->chunk);
@@ -3136,8 +3139,8 @@ void (*callback)(struct vdec_s *, void *),
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(VLD_MEM_VIFIFO_WP),
 			READ_VREG(VLD_MEM_VIFIFO_RP),
-			READ_PARSER_REG(PARSER_VIDEO_RP),
-			READ_PARSER_REG(PARSER_VIDEO_WP),
+			STBUF_READ(&vdec->vbuf, get_rp),
+			STBUF_READ(&vdec->vbuf, get_wp),
 			size);
 
 	if (vdec->mvfrm && hw->chunk)

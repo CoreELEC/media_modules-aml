@@ -22,7 +22,7 @@
 
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/amstream.h>
-#include "../stream_input/parser/streambuf.h"
+#include "../stream_input/amports/streambuf.h"
 #include "aml_vcodec_drv.h"
 
 struct aml_vdec_adapt {
