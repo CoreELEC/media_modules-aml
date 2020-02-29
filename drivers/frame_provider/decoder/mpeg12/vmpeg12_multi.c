@@ -1500,15 +1500,21 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	u32 index = pic->index;
 	u32 info = pic->buffer_info;
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	ulong nv_order = VIDTYPE_VIU_NV21;
+
+	/* swap uv */
+	if (hw->is_used_v4l) {
+		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
+			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
+			nv_order = VIDTYPE_VIU_NV12;
+	}
 
 	user_data_ready_notify(hw, pic->pts, pic->pts_valid);
-#ifdef NV21
-	type = VIDTYPE_VIU_NV21;
-#endif
 
 	if (hw->frame_prog & PICINFO_PROG) {
 		field_num = 1;
-		type |= VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
+		type |= VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD | nv_order;
 	} else {
 #ifdef INTERLACE_SEQ_ALWAYS
 		/* once an interlace seq, force interlace, to make di easy. */
@@ -1547,7 +1553,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			vf->duration_pulldown = (field_num == 3) ?
 				(vf->duration >> 1):0;
 			if (i > 0)
-				type = VIDTYPE_VIU_NV21;
+				type = nv_order;
 			if (i == 1) /* second field*/
 				type |= (first_field_type == VIDTYPE_INTERLACE_TOP) ?
 					VIDTYPE_INTERLACE_BOTTOM : VIDTYPE_INTERLACE_TOP;

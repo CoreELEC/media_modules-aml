@@ -5376,8 +5376,8 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 
 	/* swap uv */
 	if (hevc->is_used_v4l) {
-		if ((v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21) ||
-			(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
+		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
 			data32 &= ~(1 << 8); /* NV21 */
 		else
 			data32 |= (1 << 8); /* NV12 */
@@ -5419,8 +5419,8 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 
 	/* swap uv */
 	if (hevc->is_used_v4l) {
-		if ((v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21) ||
-			(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
+		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
 			data32 |= (1 << 12); /* NV21 */
 		else
 			data32 &= ~(1 << 12); /* NV12 */
@@ -8663,7 +8663,16 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	struct vframe_s *vf = NULL;
 	int stream_offset = pic->stream_offset;
 	unsigned short slice_type = pic->slice_type;
+	ulong nv_order = VIDTYPE_VIU_NV21;
 	u32 frame_size = 0;
+	struct aml_vcodec_ctx * v4l2_ctx = hevc->v4l2_ctx;
+
+	/* swap uv */
+	if (hevc->is_used_v4l) {
+		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
+			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
+			nv_order = VIDTYPE_VIU_NV12;
+	}
 
 	if (force_disp_pic_index & 0x100) {
 		/*recycle directly*/
@@ -8823,7 +8832,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		}
 		if (pic->double_write_mode) {
 			vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
-			vf->type |= VIDTYPE_VIU_NV21;
+			vf->type |= nv_order;
 
 			if ((pic->double_write_mode == 3) &&
 				(!(IS_8K_SIZE(pic->width, pic->height)))) {
@@ -8889,7 +8898,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			vf->bitdepth |= BITDEPTH_SAVING_MODE;
 #else
 		vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
-		vf->type |= VIDTYPE_VIU_NV21;
+		vf->type |= nv_order;
 		vf->canvas0Addr = vf->canvas1Addr = spec2canvas(pic);
 #endif
 		set_frame_info(hevc, vf, pic);
@@ -8990,14 +8999,14 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 			if (pic->pic_struct == 3) {
 				vf->type = VIDTYPE_INTERLACE_TOP
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 				vf2->type = VIDTYPE_INTERLACE_BOTTOM
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 			} else {
 				vf->type = VIDTYPE_INTERLACE_BOTTOM
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 				vf2->type = VIDTYPE_INTERLACE_TOP
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 			}
 			hevc->vf_pre_count++;
 			decoder_do_frame_check(vdec, vf);
@@ -9035,18 +9044,18 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 			if (pic->pic_struct == 5) {
 				vf->type = VIDTYPE_INTERLACE_TOP
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 				vf2->type = VIDTYPE_INTERLACE_BOTTOM
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 				vf3->type = VIDTYPE_INTERLACE_TOP
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 			} else {
 				vf->type = VIDTYPE_INTERLACE_BOTTOM
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 				vf2->type = VIDTYPE_INTERLACE_TOP
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 				vf3->type = VIDTYPE_INTERLACE_BOTTOM
-				| VIDTYPE_VIU_NV21;
+				| nv_order;
 			}
 			hevc->vf_pre_count++;
 			decoder_do_frame_check(vdec, vf);
@@ -9082,12 +9091,12 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			vf->height <<= 1;
 			if (pic->pic_struct == 9) {
 				vf->type = VIDTYPE_INTERLACE_TOP
-				| VIDTYPE_VIU_NV21 | VIDTYPE_VIU_FIELD;
+				| nv_order | VIDTYPE_VIU_FIELD;
 				process_pending_vframe(hevc,
 				hevc->pre_bot_pic, 0);
 			} else {
 				vf->type = VIDTYPE_INTERLACE_BOTTOM |
-				VIDTYPE_VIU_NV21 | VIDTYPE_VIU_FIELD;
+				nv_order | VIDTYPE_VIU_FIELD;
 				vf->index = (pic->index << 8) | 0xff;
 				process_pending_vframe(hevc,
 				hevc->pre_top_pic, 1);
@@ -9118,10 +9127,10 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			vf->height <<= 1;
 			if (pic->pic_struct == 11)
 				vf->type = VIDTYPE_INTERLACE_TOP |
-				VIDTYPE_VIU_NV21 | VIDTYPE_VIU_FIELD;
+				nv_order | VIDTYPE_VIU_FIELD;
 			else {
 				vf->type = VIDTYPE_INTERLACE_BOTTOM |
-				VIDTYPE_VIU_NV21 | VIDTYPE_VIU_FIELD;
+				nv_order | VIDTYPE_VIU_FIELD;
 				vf->index = (pic->index << 8) | 0xff;
 			}
 			decoder_do_frame_check(vdec, vf);
@@ -9155,14 +9164,14 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			case 1:
 				vf->height <<= 1;
 				vf->type = VIDTYPE_INTERLACE_TOP |
-				VIDTYPE_VIU_NV21 | VIDTYPE_VIU_FIELD;
+				nv_order | VIDTYPE_VIU_FIELD;
 				process_pending_vframe(hevc, pic, 1);
 				hevc->pre_top_pic = pic;
 				break;
 			case 2:
 				vf->height <<= 1;
 				vf->type = VIDTYPE_INTERLACE_BOTTOM
-				| VIDTYPE_VIU_NV21
+				| nv_order
 				| VIDTYPE_VIU_FIELD;
 				process_pending_vframe(hevc, pic, 0);
 				hevc->pre_bot_pic = pic;

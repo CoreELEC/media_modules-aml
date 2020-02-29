@@ -2619,6 +2619,8 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
 	struct vframe_s *vf = NULL;
 	int buffer_index = frame->buf_spec_num;
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	ulong nv_order = VIDTYPE_VIU_NV21;
 	int vf_count = 1;
 	int i;
 	int bForceInterlace = 0;
@@ -2629,6 +2631,14 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			__func__, buffer_index);
 		return -1;
 	}
+
+	/* swap uv */
+	if (hw->is_used_v4l) {
+		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
+			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
+			nv_order = VIDTYPE_VIU_NV12;
+	}
+
 	if (force_disp_bufspec_num & 0x100) {
 		/*recycle directly*/
 		if (hw->buffer_spec[frame->buf_spec_num].used != 3 &&
@@ -2790,7 +2800,7 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			if (hw->double_write_mode) {
 				vf->type |= VIDTYPE_PROGRESSIVE
 					| VIDTYPE_VIU_FIELD;
-				vf->type |= VIDTYPE_VIU_NV21;
+				vf->type |= nv_order;
 				if (hw->double_write_mode == 3)
 					vf->type |= VIDTYPE_COMPRESS;
 
@@ -2823,7 +2833,7 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->compHeight = hw->frame_height;
 		} else {
 			vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD |
-				VIDTYPE_VIU_NV21;
+				nv_order;
 
 			vf->canvas0Addr = vf->canvas1Addr =
 			spec2canvas(&hw->buffer_spec[buffer_index]);
@@ -2855,7 +2865,7 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		if (bForceInterlace || is_interlace(frame)) {
 			vf->type =
 				VIDTYPE_INTERLACE_FIRST |
-				VIDTYPE_VIU_NV21;
+				nv_order;
 
 			if (bForceInterlace) {
 				if (frame->frame != NULL && frame->frame->pic_struct == PIC_TOP_BOT) {
@@ -3855,9 +3865,18 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 	struct vframe_s *vf;
 	struct vdec_s *vdec = op_arg;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	ulong nv_order = VIDTYPE_VIU_NV21;
 
 	if (!hw)
 		return NULL;
+
+	/* swap uv */
+	if (hw->is_used_v4l) {
+		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
+			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
+			nv_order = VIDTYPE_VIU_NV12;
+	}
 
 	if (force_disp_bufspec_num & 0x100) {
 		int buffer_index = force_disp_bufspec_num & 0xff;
@@ -3889,7 +3908,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 			if (hw->double_write_mode) {
 				vf->type |= VIDTYPE_PROGRESSIVE
 					| VIDTYPE_VIU_FIELD;
-				vf->type |= VIDTYPE_VIU_NV21;
+				vf->type |= nv_order;
 				if (hw->double_write_mode == 3)
 					vf->type |= VIDTYPE_COMPRESS;
 
@@ -3927,7 +3946,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 			}
 		} else {
 			vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD |
-				VIDTYPE_VIU_NV21;
+				nv_order;
 			vf->canvas0Addr = vf->canvas1Addr =
 			spec2canvas(&hw->buffer_spec[buffer_index]);
 		}
