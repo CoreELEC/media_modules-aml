@@ -215,6 +215,7 @@ struct vdec_mpeg12_hw_s {
 	DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
 	struct vframe_s vfpool[VF_POOL_SIZE];
 	s32 vfbuf_use[DECODE_BUFFER_NUM_MAX];
+	s32 ref_use[DECODE_BUFFER_NUM_MAX];
 	u32 frame_width;
 	u32 frame_height;
 	u32 frame_dur;
@@ -500,7 +501,7 @@ static bool is_enough_free_buffer(struct vdec_mpeg12_hw_s *hw)
 	int i;
 
 	for (i = 0; i < hw->buf_num; i++) {
-		if (hw->vfbuf_use[i] == 0)
+		if ((hw->vfbuf_use[i] == 0) && (hw->ref_use[i] == 0))
 			break;
 	}
 
@@ -512,7 +513,8 @@ static int find_free_buffer(struct vdec_mpeg12_hw_s *hw)
 	int i;
 
 	for (i = 0; i < hw->buf_num; i++) {
-		if (hw->vfbuf_use[i] == 0)
+		if ((hw->vfbuf_use[i] == 0) &&
+			(hw->ref_use[i] == 0))
 			break;
 	}
 
@@ -1595,10 +1597,10 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
 		} else {
-			debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
-				"%s, num: %d(%c), i: %d, pts: %d(%lld), dur: %d, type: %x\n",
-				__func__, hw->disp_num, GET_SLICE_TYPE(info), i,
-				vf->pts, vf->pts_us64, vf->duration, vf->type);
+			debug_print(DECODE_ID(hw), 0,
+				"%s, vf: %lx, num[%d]: %d(%c), dur: %d, type: %x, pts: %d(%lld)\n",
+				__func__, (ulong)vf, i, hw->disp_num, GET_SLICE_TYPE(info),
+				vf->duration, vf->type, vf->pts, vf->pts_us64);
 			hw->disp_num++;
 			if (i == 0) {
 				struct vdec_s *vdec = hw_to_vdec(hw);
@@ -1669,7 +1671,7 @@ static void force_interlace_check(struct vdec_mpeg12_hw_s *hw)
 static int update_reference(struct vdec_mpeg12_hw_s *hw,
 	int index)
 {
-	hw->vfbuf_use[index]++;
+	hw->ref_use[index]++;
 	if (hw->refs[1] == -1) {
 		hw->refs[1] = index;
 		/*
@@ -1682,7 +1684,7 @@ static int update_reference(struct vdec_mpeg12_hw_s *hw,
 		/* second pic do not output */
 		index = hw->buf_num;
 	} else {
-		hw->vfbuf_use[hw->refs[0]]--;
+		hw->ref_use[hw->refs[0]]--;		//old ref0 ununsed
 		hw->refs[0] = hw->refs[1];
 		hw->refs[1] = index;
 		index = hw->refs[0];
@@ -1965,8 +1967,14 @@ static void flush_output(struct vdec_mpeg12_hw_s *hw)
 	if (hw->dec_num < 2)
 		return;
 
-	if (index >= 0 && index < hw->buf_num)
+	if ((hw->refs[0] >= 0) &&
+		(hw->refs[0] < hw->buf_num))
+		hw->ref_use[hw->refs[0]] = 0;
+
+	if (index >= 0 && index < hw->buf_num) {
+		hw->ref_use[index] = 0;
 		prepare_display_buf(hw, &hw->pics[index]);
+	}
 }
 
 static int notify_v4l_eos(struct vdec_s *vdec)
@@ -2159,19 +2167,42 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 	return NULL;
 }
 
+static int mpeg12_valid_vf_check(struct vframe_s *vf, struct vdec_mpeg12_hw_s *hw)
+{
+	int i;
+
+	if (vf == NULL)
+		return 0;
+
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		if (vf == &hw->vfpool[i])
+			return 1;
+	}
+	return 0;
+}
+
 static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)vdec->private;
 
+	if (!mpeg12_valid_vf_check(vf, hw)) {
+		debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+			"invalid vf: %lx\n", (ulong)vf);
+		return ;
+	}
 	hw->vfbuf_use[vf->index]--;
+	if  (hw->vfbuf_use[vf->index] < 0) {
+		debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+			"warn: vf %lx, index %d putback repetitive\n", (ulong)vf, vf->index);
+	}
 	hw->put_num++;
+	debug_print(DECODE_ID(hw), 0,
+		"%s: vf: %lx, index: %d, use: %d\n", __func__, (ulong)vf,
+		vf->index, hw->vfbuf_use[vf->index]);
 	kfifo_put(&hw->newframe_q,
 		(const struct vframe_s *)vf);
-	debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-		"%s: index %d, use %d\n", __func__,
-		vf->index, hw->vfbuf_use[vf->index]);
 }
 
 static int vmpeg_event_cb(int type, void *data, void *private_data)
@@ -2376,7 +2407,8 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 
 	for (i = 0; i < hw->buf_num; i++) {
 		debug_print(DECODE_ID(hw), 0,
-			"index %d, used %d\n", i, hw->vfbuf_use[i]);
+			"index %d, used %d, ref %d\n", i,
+			hw->vfbuf_use[i], hw->ref_use[i]);
 	}
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
@@ -2390,13 +2422,13 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 			state);
 	}
 	debug_print(DECODE_ID(hw), 0,
-	"%s, newq(%d/%d), dispq(%d/%d) vf peek/get/put (%d/%d/%d),drop=%d, buffer_not_ready %d\n",
+	"%s, newq(%d/%d), dispq(%d/%d) vf pre/get/put (%d/%d/%d),drop=%d, buffer_not_ready %d\n",
 	__func__,
 	kfifo_len(&hw->newframe_q),
 	VF_POOL_SIZE,
 	kfifo_len(&hw->display_q),
 	VF_POOL_SIZE,
-	hw->peek_num,
+	hw->disp_num,
 	hw->get_num,
 	hw->put_num,
 	hw->drop_frame_count,
@@ -2670,8 +2702,10 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 		kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 	}
 
-	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++)
+	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
 		hw->vfbuf_use[i] = 0;
+		hw->ref_use[i] = 0;
+	}
 
 
 	if (hw->mm_blk_handle) {
