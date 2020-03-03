@@ -292,7 +292,7 @@ static int refer_buffer_num(struct h265_SPS_t *sps)
 		used_buf_num = sps->temporal_layer[0].num_reorder_pics;
 
 	sps_pic_buf_diff = sps->temporal_layer[0].max_dec_pic_buffering -
-		sps->temporal_layer[0].num_reorder_pics + 1;
+		sps->temporal_layer[0].num_reorder_pics - 1;
 
 	if (sps_pic_buf_diff >= 4)
 		used_buf_num += 1;

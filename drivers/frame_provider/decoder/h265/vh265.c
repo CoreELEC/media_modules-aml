@@ -7546,9 +7546,6 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 	}
 
 	//pr_err("[%s line %d] hevc->gvs=0x%p operation\n",__func__, __LINE__, hevc->gvs);
-	if (hevc->gvs)
-		kfree(hevc->gvs);
-	hevc->gvs = NULL;
 }
 
 static int hevc_local_init(struct hevc_state_s *hevc)
@@ -11817,6 +11814,10 @@ static int vmh265_stop(struct hevc_state_s *hevc)
 
 	hevc_local_uninit(hevc);
 
+	if (hevc->gvs)
+		kfree(hevc->gvs);
+	hevc->gvs = NULL;
+
 	if (use_cma) {
 		hevc->uninit_list = 1;
 		reset_process_time(hevc);
@@ -12859,6 +12860,9 @@ static int amvdec_h265_probe(struct platform_device *pdev)
 		hevc_print(hevc, 0,
 			"\namvdec_h265 init failed.\n");
 		hevc_local_uninit(hevc);
+		if (hevc->gvs)
+			kfree(hevc->gvs);
+		hevc->gvs = NULL;
 		uninit_mmu_buffers(hevc);
 		vfree(hevc);
 		pdata->dec_status = NULL;
@@ -13307,6 +13311,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		hevc_print(hevc, 0,
 			"\namvdec_h265 init failed.\n");
 		hevc_local_uninit(hevc);
+		if (hevc->gvs)
+			kfree(hevc->gvs);
+		hevc->gvs = NULL;
 		uninit_mmu_buffers(hevc);
 		/* devm_kfree(&pdev->dev, (void *)hevc); */
 		if (hevc)
