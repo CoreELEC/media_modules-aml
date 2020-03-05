@@ -22,6 +22,9 @@
 
 #include "../../../common/firmware/firmware_type.h"
 #include <linux/amlogic/media/utils/vformat.h>
+#ifdef CONFIG_AMLOGIC_TEE
+#include <linux/amlogic/tee.h>
+#endif
 
 #define FW_LOAD_FORCE	(0x1)
 #define FW_LOAD_TRY	(0X2)
@@ -37,5 +40,17 @@ extern int get_decoder_firmware_data(enum vformat_e type,
 extern int get_data_from_name(const char *name, char *buf);
 extern int get_firmware_data(unsigned int foramt, char *buf);
 extern int video_fw_reload(int mode);
+
+#ifndef CONFIG_AMLOGIC_TEE
+static inline bool tee_enabled(void) { return false; }
+static inline int tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
+{
+	return -1;
+}
+static inline int tee_load_video_fw(u32 index, u32 vdec)
+{
+	return -1;
+}
+#endif
 
 #endif

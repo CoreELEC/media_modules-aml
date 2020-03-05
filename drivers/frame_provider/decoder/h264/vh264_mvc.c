@@ -31,11 +31,8 @@
 #include <linux/workqueue.h>
 #include <linux/dma-mapping.h>
 #include <linux/atomic.h>
-#include <linux/amlogic/tee.h>
-
 #include <linux/module.h>
 #include <linux/slab.h>
-
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../utils/vdec.h"
@@ -45,7 +42,6 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
-#include <linux/amlogic/tee.h>
 #include "../utils/config_parser.h"
 
 #define TIME_TASK_PRINT_ENABLE  0x100
@@ -82,7 +78,7 @@ static int vh264mvc_event_cb(int type, void *data, void *private_data);
 
 static void vh264mvc_prot_init(void);
 static int vh264mvc_local_init(void);
-static void vh264mvc_put_timer_func(unsigned long arg);
+static void vh264mvc_put_timer_func(struct timer_list *timer);
 
 static const char vh264mvc_dec_id[] = "vh264mvc-dev";
 
@@ -454,7 +450,7 @@ static struct vframe_s *vh264mvc_vf_get(void *op_arg)
 			vf->right_eye.start_y = 0;
 			vf->right_eye.width = vf->width;
 			vf->right_eye.height = vf->height;
-			vf->trans_fmt = TVIN_TFMT_3D_TB;
+			//vf->trans_fmt = TVIN_TFMT_3D_TB;
 
 			if (view_mode == 2) {
 				vf->canvas0Addr =
@@ -1086,10 +1082,8 @@ static void vh264_mvc_set_clk(struct work_struct *work)
 	}
 }
 
-static void vh264mvc_put_timer_func(unsigned long arg)
+static void vh264mvc_put_timer_func(struct timer_list *timer)
 {
-	struct timer_list *timer = (struct timer_list *)arg;
-
 	int valid_frame = 0;
 
 	if (enable_recycle == 0) {
@@ -1376,7 +1370,6 @@ static int vh264mvc_local_init(void)
 	max_dec_frame_buffering[1] = -1;
 	fill_ptr = get_ptr = put_ptr = putting_ptr = 0;
 	dirty_frame_num = 0;
-
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
 		view0_vfbuf_use[i] = 0;
 		view1_vfbuf_use[i] = 0;
@@ -1420,11 +1413,12 @@ static s32 vh264mvc_init(void)
 {
 	int ret = -1;
 	char *buf = vmalloc(0x1000 * 16);
+
 	if (buf == NULL)
 		return -ENOMEM;
 
 	pr_info("\nvh264mvc_init\n");
-	init_timer(&recycle_timer);
+	timer_setup(&recycle_timer, vh264mvc_put_timer_func, 0);
 
 	stat |= STAT_TIMER_INIT;
 
@@ -1514,10 +1508,7 @@ static s32 vh264mvc_init(void)
 
 	stat |= STAT_VF_HOOK;
 
-	recycle_timer.data = (ulong) (&recycle_timer);
-	recycle_timer.function = vh264mvc_put_timer_func;
 	recycle_timer.expires = jiffies + PUT_INTERVAL;
-
 	add_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_ARM;
@@ -1681,32 +1672,16 @@ static int amvdec_h264mvc_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int h264mvc_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int h264mvc_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops h264mvc_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(h264mvc_suspend, h264mvc_resume)
-};
-#endif
 
 static struct platform_driver amvdec_h264mvc_driver = {
 	.probe = amvdec_h264mvc_probe,
 	.remove = amvdec_h264mvc_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &h264mvc_pm_ops,
-#endif
 	}
 };
 

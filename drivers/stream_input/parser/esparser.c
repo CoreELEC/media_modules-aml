@@ -166,7 +166,6 @@ static ssize_t _esparser_write(const char __user *buf,
 	dma_addr_t dma_addr = 0;
 	u32 type = stbuf->type;
 
-	VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
 	if (type == BUF_TYPE_HEVC)
 		parser_type = PARSER_VIDEO;
 	else if (type == BUF_TYPE_VIDEO)
@@ -251,8 +250,6 @@ static ssize_t _esparser_write(const char __user *buf,
 		audio_data_parsed += len;
 
 	threadrw_update_buffer_level(stbuf, len);
-	VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
-
 	return len;
 }
 
@@ -264,8 +261,8 @@ static ssize_t _esparser_write_s(const char __user *buf,
 	u32 len = 0;
 	int ret;
 	u32 wp, buf_start, buf_end;
+	dma_addr_t buf_wp_map;
 	u32 type = stbuf->type;
-	void *vaddr = NULL;
 
 	if (type != BUF_TYPE_AUDIO)
 		BUG();
@@ -275,25 +272,24 @@ static ssize_t _esparser_write_s(const char __user *buf,
 	/*pr_info("write wp 0x%x, count %d, start 0x%x, end 0x%x\n",
 	*		 wp, (u32)count, buf_start, buf_end);*/
 	if (wp + count > buf_end) {
-		if (wp == buf_end) {
-			wp = buf_start;
-			set_buf_wp(type, wp);
-			return -EAGAIN;
-		}
-		vaddr = codec_mm_phys_to_virt(wp);
-		ret = copy_from_user(vaddr, p, buf_end - wp);
+		ret = copy_from_user(codec_mm_phys_to_virt(wp),
+				 p, buf_end - wp);
 		if (ret > 0) {
 			len +=  buf_end - wp - ret;
-			codec_mm_dma_flush(vaddr, len, DMA_TO_DEVICE);
+			buf_wp_map = dma_map_single(amports_get_dma_device(),
+				codec_mm_phys_to_virt(wp), len, DMA_TO_DEVICE);
 			wp += len;
 			pr_info("copy from user not finished\n");
+			dma_unmap_single(NULL, buf_wp_map, len, DMA_TO_DEVICE);
 			set_buf_wp(type, wp);
 			goto end_write;
 		} else if (ret == 0) {
 			len += buf_end - wp;
-			codec_mm_dma_flush(vaddr, len, DMA_TO_DEVICE);
+			buf_wp_map = dma_map_single(amports_get_dma_device(),
+				codec_mm_phys_to_virt(wp), len, DMA_TO_DEVICE);
 			wp = buf_start;
 			r = count - len;
+			dma_unmap_single(NULL, buf_wp_map, len, DMA_TO_DEVICE);
 			set_buf_wp(type, wp);
 		} else {
 			pr_info("copy from user failed 1\n");
@@ -302,15 +298,16 @@ static ssize_t _esparser_write_s(const char __user *buf,
 			return -EAGAIN;
 		}
 	}
-
-	vaddr = codec_mm_phys_to_virt(wp);
-	ret = copy_from_user(vaddr, p + len, r);
+	ret = copy_from_user(codec_mm_phys_to_virt(wp), p + len, r);
 	if (ret >= 0) {
 		len += r - ret;
-		codec_mm_dma_flush(vaddr, r - ret, DMA_TO_DEVICE);
+		buf_wp_map = dma_map_single(amports_get_dma_device(),
+			 codec_mm_phys_to_virt(wp), r - ret, DMA_TO_DEVICE);
+
 		if (ret > 0)
 			pr_info("copy from user not finished 2\n");
 		wp += r - ret;
+		dma_unmap_single(NULL, buf_wp_map, r - ret, DMA_TO_DEVICE);
 		set_buf_wp(type, wp);
 	} else {
 		pr_info("copy from user failed 2\n");
@@ -396,8 +393,6 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 	u32 parser_sub_rp;
 	bool first_use = false;
 	/* #if MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8 */
-	VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
-
 	if (has_hevc_vdec() && (buf->type == BUF_TYPE_HEVC))
 		pts_type = PTS_TYPE_HEVC;
 	else
@@ -452,15 +447,13 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 
 		/* reset PARSER with first esparser_init() call */
 		WRITE_RESET_REG(RESET1_REGISTER, RESET_PARSER);
-/* for recorded file and local play, this can't change the input source*/
-/* TS data path */
-/*
+
+		/* TS data path */
 #ifndef CONFIG_AM_DVB
 		WRITE_DEMUX_REG(FEC_INPUT_CONTROL, 0);
 #else
 		tsdemux_set_reset_flag();
-#endif  */
-
+#endif
 		CLEAR_DEMUX_REG_MASK(TS_HIU_CTL, 1 << USE_HI_BSF_INTERFACE);
 		CLEAR_DEMUX_REG_MASK(TS_HIU_CTL_2, 1 << USE_HI_BSF_INTERFACE);
 		CLEAR_DEMUX_REG_MASK(TS_HIU_CTL_3, 1 << USE_HI_BSF_INTERFACE);
@@ -523,9 +516,7 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 			vdec->input.start);
 		WRITE_PARSER_REG(PARSER_VIDEO_END_PTR,
 			vdec->input.start + vdec->input.size - 8);
-		if (vdec_single(vdec) || (vdec_get_debug_flags() & 0x2)) {
-			if (vdec_get_debug_flags() & 0x2)
-				pr_info("%s %d\n", __func__, __LINE__);
+		if (vdec_single(vdec)) {
 			CLEAR_PARSER_REG_MASK(PARSER_ES_CONTROL,
 				ES_VID_MAN_RD_PTR);
 
@@ -603,7 +594,6 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 			pr_info("esparser_init: irq register failed.\n");
 			goto Err_2;
 		}
-		VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
 
 		WRITE_PARSER_REG(PARSER_INT_STATUS, 0xffff);
 		WRITE_PARSER_REG(PARSER_INT_ENABLE,
@@ -749,6 +739,7 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 	s32 r;
 	u32 len;
 	u32 realcount, totalcount;
+	u32 re_count = count;
 	u32 havewritebytes = 0;
 	u32 leftcount = 0;
 
@@ -857,12 +848,7 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 		mutex_unlock(&esparser_mutex);
 	}
 
-	if ((drm->drm_flag & TYPE_DRMINFO) && (drm->drm_hasesdata == 0)) {
-		havewritebytes = sizeof(struct drm_info);
-	} else if (drm->drm_hasesdata == 1) {
-		havewritebytes += sizeof(struct drm_info);
-	}
-	return havewritebytes;
+	return re_count;
 }
 EXPORT_SYMBOL(drm_write);
 

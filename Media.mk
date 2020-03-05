@@ -18,10 +18,13 @@ CONFIGS := CONFIG_AMLOGIC_MEDIA_VDEC_MPEG12=m \
 	CONFIG_AMLOGIC_MEDIA_VDEC_MJPEG_MULTI=m \
 	CONFIG_AMLOGIC_MEDIA_VDEC_REAL=m \
 	CONFIG_AMLOGIC_MEDIA_VDEC_AVS=m \
-	CONFIG_AMLOGIC_MEDIA_VDEC_AVS_MULTI=m \
 	CONFIG_AMLOGIC_MEDIA_VDEC_AVS2=m \
 	CONFIG_AMLOGIC_MEDIA_VENC_H264=m \
-	CONFIG_AMLOGIC_MEDIA_VENC_H265=m
+	CONFIG_AMLOGIC_MEDIA_VENC_H265=m \
+	CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION=y \
+	CONFIG_AMLOGIC_MEDIA_GE2D=y \
+	CONFIG_AMLOGIC_MEDIA_VENC_MULTI=m \
+	CONFIG_AMLOGIC_MEDIA_VENC_JPEG=m
 
 define copy-media-modules
 $(foreach m, $(shell find $(strip $(1)) -name "*.ko"),\
@@ -89,11 +92,10 @@ $(shell mkdir $(MODS_OUT) -p)
 endif
 
 ifeq ($(KERNEL_A32_SUPPORT), true)
-TOOLS := /opt/gcc-linaro-6.3.1-2017.02-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
+TOOLS := /opt/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
 else
-TOOLS := /opt/gcc-linaro-5.3-2016.02-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
+TOOLS := /opt/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu/bin/aarch64-linux-gnu-
 endif
-
 
 modules:
 	CCACHE_NODIRECT="true" PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH \

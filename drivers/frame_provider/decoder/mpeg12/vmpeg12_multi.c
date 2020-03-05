@@ -26,19 +26,19 @@
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
-
+#include <linux/sched/clock.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
 
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
-
 #include "../utils/vdec_input.h"
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
@@ -50,7 +50,6 @@
 #include "../utils/firmware.h"
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include "../utils/config_parser.h"
-
 
 #define MEM_NAME "codec_mmpeg12"
 #define CHECK_INTERVAL        (HZ/100)
@@ -84,7 +83,6 @@
 #define PICINFO_RPT_FIRST   0x4000
 #define PICINFO_TOP_FIRST   0x2000
 #define PICINFO_FRAME       0x1000
-
 #define TOP_FIELD            0x1000
 #define BOTTOM_FIELD         0x2000
 #define FRAME_PICTURE        0x3000
@@ -284,6 +282,7 @@ struct vdec_mpeg12_hw_s {
 	u32 pre_parser_wr_ptr;
 	u8 next_again_flag;
 #endif
+
 	struct work_struct userdata_push_work;
 	struct mutex userdata_mutex;
 	struct mmpeg2_userdata_info_t userdata_info;
@@ -326,7 +325,7 @@ unsigned int mpeg12_debug_mask = 0xff;
 #define PRINT_FLAG_ERROR              0x0
 #define PRINT_FLAG_RUN_FLOW           0X0001
 #define PRINT_FLAG_TIMEINFO           0x0002
-#define PRINT_FLAG_UCODE_DETAIL       0x0004
+#define PRINT_FLAG_UCODE_DETAIL		  0x0004
 #define PRINT_FLAG_VLD_DETAIL         0x0008
 #define PRINT_FLAG_DEC_DETAIL         0x0010
 #define PRINT_FLAG_BUFFER_DETAIL      0x0020
@@ -349,14 +348,18 @@ int debug_print(int index, int debug_flag, const char *fmt, ...)
 	if (((debug_enable & debug_flag) &&
 		((1 << index) & mpeg12_debug_mask))
 		|| (debug_flag == PRINT_FLAG_ERROR)) {
-		unsigned char buf[512];
+		unsigned char *buf = vzalloc(512);
 		int len = 0;
 		va_list args;
+
+		if (!buf)
+			return 0;
 		va_start(args, fmt);
 		len = sprintf(buf, "%d: ", index);
 		vsnprintf(buf + len, 512-len, fmt, args);
 		pr_info("%s", buf);
 		va_end(args);
+		vfree(buf);
 	}
 	return 0;
 }
@@ -1429,6 +1432,7 @@ static void userdata_push_do_work(struct work_struct *work)
 		if (pdata >= hw->userdata_info.data_buf_end)
 			pdata = hw->userdata_info.data_buf;
 	}
+
 	pcur_ud_rec = hw->ud_record + hw->cur_ud_idx;
 
 	pcur_ud_rec->meta_info = meta_info;
@@ -1455,7 +1459,6 @@ static void userdata_push_do_work(struct work_struct *work)
 
 	hw->cur_ud_idx++;
 	WRITE_VREG(AV_SCRATCH_J, 0);
-
 }
 
 
@@ -1631,35 +1634,35 @@ static void force_interlace_check(struct vdec_mpeg12_hw_s *hw)
 		(hw->frame_width == 720) &&
 		(hw->frame_height == 576) &&
 		(hw->frame_dur == 3840)) {
-		hw->frame_prog = 0;
-	} else if ((hw->dec_control
-	& DEC_CONTROL_FLAG_FORCE_3000_704_480_INTERLACE) &&
-		(hw->frame_width == 704) &&
-		(hw->frame_height == 480) &&
-		(hw->frame_dur == 3200)) {
-		hw->frame_prog = 0;
-	} else if ((hw->dec_control
-	& DEC_CONTROL_FLAG_FORCE_2500_704_576_INTERLACE) &&
-		(hw->frame_width == 704) &&
-		(hw->frame_height == 576) &&
-		(hw->frame_dur == 3840)) {
-		hw->frame_prog = 0;
-	} else if ((hw->dec_control
-	& DEC_CONTROL_FLAG_FORCE_2500_544_576_INTERLACE) &&
-		(hw->frame_width == 544) &&
-		(hw->frame_height == 576) &&
-		(hw->frame_dur == 3840)) {
-		hw->frame_prog = 0;
-	} else if ((hw->dec_control
-	& DEC_CONTROL_FLAG_FORCE_2500_480_576_INTERLACE) &&
-		(hw->frame_width == 480) &&
-		(hw->frame_height == 576) &&
-		(hw->frame_dur == 3840)) {
-		hw->frame_prog = 0;
-	} else if (hw->dec_control
-	& DEC_CONTROL_FLAG_FORCE_SEQ_INTERLACE) {
-		hw->frame_prog = 0;
-	}
+			hw->frame_prog = 0;
+		} else if ((hw->dec_control
+		& DEC_CONTROL_FLAG_FORCE_3000_704_480_INTERLACE) &&
+			(hw->frame_width == 704) &&
+			(hw->frame_height == 480) &&
+			(hw->frame_dur == 3200)) {
+			hw->frame_prog = 0;
+		} else if ((hw->dec_control
+		& DEC_CONTROL_FLAG_FORCE_2500_704_576_INTERLACE) &&
+			(hw->frame_width == 704) &&
+			(hw->frame_height == 576) &&
+			(hw->frame_dur == 3840)) {
+			hw->frame_prog = 0;
+		} else if ((hw->dec_control
+		& DEC_CONTROL_FLAG_FORCE_2500_544_576_INTERLACE) &&
+			(hw->frame_width == 544) &&
+			(hw->frame_height == 576) &&
+			(hw->frame_dur == 3840)) {
+			hw->frame_prog = 0;
+		} else if ((hw->dec_control
+		& DEC_CONTROL_FLAG_FORCE_2500_480_576_INTERLACE) &&
+			(hw->frame_width == 480) &&
+			(hw->frame_height == 576) &&
+			(hw->frame_dur == 3840)) {
+			hw->frame_prog = 0;
+		} else if (hw->dec_control
+		& DEC_CONTROL_FLAG_FORCE_SEQ_INTERLACE) {
+			hw->frame_prog = 0;
+		}
 
 }
 
@@ -1907,7 +1910,7 @@ static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 {
 	u32 info, offset;
 	struct vdec_mpeg12_hw_s *hw =
-		(struct vdec_mpeg12_hw_s *)(vdec->private);
+	(struct vdec_mpeg12_hw_s *)(vdec->private);
 	if (hw->eos)
 		return IRQ_HANDLED;
 	info = READ_VREG(MREG_PIC_INFO);
@@ -2147,7 +2150,7 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 	struct vframe_s *vf;
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg12_hw_s *hw =
-		(struct vdec_mpeg12_hw_s *)vdec->private;
+	(struct vdec_mpeg12_hw_s *)vdec->private;
 
 	hw->get_num++;
 	if (kfifo_get(&hw->display_q, &vf))
@@ -2181,7 +2184,7 @@ static int vmpeg_vf_states(struct vframe_states *states, void *op_arg)
 	unsigned long flags;
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg12_hw_s *hw =
-		(struct vdec_mpeg12_hw_s *)vdec->private;
+	(struct vdec_mpeg12_hw_s *)vdec->private;
 
 	spin_lock_irqsave(&hw->lock, flags);
 
@@ -2316,11 +2319,11 @@ static void vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 			}
 
 			hw->canvas_config[i][0].phy_addr =
-				decbuf_start;
+			decbuf_start;
 			hw->canvas_config[i][0].width =
-				canvas_width;
+			canvas_width;
 			hw->canvas_config[i][0].height =
-				canvas_height;
+			canvas_height;
 			hw->canvas_config[i][0].block_mode =
 				hw->canvas_mode;
 			hw->canvas_config[i][0].endian =
@@ -2338,7 +2341,7 @@ static void vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 				(hw->canvas_mode == CANVAS_BLKMODE_LINEAR)?7:0;
 
 			canvas_config_config(canvas_u(canvas),
-				&hw->canvas_config[i][1]);
+			&hw->canvas_config[i][1]);
 		}
 	}
 	return;
@@ -2496,9 +2499,10 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 	vdec_schedule_work(&hw->timeout_work);
 }
 
-static void check_timer_func(unsigned long arg)
+static void check_timer_func(struct timer_list *timer)
 {
-	struct vdec_mpeg12_hw_s *hw = (struct vdec_mpeg12_hw_s *)arg;
+	struct vdec_mpeg12_hw_s *hw = container_of(timer,
+		struct vdec_mpeg12_hw_s, check_timer);
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	unsigned int timeout_val = decode_timeout_val;
 
@@ -2603,10 +2607,10 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 		WRITE_VREG(MREG_CMD, 0);
 
 	debug_print(DECODE_ID(hw), PRINT_FLAG_RESTORE,
-		"0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x\n",
-		hw->frame_width, hw->frame_height, hw->seqinfo,
-		hw->reg_f_code_reg, hw->reg_slice_ver_pos_pic_type,
-		hw->reg_mb_info);
+	"0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x\n",
+	hw->frame_width, hw->frame_height, hw->seqinfo,
+	hw->reg_f_code_reg, hw->reg_slice_ver_pos_pic_type,
+	hw->reg_mb_info);
 
 	WRITE_VREG(MREG_PIC_WIDTH, hw->reg_pic_width);
 	WRITE_VREG(MREG_PIC_HEIGHT, hw->reg_pic_height);
@@ -2651,6 +2655,7 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 		/*stream based input*/
 		WRITE_VREG(MREG_INPUT, (hw->ctx_valid<<6));
 	}
+
 	return 0;
 }
 
@@ -2754,9 +2759,10 @@ static s32 vmpeg12_init(struct vdec_mpeg12_hw_s *hw)
 			USER_DATA_SIZE);
 
 	amvdec_enable();
-	init_timer(&hw->check_timer);
-	hw->check_timer.data = (unsigned long)hw;
-	hw->check_timer.function = check_timer_func;
+	timer_setup(&hw->check_timer, check_timer_func, 0);
+	//init_timer(&hw->check_timer);
+	//hw->check_timer.data = (unsigned long)hw;
+	//hw->check_timer.function = check_timer_func;
 	hw->check_timer.expires = jiffies + CHECK_INTERVAL;
 
 	hw->stat |= STAT_TIMER_ARM;
@@ -2847,7 +2853,7 @@ void (*callback)(struct vdec_s *, void *),
 		void *arg)
 {
 	struct vdec_mpeg12_hw_s *hw =
-		(struct vdec_mpeg12_hw_s *)vdec->private;
+	(struct vdec_mpeg12_hw_s *)vdec->private;
 	int save_reg = READ_VREG(POWER_CTL_VLD);
 	int size, ret;
 	/* reset everything except DOS_TOP[1] and APB_CBUS[0]*/
@@ -3187,32 +3193,16 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int mmpeg12_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int mmpeg12_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops mmpeg12_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mmpeg12_suspend, mmpeg12_resume)
-};
-#endif
 
 static struct platform_driver ammvdec_mpeg12_driver = {
 	.probe = ammvdec_mpeg12_probe,
 	.remove = ammvdec_mpeg12_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &mmpeg12_pm_ops,
-#endif
 	}
 };
 
@@ -3294,7 +3284,6 @@ module_param_array(max_process_time, uint, &max_decode_instance_num, 0664);
 module_param(udebug_flag, uint, 0664);
 MODULE_PARM_DESC(udebug_flag, "\n ammvdec_mpeg12 udebug_flag\n");
 
-
 #ifdef AGAIN_HAS_THRESHOLD
 module_param(again_threshold, uint, 0664);
 MODULE_PARM_DESC(again_threshold, "\n again_threshold\n");
@@ -3302,7 +3291,6 @@ MODULE_PARM_DESC(again_threshold, "\n again_threshold\n");
 
 module_param(without_display_mode, uint, 0664);
 MODULE_PARM_DESC(without_display_mode, "\n ammvdec_mpeg12 without_display_mode\n");
-
 
 module_init(ammvdec_mpeg12_driver_init_module);
 module_exit(ammvdec_mpeg12_driver_remove_module);

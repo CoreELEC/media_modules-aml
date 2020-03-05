@@ -140,20 +140,29 @@ static ssize_t addr_offset_show(struct class *class,
 	return sprintf(buf, "%d\n", astream_dev->offset);
 }
 
-static struct class_attribute astream_class_attrs[] = {
-	__ATTR_RO(format),
-	__ATTR_RO(samplerate),
-	__ATTR_RO(channum),
-	__ATTR_RO(datawidth),
-	__ATTR_RO(pts),
-	__ATTR_RO(addr_offset),
-	__ATTR_NULL
+static CLASS_ATTR_RO(format);
+static CLASS_ATTR_RO(samplerate);
+static CLASS_ATTR_RO(channum);
+static CLASS_ATTR_RO(datawidth);
+static CLASS_ATTR_RO(pts);
+static CLASS_ATTR_RO(addr_offset);
+
+static struct attribute *astream_class_attrs[] = {
+	&class_attr_format.attr,
+	&class_attr_samplerate.attr,
+	&class_attr_channum.attr,
+	&class_attr_datawidth.attr,
+	&class_attr_pts.attr,
+	&class_attr_addr_offset.attr,
+	NULL
 };
 
+ATTRIBUTE_GROUPS(astream_class);
+
 static struct class astream_class = {
-		.name = "astream",
-		.class_attrs = astream_class_attrs,
-	};
+	.name = "astream",
+	.class_groups = astream_class_groups,
+};
 
 #if 1
 #define IO_CBUS_PHY_BASE 0xc1100000ULL
@@ -412,3 +421,4 @@ void astream_dev_unregister(void)
 		class_unregister(&astream_class);
 	}
 }
+

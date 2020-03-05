@@ -37,15 +37,18 @@ int dpb_print(int index, int debug_flag, const char *fmt, ...)
 	if (((h264_debug_flag & debug_flag) &&
 		((1 << index) & h264_debug_mask))
 		|| (debug_flag == PRINT_FLAG_ERROR)) {
-		unsigned char buf[512];
+		unsigned char *buf = vzalloc(512);
 		int len = 0;
 		va_list args;
 
+		if (!buf)
+			return 0;
 		va_start(args, fmt);
 		len = sprintf(buf, "%d: ", index);
 		vsnprintf(buf + len, 512-len, fmt, args);
 		pr_debug("%s", buf);
 		va_end(args);
+		vfree(buf);
 	}
 	return 0;
 }
@@ -55,13 +58,17 @@ int dpb_print_cont(int index, int debug_flag, const char *fmt, ...)
 	if (((h264_debug_flag & debug_flag) &&
 		((1 << index) & h264_debug_mask))
 		|| (debug_flag == PRINT_FLAG_ERROR)) {
-		unsigned char buf[512];
+		unsigned char *buf = vzalloc(512);
 		int len = 0;
 		va_list args;
+
+		if (!buf)
+			return 0;
 		va_start(args, fmt);
 		vsnprintf(buf + len, 512-len, fmt, args);
 		pr_info("%s", buf);
 		va_end(args);
+		vfree(buf);
 	}
 	return 0;
 }
@@ -652,7 +659,7 @@ static void decode_poc(struct VideoParameters *p_Vid, struct Slice *pSlice)
 				(pSlice->toppoc < pSlice->bottompoc) ?
 				 pSlice->toppoc : pSlice->bottompoc;
 					/* POC200301 */
-		} else if (pSlice->bottom_field_flag == FALSE) {
+		} else if (pSlice->bottom_field_flag == 0) {
 			/* top field */
 			pSlice->ThisPOC = pSlice->toppoc =
 				pSlice->PicOrderCntMsb +
@@ -770,7 +777,7 @@ static void decode_poc(struct VideoParameters *p_Vid, struct Slice *pSlice)
 				(pSlice->toppoc < pSlice->bottompoc) ?
 				pSlice->toppoc : pSlice->bottompoc;
 				/* POC200301 */
-		} else if (pSlice->bottom_field_flag == FALSE) {
+		} else if (pSlice->bottom_field_flag == 0) {
 			/* top field */
 			pSlice->ThisPOC = pSlice->toppoc =
 				p_Vid->ExpectedPicOrderCnt +
@@ -824,7 +831,7 @@ static void decode_poc(struct VideoParameters *p_Vid, struct Slice *pSlice)
 			if (pSlice->field_pic_flag == 0)
 				pSlice->toppoc = pSlice->bottompoc =
 					pSlice->framepoc = pSlice->ThisPOC;
-			else if (pSlice->bottom_field_flag == FALSE)
+			else if (pSlice->bottom_field_flag == 0)
 				pSlice->toppoc = pSlice->framepoc =
 				pSlice->ThisPOC;
 			else
@@ -870,7 +877,6 @@ void fill_frame_num_gap(struct VideoParameters *p_Vid, struct Slice *currSlice)
 	CurrFrameNum = currSlice->frame_num; /*p_Vid->frame_num;*/
 
 	while (CurrFrameNum != UnusedShortTermFrameNum) {
-		/*pr_err("CurrFrameNum = %d, UnusedShortTermFrameNum = %d\n", CurrFrameNum, UnusedShortTermFrameNum);*/
 		/*picture = alloc_storable_picture
 		 *(p_Vid, FRAME, p_Vid->width,
 		 *p_Vid->height,
@@ -5459,7 +5465,7 @@ void init_old_slice(OldSliceParams *p_old_slice)
 	p_old_slice->pps_id         = INT_MAX;
 	p_old_slice->frame_num      = INT_MAX;
 	p_old_slice->nal_ref_idc    = INT_MAX;
-	p_old_slice->idr_flag       = FALSE;
+	p_old_slice->idr_flag       = 0;
 
 	p_old_slice->pic_oder_cnt_lsb          = UINT_MAX;
 	p_old_slice->delta_pic_oder_cnt_bottom = INT_MAX;

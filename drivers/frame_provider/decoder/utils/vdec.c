@@ -37,15 +37,18 @@
 #include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #endif
 #include <linux/amlogic/media/vfm/vfm_ext.h>
+#include <linux/sched/clock.h>
+#include <uapi/linux/sched/types.h>
+#include <linux/signal.h>
 /*for VDEC_DEBUG_SUPPORT*/
 #include <linux/time.h>
-
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "vdec.h"
 #include "vdec_trace.h"
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 #include "vdec_profile.h"
 #endif
+#include <linux/sched/clock.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/libfdt_env.h>
@@ -77,6 +80,13 @@
 #include <linux/amlogic/power_ctrl.h>
 #endif
 
+#ifdef CONFIG_AMLOGIC_IONVIDEO
+#include <linux/amlogic/media/video_sink/ionvideo_ext.h>
+#endif
+
+/* wait other module to support this function */
+#define is_support_power_ctrl() 0
+
 static DEFINE_MUTEX(vdec_mutex);
 
 #define MC_SIZE (4096 * 4)
@@ -103,7 +113,6 @@ static int parallel_decode = 1;
 static int fps_detection;
 static int fps_clear;
 
-
 static int force_nosecure_even_drm;
 static int disable_switch_single_to_mult;
 
@@ -118,7 +127,6 @@ static DEFINE_SPINLOCK(vdec_spin_lock);
 static int frameinfo_flag = 0;
 static int v4lvideo_add_di = 1;
 static int max_di_instance = 2;
-
 //static int path_debug = 0;
 
 static int enable_mvdec_info = 1;
@@ -193,23 +201,6 @@ static const char * const vdec_status_string[] = {
 	"VDEC_STATUS_CONNECTED",
 	"VDEC_STATUS_ACTIVE"
 };
-/*
-bit [28] enable print
-bit [23:16] etc
-bit [15:12]
-	none 0 and not 0x1: force single
-	none 0 and 0x1: force multi
-bit [8]
-	1: force dual
-bit [3]
-	1: use mavs for single mode
-bit [2]
-	1: force vfm path for frame mode
-bit [1]
-	1: force esparser auto mode
-bit [0]
-	1: disable audo manual mode ??
-*/
 
 static int debugflags;
 
@@ -333,14 +324,9 @@ static void vdec_up(struct vdec_s *vdec)
 	up(&core->sem);
 }
 
-
 static u64 vdec_get_us_time_system(void)
 {
-	struct timeval tv;
-
-	do_gettimeofday(&tv);
-
-	return div64_u64(timeval_to_ns(&tv), 1000);
+	return div64_u64(local_clock(), 1000);
 }
 
 static void vdec_fps_clear(int id)
@@ -533,13 +519,6 @@ static void free_canvas_ex(int index, int id)
 
 static void vdec_dmc_pipeline_reset(void)
 {
-	/*
-	 * bit15: vdec_piple
-	 * bit14: hevc_dmc_piple
-	 * bit13: hevcf_dmc_pipl
-	 * bit12: wave420_dmc_pipl
-	 * bit11: hcodec_dmc_pipl
-	 */
 
 	WRITE_RESET_REG(RESET7_REGISTER,
 		(1 << 15) | (1 << 14) | (1 << 13) |
@@ -1024,7 +1003,6 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 	struct vdec_s *vdec;
 	int type = VDEC_TYPE_SINGLE;
 	int id;
-
 	if (is_mult_inc(port->type))
 		type = (port->type & PORT_TYPE_FRAME) ?
 			VDEC_TYPE_FRAME_BLOCK :
@@ -1084,6 +1062,7 @@ int vdec_set_format(struct vdec_s *vdec, int format)
 		vdec->slave->format = format;
 		vdec->slave->port_flag |= PORT_FLAG_VFORMAT;
 	}
+
 	//trace_vdec_set_format(vdec, format);/*DEBUG_TMP*/
 
 	return 0;
@@ -1905,6 +1884,8 @@ EXPORT_SYMBOL(vdec_sync_input);
 
 const char *vdec_status_str(struct vdec_s *vdec)
 {
+	if (vdec->status < 0)
+		return "INVALID";
 	return vdec->status < ARRAY_SIZE(vdec_status_string) ?
 		vdec_status_string[vdec->status] : "INVALID";
 }
@@ -2074,7 +2055,6 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	const char *dev_name;
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
 
-	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
 	dev_name = get_dev_name(vdec_single(vdec), vdec->format);
 
 	if (dev_name == NULL)
@@ -2538,7 +2518,6 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 }
 EXPORT_SYMBOL(vdec_v4l2_reset);
 
-
 void vdec_free_cmabuf(void)
 {
 	mutex_lock(&vdec_mutex);
@@ -2771,7 +2750,6 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 	inc_profi_count(mask, vdec->check_count);
 #endif
 	if (vdec_core_with_input(mask)) {
-
 		/* check frame based input underrun */
 		if (input && !input->eos && input_frame_based(input)
 			&& (!vdec_input_next_chunk(input))) {
@@ -2896,7 +2874,6 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 	vdec->need_more_data |= VDEC_NEED_MORE_DATA_RUN;
 	vdec->need_more_data &= ~VDEC_NEED_MORE_DATA_DIRTY;
 }
-
 
 /* struct vdec_core_shread manages all decoder instance in active list. When
  * a vdec is added into the active list, it can onlt be in two status:
@@ -3379,7 +3356,6 @@ void vdec_poweron(enum vdec_type_e core)
 		if (has_hdec()) {
 			sleep_val = is_power_ctrl_ver2 ? 0x1 : 0x3;
 			iso_val = is_power_ctrl_ver2 ? 0x1 : 0x30;
-
 			/* hcodec power on */
 #ifdef CONFIG_AMLOGIC_POWER
 			if (is_support_power_ctrl()) {
@@ -3528,7 +3504,6 @@ void vdec_poweroff(enum vdec_type_e core)
 {
 	int sleep_val, iso_val;
 	bool is_power_ctrl_ver2 = false;
-
 	if (core >= VDEC_MAX)
 		return;
 
@@ -3548,7 +3523,7 @@ void vdec_poweroff(enum vdec_type_e core)
 		sleep_val = is_power_ctrl_ver2 ? 0x2 : 0xc;
 		iso_val = is_power_ctrl_ver2 ? 0x2 : 0xc0;
 
-		/* enable vdec1 isolation */
+			/* disable VDEC_1 DMC REQ*/
 #ifdef CONFIG_AMLOGIC_POWER
 		if (is_support_power_ctrl()) {
 			if (power_ctrl_iso_mask(false, iso_val, 0)) {
@@ -3663,15 +3638,15 @@ void vdec_poweroff(enum vdec_type_e core)
 				WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
 					READ_AOREG(AO_RTI_GEN_PWR_ISO0) | iso_val);
 #endif
-				/* power off hevc memories */
-				WRITE_VREG(DOS_MEM_PD_HEVC, 0xffffffffUL);
+			/* power off hevc memories */
+			WRITE_VREG(DOS_MEM_PD_HEVC, 0xffffffffUL);
 
-				/* disable hevc clock */
-				hevc_clock_off();
-				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-					hevc_back_clock_off();
+			/* disable hevc clock */
+			hevc_clock_off();
+			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+				hevc_back_clock_off();
 
-				/* hevc power off */
+			/* hevc power off */
 #ifdef CONFIG_AMLOGIC_POWER
 				if (is_support_power_ctrl()) {
 					if (power_ctrl_sleep_mask(false, sleep_val, 0)) {
@@ -3680,7 +3655,7 @@ void vdec_poweroff(enum vdec_type_e core)
 						return;
 					}
 				} else {
-					WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
+			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
 						READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) | sleep_val);
 				}
 #else
@@ -3871,8 +3846,8 @@ void vdec_reset_core(struct vdec_s *vdec)
 		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1)) {
 		WRITE_VREG(DOS_SW_RESET0, (1<<3)|(1<<4)|(1<<5)|(1<<7)|(1<<8)|(1<<9));
 	} else {
-		WRITE_VREG(DOS_SW_RESET0,
-			(1<<3)|(1<<4)|(1<<5));
+	WRITE_VREG(DOS_SW_RESET0,
+		(1<<3)|(1<<4)|(1<<5));
 	}
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
@@ -3916,16 +3891,13 @@ void hevc_mmu_dma_check(struct vdec_s *vdec)
 	}
 }
 EXPORT_SYMBOL(hevc_mmu_dma_check);
-
 void hevc_reset_core(struct vdec_s *vdec)
 {
 	unsigned long flags;
 	unsigned int mask = 0;
-
 	mask = 1 << 4; /*bit4: hevc*/
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
 		mask |= 1 << 8; /*bit8: hevcb*/
-
 	WRITE_VREG(HEVC_STREAM_CONTROL, 0);
 	spin_lock_irqsave(&vdec_spin_lock, flags);
 	codec_dmcbus_write(DMC_REQ_CTRL,
@@ -4225,9 +4197,7 @@ static ssize_t enable_mvdec_info_store(struct class *cla,
 
 	return count;
 }
-
-
-static ssize_t store_poweron_clock_level(struct class *class,
+static ssize_t poweron_clock_level_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t size)
 {
@@ -4243,7 +4213,7 @@ static ssize_t store_poweron_clock_level(struct class *class,
 	return size;
 }
 
-static ssize_t show_poweron_clock_level(struct class *class,
+static ssize_t poweron_clock_level_show(struct class *class,
 		struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", poweron_clock_level);
@@ -4254,7 +4224,7 @@ static ssize_t show_poweron_clock_level(struct class *class,
  *always don't release
  *vdec 64 memory for fast play.
  */
-static ssize_t store_keep_vdec_mem(struct class *class,
+static ssize_t keep_vdec_mem_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t size)
 {
@@ -4269,15 +4239,14 @@ static ssize_t store_keep_vdec_mem(struct class *class,
 	return size;
 }
 
-static ssize_t show_keep_vdec_mem(struct class *class,
+static ssize_t keep_vdec_mem_show(struct class *class,
 		struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", keep_vdec_mem);
 }
 
-
 #ifdef VDEC_DEBUG_SUPPORT
-static ssize_t store_debug(struct class *class,
+static ssize_t debug_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t size)
 {
@@ -4334,7 +4303,7 @@ static ssize_t store_debug(struct class *class,
 	return size;
 }
 
-static ssize_t show_debug(struct class *class,
+static ssize_t debug_show(struct class *class,
 		struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
@@ -4875,43 +4844,57 @@ static ssize_t dump_fps_show(struct class *class,
 	return pbuf - buf;
 }
 
-
-
-static struct class_attribute vdec_class_attrs[] = {
-	__ATTR_RO(amrisc_regs),
-	__ATTR_RO(dump_trace),
-	__ATTR_RO(clock_level),
-	__ATTR(enable_mvdec_info, S_IRUGO | S_IWUSR | S_IWGRP,
-	enable_mvdec_info_show, enable_mvdec_info_store),
-	__ATTR(poweron_clock_level, S_IRUGO | S_IWUSR | S_IWGRP,
-	show_poweron_clock_level, store_poweron_clock_level),
-	__ATTR(dump_risc_mem, S_IRUGO | S_IWUSR | S_IWGRP,
-	dump_risc_mem_show, dump_risc_mem_store),
-	__ATTR(keep_vdec_mem, S_IRUGO | S_IWUSR | S_IWGRP,
-	show_keep_vdec_mem, store_keep_vdec_mem),
-	__ATTR_RO(core),
-	__ATTR_RO(vdec_status),
-	__ATTR_RO(dump_vdec_blocks),
-	__ATTR_RO(dump_vdec_chunks),
-	__ATTR_RO(dump_decoder_state),
+static CLASS_ATTR_RO(amrisc_regs);
+static CLASS_ATTR_RO(dump_trace);
+static CLASS_ATTR_RO(clock_level);
+static CLASS_ATTR_RW(poweron_clock_level);
+static CLASS_ATTR_RW(dump_risc_mem);
+static CLASS_ATTR_RW(keep_vdec_mem);
+static CLASS_ATTR_RW(enable_mvdec_info);
+static CLASS_ATTR_RO(core);
+static CLASS_ATTR_RO(vdec_status);
+static CLASS_ATTR_RO(dump_vdec_blocks);
+static CLASS_ATTR_RO(dump_vdec_chunks);
+static CLASS_ATTR_RO(dump_decoder_state);
 #ifdef VDEC_DEBUG_SUPPORT
-	__ATTR(debug, S_IRUGO | S_IWUSR | S_IWGRP,
-	show_debug, store_debug),
+static CLASS_ATTR_RW(debug);
 #endif
 #ifdef FRAME_CHECK
-	__ATTR(dump_yuv, S_IRUGO | S_IWUSR | S_IWGRP,
-	dump_yuv_show, dump_yuv_store),
-	__ATTR(frame_check, S_IRUGO | S_IWUSR | S_IWGRP,
-	frame_check_show, frame_check_store),
+static CLASS_ATTR_RW(dump_yuv);
+static CLASS_ATTR_RW(frame_check);
 #endif
-	__ATTR_RO(dump_fps),
-	__ATTR_NULL
+static CLASS_ATTR_RO(dump_fps);
+
+static struct attribute *vdec_class_attrs[] = {
+	&class_attr_amrisc_regs.attr,
+	&class_attr_dump_trace.attr,
+	&class_attr_clock_level.attr,
+	&class_attr_poweron_clock_level.attr,
+	&class_attr_dump_risc_mem.attr,
+	&class_attr_keep_vdec_mem.attr,
+	&class_attr_enable_mvdec_info.attr,
+	&class_attr_core.attr,
+	&class_attr_vdec_status.attr,
+	&class_attr_dump_vdec_blocks.attr,
+	&class_attr_dump_vdec_chunks.attr,
+	&class_attr_dump_decoder_state.attr,
+#ifdef VDEC_DEBUG_SUPPORT
+	&class_attr_debug.attr,
+#endif
+#ifdef FRAME_CHECK
+	&class_attr_dump_yuv.attr,
+	&class_attr_frame_check.attr,
+#endif
+	&class_attr_dump_fps.attr,
+	NULL
 };
 
+ATTRIBUTE_GROUPS(vdec_class);
+
 static struct class vdec_class = {
-		.name = "vdec",
-		.class_attrs = vdec_class_attrs,
-	};
+	.name = "vdec",
+	.class_groups = vdec_class_groups,
+};
 
 struct device *get_vdec_device(void)
 {
@@ -5213,6 +5196,7 @@ u32  vdec_get_frame_vdec(struct vdec_s *vdec,  struct vframe_counter_s *tmpbuf)
 	return toread;
 }
 EXPORT_SYMBOL(vdec_get_frame_vdec);
+
 
 RESERVEDMEM_OF_DECLARE(vdec, "amlogic, vdec-memory", vdec_mem_setup);
 /*

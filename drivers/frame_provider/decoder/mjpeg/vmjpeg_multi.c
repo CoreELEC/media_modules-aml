@@ -29,12 +29,12 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
 
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
-
 #include "../utils/vdec_input.h"
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
@@ -122,14 +122,18 @@ int mmjpeg_debug_print(int index, int debug_flag, const char *fmt, ...)
 	if (((debug_enable & debug_flag) &&
 		((1 << index) & mmjpeg_debug_mask))
 		|| (debug_flag == PRINT_FLAG_ERROR)) {
-		unsigned char buf[512];
+		unsigned char *buf = vzalloc(512);
 		int len = 0;
 		va_list args;
+
+		if (!buf)
+			return 0;
 		va_start(args, fmt);
 		len = sprintf(buf, "%d: ", index);
 		vsnprintf(buf + len, 512-len, fmt, args);
 		pr_info("%s", buf);
 		va_end(args);
+		vfree(buf);
 	}
 	return 0;
 }
@@ -206,7 +210,7 @@ struct vdec_mjpeg_hw_s {
 	struct firmware_s *fw;
 	struct timer_list check_timer;
 	u32 decode_timeout_count;
-	unsigned long int start_process_time;
+	u32 start_process_time;
 	u32 last_vld_level;
 	u8 eos;
 	u32 frame_num;
@@ -767,22 +771,23 @@ static void timeout_process(struct vdec_mjpeg_hw_s *hw)
 	vdec_schedule_work(&hw->work);
 }
 
-static void check_timer_func(unsigned long arg)
+static void check_timer_func(struct timer_list *timer)
 {
-	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)arg;
+	struct vdec_mjpeg_hw_s *hw = container_of(timer,
+		struct vdec_mjpeg_hw_s, check_timer);
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	int timeout_val = decode_timeout_val;
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
-		"%s: status:nstatus=%d:%d\n",
-		__func__, vdec->status, vdec->next_status);
+	"%s: status:nstatus=%d:%d\n",
+			__func__, vdec->status, vdec->next_status);
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
-		"%s: %d,buftl=%x:%x:%x:%x\n",
-		__func__, __LINE__,
-		READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
-		READ_PARSER_REG(PARSER_VIDEO_WP),
-		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-		READ_VREG(VLD_MEM_VIFIFO_WP));
+	"%s: %d,buftl=%x:%x:%x:%x\n",
+			__func__, __LINE__,
+			READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
+			READ_PARSER_REG(PARSER_VIDEO_WP),
+			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+			READ_VREG(VLD_MEM_VIFIFO_WP));
 
 	if (radr != 0) {
 		if (rval != 0) {
@@ -1102,10 +1107,7 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 		CODEC_MM_FLAGS_CMA_CLEAR |
 		CODEC_MM_FLAGS_FOR_VDECODER);
 
-	init_timer(&hw->check_timer);
-
-	hw->check_timer.data = (unsigned long)hw;
-	hw->check_timer.function = check_timer_func;
+	timer_setup(&hw->check_timer, check_timer_func, 0);
 	hw->check_timer.expires = jiffies + CHECK_INTERVAL;
 	/*add_timer(&hw->check_timer);*/
 	hw->stat |= STAT_TIMER_ARM;
@@ -1235,19 +1237,19 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->init_flag = 1;
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-		"%s (0x%x 0x%x 0x%x) vldcrl 0x%x bitcnt 0x%x powerctl 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-		__func__,
-		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-		READ_VREG(VLD_MEM_VIFIFO_WP),
-		READ_VREG(VLD_MEM_VIFIFO_RP),
-		READ_VREG(VLD_DECODE_CONTROL),
-		READ_VREG(VIFF_BIT_CNT),
-		READ_VREG(POWER_CTL_VLD),
-		READ_VREG(VLD_MEM_VIFIFO_START_PTR),
-		READ_VREG(VLD_MEM_VIFIFO_CURR_PTR),
-		READ_VREG(VLD_MEM_VIFIFO_CONTROL),
-		READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
-		READ_VREG(VLD_MEM_VIFIFO_END_PTR));
+	"%s (0x%x 0x%x 0x%x) vldcrl 0x%x bitcnt 0x%x powerctl 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+	__func__,
+	READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+	READ_VREG(VLD_MEM_VIFIFO_WP),
+	READ_VREG(VLD_MEM_VIFIFO_RP),
+	READ_VREG(VLD_DECODE_CONTROL),
+	READ_VREG(VIFF_BIT_CNT),
+	READ_VREG(POWER_CTL_VLD),
+	READ_VREG(VLD_MEM_VIFIFO_START_PTR),
+	READ_VREG(VLD_MEM_VIFIFO_CURR_PTR),
+	READ_VREG(VLD_MEM_VIFIFO_CONTROL),
+	READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
+	READ_VREG(VLD_MEM_VIFIFO_END_PTR));
 }
 static void wait_vmjpeg_search_done(struct vdec_mjpeg_hw_s *hw)
 {
@@ -1302,7 +1304,6 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	return 0;
 }
-
 static void vmjpeg_work(struct work_struct *work)
 {
 	struct vdec_mjpeg_hw_s *hw = container_of(work,
@@ -1532,32 +1533,16 @@ static int ammvdec_mjpeg_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int mmjpeg_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int mmjpeg_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops mmjpeg_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mmjpeg_suspend, mmjpeg_resume)
-};
-#endif
 
 static struct platform_driver ammvdec_mjpeg_driver = {
 	.probe = ammvdec_mjpeg_probe,
 	.remove = ammvdec_mjpeg_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &mmjpeg_pm_ops,
-#endif
 	}
 };
 

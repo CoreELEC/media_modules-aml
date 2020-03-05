@@ -41,7 +41,8 @@
 #include "../utils/decoder_bmmu_box.h"
 #include <linux/uaccess.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
 
 
 
@@ -1310,11 +1311,9 @@ static void vmpeg12_set_clk(struct work_struct *work)
 }
 
 
-static void vmpeg_put_timer_func(unsigned long arg)
+static void vmpeg_put_timer_func(struct timer_list *timer)
 {
-	struct timer_list *timer = (struct timer_list *)arg;
 	int fatal_reset = 0;
-
 	enum receviver_start_e state = RECEIVER_INACTIVE;
 
 	if (vf_get_receiver(PROVIDER_NAME)) {
@@ -1366,7 +1365,7 @@ static void vmpeg_put_timer_func(unsigned long arg)
 
 	if (frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur))
-		schedule_work(&set_clk_work);
+	schedule_work(&set_clk_work);
 
 	timer->expires = jiffies + PUT_INTERVAL;
 
@@ -1949,7 +1948,7 @@ static s32 vmpeg12_init(void)
 	if (IS_ERR_OR_NULL(buf))
 		return -ENOMEM;
 
-	init_timer(&recycle_timer);
+	timer_setup(&recycle_timer, vmpeg_put_timer_func, 0);
 
 	stat |= STAT_TIMER_INIT;
 
@@ -2014,10 +2013,7 @@ static s32 vmpeg12_init(void)
 
 	stat |= STAT_VF_HOOK;
 
-	recycle_timer.data = (ulong)&recycle_timer;
-	recycle_timer.function = vmpeg_put_timer_func;
 	recycle_timer.expires = jiffies + PUT_INTERVAL;
-
 	add_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_ARM;
@@ -2159,32 +2155,16 @@ static int amvdec_mpeg12_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int mpeg12_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int mpeg12_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops mpeg12_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mpeg12_suspend, mpeg12_resume)
-};
-#endif
 
 static struct platform_driver amvdec_mpeg12_driver = {
 	.probe = amvdec_mpeg12_probe,
 	.remove = amvdec_mpeg12_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &mpeg12_pm_ops,
-#endif
 	}
 };
 

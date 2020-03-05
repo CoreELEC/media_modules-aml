@@ -16,7 +16,7 @@
 */
 
 #include <linux/kernel.h>
-#include <asm/compiler.h>
+//#include <asm/compiler.h>
 #include "secprot.h"
 #ifndef CONFIG_ARM64
 #include <asm/opcodes-sec.h>
@@ -26,6 +26,9 @@
 
 int tee_config_device_secure(int dev_id, int secure)
 {
+#if 1
+	return 0;
+#else
 	int ret = 0;
 	register unsigned x0 asm("x0");
 	register unsigned x1 asm("x1");
@@ -46,10 +49,14 @@ int tee_config_device_secure(int dev_id, int secure)
 	ret = x0;
 
 	return ret;
+#endif
 }
 #else
 int tee_config_device_secure(int dev_id, int secure)
 {
+#if 1
+	return 0;
+#else
 	int ret = 0;
 	register unsigned int r0 asm("r0");
 	register unsigned int r1 asm("r1");
@@ -70,6 +77,7 @@ int tee_config_device_secure(int dev_id, int secure)
 	ret = r0;
 
 	return ret;
+#endif
 }
 #endif
 

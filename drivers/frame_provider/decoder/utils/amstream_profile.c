@@ -66,5 +66,3 @@ bool is_support_profile(char *name)
 	return ret;
 }
 EXPORT_SYMBOL(is_support_profile);
-
-

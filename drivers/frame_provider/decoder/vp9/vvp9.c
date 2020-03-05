@@ -37,14 +37,15 @@
 #include <linux/dma-mapping.h>
 #include <linux/dma-contiguous.h>
 #include <linux/slab.h>
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
+#include <linux/sched/clock.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include "../utils/decoder_mmu_box.h"
 #include "../utils/decoder_bmmu_box.h"
 
 #define MEM_NAME "codec_vp9"
-/* #include <mach/am_regs.h> */
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
@@ -64,10 +65,8 @@
 
 #include "vvp9.h"
 
-
 /*#define SUPPORT_FB_DECODING*/
 /*#define FB_DECODING_TEST_SCHEDULE*/
-
 
 #define HW_MASK_FRONT    0x1
 #define HW_MASK_BACK     0x2
@@ -148,6 +147,7 @@
 #ifdef MULTI_INSTANCE_SUPPORT
 #define MAX_DECODE_INSTANCE_NUM     9
 #define MULTI_DRIVER_NAME "ammvdec_vp9"
+
 static unsigned int max_decode_instance_num
 				= MAX_DECODE_INSTANCE_NUM;
 static unsigned int decode_frame_count[MAX_DECODE_INSTANCE_NUM];
@@ -208,7 +208,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi);
 #endif
 static void vvp9_prot_init(struct VP9Decoder_s *pbi, u32 mask);
 static int vvp9_local_init(struct VP9Decoder_s *pbi);
-static void vvp9_put_timer_func(unsigned long arg);
+static void vvp9_put_timer_func(struct timer_list *timer);
 static void dump_data(struct VP9Decoder_s *pbi, int size);
 static unsigned char get_data_check_sum
 	(struct VP9Decoder_s *pbi, int size);
@@ -936,6 +936,7 @@ struct BuffInfo_s {
 	struct buff_s rpm;
 	struct buff_s lmem;
 } BuffInfo_t;
+
 #ifdef MULTI_INSTANCE_SUPPORT
 #define DEC_RESULT_NONE             0
 #define DEC_RESULT_DONE             1
@@ -2837,7 +2838,6 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 	return 0;
 }
 
-/*struct VP9Decoder_s vp9_decoder;*/
 union param_u vp9_param;
 
 /**************************************************
@@ -4930,6 +4930,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 	if ((!pbi->mmu_enable) && ((dw_mode & 0x10) == 0))
 		buf_size += (mc_buffer_size_h << 16);
 
+
 	if (pbi->mmu_enable) {
 		pic_config->header_adr = decoder_bmmu_box_get_phy_addr(
 			pbi->bmmu_box, HEADER_BUFFER_IDX(pic_config->index));
@@ -4947,6 +4948,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 		<= mpred_mv_end
 	) {
 #endif
+
 		if (buf_size > 0) {
 			ret = decoder_bmmu_box_alloc_buf_phy(pbi->bmmu_box,
 					VF_BUFFER_IDX(i),
@@ -5053,7 +5055,6 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 	struct PIC_BUFFER_CONFIG_s *pic_config;
 	u32 header_size;
 	struct vdec_s *vdec = hw_to_vdec(pbi);
-
 	if (pbi->mmu_enable && ((pbi->double_write_mode & 0x10) == 0)) {
 		header_size = vvp9_mmu_compress_header_size(pbi);
 		/*alloc VP9 compress header first*/
@@ -8556,14 +8557,13 @@ static void vp9_set_clk(struct work_struct *work)
 		frame_height * fps;
 }
 
-static void vvp9_put_timer_func(unsigned long arg)
+static void vvp9_put_timer_func(struct timer_list *timer)
 {
-	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)arg;
-	struct timer_list *timer = &pbi->timer;
+	struct VP9Decoder_s *pbi = container_of(timer,
+		struct VP9Decoder_s, timer);
+	enum receviver_start_e state = RECEIVER_INACTIVE;
 	uint8_t empty_flag;
 	unsigned int buf_level;
-
-	enum receviver_start_e state = RECEIVER_INACTIVE;
 
 	if (pbi->m_ins_flag) {
 		if (hw_to_vdec(pbi)->next_status
@@ -9049,12 +9049,10 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 	fw->len = fw_size;
 
 	INIT_WORK(&pbi->set_clk_work, vp9_set_clk);
-	init_timer(&pbi->timer);
+	timer_setup(&pbi->timer, vvp9_put_timer_func, 0);
 
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (pbi->m_ins_flag) {
-		pbi->timer.data = (ulong) pbi;
-		pbi->timer.function = vvp9_put_timer_func;
 		pbi->timer.expires = jiffies + PUT_INTERVAL;
 
 		/*add_timer(&pbi->timer);
@@ -9133,13 +9131,10 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 #endif
 	pbi->stat |= STAT_VF_HOOK;
 
-	pbi->timer.data = (ulong)pbi;
-	pbi->timer.function = vvp9_put_timer_func;
 	pbi->timer.expires = jiffies + PUT_INTERVAL;
+	add_timer(&pbi->timer);
 
 	pbi->stat |= STAT_VDEC_RUN;
-
-	add_timer(&pbi->timer);
 
 	pbi->stat |= STAT_TIMER_ARM;
 
@@ -9295,7 +9290,7 @@ static struct VP9Decoder_s *gHevc;
 static int amvdec_vp9_probe(struct platform_device *pdev)
 {
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
-	struct BUF_s BUF[MAX_BUF_NUM];
+	//struct BUF_s BUF[MAX_BUF_NUM];
 	struct VP9Decoder_s *pbi;
 	int ret;
 #ifndef MULTI_INSTANCE_SUPPORT
@@ -9304,7 +9299,7 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 	pr_debug("%s\n", __func__);
 
 	mutex_lock(&vvp9_mutex);
-	pbi = vmalloc(sizeof(struct VP9Decoder_s));
+	pbi = vzalloc(sizeof(struct VP9Decoder_s));
 	if (pbi == NULL) {
 		pr_info("\namvdec_vp9 device data allocation failed\n");
 		mutex_unlock(&vvp9_mutex);
@@ -9312,9 +9307,11 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 	}
 
 	gHevc = pbi;
+#if 0
 	memcpy(&BUF[0], &pbi->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
 	memset(pbi, 0, sizeof(struct VP9Decoder_s));
 	memcpy(&pbi->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
+#endif
 
 	pbi->init_flag = 0;
 	pbi->first_sc_checked= 0;
@@ -9454,32 +9451,16 @@ static int amvdec_vp9_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int vp9_suspend(struct device *dev)
-{
-	amhevc_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int vp9_resume(struct device *dev)
-{
-	amhevc_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops vp9_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(vp9_suspend, vp9_resume)
-};
-#endif
 
 static struct platform_driver amvdec_vp9_driver = {
 	.probe = amvdec_vp9_probe,
 	.remove = amvdec_vp9_remove,
+#ifdef CONFIG_PM
+	.suspend = amhevc_suspend,
+	.resume = amhevc_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &vp9_pm_ops,
-#endif
 	}
 };
 
@@ -9918,7 +9899,6 @@ static void run_front(struct vdec_s *vdec)
 		vdec_schedule_work(&pbi->work);
 		return;
 	}
-
 	input_empty[pbi->index] = 0;
 	pbi->dec_result = DEC_RESULT_NONE;
 	pbi->start_shift_bytes = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
@@ -10404,7 +10384,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	struct vframe_content_light_level_s content_light_level;
 	struct vframe_master_display_colour_s vf_dp;
 
-	struct BUF_s BUF[MAX_BUF_NUM];
+	//struct BUF_s BUF[MAX_BUF_NUM];
 	struct VP9Decoder_s *pbi = NULL;
 	pr_debug("%s\n", __func__);
 
@@ -10435,8 +10415,10 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pdata->threaded_irq_handler = vp9_threaded_irq_cb;
 	pdata->dump_state = vp9_dump_state;
 
+#if 0
 	memcpy(&BUF[0], &pbi->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
 	memcpy(&pbi->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
+#endif
 
 	pbi->index = pdev->id;
 
@@ -10721,11 +10703,12 @@ static int ammvdec_vp9_remove(struct platform_device *pdev)
 static struct platform_driver ammvdec_vp9_driver = {
 	.probe = ammvdec_vp9_probe,
 	.remove = ammvdec_vp9_remove,
+#ifdef CONFIG_PM
+	.suspend = amhevc_suspend,
+	.resume = amhevc_resume,
+#endif
 	.driver = {
 		.name = MULTI_DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &vp9_pm_ops,
-#endif
 	}
 };
 #endif

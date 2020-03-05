@@ -1179,7 +1179,7 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 					"reqbufs (st:%d) %d -> %d\n",
 					ctx->state, rb->count, ctx->dpb_size);
-			//rb->count = ctx->dpb_size;
+			rb->count = ctx->dpb_size;
 		}
 	}
 

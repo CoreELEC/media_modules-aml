@@ -23,9 +23,7 @@
 #include <linux/fs.h>
 #include <linux/kfifo.h>
 #include <linux/platform_device.h>
-
 #include <linux/amlogic/media/canvas/canvas.h>
-
 #include <linux/dma-mapping.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/utils/vformat.h>
@@ -40,11 +38,9 @@
 #include "../utils/vdec.h"
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/amvdec.h"
-
 #include "../../../stream_input/parser/streambuf.h"
 #include "../../../stream_input/parser/streambuf_reg.h"
 #include "../../../stream_input/parser/rmparser.h"
-
 #include "vreal.h"
 #include <linux/amlogic/media/registers/register.h>
 #include "../utils/decoder_mmu_box.h"
@@ -52,9 +48,8 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
-#include <linux/amlogic/tee.h>
-
-
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
 
 #define DRIVER_NAME "amvdec_real"
 #define MODULE_NAME "amvdec_real"
@@ -457,9 +452,8 @@ static void vreal_set_clk(struct work_struct *work)
 	}
 }
 
-static void vreal_put_timer_func(unsigned long arg)
+static void vreal_put_timer_func(struct timer_list *timer)
 {
-	struct timer_list *timer = (struct timer_list *)arg;
 	/* unsigned int status; */
 
 #if 0
@@ -808,7 +802,7 @@ s32 vreal_init(struct vdec_s *vdec)
 
 	pr_info("vreal_init\n");
 
-	init_timer(&recycle_timer);
+	timer_setup(&recycle_timer, vreal_put_timer_func, 0);
 
 	stat |= STAT_TIMER_INIT;
 
@@ -907,10 +901,7 @@ s32 vreal_init(struct vdec_s *vdec)
 
 	stat |= STAT_VF_HOOK;
 
-	recycle_timer.data = (ulong)&recycle_timer;
-	recycle_timer.function = vreal_put_timer_func;
 	recycle_timer.expires = jiffies + PUT_INTERVAL;
-
 	add_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_ARM;
@@ -1001,32 +992,16 @@ static int amvdec_real_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int real_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int real_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops real_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(real_suspend, real_resume)
-};
-#endif
 
 static struct platform_driver amvdec_real_driver = {
 	.probe = amvdec_real_probe,
 	.remove = amvdec_real_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &real_pm_ops,
-#endif
 	}
 };
 

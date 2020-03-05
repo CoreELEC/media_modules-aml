@@ -26,12 +26,10 @@
 #include <linux/dma-mapping.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
-
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/canvas/canvas.h>
-
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "vmpeg4.h"
 #include <linux/amlogic/media/registers/register.h>
@@ -40,7 +38,8 @@
 #include "../utils/decoder_bmmu_box.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
 
 
 
@@ -714,10 +713,8 @@ static void vmpeg4_set_clk(struct work_struct *work)
 			frame_width, frame_height, fps);
 }
 
-static void vmpeg_put_timer_func(unsigned long arg)
+static void vmpeg_put_timer_func(struct timer_list *timer)
 {
-	struct timer_list *timer = (struct timer_list *)arg;
-
 	while (!kfifo_is_empty(&recycle_q) && (READ_VREG(MREG_BUFFERIN) == 0)) {
 		struct vframe_s *vf;
 
@@ -733,7 +730,7 @@ static void vmpeg_put_timer_func(unsigned long arg)
 
 	if (frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur))
-		schedule_work(&set_clk_work);
+	schedule_work(&set_clk_work);
 
 	if (READ_VREG(AV_SCRATCH_L)) {
 		pr_info("mpeg4 fatal error happened,need reset    !!\n");
@@ -1064,7 +1061,7 @@ static s32 vmpeg4_init(void)
 	stat |= STAT_MC_LOAD;
 	query_video_status(0, &trickmode_fffb);
 
-	init_timer(&recycle_timer);
+	timer_setup(&recycle_timer, vmpeg_put_timer_func, 0);
 	stat |= STAT_TIMER_INIT;
 
 	if (vdec_request_irq(VDEC_IRQ_1, vmpeg4_isr,
@@ -1109,10 +1106,7 @@ static s32 vmpeg4_init(void)
 
 	stat |= STAT_VF_HOOK;
 
-	recycle_timer.data = (ulong)&recycle_timer;
-	recycle_timer.function = vmpeg_put_timer_func;
 	recycle_timer.expires = jiffies + PUT_INTERVAL;
-
 	add_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_ARM;
@@ -1216,32 +1210,16 @@ static int amvdec_mpeg4_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int mpeg4_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int mpeg4_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops mpeg4_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mpeg4_suspend, mpeg4_resume)
-};
-#endif
 
 static struct platform_driver amvdec_mpeg4_driver = {
 	.probe = amvdec_mpeg4_probe,
 	.remove = amvdec_mpeg4_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &mpeg4_pm_ops,
-#endif
 	}
 };
 

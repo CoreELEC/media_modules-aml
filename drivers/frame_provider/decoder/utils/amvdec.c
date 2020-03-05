@@ -43,7 +43,8 @@
 #include "amvdec.h"
 #include <linux/amlogic/media/utils/amports_config.h>
 #include "firmware.h"
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 
 #define MC_SIZE (4096 * 16)

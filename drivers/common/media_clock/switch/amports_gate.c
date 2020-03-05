@@ -96,11 +96,11 @@ int amports_clock_gate_init(struct device *dev)
 		gates[i].clk = devm_clk_get(dev, gates[i].name);
 		if (IS_ERR_OR_NULL(gates[i].clk)) {
 			gates[i].clk = NULL;
-			pr_info("get gate %s control failed %p\n",
+			pr_info("get gate %s control failed %px\n",
 				gates[i].name,
 				gates[i].clk);
 		} else {
-			pr_info("get gate %s control ok %p\n",
+			pr_info("get gate %s control ok %px\n",
 				gates[i].name,
 				gates[i].clk);
 		}

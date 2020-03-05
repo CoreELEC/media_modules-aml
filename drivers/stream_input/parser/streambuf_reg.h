@@ -103,12 +103,6 @@
 			(VDEC2_VLD_MEM_VIFIFO_START_PTR+(r))))
 #define _WRITE_VDEC2_ST_REG(r, val) codec_dosbus_write(\
 		(VDEC2_VLD_MEM_VIFIFO_START_PTR+r), val)
-#define MEM_BUFCTRL_MANUAL      (1<<1)
-#define MEM_BUFCTRL_INIT        (1<<0)
 #define MEM_LEVEL_CNT_BIT       18
 #define MEM_FIFO_CNT_BIT        16
-#define MEM_FILL_ON_LEVEL       (1<<10)
-#define MEM_CTRL_EMPTY_EN       (1<<2)
-#define MEM_CTRL_FILL_EN        (1<<1)
-#define MEM_CTRL_INIT           (1<<0)
 #endif /* STREAMBUF_REG_H */

@@ -23,12 +23,9 @@
 #include <linux/io.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/utils/vformat.h>
-#include <linux/amlogic/iomap.h>
 #include <asm/cacheflush.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
-/* #include <mach/am_regs.h> */
-
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "streambuf_reg.h"
@@ -194,9 +191,10 @@ void stbuf_fetch_release(void)
 	}
 }
 
-static void _stbuf_timer_func(unsigned long arg)
+static void _stbuf_timer_func(struct timer_list *timer)
 {
-	struct stream_buf_s *p = (struct stream_buf_s *)arg;
+	struct stream_buf_s *p = container_of(timer,
+		struct stream_buf_s, timer);
 
 	if (stbuf_space(p) < p->wcnt) {
 		p->timer.expires = jiffies + STBUF_WAIT_INTERVAL;
@@ -277,8 +275,6 @@ s32 stbuf_init(struct stream_buf_s *buf, struct vdec_s *vdec, bool is_multi)
 	u32 dummy;
 	u32 addr32;
 
-	VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
-
 	if (!buf->buf_start) {
 		r = _stbuf_alloc(buf, (vdec) ?
 			vdec->port_flag & PORT_FLAG_DRM : 0);
@@ -304,9 +300,10 @@ s32 stbuf_init(struct stream_buf_s *buf, struct vdec_s *vdec, bool is_multi)
 	}
 
 	buf->write_thread = 0;
-	if (((vdec && !vdec_single(vdec)) || (is_multi)) &&
-		(vdec_get_debug_flags() & 0x2) == 0)
+
+	if ((vdec && !vdec_single(vdec)) || (is_multi))
 		return 0;
+
 	if (has_hevc_vdec() && buf->type == BUF_TYPE_HEVC) {
 		CLEAR_VREG_MASK(HEVC_STREAM_CONTROL, 1);
 		WRITE_VREG(HEVC_STREAM_START_ADDR, addr32);
@@ -318,8 +315,6 @@ s32 stbuf_init(struct stream_buf_s *buf, struct vdec_s *vdec, bool is_multi)
 	}
 
 	if (buf->type == BUF_TYPE_VIDEO) {
-		VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
-
 		_WRITE_ST_REG(CONTROL, 0);
 		/* reset VLD before setting all pointers */
 		WRITE_VREG(VLD_MEM_VIFIFO_WRAP_COUNT, 0);
@@ -395,7 +390,7 @@ s32 stbuf_wait_space(struct stream_buf_s *stream_buf, size_t count)
 
 	p->wcnt = count;
 
-	setup_timer(&p->timer, _stbuf_timer_func, (ulong) p);
+	timer_setup(&p->timer, _stbuf_timer_func, 0);
 
 	mod_timer(&p->timer, jiffies + STBUF_WAIT_INTERVAL);
 

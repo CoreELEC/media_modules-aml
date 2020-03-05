@@ -20,13 +20,11 @@
 #include <linux/types.h>
 #include <linux/debugfs.h>
 #include <linux/moduleparam.h>
-
-
+#include <linux/sched/clock.h>
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <trace/events/meson_atrace.h>
 #include "vdec_profile.h"
 #include "vdec.h"
-
 
 #define ISA_TIMERE 0x2662
 #define ISA_TIMERE_HI 0x2663
@@ -112,11 +110,7 @@ static u64 get_us_time_hw(void)
 
 static u64 get_us_time_system(void)
 {
-	struct timeval tv;
-
-	do_gettimeofday(&tv);
-
-	return div64_u64(timeval_to_ns(&tv), 1000);
+	return div64_u64(local_clock(), 1000);
 }
 
 static void vdec_profile_update_alloc_time(

@@ -422,6 +422,7 @@ static int decoder_bmmu_box_dump(struct decoder_bmmu_box *box, void *buf,
 	int tsize = 0;
 	int s;
 	int i;
+
 	if (!buf) {
 		pbuf = sbuf;
 		size = 512;
@@ -466,6 +467,7 @@ static int decoder_bmmu_box_dump_all(void *buf, int size)
 	int s;
 	int i;
 	struct list_head *head, *list;
+
 	if (!buf) {
 		pbuf = sbuf;
 		size = 512;
@@ -523,7 +525,7 @@ static ssize_t box_dump_show(struct class *class, struct class_attribute *attr,
 	return ret;
 }
 
-static ssize_t box_debug_show(struct class *class,
+static ssize_t debug_show(struct class *class,
 		struct class_attribute *attr,
 		char *buf)
 {
@@ -537,8 +539,7 @@ static ssize_t box_debug_show(struct class *class,
 	return size;
 }
 
-
-static ssize_t box_debug_store(struct class *class,
+static ssize_t debug_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t size)
 {
@@ -559,19 +560,21 @@ static ssize_t box_debug_store(struct class *class,
 
 }
 
+static CLASS_ATTR_RO(box_dump);
+static CLASS_ATTR_RW(debug);
 
-
-static struct class_attribute decoder_bmmu_box_class_attrs[] = {
-	__ATTR_RO(box_dump),
-	__ATTR(debug, S_IRUGO | S_IWUSR | S_IWGRP,
-		box_debug_show, box_debug_store),
-	__ATTR_NULL
+static struct attribute *decoder_bmmu_box_class_attrs[] = {
+	&class_attr_box_dump.attr,
+	&class_attr_debug.attr,
+	NULL
 };
 
+ATTRIBUTE_GROUPS(decoder_bmmu_box_class);
+
 static struct class decoder_bmmu_box_class = {
-		.name = "decoder_bmmu_box",
-		.class_attrs = decoder_bmmu_box_class_attrs,
-	};
+	.name = "decoder_bmmu_box",
+	.class_groups = decoder_bmmu_box_class_groups,
+};
 
 int decoder_bmmu_box_init(void)
 {

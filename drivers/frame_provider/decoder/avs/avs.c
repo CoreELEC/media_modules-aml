@@ -43,8 +43,8 @@
 #include "../utils/decoder_bmmu_box.h"
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
-#include <linux/amlogic/tee.h>
-
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
 
 #define DRIVER_NAME "amvdec_avs"
 #define MODULE_NAME "amvdec_avs"
@@ -159,7 +159,6 @@ static u32 canvas_base = 128;
 #else
 	int	canvas_num = 3;
 #endif
-
 
 static struct vframe_s vfpool[VF_POOL_SIZE];
 /*static struct vframe_s vfpool2[VF_POOL_SIZE];*/
@@ -644,6 +643,7 @@ static void vavs_isr(void)
 				decoder_bmmu_box_get_mem_handle(
 					mm_blk_handle,
 					buffer_index);
+
 			kfifo_put(&display_q,
 					  (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -726,7 +726,6 @@ static void vavs_isr(void)
 					mm_blk_handle,
 					buffer_index);
 			decoder_do_frame_check(NULL, vf);
-
 			kfifo_put(&display_q,
 					  (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -1179,20 +1178,20 @@ static void vavs_local_init(bool is_reset)
 #endif
 
 	if (!is_reset) {
-		INIT_KFIFO(display_q);
-		INIT_KFIFO(recycle_q);
-		INIT_KFIFO(newframe_q);
+	INIT_KFIFO(display_q);
+	INIT_KFIFO(recycle_q);
+	INIT_KFIFO(newframe_q);
 
-		for (i = 0; i < VF_POOL_SIZE; i++) {
-			const struct vframe_s *vf = &vfpool[i];
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		const struct vframe_s *vf = &vfpool[i];
 
-			vfpool[i].index = vf_buf_num;
-			vfpool[i].bufWidth = 1920;
-			kfifo_put(&newframe_q, vf);
-		}
+		vfpool[i].index = vf_buf_num;
+		vfpool[i].bufWidth = 1920;
+		kfifo_put(&newframe_q, vf);
+	}
 
-		for (i = 0; i < vf_buf_num; i++)
-			vfbuf_use[i] = 0;
+	for (i = 0; i < vf_buf_num; i++)
+		vfbuf_use[i] = 0;
 	}
 
 	cur_vfpool = vfpool;
@@ -1323,10 +1322,8 @@ static void avs_set_clk(struct work_struct *work)
 		}
 }
 
-static void vavs_put_timer_func(unsigned long arg)
+static void vavs_put_timer_func(struct timer_list *timer)
 {
-	struct timer_list *timer = (struct timer_list *)arg;
-
 #ifndef HANDLE_AVS_IRQ
 	vavs_isr();
 #endif
@@ -1414,7 +1411,7 @@ static void vavs_put_timer_func(unsigned long arg)
 
 	if (frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur))
-		schedule_work(&set_clk_work);
+	schedule_work(&set_clk_work);
 
 	timer->expires = jiffies + PUT_INTERVAL;
 
@@ -1543,7 +1540,6 @@ static s32 vavs_init(void)
 		return -ENOMEM;
 
 	pr_info("vavs_init\n");
-	init_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_INIT;
 
@@ -1627,10 +1623,8 @@ static s32 vavs_init(void)
 
 	stat |= STAT_VF_HOOK;
 
-	recycle_timer.data = (ulong)(&recycle_timer);
-	recycle_timer.function = vavs_put_timer_func;
+	timer_setup(&recycle_timer, vavs_put_timer_func, 0);
 	recycle_timer.expires = jiffies + PUT_INTERVAL;
-
 	add_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_ARM;
@@ -1811,40 +1805,20 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 	pr_debug("total frame %d, avi_flag %d, rate %d\n", total_frame, avi_flag,
 		   vavs_amstream_dec_info.rate);
 #endif
-	kfree(gvs);
-	gvs = NULL;
+		kfree(gvs);
+		gvs = NULL;
 
 	cancel_work_sync(&set_clk_work);
 	return 0;
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int avs_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int avs_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops avs_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(avs_suspend, avs_resume)
-};
-#endif
 
 static struct platform_driver amvdec_avs_driver = {
 	.probe = amvdec_avs_probe,
 	.remove = amvdec_avs_remove,
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &avs_pm_ops,
-#endif
 	}
 };
 

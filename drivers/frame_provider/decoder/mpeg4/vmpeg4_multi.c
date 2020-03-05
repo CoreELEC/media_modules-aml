@@ -26,13 +26,14 @@
 #include <linux/dma-mapping.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
-
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
+#include <linux/sched/clock.h>
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
@@ -178,14 +179,18 @@ int mmpeg4_debug_print(int index, int debug_flag, const char *fmt, ...)
 	if (((debug_enable & debug_flag) &&
 		((1 << index) & mpeg4_debug_mask))
 		|| (debug_flag == PRINT_FLAG_ERROR)) {
-		unsigned char buf[512];
+		unsigned char *buf = vzalloc(512);
 		int len = 0;
 		va_list args;
+
+		if (!buf)
+			return 0;
 		va_start(args, fmt);
 		len = sprintf(buf, "%d: ", index);
 		vsnprintf(buf + len, 512-len, fmt, args);
 		pr_info("%s", buf);
 		va_end(args);
+		vfree(buf);
 	}
 	return 0;
 }
@@ -339,7 +344,6 @@ static unsigned char aspect_ratio_table[16] = {
 };
 
 static void reset_process_time(struct vdec_mpeg4_hw_s *hw);
-
 
 static int vmpeg4_get_buf_num(struct vdec_mpeg4_hw_s *hw)
 {
@@ -874,7 +878,6 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 	u32 repeat_cnt, duration = 3200;
 	struct pic_info_t *dec_pic, *disp_pic;
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)(vdec->private);
-
 	if (hw->eos)
 		return IRQ_HANDLED;
 
@@ -1760,9 +1763,10 @@ static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 }
 
 
-static void check_timer_func(unsigned long arg)
+static void check_timer_func(struct timer_list *timer)
 {
-	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)arg;
+	struct vdec_mpeg4_hw_s *hw = container_of(timer,
+		struct vdec_mpeg4_hw_s, check_timer);
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	unsigned int timeout_val = decode_timeout_val;
 
@@ -2031,9 +2035,10 @@ static s32 vmmpeg4_init(struct vdec_mpeg4_hw_s *hw)
 
 	amvdec_enable();
 
-	init_timer(&hw->check_timer);
-	hw->check_timer.data = (unsigned long)hw;
-	hw->check_timer.function = check_timer_func;
+	timer_setup(&hw->check_timer, check_timer_func, 0);
+	//init_timer(&hw->check_timer);
+	//hw->check_timer.data = (unsigned long)hw;
+	//hw->check_timer.function = check_timer_func;
 	hw->check_timer.expires = jiffies + CHECK_INTERVAL;
 	hw->stat |= STAT_TIMER_ARM;
 	hw->eos = 0;
@@ -2048,7 +2053,6 @@ static s32 vmmpeg4_init(struct vdec_mpeg4_hw_s *hw)
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 {
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
-
 	if (hw->eos)
 		return 0;
 	if (vdec_stream_based(vdec) && (hw->init_flag == 0)
@@ -2415,32 +2419,16 @@ static int ammvdec_mpeg4_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int mmpeg4_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int mmpeg4_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops mmpeg4_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mmpeg4_suspend, mmpeg4_resume)
-};
-#endif
 
 static struct platform_driver ammvdec_mpeg4_driver = {
 	.probe = ammvdec_mpeg4_probe,
 	.remove = ammvdec_mpeg4_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &mmpeg4_pm_ops,
-#endif
 	}
 };
 

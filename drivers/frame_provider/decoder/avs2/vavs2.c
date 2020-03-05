@@ -37,7 +37,9 @@
 #include <linux/dma-mapping.h>
 #include <linux/dma-contiguous.h>
 #include <linux/slab.h>
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
+#include <linux/sched/clock.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include "../utils/decoder_mmu_box.h"
@@ -55,7 +57,6 @@
 #include "../utils/config_parser.h"
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
-#include <linux/amlogic/tee.h>
 
 
 #define I_ONLY_SUPPORT
@@ -67,8 +68,6 @@
 #define HEVC_SHIFT_LENGTH_PROTECT                  0x313a
 #define HEVC_MPRED_CTRL9                           0x325b
 #define HEVC_DBLK_CFGD                             0x350d
-
-
 #define HEVC_CM_HEADER_START_ADDR                  0x3628
 #define HEVC_DBLK_CFGB                             0x350b
 #define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
@@ -297,7 +296,7 @@ static int vavs2_stop(struct AVS2Decoder_s *dec);
 static s32 vavs2_init(struct vdec_s *vdec);
 static void vavs2_prot_init(struct AVS2Decoder_s *dec);
 static int vavs2_local_init(struct AVS2Decoder_s *dec);
-static void vavs2_put_timer_func(unsigned long arg);
+static void vavs2_put_timer_func(struct timer_list *timer);
 static void dump_data(struct AVS2Decoder_s *dec, int size);
 static unsigned char get_data_check_sum
 	(struct AVS2Decoder_s *dec, int size);
@@ -3776,10 +3775,6 @@ static void config_avs2_clk_forced_on(void)
 }
 #endif
 
-
-
-
-
 static struct AVS2Decoder_s gAVS2Decoder;
 
 static void avs2_local_uninit(struct AVS2Decoder_s *dec)
@@ -3921,7 +3916,17 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 		avs2_print(dec, AVS2_DBG_BUFMGR,
 			"%s, lmem_phy_addr %x\n",
 			__func__, (u32)dec->lmem_phy_addr);
-
+/*
+	dec->lmem_phy_addr = dma_map_single(amports_get_dma_device(),
+		dec->lmem_addr, LMEM_BUF_SIZE, DMA_BIDIRECTIONAL);
+	if (dma_mapping_error(amports_get_dma_device(),
+		dec->lmem_phy_addr)) {
+		pr_err("%s: failed to map lmem buffer\n", __func__);
+		kfree(dec->lmem_addr);
+		dec->lmem_addr = NULL;
+		return -1;
+	}
+*/
 	dec->lmem_ptr = dec->lmem_addr;
 
 
@@ -3934,6 +3939,15 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 		return -1;
 	}
 	memset(dec->frame_mmu_map_addr, 0, get_frame_mmu_map_size(dec));
+/*	dec->frame_mmu_map_phy_addr = dma_map_single(amports_get_dma_device(),
+	dec->frame_mmu_map_addr, FRAME_MMU_MAP_SIZE, DMA_BIDIRECTIONAL);
+	if (dma_mapping_error(amports_get_dma_device(),
+	dec->frame_mmu_map_phy_addr)) {
+		pr_err("%s: failed to map count_buffer\n", __func__);
+		kfree(dec->frame_mmu_map_addr);
+		dec->frame_mmu_map_addr = NULL;
+		return -1;
+	}*/
 #endif
 
 	ret = 0;
@@ -4549,7 +4563,6 @@ static inline void dec_update_gvs(struct AVS2Decoder_s *dec)
 	}
 	dec->gvs->status = dec->stat | dec->fatal_error;
 }
-
 
 static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 {
@@ -5904,10 +5917,10 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 	return IRQ_WAKE_THREAD;
 }
 
-static void vavs2_put_timer_func(unsigned long arg)
+static void vavs2_put_timer_func(struct timer_list *timer)
 {
-	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)arg;
-	struct timer_list *timer = &dec->timer;
+	struct AVS2Decoder_s *dec = container_of(timer,
+		struct AVS2Decoder_s, timer);
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
@@ -6025,6 +6038,7 @@ static void vavs2_put_timer_func(unsigned long arg)
 	}
 	if (debug & AVS2_DBG_DUMP_RPM_BUF) {
 		int i;
+
 		pr_info("RPM:\n");
 		for (i = 0; i < RPM_BUF_SIZE; i += 4) {
 			int ii;
@@ -6041,6 +6055,7 @@ static void vavs2_put_timer_func(unsigned long arg)
 	}
 	if (debug & AVS2_DBG_DUMP_LMEM_BUF) {
 		int i;
+
 		pr_info("LMEM:\n");
 		for (i = 0; i < LMEM_BUF_SIZE; i += 4) {
 			int ii;
@@ -6312,7 +6327,8 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	int fw_size = 0x1000 * 16;
 	struct firmware_s *fw = NULL;
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)vdec->private;
-	init_timer(&dec->timer);
+
+	timer_setup(&dec->timer, vavs2_put_timer_func, 0);
 
 	dec->stat |= STAT_TIMER_INIT;
 	if (vavs2_local_init(dec) < 0)
@@ -6334,8 +6350,6 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	fw->len = fw_size;
 
 	if (dec->m_ins_flag) {
-		dec->timer.data = (ulong) dec;
-		dec->timer.function = vavs2_put_timer_func;
 		dec->timer.expires = jiffies + PUT_INTERVAL;
 
 		/*add_timer(&dec->timer);
@@ -6348,7 +6362,9 @@ static s32 vavs2_init(struct vdec_s *vdec)
 
 		return 0;
 	}
+
 	amhevc_enable();
+
 	ret = amhevc_loadmc_ex(VFORMAT_AVS2, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();
@@ -6391,11 +6407,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	}
 	dec->stat |= STAT_VF_HOOK;
 
-	dec->timer.data = (ulong)dec;
-	dec->timer.function = vavs2_put_timer_func;
 	dec->timer.expires = jiffies + PUT_INTERVAL;
-
-
 	add_timer(&dec->timer);
 
 	dec->stat |= STAT_TIMER_ARM;
@@ -6518,15 +6530,25 @@ static int amvdec_avs2_mmu_init(struct AVS2Decoder_s *dec)
 static int amvdec_avs2_probe(struct platform_device *pdev)
 {
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
-	struct BUF_s BUF[MAX_BUF_NUM];
+	/*struct BUF_s BUF[MAX_BUF_NUM];*/
 	struct AVS2Decoder_s *dec = &gAVS2Decoder;
 	int ret;
 	pr_info("%s\n", __func__);
+
+	dec = vzalloc(sizeof(struct AVS2Decoder_s));
+	if (!dec)
+		return -ENOMEM;
+
+	pdata->private = dec;
+	platform_set_drvdata(pdev, pdata);
+
 	mutex_lock(&vavs2_mutex);
 
-	memcpy(&BUF[0], &dec->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
-	memset(dec, 0, sizeof(struct AVS2Decoder_s));
-	memcpy(&dec->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
+	/*
+	 *memcpy(&BUF[0], &dec->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
+	 *memset(dec, 0, sizeof(struct AVS2Decoder_s));
+	 *memcpy(&dec->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
+	 */
 
 	dec->init_flag = 0;
 	dec->first_sc_checked = 0;
@@ -6625,32 +6647,16 @@ static int amvdec_avs2_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int avs2_suspend(struct device *dev)
-{
-	amhevc_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int avs2_resume(struct device *dev)
-{
-	amhevc_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops avs2_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(avs2_suspend, avs2_resume)
-};
-#endif
 
 static struct platform_driver amvdec_avs2_driver = {
 	.probe = amvdec_avs2_probe,
 	.remove = amvdec_avs2_remove,
+#ifdef CONFIG_PM
+	.suspend = amhevc_suspend,
+	.resume = amhevc_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &avs2_pm_ops,
-#endif
 	}
 };
 
@@ -7279,9 +7285,9 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	int config_val;
 	struct vframe_content_light_level_s content_light_level;
 	struct vframe_master_display_colour_s vf_dp;
-
-	struct BUF_s BUF[MAX_BUF_NUM];
+	/*struct BUF_s BUF[MAX_BUF_NUM];*/
 	struct AVS2Decoder_s *dec = NULL;
+
 	pr_info("%s\n", __func__);
 	if (pdata == NULL) {
 		pr_info("\nammvdec_avs2 memory resource undefined.\n");
@@ -7315,9 +7321,11 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	pdata->threaded_irq_handler = avs2_threaded_irq_cb;
 	pdata->dump_state = avs2_dump_state;
 
-	memcpy(&BUF[0], &dec->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
-	memset(dec, 0, sizeof(struct AVS2Decoder_s));
-	memcpy(&dec->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
+	/*
+	 * memcpy(&BUF[0], &dec->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
+	 * memset(dec, 0, sizeof(struct AVS2Decoder_s));
+	 * memcpy(&dec->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
+	 */
 
 	dec->index = pdev->id;
 	dec->m_ins_flag = 1;
@@ -7512,11 +7520,12 @@ static int ammvdec_avs2_remove(struct platform_device *pdev)
 static struct platform_driver ammvdec_avs2_driver = {
 	.probe = ammvdec_avs2_probe,
 	.remove = ammvdec_avs2_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = MULTI_DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &avs2_pm_ops,
-#endif
 	}
 };
 #endif

@@ -967,21 +967,25 @@ ssize_t tsdemux_write(struct file *file,
 		return -EAGAIN;
 }
 
-static ssize_t show_discontinue_counter(struct class *class,
+static ssize_t discontinue_counter_show(struct class *class,
 		struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", discontinued_counter);
 }
 
-static struct class_attribute tsdemux_class_attrs[] = {
-	__ATTR(discontinue_counter, S_IRUGO, show_discontinue_counter, NULL),
-	__ATTR_NULL
+static CLASS_ATTR_RO(discontinue_counter);
+
+static struct attribute *tsdemux_class_attrs[] = {
+	&class_attr_discontinue_counter.attr,
+	NULL
 };
 
+ATTRIBUTE_GROUPS(tsdemux_class);
+
 static struct class tsdemux_class = {
-		.name = "tsdemux",
-		.class_attrs = tsdemux_class_attrs,
-	};
+	.name = "tsdemux",
+	.class_groups = tsdemux_class_groups,
+};
 
 int tsdemux_class_register(void)
 {

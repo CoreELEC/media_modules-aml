@@ -23,7 +23,6 @@
 #include <linux/timer.h>
 #include <linux/kfifo.h>
 #include <linux/platform_device.h>
-
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/vfm/vframe.h>
@@ -38,7 +37,6 @@
 #include <linux/slab.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include <linux/amlogic/media/canvas/canvas.h>
-
 #include "../utils/vdec.h"
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/amvdec.h"
@@ -46,18 +44,16 @@
 #include "../../../stream_input/parser/streambuf.h"
 #include <linux/delay.h>
 #include <linux/amlogic/media/video_sink/video.h>
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
 #include <linux/amlogic/media/ge2d/ge2d.h>
 #include "../utils/decoder_mmu_box.h"
 #include "../utils/decoder_bmmu_box.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
-#include <linux/amlogic/tee.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/uaccess.h>
-
-
 
 #define DRIVER_NAME "amvdec_h264"
 #define MODULE_NAME "amvdec_h264"
@@ -160,7 +156,7 @@ static int vh264_event_cb(int type, void *data, void *private_data);
 
 static void vh264_prot_init(void);
 static int vh264_local_init(void);
-static void vh264_put_timer_func(unsigned long arg);
+static void vh264_put_timer_func(struct timer_list *timer);
 static void stream_switching_done(void);
 
 static const char vh264_dec_id[] = "vh264-dev";
@@ -252,14 +248,6 @@ static unsigned int canvas_mode;
 static u32 bad_block_scale;
 #endif
 static u32 enable_userdata_debug;
-
-/* if not define, must clear AV_SCRATCH_J in isr when
- * ITU_T35 code enabled in ucode, otherwise may fatal
- * error repeatly.
- */
-//#define ENABLE_SEI_ITU_T35
-
-
 
 static unsigned int enable_switch_fense = 1;
 #define EN_SWITCH_FENCE() (enable_switch_fense && !is_4k)
@@ -2599,7 +2587,6 @@ static inline void h264_update_gvs(void)
 	gvs->ratio_control = ratio_control;
 }
 
-
 #ifdef HANDLE_H264_IRQ
 static irqreturn_t vh264_isr(int irq, void *dev_id)
 #else
@@ -3348,9 +3335,8 @@ static void vh264_set_clk(struct work_struct *work)
 			frame_width, frame_height, fps);
 }
 
-static void vh264_put_timer_func(unsigned long arg)
+static void vh264_put_timer_func(struct timer_list *timer)
 {
-	struct timer_list *timer = (struct timer_list *)arg;
 	unsigned int wait_buffer_status;
 	unsigned int wait_i_pass_frames;
 	unsigned int reg_val;
@@ -3477,7 +3463,7 @@ static void vh264_put_timer_func(unsigned long arg)
 		(clk_adj_frame_count > VDEC_CLOCK_ADJUST_FRAME) &&
 		frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur))
-		schedule_work(&set_clk_work);
+	schedule_work(&set_clk_work);
 
 exit:
 	timer->expires = jiffies + PUT_INTERVAL;
@@ -3800,7 +3786,7 @@ static s32 vh264_init(void)
 	int firmwareloaded = 0;
 
 	/* pr_info("\nvh264_init\n"); */
-	init_timer(&recycle_timer);
+	timer_setup(&recycle_timer, vh264_put_timer_func, 0);
 
 	stat |= STAT_TIMER_INIT;
 
@@ -3992,10 +3978,7 @@ static s32 vh264_init(void)
 
 	stat |= STAT_VF_HOOK;
 
-	recycle_timer.data = (ulong) &recycle_timer;
-	recycle_timer.function = vh264_put_timer_func;
 	recycle_timer.expires = jiffies + PUT_INTERVAL;
-
 	add_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_ARM;
@@ -4351,8 +4334,6 @@ static int amvdec_h264_probe(struct platform_device *pdev)
 	INIT_WORK(&userdata_push_work, userdata_push_do_work);
 	INIT_WORK(&qos_work, qos_do_work);
 
-
-
 	atomic_set(&vh264_active, 1);
 
 	mutex_unlock(&vh264_mutex);
@@ -4395,32 +4376,16 @@ static int amvdec_h264_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int h264_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int h264_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops h264_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(h264_suspend, h264_resume)
-};
-#endif
 
 static struct platform_driver amvdec_h264_driver = {
 	.probe = amvdec_h264_probe,
 	.remove = amvdec_h264_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &h264_pm_ops,
-#endif
 	}
 };
 
@@ -4490,7 +4455,7 @@ module_param(dec_control, uint, 0664);
 MODULE_PARM_DESC(dec_control, "\n amvdec_h264 decoder control\n");
 module_param(frame_count, uint, 0664);
 MODULE_PARM_DESC(frame_count,
-       "\n amvdec_h264 decoded total count\n");
+		"\n amvdec_h264 decoded total count\n");
 module_param(fatal_error_reset, uint, 0664);
 MODULE_PARM_DESC(fatal_error_reset,
 		"\n amvdec_h264 decoder reset when fatal error happens\n");

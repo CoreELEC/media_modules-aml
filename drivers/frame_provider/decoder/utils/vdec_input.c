@@ -20,14 +20,11 @@
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-
 #include "../../../stream_input/amports/amports_priv.h"
 #include "vdec.h"
 #include "vdec_input.h"
-
 #include <asm/cacheflush.h>
 #include <linux/crc32.h>
-
 
 #define VFRAME_BLOCK_SIZE (512 * SZ_1K)/*512 for 1080p default init.*/
 #define VFRAME_BLOCK_SIZE_4K (2 * SZ_1M) /*2M for 4K default.*/
@@ -62,7 +59,7 @@ static int aml_copy_from_user(void *to, const void *from, ulong n)
 {
 	int ret =0;
 
-	if (likely(access_ok(VERIFY_READ, from, n)))
+	if (likely(access_ok(from, n)))
 		ret = copy_from_user(to, from, n);
 	else
 		memcpy(to, from, n);
@@ -326,6 +323,7 @@ static int vdec_input_dump_block_locked(
 	char sbuf[512];
 	int tsize = 0;
 	int s;
+
 	if (!pbuf) {
 		pbuf = sbuf;
 		size = 512;
@@ -412,6 +410,7 @@ int vdec_input_dump_blocks(struct vdec_input_s *input,
 		s += vdec_input_dump_block_locked(block, lbuf, size - s);
 	}
 	vdec_input_unlock(input, flags);
+
 	return s;
 }
 
@@ -424,6 +423,7 @@ static int vdec_input_dump_chunk_locked(
 	char sbuf[512];
 	int tsize = 0;
 	int s;
+
 	if (!pbuf) {
 		pbuf = sbuf;
 		size = 512;
@@ -470,6 +470,7 @@ int vdec_input_dump_chunks(int id, struct vdec_input_s *input,
 
 	if (size <= 0)
 		return 0;
+
 	if (!bufs)
 		lbuf = sbuf;
 	s = snprintf(lbuf + s, size - s,
@@ -500,6 +501,7 @@ int vdec_input_dump_chunks(int id, struct vdec_input_s *input,
 			break;
 	}
 	vdec_input_unlock(input, flags);
+
 	return s;
 }
 
@@ -765,6 +767,7 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	struct vframe_chunk_s *chunk;
 	struct vdec_s *vdec = input->vdec;
 	struct vframe_block_list_s *block;
+
 	int need_pading_size = MIN_FRAME_PADDING_SIZE;
 
 	if (vdec_secure(vdec)) {
@@ -966,7 +969,6 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 	} else {
 		ret = vdec_input_add_chunk(input, buf, count, 0);
 	}
-
 	return ret;
 }
 EXPORT_SYMBOL(vdec_input_add_frame);
@@ -1141,5 +1143,3 @@ u32 vdec_input_get_freed_handle(struct vdec_s *vdec)
 	return handle;
 }
 EXPORT_SYMBOL(vdec_input_get_freed_handle);
-
-

@@ -41,16 +41,7 @@
 #define PRINT_FLAG_V4L_DETAIL         0x8000
 #define DISABLE_ERROR_HANDLE          0x10000
 #define DEBUG_DUMP_STAT               0x80000
-/*setting canvas mode and endian.
-  if this flag is set, value of canvas mode
-  will according to the value of mem_map_mode.
-  endian will be forced set to 0 in
-  CANVAS_BLKMODE_LINEAR mode.
-  otherwise picture will display abnormal.
-  if this flag is not set, value of canvas mode
-  will be determined by the user speace config.
-  endian will be set 7 in CANVAS_BLKMODE_LINEAR mode.
-*/
+
 #define IGNORE_PARAM_FROM_CONFIG      0x8000000
 
 #define MVC_EXTENSION_ENABLE 0
@@ -61,7 +52,7 @@
 #define H264_OUTPUT_MODE_NORMAL 0x4
 #define H264_OUTPUT_MODE_FAST   0x8
 
-#define FALSE 0
+//#define FALSE 0
 
 #define H264_SLICE_HEAD_DONE         0x01
 #define H264_PIC_DATA_DONE          0x02

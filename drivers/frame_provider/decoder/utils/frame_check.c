@@ -25,6 +25,7 @@
 #include <linux/timer.h>
 #include <linux/kfifo.h>
 #include <linux/kthread.h>
+ #include <linux/vmalloc.h>
 #include <linux/platform_device.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
@@ -121,7 +122,7 @@ static int get_frame_size(struct pic_check_mgr_t *pic,
 			return -1;
 	}
 
-	pic->size_y = vf->width * vf->height;
+	pic->size_y = vf->width* vf->height;
 	pic->size_uv = pic->size_y >> 1;
 	pic->size_pic = pic->size_y + pic->size_uv;
 
@@ -317,9 +318,13 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 static int write_crc_work(struct pic_check_mgr_t *mgr)
 {
 	unsigned int wr_size;
-	char *crc_buf, crc_tmp[64*30];
+	char *crc_buf, *crc_tmp = NULL;
 	mm_segment_t old_fs;
 	struct pic_check_t *check = &mgr->pic_check;
+
+	crc_tmp = (char *)vzalloc(64 * 30);
+	if (!crc_tmp)
+		return -1;
 
 	if (mgr->enable & CRC_MASK) {
 		wr_size = 0;
@@ -344,6 +349,8 @@ static int write_crc_work(struct pic_check_mgr_t *mgr)
 			set_fs(old_fs);
 		}
 	}
+
+	vfree(crc_tmp);
 	return 0;
 }
 
@@ -442,19 +449,20 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 		return 0;
 
 	if (single_mode_vdec != NULL) {
-		if (mgr->size_pic >
-			(dump->buf_size - dump->dump_cnt * mgr->size_pic)) {
-			if (dump->buf_size) {
-				dbg_print(FC_ERROR,
-					"not enough buf, force dump less\n");
-				dump->num = dump->dump_cnt;
-				check_schedule(mgr);
-			} else
-				set_disable(mgr, YUV_MASK);
-			return -1;
-		}
-		tmp_addr = dump->buf_addr +
-			mgr->size_pic * dump->dump_cnt;
+	if (mgr->size_pic >
+		(dump->buf_size - dump->dump_cnt * mgr->size_pic)) {
+		if (dump->buf_size) {
+			dbg_print(FC_ERROR,
+				"not enough buf, force dump less\n");
+			dump->num = dump->dump_cnt;
+			check_schedule(mgr);
+		} else
+			set_disable(mgr, YUV_MASK);
+		return -1;
+	}
+
+	tmp_addr = dump->buf_addr +
+		mgr->size_pic * dump->dump_cnt;
 	} else {
 		if (mgr->size_pic > dump->buf_size) {
 			dbg_print(FC_ERROR,
@@ -571,7 +579,7 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 			if ((comp_crc_y != crc_y) || (crc_uv != comp_crc_uv)) {
 					mgr->pic_dump.start = 0;
 					if (fc_debug || mgr->pic_dump.num < 3)
-						mgr->pic_dump.num++;
+					mgr->pic_dump.num++;
 					dbg_print(0, "\n\nError: %08d: %08x %08x != %08x %08x\n\n",
 						mgr->frame_cnt, crc_y, crc_uv, comp_crc_y, comp_crc_uv);
 					do_yuv_dump(mgr, vf);
@@ -1075,7 +1083,7 @@ void frame_check_exit(struct pic_check_mgr_t *mgr)
 			atomic_set(&mgr->work_inited, 0);
 		}
 		if (single_mode_vdec != NULL)
-			write_yuv_work(mgr);
+		write_yuv_work(mgr);
 		write_crc_work(mgr);
 
 		for (i = 0; i < ARRAY_SIZE(check->fbc_planes); i++) {

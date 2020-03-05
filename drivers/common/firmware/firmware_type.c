@@ -39,7 +39,6 @@ static const struct format_name_s format_name[] = {
 	{VIDEO_DEC_AVS,			"avs"},
 	{VIDEO_DEC_AVS_GXM,		"avs_gxm"},
 	{VIDEO_DEC_AVS_NOCABAC,		"avs_no_cabac"},
-	{VIDEO_DEC_AVS_MULTI,		"avs_multi"},
 	{VIDEO_DEC_H264,		"h264"},
 	{VIDEO_DEC_H264_MVC,		"h264_mvc"},
 	{VIDEO_DEC_H264_MVC_GXM,	"h264_mvc_gxm"},

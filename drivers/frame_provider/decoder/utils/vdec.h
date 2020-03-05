@@ -128,7 +128,6 @@ extern void vdec_fill_vdec_frame(struct vdec_s *vdec,
 				struct vframe_s *vf, u32 hw_dec_time);
 extern void vdec_set_vframe_comm(struct vdec_s *vdec, char *n);
 
-
 struct vdec_s;
 enum vformat_t;
 
@@ -369,7 +368,6 @@ extern int vdec_destroy(struct vdec_s *vdec);
 extern int vdec_reset(struct vdec_s *vdec);
 
 extern int vdec_v4l2_reset(struct vdec_s *vdec, int flag);
-
 extern void vdec_set_status(struct vdec_s *vdec, int status);
 
 extern void vdec_set_next_status(struct vdec_s *vdec, int status);
@@ -431,7 +429,9 @@ extern void vdec_core_finish_run(struct vdec_s *vdec, unsigned long mask);
 #ifdef VDEC_DEBUG_SUPPORT
 extern void vdec_set_step_mode(void);
 #endif
+
 extern void hevc_mmu_dma_check(struct vdec_s *vdec);
+
 int vdec_read_user_data(struct vdec_s *vdec,
 				struct userdata_param_t *p_userdata_param);
 
@@ -447,7 +447,6 @@ extern void vdec_set_step_mode(void);
 int vdec_get_debug_flags(void);
 
 void VDEC_PRINT_FUN_LINENO(const char *fun, int line);
-
 
 unsigned char is_mult_inc(unsigned int);
 

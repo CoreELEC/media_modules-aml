@@ -30,7 +30,6 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/amvdec.h"
 #include "../utils/vdec.h"
@@ -41,10 +40,9 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
-#include <linux/amlogic/tee.h>
+//#include <linux/amlogic/tee.h>
+#include <uapi/linux/tee.h>
 #include <linux/delay.h>
-
-
 
 #define DRIVER_NAME "amvdec_vc1"
 #define MODULE_NAME "amvdec_vc1"
@@ -496,6 +494,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 				decoder_bmmu_box_get_mem_handle(
 					mm_blk_handle,
 					buffer_index);
+
 			kfifo_put(&display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -555,6 +554,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 				decoder_bmmu_box_get_mem_handle(
 					mm_blk_handle,
 					buffer_index);
+
 			kfifo_put(&display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -640,7 +640,6 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 				decoder_bmmu_box_get_mem_handle(
 					mm_blk_handle,
 					buffer_index);
-
 			kfifo_put(&display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -1017,11 +1016,8 @@ static void error_do_work(struct work_struct *work)
 		amvdec_start();
 }
 
-
-static void vvc1_put_timer_func(unsigned long arg)
+static void vvc1_put_timer_func(struct timer_list *timer)
 {
-	struct timer_list *timer = (struct timer_list *)arg;
-
 	if (READ_VREG(VC1_SOS_COUNT) > 10)
 		schedule_work(&error_wd_work);
 
@@ -1057,7 +1053,7 @@ static s32 vvc1_init(void)
 		return -ENOMEM;
 
 	pr_info("vvc1_init, format %d\n", vvc1_amstream_dec_info.format);
-	init_timer(&recycle_timer);
+	timer_setup(&recycle_timer, vvc1_put_timer_func, 0);
 
 	stat |= STAT_TIMER_INIT;
 
@@ -1131,10 +1127,7 @@ static s32 vvc1_init(void)
 
 	stat |= STAT_VF_HOOK;
 
-	recycle_timer.data = (ulong)&recycle_timer;
-	recycle_timer.function = vvc1_put_timer_func;
 	recycle_timer.expires = jiffies + PUT_INTERVAL;
-
 	add_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_ARM;
@@ -1236,32 +1229,16 @@ static int amvdec_vc1_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int vc1_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int vc1_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops vc1_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(vc1_suspend, vc1_resume)
-};
-#endif
 
 static struct platform_driver amvdec_vc1_driver = {
 	.probe = amvdec_vc1_probe,
 	.remove = amvdec_vc1_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &vc1_pm_ops,
-#endif
 	}
 };
 

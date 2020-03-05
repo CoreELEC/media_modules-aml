@@ -28,7 +28,6 @@
 #include <linux/slab.h>
 #include <linux/amlogic/media/codec_mm/codec_mm_scatter.h>
 #include <linux/platform_device.h>
-
 struct decoder_mmu_box {
 	int max_sc_num;
 	const char *name;
@@ -115,7 +114,7 @@ void decoder_mmu_try_to_release_box(void *handle)
 
 	if (!is_keep) {
 		decoder_mmu_box_mgr_del_box(box);
-		codec_mm_scatter_mgt_delay_free_swith(0, 0, 0, box->tvp_mode);
+		codec_mm_scatter_mgt_delay_free_switch(0, 0, 0, box->tvp_mode);
 		kfree(box);
 	}
 }
@@ -162,7 +161,7 @@ void *decoder_mmu_box_alloc_box(const char *name,
 	mutex_init(&box->mutex);
 	INIT_LIST_HEAD(&box->list);
 	decoder_mmu_box_mgr_add_box(box);
-	codec_mm_scatter_mgt_delay_free_swith(1, 2000,
+	codec_mm_scatter_mgt_delay_free_switch(1, 2000,
 		min_size_M, box->tvp_mode);
 	return (void *)box;
 }
@@ -261,7 +260,7 @@ int decoder_mmu_box_free_idx(void *handle, int idx)
 	mutex_unlock(&box->mutex);
 
 	if (sc && box->box_ref_cnt == 0)
-		codec_mm_scatter_mgt_delay_free_swith(0, 0, 0, box->tvp_mode);
+		codec_mm_scatter_mgt_delay_free_switch(0, 0, 0, box->tvp_mode);
 
 	return 0;
 }
@@ -287,7 +286,7 @@ int decoder_mmu_box_free(void *handle)
 	}
 	mutex_unlock(&box->mutex);
 	decoder_mmu_box_mgr_del_box(box);
-	codec_mm_scatter_mgt_delay_free_swith(0, 0, 0, box->tvp_mode);
+	codec_mm_scatter_mgt_delay_free_switch(0, 0, 0, box->tvp_mode);
 	kfree(box);
 	return 0;
 }
@@ -410,16 +409,18 @@ box_dump_show(struct class *class,
 	return ret;
 }
 
+static CLASS_ATTR_RO(box_dump);
 
-
-static struct class_attribute decoder_mmu_box_class_attrs[] = {
-	__ATTR_RO(box_dump),
-	__ATTR_NULL
+static struct attribute *decoder_mmu_box_class_attrs[] = {
+	&class_attr_box_dump.attr,
+	NULL
 };
+
+ATTRIBUTE_GROUPS(decoder_mmu_box_class);
 
 static struct class decoder_mmu_box_class = {
 	.name = "decoder_mmu_box",
-	.class_attrs = decoder_mmu_box_class_attrs,
+	.class_groups = decoder_mmu_box_class_groups,
 };
 
 int decoder_mmu_box_init(void)

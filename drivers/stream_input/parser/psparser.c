@@ -893,15 +893,12 @@ s32 psparser_init(u32 vid, u32 aid, u32 sid, struct vdec_s *vdec)
 
 	WRITE_RESET_REG(RESET1_REGISTER, RESET_PARSER);
 
-/* for recorded file and local play, this can't change the input source*/
 	/* TS data path */
-/*
 #ifndef CONFIG_AM_DVB
 	WRITE_DEMUX_REG(FEC_INPUT_CONTROL, 0);
 #else
 	tsdemux_set_reset_flag();
-#endif */
-
+#endif
 	CLEAR_DEMUX_REG_MASK(TS_HIU_CTL, 1 << USE_HI_BSF_INTERFACE);
 	CLEAR_DEMUX_REG_MASK(TS_HIU_CTL_2, 1 << USE_HI_BSF_INTERFACE);
 	CLEAR_DEMUX_REG_MASK(TS_HIU_CTL_3, 1 << USE_HI_BSF_INTERFACE);

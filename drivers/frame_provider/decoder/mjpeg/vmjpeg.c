@@ -28,7 +28,6 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include <linux/amlogic/media/registers/register.h>
@@ -36,9 +35,6 @@
 #include "../utils/decoder_bmmu_box.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include <linux/amlogic/tee.h>
-
-
 
 #ifdef CONFIG_AM_VDEC_MJPEG_LOG
 #define AMLOG
@@ -397,10 +393,8 @@ static void mjpeg_set_clk(struct work_struct *work)
 	}
 }
 
-static void vmjpeg_put_timer_func(unsigned long arg)
+static void vmjpeg_put_timer_func(struct timer_list *timer)
 {
-	struct timer_list *timer = (struct timer_list *)arg;
-
 	while (!kfifo_is_empty(&recycle_q) &&
 			(READ_VREG(MREG_TO_AMRISC) == 0)) {
 		struct vframe_s *vf;
@@ -740,7 +734,7 @@ static s32 vmjpeg_init(void)
 	if (IS_ERR_OR_NULL(buf))
 		return -ENOMEM;
 
-	init_timer(&recycle_timer);
+	timer_setup(&recycle_timer, vmjpeg_put_timer_func, 0);
 
 	stat |= STAT_TIMER_INIT;
 
@@ -805,10 +799,7 @@ static s32 vmjpeg_init(void)
 
 	stat |= STAT_VF_HOOK;
 
-	recycle_timer.data = (ulong)&recycle_timer;
-	recycle_timer.function = vmjpeg_put_timer_func;
 	recycle_timer.expires = jiffies + PUT_INTERVAL;
-
 	add_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_ARM;
@@ -911,32 +902,16 @@ static int amvdec_mjpeg_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-#ifdef CONFIG_PM
-static int mjpeg_suspend(struct device *dev)
-{
-	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
-	return 0;
-}
-
-static int mjpeg_resume(struct device *dev)
-{
-	amvdec_resume(to_platform_device(dev));
-	return 0;
-}
-
-static const struct dev_pm_ops mjpeg_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mjpeg_suspend, mjpeg_resume)
-};
-#endif
 
 static struct platform_driver amvdec_mjpeg_driver = {
 	.probe = amvdec_mjpeg_probe,
 	.remove = amvdec_mjpeg_remove,
+#ifdef CONFIG_PM
+	.suspend = amvdec_suspend,
+	.resume = amvdec_resume,
+#endif
 	.driver = {
 		.name = DRIVER_NAME,
-#ifdef CONFIG_PM
-		.pm = &mjpeg_pm_ops,
-#endif
 	}
 };
 
