@@ -5705,7 +5705,7 @@ static void check_frame_store_same_pic_num(struct DecodedPictureBuffer *p_Dpb,
 	}
 }
 
-int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb)
+int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_gap)
 {
 
 	int new_pic_flag = 0;
@@ -5773,6 +5773,7 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb)
 			 *if (p_Vid->conceal_mode == 0)
 			 */
 			fill_frame_num_gap(p_Vid, currSlice);
+			*frame_num_gap = 1;
 		}
 
 		if (currSlice->nal_reference_idc) {

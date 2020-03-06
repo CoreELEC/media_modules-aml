@@ -134,6 +134,8 @@ unsigned int h264_debug_mask = 0xff;
 	 */
 unsigned int h264_debug_cmd;
 
+static int ref_b_frame_error_max_count = 50;
+
 static unsigned int dec_control =
 	DEC_CONTROL_FLAG_FORCE_2997_1080P_INTERLACE |
 	DEC_CONTROL_FLAG_FORCE_2500_576P_INTERLACE;
@@ -274,8 +276,9 @@ static unsigned int i_only_flag;
 	bit[16] 1: check slice header number.
 	bit[17] 1: If the decoded Mb count is insufficient but greater than the threshold, it is considered the correct frame.
 	bit[18] 1: time out status, store pic to dpb buffer.
+	bit[19] 1: If a lot b frames are wrong consecutively, the DPB queue reset.
 */
-static unsigned int error_proc_policy = 0x7Cfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0xfCfb6; /*0x1f14*/
 
 
 /*
@@ -856,8 +859,6 @@ struct vdec_h264_hw_s {
 	bool first_head_check_flag;
 	unsigned int height_aspect_ratio;
 	unsigned int width_aspect_ratio;
-	bool new_iframe_flag;
-	bool ref_err_flush_dpb_flag;
 	unsigned int first_i_policy;
 	u32 reorder_dpb_size_margin;
 	bool wait_reset_done_flag;
@@ -876,6 +877,7 @@ struct vdec_h264_hw_s {
 	unsigned int first_pre_frame_num;
 #endif
 	unsigned int res_ch_flag;
+	u32 b_frame_error_count;
 };
 
 static u32 again_threshold;
@@ -3451,6 +3453,24 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 			pic->data_flag |= ERROR_FLAG;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG, " ref error mark1 \n");
 		}
+
+		if (error_proc_policy & 0x80000) {
+			if (ref_b_frame_error_max_count &&
+				ref->slice_type == B_SLICE) {
+				if (ref->data_flag & ERROR_FLAG)
+					hw->b_frame_error_count++;
+				else
+					hw->b_frame_error_count = 0;
+				if (hw->b_frame_error_count > ref_b_frame_error_max_count) {
+					hw->b_frame_error_count = 0;
+					dpb_print(DECODE_ID(hw), 0,
+						"error %d B frame, reset dpb buffer\n",
+						ref_b_frame_error_max_count);
+					return -1;
+				}
+			}
+		}
+
 		if (ref->data_flag & NULL_FLAG)
 			hw->data_flag |= NULL_FLAG;
 #endif
@@ -5795,6 +5815,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		int slice_header_process_status = 0;
 		int I_flag;
+		int frame_num_gap = 0;
 		/*unsigned char is_idr;*/
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
 		reset_process_time(hw);
@@ -6010,7 +6031,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 
 		slice_header_process_status =
-			h264_slice_header_process(p_H264_Dpb);
+			h264_slice_header_process(p_H264_Dpb, &frame_num_gap);
 		if (hw->mmu_enable)
 			hevc_sao_set_slice_type(hw,
 				slice_header_process_status,
@@ -6073,17 +6094,10 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					}*/
 				}
 
-			if (p_H264_Dpb->mVideo.dec_picture->slice_type == I_SLICE) {
-				hw->new_iframe_flag = 1;
-			}
-			if (hw->new_iframe_flag) {
-				if (p_H264_Dpb->mVideo.dec_picture->slice_type == P_SLICE) {
-					hw->new_iframe_flag = 0;
-					hw->ref_err_flush_dpb_flag = 1;
-				}else  if (p_H264_Dpb->mVideo.dec_picture->slice_type == B_SLICE) {
-							hw->new_iframe_flag = 0;
-							hw->ref_err_flush_dpb_flag = 0;
-						}
+			if (!I_flag && frame_num_gap) {
+				hw->data_flag |= ERROR_FLAG;
+				p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
+				dpb_print(DECODE_ID(hw), 0, "frame number gap error\n");
 			}
 
 			if (error_proc_policy & 0x400) {
@@ -6096,15 +6110,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						hw->decode_pic_count+1,
 						hw->skip_frame_count,
 						hw->reflist_error_count);
-
-					if (hw->ref_err_flush_dpb_flag) {
-						flush_dpb(p_H264_Dpb);
-						p_H264_Dpb->colocated_buf_map = 0;
-						if (p_H264_Dpb->mVideo.dec_picture->colocated_buf_index >= 0) {
-							p_H264_Dpb->colocated_buf_map |= 1 <<
-								p_H264_Dpb->mVideo.dec_picture->colocated_buf_index;
-						}
-					}
 
 					p_H264_Dpb->mVideo.dec_picture->data_flag = NODISP_FLAG;
 					if (((error_proc_policy & 0x80)
@@ -9287,8 +9292,6 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	hw->mmu_enable = 0;
 	hw->first_head_check_flag = 0;
-	hw->new_iframe_flag = 0;
-	hw->ref_err_flush_dpb_flag = 0;
 
 	if (pdata->sys_info)
 		hw->vh264_amstream_dec_info = *pdata->sys_info;
