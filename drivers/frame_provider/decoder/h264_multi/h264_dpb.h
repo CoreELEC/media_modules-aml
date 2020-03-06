@@ -924,7 +924,7 @@ void set_frame_output_flag(struct h264_dpb_stru *p_H264_Dpb, int index);
 
 int is_there_unused_frame_from_dpb(struct DecodedPictureBuffer *p_Dpb);
 
-int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb);
+int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_gap);
 
 void dpb_init_global(struct h264_dpb_stru *p_H264_Dpb,
 	int id, int actual_dpb_size, int max_reference_size);
