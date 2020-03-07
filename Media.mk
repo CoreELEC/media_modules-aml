@@ -63,11 +63,10 @@ $(shell cp $(MEDIA_DRIVERS)/../firmware/* $(UCODE_OUT) -rfa)
 $(shell cp $(MEDIA_DRIVERS)/* $(MEDIA_MODULES) -rfa)
 
 define media-modules
-	PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH \
-		$(MAKE) -C $(KDIR) M=$(MEDIA_MODULES) ARCH=$(KERNEL_ARCH) \
-		CROSS_COMPILE=$(PREFIX_CROSS_COMPILE) $(CONFIGS) \
-		EXTRA_CFLAGS+=-I$(INCLUDE) modules; \
-		find $(MEDIA_MODULES) -name "*.ko" | PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH xargs -i cp {} $(MODS_OUT)
+	PATH=$(KERNEL_TOOLPATHS):$$PATH \
+	$(MAKE) -C $(KDIR) M=$(MEDIA_MODULES) $(KERNEL_ARGS) $(CONFIGS) \
+	"EXTRA_CFLAGS+=-I$(INCLUDE) -Wno-error" modules; \
+	find $(MEDIA_MODULES) -name "*.ko" | PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH xargs -i cp {} $(MODS_OUT)
 endef
 
 else
@@ -91,17 +90,10 @@ ifeq (,$(wildcard $(MODS_OUT)))
 $(shell mkdir $(MODS_OUT) -p)
 endif
 
-ifeq ($(KERNEL_A32_SUPPORT), true)
-TOOLS := /opt/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
-else
-TOOLS := /opt/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu/bin/aarch64-linux-gnu-
-endif
-
 modules:
-	CCACHE_NODIRECT="true" PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH \
-		$(MAKE) -C $(KDIR) M=$(MEDIA_DRIVERS) ARCH=$(KERNEL_ARCH) \
-		CROSS_COMPILE=$(TOOLS) $(CONFIGS) \
-		EXTRA_CFLAGS+=-I$(INCLUDE) -j64
+	CCACHE_NODIRECT="true" PATH=$(KERNEL_TOOLPATHS):$$PATH \
+	$(MAKE) -C $(KDIR) M=$(MEDIA_DRIVERS) $(KERNEL_ARGS) $(CONFIGS) \
+	EXTRA_CFLAGS+=-I$(INCLUDE) -j64
 
 copy-modules:
 	@echo "start copying media modules."
@@ -110,8 +102,9 @@ copy-modules:
 
 all: modules copy-modules
 
+
 clean:
-	PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH \
-		$(MAKE) -C $(KDIR) M=$(MEDIA_DRIVERS) ARCH=$(KERNEL_ARCH) clean
+	PATH=$(KERNEL_TOOLPATHS):$$PATH \
+	$(MAKE) -C $(KDIR) M=$(MEDIA_DRIVERS) $(KERNEL_ARGS) clean
 
 endif
