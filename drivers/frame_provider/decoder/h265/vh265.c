@@ -3706,7 +3706,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 		unsigned char flush_flag)
 {
 	int num_pic_not_yet_display = 0;
-	int i;
+	int i, fisrt_pic_flag = 0;
 	struct PIC_s *pic;
 	struct PIC_s *pic_display = NULL;
 	struct vdec_s *vdec = hw_to_vdec(hevc);
@@ -3754,6 +3754,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 				pic->num_reorder_pic = 0;
 				if (vdec->master || vdec->slave)
 					pic_display = pic;
+				fisrt_pic_flag = 1;
 				hevc_print(hevc, 0, "VH265: output first frame\n");
 			}
 		}
@@ -3775,10 +3776,21 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 							decode_idx))
 								pic_display
 								= pic;
+
 				} else
 					pic_display = pic;
+
 			}
 		}
+		/* dv wait cur_pic all data get,
+		some data may get after picture output */
+		if ((vdec->master || vdec->slave)
+			&& (pic_display == hevc->cur_pic) &&
+			(!flush_flag) &&
+			(hevc->bypass_dvenl && !dolby_meta_with_el)
+			&& (!fisrt_pic_flag))
+			pic_display = NULL;
+
 		if (pic_display) {
 			if ((num_pic_not_yet_display >
 				pic_display->num_reorder_pic)
