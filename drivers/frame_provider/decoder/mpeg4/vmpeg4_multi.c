@@ -1782,8 +1782,6 @@ static void check_timer_func(unsigned long arg)
 	}
 
 	if (((debug_enable & PRINT_FLAG_TIMEOUT_STATUS) == 0) &&
-		(vdec_frame_based(vdec) ||
-		((u32)READ_VREG(VLD_MEM_VIFIFO_LEVEL) > 0x100)) &&
 		(timeout_val > 0) &&
 		(hw->start_process_time > 0) &&
 		((1000 * (jiffies - hw->start_process_time) / HZ)

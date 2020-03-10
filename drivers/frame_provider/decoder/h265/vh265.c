@@ -10570,9 +10570,7 @@ static void vh265_check_timer_func(unsigned long arg)
 	}
 
 	if (hevc->m_ins_flag) {
-		if ((input_frame_based(hw_to_vdec(hevc)) ||
-			(READ_VREG(HEVC_STREAM_LEVEL) > 0xb0)) &&
-			((get_dbg_flag(hevc) &
+		if (((get_dbg_flag(hevc) &
 			H265_DEBUG_DIS_LOC_ERROR_PROC) == 0) &&
 			(decode_timeout_val > 0) &&
 			(hevc->start_process_time > 0) &&
