@@ -6814,9 +6814,7 @@ static void check_timer_func(unsigned long arg)
 		radr = 0;
 	}
 
-	if ((input_frame_based(vdec) ||
-		(READ_VREG(VLD_MEM_VIFIFO_LEVEL) > 0xb0)) &&
-		((h264_debug_flag & DISABLE_ERROR_HANDLE) == 0) &&
+	if (((h264_debug_flag & DISABLE_ERROR_HANDLE) == 0) &&
 		(timeout_val > 0) &&
 		(hw->start_process_time > 0) &&
 		((1000 * (jiffies - hw->start_process_time) / HZ)
