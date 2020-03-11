@@ -1874,6 +1874,9 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 		return -EINVAL;
 	}
 
+	if (!V4L2_TYPE_IS_OUTPUT(f->type))
+		ctx->cap_pix_fmt = pix_mp->pixelformat;
+
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %u, planes: %u, fmt: %u\n",
 		__func__, f->type, f->fmt.pix_mp.num_planes,
