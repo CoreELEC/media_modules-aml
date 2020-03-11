@@ -646,8 +646,8 @@ struct vdec_h264_hw_s {
 #endif
 	struct StorablePicture *last_dec_picture;
 
-	ulong lmem_addr;
-	dma_addr_t lmem_addr_remap;
+	ulong lmem_phy_addr;
+	dma_addr_t lmem_addr;
 
 	void *bmmu_box;
 #ifdef H264_MMU
@@ -5761,11 +5761,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 	if (dec_dpb_status == H264_CONFIG_REQUEST) {
 #if 1
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
-		dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			hw->lmem_addr_remap,
-			PAGE_SIZE,
-			DMA_FROM_DEVICE);
 		for (i = 0; i < (RPM_END-RPM_BEGIN); i += 4) {
 			int ii;
 			for (ii = 0; ii < 4; ii++) {
@@ -5899,11 +5894,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			goto empty_proc;
 		}
 
-		dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			hw->lmem_addr_remap,
-			PAGE_SIZE,
-			DMA_FROM_DEVICE);
 #if 0
 		if (p_H264_Dpb->mVideo.dec_picture == NULL) {
 			if (!is_buffer_available(vdec)) {
@@ -6272,11 +6262,6 @@ pic_done_proc:
 	} else if (dec_dpb_status == H264_AUX_DATA_READY) {
 		reset_process_time(hw);
 		if (READ_VREG(H264_AUX_DATA_SIZE) != 0) {
-			dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			hw->aux_phy_addr,
-			hw->prefix_aux_size + hw->suffix_aux_size,
-			DMA_FROM_DEVICE);
 			if (dpb_is_debug(DECODE_ID(hw),
 				PRINT_FLAG_DPB_DETAIL))
 				dump_aux_buf(hw);
@@ -6431,11 +6416,6 @@ send_again:
 			u8 *sei_data_buf;
 			u8 swap_byte;
 
-			dma_sync_single_for_cpu(
-				amports_get_dma_device(),
-				hw->aux_phy_addr,
-				hw->prefix_aux_size + hw->suffix_aux_size,
-				DMA_FROM_DEVICE);
 #if 0
 			dump_aux_buf(hw);
 #endif
@@ -6488,12 +6468,6 @@ send_again:
 	debug_tag = READ_VREG(DEBUG_REG1);
 	if (debug_tag & 0x10000) {
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
-
-		dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			hw->lmem_addr_remap,
-			PAGE_SIZE,
-			DMA_FROM_DEVICE);
 
 		dpb_print(DECODE_ID(hw), 0,
 			"LMEM<tag %x>:\n", debug_tag);
@@ -7069,7 +7043,7 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 	else*/
 		CLEAR_VREG_MASK(AV_SCRATCH_F, 1 << 6);
 
-	WRITE_VREG(LMEM_DUMP_ADR, (u32)hw->lmem_addr_remap);
+	WRITE_VREG(LMEM_DUMP_ADR, (u32)hw->lmem_phy_addr);
 #if 1 /* #if MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8 */
 	WRITE_VREG(MDEC_PIC_DC_THRESH, 0x404038aa);
 #endif
@@ -7321,28 +7295,15 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 	}
 
 #if 1 /* #ifdef  BUFFER_MGR_IN_C */
-	hw->lmem_addr = __get_free_page(GFP_KERNEL);
-	if (!hw->lmem_addr) {
-		pr_info("%s: failed to alloc lmem_addr\n", __func__);
-		return -ENOMEM;
-	} else {
-		hw->lmem_addr_remap = dma_map_single(
-				amports_get_dma_device(),
-				(void *)hw->lmem_addr,
-				PAGE_SIZE, DMA_FROM_DEVICE);
-		if (dma_mapping_error(amports_get_dma_device(),
-			hw->lmem_addr_remap)) {
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-			"%s: failed to map lmem_addr\n", __func__);
-			free_page(hw->lmem_addr);
-			hw->lmem_addr = 0;
-			hw->lmem_addr_remap = 0;
-			return -ENOMEM;
-		}
+	hw->lmem_addr = (dma_addr_t)dma_alloc_coherent(amports_get_dma_device(),
+			PAGE_SIZE, (dma_addr_t *)&hw->lmem_phy_addr, GFP_KERNEL);
 
-		pr_debug("%s, vaddr=%lx phy_addr=%p\n",
-			__func__, hw->lmem_addr, (void *)hw->lmem_addr_remap);
+	if (hw->lmem_addr == 0) {
+		pr_err("%s: failed to alloc lmem buffer\n", __func__);
+		return -1;
 	}
+	pr_debug("%s, phy_addr=%lx vaddr=%p\n",
+		__func__, hw->lmem_phy_addr, (void *)hw->lmem_addr);
 
 	if (prefix_aux_buf_size > 0 ||
 		suffix_aux_buf_size > 0) {
@@ -7350,21 +7311,14 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 		hw->prefix_aux_size = AUX_BUF_ALIGN(prefix_aux_buf_size);
 		hw->suffix_aux_size = AUX_BUF_ALIGN(suffix_aux_buf_size);
 		aux_buf_size = hw->prefix_aux_size + hw->suffix_aux_size;
-		hw->aux_addr = kmalloc(aux_buf_size, GFP_KERNEL);
+		hw->aux_addr = dma_alloc_coherent(amports_get_dma_device(),
+						  aux_buf_size, &hw->aux_phy_addr,
+						  GFP_KERNEL);
 		if (hw->aux_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
 		}
 
-		hw->aux_phy_addr = dma_map_single(amports_get_dma_device(),
-			hw->aux_addr, aux_buf_size, DMA_FROM_DEVICE);
-		if (dma_mapping_error(amports_get_dma_device(),
-			hw->aux_phy_addr)) {
-			pr_err("%s: failed to map rpm buffer\n", __func__);
-			kfree(hw->aux_addr);
-			hw->aux_addr = NULL;
-			return -1;
-		}
 		hw->sei_data_buf = kmalloc(SEI_DATA_SIZE, GFP_KERNEL);
 		if (hw->sei_data_buf == NULL) {
 			pr_err("%s: failed to alloc sei itu data buffer\n",
@@ -7375,7 +7329,9 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 		if (hw->sei_itu_data_buf == NULL) {
 			pr_err("%s: failed to alloc sei itu data buffer\n",
 				__func__);
-			kfree(hw->aux_addr);
+			dma_free_coherent(amports_get_dma_device(),
+				hw->prefix_aux_size + hw->suffix_aux_size, hw->aux_addr,
+				hw->aux_phy_addr);
 			hw->aux_addr = NULL;
 			kfree(hw->sei_data_buf);
 			hw->sei_data_buf = NULL;
@@ -7389,7 +7345,9 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 			if (!hw->sei_user_data_buffer) {
 				pr_info("%s: Can not allocate sei_data_buffer\n",
 					   __func__);
-				kfree(hw->aux_addr);
+				dma_free_coherent(amports_get_dma_device(),
+					hw->prefix_aux_size + hw->suffix_aux_size, hw->aux_addr,
+					hw->aux_phy_addr);
 				hw->aux_addr = NULL;
 				kfree(hw->sei_data_buf);
 				hw->sei_data_buf = NULL;
@@ -7447,22 +7405,17 @@ static int vh264_stop(struct vdec_h264_hw_s *hw)
 		vdec_free_irq(VDEC_IRQ_1, (void *)hw);
 		hw->stat &= ~STAT_ISR_REG;
 	}
-	if (hw->lmem_addr_remap) {
-		dma_unmap_single(amports_get_dma_device(),
-			hw->lmem_addr_remap,
-			PAGE_SIZE, DMA_FROM_DEVICE);
-		hw->lmem_addr_remap = 0;
-	}
 	if (hw->lmem_addr) {
-		free_page(hw->lmem_addr);
+		dma_free_coherent(amports_get_dma_device(),
+			PAGE_SIZE, (void *)hw->lmem_addr,
+			hw->lmem_phy_addr);
 		hw->lmem_addr = 0;
 	}
+
 	if (hw->aux_addr) {
-		dma_unmap_single(amports_get_dma_device(),
-			hw->aux_phy_addr,
-			hw->prefix_aux_size + hw->suffix_aux_size,
-			DMA_FROM_DEVICE);
-		kfree(hw->aux_addr);
+		dma_free_coherent(amports_get_dma_device(),
+			hw->prefix_aux_size + hw->suffix_aux_size, hw->aux_addr,
+			hw->aux_phy_addr);
 		hw->aux_addr = NULL;
 	}
 	if (hw->sei_data_buf != NULL) {
