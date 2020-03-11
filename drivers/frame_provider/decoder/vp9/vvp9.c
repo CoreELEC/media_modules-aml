@@ -7073,26 +7073,16 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 	struct vdec_s *pvdec = hw_to_vdec(pbi);
 	int stream_offset = pic_config->stream_offset;
 	unsigned short slice_type = pic_config->slice_type;
-	struct aml_vcodec_ctx * v4l2_ctx = pbi->v4l2_ctx;
-	ulong nv_order = VIDTYPE_VIU_NV21;
 	u32 pts_valid = 0, pts_us64_valid = 0;
 	u32 pts_save;
 	u64 pts_us64_save;
 	u32 frame_size = 0;
-
 
 	if (debug & VP9_DEBUG_BUFMGR)
 		pr_info("%s index = %d\r\n", __func__, pic_config->index);
 	if (kfifo_get(&pbi->newframe_q, &vf) == 0) {
 		pr_info("fatal error, no available buffer slot.");
 		return -1;
-	}
-
-	/* swap uv */
-	if (pbi->is_used_v4l) {
-		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
-			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
-			nv_order = VIDTYPE_VIU_NV12;
 	}
 
 	if (pic_config->double_write_mode)
@@ -7244,7 +7234,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		if (pic_config->double_write_mode) {
 			vf->type = VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD;
-			vf->type |= nv_order;
+			vf->type |= VIDTYPE_VIU_NV21;
 			if ((pic_config->double_write_mode == 3) &&
 				(!IS_8K_SIZE(pic_config->y_crop_width,
 				pic_config->y_crop_height))) {

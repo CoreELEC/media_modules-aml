@@ -464,7 +464,6 @@ struct aml_vcodec_ctx {
 	int stop_cmd;
 	u32 display_count;
 	struct v4l_buff_pool cap_pool;
-	u32 cap_pix_fmt;
 };
 
 /**
