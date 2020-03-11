@@ -388,12 +388,6 @@ static void dmxn_op_chan(int dmx, int ch, int(*op)(int, int), int ch_op)
 	} while (0)
 
 #define NO_SUB
-#define SUB_BUF_DMX
-#define SUB_PARSER
-
-#ifndef SUB_BUF_DMX
-#undef SUB_PARSER
-#endif
 
 #define SUB_BUF_SHARED
 #define PES_BUF_SHARED
@@ -1143,18 +1137,10 @@ static void process_sub(struct aml_dmx *dmx)
 	}
 
 	if (buffer1 && len1)
-#ifdef SUB_BUF_DMX
-		buffer1_virt = (void *)dmx->sub_pages + (buffer1 - start_ptr);
-#else
-		buffer1_virt = (void *)dmx->sub_buf_base_virt + (buffer1 - start_ptr);
-#endif
+		buffer1_virt = dmx->sub_buf_base_virt + (buffer1 - start_ptr);
 
 	if (buffer2 && len2)
-#ifdef SUB_BUF_DMX
-		buffer2_virt = (void *)dmx->sub_pages + (buffer2 - start_ptr);
-#else
-		buffer2_virt = (void *)dmx->sub_buf_base_virt + (buffer2 - start_ptr);
-#endif
+		buffer2_virt = dmx->sub_buf_base_virt + (buffer2 - start_ptr);
 
 //	printk("rd_ptr %p buffer1 %p len1 %d buffer2 %p len2 %d buffer1_virt %p buffer2_virt %p\n",
 //		(void*)rd_ptr, (void*)buffer1, len1, (void*)buffer2, len2, buffer1_virt, buffer2_virt);
@@ -2458,11 +2444,8 @@ static int dmx_alloc_sub_buffer(struct aml_dvb *dvb, struct aml_dmx *dmx)
 
 end_alloc:
 	addr = virt_to_phys((void *)dmx->sub_pages);
-#ifndef SUB_PARSER
 	DMX_WRITE_REG(dmx->id, SB_START, addr >> 12);
 	DMX_WRITE_REG(dmx->id, SB_LAST_ADDR, (dmx->sub_buf_len >> 3) - 1);
-#endif
-	pr_inf("sub buff: (%d) %lx %x\n", dmx->id, addr, dmx->sub_buf_len);
 #endif
 	return 0;
 }
@@ -4252,39 +4235,14 @@ exit:
 }
 #endif
 
-static int set_subtitle_pes_buffer(struct aml_dmx *dmx)
-{
-#ifdef SUB_PARSER
-	unsigned long addr = virt_to_phys((void *)dmx->sub_pages);
-	WRITE_MPEG_REG(PARSER_SUB_RP, addr);
-	WRITE_MPEG_REG(PARSER_SUB_START_PTR, addr);
-	WRITE_MPEG_REG(PARSER_SUB_END_PTR, addr + dmx->sub_buf_len - 8);
-	pr_inf("set sub buff: (%d) %lx %x\n", dmx->id, addr, dmx->sub_buf_len);
-#endif
-	return 0;
-}
-
-int dmx_get_sub_buffer(unsigned long *base, unsigned long *virt)
-{
-#ifndef SUB_BUF_DMX
-	unsigned long s = READ_MPEG_REG(PARSER_SUB_START_PTR);
-	if (base)
-		*base = s;
-	if (virt)
-		*virt = (unsigned long)codec_mm_phys_to_virt(s);
-#endif
-	return 0;
-}
-
 int dmx_init_sub_buffer(struct aml_dmx *dmx, unsigned long base, unsigned long virt)
 {
-#ifndef SUB_BUF_DMX
-	dmx->sub_buf_base = base;
+	dmx->sub_buf_base = (base)? base : READ_MPEG_REG(PARSER_SUB_START_PTR);
 	pr_inf("sub buf base: 0x%lx\n", dmx->sub_buf_base);
 
-	dmx->sub_buf_base_virt = (u8 *)virt;
+	dmx->sub_buf_base_virt = (base)? (u8 *)virt : codec_mm_phys_to_virt(dmx->sub_buf_base);
 	pr_inf("sub buf base virt: 0x%p\n", dmx->sub_buf_base_virt);
-#endif
+
 	return 0;
 }
 
@@ -4309,7 +4267,6 @@ int dmx_alloc_chan(struct aml_dmx *dmx, int type, int pes_type, int pid)
 			if (!dmx->channel[2].used)
 				id = 2;
 			//alloc_subtitle_pes_buffer(dmx);
-			set_subtitle_pes_buffer(dmx);
 			break;
 		case DMX_PES_PCR:
 			if (!dmx->channel[3].used)
@@ -4977,6 +4934,11 @@ int aml_dmx_hw_start_feed(struct dvb_demux_feed *dvbdmxfeed)
 	struct aml_dvb *dvb = (struct aml_dvb *)dmx->demux.priv;
 	unsigned long flags;
 	int ret = 0;
+
+	if (dvbdmxfeed->type == DMX_TYPE_TS
+		&& (dvbdmxfeed->pes_type == DMX_PES_SUBTITLE
+			|| dvbdmxfeed->pes_type == DMX_PES_TELETEXT))
+		dmx_init_sub_buffer(dmx, 0, 0);
 
 	spin_lock_irqsave(&dvb->slock, flags);
 	ret = dmx_add_feed(dmx, dvbdmxfeed);
