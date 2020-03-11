@@ -252,7 +252,6 @@ static struct file* file_open(int mode, const char *str, ...)
 	if (IS_ERR(fp)) {
 		fp = NULL;
 		dbg_print(FC_ERROR, "open %s failed\n", file);
-		va_end(args);
 		return fp;
 	}
 	dbg_print(FC_ERROR, "open %s success\n", file);

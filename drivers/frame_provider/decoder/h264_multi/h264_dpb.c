@@ -1565,7 +1565,7 @@ static void dpb_combine_field(struct h264_dpb_stru *p_H264_Dpb,
 	fs->frame->view_id = fs->view_id;
 #endif
 	fs->frame->iCodingType = fs->top_field->iCodingType;
-	if (fs->bottom_field && fs->top_field->poc < fs->bottom_field->poc) {
+	if (fs->top_field->poc < fs->bottom_field->poc) {
 		fs->pts = fs->top_field->pts;
 		fs->pts64 = fs->top_field->pts64;
 		/*SWPL-7105 fix */
@@ -1575,7 +1575,7 @@ static void dpb_combine_field(struct h264_dpb_stru *p_H264_Dpb,
 			fs->pts64 = 0;
 		}
 		fs->offset_delimiter = fs->top_field->offset_delimiter;
-	} else if (fs->bottom_field) {
+	} else {
 		fs->pts = fs->bottom_field->pts;
 		fs->pts64 = fs->bottom_field->pts64;
 		fs->offset_delimiter = fs->bottom_field->offset_delimiter;

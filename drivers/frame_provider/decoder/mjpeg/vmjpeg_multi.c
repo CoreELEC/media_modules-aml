@@ -1475,12 +1475,8 @@ static int ammvdec_mjpeg_remove(struct platform_device *pdev)
 	struct vdec_mjpeg_hw_s *hw =
 		(struct vdec_mjpeg_hw_s *)
 		(((struct vdec_s *)(platform_get_drvdata(pdev)))->private);
-	struct vdec_s *vdec;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 	int i;
-
-	if (!hw)
-		return -1;
-	vdec = hw_to_vdec(hw);
 
 	vmjpeg_stop(hw);
 
@@ -1496,8 +1492,10 @@ static int ammvdec_mjpeg_remove(struct platform_device *pdev)
 			vdec->free_canvas_ex(hw->buffer_spec[i].v_canvas_index, vdec->id);
 		}
 	}
-	vfree(hw);
-
+	if (hw) {
+		vfree(hw);
+		hw = NULL;
+	}
 	pr_info("%s\n", __func__);
 	return 0;
 }
