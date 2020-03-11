@@ -613,7 +613,16 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 {
 	struct vframe_s *vf = NULL;
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	ulong nv_order = VIDTYPE_VIU_NV21;
 	int index = pic->index;
+
+	/* swap uv */
+	if (hw->is_used_v4l) {
+		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
+			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
+			nv_order = VIDTYPE_VIU_NV12;
+	}
 
 	if (pic->pic_info & INTERLACE_FLAG) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
@@ -644,7 +653,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->type = (pic->pic_info & TOP_FIELD_FIRST_FLAG) ?
 			VIDTYPE_INTERLACE_TOP : VIDTYPE_INTERLACE_BOTTOM;
 #ifdef NV21
-		vf->type |= VIDTYPE_VIU_NV21;
+		vf->type |= nv_order;
 #endif
 		set_frame_info(hw, vf, pic->index);
 
@@ -696,7 +705,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->type = (pic->pic_info & TOP_FIELD_FIRST_FLAG) ?
 			VIDTYPE_INTERLACE_BOTTOM : VIDTYPE_INTERLACE_TOP;
 #ifdef NV21
-		vf->type |= VIDTYPE_VIU_NV21;
+		vf->type |= nv_order;
 #endif
 		set_frame_info(hw, vf, pic->index);
 
@@ -757,7 +766,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			pic->duration;
 #ifdef NV21
 		vf->type = VIDTYPE_PROGRESSIVE |
-			VIDTYPE_VIU_FIELD | VIDTYPE_VIU_NV21;
+			VIDTYPE_VIU_FIELD | nv_order;
 #else
 		vf->type = VIDTYPE_PROGRESSIVE |
 			VIDTYPE_VIU_FIELD;
