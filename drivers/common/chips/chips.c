@@ -145,6 +145,7 @@ static const struct type_name vformat_type_name[] = {
 	{VFORMAT_JPEG_ENC, "jpeg_enc"},
 	{VFORMAT_VP9, "vp9"},
 	{VFORMAT_AVS2, "avs2"},
+	{VFORMAT_AV1, "av1"},
 	{VFORMAT_YUV, "yuv"},
 	{0, NULL},
 };

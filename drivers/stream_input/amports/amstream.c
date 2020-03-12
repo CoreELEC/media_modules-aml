@@ -943,6 +943,7 @@ static int amstream_port_init(struct port_priv_s *priv)
 		if (has_hevc_vdec()) {
 			if (port->vformat == VFORMAT_HEVC ||
 				port->vformat == VFORMAT_AVS2 ||
+				port->vformat == VFORMAT_AV1 ||
 				port->vformat == VFORMAT_VP9)
 				pvbuf = &bufs[BUF_TYPE_HEVC];
 		}
@@ -973,6 +974,7 @@ static int amstream_port_init(struct port_priv_s *priv)
 			(port->pcr_inited == 1) ? port->pcrid : 0xffff,
 			(port->vformat == VFORMAT_HEVC) ||
 			(port->vformat == VFORMAT_AVS2) ||
+			(port->vformat == VFORMAT_AV1) ||
 			(port->vformat == VFORMAT_VP9),
 			vdec);
 		} else {
@@ -1053,6 +1055,7 @@ static int amstream_port_release(struct port_priv_s *priv)
 	if (has_hevc_vdec()) {
 		if (port->vformat == VFORMAT_HEVC
 			|| port->vformat == VFORMAT_AVS2
+			|| port->vformat == VFORMAT_AV1
 			|| port->vformat == VFORMAT_VP9)
 			pvbuf = &bufs[BUF_TYPE_HEVC];
 	}
@@ -1209,6 +1212,7 @@ static ssize_t amstream_mpts_write(struct file *file, const char *buf,
 	if (has_hevc_vdec()) {
 		pvbuf =	(port->vformat == VFORMAT_HEVC ||
 					port->vformat == VFORMAT_AVS2 ||
+					port->vformat == VFORMAT_AV1 ||
 					port->vformat == VFORMAT_VP9) ?
 			&bufs[BUF_TYPE_HEVC] : &bufs[BUF_TYPE_VIDEO];
 	} else
@@ -1803,6 +1807,7 @@ static int amstream_release(struct inode *inode, struct file *file)
 
 			if ((port->vformat == VFORMAT_HEVC
 					|| port->vformat == VFORMAT_AVS2
+					|| port->vformat == VFORMAT_AV1
 					|| port->vformat == VFORMAT_VP9)) {
 					vdec_poweroff(VDEC_HEVC);
 				} else {
@@ -2350,6 +2355,7 @@ static long amstream_ioctl_get_ex(struct port_priv_s *priv, ulong arg)
 
 			buf = (this->vformat == VFORMAT_HEVC ||
 				this->vformat == VFORMAT_AVS2 ||
+				this->vformat == VFORMAT_AV1 ||
 				this->vformat == VFORMAT_VP9) ?
 				&bufs[BUF_TYPE_HEVC] :
 				&bufs[BUF_TYPE_VIDEO];
@@ -2836,6 +2842,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 
 			buf = (this->vformat == VFORMAT_HEVC ||
 					this->vformat == VFORMAT_AVS2 ||
+					this->vformat == VFORMAT_AV1 ||
 					this->vformat == VFORMAT_VP9) ?
 				&bufs[BUF_TYPE_HEVC] :
 				&bufs[BUF_TYPE_VIDEO];

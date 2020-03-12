@@ -644,9 +644,15 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
-	while (!(codec_dmcbus_read(DMC_CHAN_STS)
+	if (is_cpu_tm2_revb()) {
+		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
 			& mask))
 			;
+	} else {
+		while (!(codec_dmcbus_read(DMC_CHAN_STS)
+				& mask))
+				;
+	}
 
 	pr_debug("%s input->target= 0x%x\n", __func__,  input->target);
 }
@@ -687,6 +693,7 @@ static int vdec_get_hw_type(int value)
 		case VFORMAT_HEVC:
 		case VFORMAT_VP9:
 		case VFORMAT_AVS2:
+		case VFORMAT_AV1:
 			type = CORE_MASK_HEVC;
 		break;
 
@@ -922,7 +929,8 @@ static const char * const vdec_device_name[] = {
 	"amvenc_avc",        "amvenc_avc",
 	"jpegenc",           "jpegenc",
 	"amvdec_vp9",        "ammvdec_vp9",
-	"amvdec_avs2",       "ammvdec_avs2"
+	"amvdec_avs2",       "ammvdec_avs2",
+	"amvdec_av1",        "ammvdec_av1",
 };
 
 
@@ -1046,7 +1054,8 @@ int vdec_set_decinfo(struct vdec_s *vdec, struct dec_sysinfo *p)
 
 		sprintf(fmt, "m%s", ++str);
 		if (is_support_profile(fmt) &&
-			vdec->sys_info->format != VIDEO_DEC_FORMAT_H263)
+			vdec->sys_info->format != VIDEO_DEC_FORMAT_H263 &&
+			vdec->format != VFORMAT_AV1)
 			vdec->type = VDEC_TYPE_STREAM_PARSER;
 	}
 
@@ -1768,9 +1777,15 @@ void hevc_wait_ddr(void)
 		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
-	while (!(codec_dmcbus_read(DMC_CHAN_STS)
-		& mask))
-		;
+	if (is_cpu_tm2_revb()) {
+		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
+			& mask))
+			;
+	} else {
+		while (!(codec_dmcbus_read(DMC_CHAN_STS)
+			& mask))
+			;
+	}
 }
 
 void vdec_save_input_context(struct vdec_s *vdec)
@@ -2155,7 +2170,9 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	vdec_input_set_type(&vdec->input, vdec->type,
 			(vdec->format == VFORMAT_HEVC ||
 			vdec->format == VFORMAT_AVS2 ||
-			vdec->format == VFORMAT_VP9) ?
+			vdec->format == VFORMAT_VP9 ||
+			vdec->format == VFORMAT_AV1
+			) ?
 				VDEC_INPUT_TARGET_HEVC :
 				VDEC_INPUT_TARGET_VLD);
 	if (vdec_single(vdec) || (vdec_get_debug_flags() & 0x2))
@@ -2427,7 +2444,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	}
 
 	p->dolby_meta_with_el = 0;
-	pr_debug("vdec_init, vf_provider_name = %s\n", p->vf_provider_name);
+	pr_debug("vdec_init, vf_provider_name = %s, b %d\n",
+		p->vf_provider_name, is_cpu_tm2_revb());
 	vdec_input_prepare_bufs(/*prepared buffer for fast playing.*/
 		&vdec->input,
 		vdec->sys_info->width,
@@ -3912,9 +3930,15 @@ void vdec_reset_core(struct vdec_s *vdec)
 		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
-	while (!(codec_dmcbus_read(DMC_CHAN_STS)
-		& mask))
-		;
+	if (is_cpu_tm2_revb()) {
+		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
+			& mask))
+			;
+	} else {
+		while (!(codec_dmcbus_read(DMC_CHAN_STS)
+			& mask))
+			;
+	}
 	/*
 	 * 2: assist
 	 * 3: vld_reset
@@ -3995,9 +4019,15 @@ void hevc_reset_core(struct vdec_s *vdec)
 		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
-	while (!(codec_dmcbus_read(DMC_CHAN_STS)
-		& mask))
-		;
+	if (is_cpu_tm2_revb()) {
+		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
+			& mask))
+			;
+	} else {
+		while (!(codec_dmcbus_read(DMC_CHAN_STS)
+			& mask))
+			;
+	}
 
 	if (vdec == NULL || input_frame_based(vdec))
 		WRITE_VREG(HEVC_STREAM_CONTROL, 0);
