@@ -679,7 +679,7 @@ static int section_crc(struct aml_dmx *dmx, struct aml_filter *f, u8 *p)
 		sec->seclen = sec_len;
 		sec->crc_val = ~0;
 		if (demux->check_crc32(feed, p, sec_len)) {
-			pr_error("section CRC check failed!\n");
+			pr_error("section CRC check failed! pid[%d]\n", feed->pid);
 
 #if 0
 {
