@@ -247,7 +247,7 @@ static int vdec_hevc_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 
 	/* alloc the header buffer to be used cache sps or spp etc.*/
 	inst->vsi->header_buf = kzalloc(HEADER_BUFFER_SIZE, GFP_KERNEL);
-	if (!inst->vsi) {
+	if (!inst->vsi->header_buf) {
 		ret = -ENOMEM;
 		goto err;
 	}

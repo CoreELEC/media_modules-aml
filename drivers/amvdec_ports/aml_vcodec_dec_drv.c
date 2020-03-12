@@ -48,7 +48,7 @@
 #define V4LVIDEO_IOCTL_SET_CONFIG_PARAMS	_IOWR(V4LVIDEO_IOC_MAGIC, 0x04, struct v4l2_config_parm)
 #define V4LVIDEO_IOCTL_GET_CONFIG_PARAMS	_IOWR(V4LVIDEO_IOC_MAGIC, 0x05, struct v4l2_config_parm)
 
-bool param_sets_from_ucode;
+bool param_sets_from_ucode = 1;
 bool enable_drm_mode;
 
 static int fops_vcodec_open(struct file *file)

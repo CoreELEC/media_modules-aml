@@ -211,41 +211,37 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	/* init vfm */
 	inst->vfm.ctx		= ctx;
 	inst->vfm.ada_ctx	= &inst->vdec;
-	vcodec_vfm_init(&inst->vfm);
+	ret = vcodec_vfm_init(&inst->vfm);
+	if (ret) {
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"init vfm failed.\n");
+		goto err;
+	}
 
 	ret = video_decoder_init(&inst->vdec);
 	if (ret) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"vdec_mpeg12 init err=%d\n", ret);
-		goto error_free_inst;
+		goto err;
 	}
 
 	/* probe info from the stream */
 	inst->vsi = kzalloc(sizeof(struct vdec_mpeg12_vsi), GFP_KERNEL);
 	if (!inst->vsi) {
 		ret = -ENOMEM;
-		goto error_free_inst;
+		goto err;
 	}
 
 	/* alloc the header buffer to be used cache sps or spp etc.*/
 	inst->vsi->header_buf = kzalloc(HEADER_BUFFER_SIZE, GFP_KERNEL);
-	if (!inst->vsi) {
+	if (!inst->vsi->header_buf) {
 		ret = -ENOMEM;
-		goto error_free_vsi;
+		goto err;
 	}
-
-	inst->vsi->pic.visible_width	= 1920;
-	inst->vsi->pic.visible_height	= 1080;
-	inst->vsi->pic.coded_width	= 1920;
-	inst->vsi->pic.coded_height	= 1088;
-	inst->vsi->pic.y_bs_sz		= 0;
-	inst->vsi->pic.y_len_sz		= (1920 * 1088);
-	inst->vsi->pic.c_bs_sz		= 0;
-	inst->vsi->pic.c_len_sz		= (1920 * 1088 / 2);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
 		"mpeg12 Instance >> %lx\n", (ulong) inst);
-
+	init_completion(&inst->comp);
 	ctx->ada_ctx	= &inst->vdec;
 	*h_vdec		= (unsigned long)inst;
 
@@ -253,10 +249,15 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 
 	return 0;
 
-error_free_vsi:
-	kfree(inst->vsi);
-error_free_inst:
-	kfree(inst);
+err:
+	if (inst)
+		vcodec_vfm_release(&inst->vfm);
+	if (inst && inst->vsi && inst->vsi->header_buf)
+		kfree(inst->vsi->header_buf);
+	if (inst && inst->vsi)
+		kfree(inst->vsi);
+	if (inst)
+		kfree(inst);
 	*h_vdec = 0;
 
 	return ret;
@@ -286,8 +287,8 @@ static void fill_vdec_params(struct vdec_mpeg12_inst *inst,
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
-	/*1(EOS) + 8(DECODE_BUFFER_NUM_DEF)*/
-	dec->dpb_sz = 9;
+	/*7(parm_v4l_buffer_margin) + 8(DECODE_BUFFER_NUM_DEF)*/
+	dec->dpb_sz = 15;
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_BUFMGR,
 		"The stream infos, coded:(%d x %d), visible:(%d x %d), DPB: %d\n",
@@ -583,7 +584,7 @@ static void set_param_ps_info(struct vdec_mpeg12_inst *inst,
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
-	dec->dpb_sz		= ps->dpb_size + 1;
+	dec->dpb_sz		= ps->dpb_size;
 
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=
