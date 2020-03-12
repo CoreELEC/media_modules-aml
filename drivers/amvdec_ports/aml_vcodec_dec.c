@@ -1699,6 +1699,9 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 		mutex_unlock(&ctx->state_lock);
 	}
 
+	if (!V4L2_TYPE_IS_OUTPUT(f->type))
+		ctx->cap_pix_fmt = pix_mp->pixelformat;
+
 	return 0;
 }
 
@@ -1873,9 +1876,6 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 			f->type, ctx->state);
 		return -EINVAL;
 	}
-
-	if (!V4L2_TYPE_IS_OUTPUT(f->type))
-		ctx->cap_pix_fmt = pix_mp->pixelformat;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %u, planes: %u, fmt: %u\n",
