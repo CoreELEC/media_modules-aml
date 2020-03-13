@@ -884,6 +884,8 @@ struct vdec_h264_hw_s {
 	unsigned int res_ch_flag;
 	u32 b_frame_error_count;
 	struct vdec_info gvs;
+	u32 kpi_first_i_comming;
+	u32 kpi_first_i_decoded;
 };
 
 static u32 again_threshold;
@@ -4895,6 +4897,12 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			hw->dpb.reorder_pic_num,
 			hw->max_reference_size);
 
+		if (hw->kpi_first_i_comming == 0) {
+			hw->kpi_first_i_comming = 1;
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+				"[vdec_kpi][%s] First I frame comming.\n", __func__);
+		}
+
 		buf_size = (hw->mb_total << 8) + (hw->mb_total << 7);
 
 		mutex_lock(&vmh264_mutex);
@@ -6239,6 +6247,11 @@ pic_done_proc:
 			(dec_dpb_status == H264_FIND_NEXT_PIC_NAL) ?
 			"H264_FIND_NEXT_PIC_NAL" : "H264_FIND_NEXT_DVEL_NAL",
 			hw->decode_pic_count);
+		if (hw->kpi_first_i_decoded == 0) {
+			hw->kpi_first_i_decoded = 1;
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+				"[vdec_kpi][%s] First I frame decoded.\n", __func__);
+		}
 		/* WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD); */
 		hw->dec_result = DEC_RESULT_DONE;
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION

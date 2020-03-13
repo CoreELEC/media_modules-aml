@@ -320,6 +320,8 @@ struct vdec_mpeg12_hw_s {
 	struct vframe_qos_s vframe_qos;
 	unsigned int res_ch_flag;
 	u32 i_only;
+	u32 kpi_first_i_comming;
+	u32 kpi_first_i_decoded;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -1657,6 +1659,13 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				hw->mm_blk_handle, index);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
+			/* if (hw->disp_num == 1) { */
+			if (hw->kpi_first_i_decoded == 0) {
+				hw->kpi_first_i_decoded = 1;
+				debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+					"[vdec_kpi][%s] First I frame decoded.\n",
+					__func__);
+			}
 			if (without_display_mode == 0) {
 				vf_notify_receiver(vdec->vf_provider_name,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY,
@@ -1812,6 +1821,12 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 	reg = READ_VREG(AV_SCRATCH_G);
 	if (reg == 1) {
+		if (hw->kpi_first_i_comming == 0) {
+			hw->kpi_first_i_comming = 1;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+				"[vdec_kpi][%s] First I frame coming.\n",
+				__func__);
+		}
 		if (hw->is_used_v4l) {
 			int frame_width = READ_VREG(MREG_PIC_WIDTH);
 			int frame_height = READ_VREG(MREG_PIC_HEIGHT);
@@ -1878,9 +1893,9 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 		seqinfo = READ_VREG(MREG_SEQ_INFO);
 
 		if ((info & PICINFO_PROG) == 0 &&
-			(info & FRAME_PICTURE_MASK) != FRAME_PICTURE)
+			(info & FRAME_PICTURE_MASK) != FRAME_PICTURE) {
 			hw->first_i_frame_ready = 1; /* for field struct case*/
-
+		}
 		if (index >= hw->buf_num) {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"mmpeg12: invalid buf index: %d\n", index);
@@ -1993,8 +2008,9 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		if ((hw->first_i_frame_ready == 0) &&
 			((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) &&
-			((info & PICINFO_ERROR) == 0))
+			((info & PICINFO_ERROR) == 0)) {
 			hw->first_i_frame_ready = 1;
+		}
 
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 			"mmpeg12: disp_pic=%d(%c), ind=%d, offst=%x, pts=(%d,%lld)(%d)\n",

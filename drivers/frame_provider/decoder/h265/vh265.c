@@ -181,9 +181,7 @@ static struct vframe_provider_s vh265_vf_prov;
 static u32 bit_depth_luma;
 static u32 bit_depth_chroma;
 static u32 video_signal_type;
-
 static int start_decode_buf_level = 0x8000;
-
 static unsigned int decode_timeout_val = 200;
 
 static u32 run_ready_min_buf_num = 2;
@@ -1751,6 +1749,8 @@ struct hevc_state_s {
 	struct vdec_info *gvs;
 	unsigned int res_ch_flag;
 	bool ip_mode;
+	u32 kpi_first_i_comming;
+	u32 kpi_first_i_decoded;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -9232,6 +9232,14 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			vf->pts, vf->pts_us64,
 			vf->duration);
 		hw_to_vdec(hevc)->vdec_fps_detec(hw_to_vdec(hevc)->id);
+
+		/*if (pic->vf_ref == hevc->vf_pre_count) {*/
+		if (hevc->kpi_first_i_decoded == 0) {
+			hevc->kpi_first_i_decoded = 1;
+			pr_debug("[vdec_kpi][%s] First I frame decoded.\n",
+				__func__);
+		}
+
 		if (without_display_mode == 0) {
 			vf_notify_receiver(hevc->provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -10306,6 +10314,11 @@ force_output:
 		if (hevc->pic_list_init_flag == 2) {
 			hevc->pic_list_init_flag = 3;
 			hevc_print(hevc, 0, "set pic_list_init_flag to 3\n");
+			if (hevc->kpi_first_i_comming == 0) {
+				hevc->kpi_first_i_comming = 1;
+				pr_debug("[vdec_kpi][%s] First I frame coming.\n",
+					__func__);
+			}
 		} else if (hevc->wait_buf == 0) {
 			u32 vui_time_scale;
 			u32 vui_num_units_in_tick;

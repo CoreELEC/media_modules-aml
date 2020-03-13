@@ -2870,7 +2870,7 @@ static int dmx_init(struct aml_dmx *dmx)
 	if (dmx->init)
 		return 0;
 
-	pr_inf("demux init\n");
+	pr_dbg("[dmx_kpi] %s Enter\n", __func__);
 
 	memset(buf, 0, 32);
 	snprintf(buf, sizeof(buf), "asyncfifo_buf_len");
@@ -2926,7 +2926,7 @@ static int dmx_init(struct aml_dmx *dmx)
 	       sizeof(dmx->sec_buf_watchdog_count));
 
 	dmx->init = 1;
-
+	pr_dbg("[dmx_kpi] %s Exit\n", __func__);
 	return 0;
 }
 
@@ -2934,7 +2934,7 @@ static int dmx_init(struct aml_dmx *dmx)
 static int dmx_deinit(struct aml_dmx *dmx)
 {
 	struct aml_dvb *dvb = (struct aml_dvb *)dmx->demux.priv;
-
+	pr_dbg("[dmx_kpi] %s Enter\n", __func__);
 	if (!dmx->init)
 		return 0;
 
@@ -2999,7 +2999,7 @@ static int dmx_deinit(struct aml_dmx *dmx)
 	}
 
 	dmx->init = 0;
-
+	pr_dbg("[dmx_kpi] %s Exit\n", __func__);
 	return 0;
 }
 
@@ -3871,7 +3871,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 {
 	int id, times;
 
-	pr_dbg("demux reset begin\n");
+	pr_dbg("[dmx_kpi] demux reset begin\n");
 
 	for (id = 0; id < DMX_DEV_COUNT; id++) {
 		if (!dvb->dmx[id].init)
@@ -4087,7 +4087,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 	}
 #endif
 
-	pr_dbg("demux reset end\n");
+	pr_dbg("[dmx_kpi] demux reset end\n");
 }
 
 /*Reset the individual demux*/

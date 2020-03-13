@@ -155,7 +155,7 @@ long aml_stb_get_base(int id)
 static void aml_dvb_dmx_release(struct aml_dvb *advb, struct aml_dmx *dmx)
 {
 	int i;
-
+	pr_dbg("[dmx_kpi] %s Enter.\n", __func__);
 	dvb_net_release(&dmx->dvb_net);
 	aml_dmx_hw_deinit(dmx);
 	dmx->demux.dmx.close(&dmx->demux.dmx);
@@ -166,6 +166,7 @@ static void aml_dvb_dmx_release(struct aml_dvb *advb, struct aml_dmx *dmx)
 
 	dvb_dmxdev_release(&dmx->dmxdev);
 	dvb_dmx_release(&dmx->demux);
+	pr_dbg("[dmx_kpi] %s Exit.\n", __func__);
 }
 
 static int aml_dvb_dmx_init(struct aml_dvb *advb, struct aml_dmx *dmx, int id)
@@ -2321,7 +2322,7 @@ error_fe:
 
 	if (advb->tuners)
 		kfree(advb->tuners);
-
+	pr_dbg("probe amlogic dvb driver [%s] Exit\n", DVB_VERSION);
 	return 0;
 error:
 	for (i = 0; i < advb->async_fifo_total_count; i++) {
@@ -2347,6 +2348,8 @@ static int aml_dvb_remove(struct platform_device *pdev)
 {
 	struct aml_dvb *advb = (struct aml_dvb *)dev_get_drvdata(&pdev->dev);
 	int i;
+
+	pr_dbg("[dmx_kpi] %s Enter.\n", __func__);
 
 	for (i=0; i<FE_DEV_COUNT; i++) {
 		aml_detach_dtvdemod(s_demod_type[i]);
@@ -2427,6 +2430,7 @@ static int aml_dvb_remove(struct platform_device *pdev)
 	if (advb->tuners)
 		kfree(advb->tuners);
 
+	pr_dbg("[dmx_kpi] %s Exit.\n", __func__);
 	return 0;
 }
 
@@ -2515,6 +2519,7 @@ static int aml_tsdemux_reset(void)
 {
 	struct aml_dvb *dvb = &aml_dvb_device;
 	unsigned long flags;
+	pr_dbg("[dmx_kpi] %s Enter\n", __func__);
 
 	spin_lock_irqsave(&dvb->slock, flags);
 	if (dvb->reset_flag) {
@@ -2529,7 +2534,7 @@ static int aml_tsdemux_reset(void)
 		}
 	}
 	spin_unlock_irqrestore(&dvb->slock, flags);
-
+	pr_dbg("[dmx_kpi] %s Exit\n", __func__);
 	return 0;
 }
 
