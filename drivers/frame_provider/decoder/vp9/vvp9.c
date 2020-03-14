@@ -1197,6 +1197,8 @@ struct VP9Decoder_s {
 	u32 dynamic_buf_num_margin;
 	struct vframe_s vframe_dummy;
 	unsigned int res_ch_flag;
+	/*struct VP9Decoder_s vp9_decoder;*/
+	union param_u vp9_param;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -2872,9 +2874,6 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
  */
 	return 0;
 }
-
-/*struct VP9Decoder_s vp9_decoder;*/
-union param_u vp9_param;
 
 /**************************************************
  *
@@ -7329,6 +7328,8 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		&& pic_config->y_crop_height == 196
 		&& (debug & VP9_DEBUG_NO_TRIGGER_FRAME) == 0
 		&& (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX))) {
+			struct vdec_info tmp4x;
+
 			inc_vf_ref(pbi, pic_config->index);
 			decoder_do_frame_check(pvdec, vf);
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
@@ -7337,10 +7338,11 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			pbi_update_gvs(pbi);
 			/*count info*/
 			vdec_count_info(pbi->gvs, 0, stream_offset);
-			pbi->gvs->bit_rate = bit_depth_luma;
-			pbi->gvs->frame_data = bit_depth_chroma;
-			pbi->gvs->samp_cnt = get_double_write_mode(pbi);
-			vdec_fill_vdec_frame(pvdec, &pbi->vframe_qos, pbi->gvs,
+			memcpy(&tmp4x, pbi->gvs, sizeof(struct vdec_info));
+			tmp4x.bit_depth_luma = pbi->vp9_param.p.bit_depth;
+			tmp4x.bit_depth_chroma = pbi->vp9_param.p.bit_depth;
+			tmp4x.double_write_mode = get_double_write_mode(pbi);
+			vdec_fill_vdec_frame(pvdec, &pbi->vframe_qos, &tmp4x,
 				vf, pic_config->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
 			if (without_display_mode == 0) {
@@ -7427,66 +7429,66 @@ static void debug_buffer_mgr_more(struct VP9Decoder_s *pbi)
 		return;
 	pr_info("vp9_param: (%d)\n", pbi->slice_idx);
 	for (i = 0; i < (RPM_END-RPM_BEGIN); i++) {
-		pr_info("%04x ", vp9_param.l.data[i]);
+		pr_info("%04x ", pbi->vp9_param.l.data[i]);
 		if (((i + 1) & 0xf) == 0)
 			pr_info("\n");
 	}
 	pr_info("=============param==========\r\n");
-	pr_info("profile               %x\r\n", vp9_param.p.profile);
+	pr_info("profile               %x\r\n", pbi->vp9_param.p.profile);
 	pr_info("show_existing_frame   %x\r\n",
-	vp9_param.p.show_existing_frame);
+	pbi->vp9_param.p.show_existing_frame);
 	pr_info("frame_to_show_idx     %x\r\n",
-	vp9_param.p.frame_to_show_idx);
-	pr_info("frame_type            %x\r\n", vp9_param.p.frame_type);
-	pr_info("show_frame            %x\r\n", vp9_param.p.show_frame);
+	pbi->vp9_param.p.frame_to_show_idx);
+	pr_info("frame_type            %x\r\n", pbi->vp9_param.p.frame_type);
+	pr_info("show_frame            %x\r\n", pbi->vp9_param.p.show_frame);
 	pr_info("e.r.r.o.r_resilient_mode  %x\r\n",
-	vp9_param.p.error_resilient_mode);
-	pr_info("intra_only            %x\r\n", vp9_param.p.intra_only);
+	pbi->vp9_param.p.error_resilient_mode);
+	pr_info("intra_only            %x\r\n", pbi->vp9_param.p.intra_only);
 	pr_info("display_size_present  %x\r\n",
-	vp9_param.p.display_size_present);
+	pbi->vp9_param.p.display_size_present);
 	pr_info("reset_frame_context   %x\r\n",
-	vp9_param.p.reset_frame_context);
+	pbi->vp9_param.p.reset_frame_context);
 	pr_info("refresh_frame_flags   %x\r\n",
-	vp9_param.p.refresh_frame_flags);
-	pr_info("bit_depth             %x\r\n", vp9_param.p.bit_depth);
-	pr_info("width                 %x\r\n", vp9_param.p.width);
-	pr_info("height                %x\r\n", vp9_param.p.height);
-	pr_info("display_width         %x\r\n", vp9_param.p.display_width);
-	pr_info("display_height        %x\r\n", vp9_param.p.display_height);
-	pr_info("ref_info              %x\r\n", vp9_param.p.ref_info);
-	pr_info("same_frame_size       %x\r\n", vp9_param.p.same_frame_size);
+	pbi->vp9_param.p.refresh_frame_flags);
+	pr_info("bit_depth             %x\r\n", pbi->vp9_param.p.bit_depth);
+	pr_info("width                 %x\r\n", pbi->vp9_param.p.width);
+	pr_info("height                %x\r\n", pbi->vp9_param.p.height);
+	pr_info("display_width         %x\r\n", pbi->vp9_param.p.display_width);
+	pr_info("display_height        %x\r\n", pbi->vp9_param.p.display_height);
+	pr_info("ref_info              %x\r\n", pbi->vp9_param.p.ref_info);
+	pr_info("same_frame_size       %x\r\n", pbi->vp9_param.p.same_frame_size);
 	if (!(debug & VP9_DEBUG_DBG_LF_PRINT))
 		return;
 	pr_info("mode_ref_delta_enabled: 0x%x\r\n",
-	vp9_param.p.mode_ref_delta_enabled);
+	pbi->vp9_param.p.mode_ref_delta_enabled);
 	pr_info("sharpness_level: 0x%x\r\n",
-	vp9_param.p.sharpness_level);
+	pbi->vp9_param.p.sharpness_level);
 	pr_info("ref_deltas: 0x%x, 0x%x, 0x%x, 0x%x\r\n",
-	vp9_param.p.ref_deltas[0], vp9_param.p.ref_deltas[1],
-	vp9_param.p.ref_deltas[2], vp9_param.p.ref_deltas[3]);
-	pr_info("mode_deltas: 0x%x, 0x%x\r\n", vp9_param.p.mode_deltas[0],
-	vp9_param.p.mode_deltas[1]);
-	pr_info("filter_level: 0x%x\r\n", vp9_param.p.filter_level);
-	pr_info("seg_enabled: 0x%x\r\n", vp9_param.p.seg_enabled);
-	pr_info("seg_abs_delta: 0x%x\r\n", vp9_param.p.seg_abs_delta);
+	pbi->vp9_param.p.ref_deltas[0], pbi->vp9_param.p.ref_deltas[1],
+	pbi->vp9_param.p.ref_deltas[2], pbi->vp9_param.p.ref_deltas[3]);
+	pr_info("mode_deltas: 0x%x, 0x%x\r\n", pbi->vp9_param.p.mode_deltas[0],
+	pbi->vp9_param.p.mode_deltas[1]);
+	pr_info("filter_level: 0x%x\r\n", pbi->vp9_param.p.filter_level);
+	pr_info("seg_enabled: 0x%x\r\n", pbi->vp9_param.p.seg_enabled);
+	pr_info("seg_abs_delta: 0x%x\r\n", pbi->vp9_param.p.seg_abs_delta);
 	pr_info("seg_lf_feature_enabled: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\r\n",
-	(vp9_param.p.seg_lf_info[0]>>15 & 1),
-	(vp9_param.p.seg_lf_info[1]>>15 & 1),
-	(vp9_param.p.seg_lf_info[2]>>15 & 1),
-	(vp9_param.p.seg_lf_info[3]>>15 & 1),
-	(vp9_param.p.seg_lf_info[4]>>15 & 1),
-	(vp9_param.p.seg_lf_info[5]>>15 & 1),
-	(vp9_param.p.seg_lf_info[6]>>15 & 1),
-	(vp9_param.p.seg_lf_info[7]>>15 & 1));
+	(pbi->vp9_param.p.seg_lf_info[0]>>15 & 1),
+	(pbi->vp9_param.p.seg_lf_info[1]>>15 & 1),
+	(pbi->vp9_param.p.seg_lf_info[2]>>15 & 1),
+	(pbi->vp9_param.p.seg_lf_info[3]>>15 & 1),
+	(pbi->vp9_param.p.seg_lf_info[4]>>15 & 1),
+	(pbi->vp9_param.p.seg_lf_info[5]>>15 & 1),
+	(pbi->vp9_param.p.seg_lf_info[6]>>15 & 1),
+	(pbi->vp9_param.p.seg_lf_info[7]>>15 & 1));
 	pr_info("seg_lf_feature_data: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\r\n",
-	(vp9_param.p.seg_lf_info[0] & 0x13f),
-	(vp9_param.p.seg_lf_info[1] & 0x13f),
-	(vp9_param.p.seg_lf_info[2] & 0x13f),
-	(vp9_param.p.seg_lf_info[3] & 0x13f),
-	(vp9_param.p.seg_lf_info[4] & 0x13f),
-	(vp9_param.p.seg_lf_info[5] & 0x13f),
-	(vp9_param.p.seg_lf_info[6] & 0x13f),
-	(vp9_param.p.seg_lf_info[7] & 0x13f));
+	(pbi->vp9_param.p.seg_lf_info[0] & 0x13f),
+	(pbi->vp9_param.p.seg_lf_info[1] & 0x13f),
+	(pbi->vp9_param.p.seg_lf_info[2] & 0x13f),
+	(pbi->vp9_param.p.seg_lf_info[3] & 0x13f),
+	(pbi->vp9_param.p.seg_lf_info[4] & 0x13f),
+	(pbi->vp9_param.p.seg_lf_info[5] & 0x13f),
+	(pbi->vp9_param.p.seg_lf_info[6] & 0x13f),
+	(pbi->vp9_param.p.seg_lf_info[7] & 0x13f));
 
 }
 
@@ -7565,23 +7567,23 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 
 	if (pbi->is_used_v4l && ctx->param_sets_from_ucode)
 		pbi->res_ch_flag = 0;
-	bit_depth_luma = vp9_param.p.bit_depth;
-	bit_depth_chroma = vp9_param.p.bit_depth;
+	bit_depth_luma = pbi->vp9_param.p.bit_depth;
+	bit_depth_chroma = pbi->vp9_param.p.bit_depth;
 
-	if ((vp9_param.p.bit_depth >= VPX_BITS_10) &&
+	if ((pbi->vp9_param.p.bit_depth >= VPX_BITS_10) &&
 		(get_double_write_mode(pbi) == 0x10)) {
 		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		pr_err("fatal err, bit_depth %d, unsupport dw 0x10\n",
-			vp9_param.p.bit_depth);
+			pbi->vp9_param.p.bit_depth);
 		return -1;
 	}
 
 	if (pbi->process_state != PROC_STATE_SENDAGAIN) {
-		ret = vp9_bufmgr_process(pbi, &vp9_param);
+		ret = vp9_bufmgr_process(pbi, &pbi->vp9_param);
 		if (!pbi->m_ins_flag)
 			pbi->slice_idx++;
 	} else {
-		union param_u *params = &vp9_param;
+		union param_u *params = &pbi->vp9_param;
 		if (pbi->mmu_enable && ((pbi->double_write_mode & 0x10) == 0)) {
 			ret = vp9_alloc_mmu(pbi,
 				cm->new_fb_idx,
@@ -7639,11 +7641,11 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 #endif
 		}
 		/*pr_info("Decode Frame Data %d\n", pbi->frame_count);*/
-		config_pic_size(pbi, vp9_param.p.bit_depth);
+		config_pic_size(pbi, pbi->vp9_param.p.bit_depth);
 
 		if ((pbi->common.frame_type != KEY_FRAME)
 			&& (!pbi->common.intra_only)) {
-			config_mc_buffer(pbi, vp9_param.p.bit_depth);
+			config_mc_buffer(pbi, pbi->vp9_param.p.bit_depth);
 #ifdef SUPPORT_FB_DECODING
 			if (pbi->used_stage_buf_num == 0)
 #endif
@@ -7660,34 +7662,34 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		else
 			config_mcrcc_axi_hw(pbi);
 #endif
-		config_sao_hw(pbi, &vp9_param);
+		config_sao_hw(pbi, &pbi->vp9_param);
 
 #ifdef VP9_LPF_LVL_UPDATE
 		/*
 		* Get loop filter related picture level parameters from Parser
 		*/
-		pbi->lf->mode_ref_delta_enabled = vp9_param.p.mode_ref_delta_enabled;
-		pbi->lf->sharpness_level = vp9_param.p.sharpness_level;
+		pbi->lf->mode_ref_delta_enabled = pbi->vp9_param.p.mode_ref_delta_enabled;
+		pbi->lf->sharpness_level = pbi->vp9_param.p.sharpness_level;
 		for (i = 0; i < 4; i++)
-			pbi->lf->ref_deltas[i] = vp9_param.p.ref_deltas[i];
+			pbi->lf->ref_deltas[i] = pbi->vp9_param.p.ref_deltas[i];
 		for (i = 0; i < 2; i++)
-			pbi->lf->mode_deltas[i] = vp9_param.p.mode_deltas[i];
-		pbi->default_filt_lvl = vp9_param.p.filter_level;
-		pbi->seg_4lf->enabled = vp9_param.p.seg_enabled;
-		pbi->seg_4lf->abs_delta = vp9_param.p.seg_abs_delta;
+			pbi->lf->mode_deltas[i] = pbi->vp9_param.p.mode_deltas[i];
+		pbi->default_filt_lvl = pbi->vp9_param.p.filter_level;
+		pbi->seg_4lf->enabled = pbi->vp9_param.p.seg_enabled;
+		pbi->seg_4lf->abs_delta = pbi->vp9_param.p.seg_abs_delta;
 		for (i = 0; i < MAX_SEGMENTS; i++)
-			pbi->seg_4lf->feature_mask[i] = (vp9_param.p.seg_lf_info[i] &
+			pbi->seg_4lf->feature_mask[i] = (pbi->vp9_param.p.seg_lf_info[i] &
 			0x8000) ? (1 << SEG_LVL_ALT_LF) : 0;
 		for (i = 0; i < MAX_SEGMENTS; i++)
 			pbi->seg_4lf->feature_data[i][SEG_LVL_ALT_LF]
-			= (vp9_param.p.seg_lf_info[i]
-			& 0x100) ? -(vp9_param.p.seg_lf_info[i]
-			& 0x3f) : (vp9_param.p.seg_lf_info[i] & 0x3f);
+			= (pbi->vp9_param.p.seg_lf_info[i]
+			& 0x100) ? -(pbi->vp9_param.p.seg_lf_info[i]
+			& 0x3f) : (pbi->vp9_param.p.seg_lf_info[i] & 0x3f);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 			/*Set pipeline mode*/
 			uint32_t lpf_data32 = READ_VREG(HEVC_DBLK_CFGB);
 			/*dblk pipeline mode=1 for performance*/
-			if (vp9_param.p.width >= 1280)
+			if (pbi->vp9_param.p.width >= 1280)
 				lpf_data32 |= (0x1 << 4);
 			else
 				lpf_data32 &= ~(0x3 << 4);
@@ -8405,7 +8407,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	}
 
 	if (debug & VP9_DEBUG_SEND_PARAM_WITH_REG) {
-		get_rpm_param(&vp9_param);
+		get_rpm_param(&pbi->vp9_param);
 	} else {
 #ifdef SUPPORT_FB_DECODING
 		if (pbi->used_stage_buf_num > 0) {
@@ -8460,7 +8462,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
 				int ii;
 				for (ii = 0; ii < 4; ii++)
-					vp9_param.l.data[i + ii] =
+					pbi->vp9_param.l.data[i + ii] =
 						pbi->rpm_ptr[i + 3 - ii];
 			}
 		}
@@ -8470,8 +8472,8 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 
-		pbi->frame_width = vp9_param.p.width;
-		pbi->frame_height = vp9_param.p.height;
+		pbi->frame_width = pbi->vp9_param.p.width;
+		pbi->frame_height = pbi->vp9_param.p.height;
 
 		if (!v4l_res_change(pbi)) {
 			if (ctx->param_sets_from_ucode && !pbi->v4l_params_parsed) {
@@ -10232,7 +10234,7 @@ static void run_back(struct vdec_s *vdec)
 		for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
 			int ii;
 			for (ii = 0; ii < 4; ii++)
-				vp9_param.l.data[i + ii] =
+				pbi->vp9_param.l.data[i + ii] =
 					pbi->s2_buf->rpm[i + 3 - ii];
 		}
 #ifndef FB_DECODING_TEST_SCHEDULE

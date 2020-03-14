@@ -5918,6 +5918,14 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					hevc_print_cont(hevc, 0,
 					"Debug mode or error, recycle it\n");
 				}
+				/*
+				 * Here the pic/frame error_mark is 1,
+				 * and it won't be displayed, so increase
+				 * the drop count
+				 */
+				hevc->gvs->drop_frame_count++;
+				/* error frame count also need increase */
+				hevc->gvs->error_frame_count++;
 			} else {
 				if (hevc->i_only & 0x1
 					&& pic_display->slice_type != 2) {
@@ -6215,6 +6223,14 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 						hevc_print_cont(hevc, 0,
 						"Debug or err,recycle it\n");
 					}
+					/*
+					 * Here the pic/frame error_mark is 1,
+					 * and it won't be displayed, so increase
+					 * the drop count
+					 */
+					hevc->gvs->drop_frame_count++;
+					/* error frame count also need increase */
+					hevc->gvs->error_frame_count++;
 				} else {
 					if (hevc->i_only & 0x1
 						&& pic_display->
@@ -7385,6 +7401,8 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				/*count info*/
 				vdec_count_info(hevc->gvs, hevc->cur_pic->error_mark,
 					hevc->cur_pic->stream_offset);
+				if (hevc->PB_skip_mode == 2)
+					hevc->gvs->drop_frame_count++;
 			}
 
 			if (is_skip_decoding(hevc,
@@ -7415,6 +7433,8 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		/*count info*/
 		vdec_count_info(hevc->gvs, hevc->cur_pic->error_mark,
 			hevc->cur_pic->stream_offset);
+		if (hevc->PB_skip_mode == 2)
+			hevc->gvs->drop_frame_count++;
 		return 2;
 	}
 #ifdef MCRCC_ENABLE
@@ -8655,6 +8675,7 @@ static inline void hevc_update_gvs(struct hevc_state_s *hevc)
 		else
 			hevc->gvs->frame_rate = -1;
 	}
+	hevc->gvs->error_count = hevc->gvs->error_frame_count;
 	hevc->gvs->status = hevc->stat | hevc->fatal_error;
 	if (hevc->gvs->ratio_control != hevc->ratio_control)
 		hevc->gvs->ratio_control = hevc->ratio_control;
@@ -8668,6 +8689,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	unsigned short slice_type = pic->slice_type;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	u32 frame_size = 0;
+	struct vdec_info tmp4x;
 	struct aml_vcodec_ctx * v4l2_ctx = hevc->v4l2_ctx;
 
 	/* swap uv */
@@ -9197,10 +9219,11 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		/*count info*/
 		vdec_count_info(hevc->gvs, 0, stream_offset);
 		hevc_update_gvs(hevc);
-		hevc->gvs->bit_rate = hevc->bit_depth_luma;
-		hevc->gvs->frame_data = hevc->bit_depth_chroma;
-		hevc->gvs->samp_cnt = get_double_write_mode(hevc);
-		vdec_fill_vdec_frame(vdec, &hevc->vframe_qos, hevc->gvs, vf, pic->hw_decode_time);
+		memcpy(&tmp4x, hevc->gvs, sizeof(struct vdec_info));
+		tmp4x.bit_depth_luma = hevc->bit_depth_luma;
+		tmp4x.bit_depth_chroma = hevc->bit_depth_chroma;
+		tmp4x.double_write_mode = get_double_write_mode(hevc);
+		vdec_fill_vdec_frame(vdec, &hevc->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 		vdec->vdec_fps_detec(vdec->id);
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s(type %d index 0x%x poc %d/%d) pts(%d,%d) dur %d\n",
@@ -11029,7 +11052,7 @@ int vh265_dec_status(struct vdec_info *vstatus)
 		vstatus->frame_rate = 96000 / hevc->frame_dur;
 	else
 		vstatus->frame_rate = -1;
-	vstatus->error_count = 0;
+	vstatus->error_count = hevc->gvs->error_frame_count;
 	vstatus->status = hevc->stat | hevc->fatal_error;
 	vstatus->bit_rate = hevc->gvs->bit_rate;
 	vstatus->frame_dur = hevc->frame_dur;

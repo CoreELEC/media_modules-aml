@@ -878,6 +878,7 @@ struct vdec_h264_hw_s {
 #endif
 	unsigned int res_ch_flag;
 	u32 b_frame_error_count;
+	struct vdec_info gvs;
 };
 
 static u32 again_threshold;
@@ -2714,6 +2715,12 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			}
 		}
 		hw->h264_pts_count++;
+	}
+
+	if (frame->data_flag & ERROR_FLAG) {
+		vdec_count_info(&hw->gvs, 1, 0);
+		if (!hw->send_error_frame_flag)
+			hw->gvs.drop_frame_count++;
 	}
 
 	if ((frame->data_flag & NODISP_FLAG) ||
@@ -6629,7 +6636,7 @@ static void vmh264_dump_state(struct vdec_s *vdec)
 		);
 
 	dpb_print(DECODE_ID(hw), 0,
-		"is_framebase(%d), eos %d, state 0x%x, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d bufmgr_reset_cnt %d\n",
+		"is_framebase(%d), eos %d, state 0x%x, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d bufmgr_reset_cnt %d error_frame_count = %d, drop_frame_count = %d\n",
 		input_frame_based(vdec),
 		hw->eos,
 		hw->stat,
@@ -6639,7 +6646,9 @@ static void vmh264_dump_state(struct vdec_s *vdec)
 		run_count[DECODE_ID(hw)],
 		not_run_ready[DECODE_ID(hw)],
 		input_empty[DECODE_ID(hw)],
-		hw->reset_bufmgr_count
+		hw->reset_bufmgr_count,
+		hw->gvs.error_frame_count,
+		hw->gvs.drop_frame_count
 		);
 
 #ifdef DETECT_WRONG_MULTI_SLICE
@@ -6866,7 +6875,7 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	}
 	else
 		vstatus->frame_rate = -1;
-	vstatus->error_count = 0;
+	vstatus->error_count = hw->gvs.error_frame_count;
 	vstatus->status = hw->stat;
 	if (hw->h264_ar == 0x3ff)
 		ar_tmp = (0x100 *
@@ -6880,6 +6889,9 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->ratio_control =
 		ar << DISP_RATIO_ASPECT_RATIO_BIT;
 
+	vstatus->error_frame_count = hw->gvs.error_frame_count;
+	vstatus->drop_frame_count = hw->gvs.drop_frame_count;
+	vstatus->frame_count = decode_frame_count[DECODE_ID(hw)];
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s-%02d", DRIVER_NAME, hw->id);
 
@@ -9502,6 +9514,8 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	atomic_set(&hw->vh264_active, 1);
 	vdec_set_vframe_comm(pdata, DRIVER_NAME);
+	display_frame_count[DECODE_ID(hw)] = 0;
+	decode_frame_count[DECODE_ID(hw)] = 0;
 
 	return 0;
 }

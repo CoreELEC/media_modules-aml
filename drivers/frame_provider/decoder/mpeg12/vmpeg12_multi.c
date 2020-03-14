@@ -1510,7 +1510,7 @@ static inline void hw_update_gvs(struct vdec_mpeg12_hw_s *hw)
 		hw->gvs.ratio_control = hw->ratio_control;
 
 	hw->gvs.status = hw->stat;
-	hw->gvs.error_count = READ_VREG(AV_SCRATCH_C);
+	hw->gvs.error_count = hw->gvs.error_frame_count;
 	hw->gvs.drop_frame_count = hw->drop_frame_count;
 
 }
@@ -1628,6 +1628,12 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			((PICINFO_TYPE_MASK & pic->buffer_info) !=
 			 PICINFO_TYPE_I))) {
 			hw->drop_frame_count++;
+			/* Though we drop it, it is still an error frame, count it.
+			 * Becase we've counted the error frame in vdec_count_info
+			 * function, avoid count it twice.
+			 */
+			if (!(info & PICINFO_ERROR))
+				hw->gvs.error_frame_count++;
 			hw->vfbuf_use[index]--;
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);

@@ -4592,6 +4592,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 		}
 
 		if (vf) {
+			struct vdec_info tmp4x;
 			int stream_offset = pic->stream_offset;
 			set_vframe(dec, vf, pic, 0);
 			decoder_do_frame_check(pvdec, vf);
@@ -4601,10 +4602,11 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			dec_update_gvs(dec);
 			/*count info*/
 			vdec_count_info(dec->gvs, 0, stream_offset);
-			dec->gvs->bit_rate = bit_depth_luma;
-			dec->gvs->frame_data = bit_depth_chroma;
-			dec->gvs->samp_cnt = get_double_write_mode(dec);
-			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, dec->gvs, vf, pic->hw_decode_time);
+			memcpy(&tmp4x, dec->gvs, sizeof(struct vdec_info));
+			tmp4x.bit_depth_luma = bit_depth_luma;
+			tmp4x.bit_depth_chroma = bit_depth_chroma;
+			tmp4x.double_write_mode = get_double_write_mode(dec);
+			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
 			if (without_display_mode == 0) {
 				vf_notify_receiver(dec->provider_name,
