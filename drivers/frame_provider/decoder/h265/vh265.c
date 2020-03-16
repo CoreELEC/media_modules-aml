@@ -6821,7 +6821,8 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				(rpm_param->p.sei_frame_field_info >> 8) & 0x1;
 		}
 
-		if (interlace_enable == 0 || hevc->m_ins_flag)
+		/* if (interlace_enable == 0 || hevc->m_ins_flag) */
+		if (interlace_enable == 0)
 			hevc->interlace_flag = 0;
 		if (interlace_enable & 0x100)
 			hevc->interlace_flag = interlace_enable & 0x1;
@@ -8001,6 +8002,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 			pic->height),
 			DISP_RATIO_ASPECT_RATIO_MAX);
 		vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
+		vf->ratio_control <<= hevc->interlace_flag;
 	}
 	hevc->ratio_control = vf->ratio_control;
 	if (pic->aux_data_buf
@@ -10491,6 +10493,17 @@ force_output:
 			hevc->sps_num_reorder_pics_0 =
 			hevc->param.p.sps_num_reorder_pics_0;
 			hevc->pic_list_init_flag = 1;
+			if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
+				((hevc->param.p.profile_etc & 0xc) == 0x4)
+				&& (interlace_enable != 0)) {
+				hevc->double_write_mode = 1;
+				hevc->interlace_flag = 1;
+				hevc->frame_ar = (hevc->pic_h * 0x100 / hevc->pic_w) * 2;
+				hevc_print(hevc, 0,
+					"interlace (%d, %d), profile_etc %x, ar 0x%x, dw %d\n",
+					hevc->pic_w, hevc->pic_h, hevc->param.p.profile_etc, hevc->frame_ar,
+					get_double_write_mode(hevc));
+			}
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hevc->m_ins_flag) {
 				vdec_schedule_work(&hevc->work);
@@ -11007,7 +11020,9 @@ int vh265_dec_status(struct vdec_info *vstatus)
 		return -1;
 
 	vstatus->frame_width = hevc->frame_width;
-	vstatus->frame_height = hevc->frame_height;
+	/* for hevc interlace for disp height x2 */
+	vstatus->frame_height =
+		(hevc->frame_height << hevc->interlace_flag);
 	if (hevc->frame_dur != 0)
 		vstatus->frame_rate = 96000 / hevc->frame_dur;
 	else
@@ -13232,6 +13247,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		}
 		hevc->double_write_mode = double_write_mode;
 	}
+	/* get valid double write from configure or node */
+	hevc->double_write_mode = get_double_write_mode(hevc);
+
 	if (!hevc->is_used_v4l) {
 		if (hevc->save_buffer_mode && dynamic_buf_num_margin > 2)
 			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin -2;
