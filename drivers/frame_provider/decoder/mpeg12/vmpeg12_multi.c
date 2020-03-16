@@ -1503,6 +1503,9 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 
+#ifdef NV21
+	type = nv_order;
+#endif
 	/* swap uv */
 	if (hw->is_used_v4l) {
 		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
