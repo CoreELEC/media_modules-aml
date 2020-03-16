@@ -1507,6 +1507,9 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	bool pb_skip = false;
 
+#ifdef NV21
+	type = nv_order;
+#endif
 	/* swap uv */
 	if (hw->is_used_v4l) {
 		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
