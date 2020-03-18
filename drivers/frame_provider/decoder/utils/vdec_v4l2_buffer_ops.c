@@ -137,11 +137,11 @@ int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 	aml_vdec_pic_info_update(ctx);
 
 	mutex_lock(&ctx->state_lock);
-	if (ctx->state == AML_STATE_ACTIVE) {
-		ctx->state = AML_STATE_FLUSHING;/*prepare flushing*/
-		//ATRACE_COUNTER("v4l2_state", ctx->state);
-		pr_err("vcodec state (AML_STATE_FLUSHING-RESCHG)\n");
-	}
+
+	ctx->state = AML_STATE_FLUSHING;/*prepare flushing*/
+
+	pr_info("[%d]: vcodec state (AML_STATE_FLUSHING-RESCHG)\n", ctx->id);
+
 	mutex_unlock(&ctx->state_lock);
 
 	ctx->q_data[AML_Q_DATA_SRC].resolution_changed = true;

@@ -58,6 +58,9 @@
 #define V4L2_EVENT_REQUEST_RESET	(1 << 8)
 #define V4L2_EVENT_REQUEST_EXIT		(1 << 9)
 
+/* eos event */
+#define V4L2_EVENT_SEND_EOS		(1 << 16)
+
 /* v4l buffer pool */
 #define V4L_CAP_BUFF_MAX		(32)
 #define V4L_CAP_BUFF_INVALID		(0)
@@ -454,9 +457,7 @@ struct aml_vcodec_ctx {
 	int buf_used_count;
 	bool receive_cmd_stop;
 	bool param_sets_from_ucode;
-	bool v4l_codec_ready;
 	bool v4l_codec_dpb_ready;
-	wait_queue_head_t wq;
 	spinlock_t slock;
 	struct v4l2_config_parm config;
 	bool is_stream_off;

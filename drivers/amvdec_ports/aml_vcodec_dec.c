@@ -207,7 +207,8 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 	struct v4l2_event event = {0};
 
 	if (ctx->receive_cmd_stop &&
-			!ctx->q_data[AML_Q_DATA_SRC].resolution_changed) {
+			changes != V4L2_EVENT_SRC_CH_RESOLUTION &&
+			changes != V4L2_EVENT_SEND_EOS) {
 		ctx->state = AML_STATE_ABORT;
 		ATRACE_COUNTER("v4l2_state", ctx->state);
 		changes = V4L2_EVENT_REQUEST_EXIT;
@@ -222,6 +223,9 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 	case V4L2_EVENT_REQUEST_EXIT:
 		event.type = V4L2_EVENT_SOURCE_CHANGE;
 		event.u.src_change.changes = changes;
+		break;
+	case V4L2_EVENT_SEND_EOS:
+		event.type = V4L2_EVENT_EOS;
 		break;
 	default:
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -527,7 +531,6 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 	}
 
 	if (vf->flag & VFRAME_FLAG_EMPTY_FRAME_V4L) {
-		dstbuf->lastframe = true;
 		dstbuf->vb.flags = V4L2_BUF_FLAG_LAST;
 		if (dstbuf->frame_buffer.num_planes == 1) {
 			vb2_set_plane_payload(&dstbuf->vb.vb2_buf, 0, 0);
@@ -547,6 +550,25 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 		"receive vbuf idx: %d, state: %d\n",
 		dstbuf->vb.vb2_buf.index,
 		dstbuf->vb.vb2_buf.state);
+
+	if (vf->flag & VFRAME_FLAG_EMPTY_FRAME_V4L) {
+		if (ctx->q_data[AML_Q_DATA_SRC].resolution_changed) {
+			/* make the run to stanby until new buffs to enque. */
+			ctx->v4l_codec_dpb_ready = false;
+			ctx->reset_flag = V4L_RESET_MODE_LIGHT;
+
+			/*
+			 * After all buffers containing decoded frames from
+			 * before the resolution change point ready to be
+			 * dequeued on the CAPTURE queue, the driver sends a
+			 * V4L2_EVENT_SOURCE_CHANGE event for source change
+			 * type V4L2_EVENT_SRC_CH_RESOLUTION, also the upper
+			 * layer will get new information from cts->picinfo.
+			 */
+			aml_vdec_dispatch_event(ctx, V4L2_EVENT_SRC_CH_RESOLUTION);
+		} else
+			aml_vdec_dispatch_event(ctx, V4L2_EVENT_SEND_EOS);
+	}
 
 	if (dstbuf->vb.vb2_buf.state == VB2_BUF_STATE_ACTIVE) {
 		/* binding vframe handle. */
@@ -568,24 +590,6 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 			"vcodec state (AML_STATE_FLUSHED)\n");
 	}
 	mutex_unlock(&ctx->state_lock);
-
-	if (dstbuf->lastframe &&
-		ctx->q_data[AML_Q_DATA_SRC].resolution_changed) {
-
-		/* make the run to stanby until new buffs to enque. */
-		ctx->v4l_codec_dpb_ready = false;
-		ctx->reset_flag = V4L_RESET_MODE_LIGHT;
-
-		/*
-		 * After all buffers containing decoded frames from
-		 * before the resolution change point ready to be
-		 * dequeued on the CAPTURE queue, the driver sends a
-		 * V4L2_EVENT_SOURCE_CHANGE event for source change
-		 * type V4L2_EVENT_SRC_CH_RESOLUTION, also the upper
-		 * layer will get new information from cts->picinfo.
-		 */
-		aml_vdec_dispatch_event(ctx, V4L2_EVENT_SRC_CH_RESOLUTION);
-	}
 
 	ctx->decoded_frame_cnt++;
 }
@@ -645,8 +649,6 @@ static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 		if (ctx->state == AML_STATE_PROBE) {
 			ctx->state = AML_STATE_READY;
 			ATRACE_COUNTER("v4l2_state", ctx->state);
-			ctx->v4l_codec_ready = true;
-			wake_up_interruptible(&ctx->wq);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_READY)\n");
 		}
@@ -924,7 +926,6 @@ void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 	/* flush worker. */
 	flush_workqueue(dev->decode_workqueue);
 
-	ctx->v4l_codec_ready = false;
 	ctx->v4l_codec_dpb_ready = false;
 
 	/* stop decoder. */
@@ -1153,7 +1154,6 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 				(ctx->reset_flag == V4L_RESET_MODE_LIGHT)) {
 				ctx->state = AML_STATE_RESET;
 				ATRACE_COUNTER("v4l2_state", ctx->state);
-				ctx->v4l_codec_ready = false;
 				ctx->v4l_codec_dpb_ready = false;
 
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,

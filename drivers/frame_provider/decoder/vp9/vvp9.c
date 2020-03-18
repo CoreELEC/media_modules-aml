@@ -9680,25 +9680,6 @@ static void vp9_work(struct work_struct *work)
 		return;
 	}
 
-	if (pbi->dec_result == DEC_V4L2_CONTINUE_DECODING) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
-
-		if (ctx->param_sets_from_ucode) {
-			reset_process_time(pbi);
-			if (wait_event_interruptible_timeout(ctx->wq,
-				ctx->v4l_codec_ready,
-				msecs_to_jiffies(500)) < 0)
-				return;
-		}
-
-		continue_decoding(pbi);
-		pbi->postproc_done = 0;
-		pbi->process_busy = 0;
-
-		return;
-	}
-
 	if (((pbi->dec_result == DEC_RESULT_GET_DATA) ||
 		(pbi->dec_result == DEC_RESULT_GET_DATA_RETRY))
 		&& (hw_to_vdec(pbi)->next_status !=

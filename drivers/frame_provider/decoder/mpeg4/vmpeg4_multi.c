@@ -999,9 +999,6 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 				hw->v4l_params_parsed	= true;
 				vdec_v4l_set_ps_infos(ctx, &ps);
 			}
-
-			if (!ctx->v4l_codec_ready)
-				return IRQ_HANDLED;
 		}
 
 		if (hw->vmpeg4_amstream_dec_info.rate == 0) {

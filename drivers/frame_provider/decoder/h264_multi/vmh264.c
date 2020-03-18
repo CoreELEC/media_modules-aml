@@ -5834,17 +5834,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
 		reset_process_time(hw);
 
-		if (hw->is_used_v4l) {
-			struct aml_vcodec_ctx *ctx =
-				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-			if (ctx->param_sets_from_ucode && !ctx->v4l_codec_ready) {
-				//amvdec_stop();
-				hw->dec_result = DEC_RESULT_DONE;
-				vdec_schedule_work(&hw->work);
-				return IRQ_HANDLED;
-			}
-		}
 #ifdef DETECT_WRONG_MULTI_SLICE
 		hw->cur_picture_slice_count++;
 		if (hw->multi_slice_pic_flag == 1 &&

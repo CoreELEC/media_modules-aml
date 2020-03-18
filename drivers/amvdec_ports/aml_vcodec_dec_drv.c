@@ -82,7 +82,6 @@ static int fops_vcodec_open(struct file *file)
 	mutex_init(&ctx->state_lock);
 	mutex_init(&ctx->lock);
 	spin_lock_init(&ctx->slock);
-	init_waitqueue_head(&ctx->wq);
 	init_completion(&ctx->comp);
 
 	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
