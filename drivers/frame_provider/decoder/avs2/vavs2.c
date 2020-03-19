@@ -6234,7 +6234,7 @@ static int vavs2_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
 		(struct AVS2Decoder_s *)vdec->private;
 	if (i_only_flag & 0x100)
 		return 0;
-	if (trickmode == TRICKMODE_I)
+	if (trickmode == TRICKMODE_I || trickmode == TRICKMODE_I_HEVC)
 		dec->i_only = 0x3;
 	else if (trickmode == TRICKMODE_NONE)
 		dec->i_only = 0x0;

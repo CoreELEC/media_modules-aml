@@ -800,7 +800,6 @@ EXPORT_SYMBOL(vdec_status);
 int vdec_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
 {
 	int r;
-
 	if (vdec->set_trickmode) {
 		r = vdec->set_trickmode(vdec, trickmode);
 
@@ -809,7 +808,6 @@ int vdec_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
 				trickmode);
 		return r;
 	}
-
 	return -1;
 }
 EXPORT_SYMBOL(vdec_set_trickmode);
