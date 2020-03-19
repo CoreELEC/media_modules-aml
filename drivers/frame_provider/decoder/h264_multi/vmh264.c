@@ -6865,7 +6865,7 @@ static void check_timer_func(unsigned long arg)
 
 static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
-	u32 ar;
+	u32 ar, ar_tmp;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
 
 	if (!hw)
@@ -6882,11 +6882,13 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->error_count = 0;
 	vstatus->status = hw->stat;
 	if (hw->h264_ar == 0x3ff)
-		hw->h264_ar = (0x100 *
+		ar_tmp = (0x100 *
 			hw->frame_height * hw->height_aspect_ratio) /
 			(hw->frame_width * hw->width_aspect_ratio);
+	else
+		ar_tmp = hw->h264_ar;
 	ar = min_t(u32,
-			hw->h264_ar,
+			ar_tmp,
 			DISP_RATIO_ASPECT_RATIO_MAX);
 	vstatus->ratio_control =
 		ar << DISP_RATIO_ASPECT_RATIO_BIT;
