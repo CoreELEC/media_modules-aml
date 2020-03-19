@@ -307,6 +307,7 @@ struct vdec_mpeg4_hw_s {
 	bool v4l_params_parsed;
 	u32 buf_num;
 	u32 dynamic_buf_num_margin;
+	u32 i_only;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -616,6 +617,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	int index = pic->index;
+	bool pb_skip = false;
 
 	/* swap uv */
 	if (hw->is_used_v4l) {
@@ -623,6 +625,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
 			nv_order = VIDTYPE_VIU_NV12;
 	}
+
+	if (hw->i_only)
+		pb_skip = 1;
 
 	if (pic->pic_info & INTERLACE_FLAG) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
@@ -662,7 +667,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			"field0: pts %d, pts64 %lld, w %d, h %d, dur %d\n",
 			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
 
-		if ((hw->first_i_frame_ready == 0)
+		if (((hw->first_i_frame_ready == 0) || pb_skip)
 			 && (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
 			hw->vfbuf_use[index]--;
@@ -713,8 +718,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
 			"filed1: pts %d, pts64 %lld, w %d, h %d, dur: %d\n",
 			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
-		if ((hw->first_i_frame_ready == 0) &&
-			(pic->pic_type != I_PICTURE)) {
+		if (((hw->first_i_frame_ready == 0) || pb_skip)
+			&& (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
 			hw->vfbuf_use[index]--;
 			kfifo_put(&hw->newframe_q,
@@ -778,8 +783,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			"prog: pts %d, pts64 %lld, w %d, h %d, dur %d\n",
 			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
 
-		if ((hw->first_i_frame_ready == 0) &&
-			(pic->pic_type != I_PICTURE)) {
+		if (((hw->first_i_frame_ready == 0) || pb_skip)
+			&& (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
 			hw->vfbuf_use[index]--;
 			kfifo_put(&hw->newframe_q,
@@ -2265,6 +2270,23 @@ static void reset(struct vdec_s *vdec)
 	hw->ctx_valid = 0;
 }
 
+static int vmpeg4_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
+{
+	struct vdec_mpeg4_hw_s *hw =
+	(struct vdec_mpeg4_hw_s *)vdec->private;
+	if (!hw)
+		return 0;
+
+	if (trickmode == TRICKMODE_I) {
+		hw->i_only = 0x3;
+		trickmode_i = 1;
+	} else if (trickmode == TRICKMODE_NONE) {
+		hw->i_only = 0x0;
+		trickmode_i = 0;
+	}
+	return 0;
+}
+
 static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 {
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
@@ -2289,6 +2311,7 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	pdata->private = hw;
 	pdata->dec_status = dec_status;
 	/* pdata->set_trickmode = set_trickmode; */
+	pdata->set_trickmode = vmpeg4_set_trickmode;
 	pdata->run_ready = run_ready;
 	pdata->run = run;
 	pdata->reset = reset;

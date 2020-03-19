@@ -319,6 +319,7 @@ struct vdec_mpeg12_hw_s {
 	struct vdec_info gvs;
 	struct vframe_qos_s vframe_qos;
 	unsigned int res_ch_flag;
+	u32 i_only;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -1525,6 +1526,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	ulong nv_order = VIDTYPE_VIU_NV21;
+	bool pb_skip = false;
 
 #ifdef NV21
 	type = nv_order;
@@ -1534,6 +1536,12 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
 			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
 			nv_order = VIDTYPE_VIU_NV12;
+	}
+
+	pb_skip = (hw->pics[hw->refs[0]].offset ==
+		hw->pics[hw->refs[1]].offset);
+	if (hw->i_only) {
+		pb_skip = 1;
 	}
 
 	user_data_ready_notify(hw, pic->pts, pic->pts_valid);
@@ -1616,7 +1624,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		vf->type_original = vf->type;
 
 		if ((error_skip(hw, pic->buffer_info, vf)) ||
-			((hw->first_i_frame_ready == 0) &&
+			(((hw->first_i_frame_ready == 0) || pb_skip) &&
 			((PICINFO_TYPE_MASK & pic->buffer_info) !=
 			 PICINFO_TYPE_I))) {
 			hw->drop_frame_count++;
@@ -3150,6 +3158,23 @@ static void reset(struct vdec_s *vdec)
 	pr_info("ammvdec_mpeg12: reset.\n");
 }
 
+static int vmpeg12_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
+{
+	struct vdec_mpeg12_hw_s *hw =
+	(struct vdec_mpeg12_hw_s *)vdec->private;
+	if (!hw)
+		return 0;
+
+	if (trickmode == TRICKMODE_I) {
+		hw->i_only = 0x3;
+		//trickmode_i = 1;
+	} else if (trickmode == TRICKMODE_NONE) {
+		hw->i_only = 0x0;
+		//trickmode_i = 0;
+	}
+	return 0;
+}
+
 static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 {
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
@@ -3174,6 +3199,7 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 
 	pdata->private = hw;
 	pdata->dec_status = vmmpeg12_dec_status;
+	pdata->set_trickmode = vmpeg12_set_trickmode;
 	pdata->run_ready = run_ready;
 	pdata->run = run;
 	pdata->reset = reset;

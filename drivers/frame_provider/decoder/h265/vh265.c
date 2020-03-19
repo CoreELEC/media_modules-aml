@@ -537,6 +537,7 @@ void WRITE_VREG_DBG(unsigned adr, unsigned val)
 #undef WRITE_VREG
 #define WRITE_VREG WRITE_VREG_DBG
 #endif
+extern u32 trickmode_i;
 
 static DEFINE_MUTEX(vh265_mutex);
 
@@ -11088,6 +11089,32 @@ static void H265_DECODE_INIT(void)
 }
 #endif
 
+int vh265_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
+{
+    struct hevc_state_s *hevc = (struct hevc_state_s *)vdec->private;
+    hevc_print(hevc, 0,	"[%s %d] trickmode:%lu\n", __func__, __LINE__, trickmode);
+
+    if (trickmode == TRICKMODE_I) {
+		trickmode_i = 1;
+		i_only_flag = 0x1;
+    } else if (trickmode == TRICKMODE_NONE) {
+		trickmode_i = 0;
+		i_only_flag = 0x0;
+    } else if (trickmode == 0x02) {
+		trickmode_i = 0;
+		i_only_flag = 0x02;
+    } else if (trickmode == 0x03) {
+		trickmode_i = 1;
+		i_only_flag = 0x03;
+    } else if (trickmode == 0x07) {
+		trickmode_i = 1;
+		i_only_flag = 0x07;
+    }
+    //hevc_print(hevc, 0, "i_only_flag: %d trickmode_i:%d\n", i_only_flag, trickmode_i);
+
+    return 0;
+}
+
 static void config_decode_mode(struct hevc_state_s *hevc)
 {
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
@@ -12867,6 +12894,7 @@ static int amvdec_h265_probe(struct platform_device *pdev)
 #ifdef MULTI_INSTANCE_SUPPORT
 	pdata->private = hevc;
 	pdata->dec_status = vh265_dec_status;
+	pdata->set_trickmode = vh265_set_trickmode;
 	pdata->set_isreset = vh265_set_isreset;
 	is_reset = 0;
 	if (vh265_init(pdata) < 0) {
@@ -13141,7 +13169,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 
 	pdata->private = hevc;
 	pdata->dec_status = vh265_dec_status;
-	/* pdata->set_trickmode = set_trickmode; */
+	pdata->set_trickmode = vh265_set_trickmode;
 	pdata->run_ready = run_ready;
 	pdata->run = run;
 	pdata->reset = reset;
