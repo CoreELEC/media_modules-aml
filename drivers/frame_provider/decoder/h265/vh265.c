@@ -3339,9 +3339,7 @@ static int get_work_pic_num(struct hevc_state_s *hevc)
 				dynamic_buf_num_margin,  hevc->dynamic_buf_num_margin);
 
 	if (sps_pic_buf_diff >= 4)
-	{
-		used_buf_num += 1;
-	}
+		used_buf_num += sps_pic_buf_diff;
 
 	if (hevc->is_used_v4l) {
 		/* for eos add more buffer to flush.*/
@@ -8483,6 +8481,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 		kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 		spin_lock_irqsave(&lock, flags);
 		vf->index &= 0xff;
+		hevc->m_PIC[vf->index]->vf_ref = 0;
 		hevc->m_PIC[vf->index]->output_ready = 0;
 		if (hevc->wait_buf != 0)
 			WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
