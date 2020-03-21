@@ -952,7 +952,8 @@ static const char * const vdec_device_name[] = {
 	"amvenc_avc",
 	"jpegenc",
 	"amvdec_vp9",
-	"amvdec_avs2"
+	"amvdec_avs2",
+	"amvdec_av1"
 };
 
 #endif
