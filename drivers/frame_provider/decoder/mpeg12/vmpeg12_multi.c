@@ -1603,7 +1603,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
 		} else {
-			debug_print(DECODE_ID(hw), 0,
+			debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
 				"%s, vf: %lx, num[%d]: %d(%c), dur: %d, type: %x, pts: %d(%lld)\n",
 				__func__, (ulong)vf, i, hw->disp_num, GET_SLICE_TYPE(info),
 				vf->duration, vf->type, vf->pts, vf->pts_us64);
@@ -2204,7 +2204,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 			"warn: vf %lx, index %d putback repetitive\n", (ulong)vf, vf->index);
 	}
 	hw->put_num++;
-	debug_print(DECODE_ID(hw), 0,
+	debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 		"%s: vf: %lx, index: %d, use: %d\n", __func__, (ulong)vf,
 		vf->index, hw->vfbuf_use[vf->index]);
 	kfifo_put(&hw->newframe_q,
