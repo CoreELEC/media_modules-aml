@@ -775,6 +775,7 @@ struct AV1HW_s {
 #endif
 
 };
+static void av1_dump_state(struct vdec_s *vdec);
 
 int av1_print(struct AV1HW_s *hw,
 	int flag, const char *fmt, ...)
@@ -1217,7 +1218,6 @@ static int get_mv_buf(struct AV1HW_s *hw,
 	}
 	return ret;
 }
-
 static void put_mv_buf(struct AV1HW_s *hw,
 				int *mv_buf_index)
 {
@@ -1240,7 +1240,6 @@ static void put_mv_buf(struct AV1HW_s *hw,
 		hw->m_mv_BUF[i].used_flag)
 		hw->m_mv_BUF[i].used_flag = 0;
 }
-
 static void	put_un_used_mv_bufs(struct AV1HW_s *hw)
 {
 	struct AV1_Common_s *const cm = &hw->pbi->common;
@@ -1254,7 +1253,6 @@ static void	put_un_used_mv_bufs(struct AV1HW_s *hw)
 			put_mv_buf(hw, &frame_bufs[i].buf.mv_buf_index);
 	}
 }
-
 #endif
 
 
@@ -1272,8 +1270,6 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 			free_buf_count++;
 	return free_buf_count;
 }
-
-
 
 int aom_bufmgr_init(struct AV1HW_s *hw, struct BuffInfo_s *buf_spec_i,
 		struct buff_s *mc_buf_i) {
@@ -4600,7 +4596,6 @@ static int av1_local_init(struct AV1HW_s *hw)
 		hw->used_buf_num = MAX_BUF_NUM_SAVE_BUF;
 	else
 		hw->used_buf_num = max_buf_num;
-
 	if (hw->used_buf_num > MAX_BUF_NUM)
 		hw->used_buf_num = MAX_BUF_NUM;
 	if (hw->used_buf_num > FRAME_BUFFERS)
@@ -5396,7 +5391,9 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 {
+	sd->stream_offset = pbi->pre_stream_offset;
 	prepare_display_buf((struct AV1HW_s *)(pbi->private_data), sd);
+	pbi->pre_stream_offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 }
 
 static int notify_v4l_eos(struct vdec_s *vdec)
@@ -6959,7 +6956,8 @@ static void vav1_put_timer_func(unsigned long arg)
 	}
 #endif
 	if (debug & VP9_DEBUG_DUMP_PIC_LIST) {
-		dump_pic_list(hw);
+		/*dump_pic_list(hw);*/
+		av1_dump_state(hw_to_vdec(hw));
 		debug &= ~VP9_DEBUG_DUMP_PIC_LIST;
 	}
 	if (debug & VP9_DEBUG_TRIG_SLICE_SEGMENT_PROC) {
@@ -7629,7 +7627,6 @@ static int amvdec_av1_probe(struct platform_device *pdev)
 	for (i = 0; i < WORK_BUF_SPEC_NUM; i++)
 		aom_workbuff_spec[i].start_adr = pdata->mem_start;
 #endif
-
 
 	if (debug) {
 		av1_print(hw, AOM_DEBUG_HW_MORE, "===AV1 decoder mem resource 0x%lx size 0x%x\n",

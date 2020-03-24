@@ -2112,6 +2112,7 @@ typedef struct AV1Decoder {
     buff_t* mc_buf;
     //unsigned short *rpm_ptr;
     void *private_data;
+    u32 pre_stream_offset;
 #endif
 } AV1Decoder;
 
