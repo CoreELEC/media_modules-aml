@@ -7037,7 +7037,7 @@ static void update_vf_memhandle(struct VP9Decoder_s *pbi,
 		vf->mem_head_handle =
 			decoder_bmmu_box_get_mem_handle(
 				pbi->bmmu_box,
-				HEADER_BUFFER_IDX(pic->BUF_index));
+				VF_BUFFER_IDX(pic->BUF_index));
 	} else {
 		vf->mem_handle =
 			decoder_bmmu_box_get_mem_handle(
