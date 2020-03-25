@@ -2460,6 +2460,34 @@ error:
 }
 EXPORT_SYMBOL(vdec_init);
 
+/*
+ *Remove the vdec after timeout happens both in vdec_disconnect
+ *and platform_device_unregister. Then after, we can release the vdec.
+ */
+static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_s *v_ref)
+{
+	struct vdec_s *vdec, *tmp;
+	unsigned long flags;
+
+	flags = vdec_core_lock(core);
+
+	list_for_each_entry_safe(vdec, tmp,
+		&core->connected_vdec_list, list) {
+		if ((vdec->status == VDEC_STATUS_DISCONNECTED) &&
+		    (vdec == v_ref)) {
+		    pr_err("%s, vdec = %p, active vdec = %p\n",
+				__func__, vdec, core->active_vdec);
+			if (core->active_vdec == v_ref)
+				core->active_vdec = NULL;
+			if (core->last_vdec == v_ref)
+				core->last_vdec = NULL;
+			list_del(&vdec->list);
+		}
+	}
+
+	vdec_core_unlock(core, flags);
+}
+
 /* vdec_create/init/release/destroy are applied to both dual running decoders
  */
 void vdec_release(struct vdec_s *vdec)
@@ -2513,6 +2541,8 @@ void vdec_release(struct vdec_s *vdec)
 	if (atomic_read(&vdec_core->vdec_nr) == 1)
 		vdec_disable_DMC(vdec);
 	platform_device_unregister(vdec->dev);
+	/*Check if the vdec still in connected list, if yes, delete it*/
+	vdec_connect_list_force_clear(vdec_core, vdec);
 	pr_debug("vdec_release instance %p, total %d\n", vdec,
 		atomic_read(&vdec_core->vdec_nr));
 	vdec_destroy(vdec);
