@@ -71,6 +71,14 @@
 #define V4L_RESET_MODE_NORMAL		(1 << 0) /* reset vdec_input and decoder. */
 #define V4L_RESET_MODE_LIGHT		(1 << 1) /* just only reset decoder. */
 
+/* m2m job queue's status */
+/* Instance is already queued on the job_queue */
+#define TRANS_QUEUED		(1 << 0)
+/* Instance is currently running in hardware */
+#define TRANS_RUNNING		(1 << 1)
+/* Instance is currently aborting */
+#define TRANS_ABORT		(1 << 2)
+
 /**
  * enum aml_hw_reg_idx - AML hw register base index
  */
@@ -373,99 +381,93 @@ struct aml_vdec_thread {
 /**
  * struct aml_vcodec_ctx - Context (instance) private data.
  *
- * @type: type of the instance - decoder or encoder
- * @dev: pointer to the aml_vcodec_dev of the device
- * @list: link to ctx_list of aml_vcodec_dev
- * @fh: struct v4l2_fh
- * @m2m_ctx: pointer to the v4l2_m2m_ctx of the context
- * @q_data: store information of input and output queue
- *	    of the context
- * @id: index of the context that this structure describes
- * @state: state of the context
- * @param_change: indicate encode parameter type
- * @enc_params: encoding parameters
- * @dec_if: hooked decoder driver interface
- * @enc_if: hoooked encoder driver interface
- * @drv_handle: driver handle for specific decode/encode instance
- *
- * @picinfo: store picture info after header parsing
+ * @id: index of the context that this structure describes.
+ * @type: type of the instance - decoder or encoder.
+ * @dev: pointer to the aml_vcodec_dev of the device.
+ * @m2m_ctx: pointer to the v4l2_m2m_ctx of the context.
+ * @ada_ctx: pointer to the aml_vdec_adapt of the context.
+ * @dec_if: hooked decoder driver interface.
+ * @drv_handle: driver handle for specific decode instance
+ * @fh: struct v4l2_fh.
+ * @ctrl_hdl: handler for v4l2 framework.
+ * @slock: protect v4l2 codec context.
+ * @empty_flush_buf: a fake size-0 capture buffer that indicates flush.
+ * @list: link to ctx_list of aml_vcodec_dev.
+ * @q_data: store information of input and output queue of the context.
+ * @queue: waitqueue that can be used to wait for this context to finish.
+ * @lock: protect the vdec thread.
+ * @state_lock: protect the codec status.
+ * @state: state of the context.
+ * @decode_work: decoder work be used to output buffer.
+ * @output_thread_ready: indicate the output thread ready.
+ * @cap_pool: capture buffers are remark in the pool.
+ * @vdec_thread_list: vdec thread be used to capture.
  * @dpb_size: store dpb count after header parsing
- * @int_cond: variable used by the waitqueue
- * @int_type: type of the last interrupt
- * @queue: waitqueue that can be used to wait for this context to
- *	   finish
- * @irq_status: irq status
- *
- * @ctrl_hdl: handler for v4l2 framework
- * @decode_work: worker for the decoding
- * @encode_work: worker for the encoding
- * @last_decoded_picinfo: pic information get from latest decode
- * @empty_flush_buf: a fake size-0 capture buffer that indicates flush
- *
- * @colorspace: enum v4l2_colorspace; supplemental to pixelformat
- * @ycbcr_enc: enum v4l2_ycbcr_encoding, Y'CbCr encoding
- * @quantization: enum v4l2_quantization, colorspace quantization
- * @xfer_func: enum v4l2_xfer_func, colorspace transfer function
- * @lock: protect variables accessed by V4L2 threads and worker thread such as
- *	  aml_video_dec_buf.
+ * @param_change: indicate encode parameter type
+ * @param_sets_from_ucode: if true indicate ps from ucode.
+ * @v4l_codec_dpb_ready: queue buffer number greater than dpb.
+ * @comp: comp be used for sync picture information with decoder.
+ * @config: used to set or get parms for application.
+ * @picinfo: store picture info after header parsing.
+ * @last_decoded_picinfo: pic information get from latest decode.
+ * @colorspace: enum v4l2_colorspace; supplemental to pixelformat.
+ * @ycbcr_enc: enum v4l2_ycbcr_encoding, Y'CbCr encoding.
+ * @quantization: enum v4l2_quantization, colorspace quantization.
+ * @xfer_func: enum v4l2_xfer_func, colorspace transfer function.
+ * @cap_pix_fmt: the picture format used to switch nv21 or nv12.
+ * @has_receive_eos: if receive last frame of capture that be set.
+ * @is_drm_mode: decoding work on drm mode if that set.
+ * @is_stream_mode: vdec input used to stream mode, default frame mode.
+ * @is_stream_off: the value used to handle reset active.
+ * @receive_cmd_stop: if receive the cmd flush decoder.
+ * @reset_flag: reset mode includes lightly and normal mode.
+ * @decoded_frame_cnt: the capture buffer deque number to be count.
+ * @buf_used_count: means that decode allocate how many buffs from v4l.
  */
 struct aml_vcodec_ctx {
-	enum aml_instance_type type;
-	struct aml_vcodec_dev *dev;
-	struct list_head list;
+	int				id;
+	enum aml_instance_type		type;
+	struct aml_vcodec_dev		*dev;
+	struct v4l2_m2m_ctx		*m2m_ctx;
+	struct aml_vdec_adapt		*ada_ctx;
+	const struct vdec_common_if	*dec_if;
+	ulong				drv_handle;
+	struct v4l2_fh			fh;
+	struct v4l2_ctrl_handler	ctrl_hdl;
+	spinlock_t			slock;
+	struct aml_video_dec_buf	*empty_flush_buf;
+	struct list_head		list;
 
-	struct v4l2_fh fh;
-	struct v4l2_m2m_ctx *m2m_ctx;
-	struct aml_vdec_adapt *ada_ctx;
-	struct aml_q_data q_data[2];
-	int id;
-	struct mutex state_lock;
-	enum aml_instance_state state;
-	enum aml_encode_param param_change;
-	struct aml_enc_params enc_params;
+	struct aml_q_data		q_data[2];
+	wait_queue_head_t		queue;
+	struct mutex			lock, state_lock;
+	enum aml_instance_state		state;
+	struct work_struct		decode_work;
+	bool				output_thread_ready;
+	struct v4l_buff_pool		cap_pool;
+	struct list_head		vdec_thread_list;
 
-	const struct vdec_common_if *dec_if;
-	const struct venc_common_if *enc_if;
-	unsigned long drv_handle;
+	int				dpb_size;
+	bool				param_sets_from_ucode;
+	bool				v4l_codec_dpb_ready;
+	struct completion		comp;
+	struct v4l2_config_parm		config;
+	struct vdec_pic_info		picinfo;
+	struct vdec_pic_info		last_decoded_picinfo;
+	enum v4l2_colorspace		colorspace;
+	enum v4l2_ycbcr_encoding	ycbcr_enc;
+	enum v4l2_quantization		quantization;
+	enum v4l2_xfer_func		xfer_func;
+	u32				cap_pix_fmt;
 
-	struct vdec_pic_info picinfo;
-	int dpb_size;
-
-	int int_cond;
-	int int_type;
-	wait_queue_head_t queue;
-	unsigned int irq_status;
-
-	struct v4l2_ctrl_handler ctrl_hdl;
-	struct work_struct decode_work;
-	struct work_struct encode_work;
-	struct vdec_pic_info last_decoded_picinfo;
-	struct aml_video_dec_buf *empty_flush_buf;
-
-	enum v4l2_colorspace colorspace;
-	enum v4l2_ycbcr_encoding ycbcr_enc;
-	enum v4l2_quantization quantization;
-	enum v4l2_xfer_func xfer_func;
-
-	int decoded_frame_cnt;
-	struct mutex lock;
-	struct completion comp;
-	bool has_receive_eos;
-	struct list_head vdec_thread_list;
-	bool is_drm_mode;
-	bool is_stream_mode;
-	int buf_used_count;
-	bool receive_cmd_stop;
-	bool param_sets_from_ucode;
-	bool v4l_codec_dpb_ready;
-	spinlock_t slock;
-	struct v4l2_config_parm config;
-	bool is_stream_off;
-	int reset_flag;
-	int stop_cmd;
-	u32 display_count;
-	struct v4l_buff_pool cap_pool;
-	u32 cap_pix_fmt;
+	bool				has_receive_eos;
+	bool				is_drm_mode;
+	bool				is_stream_mode;
+	bool				is_stream_off;
+	bool				receive_cmd_stop;
+	int				reset_flag;
+	int				decoded_frame_cnt;
+	int				buf_used_count;
 };
 
 /**

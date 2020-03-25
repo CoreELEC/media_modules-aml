@@ -867,7 +867,9 @@ static void aml_vdec_worker(struct work_struct *work)
 		mutex_unlock(&ctx->state_lock);
 
 		ctx->q_data[AML_Q_DATA_SRC].resolution_changed = true;
-		v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
+		while (ctx->m2m_ctx->job_flags & TRANS_RUNNING) {
+			v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
+		}
 
 		aml_vdec_flush_decoder(ctx);
 
@@ -920,17 +922,22 @@ void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 {
 	struct aml_vcodec_dev *dev = ctx->dev;
 
-	/* pause inject output data to vdec. */
-	v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
+	/* disable queue output item to worker. */
+	ctx->output_thread_ready = false;
 
-	/* flush worker. */
+	/* flush output buffer worker. */
 	flush_workqueue(dev->decode_workqueue);
 
-	ctx->v4l_codec_dpb_ready = false;
-
-	/* stop decoder. */
+	/* clean output cache and decoder status . */
 	if (ctx->state > AML_STATE_INIT)
 		aml_vdec_reset(ctx);
+
+	/* pause the job and clean trans status. */
+	while (ctx->m2m_ctx->job_flags & TRANS_RUNNING) {
+		v4l2_m2m_job_pause(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
+	}
+
+	ctx->v4l_codec_dpb_ready = false;
 }
 
 void try_to_capture(struct aml_vcodec_ctx *ctx)
@@ -987,6 +994,7 @@ void aml_thread_notify(struct aml_vcodec_ctx *ctx,
 {
 	struct aml_vdec_thread *thread = NULL;
 
+	mutex_lock(&ctx->lock);
 	list_for_each_entry(thread, &ctx->vdec_thread_list, node) {
 		if (thread->task == NULL)
 			continue;
@@ -994,6 +1002,7 @@ void aml_thread_notify(struct aml_vcodec_ctx *ctx,
 		if (thread->type == type)
 			up(&thread->sem);
 	}
+	mutex_unlock(&ctx->lock);
 }
 EXPORT_SYMBOL_GPL(aml_thread_notify);
 
@@ -1039,7 +1048,10 @@ void aml_thread_stop(struct aml_vcodec_ctx *ctx)
 	while (!list_empty(&ctx->vdec_thread_list)) {
 		thread = list_entry(ctx->vdec_thread_list.next,
 			struct aml_vdec_thread, node);
+		mutex_lock(&ctx->lock);
 		list_del(&thread->node);
+		mutex_unlock(&ctx->lock);
+
 		thread->stop = true;
 		up(&thread->sem);
 		kthread_stop(thread->task);
@@ -1368,7 +1380,6 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 		struct aml_video_dec_buf *aml_buf = NULL;
 		struct file *file = NULL;
 
-		mutex_lock(&ctx->lock);
 		vq = v4l2_m2m_get_vq(ctx->m2m_ctx, buf->type);
 		vb2_v4l2 = to_vb2_v4l2_buffer(vq->bufs[buf->index]);
 		aml_buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
@@ -1387,7 +1398,6 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 				(ulong) v4l_get_vf_handle(vb2_v4l2->private));
 		}
 		fput(file);
-		mutex_unlock(&ctx->lock);
 	}
 
 	return ret;
@@ -2288,8 +2298,9 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		if (ctx->is_drm_mode && q->memory == VB2_MEMORY_DMABUF)
 			aml_recycle_dma_buffers(ctx);
 	} else {
-		/* stop decoder. */
-		wait_vcodec_ending(ctx);
+		/* clean output cache and decoder status . */
+		if (ctx->state > AML_STATE_INIT)
+			aml_vdec_reset(ctx);
 
 		for (i = 0; i < q->num_buffers; ++i) {
 			vb2_v4l2 = to_vb2_v4l2_buffer(q->bufs[i]);
@@ -2316,7 +2327,8 @@ static void m2mops_vdec_device_run(void *priv)
 	struct aml_vcodec_ctx *ctx = priv;
 	struct aml_vcodec_dev *dev = ctx->dev;
 
-	queue_work(dev->decode_workqueue, &ctx->decode_work);
+	if (ctx->output_thread_ready)
+		queue_work(dev->decode_workqueue, &ctx->decode_work);
 }
 
 void vdec_device_vf_run(struct aml_vcodec_ctx *ctx)

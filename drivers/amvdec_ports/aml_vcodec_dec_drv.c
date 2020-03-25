@@ -108,6 +108,7 @@ static int fops_vcodec_open(struct file *file)
 	}
 	src_vq = v4l2_m2m_get_vq(ctx->m2m_ctx,
 				V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+	ctx->output_thread_ready = true;
 	ctx->empty_flush_buf->vb.vb2_buf.vb2_queue = src_vq;
 	ctx->empty_flush_buf->lastframe = true;
 	aml_vcodec_dec_set_default_params(ctx);
