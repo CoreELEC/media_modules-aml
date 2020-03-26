@@ -181,6 +181,8 @@ static u32 old_fec_input_control;
 static int have_old_stb_top_config = 1;
 static int have_old_fec_input_control = 1;
 
+static long pes_off_pre[DMX_DEV_COUNT];
+
 static void
 dmx_write_reg(int r, u32 v)
 {
@@ -1195,13 +1197,13 @@ static void process_sub(struct aml_dmx *dmx)
 
 static void process_pes(struct aml_dmx *dmx)
 {
-	static long off, off_pre;
+	long off, off_pre = pes_off_pre[dmx->id];
 	u8 *buffer1 = 0, *buffer2 = 0;
 	u8 *buffer1_phys = 0, *buffer2_phys = 0;
 	u32 len1 = 0, len2 = 0;
 	int i = 1;
 
-	off = (DMX_READ_REG(dmx->id, OB_PES_WR_PTR) << 3);
+	off = (DMX_READ_REG(dmx->id, OTHER_WR_PTR) << 3);
 
 	pr_dbg_irq_pes("[%d]WR:0x%x PES WR:0x%x\n", dmx->id,
 			DMX_READ_REG(dmx->id, OTHER_WR_PTR),
@@ -1226,7 +1228,7 @@ static void process_pes(struct aml_dmx *dmx)
 	} else if (off == off_pre) {
 		pr_dbg("pes no data\n");
 	}
-	off_pre = off;
+	pes_off_pre[dmx->id] = off;
 	if (len1) {
 		buffer1_phys = (unsigned char *)virt_to_phys(buffer1);
 		dma_sync_single_for_cpu(dmx_get_dev(dmx),
@@ -4022,6 +4024,14 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 					set_subtitle_pes_buffer(dmx);
 #endif
 #endif
+				{
+					u32 v = dmx_get_chan_target(dmx, n);
+					if (v != 0xFFFF &&
+						(v & (0x7 << PID_TYPE))
+						==
+						(OTHER_PES_PACKET << PID_TYPE))
+						pes_off_pre[dmx->id] = 0;
+				}
 				dmx_set_chan_regs(dmx, n);
 			}
 		}
@@ -4227,6 +4237,14 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 					set_subtitle_pes_buffer(dmx);
 #endif
 #endif
+				{
+					u32 v = dmx_get_chan_target(dmx, n);
+					if (v != 0xFFFF &&
+						(v & (0x7 << PID_TYPE))
+						==
+						(OTHER_PES_PACKET << PID_TYPE))
+						pes_off_pre[dmx->id] = 0;
+				}
 				dmx_set_chan_regs(dmx, n);
 			}
 		}
@@ -4420,8 +4438,9 @@ int dmx_alloc_chan(struct aml_dmx *dmx, int type, int pes_type, int pid)
 			if (!dmx->channel[3].used)
 				id = 3;
 			break;
-		case DMX_PES_OTHER:
 		case DMX_PES_AUDIO3:
+			pes_off_pre[dmx->id] = 0;
+		case DMX_PES_OTHER:
 			{
 				int i;
 
