@@ -429,6 +429,13 @@ static struct stream_port_s ports[] = {
 		.fops = &vbuf_fops,
 		.vformat = VFORMAT_HEVC,
 	},
+	{
+		.name = "amstream_dves_av1",
+		.type = PORT_TYPE_ES | PORT_TYPE_VIDEO | PORT_TYPE_HEVC | PORT_TYPE_FRAME |
+			PORT_TYPE_DECODER_SCHED | PORT_TYPE_DUALDEC,
+		.fops = &vframe_fops,
+		.vformat = VFORMAT_AV1,
+	},
 #endif
 #endif
 };
@@ -633,6 +640,19 @@ static int video_port_init(struct port_priv_s *priv,
 			return r;
 		}
 
+		if (vdec_dual(vdec)) {
+			if (port->vformat == VFORMAT_AV1)	/* av1 dv only single layer */
+				return 0;
+			r = vdec_init(vdec->slave,
+				(priv->vdec->sys_info->height *
+				priv->vdec->sys_info->width) > 1920*1088);
+			if (r < 0) {
+				pr_err("video_port_init %d, vdec_init failed\n",
+					__LINE__);
+				video_port_release(priv, pbuf, 2);
+				return r;
+			}
+		}
 		return 0;
 	}
 

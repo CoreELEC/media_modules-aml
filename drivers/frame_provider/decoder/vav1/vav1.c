@@ -353,6 +353,7 @@ static u32 frame_height;
 static u32 video_signal_type;
 static u32 force_dv_enable;
 static u32 on_no_keyframe_skiped;
+static u32 without_display_mode;
 
 #define PROB_SIZE    (496 * 2 * 4)
 #define PROB_BUF_SIZE    (0x5000)
@@ -439,6 +440,12 @@ static u32 udebug_pause_pos;
 static u32 udebug_pause_val;
 
 static u32 udebug_pause_decode_idx;
+
+
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+static u32 dv_toggle_prov_name;
+#endif
+
 
 #define DEBUG_REG
 #ifdef DEBUG_REG
@@ -5252,6 +5259,9 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 	uint8_t index = vf->index & 0xff;
 	unsigned long flags;
 
+	if ((vf == NULL) || (hw == NULL))
+		return;
+
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 	hw->vf_put_count++;
 	if (debug & AOM_DEBUG_VFRAME) {
@@ -5810,8 +5820,11 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			vdec_count_info(gvs, 0, stream_offset);
 #endif
 			hw_to_vdec(hw)->vdec_fps_detec(hw_to_vdec(hw)->id);
-			vf_notify_receiver(hw->provider_name,
+			if (without_display_mode == 0) {
+				vf_notify_receiver(hw->provider_name,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			} else
+				vav1_vf_put(vav1_vf_get(hw), hw);
 		} else {
 			hw->stat |= AV1_TRIGGER_FRAME_DONE;
 			hevc_source_changed(VFORMAT_AV1, 196, 196, 30);
@@ -9311,6 +9324,29 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	if (pdata->use_vfm_path)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			VFM_DEC_PROVIDER_NAME);
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+	else if (vdec_dual(pdata)) {
+		struct AV1HW_s *hevc_pair = NULL;
+
+		if (dv_toggle_prov_name) /*debug purpose*/
+			snprintf(pdata->vf_provider_name,
+			VDEC_PROVIDER_NAME_SIZE,
+				(pdata->master) ? VFM_DEC_DVBL_PROVIDER_NAME :
+				VFM_DEC_DVEL_PROVIDER_NAME);
+		else
+			snprintf(pdata->vf_provider_name,
+			VDEC_PROVIDER_NAME_SIZE,
+				(pdata->master) ? VFM_DEC_DVEL_PROVIDER_NAME :
+				VFM_DEC_DVBL_PROVIDER_NAME);
+		if (pdata->master)
+			hevc_pair = (struct AV1HW_s *)pdata->master->private;
+		else if (pdata->slave)
+			hevc_pair = (struct AV1HW_s *)pdata->slave->private;
+
+		if (hevc_pair)
+			hw->shift_byte_count_lo = hevc_pair->shift_byte_count_lo;
+	}
+#endif
 	else
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			MULTI_INSTANCE_PROVIDER_NAME ".%02x", pdev->id & 0xff);
@@ -9324,6 +9360,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	hw->platform_dev = pdev;
 	hw->video_signal_type = 0;
 	hw->m_ins_flag = 1;
+
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX)
 		hw->stat |= AV1_TRIGGER_FRAME_ENABLE;
 
@@ -9881,6 +9918,11 @@ MODULE_PARM_DESC(get_picture_qos, "\n amvdec_av1 get_picture_qos\n");
 module_param(udebug_flag, uint, 0664);
 MODULE_PARM_DESC(udebug_flag, "\n amvdec_h265 udebug_flag\n");
 
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+module_param(dv_toggle_prov_name, uint, 0664);
+MODULE_PARM_DESC(dv_toggle_prov_name, "\n dv_toggle_prov_name\n");
+#endif
+
 module_param(udebug_pause_pos, uint, 0664);
 MODULE_PARM_DESC(udebug_pause_pos, "\n udebug_pause_pos\n");
 
@@ -9892,6 +9934,9 @@ MODULE_PARM_DESC(udebug_pause_decode_idx, "\n udebug_pause_decode_idx\n");
 
 module_param(force_pts_unstable, uint, 0664);
 MODULE_PARM_DESC(force_pts_unstable, "\n force_pts_unstable\n");
+
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
 
 module_init(amvdec_av1_driver_init_module);
 module_exit(amvdec_av1_driver_remove_module);
