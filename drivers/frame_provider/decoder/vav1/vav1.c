@@ -1472,6 +1472,7 @@ static DEFINE_MUTEX(vav1_mutex);
 static struct device *cma_dev;
 #endif
 #define HEVC_DEC_STATUS_REG       HEVC_ASSIST_SCRATCH_0
+#define HEVC_FG_STATUS			HEVC_ASSIST_SCRATCH_B
 #define HEVC_RPM_BUFFER           HEVC_ASSIST_SCRATCH_1
 #define AOM_AV1_ADAPT_PROB_REG        HEVC_ASSIST_SCRATCH_3
 #define AOM_AV1_MMU_MAP_BUFFER        HEVC_ASSIST_SCRATCH_4 // changed to use HEVC_ASSIST_MMU_MAP_ADDR
@@ -4528,49 +4529,55 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 		(1 << 0)	/*parser_int_enable*/
 		;
 #else
-    data32 = data32 & 0x1fffffff;
-    data32 = data32 |
-			 (3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
-			 (1 << 24) |  // stream_buffer_empty_int_amrisc_enable
-			 (1 << 22) |  // stream_fifo_empty_int_amrisc_enable
-			 (1 << 7) |  // dec_done_int_cpu_enable
-			 (1 << 4) |  // startcode_found_int_cpu_enable
-			 (0 << 3) |  // startcode_found_int_amrisc_enable
-			 (1 << 0)	// parser_int_enable
-			 ;
-
+		data32 = data32 & 0x03ffffff;
+		data32 = data32 |
+			(3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
+			(3 << 26) |  // stream_fifo_empty_int_ctl ( 4 interrupt)
+			(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
+			(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+#ifdef AOM_AV1_HED_FB
+#ifdef DUAL_DECODE
+		// For HALT CCPU test. Use Pull inside CCPU to generate interrupt
+		// (1 << 9) |  // fed_fb_slice_done_int_amrisc_enable
+#else
+			(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
+#endif
+#endif
+			(1 << 7) |  // dec_done_int_cpu_enable
+			(1 << 4) |  // startcode_found_int_cpu_enable
+			(0 << 3) |  // startcode_found_int_amrisc_enable
+			(1 << 0)    // parser_int_enable
+			;
 #endif
 		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
-	data32 = READ_VREG(HEVC_SHIFT_STATUS);
-	data32 = data32 |
-	(0 << 1) |/*emulation_check_off AV1
-		do not have emulation*/
-	(1 << 0)/*startcode_check_on*/
-	;
-	WRITE_VREG(HEVC_SHIFT_STATUS, data32);
-	WRITE_VREG(HEVC_SHIFT_CONTROL,
-	(0 << 14) | /*disable_start_code_protect*/
-	(1 << 10) | /*length_zero_startcode_en for AV1*/
-	(1 << 9) | /*length_valid_startcode_en for AV1*/
-	(3 << 6) | /*sft_valid_wr_position*/
-	(2 << 4) | /*emulate_code_length_sub_1*/
-	(3 << 1) | /*start_code_length_sub_1
-	AV1 use 0x00000001 as startcode (4 Bytes)*/
-	(1 << 0)   /*stream_shift_enable*/
-	);
+		data32 = READ_VREG(HEVC_SHIFT_STATUS);
+		data32 = data32 |
+		(0 << 1) |/*emulation_check_off AV1
+			do not have emulation*/
+		(1 << 0)/*startcode_check_on*/
+		;
+		WRITE_VREG(HEVC_SHIFT_STATUS, data32);
+		WRITE_VREG(HEVC_SHIFT_CONTROL,
+		(0 << 14) | /*disable_start_code_protect*/
+		(1 << 10) | /*length_zero_startcode_en for AV1*/
+		(1 << 9) | /*length_valid_startcode_en for AV1*/
+		(3 << 6) | /*sft_valid_wr_position*/
+		(2 << 4) | /*emulate_code_length_sub_1*/
+		(3 << 1) | /*start_code_length_sub_1
+		AV1 use 0x00000001 as startcode (4 Bytes)*/
+		(1 << 0)   /*stream_shift_enable*/
+		);
 
-	WRITE_VREG(HEVC_CABAC_CONTROL,
-		(1 << 0)/*cabac_enable*/
-	);
+		WRITE_VREG(HEVC_CABAC_CONTROL,
+			(1 << 0)/*cabac_enable*/
+		);
 
-	WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
-		(1 << 0)/* hevc_parser_core_clk_en*/
-	);
+		WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
+			(1 << 0)/* hevc_parser_core_clk_en*/
+		);
 
-
-	WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
-
+		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 	}
 
 	if (mask & HW_MASK_BACK) {
@@ -5575,6 +5582,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 					else if ((mode == 1 || mode == 2 || mode == 4)
 					&& (debug & AOM_DEBUG_DW_DISP_MAIN) == 0) {
 					vf->compHeadAddr = pic_config->header_dw_adr;
+					vf->fgs_valid = 0;
 					av1_print(hw, AOM_DEBUG_VFRAME,
 						"Use dw mmu for display\n");
 					}
@@ -7497,8 +7505,10 @@ static irqreturn_t vav1_isr(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-    if (dec_status == AOM_AV1_FGS_PARAM) {
-	    uint32_t status_val = READ_VREG(HEVC_DEC_STATUS_REG);
+    //if (READ_VREG(HEVC_FG_STATUS) == AOM_AV1_FGS_PARAM) {
+	if (hw->dec_status == AOM_AV1_FGS_PARAM) {
+	    uint32_t status_val = READ_VREG(HEVC_FG_STATUS);
+	    WRITE_VREG(HEVC_FG_STATUS, AOM_AV1_FGS_PARAM_CONT);
 	    WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_FGS_PARAM_CONT);
 			// Bit[11] - 0 Read, 1 - Write
 			// Bit[10:8] - film_grain_params_ref_idx // For Write request
