@@ -582,6 +582,7 @@ struct AV1HW_s {
 	struct work_struct work;
 	struct work_struct set_clk_work;
 	u32 start_shift_bytes;
+	u32 data_size;
 
 	struct BuffInfo_s work_space_buf_store;
 	unsigned long buf_start;
@@ -1381,6 +1382,7 @@ static u32 pop_shorts;
 static u32 dbg_cmd;
 static u32 dbg_skip_decode_index;
 static u32 endian = 0xff0;
+static u32 multi_frames_in_one_pack = 1;
 #ifdef ERROR_HANDLE_DEBUG
 static u32 dbg_nal_skip_flag;
 		/* bit[0], skip vps; bit[1], skip sps; bit[2], skip pps */
@@ -7203,23 +7205,26 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		else
 			hw->fgs_valid = 0;
 #endif
+		decode_frame_count[hw->index] = hw->frame_count;
 		if (hw->m_ins_flag) {
 #ifdef USE_DEC_PIC_END
-            if (READ_VREG(PIC_END_LCU_COUNT) != 0) {
-                hw->frame_decoded = 1;
-                    /*
-                    In c module, multi obus are put in one packet, which is decoded
-                    with av1_receive_compressed_data().
-                    For STREAM_MODE or SINGLE_MODE, there is no packet boundary,
-                    we assume each packet must and only include one picture of data (LCUs)
-                     or cm->show_existing_frame is 1
-                    */
-                av1_print(hw, AOM_DEBUG_HW_MORE,
-                	"Decoding done, fgs_valid %d\n",
-                	hw->fgs_valid);
-                hw->config_next_ref_info_flag = 1; /*to do: low_latency_flag  case*/
-                //config_next_ref_info_hw(hw);
-            }
+			if (READ_VREG(PIC_END_LCU_COUNT) != 0) {
+				hw->frame_decoded = 1;
+				/*
+				In c module, multi obus are put in one packet, which is decoded
+				with av1_receive_compressed_data().
+				For STREAM_MODE or SINGLE_MODE, there is no packet boundary,
+				we assume each packet must and only include one picture of data (LCUs)
+				 or cm->show_existing_frame is 1
+				*/
+				av1_print(hw, AOM_DEBUG_HW_MORE,
+					"Decoding done, fgs_valid %d data_size 0x%x shiftbyte 0x%x\n",
+					hw->fgs_valid,
+					hw->data_size,
+					READ_VREG(HEVC_SHIFT_BYTE_COUNT));
+				hw->config_next_ref_info_flag = 1; /*to do: low_latency_flag  case*/
+				//config_next_ref_info_hw(hw);
+			}
 #endif
 
 			if (get_picture_qos)
@@ -7234,8 +7239,18 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				&cm->cur_frame->buf, 0, 0);
 
 			if (/*hw->vf_pre_count == 0 ||*/ hw->low_latency_flag)
-					av1_postproc(hw);
+				av1_postproc(hw);
 
+			if (multi_frames_in_one_pack &&
+			hw->frame_decoded &&
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
+				WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
+				av1_print(hw, AOM_DEBUG_HW_MORE,
+				"PIC_END, fgs_valid %d search head ...\n",
+				hw->fgs_valid);
+				if (hw->config_next_ref_info_flag)
+					config_next_ref_info_hw(hw);
+			} else {
 				hw->dec_result = DEC_RESULT_DONE;
 				amhevc_stop();
 #ifdef MCRCC_ENABLE
@@ -7243,6 +7258,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					dump_hit_rate(hw);
 #endif
 				vdec_schedule_work(&hw->work);
+			}
 		} else {
             av1_print(hw, AOM_DEBUG_HW_MORE,
             	"PIC_END, fgs_valid %d search head ...\n",
@@ -7533,19 +7549,18 @@ static irqreturn_t vav1_isr(int irq, void *data)
 			hw->process_busy = 0;
 			return IRQ_HANDLED;
 		}
-
-		if (get_free_buf_count(hw) <= 0) {
-			/*
-			if (hw->wait_buf == 0)
-				pr_info("set wait_buf to 1\r\n");
-			*/
-			hw->wait_buf = 1;
-			hw->process_busy = 0;
-			av1_print(hw, VP9_DEBUG_BUFMGR,
-				"free buf not enough = %d\n",
-				get_free_buf_count(hw));
-			return IRQ_HANDLED;
-		}
+	}
+	if (get_free_buf_count(hw) <= 0) {
+		/*
+		if (hw->wait_buf == 0)
+			pr_info("set wait_buf to 1\r\n");
+		*/
+		hw->wait_buf = 1;
+		hw->process_busy = 0;
+		av1_print(hw, VP9_DEBUG_BUFMGR,
+			"free buf not enough = %d\n",
+			get_free_buf_count(hw));
+		return IRQ_HANDLED;
 	}
 	return IRQ_WAKE_THREAD;
 }
@@ -8645,7 +8660,6 @@ static void av1_work(struct work_struct *work)
 			hw->ctx_valid = 1; */
 		hw->result_done_count++;
 		hw->process_state = PROC_STATE_INIT;
-		decode_frame_count[hw->index] = hw->frame_count;
 
 		if (hw->mmu_enable)
 			hw->used_4k_num =
@@ -8762,9 +8776,9 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	else
 		not_run_ready[hw->index]++;
 
-	av1_print(hw,
+	/*av1_print(hw,
 		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx=>%lx\r\n",
-		__func__, mask, ret);
+		__func__, mask, ret);*/
 	return ret;
 }
 
@@ -8879,6 +8893,7 @@ static void run_front(struct vdec_s *vdec)
 		size = hw->chunk->size +
 			(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
 	}
+	hw->data_size = size;
 	WRITE_VREG(HEVC_DECODE_SIZE, size);
 	WRITE_VREG(HEVC_DECODE_COUNT, hw->result_done_count);
 	WRITE_VREG(LMEM_DUMP_ADR, (u32)hw->lmem_phy_addr);
@@ -9558,6 +9573,9 @@ MODULE_PARM_DESC(frame_width, "\n amvdec_av1 frame_width\n");
 module_param(frame_height, uint, 0664);
 MODULE_PARM_DESC(frame_height, "\n amvdec_av1 frame_height\n");
 
+module_param(multi_frames_in_one_pack, uint, 0664);
+MODULE_PARM_DESC(multi_frames_in_one_pack, "\n multi_frames_in_one_pack\n");
+
 module_param(debug, uint, 0664);
 MODULE_PARM_DESC(debug, "\n amvdec_av1 debug\n");
 
@@ -9692,6 +9710,7 @@ module_param_array(input_empty, uint,
 
 module_param_array(not_run_ready, uint,
 	&max_decode_instance_num, 0664);
+
 #ifdef AOM_AV1_MMU_DW
 module_param_array(dw_mmu_enable, uint,
 	&max_decode_instance_num, 0664);
