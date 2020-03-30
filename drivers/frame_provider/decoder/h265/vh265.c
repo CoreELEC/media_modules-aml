@@ -10574,9 +10574,8 @@ int vh265_dec_status(struct vdec_info *vstatus)
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
 	vstatus->status = hevc->stat | hevc->fatal_error;
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	vstatus->bit_rate = gvs->bit_rate;
 	vstatus->frame_dur = hevc->frame_dur;
+#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	if (gvs) {
 		vstatus->bit_rate = gvs->bit_rate;
 		vstatus->frame_data = gvs->frame_data;

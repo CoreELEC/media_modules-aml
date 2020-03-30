@@ -6582,6 +6582,7 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
 	vstatus->status = hw->stat;
+	vstatus->frame_dur = hw->frame_dur;
 	if (hw->h264_ar == 0x3ff)
 		ar_tmp = (0x100 *
 			hw->frame_height * hw->height_aspect_ratio) /
