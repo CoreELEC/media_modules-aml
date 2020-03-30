@@ -249,7 +249,8 @@ static unsigned int not_run_ready[MAX_DECODE_INSTANCE_NUM];
 #ifdef AOM_AV1_MMU_DW
 static unsigned int dw_mmu_enable[MAX_DECODE_INSTANCE_NUM];
 #endif
-static u32 decode_timeout_val = 200;
+/* disable timeout for av1 mosaic JIRA SWPL-23326 */
+static u32 decode_timeout_val = 0;
 static int start_decode_buf_level = 0x8000;
 static u32 work_buf_size;
 
@@ -900,13 +901,20 @@ static void start_process_time(struct AV1HW_s *hw)
 
 static void timeout_process(struct AV1HW_s *hw)
 {
+	reset_process_time(hw);
+	if (hw->process_busy) {
+		av1_print(hw,
+			0, "%s decoder timeout but process_busy\n", __func__);
+		if (debug)
+			av1_print(hw, 0, "debug disable timeout notify\n");
+		return;
+	}
 	hw->timeout_num++;
 	amhevc_stop();
 	av1_print(hw,
 		0, "%s decoder timeout\n", __func__);
 
 	hw->dec_result = DEC_RESULT_DONE;
-	reset_process_time(hw);
 	vdec_schedule_work(&hw->work);
 }
 
@@ -6217,112 +6225,108 @@ static  uint32_t  mcrcc_get_abs_frame_distance(struct AV1HW_s *hw, uint32_t refi
 
 static void  config_mcrcc_axi_hw_nearest_ref(struct AV1HW_s *hw)
 {
-    uint32_t i;
-    uint32_t rdata32;
-    uint32_t dist_array[8];
-    uint32_t refcanvas_array[2];
-    uint32_t orderhint_bits;
-    unsigned char is_inter;
-    AV1_COMMON *cm = &hw->pbi->common;
-    PIC_BUFFER_CONFIG *curr_pic_config;
-    int32_t  curr_orderhint;
-    int cindex0 = LAST_FRAME;
-    uint32_t    last_ref_orderhint_dist = 1023; // large distance
-    uint32_t    curr_ref_orderhint_dist = 1023; // large distance
+	uint32_t i;
+	uint32_t rdata32;
+	uint32_t dist_array[8];
+	uint32_t refcanvas_array[2];
+	uint32_t orderhint_bits;
+	unsigned char is_inter;
+	AV1_COMMON *cm = &hw->pbi->common;
+	PIC_BUFFER_CONFIG *curr_pic_config;
+	int32_t  curr_orderhint;
+	int cindex0 = LAST_FRAME;
+	uint32_t    last_ref_orderhint_dist = 1023; // large distance
+	uint32_t    curr_ref_orderhint_dist = 1023; // large distance
 	int cindex1;
-    av1_print(hw, VP9_DEBUG_CACHE_HIT_RATE,
-    	"[test.c] #### config_mcrcc_axi_hw ####\n");
+	av1_print(hw, VP9_DEBUG_CACHE_HIT_RATE,
+		"[test.c] #### config_mcrcc_axi_hw ####\n");
 
-    WRITE_VREG(HEVCD_MCRCC_CTL1, 0x2); // reset mcrcc
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0x2); // reset mcrcc
 
-    is_inter = av1_frame_is_inter(&hw->pbi->common); //((pbi->common.frame_type != KEY_FRAME) && (!pbi->common.intra_only)) ? 1 : 0;
-
-    if ( !is_inter ) { // I-PIC
-        //WRITE_VREG(HEVCD_MCRCC_CTL1, 0x1); // remove reset -- disables clock
-
-        WRITE_VREG(HEVCD_MCRCC_CTL2, 0xffffffff); // Replace with current-frame canvas
-        WRITE_VREG(HEVCD_MCRCC_CTL3, 0xffffffff); //
-        WRITE_VREG(HEVCD_MCRCC_CTL1, 0xff0); // enable mcrcc progressive-mode
-        return;
-    }
+	is_inter = av1_frame_is_inter(&hw->pbi->common); //((pbi->common.frame_type != KEY_FRAME) && (!pbi->common.intra_only)) ? 1 : 0;
+	if ( !is_inter ) { // I-PIC
+		//WRITE_VREG(HEVCD_MCRCC_CTL1, 0x1); // remove reset -- disables clock
+		WRITE_VREG(HEVCD_MCRCC_CTL2, 0xffffffff); // Replace with current-frame canvas
+		WRITE_VREG(HEVCD_MCRCC_CTL3, 0xffffffff); //
+		WRITE_VREG(HEVCD_MCRCC_CTL1, 0xff0); // enable mcrcc progressive-mode
+		return;
+	}
 
 #if 0
-   //printk("before call mcrcc_get_hitrate\r\n");
-    mcrcc_get_hitrate(hw);
-    decomp_get_hitrate(hw);
-    decomp_get_comprate(hw);
+	//printk("before call mcrcc_get_hitrate\r\n");
+	mcrcc_get_hitrate(hw);
+	decomp_get_hitrate(hw);
+	decomp_get_comprate(hw);
 #endif
 
-    // Find absolute orderhint delta
-    curr_pic_config =  &cm->cur_frame->buf;
-    curr_orderhint = curr_pic_config->order_hint;
-    orderhint_bits = cm->seq_params.order_hint_info.order_hint_bits_minus_1;
-    for (i = LAST_FRAME; i <= ALTREF_FRAME; i++) {
-        int32_t  ref_orderhint;
-        PIC_BUFFER_CONFIG *pic_config;
-        //int32_t  tmp;
+	// Find absolute orderhint delta
+	curr_pic_config =  &cm->cur_frame->buf;
+	curr_orderhint = curr_pic_config->order_hint;
+	orderhint_bits = cm->seq_params.order_hint_info.order_hint_bits_minus_1;
+	for (i = LAST_FRAME; i <= ALTREF_FRAME; i++) {
+		int32_t  ref_orderhint = 0;
+		PIC_BUFFER_CONFIG *pic_config;
+		//int32_t  tmp;
+		pic_config = av1_get_ref_frame_spec_buf(cm,i);
+		if (pic_config)
+			ref_orderhint = pic_config->order_hint;
+		//tmp = curr_orderhint - ref_orderhint;
+		//dist_array[i] =  (tmp < 0) ? -tmp : tmp;
+		dist_array[i] =  mcrcc_get_abs_frame_distance(hw, i,ref_orderhint, curr_orderhint, orderhint_bits);
+	}
+	// Get smallest orderhint distance refid
+	for (i = LAST_FRAME; i <= ALTREF_FRAME; i++) {
+		PIC_BUFFER_CONFIG *pic_config;
+		pic_config = av1_get_ref_frame_spec_buf(cm, i);
+		curr_ref_orderhint_dist = dist_array[i];
+		if ( curr_ref_orderhint_dist < last_ref_orderhint_dist) {
+			cindex0 = i;
+			last_ref_orderhint_dist = curr_ref_orderhint_dist;
+		}
+	}
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (cindex0 << 8) | (1<<1) | 0);
+	refcanvas_array[0] = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR) & 0xffff;
 
-        pic_config = av1_get_ref_frame_spec_buf(cm,i);
-        ref_orderhint = pic_config->order_hint;
-        //tmp = curr_orderhint - ref_orderhint;
-        //dist_array[i] =  (tmp < 0) ? -tmp : tmp;
-        dist_array[i] =  mcrcc_get_abs_frame_distance(hw, i,ref_orderhint, curr_orderhint, orderhint_bits);;
-    }
+	last_ref_orderhint_dist = 1023; // large distance
+	curr_ref_orderhint_dist = 1023; // large distance
+	// Get 2nd smallest orderhint distance refid
+	cindex1 = LAST_FRAME;
+	for (i = LAST_FRAME; i <= ALTREF_FRAME; i++) {
+		PIC_BUFFER_CONFIG *pic_config;
+		pic_config = av1_get_ref_frame_spec_buf(cm, i);
+		curr_ref_orderhint_dist = dist_array[i];
+		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (i << 8) | (1<<1) | 0);
+		refcanvas_array[1] = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR) & 0xffff;
+		av1_print(hw, VP9_DEBUG_CACHE_HIT_RATE, "[cache_util.c] curr_ref_orderhint_dist:%x last_ref_orderhint_dist:%x refcanvas_array[0]:%x refcanvas_array[1]:%x\n",
+		curr_ref_orderhint_dist, last_ref_orderhint_dist, refcanvas_array[0],refcanvas_array[1]);
+		if ((curr_ref_orderhint_dist < last_ref_orderhint_dist) && (refcanvas_array[0] != refcanvas_array[1])) {
+			cindex1 = i;
+			last_ref_orderhint_dist = curr_ref_orderhint_dist;
+		}
+	}
 
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (cindex0 << 8) | (1<<1) | 0);
+	refcanvas_array[0] = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (cindex1 << 8) | (1<<1) | 0);
+	refcanvas_array[1] = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
 
-    // Get smallest orderhint distance refid
-    for (i = LAST_FRAME; i <= ALTREF_FRAME; i++) {
-        PIC_BUFFER_CONFIG *pic_config;
-        pic_config = av1_get_ref_frame_spec_buf(cm, i);
-        curr_ref_orderhint_dist = dist_array[i];
-        if ( curr_ref_orderhint_dist < last_ref_orderhint_dist) {
-            cindex0 = i;
-            last_ref_orderhint_dist = curr_ref_orderhint_dist;
-        }
-    }
-    WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (cindex0 << 8) | (1<<1) | 0);
-    refcanvas_array[0] = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR) & 0xffff;
+	av1_print(hw, VP9_DEBUG_CACHE_HIT_RATE, "[cache_util.c] refcanvas_array[0](index %d):%x refcanvas_array[1](index %d):%x\n",
+	cindex0, refcanvas_array[0], cindex1, refcanvas_array[1]);
 
-    last_ref_orderhint_dist = 1023; // large distance
-    curr_ref_orderhint_dist = 1023; // large distance
-    // Get 2nd smallest orderhint distance refid
-    cindex1 = LAST_FRAME;
-    for(i = LAST_FRAME; i <= ALTREF_FRAME; i++) {
-        PIC_BUFFER_CONFIG *pic_config;
-        pic_config = av1_get_ref_frame_spec_buf(cm, i);
-        curr_ref_orderhint_dist = dist_array[i];
-        WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (i << 8) | (1<<1) | 0);
-        refcanvas_array[1] = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR) & 0xffff;
-        av1_print(hw, VP9_DEBUG_CACHE_HIT_RATE, "[cache_util.c] curr_ref_orderhint_dist:%x last_ref_orderhint_dist:%x refcanvas_array[0]:%x refcanvas_array[1]:%x\n",
-           curr_ref_orderhint_dist, last_ref_orderhint_dist, refcanvas_array[0],refcanvas_array[1]);
-        if( (curr_ref_orderhint_dist < last_ref_orderhint_dist) && (refcanvas_array[0] != refcanvas_array[1])) {
-            cindex1 = i;
-            last_ref_orderhint_dist = curr_ref_orderhint_dist;
-        }
-    }
+	// lowest delta_picnum
+	rdata32 = refcanvas_array[0];
+	rdata32 = rdata32 & 0xffff;
+	rdata32 = rdata32 | ( rdata32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL2, rdata32);
 
-    WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (cindex0 << 8) | (1<<1) | 0);
-    refcanvas_array[0] = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
-    WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (cindex1 << 8) | (1<<1) | 0);
-    refcanvas_array[1] = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	// 2nd-lowest delta_picnum
+	rdata32 = refcanvas_array[1];
+	rdata32 = rdata32 & 0xffff;
+	rdata32 = rdata32 | ( rdata32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL3, rdata32);
 
-    av1_print(hw, VP9_DEBUG_CACHE_HIT_RATE, "[cache_util.c] refcanvas_array[0](index %d):%x refcanvas_array[1](index %d):%x\n",
-            cindex0, refcanvas_array[0], cindex1, refcanvas_array[1]);
-
-    // lowest delta_picnum
-    rdata32 = refcanvas_array[0];
-    rdata32 = rdata32 & 0xffff;
-    rdata32 = rdata32 | ( rdata32 << 16);
-    WRITE_VREG(HEVCD_MCRCC_CTL2, rdata32);
-
-    // 2nd-lowest delta_picnum
-    rdata32 = refcanvas_array[1];
-    rdata32 = rdata32 & 0xffff;
-    rdata32 = rdata32 | ( rdata32 << 16);
-    WRITE_VREG(HEVCD_MCRCC_CTL3, rdata32);
-
-    WRITE_VREG(HEVCD_MCRCC_CTL1, 0xff0); // enable mcrcc progressive-mode
-    return;
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0xff0); // enable mcrcc progressive-mode
+	return;
 }
 
 
