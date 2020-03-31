@@ -2346,7 +2346,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				mutex_unlock(&vdec_mutex);
 				goto error;
 			}
-			if (!v4lvideo_add_di || vdec_secure(vdec))
+			if (!v4lvideo_add_di)
 				snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 					"%s %s", vdec->vf_provider_name,
 					vdec->vf_receiver_name);
