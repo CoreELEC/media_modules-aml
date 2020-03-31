@@ -85,6 +85,7 @@ static DEFINE_MUTEX(vdec_mutex);
 static int inited_vcodec_num;
 #define jiffies_ms div64_u64(get_jiffies_64() * 1000, HZ)
 static int poweron_clock_level;
+static int debug_vdetect = 0;
 static int keep_vdec_mem;
 static unsigned int debug_trace_num = 16 * 20;
 static int step_mode;
@@ -2294,9 +2295,17 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 					"%s %s", vdec->vf_provider_name,
 					"amlvideo amvideo");
 			} else {
-				snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
-					"%s %s", vdec->vf_provider_name,
-					"amlvideo ppmgr deinterlace amvideo");
+				if (debug_vdetect)
+					snprintf(vdec->vfm_map_chain,
+						 VDEC_MAP_NAME_SIZE,
+						 "%s vdetect.0 %s",
+						 vdec->vf_provider_name,
+						 "amlvideo ppmgr deinterlace amvideo");
+				else
+					snprintf(vdec->vfm_map_chain,
+						 VDEC_MAP_NAME_SIZE, "%s %s",
+						 vdec->vf_provider_name,
+						 "amlvideo ppmgr deinterlace amvideo");
 			}
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
@@ -4350,7 +4359,6 @@ static ssize_t enable_mvdec_info_store(struct class *cla,
 	return count;
 }
 
-
 static ssize_t store_poweron_clock_level(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t size)
@@ -5442,6 +5450,9 @@ MODULE_PARM_DESC(v4lvideo_add_di,
 module_param(max_di_instance, int, 0664);
 MODULE_PARM_DESC(max_di_instance,
 				"\n max_di_instance\n");
+
+module_param(debug_vdetect, int, 0664);
+MODULE_PARM_DESC(debug_vdetect, "\n debug_vdetect\n");
 
 /*
 *module_init(vdec_module_init);
