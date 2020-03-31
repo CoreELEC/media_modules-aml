@@ -121,38 +121,58 @@ static struct aml_video_fmt aml_video_formats[] = {
 static const struct aml_codec_framesizes aml_vdec_framesizes[] = {
 	{
 		.fourcc	= V4L2_PIX_FMT_H264,
-		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 8,
-				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 8 },
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
 	{
 		.fourcc	= V4L2_PIX_FMT_HEVC,
-		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 8,
-				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 8 },
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_VP9,
-		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 8,
-				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 8 },
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_MPEG1,
-		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 8,
-				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 8 },
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_MPEG2,
-		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 8,
-				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 8 },
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_MPEG4,
-		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 8,
-				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 8 },
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_MJPEG,
-		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 8,
-				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 8 },
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_NV21,
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_NV21M,
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_NV12,
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_NV12M,
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
 };
 
@@ -1721,7 +1741,8 @@ static int vidioc_enum_framesizes(struct file *file, void *priv,
 	int i = 0;
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s\n", __func__);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, idx: %d, pix fmt: %x\n",
+		__func__, fsize->index, fsize->pixel_format);
 
 	if (fsize->index != 0)
 		return -EINVAL;
