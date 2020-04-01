@@ -292,6 +292,8 @@ static u32 double_write_mode;
 #define PTS_MODE_SWITCHING_RECOVERY_THREASHOLD 3
 
 #define DUR2PTS(x) ((x)*90/96)
+#define PTS2DUR(x) ((x)*96/90)
+
 
 struct AV1HW_s;
 static int vav1_vf_states(struct vframe_states *states, void *);
@@ -5489,6 +5491,18 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			pts_valid = 1;
 			pts_us64_valid = 1;
 		}
+		if (vdec_frame_based(hw_to_vdec(hw)) && (!hw->get_frame_dur) && hw->last_lookup_pts_us64 && hw->last_pts
+			&& ((vf->pts_us64 > hw->last_lookup_pts_us64)  ||(vf->pts > hw->last_pts) )) {
+			 if (vf->pts > hw->last_pts)
+				hw->frame_dur =   PTS2DUR(vf->pts -hw->last_pts);
+			av1_print(hw, 0,
+				"AV1 frame mode  dur=%d,pts(%d,%lld) last pts(%d,%lld)\n",
+				hw->frame_dur, vf->pts,
+			vf->pts_us64, hw->last_pts, hw->last_lookup_pts_us64);
+			hw->get_frame_dur = true;
+			hw->pts_mode = PTS_NONE_REF_USE_DURATION;
+			hw->duration_from_pts_done = 1;
+		}
 
 		fill_frame_info(hw, pic_config, frame_size, vf->pts);
 
@@ -5551,8 +5565,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		hw->last_pts_us64 = vf->pts_us64;
 		if ((debug & VP9_DEBUG_OUT_PTS) != 0) {
 			pr_info
-			("AV1 dec out pts: pts_mode=%d,dur=%d,pts(%d,%lld)(%d,%lld)\n",
-			hw->pts_mode, hw->frame_dur, vf->pts,
+			("AV1 dec out slice_type %d pts: pts_mode=%d,dur=%d,pts(%d,%lld)(%d,%lld)\n",
+			slice_type, hw->pts_mode, hw->frame_dur, vf->pts,
 			vf->pts_us64, pts_save, pts_us64_save);
 		}
 
@@ -6439,6 +6453,11 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		pbi->bufmgr_proc_count);
 		pbi->decode_idx++;
 		hw->frame_count++;
+		cur_pic_config->slice_type = cm->cur_frame->frame_type;
+		if (hw->chunk) {
+			cur_pic_config->pts = hw->chunk->pts;
+			cur_pic_config->pts64 = hw->chunk->pts64;
+		}
 #ifdef DUAL_DECODE
 #else
 		config_pic_size(hw, hw->aom_param.p.bit_depth);
@@ -7998,13 +8017,6 @@ static int vav1_local_init(struct AV1HW_s *hw)
 
 
 	ret = av1_local_init(hw);
-
-	if (!hw->pts_unstable) {
-		hw->pts_unstable =
-		(hw->vav1_amstream_dec_info.rate == 0)?1:0;
-		pr_info("set pts unstable\n");
-	}
-
 	return ret;
 }
 
