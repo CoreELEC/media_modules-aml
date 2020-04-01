@@ -1389,7 +1389,7 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 			ATRACE_COUNTER("v4l2_dqin_eagain", 0);
 		else
 			ATRACE_COUNTER("v4l2_dqin_ok", 0);
-	} else if (!V4L2_TYPE_IS_OUTPUT(buf->type)) {
+	} else {
 		if (ret == -EAGAIN)
 			ATRACE_COUNTER("v4l2_dqout_eagain", 0);
 	}
@@ -1399,6 +1399,9 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 		struct vb2_v4l2_buffer *vb2_v4l2 = NULL;
 		struct aml_video_dec_buf *aml_buf = NULL;
 		struct file *file = NULL;
+
+		if (ctx->is_drm_mode && ctx->output_dma_mode)
+			aml_recycle_dma_buffers(ctx);
 
 		vq = v4l2_m2m_get_vq(ctx->m2m_ctx, buf->type);
 		vb2_v4l2 = to_vb2_v4l2_buffer(vq->bufs[buf->index]);
@@ -2094,6 +2097,12 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	src_mem.addr	= vb2_dma_contig_plane_dma_addr(vb, 0);
 	src_mem.size	= vb->planes[0].bytesused;
 	src_mem.model	= vb->memory;
+
+	if (vb->memory == VB2_MEMORY_DMABUF) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
+				"%s, output_dma_mode set", __func__);
+		ctx->output_dma_mode = true;
+	}
 
 	if (vdec_if_probe(ctx, &src_mem, NULL)) {
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);

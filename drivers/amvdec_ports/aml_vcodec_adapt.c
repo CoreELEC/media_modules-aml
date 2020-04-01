@@ -487,12 +487,10 @@ static void set_vdec_properity(struct vdec_s *vdec,
 			vdec->type = VDEC_TYPE_STREAM_PARSER;
 			vdec->port->type &= ~PORT_TYPE_FRAME;
 			vdec->port->type |= PORT_TYPE_ES;
-			ada_ctx->ctx->is_stream_mode = true;
 		} else if (aml_set_vdec_type == VDEC_TYPE_FRAME_BLOCK) {
 			vdec->type = VDEC_TYPE_FRAME_BLOCK;
 			vdec->port->type &= ~PORT_TYPE_ES;
 			vdec->port->type |= PORT_TYPE_FRAME;
-			ada_ctx->ctx->is_stream_mode = false;
 		}
 	}
 

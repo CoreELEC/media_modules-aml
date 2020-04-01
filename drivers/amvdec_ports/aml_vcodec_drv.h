@@ -462,7 +462,7 @@ struct aml_vcodec_ctx {
 
 	bool				has_receive_eos;
 	bool				is_drm_mode;
-	bool				is_stream_mode;
+	bool				output_dma_mode;
 	bool				is_stream_off;
 	bool				receive_cmd_stop;
 	int				reset_flag;
