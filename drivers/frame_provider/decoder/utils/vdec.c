@@ -2351,11 +2351,18 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 					"%s %s", vdec->vf_provider_name,
 					vdec->vf_receiver_name);
 			else {
-				if (vdec->vf_receiver_inst == 0)
-					snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
-						"%s %s %s", vdec->vf_provider_name,
-						"dimulti.1",
-						vdec->vf_receiver_name);
+				if ((vdec->vf_receiver_inst == 0)
+					&& (max_di_instance > 0))
+					if (max_di_instance == 1)
+						snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+							"%s %s %s", vdec->vf_provider_name,
+							"deinterlace",
+							vdec->vf_receiver_name);
+					else
+						snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+							"%s %s %s", vdec->vf_provider_name,
+							"dimulti.1",
+							vdec->vf_receiver_name);
 				else if ((vdec->vf_receiver_inst <
 					  max_di_instance) &&
 					  (vdec->vf_receiver_inst == 1))
