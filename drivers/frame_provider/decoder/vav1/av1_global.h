@@ -2204,6 +2204,8 @@ typedef union param_u {
            SEG_LVL_ALT_LF_V data: seg_lf_info_y[bit8~14]
            */
         unsigned short seg_lf_info_c[8];
+		unsigned short video_signal_type;
+		unsigned short color_description;
 
         /*ucode end*/
         /*other*/

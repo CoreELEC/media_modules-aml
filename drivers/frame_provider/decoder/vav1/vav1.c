@@ -334,6 +334,7 @@ static const char vav1_dec_id[] = "vav1-dev";
 #define PROVIDER_NAME   "decoder.av1"
 #define MULTI_INSTANCE_PROVIDER_NAME    "vdec.av1"
 #endif
+#define DV_PROVIDER_NAME  "dvbldec"
 
 static const struct vframe_operations_s vav1_vf_provider = {
 	.peek = vav1_vf_peek,
@@ -350,7 +351,7 @@ static u32 bit_depth_chroma;
 static u32 frame_width;
 static u32 frame_height;
 static u32 video_signal_type;
-
+static u32 force_dv_enable;
 static u32 on_no_keyframe_skiped;
 
 #define PROB_SIZE    (496 * 2 * 4)
@@ -644,6 +645,8 @@ struct AV1HW_s {
 	u32 suffix_aux_size;
 	void *aux_addr;
 	dma_addr_t aux_phy_addr;
+	char *dv_data_buf;
+	int dv_data_size;
 
 	void *prob_buffer_addr;
 	void *count_buffer_addr;
@@ -1353,10 +1356,10 @@ int aom_bufmgr_init(struct AV1HW_s *hw, struct BuffInfo_s *buf_spec_i,
 	return 0;
 }
 
-
+/*
 struct AV1HW_s av1_decoder;
 union param_u av1_param;
-
+*/
 /**************************************************
  *
  *AV1 buffer management end
@@ -1805,10 +1808,11 @@ static void config_aux_buf(struct AV1HW_s *hw)
 }
 
 /*
-* dv_meta_flag: 1, dolby meta only; 2, not include dolby meta
+* dv_meta_flag: 1, dolby meta (T35) only; 2, not include dolby meta (T35)
 */
 static void set_aux_data(struct AV1HW_s *hw,
-	struct PIC_BUFFER_CONFIG_s *pic, unsigned char suffix_flag,
+	    char **aux_data_buf, int *aux_data_size,
+	unsigned char suffix_flag,
 	unsigned char dv_meta_flag)
 {
 	int i;
@@ -1817,7 +1821,7 @@ static void set_aux_data(struct AV1HW_s *hw,
 		READ_VREG(HEVC_AUX_DATA_SIZE);
 	unsigned int aux_count = 0;
 	int aux_size = 0;
-	if (pic == NULL || 0 == aux_data_is_avaible(hw))
+	if (0 == aux_data_is_avaible(hw))
 		return;
 
 	if (hw->aux_data_dirty ||
@@ -1846,8 +1850,8 @@ static void set_aux_data(struct AV1HW_s *hw,
 	}
 	if (debug & VP9_DEBUG_BUFMGR_MORE) {
 		av1_print(hw, 0,
-			"%s:pic 0x%p old size %d count %d,suf %d dv_flag %d\r\n",
-			__func__, pic, pic->aux_data_size,
+			"%s:old size %d count %d,suf %d dv_flag %d\r\n",
+			__func__, *aux_data_size,
 			aux_count, suffix_flag, dv_meta_flag);
 	}
 	if (aux_size > 0 && aux_count > 0) {
@@ -1860,26 +1864,27 @@ static void set_aux_data(struct AV1HW_s *hw,
 			if (tag != 0 && tag != 0xff) {
 				if (dv_meta_flag == 0)
 					heads_size += 8;
-				else if (dv_meta_flag == 1 && tag == 0x1)
+				else if (dv_meta_flag == 1 && tag == 0x14)
 					heads_size += 8;
-				else if (dv_meta_flag == 2 && tag != 0x1)
+				else if (dv_meta_flag == 2 && tag != 0x14)
 					heads_size += 8;
 			}
 		}
-		new_size = pic->aux_data_size + aux_count + heads_size;
+		new_size = *aux_data_size + aux_count + heads_size;
 		new_buf = vmalloc(new_size);
 		if (new_buf) {
 			unsigned char valid_tag = 0;
 			unsigned char *h =
 				new_buf +
-				pic->aux_data_size;
+				*aux_data_size;
 			unsigned char *p = h + 8;
 			int len = 0;
 			int padding_len = 0;
-			memcpy(new_buf, pic->aux_data_buf,  pic->aux_data_size);
-			if (pic->aux_data_buf)
-				vfree(pic->aux_data_buf);
-			pic->aux_data_buf = new_buf;
+			if (*aux_data_buf) {
+				memcpy(new_buf, *aux_data_buf,  *aux_data_size);
+				vfree(*aux_data_buf);
+			}
+			*aux_data_buf = new_buf;
 			for (i = 0; i < aux_count; i += 4) {
 				int ii;
 				unsigned char tag = aux_adr[i + 3] >> 8;
@@ -1887,15 +1892,15 @@ static void set_aux_data(struct AV1HW_s *hw,
 					if (dv_meta_flag == 0)
 						valid_tag = 1;
 					else if (dv_meta_flag == 1
-						&& tag == 0x1)
+						&& tag == 0x14)
 						valid_tag = 1;
 					else if (dv_meta_flag == 2
-						&& tag != 0x1)
+						&& tag != 0x14)
 						valid_tag = 1;
 					else
 						valid_tag = 0;
 					if (valid_tag && len > 0) {
-						pic->aux_data_size +=
+						*aux_data_size +=
 						(len + 8);
 						h[0] = (len >> 24)
 						& 0xff;
@@ -1936,7 +1941,7 @@ static void set_aux_data(struct AV1HW_s *hw,
 				}
 			}
 			if (len > 0) {
-				pic->aux_data_size += (len + 8);
+				*aux_data_size += (len + 8);
 				h[0] = (len >> 24) & 0xff;
 				h[1] = (len >> 16) & 0xff;
 				h[2] = (len >> 8) & 0xff;
@@ -1947,10 +1952,10 @@ static void set_aux_data(struct AV1HW_s *hw,
 			if (debug & VP9_DEBUG_BUFMGR_MORE) {
 				av1_print(hw, 0,
 					"aux: (size %d) suffix_flag %d\n",
-					pic->aux_data_size, suffix_flag);
-				for (i = 0; i < pic->aux_data_size; i++) {
+					*aux_data_size, suffix_flag);
+				for (i = 0; i < *aux_data_size; i++) {
 					av1_print_cont(hw, 0,
-						"%02x ", pic->aux_data_buf[i]);
+						"%02x ", (*aux_data_buf)[i]);
 					if (((i + 1) & 0xf) == 0)
 						av1_print_cont(hw, 0, "\n");
 				}
@@ -1959,11 +1964,56 @@ static void set_aux_data(struct AV1HW_s *hw,
 
 		} else {
 			av1_print(hw, 0, "new buf alloc failed\n");
-			if (pic->aux_data_buf)
-				vfree(pic->aux_data_buf);
-			pic->aux_data_buf = NULL;
-			pic->aux_data_size = 0;
+			if (*aux_data_buf)
+				vfree(*aux_data_buf);
+			*aux_data_buf = NULL;
+			*aux_data_size = 0;
 		}
+	}
+
+}
+
+static void set_dv_data(struct AV1HW_s *hw)
+{
+	set_aux_data(hw, &hw->dv_data_buf,
+		&hw->dv_data_size, 0, 1);
+
+}
+
+static void set_pic_aux_data(struct AV1HW_s *hw,
+	struct PIC_BUFFER_CONFIG_s *pic, unsigned char suffix_flag,
+	unsigned char dv_meta_flag)
+{
+	if (pic == NULL)
+		return;
+	set_aux_data(hw, &pic->aux_data_buf,
+		&pic->aux_data_size, suffix_flag, dv_meta_flag);
+}
+
+static void copy_dv_data(struct AV1HW_s *hw,
+	struct PIC_BUFFER_CONFIG_s *pic)
+{
+	char *new_buf;
+	int new_size;
+	new_size = pic->aux_data_size + hw->dv_data_size;
+	new_buf = vmalloc(new_size);
+	if (new_buf) {
+		if (debug & VP9_DEBUG_BUFMGR_MORE) {
+			av1_print(hw, 0,
+				"%s: (size %d) pic index %d\n",
+				__func__,
+				hw->dv_data_size, pic->index);
+		}
+		if (pic->aux_data_buf) {
+			memcpy(new_buf, pic->aux_data_buf,  pic->aux_data_size);
+			vfree(pic->aux_data_buf);
+		}
+		memcpy(new_buf + pic->aux_data_size, hw->dv_data_buf, hw->dv_data_size);
+		pic->aux_data_size += hw->dv_data_size;
+		pic->aux_data_buf = new_buf;
+		vfree(hw->dv_data_buf);
+		hw->dv_data_buf = NULL;
+		hw->dv_data_size = 0;
 	}
 
 }
@@ -5153,11 +5203,15 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 		if (index < hw->used_buf_num) {
 			hw->vf_get_count++;
 			if (debug & AOM_DEBUG_VFRAME) {
+				struct BufferPool_s *pool = hw->pbi->common.buffer_pool;
+				struct PIC_BUFFER_CONFIG_s *pic =
+					&pool->frame_bufs[index].buf;
 				unsigned long flags;
 				lock_buffer_pool(hw->pbi->common.buffer_pool, flags);
-				av1_print(hw, AOM_DEBUG_VFRAME, "%s index 0x%x type 0x%x w/h %d/%d, pts %d, %lld\n",
+				av1_print(hw, AOM_DEBUG_VFRAME, "%s index 0x%x type 0x%x w/h %d/%d, aux size %d, pts %d, %lld\n",
 					__func__, vf->index, vf->type,
 					vf->width, vf->height,
+					pic->aux_data_size,
 					vf->pts,
 					vf->pts_us64);
 				unlock_buffer_pool(hw->pbi->common.buffer_pool, flags);
@@ -6384,9 +6438,19 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		/* the case when cm->show_existing_frame is 1 */
 		/*case 3016*/
 		av1_print(hw, AOM_DEBUG_HW_MORE,
-			"Decoding done (show_existing_frame = %d)\n",
-			cm->show_existing_frame);
+			"Decoding done (index=%d, show_existing_frame = %d)\n",
+			cm->cur_frame? cm->cur_frame->buf.index:-1,
+			cm->show_existing_frame
+			);
 
+		if (cm->cur_frame) {
+			PIC_BUFFER_CONFIG* cur_pic_config = &cm->cur_frame->buf;
+			if (debug &
+				VP9_DEBUG_BUFMGR_MORE)
+				dump_aux_buf(hw);
+			set_pic_aux_data(hw,
+				cur_pic_config, 0, 0);
+		}
 		config_next_ref_info_hw(hw);
 
 		av1_print(hw, AOM_DEBUG_HW_MORE,
@@ -6408,7 +6472,16 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		PIC_BUFFER_CONFIG* cur_pic_config = &cm->cur_frame->buf;
 		PIC_BUFFER_CONFIG* prev_pic_config = &cm->prev_frame->buf;
 		//struct segmentation_lf *seg_4lf = &hw->seg_4lf_store;
-
+		if (debug &
+			VP9_DEBUG_BUFMGR_MORE)
+			dump_aux_buf(hw);
+		set_dv_data(hw);
+		if (cm->show_frame &&
+			hw->dv_data_buf != NULL)
+			copy_dv_data(hw, cur_pic_config);
+		/* to do:..
+		set_pic_aux_data(hw,
+			cur_pic_config, 0, 2);*/
 		hw->frame_decoded = 0;
 		pbi->bufmgr_proc_count++;
 		if (hw->new_compressed_data == 0) {
@@ -7241,7 +7314,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				 or cm->show_existing_frame is 1
 				*/
 				av1_print(hw, AOM_DEBUG_HW_MORE,
-					"Decoding done, fgs_valid %d data_size 0x%x shiftbyte 0x%x\n",
+					"Decoding done (index %d), fgs_valid %d data_size 0x%x shiftbyte 0x%x\n",
+					cm->cur_frame? cm->cur_frame->buf.index:-1,
 					hw->fgs_valid,
 					hw->data_size,
 					READ_VREG(HEVC_SHIFT_BYTE_COUNT));
@@ -7255,12 +7329,13 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 			reset_process_time(hw);
 
+			/*
 			if (debug &
 				VP9_DEBUG_BUFMGR_MORE)
 				dump_aux_buf(hw);
 			set_aux_data(hw,
 				&cm->cur_frame->buf, 0, 0);
-
+			*/
 			if (/*hw->vf_pre_count == 0 ||*/ hw->low_latency_flag)
 				av1_postproc(hw);
 
@@ -7297,16 +7372,18 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				    we assume each packet must and only include one picture of data (LCUs)
 					 or cm->show_existing_frame is 1
 					*/
-			    av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done\n");
-			    config_next_ref_info_hw(hw);
+				av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
+					cm->cur_frame? cm->cur_frame->buf.index:-1);
+				config_next_ref_info_hw(hw);
 			}
 #endif
+			/*
 			if (debug &
 				VP9_DEBUG_BUFMGR_MORE)
 				dump_aux_buf(hw);
 			set_aux_data(hw,
 				&cm->cur_frame->buf, 0, 0);
-
+			*/
 			if (hw->low_latency_flag) {
 				av1_postproc(hw);
 				vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_EVENT_CB);
@@ -7357,9 +7434,11 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		int next_lcu_size;
 	    av1_bufmgr_process(hw->pbi, &hw->aom_param, 0, obu_type);
 
-		bit_depth_luma = av1_param.p.bit_depth;
-		bit_depth_chroma = av1_param.p.bit_depth;
+		bit_depth_luma = hw->aom_param.p.bit_depth;
+		bit_depth_chroma = hw->aom_param.p.bit_depth;
 	    next_lcu_size = ((hw->aom_param.p.seq_flags >> 6) & 0x1) ? 128 : 64;
+		hw->video_signal_type = (hw->aom_param.p.video_signal_type << 16
+			| hw->aom_param.p.color_description);
 
 	    if (next_lcu_size != hw->current_lcu_size) {
 			av1_print(hw, AOM_DEBUG_HW_MORE,
@@ -7405,7 +7484,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			    we assume each packet must and only include one picture of data (LCUs)
 				 or cm->show_existing_frame is 1
 				*/
-			    av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done\n");
+				av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
+					cm->cur_frame? cm->cur_frame->buf.index:-1);
 			}
 		}
 #endif
@@ -8074,7 +8154,7 @@ static s32 vav1_init(struct AV1HW_s *hw)
 		INIT_WORK(&hw->work, av1_work);
 		hw->fw = fw;
 
-		return 0;
+		return 0;	/*multi instance return */
 	}
 #endif
 	amhevc_enable();
@@ -8107,12 +8187,15 @@ static s32 vav1_init(struct AV1HW_s *hw)
 
 	hw->stat |= STAT_ISR_REG;
 
-	hw->provider_name = PROVIDER_NAME;
+	if (force_dv_enable)
+		hw->provider_name = DV_PROVIDER_NAME;
+	else
+		hw->provider_name = PROVIDER_NAME;
 #ifdef MULTI_INSTANCE_SUPPORT
-	vf_provider_init(&vav1_vf_prov, PROVIDER_NAME,
+	vf_provider_init(&vav1_vf_prov, hw->provider_name,
 				&vav1_vf_provider, hw);
 	vf_reg_provider(&vav1_vf_prov);
-	vf_notify_receiver(PROVIDER_NAME, VFRAME_EVENT_PROVIDER_START, NULL);
+	vf_notify_receiver(hw->provider_name, VFRAME_EVENT_PROVIDER_START, NULL);
 	if (hw->frame_dur != 0) {
 		if (!is_reset)
 			vf_notify_receiver(hw->provider_name,
@@ -8121,12 +8204,12 @@ static s32 vav1_init(struct AV1HW_s *hw)
 					((unsigned long)hw->frame_dur));
 	}
 #else
-	vf_provider_init(&vav1_vf_prov, PROVIDER_NAME, &vav1_vf_provider,
+	vf_provider_init(&vav1_vf_prov, hw->provider_name, &vav1_vf_provider,
 					 hw);
 	vf_reg_provider(&vav1_vf_prov);
-	vf_notify_receiver(PROVIDER_NAME, VFRAME_EVENT_PROVIDER_START, NULL);
+	vf_notify_receiver(hw->provider_name, VFRAME_EVENT_PROVIDER_START, NULL);
 	if (!is_reset)
-		vf_notify_receiver(PROVIDER_NAME, VFRAME_EVENT_PROVIDER_FR_HINT,
+		vf_notify_receiver(hw->provider_name, VFRAME_EVENT_PROVIDER_FR_HINT,
 		(void *)((unsigned long)hw->frame_dur));
 #endif
 	hw->stat |= STAT_VF_HOOK;
@@ -9576,6 +9659,8 @@ static void __exit amvdec_av1_driver_remove_module(void)
 }
 
 /****************************************/
+module_param(force_dv_enable, uint, 0664);
+MODULE_PARM_DESC(force_dv_enable, "\n amvdec_av1 force_dv_enable\n");
 
 module_param(bit_depth_luma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_luma, "\n amvdec_av1 bit_depth_luma\n");
