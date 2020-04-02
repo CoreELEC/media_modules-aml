@@ -2160,6 +2160,7 @@ static int aml_dvb_probe(struct platform_device *pdev)
 		goto error;
 	}
 
+	aml_register_parser_mconfig();
 #ifdef ENABLE_DEMUX_DRIVER
 	tsdemux_set_ops(&aml_tsdemux_ops);
 #else

@@ -399,6 +399,7 @@ extern struct aml_dvb *aml_get_dvb_device(void);
 
 extern int aml_regist_dmx_class(void);
 extern int aml_unregist_dmx_class(void);
+extern void aml_register_parser_mconfig(void);
 
 struct devio_aml_platform_data {
 	int (*io_setup)(void *);

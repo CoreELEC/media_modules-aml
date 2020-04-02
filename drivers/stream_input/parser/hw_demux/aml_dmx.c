@@ -44,6 +44,7 @@
 #include <linux/pinctrl/pinmux.h>
 #include <linux/vmalloc.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/amlogic/media/codec_mm/configs.h>
 #include "../streambuf.h"
 #include "c_stb_define.h"
 #include "c_stb_regs_define.h"
@@ -5942,5 +5943,19 @@ int aml_unregist_dmx_class(void)
 
 	class_unregister(&aml_dmx_class);
 	return 0;
+}
+
+static struct mconfig parser_configs[] = {
+	MC_PU32("video_pts", &video_pts),
+	MC_PU32("audio_pts", &audio_pts),
+	MC_PU32("video_pts_bit32", &video_pts_bit32),
+	MC_PU32("audio_pts_bit32", &audio_pts_bit32),
+	MC_PU32("first_video_pts", &first_video_pts),
+	MC_PU32("first_audio_pts", &first_audio_pts),
+};
+
+void aml_register_parser_mconfig(void)
+{
+	REG_PATH_CONFIGS("media.parser", parser_configs);
 }
 
