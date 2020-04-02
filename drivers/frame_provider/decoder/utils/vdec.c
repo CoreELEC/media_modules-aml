@@ -83,6 +83,9 @@
 #ifdef CONFIG_AMLOGIC_IONVIDEO
 #include <linux/amlogic/media/video_sink/ionvideo_ext.h>
 #endif
+#include <linux/pm.h>
+#include <linux/pm_domain.h>
+#include <linux/pm_runtime.h>
 
 /* wait other module to support this function */
 #define is_support_power_ctrl() 0
@@ -133,6 +136,8 @@ static int enable_mvdec_info = 1;
 
 int decode_underflow = 0;
 
+static bool disable_power_domain;
+
 #define CANVAS_MAX_SIZE (AMVDEC_CANVAS_MAX1 - AMVDEC_CANVAS_START_INDEX + 1 + AMVDEC_CANVAS_MAX2 + 1)
 
 struct am_reg {
@@ -154,6 +159,27 @@ struct decode_fps_s {
 	u64 start_timestamp;
 	u64 last_timestamp;
 	u32 fps;
+};
+
+enum vdec_pd_e {
+	PD_VDEC,
+	PD_HCODEC,
+	PD_HEVC,
+	PD_WAVE,
+	PD_MAX
+};
+
+struct vdec_pwrc_s {
+	u8 *name;
+	struct device *dev;
+	struct device_link *link;
+};
+
+static struct vdec_pwrc_s vdec_pd[] = {
+	{ .name = "pwrc-vdec", },
+	{ .name = "pwrc-hcodec",},
+	{ .name = "pwrc-hevc", },
+	{ .name = "pwrc-wave", },
 };
 
 struct vdec_core_s {
@@ -184,6 +210,7 @@ struct vdec_core_s {
 	struct decode_fps_s decode_fps[MAX_INSTANCE_MUN];
 	unsigned long buff_flag;
 	unsigned long stream_buff_flag;
+	struct vdec_pwrc_s *pd;
 };
 
 struct canvas_status_s {
@@ -3233,6 +3260,8 @@ void vdec_power_reset(void)
 }
 EXPORT_SYMBOL(vdec_power_reset);
 
+static void vdec_power_switch(struct vdec_pwrc_s *pd, int id, bool on);
+
 void vdec_poweron(enum vdec_type_e core)
 {
 	void *decomp_addr = NULL;
@@ -3255,6 +3284,33 @@ void vdec_poweron(enum vdec_type_e core)
 
 	if (vdec_on(core)) {
 		mutex_unlock(&vdec_mutex);
+		return;
+	}
+
+	/* power domain check. */
+	if (!disable_power_domain && vdec_core->pd) {
+		int pd_id = 0;
+
+		if (core == VDEC_1) {
+			amports_switch_gate("clk_vdec_mux", 1);
+			vdec_clock_hi_enable();
+			pd_id = PD_VDEC;
+		} else if (core == VDEC_HCODEC) {
+			hcodec_clock_enable();
+			pd_id = PD_HCODEC;
+		} else if (core == VDEC_HEVC) {
+			/* enable hevc clock */
+			amports_switch_gate("clk_hevc_mux", 1);
+			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+				amports_switch_gate("clk_hevcb_mux", 1);
+			hevc_clock_hi_enable();
+			hevc_back_clock_hi_enable();
+			pd_id = PD_HEVC;
+		}
+
+		vdec_power_switch(vdec_core->pd, pd_id, true);
+		mutex_unlock(&vdec_mutex);
+
 		return;
 	}
 
@@ -3512,6 +3568,30 @@ void vdec_poweroff(enum vdec_type_e core)
 	vdec_core->power_ref_count[core]--;
 	if (vdec_core->power_ref_count[core] > 0) {
 		mutex_unlock(&vdec_mutex);
+		return;
+	}
+
+	/* power domain check. */
+	if (!disable_power_domain && vdec_core->pd) {
+		int pd_id = 0;
+
+		if (core == VDEC_1) {
+			vdec_clock_off();
+			pd_id = PD_VDEC;
+		} else if (core == VDEC_HCODEC) {
+			hcodec_clock_off();
+			pd_id = PD_HCODEC;
+		} else if (core == VDEC_HEVC) {
+			/* disable hevc clock */
+			hevc_clock_off();
+			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+				hevc_back_clock_off();
+			pd_id = PD_HEVC;
+		}
+
+		vdec_power_switch(vdec_core->pd, pd_id, false);
+		mutex_unlock(&vdec_mutex);
+
 		return;
 	}
 
@@ -4902,6 +4982,65 @@ struct device *get_vdec_device(void)
 }
 EXPORT_SYMBOL(get_vdec_device);
 
+static void vdec_power_switch(struct vdec_pwrc_s *pd, int id, bool on)
+{
+	struct device *dev = pd[id].dev;
+
+	if (on)
+		pm_runtime_get_sync(dev);
+	else
+		pm_runtime_put_sync(dev);
+
+	pr_debug("the %-15s power %s\n",
+		pd[id].name, on ? "on" : "off");
+}
+
+static int vdec_power_domain_init(struct device *dev,
+				       struct vdec_pwrc_s **pd_out)
+{
+	int i, err;
+	struct vdec_pwrc_s *pd = vdec_pd;
+
+	for (i = 0; i < ARRAY_SIZE(vdec_pd); i++) {
+		pd[i].dev = dev_pm_domain_attach_by_name(dev, pd[i].name);
+		if (IS_ERR_OR_NULL(pd[i].dev)) {
+			err = PTR_ERR(pd[i].dev);
+			dev_err(dev, "Get %s failed, pm-domain: %d\n",
+				pd[i].name, err);
+			continue;
+		}
+
+		pd[i].link = device_link_add(dev, pd[i].dev,
+						       DL_FLAG_PM_RUNTIME |
+						       DL_FLAG_STATELESS);
+		if (IS_ERR_OR_NULL(pd[i].link)) {
+			dev_err(dev, "Adding %s device link failed!\n",
+				pd[i].name);
+			return -ENODEV;
+		}
+
+		pr_debug("power domain: name: %s, dev: %px, link: %px\n",
+			pd[i].name, pd[i].dev, pd[i].link);
+	}
+
+	*pd_out = pd;
+
+	return 0;
+}
+
+static void vdec_power_domain_remove(struct vdec_pwrc_s *pd)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(vdec_pd); i++) {
+		if (!IS_ERR_OR_NULL(pd[i].link))
+			device_link_del(pd[i].link);
+
+		if (!IS_ERR_OR_NULL(pd[i].dev))
+			dev_pm_domain_detach(pd[i].dev, true);
+	}
+}
+
 static int vdec_probe(struct platform_device *pdev)
 {
 	s32 i, r;
@@ -4981,6 +5120,17 @@ static int vdec_probe(struct platform_device *pdev)
 	vdec_core->vdec_core_wq = alloc_ordered_workqueue("%s",__WQ_LEGACY |
 		WQ_MEM_RECLAIM |WQ_HIGHPRI/*high priority*/, "vdec-work");
 	/*work queue priority lower than vdec-core.*/
+
+	/* init power domains. */
+	if (of_property_read_bool(pdev->dev.of_node, "power-domains")) {
+		r = vdec_power_domain_init(&pdev->dev, &vdec_core->pd);
+		if (r) {
+			vdec_power_domain_remove(vdec_core->pd);
+			pr_err("vdec power domain init failed\n");
+			return r;
+		}
+	}
+
 	return 0;
 }
 
@@ -5002,6 +5152,10 @@ static int vdec_remove(struct platform_device *pdev)
 	kthread_stop(vdec_core->thread);
 
 	destroy_workqueue(vdec_core->vdec_core_wq);
+
+	if (vdec_core->pd)
+		vdec_power_domain_remove(vdec_core->pd);
+
 	class_unregister(&vdec_class);
 
 	return 0;
@@ -5216,6 +5370,7 @@ module_param(fps_detection, int, 0664);
 module_param(fps_clear, int, 0664);
 module_param(force_nosecure_even_drm, int, 0664);
 module_param(disable_switch_single_to_mult, int, 0664);
+module_param(disable_power_domain, bool, 0664);
 
 module_param(frameinfo_flag, int, 0664);
 MODULE_PARM_DESC(frameinfo_flag,
