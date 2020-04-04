@@ -116,6 +116,11 @@ static struct aml_video_fmt aml_video_formats[] = {
 		.type = AML_FMT_FRAME,
 		.num_planes = 2,
 	},
+	{
+		.fourcc = V4L2_PIX_FMT_YUV420,
+		.type = AML_FMT_FRAME,
+		.num_planes = 1,
+	},
 };
 
 static const struct aml_codec_framesizes aml_vdec_framesizes[] = {
@@ -642,10 +647,9 @@ static void aml_check_dpb_ready(struct aml_vcodec_ctx *ctx)
 {
 	if (!ctx->v4l_codec_dpb_ready) {
 		/*
-		 * make sure enough dst bufs for decoding, and
-		 * the backend maybe hold 4 frms so need to minus 4.
+		 * make sure enough dst bufs for decoding.
 		 */
-		if ((ctx->dpb_size) && (ctx->cap_pool.in >= ctx->dpb_size - 4))
+		if ((ctx->dpb_size) && (ctx->cap_pool.in >= ctx->dpb_size))
 			ctx->v4l_codec_dpb_ready = true;
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
