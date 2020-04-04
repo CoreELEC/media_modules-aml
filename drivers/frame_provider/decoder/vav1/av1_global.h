@@ -2267,31 +2267,31 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd);
 
 #endif
 
-#define VP9_DEBUG_BUFMGR                   0x01
-#define VP9_DEBUG_BUFMGR_MORE              0x02
-#define VP9_DEBUG_BUFMGR_DETAIL            0x04
-#define VP9_DEBUG_OUT_PTS                  0x10
+#define AV1_DEBUG_BUFMGR                   0x01
+#define AV1_DEBUG_BUFMGR_MORE              0x02
+#define AV1_DEBUG_BUFMGR_DETAIL            0x04
+#define AV1_DEBUG_OUT_PTS                  0x10
 #define AOM_DEBUG_HW_MORE                  0x20
 #define AOM_DEBUG_VFRAME                   0x40
 #define AOM_DEBUG_PRINT_LIST_INFO          0x80
 #define AOM_AV1_DEBUG_SEND_PARAM_WITH_REG      0x100
-#define VP9_DEBUG_IGNORE_VF_REF            0x200
-#define VP9_DEBUG_DBG_LF_PRINT             0x400
-#define VP9_DEBUG_REG                      0x800
+#define AV1_DEBUG_IGNORE_VF_REF            0x200
+#define AV1_DEBUG_DBG_LF_PRINT             0x400
+#define AV1_DEBUG_REG                      0x800
 #define AOM_DEBUG_BUFMGR_ONLY              0x1000
 #define AOM_DEBUG_AUX_DATA                 0x2000
-#define VP9_DEBUG_QOS_INFO                 0x4000
+#define AV1_DEBUG_QOS_INFO                 0x4000
 #define AOM_DEBUG_DW_DISP_MAIN             0x8000
-#define VP9_DEBUG_DIS_LOC_ERROR_PROC       0x10000
-#define VP9_DEBUG_DIS_SYS_ERROR_PROC   0x20000
-#define VP9_DEBUG_DUMP_PIC_LIST       0x40000
-#define VP9_DEBUG_TRIG_SLICE_SEGMENT_PROC 0x80000
-#define VP9_DEBUG_NO_TRIGGER_FRAME       0x100000
-#define VP9_DEBUG_LOAD_UCODE_FROM_FILE   0x200000
-#define VP9_DEBUG_FORCE_SEND_AGAIN       0x400000
-#define VP9_DEBUG_DUMP_DATA              0x800000
-#define VP9_DEBUG_CACHE                  0x1000000
-#define VP9_DEBUG_CACHE_HIT_RATE         0x2000000
+#define AV1_DEBUG_DIS_LOC_ERROR_PROC       0x10000
+#define AV1_DEBUG_DIS_SYS_ERROR_PROC   0x20000
+#define AV1_DEBUG_DUMP_PIC_LIST       0x40000
+#define AV1_DEBUG_TRIG_SLICE_SEGMENT_PROC 0x80000
+#define AV1_DEBUG_NO_TRIGGER_FRAME       0x100000
+#define AV1_DEBUG_LOAD_UCODE_FROM_FILE   0x200000
+#define AV1_DEBUG_FORCE_SEND_AGAIN       0x400000
+#define AV1_DEBUG_DUMP_DATA              0x800000
+#define AV1_DEBUG_CACHE                  0x1000000
+#define AV1_DEBUG_CACHE_HIT_RATE         0x2000000
 #define IGNORE_PARAM_FROM_CONFIG         0x8000000
 #if 1
 /*def MULTI_INSTANCE_SUPPORT*/

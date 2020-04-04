@@ -924,7 +924,7 @@ void av1_set_mb_mi(AV1_COMMON *cm, int width, int height) {
   // eg. cdef, which operates on units of 8x8 luma pixels.
   const int aligned_width = ALIGN_POWER_OF_TWO(width, 3);
   const int aligned_height = ALIGN_POWER_OF_TWO(height, 3);
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, " [PICTURE] av1_set_mb_mi (%d X %d)\n", width, height);
+  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, " [PICTURE] av1_set_mb_mi (%d X %d)\n", width, height);
 
   cm->mi_cols = aligned_width >> MI_SIZE_LOG2;
   cm->mi_rows = aligned_height >> MI_SIZE_LOG2;
@@ -1004,7 +1004,7 @@ static void setup_superres(AV1_COMMON *const cm, union param_u *params,
 
   *width = params->p.dec_frame_width;
   *height = params->p.frame_height;
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, " [PICTURE] set decoding size to (%d X %d) scaled size to (%d X %d)\n",
+  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, " [PICTURE] set decoding size to (%d X %d) scaled size to (%d X %d)\n",
 	*width, *height,
 	cm->superres_upscaled_width,
 	cm->superres_upscaled_height);
@@ -1260,7 +1260,7 @@ static int motion_field_projection(AV1_COMMON *cm,
 
 #ifdef AML
   int i;
-  //av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "$$$$$$$$$$$%s:cm->mv_ref_id_index = %d, start_frame=%d\n", __func__, cm->mv_ref_id_index, start_frame);
+  //av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "$$$$$$$$$$$%s:cm->mv_ref_id_index = %d, start_frame=%d\n", __func__, cm->mv_ref_id_index, start_frame);
   cm->mv_ref_id[cm->mv_ref_id_index] = start_frame;
   for (i = 0; i < REF_FRAMES; i++) {
       cm->mv_ref_offset[cm->mv_ref_id_index][i]=0;
@@ -1378,7 +1378,7 @@ void av1_setup_motion_field(AV1_COMMON *cm) {
   ref_stamp = MFMV_STACK_SIZE - 1;
 #ifdef AML
   cm->mv_ref_id_index = 0;
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "%s(%d) mi_cols %d mi_rows %d\n",
+  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s(%d) mi_cols %d mi_rows %d\n",
       __func__, setup_motion_field_debug_count++,
       cm->mi_cols,
       cm->mi_rows
@@ -1422,7 +1422,7 @@ static void set_ref_frame_info(int *remapped_ref_idx, int frame_idx,
   assert(frame_idx >= 0 && frame_idx < INTER_REFS_PER_FRAME);
 
   remapped_ref_idx[frame_idx] = ref_info->map_idx;
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "+++++++++++++%s:remapped_ref_idx[%d]=0x%x\n", __func__, frame_idx, ref_info->map_idx);
+  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "+++++++++++++%s:remapped_ref_idx[%d]=0x%x\n", __func__, frame_idx, ref_info->map_idx);
 }
 
 
@@ -1625,91 +1625,89 @@ void av1_setup_frame_sign_bias(AV1_COMMON *cm) {
 }
 
 
-void av1_setup_skip_mode_allowed(AV1_COMMON *cm) {
-  const OrderHintInfo *const order_hint_info = &cm->seq_params.order_hint_info;
-  SkipModeInfo *const skip_mode_info = &cm->current_frame.skip_mode_info;
-  int i;
-  int cur_order_hint;
-  int ref_order_hints[2] = { -1, INT_MAX };
-  int ref_idx[2] = { INVALID_IDX, INVALID_IDX };
+void av1_setup_skip_mode_allowed(AV1_COMMON *cm)
+{
+	const OrderHintInfo *const order_hint_info = &cm->seq_params.order_hint_info;
+	SkipModeInfo *const skip_mode_info = &cm->current_frame.skip_mode_info;
+	int i;
+	int cur_order_hint;
+	int ref_order_hints[2] = { -1, INT_MAX };
+	int ref_idx[2] = { INVALID_IDX, INVALID_IDX };
 
-  skip_mode_info->skip_mode_allowed = 0;
-  skip_mode_info->ref_frame_idx_0 = INVALID_IDX;
-  skip_mode_info->ref_frame_idx_1 = INVALID_IDX;
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "av1_setup_skip_mode_allowed %d %d %d\n", order_hint_info->enable_order_hint,
-    frame_is_intra_only(cm),
-    cm->current_frame.reference_mode);
-  if (!order_hint_info->enable_order_hint || frame_is_intra_only(cm) ||
-      cm->current_frame.reference_mode == SINGLE_REFERENCE)
-    return;
+	skip_mode_info->skip_mode_allowed = 0;
+	skip_mode_info->ref_frame_idx_0 = INVALID_IDX;
+	skip_mode_info->ref_frame_idx_1 = INVALID_IDX;
+	av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "av1_setup_skip_mode_allowed %d %d %d\n", order_hint_info->enable_order_hint,
+		frame_is_intra_only(cm),
+		cm->current_frame.reference_mode);
+	if (!order_hint_info->enable_order_hint || frame_is_intra_only(cm) ||
+		cm->current_frame.reference_mode == SINGLE_REFERENCE)
+		return;
 
-  cur_order_hint = cm->current_frame.order_hint;
+	cur_order_hint = cm->current_frame.order_hint;
 
-  // Identify the nearest forward and backward references.
-  for (i = 0; i < INTER_REFS_PER_FRAME; ++i) {
-    const RefCntBuffer *const buf = get_ref_frame_buf(cm, LAST_FRAME + i);
-    int ref_order_hint;
-    if (buf == NULL) continue;
+	// Identify the nearest forward and backward references.
+	for (i = 0; i < INTER_REFS_PER_FRAME; ++i) {
+		const RefCntBuffer *const buf = get_ref_frame_buf(cm, LAST_FRAME + i);
+		int ref_order_hint;
+		if (buf == NULL) continue;
 
-    ref_order_hint = buf->order_hint;
-    if (get_relative_dist(order_hint_info, ref_order_hint, cur_order_hint) <
-        0) {
-      // Forward reference
-      if (ref_order_hints[0] == -1 ||
-          get_relative_dist(order_hint_info, ref_order_hint,
-                            ref_order_hints[0]) > 0) {
-        ref_order_hints[0] = ref_order_hint;
-        ref_idx[0] = i;
-      }
-    } else if (get_relative_dist(order_hint_info, ref_order_hint,
-                                 cur_order_hint) > 0) {
-      // Backward reference
-      if (ref_order_hints[1] == INT_MAX ||
-          get_relative_dist(order_hint_info, ref_order_hint,
-                            ref_order_hints[1]) < 0) {
-        ref_order_hints[1] = ref_order_hint;
-        ref_idx[1] = i;
-      }
-    }
-  }
+		ref_order_hint = buf->order_hint;
+		if (get_relative_dist(order_hint_info, ref_order_hint, cur_order_hint) < 0) {
+			// Forward reference
+			if (ref_order_hints[0] == -1 ||
+				get_relative_dist(order_hint_info, ref_order_hint,
+				ref_order_hints[0]) > 0) {
+				ref_order_hints[0] = ref_order_hint;
+				ref_idx[0] = i;
+			}
+		} else if (get_relative_dist(order_hint_info, ref_order_hint,
+		cur_order_hint) > 0) {
+			// Backward reference
+			if (ref_order_hints[1] == INT_MAX ||
+				get_relative_dist(order_hint_info, ref_order_hint,
+				ref_order_hints[1]) < 0) {
+				ref_order_hints[1] = ref_order_hint;
+				ref_idx[1] = i;
+			}
+		}
+	}
 
-  if (ref_idx[0] != INVALID_IDX && ref_idx[1] != INVALID_IDX) {
-    // == Bi-directional prediction ==
-    skip_mode_info->skip_mode_allowed = 1;
-    skip_mode_info->ref_frame_idx_0 = AOMMIN(ref_idx[0], ref_idx[1]);
-    skip_mode_info->ref_frame_idx_1 = AOMMAX(ref_idx[0], ref_idx[1]);
-  } else if (ref_idx[0] != INVALID_IDX && ref_idx[1] == INVALID_IDX) {
-    // == Forward prediction only ==
-    // Identify the second nearest forward reference.
-    ref_order_hints[1] = -1;
-    for (i = 0; i < INTER_REFS_PER_FRAME; ++i) {
-      const RefCntBuffer *const buf = get_ref_frame_buf(cm, LAST_FRAME + i);
-      int ref_order_hint;
-      if (buf == NULL) continue;
+	if (ref_idx[0] != INVALID_IDX && ref_idx[1] != INVALID_IDX) {
+		// == Bi-directional prediction ==
+		skip_mode_info->skip_mode_allowed = 1;
+		skip_mode_info->ref_frame_idx_0 = AOMMIN(ref_idx[0], ref_idx[1]);
+		skip_mode_info->ref_frame_idx_1 = AOMMAX(ref_idx[0], ref_idx[1]);
+	} else if (ref_idx[0] != INVALID_IDX && ref_idx[1] == INVALID_IDX) {
+		// == Forward prediction only ==
+		// Identify the second nearest forward reference.
+		ref_order_hints[1] = -1;
+		for (i = 0; i < INTER_REFS_PER_FRAME; ++i) {
+			const RefCntBuffer *const buf = get_ref_frame_buf(cm, LAST_FRAME + i);
+			int ref_order_hint;
+			if (buf == NULL) continue;
 
-      ref_order_hint = buf->order_hint;
-      if ((ref_order_hints[0] != -1 &&
-           get_relative_dist(order_hint_info, ref_order_hint,
-                             ref_order_hints[0]) < 0) &&
-          (ref_order_hints[1] == -1 ||
-           get_relative_dist(order_hint_info, ref_order_hint,
-                             ref_order_hints[1]) > 0)) {
-        // Second closest forward reference
-        ref_order_hints[1] = ref_order_hint;
-        ref_idx[1] = i;
-      }
-    }
-    if (ref_order_hints[1] != -1) {
-      skip_mode_info->skip_mode_allowed = 1;
-      skip_mode_info->ref_frame_idx_0 = AOMMIN(ref_idx[0], ref_idx[1]);
-      skip_mode_info->ref_frame_idx_1 = AOMMAX(ref_idx[0], ref_idx[1]);
-    }
-  }
-	av1_print2(VP9_DEBUG_BUFMGR_DETAIL,
+			ref_order_hint = buf->order_hint;
+			if ((ref_order_hints[0] != -1 &&
+			get_relative_dist(order_hint_info, ref_order_hint, ref_order_hints[0]) < 0) &&
+			(ref_order_hints[1] == -1 ||
+			get_relative_dist(order_hint_info, ref_order_hint, ref_order_hints[1]) > 0)) {
+				// Second closest forward reference
+				ref_order_hints[1] = ref_order_hint;
+				ref_idx[1] = i;
+			}
+		}
+		if (ref_order_hints[1] != -1) {
+			skip_mode_info->skip_mode_allowed = 1;
+			skip_mode_info->ref_frame_idx_0 = AOMMIN(ref_idx[0], ref_idx[1]);
+			skip_mode_info->ref_frame_idx_1 = AOMMAX(ref_idx[0], ref_idx[1]);
+		}
+	}
+	av1_print2(AV1_DEBUG_BUFMGR_DETAIL,
 		"skip_mode_info: skip_mode_allowed 0x%x 0x%x 0x%x\n",
-		cm->current_frame.skip_mode_info.skip_mode_allowed,
-		cm->current_frame.skip_mode_info.ref_frame_idx_0,
-		cm->current_frame.skip_mode_info.ref_frame_idx_1);
+	cm->current_frame.skip_mode_info.skip_mode_allowed,
+	cm->current_frame.skip_mode_info.ref_frame_idx_0,
+	cm->current_frame.skip_mode_info.ref_frame_idx_1);
 }
 
 static inline int frame_might_allow_ref_frame_mvs(const AV1_COMMON *cm) {
@@ -2319,7 +2317,7 @@ int av1_decode_frame_headers_and_setup(AV1Decoder *pbi, int trailing_bits_presen
                          "frame context is unavailable.");
     }
 #if 0
-    av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "%d,%d,%d,%d\n",cm->error_resilient_mode,
+    av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%d,%d,%d,%d\n",cm->error_resilient_mode,
       cm->seq_params.order_hint_info.enable_ref_frame_mvs,
       cm->seq_params.order_hint_info.enable_order_hint,frame_is_intra_only(cm));
 
@@ -3220,8 +3218,8 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
   // arguments are invalid.
   BufferPool *const pool = cm->buffer_pool;
   int frame_decoded;
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "%s: new_compressed_data= %d\n", __func__, new_compressed_data);
+  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
+  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: new_compressed_data= %d\n", __func__, new_compressed_data);
   for (j = 0; j < pbi->num_output_frames; j++) {
     decrease_ref_count(pbi, pbi->output_frames[j], pool);
   }
@@ -3233,7 +3231,7 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
       return -1;
     }
     pbi->seen_frame_header = 0;
-    av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "New_compressed_data (%d)\n", new_compressed_data_count++);
+    av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "New_compressed_data (%d)\n", new_compressed_data_count++);
 
   }
 
@@ -3249,7 +3247,7 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
         dump_buffer_status(pbi);
       }
   }
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
+  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
 
   return frame_decoded;
 
@@ -3296,7 +3294,7 @@ int av1_bufmgr_postproc(AV1Decoder *pbi, unsigned char frame_decoded)
 int aom_realloc_frame_buffer(AV1_COMMON *cm, PIC_BUFFER_CONFIG *pic,
   int width, int height, unsigned int order_hint)
 {
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "%s, index 0x%x, width 0x%x, height 0x%x order_hint 0x%x\n",
+  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s, index 0x%x, width 0x%x, height 0x%x order_hint 0x%x\n",
     __func__, pic->index, width, height, order_hint);
   pic->y_crop_width = width;
   pic->y_crop_height = height;
@@ -3332,7 +3330,7 @@ void av1_set_next_ref_frame_map(AV1Decoder *pbi) {
   int mask;
   AV1_COMMON *const cm = &pbi->common;
   int check_on_show_existing_frame;
-  av1_print2(VP9_DEBUG_BUFMGR_DETAIL, "%s, %d, mask 0x%x, show_existing_frame %d, reset_decoder_state %d\n",
+  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s, %d, mask 0x%x, show_existing_frame %d, reset_decoder_state %d\n",
     __func__, pbi->camera_frame_header_ready,
     cm->current_frame.refresh_frame_flags,
     cm->show_existing_frame,
