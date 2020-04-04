@@ -706,7 +706,7 @@ static int _dsc_set_key(struct DescChannel *ch, int flags, enum ca_cw_type type,
 						return -1;
 					}
 					swdmx_desc_channel_set_algo(ch->chan, ch->algo);
-					swdmx_desc_channel_set_param(ch->chan, SWDMX_AES_CBC_PARAM_ALIGN, SWDMX_DESC_ALIGN_HEAD);
+					swdmx_desc_channel_set_param(ch->chan, SWDMX_AES_CBC_PARAM_ALIGN, (u8*)SWDMX_DESC_ALIGN_HEAD);
 				}
 				if (type == CA_CW_AES_EVEN) {
 					swdmx_desc_channel_set_param(ch->chan, SWDMX_AES_CBC_PARAM_EVEN_KEY, key);

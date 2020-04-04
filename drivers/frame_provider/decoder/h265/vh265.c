@@ -6927,7 +6927,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		/**/
 		/* if((iPrevPOC != curr_POC)){ */
 		if (rpm_param->p.slice_segment_address == 0) {
-			struct PIC_s *pic;
+			struct PIC_s *pic = NULL;
 
 			hevc->new_pic = 1;
 #ifdef MULTI_INSTANCE_SUPPORT
