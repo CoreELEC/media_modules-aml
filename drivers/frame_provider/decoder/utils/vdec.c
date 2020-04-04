@@ -91,7 +91,7 @@ static unsigned int clk_config;
    &2: always reload firmware.
    &4: vdec canvas debug enable
   */
-static unsigned int debug;
+static unsigned int debug = 2;
 
 static int hevc_max_reset_count;
 
