@@ -97,6 +97,11 @@ static struct aml_video_fmt aml_video_formats[] = {
 		.num_planes = 1,
 	},
 	{
+		.fourcc = V4L2_PIX_FMT_AV1,
+		.type = AML_FMT_DEC,
+		.num_planes = 1,
+	},
+	{
 		.fourcc = V4L2_PIX_FMT_NV21,
 		.type = AML_FMT_FRAME,
 		.num_planes = 1,
@@ -516,7 +521,7 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 	struct vframe_s *vf = (struct vframe_s *)fb->vf_handle;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
-		"FROM (%s %s) vf: %lx, ts: %llx, idx: %d, "
+		"FROM (%s %s) vf: %lx, ts: %llu, idx: %d, "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 		vf_get_provider(ctx->ada_ctx->recv_name)->name,
 		ctx->ada_ctx->vfm_path != FRAME_BASE_PATH_V4L_VIDEO ? "OSD" : "VIDEO",

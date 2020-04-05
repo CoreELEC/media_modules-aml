@@ -31,6 +31,7 @@ const struct vdec_common_if *get_vp9_dec_comm_if(void);
 const struct vdec_common_if *get_mpeg12_dec_comm_if(void);
 const struct vdec_common_if *get_mpeg4_dec_comm_if(void);
 const struct vdec_common_if *get_mjpeg_dec_comm_if(void);
+const struct vdec_common_if *get_av1_dec_comm_if(void);
 
 int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
 {
@@ -56,6 +57,9 @@ int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
 		break;
 	case V4L2_PIX_FMT_MJPEG:
 		ctx->dec_if = get_mjpeg_dec_comm_if();
+		break;
+	case V4L2_PIX_FMT_AV1:
+		ctx->dec_if = get_av1_dec_comm_if();
 		break;
 	default:
 		return -EINVAL;

@@ -682,8 +682,8 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	dump_write(buf, count);
 #endif
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
-		"write frames, vbuf: %p, size: %u, ret: %d, crc: %x\n",
-		buf, count, ret, crc32_le(0, buf, count));
+		"write frames, vbuf: %p, size: %u, ret: %d, crc: %x, ts: %llu\n",
+		buf, count, ret, crc32_le(0, buf, count), timestamp);
 
 	return ret;
 }
@@ -706,8 +706,8 @@ int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
 	}
 
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
-		"write frames, vbuf: %lx, size: %u, ret: %d\n",
-		addr, count, ret);
+		"write frames, vbuf: %lx, size: %u, ret: %d, ts: %llu\n",
+		addr, count, ret, timestamp);
 
 	return ret;
 }
