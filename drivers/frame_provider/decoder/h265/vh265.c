@@ -3900,7 +3900,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 		}
 	}
 
-	if (pic_display && pic_display->num_reorder_pic &&
+	if (pic_display && hevc->sps_num_reorder_pics_0 &&
 		(hevc->vf_pre_count == 1) && (hevc->first_pic_flag == 1)) {
 		pic_display = NULL;
 		hevc->first_pic_flag = 0;
