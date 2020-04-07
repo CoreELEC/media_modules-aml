@@ -448,12 +448,12 @@ static int dmx_timeout_set(struct aml_dmxtimeout *dto, int enable,
 				int force);
 
 /*Audio & Video PTS value*/
-static u32 video_pts;
-static u32 audio_pts;
-static u32 video_pts_bit32;
-static u32 audio_pts_bit32;
-static u32 first_video_pts;
-static u32 first_audio_pts;
+static u32 video_pts = 0;
+static u32 audio_pts = 0;
+static u32 video_pts_bit32 = 0;
+static u32 audio_pts_bit32 = 0;
+static u32 first_video_pts = 0;
+static u32 first_audio_pts = 0;
 static int demux_skipbyte;
 static int tsfile_clkdiv = 5;
 static int asyncfifo_buf_len = ASYNCFIFO_BUFFER_SIZE_DEFAULT;
@@ -3484,10 +3484,14 @@ static int dmx_set_chan_regs(struct aml_dmx *dmx, int cid)
 			 DMX_READ_REG(dmx->id, OM_CMD_STATUS));
 	}
 
-	if (cid == 0)
+	if (cid == 0) {
+		video_pts = 0;
 		first_video_pts = 0;
-	else if (cid == 1)
+	}
+	else if (cid == 1) {
+		audio_pts = 0;
 		first_audio_pts = 0;
+	}
 
 	return 0;
 }
