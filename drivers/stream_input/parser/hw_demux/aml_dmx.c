@@ -3082,6 +3082,7 @@ static int dmx_enable(struct aml_dmx *dmx)
 	int s2p_id;
 	u32 invert0 = 0, invert1 = 0, invert2 = 0, fec_s0 = 0, fec_s1 = 0, fec_s2 = 0;
 	u32 use_sop = 0;
+	int i = 0;
 
 	record = dmx_get_record_flag(dmx);
 	if (use_of_sop == 1) {
@@ -3115,14 +3116,16 @@ static int dmx_enable(struct aml_dmx *dmx)
 		s2p_id = 0;
 		fec_ctrl = 0;
 		if (dmx->source == AM_TS_SRC_S_TS0) {
-			s2p_id = dvb->ts[0].s2p_id;
-			fec_ctrl = dvb->ts[0].control;
+			s2p_id = 0;
 		} else if (dmx->source == AM_TS_SRC_S_TS1) {
-			s2p_id = dvb->ts[1].s2p_id;
-			fec_ctrl = dvb->ts[1].control;
+			s2p_id = 1;
 		} else if (dmx->source == AM_TS_SRC_S_TS2) {
-			s2p_id = dvb->ts[2].s2p_id;
-			fec_ctrl = dvb->ts[2].control;
+			s2p_id = 2;
+		}
+		for (i = 0; i < dvb->s2p_total_count; i++) {
+			if (dvb->ts[i].s2p_id == s2p_id) {
+				fec_ctrl = dvb->ts[i].control;
+			}
 		}
 		//fec_sel = (s2p_id == 1) ? 5 : 6;
 		fec_sel = 6 - s2p_id;
@@ -5135,22 +5138,22 @@ int aml_dmx_hw_set_source(struct dmx_demux *demux, dmx_source_t src)
 	case DMX_SOURCE_FRONT0:
 		hw_src =
 		    (dvb->ts[0].mode ==
-		     AM_TS_SERIAL) ? (AM_TS_SRC_S_TS0) : AM_TS_SRC_TS0;
+		     AM_TS_SERIAL) ? (dvb->ts[0].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS0;
 		break;
 	case DMX_SOURCE_FRONT1:
 		hw_src =
 		    (dvb->ts[1].mode ==
-		     AM_TS_SERIAL) ? (AM_TS_SRC_S_TS1) : AM_TS_SRC_TS1;
+		     AM_TS_SERIAL) ? (dvb->ts[1].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS1;
 		break;
 	case DMX_SOURCE_FRONT2:
 		hw_src =
 		    (dvb->ts[2].mode ==
-		     AM_TS_SERIAL) ? (AM_TS_SRC_S_TS2) : AM_TS_SRC_TS2;
+		     AM_TS_SERIAL) ? (dvb->ts[2].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS2;
 		break;
 	case DMX_SOURCE_FRONT3:
 		hw_src =
 			(dvb->ts[3].mode ==
-			 AM_TS_SERIAL) ? (AM_TS_SRC_S_TS3) : AM_TS_SRC_TS3;
+			 AM_TS_SERIAL) ? (dvb->ts[3].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS3;
 		break;
 	case DMX_SOURCE_DVR0:
 		hw_src = AM_TS_SRC_HIU;
@@ -5201,22 +5204,22 @@ int aml_stb_hw_set_source(struct aml_dvb *dvb, dmx_source_t src)
 	case DMX_SOURCE_FRONT0:
 		hw_src =
 		    (dvb->ts[0].mode ==
-		     AM_TS_SERIAL) ? (AM_TS_SRC_S_TS0) : AM_TS_SRC_TS0;
+		     AM_TS_SERIAL) ? (dvb->ts[0].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS0;
 		break;
 	case DMX_SOURCE_FRONT1:
 		hw_src =
 		    (dvb->ts[1].mode ==
-		     AM_TS_SERIAL) ? (AM_TS_SRC_S_TS1) : AM_TS_SRC_TS1;
+		     AM_TS_SERIAL) ? (dvb->ts[1].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS1;
 		break;
 	case DMX_SOURCE_FRONT2:
 		hw_src =
 		    (dvb->ts[2].mode ==
-		     AM_TS_SERIAL) ? (AM_TS_SRC_S_TS2) : AM_TS_SRC_TS2;
+		     AM_TS_SERIAL) ? (dvb->ts[2].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS2;
 		break;
 	case DMX_SOURCE_FRONT3:
 		hw_src =
 		    (dvb->ts[3].mode ==
-		     AM_TS_SERIAL) ? (AM_TS_SRC_S_TS3) : AM_TS_SRC_TS3;
+		     AM_TS_SERIAL) ? (dvb->ts[3].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS3;
 		break;
 	case DMX_SOURCE_DVR0:
 		hw_src = AM_TS_SRC_HIU;
@@ -5383,19 +5386,19 @@ int aml_tso_hw_set_source(struct aml_dvb *dvb, dmx_source_t src)
 	switch (src) {
 	case DMX_SOURCE_FRONT0:
 		hw_src = (dvb->ts[0].mode == AM_TS_SERIAL)
-		    ? (AM_TS_SRC_S_TS0) : AM_TS_SRC_TS0;
+		    ? (dvb->ts[0].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS0;
 		break;
 	case DMX_SOURCE_FRONT1:
 		hw_src = (dvb->ts[1].mode == AM_TS_SERIAL)
-		    ? (AM_TS_SRC_S_TS1) : AM_TS_SRC_TS1;
+		    ? (dvb->ts[1].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS1;
 		break;
 	case DMX_SOURCE_FRONT2:
 		hw_src = (dvb->ts[2].mode == AM_TS_SERIAL)
-		    ? (AM_TS_SRC_S_TS2) : AM_TS_SRC_TS2;
+		    ? (dvb->ts[2].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS2;
 		break;
 	case DMX_SOURCE_FRONT3:
 		hw_src = (dvb->ts[3].mode == AM_TS_SERIAL)
-		    ? (AM_TS_SRC_S_TS3) : AM_TS_SRC_TS3;
+		    ? (dvb->ts[3].s2p_id+AM_TS_SRC_S_TS0) : AM_TS_SRC_TS3;
 		break;
 	case DMX_SOURCE_DVR0:
 		hw_src = AM_TS_SRC_HIU;
