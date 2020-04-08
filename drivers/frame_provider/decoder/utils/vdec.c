@@ -2967,12 +2967,7 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 
 	if (secure && vdec_stream_based(vdec) && force_nosecure_even_drm)
 	{
-		/* Verimatrix ultra webclient (HLS) was played in drmmode and used hw demux. In drmmode VDEC only can access secure.
-		Now HW demux parsed es data to no-secure buffer. So the VDEC input was no-secure, VDEC playback failed. Forcing
-		use nosecure for verimatrix webclient HLS. If in the future HW demux can parse es data to secure buffer, make
-		VDEC r/w secure.*/
 		secure = 0;
-		//pr_debug("allow VDEC can access nosecure even in drmmode\n");
 	}
 	if (input->target == VDEC_INPUT_TARGET_VLD)
 		tee_config_device_secure(DMC_DEV_ID_VDEC, secure);
