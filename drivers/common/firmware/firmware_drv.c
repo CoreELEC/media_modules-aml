@@ -548,6 +548,7 @@ static int fw_replace_dup_data(char *buf)
 				goto out;
 			}
 
+			info->data->head.data_size = len;
 			memcpy(data, pinfo->data, len);
 			memcpy(data, info->data, sizeof(*data));
 
