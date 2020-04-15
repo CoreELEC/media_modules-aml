@@ -548,9 +548,13 @@ static int fw_replace_dup_data(char *buf)
 				goto out;
 			}
 
-			info->data->head.data_size = len;
 			memcpy(data, pinfo->data, len);
+
+			/* update header information. */
 			memcpy(data, info->data, sizeof(*data));
+
+			/* if replaced success need to update real size. */
+			data->head.data_size = comp->head.data_size;
 
 			kfree(info->data);
 			info->data = data;
