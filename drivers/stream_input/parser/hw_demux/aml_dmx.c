@@ -116,6 +116,9 @@ MODULE_PARM_DESC(disable_dsc, "\n\t\t Disable discrambler");
 static int disable_dsc;
 module_param(disable_dsc, int, 0644);
 
+MODULE_PARM_DESC(enable_sec_monitor, "\n\t\t Enable sec monitor default is disable");
+static int enable_sec_monitor = 0;
+module_param(enable_sec_monitor, int, 0644);
 /*For old version kernel */
 #ifndef MESON_CPU_MAJOR_ID_GXL
 #define MESON_CPU_MAJOR_ID_GXL	0x21
@@ -501,7 +504,8 @@ static void section_buffer_watchdog_func(unsigned long arg)
 		    DMX_READ_REG(device_no, DEMUX_CHANNEL_ACTIVITY);
 		section_busy32 =
 			DMX_READ_REG(device_no, SEC_BUFF_BUSY);
-#if 1
+
+		if (enable_sec_monitor) {
 		if (om_cmd_status32 & 0x8fc2) {
 			/* bit 15:12 -- om_cmd_count */
 			/* bit  11:9 -- overflow_count */
@@ -526,7 +530,7 @@ static void section_buffer_watchdog_func(unsigned long arg)
 			dmx_reset_dmx_hw_ex_unlock(dvb, dmx, 0);
 			goto end;
 		}
-#else
+		} else {
 		/* bit 15:12 -- om_cmd_count (read only) */
 		/* bit  11:9 -- overflow_count */
 		/* bit  11:9 --       om_cmd_wr_ptr(read only) */
@@ -542,7 +546,7 @@ static void section_buffer_watchdog_func(unsigned long arg)
 			dmx_reset_hw_ex(dvb, 0);
 			goto end;
 		}
-#endif
+		}
 		section_busy32 =
 			DMX_READ_REG(device_no, SEC_BUFF_BUSY);
 		if (LARGE_SEC_BUFF_MASK ==
