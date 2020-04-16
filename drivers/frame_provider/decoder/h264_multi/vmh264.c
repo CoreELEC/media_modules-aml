@@ -344,10 +344,15 @@ static void vmh264_dump_state(struct vdec_s *vdec);
 			((status & 0xf0) == 0x80))
 
 #define is_interlace(frame)	\
-			(frame->frame &&\
+			((frame->frame &&\
 			frame->top_field &&\
 			frame->bottom_field &&\
-			(!frame->frame->coded_frame))
+			(!frame->frame->coded_frame)) || \
+			(frame->frame && \
+			 frame->frame->coded_frame && \
+			 (!frame->frame->frame_mbs_only_flag) && \
+			 frame->frame->structure == FRAME))
+
 static inline bool close_to(int a, int b, int m)
 {
 	return (abs(a - b) < m) ? true : false;
@@ -2532,13 +2537,6 @@ static int check_force_interlace(struct vdec_h264_hw_s *hw,
 	/* no di in secure mode, disable force di */
 	if (vdec_secure(hw_to_vdec(hw)))
 		return 0;
-	if (frame->frame) {
-		if (frame->frame->coded_frame
-			&& !frame->frame->frame_mbs_only_flag) {
-			if (frame->frame->structure == FRAME)
-				return 1;
-		}
-	}
 
 	if ((dec_control & DEC_CONTROL_FLAG_FORCE_2997_1080P_INTERLACE)
 		&& hw->bitstream_restriction_flag
@@ -2869,12 +2867,24 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		hw->buffer_spec[buffer_index].used = 2;
 		hw->buffer_spec[buffer_index].vf_ref++;
 
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
+			"%s %d frame = %p top_field = %p bottom_field = %p\n", __func__, __LINE__, frame->frame,
+			frame->top_field, frame->bottom_field);
+
+		if (frame->frame != NULL) {
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
+				"%s %d coded_frame = %d frame_mbs_only_flag = %d structure = %d\n", __func__, __LINE__,
+				frame->frame->coded_frame, frame->frame->frame_mbs_only_flag, frame->frame->structure);
+		}
+
 		if (bForceInterlace || is_interlace(frame)) {
 			vf->type =
 				VIDTYPE_INTERLACE_FIRST |
 				nv_order;
 
-			if (bForceInterlace) {
+			if (frame->frame != NULL &&
+				(frame->frame->pic_struct == PIC_TOP_BOT ||
+				frame->frame->pic_struct == PIC_BOT_TOP)) {
 				if (frame->frame != NULL && frame->frame->pic_struct == PIC_TOP_BOT) {
 				vf->type |= (i == 0 ?
 					VIDTYPE_INTERLACE_TOP :
@@ -2883,28 +2893,32 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 					vf->type |= (i == 0 ?
 					VIDTYPE_INTERLACE_BOTTOM :
 					VIDTYPE_INTERLACE_TOP);
-				} else {
+				}
+			} else if (frame->top_field != NULL && frame->bottom_field != NULL) {/*top first*/
+				if (frame->top_field->poc <= frame->bottom_field->poc)
 					vf->type |= (i == 0 ?
-					VIDTYPE_INTERLACE_TOP :
-					VIDTYPE_INTERLACE_BOTTOM);
-				}
-
-				if (i == 1) {
-					vf->pts = 0;
-					vf->pts_us64 = 0;
-				}
-			} else if (frame->top_field->poc <=
-				frame->bottom_field->poc) /*top first*/
+						VIDTYPE_INTERLACE_TOP :
+						VIDTYPE_INTERLACE_BOTTOM);
+				else
+					vf->type |= (i == 0 ?
+						VIDTYPE_INTERLACE_BOTTOM :
+						VIDTYPE_INTERLACE_TOP);
+			} else {
 				vf->type |= (i == 0 ?
 					VIDTYPE_INTERLACE_TOP :
 					VIDTYPE_INTERLACE_BOTTOM);
-			else
-				vf->type |= (i == 0 ?
-					VIDTYPE_INTERLACE_BOTTOM :
-					VIDTYPE_INTERLACE_TOP);
+			}
 			vf->duration = vf->duration/2;
-		}
+			if (i == 1) {
+				vf->pts = 0;
+				vf->pts_us64 = 0;
+			}
 
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
+			"%s %d type = 0x%x pic_struct = %d pts = 0x%x pts_us64 = 0x%llx bForceInterlace = %d\n",
+			__func__, __LINE__, vf->type, frame->frame->pic_struct,
+			vf->pts, vf->pts_us64, bForceInterlace);
+		}
 		if (i == 0) {
 			struct vdec_s *pvdec;
 			struct vdec_info vs;
