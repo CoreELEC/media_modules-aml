@@ -465,8 +465,8 @@ enum ProfileIDC {
 enum FirstInsertFrm_State {
 	FirstInsertFrm_IDLE = 0,
 	FirstInsertFrm_OUT = 1,
-	FirstInsertFrm_SKIPDONE = 2,
-	FirstInsertFrm_RESET = 3,
+	FirstInsertFrm_RESET = 2,
+	FirstInsertFrm_SKIPDONE = 3,
 };
 
 
