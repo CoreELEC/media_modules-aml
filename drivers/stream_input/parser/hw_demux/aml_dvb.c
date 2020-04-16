@@ -1453,6 +1453,49 @@ const char *buf, size_t size)\
 	ASYNCFIFO_SECUREADDR_FUNC_DECL(2)
 #endif
 
+/*Show the async fifo secure buffer size*/
+#define ASYNCFIFO_SECUREADDR_SIZE_FUNC_DECL(i)  \
+static ssize_t asyncfifo##i##_show_secure_addr_size(struct class *class,  \
+				struct class_attribute *attr, char *buf)\
+{\
+	struct aml_dvb *dvb = &aml_dvb_device;\
+	struct aml_asyncfifo *afifo = &dvb->asyncfifo[i];\
+	ssize_t ret = 0;\
+	if (dvb->async_fifo_total_count <= i)\
+		return ret;\
+	ret = sprintf(buf, "0x%x\n", afifo->blk.len);\
+	return ret;\
+} \
+static ssize_t asyncfifo##i##_store_secure_addr_size(struct class *class,  \
+					struct class_attribute *attr, \
+const char *buf, size_t size)\
+{\
+	struct aml_dvb *dvb = &aml_dvb_device;\
+	struct aml_asyncfifo *afifo = &dvb->asyncfifo[i];\
+	unsigned long value;\
+	int ret=0;\
+	if (dvb->async_fifo_total_count <= i)\
+		return (size_t)0;\
+	ret = kstrtol(buf, 0, &value);\
+	if (ret == 0 && value != afifo->blk.len) {\
+		afifo->blk.len = value;\
+		aml_asyncfifo_hw_reset(&aml_dvb_device.asyncfifo[i]);\
+	} \
+	return size;\
+}
+
+#if ASYNCFIFO_COUNT > 0
+	ASYNCFIFO_SECUREADDR_SIZE_FUNC_DECL(0)
+#endif
+
+#if ASYNCFIFO_COUNT > 1
+	ASYNCFIFO_SECUREADDR_SIZE_FUNC_DECL(1)
+#endif
+
+#if ASYNCFIFO_COUNT > 2
+	ASYNCFIFO_SECUREADDR_SIZE_FUNC_DECL(2)
+#endif
+
 
 /*Show the async fifo secure enable*/
 #define ASYNCFIFO_SECURENABLE_FUNC_DECL(i)  \
@@ -1846,6 +1889,10 @@ static struct class_attribute aml_stb_class_attrs[] = {
 	__ATTR(asyncfifo##i##_secure_addr, S_IRUGO | S_IWUSR | S_IWGRP,\
 	asyncfifo##i##_show_secure_addr, \
 	asyncfifo##i##_store_secure_addr)
+#define ASYNCFIFO_SECUREADDR_SIZE_ATTR_DECL(i)\
+	__ATTR(asyncfifo##i##_secure_addr_size, S_IRUGO | S_IWUSR | S_IWGRP,\
+	asyncfifo##i##_show_secure_addr_size, \
+	asyncfifo##i##_store_secure_addr_size)
 #define ASYNCFIFO_SECURENABLE_ATTR_DECL(i)\
 	__ATTR(asyncfifo##i##_secure_enable, S_IRUGO | S_IWUSR | S_IWGRP,\
 	asyncfifo##i##_show_secure_enable, \
@@ -1855,12 +1902,14 @@ static struct class_attribute aml_stb_class_attrs[] = {
 	ASYNCFIFO_SOURCE_ATTR_DECL(0),
 	ASYNCFIFO_FLUSHSIZE_ATTR_DECL(0),
 	ASYNCFIFO_SECUREADDR_ATTR_DECL(0),
+	ASYNCFIFO_SECUREADDR_SIZE_ATTR_DECL(0),
 	ASYNCFIFO_SECURENABLE_ATTR_DECL(0),
 #endif
 #if ASYNCFIFO_COUNT > 1
 	ASYNCFIFO_SOURCE_ATTR_DECL(1),
 	ASYNCFIFO_FLUSHSIZE_ATTR_DECL(1),
 	ASYNCFIFO_SECUREADDR_ATTR_DECL(1),
+	ASYNCFIFO_SECUREADDR_SIZE_ATTR_DECL(1),
 	ASYNCFIFO_SECURENABLE_ATTR_DECL(1),
 #endif
 
@@ -1868,6 +1917,7 @@ static struct class_attribute aml_stb_class_attrs[] = {
 	ASYNCFIFO_SOURCE_ATTR_DECL(2),
 	ASYNCFIFO_FLUSHSIZE_ATTR_DECL(2),
 	ASYNCFIFO_SECUREADDR_ATTR_DECL(2),
+	ASYNCFIFO_SECUREADDR_SIZE_ATTR_DECL(2),
 	ASYNCFIFO_SECURENABLE_ATTR_DECL(2),
 #endif
 

@@ -1416,6 +1416,11 @@ static inline int dmx_get_order(unsigned long size)
 	return order;
 }
 
+static inline int dmx_get_afifo_size(struct aml_asyncfifo *afifo)
+{
+	return afifo->secure_enable && afifo->blk.len ? afifo->blk.len : asyncfifo_buf_len;
+}
+
 static void dvr_process_channel(struct aml_asyncfifo *afifo,
 				struct aml_channel *channel,
 				u32 total, u32 size,
@@ -1505,6 +1510,7 @@ static void dvr_process_channel(struct aml_asyncfifo *afifo,
 		pr_dbg_irq_dvr("write data to dvr\n");
 }
 
+static uint32_t last_afifo_time = 0;
 static void dvr_irq_bh_handler(unsigned long arg)
 {
 	struct aml_asyncfifo *afifo = (struct aml_asyncfifo *)arg;
@@ -1514,7 +1520,8 @@ static void dvr_irq_bh_handler(unsigned long arg)
 	int i, factor;
 	unsigned long flags;
 
-	pr_dbg_irq_dvr("async fifo %d irq\n", afifo->id);
+	pr_dbg_irq_dvr("async fifo %d irq, interval:%d ms, %d data\n", afifo->id,
+			jiffies_to_msecs(jiffies - last_afifo_time), afifo->flush_size);
 
 	spin_lock_irqsave(&dvb->slock, flags);
 
@@ -1547,6 +1554,7 @@ static void dvr_irq_bh_handler(unsigned long arg)
 		}
 	}
 	spin_unlock_irqrestore(&dvb->slock, flags);
+	last_afifo_time = jiffies;
 }
 
 static irqreturn_t dvr_irq_handler(int irq_number, void *para)
@@ -2606,19 +2614,19 @@ static int asyncfifo_set_buffer(struct aml_asyncfifo *afifo,
 
 	afifo->buf_toggle = 0;
 	afifo->buf_read   = 0;
-	afifo->buf_len = len;
+	afifo->buf_len = dmx_get_afifo_size(afifo);
 	pr_error("++++async fifo %d buf size %d, flush size %d\n",
 			afifo->id, afifo->buf_len, afifo->flush_size);
 
 	if ((afifo->flush_size <= 0)
-			|| (afifo->flush_size > (afifo->buf_len>>1))) {
-		afifo->flush_size = afifo->buf_len>>1;
+			|| (afifo->flush_size > (len>>1))) {
+		afifo->flush_size = len>>1;
 	} else if (afifo->flush_size < 128) {
 		afifo->flush_size = 128;
 	} else {
 		int fsize;
 
-		for (fsize = 128; fsize < (afifo->buf_len>>1); fsize <<= 1) {
+		for (fsize = 128; fsize < (len>>1); fsize <<= 1) {
 			if (fsize >= afifo->flush_size)
 				break;
 		}
@@ -2631,7 +2639,7 @@ static int asyncfifo_set_buffer(struct aml_asyncfifo *afifo,
 		return -1;
 
 	afifo->pages_map = dma_map_single(asyncfifo_get_dev(afifo),
-			(void *)afifo->pages, afifo->buf_len, DMA_FROM_DEVICE);
+			(void *)afifo->pages, len, DMA_FROM_DEVICE);
 
 	return 0;
 }
@@ -2639,8 +2647,8 @@ static void asyncfifo_put_buffer(struct aml_asyncfifo *afifo)
 {
 	if (afifo->pages) {
 		dma_unmap_single(asyncfifo_get_dev(afifo),
-			afifo->pages_map, afifo->buf_len, DMA_FROM_DEVICE);
-		asyncfifo_free_buffer(afifo->pages, afifo->buf_len);
+			afifo->pages_map, asyncfifo_buf_len, DMA_FROM_DEVICE);
+		asyncfifo_free_buffer(afifo->pages, asyncfifo_buf_len);
 		afifo->pages_map = 0;
 		afifo->pages = 0;
 	}
