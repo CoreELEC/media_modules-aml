@@ -7034,6 +7034,7 @@ static void update_vf_memhandle(struct VP9Decoder_s *pbi,
 	if (pic->index < 0) {
 		vf->mem_handle = NULL;
 		vf->mem_head_handle = NULL;
+		vf->mem_dw_handle = NULL;
 	} else if (vf->type & VIDTYPE_SCATTER) {
 		vf->mem_handle =
 			decoder_mmu_box_get_mem_handle(
@@ -7042,11 +7043,19 @@ static void update_vf_memhandle(struct VP9Decoder_s *pbi,
 			decoder_bmmu_box_get_mem_handle(
 				pbi->bmmu_box,
 				HEADER_BUFFER_IDX(pic->BUF_index));
+		if (pbi->double_write_mode == 3)
+			vf->mem_dw_handle =
+				decoder_bmmu_box_get_mem_handle(
+					pbi->bmmu_box,
+					VF_BUFFER_IDX(pic->BUF_index));
+		else
+			vf->mem_dw_handle = NULL;
 	} else {
 		vf->mem_handle =
 			decoder_bmmu_box_get_mem_handle(
 				pbi->bmmu_box, VF_BUFFER_IDX(pic->BUF_index));
 		vf->mem_head_handle = NULL;
+		vf->mem_dw_handle = NULL;
 		/*vf->mem_head_handle =
 		 *decoder_bmmu_box_get_mem_handle(
 		 *hevc->bmmu_box, VF_BUFFER_IDX(BUF_index));

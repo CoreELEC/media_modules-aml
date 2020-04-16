@@ -5492,6 +5492,7 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 	if (pic->index < 0) {
 		vf->mem_handle = NULL;
 		vf->mem_head_handle = NULL;
+		vf->mem_dw_handle = NULL;
 	} else if (vf->type & VIDTYPE_SCATTER) {
 #ifdef AOM_AV1_MMU_DW
 		if (pic->double_write_mode & 0x20 &&
@@ -5503,6 +5504,7 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 				decoder_bmmu_box_get_mem_handle(
 					hw->bmmu_box,
 					DW_HEADER_BUFFER_IDX(pic->BUF_index));
+			vf->mem_dw_handle = NULL;
 		} else
 #endif
 		{
@@ -5513,6 +5515,13 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 			decoder_bmmu_box_get_mem_handle(
 				hw->bmmu_box,
 				HEADER_BUFFER_IDX(pic->BUF_index));
+		if (hw->double_write_mode == 3)
+			vf->mem_dw_handle =
+				decoder_bmmu_box_get_mem_handle(
+					hw->bmmu_box,
+					VF_BUFFER_IDX(pic->BUF_index));
+		else
+			vf->mem_dw_handle = NULL;
 		}
 #ifdef USE_SPEC_BUF_FOR_MMU_HEAD
 		vf->mem_head_handle = NULL;
@@ -5522,6 +5531,7 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 			decoder_bmmu_box_get_mem_handle(
 				hw->bmmu_box, VF_BUFFER_IDX(pic->BUF_index));
 		vf->mem_head_handle = NULL;
+		vf->mem_dw_handle = NULL;
 		/*vf->mem_head_handle =
 		 *decoder_bmmu_box_get_mem_handle(
 		 *hw->bmmu_box, VF_BUFFER_IDX(BUF_index));
