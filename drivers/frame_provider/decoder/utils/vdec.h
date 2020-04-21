@@ -36,6 +36,7 @@
 
 #include "vdec_input.h"
 #include "frame_check.h"
+#include "vdec_sync.h"
 
 s32 vdec_dev_register(void);
 s32 vdec_dev_unregister(void);
@@ -273,6 +274,7 @@ struct vdec_s {
 	atomic_t inrelease;
 	int parallel_dec;
 	struct vdec_frames_s *mvfrm;
+	struct vdec_sync sync;
 };
 
 /* common decoder vframe provider name to use default vfm path */

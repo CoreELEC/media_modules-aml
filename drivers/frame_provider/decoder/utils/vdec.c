@@ -91,12 +91,20 @@ static int keep_vdec_mem;
 static unsigned int debug_trace_num = 16 * 20;
 static int step_mode;
 static unsigned int clk_config;
+
 /*
-   &1: sched_priority to MAX_RT_PRIO -1.
-   &2: always reload firmware.
-   &4: vdec canvas debug enable
-  */
-static unsigned int debug = 2;
+ * 0x1  : sched_priority to MAX_RT_PRIO -1.
+ * 0x2  : always reload firmware.
+ * 0x4  : vdec canvas debug enable
+ * 0x100: enable vdec fence.
+ */
+#define VDEC_DBG_SCHED_PRIO	(0x1)
+#define VDEC_DBG_ALWAYS_LOAD_FW	(0x2)
+#define VDEC_DBG_CANVAS_STATUS	(0x4)
+#define VDEC_DBG_ENABLE_FENCE	(0x100)
+
+u32 debug;
+EXPORT_SYMBOL(debug);
 
 static int hevc_max_reset_count;
 
@@ -250,6 +258,7 @@ static const char vfm_path_node[][VDEC_MAP_NAME_SIZE] =
 	"v4lvideo.6",
 	"v4lvideo.7",
 	"v4lvideo.8",
+	"fake-amvideo",
 	"disable",
 	"reserved",
 };
