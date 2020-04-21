@@ -316,6 +316,8 @@ static void dump_data(struct AV1HW_s *hw, int size);
 static unsigned char get_data_check_sum
 	(struct AV1HW_s *hw, int size);
 static void dump_pic_list(struct AV1HW_s *hw);
+static int vav1_mmu_map_alloc(struct AV1HW_s *hw);
+static void vav1_mmu_map_free(struct AV1HW_s *hw);
 static int av1_alloc_mmu(
 		struct AV1HW_s *hw,
 		int cur_buf_idx,
@@ -352,9 +354,11 @@ static u32 bit_depth_chroma;
 static u32 frame_width;
 static u32 frame_height;
 static u32 video_signal_type;
-static u32 force_dv_enable;
 static u32 on_no_keyframe_skiped;
 static u32 without_display_mode;
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+static u32 force_dv_enable;
+#endif
 
 #define PROB_SIZE    (496 * 2 * 4)
 #define PROB_BUF_SIZE    (0x5000)
@@ -4808,6 +4812,67 @@ static void config_av1_clk_forced_on(void)
 #endif
 
 
+static int vav1_mmu_map_alloc(struct AV1HW_s *hw)
+{
+	if (hw->mmu_enable) {
+		u32 mmu_map_size = vav1_frame_mmu_map_size(hw);
+		hw->frame_mmu_map_addr =
+			dma_alloc_coherent(amports_get_dma_device(),
+				mmu_map_size,
+				&hw->frame_mmu_map_phy_addr, GFP_KERNEL);
+		if (hw->frame_mmu_map_addr == NULL) {
+			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			return -1;
+		}
+		memset(hw->frame_mmu_map_addr, 0, mmu_map_size);
+	}
+#ifdef AOM_AV1_MMU_DW
+	if (hw->dw_mmu_enable) {
+		u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
+		hw->dw_frame_mmu_map_addr =
+			dma_alloc_coherent(amports_get_dma_device(),
+				mmu_map_size,
+				&hw->dw_frame_mmu_map_phy_addr, GFP_KERNEL);
+		if (hw->dw_frame_mmu_map_addr == NULL) {
+			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			return -1;
+		}
+		memset(hw->dw_frame_mmu_map_addr, 0, mmu_map_size);
+	}
+#endif
+	return 0;
+}
+
+
+static void vav1_mmu_map_free(struct AV1HW_s *hw)
+{
+	if (hw->mmu_enable) {
+		u32 mmu_map_size = vav1_frame_mmu_map_size(hw);
+		if (hw->frame_mmu_map_addr) {
+			if (hw->frame_mmu_map_phy_addr)
+				dma_free_coherent(amports_get_dma_device(),
+					mmu_map_size,
+					hw->frame_mmu_map_addr,
+					hw->frame_mmu_map_phy_addr);
+			hw->frame_mmu_map_addr = NULL;
+		}
+	}
+#ifdef AOM_AV1_MMU_DW
+	if (hw->dw_mmu_enable) {
+		u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
+		if (hw->dw_frame_mmu_map_addr) {
+			if (hw->dw_frame_mmu_map_phy_addr)
+				dma_free_coherent(amports_get_dma_device(),
+					mmu_map_size,
+					hw->dw_frame_mmu_map_addr,
+					hw->dw_frame_mmu_map_phy_addr);
+			hw->dw_frame_mmu_map_addr = NULL;
+		}
+	}
+#endif
+}
+
+
 static void av1_local_uninit(struct AV1HW_s *hw)
 {
 	hw->rpm_ptr = NULL;
@@ -4858,30 +4923,9 @@ static void av1_local_uninit(struct AV1HW_s *hw)
 
 		hw->count_buffer_addr = NULL;
 	}
-	if (hw->mmu_enable) {
-		u32 mmu_map_size = vav1_frame_mmu_map_size(hw);
-		if (hw->frame_mmu_map_addr) {
-			if (hw->frame_mmu_map_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
-					mmu_map_size,
-					hw->frame_mmu_map_addr,
-					hw->frame_mmu_map_phy_addr);
-			hw->frame_mmu_map_addr = NULL;
-		}
-	}
-#ifdef AOM_AV1_MMU_DW
-	if (hw->dw_mmu_enable) {
-		u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
-		if (hw->dw_frame_mmu_map_addr) {
-			if (hw->dw_frame_mmu_map_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
-					mmu_map_size,
-					hw->dw_frame_mmu_map_addr,
-					hw->dw_frame_mmu_map_phy_addr);
-			hw->dw_frame_mmu_map_addr = NULL;
-		}
-	}
-#endif
+
+	vav1_mmu_map_free(hw);
+
 	if (hw->gvs)
 		vfree(hw->gvs);
 	hw->gvs = NULL;
@@ -5007,7 +5051,6 @@ static int av1_local_init(struct AV1HW_s *hw)
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
 		}
-
 		hw->rpm_ptr = hw->rpm_addr;
 	}
 
@@ -5018,11 +5061,11 @@ static int av1_local_init(struct AV1HW_s *hw)
 		hw->prefix_aux_size = AUX_BUF_ALIGN(prefix_aux_buf_size);
 		hw->suffix_aux_size = AUX_BUF_ALIGN(suffix_aux_buf_size);
 		aux_buf_size = hw->prefix_aux_size + hw->suffix_aux_size;
-		hw->aux_addr =dma_alloc_coherent(amports_get_dma_device(),
+		hw->aux_addr = dma_alloc_coherent(amports_get_dma_device(),
 				aux_buf_size, &hw->aux_phy_addr, GFP_KERNEL);
 		if (hw->aux_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
-			return -1;
+			goto dma_alloc_fail;
 		}
 	}
 #ifdef DUMP_FILMGRAIN
@@ -5039,16 +5082,16 @@ static int av1_local_init(struct AV1HW_s *hw)
 			&hw->lmem_phy_addr, GFP_KERNEL);
 	if (hw->lmem_addr == NULL) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
-		return -1;
+		goto dma_alloc_fail;
 	}
-		hw->lmem_ptr = hw->lmem_addr;
+	hw->lmem_ptr = hw->lmem_addr;
 
 	hw->prob_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
 				PROB_BUF_SIZE,
 				&hw->prob_buffer_phy_addr, GFP_KERNEL);
 	if (hw->prob_buffer_addr == NULL) {
 		pr_err("%s: failed to alloc prob_buffer\n", __func__);
-		return -1;
+		goto dma_alloc_fail;
 	}
 	memset(hw->prob_buffer_addr, 0, PROB_BUF_SIZE);
 	hw->count_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
@@ -5056,38 +5099,19 @@ static int av1_local_init(struct AV1HW_s *hw)
 				&hw->count_buffer_phy_addr, GFP_KERNEL);
 	if (hw->count_buffer_addr == NULL) {
 		pr_err("%s: failed to alloc count_buffer\n", __func__);
-		return -1;
+		goto dma_alloc_fail;
 	}
 	memset(hw->count_buffer_addr, 0, COUNT_BUF_SIZE);
 
-	if (hw->mmu_enable) {
-		u32 mmu_map_size = vav1_frame_mmu_map_size(hw);
-		hw->frame_mmu_map_addr =
-			dma_alloc_coherent(amports_get_dma_device(),
-				mmu_map_size,
-				&hw->frame_mmu_map_phy_addr, GFP_KERNEL);
-		if (hw->frame_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
-			return -1;
-		}
-		memset(hw->frame_mmu_map_addr, 0, mmu_map_size);
-	}
-#ifdef AOM_AV1_MMU_DW
-	if (hw->dw_mmu_enable) {
-		u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
-		hw->dw_frame_mmu_map_addr =
-			dma_alloc_coherent(amports_get_dma_device(),
-				mmu_map_size,
-				&hw->dw_frame_mmu_map_phy_addr, GFP_KERNEL);
-		if (hw->dw_frame_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
-			return -1;
-		}
-		memset(hw->dw_frame_mmu_map_addr, 0, mmu_map_size);
-	}
-#endif
-	ret = 0;
+	ret = vav1_mmu_map_alloc(hw);
+	if (ret < 0)
+		goto dma_alloc_fail;
+
 	return ret;
+
+dma_alloc_fail:
+	av1_local_uninit(hw);
+	return -1;
 }
 
 
@@ -7481,9 +7505,43 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	    hw->has_sequence = 1;
 	    av1_bufmgr_process(hw->pbi, &hw->aom_param, 0, obu_type);
 
+		if ((hw->max_pic_w < hw->aom_param.p.max_frame_width) ||
+			(hw->max_pic_h < hw->aom_param.p.max_frame_height)) {
+			av1_print(hw, 0, "%s, max size change (%d, %d) -> (%d, %d)\n",
+				__func__, hw->max_pic_w, hw->max_pic_h,
+				hw->aom_param.p.max_frame_width, hw->aom_param.p.max_frame_height);
+			vav1_mmu_map_free(hw);
+			hw->max_pic_w = hw->aom_param.p.max_frame_width;
+			hw->max_pic_h = hw->aom_param.p.max_frame_height;
+			hw->init_pic_w = hw->max_pic_w;
+			hw->init_pic_h = hw->max_pic_h;
+			hw->pbi->frame_width = hw->init_pic_w;
+			hw->pbi->frame_height = hw->init_pic_h;
+			if (IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h)) {
+				hw->double_write_mode = 4;
+				max_buf_num = MAX_BUF_NUM_LESS;
+				if (max_buf_num > REF_FRAMES_4K)
+					mv_buf_margin = max_buf_num - REF_FRAMES_4K + 1;
+				if (((hw->max_pic_w % 64) != 0) &&
+					(hw_to_vdec(hw)->canvas_mode != CANVAS_BLKMODE_LINEAR))
+					mem_map_mode = 2;
+				av1_print(hw, 0, "force 8k double write 4, mem_map_mode %d\n", mem_map_mode);
+			}
+			vav1_mmu_map_alloc(hw);
+			if (hw->mmu_enable)
+			    WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL, hw->frame_mmu_map_phy_addr);
+#ifdef AOM_AV1_MMU_DW
+			if (hw->dw_mmu_enable) {
+				WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2, hw->dw_frame_mmu_map_phy_addr);
+				//default of 0xffffffff will disable dw
+			    WRITE_VREG(HEVC_SAO_Y_START_ADDR, 0);
+			    WRITE_VREG(HEVC_SAO_C_START_ADDR, 0);
+			}
+#endif
+		}
 		bit_depth_luma = hw->aom_param.p.bit_depth;
 		bit_depth_chroma = hw->aom_param.p.bit_depth;
-	    next_lcu_size = ((hw->aom_param.p.seq_flags >> 6) & 0x1) ? 128 : 64;
+		next_lcu_size = ((hw->aom_param.p.seq_flags >> 6) & 0x1) ? 128 : 64;
 		hw->video_signal_type = (hw->aom_param.p.video_signal_type << 16
 			| hw->aom_param.p.color_description);
 
@@ -8119,7 +8177,6 @@ static int vav1_local_init(struct AV1HW_s *hw)
 		kfifo_put(&hw->newframe_q, vf);
 	}
 
-
 	ret = av1_local_init(hw);
 
 	if (force_pts_unstable) {
@@ -8166,7 +8223,6 @@ static s32 vav1_init(struct AV1HW_s *hw)
 		return -1;
 	}
 	av1_print(hw, AOM_DEBUG_HW_MORE, "%s %d\n", __func__, __LINE__);
-
 	fw->len = fw_size;
 
 	INIT_WORK(&hw->set_clk_work, av1_set_clk);
@@ -8218,10 +8274,11 @@ static s32 vav1_init(struct AV1HW_s *hw)
 	}
 
 	hw->stat |= STAT_ISR_REG;
-
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	if (force_dv_enable)
 		hw->provider_name = DV_PROVIDER_NAME;
 	else
+#endif
 		hw->provider_name = PROVIDER_NAME;
 #ifdef MULTI_INSTANCE_SUPPORT
 	vf_provider_init(&vav1_vf_prov, hw->provider_name,
@@ -9362,6 +9419,19 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	hw->video_signal_type = 0;
 	hw->m_ins_flag = 1;
 
+	if (pdata->sys_info) {
+		hw->vav1_amstream_dec_info = *pdata->sys_info;
+		if ((unsigned long) hw->vav1_amstream_dec_info.param
+				& 0x08) {
+				hw->low_latency_flag = 1;
+			} else
+				hw->low_latency_flag = 0;
+	} else {
+		hw->vav1_amstream_dec_info.width = 0;
+		hw->vav1_amstream_dec_info.height = 0;
+		hw->vav1_amstream_dec_info.rate = 30;
+	}
+
 	if ((debug & IGNORE_PARAM_FROM_CONFIG) == 0 &&
 			pdata->config_len) {
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -9472,19 +9542,6 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 	hw->mmu_enable = 1;
 	video_signal_type = hw->video_signal_type;
-
-	if (pdata->sys_info) {
-		hw->vav1_amstream_dec_info = *pdata->sys_info;
-		if ((unsigned long) hw->vav1_amstream_dec_info.param
-				& 0x08) {
-				hw->low_latency_flag = 1;
-			} else
-				hw->low_latency_flag = 0;
-	} else {
-		hw->vav1_amstream_dec_info.width = 0;
-		hw->vav1_amstream_dec_info.height = 0;
-		hw->vav1_amstream_dec_info.rate = 30;
-	}
 
 	hw->is_used_v4l = (((unsigned long)
 		hw->vav1_amstream_dec_info.param & 0x80) >> 7);
@@ -9735,8 +9792,10 @@ static void __exit amvdec_av1_driver_remove_module(void)
 }
 
 /****************************************/
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 module_param(force_dv_enable, uint, 0664);
 MODULE_PARM_DESC(force_dv_enable, "\n amvdec_av1 force_dv_enable\n");
+#endif
 
 module_param(bit_depth_luma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_luma, "\n amvdec_av1 bit_depth_luma\n");
