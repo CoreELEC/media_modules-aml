@@ -886,6 +886,8 @@ struct vdec_h264_hw_s {
 	struct vdec_info gvs;
 	u32 kpi_first_i_comming;
 	u32 kpi_first_i_decoded;
+	int sidebind_type;
+	int sidebind_channel_id;
 };
 
 static u32 again_threshold;
@@ -4194,6 +4196,9 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 		(min(hw->h264_ar, (u32) DISP_RATIO_ASPECT_RATIO_MAX)) <<
 		DISP_RATIO_ASPECT_RATIO_BIT;
 	vf->orientation = hw->vh264_rotation;
+
+	vf->sidebind_type = hw->sidebind_type;
+	vf->sidebind_channel_id = hw->sidebind_channel_id;
 
 	if (hw->mmu_enable)
 		return;
@@ -9340,6 +9345,13 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			"parm_v4l_canvas_mem_mode",
 			&config_val) == 0)
 			hw->canvas_mode = config_val;
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			hw->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			hw->sidebind_channel_id = config_val;
 	} else
 		hw->double_write_mode = double_write_mode;
 

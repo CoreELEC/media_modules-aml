@@ -762,6 +762,8 @@ struct AVS2Decoder_s {
 	int frameinfo_enable;
 	struct vframe_qos_s vframe_qos;
 	u32 dynamic_buf_margin;
+	int sidebind_type;
+	int sidebind_channel_id;
 };
 
 static int  compute_losless_comp_body_size(
@@ -4054,6 +4056,9 @@ static void set_frame_info(struct AVS2Decoder_s *dec, struct vframe_s *vf)
 
 	ar = min_t(u32, dec->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
+
+	vf->sidebind_type = dec->sidebind_type;
+	vf->sidebind_channel_id = dec->sidebind_channel_id;
 
 	return;
 }
@@ -7359,6 +7364,14 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 			dec->dynamic_buf_margin = config_val;
 		else
 			dec->dynamic_buf_margin = 0;
+
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			dec->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			dec->sidebind_channel_id = config_val;
 
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0

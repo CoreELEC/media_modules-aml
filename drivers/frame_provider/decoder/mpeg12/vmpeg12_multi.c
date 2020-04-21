@@ -322,6 +322,8 @@ struct vdec_mpeg12_hw_s {
 	u32 i_only;
 	u32 kpi_first_i_comming;
 	u32 kpi_first_i_decoded;
+	int sidebind_type;
+	int sidebind_channel_id;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -695,6 +697,9 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 
 	vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 	vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
+
+	vf->sidebind_type = hw->sidebind_type;
+	vf->sidebind_channel_id = hw->sidebind_channel_id;
 
 	debug_print(DECODE_ID(hw), PRINT_FLAG_PARA_DATA,
 	"mpeg2dec: w(%d), h(%d), dur(%d), dur-ES(%d)\n",
@@ -3274,6 +3279,13 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 			"parm_v4l_buffer_margin",
 			&config_val) == 0)
 			hw->dynamic_buf_num_margin= config_val;
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			hw->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			hw->sidebind_channel_id = config_val;
 	}
 
 	hw->buf_num = vmpeg12_get_buf_num(hw);

@@ -308,6 +308,8 @@ struct vdec_mpeg4_hw_s {
 	u32 buf_num;
 	u32 dynamic_buf_num_margin;
 	u32 i_only;
+	int sidebind_type;
+	int sidebind_channel_id;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -549,6 +551,9 @@ static void set_frame_info(struct vdec_mpeg4_hw_s *hw, struct vframe_s *vf,
 			break;
 		}
 	}
+
+	vf->sidebind_type = hw->sidebind_type;
+	vf->sidebind_channel_id = hw->sidebind_channel_id;
 
 	ar = min(ar, DISP_RATIO_ASPECT_RATIO_MAX);
 
@@ -2334,6 +2339,14 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 			hw->dynamic_buf_num_margin = config_val;
 		else
 			hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
+
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			hw->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			hw->sidebind_channel_id = config_val;
 	} else {
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 	}

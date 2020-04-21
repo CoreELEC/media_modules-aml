@@ -1199,6 +1199,8 @@ struct VP9Decoder_s {
 	unsigned int res_ch_flag;
 	/*struct VP9Decoder_s vp9_decoder;*/
 	union param_u vp9_param;
+	int sidebind_type;
+	int sidebind_channel_id;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -6814,6 +6816,9 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 		hdr.color_parms = pbi->vf_dp;
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
+
+	vf->sidebind_type = pbi->sidebind_type;
+	vf->sidebind_channel_id = pbi->sidebind_channel_id;
 }
 
 static int vvp9_vf_states(struct vframe_states *states, void *op_arg)
@@ -10610,6 +10615,14 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			pbi->max_pic_h = vp9_buf_height;
 			vp9_print(pbi, 0, "use buf resolution\n");
 		}
+
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			pbi->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			pbi->sidebind_channel_id = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_codec_enable",
