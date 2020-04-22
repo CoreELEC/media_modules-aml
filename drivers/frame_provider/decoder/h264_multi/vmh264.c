@@ -5232,6 +5232,7 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 			__func__, payload_type);
 		return read_size;
 	}
+	p_H264_Dpb->vui_status = p_H264_Dpb->dpb_param.l.data[VUI_STATUS];
 	switch (payload_type) {
 	case SEI_BUFFERING_PERIOD:
 		break;
