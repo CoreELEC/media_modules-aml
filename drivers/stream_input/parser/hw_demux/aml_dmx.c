@@ -116,8 +116,8 @@ MODULE_PARM_DESC(disable_dsc, "\n\t\t Disable discrambler");
 static int disable_dsc;
 module_param(disable_dsc, int, 0644);
 
-MODULE_PARM_DESC(enable_sec_monitor, "\n\t\t Enable sec monitor default is disable");
-static int enable_sec_monitor = 1;
+MODULE_PARM_DESC(enable_sec_monitor, "\n\t\t Enable sec monitor default is enable");
+static int enable_sec_monitor = 2;
 module_param(enable_sec_monitor, int, 0644);
 /*For old version kernel */
 #ifndef MESON_CPU_MAJOR_ID_GXL
@@ -507,19 +507,25 @@ static void section_buffer_watchdog_func(unsigned long arg)
 		section_busy32 =
 			DMX_READ_REG(device_no, SEC_BUFF_BUSY);
 
-		if (enable_sec_monitor) {
 		if (om_cmd_status32 & 0x8fc2) {
-			/* bit 15:12 -- om_cmd_count */
+			/* bit 15:12 -- om_cmd_count (read only) */
 			/* bit  11:9 -- overflow_count */
+			/* bit  11:9 --       om_cmd_wr_ptr(read only) */
 			/* bit   8:6 -- om_overwrite_count */
-			/* bit     1 -- om_cmd_overflow */
+			/* bit   8:6 --       om_cmd_rd_ptr(read only) */
+			/* bit   5:3 -- type_stb_om_w_rd(read only) */
+			/* bit     2 -- unit_start_stb_om_w_rd(read only) */
+			/* bit     1 -- om_cmd_overflow(read only) */
+			/* bit     0 -- om_cmd_pending(read) */
+			/* bit     0 -- om_cmd_read_finished(write) */
 			/*BUG: If the recoder is running, return */
 			if (dmx->record)
 				goto end;
-			/*Reset the demux */
-			pr_dbg("reset the demux\n"
+			/* OM status is wrong */
+			dmx->om_status_error_count++;
+			pr_dbg("demux om status \n"
 			"%04x\t%03x\t%03x\t%03x\t%01x\t%01x\t"
-			"%x\t%x\tdmx%d:status:0x%x\n",
+			"%x\t%x\tdmx%d:status:0x%xerr_cnt:%d-%d\n",
 			(om_cmd_status32 >> 12) & 0xf,
 			(om_cmd_status32 >> 9) & 0x7,
 			(om_cmd_status32 >> 6) & 0x7,
@@ -527,27 +533,18 @@ static void section_buffer_watchdog_func(unsigned long arg)
 			(om_cmd_status32 >> 2) & 0x1,
 			(om_cmd_status32 >> 1) & 0x1,
 			demux_channel_activity32, section_busy32,
-			dmx->id, om_cmd_status32);
-
-			dmx_reset_dmx_hw_ex_unlock(dvb, dmx, 0);
-			goto end;
-		}
+			dmx->id, om_cmd_status32, dmx->om_status_error_count, enable_sec_monitor);
+			if (enable_sec_monitor &&
+					dmx->om_status_error_count > enable_sec_monitor) {
+				/*Reset the demux */
+				dmx_reset_dmx_hw_ex_unlock(dvb, dmx, 0);
+				/* Reset the error count */
+				dmx->om_status_error_count = 0;
+				goto end;
+			}
 		} else {
-		/* bit 15:12 -- om_cmd_count (read only) */
-		/* bit  11:9 -- overflow_count */
-		/* bit  11:9 --       om_cmd_wr_ptr(read only) */
-		/* bit   8:6 -- om_overwrite_count */
-		/* bit   8:6 --       om_cmd_rd_ptr(read only) */
-		/* bit   5:3 -- type_stb_om_w_rd(read only) */
-		/* bit     2 -- unit_start_stb_om_w_rd(read only) */
-		/* bit     1 -- om_cmd_overflow(read only) */
-		/* bit     0 -- om_cmd_pending(read) */
-		/* bit     0 -- om_cmd_read_finished(write) */
-		if (om_cmd_status32 & 0x0002) {
-			pr_error("reset the demux\n");
-			dmx_reset_hw_ex(dvb, 0);
-			goto end;
-		}
+			/* OM status is correct, reset the error count */
+			dmx->om_status_error_count = 0;
 		}
 		section_busy32 =
 			DMX_READ_REG(device_no, SEC_BUFF_BUSY);
@@ -2935,6 +2932,7 @@ static int dmx_init(struct aml_dmx *dmx)
 	memset(dmx->sec_buf_watchdog_count, 0,
 	       sizeof(dmx->sec_buf_watchdog_count));
 
+	dmx->om_status_error_count = 0;
 	dmx->init = 1;
 	pr_dbg("[dmx_kpi] %s Exit\n", __func__);
 	return 0;
