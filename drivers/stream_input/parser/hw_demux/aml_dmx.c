@@ -2390,6 +2390,39 @@ void dsc_release(void)
 	aml_ci_plus_disable();
 }
 /************************* AES DESC************************************/
+void set_ciplus_input_source(struct aml_dsc *dsc)
+{
+	u32 data;
+	u32 in = 0;
+
+	if (dsc->id != 0) {
+		pr_error("Ciplus set output can only work at dsc0 device\n");
+		return;
+	}
+
+	switch (dsc->source) {
+	case  AM_TS_SRC_DMX0:
+		in = 0;
+		break;
+	case  AM_TS_SRC_DMX1:
+		in = 1;
+		break;
+	case  AM_TS_SRC_DMX2:
+		in = 2;
+		break;
+	default:
+		break;
+	}
+
+	if (ciplus_out_auto_mode == 1) {
+		/* Set ciplus input source */
+		data = READ_MPEG_REG(STB_TOP_CONFIG);
+		data &= ~(3<<CIPLUS_IN_SEL);
+		data |= in << CIPLUS_IN_SEL;
+		WRITE_MPEG_REG(STB_TOP_CONFIG, data);
+		pr_inf("dsc ciplus in[%x]\n", in);
+	}
+}
 
 int dsc_enable(struct aml_dsc *dsc, int enable)
 {
@@ -5444,6 +5477,9 @@ int aml_dsc_hw_set_source(struct aml_dsc *dsc,
 		}
 		if (hw_dst == -1)
 			dsc_enable(dsc, 0);
+	}
+	if (src_reset && dst_reset) {
+		set_ciplus_input_source(dsc);
 	}
 
 	spin_unlock_irqrestore(&dvb->slock, flags);
