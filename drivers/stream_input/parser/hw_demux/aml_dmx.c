@@ -117,7 +117,7 @@ static int disable_dsc;
 module_param(disable_dsc, int, 0644);
 
 MODULE_PARM_DESC(enable_sec_monitor, "\n\t\t Enable sec monitor default is disable");
-static int enable_sec_monitor = 0;
+static int enable_sec_monitor = 1;
 module_param(enable_sec_monitor, int, 0644);
 /*For old version kernel */
 #ifndef MESON_CPU_MAJOR_ID_GXL
@@ -1432,7 +1432,7 @@ static void dvr_process_channel(struct aml_asyncfifo *afifo,
 
 	if (afifo->buf_read > afifo->buf_toggle) {
 		cnt = total - afifo->buf_read;
-		if (!afifo->secure_enable) {
+		if (!(afifo->secure_enable && afifo->blk.addr)) {
 		dma_sync_single_for_cpu(asyncfifo_get_dev(afifo),
 				afifo->pages_map+afifo->buf_read*size,
 				cnt*size,
@@ -1466,7 +1466,7 @@ static void dvr_process_channel(struct aml_asyncfifo *afifo,
 
 	if (afifo->buf_toggle > afifo->buf_read) {
 		cnt = afifo->buf_toggle - afifo->buf_read;
-		if (!afifo->secure_enable) {
+		if (!(afifo->secure_enable && afifo->blk.addr)) {
 		dma_sync_single_for_cpu(asyncfifo_get_dev(afifo),
 				afifo->pages_map+afifo->buf_read*size,
 				cnt*size,
@@ -2591,19 +2591,21 @@ static int dmx_alloc_pes_buffer_shared(struct aml_dvb *dvb)
 #endif
 
 /*Allocate ASYNC FIFO Buffer*/
-static unsigned long asyncfifo_alloc_buffer(int len)
+static unsigned long asyncfifo_alloc_buffer(struct aml_asyncfifo *afifo, int len)
 {
-	unsigned long pages = __get_free_pages(GFP_KERNEL, get_order(len));
+	if (!afifo->stored_pages) {
+		afifo->stored_pages = __get_free_pages(GFP_KERNEL, get_order(len));
+	}
 
-	if (!pages) {
+	if (!afifo->stored_pages) {
 		pr_error("cannot allocate async fifo buffer\n");
 		return 0;
 	}
-	return pages;
+	return afifo->stored_pages;
 }
 static void asyncfifo_free_buffer(unsigned long buf, int len)
 {
-	free_pages(buf, get_order(len));
+	//free_pages(buf, get_order(len));
 }
 
 static int asyncfifo_set_buffer(struct aml_asyncfifo *afifo,
@@ -2615,8 +2617,8 @@ static int asyncfifo_set_buffer(struct aml_asyncfifo *afifo,
 	afifo->buf_toggle = 0;
 	afifo->buf_read   = 0;
 	afifo->buf_len = dmx_get_afifo_size(afifo);
-	pr_error("++++async fifo %d buf size %d, flush size %d\n",
-			afifo->id, afifo->buf_len, afifo->flush_size);
+	pr_error("++++async fifo %d buf %lu buf size %d, flush size %d, secure_enable %d, blk.addr %u\n",
+			afifo->id, buf, afifo->buf_len, afifo->flush_size, afifo->secure_enable, afifo->blk.addr);
 
 	if ((afifo->flush_size <= 0)
 			|| (afifo->flush_size > (len>>1))) {
@@ -3699,7 +3701,7 @@ static void dmx_clear_filter_buffer(struct aml_dmx *dmx, int fid)
 
 static void async_fifo_set_regs(struct aml_asyncfifo *afifo, int source_val)
 {
-	u32 start_addr = afifo->secure_enable ? afifo->blk.addr :
+	u32 start_addr = (afifo->secure_enable && afifo->blk.addr) ? afifo->blk.addr :
 					virt_to_phys((void *)afifo->pages);
 	u32 size = afifo->buf_len;
 	u32 flush_size = afifo->flush_size;
@@ -5026,7 +5028,7 @@ int aml_asyncfifo_hw_init(struct aml_asyncfifo *afifo)
 	int ret;
 
 	int len = asyncfifo_buf_len;
-	unsigned long buf = asyncfifo_alloc_buffer(len);
+	unsigned long buf = asyncfifo_alloc_buffer(afifo, len);
 
 	if (!buf)
 		return -1;
@@ -5077,7 +5079,7 @@ int aml_asyncfifo_hw_reset(struct aml_asyncfifo *afifo)
 
 	unsigned long buf = 0;
 	int len = asyncfifo_buf_len;
-	buf = asyncfifo_alloc_buffer(len);
+	buf = asyncfifo_alloc_buffer(afifo, len);
 	if (!buf)
 		return -1;
 
