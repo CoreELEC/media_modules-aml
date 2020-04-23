@@ -2392,71 +2392,6 @@ void dsc_release(void)
 }
 /************************* AES DESC************************************/
 
-void dsc_enable_source(struct aml_dsc *dsc)
-{
-	u32 data;
-	u32 in = 0, out = 0;
-	int set = 0;
-
-	if (dsc->id != 0) {
-		pr_error("Ciplus set output can only work at dsc0 device\n");
-		return;
-	}
-
-	switch (dsc->source) {
-	case  AM_TS_SRC_DMX0:
-		in = 0;
-		break;
-	case  AM_TS_SRC_DMX1:
-		in = 1;
-		break;
-	case  AM_TS_SRC_DMX2:
-		in = 2;
-		break;
-	default:
-		break;
-	}
-
-	if (ciplus_out_auto_mode == 1) {
-		switch (dsc->dst) {
-		case  AM_TS_SRC_DMX0:
-			out = 1;
-			break;
-		case  AM_TS_SRC_DMX1:
-			out = 2;
-			break;
-		case  AM_TS_SRC_DMX2:
-			out = 4;
-			break;
-		default:
-			break;
-		}
-		set = 1;
-		ciplus_out_sel = out;
-	} else if (ciplus_out_sel >= 0 && ciplus_out_sel <= 7) {
-		set = 1;
-		out = ciplus_out_sel;
-	} else {
-		pr_error("dsc ciplus out config is invalid\n");
-	}
-
-	if (set) {
-		/* Set ciplus input source ,
-		 * output set 0 means no output. ---> need confirm.
-		 * if output set 0 still affects dsc output, we need to disable
-		 * ciplus module.
-		 */
-		data = READ_MPEG_REG(STB_TOP_CONFIG);
-		data &= ~(3<<CIPLUS_IN_SEL);
-		data |= in << CIPLUS_IN_SEL;
-		data &= ~(7<<CIPLUS_OUT_SEL);
-		data |= out << CIPLUS_OUT_SEL;
-		WRITE_MPEG_REG(STB_TOP_CONFIG, data);
-		pr_inf("dsc ciplus in[%x] out[%x] %s\n", in, out,
-			(ciplus_out_auto_mode) ? "" : "force");
-	}
-}
-
 int dsc_enable(struct aml_dsc *dsc, int enable)
 {
 	if (dsc->id == 0) {
@@ -5463,9 +5398,7 @@ int aml_dsc_hw_set_source(struct aml_dsc *dsc,
 		if (hw_dst == -1)
 			dsc_enable(dsc, 0);
 	}
-	if (src_reset && dst_reset) {
-		dsc_enable_source(dsc);
-	}
+
 	spin_unlock_irqrestore(&dvb->slock, flags);
 
 	return ret;
