@@ -704,6 +704,7 @@ static int aml_dvb_asyncfifo_init(struct aml_dvb *advb,
 	asyncfifo->secure_enable = 0;
 	asyncfifo->blk.addr = 0;
 	asyncfifo->blk.len = 0;
+	asyncfifo->stored_pages = 0;
 
 	return aml_asyncfifo_hw_init(asyncfifo);
 }
