@@ -1898,6 +1898,12 @@ static long amstream_ioctl_get(struct port_priv_s *priv, ulong arg)
 	case AMSTREAM_GET_VPTS:
 		parm.data_32 = timestamp_vpts_get();
 		break;
+	case AMSTREAM_GET_VPTS_U64:
+		parm.data_64 = timestamp_vpts_get_u64();
+		break;
+	case AMSTREAM_GET_APTS_U64:
+		parm.data_64 = timestamp_apts_get_u64();
+		break;
 	case AMSTREAM_GET_PCRSCR:
 		parm.data_32 = timestamp_pcrscr_get();
 		break;

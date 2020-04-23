@@ -224,6 +224,11 @@ static int tsdemux_config(void)
 
 static void tsdemux_pcr_set(unsigned int pcr);
 /*TODO irq*/
+/* bit 15 ---------------*/
+/* bit 12 --VIDEO_PTS[32]*/
+/* bit 0  ---------------*/
+/*Read the 13th bit of STB_PTS_DTS_STATUS register
+correspond to the highest bit of video pts*/
 static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 {
 	u32 int_status = 0;
@@ -243,11 +248,18 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 	if (int_status & (1 << NEW_PDTS_READY)) {
 		if (!enable_demux_driver()) {
 			u32 pdts_status = READ_DEMUX_REG(STB_PTS_DTS_STATUS);
+			u64 vpts;
+
+			vpts = READ_MPEG_REG(VIDEO_PTS_DEMUX);
+			vpts &= 0x00000000FFFFFFFF;
+			if (pdts_status & 0x1000) {
+				vpts = vpts | (1LL<<32);
+			}
 
 			if (pdts_status & (1 << VIDEO_PTS_READY))
-				pts_checkin_wrptr(PTS_TYPE_VIDEO,
+				pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
 					READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
-					READ_DEMUX_REG(VIDEO_PTS_DEMUX));
+					vpts);
 
 			if (pdts_status & (1 << AUDIO_PTS_READY))
 				pts_checkin_wrptr(PTS_TYPE_AUDIO,
@@ -259,13 +271,18 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 #define DMX_READ_REG(i, r)\
 	((i) ? ((i == 1) ? READ_DEMUX_REG(r##_2) : \
 		READ_DEMUX_REG(r##_3)) : READ_DEMUX_REG(r))
-
+			u64 vpts;
 			u32 pdts_status = DMX_READ_REG(id, STB_PTS_DTS_STATUS);
+			vpts = DMX_READ_REG(id, VIDEO_PTS_DEMUX);
+			vpts &= 0x00000000FFFFFFFF;
+			if (pdts_status & 0x1000) {
+				vpts = vpts | (1LL<<32);
+			}
 
 			if (pdts_status & (1 << VIDEO_PTS_READY))
-				pts_checkin_wrptr(PTS_TYPE_VIDEO,
+				pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
 					DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
-					DMX_READ_REG(id, VIDEO_PTS_DEMUX));
+					vpts);
 
 			if (pdts_status & (1 << AUDIO_PTS_READY))
 				pts_checkin_wrptr(PTS_TYPE_AUDIO,
