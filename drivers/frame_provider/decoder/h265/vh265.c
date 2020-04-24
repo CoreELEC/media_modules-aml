@@ -1751,6 +1751,8 @@ struct hevc_state_s {
 	bool ip_mode;
 	u32 kpi_first_i_comming;
 	u32 kpi_first_i_decoded;
+	int sidebind_type;
+	int sidebind_channel_id;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -8100,6 +8102,9 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 		hdr.color_parms = *vf_dp;
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
+
+	vf->sidebind_type = hevc->sidebind_type;
+	vf->sidebind_channel_id = hevc->sidebind_channel_id;
 }
 
 static int vh265_vf_states(struct vframe_states *states, void *op_arg)
@@ -13286,6 +13291,14 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 				&config_val) == 0) {
 				hevc->max_pic_h = config_val;
 		}
+
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			hevc->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			hevc->sidebind_channel_id = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_codec_enable",
