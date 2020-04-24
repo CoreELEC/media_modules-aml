@@ -524,6 +524,7 @@ static void vavs_isr(void)
 			pic_type = 2;
 			if ((picture_type == I_PICTURE) && pts_valid) {
 				vf->pts = pts;
+				vf->pts_us64 = pts_us64;
 				if ((repeat_count > 1) && avi_flag) {
 					/* next_pts = pts +
 					 *   (vavs_amstream_dec_info.rate *
@@ -537,6 +538,9 @@ static void vavs_isr(void)
 					next_pts = 0;
 			} else {
 				vf->pts = next_pts;
+				if (vf->pts == 0) {
+					vf->pts_us64 = 0;
+				}
 				if ((repeat_count > 1) && avi_flag) {
 					/* vf->duration =
 					 *   vavs_amstream_dec_info.rate *
@@ -578,8 +582,11 @@ static void vavs_isr(void)
 				pr_info("buffer_index %d, canvas addr %x\n",
 					   buffer_index, vf->canvas0Addr);
 			}
-			 vf->pts = (pts_valid)?pts:0;
-			vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+
+			vf->pts = (pts_valid)?pts:0;
+			/*
+			*vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+			*/
 			vfbuf_use[buffer_index]++;
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
@@ -603,7 +610,9 @@ static void vavs_isr(void)
 				vf->pts = 0;
 			else
 			vf->pts = next_pts;
-
+			if (vf->pts == 0) {
+				vf->pts_us64 = 0;
+			}
 			if ((repeat_count > 1) && avi_flag) {
 				/* vf->duration = vavs_amstream_dec_info.rate *
 				 *   repeat_count >> 1;
@@ -681,6 +690,9 @@ static void vavs_isr(void)
 					next_pts = 0;
 			} else {
 				vf->pts = next_pts;
+				if (vf->pts == 0) {
+					vf->pts_us64 = 0;
+				}
 				if ((repeat_count > 1) && avi_flag) {
 					/* vf->duration =
 					 *   vavs_amstream_dec_info.rate *
@@ -711,7 +723,9 @@ static void vavs_isr(void)
 				index2canvas(buffer_index);
 			vf->type_original = vf->type;
 			vf->pts = (pts_valid)?pts:0;
-			vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+			/*
+			*vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+			*/
 			if (debug_flag & AVS_DEBUG_PRINT) {
 				pr_info("buffer_index %d, canvas addr %x\n",
 					   buffer_index, vf->canvas0Addr
