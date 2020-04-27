@@ -2720,6 +2720,7 @@ static int aml_tsdemux_set_sid(int spid)
 		}
 
 		if ((spid >= 0) && (spid < 0x1FFF)) {
+			dmx->sub_chan = 3;
 			dmx->sub_chan =
 			    dmx_alloc_chan(dmx, DMX_TYPE_TS,
 						DMX_PES_SUBTITLE, spid);

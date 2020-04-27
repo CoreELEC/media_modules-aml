@@ -4386,11 +4386,13 @@ exit:
 static int set_subtitle_pes_buffer(struct aml_dmx *dmx)
 {
 #ifdef SUB_PARSER
+	if (dmx->sub_chan == -1) {
 	unsigned long addr = virt_to_phys((void *)dmx->sub_pages);
 	WRITE_MPEG_REG(PARSER_SUB_RP, addr);
 	WRITE_MPEG_REG(PARSER_SUB_START_PTR, addr);
 	WRITE_MPEG_REG(PARSER_SUB_END_PTR, addr + dmx->sub_buf_len - 8);
 	pr_inf("set sub buff: (%d) %lx %x\n", dmx->id, addr, dmx->sub_buf_len);
+	}
 #endif
 	return 0;
 }
