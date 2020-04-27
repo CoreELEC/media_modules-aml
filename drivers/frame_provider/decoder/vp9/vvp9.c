@@ -9966,7 +9966,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (ctx->param_sets_from_ucode) {
 			if (pbi->v4l_params_parsed) {
-				if ((ctx->cap_pool.in < ctx->dpb_size) &&
+				if ((ctx->cap_pool.in < pbi->used_buf_num) &&
 				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
 				run_ready_min_buf_num)
 					ret = 0;

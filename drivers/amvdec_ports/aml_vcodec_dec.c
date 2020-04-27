@@ -1652,6 +1652,40 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 	return 0;
 }
 
+static void copy_v4l2_format_dimention(struct v4l2_pix_format_mplane *pix_mp,
+		struct aml_q_data *q_data, u32 type)
+{
+	if (!pix_mp || !q_data)
+		return;
+
+	if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		pix_mp->width = q_data->visible_width;
+		pix_mp->height = q_data->visible_height;
+	} else {
+		/*
+		 * Width and height are set to the dimensions
+		 * of the movie, the buffer is bigger and
+		 * further processing stages should crop to this
+		 * rectangle.
+		 */
+		pix_mp->width = q_data->coded_width;
+		pix_mp->height = q_data->coded_height;
+	}
+
+	/*
+	 * Set pixelformat to the format in which mt vcodec
+	 * outputs the decoded frame
+	 */
+	pix_mp->num_planes = q_data->fmt->num_planes;
+	pix_mp->pixelformat = q_data->fmt->fourcc;
+	pix_mp->plane_fmt[0].bytesperline = q_data->bytesperline[0];
+	pix_mp->plane_fmt[0].sizeimage = q_data->sizeimage[0];
+	if (type != V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		pix_mp->plane_fmt[1].bytesperline = q_data->bytesperline[1];
+		pix_mp->plane_fmt[1].sizeimage = q_data->sizeimage[1];
+	}
+}
+
 static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 	struct v4l2_format *f)
 {
@@ -1732,8 +1766,11 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 		mutex_unlock(&ctx->state_lock);
 	}
 
-	if (!V4L2_TYPE_IS_OUTPUT(f->type))
+	if (!V4L2_TYPE_IS_OUTPUT(f->type)) {
 		ctx->cap_pix_fmt = pix_mp->pixelformat;
+		if (ctx->state >= AML_STATE_PROBE)
+			copy_v4l2_format_dimention(pix_mp, q_data, f->type);
+	}
 
 	return 0;
 }
@@ -1863,25 +1900,7 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 		q_data->bytesperline[0] = ctx->picinfo.coded_width;
 		q_data->bytesperline[1] = ctx->picinfo.coded_width;
 
-		/*
-		 * Width and height are set to the dimensions
-		 * of the movie, the buffer is bigger and
-		 * further processing stages should crop to this
-		 * rectangle.
-		 */
-		pix_mp->width = q_data->coded_width;
-		pix_mp->height = q_data->coded_height;
-
-		/*
-		 * Set pixelformat to the format in which mt vcodec
-		 * outputs the decoded frame
-		 */
-		pix_mp->num_planes = q_data->fmt->num_planes;
-		pix_mp->pixelformat = q_data->fmt->fourcc;
-		pix_mp->plane_fmt[0].bytesperline = q_data->bytesperline[0];
-		pix_mp->plane_fmt[0].sizeimage = q_data->sizeimage[0];
-		pix_mp->plane_fmt[1].bytesperline = q_data->bytesperline[1];
-		pix_mp->plane_fmt[1].sizeimage = q_data->sizeimage[1];
+		copy_v4l2_format_dimention(pix_mp, q_data, f->type);
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		/*
 		 * This is run on OUTPUT
@@ -1889,21 +1908,9 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 		 * so width and height have no meaning.
 		 * Assign value here to pass v4l2-compliance test
 		 */
-		pix_mp->width = q_data->visible_width;
-		pix_mp->height = q_data->visible_height;
-		pix_mp->plane_fmt[0].bytesperline = q_data->bytesperline[0];
-		pix_mp->plane_fmt[0].sizeimage = q_data->sizeimage[0];
-		pix_mp->pixelformat = q_data->fmt->fourcc;
-		pix_mp->num_planes = q_data->fmt->num_planes;
+		copy_v4l2_format_dimention(pix_mp, q_data, f->type);
 	} else {
-		pix_mp->width = q_data->coded_width;
-		pix_mp->height = q_data->coded_height;
-		pix_mp->num_planes = q_data->fmt->num_planes;
-		pix_mp->pixelformat = q_data->fmt->fourcc;
-		pix_mp->plane_fmt[0].bytesperline = q_data->bytesperline[0];
-		pix_mp->plane_fmt[0].sizeimage = q_data->sizeimage[0];
-		pix_mp->plane_fmt[1].bytesperline = q_data->bytesperline[1];
-		pix_mp->plane_fmt[1].sizeimage = q_data->sizeimage[1];
+		copy_v4l2_format_dimention(pix_mp, q_data, f->type);
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 			"type=%d state=%d Format information could not be read, not ready yet!\n",
