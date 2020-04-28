@@ -806,13 +806,62 @@ static ssize_t stb_clear_av(struct class *class,
 	return size;
 }
 
+static int stb_check_source(const char *buf)
+{
+	struct aml_dvb *dvb = &aml_dvb_device;
+	int ret = 0;
+	char *src;
+
+	switch (dvb->stb_source) {
+	case AM_TS_SRC_TS0:
+	case AM_TS_SRC_S_TS0:
+		src = "ts0";
+		break;
+	case AM_TS_SRC_TS1:
+	case AM_TS_SRC_S_TS1:
+		src = "ts1";
+		break;
+	case AM_TS_SRC_TS2:
+	case AM_TS_SRC_S_TS2:
+		src = "ts2";
+		break;
+	case AM_TS_SRC_TS3:
+		src = "ts3";
+		break;
+	case AM_TS_SRC_HIU:
+		src = "hiu";
+		break;
+	case AM_TS_SRC_HIU1:
+		src = "hiu1";
+		break;
+	case AM_TS_SRC_DMX0:
+		src = "dmx0";
+		break;
+	case AM_TS_SRC_DMX1:
+		src = "dmx1";
+		break;
+	case AM_TS_SRC_DMX2:
+		src = "dmx2";
+		break;
+	default:
+		src = "disable";
+		break;
+	}
+	pr_error("stb_check_source set buf:%s, src:%s\n", buf, src);
+	ret = strcmp(buf,src);
+	return ret;
+}
+
 /*Set the STB input source*/
 static ssize_t stb_store_source(struct class *class,
 				struct class_attribute *attr, const char *buf,
 				size_t size)
 {
 	dmx_source_t src = -1;
-
+	if (stb_check_source(buf) == 0) {
+		pr_error("stb_store_source same source \n");
+		return size;
+	}
 	if (!strncmp("ts0", buf, 3))
 		src = DMX_SOURCE_FRONT0;
 	else if (!strncmp("ts1", buf, 3))
@@ -833,7 +882,6 @@ static ssize_t stb_store_source(struct class *class,
 		src = DMX_SOURCE_FRONT2 + 100;
 	if (src != -1)
 		aml_stb_hw_set_source(&aml_dvb_device, src);
-
 	return size;
 }
 
@@ -1050,6 +1098,53 @@ static ssize_t demux##i##_show_pcr(struct class *class,  \
 	return sprintf(buf, "%08x\n", f);\
 }
 
+static int dmx_check_source(int i, const char *buf)
+{
+	struct aml_dvb *dvb = &aml_dvb_device;
+	struct aml_dmx *dmx = &dvb->dmx[i];
+	ssize_t ret = 0;
+	char *src;
+	switch (dmx->source) {
+	 case AM_TS_SRC_TS0:
+	 case AM_TS_SRC_S_TS0:
+		src = "ts0";
+	break;
+	 case AM_TS_SRC_TS1:
+	 case AM_TS_SRC_S_TS1:
+		src = "ts1";
+	break;
+	 case AM_TS_SRC_TS2:
+	 case AM_TS_SRC_S_TS2:
+		src = "ts2";
+	break;
+	 case AM_TS_SRC_TS3:
+		src = "ts3";
+	break;
+	 case AM_TS_SRC_DMX0:
+		src = "dmx0";
+	break;
+	 case AM_TS_SRC_DMX1:
+		src = "dmx1";
+	break;
+	 case AM_TS_SRC_DMX2:
+		src = "dmx2";
+	break;
+	 case AM_TS_SRC_HIU:
+		src = "hiu";
+	break;
+	 case AM_TS_SRC_HIU1:
+		src = "hiu1";
+	break;
+	 default :
+		src = "";
+	break;
+	}
+	pr_error("dmx_check_source:set[%s]src[%s]dmx[%d]dmx->source:%d\n", buf, src, i, dmx->source);
+	ret = strcmp(buf, src);
+	return ret;
+}
+
+
 /*Show the STB input source*/
 #define DEMUX_SOURCE_FUNC_DECL(i)  \
 static ssize_t demux##i##_show_source(struct class *class,  \
@@ -1101,7 +1196,10 @@ static ssize_t demux##i##_store_source(struct class *class,  \
 		struct class_attribute *attr, const char *buf, size_t size)\
 {\
 	dmx_source_t src = -1;\
-	\
+	if (dmx_check_source(i, buf) == 0) {\
+		pr_error("dmx[%d] source is same [%s]\n", i, buf);\
+		return size;\
+	}\
 	if (!strncmp("ts0", buf, 3)) {\
 		src = DMX_SOURCE_FRONT0;\
 	} else if (!strncmp("ts1", buf, 3)) {\

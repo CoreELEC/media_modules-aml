@@ -176,6 +176,7 @@ module_param(use_of_sop, int, 0644);
 #define CIPLUS_CONFIG 0x16fd
 #define CIPLUS_ENDIAN 0x16fe*/
 
+
 static u32 old_stb_top_config;
 static u32 old_fec_input_control;
 static int have_old_stb_top_config = 1;
@@ -519,28 +520,28 @@ static void section_buffer_watchdog_func(unsigned long arg)
 			/* bit     0 -- om_cmd_pending(read) */
 			/* bit     0 -- om_cmd_read_finished(write) */
 			/*BUG: If the recoder is running, return */
-			if (dmx->record)
-				goto end;
-			/* OM status is wrong */
-			dmx->om_status_error_count++;
-			pr_dbg("demux om status \n"
-			"%04x\t%03x\t%03x\t%03x\t%01x\t%01x\t"
-			"%x\t%x\tdmx%d:status:0x%xerr_cnt:%d-%d\n",
-			(om_cmd_status32 >> 12) & 0xf,
-			(om_cmd_status32 >> 9) & 0x7,
-			(om_cmd_status32 >> 6) & 0x7,
-			(om_cmd_status32 >> 3) & 0x7,
-			(om_cmd_status32 >> 2) & 0x1,
-			(om_cmd_status32 >> 1) & 0x1,
-			demux_channel_activity32, section_busy32,
-			dmx->id, om_cmd_status32, dmx->om_status_error_count, enable_sec_monitor);
-			if (enable_sec_monitor &&
-					dmx->om_status_error_count > enable_sec_monitor) {
-				/*Reset the demux */
-				dmx_reset_dmx_hw_ex_unlock(dvb, dmx, 0);
-				/* Reset the error count */
-				dmx->om_status_error_count = 0;
-				goto end;
+			if (!dmx->record) {
+				/* OM status is wrong */
+				dmx->om_status_error_count++;
+				pr_dbg("demux om status \n"
+				"%04x\t%03x\t%03x\t%03x\t%01x\t%01x\t"
+				"%x\t%x\tdmx%d:status:0x%xerr_cnt:%d-%d\n",
+				(om_cmd_status32 >> 12) & 0xf,
+				(om_cmd_status32 >> 9) & 0x7,
+				(om_cmd_status32 >> 6) & 0x7,
+				(om_cmd_status32 >> 3) & 0x7,
+				(om_cmd_status32 >> 2) & 0x1,
+				(om_cmd_status32 >> 1) & 0x1,
+				demux_channel_activity32, section_busy32,
+				dmx->id, om_cmd_status32, dmx->om_status_error_count, enable_sec_monitor);
+				if (enable_sec_monitor &&
+						dmx->om_status_error_count > enable_sec_monitor) {
+					/*Reset the demux */
+					dmx_reset_dmx_hw_ex_unlock(dvb, dmx, 0);
+					/* Reset the error count */
+					dmx->om_status_error_count = 0;
+					goto end;
+				}
 			}
 		} else {
 			/* OM status is correct, reset the error count */
@@ -3033,6 +3034,7 @@ static int dmx_get_record_flag(struct aml_dmx *dmx)
 	for (i = 0; i < CHANNEL_COUNT; i++) {
 		if (dmx->channel[i].used && dmx->channel[i].dvr_feed) {
 			if (!dmx->record) {
+				pr_error("dmx_get_record_flag set record dmx->id: %d\n", dmx->id);
 				dmx->record = 1;
 
 				if (linked) {
@@ -3050,6 +3052,7 @@ static int dmx_get_record_flag(struct aml_dmx *dmx)
 	}
 
 	if (dmx->record) {
+		pr_error("dmx_get_record_flag clear record dmx->id: %d\n", dmx->id);
 		dmx->record = 0;
 		if (linked) {
 			/*A record will stop, reset the async fifos
@@ -3704,6 +3707,25 @@ static void async_fifo_set_regs(struct aml_asyncfifo *afifo, int source_val)
 	u32 size = afifo->buf_len;
 	u32 flush_size = afifo->flush_size;
 	int factor = dmx_get_order(size / flush_size);
+	u32 old_start_addr, old_size, new_size, old_factor, new_factor;
+
+	int old_src, old_en;
+
+	old_en  = READ_ASYNC_FIFO_REG(afifo->id, REG2) & (1 << ASYNC_FIFO_FILL_EN);
+	old_src = (READ_ASYNC_FIFO_REG(afifo->id, REG2) >> ASYNC_FIFO_SOURCE_LSB) & 3;
+
+	old_start_addr = READ_ASYNC_FIFO_REG(afifo->id, REG0);
+
+	new_size = (size >> 7) & 0x7fff;
+	old_size = (READ_ASYNC_FIFO_REG(afifo->id, REG1) >> ASYNC_FIFO_FLUSH_CNT_LSB) & 0x7fff;
+
+	old_factor = (READ_ASYNC_FIFO_REG(afifo->id, REG3) >> ASYNC_FLUSH_SIZE_IRQ_LSB) & 0x7fff;
+	new_factor = ((size >> (factor + 7)) - 1) & 0x7fff;
+
+	pr_error("async_fifo_set_regs old_src=0x%x source_val=0x%x new_size=0x%x old_size=0x%x old_factor=0x%x new_factor=0x%x old_start_addr=0x%x start_addr=0x%x\n", old_src, source_val, new_size, old_size, old_factor , new_factor,old_start_addr, start_addr);
+	if (old_en && (old_src == source_val) && (new_size == old_size) && (old_factor == new_factor) && (old_start_addr == start_addr))
+		return;
+
 	pr_error("ASYNC FIFO id=%d, link to DMX%d, start_addr %x, buf_size %d,"
 		"source value 0x%x, factor %d\n",
 		afifo->id, afifo->source, start_addr, size, source_val, factor);
@@ -3774,25 +3796,6 @@ static void reset_async_fifos(struct aml_dvb *dvb)
 	int i, j;
 	int record_enable;
 
-	pr_dbg("reset ASYNC FIFOs\n");
-	for (i = 0; i < dvb->async_fifo_total_count; i++) {
-		if (!dvb->asyncfifo[i].init)
-			continue;
-		pr_dbg("Disable ASYNC FIFO id=%d\n", dvb->asyncfifo[i].id);
-		CLEAR_ASYNC_FIFO_REG_MASK(dvb->asyncfifo[i].id, REG1,
-					  1 << ASYNC_FIFO_FLUSH_EN);
-		CLEAR_ASYNC_FIFO_REG_MASK(dvb->asyncfifo[i].id, REG2,
-					  1 << ASYNC_FIFO_FILL_EN);
-		if (READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG2) &
-				(1 << ASYNC_FIFO_FILL_EN) ||
-			READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG1) &
-				(1 << ASYNC_FIFO_FLUSH_EN)) {
-			pr_dbg("Set reg failed\n");
-		} else
-			pr_dbg("Set reg ok\n");
-		dvb->asyncfifo[i].buf_toggle = 0;
-		dvb->asyncfifo[i].buf_read = 0;
-	}
 
 	for (j = 0; j < DMX_DEV_COUNT; j++) {
 		if (!dvb->dmx[j].init)
@@ -3836,22 +3839,51 @@ static void reset_async_fifos(struct aml_dvb *dvb)
 				break;
 			}
 		}
-		pr_dbg("Set DMX%d TS_RECORDER_ENABLE to %d\n", dvb->dmx[j].id,
+		pr_error("Set DMX%d TS_RECORDER_ENABLE to %d\n", dvb->dmx[j].id,
 		       record_enable ? 1 : 0);
 		if (record_enable) {
-			/*DMX_SET_REG_MASK(dvb->dmx[j].id,
-			 *DEMUX_CONTROL, 1<<TS_RECORDER_ENABLE);
-			 */
-			DMX_WRITE_REG(dvb->dmx[j].id, DEMUX_CONTROL,
-				DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) |
-				(1 << TS_RECORDER_ENABLE));
+			int old_en = DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) & (1 << TS_RECORDER_ENABLE);
+
+			if (!old_en) {
+				DMX_WRITE_REG(dvb->dmx[j].id, DEMUX_CONTROL,
+					DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) |
+					(1 << TS_RECORDER_ENABLE));
+			}
 		} else {
-			/*DMX_CLEAR_REG_MASK(dvb->dmx[j].id,
-			 *DEMUX_CONTROL, 1<<TS_ECORDER_ENABLE);
-			 */
-			DMX_WRITE_REG(dvb->dmx[j].id, DEMUX_CONTROL,
-				DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) &
-				(~(1 <<	TS_RECORDER_ENABLE)));
+			int old_en = DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) & (1 << TS_RECORDER_ENABLE);
+
+			if (old_en) {
+				DMX_WRITE_REG(dvb->dmx[j].id, DEMUX_CONTROL,
+					DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) &
+					(~(1 <<	TS_RECORDER_ENABLE)));
+			}
+		}
+	}
+	pr_error("reset ASYNC FIFOs\n");
+	for (i = 0; i < dvb->async_fifo_total_count; i++) {
+		struct aml_asyncfifo *afifo = &dvb->asyncfifo[i];
+		int old;
+
+		if (!dvb->asyncfifo[i].init)
+			continue;
+
+		old = READ_ASYNC_FIFO_REG(afifo->id, REG2) & (1 << ASYNC_FIFO_FILL_EN);
+
+		if (old && (afifo != low_dmx_fifo) && (afifo != high_dmx_fifo) && (afifo != highest_dmx_fifo)) {
+			pr_error("Disable ASYNC FIFO id=%d\n", dvb->asyncfifo[i].id);
+			CLEAR_ASYNC_FIFO_REG_MASK(dvb->asyncfifo[i].id, REG1,
+						  1 << ASYNC_FIFO_FLUSH_EN);
+			CLEAR_ASYNC_FIFO_REG_MASK(dvb->asyncfifo[i].id, REG2,
+						  1 << ASYNC_FIFO_FILL_EN);
+			if (READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG2) &
+					(1 << ASYNC_FIFO_FILL_EN) ||
+				READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG1) &
+					(1 << ASYNC_FIFO_FLUSH_EN)) {
+				pr_error("Set reg failed\n");
+			} else
+				pr_error("Set reg ok\n");
+			dvb->asyncfifo[i].buf_toggle = 0;
+			dvb->asyncfifo[i].buf_read = 0;
 		}
 	}
 
@@ -4050,9 +4082,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 			if (filter->used)
 				dmx_set_filter_regs(dmx, n);
 		}
-
 		dmx_enable(&dvb->dmx[id]);
-
 		dmx_smallsec_set(&dmx->smallsec,
 				dmx->smallsec.enable,
 				dmx->smallsec.bufsize,
@@ -4118,7 +4148,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 		dvb->dmx_watchdog_disable[dmx->id] = 1;
 	}
 #endif
-
+	pr_error("dmx_reset_dmx_hw_ex_unlock into\n");
 	WRITE_MPEG_REG(RESET3_REGISTER,
 		       (dmx->id) ? ((dmx->id ==
 				     1) ? RESET_DEMUX1 : RESET_DEMUX2) :
@@ -4269,9 +4299,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 			dmx->sec_cnt_match[n] = 0;
 			dmx->sec_cnt_crc_fail[n] = 0;
 		}
-
 		dmx_enable(dmx);
-
 		dmx_smallsec_set(&dmx->smallsec,
 				dmx->smallsec.enable,
 				dmx->smallsec.bufsize,
@@ -4330,7 +4358,6 @@ void dmx_reset_dmx_hw_ex(struct aml_dvb *dvb, struct aml_dmx *dmx,
 			 int reset_irq)
 {
 	unsigned long flags;
-
 	spin_lock_irqsave(&dvb->slock, flags);
 	dmx_reset_dmx_hw_ex_unlock(dvb, dmx, reset_irq);
 	spin_unlock_irqrestore(&dvb->slock, flags);
@@ -4506,7 +4533,6 @@ int dmx_alloc_chan(struct aml_dmx *dmx, int type, int pes_type, int pid)
 	set_debug_dmx_chanpids(dmx->id, id, pid);
 
 	dmx->chan_count++;
-
 	dmx_enable(dmx);
 
 	return id;
@@ -4531,7 +4557,6 @@ void dmx_free_chan(struct aml_dmx *dmx, int cid)
 
 	set_debug_dmx_chanpids(dmx->id, cid, -1);
 	dmx->chan_count--;
-
 	dmx_enable(dmx);
 
 	/*Special pes type channel, check its dvr feed */
@@ -4648,7 +4673,6 @@ static int sf_add_feed(struct aml_dmx *src_dmx, struct dvb_demux_feed *feed)
 
 	sf->user++;
 	debug_sf_user = sf->user;
-
 	dmx_enable(sf->dmx);
 
 	return 0;
