@@ -6852,13 +6852,15 @@ static void avs2_work(struct work_struct *work)
 			return;
 		}
 	} else if (dec->dec_result == DEC_RESULT_EOS) {
-		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+		avs2_print(dec, 0,
 			"%s: end of stream\n",
 			__func__);
 		dec->eos = 1;
-		check_pic_error(dec, dec->avs2_dec.hc.cur_pic);
-		avs2_post_process(&dec->avs2_dec);
-		avs2_prepare_display_buf(dec);
+		if ( dec->avs2_dec.hc.cur_pic != NULL) {
+			check_pic_error(dec, dec->avs2_dec.hc.cur_pic);
+			avs2_post_process(&dec->avs2_dec);
+			avs2_prepare_display_buf(dec);
+		}
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
 	} else if (dec->dec_result == DEC_RESULT_FORCE_EXIT) {
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
