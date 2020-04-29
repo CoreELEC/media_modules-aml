@@ -476,6 +476,7 @@ static int asyncfifo_buf_len = ASYNCFIFO_BUFFER_SIZE_DEFAULT;
 #define asyncfifo_get_dev(afifo) ((afifo)->dvb->dev)
 
 
+
 /*Section buffer watchdog*/
 static void section_buffer_watchdog_func(unsigned long arg)
 {
@@ -3910,12 +3911,17 @@ void dmx_reset_hw(struct aml_dvb *dvb)
 void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 {
 	int id, times;
+	u32 pcr_num[DMX_DEV_COUNT];
+	u32 pcr_reg[DMX_DEV_COUNT];
 
 	pr_dbg("[dmx_kpi] demux reset begin\n");
 
 	for (id = 0; id < DMX_DEV_COUNT; id++) {
 		if (!dvb->dmx[id].init)
 			continue;
+		pcr_reg[id] = DMX_READ_REG(id, PCR90K_CTL);
+		pcr_num[id] = DMX_READ_REG(id, ASSIGN_PID_NUMBER);
+		pr_dbg("reset demux, pcr_regs[%d]:0x%x, pcr_num[%d]:0x%x\n", id, pcr_reg[id], id, pcr_num[id]);
 		if (reset_irq) {
 			if (dvb->dmx[id].dmx_irq != -1)
 				disable_irq(dvb->dmx[id].dmx_irq);
@@ -4094,6 +4100,8 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 				dmx->timeout.ch_disable,
 				dmx->timeout.match,
 				1);
+		DMX_WRITE_REG(id, ASSIGN_PID_NUMBER,  pcr_num[id]);
+		DMX_WRITE_REG(id, PCR90K_CTL,  pcr_reg[id]);
 	}
 
 	for (id = 0; id < DSC_DEV_COUNT; id++) {
@@ -4132,6 +4140,15 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 				int reset_irq)
 {
+	u32 pcr_num = 0;
+	u32 pcr_regs = 0;
+	{
+		if (!dmx->init)
+			return;
+		pcr_regs = DMX_READ_REG(dmx->id, PCR90K_CTL);
+		pcr_num = DMX_READ_REG(dmx->id, ASSIGN_PID_NUMBER);
+		pr_dbg("reset demux, pcr_regs:0x%x, pcr_num:0x%x\n", pcr_regs, pcr_num);
+	}
 	{
 		if (!dmx->init)
 			return;
@@ -4347,6 +4364,10 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 		dvb->dmx_watchdog_disable[dmx->id] = 0;
 	}
 #endif
+	{
+		DMX_WRITE_REG(dmx->id, ASSIGN_PID_NUMBER,  pcr_num);
+		DMX_WRITE_REG(dmx->id, PCR90K_CTL,  pcr_regs);
+	}
 }
 
 void dmx_reset_dmx_id_hw_ex_unlock(struct aml_dvb *dvb, int id, int reset_irq)
