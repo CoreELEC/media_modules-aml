@@ -5059,8 +5059,8 @@ static bool is_buffer_available(struct vdec_s *vdec)
 		if ((error_proc_policy & 0x4) &&
 			(error_proc_policy & 0x8)) {
 			if ((kfifo_len(&hw->display_q) <= 0) &&
-			(p_H264_Dpb->mDPB.used_size >=
-				(p_H264_Dpb->mDPB.size - 1)) &&
+			(p_H264_Dpb->mDPB.used_size ==
+				p_H264_Dpb->mDPB.size) &&
 				(p_Dpb->ref_frames_in_buffer >
 				(imax(
 				1, p_Dpb->num_ref_frames)
@@ -5071,8 +5071,8 @@ static bool is_buffer_available(struct vdec_s *vdec)
 				bufmgr_h264_remove_unused_frame(p_H264_Dpb, 1);
 		} else if ((error_proc_policy & 0x4) &&
 			(kfifo_len(&hw->display_q) <= 0) &&
-			((p_H264_Dpb->mDPB.used_size >=
-				(p_H264_Dpb->mDPB.size - 1)) ||
+			((p_H264_Dpb->mDPB.used_size ==
+				p_H264_Dpb->mDPB.size) ||
 			(!have_free_buf_spec(vdec)))) {
 			enum receviver_start_e state = RECEIVER_INACTIVE;
 			if ((error_proc_policy & 0x10) &&
