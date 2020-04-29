@@ -1473,6 +1473,9 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			PROVIDER_NAME ".%02x", pdev->id & 0xff);
 
+	platform_set_drvdata(pdev, pdata);
+	hw->platform_dev = pdev;
+
 	if (((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0) && pdata->config_len) {
 		mmjpeg_debug_print(DECODE_ID(hw), 0, "pdata->config: %s\n", pdata->config);
 		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
@@ -1496,10 +1499,6 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 
 	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
 		&vf_provider_ops, pdata);
-
-	platform_set_drvdata(pdev, pdata);
-
-	hw->platform_dev = pdev;
 
 	if (pdata->sys_info) {
 		hw->vmjpeg_amstream_dec_info = *pdata->sys_info;
