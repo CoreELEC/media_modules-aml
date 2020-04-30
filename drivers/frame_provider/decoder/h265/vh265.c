@@ -3904,7 +3904,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 	if (pic_display && hevc->sps_num_reorder_pics_0 &&
 		(hevc->vf_pre_count == 1) && (hevc->first_pic_flag == 1)) {
 		pic_display = NULL;
-		hevc->first_pic_flag = 0;
+		hevc->first_pic_flag = 2;
 	}
 	return pic_display;
 }
@@ -5608,6 +5608,7 @@ static void recycle_mmu_bufs(struct hevc_state_s *hevc)
 static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 		union param_u *rpm_param)
 {
+	struct vdec_s *vdec = hw_to_vdec(hevc);
 	struct PIC_s *new_pic = NULL;
 	struct PIC_s *pic;
 	int i;
@@ -5693,7 +5694,9 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 		new_pic->dis_mark = 0;
 		/* new_pic->output_ready = 0; */
 		new_pic->num_reorder_pic = rpm_param->p.sps_num_reorder_pics_0;
-		new_pic->ip_mode = (!new_pic->num_reorder_pic && !disable_ip_mode) ? true : false;
+		new_pic->ip_mode = (!new_pic->num_reorder_pic &&
+								!(vdec->slave || vdec->master) &&
+								!disable_ip_mode) ? true : false;
 		new_pic->losless_comp_body_size = hevc->losless_comp_body_size;
 		new_pic->POC = hevc->curr_POC;
 		new_pic->pic_struct = hevc->curr_pic_struct;
@@ -5739,6 +5742,7 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 		union param_u *rpm_param)
 {
+	struct vdec_s *vdec = hw_to_vdec(hevc);
 	int ret;
 	struct aml_vcodec_ctx * v4l = hevc->v4l2_ctx;
 	struct v4l_buff_pool *pool = &v4l->cap_pool;
@@ -5817,7 +5821,9 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	new_pic->dis_mark = 0;
 	/* new_pic->output_ready = 0; */
 	new_pic->num_reorder_pic = rpm_param->p.sps_num_reorder_pics_0;
-	new_pic->ip_mode = (!new_pic->num_reorder_pic && !disable_ip_mode) ? true : false;
+	new_pic->ip_mode = (!new_pic->num_reorder_pic &&
+							!(vdec->slave || vdec->master) &&
+							!disable_ip_mode) ? true : false;
 	new_pic->losless_comp_body_size = hevc->losless_comp_body_size;
 	new_pic->POC = hevc->curr_POC;
 	new_pic->pic_struct = hevc->curr_pic_struct;
@@ -6263,7 +6269,14 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 		}
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
 			dump_pic_list(hevc);
-		pic = get_pic_by_POC(hevc, decoded_poc);
+		if (hevc->vf_pre_count == 1 &&
+				hevc->first_pic_flag == 1) {
+			hevc->first_pic_flag = 2;
+			pic = NULL;
+		}
+		else
+			pic = get_pic_by_POC(hevc, decoded_poc);
+
 		flush_output(hevc, pic);
 	}
 
@@ -6829,7 +6842,9 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	if (hevc->wait_buf == 0) {
 		hevc->sps_num_reorder_pics_0 =
 			rpm_param->p.sps_num_reorder_pics_0;
-		hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 && !disable_ip_mode) ? true : false;
+		hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 &&
+							!(vdec->slave || vdec->master) &&
+							!disable_ip_mode) ? true : false;
 		hevc->m_temporalId = rpm_param->p.m_temporalId;
 		hevc->m_nalUnitType = rpm_param->p.m_nalUnitType;
 		hevc->interlace_flag =
@@ -10535,7 +10550,9 @@ force_output:
 		} else {
 			hevc->sps_num_reorder_pics_0 =
 			hevc->param.p.sps_num_reorder_pics_0;
-			hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 && !disable_ip_mode) ? true : false;
+			hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 &&
+								!(vdec->slave || vdec->master) &&
+								!disable_ip_mode) ? true : false;
 			hevc->pic_list_init_flag = 1;
 			if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
 				((hevc->param.p.profile_etc & 0xc) == 0x4)
