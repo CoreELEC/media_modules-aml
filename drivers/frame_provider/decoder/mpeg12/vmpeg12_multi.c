@@ -1427,7 +1427,7 @@ static void userdata_push_do_work(struct work_struct *work)
 	psrc_data = (u8 *)hw->ccbuf_phyAddress_virt + hw->ucode_cc_last_wp;
 
 	pdata = hw->userdata_info.data_buf + hw->userdata_info.last_wp;
-	for (i = 0; i < data_length; i++) {
+	for (i = 0; i < data_length && hw->ccbuf_phyAddress_virt != NULL && psrc_data; i++) {
 		*pdata++ = *psrc_data++;
 		if (pdata >= hw->userdata_info.data_buf_end)
 			pdata = hw->userdata_info.data_buf;
