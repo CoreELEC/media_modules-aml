@@ -1246,6 +1246,12 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 					ctx->state, rb->count, ctx->dpb_size);
 			//rb->count = ctx->dpb_size;
 		}
+	} else {
+		if (rb->memory == VB2_MEMORY_DMABUF) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
+					"%s, output_dma_mode set", __func__);
+			ctx->output_dma_mode = true;
+		}
 	}
 
 	return v4l2_m2m_ioctl_reqbufs(file, priv, rb);
@@ -1988,6 +1994,8 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 
 		for (i = 0; i < *nplanes; i++) {
 			sizes[i] = q_data->sizeimage[i];
+			if (V4L2_TYPE_IS_OUTPUT(vq->type) && ctx->output_dma_mode)
+				sizes[i] = 0;
 			//alloc_devs[i] = &ctx->dev->plat_dev->dev;
 			alloc_devs[i] = v4l_get_dev_from_codec_mm();//alloc mm from the codec mm
 		}
@@ -2009,6 +2017,10 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d, idx: %d\n",
 		__func__, vb->vb2_queue->type, vb->index);
+
+	if (vb->memory == VB2_MEMORY_DMABUF
+		&& V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type))
+		return 0;
 
 	q_data = aml_vdec_get_q_data(ctx, vb->vb2_queue->type);
 
@@ -2104,12 +2116,6 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	src_mem.addr	= vb2_dma_contig_plane_dma_addr(vb, 0);
 	src_mem.size	= vb->planes[0].bytesused;
 	src_mem.model	= vb->memory;
-
-	if (vb->memory == VB2_MEMORY_DMABUF) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
-				"%s, output_dma_mode set", __func__);
-		ctx->output_dma_mode = true;
-	}
 
 	if (vdec_if_probe(ctx, &src_mem, NULL)) {
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
