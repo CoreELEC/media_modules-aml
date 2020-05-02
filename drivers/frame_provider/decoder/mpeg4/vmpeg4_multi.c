@@ -2335,7 +2335,8 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	hw->platform_dev = pdev;
 
 	if (((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0) && pdata->config_len) {
-		mmpeg4_debug_print(DECODE_ID(hw), 0, "pdata->config: %s\n", pdata->config);
+		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+			 "pdata->config: %s\n", pdata->config);
 		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
 			&config_val) == 0)
 			hw->dynamic_buf_num_margin = config_val;
