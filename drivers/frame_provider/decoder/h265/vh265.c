@@ -50,6 +50,7 @@
 #include <media/v4l2-mem2mem.h>
 
 #define HEVC_8K_LFTOFFSET_FIX
+#define SUPPORT_LONG_TERM_RPS
 
 #define CONSTRAIN_MAX_BUF_NUM
 
@@ -781,8 +782,18 @@ enum NalUnitType {
 #define RPM_BEGIN                                              0x100
 #define modification_list_cur                                  0x148
 #define RPM_END                                                0x180
-
+#ifdef SUPPORT_LONG_TERM_RPS
+/*
+  */
+#define RPS_END  0x8000
+#define RPS_LT_BIT 		14
+#define RPS_USED_BIT        13
+#define RPS_SIGN_BIT        12
+#else
+#define RPS_END		0x8000
 #define RPS_USED_BIT        14
+#define RPS_SIGN_BIT        13
+#endif
 /* MISC_FLAG0 */
 #define PCM_LOOP_FILTER_DISABLED_FLAG_BIT       0
 #define PCM_ENABLE_FLAG_BIT             1
@@ -1343,6 +1354,11 @@ struct PIC_s {
 	/**/ int slice_idx;
 	int m_aiRefPOCList0[MAX_SLICE_NUM][16];
 	int m_aiRefPOCList1[MAX_SLICE_NUM][16];
+#ifdef SUPPORT_LONG_TERM_RPS
+	unsigned char long_term_ref;
+	unsigned char m_aiRefLTflgList0[MAX_SLICE_NUM][16];
+	unsigned char m_aiRefLTflgList1[MAX_SLICE_NUM][16];
+#endif
 	/*buffer */
 	unsigned int header_adr;
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
@@ -3655,14 +3671,20 @@ static void dump_pic_list(struct hevc_state_s *hevc)
 		if (pic == NULL || pic->index == -1)
 			continue;
 		hevc_print_cont(hevc, 0,
-		"index %d buf_idx %d mv_idx %d decode_idx:%d,	POC:%d,	referenced:%d,	",
+		"index %d buf_idx %d mv_idx %d decode_idx:%d,	POC:%d,	referenced:%d (LT %d),	",
 		 pic->index, pic->BUF_index,
 #ifndef MV_USE_FIXED_BUF
 		pic->mv_buf_index,
 #else
 		 -1,
 #endif
-		 pic->decode_idx, pic->POC, pic->referenced);
+		 pic->decode_idx, pic->POC, pic->referenced
+#ifdef SUPPORT_LONG_TERM_RPS
+		 , pic->long_term_ref
+#else
+		 , 0
+#endif
+		 );
 		hevc_print_cont(hevc, 0,
 			"num_reorder_pic:%d, output_mark:%d, error_mark:%d w/h %d,%d",
 				pic->num_reorder_pic, pic->output_mark, pic->error_mark,
@@ -3927,6 +3949,28 @@ static int config_mc_buffer(struct hevc_state_s *hevc, struct PIC_s *cur_pic)
 	return 0;
 }
 
+#ifdef SUPPORT_LONG_TERM_RPS
+static unsigned char is_ref_long_term(struct hevc_state_s *hevc, int poc)
+{
+	int ii;
+	struct PIC_s *pic;
+	for (ii = 0; ii < MAX_REF_PIC_NUM; ii++) {
+		pic = hevc->m_PIC[ii];
+		if (pic == NULL ||
+			pic->index == -1 ||
+			pic->BUF_index == -1
+			)
+			continue;
+
+		if (pic->referenced && pic->POC == poc
+			&& pic->long_term_ref)
+			return 1;
+	}
+	return 0;
+}
+
+#endif
+
 static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 							  union param_u *params)
 {
@@ -3947,14 +3991,22 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 			)
 			continue;
 
+#ifdef SUPPORT_LONG_TERM_RPS
+		pic->long_term_ref = 0;
+#endif
 		if ((pic->referenced == 0 || pic->POC == cur_poc))
 			continue;
 		is_referenced = 0;
+
 		for (i = 0; i < 16; i++) {
 			int delt;
-
+#ifdef SUPPORT_LONG_TERM_RPS
+			if (params->p.CUR_RPS[i] == RPS_END)
+				break;
+#else
 			if (params->p.CUR_RPS[i] & 0x8000)
 				break;
+#endif
 			delt =
 				params->p.CUR_RPS[i] &
 				((1 << (RPS_USED_BIT - 1)) - 1);
@@ -3965,8 +4017,15 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 			} else
 				poc_tmp = cur_poc + delt;
 			if (poc_tmp == pic->POC) {
+#ifdef SUPPORT_LONG_TERM_RPS
+				if (params->p.CUR_RPS[i] & (1 << (RPS_LT_BIT)))
+					pic->long_term_ref = 1;
+				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
+					hevc_print(hevc, 0, "%d: CUR_RPS 0x%x, LT %d\n",
+						i, params->p.CUR_RPS[i],
+						pic->long_term_ref);
+#endif
 				is_referenced = 1;
-				/* hevc_print(hevc, 0, "i is %d\n", i); */
 				break;
 			}
 		}
@@ -4009,8 +4068,13 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 		pic->m_aiRefPOCList1[pic->slice_idx][i] = 0;
 	}
 	for (i = 0; i < 16; i++) {
+#ifdef SUPPORT_LONG_TERM_RPS
+		if (params->p.CUR_RPS[i] == RPS_END)
+			break;
+#else
 		if (params->p.CUR_RPS[i] & 0x8000)
 			break;
+#endif
 		if ((params->p.CUR_RPS[i] >> RPS_USED_BIT) & 1) {
 			int delt =
 				params->p.CUR_RPS[i] &
@@ -5005,7 +5069,27 @@ static void config_mpred_hw(struct hevc_state_s *hevc)
 			 );
 	WRITE_VREG(HEVC_MPRED_REF_NUM, data32);
 
-	data32 = (hevc->LongTerm_Ref);
+#ifdef SUPPORT_LONG_TERM_RPS
+	data32 = 0;
+	for (i = 0; i < hevc->RefNum_L0; i++) {
+		if (is_ref_long_term(hevc,
+			cur_pic->m_aiRefPOCList0
+				[cur_pic->slice_idx][i]))
+			data32 = data32 | (1 << i);
+	}
+	for (i = 0; i < hevc->RefNum_L1; i++) {
+		if (is_ref_long_term(hevc,
+			cur_pic->m_aiRefPOCList1
+				[cur_pic->slice_idx][i]))
+			data32 = data32 | (1 << (i + 16));
+	}
+	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
+		hevc_print(hevc, 0,
+			"LongTerm_Ref 0x%x\n", data32);
+	}
+#else
+	data32 = hevc->LongTerm_Ref;
+#endif
 	WRITE_VREG(HEVC_MPRED_LT_REF, data32);
 
 	data32 = 0;
@@ -10741,13 +10825,20 @@ static void vh265_check_timer_func(unsigned long arg)
 #endif
 
 	if (radr != 0) {
+#ifdef SUPPORT_LONG_TERM_RPS
+		if ((radr >> 24) != 0) {
+			int count = radr >> 24;
+			int adr = radr & 0xffffff;
+			int i;
+			for (i = 0; i < count; i++)
+				pr_info("READ_VREG(%x)=%x\n", adr+i, READ_VREG(adr+i));
+		} else
+#endif
 		if (rval != 0) {
 			WRITE_VREG(radr, rval);
-			hevc_print(hevc, 0,
-				"WRITE_VREG(%x,%x)\n", radr, rval);
+			pr_info("WRITE_VREG(%x,%x)\n", radr, rval);
 		} else
-			hevc_print(hevc, 0,
-				"READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
+			pr_info("READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
 		rval = 0;
 		radr = 0;
 	}
