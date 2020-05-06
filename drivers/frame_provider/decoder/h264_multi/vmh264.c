@@ -5086,6 +5086,10 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 						FIX_FRAME_RATE_OFF;
 					hw->pts_duration = 0;
 					hw->frame_dur = frame_dur_es;
+					if (!hw->fixed_frame_rate_flag && (p_H264_Dpb->mSPS.profile_idc != BASELINE)) {
+						if (frame_dur_es == 7680)
+							hw->frame_dur = frame_dur_es /2;
+					}
 					vdec_schedule_work(&hw->notify_work);
 					dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_DEC_DETAIL,
