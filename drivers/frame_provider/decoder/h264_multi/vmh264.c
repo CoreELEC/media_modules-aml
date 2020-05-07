@@ -815,6 +815,8 @@ struct vdec_h264_hw_s {
 
 	u8 reset_bufmgr_flag;
 	u32 reset_bufmgr_count;
+	ulong timeout;
+	u32 timeout_flag;
 	u32 cfg_param1;
 	u32 cfg_param2;
 	u32 cfg_param3;
@@ -5074,22 +5076,26 @@ static bool is_buffer_available(struct vdec_s *vdec)
 		if ((error_proc_policy & 0x4) &&
 			(error_proc_policy & 0x8)) {
 			if ((kfifo_len(&hw->display_q) <= 0) &&
-			(p_H264_Dpb->mDPB.used_size ==
-				p_H264_Dpb->mDPB.size) &&
+			(p_H264_Dpb->mDPB.used_size >=
+				(p_H264_Dpb->mDPB.size - 1)) &&
 				(p_Dpb->ref_frames_in_buffer >
 				(imax(
 				1, p_Dpb->num_ref_frames)
 				- p_Dpb->ltref_frames_in_buffer +
-				force_sliding_margin)))
+				force_sliding_margin))){
 				bufmgr_recover(hw);
-			else
+			} else {
 				bufmgr_h264_remove_unused_frame(p_H264_Dpb, 1);
+			}
 		} else if ((error_proc_policy & 0x4) &&
 			(kfifo_len(&hw->display_q) <= 0) &&
-			((p_H264_Dpb->mDPB.used_size ==
-				p_H264_Dpb->mDPB.size) ||
+			((p_H264_Dpb->mDPB.used_size >=
+				(p_H264_Dpb->mDPB.size - 1)) ||
 			(!have_free_buf_spec(vdec)))) {
 			enum receviver_start_e state = RECEIVER_INACTIVE;
+
+			if (hw->timeout_flag == false)
+			      hw->timeout = jiffies + HZ / 2;
 			if ((error_proc_policy & 0x10) &&
 				vf_get_receiver(vdec->vf_provider_name)) {
 				state =
@@ -5101,9 +5107,15 @@ static bool is_buffer_available(struct vdec_s *vdec)
 					state = RECEIVER_INACTIVE;
 			}
 			if (state == RECEIVER_INACTIVE)
+				hw->timeout_flag = true;
+
+			if (state == RECEIVER_INACTIVE && hw->timeout_flag &&
+				time_after(jiffies, hw->timeout)) {
 				bufmgr_recover(hw);
-			else
+				dpb_print(DECODE_ID(hw), 0, "%s %d timeout to reset\n", __func__, __LINE__);
+			} else {
 				bufmgr_h264_remove_unused_frame(p_H264_Dpb, 1);
+			}
 		} else if ((error_proc_policy & 0x8) &&
 			(p_Dpb->ref_frames_in_buffer >
 			(imax(
@@ -5117,6 +5129,9 @@ static bool is_buffer_available(struct vdec_s *vdec)
 		if (hw->reset_bufmgr_flag == 1)
 			buffer_available = 1;
 	}
+
+	if (buffer_available == 1)
+		hw->timeout_flag = false;
 
 	return buffer_available;
 }
