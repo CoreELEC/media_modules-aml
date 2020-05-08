@@ -469,11 +469,8 @@ static unsigned int force_disp_pic_index;
 static unsigned int disp_vframe_valve_level;
 static int pre_decode_buf_level = 0x1000;
 static unsigned int pic_list_debug;
-#ifdef HEVC_8K_LFTOFFSET_FIX
-	/* performance_profile: bit 0, multi slice in ucode
-	*/
-static unsigned int performance_profile = 1;
-#endif
+
+
 #ifdef MULTI_INSTANCE_SUPPORT
 static unsigned int max_decode_instance_num
 				= MAX_DECODE_INSTANCE_NUM;
@@ -1730,10 +1727,6 @@ struct hevc_state_s {
 	bool is_used_v4l;
 	void *v4l2_ctx;
 	bool v4l_params_parsed;
-	u32 mem_map_mode;
-	u32 performance_profile;
-	struct vdec_info *gvs;
-	unsigned int res_ch_flag;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -10014,11 +10007,6 @@ force_output:
 		hevc->pic_h = hevc->param.p.pic_height_in_luma_samples;
 		hevc->lcu_size = 1 << (log + 3 + log_s);
 		hevc->lcu_size_log2 = log2i(hevc->lcu_size);
-		if (performance_profile &&( (!is_oversize(hevc->pic_w, hevc->pic_h)) && IS_8K_SIZE(hevc->pic_w,hevc->pic_h)))
-			hevc->performance_profile = 1;
-		else
-			hevc->performance_profile = 0;
-		hevc_print(hevc, 0, "hevc->performance_profile %d\n", hevc->performance_profile);
 		if (hevc->pic_w == 0 || hevc->pic_h == 0
 						|| hevc->lcu_size == 0
 						|| is_oversize(hevc->pic_w, hevc->pic_h)
@@ -10643,11 +10631,6 @@ static void config_decode_mode(struct hevc_state_s *hevc)
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 #endif
 	unsigned decode_mode;
-#ifdef HEVC_8K_LFTOFFSET_FIX
-	if (hevc->performance_profile)
-		WRITE_VREG(NAL_SEARCH_CTL,
-			READ_VREG(NAL_SEARCH_CTL) | (1 << 21));
-#endif
 	if (!hevc->m_ins_flag)
 		decode_mode = DECODE_MODE_SINGLE;
 	else if (vdec_frame_based(hw_to_vdec(hevc)))
@@ -13292,10 +13275,6 @@ MODULE_PARM_DESC(pic_list_debug, "\n pic_list_debug\n");
 module_param(without_display_mode, uint, 0664);
 MODULE_PARM_DESC(without_display_mode, "\n amvdec_h265 without_display_mode\n");
 
-#ifdef HEVC_8K_LFTOFFSET_FIX
-module_param(performance_profile, uint, 0664);
-MODULE_PARM_DESC(performance_profile, "\n amvdec_h265 performance_profile\n");
-#endif
 module_init(amvdec_h265_driver_init_module);
 module_exit(amvdec_h265_driver_remove_module);
 
