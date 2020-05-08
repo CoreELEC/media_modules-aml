@@ -108,7 +108,7 @@ static u32 buf_size = 32 * 1024 * 1024;
 static int pre_decode_buf_level = 0x800;
 static int start_decode_buf_level = 0x4000;
 static u32 dec_control;
-static u32 error_frame_skip_level = 1;
+static u32 error_frame_skip_level = 2;
 static u32 udebug_flag;
 static unsigned int radr;
 static unsigned int rval;
@@ -2288,10 +2288,7 @@ static void reset_process_time(struct vdec_mpeg12_hw_s *hw)
 }
 static void start_process_time(struct vdec_mpeg12_hw_s *hw)
 {
-	if ((hw->refs[1] != -1) && (hw->refs[0] == -1))
-		hw->decode_timeout_count = 1;
-	else
-		hw->decode_timeout_count = 10;
+	hw->decode_timeout_count = 10;
 	hw->start_process_time = jiffies;
 }
 static void timeout_process(struct vdec_mpeg12_hw_s *hw)
@@ -2308,8 +2305,7 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 		"%s decoder timeout, status=%d, level=%d\n",
 		__func__, vdec->status, READ_VREG(VLD_MEM_VIFIFO_LEVEL));
 	hw->dec_result = DEC_RESULT_DONE;
-	if ((hw->refs[1] != -1) && (hw->refs[0] != -1))
-		hw->first_i_frame_ready = 0;
+	hw->first_i_frame_ready = 0;
 
 	/*
 	 * In this very timeout point,the vmpeg12_work arrives,
