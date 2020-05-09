@@ -1306,7 +1306,11 @@ static ssize_t amstream_sub_read(struct file *file, char __user *buf,
 
 	if (sub_wp == sub_rp || sub_rp == 0)
 		return 0;
-
+	/*flush sub buf before read*/
+	codec_mm_dma_flush(
+			(void*)codec_mm_phys_to_virt(sub_start),
+			stbuf_size(s_buf),
+			DMA_FROM_DEVICE);
 	if (sub_wp > sub_rp)
 		data_size = sub_wp - sub_rp;
 	else
