@@ -2760,7 +2760,6 @@ static irqreturn_t vdec_isr(int irq, void *dev_id)
 		if (atomic_read(&vdec->inrelease) > 0)
 			return ret;
 		atomic_set(&vdec->inirq_flag, 1);
-		vdec->isr_ns = local_clock();
 	}
 	if (c->dev_isr) {
 		ret = c->dev_isr(irq, c->dev_id);
@@ -2815,15 +2814,9 @@ static irqreturn_t vdec_thread_isr(int irq, void *dev_id)
 	}
 
 	if (vdec) {
-		u32 isr2tfn = 0;
 		if (atomic_read(&vdec->inrelease) > 0)
 			return ret;
 		atomic_set(&vdec->inirq_thread_flag, 1);
-		vdec->tfn_ns = local_clock();
-		isr2tfn = vdec->tfn_ns - vdec->isr_ns;
-		if (isr2tfn > 10000000)
-			pr_err("!!!!!!! %s vdec_isr to %s took %u ns !!!\n",
-				vdec->vf_provider_name, __func__, isr2tfn);
 	}
 	if (c->dev_threaded_isr) {
 		ret = c->dev_threaded_isr(irq, c->dev_id);
