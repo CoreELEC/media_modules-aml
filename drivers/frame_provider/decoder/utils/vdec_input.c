@@ -1141,14 +1141,19 @@ u32 vdec_input_get_freed_handle(struct vdec_s *vdec)
 		return 0;
 
 	flags = vdec_input_lock(input);
-	block = list_first_entry_or_null(&input->vframe_block_free_list,
+	do {
+		block = list_first_entry_or_null(&input->vframe_block_free_list,
 		struct vframe_block_list_s, list);
+		if (!block) {
+			break;
+		}
 
-	if (block) {
 		handle = block->handle;
 		vdec_input_del_block_locked(input, block);
 		kfree(block);
-	}
+
+	} while(!handle);
+
 	vdec_input_unlock(input, flags);
 	return handle;
 }

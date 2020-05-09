@@ -5682,6 +5682,11 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 		if (vf->pts != 0)
 			hw->last_lookup_pts = vf->pts;
+		if (hw->frame_dur && ((vf->pts == 0) || (vf->pts_us64 == 0))) {
+			vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+			vf->pts_us64 = hw->last_pts_us64 +
+				(DUR2PTS(hw->frame_dur) * 100 / 9);
+		}
 
 		if ((hw->pts_mode == PTS_NONE_REF_USE_DURATION)
 			&& (slice_type != KEY_FRAME))
