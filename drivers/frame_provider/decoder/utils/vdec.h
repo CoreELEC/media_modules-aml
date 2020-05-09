@@ -269,8 +269,6 @@ struct vdec_s {
 	atomic_t inirq_flag;
 	atomic_t inrelease;
 	int parallel_dec;
-	volatile u64 isr_ns;
-	volatile u64 tfn_ns;
 	struct vdec_frames_s *mvfrm;
 };
 
