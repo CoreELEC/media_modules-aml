@@ -9251,7 +9251,6 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			get_pic_poc(hevc, (vf->index >> 8) & 0xff),
 			vf->pts, vf->pts_us64,
 			vf->duration);
-		hw_to_vdec(hevc)->vdec_fps_detec(hw_to_vdec(hevc)->id);
 
 		/*if (pic->vf_ref == hevc->vf_pre_count) {*/
 		if (hevc->kpi_first_i_decoded == 0) {
