@@ -1413,6 +1413,7 @@ struct PIC_s {
 	u32 frame_size; // For frame base mode
 	bool vframe_bound;
 	bool ip_mode;
+	u32 stream_frame_size;  //for stream base
 } /*PIC_t */;
 
 #define MAX_TILE_COL_NUM    10
@@ -1753,6 +1754,10 @@ struct hevc_state_s {
 	u32 kpi_first_i_decoded;
 	int sidebind_type;
 	int sidebind_channel_id;
+	u32 last_dec_pic_offset;
+	u32 min_pic_size;
+	u32 pts_continue_miss;
+	u32 pts_lookup_margin;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -8759,23 +8764,36 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		else {
 #endif
 #endif
+		if (pic->stream_frame_size > 50 &&
+			(hevc->min_pic_size > pic->stream_frame_size ||
+			(hevc->min_pic_size == 0))) {
+			hevc->min_pic_size = pic->stream_frame_size;
+
+			if (hevc->min_pic_size < 1024 &&
+				((hevc->pts_lookup_margin > hevc->min_pic_size)
+				|| (hevc->pts_lookup_margin == 0)))
+				hevc->pts_lookup_margin = hevc->min_pic_size;
+		}
+
 		hevc_print(hevc, H265_DEBUG_OUT_PTS,
 			"call pts_lookup_offset_us64(0x%x)\n",
 			stream_offset);
 		if (pts_lookup_offset_us64
 			(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
-			&frame_size, 0,
+			&frame_size, hevc->pts_lookup_margin,
 			 &vf->pts_us64) != 0) {
 #ifdef DEBUG_PTS
 			hevc->pts_missed++;
 #endif
 			vf->pts = 0;
 			vf->pts_us64 = 0;
-		}
+			hevc->pts_continue_miss++;
+		} else {
+			hevc->pts_continue_miss = 0;
 #ifdef DEBUG_PTS
-		else
 			hevc->pts_hit++;
 #endif
+		}
 #ifdef MULTI_INSTANCE_SUPPORT
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		} else {
@@ -8786,6 +8804,17 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		}
 #endif
 #endif
+		if (vdec_stream_based(vdec) && (vf->duration > 0)) {
+			if ((vf->pts != 0) && (hevc->last_pts != 0)) {
+				int diff = vf->pts - hevc->last_pts;
+				if (diff > ((hevc->pts_continue_miss + 2)
+					* DUR2PTS(vf->duration))) {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+				}
+			}
+		}
+
 		if (pts_unstable && (hevc->frame_dur > 0))
 			hevc->pts_mode = PTS_NONE_REF_USE_DURATION;
 
@@ -10604,9 +10633,14 @@ force_output:
 		if ((hevc->new_pic) && (hevc->cur_pic)) {
 			hevc->cur_pic->stream_offset =
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+			hevc->cur_pic->stream_frame_size =
+				hevc->cur_pic->stream_offset - hevc->last_dec_pic_offset;
 			hevc_print(hevc, H265_DEBUG_OUT_PTS,
-				"read stream_offset = 0x%x\n",
-				hevc->cur_pic->stream_offset);
+				"read stream_offset = 0x%x, frame_size = 0x%x\n",
+				hevc->cur_pic->stream_offset, hevc->cur_pic->stream_frame_size);
+			hevc->last_dec_pic_offset = hevc->cur_pic->stream_offset;
+
+
 			hevc->cur_pic->aspect_ratio_idc =
 				hevc->param.p.aspect_ratio_idc;
 			hevc->cur_pic->sar_width =
@@ -11318,6 +11352,9 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 	hevc->pts_missed = 0;
 	hevc->pts_hit = 0;
 #endif
+	hevc->pts_lookup_margin = 0;
+	hevc->pts_continue_miss = 0;
+	hevc->min_pic_size = 0;
 
 	hevc->saved_resolution = 0;
 	hevc->get_frame_dur = false;
