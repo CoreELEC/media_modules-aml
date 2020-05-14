@@ -1171,6 +1171,13 @@ int vdec_write_vframe(struct vdec_s *vdec, const char *buf, size_t count)
 }
 EXPORT_SYMBOL(vdec_write_vframe);
 
+int vdec_write_vframe_with_dma(struct vdec_s *vdec,
+	ulong addr, size_t count, u32 handle)
+{
+	return vdec_input_add_frame_with_dma(&vdec->input, addr, count, handle);
+}
+EXPORT_SYMBOL(vdec_write_vframe_with_dma);
+
 /* add a work queue thread for vdec*/
 void vdec_schedule_work(struct work_struct *work)
 {

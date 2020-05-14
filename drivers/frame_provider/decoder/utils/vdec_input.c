@@ -973,6 +973,16 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 }
 EXPORT_SYMBOL(vdec_input_add_frame);
 
+int vdec_input_add_frame_with_dma(struct vdec_input_s *input, ulong addr,
+			size_t count, u32 handle)
+{
+	struct vdec_s *vdec = input->vdec;
+
+	return vdec_secure(vdec) ?
+		vdec_input_add_chunk(input, (char *)addr, count, handle) : -1;
+}
+EXPORT_SYMBOL(vdec_input_add_frame_with_dma);
+
 struct vframe_chunk_s *vdec_input_next_chunk(struct vdec_input_s *input)
 {
 	struct vframe_chunk_s *chunk = NULL;

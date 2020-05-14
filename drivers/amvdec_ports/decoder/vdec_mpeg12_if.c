@@ -93,6 +93,7 @@ struct vdec_mpeg12_vsi {
 	int head_offset;
 	struct vdec_mpeg12_dec_info dec;
 	struct vdec_pic_info pic;
+	struct vdec_pic_info cur_pic;
 	struct v4l2_rect crop;
 	bool is_combine;
 	int nalu_pos;
@@ -120,11 +121,11 @@ static void get_pic_info(struct vdec_mpeg12_inst *inst,
 {
 	*pic = inst->vsi->pic;
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
 		"pic(%d, %d), buf(%d, %d)\n",
 		 pic->visible_width, pic->visible_height,
 		 pic->coded_width, pic->coded_height);
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
 		"Y(%d, %d), C(%d, %d)\n",
 		pic->y_bs_sz, pic->y_len_sz,
 		pic->c_bs_sz, pic->c_len_sz);
@@ -137,7 +138,7 @@ static void get_crop_info(struct vdec_mpeg12_inst *inst, struct v4l2_rect *cr)
 	cr->width = inst->vsi->crop.width;
 	cr->height = inst->vsi->crop.height;
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
 		"l=%d, t=%d, w=%d, h=%d\n",
 		 cr->left, cr->top, cr->width, cr->height);
 }
@@ -145,7 +146,7 @@ static void get_crop_info(struct vdec_mpeg12_inst *inst, struct v4l2_rect *cr)
 static void get_dpb_size(struct vdec_mpeg12_inst *inst, unsigned int *dpb_sz)
 {
 	*dpb_sz = inst->vsi->dec.dpb_sz;
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "sz=%d\n", *dpb_sz);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO, "sz=%d\n", *dpb_sz);
 }
 
 static u32 vdec_config_default_parms(u8 *parm)
@@ -181,6 +182,7 @@ static void vdec_parser_parms(struct vdec_mpeg12_inst *inst)
 	inst->parms.cfg		= ctx->config.parm.dec.cfg;
 	inst->parms.parms_status |= V4L2_CONFIG_PARM_DECODE_CFGINFO;
 }
+
 static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 {
 	struct vdec_mpeg12_inst *inst = NULL;
@@ -190,7 +192,7 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	if (!inst)
 		return -ENOMEM;
 
-	inst->vdec.video_type	= VFORMAT_MPEG12;
+	inst->vdec.format	= VFORMAT_MPEG12;
 	inst->vdec.dev		= ctx->dev->vpu_plat_dev;
 	inst->vdec.filp		= ctx->dev->filp;
 	inst->vdec.config	= ctx->config;
@@ -209,41 +211,37 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	/* init vfm */
 	inst->vfm.ctx		= ctx;
 	inst->vfm.ada_ctx	= &inst->vdec;
-	vcodec_vfm_init(&inst->vfm);
+	ret = vcodec_vfm_init(&inst->vfm);
+	if (ret) {
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"init vfm failed.\n");
+		goto err;
+	}
 
 	ret = video_decoder_init(&inst->vdec);
 	if (ret) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"vdec_mpeg12 init err=%d\n", ret);
-		goto error_free_inst;
+		goto err;
 	}
 
 	/* probe info from the stream */
 	inst->vsi = kzalloc(sizeof(struct vdec_mpeg12_vsi), GFP_KERNEL);
 	if (!inst->vsi) {
 		ret = -ENOMEM;
-		goto error_free_inst;
+		goto err;
 	}
 
 	/* alloc the header buffer to be used cache sps or spp etc.*/
 	inst->vsi->header_buf = kzalloc(HEADER_BUFFER_SIZE, GFP_KERNEL);
-	if (!inst->vsi) {
+	if (!inst->vsi->header_buf) {
 		ret = -ENOMEM;
-		goto error_free_vsi;
+		goto err;
 	}
-
-	inst->vsi->pic.visible_width	= 1920;
-	inst->vsi->pic.visible_height	= 1080;
-	inst->vsi->pic.coded_width	= 1920;
-	inst->vsi->pic.coded_height	= 1088;
-	inst->vsi->pic.y_bs_sz		= 0;
-	inst->vsi->pic.y_len_sz		= (1920 * 1088);
-	inst->vsi->pic.c_bs_sz		= 0;
-	inst->vsi->pic.c_len_sz		= (1920 * 1088 / 2);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
 		"mpeg12 Instance >> %lx\n", (ulong) inst);
-
+	init_completion(&inst->comp);
 	ctx->ada_ctx	= &inst->vdec;
 	*h_vdec		= (unsigned long)inst;
 
@@ -251,10 +249,15 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 
 	return 0;
 
-error_free_vsi:
-	kfree(inst->vsi);
-error_free_inst:
-	kfree(inst);
+err:
+	if (inst)
+		vcodec_vfm_release(&inst->vfm);
+	if (inst && inst->vsi && inst->vsi->header_buf)
+		kfree(inst->vsi->header_buf);
+	if (inst && inst->vsi)
+		kfree(inst->vsi);
+	if (inst)
+		kfree(inst);
 	*h_vdec = 0;
 
 	return ret;
@@ -284,23 +287,24 @@ static void fill_vdec_params(struct vdec_mpeg12_inst *inst,
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
-	/*1(EOS) + 8(DECODE_BUFFER_NUM_DEF)*/
-	dec->dpb_sz = 9;
+	/*7(parm_v4l_buffer_margin) + 8(DECODE_BUFFER_NUM_DEF)*/
+	dec->dpb_sz = 15;
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_BUFMGR,
 		"The stream infos, coded:(%d x %d), visible:(%d x %d), DPB: %d\n",
 		pic->coded_width, pic->coded_height,
 		pic->visible_width, pic->visible_height, dec->dpb_sz);
 }
 
-static int stream_parse_by_ucode(struct vdec_mpeg12_inst *inst, u8 *buf, u32 size)
+static int parse_stream_ucode(struct vdec_mpeg12_inst *inst, u8 *buf, u32 size)
 {
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
 	ret = vdec_vframe_write(vdec, buf, size, 0);
 	if (ret < 0) {
-		pr_err("write frame data failed. err: %d\n", ret);
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"write frame data failed. err: %d\n", ret);
 		return ret;
 	}
 
@@ -311,7 +315,27 @@ static int stream_parse_by_ucode(struct vdec_mpeg12_inst *inst, u8 *buf, u32 siz
 	return inst->vsi->dec.dpb_sz ? 0 : -1;
 }
 
-static int stream_parse(struct vdec_mpeg12_inst *inst, u8 *buf, u32 size)
+static int parse_stream_ucode_dma(struct vdec_mpeg12_inst *inst,
+	ulong buf, u32 size, u32 handle)
+{
+	int ret = 0;
+	struct aml_vdec_adapt *vdec = &inst->vdec;
+
+	ret = vdec_vframe_write_with_dma(vdec, buf, size, 0, handle);
+	if (ret < 0) {
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"write frame data failed. err: %d\n", ret);
+		return ret;
+	}
+
+	/* wait ucode parse ending. */
+	wait_for_completion_timeout(&inst->comp,
+		msecs_to_jiffies(1000));
+
+	return inst->vsi->dec.dpb_sz ? 0 : -1;
+}
+
+static int parse_stream_cpu(struct vdec_mpeg12_inst *inst, u8 *buf, u32 size)
 {
 	int ret = 0;
 	struct mpeg12_param_sets *ps = NULL;
@@ -342,21 +366,38 @@ static int vdec_mpeg12_probe(unsigned long h_vdec,
 {
 	struct vdec_mpeg12_inst *inst =
 		(struct vdec_mpeg12_inst *)h_vdec;
-	struct stream_info *st;
 	u8 *buf = (u8 *)bs->vaddr;
 	u32 size = bs->size;
 	int ret = 0;
 
-	st = (struct stream_info *)buf;
-	if (inst->ctx->is_drm_mode && (st->magic == DRMe || st->magic == DRMn))
-		return 0;
+	if (inst->ctx->is_drm_mode) {
+		if (bs->model == VB2_MEMORY_MMAP) {
+			struct aml_video_stream *s =
+				(struct aml_video_stream *) buf;
 
-	if (inst->ctx->param_sets_from_ucode)
-		ret = stream_parse_by_ucode(inst, buf, size);
-	else if (st->magic == NORe || st->magic == NORn)
-		ret = stream_parse(inst, st->data, st->length);
-	else
-		ret = stream_parse(inst, buf, size);
+			if ((s->magic != AML_VIDEO_MAGIC) &&
+				(s->type != V4L_STREAM_TYPE_MATEDATA))
+				return -1;
+
+			if (inst->ctx->param_sets_from_ucode) {
+				ret = parse_stream_ucode(inst, s->data, s->len);
+			} else {
+				ret = parse_stream_cpu(inst, s->data, s->len);
+			}
+		} else if (bs->model == VB2_MEMORY_DMABUF ||
+			bs->model == VB2_MEMORY_USERPTR) {
+			ret = parse_stream_ucode_dma(inst, bs->addr, size,
+				BUFF_IDX(bs, bs->index));
+		}
+	} else {
+		if (inst->ctx->param_sets_from_ucode) {
+			ret = parse_stream_ucode(inst, buf, size);
+		} else {
+			ret = parse_stream_cpu(inst, buf, size);
+		}
+	}
+
+	inst->vsi->cur_pic = inst->vsi->pic;
 
 	return ret;
 }
@@ -441,29 +482,34 @@ static int vdec_mpeg12_decode(unsigned long h_vdec, struct aml_vcodec_mem *bs,
 {
 	struct vdec_mpeg12_inst *inst = (struct vdec_mpeg12_inst *)h_vdec;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
-	struct stream_info *st;
-	u8 *buf;
-	u32 size;
-	int ret = 0;
+	u8 *buf = (u8 *) bs->vaddr;
+	u32 size = bs->size;
+	int ret = -1;
 
-	/* bs NULL means flush decoder */
-	if (bs == NULL)
-		return 0;
+	if (vdec_input_full(vdec))
+		return -EAGAIN;
 
-	buf = (u8 *)bs->vaddr;
-	size = bs->size;
-	st = (struct stream_info *)buf;
+	if (inst->ctx->is_drm_mode) {
+		if (bs->model == VB2_MEMORY_MMAP) {
+			struct aml_video_stream *s =
+				(struct aml_video_stream *) buf;
 
-	if (inst->ctx->is_drm_mode && (st->magic == DRMe || st->magic == DRMn))
-		ret = vdec_vbuf_write(vdec, st->m.buf, sizeof(st->m.drm));
-	else if (st->magic == NORe)
-		ret = vdec_vbuf_write(vdec, st->data, st->length);
-	else if (st->magic == NORn)
-		ret = vdec_write_nalu(inst, st->data, st->length, timestamp);
-	else if (inst->ctx->is_stream_mode)
-		ret = vdec_vbuf_write(vdec, buf, size);
-	else
+			if (s->magic != AML_VIDEO_MAGIC)
+				return -1;
+
+			ret = vdec_vframe_write(vdec,
+				s->data,
+				s->len,
+				timestamp);
+		} else if (bs->model == VB2_MEMORY_DMABUF ||
+			bs->model == VB2_MEMORY_USERPTR) {
+			ret = vdec_vframe_write_with_dma(vdec,
+				bs->addr, size, timestamp,
+				BUFF_IDX(bs, bs->index));
+		}
+	} else {
 		ret = vdec_write_nalu(inst, buf, size, timestamp);
+	}
 
 	return ret;
 }
@@ -538,7 +584,7 @@ static void set_param_ps_info(struct vdec_mpeg12_inst *inst,
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
-	dec->dpb_sz		= ps->dpb_size + 1;
+	dec->dpb_sz		= ps->dpb_size;
 
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=

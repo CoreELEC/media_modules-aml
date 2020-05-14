@@ -313,9 +313,6 @@ static irqreturn_t vmjpeg_isr(struct vdec_s *vdec, int irq)
 			hw->v4l_params_parsed	= true;
 			vdec_v4l_set_ps_infos(ctx, &ps);
 		}
-
-		if (!ctx->v4l_codec_ready)
-			return IRQ_HANDLED;
 	}
 
 	if (hw->is_used_v4l) {

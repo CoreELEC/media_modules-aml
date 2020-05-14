@@ -143,6 +143,9 @@ extern int vdec_input_set_buffer(struct vdec_input_s *input, u32 start,
 extern int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 	size_t count);
 
+extern int vdec_input_add_frame_with_dma(struct vdec_input_s *input, ulong addr,
+	size_t count, u32 handle);
+
 /* Peek next frame data from decoder's input */
 extern struct vframe_chunk_s *vdec_input_next_chunk(
 			struct vdec_input_s *input);

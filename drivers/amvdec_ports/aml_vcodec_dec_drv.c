@@ -48,8 +48,8 @@
 #define V4LVIDEO_IOCTL_SET_CONFIG_PARAMS	_IOWR(V4LVIDEO_IOC_MAGIC, 0x04, struct v4l2_config_parm)
 #define V4LVIDEO_IOCTL_GET_CONFIG_PARAMS	_IOWR(V4LVIDEO_IOC_MAGIC, 0x05, struct v4l2_config_parm)
 
-bool scatter_mem_enable;
-bool param_sets_from_ucode;
+bool param_sets_from_ucode = 1;
+bool enable_drm_mode;
 
 static int fops_vcodec_open(struct file *file)
 {
@@ -82,11 +82,14 @@ static int fops_vcodec_open(struct file *file)
 	mutex_init(&ctx->state_lock);
 	mutex_init(&ctx->lock);
 	spin_lock_init(&ctx->slock);
-	init_waitqueue_head(&ctx->wq);
 	init_completion(&ctx->comp);
 
-	ctx->scatter_mem_enable = scatter_mem_enable ? 1 : 0;
 	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
+
+	if (enable_drm_mode) {
+		ctx->is_drm_mode = true;
+		ctx->param_sets_from_ucode = true;
+	}
 
 	ctx->type = AML_INST_DECODER;
 	ret = aml_vcodec_dec_ctrls_setup(ctx);
@@ -105,6 +108,7 @@ static int fops_vcodec_open(struct file *file)
 	}
 	src_vq = v4l2_m2m_get_vq(ctx->m2m_ctx,
 				V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+	ctx->output_thread_ready = true;
 	ctx->empty_flush_buf->vb.vb2_buf.vb2_queue = src_vq;
 	ctx->empty_flush_buf->lastframe = true;
 	aml_vcodec_dec_set_default_params(ctx);
@@ -612,11 +616,11 @@ bool dump_capture_frame;
 EXPORT_SYMBOL(dump_capture_frame);
 module_param(dump_capture_frame, bool, 0644);
 
-EXPORT_SYMBOL(scatter_mem_enable);
-module_param(scatter_mem_enable, bool, 0644);
-
 EXPORT_SYMBOL(param_sets_from_ucode);
 module_param(param_sets_from_ucode, bool, 0644);
+
+EXPORT_SYMBOL(enable_drm_mode);
+module_param(enable_drm_mode, bool, 0644);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("AML video codec V4L2 decoder driver");

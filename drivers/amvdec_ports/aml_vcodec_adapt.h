@@ -27,6 +27,7 @@
 
 struct aml_vdec_adapt {
 	enum vformat_e format;
+	enum VIDEO_DEC_TYPE dec_type;
 	void *vsi;
 	int32_t failure;
 	uint32_t inst_addr;
@@ -39,7 +40,6 @@ struct aml_vdec_adapt {
 	struct stream_port_s port;
 	struct dec_sysinfo dec_prop;
 	struct v4l2_config_parm config;
-	int video_type;
 	char *recv_name;
 	int vfm_path;
 };
@@ -54,6 +54,9 @@ int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count, u64 timestamp);
 
+int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
+	ulong addr, u32 count, u64 timestamp, u32 handle);
+
 bool vdec_input_full(struct aml_vdec_adapt *ada_ctx);
 
 void aml_decoder_flush(struct aml_vdec_adapt *ada_ctx);
@@ -65,6 +68,8 @@ extern void dump_write(const char __user *buf, size_t count);
 bool is_input_ready(struct aml_vdec_adapt *ada_ctx);
 
 int vdec_frame_number(struct aml_vdec_adapt *ada_ctx);
+
+u32 aml_recycle_buffer(struct aml_vdec_adapt *adaptor);
 
 #endif /* VDEC_ADAPT_H */
 
