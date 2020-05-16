@@ -341,7 +341,8 @@ s32 astream_dev_register(void)
 		goto err_2;
 	}
 
-	if (AM_MESON_CPU_MAJOR_ID_TXL < get_cpu_major_id()) {
+	if (AM_MESON_CPU_MAJOR_ID_TXL < get_cpu_major_id()
+		&& MESON_CPU_MAJOR_ID_GXLX != get_cpu_type()) {
 		node = of_find_node_by_path("/codec_io/io_cbus_base");
 		if (!node) {
 			pr_info("No io_cbus_base node found.");
