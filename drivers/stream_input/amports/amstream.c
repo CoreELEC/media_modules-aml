@@ -1057,8 +1057,10 @@ static int amstream_port_release(struct port_priv_s *priv)
 		tsdemux_release();
 	}
 
-	if (port->type & PORT_TYPE_MPPS)
+	if ((port->type & PORT_TYPE_MPPS) &&
+		!(port->flag & PORT_FLAG_VFORMAT)) {
 		psparser_release();
+	}
 
 	if (port->type & PORT_TYPE_VIDEO)
 		video_port_release(priv, pvbuf, 0);

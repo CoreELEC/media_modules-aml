@@ -261,7 +261,6 @@ static ssize_t _esparser_write(const char __user *buf,
 	return esparser_stbuf_write(stbuf, buf, count);
 }
 
-
 static ssize_t _esparser_write_s(const char __user *buf,
 			size_t count, struct stream_buf_s *stbuf)
 {
@@ -825,6 +824,7 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 	len = realcount;
 	count = realcount;
 	totalcount = realcount;
+	stbuf->is_phybuf = isphybuf;
 
 	while (len > 0) {
 		if (stbuf->type != BUF_TYPE_SUBTITLE
