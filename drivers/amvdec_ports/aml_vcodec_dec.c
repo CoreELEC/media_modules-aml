@@ -2134,6 +2134,10 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	if (ctx->is_drm_mode && src_mem.model == VB2_MEMORY_DMABUF) {
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 		aml_recycle_dma_buffers(ctx);
+	} else if (ctx->param_sets_from_ucode) {
+		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+		v4l2_m2m_buf_done(to_vb2_v4l2_buffer(vb),
+			VB2_BUF_STATE_DONE);
 	}
 
 	if (vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->picinfo)) {
@@ -2335,15 +2339,24 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 	codec_mm_bufs_cnt_clean(q);
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
+		if (ctx->is_drm_mode && q->memory == VB2_MEMORY_DMABUF)
+			aml_recycle_dma_buffers(ctx);
+
 		while ((vb2_v4l2 = v4l2_m2m_src_buf_remove(ctx->m2m_ctx)))
 			v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
 
-		if (ctx->is_drm_mode && q->memory == VB2_MEMORY_DMABUF)
-			aml_recycle_dma_buffers(ctx);
+		for (i = 0; i < q->num_buffers; ++i) {
+			vb2_v4l2 = to_vb2_v4l2_buffer(q->bufs[i]);
+			if (vb2_v4l2->vb2_buf.state == VB2_BUF_STATE_ACTIVE)
+				v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
+		}
 	} else {
 		/* clean output cache and decoder status . */
 		if (ctx->state > AML_STATE_INIT)
 			aml_vdec_reset(ctx);
+
+		while ((vb2_v4l2 = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx)))
+			v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
 
 		for (i = 0; i < q->num_buffers; ++i) {
 			vb2_v4l2 = to_vb2_v4l2_buffer(q->bufs[i]);
