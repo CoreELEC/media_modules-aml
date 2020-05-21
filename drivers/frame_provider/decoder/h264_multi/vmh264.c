@@ -10432,6 +10432,11 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 	/*hw->decode_pic_count = 0;
 	hw->seq_info2 = 0;*/
 
+	hw->cfg_param1 = READ_VREG(AV_SCRATCH_1);
+	hw->cfg_param2 = READ_VREG(AV_SCRATCH_2);
+	hw->cfg_param3 = READ_VREG(AV_SCRATCH_6);
+	hw->cfg_param4 = READ_VREG(AV_SCRATCH_B);
+
 	if (vh264_set_params(hw,
 		hw->cfg_param1,
 		hw->cfg_param2,
