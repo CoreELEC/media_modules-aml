@@ -84,6 +84,7 @@ struct stream_buf_s {
 	bool no_parser;
 	bool is_phybuf;
 	bool is_hevc;
+	u32 drm_flag;
 	ulong ext_buf_addr;
 	atomic_t payload;
 	struct parser_args pars;

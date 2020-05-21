@@ -216,7 +216,7 @@ static int esparser_stbuf_write(struct stream_buf_s *stbuf, const u8 *buf, u32 c
 		}
 
 		search_done = 0;
-		if (!(stbuf->is_phybuf & TYPE_PATTERN)) {
+		if (!(stbuf->drm_flag & TYPE_PATTERN)) {
 			WRITE_PARSER_REG(PARSER_FETCH_CMD,
 				(7 << FETCH_ENDIAN) | len);
 			WRITE_PARSER_REG(PARSER_FETCH_ADDR, search_pattern_map);
@@ -226,6 +226,7 @@ static int esparser_stbuf_write(struct stream_buf_s *stbuf, const u8 *buf, u32 c
 			WRITE_PARSER_REG(PARSER_FETCH_CMD,
 				(7 << FETCH_ENDIAN) | (len + 512));
 		}
+
 		ret = wait_event_interruptible_timeout(wq, search_done != 0,
 			HZ / 5);
 		if (ret == 0) {
@@ -768,7 +769,7 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 	struct drm_info tmpmm;
 	struct drm_info *drm = &tmpmm;
 	u32 res = 0;
-	int isphybuf = 0;
+	int drm_flag = 0;
 	unsigned long realbuf;
 
 	if (buf == NULL || count == 0)
@@ -792,7 +793,7 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 		/* buf only has drminfo not have esdata; */
 		realbuf = drm->drm_phy;
 		realcount = drm->drm_pktsize;
-		isphybuf = drm->drm_flag;
+		drm_flag = drm->drm_flag;
 		/* DRM_PRNT("drm_get_rawdata
 		 *onlydrminfo drm->drm_hasesdata[0x%x]
 		 * stbuf->type %d buf[0x%x]\n",
@@ -805,14 +806,14 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 		}
 		realcount = drm->drm_pktsize;
 		realbuf = (unsigned long)buf + sizeof(struct drm_info);
-		isphybuf = 0;
+		drm_flag = 0;
 		/* DRM_PRNT("drm_get_rawdata
 		 *   drminfo+es drm->drm_hasesdata[0x%x]
 		 * stbuf->type %d\n",drm->drm_hasesdata,stbuf->type);
 		 */
 	} else {		/* buf is hwhead; */
 		realcount = count;
-		isphybuf = 0;
+		drm_flag = 0;
 		realbuf = (unsigned long)buf;
 		/* DRM_PRNT("drm_get_rawdata
 		 *  drm->drm_hasesdata[0x%x]
@@ -824,7 +825,8 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 	len = realcount;
 	count = realcount;
 	totalcount = realcount;
-	stbuf->is_phybuf = isphybuf;
+	stbuf->drm_flag = drm_flag;
+	stbuf->is_phybuf = drm_flag ? 1 : 0;
 
 	while (len > 0) {
 		if (stbuf->type != BUF_TYPE_SUBTITLE
@@ -842,7 +844,7 @@ ssize_t drm_write(struct file *file, struct stream_buf_s *stbuf,
 
 		if (stbuf->type != BUF_TYPE_AUDIO)
 			r = _esparser_write((const char __user *)realbuf, len,
-					stbuf, isphybuf);
+					stbuf, drm_flag);
 		else
 			r = _esparser_write_s((const char __user *)realbuf, len,
 					stbuf);
