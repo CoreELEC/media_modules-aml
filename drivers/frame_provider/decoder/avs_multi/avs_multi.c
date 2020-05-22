@@ -2494,6 +2494,14 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	(struct vdec_avs_hw_s *)vdec->private;
 	int ret = 1;
 	unsigned buf_busy_mask = (1 << hw->vf_buf_num_used) - 1;
+
+	if (work_pending(&hw->work) ||
+	    work_busy(&hw->work)) {
+		debug_print(hw, PRINT_FLAG_RUN_FLOW,
+			   "avs work pending,not ready for run.\n");
+		return 0;
+	}
+
 #ifdef DEBUG_MULTI_FRAME_INS
 	if ((DECODE_ID(hw) == 0) && run_count[0] > run_count[1] &&
 		run_count[1] < max_run_count[1])

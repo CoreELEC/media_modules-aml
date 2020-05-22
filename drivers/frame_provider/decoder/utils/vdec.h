@@ -269,9 +269,8 @@ struct vdec_s {
 	u64 run_clk[VDEC_MAX];
 	u64 start_run_clk[VDEC_MAX];
 #endif
-	atomic_t inirq_thread_flag;
-	atomic_t inirq_flag;
-	atomic_t inrelease;
+	u64 irq_thread_cnt;
+	u64 irq_cnt;
 	int parallel_dec;
 	struct vdec_frames_s *mvfrm;
 	struct vdec_sync sync;

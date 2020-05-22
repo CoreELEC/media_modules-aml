@@ -10084,6 +10084,12 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		CODEC_MM_FLAGS_TVP : 0;
 	unsigned long ret = 0;
 
+	if (work_pending(&pbi->work) ||
+	    work_busy(&pbi->work)) {
+		vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
+			  "vp9 work pending,not ready for run.\n");
+		return 0;
+	}
 	if (!(pbi->pic_list_init_done && pbi->pic_list_init_done2) || pbi->eos)
 		return ret;
 	if (!pbi->first_sc_checked && pbi->mmu_enable) {

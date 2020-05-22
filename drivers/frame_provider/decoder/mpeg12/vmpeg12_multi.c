@@ -2730,8 +2730,11 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
-	if (work_pending(&hw->work)) {
-		pr_err("timeout_process return befor do anything.");
+	if (work_pending(&hw->work) ||
+	    work_busy(&hw->work) ||
+	    work_pending(&hw->timeout_work) ||
+	    work_busy(&hw->timeout_work)) {
+		pr_err("%s mpeg12[%d] timeout_process return befor do anything.\n",__func__, vdec->id);
 		return;
 	}
 	reset_process_time(hw);
@@ -2748,7 +2751,7 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 	 * let it to handle the scenario.
 	 */
 	if (work_pending(&hw->work)) {
-		pr_err("timeout_process return befor schedule.");
+		pr_err("%s mpeg12[%d] return befor schedule.", __func__, vdec->id);
 		return;
 	}
 	vdec_schedule_work(&hw->timeout_work);
@@ -3046,6 +3049,14 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		(struct vdec_mpeg12_hw_s *)vdec->private;
 	if (hw->eos)
 		return 0;
+	if (work_pending(&hw->work) ||
+	    work_busy(&hw->work) ||
+	    work_pending(&hw->timeout_work) ||
+	    work_busy(&hw->timeout_work)) {
+		debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"mpeg12 work pending,not ready for run.\n");
+		return 0;
+	}
 	if (vdec_stream_based(vdec) && (hw->init_flag == 0)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
@@ -3146,6 +3157,7 @@ void (*callback)(struct vdec_s *, void *),
 		(struct vdec_mpeg12_hw_s *)vdec->private;
 	int save_reg = READ_VREG(POWER_CTL_VLD);
 	int size, ret;
+
 	/* reset everything except DOS_TOP[1] and APB_CBUS[0]*/
 	WRITE_VREG(DOS_SW_RESET0, 0xfffffff0);
 	WRITE_VREG(DOS_SW_RESET0, 0);

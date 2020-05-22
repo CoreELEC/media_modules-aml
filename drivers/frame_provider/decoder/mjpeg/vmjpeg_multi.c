@@ -1255,6 +1255,12 @@ static unsigned long run_ready(struct vdec_s *vdec,
 	hw->not_run_ready++;
 	if (hw->eos)
 		return 0;
+	if (work_pending(&hw->work) ||
+	    work_busy(&hw->work)) {
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+			   "mjpeg work pending,not ready for run.\n");
+		return 0;
+	}
 	if (vdec_stream_based(vdec) && (hw->init_flag == 0)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;

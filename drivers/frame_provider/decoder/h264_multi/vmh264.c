@@ -6879,10 +6879,16 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 
 	/*
 	 * In this very timeout point,the vh264_work arrives,
-	 * let it to handle the scenario.
+	 * or in some cases the system become slow,  then come
+	 * this second timeout. In both cases we return.
 	 */
-	if (work_pending(&hw->work))
+	if (work_pending(&hw->work) ||
+	    work_busy(&hw->work) ||
+	    work_pending(&hw->timeout_work) ||
+	    work_busy(&hw->timeout_work)) {
+		pr_err("%s h264[%d] work pending, do nothing.\n",__func__, vdec->id);
 		return;
+	}
 
 	hw->timeout_num++;
 	amvdec_stop();
@@ -8990,6 +8996,14 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	int tvp = vdec_secure(hw_to_vdec(hw)) ?
 		CODEC_MM_FLAGS_TVP : 0;
 
+	if (work_pending(&hw->work) ||
+	    work_busy(&hw->work) ||
+	    work_pending(&hw->timeout_work) ||
+	    work_busy(&hw->timeout_work)) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+			  "h264 work pending, not ready for run.\n");
+		return 0;
+	}
 	if (!hw->first_sc_checked && hw->mmu_enable) {
 		int size = decoder_mmu_box_sc_check(hw->mmu_box, tvp);
 		hw->first_sc_checked =1;

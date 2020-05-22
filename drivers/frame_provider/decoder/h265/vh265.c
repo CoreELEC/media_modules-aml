@@ -12077,13 +12077,16 @@ static void timeout_process(struct hevc_state_s *hevc)
 {
 	/*
 	 * In this very timeout point,the vh265_work arrives,
-	 * let it to handle the scenario.
+	 * or in some cases the system become slow,  then come
+	 * this second timeout. In both cases we return.
 	 */
 	if (work_pending(&hevc->work) ||
 	    work_busy(&hevc->work) ||
 	    work_pending(&hevc->timeout_work) ||
-	    work_busy(&hevc->timeout_work))
+	    work_pending(&hevc->timeout_work)) {
+		pr_err("%s h265[%d] work pending, do nothing.\n",__func__, hevc->index);
 		return;
+	}
 
 	hevc->timeout_num++;
 	amhevc_stop();
@@ -12867,6 +12870,14 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 	if (hevc->eos)
 		return 0;
+	if (work_pending(&hevc->work) ||
+	    work_busy(&hevc->work) ||
+	    work_pending(&hevc->timeout_work) ||
+	    work_pending(&hevc->timeout_work)) {
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+			   "h265 work pending,not ready for run.\n");
+		return 0;
+	}
 	if (!hevc->first_sc_checked && hevc->mmu_enable) {
 		int size = decoder_mmu_box_sc_check(hevc->mmu_box, tvp);
 		hevc->first_sc_checked =1;

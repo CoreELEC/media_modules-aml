@@ -9543,6 +9543,12 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		CODEC_MM_FLAGS_TVP : 0;
 	unsigned long ret = 0;
 
+	if (work_pending(&hw->work) ||
+	    work_busy(&hw->work)) {
+		av1_print(hw, PRINT_FLAG_VDEC_DETAIL,
+			   "av1 work pending,not ready for run.\n");
+		return 0;
+	}
 	if (!hw->pic_list_init_done2 || hw->eos)
 		return ret;
 
