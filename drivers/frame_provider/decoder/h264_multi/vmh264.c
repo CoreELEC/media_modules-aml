@@ -1374,7 +1374,9 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	if (get_cpu_major_id() >= MESON_CPU_MAJOR_ID_G12A) {
 		  WRITE_VREG(HEVC_DBLK_CFG1, 0x2); // set ctusize==16
 		  WRITE_VREG(HEVC_DBLK_CFG2, ((height & 0xffff)<<16) | (width & 0xffff));
-		  if (dw_mode)
+		  if (dw_mode & 0x10)
+			WRITE_VREG(HEVC_DBLK_CFGB, 0x40405603);
+		  else if (dw_mode)
 			WRITE_VREG(HEVC_DBLK_CFGB, 0x40405703);
 		  else
 			WRITE_VREG(HEVC_DBLK_CFGB, 0x40405503);
@@ -1401,7 +1403,9 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	data32 &= (~0xff0);
 	data32 |= endian;	/* Big-Endian per 64-bit */
 
-	if (hw->mmu_enable && dw_mode)
+	if (hw->mmu_enable && (dw_mode & 0x10))
+		data32 |= ((hw->canvas_mode << 12) |1);
+	else if (hw->mmu_enable && dw_mode)
 		data32 |= ((hw->canvas_mode << 12));
 	else
 		data32 |= ((hw->canvas_mode << 12)|2);

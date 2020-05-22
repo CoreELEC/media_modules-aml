@@ -5504,13 +5504,12 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	data32 &= (~0xff0);
 	/* data32 |= 0x670;  // Big-Endian per 64-bit */
 	data32 |= endian;	/* Big-Endian per 64-bit */
-	if  (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) {
-		data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
-		if (get_double_write_mode(pbi) == 0)
-			data32 |= 0x2; /*disable double write*/
+	data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
+	if (get_double_write_mode(pbi) == 0)
+		data32 |= 0x2; /*disable double write*/
 	else if (get_double_write_mode(pbi) & 0x10)
 		data32 |= 0x1; /*disable cm*/
-	} else { /* >= G12A dw write control */
+	 if  (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) { /* >= G12A dw write control */
 		unsigned int data;
 		data = READ_VREG(HEVC_DBLK_CFGB);
 		data &= (~0x300); /*[8]:first write enable (compress)  [9]:double write enable (uncompress)*/
@@ -5891,9 +5890,13 @@ void vp9_loop_filter_init(struct VP9Decoder_s *pbi)
 		(0x3 << 10) | // (dw fifo thres not r/b)
 		(0x3 << 8) | // 1st/2nd write both enable
 		(0x1 << 0); // vp9 video format
+		if (get_double_write_mode(pbi) == 0x10)
+			 data32 &= (~0x100);
 	} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		data32 = (0x57 << 8) |  /*1st/2nd write both enable*/
 			(0x1  << 0); /*vp9 video format*/
+		if (get_double_write_mode(pbi) == 0x10)
+			 data32 &= (~0x100);
 	} else
 		data32 = 0x40400001;
 
