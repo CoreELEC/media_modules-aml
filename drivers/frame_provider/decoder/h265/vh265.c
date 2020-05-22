@@ -5345,13 +5345,12 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	data32 &= (~0xff0);
 	/* data32 |= 0x670;  // Big-Endian per 64-bit */
 	data32 |= endian;	/* Big-Endian per 64-bit */
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) {
-		data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
-		if (get_double_write_mode(hevc) == 0)
-			data32 |= 0x2; /*disable double write*/
-		else if (get_double_write_mode(hevc) & 0x10)
-			data32 |= 0x1; /*disable cm*/
-	} else {
+	data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
+	if (get_double_write_mode(hevc) == 0)
+		data32 |= 0x2; /*disable double write*/
+	else if (get_double_write_mode(hevc) & 0x10)
+		data32 |= 0x1; /*disable cm*/
+	 if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 			unsigned int data;
 			data = (0x57 << 8) |  /* 1st/2nd write both enable*/
 				(0x0  << 0);   /* h265 video format*/
@@ -5364,7 +5363,6 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 				data |= (0x1 << 9); /*double write only*/
 			else
 				data |= ((0x1 << 8)  |(0x1 << 9));
-
 			WRITE_VREG(HEVC_DBLK_CFGB, data);
 			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
 				"[DBLK DEBUG] HEVC1 CFGB : 0x%x\n", data);
@@ -5391,6 +5389,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	*  [1]     dw_disable:disable double write output
 	*  [0]     cm_disable:disable compress output
 	*/
+
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 	if (get_double_write_mode(hevc) & 0x10) {
 		/* [23:22] dw_v1_ctrl
