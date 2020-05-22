@@ -1299,11 +1299,31 @@ static void vdec_sync_input_write(struct vdec_s *vdec)
 		return;
 
 	if (vdec->input.target == VDEC_INPUT_TARGET_VLD) {
-		WRITE_VREG(VLD_MEM_VIFIFO_WP,
-			STBUF_READ(&vdec->vbuf, get_wp));
+		if (enable_stream_mode_multi_dec) {
+			if (!vdec->master) {
+				WRITE_VREG(VLD_MEM_VIFIFO_WP,
+					STBUF_READ(&vdec->vbuf, get_wp));
+			} else {
+				STBUF_WRITE(&vdec->vbuf, set_wp,
+					STBUF_READ(&vdec->master->vbuf, get_wp));
+			}
+		} else {
+			WRITE_VREG(VLD_MEM_VIFIFO_WP,
+				STBUF_READ(&vdec->vbuf, get_wp));
+		}
 	} else if (vdec->input.target == VDEC_INPUT_TARGET_HEVC) {
-		WRITE_VREG(HEVC_STREAM_WR_PTR,
-			STBUF_READ(&vdec->vbuf, get_wp));
+		if (enable_stream_mode_multi_dec) {
+			if (!vdec->master) {
+				WRITE_VREG(HEVC_STREAM_WR_PTR,
+					STBUF_READ(&vdec->vbuf, get_wp));
+			} else {
+				STBUF_WRITE(&vdec->vbuf, set_wp,
+					STBUF_READ(&vdec->master->vbuf, get_wp));
+			}
+		} else {
+			WRITE_VREG(HEVC_STREAM_WR_PTR,
+				STBUF_READ(&vdec->vbuf, get_wp));
+		}
 	}
 }
 
@@ -2224,7 +2244,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	vdec_frame_check_init(vdec);
 #endif
 	/* stream buffer init. */
-	if (vdec->vbuf.ops) {
+	if (vdec->vbuf.ops && !vdec->master) {
 		r = vdec->vbuf.ops->init(&vdec->vbuf, vdec);
 		if (r) {
 			pr_err("%s stream buffer init err (%d)\n", dev_name, r);
@@ -2234,6 +2254,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 			mutex_unlock(&vdec_mutex);
 
 			goto error;
+		}
+
+		if (vdec->slave) {
+			memcpy(&vdec->slave->vbuf, &vdec->vbuf,
+				sizeof(vdec->vbuf));
 		}
 	}
 
@@ -2598,7 +2623,7 @@ void vdec_release(struct vdec_s *vdec)
 	/*Check if the vdec still in connected list, if yes, delete it*/
 	vdec_connect_list_force_clear(vdec_core, vdec);
 
-	if (vdec->vbuf.ops)
+	if (vdec->vbuf.ops && !vdec->master)
 		vdec->vbuf.ops->release(&vdec->vbuf);
 
 	pr_debug("vdec_release instance %p, total %d\n", vdec,

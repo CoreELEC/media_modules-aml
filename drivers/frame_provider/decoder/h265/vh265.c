@@ -8763,7 +8763,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		else {
 #endif
 #endif
-		if (pic->stream_frame_size > 50 &&
+		if (!vdec_dual(vdec) && pic->stream_frame_size > 50 &&
 			(hevc->min_pic_size > pic->stream_frame_size ||
 			(hevc->min_pic_size == 0))) {
 			hevc->min_pic_size = pic->stream_frame_size;
@@ -8803,7 +8803,8 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		}
 #endif
 #endif
-		if (vdec_stream_based(vdec) && (vf->duration > 0)) {
+		if (!vdec_dual(vdec) &&
+			vdec_stream_based(vdec) && (vf->duration > 0)) {
 			if ((vf->pts != 0) && (hevc->last_pts != 0)) {
 				int diff = vf->pts - hevc->last_pts;
 				if (diff > ((hevc->pts_continue_miss + 2)
