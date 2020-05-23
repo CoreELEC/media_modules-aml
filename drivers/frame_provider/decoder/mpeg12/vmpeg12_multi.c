@@ -76,6 +76,9 @@
 #define MREG_WAIT_BUFFER    AV_SCRATCH_E
 #define MREG_FATAL_ERROR    AV_SCRATCH_F
 
+#define MREG_CC_ADDR    AV_SCRATCH_0
+#define AUX_BUF_ALIGN(adr) ((adr + 0xf) & (~0xf))
+
 #define GET_SLICE_TYPE(type)  ("IPB##"[((type&PICINFO_TYPE_MASK)>>16)&0x3])
 #define PICINFO_ERROR       0x80000000
 #define PICINFO_TYPE_MASK   0x00030000
@@ -265,8 +268,9 @@ struct vdec_mpeg12_hw_s {
 	struct work_struct notify_work;
 	void (*vdec_cb)(struct vdec_s *, void *);
 	void *vdec_cb_arg;
-	unsigned long ccbuf_phyAddress;
+	dma_addr_t ccbuf_phyAddress;
 	void *ccbuf_phyAddress_virt;
+	u32 cc_buf_size;
 	unsigned long ccbuf_phyAddress_is_remaped_nocache;
 	u32 frame_rpt_state;
 /* for error handling */
@@ -1373,11 +1377,6 @@ static void userdata_push_do_work(struct work_struct *work)
 
 	offset = READ_VREG(AV_SCRATCH_I);
 
-	codec_mm_dma_flush(
-		hw->ccbuf_phyAddress_virt,
-		CCBUF_SIZE,
-		DMA_FROM_DEVICE);
-
 	mutex_lock(&hw->userdata_mutex);
 	if (hw->ccbuf_phyAddress_virt) {
 		pdata = (u8 *)hw->ccbuf_phyAddress_virt + hw->ucode_cc_last_wp;
@@ -2431,26 +2430,16 @@ static void vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 		}
 
 		if (i == hw->buf_num) {
-			if (hw->ccbuf_phyAddress_is_remaped_nocache)
-				codec_mm_unmap_phyaddr(hw->ccbuf_phyAddress_virt);
-			hw->ccbuf_phyAddress_virt = NULL;
-			hw->ccbuf_phyAddress = 0;
-			hw->ccbuf_phyAddress_is_remaped_nocache = 0;
-
-			hw->buf_start = decbuf_start;
-			hw->ccbuf_phyAddress = hw->buf_start + CTX_CCBUF_OFFSET;
-			hw->ccbuf_phyAddress_virt
-				= codec_mm_phys_to_virt(
-					hw->ccbuf_phyAddress);
-			if ((!hw->ccbuf_phyAddress_virt) && (!hw->tvp_flag)) {
-				hw->ccbuf_phyAddress_virt
-					= codec_mm_vmap(
-						hw->ccbuf_phyAddress,
-						CCBUF_SIZE);
-				hw->ccbuf_phyAddress_is_remaped_nocache = 1;
+			hw->cc_buf_size = AUX_BUF_ALIGN(CCBUF_SIZE);
+			hw->ccbuf_phyAddress_virt = dma_alloc_coherent(amports_get_dma_device(),
+						  hw->cc_buf_size, &hw->ccbuf_phyAddress,
+						  GFP_KERNEL);
+			if (hw->ccbuf_phyAddress_virt == NULL) {
+				pr_err("%s: failed to alloc cc buffer\n", __func__);
+				return;
 			}
 
-			WRITE_VREG(MREG_CO_MV_START, hw->buf_start);
+			WRITE_VREG(MREG_CC_ADDR, hw->ccbuf_phyAddress);
 		} else {
 			if (vdec->parallel_dec == 1) {
 				unsigned tmp;
@@ -2712,6 +2701,7 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 		vmpeg12_canvas_init(hw);
 	else {
 		WRITE_VREG(MREG_CO_MV_START, hw->buf_start);
+		WRITE_VREG(MREG_CC_ADDR, hw->ccbuf_phyAddress);
 		if (!hw->is_used_v4l) {
 			for (i = 0; i < hw->buf_num; i++) {
 				canvas_config_config(canvas_y(hw->canvas_spec[i]),
@@ -2795,8 +2785,12 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 		height information,in order to be compatible
 		with the old version of ucode.
 		1: Report the width and height information
-		0: Not Report*/
-	WRITE_VREG(MREG_FATAL_ERROR, 1 << 1);
+		0: No Report
+	  bit0:
+	        1: Use cma cc buffer for new driver
+	        0: use codec mm cc buffer for old driver
+		*/
+	WRITE_VREG(MREG_FATAL_ERROR, 3);
 	/* clear wait buffer status */
 	WRITE_VREG(MREG_WAIT_BUFFER, 0);
 #ifdef NV21
@@ -3382,11 +3376,12 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 		}
 	}
 
-	if (hw->ccbuf_phyAddress_is_remaped_nocache)
-		codec_mm_unmap_phyaddr(hw->ccbuf_phyAddress_virt);
-	hw->ccbuf_phyAddress_virt = NULL;
-	hw->ccbuf_phyAddress = 0;
-	hw->ccbuf_phyAddress_is_remaped_nocache = 0;
+	if (hw->ccbuf_phyAddress_virt) {
+		dma_free_coherent(amports_get_dma_device(),hw->cc_buf_size,
+			hw->ccbuf_phyAddress_virt, hw->ccbuf_phyAddress);
+		hw->ccbuf_phyAddress_virt = NULL;
+		hw->ccbuf_phyAddress = 0;
+	}
 
 	if (hw->user_data_buffer != NULL) {
 		kfree(hw->user_data_buffer);
