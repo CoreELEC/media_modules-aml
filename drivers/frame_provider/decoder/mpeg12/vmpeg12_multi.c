@@ -2438,7 +2438,8 @@ static void vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 				pr_err("%s: failed to alloc cc buffer\n", __func__);
 				return;
 			}
-
+			hw->buf_start = decbuf_start;
+			WRITE_VREG(MREG_CO_MV_START, hw->buf_start);
 			WRITE_VREG(MREG_CC_ADDR, hw->ccbuf_phyAddress);
 		} else {
 			if (vdec->parallel_dec == 1) {
