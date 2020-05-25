@@ -94,7 +94,6 @@ static struct StorablePicture *get_new_pic(
 	struct h264_dpb_stru *p_H264_Dpb,
 	enum PictureStructure structure, unsigned char is_output);
 
-static void update_ref_list(struct DecodedPictureBuffer *p_Dpb);
 
 static void init_dummy_fs(void)
 {
@@ -930,7 +929,8 @@ void fill_frame_num_gap(struct VideoParameters *p_Vid, struct Slice *currSlice)
 			release_picture(p_H264_Dpb, picture);
 			bufmgr_force_recover(p_H264_Dpb);
 			return;
-		}
+		} else if (ret == -2)
+			release_picture(p_H264_Dpb, picture);
 
 		picture = NULL;
 		p_Vid->pre_frame_num = UnusedShortTermFrameNum;
@@ -2459,7 +2459,7 @@ static int is_long_term_reference(struct FrameStore *fs)
 	return 0;
 }
 
-static void update_ref_list(struct DecodedPictureBuffer *p_Dpb)
+void update_ref_list(struct DecodedPictureBuffer *p_Dpb)
 {
 	unsigned int i, j;
 
@@ -3607,6 +3607,16 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 					  PRINT_FLAG_DPB_DETAIL,
 					  "duplicate frame_num in short-term reference picture buffer %d\n",
 					   500);
+				if (p_Dpb->fs_ref[i]->dpb_frame_count == p_H264_Dpb->dpb_frame_count) {
+					dpb_print(p_H264_Dpb->decoder_index,
+							  0, "duplicate frame, no insert to dpb\n");
+					return -2;
+				} else {
+					dpb_print(p_H264_Dpb->decoder_index,
+						  0, "duplicate frame_num release defore ref\n");
+					unmark_for_reference(p_Dpb, p_Dpb->fs_ref[i]);
+					update_ref_list(p_Dpb);
+				}
 			}
 		}
 	}

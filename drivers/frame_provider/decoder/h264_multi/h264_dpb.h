@@ -971,4 +971,7 @@ int dpb_check_ref_list_error(
 void unmark_for_reference(struct DecodedPictureBuffer *p_Dpb,
 	struct FrameStore *fs);
 
+void update_ref_list(struct DecodedPictureBuffer *p_Dpb);
+
+
 #endif

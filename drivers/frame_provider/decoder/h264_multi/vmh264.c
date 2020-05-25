@@ -277,8 +277,9 @@ static unsigned int i_only_flag;
 	bit[17] 1: If the decoded Mb count is insufficient but greater than the threshold, it is considered the correct frame.
 	bit[18] 1: time out status, store pic to dpb buffer.
 	bit[19] 1: If a lot b frames are wrong consecutively, the DPB queue reset.
+	bit[20] 1: fixed some error stream will lead to the diffusion of the error, resulting playback stuck.
 */
-static unsigned int error_proc_policy = 0xfCfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0x1fCfb6; /*0x1f14*/
 
 
 /*
@@ -891,6 +892,7 @@ struct vdec_h264_hw_s {
 	int sidebind_type;
 	int sidebind_channel_id;
 	u32 low_latency_mode;
+	int ip_field_error_count;
 };
 
 static u32 again_threshold;
@@ -5655,6 +5657,38 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 		}
 	}
 
+	if ((error_proc_policy & 0x100000) &&
+			hw->last_dec_picture &&
+				(hw->last_dec_picture->slice_type == I_SLICE) &&
+				(hw->dpb.mSlice.slice_type == P_SLICE)) {
+		if ((p->data_flag & ERROR_FLAG) &&
+				(decode_mb_count >= mb_total)) {
+				hw->ip_field_error_count++;
+				if (hw->ip_field_error_count == 4) {
+					unsigned int i;
+					struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
+					for (i = 0; i < p_Dpb->ref_frames_in_buffer; i++) {
+						if (p_Dpb->fs_ref[i]->top_field)
+							p_Dpb->fs_ref[i]->top_field->data_flag &= ~ERROR_FLAG;
+						if (p_Dpb->fs_ref[i]->bottom_field)
+							p_Dpb->fs_ref[i]->bottom_field->data_flag &= ~ERROR_FLAG;
+						if (p_Dpb->fs_ref[i]->frame)
+							p_Dpb->fs_ref[i]->frame->data_flag &= ~ERROR_FLAG;
+					}
+					hw->ip_field_error_count = 0;
+					p->data_flag &= ~ERROR_FLAG;
+					hw->data_flag &= ~ERROR_FLAG;
+					dpb_print(DECODE_ID(hw), 0,
+						"clear all ref frame error flag\n");
+				}
+		} else {
+			if (hw->ip_field_error_count > 0)
+				dpb_print(DECODE_ID(hw), 0,
+					"clear error count %d\n", hw->ip_field_error_count);
+			hw->ip_field_error_count = 0;
+		}
+	}
+
 	if (p->data_flag & ERROR_FLAG) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
 			"%s: decode error, seq_info2 0x%x, mby_mbx 0x%x, mb_total %d decoded mb_count %d ERROR_STATUS_REG 0x%x\n",
@@ -5780,6 +5814,8 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 			if (ret == -1) {
 				release_cur_decoding_buf(hw);
 				bufmgr_force_recover(p_H264_Dpb);
+			} else if (ret == -2) {
+				release_cur_decoding_buf(hw);
 			} else {
 			if (hw->data_flag & ERROR_FLAG) {
 				hw->no_error_count = 0;
@@ -5900,6 +5936,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		int slice_header_process_status = 0;
 		int I_flag;
 		int frame_num_gap = 0;
+		union param dpb_param_bak;
 		/*unsigned char is_idr;*/
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
 		reset_process_time(hw);
@@ -5987,6 +6024,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			/* printk("%x:%x\n", i,data32); */
 		}
 #else
+		dpb_param_bak = p_H264_Dpb->dpb_param;
 		for (i = 0; i < (RPM_END-RPM_BEGIN); i += 4) {
 			int ii;
 
@@ -6008,6 +6046,19 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 							0, "\r\n");
 				}
 			}
+		}
+#endif
+#ifdef DETECT_WRONG_MULTI_SLICE
+
+		if (p_H264_Dpb->mVideo.dec_picture &&
+				hw->multi_slice_pic_flag == 2 &&
+				(p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] != dpb_param_bak.l.data[SLICE_TYPE] ||
+				dpb_param_bak.l.data[FIRST_MB_IN_SLICE] > p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE])) {
+			dpb_print(DECODE_ID(hw), 0,
+				"decode next pic, save before, SLICE_TYPE BAK %d, SLICE_TYPE %d, FIRST_MB_IN_SLICE BAK %d, FIRST_MB_IN_SLICE %d\n",
+					dpb_param_bak.l.data[SLICE_TYPE], p_H264_Dpb->dpb_param.l.data[SLICE_TYPE],
+					dpb_param_bak.l.data[FIRST_MB_IN_SLICE], p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE]);
+			vh264_pic_done_proc(vdec);
 		}
 #endif
 		data_low = p_H264_Dpb->dpb_param.l.data[VIDEO_SIGNAL_LOW];
@@ -6055,7 +6106,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					vdec_schedule_work(&hw->work);
 					dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_UCODE_EVT,
-						"has_i_frame is 0, discard none I(DR) frame\n");
+						"has_i_frame is 0, discard none I(DR) frame silce_type %d is_idr %d\n", p_H264_Dpb->dpb_param.l.data[SLICE_TYPE], is_idr);
 					return IRQ_HANDLED;
 				}
 			} else {
@@ -6109,6 +6160,9 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		if (p_H264_Dpb->mVideo.dec_picture) {
 			int cfg_ret = 0;
 			bool field_pic_flag = false;
+			unsigned mby_mbx = READ_VREG(MBY_MBX);
+			struct StorablePicture *p =
+				p_H264_Dpb->mVideo.dec_picture;
 
 			if (slice_header_process_status == 1) {
 				if (!p_H264_Dpb->mSPS.frame_mbs_only_flag) {
@@ -6133,21 +6187,28 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					dpb_param.dpb.NAL_info_mmco & 0x1f)
 					== 5)
 					hw->data_flag |= IDR_FLAG;
+				if ((p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE]) && !mby_mbx) {
+					p->data_flag |= ERROR_FLAG;
+					dpb_print(DECODE_ID(hw),
+						PRINT_FLAG_VDEC_STATUS,
+						"one slice error in muulti-slice  first_mb 0x%x mby_mbx 0x%x  slice_type %d\n",
+						p_H264_Dpb->dpb_param.l.
+						data[FIRST_MB_IN_SLICE],
+						READ_VREG(MBY_MBX),
+						 p->slice_type);
+				}
 				dpb_print(DECODE_ID(hw),
 				PRINT_FLAG_VDEC_STATUS,
 				"==================> frame count %d to skip %d\n",
 				hw->decode_pic_count+1,
 				hw->skip_frame_count);
 				} else if (error_proc_policy & 0x100){
-					struct StorablePicture *p =
-						p_H264_Dpb->mVideo.dec_picture;
-					unsigned mby_mbx = READ_VREG(MBY_MBX);
 					unsigned decode_mb_count =
 						((mby_mbx & 0xff) * hw->mb_width +
 						(((mby_mbx >> 8) & 0xff) + 1));
 					if (decode_mb_count <
 						((p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE]) *
-						(1 + p->mb_aff_frame_flag))) {
+						(1 + p->mb_aff_frame_flag)) && decode_mb_count) {
 						dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_VDEC_STATUS,
 						"Error detect! first_mb 0x%x mby_mbx 0x%x decode_mb 0x%x\n",
@@ -8513,11 +8574,18 @@ result_done:
 				struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
 
 				for (i = 0; i < p_Dpb->used_size; i++) {
-					if (p_Dpb->fs[i]->dpb_frame_count + 500 < p_H264_Dpb->dpb_frame_count) {
+					int i_flag = p_Dpb->fs[i]->bottom_field || p_Dpb->fs[i]->top_field;
+					int threshold = i_flag ? ((50 + p_Dpb->used_size) * 2)  : 50 + p_Dpb->used_size;
+					if ((p_Dpb->fs[i]->dpb_frame_count + threshold
+							< p_H264_Dpb->dpb_frame_count) &&
+						p_Dpb->fs[i]->is_reference &&
+						!p_Dpb->fs[i]->is_long_term &&
+						p_Dpb->fs[i]->is_output) {
 						dpb_print(DECODE_ID(hw),
 							0,
 							"unmark reference dpb_frame_count diffrence large in dpb\n");
 						unmark_for_reference(p_Dpb, p_Dpb->fs[i]);
+						update_ref_list(p_Dpb);
 					}
 				}
 			}
