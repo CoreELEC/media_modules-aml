@@ -8161,14 +8161,20 @@ static void vmh264_wakeup_userdata_poll(struct vdec_s *vdec)
 
 #endif
 
-static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw, u32 param1, u32 param4, struct aml_vdec_ps_infos *ps)
+static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
+	u32 param1, u32 param2, u32 param3, u32 param4,
+	struct aml_vdec_ps_infos *ps)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	int mb_width, mb_total;
 	int mb_height = 0;
 	int active_buffer_spec_num;
 	int max_reference_size ,level_idc;
-	unsigned int used_reorder_dpb_size_margin
+	u32 frame_mbs_only_flag;
+	u32 chroma_format_idc, chroma444;
+	u32 crop_infor, crop_bottom, crop_right;
+	u32 frame_width, frame_height;
+	u32 used_reorder_dpb_size_margin
 		= hw->reorder_dpb_size_margin;
 	int reorder_pic_num;
 
@@ -8222,12 +8228,46 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw, u32 param1, u32 param4,
 	if (hw->no_poc_reorder_flag)
 		reorder_pic_num = 1;
 
+	/*
+	 * crop
+	 * AV_SCRATCH_2
+	 * bit 15: frame_mbs_only_flag
+	 * bit 13-14: chroma_format_idc
+	 */
+	frame_mbs_only_flag = (hw->seq_info >> 15) & 0x01;
+	chroma_format_idc = (hw->seq_info >> 13) & 0x03;
+	chroma444 = (chroma_format_idc == 3) ? 1 : 0;
+
+	/*
+	 * AV_SCRATCH_6 bit 31-16 =  (left  << 8 | right ) << 1
+	 * AV_SCRATCH_6 bit 15-0 =  (top << 8  | bottom ) <<
+	 *                          (2 - frame_mbs_only_flag)
+	 */
+	crop_infor = param3;
+	crop_bottom = (crop_infor & 0xff) >> (2 - frame_mbs_only_flag);
+	crop_right = ((crop_infor >> 16) & 0xff) >> (2 - frame_mbs_only_flag);
+
+	frame_width = mb_width << 4;
+	frame_height = mb_height << 4;
+
+	if (frame_mbs_only_flag) {
+		frame_height = frame_height - (2 >> chroma444) *
+			min(crop_bottom, (u32)((8 << chroma444) - 1));
+		frame_width = frame_width - (2 >> chroma444) *
+			min(crop_right, (u32)((8 << chroma444) - 1));
+	} else {
+		frame_height = frame_height - (4 >> chroma444) *
+			min(crop_bottom, (u32)((8 << chroma444) - 1));
+		frame_width = frame_width - (4 >> chroma444) *
+			min(crop_right, (u32)((8 << chroma444) - 1));
+	}
+
 	ps->profile 		= level_idc;
 	ps->ref_frames 		= max_reference_size;
 	ps->mb_width 		= mb_width;
 	ps->mb_height 		= mb_height;
-	ps->visible_width	= mb_width << 4;
-	ps->visible_height	= mb_height << 4;
+	ps->visible_width	= frame_width;
+	ps->visible_height	= frame_height;
 	ps->coded_width		= ALIGN(mb_width << 4, 64);
 	ps->coded_height	= ALIGN(mb_height << 4, 64);
 	ps->reorder_frames	= reorder_pic_num;
@@ -8236,7 +8276,9 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw, u32 param1, u32 param4,
 	return 0;
 }
 
-static int v4l_res_change(struct vdec_h264_hw_s *hw, u32 param1, u32 param4)
+static int v4l_res_change(struct vdec_h264_hw_s *hw,
+			  u32 param1, u32 param2,
+			  u32 param3, u32 param4)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -8249,9 +8291,12 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw, u32 param1, u32 param4)
 			hw->seq_info2 != (param1 & (~0x80000000)) &&
 			hw->seq_info2 != 0) /*picture size changed*/ {
 			struct aml_vdec_ps_infos ps;
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "h264 res_change\n");
-			if (vmh264_get_ps_info(hw, param1, param4, &ps) < 0) {
-				dpb_print(DECODE_ID(hw), 0, "set parameters error\n");
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+				"h264 res_change\n");
+			if (vmh264_get_ps_info(hw, param1,
+				param2, param3, param4, &ps) < 0) {
+				dpb_print(DECODE_ID(hw), 0,
+					"set parameters error\n");
 			}
 			hw->v4l_params_parsed = false;
 			vdec_v4l_set_ps_infos(ctx, &ps);
@@ -8302,12 +8347,17 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 
 		if (hw->is_used_v4l &&
 			ctx->param_sets_from_ucode) {
-			if (!v4l_res_change(hw, param1, param4)) {
+			if (!v4l_res_change(hw, param1, param2, param3, param4)) {
 				if (!hw->v4l_params_parsed) {
 					struct aml_vdec_ps_infos ps;
-					dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "h264 parsered csd data\n");
-					if (vmh264_get_ps_info(hw, param1, param4, &ps) < 0) {
-						dpb_print(DECODE_ID(hw), 0, "set parameters error\n");
+					dpb_print(DECODE_ID(hw),
+						PRINT_FLAG_DEC_DETAIL,
+						"h264 parsered csd data\n");
+					if (vmh264_get_ps_info(hw,
+						param1, param2,
+						param3, param4, &ps) < 0) {
+						dpb_print(DECODE_ID(hw), 0,
+							"set parameters error\n");
 					}
 					hw->v4l_params_parsed = true;
 					vdec_v4l_set_ps_infos(ctx, &ps);
