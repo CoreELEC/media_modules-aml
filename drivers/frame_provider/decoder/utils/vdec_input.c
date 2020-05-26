@@ -1116,14 +1116,18 @@ void vdec_input_release(struct vdec_input_s *input)
 	}
 
 	/* release swap pages */
-	if (input->swap_page_phys) {
-		if (vdec_secure(input->vdec))
+	if (vdec_secure(input->vdec)) {
+		if (input->swap_page_phys)
 			codec_mm_free_for_dma("SWAP", input->swap_page_phys);
-		else
-			__free_page(input->swap_page);
-		input->swap_page = NULL;
-		input->swap_page_phys = 0;
+	} else {
+		if (input->swap_page) {
+			dma_free_coherent(v4l_get_dev_from_codec_mm(),
+				PAGE_SIZE, input->swap_page,
+				input->swap_page_phys);
+		}
 	}
+	input->swap_page = NULL;
+	input->swap_page_phys = 0;
 	input->swap_valid = false;
 }
 EXPORT_SYMBOL(vdec_input_release);
