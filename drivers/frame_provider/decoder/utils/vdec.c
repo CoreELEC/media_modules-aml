@@ -4147,13 +4147,7 @@ void vdec_reset_core(struct vdec_s *vdec)
 	 * 13: ddr
 	 * 14: afifo
 	 */
-	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1)) {
-		WRITE_VREG(DOS_SW_RESET0, (1<<3)|(1<<4)|(1<<5)|(1<<7)|(1<<8)|(1<<9));
-	} else {
-		WRITE_VREG(DOS_SW_RESET0,
-			(1<<3)|(1<<4)|(1<<5));
-	}
+	WRITE_VREG(DOS_SW_RESET0, (1<<3)|(1<<4)|(1<<5)|(1<<7)|(1<<8)|(1<<9));
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
 	spin_lock_irqsave(&vdec_spin_lock, flags);
