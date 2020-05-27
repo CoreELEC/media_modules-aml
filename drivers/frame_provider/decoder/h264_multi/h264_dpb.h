@@ -483,8 +483,8 @@ struct SPSParameters {
 	int frame_mbs_only_flag;
 	int num_ref_frames;
 	int max_dpb_size;
-
 	int log2_max_frame_num_minus4;
+	int frame_num_gap_allowed;
 };
 
 #define DEC_REF_PIC_MARKING_BUFFER_NUM_MAX   45
