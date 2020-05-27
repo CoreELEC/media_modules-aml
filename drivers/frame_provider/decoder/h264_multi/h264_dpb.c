@@ -37,18 +37,19 @@ int dpb_print(int index, int debug_flag, const char *fmt, ...)
 	if (((h264_debug_flag & debug_flag) &&
 		((1 << index) & h264_debug_mask))
 		|| (debug_flag == PRINT_FLAG_ERROR)) {
-		unsigned char *buf = vzalloc(512);
+		unsigned char *buf = kzalloc(512, GFP_ATOMIC);
 		int len = 0;
 		va_list args;
 
 		if (!buf)
 			return 0;
+
 		va_start(args, fmt);
 		len = sprintf(buf, "%d: ", index);
 		vsnprintf(buf + len, 512-len, fmt, args);
 		pr_debug("%s", buf);
 		va_end(args);
-		vfree(buf);
+		kfree(buf);
 	}
 	return 0;
 }
@@ -58,17 +59,18 @@ int dpb_print_cont(int index, int debug_flag, const char *fmt, ...)
 	if (((h264_debug_flag & debug_flag) &&
 		((1 << index) & h264_debug_mask))
 		|| (debug_flag == PRINT_FLAG_ERROR)) {
-		unsigned char *buf = vzalloc(512);
+		unsigned char *buf = kzalloc(512, GFP_ATOMIC);
 		int len = 0;
 		va_list args;
 
 		if (!buf)
 			return 0;
+
 		va_start(args, fmt);
 		vsnprintf(buf + len, 512-len, fmt, args);
 		pr_info("%s", buf);
 		va_end(args);
-		vfree(buf);
+		kfree(buf);
 	}
 	return 0;
 }
