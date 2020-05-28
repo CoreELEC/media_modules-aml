@@ -89,6 +89,9 @@ struct pic_check_mgr_t{
 	bool mjpeg_flag;
 	void *extra_v_vaddr;
 	ulong extra_v_phyaddr;
+	int yuvsum;
+	u32 width;
+	u32 height;
 };
 
 int dump_yuv_trig(struct pic_check_mgr_t *mgr,

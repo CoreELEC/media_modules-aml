@@ -83,6 +83,40 @@ static unsigned int yuv_enable, check_enable;
 static unsigned int yuv_start[MAX_INSTANCE_MUN];
 static unsigned int yuv_num[MAX_INSTANCE_MUN];
 
+#define CHECKSUM_PATH  "/data/local/tmp/"
+static char checksum_info[128] = "checksum info";
+static char checksum_filename[128] = "checksum";
+static unsigned int checksum_enable;
+static unsigned int checksum_start_count;
+
+static const char * const format_name[] = {
+	"MPEG12",
+	"MPEG4",
+	"H264",
+	"MJPEG",
+	"REAL",
+	"JPEG",
+	"VC1",
+	"AVS",
+	"YUV",
+	"H264MVC",
+	"H264_4K2K",
+	"HEVC",
+	"H264_ENC",
+	"JPEG_ENC",
+	"VP9",
+	"AVS2",
+	"AV1",
+};
+
+static const char *get_format_name(int format)
+{
+	if (format < 17 && format >= 0)
+		return format_name[format];
+	else
+		return "Unknow";
+}
+
 
 static inline void set_enable(struct pic_check_mgr_t *p, int mask)
 {
@@ -120,7 +154,8 @@ static int get_frame_size(struct pic_check_mgr_t *pic,
 				vf->width, vf->height);
 			return -1;
 	}
-
+	pic->height = vf->height;
+	pic->width = vf->width;
 	pic->size_y = vf->width * vf->height;
 	pic->size_uv = pic->size_y >> (1 + pic->mjpeg_flag);
 	pic->size_pic = pic->size_y + (pic->size_y >> 1);
@@ -569,6 +604,9 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 	char *crc_addr = NULL;
 	int comp_frame = 0, comp_crc_y, comp_crc_uv;
 	struct pic_check_t *check = &mgr->pic_check;
+
+	mgr->yuvsum += crc_uv;
+	mgr->yuvsum += crc_y;
 
 	if (kfifo_get(&check->new_chk_q, &crc_addr) == 0) {
 		dbg_print(0, "%08d: %08x %08x\n",
@@ -1038,6 +1076,9 @@ int frame_check_init(struct pic_check_mgr_t *mgr, int id)
 	mgr->size_pic = 0;
 	mgr->last_size_pic = 0;
 	mgr->id = id;
+	mgr->yuvsum = 0;
+	mgr->height = 0;
+	mgr->width = 0;
 
 	dump->num = 0;
 	dump->dump_cnt = 0;
@@ -1195,10 +1236,71 @@ int vdec_frame_check_init(struct vdec_s *vdec)
 	return ret;
 }
 
+int print_decoder_info(struct vdec_s *vdec)
+{
+	if (vdec->vfc.enable & CRC_MASK) {
+		const char *format_name;
+
+		format_name = get_format_name(vdec->format);
+		if (format_name == NULL)
+			return -1;
+
+		dbg_print(0, "Decoder-Summary:Type:%10s,framesize:%04dx%04d;out-nums:%08d,yuvsum:%08x\n",
+			format_name, vdec->vfc.width, vdec->vfc.height,
+			vdec->vfc.frame_cnt, vdec->vfc.yuvsum);
+		sprintf(checksum_info, "Type:%10s,framesize:%04dx%04d,out-nums:%08d,yuvsum:%08x",
+			format_name, vdec->vfc.width, vdec->vfc.height,
+			vdec->vfc.frame_cnt, vdec->vfc.yuvsum);
+		if (checksum_enable) {
+			struct file *checksum_fp;
+			static loff_t checksum_pos;
+			mm_segment_t old_fs;
+			char checksum_buf[128]="\n";
+			static int num;
+			static char file_name[128];
+
+			if (strcmp(checksum_filename,file_name) != 0) {
+				num = 0;
+				checksum_pos = 0;
+				strcpy(file_name,checksum_filename);
+			}
+			if (checksum_start_count == 1) {
+				num = 0;
+				checksum_start_count = 0;
+			}
+
+			str_strip(checksum_filename);
+			checksum_fp = file_open(O_CREAT| O_WRONLY | O_APPEND,
+				"%s%s.txt", CHECKSUM_PATH,checksum_filename);
+			if (checksum_fp == NULL) {
+				return -1;
+			}
+			sprintf(checksum_buf, "%08d (Type:%10s, framesize:%04dx%04d, out-nums:%08d, yuvsum:%08x)\n",
+				num,format_name, vdec->vfc.width, vdec->vfc.height,
+				vdec->vfc.frame_cnt, vdec->vfc.yuvsum);
+
+			old_fs = get_fs();
+			set_fs(KERNEL_DS);
+
+			vfs_write(checksum_fp, checksum_buf,
+				strlen(checksum_buf), &checksum_pos);
+
+			set_fs(old_fs);
+
+			filp_close(checksum_fp, current->files);
+			checksum_fp = NULL;
+			num++;
+		}
+	}
+
+	return 0;
+}
+
 void vdec_frame_check_exit(struct vdec_s *vdec)
 {
 	if (vdec == NULL)
 		return;
+	print_decoder_info(vdec);
 	frame_check_exit(&vdec->vfc);
 
 	single_mode_vdec = NULL;
@@ -1315,3 +1417,14 @@ MODULE_PARM_DESC(fc_debug, "\n frame check debug\n");
 module_param(size_yuv_buf, uint, 0664);
 MODULE_PARM_DESC(size_yuv_buf, "\n size_yuv_buf\n");
 
+module_param_string(checksum_info, checksum_info, 128, 0664);
+MODULE_PARM_DESC(checksum_info, "\n checksum_info\n");
+
+module_param_string(checksum_filename, checksum_filename, 128, 0664);
+MODULE_PARM_DESC(checksum_filename, "\n checksum_filename\n");
+
+module_param(checksum_start_count, uint, 0664);
+MODULE_PARM_DESC(checksum_start_count, "\n checksum_start_count\n");
+
+module_param(checksum_enable, uint, 0664);
+MODULE_PARM_DESC(checksum_enable, "\n checksum_enable\n");
