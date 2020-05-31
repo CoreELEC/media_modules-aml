@@ -1645,7 +1645,7 @@ static void  hevc_sao_wait_done(struct vdec_h264_hw_s *hw)
 	}
 	return;
 }
-static void buf_spec_init(struct vdec_h264_hw_s *hw)
+static void buf_spec_init(struct vdec_h264_hw_s *hw, bool buffer_reset_flag)
 {
 	int i;
 	unsigned long flags;
@@ -1674,10 +1674,16 @@ static void buf_spec_init(struct vdec_h264_hw_s *hw)
 			vf->index = -1;
 		}
 	}
-
-	for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
-		hw->buffer_spec[i].used = -1;
-		hw->buffer_spec[i].canvas_pos = -1;
+	if (buffer_reset_flag) {
+		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
+			if (hw->buffer_spec[i].used != -1)
+				hw->buffer_spec[i].used = 0;
+		}
+	} else {
+		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
+			hw->buffer_spec[i].used = -1;
+			hw->buffer_spec[i].canvas_pos = -1;
+		}
 	}
 
 	if (dpb_is_debug(DECODE_ID(hw),
@@ -4723,7 +4729,7 @@ static void vh264_config_canvs_for_mmu(struct vdec_h264_hw_s *hw)
 }
 
 static int vh264_set_params(struct vdec_h264_hw_s *hw,
-	u32 param1, u32 param2, u32 param3, u32 param4)
+	u32 param1, u32 param2, u32 param3, u32 param4, bool buffer_reset_flag)
 {
 	int i, j;
 	int mb_width, mb_total;
@@ -4920,7 +4926,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		mutex_lock(&vmh264_mutex);
 		if (!hw->mmu_enable) {
-			config_buf_specs(vdec);
+			if (!buffer_reset_flag)
+				config_buf_specs(vdec);
 			i = get_buf_spec_by_canvas_pos(hw, 0);
 
 			if (hw->is_used_v4l) {
@@ -8368,7 +8375,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				}
 				else {
 					if (vh264_set_params(hw, param1,
-					param2, param3, param4) < 0)
+					param2, param3, param4, false) < 0)
 						dpb_print(DECODE_ID(hw), 0, "set parameters error\n");
 
 					WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
@@ -8381,7 +8388,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			}
 		} else {
 			if (vh264_set_params(hw, param1,
-				param2, param3, param4) < 0)
+				param2, param3, param4, false) < 0)
 					dpb_print(DECODE_ID(hw), 0, "set parameters error\n");
 
 			WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
@@ -9273,7 +9280,7 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 		schedule();
 	}
 
-	buf_spec_init(hw);
+	buf_spec_init(hw, true);
 
 	vh264_local_init(hw, true);
 	/*hw->decode_pic_count = 0;
@@ -9288,7 +9295,7 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 		hw->cfg_param1,
 		hw->cfg_param2,
 		hw->cfg_param3,
-		hw->cfg_param4) < 0)
+		hw->cfg_param4, true) < 0)
 		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 
 	/*drop 3 frames after reset bufmgr if bit0 is set 1 */
@@ -9519,7 +9526,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pdata);
 
-	buf_spec_init(hw);
+	buf_spec_init(hw, false);
 
 	hw->platform_dev = pdev;
 
