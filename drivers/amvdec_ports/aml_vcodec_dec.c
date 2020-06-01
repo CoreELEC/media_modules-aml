@@ -1588,24 +1588,14 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
 	struct aml_q_data *q_data;
 
-	if (s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+	if ((s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) &&
+		(s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE))
 		return -EINVAL;
 
 	q_data = &ctx->q_data[AML_Q_DATA_DST];
 
 	switch (s->target) {
 	case V4L2_SEL_TGT_COMPOSE_DEFAULT:
-		s->r.left = 0;
-		s->r.top = 0;
-		s->r.width = ctx->picinfo.visible_width;
-		s->r.height = ctx->picinfo.visible_height;
-		break;
-	case V4L2_SEL_TGT_COMPOSE_BOUNDS:
-		s->r.left = 0;
-		s->r.top = 0;
-		s->r.width = ctx->picinfo.coded_width;
-		s->r.height = ctx->picinfo.coded_height;
-		break;
 	case V4L2_SEL_TGT_COMPOSE:
 		if (vdec_if_get_param(ctx, GET_PARAM_CROP_INFO, &(s->r))) {
 			/* set to default value if header info not ready yet*/
@@ -1614,6 +1604,12 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 			s->r.width = q_data->visible_width;
 			s->r.height = q_data->visible_height;
 		}
+		break;
+	case V4L2_SEL_TGT_COMPOSE_BOUNDS:
+		s->r.left = 0;
+		s->r.top = 0;
+		s->r.width = ctx->picinfo.coded_width;
+		s->r.height = ctx->picinfo.coded_height;
 		break;
 	default:
 		return -EINVAL;
