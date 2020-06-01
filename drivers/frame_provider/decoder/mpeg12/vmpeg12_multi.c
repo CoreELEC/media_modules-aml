@@ -148,7 +148,7 @@ static unsigned int decode_timeout_val = 200;
 #define AGAIN_HAS_THRESHOLD
 
 #ifdef AGAIN_HAS_THRESHOLD
-u32 again_threshold;
+static u32 again_threshold;
 #endif
 
 /*
@@ -1544,8 +1544,6 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			nv_order = VIDTYPE_VIU_NV12;
 	}
 
-	pb_skip = (hw->pics[hw->refs[0]].offset ==
-		hw->pics[hw->refs[1]].offset);
 	if (hw->i_only) {
 		pb_skip = 1;
 	}

@@ -278,9 +278,9 @@ static u32 vf_buf_num = 8;
 /*static u32 vf_buf_num_used;*/
 static u32 canvas_base = 128;
 #ifdef NV21
-	int	canvas_num = 2; /*NV21*/
+static int	canvas_num = 2; /*NV21*/
 #else
-	int	canvas_num = 3;
+static int	canvas_num = 3;
 #endif
 
 #if 0
@@ -1604,7 +1604,7 @@ static int vavs_event_cb(int type, void *data, void *private_data)
 	return 0;
 }
 
-int vavs_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
+static int vavs_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)vdec->private;
@@ -1637,7 +1637,7 @@ int vavs_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	return 0;
 }
 
-int vavs_set_isreset(struct vdec_s *vdec, int isreset)
+static int vavs_set_isreset(struct vdec_s *vdec, int isreset)
 {
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)vdec->private;
@@ -1800,7 +1800,7 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 	return 0;
 }
 
-void vavs_recover(struct vdec_avs_hw_s *hw)
+static void vavs_recover(struct vdec_avs_hw_s *hw)
 {
 	vavs_canvas_init(hw);
 

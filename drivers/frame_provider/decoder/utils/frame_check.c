@@ -158,7 +158,7 @@ static int get_frame_size(struct pic_check_mgr_t *pic,
 static int canvas_get_virt_addr(struct pic_check_mgr_t *pic,
 	struct vframe_s *vf)
 {
-	int phy_y_addr, phy_uv_addr;
+	unsigned long phy_y_addr, phy_uv_addr;
 	void *vaddr_y, *vaddr_uv;
 
 	if ((vf->canvas0Addr == vf->canvas1Addr) &&
@@ -174,7 +174,7 @@ static int canvas_get_virt_addr(struct pic_check_mgr_t *pic,
 	vaddr_uv = codec_mm_phys_to_virt(phy_uv_addr);
 
 	if (((!vaddr_y) || (!vaddr_uv)) && ((!phy_y_addr) || (!phy_uv_addr))) {
-		dbg_print(FC_ERROR, "%s, y_addr %p(0x%x), uv_addr %p(0x%x)\n",
+		dbg_print(FC_ERROR, "%s, y_addr %p(0x%lx), uv_addr %p(0x%lx)\n",
 			__func__, vaddr_y, phy_y_addr, vaddr_uv, phy_uv_addr);
 		return -1;
 	}
@@ -595,7 +595,8 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 						mgr->pic_dump.num++;
 					dbg_print(0, "\n\nError: %08d: %08x %08x != %08x %08x\n\n",
 						mgr->frame_cnt, crc_y, crc_uv, comp_crc_y, comp_crc_uv);
-					do_yuv_dump(mgr, vf);
+					if (!(vf->type & VIDTYPE_SCATTER))
+						do_yuv_dump(mgr, vf);
 					if (fc_debug & FC_ERR_CRC_BLOCK_MODE)
 						mgr->err_crc_block = 1;
 					mgr->usr_cmp_result = -mgr->frame_cnt;

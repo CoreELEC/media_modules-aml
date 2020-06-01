@@ -521,7 +521,7 @@ static u32 force_bypass_dvenl;
 #define get_buffer_mode(hevc) buffer_mode
 
 
-DEFINE_SPINLOCK(lock);
+static DEFINE_SPINLOCK(lock);
 struct task_struct *h265_task = NULL;
 #undef DEBUG_REG
 #ifdef DEBUG_REG
@@ -1761,7 +1761,7 @@ struct hevc_state_s {
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
-u32 again_threshold;
+static u32 again_threshold;
 #endif
 #ifdef SEND_LMEM_WITH_RPM
 #define get_lmem_params(hevc, ladr) \
