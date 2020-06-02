@@ -1246,6 +1246,80 @@ static ssize_t demux##i##_show_free_filters(struct class *class,  \
 	return ret;\
 }
 
+static ssize_t demux_state_show(struct class *class,
+				struct class_attribute *attr, char *buf)
+{
+	struct aml_dvb *dvb = &aml_dvb_device;
+	int i = 0, r = 0, j = 0;
+	struct dvb_demux *dmx;
+	struct aml_dmx *dmx1;
+	int fid, count;
+	ssize_t ret = 0;
+	char *str = NULL;
+
+	for (i = 0; i < 3; i++) {
+		r = sprintf(buf, "#####dmx%d#######\n", i);
+		buf += r;
+		ret += r;
+		dmx = &dvb->dmx[i].demux;
+		if (mutex_lock_interruptible(&dmx->mutex))
+			return -ERESTARTSYS;
+
+		r = sprintf(buf, "filter:\n");
+		buf += r;
+		ret += r;
+
+		count = 0;
+		for (fid = 0; fid < dmx->filternum; fid++) {
+			if (!dmx->filter[fid].state != DMX_STATE_FREE)
+				count++;
+			else {
+				r = sprintf(buf, "fid:%d, pid:0x%0x\n",fid,dmx->filter[fid].feed->pid);
+				buf += r;
+				ret += r;
+			}
+		}
+		r = sprintf(buf, "used filter:%d, free filter:%d\n", (dmx->filternum - count), count);
+		buf += r;
+		ret += r;
+
+		r = sprintf(buf, "chan:\n");
+		buf += r;
+		ret += r;
+
+		dmx1 = &dvb->dmx[i];
+		count = 0;
+		for (j = 0; j < CHANNEL_COUNT; j++) {
+			if (dmx1->channel[j].used) {
+				if (dmx1->channel[j].type == DMX_TYPE_TS) {
+					if (dmx1->channel[j].pes_type == DMX_PES_VIDEO) {
+						str = "video";
+					} else if (dmx1->channel[j].pes_type == DMX_PES_AUDIO){
+						str = "audio";
+					} else if (dmx1->channel[j].pes_type == DMX_PES_SUBTITLE) {
+						str = "sub";
+					} else if (dmx1->channel[j].pes_type == DMX_PES_TELETEXT) {
+						str = "ttx";
+					} else if (dmx1->channel[j].pes_type == DMX_PES_TELETEXT) {
+						str = "other";
+					}
+				} else {
+					str = "sec";
+				}
+				count ++;
+				r = sprintf(buf, "id:%d, type:%s, pid:0x%0x\n", j, str, dmx1->channel[j].pid);
+				buf += r;
+				ret += r;
+			}
+		}
+		r = sprintf(buf, "used chan:%d, free chan:%d\n", count, (CHANNEL_COUNT - count));
+		buf += r;
+		ret += r;
+		mutex_unlock(&dmx->mutex);
+	}
+	return ret;
+}
+
 /*Show filter users count*/
 #define DEMUX_FILTER_USERS_FUNC_DECL(i)  \
 static ssize_t demux##i##_show_filter_users(struct class *class,  \
@@ -2071,6 +2145,7 @@ static struct class_attribute aml_stb_class_attrs[] = {
 	__ATTR(first_audio_pts, 0644, demux_show_first_audio_pts,
 	       NULL),
 	__ATTR(clear_av, 0644, NULL, stb_clear_av),
+	__ATTR(demux_state, 0644, demux_state_show, NULL),
 
 #define DSC_SOURCE_ATTR_DECL(i)\
 	__ATTR(dsc##i##_source,  0664,\
