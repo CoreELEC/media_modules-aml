@@ -480,6 +480,7 @@ AV1 buffer management start
 #define MAX_SIZE_8K (8192 * 4608)
 #define MAX_SIZE_4K (4096 * 2304)
 #define IS_8K_SIZE(w, h)	(((w) * (h)) > MAX_SIZE_4K)
+#define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
 
 #define INVALID_IDX -1  /* Invalid buffer index.*/
 
@@ -676,6 +677,7 @@ struct AV1HW_s {
 	struct BUF_s m_BUF[MAX_BUF_NUM];
 	struct MVBUF_s m_mv_BUF[MV_BUFFER_NUM];
 	u32 used_buf_num;
+	u32 mv_buf_margin;
 	DECLARE_KFIFO(newframe_q, struct vframe_s *, VF_POOL_SIZE);
 	DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
 	DECLARE_KFIFO(pending_q, struct vframe_s *, VF_POOL_SIZE);
@@ -1190,15 +1192,15 @@ static int init_mv_buf_list(struct AV1HW_s *hw)
 		pr_info("%s, calculated mv size 0x%x\n",
 			__func__, size);
 	if (hw->init_pic_w > 4096 && hw->init_pic_h > 2048) {
-		count = REF_FRAMES_4K + mv_buf_margin;
+		count = REF_FRAMES_4K + hw->mv_buf_margin;
 		if (debug & AOM_DEBUG_USE_FIXED_MV_BUF_SIZE)
 			size = 0x260000;
 	} else if (hw->init_pic_w > 2048 && hw->init_pic_h > 1088) {
-		count = REF_FRAMES_4K + mv_buf_margin;
+		count = REF_FRAMES_4K + hw->mv_buf_margin;
 		if (debug & AOM_DEBUG_USE_FIXED_MV_BUF_SIZE)
 			size = 0x130000;
 	} else {
-		count = REF_FRAMES + mv_buf_margin;
+		count = REF_FRAMES + hw->mv_buf_margin;
 		if (debug & AOM_DEBUG_USE_FIXED_MV_BUF_SIZE)
 			size = 0x130000;
 	}
@@ -5015,15 +5017,15 @@ static int av1_local_init(struct AV1HW_s *hw)
 		return -1;
 	}
 #endif
-	if (IS_8K_SIZE(hw->init_pic_w, hw->init_pic_h)) {
-		max_buf_num = MAX_BUF_NUM_LESS;
-		if (max_buf_num > REF_FRAMES_4K)
-			mv_buf_margin = max_buf_num - REF_FRAMES_4K + 1;
+	hw->mv_buf_margin = mv_buf_margin;
+	if (IS_4K_SIZE(hw->init_pic_w, hw->init_pic_h)) {
+		hw->used_buf_num = MAX_BUF_NUM_LESS;
+		if (hw->used_buf_num > REF_FRAMES_4K)
+			hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
 	}
-	if (hw->save_buffer_mode)
-		hw->used_buf_num = MAX_BUF_NUM_SAVE_BUF;
 	else
 		hw->used_buf_num = max_buf_num;
+
 	if (hw->used_buf_num > MAX_BUF_NUM)
 		hw->used_buf_num = MAX_BUF_NUM;
 	if (hw->used_buf_num > FRAME_BUFFERS)
@@ -7445,9 +7447,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			hw->pbi->frame_height = hw->init_pic_h;
 			if (IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h)) {
 				hw->double_write_mode = 4;
-				max_buf_num = MAX_BUF_NUM_LESS;
-				if (max_buf_num > REF_FRAMES_4K)
-					mv_buf_margin = max_buf_num - REF_FRAMES_4K + 1;
+				hw->used_buf_num = MAX_BUF_NUM_LESS;
+				if (hw->used_buf_num > REF_FRAMES_4K)
+					hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
 				if (((hw->max_pic_w % 64) != 0) &&
 					(hw_to_vdec(hw)->canvas_mode != CANVAS_BLKMODE_LINEAR))
 					mem_map_mode = 2;
