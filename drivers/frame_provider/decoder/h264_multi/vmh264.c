@@ -890,6 +890,7 @@ struct vdec_h264_hw_s {
 	u32 kpi_first_i_decoded;
 	int sidebind_type;
 	int sidebind_channel_id;
+	u32 low_latency_mode;
 };
 
 static u32 again_threshold;
@@ -6110,7 +6111,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				if (!field_pic_flag && (((p_H264_Dpb->mSPS.profile_idc == BASELINE) &&
 					(p_H264_Dpb->reorder_pic_num < 2)) ||
 					(((unsigned long)(hw->vh264_amstream_dec_info
-						.param)) & 0x8))) {
+						.param)) & 0x8) || hw->low_latency_mode & 0x8)) {
 					p_H264_Dpb->fast_output_enable =
 					H264_OUTPUT_MODE_FAST;
 				}
@@ -9426,6 +9427,10 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			"parm_v4l_canvas_mem_mode",
 			&config_val) == 0)
 			hw->canvas_mode = config_val;
+		if (get_config_int(pdata->config,
+			"parm_v4l_low_latency_mode",
+			&config_val) == 0)
+			hw->low_latency_mode = config_val;
 		if (get_config_int(pdata->config, "sidebind_type",
 				&config_val) == 0)
 			hw->sidebind_type = config_val;

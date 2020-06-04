@@ -287,6 +287,7 @@ struct aml_vdec_cfg_infos {
 	u32 ref_buf_margin;
 	u32 canvas_mem_mode;
 	u32 canvas_mem_endian;
+	u32 low_latency_mode;
 };
 
 struct aml_vdec_hdr_infos {
