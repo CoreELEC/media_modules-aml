@@ -5623,7 +5623,7 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 	unsigned mby_mbx = READ_VREG(MBY_MBX);
 	unsigned mb_total = (hw->seq_info2 >> 8) & 0xffff;
 	unsigned decode_mb_count =
-		((mby_mbx & 0xff) * hw->mb_width +
+		((mby_mbx & 0xff) * (hw->seq_info2 & 0xff) +
 		(((mby_mbx >> 8) & 0xff) + 1));
 	if (mby_mbx == 0)
 		return;
