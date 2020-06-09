@@ -142,6 +142,8 @@ static int enable_stream_mode_multi_dec;
 
 #define CANVAS_MAX_SIZE (AMVDEC_CANVAS_MAX1 - AMVDEC_CANVAS_START_INDEX + 1 + AMVDEC_CANVAS_MAX2 + 1)
 
+extern void vframe_rate_uevent(int duration);
+
 struct am_reg {
 	char *name;
 	int offset;
@@ -2624,6 +2626,8 @@ void vdec_release(struct vdec_s *vdec)
 		pr_info("VDEC_DEBUG: step_mode is clear\n");
 	}
 #endif
+	/* When release, userspace systemctl need this duration 0 event */
+	vframe_rate_uevent(0);
 	vdec_disconnect(vdec);
 
 	if (vdec->vframe_provider.name) {
@@ -5515,10 +5519,81 @@ void vdec_set_vframe_comm(struct vdec_s *vdec, char *n)
 }
 EXPORT_SYMBOL(vdec_set_vframe_comm);
 
+u32 diff_pts(u32 a, u32 b)
+{
+	if (!a || !b)
+		return 0;
+	else
+		return abs(a - b);
+}
+
+/*
+ * We only use the first 5 frames to calc duration.
+ * The fifo[0]~fifo[4] means the frame 0 to frame 4.
+ * we start to calculate the duration from frame 1.
+ * And the caller guarantees that slot > 0.
+ */
+static void cal_dur_from_pts(struct vdec_s *vdec, u32 slot)
+{
+#define DURATION_THRESHOD 10
+	static u32 sended = 0;
+	u32 old = 0, cur, diff;
+	struct vframe_counter_s *fifo = vdec->mvfrm->fifo_buf;
+
+	if (vdec->mvfrm->wr == 1)
+		sended = 0;
+
+	if (vdec->format != VFORMAT_H264 &&
+	    vdec->format != VFORMAT_HEVC) {
+	    if (fifo[slot].frame_dur != sended) {
+		sended = fifo[slot].frame_dur;
+		pr_debug("%s send dur%u \n",__func__, sended);
+		vframe_rate_uevent(sended);
+	    }
+	    return;
+	}
+
+	if (!fifo[slot].pts)
+		return;
+
+	if (slot == 1) {
+		cur = diff_pts(fifo[1].pts, fifo[0].pts);
+	} else {
+		old = diff_pts(fifo[slot - 1].pts, fifo[slot - 2].pts);
+		cur = diff_pts(fifo[slot].pts, fifo[slot - 1].pts);
+	}
+
+	diff = abs(cur - old);
+	if (diff > DURATION_THRESHOD) {
+		u32 dur, cur2;
+
+		cur2 = (cur << 4) / 15;
+		diff = abs(cur2 - fifo[slot].frame_dur);
+		if (fifo[slot].frame_dur == 3600)
+			dur = cur2;
+		else if (diff < DURATION_THRESHOD || diff > fifo[slot].frame_dur)
+			dur = fifo[slot].frame_dur;
+		else
+			dur = cur2;
+
+		if (sended == dur)
+			return;
+
+		sended = dur;
+		pr_debug("%s vstatus %u dur%u - %u, revised %u\n",__func__,fifo[slot].frame_dur, cur,cur2, dur);
+		if (diff > 10 && slot >= 2)
+			pr_debug("wr=%u,slot=%u pts %u, %u, %u\n",vdec->mvfrm->wr,slot,
+				fifo[slot].pts, fifo[slot-1].pts,fifo[slot-2].pts);
+
+		vframe_rate_uevent(dur);
+	}
+}
+
 void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 				struct vdec_info *vinfo,struct vframe_s *vf,
 				u32 hw_dec_time)
 {
+#define MINIMUM_FRAMES 5
 	u32 i;
 	struct vframe_counter_s *fifo_buf;
 	struct vdec_frames_s *mvfrm = vdec->mvfrm;
@@ -5542,6 +5617,10 @@ void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 		fifo_buf[i].signal_type = vf->signal_type;
 		fifo_buf[i].pts = vf->pts;
 		fifo_buf[i].pts_us64 = vf->pts_us64;
+
+		/* Calculate the duration from pts */
+		if (mvfrm->wr < MINIMUM_FRAMES && mvfrm->wr > 0)
+			cal_dur_from_pts(vdec, i);
 	}
 	mvfrm->wr++;
 }
