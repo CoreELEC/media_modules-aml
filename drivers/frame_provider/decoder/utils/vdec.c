@@ -103,7 +103,7 @@ static unsigned int clk_config;
 #define VDEC_DBG_CANVAS_STATUS	(0x4)
 #define VDEC_DBG_ENABLE_FENCE	(0x100)
 
-u32 debug;
+u32 debug = VDEC_DBG_ALWAYS_LOAD_FW;
 EXPORT_SYMBOL(debug);
 
 static int hevc_max_reset_count;
