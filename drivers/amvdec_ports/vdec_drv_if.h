@@ -129,8 +129,8 @@ void vdec_if_deinit(struct aml_vcodec_ctx *ctx);
  *
  * Return: 0 on success. -EIO on unrecoverable error.
  */
-int vdec_if_decode(struct aml_vcodec_ctx *ctx, struct aml_vcodec_mem *bs,
-			u64 timestamp, bool *res_chg);
+int vdec_if_decode(struct aml_vcodec_ctx *ctx,
+		   struct aml_vcodec_mem *bs, bool *res_chg);
 
 /**
  * vdec_if_get_param() - get driver's parameter

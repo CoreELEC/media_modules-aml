@@ -44,6 +44,7 @@ struct aml_vcodec_mem {
 	void	*vaddr;
 	u32	bytes_used;
 	u32	offset;
+	u64	timestamp;
 	dma_addr_t dma_addr;
 	u32	model;
 };

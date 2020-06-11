@@ -76,8 +76,8 @@ int vdec_if_probe(struct aml_vcodec_ctx *ctx,
 	return ret;
 }
 
-int vdec_if_decode(struct aml_vcodec_ctx *ctx, struct aml_vcodec_mem *bs,
-	u64 timestamp, bool *res_chg)
+int vdec_if_decode(struct aml_vcodec_ctx *ctx,
+		   struct aml_vcodec_mem *bs, bool *res_chg)
 {
 	int ret = 0;
 
@@ -93,7 +93,7 @@ int vdec_if_decode(struct aml_vcodec_ctx *ctx, struct aml_vcodec_mem *bs,
 		return -EIO;
 
 	aml_vcodec_set_curr_ctx(ctx->dev, ctx);
-	ret = ctx->dec_if->decode(ctx->drv_handle, bs, timestamp, res_chg);
+	ret = ctx->dec_if->decode(ctx->drv_handle, bs, res_chg);
 	aml_vcodec_set_curr_ctx(ctx->dev, NULL);
 
 	return ret;

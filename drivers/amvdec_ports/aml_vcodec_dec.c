@@ -847,6 +847,7 @@ static void aml_vdec_worker(struct work_struct *work)
 	buf.addr	= vb2_dma_contig_plane_dma_addr(src_buf, 0);
 	buf.size	= src_buf->planes[0].bytesused;
 	buf.model	= src_buf->memory;
+	buf.timestamp	= src_buf->timestamp;
 
 	if (!buf.vaddr && !buf.addr) {
 		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
@@ -865,7 +866,7 @@ static void aml_vdec_worker(struct work_struct *work)
 	/*v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 		"timestamp: 0x%llx\n", src_buf->timestamp);*/
 
-	ret = vdec_if_decode(ctx, &buf, src_buf->timestamp, &res_chg);
+	ret = vdec_if_decode(ctx, &buf, &res_chg);
 	if (ret > 0) {
 		/*
 		 * we only return src buffer with VB2_BUF_STATE_DONE
@@ -2083,9 +2084,9 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
-		"%s, vb: %lx, type: %d, idx: %d, state: %d, used: %d\n",
+		"%s, vb: %lx, type: %d, idx: %d, state: %d, used: %d, ts: %llu\n",
 		__func__, (ulong) vb, vb->vb2_queue->type,
-		vb->index, vb->state, buf->used);
+		vb->index, vb->state, buf->used, vb->timestamp);
 	/*
 	 * check if this buffer is ready to be used after decode
 	 */
@@ -2151,6 +2152,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	src_mem.addr	= vb2_dma_contig_plane_dma_addr(vb, 0);
 	src_mem.size	= vb->planes[0].bytesused;
 	src_mem.model	= vb->memory;
+	src_mem.timestamp = vb->timestamp;
 
 	if (vdec_if_probe(ctx, &src_mem, NULL)) {
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);

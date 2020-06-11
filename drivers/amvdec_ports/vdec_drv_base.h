@@ -43,7 +43,7 @@ struct vdec_common_if {
 	 * @res_chg : [out] resolution change happen
 	 */
 	int (*decode)(unsigned long h_vdec, struct aml_vcodec_mem *bs,
-		u64 pts, bool *res_chg);
+		bool *res_chg);
 
 	/**
 	 * (*get_param)() - get driver's parameter
