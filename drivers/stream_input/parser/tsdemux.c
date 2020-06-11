@@ -835,7 +835,6 @@ ssize_t drm_tswrite(struct file *file,
 {
 	s32 r;
 	u32 realcount = count;
-	u32 re_count = count;
 	u32 havewritebytes = 0;
 
 	struct drm_info tmpmm;
@@ -894,12 +893,14 @@ ssize_t drm_tswrite(struct file *file,
 					r = stbuf_wait_space(vbuf, wait_size);
 
 					if (r < 0) {
-						pr_info
-						("write no space--- ");
-						pr_info
-						("no space,%d--%d,r-%d\n",
-						 stbuf_space(vbuf),
-						 stbuf_space(abuf), r);
+						if (r != -EAGAIN)
+							pr_info
+							("write no space--- ");
+						if (r != -EAGAIN)
+							pr_info
+							("no space,%d--%d,r-%d\n",
+							stbuf_space(vbuf),
+							stbuf_space(abuf), r);
 						return r;
 					}
 				}
@@ -933,9 +934,18 @@ ssize_t drm_tswrite(struct file *file,
 		}
 		/* pr_info("write_size = %d,count = %d,\n",*/
 		   /*write_size, count); */
-		if (write_size > 0)
-			r = _tsdemux_write((const char __user *)realbuf,
-					 write_size, isphybuf);
+		if (write_size > 0) {
+			r = _tsdemux_write((const char __user *)realbuf + havewritebytes,
+				write_size, isphybuf);
+			if (r < 0) {
+				if (r != -EAGAIN)
+					pr_info
+					("vspace %d--aspace %d,r-%d\n",
+					stbuf_space(vbuf),
+					stbuf_space(abuf), r);
+				return r;
+			}
+		}
 		else
 			return -EAGAIN;
 
@@ -946,11 +956,12 @@ ssize_t drm_tswrite(struct file *file,
 		if (havewritebytes == realcount)
 			break;	/* write ok; */
 		else if (havewritebytes > realcount)
-			pr_info(" error ! write too much\n");
+			pr_info(" error ! write too much havewritebytes = %u, r = %u\n",
+			(u32)havewritebytes,(u32)realcount);
 
 		count -= r;
 	}
-	return re_count;
+	return havewritebytes;
 }
 
 ssize_t tsdemux_write(struct file *file,
