@@ -622,6 +622,8 @@ static void add_prefix_data(struct vp9_superframe_split *s,
 	u32 length;
 
 	length = s->size + s->nb_frames * PREFIX_SIZE;
+	if (!length)
+		return;
 	p = vzalloc(length);
 	if (!p) {
 		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
