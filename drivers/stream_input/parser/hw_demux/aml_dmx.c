@@ -3376,6 +3376,10 @@ static int dmx_enable(struct aml_dmx *dmx)
 		DMX_WRITE_REG(dmx->id, STB_OM_CTL,
 			      (0x40 << MAX_OM_DMA_COUNT) |
 			      (0x7f << LAST_OM_ADDR));
+
+		DMX_WRITE_REG(dmx->id, VIDEO_STREAM_ID,
+				((record && !hi_bsf) ? 0xFFFF : 0));
+
 		DMX_WRITE_REG(dmx->id, DEMUX_CONTROL,
 			      (0 << BYPASS_USE_RECODER_PATH) |
 			      (0 << INSERT_AUDIO_PES_STRONG_SYNC) |
@@ -3476,7 +3480,8 @@ static u32 dmx_get_chan_target(struct aml_dmx *dmx, int cid)
 			type = OTHER_PES_PACKET;
 			break;
 		default:
-			type = BYPASS_PACKET;
+			type = (dmx->channel[0].used || dmx->channel[1].used) ?
+				RECORDER_STREAM : VIDEO_PACKET;
 			break;
 		}
 	}
