@@ -22,7 +22,7 @@
 
 #include "../../../common/firmware/firmware_type.h"
 #include <linux/amlogic/media/utils/vformat.h>
-#ifdef CONFIG_AMLOGIC_TEE
+#if defined(CONFIG_AMLOGIC_TEE) || defined(CONFIG_AMLOGIC_TEE_MODULE)
 #include <linux/amlogic/tee.h>
 #endif
 
@@ -41,7 +41,7 @@ extern int get_data_from_name(const char *name, char *buf);
 extern int get_firmware_data(unsigned int foramt, char *buf);
 extern int video_fw_reload(int mode);
 
-#ifndef CONFIG_AMLOGIC_TEE
+#if !defined(CONFIG_AMLOGIC_TEE) && !defined(CONFIG_AMLOGIC_TEE_MODULE)
 static inline bool tee_enabled(void) { return false; }
 static inline int tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
 {
