@@ -692,15 +692,15 @@ struct AV1HW_s {
 
 	u32 video_signal_type;
 
+	u32 pts_unstable;
+	bool av1_first_pts_ready;
+	u8  first_pts_index;
 	u32 frame_mode_pts_save[FRAME_BUFFERS];
 	u64 frame_mode_pts64_save[FRAME_BUFFERS];
 
 	int last_pts;
 	u64 last_pts_us64;
 	u64 shift_byte_count;
-
-	u32 pts_unstable;
-	bool av1_first_pts_ready;
 
 	u32 shift_byte_count_lo;
 	u32 shift_byte_count_hi;
@@ -1482,7 +1482,8 @@ static u32 max_decoding_time;
 static u32 error_handle_policy;
 /*static u32 parser_sei_enable = 1;*/
 #define MAX_BUF_NUM_NORMAL     16
-#define MAX_BUF_NUM_LESS   12
+/*less bufs num 12 caused frame drop, nts failed*/
+#define MAX_BUF_NUM_LESS   13
 static u32 max_buf_num = MAX_BUF_NUM_NORMAL;
 #define MAX_BUF_NUM_SAVE_BUF  8
 
@@ -5612,16 +5613,25 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			pts_us64_valid = 1;
 		}
 
-		if ((hw->av1_first_pts_ready) && hw->frame_dur && ((vf->pts == 0) || (vf->pts_us64 == 0))) {
-			vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
-			vf->pts_us64 = hw->last_pts_us64 +
-				(DUR2PTS(hw->frame_dur) * 100 / 9);
-		}
+		if (hw->av1_first_pts_ready) {
+			if (hw->frame_dur && ((vf->pts == 0) || (vf->pts_us64 == 0))) {
+				vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+				vf->pts_us64 = hw->last_pts_us64 +
+					(DUR2PTS(hw->frame_dur) * 100 / 9);
+			}
 
-		if (!close_to(vf->pts, (hw->last_pts + DUR2PTS(hw->frame_dur)), 100)) {
-			vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
-			vf->pts_us64 = hw->last_pts_us64 +
-				(DUR2PTS(hw->frame_dur) * 100 / 9);
+			if (!close_to(vf->pts, (hw->last_pts + DUR2PTS(hw->frame_dur)), 100)) {
+				vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+				vf->pts_us64 = hw->last_pts_us64 +
+					(DUR2PTS(hw->frame_dur) * 100 / 9);
+			}
+		} else {
+			av1_print(hw, AV1_DEBUG_OUT_PTS,
+				"first pts %d change to save[%d] %d\n",
+				vf->pts, hw->first_pts_index - 1,
+				hw->frame_mode_pts_save[hw->first_pts_index - 1]);
+			vf->pts = hw->frame_mode_pts_save[hw->first_pts_index - 1];
+			vf->pts_us64 = hw->frame_mode_pts64_save[hw->first_pts_index - 1];
 		}
 		hw->last_pts = vf->pts;
 		hw->last_pts_us64 = vf->pts_us64;
@@ -8075,6 +8085,7 @@ static int vav1_local_init(struct AV1HW_s *hw)
 	hw->saved_resolution = 0;
 	hw->get_frame_dur = false;
 	on_no_keyframe_skiped = 0;
+	hw->first_pts_index = 0;
 	hw->av1_first_pts_ready = false;
 	width = hw->vav1_amstream_dec_info.width;
 	height = hw->vav1_amstream_dec_info.height;
@@ -8918,13 +8929,16 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	}
 	hw->frame_mode_pts_save[0] = hw->chunk->pts;
 	hw->frame_mode_pts64_save[0] = hw->chunk->pts64;
+	if (hw->first_pts_index < ARRAY_SIZE(hw->frame_mode_pts_save))
+		hw->first_pts_index++;
 	/* frame duration check */
 	if ((!hw->frame_count) || hw->get_frame_dur)
 		return;
 	valid_pts_diff_cnt = 0;
 	pts_diff_sum = 0;
 	for (i = 0; i < FRAME_BUFFERS - 1; i++) {
-		if (hw->frame_mode_pts_save[i] > hw->frame_mode_pts_save[i + 1])
+		if ((hw->frame_mode_pts_save[i] > hw->frame_mode_pts_save[i + 1]) &&
+			(hw->frame_mode_pts_save[i + 1] != 0))
 			in_pts_diff = hw->frame_mode_pts_save[i]
 				- hw->frame_mode_pts_save[i + 1];
 		else
@@ -8945,7 +8959,8 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 		return;
 	}
 	calc_dur = PTS2DUR(pts_diff_sum / valid_pts_diff_cnt);
-	if (!close_to(calc_dur, hw->frame_dur, 10)) {
+	if ((!close_to(calc_dur, hw->frame_dur, 10)) &&
+		(calc_dur < 4800) && (calc_dur > 800)) {
 		av1_print(hw, 0, "change to calc dur %d, old dur %d\n", calc_dur, hw->frame_dur);
 		hw->frame_dur = calc_dur;
 		hw->get_frame_dur = true;
