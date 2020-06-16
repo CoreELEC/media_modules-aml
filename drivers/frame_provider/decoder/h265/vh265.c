@@ -49,6 +49,11 @@
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include <media/v4l2-mem2mem.h>
 
+/*
+to enable DV of frame mode
+#define DOLBY_META_SUPPORT in ucode
+*/
+
 #define HEVC_8K_LFTOFFSET_FIX
 
 #define CONSTRAIN_MAX_BUF_NUM
@@ -422,8 +427,12 @@ use_cma: 1, use both reserver memory and cma for buffers
 static u32 use_cma = 2;
 
 #define AUX_BUF_ALIGN(adr) ((adr + 0xf) & (~0xf))
+/*
 static u32 prefix_aux_buf_size = (16 * 1024);
 static u32 suffix_aux_buf_size;
+*/
+static u32 prefix_aux_buf_size = (12 * 1024);
+static u32 suffix_aux_buf_size = (12 * 1024);
 
 static u32 max_decoding_time;
 /*
@@ -464,8 +473,8 @@ static u32 fr_hint_status;
 	 *  bit 8, debug flag
 	 */
 static u32 parser_sei_enable;
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 static u32 parser_dolby_vision_enable = 1;
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 static u32 dolby_meta_with_el;
 static u32 dolby_el_flush_th = 2;
 #endif
@@ -3907,6 +3916,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 
 			}
 		}
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		/* dv wait cur_pic all data get,
 		some data may get after picture output */
 		if ((vdec->master || vdec->slave)
@@ -3915,7 +3925,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 			(hevc->bypass_dvenl && !dolby_meta_with_el)
 			&& (!fisrt_pic_flag))
 			pic_display = NULL;
-
+#endif
 		if (pic_display) {
 			if ((num_pic_not_yet_display >
 				pic_display->num_reorder_pic)
@@ -6860,9 +6870,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		union param_u *rpm_param,
 		int decode_pic_begin)
 {
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	struct vdec_s *vdec = hw_to_vdec(hevc);
-#endif
 	int i;
 	int lcu_x_num_div;
 	int lcu_y_num_div;
@@ -9572,11 +9580,11 @@ static int hevc_recover(struct hevc_state_s *hevc)
 	WRITE_VREG(NAL_SEARCH_CTL,
 		READ_VREG(NAL_SEARCH_CTL)
 		| ((parser_sei_enable & 0x7) << 17));
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+/*#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION*/
 	WRITE_VREG(NAL_SEARCH_CTL,
 		READ_VREG(NAL_SEARCH_CTL) |
 		((parser_dolby_vision_enable & 0x1) << 20));
-#endif
+/*#endif*/
 	config_decode_mode(hevc);
 	WRITE_VREG(DECODE_STOP_POS, udebug_flag);
 
@@ -9784,9 +9792,7 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 	unsigned int dec_status = hevc->dec_status;
 	int i, ret;
 
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	struct vdec_s *vdec = hw_to_vdec(hevc);
-#endif
 
 	if (hevc->eos)
 		return IRQ_HANDLED;
@@ -9829,11 +9835,11 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		WRITE_VREG(NAL_SEARCH_CTL,
 			READ_VREG(NAL_SEARCH_CTL)
 			| ((parser_sei_enable & 0x7) << 17));
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+/*#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION*/
 		WRITE_VREG(NAL_SEARCH_CTL,
 			READ_VREG(NAL_SEARCH_CTL) |
 			((parser_dolby_vision_enable & 0x1) << 20));
-#endif
+/*#endif*/
 		config_decode_mode(hevc);
 		/* search new nal */
 		WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
@@ -9912,6 +9918,8 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 			read_decode_info(hevc);
 			if (vdec_frame_based(hw_to_vdec(hevc))) {
 				hevc->empty_flag = 1;
+				/*suffix sei or dv meta*/
+				set_aux_data(hevc, hevc->cur_pic, 1, 0);
 				goto pic_done;
 			} else {
 				if (
@@ -9938,6 +9946,8 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 			if (vdec_frame_based(hw_to_vdec(hevc))) {
 				/*hevc->dec_result = DEC_RESULT_GET_DATA;*/
 				hevc->empty_flag = 1;
+				/*suffix sei or dv meta*/
+				set_aux_data(hevc, hevc->cur_pic, 1, 0);
 				goto pic_done;
 			} else {
 				hevc->dec_result = DEC_RESULT_AGAIN;
@@ -10076,7 +10086,9 @@ pic_done:
 					(READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff) == 0
 					&& (hevc->lcu_x_num * hevc->lcu_y_num != 1))
 					hevc->cur_pic->error_mark = 1;
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 force_output:
+#endif
 				pic_display = output_pic(hevc, 1);
 				if (pic_display) {
 					if ((pic_display->error_mark &&
@@ -10391,11 +10403,11 @@ force_output:
 			WRITE_VREG(NAL_SEARCH_CTL,
 				READ_VREG(NAL_SEARCH_CTL)
 				| ((parser_sei_enable & 0x7) << 17));
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+/*#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION*/
 			WRITE_VREG(NAL_SEARCH_CTL,
 				READ_VREG(NAL_SEARCH_CTL) |
 				((parser_dolby_vision_enable & 0x1) << 20));
-#endif
+/*#endif*/
 			config_decode_mode(hevc);
 		}
 
@@ -11380,11 +11392,11 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 	WRITE_VREG(NAL_SEARCH_CTL,
 		READ_VREG(NAL_SEARCH_CTL)
 		| ((parser_sei_enable & 0x7) << 17));
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+/*#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION*/
 	WRITE_VREG(NAL_SEARCH_CTL,
 		READ_VREG(NAL_SEARCH_CTL) |
 		((parser_dolby_vision_enable & 0x1) << 20));
-#endif
+/*#endif*/
 	WRITE_VREG(DECODE_STOP_POS, udebug_flag);
 
 	config_decode_mode(hevc);
@@ -13694,8 +13706,8 @@ static struct mconfig h265_configs[] = {
 	MC_PU32("parser_sei_enable", &parser_sei_enable),
 	MC_PU32("start_decode_buf_level", &start_decode_buf_level),
 	MC_PU32("decode_timeout_val", &decode_timeout_val),
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	MC_PU32("parser_dolby_vision_enable", &parser_dolby_vision_enable),
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	MC_PU32("dv_toggle_prov_name", &dv_toggle_prov_name),
 	MC_PU32("dv_debug", &dv_debug),
 #endif
@@ -13752,10 +13764,10 @@ static int __init amvdec_h265_driver_init_module(void)
 			amvdec_h265_profile.profile = "4k";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 			amvdec_h265_profile.profile =
-				"8k, 8bit, 10bit, dwrite, compressed";
+				"8k, 8bit, 10bit, dwrite, compressed, frame_dv";
 		}else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB) {
 			amvdec_h265_profile.profile =
-				"4k, 8bit, 10bit, dwrite, compressed";
+				"4k, 8bit, 10bit, dwrite, compressed, frame_dv";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_MG9TV)
 			amvdec_h265_profile.profile = "4k";
 	}
@@ -13947,11 +13959,11 @@ MODULE_PARM_DESC(pts_unstable, "\n amvdec_h265 pts_unstable\n");
 module_param(parser_sei_enable, uint, 0664);
 MODULE_PARM_DESC(parser_sei_enable, "\n parser_sei_enable\n");
 
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 module_param(parser_dolby_vision_enable, uint, 0664);
 MODULE_PARM_DESC(parser_dolby_vision_enable,
 	"\n parser_dolby_vision_enable\n");
 
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 module_param(dolby_meta_with_el, uint, 0664);
 MODULE_PARM_DESC(dolby_meta_with_el,
 	"\n dolby_meta_with_el\n");

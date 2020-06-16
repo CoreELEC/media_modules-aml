@@ -325,7 +325,10 @@ static int userdata_poc_ri, userdata_poc_wi;
 static int last_read_wi;
 static u32 ud_ready_vdec_flag;
 
-
+/*bit 1 force dual layer
+ *bit 2 force frame mode
+ */
+static u32 force_dv_mode;
 
 static DEFINE_MUTEX(userdata_mutex);
 
@@ -428,6 +431,19 @@ static struct stream_port_s ports[] = {
 		.type = PORT_TYPE_ES | PORT_TYPE_VIDEO | PORT_TYPE_HEVC |
 			PORT_TYPE_DECODER_SCHED | PORT_TYPE_DUALDEC,
 		.fops = &vbuf_fops,
+		.vformat = VFORMAT_HEVC,
+	},
+	{
+		.name = "amstream_dves_avc_frame",
+		.type = PORT_TYPE_ES | PORT_TYPE_VIDEO | PORT_TYPE_FRAME |
+			PORT_TYPE_DECODER_SCHED | PORT_TYPE_DUALDEC,
+		.fops = &vframe_fops,
+	},
+	{
+		.name = "amstream_dves_hevc_frame",
+		.type = PORT_TYPE_ES | PORT_TYPE_VIDEO | PORT_TYPE_HEVC | PORT_TYPE_FRAME |
+			PORT_TYPE_DECODER_SCHED | PORT_TYPE_DUALDEC,
+		.fops = &vframe_fops,
 		.vformat = VFORMAT_HEVC,
 	},
 	{
@@ -631,7 +647,7 @@ static int video_port_init(struct port_priv_s *priv,
 				__LINE__);
 			return r;
 		}
-
+#if 0
 		if (vdec_dual(vdec)) {
 			if (port->vformat == VFORMAT_AV1)	/* av1 dv only single layer */
 				return 0;
@@ -645,6 +661,7 @@ static int video_port_init(struct port_priv_s *priv,
 				return r;
 			}
 		}
+#endif
 		return 0;
 	}
 
@@ -1620,6 +1637,17 @@ static int amstream_open(struct inode *inode, struct file *file)
 			return -EBUSY;
 		}
 	}
+	/* force dv frame mode */
+	if ((force_dv_mode & 0x2) &&
+		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)) {
+		port->type |= PORT_TYPE_FRAME;
+		port->fops = &vframe_fops;
+		pr_debug("%s, dobly vision force frame mode.\n", __func__);
+	}
+
+	/* esplayer stream mode force dv */
+	if (force_dv_mode & 0x1)
+		port->type |= PORT_TYPE_DUALDEC;
 
 	/* check other ports conflicts for audio */
 	for (s = &ports[0], i = 0; i < amstream_port_num; i++, s++) {
@@ -1702,17 +1730,18 @@ static int amstream_open(struct inode *inode, struct file *file)
 			pr_err("amstream: vdec creation failed\n");
 			return -ENOMEM;
 		}
+		if (!(port->type & PORT_TYPE_FRAME)) {
+			if ((port->type & PORT_TYPE_DUALDEC) ||
+				(vdec_get_debug_flags() & 0x100)) {
+				priv->vdec->slave = vdec_create(port, priv->vdec);
 
-		if ((port->type & PORT_TYPE_DUALDEC) ||
-			(vdec_get_debug_flags() & 0x100)) {
-			priv->vdec->slave = vdec_create(port, priv->vdec);
-
-			if (priv->vdec->slave == NULL) {
-				vdec_release(priv->vdec);
-				port->flag = 0;
-				kfree(priv);
-				pr_err("amstream: sub vdec creation failed\n");
-				return -ENOMEM;
+				if (priv->vdec->slave == NULL) {
+					vdec_release(priv->vdec);
+					port->flag = 0;
+					kfree(priv);
+					pr_err("amstream: sub vdec creation failed\n");
+					return -ENOMEM;
+				}
 			}
 		}
 	}
@@ -4474,6 +4503,10 @@ static void __exit amstream_module_exit(void)
 
 module_init(amstream_module_init);
 module_exit(amstream_module_exit);
+
+module_param(force_dv_mode, uint, 0664);
+MODULE_PARM_DESC(force_dv_mode,
+	"\n force_dv_mode \n");
 
 module_param(def_4k_vstreambuf_sizeM, uint, 0664);
 MODULE_PARM_DESC(def_4k_vstreambuf_sizeM,

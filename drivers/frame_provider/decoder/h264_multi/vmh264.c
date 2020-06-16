@@ -65,6 +65,10 @@
 
 #define DETECT_WRONG_MULTI_SLICE
 
+/*
+to enable DV of frame mode
+#define DOLBY_META_SUPPORT in ucode
+*/
 
 #undef pr_info
 #define pr_info printk
@@ -148,7 +152,6 @@ static unsigned int error_recovery_mode_in;
 static int start_decode_buf_level = 0x4000;
 static int pre_decode_buf_level = 0x1000;
 static int stream_mode_start_num = 4;
-
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 /*to make reorder size difference of bl and el not too big*/
 static unsigned int reorder_dpb_size_margin_dv = 16;
@@ -3113,10 +3116,10 @@ static void set_aux_data(struct vdec_h264_hw_s *hw,
 			hw_buf->prefix_aux_size;
 	}
 	if (dpb_is_debug(DECODE_ID(hw),
-		 PRINT_FLAG_DPB_DETAIL)) {
+		 PRINT_FLAG_DEC_DETAIL)) {
 		dpb_print(DECODE_ID(hw), 0,
-			"%s:old size %d count %d,suf %d dv_flag %d\r\n",
-			__func__, AUX_DATA_SIZE(pic),
+			"%s:poc %d old size %d count %d,suf %d dv_flag %d\r\n",
+			__func__, pic->poc, AUX_DATA_SIZE(pic),
 			aux_count, suffix_flag, dv_meta_flag);
 	}
 	if (aux_size > 0 && aux_count > 0) {
@@ -3212,7 +3215,7 @@ static void set_aux_data(struct vdec_h264_hw_s *hw,
 				h[7] = (padding_len) & 0xff;
 			}
 			if (dpb_is_debug(DECODE_ID(hw),
-				PRINT_FLAG_DPB_DETAIL)) {
+				PRINT_FLAG_DEC_DETAIL)) {
 				dpb_print(DECODE_ID(hw), 0,
 					"aux: (size %d) suffix_flag %d\n",
 					AUX_DATA_SIZE(pic), suffix_flag);
@@ -6402,7 +6405,11 @@ pic_done_proc:
 				PRINT_FLAG_DPB_DETAIL))
 				dump_aux_buf(hw);
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-			if (vdec->dolby_meta_with_el || vdec->slave) {
+			if (vdec_frame_based(vdec)) {
+				if (hw->last_dec_picture)
+					set_aux_data(hw,
+						hw->last_dec_picture, 0, 0, NULL);
+			} else if (vdec->dolby_meta_with_el || vdec->slave) {
 				if (hw->last_dec_picture)
 					set_aux_data(hw, hw->last_dec_picture,
 						0, 0, NULL);
@@ -8248,7 +8255,9 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	u32 param1, u32 param2, u32 param3, u32 param4,
 	struct aml_vdec_ps_infos *ps)
 {
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	struct vdec_s *vdec = hw_to_vdec(hw);
+#endif
 	int mb_width, mb_total;
 	int mb_height = 0;
 	int active_buffer_spec_num;
@@ -9880,9 +9889,9 @@ static int __init ammvdec_h264_driver_init_module(void)
 	if (vdec_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) {
 			ammvdec_h264_profile.profile =
-					"4k, dwrite, compressed";
+					"4k, dwrite, compressed, frame_dv";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) {
-			ammvdec_h264_profile.profile = "4k";
+			ammvdec_h264_profile.profile = "4k, frame_dv";
 		}
 	}
 

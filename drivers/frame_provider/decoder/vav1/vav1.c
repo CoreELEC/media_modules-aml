@@ -9750,7 +9750,7 @@ static int __init amvdec_av1_driver_init_module(void)
 
 	if ((get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2) || is_cpu_tm2_revb()) {
 		amvdec_av1_profile.profile =
-				"8k, 10bit, dwrite, compressed, no_head";
+				"8k, 10bit, dwrite, compressed, no_head, frame_dv";
 	} else {
 		amvdec_av1_profile.name = "av1_unsupport";
 	}
