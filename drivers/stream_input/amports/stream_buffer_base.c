@@ -88,8 +88,10 @@ int stream_buffer_base_init(struct stream_buf_s *stbuf,
 	width	= vdec->sys_info->width;
 	height	= vdec->sys_info->height;
 
-	memcpy(stbuf, get_def_parms(format),
-		sizeof(*stbuf));
+	if (!stbuf->ext_buf_addr) {
+		memcpy(stbuf, get_def_parms(format),
+			sizeof(*stbuf));
+	}
 
 	stbuf->id	= vdec->id;
 	stbuf->is_hevc	= ((format == VFORMAT_HEVC) ||
@@ -110,12 +112,37 @@ EXPORT_SYMBOL(stream_buffer_base_init);
 
 void stream_buffer_set_ext_buf(struct stream_buf_s *stbuf,
 			       ulong addr,
-			       u32 size)
+			       u32 size,
+			       u32 flag)
 {
 	stbuf->ext_buf_addr	= addr;
 	stbuf->buf_size		= size;
+	stbuf->is_secure = ((flag & STBUF_META_FLAG_SECURE) != 0);
+
+	/*
+	pr_debug("%s, addr %lx, size 0x%x, secure %d\n", __func__,
+		stbuf->ext_buf_addr, stbuf->buf_size, stbuf->is_secure);
+	*/
 }
 EXPORT_SYMBOL(stream_buffer_set_ext_buf);
+
+void stream_buffer_meta_write(struct stream_buf_s *stbuf,
+	struct stream_buffer_metainfo *meta)
+{
+	u32 wp;
+
+	if (meta->stbuf_pktaddr + meta->stbuf_pktsize < stbuf->buf_start + stbuf->buf_size)
+		wp = meta->stbuf_pktaddr + meta->stbuf_pktsize;
+	else
+		wp = meta->stbuf_pktaddr + meta->stbuf_pktsize - stbuf->buf_size;
+
+	stbuf->ops->set_wp(stbuf, wp);
+	/*
+	pr_debug("%s, update wp 0x%x + sz 0x%x --> 0x%x\n",
+		__func__, meta->stbuf_pktaddr, meta->stbuf_pktsize, wp);
+	*/
+}
+EXPORT_SYMBOL(stream_buffer_meta_write);
 
 ssize_t stream_buffer_write_ex(struct file *file,
 		       struct stream_buf_s *stbuf,

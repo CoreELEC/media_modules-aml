@@ -37,6 +37,10 @@
 #define FETCHBUF_SIZE   (64*1024)
 #define USER_DATA_SIZE  (8*1024)
 
+/* stream_buffer_metainfo stbuf_flag */
+#define STBUF_META_FLAG_SECURE	(1 << 0)
+#define STBUF_META_FLAG_XXX1	(1 << 1)
+
 struct vdec_s;
 struct stream_buf_s;
 
@@ -137,6 +141,29 @@ struct drm_info {
 	u32 handle;
 	u32 extpad[7];
 } /*drminfo_t */;
+
+struct stream_buffer_metainfo {
+	union {
+		u32 stbuf_start;
+		u32 stbuf_pktaddr; //stbuf_pktaddr + stbuf_pktsize = wp
+	};
+	union {
+		u32 stbuf_size;
+		u32 stbuf_pktsize;
+	};
+	u32 stbuf_flag;
+	u32 stbuf_private;
+	u32 reserved[16];
+};
+
+struct stream_buffer_status {
+	u32 stbuf_wp;
+	u32 stbuf_rp;
+	u32 stbuf_start;
+	u32 stbuf_size;
+	u32 reserved[16];
+};
+
 
 #define TYPE_DRMINFO_V2  0x100
 #define TYPE_DRMINFO   0x80

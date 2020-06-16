@@ -123,8 +123,6 @@ static int def_vstreambuf_sizeM =
 	(DEFAULT_VIDEO_BUFFER_SIZE >> 20);
 static int slow_input;
 
-extern int enable_stream_mode_multi_dec;
-
 /* #define DATA_DEBUG */
 static int use_bufferlevelx10000 = 10000;
 static int reset_canuse_buferlevel(int level);
@@ -907,7 +905,8 @@ static int amstream_port_init(struct port_priv_s *priv)
 
 	mutex_lock(&amstream_mutex);
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+		(get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2)) {
 		r = check_efuse_chip(port->vformat);
 		if (r) {
 			pr_info("No support video format %d.\n", port->vformat);
@@ -960,7 +959,7 @@ static int amstream_port_init(struct port_priv_s *priv)
 					get_esparser_stbuf_ops();
 
 				/* def used stbuf with parser if the feature disable. */
-				if (!enable_stream_mode_multi_dec)
+				if (!is_support_no_parser())
 					ops = get_esparser_stbuf_ops();
 			}
 
@@ -1614,7 +1613,7 @@ static int amstream_open(struct inode *inode, struct file *file)
 		}
 	}
 
-	if (!enable_stream_mode_multi_dec) {
+	if (!is_support_no_parser()) {
 		if ((port->flag & PORT_FLAG_IN_USE) &&
 			((port->type & PORT_TYPE_FRAME) == 0)) {
 			mutex_unlock(&amstream_mutex);
@@ -1717,6 +1716,7 @@ static int amstream_open(struct inode *inode, struct file *file)
 			}
 		}
 	}
+
 	return 0;
 }
 
@@ -3430,6 +3430,46 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 		pr_info("amstream get crc32 cmpare num %d result: %d\n",
 			vdec->vfc.usr_cmp_num, vdec->vfc.usr_cmp_result);
 		*/
+		break;
+	}
+	case AMSTREAM_IOC_INIT_EX_STBUF: {
+		struct stream_buffer_metainfo parm;
+		struct stream_buf_s *vbuf = &priv->vdec->vbuf;
+
+		if (copy_from_user(&parm, (void __user *)arg,
+			sizeof(struct stream_buffer_metainfo))) {
+			return -EFAULT;
+		}
+		stream_buffer_set_ext_buf(vbuf, parm.stbuf_start,
+			parm.stbuf_size, parm.stbuf_flag);
+		break;
+	}
+	case AMSTREAM_IOC_WR_STBUF_META: {
+		struct stream_buffer_metainfo meta;
+		struct stream_buf_s *vbuf = &priv->vdec->vbuf;
+
+		if (copy_from_user(&meta, (void __user *)arg,
+			sizeof(struct stream_buffer_metainfo))) {
+			return -EFAULT;
+		}
+		if (!vbuf->ext_buf_addr)
+			return -ENODEV;
+
+		stream_buffer_meta_write(vbuf, &meta);
+		break;
+	}
+	case AMSTREAM_IOC_GET_STBUF_STATUS: {
+		struct stream_buffer_status st;
+		struct stream_buf_s *pbuf = &priv->vdec->vbuf;
+
+		st.stbuf_start = pbuf->ext_buf_addr;
+		st.stbuf_size = pbuf->buf_size;
+		st.stbuf_rp = pbuf->ops->get_rp(pbuf);
+		st.stbuf_wp = pbuf->ops->get_wp(pbuf);
+		if (copy_to_user((void __user *)arg, &st,
+			sizeof(struct stream_buffer_status))) {
+			return -EFAULT;
+		}
 		break;
 	}
 	default:

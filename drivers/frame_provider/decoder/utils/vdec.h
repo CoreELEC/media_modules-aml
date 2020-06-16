@@ -468,4 +468,6 @@ int vdec_get_frame_num(struct vdec_s *vdec);
 int show_stream_buffer_status(char *buf,
 	int (*callback) (struct stream_buf_s *, char *));
 
+bool is_support_no_parser(void);
+
 #endif				/* VDEC_H */

@@ -44,8 +44,9 @@ int stream_buffer_base_init(struct stream_buf_s *stbuf,
 			    struct parser_args *pars);
 
 void stream_buffer_set_ext_buf(struct stream_buf_s *stbuf,
-			   ulong addr,
-			   u32 size);
+			       ulong addr,
+			       u32 size,
+			       u32 flag);
 
 int stream_buffer_write(struct file *file,
 			struct stream_buf_s *stbuf,
@@ -57,6 +58,9 @@ ssize_t stream_buffer_write_ex(struct file *file,
 			   const char __user *buf,
 			   size_t count,
 			   int flags);
+
+void stream_buffer_meta_write(struct stream_buf_s *stbuf,
+	struct stream_buffer_metainfo *meta);
 
 #endif /* STREAM_BUFFER_INTERFACE_H */
 

@@ -47,6 +47,7 @@
 #include "../utils/firmware.h"
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include "../utils/config_parser.h"
+#include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <media/v4l2-mem2mem.h>
 
 #define DRIVER_NAME "ammvdec_mpeg4"
@@ -871,8 +872,8 @@ static void vmpeg4_prepare_input(struct vdec_mpeg4_hw_s *hw)
 	/* reset VLD fifo for all vdec */
 	WRITE_VREG(DOS_SW_RESET0, (1<<5) | (1<<4) | (1<<3));
 	WRITE_VREG(DOS_SW_RESET0, 0);
-
-	dummy = READ_RESET_REG(RESET0_REGISTER);
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2)
+		dummy = READ_RESET_REG(RESET0_REGISTER);
 	WRITE_VREG(POWER_CTL_VLD, 1 << 4);
 
 	/*

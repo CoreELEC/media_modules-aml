@@ -414,18 +414,24 @@ static struct clk_set_setting clks_for_formats[] = {
 void set_clock_gate(struct gate_switch_node *nodes, int num)
 {
 	struct gate_switch_node *node = NULL;
+	char *hevc_mux_str = NULL;
+
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2)
+		hevc_mux_str = "clk_hevc_mux";
+	else
+		hevc_mux_str = "clk_hevcf_mux";
 
 	do {
 		node = &nodes[num - 1];
-		if (IS_ERR_OR_NULL(node))
+		if (IS_ERR_OR_NULL(node) || (IS_ERR_OR_NULL(node->clk)))
 			pr_info("get mux clk err.\n");
 
 		if (!strcmp(node->name, "clk_vdec_mux"))
 			gclk.vdec_mux_node = node;
 		else if (!strcmp(node->name, "clk_hcodec_mux"))
 			gclk.hcodec_mux_node = node;
-		else if (!strcmp(node->name, "clk_hevc_mux"))
-			gclk.hevc_mux_node = node;
+		else if (!strcmp(node->name, hevc_mux_str))
+				gclk.hevc_mux_node = node;
 		else if (!strcmp(node->name, "clk_hevcb_mux"))
 			gclk.hevc_back_mux_node = node;
 	} while(--num);
@@ -785,7 +791,8 @@ static int hevc_back_clock_set(int clk)
 		clk = hevcb_frq;
 	}
 
-	if (get_cpu_major_id() >= MESON_CPU_MAJOR_ID_TXLX) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) &&
+		(get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2)) {
 		if ((READ_EFUSE_REG(EFUSE_LIC1) >> 28 & 0x1) && clk > 333) {
 			pr_info("The hevcb clock limit to 333MHz.\n");
 			clk = 333;
@@ -1022,6 +1029,7 @@ static int vdec_clock_get(enum vdec_type_e core)
 	AM_MESON_CPU_MAJOR_ID_SM1,\
 	AM_MESON_CPU_MAJOR_ID_TL1,\
 	AM_MESON_CPU_MAJOR_ID_TM2,\
+	AM_MESON_CPU_MAJOR_ID_SC2,\
 	0}
 #include "clk.h"
 

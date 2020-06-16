@@ -265,10 +265,11 @@ u32 stbuf_space(struct stream_buf_s *buf)
 		size = size - 6 * 1024;
 	}
 
-	if ((buf->type == BUF_TYPE_VIDEO)
-		|| (has_hevc_vdec() && buf->type == BUF_TYPE_HEVC))
-		size -= READ_PARSER_REG(PARSER_VIDEO_HOLE);
-
+	if (!buf->no_parser) {
+		if ((buf->type == BUF_TYPE_VIDEO)
+			|| (has_hevc_vdec() && buf->type == BUF_TYPE_HEVC))
+			size -= READ_PARSER_REG(PARSER_VIDEO_HOLE);
+	}
 	return size > 0 ? size : 0;
 }
 
@@ -432,11 +433,11 @@ void stbuf_release(struct stream_buf_s *buf)
 	int r;
 
 	buf->first_tstamp = INVALID_PTS;
-
-	r = stbuf_init(buf, NULL);/* reinit buffer */
-	if (r < 0)
-		pr_err("stbuf_release %d, stbuf_init failed\n", __LINE__);
-
+	if (!buf->ext_buf_addr) {
+		r = stbuf_init(buf, NULL);/* reinit buffer */
+		if (r < 0)
+			pr_err("stbuf_release %d, stbuf_init failed\n", __LINE__);
+	}
 	if (buf->flag & BUF_FLAG_ALLOC && buf->buf_start) {
 		codec_mm_free_for_dma(MEM_NAME, buf->buf_start);
 		buf->flag &= ~BUF_FLAG_ALLOC;

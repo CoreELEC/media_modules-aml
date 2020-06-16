@@ -31,6 +31,7 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include "../../frame_provider/decoder/utils/vdec.h"
+#include "../../common/chips/decoder_cpu_ver_info.h"
 #include "stream_buffer_base.h"
 #include "amports_priv.h"
 #include "thread_rw.h"
@@ -88,6 +89,8 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 	if (stbuf->ext_buf_addr) {
 		addr	= stbuf->ext_buf_addr;
 		size	= stbuf->buf_size;
+		is_secure = stbuf->is_secure;
+		pages = (size >> PAGE_SHIFT);
 	} else {
 		flags |= CODEC_MM_FLAGS_FOR_VDECODER;
 		if (vdec->port_flag & PORT_FLAG_DRM) {
@@ -103,12 +106,11 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 			ret = -ENOMEM;
 			goto err;
 		}
-
-		ret = vdec_set_input_buffer(vdec, addr, size);
-		if (ret) {
-			pr_err("[%d]: set input buffer err.\n", stbuf->id);
-			goto err;
-		}
+	}
+	ret = vdec_set_input_buffer(vdec, addr, size);
+	if (ret) {
+		pr_err("[%d]: set input buffer err.\n", stbuf->id);
+		goto err;
 	}
 
 	atomic_set(&stbuf->payload, 0);
@@ -123,16 +125,18 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 	stbuf->buf_page_num	= pages;
 	stbuf->canusebuf_size	= size;
 
-	/* init pts server. */
-	ret = pts_start(type_to_pts(stbuf->type));
-	if (ret < 0) {
-		pr_err("[%d]: pts server failed\n", stbuf->id);
-		//goto err;//fixme
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2) {
+		/* init pts server. parser register w/r inside */
+		ret = pts_start(type_to_pts(stbuf->type));
+		if (ret < 0) {
+			pr_err("[%d]: pts server failed\n", stbuf->id);
+			//goto err;//fixme
+		}
 	}
-
 	/* init thread write. */
 	if (!(vdec_get_debug_flags() & 1) &&
-		!codec_mm_video_tvp_enabled()) {
+		!codec_mm_video_tvp_enabled() &&
+		(!stbuf->ext_buf_addr)) {
 		int block_size = PAGE_SIZE << 4;
 		int buf_num = (2 * SZ_1M) / (PAGE_SIZE << 4);
 
