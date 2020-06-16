@@ -124,6 +124,28 @@ module_param(enable_sec_monitor, int, 0644);
 #define MESON_CPU_MAJOR_ID_GXL	0x21
 #endif
 
+static int npidtypes = CHANNEL_COUNT;
+#define MOD_PARAM_DECLARE_CHANPIDS_TYPES(_dmx) \
+MODULE_PARM_DESC(debug_dmx##_dmx##_chanpids_types, "\n\t\t pids types of dmx channels"); \
+static short debug_dmx##_dmx##_chanpids_types[CHANNEL_COUNT] = \
+					{[0 ... (CHANNEL_COUNT - 1)] = -1}; \
+module_param_array(debug_dmx##_dmx##_chanpids_types, short, &npidtypes, 0444)
+
+MOD_PARAM_DECLARE_CHANPIDS_TYPES(0);
+MOD_PARAM_DECLARE_CHANPIDS_TYPES(1);
+MOD_PARAM_DECLARE_CHANPIDS_TYPES(2);
+
+#define set_debug_dmx_chanpids_types(_dmx, _idx, _type)\
+	do { \
+		if ((_dmx) == 0) \
+			debug_dmx0_chanpids_types[(_idx)] = (_type); \
+		else if ((_dmx) == 1) \
+			debug_dmx1_chanpids_types[(_idx)] = (_type); \
+		else if ((_dmx) == 2) \
+			debug_dmx2_chanpids_types[(_idx)] = (_type); \
+	} while (0)
+
+
 static int npids = CHANNEL_COUNT;
 #define MOD_PARAM_DECLARE_CHANPIDS(_dmx) \
 MODULE_PARM_DESC(debug_dmx##_dmx##_chanpids, "\n\t\t pids of dmx channels"); \
@@ -150,6 +172,8 @@ MOD_PARAM_DECLARE_CHANPIDS(2);
 			debug_dmx1_chanpids[(_idx)] = (_pid); \
 		else if ((_dmx) == 2) \
 			debug_dmx2_chanpids[(_idx)] = (_pid); \
+		if (_pid == -1) \
+			set_debug_dmx_chanpids_types(_dmx, _idx, -1); \
 	} while (0)
 
 MODULE_PARM_DESC(debug_sf_user, "\n\t\t only for sf mode check");
@@ -3552,6 +3576,10 @@ static int dmx_set_chan_regs(struct aml_dmx *dmx, int cid)
 		first_audio_pts = 0;
 	}
 
+	if (dmx->channel[cid].used)
+		set_debug_dmx_chanpids_types(dmx->id,
+			cid,
+			(dmx_get_chan_target(dmx, cid) >> PID_TYPE) & 0x7);
 	return 0;
 }
 
