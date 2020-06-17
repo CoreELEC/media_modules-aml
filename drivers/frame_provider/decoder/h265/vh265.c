@@ -402,7 +402,7 @@ static u32 nal_skip_policy = 2;
  *bit 1, 1: only decode I picture;
  */
 static u32 i_only_flag;
-
+static u32 skip_nal_count = 500;
 /*
 bit 0, fast output first I picture
 */
@@ -1737,7 +1737,7 @@ struct hevc_state_s {
 	struct mutex chunks_mutex;
 	int need_cache_size;
 	u64 sc_start_time;
-	u32 skip_first_nal;
+	u32 skip_nal_count;
 	bool is_swap;
 	bool is_4k;
 	int frameinfo_enable;
@@ -9731,6 +9731,20 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 	return ret;
 }
 
+static int hevc_skip_nal(struct hevc_state_s *hevc)
+{
+	if ((hevc->pic_h == 96) && (hevc->pic_w  == 160) &&
+		(get_double_write_mode(hevc) == 0x10)) {
+		if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TXLX) {
+			if (hevc->skip_nal_count < skip_nal_count)
+				return 1;
+		} else {
+			if (hevc->skip_nal_count < 1)
+				return 1;
+		}
+	}
+	return 0;
+}
 
 static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 {
@@ -10566,14 +10580,12 @@ force_output:
 		if (hevc->pic_w == 0 || hevc->pic_h == 0
 						|| hevc->lcu_size == 0
 						|| is_oversize(hevc->pic_w, hevc->pic_h)
-						||  (!hevc->skip_first_nal &&
-						(hevc->pic_h == 96) && (hevc->pic_w  == 160))) {
+						||  hevc_skip_nal(hevc)) {
 			/* skip search next start code */
 			WRITE_VREG(HEVC_WAIT_FLAG, READ_VREG(HEVC_WAIT_FLAG)
 						& (~0x2));
-			if  ( !hevc->skip_first_nal &&
-				(hevc->pic_h == 96) && (hevc->pic_w  == 160))
-				hevc->skip_first_nal = 1;
+			if  ((hevc->pic_h == 96) && (hevc->pic_w  == 160))
+				hevc->skip_nal_count++;
 			hevc->skip_flag = 1;
 			WRITE_VREG(HEVC_DEC_STATUS_REG,	HEVC_ACTION_DONE);
 			/* Interrupt Amrisc to excute */
@@ -13765,6 +13777,9 @@ MODULE_PARM_DESC(error_handle_system_threshold,
 module_param(error_skip_nal_count, uint, 0664);
 MODULE_PARM_DESC(error_skip_nal_count,
 				 "\n amvdec_h265 error_skip_nal_count\n");
+
+module_param(skip_nal_count, uint, 0664);
+MODULE_PARM_DESC(skip_nal_count, "\n skip_nal_count\n");
 
 module_param(debug, uint, 0664);
 MODULE_PARM_DESC(debug, "\n amvdec_h265 debug\n");
