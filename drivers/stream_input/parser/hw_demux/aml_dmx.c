@@ -3769,33 +3769,49 @@ static void dmx_clear_filter_buffer(struct aml_dmx *dmx, int fid)
 
 static void async_fifo_set_regs(struct aml_asyncfifo *afifo, int source_val)
 {
-	u32 start_addr = (afifo->secure_enable && afifo->blk.addr) ? afifo->blk.addr :
-					virt_to_phys((void *)afifo->pages);
+	u32 start_addr = (afifo->secure_enable && afifo->blk.addr)?
+			afifo->blk.addr : virt_to_phys((void *)afifo->pages);
 	u32 size = afifo->buf_len;
 	u32 flush_size = afifo->flush_size;
 	int factor = dmx_get_order(size / flush_size);
-	u32 old_start_addr, old_size, new_size, old_factor, new_factor;
-
+	u32 old_size, new_size, old_factor, new_factor;
 	int old_src, old_en;
 
-	old_en  = READ_ASYNC_FIFO_REG(afifo->id, REG2) & (1 << ASYNC_FIFO_FILL_EN);
-	old_src = (READ_ASYNC_FIFO_REG(afifo->id, REG2) >> ASYNC_FIFO_SOURCE_LSB) & 3;
-
-	old_start_addr = READ_ASYNC_FIFO_REG(afifo->id, REG0);
+	old_en  = READ_ASYNC_FIFO_REG(afifo->id, REG2)
+			& (1 << ASYNC_FIFO_FILL_EN);
+	old_src =
+		(READ_ASYNC_FIFO_REG(afifo->id, REG2) >> ASYNC_FIFO_SOURCE_LSB)
+		& 3;
 
 	new_size = (size >> 7) & 0x7fff;
-	old_size = (READ_ASYNC_FIFO_REG(afifo->id, REG1) >> ASYNC_FIFO_FLUSH_CNT_LSB) & 0x7fff;
+	old_size =
+		(READ_ASYNC_FIFO_REG(afifo->id, REG1)
+			>> ASYNC_FIFO_FLUSH_CNT_LSB)
+		& 0x7fff;
 
-	old_factor = (READ_ASYNC_FIFO_REG(afifo->id, REG3) >> ASYNC_FLUSH_SIZE_IRQ_LSB) & 0x7fff;
+	old_factor =
+		(READ_ASYNC_FIFO_REG(afifo->id, REG3)
+			>> ASYNC_FLUSH_SIZE_IRQ_LSB)
+		& 0x7fff;
 	new_factor = ((size >> (factor + 7)) - 1) & 0x7fff;
 
-	pr_error("async_fifo_set_regs old_src=0x%x source_val=0x%x new_size=0x%x old_size=0x%x old_factor=0x%x new_factor=0x%x old_start_addr=0x%x start_addr=0x%x\n", old_src, source_val, new_size, old_size, old_factor , new_factor,old_start_addr, start_addr);
-	if (old_en && (old_src == source_val) && (new_size == old_size) && (old_factor == new_factor) && (old_start_addr == start_addr))
+	pr_inf("AF(%d) [%s] src:0x%x->0x%x size:0x%x->0x%x factor:0x%x->0x%x\n",
+		afifo->id,
+		old_en? "on" : "off",
+		old_src, source_val,
+		old_size, new_size,
+		old_factor, new_factor);
+
+	if (old_en
+		&& (old_src == source_val)
+		&& (new_size == old_size)
+		&& (old_factor == new_factor))
 		return;
 
-	pr_error("ASYNC FIFO id=%d, link to DMX%d, start_addr %x, buf_size %d,"
+	pr_inf("ASYNC FIFO id=%d, link to DMX%d, start_addr %x, buf_size %d,"
 		"source value 0x%x, factor %d\n",
 		afifo->id, afifo->source, start_addr, size, source_val, factor);
+
 	/* Destination address */
 	WRITE_ASYNC_FIFO_REG(afifo->id, REG0, start_addr);
 
@@ -3872,61 +3888,73 @@ static void reset_async_fifos(struct aml_dvb *dvb)
 			if (!dvb->asyncfifo[i].init)
 				continue;
 
-			if (dvb->dmx[j].record
-			    && dvb->dmx[j].id == dvb->asyncfifo[i].source) {
-				/*This dmx is linked to the async fifo,
-				 *Enable the TS_RECORDER_ENABLE
-				 */
-				record_enable = 1;
-				if (!low_dmx_fifo) {
-					low_dmx_fifo = &dvb->asyncfifo[i];
-				} else if (low_dmx_fifo->source >
-					   dvb->asyncfifo[i].source) {
-					if (!high_dmx_fifo)
-						high_dmx_fifo = low_dmx_fifo;
-					else {
-						highest_dmx_fifo = high_dmx_fifo;
-						high_dmx_fifo = low_dmx_fifo;
-					}
-					low_dmx_fifo = &dvb->asyncfifo[i];
-				} else if (low_dmx_fifo->source <
-					   dvb->asyncfifo[i].source) {
-					if (!high_dmx_fifo)
-						high_dmx_fifo = &dvb->asyncfifo[i];
-					else {
-						if (high_dmx_fifo->source > dvb->asyncfifo[i].source) {
-							highest_dmx_fifo = high_dmx_fifo;
-							high_dmx_fifo = &dvb->asyncfifo[i];
-						} else {
-							highest_dmx_fifo = &dvb->asyncfifo[i];
-						}
+			if (!dvb->dmx[j].record
+				|| !(dvb->dmx[j].id == dvb->asyncfifo[i].source))
+				continue;
+
+			/*This dmx is linked to the async fifo,
+			 *Enable the TS_RECORDER_ENABLE
+			 */
+			record_enable = 1;
+			if (!low_dmx_fifo) {
+				low_dmx_fifo = &dvb->asyncfifo[i];
+			} else if (low_dmx_fifo->source >
+				   dvb->asyncfifo[i].source) {
+				if (!high_dmx_fifo)
+					high_dmx_fifo = low_dmx_fifo;
+				else {
+					highest_dmx_fifo = high_dmx_fifo;
+					high_dmx_fifo = low_dmx_fifo;
+				}
+				low_dmx_fifo = &dvb->asyncfifo[i];
+			} else if (low_dmx_fifo->source <
+				   dvb->asyncfifo[i].source) {
+				if (!high_dmx_fifo)
+					high_dmx_fifo = &dvb->asyncfifo[i];
+				else {
+					if (high_dmx_fifo->source >
+						dvb->asyncfifo[i].source) {
+						highest_dmx_fifo =
+							high_dmx_fifo;
+						high_dmx_fifo =
+							&dvb->asyncfifo[i];
+					} else {
+						highest_dmx_fifo =
+							&dvb->asyncfifo[i];
 					}
 				}
-
-				break;
 			}
+			break;
 		}
-		pr_error("Set DMX%d TS_RECORDER_ENABLE to %d\n", dvb->dmx[j].id,
-		       record_enable ? 1 : 0);
+
+		pr_inf("Set DMX%d TS_RECORDER_ENABLE to %d\n", dvb->dmx[j].id,
+			record_enable ? 1 : 0);
+
 		if (record_enable) {
-			int old_en = DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) & (1 << TS_RECORDER_ENABLE);
+			int old_en =
+				DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL)
+				& (1 << TS_RECORDER_ENABLE);
 
 			if (!old_en) {
 				DMX_WRITE_REG(dvb->dmx[j].id, DEMUX_CONTROL,
-					DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) |
-					(1 << TS_RECORDER_ENABLE));
+					DMX_READ_REG(dvb->dmx[j].id,
+						DEMUX_CONTROL)
+					| (1 << TS_RECORDER_ENABLE));
 			}
 		} else {
-			int old_en = DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) & (1 << TS_RECORDER_ENABLE);
+			int old_en =
+				DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL)
+				& (1 << TS_RECORDER_ENABLE);
 
 			if (old_en) {
 				DMX_WRITE_REG(dvb->dmx[j].id, DEMUX_CONTROL,
-					DMX_READ_REG(dvb->dmx[j].id, DEMUX_CONTROL) &
-					(~(1 <<	TS_RECORDER_ENABLE)));
+					DMX_READ_REG(dvb->dmx[j].id,
+						DEMUX_CONTROL)
+					& (~(1 << TS_RECORDER_ENABLE)));
 			}
 		}
 	}
-	pr_error("reset ASYNC FIFOs\n");
+	pr_inf("reset ASYNC FIFOs\n");
 	for (i = 0; i < dvb->async_fifo_total_count; i++) {
 		struct aml_asyncfifo *afifo = &dvb->asyncfifo[i];
 		int old;
@@ -3934,21 +3962,27 @@ static void reset_async_fifos(struct aml_dvb *dvb)
 		if (!dvb->asyncfifo[i].init)
 			continue;
 
-		old = READ_ASYNC_FIFO_REG(afifo->id, REG2) & (1 << ASYNC_FIFO_FILL_EN);
+		old = READ_ASYNC_FIFO_REG(afifo->id, REG2)
+			& (1 << ASYNC_FIFO_FILL_EN);
 
-		if (old && (afifo != low_dmx_fifo) && (afifo != high_dmx_fifo) && (afifo != highest_dmx_fifo)) {
-			pr_error("Disable ASYNC FIFO id=%d\n", dvb->asyncfifo[i].id);
+		if (old
+			&& (afifo != low_dmx_fifo)
+			&& (afifo != high_dmx_fifo)
+			&& (afifo != highest_dmx_fifo)) {
+			pr_inf("Disable ASYNC FIFO id=%d\n",
+				dvb->asyncfifo[i].id);
 			CLEAR_ASYNC_FIFO_REG_MASK(dvb->asyncfifo[i].id, REG1,
 						  1 << ASYNC_FIFO_FLUSH_EN);
 			CLEAR_ASYNC_FIFO_REG_MASK(dvb->asyncfifo[i].id, REG2,
 						  1 << ASYNC_FIFO_FILL_EN);
-			if (READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG2) &
-					(1 << ASYNC_FIFO_FILL_EN) ||
-				READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG1) &
-					(1 << ASYNC_FIFO_FLUSH_EN)) {
+			if (READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG2)
+					& (1 << ASYNC_FIFO_FILL_EN)
+				||
+				READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG1)
+					& (1 << ASYNC_FIFO_FLUSH_EN)) {
 				pr_error("Set reg failed\n");
 			} else
-				pr_error("Set reg ok\n");
+				pr_inf("Set reg ok\n");
 			dvb->asyncfifo[i].buf_toggle = 0;
 			dvb->asyncfifo[i].buf_read = 0;
 		}
