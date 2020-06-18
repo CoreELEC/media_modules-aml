@@ -945,12 +945,12 @@ static int amvdec_real_probe(struct platform_device *pdev)
 	pdata->set_isreset = vreal_set_isreset;
 	is_reset = 0;
 
+	INIT_WORK(&set_clk_work, vreal_set_clk);
 	if (vreal_init(pdata) < 0) {
 		pr_info("amvdec_real init failed.\n");
 		pdata->dec_status = NULL;
 		return -ENODEV;
 	}
-	INIT_WORK(&set_clk_work, vreal_set_clk);
 	return 0;
 }
 

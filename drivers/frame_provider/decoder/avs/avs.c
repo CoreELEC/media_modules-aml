@@ -1716,6 +1716,13 @@ static int amvdec_avs_probe(struct platform_device *pdev)
 
 	INIT_WORK(&set_clk_work, avs_set_clk);
 	vdec = pdata;
+
+	INIT_WORK(&fatal_error_wd_work, vavs_fatal_error_handler);
+	atomic_set(&error_handler_run, 0);
+
+	INIT_WORK(&userdata_push_work, userdata_push_do_work);
+	INIT_WORK(&notify_work, vavs_notify_work);
+
 	if (vavs_init() < 0) {
 		pr_info("amvdec_avs init failed.\n");
 		kfree(gvs);
@@ -1723,14 +1730,6 @@ static int amvdec_avs_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return -ENODEV;
 	}
-
-	INIT_WORK(&fatal_error_wd_work, vavs_fatal_error_handler);
-	atomic_set(&error_handler_run, 0);
-
-	INIT_WORK(&userdata_push_work, userdata_push_do_work);
-
-	INIT_WORK(&notify_work, vavs_notify_work);
-
 	return 0;
 }
 
