@@ -1678,7 +1678,7 @@ static void buf_spec_init(struct vdec_h264_hw_s *hw, bool buffer_reset_flag)
 	}
 	if (buffer_reset_flag) {
 		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
-			if (hw->buffer_spec[i].used != -1)
+			if (hw->buffer_spec[i].used == 1 || hw->buffer_spec[i].used == 2)
 				hw->buffer_spec[i].used = 0;
 		}
 	} else {
