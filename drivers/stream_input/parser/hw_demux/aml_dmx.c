@@ -3767,6 +3767,21 @@ static void dmx_clear_filter_buffer(struct aml_dmx *dmx, int fid)
 		DMX_WRITE_REG(dmx->id, SEC_BUFF_READY, section_busy32);
 }
 
+static void async_fifo_disable(struct aml_asyncfifo *afifo)
+{
+	pr_inf("AF(%d) disable asyncfifo\n", afifo->id);
+	CLEAR_ASYNC_FIFO_REG_MASK(afifo->id, REG1, 1 << ASYNC_FIFO_FLUSH_EN);
+	CLEAR_ASYNC_FIFO_REG_MASK(afifo->id, REG2, 1 << ASYNC_FIFO_FILL_EN);
+	if (READ_ASYNC_FIFO_REG(afifo->id, REG2) & (1 << ASYNC_FIFO_FILL_EN)
+		|| READ_ASYNC_FIFO_REG(afifo->id, REG1)
+			& (1 << ASYNC_FIFO_FLUSH_EN)) {
+		pr_error("disable failed\n");
+	} else
+		pr_inf("disable ok\n");
+	afifo->buf_toggle = 0;
+	afifo->buf_read = 0;
+}
+
 static void async_fifo_set_regs(struct aml_asyncfifo *afifo, int source_val)
 {
 	u32 start_addr = (afifo->secure_enable && afifo->blk.addr)?
@@ -3807,6 +3822,25 @@ static void async_fifo_set_regs(struct aml_asyncfifo *afifo, int source_val)
 		&& (new_size == old_size)
 		&& (old_factor == new_factor))
 		return;
+
+	if (old_en) {
+		if ((old_size == new_size)
+			&& (old_factor == new_factor)) {
+			/*only source changed, do not reset all*/
+			/* Connect the DEMUX to ASYNC_FIFO */
+			WRITE_ASYNC_FIFO_REG(afifo->id, REG2,
+				(READ_ASYNC_FIFO_REG(afifo->id, REG2)
+				& ~(0x3 << ASYNC_FIFO_SOURCE_LSB))
+				| (source_val << ASYNC_FIFO_SOURCE_LSB));
+			return;
+		} else {
+			/*Dynamic change setting is not supported,
+			 *should disable it first.
+			 *Data discontinue will be here.
+			 */
+			async_fifo_disable(afifo);
+		}
+	}
 
 	pr_inf("ASYNC FIFO id=%d, link to DMX%d, start_addr %x, buf_size %d,"
 		"source value 0x%x, factor %d\n",
@@ -3879,17 +3913,21 @@ static void reset_async_fifos(struct aml_dvb *dvb)
 	int i, j;
 	int record_enable;
 
+	struct aml_asyncfifo *afifo = NULL;
 
 	for (j = 0; j < DMX_DEV_COUNT; j++) {
 		if (!dvb->dmx[j].init)
 			continue;
+
 		record_enable = 0;
 		for (i = 0; i < dvb->async_fifo_total_count; i++) {
-			if (!dvb->asyncfifo[i].init)
+			afifo = &dvb->asyncfifo[i];
+
+			if (!afifo->init)
 				continue;
 
 			if (!dvb->dmx[j].record
-				|| !(dvb->dmx[j].id == dvb->asyncfifo[i].source))
+				|| !(dvb->dmx[j].id == afifo->source))
 				continue;
 
 			/*This dmx is linked to the async fifo,
@@ -3897,30 +3935,27 @@ static void reset_async_fifos(struct aml_dvb *dvb)
 			 */
 			record_enable = 1;
 			if (!low_dmx_fifo) {
-				low_dmx_fifo = &dvb->asyncfifo[i];
+				low_dmx_fifo = afifo;
 			} else if (low_dmx_fifo->source >
-				   dvb->asyncfifo[i].source) {
+				   afifo->source) {
 				if (!high_dmx_fifo)
 					high_dmx_fifo = low_dmx_fifo;
 				else {
 					highest_dmx_fifo = high_dmx_fifo;
 					high_dmx_fifo = low_dmx_fifo;
 				}
-				low_dmx_fifo = &dvb->asyncfifo[i];
-			} else if (low_dmx_fifo->source <
-				   dvb->asyncfifo[i].source) {
+				low_dmx_fifo = afifo;
+			} else if (low_dmx_fifo->source < afifo->source) {
 				if (!high_dmx_fifo)
-					high_dmx_fifo = &dvb->asyncfifo[i];
+					high_dmx_fifo = afifo;
 				else {
 					if (high_dmx_fifo->source >
-						dvb->asyncfifo[i].source) {
+						afifo->source) {
 						highest_dmx_fifo =
 							high_dmx_fifo;
-						high_dmx_fifo =
-							&dvb->asyncfifo[i];
+						high_dmx_fifo = afifo;
 					} else {
-						highest_dmx_fifo =
-							&dvb->asyncfifo[i];
+						highest_dmx_fifo = afifo;
 					}
 				}
 			}
@@ -3956,10 +3991,11 @@ static void reset_async_fifos(struct aml_dvb *dvb)
 	}
 	pr_inf("reset ASYNC FIFOs\n");
 	for (i = 0; i < dvb->async_fifo_total_count; i++) {
-		struct aml_asyncfifo *afifo = &dvb->asyncfifo[i];
 		int old;
 
-		if (!dvb->asyncfifo[i].init)
+		afifo = &dvb->asyncfifo[i];
+
+		if (!afifo->init)
 			continue;
 
 		old = READ_ASYNC_FIFO_REG(afifo->id, REG2)
@@ -3968,24 +4004,8 @@ static void reset_async_fifos(struct aml_dvb *dvb)
 		if (old
 			&& (afifo != low_dmx_fifo)
 			&& (afifo != high_dmx_fifo)
-			&& (afifo != highest_dmx_fifo)) {
-			pr_inf("Disable ASYNC FIFO id=%d\n",
-				dvb->asyncfifo[i].id);
-			CLEAR_ASYNC_FIFO_REG_MASK(dvb->asyncfifo[i].id, REG1,
-						  1 << ASYNC_FIFO_FLUSH_EN);
-			CLEAR_ASYNC_FIFO_REG_MASK(dvb->asyncfifo[i].id, REG2,
-						  1 << ASYNC_FIFO_FILL_EN);
-			if (READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG2)
-					& (1 << ASYNC_FIFO_FILL_EN)
-				||
-				READ_ASYNC_FIFO_REG(dvb->asyncfifo[i].id, REG1)
-					& (1 << ASYNC_FIFO_FLUSH_EN)) {
-				pr_error("Set reg failed\n");
-			} else
-				pr_inf("Set reg ok\n");
-			dvb->asyncfifo[i].buf_toggle = 0;
-			dvb->asyncfifo[i].buf_read = 0;
-		}
+			&& (afifo != highest_dmx_fifo))
+			async_fifo_disable(afifo);
 	}
 
 	/*Set the async fifo regs */
