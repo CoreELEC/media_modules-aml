@@ -1248,11 +1248,11 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 			//rb->count = ctx->dpb_size;
 		}
 	} else {
-		if (rb->memory == VB2_MEMORY_DMABUF) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
-					"%s, output_dma_mode set", __func__);
-			ctx->output_dma_mode = true;
-		}
+		ctx->output_dma_mode =
+			(rb->memory == VB2_MEMORY_DMABUF) ? 1 : 0;
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
+			"output buffer memory mode is %d\n", rb->memory);
 	}
 
 	return v4l2_m2m_ioctl_reqbufs(file, priv, rb);
