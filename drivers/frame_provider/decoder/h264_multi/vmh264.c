@@ -2473,7 +2473,8 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 			}
 		}
 
-		if (v4l2_m2m_num_dst_bufs_ready(v4l->m2m_ctx)
+		if (v4l->cap_pool.out < hw->dpb.mDPB.size &&
+			v4l2_m2m_num_dst_bufs_ready(v4l->m2m_ctx)
 			>= run_ready_min_buf_num)
 			return 1;
 
@@ -5372,7 +5373,8 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			enum receviver_start_e state = RECEIVER_INACTIVE;
 
 			if (hw->timeout_flag == false)
-			      hw->timeout = jiffies + HZ / 2;
+				hw->timeout = jiffies + HZ / 2;
+
 			if ((error_proc_policy & 0x10) &&
 				vf_get_receiver(vdec->vf_provider_name)) {
 				state =
@@ -5389,7 +5391,9 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			if (state == RECEIVER_INACTIVE && hw->timeout_flag &&
 				time_after(jiffies, hw->timeout)) {
 				bufmgr_recover(hw);
-				dpb_print(DECODE_ID(hw), 0, "%s %d timeout to reset\n", __func__, __LINE__);
+				hw->timeout_flag = false;
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
+					"%s %d timeout to reset\n", __func__, __LINE__);
 			} else {
 				bufmgr_h264_remove_unused_frame(p_H264_Dpb, 1);
 			}
