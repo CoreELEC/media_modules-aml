@@ -2580,13 +2580,12 @@ error_fe:
 			s_tuner_type[i] = AM_TUNER_NONE;
 		}
 
+		if (advb->tuners)
+			kfree(advb->tuners);
+		pr_dbg("probe amlogic dvb driver [%s] Exit\n", DVB_VERSION);
 		return 0;
 	}
 
-	if (advb->tuners)
-		kfree(advb->tuners);
-	pr_dbg("probe amlogic dvb driver [%s] Exit\n", DVB_VERSION);
-	return 0;
 error:
 	for (i = 0; i < advb->async_fifo_total_count; i++) {
 		if (advb->asyncfifo[i].id != -1)

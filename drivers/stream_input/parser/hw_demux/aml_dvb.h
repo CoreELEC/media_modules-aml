@@ -333,7 +333,7 @@ struct aml_dvb {
 	int	ts_out_invert;
 
 	unsigned int tuner_num;
-	unsigned int tuner_cur;
+	int tuner_cur;
 	struct aml_tuner *tuners;
 	bool tuner_attached;
 
