@@ -25,6 +25,8 @@
 #include <linux/kfifo.h>
 
 #define FRAME_CHECK
+#define AUX_DATA_CRC
+
 
 #define YUV_MAX_DUMP_NUM  60
 
@@ -57,6 +59,20 @@ struct pic_check_t{
 	DECLARE_KFIFO(new_chk_q, char *, SIZE_CHECK_Q);
 	DECLARE_KFIFO(wr_chk_q, char *, SIZE_CHECK_Q);
 };
+
+struct aux_data_check_t{
+	struct file *check_fp;
+	loff_t check_pos;
+
+	struct file *compare_fp;
+	loff_t compare_pos;
+	unsigned int cmp_crc_cnt;
+	void *check_addr;
+
+	DECLARE_KFIFO(new_chk_q, char *, SIZE_CHECK_Q);
+	DECLARE_KFIFO(wr_chk_q, char *, SIZE_CHECK_Q);
+};
+
 
 struct pic_check_mgr_t{
 	int id;
@@ -94,10 +110,28 @@ struct pic_check_mgr_t{
 	u32 height;
 };
 
+struct aux_data_check_mgr_t{
+	int id;
+	int enable;
+	unsigned int frame_cnt;
+	/* pic info */
+	int aux_size;
+	char *aux_addr;
+
+	int file_cnt;
+	atomic_t work_inited;
+	struct work_struct aux_data_check_work;
+
+	struct aux_data_check_t aux_data_check;
+};
+
+
 int dump_yuv_trig(struct pic_check_mgr_t *mgr,
 	int id, int start, int num);
 
 int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf);
+
+int decoder_do_aux_data_check(struct vdec_s *vdec, char *aux_buffer, int size);
 
 int frame_check_init(struct pic_check_mgr_t *mgr, int id);
 
@@ -119,6 +153,10 @@ ssize_t dump_yuv_store(struct class *class,
 
 void vdec_frame_check_exit(struct vdec_s *vdec);
 int vdec_frame_check_init(struct vdec_s *vdec);
+
+void vdec_aux_data_check_exit(struct vdec_s *vdec);
+int vdec_aux_data_check_init(struct vdec_s *vdec);
+
 
 #endif /* __FRAME_CHECK_H__ */
 

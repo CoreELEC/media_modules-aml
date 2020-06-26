@@ -3071,6 +3071,10 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		hw->vf_pre_count++;
 		vdec->vdec_fps_detec(vdec->id);
+#ifdef AUX_DATA_CRC
+		decoder_do_aux_data_check(vdec, hw->buffer_spec[buffer_index].aux_data_buf,
+			hw->buffer_spec[buffer_index].aux_data_size);
+#endif
 		if (without_display_mode == 0) {
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -10098,6 +10102,10 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			USER_DATA_SIZE);
 #endif
 
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_init(pdata);
+#endif
+
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 	if (pdata->parallel_dec == 1) {
 		if (hw->mmu_enable == 0)
@@ -10194,6 +10202,10 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 	vmh264_destroy_userdata_manager(hw);
 #endif
 	/* vdec_source_changed(VFORMAT_H264, 0, 0, 0); */
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_exit(vdec);
+#endif
 
 	atomic_set(&hw->vh264_active, 0);
 	if (vdec->parallel_dec == 1) {

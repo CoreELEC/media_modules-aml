@@ -9492,6 +9492,10 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			get_pic_poc(hevc, (vf->index >> 8) & 0xff),
 			vf->pts, vf->pts_us64,
 			vf->duration);
+#ifdef AUX_DATA_CRC
+		decoder_do_aux_data_check(vdec, hevc->m_PIC[vf->index & 0xff]->aux_data_buf,
+			hevc->m_PIC[vf->index & 0xff]->aux_data_size);
+#endif
 
 		/*if (pic->vf_ref == hevc->vf_pre_count) {*/
 		if (hevc->kpi_first_i_decoded == 0) {
@@ -13853,6 +13857,10 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_init(pdata);
+#endif
+
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 
 	/*set the max clk for smooth playing...*/
@@ -13877,6 +13885,10 @@ static int ammvdec_h265_remove(struct platform_device *pdev)
 	if (hevc == NULL)
 		return 0;
 	vdec = hw_to_vdec(hevc);
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_exit(vdec);
+#endif
 
 	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
 	if (get_dbg_flag(hevc))

@@ -274,6 +274,9 @@ struct vdec_s {
 	int parallel_dec;
 	struct vdec_frames_s *mvfrm;
 	struct vdec_sync sync;
+
+	/*aux data check*/
+	struct aux_data_check_mgr_t adc;
 };
 
 /* common decoder vframe provider name to use default vfm path */
