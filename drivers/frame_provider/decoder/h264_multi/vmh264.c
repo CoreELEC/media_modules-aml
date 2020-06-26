@@ -4929,7 +4929,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		mutex_lock(&vmh264_mutex);
 		if (!hw->mmu_enable) {
-			if (!buffer_reset_flag)
+			if (!buffer_reset_flag || hw->is_used_v4l)
 				config_buf_specs(vdec);
 			i = get_buf_spec_by_canvas_pos(hw, 0);
 
@@ -9185,6 +9185,8 @@ static void reset(struct vdec_s *vdec)
 	hw->eos = 0;
 	hw->decode_pic_count = 0;
 	hw->dec_result = DEC_RESULT_NONE;
+	/* v4l will reset on every res change */
+	hw->res_ch_flag = 0;
 
 	clear_refer_bufs(hw);
 	reset_process_time(hw);
