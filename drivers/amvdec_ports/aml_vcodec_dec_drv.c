@@ -620,6 +620,10 @@ bool dump_capture_frame;
 EXPORT_SYMBOL(dump_capture_frame);
 module_param(dump_capture_frame, bool, 0644);
 
+int dump_output_frame;
+EXPORT_SYMBOL(dump_output_frame);
+module_param(dump_output_frame, int, 0644);
+
 EXPORT_SYMBOL(param_sets_from_ucode);
 module_param(param_sets_from_ucode, bool, 0644);
 

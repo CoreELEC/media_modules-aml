@@ -55,6 +55,7 @@
 
 //#define DATA_DEBUG
 
+extern int dump_output_frame;
 extern void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx, u32 handle);
 static int def_4k_vstreambuf_sizeM =
 	(DEFAULT_VIDEO_BUFFER_SIZE_4K >> 20);
@@ -608,6 +609,18 @@ out:
 	return ret;
 }
 
+void dump(const char* path, const char *data, unsigned int size)
+{
+	struct file *fp;
+
+	fp = filp_open(path,
+			O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
+	if (!IS_ERR(fp)) {
+		kernel_write(fp, data, size, 0);
+		filp_close(fp, NULL);
+	}
+
+}
 int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count)
 {
@@ -678,10 +691,11 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 		msleep(30);
 	}
 
-#ifdef DATA_DEBUG
-	/* dump to file */
-	dump_write(buf, count);
-#endif
+	if (dump_output_frame > 0) {
+		dump("/data/es.data", buf, count);
+		dump_output_frame--;
+	}
+
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
 		"write frames, vbuf: %p, size: %u, ret: %d, crc: %x, ts: %llu\n",
 		buf, count, ret, crc32_le(0, buf, count), timestamp);
