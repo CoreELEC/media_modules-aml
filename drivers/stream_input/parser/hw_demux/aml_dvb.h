@@ -113,6 +113,7 @@ struct aml_channel {
 	int                  filter_count;
 	struct dvb_demux_feed     *feed;
 	struct dvb_demux_feed     *dvr_feed;
+	int                  pkt_type;
 };
 
 struct aml_filter {
