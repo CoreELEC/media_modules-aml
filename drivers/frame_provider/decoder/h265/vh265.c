@@ -1799,6 +1799,31 @@ static int is_oversize(int w, int h)
 	return false;
 }
 
+int is_oversize_ex(int w, int h)
+{
+	int max = (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) ?
+		MAX_SIZE_8K : MAX_SIZE_4K;
+
+	if (w == 0 || h == 0)
+		return true;
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
+		if (w > 8192 || h > 4608)
+			return true;
+	} else {
+		if (w > 4096 || h > 2304)
+			return true;
+	}
+
+	if (w < 0 || h < 0)
+		return true;
+
+	if (h != 0 && (w > max / h))
+		return true;
+
+	return false;
+}
+
+
 void check_head_error(struct hevc_state_s *hevc)
 {
 #define pcm_enabled_flag                                  0x040
@@ -2705,7 +2730,11 @@ static struct PIC_s *get_ref_pic_by_POC(struct hevc_state_s *hevc, int POC)
 		if (pic == NULL || pic->index == -1 ||
 			pic->BUF_index == -1)
 			continue;
-		if ((pic->POC == POC) && (pic->referenced)) {
+		/*Add width and height of ref picture detection,
+			resolved incorrectly referenced frame.*/
+		if ((pic->POC == POC) && (pic->referenced) &&
+			(hevc->pic_w == pic->width) &&
+			(hevc->pic_h == pic->height)) {
 			if (ret_pic == NULL)
 				ret_pic = pic;
 			else {
@@ -2715,14 +2744,6 @@ static struct PIC_s *get_ref_pic_by_POC(struct hevc_state_s *hevc, int POC)
 		}
 	}
 
-	if (ret_pic == NULL) {
-		if (get_dbg_flag(hevc)) {
-			hevc_print(hevc, 0,
-				"Wrong, POC of %d is not in referenced list\n",
-				   POC);
-		}
-		ret_pic = get_pic_by_POC(hevc, POC);
-	}
 	return ret_pic;
 }
 
@@ -6372,6 +6393,7 @@ static void check_pic_decoded_error(struct hevc_state_s *hevc,
 		 && current_lcu_idx <
 		 ((hevc->lcu_x_num*hevc->lcu_y_num) - 1))
 			hevc->cur_pic->error_mark = 1;
+
 		if (hevc->cur_pic->error_mark) {
 			hevc_print(hevc, 0,
 				"cur lcu idx = %d, (total %d), set error_mark\n",
@@ -6902,6 +6924,18 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		hevc->TMVPFlag = rpm_param->p.slice_temporal_mvp_enable_flag;
 		hevc->isNextSliceSegment =
 			rpm_param->p.dependent_slice_segment_flag ? 1 : 0;
+		if (is_oversize_ex(rpm_param->p.pic_width_in_luma_samples,
+				rpm_param->p.pic_height_in_luma_samples)) {
+			hevc_print(hevc, 0, "over size : %u x %u.\n",
+				rpm_param->p.pic_width_in_luma_samples, rpm_param->p.pic_height_in_luma_samples);
+			if ((!hevc->m_ins_flag) &&
+				((debug &
+				H265_NO_CHANG_DEBUG_FLAG_IN_CODE) == 0))
+				debug |= (H265_DEBUG_DIS_LOC_ERROR_PROC |
+				H265_DEBUG_DIS_SYS_ERROR_PROC);
+			return 3;
+		}
+
 		if (hevc->pic_w != rpm_param->p.pic_width_in_luma_samples
 			|| hevc->pic_h !=
 			rpm_param->p.pic_height_in_luma_samples) {
@@ -6911,7 +6945,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				   rpm_param->p.pic_width_in_luma_samples,
 				   rpm_param->p.pic_height_in_luma_samples,
 				   hevc->interlace_flag);
-
 			hevc->pic_w = rpm_param->p.pic_width_in_luma_samples;
 			hevc->pic_h = rpm_param->p.pic_height_in_luma_samples;
 			hevc->frame_width = hevc->pic_w;
@@ -6923,17 +6956,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 #endif
 		}
 
-		if (is_oversize(hevc->pic_w, hevc->pic_h)) {
-			hevc_print(hevc, 0, "over size : %u x %u.\n",
-				hevc->pic_w, hevc->pic_h);
-			if ((!hevc->m_ins_flag) &&
-				((debug &
-				H265_NO_CHANG_DEBUG_FLAG_IN_CODE) == 0))
-				debug |= (H265_DEBUG_DIS_LOC_ERROR_PROC |
-				H265_DEBUG_DIS_SYS_ERROR_PROC);
-			hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-			return 3;
-		}
 		if (hevc->bit_depth_chroma > 10 ||
 			hevc->bit_depth_luma > 10) {
 			hevc_print(hevc, 0, "unsupport bitdepth : %u,%u\n",
@@ -7401,6 +7423,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 					add_log(hevc,
 					"WRONG,fail to get the pic Col_POC");
 			} else if (hevc->col_pic->error_mark || hevc->col_pic->dis_mark == 0) {
+				hevc->col_pic->error_mark = 1;
 				hevc->cur_pic->error_mark = 1;
 				if (get_dbg_flag(hevc)) {
 					hevc_print(hevc, 0,
@@ -10038,6 +10061,15 @@ pic_done:
 						(u32)vdec->mvfrm->hw_decode_time;
 					}
 				}
+				/*Detects the first frame whether has an over decode error*/
+				if (vdec->master == NULL && vdec->slave == NULL &&
+					hevc->empty_flag == 0) {
+					hevc->over_decode =
+						(READ_VREG(HEVC_SHIFT_STATUS) >> 15) & 0x1;
+					if (hevc->over_decode)
+						hevc_print(hevc, 0,
+							"!!!Over decode %d\n", __LINE__);
+				}
 				check_pic_decoded_error(hevc,
 					READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff);
 				if (hevc->cur_pic != NULL &&
@@ -10219,6 +10251,15 @@ force_output:
 					dolby_get_meta(hevc);
 			}
 #endif
+			/*Detects frame whether has an over decode error*/
+			if (vdec->master == NULL && vdec->slave == NULL &&
+					hevc->empty_flag == 0) {
+					hevc->over_decode =
+						(READ_VREG(HEVC_SHIFT_STATUS) >> 15) & 0x1;
+					if (hevc->over_decode)
+						hevc_print(hevc, 0,
+							"!!!Over decode %d\n", __LINE__);
+			}
 			check_pic_decoded_error(hevc,
 				hevc->pic_decoded_lcu_idx);
 			pic = get_pic_by_POC(hevc, hevc->curr_POC);
@@ -11827,6 +11868,10 @@ static void timeout_process(struct hevc_state_s *hevc)
 		0, "%s decoder timeout\n", __func__);
 	check_pic_decoded_error(hevc,
 				hevc->pic_decoded_lcu_idx);
+	/*The current decoded frame is marked
+		error when the decode timeout*/
+	if (hevc->cur_pic != NULL)
+		hevc->cur_pic->error_mark = 1;
 	hevc->decoded_poc = hevc->curr_POC;
 	hevc->decoding_pic = NULL;
 	hevc->dec_result = DEC_RESULT_DONE;
