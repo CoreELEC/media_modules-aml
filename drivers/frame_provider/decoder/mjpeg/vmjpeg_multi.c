@@ -34,6 +34,7 @@
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
+#include "../../../common/chips/decoder_cpu_ver_info.h"
 
 #include "../utils/vdec_input.h"
 #include "../utils/vdec.h"
@@ -654,10 +655,11 @@ static void init_scaler(void)
 #else
 	WRITE_RESET_REG(RESET2_REGISTER, RESET_PSCALE);
 #endif
-	READ_RESET_REG(RESET2_REGISTER);
-	READ_RESET_REG(RESET2_REGISTER);
-	READ_RESET_REG(RESET2_REGISTER);
-
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2) {
+		READ_RESET_REG(RESET2_REGISTER);
+		READ_RESET_REG(RESET2_REGISTER);
+		READ_RESET_REG(RESET2_REGISTER);
+	}
 	WRITE_VREG(PSCALE_RST, 0x7);
 	WRITE_VREG(PSCALE_RST, 0x0);
 }
