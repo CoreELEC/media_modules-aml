@@ -787,6 +787,11 @@ static void vdec_update_buff_status(void)
 		} else if (input_stream_based(input)) {
 			core->stream_buff_flag |= vdec->core_mask;
 		}
+		/* slave el pre_decode_level wp update */
+		if ((is_support_no_parser()) && (vdec->slave)) {
+			STBUF_WRITE(&vdec->slave->vbuf, set_wp,
+				STBUF_READ(&vdec->vbuf, get_wp));
+		}
 	}
 	vdec_inputbuff_unlock(core, flags);
 }
@@ -4913,6 +4918,11 @@ static struct platform_driver vdec_driver = {
 	}
 };
 
+static struct codec_profile_t amvdec_common_profile = {
+	.name = "vdec_common",
+	.profile = "vdec"
+};
+
 static struct codec_profile_t amvdec_input_profile = {
 	.name = "vdec_input",
 	.profile = "drm_framemode"
@@ -4926,6 +4936,11 @@ int vdec_module_init(void)
 	}
 	INIT_REG_NODE_CONFIGS("media.decoder", &vdec_node,
 		"vdec", vdec_configs, CONFIG_FOR_RW);
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2) {
+		amvdec_common_profile.profile = "vdec, no_single";
+	}
+	vcodec_profile_register(&amvdec_common_profile);
+
 	vcodec_profile_register(&amvdec_input_profile);
 	return 0;
 }
