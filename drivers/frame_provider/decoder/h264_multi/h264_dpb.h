@@ -900,7 +900,7 @@ struct h264_dpb_stru {
 	unsigned int last_dpb_status;
 	unsigned char buf_alloc_fail;
 	unsigned int dpb_error_flag;
-	unsigned int origin_max_reference;
+	unsigned int reorder_output;
 	unsigned int first_insert_frame;
 	int first_output_poc;
 	int dpb_frame_count;
