@@ -4844,7 +4844,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		reg_val = param4;
 		level_idc = reg_val & 0xff;
 		max_reference_size = (reg_val >> 8) & 0xff;
-		hw->dpb.origin_max_reference = max_reference_size;
+		hw->dpb.reorder_output = max_reference_size;
 		dpb_print(DECODE_ID(hw), 0,
 			"mb height/widht/total: %x/%x/%x level_idc %x max_ref_num %x\n",
 			mb_height, mb_width, mb_total,
@@ -4857,10 +4857,11 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			max_reference_size, mb_width, mb_height);
 
 		dpb_print(DECODE_ID(hw), 0,
-			"restriction_flag=%d, max_dec_frame_buffering=%d, reorder_pic_num=%d\n",
+			"restriction_flag=%d, max_dec_frame_buffering=%d, reorder_pic_num=%d num_reorder_frames %d\n",
 			hw->bitstream_restriction_flag,
 			hw->max_dec_frame_buffering,
-			hw->dpb.reorder_pic_num);
+			hw->dpb.reorder_pic_num,
+			hw->num_reorder_frames);
 
 		if ((hw->bitstream_restriction_flag) &&
 			(hw->max_dec_frame_buffering <
@@ -4869,6 +4870,12 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			dpb_print(DECODE_ID(hw), 0,
 			"set reorder_pic_num to %d\n",
 			hw->dpb.reorder_pic_num);
+		}
+
+		if (p_H264_Dpb->bitstream_restriction_flag &&
+			p_H264_Dpb->num_reorder_frames <= p_H264_Dpb->max_dec_frame_buffering &&
+			p_H264_Dpb->num_reorder_frames >= 0) {
+			hw->dpb.reorder_output = hw->num_reorder_frames + 1;
 		}
 
 		active_buffer_spec_num =

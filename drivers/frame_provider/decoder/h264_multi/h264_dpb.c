@@ -2292,7 +2292,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 		if (fast_output_flag)
 			;
 		else if (none_displayed_num <
-			p_H264_Dpb->origin_max_reference)
+			p_H264_Dpb->reorder_output)
 			return 0;
 	}
 
