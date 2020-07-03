@@ -14,12 +14,14 @@
  * more details.
  *
 */
-
+#define LOG_LINE() pr_err("[%s:%d]\n", __FUNCTION__, __LINE__);
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/timer.h>
+#include <linux/clk.h>
+#include <linux/reset.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -43,6 +45,13 @@
 #include "../../../frame_provider/decoder/utils/firmware.h"
 #include "../../../frame_provider/decoder/utils/amvdec.h"
 #include "jpegenc.h"
+
+#include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
+#include <linux/amlogic/media/utils/vdec_reg.h>
+#include <linux/amlogic/power_ctrl.h>
+#include <dt-bindings/power/sc2-pd.h>
+#include <linux/amlogic/pwr_ctrl.h>
+
 #include <linux/amlogic/media/utils/amlog.h>
 //#include "amports_priv.h"
 #include <linux/of_reserved_mem.h>
@@ -76,7 +85,7 @@
 
 static s32 jpegenc_device_major;
 static struct device *jpegenc_dev;
-static u32 jpegenc_print_level = LOG_DEBUG;
+static u32 jpegenc_print_level = 0;
 
 static u32 clock_level = 1;
 static u16 gQuantTable[2][DCTSIZE2];
@@ -94,6 +103,86 @@ static DEFINE_SPINLOCK(lock);
 #define JPEGENC_BUFFER_LEVEL_8M     4
 #define JPEGENC_BUFFER_LEVEL_13M   5
 #define JPEGENC_BUFFER_LEVEL_HD     6
+
+
+#define MHz (1000000)
+
+#define CHECK_RET(_ret) if (ret) {pr_err(\
+		"%s:%d:function call failed with result: %d\n",\
+		__FUNCTION__, __LINE__, _ret);}
+
+
+struct jpegenc_clks {
+	struct clk *jpegenc_aclk;
+	//struct clk *hcodec_bclk;
+	//struct clk *hcodec_cclk;
+};
+
+static struct jpegenc_clks s_jpegenc_clks;
+struct reset_control *jpegenc_rst;
+
+/*
+s32 jpegenc_hw_reset(void)
+{
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+		reset_control_reset(jpegenc_rst);
+		pr_err("request jpegenc reset from application.\n");
+	}
+	return 0;
+}
+*/
+
+s32 jpegenc_clk_prepare(struct device *dev, struct jpegenc_clks *clks)
+{
+	int ret;
+
+	clks->jpegenc_aclk = devm_clk_get(dev, "cts_jpegenc_aclk");
+
+	if (IS_ERR_OR_NULL(clks->jpegenc_aclk)) {
+		pr_err("failed to get jpegenc aclk: %px, %ld, dev=%px\n",
+				clks->jpegenc_aclk,
+				PTR_ERR(clks->jpegenc_aclk),
+				dev);
+		return -1;
+	}
+
+	ret = clk_set_rate(clks->jpegenc_aclk, 667 * MHz);
+	CHECK_RET(ret);
+
+	ret = clk_prepare(clks->jpegenc_aclk);
+	CHECK_RET(ret);
+
+	pr_err("jpegenc_clk_a: %lu MHz\n", clk_get_rate(clks->jpegenc_aclk) / 1000000);
+
+	return 0;
+}
+
+void jpegenc_clk_unprepare(struct device *dev, struct jpegenc_clks *clks)
+{
+	clk_unprepare(clks->jpegenc_aclk);
+	devm_clk_put(dev, clks->jpegenc_aclk);
+
+	//clk_unprepare(clks->wave_bclk);
+	//devm_clk_put(dev, clks->wave_bclk);
+
+	//clk_unprepare(clks->wave_aclk);
+	//devm_clk_put(dev, clks->wave_aclk);
+}
+
+static s32 jpegenc_clk_config(u32 enable)
+{
+	if (enable) {
+		clk_enable(s_jpegenc_clks.jpegenc_aclk);
+		//clk_enable(s_hcodec_clks.wave_bclk);
+		//clk_enable(s_hcodec_clks.wave_cclk);
+	} else {
+		clk_disable(s_jpegenc_clks.jpegenc_aclk);
+		//clk_disable(s_hcodec_clks.wave_bclk);
+		//clk_disable(s_hcodec_clks.wave_aclk);
+	}
+
+	return 0;
+}
 
 const s8 *glevel_str[] = {
 	"VGA",
@@ -2358,8 +2447,14 @@ static void mfdin_basic_jpeg(
 
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_GXBB) {
 		reg_offset = -8;
-		WRITE_HREG((HCODEC_MFDIN_REG8_DMBL + reg_offset),
-			(picsize_x << 14) | (picsize_y << 0));
+		
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+			WRITE_HREG((HCODEC_MFDIN_REG8_DMBL + reg_offset),
+				(picsize_x << 16) | (picsize_y << 0));
+		} else {
+			WRITE_HREG((HCODEC_MFDIN_REG8_DMBL + reg_offset),
+				(picsize_x << 14) | (picsize_y << 0));
+		}
 	} else {
 		reg_offset = 0;
 		WRITE_HREG((HCODEC_MFDIN_REG8_DMBL + reg_offset),
@@ -2606,6 +2701,7 @@ static void jpegenc_isr_tasklet(ulong data)
 static irqreturn_t jpegenc_isr(s32 irq_number, void *para)
 {
 	struct jpegenc_manager_s *manager = (struct jpegenc_manager_s *)para;
+	jenc_pr(LOG_INFO, "*****JPEGENC_ISR*****");
 	WRITE_HREG(HCODEC_ASSIST_MBOX2_CLR_REG, 1);
 	manager->encode_hw_status  = READ_HREG(JPEGENC_ENCODER_STATUS);
 	if (manager->encode_hw_status == JPEGENC_ENCODER_DONE) {
@@ -2620,16 +2716,15 @@ static void jpegenc_start(void)
 	READ_VREG(DOS_SW_RESET1);
 	READ_VREG(DOS_SW_RESET1);
 	READ_VREG(DOS_SW_RESET1);
-
 	WRITE_VREG(DOS_SW_RESET1, (1 << 12) | (1 << 11));
 	WRITE_VREG(DOS_SW_RESET1, 0);
-
 	READ_VREG(DOS_SW_RESET1);
 	READ_VREG(DOS_SW_RESET1);
 	READ_VREG(DOS_SW_RESET1);
 
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_GXBB)
 		WRITE_HREG((HCODEC_MFDIN_REG7_SCMD - 8), (1 << 28)),
+
 	WRITE_HREG(HCODEC_MPSR, 0x0001);
 }
 
@@ -2731,6 +2826,7 @@ s32 jpegenc_loadmc(const char *p)
 	return ret;
 }
 
+/*
 bool jpegenc_on(void)
 {
 	bool hcodec_on;
@@ -2744,7 +2840,7 @@ bool jpegenc_on(void)
 	spin_unlock_irqrestore(&lock, flags);
 	return hcodec_on;
 }
-
+*/
 static s32 jpegenc_poweron(u32 clock)
 {
 	ulong flags;
@@ -2756,7 +2852,13 @@ static s32 jpegenc_poweron(u32 clock)
 
 	spin_lock_irqsave(&lock, flags);
 
-	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_M8) {
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+		jpegenc_clk_config(1);
+
+		pwr_ctrl_psci_smc(PDID_DOS_HCODEC, PWR_ON);
+
+		//hvdec_clock_enable(clock);
+	} else if (get_cpu_type() >= MESON_CPU_MAJOR_ID_M8) {
 		WRITE_AOREG(AO_RTI_PWR_CNTL_REG0,
 			(READ_AOREG(AO_RTI_PWR_CNTL_REG0) & (~0x18)));
 		udelay(10);
@@ -2804,7 +2906,12 @@ static s32 jpegenc_poweroff(void)
 
 	spin_lock_irqsave(&lock, flags);
 
-	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_M8) {
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+		jpegenc_clk_config(0);
+		pwr_ctrl_psci_smc(PDID_DOS_HCODEC, PWR_OFF);
+		//hvdec_clock_disable();
+		LOG_LINE();
+	} else if (get_cpu_type() >= MESON_CPU_MAJOR_ID_M8) {
 		/* enable HCODEC isolation */
 		WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
 			READ_AOREG(AO_RTI_GEN_PWR_ISO0) | 0x30);
@@ -3521,6 +3628,21 @@ static s32 jpegenc_probe(struct platform_device *pdev)
 		gJpegenc.mem.buf_size = 0;
 		return -EFAULT;
 	}
+
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+		if (jpegenc_clk_prepare(&pdev->dev, &s_jpegenc_clks)) {
+			//err = -ENOENT;
+			pr_err("[%s:%d] prepare jpegenc clk failed\n", __FUNCTION__, __LINE__);
+			//goto ERROR_PROBE_DEVICE;
+			return -EINVAL;
+		}
+	}
+
+	//if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+	//	jpegenc_rst = devm_reset_control_get(&pdev->dev, "jpegenc_rst");
+	//	if (IS_ERR(jpegenc_rst))
+	//		pr_err("amvenc probe, jpegenc get reset failed: %ld\n", PTR_ERR(jpegenc_rst));
+	//}
 
 	res_irq = platform_get_irq(pdev, 0);
 	if (res_irq < 0) {
