@@ -1481,9 +1481,9 @@ static u32 max_decoding_time;
 
 static u32 error_handle_policy;
 /*static u32 parser_sei_enable = 1;*/
-#define MAX_BUF_NUM_NORMAL     16
+#define MAX_BUF_NUM_NORMAL     18
 /*less bufs num 12 caused frame drop, nts failed*/
-#define MAX_BUF_NUM_LESS   13
+#define MAX_BUF_NUM_LESS   15
 static u32 max_buf_num = MAX_BUF_NUM_NORMAL;
 #define MAX_BUF_NUM_SAVE_BUF  8
 
@@ -8975,7 +8975,7 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	}
 	calc_dur = PTS2DUR(pts_diff_sum / valid_pts_diff_cnt);
 	if ((!close_to(calc_dur, hw->frame_dur, 10)) &&
-		(calc_dur < 4800) && (calc_dur > 800)) {
+		(calc_dur < 9601) && (calc_dur > 800)) {
 		av1_print(hw, 0, "change to calc dur %d, old dur %d\n", calc_dur, hw->frame_dur);
 		hw->frame_dur = calc_dur;
 		hw->get_frame_dur = true;
