@@ -1487,14 +1487,20 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
 	struct v4l2_pix_format_mplane *pix_fmt_mp = &f->fmt.pix_mp;
 	int i;
 
-	pix_fmt_mp->field = V4L2_FIELD_NONE;
-
 	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		pix_fmt_mp->num_planes = 1;
 		pix_fmt_mp->plane_fmt[0].bytesperline = 0;
+		if (pix_fmt_mp->pixelformat != V4L2_PIX_FMT_MPEG2  &&
+		    pix_fmt_mp->pixelformat != V4L2_PIX_FMT_H264)
+			pix_fmt_mp->field = V4L2_FIELD_NONE;
+		else if (pix_fmt_mp->field != V4L2_FIELD_NONE)
+			pr_info("%s, field: %u, fmt: %u\n",
+				__func__, pix_fmt_mp->field,
+				pix_fmt_mp->pixelformat);
 	} else if (!V4L2_TYPE_IS_OUTPUT(f->type)) {
 		int tmp_w, tmp_h;
 
+		pix_fmt_mp->field = V4L2_FIELD_NONE;
 		pix_fmt_mp->height = clamp(pix_fmt_mp->height,
 					AML_VDEC_MIN_H,
 					AML_VDEC_MAX_H);
