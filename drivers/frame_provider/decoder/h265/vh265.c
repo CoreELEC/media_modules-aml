@@ -10207,7 +10207,7 @@ force_output:
 			reset_process_time(hevc);
 			if (aux_data_is_avaible(hevc))
 				dolby_get_meta(hevc);
-			if(hevc->cur_pic->slice_type == 2 &&
+			if(hevc->cur_pic && hevc->cur_pic->slice_type == 2 &&
 				hevc->vf_pre_count == 0) {
 				hevc_print(hevc, 0,
 						"first slice_type %x no_switch_dvlayer_count %x\n",
@@ -11869,7 +11869,10 @@ static void timeout_process(struct hevc_state_s *hevc)
 	 * In this very timeout point,the vh265_work arrives,
 	 * let it to handle the scenario.
 	 */
-	if (work_pending(&hevc->work))
+	if (work_pending(&hevc->work) ||
+	    work_busy(&hevc->work) ||
+	    work_pending(&hevc->timeout_work) ||
+	    work_busy(&hevc->timeout_work))
 		return;
 
 	hevc->timeout_num++;
