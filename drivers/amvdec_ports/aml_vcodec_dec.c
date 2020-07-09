@@ -1126,15 +1126,12 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 	if (ret)
 		return ret;
 
-	dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx,
-			multiplanar ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
-			V4L2_BUF_TYPE_VIDEO_CAPTURE);
 	switch (cmd->cmd) {
 	case V4L2_DEC_CMD_STOP:
 		ATRACE_COUNTER("v4l2_stop", 0);
 		if (ctx->state != AML_STATE_ACTIVE) {
 			if (ctx->state >= AML_STATE_IDLE &&
-				ctx->state <= AML_STATE_PROBE) {
+				ctx->state < AML_STATE_PROBE) {
 				ctx->state = AML_STATE_ABORT;
 				ATRACE_COUNTER("v4l2_state", ctx->state);
 				aml_vdec_dispatch_event(ctx, V4L2_EVENT_REQUEST_EXIT);
@@ -1152,13 +1149,7 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 			return 0;
 		}
 
-		if (!vb2_is_streaming(dst_vq)) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-				"Capture stream is off. No need to flush.\n");
-			return 0;
-		}
-
-		/* flush src */
+		/* flush pipeline */
 		v4l2_m2m_buf_queue(ctx->m2m_ctx, &ctx->empty_flush_buf->vb);
 		v4l2_m2m_try_schedule(ctx->m2m_ctx);//pay attention
 		ctx->receive_cmd_stop = true;
@@ -1166,6 +1157,9 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 
 	case V4L2_DEC_CMD_START:
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "CMD V4L2_DEC_CMD_START\n");
+		dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx,
+			multiplanar ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
+			V4L2_BUF_TYPE_VIDEO_CAPTURE);
 		vb2_clear_last_buffer_dequeued(dst_vq);//pay attention
 		break;
 
