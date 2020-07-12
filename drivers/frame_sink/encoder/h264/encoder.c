@@ -2762,7 +2762,7 @@ static void encode_isr_tasklet(ulong data)
 {
 	struct encode_manager_s *manager = (struct encode_manager_s *)data;
 
-	enc_pr(LOG_ERROR, "encoder is done %d\n", manager->encode_hw_status);
+	enc_pr(LOG_INFO, "encoder is done %d\n", manager->encode_hw_status);
 	if (((manager->encode_hw_status == ENCODER_IDR_DONE)
 		|| (manager->encode_hw_status == ENCODER_NON_IDR_DONE)
 		|| (manager->encode_hw_status == ENCODER_SEQUENCE_DONE)
@@ -2856,11 +2856,6 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 			wq->request.src_w = wq->pic.encoder_width;
 			wq->request.src_h = wq->pic.encoder_height;
 			enc_pr(LOG_INFO, "hwenc: force wq->request.scale_enable=%d\n", wq->request.scale_enable);
-		}
-
-		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
-			enc_pr(LOG_INFO, "disable ge2d scale for sc2\n");
-			wq->request.scale_enable = 0;
 		}
 
 		wq->request.nr_mode =
