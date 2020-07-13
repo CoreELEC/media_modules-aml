@@ -1246,6 +1246,24 @@ static ssize_t demux##i##_show_free_filters(struct class *class,  \
 	return ret;\
 }
 
+/*Show dmx dev open count*/
+#define DEMUX_DEV_USERS_FUNC_DECL(i)  \
+static ssize_t demux##i##_show_dev_users(struct class *class,  \
+				struct class_attribute *attr, char *buf)\
+{\
+	struct aml_dvb *dvb = &aml_dvb_device;\
+	struct dvb_demux *dmx = &dvb->dmx[i].demux;\
+	int count;\
+	ssize_t ret = 0;\
+	if (mutex_lock_interruptible(&dmx->mutex)) \
+		return -ERESTARTSYS; \
+	count = dvb->dmx[i].dmxdev.dvbdev->users -1;\
+	mutex_unlock(&dmx->mutex);\
+	ret = sprintf(buf, "%d\n", count);\
+	return ret;\
+}
+
+
 static ssize_t demux_state_show(struct class *class,
 				struct class_attribute *attr, char *buf)
 {
@@ -1274,12 +1292,17 @@ static ssize_t demux_state_show(struct class *class,
 			if (!dmx->filter[fid].state != DMX_STATE_FREE)
 				count++;
 			else {
-				r = sprintf(buf, "fid:%d, pid:0x%0x\n",fid,dmx->filter[fid].feed->pid);
+				r = sprintf(buf, "fid:%d, pid:0x%0x, state:%d\n", fid, dmx->filter[fid].feed->pid,
+					dmx->filter[fid].state);
 				buf += r;
 				ret += r;
 			}
 		}
 		r = sprintf(buf, "used filter:%d, free filter:%d\n", (dmx->filternum - count), count);
+		buf += r;
+		ret += r;
+
+		r = sprintf(buf, "file users:%d\n", dvb->dmx[i].dmxdev.dvbdev->users);
 		buf += r;
 		ret += r;
 
@@ -1451,6 +1474,7 @@ static ssize_t dvr##i##_store_mode(struct class *class,  \
 	DEMUX_SOURCE_FUNC_DECL(0)
 	DEMUX_FREE_FILTERS_FUNC_DECL(0)
 	DEMUX_FILTER_USERS_FUNC_DECL(0)
+	DEMUX_DEV_USERS_FUNC_DECL(0)
 	DVR_MODE_FUNC_DECL(0)
 	DEMUX_TS_HEADER_FUNC_DECL(0)
 	DEMUX_CHANNEL_ACTIVITY_FUNC_DECL(0)
@@ -1461,6 +1485,7 @@ static ssize_t dvr##i##_store_mode(struct class *class,  \
 	DEMUX_SOURCE_FUNC_DECL(1)
 	DEMUX_FREE_FILTERS_FUNC_DECL(1)
 	DEMUX_FILTER_USERS_FUNC_DECL(1)
+	DEMUX_DEV_USERS_FUNC_DECL(1)
 	DVR_MODE_FUNC_DECL(1)
 	DEMUX_TS_HEADER_FUNC_DECL(1)
 	DEMUX_CHANNEL_ACTIVITY_FUNC_DECL(1)
@@ -1471,6 +1496,7 @@ static ssize_t dvr##i##_store_mode(struct class *class,  \
 	DEMUX_SOURCE_FUNC_DECL(2)
 	DEMUX_FREE_FILTERS_FUNC_DECL(2)
 	DEMUX_FILTER_USERS_FUNC_DECL(2)
+	DEMUX_DEV_USERS_FUNC_DECL(2)
 	DVR_MODE_FUNC_DECL(2)
 	DEMUX_TS_HEADER_FUNC_DECL(2)
 	DEMUX_CHANNEL_ACTIVITY_FUNC_DECL(2)
@@ -2044,6 +2070,9 @@ static struct class_attribute aml_stb_class_attrs[] = {
 #define DEMUX_FILTER_USERS_ATTR_DECL(i)\
 	__ATTR(demux##i##_filter_users,  0644, \
 	demux##i##_show_filter_users, demux##i##_store_filter_used)
+#define DEMUX_DEV_USERS_ATTR_DECL(i)\
+	__ATTR(demux##i##_dev_users,  0644, \
+	demux##i##_show_dev_users, NULL)
 #define DVR_MODE_ATTR_DECL(i)\
 	__ATTR(dvr##i##_mode,  0644, dvr##i##_show_mode, \
 	dvr##i##_store_mode)
@@ -2062,6 +2091,7 @@ static struct class_attribute aml_stb_class_attrs[] = {
 	DEMUX_SOURCE_ATTR_DECL(0),
 	DEMUX_FREE_FILTERS_ATTR_DECL(0),
 	DEMUX_FILTER_USERS_ATTR_DECL(0),
+	DEMUX_DEV_USERS_ATTR_DECL(0),
 	DVR_MODE_ATTR_DECL(0),
 	DEMUX_TS_HEADER_ATTR_DECL(0),
 	DEMUX_CHANNEL_ACTIVITY_ATTR_DECL(0),
@@ -2072,6 +2102,7 @@ static struct class_attribute aml_stb_class_attrs[] = {
 	DEMUX_SOURCE_ATTR_DECL(1),
 	DEMUX_FREE_FILTERS_ATTR_DECL(1),
 	DEMUX_FILTER_USERS_ATTR_DECL(1),
+	DEMUX_DEV_USERS_ATTR_DECL(1),
 	DVR_MODE_ATTR_DECL(1),
 	DEMUX_TS_HEADER_ATTR_DECL(1),
 	DEMUX_CHANNEL_ACTIVITY_ATTR_DECL(1),
@@ -2082,6 +2113,7 @@ static struct class_attribute aml_stb_class_attrs[] = {
 	DEMUX_SOURCE_ATTR_DECL(2),
 	DEMUX_FREE_FILTERS_ATTR_DECL(2),
 	DEMUX_FILTER_USERS_ATTR_DECL(2),
+	DEMUX_DEV_USERS_ATTR_DECL(2),
 	DVR_MODE_ATTR_DECL(2),
 	DEMUX_TS_HEADER_ATTR_DECL(2),
 	DEMUX_CHANNEL_ACTIVITY_ATTR_DECL(2),
