@@ -5861,6 +5861,9 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		int frame_num_gap = 0;
 		/*unsigned char is_idr;*/
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
+		unsigned mb_width = hw->seq_info2 & 0xff;
+		unsigned short first_mb_in_slice;
+		unsigned int decode_mb_count, mby_mbx;
 		reset_process_time(hw);
 
 		if (hw->is_used_v4l) {
@@ -5891,7 +5894,21 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			hw->picture_slice_count,
 			hw->cur_picture_slice_count,
 			hw->multi_slice_pic_flag);
-			if (hw->cur_picture_slice_count > hw->last_picture_slice_count)
+
+			first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3];
+			mby_mbx = READ_VREG(MBY_MBX);
+			decode_mb_count = ((mby_mbx & 0xff) * mb_width +
+					(((mby_mbx >> 8) & 0xff) + 1));
+
+			if (first_mb_in_slice == decode_mb_count &&
+				first_mb_in_slice != 0) {
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+				"%s first_mb_in_slice = %d \n",
+				__func__, first_mb_in_slice);
+
+				hw->multi_slice_pic_flag = 0;
+				hw->multi_slice_pic_check_count = 0;
+			} else if (hw->cur_picture_slice_count > hw->last_picture_slice_count)
 				vh264_pic_done_proc(vdec);
 			else {
 				if (p_H264_Dpb->mVideo.dec_picture) {
