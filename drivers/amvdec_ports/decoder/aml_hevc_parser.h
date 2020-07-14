@@ -22,6 +22,7 @@
 #include "../aml_vcodec_drv.h"
 #include "../utils/common.h"
 
+
 #define MAX_DPB_SIZE				16 // A.4.1
 #define MAX_REFS				16
 
@@ -282,8 +283,9 @@ struct HEVCWindow {
 };
 
 struct VUI {
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 	struct AVRational sar;
-
+#endif
 	int overscan_info_present_flag;
 	int overscan_appropriate_flag;
 
@@ -551,7 +553,11 @@ struct h265_param_sets {
 	struct h265_PPS_t pps;
 };
 
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 int h265_decode_extradata_ps(u8 *data, int size, struct h265_param_sets *ps);
+#else
+inline int h265_decode_extradata_ps(u8 *data, int size, struct h265_param_sets *ps) { return -1; }
+#endif
 
 #endif /* AML_HEVC_PARSER_H */
 

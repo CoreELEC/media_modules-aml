@@ -69,3 +69,5 @@ static void __exit decoder_common_exit(void)
 
 module_init(decoder_common_init);
 module_exit(decoder_common_exit);
+MODULE_DESCRIPTION("AMLOGIC decoder_common driver");
+MODULE_LICENSE("GPL");

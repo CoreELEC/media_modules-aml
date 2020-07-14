@@ -19,8 +19,10 @@
 #define AML_VP9_PARSER_H
 
 #include "../aml_vcodec_drv.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 #include "../utils/pixfmt.h"
 #include "../utils/get_bits.h"
+#endif
 
 #define MAX_SEGMENT	8
 
@@ -97,7 +99,9 @@ struct VP9SharedContext {
 
 struct VP9Context {
 	struct VP9SharedContext s;
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 	struct get_bits_context gb;
+#endif
 	int pass, active_tile_cols;
 
 	u8 ss_h, ss_v;
@@ -112,8 +116,9 @@ struct VP9Context {
 
 	int render_width;
 	int render_height;
-
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 	enum AVPixelFormat pix_fmt, last_fmt, gf_fmt;
+#endif
 	u32 sb_cols, sb_rows, rows, cols;
 
 	struct {
@@ -170,6 +175,11 @@ struct vp9_param_sets {
 };
 
 int vp9_superframe_split_filter(struct vp9_superframe_split *s);
+
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 int vp9_decode_extradata_ps(u8 *data, int size, struct vp9_param_sets *ps);
+#else
+inline int vp9_decode_extradata_ps(u8 *data, int size, struct vp9_param_sets *ps) { return -1; }
+#endif
 
 #endif //AML_VP9_PARSER_H

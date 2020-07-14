@@ -19,7 +19,9 @@
 #define AML_H264_PARSER_H
 
 #include "../aml_vcodec_drv.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 #include "../utils/pixfmt.h"
+#endif
 
 #define QP_MAX_NUM (51 + 6 * 6)           // The maximum supported qp
 
@@ -128,9 +130,11 @@ struct h264_SPS_t {
 	int video_signal_type_present_flag;
 	int full_range;
 	int colour_description_present_flag;
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 	enum AVColorPrimaries color_primaries;
 	enum AVColorTransferCharacteristic color_trc;
 	enum AVColorSpace colorspace;
+#endif
 	int timing_info_present_flag;
 	u32 num_units_in_tick;
 	u32 time_scale;
@@ -195,7 +199,12 @@ struct h264_param_sets {
 	struct h264_PPS_t pps;
 };
 
+
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 int h264_decode_extradata_ps(u8 *data, int size, struct h264_param_sets *ps);
+#else
+inline int h264_decode_extradata_ps(u8 *data, int size, struct h264_param_sets *ps) { return -1; }
+#endif
 
 #endif /* AML_H264_PARSER_H */
 

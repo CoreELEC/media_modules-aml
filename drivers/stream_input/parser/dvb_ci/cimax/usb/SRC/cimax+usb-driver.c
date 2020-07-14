@@ -2533,3 +2533,4 @@ static void device_exit_module(void)
 
 module_init(device_init_module);
 module_exit(device_exit_module);
+MODULE_LICENSE("GPL");
