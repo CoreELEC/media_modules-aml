@@ -3316,17 +3316,18 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if (pts_by_offset) {
 				offset = READ_VREG(AVS_OFFSET_REG);
 				debug_print(hw, PRINT_FLAG_DECODING, "AVS OFFSET=%x\n", offset);
-				if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset, &pts,
-					&frame_size,
-					0, &pts_us64) == 0) {
-					pts_valid = 1;
+				if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+					if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset, &pts,
+						&frame_size, 0, &pts_us64) == 0) {
+						pts_valid = 1;
 #ifdef DEBUG_PTS
-					hw->pts_hit++;
+						hw->pts_hit++;
 #endif
-				} else {
+					} else {
 #ifdef DEBUG_PTS
-					hw->pts_missed++;
+						hw->pts_missed++;
 #endif
+					}
 				}
 			}
 	
@@ -3459,7 +3460,10 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 	
 				if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
 					set_vframe_pts(hw, decode_pic_count, vf);
-	
+				if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+					vf->pts_us64 = offset;
+					vf->pts = 0;
+				}
 				kfifo_put(&hw->display_q,
 						  (const struct vframe_s *)vf);
 				avs_vf_notify_receiver(hw, PROVIDER_NAME,
@@ -3530,7 +3534,11 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 	
 				if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
 					set_vframe_pts(hw, decode_pic_count, vf);
-	
+
+				if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+					vf->pts_us64 = offset;
+					vf->pts = 0;
+				}
 				kfifo_put(&hw->display_q,
 						  (const struct vframe_s *)vf);
 				avs_vf_notify_receiver(hw, PROVIDER_NAME,
@@ -3619,7 +3627,11 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 	
 				if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
 					set_vframe_pts(hw, decode_pic_count, vf);
-	
+
+				if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+					vf->pts_us64 = offset;
+					vf->pts = 0;
+				}
 				kfifo_put(&hw->display_q,
 						  (const struct vframe_s *)vf);
 				avs_vf_notify_receiver(hw, PROVIDER_NAME,

@@ -106,6 +106,7 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 			ret = -ENOMEM;
 			goto err;
 		}
+		stbuf->use_ptsserv = 1;
 	}
 	ret = vdec_set_input_buffer(vdec, addr, size);
 	if (ret) {
@@ -124,12 +125,14 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 	stbuf->no_parser	= true;
 	stbuf->buf_page_num	= pages;
 	stbuf->canusebuf_size	= size;
+	stbuf->stream_offset	= 0;
 
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2) {
-		/* init pts server. parser register w/r inside */
+	if (stbuf->use_ptsserv) {
+		/* init pts server. */
 		ret = pts_start(type_to_pts(stbuf->type));
 		if (ret < 0) {
 			pr_err("[%d]: pts server failed\n", stbuf->id);
+			stbuf->use_ptsserv = false;
 			//goto err;//fixme
 		}
 	}
@@ -167,7 +170,8 @@ static void stream_buffer_release(struct stream_buf_s *stbuf)
 	if (stbuf->write_thread)
 		threadrw_release(stbuf);
 
-	pts_stop(type_to_pts(stbuf->type));
+	if (stbuf->use_ptsserv)
+		pts_stop(type_to_pts(stbuf->type));
 
 	if (stbuf->flag & BUF_FLAG_ALLOC && stbuf->buf_start) {
 		if (!stbuf->ext_buf_addr)

@@ -2510,6 +2510,12 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				vdec->vf_receiver_name);
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
+		} else if (p->frame_base_video_path == FRAME_BASE_PATH_DTV_TUNNEL_MODE) {
+			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+				"%s deinterlace %s", vdec->vf_provider_name,
+				"amvideo");
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
 		}
 
 		if (vfm_map_add(vdec->vfm_map_id,

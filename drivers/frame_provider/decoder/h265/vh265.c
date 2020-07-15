@@ -8850,25 +8850,28 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 				hevc->pts_lookup_margin = hevc->min_pic_size;
 		}
 
-		hevc_print(hevc, H265_DEBUG_OUT_PTS,
-			"call pts_lookup_offset_us64(0x%x)\n",
-			stream_offset);
-		if (pts_lookup_offset_us64
-			(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
-			&frame_size, hevc->pts_lookup_margin,
-			 &vf->pts_us64) != 0) {
+			hevc_print(hevc, H265_DEBUG_OUT_PTS,
+				"call pts_lookup_offset_us64(0x%x)\n",
+				stream_offset);
+			if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+				if (pts_lookup_offset_us64
+					(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
+					&frame_size, hevc->pts_lookup_margin,
+					 &vf->pts_us64) != 0) {
 #ifdef DEBUG_PTS
-			hevc->pts_missed++;
+					hevc->pts_missed++;
 #endif
-			vf->pts = 0;
-			vf->pts_us64 = 0;
-			hevc->pts_continue_miss++;
-		} else {
-			hevc->pts_continue_miss = 0;
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+					hevc->pts_continue_miss++;
+				} else {
+					hevc->pts_continue_miss = 0;
 #ifdef DEBUG_PTS
-			hevc->pts_hit++;
+					hevc->pts_hit++;
 #endif
-		}
+				}
+			}
+
 #ifdef MULTI_INSTANCE_SUPPORT
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		} else {
@@ -9046,6 +9049,10 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		if (force_fps & 0x200) {
 			vf->pts = 0;
 			vf->pts_us64 = 0;
+		}
+		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+			vf->pts_us64 = stream_offset;
+			vf->pts = 0;
 		}
 		/*
 		 *	!!! to do ...

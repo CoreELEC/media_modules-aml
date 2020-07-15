@@ -1638,8 +1638,7 @@ static int amstream_open(struct inode *inode, struct file *file)
 		}
 	}
 	/* force dv frame mode */
-	if ((force_dv_mode & 0x2) &&
-		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)) {
+	if (force_dv_mode & 0x2) {
 		port->type |= PORT_TYPE_FRAME;
 		port->fops = &vframe_fops;
 		pr_debug("%s, dobly vision force frame mode.\n", __func__);
@@ -2163,10 +2162,15 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		else if (this->type & PORT_TYPE_FRAME)
 			r = vdec_set_pts(priv->vdec, parm.data_32);
 		else if ((this->type & PORT_TYPE_VIDEO) ||
-			(this->type & PORT_TYPE_HEVC))
-			r = es_vpts_checkin(&priv->vdec->vbuf,
-				parm.data_32);
-		else if (this->type & PORT_TYPE_AUDIO)
+			(this->type & PORT_TYPE_HEVC)) {
+			struct stream_buf_s *vbuf = &priv->vdec->vbuf;
+			if (vbuf->no_parser) {
+				pts_checkin_offset(PTS_TYPE_VIDEO,
+					vbuf->stream_offset, parm.data_32);
+			} else {
+				r = es_vpts_checkin(vbuf, parm.data_32);
+			}
+		} else if (this->type & PORT_TYPE_AUDIO)
 			r = es_apts_checkin(&bufs[BUF_TYPE_AUDIO],
 				parm.data_32);
 		break;
@@ -2925,9 +2929,15 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 		else if (this->type & PORT_TYPE_FRAME)
 			r = vdec_set_pts(priv->vdec, arg);
 		else if ((this->type & PORT_TYPE_VIDEO) ||
-			(this->type & PORT_TYPE_HEVC))
-			r = es_vpts_checkin(&priv->vdec->vbuf, arg);
-		else if (this->type & PORT_TYPE_AUDIO)
+			(this->type & PORT_TYPE_HEVC)) {
+			struct stream_buf_s *vbuf = &priv->vdec->vbuf;
+			if (vbuf->no_parser) {
+				pts_checkin_offset(PTS_TYPE_VIDEO,
+					vbuf->stream_offset, arg);
+			} else {
+				r = es_vpts_checkin(vbuf, arg);
+			}
+		} else if (this->type & PORT_TYPE_AUDIO)
 			r = es_apts_checkin(&bufs[BUF_TYPE_AUDIO], arg);
 		break;
 

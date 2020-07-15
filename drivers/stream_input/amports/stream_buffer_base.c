@@ -116,9 +116,9 @@ void stream_buffer_set_ext_buf(struct stream_buf_s *stbuf,
 			       u32 flag)
 {
 	stbuf->ext_buf_addr	= addr;
-	stbuf->buf_size		= size;
-	stbuf->is_secure = ((flag & STBUF_META_FLAG_SECURE) != 0);
-
+	stbuf->buf_size 	= size;
+	stbuf->is_secure	= ((flag & STBUF_META_FLAG_SECURE) != 0);
+	stbuf->use_ptsserv	= ((flag & STBUF_META_FLAG_PTS_SERV) != 0);
 	/*
 	pr_debug("%s, addr %lx, size 0x%x, secure %d\n", __func__,
 		stbuf->ext_buf_addr, stbuf->buf_size, stbuf->is_secure);
@@ -129,7 +129,20 @@ EXPORT_SYMBOL(stream_buffer_set_ext_buf);
 void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 	struct stream_buffer_metainfo *meta)
 {
-	u32 wp;
+	u32 wp = stbuf->ops->get_wp(stbuf);
+
+	if ((stbuf->stream_offset == 0) &&
+		(wp == stbuf->ext_buf_addr) &&
+		(meta->stbuf_pktaddr > stbuf->ext_buf_addr)) {
+		struct stream_buffer_metainfo self_meta;
+
+		pr_info("warn: first packet_wp(%x) is not stbuf start addr(%lx)\n",
+			meta->stbuf_pktaddr, stbuf->ext_buf_addr);
+
+		self_meta.stbuf_pktaddr = stbuf->ext_buf_addr;
+		self_meta.stbuf_pktsize = meta->stbuf_pktaddr - stbuf->ext_buf_addr;
+		stream_buffer_meta_write(stbuf, &self_meta);
+	}
 
 	if (meta->stbuf_pktaddr + meta->stbuf_pktsize < stbuf->buf_start + stbuf->buf_size)
 		wp = meta->stbuf_pktaddr + meta->stbuf_pktsize;
@@ -137,9 +150,11 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 		wp = meta->stbuf_pktaddr + meta->stbuf_pktsize - stbuf->buf_size;
 
 	stbuf->ops->set_wp(stbuf, wp);
+
+	stbuf->stream_offset += meta->stbuf_pktsize;
 	/*
-	pr_debug("%s, update wp 0x%x + sz 0x%x --> 0x%x\n",
-		__func__, meta->stbuf_pktaddr, meta->stbuf_pktsize, wp);
+	pr_debug("%s, update wp 0x%x + sz 0x%x --> 0x%x, stream_offset 0x%x\n",
+		__func__, meta->stbuf_pktaddr, meta->stbuf_pktsize, wp, stbuf->stream_offset);
 	*/
 }
 EXPORT_SYMBOL(stream_buffer_meta_write);
@@ -177,6 +192,8 @@ ssize_t stream_buffer_write_ex(struct file *file,
 	len = min_t(u32, len, count);
 
 	r = stbuf->ops->write(stbuf, buf, len);
+	if (r > 0)
+		stbuf->stream_offset += r;
 
 	return r;
 }

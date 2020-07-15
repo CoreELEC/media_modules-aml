@@ -413,15 +413,21 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 		vf->timestamp = hw->chunk->timestamp;
 	} else {
 		offset = READ_VREG(MREG_FRAME_OFFSET);
-		if (pts_lookup_offset_us64
-			(PTS_TYPE_VIDEO, offset, &pts,
-			&frame_size, 3000,
-			&pts_us64) == 0) {
-			vf->pts = pts;
-			vf->pts_us64 = pts_us64;
-		} else {
+		if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+			if (pts_lookup_offset_us64
+				(PTS_TYPE_VIDEO, offset, &pts,
+				&frame_size, 3000,
+				&pts_us64) == 0) {
+				vf->pts = pts;
+				vf->pts_us64 = pts_us64;
+			} else {
+				vf->pts = 0;
+				vf->pts_us64 = 0;
+			}
+		}
+		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+			vf->pts_us64 = offset;
 			vf->pts = 0;
-			vf->pts_us64 = 0;
 		}
 	}
 	vf->orientation = 0;

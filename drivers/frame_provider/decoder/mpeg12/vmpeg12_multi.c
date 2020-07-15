@@ -1669,6 +1669,10 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
 				hw->mm_blk_handle, index);
+			if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+				vf->pts_us64 = pic->offset;
+				vf->pts = 0;
+			}
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 			/* if (hw->disp_num == 1) { */
@@ -1964,13 +1968,15 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 						"pts invalid\n");
 				}
 			} else {
-				if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset,
-					&pts, &frame_size, 0, &pts_us64) == 0) {
-					new_pic->pts_valid = true;
-					new_pic->pts = pts;
-					new_pic->pts64 = pts_us64;
-				} else
-					new_pic->pts_valid = false;
+				if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+					if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset,
+						&pts, &frame_size, 0, &pts_us64) == 0) {
+						new_pic->pts_valid = true;
+						new_pic->pts = pts;
+						new_pic->pts64 = pts_us64;
+					} else
+						new_pic->pts_valid = false;
+				}
 			}
 		} else {
 			if (hw->chunk)

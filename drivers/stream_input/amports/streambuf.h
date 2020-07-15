@@ -38,8 +38,9 @@
 #define USER_DATA_SIZE  (8*1024)
 
 /* stream_buffer_metainfo stbuf_flag */
-#define STBUF_META_FLAG_SECURE	(1 << 0)
-#define STBUF_META_FLAG_XXX1	(1 << 1)
+#define STBUF_META_FLAG_SECURE		(1 << 0)
+#define STBUF_META_FLAG_PTS_SERV	(1 << 1)	/* use pts server flag */
+#define STBUF_META_FLAG_XXX1		(1 << 2)
 
 struct vdec_s;
 struct stream_buf_s;
@@ -88,9 +89,11 @@ struct stream_buf_s {
 	bool no_parser;
 	bool is_phybuf;
 	bool is_hevc;
+	bool use_ptsserv;
 	u32 drm_flag;
 	ulong ext_buf_addr;
 	atomic_t payload;
+	u32 stream_offset;
 	struct parser_args pars;
 	struct stream_buf_ops *ops;
 } /*stream_buf_t */;

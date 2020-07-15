@@ -2748,14 +2748,16 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			frame->data_flag |= ERROR_FLAG;
 	}
 	if (vdec_stream_based(vdec) && !(frame->data_flag & NODISP_FLAG)) {
-		if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
-			frame->offset_delimiter, &frame->pts, &frame->frame_size,
-			0, &frame->pts64) == 0)) {
-			hw->last_pts64 = frame->pts64;
-			hw->last_pts = frame->pts;
-		} else {
-			frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
-			frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+		if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+			if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
+				frame->offset_delimiter, &frame->pts, &frame->frame_size,
+				0, &frame->pts64) == 0)) {
+				hw->last_pts64 = frame->pts64;
+				hw->last_pts = frame->pts;
+			} else {
+				frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
+				frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+			}
 		}
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"%s error= 0x%x poc = %d  offset= 0x%x pts= 0x%x last_pts =0x%x  pts64 = %lld  last_pts64= %lld  duration = %d\n",
@@ -3012,7 +3014,10 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
-
+		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+			vf->pts_us64 = frame->offset_delimiter;
+			vf->pts = 0;
+		}
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		hw->vf_pre_count++;
