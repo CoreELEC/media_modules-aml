@@ -375,6 +375,12 @@ union param {
 		unsigned short colocated_mv_addr_start[2];
 		unsigned short colocated_mv_addr_end[2];
 		unsigned short colocated_mv_wr_addr[2];
+
+		unsigned short frame_crop_left_offset;
+		unsigned short frame_crop_right_offset;
+		unsigned short frame_crop_top_offset;
+		unsigned short frame_crop_bottom_offset;
+		unsigned short chroma_format_idc;
 	} dpb;
 	struct {
 		unsigned short dump[MMCO_OFFSET];
@@ -895,6 +901,12 @@ struct h264_dpb_stru {
 	u8 bitstream_restriction_flag;
 	u16 num_reorder_frames;
 	u16 max_dec_frame_buffering;
+
+	unsigned int frame_crop_left_offset;
+	unsigned int frame_crop_right_offset;
+	unsigned int frame_crop_top_offset;
+	unsigned int frame_crop_bottom_offset;
+	unsigned int chroma_format_idc;
 
 	unsigned int dec_dpb_status;
 	unsigned int last_dpb_status;

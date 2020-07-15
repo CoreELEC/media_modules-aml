@@ -4749,8 +4749,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	int active_buffer_spec_num;
 	unsigned int buf_size;
 	unsigned int frame_mbs_only_flag;
-	unsigned int chroma_format_idc, chroma444;
-	unsigned int crop_infor, crop_bottom, crop_right;
+	unsigned int chroma_format_idc;
+	unsigned int crop_bottom, crop_right;
 	unsigned int used_reorder_dpb_size_margin
 		= hw->reorder_dpb_size_margin;
 	u8 *colocate_vaddr = NULL;
@@ -4788,6 +4788,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	if (hw->config_bufmgr_done == 0) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 		u32 reg_val;
+		int sub_width_c = 0, sub_height_c = 0;
+
 		hw->cfg_param1 = param1;
 		hw->cfg_param2 = param2;
 		hw->cfg_param3 = param3;
@@ -4810,44 +4812,52 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		   bit 15: frame_mbs_only_flag
 		   bit 13-14: chroma_format_idc */
 		frame_mbs_only_flag = (hw->seq_info >> 15) & 0x01;
-		chroma_format_idc = (hw->seq_info >> 13) & 0x03;
-		chroma444 = (chroma_format_idc == 3) ? 1 : 0;
+		chroma_format_idc = p_H264_Dpb->chroma_format_idc;
 
 		/* @AV_SCRATCH_6.31-16 =  (left  << 8 | right ) << 1
 		   @AV_SCRATCH_6.15-0   =  (top << 8  | bottom ) <<
 		   (2 - frame_mbs_only_flag) */
-		crop_infor = param3;
-		crop_bottom = (crop_infor & 0xff) >> (2 - frame_mbs_only_flag);
-		crop_right = ((crop_infor >> 16) & 0xff)
-			>> (2 - frame_mbs_only_flag);
+
+		switch (chroma_format_idc) {
+			case 1:
+				sub_width_c = 2;
+				sub_height_c = 2;
+				break;
+
+			case 2:
+				sub_width_c = 2;
+				sub_height_c = 1;
+				break;
+
+			case 3:
+				sub_width_c = 1;
+				sub_height_c = 1;
+				break;
+
+			default:
+				break;
+		}
+
+		if (chroma_format_idc == 0) {
+			crop_right = p_H264_Dpb->frame_crop_right_offset;
+			crop_bottom = p_H264_Dpb->frame_crop_bottom_offset *
+				(2 - frame_mbs_only_flag);
+		} else {
+			crop_right = sub_width_c * p_H264_Dpb->frame_crop_right_offset;
+			crop_bottom = sub_height_c * p_H264_Dpb->frame_crop_bottom_offset *
+				(2 - frame_mbs_only_flag);
+		}
 
 		p_H264_Dpb->mSPS.frame_mbs_only_flag = frame_mbs_only_flag;
 		hw->frame_width = mb_width << 4;
 		hw->frame_height = mb_height << 4;
-		if (frame_mbs_only_flag) {
-			hw->frame_height =
-				hw->frame_height - (2 >> chroma444) *
-				min(crop_bottom,
-					(unsigned int)((8 << chroma444) - 1));
-			hw->frame_width =
-				hw->frame_width -
-					(2 >> chroma444) * min(crop_right,
-						(unsigned
-						 int)((8 << chroma444) - 1));
-		} else {
-			hw->frame_height =
-				hw->frame_height - (4 >> chroma444) *
-				min(crop_bottom,
-					(unsigned int)((8 << chroma444)
-							  - 1));
-			hw->frame_width =
-				hw->frame_width -
-				(4 >> chroma444) * min(crop_right,
-				(unsigned int)((8 << chroma444) - 1));
-		}
+
+		hw->frame_width = hw->frame_width - crop_right;
+		hw->frame_height = hw->frame_height - crop_bottom;
+
 		dpb_print(DECODE_ID(hw), 0,
-			"frame_mbs_only_flag %d, crop_bottom %d,  frame_height %d,\n",
-			frame_mbs_only_flag, crop_bottom, hw->frame_height);
+			"chroma_format_idc = %d frame_mbs_only_flag %d, crop_bottom %d,  frame_height %d,\n",
+			chroma_format_idc, frame_mbs_only_flag, crop_bottom, hw->frame_height);
 		dpb_print(DECODE_ID(hw), 0,
 			"mb_height %d,crop_right %d, frame_width %d, mb_width %d\n",
 			mb_height, crop_right,
@@ -5921,6 +5931,21 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			p_H264_Dpb->num_reorder_frames;
 		hw->max_dec_frame_buffering =
 			p_H264_Dpb->max_dec_frame_buffering;
+
+		/*crop*/
+		p_H264_Dpb->chroma_format_idc = p_H264_Dpb->dpb_param.dpb.chroma_format_idc;
+		p_H264_Dpb->frame_crop_left_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_left_offset;
+		p_H264_Dpb->frame_crop_right_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_right_offset;
+		p_H264_Dpb->frame_crop_top_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_top_offset;
+		p_H264_Dpb->frame_crop_bottom_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_bottom_offset;
+
+		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
+		"%s chroma_format_idc %d crop offset: left %d right %d top %d bottom %d\n",
+		__func__, p_H264_Dpb->chroma_format_idc,
+		p_H264_Dpb->frame_crop_left_offset,
+		p_H264_Dpb->frame_crop_right_offset,
+		p_H264_Dpb->frame_crop_top_offset,
+		p_H264_Dpb->frame_crop_bottom_offset);
 #endif
 
 		WRITE_VREG(DPB_STATUS_REG, H264_ACTION_CONFIG_DONE);
@@ -8280,8 +8305,9 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	int active_buffer_spec_num;
 	int max_reference_size ,level_idc;
 	u32 frame_mbs_only_flag;
-	u32 chroma_format_idc, chroma444;
-	u32 crop_infor, crop_bottom, crop_right;
+	u32 chroma_format_idc;
+	u32 crop_bottom, crop_right;
+	int sub_width_c = 0, sub_height_c = 0;
 	u32 frame_width, frame_height;
 	u32 used_reorder_dpb_size_margin
 		= hw->reorder_dpb_size_margin;
@@ -8344,32 +8370,48 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	 * bit 13-14: chroma_format_idc
 	 */
 	frame_mbs_only_flag = (hw->seq_info >> 15) & 0x01;
-	chroma_format_idc = (hw->seq_info >> 13) & 0x03;
-	chroma444 = (chroma_format_idc == 3) ? 1 : 0;
+	chroma_format_idc = hw->dpb.chroma_format_idc;
 
 	/*
 	 * AV_SCRATCH_6 bit 31-16 =  (left  << 8 | right ) << 1
 	 * AV_SCRATCH_6 bit 15-0 =  (top << 8  | bottom ) <<
 	 *                          (2 - frame_mbs_only_flag)
 	 */
-	crop_infor = param3;
-	crop_bottom = (crop_infor & 0xff) >> (2 - frame_mbs_only_flag);
-	crop_right = ((crop_infor >> 16) & 0xff) >> (2 - frame_mbs_only_flag);
+	switch (chroma_format_idc) {
+		case 1:
+			sub_width_c = 2;
+			sub_height_c = 2;
+			break;
+
+		case 2:
+			sub_width_c = 2;
+			sub_height_c = 1;
+			break;
+
+		case 3:
+			sub_width_c = 1;
+			sub_height_c = 1;
+			break;
+
+		default:
+			break;
+	}
+
+	if (chroma_format_idc == 0) {
+		crop_right = hw->dpb.frame_crop_right_offset;
+		crop_bottom = hw->dpb.frame_crop_bottom_offset *
+			(2 - frame_mbs_only_flag);
+	} else {
+		crop_right = sub_width_c * hw->dpb.frame_crop_right_offset;
+		crop_bottom = sub_height_c * hw->dpb.frame_crop_bottom_offset *
+			(2 - frame_mbs_only_flag);
+	}
 
 	frame_width = mb_width << 4;
 	frame_height = mb_height << 4;
 
-	if (frame_mbs_only_flag) {
-		frame_height = frame_height - (2 >> chroma444) *
-			min(crop_bottom, (u32)((8 << chroma444) - 1));
-		frame_width = frame_width - (2 >> chroma444) *
-			min(crop_right, (u32)((8 << chroma444) - 1));
-	} else {
-		frame_height = frame_height - (4 >> chroma444) *
-			min(crop_bottom, (u32)((8 << chroma444) - 1));
-		frame_width = frame_width - (4 >> chroma444) *
-			min(crop_right, (u32)((8 << chroma444) - 1));
-	}
+	frame_width = frame_width - crop_right;
+	frame_height = frame_height - crop_bottom;
 
 	ps->profile 		= level_idc;
 	ps->ref_frames 		= max_reference_size;
