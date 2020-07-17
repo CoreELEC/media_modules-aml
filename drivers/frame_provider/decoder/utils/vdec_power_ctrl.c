@@ -136,7 +136,10 @@ static void pm_vdec_clock_on(int id)
 		hcodec_clock_enable();
 	} else if (id == VDEC_HEVC) {
 		/* enable hevc clock */
-		amports_switch_gate("clk_hevc_mux", 1);
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)
+			amports_switch_gate("clk_hevcf_mux", 1);
+		else
+			amports_switch_gate("clk_hevc_mux", 1);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
 			amports_switch_gate("clk_hevcb_mux", 1);
 		hevc_clock_hi_enable();
