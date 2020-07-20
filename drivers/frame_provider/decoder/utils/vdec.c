@@ -516,9 +516,6 @@ static int get_canvas_ex(int type, int id)
 	flags = vdec_canvas_lock(vdec_core);
 
 	for (i = 0; i < CANVAS_MAX_SIZE; i++) {
-		/*0x10-0x15 has been used by rdma*/
-		if ((i >= 0x10) && (i <= 0x15))
-				continue;
 		if ((canvas_stat[i].type == type) &&
 			(canvas_stat[i].id & (1 << id)) == 0) {
 			canvas_stat[i].canvas_used_flag++;
@@ -534,9 +531,6 @@ static int get_canvas_ex(int type, int id)
 	}
 
 	for (i = 0; i < CANVAS_MAX_SIZE; i++) {
-		/*0x10-0x15 has been used by rdma*/
-		if ((i >= 0x10) && (i <= 0x15))
-				continue;
 		if (canvas_stat[i].type == 0) {
 			canvas_stat[i].type = type;
 			canvas_stat[i].canvas_used_flag = 1;
