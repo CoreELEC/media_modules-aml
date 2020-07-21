@@ -144,7 +144,7 @@ static unsigned int buf_spec_reg[] = {
 	AV_SCRATCH_7, /*AVS_SOS_COUNT*/
 	AV_SCRATCH_D, /*DEBUG_REG2*/
 	AV_SCRATCH_E, /*DEBUG_REG1*/
-	AV_SCRATCH_N  /*user_data_flags*/
+	AV_SCRATCH_M  /*user_data_poc_number*/
 };
 #endif
 
@@ -231,6 +231,7 @@ firmware_sel
 ********************************/
 static int firmware_sel;
 static int disable_longcabac_trans = 1;
+static int pre_decode_buf_level = 0x20000;
 
 
 static struct vframe_s *vavs_vf_peek(void *);
@@ -431,8 +432,8 @@ struct vdec_avs_hw_s {
 	void *user_data_buffer;
 	dma_addr_t user_data_buffer_phys;
 #endif
-	void *lmem_addr;
-	dma_addr_t lmem_phy_addr;
+	dma_addr_t lmem_addr;
+	ulong lmem_phy_addr;
 
 	u32 buf_offset;
 
@@ -545,6 +546,7 @@ struct vdec_avs_hw_s {
 	u32 old_udebug_flag;
 	u32 decode_status_skip_pic_done_flag;
 	u32 decode_decode_cont_start_code;
+	int cc_init_flag;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -2074,6 +2076,8 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 				);
 			}
 #else
+			for (i = 0; i < hw->vf_buf_num_used; i++)
+				WRITE_VREG(buf_spec_reg[i], 0);
 			for (i = 0; i < hw->vf_buf_num_used; i += 2) {
 				WRITE_VREG(buf_spec_reg[i >> 1],
 					(hw->canvas_spec[i] & 0xffff) |
@@ -2203,10 +2207,12 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 #endif
 
 #ifdef ENABLE_USER_DATA
-	if (firmware_sel == 0) {
+	if (hw->cc_init_flag == 0) {
+		hw->cc_init_flag++;
 		WRITE_VREG(AV_SCRATCH_N, (u32)(hw->user_data_buffer_phys - hw->buf_offset));
 		pr_debug("AV_SCRATCH_N = 0x%x\n", READ_VREG(AV_SCRATCH_N));
-	}
+	} else
+		WRITE_VREG(AV_SCRATCH_N, 0);
 #endif
 	if (hw->m_ins_flag) {
 		if (vdec_frame_based(hw_to_vdec(hw)))
@@ -2218,7 +2224,7 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 			} else
 				WRITE_VREG(DECODE_MODE, DECODE_MODE_MULTI_STREAMBASE);
 		}
-		WRITE_VREG(DECODE_LMEM_BUF_ADR, hw->lmem_phy_addr);
+		WRITE_VREG(DECODE_LMEM_BUF_ADR, (u32)hw->lmem_phy_addr);
 	} else
 		WRITE_VREG(DECODE_MODE, DECODE_MODE_SINGLE);
 
@@ -3028,6 +3034,23 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		run_count[DECODE_ID(hw)] >= max_run_count[DECODE_ID(hw)])
 		return 0;
 #endif
+	if (vdec_stream_based(vdec)
+		&& pre_decode_buf_level != 0) {
+		u32 rp, wp, level;
+
+		rp = STBUF_READ(&vdec->vbuf, get_rp);
+		wp = STBUF_READ(&vdec->vbuf, get_wp);
+		if (wp < rp)
+			level = vdec->input.size + wp - rp;
+		else
+			level = wp - rp;
+
+		if (level < pre_decode_buf_level) {
+			hw->not_run_ready++;
+			return 0;
+		}
+	}
+
 
 	if (hw->reset_decode_flag == 0 &&
 		hw->again_flag == 0 &&
@@ -3902,7 +3925,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 			hw->user_data_buffer, (u32)hw->user_data_buffer_phys);
 	}
 #endif
-	hw->lmem_addr = kmalloc(LMEM_BUF_SIZE, GFP_KERNEL);
+	/*hw->lmem_addr = kmalloc(LMEM_BUF_SIZE, GFP_KERNEL);
 	if (hw->lmem_addr == NULL) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
 		return -1;
@@ -3915,9 +3938,14 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		kfree(hw->lmem_addr);
 		hw->lmem_addr = NULL;
 		return -1;
-	}
-
+	}*/
 	/*INIT_WORK(&hw->set_clk_work, avs_set_clk);*/
+	hw->lmem_addr = (dma_addr_t)dma_alloc_coherent(amports_get_dma_device(),
+	               LMEM_BUF_SIZE, (dma_addr_t *)&hw->lmem_phy_addr, GFP_KERNEL);
+	if (hw->lmem_addr == 0) {
+		pr_err("%s: failed to alloc lmem buffer\n", __func__);
+		return -1;
+	}
 
 	if (vavs_init(hw) < 0) {
 		pr_info("amvdec_avs init failed.\n");
@@ -4030,12 +4058,18 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 			hw->user_data_buffer_phys = 0;
 		}
 	#endif
-		if (hw->lmem_addr) {
+		/*if (hw->lmem_addr) {
 			dma_unmap_single(amports_get_dma_device(),
 				hw->lmem_phy_addr, LMEM_BUF_SIZE, DMA_FROM_DEVICE);
 			kfree(hw->lmem_addr);
 			hw->lmem_addr = NULL;
-		}
+		}*/
+	if (hw->lmem_addr) {
+		dma_free_coherent(amports_get_dma_device(),
+					LMEM_BUF_SIZE, (void *)hw->lmem_addr,
+					hw->lmem_phy_addr);
+		hw->lmem_addr = 0;
+	}
 
 		if (hw->fw) {
 			vfree(hw->fw);
@@ -4289,7 +4323,7 @@ if (run_flag) {
 			WRITE_VREG(DECODE_MODE, DECODE_MODE_MULTI_FRAMEBASE);
 		else
 			WRITE_VREG(DECODE_MODE, DECODE_MODE_MULTI_STREAMBASE);
-		WRITE_VREG(DECODE_LMEM_BUF_ADR, hw->lmem_phy_addr);
+		WRITE_VREG(DECODE_LMEM_BUF_ADR, (u32)hw->lmem_phy_addr);
 	} else
 		WRITE_VREG(DECODE_MODE, DECODE_MODE_SINGLE);
 	WRITE_VREG(DECODE_STOP_POS, udebug_flag);
@@ -4794,6 +4828,11 @@ MODULE_PARM_DESC(udebug_pause_ins_id, "\n udebug_pause_ins_id\n");
 
 module_param(start_decoding_delay, uint, 0664);
 MODULE_PARM_DESC(start_decoding_delay, "\n start_decoding_delay\n");
+
+module_param(pre_decode_buf_level, int, 0664);
+MODULE_PARM_DESC(pre_decode_buf_level,
+				"\n ammvdec_mavs pre_decode_buf_level\n");
+
 
 #ifdef DEBUG_MULTI_WITH_AUTOMODE
 module_param(debug_flag2, uint, 0664);
