@@ -1,11 +1,27 @@
-#ifndef AML_MPEG12_PARSER_H
-#define AML_MPEG12_PARSER_H
+/*
+ * drivers/amvdec_ports/decoder/aml_mjpeg_parser.h
+ *
+ * Copyright (C) 2015 Amlogic, Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ */
+#ifndef AML_MJPEG_PARSER_H
+#define AML_MJPEG_PARSER_H
 
 #include "../aml_vcodec_drv.h"
-#include "../utils/pixfmt.h"
 #include "../utils/common.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 #include "../utils/get_bits.h"
-#include "../utils/put_bits.h"
+#endif
 
 #define FF_PROFILE_MJPEG_HUFFMAN_BASELINE_DCT            0xc0
 #define FF_PROFILE_MJPEG_HUFFMAN_EXTENDED_SEQUENTIAL_DCT 0xc1
@@ -107,7 +123,9 @@ struct VLC {
 };
 
 struct MJpegDecodeContext {
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 	struct get_bits_context gb;
+#endif
 	int buf_size;
 
 	int start_code; /* current start code */
@@ -159,6 +177,10 @@ struct mjpeg_param_sets {
 	struct MJpegDecodeContext dec_ps;
 };
 
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 int mjpeg_decode_extradata_ps(u8 *buf, int size, struct mjpeg_param_sets *ps);
+#else
+inline int mjpeg_decode_extradata_ps(u8 *buf, int size, struct mjpeg_param_sets *ps) { return -1; }
+#endif
 
 #endif

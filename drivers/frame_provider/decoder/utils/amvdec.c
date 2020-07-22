@@ -1161,8 +1161,9 @@ static void __exit amvdec_exit(void)
 
 module_init(amvdec_init);
 module_exit(amvdec_exit);
-#endif
+
 
 MODULE_DESCRIPTION("Amlogic Video Decoder Utility Driver");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Tim Yao <timyao@amlogic.com>");
+#endif
