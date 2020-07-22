@@ -174,11 +174,12 @@ struct vp9_param_sets {
 	struct VP9Context ctx;
 };
 
-int vp9_superframe_split_filter(struct vp9_superframe_split *s);
 
 #ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
+int vp9_superframe_split_filter(struct vp9_superframe_split *s);
 int vp9_decode_extradata_ps(u8 *data, int size, struct vp9_param_sets *ps);
 #else
+inline int vp9_superframe_split_filter(struct vp9_superframe_split *s) { return -1;}
 inline int vp9_decode_extradata_ps(u8 *data, int size, struct vp9_param_sets *ps) { return -1; }
 #endif
 
