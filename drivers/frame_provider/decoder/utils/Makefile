@@ -6,4 +6,5 @@ decoder_common-objs	+=	amstream_profile.o
 decoder_common-objs	+=	frame_check.o amlogic_fbc_hook.o
 decoder_common-objs	+=	vdec_v4l2_buffer_ops.o
 decoder_common-objs	+=	vdec_sync.o
+decoder_common-objs	+=	vdec_power_ctrl.o
 

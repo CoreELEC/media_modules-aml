@@ -80,6 +80,8 @@
 
 #include <dt-bindings/power/sc2-pd.h>
 #include <linux/amlogic/pwr_ctrl.h>
+#include <linux/of_device.h>
+#include "vdec_power_ctrl.h"
 
 static DEFINE_MUTEX(vdec_mutex);
 
@@ -109,9 +111,12 @@ static unsigned int clk_config;
 u32 debug = VDEC_DBG_ALWAYS_LOAD_FW;
 EXPORT_SYMBOL(debug);
 
-static int hevc_max_reset_count;
+int hevc_max_reset_count;
+EXPORT_SYMBOL(hevc_max_reset_count);
 
-static int no_powerdown;
+int no_powerdown;
+EXPORT_SYMBOL(no_powerdown);
+
 static int parallel_decode = 1;
 static int fps_detection;
 static int fps_clear;
@@ -193,6 +198,7 @@ struct vdec_core_s {
 	struct decode_fps_s decode_fps[MAX_INSTANCE_MUN];
 	unsigned long buff_flag;
 	unsigned long stream_buff_flag;
+	struct power_manager_s *pm;
 };
 
 struct canvas_status_s {
@@ -926,13 +932,6 @@ void update_vdec_clk_config_settings(unsigned int config)
 }
 EXPORT_SYMBOL(update_vdec_clk_config_settings);
 
-static bool hevc_workaround_needed(void)
-{
-	return (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_GXBB) &&
-		(get_meson_cpu_version(MESON_CPU_VERSION_LVL_MINOR)
-			== GXBB_REV_A_MINOR);
-}
-
 struct device *get_codec_cma_device(void)
 {
 	return vdec_core->cma_dev;
@@ -1142,8 +1141,9 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 		}
 	}
 
-	pr_debug("vdec_create instance %p, total %d\n", vdec,
-		atomic_read(&vdec_core->vdec_nr));
+	pr_debug("vdec_create instance %p, total %d, PM: %s\n", vdec,
+		atomic_read(&vdec_core->vdec_nr),
+		get_pm_name(vdec_core->pm->pm_type));
 
 	//trace_vdec_create(vdec); /*DEBUG_TMP*/
 
@@ -3381,66 +3381,6 @@ static int vdec_core_thread(void *data)
 }
 
 #if 1				/* MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8 */
-static bool test_hevc(u32 decomp_addr, u32 us_delay)
-{
-	int i;
-
-	/* SW_RESET IPP */
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL, 1);
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL, 0);
-
-	/* initialize all canvas table */
-	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0);
-	for (i = 0; i < 32; i++)
-		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CMD_ADDR,
-			0x1 | (i << 8) | decomp_addr);
-	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 1);
-	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
-	for (i = 0; i < 32; i++)
-		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, 0);
-
-	/* Initialize mcrcc */
-	WRITE_VREG(HEVCD_MCRCC_CTL1, 0x2);
-	WRITE_VREG(HEVCD_MCRCC_CTL2, 0x0);
-	WRITE_VREG(HEVCD_MCRCC_CTL3, 0x0);
-	WRITE_VREG(HEVCD_MCRCC_CTL1, 0xff0);
-
-	/* Decomp initialize */
-	WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x0);
-	WRITE_VREG(HEVCD_MPP_DECOMP_CTL2, 0x0);
-
-	/* Frame level initialization */
-	WRITE_VREG(HEVCD_IPP_TOP_FRMCONFIG, 0x100 | (0x100 << 16));
-	WRITE_VREG(HEVCD_IPP_TOP_TILECONFIG3, 0x0);
-	WRITE_VREG(HEVCD_IPP_TOP_LCUCONFIG, 0x1 << 5);
-	WRITE_VREG(HEVCD_IPP_BITDEPTH_CONFIG, 0x2 | (0x2 << 2));
-
-	WRITE_VREG(HEVCD_IPP_CONFIG, 0x0);
-	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE, 0x0);
-
-	/* Enable SWIMP mode */
-	WRITE_VREG(HEVCD_IPP_SWMPREDIF_CONFIG, 0x1);
-
-	/* Enable frame */
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL, 0x2);
-	WRITE_VREG(HEVCD_IPP_TOP_FRMCTL, 0x1);
-
-	/* Send SW-command CTB info */
-	WRITE_VREG(HEVCD_IPP_SWMPREDIF_CTBINFO, 0x1 << 31);
-
-	/* Send PU_command */
-	WRITE_VREG(HEVCD_IPP_SWMPREDIF_PUINFO0, (0x4 << 9) | (0x4 << 16));
-	WRITE_VREG(HEVCD_IPP_SWMPREDIF_PUINFO1, 0x1 << 3);
-	WRITE_VREG(HEVCD_IPP_SWMPREDIF_PUINFO2, 0x0);
-	WRITE_VREG(HEVCD_IPP_SWMPREDIF_PUINFO3, 0x0);
-
-	udelay(us_delay);
-
-	WRITE_VREG(HEVCD_IPP_DBG_SEL, 0x2 << 4);
-
-	return (READ_VREG(HEVCD_IPP_DBG_DATA) & 3) == 1;
-}
-
 void vdec_power_reset(void)
 {
 	/* enable vdec1 isolation */
@@ -3490,13 +3430,6 @@ EXPORT_SYMBOL(vdec_power_reset);
 
 void vdec_poweron(enum vdec_type_e core)
 {
-	void *decomp_addr = NULL;
-	dma_addr_t decomp_dma_addr;
-	u32 decomp_addr_aligned = 0;
-	int hevc_loop = 0;
-	int sleep_val, iso_val;
-	bool is_power_ctrl_ver2 = false;
-
 	if (core >= VDEC_MAX)
 		return;
 
@@ -3508,277 +3441,12 @@ void vdec_poweron(enum vdec_type_e core)
 		return;
 	}
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2) {
-		if (core == VDEC_1)
-			pwr_ctrl_psci_smc(PDID_DOS_VDEC, PWR_ON);
-		else if (core == VDEC_HEVC) {
-			pwr_ctrl_psci_smc(PDID_DOS_HEVC, PWR_ON);
-
-			/* wait 10uS */
-			udelay(10);
-			/* hevc soft reset */
-			WRITE_VREG(DOS_SW_RESET3, 0xffffffff);
-			WRITE_VREG(DOS_SW_RESET3, 0);
-			/* enable hevc clock */
-			amports_switch_gate("clk_hevcf_mux", 1);
-			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-				amports_switch_gate("clk_hevcb_mux", 1);
-			hevc_clock_hi_enable();
-			hevc_back_clock_hi_enable();
-			/* power up hevc memories */
-			WRITE_VREG(DOS_MEM_PD_HEVC, 0);
-			/* remove hevc isolation */
-		} else if (core == VDEC_HCODEC)
-			pwr_ctrl_psci_smc(PDID_DOS_HCODEC, PWR_ON);
-
-		mutex_unlock(&vdec_mutex);
-
-		return;
-	}
-
 	if (vdec_on(core)) {
 		mutex_unlock(&vdec_mutex);
 		return;
 	}
 
-	is_power_ctrl_ver2 =
-		((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1)) ? true : false;
-
-	if (hevc_workaround_needed() &&
-		(core == VDEC_HEVC)) {
-		decomp_addr = codec_mm_dma_alloc_coherent(MEM_NAME,
-			SZ_64K + SZ_4K, &decomp_dma_addr, GFP_KERNEL, 0);
-
-		if (decomp_addr) {
-			decomp_addr_aligned = ALIGN(decomp_dma_addr, SZ_64K);
-			memset((u8 *)decomp_addr +
-				(decomp_addr_aligned - decomp_dma_addr),
-				0xff, SZ_4K);
-		} else
-			pr_err("vdec: alloc HEVC gxbb decomp buffer failed.\n");
-	}
-
-	if (core == VDEC_1) {
-		sleep_val = is_power_ctrl_ver2 ? 0x2 : 0xc;
-		iso_val = is_power_ctrl_ver2 ? 0x2 : 0xc0;
-
-		/* vdec1 power on */
-#ifdef CONFIG_AMLOGIC_POWER
-		if (is_support_power_ctrl()) {
-			if (power_ctrl_sleep_mask(true, sleep_val, 0)) {
-				mutex_unlock(&vdec_mutex);
-				pr_err("vdec-1 power on ctrl sleep fail.\n");
-				return;
-			}
-		} else {
-			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-				READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);
-		}
-#else
-		WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-			READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);
-#endif
-		/* wait 10uS */
-		udelay(10);
-		/* vdec1 soft reset */
-		WRITE_VREG(DOS_SW_RESET0, 0xfffffffc);
-		WRITE_VREG(DOS_SW_RESET0, 0);
-		/* enable vdec1 clock */
-		/*
-		 *add power on vdec clock level setting,only for m8 chip,
-		 * m8baby and m8m2 can dynamic adjust vdec clock,
-		 * power on with default clock level
-		 */
-		amports_switch_gate("clk_vdec_mux", 1);
-		vdec_clock_hi_enable();
-		/* power up vdec memories */
-		WRITE_VREG(DOS_MEM_PD_VDEC, 0);
-
-		/* remove vdec1 isolation */
-#ifdef CONFIG_AMLOGIC_POWER
-		if (is_support_power_ctrl()) {
-			if (power_ctrl_iso_mask(true, iso_val, 0)) {
-				mutex_unlock(&vdec_mutex);
-				pr_err("vdec-1 power on ctrl iso fail.\n");
-				return;
-			}
-		} else {
-			WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-				READ_AOREG(AO_RTI_GEN_PWR_ISO0) & ~iso_val);
-		}
-#else
-		WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-			READ_AOREG(AO_RTI_GEN_PWR_ISO0) & ~iso_val);
-#endif
-		/* reset DOS top registers */
-		WRITE_VREG(DOS_VDEC_MCRCC_STALL_CTRL, 0);
-	} else if (core == VDEC_2) {
-		if (has_vdec2()) {
-			/* vdec2 power on */
-			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-					READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) &
-					~0x30);
-			/* wait 10uS */
-			udelay(10);
-			/* vdec2 soft reset */
-			WRITE_VREG(DOS_SW_RESET2, 0xffffffff);
-			WRITE_VREG(DOS_SW_RESET2, 0);
-			/* enable vdec1 clock */
-			vdec2_clock_hi_enable();
-			/* power up vdec memories */
-			WRITE_VREG(DOS_MEM_PD_VDEC2, 0);
-			/* remove vdec2 isolation */
-			WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-					READ_AOREG(AO_RTI_GEN_PWR_ISO0) &
-					~0x300);
-			/* reset DOS top registers */
-			WRITE_VREG(DOS_VDEC2_MCRCC_STALL_CTRL, 0);
-		}
-	} else if (core == VDEC_HCODEC) {
-		if (has_hdec()) {
-			sleep_val = is_power_ctrl_ver2 ? 0x1 : 0x3;
-			iso_val = is_power_ctrl_ver2 ? 0x1 : 0x30;
-
-			/* hcodec power on */
-#ifdef CONFIG_AMLOGIC_POWER
-			if (is_support_power_ctrl()) {
-				if (power_ctrl_sleep_mask(true, sleep_val, 0)) {
-					mutex_unlock(&vdec_mutex);
-					pr_err("hcodec power on ctrl sleep fail.\n");
-					return;
-				}
-			} else {
-				WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-					READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);
-			}
-#else
-			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-				READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);
-#endif
-			/* wait 10uS */
-			udelay(10);
-			/* hcodec soft reset */
-			WRITE_VREG(DOS_SW_RESET1, 0xffffffff);
-			WRITE_VREG(DOS_SW_RESET1, 0);
-			/* enable hcodec clock */
-			hcodec_clock_enable();
-			/* power up hcodec memories */
-			WRITE_VREG(DOS_MEM_PD_HCODEC, 0);
-			/* remove hcodec isolation */
-#ifdef CONFIG_AMLOGIC_POWER
-			if (is_support_power_ctrl()) {
-				if (power_ctrl_iso_mask(true, iso_val, 0)) {
-					mutex_unlock(&vdec_mutex);
-					pr_err("hcodec power on ctrl iso fail.\n");
-					return;
-				}
-			} else {
-				WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-					READ_AOREG(AO_RTI_GEN_PWR_ISO0) & ~iso_val);
-			}
-#else
-			WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-				READ_AOREG(AO_RTI_GEN_PWR_ISO0) & ~iso_val);
-#endif
-		}
-	} else if (core == VDEC_HEVC) {
-		if (has_hevc_vdec()) {
-			bool hevc_fixed = false;
-
-			sleep_val = is_power_ctrl_ver2 ? 0x4 : 0xc0;
-			iso_val = is_power_ctrl_ver2 ? 0x4 : 0xc00;
-
-			while (!hevc_fixed) {
-				/* hevc power on */
-#ifdef CONFIG_AMLOGIC_POWER
-				if (is_support_power_ctrl()) {
-					if (power_ctrl_sleep_mask(true, sleep_val, 0)) {
-						mutex_unlock(&vdec_mutex);
-						pr_err("hevc power on ctrl sleep fail.\n");
-						return;
-					}
-				} else {
-					WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-						READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);
-				}
-#else
-				WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-					READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);
-#endif
-				/* wait 10uS */
-				udelay(10);
-				/* hevc soft reset */
-				WRITE_VREG(DOS_SW_RESET3, 0xffffffff);
-				WRITE_VREG(DOS_SW_RESET3, 0);
-				/* enable hevc clock */
-				amports_switch_gate("clk_hevc_mux", 1);
-				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-					amports_switch_gate("clk_hevcb_mux", 1);
-				hevc_clock_hi_enable();
-				hevc_back_clock_hi_enable();
-				/* power up hevc memories */
-				WRITE_VREG(DOS_MEM_PD_HEVC, 0);
-				/* remove hevc isolation */
-#ifdef CONFIG_AMLOGIC_POWER
-				if (is_support_power_ctrl()) {
-					if (power_ctrl_iso_mask(true, iso_val, 0)) {
-						mutex_unlock(&vdec_mutex);
-						pr_err("hevc power on ctrl iso fail.\n");
-						return;
-					}
-				} else {
-					WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-						READ_AOREG(AO_RTI_GEN_PWR_ISO0) & ~iso_val);
-				}
-#else
-				WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-					READ_AOREG(AO_RTI_GEN_PWR_ISO0) & ~iso_val);
-#endif
-				if (!hevc_workaround_needed())
-					break;
-
-				if (decomp_addr)
-					hevc_fixed = test_hevc(
-						decomp_addr_aligned, 20);
-
-				if (!hevc_fixed) {
-					hevc_loop++;
-
-					mutex_unlock(&vdec_mutex);
-
-					if (hevc_loop >= HEVC_TEST_LIMIT) {
-						pr_warn("hevc power sequence over limit\n");
-						pr_warn("=====================================================\n");
-						pr_warn(" This chip is identified to have HW failure.\n");
-						pr_warn(" Please contact sqa-platform to replace the platform.\n");
-						pr_warn("=====================================================\n");
-
-						panic("Force panic for chip detection !!!\n");
-
-						break;
-					}
-
-					vdec_poweroff(VDEC_HEVC);
-
-					mdelay(10);
-
-					mutex_lock(&vdec_mutex);
-				}
-			}
-
-			if (hevc_loop > hevc_max_reset_count)
-				hevc_max_reset_count = hevc_loop;
-
-			WRITE_VREG(DOS_SW_RESET3, 0xffffffff);
-			udelay(10);
-			WRITE_VREG(DOS_SW_RESET3, 0);
-		}
-	}
-
-	if (decomp_addr)
-		codec_mm_dma_free_coherent(MEM_NAME,
-			SZ_64K + SZ_4K, decomp_addr, decomp_dma_addr, 0);
+	vdec_core->pm->power_on(vdec_core->cma_dev, core);
 
 	mutex_unlock(&vdec_mutex);
 }
@@ -3786,9 +3454,6 @@ EXPORT_SYMBOL(vdec_poweron);
 
 void vdec_poweroff(enum vdec_type_e core)
 {
-	int sleep_val, iso_val;
-	bool is_power_ctrl_ver2 = false;
-
 	if (core >= VDEC_MAX)
 		return;
 
@@ -3800,220 +3465,15 @@ void vdec_poweroff(enum vdec_type_e core)
 		return;
 	}
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2) {
-		if (core == VDEC_1)
-			pwr_ctrl_psci_smc(PDID_DOS_VDEC, PWR_OFF);
-		else if (core == VDEC_HEVC) {
-			pwr_ctrl_psci_smc(PDID_DOS_HEVC, PWR_OFF);
+	vdec_core->pm->power_off(vdec_core->cma_dev, core);
 
-			/* disable hevc clock */
-			hevc_clock_off();
-			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-				hevc_back_clock_off();
-		}
-		else if (core == VDEC_HCODEC)
-			pwr_ctrl_psci_smc(PDID_DOS_HCODEC, PWR_OFF);
-
-		mutex_unlock(&vdec_mutex);
-		return;
-	}
-
-	is_power_ctrl_ver2 =
-		((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1)) ? true : false;
-
-	if (core == VDEC_1) {
-		sleep_val = is_power_ctrl_ver2 ? 0x2 : 0xc;
-		iso_val = is_power_ctrl_ver2 ? 0x2 : 0xc0;
-
-		/* enable vdec1 isolation */
-#ifdef CONFIG_AMLOGIC_POWER
-		if (is_support_power_ctrl()) {
-			if (power_ctrl_iso_mask(false, iso_val, 0)) {
-				mutex_unlock(&vdec_mutex);
-				pr_err("vdec-1 power off ctrl iso fail.\n");
-				return;
-			}
-		} else {
-			WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-				READ_AOREG(AO_RTI_GEN_PWR_ISO0) | iso_val);
-		}
-#else
-		WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-			READ_AOREG(AO_RTI_GEN_PWR_ISO0) | iso_val);
-#endif
-		/* power off vdec1 memories */
-		WRITE_VREG(DOS_MEM_PD_VDEC, 0xffffffffUL);
-		/* disable vdec1 clock */
-		vdec_clock_off();
-		/* vdec1 power off */
-#ifdef CONFIG_AMLOGIC_POWER
-		if (is_support_power_ctrl()) {
-			if (power_ctrl_sleep_mask(false, sleep_val, 0)) {
-				mutex_unlock(&vdec_mutex);
-				pr_err("vdec-1 power off ctrl sleep fail.\n");
-				return;
-			}
-		} else {
-			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-				READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) | sleep_val);
-		}
-#else
-		WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-			READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) | sleep_val);
-#endif
-	} else if (core == VDEC_2) {
-		if (has_vdec2()) {
-			/* enable vdec2 isolation */
-			WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-					READ_AOREG(AO_RTI_GEN_PWR_ISO0) |
-					0x300);
-			/* power off vdec2 memories */
-			WRITE_VREG(DOS_MEM_PD_VDEC2, 0xffffffffUL);
-			/* disable vdec2 clock */
-			vdec2_clock_off();
-			/* vdec2 power off */
-			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-					READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) |
-					0x30);
-		}
-	} else if (core == VDEC_HCODEC) {
-		if (has_hdec()) {
-			sleep_val = is_power_ctrl_ver2 ? 0x1 : 0x3;
-			iso_val = is_power_ctrl_ver2 ? 0x1 : 0x30;
-
-			/* enable hcodec isolation */
-#ifdef CONFIG_AMLOGIC_POWER
-			if (is_support_power_ctrl()) {
-				if (power_ctrl_iso_mask(false, iso_val, 0)) {
-					mutex_unlock(&vdec_mutex);
-					pr_err("hcodec power off ctrl iso fail.\n");
-					return;
-				}
-			} else {
-				WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-					READ_AOREG(AO_RTI_GEN_PWR_ISO0) | iso_val);
-			}
-#else
-			WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-				READ_AOREG(AO_RTI_GEN_PWR_ISO0) | iso_val);
-#endif
-			/* power off hcodec memories */
-			WRITE_VREG(DOS_MEM_PD_HCODEC, 0xffffffffUL);
-			/* disable hcodec clock */
-			hcodec_clock_off();
-			/* hcodec power off */
-#ifdef CONFIG_AMLOGIC_POWER
-			if (is_support_power_ctrl()) {
-				if (power_ctrl_sleep_mask(false, sleep_val, 0)) {
-					mutex_unlock(&vdec_mutex);
-					pr_err("hcodec power off ctrl sleep fail.\n");
-					return;
-				}
-			} else {
-				WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-					READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) | sleep_val);
-			}
-#else
-			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-				READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) | sleep_val);
-#endif
-		}
-	} else if (core == VDEC_HEVC) {
-		if (has_hevc_vdec()) {
-			sleep_val = is_power_ctrl_ver2 ? 0x4 : 0xc0;
-			iso_val = is_power_ctrl_ver2 ? 0x4 : 0xc00;
-
-			if (no_powerdown == 0) {
-				/* enable hevc isolation */
-#ifdef CONFIG_AMLOGIC_POWER
-				if (is_support_power_ctrl()) {
-					if (power_ctrl_iso_mask(false, iso_val, 0)) {
-						mutex_unlock(&vdec_mutex);
-						pr_err("hevc power off ctrl iso fail.\n");
-						return;
-					}
-				} else {
-					WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-						READ_AOREG(AO_RTI_GEN_PWR_ISO0) | iso_val);
-				}
-#else
-				WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-					READ_AOREG(AO_RTI_GEN_PWR_ISO0) | iso_val);
-#endif
-				/* power off hevc memories */
-				WRITE_VREG(DOS_MEM_PD_HEVC, 0xffffffffUL);
-
-				/* disable hevc clock */
-				hevc_clock_off();
-				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-					hevc_back_clock_off();
-
-				/* hevc power off */
-#ifdef CONFIG_AMLOGIC_POWER
-				if (is_support_power_ctrl()) {
-					if (power_ctrl_sleep_mask(false, sleep_val, 0)) {
-						mutex_unlock(&vdec_mutex);
-						pr_err("hevc power off ctrl sleep fail.\n");
-						return;
-					}
-				} else {
-					WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-						READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) | sleep_val);
-				}
-#else
-				WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-					READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) | sleep_val);
-#endif
-			} else {
-				pr_info("!!!!!!!!not power down\n");
-				hevc_reset_core(NULL);
-				no_powerdown = 0;
-			}
-		}
-	}
 	mutex_unlock(&vdec_mutex);
 }
 EXPORT_SYMBOL(vdec_poweroff);
 
 bool vdec_on(enum vdec_type_e core)
 {
-	bool ret = false;
-
-	if (core == VDEC_1) {
-		if (((READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) &
-			(((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1))
-			? 0x2 : 0xc)) == 0) &&
-			(READ_HHI_REG(HHI_VDEC_CLK_CNTL) & 0x100))
-			ret = true;
-	} else if (core == VDEC_2) {
-		if (has_vdec2()) {
-			if (((READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & 0x30) == 0) &&
-				(READ_HHI_REG(HHI_VDEC2_CLK_CNTL) & 0x100))
-				ret = true;
-		}
-	} else if (core == VDEC_HCODEC) {
-		if (has_hdec()) {
-			if (((READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) &
-				(((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1))
-				? 0x1 : 0x3)) == 0) &&
-				(READ_HHI_REG(HHI_VDEC_CLK_CNTL) & 0x1000000))
-				ret = true;
-		}
-	} else if (core == VDEC_HEVC) {
-		if (has_hevc_vdec()) {
-			if (((READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) &
-				(((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1))
-				? 0x4 : 0xc0)) == 0) &&
-				(READ_HHI_REG(HHI_VDEC2_CLK_CNTL) & 0x1000000))
-				ret = true;
-		}
-	}
-
-	return ret;
+	return vdec_core->pm->power_state(vdec_core->cma_dev, core);
 }
 EXPORT_SYMBOL(vdec_on);
 
@@ -5391,6 +4851,18 @@ static int vdec_probe(struct platform_device *pdev)
 	vdec_core->vdec_core_wq = alloc_ordered_workqueue("%s",__WQ_LEGACY |
 		WQ_MEM_RECLAIM |WQ_HIGHPRI/*high priority*/, "vdec-work");
 	/*work queue priority lower than vdec-core.*/
+
+	/* power manager init. */
+	vdec_core->pm = (struct power_manager_s *)
+		of_device_get_match_data(&pdev->dev);
+	if (vdec_core->pm->init) {
+		r = vdec_core->pm->init(&pdev->dev);
+		if (r) {
+			pr_err("vdec power manager init failed\n");
+			return r;
+		}
+	}
+
 	return 0;
 }
 
@@ -5412,17 +4884,14 @@ static int vdec_remove(struct platform_device *pdev)
 	kthread_stop(vdec_core->thread);
 
 	destroy_workqueue(vdec_core->vdec_core_wq);
+
+	if (vdec_core->pm->release)
+		vdec_core->pm->release(&pdev->dev);
+
 	class_unregister(&vdec_class);
 
 	return 0;
 }
-
-static const struct of_device_id amlogic_vdec_dt_match[] = {
-	{
-		.compatible = "amlogic, vdec",
-	},
-	{},
-};
 
 static struct mconfig vdec_configs[] = {
 	MC_PU32("debug_trace_num", &debug_trace_num),
@@ -5433,12 +4902,14 @@ static struct mconfig vdec_configs[] = {
 };
 static struct mconfig_node vdec_node;
 
+extern const struct of_device_id amlogic_vdec_matches[];
+
 static struct platform_driver vdec_driver = {
 	.probe = vdec_probe,
 	.remove = vdec_remove,
 	.driver = {
 		.name = "vdec",
-		.of_match_table = amlogic_vdec_dt_match,
+		.of_match_table = amlogic_vdec_matches,
 	}
 };
 
