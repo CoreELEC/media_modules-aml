@@ -41,6 +41,8 @@
 #define PRINT_FLAG_V4L_DETAIL         0x8000
 #define DISABLE_ERROR_HANDLE          0x10000
 #define DEBUG_DUMP_STAT               0x80000
+#define DEBUG_TIMEOUT_DEC_STAT        0x800000
+
 /*setting canvas mode and endian.
   if this flag is set, value of canvas mode
   will according to the value of mem_map_mode.

@@ -7010,7 +7010,13 @@ static void check_timer_func(unsigned long arg)
 		u32 dpb_status = READ_VREG(DPB_STATUS_REG);
 		u32 mby_mbx = READ_VREG(MBY_MBX);
 		if ((dpb_status == H264_ACTION_DECODE_NEWPIC) ||
-			(dpb_status == H264_ACTION_DECODE_SLICE)) {
+			(dpb_status == H264_ACTION_DECODE_SLICE) ||
+			(dpb_status == H264_SEI_DATA_DONE) ||
+			(dpb_status == H264_STATE_SEARCH_HEAD)) {
+			if (h264_debug_flag & DEBUG_TIMEOUT_DEC_STAT)
+				pr_debug("%s dpb_status = 0x%x last_mby_mbx = %u mby_mbx = %u\n",
+				__func__, dpb_status, hw->last_mby_mbx, mby_mbx);
+
 			if (hw->last_mby_mbx == mby_mbx) {
 				if (hw->decode_timeout_count > 0)
 					hw->decode_timeout_count--;
