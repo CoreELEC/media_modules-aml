@@ -1418,7 +1418,7 @@ static u32 buf_alloc_height = 2304;
 static u32 av1_max_pic_w = 4096;
 static u32 av1_max_pic_h = 2304;
 
-static u32 dynamic_buf_num_margin;
+static u32 dynamic_buf_num_margin = 3;
 #else
 static u32 buf_alloc_width;
 static u32 buf_alloc_height;
@@ -1481,9 +1481,9 @@ static u32 max_decoding_time;
 
 static u32 error_handle_policy;
 /*static u32 parser_sei_enable = 1;*/
-#define MAX_BUF_NUM_NORMAL     18
+#define MAX_BUF_NUM_NORMAL     16
 /*less bufs num 12 caused frame drop, nts failed*/
-#define MAX_BUF_NUM_LESS   15
+#define MAX_BUF_NUM_LESS   14
 static u32 max_buf_num = MAX_BUF_NUM_NORMAL;
 #define MAX_BUF_NUM_SAVE_BUF  8
 
@@ -5028,12 +5028,12 @@ static int av1_local_init(struct AV1HW_s *hw)
 #endif
 	hw->mv_buf_margin = mv_buf_margin;
 	if (IS_4K_SIZE(hw->init_pic_w, hw->init_pic_h)) {
-		hw->used_buf_num = MAX_BUF_NUM_LESS;
+		hw->used_buf_num = MAX_BUF_NUM_LESS + dynamic_buf_num_margin;
 		if (hw->used_buf_num > REF_FRAMES_4K)
 			hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
 	}
 	else
-		hw->used_buf_num = max_buf_num;
+		hw->used_buf_num = max_buf_num + dynamic_buf_num_margin;
 
 	if (hw->used_buf_num > MAX_BUF_NUM)
 		hw->used_buf_num = MAX_BUF_NUM;
@@ -5547,7 +5547,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 	int stream_offset = pic_config->stream_offset;
 	u32 pts_valid = 0, pts_us64_valid = 0;
 	u32 frame_size;
-	int i;
+	int i, reclac_flag;
 
 	av1_print(hw, AOM_DEBUG_VFRAME, "%s index = %d\r\n", __func__, pic_config->index);
 	if (kfifo_get(&hw->newframe_q, &vf) == 0) {
@@ -5626,12 +5626,32 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
 				vf->pts_us64 = hw->last_pts_us64 +
 					(DUR2PTS(hw->frame_dur) * 100 / 9);
+				reclac_flag = 1;
 			}
 
 			if (!close_to(vf->pts, (hw->last_pts + DUR2PTS(hw->frame_dur)), 100)) {
 				vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
 				vf->pts_us64 = hw->last_pts_us64 +
 					(DUR2PTS(hw->frame_dur) * 100 / 9);
+				reclac_flag = 2;
+			}
+
+			/* try find the closed pts in saved pts pool */
+			if (reclac_flag) {
+				for (i = 0; i < FRAME_BUFFERS - 1; i++) {
+					if ((hw->frame_mode_pts_save[i] > vf->pts) &&
+						(hw->frame_mode_pts_save[i + 1] < vf->pts)) {
+						if ((hw->frame_mode_pts_save[i] - vf->pts) >
+							(vf->pts - hw->frame_mode_pts_save[i + 1])) {
+							vf->pts = hw->frame_mode_pts_save[i + 1];
+							vf->pts_us64 = hw->frame_mode_pts64_save[i + 1];
+						} else {
+							vf->pts = hw->frame_mode_pts_save[i];
+							vf->pts_us64 = hw->frame_mode_pts64_save[i];
+						}
+						break;
+					}
+				}
 			}
 		} else {
 			av1_print(hw, AV1_DEBUG_OUT_PTS,
@@ -8934,7 +8954,9 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	unsigned int i, valid_pts_diff_cnt, pts_diff_sum;
 	unsigned int in_pts_diff, last_valid_pts_diff, calc_dur;
 
-	if (hw->chunk == NULL)
+	if ((hw->chunk == NULL) ||
+		(hw->frame_count && (hw->chunk->pts == 0)) ||
+		(hw->frame_mode_pts_save[0] == hw->chunk->pts))
 		return;
 	av1_print(hw, AV1_DEBUG_OUT_PTS,
 		"run_front: pts %d, pts64 %lld\n", hw->chunk->pts, hw->chunk->pts64);
@@ -8946,8 +8968,8 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	hw->frame_mode_pts64_save[0] = hw->chunk->pts64;
 	if (hw->first_pts_index < ARRAY_SIZE(hw->frame_mode_pts_save))
 		hw->first_pts_index++;
-	/* frame duration check */
-	if ((!hw->frame_count) || hw->get_frame_dur)
+	/* frame duration check, vdec_secure return for nts problem */
+	if ((!hw->frame_count) || hw->get_frame_dur || vdec_secure(hw_to_vdec(hw)))
 		return;
 	valid_pts_diff_cnt = 0;
 	pts_diff_sum = 0;
