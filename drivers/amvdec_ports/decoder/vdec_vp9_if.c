@@ -669,6 +669,94 @@ static void add_prefix_data(struct vp9_superframe_split *s,
 	*out_size = length;
 }
 
+#ifndef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
+static int vp9_superframe_split_filter(struct vp9_superframe_split *s)
+{
+	int i, j, ret, marker;
+	bool is_superframe = false;
+	int *prefix = (int *)s->data;
+
+	if (!s->data)
+		return -1;
+
+#define AML_PREFIX ('V' << 24 | 'L' << 16 | 'M' << 8 | 'A')
+	if (prefix[3] == AML_PREFIX) {
+		s->prefix_size = 16;
+		/*pr_info("the frame data has beed added header\n");*/
+	}
+
+	marker = s->data[s->data_size - 1];
+	if ((marker & 0xe0) == 0xc0) {
+		int length_size = 1 + ((marker >> 3) & 0x3);
+		int   nb_frames = 1 + (marker & 0x7);
+		int    idx_size = 2 + nb_frames * length_size;
+
+		if (s->data_size >= idx_size &&
+			s->data[s->data_size - idx_size] == marker) {
+			s64 total_size = 0;
+			int idx = s->data_size + 1 - idx_size;
+
+			for (i = 0; i < nb_frames; i++) {
+				int frame_size = 0;
+				for (j = 0; j < length_size; j++)
+					frame_size |= s->data[idx++] << (j * 8);
+
+				total_size += frame_size;
+				if (frame_size < 0 ||
+					total_size > s->data_size - idx_size) {
+					v4l_dbg(0, V4L_DEBUG_CODEC_ERROR, "Invalid frame size in a sframe: %d\n",
+						frame_size);
+					ret = -EINVAL;
+					goto fail;
+				}
+				s->sizes[i] = frame_size;
+			}
+
+			s->nb_frames	     = nb_frames;
+			s->size 	     = total_size;
+			s->next_frame	     = 0;
+			s->next_frame_offset = 0;
+			is_superframe	     = true;
+		}
+	}else {
+		s->nb_frames = 1;
+		s->sizes[0]  = s->data_size;
+		s->size      = s->data_size;
+	}
+
+	/*pr_info("sframe: %d, frames: %d, IN: %x, OUT: %x\n",
+		is_superframe, s->nb_frames,
+		s->data_size, s->size);*/
+
+	/* parse uncompressed header. */
+	if (is_superframe) {
+		/* bitstream profile. */
+		/* frame type. (intra or inter) */
+		/* colorspace descriptor */
+		/* ... */
+
+		v4l_dbg(0, V4L_DEBUG_CODEC_PARSER, "the frame is a superframe.\n");
+	}
+
+	/*pr_err("in: %x, %d, out: %x, sizes %d,%d,%d,%d,%d,%d,%d,%d\n",
+		s->data_size,
+		s->nb_frames,
+		s->size,
+		s->sizes[0],
+		s->sizes[1],
+		s->sizes[2],
+		s->sizes[3],
+		s->sizes[4],
+		s->sizes[5],
+		s->sizes[6],
+		s->sizes[7]);*/
+
+	return 0;
+fail:
+	return ret;
+}
+#endif
+
 static void trigger_decoder(struct aml_vdec_adapt *vdec)
 {
 	int i, ret;
