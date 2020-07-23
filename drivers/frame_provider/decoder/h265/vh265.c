@@ -1776,6 +1776,7 @@ struct hevc_state_s {
 	u64 again_timeout_jiffies;
 	u32 pre_parser_video_rp;
 	u32 pre_parser_video_wp;
+	bool dv_duallayer;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -8522,6 +8523,8 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 			else
 				req->dv_enhance_exist =
 					hevc->m_PIC[index]->dv_enhance_exist;
+			if (vdec_frame_based(vdec) && (hevc->dv_duallayer == true))
+				req->dv_enhance_exist = 1;
 			hevc_print(hevc, H265_DEBUG_DV,
 			"query dv_enhance_exist for pic (vf 0x%p, poc %d index %d) flag => %d, aux sizd 0x%x\n",
 			req->vf,
@@ -13545,6 +13548,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			"parm_v4l_canvas_mem_mode",
 			&config_val) == 0)
 			hevc->mem_map_mode = config_val;
+
+		if (get_config_int(pdata->config, "dv_duallayer",
+				&config_val) == 0)
+			hevc->dv_duallayer = config_val;
+		else
+			hevc->dv_duallayer = false;
 #endif
 	} else {
 		if (pdata->sys_info)
