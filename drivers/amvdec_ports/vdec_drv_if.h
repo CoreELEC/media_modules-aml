@@ -60,6 +60,15 @@ enum vdec_fb_status {
 	FB_ST_FREE
 };
 
+enum vdec_dw_mode {
+	VDEC_DW_AFBC_ONLY = 0,
+	VDEC_DW_AFBC_1_1_DW = 1,
+	VDEC_DW_AFBC_1_4_DW = 2,
+	VDEC_DW_AFBC_x2_1_4_DW = 3,
+	VDEC_DW_AFBC_1_2_DW = 4,
+	VDEC_DW_NO_AFBC = 16,
+};
+
 /* For GET_PARAM_DISP_FRAME_BUFFER and GET_PARAM_FREE_FRAME_BUFFER,
  * the caller does not own the returned buffer. The buffer will not be
  *				released before vdec_if_deinit.
@@ -69,6 +78,8 @@ enum vdec_fb_status {
  * GET_PARAM_PIC_INFO		: get picture info, struct vdec_pic_info*
  * GET_PARAM_CROP_INFO		: get crop info, struct v4l2_crop*
  * GET_PARAM_DPB_SIZE		: get dpb size, unsigned int*
+ * GET_PARAM_DW_MODE:		: get double write mode, unsigned int*
+ * GET_PARAM_COMP_BUF_INFO	: get compressed buf info,  struct vdec_comp_buf_info*
  */
 enum vdec_get_param_type {
 	GET_PARAM_DISP_FRAME_BUFFER,
@@ -76,7 +87,9 @@ enum vdec_get_param_type {
 	GET_PARAM_PIC_INFO,
 	GET_PARAM_CROP_INFO,
 	GET_PARAM_DPB_SIZE,
-	GET_PARAM_CONFIG_INFO
+	GET_PARAM_CONFIG_INFO,
+	GET_PARAM_DW_MODE,
+	GET_PARAM_COMP_BUF_INFO,
 };
 
 /*
@@ -85,6 +98,7 @@ enum vdec_get_param_type {
 enum vdec_set_param_type {
 	SET_PARAM_WRITE_FRAME_SYNC,
 	SET_PARAM_PS_INFO,
+	SET_PARAM_COMP_BUF_INFO,
 	SET_PARAM_HDR_INFO,
 	SET_PARAM_POST_EVENT
 };

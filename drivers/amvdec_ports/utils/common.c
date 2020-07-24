@@ -5,7 +5,9 @@
 #include <linux/string.h>
 
 #include "common.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 #include "pixfmt.h"
+#endif
 
 const u8 ff_zigzag_direct[64] = {
 	0,  1,  8, 16, 9, 2, 3, 10,

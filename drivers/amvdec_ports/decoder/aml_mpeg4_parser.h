@@ -2,8 +2,10 @@
 #define AVCODEC_MPEG4VIDEO_H
 
 #include "../aml_vcodec_drv.h"
-#include "../utils/pixfmt.h"
 #include "../utils/common.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
+#include "../utils/pixfmt.h"
+#endif
 
 //mpeg4 profile
 #define FF_PROFILE_MPEG4_SIMPLE                     0
@@ -223,13 +225,15 @@ struct mpeg4_dec_param {
 
 	struct AVRational time_base;
 	int ticks_per_frame;
-	enum AVPixelFormat pix_fmt;
 	struct AVRational sample_aspect_ratio;
 	enum AVColorPrimaries color_primaries;
 	enum AVColorTransferCharacteristic color_trc;
 	enum AVColorSpace colorspace;
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
+	enum AVPixelFormat pix_fmt;
 	enum AVColorRange color_range;
 	enum AVChromaLocation chroma_sample_location;
+#endif
 	int err_recognition;
 	int idct_algo;
 	int bits_per_raw_sample;
@@ -245,7 +249,11 @@ struct mpeg4_param_sets {
 	struct mpeg4_dec_param dec_ps;
 };
 
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 int mpeg4_decode_extradata_ps(u8 *buf, int size, struct mpeg4_param_sets *ps);
+#else
+inline int mpeg4_decode_extradata_ps(u8 *buf, int size, struct mpeg4_param_sets *ps) { return -1; }
+#endif
 
 #endif
 

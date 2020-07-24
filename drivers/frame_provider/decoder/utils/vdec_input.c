@@ -520,11 +520,12 @@ int vdec_input_set_buffer(struct vdec_input_s *input, u32 start, u32 size)
 		input->swap_page_phys = codec_mm_alloc_for_dma("SWAP",
 			1, 0, CODEC_MM_FLAGS_TVP);
 	else {
-		input->swap_page = alloc_page(GFP_KERNEL);
-		if (input->swap_page) {
-			input->swap_page_phys =
-				page_to_phys(input->swap_page);
-		}
+		input->swap_page = dma_alloc_coherent(v4l_get_dev_from_codec_mm(),
+				PAGE_SIZE,
+				&input->swap_page_phys, GFP_KERNEL);
+
+		if (input->swap_page == NULL)
+			return -ENOMEM;
 	}
 
 	if (input->swap_page_phys == 0)
@@ -1118,14 +1119,18 @@ void vdec_input_release(struct vdec_input_s *input)
 	}
 
 	/* release swap pages */
-	if (input->swap_page_phys) {
-		if (vdec_secure(input->vdec))
+	if (vdec_secure(input->vdec)) {
+		if (input->swap_page_phys)
 			codec_mm_free_for_dma("SWAP", input->swap_page_phys);
-		else
-			__free_page(input->swap_page);
-		input->swap_page = NULL;
-		input->swap_page_phys = 0;
+	} else {
+		if (input->swap_page) {
+			dma_free_coherent(v4l_get_dev_from_codec_mm(),
+				PAGE_SIZE, input->swap_page,
+				input->swap_page_phys);
+		}
 	}
+	input->swap_page = NULL;
+	input->swap_page_phys = 0;
 	input->swap_valid = false;
 }
 EXPORT_SYMBOL(vdec_input_release);
@@ -1141,14 +1146,19 @@ u32 vdec_input_get_freed_handle(struct vdec_s *vdec)
 		return 0;
 
 	flags = vdec_input_lock(input);
-	block = list_first_entry_or_null(&input->vframe_block_free_list,
+	do {
+		block = list_first_entry_or_null(&input->vframe_block_free_list,
 		struct vframe_block_list_s, list);
+		if (!block) {
+			break;
+		}
 
-	if (block) {
 		handle = block->handle;
 		vdec_input_del_block_locked(input, block);
 		kfree(block);
-	}
+
+	} while(!handle);
+
 	vdec_input_unlock(input, flags);
 	return handle;
 }

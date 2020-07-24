@@ -366,6 +366,12 @@ union param {
 		unsigned short colocated_mv_addr_start[2];
 		unsigned short colocated_mv_addr_end[2];
 		unsigned short colocated_mv_wr_addr[2];
+
+		unsigned short frame_crop_left_offset;
+		unsigned short frame_crop_right_offset;
+		unsigned short frame_crop_top_offset;
+		unsigned short frame_crop_bottom_offset;
+		unsigned short chroma_format_idc;
 	} dpb;
 	struct {
 		unsigned short dump[MMCO_OFFSET];
@@ -456,8 +462,8 @@ enum ProfileIDC {
 enum FirstInsertFrm_State {
 	FirstInsertFrm_IDLE = 0,
 	FirstInsertFrm_OUT = 1,
-	FirstInsertFrm_SKIPDONE = 2,
-	FirstInsertFrm_RESET = 3,
+	FirstInsertFrm_RESET = 2,
+	FirstInsertFrm_SKIPDONE = 3,
 };
 
 
@@ -474,8 +480,8 @@ struct SPSParameters {
 	int frame_mbs_only_flag;
 	int num_ref_frames;
 	int max_dpb_size;
-
 	int log2_max_frame_num_minus4;
+	int frame_num_gap_allowed;
 };
 
 #define DEC_REF_PIC_MARKING_BUFFER_NUM_MAX   45
@@ -887,11 +893,17 @@ struct h264_dpb_stru {
 	u16 num_reorder_frames;
 	u16 max_dec_frame_buffering;
 
+	unsigned int frame_crop_left_offset;
+	unsigned int frame_crop_right_offset;
+	unsigned int frame_crop_top_offset;
+	unsigned int frame_crop_bottom_offset;
+	unsigned int chroma_format_idc;
+
 	unsigned int dec_dpb_status;
 	unsigned int last_dpb_status;
 	unsigned char buf_alloc_fail;
 	unsigned int dpb_error_flag;
-	unsigned int origin_max_reference;
+	unsigned int reorder_output;
 	unsigned int first_insert_frame;
 	int first_output_poc;
 	int dpb_frame_count;
@@ -915,7 +927,7 @@ void set_frame_output_flag(struct h264_dpb_stru *p_H264_Dpb, int index);
 
 int is_there_unused_frame_from_dpb(struct DecodedPictureBuffer *p_Dpb);
 
-int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb);
+int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_gap);
 
 void dpb_init_global(struct h264_dpb_stru *p_H264_Dpb,
 	int id, int actual_dpb_size, int max_reference_size);
@@ -961,5 +973,8 @@ int dpb_check_ref_list_error(
 
 void unmark_for_reference(struct DecodedPictureBuffer *p_Dpb,
 	struct FrameStore *fs);
+
+void update_ref_list(struct DecodedPictureBuffer *p_Dpb);
+
 
 #endif

@@ -50,7 +50,7 @@ struct fw_info_s {
 	char src_from[32];
 	int file_type;
 	unsigned int format;
-	struct firmware_data_s *data;
+	struct firmware_s *data;
 };
 
 struct fw_head_s {
@@ -71,7 +71,7 @@ struct fw_head_s {
 	char reserved[92];
 };
 
-struct firmware_data_s {
+struct firmware_s {
 	union {
 		struct fw_head_s head;
 		char buf[512];

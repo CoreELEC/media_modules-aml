@@ -26,20 +26,19 @@
 #include "aml_vcodec_drv.h"
 
 struct aml_vdec_adapt {
-	enum vformat_e format;
-	enum VIDEO_DEC_TYPE dec_type;
+	enum VIDEO_DEC_TYPE format;
 	void *vsi;
 	int32_t failure;
 	uint32_t inst_addr;
 	unsigned int signaled;
 	struct aml_vcodec_ctx *ctx;
-	struct platform_device *dev;
 	wait_queue_head_t wq;
 	struct file *filp;
 	struct vdec_s *vdec;
 	struct stream_port_s port;
 	struct dec_sysinfo dec_prop;
 	struct v4l2_config_parm config;
+	int video_type;
 	char *recv_name;
 	int vfm_path;
 };

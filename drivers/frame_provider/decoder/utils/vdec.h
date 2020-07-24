@@ -461,4 +461,5 @@ extern u32  vdec_get_frame_vdec(struct vdec_s *vdec,  struct vframe_counter_s *t
 
 int vdec_get_frame_num(struct vdec_s *vdec);
 
+extern int get_double_write_ratio(int dw_mode);
 #endif				/* VDEC_H */

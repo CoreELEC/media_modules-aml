@@ -421,6 +421,26 @@ static struct stream_port_s ports[] = {
 		.fops = &vbuf_fops,
 		.vformat = VFORMAT_HEVC,
 	},
+	{
+		.name = "amstream_dves_avc_frame",
+		.type = PORT_TYPE_ES | PORT_TYPE_VIDEO | PORT_TYPE_FRAME |
+			PORT_TYPE_DECODER_SCHED | PORT_TYPE_DUALDEC,
+		.fops = &vframe_fops,
+	},
+	{
+		.name = "amstream_dves_hevc_frame",
+		.type = PORT_TYPE_ES | PORT_TYPE_VIDEO | PORT_TYPE_HEVC | PORT_TYPE_FRAME |
+			PORT_TYPE_DECODER_SCHED | PORT_TYPE_DUALDEC,
+		.fops = &vframe_fops,
+		.vformat = VFORMAT_HEVC,
+	},
+	{
+		.name = "amstream_dves_av1",
+		.type = PORT_TYPE_ES | PORT_TYPE_VIDEO | PORT_TYPE_HEVC | PORT_TYPE_FRAME |
+			PORT_TYPE_DECODER_SCHED | PORT_TYPE_DUALDEC,
+		.fops = &vframe_fops,
+		.vformat = VFORMAT_AV1,
+	},
 #endif
 #endif
 };
@@ -1760,6 +1780,7 @@ static int amstream_release(struct inode *inode, struct file *file)
 
 			if ((port->vformat == VFORMAT_HEVC
 					|| port->vformat == VFORMAT_AVS2
+					|| port->vformat == VFORMAT_AV1
 					|| port->vformat == VFORMAT_VP9)) {
 					vdec_poweroff(VDEC_HEVC);
 				} else {

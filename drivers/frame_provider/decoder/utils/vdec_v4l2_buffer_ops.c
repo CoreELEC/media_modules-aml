@@ -2,11 +2,6 @@
 #include <media/v4l2-mem2mem.h>
 #include <linux/printk.h>
 
-#ifndef CONFIG_AMLOGIC_MEDIA_V4L_DEC
-static void v4l2_m2m_job_pause(struct v4l2_m2m_dev *m2m_dev,
-			struct v4l2_m2m_ctx *m2m_ctx) { return; }
-#endif
-
 int vdec_v4l_get_buffer(struct aml_vcodec_ctx *ctx,
 	struct vdec_v4l2_buffer **out)
 {
@@ -52,6 +47,22 @@ int vdec_v4l_set_ps_infos(struct aml_vcodec_ctx *ctx,
 }
 EXPORT_SYMBOL(vdec_v4l_set_ps_infos);
 
+int vdec_v4l_set_comp_buf_info(struct aml_vcodec_ctx *ctx,
+		struct vdec_comp_buf_info *info)
+{
+	int ret = 0;
+
+	if (ctx->drv_handle == 0)
+		return -EIO;
+
+	ret = ctx->dec_if->set_param(ctx->drv_handle,
+		SET_PARAM_COMP_BUF_INFO, info);
+
+	return ret;
+
+}
+EXPORT_SYMBOL(vdec_v4l_set_comp_buf_info);
+
 int vdec_v4l_set_hdr_infos(struct aml_vcodec_ctx *ctx,
 	struct aml_vdec_hdr_infos *hdr)
 {
@@ -67,7 +78,7 @@ int vdec_v4l_set_hdr_infos(struct aml_vcodec_ctx *ctx,
 }
 EXPORT_SYMBOL(vdec_v4l_set_hdr_infos);
 
-static void aml_wait_dpb_ready(struct aml_vcodec_ctx *ctx)
+static void aml_wait_buf_ready(struct aml_vcodec_ctx *ctx)
 {
 	ulong expires;
 
@@ -81,7 +92,7 @@ static void aml_wait_dpb_ready(struct aml_vcodec_ctx *ctx)
 		}
 
 		ready_num = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
-		if ((ready_num + ctx->buf_used_count) >= ctx->dpb_size)
+		if ((ready_num + ctx->buf_used_count) >= CTX_BUF_TOTAL(ctx))
 			ctx->v4l_codec_dpb_ready = true;
 	}
 }
@@ -137,7 +148,7 @@ int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 		return -EIO;
 
 	/* wait the DPB state to be ready. */
-	aml_wait_dpb_ready(ctx);
+	aml_wait_buf_ready(ctx);
 
 	aml_vdec_pic_info_update(ctx);
 
@@ -171,3 +182,17 @@ int vdec_v4l_write_frame_sync(struct aml_vcodec_ctx *ctx)
 }
 EXPORT_SYMBOL(vdec_v4l_write_frame_sync);
 
+int vdec_v4l_get_dw_mode(struct aml_vcodec_ctx *ctx,
+	unsigned int *dw_mode)
+{
+	int ret = -1;
+
+	if (ctx->drv_handle == 0)
+		return -EIO;
+
+	ret = ctx->dec_if->get_param(ctx->drv_handle,
+		GET_PARAM_DW_MODE, dw_mode);
+
+	return ret;
+}
+EXPORT_SYMBOL(vdec_v4l_get_dw_mode);

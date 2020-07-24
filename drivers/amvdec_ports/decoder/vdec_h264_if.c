@@ -279,6 +279,8 @@ static void vdec_parser_parms(struct vdec_h264_inst *inst)
 			ctx->config.parm.dec.cfg.canvas_mem_mode);
 		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_endian:%d;",
 			ctx->config.parm.dec.cfg.canvas_mem_endian);
+		pbuf += sprintf(pbuf, "parm_v4l_low_latency_mode:%d;",
+			ctx->config.parm.dec.cfg.low_latency_mode);
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
 		ctx->config.parm.dec.cfg.double_write_mode = 16;
@@ -300,8 +302,7 @@ static int vdec_h264_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	if (!inst)
 		return -ENOMEM;
 
-	inst->vdec.format	= VFORMAT_H264;
-	inst->vdec.dev		= ctx->dev->vpu_plat_dev;
+	inst->vdec.video_type	= VFORMAT_H264;
 	inst->vdec.filp		= ctx->dev->filp;
 	inst->vdec.ctx		= ctx;
 	inst->ctx		= ctx;
@@ -322,6 +323,7 @@ static int vdec_h264_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
+	ctx->vfm = &inst->vfm;
 	ret = video_decoder_init(&inst->vdec);
 	if (ret) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
@@ -706,7 +708,7 @@ static void vdec_h264_deinit(unsigned long h_vdec)
 
 static int vdec_h264_get_fb(struct vdec_h264_inst *inst, struct vdec_v4l2_buffer **out)
 {
-	return get_fb_from_queue(inst->ctx, out);
+	return get_fb_from_queue(inst->ctx, out, false);
 }
 
 static void vdec_h264_get_vf(struct vdec_h264_inst *inst, struct vdec_v4l2_buffer **out)
@@ -979,6 +981,13 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 	case GET_PARAM_CONFIG_INFO:
 		get_param_config_info(inst, out);
 		break;
+
+	case GET_PARAM_DW_MODE:
+	{
+		unsigned int* mode = out;
+		*mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
+		break;
+	}
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);

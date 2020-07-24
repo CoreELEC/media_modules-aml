@@ -103,7 +103,6 @@ static struct StorablePicture *get_new_pic(
 	struct h264_dpb_stru *p_H264_Dpb,
 	enum PictureStructure structure, unsigned char is_output);
 
-static void update_ref_list(struct DecodedPictureBuffer *p_Dpb);
 
 static void init_dummy_fs(void)
 {
@@ -437,6 +436,7 @@ void slice_prepare(struct h264_dpb_stru *p_H264_Dpb,
 	/* pSlice->adaptive_ref_pic_buffering_flag; */
 	sps->log2_max_frame_num_minus4 =
 		p_H264_Dpb->dpb_param.l.data[LOG2_MAX_FRAME_NUM] - 4;
+	sps->frame_num_gap_allowed = p_H264_Dpb->dpb_param.l.data[FRAME_NUM_GAP_ALLOWED];
 
 	p_Vid->non_conforming_stream =
 		p_H264_Dpb->dpb_param.l.data[NON_CONFORMING_STREAM];
@@ -937,7 +937,8 @@ void fill_frame_num_gap(struct VideoParameters *p_Vid, struct Slice *currSlice)
 			release_picture(p_H264_Dpb, picture);
 			bufmgr_force_recover(p_H264_Dpb);
 			return;
-		}
+		} else if (ret == -2)
+			release_picture(p_H264_Dpb, picture);
 
 		picture = NULL;
 		p_Vid->pre_frame_num = UnusedShortTermFrameNum;
@@ -2300,7 +2301,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 		if (fast_output_flag)
 			;
 		else if (none_displayed_num <
-			p_H264_Dpb->origin_max_reference)
+			p_H264_Dpb->reorder_output)
 			return 0;
 	}
 
@@ -2466,7 +2467,7 @@ static int is_long_term_reference(struct FrameStore *fs)
 	return 0;
 }
 
-static void update_ref_list(struct DecodedPictureBuffer *p_Dpb)
+void update_ref_list(struct DecodedPictureBuffer *p_Dpb)
 {
 	unsigned int i, j;
 
@@ -3614,6 +3615,16 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 					  PRINT_FLAG_DPB_DETAIL,
 					  "duplicate frame_num in short-term reference picture buffer %d\n",
 					   500);
+				if (p_Dpb->fs_ref[i]->dpb_frame_count == p_H264_Dpb->dpb_frame_count) {
+					dpb_print(p_H264_Dpb->decoder_index,
+							  0, "duplicate frame, no insert to dpb\n");
+					return -2;
+				} else {
+					dpb_print(p_H264_Dpb->decoder_index,
+						  0, "duplicate frame_num release defore ref\n");
+					unmark_for_reference(p_Dpb, p_Dpb->fs_ref[i]);
+					update_ref_list(p_Dpb);
+				}
 			}
 		}
 	}
@@ -5713,7 +5724,7 @@ static void check_frame_store_same_pic_num(struct DecodedPictureBuffer *p_Dpb,
 	}
 }
 
-int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb)
+int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_gap)
 {
 
 	int new_pic_flag = 0;
@@ -5771,6 +5782,7 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb)
 			currSlice->frame_num != p_Vid->pre_frame_num &&
 			currSlice->frame_num !=
 			(p_Vid->pre_frame_num + 1) % p_Vid->max_frame_num) {
+			struct SPSParameters *active_sps = p_Vid->active_sps;
 			/*if (active_sps->
 			 *gaps_in_frame_num_value_allowed_flag
 			 *== 0) {
@@ -5780,7 +5792,9 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb)
 			 *}
 			 *if (p_Vid->conceal_mode == 0)
 			 */
-			fill_frame_num_gap(p_Vid, currSlice);
+			 if (active_sps->frame_num_gap_allowed)
+				fill_frame_num_gap(p_Vid, currSlice);
+			*frame_num_gap = 1;
 		}
 
 		if (currSlice->nal_reference_idc) {

@@ -69,6 +69,8 @@ extern u32 debug_mode;
 #define V4L_DEBUG_CODEC_PARSER	(1 << 6)
 #define V4L_DEBUG_CODEC_PROT	(1 << 7)
 #define V4L_DEBUG_CODEC_EXINFO	(1 << 8)
+#define V4L_DEBUG_VPP_BUFMGR	(1 << 9)
+#define V4L_DEBUG_VPP_DETAIL	(1 << 10)
 
 #define __v4l_dbg(h, id, fmt, args...)					\
 	do {								\
@@ -92,12 +94,6 @@ extern u32 debug_mode;
 		}								\
 	} while (0)
 
-void __iomem *aml_vcodec_get_reg_addr(struct aml_vcodec_ctx *data,
-				unsigned int reg_idx);
-int aml_vcodec_mem_alloc(struct aml_vcodec_ctx *data,
-				struct aml_vcodec_mem *mem);
-void aml_vcodec_mem_free(struct aml_vcodec_ctx *data,
-				struct aml_vcodec_mem *mem);
 void aml_vcodec_set_curr_ctx(struct aml_vcodec_dev *dev,
 	struct aml_vcodec_ctx *ctx);
 struct aml_vcodec_ctx *aml_vcodec_get_curr_ctx(struct aml_vcodec_dev *dev);

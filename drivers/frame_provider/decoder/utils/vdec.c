@@ -633,6 +633,7 @@ static int vdec_get_hw_type(int value)
 		case VFORMAT_HEVC:
 		case VFORMAT_VP9:
 		case VFORMAT_AVS2:
+		case VFORMAT_AV1:
 			type = CORE_MASK_HEVC;
 		break;
 
@@ -861,7 +862,8 @@ static const char * const vdec_device_name[] = {
 	"amvenc_avc",        "amvenc_avc",
 	"jpegenc",           "jpegenc",
 	"amvdec_vp9",        "ammvdec_vp9",
-	"amvdec_avs2",       "ammvdec_avs2"
+	"amvdec_avs2",       "ammvdec_avs2",
+	"amvdec_av1",        "ammvdec_av1",
 };
 
 
@@ -883,7 +885,8 @@ static const char * const vdec_device_name[] = {
 	"amvenc_avc",
 	"jpegenc",
 	"amvdec_vp9",
-	"amvdec_avs2"
+	"amvdec_avs2",
+	"amvdec_av1"
 };
 
 #endif
@@ -985,7 +988,8 @@ int vdec_set_decinfo(struct vdec_s *vdec, struct dec_sysinfo *p)
 
 		sprintf(fmt, "m%s", ++str);
 		if (is_support_profile(fmt) &&
-			vdec->sys_info->format != VIDEO_DEC_FORMAT_H263)
+			vdec->sys_info->format != VIDEO_DEC_FORMAT_H263 &&
+			vdec->format != VFORMAT_AV1)
 			vdec->type = VDEC_TYPE_STREAM_PARSER;
 	}
 
@@ -2089,7 +2093,9 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	vdec_input_set_type(&vdec->input, vdec->type,
 			(vdec->format == VFORMAT_HEVC ||
 			vdec->format == VFORMAT_AVS2 ||
-			vdec->format == VFORMAT_VP9) ?
+			vdec->format == VFORMAT_VP9 ||
+			vdec->format == VFORMAT_AV1
+			) ?
 				VDEC_INPUT_TARGET_HEVC :
 				VDEC_INPUT_TARGET_VLD);
 	if (vdec_single(vdec) || (vdec_get_debug_flags() & 0x2))
@@ -4722,6 +4728,18 @@ u32  vdec_get_frame_vdec(struct vdec_s *vdec,  struct vframe_counter_s *tmpbuf)
 }
 EXPORT_SYMBOL(vdec_get_frame_vdec);
 
+int get_double_write_ratio(int dw_mode)
+{
+	int ratio = 1;
+
+	if ((dw_mode == 2) ||
+			(dw_mode == 3))
+		ratio = 4;
+	else if (dw_mode == 4)
+		ratio = 2;
+	return ratio;
+}
+EXPORT_SYMBOL(get_double_write_ratio);
 
 RESERVEDMEM_OF_DECLARE(vdec, "amlogic, vdec-memory", vdec_mem_setup);
 /*

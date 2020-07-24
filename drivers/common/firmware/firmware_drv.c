@@ -28,7 +28,6 @@
 #include <linux/amlogic/cpu_version.h>
 #include "../../stream_input/amports/amports_priv.h"
 #include "../../frame_provider/decoder/utils/vdec.h"
-#include "../../frame_provider/decoder/utils/firmware.h"
 #include "firmware_priv.h"
 #include "../chips/chips.h"
 #include <linux/string.h>
@@ -124,12 +123,16 @@ int get_data_from_name(const char *name, char *buf)
 	struct fw_mgr_s *mgr = g_mgr;
 	struct fw_info_s *info;
 	char *fw_name = __getname();
+	int len;
 
 	if (fw_name == NULL)
 		return -ENOMEM;
 
-	strcat(fw_name, name);
-	strcat(fw_name, ".bin");
+	len = snprintf(fw_name, PATH_MAX, "%s.bin", name);
+	if (len >= PATH_MAX) {
+		__putname(fw_name);
+		return -ENAMETOOLONG;
+	}
 
 	mutex_lock(&mutex);
 
@@ -445,8 +448,7 @@ static int fw_info_fill(void)
 	return ret;
 }
 
-//static int fw_data_check_sum(struct firmware_s *fw) //kernel4.9
-static int fw_data_check_sum(struct firmware_data_s *fw)
+static int fw_data_check_sum(struct firmware_s *fw)
 {
 	unsigned int crc;
 
@@ -457,8 +459,7 @@ static int fw_data_check_sum(struct firmware_data_s *fw)
 	return fw->head.checksum != (crc ^ ~0U) ? 0 : 1;
 }
 
-//static int fw_data_filter(struct firmware_s *fw,//kernel4.9
-static int fw_data_filter(struct firmware_data_s *fw,
+static int fw_data_filter(struct firmware_s *fw,
 	struct fw_info_s *fw_info)
 {
 	struct fw_mgr_s *mgr = g_mgr;
@@ -513,21 +514,70 @@ static int fw_data_filter(struct firmware_data_s *fw,
 	return 0;
 }
 
+static int fw_replace_dup_data(char *buf)
+{
+	int ret = 0;
+	struct fw_mgr_s *mgr = g_mgr;
+	struct package_s *pkg =
+		(struct package_s *) buf;
+	struct package_info_s *pinfo =
+		(struct package_info_s *) pkg->data;
+	struct fw_info_s *info = NULL;
+	char *pdata = pkg->data;
+	int try_cnt = TRY_PARSE_MAX;
+
+	do {
+		if (!pinfo->head.length)
+			break;
+		list_for_each_entry(info, &mgr->fw_head, node) {
+			struct firmware_s *comp = NULL;
+			struct firmware_s *data = NULL;
+			int len = 0;
+
+			comp = (struct firmware_s *)pinfo->data;
+			if (comp->head.duplicate)
+				break;
+
+			if (!info->data->head.duplicate ||
+				comp->head.checksum !=
+				info->data->head.checksum)
+				continue;
+
+			len = pinfo->head.length;
+			data = kzalloc(len, GFP_KERNEL);
+			if (data == NULL) {
+				ret = -ENOMEM;
+				goto out;
+			}
+
+			memcpy(data, pinfo->data, len);
+
+			/* update header information. */
+			memcpy(data, info->data, sizeof(*data));
+
+			/* if replaced success need to update real size. */
+			data->head.data_size = comp->head.data_size;
+
+			kfree(info->data);
+			info->data = data;
+		}
+		pdata += (pinfo->head.length + sizeof(*pinfo));
+		pinfo = (struct package_info_s *)pdata;
+	} while (try_cnt--);
+out:
+	return ret;
+}
+
 static int fw_check_pack_version(char *buf)
 {
 	struct package_s *pack = NULL;
-	int major, minor, major_fw, minor_fw, ver = 0;
+	int major, minor, major_fw, minor_fw;
 	int ret;
 
 	pack = (struct package_s *) buf;
 	ret = sscanf(PACK_VERS, "v%x.%x", &major, &minor);
 	if (ret != 2)
 		return -1;
-
-	ver = (major << 16 | minor);
-
-	if (debug)
-		pr_info("the package has %d fws totally.\n", pack->head.total);
 
 	major_fw = (pack->head.version >> 16) & 0xff;
 	minor_fw = pack->head.version & 0xff;
@@ -538,9 +588,16 @@ static int fw_check_pack_version(char *buf)
 		return -1;
 	}
 
-	if (ver != pack->head.version) {
-		pr_info("the fw pack ver v%d.%d is too lower.\n", major_fw, minor_fw);
-		pr_info("it may work abnormally so need to be update in time.\n");
+	if (minor < minor_fw) {
+		pr_info("The fw driver version (v%d.%d) is lower than the pkg version (v%d.%d).\n",
+			major, minor, major_fw, minor_fw);
+		pr_info("The driver version is too low that may affect the work please update asap.\n");
+	}
+
+	if (debug) {
+		pr_info("The package has %d fws totally.\n", pack->head.total);
+		pr_info("The driver ver is v%d.%d\n", major, minor);
+		pr_info("The firmware ver is v%d.%d\n", major_fw, minor_fw);
 	}
 
 	return 0;
@@ -552,11 +609,10 @@ static int fw_package_parse(struct fw_files_s *files,
 	int ret = 0;
 	struct package_info_s *pack_info;
 	struct fw_info_s *info;
-//	struct firmware_s *data;//kernel4.9
-	struct firmware_data_s *data;
+	struct firmware_s *data;
 	char *pack_data;
 	int info_len, len;
-	int try_cnt = 100;
+	int try_cnt = TRY_PARSE_MAX;
 	char *path = __getname();
 
 	if (path == NULL)
@@ -603,7 +659,8 @@ static int fw_package_parse(struct fw_files_s *files,
 		pack_data += (pack_info->head.length + info_len);
 		pack_info = (struct package_info_s *)pack_data;
 
-		if (!fw_data_check_sum(data)) {
+		if (!data->head.duplicate &&
+			!fw_data_check_sum(data)) {
 			pr_info("check sum fail !\n");
 			kfree(data);
 			kfree(info);
@@ -620,6 +677,10 @@ static int fw_package_parse(struct fw_files_s *files,
 		fw_add_info(info);
 	} while (try_cnt--);
 
+	/* process the fw of dup attribute. */
+	ret = fw_replace_dup_data(buf);
+	if (ret)
+		pr_err("replace dup fw failed.\n");
 out:
 	__putname(path);
 

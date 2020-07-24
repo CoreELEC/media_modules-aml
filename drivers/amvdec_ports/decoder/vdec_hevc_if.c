@@ -115,6 +115,7 @@ struct vdec_hevc_inst {
 	struct vcodec_vfm_s vfm;
 	struct aml_dec_params parms;
 	struct completion comp;
+	struct vdec_comp_buf_info comp_info;
 };
 
 static void get_pic_info(struct vdec_hevc_inst *inst,
@@ -206,8 +207,7 @@ static int vdec_hevc_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	if (!inst)
 		return -ENOMEM;
 
-	inst->vdec.format	= VFORMAT_HEVC;
-	inst->vdec.dev		= ctx->dev->vpu_plat_dev;
+	inst->vdec.video_type	= VFORMAT_HEVC;
 	inst->vdec.filp		= ctx->dev->filp;
 	inst->vdec.ctx		= ctx;
 	inst->ctx		= ctx;
@@ -231,6 +231,7 @@ static int vdec_hevc_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
+	ctx->vfm = &inst->vfm;
 	ret = video_decoder_init(&inst->vdec);
 	if (ret) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
@@ -544,7 +545,7 @@ static void vdec_hevc_deinit(unsigned long h_vdec)
 
 static int vdec_hevc_get_fb(struct vdec_hevc_inst *inst, struct vdec_v4l2_buffer **out)
 {
-	return get_fb_from_queue(inst->ctx, out);
+	return get_fb_from_queue(inst->ctx, out, false);
 }
 
 static void vdec_hevc_get_vf(struct vdec_hevc_inst *inst, struct vdec_v4l2_buffer **out)
@@ -702,6 +703,12 @@ static int vdec_hevc_decode(unsigned long h_vdec,
 		"parms status: %u\n", parms->parms_status);
  }
 
+static void get_param_comp_buf_info(struct vdec_hevc_inst *inst,
+		struct vdec_comp_buf_info *params)
+{
+	memcpy(params, &inst->comp_info, sizeof(*params));
+}
+
 static int vdec_hevc_get_param(unsigned long h_vdec,
 			       enum vdec_get_param_type type, void *out)
 {
@@ -738,6 +745,17 @@ static int vdec_hevc_get_param(unsigned long h_vdec,
 	case GET_PARAM_CONFIG_INFO:
 		get_param_config_info(inst, out);
 		break;
+
+	case GET_PARAM_DW_MODE:
+	{
+		unsigned int *mode = out;
+		*mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
+		break;
+	}
+	case GET_PARAM_COMP_BUF_INFO:
+		get_param_comp_buf_info(inst, out);
+		break;
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);
@@ -758,6 +776,7 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	struct vdec_pic_info *pic = &inst->vsi->pic;
 	struct vdec_hevc_dec_info *dec = &inst->vsi->dec;
 	struct v4l2_rect *rect = &inst->vsi->crop;
+	int dw = inst->parms.cfg.double_write_mode;
 
 	/* fill visible area size that be used for EGL. */
 	pic->visible_width	= ps->visible_width;
@@ -773,7 +792,9 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 
 	pic->coded_width 	= ps->coded_width;
 	pic->coded_height 	= ps->coded_height;
-	pic->y_len_sz		= pic->coded_width * pic->coded_height;
+
+	pic->y_len_sz		= vdec_pic_scale(inst, pic->coded_width, dw) *
+				  vdec_pic_scale(inst, pic->coded_height, dw);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	dec->dpb_sz		= ps->dpb_size;
@@ -790,6 +811,12 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 		pic->visible_width, pic->visible_height,
 		pic->coded_width, pic->coded_height,
 		dec->dpb_sz);
+}
+
+static void set_param_comp_buf_info(struct vdec_hevc_inst *inst,
+		struct vdec_comp_buf_info *info)
+{
+	memcpy(&inst->comp_info, info, sizeof(*info));
 }
 
 static void set_param_hdr_info(struct vdec_hevc_inst *inst,
@@ -833,6 +860,10 @@ static int vdec_hevc_set_param(unsigned long h_vdec,
 
 	case SET_PARAM_PS_INFO:
 		set_param_ps_info(inst, in);
+		break;
+
+	case SET_PARAM_COMP_BUF_INFO:
+		set_param_comp_buf_info(inst, in);
 		break;
 
 	case SET_PARAM_HDR_INFO:

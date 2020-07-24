@@ -34,6 +34,7 @@
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_vfm.h"
+#include "aml_vcodec_vpp.h"
 #include <linux/file.h>
 #include <linux/anon_inodes.h>
 
@@ -62,6 +63,8 @@ static int fops_vcodec_open(struct file *file)
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
+	kref_init(&ctx->ctx_ref);
+
 	aml_buf = kzalloc(sizeof(*aml_buf), GFP_KERNEL);
 	if (!aml_buf) {
 		kfree(ctx);
@@ -112,6 +115,7 @@ static int fops_vcodec_open(struct file *file)
 	ctx->empty_flush_buf->vb.vb2_buf.vb2_queue = src_vq;
 	ctx->empty_flush_buf->lastframe = true;
 	aml_vcodec_dec_set_default_params(ctx);
+	ctx->is_stream_off = true;
 
 	ret = aml_thread_start(ctx, try_to_capture, AML_THREAD_CAPTURE, "cap");
 	if (ret) {
@@ -151,6 +155,12 @@ static int fops_vcodec_release(struct file *file)
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "release decoder %lx\n", (ulong) ctx);
 	mutex_lock(&dev->dev_mutex);
 
+	if (ctx->vpp) {
+		mutex_lock(&ctx->state_lock);
+		aml_v4l2_vpp_destroy(ctx->vpp);
+		ctx->vpp = NULL;
+		mutex_unlock(&ctx->state_lock);
+	}
 	/*
 	 * Call v4l2_m2m_ctx_release before aml_vcodec_dec_release. First, it
 	 * makes sure the worker thread is not running after vdec_if_deinit.
@@ -168,7 +178,7 @@ static int fops_vcodec_release(struct file *file)
 
 	list_del_init(&ctx->list);
 	kfree(ctx->empty_flush_buf);
-	kfree(ctx);
+	kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
 	mutex_unlock(&dev->dev_mutex);
 	return 0;
 }
@@ -302,8 +312,10 @@ void* v4l_get_vf_handle(int fd)
 
 	if (!is_v4l2_buf_file(file)) {
 		fput(file);
+#if 0
 		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"the buf file checked fail!\n");
+#endif
 		return NULL;
 	}
 
@@ -537,10 +549,6 @@ static int aml_vcodec_dec_remove(struct platform_device *pdev)
 	return 0;
 }
 
-/*static void aml_vcodec_dev_release(struct device *dev)
-{
-}*/
-
 static struct platform_driver aml_vcodec_dec_driver = {
 	.probe	= aml_vcodec_probe,
 	.remove	= aml_vcodec_dec_remove,
@@ -550,39 +558,28 @@ static struct platform_driver aml_vcodec_dec_driver = {
 	},
 };
 
-/*
-static struct platform_device aml_vcodec_dec_device = {
-	.name		= AML_VCODEC_DEC_NAME,
-	.dev.release	= aml_vcodec_dev_release,
-};*/
-
-module_platform_driver(aml_vcodec_dec_driver);
-
-/*
 static int __init amvdec_ports_init(void)
 {
-	int ret;
+	v4l_dbg(0, V4L_DEBUG_CODEC_PRINFO, "v4l dec module init\n");
 
-	ret = platform_device_register(&aml_vcodec_dec_device);
-	if (ret)
-		return ret;
+	if (platform_driver_register(&aml_vcodec_dec_driver)) {
+		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
+			"failed to register v4l dec driver\n");
+		return -ENODEV;
+	}
 
-	ret = platform_driver_register(&aml_vcodec_dec_driver);
-	if (ret)
-		platform_device_unregister(&aml_vcodec_dec_device);
-
-	return ret;
+	return 0;
 }
 
 static void __exit amvdec_ports_exit(void)
 {
+	v4l_dbg(0, V4L_DEBUG_CODEC_PRINFO, "v4l dec module exit\n");
+
 	platform_driver_unregister(&aml_vcodec_dec_driver);
-	platform_device_unregister(&aml_vcodec_dec_device);
 }
 
 module_init(amvdec_ports_init);
 module_exit(amvdec_ports_exit);
-*/
 
 u32 debug_mode;
 EXPORT_SYMBOL(debug_mode);
@@ -612,15 +609,31 @@ bool multiplanar;
 EXPORT_SYMBOL(multiplanar);
 module_param(multiplanar, bool, 0644);
 
-bool dump_capture_frame;
+int dump_capture_frame;
 EXPORT_SYMBOL(dump_capture_frame);
-module_param(dump_capture_frame, bool, 0644);
+module_param(dump_capture_frame, int, 0644);
+
+int dump_vpp_input;
+EXPORT_SYMBOL(dump_vpp_input);
+module_param(dump_vpp_input, int, 0644);
 
 EXPORT_SYMBOL(param_sets_from_ucode);
 module_param(param_sets_from_ucode, bool, 0644);
 
 EXPORT_SYMBOL(enable_drm_mode);
 module_param(enable_drm_mode, bool, 0644);
+
+int bypass_vpp = 1;
+EXPORT_SYMBOL(bypass_vpp);
+module_param(bypass_vpp, int, 0644);
+
+bool support_mjpeg;
+EXPORT_SYMBOL(support_mjpeg);
+module_param(support_mjpeg, bool, 0644);
+
+bool support_format_I420;
+EXPORT_SYMBOL(support_format_I420);
+module_param(support_format_I420, bool, 0644);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("AML video codec V4L2 decoder driver");

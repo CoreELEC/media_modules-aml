@@ -21,6 +21,7 @@
 #include "aml_vcodec_vfq.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_adapt.h"
+#include "aml_vcodec_vpp.h"
 #include <media/v4l2-mem2mem.h>
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_VIDEO_COMPOSER
@@ -98,14 +99,27 @@ void video_vf_put(char *receiver, struct vdec_v4l2_buffer *fb, int id)
 	ATRACE_COUNTER("v4l2_to", vf->index_disp);
 
 	v4l_dbg(0, V4L_DEBUG_CODEC_OUTPUT,
-		"[%d]: TO   (%s) vf: %p, idx: %d, "
+		"[%d]: TO   (%s) vf: %px, idx: %d, "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
-		id, vfp->name, vf, vf->index,
+		id, vfp->name, vf, vf->index & 0xff,
 		fb->m.mem[0].addr, fb->m.mem[0].size,
 		fb->m.mem[1].addr, fb->m.mem[1].size,
 		fb->m.mem[2].addr, fb->m.mem[2].size);
 
-	if (vfp && vf && atomic_dec_and_test(&vf->use_cnt))
+	if (vfp && vf)
+		vf_put(vf, receiver);
+}
+
+void vpp_vf_put(char *receiver, struct vframe_s *vf, int id)
+{
+	struct vframe_provider_s *vfp = vf_get_provider(receiver);
+	ATRACE_COUNTER("v4l2_to", vf->index_disp);
+
+	v4l_dbg(0, V4L_DEBUG_CODEC_OUTPUT,
+		"[%d]: TO   (%s) vf: %p, idx: %d\n",
+		id, vfp->name, vf, vf->index);
+
+	if (vfp && vf)
 		vf_put(vf, receiver);
 }
 
@@ -173,6 +187,11 @@ static int video_receiver_event_fun(int type, void *data, void *private_data)
 
 		if (ret < 0) {
 			v4l_dbg(vfm->ctx, V4L_DEBUG_CODEC_ERROR, "receiver vf err.\n");
+			break;
+		}
+
+		if (vfm->ctx->vpp) {
+			aml_v4l2_vpp_push_vframe(vfm->ctx->vpp, vfm->vf);
 			break;
 		}
 

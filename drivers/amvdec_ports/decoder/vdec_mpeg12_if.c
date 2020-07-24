@@ -192,8 +192,7 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	if (!inst)
 		return -ENOMEM;
 
-	inst->vdec.format	= VFORMAT_MPEG12;
-	inst->vdec.dev		= ctx->dev->vpu_plat_dev;
+	inst->vdec.video_type	= VFORMAT_MPEG12;
 	inst->vdec.filp		= ctx->dev->filp;
 	inst->vdec.config	= ctx->config;
 	inst->vdec.ctx		= ctx;
@@ -218,6 +217,7 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
+	ctx->vfm = &inst->vfm;
 	ret = video_decoder_init(&inst->vdec);
 	if (ret) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
@@ -428,7 +428,7 @@ static void vdec_mpeg12_deinit(unsigned long h_vdec)
 
 static int vdec_mpeg12_get_fb(struct vdec_mpeg12_inst *inst, struct vdec_v4l2_buffer **out)
 {
-	return get_fb_from_queue(inst->ctx, out);
+	return get_fb_from_queue(inst->ctx, out, false);
 }
 
 static void vdec_mpeg12_get_vf(struct vdec_mpeg12_inst *inst, struct vdec_v4l2_buffer **out)
@@ -549,6 +549,12 @@ static int vdec_mpeg12_get_param(unsigned long h_vdec,
 		get_crop_info(inst, out);
 		break;
 
+	case GET_PARAM_DW_MODE:
+	{
+		unsigned int* mode = out;
+		*mode = VDEC_DW_NO_AFBC;
+		break;
+	}
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);

@@ -20,6 +20,7 @@
 #ifndef _AML_VCODEC_DRV_H_
 #define _AML_VCODEC_DRV_H_
 
+#include <linux/kref.h>
 #include <linux/platform_device.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-ctrls.h>
@@ -27,6 +28,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
 #include <linux/amlogic/media/vfm/vframe.h>
+#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "aml_vcodec_util.h"
 
 #define AML_VCODEC_DRV_NAME	"aml_vcodec_drv"
@@ -66,6 +68,7 @@
 #define V4L_CAP_BUFF_INVALID		(0)
 #define V4L_CAP_BUFF_IN_M2M		(1)
 #define V4L_CAP_BUFF_IN_DEC		(2)
+#define V4L_CAP_BUFF_IN_VPP		(3)
 
 /* v4l reset mode */
 #define V4L_RESET_MODE_NORMAL		(1 << 0) /* reset vdec_input and decoder. */
@@ -79,6 +82,7 @@
 /* Instance is currently aborting */
 #define TRANS_ABORT		(1 << 2)
 
+#define CTX_BUF_TOTAL(ctx) (ctx->dpb_size + ctx->vpp_size)
 /**
  * enum aml_hw_reg_idx - AML hw register base index
  */
@@ -183,13 +187,13 @@ enum aml_q_type {
  * struct aml_q_data - Structure used to store information about queue
  */
 struct aml_q_data {
-	unsigned int	visible_width;
-	unsigned int	visible_height;
-	unsigned int	coded_width;
-	unsigned int	coded_height;
+	u32	visible_width;
+	u32	visible_height;
+	u32	coded_width;
+	u32	coded_height;
 	enum v4l2_field	field;
-	unsigned int	bytesperline[AML_VCODEC_MAX_PLANES];
-	unsigned int	sizeimage[AML_VCODEC_MAX_PLANES];
+	u32	bytesperline[AML_VCODEC_MAX_PLANES];
+	u32	sizeimage[AML_VCODEC_MAX_PLANES];
 	struct aml_video_fmt	*fmt;
 	bool resolution_changed;
 };
@@ -214,42 +218,19 @@ struct aml_q_data {
  * @force_intra: force/insert intra frame
  */
 struct aml_enc_params {
-	unsigned int	bitrate;
-	unsigned int	num_b_frame;
-	unsigned int	rc_frame;
-	unsigned int	rc_mb;
-	unsigned int	seq_hdr_mode;
-	unsigned int	intra_period;
-	unsigned int	gop_size;
-	unsigned int	framerate_num;
-	unsigned int	framerate_denom;
-	unsigned int	h264_max_qp;
-	unsigned int	h264_profile;
-	unsigned int	h264_level;
-	unsigned int	force_intra;
-};
-
-/**
- * struct aml_vcodec_pm - Power management data structure
- */
-struct aml_vcodec_pm {
-	struct clk	*vdec_bus_clk_src;
-	struct clk	*vencpll;
-
-	struct clk	*vcodecpll;
-	struct clk	*univpll_d2;
-	struct clk	*clk_cci400_sel;
-	struct clk	*vdecpll;
-	struct clk	*vdec_sel;
-	struct clk	*vencpll_d2;
-	struct clk	*venc_sel;
-	struct clk	*univpll1_d2;
-	struct clk	*venc_lt_sel;
-	struct device	*larbvdec;
-	struct device	*larbvenc;
-	struct device	*larbvenclt;
-	struct device	*dev;
-	struct aml_vcodec_dev	*amldev;
+	u32	bitrate;
+	u32	num_b_frame;
+	u32	rc_frame;
+	u32	rc_mb;
+	u32	seq_hdr_mode;
+	u32	intra_period;
+	u32	gop_size;
+	u32	framerate_num;
+	u32	framerate_denom;
+	u32	h264_max_qp;
+	u32	h264_profile;
+	u32	h264_level;
+	u32	force_intra;
 };
 
 /**
@@ -268,16 +249,28 @@ struct aml_vcodec_pm {
  *      buffer size will be aligned to 176x160.
  */
 struct vdec_pic_info {
-	unsigned int visible_width;
-	unsigned int visible_height;
-	unsigned int coded_width;
-	unsigned int coded_height;
-	unsigned int y_bs_sz;
-	unsigned int c_bs_sz;
-	unsigned int y_len_sz;
-	unsigned int c_len_sz;
+	u32 visible_width;
+	u32 visible_height;
+	u32 coded_width;
+	u32 coded_height;
+	u32 y_bs_sz;
+	u32 c_bs_sz;
+	u32 y_len_sz;
+	u32 c_len_sz;
 	int profile_idc;
 	int ref_frame_count;
+};
+
+/**
+ * struct vdec_comp_buf_info - compressed buffer info
+ * @max_size: max size needed for MMU Box in MB
+ * @header_size: contineous size for the compressed header
+ * @frame_buffer_size: SG page number to store the frame
+ */
+struct vdec_comp_buf_info {
+	u32 max_size;
+	u32 header_size;
+	u32 frame_buffer_size;
 };
 
 struct aml_vdec_cfg_infos {
@@ -287,6 +280,8 @@ struct aml_vdec_cfg_infos {
 	u32 ref_buf_margin;
 	u32 canvas_mem_mode;
 	u32 canvas_mem_endian;
+	u32 low_latency_mode;
+	u32 uvm_hook_type;
 };
 
 struct aml_vdec_hdr_infos {
@@ -357,6 +352,7 @@ struct v4l_buff_pool {
 	 */
 	u32 seq[V4L_CAP_BUFF_MAX];
 	u32 in, out;
+	u32 dec, vpp;
 };
 
 enum aml_thread_type {
@@ -367,25 +363,49 @@ enum aml_thread_type {
 typedef void (*aml_thread_func)(struct aml_vcodec_ctx *ctx);
 
 struct aml_vdec_thread {
-	struct list_head node;
-	spinlock_t lock;
-	struct semaphore sem;
-	struct task_struct *task;
-	enum aml_thread_type type;
-	void *priv;
-	int stop;
+	struct list_head	node;
+	spinlock_t		lock;
+	struct semaphore	sem;
+	struct task_struct	*task;
+	enum aml_thread_type	type;
+	void			*priv;
+	int			stop;
 
-	aml_thread_func func;
+	aml_thread_func		func;
 };
 
+/* struct internal_comp_buf - compressed buffer
+ * @index: index of this buf within (B)MMU BOX
+ * @ref: reference number of this buf
+ * @mmu_box: mmu_box of context
+ * @bmmu_box: bmmu_box of context
+ * @box_ref: box_ref of context
+ * @header_addr: header for compressed buffer
+ * @frame_buffer_size: SG buffer page number from
+ * @priv_data use for video composer
+ *  struct vdec_comp_buf_info
+ */
+struct internal_comp_buf {
+	u32		index;
+	u32		ref;
+	void		*mmu_box;
+	void		*bmmu_box;
+	struct kref	*box_ref;
+
+	ulong		header_addr;
+	u32		frame_buffer_size;
+	struct file_private_data priv_data;
+};
 /**
  * struct aml_vcodec_ctx - Context (instance) private data.
- *
  * @id: index of the context that this structure describes.
+ * @ctx_ref: for deferred free of this context.
  * @type: type of the instance - decoder or encoder.
  * @dev: pointer to the aml_vcodec_dev of the device.
  * @m2m_ctx: pointer to the v4l2_m2m_ctx of the context.
  * @ada_ctx: pointer to the aml_vdec_adapt of the context.
+ * @vpp: pointer to video post processor
+ * @vfm: pointer to video frame manager
  * @dec_if: hooked decoder driver interface.
  * @drv_handle: driver handle for specific decode instance
  * @fh: struct v4l2_fh.
@@ -403,6 +423,7 @@ struct aml_vdec_thread {
  * @cap_pool: capture buffers are remark in the pool.
  * @vdec_thread_list: vdec thread be used to capture.
  * @dpb_size: store dpb count after header parsing
+ * @vpp_size: store vpp buffer count after header parsing
  * @param_change: indicate encode parameter type
  * @param_sets_from_ucode: if true indicate ps from ucode.
  * @v4l_codec_dpb_ready: queue buffer number greater than dpb.
@@ -423,13 +444,21 @@ struct aml_vdec_thread {
  * @reset_flag: reset mode includes lightly and normal mode.
  * @decoded_frame_cnt: the capture buffer deque number to be count.
  * @buf_used_count: means that decode allocate how many buffs from v4l.
+ * @mmu_box: mmu_box of context.
+ * @bmmu_box: bmmu_box of context.
+ * @box_ref: box_ref of context.
+ * @comp_info: compress buffer information.
+ * @comp_bufs: compress buffer describe.
  */
 struct aml_vcodec_ctx {
 	int				id;
+	struct kref			ctx_ref;
 	enum aml_instance_type		type;
 	struct aml_vcodec_dev		*dev;
 	struct v4l2_m2m_ctx		*m2m_ctx;
 	struct aml_vdec_adapt		*ada_ctx;
+	struct aml_v4l2_vpp		*vpp;
+	struct vcodec_vfm_s 		*vfm;
 	const struct vdec_common_if	*dec_if;
 	ulong				drv_handle;
 	struct v4l2_fh			fh;
@@ -448,6 +477,7 @@ struct aml_vcodec_ctx {
 	struct list_head		vdec_thread_list;
 
 	int				dpb_size;
+	int				vpp_size;
 	bool				param_sets_from_ucode;
 	bool				v4l_codec_dpb_ready;
 	struct completion		comp;
@@ -459,6 +489,7 @@ struct aml_vcodec_ctx {
 	enum v4l2_quantization		quantization;
 	enum v4l2_xfer_func		xfer_func;
 	u32				cap_pix_fmt;
+	u32				output_pix_fmt;
 
 	bool				has_receive_eos;
 	bool				is_drm_mode;
@@ -468,81 +499,46 @@ struct aml_vcodec_ctx {
 	int				reset_flag;
 	int				decoded_frame_cnt;
 	int				buf_used_count;
+
+	/* compressed buffer support */
+	void				*bmmu_box;
+	void				*mmu_box;
+	struct kref			box_ref;
+	struct vdec_comp_buf_info	comp_info;
+	struct internal_comp_buf	*comp_bufs;
 };
 
 /**
- * struct aml_vcodec_dev - driver data
+ * struct aml_vcodec_dev - driver data.
  * @v4l2_dev: V4L2 device to register video devices for.
- * @vfd_dec: Video device for decoder
- * @vfd_enc: Video device for encoder.
- *
- * @m2m_dev_dec: m2m device for decoder
- * @m2m_dev_enc: m2m device for encoder.
- * @plat_dev: platform device
- * @vpu_plat_dev: aml vpu platform device
- * @alloc_ctx: VB2 allocator context
- *	       (for allocations without kernel mapping).
- * @ctx_list: list of struct aml_vcodec_ctx
- * @irqlock: protect data access by irq handler and work thread
- * @curr_ctx: The context that is waiting for codec hardware
- *
- * @reg_base: Mapped address of AML Vcodec registers.
- *
- * @id_counter: used to identify current opened instance
- *
- * @encode_workqueue: encode work queue
- *
- * @int_cond: used to identify interrupt condition happen
- * @int_type: used to identify what kind of interrupt condition happen
- * @dev_mutex: video_device lock
- * @queue: waitqueue for waiting for completion of device commands
- *
- * @dec_irq: decoder irq resource
- * @enc_irq: h264 encoder irq resource
- * @enc_lt_irq: vp8 encoder irq resource
- *
- * @dec_mutex: decoder hardware lock
- * @enc_mutex: encoder hardware lock.
- *
- * @pm: power management control
+ * @vfd_dec: Video device for decoder.
+ * @plat_dev: platform device.
+ * @m2m_dev_dec: m2m device for decoder.
+ * @curr_ctx: The context that is waiting for codec hardware.
+ * @id_counter: used to identify current opened instance.
  * @dec_capability: used to identify decode capability, ex: 4k
- * @enc_capability: used to identify encode capability
+ * @decode_workqueue: the worker used to output buffer schedule.
+ * @ctx_list: list of struct aml_vcodec_ctx.
+ * @irqlock: protect data access by irq handler and work thread.
+ * @dev_mutex: video_device lock.
+ * @dec_mutex: decoder hardware lock.
+ * @queue: waitqueue for waiting for completion of device commands.
  */
 struct aml_vcodec_dev {
-	struct v4l2_device v4l2_dev;
-	struct video_device *vfd_dec;
-	struct video_device *vfd_enc;
-	struct file *filp;
-
-	struct v4l2_m2m_dev *m2m_dev_dec;
-	struct v4l2_m2m_dev *m2m_dev_enc;
-	struct platform_device *plat_dev;
-	struct platform_device *vpu_plat_dev;//??
-	struct vb2_alloc_ctx *alloc_ctx;//??
-	struct list_head ctx_list;
-	spinlock_t irqlock;
-	struct aml_vcodec_ctx *curr_ctx;
-	void __iomem *reg_base[NUM_MAX_VCODEC_REG_BASE];
-
-	unsigned long id_counter;
-
-	struct workqueue_struct *decode_workqueue;
-	struct workqueue_struct *encode_workqueue;
-	int int_cond;
-	int int_type;
-	struct mutex dev_mutex;
-	wait_queue_head_t queue;
-
-	int dec_irq;
-	int enc_irq;
-	int enc_lt_irq;
-
-	struct mutex dec_mutex;
-	struct mutex enc_mutex;
-
-	struct aml_vcodec_pm pm;
-	unsigned int dec_capability;
-	unsigned int enc_capability;
+	struct v4l2_device		v4l2_dev;
+	struct video_device		*vfd_dec;
+	struct platform_device		*plat_dev;
+	struct v4l2_m2m_dev		*m2m_dev_dec;
+	struct aml_vcodec_ctx		*curr_ctx;
+	ulong				id_counter;
+	u32				dec_capability;
+	struct workqueue_struct		*decode_workqueue;
+	struct list_head		ctx_list;
+	struct file			*filp;
+	spinlock_t			irqlock;
+	struct mutex			dev_mutex;
+	struct mutex			dec_mutex;
+	wait_queue_head_t		queue;
 };
 
 static inline struct aml_vcodec_ctx *fh_to_ctx(struct v4l2_fh *fh)

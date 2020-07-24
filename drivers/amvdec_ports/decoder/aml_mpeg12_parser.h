@@ -2,8 +2,10 @@
 #define AML_MPEG12_PARSER_H
 
 #include "../aml_vcodec_drv.h"
-#include "../utils/pixfmt.h"
 #include "../utils/common.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
+#include "../utils/pixfmt.h"
+#endif
 
 /* Start codes. */
 #define SEQ_END_CODE            0x000001b7
@@ -70,6 +72,10 @@ struct mpeg12_param_sets {
 	struct MpvParseContext dec_ps;
 };
 
+#ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 int mpeg12_decode_extradata_ps(u8 *buf, int size, struct mpeg12_param_sets *ps);
+#else
+inline int mpeg12_decode_extradata_ps(u8 *buf, int size, struct mpeg12_param_sets *ps) { return -1; }
+#endif
 
 #endif
