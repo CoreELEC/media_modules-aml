@@ -3114,9 +3114,9 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 	if (!vdec_core_with_input(mask))
 		return;
 
-	if (secure && vdec_stream_based(vdec) && force_nosecure_even_drm)
+	if (vdec_stream_based(vdec) && !vdec_secure(vdec))
 	{
-		secure = 0;
+		tee_config_device_secure(DMC_DEV_ID_PARSER, 0);
 	}
 	if (input->target == VDEC_INPUT_TARGET_VLD)
 		tee_config_device_secure(DMC_DEV_ID_VDEC, secure);
