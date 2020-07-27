@@ -622,7 +622,7 @@ static int video_port_init(struct port_priv_s *priv,
 		pr_err("vformat not set\n");
 		return -EPERM;
 	}
-	if (vdec_dual(vdec) && vdec_secure(vdec)) {
+	if (vdec_dual(vdec) && vdec_secure(vdec) && (vdec->slave)) {
 		/*copy drm flags for slave dec.*/
 		vdec->slave->port_flag |= PORT_FLAG_DRM;
 	}
