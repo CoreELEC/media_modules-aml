@@ -10072,7 +10072,7 @@ pic_done:
 					}
 				}
 				/*Detects the first frame whether has an over decode error*/
-				if (vdec->master == NULL && vdec->slave == NULL &&
+				if ((!vdec_dual(vdec)) &&
 					hevc->empty_flag == 0) {
 					hevc->over_decode =
 						(READ_VREG(HEVC_SHIFT_STATUS) >> 15) & 0x1;
@@ -10264,7 +10264,7 @@ force_output:
 			}
 #endif
 			/*Detects frame whether has an over decode error*/
-			if (vdec->master == NULL && vdec->slave == NULL &&
+			if ((!vdec_dual(vdec)) &&
 					hevc->empty_flag == 0) {
 					hevc->over_decode =
 						(READ_VREG(HEVC_SHIFT_STATUS) >> 15) & 0x1;
@@ -12335,7 +12335,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			READ_VREG(HEVC_PARSER_LCU_START)
 			& 0xffffff;
 
-		if (vdec->master == NULL && vdec->slave == NULL &&
+		if ((!vdec_dual(vdec)) &&
 			hevc->empty_flag == 0) {
 			hevc->over_decode =
 				(READ_VREG(HEVC_SHIFT_STATUS) >> 15) & 0x1;
@@ -12911,7 +12911,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		init_pic_list_hw(hevc);
 
 	backup_decode_state(hevc);
-
 	start_process_time(hevc);
 	mod_timer(&hevc->timer, jiffies);
 	hevc->stat |= STAT_TIMER_ARM;
