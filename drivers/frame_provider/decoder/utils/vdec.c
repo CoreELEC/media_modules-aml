@@ -133,6 +133,9 @@ static DEFINE_SPINLOCK(vdec_spin_lock);
 #define PRINT_FRAME_INFO 1
 #define DISABLE_FRAME_INFO 2
 
+#define RESET7_REGISTER_LEVEL 0x1127
+#define P_RESETCTRL_RESET5_LEVEL 0x15
+
 static int frameinfo_flag = 0;
 static int v4lvideo_add_di = 1;
 static int max_di_instance = 2;
@@ -3659,6 +3662,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 {
 	unsigned long flags;
 	unsigned int mask = 0;
+	int cpu_type;
 
 	mask = 1 << 4; /*bit4: hevc*/
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
@@ -3684,11 +3688,16 @@ void hevc_reset_core(struct vdec_s *vdec)
 	if (vdec == NULL || input_frame_based(vdec))
 		WRITE_VREG(HEVC_STREAM_CONTROL, 0);
 
+
+	WRITE_VREG(HEVC_SAO_MMU_RESET_CTRL,
+			READ_VREG(HEVC_SAO_MMU_RESET_CTRL) | 1);
+
 		/*
 	 * 2: assist
 	 * 3: parser
 	 * 4: parser_state
 	 * 8: dblk
+	 * 10:wrrsp lmem
 	 * 11:mcpu
 	 * 12:ccpu
 	 * 13:ddr
@@ -3698,6 +3707,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 	 * 18:mpred
 	 * 19:sao
 	 * 24:hevc_afifo
+	 * 26:rst_mmu_n
 	 */
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2) &&
 		(vdec->format == VFORMAT_AVS2)) {
@@ -3707,12 +3717,45 @@ void hevc_reset_core(struct vdec_s *vdec)
 		(1<<17)|(1<<18)|(1<<19));
 	} else {
 		WRITE_VREG(DOS_SW_RESET3,
-			(1<<3)|(1<<4)|(1<<8)|(1<<11)|
+			(1<<3)|(1<<4)|(1<<8)|(1<<10)|(1<<11)|
 			(1<<12)|(1<<13)|(1<<14)|(1<<15)|
-			(1<<17)|(1<<18)|(1<<19)|(1<<24));
+			(1<<17)|(1<<18)|(1<<19)|(1<<24)|(1<<26));
 	}
 
 	WRITE_VREG(DOS_SW_RESET3, 0);
+	while (READ_VREG(HEVC_WRRSP_LMEM) & 0xfff)
+		;
+	WRITE_VREG(HEVC_SAO_MMU_RESET_CTRL,
+			READ_VREG(HEVC_SAO_MMU_RESET_CTRL) & (~1));
+	cpu_type = get_cpu_major_id();
+	if (cpu_type == AM_MESON_CPU_MAJOR_ID_TL1 &&
+			is_meson_rev_b())
+		cpu_type = AM_MESON_CPU_MAJOR_ID_G12B;
+	switch (cpu_type) {
+	case AM_MESON_CPU_MAJOR_ID_G12B:
+		WRITE_RESET_REG((RESET7_REGISTER_LEVEL),
+				READ_RESET_REG(RESET7_REGISTER_LEVEL) & (~((1<<13)|(1<<14))));
+		WRITE_RESET_REG((RESET7_REGISTER_LEVEL),
+				READ_RESET_REG((RESET7_REGISTER_LEVEL)) | ((1<<13)|(1<<14)));
+		break;
+	case AM_MESON_CPU_MAJOR_ID_G12A:
+	case AM_MESON_CPU_MAJOR_ID_SM1:
+	case AM_MESON_CPU_MAJOR_ID_TL1:
+	case AM_MESON_CPU_MAJOR_ID_TM2:
+		WRITE_RESET_REG((RESET7_REGISTER_LEVEL),
+				READ_RESET_REG(RESET7_REGISTER_LEVEL) & (~((1<<13))));
+		WRITE_RESET_REG((RESET7_REGISTER_LEVEL),
+				READ_RESET_REG((RESET7_REGISTER_LEVEL)) | ((1<<13)));
+		break;
+	case AM_MESON_CPU_MAJOR_ID_SC2:
+		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,
+				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) & (~((1<<1)|(1<<12)|(1<<13))));
+		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,
+				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) | ((1<<1)|(1<<12)|(1<<13)));
+		break;
+	default:
+		break;
+	}
 
 
 	spin_lock_irqsave(&vdec_spin_lock, flags);
