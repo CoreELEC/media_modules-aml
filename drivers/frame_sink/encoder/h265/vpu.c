@@ -17,7 +17,6 @@
  *
  */
 
-
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
@@ -62,7 +61,7 @@
 /* if you want to have clock gating scheme frame by frame */
 /* #define VPU_SUPPORT_CLOCK_CONTROL */
 
-#define VPU_SUPPORT_CLOCK_CONTROL
+//#define VPU_SUPPORT_CLOCK_CONTROL
 
 
 #define VPU_PLATFORM_DEVICE_NAME "HevcEnc"
@@ -233,13 +232,25 @@ void vpu_clk_unprepare(struct device *dev, struct vpu_clks *clks)
 s32 vpu_clk_config(u32 enable)
 {
 	if (enable) {
-		clk_enable(s_vpu_clks.wave_aclk);
-		clk_enable(s_vpu_clks.wave_bclk);
-		clk_enable(s_vpu_clks.wave_cclk);
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+			clk_enable(s_vpu_clks.wave_aclk);
+			clk_enable(s_vpu_clks.wave_bclk);
+			clk_enable(s_vpu_clks.wave_cclk);
+		} else {
+			if (get_cpu_type() >= MESON_CPU_MAJOR_ID_G12A)
+				HevcEnc_MoreClock_enable();
+			HevcEnc_clock_enable(clock_level);
+		}
 	} else {
-		clk_disable(s_vpu_clks.wave_cclk);
-		clk_disable(s_vpu_clks.wave_bclk);
-		clk_disable(s_vpu_clks.wave_aclk);
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+			clk_disable(s_vpu_clks.wave_cclk);
+			clk_disable(s_vpu_clks.wave_bclk);
+			clk_disable(s_vpu_clks.wave_aclk);
+		} else {
+			HevcEnc_clock_disable();
+			if (get_cpu_type() >= MESON_CPU_MAJOR_ID_G12A)
+				HevcEnc_MoreClock_disable();
+		}
 	}
 
 	return 0;
@@ -485,6 +496,10 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 			}
 			s_vpu_irq_requested = true;
 		}
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+		
+		} else
+		    amports_switch_gate("vdec", 1);
 
 		spin_lock_irqsave(&s_vpu_lock, flags);
 
@@ -1561,6 +1576,9 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 
 			udelay(10);
 			spin_unlock_irqrestore(&s_vpu_lock, flags);
+			if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+			} else
+			    amports_switch_gate("vdec", 0);
 		}
 	}
 	up(&s_vpu_sem);
@@ -1965,7 +1983,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 	struct resource res;
 	struct device_node *np, *child;
 
-	enc_pr(LOG_DEBUG, "vpu_probe, clock_a: %d, clock_b: %d, clock_c: %d\n",
+	enc_pr(LOG_DEBUG, "vpu_probe fuck, clock_a: %d, clock_b: %d, clock_c: %d\n",
 		wave_clocka, wave_clockb, wave_clockc);
 
 	s_vpu_major = 0;
@@ -2040,9 +2058,12 @@ static s32 vpu_probe(struct platform_device *pdev)
 	s_vpu_clk = clk;
 #endif
 
-	if (vpu_clk_prepare(&pdev->dev, &s_vpu_clks)) {
-		err = -ENOENT;
-		goto ERROR_PROVE_DEVICE;
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+		if (vpu_clk_prepare(&pdev->dev, &s_vpu_clks)) {
+			err = -ENOENT;
+			//goto ERROR_PROVE_DEVICE;
+			return err;
+		}
 	}
 
 #ifndef VPU_SUPPORT_CLOCK_CONTROL
@@ -2137,7 +2158,9 @@ ERROR_PROVE_DEVICE:
 #ifndef VPU_SUPPORT_CLOCK_CONTROL
 	vpu_clk_config(0);
 #endif
-	vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
+
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2)
+		vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
 
 	if (s_vpu_irq_requested == true) {
 		if (s_vpu_irq >= 0) {
@@ -2194,7 +2217,9 @@ static s32 vpu_remove(struct platform_device *pdev)
 #ifndef VPU_SUPPORT_CLOCK_CONTROL
 	vpu_clk_config(0);
 #endif
-	vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
+
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2)
+		vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
 	uninit_HevcEnc_device();
 	return 0;
 }
