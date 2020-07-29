@@ -196,6 +196,8 @@ static u32 print_lcu_error = 1;
 	bit 0, stream base resend data when decoding buf empty
 */
 static u32 data_resend_policy = 1;
+static u32 poc_num_margin = 1000;
+static u32 poc_error_limit = 30;
 
 static u32 dirty_time_threshold = 2000;
 static u32 dirty_count_threshold = 200;
@@ -451,10 +453,18 @@ static u32 max_decoding_time;
  *
  *bit 4: 0, set error_mark after reset/recover
  *	1, do not set error_mark after reset/recover
+ *
  *bit 5: 0, check total lcu for every picture
  *	1, do not check total lcu
+ *
  *bit 6: 0, do not check head error
  *	1, check head error
+ *
+ *bit 7: 0, allow to print over decode
+ *       1, NOT allow to print over decode
+ *
+ *bit 8: 0, use interlace policy
+ *       1, NOT use interlace policy
  *
  */
 
@@ -1778,6 +1788,7 @@ struct hevc_state_s {
 	u32 pre_parser_video_rp;
 	u32 pre_parser_video_wp;
 	bool dv_duallayer;
+	u32 poc_error_count;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -12356,6 +12367,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 	} else if (hevc->dec_result == DEC_RESULT_DONE) {
 		/* if (!hevc->ctx_valid)
 			hevc->ctx_valid = 1; */
+			int i;
 		decode_frame_count[hevc->index]++;
 #ifdef DETREFILL_ENABLE
 	if (hevc->is_swap &&
@@ -12431,6 +12443,35 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 
 		check_pic_decoded_error(hevc,
 			hevc->pic_decoded_lcu_idx);
+		if ((error_handle_policy & 0x100) == 0 && hevc->cur_pic) {
+			for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+				struct PIC_s *pic;
+				pic = hevc->m_PIC[i];
+				if (!pic || pic->index == -1)
+					continue;
+				if ((hevc->cur_pic->POC + poc_num_margin < pic->POC) && (pic->referenced == 0) &&
+					(pic->output_mark == 1) && (pic->output_ready == 0)) {
+					hevc->poc_error_count++;
+					break;
+				}
+			}
+			if (i == MAX_REF_PIC_NUM)
+				hevc->poc_error_count = 0;
+			if (hevc->poc_error_count >= poc_error_limit) {
+				for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+					struct PIC_s *pic;
+					pic = hevc->m_PIC[i];
+					if (!pic || pic->index == -1)
+						continue;
+					if ((hevc->cur_pic->POC + poc_num_margin < pic->POC) && (pic->referenced == 0) &&
+						(pic->output_mark == 1) && (pic->output_ready == 0)) {
+						pic->output_mark = 0;
+						hevc_print(hevc, 0, "DPB poc error, remove error frame\n");
+					}
+				}
+			}
+		}
+
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 #if 1
 		if (vdec->slave) {
@@ -14062,6 +14103,14 @@ MODULE_PARM_DESC(print_lcu_error,
 module_param(data_resend_policy, uint, 0664);
 MODULE_PARM_DESC(data_resend_policy,
 	"\n h265 data_resend_policy\n");
+
+module_param(poc_num_margin, uint, 0664);
+MODULE_PARM_DESC(poc_num_margin,
+	"\n h265 poc_num_margin\n");
+
+module_param(poc_error_limit, uint, 0664);
+MODULE_PARM_DESC(poc_error_limit,
+	"\n h265 poc_error_limit\n");
 
 module_param_array(decode_frame_count, uint,
 	&max_decode_instance_num, 0664);
