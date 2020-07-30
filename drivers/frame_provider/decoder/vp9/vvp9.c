@@ -161,6 +161,8 @@ static u32 decode_timeout_val = 200;
 static int start_decode_buf_level = 0x8000;
 static u32 work_buf_size;
 
+static u32 force_pts_unstable;
+
 static u32 mv_buf_margin;
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
@@ -960,6 +962,7 @@ struct BuffInfo_s {
 #define DEC_RESULT_GET_DATA_RETRY   8
 #define DEC_RESULT_EOS              9
 #define DEC_RESULT_FORCE_EXIT       10
+#define DEC_RESULT_NEED_MORE_BUFFER	11
 #define DEC_V4L2_CONTINUE_DECODING  18
 
 #define DEC_S1_RESULT_NONE          0
@@ -1215,6 +1218,10 @@ struct VP9Decoder_s {
 	int sidebind_channel_id;
 	bool enable_fence;
 	int fence_usage;
+	u32 frame_mode_pts_save[FRAME_BUFFERS];
+	u64 frame_mode_pts64_save[FRAME_BUFFERS];
+	int run_ready_min_buf_num;
+	int one_package_frame_cnt;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -7150,6 +7157,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 	u32 pts_save;
 	u64 pts_us64_save;
 	u32 frame_size = 0;
+	int i = 0;
 
 
 	if (debug & VP9_DEBUG_BUFMGR)
@@ -7171,6 +7179,26 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 
 	display_frame_count[pbi->index]++;
 	if (vf) {
+		if (!force_pts_unstable) {
+			if ((pic_config->pts == 0) || (pic_config->pts <= pbi->last_pts)) {
+					for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
+						if ((pbi->last_pts == pbi->frame_mode_pts_save[i]) ||
+								(pbi->last_pts_us64 == pbi->frame_mode_pts64_save[i])) {
+								pic_config->pts = pbi->frame_mode_pts_save[i - 1];
+								pic_config->pts64 = pbi->frame_mode_pts64_save[i - 1];
+								break;
+						}
+				}
+				if ((i == 0) || (pic_config->pts <= pbi->last_pts)) {
+						vp9_print(pbi, VP9_DEBUG_OUT_PTS,
+							"no found pts %d, set 0. %d, %d\n",
+								i, pic_config->pts, pbi->last_pts);
+						pic_config->pts = 0;
+						pic_config->pts64 = 0;
+				}
+			}
+		}
+
 		if (pbi->is_used_v4l) {
 			vf->v4l_mem_handle
 				= pbi->m_BUF[pic_config->BUF_index].v4l_ref_buf_addr;
@@ -8460,6 +8488,16 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+	if (pbi->m_ins_flag &&
+			!get_free_buf_count(pbi)) {
+		pbi->run_ready_min_buf_num = pbi->one_package_frame_cnt + 1;
+		pr_err("need buffer, one package frame count = %d\n", pbi->one_package_frame_cnt + 1);
+		pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+		vdec_schedule_work(&pbi->work);
+		return IRQ_HANDLED;
+	}
+
+	pbi->one_package_frame_cnt++;
 
 #ifdef MULTI_INSTANCE_SUPPORT
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
@@ -9794,6 +9832,35 @@ static void vp9_work(struct work_struct *work)
 		return;
 	}
 
+	if (pbi->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
+		reset_process_time(pbi);
+		if (!get_free_buf_count(pbi)) {
+			pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+			vdec_schedule_work(&pbi->work);
+		} else {
+			int i;
+
+			if (pbi->mmu_enable)
+				vp9_recycle_mmu_buf_tail(pbi);
+
+			if (pbi->frame_count > 0)
+				vp9_bufmgr_postproc(pbi);
+
+			for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
+				int ii;
+				for (ii = 0; ii < 4; ii++)
+					pbi->vp9_param.l.data[i + ii] =
+						pbi->rpm_ptr[i + 3 - ii];
+			}
+			continue_decoding(pbi);
+			pbi->postproc_done = 0;
+			pbi->process_busy = 0;
+
+			start_process_time(pbi);
+		}
+		return;
+	}
+
 	if (((pbi->dec_result == DEC_RESULT_GET_DATA) ||
 		(pbi->dec_result == DEC_RESULT_GET_DATA_RETRY))
 		&& (hw_to_vdec(pbi)->next_status !=
@@ -9816,7 +9883,7 @@ static void vp9_work(struct work_struct *work)
 		}
 
 		if (get_free_buf_count(pbi) >=
-			run_ready_min_buf_num) {
+			pbi->run_ready_min_buf_num) {
 			int r;
 			int decode_size;
 			r = vdec_prepare_input(vdec, &pbi->chunk);
@@ -10011,7 +10078,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		if (mask & CORE_MASK_HEVC_BACK) {
 			if (s2_buf_available(pbi) &&
 				(get_free_buf_count(pbi) >=
-				run_ready_min_buf_num)) {
+				pbi->run_ready_min_buf_num)) {
 				ret |= CORE_MASK_HEVC_BACK;
 				pbi->back_not_run_ready = 0;
 			} else
@@ -10023,7 +10090,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 #endif
 		}
 	} else if (get_free_buf_count(pbi) >=
-		run_ready_min_buf_num)
+		pbi->run_ready_min_buf_num)
 		ret = CORE_MASK_VDEC_1 | CORE_MASK_HEVC
 			| CORE_MASK_HEVC_FRONT
 			| CORE_MASK_HEVC_BACK;
@@ -10051,7 +10118,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 #else
 	if (get_free_buf_count(pbi) >=
-		run_ready_min_buf_num) {
+		pbi->run_ready_min_buf_num) {
 		if (vdec->parallel_dec == 1)
 			ret = CORE_MASK_HEVC;
 		else
@@ -10066,7 +10133,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			if (pbi->v4l_params_parsed) {
 				if ((ctx->cap_pool.in < pbi->used_buf_num) &&
 				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
-				run_ready_min_buf_num)
+				pbi->run_ready_min_buf_num)
 					ret = 0;
 			} else {
 				if ((pbi->res_ch_flag == 1) &&
@@ -10076,7 +10143,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			}
 		} else if (ctx->cap_pool.in < ctx->dpb_size) {
 			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
-				run_ready_min_buf_num)
+				pbi->run_ready_min_buf_num)
 				ret = 0;
 		}
 	}
@@ -10091,6 +10158,22 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		__func__, mask, ret);
 	return ret;
 #endif
+}
+
+static void vp9_frame_mode_pts_save(struct VP9Decoder_s *pbi)
+{
+	int i = 0;
+
+	if (pbi->chunk == NULL)
+	       return;
+	vp9_print(pbi, VP9_DEBUG_OUT_PTS,
+	       "run front: pts %d, pts64 %lld\n", pbi->chunk->pts, pbi->chunk->pts64);
+	for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
+	       pbi->frame_mode_pts_save[i] = pbi->frame_mode_pts_save[i - 1];
+	       pbi->frame_mode_pts64_save[i] = pbi->frame_mode_pts64_save[i - 1];
+	}
+	pbi->frame_mode_pts_save[0] = pbi->chunk->pts;
+	pbi->frame_mode_pts64_save[0] = pbi->chunk->pts64;
 }
 
 static void run_front(struct vdec_s *vdec)
@@ -10128,6 +10211,8 @@ static void run_front(struct vdec_s *vdec)
 	input_empty[pbi->index] = 0;
 	pbi->dec_result = DEC_RESULT_NONE;
 	pbi->start_shift_bytes = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+
+	vp9_frame_mode_pts_save(pbi);
 
 	if (debug & PRINT_FLAG_VDEC_STATUS) {
 		int ii;
@@ -10375,6 +10460,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	run_count[pbi->index]++;
 	pbi->vdec_cb_arg = arg;
 	pbi->vdec_cb = callback;
+	pbi->one_package_frame_cnt = 0;
 #ifdef SUPPORT_FB_DECODING
 	if ((mask & CORE_MASK_HEVC) ||
 		(mask & CORE_MASK_HEVC_FRONT))
@@ -10509,7 +10595,7 @@ static void vp9_dump_state(struct vdec_s *vdec)
 	pbi->vf_get_count,
 	pbi->vf_put_count,
 	get_free_buf_count(pbi),
-	run_ready_min_buf_num
+	pbi->run_ready_min_buf_num
 	);
 
 	dump_pic_list(pbi);
@@ -10810,7 +10896,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	if (!pbi->is_used_v4l) {
 		pbi->mem_map_mode = mem_map_mode;
 	}
-
+	pbi->run_ready_min_buf_num = run_ready_min_buf_num;
 	if (is_oversize(pbi->max_pic_w, pbi->max_pic_h)) {
 		pr_err("over size: %dx%d, probe failed\n",
 			pbi->max_pic_w, pbi->max_pic_h);
@@ -11285,6 +11371,9 @@ MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
+
+module_param(force_pts_unstable, uint, 0664);
+MODULE_PARM_DESC(force_pts_unstable, "\n force_pts_unstable\n");
 
 module_init(amvdec_vp9_driver_init_module);
 module_exit(amvdec_vp9_driver_remove_module);
