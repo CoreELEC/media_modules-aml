@@ -4914,7 +4914,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			mb_height, crop_right,
 			hw->frame_width, mb_width);
 
-		if (hw->frame_height == 1088)
+		if (hw->frame_height == 1088 && (crop_right != 0 || crop_bottom != 0))
 			hw->frame_height = 1080;
 #endif
 		if (!hw->mmu_enable) {
