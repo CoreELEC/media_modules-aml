@@ -4496,11 +4496,13 @@ static s32 amvenc_avc_probe(struct platform_device *pdev)
 #endif
 	}
 
-	if (hcodec_clk_prepare(&pdev->dev, &s_hcodec_clks)) {
-		//err = -ENOENT;
-		enc_pr(LOG_ERROR, "[%s:%d] probe hcodec enc failed\n", __FUNCTION__, __LINE__);
-		//goto ERROR_PROBE_DEVICE;
-		return -EINVAL;
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+		if (hcodec_clk_prepare(&pdev->dev, &s_hcodec_clks)) {
+			//err = -ENOENT;
+			enc_pr(LOG_ERROR, "[%s:%d] probe hcodec enc failed\n", __FUNCTION__, __LINE__);
+			//goto ERROR_PROBE_DEVICE;
+			return -EINVAL;
+		}
 	}
 
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
