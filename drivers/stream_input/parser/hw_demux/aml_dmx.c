@@ -2557,7 +2557,10 @@ end_alloc:
 	DMX_WRITE_REG(dmx->id, SB_START, addr >> 12);
 	DMX_WRITE_REG(dmx->id, SB_LAST_ADDR, (dmx->sub_buf_len >> 3) - 1);
 #endif
-	pr_inf("sub buff: (%d) %lx %x\n", dmx->id, addr, dmx->sub_buf_len);
+	if (dmx->sub_pages != dvb->sub_pages) {
+		pr_dbg("sub buff: (%d) %lx %x\n",
+			dmx->id, addr, dmx->sub_buf_len);
+	}
 #endif
 	return 0;
 }
@@ -2579,7 +2582,7 @@ static int dmx_alloc_sub_buffer_shared(struct aml_dvb *dvb)
 	    dma_map_single(dvb->dev, (void *)dvb->sub_pages,
 					dvb->sub_buf_len, DMA_FROM_DEVICE);
 
-	pr_inf("sub buff shared: %lx %x\n",
+	pr_dbg("sub buff shared: %lx %x\n",
 		(unsigned long)virt_to_phys((void *)dvb->sub_pages),
 		dvb->sub_buf_len);
 #endif
@@ -2619,7 +2622,10 @@ end_alloc:
 	DMX_WRITE_REG(dmx->id, OB_START, addr >> 12);
 	DMX_WRITE_REG(dmx->id, OB_LAST_ADDR, (dmx->pes_buf_len >> 3) - 1);
 
-	pr_inf("pes buff: (%d) %lx %x\n", dmx->id, addr, dmx->pes_buf_len);
+	if (dmx->pes_pages != dvb->pes_pages) {
+		pr_dbg("pes buff: (%d) %lx %x\n",
+			dmx->id, addr, dmx->pes_buf_len);
+	}
 	return 0;
 }
 #ifdef PES_BUF_SHARED
@@ -2639,7 +2645,7 @@ static int dmx_alloc_pes_buffer_shared(struct aml_dvb *dvb)
 	    dma_map_single(dvb->dev, (void *)dvb->pes_pages,
 					dvb->pes_buf_len, DMA_FROM_DEVICE);
 
-	pr_inf("pes buff shared: %lx %x\n",
+	pr_dbg("pes buff shared: %lx %x\n",
 		(unsigned long)virt_to_phys((void *)dvb->pes_pages),
 		dvb->pes_buf_len);
 	return 0;
@@ -2673,7 +2679,7 @@ static int asyncfifo_set_buffer(struct aml_asyncfifo *afifo,
 	afifo->buf_toggle = 0;
 	afifo->buf_read   = 0;
 	afifo->buf_len = dmx_get_afifo_size(afifo);
-	pr_error("++++async fifo %d buf %lu buf size %d, flush size %d, secure_enable %d, blk.addr %u\n",
+	pr_dbg("async fifo %d buf %lu buf size %d, flush size %d, secure_enable %d, blk.addr %u\n",
 			afifo->id, buf, afifo->buf_len, afifo->flush_size, afifo->secure_enable, afifo->blk.addr);
 
 	if ((afifo->flush_size <= 0)
