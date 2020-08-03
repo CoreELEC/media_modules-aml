@@ -358,6 +358,7 @@ struct v4l_buff_pool {
 	 */
 	u32 seq[V4L_CAP_BUFF_MAX];
 	u32 in, out;
+	u32 dec, vpp;
 };
 
 enum aml_thread_type {

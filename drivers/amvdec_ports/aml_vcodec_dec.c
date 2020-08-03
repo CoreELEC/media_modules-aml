@@ -409,20 +409,19 @@ int get_fb_from_queue(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer **out_
 	dst_vb2_v4l2 = container_of(dst_buf, struct vb2_v4l2_buffer, vb2_buf);
 	dst_buf_info = container_of(dst_vb2_v4l2, struct aml_video_dec_buf, vb);
 
+	pfb	= &dst_buf_info->frame_buffer;
+	pfb->buf_idx	= dst_buf->index;
+	pfb->num_planes	= dst_buf->num_planes;
+	pfb->status		= FB_ST_NORMAL;
 	if (dst_buf->num_planes == 1) {
-		pfb			= &dst_buf_info->frame_buffer;
 		pfb->m.mem[0].dma_addr	= vb2_dma_contig_plane_dma_addr(dst_buf, 0);
 		pfb->m.mem[0].addr	= dma_to_phys(v4l_get_dev_from_codec_mm(), pfb->m.mem[0].dma_addr);
 		pfb->m.mem[0].size	= ctx->picinfo.y_len_sz + ctx->picinfo.c_len_sz;
 		pfb->m.mem[0].offset	= ctx->picinfo.y_len_sz;
-		pfb->num_planes		= dst_buf->num_planes;
-		pfb->status		= FB_ST_NORMAL;
-
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"idx: %u, 1 plane, y:(0x%lx, %d)\n", dst_buf->index,
 			pfb->m.mem[0].addr, pfb->m.mem[0].size);
 	} else if (dst_buf->num_planes == 2) {
-		pfb			= &dst_buf_info->frame_buffer;
 		pfb->m.mem[0].dma_addr	= vb2_dma_contig_plane_dma_addr(dst_buf, 0);
 		pfb->m.mem[0].addr	= dma_to_phys(v4l_get_dev_from_codec_mm(), pfb->m.mem[0].dma_addr);
 		pfb->m.mem[0].size	= ctx->picinfo.y_len_sz;
@@ -432,15 +431,11 @@ int get_fb_from_queue(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer **out_
 		pfb->m.mem[1].addr	= dma_to_phys(v4l_get_dev_from_codec_mm(), pfb->m.mem[1].dma_addr);
 		pfb->m.mem[1].size	= ctx->picinfo.c_len_sz;
 		pfb->m.mem[1].offset	= ctx->picinfo.c_len_sz >> 1;
-		pfb->num_planes		= dst_buf->num_planes;
-		pfb->status		= FB_ST_NORMAL;
-
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"idx: %u, 2 planes, y:(0x%lx, %d), c:(0x%lx, %d)\n", dst_buf->index,
 			pfb->m.mem[0].addr, pfb->m.mem[0].size,
 			pfb->m.mem[1].addr, pfb->m.mem[1].size);
 	} else {
-		pfb			= &dst_buf_info->frame_buffer;
 		pfb->m.mem[0].dma_addr	= vb2_dma_contig_plane_dma_addr(dst_buf, 0);
 		pfb->m.mem[0].addr	= dma_to_phys(v4l_get_dev_from_codec_mm(), pfb->m.mem[0].dma_addr);
 		pfb->m.mem[0].size	= ctx->picinfo.y_len_sz;
@@ -455,8 +450,6 @@ int get_fb_from_queue(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer **out_
 		pfb->m.mem[2].addr	= dma_to_phys(v4l_get_dev_from_codec_mm(), pfb->m.mem[3].dma_addr);
 		pfb->m.mem[2].size	= ctx->picinfo.c_len_sz >> 1;
 		pfb->m.mem[2].offset	= 0;
-		pfb->num_planes		= dst_buf->num_planes;
-		pfb->status		= FB_ST_NORMAL;
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"idx: %u, 3 planes, y:(0x%lx, %d), u:(0x%lx, %d), v:(0x%lx, %d)\n",
@@ -473,6 +466,7 @@ int get_fb_from_queue(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer **out_
 
 	info = container_of(pfb, struct aml_video_dec_buf, frame_buffer);
 
+	ctx->cap_pool.dec++;
 	ctx->cap_pool.seq[ctx->cap_pool.out++] =
 		(V4L_CAP_BUFF_IN_DEC << 16 | dst_buf->index);
 	v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
@@ -2380,6 +2374,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 	ctx->buf_used_count = 0;
 	ctx->cap_pool.in = 0;
 	ctx->cap_pool.out = 0;
+	ctx->cap_pool.dec = 0;
+	ctx->cap_pool.vpp = 0;
 }
 
 static void m2mops_vdec_device_run(void *priv)

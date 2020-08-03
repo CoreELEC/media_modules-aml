@@ -896,6 +896,7 @@ struct vdec_h264_hw_s {
 	int sidebind_channel_id;
 	u32 low_latency_mode;
 	int ip_field_error_count;
+	int buffer_wrap[BUFSPEC_POOL_SIZE];
 };
 
 static u32 again_threshold;
@@ -1688,6 +1689,7 @@ static void buf_spec_init(struct vdec_h264_hw_s *hw, bool buffer_reset_flag)
 		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
 			hw->buffer_spec[i].used = -1;
 			hw->buffer_spec[i].canvas_pos = -1;
+			hw->buffer_wrap[i] = -1;
 		}
 	}
 
@@ -1909,8 +1911,9 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 
 	bs->cma_alloc_addr = (unsigned long)fb;
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
-		"[%d] %s(), cma alloc addr: 0x%x\n",
-		ctx->id, __func__, bs->cma_alloc_addr);
+		"[%d] %s(), cma alloc addr: 0x%x, out %d dec %d\n",
+		ctx->id, __func__, bs->cma_alloc_addr,
+		ctx->cap_pool.out, ctx->cap_pool.dec);
 
 	if (fb->num_planes == 1) {
 		y_addr = fb->m.mem[0].addr;
@@ -2121,34 +2124,68 @@ static void config_decode_canvas_ex(struct vdec_h264_hw_s *hw, int i)
 		7);
 }
 
+
+static int v4l_get_free_buffer_spec(struct vdec_h264_hw_s *hw)
+{
+	int i;
+
+	for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
+		if (hw->buffer_spec[i].cma_alloc_addr == 0)
+			return i;
+	}
+
+	return -1;
+}
+
+static int v4l_find_buffer_spec_idx(struct vdec_h264_hw_s *hw, unsigned int v4l_indx)
+{
+	int i;
+
+	for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
+		if (hw->buffer_wrap[i] == v4l_indx)
+			return i;
+	}
+	return -1;
+}
+
 static int v4l_get_free_buf_idx(struct vdec_s *vdec)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
 	struct aml_vcodec_ctx * v4l = hw->v4l2_ctx;
 	struct v4l_buff_pool *pool = &v4l->cap_pool;
 	struct buffer_spec_s *pic = NULL;
-	int i, idx = INVALID_IDX;
+	int i, rt, idx = INVALID_IDX;
 	ulong flags;
+	u32 state, index;
 
 	spin_lock_irqsave(&hw->bufspec_lock, flags);
 	for (i = 0; i < pool->in; ++i) {
-		u32 state = (pool->seq[i] >> 16);
-		u32 index = (pool->seq[i] & 0xffff);
+		state = (pool->seq[i] >> 16);
+		index = (pool->seq[i] & 0xffff);
 
 		switch (state) {
 		case V4L_CAP_BUFF_IN_DEC:
-			pic = &hw->buffer_spec[i];
-			if ((pic->vf_ref == 0) &&
-				(pic->used == 0) &&
-				pic->cma_alloc_addr) {
-				idx = i;
+			rt = v4l_find_buffer_spec_idx(hw, index);
+			if (rt >= 0) {
+				pic = &hw->buffer_spec[rt];
+				if ((pic->vf_ref == 0) &&
+					(pic->used == 0) &&
+					pic->cma_alloc_addr) {
+					idx = rt;
+				}
 			}
 			break;
 		case V4L_CAP_BUFF_IN_M2M:
-			pic = &hw->buffer_spec[index];
-			if (!alloc_one_buf_spec_from_queue(hw, index)) {
-				config_decode_canvas(hw, index);
-				idx = index;
+			rt = v4l_get_free_buffer_spec(hw);
+			if (rt >= 0) {
+				pic = &hw->buffer_spec[rt];
+				if (!alloc_one_buf_spec_from_queue(hw, rt)) {
+					struct vdec_v4l2_buffer *fb;
+					config_decode_canvas(hw, rt);
+					fb = (struct vdec_v4l2_buffer *)pic->cma_alloc_addr;
+					hw->buffer_wrap[rt] = fb->buf_idx;
+					idx = rt;
+				}
 			}
 			break;
 		default:
@@ -2165,6 +2202,10 @@ static int v4l_get_free_buf_idx(struct vdec_s *vdec)
 
 	if (idx < 0) {
 		dpb_print(DECODE_ID(hw), 0, "%s fail\n", __func__);
+		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
+			dpb_print(DECODE_ID(hw), 0, "%s, %d\n",
+				__func__, hw->buffer_wrap[i]);
+		}
 		vmh264_dump_state(vdec);
 	}
 
@@ -2195,6 +2236,7 @@ int get_free_buf_idx(struct vdec_s *vdec)
 			hw->buffer_spec[i].used = 1;
 			hw->start_search_pos = i+1;
 			index = i;
+			hw->buffer_wrap[i] = index;
 			break;
 		}
 	}
@@ -2210,6 +2252,7 @@ int get_free_buf_idx(struct vdec_s *vdec)
 				hw->buffer_spec[i].used = 1;
 				hw->start_search_pos = i+1;
 				index = i;
+				hw->buffer_wrap[i] = index;
 				break;
 			}
 		}
@@ -2476,7 +2519,7 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 			}
 		}
 
-		if (v4l->cap_pool.out < hw->dpb.mDPB.size &&
+		if (v4l->cap_pool.dec < hw->dpb.mDPB.size &&
 			v4l2_m2m_num_dst_bufs_ready(v4l->m2m_ctx)
 			>= run_ready_min_buf_num)
 			return 1;
@@ -2573,7 +2616,9 @@ static int check_force_interlace(struct vdec_h264_hw_s *hw,
 			 && (hw->frame_dur == 3840)) {
 		bForceInterlace = 1;
 	}
-
+	if (hw->is_used_v4l && (bForceInterlace == 0)) {
+		bForceInterlace = (frame->frame->mb_aff_frame_flag)?1:0;
+	}
 	return bForceInterlace;
 }
 
@@ -6795,9 +6840,10 @@ static void dump_bufspec(struct vdec_h264_hw_s *hw,
 		if (hw->buffer_spec[i].used == -1)
 			continue;
 		dpb_print(DECODE_ID(hw), 0,
-			"bufspec (%d): used %d adr 0x%x canvas(%d) vf_ref(%d) ",
+			"bufspec (%d): used %d adr 0x%x(%lx) canvas(%d) vf_ref(%d) ",
 			i, hw->buffer_spec[i].used,
 			hw->buffer_spec[i].buf_adr,
+			hw->buffer_spec[i].cma_alloc_addr,
 			hw->buffer_spec[i].canvas_pos,
 			hw->buffer_spec[i].vf_ref
 			);

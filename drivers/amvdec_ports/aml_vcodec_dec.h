@@ -58,6 +58,7 @@ struct vdec_v4l2_buffer {
 	} m;
 	ulong	vf_handle;
 	u32	status;
+	u32	buf_idx;
 };
 
 
