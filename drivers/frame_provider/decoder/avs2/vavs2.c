@@ -4226,6 +4226,17 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 
 static int vavs2_event_cb(int type, void *data, void *private_data)
 {
+	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)private_data;
+
+	if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
+		struct provider_state_req_s *req =
+			(struct provider_state_req_s *)data;
+		if (req->req_type == REQ_STATE_SECURE)
+			req->req_result[0] = vdec_secure(hw_to_vdec(dec));
+		else
+			req->req_result[0] = 0xffffffff;
+	}
+
 	return 0;
 }
 
