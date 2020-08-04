@@ -2359,8 +2359,20 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		(const struct vframe_s *)vf);
 }
 
-static int vmpeg_event_cb(int type, void *data, void *private_data)
+
+static int vmpeg_event_cb(int type, void *data, void *op_arg)
 {
+	struct vdec_s *vdec = op_arg;
+
+	if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
+		struct provider_state_req_s *req =
+			(struct provider_state_req_s *)data;
+		if (req->req_type == REQ_STATE_SECURE)
+			req->req_result[0] = vdec_secure(vdec);
+		else
+			req->req_result[0] = 0xffffffff;
+	}
+
 	return 0;
 }
 

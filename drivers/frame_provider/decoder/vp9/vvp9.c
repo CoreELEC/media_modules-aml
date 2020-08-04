@@ -6959,6 +6959,8 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 
 static int vvp9_event_cb(int type, void *data, void *private_data)
 {
+	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)private_data;
+
 	if (type & VFRAME_EVENT_RECEIVER_RESET) {
 #if 0
 		unsigned long flags;
@@ -6976,6 +6978,13 @@ static int vvp9_event_cb(int type, void *data, void *private_data)
 #endif
 		amhevc_start();
 #endif
+	} else if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
+		struct provider_state_req_s *req =
+			(struct provider_state_req_s *)data;
+		if (req->req_type == REQ_STATE_SECURE)
+			req->req_result[0] = vdec_secure(hw_to_vdec(pbi));
+		else
+			req->req_result[0] = 0xffffffff;
 	}
 
 	return 0;

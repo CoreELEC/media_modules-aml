@@ -8827,17 +8827,26 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 			hevc_print(hevc, 0,
 			"%s(type 0x%x vf index 0x%x)=>size 0x%x\n",
 			__func__, type, index, req->aux_size);
+	}
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-	} else if (type & VFRAME_EVENT_RECEIVER_DOLBY_BYPASS_EL) {
+	else if (type & VFRAME_EVENT_RECEIVER_DOLBY_BYPASS_EL) {
 		if ((force_bypass_dvenl & 0x80000000) == 0) {
 			hevc_print(hevc, 0,
 			"%s: VFRAME_EVENT_RECEIVER_DOLBY_BYPASS_EL\n",
 			__func__);
 			hevc->bypass_dvenl_enable = 1;
 		}
-
-#endif
 	}
+#endif
+	else if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
+		struct provider_state_req_s *req =
+			(struct provider_state_req_s *)data;
+		if (req->req_type == REQ_STATE_SECURE)
+			req->req_result[0] = vdec_secure(vdec);
+		else
+			req->req_result[0] = 0xffffffff;
+	}
+
 	return 0;
 }
 
