@@ -191,6 +191,7 @@ static unsigned int decode_timeout_val = 200;
 
 static u32 run_ready_min_buf_num = 2;
 static u32 disable_ip_mode;
+static u32 print_lcu_error = 1;
 /*data_resend_policy:
 	bit 0, stream base resend data when decoding buf empty
 */
@@ -6394,10 +6395,11 @@ static void check_pic_decoded_error_pre(struct hevc_state_s *hevc,
 				hevc->cur_pic->error_mark = 1;
 		}
 		if (hevc->cur_pic->error_mark) {
-			hevc_print(hevc, 0,
-				"cur lcu idx = %d, (total %d), set error_mark\n",
-				current_lcu_idx,
-				hevc->lcu_x_num_pre*hevc->lcu_y_num_pre);
+			if (print_lcu_error)
+				hevc_print(hevc, 0,
+					"cur lcu idx = %d, (total %d), set error_mark\n",
+					current_lcu_idx,
+					hevc->lcu_x_num_pre*hevc->lcu_y_num_pre);
 			if (is_log_enable(hevc))
 				add_log(hevc,
 					"cur lcu idx = %d, (total %d), set error_mark",
@@ -6447,10 +6449,11 @@ static void check_pic_decoded_error(struct hevc_state_s *hevc,
 			hevc->cur_pic->error_mark = 1;
 
 		if (hevc->cur_pic->error_mark) {
-			hevc_print(hevc, 0,
-				"cur lcu idx = %d, (total %d), set error_mark\n",
-				current_lcu_idx,
-				hevc->lcu_x_num*hevc->lcu_y_num);
+			if (print_lcu_error)
+				hevc_print(hevc, 0,
+					"cur lcu idx = %d, (total %d), set error_mark\n",
+					current_lcu_idx,
+					hevc->lcu_x_num*hevc->lcu_y_num);
 			if (((hevc->i_only & 0x4)  == 0) && hevc->cur_pic->POC && ( hevc->cur_pic->slice_type == 0)
 					&& ((hevc->cur_pic->POC + MAX_BUF_NUM) < hevc->iPrevPOC)) {
 					hevc_print(hevc, 0,
@@ -14051,6 +14054,10 @@ MODULE_PARM_DESC(start_decode_buf_level,
 module_param(decode_timeout_val, uint, 0664);
 MODULE_PARM_DESC(decode_timeout_val,
 	"\n h265 decode_timeout_val\n");
+
+module_param(print_lcu_error, uint, 0664);
+MODULE_PARM_DESC(print_lcu_error,
+	"\n h265 print_lcu_error\n");
 
 module_param(data_resend_policy, uint, 0664);
 MODULE_PARM_DESC(data_resend_policy,
