@@ -2024,12 +2024,17 @@ static int dsc_set_csa_key(struct aml_dsc_channel *ch, int flags,
 #define KEY_WR_DES_A    0
 
 #define IDSA_MODE_BIT	31
-#define SM4_MODE		30
+#define SM4_MODE	30
+#define DES2_KEY_ENDIAN 25
+#define DES2_IN_ENDIAN  21
+#define DES2_CFG	6
+#define DES2_EN		5
 #define CNTL_ENABLE     3
 #define AES_CBC_DISABLE 2
 #define AES_EN          1
 #define DES_EN          0
 
+#define AES_IV_ENDIAN	28
 #define AES_MSG_OUT_ENDIAN 24
 #define AES_MSG_IN_ENDIAN  20
 #define AES_KEY_ENDIAN  16
@@ -2120,7 +2125,11 @@ static void aml_ci_plus_config(int key_endian, int mode, int algo)
 	unsigned int sm4_mode = 0;
 	unsigned int cbc_disable = 0;
 	unsigned int des_enable = 0;
-	unsigned int aes_enable = 1;
+	unsigned int aes_enable = 0;
+	unsigned int des2_key_endian = 0;
+	unsigned int des2_in_endian = 0;
+	unsigned int des2_cfg = 0;
+	unsigned int des2_enable = 0;
 
 	pr_dbg("%s mode:%d,alog:%d\n",__FUNCTION__,mode,algo);
 
@@ -2134,6 +2143,14 @@ static void aml_ci_plus_config(int key_endian, int mode, int algo)
 				| (15 << DES_MSG_IN_ENDIAN)
 				| (key_endian << DES_KEY_ENDIAN)
 				);
+	} else if (algo == ALGO_DES){
+		WRITE_MPEG_REG(CIPLUS_ENDIAN,
+				(15 << AES_IV_ENDIAN)
+				| (7 << AES_MSG_OUT_ENDIAN)
+				| (15 << AES_MSG_IN_ENDIAN)
+				| (15 << AES_KEY_ENDIAN)
+				);
+		pr_inf("CIPLUS_ENDIAN is 0x%x\n", READ_MPEG_REG(CIPLUS_ENDIAN));
 	} else {
 		WRITE_MPEG_REG(CIPLUS_ENDIAN, 0);
 	}
@@ -2143,10 +2160,17 @@ static void aml_ci_plus_config(int key_endian, int mode, int algo)
 	if (algo == ALGO_SM4) {
 		sm4_mode = 1;
 	} else if (algo ==  ALGO_AES){
-		sm4_mode = 0;
+		aes_enable = 1;
 	} else {
-		sm4_mode = 0;
-		des_enable = 1;
+		if (get_cpu_type() < MESON_CPU_MAJOR_ID_SM1) {
+			des_enable = 1;
+		} else {
+			des2_key_endian = 8;
+			des2_in_endian = 8;
+			des2_cfg = 2;
+			des2_enable = 1;
+			aes_enable = 1;
+		}
 	}
 
 	if (mode == IDSA_MODE) {
@@ -2162,6 +2186,10 @@ static void aml_ci_plus_config(int key_endian, int mode, int algo)
 
 	data =  (idsa_mode << IDSA_MODE_BIT) |
 			(sm4_mode << SM4_MODE ) |
+			(des2_key_endian << DES2_KEY_ENDIAN) |
+			(des2_in_endian << DES2_IN_ENDIAN) |
+			(des2_cfg << DES2_CFG) |
+			(des2_enable << DES2_EN) |
 			(cbc_disable << AES_CBC_DISABLE) |
 			/*1 << AES_CBC_DISABLE     : ECB
 			 *0 << AES_CBC_DISABLE     : CBC
@@ -2352,13 +2380,21 @@ static int dsc_set_aes_des_sm4_key(struct aml_dsc_channel *ch, int flags,
 			algo = ALGO_SM4;
 		break;
 	case CA_CW_DES_EVEN:
-		ab_des = 0x1;
+		if (get_cpu_type() < MESON_CPU_MAJOR_ID_SM1) {
+			ab_des = 0x1;
+		} else {
+			ab_aes = 0x1;
+		}
 		ch->mode = ECB_MODE;
 		des = 1;
 		algo = ALGO_DES;
 		break;
 	case CA_CW_DES_ODD:
-		ab_des = 0x2;
+		if (get_cpu_type() < MESON_CPU_MAJOR_ID_SM1) {
+			ab_des = 0x2;
+		} else {
+			ab_aes = 0x2;
+		}
 		ch->mode = ECB_MODE;
 		algo = ALGO_DES;
 		des = 1;
