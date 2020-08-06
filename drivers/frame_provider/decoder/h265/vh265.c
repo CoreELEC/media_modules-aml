@@ -5007,23 +5007,24 @@ static void config_mpred_hw(struct hevc_state_s *hevc)
 	WRITE_VREG(HEVC_MPRED_MV_RD_ROW_JUMP, data32);
 
 	data32 = READ_VREG(HEVC_MPRED_CTRL0);
-	data32 = (hevc->slice_type |
-			  hevc->new_pic << 2 |
-			  hevc->new_tile << 3 |
-			  hevc->isNextSliceSegment << 4 |
-			  hevc->TMVPFlag << 5 |
-			  hevc->LDCFlag << 6 |
-			  hevc->ColFromL0Flag << 7 |
-			  above_ptr_ctrl << 8 |
-			  above_en << 9 |
-			  mv_wr_en << 10 |
-			  mv_rd_en << 11 |
-			  col_isIntra << 12 |
-			  buffer_linear << 13 |
-			  hevc->LongTerm_Curr << 14 |
-			  hevc->LongTerm_Col << 15 |
-			  hevc->lcu_size_log2 << 16 |
-			  cu_size_log2 << 20 | hevc->plevel << 24);
+	data32 = ((hevc->slice_type & 3) |
+			  (hevc->new_pic & 1) << 2 |
+			  (hevc->new_tile & 1) << 3 |
+			  (hevc->isNextSliceSegment  & 1)<< 4 |
+			  (hevc->TMVPFlag  & 1)<< 5 |
+			  (hevc->LDCFlag & 1) << 6 |
+			  (hevc->ColFromL0Flag & 1)<< 7 |
+			  (above_ptr_ctrl & 1)<< 8 |
+			  (above_en  & 1) << 9 |
+			  (mv_wr_en & 1) << 10 |
+			  (mv_rd_en  & 1)<< 11 |
+			  (col_isIntra & 1)<< 12 |
+			  (buffer_linear & 1)<< 13 |
+			  (hevc->LongTerm_Curr & 1) << 14 |
+			  (hevc->LongTerm_Col & 1) << 15 |
+			  (hevc->lcu_size_log2 & 0xf) << 16 |
+			  (cu_size_log2  & 0xf) << 20 | (hevc->plevel & 0x7) << 24);
+	data32 &=  ~(1<< 28);
 	WRITE_VREG(HEVC_MPRED_CTRL0, data32);
 
 	data32 = READ_VREG(HEVC_MPRED_CTRL1);
