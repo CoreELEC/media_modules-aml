@@ -127,6 +127,7 @@ to enable DV of frame mode
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 #define INVALID_IDX -1  /* Invalid buffer index.*/
 
+
 static int mmu_enable;
 /*mmu do not support mbaff*/
 static int force_enable_mmu = 0;
@@ -281,8 +282,9 @@ static unsigned int i_only_flag;
 	bit[18] 1: time out status, store pic to dpb buffer.
 	bit[19] 1: If a lot b frames are wrong consecutively, the DPB queue reset.
 	bit[20] 1: fixed some error stream will lead to the diffusion of the error, resulting playback stuck.
+	bit[21] 1: fixed DVB loop playback cause jetter issue.
 */
-static unsigned int error_proc_policy = 0x1fCfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0x3fCfb6; /*0x1f14*/
 
 
 /*
@@ -339,6 +341,12 @@ static unsigned int mb_count_threshold = 5; /*percentage*/
 */
 static u32 double_write_mode;
 static u32 without_display_mode;
+
+static u32 loop_playback_poc_threshold = 400;
+static u32 poc_threshold = 50;
+
+
+
 #define IS_VDEC_DW(hw)  (hw->double_write_mode >> 16 & 0xf)
 
 static void vmh264_dump_state(struct vdec_s *vdec);
@@ -897,6 +905,8 @@ struct vdec_h264_hw_s {
 	u32 low_latency_mode;
 	int ip_field_error_count;
 	int buffer_wrap[BUFSPEC_POOL_SIZE];
+	int loop_flag;
+	int loop_last_poc;
 };
 
 static u32 again_threshold;
@@ -5783,6 +5793,8 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int ret;
+	int i;
+	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
 
 	if (vdec->mvfrm)
 		vdec->mvfrm->hw_decode_time =
@@ -5879,11 +5891,39 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				hw->no_error_i_count = 0xf;
 			} else
 #endif
+			if (error_proc_policy & 0x200000) {
+				if (!hw->loop_flag) {
+					for (i = 0; i < p_Dpb->used_size; i++) {
+						if ((p_H264_Dpb->mVideo.dec_picture->poc + loop_playback_poc_threshold < p_Dpb->fs[i]->poc) &&
+								!p_Dpb->fs[i]->is_output &&
+								!p_Dpb->fs[i]->pre_output) {
+							hw->loop_flag = 1;
+							hw->loop_last_poc = p_H264_Dpb->mVideo.dec_picture->poc;
+							break;
+						}
+					}
+				} else {
+					if ((p_H264_Dpb->mVideo.dec_picture->poc >= hw->loop_last_poc - poc_threshold) &&
+						(p_H264_Dpb->mVideo.dec_picture->poc <= hw->loop_last_poc + poc_threshold)) {
+						if (hw->loop_flag >= 5) {
+							for (i = 0; i < p_Dpb->used_size; i++) {
+								if ((hw->loop_last_poc + loop_playback_poc_threshold < p_Dpb->fs[i]->poc) &&
+										!p_Dpb->fs[i]->is_output &&
+										!p_Dpb->fs[i]->pre_output) {
+									p_Dpb->fs[i]->is_output = 1;
+								}
+							}
+							hw->loop_flag = 0;
+						} else
+							hw->loop_flag++;
+					} else
+						hw->loop_flag = 0;
+				}
+			}
 				ret = store_picture_in_dpb(p_H264_Dpb,
 					p_H264_Dpb->mVideo.dec_picture,
 					hw->data_flag | hw->dec_flag |
 				p_H264_Dpb->mVideo.dec_picture->data_flag);
-
 
 
 			if (ret == -1) {
@@ -10224,6 +10264,13 @@ MODULE_PARM_DESC(check_slice_num, "\n check_slice_num\n");
 
 module_param(mb_count_threshold, uint, 0664);
 MODULE_PARM_DESC(mb_count_threshold, "\n mb_count_threshold\n");
+
+module_param(loop_playback_poc_threshold, uint, 0664);
+MODULE_PARM_DESC(loop_playback_poc_threshold, "\n loop_playback_poc_threshold\n");
+
+module_param(poc_threshold, uint, 0664);
+MODULE_PARM_DESC(poc_threshold, "\n poc_threshold\n");
+
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);
