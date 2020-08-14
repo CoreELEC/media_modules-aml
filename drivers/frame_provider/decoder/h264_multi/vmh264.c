@@ -3039,18 +3039,20 @@ int notify_v4l_eos(struct vdec_s *vdec)
 	int index = INVALID_IDX;
 	ulong expires;
 
-	if (hw->is_used_v4l && hw->eos) {
-		expires = jiffies + msecs_to_jiffies(2000);
-		while (INVALID_IDX == (index = v4l_get_free_buf_idx(vdec))) {
-			if (time_after(jiffies, expires) ||
-				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx))
-				break;
-		}
+	if (hw->eos) {
+		if (hw->is_used_v4l) {
+			expires = jiffies + msecs_to_jiffies(2000);
+			while (INVALID_IDX == (index = v4l_get_free_buf_idx(vdec))) {
+				if (time_after(jiffies, expires) ||
+					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx))
+					break;
+			}
 
-		if (index == INVALID_IDX) {
-			if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb) < 0) {
-				pr_err("[%d] EOS get free buff fail.\n", ctx->id);
-				return -1;
+			if (index == INVALID_IDX) {
+				if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb) < 0) {
+					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
+					return -1;
+				}
 			}
 		}
 
@@ -3066,7 +3068,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
-		pr_info("[%d] H264 EOS notify.\n", ctx->id);
+		pr_info("[%d] H264 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
 
 	return 0;
@@ -8835,8 +8837,7 @@ result_done:
 			amhevc_stop();
 		hw->eos = 1;
 		flush_dpb(p_H264_Dpb);
-		if (hw->is_used_v4l)
-			notify_v4l_eos(hw_to_vdec(hw));
+		notify_v4l_eos(hw_to_vdec(hw));
 		mutex_lock(&hw->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;

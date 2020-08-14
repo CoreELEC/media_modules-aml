@@ -1398,9 +1398,9 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = NULL;
 	struct vdec_v4l2_buffer *fb = NULL;
-	int index;
+	int index = -1;
 
-	if (hw->is_used_v4l && hw->eos) {
+	if (hw->eos) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
 			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"%s fatal error, no available buffer slot.\n",
@@ -1408,12 +1408,13 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			return -1;
 		}
 
-		index = find_free_buffer(hw);
-
-		if ((index == -1) &&
-				vdec_v4l_get_buffer(hw->v4l2_ctx, &fb)) {
-			pr_err("[%d] get fb fail.\n", ctx->id);
-			return -1;
+		if (hw->is_used_v4l) {
+			index = find_free_buffer(hw);
+			if ((index == -1) &&
+					vdec_v4l_get_buffer(hw->v4l2_ctx, &fb)) {
+				pr_err("[%d] get fb fail.\n", ctx->id);
+				return -1;
+			}
 		}
 
 		vf->type |= VIDTYPE_V4L_EOS;
@@ -1426,7 +1427,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
-		pr_info("[%d] mpeg4 EOS notify.\n", ctx->id);
+		pr_info("[%d] mpeg4 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
 
 	return 0;
@@ -1486,9 +1487,7 @@ static void vmpeg4_work(struct work_struct *work)
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 		flush_output(hw);
-
-		if (hw->is_used_v4l)
-			notify_v4l_eos(vdec);
+		notify_v4l_eos(vdec);
 
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"%s: eos flushed, frame_num %d\n",

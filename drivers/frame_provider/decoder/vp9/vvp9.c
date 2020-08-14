@@ -7478,18 +7478,20 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	int index = INVALID_IDX;
 	ulong expires;
 
-	if (hw->is_used_v4l && hw->eos) {
-		expires = jiffies + msecs_to_jiffies(2000);
-		while (INVALID_IDX == (index = v4l_get_free_fb(hw))) {
-			if (time_after(jiffies, expires) ||
-				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx))
-				break;
-		}
+	if (hw->eos) {
+		if (hw->is_used_v4l) {
+			expires = jiffies + msecs_to_jiffies(2000);
+			while (INVALID_IDX == (index = v4l_get_free_fb(hw))) {
+				if (time_after(jiffies, expires) ||
+					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx))
+					break;
+			}
 
-		if (index == INVALID_IDX) {
-			if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb) < 0) {
-				pr_err("[%d] EOS get free buff fail.\n", ctx->id);
-				return -1;
+			if (index == INVALID_IDX) {
+				if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb) < 0) {
+					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
+					return -1;
+				}
 			}
 		}
 
@@ -7503,7 +7505,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
-		pr_info("[%d] VP9 EOS notify.\n", ctx->id);
+		pr_info("[%d] VP9 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
 
 	return 0;
@@ -9984,8 +9986,7 @@ static void vp9_work(struct work_struct *work)
 		pbi->eos = 1;
 		vp9_bufmgr_postproc(pbi);
 
-		if (pbi->is_used_v4l)
-			notify_v4l_eos(hw_to_vdec(pbi));
+		notify_v4l_eos(hw_to_vdec(pbi));
 
 		vdec_vframe_dirty(hw_to_vdec(pbi), pbi->chunk);
 	} else if (pbi->dec_result == DEC_RESULT_FORCE_EXIT) {
