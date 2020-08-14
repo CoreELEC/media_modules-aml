@@ -5967,6 +5967,12 @@ static void set_aux_data(struct hevc_state_s *hevc,
 			__func__, pic, pic->aux_data_size,
 			aux_count, suffix_flag, dv_meta_flag);
 	}
+
+	if (aux_count > aux_size) {
+		hevc_print(hevc, 0,
+			"%s:aux_count(%d) is over size\n", __func__, aux_count);
+		aux_count = 0;
+	}
 	if (aux_size > 0 && aux_count > 0) {
 		int heads_size = 0;
 		int new_size;
