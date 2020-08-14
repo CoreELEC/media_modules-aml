@@ -2795,8 +2795,24 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 
 	if (frame->data_flag & ERROR_FLAG) {
 		vdec_count_info(&hw->gvs, 1, 0);
-		if (!hw->send_error_frame_flag)
+		if (frame->slice_type == I_SLICE) {
+			hw->gvs.i_concealed_frames++;
+		} else if (frame->slice_type == P_SLICE) {
+			hw->gvs.p_concealed_frames++;
+		} else if (frame->slice_type == B_SLICE) {
+			hw->gvs.b_concealed_frames++;
+		}
+		if (!hw->send_error_frame_flag) {
 			hw->gvs.drop_frame_count++;
+			if (frame->slice_type == I_SLICE) {
+				hw->gvs.i_lost_frames++;
+			} else if (frame->slice_type == P_SLICE) {
+				hw->gvs.p_lost_frames++;
+			} else if (frame->slice_type == B_SLICE) {
+				hw->gvs.b_lost_frames++;
+			}
+		}
+
 	}
 
 	if ((frame->data_flag & NODISP_FLAG) ||
@@ -3007,6 +3023,10 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			pvdec->dec_status(pvdec, &vs);
 			decoder_do_frame_check(pvdec, vf);
 			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
+
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
+			"[%s:%d] i_decoded_frame = %d p_decoded_frame = %d b_decoded_frame = %d\n",
+			__func__, __LINE__,vs.i_decoded_frames,vs.p_decoded_frames,vs.b_decoded_frames);
 		}
 
 		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
@@ -6484,6 +6504,13 @@ pic_done_proc:
 			hw->get_data_count = 0x7fffffff;
 			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD);
 			decode_frame_count[DECODE_ID(hw)]++;
+			if (p_H264_Dpb->mSlice.slice_type == I_SLICE) {
+				hw->gvs.i_decoded_frames++;
+			} else if (p_H264_Dpb->mSlice.slice_type == P_SLICE) {
+				hw->gvs.p_decoded_frames++;
+			} else if (p_H264_Dpb->mSlice.slice_type == B_SLICE) {
+				hw->gvs.b_decoded_frames++;
+			}
 			start_process_time(hw);
 			return IRQ_HANDLED;
 		}
@@ -7158,7 +7185,8 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->frame_height = hw->frame_height;
 	if (hw->frame_dur != 0) {
 		vstatus->frame_dur = hw->frame_dur;
-		vstatus->frame_rate = 96000 / hw->frame_dur;
+		vstatus->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
+		                    96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
 	}
 	else
 		vstatus->frame_rate = -1;
@@ -7179,6 +7207,15 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->error_frame_count = hw->gvs.error_frame_count;
 	vstatus->drop_frame_count = hw->gvs.drop_frame_count;
 	vstatus->frame_count = decode_frame_count[DECODE_ID(hw)];
+	vstatus->i_decoded_frames = hw->gvs.i_decoded_frames;
+	vstatus->i_lost_frames = hw->gvs.i_lost_frames;
+	vstatus->i_concealed_frames = hw->gvs.i_concealed_frames;
+	vstatus->p_decoded_frames = hw->gvs.p_decoded_frames;
+	vstatus->p_lost_frames = hw->gvs.p_lost_frames;
+	vstatus->p_concealed_frames = hw->gvs.p_concealed_frames;
+	vstatus->b_decoded_frames = hw->gvs.b_decoded_frames;
+	vstatus->b_lost_frames = hw->gvs.b_lost_frames;
+	vstatus->b_concealed_frames = hw->gvs.b_concealed_frames;
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s-%02d", DRIVER_NAME, hw->id);
 
@@ -8794,6 +8831,13 @@ result_done:
 				}
 			}
 		decode_frame_count[DECODE_ID(hw)]++;
+		if (hw->dpb.mSlice.slice_type == I_SLICE) {
+			hw->gvs.i_decoded_frames++;
+		} else if (hw->dpb.mSlice.slice_type == P_SLICE) {
+			hw->gvs.p_decoded_frames++;
+		} else if (hw->dpb.mSlice.slice_type == B_SLICE) {
+			hw->gvs.b_decoded_frames++;
+		}
 		amvdec_stop();
 		if (!vdec_is_support_4k()) {
 			if (clk_adj_frame_count < VDEC_CLOCK_ADJUST_FRAME) {

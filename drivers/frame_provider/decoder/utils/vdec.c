@@ -5134,6 +5134,10 @@ void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 	if (vinfo) {
 		memcpy(&fifo_buf[i].frame_width, &vinfo->frame_width,
 		        ((char*)&vinfo->reserved[0] - (char*)&vinfo->frame_width));
+		/*copy for ipb report*/
+		memcpy(&fifo_buf[i].i_decoded_frames, &vinfo->i_decoded_frames,
+		        ((char*)&vinfo->endipb_line[0] - (char*)&vinfo->i_decoded_frames));
+		fifo_buf[i].av_resynch_counter = timestamp_avsync_counter_get();
 	}
 	if (vf) {
 		fifo_buf[i].vf_type = vf->type;
