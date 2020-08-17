@@ -189,6 +189,7 @@ int decoder_mmu_box_alloc_idx(
 			ret = codec_mm_scatter_alloc_want_pages(sc,
 				num_pages);
 		else {
+			box->box_ref_cnt--;
 			codec_mm_scatter_dec_owner_user(sc, 0);
 			box->sc_list[idx] = NULL;
 			sc = NULL;

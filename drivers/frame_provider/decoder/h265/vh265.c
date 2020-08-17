@@ -2168,7 +2168,6 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 		hevc->decoding_pic->referenced = 0;
 		hevc->decoding_pic->POC = INVALID_POC;
 		put_mv_buf(hevc, hevc->decoding_pic);
-		release_pic_mmu_buf(hevc, hevc->decoding_pic);
 		release_aux_data(hevc, hevc->decoding_pic);
 		hevc->decoding_pic = NULL;
 	}
@@ -5647,6 +5646,7 @@ static void pic_list_process(struct hevc_state_s *hevc)
 			if (alloc_pic_count > work_pic_num) {
 				pic->width = 0;
 				pic->height = 0;
+				release_pic_mmu_buf(hevc, pic);
 				pic->index = -1;
 			} else {
 				pic->width = hevc->pic_w;
@@ -5681,24 +5681,6 @@ static void pic_list_process(struct hevc_state_s *hevc)
 		alloc_pic_count,
 		get_alloc_pic_count(hevc));
 	}
-}
-
-static void recycle_mmu_bufs(struct hevc_state_s *hevc)
-{
-	int i;
-	struct PIC_s *pic;
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
-		pic = hevc->m_PIC[i];
-		if (pic == NULL || pic->index == -1)
-			continue;
-
-		if (pic->output_mark == 0 && pic->referenced == 0
-			&& pic->output_ready == 0
-			&& pic->scatter_alloc
-			)
-			release_pic_mmu_buf(hevc, pic);
-	}
-
 }
 
 static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
@@ -7209,8 +7191,8 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			apply_ref_pic_set(hevc, hevc->curr_POC,
 							  rpm_param);
 
-			if (hevc->mmu_enable)
-				recycle_mmu_bufs(hevc);
+			/*if (hevc->mmu_enable)
+				recycle_mmu_bufs(hevc);*/
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			if (vdec->master) {
@@ -7583,10 +7565,7 @@ static int H265_alloc_mmu(struct hevc_state_s *hevc, struct PIC_s *new_pic,
 	/*hevc_print(hevc, 0,
 	"alloc_mmu cur_idx : %d picture_size : %d mmu_4k_number : %d\r\n",
 	cur_buf_idx, picture_size, cur_mmu_4k_number);*/
-	if (new_pic->scatter_alloc) {
-		decoder_mmu_box_free_idx(hevc->mmu_box, new_pic->index);
-		new_pic->scatter_alloc = 0;
-	}
+
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 		max_frame_num = MAX_FRAME_8K_NUM;
 	else
@@ -7603,8 +7582,8 @@ static int H265_alloc_mmu(struct hevc_state_s *hevc, struct PIC_s *new_pic,
 		cur_buf_idx,
 		cur_mmu_4k_number,
 		mmu_index_adr);
-	if (ret == 0)
-		new_pic->scatter_alloc = 1;
+
+	new_pic->scatter_alloc = 1;
 
 	hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
 		"%s pic index %d page count(%d) ret =%d\n",
