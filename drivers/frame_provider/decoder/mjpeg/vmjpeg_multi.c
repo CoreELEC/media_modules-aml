@@ -338,7 +338,6 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	u64 pts_us64;
 	u32 frame_size;
 
-	reset_process_time(hw);
 	if (READ_VREG(AV_SCRATCH_D) != 0 &&
 		(debug_enable & PRINT_FLAG_UCODE_DETAIL)) {
 		pr_info("dbg%x: %x\n", READ_VREG(AV_SCRATCH_D),
@@ -376,6 +375,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 			WRITE_VREG(DEC_STATUS_REG, 0);
 		return IRQ_HANDLED;
 	}
+	reset_process_time(hw);
 
 	reg = READ_VREG(MREG_FROM_AMRISC);
 	index = READ_VREG(AV_SCRATCH_5) & 0xffffff;
@@ -885,8 +885,6 @@ static void check_timer_func(unsigned long arg)
 	}
 
 	if (((debug_enable & PRINT_FLAG_TIMEOUT_STATUS) == 0) &&
-		(input_frame_based(vdec) ||
-		((u32)READ_VREG(VLD_MEM_VIFIFO_LEVEL) > 0x100)) &&
 		(timeout_val > 0) &&
 		(hw->start_process_time > 0) &&
 		((1000 * (jiffies - hw->start_process_time) / HZ)
