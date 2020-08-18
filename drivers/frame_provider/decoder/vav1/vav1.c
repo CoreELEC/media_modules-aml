@@ -701,6 +701,7 @@ struct AV1HW_s {
 
 	u32 pts_unstable;
 	bool av1_first_pts_ready;
+	bool dur_recalc_flag;
 	u8  first_pts_index;
 	u32 frame_mode_pts_save[FRAME_BUFFERS];
 	u64 frame_mode_pts64_save[FRAME_BUFFERS];
@@ -6111,6 +6112,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 						break;
 					}
 				}
+				if (i == (FRAME_BUFFERS - 1))
+					hw->dur_recalc_flag = 1;
 			}
 		} else {
 			av1_print(hw, AV1_DEBUG_OUT_PTS,
@@ -8742,6 +8745,7 @@ static int vav1_local_init(struct AV1HW_s *hw)
 	hw->get_frame_dur = false;
 	on_no_keyframe_skiped = 0;
 	hw->first_pts_index = 0;
+	hw->dur_recalc_flag = 0;
 	hw->av1_first_pts_ready = false;
 	width = hw->vav1_amstream_dec_info.width;
 	height = hw->vav1_amstream_dec_info.height;
@@ -9611,10 +9615,28 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 		if ((hw->chunk->pts == 0) ||
 			(hw->frame_mode_pts_save[0] == hw->chunk->pts))
 		return;
+
+		/* fps change, frame dur change to lower or higher,
+		 * can't find closed pts in saved pool */
+		if ((hw->dur_recalc_flag) ||
+			(hw->last_pts >  hw->chunk->pts)) {
+			hw->av1_first_pts_ready = 0;
+			hw->first_pts_index = 0;
+			hw->get_frame_dur = 0;
+			hw->dur_recalc_flag = 0;
+			memset(hw->frame_mode_pts_save, 0,
+			        sizeof(hw->frame_mode_pts_save));
+			memset(hw->frame_mode_pts64_save, 0,
+			        sizeof(hw->frame_mode_pts64_save));
+			/*v4l use*/
+			memset(hw->frame_mode_timestamp_save, 0,
+			        sizeof(hw->frame_mode_timestamp_save));
+		}
 	}
 	av1_print(hw, AV1_DEBUG_OUT_PTS,
 		"run_front: pts %d, pts64 %lld, ts: %llu\n",
 		hw->chunk->pts, hw->chunk->pts64, hw->chunk->timestamp);
+
 	for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
 		hw->frame_mode_pts_save[i] = hw->frame_mode_pts_save[i - 1];
 		hw->frame_mode_pts64_save[i] = hw->frame_mode_pts64_save[i - 1];
@@ -9626,7 +9648,7 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	if (hw->first_pts_index < ARRAY_SIZE(hw->frame_mode_pts_save))
 		hw->first_pts_index++;
 	/* frame duration check, vdec_secure return for nts problem */
-	if ((!hw->frame_count) || hw->get_frame_dur || vdec_secure(hw_to_vdec(hw)))
+	if ((!hw->first_pts_index) || hw->get_frame_dur || vdec_secure(hw_to_vdec(hw)))
 		return;
 	valid_pts_diff_cnt = 0;
 	pts_diff_sum = 0;
