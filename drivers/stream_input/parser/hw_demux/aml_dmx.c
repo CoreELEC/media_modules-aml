@@ -3614,7 +3614,7 @@ static int dmx_set_chan_regs(struct aml_dmx *dmx, int cid)
 	pr_dbg("write fm comp %x\n", data | (max >> 1));
 
 	if (DMX_READ_REG(dmx->id, OM_CMD_STATUS) & 0x8e00) {
-		pr_error("error send cmd %x\n",
+		pr_error("warning: send cmd %x\n",
 			 DMX_READ_REG(dmx->id, OM_CMD_STATUS));
 	}
 
@@ -4639,6 +4639,18 @@ int dmx_init_sub_buffer(struct aml_dmx *dmx, unsigned long base, unsigned long v
 	return 0;
 }
 
+static int check_dvr_for_raw_channel(struct aml_dmx *dmx, int ch)
+{
+	switch (ch) {
+		case 0:
+		case 1:  return 1;
+		case 2:  return dmx->sub_chan != -1 ? 1 : 0;
+		case 3:  return dmx->pcr_chan != -1 ? 1 : 0;
+		default: return 0;
+	}
+	return 0;
+}
+
 /*Allocate a new channel*/
 int dmx_alloc_chan(struct aml_dmx *dmx, int type, int pes_type, int pid)
 {
@@ -4700,11 +4712,13 @@ int dmx_alloc_chan(struct aml_dmx *dmx, int type, int pes_type, int pid)
 		return -1;
 	}
 
-	pr_dbg("allocate channel(id:%d PID:0x%x)\n", id, pid);
+	pr_dbg("allocate channel(id:%d-%d PID:0x%x)\n", dmx->id, id, pid);
 
-	if (id <= 3) {
+	if (check_dvr_for_raw_channel(dmx, id)) {
 		ret = dmx_get_chan(dmx, pid);
 		if (ret >= 0 && DVR_FEED(dmx->channel[ret].feed)) {
+			pr_dbg("raw ch fix: dmx:%d: ch[%d(dvr)] -> ch[%d]\n",
+				dmx->id, ret, id);
 			dmx_remove_feed(dmx, dmx->channel[ret].feed);
 			dmx->channel[id].dvr_feed = dmx->channel[ret].feed;
 			dmx->channel[id].dvr_feed->priv = (void *)(long)id;
@@ -4745,7 +4759,7 @@ int dmx_alloc_chan(struct aml_dmx *dmx, int type, int pes_type, int pid)
 /*Free a channel*/
 void dmx_free_chan(struct aml_dmx *dmx, int cid)
 {
-	pr_dbg("free channel(id:%d PID:0x%x)\n", cid, dmx->channel[cid].pid);
+	pr_dbg("free channel(id:%d-%d PID:0x%x)\n", dmx->id, cid, dmx->channel[cid].pid);
 
 	dmx->channel[cid].used = 0;
 	dmx->channel[cid].pid = 0x1fff;
@@ -4783,8 +4797,11 @@ void dmx_free_chan(struct aml_dmx *dmx, int cid)
 	dmx_enable(dmx);
 
 	/*Special pes type channel, check its dvr feed */
-	if (cid <= 3 && dmx->channel[cid].dvr_feed) {
+	if (check_dvr_for_raw_channel(dmx, cid)
+			&& dmx->channel[cid].dvr_feed) {
 		/*start the dvr feed */
+		pr_dbg("raw ch fix: dmx:%d: ch[%d] -> ch[(dvr)]\n",
+			dmx->id, cid);
 		dmx_add_feed(dmx, dmx->channel[cid].dvr_feed);
 	}
 }
@@ -5035,7 +5052,8 @@ static int dmx_add_feed(struct aml_dmx *dmx, struct dvb_demux_feed *feed)
 
 	switch (feed->type) {
 	case DMX_TYPE_TS:
-		pr_dbg("%s: DMX_TYPE_TS\n", __func__);
+		pr_dbg("add feed ts: pid:%d-0x%x, (%p)\n",
+			dmx->id, feed->pid, feed);
 		ret = dmx_get_chan(dmx, feed->pid);
 		if (ret >= 0) {
 			if (DVR_FEED(dmx->channel[ret].feed)) {
@@ -5105,7 +5123,8 @@ static int dmx_add_feed(struct aml_dmx *dmx, struct dvb_demux_feed *feed)
 
 		break;
 	case DMX_TYPE_SEC:
-		pr_dbg("%s: DMX_TYPE_SEC\n", __func__);
+		pr_dbg("add feed sec: pid:%d-0x%x, (%p)\n",
+			dmx->id, feed->pid, feed);
 		ret = dmx_get_chan(dmx, feed->pid);
 		if (ret >= 0) {
 			if (DVR_FEED(dmx->channel[ret].feed)) {
@@ -5183,6 +5202,8 @@ static int dmx_remove_feed(struct aml_dmx *dmx, struct dvb_demux_feed *feed)
 
 	switch (feed->type) {
 	case DMX_TYPE_TS:
+		pr_dbg("rm feed ts: pid:%d-0x%x, %p\n",
+			dmx->id, feed->pid, feed);
 		if (dmx->channel[(long)feed->priv].feed ==
 		    dmx->channel[(long)feed->priv].dvr_feed) {
 			dmx_rm_recchan(dmx->id, (long)feed->priv);
@@ -5212,6 +5233,8 @@ static int dmx_remove_feed(struct aml_dmx *dmx, struct dvb_demux_feed *feed)
 
 		break;
 	case DMX_TYPE_SEC:
+		pr_dbg("rm feed sec: pid:%d-0x%x, %p\n",
+			dmx->id, feed->pid, feed);
 		for (filter = feed->filter; filter; filter = filter->next) {
 			if (filter->hw_handle != (u16)-1)
 				dmx_remove_filter(dmx, (long)feed->priv,
