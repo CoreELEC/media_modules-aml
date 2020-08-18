@@ -8896,33 +8896,6 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 		fill_frame_info(hevc, pic, frame_size, vf->pts);
 
-		if ((hevc->pts_mode == PTS_NORMAL) && (vf->pts != 0)
-			&& hevc->get_frame_dur) {
-			int pts_diff = (int)vf->pts - hevc->last_lookup_pts;
-
-			if (pts_diff < 0) {
-				hevc->pts_mode_switching_count++;
-				hevc->pts_mode_recovery_count = 0;
-
-				if (hevc->pts_mode_switching_count >=
-					PTS_MODE_SWITCHING_THRESHOLD) {
-					hevc->pts_mode =
-						PTS_NONE_REF_USE_DURATION;
-					hevc_print(hevc, 0,
-					"HEVC: switch to n_d mode.\n");
-				}
-
-			} else {
-				int p = PTS_MODE_SWITCHING_RECOVERY_THREASHOLD;
-
-				hevc->pts_mode_recovery_count++;
-				if (hevc->pts_mode_recovery_count > p) {
-					hevc->pts_mode_switching_count = 0;
-					hevc->pts_mode_recovery_count = 0;
-				}
-			}
-		}
-
 		if (vf->pts != 0)
 			hevc->last_lookup_pts = vf->pts;
 
