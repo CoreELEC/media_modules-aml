@@ -2361,6 +2361,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 			buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
 			buf->frame_buffer.status = FB_ST_NORMAL;
 			buf->que_in_m2m = false;
+			buf->vb.flags = 0;
 			ctx->cap_pool.seq[i] = 0;
 
 			if (vb2_v4l2->vb2_buf.state == VB2_BUF_STATE_ACTIVE)
