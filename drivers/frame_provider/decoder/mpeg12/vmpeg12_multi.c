@@ -1894,14 +1894,8 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 			READ_VREG(VLD_MEM_VIFIFO_CONTROL),
 			READ_VREG(VIFF_BIT_CNT));
 		if (vdec_frame_based(vdec)) {
-			u32 bitcnt = READ_VREG(VIFF_BIT_CNT);
-			if (bitcnt < 32) {
-				reset_process_time(hw);
-				hw->dec_result = DEC_RESULT_GET_DATA;
-			} else {
-				userdata_pushed_drop(hw);
-				hw->dec_result = DEC_RESULT_DONE;
-			}
+			userdata_pushed_drop(hw);
+			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
 		} else {
 			hw->dec_result = DEC_RESULT_AGAIN;
