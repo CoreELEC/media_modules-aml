@@ -318,15 +318,6 @@ struct vdec_mpeg4_hw_s {
 	int sidebind_type;
 	int sidebind_channel_id;
 	unsigned int res_ch_flag;
-	unsigned int i_decoded_frames;
-	unsigned int i_lost_frames;
-	unsigned int i_concealed_frames;
-	unsigned int p_decoded_frames;
-	unsigned int p_lost_frames;
-	unsigned int p_concealed_frames;
-	unsigned int b_decoded_frames;
-	unsigned int b_lost_frames;
-	unsigned int b_concealed_frames;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -718,13 +709,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		if (((hw->first_i_frame_ready == 0) || pb_skip)
 			 && (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
-			if (pic->pic_type == I_PICTURE) {
-				hw->i_lost_frames++;
-			} else if (pic->pic_type == P_PICTURE) {
-				hw->p_lost_frames++;
-			} else if (pic->pic_type == B_PICTURE) {
-				hw->b_lost_frames++;
-			}
 			hw->vfbuf_use[index]--;
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
@@ -738,13 +722,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 			vdec->vdec_fps_detec(vdec->id);
 			hw->frame_num++;
-			if (pic->pic_type == I_PICTURE) {
-				hw->i_decoded_frames++;
-			} else if (pic->pic_type == P_PICTURE) {
-				hw->p_decoded_frames++;
-			} else if (pic->pic_type == B_PICTURE) {
-				hw->b_decoded_frames++;
-			}
 			if (without_display_mode == 0) {
 				vf_notify_receiver(vdec->vf_provider_name,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -783,13 +760,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		if (((hw->first_i_frame_ready == 0) || pb_skip)
 			&& (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
-			if (pic->pic_type == I_PICTURE) {
-				hw->i_lost_frames++;
-			} else if (pic->pic_type == P_PICTURE) {
-				hw->p_lost_frames++;
-			} else if (pic->pic_type == B_PICTURE) {
-				hw->b_lost_frames++;
-			}
 			hw->vfbuf_use[index]--;
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
@@ -803,13 +773,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vdec->vdec_fps_detec(vdec->id);
 			decoder_do_frame_check(vdec, vf);
 			hw->frame_num++;
-			if (pic->pic_type == I_PICTURE) {
-				hw->i_decoded_frames++;
-			} else if (pic->pic_type == P_PICTURE) {
-				hw->p_decoded_frames++;
-			} else if (pic->pic_type == B_PICTURE) {
-				hw->b_decoded_frames++;
-			}
 			if (without_display_mode == 0) {
 				vf_notify_receiver(vdec->vf_provider_name,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -862,13 +825,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		if (((hw->first_i_frame_ready == 0) || pb_skip)
 			&& (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
-			if (pic->pic_type == I_PICTURE) {
-				hw->i_lost_frames++;
-			} else if (pic->pic_type == P_PICTURE) {
-				hw->p_lost_frames++;
-			} else if (pic->pic_type == B_PICTURE) {
-				hw->b_lost_frames++;
-			}
 			hw->vfbuf_use[index]--;
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
@@ -884,13 +840,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vdec->vdec_fps_detec(vdec->id);
 			decoder_do_frame_check(vdec, vf);
 			hw->frame_num++;
-			if (pic->pic_type == I_PICTURE) {
-				hw->i_decoded_frames++;
-			} else if (pic->pic_type == P_PICTURE) {
-				hw->p_decoded_frames++;
-			} else if (pic->pic_type == B_PICTURE) {
-				hw->b_decoded_frames++;
-			}
+
 			vdec->dec_status(vdec, &vinfo);
 			vdec_fill_vdec_frame(vdec, NULL,
 				&vinfo, vf, pic->hw_decode_time);
@@ -1650,25 +1600,13 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
 	if (0 != hw->vmpeg4_amstream_dec_info.rate)
-		vstatus->frame_rate = ((DURATION_UNIT * 10 / hw->vmpeg4_amstream_dec_info.rate) % 10) < 5 ?
-		DURATION_UNIT / hw->vmpeg4_amstream_dec_info.rate : (DURATION_UNIT / hw->vmpeg4_amstream_dec_info.rate +1);
+		vstatus->frame_rate = DURATION_UNIT /
+				hw->vmpeg4_amstream_dec_info.rate;
 	else
-		vstatus->frame_rate = -1;
+		vstatus->frame_rate = DURATION_UNIT;
 	vstatus->error_count = READ_VREG(MP4_ERR_COUNT);
 	vstatus->status = hw->stat;
 	vstatus->frame_dur = hw->frame_dur;
-	vstatus->error_frame_count = READ_VREG(MP4_ERR_COUNT);
-	vstatus->drop_frame_count = hw->drop_frame_count;
-	vstatus->frame_count =hw->frame_num;
-	vstatus->i_decoded_frames = hw->i_decoded_frames;
-	vstatus->i_lost_frames = hw->i_lost_frames;
-	vstatus->i_concealed_frames = hw->i_concealed_frames;
-	vstatus->p_decoded_frames = hw->p_decoded_frames;
-	vstatus->p_lost_frames = hw->p_lost_frames;
-	vstatus->p_concealed_frames = hw->p_concealed_frames;
-	vstatus->b_decoded_frames = hw->b_decoded_frames;
-	vstatus->b_lost_frames = hw->b_lost_frames;
-	vstatus->b_concealed_frames = hw->b_concealed_frames;
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 			"%s", DRIVER_NAME);
 
