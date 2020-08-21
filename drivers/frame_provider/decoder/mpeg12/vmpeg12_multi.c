@@ -1538,7 +1538,8 @@ static inline void hw_update_gvs(struct vdec_mpeg12_hw_s *hw)
 	if (hw->gvs.frame_dur != hw->frame_dur) {
 		hw->gvs.frame_dur = hw->frame_dur;
 		if (hw->frame_dur != 0)
-			hw->gvs.frame_rate = 96000 / hw->frame_dur;
+			hw->gvs.frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
+					96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
 		else
 			hw->gvs.frame_rate = -1;
 	}
@@ -1668,12 +1669,27 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			((PICINFO_TYPE_MASK & pic->buffer_info) !=
 			 PICINFO_TYPE_I))) {
 			hw->drop_frame_count++;
+			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
+				hw->gvs.i_lost_frames++;
+			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+				hw->gvs.p_lost_frames++;
+			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+				hw->gvs.b_lost_frames++;
+			}
 			/* Though we drop it, it is still an error frame, count it.
 			 * Becase we've counted the error frame in vdec_count_info
 			 * function, avoid count it twice.
 			 */
-			if (!(info & PICINFO_ERROR))
-				hw->gvs.error_frame_count++;
+		if (!(info & PICINFO_ERROR)) {
+			hw->gvs.error_frame_count++;
+			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
+				hw->gvs.i_concealed_frames++;
+			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+				hw->gvs.p_concealed_frames++;
+			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+				hw->gvs.b_concealed_frames++;
+			}
+		}
 			hw->vfbuf_use[index]--;
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
@@ -2097,6 +2113,24 @@ static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 	offset = READ_VREG(MREG_FRAME_OFFSET);
 
 	vdec_count_info(&hw->gvs, info & PICINFO_ERROR, offset);
+	if (info &PICINFO_ERROR) {
+		if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
+			hw->gvs.i_concealed_frames++;
+		} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+			hw->gvs.p_concealed_frames++;
+		} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+			hw->gvs.b_concealed_frames++;
+		}
+	}
+	if (offset) {
+		if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
+			hw->gvs.i_decoded_frames++;
+		} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+			hw->gvs.p_decoded_frames++;
+		} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+			hw->gvs.b_decoded_frames++;
+		}
+	}
 
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 
@@ -2471,7 +2505,8 @@ static int vmmpeg12_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
 	if (hw->frame_dur != 0)
-		vstatus->frame_rate = 96000 / hw->frame_dur;
+		vstatus->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
+		                    96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(AV_SCRATCH_C);
@@ -2483,6 +2518,15 @@ static int vmmpeg12_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->frame_count = hw->gvs.frame_count;
 	vstatus->error_frame_count = hw->gvs.error_frame_count;
 	vstatus->drop_frame_count = hw->drop_frame_count;
+	vstatus->i_decoded_frames = hw->gvs.i_decoded_frames;
+	vstatus->i_lost_frames = hw->gvs.i_lost_frames;
+	vstatus->i_concealed_frames = hw->gvs.i_concealed_frames;
+	vstatus->p_decoded_frames = hw->gvs.p_decoded_frames;
+	vstatus->p_lost_frames = hw->gvs.p_lost_frames;
+	vstatus->p_concealed_frames = hw->gvs.p_concealed_frames;
+	vstatus->b_decoded_frames = hw->gvs.b_decoded_frames;
+	vstatus->b_lost_frames = hw->gvs.b_lost_frames;
+	vstatus->b_concealed_frames = hw->gvs.b_concealed_frames;
 	vstatus->total_data = hw->gvs.total_data;
 	vstatus->samp_cnt = hw->gvs.samp_cnt;
 	vstatus->offset = hw->gvs.offset;

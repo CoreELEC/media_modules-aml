@@ -7241,7 +7241,8 @@ static inline void pbi_update_gvs(struct VP9Decoder_s *pbi)
 	if (pbi->gvs->frame_dur != pbi->frame_dur) {
 		pbi->gvs->frame_dur = pbi->frame_dur;
 		if (pbi->frame_dur != 0)
-			pbi->gvs->frame_rate = 96000 / pbi->frame_dur;
+			pbi->gvs->frame_rate = ((96000 * 10 / pbi->frame_dur) % 10) < 5 ?
+					96000 / pbi->frame_dur : (96000 / pbi->frame_dur +1);
 		else
 			pbi->gvs->frame_rate = -1;
 	}
@@ -7588,6 +7589,15 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			pbi_update_gvs(pbi);
 			/*count info*/
 			vdec_count_info(pbi->gvs, 0, stream_offset);
+			if (stream_offset) {
+				if (slice_type == KEY_FRAME) {
+					pbi->gvs->i_decoded_frames++;
+				} else if (slice_type == INTER_FRAME) {
+					pbi->gvs->p_decoded_frames++;
+				} else if (slice_type == FRAME_TYPES) {
+					pbi->gvs->b_decoded_frames++;
+				}
+			}
 			memcpy(&tmp4x, pbi->gvs, sizeof(struct vdec_info));
 			tmp4x.bit_depth_luma = pbi->vp9_param.p.bit_depth;
 			tmp4x.bit_depth_chroma = pbi->vp9_param.p.bit_depth;
@@ -9231,7 +9241,8 @@ int vvp9_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->frame_width = frame_width;
 	vstatus->frame_height = frame_height;
 	if (vp9->frame_dur != 0)
-		vstatus->frame_rate = 96000 / vp9->frame_dur;
+		vstatus->frame_rate = ((96000 * 10 / vp9->frame_dur) % 10) < 5 ?
+				96000 / vp9->frame_dur : (96000 / vp9->frame_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
@@ -9243,6 +9254,15 @@ int vvp9_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->frame_count = vp9->gvs->frame_count;
 	vstatus->error_frame_count = vp9->gvs->error_frame_count;
 	vstatus->drop_frame_count = vp9->gvs->drop_frame_count;
+	vstatus->i_decoded_frames = vp9->gvs->i_decoded_frames;
+	vstatus->i_lost_frames = vp9->gvs->i_lost_frames;
+	vstatus->i_concealed_frames = vp9->gvs->i_concealed_frames;
+	vstatus->p_decoded_frames = vp9->gvs->p_decoded_frames;
+	vstatus->p_lost_frames = vp9->gvs->p_lost_frames;
+	vstatus->p_concealed_frames = vp9->gvs->p_concealed_frames;
+	vstatus->b_decoded_frames = vp9->gvs->b_decoded_frames;
+	vstatus->b_lost_frames = vp9->gvs->b_lost_frames;
+	vstatus->b_concealed_frames = vp9->gvs->b_concealed_frames;
 	vstatus->total_data = vp9->gvs->total_data;
 	vstatus->samp_cnt = vp9->gvs->samp_cnt;
 	vstatus->offset = vp9->gvs->offset;

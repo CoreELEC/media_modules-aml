@@ -2665,6 +2665,13 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
 		} else if (p->frame_base_video_path ==
+			FRAME_BASE_PATH_DTV_TUNNEL_MODE) {
+			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+				"%s deinterlace %s", vdec->vf_provider_name,
+				"amvideo");
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
+		} else if (p->frame_base_video_path ==
 			FRAME_BASE_PATH_AMLVIDEO_FENCE) {
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 				"%s %s", vdec->vf_provider_name,
@@ -5636,6 +5643,10 @@ void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 	if (vinfo) {
 		memcpy(&fifo_buf[i].frame_width, &vinfo->frame_width,
 		        ((char*)&vinfo->reserved[0] - (char*)&vinfo->frame_width));
+		/*copy for ipb report*/
+		memcpy(&fifo_buf[i].i_decoded_frames, &vinfo->i_decoded_frames,
+		        ((char*)&vinfo->endipb_line[0] - (char*)&vinfo->i_decoded_frames));
+		fifo_buf[i].av_resynch_counter = timestamp_avsync_counter_get();
 	}
 	if (vf) {
 		fifo_buf[i].vf_type = vf->type;

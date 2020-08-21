@@ -491,4 +491,5 @@ extern void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size);
 void vdec_set_vld_wp(struct vdec_s *vdec, u32 wp);
 void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size);
 
+extern u32 timestamp_avsync_counter_get(void);
 #endif				/* VDEC_H */

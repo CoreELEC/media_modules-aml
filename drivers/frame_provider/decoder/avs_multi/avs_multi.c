@@ -925,7 +925,8 @@ static inline void avs_update_gvs(struct vdec_avs_hw_s *hw)
 	if (hw->gvs->frame_dur != hw->frame_dur) {
 		hw->gvs->frame_dur = hw->frame_dur;
 		if (hw->frame_dur != 0)
-			hw->gvs->frame_rate = 96000 / hw->frame_dur;
+			hw->gvs->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
+					96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
 		else
 			hw->gvs->frame_rate = -1;
 	}
@@ -1087,7 +1088,8 @@ static int vavs_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
 	if (hw->frame_dur != 0)
-		vstatus->frame_rate = 96000 / hw->frame_dur;
+		vstatus->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
+				96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(AV_SCRATCH_C);
@@ -1099,6 +1101,15 @@ static int vavs_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->frame_count = hw->gvs->frame_count;
 	vstatus->error_frame_count = hw->gvs->error_frame_count;
 	vstatus->drop_frame_count = hw->gvs->drop_frame_count;
+	vstatus->i_decoded_frames = hw->gvs->i_decoded_frames;
+	vstatus->i_lost_frames = hw->gvs->i_lost_frames;
+	vstatus->i_concealed_frames = hw->gvs->i_concealed_frames;
+	vstatus->p_decoded_frames = hw->gvs->p_decoded_frames;
+	vstatus->p_lost_frames = hw->gvs->p_lost_frames;
+	vstatus->p_concealed_frames = hw->gvs->p_concealed_frames;
+	vstatus->b_decoded_frames = hw->gvs->b_decoded_frames;
+	vstatus->b_lost_frames = hw->gvs->b_lost_frames;
+	vstatus->b_concealed_frames = hw->gvs->b_concealed_frames;
 	vstatus->total_data = hw->gvs->total_data;
 	vstatus->samp_cnt = hw->gvs->samp_cnt;
 	vstatus->offset = hw->gvs->offset;
@@ -3677,6 +3688,15 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 	
 			/*count info*/
 			vdec_count_info(hw->gvs, 0, offset);
+			if (offset) {
+				if (picture_type == I_PICTURE) {
+					hw->gvs->i_decoded_frames++;
+				} else if (picture_type == P_PICTURE) {
+					hw->gvs->p_decoded_frames++;
+				} else if (picture_type == B_PICTURE) {
+					hw->gvs->b_decoded_frames++;
+				}
+			}
 			avs_update_gvs(hw);
 			vdec_fill_vdec_frame(hw_to_vdec(hw), NULL, hw->gvs, vf, 0);
 
