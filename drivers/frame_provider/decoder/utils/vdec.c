@@ -2604,8 +2604,12 @@ static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_
 		    (vdec == v_ref)) {
 		    pr_err("%s, vdec = %p, active vdec = %p\n",
 				__func__, vdec, core->active_vdec);
+			if (v_ref->active_mask)
+				core->sched_mask &= ~v_ref->active_mask;
 			if (core->active_vdec == v_ref)
 				core->active_vdec = NULL;
+			if (core->active_hevc == v_ref)
+				core->active_hevc = NULL;
 			if (core->last_vdec == v_ref)
 				core->last_vdec = NULL;
 			list_del(&vdec->list);
