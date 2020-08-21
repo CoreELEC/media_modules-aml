@@ -470,4 +470,5 @@ int show_stream_buffer_status(char *buf,
 
 bool is_support_no_parser(void);
 
+extern u32 timestamp_avsync_counter_get(void);
 #endif				/* VDEC_H */

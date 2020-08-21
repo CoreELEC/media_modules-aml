@@ -6080,8 +6080,22 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 				 * the drop count
 				 */
 				hevc->gvs->drop_frame_count++;
+				if (pic_display->slice_type == I_SLICE) {
+					hevc->gvs->i_lost_frames++;
+				} else if (pic_display->slice_type == P_SLICE) {
+					hevc->gvs->p_lost_frames++;
+				} else if (pic_display->slice_type == B_SLICE) {
+					hevc->gvs->b_lost_frames++;
+				}
 				/* error frame count also need increase */
 				hevc->gvs->error_frame_count++;
+				if (pic_display->slice_type == I_SLICE) {
+					hevc->gvs->i_concealed_frames++;
+				} else if (pic_display->slice_type == P_SLICE) {
+					hevc->gvs->p_concealed_frames++;
+				} else if (pic_display->slice_type == B_SLICE) {
+					hevc->gvs->b_concealed_frames++;
+				}
 			} else {
 				if (hevc->i_only & 0x1
 					&& pic_display->slice_type != 2) {
@@ -6388,8 +6402,22 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 					 * the drop count
 					 */
 					hevc->gvs->drop_frame_count++;
+					if (pic_display->slice_type == I_SLICE) {
+						hevc->gvs->i_lost_frames++;
+					}else if (pic_display->slice_type == P_SLICE) {
+						hevc->gvs->p_lost_frames++;
+					} else if (pic_display->slice_type == B_SLICE) {
+						hevc->gvs->b_lost_frames++;
+					}
 					/* error frame count also need increase */
 					hevc->gvs->error_frame_count++;
+					if (pic_display->slice_type == I_SLICE) {
+						hevc->gvs->i_concealed_frames++;
+					} else if (pic_display->slice_type == P_SLICE) {
+						hevc->gvs->p_concealed_frames++;
+					} else if (pic_display->slice_type == B_SLICE) {
+						hevc->gvs->b_concealed_frames++;
+					}
 				} else {
 					if (hevc->i_only & 0x1
 						&& pic_display->
@@ -7571,9 +7599,33 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				/*count info*/
 				vdec_count_info(hevc->gvs, hevc->cur_pic->error_mark,
 					hevc->cur_pic->stream_offset);
-				if (hevc->PB_skip_mode == 2)
-					hevc->gvs->drop_frame_count++;
+				if (hevc->cur_pic->slice_type == I_SLICE) {
+					hevc->gvs->i_decoded_frames++;
+				} else if (hevc->cur_pic->slice_type == P_SLICE) {
+					hevc->gvs->p_decoded_frames++;
+				} else if (hevc->cur_pic->slice_type == B_SLICE) {
+					hevc->gvs->b_decoded_frames++;
+				}
+			if (hevc->cur_pic->error_mark) {
+				if (hevc->cur_pic->slice_type == I_SLICE) {
+					hevc->gvs->i_concealed_frames++;
+				} else if (hevc->cur_pic->slice_type == P_SLICE) {
+					hevc->gvs->p_concealed_frames++;
+				} else if (hevc->cur_pic->slice_type == B_SLICE) {
+					hevc->gvs->b_concealed_frames++;
+				}
 			}
+			if (hevc->PB_skip_mode == 2) {
+				hevc->gvs->drop_frame_count++;
+				if (rpm_param->p.slice_type == I_SLICE) {
+					hevc->gvs->i_lost_frames++;
+				} else if (rpm_param->p.slice_type == P_SLICE) {
+					hevc->gvs->p_lost_frames++;
+				} else if (rpm_param->p.slice_type == B_SLICE) {
+					hevc->gvs->b_lost_frames++;
+				}
+			}
+		}
 
 			if (is_skip_decoding(hevc,
 				hevc->cur_pic)) {
@@ -7603,8 +7655,32 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		/*count info*/
 		vdec_count_info(hevc->gvs, hevc->cur_pic->error_mark,
 			hevc->cur_pic->stream_offset);
-		if (hevc->PB_skip_mode == 2)
+		if (hevc->cur_pic->slice_type == I_SLICE) {
+			hevc->gvs->i_decoded_frames++;
+		} else if (hevc->cur_pic->slice_type == P_SLICE) {
+			hevc->gvs->p_decoded_frames++;
+		} else if (hevc->cur_pic->slice_type == B_SLICE) {
+			hevc->gvs->b_decoded_frames++;
+		}
+		if (hevc->cur_pic->error_mark) {
+			if (hevc->cur_pic->slice_type == I_SLICE) {
+				hevc->gvs->i_concealed_frames++;
+			} else if (hevc->cur_pic->slice_type == P_SLICE) {
+				hevc->gvs->p_concealed_frames++;
+			} else if (hevc->cur_pic->slice_type == B_SLICE) {
+				hevc->gvs->b_concealed_frames++;
+			}
+		}
+		if (hevc->PB_skip_mode == 2) {
 			hevc->gvs->drop_frame_count++;
+			if (rpm_param->p.slice_type == I_SLICE) {
+				hevc->gvs->i_lost_frames++;
+			} else if (rpm_param->p.slice_type == P_SLICE) {
+				hevc->gvs->p_lost_frames++;
+			} else if (rpm_param->p.slice_type == B_SLICE) {
+				hevc->gvs->b_lost_frames++;
+			}
+		}
 		return 2;
 	}
 #ifdef MCRCC_ENABLE
@@ -8842,7 +8918,8 @@ static inline void hevc_update_gvs(struct hevc_state_s *hevc)
 	if (hevc->gvs->frame_dur != hevc->frame_dur) {
 		hevc->gvs->frame_dur = hevc->frame_dur;
 		if (hevc->frame_dur != 0)
-			hevc->gvs->frame_rate = 96000 / hevc->frame_dur;
+			hevc->gvs->frame_rate = ((96000 * 10 / hevc->frame_dur) % 10) < 5 ?
+					96000 / hevc->frame_dur : (96000 / hevc->frame_dur +1);
 		else
 			hevc->gvs->frame_rate = -1;
 	}
@@ -9394,6 +9471,13 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 #endif
 		/*count info*/
 		vdec_count_info(hevc->gvs, 0, stream_offset);
+		if (hevc->cur_pic->slice_type == I_SLICE) {
+			hevc->gvs->i_decoded_frames++;
+		} else if (hevc->cur_pic->slice_type == P_SLICE) {
+			hevc->gvs->p_decoded_frames++;
+		} else if (hevc->cur_pic->slice_type == B_SLICE) {
+			hevc->gvs->b_decoded_frames++;
+		}
 		hevc_update_gvs(hevc);
 		memcpy(&tmp4x, hevc->gvs, sizeof(struct vdec_info));
 		tmp4x.bit_depth_luma = hevc->bit_depth_luma;
@@ -10853,6 +10937,13 @@ force_output:
 	} else {
 		/* skip, search next start code */
 		hevc->gvs->drop_frame_count++;
+		if (hevc->cur_pic->slice_type == I_SLICE) {
+			hevc->gvs->i_lost_frames++;
+		} else if (hevc->cur_pic->slice_type == P_SLICE) {
+			hevc->gvs->i_lost_frames++;
+		} else if (hevc->cur_pic->slice_type == B_SLICE) {
+			hevc->gvs->i_lost_frames++;
+		}
 		WRITE_VREG(HEVC_WAIT_FLAG, READ_VREG(HEVC_WAIT_FLAG) & (~0x2));
 			hevc->skip_flag = 1;
 		WRITE_VREG(HEVC_DEC_STATUS_REG,	HEVC_ACTION_DONE);
@@ -11306,7 +11397,8 @@ int vh265_dec_status(struct vdec_info *vstatus)
 	vstatus->frame_height =
 		(hevc->frame_height << hevc->interlace_flag);
 	if (hevc->frame_dur != 0)
-		vstatus->frame_rate = 96000 / hevc->frame_dur;
+		vstatus->frame_rate = ((96000 * 10 / hevc->frame_dur) % 10) < 5 ?
+				96000 / hevc->frame_dur : (96000 / hevc->frame_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = hevc->gvs->error_frame_count;
@@ -11320,6 +11412,15 @@ int vh265_dec_status(struct vdec_info *vstatus)
 		vstatus->frame_count = hevc->gvs->frame_count;
 		vstatus->error_frame_count = hevc->gvs->error_frame_count;
 		vstatus->drop_frame_count = hevc->gvs->drop_frame_count;
+		vstatus->i_decoded_frames = hevc->gvs->i_decoded_frames;
+		vstatus->i_lost_frames = hevc->gvs->i_lost_frames;
+		vstatus->i_concealed_frames = hevc->gvs->i_concealed_frames;
+		vstatus->p_decoded_frames = hevc->gvs->p_decoded_frames;
+		vstatus->p_lost_frames = hevc->gvs->p_lost_frames;
+		vstatus->p_concealed_frames = hevc->gvs->p_concealed_frames;
+		vstatus->b_decoded_frames = hevc->gvs->b_decoded_frames;
+		vstatus->b_lost_frames = hevc->gvs->b_lost_frames;
+		vstatus->b_concealed_frames = hevc->gvs->b_concealed_frames;
 		vstatus->samp_cnt = hevc->gvs->samp_cnt;
 		vstatus->offset = hevc->gvs->offset;
 	}

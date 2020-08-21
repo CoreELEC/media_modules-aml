@@ -2619,28 +2619,20 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 			u32 struct_size = 0;
 			int vdec_id = 0;
 			struct vdec_s *vdec = NULL;
-			struct vframe_counter_s tmpbuf[QOS_FRAME_NUM] = {0};
+			struct vframe_counter_s *tmpbuf = kmalloc(QOS_FRAME_NUM *
+						sizeof(struct vframe_counter_s),GFP_KERNEL);
 			struct av_param_mvdec_t  __user *uarg = (void *)arg;
 
-			if (AMSTREAM_IOC_GET_MVDECINFO == cmd) {
-				if (get_user(vdec_id, &uarg->vdec_id) < 0
-				   || get_user(struct_size, &uarg->struct_size) < 0) {
-						r = -EFAULT;
-						break;
-					}
-				if (struct_size != sizeof(struct av_param_mvdec_t)) {
-					pr_err("pass in size %u != expected size %u\n",
-						struct_size, (u32)sizeof(struct av_param_mvdec_t));
-					pr_err("App using old structue,we will support it.\n");
-					//Here will add the compatibility for old structure when
-					//current struecture be substituded by newer structure.
-					//msleep(1000); let app handle it.
-					break;
-				}
+			if (!tmpbuf) {
+				r = -EFAULT;
+				pr_err("kmalloc vframe_counter_s failed!\n");
+				break;
 			}
+
 			vdec = vdec_get_vdec_by_id(vdec_id);
 			if (!vdec) {
 				r = 0;
+				kfree(tmpbuf);
 				break;
 			}
 
@@ -2649,18 +2641,42 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 				put_user(slots, &uarg->slots);
 			if (slots) {
 				if (AMSTREAM_IOC_GET_MVDECINFO == cmd) {
+					if (get_user(vdec_id, &uarg->vdec_id) < 0 ||
+					get_user(struct_size, &uarg->struct_size) < 0) {
+						r = -EFAULT;
+						kfree(tmpbuf);
+						break;
+					}
 					if (copy_to_user((void *)&uarg->comm,
 								&vdec->mvfrm->comm,
 								sizeof(struct vframe_comm_s))) {
 						r = -EFAULT;
-						break;
-					}
-					if (copy_to_user((void *)&uarg->minfo[0],
-								tmpbuf,
-								slots*sizeof(struct vframe_counter_s))) {
-						r = -EFAULT;
 						kfree(tmpbuf);
 						break;
+					}
+					if (struct_size == sizeof(struct av_param_mvdec_t_old)) {//old struct
+						struct av_param_mvdec_t_old  __user *uarg_old = (void *)arg;
+						int m;
+						for (m=0; m<slots; m++)
+							if (copy_to_user((void *)&uarg_old->minfo[m],
+										&tmpbuf[m],
+										sizeof(struct vframe_counter_s_old))) {
+								r = -EFAULT;
+								kfree(tmpbuf);
+								break;
+							}
+					} else if (struct_size == sizeof(struct av_param_mvdec_t)) {//new struct
+						if (copy_to_user((void *)&uarg->minfo[0],
+									tmpbuf,
+									slots*sizeof(struct vframe_counter_s))) {
+							r = -EFAULT;
+							kfree(tmpbuf);
+							break;
+						}
+					} else {
+						pr_err("pass in size %u,old struct size %u,current struct size %u\n",
+						struct_size, (u32)sizeof(struct av_param_mvdec_t_old),(u32)sizeof(struct av_param_mvdec_t));
+						pr_err("App use another picture size,we haven't support it.\n");
 					}
 				}else { //For compatibility, only copy the qos
 					struct av_param_qosinfo_t  __user *uarg = (void *)arg;
@@ -2670,6 +2686,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 									&tmpbuf[i].qos,
 									sizeof(struct vframe_qos_s))) {
 							r = -EFAULT;
+							kfree(tmpbuf);
 							break;
 						}
 				}
@@ -2678,6 +2695,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 			      infinitely calling*/
 				//msleep(10); let user app handle it.
 			}
+			kfree(tmpbuf);
 		}
 		break;
 	case AMSTREAM_IOC_GET_AVINFO:
