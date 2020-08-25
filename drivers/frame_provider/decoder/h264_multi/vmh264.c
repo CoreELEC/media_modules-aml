@@ -2843,18 +2843,13 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 				VIDTYPE_INTERLACE_FIRST |
 				VIDTYPE_VIU_NV21;
 
-			if (frame->frame != NULL &&
-				(frame->frame->pic_struct == PIC_TOP_BOT ||
-				frame->frame->pic_struct == PIC_BOT_TOP) &&
-				frame->frame->coded_frame) {
-				if (frame->frame != NULL && frame->frame->pic_struct == PIC_TOP_BOT) {
+			if (bForceInterlace) {
 				vf->type |= (i == 0 ?
 					VIDTYPE_INTERLACE_TOP :
 					VIDTYPE_INTERLACE_BOTTOM);
-				} else if (frame->frame != NULL && frame->frame->pic_struct == PIC_BOT_TOP) {
-					vf->type |= (i == 0 ?
-					VIDTYPE_INTERLACE_BOTTOM :
-					VIDTYPE_INTERLACE_TOP);
+				if (i == 1) {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
 				}
 			} else if (frame->top_field != NULL && frame->bottom_field != NULL) {/*top first*/
 				if (frame->top_field->poc <= frame->bottom_field->poc)
