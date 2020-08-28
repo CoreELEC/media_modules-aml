@@ -30,6 +30,7 @@
 #include <linux/delay.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
+#include <linux/amlogic/media/frame_sync/tsync_pcr.h>
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "../../common/chips/decoder_cpu_ver_info.h"
 #include "stream_buffer_base.h"
@@ -135,6 +136,7 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 			stbuf->use_ptsserv = false;
 			//goto err;//fixme
 		}
+		tsync_pcr_start();
 	}
 	/* init thread write. */
 	if (!(vdec_get_debug_flags() & 1) &&
@@ -170,8 +172,10 @@ static void stream_buffer_release(struct stream_buf_s *stbuf)
 	if (stbuf->write_thread)
 		threadrw_release(stbuf);
 
-	if (stbuf->use_ptsserv)
+	if (stbuf->use_ptsserv) {
 		pts_stop(type_to_pts(stbuf->type));
+		tsync_pcr_stop();
+	}
 
 	if (stbuf->flag & BUF_FLAG_ALLOC && stbuf->buf_start) {
 		if (!stbuf->ext_buf_addr)
