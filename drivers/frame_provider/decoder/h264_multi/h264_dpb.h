@@ -976,6 +976,8 @@ void dump_dpb(struct DecodedPictureBuffer *p_Dpb, u8 force);
 
 void dump_pic(struct h264_dpb_stru *p_H264_Dpb);
 
+void * vh264_get_bufspec_lock(struct vdec_s *vdec);
+
 enum PictureStructure get_cur_slice_picture_struct(
 	struct h264_dpb_stru *p_H264_Dpb);
 

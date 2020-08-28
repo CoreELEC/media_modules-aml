@@ -2212,8 +2212,11 @@ static void get_smallest_poc(struct DecodedPictureBuffer *p_Dpb, int *poc,
 			     int *pos)
 {
 	unsigned int i;
+	unsigned long flags;
 	struct h264_dpb_stru *p_H264_Dpb = container_of(p_Dpb,
 				struct h264_dpb_stru, mDPB);
+	struct vdec_s *vdec= (struct vdec_s *)p_H264_Dpb->vdec;
+	void *p = vh264_get_bufspec_lock(vdec);
 	dpb_print(p_H264_Dpb->decoder_index,
 		PRINT_FLAG_DPB_DETAIL, "%s\n", __func__);
 	if (p_Dpb->used_size < 1) {
@@ -2224,6 +2227,9 @@ static void get_smallest_poc(struct DecodedPictureBuffer *p_Dpb, int *poc,
 
 	*pos = -1;
 	*poc = INT_MAX;
+	if (p == NULL)
+		return;
+	spin_lock_irqsave(p, flags);
 	for (i = 0; i < p_Dpb->used_size; i++) {
 #ifdef OUTPUT_BUFFER_IN_C
 		/* rain */
@@ -2237,6 +2243,7 @@ static void get_smallest_poc(struct DecodedPictureBuffer *p_Dpb, int *poc,
 			*pos = i;
 		}
 	}
+	spin_unlock_irqrestore(p, flags);
 }
 
 int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)

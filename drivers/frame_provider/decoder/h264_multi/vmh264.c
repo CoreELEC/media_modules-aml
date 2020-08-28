@@ -4215,7 +4215,14 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 	if (hw->buffer_empty_flag)
 		WRITE_VREG(ASSIST_MBOX1_IRQ_REG, 0x1);
 }
-
+void * vh264_get_bufspec_lock(struct vdec_s *vdec)
+{
+	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	if (hw)
+		return (&hw->bufspec_lock);
+	else
+		return NULL;
+}
 static int vh264_event_cb(int type, void *data, void *op_arg)
 {
 	unsigned long flags;
