@@ -387,9 +387,9 @@ static inline bool close_to(int a, int b, int m)
 #define DEFAULT_MEM_SIZE        (32*1024*1024)
 #define AVIL_DPB_BUFF_SIZE      0x01ec2000
 
-#define DEF_BUF_START_ADDR			0x01000000
-#define mem_sps_base				0x011c3c00
-#define mem_pps_base				0x011cbc00
+#define DEF_BUF_START_ADDR			0x00000000
+#define mem_sps_base				0x01c3c00
+#define mem_pps_base				0x01cbc00
 /*#define V_BUF_ADDR_OFFSET             (0x13e000)*/
 u32 V_BUF_ADDR_OFFSET = 0x200000;
 #define DCAC_READ_MARGIN	(64 * 1024)
