@@ -421,16 +421,20 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 	bool alloc_buffer = false;
 	s32 r = 0;
 
-	enc_pr(LOG_DEBUG, "[+] %s\n", __func__);
+	enc_pr(LOG_DEBUG, "[+] %s, open_count=%d\n", __func__,
+			s_vpu_drv_context.open_count);
+	enc_pr(LOG_DEBUG, "vpu_open, calling process: %d:%s\n", current->pid, current->comm);
 	spin_lock(&s_vpu_lock);
 	s_vpu_drv_context.open_count++;
 	if (s_vpu_drv_context.open_count == 1) {
 		alloc_buffer = true;
 	} else {
 		r = -EBUSY;
+		enc_pr(LOG_ERROR, "vpu_open, device is busy, s_vpu_drv_context.open_count=%d\n",
+				s_vpu_drv_context.open_count);
 		s_vpu_drv_context.open_count--;
 		spin_unlock(&s_vpu_lock);
-		goto Err;
+		return r;
 	}
 	filp->private_data = (void *)(&s_vpu_drv_context);
 	spin_unlock(&s_vpu_lock);
@@ -563,9 +567,12 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 	dma_cfg[0].fd = -1;
 	dma_cfg[1].fd = -1;
 	dma_cfg[2].fd = -1;
-Err:
-	if (r != 0)
+
+	if (r != 0) {
+		enc_pr(LOG_DEBUG, "vpu_open, error handling, r=%d, s_vpu_drv_context.open_count\n",
+				r, s_vpu_drv_context.open_count);
 		s_vpu_drv_context.open_count--;
+	}
 	enc_pr(LOG_DEBUG, "[-] %s, ret: %d\n", __func__, r);
 	return r;
 }
@@ -1508,14 +1515,27 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 	s32 ret = 0;
 	ulong flags;
 
-	enc_pr(LOG_DEBUG, "vpu_release\n");
+	enc_pr(LOG_DEBUG, "vpu_release, calling process: %d:%s\n", current->pid, current->comm);
 	ret = down_interruptible(&s_vpu_sem);
+	enc_pr(LOG_DEBUG, "vpu_release, ret = %d\n", ret);
+
+	if (s_vpu_drv_context.open_count <= 0) {
+		enc_pr(LOG_DEBUG, "vpu_release, open_count=%d, already released or even not inited\n",
+			s_vpu_drv_context.open_count);
+		s_vpu_drv_context.open_count = 0;
+		goto exit_release;
+	}
+
 	if (ret == 0) {
 		vpu_free_buffers(filp);
 		vpu_free_instances(filp);
+
+		enc_pr(LOG_DEBUG, "vpu_release, decrease open_count from %d\n",
+				s_vpu_drv_context.open_count);
+
 		s_vpu_drv_context.open_count--;
 		if (s_vpu_drv_context.open_count == 0) {
-			enc_pr(LOG_INFO,
+			enc_pr(LOG_DEBUG,
 			       "vpu_release: s_interrupt_flag(%d), reason(0x%08lx)\n",
 			       s_interrupt_flag, s_vpu_drv_context.interrupt_reason);
 			s_vpu_drv_context.interrupt_reason = 0;
@@ -1582,6 +1602,7 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 			    amports_switch_gate("vdec", 0);
 		}
 	}
+exit_release:
 	up(&s_vpu_sem);
 	return 0;
 }
