@@ -298,6 +298,7 @@ s32 stbuf_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 			return r;
 	}
 	addr32 = buf->buf_start & 0xffffffff;
+	buf->use_ptsserv = true;
 	init_waitqueue_head(&buf->wq);
 
 	/*
