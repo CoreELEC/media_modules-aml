@@ -265,7 +265,10 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 	}
 
 	v4l2_event_queue_fh(&ctx->fh, &event);
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "changes: %x\n", changes);
+	if (changes != V4L2_EVENT_SRC_CH_HDRINFO)
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "changes: %x\n", changes);
+	else
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "changes: %x\n", changes);
 }
 
 static void aml_vdec_flush_decoder(struct aml_vcodec_ctx *ctx)

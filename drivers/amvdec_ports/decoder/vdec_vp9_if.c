@@ -215,9 +215,10 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 
 	if ((ctx->config.parm.dec.parms_status &
 		V4L2_CONFIG_PARM_DECODE_HDRINFO) &&
-		inst->parms.hdr.color_parms.present_flag) {
+		ctx->config.parm.dec.hdr.color_parms.present_flag) {
 		u8 *pbuf = ctx->config.buf + ctx->config.length;
 
+		pbuf += sprintf(pbuf, "HDRStaticInfo:%d;", 1);
 		pbuf += sprintf(pbuf, "mG.x:%d;",
 			ctx->config.parm.dec.hdr.color_parms.primaries[0][0]);
 		pbuf += sprintf(pbuf, "mG.y:%d;",
@@ -235,7 +236,7 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 		pbuf += sprintf(pbuf, "mW.y:%d;",
 			ctx->config.parm.dec.hdr.color_parms.white_point[1]);
 		pbuf += sprintf(pbuf, "mMaxDL:%d;",
-			ctx->config.parm.dec.hdr.color_parms.luminance[0] / 1000);
+			ctx->config.parm.dec.hdr.color_parms.luminance[0] * 10000);
 		pbuf += sprintf(pbuf, "mMinDL:%d;",
 			ctx->config.parm.dec.hdr.color_parms.luminance[1]);
 		pbuf += sprintf(pbuf, "mMaxCLL:%d;",
@@ -1010,7 +1011,7 @@ static void set_param_hdr_info(struct vdec_vp9_inst *inst,
 			V4L2_CONFIG_PARM_DECODE_HDRINFO;
 		aml_vdec_dispatch_event(inst->ctx,
 			V4L2_EVENT_SRC_CH_HDRINFO);
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
 			"VP9 set HDR infos\n");
 	}
 }
