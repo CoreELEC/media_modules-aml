@@ -1813,6 +1813,8 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 
 
 	amvdec_disable();
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TM2)
+		vdec_reset_core(NULL);
 	pic_type = 0;
 	if (mm_blk_handle) {
 		decoder_bmmu_box_free(mm_blk_handle);
