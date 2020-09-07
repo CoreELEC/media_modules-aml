@@ -2188,6 +2188,30 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 		release_aux_data(hevc, hevc->decoding_pic);
 		hevc->decoding_pic = NULL;
 	}
+	if (vdec_stream_based(vdec) &&
+		(hevc->decode_idx - hevc->decode_idx_bak > 1)) {
+		int i;
+		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+			struct PIC_s *pic;
+			pic = hevc->m_PIC[i];
+			if (pic == NULL ||
+				(pic->index == -1) ||
+				(pic->BUF_index == -1) ||
+				(pic->POC == INVALID_POC))
+				continue;
+			if ((hevc->decode_idx > hevc->decode_idx_bak) &&
+					pic->decode_idx != hevc->decode_idx) {
+					hevc_print(hevc, 0, "release error buffer\n");
+					pic->error_mark = 0;
+					pic->output_ready = 0;
+					pic->output_mark = 0;
+					pic->referenced = 0;
+					pic->POC = INVALID_POC;
+					put_mv_buf(hevc, pic);
+					release_aux_data(hevc, pic);
+			}
+		}
+	}
 	hevc->decode_idx = hevc->decode_idx_bak;
 	hevc->m_pocRandomAccess = hevc->m_pocRandomAccess_bak;
 	hevc->curr_POC = hevc->curr_POC_bak;
