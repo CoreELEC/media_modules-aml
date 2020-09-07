@@ -542,6 +542,8 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DEC_RESULT_ERROR            6
 #define DEC_RESULT_EOS              7
 #define DEC_RESULT_FORCE_EXIT       8
+#define DEC_RESULT_TIMEOUT			9
+
 
 /*
  *static const char *dec_result_str[] = {
@@ -6882,7 +6884,6 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 static void timeout_process(struct vdec_h264_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 
 	/*
 	 * In this very timeout point,the vh264_work arrives,
@@ -6904,12 +6905,10 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 		hevc_set_frame_done(hw);
 		hevc_sao_wait_done(hw);
 	}
-	if (!hw->i_only && (error_proc_policy & 0x2))
-		flush_dpb(p_H264_Dpb);
 	dpb_print(DECODE_ID(hw),
 		PRINT_FLAG_ERROR, "%s decoder timeout\n", __func__);
 	release_cur_decoding_buf(hw);
-	hw->dec_result = DEC_RESULT_DONE;
+	hw->dec_result = DEC_RESULT_TIMEOUT;
 	hw->data_flag |= ERROR_FLAG;
 
 	if (work_pending(&hw->work))
@@ -8803,9 +8802,18 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			}
 		}
 		return;
-	} else if (hw->dec_result == DEC_RESULT_DONE) {
+	} else if (hw->dec_result == DEC_RESULT_DONE ||
+					hw->dec_result == DEC_RESULT_TIMEOUT) {
 		/* if (!hw->ctx_valid)
 			hw->ctx_valid = 1; */
+		if ((hw->dec_result == DEC_RESULT_TIMEOUT) &&
+				!hw->i_only && (error_proc_policy & 0x2)) {
+			struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+			dpb_print(DECODE_ID(hw), 0,
+				"%s, decode timeout flush dpb\n",
+				__func__);
+			flush_dpb(p_H264_Dpb);
+		}
 result_done:
 		{
 			if (error_proc_policy & 0x8000) {
