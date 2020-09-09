@@ -327,7 +327,7 @@ extern int vdec_write_vframe(struct vdec_s *vdec, const char *buf,
 				size_t count);
 
 extern int vdec_write_vframe_with_dma(struct vdec_s *vdec,
-	ulong addr, size_t count, u32 handle);
+	ulong addr, size_t count, u32 handle, chunk_free free, void* priv);
 
 /* mark the vframe_chunk as consumed */
 extern void vdec_vframe_dirty(struct vdec_s *vdec,

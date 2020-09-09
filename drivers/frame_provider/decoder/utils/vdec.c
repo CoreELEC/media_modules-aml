@@ -1244,9 +1244,10 @@ int vdec_write_vframe(struct vdec_s *vdec, const char *buf, size_t count)
 EXPORT_SYMBOL(vdec_write_vframe);
 
 int vdec_write_vframe_with_dma(struct vdec_s *vdec,
-	ulong addr, size_t count, u32 handle)
+	ulong addr, size_t count, u32 handle, chunk_free free, void* priv)
 {
-	return vdec_input_add_frame_with_dma(&vdec->input, addr, count, handle);
+	return vdec_input_add_frame_with_dma(&vdec->input,
+		addr, count, handle, free, priv);
 }
 EXPORT_SYMBOL(vdec_write_vframe_with_dma);
 

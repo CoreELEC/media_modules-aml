@@ -55,6 +55,7 @@
 
 //#define DATA_DEBUG
 
+extern void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx, u32 handle);
 static int def_4k_vstreambuf_sizeM =
 	(DEFAULT_VIDEO_BUFFER_SIZE_4K >> 20);
 static int def_vstreambuf_sizeM =
@@ -688,8 +689,16 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	return ret;
 }
 
+void vdec_vframe_input_free(void *priv, u32 handle)
+{
+	struct aml_vcodec_ctx *ctx = priv;
+
+	aml_recycle_dma_buffers(ctx, handle);
+}
+
 int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
-	ulong addr, u32 count, u64 timestamp, u32 handle)
+	ulong addr, u32 count, u64 timestamp, u32 handle,
+	chunk_free free, void* priv)
 {
 	int ret = -1;
 	struct vdec_s *vdec = ada_ctx->vdec;
@@ -697,7 +706,8 @@ int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
 	/* set timestamp */
 	vdec_set_timestamp(vdec, timestamp);
 
-	ret = vdec_write_vframe_with_dma(vdec, addr, count, handle);
+	ret = vdec_write_vframe_with_dma(vdec, addr, count,
+		handle, free, priv);
 
 	if (slow_input) {
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_PRINFO,
@@ -784,9 +794,3 @@ void v4l2_config_vdec_parm(struct aml_vdec_adapt *ada_ctx, u8 *data, u32 len)
 	vdec->config_len = len > PAGE_SIZE ? PAGE_SIZE : len;
 	memcpy(vdec->config, data, vdec->config_len);
 }
-
-u32 aml_recycle_buffer(struct aml_vdec_adapt *adaptor)
-{
-	return vdec_input_get_freed_handle(adaptor->vdec);
-}
-

@@ -421,6 +421,7 @@ struct aml_vdec_thread {
  * @is_drm_mode: decoding work on drm mode if that set.
  * @is_stream_mode: vdec input used to stream mode, default frame mode.
  * @is_stream_off: the value used to handle reset active.
+ * @is_out_stream_off: streamoff called for output port.
  * @receive_cmd_stop: if receive the cmd flush decoder.
  * @reset_flag: reset mode includes lightly and normal mode.
  * @decoded_frame_cnt: the capture buffer deque number to be count.
@@ -466,6 +467,7 @@ struct aml_vcodec_ctx {
 	bool				is_drm_mode;
 	bool				output_dma_mode;
 	bool				is_stream_off;
+	bool				is_out_stream_off;
 	bool				receive_cmd_stop;
 	int				reset_flag;
 	int				decoded_frame_cnt;
