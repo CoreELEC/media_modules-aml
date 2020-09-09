@@ -3401,6 +3401,7 @@ static int dmx_enable(struct aml_dmx *dmx)
 			      (1 << AUDIO_PACKET) |
 			      (1 << SUB_PACKET) |
 			      (1 << SCR_ONLY_PACKET) |
+			      (1 << RECORDER_STREAM) |
 				(1 << OTHER_PES_PACKET));
 		DMX_WRITE_REG(dmx->id, PES_STRONG_SYNC, 0x1234);
 		DMX_WRITE_REG(dmx->id, DEMUX_ENDIAN,
@@ -4735,11 +4736,11 @@ int dmx_alloc_chan(struct aml_dmx *dmx, int type, int pes_type, int pid)
 
 	dmx_set_chan_regs(dmx, id);
 
-	/* If video channel started,
+	/* If video/audio channel started,
 	* visit all channels with type:VIDEO_PACKET
-	* change them to type:RECORD_STREAM
+	* change them to type:RECORDER_STREAM
 	*/
-	if (id == 0) {
+	if (id == 0 || id == 1) {
 		int i;
 		for (i = SYS_CHAN_COUNT; i < CHANNEL_COUNT; i++) {
 			if (dmx->channel[i].used
@@ -4765,21 +4766,21 @@ void dmx_free_chan(struct aml_dmx *dmx, int cid)
 	dmx->channel[cid].pid = 0x1fff;
 	dmx_set_chan_regs(dmx, cid);
 
-	/* Video channel gone,
+	/* video/audio channel gone,
 	 * RECORDER_STREAM channels depends on AV channel's existence
 	 * setup one fake video channel,
 	 * then other RECORDER_STREAM channels will be happy to run.
 	 */
-	if (cid == 0) {
+	if (cid == 0 || cid == 1) {
 		int i;
 		struct aml_channel *pch;
+
 		for (i = SYS_CHAN_COUNT; i < CHANNEL_COUNT; i++) {
 			pch = &dmx->channel[i];
-			if (pch->used && pch->pkt_type == RECORDER_STREAM) {
-				dmx_set_chan_regs(dmx, i);
 
-				/*need at least one channel of type:VIDEO_PKT*/
-				break;
+			if (pch->used) {
+				if (pch->pkt_type == RECORDER_STREAM)
+					dmx_set_chan_regs(dmx, i);
 			}
 		}
 	}
