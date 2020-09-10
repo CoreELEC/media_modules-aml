@@ -475,4 +475,7 @@ int show_stream_buffer_status(char *buf,
 bool is_support_no_parser(void);
 
 extern u32 timestamp_avsync_counter_get(void);
+
+int vdec_resource_checking(struct vdec_s *vdec);
+
 #endif				/* VDEC_H */

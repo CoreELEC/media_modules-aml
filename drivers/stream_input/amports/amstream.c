@@ -920,6 +920,10 @@ static int amstream_port_init(struct port_priv_s *priv)
 	struct stream_port_s *port = priv->port;
 	struct vdec_s *vdec = priv->vdec;
 
+	r = vdec_resource_checking(vdec);
+	if (r < 0)
+		return r;
+
 	mutex_lock(&amstream_mutex);
 
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
@@ -1088,7 +1092,7 @@ static int amstream_port_release(struct port_priv_s *priv)
 		sub_port_release(port, psbuf);
 
 	port->pcr_inited = 0;
-	port->flag = 0;
+
 	return 0;
 }
 
@@ -1602,6 +1606,7 @@ static int amstream_open(struct inode *inode, struct file *file)
 	struct stream_port_s *s;
 	struct stream_port_s *port = &ports[iminor(inode)];
 	struct port_priv_s *priv;
+
 	VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
 #ifdef G12A_BRINGUP_DEBUG
 	if (vdec_get_debug_flags() & 0xff0000) {
@@ -1756,7 +1761,6 @@ static int amstream_release(struct inode *inode, struct file *file)
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	u32 port_flag = 0;
 #endif
-
 	if (iminor(inode) >= amstream_port_num)
 		return -ENODEV;
 
@@ -1790,7 +1794,6 @@ static int amstream_release(struct inode *inode, struct file *file)
 		if (i == amstream_port_num)
 			timestamp_firstvpts_set(0);
 	}
-	port->flag = 0;
 
 	/* timestamp_pcrscr_set(0); */
 
@@ -3491,7 +3494,18 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 	}
 	case AMSTREAM_IOC_INIT_EX_STBUF: {
 		struct stream_buffer_metainfo parm;
-		struct stream_buf_s *vbuf = &priv->vdec->vbuf;
+		struct stream_buf_s *vbuf = NULL;
+
+		if (priv->vdec == NULL) {
+			pr_err("init %s, no vdec.\n", __func__);
+			return -EFAULT;
+		}
+
+		vbuf = &priv->vdec->vbuf;
+		if (vbuf == NULL) {
+			pr_err("init %s, no stbuf.\n", __func__);
+			return -EFAULT;
+		}
 
 		if (copy_from_user(&parm, (void __user *)arg,
 			sizeof(struct stream_buffer_metainfo))) {
@@ -3503,7 +3517,23 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 	}
 	case AMSTREAM_IOC_WR_STBUF_META: {
 		struct stream_buffer_metainfo meta;
-		struct stream_buf_s *vbuf = &priv->vdec->vbuf;
+		struct stream_buf_s *vbuf = NULL;
+
+		if (priv->vdec == NULL) {
+			pr_err("write %s, no vdec.\n", __func__);
+			return -EFAULT;
+		}
+
+		vbuf = &priv->vdec->vbuf;
+		if (vbuf == NULL) {
+			pr_err("write %s, no stbuf.\n", __func__);
+			return -EFAULT;
+		}
+
+		if (vbuf->ops == NULL) {
+			pr_err("write %s, no ops.\n", __func__);
+			return -EFAULT;
+		}
 
 		if (copy_from_user(&meta, (void __user *)arg,
 			sizeof(struct stream_buffer_metainfo))) {
@@ -3517,7 +3547,23 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 	}
 	case AMSTREAM_IOC_GET_STBUF_STATUS: {
 		struct stream_buffer_status st;
-		struct stream_buf_s *pbuf = &priv->vdec->vbuf;
+		struct stream_buf_s *pbuf = NULL;
+
+		if (priv->vdec == NULL) {
+			pr_err("get status %s, no vdec.\n", __func__);
+			return -EFAULT;
+		}
+
+		pbuf = &priv->vdec->vbuf;
+		if (pbuf == NULL) {
+			pr_err("get status %s, no stbuf.\n", __func__);
+			return -EFAULT;
+		}
+
+		if (pbuf->ops == NULL) {
+			pr_err("get status %s, no ops.\n", __func__);
+			return -EFAULT;
+		}
 
 		st.stbuf_start = pbuf->ext_buf_addr;
 		st.stbuf_size = pbuf->buf_size;

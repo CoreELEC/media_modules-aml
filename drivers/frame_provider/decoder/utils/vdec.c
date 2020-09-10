@@ -202,6 +202,7 @@ struct vdec_core_s {
 	unsigned long buff_flag;
 	unsigned long stream_buff_flag;
 	struct power_manager_s *pm;
+	u32 vdec_resouce_status;
 };
 
 struct canvas_status_s {
@@ -2195,6 +2196,41 @@ int vdec_destroy(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(vdec_destroy);
 
+static bool is_tunnel_pipeline(u32 pl)
+{
+	return ((pl & BIT(FRAME_BASE_PATH_DTV_TUNNEL_MODE)) ||
+		(pl & BIT(FRAME_BASE_PATH_AMLVIDEO_AMVIDEO))) ?
+		true : false;
+}
+
+static bool is_res_locked(u32 pre, u32 cur)
+{
+	return is_tunnel_pipeline(pre) ?
+		(is_tunnel_pipeline(cur) ? true : false) : false;
+}
+
+int vdec_resource_checking(struct vdec_s *vdec)
+{
+	/*
+	 * If it is the single instance that the pipeline of DTV used,
+	 * then have to check that the resources which is belong tunnel
+	 * pipeline these are being released.
+	 */
+	ulong expires = jiffies + msecs_to_jiffies(2000);
+
+	while (is_res_locked(vdec_core->vdec_resouce_status,
+		BIT(vdec->frame_base_video_path))) {
+		if (time_after(jiffies, expires)) {
+			pr_err("wait vdec resource timeout.\n");
+			return -EBUSY;
+		}
+		schedule();
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(vdec_resource_checking);
+
 /*
  *register vdec_device
  * create output, vfm or create ionvideo output
@@ -2205,6 +2241,10 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	struct vdec_s *p = vdec;
 	const char *dev_name;
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
+
+	if (is_res_locked(vdec_core->vdec_resouce_status,
+		BIT(vdec->frame_base_video_path)))
+		return -EBUSY;
 
 	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
 	dev_name = get_dev_name(vdec_single(vdec), vdec->format);
@@ -2508,7 +2548,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				vdec->vf_receiver_name);
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
-		} else if (p->frame_base_video_path == FRAME_BASE_PATH_DTV_TUNNEL_MODE) {
+		} else if (p->frame_base_video_path ==
+			FRAME_BASE_PATH_DTV_TUNNEL_MODE) {
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 				"%s deinterlace %s", vdec->vf_provider_name,
 				"amvideo");
@@ -2585,6 +2626,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	p->dolby_meta_with_el = 0;
 	pr_debug("vdec_init, vf_provider_name = %s, b %d\n",
 		p->vf_provider_name, is_cpu_tm2_revb());
+
+	mutex_lock(&vdec_mutex);
+	vdec_core->vdec_resouce_status |= BIT(p->frame_base_video_path);
+	mutex_unlock(&vdec_mutex);
+
 	vdec_input_prepare_bufs(/*prepared buffer for fast playing.*/
 		&vdec->input,
 		vdec->sys_info->width,
@@ -2691,12 +2737,16 @@ void vdec_release(struct vdec_s *vdec)
 
 	pr_debug("vdec_release instance %p, total %d\n", vdec,
 		atomic_read(&vdec_core->vdec_nr));
+
+	mutex_lock(&vdec_mutex);
+	vdec_core->vdec_resouce_status &= ~BIT(vdec->frame_base_video_path);
+	mutex_unlock(&vdec_mutex);
+
 	vdec_destroy(vdec);
 
 	mutex_lock(&vdec_mutex);
 	inited_vcodec_num--;
 	mutex_unlock(&vdec_mutex);
-
 }
 EXPORT_SYMBOL(vdec_release);
 
