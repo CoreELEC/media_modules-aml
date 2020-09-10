@@ -1806,6 +1806,8 @@ struct hevc_state_s {
 	u32 pre_parser_video_wp;
 	bool dv_duallayer;
 	u32 poc_error_count;
+	u32 timeout_flag;
+	ulong timeout;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -12265,6 +12267,68 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	return (new_pic != NULL) ? 1 : 0;
 }
 
+static void check_buffer_status(struct hevc_state_s *hevc)
+{
+	int i;
+	struct PIC_s *new_pic = NULL;
+	struct PIC_s *pic;
+	struct vdec_s *vdec = hw_to_vdec(hevc);
+
+	enum receviver_start_e state = RECEIVER_INACTIVE;
+	if (vf_get_receiver(vdec->vf_provider_name)) {
+		state =
+		vf_notify_receiver(vdec->vf_provider_name,
+			VFRAME_EVENT_PROVIDER_QUREY_STATE,
+			NULL);
+		if ((state == RECEIVER_STATE_NULL)
+			|| (state == RECEIVER_STATE_NONE))
+			state = RECEIVER_INACTIVE;
+	}
+	if (hevc->timeout_flag == false)
+		hevc->timeout = jiffies + HZ / 2;
+
+	if (state == RECEIVER_INACTIVE)
+		hevc->timeout_flag = true;
+	else
+		hevc->timeout_flag = false;
+
+	if (state == RECEIVER_INACTIVE && hevc->timeout_flag &&
+				time_after(jiffies, hevc->timeout)) {
+		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+			int poc = INVALID_POC;
+			pic = hevc->m_PIC[i];
+			if (pic == NULL || pic->index == -1)
+					continue;
+			if ((pic->referenced == 0) &&
+					(pic->error_mark == 1) &&
+					(pic->output_mark == 1)) {
+				if (poc == INVALID_POC ||  (pic->POC < poc)) {
+					new_pic = pic;
+					poc = pic->POC;
+				}
+			}
+		}
+	    if (new_pic)  {
+			new_pic->referenced = 0;
+			new_pic->output_mark = 0;
+			put_mv_buf(hevc, new_pic);
+			hevc_print(hevc, 0, "check_buffer_status force release error  pic %d  recieve_state %d \n", new_pic->POC, state);
+		} else {
+			for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+				pic = hevc->m_PIC[i];
+				if (pic == NULL || pic->index == -1)
+					continue;
+				if ((pic->referenced == 1) && (pic->error_mark == 1)) {
+					flush_output(hevc, pic);
+					hevc_print(hevc, 0, "check_buffer_status DPB error, neeed fornce flush  recieve_state %d \n", state);
+					break;
+				}
+			}
+		}
+	}
+}
+
+
 static int vmh265_stop(struct hevc_state_s *hevc)
 {
 	if (hevc->stat & STAT_TIMER_ARM) {
@@ -12996,8 +13060,10 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		switching resolution*/
 		if (run_ready_max_buf_num == 0xff &&
 			get_used_buf_count(hevc) >=
-			get_work_pic_num(hevc))
+			get_work_pic_num(hevc)) {
+			check_buffer_status(hevc);
 			ret = 0;
+		}
 		else if (run_ready_max_buf_num &&
 			get_used_buf_count(hevc) >=
 			run_ready_max_buf_num)
