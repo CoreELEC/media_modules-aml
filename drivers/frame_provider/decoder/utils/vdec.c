@@ -5062,25 +5062,32 @@ u32 diff_pts(u32 a, u32 b)
 static void cal_dur_from_pts(struct vdec_s *vdec, u32 slot)
 {
 #define DURATION_THRESHOD 10
-	static u32 sended = 0;
+	static u32 must_send = 0, ready = 0;
 	u32 old = 0, cur, diff;
 	struct vframe_counter_s *fifo = vdec->mvfrm->fifo_buf;
 
-	if (vdec->mvfrm->wr == 1)
-		sended = 0;
-
-	if (vdec->format != VFORMAT_H264 &&
-	    vdec->format != VFORMAT_HEVC) {
-	    if (fifo[slot].frame_dur != sended) {
-		sended = fifo[slot].frame_dur;
-		pr_debug("%s send dur%u \n",__func__, sended);
-		vframe_rate_uevent(sended);
-	    }
-	    return;
+	if (vdec->mvfrm->wr == 1) {
+		ready = 0;
+		must_send = 0;
 	}
 
-	if (!fifo[slot].pts)
-		return;
+	if (must_send == 2)
+		return ;
+
+	if (ready)
+		++must_send;
+
+	if ((vdec->format != VFORMAT_H264 && vdec->format != VFORMAT_HEVC) ||
+	    !fifo[slot].pts) {
+		if (fifo[slot].frame_dur != ready) {
+			if (must_send)
+				ready = (ready + fifo[slot].frame_dur) / 2;
+			else
+				ready = fifo[slot].frame_dur;
+		pr_debug("%s inner driver dur%u \n",__func__, ready);
+	    }
+	    goto end_handle;
+	}
 
 	if (slot == 1) {
 		cur = diff_pts(fifo[1].pts, fifo[0].pts);
@@ -5102,16 +5109,23 @@ static void cal_dur_from_pts(struct vdec_s *vdec, u32 slot)
 		else
 			dur = cur2;
 
-		if (sended == dur)
-			return;
+		if (ready == dur)
+			goto end_handle;
 
-		sended = dur;
-		pr_debug("%s vstatus %u dur%u - %u, revised %u\n",__func__,fifo[slot].frame_dur, cur,cur2, dur);
+		if (must_send)
+			ready = (ready + dur) / 2;
+		else
+			ready = dur;
+		pr_debug("%s vstatus %u dur%u -> %u, revised %u\n",__func__,fifo[slot].frame_dur, cur,cur2, dur);
 		if (diff > 10 && slot >= 2)
 			pr_debug("wr=%u,slot=%u pts %u, %u, %u\n",vdec->mvfrm->wr,slot,
 				fifo[slot].pts, fifo[slot-1].pts,fifo[slot-2].pts);
+	}
 
-		vframe_rate_uevent(dur);
+end_handle:
+	if (must_send) {
+		++must_send;
+		vframe_rate_uevent(ready);
 	}
 }
 
