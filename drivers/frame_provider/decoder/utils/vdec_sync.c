@@ -53,6 +53,7 @@ static struct sync_timeline *sync_timeline_create(const char *name)
 
 	kref_init(&obj->kref);
 	obj->context = fence_context_alloc(1);
+	obj->timestamp = local_clock();
 	strlcpy(obj->name, name, sizeof(obj->name));
 	INIT_LIST_HEAD(&obj->active_list_head);
 	INIT_LIST_HEAD(&obj->pt_list);
@@ -67,7 +68,6 @@ static void sync_timeline_free(struct kref *kref)
 		container_of(kref, struct sync_timeline, kref);
 
 	pr_info("[VDEC-FENCE] free timeline: %lx\n", (ulong) obj);
-
 	kfree(obj);
 }
 
@@ -188,7 +188,7 @@ static void sync_timeline_signal(struct sync_timeline *obj, unsigned int inc)
 	obj->value += inc;
 	list_for_each_entry_safe(pt, next, &obj->active_list_head,
 				 active_list) {
-		if (fence_is_signaled_locked(&pt->fence))
+		if (fence_is_signaled(&pt->fence))
 			list_del_init(&pt->active_list);
 	}
 	spin_unlock_irqrestore(&obj->lock, flags);
@@ -297,8 +297,8 @@ EXPORT_SYMBOL(vdec_fence_get);
 void vdec_fence_put(struct fence *fence)
 {
 	if (debug & VDEC_DBG_ENABLE_FENCE)
-		pr_info("[VDEC-FENCE]: the fence cost time: %lld ns\n",
-			local_clock() - get_sync_pt(fence)->timestamp);
+		pr_info("[VDEC-FENCE]: the fence (%px) cost time: %lld ns\n",
+			fence, local_clock() - get_sync_pt(fence)->timestamp);
 	fence_put(fence);
 }
 EXPORT_SYMBOL(vdec_fence_put);
@@ -328,12 +328,25 @@ EXPORT_SYMBOL(vdec_timeline_create);
 int vdec_timeline_create_fence(struct vdec_sync *sync)
 {
 	struct sync_timeline *obj = sync->timeline;
+	struct sync_pt *pt = NULL;
+	ulong flags;
 	u32 value = 0;
 
 	if (obj == NULL)
 		return -EPERM;
 
+	spin_lock_irqsave(&obj->lock, flags);
+
+	pt = list_last_entry(&obj->pt_list, struct sync_pt, link);
 	value = obj->value + 1;
+
+	if (!list_empty(&obj->pt_list)) {
+		pt = list_last_entry(&obj->pt_list, struct sync_pt, link);
+		if (value == pt->fence.seqno) {
+			value++;
+		}
+	}
+	spin_unlock_irqrestore(&obj->lock, flags);
 
 	return timeline_create_fence(sync,
 				     sync->usage,
@@ -393,4 +406,22 @@ bool check_objs_all_signaled(struct vdec_sync *sync)
 	return ret;
 }
 EXPORT_SYMBOL(check_objs_all_signaled);
+
+int vdec_clean_all_fence(struct vdec_sync *sync)
+{
+	struct sync_timeline *obj = sync->timeline;
+	struct sync_pt *pt, *next;
+
+	spin_lock_irq(&obj->lock);
+
+	list_for_each_entry_safe(pt, next, &obj->pt_list, link) {
+		fence_set_error(&pt->fence, -ENOENT);
+		fence_signal_locked(&pt->fence);
+	}
+
+	spin_unlock_irq(&obj->lock);
+
+	return 0;
+}
+EXPORT_SYMBOL(vdec_clean_all_fence);
 

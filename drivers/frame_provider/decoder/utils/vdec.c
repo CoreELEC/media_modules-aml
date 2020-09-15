@@ -2514,6 +2514,13 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				"amvideo");
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
+		} else if (p->frame_base_video_path ==
+			FRAME_BASE_PATH_AMLVIDEO_FENCE) {
+			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+				"%s %s", vdec->vf_provider_name,
+				"amlvideo amvideo");
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
 		}
 
 		if (vfm_map_add(vdec->vfm_map_id,
@@ -3431,7 +3438,6 @@ void vdec_power_reset(void)
 	}
 }
 EXPORT_SYMBOL(vdec_power_reset);
-
 
 void vdec_poweron(enum vdec_type_e core)
 {

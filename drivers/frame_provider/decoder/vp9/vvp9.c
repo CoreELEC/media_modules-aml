@@ -11175,24 +11175,24 @@ static int __init amvdec_vp9_driver_init_module(void)
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 		amvdec_vp9_profile.profile =
-				"8k, 10bit, dwrite, compressed";
+				"8k, 10bit, dwrite, compressed, fence";
 	} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL
 		/*&& get_cpu_major_id() != MESON_CPU_MAJOR_ID_GXLX*/
 		&& get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXL) {
 			if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX) {
 				if (vdec_is_support_4k())
 					amvdec_vp9_profile.profile =
-						"4k, 10bit, dwrite, compressed";
+						"4k, 10bit, dwrite, compressed, fence";
 				else
 					amvdec_vp9_profile.profile =
-						"10bit, dwrite, compressed";
+						"10bit, dwrite, compressed, fence";
 			} else {
 				if (vdec_is_support_4k())
 					amvdec_vp9_profile.profile =
-						"4k, 10bit, dwrite, compressed";
+						"4k, 10bit, dwrite, compressed, fence";
 				else
 					amvdec_vp9_profile.profile =
-						"10bit, dwrite, compressed";
+						"10bit, dwrite, compressed, fence";
 			}
 
 	} else {

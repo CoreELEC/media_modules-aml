@@ -819,8 +819,9 @@ struct FrameStore {
 	int dpb_frame_count;
 	u32 hw_decode_time;
 	u32 frame_size2; // For recording the chunk->size in frame mode
+	bool show_frame;
+	struct fence *fence;
 };
-
 
 /* #define DPB_SIZE_MAX     16 */
 #define DPB_SIZE_MAX     32
@@ -989,5 +990,6 @@ void unmark_for_reference(struct DecodedPictureBuffer *p_Dpb,
 
 void update_ref_list(struct DecodedPictureBuffer *p_Dpb);
 
+int post_picture_early(struct vdec_s *vdec, int index);
 
 #endif

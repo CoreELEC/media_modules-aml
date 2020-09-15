@@ -345,7 +345,14 @@ static u32 without_display_mode;
 static u32 loop_playback_poc_threshold = 400;
 static u32 poc_threshold = 50;
 
-
+/*
+ *[3:0] 0: default use config from omx.
+ *      1: force enable fence.
+ *      2: disable fence.
+ *[7:4] 0: fence use for driver.
+ *      1: fence fd use for app.
+ */
+static u32 force_config_fence;
 
 #define IS_VDEC_DW(hw)  (hw->double_write_mode >> 16 & 0xf)
 
@@ -486,6 +493,7 @@ struct buffer_spec_s {
 	/*unsigned int comp_body_size;*/
 	unsigned int dw_y_adr;
 	unsigned int dw_u_v_adr;
+	int fs_idx;
 };
 
 #define AUX_DATA_SIZE(pic) (hw->buffer_spec[pic->buf_spec_num].aux_data_size)
@@ -909,6 +917,8 @@ struct vdec_h264_hw_s {
 	int buffer_wrap[BUFSPEC_POOL_SIZE];
 	int loop_flag;
 	int loop_last_poc;
+	bool enable_fence;
+	int fence_usage;
 };
 
 static u32 again_threshold;
@@ -2691,31 +2701,16 @@ static int is_iframe(struct FrameStore *frame) {
 	return 0;
 }
 
-
-
-int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
+static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
-	struct vframe_s *vf = NULL;
 	int buffer_index = frame->buf_spec_num;
-	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
-	ulong nv_order = VIDTYPE_VIU_NV21;
-	int vf_count = 1;
-	int i;
-	int bForceInterlace = 0;
 
 	if (buffer_index < 0 || buffer_index >= BUFSPEC_POOL_SIZE) {
 		dpb_print(DECODE_ID(hw), 0,
 			"%s, buffer_index 0x%x is beyond range\n",
 			__func__, buffer_index);
 		return -1;
-	}
-
-	/* swap uv */
-	if (hw->is_used_v4l) {
-		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
-			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
-			nv_order = VIDTYPE_VIU_NV12;
 	}
 
 	if (force_disp_bufspec_num & 0x100) {
@@ -2736,11 +2731,14 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			&& (!(frame->data_flag & I_FLAG)))
 			frame->data_flag |= ERROR_FLAG;
 	}
+
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
-			"%s, buffer_index 0x%x  frame_error %x  poc %d hw error %x error_proc_policy %x\n",
-			__func__, buffer_index,  frame->data_flag & ERROR_FLAG,
-			frame->poc, hw->data_flag & ERROR_FLAG,
-			error_proc_policy);
+		"%s, buffer_index 0x%x  frame_error %x  poc %d hw error %x error_proc_policy %x\n",
+		__func__, buffer_index,
+		frame->data_flag & ERROR_FLAG,
+		frame->poc, hw->data_flag & ERROR_FLAG,
+		error_proc_policy);
+
 	if (frame->frame == NULL &&
 			((frame->is_used == 1 && frame->top_field)
 			|| (frame->is_used == 2 && frame->bottom_field))) {
@@ -2822,19 +2820,14 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 	if ((frame->data_flag & NODISP_FLAG) ||
 		(frame->data_flag & NULL_FLAG) ||
 		((!hw->send_error_frame_flag) &&
-			(frame->data_flag & ERROR_FLAG)) ||
+		(frame->data_flag & ERROR_FLAG)) ||
 		((hw->i_only & 0x1) &&
-		(!(frame->data_flag & I_FLAG)))
-			) {
+		(!(frame->data_flag & I_FLAG)))) {
 		set_frame_output_flag(&hw->dpb, frame->index);
-		return 0; /*do not return -1,
-			otherwise flush_dpb() will not flush all dbp frames*/
+		frame->show_frame = false;
 	}
 
-	display_frame_count[DECODE_ID(hw)]++;
-
-	if (dpb_is_debug(DECODE_ID(hw),
-	 PRINT_FLAG_DPB_DETAIL)) {
+	if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL)) {
 		dpb_print(DECODE_ID(hw), 0,
 			"%s, fs[%d] poc %d, buf_spec_num %d\n",
 			__func__, frame->index, frame->poc,
@@ -2847,16 +2840,41 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			frame->bottom_field, -1);
 	}
 
+	frame->show_frame = true;
+
+	return 0;
+}
+
+static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
+{
+	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	struct vframe_s *vf = NULL;
+	int buffer_index = frame->buf_spec_num;
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	ulong nv_order = VIDTYPE_VIU_NV21;
+	int bForceInterlace = 0;
+	int vf_count = 1;
+	int i;
+
+	/* swap uv */
+	if (hw->is_used_v4l) {
+		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
+			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
+			nv_order = VIDTYPE_VIU_NV12;
+	}
+
 	if (!is_interlace(frame))
 		vf_count = 1;
 	else
 		vf_count = 2;
+
 	bForceInterlace = check_force_interlace(hw, frame);
 	if (bForceInterlace)
 		vf_count = 2;
 	if (hw->is_used_v4l)
 		vf_count = 1;
-	hw->buffer_spec[buffer_index].vf_ref = 0;
+	if (!hw->enable_fence)
+		hw->buffer_spec[buffer_index].vf_ref = 0;
 	fill_frame_info(hw, frame);
 	for (i = 0; i < vf_count; i++) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0 ||
@@ -2882,6 +2900,12 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		if (hw->is_used_v4l) {
 			vf->v4l_mem_handle
 				= hw->buffer_spec[buffer_index].cma_alloc_addr;
+		}
+
+		if (hw->enable_fence) {
+			/* fill fence information. */
+			if (hw->fence_usage == FENCE_USE_FOR_DRIVER)
+				vf->fence	= frame->fence;
 		}
 
 		if (hw->mmu_enable) {
@@ -2962,8 +2986,11 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		if (frame->data_flag & ERROR_FLAG)
 			vf->flag |= VFRAME_FLAG_ERROR_RECOVERY;
 		update_vf_memhandle(hw, vf, buffer_index);
-		hw->buffer_spec[buffer_index].used = 2;
-		hw->buffer_spec[buffer_index].vf_ref++;
+
+		if (!hw->enable_fence) {
+			hw->buffer_spec[buffer_index].used = 2;
+			hw->buffer_spec[buffer_index].vf_ref++;
+		}
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
 			"%s %d frame = %p top_field = %p bottom_field = %p\n", __func__, __LINE__, frame->frame,
@@ -3014,9 +3041,9 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			}
 
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
-			"%s %d type = 0x%x pic_struct = %d pts = 0x%x pts_us64 = 0x%llx bForceInterlace = %d\n",
-			__func__, __LINE__, vf->type, frame->frame->pic_struct,
-			vf->pts, vf->pts_us64, bForceInterlace);
+				"%s %d type = 0x%x pic_struct = %d pts = 0x%x pts_us64 = 0x%llx bForceInterlace = %d\n",
+				__func__, __LINE__, vf->type, frame->frame->pic_struct,
+				vf->pts, vf->pts_us64, bForceInterlace);
 		}
 		if (i == 0) {
 			struct vdec_s *pvdec;
@@ -3054,6 +3081,76 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		PRINT_FLAG_DUMP_BUFSPEC))
 		dump_bufspec(hw, __func__);
 
+	return 0;
+}
+
+int post_picture_early(struct vdec_s *vdec, int index)
+{
+	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	struct h264_dpb_stru *dpb_stru = &hw->dpb;
+	struct FrameStore fs;
+	u32 offset_lo, offset_hi;
+
+	if (!hw->enable_fence)
+		return 0;
+
+	/* create fence for each buffers. */
+	if (vdec_timeline_create_fence(&vdec->sync))
+		return -1;
+
+	memset(&fs, 0, sizeof(fs));
+
+	fs.buf_spec_num		= index;
+	fs.fence		= vdec->sync.fence;
+	fs.slice_type		= dpb_stru->mSlice.slice_type;
+	fs.dpb_frame_count	= dpb_stru->dpb_frame_count;
+
+	offset_lo = dpb_stru->dpb_param.l.data[OFFSET_DELIMITER_LO];
+	offset_hi = dpb_stru->dpb_param.l.data[OFFSET_DELIMITER_HI];
+	fs.offset_delimiter	= (offset_lo | offset_hi << 16);
+
+	if (hw->chunk) {
+		fs.pts		= hw->chunk->pts;
+		fs.pts64	= hw->chunk->pts64;
+		fs.timestamp	= hw->chunk->timestamp;
+	}
+
+	post_video_frame(vdec, &fs);
+
+	display_frame_count[DECODE_ID(hw)]++;
+	return 0;
+}
+
+int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
+{
+	struct vdec_h264_hw_s *hw =
+		(struct vdec_h264_hw_s *)vdec->private;
+
+	if (hw->enable_fence) {
+		post_prepare_process(vdec, frame);
+
+		if (!frame->show_frame)
+			pr_info("do not display.\n");
+
+		hw->buffer_spec[frame->buf_spec_num].used = 2;
+		hw->buffer_spec[frame->buf_spec_num].vf_ref = 1;
+		hw->buffer_spec[frame->buf_spec_num].fs_idx = frame->index;
+
+		/* notify signal to wake up wq of fence. */
+		vdec_timeline_increase(&vdec->sync, 1);
+		return 0;
+	}
+
+	if (post_prepare_process(vdec, frame))
+		return -1;
+
+	if (!frame->show_frame)
+		return 0;
+
+	if (post_video_frame(vdec, frame))
+		return -1;
+
+	display_frame_count[DECODE_ID(hw)]++;
 	return 0;
 }
 
@@ -4163,8 +4260,13 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 			__func__, vf);
 		return;
 	}
-	frame_index = FRAME_INDEX(vf->index);
+
 	buf_spec_num = BUFSPEC_INDEX(vf->index);
+	if (hw->enable_fence)
+		frame_index = hw->buffer_spec[buf_spec_num].fs_idx;
+	else
+		frame_index = FRAME_INDEX(vf->index);
+
 	if (frame_index < 0 ||
 		frame_index >= DPB_SIZE_MAX ||
 		buf_spec_num < 0 ||
@@ -4176,6 +4278,12 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 		/*get_buf_spec_idx_by_canvas_config(hw,
 			&vf->canvas0_config[0]);*/
+
+	if (hw->enable_fence && vf->fence) {
+		vdec_fence_put(vf->fence);
+		vf->fence = NULL;
+	}
+
 	spin_lock_irqsave(&hw->bufspec_lock, flags);
 	if (hw->buffer_spec[buf_spec_num].used == 2) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
@@ -9780,8 +9888,31 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "sidebind_channel_id",
 				&config_val) == 0)
 			hw->sidebind_channel_id = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_enable_fence",
+			&config_val) == 0)
+			hw->enable_fence = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_fence_usage",
+			&config_val) == 0)
+			hw->fence_usage = config_val;
 	} else
 		hw->double_write_mode = double_write_mode;
+
+	if (force_config_fence) {
+		hw->enable_fence = true;
+		hw->fence_usage = (force_config_fence >> 4) & 0xf;
+		if (force_config_fence & 0x2)
+			hw->enable_fence = false;
+		dpb_print(DECODE_ID(hw), 0,
+			"enable fence: %d, fence usage: %d\n",
+			hw->enable_fence, hw->fence_usage);
+	}
+
+	if (hw->enable_fence)
+		pdata->sync.usage = hw->fence_usage;
 
 	if (!hw->is_used_v4l) {
 		hw->reorder_dpb_size_margin = reorder_dpb_size_margin;
@@ -9984,7 +10115,45 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	display_frame_count[DECODE_ID(hw)] = 0;
 	decode_frame_count[DECODE_ID(hw)] = 0;
 
+	if (hw->enable_fence) {
+		/* creat timeline. */
+		vdec_timeline_create(&pdata->sync, DRIVER_NAME);
+	}
+
 	return 0;
+}
+
+static void vdec_fence_release(struct vdec_h264_hw_s *hw,
+			       struct vdec_sync *sync)
+{
+	ulong expires;
+	int i;
+
+	/* clear display pool. */
+	clear_refer_bufs(hw);
+
+	/* notify signal to wake up all fences. */
+	vdec_timeline_increase(sync, VF_POOL_SIZE);
+
+	expires = jiffies + msecs_to_jiffies(2000);
+	while (!check_objs_all_signaled(sync)) {
+		if (time_after(jiffies, expires)) {
+			pr_err("wait fence signaled timeout.\n");
+			break;
+		}
+	}
+
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		struct vframe_s *vf = &hw->vfpool[hw->cur_pool][i];
+
+		if (vf->fence) {
+			vdec_fence_put(vf->fence);
+			vf->fence = NULL;
+		}
+	}
+
+	/* decreases refcnt of timeline. */
+	vdec_timeline_put(sync);
 }
 
 static int ammvdec_h264_remove(struct platform_device *pdev)
@@ -10049,6 +10218,9 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 			}
 		}
 	}
+
+	if (hw->enable_fence)
+		vdec_fence_release(hw, &vdec->sync);
 
 	ammvdec_h264_mmu_release(hw);
 	h264_free_hw_stru(&pdev->dev, (void *)hw);
@@ -10131,9 +10303,9 @@ static int __init ammvdec_h264_driver_init_module(void)
 	if (vdec_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) {
 			ammvdec_h264_profile.profile =
-					"4k, dwrite, compressed, frame_dv";
+					"4k, dwrite, compressed, frame_dv, fence";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) {
-			ammvdec_h264_profile.profile = "4k, frame_dv";
+			ammvdec_h264_profile.profile = "4k, frame_dv, fence";
 		}
 	}
 
@@ -10350,6 +10522,8 @@ MODULE_PARM_DESC(loop_playback_poc_threshold, "\n loop_playback_poc_threshold\n"
 module_param(poc_threshold, uint, 0664);
 MODULE_PARM_DESC(poc_threshold, "\n poc_threshold\n");
 
+module_param(force_config_fence, uint, 0664);
+MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);

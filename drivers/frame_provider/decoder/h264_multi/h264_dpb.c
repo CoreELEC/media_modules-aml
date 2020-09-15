@@ -1797,6 +1797,7 @@ void reset_frame_store(struct h264_dpb_stru *p_H264_Dpb,
 
 		f->is_output = 0;
 		f->pre_output = 0;
+		f->show_frame   = false;
 
 		f->frame        = NULL;
 		f->top_field    = NULL;
@@ -2160,6 +2161,7 @@ void bufmgr_h264_remove_unused_frame(struct h264_dpb_stru *p_H264_Dpb,
 	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
 	int ret = 0;
 	unsigned char removed_flag = 0;
+
 	do {
 		ret = remove_unused_frame_from_dpb(p_H264_Dpb);
 		if (ret != 0)
@@ -2325,9 +2327,9 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 			"%s first_insert_frame %d \n", __func__, p_H264_Dpb->first_insert_frame);
 	}
-	if (prepare_display_buf(p_H264_Dpb->vdec, p_Dpb->fs[pos]) >= 0)
+	if (prepare_display_buf(p_H264_Dpb->vdec, p_Dpb->fs[pos]) >= 0) {
 		p_Dpb->fs[pos]->pre_output = 1;
-	else {
+	} else {
 		if (h264_debug_flag & PRINT_FLAG_DPB_DETAIL) {
 			dpb_print(p_H264_Dpb->decoder_index, 0,
 			"%s[%d] poc:%d last_output_poc:%d poc_even_odd_flag:%d\n",
@@ -5467,6 +5469,7 @@ void set_frame_output_flag(struct h264_dpb_stru *p_H264_Dpb, int index)
 
 	p_H264_Dpb->mFrameStore[index].is_output = 1;
 	p_H264_Dpb->mFrameStore[index].pre_output = 0;
+	p_H264_Dpb->mFrameStore[index].show_frame = false;
 	dump_dpb(p_Dpb, 0);
 }
 
@@ -5866,6 +5869,10 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 #endif
 		}
 	}
+
+	if (post_picture_early(p_H264_Dpb->vdec,
+		p_H264_Dpb->mVideo.dec_picture->buf_spec_num))
+		return -1;
 
 	if (p_H264_Dpb->mSlice.slice_type == P_SLICE)
 		init_lists_p_slice(&p_H264_Dpb->mSlice);

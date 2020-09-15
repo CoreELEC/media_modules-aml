@@ -87,3 +87,5 @@ void vdec_fence_status_set(struct fence *fence, int status);
 
 bool check_objs_all_signaled(struct vdec_sync *sync);
 
+int vdec_clean_all_fence(struct vdec_sync *sync);
+
