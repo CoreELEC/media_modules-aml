@@ -8010,6 +8010,14 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 		pic->canvas_config[1].block_mode =
 				blkmode;
 		pic->canvas_config[1].endian = hevc->is_used_v4l ? 0 : 7;
+
+		ATRACE_COUNTER("set canvas0 addr", pic->canvas_config[0].phy_addr);
+		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
+			__func__, pic->canvas_config[0].phy_addr);
+#else
+		ATRACE_COUNTER("set canvas0 addr", spec2canvas(pic));
+		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
+			__func__, spec2canvas(pic));
 #endif
 	} else {
 		if (!hevc->mmu_enable) {
@@ -8030,6 +8038,9 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 				canvas_w, canvas_h,
 				CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
 		}
+		ATRACE_COUNTER("set canvas0 addr", spec2canvas(pic));
+		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
+			__func__, spec2canvas(pic));
 	}
 #else
 	if (vdec->parallel_dec == 1) {
@@ -8048,6 +8059,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 	canvas_config_ex(pic->uv_canvas_index, pic->mc_u_v_adr,
 		canvas_w, canvas_h,
 		CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+
+	ATRACE_COUNTER("set canvas0 addr", spec2canvas(pic));
+	hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
+		__func__, spec2canvas(pic));
 #endif
 }
 
@@ -8527,7 +8542,15 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 
 	if (kfifo_get(&hevc->display_q, &vf)) {
 		struct vframe_s *next_vf;
-		if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
+
+		ATRACE_COUNTER(__func__, (long)vf);
+#ifdef MULTI_INSTANCE_SUPPORT
+		ATRACE_COUNTER("get canvas0 addr", vf->canvas0_config[0].phy_addr);
+#else
+		ATRACE_COUNTER("get canvas0 addr", vf->canvas0Addr);
+#endif
+
+		if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT) {
 			hevc_print(hevc, 0,
 				"%s(vf 0x%p type %d index 0x%x poc %d/%d) pts(%d,%d) dur %d\n",
 				__func__, vf, vf->type, vf->index,
@@ -8535,6 +8558,12 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 				get_pic_poc(hevc, (vf->index >> 8) & 0xff),
 				vf->pts, vf->pts_us64,
 				vf->duration);
+#ifdef MULTI_INSTANCE_SUPPORT
+			hevc_print(hevc, 0, "get canvas0 addr:0x%x\n", vf->canvas0_config[0].phy_addr);
+#else
+			hevc_print(hevc, 0, "get canvas0 addr:0x%x\n", vf->canvas0Addr);
+#endif
+		}
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		if (get_dbg_flag(hevc) & H265_DEBUG_DV) {
 			struct PIC_s *pic = hevc->m_PIC[vf->index & 0xff];
@@ -8598,12 +8627,26 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 		return;
 	if (!vf)
 		return;
+
+	ATRACE_COUNTER(__func__, (long)vf);
+#ifdef MULTI_INSTANCE_SUPPORT
+	ATRACE_COUNTER("put canvas0 addr", vf->canvas0_config[0].phy_addr);
+#else
+	ATRACE_COUNTER("put canvas0 addr", vf->canvas0Addr);
+#endif
+
 	index_top = vf->index & 0xff;
 	index_bot = (vf->index >> 8) & 0xff;
 	if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 		hevc_print(hevc, 0,
-			"%s(type %d index 0x%x)\n",
-			__func__, vf->type, vf->index);
+			"%s(vf 0x%p type %d index 0x%x put canvas0 addr:0x%x)\n",
+			__func__, vf, vf->type, vf->index
+#ifdef MULTI_INSTANCE_SUPPORT
+			, vf->canvas0_config[0].phy_addr
+#else
+			, vf->canvas0Addr
+#endif
+			);
 	hevc->vf_put_count++;
 	kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 	spin_lock_irqsave(&lock, flags);
