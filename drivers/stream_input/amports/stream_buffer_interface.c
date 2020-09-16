@@ -60,18 +60,6 @@ static const char *type_to_str(int t)
 	}
 }
 
-static int type_to_pts(int t)
-{
-	switch (t) {
-	case BUF_TYPE_VIDEO:
-		return PTS_TYPE_VIDEO;
-	case BUF_TYPE_HEVC:
-		return PTS_TYPE_HEVC;
-	default:
-		return PTS_TYPE_MAX;
-	}
-}
-
 static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 {
 	int ret = 0;
@@ -128,16 +116,6 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 	stbuf->canusebuf_size	= size;
 	stbuf->stream_offset	= 0;
 
-	if (stbuf->use_ptsserv) {
-		/* init pts server. */
-		ret = pts_start(type_to_pts(stbuf->type));
-		if (ret < 0) {
-			pr_err("[%d]: pts server failed\n", stbuf->id);
-			stbuf->use_ptsserv = false;
-			//goto err;//fixme
-		}
-		tsync_pcr_start();
-	}
 	/* init thread write. */
 	if (!(vdec_get_debug_flags() & 1) &&
 		!codec_mm_video_tvp_enabled() &&
@@ -171,11 +149,6 @@ static void stream_buffer_release(struct stream_buf_s *stbuf)
 {
 	if (stbuf->write_thread)
 		threadrw_release(stbuf);
-
-	if (stbuf->use_ptsserv) {
-		pts_stop(type_to_pts(stbuf->type));
-		tsync_pcr_stop();
-	}
 
 	if (stbuf->flag & BUF_FLAG_ALLOC && stbuf->buf_start) {
 		if (!stbuf->ext_buf_addr)
