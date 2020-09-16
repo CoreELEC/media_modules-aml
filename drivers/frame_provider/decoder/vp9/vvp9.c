@@ -10283,10 +10283,11 @@ static void vp9_dump_state(struct vdec_s *vdec)
 	vp9_print(pbi, 0, "====== %s\n", __func__);
 
 	vp9_print(pbi, 0,
-		"width/height (%d/%d), used_buf_num %d\n",
+		"width/height (%d/%d), used_buf_num %d video_signal_type 0x%x\n",
 		cm->width,
 		cm->height,
-		pbi->used_buf_num
+		pbi->used_buf_num,
+		pbi->video_signal_type
 		);
 
 	vp9_print(pbi, 0,
@@ -10424,6 +10425,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	int ret;
 	int config_val;
+	int transfer_val;
 	struct vframe_content_light_level_s content_light_level;
 	struct vframe_master_display_colour_s vf_dp;
 
@@ -10582,13 +10584,22 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 					&content_light_level.max_content);
 			get_config_int(pdata->config, "mMaxFALL",
 					&content_light_level.max_pic_average);
+
+			get_config_int(pdata->config, "mTransfer",
+					&transfer_val);
+
+			if (transfer_val == 0)
+				transfer_val = 16;
+
+			vp9_print(pbi, 0, "transfer_val=%d\n",transfer_val);
+
 			vf_dp.content_light_level = content_light_level;
 			pbi->video_signal_type = (1 << 29)
 					| (5 << 26)	/* unspecified */
 					| (0 << 25)	/* limit */
 					| (1 << 24)	/* color available */
 					| (9 << 16)	/* 2020 */
-					| (16 << 8)	/* 2084 */
+					| (transfer_val << 8)	/* 2084 */
 					| (9 << 0);	/* 2020 */
 		}
 		pbi->vf_dp = vf_dp;
