@@ -2680,6 +2680,8 @@ static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_
  */
 void vdec_release(struct vdec_s *vdec)
 {
+	u32 wcount = 0;
+
 	//trace_vdec_release(vdec);/*DEBUG_TMP*/
 #ifdef VDEC_DEBUG_SUPPORT
 	if (step_mode) {
@@ -2719,8 +2721,19 @@ void vdec_release(struct vdec_s *vdec)
 		}
 	}
 
-	while (vdec->irq_cnt > vdec->irq_thread_cnt)
-		schedule();
+	while (vdec->irq_cnt > vdec->irq_thread_cnt) {
+		if ((wcount & 0x1f) == 0)
+			pr_debug("%s vdec[%lx]: %lld > %lld, loop %u times\n",__func__, (unsigned long)vdec,
+				vdec->irq_cnt,vdec->irq_thread_cnt, wcount);
+		/*
+		 * Wait at most 2000 ms.
+		 * In suspend scenario, the system may disable thread_fn,
+		 * thus can NOT always waiting the thread_fn happen
+		 */
+		if (++wcount > 1000)
+			break;
+		usleep_range(1000, 2000);
+	}
 
 #ifdef FRAME_CHECK
 	vdec_frame_check_exit(vdec);
@@ -3047,8 +3060,11 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 	struct vdec_input_s *input = &vdec->input;
 
 	/* Wait the matching irq_thread finished */
-	if (vdec->irq_cnt > vdec->irq_thread_cnt)
+	if (vdec->irq_cnt > vdec->irq_thread_cnt) {
+		pr_debug("%s vdec[%lx]: %lld > %lld\n",__func__, (unsigned long)vdec,
+			vdec->irq_cnt,vdec->irq_thread_cnt);
 		return false;
+	}
 
 	if ((vdec->status != VDEC_STATUS_CONNECTED) &&
 	    (vdec->status != VDEC_STATUS_ACTIVE))
