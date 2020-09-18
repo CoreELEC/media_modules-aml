@@ -11966,6 +11966,9 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	set_vdec_func(&vh265_dec_status);
 #endif
 	amhevc_start();
+
+	WRITE_VREG(HEVC_SHIFT_BYTE_COUNT, 0);
+
 	hevc->stat |= STAT_VDEC_RUN;
 	hevc->init_flag = 1;
 	error_handle_threshold = 30;
