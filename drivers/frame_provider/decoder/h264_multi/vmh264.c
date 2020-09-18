@@ -4135,7 +4135,7 @@ static bool vf_valid_check(struct vframe_s *vf, struct vdec_h264_hw_s *hw) {
 		return true;
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		for (j = 0; j < VF_POOL_NUM; j ++) {
-			if (vf == &(hw->vfpool[j][i]))
+			if (vf == &(hw->vfpool[j][i]) || vf == &hw->vframe_dummy)
 				return true;
 		}
 	}

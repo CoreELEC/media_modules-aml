@@ -8537,12 +8537,12 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 static bool vf_valid_check(struct vframe_s *vf, struct hevc_state_s *hevc) {
 	int i;
 	for (i = 0; i < VF_POOL_SIZE; i++) {
-		if (vf == &hevc->vfpool[i])
+		if (vf == &hevc->vfpool[i]  || vf == &hevc->vframe_dummy)
 			return true;
 	}
-	pr_info(" h265 invalid vf been put, vf = %p\n", vf);
+	hevc_print(hevc, 0," h265 invalid vf been put, vf = %p\n", vf);
 	for (i = 0; i < VF_POOL_SIZE; i++) {
-		pr_info("www valid vf[%d]= %p \n", i, &hevc->vfpool[i]);
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,"valid vf[%d]= %p \n", i, &hevc->vfpool[i]);
 	}
 	return false;
 }
