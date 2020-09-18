@@ -1071,8 +1071,8 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 		if (block->free) {
 			vdec_input_del_block_locked(input, block);
 			block->free(block->priv, block->handle);
+			kfree(block);
 		}
-		kfree(block);
 	} else if (block->chunk_count == 0 &&
 		input->wr_block != block ) {/*don't free used block*/
 		if (block->size < input->default_block_size) {
