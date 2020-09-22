@@ -800,6 +800,7 @@ struct vdec_h264_hw_s {
 	struct dec_sysinfo vh264_amstream_dec_info;
 
 	int dec_result;
+	u32 timeout_processing;
 	struct work_struct work;
 	struct work_struct notify_work;
 	struct work_struct timeout_work;
@@ -7006,8 +7007,8 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 	 */
 	if (work_pending(&hw->work) ||
 	    work_busy(&hw->work) ||
-	    work_pending(&hw->timeout_work) ||
-	    work_busy(&hw->timeout_work)) {
+	    work_busy(&hw->timeout_work) ||
+	    work_pending(&hw->timeout_work)) {
 		pr_err("%s h264[%d] work pending, do nothing.\n",__func__, vdec->id);
 		return;
 	}
@@ -9114,7 +9115,9 @@ static void vh264_timeout_work(struct work_struct *work)
 	if (work_pending(&hw->work))
 		return;
 
+	hw->timeout_processing = 1;
 	vh264_work_implement(hw, vdec, 1);
+
 }
 
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
@@ -9125,14 +9128,14 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	int tvp = vdec_secure(hw_to_vdec(hw)) ?
 		CODEC_MM_FLAGS_TVP : 0;
 
-	if (work_pending(&hw->work) ||
-	    work_busy(&hw->work) ||
-	    work_pending(&hw->timeout_work) ||
-	    work_busy(&hw->timeout_work)) {
+	if (hw->timeout_processing &&
+	    (work_pending(&hw->work) || work_busy(&hw->work) ||
+	    work_pending(&hw->timeout_work) || work_busy(&hw->timeout_work))) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
 			  "h264 work pending, not ready for run.\n");
 		return 0;
 	}
+	hw->timeout_processing = 0;
 	if (!hw->first_sc_checked && hw->mmu_enable) {
 		int size = decoder_mmu_box_sc_check(hw->mmu_box, tvp);
 		hw->first_sc_checked =1;

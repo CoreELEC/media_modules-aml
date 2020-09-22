@@ -6946,12 +6946,6 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 	if (dec->eos)
 		return ret;
-	if (work_pending(&dec->work) ||
-	    work_busy(&dec->work)) {
-		avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
-			   "avs2 work pending,not ready for run.\n");
-		return 0;
-	}
 	if (!dec->first_sc_checked) {
 		int size = decoder_mmu_box_sc_check(dec->mmu_box, tvp);
 		dec->first_sc_checked = 1;

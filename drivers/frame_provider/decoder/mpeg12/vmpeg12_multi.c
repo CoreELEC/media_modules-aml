@@ -266,6 +266,7 @@ struct vdec_mpeg12_hw_s {
 
 	s32 refs[2];
 	int dec_result;
+	u32 timeout_processing;
 	struct work_struct work;
 	struct work_struct timeout_work;
 	struct work_struct notify_work;
@@ -2297,6 +2298,11 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		amvdec_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
+	/*disable mbox interrupt */
+	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
+	del_timer_sync(&hw->check_timer);
+	hw->stat &= ~STAT_TIMER_ARM;
+	wait_vmmpeg12_search_done(hw);
 
 	if (from == 1) {
 		/*This is a timeout work*/
@@ -2310,15 +2316,10 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		}
 	}
 
-	/*disable mbox interrupt */
-	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
-	wait_vmmpeg12_search_done(hw);
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1);
 	else
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
-	del_timer_sync(&hw->check_timer);
-	hw->stat &= ~STAT_TIMER_ARM;
 
 	if (hw->is_used_v4l) {
 		struct aml_vcodec_ctx *ctx =
@@ -2352,6 +2353,7 @@ static void vmpeg12_timeout_work(struct work_struct *work)
 		return;
 	}
 
+	hw->timeout_processing = 1;
 	vmpeg12_work_implement(hw, vdec, 1);
 }
 
@@ -2732,8 +2734,8 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 
 	if (work_pending(&hw->work) ||
 	    work_busy(&hw->work) ||
-	    work_pending(&hw->timeout_work) ||
-	    work_busy(&hw->timeout_work)) {
+	    work_busy(&hw->timeout_work) ||
+	    work_pending(&hw->timeout_work)) {
 		pr_err("%s mpeg12[%d] timeout_process return befor do anything.\n",__func__, vdec->id);
 		return;
 	}
@@ -3049,10 +3051,9 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		(struct vdec_mpeg12_hw_s *)vdec->private;
 	if (hw->eos)
 		return 0;
-	if (work_pending(&hw->work) ||
-	    work_busy(&hw->work) ||
-	    work_pending(&hw->timeout_work) ||
-	    work_busy(&hw->timeout_work)) {
+	if (hw->timeout_processing &&
+	    (work_pending(&hw->work) || work_busy(&hw->work) ||
+	    work_pending(&hw->timeout_work) || work_busy(&hw->timeout_work))) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"mpeg12 work pending,not ready for run.\n");
 		return 0;
