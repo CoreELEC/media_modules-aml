@@ -11844,6 +11844,7 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 {
 	int i;
 	int ret = -1;
+	struct vdec_s *vdec = hw_to_vdec(hevc);
 
 #ifdef DEBUG_PTS
 	hevc->pts_missed = 0;
@@ -11890,8 +11891,9 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 		hevc->i_only = 0x0;
 	hevc->error_watchdog_count = 0;
 	hevc->sei_present_flag = 0;
-	pts_unstable = ((unsigned long)hevc->vh265_amstream_dec_info.param
-		& 0x40) >> 6;
+	if (vdec->sys_info)
+		pts_unstable = ((unsigned long)vdec->sys_info->param
+			& 0x40) >> 6;
 	hevc_print(hevc, 0,
 		"h265:pts_unstable=%d\n", pts_unstable);
 /*
