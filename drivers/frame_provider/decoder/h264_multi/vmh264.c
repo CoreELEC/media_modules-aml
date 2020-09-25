@@ -3054,7 +3054,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			pvdec = hw_to_vdec(hw);
 			memset(&vs, 0, sizeof(struct vdec_info));
 			pvdec->dec_status(pvdec, &vs);
-			decoder_do_frame_check(pvdec, vf);
+			vdec_vframe_ready(pvdec, vf);
 			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
 
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,

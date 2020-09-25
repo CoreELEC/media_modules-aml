@@ -3670,6 +3670,7 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 					vf->pts_us64 = offset;
 					vf->pts = 0;
 				}
+				vdec_vframe_ready(hw_to_vdec(hw), vf);
 				kfifo_put(&hw->display_q,
 						  (const struct vframe_s *)vf);
 				avs_vf_notify_receiver(hw, PROVIDER_NAME,
@@ -3691,7 +3692,7 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 			}
 			avs_update_gvs(hw);
 			vdec_fill_vdec_frame(hw_to_vdec(hw), NULL, hw->gvs, vf, 0);
-	
+
 			/* pr_info("PicType = %d, PTS = 0x%x\n",
 			 *	 picture_type, vf->pts);
 			 */

@@ -5176,6 +5176,16 @@ void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 }
 EXPORT_SYMBOL(vdec_fill_vdec_frame);
 
+void vdec_vframe_ready(struct vdec_s *vdec, struct vframe_s *vf) {
+	decoder_do_frame_check(vdec, vf);
+	if (vdec_secure(vdec)) {
+		vf->flag |= VFRAME_FLAG_VIDEO_SECURE;
+	} else {
+		vf->flag &= ~VFRAME_FLAG_VIDEO_SECURE;
+	}
+}
+EXPORT_SYMBOL(vdec_vframe_ready);
+
 /* In this function,if we use copy_to_user, we may encounter sleep,
 which may block the vdec_fill_vdec_frame,this is not acceptable.
 So, we should use a tmp buffer(passed by caller) to get the content */

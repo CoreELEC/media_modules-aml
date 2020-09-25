@@ -6273,7 +6273,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		update_vf_memhandle(hw, vf, pic_config);
 
 		av1_inc_vf_ref(hw, pic_config->index);
-		decoder_do_frame_check(hw_to_vdec(hw), vf);
+		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		hw->vf_pre_count++;

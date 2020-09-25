@@ -807,11 +807,11 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hw->mm_blk_handle, index);
+			vdec_vframe_ready(vdec, vf);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 			vdec->vdec_fps_detec(vdec->id);
-			decoder_do_frame_check(vdec, vf);
 			hw->frame_num++;
 			if (pic->pic_type == I_PICTURE) {
 				hw->i_decoded_frames++;
@@ -893,11 +893,11 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hw->mm_blk_handle, index);
+			vdec_vframe_ready(vdec, vf);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 			vdec->vdec_fps_detec(vdec->id);
-			decoder_do_frame_check(vdec, vf);
 			hw->frame_num++;
 			if (pic->pic_type == I_PICTURE) {
 				hw->i_decoded_frames++;
