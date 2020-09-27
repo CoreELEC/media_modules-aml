@@ -10909,6 +10909,14 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	} else
 #endif
 	{
+		if (pdata->sys_info) {
+			pbi->vvp9_amstream_dec_info = *pdata->sys_info;
+			if ((pbi->vvp9_amstream_dec_info.width != 0) &&
+				(pbi->vvp9_amstream_dec_info.height != 0)) {
+				pbi->max_pic_w = pbi->vvp9_amstream_dec_info.width;
+				pbi->max_pic_h = pbi->vvp9_amstream_dec_info.height;
+			}
+		}
 		/*pbi->vvp9_amstream_dec_info.width = 0;
 		pbi->vvp9_amstream_dec_info.height = 0;
 		pbi->vvp9_amstream_dec_info.rate = 30;*/
