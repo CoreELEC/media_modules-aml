@@ -2912,10 +2912,12 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 				vf->pts_us64 = 0;
 			}
 
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
-			"%s %d type = 0x%x pic_struct = %d pts = 0x%x pts_us64 = 0x%llx bForceInterlace = %d\n",
-			__func__, __LINE__, vf->type, frame->frame->pic_struct,
-			vf->pts, vf->pts_us64, bForceInterlace);
+			if (frame->frame) {
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
+					"%s %d type = 0x%x pic_struct = %d pts = 0x%x pts_us64 = 0x%llx bForceInterlace = %d\n",
+					__func__, __LINE__, vf->type, frame->frame->pic_struct,
+					vf->pts, vf->pts_us64, bForceInterlace);
+			}
 		}
 		if (i == 0) {
 			struct vdec_s *pvdec;
