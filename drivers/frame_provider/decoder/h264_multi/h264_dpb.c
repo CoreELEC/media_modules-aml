@@ -2690,12 +2690,17 @@ void dump_dpb(struct DecodedPictureBuffer *p_Dpb, u8 force)
 				"B: poc=%d  ",
 				p_Dpb->fs[i]->frame->bottom_poc);
 		}
-		if (p_Dpb->fs[i]->is_used == 3)
-			dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"F: poc=%d pic_num=%d ",
-			p_Dpb->fs[i]->frame->poc,
-			p_Dpb->fs[i]->frame->pic_num);
+		if (p_Dpb->fs[i]->is_used == 3) {
+			if (p_Dpb->fs[i]->frame != NULL)
+				dpb_print_cont(p_H264_Dpb->decoder_index,
+				0,
+				"F: poc=%d pic_num=%d ",
+				p_Dpb->fs[i]->frame->poc,
+				p_Dpb->fs[i]->frame->pic_num);
+			else
+				dpb_print_cont(p_H264_Dpb->decoder_index,
+				0, "fs[%d] frame is null ", i);
+		}
 		dpb_print_cont(p_H264_Dpb->decoder_index,
 			0,
 			"G: poc=%d)  ", p_Dpb->fs[i]->poc);
@@ -2716,10 +2721,13 @@ void dump_dpb(struct DecodedPictureBuffer *p_Dpb, u8 force)
 			0,
 			"pre_output(in dispq or displaying)  ");
 		if (p_Dpb->fs[i]->is_used == 3) {
-			if (p_Dpb->fs[i]->frame->non_existing)
+			if (p_Dpb->fs[i]->frame != NULL && p_Dpb->fs[i]->frame->non_existing)
 				dpb_print_cont(p_H264_Dpb->decoder_index,
 				0,
 				"non_existing  ");
+			else
+				dpb_print_cont(p_H264_Dpb->decoder_index,
+				0, "fs[%d] frame is null ", i);
 		}
 		dpb_print_cont(p_H264_Dpb->decoder_index,
 			0,
