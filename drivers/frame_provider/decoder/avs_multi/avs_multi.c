@@ -2287,8 +2287,7 @@ static int amvdec_avs_probe(struct platform_device *pdev)
 		return -EFAULT;
 	}
 
-	hw = (struct vdec_avs_hw_s *)devm_kzalloc(&pdev->dev,
-		sizeof(struct vdec_avs_hw_s), GFP_KERNEL);
+	hw = (struct vdec_avs_hw_s *)vzalloc(sizeof(struct vdec_avs_hw_s));
 	if (hw == NULL) {
 		pr_info("\nammvdec_avs decoder driver alloc failed\n");
 		return -ENOMEM;
@@ -2470,7 +2469,7 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 #endif
 	kfree(hw->gvs);
 	hw->gvs = NULL;
-
+	vfree(hw);
 	return 0;
 }
 
@@ -3928,6 +3927,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 {
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	struct vdec_avs_hw_s *hw = NULL;
+	int r = 0;
 
 	if (vdec_get_debug_flags() & 0x8)
 		return amvdec_avs_probe(pdev);
@@ -3939,8 +3939,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		return -EFAULT;
 	}
 
-	hw = (struct vdec_avs_hw_s *)devm_kzalloc(&pdev->dev,
-		sizeof(struct vdec_avs_hw_s), GFP_KERNEL);
+	hw = (struct vdec_avs_hw_s *)vzalloc(sizeof(struct vdec_avs_hw_s));
 	if (hw == NULL) {
 		pr_info("\nammvdec_avs decoder driver alloc failed\n");
 		return -ENOMEM;
@@ -3959,7 +3958,8 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		canvas_num = 3;
 	} else {
 		pr_info("Error, do not support longcabac work around!!!");
-		return -ENOMEM;
+		r = -ENOMEM;
+		goto error1;
 	}
 
 	if (pdata->sys_info)
@@ -3990,7 +3990,8 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		if (!hw->user_data_buffer) {
 			pr_info("%s: Can not allocate hw->user_data_buffer\n",
 				   __func__);
-			return -ENOMEM;
+			r = -ENOMEM;
+			goto error2;
 		}
 		pr_debug("hw->user_data_buffer = 0x%p, hw->user_data_buffer_phys = 0x%x\n",
 			hw->user_data_buffer, (u32)hw->user_data_buffer_phys);
@@ -4015,15 +4016,14 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 	               LMEM_BUF_SIZE, (dma_addr_t *)&hw->lmem_phy_addr, GFP_KERNEL);
 	if (hw->lmem_addr == 0) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
-		return -1;
+		r = -1;
+		goto error3;
 	}
 
 	if (vavs_init(hw) < 0) {
 		pr_info("amvdec_avs init failed.\n");
-		kfree(hw->gvs);
-		hw->gvs = NULL;
-		pdata->dec_status = NULL;
-		return -ENODEV;
+		r = -ENODEV;
+		goto error4;
 	}
 
 	/*INIT_WORK(&hw->fatal_error_wd_work, vavs_fatal_error_handler);
@@ -4068,8 +4068,25 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 
 	/*INIT_WORK(&hw->userdata_push_work, userdata_push_do_work);*/
 
-
 	return 0;
+
+error4:
+	dma_free_coherent(amports_get_dma_device(),
+		LMEM_BUF_SIZE, (void *)hw->lmem_addr,
+		hw->lmem_phy_addr);
+error3:
+	dma_free_coherent(
+		amports_get_dma_device(),
+		USER_DATA_SIZE,
+		hw->user_data_buffer,
+		hw->user_data_buffer_phys);
+error2:
+	kfree(hw->gvs);
+	hw->gvs = NULL;
+	pdata->dec_status = NULL;
+error1:
+	vfree(hw);
+	return r;
 }
 
  int ammvdec_avs_remove(struct platform_device *pdev)
@@ -4153,6 +4170,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 			hw->gvs = NULL;
 		}
 
+		vfree(hw);
 		return 0;
 	}
 }
@@ -4475,8 +4493,7 @@ static int ammvdec_avs_probe2(struct platform_device *pdev)
 	}
 	pr_info("%s %d\n", __func__, __LINE__);
 
-	hw = (struct vdec_avs_hw_s *)devm_kzalloc(&pdev->dev,
-		sizeof(struct vdec_avs_hw_s), GFP_KERNEL);
+	hw = (struct vdec_avs_hw_s *)vzalloc(sizeof(struct vdec_avs_hw_s));
 	if (hw == NULL) {
 		pr_info("\nammvdec_avs decoder driver alloc failed\n");
 		return -ENOMEM;
@@ -4723,7 +4740,7 @@ static int ammvdec_avs_remove2(struct platform_device *pdev)
 #endif
 	kfree(hw->gvs);
 	hw->gvs = NULL;
-
+	vfree(hw);
 	return 0;
 }
 #endif
