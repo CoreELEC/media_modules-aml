@@ -63,6 +63,8 @@ struct vframe_chunk_s {
 	bool timestamp_valid;
 	u64 sequence;
 	struct vframe_block_list_s *block;
+	u32 hdr10p_data_size;
+	char *hdr10p_data_buf;
 };
 
 #define VDEC_INPUT_TARGET_VLD           0

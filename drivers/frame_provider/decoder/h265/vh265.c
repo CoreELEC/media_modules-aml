@@ -1455,6 +1455,8 @@ struct PIC_s {
 	bool vframe_bound;
 	bool ip_mode;
 	u32 stream_frame_size;  //for stream base
+	u32 hdr10p_data_size;
+	char *hdr10p_data_buf;
 } /*PIC_t */;
 
 #define MAX_TILE_COL_NUM    10
@@ -8133,8 +8135,22 @@ static int parse_sei(struct hevc_state_s *hevc,
 					&& p_sei[2] == 0x3C
 					&& p_sei[3] == 0x00
 					&& p_sei[4] == 0x01
-					&& p_sei[5] == 0x04)
+					&& p_sei[5] == 0x04) {
+					char *new_buf;
 					hevc->sei_present_flag |= SEI_HDR10PLUS_MASK;
+					new_buf = vzalloc(payload_size);
+					if (new_buf) {
+						memcpy(new_buf, p_sei, payload_size);
+						pic->hdr10p_data_buf = new_buf;
+						pic->hdr10p_data_size = payload_size;
+					} else {
+						hevc_print(hevc, 0,
+							"%s:hdr10p data vzalloc size(%d) fail\n",
+							__func__, payload_size);
+						pic->hdr10p_data_buf = NULL;
+						pic->hdr10p_data_size = 0;
+					}
+				}
 
 				break;
 			case SEI_MasteringDisplayColorVolume:
@@ -8394,6 +8410,41 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
 
+	if ((hevc->sei_present_flag & SEI_HDR10PLUS_MASK) && (pic->hdr10p_data_buf != NULL)
+		&& (pic->hdr10p_data_size != 0)) {
+		char *new_buf;
+		new_buf = vzalloc(pic->hdr10p_data_size);
+
+		if (new_buf) {
+			memcpy(new_buf, pic->hdr10p_data_buf, pic->hdr10p_data_size);
+			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE) {
+				hevc_print(hevc, 0,
+					"hdr10p data: (size %d)\n",
+					pic->hdr10p_data_size);
+				for (i = 0; i < pic->hdr10p_data_size; i++) {
+					hevc_print_cont(hevc, 0,
+						"%02x ", pic->hdr10p_data_buf[i]);
+					if (((i + 1) & 0xf) == 0)
+						hevc_print_cont(hevc, 0, "\n");
+				}
+				hevc_print_cont(hevc, 0, "\n");
+			}
+
+			vf->hdr10p_data_size = pic->hdr10p_data_size;
+			vf->hdr10p_data_buf = new_buf;
+		} else {
+			hevc_print(hevc, 0,
+				"%s:hdr10p data vzalloc size(%d) fail\n",
+				__func__, pic->hdr10p_data_size);
+			vf->hdr10p_data_buf = NULL;
+			vf->hdr10p_data_size = 0;
+		}
+
+		vfree(pic->hdr10p_data_buf);
+		pic->hdr10p_data_buf = NULL;
+		pic->hdr10p_data_size = 0;
+	}
+
 	vf->sidebind_type = hevc->sidebind_type;
 	vf->sidebind_channel_id = hevc->sidebind_channel_id;
 }
@@ -8650,6 +8701,12 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	hevc->vf_put_count++;
 	kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 	spin_lock_irqsave(&lock, flags);
+
+	if (vf->hdr10p_data_buf) {
+		vfree(vf->hdr10p_data_buf);
+		vf->hdr10p_data_buf = NULL;
+		vf->hdr10p_data_size = 0;
+	}
 
 	if (index_top != 0xff
 		&& index_top < MAX_REF_PIC_NUM

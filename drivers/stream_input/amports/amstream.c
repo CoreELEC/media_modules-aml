@@ -2585,6 +2585,26 @@ static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 		} else
 			r = -EINVAL;
 		break;
+	case AMSTREAM_SET_PTR_HDR10P_DATA:
+		if ((this->type & PORT_TYPE_VIDEO) && (this->type & PORT_TYPE_FRAME)) {
+			if (!parm.pointer || (parm.len <= 0) ||
+				(parm.len > PAGE_SIZE)) {
+				r = -EINVAL;
+			} else {
+				r = copy_from_user(priv->vdec->hdr10p_data_buf,
+						parm.pointer, parm.len);
+				if (r) {
+					priv->vdec->hdr10p_data_size = 0;
+					priv->vdec->hdr10p_data_valid = false;
+					r = -EINVAL;
+				} else {
+					priv->vdec->hdr10p_data_size = parm.len;
+					priv->vdec->hdr10p_data_valid = true;
+				}
+			}
+		} else
+			r = -EINVAL;
+		break;
 	default:
 		r = -ENOIOCTLCMD;
 		break;

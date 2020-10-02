@@ -279,6 +279,10 @@ struct vdec_s {
 
 	/*aux data check*/
 	struct aux_data_check_mgr_t adc;
+
+	u32 hdr10p_data_size;
+	char hdr10p_data_buf[PAGE_SIZE];
+	bool hdr10p_data_valid;
 };
 
 /* common decoder vframe provider name to use default vfm path */
