@@ -2826,6 +2826,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 		(!(frame->data_flag & I_FLAG)))) {
 		set_frame_output_flag(&hw->dpb, frame->index);
 		frame->show_frame = false;
+		return 0;
 	}
 
 	if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL)) {
