@@ -9832,6 +9832,11 @@ static void dump_aux_buf(struct hevc_state_s *hevc)
 		hevc_print(hevc, 0,
 			"prefix aux: (size %d)\n",
 			aux_size);
+		if (aux_size > hevc->prefix_aux_size) {
+			hevc_print(hevc, 0,
+				"%s:aux_size(%d) is over size\n", __func__, aux_size);
+			return ;
+		}
 		for (i = 0; i <
 		(aux_size >> 1); i++) {
 			hevc_print_cont(hevc, 0,
@@ -9853,6 +9858,11 @@ static void dump_aux_buf(struct hevc_state_s *hevc)
 		hevc_print(hevc, 0,
 			"suffix aux: (size %d)\n",
 			aux_size);
+		if (aux_size > hevc->suffix_aux_size) {
+			hevc_print(hevc, 0,
+				"%s:aux_size(%d) is over size\n", __func__, aux_size);
+			return ;
+		}
 		for (i = 0; i <
 		(aux_size >> 1); i++) {
 			hevc_print_cont(hevc, 0,
@@ -12729,7 +12739,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		hevc->eos = 1;
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		if ((vdec_dual(vdec)) && aux_data_is_avaible(hevc))
-			dolby_get_meta(hevc);
+			if (hevc->decoding_pic)
+				dolby_get_meta(hevc);
 #endif
 		check_pic_decoded_error(hevc,
 			hevc->pic_decoded_lcu_idx);
