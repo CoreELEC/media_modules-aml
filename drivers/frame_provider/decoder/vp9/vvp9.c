@@ -7656,7 +7656,8 @@ void vp9_recycle_mmu_work(struct work_struct *work)
 	struct VP9Decoder_s *pbi = container_of(work,
 		struct VP9Decoder_s, recycle_mmu_work);
 
-	vp9_recycle_mmu_buf(pbi);
+	if (pbi)
+		vp9_recycle_mmu_buf(pbi);
 }
 #endif
 
