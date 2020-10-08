@@ -9098,6 +9098,8 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 		hw->cfg_param3,
 		hw->cfg_param4) < 0)
 		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+	else
+		hw->stat &= (~DECODER_FATAL_ERROR_SIZE_OVERFLOW);
 
 	/*drop 3 frames after reset bufmgr if bit0 is set 1 */
 	if (first_i_policy & 0x01)
@@ -9105,7 +9107,10 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 
 	p_H264_Dpb->first_insert_frame = FirstInsertFrm_RESET;
 
-	hw->init_flag = 1;
+	if (hw->stat & DECODER_FATAL_ERROR_SIZE_OVERFLOW)
+		hw->init_flag = 0;
+	else
+		hw->init_flag = 1;
 
 	hw->reset_bufmgr_count++;
 #endif
