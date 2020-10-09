@@ -29,9 +29,10 @@ CONFIGS_BUILD := -Wno-parentheses-equality -Wno-pointer-bool-conversion \
 				-Wno-logical-not-parentheses -Wno-sometimes-uninitialized \
 				-Wno-frame-larger-than=
 
+KBUILD_CFLAGS_MODULE += $(GKI_EXT_MODULE_PREDEFINE)
 
 modules:
-	$(MAKE) -C  $(KERNEL_SRC) M=$(M)/drivers modules "EXTRA_CFLAGS+=-I$(INCLUDE) -Wno-error $(CONFIGS_BUILD) $(EXTRA_INCLUDE)" $(CONFIGS)
+	$(MAKE) -C  $(KERNEL_SRC) M=$(M)/drivers modules "EXTRA_CFLAGS+=-I$(INCLUDE) -Wno-error $(CONFIGS_BUILD) $(EXTRA_INCLUDE) $(KBUILD_CFLAGS_MODULE)" $(CONFIGS)
 
 all: modules
 
