@@ -25,8 +25,8 @@
 #include <linux/platform_device.h>
 #include <linux/amlogic/cpu_version.h>
 #include <linux/amlogic/major.h>
-#include <media_sync_core.h>
-#include <media_sync_dev.h>
+#include "media_sync_core.h"
+#include "media_sync_dev.h"
 
 #define MEDIASYNC_DEVICE_NAME   "mediasync"
 static struct device *mediasync_dev;

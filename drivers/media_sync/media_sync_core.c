@@ -10,7 +10,7 @@
 #include <linux/times.h>
 #include <linux/time.h>
 #include <linux/time64.h>
-#include <media_sync_core.h>
+#include "media_sync_core.h"
 
 #define MAX_INSTANCE_NUM 10
 mediasync_ins* vMediaSyncInsList[MAX_INSTANCE_NUM] = {0};
