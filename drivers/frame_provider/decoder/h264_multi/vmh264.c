@@ -8380,7 +8380,14 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	 * bit 15: frame_mbs_only_flag
 	 * bit 13-14: chroma_format_idc
 	 */
+	hw->seq_info = param2;
 	frame_mbs_only_flag = (hw->seq_info >> 15) & 0x01;
+	if (hw->dpb.mSPS.profile_idc != 100 &&
+		hw->dpb.mSPS.profile_idc != 110 &&
+		hw->dpb.mSPS.profile_idc != 122 &&
+		hw->dpb.mSPS.profile_idc != 144) {
+		hw->dpb.chroma_format_idc = 1;
+	}
 	chroma_format_idc = hw->dpb.chroma_format_idc;
 
 	/*
