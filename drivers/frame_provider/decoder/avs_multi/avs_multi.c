@@ -4780,9 +4780,9 @@ static int __init ammvdec_avs_driver_init_module(void)
 	amvdec_avs_driver = amvdec_avs_driver;
 #endif
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB)
-		ammvdec_avs_profile.profile = "avs+";
+		ammvdec_avs_profile.profile = "mavs+";
 
-	//vcodec_profile_register(&ammvdec_avs_profile);
+	vcodec_profile_register(&ammvdec_avs_profile);
 	INIT_REG_NODE_CONFIGS("media.decoder", &mavs_node,
 		"mavs", mavs_configs, CONFIG_FOR_RW);
 	return 0;
