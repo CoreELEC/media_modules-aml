@@ -5270,7 +5270,8 @@ static void reorder_lists(struct Slice *currSlice)
 		}
 		/* that's a definition */
 		currSlice->listXsize[0] =
-			(char)currSlice->num_ref_idx_active[LIST_0];
+			(char) imin(currSlice->listXsize[0],
+			currSlice->num_ref_idx_active[LIST_0]);
 		CHECK_VALID(currSlice->listXsize[0], 0);
 		if (h264_debug_flag & PRINT_FLAG_DPB_DETAIL) {
 			dpb_print(p_H264_Dpb->decoder_index,
