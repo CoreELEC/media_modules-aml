@@ -1093,6 +1093,11 @@ static int amstream_port_release(struct port_priv_s *priv)
 
 	port->pcr_inited = 0;
 
+	if (!is_mult_inc(port->type) ||
+		(is_mult_inc(port->flag) &&
+		!is_support_no_parser()))
+		port->flag = 0;
+
 	return 0;
 }
 
@@ -1794,6 +1799,11 @@ static int amstream_release(struct inode *inode, struct file *file)
 		if (i == amstream_port_num)
 			timestamp_firstvpts_set(0);
 	}
+
+	if (!is_mult_inc(port->type) ||
+		(is_mult_inc(port->flag) &&
+		!is_support_no_parser()))
+		port->flag = 0;
 
 	/* timestamp_pcrscr_set(0); */
 
