@@ -1094,7 +1094,7 @@ static int amstream_port_release(struct port_priv_s *priv)
 	port->pcr_inited = 0;
 
 	if (!is_mult_inc(port->type) ||
-		(is_mult_inc(port->flag) &&
+		(is_mult_inc(port->type) &&
 		!is_support_no_parser()))
 		port->flag = 0;
 
@@ -1801,7 +1801,7 @@ static int amstream_release(struct inode *inode, struct file *file)
 	}
 
 	if (!is_mult_inc(port->type) ||
-		(is_mult_inc(port->flag) &&
+		(is_mult_inc(port->type) &&
 		!is_support_no_parser()))
 		port->flag = 0;
 
