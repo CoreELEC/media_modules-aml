@@ -533,8 +533,9 @@ EXPORT_SYMBOL(get_audio_info);
 static void amstream_change_vbufsize(struct port_priv_s *priv,
 	struct stream_buf_s *pvbuf)
 {
-	if (pvbuf->buf_start != 0) {
-		pr_info("streambuf is alloced before\n");
+	if (pvbuf->buf_start != 0 || pvbuf->ext_buf_addr != 0) {
+		pr_info("streambuf is alloced, buf_start 0x%lx, extbuf 0x%lx\n",
+			pvbuf->buf_start, pvbuf->ext_buf_addr);
 		return;
 	}
 	if (priv->port->is_4k) {
