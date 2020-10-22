@@ -1215,7 +1215,7 @@ struct VP9Decoder_s {
 	u32 mem_map_mode;
 	u32 dynamic_buf_num_margin;
 	struct vframe_s vframe_dummy;
-	unsigned int res_ch_flag;
+	u32 res_ch_flag;
 	/*struct VP9Decoder_s vp9_decoder;*/
 	union param_u vp9_param;
 	int sidebind_type;
@@ -7737,6 +7737,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 
 	if (pbi->is_used_v4l && ctx->param_sets_from_ucode)
 		pbi->res_ch_flag = 0;
+
 	bit_depth_luma = pbi->vp9_param.p.bit_depth;
 	bit_depth_chroma = pbi->vp9_param.p.bit_depth;
 
@@ -8406,6 +8407,7 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 			vdec_v4l_res_ch_event(ctx);
 			pbi->v4l_params_parsed = false;
 			pbi->res_ch_flag = 1;
+			ctx->v4l_resolution_change = 1;
 			pbi->eos = 1;
 			vp9_bufmgr_postproc(pbi);
 			//del_timer_sync(&pbi->timer);
@@ -10208,9 +10210,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				pbi->run_ready_min_buf_num)
 					ret = 0;
 			} else {
-				if ((pbi->res_ch_flag == 1) &&
-				((ctx->state <= AML_STATE_INIT) ||
-				(ctx->state >= AML_STATE_FLUSHING)))
+				if (ctx->v4l_resolution_change)
 					ret = 0;
 			}
 		} else if (ctx->cap_pool.in < ctx->dpb_size) {

@@ -1197,6 +1197,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 			mutex_unlock(&ctx->state_lock);
 
 			ctx->is_stream_off = false;
+			ctx->v4l_resolution_change = false;
 		}
 	} else
 		ctx->is_out_stream_off = false;
@@ -2318,6 +2319,7 @@ static int vb2ops_vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 	struct aml_vcodec_ctx *ctx = vb2_get_drv_priv(q);
 
 	ctx->has_receive_eos = false;
+
 	v4l2_m2m_set_dst_buffered(ctx->fh.m2m_ctx, true);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,

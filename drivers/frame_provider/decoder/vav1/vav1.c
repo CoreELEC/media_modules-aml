@@ -803,7 +803,7 @@ struct AV1HW_s {
 	u32 mem_map_mode;
 	u32 dynamic_buf_num_margin;
 	struct vframe_s vframe_dummy;
-	unsigned int res_ch_flag;
+	u32 res_ch_flag;
 	int buffer_wrap[FRAME_BUFFERS];
 };
 static void av1_dump_state(struct vdec_s *vdec);
@@ -7850,6 +7850,7 @@ static int v4l_res_change(struct AV1HW_s *hw)
 			vdec_v4l_res_ch_event(ctx);
 			hw->v4l_params_parsed = false;
 			hw->res_ch_flag = 1;
+			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			//del_timer_sync(&pbi->timer);
 			notify_v4l_eos(hw_to_vdec(hw));
@@ -9580,9 +9581,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				run_ready_min_buf_num)
 					ret = 0;
 			} else {
-				if ((hw->res_ch_flag == 1) &&
-				((ctx->state <= AML_STATE_INIT) ||
-				(ctx->state >= AML_STATE_FLUSHING)))
+				if (ctx->v4l_resolution_change)
 					ret = 0;
 			}
 		} else if (ctx->cap_pool.in < ctx->dpb_size) {

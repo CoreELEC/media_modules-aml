@@ -408,6 +408,7 @@ struct aml_vdec_thread {
  * @param_change: indicate encode parameter type
  * @param_sets_from_ucode: if true indicate ps from ucode.
  * @v4l_codec_dpb_ready: queue buffer number greater than dpb.
+ # @v4l_resolution_change: indicate resolution change happend.
  * @comp: comp be used for sync picture information with decoder.
  * @config: used to set or get parms for application.
  * @picinfo: store picture info after header parsing.
@@ -453,6 +454,7 @@ struct aml_vcodec_ctx {
 	int				dpb_size;
 	bool				param_sets_from_ucode;
 	bool				v4l_codec_dpb_ready;
+	bool				v4l_resolution_change;
 	struct completion		comp;
 	struct v4l2_config_parm		config;
 	struct vdec_pic_info		picinfo;

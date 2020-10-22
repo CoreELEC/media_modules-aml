@@ -1792,7 +1792,7 @@ struct hevc_state_s {
 	u32 mem_map_mode;
 	u32 performance_profile;
 	struct vdec_info *gvs;
-	unsigned int res_ch_flag;
+	u32 res_ch_flag;
 	bool ip_mode;
 	u32 kpi_first_i_comming;
 	u32 kpi_first_i_decoded;
@@ -10081,6 +10081,7 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 			vdec_v4l_res_ch_event(ctx);
 			hevc->v4l_params_parsed = false;
 			hevc->res_ch_flag = 1;
+			ctx->v4l_resolution_change = 1;
 			hevc->eos = 1;
 			flush_output(hevc, NULL);
 			//del_timer_sync(&hevc->timer);
@@ -13187,9 +13188,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				run_ready_min_buf_num)
 					ret = 0;
 			} else {
-				if ((hevc->res_ch_flag == 1) &&
-				((ctx->state <= AML_STATE_INIT) ||
-				(ctx->state >= AML_STATE_FLUSHING)))
+				if (ctx->v4l_resolution_change)
 					ret = 0;
 			}
 		} else if (!ctx->v4l_codec_dpb_ready) {
