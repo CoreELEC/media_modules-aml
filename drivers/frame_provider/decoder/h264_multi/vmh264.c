@@ -342,8 +342,8 @@ static unsigned int mb_count_threshold = 5; /*percentage*/
 static u32 double_write_mode;
 static u32 without_display_mode;
 
-static u32 loop_playback_poc_threshold = 400;
-static u32 poc_threshold = 50;
+static int loop_playback_poc_threshold = 400;
+static int poc_threshold = 50;
 
 /*
  *[3:0] 0: default use config from omx.
@@ -10544,10 +10544,10 @@ MODULE_PARM_DESC(check_slice_num, "\n check_slice_num\n");
 module_param(mb_count_threshold, uint, 0664);
 MODULE_PARM_DESC(mb_count_threshold, "\n mb_count_threshold\n");
 
-module_param(loop_playback_poc_threshold, uint, 0664);
+module_param(loop_playback_poc_threshold, int, 0664);
 MODULE_PARM_DESC(loop_playback_poc_threshold, "\n loop_playback_poc_threshold\n");
 
-module_param(poc_threshold, uint, 0664);
+module_param(poc_threshold, int, 0664);
 MODULE_PARM_DESC(poc_threshold, "\n poc_threshold\n");
 
 module_param(force_config_fence, uint, 0664);

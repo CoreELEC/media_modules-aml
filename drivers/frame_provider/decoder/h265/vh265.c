@@ -197,8 +197,8 @@ static u32 print_lcu_error = 1;
 	bit 0, stream base resend data when decoding buf empty
 */
 static u32 data_resend_policy = 1;
-static u32 poc_num_margin = 1000;
-static u32 poc_error_limit = 30;
+static int poc_num_margin = 1000;
+static int poc_error_limit = 30;
 
 static u32 dirty_time_threshold = 2000;
 static u32 dirty_count_threshold = 200;
@@ -14480,11 +14480,11 @@ module_param(data_resend_policy, uint, 0664);
 MODULE_PARM_DESC(data_resend_policy,
 	"\n h265 data_resend_policy\n");
 
-module_param(poc_num_margin, uint, 0664);
+module_param(poc_num_margin, int, 0664);
 MODULE_PARM_DESC(poc_num_margin,
 	"\n h265 poc_num_margin\n");
 
-module_param(poc_error_limit, uint, 0664);
+module_param(poc_error_limit, int, 0664);
 MODULE_PARM_DESC(poc_error_limit,
 	"\n h265 poc_error_limit\n");
 
