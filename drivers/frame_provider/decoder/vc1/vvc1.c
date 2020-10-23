@@ -93,6 +93,7 @@
 #define MEM_LEVEL_CNT_BIT       18
 #endif
 static struct vdec_info *gvs;
+static struct vdec_s *vdec = NULL;
 
 static struct vframe_s *vvc1_vf_peek(void *);
 static struct vframe_s *vvc1_vf_get(void *);
@@ -726,6 +727,15 @@ static int vvc1_event_cb(int type, void *data, void *private_data)
 #endif
 		amvdec_start();
 	}
+
+	if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
+		struct provider_state_req_s *req =
+			(struct provider_state_req_s *)data;
+		if (req->req_type == REQ_STATE_SECURE && vdec)
+			req->req_result[0] = vdec_secure(vdec);
+		else
+			req->req_result[0] = 0xffffffff;
+	}
 	return 0;
 }
 
@@ -1170,6 +1180,7 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 	pdata->dec_status = vvc1_dec_status;
 	pdata->set_isreset = vvc1_set_isreset;
 	is_reset = 0;
+	vdec = pdata;
 
 	vvc1_vdec_info_init();
 
@@ -1234,6 +1245,7 @@ static int amvdec_vc1_remove(struct platform_device *pdev)
 #endif
 	kfree(gvs);
 	gvs = NULL;
+	vdec = NULL;
 
 	return 0;
 }

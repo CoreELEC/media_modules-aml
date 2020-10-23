@@ -134,6 +134,8 @@ static const char vmpeg4_dec_id[] = "vmpeg4-dev";
 
 #define PROVIDER_NAME   "decoder.mpeg4"
 
+struct vdec_s *vdec = NULL;
+
 /*
  *int query_video_status(int type, int *value);
  */
@@ -657,6 +659,15 @@ static int vmpeg_event_cb(int type, void *data, void *private_data)
 #endif
 		amvdec_start();
 	}
+
+	if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
+		struct provider_state_req_s *req =
+			(struct provider_state_req_s *)data;
+		if (req->req_type == REQ_STATE_SECURE && vdec)
+			req->req_result[0] = vdec_secure(vdec);
+		else
+			req->req_result[0] = 0xffffffff;
+	}
 	return 0;
 }
 
@@ -1148,6 +1159,7 @@ static int amvdec_mpeg4_probe(struct platform_device *pdev)
 	pdata->dec_status = vmpeg4_dec_status;
 	pdata->set_isreset = vmpeg4_set_isreset;
 	is_reset = 0;
+	vdec = pdata;
 
 	INIT_WORK(&reset_work, reset_do_work);
 	INIT_WORK(&notify_work, vmpeg4_notify_work);
@@ -1212,6 +1224,7 @@ static int amvdec_mpeg4_remove(struct platform_device *pdev)
 			   vmpeg4_amstream_dec_info.rate);
 	kfree(gvs);
 	gvs = NULL;
+	vdec = NULL;
 
 	return 0;
 }

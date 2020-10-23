@@ -121,6 +121,7 @@ int avs_get_debug_flag(void)
 static struct vframe_s *vavs_vf_peek(void *);
 static struct vframe_s *vavs_vf_get(void *);
 static void vavs_vf_put(struct vframe_s *, void *);
+static int vavs_event_cb(int type, void *data, void *private_data);
 static int vavs_vf_states(struct vframe_states *states, void *);
 
 static const char vavs_dec_id[] = "vavs-dev";
@@ -133,6 +134,7 @@ static const struct vframe_operations_s vavs_vf_provider = {
 	.peek = vavs_vf_peek,
 	.get = vavs_vf_get,
 	.put = vavs_vf_put,
+	.event_cb = vavs_event_cb,
 	.vf_states = vavs_vf_states,
 };
 static void *mm_blk_handle;
@@ -191,7 +193,7 @@ static struct work_struct notify_work;
 static struct work_struct set_clk_work;
 static bool is_reset;
 
-static struct vdec_s *vdec;
+static struct vdec_s *vdec = NULL;
 
 #ifdef AVSP_LONG_CABAC
 static struct work_struct long_cabac_wd_work;
@@ -410,7 +412,6 @@ static void UserDataHandler(void)
 		schedule_work(&userdata_push_work);
 	}
 }
-
 
 #ifdef HANDLE_AVS_IRQ
 static irqreturn_t vavs_isr(int irq, void *dev_id)
@@ -739,8 +740,8 @@ static void vavs_isr(void)
 				decoder_bmmu_box_get_mem_handle(
 					mm_blk_handle,
 					buffer_index);
-			decoder_do_frame_check(NULL, vf);
 
+			decoder_do_frame_check(NULL, vf);
 			kfifo_put(&display_q,
 					  (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -820,6 +821,20 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 	if (i < VF_POOL_SIZE)
 		kfifo_put(&recycle_q, (const struct vframe_s *)vf);
 
+}
+
+static int vavs_event_cb(int type, void *data, void *private_data)
+{
+	if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
+		struct provider_state_req_s *req =
+			(struct provider_state_req_s *)data;
+		if (req->req_type == REQ_STATE_SECURE && vdec)
+			req->req_result[0] = vdec_secure(vdec);
+		else
+			req->req_result[0] = 0xffffffff;
+	}
+
+	return 0;
 }
 
 int vavs_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
@@ -1828,6 +1843,7 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 #endif
 	kfree(gvs);
 	gvs = NULL;
+	vdec = NULL;
 
 	cancel_work_sync(&set_clk_work);
 	return 0;
