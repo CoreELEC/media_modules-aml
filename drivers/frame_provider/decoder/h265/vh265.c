@@ -246,10 +246,12 @@ static const char * const matrix_coeffs_names[] = {
  *	2, (1/4):(1/4) ratio;
  *	3, (1/4):(1/4) ratio, with both compressed frame included
  *	4, (1/2):(1/2) ratio;
+ *	5, (1/2):(1/2) ratio, with both compressed frame included
  *	0x10, double write only
  *	0x100, if > 1080p,use mode 4,else use mode 1;
  *	0x200, if > 1080p,use mode 2,else use mode 1;
  *	0x300, if > 720p, use mode 4, else use mode 1;
+ *	0x1000,if > 1080p,use mode 3, else if > 960*540, use mode 4, else use mode 1;
  */
 static u32 double_write_mode;
 
@@ -2063,6 +2065,14 @@ static int v4l_parser_get_double_write_mode(struct hevc_state_s *hevc, int w, in
 		if (w > 1280 && h > 720)
 			dw = 0x4; /*1:2*/
 		break;
+	case 0x1000:
+		if (w * h > 1920 * 1080)
+			dw = 3;
+		else if (w * h > 960 * 540)
+			dw = 5;
+		else
+			dw = 1;
+		break;
 	default:
 		dw = valid_dw_mode;
 		break;
@@ -2078,7 +2088,8 @@ static int get_double_write_ratio(struct hevc_state_s *hevc,
 	if ((dw_mode == 2) ||
 			(dw_mode == 3))
 		ratio = 4;
-	else if (dw_mode == 4)
+	else if ((dw_mode == 4) ||
+				(dw_mode == 5))
 		ratio = 2;
 	return ratio;
 }
@@ -5411,7 +5422,8 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 		if (get_double_write_mode(hevc) == 2 ||
 			get_double_write_mode(hevc) == 3)
 			data32 |= (0xff<<16);
-		else if (get_double_write_mode(hevc) == 4)
+		else if (get_double_write_mode(hevc) == 4 ||
+				get_double_write_mode(hevc) == 5)
 			data32 |= (0x33<<16);
 
 		if (hevc->mem_saving_mode == 1)
@@ -8852,7 +8864,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			hevc_print(hevc, 0,
 			"%s warning(1), vf=>display_q: (index 0x%x)\n",
 				__func__, vf->index);
-		if ((hevc->double_write_mode == 3) &&
+		if ((pair_pic->double_write_mode == 3) &&
 				(!(IS_8K_SIZE(vf->width, vf->height)))) {
 					vf->type |= VIDTYPE_COMPRESS;
 					if (hevc->mmu_enable)
@@ -8888,7 +8900,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				"%s warning(2), vf=>display_q: (index 0x%x)\n",
 				__func__, vf->index);
 			if (vf) {
-				if ((hevc->double_write_mode == 3) &&
+				if ((pair_pic->double_write_mode == 3) &&
 				(!(IS_8K_SIZE(vf->width, vf->height)))) {
 					vf->type |= VIDTYPE_COMPRESS;
 					if (hevc->mmu_enable)
@@ -8907,7 +8919,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				return -1;
 			}
 			if (vf) {
-				if ((hevc->double_write_mode == 3) &&
+				if ((pair_pic->double_write_mode == 3) &&
 				(!(IS_8K_SIZE(vf->width, vf->height)))) {
 					vf->type |= VIDTYPE_COMPRESS;
 					if (hevc->mmu_enable)
@@ -8934,7 +8946,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				return -1;
 			}
 			if (vf) {
-				if ((hevc->double_write_mode == 3) &&
+				if ((pair_pic->double_write_mode == 3) &&
 				(!(IS_8K_SIZE(vf->width, vf->height)))) {
 					vf->type |= VIDTYPE_COMPRESS;
 					if (hevc->mmu_enable)
@@ -9249,7 +9261,7 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
 			vf->type |= nv_order;
 
-			if ((pic->double_write_mode == 3) &&
+			if (((pic->double_write_mode == 3) || (pic->double_write_mode == 5)) &&
 				(!(IS_8K_SIZE(pic->width, pic->height)))) {
 				vf->type |= VIDTYPE_COMPRESS;
 				if (hevc->mmu_enable)
@@ -13977,7 +13989,11 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		hevc->double_write_mode = double_write_mode;
 	}
 	/* get valid double write from configure or node */
-	hevc->double_write_mode = get_double_write_mode(hevc);
+	//hevc->double_write_mode = get_double_write_mode(hevc);
+
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) &&
+			(hevc->double_write_mode == 3))
+		hevc->double_write_mode = 0x1000;
 
 	if (!hevc->is_used_v4l) {
 		if (hevc->save_buffer_mode && dynamic_buf_num_margin > 2)
