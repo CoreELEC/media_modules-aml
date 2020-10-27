@@ -98,7 +98,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	mediasync_priv_s *priv = (mediasync_priv_s *)file->private_data;
 	mediasync_ins *SyncIns = NULL;
 	mediasync_alloc_para parm = {0};
-    mediasync_arthortime_para ArthorTime = {0};
+	mediasync_arthortime_para ArthorTime = {0};
 	mediasync_updatetime_para UpdateTime = {0};
 	mediasync_systime_para SystemTime = {0};
 	switch (cmd) {

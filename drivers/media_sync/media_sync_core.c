@@ -55,6 +55,9 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	pInstance = vMediaSyncInsList[index];
 	ktime_get_ts64(&ts_monotonic);
 	timeus = ts_monotonic.tv_sec * 1000000LL + ts_monotonic.tv_nsec / 1000LL;
+	if (pInstance->mDemuxId < 0)
+		return timeus;
+
 	ret = demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 	if (ret != 0) {
 		stc = timeus;
@@ -82,7 +85,7 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 			}
 		}
 	}
-	printk("get_stc_time_us stc:%lld pcr:%lld system_time:%lld\n", stc,  pcr * 100 / 9,  timeus);
+	pr_debug("get_stc_time_us stc:%lld pcr:%lld system_time:%lld\n", stc,  pcr * 100 / 9,  timeus);
 	return stc;
 }
 
@@ -91,7 +94,7 @@ static s64 get_system_time_us(void) {
 	struct timespec64 ts_monotonic;
 	ktime_get_ts64(&ts_monotonic);
 	TimeUs = ts_monotonic.tv_sec * 1000000LL + ts_monotonic.tv_nsec / 1000LL;
-	printk("get_system_time_us %lld\n", TimeUs);
+	pr_debug("get_system_time_us %lld\n", TimeUs);
 	return TimeUs;
 }
 
@@ -111,7 +114,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			vMediaSyncInsList[index] = pInstance;
 			pInstance->mSyncInsId = index;
 			*sSyncInsId = index;
-			printk("mediasync_ins_alloc index:%d\n", index);
+			pr_info("mediasync_ins_alloc index:%d\n", index);
 			break;
 		}
 	}
@@ -209,7 +212,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			if (diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
-				printk("MEDIA_SYNC_PCRMASTER update time");
+				pr_info("MEDIA_SYNC_PCRMASTER update time\n");
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = current_systemtime;
 				pInstance->mLastStc = current_stc;
