@@ -9869,6 +9869,9 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	if (pdata->sys_info)
 		hw->vh264_amstream_dec_info = *pdata->sys_info;
 
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5)
+		force_enable_mmu = 1;
+
 	if (force_enable_mmu && pdata->sys_info &&
 		    (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) &&
 		    (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX) &&
