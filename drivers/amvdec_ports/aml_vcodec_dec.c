@@ -354,9 +354,9 @@ void vdec_frame_buffer_release(void *data)
 	struct file_private_data *priv_data =
 		(struct file_private_data *) data;
 	struct aml_vcodec_dev *dev = (struct aml_vcodec_dev *)
-		priv_data->v4l_dev_handle;
+		priv_data->vb_handle;
 	struct aml_vcodec_ctx *inst = (struct aml_vcodec_ctx *)
-		priv_data->v4l_inst_handle;
+		priv_data->v4l_dec_ctx;
 	u32 id = priv_data->v4l_inst_id;
 
 	if (aml_check_inst_quit(dev, inst, id)) {
@@ -1413,8 +1413,8 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 		vq = v4l2_m2m_get_vq(ctx->m2m_ctx, buf->type);
 		vb2_v4l2 = to_vb2_v4l2_buffer(vq->bufs[buf->index]);
 		aml_buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
-		aml_buf->privdata.v4l_dev_handle	= (ulong) ctx->dev;
-		aml_buf->privdata.v4l_inst_handle	= (ulong) ctx;
+		aml_buf->privdata.vb_handle	= (ulong) ctx->dev;
+		aml_buf->privdata.v4l_dec_ctx	= (ulong) ctx;
 		aml_buf->privdata.v4l_inst_id		= ctx->id;
 
 		file = fget(vb2_v4l2->private);
