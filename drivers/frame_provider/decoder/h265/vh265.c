@@ -534,6 +534,14 @@ static u32 force_bypass_dvenl;
 #endif
 #endif
 
+/*
+ *[3:0] 0: default use config from omx.
+ *      1: force enable fence.
+ *      2: disable fence.
+ *[7:4] 0: fence use for driver.
+ *      1: fence fd use for app.
+ */
+static u32 force_config_fence;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 #define get_dbg_flag(hevc) ((debug_mask & (1 << hevc->index)) ? debug : 0)
@@ -1461,6 +1469,8 @@ struct PIC_s {
 	u32 stream_frame_size;  //for stream base
 	u32 hdr10p_data_size;
 	char *hdr10p_data_buf;
+	struct fence *fence;
+	bool show_frame;
 } /*PIC_t */;
 
 #define MAX_TILE_COL_NUM    10
@@ -1815,6 +1825,8 @@ struct hevc_state_s {
 	u32 timeout_flag;
 	ulong timeout;
 	bool discard_dv_data;
+	bool enable_fence;
+	int fence_usage;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -2199,6 +2211,7 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 	if (hevc->decoding_pic) {
 		hevc->decoding_pic->error_mark = 0;
 		hevc->decoding_pic->output_ready = 0;
+		hevc->decoding_pic->show_frame = false;
 		hevc->decoding_pic->output_mark = 0;
 		hevc->decoding_pic->referenced = 0;
 		hevc->decoding_pic->POC = INVALID_POC;
@@ -2222,6 +2235,7 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 					hevc_print(hevc, 0, "release error buffer\n");
 					pic->error_mark = 0;
 					pic->output_ready = 0;
+					pic->show_frame = false;
 					pic->output_mark = 0;
 					pic->referenced = 0;
 					pic->POC = INVALID_POC;
@@ -2350,7 +2364,8 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 #endif
 }
 
-static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic);
+static int post_picture_early(struct vdec_s *vdec, int index);
+static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *pic);
 static int H265_alloc_mmu(struct hevc_state_s *hevc,
 			struct PIC_s *new_pic,	unsigned short bit_depth,
 			unsigned int *mmu_index_adr);
@@ -6193,7 +6208,7 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					&& pic_display->slice_type != 2) {
 					pic_display->output_ready = 0;
 				} else {
-					prepare_display_buf(hevc, pic_display);
+					prepare_display_buf(hw_to_vdec(hevc), pic_display);
 					if (get_dbg_flag(hevc)
 						& H265_DEBUG_BUFMGR) {
 						hevc_print(hevc, 0,
@@ -6523,7 +6538,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 						pic_display->output_ready = 0;
 					} else {
 						prepare_display_buf
-							(hevc,
+							(hw_to_vdec(hevc),
 							 pic_display);
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
@@ -7450,7 +7465,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				hevc->cur_pic->output_ready = 1;
 				hevc->cur_pic->stream_offset =
 					READ_VREG(HEVC_SHIFT_BYTE_COUNT);
-				prepare_display_buf(hevc, hevc->cur_pic);
+				prepare_display_buf(vdec, hevc->cur_pic);
 				hevc->wait_buf = 2;
 				return -1;
 			}
@@ -7790,6 +7805,9 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 
 	if ((hevc->slice_type != 2) && (hevc->i_only & 0x2))
 		return 0xf;
+
+	if (post_picture_early(vdec, hevc->cur_pic->index))
+		return -1;
 
 	return 0;
 }
@@ -8580,7 +8598,6 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 		return NULL;
 	else if (step == 1)
 		step = 2;
-
 #if 0
 	if (force_disp_pic_index & 0x100) {
 		int buffer_index = force_disp_pic_index & 0xff;
@@ -8751,6 +8768,7 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 
 	index_top = vf->index & 0xff;
 	index_bot = (vf->index >> 8) & 0xff;
+
 	if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 		hevc_print(hevc, 0,
 			"%s(vf 0x%p type %d index 0x%x put canvas0 addr:0x%x)\n",
@@ -8763,6 +8781,12 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 			);
 	hevc->vf_put_count++;
 	kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
+
+	if (hevc->enable_fence && vf->fence) {
+		vdec_fence_put(vf->fence);
+		vf->fence = NULL;
+	}
+
 	spin_lock_irqsave(&lock, flags);
 
 	if (vf->hdr10p_data_buf) {
@@ -8781,6 +8805,7 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 
 			if (hevc->m_PIC[index_top]->vf_ref == 0) {
 				hevc->m_PIC[index_top]->output_ready = 0;
+				hevc->m_PIC[index_top]->show_frame = false;
 
 				if (hevc->wait_buf != 0)
 					WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
@@ -8799,6 +8824,8 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 
 			if (hevc->m_PIC[index_bot]->vf_ref == 0) {
 				hevc->m_PIC[index_bot]->output_ready = 0;
+				hevc->m_PIC[index_bot]->show_frame = false;
+
 				if (hevc->wait_buf != 0)
 					WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
 						0x1);
@@ -9142,9 +9169,26 @@ static void put_vf_to_display_q(struct hevc_state_s *hevc, struct vframe_s *vf)
 	ATRACE_COUNTER(MODULE_NAME, vf->pts);
 }
 
-static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
+static int post_prepare_process(struct vdec_s *vdec, struct PIC_s *frame)
 {
-	struct vdec_s *vdec = hw_to_vdec(hevc);
+	struct hevc_state_s *hevc = (struct hevc_state_s *)vdec->private;
+
+	if (force_disp_pic_index & 0x100) {
+		/*recycle directly*/
+		frame->output_ready = 0;
+		frame->show_frame = false;
+		hevc_print(hevc, 0, "discard show frame.\n");
+		return -1;
+	}
+
+	frame->show_frame = true;
+
+	return 0;
+}
+
+static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
+{
+	struct hevc_state_s *hevc = (struct hevc_state_s *)vdec->private;
 	struct vframe_s *vf = NULL;
 	int stream_offset = pic->stream_offset;
 	unsigned short slice_type = pic->slice_type;
@@ -9160,17 +9204,12 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			nv_order = VIDTYPE_VIU_NV12;
 	}
 
-	if (force_disp_pic_index & 0x100) {
-		/*recycle directly*/
-		pic->output_ready = 0;
-		return -1;
-	}
 	if (kfifo_get(&hevc->newframe_q, &vf) == 0) {
 		hevc_print(hevc, 0,
 			"fatal error, no available buffer slot.");
 		return -1;
 	}
-	display_frame_count[hevc->index]++;
+
 	if (vf) {
 		/*hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 			"%s: pic index 0x%x\n",
@@ -9185,6 +9224,12 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 				vf->mm_box.mmu_box	= hevc->mmu_box;
 				vf->mm_box.mmu_idx	= pic->index;
 			}
+		}
+
+		if (hevc->enable_fence) {
+			/* fill fence information. */
+			if (hevc->fence_usage == FENCE_USE_FOR_DRIVER)
+				vf->fence	= pic->fence;
 		}
 
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -9720,6 +9765,65 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			vh265_vf_put(vh265_vf_get(vdec), vdec);
 	}
 
+	return 0;
+}
+
+static int post_picture_early(struct vdec_s *vdec, int index)
+{
+	struct hevc_state_s *hevc = (struct hevc_state_s *)vdec->private;
+	struct PIC_s *pic = hevc->m_PIC[index];
+
+	if (!hevc->enable_fence)
+		return 0;
+
+	/* create fence for each buffers. */
+	if (vdec_timeline_create_fence(&vdec->sync))
+		return -1;
+
+	pic->fence		= vdec->sync.fence;
+	pic->stream_offset	= READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+
+	if (hevc->chunk) {
+		pic->pts	= hevc->chunk->pts;
+		pic->pts64	= hevc->chunk->pts64;
+		pic->timestamp	= hevc->chunk->timestamp;
+	}
+
+	post_video_frame(vdec, pic);
+
+	display_frame_count[hevc->index]++;
+
+	return 0;
+}
+
+static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
+{
+	struct hevc_state_s *hevc =
+		(struct hevc_state_s *)vdec->private;
+
+	if (hevc->enable_fence) {
+		post_prepare_process(vdec, frame);
+
+		if (!frame->show_frame)
+			pr_info("do not display.\n");
+
+		hevc->m_PIC[frame->index]->vf_ref = 1;
+
+		/* notify signal to wake up wq of fence. */
+		vdec_timeline_increase(&vdec->sync, 1);
+		return 0;
+	}
+
+	if (post_prepare_process(vdec, frame))
+		return -1;
+
+	if (!frame->show_frame)
+		return 0;
+
+	if (post_video_frame(vdec, frame))
+		return -1;
+
+	display_frame_count[hevc->index]++;
 	return 0;
 }
 
@@ -10517,7 +10621,7 @@ force_output:
 						pic_display->output_ready = 0;
 						} else {
 							prepare_display_buf
-								(hevc,
+								(hw_to_vdec(hevc),
 								 pic_display);
 							hevc->first_pic_flag = 1;
 						}
@@ -14059,6 +14163,16 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->discard_dv_data = config_val;
 			hevc_print(hevc, 0, "discard dv data\n");
 		}
+
+		if (get_config_int(pdata->config,
+			"parm_enable_fence",
+			&config_val) == 0)
+			hevc->enable_fence = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_fence_usage",
+			&config_val) == 0)
+			hevc->fence_usage = config_val;
 #endif
 	} else {
 		if (pdata->sys_info)
@@ -14072,6 +14186,19 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	}
 	/* get valid double write from configure or node */
 	//hevc->double_write_mode = get_double_write_mode(hevc);
+
+	if (force_config_fence) {
+		hevc->enable_fence = true;
+		hevc->fence_usage = (force_config_fence >> 4) & 0xf;
+		if (force_config_fence & 0x2)
+			hevc->enable_fence = false;
+		hevc_print(hevc, 0,
+			"enable fence: %d, fence usage: %d\n",
+			hevc->enable_fence, hevc->fence_usage);
+	}
+
+	if (hevc->enable_fence)
+		pdata->sync.usage = hevc->fence_usage;
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) &&
 			(hevc->double_write_mode == 3))
@@ -14183,7 +14310,42 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
 					| CORE_MASK_COMBINE);
 
+	if (hevc->enable_fence) {
+		/* creat timeline. */
+		vdec_timeline_create(&pdata->sync, DRIVER_NAME);
+	}
+
 	return 0;
+}
+
+static void vdec_fence_release(struct hevc_state_s *hw,
+			       struct vdec_sync *sync)
+{
+	ulong expires;
+	int i;
+
+	/* notify signal to wake up all fences. */
+	vdec_timeline_increase(sync, VF_POOL_SIZE);
+
+	expires = jiffies + msecs_to_jiffies(2000);
+	while (!check_objs_all_signaled(sync)) {
+		if (time_after(jiffies, expires)) {
+			pr_err("wait fence signaled timeout.\n");
+			break;
+		}
+	}
+
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		struct vframe_s *vf = &hw->vfpool[i];
+
+		if (vf->fence) {
+			vdec_fence_put(vf->fence);
+			vf->fence = NULL;
+		}
+	}
+
+	/* decreases refcnt of timeline. */
+	vdec_timeline_put(sync);
 }
 
 static int ammvdec_h265_remove(struct platform_device *pdev)
@@ -14214,6 +14376,9 @@ static int ammvdec_h265_remove(struct platform_device *pdev)
 		vdec_core_release(hw_to_vdec(hevc), CORE_MASK_HEVC);
 
 	vdec_set_status(hw_to_vdec(hevc), VDEC_STATUS_DISCONNECTED);
+
+	if (hevc->enable_fence)
+		vdec_fence_release(hevc, &vdec->sync);
 
 	vfree((void *)hevc);
 
@@ -14347,10 +14512,10 @@ static int __init amvdec_h265_driver_init_module(void)
 			amvdec_h265_profile.profile = "4k";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 			amvdec_h265_profile.profile =
-				"8k, 8bit, 10bit, dwrite, compressed, frame_dv";
+				"8k, 8bit, 10bit, dwrite, compressed, frame_dv, fence";
 		}else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB) {
 			amvdec_h265_profile.profile =
-				"4k, 8bit, 10bit, dwrite, compressed, frame_dv";
+				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, fence";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_MG9TV)
 			amvdec_h265_profile.profile = "4k";
 	}
@@ -14674,7 +14839,8 @@ MODULE_PARM_DESC(dirty_count_threshold, "\n dirty_count_threshold\n");
 module_param(dirty_buffersize_threshold, uint, 0664);
 MODULE_PARM_DESC(dirty_buffersize_threshold, "\n dirty_buffersize_threshold\n");
 
-
+module_param(force_config_fence, uint, 0664);
+MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
 
 module_init(amvdec_h265_driver_init_module);
 module_exit(amvdec_h265_driver_remove_module);
