@@ -17,7 +17,6 @@
  *
  */
 
-
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
@@ -41,9 +40,15 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/of_address.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-#include <linux/amlogic/cpu_version.h>
+//#include <linux/amlogic/cpu_version.h>
+#include <linux/amlogic/media/registers/cpu_version.h>
 #include <linux/version.h>
-
+#include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
+#include <linux/amlogic/media/utils/vdec_reg.h>
+#include <linux/amlogic/power_ctrl.h>
+#include <dt-bindings/power/sc2-pd.h>
+#include <linux/amlogic/power_domain.h>
+#include <linux/amlogic/power_ctrl.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,1)
 #include <linux/sched/signal.h>
 #endif
@@ -58,7 +63,7 @@
 /* if you want to have clock gating scheme frame by frame */
 /* #define VPU_SUPPORT_CLOCK_CONTROL */
 
-#define VPU_SUPPORT_CLOCK_CONTROL
+//#define VPU_SUPPORT_CLOCK_CONTROL
 
 
 #define VPU_PLATFORM_DEVICE_NAME "HevcEnc"
@@ -86,6 +91,10 @@
 
 static s32 print_level = LOG_DEBUG;
 static s32 clock_level = 4;
+
+static s32 wave_clocka;
+static s32 wave_clockb;
+static s32 wave_clockc;
 
 static struct video_mm_t s_vmem;
 static struct vpudrv_buffer_t s_video_memory = {0};
@@ -160,29 +169,41 @@ s32 vpu_clk_prepare(struct device *dev, struct vpu_clks *clks)
 {
 	int ret;
 
-	clks->wave_aclk = devm_clk_get(dev, "wave_clk_a");
+	s32 new_clocka = 667;
+	s32 new_clockb = 400;
+	s32 new_clockc = 400;
+
+	if (wave_clocka > 0)
+		new_clocka = wave_clocka;
+	if (wave_clockb > 0)
+		new_clockb = wave_clockb;
+	if (wave_clockc > 0)
+		new_clockc = wave_clockc;
+
+	clks->wave_aclk = devm_clk_get(dev, "cts_wave420_aclk");
 	if (IS_ERR_OR_NULL(clks->wave_aclk)) {
 		enc_pr(LOG_ERROR, "failed to get wave aclk\n");
 		return -1;
 	}
 
-	clks->wave_bclk = devm_clk_get(dev, "wave_clk_b");
+	clks->wave_bclk = devm_clk_get(dev, "cts_wave420_bclk");
 	if (IS_ERR_OR_NULL(clks->wave_aclk)) {
 		enc_pr(LOG_ERROR, "failed to get wave aclk\n");
 		return -1;
 	}
 
-	clks->wave_cclk = devm_clk_get(dev, "wave_clk_c");
+	clks->wave_cclk = devm_clk_get(dev, "cts_wave420_cclk");
 	if (IS_ERR_OR_NULL(clks->wave_aclk)) {
 		enc_pr(LOG_ERROR, "failed to get wave aclk\n");
 		return -1;
 	}
 
-	ret = clk_set_rate(clks->wave_aclk, 400 * MHz);
+	ret = clk_set_rate(clks->wave_aclk, new_clocka * MHz);
 	CHECK_RET(ret);
-	ret = clk_set_rate(clks->wave_bclk, 400 * MHz);
+	ret = clk_set_rate(clks->wave_bclk, new_clockb * MHz);
 	CHECK_RET(ret);
-	ret = clk_set_rate(clks->wave_cclk, 400 * MHz);
+	ret = clk_set_rate(clks->wave_cclk, new_clockc * MHz);
+
 	CHECK_RET(ret);
 	ret = clk_prepare(clks->wave_aclk);
 	CHECK_RET(ret);
@@ -213,13 +234,25 @@ void vpu_clk_unprepare(struct device *dev, struct vpu_clks *clks)
 s32 vpu_clk_config(u32 enable)
 {
 	if (enable) {
-		clk_enable(s_vpu_clks.wave_aclk);
-		clk_enable(s_vpu_clks.wave_bclk);
-		clk_enable(s_vpu_clks.wave_cclk);
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+			clk_enable(s_vpu_clks.wave_aclk);
+			clk_enable(s_vpu_clks.wave_bclk);
+			clk_enable(s_vpu_clks.wave_cclk);
+		} else {
+			if (get_cpu_type() >= MESON_CPU_MAJOR_ID_G12A)
+				HevcEnc_MoreClock_enable();
+			HevcEnc_clock_enable(clock_level);
+		}
 	} else {
-		clk_disable(s_vpu_clks.wave_cclk);
-		clk_disable(s_vpu_clks.wave_bclk);
-		clk_disable(s_vpu_clks.wave_aclk);
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+			clk_disable(s_vpu_clks.wave_cclk);
+			clk_disable(s_vpu_clks.wave_bclk);
+			clk_disable(s_vpu_clks.wave_aclk);
+		} else {
+			HevcEnc_clock_disable();
+			if (get_cpu_type() >= MESON_CPU_MAJOR_ID_G12A)
+				HevcEnc_MoreClock_disable();
+		}
 	}
 
 	return 0;
@@ -465,12 +498,21 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 			}
 			s_vpu_irq_requested = true;
 		}
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+		} else
+		    amports_switch_gate("vdec", 1);
 
 		spin_lock_irqsave(&s_vpu_lock, flags);
-		WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-			READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) &
-			(get_cpu_type() == MESON_CPU_MAJOR_ID_SM1
-			? ~0x8 : ~(0x3<<24)));
+
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+			//vpu_clk_config(1);
+			pwr_ctrl_psci_smc(PDID_SC2_DOS_WAVE, PWR_ON);
+		} else {
+			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
+				READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) &
+				(get_cpu_type() == MESON_CPU_MAJOR_ID_SM1
+				? ~0x8 : ~(0x3<<24)));
+		}
 		udelay(10);
 
 		if (get_cpu_type() <= MESON_CPU_MAJOR_ID_TXLX) {
@@ -487,12 +529,16 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 			WRITE_VREG(DOS_SW_RESET4, data32);
 		}
 
-		WRITE_MPEG_REG(RESET0_REGISTER, data32 & ~(1<<21));
-		WRITE_MPEG_REG(RESET0_REGISTER, data32 | (1<<21));
-		READ_MPEG_REG(RESET0_REGISTER);
-		READ_MPEG_REG(RESET0_REGISTER);
-		READ_MPEG_REG(RESET0_REGISTER);
-		READ_MPEG_REG(RESET0_REGISTER);
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+			pr_err("consider using reset control\n");
+		} else {
+			WRITE_MPEG_REG(RESET0_REGISTER, data32 & ~(1<<21));
+			WRITE_MPEG_REG(RESET0_REGISTER, data32 | (1<<21));
+			READ_MPEG_REG(RESET0_REGISTER);
+			READ_MPEG_REG(RESET0_REGISTER);
+			READ_MPEG_REG(RESET0_REGISTER);
+			READ_MPEG_REG(RESET0_REGISTER);
+		}
 
 #ifndef VPU_SUPPORT_CLOCK_CONTROL
 		vpu_clk_config(1);
@@ -503,12 +549,14 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 		WRITE_VREG(DOS_WAVE420L_CNTL_STAT, 0x1);
 		WRITE_VREG(DOS_MEM_PD_WAVE420L, 0x0);
 
-		WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-			READ_AOREG(AO_RTI_GEN_PWR_ISO0) &
-			(get_cpu_type() == MESON_CPU_MAJOR_ID_SM1
-			? ~0x8 : ~(0x3<<12)));
-		udelay(10);
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
 
+		} else {
+			WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
+				READ_AOREG(AO_RTI_GEN_PWR_ISO0) &
+				(get_cpu_type() == MESON_CPU_MAJOR_ID_SM1
+				? ~0x8 : ~(0x3<<12)));
+		}
 		spin_unlock_irqrestore(&s_vpu_lock, flags);
 	}
 	memset(dma_cfg, 0, sizeof(dma_cfg));
@@ -1494,27 +1542,44 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 				memset(&s_vmem,
 					0, sizeof(struct video_mm_t));
 			}
+
 			if ((s_vpu_irq >= 0) && (s_vpu_irq_requested == true)) {
 				free_irq(s_vpu_irq, &s_vpu_drv_context);
 				s_vpu_irq_requested = false;
 			}
 			spin_lock_irqsave(&s_vpu_lock, flags);
-			WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
-				READ_AOREG(AO_RTI_GEN_PWR_ISO0) |
-				(get_cpu_type() == MESON_CPU_MAJOR_ID_SM1
-				? 0x8 : (0x3<<12)));
+
+			if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+				//vpu_clk_config(0);
+				pwr_ctrl_psci_smc(PDID_SC2_DOS_WAVE, PWR_OFF);
+			} else {
+				WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
+					READ_AOREG(AO_RTI_GEN_PWR_ISO0) |
+					(get_cpu_type() == MESON_CPU_MAJOR_ID_SM1
+					? 0x8 : (0x3<<12)));
+			}
+
 			udelay(10);
 
 			WRITE_VREG(DOS_MEM_PD_WAVE420L, 0xffffffff);
 #ifndef VPU_SUPPORT_CLOCK_CONTROL
 			vpu_clk_config(0);
 #endif
-			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
-				READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) |
-				(get_cpu_type() == MESON_CPU_MAJOR_ID_SM1
-				? 0x8 : (0x3<<24)));
+
+			if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+
+			} else {
+				WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
+					READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) |
+					(get_cpu_type() == MESON_CPU_MAJOR_ID_SM1
+					? 0x8 : (0x3<<24)));
+			}
+
 			udelay(10);
 			spin_unlock_irqrestore(&s_vpu_lock, flags);
+			if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+			} else
+			    amports_switch_gate("vdec", 0);
 		}
 	}
 	up(&s_vpu_sem);
@@ -1919,7 +1984,8 @@ static s32 vpu_probe(struct platform_device *pdev)
 	struct resource res;
 	struct device_node *np, *child;
 
-	enc_pr(LOG_DEBUG, "vpu_probe\n");
+	enc_pr(LOG_DEBUG, "vpu_probe fuck, clock_a: %d, clock_b: %d, clock_c: %d\n",
+		wave_clocka, wave_clockb, wave_clockc);
 
 	s_vpu_major = 0;
 	use_reserve = false;
@@ -1936,6 +2002,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 	memset(&res, 0, sizeof(struct resource));
 
 	idx = of_reserved_mem_device_init(&pdev->dev);
+
 	if (idx != 0) {
 		enc_pr(LOG_DEBUG,
 			"HevcEnc reserved memory config fail.\n");
@@ -1992,9 +2059,12 @@ static s32 vpu_probe(struct platform_device *pdev)
 	s_vpu_clk = clk;
 #endif
 
-	if (vpu_clk_prepare(&pdev->dev, &s_vpu_clks)) {
-		err = -ENOENT;
-		goto ERROR_PROVE_DEVICE;
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
+		if (vpu_clk_prepare(&pdev->dev, &s_vpu_clks)) {
+			err = -ENOENT;
+			//goto ERROR_PROVE_DEVICE;
+			return err;
+		}
 	}
 
 #ifndef VPU_SUPPORT_CLOCK_CONTROL
@@ -2047,7 +2117,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 		enc_pr(LOG_ERROR, "could not allocate major number\n");
 		goto ERROR_PROVE_DEVICE;
 	}
-	enc_pr(LOG_INFO, "SUCCESS alloc_chrdev_region\n");
+	enc_pr(LOG_DEBUG, "SUCCESS alloc_chrdev_region\n");
 
 	init_waitqueue_head(&s_interrupt_wait_q);
 	tasklet_init(&hevc_tasklet,
@@ -2089,7 +2159,9 @@ ERROR_PROVE_DEVICE:
 #ifndef VPU_SUPPORT_CLOCK_CONTROL
 	vpu_clk_config(0);
 #endif
-	vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
+
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2)
+		vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
 
 	if (s_vpu_irq_requested == true) {
 		if (s_vpu_irq >= 0) {
@@ -2146,7 +2218,9 @@ static s32 vpu_remove(struct platform_device *pdev)
 #ifndef VPU_SUPPORT_CLOCK_CONTROL
 	vpu_clk_config(0);
 #endif
-	vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
+
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2)
+		vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
 	uninit_HevcEnc_device();
 	return 0;
 }
@@ -2309,7 +2383,7 @@ DONE_WAKEUP:
 
 static const struct of_device_id cnm_hevcenc_dt_match[] = {
 	{
-		.compatible = "amlogic, HevcEnc",
+		.compatible = "cnm, HevcEnc",
 	},
 	{},
 };
@@ -2335,7 +2409,8 @@ static s32 __init vpu_init(void)
 		&& (get_cpu_type() != MESON_CPU_MAJOR_ID_G12A)
 			&& (get_cpu_type() != MESON_CPU_MAJOR_ID_GXLX)
 				&& (get_cpu_type() != MESON_CPU_MAJOR_ID_G12B)
-				&& (get_cpu_type() != MESON_CPU_MAJOR_ID_SM1)) {
+				&& (get_cpu_type() != MESON_CPU_MAJOR_ID_SM1)
+				&& (get_cpu_type() != MESON_CPU_MAJOR_ID_SC2)) {
 		enc_pr(LOG_DEBUG,
 			"The chip is not support hevc encoder\n");
 		return -1;
@@ -2361,6 +2436,7 @@ static void __exit vpu_exit(void)
 		(get_cpu_type() != MESON_CPU_MAJOR_ID_G12A) &&
 		(get_cpu_type() != MESON_CPU_MAJOR_ID_GXLX) &&
 		(get_cpu_type() != MESON_CPU_MAJOR_ID_G12B) &&
+		(get_cpu_type() != MESON_CPU_MAJOR_ID_SC2) &&
 		(get_cpu_type() != MESON_CPU_MAJOR_ID_SM1)) {
 		enc_pr(LOG_INFO,
 			"The chip is not support hevc encoder\n");
@@ -2385,6 +2461,15 @@ MODULE_PARM_DESC(print_level, "\n print_level\n");
 
 module_param(clock_level, uint, 0664);
 MODULE_PARM_DESC(clock_level, "\n clock_level\n");
+
+module_param(wave_clocka, uint, 0664);
+MODULE_PARM_DESC(wave_clocka, "\n wave_clocka\n");
+
+module_param(wave_clockb, uint, 0664);
+MODULE_PARM_DESC(wave_clockb, "\n wave_clockb\n");
+
+module_param(wave_clockc, uint, 0664);
+MODULE_PARM_DESC(wave_clockc, "\n wave_clockc\n");
 
 MODULE_AUTHOR("Amlogic using C&M VPU, Inc.");
 MODULE_DESCRIPTION("VPU linux driver");

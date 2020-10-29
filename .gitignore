@@ -99,3 +99,4 @@ all.config
 # customer folder
 customer
 
+*.mod
