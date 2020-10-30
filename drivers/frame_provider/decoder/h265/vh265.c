@@ -9679,8 +9679,9 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			vf->pts, vf->pts_us64,
 			vf->duration);
 #ifdef AUX_DATA_CRC
-		decoder_do_aux_data_check(vdec, hevc->m_PIC[vf->index & 0xff]->aux_data_buf,
-			hevc->m_PIC[vf->index & 0xff]->aux_data_size);
+		if ((vf->index & 0xff) <= MAX_REF_PIC_NUM)
+			decoder_do_aux_data_check(vdec, hevc->m_PIC[vf->index & 0xff]->aux_data_buf,
+				hevc->m_PIC[vf->index & 0xff]->aux_data_size);
 #endif
 		if (hevc->is_used_v4l)
 			update_vframe_src_fmt(vf,
