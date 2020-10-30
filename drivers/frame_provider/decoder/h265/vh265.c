@@ -468,6 +468,8 @@ static u32 max_decoding_time;
  *
  *bit 8: 0, use interlace policy
  *       1, NOT use interlace policy
+ *bit 9: 0, use manual parser NAL
+ *       1, NOT use manual parser NAL
  *
  */
 
@@ -11792,10 +11794,14 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 	} else {
 		/* check vps/sps/pps/i-slice in ucode */
 		unsigned ctl_val = 0x8;
+
 		if (hevc->PB_skip_mode == 0)
 			ctl_val = 0x4;	/* check vps/sps/pps only in ucode */
 		else if (hevc->PB_skip_mode == 3)
 			ctl_val = 0x0;	/* check vps/sps/pps/idr in ucode */
+		if (((error_handle_policy & 0x200) == 0) &&
+				input_stream_based(vdec))
+			ctl_val = 0x1;
 		WRITE_VREG(NAL_SEARCH_CTL, ctl_val);
 	}
 	if ((get_dbg_flag(hevc) & H265_DEBUG_NO_EOS_SEARCH_DONE)
@@ -12978,14 +12984,20 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			else
 				hevc->again_count = 0;
 
-			hevc->pre_parser_video_rp = STBUF_READ(&vdec->vbuf, get_rp);;
+			hevc->pre_parser_video_rp = STBUF_READ(&vdec->vbuf, get_rp);
 			hevc->pre_parser_video_wp = STBUF_READ(&vdec->vbuf, get_wp);
 
-			if ((hevc->again_count > dirty_count_threshold) &&
-					time_after64(get_jiffies_64(), hevc->again_timeout_jiffies)) {
+			if (((hevc->again_count > dirty_count_threshold) &&
+					time_after64(get_jiffies_64(), hevc->again_timeout_jiffies)) ||
+					(((error_handle_policy & 0x200) == 0) &&
+						(hevc->pic_list_init_flag == 0) &&
+						!(hevc->have_vps || hevc->have_sps || hevc->have_pps))) {
 				mutex_lock(&hevc->chunks_mutex);
+				hevc->again_count = 0;
 				vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
 				hevc->chunk = NULL;
+				hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
+					"Discard dirty data\n");
 				mutex_unlock(&hevc->chunks_mutex);
 			}
 		}
