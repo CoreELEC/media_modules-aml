@@ -1191,6 +1191,7 @@ static void vavs_local_init(bool is_reset)
 {
 	int i;
 
+	is_reset = 0;
 	vavs_ratio = vavs_amstream_dec_info.ratio;
 
 	avi_flag = (unsigned long) vavs_amstream_dec_info.param;
