@@ -1325,6 +1325,7 @@ typedef struct PIC_BUFFER_CONFIG_s {
   int min_mv;
   int avg_mv;
 #endif
+	u64 timestamp;
 } PIC_BUFFER_CONFIG;
 
 /*
@@ -2026,7 +2027,7 @@ typedef struct AV1Decoder {
   //DECLARE_ALIGNED(32, MACROBLOCKD, mb);
 
   //DECLARE_ALIGNED(32, AV1_COMMON, common);
-  AV1_COMMON common;
+  AV1_COMMON *common;
 
 #ifdef ORI_CODE
   AVxWorker lf_worker;
@@ -2267,7 +2268,7 @@ void av1_release_buf(AV1Decoder *pbi, RefCntBuffer *const buf);
 
 int av1_bufmgr_postproc(AV1Decoder *pbi, unsigned char frame_decoded);
 
-AV1Decoder *av1_decoder_create(BufferPool *const pool);
+AV1Decoder *av1_decoder_create(BufferPool *const pool, AV1_COMMON *cm);
 
 unsigned char av1_frame_is_inter(const AV1_COMMON *const cm);
 
@@ -2275,6 +2276,10 @@ RefCntBuffer *av1_get_primary_ref_frame_buf(
   const AV1_COMMON *const cm);
 
 void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd);
+
+int get_free_frame_buffer(struct AV1_Common_s *cm);
+
+void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *cm);
 
 #if 1
 #define lock_buffer_pool(pool, flags) \

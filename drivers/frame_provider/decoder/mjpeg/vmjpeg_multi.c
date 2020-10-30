@@ -47,6 +47,7 @@
 #include "../utils/firmware.h"
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include "../utils/config_parser.h"
+#include <media/v4l2-mem2mem.h>
 
 #define MEM_NAME "codec_mmjpeg"
 
@@ -102,7 +103,7 @@ static int pre_decode_buf_level = 0x800;
 static int start_decode_buf_level = 0x2000;
 static u32 without_display_mode;
 static u32 dynamic_buf_num_margin;
-//static u32 run_ready_min_buf_num = 2;
+static u32 run_ready_min_buf_num = 2;
 #undef pr_info
 #define pr_info printk
 unsigned int mmjpeg_debug_mask = 0xff;
@@ -237,6 +238,8 @@ struct vdec_mjpeg_hw_s {
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
+static int notify_v4l_eos(struct vdec_s *vdec);
+
 static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 {
 	u32 temp;
@@ -318,7 +321,7 @@ static int v4l_res_change(struct vdec_mjpeg_hw_s *hw, int width, int height)
 			vdec_v4l_res_ch_event(ctx);
 			hw->v4l_params_parsed = false;
 			hw->res_ch_flag = 1;
-			//ctx->v4l_resolution_change = 1;
+			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			notify_v4l_eos(hw_to_vdec(hw));
 
@@ -971,7 +974,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 		decbuf_start	= fb->m.mem[0].addr;
 		decbuf_y_size	= fb->m.mem[0].size;
 		decbuf_u_start	= fb->m.mem[1].addr;
-		decbuf_u_size	= fb->m.mem[1].size;
+		decbuf_u_size	= fb->m.mem[1].size >> 1;
 		decbuf_v_start	= decbuf_u_start + decbuf_u_size;
 		decbuf_v_size	= decbuf_u_size;
 		canvas_width	= ALIGN(hw->frame_width, 64);
@@ -1273,22 +1276,18 @@ static unsigned long run_ready(struct vdec_s *vdec,
 
 		if (ctx->param_sets_from_ucode) {
 			if (hw->v4l_params_parsed) {
-#if 0
 				if (!ctx->v4l_codec_dpb_ready &&
 					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
 					run_ready_min_buf_num)
 					return 0;
-#endif
 			} else {
-				//if (ctx->v4l_resolution_change)
-				//	return 0;
+				if (ctx->v4l_resolution_change)
+					return 0;
 			}
 		} else if (!ctx->v4l_codec_dpb_ready) {
-#if 0
 			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
 				run_ready_min_buf_num)
 				return 0;
-#endif
 		}
 	}
 

@@ -190,8 +190,6 @@ static int vmpeg_vf_states(struct vframe_states *states, void *);
 static int vmpeg_event_cb(int type, void *data, void *private_data);
 static int notify_v4l_eos(struct vdec_s *vdec);
 
-
-
 struct mmpeg2_userdata_record_t {
 	struct userdata_meta_info_t meta_info;
 	u32 rec_start;
@@ -334,7 +332,7 @@ struct vdec_mpeg12_hw_s {
 	u32 dynamic_buf_num_margin;
 	struct vdec_info gvs;
 	struct vframe_qos_s vframe_qos;
-	unsigned int res_ch_flag;
+	u32 res_ch_flag;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -1788,6 +1786,7 @@ static int v4l_res_change(struct vdec_mpeg12_hw_s *hw, int width, int height)
 			vdec_v4l_res_ch_event(ctx);
 			hw->v4l_params_parsed = false;
 			hw->res_ch_flag = 1;
+			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			flush_output(hw);
 			notify_v4l_eos(hw_to_vdec(hw));

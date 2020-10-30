@@ -39,8 +39,6 @@
 #define VDEC_GATHER_MEMORY_TYPE		0
 #define VDEC_SCATTER_MEMORY_TYPE	1
 
-#define ALIGN_64K			(64 * 1024)
-
 /**
  * struct vdec_fb  - decoder frame buffer
  * @mem_type	: gather or scatter memory.

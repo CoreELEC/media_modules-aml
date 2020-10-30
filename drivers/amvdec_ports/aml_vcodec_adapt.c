@@ -239,7 +239,6 @@ static void user_buffer_init(void)
 static void audio_component_release(struct stream_port_s *port,
 	struct stream_buf_s *pbuf, int release_num)
 {
-	#if 0
 	switch (release_num) {
 		default:
 		case 0:
@@ -252,18 +251,6 @@ static void audio_component_release(struct stream_port_s *port,
 		case 1:
 			;
 	}
-	#else
-	if (release_num == 0 || release_num == 4) {
-		esparser_release(pbuf);
-		adec_release(port->vformat);
-		stbuf_release(pbuf, false);
-	} else if (release_num == 3) {
-		adec_release(port->vformat);
-		stbuf_release(pbuf, false);
-	} else if (release_num == 2) {
-		stbuf_release(pbuf, false);
-	}
-	#endif
 }
 
 static int audio_component_init(struct stream_port_s *port,
@@ -308,7 +295,6 @@ struct stream_buf_s *pbuf, int release_num)
 
 	struct vdec_s *slave = NULL;
 
-	#if 0
 	switch (release_num) {
 	default:
 	case 0:
@@ -335,34 +321,6 @@ struct stream_buf_s *pbuf, int release_num)
 	case 1:
 		;
 	}
-	#else
-	if (release_num == 0 || release_num == 4) {
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-		esparser_release(pbuf);
-		if (vdec->slave)
-			slave = vdec->slave;
-		vdec_release(vdec);
-
-		if (slave)
-			vdec_release(slave);
-		vdec = NULL;
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-		stbuf_release(pbuf, is_multidec);
-	} else if (release_num == 3) {
-		if (vdec->slave)
-			slave = vdec->slave;
-		vdec_release(vdec);
-		
-		if (slave)
-			vdec_release(slave);
-		vdec = NULL;
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-		stbuf_release(pbuf, is_multidec);
-	} else if (release_num == 2) {
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-		stbuf_release(pbuf, is_multidec);
-	}
-	#endif
 }
 
 static int video_component_init(struct stream_port_s *port,
@@ -794,6 +752,10 @@ int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *mode)
 			"resolution_changed reset mode: %d\n", *mode);
 			*mode = V4L_RESET_MODE_LIGHT;
 		}
+
+		if (ada_ctx->ctx->v4l_resolution_change)
+			*mode = V4L_RESET_MODE_LIGHT;
+
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_PRINFO,
 			"reset mode: %d\n", *mode);
 

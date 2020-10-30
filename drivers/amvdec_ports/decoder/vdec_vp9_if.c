@@ -174,6 +174,8 @@ static u32 vdec_config_default_parms(u8 *parm)
 	pbuf += sprintf(pbuf, "vp9_double_write_mode:16;");
 	pbuf += sprintf(pbuf, "vp9_buf_width:1920;");
 	pbuf += sprintf(pbuf, "vp9_buf_height:1088;");
+	pbuf += sprintf(pbuf, "vp9_max_pic_w:4096;");
+	pbuf += sprintf(pbuf, "vp9_max_pic_h:2304;");
 	pbuf += sprintf(pbuf, "save_buffer_mode:0;");
 	pbuf += sprintf(pbuf, "no_head:0;");
 	pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:0;");
@@ -214,9 +216,10 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 
 	if ((ctx->config.parm.dec.parms_status &
 		V4L2_CONFIG_PARM_DECODE_HDRINFO) &&
-		inst->parms.hdr.color_parms.present_flag) {
+		ctx->config.parm.dec.hdr.color_parms.present_flag) {
 		u8 *pbuf = ctx->config.buf + ctx->config.length;
 
+		pbuf += sprintf(pbuf, "HDRStaticInfo:%d;", 1);
 		pbuf += sprintf(pbuf, "mG.x:%d;",
 			ctx->config.parm.dec.hdr.color_parms.primaries[0][0]);
 		pbuf += sprintf(pbuf, "mG.y:%d;",
@@ -234,7 +237,7 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 		pbuf += sprintf(pbuf, "mW.y:%d;",
 			ctx->config.parm.dec.hdr.color_parms.white_point[1]);
 		pbuf += sprintf(pbuf, "mMaxDL:%d;",
-			ctx->config.parm.dec.hdr.color_parms.luminance[0] / 1000);
+			ctx->config.parm.dec.hdr.color_parms.luminance[0] * 10000);
 		pbuf += sprintf(pbuf, "mMinDL:%d;",
 			ctx->config.parm.dec.hdr.color_parms.luminance[1]);
 		pbuf += sprintf(pbuf, "mMaxCLL:%d;",
@@ -463,7 +466,8 @@ static int parse_stream_ucode_dma(struct vdec_vp9_inst *inst,
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
-	ret = vdec_vframe_write_with_dma(vdec, buf, size, timestamp, handle);
+	ret = vdec_vframe_write_with_dma(vdec, buf, size, timestamp, handle,
+		vdec_vframe_input_free, inst->ctx);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -875,7 +879,8 @@ static int vdec_vp9_decode(unsigned long h_vdec,
 			bs->model == VB2_MEMORY_USERPTR) {
 			ret = vdec_vframe_write_with_dma(vdec,
 				bs->addr, size, bs->timestamp,
-				BUFF_IDX(bs, bs->index));
+				BUFF_IDX(bs, bs->index),
+				vdec_vframe_input_free, inst->ctx);
 		}
 	} else {
 		/*checked whether the resolution changes.*/
@@ -1034,7 +1039,7 @@ static void set_param_hdr_info(struct vdec_vp9_inst *inst,
 			V4L2_CONFIG_PARM_DECODE_HDRINFO;
 		aml_vdec_dispatch_event(inst->ctx,
 			V4L2_EVENT_SRC_CH_HDRINFO);
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
 			"VP9 set HDR infos\n");
 	}
 }

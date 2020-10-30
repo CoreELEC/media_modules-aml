@@ -605,6 +605,10 @@ int vp9_need_prefix;
 EXPORT_SYMBOL(vp9_need_prefix);
 module_param(vp9_need_prefix, int, 0644);
 
+int av1_need_prefix;
+EXPORT_SYMBOL(av1_need_prefix);
+module_param(av1_need_prefix, int, 0644);
+
 bool multiplanar;
 EXPORT_SYMBOL(multiplanar);
 module_param(multiplanar, bool, 0644);

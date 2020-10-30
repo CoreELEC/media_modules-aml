@@ -121,6 +121,7 @@ struct vdec_av1_inst {
 	struct vcodec_vfm_s vfm;
 	struct aml_dec_params parms;
 	struct completion comp;
+	struct vdec_comp_buf_info comp_info;
 };
 
 /*!\brief OBU types. */
@@ -273,10 +274,8 @@ static void vdec_parser_parms(struct vdec_av1_inst *inst)
 			ctx->config.parm.dec.cfg.ref_buf_margin);
 		pbuf += sprintf(pbuf, "av1_double_write_mode:%d;",
 			ctx->config.parm.dec.cfg.double_write_mode);
-		pbuf += sprintf(pbuf, "av1_buf_width:%d;",
-			ctx->config.parm.dec.cfg.init_width);
-		pbuf += sprintf(pbuf, "av1_buf_height:%d;",
-			ctx->config.parm.dec.cfg.init_height);
+		pbuf += sprintf(pbuf, "av1_buf_width:1920;");
+		pbuf += sprintf(pbuf, "av1_buf_height:1088;");
 		pbuf += sprintf(pbuf, "save_buffer_mode:0;");
 		pbuf += sprintf(pbuf, "no_head:0;");
 		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:%d;",
@@ -434,7 +433,8 @@ static int parse_stream_ucode_dma(struct vdec_av1_inst *inst,
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
-	ret = vdec_vframe_write_with_dma(vdec, buf, size, timestamp, handle);
+	ret = vdec_vframe_write_with_dma(vdec, buf, size, timestamp, handle,
+		vdec_vframe_input_free, inst->ctx);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -525,7 +525,7 @@ static void vdec_av1_deinit(unsigned long h_vdec)
 
 static int vdec_av1_get_fb(struct vdec_av1_inst *inst, struct vdec_v4l2_buffer **out)
 {
-	return get_fb_from_queue(inst->ctx, out);
+	return get_fb_from_queue(inst->ctx, out, false);
 }
 
 static void vdec_av1_get_vf(struct vdec_av1_inst *inst, struct vdec_v4l2_buffer **out)
@@ -1118,7 +1118,8 @@ static int vdec_av1_decode(unsigned long h_vdec,
 			bs->model == VB2_MEMORY_USERPTR) {
 			ret = vdec_vframe_write_with_dma(vdec,
 				bs->addr, size, bs->timestamp,
-				BUFF_IDX(bs, bs->index));
+				BUFF_IDX(bs, bs->index),
+				vdec_vframe_input_free, inst->ctx);
 		}
 	} else {
 		/*checked whether the resolution changes.*/
@@ -1150,6 +1151,12 @@ static int vdec_av1_decode(unsigned long h_vdec,
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
 		"parms status: %u\n", parms->parms_status);
  }
+
+static void get_param_comp_buf_info(struct vdec_av1_inst *inst,
+		struct vdec_comp_buf_info *params)
+{
+	memcpy(params, &inst->comp_info, sizeof(*params));
+}
 
 static int vdec_av1_get_param(unsigned long h_vdec,
 			       enum vdec_get_param_type type, void *out)
@@ -1188,6 +1195,16 @@ static int vdec_av1_get_param(unsigned long h_vdec,
 		get_param_config_info(inst, out);
 		break;
 
+	case GET_PARAM_DW_MODE:
+	{
+		unsigned int *mode = out;
+		*mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
+		break;
+	}
+	case GET_PARAM_COMP_BUF_INFO:
+		get_param_comp_buf_info(inst, out);
+		break;
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);
@@ -1200,6 +1217,61 @@ static int vdec_av1_get_param(unsigned long h_vdec,
 static void set_param_write_sync(struct vdec_av1_inst *inst)
 {
 	complete(&inst->comp);
+}
+
+static int vdec_get_dw_mode(struct vdec_av1_inst *inst, int dw_mode)
+{
+	u32 valid_dw_mode = inst->parms.cfg.double_write_mode;
+	int w = inst->parms.cfg.init_width;
+	int h = inst->parms.cfg.init_height;
+	u32 dw = 0x1; /*1:1*/
+
+	switch (valid_dw_mode) {
+	case 0x100:
+		if (w > 1920 && h > 1088)
+			dw = 0x4; /*1:2*/
+		break;
+	case 0x200:
+		if (w > 1920 && h > 1088)
+			dw = 0x2; /*1:4*/
+		break;
+	case 0x300:
+		if (w > 1280 && h > 720)
+			dw = 0x4; /*1:2*/
+		break;
+	default:
+		dw = valid_dw_mode;
+		break;
+	}
+
+	return dw;
+}
+
+static int vdec_pic_scale(struct vdec_av1_inst *inst, int length, int dw_mode)
+{
+	int ret = 64;
+
+	switch (vdec_get_dw_mode(inst, dw_mode)) {
+	case 0x0: /* only afbc, output afbc */
+		ret = 64;
+		break;
+	case 0x1: /* afbc and (w x h), output YUV420 */
+		ret = length;
+		break;
+	case 0x2: /* afbc and (w/4 x h/4), output YUV420 */
+	case 0x3: /* afbc and (w/4 x h/4), output afbc and YUV420 */
+		ret = length >> 2;
+		break;
+	case 0x4: /* afbc and (w/2 x h/2), output YUV420 */
+		ret = length >> 1;
+		break;
+	case 0x10: /* (w x h), output YUV420-8bit) */
+	default:
+		ret = length;
+		break;
+	}
+
+	return ret;
 }
 
 static void set_param_ps_info(struct vdec_av1_inst *inst,
@@ -1245,6 +1317,12 @@ static void set_param_ps_info(struct vdec_av1_inst *inst,
 		ps->dpb_size);
 }
 
+static void set_param_comp_buf_info(struct vdec_av1_inst *inst,
+		struct vdec_comp_buf_info *info)
+{
+	memcpy(&inst->comp_info, info, sizeof(*info));
+}
+
 static void set_param_hdr_info(struct vdec_av1_inst *inst,
 	struct aml_vdec_hdr_infos *hdr)
 {
@@ -1286,6 +1364,10 @@ static int vdec_av1_set_param(unsigned long h_vdec,
 
 	case SET_PARAM_PS_INFO:
 		set_param_ps_info(inst, in);
+		break;
+
+	case SET_PARAM_COMP_BUF_INFO:
+		set_param_comp_buf_info(inst, in);
 		break;
 
 	case SET_PARAM_HDR_INFO:

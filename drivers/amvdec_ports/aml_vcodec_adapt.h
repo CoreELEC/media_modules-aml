@@ -27,13 +27,12 @@
 #include "aml_vcodec_drv.h"
 
 struct aml_vdec_adapt {
-	enum vformat_e format;
+	int format;
 	void *vsi;
 	int32_t failure;
 	uint32_t inst_addr;
 	unsigned int signaled;
 	struct aml_vcodec_ctx *ctx;
-	struct platform_device *dev;
 	wait_queue_head_t wq;
 	struct file *filp;
 	struct vdec_s *vdec;

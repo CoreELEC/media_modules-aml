@@ -2513,6 +2513,11 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 	int allocated_count = 0;
 
 	if (hw->is_used_v4l) {
+		struct h264_dpb_stru *dpb = &hw->dpb;
+
+		if (dpb->mDPB.used_size >= dpb->mDPB.size - 1)
+			return 0;
+
 		for (i = 0; i < hw->dpb.mDPB.size; i++) {
 			if (hw->buffer_spec[i].used == 0 &&
 				hw->buffer_spec[i].vf_ref == 0 &&
@@ -3061,7 +3066,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
-		pr_info("[%d] H264 EOS notify.\n", ctx->id);
+		pr_info("[%d] H264 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
 
 	return 0;
@@ -8414,6 +8419,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	 * bit 15: frame_mbs_only_flag
 	 * bit 13-14: chroma_format_idc
 	 */
+	hw->seq_info = param2;
 	frame_mbs_only_flag = (hw->seq_info >> 15) & 0x01;
 	if (hw->dpb.mSPS.profile_idc != 100 &&
 		hw->dpb.mSPS.profile_idc != 110 &&
@@ -8504,6 +8510,7 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 			vdec_v4l_set_ps_infos(ctx, &ps);
 			vdec_v4l_res_ch_event(ctx);
 			hw->res_ch_flag = 1;
+			ctx->v4l_resolution_change = 1;
 			amvdec_stop();
 			if (hw->mmu_enable)
 				amhevc_stop();
@@ -8563,11 +8570,11 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 					}
 					hw->v4l_params_parsed = true;
 					vdec_v4l_set_ps_infos(ctx, &ps);
+
 					amvdec_stop();
 					if (hw->mmu_enable)
 						amhevc_stop();
-				}
-				else {
+				} else {
 					if (vh264_set_params(hw, param1,
 					param2, param3, param4, false) < 0)
 						dpb_print(DECODE_ID(hw), 0, "set parameters error\n");
@@ -8792,8 +8799,7 @@ result_done:
 			amhevc_stop();
 		hw->eos = 1;
 		flush_dpb(p_H264_Dpb);
-		if (hw->is_used_v4l)
-			notify_v4l_eos(hw_to_vdec(hw));
+		notify_v4l_eos(hw_to_vdec(hw));
 		mutex_lock(&hw->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
@@ -8992,10 +8998,11 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
 					run_ready_min_buf_num)
 					ret = 0;
+				else if (ctx->v4l_codec_dpb_ready &&
+					!is_buffer_available(vdec))
+					ret = 0;
 			} else {
-				if ((hw->res_ch_flag == 1) &&
-					((ctx->state <= AML_STATE_INIT) ||
-					(ctx->state >= AML_STATE_FLUSHING)))
+				if (ctx->v4l_resolution_change)
 					ret = 0;
 			}
 		} else if (!ctx->v4l_codec_dpb_ready) {
@@ -9281,10 +9288,17 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 static void clear_refer_bufs(struct vdec_h264_hw_s *hw)
 {
 	int i;
+	ulong flags;
 
-	mutex_lock(&vmh264_mutex);
-	dealloc_buf_specs(hw, 1);
-	mutex_unlock(&vmh264_mutex);
+	if (hw->is_used_v4l) {
+		spin_lock_irqsave(&hw->bufspec_lock, flags);
+		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
+			hw->buffer_spec[i].used = -1;
+			hw->buffer_spec[i].cma_alloc_addr = 0;
+			hw->buffer_spec[i].buf_adr = 0;
+		}
+		spin_unlock_irqrestore(&hw->bufspec_lock, flags);
+	}
 
 	INIT_KFIFO(hw->display_q);
 	INIT_KFIFO(hw->newframe_q);
@@ -9319,13 +9333,10 @@ static void reset(struct vdec_s *vdec)
 	}
 	hw->eos = 0;
 	hw->decode_pic_count = 0;
-	hw->dec_result = DEC_RESULT_NONE;
-	/* v4l will reset on every res change */
-	hw->res_ch_flag = 0;
 
-	clear_refer_bufs(hw);
 	reset_process_time(hw);
 	h264_reset_bufmgr(vdec);
+	clear_refer_bufs(hw);
 
 	dpb_print(DECODE_ID(hw), 0, "%s\n", __func__);
 }
@@ -9485,11 +9496,13 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 
 	flush_dpb(&hw->dpb);
 
-	timeout = jiffies + HZ;
-	while (kfifo_len(&hw->display_q) > 0) {
-		if (time_after(jiffies, timeout))
-			break;
-		schedule();
+	if (hw->is_used_v4l) {
+		timeout = jiffies + HZ;
+		while (kfifo_len(&hw->display_q) > 0) {
+			if (time_after(jiffies, timeout))
+				break;
+			schedule();
+		}
 	}
 
 	buf_spec_init(hw, true);
@@ -9498,10 +9511,12 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 	/*hw->decode_pic_count = 0;
 	hw->seq_info2 = 0;*/
 
-	hw->cfg_param1 = READ_VREG(AV_SCRATCH_1);
-	hw->cfg_param2 = READ_VREG(AV_SCRATCH_2);
-	hw->cfg_param3 = READ_VREG(AV_SCRATCH_6);
-	hw->cfg_param4 = READ_VREG(AV_SCRATCH_B);
+	if (!hw->is_used_v4l) {
+		hw->cfg_param1 = READ_VREG(AV_SCRATCH_1);
+		hw->cfg_param2 = READ_VREG(AV_SCRATCH_2);
+		hw->cfg_param3 = READ_VREG(AV_SCRATCH_6);
+		hw->cfg_param4 = READ_VREG(AV_SCRATCH_B);
+	}
 
 	if (vh264_set_params(hw,
 		hw->cfg_param1,

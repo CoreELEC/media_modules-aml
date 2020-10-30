@@ -928,18 +928,6 @@ static int get_double_write_mode_init(struct AVS2Decoder_s *dec)
 	return dw;
 }
 
-static int get_double_write_ratio(struct AVS2Decoder_s *dec,
-	int dw_mode)
-{
-	int ratio = 1;
-	if ((dw_mode == 2) ||
-			(dw_mode == 3))
-		ratio = 4;
-	else if (dw_mode == 4)
-		ratio = 2;
-	return ratio;
-}
-
 //#define	MAX_4K_NUM		0x1200
 #ifdef AVS2_10B_MMU
 int avs2_alloc_mmu(
@@ -1947,9 +1935,9 @@ static void init_buf_list(struct AVS2Decoder_s *dec)
 
 	if (dw_mode) {
 		int pic_width_dw = pic_width /
-			get_double_write_ratio(dec, dw_mode);
+			get_double_write_ratio(dw_mode);
 		int pic_height_dw = pic_height /
-			get_double_write_ratio(dec, dw_mode);
+			get_double_write_ratio(dw_mode);
 		int lcu_size = 64; /*fixed 64*/
 		int pic_width_64 = (pic_width_dw + 63) & (~0x3f);
 		int pic_height_32 = (pic_height_dw + 31) & (~0x1f);
@@ -2072,9 +2060,9 @@ static int config_pic(struct AVS2Decoder_s *dec,
 
 	if (dw_mode) {
 		int pic_width_dw = pic_width /
-			get_double_write_ratio(dec, dw_mode);
+			get_double_write_ratio(dw_mode);
 		int pic_height_dw = pic_height /
-			get_double_write_ratio(dec, dw_mode);
+			get_double_write_ratio(dw_mode);
 		int pic_width_64_dw = (pic_width_dw + 63) & (~0x3f);
 		int pic_height_32_dw = (pic_height_dw + 31) & (~0x1f);
 		int pic_width_lcu_dw  = (pic_width_64_dw % lcu_size) ?
@@ -3990,11 +3978,9 @@ static void set_canvas(struct AVS2Decoder_s *dec,
 	/*CANVAS_BLKMODE_64X32*/
 	if	(pic->double_write_mode) {
 		canvas_w = pic->pic_w	/
-				get_double_write_ratio(dec,
-					pic->double_write_mode);
+				get_double_write_ratio(pic->double_write_mode);
 		canvas_h = pic->pic_h /
-				get_double_write_ratio(dec,
-					pic->double_write_mode);
+				get_double_write_ratio(pic->double_write_mode);
 
 		if (mem_map_mode == 0)
 			canvas_w = ALIGN(canvas_w, 32);
@@ -4505,11 +4491,9 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 		   vf->width,vf->height, pic->width,
 			pic->height); */
 		vf->width = pic->pic_w /
-			get_double_write_ratio(dec,
-				pic->double_write_mode);
+			get_double_write_ratio(pic->double_write_mode);
 		vf->height = pic->pic_h /
-			get_double_write_ratio(dec,
-				pic->double_write_mode);
+			get_double_write_ratio(pic->double_write_mode);
 		if (force_w_h != 0) {
 			vf->width = (force_w_h >> 16) & 0xffff;
 			vf->height = force_w_h & 0xffff;

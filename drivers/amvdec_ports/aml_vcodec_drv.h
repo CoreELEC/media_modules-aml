@@ -123,7 +123,6 @@ enum aml_instance_type {
  * @AML_STATE_ACTIVE	- vdec is ready for work.
  * @AML_STATE_FLUSHING	- vdec is flushing. Only used by decoder
  * @AML_STATE_FLUSHED	- decoder has transacted the last frame.
- * @AML_STATE_RESET	- decoder has be reset after flush.
  * @AML_STATE_ABORT	- vcodec should be aborted
  */
 enum aml_instance_state {
@@ -134,7 +133,6 @@ enum aml_instance_state {
 	AML_STATE_ACTIVE,
 	AML_STATE_FLUSHING,
 	AML_STATE_FLUSHED,
-	AML_STATE_RESET,
 	AML_STATE_ABORT,
 };
 
@@ -376,7 +374,8 @@ struct aml_vdec_thread {
 
 /* struct internal_comp_buf - compressed buffer
  * @index: index of this buf within (B)MMU BOX
- * @ref: reference number of this buf
+ * @ref: [0-7]:reference number of this buf
+ *       [8-15]: use for reuse.
  * @mmu_box: mmu_box of context
  * @bmmu_box: bmmu_box of context
  * @box_ref: box_ref of context
@@ -384,6 +383,8 @@ struct aml_vdec_thread {
  * @frame_buffer_size: SG buffer page number from
  * @priv_data use for video composer
  *  struct vdec_comp_buf_info
+ * @idx_vb: vb index and uvm buffer pair.
+ * @lock: use for lock reuse of compress buffer.
  */
 struct internal_comp_buf {
 	u32		index;
@@ -393,8 +394,11 @@ struct internal_comp_buf {
 	struct kref	*box_ref;
 
 	ulong		header_addr;
+	u32		header_size;
 	u32		frame_buffer_size;
 	struct file_private_data priv_data;
+	u32		idx_vb;
+	struct mutex	lock;
 };
 /**
  * struct aml_vcodec_ctx - Context (instance) private data.
@@ -427,6 +431,7 @@ struct internal_comp_buf {
  * @param_change: indicate encode parameter type
  * @param_sets_from_ucode: if true indicate ps from ucode.
  * @v4l_codec_dpb_ready: queue buffer number greater than dpb.
+ # @v4l_resolution_change: indicate resolution change happend.
  * @comp: comp be used for sync picture information with decoder.
  * @config: used to set or get parms for application.
  * @picinfo: store picture info after header parsing.
@@ -440,6 +445,7 @@ struct internal_comp_buf {
  * @is_drm_mode: decoding work on drm mode if that set.
  * @is_stream_mode: vdec input used to stream mode, default frame mode.
  * @is_stream_off: the value used to handle reset active.
+ * @is_out_stream_off: streamoff called for output port.
  * @receive_cmd_stop: if receive the cmd flush decoder.
  * @reset_flag: reset mode includes lightly and normal mode.
  * @decoded_frame_cnt: the capture buffer deque number to be count.
@@ -480,6 +486,7 @@ struct aml_vcodec_ctx {
 	int				vpp_size;
 	bool				param_sets_from_ucode;
 	bool				v4l_codec_dpb_ready;
+	bool				v4l_resolution_change;
 	struct completion		comp;
 	struct v4l2_config_parm		config;
 	struct vdec_pic_info		picinfo;
@@ -495,6 +502,7 @@ struct aml_vcodec_ctx {
 	bool				is_drm_mode;
 	bool				output_dma_mode;
 	bool				is_stream_off;
+	bool				is_out_stream_off;
 	bool				receive_cmd_stop;
 	int				reset_flag;
 	int				decoded_frame_cnt;
@@ -506,6 +514,7 @@ struct aml_vcodec_ctx {
 	struct kref			box_ref;
 	struct vdec_comp_buf_info	comp_info;
 	struct internal_comp_buf	*comp_bufs;
+	struct uvm_hook_mod_info	*uvm_proxy;
 };
 
 /**

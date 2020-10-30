@@ -192,6 +192,8 @@ retry:
 				"vpp bind buf:%d to vpp_buf:%p\n",
 				VPP_BUF_GET_IDX(out_buf), out_buf);
 			out->status = FB_ST_DISPLAY;
+			out->m.mem[0].bytes_used = out->m.mem[0].size;
+			out->m.mem[1].bytes_used = out->m.mem[1].size;
 		}
 
 		/* safe to pop in_buf */

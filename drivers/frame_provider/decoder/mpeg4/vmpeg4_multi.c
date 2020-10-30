@@ -319,7 +319,7 @@ struct vdec_mpeg4_hw_s {
 	bool v4l_params_parsed;
 	u32 buf_num;
 	u32 dynamic_buf_num_margin;
-	unsigned int res_ch_flag;
+	u32 res_ch_flag;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -942,6 +942,7 @@ static int v4l_res_change(struct vdec_mpeg4_hw_s *hw, int width, int height)
 			vdec_v4l_res_ch_event(ctx);
 			hw->v4l_params_parsed = false;
 			hw->res_ch_flag = 1;
+			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			flush_output(hw);
 			notify_v4l_eos(hw_to_vdec(hw));
@@ -1478,7 +1479,9 @@ static void vmpeg4_work(struct work_struct *work)
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 		flush_output(hw);
-		notify_v4l_eos(vdec);
+
+		if (hw->is_used_v4l)
+			notify_v4l_eos(vdec);
 
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"%s: eos flushed, frame_num %d\n",
@@ -2198,9 +2201,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 					run_ready_min_buf_num)
 					return 0;
 			} else {
-				if ((hw->res_ch_flag == 1) &&
-				((ctx->state <= AML_STATE_INIT) ||
-				(ctx->state >= AML_STATE_FLUSHING)))
+				if (ctx->v4l_resolution_change)
 					return 0;
 			}
 		} else if (!ctx->v4l_codec_dpb_ready) {
