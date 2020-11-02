@@ -266,7 +266,8 @@ static void pm_vdec_legacy_power_off(struct device *dev, int id);
 static void pm_vdec_legacy_power_on(struct device *dev, int id)
 {
 	void *decomp_addr = NULL;
-	dma_addr_t decomp_dma_addr;
+	ulong decomp_dma_addr;
+	ulong mem_handle;
 	u32 decomp_addr_aligned = 0;
 	int hevc_loop = 0;
 	int sleep_val, iso_val;
@@ -278,9 +279,8 @@ static void pm_vdec_legacy_power_on(struct device *dev, int id)
 
 	if (hevc_workaround_needed() &&
 		(id == VDEC_HEVC)) {
-		decomp_addr = codec_mm_dma_alloc_coherent("vdec_prealloc",
-			SZ_64K + SZ_4K, &decomp_dma_addr, GFP_KERNEL, 0);
-
+		decomp_addr = codec_mm_dma_alloc_coherent(&mem_handle,
+			&decomp_dma_addr, SZ_64K + SZ_4K, "vdec_prealloc");
 		if (decomp_addr) {
 			decomp_addr_aligned = ALIGN(decomp_dma_addr, SZ_64K);
 			memset((u8 *)decomp_addr +
@@ -497,8 +497,7 @@ static void pm_vdec_legacy_power_on(struct device *dev, int id)
 	}
 
 	if (decomp_addr)
-		codec_mm_dma_free_coherent("vdec_prealloc",
-			SZ_64K + SZ_4K, decomp_addr, decomp_dma_addr, 0);
+		codec_mm_dma_free_coherent(mem_handle);
 }
 
 static void pm_vdec_legacy_power_off(struct device *dev, int id)
