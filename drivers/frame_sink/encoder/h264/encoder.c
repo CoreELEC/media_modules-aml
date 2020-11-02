@@ -3253,8 +3253,7 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 			"avc init as mode %d, wq: %p.\n",
 			wq->ucode_index, (void *)wq);
 
-		if (addr_info[2] > wq->mem.bufspec.max_width ||
-		    addr_info[3] > wq->mem.bufspec.max_height) {
+		if (addr_info[2] * addr_info[3] > wq->mem.bufspec.max_width * wq->mem.bufspec.max_height) {
 			enc_pr(LOG_ERROR,
 				"avc config init- encode size %dx%d is larger than supported (%dx%d).  wq:%p.\n",
 				addr_info[2], addr_info[3],
