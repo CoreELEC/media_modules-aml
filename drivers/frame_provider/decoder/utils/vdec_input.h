@@ -39,7 +39,7 @@ struct vframe_block_list_s {
 	int chunk_count;
 	int is_out_buf;
 	u32 handle;
-
+	ulong mem_handle;
 	/* free callback */
 	chunk_free free;
 	void* priv;
@@ -89,6 +89,7 @@ struct vdec_input_s {
 	bool swap_valid;
 	bool swap_needed;
 	bool eos;
+	ulong mem_handle;
 	void *swap_page;
 	dma_addr_t swap_page_phys;
 	u64 total_wr_count;

@@ -223,10 +223,18 @@ static void vframe_block_add_chunk(struct vframe_block_list_s *block,
 	block->input->sequence++;
 }
 
+static bool is_coherent_buff = 1;
+
 static void vframe_block_free_block(struct vframe_block_list_s *block)
 {
-	if (block->addr) {
-		codec_mm_free_for_dma(MEM_NAME,	block->addr);
+	if (is_coherent_buff) {
+		if (block->mem_handle) {
+			codec_mm_dma_free_coherent(block->mem_handle);
+		}
+	} else {
+		if (block->addr) {
+			codec_mm_free_for_dma(MEM_NAME,	block->addr);
+		}
 	}
 	/*
 	*pr_err("free block %d, size=%d\n", block->id, block->size);
@@ -258,20 +266,25 @@ static int vframe_block_init_alloc_storage(struct vdec_input_s *input,
 		block->priv = priv;
 	} else {
 		alloc_size = PAGE_ALIGN(alloc_size);
-		block->addr = codec_mm_alloc_for_dma_ex(
-			MEM_NAME,
-			alloc_size/PAGE_SIZE,
-			VFRAME_BLOCK_PAGEALIGN,
-			CODEC_MM_FLAGS_DMA_CPU | CODEC_MM_FLAGS_FOR_VDECODER,
-			input->id,
-			block->id);
+		if (is_coherent_buff) {
+			block->start_virt = codec_mm_dma_alloc_coherent(&block->mem_handle, &block->addr, alloc_size, MEM_NAME);
+		} else {
+			block->addr = codec_mm_alloc_for_dma_ex(
+				MEM_NAME,
+				alloc_size/PAGE_SIZE,
+				VFRAME_BLOCK_PAGEALIGN,
+				CODEC_MM_FLAGS_DMA_CPU | CODEC_MM_FLAGS_FOR_VDECODER,
+				input->id,
+				block->id);
+		}
 
 		if (!block->addr) {
 			pr_err("Input block allocation failed\n");
 			return -ENOMEM;
 		}
 
-		block->start_virt = (void *)codec_mm_phys_to_virt(block->addr);
+		if (!is_coherent_buff)
+			block->start_virt = (void *)codec_mm_phys_to_virt(block->addr);
 		if (block->start_virt)
 			block->is_mapped = true;
 		block->start = block->addr;
@@ -525,10 +538,9 @@ int vdec_input_set_buffer(struct vdec_input_s *input, u32 start, u32 size)
 		input->swap_page_phys = codec_mm_alloc_for_dma("SWAP",
 			1, 0, CODEC_MM_FLAGS_TVP);
 	else {
-		input->swap_page = dma_alloc_coherent(v4l_get_dev_from_codec_mm(),
-				PAGE_SIZE,
-				&input->swap_page_phys, GFP_KERNEL);
-
+		input->swap_page = codec_mm_dma_alloc_coherent(&input->mem_handle,
+				(ulong *)&input->swap_page_phys,
+				PAGE_SIZE, MEM_NAME);
 		if (input->swap_page == NULL)
 			return -ENOMEM;
 	}
@@ -1156,11 +1168,8 @@ void vdec_input_release(struct vdec_input_s *input)
 		if (input->swap_page_phys)
 			codec_mm_free_for_dma("SWAP", input->swap_page_phys);
 	} else {
-		if (input->swap_page) {
-			dma_free_coherent(v4l_get_dev_from_codec_mm(),
-				PAGE_SIZE, input->swap_page,
-				input->swap_page_phys);
-		}
+		if (input->swap_page)
+			codec_mm_dma_free_coherent(input->mem_handle);
 	}
 	input->swap_page = NULL;
 	input->swap_page_phys = 0;

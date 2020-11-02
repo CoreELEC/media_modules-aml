@@ -43,9 +43,9 @@ int aml_vcodec_mem_alloc(struct aml_vcodec_ctx *data,
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)data;
 	struct device *dev = &ctx->dev->plat_dev->dev;
 
-	//mem->vaddr = dma_alloc_coherent(dev, size, &mem->dma_addr, GFP_KERNEL);
-	mem->vaddr = codec_mm_dma_alloc_coherent(dev_name(dev), size,
-			&mem->dma_addr, GFP_KERNEL, 0);
+	mem->vaddr = dma_alloc_coherent(dev, size, &mem->dma_addr, GFP_KERNEL);
+	//mem->vaddr = codec_mm_dma_alloc_coherent(dev_name(dev), size,
+	//		&mem->dma_addr, GFP_KERNEL, 0);
 	if (!mem->vaddr) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"%s dma_alloc size=%ld failed!\n", dev_name(dev),
