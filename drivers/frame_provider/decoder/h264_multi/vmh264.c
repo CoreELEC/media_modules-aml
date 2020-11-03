@@ -937,7 +937,6 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 			u32 index);
 static void release_aux_data(struct vdec_h264_hw_s *hw,
 	int buf_spec_num);
-static void clear_refer_bufs(struct vdec_h264_hw_s *hw);
 #ifdef ERROR_HANDLE_TEST
 static void h264_clear_dpb(struct vdec_h264_hw_s *hw);
 #endif
@@ -8789,6 +8788,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			if (!v4l_res_change(hw, param1, param2, param3, param4)) {
 				if (!hw->v4l_params_parsed) {
 					struct aml_vdec_ps_infos ps;
+
 					dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_DEC_DETAIL,
 						"h264 parsered csd data\n");
@@ -8800,7 +8800,6 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 					}
 					hw->v4l_params_parsed = true;
 					vdec_v4l_set_ps_infos(ctx, &ps);
-					clear_refer_bufs(hw);
 
 					amvdec_stop();
 					if (hw->mmu_enable)
@@ -9584,6 +9583,7 @@ static void reset(struct vdec_s *vdec)
 
 	reset_process_time(hw);
 	h264_reset_bufmgr(vdec);
+	clear_refer_bufs(hw);
 
 	dpb_print(DECODE_ID(hw), 0, "%s\n", __func__);
 }
