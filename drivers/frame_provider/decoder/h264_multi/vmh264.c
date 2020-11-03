@@ -9938,6 +9938,9 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	} else
 		hw->double_write_mode = double_write_mode;
 
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5)
+		hw->double_write_mode = 3;
+
 	if (force_config_fence) {
 		hw->enable_fence = true;
 		hw->fence_usage = (force_config_fence >> 4) & 0xf;
@@ -9959,8 +9962,10 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			hw->canvas_mode = pdata->canvas_mode;
 	}
 
-	if (hw->mmu_enable)
+	if (hw->mmu_enable) {
+			hw->canvas_mode = CANVAS_BLKMODE_LINEAR;
 			hw->double_write_mode &= 0xffff;
+	}
 
 	if (pdata->parallel_dec == 1) {
 		int i;
