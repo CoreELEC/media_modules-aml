@@ -30,7 +30,7 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/utils/vdec_reg.h>
-#include "../../../stream_input/parser/streambuf_reg.h"
+#include "../../../stream_input/amports/streambuf_reg.h"
 #include "../utils/amvdec.h"
 #include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
@@ -190,7 +190,7 @@ static struct work_struct notify_work;
 static struct work_struct set_clk_work;
 static bool is_reset;
 
-static struct vdec_s *vdec;
+static struct vdec_s *vdec = NULL;
 
 #ifdef AVSP_LONG_CABAC
 static struct work_struct long_cabac_wd_work;
@@ -1805,8 +1805,9 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 	pr_debug("total frame %d, avi_flag %d, rate %d\n", total_frame, avi_flag,
 		   vavs_amstream_dec_info.rate);
 #endif
-		kfree(gvs);
-		gvs = NULL;
+	kfree(gvs);
+	gvs = NULL;
+	vdec = NULL;
 
 	cancel_work_sync(&set_clk_work);
 	return 0;

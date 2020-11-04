@@ -40,7 +40,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/reset.h>
 #include <linux/amlogic/media/utils/amstream.h>
-#include <linux/amlogic/cpu_version.h>
+#include <linux/amlogic/media/registers/cpu_version.h>
 #include <linux/clk.h>
 #include <linux/dvb/ca.h>
 

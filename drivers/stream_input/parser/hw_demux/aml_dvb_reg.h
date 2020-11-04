@@ -20,7 +20,7 @@
 
 //#include <linux/amlogic/iomap.h>
 #include <linux/amlogic/media/registers/register_map.h>
-//#include <linux/amlogic/cpu_version.h>
+//#include <linux/amlogic/media/registers/cpu_version.h>
 
 #define ID_STB_CBUS_BASE		0
 #define ID_SMARTCARD_REG_BASE		1

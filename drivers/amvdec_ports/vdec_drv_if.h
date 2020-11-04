@@ -23,7 +23,7 @@
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
-#include "../stream_input/parser/streambuf.h"
+#include "../stream_input/amports/streambuf.h"
 
 #define AML_VIDEO_MAGIC CODEC_MODE('A', 'M', 'L', 'V')
 

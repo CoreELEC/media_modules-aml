@@ -634,10 +634,6 @@ static void init_scaler(void)
 #else
 	WRITE_RESET_REG(RESET2_REGISTER, RESET_PSCALE);
 #endif
-	READ_RESET_REG(RESET2_REGISTER);
-	READ_RESET_REG(RESET2_REGISTER);
-	READ_RESET_REG(RESET2_REGISTER);
-
 	WRITE_VREG(PSCALE_RST, 0x7);
 	WRITE_VREG(PSCALE_RST, 0x0);
 }
@@ -701,10 +697,10 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
 	if (input_frame_based(vdec) &&
 		debug_enable & PRINT_FRAMEBASE_DATA
 		) {
@@ -777,15 +773,15 @@ static void check_timer_func(struct timer_list *timer)
 	int timeout_val = decode_timeout_val;
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
-	"%s: status:nstatus=%d:%d\n",
-			__func__, vdec->status, vdec->next_status);
+		"%s: status:nstatus=%d:%d\n",
+		__func__, vdec->status, vdec->next_status);
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
-	"%s: %d,buftl=%x:%x:%x:%x\n",
-			__func__, __LINE__,
-			READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
-			READ_PARSER_REG(PARSER_VIDEO_WP),
-			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-			READ_VREG(VLD_MEM_VIFIFO_WP));
+		"%s: %d,buftl=%x:%x:%x:%x\n",
+		__func__, __LINE__,
+		READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
+		STBUF_READ(&vdec->vbuf, get_wp),
+		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+		READ_VREG(VLD_MEM_VIFIFO_WP));
 
 	if (radr != 0) {
 		if (rval != 0) {
@@ -798,8 +794,6 @@ static void check_timer_func(struct timer_list *timer)
 	}
 
 	if (((debug_enable & PRINT_FLAG_TIMEOUT_STATUS) == 0) &&
-		(input_frame_based(vdec) ||
-		((u32)READ_VREG(VLD_MEM_VIFIFO_LEVEL) > 0x100)) &&
 		(timeout_val > 0) &&
 		(hw->start_process_time > 0) &&
 		((1000 * (jiffies - hw->start_process_time) / HZ)
@@ -1129,8 +1123,8 @@ static unsigned long run_ready(struct vdec_s *vdec,
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = READ_PARSER_REG(PARSER_VIDEO_RP);
-		wp = READ_PARSER_REG(PARSER_VIDEO_WP);
+		rp = STBUF_READ(&vdec->vbuf, get_rp);
+		wp = STBUF_READ(&vdec->vbuf, get_wp);
 		if (wp < rp)
 			level = vdec->input.size + wp - rp;
 		else
@@ -1183,7 +1177,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		"%s: %d,r=%d,buftl=%x:%x:%x\n",
 			__func__, __LINE__, ret,
 			READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
-			READ_PARSER_REG(PARSER_VIDEO_WP),
+			STBUF_READ(&vdec->vbuf, get_rp),
 			READ_VREG(VLD_MEM_VIFIFO_WP));
 
 		hw->dec_result = DEC_RESULT_AGAIN;
@@ -1235,19 +1229,19 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->init_flag = 1;
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-	"%s (0x%x 0x%x 0x%x) vldcrl 0x%x bitcnt 0x%x powerctl 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-	__func__,
-	READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-	READ_VREG(VLD_MEM_VIFIFO_WP),
-	READ_VREG(VLD_MEM_VIFIFO_RP),
-	READ_VREG(VLD_DECODE_CONTROL),
-	READ_VREG(VIFF_BIT_CNT),
-	READ_VREG(POWER_CTL_VLD),
-	READ_VREG(VLD_MEM_VIFIFO_START_PTR),
-	READ_VREG(VLD_MEM_VIFIFO_CURR_PTR),
-	READ_VREG(VLD_MEM_VIFIFO_CONTROL),
-	READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
-	READ_VREG(VLD_MEM_VIFIFO_END_PTR));
+		"%s (0x%x 0x%x 0x%x) vldcrl 0x%x bitcnt 0x%x powerctl 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+		__func__,
+		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+		READ_VREG(VLD_MEM_VIFIFO_WP),
+		READ_VREG(VLD_MEM_VIFIFO_RP),
+		READ_VREG(VLD_DECODE_CONTROL),
+		READ_VREG(VIFF_BIT_CNT),
+		READ_VREG(POWER_CTL_VLD),
+		READ_VREG(VLD_MEM_VIFIFO_START_PTR),
+		READ_VREG(VLD_MEM_VIFIFO_CURR_PTR),
+		READ_VREG(VLD_MEM_VIFIFO_CONTROL),
+		READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
+		READ_VREG(VLD_MEM_VIFIFO_END_PTR));
 }
 static void wait_vmjpeg_search_done(struct vdec_mjpeg_hw_s *hw)
 {

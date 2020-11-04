@@ -866,8 +866,6 @@ static void vmpeg4_prepare_input(struct vdec_mpeg4_hw_s *hw)
 	/* reset VLD fifo for all vdec */
 	WRITE_VREG(DOS_SW_RESET0, (1<<5) | (1<<4) | (1<<3));
 	WRITE_VREG(DOS_SW_RESET0, 0);
-
-	dummy = READ_RESET_REG(RESET0_REGISTER);
 	WRITE_VREG(POWER_CTL_VLD, 1 << 4);
 
 	/*
@@ -1391,9 +1389,9 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = NULL;
 	struct vdec_v4l2_buffer *fb = NULL;
-	int index;
+	int index = -1;
 
-	if (hw->is_used_v4l && hw->eos) {
+	if (hw->eos) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
 			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"%s fatal error, no available buffer slot.\n",
@@ -1401,12 +1399,13 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			return -1;
 		}
 
-		index = find_free_buffer(hw);
-
-		if ((index == -1) &&
-				vdec_v4l_get_buffer(hw->v4l2_ctx, &fb)) {
-			pr_err("[%d] get fb fail.\n", ctx->id);
-			return -1;
+		if (hw->is_used_v4l) {
+			index = find_free_buffer(hw);
+			if ((index == -1) &&
+					vdec_v4l_get_buffer(hw->v4l2_ctx, &fb)) {
+				pr_err("[%d] get fb fail.\n", ctx->id);
+				return -1;
+			}
 		}
 
 		vf->type |= VIDTYPE_V4L_EOS;
@@ -1419,7 +1418,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
-		pr_info("[%d] mpeg4 EOS notify.\n", ctx->id);
+		pr_info("[%d] mpeg4 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
 
 	return 0;
@@ -1479,9 +1478,7 @@ static void vmpeg4_work(struct work_struct *work)
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 		flush_output(hw);
-
-		if (hw->is_used_v4l)
-			notify_v4l_eos(vdec);
+		notify_v4l_eos(vdec);
 
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"%s: eos flushed, frame_num %d\n",
@@ -1794,10 +1791,11 @@ static void vmpeg4_dump_state(struct vdec_s *vdec)
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
+
 	if (vdec_frame_based(vdec) &&
 		debug_enable & PRINT_FRAMEBASE_DATA) {
 		int jj;
@@ -1895,8 +1893,6 @@ static void check_timer_func(struct timer_list *timer)
 	}
 
 	if (((debug_enable & PRINT_FLAG_TIMEOUT_STATUS) == 0) &&
-		(vdec_frame_based(vdec) ||
-		((u32)READ_VREG(VLD_MEM_VIFIFO_LEVEL) > 0x100)) &&
 		(timeout_val > 0) &&
 		(hw->start_process_time > 0) &&
 		((1000 * (jiffies - hw->start_process_time) / HZ)
@@ -1983,7 +1979,7 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 	/* disable PSCALE for hardware sharing */
 	WRITE_VREG(PSCALE_CTRL, 0);
 
-	WRITE_VREG(MREG_BUFFEROUT, 0);
+	WRITE_VREG(MREG_BUFFEROUT, 0x10000);
 
 	/* clear mailbox interrupt */
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
@@ -2179,8 +2175,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = READ_PARSER_REG(PARSER_VIDEO_RP);
-		wp = READ_PARSER_REG(PARSER_VIDEO_WP);
+		rp = STBUF_READ(&vdec->vbuf, get_rp);
+		wp = STBUF_READ(&vdec->vbuf, get_wp);
 		if (wp < rp)
 			level = vdec->input.size + wp - rp;
 		else
@@ -2326,8 +2322,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 		READ_VREG(VLD_MEM_VIFIFO_WP),
 		READ_VREG(VLD_MEM_VIFIFO_RP),
-		READ_PARSER_REG(PARSER_VIDEO_RP),
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_rp),
+		STBUF_READ(&vdec->vbuf, get_wp));
 
 	hw->dec_result = DEC_RESULT_NONE;
 	if (vdec->mc_loaded) {

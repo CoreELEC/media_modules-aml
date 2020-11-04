@@ -31,6 +31,8 @@
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_VDEC
 #include <trace/events/meson_atrace.h>
 /*#define CONFIG_AM_VDEC_DV*/
+#include "../../../stream_input/amports/streambuf.h"
+#include "../../../stream_input/amports/stream_buffer_base.h"
 
 #include "vdec_input.h"
 #include "frame_check.h"
@@ -177,6 +179,7 @@ struct vdec_s {
 	struct vdec_s *master;
 	struct vdec_s *slave;
 	struct stream_port_s *port;
+	struct stream_buf_s vbuf;
 	int status;
 	int next_status;
 	int type;
@@ -324,7 +327,7 @@ extern int vdec_write_vframe(struct vdec_s *vdec, const char *buf,
 				size_t count);
 
 extern int vdec_write_vframe_with_dma(struct vdec_s *vdec,
-	ulong addr, size_t count, u32 handle);
+	ulong addr, size_t count, u32 handle, chunk_free free, void* priv);
 
 /* mark the vframe_chunk as consumed */
 extern void vdec_vframe_dirty(struct vdec_s *vdec,
@@ -461,5 +464,12 @@ extern u32  vdec_get_frame_vdec(struct vdec_s *vdec,  struct vframe_counter_s *t
 
 int vdec_get_frame_num(struct vdec_s *vdec);
 
-extern int get_double_write_ratio(int dw_mode);
+int show_stream_buffer_status(char *buf,
+	int (*callback) (struct stream_buf_s *, char *));
+
+bool is_support_no_parser(void);
+
+int get_double_write_ratio(int dw_mode);
+
+extern u32 timestamp_avsync_counter_get(void);
 #endif				/* VDEC_H */

@@ -20,7 +20,9 @@
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/power_ctrl.h>
 //#include <dt-bindings/power/sc2-pd.h>
-#include <linux/amlogic/pwr_ctrl.h>
+//#include <linux/amlogic/pwr_ctrl.h>
+#include <linux/amlogic/power_domain.h>
+#include <dt-bindings/power/sc2-pd.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include "../../../common/media_clock/switch/amports_gate.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
@@ -28,9 +30,6 @@
 
 #define HEVC_TEST_LIMIT		(100)
 #define GXBB_REV_A_MINOR	(0xa)
-
-/* wait other module to support this function */
-bool is_support_power_ctrl(void) { return 0; }
 
 extern int no_powerdown;
 extern int hevc_max_reset_count;
@@ -139,7 +138,10 @@ static void pm_vdec_clock_on(int id)
 		hcodec_clock_enable();
 	} else if (id == VDEC_HEVC) {
 		/* enable hevc clock */
-		amports_switch_gate("clk_hevc_mux", 1);
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)
+			amports_switch_gate("clk_hevcf_mux", 1);
+		else
+			amports_switch_gate("clk_hevc_mux", 1);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
 			amports_switch_gate("clk_hevcb_mux", 1);
 		hevc_clock_hi_enable();
@@ -165,6 +167,7 @@ static void pm_vdec_power_domain_power_on(struct device *dev, int id)
 {
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
 
+	pr_info("%s line %d, id:%d\n",__func__, __LINE__, id);
 	pm_vdec_clock_on(id);
 	pm_vdec_power_switch(pm->pd_data, id, true);
 }
@@ -173,6 +176,7 @@ static void pm_vdec_power_domain_power_off(struct device *dev, int id)
 {
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
 
+	pr_info("%s line %d\n",__func__, __LINE__);
 	pm_vdec_clock_off(id);
 	pm_vdec_power_switch(pm->pd_data, id, false);
 }
@@ -181,6 +185,7 @@ static bool pm_vdec_power_domain_power_state(struct device *dev, int id)
 {
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
 
+	pr_info("%s line %d id:%d pd_data:%px\n",__func__, __LINE__,id,pm->pd_data);
 	return pm_runtime_active(pm->pd_data[id].dev);
 }
 
@@ -690,8 +695,8 @@ static void pm_vdec_pd_sec_api_power_on(struct device *dev, int id)
 {
 #if 0
 	int pd_id = (id == VDEC_1) ? PDID_DOS_VDEC :
-		    (id == VDEC_HEVC) ? PDID_DOS_HEVC :
-		    PDID_DOS_HCODEC;
+		    ((id == VDEC_HEVC) ? PDID_DOS_HEVC :
+		    PDID_DOS_HCODEC);
 
 	pm_vdec_clock_on(id);
 	pwr_ctrl_psci_smc(pd_id, PWR_ON);
@@ -702,8 +707,8 @@ static void pm_vdec_pd_sec_api_power_off(struct device *dev, int id)
 {
 #if 0
 	int pd_id = (id == VDEC_1) ? PDID_DOS_VDEC :
-		    (id == VDEC_HEVC) ? PDID_DOS_HEVC :
-		    PDID_DOS_HCODEC;
+		    ((id == VDEC_HEVC) ? PDID_DOS_HEVC :
+		    PDID_DOS_HCODEC);
 
 	pm_vdec_clock_off(id);
 	pwr_ctrl_psci_smc(pd_id, PWR_OFF);
@@ -714,8 +719,8 @@ static bool pm_vdec_pd_sec_api_power_state(struct device *dev, int id)
 {
 #if 0
 	int pd_id = (id == VDEC_1) ? PDID_DOS_VDEC :
-		    (id == VDEC_HEVC) ? PDID_DOS_HEVC :
-		    PDID_DOS_HCODEC;
+		    ((id == VDEC_HEVC) ? PDID_DOS_HEVC :
+		    PDID_DOS_HCODEC);
 
 	return !pwr_ctrl_status_psci_smc(pd_id);
 #endif

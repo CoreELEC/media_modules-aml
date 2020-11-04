@@ -30,8 +30,8 @@
 #include <linux/uaccess.h>
 /* #include <mach/am_regs.h> */
 #include <linux/amlogic/media/utils/vdec_reg.h>
-#include "streambuf_reg.h"
-#include "streambuf.h"
+#include "../amports/streambuf_reg.h"
+#include "../amports/streambuf.h"
 #include "psparser.h"
 #include "../amports/amports_priv.h"
 
@@ -893,12 +893,15 @@ s32 psparser_init(u32 vid, u32 aid, u32 sid, struct vdec_s *vdec)
 
 	WRITE_RESET_REG(RESET1_REGISTER, RESET_PARSER);
 
+/* for recorded file and local play, this can't change the input source*/
 	/* TS data path */
+/*
 #ifndef CONFIG_AM_DVB
 	WRITE_DEMUX_REG(FEC_INPUT_CONTROL, 0);
 #else
 	tsdemux_set_reset_flag();
-#endif
+#endif */
+
 	CLEAR_DEMUX_REG_MASK(TS_HIU_CTL, 1 << USE_HI_BSF_INTERFACE);
 	CLEAR_DEMUX_REG_MASK(TS_HIU_CTL_2, 1 << USE_HI_BSF_INTERFACE);
 	CLEAR_DEMUX_REG_MASK(TS_HIU_CTL_3, 1 << USE_HI_BSF_INTERFACE);
@@ -1150,3 +1153,47 @@ u8 psparser_get_sub_info(struct subtitle_info **sub_infos)
 	return 0;
 #endif
 }
+
+static int psparser_stbuf_init(struct stream_buf_s *stbuf,
+			       struct vdec_s *vdec)
+{
+	int ret = -1;
+
+	ret = stbuf_init(stbuf, vdec);
+	if (ret)
+		goto out;
+
+	ret = psparser_init(stbuf->pars.vid,
+			   stbuf->pars.aid,
+			   stbuf->pars.sid,
+			   vdec);
+	if (ret)
+		goto out;
+
+	stbuf->flag |= BUF_FLAG_IN_USE;
+out:
+	return ret;
+}
+
+static void psparser_stbuf_release(struct stream_buf_s *stbuf)
+{
+	psparser_release();
+
+	stbuf_release(stbuf);
+}
+
+static struct stream_buf_ops psparser_stbuf_ops = {
+	.init	= psparser_stbuf_init,
+	.release = psparser_stbuf_release,
+	.get_wp	= parser_get_wp,
+	.set_wp	= parser_set_wp,
+	.get_rp	= parser_get_rp,
+	.set_rp	= parser_set_rp,
+};
+
+struct stream_buf_ops *get_psparser_stbuf_ops(void)
+{
+	return &psparser_stbuf_ops;
+}
+EXPORT_SYMBOL(get_psparser_stbuf_ops);
+

@@ -91,6 +91,7 @@
 #define MEM_LEVEL_CNT_BIT       18
 #endif
 static struct vdec_info *gvs;
+static struct vdec_s *vdec = NULL;
 
 static struct vframe_s *vvc1_vf_peek(void *);
 static struct vframe_s *vvc1_vf_get(void *);
@@ -1163,6 +1164,7 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 	pdata->dec_status = vvc1_dec_status;
 	pdata->set_isreset = vvc1_set_isreset;
 	is_reset = 0;
+	vdec = pdata;
 
 	vvc1_vdec_info_init();
 
@@ -1224,6 +1226,7 @@ static int amvdec_vc1_remove(struct platform_device *pdev)
 #endif
 	kfree(gvs);
 	gvs = NULL;
+	vdec = NULL;
 
 	return 0;
 }

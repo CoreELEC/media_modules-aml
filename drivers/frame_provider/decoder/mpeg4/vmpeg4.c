@@ -133,6 +133,8 @@ static const char vmpeg4_dec_id[] = "vmpeg4-dev";
 
 #define PROVIDER_NAME   "decoder.mpeg4"
 
+struct vdec_s *vdec = NULL;
+
 /*
  *int query_video_status(int type, int *value);
  */
@@ -1142,6 +1144,7 @@ static int amvdec_mpeg4_probe(struct platform_device *pdev)
 	pdata->dec_status = vmpeg4_dec_status;
 	pdata->set_isreset = vmpeg4_set_isreset;
 	is_reset = 0;
+	vdec = pdata;
 
 	INIT_WORK(&reset_work, reset_do_work);
 	INIT_WORK(&notify_work, vmpeg4_notify_work);
@@ -1205,6 +1208,7 @@ static int amvdec_mpeg4_remove(struct platform_device *pdev)
 			   vmpeg4_amstream_dec_info.rate);
 	kfree(gvs);
 	gvs = NULL;
+	vdec = NULL;
 
 	return 0;
 }

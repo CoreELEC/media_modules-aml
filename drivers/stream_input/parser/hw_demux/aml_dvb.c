@@ -48,7 +48,7 @@
 #include <linux/reset.h>
 #include <linux/of_gpio.h>
 #include <linux/amlogic/media/utils/amstream.h>
-#include <linux/amlogic/cpu_version.h>
+#include <linux/amlogic/media/registers/cpu_version.h>
 #include <linux/clk.h>
 #include <linux/of_irq.h>
 #include "c_stb_define.h"

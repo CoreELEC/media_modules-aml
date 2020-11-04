@@ -41,6 +41,7 @@
 #define PRINT_FLAG_V4L_DETAIL         0x8000
 #define DISABLE_ERROR_HANDLE          0x10000
 #define DEBUG_DUMP_STAT               0x80000
+#define DEBUG_TIMEOUT_DEC_STAT        0x800000
 
 #define IGNORE_PARAM_FROM_CONFIG      0x8000000
 

@@ -45,8 +45,12 @@
 #include <linux/dma-contiguous.h>
 #include <linux/uaccess.h>
 #include <linux/clk.h>
-#include "../parser/streambuf.h"
-#include "../parser/streambuf_reg.h"
+#if 1				/* MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
+/* #include <mach/mod_gate.h> */
+/* #include <mach/power_gate.h> */
+#endif
+#include "../amports/streambuf.h"
+#include "../amports/streambuf_reg.h"
 #include "../parser/tsdemux.h"
 #include "../parser/psparser.h"
 #include "../parser/esparser.h"
@@ -56,7 +60,7 @@
 #include "amports_priv.h"
 #include <linux/amlogic/media/utils/amports_config.h>
 #include <linux/amlogic/media/frame_sync/tsync_pcr.h>
-#include "../parser/thread_rw.h"
+#include "../amports/thread_rw.h"
 #include <linux/firmware.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
@@ -72,6 +76,7 @@
 #include "../../common/chips/chips.h"
 #include "../../common/chips/decoder_cpu_ver_info.h"
 #include "../subtitle/subtitle.h"
+#include "stream_buffer_base.h"
 
 //#define G12A_BRINGUP_DEBUG
 
@@ -110,9 +115,6 @@ static int def_4k_vstreambuf_sizeM =
 static int def_vstreambuf_sizeM =
 	(DEFAULT_VIDEO_BUFFER_SIZE >> 20);
 static int slow_input;
-
-
-
 
 /* #define DATA_DEBUG */
 static int use_bufferlevelx10000 = 10000;
@@ -316,7 +318,10 @@ static int userdata_poc_ri, userdata_poc_wi;
 static int last_read_wi;
 static u32 ud_ready_vdec_flag;
 
-
+/*bit 1 force dual layer
+ *bit 2 force frame mode
+ */
+static u32 force_dv_mode;
 
 static DEFINE_MUTEX(userdata_mutex);
 
@@ -521,11 +526,12 @@ EXPORT_SYMBOL(get_audio_info);
 static void amstream_change_vbufsize(struct port_priv_s *priv,
 	struct stream_buf_s *pvbuf)
 {
-	if (pvbuf->buf_start != 0) {
-		pr_info("streambuf is alloced before\n");
+	if (pvbuf->buf_start != 0 || pvbuf->ext_buf_addr != 0) {
+		pr_info("streambuf is alloced, buf_start 0x%lx, extbuf 0x%lx\n",
+			pvbuf->buf_start, pvbuf->ext_buf_addr);
 		return;
 	}
-	if (pvbuf->for_4k) {
+	if (priv->port->is_4k) {
 		pvbuf->buf_size = def_4k_vstreambuf_sizeM * SZ_1M;
 		if (priv->vdec->port_flag & PORT_FLAG_DRM)
 			pvbuf->buf_size = DEFAULT_VIDEO_BUFFER_SIZE_4K_TVP;
@@ -552,7 +558,7 @@ static bool port_get_inited(struct port_priv_s *priv)
 	if (port->type & PORT_TYPE_VIDEO) {
 		struct vdec_s *vdec = priv->vdec;
 
-		return vdec->port_flag & PORT_FLAG_INITED;
+		return vdec ? vdec->port_flag & PORT_FLAG_INITED : 0;
 	}
 
 	return port->flag & PORT_FLAG_INITED;
@@ -566,6 +572,9 @@ static void port_set_inited(struct port_priv_s *priv)
 		struct vdec_s *vdec = priv->vdec;
 
 		vdec->port_flag |= PORT_FLAG_INITED;
+		port->flag |= PORT_FLAG_INITED;
+		pr_info("vdec->port_flag=0x%x, port_flag=0x%x\n",
+			vdec->port_flag, port->flag);
 	} else
 		port->flag |= PORT_FLAG_INITED;
 }
@@ -573,20 +582,16 @@ static void port_set_inited(struct port_priv_s *priv)
 static void video_port_release(struct port_priv_s *priv,
 	  struct stream_buf_s *pbuf, int release_num)
 {
-	struct stream_port_s *port = priv->port;
 	struct vdec_s *vdec = priv->vdec;
 	struct vdec_s *slave = NULL;
-	bool is_multidec = !vdec_single(vdec);
+
+	if (!vdec)
+		return;
 
 	switch (release_num) {
 	default:
 	/*fallthrough*/
 	case 0:		/*release all */
-	/*fallthrough*/
-	case 4:
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-			esparser_release(pbuf);
-	/*fallthrough*/
 	case 3:
 		if (vdec->slave)
 			slave = vdec->slave;
@@ -594,10 +599,6 @@ static void video_port_release(struct port_priv_s *priv,
 		if (slave)
 			vdec_release(slave);
 		priv->vdec = NULL;
-	/*fallthrough*/
-	case 2:
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-			stbuf_release(pbuf, is_multidec);
 	/*fallthrough*/
 	case 1:
 		;
@@ -615,20 +616,20 @@ static int video_port_init(struct port_priv_s *priv,
 		pr_err("vformat not set\n");
 		return -EPERM;
 	}
-	if (vdec_dual(vdec) && vdec_secure(vdec)) {
+	if (vdec_dual(vdec) && vdec_secure(vdec) && (vdec->slave)) {
 		/*copy drm flags for slave dec.*/
 		vdec->slave->port_flag |= PORT_FLAG_DRM;
 	}
 	if (port->vformat == VFORMAT_H264_4K2K ||
 		(priv->vdec->sys_info->height *
 			priv->vdec->sys_info->width) > 1920*1088) {
-		pbuf->for_4k = 1;
+		port->is_4k = true;
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
 				&& port->vformat == VFORMAT_H264) {
 			vdec_poweron(VDEC_HEVC);
 		}
 	} else {
-		pbuf->for_4k = 0;
+		port->is_4k = false;
 	}
 
 	if (port->type & PORT_TYPE_FRAME) {
@@ -638,10 +639,23 @@ static int video_port_init(struct port_priv_s *priv,
 		if (r < 0) {
 			pr_err("video_port_init %d, vdec_init failed\n",
 				__LINE__);
-			video_port_release(priv, pbuf, 2);
 			return r;
 		}
-
+#if 0
+		if (vdec_dual(vdec)) {
+			if (port->vformat == VFORMAT_AV1)	/* av1 dv only single layer */
+				return 0;
+			r = vdec_init(vdec->slave,
+				(priv->vdec->sys_info->height *
+				priv->vdec->sys_info->width) > 1920*1088);
+			if (r < 0) {
+				vdec_release(vdec);
+				pr_err("video_port_init %d, vdec_init failed\n",
+					__LINE__);
+				return r;
+			}
+		}
+#endif
 		return 0;
 	}
 
@@ -656,12 +670,6 @@ static int video_port_init(struct port_priv_s *priv,
 		}
 	}
 
-	r = stbuf_init(pbuf, vdec, false);
-	if (r < 0) {
-		pr_err("video_port_init %d, stbuf_init failed\n", __LINE__);
-		return r;
-	}
-
 	/* todo: set path based on port flag */
 	r = vdec_init(vdec,
 		(priv->vdec->sys_info->height *
@@ -669,8 +677,7 @@ static int video_port_init(struct port_priv_s *priv,
 
 	if (r < 0) {
 		pr_err("video_port_init %d, vdec_init failed\n", __LINE__);
-		video_port_release(priv, pbuf, 2);
-		return r;
+		goto err;
 	}
 
 	if (vdec_dual(vdec)) {
@@ -678,25 +685,20 @@ static int video_port_init(struct port_priv_s *priv,
 			(priv->vdec->sys_info->height *
 			priv->vdec->sys_info->width) > 1920*1088);
 		if (r < 0) {
-			pr_err("video_port_init %d, vdec_init failed\n",
-				__LINE__);
-			video_port_release(priv, pbuf, 2);
-			return r;
+			pr_err("video_port_init %d, vdec_init failed\n", __LINE__);
+			goto err;
 		}
 	}
-
-	if (port->type & PORT_TYPE_ES) {
-		r = esparser_init(pbuf, vdec);
-		if (r < 0) {
-			video_port_release(priv, pbuf, 3);
-			pr_err("esparser_init() failed\n");
-			return r;
-		}
-	}
-
-	pbuf->flag |= BUF_FLAG_IN_USE;
 
 	return 0;
+err:
+	if (vdec->slave)
+		vdec_release(vdec->slave);
+	if (vdec)
+		vdec_release(vdec);
+	priv->vdec = NULL;
+
+	return r;
 }
 
 static void audio_port_release(struct stream_port_s *port,
@@ -714,7 +716,7 @@ static void audio_port_release(struct stream_port_s *port,
 		adec_release(port->vformat);
 	/*fallthrough*/
 	case 2:
-		stbuf_release(pbuf, false);
+		stbuf_release(pbuf);
 	/*fallthrough*/
 	case 1:
 		;
@@ -727,23 +729,35 @@ static int audio_port_reset(struct stream_port_s *port,
 				struct stream_buf_s *pbuf)
 {
 	int r;
-
+	mutex_lock(&amstream_mutex);
 	if ((port->flag & PORT_FLAG_AFORMAT) == 0) {
 		pr_err("aformat not set\n");
+		mutex_unlock(&amstream_mutex);
 		return 0;
 	}
 
+	pr_info("audio port reset, flag:0x%x\n", port->flag);
+	if ((port->flag & PORT_FLAG_INITED) == 0) {
+		pr_info("audio port not inited,return\n");
+		mutex_unlock(&amstream_mutex);
+		return 0;
+	}
+
+	pr_info("audio_port_reset begin\n");
 	pts_stop(PTS_TYPE_AUDIO);
 
-	stbuf_release(pbuf, false);
+	stbuf_release(pbuf);
 
-	r = stbuf_init(pbuf, NULL, false);
-	if (r < 0)
+	r = stbuf_init(pbuf, NULL);
+	if (r < 0) {
+		mutex_unlock(&amstream_mutex);
 		return r;
+	}
 
 	r = adec_init(port);
 	if (r < 0) {
 		audio_port_release(port, pbuf, 2);
+		mutex_unlock(&amstream_mutex);
 		return r;
 	}
 
@@ -766,6 +780,11 @@ static int audio_port_reset(struct stream_port_s *port,
 
 	r = pts_start(PTS_TYPE_AUDIO);
 
+	//clear audio break flag after reset
+	//tsync_audio_break(0);
+
+	pr_info("audio_port_reset done\n");
+	mutex_unlock(&amstream_mutex);
 	return r;
 }
 
@@ -776,9 +795,9 @@ static int sub_port_reset(struct stream_port_s *port,
 
 	port->flag &= (~PORT_FLAG_INITED);
 
-	stbuf_release(pbuf, false);
+	stbuf_release(pbuf);
 
-	r = stbuf_init(pbuf, NULL, false);
+	r = stbuf_init(pbuf, NULL);
 	if (r < 0)
 		return r;
 
@@ -810,7 +829,7 @@ static int audio_port_init(struct stream_port_s *port,
 		return 0;
 	}
 
-	r = stbuf_init(pbuf, NULL, false);
+	r = stbuf_init(pbuf, NULL);
 	if (r < 0)
 		return r;
 	r = adec_init(port);
@@ -837,14 +856,14 @@ static void sub_port_release(struct stream_port_s *port,
 		/* this is es sub */
 		esparser_release(pbuf);
 	}
-	stbuf_release(pbuf, false);
+	stbuf_release(pbuf);
 	sub_port_inited = 0;
 }
 
 static int sub_port_init(struct stream_port_s *port, struct stream_buf_s *pbuf)
 {
 	int r;
-	r = stbuf_init(pbuf, NULL, false);
+	r = stbuf_init(pbuf, NULL);
 	if (r < 0)
 		return r;
 	if ((port->flag & PORT_FLAG_SID) == 0) {
@@ -876,6 +895,16 @@ static void amstream_user_buffer_init(void)
 	pubuf->buf_rp = 0;
 }
 
+#if 1
+/*DDD*/
+struct stream_buf_s *get_vbuf(void)
+{
+	return &bufs[BUF_TYPE_VIDEO];
+}
+
+EXPORT_SYMBOL(get_vbuf);
+#endif
+
 static int amstream_port_init(struct port_priv_s *priv)
 {
 	int r = 0;
@@ -887,7 +916,8 @@ static int amstream_port_init(struct port_priv_s *priv)
 
 	mutex_lock(&amstream_mutex);
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+		(get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2)) {
 		r = check_efuse_chip(port->vformat);
 		if (r) {
 			pr_info("No support video format %d.\n", port->vformat);
@@ -920,22 +950,60 @@ static int amstream_port_init(struct port_priv_s *priv)
 	}
 
 	if ((port->type & PORT_TYPE_VIDEO) &&
-		(vdec->port_flag & PORT_FLAG_VFORMAT)) {
-		pvbuf->for_4k = 0;
-		if (has_hevc_vdec()) {
-			if (port->vformat == VFORMAT_HEVC ||
-				port->vformat == VFORMAT_AVS2 ||
-				port->vformat == VFORMAT_VP9)
-				pvbuf = &bufs[BUF_TYPE_HEVC];
+		(port->flag & PORT_FLAG_VFORMAT)) {
+		if (vdec_stream_based(vdec)) {
+			struct stream_buf_ops *ops = NULL;
+			struct parser_args pars	= {
+				.vid = (port->flag & PORT_FLAG_VID) ? port->vid : 0xffff,
+				.aid = (port->flag & PORT_FLAG_AID) ? port->aid : 0xffff,
+				.sid = (port->flag & PORT_FLAG_SID) ? port->sid : 0xffff,
+				.pcrid = (port->pcr_inited == 1) ? port->pcrid : 0xffff,
+			};
+
+			if (port->type & PORT_TYPE_MPTS) {
+				ops = get_tsparser_stbuf_ops();
+			} else if (port->type & PORT_TYPE_MPPS) {
+				ops = get_psparser_stbuf_ops();
+			} else {
+				ops = !vdec_single(vdec) ?
+					get_stbuf_ops() :
+					get_esparser_stbuf_ops();
+
+				/* def used stbuf with parser if the feature disable. */
+				if (!is_support_no_parser())
+					ops = get_esparser_stbuf_ops();
+			}
+
+			r = stream_buffer_base_init(&vdec->vbuf, ops, &pars);
+			if (r) {
+				mutex_unlock(&priv->mutex);
+				pr_err("stream buffer base init failed\n");
+				goto error2;
+			}
 		}
+
 		mutex_lock(&priv->mutex);
-		r = video_port_init(priv, pvbuf);
+		r = video_port_init(priv, &vdec->vbuf);
 		if (r < 0) {
 			mutex_unlock(&priv->mutex);
-			pr_err("video_port_init  failed\n");
+			pr_err("video_port_init failed\n");
 			goto error2;
 		}
 		mutex_unlock(&priv->mutex);
+	}
+
+	if ((port->type & PORT_TYPE_MPTS) &&
+		!(port->flag & PORT_FLAG_VFORMAT)) {
+		r = tsdemux_init(0xffff,
+			(port->flag & PORT_FLAG_AID) ? port->aid : 0xffff,
+			(port->flag & PORT_FLAG_SID) ? port->sid : 0xffff,
+			(port->pcr_inited == 1) ? port->pcrid : 0xffff,
+			0, vdec);
+		if (r < 0) {
+			pr_err("tsdemux_init  failed\n");
+			goto error4;
+		}
+		tsync_pcr_start();
 	}
 
 	if ((port->type & PORT_TYPE_SUB) && (port->flag & PORT_FLAG_SID)) {
@@ -946,44 +1014,6 @@ static int amstream_port_init(struct port_priv_s *priv)
 		}
 	}
 
-	if (port->type & PORT_TYPE_MPTS) {
-		if (has_hevc_vdec()) {
-			r = tsdemux_init(
-			(port->flag & PORT_FLAG_VID) ? port->vid : 0xffff,
-			(port->flag & PORT_FLAG_AID) ? port->aid : 0xffff,
-			(port->flag & PORT_FLAG_SID) ? port->sid : 0xffff,
-			(port->pcr_inited == 1) ? port->pcrid : 0xffff,
-			(port->vformat == VFORMAT_HEVC) ||
-			(port->vformat == VFORMAT_AVS2) ||
-			(port->vformat == VFORMAT_VP9),
-			vdec);
-		} else {
-			r = tsdemux_init(
-			(port->flag & PORT_FLAG_VID) ? port->vid : 0xffff,
-			(port->flag & PORT_FLAG_AID) ? port->aid : 0xffff,
-			(port->flag & PORT_FLAG_SID) ? port->sid : 0xffff,
-			(port->pcr_inited == 1) ? port->pcrid : 0xffff,
-			0,
-			vdec);
-		}
-
-		if (r < 0) {
-			pr_err("tsdemux_init  failed\n");
-			goto error4;
-		}
-		tsync_pcr_start();
-	}
-	if (port->type & PORT_TYPE_MPPS) {
-		r = psparser_init(
-			(port->flag & PORT_FLAG_VID) ? port->vid : 0xffff,
-			(port->flag & PORT_FLAG_AID) ? port->aid : 0xffff,
-			(port->flag & PORT_FLAG_SID) ? port->sid : 0xffff,
-			priv->vdec);
-		if (r < 0) {
-			pr_err("psparser_init  failed\n");
-			goto error5;
-		}
-	}
 #ifdef CONFIG_AM_VDEC_REAL
 	if (port->type & PORT_TYPE_RM) {
 		rm_set_vasid(
@@ -1012,12 +1042,11 @@ static int amstream_port_init(struct port_priv_s *priv)
 	mutex_unlock(&amstream_mutex);
 	return 0;
 	/*errors follow here */
-error5:
-	tsdemux_release();
+
 error4:
 	sub_port_release(port, psbuf);
 error3:
-	video_port_release(priv, pvbuf, 0);
+	video_port_release(priv, &priv->vdec->vbuf, 0);
 error2:
 	audio_port_release(port, pabuf, 0);
 error1:
@@ -1028,25 +1057,20 @@ error1:
 static int amstream_port_release(struct port_priv_s *priv)
 {
 	struct stream_port_s *port = priv->port;
-	struct stream_buf_s *pvbuf = &bufs[BUF_TYPE_VIDEO];
+	struct stream_buf_s *pvbuf = &priv->vdec->vbuf;
 	struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
 	struct stream_buf_s *psbuf = &bufs[BUF_TYPE_SUBTITLE];
 
-	if (has_hevc_vdec()) {
-		if (port->vformat == VFORMAT_HEVC
-			|| port->vformat == VFORMAT_AVS2
-			|| port->vformat == VFORMAT_VP9)
-			pvbuf = &bufs[BUF_TYPE_HEVC];
-	}
-
-	if (port->type & PORT_TYPE_MPTS) {
-		vdec_disconnect(priv->vdec);
+	if ((port->type & PORT_TYPE_MPTS) &&
+		!(port->flag & PORT_FLAG_VFORMAT)) {
 		tsync_pcr_stop();
 		tsdemux_release();
 	}
 
-	if (port->type & PORT_TYPE_MPPS)
+	if ((port->type & PORT_TYPE_MPPS) &&
+		!(port->flag & PORT_FLAG_VFORMAT)) {
 		psparser_release();
+	}
 
 	if (port->type & PORT_TYPE_VIDEO)
 		video_port_release(priv, pvbuf, 0);
@@ -1058,7 +1082,12 @@ static int amstream_port_release(struct port_priv_s *priv)
 		sub_port_release(port, psbuf);
 
 	port->pcr_inited = 0;
-	port->flag = 0;
+
+	if (!is_mult_inc(port->type) ||
+		(is_mult_inc(port->type) &&
+		!is_support_no_parser()))
+		port->flag = 0;
+
 	return 0;
 }
 
@@ -1103,14 +1132,8 @@ static ssize_t amstream_vbuf_write(struct file *file, const char *buf,
 					size_t count, loff_t *ppos)
 {
 	struct port_priv_s *priv = (struct port_priv_s *)file->private_data;
-	struct stream_port_s *port = priv->port;
-	struct stream_buf_s *pbuf = NULL;
+	struct stream_buf_s *pbuf = &priv->vdec->vbuf;
 	int r;
-	if (has_hevc_vdec()) {
-		pbuf = (port->type & PORT_TYPE_HEVC) ? &bufs[BUF_TYPE_HEVC] :
-			&bufs[BUF_TYPE_VIDEO];
-	} else
-		pbuf = &bufs[BUF_TYPE_VIDEO];
 
 	if (!(port_get_inited(priv))) {
 		r = amstream_port_init(priv);
@@ -1121,7 +1144,7 @@ static ssize_t amstream_vbuf_write(struct file *file, const char *buf,
 	if (priv->vdec->port_flag & PORT_FLAG_DRM)
 		r = drm_write(file, pbuf, buf, count);
 	else
-		r = esparser_write(file, pbuf, buf, count);
+		r = stream_buffer_write(file, pbuf, buf, count);
 	if (slow_input) {
 		pr_info("slow_input: es codec write size %x\n", r);
 		msleep(3000);
@@ -1185,16 +1208,8 @@ static ssize_t amstream_mpts_write(struct file *file, const char *buf,
 	struct port_priv_s *priv = (struct port_priv_s *)file->private_data;
 	struct stream_port_s *port = priv->port;
 	struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
-	struct stream_buf_s *pvbuf = NULL;
+	struct stream_buf_s *pvbuf = &priv->vdec->vbuf;
 	int r = 0;
-
-	if (has_hevc_vdec()) {
-		pvbuf =	(port->vformat == VFORMAT_HEVC ||
-					port->vformat == VFORMAT_AVS2 ||
-					port->vformat == VFORMAT_VP9) ?
-			&bufs[BUF_TYPE_HEVC] : &bufs[BUF_TYPE_VIDEO];
-	} else
-		pvbuf = &bufs[BUF_TYPE_VIDEO];
 
 	if (!(port_get_inited(priv))) {
 		r = amstream_port_init(priv);
@@ -1264,7 +1279,11 @@ static ssize_t amstream_sub_read(struct file *file, char __user *buf,
 
 	if (sub_wp == sub_rp || sub_rp == 0)
 		return 0;
-
+	/*flush sub buf before read*/
+	codec_mm_dma_flush(
+			(void*)codec_mm_phys_to_virt(sub_start),
+			stbuf_size(s_buf),
+			DMA_FROM_DEVICE);
 	if (sub_wp > sub_rp)
 		data_size = sub_wp - sub_rp;
 	else
@@ -1356,6 +1375,7 @@ static void set_userdata_poc(struct userdata_poc_info_t poc)
 	if (userdata_poc_wi == USERDATA_FIFO_NUM)
 		userdata_poc_wi = 0;
 }
+EXPORT_SYMBOL(set_userdata_poc);
 
 void init_userdata_fifo(void)
 {
@@ -1581,6 +1601,8 @@ static int amstream_open(struct inode *inode, struct file *file)
 	struct stream_port_s *s;
 	struct stream_port_s *port = &ports[iminor(inode)];
 	struct port_priv_s *priv;
+
+	VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
 #ifdef G12A_BRINGUP_DEBUG
 	if (vdec_get_debug_flags() & 0xff0000) {
 		pr_info("%s force open port %d\n",
@@ -1606,11 +1628,23 @@ static int amstream_open(struct inode *inode, struct file *file)
 		}
 	}
 
-	if ((port->flag & PORT_FLAG_IN_USE) &&
-		((port->type & PORT_TYPE_FRAME) == 0)) {
-		mutex_unlock(&amstream_mutex);
-		return -EBUSY;
+	if (!is_support_no_parser()) {
+		if ((port->flag & PORT_FLAG_IN_USE) &&
+			((port->type & PORT_TYPE_FRAME) == 0)) {
+			mutex_unlock(&amstream_mutex);
+			return -EBUSY;
+		}
 	}
+	/* force dv frame mode */
+	if (force_dv_mode & 0x2) {
+		port->type |= PORT_TYPE_FRAME;
+		port->fops = &vframe_fops;
+		pr_debug("%s, dobly vision force frame mode.\n", __func__);
+	}
+
+	/* esplayer stream mode force dv */
+	if (force_dv_mode & 0x1)
+		port->type |= PORT_TYPE_DUALDEC;
 
 	/* check other ports conflicts for audio */
 	for (s = &ports[0], i = 0; i < amstream_port_num; i++, s++) {
@@ -1693,17 +1727,18 @@ static int amstream_open(struct inode *inode, struct file *file)
 			pr_err("amstream: vdec creation failed\n");
 			return -ENOMEM;
 		}
+		if (!(port->type & PORT_TYPE_FRAME)) {
+			if ((port->type & PORT_TYPE_DUALDEC) ||
+				(vdec_get_debug_flags() & 0x100)) {
+				priv->vdec->slave = vdec_create(port, priv->vdec);
 
-		if ((port->type & PORT_TYPE_DUALDEC) ||
-			(vdec_get_debug_flags() & 0x100)) {
-			priv->vdec->slave = vdec_create(port, priv->vdec);
-
-			if (priv->vdec->slave == NULL) {
-				vdec_release(priv->vdec);
-				port->flag = 0;
-				kfree(priv);
-				pr_err("amstream: sub vdec creation failed\n");
-				return -ENOMEM;
+				if (priv->vdec->slave == NULL) {
+					vdec_release(priv->vdec);
+					port->flag = 0;
+					kfree(priv);
+					pr_err("amstream: sub vdec creation failed\n");
+					return -ENOMEM;
+				}
 			}
 		}
 	}
@@ -1753,7 +1788,11 @@ static int amstream_release(struct inode *inode, struct file *file)
 		if (i == amstream_port_num)
 			timestamp_firstvpts_set(0);
 	}
-	port->flag = 0;
+
+	if (!is_mult_inc(port->type) ||
+		(is_mult_inc(port->type) &&
+		!is_support_no_parser()))
+		port->flag = 0;
 
 	/* timestamp_pcrscr_set(0); */
 
@@ -1775,8 +1814,9 @@ static int amstream_release(struct inode *inode, struct file *file)
 #else
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
 				&& port->vformat == VFORMAT_H264
-				&& bufs[BUF_TYPE_VIDEO].for_4k)
+				&& port->is_4k) {
 				vdec_poweroff(VDEC_HEVC);
+			}
 
 			if ((port->vformat == VFORMAT_HEVC
 					|| port->vformat == VFORMAT_AVS2
@@ -1888,8 +1928,14 @@ static long amstream_ioctl_get(struct port_priv_s *priv, ulong arg)
 	case AMSTREAM_GET_VPTS:
 		parm.data_32 = timestamp_vpts_get();
 		break;
+	case AMSTREAM_GET_VPTS_U64:
+		parm.data_64 = timestamp_vpts_get_u64();
+		break;
+	case AMSTREAM_GET_APTS_U64:
+		parm.data_64 = timestamp_apts_get_u64();
+		break;
 	case AMSTREAM_GET_PCRSCR:
-		parm.data_32 = timestamp_pcrscr_get();
+		//parm.data_32 = timestamp_pcrscr_get();
 		break;
 	case AMSTREAM_GET_LAST_CHECKIN_APTS:
 		parm.data_32 = get_last_checkin_pts(PTS_TYPE_AUDIO);
@@ -1995,25 +2041,17 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 	switch (parm.cmd) {
 	case AMSTREAM_SET_VB_START:
 		if ((this->type & PORT_TYPE_VIDEO) &&
-			((bufs[BUF_TYPE_VIDEO].flag & BUF_FLAG_IN_USE) == 0)) {
-			if (has_hevc_vdec())
-				bufs[BUF_TYPE_HEVC].buf_start = parm.data_32;
-			bufs[BUF_TYPE_VIDEO].buf_start = parm.data_32;
+			((priv->vdec->vbuf.flag & BUF_FLAG_IN_USE) == 0)) {
+			priv->vdec->vbuf.buf_start = parm.data_32;
 		} else
 			r = -EINVAL;
 		break;
 	case AMSTREAM_SET_VB_SIZE:
 		if ((this->type & PORT_TYPE_VIDEO) &&
-			((bufs[BUF_TYPE_VIDEO].flag & BUF_FLAG_IN_USE) == 0)) {
-			if (bufs[BUF_TYPE_VIDEO].flag & BUF_FLAG_ALLOC) {
-				if (has_hevc_vdec()) {
-					r = stbuf_change_size(
-						&bufs[BUF_TYPE_HEVC],
-						parm.data_32,
-						false);
-				}
+			((priv->vdec->vbuf.flag & BUF_FLAG_IN_USE) == 0)) {
+			if (priv->vdec->vbuf.flag & BUF_FLAG_ALLOC) {
 				r += stbuf_change_size(
-						&bufs[BUF_TYPE_VIDEO],
+						&priv->vdec->vbuf,
 						parm.data_32,
 						false);
 			}
@@ -2077,7 +2115,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 			this->flag |= PORT_FLAG_AID;
 
 			if (port_get_inited(priv)) {
-				tsync_audio_break(1);
+				//tsync_audio_break(1);
 				amstream_change_avid(this);
 			}
 		} else
@@ -2125,13 +2163,16 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 			r = -EINVAL;
 		else if (this->type & PORT_TYPE_FRAME)
 			r = vdec_set_pts(priv->vdec, parm.data_32);
-		else if (has_hevc_vdec() && this->type & PORT_TYPE_HEVC)
-			r = es_vpts_checkin(&bufs[BUF_TYPE_HEVC],
-				parm.data_32);
-		else if (this->type & PORT_TYPE_VIDEO)
-			r = es_vpts_checkin(&bufs[BUF_TYPE_VIDEO],
-				parm.data_32);
-		else if (this->type & PORT_TYPE_AUDIO)
+		else if ((this->type & PORT_TYPE_VIDEO) ||
+			(this->type & PORT_TYPE_HEVC)) {
+			struct stream_buf_s *vbuf = &priv->vdec->vbuf;
+			if (vbuf->no_parser) {
+				pts_checkin_offset(PTS_TYPE_VIDEO,
+					vbuf->stream_offset, parm.data_32);
+			} else {
+				r = es_vpts_checkin(vbuf, parm.data_32);
+			}
+		} else if (this->type & PORT_TYPE_AUDIO)
 			r = es_apts_checkin(&bufs[BUF_TYPE_AUDIO],
 				parm.data_32);
 		break;
@@ -2148,25 +2189,13 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 				 * life sequence or multi-tasking management
 				 */
 				r = vdec_set_pts64(priv->vdec, pts);
-			} else if (has_hevc_vdec()) {
-				if (this->type & PORT_TYPE_HEVC) {
+			} else if ((this->type & PORT_TYPE_HEVC) ||
+					(this->type & PORT_TYPE_VIDEO)) {
 					r = es_vpts_checkin_us64(
-					&bufs[BUF_TYPE_HEVC], pts);
-				} else if (this->type & PORT_TYPE_VIDEO) {
-					r = es_vpts_checkin_us64(
-					&bufs[BUF_TYPE_VIDEO], pts);
-				} else if (this->type & PORT_TYPE_AUDIO) {
+					&priv->vdec->vbuf, pts);
+			} else if (this->type & PORT_TYPE_AUDIO) {
 					r = es_vpts_checkin_us64(
 					&bufs[BUF_TYPE_AUDIO], pts);
-				}
-			} else {
-				if (this->type & PORT_TYPE_VIDEO) {
-					r = es_vpts_checkin_us64(
-					&bufs[BUF_TYPE_VIDEO], pts);
-				} else if (this->type & PORT_TYPE_AUDIO) {
-					r = es_vpts_checkin_us64(
-					&bufs[BUF_TYPE_AUDIO], pts);
-				}
 			}
 		}
 		break;
@@ -2214,9 +2243,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		tsdemux_set_demux(parm.data_32);
 		break;
 	case AMSTREAM_SET_VIDEO_DELAY_LIMIT_MS:
-		if (has_hevc_vdec())
-			bufs[BUF_TYPE_HEVC].max_buffer_delay_ms = parm.data_32;
-		bufs[BUF_TYPE_VIDEO].max_buffer_delay_ms = parm.data_32;
+		priv->vdec->vbuf.max_buffer_delay_ms = parm.data_32;
 		break;
 	case AMSTREAM_SET_AUDIO_DELAY_LIMIT_MS:
 		bufs[BUF_TYPE_AUDIO].max_buffer_delay_ms = parm.data_32;
@@ -2326,23 +2353,20 @@ static long amstream_ioctl_get_ex(struct port_priv_s *priv, ulong arg)
 			struct am_ioctl_parm_ex *p = &parm;
 			struct stream_buf_s *buf = NULL;
 
-			buf = (this->vformat == VFORMAT_HEVC ||
-				this->vformat == VFORMAT_AVS2 ||
-				this->vformat == VFORMAT_VP9) ?
-				&bufs[BUF_TYPE_HEVC] :
-				&bufs[BUF_TYPE_VIDEO];
+			mutex_unlock(&amstream_mutex);
+
+			/*
+			 *todo: check upper layer for decoder
+			 * handler lifecycle
+			 */
+			if (priv->vdec == NULL) {
+				r = -EINVAL;
+				mutex_unlock(&amstream_mutex);
+				break;
+			}
 
 			if (this->type & PORT_TYPE_FRAME) {
 				struct vdec_input_status_s status;
-
-				/*
-				 *todo: check upper layer for decoder
-				 * handler lifecycle
-				 */
-				if (priv->vdec == NULL) {
-					r = -EINVAL;
-					break;
-				}
 
 				r = vdec_input_get_status(&priv->vdec->input,
 							&status);
@@ -2353,13 +2377,16 @@ static long amstream_ioctl_get_ex(struct port_priv_s *priv, ulong arg)
 					p->status.read_pointer =
 							status.read_pointer;
 				}
+				mutex_unlock(&amstream_mutex);
 				break;
 			}
 
+			buf = &priv->vdec->vbuf;
 			p->status.size = stbuf_canusesize(buf);
 			p->status.data_len = stbuf_level(buf);
 			p->status.free_len = stbuf_space(buf);
 			p->status.read_pointer = stbuf_rp(buf);
+			mutex_unlock(&amstream_mutex);
 		} else
 			r = -EINVAL;
 		break;
@@ -2672,25 +2699,18 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 
 	case AMSTREAM_IOC_VB_START:
 		if ((this->type & PORT_TYPE_VIDEO) &&
-			((bufs[BUF_TYPE_VIDEO].flag & BUF_FLAG_IN_USE) == 0)) {
-			if (has_hevc_vdec())
-				bufs[BUF_TYPE_HEVC].buf_start = arg;
-			bufs[BUF_TYPE_VIDEO].buf_start = arg;
+			((priv->vdec->vbuf.flag & BUF_FLAG_IN_USE) == 0)) {
+			priv->vdec->vbuf.buf_start = arg;
 		} else
 			r = -EINVAL;
 		break;
 
 	case AMSTREAM_IOC_VB_SIZE:
 		if ((this->type & PORT_TYPE_VIDEO) &&
-			((bufs[BUF_TYPE_VIDEO].flag & BUF_FLAG_IN_USE) == 0)) {
-			if (bufs[BUF_TYPE_VIDEO].flag & BUF_FLAG_ALLOC) {
-				if (has_hevc_vdec()) {
-					r = stbuf_change_size(
-						&bufs[BUF_TYPE_HEVC],
-						arg, false);
-				}
+			((priv->vdec->vbuf.flag & BUF_FLAG_IN_USE) == 0)) {
+			if (priv->vdec->vbuf.flag & BUF_FLAG_ALLOC) {
 				r += stbuf_change_size(
-						&bufs[BUF_TYPE_VIDEO],
+						&priv->vdec->vbuf,
 						arg, false);
 			}
 		} else
@@ -2752,7 +2772,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			this->flag |= PORT_FLAG_AID;
 
 			if (port_get_inited(priv)) {
-				tsync_audio_break(1);
+				//tsync_audio_break(1);
 				amstream_change_avid(this);
 			}
 		} else
@@ -2783,23 +2803,20 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			struct am_io_param *p = &para;
 			struct stream_buf_s *buf = NULL;
 
-			buf = (this->vformat == VFORMAT_HEVC ||
-					this->vformat == VFORMAT_AVS2 ||
-					this->vformat == VFORMAT_VP9) ?
-				&bufs[BUF_TYPE_HEVC] :
-				&bufs[BUF_TYPE_VIDEO];
+			mutex_lock(&amstream_mutex);
+
+			/*
+			 *todo: check upper layer for decoder
+			 * handler lifecycle
+			 */
+			if (priv->vdec == NULL) {
+				r = -EINVAL;
+				mutex_unlock(&amstream_mutex);
+				break;
+			}
 
 			if (this->type & PORT_TYPE_FRAME) {
 				struct vdec_input_status_s status;
-
-				/*
-				 *todo: check upper layer for decoder
-				 * handler lifecycle
-				 */
-				if (priv->vdec == NULL) {
-					r = -EINVAL;
-					break;
-				}
 
 				r = vdec_input_get_status(&priv->vdec->input,
 							&status);
@@ -2813,15 +2830,19 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 						sizeof(para)))
 						r = -EFAULT;
 				}
+				mutex_unlock(&amstream_mutex);
 				break;
 			}
 
+			buf = &priv->vdec->vbuf;
 			p->status.size = stbuf_canusesize(buf);
 			p->status.data_len = stbuf_level(buf);
 			p->status.free_len = stbuf_space(buf);
 			p->status.read_pointer = stbuf_rp(buf);
 			if (copy_to_user((void *)arg, p, sizeof(para)))
 				r = -EFAULT;
+
+			mutex_unlock(&amstream_mutex);
 			return r;
 		}
 		r = -EINVAL;
@@ -2880,11 +2901,16 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			r = -EINVAL;
 		else if (this->type & PORT_TYPE_FRAME)
 			r = vdec_set_pts(priv->vdec, arg);
-		else if (has_hevc_vdec() && this->type & PORT_TYPE_HEVC)
-			r = es_vpts_checkin(&bufs[BUF_TYPE_HEVC], arg);
-		else if (this->type & PORT_TYPE_VIDEO)
-			r = es_vpts_checkin(&bufs[BUF_TYPE_VIDEO], arg);
-		else if (this->type & PORT_TYPE_AUDIO)
+		else if ((this->type & PORT_TYPE_VIDEO) ||
+			(this->type & PORT_TYPE_HEVC)) {
+			struct stream_buf_s *vbuf = &priv->vdec->vbuf;
+			if (vbuf->no_parser) {
+				pts_checkin_offset(PTS_TYPE_VIDEO,
+					vbuf->stream_offset, arg);
+			} else {
+				r = es_vpts_checkin(vbuf, arg);
+			}
+		} else if (this->type & PORT_TYPE_AUDIO)
 			r = es_apts_checkin(&bufs[BUF_TYPE_AUDIO], arg);
 		break;
 
@@ -2905,25 +2931,13 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 				 */
 				if (priv->vdec)
 					r = vdec_set_pts64(priv->vdec, pts);
-			} else if (has_hevc_vdec()) {
-				if (this->type & PORT_TYPE_HEVC) {
+			} else if ((this->type & PORT_TYPE_HEVC) ||
+					(this->type & PORT_TYPE_VIDEO)) {
 					r = es_vpts_checkin_us64(
-					&bufs[BUF_TYPE_HEVC], pts);
-				} else if (this->type & PORT_TYPE_VIDEO) {
-					r = es_vpts_checkin_us64(
-					&bufs[BUF_TYPE_VIDEO], pts);
-				} else if (this->type & PORT_TYPE_AUDIO) {
+					&priv->vdec->vbuf, pts);
+			} else if (this->type & PORT_TYPE_AUDIO) {
 					r = es_vpts_checkin_us64(
 					&bufs[BUF_TYPE_AUDIO], pts);
-				}
-			} else {
-				if (this->type & PORT_TYPE_VIDEO) {
-					r = es_vpts_checkin_us64(
-					&bufs[BUF_TYPE_VIDEO], pts);
-				} else if (this->type & PORT_TYPE_AUDIO) {
-					r = es_vpts_checkin_us64(
-					&bufs[BUF_TYPE_AUDIO], pts);
-				}
 			}
 		}
 		break;
@@ -3136,19 +3150,19 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 				struct vdec_s *vdec;
 
 				p_userdata_param = &param;
-
 				if (copy_from_user(p_userdata_param,
 					(void __user *)arg,
 					sizeof(struct userdata_param_t))) {
 					r = -EFAULT;
 					break;
 				}
-
+				mutex_lock(&amstream_mutex);
 				vdec = vdec_get_vdec_by_id(p_userdata_param->instance_id);
 				if (vdec) {
 					if (vdec_read_user_data(vdec,
 							p_userdata_param) == 0) {
 						r = -EFAULT;
+						mutex_unlock(&amstream_mutex);
 						break;
 					}
 
@@ -3158,6 +3172,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 						r = -EFAULT;
 				} else
 					r = -EINVAL;
+				mutex_unlock(&amstream_mutex);
 			}
 		}
 		break;
@@ -3188,12 +3203,14 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			struct vdec_s *vdec;
 			int vdec_id;
 
+			mutex_lock(&amstream_mutex);
 			get_user(vdec_id, (int __user *)arg);
 			vdec = vdec_get_vdec_by_id(vdec_id);
 			if (vdec) {
 				vdec_reset_userdata_fifo(vdec, 0);
 				pr_info("reset_userdata_fifo for vdec: %d\n", vdec_id);
 			}
+			mutex_unlock(&amstream_mutex);
 		} else
 			r = -EINVAL;
 		break;
@@ -3239,7 +3256,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 		break;
 
 	case AMSTREAM_IOC_PCRSCR:
-		put_user(timestamp_pcrscr_get(), (int __user *)arg);
+		//put_user(timestamp_pcrscr_get(), (int __user *)arg);
 		break;
 
 	case AMSTREAM_IOC_SET_PCRSCR:
@@ -3292,15 +3309,13 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 		tsdemux_set_demux((int)arg);
 		break;
 	case AMSTREAM_IOC_SET_VIDEO_DELAY_LIMIT_MS:
-		if (has_hevc_vdec())
-			bufs[BUF_TYPE_HEVC].max_buffer_delay_ms = (int)arg;
-		bufs[BUF_TYPE_VIDEO].max_buffer_delay_ms = (int)arg;
+		priv->vdec->vbuf.max_buffer_delay_ms = (int)arg;
 		break;
 	case AMSTREAM_IOC_SET_AUDIO_DELAY_LIMIT_MS:
 		bufs[BUF_TYPE_AUDIO].max_buffer_delay_ms = (int)arg;
 		break;
 	case AMSTREAM_IOC_GET_VIDEO_DELAY_LIMIT_MS:
-		put_user(bufs[BUF_TYPE_VIDEO].max_buffer_delay_ms, (int *)arg);
+		put_user(priv->vdec->vbuf.max_buffer_delay_ms, (int *)arg);
 		break;
 	case AMSTREAM_IOC_GET_AUDIO_DELAY_LIMIT_MS:
 		put_user(bufs[BUF_TYPE_AUDIO].max_buffer_delay_ms, (int *)arg);
@@ -3354,11 +3369,18 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 	}
 	case AMSTREAM_IOC_SET_DRMMODE:
 		if ((u32) arg == 1) {
-			pr_err("set drmmode\n");
+			pr_err("set drmmode, input must be secure buffer\n");
 			this->flag |= PORT_FLAG_DRM;
 			if ((this->type & PORT_TYPE_VIDEO) &&
 				(priv->vdec))
 				priv->vdec->port_flag |= PORT_FLAG_DRM;
+		} else if ((u32)arg == 2) {
+			pr_err("set drmmode, input must be normal buffer\n");
+			if ((this->type & PORT_TYPE_VIDEO) &&
+				(priv->vdec)) {
+				pr_err("vdec port_flag with drmmode\n");
+				priv->vdec->port_flag |= PORT_FLAG_DRM;
+			}
 		} else {
 			this->flag &= (~PORT_FLAG_DRM);
 			pr_err("no drmmode\n");
@@ -3376,6 +3398,142 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			tsync_pcr_set_apts(pts);
 		else
 			tsync_set_apts(pts);
+		break;
+	}
+	case AMSTREAM_IOC_SET_CRC: {
+		struct usr_crc_info_t crc_info;
+		struct vdec_s *vdec;
+
+		if (copy_from_user(&crc_info, (void __user *)arg,
+			sizeof(struct usr_crc_info_t))) {
+			return -EFAULT;
+		}
+		/*
+		pr_info("id %d, frame %d, y_crc: %08x, uv_crc: %08x\n", crc_info.id,
+			crc_info.pic_num, crc_info.y_crc, crc_info.uv_crc);
+		*/
+		vdec = vdec_get_vdec_by_id(crc_info.id);
+		if (vdec == NULL)
+			return -ENODEV;
+		if (vdec->vfc.cmp_pool == NULL) {
+			vdec->vfc.cmp_pool =
+				vmalloc(USER_CMP_POOL_MAX_SIZE *
+					sizeof(struct usr_crc_info_t));
+			if (vdec->vfc.cmp_pool == NULL)
+				return -ENOMEM;
+		}
+		if (vdec->vfc.usr_cmp_num >= USER_CMP_POOL_MAX_SIZE) {
+			pr_info("warn: could not write any more, max %d",
+				USER_CMP_POOL_MAX_SIZE);
+			return -EFAULT;
+		}
+		memcpy(&vdec->vfc.cmp_pool[vdec->vfc.usr_cmp_num], &crc_info,
+			sizeof(struct usr_crc_info_t));
+		vdec->vfc.usr_cmp_num++;
+		break;
+	}
+	case AMSTREAM_IOC_GET_CRC_CMP_RESULT: {
+		int val, vdec_id;
+		struct vdec_s *vdec;
+
+		if (get_user(val, (int __user *)arg)) {
+			return -EFAULT;
+		}
+		vdec_id = val & 0x00ff;
+		vdec = vdec_get_vdec_by_id(vdec_id);
+		if (vdec == NULL)
+			return -ENODEV;
+		if (val & 0xff00)
+			put_user(vdec->vfc.usr_cmp_num, (int *)arg);
+		else
+			put_user(vdec->vfc.usr_cmp_result, (int *)arg);
+		/*
+		pr_info("amstream get crc32 cmpare num %d result: %d\n",
+			vdec->vfc.usr_cmp_num, vdec->vfc.usr_cmp_result);
+		*/
+		break;
+	}
+	case AMSTREAM_IOC_INIT_EX_STBUF: {
+		struct stream_buffer_metainfo parm;
+		struct stream_buf_s *vbuf = NULL;
+
+		if (priv->vdec == NULL) {
+			pr_err("init %s, no vdec.\n", __func__);
+			return -EFAULT;
+		}
+
+		vbuf = &priv->vdec->vbuf;
+		if (vbuf == NULL) {
+			pr_err("init %s, no stbuf.\n", __func__);
+			return -EFAULT;
+		}
+
+		if (copy_from_user(&parm, (void __user *)arg,
+			sizeof(struct stream_buffer_metainfo))) {
+			return -EFAULT;
+		}
+		stream_buffer_set_ext_buf(vbuf, parm.stbuf_start,
+			parm.stbuf_size, parm.stbuf_flag);
+		break;
+	}
+	case AMSTREAM_IOC_WR_STBUF_META: {
+		struct stream_buffer_metainfo meta;
+		struct stream_buf_s *vbuf = NULL;
+
+		if (priv->vdec == NULL) {
+			pr_err("write %s, no vdec.\n", __func__);
+			return -EFAULT;
+		}
+
+		vbuf = &priv->vdec->vbuf;
+		if (vbuf == NULL) {
+			pr_err("write %s, no stbuf.\n", __func__);
+			return -EFAULT;
+		}
+
+		if (vbuf->ops == NULL) {
+			pr_err("write %s, no ops.\n", __func__);
+			return -EFAULT;
+		}
+
+		if (copy_from_user(&meta, (void __user *)arg,
+			sizeof(struct stream_buffer_metainfo))) {
+			return -EFAULT;
+		}
+		if (!vbuf->ext_buf_addr)
+			return -ENODEV;
+
+		stream_buffer_meta_write(vbuf, &meta);
+		break;
+	}
+	case AMSTREAM_IOC_GET_STBUF_STATUS: {
+		struct stream_buffer_status st;
+		struct stream_buf_s *pbuf = NULL;
+
+		if (priv->vdec == NULL) {
+			pr_err("get status %s, no vdec.\n", __func__);
+			return -EFAULT;
+		}
+
+		pbuf = &priv->vdec->vbuf;
+		if (pbuf == NULL) {
+			pr_err("get status %s, no stbuf.\n", __func__);
+			return -EFAULT;
+		}
+
+		if (pbuf->ops == NULL) {
+			pr_err("get status %s, no ops.\n", __func__);
+			return -EFAULT;
+		}
+
+		st.stbuf_start = pbuf->ext_buf_addr;
+		st.stbuf_size = pbuf->buf_size;
+		st.stbuf_rp = pbuf->ops->get_rp(pbuf);
+		st.stbuf_wp = pbuf->ops->get_wp(pbuf);
+		if (copy_to_user((void __user *)arg, &st,
+			sizeof(struct stream_buffer_status))) {
+			return -EFAULT;
+		}
 		break;
 	}
 	default:
@@ -3402,6 +3560,7 @@ static long amstream_do_ioctl(struct port_priv_s *priv,
 	case AMSTREAM_IOC_SYSINFO:
 	case AMSTREAM_IOC_GET_QOSINFO:
 	case AMSTREAM_IOC_GET_MVDECINFO:
+	case AMSTREAM_IOC_GET_AVINFO:
 		r = amstream_do_ioctl_new(priv, cmd, arg);
 		break;
 	default:
@@ -3668,6 +3827,53 @@ static ssize_t ports_show(struct class *class, struct class_attribute *attr,
 	return pbuf - buf;
 }
 
+static int show_vbuf_status_cb(struct stream_buf_s *p, char *buf)
+{
+	char *pbuf = buf;
+
+	if (!p->buf_start)
+		return 0;
+	/*type */
+	pbuf += sprintf(pbuf, "Video-%d buffer:", p->id);
+	/*flag */
+	pbuf += sprintf(pbuf, "\tflag:%d( ", p->flag);
+	if (p->flag & BUF_FLAG_ALLOC)
+		pbuf += sprintf(pbuf, "%s ", "Alloc");
+	else
+		pbuf += sprintf(pbuf, "%s ", "Unalloc");
+	if (p->flag & BUF_FLAG_IN_USE)
+		pbuf += sprintf(pbuf, "%s ", "Used");
+	else
+		pbuf += sprintf(pbuf, "%s ", "Noused");
+	if (p->flag & BUF_FLAG_PARSER)
+		pbuf += sprintf(pbuf, "%s ", "Parser");
+	else
+		pbuf += sprintf(pbuf, "%s ", "noParser");
+	if (p->flag & BUF_FLAG_FIRST_TSTAMP)
+		pbuf += sprintf(pbuf, "%s ", "firststamp");
+	else
+		pbuf += sprintf(pbuf, "%s ", "nofirststamp");
+	pbuf += sprintf(pbuf, ")\n");
+
+	/*buf stats */
+	pbuf += sprintf(pbuf, "\tbuf addr:%p\n", (void *)p->buf_start);
+	pbuf += sprintf(pbuf, "\tbuf size:%#x\n", p->buf_size);
+	pbuf += sprintf(pbuf, "\tbuf canusesize:%#x\n", p->canusebuf_size);
+	pbuf += sprintf(pbuf, "\tbuf regbase:%#lx\n", p->reg_base);
+
+	if (p->reg_base && p->flag & BUF_FLAG_IN_USE) {
+		pbuf += sprintf(pbuf, "\tbuf level:%#x\n",
+				stbuf_level(p));
+		pbuf += sprintf(pbuf, "\tbuf space:%#x\n",
+				stbuf_space(p));
+		pbuf += sprintf(pbuf, "\tbuf read pointer:%#x\n",
+				stbuf_rp(p));
+	} else
+		pbuf += sprintf(pbuf, "\tbuf no used.\n");
+
+	return pbuf - buf;
+}
+
 static ssize_t bufs_show(struct class *class, struct class_attribute *attr,
 						 char *buf)
 {
@@ -3679,6 +3885,10 @@ static ssize_t bufs_show(struct class *class, struct class_attribute *attr,
 
 	for (i = 0; i < amstream_buf_num; i++) {
 		p = &bufs[i];
+
+		if (!p->buf_start)
+			continue;
+
 		/*type */
 		pbuf += sprintf(pbuf, "%s buffer:", buf_type[p->type]);
 		/*flag */
@@ -3811,6 +4021,8 @@ static ssize_t bufs_show(struct class *class, struct class_attribute *attr,
 		}
 	}
 
+	pbuf += show_stream_buffer_status(pbuf, show_vbuf_status_cb);
+
 	return pbuf - buf;
 }
 
@@ -3819,15 +4031,10 @@ static ssize_t videobufused_show(struct class *class,
 {
 	char *pbuf = buf;
 	struct stream_buf_s *p = NULL;
-	struct stream_buf_s *p_hevc = NULL;
 
 	p = &bufs[0];
-	if (has_hevc_vdec())
-		p_hevc = &bufs[BUF_TYPE_HEVC];
 
 	if (p->flag & BUF_FLAG_IN_USE)
-		pbuf += sprintf(pbuf, "%d ", 1);
-	else if (has_hevc_vdec() && (p_hevc->flag & BUF_FLAG_IN_USE))
 		pbuf += sprintf(pbuf, "%d ", 1);
 	else
 		pbuf += sprintf(pbuf, "%d ", 0);
@@ -4082,12 +4289,6 @@ static int amstream_probe(struct platform_device *pdev)
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12A)
 		vdec_power_reset();
 
-	userdata_poc_info =
-		vzalloc(sizeof(struct userdata_poc_info_t) *
-		USERDATA_FIFO_NUM);
-	if (!userdata_poc_info)
-		return -ENOMEM;
-
 	return 0;
 
 	/*
@@ -4110,8 +4311,6 @@ static int amstream_remove(struct platform_device *pdev)
 	int i;
 	struct stream_port_s *st;
 
-	if (bufs[BUF_TYPE_VIDEO].flag & BUF_FLAG_ALLOC)
-		stbuf_change_size(&bufs[BUF_TYPE_VIDEO], 0, false);
 	if (bufs[BUF_TYPE_AUDIO].flag & BUF_FLAG_ALLOC)
 		stbuf_change_size(&bufs[BUF_TYPE_AUDIO], 0, false);
 	stbuf_fetch_release();
@@ -4128,11 +4327,6 @@ static int amstream_remove(struct platform_device *pdev)
 	astream_dev_unregister();
 
 	amstream_adec_status = NULL;
-
-	if (userdata_poc_info) {
-		vfree(userdata_poc_info);
-		userdata_poc_info = NULL;
-	}
 
 	pr_err("Amlogic A/V streaming port release\n");
 
@@ -4209,6 +4403,10 @@ static void __exit amstream_module_exit(void)
 
 module_init(amstream_module_init);
 module_exit(amstream_module_exit);
+
+module_param(force_dv_mode, uint, 0664);
+MODULE_PARM_DESC(force_dv_mode,
+	"\n force_dv_mode \n");
 
 module_param(def_4k_vstreambuf_sizeM, uint, 0664);
 MODULE_PARM_DESC(def_4k_vstreambuf_sizeM,

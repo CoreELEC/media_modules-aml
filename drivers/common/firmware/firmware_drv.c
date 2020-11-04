@@ -25,7 +25,7 @@
 #include <linux/slab.h>
 
 #include <linux/amlogic/media/utils/vformat.h>
-#include <linux/amlogic/cpu_version.h>
+#include <linux/amlogic/media/registers/cpu_version.h>
 #include "../../stream_input/amports/amports_priv.h"
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "firmware_priv.h"
@@ -62,6 +62,11 @@
 
 #ifndef FIRMWARE_MAJOR
 #define FIRMWARE_MAJOR AMSTREAM_MAJOR
+#endif
+
+#if 0
+/* This is only for debug, will be deleted later!!!*/
+#define tee_enabled() 0
 #endif
 
 static DEFINE_MUTEX(mutex);
@@ -178,33 +183,42 @@ static int request_firmware_from_sys(const char *file_name,
 	pr_info("Try to load %s  ...\n", file_name);
 
 	ret = request_firmware(&fw, file_name, g_dev->dev);
+	pr_info("%s line %d\n", __func__, __LINE__);
 	if (ret < 0) {
 		pr_info("Error : %d can't load the %s.\n", ret, file_name);
 		goto err;
 	}
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	if (fw->size > size) {
 		pr_info("Not enough memory size for ucode.\n");
 		ret = -ENOMEM;
 		goto release;
 	}
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	magic = fw_probe((char *)fw->data);
+	pr_info("%s line %d\n", __func__, __LINE__);
 	if (magic != PACK && magic != CODE) {
+		pr_info("%s line %d\n", __func__, __LINE__);
 		if (fw->size < SEC_OFFSET) {
 			pr_info("This is an invalid firmware file.\n");
 			goto release;
 		}
+		pr_info("%s line %d\n", __func__, __LINE__);
 
 		magic = fw_probe((char *)fw->data + SEC_OFFSET);
+		pr_info("%s line %d\n", __func__, __LINE__);
 		if (magic != PACK) {
 			pr_info("The firmware file is not packet.\n");
 			goto release;
 		}
 
+		pr_info("%s line %d\n", __func__, __LINE__);
 		offset = SEC_OFFSET;
 	}
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	memcpy(buf, (char *)fw->data + offset, fw->size - offset);
 
 	pr_info("load firmware size : %zd, Name : %s.\n",
@@ -221,6 +235,7 @@ int request_decoder_firmware_on_sys(enum vformat_e format,
 {
 	int ret;
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	ret = get_data_from_name(file_name, buf);
 	if (ret < 0)
 		pr_info("Get firmware fail.\n");
@@ -411,8 +426,10 @@ static int fw_info_fill(void)
 	char *path = __getname();
 	const char *name;
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	if (path == NULL)
 		return -ENOMEM;
+	pr_info("%s line %d\n", __func__, __LINE__);
 
 	for (i = 0; i < info_size; i++) {
 		name = ucode_info[i].name;
@@ -440,11 +457,13 @@ static int fw_info_fill(void)
 		list_add(&files->node, &mgr->files_head);
 	}
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	__putname(path);
 
 	if (debug)
 		fw_files_info_walk();
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	return ret;
 }
 
@@ -743,14 +762,17 @@ static int fw_data_binding(void)
 	char *buf = NULL;
 	int size;
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	if (list_empty(&mgr->files_head)) {
 		pr_info("the file list is empty.\n");
 		return 0;
 	}
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	buf = vmalloc(BUFF_SIZE);
 	if (IS_ERR_OR_NULL(buf))
 		return -ENOMEM;
+	pr_info("%s line %d\n", __func__, __LINE__);
 
 	memset(buf, 0, BUFF_SIZE);
 
@@ -777,21 +799,25 @@ static int fw_data_binding(void)
 
 	vfree(buf);
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	return ret;
 }
 
 static int fw_pre_load(void)
 {
+	pr_info("%s line %d\n", __func__, __LINE__);
 	if (fw_info_fill() < 0) {
 		pr_info("Get path fail.\n");
 		return -1;
 	}
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	if (fw_data_binding() < 0) {
 		pr_info("Set data fail.\n");
 		return -1;
 	}
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	return 0;
 }
 
@@ -839,14 +865,17 @@ int video_fw_reload(int mode)
 	int ret = 0;
 	struct fw_mgr_s *mgr = g_mgr;
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	if (tee_enabled())
 		return 0;
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	mutex_lock(&mutex);
 
 	if (mode & FW_LOAD_FORCE) {
 		fw_ctx_clean();
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 		ret = fw_pre_load();
 		if (ret < 0)
 			pr_err("The fw reload fail.\n");
@@ -855,6 +884,7 @@ int video_fw_reload(int mode)
 			pr_info("The fw has been loaded.\n");
 			goto out;
 		}
+		pr_info("%s line %d\n", __func__, __LINE__);
 
 		ret = fw_pre_load();
 		if (ret < 0)
@@ -862,6 +892,7 @@ int video_fw_reload(int mode)
 	}
 out:
 	mutex_unlock(&mutex);
+	pr_info("%s line %d\n", __func__, __LINE__);
 
 	return ret;
 }
@@ -948,10 +979,12 @@ static int fw_driver_init(void)
 {
 	int ret = -1;
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	g_dev = kzalloc(sizeof(struct fw_dev_s), GFP_KERNEL);
 	if (IS_ERR_OR_NULL(g_dev))
 		return -ENOMEM;
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	g_dev->dev_no = MKDEV(FIRMWARE_MAJOR, 100);
 
 	ret = register_chrdev_region(g_dev->dev_no, 1, DEV_NAME);
@@ -960,6 +993,7 @@ static int fw_driver_init(void)
 		goto err;
 	}
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	cdev_init(&g_dev->cdev, &fw_fops);
 	g_dev->cdev.owner = THIS_MODULE;
 
@@ -969,6 +1003,7 @@ static int fw_driver_init(void)
 		goto err;
 	}
 
+	pr_info("%s line %d\n", __func__, __LINE__);
 	ret = class_register(&fw_class);
 	if (ret < 0) {
 		pr_info("Failed in creating class.\n");

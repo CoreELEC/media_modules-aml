@@ -17,8 +17,8 @@
 
 #ifndef THREAD_RW_H
 #define THREAD_RW_H
-#include "../../stream_input/parser/streambuf_reg.h"
-#include "../../stream_input/parser/streambuf.h"
+#include "../../stream_input/amports/streambuf_reg.h"
+#include "../../stream_input/amports/streambuf.h"
 #include "../../stream_input/parser/esparser.h"
 #include "../../stream_input/amports/amports_priv.h"
 

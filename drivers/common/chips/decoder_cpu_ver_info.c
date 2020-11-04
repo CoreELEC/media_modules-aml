@@ -24,7 +24,7 @@
 #include <linux/errno.h>
 #include <linux/platform_device.h>
 #include <linux/of_device.h>
-#include <linux/amlogic/cpu_version.h>
+#include <linux/amlogic/media/registers/cpu_version.h>
 #include "decoder_cpu_ver_info.h"
 
 #define DECODE_CPU_VER_ID_NODE_NAME "cpu_ver_name"
@@ -57,11 +57,13 @@ static enum AM_MESON_CPU_MAJOR_ID cpu_ver_info[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR
 	AM_MESON_CPU_MAJOR_ID_G12B,
 	AM_MESON_CPU_MAJOR_ID_GXLX2,
 	AM_MESON_CPU_MAJOR_ID_SM1,
-	AM_MESON_CPU_MAJOR_ID_A1,
-	AM_MESON_CPU_MAJOR_ID_TXLX2,
+	AM_MESON_CPU_MAJOR_ID_RES_0x2c,
+	AM_MESON_CPU_MAJOR_ID_RES_0x2d,
 	AM_MESON_CPU_MAJOR_ID_TL1,
-	AM_MESON_CPU_MAJOR_ID_C1,
 	AM_MESON_CPU_MAJOR_ID_TM2,
+	AM_MESON_CPU_MAJOR_ID_RES_0x30,
+	AM_MESON_CPU_MAJOR_ID_RES_0x31,
+	AM_MESON_CPU_MAJOR_ID_SC2,
 };
 
 static const struct of_device_id cpu_ver_of_match[] = {
@@ -109,8 +111,8 @@ static const struct of_device_id cpu_ver_of_match[] = {
 		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_TM2 - MAJOR_ID_START],
 	},
 	{
-		.compatible = "amlogic, cpu-major-id-c1",
-		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_C1 - MAJOR_ID_START],
+		.compatible = "amlogic, cpu-major-id-sc2",
+		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_SC2 - MAJOR_ID_START],
 	},
 	{},
 };
@@ -164,3 +166,11 @@ enum AM_MESON_CPU_MAJOR_ID get_cpu_major_id(void)
 	return cpu_ver_id;
 }
 EXPORT_SYMBOL(get_cpu_major_id);
+
+bool is_cpu_tm2_revb(void)
+{
+	return ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2) &&
+		(is_meson_rev_b()));
+}
+EXPORT_SYMBOL(is_cpu_tm2_revb);
+

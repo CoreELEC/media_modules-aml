@@ -21,7 +21,6 @@
 #include <media/v4l2-mem2mem.h>
 #include <media/videobuf2-dma-contig.h>
 
-#include "../stream_input/amports/amports_priv.h"
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
 //#include "aml_vcodec_intr.h"
@@ -102,6 +101,11 @@ static struct aml_video_fmt aml_video_formats[] = {
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_MJPEG,
+		.type = AML_FMT_DEC,
+		.num_planes = 1,
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_AV1,
 		.type = AML_FMT_DEC,
 		.num_planes = 1,
 	},
@@ -289,7 +293,10 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 	}
 
 	v4l2_event_queue_fh(&ctx->fh, &event);
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "changes: %x\n", changes);
+	if (changes != V4L2_EVENT_SRC_CH_HDRINFO)
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "changes: %x\n", changes);
+	else
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "changes: %x\n", changes);
 }
 
 static void aml_vdec_flush_decoder(struct aml_vcodec_ctx *ctx)
@@ -710,7 +717,7 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 			if (dmabuf_is_uvm(dma)) {
 				/* only Y will contain vframe */
 				dmabuf_set_vframe(vb2_buf->planes[0].dbuf,
-					vf, VF_SRC_DECODER);
+					vf);
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 						"set vf(%px) into %dth buf\n",
 						vf, vb2_buf->index);

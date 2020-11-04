@@ -6906,7 +6906,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	if (dec->next_again_flag &&
 		(!vdec_frame_based(vdec))) {
 		u32 parser_wr_ptr =
-			READ_PARSER_REG(PARSER_VIDEO_WP);
+			STBUF_READ(&vdec->vbuf, get_wp);
 		if (parser_wr_ptr >= dec->pre_parser_wr_ptr &&
 			(parser_wr_ptr - dec->pre_parser_wr_ptr) <
 			again_threshold) {
@@ -6921,8 +6921,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = READ_PARSER_REG(PARSER_VIDEO_RP);
-		wp = READ_PARSER_REG(PARSER_VIDEO_WP);
+		rp = STBUF_READ(&vdec->vbuf, get_rp);
+		wp = STBUF_READ(&vdec->vbuf, get_wp);
 		if (wp < rp)
 			level = vdec->input.size + wp - rp;
 		else
@@ -6982,9 +6982,12 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	dec->vdec_cb = callback;
 	/* dec->chunk = vdec_prepare_input(vdec); */
 	hevc_reset_core(vdec);
-	dec->pre_parser_wr_ptr =
-			READ_PARSER_REG(PARSER_VIDEO_WP);
+
+	if (vdec_stream_based(vdec)) {
+		dec->pre_parser_wr_ptr =
+			STBUF_READ(&vdec->vbuf, get_wp);
 		dec->next_again_flag = 0;
+	}
 
 	r = vdec_prepare_input(vdec, &dec->chunk);
 	if (r < 0) {
@@ -7223,10 +7226,10 @@ static void avs2_dump_state(struct vdec_s *vdec)
 		READ_VREG(HEVC_STREAM_RD_PTR));
 	avs2_print(dec, 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	avs2_print(dec, 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
 
 	if (input_frame_based(vdec) &&
 		(debug & PRINT_FLAG_VDEC_DATA)

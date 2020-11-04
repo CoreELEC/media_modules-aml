@@ -168,5 +168,8 @@ static void __exit vdec_clk_exit(void)
 #define ARCH_VDEC_CLK_EXIT()\
 		module_exit(vdec_clk_exit)
 
+MODULE_DESCRIPTION("AMLOGIC clk Driver");
+MODULE_LICENSE("GPL");
+
 #endif
 #endif

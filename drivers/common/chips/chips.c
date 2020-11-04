@@ -25,7 +25,7 @@
 #include <linux/mm.h>
 
 #include <linux/amlogic/media/utils/vformat.h>
-#include <linux/amlogic/cpu_version.h>
+#include <linux/amlogic/media/registers/cpu_version.h>
 #include "../../stream_input/amports/amports_priv.h"
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "chips.h"
@@ -71,11 +71,13 @@ static const struct type_name cpu_type_name[] = {
 	{AM_MESON_CPU_MAJOR_ID_GXM, "gxm"},
 	{AM_MESON_CPU_MAJOR_ID_TXL, "txl"},
 	{AM_MESON_CPU_MAJOR_ID_TXLX, "txlx"},
+	{AM_MESON_CPU_MAJOR_ID_GXLX, "gxlx"},
 	{AM_MESON_CPU_MAJOR_ID_G12A, "g12a"},
 	{AM_MESON_CPU_MAJOR_ID_G12B, "g12b"},
 	{AM_MESON_CPU_MAJOR_ID_SM1, "sm1"},
 	{AM_MESON_CPU_MAJOR_ID_TL1, "tl1"},
 	{AM_MESON_CPU_MAJOR_ID_TM2, "tm2"},
+	{AM_MESON_CPU_MAJOR_ID_SC2, "sc2"},
 	{0, NULL},
 };
 
@@ -145,6 +147,7 @@ static const struct type_name vformat_type_name[] = {
 	{VFORMAT_JPEG_ENC, "jpeg_enc"},
 	{VFORMAT_VP9, "vp9"},
 	{VFORMAT_AVS2, "avs2"},
+	{VFORMAT_AV1, "av1"},
 	{VFORMAT_YUV, "yuv"},
 	{0, NULL},
 };

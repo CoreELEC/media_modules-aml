@@ -22,16 +22,18 @@
 
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/amstream.h>
-#include "../stream_input/parser/streambuf.h"
+#include "../stream_input/amports/streambuf.h"
+#include "../frame_provider/decoder/utils/vdec_input.h"
 #include "aml_vcodec_drv.h"
 
 struct aml_vdec_adapt {
-	enum VIDEO_DEC_TYPE format;
+	enum vformat_e format;
 	void *vsi;
 	int32_t failure;
 	uint32_t inst_addr;
 	unsigned int signaled;
 	struct aml_vcodec_ctx *ctx;
+	struct platform_device *dev;
 	wait_queue_head_t wq;
 	struct file *filp;
 	struct vdec_s *vdec;
@@ -53,8 +55,11 @@ int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count, u64 timestamp);
 
+void vdec_vframe_input_free(void *priv, u32 handle);
+
 int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
-	ulong addr, u32 count, u64 timestamp, u32 handle);
+	ulong addr, u32 count, u64 timestamp, u32 handle,
+	chunk_free free, void *priv);
 
 bool vdec_input_full(struct aml_vdec_adapt *ada_ctx);
 
@@ -67,8 +72,6 @@ extern void dump_write(const char __user *buf, size_t count);
 bool is_input_ready(struct aml_vdec_adapt *ada_ctx);
 
 int vdec_frame_number(struct aml_vdec_adapt *ada_ctx);
-
-u32 aml_recycle_buffer(struct aml_vdec_adapt *adaptor);
 
 #endif /* VDEC_ADAPT_H */
 

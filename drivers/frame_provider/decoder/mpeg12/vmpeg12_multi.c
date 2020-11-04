@@ -15,6 +15,7 @@
  *
 */
 
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -73,6 +74,9 @@
 #define MREG_FRAME_OFFSET   AV_SCRATCH_D
 #define MREG_WAIT_BUFFER    AV_SCRATCH_E
 #define MREG_FATAL_ERROR    AV_SCRATCH_F
+
+#define MREG_CC_ADDR    AV_SCRATCH_0
+#define AUX_BUF_ALIGN(adr) ((adr + 0xf) & (~0xf))
 
 #define GET_SLICE_TYPE(type)  ("IPB##"[((type&PICINFO_TYPE_MASK)>>16)&0x3])
 #define PICINFO_ERROR       0x80000000
@@ -142,7 +146,7 @@ static unsigned int decode_timeout_val = 200;
 #define AGAIN_HAS_THRESHOLD
 
 #ifdef AGAIN_HAS_THRESHOLD
-u32 again_threshold;
+static u32 again_threshold;
 #endif
 
 /*
@@ -154,6 +158,18 @@ enum {
 	FRAME_REPEAT_BOT,
 	FRAME_REPEAT_NONE
 };
+
+/*Send by AV_SCRATCH_9*/
+#define MPEG12_PIC_DONE     1
+#define MPEG12_DATA_EMPTY   2
+#define MPEG12_SEQ_END      3
+#define MPEG12_DATA_REQUEST 4
+
+/*Send by AV_SCRATCH_G*/
+#define MPEG12_V4L2_INFO_NOTIFY 1
+/*Send by AV_SCRATCH_J*/
+#define MPEG12_USERDATA_DONE 0x8000
+
 #define DEC_RESULT_NONE     0
 #define DEC_RESULT_DONE     1
 #define DEC_RESULT_AGAIN    2
@@ -263,8 +279,9 @@ struct vdec_mpeg12_hw_s {
 	struct work_struct notify_work;
 	void (*vdec_cb)(struct vdec_s *, void *);
 	void *vdec_cb_arg;
-	unsigned long ccbuf_phyAddress;
+	dma_addr_t ccbuf_phyAddress;
 	void *ccbuf_phyAddress_virt;
+	u32 cc_buf_size;
 	unsigned long ccbuf_phyAddress_is_remaped_nocache;
 	u32 frame_rpt_state;
 /* for error handling */
@@ -323,6 +340,7 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
 static void reset_process_time(struct vdec_mpeg12_hw_s *hw);
 static void flush_output(struct vdec_mpeg12_hw_s *hw);
+static void start_process_time_set(struct vdec_mpeg12_hw_s *hw);
 static int debug_enable;
 /*static struct work_struct userdata_push_work;*/
 #undef pr_info
@@ -1454,7 +1472,7 @@ static void userdata_push_do_work(struct work_struct *work)
 	psrc_data = (u8 *)hw->ccbuf_phyAddress_virt + hw->ucode_cc_last_wp;
 
 	pdata = hw->userdata_info.data_buf + hw->userdata_info.last_wp;
-	for (i = 0; i < data_length && psrc_data; i++) {
+	for (i = 0; i < data_length && hw->ccbuf_phyAddress_virt != NULL && psrc_data; i++) {
 		*pdata++ = *psrc_data++;
 		if (pdata >= hw->userdata_info.data_buf_end)
 			pdata = hw->userdata_info.data_buf;
@@ -2080,20 +2098,22 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = NULL;
 	struct vdec_v4l2_buffer *fb = NULL;
-	int index;
+	int index = -1;
 
-	if (hw->is_used_v4l && hw->eos) {
+	if (hw->eos) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"%s fatal error, no available buffer slot.\n",
 				__func__);
 			return -1;
 		}
-		index = find_free_buffer(hw);
-		if ((index == -1) &&
-			vdec_v4l_get_buffer(hw->v4l2_ctx, &fb)) {
-			pr_err("[%d] get fb fail.\n", ctx->id);
-			return -1;
+		if (hw->is_used_v4l) {
+			index = find_free_buffer(hw);
+			if ((index == -1) &&
+				vdec_v4l_get_buffer(hw->v4l2_ctx, &fb)) {
+				pr_err("[%d] get fb fail.\n", ctx->id);
+				return -1;
+			}
 		}
 
 		vf->type |= VIDTYPE_V4L_EOS;
@@ -2115,6 +2135,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 	struct vdec_s *vdec, int from)
 {
+	int r;
+
 	if (hw->dec_result != DEC_RESULT_DONE)
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 			"%s, result=%d, status=%d\n", __func__,
@@ -2153,6 +2175,39 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		vdec_vframe_dirty(vdec, hw->chunk);
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
+
+		r = vdec_prepare_input(vdec, &hw->chunk);
+		if (r < 0) {
+			hw->input_empty++;
+			reset_process_time(hw);
+			hw->dec_result = DEC_RESULT_GET_DATA;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+				"%s: Insufficient data, get data retry\n", __func__);
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+		hw->input_empty = 0;
+		if (vdec_frame_based(vdec) && (hw->chunk != NULL)) {
+			r = hw->chunk->size +
+				(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+			WRITE_VREG(VIFF_BIT_CNT, r * 8);
+			if (vdec->mvfrm)
+				vdec->mvfrm->frame_size += hw->chunk->size;
+		}
+		debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"%s: %x %x %x size %d, bitcnt %d\n",
+			__func__,
+			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+			READ_VREG(VLD_MEM_VIFIFO_WP),
+			READ_VREG(VLD_MEM_VIFIFO_RP),
+			r, READ_VREG(VIFF_BIT_CNT));
+		vdec_enable_input(vdec);
+		hw->dec_result = DEC_RESULT_NONE;
+		hw->last_vld_level = 0;
+		start_process_time_set(hw);
+		hw->init_flag = 1;
+		mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
+		WRITE_VREG(MREG_BUFFEROUT, 0);
 		return;
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
@@ -2172,8 +2227,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 		flush_output(hw);
-		if (hw->is_used_v4l)
-			notify_v4l_eos(vdec);
+		notify_v4l_eos(vdec);
 
 		debug_print(DECODE_ID(hw), 0,
 			"%s: end of stream, num %d(%d)\n",
@@ -2183,6 +2237,11 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		amvdec_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
+	/*disable mbox interrupt */
+	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
+	del_timer_sync(&hw->check_timer);
+	hw->stat &= ~STAT_TIMER_ARM;
+	wait_vmmpeg12_search_done(hw);
 
 	if (from == 1) {
 		/*This is a timeout work*/
@@ -2196,15 +2255,10 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		}
 	}
 
-	/*disable mbox interrupt */
-	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
-	wait_vmmpeg12_search_done(hw);
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1);
 	else
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
-	del_timer_sync(&hw->check_timer);
-	hw->stat &= ~STAT_TIMER_ARM;
 
 	if (hw->is_used_v4l) {
 		struct aml_vcodec_ctx *ctx =
@@ -2408,26 +2462,17 @@ static void vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 		}
 
 		if (i == hw->buf_num) {
-			if (hw->ccbuf_phyAddress_is_remaped_nocache)
-				codec_mm_unmap_phyaddr(hw->ccbuf_phyAddress_virt);
-			hw->ccbuf_phyAddress_virt = NULL;
-			hw->ccbuf_phyAddress = 0;
-			hw->ccbuf_phyAddress_is_remaped_nocache = 0;
-
-			hw->buf_start = decbuf_start;
-			hw->ccbuf_phyAddress = hw->buf_start + CTX_CCBUF_OFFSET;
-			hw->ccbuf_phyAddress_virt
-				= codec_mm_phys_to_virt(
-					hw->ccbuf_phyAddress);
-			if ((!hw->ccbuf_phyAddress_virt) && (!hw->tvp_flag)) {
-				hw->ccbuf_phyAddress_virt
-					= codec_mm_vmap(
-						hw->ccbuf_phyAddress,
-						CCBUF_SIZE);
-				hw->ccbuf_phyAddress_is_remaped_nocache = 1;
+			hw->cc_buf_size = AUX_BUF_ALIGN(CCBUF_SIZE);
+			hw->ccbuf_phyAddress_virt = dma_alloc_coherent(amports_get_dma_device(),
+						  hw->cc_buf_size, &hw->ccbuf_phyAddress,
+						  GFP_KERNEL);
+			if (hw->ccbuf_phyAddress_virt == NULL) {
+				pr_err("%s: failed to alloc cc buffer\n", __func__);
+				return;
 			}
-
+			hw->buf_start = decbuf_start;
 			WRITE_VREG(MREG_CO_MV_START, hw->buf_start);
+			WRITE_VREG(MREG_CC_ADDR, hw->ccbuf_phyAddress);
 		} else {
 			if (vdec->parallel_dec == 1) {
 				unsigned tmp;
@@ -2523,13 +2568,13 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 			state);
 	}
 	debug_print(DECODE_ID(hw), 0,
-	"%s, newq(%d/%d), dispq(%d/%d) vf peek/get/put (%d/%d/%d),drop=%d, buffer_not_ready %d\n",
+	"%s, newq(%d/%d), dispq(%d/%d) vf pre/get/put (%d/%d/%d),drop=%d, buffer_not_ready %d\n",
 	__func__,
 	kfifo_len(&hw->newframe_q),
 	VF_POOL_SIZE,
 	kfifo_len(&hw->display_q),
 	VF_POOL_SIZE,
-	hw->peek_num,
+	hw->disp_num,
 	hw->get_num,
 	hw->put_num,
 	hw->drop_frame_count,
@@ -2549,10 +2594,11 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 	debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_RP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_RP));
+		STBUF_READ(&vdec->vbuf, get_rp));
 	debug_print(DECODE_ID(hw), 0,
 		"PARSER_VIDEO_WP=0x%x\n",
-		READ_PARSER_REG(PARSER_VIDEO_WP));
+		STBUF_READ(&vdec->vbuf, get_wp));
+
 	if (vdec_frame_based(vdec) &&
 		debug_enable & PRINT_FRAMEBASE_DATA
 		) {
@@ -2600,7 +2646,8 @@ static void reset_process_time(struct vdec_mpeg12_hw_s *hw)
 			max_process_time[DECODE_ID(hw)] = process_time;
 	}
 }
-static void start_process_time(struct vdec_mpeg12_hw_s *hw)
+
+static void start_process_time_set(struct vdec_mpeg12_hw_s *hw)
 {
 	if ((hw->refs[1] != -1) && (hw->refs[0] == -1))
 		hw->decode_timeout_count = 1;
@@ -2679,7 +2726,7 @@ static void check_timer_func(struct timer_list *timer)
 
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 {
-	u32 index, i;
+	u32 index = -1, i;
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 
 	index = find_free_buffer(hw);
@@ -2689,6 +2736,7 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 		vmpeg12_canvas_init(hw);
 	else {
 		WRITE_VREG(MREG_CO_MV_START, hw->buf_start);
+		WRITE_VREG(MREG_CC_ADDR, hw->ccbuf_phyAddress);
 		if (!hw->is_used_v4l) {
 			for (i = 0; i < hw->buf_num; i++) {
 				canvas_config_config(canvas_y(hw->canvas_spec[i]),
@@ -2934,8 +2982,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = READ_PARSER_REG(PARSER_VIDEO_RP);
-		wp = READ_PARSER_REG(PARSER_VIDEO_WP);
+		rp = STBUF_READ(&vdec->vbuf, get_rp);
+		wp = STBUF_READ(&vdec->vbuf, get_wp);
 		if (wp < rp)
 			level = vdec->input.size + wp - rp;
 		else
@@ -2951,7 +2999,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		if (hw->next_again_flag&&
 			(!vdec_frame_based(vdec))) {
 			u32 parser_wr_ptr =
-				READ_PARSER_REG(PARSER_VIDEO_WP);
+				STBUF_READ(&vdec->vbuf, get_wp);
 			if (parser_wr_ptr >= hw->pre_parser_wr_ptr &&
 				(parser_wr_ptr - hw->pre_parser_wr_ptr) <
 				again_threshold) {
@@ -2989,7 +3037,6 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	}
 
 	if (!is_enough_free_buffer(hw)) {
-		hw->not_run_ready++;
 		hw->buffer_not_ready++;
 		return 0;
 	}
@@ -3041,9 +3088,11 @@ void (*callback)(struct vdec_s *, void *),
 	hw->vdec_cb = callback;
 
 #ifdef AGAIN_HAS_THRESHOLD
+	if (vdec_stream_based(vdec)) {
 		hw->pre_parser_wr_ptr =
-			READ_PARSER_REG(PARSER_VIDEO_WP);
+			STBUF_READ(&vdec->vbuf, get_wp);
 		hw->next_again_flag = 0;
+	}
 #endif
 
 	size = vdec_prepare_input(vdec, &hw->chunk);
@@ -3057,6 +3106,13 @@ void (*callback)(struct vdec_s *, void *),
 		return;
 	}
 
+	hw->input_empty = 0;
+	if ((vdec_frame_based(vdec)) &&
+		(hw->chunk != NULL)) {
+		size = hw->chunk->size +
+			(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+		WRITE_VREG(VIFF_BIT_CNT, size * 8);
+	}
 	if (vdec_frame_based(vdec) && !vdec_secure(vdec)) {
 		/* HW needs padding (NAL start) for frame ending */
 		char* tail = (char *)hw->chunk->block->start_virt;
@@ -3069,7 +3125,7 @@ void (*callback)(struct vdec_s *, void *),
 		codec_mm_dma_flush(tail, 4, DMA_TO_DEVICE);
 	}
 
-	if (vdec_frame_based(vdec) && debug_enable) {
+	if (vdec_frame_based(vdec) && debug_enable && !vdec_secure(vdec)) {
 		u8 *data = NULL;
 		if (hw->chunk)
 			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
@@ -3096,42 +3152,32 @@ void (*callback)(struct vdec_s *, void *),
 		if (debug_enable & PRINT_FRAMEBASE_DATA
 			) {
 			int jj;
-
+			debug_print(DECODE_ID(hw), PRINT_FRAMEBASE_DATA,
+				"frame data:\n");
 			for (jj = 0; jj < size; jj++) {
 				if ((jj & 0xf) == 0)
-					debug_print(DECODE_ID(hw),
-					PRINT_FRAMEBASE_DATA,
-						"%06x:", jj);
-				debug_print(DECODE_ID(hw),
-				PRINT_FRAMEBASE_DATA,
-					"%02x ", data[jj]);
+					pr_info("%06x:", jj);
+				pr_info("%02x ", data[jj]);
 				if (((jj + 1) & 0xf) == 0)
-					debug_print(DECODE_ID(hw),
-					PRINT_FRAMEBASE_DATA,
-						"\n");
+					pr_info("\n");
 			}
+			pr_info("\n");
 		}
 
 		if (!hw->chunk->block->is_mapped)
 			codec_mm_unmap_phyaddr(data);
-	} else
+	} else {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-			"%s: %x %x %x %x %x size 0x%x\n",
+			"%s: %x %x %x %x %x size 0x%x, bitcnt %d\n",
 			__func__,
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(VLD_MEM_VIFIFO_WP),
 			READ_VREG(VLD_MEM_VIFIFO_RP),
-			READ_PARSER_REG(PARSER_VIDEO_RP),
-			READ_PARSER_REG(PARSER_VIDEO_WP),
-			size);
+			STBUF_READ(&vdec->vbuf, get_rp),
+			STBUF_READ(&vdec->vbuf, get_wp),
+			size, READ_VREG(VIFF_BIT_CNT));
+	}
 
-	if (vdec->mvfrm && hw->chunk)
-		vdec->mvfrm->frame_size = hw->chunk->size;
-
-	hw->input_empty = 0;
-	vdec_enable_input(vdec);
-
-	hw->dec_result = DEC_RESULT_NONE;
 	if (vdec->mc_loaded) {
 	/*firmware have load before,
 	  and not changes to another.
@@ -3150,6 +3196,7 @@ void (*callback)(struct vdec_s *, void *),
 		vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_MPEG12;
 	}
+
 	if (vmpeg12_hw_ctx_restore(hw) < 0) {
 		hw->dec_result = DEC_RESULT_ERROR;
 		debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
@@ -3158,9 +3205,11 @@ void (*callback)(struct vdec_s *, void *),
 		return;
 	}
 	/*wmb();*/
+	hw->dec_result = DEC_RESULT_NONE;
 	hw->stat |= STAT_MC_LOAD;
+	vdec_enable_input(vdec);
 	hw->last_vld_level = 0;
-	start_process_time(hw);
+	start_process_time_set(hw);
 	if (vdec->mvfrm)
 		vdec->mvfrm->hw_decode_start = local_clock();
 	amvdec_start();
@@ -3339,11 +3388,12 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 		}
 	}
 
-	if (hw->ccbuf_phyAddress_is_remaped_nocache)
-		codec_mm_unmap_phyaddr(hw->ccbuf_phyAddress_virt);
-	hw->ccbuf_phyAddress_virt = NULL;
-	hw->ccbuf_phyAddress = 0;
-	hw->ccbuf_phyAddress_is_remaped_nocache = 0;
+	if (hw->ccbuf_phyAddress_virt) {
+		dma_free_coherent(amports_get_dma_device(),hw->cc_buf_size,
+			hw->ccbuf_phyAddress_virt, hw->ccbuf_phyAddress);
+		hw->ccbuf_phyAddress_virt = NULL;
+		hw->ccbuf_phyAddress = 0;
+	}
 
 	if (hw->user_data_buffer != NULL) {
 		kfree(hw->user_data_buffer);

@@ -53,7 +53,9 @@
 static struct vframe_block_list_s *
 	vdec_input_alloc_new_block(struct vdec_input_s *input,
 	ulong phy_addr,
-	int size);
+	int size,
+	chunk_free free,
+	void* priv);
 
 static int aml_copy_from_user(void *to, const void *from, ulong n)
 {
@@ -232,7 +234,9 @@ static void vframe_block_free_block(struct vframe_block_list_s *block)
 static int vframe_block_init_alloc_storage(struct vdec_input_s *input,
 			struct vframe_block_list_s *block,
 			ulong phy_addr,
-			int size)
+			int size,
+			chunk_free free,
+			void *priv)
 {
 	int alloc_size = input->default_block_size;
 	block->magic = 0x4b434c42;
@@ -247,6 +251,8 @@ static int vframe_block_init_alloc_storage(struct vdec_input_s *input,
 		block->start_virt = NULL;
 		block->start = phy_addr;
 		block->size = size;
+		block->free = free;
+		block->priv = priv;
 	} else {
 		alloc_size = PAGE_ALIGN(alloc_size);
 		block->addr = codec_mm_alloc_for_dma_ex(
@@ -268,6 +274,7 @@ static int vframe_block_init_alloc_storage(struct vdec_input_s *input,
 		block->start = block->addr;
 		block->size = alloc_size;
 		block->is_out_buf = 0;
+		block->free = NULL;
 	}
 
 	return 0;
@@ -303,7 +310,7 @@ int vdec_input_prepare_bufs(struct vdec_input_s *input,
 	}
 	/*prepared 3 buffers for smooth start.*/
 	for (i = 0; i < 3; i++) {
-		block = vdec_input_alloc_new_block(input, 0, 0);
+		block = vdec_input_alloc_new_block(input, 0, 0, NULL, NULL);
 		if (!block)
 			break;
 		flags = vdec_input_lock(input);
@@ -608,7 +615,9 @@ EXPORT_SYMBOL(vdec_input_level);
 static struct vframe_block_list_s *
 	vdec_input_alloc_new_block(struct vdec_input_s *input,
 	ulong phy_addr,
-	int size)
+	int size,
+	chunk_free free,
+	void* priv)
 {
 	struct vframe_block_list_s *block;
 	block = kzalloc(sizeof(struct vframe_block_list_s),
@@ -620,7 +629,7 @@ static struct vframe_block_list_s *
 	}
 
 	if (vframe_block_init_alloc_storage(input,
-		block, phy_addr, size) != 0) {
+		block, phy_addr, size, free, priv) != 0) {
 		kfree(block);
 		pr_err("vframe_block storage allocation failed\n");
 		return NULL;
@@ -751,7 +760,7 @@ static int	vdec_input_get_free_block(
 		/*128k aligned,same as codec_mm*/
 		input->default_block_size = def_size;
 	}
-	block = vdec_input_alloc_new_block(input, 0, 0);
+	block = vdec_input_alloc_new_block(input, 0, 0, NULL, NULL);
 	if (!block) {
 		input->no_mem_err_cnt++;
 		return -EAGAIN;
@@ -762,7 +771,7 @@ static int	vdec_input_get_free_block(
 }
 
 int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
-		size_t count, u32 handle)
+		size_t count, u32 handle, chunk_free free, void* priv)
 {
 	unsigned long flags;
 	struct vframe_chunk_s *chunk;
@@ -773,7 +782,8 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 
 	if (vdec_secure(vdec)) {
 		block = vdec_input_alloc_new_block(input, (ulong)buf,
-			PAGE_ALIGN(count + HEVC_PADDING_SIZE + 1)); /*Add padding large than HEVC_PADDING_SIZE */
+			PAGE_ALIGN(count + HEVC_PADDING_SIZE + 1),
+			free, priv); /*Add padding large than HEVC_PADDING_SIZE */
 		if (!block)
 			return -ENOMEM;
 		block->handle = handle;
@@ -958,7 +968,7 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 				return -EIO; /*must drm info v2 version*/
 			phy_buf = (unsigned long) drm.drm_phy;
 			vdec_input_add_chunk(input, (char *)phy_buf,
-				(size_t)drm.drm_pktsize, drm.handle);
+				(size_t)drm.drm_pktsize, drm.handle, NULL, NULL);
 			count -= sizeof(struct drm_info);
 			ret += sizeof(struct drm_info);
 
@@ -968,19 +978,21 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 				vdec->pts_valid = true;
 		}
 	} else {
-		ret = vdec_input_add_chunk(input, buf, count, 0);
+		ret = vdec_input_add_chunk(input, buf, count, 0, NULL, NULL);
 	}
+
 	return ret;
 }
 EXPORT_SYMBOL(vdec_input_add_frame);
 
 int vdec_input_add_frame_with_dma(struct vdec_input_s *input, ulong addr,
-			size_t count, u32 handle)
+	size_t count, u32 handle, chunk_free free, void* priv)
 {
 	struct vdec_s *vdec = input->vdec;
 
 	return vdec_secure(vdec) ?
-		vdec_input_add_chunk(input, (char *)addr, count, handle) : -1;
+		vdec_input_add_chunk(input,
+			(char *)addr, count, handle, free, priv) : -1;
 }
 EXPORT_SYMBOL(vdec_input_add_frame_with_dma);
 
@@ -1060,6 +1072,11 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 	if (block->is_out_buf) {
 		list_move_tail(&block->list,
 			&input->vframe_block_free_list);
+		if (block->free) {
+			vdec_input_del_block_locked(input, block);
+			block->free(block->priv, block->handle);
+			kfree(block);
+		}
 	} else if (block->chunk_count == 0 &&
 		input->wr_block != block ) {/*don't free used block*/
 		if (block->size < input->default_block_size) {
@@ -1155,6 +1172,8 @@ u32 vdec_input_get_freed_handle(struct vdec_s *vdec)
 
 		handle = block->handle;
 		vdec_input_del_block_locked(input, block);
+		if (block->free)
+			block->free(block->priv, handle);
 		kfree(block);
 
 	} while(!handle);

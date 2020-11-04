@@ -21,6 +21,8 @@
 struct vdec_s;
 struct vdec_input_s;
 
+typedef void (*chunk_free)(void *priv, u32 handle);
+
 struct vframe_block_list_s {
 	u32 magic;
 	int id;
@@ -37,6 +39,11 @@ struct vframe_block_list_s {
 	int chunk_count;
 	int is_out_buf;
 	u32 handle;
+
+	/* free callback */
+	chunk_free free;
+	void* priv;
+
 	struct vdec_input_s *input;
 };
 
@@ -144,7 +151,7 @@ extern int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 	size_t count);
 
 extern int vdec_input_add_frame_with_dma(struct vdec_input_s *input, ulong addr,
-	size_t count, u32 handle);
+	size_t count, u32 handle, chunk_free free, void* priv);
 
 /* Peek next frame data from decoder's input */
 extern struct vframe_chunk_s *vdec_input_next_chunk(
