@@ -805,6 +805,8 @@ struct AV1HW_s {
 	struct vframe_s vframe_dummy;
 	u32 res_ch_flag;
 	int buffer_wrap[FRAME_BUFFERS];
+	int sidebind_type;
+	int sidebind_channel_id;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -5603,6 +5605,9 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
 		hdr.color_parms = hw->vf_dp;
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
+
+	vf->sidebind_type = hw->sidebind_type;
+	vf->sidebind_channel_id = hw->sidebind_channel_id;
 }
 
 static int vav1_vf_states(struct vframe_states *states, void *op_arg)
@@ -10253,6 +10258,14 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			hw->max_pic_h = av1_buf_height;
 			av1_print(hw, 0, "use buf resolution\n");
 		}
+
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			hw->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			hw->sidebind_channel_id = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_codec_enable",
