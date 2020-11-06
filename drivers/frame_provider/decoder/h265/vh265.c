@@ -4273,6 +4273,10 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 
 	int RefPicSetStCurr0[16];
 	int RefPicSetStCurr1[16];
+#ifdef SUPPORT_LONG_TERM_RPS
+	int num_lt = 0;
+	int RefPicSetLtCurr[16];
+#endif
 
 	for (i = 0; i < 16; i++) {
 		RefPicSetStCurr0[i] = 0;
@@ -4294,6 +4298,16 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 				((1 << (RPS_USED_BIT - 1)) - 1);
 
 			if ((params->p.CUR_RPS[i] >> (RPS_USED_BIT - 1)) & 1) {
+#ifdef SUPPORT_LONG_TERM_RPS
+				if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
+					RefPicSetLtCurr[num_lt] =
+						pic->POC - ((1 << (RPS_USED_BIT - 1)) -
+									delt);
+					num_lt++;
+					continue;
+				}
+#endif
+
 				RefPicSetStCurr0[num_neg] =
 					pic->POC - ((1 << (RPS_USED_BIT - 1)) -
 								delt);
@@ -4304,6 +4318,13 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 				 */
 				num_neg++;
 			} else {
+#ifdef SUPPORT_LONG_TERM_RPS
+				if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
+					RefPicSetLtCurr[num_lt] = pic->POC + delt;
+					num_lt++;
+					continue;
+				}
+#endif
 				RefPicSetStCurr1[num_pos] = pic->POC + delt;
 				/* hevc_print(hevc, 0,
 				 *	"RefPicSetStCurr1 %d\n",
@@ -4313,14 +4334,25 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 			}
 		}
 	}
+#ifdef SUPPORT_LONG_TERM_RPS
+	total_num = num_neg + num_pos + num_lt;
+#else
 	total_num = num_neg + num_pos;
+#endif
 	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 		hevc_print(hevc, 0,
 		"%s: curpoc %d slice_type %d, total %d ",
 		 __func__, pic->POC, params->p.slice_type, total_num);
+#ifdef SUPPORT_LONG_TERM_RPS
+		hevc_print_cont(hevc, 0,
+			"num_neg %d num_lt %d num_list0 %d num_list1 %d\n",
+		 num_neg, num_lt, num_ref_idx_l0_active, num_ref_idx_l1_active);
+#else
 		hevc_print_cont(hevc, 0,
 			"num_neg %d num_list0 %d num_list1 %d\n",
 		 num_neg, num_ref_idx_l0_active, num_ref_idx_l1_active);
+#endif
+
 	}
 
 	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
@@ -4345,10 +4377,14 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 				int cIdx = params->p.modification_list[rIdx];
 
 				pic->m_aiRefPOCList0[pic->slice_idx][rIdx] =
-					cIdx >=
+#ifdef SUPPORT_LONG_TERM_RPS
+					cIdx >= (num_neg + num_pos) ?
+						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
+#endif
+					(cIdx >=
 					num_neg ? RefPicSetStCurr1[cIdx -
 					num_neg] :
-					RefPicSetStCurr0[cIdx];
+					RefPicSetStCurr0[cIdx]);
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 					hevc_print_cont(hevc, 0, "%d ",
 						   pic->m_aiRefPOCList0[pic->
@@ -4363,10 +4399,14 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 				int cIdx = rIdx % total_num;
 
 				pic->m_aiRefPOCList0[pic->slice_idx][rIdx] =
-					cIdx >=
+#ifdef SUPPORT_LONG_TERM_RPS
+					cIdx >= (num_neg + num_pos) ?
+						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
+#endif
+					(cIdx >=
 					num_neg ? RefPicSetStCurr1[cIdx -
 					num_neg] :
-					RefPicSetStCurr0[cIdx];
+					RefPicSetStCurr0[cIdx]);
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 					hevc_print_cont(hevc, 0, "%d ",
 						   pic->m_aiRefPOCList0[pic->
@@ -4399,10 +4439,14 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 					}
 					pic->m_aiRefPOCList1[pic->
 						slice_idx][rIdx] =
-						cIdx >=
+#ifdef SUPPORT_LONG_TERM_RPS
+					cIdx >= (num_neg + num_pos) ?
+						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
+#endif
+						(cIdx >=
 						num_pos ?
 						RefPicSetStCurr0[cIdx -	num_pos]
-						: RefPicSetStCurr1[cIdx];
+						: RefPicSetStCurr1[cIdx]);
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
 						hevc_print_cont(hevc, 0, "%d ",
@@ -4422,11 +4466,15 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 
 					pic->m_aiRefPOCList1[pic->
 						slice_idx][rIdx] =
-						cIdx >=
+#ifdef SUPPORT_LONG_TERM_RPS
+					cIdx >= (num_neg + num_pos) ?
+						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
+#endif
+						(cIdx >=
 						num_pos ?
 						RefPicSetStCurr0[cIdx -
 						num_pos]
-						: RefPicSetStCurr1[cIdx];
+						: RefPicSetStCurr1[cIdx]);
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
 						hevc_print_cont(hevc, 0, "%d ",
