@@ -3478,7 +3478,7 @@ static int get_work_pic_num(struct hevc_state_s *hevc)
 				"save buf _mode : dynamic_buf_num_margin %d ----> %d \n",
 				dynamic_buf_num_margin,  hevc->dynamic_buf_num_margin);
 
-	if (sps_pic_buf_diff >= 4)
+	if (sps_pic_buf_diff >= 3)
 		used_buf_num += sps_pic_buf_diff;
 
 	if (hevc->is_used_v4l) {
@@ -14020,7 +14020,6 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 				&config_val) == 0) {
 				hevc->max_pic_h = config_val;
 		}
-
 		if (get_config_int(pdata->config, "sidebind_type",
 				&config_val) == 0)
 			hevc->sidebind_type = config_val;
@@ -14068,11 +14067,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		hevc->double_write_mode = 0x1000;
 
 	if (!hevc->is_used_v4l) {
+		/* get valid double write from configure or node */
+		//hevc->double_write_mode = get_double_write_mode(hevc);
 		if (hevc->save_buffer_mode && dynamic_buf_num_margin > 2)
 			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin -2;
 		else
 			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin;
-
 		hevc->mem_map_mode = mem_map_mode;
 	}
 
