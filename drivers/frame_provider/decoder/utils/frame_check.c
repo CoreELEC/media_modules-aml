@@ -611,8 +611,12 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 		return 0;
 	}
 
-	if (dump->dump_cnt >= dump->num)
+	if (dump->dump_cnt >= dump->num) {
+		mgr->enable &= (~YUV_MASK);
+		dump->num = 0;
+		dump->dump_cnt = 0;
 		return 0;
+	}
 
 	if (single_mode_vdec != NULL) {
 		if (mgr->size_pic >
@@ -687,6 +691,7 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 				"%s%s-%d-%d.yuv", YUV_PATH, comp_crc, mgr->id, mgr->file_cnt);
 			if (dump->yuv_fp == NULL)
 				return -1;
+			mgr->file_cnt++;
 		}
 		old_fs = get_fs();
 		set_fs(KERNEL_DS);
@@ -742,10 +747,10 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 						do_yuv_dump(mgr, vf);
 					if (fc_debug & FC_ERR_CRC_BLOCK_MODE)
 						mgr->err_crc_block = 1;
-					mgr->usr_cmp_result = -mgr->frame_cnt;
+					mgr->usr_cmp_result = -1;
 			}
 		} else {
-			mgr->usr_cmp_result = -mgr->frame_cnt;
+			mgr->usr_cmp_result = -1;
 			dbg_print(0, "frame num error: frame_cnt(%d) frame_comp(%d)\n",
 				mgr->frame_cnt, comp_frame);
 		}
