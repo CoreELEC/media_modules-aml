@@ -1588,10 +1588,12 @@ static void dpb_combine_field(struct h264_dpb_stru *p_H264_Dpb,
 			fs->pts64 = 0;
 		}
 		fs->offset_delimiter = fs->top_field->offset_delimiter;
+		fs->decoded_frame_size = fs->top_field->pic_size + fs->bottom_field->pic_size;
 	} else if (fs->bottom_field) {
 		fs->pts = fs->bottom_field->pts;
 		fs->pts64 = fs->bottom_field->pts64;
 		fs->offset_delimiter = fs->bottom_field->offset_delimiter;
+		fs->decoded_frame_size = fs->top_field->pic_size + fs->bottom_field->pic_size;
 	}
 	/* FIELD_CODING ;*/
 }
@@ -1653,6 +1655,7 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 		fs->slice_type = p->slice_type;
 		fs->frame_size = p->frame_size;
 		fs->offset_delimiter = p->offset_delimiter;
+		fs->decoded_frame_size = p->pic_size;
 		if (p->used_for_reference) {
 			fs->is_reference = 3;
 			fs->is_orig_reference = 3;

@@ -342,6 +342,9 @@ static u32 without_display_mode;
 static int loop_playback_poc_threshold = 400;
 static int poc_threshold = 50;
 
+static u32 lookup_check_conut = 30;
+
+
 /*
  *[3:0] 0: default use config from omx.
  *      1: force enable fence.
@@ -921,6 +924,9 @@ struct vdec_h264_hw_s {
 	u32 metadata_config_flag;
 	int vdec_pg_enable_flag;
 	u32 save_reg_f;
+	u32 start_bit_cnt;
+	u32 right_frame_count;
+	u32 wrong_frame_count;
 };
 
 static u32 again_threshold;
@@ -2757,12 +2763,20 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 		if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
 			frame->offset_delimiter, &frame->pts, &frame->frame_size,
 			0, &frame->pts64) == 0)) {
-			hw->last_pts64 = frame->pts64;
-			hw->last_pts = frame->pts;
+			if ((lookup_check_conut && (hw->vf_pre_count > lookup_check_conut) &&
+				(hw->wrong_frame_count > hw->right_frame_count)) &&
+				((frame->decoded_frame_size * 2 < frame->frame_size))) {
+				/*resolve many frame only one check in pts, cause playback unsmooth issue*/
+				frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
+				frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+			}
+			hw->right_frame_count++;
 		} else {
 			frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
 			frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+			hw->wrong_frame_count++;
 		}
+
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"%s error= 0x%x poc = %d  offset= 0x%x pts= 0x%x last_pts =0x%x  pts64 = %lld  last_pts64= %lld  duration = %d\n",
 		__func__, (frame->data_flag & ERROR_FLAG), frame->poc,
@@ -6037,6 +6051,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				struct StorablePicture *pic =
 					p_H264_Dpb->mVideo.dec_picture;
 				u32 offset = pic->offset_delimiter;
+				pic->pic_size = (hw->start_bit_cnt - READ_VREG(VIFF_BIT_CNT)) >> 3;
 				if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
 					offset, &pic->pts, 0, &pic->pts64)) {
 					pic->pts = 0;
@@ -9510,6 +9525,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		WRITE_VREG(H264_DECODE_INFO, (1<<13));
 		WRITE_VREG(H264_DECODE_SIZE, size);
 		WRITE_VREG(VIFF_BIT_CNT, size * 8);
+		hw->start_bit_cnt = size * 8;
 	}
 	config_aux_buf(hw);
 	config_decode_mode(hw);
