@@ -740,6 +740,7 @@ struct StorablePicture {
 	int max_mv;
 	int min_mv;
 	int avg_mv;
+	u32 pic_size;
 };
 
 struct FrameStore {
@@ -822,6 +823,7 @@ struct FrameStore {
 	u32 frame_size2; // For recording the chunk->size in frame mode
 	bool show_frame;
 	struct fence *fence;
+	u32 decoded_frame_size;
 };
 
 /* #define DPB_SIZE_MAX     16 */
