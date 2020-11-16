@@ -1678,6 +1678,19 @@ static int get_double_write_mode_init(struct VP9Decoder_s *pbi)
 }
 #endif
 
+
+static int get_double_write_ratio(struct VP9Decoder_s *pbi,
+	int dw_mode)
+{
+	int ratio = 1;
+	if ((dw_mode == 2) ||
+			(dw_mode == 3))
+		ratio = 4;
+	else if (dw_mode == 4)
+		ratio = 2;
+	return ratio;
+}
+
 //#define	MAX_4K_NUM		0x1200
 
 /* return page number */
@@ -4955,9 +4968,9 @@ static int config_pic(struct VP9Decoder_s *pbi,
 
 	if (dw_mode) {
 		int pic_width_dw = pic_width /
-			get_double_write_ratio(dw_mode);
+			get_double_write_ratio(pbi, dw_mode);
 		int pic_height_dw = pic_height /
-			get_double_write_ratio(dw_mode);
+			get_double_write_ratio(pbi, dw_mode);
 
 		int pic_width_64_dw = (pic_width_dw + 63) & (~0x3f);
 		int pic_height_32_dw = (pic_height_dw + 31) & (~0x1f);
@@ -6764,10 +6777,10 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 	/*CANVAS_BLKMODE_64X32*/
 	if	(pic_config->double_write_mode) {
 		canvas_w = pic_config->y_crop_width	/
-				get_double_write_ratio(
+				get_double_write_ratio(pbi,
 					pic_config->double_write_mode);
 		canvas_h = pic_config->y_crop_height /
-				get_double_write_ratio(
+				get_double_write_ratio(pbi,
 					pic_config->double_write_mode);
 
 		if (pbi->mem_map_mode == 0)
@@ -7343,10 +7356,10 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		   vf->width,vf->height, pic_config->width,
 			pic_config->height); */
 		vf->width = pic_config->y_crop_width /
-			get_double_write_ratio(
+			get_double_write_ratio(pbi,
 				pic_config->double_write_mode);
 		vf->height = pic_config->y_crop_height /
-			get_double_write_ratio(
+			get_double_write_ratio(pbi,
 				pic_config->double_write_mode);
 		if (force_w_h != 0) {
 			vf->width = (force_w_h >> 16) & 0xffff;

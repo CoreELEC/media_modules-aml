@@ -469,7 +469,5 @@ int show_stream_buffer_status(char *buf,
 
 bool is_support_no_parser(void);
 
-int get_double_write_ratio(int dw_mode);
-
 extern u32 timestamp_avsync_counter_get(void);
 #endif				/* VDEC_H */
