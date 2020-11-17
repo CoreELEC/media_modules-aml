@@ -5978,12 +5978,16 @@ static int get_free_fb_idx(struct hevc_state_s *hevc)
 	int i;
 
 	for (i = 0; i < MAX_REF_PIC_NUM; ++i) {
+		if (hevc->m_PIC[i] == NULL)
+			continue;
+
 		if ((hevc->m_PIC[i]->referenced == 0) &&
 			(hevc->m_PIC[i]->vf_ref == 0))
 			break;
 	}
 
-	return i;
+	return (hevc->m_PIC[i] &&
+		(i != MAX_REF_PIC_NUM)) ? i : -1;
 }
 
 static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
@@ -6017,6 +6021,8 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 			break;
 		case V4L_CAP_BUFF_IN_M2M:
 			idx = get_free_fb_idx(hevc);
+			if (idx < 0)
+				break;
 			pic = hevc->m_PIC[idx];
 			pic->width = hevc->pic_w;
 			pic->height = hevc->pic_h;
@@ -10188,8 +10194,36 @@ static void read_decode_info(struct hevc_state_s *hevc)
 	hevc->rps_set_id = (decode_info >> 8) & 0xff;
 }
 
-static int vh265_get_ps_info(struct hevc_state_s *hevc, int width, int height, struct aml_vdec_ps_infos *ps)
+static int vh265_get_ps_info(struct hevc_state_s *hevc,
+			     union param_u *rpm_param,
+			     struct aml_vdec_ps_infos *ps)
 {
+	u32 width = rpm_param->p.pic_width_in_luma_samples;
+	u32 height = rpm_param->p.pic_height_in_luma_samples;
+	u32 SubWidthC, SubHeightC;
+
+	switch (rpm_param->p.chroma_format_idc) {
+	case 1:
+		SubWidthC = 2;
+		SubHeightC = 2;
+		break;
+	case 2:
+		SubWidthC = 2;
+		SubHeightC = 1;
+		break;
+	default:
+		SubWidthC = 1;
+		SubHeightC = 1;
+		break;
+	}
+
+	width -= SubWidthC *
+		(rpm_param->p.conf_win_left_offset +
+		rpm_param->p.conf_win_right_offset);
+	height -= SubHeightC *
+		(rpm_param->p.conf_win_top_offset +
+		rpm_param->p.conf_win_bottom_offset);
+
 	ps->visible_width 	= width;
 	ps->visible_height 	= height;
 	ps->coded_width 	= ALIGN(width, 32);
@@ -10247,7 +10281,7 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 				vdec_v4l_set_comp_buf_info(ctx, &info);
 			}
 
-			vh265_get_ps_info(hevc, width, height, &ps);
+			vh265_get_ps_info(hevc, &hevc->param, &ps);
 			vdec_v4l_set_ps_infos(ctx, &ps);
 			vdec_v4l_res_ch_event(ctx);
 			hevc->v4l_params_parsed = false;
@@ -10994,7 +11028,7 @@ force_output:
 							vdec_v4l_set_comp_buf_info(ctx, &info);
 						}
 
-						vh265_get_ps_info(hevc, width, height, &ps);
+						vh265_get_ps_info(hevc, &hevc->param, &ps);
 						/*notice the v4l2 codec.*/
 						vdec_v4l_set_ps_infos(ctx, &ps);
 						hevc->v4l_params_parsed = true;
@@ -14216,6 +14250,13 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	if (mmu_enable_force == 0) {
 		if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL
 			|| hevc->double_write_mode == 0x10)
+			hevc->mmu_enable = 0;
+		else
+			hevc->mmu_enable = 1;
+	}
+
+	if (hevc->is_used_v4l) {
+		if (hevc->double_write_mode & 0x10)
 			hevc->mmu_enable = 0;
 		else
 			hevc->mmu_enable = 1;

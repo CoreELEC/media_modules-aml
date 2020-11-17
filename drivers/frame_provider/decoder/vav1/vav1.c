@@ -1091,6 +1091,7 @@ static struct internal_comp_buf* index_to_icomp_buf(
 	fb = (struct vdec_v4l2_buffer *)
 		hw->m_BUF[index].v4l_ref_buf_addr;
 	aml_fb = container_of(fb, struct aml_video_dec_buf, frame_buffer);
+
 	return &v4l2_ctx->comp_bufs[aml_fb->internal_index];
 }
 
@@ -1135,7 +1136,7 @@ int av1_alloc_mmu(
 	} else {
 		ret = decoder_mmu_box_alloc_idx(
 			hw->mmu_box,
-			hw->buffer_wrap[cur_buf_idx],
+			cur_buf_idx,
 			cur_mmu_4k_number,
 			mmu_index_adr);
 	}
@@ -1186,7 +1187,7 @@ int av1_alloc_mmu_dw(
 	}
 	ret = decoder_mmu_box_alloc_idx(
 		hw->mmu_box_dw,
-		hw->buffer_wrap[cur_buf_idx],
+		cur_buf_idx,
 		cur_mmu_4k_number,
 		mmu_index_adr);
 	return ret;
@@ -1377,7 +1378,7 @@ static int get_free_fb_idx(AV1_COMMON *cm)
 			break;
 	}
 
-	return i;
+	return (i != FRAME_BUFFERS) ? i : -1;
 }
 
 static int v4l_get_free_fb(struct AV1HW_s *hw)
@@ -1409,6 +1410,9 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 			break;
 		case V4L_CAP_BUFF_IN_M2M:
 			idx = get_free_fb_idx(cm);
+			if (idx < 0)
+				break;
+
 			pic = &frame_bufs[idx].buf;
 			pic->y_crop_width = hw->frame_width;
 			pic->y_crop_height = hw->frame_height;
@@ -2780,26 +2784,26 @@ static int config_pic(struct AV1HW_s *hw,
 /*!USE_SPEC_BUF_FOR_MMU_HEAD*/
 	if (hw->mmu_enable) {
 		pic_config->header_adr = decoder_bmmu_box_get_phy_addr(
-			hw->bmmu_box, HEADER_BUFFER_IDX(hw->buffer_wrap[pic_config->index]));
+			hw->bmmu_box, HEADER_BUFFER_IDX(pic_config->index));
 
 #ifdef AOM_AV1_MMU_DW
 		if (hw->dw_mmu_enable) {
 			pic_config->header_dw_adr = decoder_bmmu_box_get_phy_addr(
-				hw->bmmu_box, DW_HEADER_BUFFER_IDX(hw->buffer_wrap[pic_config->index]));
+				hw->bmmu_box, DW_HEADER_BUFFER_IDX(pic_config->index));
 
 		}
 		if (debug & AV1_DEBUG_BUFMGR_MORE) {
 			pr_info("MMU dw header_adr (%d, %d) %d: %d\n",
 				hw->dw_mmu_enable,
-				DW_HEADER_BUFFER_IDX(hw->buffer_wrap[pic_config->index]),
-				hw->buffer_wrap[pic_config->index],
+				DW_HEADER_BUFFER_IDX(pic_config->index),
+				pic_config->index,
 				pic_config->header_dw_adr);
 		}
 #endif
 
 		if (debug & AV1_DEBUG_BUFMGR_MORE) {
 			pr_info("MMU header_adr %d: %d\n",
-				hw->buffer_wrap[pic_config->index], pic_config->header_adr);
+				pic_config->index, pic_config->header_adr);
 		}
 	}
 #endif
@@ -2813,13 +2817,13 @@ static int config_pic(struct AV1HW_s *hw,
 #endif
 		if (buf_size > 0) {
 			ret = decoder_bmmu_box_alloc_buf_phy(hw->bmmu_box,
-					VF_BUFFER_IDX(hw->buffer_wrap[i]),
+					VF_BUFFER_IDX(i),
 					buf_size, DRIVER_NAME,
 					&pic_config->cma_alloc_addr);
 			if (ret < 0) {
 				pr_info(
 					"decoder_bmmu_box_alloc_buf_phy idx %d size %d fail\n",
-					VF_BUFFER_IDX(hw->buffer_wrap[i]),
+					VF_BUFFER_IDX(i),
 					buf_size
 					);
 				return ret;
@@ -2830,7 +2834,7 @@ static int config_pic(struct AV1HW_s *hw,
 			else {
 				pr_info(
 					"decoder_bmmu_box_alloc_buf_phy idx %d size %d return null\n",
-					VF_BUFFER_IDX(hw->buffer_wrap[i]),
+					VF_BUFFER_IDX(i),
 					buf_size
 					);
 				return -1;
@@ -5891,27 +5895,27 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 			(debug & AOM_DEBUG_DW_DISP_MAIN) == 0) {
 			vf->mem_handle =
 				decoder_mmu_box_get_mem_handle(
-					hw->mmu_box_dw, hw->buffer_wrap[pic->index]);
+					hw->mmu_box_dw, pic->index);
 			vf->mem_head_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hw->bmmu_box,
-					DW_HEADER_BUFFER_IDX(hw->buffer_wrap[pic->BUF_index]));
+					DW_HEADER_BUFFER_IDX(pic->BUF_index));
 			vf->mem_dw_handle = NULL;
 		} else
 #endif
 		{
 		vf->mem_handle =
 			decoder_mmu_box_get_mem_handle(
-				hw->mmu_box, hw->buffer_wrap[pic->index]);
+				hw->mmu_box, pic->index);
 		vf->mem_head_handle =
 			decoder_bmmu_box_get_mem_handle(
 				hw->bmmu_box,
-				HEADER_BUFFER_IDX(hw->buffer_wrap[pic->BUF_index]));
+				HEADER_BUFFER_IDX(pic->BUF_index));
 		if (hw->double_write_mode == 3)
 			vf->mem_dw_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hw->bmmu_box,
-					VF_BUFFER_IDX(hw->buffer_wrap[pic->BUF_index]));
+					VF_BUFFER_IDX(pic->BUF_index));
 		else
 			vf->mem_dw_handle = NULL;
 		}
@@ -5921,7 +5925,7 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 	} else {
 		vf->mem_handle =
 			decoder_bmmu_box_get_mem_handle(
-				hw->bmmu_box, VF_BUFFER_IDX(hw->buffer_wrap[pic->BUF_index]));
+				hw->bmmu_box, VF_BUFFER_IDX(pic->BUF_index));
 		vf->mem_head_handle = NULL;
 		vf->mem_dw_handle = NULL;
 		/*vf->mem_head_handle =
@@ -6366,7 +6370,7 @@ static int recycle_mmu_buf_tail(struct AV1HW_s *hw,
 	} else {
 		decoder_mmu_box_free_idx_tail(
 				hw->mmu_box,
-				hw->buffer_wrap[cm->cur_fb_idx_mmu],
+				cm->cur_fb_idx_mmu,
 				hw->used_4k_num);
 	}
 
@@ -6403,7 +6407,7 @@ static void av1_recycle_mmu_buf(struct AV1HW_s *hw)
 		return;
 	if (cm->cur_fb_idx_mmu != INVALID_IDX) {
 		decoder_mmu_box_free_idx(hw->mmu_box,
-			hw->buffer_wrap[cm->cur_fb_idx_mmu]);
+			cm->cur_fb_idx_mmu);
 
 		cm->cur_fb_idx_mmu = INVALID_IDX;
 		hw->used_4k_num = -1;
@@ -7996,9 +8000,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					av1_print(hw, AOM_DEBUG_HW_MORE, "mmu free tail, index %d used_num 0x%x\n",
 						cm->cur_frame->buf.index, used_4k_num);
 					if (hw->is_used_v4l) {
-						int index = hw->buffer_wrap[cm->cur_fb_idx_mmu];
 						struct internal_comp_buf *ibuf =
-							index_to_icomp_buf(hw, index);
+							index_to_icomp_buf(hw, cm->cur_fb_idx_mmu);
 
 						decoder_mmu_box_free_idx_tail(
 							ibuf->mmu_box,
@@ -8006,14 +8009,14 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 							used_4k_num);
 					} else {
 						decoder_mmu_box_free_idx_tail(hw->mmu_box,
-							hw->buffer_wrap[cm->cur_frame->buf.index], used_4k_num);
+							cm->cur_frame->buf.index, used_4k_num);
 					}
 #ifdef AOM_AV1_MMU_DW
 					if (hw->dw_mmu_enable) {
 						used_4k_num =
 						(READ_VREG(HEVC_SAO_MMU_STATUS2) >> 16);
 						decoder_mmu_box_free_idx_tail(hw->mmu_box_dw,
-							hw->buffer_wrap[cm->cur_frame->buf.index], used_4k_num);
+							cm->cur_frame->buf.index, used_4k_num);
 						av1_print(hw, AOM_DEBUG_HW_MORE, "dw mmu free tail, index %d used_num 0x%x\n",
 							cm->cur_frame->buf.index, used_4k_num);
 					}

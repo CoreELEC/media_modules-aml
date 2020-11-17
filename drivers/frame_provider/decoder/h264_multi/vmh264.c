@@ -9694,7 +9694,7 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 
 	flush_dpb(&hw->dpb);
 
-	if (hw->is_used_v4l) {
+	if (!hw->is_used_v4l) {
 		timeout = jiffies + HZ;
 		while (kfifo_len(&hw->display_q) > 0) {
 			if (time_after(jiffies, timeout))

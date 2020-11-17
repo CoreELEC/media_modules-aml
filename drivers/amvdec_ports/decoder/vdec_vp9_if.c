@@ -1017,7 +1017,7 @@ static void set_param_ps_info(struct vdec_vp9_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, crop(%d x %d), coded(%d x %d) dpb: %d\n",
+		"Parse from ucode, visible(%d x %d), coded(%d x %d) dpb: %d\n",
 		pic->visible_width, pic->visible_height,
 		pic->coded_width, pic->coded_height,
 		dec->dpb_sz);
