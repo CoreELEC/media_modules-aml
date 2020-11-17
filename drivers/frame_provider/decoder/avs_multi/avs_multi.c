@@ -3643,6 +3643,7 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 					vf->pts_us64 = offset;
 					vf->pts = 0;
 				}
+				vdec_vframe_ready(hw_to_vdec(hw), vf);
 				kfifo_put(&hw->display_q,
 						  (const struct vframe_s *)vf);
 				avs_vf_notify_receiver(hw, PROVIDER_NAME,

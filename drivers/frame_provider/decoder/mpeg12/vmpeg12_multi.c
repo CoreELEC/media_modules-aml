@@ -1656,7 +1656,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			if (i == 0) {
 				struct vdec_s *vdec = hw_to_vdec(hw);
 
-				decoder_do_frame_check(vdec, vf);
+				vdec_vframe_ready(vdec, vf);
 				hw_update_gvs(hw);
 				vdec_fill_vdec_frame(vdec, &hw->vframe_qos,
 					&hw->gvs, vf, pic->hw_decode_time);

@@ -128,6 +128,8 @@ extern void vdec_fill_vdec_frame(struct vdec_s *vdec,
 				struct vframe_qos_s *vframe_qos,
 				struct vdec_info *vinfo,
 				struct vframe_s *vf, u32 hw_dec_time);
+
+extern void vdec_vframe_ready(struct vdec_s *vdec, struct vframe_s *vf);
 extern void vdec_set_vframe_comm(struct vdec_s *vdec, char *n);
 
 struct vdec_s;

@@ -7380,7 +7380,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		&& (debug & VP9_DEBUG_NO_TRIGGER_FRAME) == 0
 		&& (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX))) {
 			inc_vf_ref(pbi, pic_config->index);
-			decoder_do_frame_check(pvdec, vf);
+			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 			pbi->vf_pre_count++;
