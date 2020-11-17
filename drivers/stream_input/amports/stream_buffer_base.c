@@ -134,14 +134,17 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 	if ((stbuf->stream_offset == 0) &&
 		(wp == stbuf->ext_buf_addr) &&
 		(meta->stbuf_pktaddr > stbuf->ext_buf_addr)) {
-		struct stream_buffer_metainfo self_meta;
+		struct vdec_s *vdec = container_of(stbuf, struct vdec_s, vbuf);
 
 		pr_info("warn: first packet_wp(%x) is not stbuf start addr(%lx)\n",
 			meta->stbuf_pktaddr, stbuf->ext_buf_addr);
 
-		self_meta.stbuf_pktaddr = stbuf->ext_buf_addr;
-		self_meta.stbuf_pktsize = meta->stbuf_pktaddr - stbuf->ext_buf_addr;
-		stream_buffer_meta_write(stbuf, &self_meta);
+		stbuf->ops->set_wp(stbuf, meta->stbuf_pktaddr);
+		stbuf->ops->set_rp(stbuf, meta->stbuf_pktaddr);
+		vdec->input.swap_rp = meta->stbuf_pktaddr;
+		if (vdec->slave)
+			vdec->slave->input.swap_rp = meta->stbuf_pktaddr;
+		stbuf->stream_offset += (meta->stbuf_pktaddr - stbuf->ext_buf_addr);
 	}
 
 	if (meta->stbuf_pktaddr + meta->stbuf_pktsize < stbuf->buf_start + stbuf->buf_size)
@@ -156,6 +159,7 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 	pr_debug("%s, update wp 0x%x + sz 0x%x --> 0x%x, stream_offset 0x%x\n",
 		__func__, meta->stbuf_pktaddr, meta->stbuf_pktsize, wp, stbuf->stream_offset);
 	*/
+
 }
 EXPORT_SYMBOL(stream_buffer_meta_write);
 

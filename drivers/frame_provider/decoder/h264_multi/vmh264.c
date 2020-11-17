@@ -3073,8 +3073,16 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
 		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
-			vf->pts_us64 = frame->offset_delimiter;
-			vf->pts = 0;
+			/* offset for tsplayer pts lookup */
+			if (i == 0) {
+				vf->pts_us64 =
+					(((u64)vf->duration << 32) &
+					0xffffffff00000000) | frame->offset_delimiter;
+				vf->pts = 0;
+			} else {
+				vf->pts_us64 = (u64)-1;
+				vf->pts = 0;
+			}
 		}
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);

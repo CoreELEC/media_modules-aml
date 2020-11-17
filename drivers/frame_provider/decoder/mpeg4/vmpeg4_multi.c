@@ -717,7 +717,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
 
 		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-			vf->pts_us64 = pic->offset;
+			vf->pts_us64 =
+				(((u64)vf->duration << 32) &
+				0xffffffff00000000) | pic->offset;
 			vf->pts = 0;
 		}
 		if (((hw->first_i_frame_ready == 0) || pb_skip)
@@ -786,7 +788,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
 
 		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-			vf->pts_us64 = pic->offset;
+			vf->pts_us64 = (u64)-1;
 			vf->pts = 0;
 		}
 
@@ -870,7 +872,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
 
 		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-			vf->pts_us64 = pic->offset;
+			vf->pts_us64 =
+				(((u64)vf->duration << 32) &
+				0xffffffff00000000) | pic->offset;
 			vf->pts = 0;
 		}
 

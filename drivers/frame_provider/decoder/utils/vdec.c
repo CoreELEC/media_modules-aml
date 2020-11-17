@@ -1476,7 +1476,7 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 
 	} else {
 		/* stream based */
-		u32 rp = 0, wp = 0, fifo_len = 0;
+		u32 rp = 0, wp = 0, fifo_len = 0, first_set_rp = 0;
 		int size;
 		bool swap_valid = input->swap_valid;
 		unsigned long swap_page_phys = input->swap_page_phys;
@@ -1570,20 +1570,28 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 			}
 
 		} else {
+			if (vdec->vbuf.ext_buf_addr) {
+				first_set_rp =
+					STBUF_READ(&vdec->vbuf, get_rp);
+				first_set_rp =
+					round_down(first_set_rp, VDEC_FIFO_ALIGN);
+			} else
+				first_set_rp = input->start;
+
 			if (input->target == VDEC_INPUT_TARGET_VLD) {
 				WRITE_VREG(VLD_MEM_VIFIFO_START_PTR,
 					input->start);
 				WRITE_VREG(VLD_MEM_VIFIFO_END_PTR,
 					input->start + input->size - 8);
 				WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
-					input->start);
+					first_set_rp);
 
 				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
 				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
 
 				/* set to manual mode */
 				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
-				WRITE_VREG(VLD_MEM_VIFIFO_RP, input->start);
+				WRITE_VREG(VLD_MEM_VIFIFO_RP, first_set_rp);
 				WRITE_VREG(VLD_MEM_VIFIFO_WP,
 					STBUF_READ(&vdec->vbuf, get_wp));
 				rp = READ_VREG(VLD_MEM_VIFIFO_RP);
@@ -1603,7 +1611,7 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 				WRITE_VREG(HEVC_STREAM_END_ADDR,
 					input->start + input->size);
 				WRITE_VREG(HEVC_STREAM_RD_PTR,
-					input->start);
+					first_set_rp);
 				WRITE_VREG(HEVC_STREAM_WR_PTR,
 					STBUF_READ(&vdec->vbuf, get_wp));
 				rp = READ_VREG(HEVC_STREAM_RD_PTR);
