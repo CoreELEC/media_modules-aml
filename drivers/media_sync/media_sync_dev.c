@@ -319,6 +319,8 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_SPEED:
 		case MEDIASYNC_IOC_SET_PAUSE:
 		case MEDIASYNC_IOC_GET_PAUSE:
+		case MEDIASYNC_IOC_SET_SYNCMODE:
+		case MEDIASYNC_IOC_GET_SYNCMODE:
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;
