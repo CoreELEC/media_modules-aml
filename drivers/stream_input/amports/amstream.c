@@ -3621,7 +3621,7 @@ static long amstream_do_ioctl(struct port_priv_s *priv,
 		break;
 	}
 	if (r != 0)
-		pr_err("amstream_do_ioctl error :%lx, %x\n", r, cmd);
+		pr_debug("amstream_do_ioctl error :%lx, %x\n", r, cmd);
 
 	return r;
 }
