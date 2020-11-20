@@ -945,7 +945,8 @@ static int v4l_res_change(struct vdec_mpeg4_hw_s *hw, int width, int height)
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			flush_output(hw);
-			notify_v4l_eos(hw_to_vdec(hw));
+			if (hw->is_used_v4l)
+				notify_v4l_eos(hw_to_vdec(hw));
 
 			ret = 1;
 		}
@@ -2454,6 +2455,8 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			PROVIDER_NAME ".%02x", pdev->id & 0xff);
 
+	platform_set_drvdata(pdev, pdata);
+	hw->platform_dev = pdev;
 
 	if (((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0) && pdata->config_len) {
 		mmpeg4_debug_print(DECODE_ID(hw), 0, "pdata->config: %s\n", pdata->config);
@@ -2476,8 +2479,6 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	vf_provider_init(&pdata->vframe_provider,
 		pdata->vf_provider_name, &vf_provider_ops, pdata);
 
-	platform_set_drvdata(pdev, pdata);
-	hw->platform_dev = pdev;
 	hw->blkmode = pdata->canvas_mode;
 
 	if (pdata->sys_info) {
@@ -2605,7 +2606,7 @@ static struct platform_driver ammvdec_mpeg4_driver = {
 
 static struct codec_profile_t amvdec_mpeg4_profile = {
 	.name = "mmpeg4",
-	.profile = ""
+	.profile = "v4l"
 };
 
 static int __init ammvdec_mpeg4_driver_init_module(void)

@@ -66,7 +66,9 @@
 
 #ifdef SUPPORT_V4L2
 #include "../utils/vdec_v4l2_buffer_ops.h"
+#include <media/v4l2-mem2mem.h>
 #endif
+#include "../../../amvdec_ports/utils/common.h"
 
 #define AML
 #include "aom_av1_define.h"
@@ -312,7 +314,7 @@ static s32 vav1_init(struct AV1HW_s *hw);
 #endif
 static void vav1_prot_init(struct AV1HW_s *hw, u32 mask);
 static int vav1_local_init(struct AV1HW_s *hw);
-static void vav1_put_timer_func(unsigned long arg);
+static void vav1_put_timer_func(struct timer_list *timer);
 static void dump_data(struct AV1HW_s *hw, int size);
 static unsigned int get_data_check_sum
 	(struct AV1HW_s *hw, int size);
@@ -699,12 +701,16 @@ struct AV1HW_s {
 
 	u32 pts_unstable;
 	bool av1_first_pts_ready;
+	bool dur_recalc_flag;
 	u8  first_pts_index;
 	u32 frame_mode_pts_save[FRAME_BUFFERS];
 	u64 frame_mode_pts64_save[FRAME_BUFFERS];
+	u64 frame_mode_timestamp_save[FRAME_BUFFERS];
+	u64 timestamp_duration;
 
 	int last_pts;
 	u64 last_pts_us64;
+	u64 last_timestamp;
 	u64 shift_byte_count;
 
 	u32 shift_byte_count_lo;
@@ -790,15 +796,17 @@ struct AV1HW_s {
 	/*
 	 * malloc may not work in real chip, please allocate memory for the following structures
 	 */
-    struct loop_filter_info_n_s *lfi;
-    struct loopfilter *lf;
-    struct segmentation_lf *seg_4lf;
+	struct loop_filter_info_n_s *lfi;
+	struct loopfilter *lf;
+	struct segmentation_lf *seg_4lf;
 #endif
 	u32 mem_map_mode;
 	u32 dynamic_buf_num_margin;
 	struct vframe_s vframe_dummy;
 	u32 res_ch_flag;
 	int buffer_wrap[FRAME_BUFFERS];
+	int sidebind_type;
+	int sidebind_channel_id;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -1539,6 +1547,7 @@ int aom_bufmgr_init(struct AV1HW_s *hw, struct BuffInfo_s *buf_spec_i,
 
 	hw->last_pts = 0;
 	hw->last_pts_us64 = 0;
+	hw->last_timestamp = 0;
 	hw->shift_byte_count = 0;
 	hw->shift_byte_count_lo = 0;
 	hw->shift_byte_count_hi = 0;
@@ -3986,11 +3995,11 @@ struct loopfilter {
   //LpfSuperblockInfo neighbor_sb_lpf_info;
 //#endif  // LOOP_FILTER_BITMASK
 };
-
+#ifdef DBG_LPF_DBLK_LVL
 static int32_t myclamp(int32_t value, int32_t low, int32_t high) {
   return value < low ? low : (value > high ? high : value);
 }
-
+#endif
 /*static int8_t extend_sign_7bits(uint8_t value) {
   return (((value>>6) & 0x1)<<7) | (value&0x7f);
 }*/
@@ -4061,10 +4070,13 @@ void av1_loop_filter_frame_init(AV1Decoder* pbi, struct segmentation_lf *seg,
 	struct loopfilter *lf,
 	int32_t pic_width) {
 	BuffInfo_t* buf_spec = pbi->work_space_buf;
-	int32_t i,dir;
+	int32_t i;
+#ifdef DBG_LPF_DBLK_LVL
+	int32_t dir;
 	int32_t filt_lvl[MAX_MB_PLANE], filt_lvl_r[MAX_MB_PLANE];
 	int32_t plane;
 	int32_t seg_id;
+#endif
 	// n_shift is the multiplier for lf_deltas
 	// the multiplier is 1 for when filter_lvl is between 0 and 31;
 	// 2 when filter_lvl is between 32 and 63
@@ -4081,7 +4093,7 @@ void av1_loop_filter_frame_init(AV1Decoder* pbi, struct segmentation_lf *seg,
 			| (lfi->lfthr[i*2].mblim & 0xff);
 		WRITE_VREG(HEVC_DBLK_CFG9, thr);
 	}
-
+#ifdef DBG_LPF_DBLK_LVL
 	filt_lvl[0] = lf->filter_level[0];
 	filt_lvl[1] = lf->filter_level_u;
 	filt_lvl[2] = lf->filter_level_v;
@@ -4205,6 +4217,8 @@ void av1_loop_filter_frame_init(AV1Decoder* pbi, struct segmentation_lf *seg,
 			level = 0;
 		WRITE_VREG(HEVC_DBLK_CFGA, level);
 	}
+#endif  // DBG_LPF_DBLK_LVL
+
 #ifdef DBG_LPF_DBLK_FORCED_OFF
 	if (lf->lf_pic_cnt == 2) {
 		printk("LF_PRINT: pic_cnt(%d) dblk forced off !!!\n", lf->lf_pic_cnt);
@@ -4247,6 +4261,9 @@ void av1_loop_filter_frame_init(AV1Decoder* pbi, struct segmentation_lf *seg,
 	{
 		uint32_t cdef_data32 = (READ_VREG(HEVC_DBLK_CDEF1) & 0xffffff00);
 		cdef_data32 |= 17;	// TODO ERROR :: cdef temp dma address left offset
+#ifdef DBG_LPF_CDEF_NO_PIPELINE
+		cdef_data32 |= (1<<17); // cdef test no pipeline for very small picture
+#endif
 		WRITE_VREG(HEVC_DBLK_CDEF1, cdef_data32);
 	}
 	// Picture count
@@ -5556,6 +5573,9 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
 		hdr.color_parms = hw->vf_dp;
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
+
+	vf->sidebind_type = hw->sidebind_type;
+	vf->sidebind_channel_id = hw->sidebind_channel_id;
 }
 
 static int vav1_vf_states(struct vframe_states *states, void *op_arg)
@@ -5753,13 +5773,17 @@ static int vav1_event_cb(int type, void *data, void *op_arg)
 			av1_print(hw, 0,
 			"%s(type 0x%x vf index 0x%x)=>size 0x%x\n",
 			__func__, type, index, req->aux_size);
-	} else if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
-		struct provider_state_req_s *req =
-			(struct provider_state_req_s *)data;
-		if (req->req_type == REQ_STATE_SECURE)
-			req->req_result[0] = vdec_secure(hw_to_vdec(hw));
-		else
-			req->req_result[0] = 0xffffffff;
+#if 0
+//def CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+	} else if (type & VFRAME_EVENT_RECEIVER_DOLBY_BYPASS_EL) {
+		if ((force_bypass_dvenl & 0x80000000) == 0) {
+			av1_print(hw, 0,
+			"%s: VFRAME_EVENT_RECEIVER_DOLBY_BYPASS_EL\n",
+			__func__);
+			hw->bypass_dvenl_enable = 1;
+		}
+
+#endif
 	}
 	return 0;
 }
@@ -6218,7 +6242,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		update_vf_memhandle(hw, vf, pic_config);
 
 		av1_inc_vf_ref(hw, pic_config->index);
-		decoder_do_frame_check(hw_to_vdec(hw), vf);
+		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		hw->vf_pre_count++;
@@ -6462,7 +6486,11 @@ void config_next_ref_info_hw(struct AV1HW_s *hw)
 	AV1_COMMON *const cm = &hw->common;
 
 	av1_set_next_ref_frame_map(hw->pbi);
-    WRITE_VREG(HEVC_PARSER_MEM_WR_ADDR, 0x1000);
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)
+		WRITE_VREG(HEVC_PARSER_MEM_WR_ADDR, 0x11a0);
+	else
+		WRITE_VREG(HEVC_PARSER_MEM_WR_ADDR, 0x1000);
+
 	for (j = 0; j < 12; j++) {
 		unsigned int info =
 			av1_get_next_used_ref_info(cm, j);
@@ -7116,7 +7144,10 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 				cm->cur_frame->segment_feature[i] = (0x80000000 | (i << 22));
 			}
 		}
-		WRITE_VREG(HEVC_PARSER_MEM_WR_ADDR, 0x1010 + (cur_pic_config->index));
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)
+			WRITE_VREG(HEVC_PARSER_MEM_WR_ADDR, 0x11b0 + (cur_pic_config->index));
+		else
+			WRITE_VREG(HEVC_PARSER_MEM_WR_ADDR, 0x1010 + (cur_pic_config->index));
 		if (hw->aom_param.p.segmentation_enabled & 1) // segmentation_enabled
 			WRITE_VREG(HEVC_PARSER_MEM_RW_DATA, READ_VREG(AV1_REF_SEG_INFO));
 		else
@@ -7823,7 +7854,8 @@ static int v4l_res_change(struct AV1HW_s *hw)
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			//del_timer_sync(&pbi->timer);
-			notify_v4l_eos(hw_to_vdec(hw));
+			if (hw->is_used_v4l)
+				notify_v4l_eos(hw_to_vdec(hw));
 			ret = 1;
 		}
 	}
@@ -8169,7 +8201,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if (hw->m_ins_flag)
 		reset_process_time(hw);
 
-
 	if (hw->process_state != PROC_STATE_SENDAGAIN
 		) {
 	    if (hw->one_compressed_data_done) {
@@ -8373,10 +8404,10 @@ static void av1_set_clk(struct work_struct *work)
 		frame_height * fps;
 }
 
-static void vav1_put_timer_func(unsigned long arg)
+static void vav1_put_timer_func(struct timer_list *timer)
 {
-	struct AV1HW_s *hw = (struct AV1HW_s *)arg;
-	struct timer_list *timer = &hw->timer;
+	struct AV1HW_s *hw = container_of(timer,
+		struct AV1HW_s, timer);
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
@@ -8777,6 +8808,7 @@ static int vav1_local_init(struct AV1HW_s *hw)
 			pr_info("set pts unstable\n");
 		}
 	}
+
 	return ret;
 }
 
@@ -8817,12 +8849,10 @@ static s32 vav1_init(struct AV1HW_s *hw)
 	fw->len = fw_size;
 
 	INIT_WORK(&hw->set_clk_work, av1_set_clk);
-	init_timer(&hw->timer);
+	timer_setup(&hw->timer, vav1_put_timer_func, 0);
 
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (hw->m_ins_flag) {
-		hw->timer.data = (ulong) hw;
-		hw->timer.function = vav1_put_timer_func;
 		hw->timer.expires = jiffies + PUT_INTERVAL;
 
 		/*add_timer(&hw->timer);
@@ -8894,13 +8924,10 @@ static s32 vav1_init(struct AV1HW_s *hw)
 #endif
 	hw->stat |= STAT_VF_HOOK;
 
-	hw->timer.data = (ulong)hw;
-	hw->timer.function = vav1_put_timer_func;
 	hw->timer.expires = jiffies + PUT_INTERVAL;
+	add_timer(&hw->timer);
 
 	hw->stat |= STAT_VDEC_RUN;
-
-	add_timer(&hw->timer);
 	hw->stat |= STAT_TIMER_ARM;
 
 	amhevc_start();
@@ -9072,12 +9099,13 @@ static int amvdec_av1_probe(struct platform_device *pdev)
 #ifndef MULTI_INSTANCE_SUPPORT
 	int i;
 #endif
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TM2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) ||
-		((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2) && !is_meson_rev_b())) {
-		pr_err("av1 unsupported on cpu %d, is_tm2_revb %d\n",
+	pr_debug("%s\n", __func__);
+
+	if (!(is_cpu_tm2_revb() ||
+	(get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2))) {
+		pr_err("unsupport av1, cpu %d, is_tm2_revb %d\n",
 			get_cpu_major_id(), is_cpu_tm2_revb());
-		return -EINVAL;
+		return -EFAULT;
 	}
 
 	mutex_lock(&vav1_mutex);
@@ -9478,7 +9506,8 @@ static void av1_work(struct work_struct *work)
 		hw->eos = 1;
 		av1_postproc(hw);
 
-		notify_v4l_eos(hw_to_vdec(hw));
+		if (hw->is_used_v4l)
+			notify_v4l_eos(hw_to_vdec(hw));
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
@@ -9633,7 +9662,6 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 			        sizeof(hw->frame_mode_timestamp_save));
 		}
 	}
-
 	av1_print(hw, AV1_DEBUG_OUT_PTS,
 		"run_front: pts %d, pts64 %lld, ts: %llu\n",
 		hw->chunk->pts, hw->chunk->pts64, hw->chunk->timestamp);
@@ -9688,10 +9716,9 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	}
 
 	calc_dur = PTS2DUR_u64(div_u64(pts_diff_sum, valid_pts_diff_cnt));
-
 	if ((!close_to(calc_dur, hw->frame_dur, 10)) &&
-		(calc_dur < 4800) && (calc_dur > 800)) {
-		av1_print(hw, 0, "change to calc dur %llu, old dur %u\n", calc_dur, hw->frame_dur);
+		(calc_dur < 9601) && (calc_dur > 800)) {
+		av1_print(hw, 0, "change to calc dur %d, old dur %d\n", calc_dur, hw->frame_dur);
 		hw->frame_dur = calc_dur;
 		hw->get_frame_dur = true;
 	} else {
@@ -10100,13 +10127,13 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 	struct BUF_s BUF[MAX_BUF_NUM];
 	struct AV1HW_s *hw = NULL;
+	pr_debug("%s\n", __func__);
 
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TM2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) ||
-		((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2) && !is_meson_rev_b())) {
-		pr_err("av1 unsupported on cpu %d, is_tm2_revb %d\n",
+	if (!(is_cpu_tm2_revb() ||
+	(get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2))) {
+		pr_err("unsupport av1, cpu %d, is_tm2_revb %d\n",
 			get_cpu_major_id(), is_cpu_tm2_revb());
-		return -EINVAL;
+		return -EFAULT;
 	}
 
 	if (pdata == NULL) {
@@ -10255,6 +10282,14 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			hw->max_pic_h = av1_buf_height;
 			av1_print(hw, 0, "use buf resolution\n");
 		}
+
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			hw->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			hw->sidebind_channel_id = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_codec_enable",
@@ -10518,6 +10553,7 @@ static struct mconfig_node av1_node;
 
 static int __init amvdec_av1_driver_init_module(void)
 {
+
 	struct BuffInfo_s *p_buf_info;
 #ifdef BUFMGR_ONLY_OLD_CHIP
 	debug |= AOM_DEBUG_BUFMGR_ONLY;
@@ -10561,7 +10597,7 @@ static int __init amvdec_av1_driver_init_module(void)
 
 	if ((get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2) || is_cpu_tm2_revb()) {
 		amvdec_av1_profile.profile =
-				"8k, 10bit, dwrite, compressed, no_head, frame_dv";
+				"8k, 10bit, dwrite, compressed, no_head, frame_dv, v4l-uvm";
 	} else {
 		amvdec_av1_profile.name = "av1_unsupport";
 	}

@@ -8359,7 +8359,8 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 			pbi->eos = 1;
 			vp9_bufmgr_postproc(pbi);
 			//del_timer_sync(&pbi->timer);
-			notify_v4l_eos(hw_to_vdec(pbi));
+			if (pbi->is_used_v4l)
+				notify_v4l_eos(hw_to_vdec(pbi));
 			ret = 1;
 		}
 	}
@@ -9922,7 +9923,8 @@ static void vp9_work(struct work_struct *work)
 		pbi->eos = 1;
 		vp9_bufmgr_postproc(pbi);
 
-		notify_v4l_eos(hw_to_vdec(pbi));
+		if (pbi->is_used_v4l)
+			notify_v4l_eos(hw_to_vdec(pbi));
 
 		vdec_vframe_dirty(hw_to_vdec(pbi), pbi->chunk);
 	} else if (pbi->dec_result == DEC_RESULT_FORCE_EXIT) {
@@ -11061,24 +11063,24 @@ static int __init amvdec_vp9_driver_init_module(void)
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 		amvdec_vp9_profile.profile =
-				"8k, 10bit, dwrite, compressed";
+				"8k, 10bit, dwrite, compressed, v4l-uvm";
 	} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL
 		/*&& get_cpu_major_id() != MESON_CPU_MAJOR_ID_GXLX*/
 		&& get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXL) {
 			if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX) {
 				if (vdec_is_support_4k())
 					amvdec_vp9_profile.profile =
-						"4k, 10bit, dwrite, compressed";
+						"4k, 10bit, dwrite, compressed, v4l-uvm";
 				else
 					amvdec_vp9_profile.profile =
-						"10bit, dwrite, compressed";
+						"10bit, dwrite, compressed, v4l-uvm";
 			} else {
 				if (vdec_is_support_4k())
 					amvdec_vp9_profile.profile =
-						"4k, 10bit, dwrite, compressed";
+						"4k, 10bit, dwrite, compressed, v4l-uvm";
 				else
 					amvdec_vp9_profile.profile =
-						"10bit, dwrite, compressed";
+						"10bit, dwrite, compressed, v4l-uvm";
 			}
 
 	} else {

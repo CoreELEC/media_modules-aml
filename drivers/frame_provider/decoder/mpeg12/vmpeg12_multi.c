@@ -1789,7 +1789,8 @@ static int v4l_res_change(struct vdec_mpeg12_hw_s *hw, int width, int height)
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			flush_output(hw);
-			notify_v4l_eos(hw_to_vdec(hw));
+			if (hw->is_used_v4l)
+				notify_v4l_eos(hw_to_vdec(hw));
 
 			ret = 1;
 		}
@@ -2226,7 +2227,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 		flush_output(hw);
-		notify_v4l_eos(vdec);
+		if (hw->is_used_v4l)
+			notify_v4l_eos(vdec);
 
 		debug_print(DECODE_ID(hw), 0,
 			"%s: end of stream, num %d(%d)\n",
@@ -3444,7 +3446,7 @@ static struct platform_driver ammvdec_mpeg12_driver = {
 
 static struct codec_profile_t ammvdec_mpeg12_profile = {
 	.name = "mmpeg12",
-	.profile = ""
+	.profile = "v4l"
 };
 
 static struct mconfig mmpeg12_configs[] = {

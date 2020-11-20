@@ -323,7 +323,8 @@ static int v4l_res_change(struct vdec_mjpeg_hw_s *hw, int width, int height)
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
-			notify_v4l_eos(hw_to_vdec(hw));
+			if (hw->is_used_v4l)
+				notify_v4l_eos(hw_to_vdec(hw));
 
 			ret = 1;
 		}
@@ -1512,7 +1513,8 @@ static void vmjpeg_work(struct work_struct *work)
 			hw->stat &= ~STAT_VDEC_RUN;
 		}
 		hw->eos = 1;
-		notify_v4l_eos(vdec);
+		if (hw->is_used_v4l)
+			notify_v4l_eos(vdec);
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
@@ -1663,10 +1665,6 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
 		&vf_provider_ops, pdata);
 
-	platform_set_drvdata(pdev, pdata);
-
-	hw->platform_dev = pdev;
-
 	vdec_source_changed(VFORMAT_MJPEG,
 			1920, 1080, 60);
 	if (vmjpeg_init(pdata) < 0) {
@@ -1738,7 +1736,7 @@ static struct platform_driver ammvdec_mjpeg_driver = {
 
 static struct codec_profile_t ammvdec_mjpeg_profile = {
 	.name = "mmjpeg",
-	.profile = ""
+	.profile = "v4l"
 };
 
 static int __init ammvdec_mjpeg_driver_init_module(void)

@@ -10134,7 +10134,8 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 			hevc->eos = 1;
 			flush_output(hevc, NULL);
 			//del_timer_sync(&hevc->timer);
-			notify_v4l_eos(hw_to_vdec(hevc));
+			if (hevc->is_used_v4l)
+				notify_v4l_eos(hw_to_vdec(hevc));
 
 			ret = 1;
 		}
@@ -12985,7 +12986,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			__func__, hevc->curr_POC, pic);
 		flush_output(hevc, pic);
 		/* dummy vf with eos flag to backend */
-		notify_v4l_eos(hw_to_vdec(hevc));
+		if (hevc->is_used_v4l)
+			notify_v4l_eos(hw_to_vdec(hevc));
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		hevc->shift_byte_count_lo
 			= READ_VREG(HEVC_SHIFT_BYTE_COUNT);
@@ -14289,10 +14291,10 @@ static int __init amvdec_h265_driver_init_module(void)
 			amvdec_h265_profile.profile = "4k";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 			amvdec_h265_profile.profile =
-				"8k, 8bit, 10bit, dwrite, compressed, frame_dv";
+				"8k, 8bit, 10bit, dwrite, compressed, frame_dv, v4l-uvm";
 		}else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB) {
 			amvdec_h265_profile.profile =
-				"4k, 8bit, 10bit, dwrite, compressed, frame_dv";
+				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, v4l-uvm";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_MG9TV)
 			amvdec_h265_profile.profile = "4k";
 	}

@@ -8806,7 +8806,8 @@ result_done:
 			amhevc_stop();
 		hw->eos = 1;
 		flush_dpb(p_H264_Dpb);
-		notify_v4l_eos(hw_to_vdec(hw));
+		if (hw->is_used_v4l)
+			notify_v4l_eos(hw_to_vdec(hw));
 		mutex_lock(&hw->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
@@ -10010,9 +10011,9 @@ static int __init ammvdec_h264_driver_init_module(void)
 	if (vdec_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) {
 			ammvdec_h264_profile.profile =
-					"4k, dwrite, compressed";
+					"4k, dwrite, compressed, v4l";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) {
-			ammvdec_h264_profile.profile = "4k";
+			ammvdec_h264_profile.profile = "4k, v4l";
 		}
 	}
 
