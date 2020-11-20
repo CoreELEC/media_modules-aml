@@ -726,6 +726,15 @@ static int vvc1_event_cb(int type, void *data, void *private_data)
 #endif
 		amvdec_start();
 	}
+
+	if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
+		struct provider_state_req_s *req =
+			(struct provider_state_req_s *)data;
+		if (req->req_type == REQ_STATE_SECURE && vdec)
+			req->req_result[0] = vdec_secure(vdec);
+		else
+			req->req_result[0] = 0xffffffff;
+	}
 	return 0;
 }
 
