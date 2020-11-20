@@ -4562,6 +4562,15 @@ void vdec_reset_userdata_fifo(struct vdec_s *vdec, int bInit)
 }
 EXPORT_SYMBOL(vdec_reset_userdata_fifo);
 
+void vdec_set_profile_level(struct vdec_s *vdec, u32 profile_idc, u32 level_idc)
+{
+	if (vdec) {
+		vdec->profile_idc = profile_idc;
+		vdec->level_idc = level_idc;
+	}
+}
+EXPORT_SYMBOL(vdec_set_profile_level);
+
 static int dump_mode;
 static ssize_t dump_risc_mem_store(struct class *class,
 		struct class_attribute *attr,
@@ -4851,7 +4860,272 @@ static ssize_t dump_fps_show(struct class *class,
 	return pbuf - buf;
 }
 
+static char * parser_h264_profile(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->profile_idc) {
+		case 66:
+			pbuf += sprintf(pbuf, "%d: Baseline Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 77:
+			pbuf += sprintf(pbuf, "%d: Main Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 88:
+			pbuf += sprintf(pbuf, "%d: Extended Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 100:
+			pbuf += sprintf(pbuf, "%d: High Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 110:
+			pbuf += sprintf(pbuf, "%d: High 10 Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+	}
 
+	return pbuf;
+}
+
+static char * parser_mpeg2_profile(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->profile_idc) {
+		case 5:
+			pbuf += sprintf(pbuf, "%d: Simple Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 4:
+			pbuf += sprintf(pbuf, "%d: Main Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 3:
+			pbuf += sprintf(pbuf, "%d: SNR Scalable Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 2:
+			pbuf += sprintf(pbuf, "%d: Airspace Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 1:
+			pbuf += sprintf(pbuf, "%d: High Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+	}
+	return pbuf;
+}
+
+static char * parser_mpeg4_profile(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->profile_idc) {
+		case 0:
+			pbuf += sprintf(pbuf, "%d: Simple Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 1:
+			pbuf += sprintf(pbuf, "%d: Simple Scalable Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 2:
+			pbuf += sprintf(pbuf, "%d: Core Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 3:
+			pbuf += sprintf(pbuf, "%d: Main Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 4:
+			pbuf += sprintf(pbuf, "%d: N-bit Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 5:
+			pbuf += sprintf(pbuf, "%d: Scalable Texture Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 6:
+			if (vdec->profile_idc == 1 || vdec->profile_idc == 2)
+				pbuf += sprintf(pbuf, "%d: Simple Face Animation Profile(%u)\n",
+				vdec->id, vdec->profile_idc);
+			else
+				pbuf += sprintf(pbuf, "%d: Simple FBA Profile(%u)\n",
+				vdec->id, vdec->profile_idc);
+			break;
+		case 7:
+			pbuf += sprintf(pbuf, "%d: Basic Animated Texture Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 8:
+			pbuf += sprintf(pbuf, "%d: Hybrid Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 9:
+			pbuf += sprintf(pbuf, "%d: Advanced Real Time Simple Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 10:
+			pbuf += sprintf(pbuf, "%d: Core Scalable Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 11:
+			pbuf += sprintf(pbuf, "%d: Advanced Coding Efficiency Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 12:
+			pbuf += sprintf(pbuf, "%d: Advanced Core Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 13:
+			pbuf += sprintf(pbuf, "%d: Advanced Scalable Texture Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 14:
+		case 15:
+			pbuf += sprintf(pbuf, "%d: Advanced Simple Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+	}
+
+	return pbuf;
+}
+
+static ssize_t profile_idc_show(struct class *class, struct class_attribute *attr,
+			char *buf)
+{
+	struct vdec_core_s *core = vdec_core;
+	char *pbuf = buf;
+	unsigned long flags = vdec_core_lock(vdec_core);
+
+	if (list_empty(&core->connected_vdec_list))
+		pbuf += sprintf(pbuf, "connected vdec list empty\n");
+	else {
+		struct vdec_s *vdec;
+		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
+			if (vdec->format == 0) {
+				pbuf = parser_mpeg2_profile(pbuf, vdec);
+			} else if (vdec->format == 1) {
+				pbuf = parser_mpeg4_profile(pbuf, vdec);
+			} else if (vdec->format == 2) {
+				pbuf = parser_h264_profile(pbuf, vdec);
+			} else {
+				pbuf += sprintf(pbuf,
+				"%d: Not Support\n", vdec->id);
+			}
+		}
+	}
+
+	vdec_core_unlock(vdec_core, flags);
+	return pbuf - buf;
+}
+
+static char * parser_h264_level(char *pbuf, struct vdec_s *vdec)
+{
+
+	pbuf += sprintf(pbuf, "%d: Level %d.%d(%u)\n",
+			vdec->id, vdec->level_idc/10, vdec->level_idc%10, vdec->level_idc);
+
+	return pbuf;
+}
+
+static char * parser_mpeg2_level(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->level_idc) {
+		case 10:
+			pbuf += sprintf(pbuf, "%d: Low Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 8:
+			pbuf += sprintf(pbuf, "%d: Main Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 6:
+			pbuf += sprintf(pbuf, "%d: High 1440 Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 4:
+			pbuf += sprintf(pbuf, "%d: High Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+	}
+
+	return pbuf;
+}
+
+static char * parser_mpeg4_level(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->level_idc) {
+		case 1:
+			pbuf += sprintf(pbuf, "%d: Level 1(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 2:
+			pbuf += sprintf(pbuf, "%d: Level 2(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 3:
+			pbuf += sprintf(pbuf, "%d: Level 3(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 4:
+			pbuf += sprintf(pbuf, "%d: Level 4(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 5:
+			pbuf += sprintf(pbuf, "%d: Level 5(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+	}
+
+	return pbuf;
+}
+
+static ssize_t level_idc_show(struct class *class, struct class_attribute *attr,
+			char *buf)
+{
+	struct vdec_core_s *core = vdec_core;
+	char *pbuf = buf;
+	unsigned long flags = vdec_core_lock(vdec_core);
+
+	if (list_empty(&core->connected_vdec_list))
+		pbuf += sprintf(pbuf, "connected vdec list empty\n");
+	else {
+		struct vdec_s *vdec;
+		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
+			if (vdec->format == 0) {
+				pbuf = parser_mpeg2_level(pbuf, vdec);
+			} else if (vdec->format == 1) {
+				pbuf = parser_mpeg4_level(pbuf, vdec);
+			} else if (vdec->format == 2) {
+				pbuf = parser_h264_level(pbuf, vdec);
+			} else {
+				pbuf += sprintf(pbuf,
+				"%d: Not Support\n", vdec->id);
+			}
+		}
+	}
+
+	vdec_core_unlock(vdec_core, flags);
+	return pbuf - buf;
+}
 
 static struct class_attribute vdec_class_attrs[] = {
 	__ATTR_RO(amrisc_regs),
@@ -4881,6 +5155,8 @@ static struct class_attribute vdec_class_attrs[] = {
 	frame_check_show, frame_check_store),
 #endif
 	__ATTR_RO(dump_fps),
+	__ATTR_RO(profile_idc),
+	__ATTR_RO(level_idc),
 	__ATTR(vfm_path, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_vdec_vfm_path, store_vdec_vfm_path),
 	__ATTR_NULL

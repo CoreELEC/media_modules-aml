@@ -480,6 +480,7 @@ enum FirstInsertFrm_State {
 
 struct SPSParameters {
 	unsigned int profile_idc;
+	unsigned int level_idc;
 	int pic_order_cnt_type;
 	int log2_max_pic_order_cnt_lsb_minus4;
 	int num_ref_frames_in_pic_order_cnt_cycle;

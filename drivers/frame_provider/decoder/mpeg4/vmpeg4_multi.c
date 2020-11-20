@@ -81,6 +81,7 @@
 #define MP4_NOT_CODED_CNT   AV_SCRATCH_A
 #define MP4_VOP_TIME_INC    AV_SCRATCH_B
 #define MP4_OFFSET_REG      AV_SCRATCH_C
+#define MP4_VOS_INFO        AV_SCRATCH_D
 #define MP4_SYS_RATE        AV_SCRATCH_E
 #define MEM_OFFSET_REG      AV_SCRATCH_F
 #define MP4_PIC_INFO        AV_SCRATCH_H
@@ -328,6 +329,8 @@ struct vdec_mpeg4_hw_s {
 	unsigned int b_decoded_frames;
 	unsigned int b_lost_frames;
 	unsigned int b_concealed_frames;
+	u32 profile_idc;
+	u32 level_idc;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -1040,7 +1043,7 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 	u32 pts, offset = 0;
 	u64 pts_us64 = 0;
 	u32 frame_size, dec_w, dec_h;
-	u32 time_increment_resolution, fixed_vop_rate, vop_time_inc;
+	u32 time_increment_resolution, fixed_vop_rate, vop_time_inc, vos_info;
 	u32 repeat_cnt, duration = 3200;
 	struct pic_info_t *dec_pic, *disp_pic;
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)(vdec->private);
@@ -1143,6 +1146,17 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		picture_type = (reg >> 3) & 7;
 		repeat_cnt = READ_VREG(MP4_NOT_CODED_CNT);
 		vop_time_inc = READ_VREG(MP4_VOP_TIME_INC);
+		vos_info = READ_VREG(MP4_VOS_INFO);
+		if ((vos_info & 0xff) &&
+			(((vos_info >> 4) & 0xf) != hw->profile_idc ||
+			(vos_info & 0xf) != hw->level_idc)) {
+			hw->profile_idc = vos_info >> 4 & 0xf;
+			hw->level_idc = vos_info & 0xf;
+			vdec_set_profile_level(vdec, hw->profile_idc, hw->level_idc);
+			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+				"profile_idc: %d  level_idc: %d\n",
+				hw->profile_idc, hw->level_idc);
+		}
 
 		index = spec_to_index(hw, READ_VREG(REC_CANVAS_ADDR));
 		if (index < 0) {

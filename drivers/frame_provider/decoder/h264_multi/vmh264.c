@@ -5118,6 +5118,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		reg_val = param4;
 		level_idc = reg_val & 0xff;
+		p_H264_Dpb->mSPS.level_idc = level_idc;
 		max_reference_size = (reg_val >> 8) & 0xff;
 		hw->dpb.reorder_output = max_reference_size;
 		dpb_print(DECODE_ID(hw), 0,
@@ -6495,6 +6496,9 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						p_H264_Dpb->mSlice.structure == BOTTOM_FIELD) ?
 						true : false;
 				}
+
+				vdec_set_profile_level(vdec, p_H264_Dpb->mSPS.profile_idc,
+					p_H264_Dpb->mSPS.level_idc);
 
 				if (!field_pic_flag && (((p_H264_Dpb->mSPS.profile_idc == BASELINE) &&
 					(p_H264_Dpb->reorder_pic_num < 2)) ||

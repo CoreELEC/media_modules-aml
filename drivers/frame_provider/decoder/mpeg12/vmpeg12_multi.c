@@ -332,6 +332,8 @@ struct vdec_mpeg12_hw_s {
 	u32 kpi_first_i_decoded;
 	int sidebind_type;
 	int sidebind_channel_id;
+	u32 profile_idc;
+	u32 level_idc;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -1941,6 +1943,17 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 		offset = READ_VREG(MREG_FRAME_OFFSET);
 		index = spec_to_index(hw, READ_VREG(REC_CANVAS_ADDR));
 		seqinfo = READ_VREG(MREG_SEQ_INFO);
+
+		if (((seqinfo >> 8) & 0xff) &&
+			((seqinfo >> 12 & 0x7) != hw->profile_idc ||
+			(seqinfo >> 8 & 0xf) != hw->level_idc)) {
+			hw->profile_idc = seqinfo >> 12 & 0x7;
+			hw->level_idc = seqinfo >> 8 & 0xf;
+			vdec_set_profile_level(vdec, hw->profile_idc, hw->level_idc);
+			debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+				"profile_idc: %d  level_idc: %d\n",
+				hw->profile_idc, hw->level_idc);
+		}
 
 		if ((info & PICINFO_PROG) == 0 &&
 			(info & FRAME_PICTURE_MASK) != FRAME_PICTURE) {

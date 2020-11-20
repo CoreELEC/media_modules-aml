@@ -283,6 +283,8 @@ struct vdec_s {
 	u32 hdr10p_data_size;
 	char hdr10p_data_buf[PAGE_SIZE];
 	bool hdr10p_data_valid;
+	u32 profile_idc;
+	u32 level_idc;
 };
 
 /* common decoder vframe provider name to use default vfm path */
@@ -482,4 +484,5 @@ extern u32 timestamp_avsync_counter_get(void);
 
 int vdec_resource_checking(struct vdec_s *vdec);
 
+void vdec_set_profile_level(struct vdec_s *vdec, u32 profile_idc, u32 level_idc);
 #endif				/* VDEC_H */
