@@ -1814,6 +1814,7 @@ struct hevc_state_s {
 	u32 poc_error_count;
 	u32 timeout_flag;
 	ulong timeout;
+	bool discard_dv_data;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -9388,6 +9389,10 @@ static int prepare_display_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		vf->canvas0Addr = vf->canvas1Addr = spec2canvas(pic);
 #endif
 		set_frame_info(hevc, vf, pic);
+		if (hevc->discard_dv_data) {
+			vf->discard_dv_data = true;
+		}
+
 		/* if((vf->width!=pic->width)||(vf->height!=pic->height)) */
 		/* hevc_print(hevc, 0,
 			"aaa: %d/%d, %d/%d\n",
@@ -14048,6 +14053,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->dv_duallayer = config_val;
 		else
 			hevc->dv_duallayer = false;
+
+		if (get_config_int(pdata->config, "negative_dv",
+			&config_val) == 0) {
+			hevc->discard_dv_data = config_val;
+			hevc_print(hevc, 0, "discard dv data\n");
+		}
 #endif
 	} else {
 		if (pdata->sys_info)
