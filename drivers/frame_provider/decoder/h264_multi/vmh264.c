@@ -920,7 +920,6 @@ struct vdec_h264_hw_s {
 	int loop_last_poc;
 	bool enable_fence;
 	int fence_usage;
-	bool discard_dv_data;
 };
 
 static u32 again_threshold;
@@ -2980,9 +2979,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 		}
 		set_frame_info(hw, vf, buffer_index);
-		if (hw->discard_dv_data) {
-			vf->discard_dv_data = true;
-		}
 
 		if (hw->mmu_enable && hw->double_write_mode) {
 			vf->width = hw->frame_width /
@@ -9958,13 +9954,6 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			"parm_fence_usage",
 			&config_val) == 0)
 			hw->fence_usage = config_val;
-
-		if (get_config_int(pdata->config,
-			"negative_dv",
-			&config_val) == 0) {
-			hw->discard_dv_data = config_val;
-			dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
-		}
 	} else
 		hw->double_write_mode = double_write_mode;
 
