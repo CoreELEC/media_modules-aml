@@ -1638,12 +1638,9 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 			}
 
 		} else {
-			if (vdec->vbuf.ext_buf_addr) {
-				first_set_rp =
-					STBUF_READ(&vdec->vbuf, get_rp);
-				first_set_rp =
-					round_down(first_set_rp, VDEC_FIFO_ALIGN);
-			} else
+			if (vdec->vbuf.ext_buf_addr)
+				first_set_rp = STBUF_READ(&vdec->vbuf, get_rp);
+			else
 				first_set_rp = input->start;
 
 			if (input->target == VDEC_INPUT_TARGET_VLD) {

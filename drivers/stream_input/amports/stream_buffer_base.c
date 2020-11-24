@@ -135,16 +135,32 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 		(wp == stbuf->ext_buf_addr) &&
 		(meta->stbuf_pktaddr > stbuf->ext_buf_addr)) {
 		struct vdec_s *vdec = container_of(stbuf, struct vdec_s, vbuf);
+		u32 first_ptr;
+		u32 round_down_size = 0;
 
-		pr_info("warn: first packet_wp(%x) is not stbuf start addr(%lx)\n",
-			meta->stbuf_pktaddr, stbuf->ext_buf_addr);
+		/*RP max alignment requirement*/
+		if (vdec->input.target == VDEC_INPUT_TARGET_HEVC)
+			round_down_size = 0x80;
+		else if (vdec->input.target == VDEC_INPUT_TARGET_VLD)
+			round_down_size = 0x100;
 
-		stbuf->ops->set_wp(stbuf, meta->stbuf_pktaddr);
-		stbuf->ops->set_rp(stbuf, meta->stbuf_pktaddr);
-		vdec->input.swap_rp = meta->stbuf_pktaddr;
+		if (stbuf->ext_buf_addr > (meta->stbuf_pktaddr - round_down_size))
+			first_ptr = stbuf->ext_buf_addr;
+		else {
+			first_ptr = round_down(meta->stbuf_pktaddr, round_down_size);
+			pr_info("warn: first packet_wp(%x round_down %x) is not stbuf start addr(%lx)\n",
+				meta->stbuf_pktaddr, first_ptr, stbuf->ext_buf_addr);
+		}
+
+		stbuf->ops->set_wp(stbuf, first_ptr);
+		stbuf->ops->set_rp(stbuf, first_ptr);
+		vdec->input.swap_rp = first_ptr;
 		if (vdec->slave)
-			vdec->slave->input.swap_rp = meta->stbuf_pktaddr;
-		stbuf->stream_offset += (meta->stbuf_pktaddr - stbuf->ext_buf_addr);
+			vdec->slave->input.swap_rp = first_ptr;
+		if (vdec->input.target != VDEC_INPUT_TARGET_HEVC)
+			stbuf->stream_offset += (meta->stbuf_pktaddr - stbuf->ext_buf_addr);
+		else
+			stbuf->stream_offset += (meta->stbuf_pktaddr - first_ptr);
 	}
 
 	if (meta->stbuf_pktaddr + meta->stbuf_pktsize < stbuf->buf_start + stbuf->buf_size)
@@ -159,7 +175,6 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 	pr_debug("%s, update wp 0x%x + sz 0x%x --> 0x%x, stream_offset 0x%x\n",
 		__func__, meta->stbuf_pktaddr, meta->stbuf_pktsize, wp, stbuf->stream_offset);
 	*/
-
 }
 EXPORT_SYMBOL(stream_buffer_meta_write);
 
