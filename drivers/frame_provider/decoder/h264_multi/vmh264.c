@@ -2617,6 +2617,7 @@ static void update_vf_memhandle(struct vdec_h264_hw_s *hw,
 static int check_force_interlace(struct vdec_h264_hw_s *hw,
 	struct FrameStore *frame)
 {
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int bForceInterlace = 0;
 	/* no di in secure mode, disable force di */
 	if (vdec_secure(hw_to_vdec(hw)))
@@ -2625,8 +2626,9 @@ static int check_force_interlace(struct vdec_h264_hw_s *hw,
 	if ((dec_control & DEC_CONTROL_FLAG_FORCE_2997_1080P_INTERLACE)
 		&& hw->bitstream_restriction_flag
 		&& (hw->frame_width == 1920)
-		&& (hw->frame_height >= 1080)
-		&& (hw->frame_dur == 3203 || hw->frame_dur == 3840)) {
+		&& (hw->frame_height >= 1080) /* For being compatible with a fake progressive stream which is interlaced actually*/
+		&& (hw->frame_dur == 3203 || (hw->frame_dur == 3840 && p_H264_Dpb->mSPS.profile_idc == 100 &&
+		p_H264_Dpb->mSPS.level_idc == 40))) {
 		bForceInterlace = 1;
 	} else if ((dec_control & DEC_CONTROL_FLAG_FORCE_2500_576P_INTERLACE)
 			 && (hw->frame_width == 720)
