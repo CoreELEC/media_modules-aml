@@ -1397,6 +1397,74 @@ static void vdec_sync_input_write(struct vdec_s *vdec)
 	}
 }
 
+void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size)
+{
+	u32 rp_set;
+	struct vdec_input_s *input = &vdec->input;
+	u32 rp = 0, wp = 0, level;
+
+	rp = STBUF_READ(&vdec->vbuf, get_rp);
+	wp = STBUF_READ(&vdec->vbuf, get_wp);
+	pr_err("aaaa wp %x, rp %x\n", wp, rp);
+	pr_err("1VLD_MEM_VIFIFO_RP %x\n", rp);
+
+	if (wp > rp)
+		level = wp - rp;
+	else
+		level = wp + vdec->input.size - rp ;
+
+	if (level <= skip_size) {
+		pr_err("skip size is error, buffer level = 0x%x, skip size = 0x%x\n", level, skip_size);
+		return;
+	}
+
+	if (wp >= rp) {
+		pr_err("case 1\n");
+		rp_set = rp + skip_size;
+	}
+	else if ((rp + skip_size) < (input->start + input->size)) {
+		pr_err("case 2\n");
+		rp_set = rp + skip_size;
+	} else {
+		pr_err("case 3\n");
+		rp_set = rp + skip_size - input->size;
+		input->stream_cookie++;
+	}
+
+	if (vdec->format == VFORMAT_H264)
+		SET_VREG_MASK(POWER_CTL_VLD,
+			(1 << 9));
+
+	WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+	/* restore read side */
+	WRITE_VREG(VLD_MEM_SWAP_ADDR,
+		input->swap_page_phys);
+	WRITE_VREG(VLD_MEM_SWAP_CTL, 1);
+
+	while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7))
+		;
+	WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
+
+	WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
+		rp_set);
+		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+	STBUF_WRITE(&vdec->vbuf, set_rp,
+		rp_set);
+	WRITE_VREG(VLD_MEM_SWAP_ADDR,
+		input->swap_page_phys);
+	WRITE_VREG(VLD_MEM_SWAP_CTL, 3);
+	while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7))
+		;
+	WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
+	pr_err("2VLD_MEM_VIFIFO_RP %x\n", READ_VREG(VLD_MEM_VIFIFO_RP));
+
+}
+EXPORT_SYMBOL(vdec_stream_skip_data);
+
+
+
 /*
  *get next frame from input chain
  */
