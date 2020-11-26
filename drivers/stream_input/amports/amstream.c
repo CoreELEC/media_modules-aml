@@ -914,6 +914,10 @@ static int amstream_port_init(struct port_priv_s *priv)
 	struct stream_port_s *port = priv->port;
 	struct vdec_s *vdec = priv->vdec;
 
+	r = vdec_resource_checking(vdec);
+	if (r < 0)
+		return r;
+
 	mutex_lock(&amstream_mutex);
 
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
@@ -2573,6 +2577,26 @@ static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 		} else
 			r = -EINVAL;
 		break;
+	case AMSTREAM_SET_PTR_HDR10P_DATA:
+		if ((this->type & PORT_TYPE_VIDEO) && (this->type & PORT_TYPE_FRAME)) {
+			if (!parm.pointer || (parm.len <= 0) ||
+				(parm.len > PAGE_SIZE)) {
+				r = -EINVAL;
+			} else {
+				r = copy_from_user(priv->vdec->hdr10p_data_buf,
+						parm.pointer, parm.len);
+				if (r) {
+					priv->vdec->hdr10p_data_size = 0;
+					priv->vdec->hdr10p_data_valid = false;
+					r = -EINVAL;
+				} else {
+					priv->vdec->hdr10p_data_size = parm.len;
+					priv->vdec->hdr10p_data_valid = true;
+				}
+			}
+		} else
+			r = -EINVAL;
+		break;
 	default:
 		r = -ENOIOCTLCMD;
 		break;
@@ -2661,6 +2685,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 								tmpbuf,
 								slots*sizeof(struct vframe_counter_s))) {
 						r = -EFAULT;
+						kfree(tmpbuf);
 						break;
 					}
 				}else { //For compatibility, only copy the qos
@@ -2679,6 +2704,34 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 			      infinitely calling*/
 				//msleep(10); let user app handle it.
 			}
+		}
+		break;
+	case AMSTREAM_IOC_GET_AVINFO:
+		{
+			struct av_param_info_t  __user *uarg = (void *)arg;
+			struct av_info_t  av_info;
+			int delay;
+			u32 avgbps;
+			if (this->type & PORT_TYPE_VIDEO) {
+				av_info.first_pic_coming = get_first_pic_coming();
+				av_info.current_fps = -1;
+				av_info.vpts = timestamp_vpts_get();
+				//av_info.vpts_err = tsync_get_vpts_error_num();
+				av_info.apts = timestamp_apts_get();
+				//av_info.apts_err = tsync_get_apts_error_num();
+				av_info.ts_error = get_discontinue_counter();
+				av_info.first_vpts = timestamp_firstvpts_get();
+				av_info.toggle_frame_count = get_toggle_frame_count();
+				delay = calculation_stream_delayed_ms(
+					PTS_TYPE_VIDEO, NULL, &avgbps);
+				if (delay >= 0)
+					av_info.dec_video_bps = avgbps;
+				else
+					av_info.dec_video_bps = 0;
+			}
+			if (copy_to_user((void *)&uarg->av_info, (void *)&av_info,
+						sizeof(struct av_info_t)))
+				r = -EFAULT;
 		}
 		break;
 	default:
@@ -4121,6 +4174,114 @@ static ssize_t max_buffer_delay_ms_show(struct class *class,
 		bufs[0].max_buffer_delay_ms);
 	size += sprintf(buf, "%dms audio max buffered data delay ms\n",
 		bufs[1].max_buffer_delay_ms);
+	return size;
+}
+
+ssize_t dump_stream_show(struct class *class,
+		struct class_attribute *attr, char *buf)
+{
+	char *p_buf = buf;
+
+	p_buf += sprintf(p_buf, "\nmdkir -p /data/tmp -m 777;setenforce 0;\n\n");
+	p_buf += sprintf(p_buf, "video:\n\t echo 0 > /sys/class/amstream/dump_stream;\n");
+	p_buf += sprintf(p_buf, "hevc :\n\t echo 4 > /sys/class/amstream/dump_stream;\n");
+
+	return p_buf - buf;
+}
+
+#define DUMP_STREAM_FILE   "/data/tmp/dump_stream.h264"
+ssize_t dump_stream_store(struct class *class,
+		struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct stream_buf_s *p_buf;
+	int ret = 0, id = 0;
+	unsigned int stride, remain, level, vmap_size;
+	int write_size;
+	void *stbuf_vaddr;
+	unsigned long offset;
+	struct file *fp;
+	mm_segment_t old_fs;
+	loff_t fpos;
+
+	ret = sscanf(buf, "%d", &id);
+	if (ret < 0) {
+		pr_info("paser buf id fail, default id = 0\n");
+		id = 0;
+	}
+	if (id != BUF_TYPE_VIDEO && id != BUF_TYPE_HEVC) {
+		pr_info("buf id out of range, max %d, id %d, set default id 0\n", BUF_MAX_NUM - 1, id);
+		id = 0;
+	}
+	p_buf = get_stream_buffer(id);
+	if (!p_buf) {
+		pr_info("get buf fail, id %d\n", id);
+		return size;
+	}
+	if ((!p_buf->buf_size) || (p_buf->is_secure) || (!(p_buf->flag & BUF_FLAG_IN_USE))) {
+		pr_info("buf size %d, is_secure %d, in_use %d, it can not dump\n",
+			p_buf->buf_size, p_buf->is_secure, (p_buf->flag & BUF_FLAG_IN_USE));
+		return size;
+	}
+
+	level = stbuf_level(p_buf);
+	if (!level || level > p_buf->buf_size) {
+		pr_info("stream buf level %d, buf size %d, error return\n", level, p_buf->buf_size);
+		return size;
+	}
+
+	fp = filp_open(DUMP_STREAM_FILE, O_CREAT | O_RDWR, 0666);
+	if (IS_ERR(fp)) {
+		fp = NULL;
+		pr_info("create dump stream file failed\n");
+		return size;
+	}
+
+	offset = p_buf->buf_start;
+	remain = level;
+	stride = SZ_1M;
+	vmap_size = 0;
+	fpos = 0;
+	pr_info("create file success, it will dump from addr 0x%lx, size 0x%x\n", offset, remain);
+	while (remain > 0) {
+		if (remain > stride)
+			vmap_size = stride;
+		else {
+			stride = remain;
+			vmap_size = stride;
+		}
+
+		stbuf_vaddr = codec_mm_vmap(offset, vmap_size);
+		if (stbuf_vaddr == NULL) {
+			stride >>= 1;
+			pr_info("vmap fail change vmap stide size 0x%x\n", stride);
+			continue;
+		}
+		codec_mm_dma_flush(stbuf_vaddr, vmap_size, DMA_FROM_DEVICE);
+
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		write_size = vfs_write(fp, stbuf_vaddr, vmap_size, &fpos);
+		if (write_size < vmap_size) {
+			write_size += vfs_write(fp, stbuf_vaddr + write_size, vmap_size - write_size, &fpos);
+			pr_info("fail write retry, total %d, write %d\n", vmap_size, write_size);
+			if (write_size < vmap_size) {
+				pr_info("retry fail, interrupt dump stream, break\n");
+				break;
+			}
+		}
+		set_fs(old_fs);
+		vfs_fsync(fp, 0);
+		pr_info("vmap_size 0x%x dump size 0x%x\n", vmap_size, write_size);
+
+		offset += vmap_size;
+		remain -= vmap_size;
+		codec_mm_unmap_phyaddr(stbuf_vaddr);
+	}
+
+	filp_close(fp, current->files);
+	pr_info("dump stream buf end\n");
+
 	return size;
 }
 

@@ -97,6 +97,7 @@ static DEFINE_MUTEX(vdec_mutex);
 static int inited_vcodec_num;
 #define jiffies_ms div64_u64(get_jiffies_64() * 1000, HZ)
 static int poweron_clock_level;
+static int debug_vdetect = 0;
 static int keep_vdec_mem;
 static unsigned int debug_trace_num = 16 * 20;
 static int step_mode;
@@ -113,8 +114,14 @@ static unsigned int clk_config;
 #define VDEC_DBG_CANVAS_STATUS	(0x4)
 #define VDEC_DBG_ENABLE_FENCE	(0x100)
 
-u32 debug = VDEC_DBG_ALWAYS_LOAD_FW;
-EXPORT_SYMBOL(debug);
+static u32 debug = VDEC_DBG_ALWAYS_LOAD_FW;
+
+u32 vdec_get_debug(void)
+{
+    return debug;
+}
+EXPORT_SYMBOL(vdec_get_debug);
+
 
 int hevc_max_reset_count;
 EXPORT_SYMBOL(hevc_max_reset_count);
@@ -152,6 +159,33 @@ int decode_underflow = 0;
 static int enable_stream_mode_multi_dec;
 
 #define CANVAS_MAX_SIZE (AMVDEC_CANVAS_MAX1 - AMVDEC_CANVAS_START_INDEX + 1 + AMVDEC_CANVAS_MAX2 + 1)
+
+
+typedef void (*vdec_frame_rate_event_func)(int);
+
+#if 1
+extern void vframe_rate_uevent(int duration);
+vdec_frame_rate_event_func frame_rate_notify = vframe_rate_uevent;
+#else
+vdec_frame_rate_event_func frame_rate_notify = NULL;
+#endif
+
+static void vdec_frame_rate_uevent(int dur)
+{
+	if (frame_rate_notify == NULL)
+		return;
+
+	if (unlikely(in_interrupt()))
+		return;
+
+	frame_rate_notify(dur);
+}
+
+void register_frame_rate_uevent_func(vdec_frame_rate_event_func func)
+{
+	frame_rate_notify = func;
+}
+EXPORT_SYMBOL(register_frame_rate_uevent_func);
 
 struct am_reg {
 	char *name;
@@ -203,6 +237,7 @@ struct vdec_core_s {
 	unsigned long buff_flag;
 	unsigned long stream_buff_flag;
 	struct power_manager_s *pm;
+	u32 vdec_resouce_status;
 };
 
 struct canvas_status_s {
@@ -240,6 +275,44 @@ bit [0]
 
 static int debugflags;
 
+static char vfm_path[VDEC_MAP_NAME_SIZE] = {"disable"};
+static const char vfm_path_node[][VDEC_MAP_NAME_SIZE] =
+{
+	"video_render.0",
+	"video_render.1",
+	"amvideo",
+	"videopip",
+	"deinterlace",
+	"dimulti.1",
+	"amlvideo",
+	"aml_video.1",
+	"amlvideo2.0",
+	"amlvideo2.1",
+	"ppmgr",
+	"ionvideo",
+	"ionvideo.1",
+	"ionvideo.2",
+	"ionvideo.3",
+	"ionvideo.4",
+	"ionvideo.5",
+	"ionvideo.6",
+	"ionvideo.7",
+	"ionvideo.8",
+	"videosync.0",
+	"v4lvideo.0",
+	"v4lvideo.1",
+	"v4lvideo.2",
+	"v4lvideo.3",
+	"v4lvideo.4",
+	"v4lvideo.5",
+	"v4lvideo.6",
+	"v4lvideo.7",
+	"v4lvideo.8",
+	"fake-amvideo",
+	"disable",
+	"reserved",
+};
+
 static struct canvas_status_s canvas_stat[AMVDEC_CANVAS_MAX1 - AMVDEC_CANVAS_START_INDEX + 1 + AMVDEC_CANVAS_MAX2 + 1];
 
 
@@ -256,15 +329,6 @@ void VDEC_PRINT_FUN_LINENO(const char *fun, int line)
 }
 EXPORT_SYMBOL(VDEC_PRINT_FUN_LINENO);
 
-bool is_support_no_parser(void)
-{
-	if ((enable_stream_mode_multi_dec) ||
-		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2))
-		return true;
-	return true;
-}
-EXPORT_SYMBOL(is_support_no_parser);
-
 unsigned char is_mult_inc(unsigned int type)
 {
 	unsigned char ret = 0;
@@ -276,6 +340,15 @@ unsigned char is_mult_inc(unsigned int type)
 	return ret;
 }
 EXPORT_SYMBOL(is_mult_inc);
+
+bool is_support_no_parser(void)
+{
+	if ((enable_stream_mode_multi_dec) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2))
+		return true;
+	return false;
+}
+EXPORT_SYMBOL(is_support_no_parser);
 
 static const bool cores_with_input[VDEC_MAX] = {
 	true,   /* VDEC_1 */
@@ -638,7 +711,11 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
-	if (is_cpu_tm2_revb() ||
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5) {
+		while (!(codec_dmcbus_read(T5_DMC_CHAN_STS)
+			& mask))
+			;
+	} else if (is_cpu_tm2_revb() ||
 		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)) {
 		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
 			& mask))
@@ -1088,6 +1165,9 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 		INIT_LIST_HEAD(&vdec->list);
 
 		atomic_inc(&vdec_core->vdec_nr);
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
+		v4lvideo_dec_count_increase();
+#endif
 		vdec->id = id;
 		vdec_input_init(&vdec->input, vdec);
 		vdec->input.vdec_is_input_frame_empty = vdec_is_input_frame_empty;
@@ -1804,7 +1884,11 @@ void hevc_wait_ddr(void)
 		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
-	if (is_cpu_tm2_revb() ||
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5) {
+		while (!(codec_dmcbus_read(T5_DMC_CHAN_STS)
+			& mask))
+			;
+	} else if (is_cpu_tm2_revb() ||
 		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)) {
 		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
 			& mask))
@@ -2128,7 +2212,8 @@ int vdec_disconnect(struct vdec_s *vdec)
 
 	return 0;
 discon_timeout:
-	pr_err("%s timeout!!! status: 0x%x\n", __func__, vdec->status);
+	pr_err("%s timeout!!! status: 0x%x force it to 2\n", __func__, vdec->status);
+	vdec_set_status(vdec, VDEC_STATUS_CONNECTED);
 	return 0;
 }
 EXPORT_SYMBOL(vdec_disconnect);
@@ -2148,11 +2233,49 @@ int vdec_destroy(struct vdec_s *vdec)
 		vfree(vdec->mvfrm);
 	vfree(vdec);
 
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
+	v4lvideo_dec_count_decrease();
+#endif
 	atomic_dec(&vdec_core->vdec_nr);
 
 	return 0;
 }
 EXPORT_SYMBOL(vdec_destroy);
+
+static bool is_tunnel_pipeline(u32 pl)
+{
+	return ((pl & BIT(FRAME_BASE_PATH_DTV_TUNNEL_MODE)) ||
+		(pl & BIT(FRAME_BASE_PATH_AMLVIDEO_AMVIDEO))) ?
+		true : false;
+}
+
+static bool is_res_locked(u32 pre, u32 cur)
+{
+	return is_tunnel_pipeline(pre) ?
+		(is_tunnel_pipeline(cur) ? true : false) : false;
+}
+
+int vdec_resource_checking(struct vdec_s *vdec)
+{
+	/*
+	 * If it is the single instance that the pipeline of DTV used,
+	 * then have to check that the resources which is belong tunnel
+	 * pipeline these are being released.
+	 */
+	ulong expires = jiffies + msecs_to_jiffies(2000);
+
+	while (is_res_locked(vdec_core->vdec_resouce_status,
+		BIT(vdec->frame_base_video_path))) {
+		if (time_after(jiffies, expires)) {
+			pr_err("wait vdec resource timeout.\n");
+			return -EBUSY;
+		}
+		schedule();
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(vdec_resource_checking);
 
 /*
  *register vdec_device
@@ -2165,6 +2288,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	const char *dev_name;
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
 
+	if (is_res_locked(vdec_core->vdec_resouce_status,
+		BIT(vdec->frame_base_video_path)))
+		return -EBUSY;
+
+	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
 	dev_name = get_dev_name(vdec_single(vdec), vdec->format);
 
 	if (dev_name == NULL)
@@ -2208,12 +2336,14 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	p->get_canvas_ex = get_canvas_ex;
 	p->free_canvas_ex = free_canvas_ex;
 	p->vdec_fps_detec = vdec_fps_detec;
-	atomic_set(&p->inrelease, 0);
-	atomic_set(&p->inirq_flag, 0);
-	atomic_set(&p->inirq_thread_flag, 0);
 	/* todo */
-	if (!vdec_dual(vdec))
-		p->use_vfm_path = vdec_stream_based(vdec);
+	if (!vdec_dual(vdec)) {
+		p->use_vfm_path =
+			is_support_no_parser() ?
+			vdec_single(vdec) :
+			vdec_stream_based(vdec);
+	}
+
 	if (debugflags & 0x4)
 		p->use_vfm_path = 1;
 	/* vdec_dev_reg.flag = 0; */
@@ -2298,7 +2428,13 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				goto error;
 			}
 		}
-		if (p->frame_base_video_path == FRAME_BASE_PATH_IONVIDEO) {
+
+		if (strncmp("disable", vfm_path, strlen("disable"))) {
+			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+				"%s %s", vdec->vf_provider_name, vfm_path);
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
+		} else if (p->frame_base_video_path == FRAME_BASE_PATH_IONVIDEO) {
 #if 1
 			r = ionvideo_assign_map(&vdec->vf_receiver_name,
 					&vdec->vf_receiver_inst);
@@ -2336,9 +2472,17 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 					"%s %s", vdec->vf_provider_name,
 					"amlvideo amvideo");
 			} else {
-				snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
-					"%s %s", vdec->vf_provider_name,
-					"amlvideo ppmgr deinterlace amvideo");
+				if (debug_vdetect)
+					snprintf(vdec->vfm_map_chain,
+						 VDEC_MAP_NAME_SIZE,
+						 "%s vdetect.0 %s",
+						 vdec->vf_provider_name,
+						 "amlvideo ppmgr deinterlace amvideo");
+				else
+					snprintf(vdec->vfm_map_chain,
+						 VDEC_MAP_NAME_SIZE, "%s %s",
+						 vdec->vf_provider_name,
+						 "amlvideo ppmgr deinterlace amvideo");
 			}
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
@@ -2359,6 +2503,12 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 				"%s %s", vdec->vf_provider_name,
 				"amvideo");
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
+		} else if (p->frame_base_video_path == FRAME_BASE_PATH_PIP_TUNNEL_MODE) {
+			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+				"%s %s", vdec->vf_provider_name,
+				"videosync.0 videopip");
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
 		} else if (p->frame_base_video_path == FRAME_BASE_PATH_V4L_VIDEO) {
@@ -2382,16 +2532,23 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				mutex_unlock(&vdec_mutex);
 				goto error;
 			}
-			if (!v4lvideo_add_di || vdec_secure(vdec))
+			if (!v4lvideo_add_di)
 				snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 					"%s %s", vdec->vf_provider_name,
 					vdec->vf_receiver_name);
 			else {
-				if (vdec->vf_receiver_inst == 0)
-					snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
-						"%s %s %s", vdec->vf_provider_name,
-						"dimulti.1",
-						vdec->vf_receiver_name);
+				if ((vdec->vf_receiver_inst == 0)
+					&& (max_di_instance > 0))
+					if (max_di_instance == 1)
+						snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+							"%s %s %s", vdec->vf_provider_name,
+							"deinterlace",
+							vdec->vf_receiver_name);
+					else
+						snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+							"%s %s %s", vdec->vf_provider_name,
+							"dimulti.1",
+							vdec->vf_receiver_name);
 				else if ((vdec->vf_receiver_inst <
 					  max_di_instance) &&
 					  (vdec->vf_receiver_inst == 1))
@@ -2415,6 +2572,33 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 						"%s %s", vdec->vf_provider_name,
 						vdec->vf_receiver_name);
 			}
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
+		} else if (p->frame_base_video_path ==
+				FRAME_BASE_PATH_V4LVIDEO) {
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
+			r = v4lvideo_assign_map(&vdec->vf_receiver_name,
+					&vdec->vf_receiver_inst);
+#else
+			r = -1;
+#endif
+			if (r < 0) {
+				pr_err("V4lVideo frame receiver allocation failed.\n");
+				mutex_lock(&vdec_mutex);
+				inited_vcodec_num--;
+				mutex_unlock(&vdec_mutex);
+				goto error;
+			}
+			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+				"%s %s", vdec->vf_provider_name,
+				vdec->vf_receiver_name);
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
+		} else if (p->frame_base_video_path ==
+			FRAME_BASE_PATH_AMLVIDEO_FENCE) {
+			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+				"%s %s", vdec->vf_provider_name,
+				"amlvideo amvideo");
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
 		}
@@ -2482,6 +2666,10 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	pr_debug("vdec_init, vf_provider_name = %s, b %d\n",
 		p->vf_provider_name, is_cpu_tm2_revb());
 
+	mutex_lock(&vdec_mutex);
+	vdec_core->vdec_resouce_status |= BIT(p->frame_base_video_path);
+	mutex_unlock(&vdec_mutex);
+
 	vdec_input_prepare_bufs(/*prepared buffer for fast playing.*/
 		&vdec->input,
 		vdec->sys_info->width,
@@ -2495,10 +2683,44 @@ error:
 }
 EXPORT_SYMBOL(vdec_init);
 
+/*
+ *Remove the vdec after timeout happens both in vdec_disconnect
+ *and platform_device_unregister. Then after, we can release the vdec.
+ */
+static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_s *v_ref)
+{
+	struct vdec_s *vdec, *tmp;
+	unsigned long flags;
+
+	flags = vdec_core_lock(core);
+
+	list_for_each_entry_safe(vdec, tmp,
+		&core->connected_vdec_list, list) {
+		if ((vdec->status == VDEC_STATUS_DISCONNECTED) &&
+		    (vdec == v_ref)) {
+		    pr_err("%s, vdec = %p, active vdec = %p\n",
+				__func__, vdec, core->active_vdec);
+			if (v_ref->active_mask)
+				core->sched_mask &= ~v_ref->active_mask;
+			if (core->active_vdec == v_ref)
+				core->active_vdec = NULL;
+			if (core->active_hevc == v_ref)
+				core->active_hevc = NULL;
+			if (core->last_vdec == v_ref)
+				core->last_vdec = NULL;
+			list_del(&vdec->list);
+		}
+	}
+
+	vdec_core_unlock(core, flags);
+}
+
 /* vdec_create/init/release/destroy are applied to both dual running decoders
  */
 void vdec_release(struct vdec_s *vdec)
 {
+	u32 wcount = 0;
+
 	//trace_vdec_release(vdec);/*DEBUG_TMP*/
 #ifdef VDEC_DEBUG_SUPPORT
 	if (step_mode) {
@@ -2508,6 +2730,8 @@ void vdec_release(struct vdec_s *vdec)
 		pr_info("VDEC_DEBUG: step_mode is clear\n");
 	}
 #endif
+	/* When release, userspace systemctl need this duration 0 event */
+	vdec_frame_rate_uevent(0);
 	vdec_disconnect(vdec);
 
 	if (vdec->vframe_provider.name) {
@@ -2536,10 +2760,19 @@ void vdec_release(struct vdec_s *vdec)
 		}
 	}
 
-	atomic_set(&vdec->inrelease, 1);
-	while ((atomic_read(&vdec->inirq_flag) > 0)
-		|| (atomic_read(&vdec->inirq_thread_flag) > 0))
-		schedule();
+	while (vdec->irq_cnt > vdec->irq_thread_cnt) {
+		if ((wcount & 0x1f) == 0)
+			pr_debug("%s vdec[%lx]: %lld > %lld, loop %u times\n",__func__, (unsigned long)vdec,
+				vdec->irq_cnt,vdec->irq_thread_cnt, wcount);
+		/*
+		 * Wait at most 2000 ms.
+		 * In suspend scenario, the system may disable thread_fn,
+		 * thus can NOT always waiting the thread_fn happen
+		 */
+		if (++wcount > 1000)
+			break;
+		usleep_range(1000, 2000);
+	}
 
 #ifdef FRAME_CHECK
 	vdec_frame_check_exit(vdec);
@@ -2548,10 +2781,18 @@ void vdec_release(struct vdec_s *vdec)
 	if (atomic_read(&vdec_core->vdec_nr) == 1)
 		vdec_disable_DMC(vdec);
 	platform_device_unregister(vdec->dev);
+	/*Check if the vdec still in connected list, if yes, delete it*/
+	vdec_connect_list_force_clear(vdec_core, vdec);
+
 	if (vdec->vbuf.ops && !vdec->master)
 		vdec->vbuf.ops->release(&vdec->vbuf);
+
 	pr_debug("vdec_release instance %p, total %d\n", vdec,
 		atomic_read(&vdec_core->vdec_nr));
+
+	mutex_lock(&vdec_mutex);
+	vdec_core->vdec_resouce_status &= ~BIT(vdec->frame_base_video_path);
+	mutex_unlock(&vdec_mutex);
 	vdec_destroy(vdec);
 
 	mutex_lock(&vdec_mutex);
@@ -2782,12 +3023,6 @@ static irqreturn_t vdec_isr(int irq, void *dev_id)
 			vdec = NULL;
 	}
 
-	if (vdec) {
-		if (atomic_read(&vdec->inrelease) > 0)
-			return ret;
-		atomic_set(&vdec->inirq_flag, 1);
-		vdec->isr_ns = local_clock();
-	}
 	if (c->dev_isr) {
 		ret = c->dev_isr(irq, c->dev_id);
 		goto isr_done;
@@ -2819,8 +3054,9 @@ static irqreturn_t vdec_isr(int irq, void *dev_id)
 
 	ret = vdec->irq_handler(vdec, c->index);
 isr_done:
-	if (vdec)
-		atomic_set(&vdec->inirq_flag, 0);
+	if (vdec && ret == IRQ_WAKE_THREAD)
+		vdec->irq_cnt++;
+
 	return ret;
 }
 
@@ -2840,17 +3076,6 @@ static irqreturn_t vdec_thread_isr(int irq, void *dev_id)
 			vdec = NULL;
 	}
 
-	if (vdec) {
-		u32 isr2tfn = 0;
-		if (atomic_read(&vdec->inrelease) > 0)
-			return ret;
-		atomic_set(&vdec->inirq_thread_flag, 1);
-		vdec->tfn_ns = local_clock();
-		isr2tfn = vdec->tfn_ns - vdec->isr_ns;
-		if (isr2tfn > 10000000)
-			pr_err("!!!!!!! %s vdec_isr to %s took %u ns !!!\n",
-				vdec->vf_provider_name, __func__, isr2tfn);
-	}
 	if (c->dev_threaded_isr) {
 		ret = c->dev_threaded_isr(irq, c->dev_id);
 		goto thread_isr_done;
@@ -2863,7 +3088,7 @@ static irqreturn_t vdec_thread_isr(int irq, void *dev_id)
 	ret = vdec->threaded_irq_handler(vdec, c->index);
 thread_isr_done:
 	if (vdec)
-		atomic_set(&vdec->inirq_thread_flag, 0);
+		vdec->irq_thread_cnt++;
 	return ret;
 }
 
@@ -2871,6 +3096,14 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 {
 	unsigned long ready_mask;
 	struct vdec_input_s *input = &vdec->input;
+
+	/* Wait the matching irq_thread finished */
+	if (vdec->irq_cnt > vdec->irq_thread_cnt) {
+		pr_debug("%s vdec[%lx]: %lld > %lld\n",__func__, (unsigned long)vdec,
+			vdec->irq_cnt,vdec->irq_thread_cnt);
+		return false;
+	}
+
 	if ((vdec->status != VDEC_STATUS_CONNECTED) &&
 	    (vdec->status != VDEC_STATUS_ACTIVE))
 		return false;
@@ -2990,14 +3223,9 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 	if (!vdec_core_with_input(mask))
 		return;
 
-	if (secure && vdec_stream_based(vdec) && force_nosecure_even_drm)
+	if (vdec_stream_based(vdec) && !vdec_secure(vdec))
 	{
-		/* Verimatrix ultra webclient (HLS) was played in drmmode and used hw demux. In drmmode VDEC only can access secure.
-		Now HW demux parsed es data to no-secure buffer. So the VDEC input was no-secure, VDEC playback failed. Forcing
-		use nosecure for verimatrix webclient HLS. If in the future HW demux can parse es data to secure buffer, make
-		VDEC r/w secure.*/
-		secure = 0;
-		//pr_debug("allow VDEC can access nosecure even in drmmode\n");
+		tee_config_device_secure(DMC_DEV_ID_PARSER, 0);
 	}
 	if (input->target == VDEC_INPUT_TARGET_VLD)
 		tee_config_device_secure(DMC_DEV_ID_VDEC, secure);
@@ -3472,8 +3700,12 @@ void vdec_reset_core(struct vdec_s *vdec)
 		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
-	if (is_cpu_tm2_revb() ||
-		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)) {
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5) {
+		while (!(codec_dmcbus_read(T5_DMC_CHAN_STS)
+			& mask))
+			;
+	} else if (is_cpu_tm2_revb() ||
+	(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2)) {
 		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
 			& mask))
 			;
@@ -3556,7 +3788,11 @@ void hevc_reset_core(struct vdec_s *vdec)
 		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
 	spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
-	if (is_cpu_tm2_revb()  ||
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5) {
+		while (!(codec_dmcbus_read(T5_DMC_CHAN_STS)
+			& mask))
+			;
+	} else if (is_cpu_tm2_revb() ||
 		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)) {
 		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
 			& mask))
@@ -3624,6 +3860,8 @@ void hevc_reset_core(struct vdec_s *vdec)
 	case AM_MESON_CPU_MAJOR_ID_SM1:
 	case AM_MESON_CPU_MAJOR_ID_TL1:
 	case AM_MESON_CPU_MAJOR_ID_TM2:
+	case AM_MESON_CPU_MAJOR_ID_T5:
+	case AM_MESON_CPU_MAJOR_ID_T5D:
 		WRITE_RESET_REG((RESET7_REGISTER_LEVEL),
 				READ_RESET_REG(RESET7_REGISTER_LEVEL) & (~((1<<13))));
 		WRITE_RESET_REG((RESET7_REGISTER_LEVEL),
@@ -4095,6 +4333,79 @@ int show_stream_buffer_status(char *buf,
 }
 EXPORT_SYMBOL(show_stream_buffer_status);
 
+static ssize_t vdec_vfm_path_store(struct class *class,
+		 struct class_attribute *attr,
+		 const char *buf, size_t count)
+{
+	char *buf_dup, *ps, *token;
+	char str[VDEC_MAP_NAME_SIZE] = "\0";
+	bool found = false;
+	int i;
+
+	if (strlen(buf) >= VDEC_MAP_NAME_SIZE) {
+		pr_info("parameter is overflow\n");
+		return -1;
+	}
+
+	buf_dup = kstrdup(buf, GFP_KERNEL);
+	ps = buf_dup;
+	while (1) {
+		token = strsep(&ps, "\n ");
+		if (token == NULL)
+			break;
+		if (*token == '\0')
+			continue;
+
+		for (i = 0; strcmp("reserved", vfm_path_node[i]) != 0; i++) {
+			if (!strncmp (vfm_path_node[i], token, strlen(vfm_path_node[i]))) {
+			        break;
+			}
+		}
+
+		if (strcmp("reserved", vfm_path_node[i]) == 0 ||
+			strncmp("help", buf, strlen("help")) == 0) {
+			if (strncmp("help", buf, strlen("help")) != 0) {
+				pr_info("warnning! Input parameter is invalid. set failed!\n");
+			}
+			pr_info("\nusage for example: \n");
+			pr_info("echo help > /sys/class/vdec/vfm_path \n");
+			pr_info("echo disable > /sys/class/vdec/vfm_path \n");
+			pr_info("echo amlvideo ppmgr amvideo > /sys/class/vdec/vfm_path \n");
+			found = false;
+
+			break;
+		} else {
+			strcat(str, vfm_path_node[i]);
+			strcat(str, " ");
+			found = true;
+		}
+	}
+
+	if (found == true) {
+		memset(vfm_path, 0, sizeof(vfm_path));
+		strncpy(vfm_path, str, strlen(str));
+		vfm_path[VDEC_MAP_NAME_SIZE - 1] = '\0';
+		pr_info("cfg path success: decoder %s\n", vfm_path);
+	}
+	kfree(buf_dup);
+
+	return count;
+}
+
+static ssize_t vdec_vfm_path_show(struct class *class,
+	struct class_attribute *attr, char *buf)
+{
+	int len = 0;
+	int i;
+	len += sprintf(buf + len, "cfg vfm path: decoder %s\n", vfm_path);
+	len += sprintf(buf + len, "\nvfm path node list: \n");
+	for (i = 0; strcmp("reserved", vfm_path_node[i]) != 0; i++) {
+		len += sprintf(buf + len, "\t%s \n", vfm_path_node[i]);
+	}
+
+	return len;
+}
+
 /*irq num as same as .dts*/
 /*
  *	interrupts = <0 3 1
@@ -4284,6 +4595,15 @@ void vdec_reset_userdata_fifo(struct vdec_s *vdec, int bInit)
 	}
 }
 EXPORT_SYMBOL(vdec_reset_userdata_fifo);
+
+void vdec_set_profile_level(struct vdec_s *vdec, u32 profile_idc, u32 level_idc)
+{
+	if (vdec) {
+		vdec->profile_idc = profile_idc;
+		vdec->level_idc = level_idc;
+	}
+}
+EXPORT_SYMBOL(vdec_set_profile_level);
 
 static int dump_mode;
 static ssize_t dump_risc_mem_store(struct class *class,
@@ -4574,6 +4894,273 @@ static ssize_t dump_fps_show(struct class *class,
 	return pbuf - buf;
 }
 
+static char * parser_h264_profile(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->profile_idc) {
+		case 66:
+			pbuf += sprintf(pbuf, "%d: Baseline Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 77:
+			pbuf += sprintf(pbuf, "%d: Main Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 88:
+			pbuf += sprintf(pbuf, "%d: Extended Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 100:
+			pbuf += sprintf(pbuf, "%d: High Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 110:
+			pbuf += sprintf(pbuf, "%d: High 10 Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+	}
+
+	return pbuf;
+}
+
+static char * parser_mpeg2_profile(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->profile_idc) {
+		case 5:
+			pbuf += sprintf(pbuf, "%d: Simple Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 4:
+			pbuf += sprintf(pbuf, "%d: Main Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 3:
+			pbuf += sprintf(pbuf, "%d: SNR Scalable Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 2:
+			pbuf += sprintf(pbuf, "%d: Airspace Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 1:
+			pbuf += sprintf(pbuf, "%d: High Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+	}
+	return pbuf;
+}
+
+static char * parser_mpeg4_profile(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->profile_idc) {
+		case 0:
+			pbuf += sprintf(pbuf, "%d: Simple Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 1:
+			pbuf += sprintf(pbuf, "%d: Simple Scalable Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 2:
+			pbuf += sprintf(pbuf, "%d: Core Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 3:
+			pbuf += sprintf(pbuf, "%d: Main Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 4:
+			pbuf += sprintf(pbuf, "%d: N-bit Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 5:
+			pbuf += sprintf(pbuf, "%d: Scalable Texture Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 6:
+			if (vdec->profile_idc == 1 || vdec->profile_idc == 2)
+				pbuf += sprintf(pbuf, "%d: Simple Face Animation Profile(%u)\n",
+				vdec->id, vdec->profile_idc);
+			else
+				pbuf += sprintf(pbuf, "%d: Simple FBA Profile(%u)\n",
+				vdec->id, vdec->profile_idc);
+			break;
+		case 7:
+			pbuf += sprintf(pbuf, "%d: Basic Animated Texture Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 8:
+			pbuf += sprintf(pbuf, "%d: Hybrid Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 9:
+			pbuf += sprintf(pbuf, "%d: Advanced Real Time Simple Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 10:
+			pbuf += sprintf(pbuf, "%d: Core Scalable Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 11:
+			pbuf += sprintf(pbuf, "%d: Advanced Coding Efficiency Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 12:
+			pbuf += sprintf(pbuf, "%d: Advanced Core Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 13:
+			pbuf += sprintf(pbuf, "%d: Advanced Scalable Texture Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		case 14:
+		case 15:
+			pbuf += sprintf(pbuf, "%d: Advanced Simple Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Profile(%u)\n",
+			vdec->id, vdec->profile_idc);
+			break;
+	}
+
+	return pbuf;
+}
+
+static ssize_t profile_idc_show(struct class *class, struct class_attribute *attr,
+			char *buf)
+{
+	struct vdec_core_s *core = vdec_core;
+	char *pbuf = buf;
+	unsigned long flags = vdec_core_lock(vdec_core);
+
+	if (list_empty(&core->connected_vdec_list))
+		pbuf += sprintf(pbuf, "connected vdec list empty\n");
+	else {
+		struct vdec_s *vdec;
+		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
+			if (vdec->format == 0) {
+				pbuf = parser_mpeg2_profile(pbuf, vdec);
+			} else if (vdec->format == 1) {
+				pbuf = parser_mpeg4_profile(pbuf, vdec);
+			} else if (vdec->format == 2) {
+				pbuf = parser_h264_profile(pbuf, vdec);
+			} else {
+				pbuf += sprintf(pbuf,
+				"%d: Not Support\n", vdec->id);
+			}
+		}
+	}
+
+	vdec_core_unlock(vdec_core, flags);
+	return pbuf - buf;
+}
+
+static char * parser_h264_level(char *pbuf, struct vdec_s *vdec)
+{
+
+	pbuf += sprintf(pbuf, "%d: Level %d.%d(%u)\n",
+			vdec->id, vdec->level_idc/10, vdec->level_idc%10, vdec->level_idc);
+
+	return pbuf;
+}
+
+static char * parser_mpeg2_level(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->level_idc) {
+		case 10:
+			pbuf += sprintf(pbuf, "%d: Low Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 8:
+			pbuf += sprintf(pbuf, "%d: Main Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 6:
+			pbuf += sprintf(pbuf, "%d: High 1440 Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 4:
+			pbuf += sprintf(pbuf, "%d: High Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+	}
+
+	return pbuf;
+}
+
+static char * parser_mpeg4_level(char *pbuf, struct vdec_s *vdec)
+{
+	switch (vdec->level_idc) {
+		case 1:
+			pbuf += sprintf(pbuf, "%d: Level 1(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 2:
+			pbuf += sprintf(pbuf, "%d: Level 2(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 3:
+			pbuf += sprintf(pbuf, "%d: Level 3(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 4:
+			pbuf += sprintf(pbuf, "%d: Level 4(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		case 5:
+			pbuf += sprintf(pbuf, "%d: Level 5(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+		default:
+			pbuf += sprintf(pbuf, "%d: Not Support Level(%u)\n",
+			vdec->id, vdec->level_idc);
+			break;
+	}
+
+	return pbuf;
+}
+
+static ssize_t level_idc_show(struct class *class, struct class_attribute *attr,
+			char *buf)
+{
+	struct vdec_core_s *core = vdec_core;
+	char *pbuf = buf;
+	unsigned long flags = vdec_core_lock(vdec_core);
+
+	if (list_empty(&core->connected_vdec_list))
+		pbuf += sprintf(pbuf, "connected vdec list empty\n");
+	else {
+		struct vdec_s *vdec;
+		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
+			if (vdec->format == 0) {
+				pbuf = parser_mpeg2_level(pbuf, vdec);
+			} else if (vdec->format == 1) {
+				pbuf = parser_mpeg4_level(pbuf, vdec);
+			} else if (vdec->format == 2) {
+				pbuf = parser_h264_level(pbuf, vdec);
+			} else {
+				pbuf += sprintf(pbuf,
+				"%d: Not Support\n", vdec->id);
+			}
+		}
+	}
+
+	vdec_core_unlock(vdec_core, flags);
+	return pbuf - buf;
+}
+
 static CLASS_ATTR_RO(amrisc_regs);
 static CLASS_ATTR_RO(dump_trace);
 static CLASS_ATTR_RO(clock_level);
@@ -4589,11 +5176,14 @@ static CLASS_ATTR_RO(dump_decoder_state);
 #ifdef VDEC_DEBUG_SUPPORT
 static CLASS_ATTR_RW(debug);
 #endif
+static CLASS_ATTR_RW(vdec_vfm_path);
 #ifdef FRAME_CHECK
 static CLASS_ATTR_RW(dump_yuv);
 static CLASS_ATTR_RW(frame_check);
 #endif
 static CLASS_ATTR_RO(dump_fps);
+static CLASS_ATTR_RO(profile_idc);
+static CLASS_ATTR_RO(level_idc);
 
 static struct attribute *vdec_class_attrs[] = {
 	&class_attr_amrisc_regs.attr,
@@ -4611,11 +5201,14 @@ static struct attribute *vdec_class_attrs[] = {
 #ifdef VDEC_DEBUG_SUPPORT
 	&class_attr_debug.attr,
 #endif
+	&class_attr_vdec_vfm_path.attr,
 #ifdef FRAME_CHECK
 	&class_attr_dump_yuv.attr,
 	&class_attr_frame_check.attr,
 #endif
 	&class_attr_dump_fps.attr,
+	&class_attr_profile_idc.attr,
+	&class_attr_level_idc.attr,
 	NULL
 };
 
@@ -4861,10 +5454,95 @@ void vdec_set_vframe_comm(struct vdec_s *vdec, char *n)
 }
 EXPORT_SYMBOL(vdec_set_vframe_comm);
 
+u32 diff_pts(u32 a, u32 b)
+{
+	if (!a || !b)
+		return 0;
+	else
+		return abs(a - b);
+}
+
+/*
+ * We only use the first 5 frames to calc duration.
+ * The fifo[0]~fifo[4] means the frame 0 to frame 4.
+ * we start to calculate the duration from frame 1.
+ * And the caller guarantees that slot > 0.
+ */
+static void cal_dur_from_pts(struct vdec_s *vdec, u32 slot)
+{
+#define DURATION_THRESHOD 10
+	static u32 must_send = 0, ready = 0;
+	u32 old = 0, cur, diff;
+	struct vframe_counter_s *fifo = vdec->mvfrm->fifo_buf;
+
+	if (vdec->mvfrm->wr == 1) {
+		ready = 0;
+		must_send = 0;
+	}
+
+	if (must_send == 2)
+		return ;
+
+	if (ready)
+		++must_send;
+
+	if ((vdec->format != VFORMAT_H264 && vdec->format != VFORMAT_HEVC) ||
+	    !fifo[slot].pts) {
+		if (fifo[slot].frame_dur != ready) {
+			if (must_send)
+				ready = (ready + fifo[slot].frame_dur) / 2;
+			else
+				ready = fifo[slot].frame_dur;
+			pr_debug("%s inner driver dur%u \n",__func__, ready);
+		}
+		goto end_handle;
+	}
+
+	if (slot == 1) {
+		cur = diff_pts(fifo[1].pts, fifo[0].pts);
+	} else {
+		old = diff_pts(fifo[slot - 1].pts, fifo[slot - 2].pts);
+		cur = diff_pts(fifo[slot].pts, fifo[slot - 1].pts);
+	}
+
+	diff = abs(cur - old);
+	if (diff > DURATION_THRESHOD) {
+		u32 dur, cur2;
+
+		cur2 = (cur << 4) / 15;
+		diff = abs(cur2 - fifo[slot].frame_dur);
+		if (fifo[slot].frame_dur == 3600)
+			dur = cur2;
+		else if (diff < DURATION_THRESHOD || diff > fifo[slot].frame_dur)
+			dur = fifo[slot].frame_dur;
+		else
+			dur = cur2;
+
+		if (ready == dur)
+			goto end_handle;
+
+		if (must_send)
+			ready = (ready + dur) / 2;
+		else
+			ready = dur;
+		pr_debug("%s vstatus %u dur%u -> %u, revised %u\n",__func__,fifo[slot].frame_dur, cur,cur2, dur);
+		if (diff > 10 && slot >= 2)
+			pr_debug("wr=%u,slot=%u pts %u, %u, %u\n",vdec->mvfrm->wr,slot,
+				fifo[slot].pts, fifo[slot-1].pts,fifo[slot-2].pts);
+	}
+
+end_handle:
+	if (must_send) {
+		++must_send;
+		vdec_frame_rate_uevent(ready);
+	}
+}
+
 void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 				struct vdec_info *vinfo,struct vframe_s *vf,
 				u32 hw_dec_time)
 {
+#define MINIMUM_FRAMES 5
 	u32 i;
 	struct vframe_counter_s *fifo_buf;
 	struct vdec_frames_s *mvfrm = vdec->mvfrm;
@@ -4888,6 +5566,10 @@ void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 		fifo_buf[i].signal_type = vf->signal_type;
 		fifo_buf[i].pts = vf->pts;
 		fifo_buf[i].pts_us64 = vf->pts_us64;
+
+		/* Calculate the duration from pts */
+		if (mvfrm->wr < MINIMUM_FRAMES && mvfrm->wr > 0)
+			cal_dur_from_pts(vdec, i);
 	}
 	mvfrm->wr++;
 }
@@ -4966,7 +5648,8 @@ int get_double_write_ratio(int dw_mode)
 	if ((dw_mode == 2) ||
 			(dw_mode == 3))
 		ratio = 4;
-	else if (dw_mode == 4)
+	else if ((dw_mode == 4) ||
+				(dw_mode == 5))
 		ratio = 2;
 	return ratio;
 }
@@ -5002,6 +5685,8 @@ module_param(max_di_instance, int, 0664);
 MODULE_PARM_DESC(max_di_instance,
 				"\n max_di_instance\n");
 
+module_param(debug_vdetect, int, 0664);
+MODULE_PARM_DESC(debug_vdetect, "\n debug_vdetect\n");
 
 module_param(enable_stream_mode_multi_dec, int, 0664);
 EXPORT_SYMBOL(enable_stream_mode_multi_dec);

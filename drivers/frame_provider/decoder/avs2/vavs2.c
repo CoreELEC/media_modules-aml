@@ -761,6 +761,8 @@ struct AVS2Decoder_s {
 	int frameinfo_enable;
 	struct vframe_qos_s vframe_qos;
 	u32 dynamic_buf_margin;
+	int sidebind_type;
+	int sidebind_channel_id;
 };
 
 static int  compute_losless_comp_body_size(
@@ -4060,6 +4062,9 @@ static void set_frame_info(struct AVS2Decoder_s *dec, struct vframe_s *vf)
 	ar = min_t(u32, dec->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 
+	vf->sidebind_type = dec->sidebind_type;
+	vf->sidebind_channel_id = dec->sidebind_channel_id;
+
 	return;
 }
 
@@ -4605,6 +4610,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 		}
 
 		if (vf) {
+			struct vdec_info tmp4x;
 			int stream_offset = pic->stream_offset;
 			set_vframe(dec, vf, pic, 0);
 			vdec_vframe_ready(pvdec, vf);
@@ -4614,10 +4620,11 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			dec_update_gvs(dec);
 			/*count info*/
 			vdec_count_info(dec->gvs, 0, stream_offset);
-			dec->gvs->bit_rate = bit_depth_luma;
-			dec->gvs->frame_data = bit_depth_chroma;
-			dec->gvs->samp_cnt = get_double_write_mode(dec);
-			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, dec->gvs, vf, pic->hw_decode_time);
+			memcpy(&tmp4x, dec->gvs, sizeof(struct vdec_info));
+			tmp4x.bit_depth_luma = bit_depth_luma;
+			tmp4x.bit_depth_chroma = bit_depth_chroma;
+			tmp4x.double_write_mode = get_double_write_mode(dec);
+			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
 			if (without_display_mode == 0) {
 				vf_notify_receiver(dec->provider_name,
@@ -5406,25 +5413,19 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			dec->avs2_dec.hc.cur_pic = NULL;
 			for (ii = 0; ii < dec->avs2_dec.ref_maxbuffer;
 					ii++) {
-				if (dec->avs2_dec.fref[ii]->
-					bg_flag == 0 &&
-					dec->avs2_dec.fref[ii]->
-					is_output == -1 &&
-					dec->avs2_dec.fref[ii]->
-					mmu_alloc_flag &&
-					dec->avs2_dec.fref[ii]->
-					vf_ref == 0) {
-					struct avs2_frame_s *pic =
-						dec->avs2_dec.fref[ii];
-					if (dec->avs2_dec.fref[ii]->
-						refered_by_others == 0) {
+				struct avs2_frame_s *pic =
+					dec->avs2_dec.fref[ii];
+				if (pic->bg_flag == 0 &&
+					pic->is_output == -1 &&
+					pic->mmu_alloc_flag &&
+					pic->vf_ref == 0) {
+					if (pic->refered_by_others == 0) {
 #ifdef AVS2_10B_MMU
-						dec->avs2_dec.fref[ii]->
-						mmu_alloc_flag = 0;
+						pic->mmu_alloc_flag = 0;
 						/*release_buffer_4k(
 						dec->avs2_dec.fref[ii]->index);*/
 						decoder_mmu_box_free_idx(dec->mmu_box,
-							dec->avs2_dec.fref[ii]->index);
+							pic->index);
 #ifdef DYNAMIC_ALLOC_HEAD
 						decoder_bmmu_box_free_idx(
 							dec->bmmu_box,
@@ -5439,10 +5440,11 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 						pic->mpred_mv_wr_start_addr = 0;
 #endif
 					}
+					/*
 					decoder_bmmu_box_free_idx(
 						dec->bmmu_box,
 						VF_BUFFER_IDX(pic->index));
-					dec->cma_alloc_addr = 0;
+					dec->cma_alloc_addr = 0;*/
 				}
 			}
 		}
@@ -6250,7 +6252,7 @@ static int vavs2_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
 		(struct AVS2Decoder_s *)vdec->private;
 	if (i_only_flag & 0x100)
 		return 0;
-	if (trickmode == TRICKMODE_I)
+	if (trickmode == TRICKMODE_I || trickmode == TRICKMODE_I_HEVC)
 		dec->i_only = 0x3;
 	else if (trickmode == TRICKMODE_NONE)
 		dec->i_only = 0x0;
@@ -6851,13 +6853,15 @@ static void avs2_work(struct work_struct *work)
 			return;
 		}
 	} else if (dec->dec_result == DEC_RESULT_EOS) {
-		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+		avs2_print(dec, 0,
 			"%s: end of stream\n",
 			__func__);
 		dec->eos = 1;
-		check_pic_error(dec, dec->avs2_dec.hc.cur_pic);
-		avs2_post_process(&dec->avs2_dec);
-		avs2_prepare_display_buf(dec);
+		if ( dec->avs2_dec.hc.cur_pic != NULL) {
+			check_pic_error(dec, dec->avs2_dec.hc.cur_pic);
+			avs2_post_process(&dec->avs2_dec);
+			avs2_prepare_display_buf(dec);
+		}
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
 	} else if (dec->dec_result == DEC_RESULT_FORCE_EXIT) {
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
@@ -7292,6 +7296,11 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	struct AVS2Decoder_s *dec = NULL;
 
 	pr_info("%s\n", __func__);
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+		pr_info("%s, chip id %d is not support avs2\n",
+			__func__, get_cpu_major_id());
+		return -1;
+	}
 	if (pdata == NULL) {
 		pr_info("\nammvdec_avs2 memory resource undefined.\n");
 		return -EFAULT;
@@ -7368,6 +7377,14 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 			dec->dynamic_buf_margin = config_val;
 		else
 			dec->dynamic_buf_margin = 0;
+
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			dec->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			dec->sidebind_channel_id = config_val;
 
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
@@ -7610,10 +7627,10 @@ static int __init amvdec_avs2_driver_init_module(void)
 		return -ENODEV;
 	}
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
-		amvdec_avs2_profile.profile =
-				"8k, 10bit, dwrite, compressed";
-	} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
+	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)) {
+		amvdec_avs2_profile.name = "avs2_unsupport";
+	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
 		if (vdec_is_support_4k())
 			amvdec_avs2_profile.profile =
 				"4k, 10bit, dwrite, compressed";
@@ -7621,7 +7638,9 @@ static int __init amvdec_avs2_driver_init_module(void)
 			amvdec_avs2_profile.profile =
 				"10bit, dwrite, compressed";
 	} else {
-		amvdec_avs2_profile.name = "avs2_unsupport";
+		/* cpu id larger than sm1 support 8k */
+		amvdec_avs2_profile.profile =
+				"8k, 10bit, dwrite, compressed";
 	}
 
 	vcodec_profile_register(&amvdec_avs2_profile);

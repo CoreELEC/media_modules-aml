@@ -878,6 +878,26 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 		return -ENOMEM;
 	}
 
+	if ((vdec->hdr10p_data_valid == true) &&
+		(vdec->hdr10p_data_size != 0)) {
+		char *new_buf;
+		new_buf = vzalloc(vdec->hdr10p_data_size);
+		if (new_buf) {
+			memcpy(new_buf, vdec->hdr10p_data_buf, vdec->hdr10p_data_size);
+			chunk->hdr10p_data_buf = new_buf;
+			chunk->hdr10p_data_size = vdec->hdr10p_data_size;
+		} else {
+			pr_err("%s:hdr10p data vzalloc size(%d) failed\n",
+				__func__, vdec->hdr10p_data_size);
+			chunk->hdr10p_data_buf = NULL;
+			chunk->hdr10p_data_size = 0;
+		}
+	} else {
+		chunk->hdr10p_data_buf = NULL;
+		chunk->hdr10p_data_size = 0;
+	}
+	vdec->hdr10p_data_valid = false;
+
 	chunk->magic = 0x4b554843;
 	if (vdec->pts_valid) {
 		chunk->pts = vdec->pts;

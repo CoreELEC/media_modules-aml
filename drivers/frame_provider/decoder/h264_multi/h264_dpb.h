@@ -43,6 +43,16 @@
 #define DEBUG_DUMP_STAT               0x80000
 #define DEBUG_TIMEOUT_DEC_STAT        0x800000
 
+/*setting canvas mode and endian.
+  if this flag is set, value of canvas mode
+  will according to the value of mem_map_mode.
+  endian will be forced set to 0 in
+  CANVAS_BLKMODE_LINEAR mode.
+  otherwise picture will display abnormal.
+  if this flag is not set, value of canvas mode
+  will be determined by the user speace config.
+  endian will be set 7 in CANVAS_BLKMODE_LINEAR mode.
+*/
 #define IGNORE_PARAM_FROM_CONFIG      0x8000000
 
 #define MVC_EXTENSION_ENABLE 0
@@ -470,6 +480,7 @@ enum FirstInsertFrm_State {
 
 struct SPSParameters {
 	unsigned int profile_idc;
+	unsigned int level_idc;
 	int pic_order_cnt_type;
 	int log2_max_pic_order_cnt_lsb_minus4;
 	int num_ref_frames_in_pic_order_cnt_cycle;
@@ -809,8 +820,9 @@ struct FrameStore {
 	int dpb_frame_count;
 	u32 hw_decode_time;
 	u32 frame_size2; // For recording the chunk->size in frame mode
+	bool show_frame;
+	struct dma_fence *fence;
 };
-
 
 /* #define DPB_SIZE_MAX     16 */
 #define DPB_SIZE_MAX     32
@@ -966,6 +978,8 @@ void dump_dpb(struct DecodedPictureBuffer *p_Dpb, u8 force);
 
 void dump_pic(struct h264_dpb_stru *p_H264_Dpb);
 
+void * vh264_get_bufspec_lock(struct vdec_s *vdec);
+
 enum PictureStructure get_cur_slice_picture_struct(
 	struct h264_dpb_stru *p_H264_Dpb);
 
@@ -977,5 +991,6 @@ void unmark_for_reference(struct DecodedPictureBuffer *p_Dpb,
 
 void update_ref_list(struct DecodedPictureBuffer *p_Dpb);
 
+int post_picture_early(struct vdec_s *vdec, int index);
 
 #endif

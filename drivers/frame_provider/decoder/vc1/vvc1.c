@@ -43,6 +43,7 @@
 //#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
 #include <linux/delay.h>
+#include "../../../common/chips/decoder_cpu_ver_info.h"
 
 #define DRIVER_NAME "amvdec_vc1"
 #define MODULE_NAME "amvdec_vc1"
@@ -1220,6 +1221,9 @@ static int amvdec_vc1_remove(struct platform_device *pdev)
 	}
 
 	amvdec_disable();
+
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TM2)
+		vdec_reset_core(NULL);
 
 	if (mm_blk_handle) {
 		decoder_bmmu_box_free(mm_blk_handle);

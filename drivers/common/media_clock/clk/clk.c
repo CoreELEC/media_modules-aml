@@ -338,7 +338,8 @@ int vdec_source_changed_for_clk_set(int format, int width, int height, int fps)
 		|| format == VFORMAT_AV1) {
 		ret_clk = hevc_clock_set(clk);
 		clock_source_wxhxfps_saved[VDEC_HEVC] = width * height * fps;
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A &&
+			get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) {
 			ret_clk = hevc_back_clock_set(clk);
 			clock_source_wxhxfps_saved[VDEC_HEVCB] = width * height * fps;
 		}

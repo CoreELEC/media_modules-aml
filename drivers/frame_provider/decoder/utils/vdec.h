@@ -36,6 +36,7 @@
 
 #include "vdec_input.h"
 #include "frame_check.h"
+#include "vdec_sync.h"
 
 s32 vdec_dev_register(void);
 s32 vdec_dev_unregister(void);
@@ -269,13 +270,20 @@ struct vdec_s {
 	u64 run_clk[VDEC_MAX];
 	u64 start_run_clk[VDEC_MAX];
 #endif
-	atomic_t inirq_thread_flag;
-	atomic_t inirq_flag;
-	atomic_t inrelease;
+	u64 irq_thread_cnt;
+	u64 irq_cnt;
 	int parallel_dec;
-	volatile u64 isr_ns;
-	volatile u64 tfn_ns;
 	struct vdec_frames_s *mvfrm;
+	struct vdec_sync sync;
+
+	/*aux data check*/
+	struct aux_data_check_mgr_t adc;
+
+	u32 hdr10p_data_size;
+	char hdr10p_data_buf[PAGE_SIZE];
+	bool hdr10p_data_valid;
+	u32 profile_idc;
+	u32 level_idc;
 };
 
 /* common decoder vframe provider name to use default vfm path */
@@ -473,5 +481,7 @@ extern int get_double_write_ratio(int dw_mode);
 
 bool is_support_no_parser(void);
 
-extern u32 timestamp_avsync_counter_get(void);
+int vdec_resource_checking(struct vdec_s *vdec);
+
+void vdec_set_profile_level(struct vdec_s *vdec, u32 profile_idc, u32 level_idc);
 #endif				/* VDEC_H */

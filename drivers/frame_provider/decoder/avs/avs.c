@@ -525,6 +525,7 @@ static void vavs_isr(void)
 			pic_type = 2;
 			if ((picture_type == I_PICTURE) && pts_valid) {
 				vf->pts = pts;
+				vf->pts_us64 = pts_us64;
 				if ((repeat_count > 1) && avi_flag) {
 					/* next_pts = pts +
 					 *   (vavs_amstream_dec_info.rate *
@@ -538,6 +539,9 @@ static void vavs_isr(void)
 					next_pts = 0;
 			} else {
 				vf->pts = next_pts;
+				if (vf->pts == 0) {
+					vf->pts_us64 = 0;
+				}
 				if ((repeat_count > 1) && avi_flag) {
 					/* vf->duration =
 					 *   vavs_amstream_dec_info.rate *
@@ -579,8 +583,11 @@ static void vavs_isr(void)
 				pr_info("buffer_index %d, canvas addr %x\n",
 					   buffer_index, vf->canvas0Addr);
 			}
-			 vf->pts = (pts_valid)?pts:0;
-			vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+
+			vf->pts = (pts_valid)?pts:0;
+			/*
+			*vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+			*/
 			vfbuf_use[buffer_index]++;
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
@@ -604,7 +611,9 @@ static void vavs_isr(void)
 				vf->pts = 0;
 			else
 			vf->pts = next_pts;
-
+			if (vf->pts == 0) {
+				vf->pts_us64 = 0;
+			}
 			if ((repeat_count > 1) && avi_flag) {
 				/* vf->duration = vavs_amstream_dec_info.rate *
 				 *   repeat_count >> 1;
@@ -683,6 +692,9 @@ static void vavs_isr(void)
 					next_pts = 0;
 			} else {
 				vf->pts = next_pts;
+				if (vf->pts == 0) {
+					vf->pts_us64 = 0;
+				}
 				if ((repeat_count > 1) && avi_flag) {
 					/* vf->duration =
 					 *   vavs_amstream_dec_info.rate *
@@ -713,7 +725,9 @@ static void vavs_isr(void)
 				index2canvas(buffer_index);
 			vf->type_original = vf->type;
 			vf->pts = (pts_valid)?pts:0;
-			vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+			/*
+			*vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+			*/
 			if (debug_flag & AVS_DEBUG_PRINT) {
 				pr_info("buffer_index %d, canvas addr %x\n",
 					   buffer_index, vf->canvas0Addr
@@ -1177,6 +1191,7 @@ static void vavs_local_init(bool is_reset)
 {
 	int i;
 
+	is_reset = 0;
 	vavs_ratio = vavs_amstream_dec_info.ratio;
 
 	avi_flag = (unsigned long) vavs_amstream_dec_info.param;
@@ -1194,20 +1209,20 @@ static void vavs_local_init(bool is_reset)
 #endif
 
 	if (!is_reset) {
-	INIT_KFIFO(display_q);
-	INIT_KFIFO(recycle_q);
-	INIT_KFIFO(newframe_q);
+		INIT_KFIFO(display_q);
+		INIT_KFIFO(recycle_q);
+		INIT_KFIFO(newframe_q);
 
-	for (i = 0; i < VF_POOL_SIZE; i++) {
-		const struct vframe_s *vf = &vfpool[i];
+		for (i = 0; i < VF_POOL_SIZE; i++) {
+			const struct vframe_s *vf = &vfpool[i];
 
-		vfpool[i].index = vf_buf_num;
-		vfpool[i].bufWidth = 1920;
-		kfifo_put(&newframe_q, vf);
-	}
+			vfpool[i].index = vf_buf_num;
+			vfpool[i].bufWidth = 1920;
+			kfifo_put(&newframe_q, vf);
+		}
 
-	for (i = 0; i < vf_buf_num; i++)
-		vfbuf_use[i] = 0;
+		for (i = 0; i < vf_buf_num; i++)
+			vfbuf_use[i] = 0;
 	}
 
 	cur_vfpool = vfpool;
@@ -1427,7 +1442,7 @@ static void vavs_put_timer_func(struct timer_list *timer)
 
 	if (frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur))
-	schedule_work(&set_clk_work);
+		schedule_work(&set_clk_work);
 
 	timer->expires = jiffies + PUT_INTERVAL;
 
@@ -1712,6 +1727,13 @@ static int amvdec_avs_probe(struct platform_device *pdev)
 
 	INIT_WORK(&set_clk_work, avs_set_clk);
 	vdec = pdata;
+
+	INIT_WORK(&fatal_error_wd_work, vavs_fatal_error_handler);
+	atomic_set(&error_handler_run, 0);
+
+	INIT_WORK(&userdata_push_work, userdata_push_do_work);
+	INIT_WORK(&notify_work, vavs_notify_work);
+
 	if (vavs_init() < 0) {
 		pr_info("amvdec_avs init failed.\n");
 		kfree(gvs);
@@ -1719,14 +1741,6 @@ static int amvdec_avs_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return -ENODEV;
 	}
-
-	INIT_WORK(&fatal_error_wd_work, vavs_fatal_error_handler);
-	atomic_set(&error_handler_run, 0);
-
-	INIT_WORK(&userdata_push_work, userdata_push_do_work);
-
-	INIT_WORK(&notify_work, vavs_notify_work);
-
 	return 0;
 }
 
@@ -1810,6 +1824,8 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 
 
 	amvdec_disable();
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TM2)
+		vdec_reset_core(NULL);
 	pic_type = 0;
 	if (mm_blk_handle) {
 		decoder_bmmu_box_free(mm_blk_handle);
@@ -1830,12 +1846,32 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 }
 
 /****************************************/
+#ifdef CONFIG_PM
+static int avs_suspend(struct device *dev)
+{
+	amvdec_suspend(to_platform_device(dev), dev->power.power_state);
+	return 0;
+}
+
+static int avs_resume(struct device *dev)
+{
+	amvdec_resume(to_platform_device(dev));
+	return 0;
+}
+
+static const struct dev_pm_ops avs_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(avs_suspend, avs_resume)
+};
+#endif
 
 static struct platform_driver amvdec_avs_driver = {
 	.probe = amvdec_avs_probe,
 	.remove = amvdec_avs_remove,
 	.driver = {
 		.name = DRIVER_NAME,
+#ifdef CONFIG_PM
+		.pm = &avs_pm_ops,
+#endif
 	}
 };
 

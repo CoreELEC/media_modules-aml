@@ -3463,7 +3463,7 @@ static void vh264_put_timer_func(struct timer_list *timer)
 		(clk_adj_frame_count > VDEC_CLOCK_ADJUST_FRAME) &&
 		frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur))
-	schedule_work(&set_clk_work);
+		schedule_work(&set_clk_work);
 
 exit:
 	timer->expires = jiffies + PUT_INTERVAL;
@@ -4425,7 +4425,8 @@ static int __init amvdec_h264_driver_init_module(void)
 		return -ENODEV;
 	}
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB
-		&& (codec_mm_get_total_size() > 80 * SZ_1M)) {
+		&& (codec_mm_get_total_size() > 80 * SZ_1M) &&
+		get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) {
 		amvdec_h264_profile.profile = "4k";
 	}
 	vcodec_profile_register(&amvdec_h264_profile);

@@ -1365,7 +1365,7 @@ static void vmpeg_put_timer_func(struct timer_list *timer)
 
 	if (frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur))
-	schedule_work(&set_clk_work);
+		schedule_work(&set_clk_work);
 
 	timer->expires = jiffies + PUT_INTERVAL;
 

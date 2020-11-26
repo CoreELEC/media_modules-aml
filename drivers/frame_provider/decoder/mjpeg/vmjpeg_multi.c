@@ -232,6 +232,8 @@ struct vdec_mjpeg_hw_s {
 	bool v4l_params_parsed;
 	int buf_num;
 	int dynamic_buf_num_margin;
+	int sidebind_type;
+	int sidebind_channel_id;
 	u32 res_ch_flag;
 	u32 canvas_mode;
 	u32 canvas_endian;
@@ -268,6 +270,9 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 	vf->canvas1_config[0] = hw->buffer_spec[vf->index].canvas_config[0];
 	vf->canvas1_config[1] = hw->buffer_spec[vf->index].canvas_config[1];
 	vf->canvas1_config[2] = hw->buffer_spec[vf->index].canvas_config[2];
+
+	vf->sidebind_type = hw->sidebind_type;
+	vf->sidebind_channel_id = hw->sidebind_channel_id;
 }
 
 static irqreturn_t vmjpeg_isr(struct vdec_s *vdec, int irq)
@@ -1652,6 +1657,14 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 			&config_val) == 0)
 			hw->canvas_endian = config_val;
 
+		if (get_config_int(pdata->config, "sidebind_type",
+				&config_val) == 0)
+			hw->sidebind_type = config_val;
+
+		if (get_config_int(pdata->config, "sidebind_channel_id",
+				&config_val) == 0)
+			hw->sidebind_channel_id = config_val;
+
 		if (get_config_int(pdata->config,
 			"parm_v4l_codec_enable",
 			&config_val) == 0)
@@ -1664,6 +1677,10 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 
 	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
 		&vf_provider_ops, pdata);
+
+	platform_set_drvdata(pdev, pdata);
+
+	hw->platform_dev = pdev;
 
 	vdec_source_changed(VFORMAT_MJPEG,
 			1920, 1080, 60);
