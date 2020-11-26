@@ -334,6 +334,7 @@ struct vdec_mpeg12_hw_s {
 	int sidebind_channel_id;
 	u32 profile_idc;
 	u32 level_idc;
+	int dec_again_cnt;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -356,7 +357,8 @@ unsigned int mpeg12_debug_mask = 0xff;
 /*static int counter_max = 5;*/
 
 static u32 run_ready_min_buf_num = 2;
-
+static int dirty_again_threshold = 100;
+static int error_proc_policy = 0x1;
 
 #define PRINT_FLAG_ERROR              0x0
 #define PRINT_FLAG_RUN_FLOW           0X0001
@@ -1306,8 +1308,7 @@ static void vmmpeg2_reset_userdata_fifo(struct vdec_s *vdec, int bInit)
 
 	if (hw) {
 		mutex_lock(&hw->userdata_mutex);
-		pr_info("%s: bInit: %d, ri: %d, wi: %d\n",
-			__func__,
+		pr_info("mpeg2_reset_userdata_fifo: bInit: %d, ri: %d, wi: %d\n",
 			bInit,
 			hw->userdata_info.read_index,
 			hw->userdata_info.write_index);
@@ -2224,8 +2225,9 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 			"%s, result=%d, status=%d\n", __func__,
 			hw->dec_result, vdec->next_status);
-
 	if (hw->dec_result == DEC_RESULT_DONE) {
+		if (vdec->input.swap_valid)
+			hw->dec_again_cnt = 0;
 		vdec_vframe_dirty(vdec, hw->chunk);
 		hw->chunk = NULL;
 	} else if (hw->dec_result == DEC_RESULT_AGAIN &&
@@ -2242,6 +2244,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 #ifdef AGAIN_HAS_THRESHOLD
 		hw->next_again_flag = 1;
 #endif
+		//hw->dec_again_cnt++;
 	} else if (hw->dec_result == DEC_RESULT_GET_DATA &&
 		vdec->next_status != VDEC_STATUS_DISCONNECTED) {
 		if (!vdec_has_more_input(vdec)) {
@@ -3016,6 +3019,7 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 	hw->buffer_not_ready = 0;
 	hw->start_process_time = 0;
 	hw->init_flag = 0;
+	hw->dec_again_cnt = 0;
 	hw->error_frame_skip_level = error_frame_skip_level;
 
 	if (dec_control)
@@ -3182,6 +3186,37 @@ static unsigned char get_data_check_sum
 	return sum;
 }
 
+static int check_dirty_data(struct vdec_s *vdec)
+{
+	struct vdec_mpeg12_hw_s *hw =
+		(struct vdec_mpeg12_hw_s *)(vdec->private);
+	u32 wp, rp, level;
+
+	rp = STBUF_READ(&vdec->vbuf, get_rp);
+	wp = STBUF_READ(&vdec->vbuf, get_wp);
+
+	if (wp > rp)
+		level = wp - rp;
+	else
+		level = wp + vdec->input.size - rp ;
+
+	if (hw->next_again_flag &&
+		hw->pre_parser_wr_ptr !=
+			STBUF_READ(&vdec->vbuf, get_wp))
+		hw->dec_again_cnt++;
+	if ((level > (vdec->input.size * 2 / 3) ) &&
+			(hw->dec_again_cnt > dirty_again_threshold)) {
+		debug_print(DECODE_ID(hw), 0, "mpeg12 data skipped %x, level %x\n", ((level / 2) >> 20) << 20, level);
+		if (vdec->input.swap_valid) {
+			vdec_stream_skip_data(vdec, ((level / 2) >> 20) << 20);
+			hw->dec_again_cnt = 0;
+		}
+		return 1;
+	}
+	return 0;
+}
+
+
 static void run(struct vdec_s *vdec, unsigned long mask,
 void (*callback)(struct vdec_s *, void *),
 		void *arg)
@@ -3199,6 +3234,19 @@ void (*callback)(struct vdec_s *, void *),
 	vdec_reset_core(vdec);
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
+
+	if ((vdec_stream_based(vdec)) &&
+			(error_proc_policy & 0x1) &&
+			check_dirty_data(vdec)) {
+		hw->dec_result = DEC_RESULT_AGAIN;
+		if (!vdec->input.swap_valid) {
+			debug_print(DECODE_ID(hw), 0, "mpeg12 start dirty data skipped\n");
+			vdec_prepare_input(vdec, &hw->chunk);
+			hw->dec_result = DEC_RESULT_DONE;
+		}
+		vdec_schedule_work(&hw->work);
+		return;
+	}
 
 #ifdef AGAIN_HAS_THRESHOLD
 	if (vdec_stream_based(vdec)) {
@@ -3665,6 +3713,9 @@ module_param_array(max_process_time, uint, &max_decode_instance_num, 0664);
 module_param(udebug_flag, uint, 0664);
 MODULE_PARM_DESC(udebug_flag, "\n ammvdec_mpeg12 udebug_flag\n");
 
+module_param(dirty_again_threshold, int, 0664);
+MODULE_PARM_DESC(dirty_again_threshold, "\n ammvdec_mpeg12 dirty_again_threshold\n");
+
 
 #ifdef AGAIN_HAS_THRESHOLD
 module_param(again_threshold, uint, 0664);
@@ -3674,6 +3725,8 @@ MODULE_PARM_DESC(again_threshold, "\n again_threshold\n");
 module_param(without_display_mode, uint, 0664);
 MODULE_PARM_DESC(without_display_mode, "\n ammvdec_mpeg12 without_display_mode\n");
 
+module_param(error_proc_policy, uint, 0664);
+MODULE_PARM_DESC(error_proc_policy, "\n ammvdec_mpeg12 error_proc_policy\n");
 
 module_init(ammvdec_mpeg12_driver_init_module);
 module_exit(ammvdec_mpeg12_driver_remove_module);
