@@ -55,11 +55,13 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	struct timespec64 ts_monotonic;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance->mSyncMode != MEDIA_SYNC_PCRMASTER)
+		return 0;
 	if (!amldemux_pcrscr_get)
 		amldemux_pcrscr_get = symbol_request(demux_get_pcr);
 	if (!amldemux_pcrscr_get)
 		return 0;
-	pInstance = vMediaSyncInsList[index];
 	ktime_get_ts64(&ts_monotonic);
 	timeus = ts_monotonic.tv_sec * 1000000LL + ts_monotonic.tv_nsec / 1000LL;
 	if (pInstance->mDemuxId < 0)
