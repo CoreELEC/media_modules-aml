@@ -56,6 +56,8 @@ void vdec_module_exit(void);
 
 #define VDEC_FIFO_ALIGN 8
 
+#define VDEC_FCC_SUPPORT
+
 enum vdec_type_e {
 	VDEC_1 = 0,
 	VDEC_HCODEC,
@@ -111,6 +113,19 @@ enum vdec_fr_hint_state {
 	VDEC_NEED_HINT,
 	VDEC_HINTED,
 };
+
+#ifdef VDEC_FCC_SUPPORT
+typedef enum {
+	DISCARD_STATUS = 1,
+	AGAIN_STATUS,
+	WAIT_MSG_STATUS,
+	SWITCHING_STATUS,
+	JUMP_BACK_STATUS,
+	SWITCH_DONE_STATUS,
+	STATUS_BUTT
+} FCC_STATUS;
+#endif
+
 extern s32 vdec_request_threaded_irq(enum vdec_irq_num num,
 			irq_handler_t handler,
 			irq_handler_t thread_fn,
@@ -259,6 +274,9 @@ struct vdec_s {
 			struct userdata_param_t *puserdata_para);
 	void (*reset_userdata_fifo)(struct vdec_s *vdec, int bInit);
 	void (*wakeup_userdata_poll)(struct vdec_s *vdec);
+#ifdef VDEC_FCC_SUPPORT
+	void (*wakeup_fcc_poll)(struct vdec_s *vdec);
+#endif
 	/* private */
 	void *private;       /* decoder per instance specific data */
 #ifdef VDEC_DEBUG_SUPPORT
@@ -285,6 +303,17 @@ struct vdec_s {
 	bool hdr10p_data_valid;
 	u32 profile_idc;
 	u32 level_idc;
+#ifdef VDEC_FCC_SUPPORT
+	enum fcc_mode_e fcc_mode;
+	u32 stream_offset;
+	int fcc_new_msg;
+	FCC_STATUS fcc_status;
+	wait_queue_head_t jump_back_wq;
+	struct mutex jump_back_mutex;
+	u32 jump_back_done;
+	u32 jump_back_error;
+	u32 jump_back_rp;
+#endif
 };
 
 /* common decoder vframe provider name to use default vfm path */
@@ -456,6 +485,12 @@ int vdec_wakeup_userdata_poll(struct vdec_s *vdec);
 void vdec_reset_userdata_fifo(struct vdec_s *vdec, int bInit);
 
 struct vdec_s *vdec_get_vdec_by_id(int vdec_id);
+
+#ifdef VDEC_FCC_SUPPORT
+int vdec_wakeup_fcc_poll(struct vdec_s *vdec);
+int vdec_has_get_fcc_new_msg(struct vdec_s *vdec);
+int fcc_debug_enable(void);
+#endif
 
 #ifdef VDEC_DEBUG_SUPPORT
 extern void vdec_set_step_mode(void);

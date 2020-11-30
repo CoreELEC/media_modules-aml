@@ -96,7 +96,10 @@ static int keep_vdec_mem;
 static unsigned int debug_trace_num = 16 * 20;
 static int step_mode;
 static unsigned int clk_config;
-
+#ifdef VDEC_FCC_SUPPORT
+static int fcc_debug;
+static void vdec_fcc_jump_back(struct vdec_s *vdec);
+#endif
 /*
  * 0x1  : sched_priority to MAX_RT_PRIO -1.
  * 0x2  : always reload firmware.
@@ -1414,8 +1417,6 @@ void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size)
 }
 EXPORT_SYMBOL(vdec_stream_skip_data);
 
-
-
 /*
  *get next frame from input chain
  */
@@ -1573,6 +1574,9 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 				while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7))
 					;
 				WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
+#ifdef VDEC_FCC_SUPPORT
+				vdec_fcc_jump_back(vdec);
+#endif
 
 				/* restore wrap count */
 				WRITE_VREG(VLD_MEM_VIFIFO_WRAP_COUNT,
@@ -1606,7 +1610,9 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 					& (1<<7))
 					;
 				WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
-
+#ifdef VDEC_FCC_SUPPORT
+				vdec_fcc_jump_back(vdec);
+#endif
 				/* restore stream offset */
 				WRITE_VREG(HEVC_SHIFT_BYTE_COUNT,
 					input->stream_cookie);
@@ -2318,8 +2324,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	if (dev_name == NULL)
 		return -ENODEV;
 
-	pr_info("vdec_init, dev_name:%s, vdec_type=%s\n",
-		dev_name, vdec_type_str(vdec));
+	pr_info("vdec_init, dev_name:%s, vdec_type=%s  id = %d\n",
+		dev_name, vdec_type_str(vdec), vdec->id);
 
 	/*
 	 *todo: VFM patch control should be configurable,
@@ -2703,6 +2709,13 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 		vdec->sys_info->height);
 	/* vdec is now ready to be active */
 	vdec_set_status(vdec, VDEC_STATUS_DISCONNECTED);
+
+#ifdef VDEC_FCC_SUPPORT
+	init_waitqueue_head(&vdec->jump_back_wq);
+	mutex_init(&vdec->jump_back_mutex);
+	vdec->fcc_mode = FCC_BUTT;
+	vdec->fcc_status = STATUS_BUTT;
+#endif
 	return 0;
 
 error:
@@ -2814,8 +2827,8 @@ void vdec_release(struct vdec_s *vdec)
 	if (vdec->vbuf.ops && !vdec->master)
 		vdec->vbuf.ops->release(&vdec->vbuf);
 
-	pr_debug("vdec_release instance %p, total %d\n", vdec,
-		atomic_read(&vdec_core->vdec_nr));
+	pr_debug("vdec_release instance %p, total %d id = %d\n", vdec,
+		atomic_read(&vdec_core->vdec_nr), vdec->id);
 
 	mutex_lock(&vdec_mutex);
 	vdec_core->vdec_resouce_status &= ~BIT(vdec->frame_base_video_path);
@@ -4629,6 +4642,157 @@ void vdec_set_profile_level(struct vdec_s *vdec, u32 profile_idc, u32 level_idc)
 }
 EXPORT_SYMBOL(vdec_set_profile_level);
 
+#ifdef VDEC_FCC_SUPPORT
+int vdec_wakeup_fcc_poll(struct vdec_s *vdec)
+{
+	if (vdec) {
+		if (vdec->wakeup_fcc_poll)
+			vdec->wakeup_fcc_poll(vdec);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(vdec_wakeup_fcc_poll);
+
+int vdec_has_get_fcc_new_msg(struct vdec_s *vdec)
+{
+	int ret = 1;
+
+	if (vdec == NULL) {
+		pr_info("Error, invalid vdec instance!\n");
+		return 0;
+	}
+
+	if (input_stream_based(vdec)) {
+		if (vdec->fcc_mode == FCC_DISCARD_MODE &&
+			vdec->fcc_status == STATUS_BUTT) {
+			ret = 1;
+			vdec->fcc_status = AGAIN_STATUS;
+		} else if (vdec->fcc_mode == FCC_DEC_MODE &&
+			vdec->fcc_status != SWITCH_DONE_STATUS) {
+			ret = 1;
+
+			if (wait_event_interruptible_timeout(vdec->jump_back_wq, vdec->jump_back_done | vdec->jump_back_error,
+					HZ / 2) <= 0) {
+				pr_info("[%d][FCC]: Error! Wait jump back wp timeout 500ms!\n",
+					vdec->id);
+				vdec->fcc_status = SWITCH_DONE_STATUS;
+			} else {
+				if (fcc_debug_enable())
+					pr_info("[%d][FCC]: jump_back_done = %d\n",
+					vdec->id, vdec->jump_back_done);
+				if (vdec->jump_back_done) {
+					vdec->fcc_status = JUMP_BACK_STATUS;
+					vdec->jump_back_done = 0;
+				} else {
+					vdec->fcc_status = SWITCH_DONE_STATUS;
+					vdec->jump_back_error = 0;
+				}
+			}
+
+			if (fcc_debug_enable())
+				pr_info("[%d][FCC]: It is DEC mode now! fcc_status: %d\n",
+					vdec->id, vdec->fcc_status);
+		} else if (vdec->fcc_mode == FCC_DISCARD_MODE &&
+			!vdec->fcc_new_msg) {
+			if (vdec->fcc_status == WAIT_MSG_STATUS) {
+				if (fcc_debug_enable())
+					pr_info("[%d][FCC]: Wait msg!\n", vdec->id);
+				ret = 0;
+			} else {
+				if (fcc_debug_enable())
+					pr_info("[%d][FCC]: Continue to find header!\n", vdec->id);
+				ret = 1;
+			}
+		} else if (vdec->fcc_new_msg) {
+			if (fcc_debug_enable())
+				pr_info("[%d][FCC]: Got discard msg!\n", vdec->id);
+			ret = 1;
+			vdec->fcc_new_msg = 0;
+			if (vdec->fcc_mode == FCC_DISCARD_MODE) {
+				vdec->fcc_status = DISCARD_STATUS;
+			}
+		}
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(vdec_has_get_fcc_new_msg);
+
+int fcc_debug_enable(void)
+{
+	return fcc_debug;
+}
+EXPORT_SYMBOL(fcc_debug_enable);
+
+static void vdec_fcc_jump_back(struct vdec_s *vdec)
+{
+	u32 cur_rp, set_rp;
+	struct vdec_input_s *input = &vdec->input;
+
+	if (fcc_debug_enable())
+		pr_info("[%d][FCC]: fcc_mode = %d fcc_status = %d\n",
+			vdec->id, vdec->fcc_mode, vdec->fcc_status);
+
+	if (input->target == VDEC_INPUT_TARGET_VLD) {
+		if (vdec->fcc_mode == FCC_DEC_MODE &&
+			vdec->fcc_status == JUMP_BACK_STATUS) {
+			set_rp = vdec->jump_back_rp;
+			cur_rp =READ_VREG(VLD_MEM_VIFIFO_RP);
+			input->stream_cookie = READ_VREG(VLD_MEM_VIFIFO_WRAP_COUNT);
+			if (cur_rp < set_rp) {
+				if (fcc_debug_enable())
+					pr_info("[%d][FCC]: Packet is wrapped! VLD_MEM_VIFIFO_WRAP_COUNT = %d\n",
+						vdec->id, input->stream_cookie);
+				input->stream_cookie = (input->stream_cookie - 1) < 0 ?
+								0 : input->stream_cookie - 1;
+			}
+
+			WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR, set_rp);
+			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+			WRITE_VREG(VLD_MEM_SWAP_ADDR,
+				input->swap_page_phys);
+			WRITE_VREG(VLD_MEM_SWAP_CTL, 3);
+			while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7))
+				;
+			WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
+			vdec->fcc_status = SWITCH_DONE_STATUS;
+			if (fcc_debug_enable()) {
+				pr_info("[%d][FCC]:Current VLD_MEM_VIFIFO_WRAP_COUNT = %d cur_rp = %x set_rp = %x\n",
+					vdec->id, input->stream_cookie, cur_rp, set_rp);
+			}
+		}
+	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+		if (vdec->fcc_mode == FCC_DEC_MODE &&
+			vdec->fcc_status == JUMP_BACK_STATUS) {
+			set_rp = vdec->jump_back_rp;
+			cur_rp = READ_VREG(HEVC_STREAM_RD_PTR);
+			if (cur_rp < set_rp) {
+				input->stream_cookie = input->stream_cookie + set_rp - cur_rp - vdec->input.size;
+			} else {
+				input->stream_cookie = input->stream_cookie - cur_rp + set_rp;
+			}
+
+			WRITE_VREG(HEVC_STREAM_RD_PTR, set_rp);
+			vdec->fcc_status = SWITCH_DONE_STATUS;
+
+			WRITE_VREG(HEVC_STREAM_SWAP_ADDR,
+				input->swap_page_phys);
+			WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 3);
+
+			while (READ_VREG(HEVC_STREAM_SWAP_CTRL)
+				& (1<<7))
+				;
+			WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
+		}
+	}
+
+	return;
+}
+#endif
+
 static int dump_mode;
 static ssize_t dump_risc_mem_store(struct class *class,
 		struct class_attribute *attr,
@@ -5185,6 +5349,28 @@ static ssize_t level_idc_show(struct class *class, struct class_attribute *attr,
 	return pbuf - buf;
 }
 
+#ifdef VDEC_FCC_SUPPORT
+static ssize_t store_fcc_debug(struct class *class,
+		struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	unsigned int val;
+	ssize_t ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret != 0)
+		return -EINVAL;
+	fcc_debug = val;
+	return size;
+}
+
+static ssize_t show_fcc_debug(struct class *class,
+		struct class_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", fcc_debug);
+}
+#endif
+
 static struct class_attribute vdec_class_attrs[] = {
 	__ATTR_RO(amrisc_regs),
 	__ATTR_RO(dump_trace),
@@ -5217,6 +5403,10 @@ static struct class_attribute vdec_class_attrs[] = {
 	__ATTR_RO(level_idc),
 	__ATTR(vfm_path, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_vdec_vfm_path, store_vdec_vfm_path),
+#ifdef VDEC_FCC_SUPPORT
+	__ATTR(fcc_debug, S_IRUGO | S_IWUSR | S_IWGRP,
+	show_fcc_debug, store_fcc_debug),
+#endif
 	__ATTR_NULL
 };
 
@@ -5728,6 +5918,11 @@ MODULE_PARM_DESC(max_di_instance,
 
 module_param(debug_vdetect, int, 0664);
 MODULE_PARM_DESC(debug_vdetect, "\n debug_vdetect\n");
+
+#ifdef VDEC_FCC_SUPPORT
+module_param(fcc_debug, int, 0664);
+MODULE_PARM_DESC(fcc_debug, "\n fcc_debug\n");
+#endif
 
 module_param(enable_stream_mode_multi_dec, int, 0664);
 EXPORT_SYMBOL(enable_stream_mode_multi_dec);

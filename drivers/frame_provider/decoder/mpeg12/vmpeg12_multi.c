@@ -180,6 +180,7 @@ enum {
 #define DEC_RESULT_EOS 5
 #define DEC_RESULT_GET_DATA         6
 #define DEC_RESULT_GET_DATA_RETRY   7
+#define DEC_RESULT_DISCARD_DATA      8
 
 #define DEC_DECODE_TIMEOUT         0x21
 #define DECODE_ID(hw) (hw_to_vdec(hw)->id)
@@ -378,6 +379,7 @@ static int error_proc_policy = 0x1;
 #define PRINT_FLAG_USERDATA_DETAIL    0x2000
 #define PRINT_FLAG_TIMEOUT_STATUS     0x4000
 #define PRINT_FLAG_V4L_DETAIL         0x8000
+#define PRINT_FLAG_FCC_STATUS         0x10000
 #define IGNORE_PARAM_FROM_CONFIG      0x8000000
 
 
@@ -1841,6 +1843,65 @@ static int v4l_res_change(struct vdec_mpeg12_hw_s *hw, int width, int height)
 	return ret;
 }
 
+#ifdef VDEC_FCC_SUPPORT
+static void fcc_discard_mode_process(struct vdec_s *vdec)
+{
+	struct vdec_mpeg12_hw_s *hw =
+		(struct vdec_mpeg12_hw_s *)(vdec->private);
+	int wrap_count;
+	u32 rp;
+	u32 first_ptr;
+
+	if (vdec->fcc_status == AGAIN_STATUS) {
+		wrap_count = READ_VREG(VLD_MEM_VIFIFO_WRAP_COUNT);
+		rp = READ_VREG(VLD_MEM_VIFIFO_RP);
+		first_ptr = vdec->vbuf.ext_buf_addr;
+
+		vdec->stream_offset = rp + vdec->input.size * wrap_count - first_ptr;
+		debug_print(DECODE_ID(hw), PRINT_FLAG_FCC_STATUS,
+			"[%d][FCC]: Notify stream_offset: %d\n",
+			vdec->id, vdec->stream_offset);
+
+		debug_print(DECODE_ID(hw), PRINT_FLAG_FCC_STATUS,
+			"[%d][FCC]: rp : 0x%x size: 0x%x wrap_count:%d first_ptr: 0x%x\n",
+			vdec->id, rp, vdec->input.size, wrap_count, first_ptr);
+		vdec_wakeup_fcc_poll(vdec);
+		vdec->fcc_status = WAIT_MSG_STATUS;
+		hw->dec_result = DEC_RESULT_AGAIN;
+		vdec_schedule_work(&hw->work);
+	} else if (vdec->fcc_status == DISCARD_STATUS) {
+		debug_print(DECODE_ID(hw), PRINT_FLAG_FCC_STATUS,
+			"[%d][FCC]: Discard current gop and to find next gop!\n",
+			vdec->id);
+		vdec->fcc_status = AGAIN_STATUS;
+		hw->dec_result = DEC_RESULT_DISCARD_DATA;
+		vdec_schedule_work(&hw->work);
+	}
+}
+
+static int vmpeg2_fcc_process(struct vdec_s *vdec)
+{
+	struct vdec_mpeg12_hw_s *hw =
+		(struct vdec_mpeg12_hw_s *)(vdec->private);
+
+	if (input_stream_based(vdec)) {
+		switch (vdec->fcc_mode) {
+		case FCC_DISCARD_MODE:
+			fcc_discard_mode_process(vdec);
+			return 1;
+		case FCC_DEC_MODE:
+			debug_print(DECODE_ID(hw), PRINT_FLAG_FCC_STATUS,
+			"[%d][FCC]: Current is Dec mode.\n", vdec->id);
+			break;
+		case FCC_BUTT:
+		default:
+			break;
+		}
+	}
+
+	return 0;
+}
+#endif
 
 static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
@@ -1872,6 +1933,13 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 				"[vdec_kpi][%s] First I frame coming.\n",
 				__func__);
 		}
+
+#ifdef VDEC_FCC_SUPPORT
+		if (vmpeg2_fcc_process(vdec) > 0) {
+			WRITE_VREG(AV_SCRATCH_G, 0);
+			return IRQ_HANDLED;
+		}
+#endif
 		if (hw->is_used_v4l) {
 			int frame_width = READ_VREG(MREG_PIC_WIDTH);
 			int frame_height = READ_VREG(MREG_PIC_HEIGHT);
@@ -2319,6 +2387,10 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		debug_print(DECODE_ID(hw), 0,
 			"%s: end of stream, num %d(%d)\n",
 			__func__, hw->disp_num, hw->dec_num);
+	} else if (hw->dec_result == DEC_RESULT_DISCARD_DATA) {
+		hw->dec_again_cnt = 0;
+		vdec_vframe_dirty(vdec, hw->chunk);
+		hw->chunk = NULL;
 	}
 	if (hw->stat & STAT_VDEC_RUN) {
 		amvdec_stop();
@@ -3084,6 +3156,13 @@ static s32 vmpeg12_init(struct vdec_mpeg12_hw_s *hw)
 	return 0;
 }
 
+#ifdef VDEC_FCC_SUPPORT
+static void vmmpeg2_wakeup_fcc_poll(struct vdec_s *vdec)
+{
+	amstream_wakeup_fcc_poll(vdec);
+}
+#endif
+
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 {
 	struct vdec_mpeg12_hw_s *hw =
@@ -3157,6 +3236,14 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		hw->buffer_not_ready++;
 		return 0;
 	}
+
+#ifdef VDEC_FCC_SUPPORT
+	if (!vdec_has_get_fcc_new_msg(vdec)) {
+		hw->buffer_not_ready++;
+		return 0;
+	}
+#endif
+
 	hw->not_run_ready = 0;
 	hw->buffer_not_ready = 0;
 	if (vdec->parallel_dec == 1)
@@ -3383,6 +3470,7 @@ void (*callback)(struct vdec_s *, void *),
 	amvdec_start();
 	hw->stat |= STAT_VDEC_RUN;
 	hw->init_flag = 1;
+
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 }
 
@@ -3443,6 +3531,10 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 	pdata->user_data_read = vmmpeg2_user_data_read;
 	pdata->reset_userdata_fifo = vmmpeg2_reset_userdata_fifo;
 	pdata->wakeup_userdata_poll = vmmpeg2_wakeup_userdata_poll;
+
+#ifdef VDEC_FCC_SUPPORT
+	pdata->wakeup_fcc_poll = vmmpeg2_wakeup_fcc_poll;
+#endif
 
 	if (pdata->use_vfm_path) {
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,

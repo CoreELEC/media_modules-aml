@@ -1504,6 +1504,7 @@ struct tile_s {
 #define DEC_RESULT_EOS              9
 #define DEC_RESULT_FORCE_EXIT       10
 #define DEC_RESULT_FREE_CANVAS      11
+#define DEC_RESULT_DISCARD_DATA      12
 
 static void vh265_work(struct work_struct *work);
 static void vh265_timeout_work(struct work_struct *work);
@@ -9729,14 +9730,17 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		pic->vf_ref = 1;
 		put_vf_to_display_q(hevc, vf);
 #endif
+
 		/*count info*/
 		vdec_count_info(hevc->gvs, 0, stream_offset);
-		if (hevc->cur_pic->slice_type == I_SLICE) {
-			hevc->gvs->i_decoded_frames++;
-		} else if (hevc->cur_pic->slice_type == P_SLICE) {
-			hevc->gvs->p_decoded_frames++;
-		} else if (hevc->cur_pic->slice_type == B_SLICE) {
-			hevc->gvs->b_decoded_frames++;
+		if (hevc->cur_pic != NULL) {
+			if (hevc->cur_pic->slice_type == I_SLICE) {
+				hevc->gvs->i_decoded_frames++;
+			} else if (hevc->cur_pic->slice_type == P_SLICE) {
+				hevc->gvs->p_decoded_frames++;
+			} else if (hevc->cur_pic->slice_type == B_SLICE) {
+				hevc->gvs->b_decoded_frames++;
+			}
 		}
 		hevc_update_gvs(hevc);
 		memcpy(&tmp4x, hevc->gvs, sizeof(struct vdec_info));
@@ -10303,6 +10307,55 @@ static int hevc_skip_nal(struct hevc_state_s *hevc)
 	}
 	return 0;
 }
+
+#ifdef VDEC_FCC_SUPPORT
+static void fcc_discard_mode_process(struct vdec_s *vdec, struct hevc_state_s *hevc)
+{
+	if (vdec->fcc_status == AGAIN_STATUS &&
+		hevc->param.p.slice_type == I_SLICE) {
+		vdec->stream_offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
+			"[%d][FCC]: Notify stream_offset: %u\n",
+			vdec->id, vdec->stream_offset);
+
+		vdec_wakeup_fcc_poll(vdec);
+		amhevc_stop();
+		vdec->fcc_status = WAIT_MSG_STATUS;
+		hevc->dec_result = DEC_RESULT_AGAIN;
+		vdec_schedule_work(&hevc->work);
+	} else if (vdec->fcc_status == DISCARD_STATUS ||
+		hevc->param.p.slice_type != I_SLICE) {
+		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
+			"[%d][FCC]: Discard current gop and to find next gop!\n",
+			vdec->id);
+
+		amhevc_stop();
+		vdec->fcc_status = AGAIN_STATUS;
+		hevc->dec_result = DEC_RESULT_DISCARD_DATA;
+		vdec_schedule_work(&hevc->work);
+	}
+}
+
+static int vh265_fcc_process(struct vdec_s *vdec, struct hevc_state_s *hevc)
+{
+	if (input_stream_based(vdec)) {
+		switch (vdec->fcc_mode) {
+		case FCC_DISCARD_MODE:
+			fcc_discard_mode_process(vdec, hevc);
+			return 1;
+		case FCC_DEC_MODE:
+			hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
+					"[%d][FCC]: Current is Dec mode.\n", vdec->id);
+			break;
+		case FCC_BUTT:
+		default:
+			break;
+		}
+	}
+
+	return 0;
+}
+#endif
 
 static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 {
@@ -11004,6 +11057,10 @@ force_output:
 				check_head_error(hevc);
 #endif
 			}
+#ifdef VDEC_FCC_SUPPORT
+			if (vh265_fcc_process(vdec, hevc) > 0)
+				return IRQ_HANDLED;
+#endif
 			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE) {
 				hevc_print(hevc, 0,
 					"rpm_param: (%d)\n", hevc->slice_idx);
@@ -12952,6 +13009,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		}
 	}
 #endif
+
 		if (hevc->mmu_enable && ((hevc->double_write_mode & 0x10) == 0)) {
 			hevc->used_4k_num =
 				READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
@@ -13208,6 +13266,11 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		}
 		hevc_print(hevc, 0, "%s: force exit end\n",
 			__func__);
+	} else if (hevc->dec_result == DEC_RESULT_DISCARD_DATA) {
+		mutex_lock(&hevc->chunks_mutex);
+		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
+		hevc->chunk = NULL;
+		mutex_unlock(&hevc->chunks_mutex);
 	}
 
 	if (hevc->stat & STAT_VDEC_RUN) {
@@ -13283,6 +13346,12 @@ static void vh265_timeout_work(struct work_struct *work)
 	vh265_work_implement(hevc, vdec, 1);
 }
 
+#ifdef VDEC_FCC_SUPPORT
+static void vh265_wakeup_fcc_poll(struct vdec_s *vdec)
+{
+	amstream_wakeup_fcc_poll(vdec);
+}
+#endif
 
 static int vh265_hw_ctx_restore(struct hevc_state_s *hevc)
 {
@@ -13297,6 +13366,9 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	int tvp = vdec_secure(hw_to_vdec(hevc)) ?
 		CODEC_MM_FLAGS_TVP : 0;
 	bool ret = 0;
+#ifdef VDEC_FCC_SUPPORT
+	int get_msg = 1;
+#endif
 	if (step == 0x12)
 		return 0;
 	else if (step == 0x11)
@@ -13421,6 +13493,10 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		}
 	}
 
+#ifdef VDEC_FCC_SUPPORT
+	get_msg = vdec_has_get_fcc_new_msg(vdec);
+	ret &= get_msg;
+#endif
 	if (ret)
 		not_run_ready[hevc->index] = 0;
 	else
@@ -14084,7 +14160,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	pdata->irq_handler = vh265_irq_cb;
 	pdata->threaded_irq_handler = vh265_threaded_irq_cb;
 	pdata->dump_state = vh265_dump_state;
-
+#ifdef VDEC_FCC_SUPPORT
+	pdata->wakeup_fcc_poll = vh265_wakeup_fcc_poll;
+#endif
 	hevc->index = pdev->id;
 	hevc->m_ins_flag = 1;
 

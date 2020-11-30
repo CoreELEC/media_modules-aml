@@ -192,11 +192,18 @@ static int (*amstream_adec_status)
 static ssize_t amstream_mprm_write
 (struct file *file, const char *buf, size_t count, loff_t *ppos);
 #endif
+#ifdef VDEC_FCC_SUPPORT
+static unsigned int amstream_offset_poll
+(struct file *file, poll_table *wait_table);
+#endif
 
 static const struct file_operations vbuf_fops = {
 	.owner = THIS_MODULE,
 	.open = amstream_open,
 	.release = amstream_release,
+#ifdef VDEC_FCC_SUPPORT
+	.poll = amstream_offset_poll,
+#endif
 	.write = amstream_vbuf_write,
 	.unlocked_ioctl = amstream_ioctl,
 #ifdef CONFIG_COMPAT
@@ -331,6 +338,25 @@ static u32 ud_ready_vdec_flag;
 static u32 force_dv_mode;
 
 static DEFINE_MUTEX(userdata_mutex);
+
+#ifdef VDEC_FCC_SUPPORT
+static void amstream_fcc_get_one_slot(struct vdec_s *vdec);
+static void amstream_fcc_release_one_slot(struct vdec_s *vdec);
+
+#define MAX_FCC_CHANNEL_NUM 5
+
+typedef struct {
+	struct mutex mutex;
+	wait_queue_head_t offset_wait;
+	u32 offset[MAX_FCC_CHANNEL_NUM];
+	u32 offset_ready_flag[MAX_FCC_CHANNEL_NUM];
+	int used[MAX_FCC_CHANNEL_NUM];
+	int id[MAX_FCC_CHANNEL_NUM];
+} st_fcc;
+
+st_fcc fcc;
+static u32 fcc_enable;
+#endif
 
 static struct stream_port_s ports[] = {
 	{
@@ -600,6 +626,10 @@ static void video_port_release(struct port_priv_s *priv,
 	/*fallthrough*/
 	case 0:		/*release all */
 	case 3:
+#ifdef VDEC_FCC_SUPPORT
+		if (fcc_enable & 0x1)
+			amstream_fcc_release_one_slot(vdec);
+#endif
 		if (vdec->slave)
 			slave = vdec->slave;
 		vdec_release(vdec);
@@ -696,6 +726,10 @@ static int video_port_init(struct port_priv_s *priv,
 			goto err;
 		}
 	}
+#ifdef VDEC_FCC_SUPPORT
+	if (fcc_enable & 0x1)
+		amstream_fcc_get_one_slot(vdec);
+#endif
 
 	return 0;
 err:
@@ -1615,6 +1649,123 @@ static ssize_t amstream_userdata_read(struct file *file, char __user *buf,
 	return retVal;
 }
 
+#ifdef VDEC_FCC_SUPPORT
+static unsigned int amstream_offset_poll(struct file *file,
+		poll_table *wait_table)
+{
+	struct port_priv_s *priv = (struct port_priv_s *)file->private_data;
+	struct vdec_s *vdec = priv->vdec;
+	int fd_match = 0;
+	int i;
+
+	poll_wait(file, &fcc.offset_wait, wait_table);
+	mutex_lock(&fcc.mutex);
+	for (i = 0; i < MAX_FCC_CHANNEL_NUM; i++) {
+		if (fcc.id[i] == vdec->id && fcc.offset_ready_flag[i] == 1) {
+			fd_match = 1;
+			if (fcc_debug_enable())
+				pr_info("i = %d vdec->id = %d  offset_ready_flag = %d\n",
+					 i, vdec->id, fcc.offset_ready_flag[i]);
+			break;
+		}
+	}
+
+	if (fd_match) {
+		mutex_unlock(&fcc.mutex);
+		return POLLIN | POLLRDNORM;
+	}
+
+	mutex_unlock(&fcc.mutex);
+	return 0;
+}
+
+void amstream_wakeup_fcc_poll(struct vdec_s *vdec)
+{
+	int i;
+
+	if (vdec == NULL) {
+		pr_info("Error, invalid vdec instance!\n");
+		return;
+	}
+
+	mutex_lock(&fcc.mutex);
+
+	for (i = 0; i < MAX_FCC_CHANNEL_NUM; i++) {
+		if (fcc.id[i] == vdec->id) {
+			fcc.offset[i] = vdec->stream_offset;
+			fcc.offset_ready_flag[i] = 1;
+			if (fcc_debug_enable())
+				pr_info("i = %d vdec->id = %d stream_offset = %d\n",
+					i, vdec->id, vdec->stream_offset);
+			break;
+		}
+	}
+
+	mutex_unlock(&fcc.mutex);
+
+	wake_up_interruptible(&fcc.offset_wait);
+}
+EXPORT_SYMBOL(amstream_wakeup_fcc_poll);
+
+static void amstream_fcc_init(void)
+{
+	int i;
+
+	init_waitqueue_head(&fcc.offset_wait);
+	mutex_init(&fcc.mutex);
+
+	for (i = 0; i < MAX_FCC_CHANNEL_NUM; i++) {
+		fcc.offset_ready_flag[i] = 0;
+		fcc.id[i] = -1;
+		fcc.used[i] = 0;
+	}
+
+	return;
+}
+
+static void amstream_fcc_get_one_slot(struct vdec_s *vdec)
+{
+	int i;
+
+	mutex_lock(&fcc.mutex);
+	for (i = 0; i < MAX_FCC_CHANNEL_NUM; i++) {
+		if (!fcc.used[i]) {
+			fcc.offset_ready_flag[i] = 0;
+			fcc.id[i] = vdec->id;
+			fcc.used[i] = 1;
+			break;
+		}
+	}
+	mutex_unlock(&fcc.mutex);
+
+	if (i >= MAX_FCC_CHANNEL_NUM)
+		pr_info("Error, no free fcc slot\n");
+
+	return;
+}
+
+static void amstream_fcc_release_one_slot(struct vdec_s *vdec)
+{
+	int i;
+
+	mutex_lock(&fcc.mutex);
+	for (i = 0; i < MAX_FCC_CHANNEL_NUM; i++) {
+		if (fcc.used[i] && vdec->id == fcc.id[i]) {
+			fcc.offset_ready_flag[i] = 0;
+			fcc.id[i] = -1;
+			fcc.used[i] = 0;
+			break;
+		}
+	}
+	mutex_unlock(&fcc.mutex);
+
+	if (i >= MAX_FCC_CHANNEL_NUM)
+		pr_info("Error, no fcc slot matched to release\n");
+
+	return;
+}
+#endif
+
 static int amstream_open(struct inode *inode, struct file *file)
 {
 	s32 i;
@@ -1891,7 +2042,9 @@ static long amstream_ioctl_get(struct port_priv_s *priv, ulong arg)
 {
 	struct stream_port_s *this = priv->port;
 	long r = 0;
-
+#ifdef VDEC_FCC_SUPPORT
+	int i;
+#endif
 	struct am_ioctl_parm parm;
 
 	if (copy_from_user
@@ -2034,6 +2187,22 @@ static long amstream_ioctl_get(struct port_priv_s *priv, ulong arg)
 		break;
 	case AMSTREAM_GET_FREED_HANDLE:
 		parm.data_32 = vdec_input_get_freed_handle(priv->vdec);
+		break;
+	case AMSTREAM_GET_OFFSET:
+#ifdef VDEC_FCC_SUPPORT
+		mutex_lock(&fcc.mutex);
+		for (i = 0; i < MAX_FCC_CHANNEL_NUM; i++) {
+			if (priv->vdec->id == fcc.id[i] &&
+				fcc.offset_ready_flag[i]) {
+				parm.data_32 = fcc.offset[i];
+				fcc.offset_ready_flag[i] = 0;
+				break;
+			}
+		}
+		mutex_unlock(&fcc.mutex);
+		if (i >= MAX_FCC_CHANNEL_NUM)
+			pr_info("Error, Get offset fail!\n");
+#endif
 		break;
 	default:
 		r = -ENOIOCTLCMD;
@@ -2280,6 +2449,41 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 			this->flag &= (~PORT_FLAG_DRM);
 			pr_debug("no drmmode\n");
 		}
+		break;
+	case AMSTREAM_SET_WORKMODE:
+	case AMSTREAM_SET_FCC_MODE:
+#ifdef VDEC_FCC_SUPPORT
+		if (parm.cmd == AMSTREAM_SET_FCC_MODE) {
+			priv->vdec->fcc_new_msg = 1;
+			if (priv->vdec->fcc_mode == FCC_DEC_MODE) {
+				priv->vdec->fcc_new_msg = 0;
+				if (fcc_debug_enable())
+					pr_info("[%d][FCC]: Current is dec mode, ignore discard message!\n",
+						priv->vdec->id);
+				break;
+			}
+		}
+
+		if (parm.data_32 == FCC_DISCARD_MODE) {
+			if (fcc_debug_enable())
+				pr_info("[%d][FCC]: Set discard pic mode!\n",
+					priv->vdec->id);
+			if ((this->type & PORT_TYPE_VIDEO) &&
+				(priv->vdec)) {
+				priv->vdec->fcc_mode = FCC_DISCARD_MODE;
+			}
+		} else if (parm.data_32 == FCC_DEC_MODE) {
+			if ((this->type & PORT_TYPE_VIDEO) &&
+				(priv->vdec)) {
+				priv->vdec->fcc_mode = FCC_DEC_MODE;
+			}
+			if (fcc_debug_enable()) {
+				pr_info("[%d][FCC]: Set dec pic mode!\n", priv->vdec->id);
+			}
+		} else {
+			pr_info("Para error! Unknow FCC Mode! vdec id: %d\n", priv->vdec->id);
+		}
+#endif
 		break;
 	case AMSTREAM_SET_APTS: {
 		unsigned int pts;
@@ -4498,7 +4702,10 @@ static int amstream_probe(struct platform_device *pdev)
 	/*prealloc fetch buf to avoid no continue buffer later...*/
 	stbuf_fetch_init();
 	REG_PATH_CONFIGS("media.amports", amports_configs);
-
+#ifdef VDEC_FCC_SUPPORT
+	if (fcc_enable & 0x1)
+		amstream_fcc_init();
+#endif
 	/* poweroff the decode core because dos can not be reset when reboot */
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12A)
 		vdec_power_reset();
@@ -4621,6 +4828,12 @@ module_exit(amstream_module_exit);
 module_param(force_dv_mode, uint, 0664);
 MODULE_PARM_DESC(force_dv_mode,
 	"\n force_dv_mode \n");
+
+#ifdef VDEC_FCC_SUPPORT
+module_param(fcc_enable, uint, 0664);
+MODULE_PARM_DESC(fcc_enable,
+	"\n fcc_enable \n");
+#endif
 
 module_param(def_4k_vstreambuf_sizeM, uint, 0664);
 MODULE_PARM_DESC(def_4k_vstreambuf_sizeM,
