@@ -1834,6 +1834,7 @@ struct hevc_state_s {
 	bool discard_dv_data;
 	bool enable_fence;
 	int fence_usage;
+	int buffer_wrap[MAX_REF_PIC_NUM];
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -3513,10 +3514,8 @@ static int v4l_parser_work_pic_num(struct hevc_state_s *hevc)
 			"save buf _mode : dynamic_buf_num_margin %d ----> %d \n",
 			dynamic_buf_num_margin,  hevc->dynamic_buf_num_margin);
 
-	if (sps_pic_buf_diff >= 4)
-	{
-		used_buf_num += 1;
-	}
+	if (sps_pic_buf_diff >= 3)
+		used_buf_num += sps_pic_buf_diff;
 
 	/* for eos add more buffer to flush.*/
 	used_buf_num++;
@@ -6003,7 +6002,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 
 	for (i = 0; i < pool->in; ++i) {
 		u32 state = (pool->seq[i] >> 16);
-		//u32 index = (pool->seq[i] & 0xffff);
+		u32 index = (pool->seq[i] & 0xffff);
 
 		switch (state) {
 		case V4L_CAP_BUFF_IN_DEC:
@@ -6026,7 +6025,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 			pic = hevc->m_PIC[idx];
 			pic->width = hevc->pic_w;
 			pic->height = hevc->pic_h;
-			//hevc->buffer_wrap[idx] = index;
+			hevc->buffer_wrap[idx] = index;
 			if ((pic->index != -1) &&
 				!v4l_alloc_buf(hevc, pic)) {
 				v4l_config_pic(hevc, pic);
@@ -9197,9 +9196,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				= hevc->m_BUF[pic->BUF_index].v4l_ref_buf_addr;
 			if (hevc->mmu_enable) {
 				vf->mm_box.bmmu_box	= hevc->bmmu_box;
-				vf->mm_box.bmmu_idx	= VF_BUFFER_IDX(pic->BUF_index);
+				vf->mm_box.bmmu_idx	= VF_BUFFER_IDX(hevc->buffer_wrap[pic->BUF_index]);
 				vf->mm_box.mmu_box	= hevc->mmu_box;
-				vf->mm_box.mmu_idx	= pic->index;
+				vf->mm_box.mmu_idx	= hevc->buffer_wrap[pic->BUF_index];
 			}
 		}
 
@@ -13635,7 +13634,7 @@ static void aml_free_canvas(struct vdec_s *vdec)
 				vdec->free_canvas_ex(pic->uv_canvas_index, vdec->id);
 			}
 		}
-		//hevc->buffer_wrap[i] = i;
+		hevc->buffer_wrap[i] = i;
 	}
 }
 
