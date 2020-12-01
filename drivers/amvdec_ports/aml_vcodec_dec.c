@@ -2767,12 +2767,14 @@ static void vb2ops_vdec_buf_cleanup(struct vb2_buffer *vb)
 		__func__, vb->vb2_queue->type, vb->index);
 
 	if (V4L2_TYPE_IS_OUTPUT(vb->type)) {
-		v4l_freebufs_back_to_codec_mm(buf->mem_onwer, buf->mem[0]);
+		if (vb->memory == VB2_MEMORY_MMAP) {
+			v4l_freebufs_back_to_codec_mm(buf->mem_onwer, buf->mem[0]);
 
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-			"IN clean, addr: %lx, size: %u, idx: %u\n",
-			buf->mem[0]->phy_addr, buf->mem[0]->buffer_size, vb->index);
-		buf->mem[0] = NULL;
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+				"IN clean, addr: %lx, size: %u, idx: %u\n",
+				buf->mem[0]->phy_addr, buf->mem[0]->buffer_size, vb->index);
+			buf->mem[0] = NULL;
+		}
 	} else {
 		if (vb->memory == VB2_MEMORY_MMAP) {
 			int i;

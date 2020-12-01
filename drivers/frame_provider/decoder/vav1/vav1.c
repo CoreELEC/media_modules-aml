@@ -6049,31 +6049,18 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		}
 
 		if (hw->av1_first_pts_ready) {
-			if (hw->is_used_v4l) {
-				if (hw->frame_dur && (vf->timestamp == 0)) {
-					vf->timestamp = hw->last_timestamp +
-						hw->timestamp_duration;
-				}
+			if (hw->frame_dur && ((vf->pts == 0) || (vf->pts_us64 == 0))) {
+				vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+				vf->pts_us64 = hw->last_pts_us64 +
+					(DUR2PTS(hw->frame_dur) * 100 / 9);
+				reclac_flag = 1;
+			}
 
-				if (!close_to(vf->timestamp, (hw->last_timestamp +
-					hw->timestamp_duration), 100)) {
-					vf->timestamp = hw->last_timestamp +
-						hw->timestamp_duration;
-				}
-			} else {
-				if (hw->frame_dur && ((vf->pts == 0) || (vf->pts_us64 == 0))) {
-					vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
-					vf->pts_us64 = hw->last_pts_us64 +
-						(DUR2PTS(hw->frame_dur) * 100 / 9);
-					reclac_flag = 1;
-				}
-
-				if (!close_to(vf->pts, (hw->last_pts + DUR2PTS(hw->frame_dur)), 100)) {
-					vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
-					vf->pts_us64 = hw->last_pts_us64 +
-						(DUR2PTS(hw->frame_dur) * 100 / 9);
-					reclac_flag = 2;
-				}
+			if (!close_to(vf->pts, (hw->last_pts + DUR2PTS(hw->frame_dur)), 100)) {
+				vf->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+				vf->pts_us64 = hw->last_pts_us64 +
+					(DUR2PTS(hw->frame_dur) * 100 / 9);
+				reclac_flag = 2;
 			}
 
 			/* try find the closed pts in saved pts pool */
@@ -9691,7 +9678,8 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 		/* fps change, frame dur change to lower or higher,
 		 * can't find closed pts in saved pool */
 		if ((hw->dur_recalc_flag) ||
-			(hw->last_pts >  hw->chunk->pts)) {
+			(hw->last_pts >  hw->chunk->pts) ||
+			(hw->last_timestamp > hw->chunk->timestamp)) {
 			hw->av1_first_pts_ready = 0;
 			hw->first_pts_index = 0;
 			hw->get_frame_dur = 0;
@@ -9720,27 +9708,21 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	if (hw->first_pts_index < ARRAY_SIZE(hw->frame_mode_pts_save))
 		hw->first_pts_index++;
 	/* frame duration check, vdec_secure return for nts problem */
-	if ((!hw->first_pts_index) || hw->get_frame_dur || vdec_secure(hw_to_vdec(hw)))
+	if ((!hw->first_pts_index) ||
+		hw->get_frame_dur ||
+		vdec_secure(hw_to_vdec(hw)) ||
+		hw->is_used_v4l)
 		return;
 	valid_pts_diff_cnt = 0;
 	pts_diff_sum = 0;
 
 	for (i = 0; i < FRAME_BUFFERS - 1; i++) {
-		if (hw->is_used_v4l) {
-			if ((hw->frame_mode_timestamp_save[i] > hw->frame_mode_timestamp_save[i + 1]) &&
-				(hw->frame_mode_timestamp_save[i + 1] != 0))
-				in_pts_diff = hw->frame_mode_timestamp_save[i]
-					- hw->frame_mode_timestamp_save[i + 1];
-			else
-				in_pts_diff = 0;
-		} else {
-			if ((hw->frame_mode_pts_save[i] > hw->frame_mode_pts_save[i + 1]) &&
-				(hw->frame_mode_pts_save[i + 1] != 0))
-				in_pts_diff = hw->frame_mode_pts_save[i]
-					- hw->frame_mode_pts_save[i + 1];
-			else
-				in_pts_diff = 0;
-		}
+		if ((hw->frame_mode_pts_save[i] > hw->frame_mode_pts_save[i + 1]) &&
+			(hw->frame_mode_pts_save[i + 1] != 0))
+			in_pts_diff = hw->frame_mode_pts_save[i]
+				- hw->frame_mode_pts_save[i + 1];
+		else
+			in_pts_diff = 0;
 
 		if (in_pts_diff < 100 ||
 			(valid_pts_diff_cnt && (!close_to(in_pts_diff, last_valid_pts_diff, 100))))
@@ -9768,11 +9750,6 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	} else {
 		if (hw->frame_count > FRAME_BUFFERS)
 			hw->get_frame_dur = true;
-	}
-
-	if (hw->is_used_v4l) {
-		hw->timestamp_duration =
-			div_u64(pts_diff_sum, valid_pts_diff_cnt);
 	}
 }
 
