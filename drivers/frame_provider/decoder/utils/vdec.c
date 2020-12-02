@@ -5592,7 +5592,6 @@ void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 EXPORT_SYMBOL(vdec_fill_vdec_frame);
 
 void vdec_vframe_ready(struct vdec_s *vdec, struct vframe_s *vf) {
-	decoder_do_frame_check(vdec, vf);
 	if (vdec_secure(vdec)) {
 		vf->flag |= VFRAME_FLAG_VIDEO_SECURE;
 	} else {
