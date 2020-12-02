@@ -5642,6 +5642,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 		if (index < hw->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			hw->vf_get_count++;
+			vf->index_disp = hw->vf_get_count;
 			if (debug & AOM_DEBUG_VFRAME) {
 				struct BufferPool_s *pool = hw->common.buffer_pool;
 				struct PIC_BUFFER_CONFIG_s *pic =
@@ -6062,6 +6063,9 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 					(DUR2PTS(hw->frame_dur) * 100 / 9);
 				reclac_flag = 2;
 			}
+
+			if (hw->is_used_v4l)
+				reclac_flag = 0;
 
 			/* try find the closed pts in saved pts pool */
 			if (reclac_flag) {
@@ -7888,8 +7892,7 @@ static int v4l_res_change(struct AV1HW_s *hw)
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			//del_timer_sync(&pbi->timer);
-			if (hw->is_used_v4l)
-				notify_v4l_eos(hw_to_vdec(hw));
+			notify_v4l_eos(hw_to_vdec(hw));
 			ret = 1;
 		}
 	}
@@ -8809,6 +8812,9 @@ static int vav1_local_init(struct AV1HW_s *hw)
 		 0) ? 3200 : hw->vav1_amstream_dec_info.rate;
 	if (width && height)
 		hw->frame_ar = height * 0x100 / width;
+
+	memset(hw->frame_mode_timestamp_save, -1,
+		sizeof(hw->frame_mode_timestamp_save));
 /*
  *TODO:FOR VERSION
  */
@@ -9669,9 +9675,9 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	if (hw->first_pts_index) {
 		/* filtration pts 0 and continuous same pts */
 		if (hw->is_used_v4l) {
-			if((hw->chunk->timestamp == 0) ||
-				(hw->frame_mode_timestamp_save[0] == hw->chunk->timestamp))
+			if (hw->frame_mode_timestamp_save[0] == hw->chunk->timestamp) {
 				return;
+			}
 		} else {
 			if((hw->chunk->pts == 0) ||
 				(hw->frame_mode_pts_save[0] == hw->chunk->pts))
@@ -9679,9 +9685,10 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 		}
 		/* fps change, frame dur change to lower or higher,
 		 * can't find closed pts in saved pool */
-		if ((hw->dur_recalc_flag) ||
-			(hw->last_pts >  hw->chunk->pts) ||
-			(hw->last_timestamp > hw->chunk->timestamp)) {
+		if (hw->is_used_v4l ?
+			((hw->last_timestamp > hw->chunk->timestamp)) :
+			((hw->dur_recalc_flag) ||
+			(hw->last_pts >  hw->chunk->pts))) {
 			hw->av1_first_pts_ready = 0;
 			hw->first_pts_index = 0;
 			hw->get_frame_dur = 0;
@@ -9690,9 +9697,8 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 			        sizeof(hw->frame_mode_pts_save));
 			memset(hw->frame_mode_pts64_save, 0,
 			        sizeof(hw->frame_mode_pts64_save));
-			/*v4l use*/
-			memset(hw->frame_mode_timestamp_save, 0,
-			        sizeof(hw->frame_mode_timestamp_save));
+			memset(hw->frame_mode_timestamp_save, -1,
+				sizeof(hw->frame_mode_timestamp_save));
 		}
 	}
 	av1_print(hw, AV1_DEBUG_OUT_PTS,

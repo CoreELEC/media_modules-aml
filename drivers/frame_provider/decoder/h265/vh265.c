@@ -5981,7 +5981,8 @@ static int get_free_fb_idx(struct hevc_state_s *hevc)
 			continue;
 
 		if ((hevc->m_PIC[i]->referenced == 0) &&
-			(hevc->m_PIC[i]->vf_ref == 0))
+			(hevc->m_PIC[i]->vf_ref == 0) &&
+			(!hevc->m_PIC[i]->cma_alloc_addr))
 			break;
 	}
 
@@ -5998,7 +5999,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	struct v4l_buff_pool *pool = &v4l->cap_pool;
 	struct PIC_s *new_pic = NULL;
 	struct PIC_s *pic = NULL;
-	int i, idx;
+	int i, j, idx;
 
 	for (i = 0; i < pool->in; ++i) {
 		u32 state = (pool->seq[i] >> 16);
@@ -6006,16 +6007,27 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 
 		switch (state) {
 		case V4L_CAP_BUFF_IN_DEC:
-			pic = hevc->m_PIC[i];
-			if (pic && (pic->index != -1) &&
-				(pic->output_mark == 0) &&
-				(pic->referenced == 0) &&
-				(pic->output_ready == 0) &&
-				(pic->width == hevc->pic_w) &&
-				(pic->height == hevc->pic_h) &&
-				(pic->vf_ref == 0) &&
-				pic->cma_alloc_addr) {
-					new_pic = pic;
+			for (j = 0; j < MAX_REF_PIC_NUM; j++) {
+				pic = hevc->m_PIC[j];
+				if (pic == NULL || pic->index == -1)
+					continue;
+
+				if (pic->output_mark == 0 &&
+					pic->referenced == 0 &&
+					pic->output_ready == 0 &&
+					pic->width == hevc->pic_w &&
+					pic->height == hevc->pic_h &&
+					pic->vf_ref == 0 &&
+					pic->cma_alloc_addr) {
+					if (new_pic) {
+						if (new_pic->POC != INVALID_POC) {
+							if (pic->POC == INVALID_POC ||
+								pic->POC < new_pic->POC)
+								new_pic = pic;
+						}
+					} else
+						new_pic = pic;
+				}
 			}
 			break;
 		case V4L_CAP_BUFF_IN_M2M:
@@ -6548,7 +6560,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 			hevc_print(hevc, 0,
 			"clear referenced flag of all buffers\n");
 		}
-		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
+		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 			dump_pic_list(hevc);
 		if (hevc->vf_pre_count == 1 &&
 				hevc->first_pic_flag == 1) {
@@ -7424,7 +7436,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				v4l_get_new_pic(hevc, rpm_param) :
 				get_new_pic(hevc, rpm_param);
 			if (hevc->cur_pic == NULL) {
-				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
+				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 					dump_pic_list(hevc);
 				hevc->wait_buf = 1;
 				return -1;
@@ -8756,13 +8768,13 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 		vf->fence = NULL;
 	}
 
-	spin_lock_irqsave(&lock, flags);
-
 	if (vf->hdr10p_data_buf) {
 		vfree(vf->hdr10p_data_buf);
 		vf->hdr10p_data_buf = NULL;
 		vf->hdr10p_data_size = 0;
 	}
+
+	spin_lock_irqsave(&lock, flags);
 
 	if (index_top != 0xff
 		&& index_top < MAX_REF_PIC_NUM
@@ -9306,8 +9318,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		hevc->last_pts_us64 = vf->pts_us64;
 		if ((get_dbg_flag(hevc) & H265_DEBUG_OUT_PTS) != 0) {
 			hevc_print(hevc, 0,
-			"H265 dec out pts: vf->pts=%d, vf->pts_us64 = %lld\n",
-			 vf->pts, vf->pts_us64);
+			"H265 dec out pts: vf->pts=%d, vf->pts_us64 = %lld, ts: %llu\n",
+			 vf->pts, vf->pts_us64, vf->timestamp);
 		}
 
 		/*

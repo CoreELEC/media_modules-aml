@@ -566,11 +566,11 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 	struct vframe_s *vf = (struct vframe_s *)fb->vf_handle;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
-		"FROM (%s %s) vf: %px, ts: %lld, idx: %d, "
+		"FROM (%s %s) vf: %px, disp: %d, ts: %lld, idx: %d, "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 		vf_get_provider(ctx->ada_ctx->recv_name)->name,
 		ctx->ada_ctx->vfm_path != FRAME_BASE_PATH_V4L_VIDEO ? "OSD" : "VIDEO",
-		vf, vf->timestamp, vf->index & 0xff,
+		vf, vf->index_disp, vf->timestamp, vf->index & 0xff,
 		fb->m.mem[0].addr, fb->m.mem[0].size,
 		fb->m.mem[1].addr, fb->m.mem[1].size,
 		fb->m.mem[2].addr, fb->m.mem[2].size);
