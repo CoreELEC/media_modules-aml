@@ -3484,6 +3484,7 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 				debug_print(hw, PRINT_FLAG_PTS,
 					"interlace1 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
+				vdec_vframe_ready(vdec, vf);
 				kfifo_put(&hw->display_q,
 						  (const struct vframe_s *)vf);
 				avs_vf_notify_receiver(hw, PROVIDER_NAME,
@@ -3565,6 +3566,7 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 				}
 				debug_print(hw, PRINT_FLAG_PTS,
 					"interlace2 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
+				vdec_vframe_ready(vdec, vf);
 				kfifo_put(&hw->display_q,
 						  (const struct vframe_s *)vf);
 				avs_vf_notify_receiver(hw, PROVIDER_NAME,
@@ -3663,7 +3665,8 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 					vf->pts_us64 = offset;
 					vf->pts = 0;
 				}
-				vdec_vframe_ready(hw_to_vdec(hw), vf);
+				decoder_do_frame_check(hw_to_vdec(hw), vf);
+				vdec_vframe_ready(vdec, vf);
 				kfifo_put(&hw->display_q,
 						  (const struct vframe_s *)vf);
 				avs_vf_notify_receiver(hw, PROVIDER_NAME,

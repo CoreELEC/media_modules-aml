@@ -8963,6 +8963,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				if (hevc->is_used_v4l && hevc->double_write_mode != 16)
 					vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 				hevc->vf_pre_count++;
+				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
 				ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -8987,6 +8988,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vf->index |= (pair_pic->index << 8);
 				vf->canvas1Addr = spec2canvas(pair_pic);
 				pair_pic->vf_ref++;
+				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
 				ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -9016,6 +9018,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vf->index |= pair_pic->index;
 				vf->canvas0Addr = spec2canvas(pair_pic);
 				pair_pic->vf_ref++;
+				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
 				ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -9140,6 +9143,7 @@ static inline void hevc_update_gvs(struct hevc_state_s *hevc)
 static void put_vf_to_display_q(struct hevc_state_s *hevc, struct vframe_s *vf)
 {
 	hevc->vf_pre_count++;
+	decoder_do_frame_check(hw_to_vdec(hevc), vf);
 	vdec_vframe_ready(hw_to_vdec(hevc), vf);
 	kfifo_put(&hevc->display_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(MODULE_NAME, vf->pts);
@@ -9528,6 +9532,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			}
 			put_vf_to_display_q(hevc, vf);
 			hevc->vf_pre_count++;
+			vdec_vframe_ready(hw_to_vdec(hevc), vf2);
 			kfifo_put(&hevc->display_q,
 			(const struct vframe_s *)vf2);
 			ATRACE_COUNTER(MODULE_NAME, vf2->pts);
@@ -9573,10 +9578,12 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			}
 			put_vf_to_display_q(hevc, vf);
 			hevc->vf_pre_count++;
+			vdec_vframe_ready(hw_to_vdec(hevc), vf2);
 			kfifo_put(&hevc->display_q,
 			(const struct vframe_s *)vf2);
 			ATRACE_COUNTER(MODULE_NAME, vf2->pts);
 			hevc->vf_pre_count++;
+			vdec_vframe_ready(hw_to_vdec(hevc), vf3);
 			kfifo_put(&hevc->display_q,
 			(const struct vframe_s *)vf3);
 			ATRACE_COUNTER(MODULE_NAME, vf3->pts);
@@ -9594,6 +9601,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			process_pending_vframe(hevc,
 			pic, (pic->pic_struct == 9));
 
+			decoder_do_frame_check(vdec, vf);
 			vdec_vframe_ready(vdec, vf);
 			/* process current vf */
 			kfifo_put(&hevc->pending_q,
@@ -9643,6 +9651,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				nv_order | VIDTYPE_VIU_FIELD;
 				vf->index = (pic->index << 8) | 0xff;
 			}
+			decoder_do_frame_check(vdec, vf);
 			vdec_vframe_ready(vdec, vf);
 			kfifo_put(&hevc->pending_q,
 			(const struct vframe_s *)vf);
@@ -9829,6 +9838,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
 		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
 					hw->m_BUF[index].v4l_ref_buf_addr;
+		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);

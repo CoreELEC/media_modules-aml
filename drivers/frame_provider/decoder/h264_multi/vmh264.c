@@ -3039,7 +3039,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			pvdec = hw_to_vdec(hw);
 			memset(&vs, 0, sizeof(struct vdec_info));
 			pvdec->dec_status(pvdec, &vs);
-			vdec_vframe_ready(pvdec, vf);
+			decoder_do_frame_check(pvdec, vf);
 			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
 		}
 
@@ -3047,6 +3047,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
 
+		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		hw->vf_pre_count++;
@@ -3175,6 +3176,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
 					hw->buffer_spec[index].cma_alloc_addr;
 
+		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);

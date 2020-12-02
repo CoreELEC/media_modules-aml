@@ -1680,9 +1680,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				vf->duration, vf->type, vf->pts, vf->pts_us64);
 			hw->disp_num++;
 			if (i == 0) {
-				struct vdec_s *vdec = hw_to_vdec(hw);
-
-				vdec_vframe_ready(vdec, vf);
+				decoder_do_frame_check(vdec, vf);
 				hw_update_gvs(hw);
 				vdec_fill_vdec_frame(vdec, &hw->vframe_qos,
 					&hw->gvs, vf, pic->hw_decode_time);
@@ -1691,6 +1689,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
 				hw->mm_blk_handle, index);
+			vdec_vframe_ready(vdec, vf);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 			/* if (hw->disp_num == 1) { */
@@ -2180,6 +2179,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 							hw->pics[index].v4l_ref_buf_addr;
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
 
+		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
