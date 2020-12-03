@@ -97,6 +97,8 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 		}
 		stbuf->use_ptsserv = 1;
 	}
+	vdec_config_vld_reg(vdec, addr, size);
+
 	ret = vdec_set_input_buffer(vdec, addr, size);
 	if (ret) {
 		pr_err("[%d]: set input buffer err.\n", stbuf->id);
@@ -284,6 +286,8 @@ static void stream_buffer_set_wp(struct stream_buf_s *stbuf, u32 val)
 		((stbuf->buf_start + stbuf->buf_size) - stbuf->buf_wp);
 
 	stbuf->buf_wp = val;
+	vdec_set_vld_wp(container_of(stbuf, struct vdec_s, vbuf), stbuf->buf_wp);
+
 	atomic_add(len, &stbuf->payload);
 }
 

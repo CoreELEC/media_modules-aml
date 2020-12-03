@@ -104,6 +104,7 @@ static const struct vframe_operations_s vh264mvc_vf_provider = {
 
 static struct vframe_provider_s vh264mvc_vf_prov;
 
+static struct vdec_s *vdec = NULL;
 static u32 frame_width, frame_height, frame_dur;
 static u32 saved_resolution;
 static struct timer_list recycle_timer;
@@ -900,6 +901,11 @@ static void vh264mvc_isr(void)
 	u64 pts_us64;
 	u32 frame_size;
 	int ret = READ_VREG(MAILBOX_COMMAND);
+
+	if (is_support_no_parser()) {
+		STBUF_WRITE(&vdec->vbuf, set_rp,
+			READ_VREG(VLD_MEM_VIFIFO_RP));
+	}
 	/* pr_info("vh264mvc_isr, cmd =%x\n", ret); */
 	switch (ret & 0xff) {
 	case CMD_ALLOC_VIEW_0:
@@ -1639,6 +1645,8 @@ static int amvdec_h264mvc_probe(struct platform_device *pdev)
 
 	INIT_WORK(&error_wd_work, error_do_work);
 	INIT_WORK(&set_clk_work, vh264_mvc_set_clk);
+
+	vdec = pdata;
 
 	atomic_set(&vh264mvc_active, 1);
 

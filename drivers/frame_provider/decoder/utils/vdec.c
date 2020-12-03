@@ -5656,6 +5656,53 @@ u32  vdec_get_frame_vdec(struct vdec_s *vdec,  struct vframe_counter_s *tmpbuf)
 }
 EXPORT_SYMBOL(vdec_get_frame_vdec);
 
+void vdec_set_vld_wp(struct vdec_s *vdec, u32 wp)
+{
+	if (vdec_single(vdec)) {
+		WRITE_VREG(VLD_MEM_VIFIFO_WP, wp);
+	}
+}
+EXPORT_SYMBOL(vdec_set_vld_wp);
+
+void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size)
+{
+	if (vdec_single(vdec)) {
+		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+		/* reset VLD before setting all pointers */
+		WRITE_VREG(VLD_MEM_VIFIFO_WRAP_COUNT, 0);
+		/*TODO: only > m6*/
+		WRITE_VREG(DOS_SW_RESET0, (1 << 4));
+		WRITE_VREG(DOS_SW_RESET0, 0);
+
+
+		WRITE_VREG(POWER_CTL_VLD, 1 << 4);
+
+		WRITE_VREG(VLD_MEM_VIFIFO_START_PTR,
+		       addr);
+		WRITE_VREG(VLD_MEM_VIFIFO_END_PTR,
+		       addr + size - 8);
+		WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
+		       addr);
+
+		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+		/* set to manual mode */
+		WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+		WRITE_VREG(VLD_MEM_VIFIFO_WP, addr);
+
+		WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 3);
+		WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+
+		/* enable */
+		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
+			(0x11 << 16) | (1<<10) | (1 << 1) | (1 << 2));
+		SET_VREG_MASK(VLD_MEM_VIFIFO_CONTROL,
+			7 << 3);
+	}
+}
+EXPORT_SYMBOL(vdec_config_vld_reg);
+
 RESERVEDMEM_OF_DECLARE(vdec, "amlogic, vdec-memory", vdec_mem_setup);
 /*
 uint force_hevc_clock_cntl;

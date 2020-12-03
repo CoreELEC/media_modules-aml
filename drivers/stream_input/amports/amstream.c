@@ -983,6 +983,9 @@ static int amstream_port_init(struct port_priv_s *priv)
 				/* def used stbuf with parser if the feature disable. */
 				if (!is_support_no_parser())
 					ops = get_esparser_stbuf_ops();
+				else if (vdec->format == VFORMAT_H264MVC ||
+					vdec->format == VFORMAT_VC1)
+					ops = get_stbuf_ops();
 			}
 
 			r = stream_buffer_base_init(&vdec->vbuf, ops, &pars);
