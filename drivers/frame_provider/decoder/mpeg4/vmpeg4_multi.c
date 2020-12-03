@@ -2394,6 +2394,17 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			hw->chunk_frame_count = 0;
 		}
 	}
+	if (vdec_frame_based(vdec) && !vdec_secure(vdec)) {
+		/* HW needs padding (NAL start) for frame ending */
+		char* tail = (char *)hw->chunk->block->start_virt;
+
+		tail += hw->chunk->offset + hw->chunk->size;
+		tail[0] = 0;
+		tail[1] = 0;
+		tail[2] = 1;
+		tail[3] = 0xb6;
+		codec_mm_dma_flush(tail, 4, DMA_TO_DEVICE);
+	}
 	if (vdec_frame_based(vdec) &&
 		(debug_enable & 0xc00)) {
 		u8 *data = NULL;
