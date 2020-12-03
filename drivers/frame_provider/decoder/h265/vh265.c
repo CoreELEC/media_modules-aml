@@ -10899,6 +10899,7 @@ force_output:
 		}
 		if (naltype == NAL_UNIT_EOS) {
 			struct PIC_s *pic;
+			bool eos_in_head = false;
 
 			hevc_print(hevc, 0, "get NAL_UNIT_EOS, flush output\n");
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
@@ -10909,7 +10910,7 @@ force_output:
 #endif
 			/*Detects frame whether has an over decode error*/
 			if (vdec->master == NULL && vdec->slave == NULL &&
-					hevc->empty_flag == 0) {
+					hevc->empty_flag == 0 && input_stream_based(vdec)) {
 					hevc->over_decode =
 						(READ_VREG(HEVC_SHIFT_STATUS) >> 15) & 0x1;
 					if (hevc->over_decode)
@@ -10924,9 +10925,23 @@ force_output:
 			hevc->m_pocRandomAccess = MAX_INT;
 			flush_output(hevc, pic);
 			clear_poc_flag(hevc);
+			if (input_frame_based(vdec)) {
+				u32 shiftbyte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+				if (shiftbyte < 0x8 && (hevc->decode_size - shiftbyte) > 0x100) {
+					hevc_print(hevc, 0," shiftbytes 0x%x  decode_size 0x%x\n", shiftbyte, hevc->decode_size);
+					eos_in_head = true;
+				}
+			}
 			WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_DISCARD_NAL);
 			/* Interrupt Amrisc to excute */
 			WRITE_VREG(HEVC_MCPU_INTR_REQ, AMRISC_MAIN_REQ);
+
+			/* eos is in the head of the chunk and followed by sps/pps/IDR
+			  * so need to go on decoding
+			  */
+			if (eos_in_head)
+				return IRQ_HANDLED;
+
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hevc->m_ins_flag) {
 				hevc->decoded_poc = INVALID_POC; /*
