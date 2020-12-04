@@ -273,7 +273,8 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 
 	if (ctx->receive_cmd_stop &&
 			changes != V4L2_EVENT_SRC_CH_RESOLUTION &&
-			changes != V4L2_EVENT_SEND_EOS) {
+			changes != V4L2_EVENT_SEND_EOS &&
+			changes != V4L2_EVENT_SRC_CH_HDRINFO) {
 		ctx->state = AML_STATE_ABORT;
 		ATRACE_COUNTER("v4l2_state", ctx->state);
 		changes = V4L2_EVENT_REQUEST_EXIT;
