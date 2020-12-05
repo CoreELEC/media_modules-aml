@@ -3223,13 +3223,13 @@ void (*callback)(struct vdec_s *, void *),
 {
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)vdec->private;
-	int save_reg = READ_VREG(POWER_CTL_VLD);
+	//int save_reg = READ_VREG(POWER_CTL_VLD);
 	int size, ret;
 
 	/* reset everything except DOS_TOP[1] and APB_CBUS[0]*/
-	WRITE_VREG(DOS_SW_RESET0, 0xfffffff0);
-	WRITE_VREG(DOS_SW_RESET0, 0);
-	WRITE_VREG(POWER_CTL_VLD, save_reg);
+	//WRITE_VREG(DOS_SW_RESET0, 0xfffffff0);
+	//WRITE_VREG(DOS_SW_RESET0, 0);
+	//WRITE_VREG(POWER_CTL_VLD, save_reg);
 	hw->run_count++;
 	vdec_reset_core(vdec);
 	hw->vdec_cb_arg = arg;
