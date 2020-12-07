@@ -2769,7 +2769,7 @@ static irqreturn_t enc_isr(s32 irq_number, void *para)
 {
 	struct encode_manager_s *manager = (struct encode_manager_s *)para;
 
-	enc_pr(LOG_ERROR, "*****ENC_ISR*****\n");
+	enc_pr(LOG_INFO, "*****ENC_ISR*****\n");
 	WRITE_HREG(HCODEC_IRQ_MBOX_CLR, 1);
 
 	manager->encode_hw_status  = READ_HREG(ENCODER_STATUS);
