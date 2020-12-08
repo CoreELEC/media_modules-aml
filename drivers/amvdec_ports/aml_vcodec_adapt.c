@@ -237,56 +237,6 @@ static void user_buffer_init(void)
 	pubuf->buf_rp = 0;
 }
 
-static void audio_component_release(struct stream_port_s *port,
-	struct stream_buf_s *pbuf, int release_num)
-{
-	switch (release_num) {
-		default:
-		case 0:
-		case 4:
-			esparser_release(pbuf);
-		case 3:
-			adec_release(port->vformat);
-		case 2:
-			stbuf_release(pbuf);
-		case 1:
-			;
-	}
-}
-
-static int audio_component_init(struct stream_port_s *port,
-	struct stream_buf_s *pbuf)
-{
-	int r;
-
-	if ((port->flag & PORT_FLAG_AFORMAT) == 0) {
-		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR, "aformat not set\n");
-		return 0;
-	}
-
-	r = stbuf_init(pbuf, NULL);
-	if (r < 0)
-		return r;
-
-	r = adec_init(port);
-	if (r < 0) {
-		audio_component_release(port, pbuf, 2);
-		return r;
-	}
-
-	if (port->type & PORT_TYPE_ES) {
-		r = esparser_init(pbuf, NULL);
-		if (r < 0) {
-			audio_component_release(port, pbuf, 3);
-			return r;
-		}
-	}
-
-	pbuf->flag |= BUF_FLAG_IN_USE;
-
-	return 0;
-}
-
 static void video_component_release(struct stream_port_s *port,
 struct stream_buf_s *pbuf, int release_num)
 {
@@ -301,7 +251,7 @@ struct stream_buf_s *pbuf, int release_num)
 	case 0:
 	case 4: {
 		if ((port->type & PORT_TYPE_FRAME) == 0)
-		esparser_release(pbuf);
+			esparser_release(pbuf);
 	}
 
 	case 3: {
@@ -316,7 +266,7 @@ struct stream_buf_s *pbuf, int release_num)
 
 	case 2: {
 		if ((port->type & PORT_TYPE_FRAME) == 0)
-		stbuf_release(pbuf);
+			stbuf_release(pbuf);
 	}
 
 	case 1:
@@ -409,14 +359,7 @@ static int video_component_init(struct stream_port_s *port,
 
 static int vdec_ports_release(struct stream_port_s *port)
 {
-	struct aml_vdec_adapt *ada_ctx
-		= container_of(port, struct aml_vdec_adapt, port);
-	struct vdec_s *vdec = ada_ctx->vdec;
-
 	struct stream_buf_s *pvbuf = &bufs[BUF_TYPE_VIDEO];
-	struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
-	//struct stream_buf_s *psbuf = &bufs[BUF_TYPE_SUBTITLE];
-	struct vdec_s *slave = NULL;
 
 	if (has_hevc_vdec()) {
 		if (port->vformat == VFORMAT_HEVC
@@ -434,23 +377,6 @@ static int vdec_ports_release(struct stream_port_s *port)
 
 	if (port->type & PORT_TYPE_VIDEO)
 		video_component_release(port, pvbuf, 0);
-
-	if (port->type & PORT_TYPE_AUDIO)
-		audio_component_release(port, pabuf, 0);
-
-	if (port->type & PORT_TYPE_SUB)
-		//sub_port_release(port, psbuf);
-
-	if (vdec) {
-		if (vdec->slave)
-			slave = vdec->slave;
-
-		vdec_release(vdec);
-
-		if (slave)
-			vdec_release(slave);
-		vdec = NULL;
-	}
 
 	port->pcr_inited = 0;
 	port->flag = 0;
@@ -512,8 +438,6 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 {
 	int ret = -1;
 	struct stream_buf_s *pvbuf = &bufs[BUF_TYPE_VIDEO];
-	struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
-	//struct stream_buf_s *psbuf = &bufs[BUF_TYPE_SUBTITLE];
 	struct vdec_s *vdec = NULL;
 
 	/* create the vdec instance.*/
@@ -527,20 +451,11 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 	ret = enable_hardware(vdec->port);
 	if (ret < 0) {
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "enable hw fail.\n");
-		goto error1;
+		return ret;
 	}
 
 	stbuf_fetch_init();
 	user_buffer_init();
-
-	if ((vdec->port->type & PORT_TYPE_AUDIO)
-		&& (vdec->port_flag & PORT_FLAG_AFORMAT)) {
-		ret = audio_component_init(vdec->port, pabuf);
-		if (ret < 0) {
-			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "audio_component_init  failed\n");
-			goto error1;
-		}
-	}
 
 	if ((vdec->port->type & PORT_TYPE_VIDEO)
 		&& (vdec->port_flag & PORT_FLAG_VFORMAT)) {
@@ -554,7 +469,7 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 		ret = video_component_init(vdec->port, pvbuf);
 		if (ret < 0) {
 			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "video_component_init  failed\n");
-			goto error2;
+			return ret;
 		}
 
 		/* connect vdec at the end after all HW initialization */
@@ -562,13 +477,6 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 	}
 
 	return 0;
-
-//error3:
-	//video_component_release(port, pvbuf, 0);
-error2:
-	audio_component_release(vdec->port, pabuf, 0);
-error1:
-	return ret;
 }
 
 int video_decoder_init(struct aml_vdec_adapt *vdec)

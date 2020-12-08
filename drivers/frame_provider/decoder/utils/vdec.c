@@ -1406,8 +1406,6 @@ void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size)
 
 	rp = STBUF_READ(&vdec->vbuf, get_rp);
 	wp = STBUF_READ(&vdec->vbuf, get_wp);
-	pr_err("aaaa wp %x, rp %x\n", wp, rp);
-	pr_err("1VLD_MEM_VIFIFO_RP %x\n", rp);
 
 	if (wp > rp)
 		level = wp - rp;
@@ -1420,14 +1418,11 @@ void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size)
 	}
 
 	if (wp >= rp) {
-		pr_err("case 1\n");
 		rp_set = rp + skip_size;
 	}
 	else if ((rp + skip_size) < (input->start + input->size)) {
-		pr_err("case 2\n");
 		rp_set = rp + skip_size;
 	} else {
-		pr_err("case 3\n");
 		rp_set = rp + skip_size - input->size;
 		input->stream_cookie++;
 	}
@@ -1459,8 +1454,6 @@ void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size)
 	while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7))
 		;
 	WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
-	pr_err("2VLD_MEM_VIFIFO_RP %x\n", READ_VREG(VLD_MEM_VIFIFO_RP));
-
 }
 EXPORT_SYMBOL(vdec_stream_skip_data);
 
