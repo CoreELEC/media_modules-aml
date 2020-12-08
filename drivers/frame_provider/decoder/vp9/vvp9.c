@@ -7078,10 +7078,15 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)op_arg;
-	uint8_t index = vf->index & 0xff;
+	uint8_t index;
 
 	if (vf == (&pbi->vframe_dummy))
 		return;
+
+	if (!vf)
+		return;
+
+	index = vf->index & 0xff;
 
 	if (pbi->enable_fence && vf->fence) {
 		vdec_fence_put(vf->fence);

@@ -1632,6 +1632,9 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
 
+	if (!vf)
+		return;
+
 	hw->vfbuf_use[vf->index]--;
 	hw->put_num++;
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,

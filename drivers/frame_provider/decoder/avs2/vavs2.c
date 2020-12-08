@@ -4241,10 +4241,15 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)op_arg;
-	uint8_t index = vf->index & 0xff;
+	uint8_t index;
 
 	if (vf == (&dec->vframe_dummy))
 		return;
+
+	if (!vf)
+		return;
+
+	index = vf->index & 0xff;
 
 	kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
 	dec->vf_put_count++;
