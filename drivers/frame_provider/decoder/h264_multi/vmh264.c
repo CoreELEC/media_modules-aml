@@ -4309,6 +4309,10 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 
 	if (vf == (&hw->vframe_dummy))
 		return;
+
+	if (!vf)
+		return;
+
 	if (vf->index == -1) {
 		dpb_print(DECODE_ID(hw), 0,
 			"Warning: %s vf %p invalid index\r\n",
