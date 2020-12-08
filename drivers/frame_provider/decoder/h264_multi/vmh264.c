@@ -2526,6 +2526,10 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 	if (hw->is_used_v4l) {
 		struct h264_dpb_stru *dpb = &hw->dpb;
 
+		/* trigger to parse head data. */
+		if (!hw->v4l_params_parsed)
+			return 1;
+
 		if (dpb->mDPB.used_size >= dpb->mDPB.size - 1)
 			return 0;
 
@@ -5633,9 +5637,10 @@ static bool is_buffer_available(struct vdec_s *vdec)
 
 		if (hw->reset_bufmgr_flag == 1)
 			buffer_available = 1;
-		else if (hw->is_used_v4l)
-			buffer_available = have_free_buf_spec(vdec);
 	}
+
+	if (hw->is_used_v4l)
+		buffer_available = have_free_buf_spec(vdec);
 
 	if (buffer_available == 1)
 		hw->timeout_flag = false;
@@ -5878,8 +5883,9 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 	if (error_proc_policy & 0x100) {
 		if (decode_mb_count < mb_total) {
 			p->data_flag |= ERROR_FLAG;
-			if ((error_proc_policy & 0x20000) &&
-				decode_mb_count >= mb_total * (100 - mb_count_threshold) / 100) {
+			if (hw->is_used_v4l ||
+				((error_proc_policy & 0x20000) &&
+				decode_mb_count >= mb_total * (100 - mb_count_threshold) / 100)) {
 				p->data_flag &= ~ERROR_FLAG;
 			}
 		}
@@ -8602,6 +8608,8 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 			- used_reorder_dpb_size_margin;
 	}
 
+	hw->dpb.mDPB.size = active_buffer_spec_num;
+
 	if (hw->no_poc_reorder_flag)
 		reorder_pic_num = 1;
 
@@ -8709,8 +8717,7 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 			hw->eos = 1;
 			flush_dpb(p_H264_Dpb);
 			//del_timer_sync(&hw->check_timer);
-			if (hw->is_used_v4l)
-				notify_v4l_eos(hw_to_vdec(hw));
+			notify_v4l_eos(hw_to_vdec(hw));
 			ret = 1;
 		}
 	}
@@ -9196,13 +9203,14 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (ctx->param_sets_from_ucode) {
 			if (hw->v4l_params_parsed) {
-				if (!ctx->v4l_codec_dpb_ready &&
-					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
-					run_ready_min_buf_num)
-					ret = 0;
-				else if (ctx->v4l_codec_dpb_ready &&
-					!is_buffer_available(vdec))
-					ret = 0;
+				if (ctx->cap_pool.in < hw->dpb.mDPB.size) {
+					if (is_buffer_available(vdec) ||
+						(v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) >=
+						run_ready_min_buf_num)) {
+						ret = 1;
+					} else
+						ret = 0;
+				}
 			} else {
 				if (ctx->v4l_resolution_change)
 					ret = 0;

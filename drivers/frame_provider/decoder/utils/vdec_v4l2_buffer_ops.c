@@ -180,7 +180,9 @@ int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 	mutex_unlock(&ctx->state_lock);
 
 	ctx->q_data[AML_Q_DATA_SRC].resolution_changed = true;
-	v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
+	while (ctx->m2m_ctx->job_flags & TRANS_RUNNING) {
+		v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
+	}
 
 	return ret;
 }

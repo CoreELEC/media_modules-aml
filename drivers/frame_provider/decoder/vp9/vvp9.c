@@ -2356,14 +2356,36 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 {
 	struct VP9_Common_s *const cm = &pbi->common;
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
-	int i;
-	int free_buf_count = 0;
-	for (i = 0; i < pbi->used_buf_num; ++i)
-		if ((frame_bufs[i].ref_count == 0) &&
-			(frame_bufs[i].buf.vf_ref == 0) &&
-			(frame_bufs[i].buf.index != -1)
-			)
-			free_buf_count++;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
+	int i, free_buf_count = 0;
+
+	if (pbi->is_used_v4l) {
+		for (i = 0; i < pbi->used_buf_num; ++i) {
+			if ((frame_bufs[i].ref_count == 0) &&
+				(frame_bufs[i].buf.vf_ref == 0) &&
+				frame_bufs[i].buf.cma_alloc_addr) {
+				free_buf_count++;
+			}
+		}
+
+		if (ctx->cap_pool.out < pbi->used_buf_num) {
+			free_buf_count +=
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
+		}
+
+		/* trigger to parse head data. */
+		if (!pbi->v4l_params_parsed) {
+			free_buf_count = pbi->run_ready_min_buf_num;
+		}
+	} else {
+		for (i = 0; i < pbi->used_buf_num; ++i) {
+			if ((frame_bufs[i].ref_count == 0) &&
+				(frame_bufs[i].buf.vf_ref == 0) &&
+				(frame_bufs[i].buf.index != -1))
+				free_buf_count++;
+		}
+	}
+
 	return free_buf_count;
 }
 
@@ -8541,8 +8563,7 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 			pbi->eos = 1;
 			vp9_bufmgr_postproc(pbi);
 			//del_timer_sync(&pbi->timer);
-			if (pbi->is_used_v4l)
-				notify_v4l_eos(hw_to_vdec(pbi));
+			notify_v4l_eos(hw_to_vdec(pbi));
 			ret = 1;
 		}
 	}
@@ -10266,6 +10287,24 @@ static int vp9_hw_ctx_restore(struct VP9Decoder_s *pbi)
 #endif
 	return 0;
 }
+
+static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
+{
+	struct VP9_Common_s *const cm = &pbi->common;
+	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
+	int i, free_count = 0;
+
+	for (i = 0; i < pbi->used_buf_num; ++i) {
+		if ((frame_bufs[i].ref_count == 0) &&
+			(frame_bufs[i].buf.vf_ref == 0) &&
+			frame_bufs[i].buf.cma_alloc_addr) {
+			free_count++;
+		}
+	}
+
+	return free_count < pbi->run_ready_min_buf_num ? 0 : 1;
+}
+
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 {
 	struct VP9Decoder_s *pbi =
@@ -10357,10 +10396,14 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (ctx->param_sets_from_ucode) {
 			if (pbi->v4l_params_parsed) {
-				if ((ctx->cap_pool.in < pbi->used_buf_num) &&
-				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
-				pbi->run_ready_min_buf_num)
-					ret = 0;
+				if (ctx->cap_pool.in < pbi->used_buf_num) {
+					if (is_avaliable_buffer(pbi) ||
+						(v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) >=
+						pbi->run_ready_min_buf_num)) {
+						ret = CORE_MASK_HEVC;
+					} else
+						ret = 0;
+				}
 			} else {
 				if (ctx->v4l_resolution_change)
 					ret = 0;

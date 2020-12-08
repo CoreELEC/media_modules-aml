@@ -2760,15 +2760,16 @@ static int get_free_buf_idx(struct hevc_state_s *hevc)
 
 	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 		pic = hevc->m_PIC[i];
-		if (pic == NULL ||
-			pic->index == -1 ||
-			pic->BUF_index == -1)
+		if ((pic == NULL) ||
+			(pic->index == -1) ||
+			(pic->BUF_index == -1))
 			continue;
 
-		if (pic->output_mark == 0 &&
-			pic->referenced == 0 &&
-			pic->output_ready == 0 &&
-			pic->cma_alloc_addr) {
+		if ((pic->output_mark == 0) &&
+			(pic->referenced == 0) &&
+			(pic->output_ready == 0) &&
+			(pic->vf_ref == 0) &&
+			(pic->cma_alloc_addr)) {
 			pic->output_ready = 1;
 			index = i;
 			break;
@@ -10278,7 +10279,7 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 {
 	struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
-	int ret = 0;
+	int i, ret = 0;
 
 	if (ctx->param_sets_from_ucode &&
 		hevc->res_ch_flag == 0) {
@@ -10310,10 +10311,26 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 			hevc->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
 			hevc->eos = 1;
+
+			/*
+			 * marks frame valid on the dpb is the ouput state,
+			 * then via flush_output all frames can be flushed out.
+			 */
+			for (i = 0; i < MAX_REF_PIC_NUM; ++i) {
+				if ((hevc->m_PIC[i] == NULL) ||
+					(hevc->m_PIC[i]->index == -1) ||
+					(hevc->m_PIC[i]->BUF_index == -1))
+					continue;
+
+				if ((hevc->m_PIC[i]->POC != INVALID_POC) &&
+					(hevc->m_PIC[i]->output_ready == 0) &&
+					hevc->m_PIC[i]->referenced)
+					hevc->m_PIC[i]->output_mark = 1;
+			}
+
 			flush_output(hevc, NULL);
 			//del_timer_sync(&hevc->timer);
-			if (hevc->is_used_v4l)
-				notify_v4l_eos(hw_to_vdec(hevc));
+			notify_v4l_eos(hw_to_vdec(hevc));
 
 			ret = 1;
 		}

@@ -1043,7 +1043,8 @@ void try_to_capture(struct aml_vcodec_ctx *ctx)
 		return;
 	}
 
-	trans_vframe_to_user(ctx, fb);
+	if (!ctx->is_stream_off)
+		trans_vframe_to_user(ctx, fb);
 }
 EXPORT_SYMBOL_GPL(try_to_capture);
 
@@ -1210,6 +1211,15 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 		if (!vb2_is_streaming(src_vq)) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 				"Output stream is off. No need to flush.\n");
+			return 0;
+		}
+
+		dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx,
+			multiplanar ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
+			V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		if (!vb2_is_streaming(dst_vq)) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+				"Capture stream is off. No need to flush.\n");
 			return 0;
 		}
 
