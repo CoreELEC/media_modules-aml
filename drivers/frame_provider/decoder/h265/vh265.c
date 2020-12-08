@@ -8460,7 +8460,8 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 		vf_dp->content_light_level.present_flag = 0;
 
 	if (hevc->is_used_v4l &&
-		((hevc->sei_present_flag & SEI_HDR10PLUS_MASK) ||
+		((hevc->video_signal_type & VIDEO_SIGNAL_TYPE_AVAILABLE_MASK) ||
+		(hevc->sei_present_flag & SEI_HDR10PLUS_MASK) ||
 		(vf_dp->present_flag) ||
 		(vf_dp->content_light_level.present_flag))) {
 		struct aml_vdec_hdr_infos hdr;
