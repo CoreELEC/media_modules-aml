@@ -1015,7 +1015,7 @@ static int amstream_port_init(struct port_priv_s *priv)
 			0, vdec);
 		if (r < 0) {
 			pr_err("tsdemux_init  failed\n");
-			goto error4;
+			goto error3;
 		}
 		tsync_pcr_start();
 	}
@@ -1024,7 +1024,7 @@ static int amstream_port_init(struct port_priv_s *priv)
 		r = sub_port_init(port, psbuf);
 		if (r < 0) {
 			pr_err("sub_port_init  failed\n");
-			goto error3;
+			goto error4;
 		}
 	}
 
@@ -1058,11 +1058,17 @@ static int amstream_port_init(struct port_priv_s *priv)
 	/*errors follow here */
 
 error4:
-	sub_port_release(port, psbuf);
+	if ((port->type & PORT_TYPE_MPTS) &&
+		!(port->flag & PORT_FLAG_VFORMAT))
+		tsdemux_release();
 error3:
-	video_port_release(priv, &priv->vdec->vbuf, 0);
+	if ((port->type & PORT_TYPE_VIDEO) &&
+		(port->flag & PORT_FLAG_VFORMAT))
+		video_port_release(priv, &priv->vdec->vbuf, 0);
 error2:
-	audio_port_release(port, pabuf, 0);
+	if ((port->type & PORT_TYPE_AUDIO) &&
+		(port->flag & PORT_FLAG_AFORMAT))
+		audio_port_release(port, pabuf, 0);
 error1:
 	mutex_unlock(&amstream_mutex);
 	return r;
