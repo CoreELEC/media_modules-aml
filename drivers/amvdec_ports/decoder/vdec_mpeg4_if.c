@@ -565,6 +565,12 @@ static int vdec_mpeg4_get_param(unsigned long h_vdec,
 	case GET_PARAM_CROP_INFO:
 		get_crop_info(inst, out);
 		break;
+	case GET_PARAM_DW_MODE:
+	{
+		unsigned int* mode = out;
+		*mode = VDEC_DW_NO_AFBC;
+		break;
+	}
 
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
