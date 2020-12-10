@@ -130,6 +130,8 @@ static u32 stat;
 static u32 buf_size = 32 * 1024 * 1024;
 static u32 buf_offset;
 static u32 avi_flag;
+static u32 unstable_pts_debug;
+static u32 unstable_pts;
 static u32 vvc1_ratio;
 static u32 vvc1_format;
 
@@ -458,6 +460,11 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 					vvc1_amstream_dec_info.rate >> 1;
 					next_pts = 0;
 					next_pts_us64 = 0;
+					if (picture_type != I_PICTURE &&
+						unstable_pts) {
+						vf->pts = 0;
+						vf->pts_us64 = 0;
+					}
 				}
 			} else {
 				vf->pts = next_pts;
@@ -481,6 +488,11 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 					vvc1_amstream_dec_info.rate >> 1;
 					next_pts = 0;
 					next_pts_us64 = 0;
+					if (picture_type != I_PICTURE &&
+						unstable_pts) {
+						vf->pts = 0;
+						vf->pts_us64 = 0;
+					}
 				}
 			}
 
@@ -542,6 +554,11 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 					vvc1_amstream_dec_info.rate >> 1;
 				next_pts = 0;
 				next_pts_us64 = 0;
+				if (picture_type != I_PICTURE &&
+					unstable_pts) {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+				}
 			}
 
 			vf->duration_pulldown = 0;
@@ -602,6 +619,11 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 						vvc1_amstream_dec_info.rate;
 					next_pts = 0;
 					next_pts_us64 = 0;
+					if (picture_type != I_PICTURE &&
+						unstable_pts) {
+						vf->pts = 0;
+						vf->pts_us64 = 0;
+					}
 				}
 			} else {
 				vf->pts = next_pts;
@@ -625,6 +647,11 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 						vvc1_amstream_dec_info.rate;
 					next_pts = 0;
 					next_pts_us64 = 0;
+					if (picture_type != I_PICTURE &&
+						unstable_pts) {
+						vf->pts = 0;
+						vf->pts_us64 = 0;
+					}
 				}
 			}
 
@@ -941,8 +968,13 @@ static void vvc1_local_init(bool is_reset)
 	/* vvc1_ratio = vvc1_amstream_dec_info.ratio; */
 	vvc1_ratio = 0x100;
 
-	avi_flag = (unsigned long) vvc1_amstream_dec_info.param;
+	avi_flag = (unsigned long) vvc1_amstream_dec_info.param & 0x01;
 
+	unstable_pts = (((unsigned long) vvc1_amstream_dec_info.param & 0x40) >> 6);
+	if (unstable_pts_debug == 1) {
+		unstable_pts = 1;
+		pr_info("vc1 init , unstable_pts_debug = %u\n",unstable_pts_debug);
+	}
 	total_frame = 0;
 
 	next_pts = 0;
@@ -1115,7 +1147,7 @@ static s32 vvc1_init(void)
 		return ret;
 
 	if (vdec_request_irq(VDEC_IRQ_1, vvc1_isr,
-		    "vvc1-irq", (void *)vvc1_dec_id)) {
+			"vvc1-irq", (void *)vvc1_dec_id)) {
 		amvdec_disable();
 
 		pr_info("vvc1 irq register error.\n");
@@ -1293,6 +1325,8 @@ static void __exit amvdec_vc1_driver_remove_module(void)
 
 	platform_driver_unregister(&amvdec_vc1_driver);
 }
+module_param(unstable_pts_debug, uint, 0664);
+MODULE_PARM_DESC(unstable_pts_debug, "\n amvdec_vc1 unstable_pts\n");
 
 /****************************************/
 module_init(amvdec_vc1_driver_init_module);
