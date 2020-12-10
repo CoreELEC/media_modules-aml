@@ -1827,6 +1827,7 @@ struct hevc_state_s {
 	bool discard_dv_data;
 	bool enable_fence;
 	int fence_usage;
+	int low_latency_flag;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -6080,7 +6081,8 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	new_pic->num_reorder_pic = rpm_param->p.sps_num_reorder_pics_0;
 	new_pic->ip_mode = (!new_pic->num_reorder_pic &&
 							!(vdec->slave || vdec->master) &&
-							!disable_ip_mode) ? true : false;
+							!disable_ip_mode &&
+							hevc->low_latency_flag) ? true : false;
 	new_pic->losless_comp_body_size = hevc->losless_comp_body_size;
 	new_pic->POC = hevc->curr_POC;
 	new_pic->pic_struct = hevc->curr_pic_struct;
@@ -11174,7 +11176,8 @@ force_output:
 			hevc->param.p.sps_num_reorder_pics_0;
 			hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 &&
 								!(vdec->slave || vdec->master) &&
-								!disable_ip_mode) ? true : false;
+								!disable_ip_mode &&
+								hevc->low_latency_flag) ? true : false;
 			hevc->pic_list_init_flag = 1;
 			if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
 				((hevc->param.p.profile_etc & 0xc) == 0x4)
@@ -14183,6 +14186,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			"parm_fence_usage",
 			&config_val) == 0)
 			hevc->fence_usage = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_low_latency_mode",
+			&config_val) == 0)
+			hevc->low_latency_flag = config_val;
+
 #endif
 	} else {
 		if (pdata->sys_info)
