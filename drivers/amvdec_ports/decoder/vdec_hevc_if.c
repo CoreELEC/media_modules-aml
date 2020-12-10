@@ -186,6 +186,8 @@ static void vdec_parser_parms(struct vdec_hevc_inst *inst)
 			ctx->config.parm.dec.cfg.canvas_mem_mode);
 		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_endian:%d;",
 			ctx->config.parm.dec.cfg.canvas_mem_endian);
+		pbuf += sprintf(pbuf, "parm_v4l_low_latency_mode:%d;",
+			ctx->config.parm.dec.cfg.low_latency_mode);
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
 		ctx->config.parm.dec.cfg.double_write_mode = 16;

@@ -9930,7 +9930,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config,
 			"parm_v4l_low_latency_mode",
 			&config_val) == 0)
-			hw->low_latency_mode = config_val;
+			hw->low_latency_mode = config_val ? 0x8:0;
 		if (get_config_int(pdata->config, "sidebind_type",
 				&config_val) == 0)
 			hw->sidebind_type = config_val;

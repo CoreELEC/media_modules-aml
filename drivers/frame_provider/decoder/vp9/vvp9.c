@@ -11161,6 +11161,11 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			"parm_fence_usage",
 			&config_val) == 0)
 			pbi->fence_usage = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_low_latency_mode",
+			&config_val) == 0)
+			pbi->low_latency_flag = config_val;
 #endif
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
@@ -11266,8 +11271,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pbi->vvp9_amstream_dec_info.height = 0;
 		pbi->vvp9_amstream_dec_info.rate = 30;
 	}
-	pbi->low_latency_flag = 1;
 
+	pbi->low_latency_flag = 1;
 	vp9_print(pbi, 0,
 			"no_head %d  low_latency %d\n",
 			pbi->no_head, pbi->low_latency_flag);
