@@ -1227,7 +1227,8 @@ struct VP9Decoder_s {
 	u32 frame_mode_pts_save[FRAME_BUFFERS];
 	u64 frame_mode_pts64_save[FRAME_BUFFERS];
 	u64 frame_mode_timestamp_save[FRAME_BUFFERS];
-	int dur_ts;
+	int timestamp_duration;
+	int output_frame_count;
 	int run_ready_min_buf_num;
 	int one_package_frame_cnt;
 	int buffer_wrap[FRAME_BUFFERS];
@@ -1302,6 +1303,7 @@ static void resize_context_buffers(struct VP9Decoder_s *pbi,
 		if (pbi != NULL) {
 			pbi->vp9_first_pts_ready = 0;
 			pbi->duration_from_pts_done = 0;
+			pbi->output_frame_count = 0;
 		}
 		pr_info("%s (%d,%d)=>(%d,%d)\r\n", __func__, cm->width,
 			cm->height, width, height);
@@ -7299,22 +7301,22 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 						vp9_print(pbi, VP9_DEBUG_OUT_PTS,
 							"no found ts: %lld, pred (ts + dur): %lld.\n",
 							pic_config->timestamp,
-							pbi->last_timestamp + pbi->dur_ts);
+							pbi->last_timestamp + pbi->timestamp_duration);
 
-						pic_config->timestamp = pbi->last_timestamp + pbi->dur_ts;
+						pic_config->timestamp = pbi->last_timestamp + pbi->timestamp_duration;
 					}
 				}
 
 				vp9_print(pbi, VP9_DEBUG_OUT_PTS,
 					"cur ts: %lld, pre ts: %lld, dur ts: %d\n",
-					pic_config->timestamp, pbi->last_timestamp, pbi->dur_ts);
+					pic_config->timestamp, pbi->last_timestamp, pbi->timestamp_duration);
 
-				if (pbi->vp9_first_pts_ready &&  /* there is a pack of multi-frames. */
-					(pic_config->timestamp > (pbi->last_timestamp + pbi->dur_ts)))
-					pic_config->timestamp = pbi->last_timestamp + pbi->dur_ts;
+				if ((pbi->output_frame_count > 1) &&  /* there is a pack of multi-frames. */
+					(pic_config->timestamp > (pbi->last_timestamp + pbi->timestamp_duration)))
+					pic_config->timestamp = pbi->last_timestamp + pbi->timestamp_duration;
 
-				if (!pbi->vp9_first_pts_ready)
-					pbi->dur_ts = pic_config->timestamp - pbi->last_timestamp;
+				if (pbi->output_frame_count == 1)
+					pbi->timestamp_duration = pic_config->timestamp - pbi->last_timestamp;
 			} else {
 				if ((pic_config->pts == 0) || (pic_config->pts <= pbi->last_pts)) {
 					for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
@@ -7586,6 +7588,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 			pbi->vf_pre_count++;
+			pbi->output_frame_count++;
 			pbi_update_gvs(pbi);
 			/*count info*/
 			vdec_count_info(pbi->gvs, 0, stream_offset);
@@ -9458,7 +9461,8 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 
 	memset(pbi->frame_mode_timestamp_save, -1,
 		sizeof(pbi->frame_mode_timestamp_save));
-	pbi->dur_ts = 0;
+	pbi->timestamp_duration = 0;
+	pbi->output_frame_count = 0;
 /*
  *TODO:FOR VERSION
  */

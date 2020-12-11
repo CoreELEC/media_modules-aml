@@ -715,6 +715,7 @@ struct AV1HW_s {
 	u64 last_pts_us64;
 	u64 last_timestamp;
 	u64 shift_byte_count;
+	int output_frame_count;
 
 	u32 shift_byte_count_lo;
 	u32 shift_byte_count_hi;
@@ -5968,7 +5969,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 	if (vf) {
 		if (!force_pts_unstable && (hw->av1_first_pts_ready)) {
 			if (hw->is_used_v4l) {
-				if ((pic_config->timestamp == 0) || (pic_config->timestamp <= hw->last_timestamp)) {
+				if (pic_config->timestamp <= hw->last_timestamp) {
 					for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
 						if (hw->last_timestamp == hw->frame_mode_timestamp_save[i]) {
 							pic_config->timestamp = hw->frame_mode_timestamp_save[i - 1];
@@ -5978,11 +5979,24 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 					if ((i == 0) || (pic_config->timestamp <= hw->last_timestamp)) {
 						av1_print(hw, AV1_DEBUG_OUT_PTS,
-							"no found timestamp %d, set 0. %d, %d\n",
-							i, pic_config->timestamp, hw->last_timestamp);
-						pic_config->timestamp = 0;
+							"no found ts: %lld, pred (ts + dur): %lld.\n",
+							pic_config->timestamp,
+							hw->last_timestamp + hw->timestamp_duration);
+
+						pic_config->timestamp = hw->last_timestamp + hw->timestamp_duration;
 					}
 				}
+
+				av1_print(hw, AV1_DEBUG_OUT_PTS,
+					"cur ts: %lld, pre ts: %lld, dur ts: %d\n",
+					pic_config->timestamp, hw->last_timestamp, hw->timestamp_duration);
+
+				if ((hw->output_frame_count > 1) &&  /* there is a pack of multi-frames. */
+					(pic_config->timestamp > (hw->last_timestamp + hw->timestamp_duration)))
+					pic_config->timestamp = hw->last_timestamp + hw->timestamp_duration;
+
+				if (hw->output_frame_count == 1)
+					hw->timestamp_duration = pic_config->timestamp - hw->last_timestamp;
 			} else {
 				if ((pic_config->pts == 0) || (pic_config->pts <= hw->last_pts)) {
 					for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
@@ -6249,6 +6263,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		hw->vf_pre_count++;
+		hw->output_frame_count++;
 #ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 		/*count info*/
 		gvs->frame_dur = hw->frame_dur;
@@ -8815,6 +8830,8 @@ static int vav1_local_init(struct AV1HW_s *hw)
 
 	memset(hw->frame_mode_timestamp_save, -1,
 		sizeof(hw->frame_mode_timestamp_save));
+	hw->timestamp_duration = 0;
+	hw->output_frame_count = 0;
 /*
  *TODO:FOR VERSION
  */
@@ -9672,23 +9689,16 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	if (hw->chunk == NULL)
 		return;
 	/* no return when first pts is 0 */
-	if (hw->first_pts_index) {
+	if (!hw->is_used_v4l && hw->first_pts_index) {
 		/* filtration pts 0 and continuous same pts */
-		if (hw->is_used_v4l) {
-			if (hw->frame_mode_timestamp_save[0] == hw->chunk->timestamp) {
-				return;
-			}
-		} else {
-			if((hw->chunk->pts == 0) ||
-				(hw->frame_mode_pts_save[0] == hw->chunk->pts))
-				return;
-		}
+		if ((hw->chunk->pts == 0) ||
+			(hw->frame_mode_pts_save[0] == hw->chunk->pts))
+			return;
+
 		/* fps change, frame dur change to lower or higher,
 		 * can't find closed pts in saved pool */
-		if (hw->is_used_v4l ?
-			((hw->last_timestamp > hw->chunk->timestamp)) :
-			((hw->dur_recalc_flag) ||
-			(hw->last_pts >  hw->chunk->pts))) {
+		if (hw->dur_recalc_flag ||
+			(hw->last_pts >  hw->chunk->pts)) {
 			hw->av1_first_pts_ready = 0;
 			hw->first_pts_index = 0;
 			hw->get_frame_dur = 0;
@@ -9697,8 +9707,6 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 			        sizeof(hw->frame_mode_pts_save));
 			memset(hw->frame_mode_pts64_save, 0,
 			        sizeof(hw->frame_mode_pts64_save));
-			memset(hw->frame_mode_timestamp_save, -1,
-				sizeof(hw->frame_mode_timestamp_save));
 		}
 	}
 	av1_print(hw, AV1_DEBUG_OUT_PTS,
@@ -9713,6 +9721,10 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	hw->frame_mode_pts_save[0] = hw->chunk->pts;
 	hw->frame_mode_pts64_save[0] = hw->chunk->pts64;
 	hw->frame_mode_timestamp_save[0] = hw->chunk->timestamp;
+
+	if (hw->is_used_v4l)
+		return;
+
 	if (hw->first_pts_index < ARRAY_SIZE(hw->frame_mode_pts_save))
 		hw->first_pts_index++;
 	/* frame duration check, vdec_secure return for nts problem */

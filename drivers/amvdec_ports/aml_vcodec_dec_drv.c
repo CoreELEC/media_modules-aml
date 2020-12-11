@@ -130,7 +130,7 @@ static int fops_vcodec_open(struct file *file)
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "%s decoder %lx\n",
 		dev_name(&dev->plat_dev->dev), (ulong)ctx);
 
-	return ret;
+	return 0;
 
 	/* Deinit when failure occurred */
 err_creat_thread:
