@@ -1595,6 +1595,10 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		field_num = (info & PICINFO_RPT_FIRST) ? 3 : 2;
 	}
 
+	if ((hw->is_used_v4l) &&
+		(vdec->prog_only))
+		field_num = 1;
+
 	for (i = 0; i < field_num; i++) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,

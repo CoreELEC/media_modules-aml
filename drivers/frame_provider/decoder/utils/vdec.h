@@ -284,6 +284,7 @@ struct vdec_s {
 	bool hdr10p_data_valid;
 	u32 profile_idc;
 	u32 level_idc;
+	bool prog_only;
 };
 
 /* common decoder vframe provider name to use default vfm path */

@@ -9514,6 +9514,10 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			get_double_write_ratio(pic->double_write_mode);
 		vf->height = vf->height /
 			get_double_write_ratio(pic->double_write_mode);
+
+		if (hevc->is_used_v4l && vdec->prog_only)
+			pic->pic_struct = 0;
+
 #ifdef HEVC_PIC_STRUCT_SUPPORT
 		if (pic->pic_struct == 3 || pic->pic_struct == 4) {
 			struct vframe_s *vf2;

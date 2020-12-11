@@ -131,6 +131,7 @@ EXPORT_SYMBOL(no_powerdown);
 static int parallel_decode = 1;
 static int fps_detection;
 static int fps_clear;
+static bool prog_only;
 
 static int force_nosecure_even_drm;
 static int disable_switch_single_to_mult;
@@ -2418,6 +2419,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	if (vdec->id >= 0)
 		id = vdec->id;
 	p->parallel_dec = parallel_decode;
+	p->prog_only = prog_only;
 	vdec_core->parallel_dec = parallel_decode;
 	vdec->canvas_mode = CANVAS_BLKMODE_32X32;
 #ifdef FRAME_CHECK
@@ -4297,6 +4299,10 @@ static ssize_t debug_store(struct class *class,
 			"VDEC_DEBUG: HHI_VDEC4_CLK_CNTL = 0x%x, HHI_VDEC2_CLK_CNTL = 0x%x\n",
 			READ_HHI_REG(HHI_VDEC4_CLK_CNTL),
 			READ_HHI_REG(HHI_VDEC2_CLK_CNTL));
+	} else if (strcmp(cbuf, "no_interlace") == 0) {
+		prog_only ^= 1;
+		pr_info("set prog only %d, %s output\n",
+			prog_only, prog_only?"force one filed only":"interlace");
 	}
 
 	flags = vdec_core_lock(vdec_core);
@@ -4340,6 +4346,8 @@ static ssize_t debug_show(struct class *class,
 		"rd adr - call READ_VREG(adr)\n");
 	pbuf += sprintf(pbuf,
 		"read_hevc_clk_reg - read HHI register for hevc clk\n");
+	pbuf += sprintf(pbuf,
+		"no_interlace - force v4l no_interlace output. %d\n", prog_only);
 	pbuf += sprintf(pbuf,
 		"===================\n");
 
@@ -5756,7 +5764,6 @@ module_param(debug_vdetect, int, 0664);
 MODULE_PARM_DESC(debug_vdetect, "\n debug_vdetect\n");
 
 module_param(enable_stream_mode_multi_dec, int, 0664);
-EXPORT_SYMBOL(enable_stream_mode_multi_dec);
 MODULE_PARM_DESC(enable_stream_mode_multi_dec,
 	"\n enable multi-decoding on stream mode. \n");
 /*

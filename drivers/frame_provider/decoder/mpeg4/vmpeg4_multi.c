@@ -670,6 +670,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
 			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
 			nv_order = VIDTYPE_VIU_NV12;
+		if (vdec->prog_only)
+			pic->pic_info &= ~INTERLACE_FLAG;
 	}
 
 	if (hw->i_only)

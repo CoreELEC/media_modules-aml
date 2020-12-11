@@ -2861,6 +2861,10 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		hw->buffer_spec[buffer_index].vf_ref = 0;
 	fill_frame_info(hw, frame);
 
+	if ((hw->is_used_v4l) &&
+		(vdec->prog_only))
+		vf_count = 1;
+
 	for (i = 0; i < vf_count; i++) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0 ||
 			vf == NULL) {
