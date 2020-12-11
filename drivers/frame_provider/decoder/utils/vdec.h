@@ -488,5 +488,7 @@ int vdec_resource_checking(struct vdec_s *vdec);
 void vdec_set_profile_level(struct vdec_s *vdec, u32 profile_idc, u32 level_idc);
 
 extern void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size);
+void vdec_set_vld_wp(struct vdec_s *vdec, u32 wp);
+void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size);
 
 #endif				/* VDEC_H */

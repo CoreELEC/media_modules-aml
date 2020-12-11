@@ -290,6 +290,11 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 		v_width = READ_VREG(AV_SCRATCH_J);
 		v_height = READ_VREG(AV_SCRATCH_K);
 
+		if (is_support_no_parser()) {
+			STBUF_WRITE(&vdec->vbuf, set_rp,
+				READ_VREG(VLD_MEM_VIFIFO_RP));
+		}
+
 		if (v_width && v_width <= 4096
 			&& (v_width != vvc1_amstream_dec_info.width)) {
 			pr_info("frame width changed %d to %d\n",
