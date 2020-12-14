@@ -187,6 +187,7 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 {
 	struct vdec_mpeg12_inst *inst = NULL;
 	int ret = -1;
+	bool dec_init = false;
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst)
@@ -224,6 +225,7 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 			"vdec_mpeg12 init err=%d\n", ret);
 		goto err;
 	}
+	dec_init = true;
 
 	/* probe info from the stream */
 	inst->vsi = kzalloc(sizeof(struct vdec_mpeg12_vsi), GFP_KERNEL);
@@ -250,6 +252,8 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	return 0;
 
 err:
+	if (dec_init)
+		video_decoder_release(&inst->vdec);
 	if (inst)
 		vcodec_vfm_release(&inst->vfm);
 	if (inst && inst->vsi && inst->vsi->header_buf)
