@@ -188,6 +188,7 @@ static int vdec_mpeg4_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 {
 	struct vdec_mpeg4_inst *inst = NULL;
 	int ret = -1;
+	bool dec_init = false;
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst)
@@ -218,6 +219,7 @@ static int vdec_mpeg4_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 			"init vfm failed.\n");
 		goto err;
 	}
+	dec_init = true;
 
 	ret = video_decoder_init(&inst->vdec);
 	if (ret) {
@@ -252,6 +254,8 @@ static int vdec_mpeg4_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	return 0;
 
 err:
+	if (dec_init)
+		video_decoder_release(&inst->vdec);
 	if (inst)
 		vcodec_vfm_release(&inst->vfm);
 	if (inst && inst->vsi && inst->vsi->header_buf)
