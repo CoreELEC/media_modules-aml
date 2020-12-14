@@ -918,6 +918,7 @@ struct vdec_h264_hw_s {
 	bool enable_fence;
 	int fence_usage;
 	bool discard_dv_data;
+	u32 metadata_config_flag;
 };
 
 static u32 again_threshold;
@@ -9906,6 +9907,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	}
 
 	if (pdata->config_len) {
+		dpb_print(DECODE_ID(hw), 0, "pdata->config=%s\n", pdata->config);
 		/*use ptr config for doubel_write_mode, etc*/
 		if (get_config_int(pdata->config,
 			"mh264_double_write_mode", &config_val) == 0)
@@ -9955,6 +9957,16 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			hw->discard_dv_data = config_val;
 			dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
 		}
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag",
+			&config_val) == 0) {
+			hw->metadata_config_flag = config_val;
+			hw->discard_dv_data = hw->metadata_config_flag & VDEC_CFG_FLAG_DV_NEGATIVE;
+			if (hw->discard_dv_data)
+				dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
+		}
+
 	} else
 		hw->double_write_mode = double_write_mode;
 

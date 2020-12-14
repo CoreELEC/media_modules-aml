@@ -65,6 +65,9 @@ enum vdec_type_e {
 	VDEC_MAX
 };
 
+#define VDEC_CFG_FLAG_DV_TWOLARYER (1 << 0)
+#define VDEC_CFG_FLAG_DV_NEGATIVE  (1 << 1)
+
 #define CORE_MASK_VDEC_1 (1 << VDEC_1)
 #define CORE_MASK_HCODEC (1 << VDEC_HCODEC)
 #define CORE_MASK_VDEC_2 (1 << VDEC_2)

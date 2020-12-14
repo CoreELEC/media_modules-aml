@@ -280,6 +280,7 @@ struct aml_vdec_cfg_infos {
 	u32 canvas_mem_endian;
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
+	u32 metadata_config_flag; // for metadata config flag
 };
 
 struct aml_vdec_hdr_infos {

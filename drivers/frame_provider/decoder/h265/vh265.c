@@ -1836,6 +1836,7 @@ struct hevc_state_s {
 	int fence_usage;
 	int buffer_wrap[MAX_REF_PIC_NUM];
 	int low_latency_flag;
+	u32 metadata_config_flag;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -9832,7 +9833,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			update_vframe_src_fmt(vf,
 				hevc->m_PIC[vf->index & 0xff]->aux_data_buf,
 				hevc->m_PIC[vf->index & 0xff]->aux_data_size,
-				false, hevc->provider_name, NULL);
+				hevc->dv_duallayer, hevc->provider_name, NULL);
 
 		/*if (pic->vf_ref == hevc->vf_pre_count) {*/
 		if (hevc->kpi_first_i_decoded == 0) {
@@ -14360,6 +14361,17 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			&config_val) == 0)
 			hevc->low_latency_flag = config_val;
 
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag",
+			&config_val) == 0) {
+			hevc->metadata_config_flag = config_val;
+			hevc->discard_dv_data = hevc->metadata_config_flag & VDEC_CFG_FLAG_DV_NEGATIVE;
+			hevc->dv_duallayer = hevc->metadata_config_flag & VDEC_CFG_FLAG_DV_TWOLARYER;
+			if (hevc->discard_dv_data)
+				hevc_print(hevc, 0, "discard dv data\n");
+			if (hevc->dv_duallayer)
+				hevc_print(hevc, 0, "dv_duallayer\n");
+		}
 #endif
 	} else {
 		if (pdata->sys_info)
