@@ -4058,7 +4058,7 @@ static ssize_t dump_trace_show(struct class *class,
 	int i;
 	char *pbuf = buf;
 	ssize_t ret;
-	u16 *trace_buf = kmalloc(debug_trace_num * 2, GFP_KERNEL);
+	u16 *trace_buf = vzalloc(debug_trace_num * 2);
 
 	if (!trace_buf) {
 		pbuf += sprintf(pbuf, "No Memory bug\n");
@@ -4069,7 +4069,7 @@ static ssize_t dump_trace_show(struct class *class,
 		mutex_lock(&vdec_mutex);
 		if (!vdec_on(VDEC_1)) {
 			mutex_unlock(&vdec_mutex);
-			kfree(trace_buf);
+			vfree(trace_buf);
 			pbuf += sprintf(pbuf, "amrisc is power off\n");
 			ret = pbuf - buf;
 			return ret;
@@ -4125,7 +4125,7 @@ static ssize_t dump_trace_show(struct class *class,
 	}
 	while (i < debug_trace_num)
 		;
-	kfree(trace_buf);
+	vfree(trace_buf);
 	pbuf += sprintf(pbuf, "\n");
 	ret = pbuf - buf;
 	return ret;
