@@ -1067,16 +1067,19 @@ void tsdemux_change_avid(unsigned int vid, unsigned int aid)
 		WRITE_DEMUX_REG(FM_WR_ADDR, 0x8000);
 		while (READ_DEMUX_REG(FM_WR_ADDR) & 0x8000)
 			;
-	} else {
-		curr_vid_id = vid;
-		curr_aud_id = aid;
-
-		tsdemux_set_vid(vid);
-		tsdemux_set_aid(aid);
-
+	}
+	else
+	{
+		if (curr_vid_id != vid) {
+			tsdemux_set_vid(vid);
+			curr_vid_id = vid;
+		}
+		if (curr_aud_id != aid) {
+			tsdemux_set_aid(aid);
+			curr_aud_id = aid;
+		}
 		reset_pcr_regs();
 	}
-
 }
 
 void tsdemux_change_sid(unsigned int sid)
@@ -1101,10 +1104,11 @@ void tsdemux_change_sid(unsigned int sid)
 void tsdemux_audio_reset(void)
 {
 	ulong flags;
+	unsigned long xflags = 0;
 
-	DEFINE_SPINLOCK(lock);
-
-	spin_lock_irqsave(&lock, flags);
+	spin_lock_irqsave(&demux_ops_lock, flags);
+	if (demux_ops && demux_ops->hw_dmx_lock)
+		xflags = demux_ops->hw_dmx_lock(xflags);
 
 	WRITE_PARSER_REG(PARSER_AUDIO_WP,
 				   READ_AIU_REG(AIU_MEM_AIFIFO_START_PTR));
@@ -1120,18 +1124,21 @@ void tsdemux_audio_reset(void)
 	WRITE_AIU_REG(AIU_MEM_AIFIFO_BUF_CNTL, MEM_BUFCTRL_INIT);
 	CLEAR_AIU_REG_MASK(AIU_MEM_AIFIFO_BUF_CNTL, MEM_BUFCTRL_INIT);
 
-	spin_unlock_irqrestore(&lock, flags);
-
+	if (demux_ops && demux_ops->hw_dmx_unlock)
+		demux_ops->hw_dmx_unlock(xflags);
+	spin_unlock_irqrestore(&demux_ops_lock, flags);
 }
 
 void tsdemux_sub_reset(void)
 {
 	ulong flags;
-	DEFINE_SPINLOCK(lock);
 	u32 parser_sub_start_ptr;
 	u32 parser_sub_end_ptr;
+	unsigned long xflags = 0;
 
-	spin_lock_irqsave(&lock, flags);
+	spin_lock_irqsave(&demux_ops_lock, flags);
+	if (demux_ops && demux_ops->hw_dmx_lock)
+		xflags = demux_ops->hw_dmx_lock(xflags);
 
 	parser_sub_start_ptr = READ_PARSER_REG(PARSER_SUB_START_PTR);
 	parser_sub_end_ptr = READ_PARSER_REG(PARSER_SUB_END_PTR);
@@ -1143,8 +1150,9 @@ void tsdemux_sub_reset(void)
 	SET_PARSER_REG_MASK(PARSER_ES_CONTROL,
 			(7 << ES_SUB_WR_ENDIAN_BIT) | ES_SUB_MAN_RD_PTR);
 
-	spin_unlock_irqrestore(&lock, flags);
-
+	if (demux_ops && demux_ops->hw_dmx_unlock)
+		demux_ops->hw_dmx_unlock(xflags);
+	spin_unlock_irqrestore(&demux_ops_lock, flags);
 }
 
 void tsdemux_set_skipbyte(int skipbyte)

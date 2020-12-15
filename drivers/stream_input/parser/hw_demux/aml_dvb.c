@@ -110,6 +110,8 @@ static int aml_tsdemux_set_sid(int spid);
 static int aml_tsdemux_set_pcrid(int pcrpid);
 static int aml_tsdemux_set_skipbyte(int skipbyte);
 static int aml_tsdemux_set_demux(int id);
+static unsigned long aml_tsdemux_hwdmx_spin_lock(unsigned long flags);
+static int aml_tsdemux_hwdmx_spin_unlock(unsigned long flags);
 
 static struct tsdemux_ops aml_tsdemux_ops = {
 	.reset = aml_tsdemux_reset,
@@ -121,7 +123,9 @@ static struct tsdemux_ops aml_tsdemux_ops = {
 	.set_sid = aml_tsdemux_set_sid,
 	.set_pcrid = aml_tsdemux_set_pcrid,
 	.set_skipbyte = aml_tsdemux_set_skipbyte,
-	.set_demux = aml_tsdemux_set_demux
+	.set_demux = aml_tsdemux_set_demux,
+	.hw_dmx_lock = aml_tsdemux_hwdmx_spin_lock,
+	.hw_dmx_unlock = aml_tsdemux_hwdmx_spin_unlock
 };
 
 long aml_stb_get_base(int id)
@@ -3023,6 +3027,22 @@ static int aml_tsdemux_set_demux(int id)
 
 	aml_dmx_set_demux(dvb, id);
 	return 0;
+}
+
+static unsigned long aml_tsdemux_hwdmx_spin_lock(unsigned long flags)
+{
+    struct aml_dvb *dvb = &aml_dvb_device;
+
+    spin_lock_irqsave(&dvb->slock, flags);
+    return flags;
+}
+
+static int aml_tsdemux_hwdmx_spin_unlock(unsigned long flags)
+{
+    struct aml_dvb *dvb = &aml_dvb_device;
+
+    spin_unlock_irqrestore(&dvb->slock, flags);
+    return 0;
 }
 
 module_init(aml_dvb_init);
