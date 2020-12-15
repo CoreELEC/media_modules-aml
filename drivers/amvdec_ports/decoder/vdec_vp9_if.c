@@ -911,7 +911,7 @@ static int vdec_vp9_decode(unsigned long h_vdec,
 
 	 parms->parms_status |= inst->parms.parms_status;
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
 		"parms status: %u\n", parms->parms_status);
  }
 
