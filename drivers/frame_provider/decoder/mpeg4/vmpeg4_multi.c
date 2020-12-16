@@ -1754,6 +1754,10 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 		} else { /*1080p*/
 			canvas_width = 1920;
 			canvas_height = 1088;
+			if (hw->vmpeg4_amstream_dec_info.width < hw->vmpeg4_amstream_dec_info.height ) {
+				canvas_width = 1088;
+				canvas_height = 1920;
+			}
 			decbuf_y_size = 0x200000;
 			decbuf_size = 0x300000;
 		}
