@@ -583,13 +583,16 @@ bool vdec_input_full(struct aml_vdec_adapt *ada_ctx)
 }
 
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
-	const char *buf, unsigned int count, u64 timestamp)
+	const char *buf, unsigned int count, u64 timestamp, ulong meta_ptr)
 {
 	int ret = -1;
 	struct vdec_s *vdec = ada_ctx->vdec;
 
 	/* set timestamp */
 	vdec_set_timestamp(vdec, timestamp);
+
+	/* set metadata */
+	vdec_set_metadata(vdec, meta_ptr);
 
 	ret = vdec_write_vframe(vdec, buf, count);
 

@@ -47,6 +47,7 @@ struct aml_vcodec_mem {
 	u64	timestamp;
 	dma_addr_t dma_addr;
 	u32	model;
+	ulong	meta_ptr;
 };
 
 struct aml_vcodec_ctx;

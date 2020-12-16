@@ -52,7 +52,7 @@ int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count);
 
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
-	const char *buf, unsigned int count, u64 timestamp);
+	const char *buf, unsigned int count, u64 timestamp, ulong meta_ptr);
 
 void vdec_vframe_input_free(void *priv, u32 handle);
 

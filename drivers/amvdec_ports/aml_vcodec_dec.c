@@ -925,6 +925,7 @@ static void aml_vdec_worker(struct work_struct *work)
 	buf.size	= src_buf->planes[0].bytesused;
 	buf.model	= src_buf->memory;
 	buf.timestamp	= src_buf->timestamp;
+	buf.meta_ptr	= (ulong)src_buf_info->meta_data;
 
 	if (!buf.vaddr && !buf.addr) {
 		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
@@ -2164,6 +2165,8 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 {
 	struct aml_vcodec_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 	struct aml_q_data *q_data;
+	struct vb2_v4l2_buffer *vb2_v4l2 = NULL;
+	struct aml_video_dec_buf *buf = NULL;
 	int i;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
@@ -2183,6 +2186,14 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 				i, vb2_plane_size(vb, i),
 				q_data->sizeimage[i]);
 		}
+	}
+
+	vb2_v4l2 = to_vb2_v4l2_buffer(vb);
+	buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
+
+	if (vb2_v4l2->meta_ptr &&
+		(copy_from_user(buf->meta_data, (void *)vb2_v4l2->meta_ptr, META_DATA_SIZE + 4))) {
+		pr_err("%s:copy_from_user error\n", __func__);
 	}
 
 	return 0;
@@ -2587,6 +2598,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	src_mem.size	= vb->planes[0].bytesused;
 	src_mem.model	= vb->memory;
 	src_mem.timestamp = vb->timestamp;
+	src_mem.meta_ptr = (ulong)buf->meta_data;
 
 	if (vdec_if_probe(ctx, &src_mem, NULL)) {
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);

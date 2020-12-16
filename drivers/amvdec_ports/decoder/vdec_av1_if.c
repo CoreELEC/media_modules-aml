@@ -1046,13 +1046,13 @@ static int vdec_write_nalu(struct vdec_av1_inst *inst,
 		parser_frame(0, src, src + size, data, &length, meta_buffer, &meta_size);
 
 		if (length)
-			ret = vdec_vframe_write(vdec, data, length, ts);
+			ret = vdec_vframe_write(vdec, data, length, ts, 0);
 		else
 			ret = -1;
 
 		vfree(data);
 	} else {
-		ret = vdec_vframe_write(vdec, buf, size, ts);
+		ret = vdec_vframe_write(vdec, buf, size, ts, 0);
 	}
 
 	return ret;
@@ -1116,7 +1116,8 @@ static int vdec_av1_decode(unsigned long h_vdec,
 			ret = vdec_vframe_write(vdec,
 				s->data,
 				s->len,
-				bs->timestamp);
+				bs->timestamp,
+				0);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
 			ret = vdec_vframe_write_with_dma(vdec,

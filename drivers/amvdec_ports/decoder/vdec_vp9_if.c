@@ -130,7 +130,7 @@ struct vdec_vp9_inst {
 };
 
 static int vdec_write_nalu(struct vdec_vp9_inst *inst,
-	u8 *buf, u32 size, u64 ts);
+	u8 *buf, u32 size, u64 ts, ulong meta_ptr);
 
 static void get_pic_info(struct vdec_vp9_inst *inst,
 			 struct vdec_pic_info *pic)
@@ -444,11 +444,11 @@ static void fill_vdec_params(struct vdec_vp9_inst *inst,
 }
 
 static int parse_stream_ucode(struct vdec_vp9_inst *inst,
-			      u8 *buf, u32 size, u64 timestamp)
+			      u8 *buf, u32 size, u64 timestamp, ulong meta_ptr)
 {
 	int ret = 0;
 
-	ret = vdec_write_nalu(inst, buf, size, timestamp);
+	ret = vdec_write_nalu(inst, buf, size, timestamp, meta_ptr);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -529,7 +529,7 @@ static int vdec_vp9_probe(unsigned long h_vdec,
 
 			if (inst->ctx->param_sets_from_ucode) {
 				ret = parse_stream_ucode(inst, s->data,
-					s->len, bs->timestamp);
+					s->len, bs->timestamp, 0);
 			} else {
 				ret = parse_stream_cpu(inst, s->data, s->len);
 			}
@@ -540,7 +540,7 @@ static int vdec_vp9_probe(unsigned long h_vdec,
 		}
 	} else {
 		if (inst->ctx->param_sets_from_ucode) {
-			ret = parse_stream_ucode(inst, buf, size, bs->timestamp);
+			ret = parse_stream_ucode(inst, buf, size, bs->timestamp, bs->meta_ptr);
 		} else {
 			ret = parse_stream_cpu(inst, buf, size);
 		}
@@ -771,7 +771,7 @@ static void trigger_decoder(struct aml_vdec_adapt *vdec)
 	for (i = 0; i < ARRAY_SIZE(vp9_trigger_framesize); i++) {
 		frame_size = vp9_trigger_framesize[i];
 		ret = vdec_vframe_write(vdec, p,
-			frame_size, 0);
+			frame_size, 0, 0);
 		v4l_dbg(vdec->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write trigger frame %d\n", ret);
 		p += frame_size;
@@ -779,7 +779,7 @@ static void trigger_decoder(struct aml_vdec_adapt *vdec)
 }
 
 static int vdec_write_nalu(struct vdec_vp9_inst *inst,
-	u8 *buf, u32 size, u64 ts)
+	u8 *buf, u32 size, u64 ts, ulong meta_ptr)
 {
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
@@ -809,10 +809,10 @@ static int vdec_write_nalu(struct vdec_vp9_inst *inst,
 
 		/*add headers.*/
 		add_prefix_data(&s, &data, &length);
-		ret = vdec_vframe_write(vdec, data, length, ts);
+		ret = vdec_vframe_write(vdec, data, length, ts, 0);
 		vfree(data);
 	} else {
-		ret = vdec_vframe_write(vdec, buf, size, ts);
+		ret = vdec_vframe_write(vdec, buf, size, ts, meta_ptr);
 	}
 
 	return ret;
@@ -876,7 +876,8 @@ static int vdec_vp9_decode(unsigned long h_vdec,
 			ret = vdec_vframe_write(vdec,
 				s->data,
 				s->len,
-				bs->timestamp);
+				bs->timestamp,
+				0);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
 			ret = vdec_vframe_write_with_dma(vdec,
@@ -889,8 +890,7 @@ static int vdec_vp9_decode(unsigned long h_vdec,
 		if ((!inst->ctx->param_sets_from_ucode) &&
 			(*res_chg = monitor_res_change(inst, buf, size)))
 			return 0;
-
-		ret = vdec_write_nalu(inst, buf, size, bs->timestamp);
+		ret = vdec_write_nalu(inst, buf, size, bs->timestamp, bs->meta_ptr);
 	}
 	ATRACE_COUNTER("v4l2_decode_write", ret);
 

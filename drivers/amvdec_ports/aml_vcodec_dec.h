@@ -39,6 +39,8 @@
 #define VDEC_GATHER_MEMORY_TYPE		0
 #define VDEC_SCATTER_MEMORY_TYPE	1
 
+#define META_DATA_SIZE       (256)
+
 /**
  * struct vdec_fb  - decoder frame buffer
  * @mem_type	: gather or scatter memory.
@@ -92,6 +94,8 @@ struct aml_video_dec_buf {
 	unsigned int internal_index;
 
 	ulong vpp_buf_handle;
+	/*4 bytes data for data len*/
+	char meta_data[META_DATA_SIZE + 4];
 };
 
 extern const struct v4l2_ioctl_ops aml_vdec_ioctl_ops;

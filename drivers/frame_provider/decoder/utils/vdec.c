@@ -1229,6 +1229,34 @@ void vdec_set_timestamp(struct vdec_s *vdec, u64 timestamp)
 }
 EXPORT_SYMBOL(vdec_set_timestamp);
 
+void vdec_set_metadata(struct vdec_s *vdec, ulong meta_ptr)
+{
+	char *tmp_buf = NULL;
+	u32 size = 0;
+
+	if (!meta_ptr)
+		return;
+
+	tmp_buf = vmalloc(META_DATA_SIZE + 4);
+	if (!tmp_buf) {
+		pr_err("%s:vmalloc 256+4 fail\n", __func__);
+		return;
+	}
+	memcpy(tmp_buf, (void *)meta_ptr, META_DATA_SIZE + 4);
+
+	size = tmp_buf[0] + (tmp_buf[1] << 8) +
+		(tmp_buf[2] << 16) + (tmp_buf[3] << 24);
+
+	if ((size > 0) && (size <= META_DATA_SIZE)) {
+		memcpy(vdec->hdr10p_data_buf, tmp_buf + 4, size);
+		vdec->hdr10p_data_size = size;
+		vdec->hdr10p_data_valid = true;
+	}
+
+	vfree(tmp_buf);
+}
+EXPORT_SYMBOL(vdec_set_metadata);
+
 int vdec_set_pts64(struct vdec_s *vdec, u64 pts64)
 {
 	vdec->pts64 = pts64;

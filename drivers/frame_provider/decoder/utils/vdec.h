@@ -76,6 +76,8 @@ enum vdec_type_e {
 #define CORE_MASK_HEVC_BACK (1 << VDEC_HEVCB)
 #define CORE_MASK_COMBINE (1UL << 31)
 
+#define META_DATA_SIZE	(256)
+
 extern void vdec2_power_mode(int level);
 extern void vdec_poweron(enum vdec_type_e core);
 extern void vdec_poweroff(enum vdec_type_e core);
@@ -473,6 +475,7 @@ unsigned char is_mult_inc(unsigned int);
 int vdec_get_status(struct vdec_s *vdec);
 
 void vdec_set_timestamp(struct vdec_s *vdec, u64 timestamp);
+void vdec_set_metadata(struct vdec_s *vdec, ulong meta_ptr);
 
 extern u32  vdec_get_frame_vdec(struct vdec_s *vdec,  struct vframe_counter_s *tmpbuf);
 

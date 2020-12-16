@@ -320,7 +320,7 @@ static int parse_stream_ucode(struct vdec_mjpeg_inst *inst,
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
-	ret = vdec_vframe_write(vdec, buf, size, timestamp);
+	ret = vdec_vframe_write(vdec, buf, size, timestamp, 0);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -493,7 +493,7 @@ static int vdec_write_nalu(struct vdec_mjpeg_inst *inst,
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
-	ret = vdec_vframe_write(vdec, buf, size, ts);
+	ret = vdec_vframe_write(vdec, buf, size, ts, 0);
 
 	return ret;
 }
@@ -521,7 +521,8 @@ static int vdec_mjpeg_decode(unsigned long h_vdec,
 			ret = vdec_vframe_write(vdec,
 				s->data,
 				s->len,
-				bs->timestamp);
+				bs->timestamp,
+				0);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
 			ret = vdec_vframe_write_with_dma(vdec,
