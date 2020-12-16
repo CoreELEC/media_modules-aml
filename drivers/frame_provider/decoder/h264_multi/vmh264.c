@@ -1695,7 +1695,7 @@ static void buf_spec_init(struct vdec_h264_hw_s *hw, bool buffer_reset_flag)
 			vf->index = -1;
 		}
 	}
-	if (buffer_reset_flag) {
+	if (!hw->is_used_v4l && buffer_reset_flag) {
 		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
 			if (hw->buffer_spec[i].used == 1 || hw->buffer_spec[i].used == 2)
 				hw->buffer_spec[i].used = 0;
@@ -3091,8 +3091,11 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				hw->buffer_spec[buffer_index].aux_data_size,
 				false, vdec->vf_provider_name, NULL);
 		if (without_display_mode == 0) {
-			vf_notify_receiver(vdec->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			if (hw->is_used_v4l && v4l2_ctx->is_stream_off)
+				vh264_vf_put(vh264_vf_get(vdec), vdec);
+			else
+				vf_notify_receiver(vdec->vf_provider_name,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 		} else
 			vh264_vf_put(vh264_vf_get(vdec), vdec);
 	}
