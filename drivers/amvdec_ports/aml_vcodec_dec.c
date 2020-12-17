@@ -221,7 +221,6 @@ extern bool support_mjpeg;
 extern int dmabuf_fd_install_data(int fd, void* data, u32 size);
 extern bool is_v4l2_buf_file(struct file *file);
 static void box_release(struct kref *kref);
-extern int get_double_write_ratio(int dw_mode);
 static struct internal_comp_buf* vb_to_comp(struct aml_vcodec_ctx *ctx, int idx_vb);
 
 static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type);
@@ -1690,18 +1689,10 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
 	struct aml_q_data *q_data;
-	int ratio = 1;
 
 	if ((s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) &&
 		(s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE))
 		return -EINVAL;
-
-	if (ctx->state >= AML_STATE_PROBE) {
-		unsigned int dw_mode = VDEC_DW_NO_AFBC;
-		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
-			return -EBUSY;
-		ratio = get_double_write_ratio(dw_mode);
-	}
 
 	q_data = &ctx->q_data[AML_Q_DATA_DST];
 
@@ -1710,14 +1701,14 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 	case V4L2_SEL_TGT_COMPOSE:
 		s->r.left = 0;
 		s->r.top = 0;
-		s->r.width = ctx->picinfo.visible_width/ratio;
-		s->r.height = ctx->picinfo.visible_height/ratio;
+		s->r.width = ctx->picinfo.visible_width;
+		s->r.height = ctx->picinfo.visible_height;
 		break;
 	case V4L2_SEL_TGT_COMPOSE_BOUNDS:
 		s->r.left = 0;
 		s->r.top = 0;
-		s->r.width = ctx->picinfo.coded_width/ratio;
-		s->r.height = ctx->picinfo.coded_height/ratio;
+		s->r.width = ctx->picinfo.coded_width;
+		s->r.height = ctx->picinfo.coded_height;
 		break;
 	default:
 		return -EINVAL;
@@ -1740,7 +1731,6 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 static int vidioc_vdec_s_selection(struct file *file, void *priv,
 	struct v4l2_selection *s)
 {
-	int ratio = 1;
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d\n",
@@ -1749,19 +1739,12 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 	if (s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
-	if (ctx->state >= AML_STATE_PROBE) {
-		unsigned int dw_mode = VDEC_DW_NO_AFBC;
-		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
-			return -EBUSY;
-		ratio = get_double_write_ratio(dw_mode);
-	}
-
 	switch (s->target) {
 	case V4L2_SEL_TGT_COMPOSE:
 		s->r.left = 0;
 		s->r.top = 0;
-		s->r.width = ctx->picinfo.visible_width/ratio;
-		s->r.height = ctx->picinfo.visible_height/ratio;
+		s->r.width = ctx->picinfo.visible_width;
+		s->r.height = ctx->picinfo.visible_height;
 		break;
 	default:
 		return -EINVAL;
@@ -1774,38 +1757,24 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 {
 	struct aml_q_data *q_data;
-	unsigned int dw_mode = VDEC_DW_NO_AFBC;
-	int ratio = 1;
 
 	q_data = aml_vdec_get_q_data(ctx, type);
-	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
-		return;
-
-	ratio = get_double_write_ratio(dw_mode);
-	/* Until STREAMOFF is called on the CAPTURE queue
-	 * (acknowledging the event), the driver operates as if
-	 * the resolution hasn't changed yet.
-	 * So we just return picinfo yet, and update picinfo in
-	 * stop_streaming hook function
-	 */
-	/* it is used for alloc the decode buffer size. */
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
-		q_data->sizeimage[0] = ctx->picinfo.y_len_sz/ratio/ratio;
-		q_data->sizeimage[1] = ctx->picinfo.c_len_sz/ratio/ratio;
+		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
+		q_data->sizeimage[1] = ctx->picinfo.c_len_sz;
 
-		/* it is used for alloc the EGL image buffer size. */
-		q_data->coded_width = ctx->picinfo.coded_width/ratio;
-		q_data->coded_height = ctx->picinfo.coded_height/ratio;
+		q_data->coded_width = ctx->picinfo.coded_width;
+		q_data->coded_height = ctx->picinfo.coded_height;
 
-		q_data->bytesperline[0] = ctx->picinfo.coded_width/ratio;
-		q_data->bytesperline[1] = ctx->picinfo.coded_width/ratio;
+		q_data->bytesperline[0] = ctx->picinfo.coded_width;
+		q_data->bytesperline[1] = ctx->picinfo.coded_width;
 	} else {
-		q_data->coded_width = ctx->picinfo.coded_width/ratio;
-		q_data->coded_height = ctx->picinfo.coded_height/ratio;
-		q_data->sizeimage[0] = ctx->picinfo.y_len_sz/ratio/ratio;
-		q_data->sizeimage[0] += ctx->picinfo.c_len_sz/ratio/ratio;
-		q_data->bytesperline[0] = ctx->picinfo.coded_width/ratio;
+		q_data->coded_width = ctx->picinfo.coded_width;
+		q_data->coded_height = ctx->picinfo.coded_height;
+		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
+		q_data->sizeimage[0] += ctx->picinfo.c_len_sz;
+		q_data->bytesperline[0] = ctx->picinfo.coded_width;
 	}
 }
 
