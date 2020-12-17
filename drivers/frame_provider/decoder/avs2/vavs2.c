@@ -3028,6 +3028,22 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	data32 |= (MEM_MAP_MODE << 12);
 	data32 &= (~0x3);
 	data32 |= 0x1; /* [1]:dw_disable [0]:cm_disable*/
+
+	/*
+	*  [31:24] ar_fifo1_axi_thred
+	*  [23:16] ar_fifo0_axi_thred
+	*  [15:14] axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes
+	*  [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
+	*  [11:08] axi_lendian_C
+	*  [07:04] axi_lendian_Y
+	*  [3]     reserved
+	*  [2]     clk_forceon
+	*  [1]     dw_disable:disable double write output
+	*  [0]     cm_disable:disable compress output
+	*/
+
+	data32 |= (2 << 14);
+
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 	/*[23:22] dw_v1_ctrl [21:20] dw_v0_ctrl [19:18] dw_h1_ctrl
 		[17:16] dw_h0_ctrl*/
@@ -3985,7 +4001,7 @@ static void set_canvas(struct AVS2Decoder_s *dec,
 				get_double_write_ratio(pic->double_write_mode);
 
 		if (mem_map_mode == 0)
-			canvas_w = ALIGN(canvas_w, 32);
+			canvas_w = ALIGN(canvas_w, 64);
 		else
 			canvas_w = ALIGN(canvas_w, 64);
 		canvas_h = ALIGN(canvas_h, 32);

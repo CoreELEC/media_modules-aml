@@ -5652,6 +5652,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	*  [0]     cm_disable:disable compress output
 	*/
 
+	data32 |= (2 << 14);
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 	if (get_double_write_mode(hevc) & 0x10) {
 		/* [23:22] dw_v1_ctrl
@@ -8114,7 +8115,7 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 			get_double_write_ratio(pic->double_write_mode);
 
 		if (hevc->mem_map_mode == 0)
-			canvas_w = ALIGN(canvas_w, 32);
+			canvas_w = ALIGN(canvas_w, 64);
 		else
 			canvas_w = ALIGN(canvas_w, 64);
 		canvas_h = ALIGN(canvas_h, 32);
@@ -10340,8 +10341,8 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 
 	ps->visible_width 	= width;
 	ps->visible_height 	= height;
-	ps->coded_width 	= ALIGN(width, 32);
-	ps->coded_height 	= ALIGN(height, 32);
+	ps->coded_width 	= ALIGN(width, 64);
+	ps->coded_height 	= ALIGN(height, 64);
 	ps->dpb_size 		= v4l_parser_work_pic_num(hevc);
 
 	return 0;

@@ -5642,6 +5642,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	*  [1]     dw_disable:disable double write output
 	*  [0]     cm_disable:disable compress output
 	*/
+	data32 |= (2 << 14);
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 
 	if (get_double_write_mode(pbi) & 0x10) {
@@ -6849,7 +6850,7 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 					pic_config->double_write_mode);
 
 		if (pbi->mem_map_mode == 0)
-			canvas_w = ALIGN(canvas_w, 32);
+			canvas_w = ALIGN(canvas_w, 64);
 		else
 			canvas_w = ALIGN(canvas_w, 64);
 		canvas_h = ALIGN(canvas_h, 32);
@@ -8529,8 +8530,8 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 {
 	ps->visible_width 	= pbi->frame_width;
 	ps->visible_height 	= pbi->frame_height;
-	ps->coded_width 	= ALIGN(pbi->frame_width, 32);
-	ps->coded_height 	= ALIGN(pbi->frame_height, 32);
+	ps->coded_width 	= ALIGN(pbi->frame_width, 64);
+	ps->coded_height 	= ALIGN(pbi->frame_height, 64);
 	ps->dpb_size 		= pbi->used_buf_num;
 
 	return 0;

@@ -3875,6 +3875,7 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	*  [1]     dw_disable:disable double write output
 	*  [0]     cm_disable:disable compress output
 	*/
+	data32 |= (2 << 14);
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 
 	if (get_double_write_mode(hw) & 0x10) {
@@ -5518,7 +5519,7 @@ static void set_canvas(struct AV1HW_s *hw,
 					pic_config->double_write_mode & 0xf);
 
 		if (mem_map_mode == 0)
-			canvas_w = ALIGN(canvas_w, 32);
+			canvas_w = ALIGN(canvas_w, 64);
 		else
 			canvas_w = ALIGN(canvas_w, 64);
 		canvas_h = ALIGN(canvas_h, 32);
@@ -7865,8 +7866,8 @@ static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 {
 	ps->visible_width 	= hw->frame_width;
 	ps->visible_height 	= hw->frame_height;
-	ps->coded_width 	= ALIGN(hw->frame_width, 32);
-	ps->coded_height 	= ALIGN(hw->frame_height, 32);
+	ps->coded_width 	= ALIGN(hw->frame_width, 64);
+	ps->coded_height 	= ALIGN(hw->frame_height, 64);
 	ps->dpb_size 		= hw->used_buf_num;
 
 	return 0;
