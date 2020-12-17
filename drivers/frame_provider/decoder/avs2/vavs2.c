@@ -3109,6 +3109,21 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	else if (get_double_write_mode(dec) & 0x10)
 		data32 |= 0x1; /*disable cm*/
 
+	/*
+	*  [31:24] ar_fifo1_axi_thred
+	*  [23:16] ar_fifo0_axi_thred
+	*  [15:14] axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes
+	*  [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
+	*  [11:08] axi_lendian_C
+	*  [07:04] axi_lendian_Y
+	*  [3]     reserved
+	*  [2]     clk_forceon
+	*  [1]     dw_disable:disable double write output
+	*  [0]     cm_disable:disable compress output
+	*/
+
+	data32 |= (2 << 14);
+
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 
 	if (get_double_write_mode(dec) & 0x10) {
