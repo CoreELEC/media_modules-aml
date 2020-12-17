@@ -1383,9 +1383,9 @@ static void userdata_push_do_work(struct work_struct *work)
 	}
 
 	cur_wp = reg & 0x7fff;
-	if (cur_wp == hw->ucode_cc_last_wp) {
+	if (cur_wp == hw->ucode_cc_last_wp || (cur_wp >= AUX_BUF_ALIGN(CCBUF_SIZE))) {
 		debug_print(DECODE_ID(hw), 0,
-			"Null user data package: wp = %d\n", cur_wp);
+			"Null or Over size user data package: wp = %d\n", cur_wp);
 		WRITE_VREG(AV_SCRATCH_J, 0);
 		return;
 	}
@@ -1499,7 +1499,7 @@ static void userdata_push_do_work(struct work_struct *work)
 
 	hw->userdata_info.last_wp += data_length;
 	if (hw->userdata_info.last_wp >= USER_DATA_SIZE)
-		hw->userdata_info.last_wp -= USER_DATA_SIZE;
+		hw->userdata_info.last_wp %= USER_DATA_SIZE;
 
 	hw->wait_for_udr_send = 1;
 
