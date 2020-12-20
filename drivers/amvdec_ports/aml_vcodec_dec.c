@@ -341,6 +341,14 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 		}
 	}
 
+	if (ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG1) {
+		if (ctx->picinfo.coded_width <= 1920 &&
+			ctx->picinfo.coded_height <= 1088) {
+			*mode = VPP_MODE_DI;
+			return true;
+		}
+	}
+
 #if 0//enable later
 	if (ctx->output_pix_fmt == V4L2_PIX_FMT_HEVC ||
 		ctx->output_pix_fmt == V4L2_PIX_FMT_VP9) {
@@ -1573,8 +1581,10 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
 			pix_mp->num_planes = 1;
 			pix_mp->plane_fmt[0].bytesperline = AML_VDEC_MAX_W;
 			pix_mp->plane_fmt[0].sizeimage = AML_VDEC_MAX_W * AML_VDEC_MAX_H;
+
 			if ((pix_mp->pixelformat != V4L2_PIX_FMT_MPEG2) &&
-			    (pix_mp->pixelformat != V4L2_PIX_FMT_H264)) {
+			    (pix_mp->pixelformat != V4L2_PIX_FMT_H264) &&
+			    (pix_mp->pixelformat != V4L2_PIX_FMT_MPEG1)) {
 				pix_mp->field = V4L2_FIELD_NONE;
 			} else if (pix_mp->field != V4L2_FIELD_NONE) {
 				pr_info("%s, field: %u, fmt: %x\n",
@@ -1613,7 +1623,8 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
 			pix->bytesperline = AML_VDEC_MAX_W;
 			pix->sizeimage = AML_VDEC_MAX_W * AML_VDEC_MAX_H;
 			if ((pix->pixelformat != V4L2_PIX_FMT_MPEG2) &&
-			    (pix->pixelformat != V4L2_PIX_FMT_H264)) {
+			    (pix->pixelformat != V4L2_PIX_FMT_H264) &&
+			    (pix->pixelformat != V4L2_PIX_FMT_MPEG1)) {
 				pix->field = V4L2_FIELD_NONE;
 			} else if (pix->field != V4L2_FIELD_NONE) {
 				pr_info("%s, field: %u, fmt: %x\n",
