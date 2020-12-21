@@ -6920,6 +6920,9 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 		memset(&hdr, 0, sizeof(hdr));
 		hdr.signal_type = vf->signal_type;
 		hdr.color_parms = pbi->vf_dp;
+
+		hdr.color_parms.luminance[0] = hdr.color_parms.luminance[0] / 10000;
+
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
 
