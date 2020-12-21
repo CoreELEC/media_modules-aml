@@ -45,15 +45,9 @@
 #define pr_error(fmt, args...) printk("DVB: " fmt, ## args)
 #define pr_inf(fmt, args...)   printk("DVB: " fmt, ## args)
 
-#define CARD_NAME "amlogic-dvb"
+#define CARD_NAME "amlogic-dvb-swdmx"
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
-
-extern ssize_t stb_show_tuner_setting(struct class *class,
-				   struct class_attribute *attr, char *buf);
-extern ssize_t stb_store_tuner_setting(struct class *class,
-				    struct class_attribute *attr,
-				    const char *buf, size_t count);
 
 static struct aml_dvb aml_dvb_device;
 typedef struct _ChainPath
@@ -350,7 +344,6 @@ static struct class_attribute aml_dvb_class_attrs[] = {
 			path0_set_buf_warning_level),
 	__ATTR(path1_buf_status, 0664, path1_show_buf_warning_status,\
 			path1_set_buf_warning_level),\
-	__ATTR(tuner_setting, 0664, stb_show_tuner_setting, stb_store_tuner_setting),
 	__ATTR_NULL
 };
 
@@ -638,7 +631,7 @@ struct platform_driver aml_dvb_driver = {
 	.suspend = NULL,
 	.resume = NULL,
 	.driver = {
-		   .name = "amlogic-dvb",
+		   .name = "amlogic-dvb-swdmx",
 		   .owner = THIS_MODULE,
 #ifdef CONFIG_OF
 	   .of_match_table = aml_dvb_dt_match,

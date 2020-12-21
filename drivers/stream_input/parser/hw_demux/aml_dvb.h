@@ -333,11 +333,6 @@ struct aml_dvb {
 	struct aml_swfilter  swfilter;
 	int	ts_out_invert;
 
-	unsigned int tuner_num;
-	int tuner_cur;
-	struct aml_tuner *tuners;
-	bool tuner_attached;
-
 	/*bufs for dmx shared*/
 	unsigned long        pes_pages;
 	unsigned long        pes_pages_map;
@@ -345,8 +340,6 @@ struct aml_dvb {
 	unsigned long        sub_pages;
 	unsigned long        sub_pages_map;
 	int                  sub_buf_len;
-
-
 };
 
 

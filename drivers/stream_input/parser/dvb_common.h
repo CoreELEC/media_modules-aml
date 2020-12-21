@@ -18,8 +18,7 @@
 #ifndef __DVB_COMMON_H__
 #define __DVB_COMMON_H__
 
-#include <linux/amlogic/aml_dtvdemod.h>
-#include <linux/amlogic/aml_tuner.h>
+#include <linux/amlogic/aml_dvb_extern.h>
 
 #include "dvb_frontend.h"
 
