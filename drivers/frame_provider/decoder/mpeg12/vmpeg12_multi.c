@@ -335,6 +335,7 @@ struct vdec_mpeg12_hw_s {
 	u32 profile_idc;
 	u32 level_idc;
 	int dec_again_cnt;
+	int vdec_pg_enable_flag;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -3068,7 +3069,7 @@ static s32 vmpeg12_init(struct vdec_mpeg12_hw_s *hw)
 			hw->user_data_buffer,
 			USER_DATA_SIZE);
 
-	amvdec_enable();
+	//amvdec_enable();
 	init_timer(&hw->check_timer);
 	hw->check_timer.data = (unsigned long)hw;
 	hw->check_timer.function = check_timer_func;
@@ -3223,13 +3224,17 @@ void (*callback)(struct vdec_s *, void *),
 {
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)vdec->private;
-	//int save_reg = READ_VREG(POWER_CTL_VLD);
+	int save_reg;
 	int size, ret;
-
+	if (!hw->vdec_pg_enable_flag) {
+		hw->vdec_pg_enable_flag = 1;
+		amvdec_enable();
+	}
+	save_reg = READ_VREG(POWER_CTL_VLD);
 	/* reset everything except DOS_TOP[1] and APB_CBUS[0]*/
-	//WRITE_VREG(DOS_SW_RESET0, 0xfffffff0);
-	//WRITE_VREG(DOS_SW_RESET0, 0);
-	//WRITE_VREG(POWER_CTL_VLD, save_reg);
+	WRITE_VREG(DOS_SW_RESET0, 0xfffffff0);
+	WRITE_VREG(DOS_SW_RESET0, 0);
+	WRITE_VREG(POWER_CTL_VLD, save_reg);
 	hw->run_count++;
 	vdec_reset_core(vdec);
 	hw->vdec_cb_arg = arg;

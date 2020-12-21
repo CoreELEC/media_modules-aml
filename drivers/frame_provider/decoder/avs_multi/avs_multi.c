@@ -553,6 +553,7 @@ struct vdec_avs_hw_s {
 	u32 old_udebug_flag;
 	u32 decode_status_skip_pic_done_flag;
 	u32 decode_decode_cont_start_code;
+	int vdec_pg_enable_flag;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -2160,7 +2161,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 
 	//hw->stat |= STAT_TIMER_INIT;
 
-	amvdec_enable();
+	//amvdec_enable();
 
 	//vdec_enable_DMC(NULL);
 
@@ -2464,7 +2465,7 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 		hw->fw = NULL;
 	}
 
-	amvdec_disable();
+	//amvdec_disable();
 	//vdec_disable_DMC(NULL);
 
 	hw->pic_type = 0;
@@ -2978,8 +2979,13 @@ void (*callback)(struct vdec_s *, void *),
 {
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)vdec->private;
-	int save_reg = READ_VREG(POWER_CTL_VLD);
+	int save_reg;
 	int size, ret;
+	if (!hw->vdec_pg_enable_flag) {
+		hw->vdec_pg_enable_flag = 1;
+		amvdec_enable();
+	}
+	save_reg = READ_VREG(POWER_CTL_VLD);
 	/* reset everything except DOS_TOP[1] and APB_CBUS[0]*/
 	debug_print(hw, PRINT_FLAG_RUN_FLOW,"run in\n");
 	if (vdec_stream_based(vdec)) {
