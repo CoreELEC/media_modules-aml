@@ -335,6 +335,7 @@ struct vdec_mpeg4_hw_s {
 	unsigned int b_decoded_frames;
 	unsigned int b_lost_frames;
 	unsigned int b_concealed_frames;
+	int vdec_pg_enable_flag;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -2261,7 +2262,7 @@ static s32 vmmpeg4_init(struct vdec_mpeg4_hw_s *hw)
 
 	pr_info("%s\n", __func__);
 
-	amvdec_enable();
+	//amvdec_enable();
 
 	timer_setup(&hw->check_timer, check_timer_func, 0);
 	//init_timer(&hw->check_timer);
@@ -2360,7 +2361,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 {
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
 	int size = 0, ret = 0;
-
+	if (!hw->vdec_pg_enable_flag) {
+		hw->vdec_pg_enable_flag = 1;
+		amvdec_enable();
+	}
 	hw->run_count++;
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
