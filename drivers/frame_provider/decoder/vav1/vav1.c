@@ -3905,6 +3905,7 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	*  [1]     dw_disable:disable double write output
 	*  [0]     cm_disable:disable compress output
 	*/
+	data32 &= (~(3 << 14));
 	data32 |= (2 << 14);
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 
@@ -3957,6 +3958,8 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	* [12]    CbCr_byte_swap
 	* [31:13] reserved
 	*/
+	data32 &= (~(3 << 8));
+	data32 |= (2 << 8);
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
 
 #endif
