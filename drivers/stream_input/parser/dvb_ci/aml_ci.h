@@ -23,7 +23,7 @@
 
 //#include "drivers/media/dvb-core/dvb_ca_en50221.h"
 #include "cimcu/dvb_ca_en50221_cimcu.h"
-#include "cimax/dvb_ca_en50221_cimax.h"
+//#include "cimax/dvb_ca_en50221_cimax.h"
 #include <linux/platform_device.h>
 
 enum aml_dvb_io_type_e {
@@ -31,7 +31,25 @@ enum aml_dvb_io_type_e {
 	AML_DVB_IO_TYPE_SPI,
 	AML_DVB_IO_TYPE_CIMAX,
 	AML_DVB_IO_TYPE_SPI_T312,
+	AML_DVB_IO_TYPE_CIBUS,
 	AML_DVB_IO_TYPE_MAX,
+};
+
+enum aml_gpio_level_e {
+		AML_GPIO_LOW = 0,
+		AML_GPIO_HIGH
+};
+enum AM_CI_CMD {
+		AM_CI_CMD_IOR = 0,
+		AM_CI_CMD_IOW,
+		AM_CI_CMD_MEMR,
+		AM_CI_CMD_MEMW,
+		AM_CI_CMD_FULLTEST,
+		AM_CI_CMD_CISTEST,
+		AM_CI_CMD_GETCD12,
+		AM_CI_CMD_POWER,
+		AM_CI_CMD_RESET,
+		AM_CI_CMD_CONGPIO,
 };
 
 struct aml_ci {
@@ -71,21 +89,21 @@ struct aml_ci {
 	int (*ci_poll_slot_status)(struct aml_ci *ca, int slot, int open);
 
 
-	struct dvb_ca_en50221_cimax en50221_cimax;
+	//struct dvb_ca_en50221_cimax en50221_cimax;
 
-	int (*ci_read_cis)(struct aml_ci *ca, int slot, u8 *buf, int size);
-	int (*ci_write_cor)(struct aml_ci *ca, int slot, int address, u8 *buf);
+	//int (*ci_read_cis)(struct aml_ci *ca, int slot, u8 *buf, int size);
+	//int (*ci_write_cor)(struct aml_ci *ca, int slot, int address, u8 *buf);
       /*return the final size or -1 for error*/
-	int (*ci_negotiate)(struct aml_ci *ca, int slot, int size);
+	//int (*ci_negotiate)(struct aml_ci *ca, int slot, int size);
 
 	/* functions for accessing the control interface on the CAM */
-	int (*ci_read_lpdu)(struct aml_ci *ca, int slot, u8 *buf, int size);
-	int (*ci_write_lpdu)(struct aml_ci *ca, int slot, u8 *buf, int size);
+	//int (*ci_read_lpdu)(struct aml_ci *ca, int slot, u8 *buf, int size);
+	//int (*ci_write_lpdu)(struct aml_ci *ca, int slot, u8 *buf, int size);
 
-	int (*ci_get_capbility)(struct aml_ci *ca, int slot);
+	//int (*ci_get_capbility)(struct aml_ci *ca, int slot);
 
-	int (*ci_cam_reset)(struct aml_ci *ca, int slot);
-	int (*ci_read_cam_status)(struct aml_ci *ca, int slot);
+	//int (*ci_cam_reset)(struct aml_ci *ca, int slot);
+	//int (*ci_read_cam_status)(struct aml_ci *ca, int slot);
 
 	/* private data, used by caller */
 	void *data;

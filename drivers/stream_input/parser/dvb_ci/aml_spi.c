@@ -1102,7 +1102,8 @@ int aml_spi_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 	spin_lock_init(&(spi_dev->spi_lock));
 	/*regist api dev*/
 	pr_dbg("*********spi Dev regist**********\r\n");
-	result = dirspi_register_board_info(spi_dev->spi_bdinfo, 1);
+	//not support mcu mode on kernel 5.4
+	//result = dirspi_register_board_info(spi_dev->spi_bdinfo, 1);
 	if (result) {
 		pr_error("register amlspi_dev spi boardinfo failed\n");
 		goto fail1;

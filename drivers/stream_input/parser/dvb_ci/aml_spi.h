@@ -65,26 +65,12 @@ struct aml_spi {
 	/*device type*/
 	int io_device_type;
 };
-enum aml_gpio_level_e {
-		AML_GPIO_LOW = 0,
-		AML_GPIO_HIGH
-};
+
 
 /* used to mcu */
 #define DATASTART 0xef
 #define DATAEND   0xfe
-enum AM_CI_CMD {
-		AM_CI_CMD_IOR = 0,
-		AM_CI_CMD_IOW,
-		AM_CI_CMD_MEMR,
-		AM_CI_CMD_MEMW,
-		AM_CI_CMD_FULLTEST,
-		AM_CI_CMD_CISTEST,
-		AM_CI_CMD_GETCD12,
-		AM_CI_CMD_POWER,
-		AM_CI_CMD_RESET,
-		AM_CI_CMD_CONGPIO,
-};
+
 enum AM_SPI_RECIVERSTEP {
 		AM_SPI_STEP_INIT = 0,
 		AM_SPI_STEP_START1,

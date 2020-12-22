@@ -1,4 +1,22 @@
-
+/*
+* Copyright (C) 2017 Amlogic, Inc. All rights reserved.
+*
+* This program is free software; you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation; either version 2 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful, but WITHOUT
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+* FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+* more details.
+*
+* You should have received a copy of the GNU General Public License along
+* with this program; if not, write to the Free Software Foundation, Inc.,
+* 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*
+* Description:
+*/
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
@@ -25,9 +43,11 @@ MODULE_PARM_DESC(pcmcia_debug, "enable verbose debug messages");
 static int pcmcia_plugin(struct aml_pcmcia *pc)
 {
 	if (pc->slot_state == MODULE_XTRACTED) {
+		pc->pwr(pc, AML_PWR_OPEN);/*hi is open power*/
 		pr_dbg(" CAM Plugged IN: Adapter(%d) Slot(0)\n", 0);
 		udelay(50);
-		aml_pcmcia_reset(pc);
+		if (pc->io_device_type != AML_DVB_IO_TYPE_CIBUS)
+			aml_pcmcia_reset(pc);
 		/*wait unplug*/
 		pc->init_irq(pc, IRQF_TRIGGER_RISING);
 		udelay(500);
@@ -45,6 +65,7 @@ static int pcmcia_plugin(struct aml_pcmcia *pc)
 static int pcmcia_unplug(struct aml_pcmcia *pc)
 {
 	if (pc->slot_state == MODULE_INSERTED) {
+		pc->pwr(pc, AML_PWR_CLOSE);/*hi is open power*/
 		pr_dbg(" CAM Unplugged: Adapter(%d) Slot(0)\n", 0);
 		/*udelay(50);*/
 		/*aml_pcmcia_reset(pc);*/
@@ -122,14 +143,15 @@ int aml_pcmcia_init(struct aml_pcmcia *pc)
 	pr_dbg("aml_pcmcia_init start pc->irq=%d\r\n", pc->irq);
 	pc->rst(pc, AML_L);
 	/*power on*/
-	pc->pwr(pc, AML_PWR_OPEN);/*hi is open power*/
+	if (pc->io_device_type != AML_DVB_IO_TYPE_CIBUS)
+		pc->pwr(pc, AML_PWR_OPEN);/*hi is open power*/
 	/*assuming cam unpluged, config the INT to waiting-for-plugin mode*/
 	pc->init_irq(pc, IRQF_TRIGGER_LOW);
 
 	INIT_WORK(&pc->pcmcia_work, aml_pcmcia_work);
 
 	mode = IRQF_ONESHOT;
-	if (pc->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+	if (pc->io_device_type == AML_DVB_IO_TYPE_SPI_T312 || pc->io_device_type == AML_DVB_IO_TYPE_CIBUS) {
 		mode = mode | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
 	}
 
@@ -143,7 +165,7 @@ int aml_pcmcia_init(struct aml_pcmcia *pc)
 
 	pc_cur = pc;
 	pr_dbg("aml_pcmcia_init ok\r\n");
-	if (pc->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
+	if (pc->io_device_type == AML_DVB_IO_TYPE_SPI_T312 || pc->io_device_type == AML_DVB_IO_TYPE_CIBUS) {
 		//mcu start very fast,so she can detect cam before soc init end.
 		//so we need add detect cam fun for first time.
 		aml_pcmcia_detect_cam(pc);

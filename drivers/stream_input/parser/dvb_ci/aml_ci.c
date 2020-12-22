@@ -29,8 +29,9 @@
 #include <linux/sysfs.h>
 #include <linux/of.h>
 #include "aml_ci.h"
-#include "aml_spi.h"
-#include "cimax/aml_cimax.h"
+//#include "aml_spi.h"
+#include "aml_ci_bus.h"
+//#include "cimax/aml_cimax.h"
 
 //#include "dvb_ca_en50221.h"
 #include <dvbdev.h>
@@ -225,6 +226,7 @@ static int aml_ci_slot_status(struct dvb_ca_en50221_cimcu *en50221,
 
 	return 0;
 }
+#if 0
 static int aml_ci_cimax_slot_reset(struct dvb_ca_en50221_cimax *en50221,
 		int slot)
 {
@@ -483,7 +485,7 @@ static int aml_ci_get_capbility(struct dvb_ca_en50221_cimax *en50221, int slot)
 	pr_error("ci_get_capbility is null %s\r\n", __func__);
 	return 0;
 }
-
+#endif
 
 /**\brief get ci config from dts
  * \param np: device node
@@ -532,6 +534,7 @@ int aml_ci_init(struct platform_device *pdev,
 
 //	ci->priv		= dvb;
 	/* register CA interface */
+#if 0
 	if (ci->io_type == AML_DVB_IO_TYPE_CIMAX) {
 		ci->en50221_cimax.owner = THIS_MODULE;
 		ci->en50221_cimax.read_cis = aml_ci_read_cis;
@@ -556,7 +559,9 @@ int aml_ci_init(struct platform_device *pdev,
 				result);
 			goto err;
 		}
-	} else {
+	} else
+#endif
+	{
 		ca_flags		= DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE;
 		/* register CA interface */
 		ci->en50221_cimcu.owner		= THIS_MODULE;
@@ -582,7 +587,7 @@ int aml_ci_init(struct platform_device *pdev,
 	}
 	*cip = ci;
 	pr_dbg("Registered EN50221 device\n");
-
+#if 0
 	if (ci->io_type == AML_DVB_IO_TYPE_SPI || ci->io_type == AML_DVB_IO_TYPE_SPI_T312) {
 		/* spi init */
 		ci->ci_init = aml_spi_init;
@@ -590,6 +595,11 @@ int aml_ci_init(struct platform_device *pdev,
 	} else if (ci->io_type == AML_DVB_IO_TYPE_CIMAX) {
 		ci->ci_init = aml_cimax_init;
 		ci->ci_exit = aml_cimax_exit;
+	} else
+#endif
+	if (ci->io_type == AML_DVB_IO_TYPE_CIBUS) {
+		ci->ci_init = aml_ci_bus_init;
+		ci->ci_exit = aml_ci_bus_exit;
 	} else {
 		/* no io dev init,is error */
 		pr_dbg("unknown io type, please check io_type in dts file\r\n");
@@ -597,10 +607,12 @@ int aml_ci_init(struct platform_device *pdev,
 
 	if (ci->ci_init)
 		result = ci->ci_init(pdev, ci);
+#if 0
 	if (ci->io_type == AML_DVB_IO_TYPE_CIMAX) {
 		if (result)
 			dvb_ca_en50221_cimax_release(&ci->en50221_cimax);
 	}
+#endif
 	return result;
 err:
 	kfree(ci);
@@ -611,10 +623,12 @@ void aml_ci_exit(struct aml_ci *ci)
 {
 	pr_dbg("Unregistering EN50221 device\n");
 	if (ci) {
+#if 0
 		if (ci->io_type == AML_DVB_IO_TYPE_CIMAX)
 			dvb_ca_en50221_cimax_release(&ci->en50221_cimax);
 		else
-			dvb_ca_en50221_cimcu_release(&ci->en50221_cimcu);
+#endif
+		dvb_ca_en50221_cimcu_release(&ci->en50221_cimcu);
 		if (ci->ci_exit)
 			ci->ci_exit(ci);
 		kfree(ci);
@@ -673,15 +687,18 @@ static int aml_ci_probe(struct platform_device *pdev)
 {
 	struct dvb_adapter *dvb_adapter = aml_get_dvb_adapter();
 	int err = 0;
-	pr_dbg("---Amlogic CI Init---\n");
+	pr_dbg("---Amlogic CI Init---[%p]\n", dvb_adapter);
+
 	err = aml_ci_init(pdev, dvb_adapter, &ci_dev);
 	if (err < 0)
 		return err;
 	platform_set_drvdata(pdev, ci_dev);
 	aml_ci_register_class(ci_dev);
+#if 0
 	if (ci_dev->io_type == AML_DVB_IO_TYPE_SPI ||
 		ci_dev->io_type == AML_DVB_IO_TYPE_SPI_T312)
 			aml_spi_mod_init();
+#endif
 	return 0;
 }
 
@@ -689,6 +706,7 @@ static int aml_ci_remove(struct platform_device *pdev)
 {
 	aml_ci_unregister_class(ci_dev);
 	platform_set_drvdata(pdev, NULL);
+#if 0
 	if (ci_dev->io_type == AML_DVB_IO_TYPE_SPI ||
 		ci_dev->io_type == AML_DVB_IO_TYPE_SPI_T312) {
 			aml_spi_exit(ci_dev);
@@ -696,6 +714,10 @@ static int aml_ci_remove(struct platform_device *pdev)
 		}
 	else if (ci_dev->io_type == AML_DVB_IO_TYPE_CIMAX)
 		aml_cimax_exit(ci_dev);
+	else
+#endif
+	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS)
+		aml_ci_bus_exit(ci_dev);
 	else
 		pr_dbg("---Amlogic CI remove unkown io type---\n");
 
@@ -706,12 +728,17 @@ static int aml_ci_remove(struct platform_device *pdev)
 static int aml_ci_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	pr_dbg("Amlogic CI Suspend!\n");
+#if 0
 	if (ci_dev->io_type == AML_DVB_IO_TYPE_SPI ||
 		ci_dev->io_type == AML_DVB_IO_TYPE_SPI_T312) {
 		  aml_spi_exit(ci_dev);
 		}
 	else if (ci_dev->io_type == AML_DVB_IO_TYPE_CIMAX)
 		aml_cimax_exit(ci_dev);
+	else
+#endif
+	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS)
+		aml_ci_bus_exit(ci_dev);
 	else
 		pr_dbg("---Amlogic CI remove unkown io type---\n");
 
@@ -722,12 +749,17 @@ static int aml_ci_resume(struct platform_device *pdev)
 {
 	int err = 0;
 	pr_dbg("Amlogic CI Resume!\n");
+#if 0
 	if (ci_dev->io_type == AML_DVB_IO_TYPE_SPI ||
 		ci_dev->io_type == AML_DVB_IO_TYPE_SPI_T312) {
 		  aml_spi_init(pdev, ci_dev);
 		}
 	else if (ci_dev->io_type == AML_DVB_IO_TYPE_CIMAX)
 		aml_cimax_init(pdev, ci_dev);
+	else
+#endif
+	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS)
+		aml_ci_bus_init(pdev, ci_dev);
 	else
 		pr_dbg("---Amlogic CI remove unkown io type---\n");
 	return err;
