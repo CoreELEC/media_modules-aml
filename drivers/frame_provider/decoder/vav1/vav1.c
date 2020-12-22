@@ -166,6 +166,7 @@
 #define AOM_AV1_DUMP_LMEM                    7
 #define AOM_AV1_FGS_PARAM_CONT               8
 #define AOM_AV1_DISCARD_NAL                  0x10
+#define AOM_AV1_RESULT_NEED_MORE_BUFFER      0x11
 
 /*status*/
 #define AOM_AV1_DEC_PIC_END                  0xe0
@@ -189,7 +190,6 @@ Bit[10:8] - film_grain_params_ref_idx, For Write request
 #define AOM_DECODE_OVER_SIZE       0x23
 #define AOM_EOS                     0x24
 #define AOM_NAL_DECODE_DONE            0x25
-
 
 #define VF_POOL_SIZE        32
 
@@ -551,7 +551,7 @@ static void fill_frame_info(struct AV1HW_s *hw,
 static int  compute_losless_comp_body_size(int width, int height,
 				uint8_t is_bit_depth_10);
 
-
+void clear_frame_buf_ref_count(AV1Decoder *pbi);
 
 #ifdef MULTI_INSTANCE_SUPPORT
 #define DEC_RESULT_NONE             0
@@ -812,6 +812,8 @@ struct AV1HW_s {
 	int buffer_wrap[FRAME_BUFFERS];
 	int sidebind_type;
 	int sidebind_channel_id;
+	u32 cur_obu_type;
+	u32 multi_frame_cnt;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -1222,6 +1224,13 @@ static int alloc_mv_buf(struct AV1HW_s *hw,
 	int i, int size)
 {
 	int ret = 0;
+
+	if (hw->m_mv_BUF[i].start_adr &&
+		size > hw->m_mv_BUF[i].size) {
+		dealloc_mv_bufs(hw);
+	} else if (hw->m_mv_BUF[i].start_adr)
+		return 0;
+
 	if (decoder_bmmu_box_alloc_buf_phy
 		(hw->bmmu_box,
 		MV_BUFFER_IDX(i), size,
@@ -1256,8 +1265,10 @@ static int init_mv_buf_list(struct AV1HW_s *hw)
 				& (~(lcu_size - 1));
 	int extended_pic_height = (pic_height + lcu_size -1)
 				& (~(lcu_size - 1));
-	int size = (extended_pic_width / 64) *
-				(extended_pic_height / 64) * 19 * 16;
+	int mv_mem_unit = (lcu_size == 128) ? (19*4*16) : (19*16);
+	int size = ((extended_pic_width / 64) *
+				(extended_pic_height / 64) *
+				mv_mem_unit + 0xffff) & (~0xffff);
 #if 0
 	if (mv_buf_margin > 0)
 		count = REF_FRAMES + mv_buf_margin;
@@ -1279,6 +1290,9 @@ static int init_mv_buf_list(struct AV1HW_s *hw)
 		count = REF_FRAMES + hw->mv_buf_margin;
 		if (debug & AOM_DEBUG_USE_FIXED_MV_BUF_SIZE)
 			size = 0x130000;
+	}
+	if (hw->is_used_v4l) {
+		size = 0x130000;
 	}
 #endif
 	if (debug) {
@@ -1507,6 +1521,8 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_buf_count = 0;
 
+	clear_frame_buf_ref_count(hw->pbi);
+
 	if (hw->is_used_v4l) {
 		for (i = 0; i < hw->used_buf_num; ++i) {
 			if ((frame_bufs[i].ref_count == 0) &&
@@ -1520,10 +1536,18 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 			free_buf_count +=
 				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
 		}
-
 		/* trigger to parse head data. */
 		if (!hw->v4l_params_parsed) {
 			free_buf_count = run_ready_min_buf_num;
+		}
+		if ((debug & AV1_DEBUG_BUFMGR_MORE) &&
+			(free_buf_count <= 0)) {
+			for (i = 0; i < hw->used_buf_num; ++i) {
+				pr_info("[%d], ref_cnt %d, vf_ref %d, cma_addr %lx\n",
+					i, frame_bufs[i].ref_count,
+					frame_bufs[i].buf.vf_ref,
+					frame_bufs[i].buf.cma_alloc_addr);
+			}
 		}
 	} else {
 		for (i = 0; i < hw->used_buf_num; ++i)
@@ -7064,7 +7088,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 
 		av1_print(hw, AOM_DEBUG_HW_MORE,
 			"aom_bufmgr_process=> %d,decode done, AOM_AV1_SEARCH_HEAD\r\n", ret);
-			WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
+		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
 		pbi->decode_idx++;
 		pbi->bufmgr_proc_count++;
 		hw->frame_decoded = 1;
@@ -7953,9 +7977,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	int obu_type;
 	int ret = 0;
 
-	/*if (hw->wait_buf)
-	 *	pr_info("set wait_buf to 0\r\n");
-	 */
 	if (hw->eos)
 		return IRQ_HANDLED;
 	hw->wait_buf = 0;
@@ -8080,9 +8101,11 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				av1_print(hw, AOM_DEBUG_HW_MORE,
 				"PIC_END, fgs_valid %d search head ...\n",
 				hw->fgs_valid);
+				hw->multi_frame_cnt++;
 				if (hw->config_next_ref_info_flag)
 					config_next_ref_info_hw(hw);
 			} else {
+				hw->multi_frame_cnt = 0;
 				hw->dec_result = DEC_RESULT_DONE;
 				amhevc_stop();
 #ifdef MCRCC_ENABLE
@@ -8200,6 +8223,13 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				//default of 0xffffffff will disable dw
 			    WRITE_VREG(HEVC_SAO_Y_START_ADDR, 0);
 			    WRITE_VREG(HEVC_SAO_C_START_ADDR, 0);
+			}
+#endif
+#if 0
+			/*alloc new mv when max size changed */
+			if (hw->pic_list_init_done) {
+				if (init_mv_buf_list(hw) < 0)
+					pr_err("%s: !!!!Error, reinit_mv_buf_list fail\n", __func__);
 			}
 #endif
 		}
@@ -8325,6 +8355,16 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			hw->postproc_done = 0;
 			hw->process_busy = 0;
 			dec_again_process(hw);
+			return IRQ_HANDLED;
+		}
+	}
+
+	if (hw->multi_frame_cnt) {
+		if (get_free_buf_count(hw) <= 0) {
+			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
+			hw->cur_obu_type = obu_type;
+			hw->process_busy = 0;
+			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
 		}
 	}
@@ -8458,18 +8498,18 @@ static irqreturn_t vav1_isr(int irq, void *data)
 			hw->process_busy = 0;
 			return IRQ_HANDLED;
 		}
-	}
-	if (get_free_buf_count(hw) <= 0) {
-		/*
-		if (hw->wait_buf == 0)
+		if (get_free_buf_count(hw) <= 0) {
+			/*
+			if (hw->wait_buf == 0)
 			pr_info("set wait_buf to 1\r\n");
-		*/
-		hw->wait_buf = 1;
-		hw->process_busy = 0;
-		av1_print(hw, AV1_DEBUG_BUFMGR,
-			"free buf not enough = %d\n",
-			get_free_buf_count(hw));
-		return IRQ_HANDLED;
+			*/
+			hw->wait_buf = 1;
+			hw->process_busy = 0;
+			av1_print(hw, AV1_DEBUG_BUFMGR,
+				"free buf not enough = %d\n",
+				get_free_buf_count(hw));
+			return IRQ_HANDLED;
+		}
 	}
 	return IRQ_WAKE_THREAD;
 }
@@ -8863,6 +8903,7 @@ static int vav1_local_init(struct AV1HW_s *hw)
 		sizeof(hw->frame_mode_timestamp_save));
 	hw->timestamp_duration = 0;
 	hw->output_frame_count = 0;
+	hw->multi_frame_cnt = 0;
 /*
  *TODO:FOR VERSION
  */
@@ -9487,6 +9528,20 @@ static void av1_work(struct work_struct *work)
 		READ_VREG(HEVC_STREAM_LEVEL),
 		READ_VREG(HEVC_STREAM_WR_PTR),
 		READ_VREG(HEVC_STREAM_RD_PTR));
+
+	if (hw->dec_result == AOM_AV1_RESULT_NEED_MORE_BUFFER) {
+		reset_process_time(hw);
+		if (get_free_buf_count(hw) <= 0) {
+			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
+			vdec_schedule_work(&hw->work);
+		} else {
+			av1_continue_decoding(hw, hw->cur_obu_type);
+			hw->postproc_done = 0;
+			start_process_time(hw);
+		}
+		return;
+	}
+
 	if (((hw->dec_result == DEC_RESULT_GET_DATA) ||
 		(hw->dec_result == DEC_RESULT_GET_DATA_RETRY))
 		&& (hw_to_vdec(hw)->next_status !=

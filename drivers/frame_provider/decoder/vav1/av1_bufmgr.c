@@ -585,6 +585,17 @@ static void decrease_ref_count(AV1Decoder *pbi, RefCntBuffer *const buf,
   }
 }
 
+void clear_frame_buf_ref_count(AV1Decoder *pbi)
+{
+	int i;
+
+	for (i = 0; i < pbi->num_output_frames; i++) {
+		decrease_ref_count(pbi, pbi->output_frames[i],
+			pbi->common->buffer_pool);
+	}
+	pbi->num_output_frames = 0;
+}
+
 static void swap_frame_buffers(AV1Decoder *pbi, int frame_decoded) {
   int ref_index = 0, mask;
   AV1_COMMON *const cm = pbi->common;
