@@ -1566,6 +1566,7 @@ typedef struct RefCntBuffer_s {
 
   FRAME_CONTEXT frame_context;
 #endif
+  int show_frame;
 } RefCntBuffer;
 
 typedef struct BufferPool_s {

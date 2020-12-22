@@ -2025,6 +2025,7 @@ int av1_decode_frame_headers_and_setup(AV1Decoder *pbi, int trailing_bits_presen
       // See if this frame can be used as show_existing_frame in future
       cm->showable_frame = params->p.showable_frame;//aom_rb_read_bit(rb);
     }
+    cm->cur_frame->show_frame = cm->show_frame;
     cm->cur_frame->showable_frame = cm->showable_frame;
     cm->error_resilient_mode =
         frame_is_sframe(cm) ||

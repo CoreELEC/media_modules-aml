@@ -3698,6 +3698,7 @@ static void init_pic_list(struct hevc_state_s *hevc)
 		pic->width = hevc->pic_w;
 		pic->height = hevc->pic_h;
 		pic->double_write_mode = dw_mode;
+		pic->POC = INVALID_POC;
 
 		/*config canvas will be delay if work on v4l. */
 		if (!hevc->is_used_v4l) {
@@ -6091,10 +6092,10 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	new_pic->dis_mark = 0;
 	/* new_pic->output_ready = 0; */
 	new_pic->num_reorder_pic = rpm_param->p.sps_num_reorder_pics_0;
-	new_pic->ip_mode = (!new_pic->num_reorder_pic &&
-							!(vdec->slave || vdec->master) &&
-							!disable_ip_mode &&
-							hevc->low_latency_flag) ? true : false;
+	new_pic->ip_mode = hevc->low_latency_flag ? true :
+			(!new_pic->num_reorder_pic &&
+			!(vdec->slave || vdec->master) &&
+			!disable_ip_mode) ? true : false;
 	new_pic->losless_comp_body_size = hevc->losless_comp_body_size;
 	new_pic->POC = hevc->curr_POC;
 	new_pic->pic_struct = hevc->curr_pic_struct;
@@ -6123,7 +6124,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	new_pic->chroma_format_idc =
 			hevc->param.p.chroma_format_idc;
 
-	hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+	hevc_print(hevc, H265_DEBUG_BUFMGR,
 		"%s: index %d, buf_idx %d, decode_idx %d, POC %d\n",
 		__func__, new_pic->index,
 		new_pic->BUF_index, new_pic->decode_idx,
@@ -10339,6 +10340,9 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 		(rpm_param->p.conf_win_top_offset +
 		rpm_param->p.conf_win_bottom_offset);
 
+	hevc->sps_num_reorder_pics_0 =
+		rpm_param->p.sps_num_reorder_pics_0;
+
 	ps->visible_width 	= width;
 	ps->visible_height 	= height;
 	ps->coded_width 	= ALIGN(width, 64);
@@ -10736,6 +10740,7 @@ pic_done:
 force_output:
 #endif
 				pic_display = output_pic(hevc, 1);
+
 				if (pic_display) {
 					if ((pic_display->error_mark &&
 						((hevc->ignore_bufmgr_error &
@@ -11331,10 +11336,10 @@ force_output:
 		} else {
 			hevc->sps_num_reorder_pics_0 =
 			hevc->param.p.sps_num_reorder_pics_0;
-			hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 &&
-								!(vdec->slave || vdec->master) &&
-								!disable_ip_mode &&
-								hevc->low_latency_flag) ? true : false;
+			hevc->ip_mode = hevc->low_latency_flag ? true :
+					(!hevc->sps_num_reorder_pics_0 &&
+					!(vdec->slave || vdec->master) &&
+					!disable_ip_mode) ? true : false;
 			hevc->pic_list_init_flag = 1;
 			if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
 				((hevc->param.p.profile_etc & 0xc) == 0x4)

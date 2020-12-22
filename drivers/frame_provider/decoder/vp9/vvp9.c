@@ -400,6 +400,8 @@ static u32 udebug_pause_decode_idx;
 
 static u32 without_display_mode;
 
+static u32 v4l_bitstream_id_enable = 1;
+
 /*
  *[3:0] 0: default use config from omx.
  *      1: force enable fence.
@@ -698,6 +700,8 @@ struct RefCntBuffer_s {
  */
 	int row;
 	int col;
+
+	int show_frame;
 } RefCntBuffer;
 
 struct RefBuffer_s {
@@ -1099,7 +1103,6 @@ struct VP9Decoder_s {
 	int last_pts;
 	u64 last_lookup_pts_us64;
 	u64 last_pts_us64;
-	u64 last_timestamp;
 	u64 shift_byte_count;
 
 	u32 pts_unstable;
@@ -1226,9 +1229,6 @@ struct VP9Decoder_s {
 	int fence_usage;
 	u32 frame_mode_pts_save[FRAME_BUFFERS];
 	u64 frame_mode_pts64_save[FRAME_BUFFERS];
-	u64 frame_mode_timestamp_save[FRAME_BUFFERS];
-	int timestamp_duration;
-	int output_frame_count;
 	int run_ready_min_buf_num;
 	int one_package_frame_cnt;
 	int buffer_wrap[FRAME_BUFFERS];
@@ -1303,7 +1303,6 @@ static void resize_context_buffers(struct VP9Decoder_s *pbi,
 		if (pbi != NULL) {
 			pbi->vp9_first_pts_ready = 0;
 			pbi->duration_from_pts_done = 0;
-			pbi->output_frame_count = 0;
 		}
 		pr_info("%s (%d,%d)=>(%d,%d)\r\n", __func__, cm->width,
 			cm->height, width, height);
@@ -2285,6 +2284,24 @@ static int get_free_fb(struct VP9Decoder_s *pbi)
 	return i;
 }
 
+static void update_hide_frame_timestamp(struct VP9Decoder_s *pbi)
+{
+	struct RefCntBuffer_s *const frame_bufs =
+		pbi->common.buffer_pool->frame_bufs;
+	int i;
+
+	for (i = 0; i < pbi->used_buf_num; ++i) {
+		if ((!frame_bufs[i].show_frame) &&
+			(!frame_bufs[i].buf.vf_ref) &&
+			(frame_bufs[i].buf.BUF_index != -1)) {
+			frame_bufs[i].buf.timestamp = pbi->chunk->timestamp;
+			vp9_print(pbi, VP9_DEBUG_OUT_PTS,
+				"%s, update %d hide frame ts: %lld\n",
+				__func__, i, frame_bufs[i].buf.timestamp);
+		}
+	}
+}
+
 static int get_free_fb_idx(struct VP9Decoder_s *pbi)
 {
 	int i;
@@ -2349,7 +2366,17 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 		}
 	}
 
+	if (free_pic && pbi->chunk) {
+		free_pic->timestamp = pbi->chunk->timestamp;
+		update_hide_frame_timestamp(pbi);
+	}
+
 	unlock_buffer_pool(cm->buffer_pool, flags);
+
+	vp9_print(pbi, VP9_DEBUG_OUT_PTS,
+		"%s, idx: %d, ts: %lld\n",
+		__func__, free_pic ? free_pic->index : INVALID_IDX,
+		free_pic->timestamp);
 
 	return free_pic ? free_pic->index : INVALID_IDX;
 }
@@ -2614,6 +2641,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		pbi->refresh_frame_flags = 0;
 		/*cm->lf.filter_level = 0;*/
 		cm->show_frame = 1;
+		cm->cur_frame->show_frame = 1;
 
 		/*
 		 *if (pbi->frame_parallel_decode) {
@@ -2629,7 +2657,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 	cm->show_frame = params->p.show_frame;
 	cm->bit_depth = params->p.bit_depth;
 	cm->error_resilient_mode = params->p.error_resilient_mode;
-
+	cm->cur_frame->show_frame = cm->show_frame;
 
 	if (cm->frame_type == KEY_FRAME) {
 		pbi->refresh_frame_flags = (1 << REF_FRAMES) - 1;
@@ -2957,7 +2985,6 @@ int vp9_bufmgr_init(struct VP9Decoder_s *pbi, struct BuffInfo_s *buf_spec_i,
 	pbi->last_pts = 0;
 	pbi->last_lookup_pts = 0;
 	pbi->last_pts_us64 = 0;
-	pbi->last_timestamp = 0;
 	pbi->last_lookup_pts_us64 = 0;
 	pbi->shift_byte_count = 0;
 	pbi->shift_byte_count_lo = 0;
@@ -7267,7 +7294,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 	u32 pts_valid = 0, pts_us64_valid = 0;
 	u32 pts_save;
 	u64 pts_us64_save;
-	u64 timestamp_save;
 	u32 frame_size = 0;
 	int i = 0;
 
@@ -7292,52 +7318,21 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 	display_frame_count[pbi->index]++;
 	if (vf) {
 		if (!force_pts_unstable) {
-			if (pbi->is_used_v4l) {
-				if (pic_config->timestamp <= pbi->last_timestamp) {
-					for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
-						if (pbi->last_timestamp == pbi->frame_mode_timestamp_save[i]) {
-							pic_config->timestamp = pbi->frame_mode_timestamp_save[i - 1];
-							break;
-						}
-					}
-
-					if ((i == 0) || (pic_config->timestamp <= pbi->last_timestamp)) {
-						vp9_print(pbi, VP9_DEBUG_OUT_PTS,
-							"no found ts: %lld, pred (ts + dur): %lld.\n",
-							pic_config->timestamp,
-							pbi->last_timestamp + pbi->timestamp_duration);
-
-						pic_config->timestamp = pbi->last_timestamp + pbi->timestamp_duration;
+			if ((pic_config->pts == 0) || (pic_config->pts <= pbi->last_pts)) {
+				for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
+					if ((pbi->last_pts == pbi->frame_mode_pts_save[i]) ||
+						(pbi->last_pts_us64 == pbi->frame_mode_pts64_save[i])) {
+						pic_config->pts = pbi->frame_mode_pts_save[i - 1];
+						pic_config->pts64 = pbi->frame_mode_pts64_save[i - 1];
+						break;
 					}
 				}
-
-				vp9_print(pbi, VP9_DEBUG_OUT_PTS,
-					"cur ts: %lld, pre ts: %lld, dur ts: %d\n",
-					pic_config->timestamp, pbi->last_timestamp, pbi->timestamp_duration);
-
-				if ((pbi->output_frame_count > 1) &&  /* there is a pack of multi-frames. */
-					(pic_config->timestamp > (pbi->last_timestamp + pbi->timestamp_duration)))
-					pic_config->timestamp = pbi->last_timestamp + pbi->timestamp_duration;
-
-				if (pbi->output_frame_count == 1)
-					pbi->timestamp_duration = pic_config->timestamp - pbi->last_timestamp;
-			} else {
-				if ((pic_config->pts == 0) || (pic_config->pts <= pbi->last_pts)) {
-					for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
-						if ((pbi->last_pts == pbi->frame_mode_pts_save[i]) ||
-							(pbi->last_pts_us64 == pbi->frame_mode_pts64_save[i])) {
-							pic_config->pts = pbi->frame_mode_pts_save[i - 1];
-							pic_config->pts64 = pbi->frame_mode_pts64_save[i - 1];
-							break;
-						}
-					}
-					if ((i == 0) || (pic_config->pts <= pbi->last_pts)) {
-						vp9_print(pbi, VP9_DEBUG_OUT_PTS,
-							"no found pts %d, set 0. %d, %d\n",
-							i, pic_config->pts, pbi->last_pts);
-						pic_config->pts = 0;
-						pic_config->pts64 = 0;
-					}
+				if ((i == 0) || (pic_config->pts <= pbi->last_pts)) {
+					vp9_print(pbi, VP9_DEBUG_OUT_PTS,
+						"no found pts %d, set 0. %d, %d\n",
+						i, pic_config->pts, pbi->last_pts);
+					pic_config->pts = 0;
+					pic_config->pts64 = 0;
 				}
 			}
 		}
@@ -7363,7 +7358,12 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		if (vdec_frame_based(pvdec)) {
 			vf->pts = pic_config->pts;
 			vf->pts_us64 = pic_config->pts64;
-			vf->timestamp = pic_config->timestamp;
+
+			if (pbi->is_used_v4l && v4l_bitstream_id_enable)
+				vf->timestamp = pic_config->timestamp;
+			else
+				vf->timestamp = pic_config->pts64;
+
 			if (vf->pts != 0 || vf->pts_us64 != 0) {
 				pts_valid = 1;
 				pts_us64_valid = 1;
@@ -7399,7 +7399,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 
 		pts_save = vf->pts;
 		pts_us64_save = vf->pts_us64;
-		timestamp_save = vf->timestamp;
 		if (pbi->is_used_v4l || pbi->pts_unstable) {
 			frame_duration_adapt(pbi, vf, pts_valid);
 			if (pbi->duration_from_pts_done) {
@@ -7455,13 +7454,12 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				(DUR2PTS(pbi->frame_dur) * 100 / 9);
 		}
 		pbi->last_pts_us64 = vf->pts_us64;
-		pbi->last_timestamp = vf->timestamp;
 		if ((debug & VP9_DEBUG_OUT_PTS) != 0) {
 			pr_info
-			("VP9 dec out pts: pts_mode=%d,dur=%d,pts(%d,%lld,%lld)(%d,%lld,%lld)\n",
+			("VP9 dec out pts: pts_mode=%d,dur=%d,pts(%d,%lld,%lld)(%d,%lld)\n",
 			pbi->pts_mode, pbi->frame_dur, vf->pts,
 			vf->pts_us64, vf->timestamp, pts_save,
-			pts_us64_save, timestamp_save);
+			pts_us64_save);
 		}
 
 		if (pbi->pts_mode == PTS_NONE_REF_USE_DURATION) {
@@ -7469,7 +7467,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vf->disp_pts_us64 = vf->pts_us64;
 			vf->pts = pts_save;
 			vf->pts_us64 = pts_us64_save;
-			/* vf->timestamp = timestamp_save; */
 		} else {
 			vf->disp_pts = 0;
 			vf->disp_pts_us64 = 0;
@@ -7592,7 +7589,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 			pbi->vf_pre_count++;
-			pbi->output_frame_count++;
 			pbi_update_gvs(pbi);
 			/*count info*/
 			vdec_count_info(pbi->gvs, 0, stream_offset);
@@ -7941,7 +7937,9 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 			if (pbi->chunk) {
 				cur_pic_config->pts = pbi->chunk->pts;
 				cur_pic_config->pts64 = pbi->chunk->pts64;
-				cur_pic_config->timestamp = pbi->chunk->timestamp;
+
+				if (pbi->is_used_v4l && !v4l_bitstream_id_enable)
+					cur_pic_config->pts64 = pbi->chunk->timestamp;
 			}
 #endif
 		}
@@ -9462,11 +9460,6 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 		 0) ? 3200 : pbi->vvp9_amstream_dec_info.rate;
 	if (width && height)
 		pbi->frame_ar = height * 0x100 / width;
-
-	memset(pbi->frame_mode_timestamp_save, -1,
-		sizeof(pbi->frame_mode_timestamp_save));
-	pbi->timestamp_duration = 0;
-	pbi->output_frame_count = 0;
 /*
  *TODO:FOR VERSION
  */
@@ -10462,15 +10455,17 @@ static void vp9_frame_mode_pts_save(struct VP9Decoder_s *pbi)
 	if (pbi->chunk == NULL)
 	       return;
 	vp9_print(pbi, VP9_DEBUG_OUT_PTS,
-	       "run front: pts %d, pts64 %lld, ts: %lld\n", pbi->chunk->pts, pbi->chunk->pts64, pbi->chunk->timestamp);
+	       "run front: pts %d, pts64 %lld, ts: %lld\n",
+	       pbi->chunk->pts, pbi->chunk->pts64, pbi->chunk->timestamp);
 	for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
 		pbi->frame_mode_pts_save[i] = pbi->frame_mode_pts_save[i - 1];
 		pbi->frame_mode_pts64_save[i] = pbi->frame_mode_pts64_save[i - 1];
-		pbi->frame_mode_timestamp_save[i] = pbi->frame_mode_timestamp_save[i - 1];
 	}
 	pbi->frame_mode_pts_save[0] = pbi->chunk->pts;
 	pbi->frame_mode_pts64_save[0] = pbi->chunk->pts64;
-	pbi->frame_mode_timestamp_save[0] = pbi->chunk->timestamp;
+
+	if (pbi->is_used_v4l && !v4l_bitstream_id_enable)
+		pbi->frame_mode_pts64_save[0] = pbi->chunk->timestamp;
 }
 
 static void run_front(struct vdec_s *vdec)
@@ -11720,6 +11715,9 @@ MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
 
 module_param(force_pts_unstable, uint, 0664);
 MODULE_PARM_DESC(force_pts_unstable, "\n force_pts_unstable\n");
+
+module_param(v4l_bitstream_id_enable, uint, 0664);
+MODULE_PARM_DESC(v4l_bitstream_id_enable, "\n v4l_bitstream_id_enable\n");
 
 module_init(amvdec_vp9_driver_init_module);
 module_exit(amvdec_vp9_driver_remove_module);
