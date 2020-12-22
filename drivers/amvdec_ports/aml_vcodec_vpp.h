@@ -20,6 +20,8 @@
 #ifndef _AML_VCODEC_VPP_H_
 #define _AML_VCODEC_VPP_H_
 
+#define SUPPORT_V4L_VPP
+
 #include <linux/kfifo.h>
 #ifdef SUPPORT_V4L_VPP
 #include <linux/amlogic/media/di/di_interface.h>

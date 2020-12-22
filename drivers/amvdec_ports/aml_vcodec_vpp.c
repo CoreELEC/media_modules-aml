@@ -21,6 +21,7 @@
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/videodev2.h>
+#include <uapi/linux/sched/types.h>
 #include "aml_vcodec_vpp.h"
 #include "aml_vcodec_vfm.h"
 #include "aml_vcodec_adapt.h"
@@ -218,7 +219,12 @@ retry:
 			in_buf->di_buf.vf->canvas0_config,
 			2 * sizeof(struct canvas_config_s));
 		vf_out->canvas0_config[0].phy_addr = fb->m.mem[0].addr;
-		vf_out->canvas0_config[1].phy_addr = fb->m.mem[1].addr;
+		if (fb->num_planes == 1)
+			vf_out->canvas0_config[1].phy_addr =
+				fb->m.mem[0].addr + fb->m.mem[0].offset;
+		else
+			vf_out->canvas0_config[1].phy_addr =
+				fb->m.mem[1].addr;
 
 		if (eos)
 			memset(vf_out, 0, sizeof(*vf_out));
@@ -270,7 +276,8 @@ int aml_v4l2_vpp_init(
 
 	if (mode > VPP_MODE_MAX || !ctx || !vpp_handle)
 		return -EINVAL;
-	if (fmt != V4L2_PIX_FMT_NV12M && fmt != V4L2_PIX_FMT_NV21M)
+	if (fmt != V4L2_PIX_FMT_NV12 && fmt != V4L2_PIX_FMT_NV12M &&
+		fmt != V4L2_PIX_FMT_NV21 && fmt != V4L2_PIX_FMT_NV21M)
 		return -EINVAL;
 
 	vpp = kzalloc(sizeof(*vpp), GFP_KERNEL);
@@ -283,10 +290,10 @@ int aml_v4l2_vpp_init(
 	init.ops.fill_output_done = v4l_vpp_fill_output_done;
 	init.caller_data = (void *)vpp;
 
-	if (fmt == V4L2_PIX_FMT_NV12M)
-		init.output_format = DI_OUTPUT_NV12;
+	if ((fmt == V4L2_PIX_FMT_NV12) || (fmt == V4L2_PIX_FMT_NV12M))
+		init.output_format = DI_OUTPUT_NV12 | DI_OUTPUT_LINEAR;
 	else
-		init.output_format = DI_OUTPUT_NV21;
+		init.output_format = DI_OUTPUT_NV21 | DI_OUTPUT_LINEAR;
 
 	vpp->di_handle = di_create_instance(init);
 	if (vpp->di_handle < 0) {
@@ -420,7 +427,7 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 
 	if (!vpp)
 		return -EINVAL;
-
+#if 0
 	/* TODO: delete it after VPP supports bypass mode well */
 	if ((vf->type & VIDTYPE_TYPEMASK) == VIDTYPE_PROGRESSIVE &&
 		vpp->work_mode == VPP_MODE_DI) {
@@ -428,7 +435,7 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 		vdec_device_vf_run(vpp->ctx);
 		return 0;
 	}
-
+#endif
 	in_buf = kzalloc(sizeof(*in_buf), GFP_KERNEL);
 	if (!in_buf)
 		return -ENOMEM;
@@ -439,6 +446,9 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 	if (vpp->in_num[INPUT_PORT] == 2)
 		vf->type |= VIDTYPE_V4L_EOS;
 #endif
+
+	if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
+		vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
 
 	in_buf->di_buf.vf = vf;
 	in_buf->di_buf.flag = 0;
