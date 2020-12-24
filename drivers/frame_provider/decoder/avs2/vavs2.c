@@ -3041,7 +3041,7 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	*  [1]     dw_disable:disable double write output
 	*  [0]     cm_disable:disable compress output
 	*/
-
+	data32 &= (~(3 << 14));
 	data32 |= (2 << 14);
 
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
@@ -3075,12 +3075,25 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	data32 &= ~(0xff << 16);
 	WRITE_VREG(HEVC_SAO_CTRL5, data32);
 
+	/*
+	* [3:0]   little_endian
+	* [5:4]   address_format 00:linear 01:32x32 10:64x32
+	* [7:6]   reserved
+	* [9:8]   Linear_LineAlignment 00:16byte 01:32byte 10:64byte
+	* [11:10] reserved
+	* [12]    CbCr_byte_swap
+	* [31:13] reserved
+	*/
+
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
 	/*[5:4] address_format 00:linear 01:32x32 10:64x32*/
 	data32 |= (MEM_MAP_MODE << 4);
 	data32 &= (~0xF);
 	data32 |= 0x8; /*Big-Endian per 64-bit*/
+
+	data32 &= (~(3 << 8));
+	data32 |= (2 << 8);
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
 #endif
 #else
@@ -3121,7 +3134,7 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	*  [1]     dw_disable:disable double write output
 	*  [0]     cm_disable:disable compress output
 	*/
-
+	data32 &= (~(3 << 14));
 	data32 |= (2 << 14);
 
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
@@ -3147,6 +3160,16 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	}
 
+	/*
+	* [3:0]   little_endian
+	* [5:4]   address_format 00:linear 01:32x32 10:64x32
+	* [7:6]   reserved
+	* [9:8]   Linear_LineAlignment 00:16byte 01:32byte 10:64byte
+	* [11:10] reserved
+	* [12]    CbCr_byte_swap
+	* [31:13] reserved
+	*/
+
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
 	/* [5:4]    -- address_format 00:linear 01:32x32 10:64x32 */
@@ -3155,6 +3178,9 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	data32 &= (~0xF);
 	data32 |= 0xf;  /* valid only when double write only */
 		/*data32 |= 0x8;*/		/* Big-Endian per 64-bit */
+
+	data32 &= (~(3 << 8));
+	data32 |= (2 << 8);
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
 #endif
 }
