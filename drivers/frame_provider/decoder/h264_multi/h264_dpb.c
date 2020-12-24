@@ -5321,9 +5321,10 @@ static void reorder_lists(struct Slice *currSlice)
 			PRINT_FLAG_DPB_DETAIL,
 				  "listX[1] reorder (PicNum): ");
 			for (i = 0; i < currSlice->listXsize[1]; i++) {
-				dpb_print_cont(p_H264_Dpb->decoder_index,
-					PRINT_FLAG_DPB_DETAIL, "%d  ",
-					currSlice->listX[1][i]->pic_num);
+				if (currSlice->listX[1][i])
+					dpb_print_cont(p_H264_Dpb->decoder_index,
+						PRINT_FLAG_DPB_DETAIL, "%d  ",
+						currSlice->listX[1][i]->pic_num);
 			}
 			dpb_print_cont(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL, "\n");
