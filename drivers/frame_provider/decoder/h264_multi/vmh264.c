@@ -920,6 +920,7 @@ struct vdec_h264_hw_s {
 	bool discard_dv_data;
 	u32 metadata_config_flag;
 	int vdec_pg_enable_flag;
+	u32 save_reg_f;
 };
 
 static u32 again_threshold;
@@ -7527,7 +7528,7 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 	/* WRITE_VREG(AV_SCRATCH_F,
 	 *	(READ_VREG(AV_SCRATCH_F) & 0xffffffc3) );
 	 */
-	WRITE_VREG(AV_SCRATCH_F, (READ_VREG(AV_SCRATCH_F) & 0xffffffc3) |
+	WRITE_VREG(AV_SCRATCH_F, (hw->save_reg_f & 0xffffffc3) |
 		((error_recovery_mode_in & 0x1) << 4));
 	/*if (hw->ucode_type == UCODE_IP_ONLY_PARAM)
 		SET_VREG_MASK(AV_SCRATCH_F, 1 << 6);
@@ -8792,6 +8793,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			dealloc_buf_specs(hw, 0);
 			mutex_unlock(&vmh264_mutex);
 		}
+	hw->save_reg_f = READ_VREG(AV_SCRATCH_F);
 	hw->dpb.last_dpb_status = hw->dpb.dec_dpb_status;
 	if (hw->dec_result == DEC_RESULT_CONFIG_PARAM) {
 		u32 param1 = READ_VREG(AV_SCRATCH_1);
