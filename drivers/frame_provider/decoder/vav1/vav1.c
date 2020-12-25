@@ -1263,16 +1263,18 @@ static int init_mv_buf_list(struct AV1HW_s *hw)
 				& (~(lcu_size - 1));
 	int extended_pic_height = (pic_height + lcu_size -1)
 				& (~(lcu_size - 1));
-	int mv_mem_unit = (lcu_size == 128) ? (19*4*16) : (19*16);
 	int size = ((extended_pic_width / 64) *
 				(extended_pic_height / 64) *
-				mv_mem_unit + 0xffff) & (~0xffff);
+				19 * 16 + 0xffff) & (~0xffff);
 #if 0
 	if (mv_buf_margin > 0)
 		count = REF_FRAMES + mv_buf_margin;
 	if (hw->init_pic_w > 2048 && hw->init_pic_h > 1088)
 		count = REF_FRAMES_4K + mv_buf_margin;
 #else
+	if ((hw->is_used_v4l) && !IS_8K_SIZE(pic_width, pic_height)) {
+		size = 0x100000;
+	}
 	if (debug)
 		pr_info("%s, calculated mv size 0x%x\n",
 			__func__, size);
@@ -1289,9 +1291,7 @@ static int init_mv_buf_list(struct AV1HW_s *hw)
 		if (debug & AOM_DEBUG_USE_FIXED_MV_BUF_SIZE)
 			size = 0x130000;
 	}
-	if (hw->is_used_v4l) {
-		size = 0x130000;
-	}
+
 #endif
 	if (debug) {
 		pr_info("%s w:%d, h:%d, lcu_size %d, count: %d, size 0x%x\n",
@@ -8232,13 +8232,15 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			    WRITE_VREG(HEVC_SAO_C_START_ADDR, 0);
 			}
 #endif
-#if 0
-			/*alloc new mv when max size changed */
-			if (hw->pic_list_init_done) {
-				if (init_mv_buf_list(hw) < 0)
-					pr_err("%s: !!!!Error, reinit_mv_buf_list fail\n", __func__);
+
+			/*v4l2 alloc new mv when max size changed */
+			if (hw->is_used_v4l) {
+				/* now less than 8k use fix mv buf size */
+				if (IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h) && hw->pic_list_init_done) {
+					if (init_mv_buf_list(hw) < 0)
+						pr_err("%s: !!!!Error, reinit_mv_buf_list fail\n", __func__);
+				}
 			}
-#endif
 		}
 		bit_depth_luma = hw->aom_param.p.bit_depth;
 		bit_depth_chroma = hw->aom_param.p.bit_depth;
