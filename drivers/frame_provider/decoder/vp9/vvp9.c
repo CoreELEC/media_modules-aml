@@ -1232,6 +1232,8 @@ struct VP9Decoder_s {
 	int run_ready_min_buf_num;
 	int one_package_frame_cnt;
 	int buffer_wrap[FRAME_BUFFERS];
+	int last_width;
+	int last_height;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -1304,8 +1306,9 @@ static void resize_context_buffers(struct VP9Decoder_s *pbi,
 			pbi->vp9_first_pts_ready = 0;
 			pbi->duration_from_pts_done = 0;
 		}
-		pr_info("%s (%d,%d)=>(%d,%d)\r\n", __func__, cm->width,
-			cm->height, width, height);
+		pr_info("%s (%d,%d)=>(%d,%d)\r\n", __func__,
+			cm->width, cm->height,
+			width, height);
 		cm->width = width;
 		cm->height = height;
 	}
@@ -3018,6 +3021,9 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 	}
 	cm->last_width = cm->width;
 	cm->last_height = cm->height;
+	pbi->last_width = cm->width;
+	pbi->last_height = cm->height;
+
 	if (cm->show_frame)
 		cm->current_video_frame++;
 
@@ -8546,7 +8552,6 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
-	struct VP9_Common_s *const cm = &pbi->common;
 	int ret = 0;
 
 	if (ctx->param_sets_from_ucode &&
@@ -8554,13 +8559,13 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 		struct aml_vdec_ps_infos ps;
 		struct vdec_comp_buf_info comp;
 
-		if ((cm->width != 0 &&
-			cm->height != 0) &&
-			(pbi->frame_width != cm->width ||
-			pbi->frame_height != cm->height)) {
+		if ((pbi->last_width != 0 &&
+			pbi->last_height != 0) &&
+			(pbi->frame_width != pbi->last_width ||
+			pbi->frame_height != pbi->last_height)) {
 
-			vp9_print(pbi, 0, "%s (%d,%d)=>(%d,%d)\r\n", __func__, cm->width,
-				cm->height, pbi->frame_width, pbi->frame_height);
+			vp9_print(pbi, 0, "%s (%d,%d)=>(%d,%d)\r\n", __func__, pbi->last_width,
+				pbi->last_height, pbi->frame_width, pbi->frame_height);
 
 			if (get_valid_double_write_mode(pbi) != 16) {
 				vvp9_get_comp_buf_info(pbi, &comp);
@@ -10835,14 +10840,16 @@ static void reset(struct vdec_s *vdec)
 		del_timer_sync(&pbi->timer);
 		pbi->stat &= ~STAT_TIMER_ARM;
 	}
+
 	reset_process_time(pbi);
+
 	vp9_local_uninit(pbi);
 	if (vvp9_local_init(pbi) < 0)
-		vp9_print(pbi, 0, "%s	local_init failed \r\n", __func__);
+		vp9_print(pbi, 0, "%s local_init failed \r\n", __func__);
 
 	vp9_decoder_ctx_reset(pbi);
 
-	vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);
+	vp9_print(pbi, 0, "%s\r\n", __func__);
 }
 
 static irqreturn_t vp9_irq_cb(struct vdec_s *vdec, int irq)
