@@ -1485,10 +1485,14 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 
 	unlock_buffer_pool(cm->buffer_pool, flags);
 
-	av1_print(hw, AV1_DEBUG_OUT_PTS,
-		"%s, idx: %d, ts: %lld\n",
-		__func__, free_pic ? free_pic->index : INVALID_IDX,
-		free_pic->timestamp);
+	if (debug & AV1_DEBUG_OUT_PTS) {
+		if (free_pic) {
+			pr_debug("%s, idx: %d, ts: %lld\n",
+				__func__, free_pic->index, free_pic->timestamp);
+		} else {
+			pr_debug("%s, av1 get free pic null\n", __func__);
+		}
+	}
 
 	return free_pic ? free_pic->index : INVALID_IDX;
 }
