@@ -212,14 +212,19 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			if (diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
-				pr_info("MEDIA_SYNC_PCRMASTER update time\n");
+				pr_info("MEDIA_SYNC_PCRMASTER update time system diff:%lld media diff:%lld current:%lld\n",
+											diff_system_time,
+											diff_mediatime,
+											current_systemtime);
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = current_systemtime;
 				pInstance->mLastStc = current_stc;
 			}
 		} else {
 			if (current_stc != 0) {
-				diff_system_time = lSystemTime - pInstance->mLastRealTime;
+				diff_system_time = (lSystemTime - pInstance->mLastRealTime)
+							* (current_stc - pInstance->mLastStc)
+							/ (current_systemtime - pInstance->mLastRealTime);
 				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			} else {
 				diff_system_time = lSystemTime - pInstance->mLastRealTime;
@@ -229,6 +234,10 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			if (diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
+				pr_info("MEDIA_SYNC_PCRMASTER update time system diff:%lld media diff:%lld current:%lld\n",
+											diff_system_time,
+											diff_mediatime,
+											current_systemtime);
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = lSystemTime;
 				pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
