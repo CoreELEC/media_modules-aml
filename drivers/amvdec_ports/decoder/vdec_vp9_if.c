@@ -1004,8 +1004,8 @@ static void set_param_ps_info(struct vdec_vp9_inst *inst,
 	pic->coded_width	= ps->coded_width;
 	pic->coded_height	= ps->coded_height;
 
-	pic->y_len_sz		= vdec_pic_scale(inst, pic->coded_width, dw) *
-				  vdec_pic_scale(inst, pic->coded_height, dw);
+	pic->y_len_sz		= ALIGN(vdec_pic_scale(inst, pic->coded_width, dw), 64) *
+				  ALIGN(vdec_pic_scale(inst, pic->coded_height, dw), 64);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	/* calc DPB size */
