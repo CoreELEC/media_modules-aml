@@ -2996,7 +2996,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 		set_frame_info(hw, vf, buffer_index);
 		if (hw->discard_dv_data) {
-			//vf->discard_dv_data = true;
+			vf->discard_dv_data = true;
 		}
 
 		if (hw->mmu_enable && hw->double_write_mode) {

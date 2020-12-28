@@ -9515,7 +9515,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 #endif
 		set_frame_info(hevc, vf, pic);
 		if (hevc->discard_dv_data) {
-			//vf->discard_dv_data = true;
+			vf->discard_dv_data = true;
 		}
 
 		/* if((vf->width!=pic->width)||(vf->height!=pic->height)) */
