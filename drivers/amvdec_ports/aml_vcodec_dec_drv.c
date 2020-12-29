@@ -84,8 +84,12 @@ static int fops_vcodec_open(struct file *file)
 	init_waitqueue_head(&ctx->queue);
 	mutex_init(&ctx->state_lock);
 	mutex_init(&ctx->lock);
+	mutex_init(&ctx->comp_lock);
 	spin_lock_init(&ctx->slock);
 	init_completion(&ctx->comp);
+	init_waitqueue_head(&ctx->wq);
+	INIT_WORK(&ctx->dmabuff_recycle_work, dmabuff_recycle_worker);
+	INIT_KFIFO(ctx->dmabuff_recycle);
 
 	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
 

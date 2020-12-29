@@ -10789,7 +10789,6 @@ static void  vp9_decoder_ctx_reset(struct VP9Decoder_s *pbi)
 	struct BufferPool_s *buffer_pool = cm->buffer_pool;
 	int i;
 
-	memset(cm, 0, sizeof(*cm));
 	cm->buffer_pool = buffer_pool;
 
 	for (i = 0; i < FRAME_BUFFERS; ++i) {

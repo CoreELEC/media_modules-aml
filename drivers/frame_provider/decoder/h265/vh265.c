@@ -1813,7 +1813,6 @@ struct hevc_state_s {
 	u32 mem_map_mode;
 	u32 performance_profile;
 	struct vdec_info *gvs;
-	u32 res_ch_flag;
 	bool ip_mode;
 	u32 kpi_first_i_comming;
 	u32 kpi_first_i_decoded;
@@ -1837,6 +1836,8 @@ struct hevc_state_s {
 	int buffer_wrap[MAX_REF_PIC_NUM];
 	int low_latency_flag;
 	u32 metadata_config_flag;
+	int last_width;
+	int last_height;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -7165,11 +7166,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	int lcu_y_num_div;
 	int Col_ref;
 	int dbg_skip_flag = 0;
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
-
-	if (hevc->is_used_v4l && ctx->param_sets_from_ucode)
-		hevc->res_ch_flag = 0;
 
 	if (hevc->wait_buf == 0) {
 		hevc->sps_num_reorder_pics_0 =
@@ -10342,6 +10338,8 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 		(rpm_param->p.conf_win_top_offset +
 		rpm_param->p.conf_win_bottom_offset);
 
+	hevc->last_width = rpm_param->p.pic_width_in_luma_samples;
+	hevc->last_height = rpm_param->p.pic_height_in_luma_samples;
 	hevc->sps_num_reorder_pics_0 =
 		rpm_param->p.sps_num_reorder_pics_0;
 
@@ -10379,18 +10377,17 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 			(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 	int i, ret = 0;
 
-	if (ctx->param_sets_from_ucode &&
-		hevc->res_ch_flag == 0) {
+	if (ctx->param_sets_from_ucode) {
 		struct aml_vdec_ps_infos ps;
 		int width = rpm_param->p.pic_width_in_luma_samples;
 		int height = rpm_param->p.pic_height_in_luma_samples;
-		if ((hevc->pic_w != 0 &&
-			hevc->pic_h != 0) &&
-			(hevc->pic_w != width ||
-			hevc->pic_h != height)) {
+		if ((hevc->last_width != 0 &&
+			hevc->last_height != 0) &&
+			(hevc->last_width != width ||
+			hevc->last_height != height)) {
 			hevc_print(hevc, 0,
 				"v4l_res_change Pic Width/Height Change (%d,%d)=>(%d,%d), interlace %d\n",
-				hevc->pic_w, hevc->pic_h,
+				hevc->last_width, hevc->last_height,
 				width,
 				height,
 				hevc->interlace_flag);
@@ -10406,7 +10403,6 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 			vdec_v4l_set_ps_infos(ctx, &ps);
 			vdec_v4l_res_ch_event(ctx);
 			hevc->v4l_params_parsed = false;
-			hevc->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
 			hevc->eos = 1;
 

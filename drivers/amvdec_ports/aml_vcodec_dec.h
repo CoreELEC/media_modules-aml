@@ -126,5 +126,6 @@ void vdec_frame_buffer_release(void *data);
 void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes);
 void* v4l_get_vf_handle(int fd);
 void aml_v4l_ctx_release(struct kref *kref);
+void dmabuff_recycle_worker(struct work_struct *work);
 
 #endif /* _AML_VCODEC_DEC_H_ */

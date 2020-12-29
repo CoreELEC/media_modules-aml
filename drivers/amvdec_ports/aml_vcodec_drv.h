@@ -23,6 +23,7 @@
 #include <linux/kref.h>
 #include <linux/platform_device.h>
 #include <linux/videodev2.h>
+#include <linux/kfifo.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
@@ -399,7 +400,6 @@ struct internal_comp_buf {
 	u32		frame_buffer_size;
 	struct file_private_data priv_data;
 	u32		idx_vb;
-	struct mutex	lock;
 };
 /**
  * struct aml_vcodec_ctx - Context (instance) private data.
@@ -451,11 +451,15 @@ struct internal_comp_buf {
  * @reset_flag: reset mode includes lightly and normal mode.
  * @decoded_frame_cnt: the capture buffer deque number to be count.
  * @buf_used_count: means that decode allocate how many buffs from v4l.
+ * @wq: wait recycle dma buffer finish.
+ * @dmabuff_recycle_work: used for recycle dmabuff.
+ * @dmabuff_recycle: kfifo used for store vb buff.
  * @mmu_box: mmu_box of context.
  * @bmmu_box: bmmu_box of context.
  * @box_ref: box_ref of context.
  * @comp_info: compress buffer information.
  * @comp_bufs: compress buffer describe.
+ * @comp_lock: used for lock ibuf free cb.
  */
 struct aml_vcodec_ctx {
 	int				id;
@@ -508,6 +512,9 @@ struct aml_vcodec_ctx {
 	int				reset_flag;
 	int				decoded_frame_cnt;
 	int				buf_used_count;
+	wait_queue_head_t		wq;
+	struct work_struct		dmabuff_recycle_work;
+	DECLARE_KFIFO(dmabuff_recycle, struct vb2_v4l2_buffer *, 32);
 
 	/* compressed buffer support */
 	void				*bmmu_box;
@@ -516,6 +523,7 @@ struct aml_vcodec_ctx {
 	struct vdec_comp_buf_info	comp_info;
 	struct internal_comp_buf	*comp_bufs;
 	struct uvm_hook_mod_info	*uvm_proxy;
+	struct mutex			comp_lock;
 };
 
 /**
