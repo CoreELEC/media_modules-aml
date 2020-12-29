@@ -65,11 +65,11 @@
 
 static DECLARE_WAIT_QUEUE_HEAD(wq);
 static u32 fetch_done = 0;
-static void *fetchbuf = NULL;
+void *fetchbuf = NULL;
 
 static const char tsdemux_fetch_id[] = "tsdemux-fetch-id";
 
-static int stbuf_fetch_init(void)
+int stbuf_fetch_init(void)
 {
 	if (NULL != fetchbuf)
 		return 0;
@@ -84,7 +84,8 @@ static int stbuf_fetch_init(void)
 	}
 	return 0;
 }
-static void stbuf_fetch_release(void)
+
+void stbuf_fetch_release(void)
 {
 	if (0 && fetchbuf) {
 		/* always don't free.for safe alloc/free*/

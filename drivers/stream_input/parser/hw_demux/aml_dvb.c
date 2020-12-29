@@ -71,9 +71,9 @@ MODULE_PARM_DESC(debug_dvb, "\n\t\t Enable dvb debug information");
 static int debug_dvb = 1;
 module_param(debug_dvb, int, 0644);
 
-#define CARD_NAME "amlogic-dvb"
+#define CARD_NAME "amlogic-dvb-demux"
 
-#define DVB_VERSION "V2.00"
+#define DVB_VERSION "V2.02"
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
@@ -84,9 +84,6 @@ module_param(dsc_max, int, 0644);
 static struct aml_dvb aml_dvb_device;
 static struct class aml_stb_class;
 
-static struct dvb_frontend *frontend[FE_DEV_COUNT] = {NULL, NULL};
-static enum dtv_demod_type s_demod_type[FE_DEV_COUNT] = {AM_DTV_DEMOD_NONE, AM_DTV_DEMOD_NONE};
-static enum tuner_type s_tuner_type[FE_DEV_COUNT] = {AM_TUNER_NONE, AM_TUNER_NONE};
 static int dmx_reset_all_flag = 0;
 #if 0
 static struct reset_control *aml_dvb_demux_reset_ctl;
@@ -1705,85 +1702,6 @@ static ssize_t hw_setting_store(struct class *class,
 	return count;
 }
 
-static ssize_t tuner_setting_show(struct class *class,
-				   struct class_attribute *attr, char *buf)
-{
-	struct aml_dvb *dvb = &aml_dvb_device;
-
-	if (dvb->tuner_cur >= 0)
-		pr_inf("dvb current attatch tuner %d, id: %d\n",
-				dvb->tuner_cur, dvb->tuners[dvb->tuner_cur].cfg.id);
-	else
-		pr_inf("dvb has no attatch tuner.\n");
-
-	return 0;
-}
-
-static ssize_t tuner_setting_store(struct class *class,
-				    struct class_attribute *attr,
-				    const char *buf, size_t count)
-{
-	int n = 0, i = 0, val = 0;
-	unsigned long tmp = 0;
-	char *buf_orig = NULL, *ps = NULL, *token = NULL;
-	char *parm[4] = { NULL };
-	struct aml_dvb *dvb = &aml_dvb_device;
-	int tuner_id = 0;
-	struct aml_tuner *tuner = NULL;
-
-	buf_orig = kstrdup(buf, GFP_KERNEL);
-	ps = buf_orig;
-
-	while (1) {
-		token = strsep(&ps, "\n ");
-		if (token == NULL)
-			break;
-		if (*token == '\0')
-			continue;
-		parm[n++] = token;
-	}
-
-	if (parm[0] && kstrtoul(parm[0], 10, &tmp) == 0) {
-		val = tmp;
-
-		for (i = 0; i < dvb->tuner_num; ++i) {
-			if (dvb->tuners[i].cfg.id == val) {
-				tuner_id = dvb->tuners[i].cfg.id;
-				break;
-			}
-		}
-
-		if (tuner_id == 0 || dvb->tuner_cur == i) {
-			pr_error("%s: set nonsupport or the same tuner %d.\n",
-					__func__, val);
-			goto EXIT;
-		}
-
-		dvb->tuner_cur = i;
-
-		for (i = 0; i < FE_DEV_COUNT; i++) {
-			tuner = &dvb->tuners[dvb->tuner_cur];
-
-			if (frontend[i] == NULL)
-				continue;
-
-			if (aml_attach_tuner(tuner->cfg.id, frontend[i], &tuner->cfg) == NULL) {
-				s_tuner_type[i] = AM_TUNER_NONE;
-				pr_error("tuner[%d] [type = %d] attach error.\n", dvb->tuner_cur, tuner->cfg.id);
-				goto EXIT;
-			} else {
-				s_tuner_type[i] = tuner->cfg.id;
-				pr_error("tuner[%d] [type = %d] attach sucess.\n", dvb->tuner_cur, tuner->cfg.id);
-			}
-		}
-
-		pr_error("%s: attach tuner %d done.\n", __func__, dvb->tuners[dvb->tuner_cur].cfg.id);
-	}
-
-EXIT:
-
-	return count;
-}
 
 static CLASS_ATTR_RW(hw_setting);
 static CLASS_ATTR_RW(source);
@@ -1889,7 +1807,6 @@ static CLASS_ATTR_RW(tso_source);
 	DSC_FREE_ATTR_DECL(1);
 #endif
 
-	static CLASS_ATTR_RW(tuner_setting);
 #define STB_ATTR(name) &class_attr_##name.attr
 
 static struct attribute *aml_stb_class_attrs[] = {
@@ -1905,7 +1822,6 @@ static struct attribute *aml_stb_class_attrs[] = {
 	STB_ATTR(first_video_pts),
 	STB_ATTR(first_audio_pts),
 	STB_ATTR(clear_av),
-	STB_ATTR(tuner_setting),
 #define DEMUX_PCR(i) \
 	STB_ATTR(demux##i##_pcr)
 	DEMUX_PCR(0),
@@ -2306,158 +2222,17 @@ static int aml_dvb_probe(struct platform_device *pdev)
 	tsdemux_set_ops(NULL);
 #endif
 
-	//add for dvb using linux TV frontend api init
-	{
-		struct demod_config config;
-		struct tuner_config *tuner_cfg = NULL;
-		char buf[32];
-		const char *str = NULL;
-		struct device_node *node_tuner = NULL;
-		u32 value = 0;
-		int j = 0;
-
-		for (i=0; i<FE_DEV_COUNT; i++) {
-			memset(&config, 0, sizeof(struct demod_config));
-
-			memset(buf, 0, 32);
-			snprintf(buf, sizeof(buf), "fe%d_mode", i);
-			ret = of_property_read_string(pdev->dev.of_node, buf, &str);
-			if (ret) {
-				continue;
-			}
-			if (!strcmp(str, "internal")) {
-				config.mode = 0;
-				config.id = AM_DTV_DEMOD_AMLDTV;
-				frontend[i] = aml_attach_dtvdemod(config.id, &config);
-				if (frontend[i] == NULL) {
-					s_demod_type[i] = AM_DTV_DEMOD_NONE;
-					pr_error("internal dtvdemod [type = %d] attach error.\n", config.id);
-					goto error_fe;
-				} else {
-					s_demod_type[i] = config.id;
-					pr_error("internal dtvdemod [type = %d] attach success.\n", config.id);
-				}
-
-				memset(buf, 0, 32);
-				snprintf(buf, sizeof(buf), "fe%d_tuner",i);
-				node_tuner = of_parse_phandle(pdev->dev.of_node, buf, 0);
-				if (!node_tuner) {
-					pr_err("can't find tuner.\n");
-					goto error_fe;
-				}
-
-				ret = of_property_read_u32(node_tuner, "tuner_num", &value);
-				if (ret) {
-					pr_err("can't find tuner_num.\n");
-					goto error_fe;
-				} else
-					advb->tuner_num = value;
-
-				advb->tuners = kzalloc(sizeof(struct aml_tuner) * advb->tuner_num, GFP_KERNEL);
-				if (!advb->tuners) {
-					pr_err("can't kzalloc for tuners.\n");
-					goto error_fe;
-				}
-
-				ret = of_property_read_u32(node_tuner, "tuner_cur", &value);
-				if (ret) {
-					pr_err("can't find tuner_cur, use default 0.\n");
-					advb->tuner_cur = -1;
-				} else
-					advb->tuner_cur = value;
-
-				for (j = 0; j < advb->tuner_num; ++j) {
-					ret = aml_get_dts_tuner_config(node_tuner, &advb->tuners[j].cfg, j);
-					if (ret) {
-						pr_err("can't find tuner.\n");
-						goto error_fe;
-					}
-				}
-
-				of_node_put(node_tuner);
-
-				/* define general-purpose callback pointer */
-				frontend[i]->callback = NULL;
-
-				if (advb->tuner_cur >= 0) {
-					tuner_cfg = &advb->tuners[advb->tuner_cur].cfg;
-					if (aml_attach_tuner(tuner_cfg->id, frontend[i], tuner_cfg) == NULL) {
-						s_tuner_type[i] = AM_TUNER_NONE;
-						pr_error("tuner [type = %d] attach error.\n", tuner_cfg->id);
-						goto error_fe;
-					} else {
-						s_tuner_type[i] = tuner_cfg->id;
-						pr_error("tuner [type = %d] attach sucess.\n", tuner_cfg->id);
-					}
-				}
-
-				ret = dvb_register_frontend(&advb->dvb_adapter, frontend[i]);
-				if (ret) {
-					pr_error("register dvb frontend failed\n");
-					goto error_fe;
-				}
-			} else if(!strcmp(str, "external")) {
-				config.mode = 1;
-				config.id = AM_DTV_DEMOD_NONE;
-				ret = aml_get_dts_demod_config(pdev->dev.of_node, &config, i);
-				if (ret) {
-					pr_err("can't find demod %d.\n", i);
-					continue;
-				}
-
-				memset(buf, 0, 32);
-				snprintf(buf, sizeof(buf), "fe%d_tuner", i);
-				node_tuner = of_parse_phandle(pdev->dev.of_node, buf, 0);
-				if (node_tuner) {
-					aml_get_dts_tuner_config(node_tuner, &config.tuner0, 0);
-					aml_get_dts_tuner_config(node_tuner, &config.tuner1, 1);
-				} else
-					pr_err("can't find %s.\n", buf);
-
-				of_node_put(node_tuner);
-
-				if (advb->ts[config.ts].mode == AM_TS_PARALLEL)
-					config.ts_out_mode = 1;
-				else
-					config.ts_out_mode = 0;
-
-				frontend[i] = aml_attach_dtvdemod(config.id, &config);
-				if (frontend[i] == NULL) {
-					s_demod_type[i] = AM_DTV_DEMOD_NONE;
-					pr_error("external dtvdemod [type = %d] attach error.\n", config.id);
-					goto error_fe;
-				} else {
-					s_demod_type[i] = config.id;
-					pr_error("external dtvdemod [type = %d] attach success.\n", config.id);
-				}
-
-				if (frontend[i]) {
-					ret = dvb_register_frontend(&advb->dvb_adapter, frontend[i]);
-					if (ret) {
-						pr_error("register dvb frontend failed\n");
-						goto error_fe;
-					}
-				}
-			}
-		}
-		return 0;
-error_fe:
-		for (i=0; i<FE_DEV_COUNT; i++) {
-			aml_detach_dtvdemod(s_demod_type[i]);
-			frontend[i] = NULL;
-			s_demod_type[i] = AM_DTV_DEMOD_NONE;
-
-			aml_detach_tuner(s_tuner_type[i]);
-			s_tuner_type[i] = AM_TUNER_NONE;
-		}
-
-		return 0;
+#if (defined CONFIG_AMLOGIC_DVB_EXTERN ||\
+		defined CONFIG_AMLOGIC_DVB_EXTERN_MODULE)
+	ret = dvb_extern_register_frontend(&advb->dvb_adapter);
+	if (ret) {
+		pr_error("aml register dvb frontend failed\n");
+		goto error;
 	}
-
-	if (advb->tuners)
-		kfree(advb->tuners);
+#endif
 
 	return 0;
+
 error:
 	for (i = 0; i < advb->async_fifo_total_count; i++) {
 		if (advb->asyncfifo[i].id != -1)
@@ -2483,26 +2258,11 @@ static int aml_dvb_remove(struct platform_device *pdev)
 	struct aml_dvb *advb = (struct aml_dvb *)dev_get_drvdata(&pdev->dev);
 	int i;
 
-	for (i=0; i<FE_DEV_COUNT; i++) {
-		aml_detach_dtvdemod(s_demod_type[i]);
+#if (defined CONFIG_AMLOGIC_DVB_EXTERN ||\
+		defined CONFIG_AMLOGIC_DVB_EXTERN_MODULE)
+	dvb_extern_unregister_frontend();
+#endif
 
-		aml_detach_tuner(s_tuner_type[i]);
-
-		if (frontend[i] &&
-			((s_tuner_type[i] == AM_TUNER_SI2151)
-			|| (s_tuner_type[i] == AM_TUNER_MXL661)
-			|| (s_tuner_type[i] == AM_TUNER_SI2159)
-			|| (s_tuner_type[i] == AM_TUNER_R842)
-			|| (s_tuner_type[i] == AM_TUNER_R840)
-			|| (s_tuner_type[i] == AM_TUNER_ATBM2040))) {
-			dvb_unregister_frontend(frontend[i]);
-			dvb_frontend_detach(frontend[i]);
-		}
-
-		frontend[i] = NULL;
-		s_demod_type[i] = AM_DTV_DEMOD_NONE;
-		s_tuner_type[i] = AM_TUNER_NONE;
-	}
 
 	tsdemux_set_ops(NULL);
 
@@ -2559,9 +2319,6 @@ static int aml_dvb_remove(struct platform_device *pdev)
 #endif
 #endif
 
-	if (advb->tuners)
-		kfree(advb->tuners);
-
 	return 0;
 }
 
@@ -2585,7 +2342,7 @@ static int aml_dvb_resume(struct platform_device *dev)
 #ifdef CONFIG_OF
 static const struct of_device_id aml_dvb_dt_match[] = {
 	{
-	 .compatible = "amlogic, dvb",
+	 .compatible = "amlogic, dvb-demux",
 	 },
 	{},
 };
@@ -2597,7 +2354,7 @@ static struct platform_driver aml_dvb_driver = {
 	.suspend = aml_dvb_suspend,
 	.resume = aml_dvb_resume,
 	.driver = {
-		   .name = "amlogic-dvb",
+		   .name = "amlogic-dvb-demux",
 		   .owner = THIS_MODULE,
 #ifdef CONFIG_OF
 	   .of_match_table = aml_dvb_dt_match,
