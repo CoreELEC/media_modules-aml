@@ -845,12 +845,15 @@ static int vdec_vp9_decode(unsigned long h_vdec,
 {
 	struct vdec_vp9_inst *inst = (struct vdec_vp9_inst *)h_vdec;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
-	u8 *buf = (u8 *) bs->vaddr;
-	u32 size = bs->size;
+	u8 *buf;
+	u32 size;
 	int ret = -1;
 
 	if (bs == NULL)
 		return -1;
+
+	buf = (u8 *) bs->vaddr;
+	size = bs->size;
 
 	if (vdec_input_full(vdec)) {
 		ATRACE_COUNTER("vdec_input_full", 0);
@@ -921,7 +924,7 @@ static int vdec_vp9_get_param(unsigned long h_vdec,
 	struct vdec_vp9_inst *inst = (struct vdec_vp9_inst *)h_vdec;
 
 	if (!inst) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"the vp9 inst of dec is invalid.\n");
 		return -1;
 	}
@@ -1034,7 +1037,7 @@ static int vdec_vp9_set_param(unsigned long h_vdec,
 	struct vdec_vp9_inst *inst = (struct vdec_vp9_inst *)h_vdec;
 
 	if (!inst) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"the vp9 inst of dec is invalid.\n");
 		return -1;
 	}

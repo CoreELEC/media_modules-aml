@@ -114,6 +114,11 @@
 	WRITE_HHI_REG_BITS(HHI_VDEC2_CLK_CNTL, 0, 8, 1);\
 }while(0)
 
+#define CHECK_RET(_ret) if (ret) {debug_print(\
+		"%s:%d:function call failed with result: %d\n",\
+		__FUNCTION__, __LINE__, _ret);}
+
+
 static int clock_real_clk[VDEC_MAX + 1];
 
 static unsigned int set_frq_enable, vdec_frq, hevc_frq, hevcb_frq;
@@ -125,14 +130,19 @@ static bool is_gp0_div2 = true;
 static int gp_pll_user_cb_vdec(struct gp_pll_user_handle_s *user,
 			int event)
 {
+	int ret;
+
 	debug_print("gp_pll_user_cb_vdec call\n");
 	if (event == GP_PLL_USER_EVENT_GRANT) {
 		struct clk *clk = clk_get(NULL, "gp0_pll");
 		if (!IS_ERR(clk)) {
-			if (is_gp0_div2)
-				clk_set_rate(clk, 1296000000UL);
-			else
-				clk_set_rate(clk, 648000000UL);
+			if (is_gp0_div2) {
+				ret = clk_set_rate(clk, 1296000000UL);
+				CHECK_RET(ret);
+			} else {
+				ret = clk_set_rate(clk, 648000000UL);
+				CHECK_RET(ret);
+			}
 			VDEC1_SAFE_CLOCK();
 			VDEC1_CLOCK_OFF();
 			if (is_gp0_div2)
@@ -456,6 +466,7 @@ int vdec_set_clk(int dec, int source, int div)
 static int vdec_set_clk(int dec, int rate)
 {
 	struct clk *clk = NULL;
+	int ret;
 
 	switch (dec) {
 	case VDEC_1:
@@ -495,7 +506,8 @@ static int vdec_set_clk(int dec, int rate)
 		return -1;
 	}
 
-	clk_set_rate(clk, rate);
+	ret = clk_set_rate(clk, rate);
+	CHECK_RET(ret);
 
 	return 0;
 }

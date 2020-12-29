@@ -476,8 +476,8 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 		fb->m.mem[1].bytes_used = decbuf_uv_size;
 	}
 
-	debug_print(DECODE_ID(hw), 0, "[%d] %s(), v4l ref buf addr: 0x%x\n",
-		ctx->id, __func__, fb);
+	debug_print(DECODE_ID(hw), 0, "[%d] %s(), v4l ref buf addr: 0x%lx\n",
+		ctx->id, __func__, (ulong)fb);
 
 	if (vdec->parallel_dec == 1) {
 		u32 tmp;
@@ -515,7 +515,7 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 	canvas_config_config(canvas_u(canvas), &hw->canvas_config[i][1]);
 
 	debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
-		"[%d] %s(), canvas: 0x%x mode: %d y: %x uv: %x w: %d h: %d\n",
+		"[%d] %s(), canvas: 0x%x mode: %d y: %lx uv: %lx w: %d h: %d\n",
 		ctx->id, __func__, canvas, hw->canvas_mode,
 		decbuf_start, decbuf_uv_start,
 		canvas_width, canvas_height);
@@ -2911,7 +2911,8 @@ static void check_timer_func(unsigned long arg)
 
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 {
-	u32 index = -1, i;
+	int index = -1;
+	u32 i;
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 
 	index = find_free_buffer(hw);
@@ -3333,7 +3334,9 @@ void (*callback)(struct vdec_s *, void *),
 		hw->dec_result = DEC_RESULT_AGAIN;
 		if (!vdec->input.swap_valid) {
 			debug_print(DECODE_ID(hw), 0, "mpeg12 start dirty data skipped\n");
-			vdec_prepare_input(vdec, &hw->chunk);
+			if (vdec_prepare_input(vdec, &hw->chunk) == -1) {
+				debug_print(DECODE_ID(hw), 0, "%s vdec_prepare_input failed\n", __func__);
+		    }
 			hw->dec_result = DEC_RESULT_DONE;
 		}
 		vdec_schedule_work(&hw->work);

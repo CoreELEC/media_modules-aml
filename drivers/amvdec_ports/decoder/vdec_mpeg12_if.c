@@ -529,7 +529,7 @@ static int vdec_mpeg12_get_param(unsigned long h_vdec,
 	struct vdec_mpeg12_inst *inst = (struct vdec_mpeg12_inst *)h_vdec;
 
 	if (!inst) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"the mpeg12 inst of dec is invalid.\n");
 		return -1;
 	}
@@ -615,7 +615,7 @@ static int vdec_mpeg12_set_param(unsigned long h_vdec,
 	struct vdec_mpeg12_inst *inst = (struct vdec_mpeg12_inst *)h_vdec;
 
 	if (!inst) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"the mpeg12 inst of dec is invalid.\n");
 		return -1;
 	}

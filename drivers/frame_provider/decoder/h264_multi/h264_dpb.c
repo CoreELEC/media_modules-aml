@@ -5058,8 +5058,8 @@ static void reorder_short_term(struct Slice *currSlice, int cur_list,
 	}
 
 	dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
-		"%s: RefPicListX[ %d ] = pic %x (%d)\n", __func__,
-		*refIdxLX, picLX, picNumLX);
+		"%s: RefPicListX[ %d ] = pic %lx (%d)\n", __func__,
+		*refIdxLX, (ulong)picLX, picNumLX);
 
 	RefPicListX[(*refIdxLX)++] = picLX;
 
@@ -5828,7 +5828,11 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 						 *  p_Vid->height_cr,
 						 */
 						 1);
-		if (p_H264_Dpb->mVideo.dec_picture) {
+		if (!p_H264_Dpb->mVideo.dec_picture) {
+			dpb_print(p_H264_Dpb->decoder_index,
+				PRINT_FLAG_DPB_DETAIL, "p_H264_Dpb->decoder_index is null\n");
+			return -1;
+		} else {
 			u32 offset_lo, offset_hi;
 			struct DecodedPictureBuffer *p_Dpb =
 				&p_H264_Dpb->mDPB;

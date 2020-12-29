@@ -8009,7 +8009,7 @@ static void get_picture_qos_info(struct VP9Decoder_s *pbi)
 		frame->min_mv = a[0];
 
 		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
-			"mv data %x  a[0]= %x a[1]= %x a[2]= %x\n",
+			"mv data %lx  a[0]= %x a[1]= %x a[2]= %x\n",
 			data, a[0], a[1], a[2]);
 
 		data = READ_VREG(HEVC_QP_INFO);
@@ -8036,7 +8036,7 @@ static void get_picture_qos_info(struct VP9Decoder_s *pbi)
 		frame->min_qp = a[0];
 
 		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
-			"qp data %x  a[0]= %x a[1]= %x a[2]= %x\n",
+			"qp data %lx  a[0]= %x a[1]= %x a[2]= %x\n",
 			data, a[0], a[1], a[2]);
 
 		data = READ_VREG(HEVC_SKIP_INFO);
@@ -8063,7 +8063,7 @@ static void get_picture_qos_info(struct VP9Decoder_s *pbi)
 		frame->min_skip = a[0];
 
 		vp9_print(pbi, VP9_DEBUG_QOS_INFO,
-			"skip data %x  a[0]= %x a[1]= %x a[2]= %x\n",
+			"skip data %lx  a[0]= %x a[1]= %x a[2]= %x\n",
 			data, a[0], a[1], a[2]);
 	} else {
 		uint32_t blk88_y_count;
@@ -10686,7 +10686,7 @@ static void vp9_dump_state(struct vdec_s *vdec)
 
 	for (i = 0; i < MAX_BUF_NUM; i++) {
 		vp9_print(pbi, 0,
-			"mv_Buf(%d) start_adr 0x%x size 0x%x used %d\n",
+			"mv_Buf(%d) start_adr 0x%lx size 0x%x used %d\n",
 			i,
 			pbi->m_mv_BUF[i].start_adr,
 			pbi->m_mv_BUF[i].size,
@@ -11260,22 +11260,12 @@ static int __init amvdec_vp9_driver_init_module(void)
 	} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL
 		/*&& get_cpu_major_id() != MESON_CPU_MAJOR_ID_GXLX*/
 		&& get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXL) {
-			if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX) {
-				if (vdec_is_support_4k())
-					amvdec_vp9_profile.profile =
-						"4k, 10bit, dwrite, compressed, fence";
-				else
-					amvdec_vp9_profile.profile =
-						"10bit, dwrite, compressed, fence";
-			} else {
-				if (vdec_is_support_4k())
-					amvdec_vp9_profile.profile =
-						"4k, 10bit, dwrite, compressed, fence";
-				else
-					amvdec_vp9_profile.profile =
-						"10bit, dwrite, compressed, fence";
-			}
-
+			if (vdec_is_support_4k())
+				amvdec_vp9_profile.profile =
+					"4k, 10bit, dwrite, compressed, fence";
+			else
+				amvdec_vp9_profile.profile =
+					"10bit, dwrite, compressed, fence";
 	} else {
 		amvdec_vp9_profile.name = "vp9_unsupport";
 	}

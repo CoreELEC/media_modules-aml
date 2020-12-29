@@ -542,7 +542,7 @@ static int vdec_mjpeg_get_param(unsigned long h_vdec,
 	struct vdec_mjpeg_inst *inst = (struct vdec_mjpeg_inst *)h_vdec;
 
 	if (!inst) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"the mjpeg inst of dec is invalid.\n");
 		return -1;
 	}
@@ -629,7 +629,7 @@ static int vdec_mjpeg_set_param(unsigned long h_vdec,
 	struct vdec_mjpeg_inst *inst = (struct vdec_mjpeg_inst *)h_vdec;
 
 	if (!inst) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"the mjpeg inst of dec is invalid.\n");
 		return -1;
 	}

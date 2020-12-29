@@ -878,12 +878,15 @@ static int vdec_h264_decode(unsigned long h_vdec,
 {
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
-	u8 *buf = (u8 *) bs->vaddr;
-	u32 size = bs->size;
+	u8 *buf;
+	u32 size;
 	int ret = -1;
 
 	if (bs == NULL)
 		return -1;
+
+	buf = (u8 *) bs->vaddr;
+	size = bs->size;
 
 	if (vdec_input_full(vdec))
 		return -EAGAIN;
@@ -958,7 +961,7 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
 
 	if (!inst) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"the h264 inst of dec is invalid.\n");
 		return -1;
 	}
@@ -1074,7 +1077,7 @@ static int vdec_h264_set_param(unsigned long h_vdec,
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
 
 	if (!inst) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"the h264 inst of dec is invalid.\n");
 		return -1;
 	}

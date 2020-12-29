@@ -956,10 +956,9 @@ int av1_alloc_context_buffers(AV1_COMMON *cm, int width, int height) {
 
 #ifdef ORI_CODE
 fail:
-#endif
   // clear the mi_* values to force a realloc on resync
   av1_set_mb_mi(cm, 0, 0);
-#ifdef ORI_CODE
+
   av1_free_context_buffers(cm);
 #endif
   return 1;
@@ -1921,8 +1920,9 @@ int av1_decode_frame_headers_and_setup(AV1Decoder *pbi, int trailing_bits_presen
       existing_frame_idx = params->p.existing_frame_idx; //aom_rb_read_literal(rb, 3);
       frame_to_show = cm->ref_frame_map[existing_frame_idx];
       if (frame_to_show == NULL) {
-        aom_internal_error(&cm->error, AOM_CODEC_UNSUP_BITSTREAM,
+          aom_internal_error(&cm->error, AOM_CODEC_UNSUP_BITSTREAM,
                            "Buffer does not contain a decoded frame");
+          return 0;
       }
       if (seq_params->decoder_model_info_present_flag &&
           cm->timing_info.equal_picture_interval == 0) {
@@ -2924,14 +2924,6 @@ int aom_decode_frame_from_obus(AV1Decoder *pbi, union param_u *params, int obu_t
           // TODO(wtc): Verify that the frame_header_obu is identical to the
           // original frame_header_obu. For now just skip frame_header_size
           // bytes in the bit buffer.
-          if (frame_header_size > payload_size) {
-            cm->error.error_code = AOM_CODEC_CORRUPT_FRAME;
-            return -1;
-          }
-          assert(rb.bit_offset == 0);
-#ifdef ORI_CODE
-          rb.bit_offset = 8 * frame_header_size;
-#endif
         }
 
         decoded_payload_size = frame_header_size;

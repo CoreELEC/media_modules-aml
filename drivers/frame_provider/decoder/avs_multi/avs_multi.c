@@ -2486,7 +2486,7 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 }
 
 /****************************************/
-
+#ifdef DEBUG_WITH_SINGLE_MODE
 static struct platform_driver amvdec_avs_driver = {
 	.probe = amvdec_avs_probe,
 	.remove = amvdec_avs_remove,
@@ -2494,7 +2494,7 @@ static struct platform_driver amvdec_avs_driver = {
 		.name = DRIVER_NAME,
 	}
 };
-
+#endif
 static void recycle_frames(struct vdec_avs_hw_s *hw);
 
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
@@ -4815,8 +4815,6 @@ static int __init ammvdec_avs_driver_init_module(void)
 		pr_info("failed to register amvdec_avs driver\n");
 		return -ENODEV;
 	}
-#else
-	amvdec_avs_driver = amvdec_avs_driver;
 #endif
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB)
 		ammvdec_avs_profile.profile = "mavs+";

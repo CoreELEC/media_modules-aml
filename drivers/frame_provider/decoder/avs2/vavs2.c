@@ -4599,8 +4599,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 
 		if (pic->error_mark) {
 			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
-				"!!!error pic, skip\n",
-				0);
+				"!!!error pic, skip\n");
 			continue;
 		}
 
@@ -4609,7 +4608,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 				pic->slice_type != I_IMG) {
 				avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 					"!!!slice type %d (not I) skip\n",
-					0, pic->slice_type);
+					pic->slice_type);
 				continue;
 			}
 			dec->skip_PB_before_I = 0;
@@ -4838,7 +4837,7 @@ static void get_picture_qos_info(struct AVS2Decoder_s *dec)
 	struct vdec_s *vdec = hw_to_vdec(dec);
 	if (!picture) {
 		avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
-			"%s decode picture is none exist\n");
+			"decode picture is none exist\n");
 
 		return;
 	}
@@ -7244,7 +7243,7 @@ static void avs2_dump_state(struct vdec_s *vdec)
 
 	for (i = 0; i < MAX_BUF_NUM; i++) {
 		avs2_print(dec, 0,
-			"mv_Buf(%d) start_adr 0x%x size 0x%x used %d\n",
+			"mv_Buf(%d) start_adr 0x%lx size 0x%x used %d\n",
 			i,
 			dec->m_mv_BUF[i].start_adr,
 			dec->m_mv_BUF[i].size,

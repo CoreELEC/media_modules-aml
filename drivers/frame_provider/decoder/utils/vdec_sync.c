@@ -256,7 +256,7 @@ static int timeline_create_fence(struct vdec_sync *sync, int usage,
 	if (usage == FENCE_USE_FOR_APP) {
 		*fd =  get_unused_fd_flags(O_CLOEXEC);
 		if (*fd < 0) {
-			return -EBADF;
+			ret = -EBADF;
 			goto err;
 		}
 

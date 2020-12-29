@@ -366,22 +366,24 @@ void vdec_frame_buffer_release(void *data)
 			decoder_bmmu_box_free_idx(vf->mm_box.bmmu_box,
 				vf->mm_box.bmmu_idx);
 			decoder_bmmu_try_to_release_box(vf->mm_box.bmmu_box);
+		} else {
+			v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
+			"[%d]: vf idx: %d, bmmu idx: %d, bmmu_box: %lx\n",
+			id, vf->index, vf->mm_box.bmmu_idx,
+			(ulong) vf->mm_box.bmmu_box);
 		}
 
 		if (decoder_mmu_box_valide_check(vf->mm_box.mmu_box)) {
 			decoder_mmu_box_free_idx(vf->mm_box.mmu_box,
 				vf->mm_box.mmu_idx);
 			decoder_mmu_try_to_release_box(vf->mm_box.mmu_box);
-		}
-
-		v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
-			"[%d]: vf idx: %d, bmmu idx: %d, bmmu_box: %lx\n",
-			id, vf->index, vf->mm_box.bmmu_idx,
-			(ulong) vf->mm_box.bmmu_box);
-		v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
+		} else {
+			v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
 			"[%d]: vf idx: %d, mmu_idx: %d, mmu_box: %lx\n",
 			id, vf->index, vf->mm_box.mmu_idx,
 			(ulong) vf->mm_box.mmu_box);
+		}
+
 	}
 
 	memset(data, 0, sizeof(struct file_private_data));
@@ -1412,7 +1414,6 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 		struct vb2_queue *vq;
 		struct vb2_v4l2_buffer *vb2_v4l2 = NULL;
 		struct aml_video_dec_buf *aml_buf = NULL;
-		struct file *file = NULL;
 
 		vq = v4l2_m2m_get_vq(ctx->m2m_ctx, buf->type);
 		vb2_v4l2 = to_vb2_v4l2_buffer(vq->bufs[buf->index]);
