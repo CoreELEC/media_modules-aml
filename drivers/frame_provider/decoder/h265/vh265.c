@@ -7833,6 +7833,8 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 #ifdef MCRCC_ENABLE
 	config_mcrcc_axi_hw(hevc, hevc->cur_pic->slice_type);
 #endif
+	if (!hevc->tile_width_lcu || !hevc->tile_height_lcu)
+		return -1;
 	config_mpred_hw(hevc);
 
 	config_sao_hw(hevc, rpm_param);
