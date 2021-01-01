@@ -485,9 +485,12 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 		} else
 			format = VIDEO_DEC_H264;
 		break;
-
+	case VFORMAT_JPEG_ENC:
+		format = VIDEO_ENC_JPEG;
+		vdec = OPTEE_VDEC_HCDEC;
+		break;
 	default:
-		pr_info("Unknow vdec format!\n");
+		pr_info("Unknow vdec format: %u\n", (u32)type);
 		break;
 	}
 

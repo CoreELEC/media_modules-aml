@@ -47,6 +47,8 @@
 #include <linux/amlogic/media/utils/amports_config.h>
 #include "encoder.h"
 #include "../../../frame_provider/decoder/utils/amvdec.h"
+#include "../../../common/chips/decoder_cpu_ver_info.h"
+#include "../../../frame_provider/decoder/utils/vdec.h"
 #include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/power_ctrl.h>
@@ -4574,6 +4576,11 @@ static struct codec_profile_t amvenc_avc_profile = {
 
 static s32 __init amvenc_avc_driver_init_module(void)
 {
+	if (get_cpu_major_id() == MESON_CPU_MAJOR_ID_T7) {
+		pr_err("T7 doesn't support hcodec avc encoder!!\n");
+		return -1;
+	}
+
 	enc_pr(LOG_INFO, "amvenc_avc module init\n");
 
 	if (platform_driver_register(&amvenc_avc_driver)) {

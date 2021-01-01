@@ -2005,7 +2005,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 	struct resource res;
 	struct device_node *np, *child;
 
-	enc_pr(LOG_DEBUG, "vpu_probe fuck, clock_a: %d, clock_b: %d, clock_c: %d\n",
+	enc_pr(LOG_DEBUG, "vpu_probe, clock_a: %d, clock_b: %d, clock_c: %d\n",
 		wave_clocka, wave_clockb, wave_clockc);
 
 	s_vpu_major = 0;

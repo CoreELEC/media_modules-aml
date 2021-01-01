@@ -86,7 +86,7 @@ int get_firmware_data(unsigned int format, char *buf)
 	struct fw_mgr_s *mgr = g_mgr;
 	struct fw_info_s *info;
 
-	pr_info("[%s], the fw (%s) will be loaded.\n",
+	pr_info("[%s], the fw (%s) will be loaded...\n",
 		tee_enabled() ? "TEE" : "LOCAL",
 		get_fw_format_name(format));
 
@@ -110,6 +110,7 @@ int get_firmware_data(unsigned int format, char *buf)
 
 		break;
 	}
+
 out:
 	mutex_unlock(&mutex);
 
