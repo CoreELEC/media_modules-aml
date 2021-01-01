@@ -1838,6 +1838,7 @@ struct hevc_state_s {
 	u32 metadata_config_flag;
 	int last_width;
 	int last_height;
+	int used_buf_num;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -10385,6 +10386,7 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 	hevc->last_height = rpm_param->p.pic_height_in_luma_samples;
 	hevc->sps_num_reorder_pics_0 =
 		rpm_param->p.sps_num_reorder_pics_0;
+	hevc->used_buf_num = v4l_parser_work_pic_num(hevc);
 
 	ps->visible_width 	= width;
 	ps->visible_height 	= height;
@@ -12699,7 +12701,9 @@ static int get_used_buf_count(struct hevc_state_s *hevc)
 
 static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 {
-	struct PIC_s *pic;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+	struct PIC_s *pic = NULL;
 	int i, free_count = 0;
 
 	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
@@ -12717,7 +12721,12 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 		}
 	}
 
-	return free_count < run_ready_min_buf_num ? 0 : 1;
+	if (ctx->cap_pool.out < hevc->used_buf_num) {
+		free_count +=
+			v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
+	}
+
+	return free_count ? 1 : 0;
 }
 
 static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
@@ -13586,7 +13595,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	}
 
 #ifdef CONSTRAIN_MAX_BUF_NUM
-	if (hevc->pic_list_init_flag == 3) {
+	if (hevc->pic_list_init_flag == 3 && !hevc->is_used_v4l) {
 		if (run_ready_max_vf_only_num > 0 &&
 			get_vf_ref_only_buf_count(hevc) >=
 			run_ready_max_vf_only_num
@@ -13618,12 +13627,10 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (ctx->param_sets_from_ucode) {
 			if (hevc->v4l_params_parsed) {
-				if (ctx->cap_pool.in < get_work_pic_num(hevc)) {
-					if (is_avaliable_buffer(hevc) ||
-						(v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) >=
-						run_ready_min_buf_num)) {
+				if (ctx->cap_pool.in < hevc->used_buf_num) {
+					if (is_avaliable_buffer(hevc))
 						ret = 1;
-					} else
+					else
 						ret = 0;
 				}
 			} else {
