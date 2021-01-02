@@ -197,7 +197,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 		return -1;
 
 	current_stc = get_stc_time_us(sSyncInsId, &current_systemtime);
-	pInstance->mSyncMode = MEDIA_SYNC_PCRMASTER;
+	//pInstance->mSyncMode = MEDIA_SYNC_PCRMASTER;
 
 	if (pInstance->mSyncMode == MEDIA_SYNC_PCRMASTER) {
 		if (lSystemTime == 0) {
