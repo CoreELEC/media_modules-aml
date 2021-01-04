@@ -22,16 +22,18 @@ typedef struct speed{
 }mediasync_speed;
 
 typedef struct instance{
-    s32 mSyncInsId;
-    s32 mDemuxId;
-    s32 mPcrPid;
-    s32 mPaused;
+	s32 mSyncInsId;
+	s32 mDemuxId;
+	s32 mPcrPid;
+	s32 mPaused;
 	s32 mRef;
 	s32 mSyncMode;
-    s64 mLastStc;
-    s64 mLastRealTime;
-    s64 mLastMediaTime;
+	s64 mLastStc;
+	s64 mLastRealTime;
+	s64 mLastMediaTime;
 	mediasync_speed mSpeed;
+	u64 last_system;
+	u64 last_pcr;
 }mediasync_ins;
 
 long mediasync_ins_alloc(s32 sDemuxId,

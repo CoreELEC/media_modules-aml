@@ -14,8 +14,7 @@
 
 #define MAX_INSTANCE_NUM 10
 mediasync_ins* vMediaSyncInsList[MAX_INSTANCE_NUM] = {0};
-u64 last_system;
-u64 last_pcr;
+
 extern int demux_get_stc(int demux_device_index, int index,
                   u64 *stc, unsigned int *base);
 extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
@@ -30,7 +29,7 @@ static u64 get_llabs(s64 value){
 	}
 }
 
-static u64 get_stc_time_us(s32 sSyncInsId)
+static u64 get_stc_time_us(s32 sSyncInsId, u64 *systemtime)
 {
     /*mediasync_ins* pInstance = NULL;
 	u64 stc;
@@ -55,6 +54,7 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	pInstance = vMediaSyncInsList[index];
 	ktime_get_ts64(&ts_monotonic);
 	timeus = ts_monotonic.tv_sec * 1000000LL + ts_monotonic.tv_nsec / 1000LL;
+	*systemtime = timeus;
 	if (pInstance->mDemuxId < 0)
 		return timeus;
 
@@ -62,26 +62,26 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	if (ret != 0) {
 		stc = timeus;
 	} else {
-		if (last_pcr == 0) {
+		if (pInstance->last_pcr == 0) {
 			stc = timeus;
-			last_pcr = pcr * 100 / 9;
-			last_system = timeus;
+			pInstance->last_pcr = pcr * 100 / 9;
+			pInstance->last_system = timeus;
 		} else {
-			pcr_diff = pcr * 100 / 9 - last_pcr;
-			time_diff = timeus - last_system;
+			pcr_diff = pcr * 100 / 9 - pInstance->last_pcr;
+			time_diff = timeus - pInstance->last_system;
 			if (time_diff && (get_llabs(pcr_diff) / time_diff
 					    > 100)) {
-				last_pcr = pcr * 100 / 9;
-				last_system = timeus;
+				pInstance->last_pcr = pcr * 100 / 9;
+				pInstance->last_system = timeus;
 				stc = timeus;
 			} else {
 				if (time_diff)
-					stc = last_system + pcr_diff;
+					stc = pInstance->last_system + pcr_diff;
 				else
 					stc = timeus;
 
-				last_pcr = pcr * 100 / 9;
-				last_system = stc;
+				pInstance->last_pcr = pcr * 100 / 9;
+				pInstance->last_system = stc;
 			}
 		}
 	}
@@ -89,14 +89,14 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	return stc;
 }
 
-static s64 get_system_time_us(void) {
+/*static s64 get_system_time_us(void) {
 	s64 TimeUs;
 	struct timespec64 ts_monotonic;
 	ktime_get_ts64(&ts_monotonic);
 	TimeUs = ts_monotonic.tv_sec * 1000000LL + ts_monotonic.tv_nsec / 1000LL;
 	pr_debug("get_system_time_us %lld\n", TimeUs);
 	return TimeUs;
-}
+}*/
 
 long mediasync_ins_alloc(s32 sDemuxId,
 			s32 sPcrPid,
@@ -196,8 +196,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 	if (pInstance == NULL)
 		return -1;
 
-	current_stc = get_stc_time_us(sSyncInsId);
-	current_systemtime = get_system_time_us();
+	current_stc = get_stc_time_us(sSyncInsId, &current_systemtime);
 	pInstance->mSyncMode = MEDIA_SYNC_PCRMASTER;
 
 	if (pInstance->mSyncMode == MEDIA_SYNC_PCRMASTER) {
@@ -222,9 +221,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			}
 		} else {
 			if (current_stc != 0) {
-				diff_system_time = (lSystemTime - pInstance->mLastRealTime)
-							* (current_stc - pInstance->mLastStc)
-							/ (current_systemtime - pInstance->mLastRealTime);
+				diff_system_time = current_stc + lSystemTime - current_systemtime - pInstance->mLastStc;
 				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			} else {
 				diff_system_time = lSystemTime - pInstance->mLastRealTime;
@@ -234,10 +231,11 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			if (diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
-				pr_info("MEDIA_SYNC_PCRMASTER update time system diff:%lld media diff:%lld current:%lld\n",
+				pr_info("MEDIA_SYNC_PCRMASTER update time stc diff:%lld media diff:%lld lSystemTime:%lld lMediaTime:%lld\n",
 											diff_system_time,
 											diff_mediatime,
-											current_systemtime);
+											lSystemTime,
+											lMediaTime);
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = lSystemTime;
 				pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
@@ -290,8 +288,7 @@ long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused) {
 		|| (sPaused == pInstance->mPaused))
 		return -1;
 
-	current_stc = get_stc_time_us(sSyncInsId);
-	current_systemtime = get_system_time_us();
+	current_stc = get_stc_time_us(sSyncInsId, &current_systemtime);
 
 	pInstance->mPaused = sPaused;
 	pInstance->mLastRealTime = current_systemtime;
@@ -388,8 +385,7 @@ long mediasync_ins_get_systemtime(s32 sSyncInsId, s64* lpSTC, s64* lpSystemTime)
 	if (pInstance == NULL)
 		return -1;
 
-	current_stc = get_stc_time_us(sSyncInsId);
-	current_systemtime = get_system_time_us();
+	current_stc = get_stc_time_us(sSyncInsId, &current_systemtime);
 
 	*lpSTC = current_stc;
 	*lpSystemTime = current_systemtime;
