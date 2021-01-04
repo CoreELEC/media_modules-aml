@@ -10465,8 +10465,10 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 
 				if ((hevc->m_PIC[i]->POC != INVALID_POC) &&
 					(hevc->m_PIC[i]->output_ready == 0) &&
-					hevc->m_PIC[i]->referenced)
-					hevc->m_PIC[i]->output_mark = 1;
+					hevc->m_PIC[i]->referenced &&
+					(hevc->m_PIC[i]->POC >= hevc->decoded_poc)) {
+						hevc->m_PIC[i]->output_mark = 1;
+				}
 			}
 
 			flush_output(hevc, NULL);
