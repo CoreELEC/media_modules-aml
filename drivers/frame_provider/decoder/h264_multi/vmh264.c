@@ -3095,6 +3095,12 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+
+		if (!frame->show_frame) {
+			vh264_vf_put(vh264_vf_get(vdec), vdec);
+			continue;
+		}
+
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		hw->vf_pre_count++;
 		vdec->vdec_fps_detec(vdec->id);
@@ -3182,9 +3188,6 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 
 	if (post_prepare_process(vdec, frame))
 		return -1;
-
-	if (!frame->show_frame)
-		return 0;
 
 	if (post_video_frame(vdec, frame))
 		return -1;

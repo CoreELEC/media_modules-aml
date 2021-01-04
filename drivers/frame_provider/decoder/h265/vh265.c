@@ -9254,7 +9254,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct PIC_s *frame)
 		frame->output_ready = 0;
 		frame->show_frame = false;
 		hevc_print(hevc, 0, "discard show frame.\n");
-		return -1;
+		return 0;
 	}
 
 	frame->show_frame = true;
@@ -9630,12 +9630,23 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vf2->type = VIDTYPE_INTERLACE_TOP
 				| nv_order;
 			}
-			put_vf_to_display_q(hevc, vf);
-			hevc->vf_pre_count++;
-			vdec_vframe_ready(hw_to_vdec(hevc), vf2);
-			kfifo_put(&hevc->display_q,
-			(const struct vframe_s *)vf2);
-			ATRACE_COUNTER(MODULE_NAME, vf2->pts);
+			if (pic->show_frame) {
+				put_vf_to_display_q(hevc, vf);
+				hevc->vf_pre_count++;
+				vdec_vframe_ready(hw_to_vdec(hevc), vf2);
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf2);
+				ATRACE_COUNTER(MODULE_NAME, vf2->pts);
+			} else {
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf);
+				vh265_vf_put(vh265_vf_get(vdec), vdec);
+
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf2);
+				vh265_vf_put(vh265_vf_get(vdec), vdec);
+				return 0;
+			}
 		} else if (pic->pic_struct == 5
 			|| pic->pic_struct == 6) {
 			struct vframe_s *vf2, *vf3;
@@ -9676,18 +9687,33 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vf3->type = VIDTYPE_INTERLACE_BOTTOM
 				| nv_order;
 			}
-			put_vf_to_display_q(hevc, vf);
-			hevc->vf_pre_count++;
-			vdec_vframe_ready(hw_to_vdec(hevc), vf2);
-			kfifo_put(&hevc->display_q,
-			(const struct vframe_s *)vf2);
-			ATRACE_COUNTER(MODULE_NAME, vf2->pts);
-			hevc->vf_pre_count++;
-			vdec_vframe_ready(hw_to_vdec(hevc), vf3);
-			kfifo_put(&hevc->display_q,
-			(const struct vframe_s *)vf3);
-			ATRACE_COUNTER(MODULE_NAME, vf3->pts);
+			if (pic->show_frame) {
+				put_vf_to_display_q(hevc, vf);
+				hevc->vf_pre_count++;
+				vdec_vframe_ready(hw_to_vdec(hevc), vf2);
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf2);
+				ATRACE_COUNTER(MODULE_NAME, vf2->pts);
+				hevc->vf_pre_count++;
+				vdec_vframe_ready(hw_to_vdec(hevc), vf3);
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf3);
+				ATRACE_COUNTER(MODULE_NAME, vf3->pts);
+			} else {
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf);
+				vh265_vf_put(vh265_vf_get(vdec), vdec);
 
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf2);
+				vh265_vf_put(vh265_vf_get(vdec), vdec);
+
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf3);
+				vh265_vf_put(vh265_vf_get(vdec), vdec);
+
+				return 0;
+			}
 		} else if (pic->pic_struct == 9
 			|| pic->pic_struct == 10) {
 			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
@@ -9700,35 +9726,40 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			/* process previous pending vf*/
 			process_pending_vframe(hevc,
 			pic, (pic->pic_struct == 9));
+			if (pic->show_frame) {
+				decoder_do_frame_check(vdec, vf);
+				vdec_vframe_ready(vdec, vf);
+				/* process current vf */
+				kfifo_put(&hevc->pending_q,
+				(const struct vframe_s *)vf);
+				vf->height <<= 1;
+				if (pic->pic_struct == 9) {
+					vf->type = VIDTYPE_INTERLACE_TOP
+					| nv_order | VIDTYPE_VIU_FIELD;
+					process_pending_vframe(hevc,
+					hevc->pre_bot_pic, 0);
+				} else {
+					vf->type = VIDTYPE_INTERLACE_BOTTOM |
+					nv_order | VIDTYPE_VIU_FIELD;
+					vf->index = (pic->index << 8) | 0xff;
+					process_pending_vframe(hevc,
+					hevc->pre_top_pic, 1);
+				}
 
-			decoder_do_frame_check(vdec, vf);
-			vdec_vframe_ready(vdec, vf);
-			/* process current vf */
-			kfifo_put(&hevc->pending_q,
-			(const struct vframe_s *)vf);
-			vf->height <<= 1;
-			if (pic->pic_struct == 9) {
-				vf->type = VIDTYPE_INTERLACE_TOP
-				| nv_order | VIDTYPE_VIU_FIELD;
-				process_pending_vframe(hevc,
-				hevc->pre_bot_pic, 0);
+				if (hevc->vf_pre_count == 0)
+					hevc->vf_pre_count++;
+
+				/**/
+				if (pic->pic_struct == 9)
+					hevc->pre_top_pic = pic;
+				else
+					hevc->pre_bot_pic = pic;
 			} else {
-				vf->type = VIDTYPE_INTERLACE_BOTTOM |
-				nv_order | VIDTYPE_VIU_FIELD;
-				vf->index = (pic->index << 8) | 0xff;
-				process_pending_vframe(hevc,
-				hevc->pre_top_pic, 1);
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf);
+				vh265_vf_put(vh265_vf_get(vdec), vdec);
+				return 0;
 			}
-
-			if (hevc->vf_pre_count == 0)
-				hevc->vf_pre_count++;
-
-			/**/
-			if (pic->pic_struct == 9)
-				hevc->pre_top_pic = pic;
-			else
-				hevc->pre_bot_pic = pic;
-
 		} else if (pic->pic_struct == 11
 		    || pic->pic_struct == 12) {
 			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
@@ -9751,19 +9782,25 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				nv_order | VIDTYPE_VIU_FIELD;
 				vf->index = (pic->index << 8) | 0xff;
 			}
-			decoder_do_frame_check(vdec, vf);
-			vdec_vframe_ready(vdec, vf);
-			kfifo_put(&hevc->pending_q,
-			(const struct vframe_s *)vf);
-			if (hevc->vf_pre_count == 0)
-				hevc->vf_pre_count++;
+			if (pic->show_frame) {
+				decoder_do_frame_check(vdec, vf);
+				vdec_vframe_ready(vdec, vf);
+				kfifo_put(&hevc->pending_q,
+				(const struct vframe_s *)vf);
+				if (hevc->vf_pre_count == 0)
+					hevc->vf_pre_count++;
 
-			/**/
-			if (pic->pic_struct == 11)
-				hevc->pre_top_pic = pic;
-			else
-				hevc->pre_bot_pic = pic;
-
+				/**/
+				if (pic->pic_struct == 11)
+					hevc->pre_top_pic = pic;
+				else
+					hevc->pre_bot_pic = pic;
+			} else {
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf);
+				vh265_vf_put(vh265_vf_get(vdec), vdec);
+				return 0;
+			}
 		} else {
 			pic->vf_ref = 1;
 
@@ -9796,7 +9833,14 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				hevc->pre_bot_pic = pic;
 				break;
 			}
-			put_vf_to_display_q(hevc, vf);
+			if (pic->show_frame) {
+				put_vf_to_display_q(hevc, vf);
+			} else {
+				kfifo_put(&hevc->display_q,
+				(const struct vframe_s *)vf);
+				vh265_vf_put(vh265_vf_get(vdec), vdec);
+				return 0;
+			}
 		}
 #else
 		vf->type_original = vf->type;
@@ -9903,9 +9947,6 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 
 	if (post_prepare_process(vdec, frame))
 		return -1;
-
-	if (!frame->show_frame)
-		return 0;
 
 	if (post_video_frame(vdec, frame))
 		return -1;
