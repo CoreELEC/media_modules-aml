@@ -182,6 +182,7 @@ static struct work_struct reset_work;
 static struct work_struct notify_work;
 static struct work_struct set_clk_work;
 static bool is_reset;
+static bool first_i_frame_ready;
 
 static DEFINE_SPINLOCK(lock);
 
@@ -462,6 +463,11 @@ static irqreturn_t vmpeg4_isr(int irq, void *dev_id)
 			}
 		}
 
+		if ( (first_i_frame_ready == 0) &&
+			(picture_type == I_PICTURE)) {
+			first_i_frame_ready = 1;
+		}
+
 		if (reg & INTERLACE_FLAG) {	/* interlace */
 			if (kfifo_get(&newframe_q, &vf) == 0) {
 				printk
@@ -492,17 +498,23 @@ static irqreturn_t vmpeg4_isr(int irq, void *dev_id)
 			set_aspect_ratio(vf, READ_VREG(MP4_PIC_RATIO));
 
 			vfbuf_use[buffer_index]++;
-			vf->mem_handle =
-				decoder_bmmu_box_get_mem_handle(
+
+			if (first_i_frame_ready == 0) {
+			    kfifo_put(&recycle_q, (const struct vframe_s *)vf);
+			} else {
+			    vf->mem_handle =
+			        decoder_bmmu_box_get_mem_handle(
 					mm_blk_handle,
 					buffer_index);
 
-			kfifo_put(&display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+			    kfifo_put(&display_q, (const struct vframe_s *)vf);
+			    ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
-			vf_notify_receiver(PROVIDER_NAME,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY,
-					NULL);
+			    vf_notify_receiver(PROVIDER_NAME,
+			        VFRAME_EVENT_PROVIDER_VFRAME_READY,
+			        NULL);
+
+			}
 
 			if (kfifo_get(&newframe_q, &vf) == 0) {
 				printk(
@@ -533,23 +545,29 @@ static irqreturn_t vmpeg4_isr(int irq, void *dev_id)
 
 			set_aspect_ratio(vf, READ_VREG(MP4_PIC_RATIO));
 
-			vfbuf_use[buffer_index]++;
-			vf->mem_handle =
-				decoder_bmmu_box_get_mem_handle(
-					mm_blk_handle,
-					buffer_index);
-
 			amlog_mask(LOG_MASK_PTS,
 			"[%s:%d] [inte] dur=0x%x rate=%d picture_type=%d\n",
 				__func__, __LINE__, vf->duration,
 				vmpeg4_amstream_dec_info.rate, picture_type);
 
-			kfifo_put(&display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+			vfbuf_use[buffer_index]++;
 
-			vf_notify_receiver(PROVIDER_NAME,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY,
+			if (first_i_frame_ready == 0) {
+			    kfifo_put(&recycle_q, (const struct vframe_s *)vf);
+			} else {
+			    vf->mem_handle =
+				decoder_bmmu_box_get_mem_handle(
+					mm_blk_handle,
+					buffer_index);
+
+			    kfifo_put(&display_q, (const struct vframe_s *)vf);
+			    ATRACE_COUNTER(MODULE_NAME, vf->pts);
+
+			    vf_notify_receiver(PROVIDER_NAME,
+			        VFRAME_EVENT_PROVIDER_VFRAME_READY,
 				NULL);
+			}
+
 
 		} else {	/* progressive */
 			if (kfifo_get(&newframe_q, &vf) == 0) {
@@ -586,18 +604,25 @@ static irqreturn_t vmpeg4_isr(int irq, void *dev_id)
 			__func__, __LINE__, vf->duration,
 			vmpeg4_amstream_dec_info.rate, picture_type);
 
+
 			vfbuf_use[buffer_index]++;
-			vf->mem_handle =
+
+			if (first_i_frame_ready == 0) {
+			    kfifo_put(&recycle_q, (const struct vframe_s *)vf);
+			} else {
+			    vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
-					mm_blk_handle,
-					buffer_index);
+				mm_blk_handle,
+				buffer_index);
 
-			kfifo_put(&display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+			    kfifo_put(&display_q, (const struct vframe_s *)vf);
+			    ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
-			vf_notify_receiver(PROVIDER_NAME,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY,
-				NULL);
+			    vf_notify_receiver(PROVIDER_NAME,
+				    VFRAME_EVENT_PROVIDER_VFRAME_READY,
+				    NULL);
+			}
+
 		}
 
 		total_frame += repeat_cnt + 1;
@@ -999,6 +1024,7 @@ static void vmpeg4_local_init(void)
 
 	frame_num_since_last_anch = 0;
 
+	first_i_frame_ready = 0;
 #ifdef CONFIG_AM_VDEC_MPEG4_LOG
 	pts_hit = pts_missed = pts_i_hit = pts_i_missed = 0;
 #endif
