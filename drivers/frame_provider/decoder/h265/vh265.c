@@ -472,8 +472,8 @@ static u32 max_decoding_time;
  *
  *bit 8: 0, use interlace policy
  *       1, NOT use interlace policy
- *bit 9: 0, use manual parser NAL
- *       1, NOT use manual parser NAL
+ *bit 9: 0, discard dirty data on playback start
+ *       1, do not discard dirty data on playback start
  *
  */
 
@@ -1511,6 +1511,7 @@ struct tile_s {
 #define DEC_RESULT_FORCE_EXIT       10
 #define DEC_RESULT_FREE_CANVAS      11
 
+
 static void vh265_work(struct work_struct *work);
 static void vh265_timeout_work(struct work_struct *work);
 static void vh265_notify_work(struct work_struct *work);
@@ -1839,6 +1840,7 @@ struct hevc_state_s {
 	int last_width;
 	int last_height;
 	int used_buf_num;
+	u32 dirty_shift_flag;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -12134,9 +12136,9 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 			ctl_val = 0x4;	/* check vps/sps/pps only in ucode */
 		else if (hevc->PB_skip_mode == 3)
 			ctl_val = 0x0;	/* check vps/sps/pps/idr in ucode */
-		if (((error_handle_policy & 0x200) == 0) &&
+		/*if (((error_handle_policy & 0x200) == 0) &&
 				input_stream_based(vdec))
-			ctl_val = 0x1;
+			ctl_val = 0x1;*/
 		WRITE_VREG(NAL_SEARCH_CTL, ctl_val);
 	}
 	if ((get_dbg_flag(hevc) & H265_DEBUG_NO_EOS_SEARCH_DONE)
@@ -12524,6 +12526,45 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 
 	return 0;
 }
+
+static int check_dirty_data(struct vdec_s *vdec)
+{
+	struct hevc_state_s *hevc =
+		(struct hevc_state_s *)(vdec->private);
+	struct vdec_input_s *input = &vdec->input;
+	u32 wp, rp, level;
+	u32 rp_set;
+
+	rp = STBUF_READ(&vdec->vbuf, get_rp);
+	wp = hevc->pre_parser_wr_ptr;
+
+	if (wp > rp)
+		level = wp - rp;
+	else
+		level = wp + vdec->input.size - rp;
+
+	if (level > 0x100000) {
+		u32 skip_size = ((level >> 1) >> 19) << 19;
+		if (!vdec->input.swap_valid) {
+			hevc_print(hevc , 0, "h265 start data discard level 0x%x, buffer level 0x%x, RP 0x%x, WP 0x%x\n",
+				((level >> 1) >> 19) << 19, level, rp, wp);
+			if (wp >= rp) {
+				rp_set = rp + skip_size;
+			}
+			else if ((rp + skip_size) < (input->start + input->size)) {
+				rp_set = rp + skip_size;
+			} else {
+				rp_set = rp + skip_size - input->size;
+			}
+			STBUF_WRITE(&vdec->vbuf, set_rp, rp_set);
+			vdec->input.stream_cookie += skip_size;
+			hevc->dirty_shift_flag = 1;
+		}
+		return 1;
+	}
+	return 0;
+}
+
 
 static int vh265_stop(struct hevc_state_s *hevc)
 {
@@ -13348,10 +13389,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			hevc->pre_parser_video_wp = STBUF_READ(&vdec->vbuf, get_wp);
 
 			if (((hevc->again_count > dirty_count_threshold) &&
-					time_after64(get_jiffies_64(), hevc->again_timeout_jiffies)) ||
-					(((error_handle_policy & 0x200) == 0) &&
-						(hevc->pic_list_init_flag == 0) &&
-						!(hevc->have_vps || hevc->have_sps || hevc->have_pps))) {
+					time_after64(get_jiffies_64(), hevc->again_timeout_jiffies))) {
 				mutex_lock(&hevc->chunks_mutex);
 				hevc->again_count = 0;
 				vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
@@ -13359,6 +13397,9 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 				hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
 					"Discard dirty data\n");
 				mutex_unlock(&hevc->chunks_mutex);
+			} else if ((((error_handle_policy & 0x200) == 0) &&
+						(hevc->pic_list_init_flag == 0))) {
+				check_dirty_data(vdec);
 			}
 		}
 	} else if (hevc->dec_result == DEC_RESULT_EOS) {
@@ -13699,7 +13740,11 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			check_sum,
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT)
 			);
+	if ((hevc->dirty_shift_flag == 1) && !(vdec->input.swap_valid)) {
+		WRITE_VREG(HEVC_SHIFT_BYTE_COUNT, vdec->input.stream_cookie);
+	}
 	hevc->start_shift_bytes = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+
 	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 		"%s: size 0x%x sum 0x%x (%x %x %x %x %x) byte count %x\n",
 		__func__, r,
