@@ -5058,8 +5058,8 @@ static void reorder_short_term(struct Slice *currSlice, int cur_list,
 	}
 
 	dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
-		"%s: RefPicListX[ %d ] = pic %lx (%d)\n", __func__,
-		*refIdxLX, (ulong)picLX, picNumLX);
+		"%s: RefPicListX[ %d ] = pic %px (%d)\n", __func__,
+		*refIdxLX, picLX, picNumLX);
 
 	RefPicListX[(*refIdxLX)++] = picLX;
 

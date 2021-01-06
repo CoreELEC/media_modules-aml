@@ -432,8 +432,8 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 		fb->m.mem[1].bytes_used = decbuf_uv_size;
 	}
 
-	mmpeg4_debug_print(DECODE_ID(hw), 0, "[%d] %s(), v4l ref buf addr: 0x%lx\n",
-		((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id, __func__, (ulong)fb);
+	mmpeg4_debug_print(DECODE_ID(hw), 0, "[%d] %s(), v4l ref buf addr: 0x%px\n",
+		ctx->id, __func__, fb);
 
 	if (vdec->parallel_dec == 1) {
 		u32 tmp;
@@ -2177,8 +2177,8 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 	hw->unstable_pts =
 	   (((unsigned long) hw->vmpeg4_amstream_dec_info.param & 0x40) >> 6);
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
-		"param = 0x%lx unstable_pts = %d\n",
-		(ulong)hw->vmpeg4_amstream_dec_info.param,
+		"param = 0x%px unstable_pts = %d\n",
+		hw->vmpeg4_amstream_dec_info.param,
 		hw->unstable_pts);
 	hw->last_dec_pts = -1;
 

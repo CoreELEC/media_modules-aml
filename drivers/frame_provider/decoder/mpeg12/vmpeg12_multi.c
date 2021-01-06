@@ -476,8 +476,8 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 		fb->m.mem[1].bytes_used = decbuf_uv_size;
 	}
 
-	debug_print(DECODE_ID(hw), 0, "[%d] %s(), v4l ref buf addr: 0x%lx\n",
-		ctx->id, __func__, (ulong)fb);
+	debug_print(DECODE_ID(hw), 0, "[%d] %s(), v4l ref buf addr: 0x%px\n",
+		ctx->id, __func__, fb);
 
 	if (vdec->parallel_dec == 1) {
 		u32 tmp;

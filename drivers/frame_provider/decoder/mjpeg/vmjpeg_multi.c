@@ -1006,7 +1006,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	}
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
-		"[%d] v4l ref buf addr: 0x%lx\n", ctx->id, (ulong)fb);
+		"[%d] v4l ref buf addr: 0x%px\n", ctx->id, fb);
 
 	if (vdec->parallel_dec == 1) {
 		if (hw->buffer_spec[i].y_canvas_index == -1)
