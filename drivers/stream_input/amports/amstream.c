@@ -1664,6 +1664,9 @@ static unsigned int amstream_offset_poll(struct file *file,
 	int fd_match = 0;
 	int i;
 
+	if ((fcc_enable & 1) == 0)
+		return 0;
+
 	poll_wait(file, &fcc.offset_wait, wait_table);
 	mutex_lock(&fcc.mutex);
 	for (i = 0; i < MAX_FCC_CHANNEL_NUM; i++) {
