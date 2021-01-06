@@ -9863,10 +9863,13 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		vdec_count_info(hevc->gvs, 0, stream_offset);
 		if (hevc->cur_pic->slice_type == I_SLICE) {
 			hevc->gvs->i_decoded_frames++;
+			vf->frame_type |= V4L2_BUF_FLAG_KEYFRAME;
 		} else if (hevc->cur_pic->slice_type == P_SLICE) {
 			hevc->gvs->p_decoded_frames++;
+			vf->frame_type |= V4L2_BUF_FLAG_PFRAME;
 		} else if (hevc->cur_pic->slice_type == B_SLICE) {
 			hevc->gvs->b_decoded_frames++;
+			vf->frame_type |= V4L2_BUF_FLAG_BFRAME;
 		}
 		hevc_update_gvs(hevc);
 		memcpy(&tmp4x, hevc->gvs, sizeof(struct vdec_info));

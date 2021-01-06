@@ -2998,6 +2998,14 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				get_double_write_ratio(hw->double_write_mode);
 		}
 
+		if (frame->slice_type == I_SLICE) {
+			vf->frame_type |= V4L2_BUF_FLAG_KEYFRAME;
+		} else if (frame->slice_type == P_SLICE) {
+			vf->frame_type |= V4L2_BUF_FLAG_PFRAME;
+		} else if (frame->slice_type == B_SLICE) {
+			vf->frame_type |= V4L2_BUF_FLAG_BFRAME;
+		}
+
 		vf->flag = 0;
 		if (frame->data_flag & I_FLAG)
 			vf->flag |= VFRAME_FLAG_SYNCFRAME;

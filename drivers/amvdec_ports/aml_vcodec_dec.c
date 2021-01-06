@@ -593,6 +593,7 @@ void trans_vframe_to_user(struct aml_vcodec_ctx *ctx, struct vdec_v4l2_buffer *f
 		vb2_set_plane_payload(vb2_buf, 1, fb->m.mem[1].bytes_used);
 	}
 	vb2_buf->timestamp = vf->timestamp;
+	dstbuf->vb.flags |= vf->frame_type;
 
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;

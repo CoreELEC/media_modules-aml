@@ -23,7 +23,7 @@
 #include <linux/list.h>
 #include <linux/completion.h>
 #include <linux/irqreturn.h>
-
+#include <linux/videodev2.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
