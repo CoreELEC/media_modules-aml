@@ -2650,7 +2650,7 @@ static int check_force_interlace(struct vdec_h264_hw_s *hw,
 			 && (hw->frame_dur == 3840)) {
 		bForceInterlace = 1;
 	}
-	if (hw->is_used_v4l && (bForceInterlace == 0)) {
+	if (hw->is_used_v4l && (bForceInterlace == 0) && frame->frame) {
 		bForceInterlace = (frame->frame->mb_aff_frame_flag)?1:0;
 	}
 	return bForceInterlace;
