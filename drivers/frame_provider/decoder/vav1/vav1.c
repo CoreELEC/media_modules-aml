@@ -8378,7 +8378,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		}
 	}
 
-	av1_continue_decoding(hw, obu_type);
+	ret = av1_continue_decoding(hw, obu_type);
 	hw->postproc_done = 0;
 	hw->process_busy = 0;
 
