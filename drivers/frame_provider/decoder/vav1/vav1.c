@@ -7885,6 +7885,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	struct AV1HW_s *hw = (struct AV1HW_s *)data;
 	unsigned int dec_status = hw->dec_status;
 	int obu_type;
+	int ret = 0;
 
 	/*if (hw->wait_buf)
 	 *	pr_info("set wait_buf to 0\r\n");
@@ -8246,12 +8247,18 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		}
 	}
 
-	av1_continue_decoding(hw, obu_type);
+	ret = av1_continue_decoding(hw, obu_type);
 	hw->postproc_done = 0;
 	hw->process_busy = 0;
 
 	if (hw->m_ins_flag) {
-		start_process_time(hw);
+		if (ret >= 0)
+			start_process_time(hw);
+		else {
+			hw->dec_result = DEC_RESULT_DONE;
+			amhevc_stop();
+			vdec_schedule_work(&hw->work);
+		}
 	}
 
 	return IRQ_HANDLED;

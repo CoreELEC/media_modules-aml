@@ -8691,6 +8691,15 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		pbi->frame_width = pbi->vp9_param.p.width;
 		pbi->frame_height = pbi->vp9_param.p.height;
 
+		if (!pbi->has_keyframe &&
+			((pbi->frame_width == 0) ||
+			(pbi->frame_height == 0))) {
+			continue_decoding(pbi);
+			pbi->postproc_done = 0;
+			pbi->process_busy = 0;
+			return IRQ_HANDLED;
+		}
+
 		if (!v4l_res_change(pbi)) {
 			if (ctx->param_sets_from_ucode && !pbi->v4l_params_parsed) {
 				struct aml_vdec_ps_infos ps;
