@@ -32,6 +32,7 @@
 #define MAJOR_ID_START AM_MESON_CPU_MAJOR_ID_M6
 
 static enum AM_MESON_CPU_MAJOR_ID cpu_ver_id = AM_MESON_CPU_MAJOR_ID_MAX;
+static int cpu_sub_id = 0;
 
 static enum AM_MESON_CPU_MAJOR_ID cpu_ver_info[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_START]=
 {
@@ -57,16 +58,17 @@ static enum AM_MESON_CPU_MAJOR_ID cpu_ver_info[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR
 	AM_MESON_CPU_MAJOR_ID_G12B,
 	AM_MESON_CPU_MAJOR_ID_GXLX2,
 	AM_MESON_CPU_MAJOR_ID_SM1,
-	AM_MESON_CPU_MAJOR_ID_RES_0x2c,
+	AM_MESON_CPU_MAJOR_ID_A1,
 	AM_MESON_CPU_MAJOR_ID_RES_0x2d,
 	AM_MESON_CPU_MAJOR_ID_TL1,
 	AM_MESON_CPU_MAJOR_ID_TM2,
-	AM_MESON_CPU_MAJOR_ID_RES_0x30,
+	AM_MESON_CPU_MAJOR_ID_C1,
 	AM_MESON_CPU_MAJOR_ID_RES_0x31,
 	AM_MESON_CPU_MAJOR_ID_SC2,
-	AM_MESON_CPU_MAJOR_ID_RES_0x33,
+	AM_MESON_CPU_MAJOR_ID_C2,
 	AM_MESON_CPU_MAJOR_ID_T5,
 	AM_MESON_CPU_MAJOR_ID_T5D,
+	AM_MESON_CPU_MAJOR_ID_T7
 };
 
 static const struct of_device_id cpu_ver_of_match[] = {
@@ -125,32 +127,57 @@ static const struct of_device_id cpu_ver_of_match[] = {
 		.compatible = "amlogic, cpu-major-id-t5d",
 		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_T5D - MAJOR_ID_START],
 	},
+	{
+		.compatible = "amlogic, cpu-major-id-t7",
+		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_T7 - MAJOR_ID_START],
+	},
 	{},
 };
 
-static bool get_cpu_id_from_dtb(enum AM_MESON_CPU_MAJOR_ID *pidType)
-{
-	struct device_node *pNode = NULL;
-	struct platform_device* pDev = NULL;
-	const struct of_device_id *pMatch = NULL;
+static const int cpu_sub_info[] = {
+		AM_MESON_CPU_MINOR_ID_REVB_G12B,
+		AM_MESON_CPU_MINOR_ID_REVB_TM2,
+};
 
-	pNode = of_find_node_by_name(NULL, DECODE_CPU_VER_ID_NODE_NAME);
-	if (NULL == pNode) {
+static const struct of_device_id cpu_sub_id_of_match[] = {
+	{
+		.compatible = "amlogic, cpu-major-id-g12b-b",
+		.data = &cpu_sub_info[0],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-tm2-b",
+		.data = &cpu_sub_info[1],
+	},
+};
+
+static bool get_cpu_id_from_dtb(enum AM_MESON_CPU_MAJOR_ID *pid_type, int *sub_id)
+{
+	struct device_node *pnode = NULL;
+	struct platform_device *pdev = NULL;
+	const struct of_device_id *pmatch = NULL;
+
+	pnode = of_find_node_by_name(NULL, DECODE_CPU_VER_ID_NODE_NAME);
+	if (NULL == pnode) {
 		pr_err("No find node.\n");
 		return -EINVAL;
 	}
 
-	pDev =  of_find_device_by_node(pNode);
-	if (NULL == pDev)
+	pdev =  of_find_device_by_node(pnode);
+	if (NULL == pdev)
 		return -EINVAL;
 
-	pMatch = of_match_device(cpu_ver_of_match, &pDev->dev);
-	if (NULL == pMatch) {
-		pr_err("No find of_match_device\n");
-		return -EINVAL;
+	pmatch = of_match_device(cpu_ver_of_match, &pdev->dev);
+	if (NULL == pmatch) {
+		pmatch = of_match_device(cpu_sub_id_of_match, &pdev->dev);
+		if (NULL == pmatch) {
+			pr_err("No find of_match_device\n");
+			return -EINVAL;
+		}
 	}
 
-	*pidType = *(enum AM_MESON_CPU_MAJOR_ID *)pMatch->data;
+	*pid_type = (enum AM_MESON_CPU_MAJOR_ID)(*(int *)pmatch->data) & (MAJOY_ID_MASK);
+
+	*sub_id = ((*(int *)pmatch->data) & (SUB_ID_MASK)) >> 8;
 
 	return AM_SUCESS;
 }
@@ -158,18 +185,20 @@ static bool get_cpu_id_from_dtb(enum AM_MESON_CPU_MAJOR_ID *pidType)
 static void initial_cpu_id(void)
 {
 	enum AM_MESON_CPU_MAJOR_ID id_type = AM_MESON_CPU_MAJOR_ID_MAX;
+	int sub_id = 0;
 
-	if (AM_SUCESS == get_cpu_id_from_dtb(&id_type))
+	if (AM_SUCESS == get_cpu_id_from_dtb(&id_type, &sub_id)) {
 		cpu_ver_id = id_type;
-	else
+		cpu_sub_id = sub_id;
+	} else {
 		cpu_ver_id = (enum AM_MESON_CPU_MAJOR_ID)get_cpu_type();
+		cpu_sub_id = (is_meson_rev_b()) ? CHIP_REVB : CHIP_REVA;
+	}
 
-	if (AM_MESON_CPU_MAJOR_ID_G12B == cpu_ver_id)
-		if (is_meson_rev_b())
-			cpu_ver_id = AM_MESON_CPU_MAJOR_ID_TL1;
+	if ((AM_MESON_CPU_MAJOR_ID_G12B == cpu_ver_id) && (CHIP_REVB == cpu_sub_id))
+		cpu_ver_id = AM_MESON_CPU_MAJOR_ID_TL1;
 
-	pr_info("vdec %s, cpu id 0x%x(%c)\n",
-		__func__, cpu_ver_id, (is_meson_rev_b())?'B':'A');
+	pr_info("vdec init cpu id: 0x%x(%d)", cpu_ver_id, cpu_sub_id);
 }
 
 enum AM_MESON_CPU_MAJOR_ID get_cpu_major_id(void)
@@ -181,10 +210,19 @@ enum AM_MESON_CPU_MAJOR_ID get_cpu_major_id(void)
 }
 EXPORT_SYMBOL(get_cpu_major_id);
 
+bool is_cpu_meson_revb(void)
+{
+	if (AM_MESON_CPU_MAJOR_ID_MAX == cpu_ver_id)
+		initial_cpu_id();
+
+	return (cpu_sub_id == CHIP_REVB);
+}
+EXPORT_SYMBOL(is_cpu_meson_revb);
+
 bool is_cpu_tm2_revb(void)
 {
-	return ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2) &&
-		(is_meson_rev_b()));
+	return ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2)
+		&& (is_cpu_meson_revb()));
 }
 EXPORT_SYMBOL(is_cpu_tm2_revb);
 

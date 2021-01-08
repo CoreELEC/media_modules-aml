@@ -1245,35 +1245,35 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 
 		} else {
 #ifdef NV21
-			canvas_config(canvas_base + canvas_num * i + 0,
+			config_cav_lut_ex(canvas_base + canvas_num * i + 0,
 					buf_start,
 					canvas_width, canvas_height,
 					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32);
-			canvas_config(canvas_base + canvas_num * i + 1,
+					CANVAS_BLKMODE_32X32, 0);
+			config_cav_lut_ex(canvas_base + canvas_num * i + 1,
 					buf_start +
 					decbuf_y_size, canvas_width,
 					canvas_height / 2,
 					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32);
+					CANVAS_BLKMODE_32X32, 0);
 #else
-			canvas_config(canvas_num * i + 0,
+			config_cav_lut_ex(canvas_num * i + 0,
 					buf_start,
 					canvas_width, canvas_height,
 					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32);
-			canvas_config(canvas_num * i + 1,
+					CANVAS_BLKMODE_32X32, 0);
+			config_cav_lut_ex(canvas_num * i + 1,
 					buf_start +
 					decbuf_y_size, canvas_width / 2,
 					canvas_height / 2,
 					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32);
-			canvas_config(canvas_num * i + 2,
+					CANVAS_BLKMODE_32X32, 0);
+			config_cav_lut_ex(canvas_num * i + 2,
 					buf_start +
 					decbuf_y_size + decbuf_uv_size,
 					canvas_width / 2, canvas_height / 2,
 					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32);
+					CANVAS_BLKMODE_32X32, 0);
 #endif
 			debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
 				"canvas config %d, addr %p\n", i,
@@ -1574,7 +1574,7 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 			vavs_restore_regs(hw);
 
 		for (i = 0; i < hw->vf_buf_num_used; i++) {
-			canvas_config_ex(canvas_y(hw->canvas_spec[i]),
+			config_cav_lut_ex(canvas_y(hw->canvas_spec[i]),
 				hw->canvas_config[i][0].phy_addr,
 				hw->canvas_config[i][0].width,
 				hw->canvas_config[i][0].height,
@@ -1582,7 +1582,7 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 				hw->canvas_config[i][0].block_mode,
 				0);
 
-			canvas_config_ex(canvas_u(hw->canvas_spec[i]),
+			config_cav_lut_ex(canvas_u(hw->canvas_spec[i]),
 				hw->canvas_config[i][1].phy_addr,
 				hw->canvas_config[i][1].width,
 				hw->canvas_config[i][1].height,
@@ -4326,7 +4326,7 @@ if (run_flag) {
 			vavs_restore_regs(hw);
 
 		for (i = 0; i < hw->vf_buf_num_used; i++) {
-			canvas_config_ex(canvas_y(hw->canvas_spec[i]),
+			config_cav_lut_ex(canvas_y(hw->canvas_spec[i]),
 				hw->canvas_config[i][0].phy_addr,
 				hw->canvas_config[i][0].width,
 				hw->canvas_config[i][0].height,
@@ -4334,7 +4334,7 @@ if (run_flag) {
 				hw->canvas_config[i][0].block_mode,
 				0);
 
-			canvas_config_ex(canvas_u(hw->canvas_spec[i]),
+			config_cav_lut_ex(canvas_u(hw->canvas_spec[i]),
 				hw->canvas_config[i][1].phy_addr,
 				hw->canvas_config[i][1].width,
 				hw->canvas_config[i][1].height,

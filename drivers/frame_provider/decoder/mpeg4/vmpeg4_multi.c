@@ -465,7 +465,7 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 		hw->canvas_config[i][0].endian = 7;
 	else
 		hw->canvas_config[i][0].endian = 0;
-	canvas_config_config(canvas_y(canvas),
+	config_cav_lut(canvas_y(canvas),
 			&hw->canvas_config[i][0]);
 
 	hw->canvas_config[i][1].phy_addr =
@@ -477,7 +477,7 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 		hw->canvas_config[i][1].endian = 7;
 	else
 		hw->canvas_config[i][1].endian = 0;
-	canvas_config_config(canvas_u(canvas),
+	config_cav_lut(canvas_u(canvas),
 			&hw->canvas_config[i][1]);
 
 	return 0;
@@ -1818,7 +1818,7 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 				hw->canvas_config[i][0].endian = 7;
 			else
 				hw->canvas_config[i][0].endian = 0;
-			canvas_config_config(canvas_y(canvas),
+			config_cav_lut(canvas_y(canvas),
 					&hw->canvas_config[i][0]);
 
 			hw->canvas_config[i][1].phy_addr =
@@ -1830,7 +1830,7 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 				hw->canvas_config[i][1].endian = 7;
 			else
 				hw->canvas_config[i][1].endian = 0;
-			canvas_config_config(canvas_u(canvas),
+			config_cav_lut(canvas_u(canvas),
 					&hw->canvas_config[i][1]);
 		}
 	}
@@ -2048,9 +2048,9 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 	} else {
 		if (!hw->is_used_v4l) {
 			for (i = 0; i < hw->buf_num; i++) {
-				canvas_config_config(canvas_y(hw->canvas_spec[i]),
+				config_cav_lut(canvas_y(hw->canvas_spec[i]),
 							&hw->canvas_config[i][0]);
-				canvas_config_config(canvas_u(hw->canvas_spec[i]),
+				config_cav_lut(canvas_u(hw->canvas_spec[i]),
 							&hw->canvas_config[i][1]);
 			}
 		}

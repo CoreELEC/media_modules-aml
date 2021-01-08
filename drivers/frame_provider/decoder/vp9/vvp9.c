@@ -68,6 +68,7 @@
 /*#define SUPPORT_FB_DECODING*/
 /*#define FB_DECODING_TEST_SCHEDULE*/
 
+#define CO_MV_COMPRESS
 #define HW_MASK_FRONT    0x1
 #define HW_MASK_BACK     0x2
 
@@ -172,6 +173,7 @@ static u32 mv_buf_margin;
  *	2, (1/4):(1/4) ratio;
  *	3, (1/4):(1/4) ratio, with both compressed frame included
  *	4, (1/2):(1/2) ratio;
+ *	8, (1/8):(1/8) ratio;
  *	0x10, double write only
  *	0x100, if > 1080p,use mode 4,else use mode 1;
  *	0x200, if > 1080p,use mode 2,else use mode 1;
@@ -335,11 +337,6 @@ struct MVBUF_s {
 
 #define DOUBLE_WRITE_YSTART_TEMP 0x02000000
 #define DOUBLE_WRITE_CSTART_TEMP 0x02900000
-
-
-
-typedef unsigned int u32;
-typedef unsigned short u16;
 
 #define VP9_DEBUG_BUFMGR                   0x01
 #define VP9_DEBUG_BUFMGR_MORE              0x02
@@ -1236,6 +1233,7 @@ struct VP9Decoder_s {
 	int last_height;
 	u32 error_frame_width;
 	u32 error_frame_height;
+	u32 endian;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -3097,7 +3095,15 @@ static u32 rval;
 static u32 pop_shorts;
 static u32 dbg_cmd;
 static u32 dbg_skip_decode_index;
-static u32 endian = 0xff0;
+
+/*
+ * bit 0~3, for HEVCD_IPP_AXIIF_CONFIG endian config
+ * bit 8~23, for HEVC_SAO_CTRL1 endian config
+ */
+static u32 endian;
+#define HEVC_CONFIG_BIG_ENDIAN     ((0x880 << 8) | 0x8)
+#define HEVC_CONFIG_LITTLE_ENDIAN  ((0xff0 << 8) | 0xf)
+
 #ifdef ERROR_HANDLE_DEBUG
 static u32 dbg_nal_skip_flag;
 		/* bit[0], skip vps; bit[1], skip sps; bit[2], skip pps */
@@ -5640,17 +5646,16 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 #endif
 #else
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
-	data32 &= (~0x3000);
-	data32 |= (pbi->mem_map_mode <<
-			   12);
+	data32 &= (~(3 << 14));
+	data32 |= (2 << 14);	/* line align with 64*/
 
-/*  [13:12] axi_aformat, 0-Linear,
- *				   1-32x32, 2-64x32
- */
+	data32 &= (~0x3000);
+	/* [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32 */
+	data32 |= (pbi->mem_map_mode << 12);
+
 	data32 &= (~0xff0);
-	/* data32 |= 0x670;  // Big-Endian per 64-bit */
-	data32 |= endian;	/* Big-Endian per 64-bit */
-	data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
+	data32 |= ((pbi->endian >> 8) & 0xfff);	/* Big-Endian per 64-bit */
+	data32 &= (~0x3); 		/*[1]:dw_disable [0]:cm_disable*/
 	if (get_double_write_mode(pbi) == 0)
 		data32 |= 0x2; /*disable double write*/
 	else if (get_double_write_mode(pbi) & 0x10)
@@ -5689,8 +5694,6 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	*  [1]     dw_disable:disable double write output
 	*  [0]     cm_disable:disable compress output
 	*/
-	data32 &= (~(3 << 14));
-	data32 |= (2 << 14);
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 
 	if (get_double_write_mode(pbi) & 0x10) {
@@ -5704,24 +5707,29 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 		data32 &= ~(0xff << 16);
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	} else {
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
+			WRITE_VREG(HEVC_SAO_CTRL26, 0);
+
 		data32 = READ_VREG(HEVC_SAO_CTRL5);
 		data32 &= (~(0xff << 16));
-		if (get_double_write_mode(pbi) == 2 ||
+		if (get_double_write_mode(pbi) == 8 ||
+			get_double_write_mode(pbi) == 9) {
+			data32 |= (0xff << 16);
+			WRITE_VREG(HEVC_SAO_CTRL26, 0xf);
+		} else if (get_double_write_mode(pbi) == 2 ||
 			get_double_write_mode(pbi) == 3)
-			data32 |= (0xff<<16);
+			data32 |= (0xff << 16);
 		else if (get_double_write_mode(pbi) == 4)
-			data32 |= (0x33<<16);
+			data32 |= (0x33 << 16);
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	}
 
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
 	/* [5:4]    -- address_format 00:linear 01:32x32 10:64x32 */
-	data32 |= (pbi->mem_map_mode <<
-			   4);
-	data32 &= (~0xF);
-	data32 |= 0xf;  /* valid only when double write only */
-		/*data32 |= 0x8;*/		/* Big-Endian per 64-bit */
+	data32 |= (pbi->mem_map_mode << 4);
+	data32 &= (~0xf);
+	data32 |= (pbi->endian & 0xf);  /* valid only when double write only */
 
 	/* swap uv */
 	if (pbi->is_used_v4l) {
@@ -5731,7 +5739,8 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 		else
 			data32 &= ~(1 << 12); /* NV12 */
 	}
-
+	data32 &= (~(3 << 8));
+	data32 |= (2 << 8);		/* line align with 64 for dw only */
 	/*
 	* [3:0]   little_endian
 	* [5:4]   address_format 00:linear 01:32x32 10:64x32
@@ -5741,8 +5750,6 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	* [12]    CbCr_byte_swap
 	* [31:13] reserved
 	*/
-	data32 &= (~(3 << 8));
-	data32 |= (2 << 8);
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
 #endif
 }
@@ -5862,8 +5869,14 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 		data32 |= (1<<10);
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	}
-
-		WRITE_VREG(VP9_SEG_MAP_BUFFER, buf_spec->seg_map.buf_start);
+#ifdef CO_MV_COMPRESS
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
+	    data32 = READ_VREG(HEVC_MPRED_CTRL4);
+	    data32 |=  (1 << 1);
+	    WRITE_VREG(HEVC_MPRED_CTRL4, data32);
+	}
+#endif
+	WRITE_VREG(VP9_SEG_MAP_BUFFER, buf_spec->seg_map.buf_start);
 
 	WRITE_VREG(LMEM_DUMP_ADR, (u32)pbi->lmem_phy_addr);
 		 /**/
@@ -6899,10 +6912,8 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 				get_double_write_ratio(
 					pic_config->double_write_mode);
 
-		if (pbi->mem_map_mode == 0)
-			canvas_w = ALIGN(canvas_w, 64);
-		else
-			canvas_w = ALIGN(canvas_w, 64);
+		/* sao ctrl1 reg alignline with 64, align with 64 */
+		canvas_w = ALIGN(canvas_w, 64);
 		canvas_h = ALIGN(canvas_h, 32);
 
 		if (vdec->parallel_dec == 1) {
@@ -6917,10 +6928,10 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 			pic_config->uv_canvas_index = 128 + pic_config->index * 2 + 1;
 		}
 
-		canvas_config_ex(pic_config->y_canvas_index,
+		config_cav_lut_ex(pic_config->y_canvas_index,
 			pic_config->dw_y_adr, canvas_w, canvas_h,
 			CANVAS_ADDR_NOWRAP, blkmode, pbi->is_used_v4l ? 0 : 7);
-		canvas_config_ex(pic_config->uv_canvas_index,
+		config_cav_lut_ex(pic_config->uv_canvas_index,
 			pic_config->dw_u_v_adr,	canvas_w, canvas_h,
 			CANVAS_ADDR_NOWRAP, blkmode, pbi->is_used_v4l ? 0 : 7);
 
@@ -9912,6 +9923,12 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 #else
 	cma_dev = pdata->cma_dev;
 #endif
+	/* config endian */
+	pbi->endian = HEVC_CONFIG_LITTLE_ENDIAN;
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+		pbi->endian = HEVC_CONFIG_BIG_ENDIAN;
+	if (endian)
+		pbi->endian = endian;
 
 #ifdef MULTI_INSTANCE_SUPPORT
 	pdata->private = pbi;
@@ -11279,9 +11296,14 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pbi->no_head = (no_head & 0xf);
 	}
 
+	pbi->endian = HEVC_CONFIG_LITTLE_ENDIAN;
 	if (!pbi->is_used_v4l) {
 		pbi->mem_map_mode = mem_map_mode;
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+			pbi->endian = HEVC_CONFIG_BIG_ENDIAN;
 	}
+	if (endian)
+		pbi->endian = endian;
 
 	if (pbi->is_used_v4l)
 		pbi->run_ready_min_buf_num = run_ready_min_buf_num - 1 ;

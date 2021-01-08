@@ -676,13 +676,16 @@ static s32 amhevc_loadmc(const u32 *p)
 
 		WRITE_VREG(HEVC_IMEM_DMA_ADR, mc_addr_map);
 		WRITE_VREG(HEVC_IMEM_DMA_COUNT, 0x1000);
-		WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (7 << 16)));
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0xf << 16)));
+		else
+			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0x7 << 16)));
 
 		while (READ_VREG(HEVC_IMEM_DMA_CTRL) & 0x8000) {
 			if (time_before(jiffies, timeout))
 				schedule();
 			else {
-				pr_err("vdec2 load mc error\n");
+				pr_err("hevc load mc error\n");
 				ret = -EBUSY;
 				break;
 			}

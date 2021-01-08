@@ -27,8 +27,6 @@
 #include <linux/kthread.h>
  #include <linux/vmalloc.h>
 #include <linux/platform_device.h>
-#include <linux/amlogic/media/canvas/canvas.h>
-#include <linux/amlogic/media/canvas/canvas_mgr.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/dma-mapping.h>
@@ -168,6 +166,18 @@ static bool is_oversize(int w, int h)
 	return false;
 }
 
+unsigned long vdec_cav_get_addr(int index);
+unsigned int vdec_cav_get_width(int index);
+unsigned int vdec_cav_get_height(int index);
+#define canvas_0(v) ((v) & 0xff)
+#define canvas_1(v) (((v) >> 8) & 0xff)
+#define canvas_2(v) (((v) >> 16) & 0xff)
+#define canvas_3(v) (((v) >> 24) & 0xff)
+
+#define canvasY(v) canvas_0(v)
+#define canvasU(v) canvas_1(v)
+#define canvasV(v) canvas_2(v)
+#define canvasUV(v) canvas_1(v)
 
 static int get_frame_size(struct pic_check_mgr_t *pic,
 	struct vframe_s *vf)
@@ -189,10 +199,10 @@ static int get_frame_size(struct pic_check_mgr_t *pic,
 	if ((vf->canvas0Addr == vf->canvas1Addr) &&
 		(vf->canvas0Addr != 0) &&
 		(vf->canvas0Addr != -1)) {
-		pic->canvas_w =
-			canvas_get_width(canvasY(vf->canvas0Addr));
-		pic->canvas_h =
-			canvas_get_height(canvasY(vf->canvas0Addr));
+		pic->canvas_w = vdec_cav_get_width(canvasY(vf->canvas0Addr));
+			//canvas_get_width(canvasY(vf->canvas0Addr));
+		pic->canvas_h = vdec_cav_get_height(canvasY(vf->canvas0Addr));
+			//canvas_get_height(canvasY(vf->canvas0Addr));
 	} else {
 		pic->canvas_w = vf->canvas0_config[0].width;
 		pic->canvas_h = vf->canvas0_config[0].height;
@@ -222,8 +232,8 @@ static int canvas_get_virt_addr(struct pic_check_mgr_t *pic,
 	if ((vf->canvas0Addr == vf->canvas1Addr) &&
 		(vf->canvas0Addr != 0) &&
 		(vf->canvas0Addr != -1)) {
-		phy_y_addr = canvas_get_addr(canvasY(vf->canvas0Addr));
-		phy_uv_addr = canvas_get_addr(canvasU(vf->canvas0Addr));
+		phy_y_addr = vdec_cav_get_addr(canvasY(vf->canvas0Addr)); //canvas_get_addr(canvasY(vf->canvas0Addr));
+		phy_uv_addr = vdec_cav_get_addr(canvasUV(vf->canvas0Addr)); //canvas_get_addr(canvasUV(vf->canvas0Addr));
 	} else {
 		phy_y_addr = vf->canvas0_config[0].phy_addr;
 		phy_uv_addr = vf->canvas0_config[1].phy_addr;

@@ -483,61 +483,61 @@ static int vmjpeg_canvas_init(void)
 		if (ret < 0)
 			return ret;
 #ifdef NV21
-		canvas_config(index2canvas0(i) & 0xff,
+		config_cav_lut_ex(index2canvas0(i) & 0xff,
 			buf_start,
 			canvas_width, canvas_height,
 			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
-		canvas_config((index2canvas0(i) >> 8) & 0xff,
+			CANVAS_BLKMODE_LINEAR, 0);
+		config_cav_lut_ex((index2canvas0(i) >> 8) & 0xff,
 			buf_start +
 			decbuf_y_size, canvas_width,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
-		canvas_config(index2canvas1(i) & 0xff,
+			CANVAS_BLKMODE_LINEAR, 0);
+		config_cav_lut_ex(index2canvas1(i) & 0xff,
 			buf_start +
 			decbuf_size / 2, canvas_width,
 			canvas_height, CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
-		canvas_config((index2canvas1(i) >> 8) & 0xff,
+			CANVAS_BLKMODE_LINEAR, 0);
+		config_cav_lut_ex((index2canvas1(i) >> 8) & 0xff,
 			buf_start +
 			decbuf_y_size + decbuf_uv_size / 2,
 			canvas_width, canvas_height / 2,
 			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
+			CANVAS_BLKMODE_LINEAR, 0);
 #else
-		canvas_config(index2canvas0(i) & 0xff,
+		config_cav_lut_ex(index2canvas0(i) & 0xff,
 			buf_start,
 			canvas_width, canvas_height,
 			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
-		canvas_config((index2canvas0(i) >> 8) & 0xff,
+			CANVAS_BLKMODE_LINEAR, 0);
+		config_cav_lut_ex((index2canvas0(i) >> 8) & 0xff,
 			buf_start +
 			decbuf_y_size, canvas_width / 2,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
-		canvas_config((index2canvas0(i) >> 16) & 0xff,
+			CANVAS_BLKMODE_LINEAR, 0);
+		config_cav_lut_ex((index2canvas0(i) >> 16) & 0xff,
 			buf_start +
 			decbuf_y_size + decbuf_uv_size,
 			canvas_width / 2, canvas_height / 2,
 			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
-		canvas_config(index2canvas1(i) & 0xff,
+			CANVAS_BLKMODE_LINEAR, 0);
+		config_cav_lut_ex(index2canvas1(i) & 0xff,
 			buf_start +
 			decbuf_size / 2, canvas_width,
 			canvas_height, CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
-		canvas_config((index2canvas1(i) >> 8) & 0xff,
+			CANVAS_BLKMODE_LINEAR, 0);
+		config_cav_lut_ex((index2canvas1(i) >> 8) & 0xff,
 			buf_start +
 			decbuf_y_size + decbuf_uv_size / 2,
 			canvas_width / 2, canvas_height / 2,
 			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
-		canvas_config((index2canvas1(i) >> 16) & 0xff,
+			CANVAS_BLKMODE_LINEAR, 0);
+		config_cav_lut_ex((index2canvas1(i) >> 16) & 0xff,
 			buf_start +
 			decbuf_y_size + decbuf_uv_size +
 			decbuf_uv_size / 2, canvas_width / 2,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR);
+			CANVAS_BLKMODE_LINEAR, 0);
 #endif
 
 	}

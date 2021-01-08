@@ -269,9 +269,10 @@ static u32 mv_buf_margin = REF_FRAMES;
  *	2, (1/4):(1/4) ratio;
  *	3, (1/4):(1/4) ratio, with both compressed frame included
  *	4, (1/2):(1/2) ratio;
- *  5, (1/2):(1/2) ratio, with both compressed frame included
+ *	5, (1/2):(1/2) ratio, with both compressed frame included
+ *	8, (1/8):(1/8) ratio;
  *	0x10, double write only
- *  0x20, mmu double write
+ *	0x20, mmu double write
  *	0x100, if > 1080p,use mode 4,else use mode 1;
  *	0x200, if > 1080p,use mode 2,else use mode 1;
  *	0x300, if > 720p, use mode 4, else use mode 1;
@@ -423,10 +424,6 @@ struct MVBUF_s {
 #else
 #define LOSLESS_COMPRESS_MODE
 #endif
-
-typedef unsigned int u32;
-typedef unsigned short u16;
-
 
 static u32 get_picture_qos;
 
@@ -812,6 +809,7 @@ struct AV1HW_s {
 	int sidebind_channel_id;
 	u32 cur_obu_type;
 	u32 multi_frame_cnt;
+	u32 endian;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -1685,7 +1683,14 @@ static u32 rval;
 static u32 pop_shorts;
 static u32 dbg_cmd;
 static u32 dbg_skip_decode_index;
-static u32 endian = 0xff0;
+/*
+ * bit 0~3, for HEVCD_IPP_AXIIF_CONFIG endian config
+ * bit 8~23, for HEVC_SAO_CTRL1 endian config
+ */
+static u32 endian;
+#define HEVC_CONFIG_BIG_ENDIAN     ((0x880 << 8) | 0x8)
+#define HEVC_CONFIG_LITTLE_ENDIAN  ((0xff0 << 8) | 0xf)
+
 static u32 multi_frames_in_one_pack = 1;
 #ifdef ERROR_HANDLE_DEBUG
 static u32 dbg_nal_skip_flag;
@@ -3521,7 +3526,7 @@ static void config_mpred_hw(struct AV1HW_s *hw, unsigned char inter_flag)
 
 	//WRITE_VREG(HEVC_MPRED_CTRL3,0x24122412);
 #ifdef CO_MV_COMPRESS
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
 		WRITE_VREG(HEVC_MPRED_CTRL3,0x10151015); // 'd10, 'd21 for AV1
 	} else {
 		WRITE_VREG(HEVC_MPRED_CTRL3,0x13151315); // 'd19, 'd21 for AV1
@@ -3558,7 +3563,7 @@ static void config_mpred_hw(struct AV1HW_s *hw, unsigned char inter_flag)
 		(cm->seq_params.order_hint_info.order_hint_bits_minus_1 << 24) |
 		(cm->cur_frame->order_hint << 16 ));
 #ifdef CO_MV_COMPRESS
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
 		data32 |= (0x10 << 8) | (0x10 << 0);
 	} else {
 		data32 |= (0x13 << 8) | (0x13 << 0);
@@ -3905,19 +3910,14 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 /*CHANGE_DONE nnn*/
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~0x3000);
-	data32 |= (mem_map_mode <<
-			   12);
-
-/*  [13:12] axi_aformat, 0-Linear,
- *				   1-32x32, 2-64x32
- */
+	data32 |= (mem_map_mode << 12); /* [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32 */
 	data32 &= (~0xff0);
 	/* data32 |= 0x670;  // Big-Endian per 64-bit */
 #ifdef AOM_AV1_MMU_DW
 	if (hw->dw_mmu_enable == 0)
-		data32 |= endian;	/* Big-Endian per 64-bit */
+		data32 |= ((hw->endian >> 8) & 0xfff);	/* Big-Endian per 64-bit */
 #else
-	data32 |= endian;	/* Big-Endian per 64-bit */
+	data32 |= ((hw->endian >> 8) & 0xfff);	/* Big-Endian per 64-bit */
 #endif
 	data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
 	if (get_double_write_mode(hw) == 0)
@@ -3945,7 +3945,8 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 		else
 			data32 |= (1 << 8); /* NV12 */
 	}
-
+	data32 &= (~(3 << 14));
+	data32 |= (2 << 14);
 	/*
 	*  [31:24] ar_fifo1_axi_thred
 	*  [23:16] ar_fifo0_axi_thred
@@ -3958,8 +3959,6 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	*  [1]     dw_disable:disable double write output
 	*  [0]     cm_disable:disable compress output
 	*/
-	data32 &= (~(3 << 14));
-	data32 |= (2 << 14);
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 
 	if (get_double_write_mode(hw) & 0x10) {
@@ -3973,9 +3972,14 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 		data32 &= ~(0xff << 16);
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	} else {
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
+			WRITE_VREG(HEVC_SAO_CTRL26, 0);
 		data32 = READ_VREG(HEVC_SAO_CTRL5);
 		data32 &= (~(0xff << 16));
-		if ((get_double_write_mode(hw) & 0xf) == 2 ||
+		if ((get_double_write_mode(hw) & 0xf) == 8) {
+			WRITE_VREG(HEVC_SAO_CTRL26, 0xf);
+			data32 |= (0xff << 16);
+		} else if ((get_double_write_mode(hw) & 0xf) == 2 ||
 			(get_double_write_mode(hw) & 0xf) == 3)
 			data32 |= (0xff<<16);
 		else if ((get_double_write_mode(hw) & 0xf) == 4 ||
@@ -3987,11 +3991,9 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
 	/* [5:4]	-- address_format 00:linear 01:32x32 10:64x32 */
-	data32 |= (mem_map_mode <<
-			   4);
-	data32 &= (~0xF);
-	data32 |= 0xf;  /* valid only when double write only */
-		/*data32 |= 0x8;*/		/* Big-Endian per 64-bit */
+	data32 |= (mem_map_mode << 4);
+	data32 &= (~0xf);
+	data32 |= (hw->endian & 0xf);  /* valid only when double write only */
 
 	/* swap uv */
 	if (hw->is_used_v4l) {
@@ -4001,7 +4003,8 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 		else
 			data32 &= ~(1 << 12); /* NV12 */
 	}
-
+	data32 &= (~(3 << 8));
+	data32 |= (2 << 8);
 	/*
 	* [3:0]   little_endian
 	* [5:4]   address_format 00:linear 01:32x32 10:64x32
@@ -4011,8 +4014,6 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	* [12]    CbCr_byte_swap
 	* [31:13] reserved
 	*/
-	data32 &= (~(3 << 8));
-	data32 |= (2 << 8);
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
 
 #endif
@@ -5034,6 +5035,13 @@ static void aom_config_work_space_hw(struct AV1HW_s *hw, u32 mask)
 	}
 #endif
 #endif
+#ifdef CO_MV_COMPRESS
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
+	    data32 = READ_VREG(HEVC_MPRED_CTRL4);
+	    data32 |=  (1 << 1);
+	    WRITE_VREG(HEVC_MPRED_CTRL4, data32);
+	}
+#endif
 	}
 
 	config_aux_buf(hw);
@@ -5605,10 +5613,8 @@ static void set_canvas(struct AV1HW_s *hw,
 				get_double_write_ratio(
 					pic_config->double_write_mode & 0xf);
 
-		if (mem_map_mode == 0)
-			canvas_w = ALIGN(canvas_w, 64);
-		else
-			canvas_w = ALIGN(canvas_w, 64);
+		/* sao ctrl1 config aligned with 64, so aligned with 64 same */
+		canvas_w = ALIGN(canvas_w, 64);
 		canvas_h = ALIGN(canvas_h, 32);
 
 		if (vdec->parallel_dec == 1) {
@@ -5623,10 +5629,10 @@ static void set_canvas(struct AV1HW_s *hw,
 			pic_config->uv_canvas_index = 128 + pic_config->index * 2 + 1;
 		}
 
-		canvas_config_ex(pic_config->y_canvas_index,
+		config_cav_lut_ex(pic_config->y_canvas_index,
 			pic_config->dw_y_adr, canvas_w, canvas_h,
 			CANVAS_ADDR_NOWRAP, blkmode, hw->is_used_v4l ? 0 : 7);
-		canvas_config_ex(pic_config->uv_canvas_index,
+		config_cav_lut_ex(pic_config->uv_canvas_index,
 			pic_config->dw_u_v_adr,	canvas_w, canvas_h,
 			CANVAS_ADDR_NOWRAP, blkmode, hw->is_used_v4l ? 0 : 7);
 
@@ -9353,6 +9359,12 @@ static int amvdec_av1_probe(struct platform_device *pdev)
 	cma_dev = pdata->cma_dev;
 #endif
 
+	hw->endian = HEVC_CONFIG_LITTLE_ENDIAN;
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+		hw->endian = HEVC_CONFIG_BIG_ENDIAN;
+	if (endian)
+		hw->endian = endian;
+
 #ifdef MULTI_INSTANCE_SUPPORT
 	pdata->private = hw;
 	pdata->dec_status = vav1_dec_status;
@@ -10522,9 +10534,14 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		hw->double_write_mode = double_write_mode;
 	}
 
+	hw->endian = HEVC_CONFIG_LITTLE_ENDIAN;
 	if (!hw->is_used_v4l) {
 		hw->mem_map_mode = mem_map_mode;
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+			hw->endian = HEVC_CONFIG_BIG_ENDIAN;
 	}
+	if (endian)
+		hw->endian = endian;
 
 	if (is_oversize(hw->max_pic_w, hw->max_pic_h)) {
 		pr_err("over size: %dx%d, probe failed\n",

@@ -1388,7 +1388,6 @@ static void set_userdata_poc(struct userdata_poc_info_t poc)
 	if (userdata_poc_wi == USERDATA_FIFO_NUM)
 		userdata_poc_wi = 0;
 }
-EXPORT_SYMBOL(set_userdata_poc);
 
 void init_userdata_fifo(void)
 {

@@ -117,6 +117,9 @@ to enable DV of frame mode
 #define DUR2PTS_REM(x) (x*90 - DUR2PTS(x)*96)
 #define FIX_FRAME_RATE_CHECK_IDRFRAME_NUM 2
 
+#define ALIGN_WIDTH(x) (ALIGN((x), 64))
+#define ALIGN_HEIGHT(x) (ALIGN((x), 32))
+
 #define H264_DEV_NUM        9
 
 #define CONSTRAIN_MAX_BUF_NUM
@@ -1769,137 +1772,137 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i)
 			buf_size += (hw->mb_total << 7) + (hw->mb_total << 6);
 		else if (IS_VDEC_DW(hw) == 2)
 			buf_size += (hw->mb_total << 6) + (hw->mb_total << 5);
+		else if (IS_VDEC_DW(hw) == 4)
+			buf_size += (hw->mb_total << 4) + (hw->mb_total << 3);
+		else if (IS_VDEC_DW(hw) == 8)
+			buf_size += (hw->mb_total << 2) + (hw->mb_total << 1);
+		if (IS_VDEC_DW(hw)) {
+			u32 align_size;
+			/* add align padding size for blk64x32: (mb_w<<4)*32, (mb_h<<4)*64 */
+			align_size = ((hw->mb_width << 9) + (hw->mb_height << 10)) / IS_VDEC_DW(hw);
+			/* double align padding size for uv*/
+			align_size <<= 1;
+			buf_size += align_size + PAGE_SIZE;
+		}
 #endif
 		if (hw->buffer_spec[i].cma_alloc_addr)
 			return 0;
 
-	if (decoder_bmmu_box_alloc_buf_phy(hw->bmmu_box, i,
-		PAGE_ALIGN(buf_size), DRIVER_NAME,
-		&hw->buffer_spec[i].cma_alloc_addr) < 0) {
-		hw->buffer_spec[i].cma_alloc_addr = 0;
-		if (hw->no_mem_count++ > 3) {
-			hw->stat |= DECODER_FATAL_ERROR_NO_MEM;
-			hw->reset_bufmgr_flag = 1;
-		}
-		dpb_print(DECODE_ID(hw), 0,
-		"%s, fail to alloc buf for bufspec%d, try later\n",
-				__func__, i
-		);
-		return -1;
-	} else {
-		hw->no_mem_count = 0;
-		hw->stat &= ~DECODER_FATAL_ERROR_NO_MEM;
-	}
-	if (!vdec_secure(vdec)) {
-		/*init internal buf*/
-		char *tmpbuf = (char *)codec_mm_phys_to_virt(hw->buffer_spec[i].cma_alloc_addr);
-		if (tmpbuf) {
-			memset(tmpbuf, 0, PAGE_ALIGN(buf_size));
-			codec_mm_dma_flush(tmpbuf,
-				   PAGE_ALIGN(buf_size),
-				   DMA_TO_DEVICE);
+		if (decoder_bmmu_box_alloc_buf_phy(hw->bmmu_box, i,
+			PAGE_ALIGN(buf_size), DRIVER_NAME,
+			&hw->buffer_spec[i].cma_alloc_addr) < 0) {
+			hw->buffer_spec[i].cma_alloc_addr = 0;
+			if (hw->no_mem_count++ > 3) {
+				hw->stat |= DECODER_FATAL_ERROR_NO_MEM;
+				hw->reset_bufmgr_flag = 1;
+			}
+			dpb_print(DECODE_ID(hw), 0,
+			"%s, fail to alloc buf for bufspec%d, try later\n",
+					__func__, i
+			);
+			return -1;
 		} else {
-			tmpbuf = codec_mm_vmap(hw->buffer_spec[i].cma_alloc_addr, PAGE_ALIGN(buf_size));
+			hw->no_mem_count = 0;
+			hw->stat &= ~DECODER_FATAL_ERROR_NO_MEM;
+		}
+		if (!vdec_secure(vdec)) {
+			/*init internal buf*/
+			char *tmpbuf = (char *)codec_mm_phys_to_virt(hw->buffer_spec[i].cma_alloc_addr);
 			if (tmpbuf) {
 				memset(tmpbuf, 0, PAGE_ALIGN(buf_size));
 				codec_mm_dma_flush(tmpbuf,
 					   PAGE_ALIGN(buf_size),
 					   DMA_TO_DEVICE);
-				codec_mm_unmap_phyaddr(tmpbuf);
+			} else {
+				tmpbuf = codec_mm_vmap(hw->buffer_spec[i].cma_alloc_addr, PAGE_ALIGN(buf_size));
+				if (tmpbuf) {
+					memset(tmpbuf, 0, PAGE_ALIGN(buf_size));
+					codec_mm_dma_flush(tmpbuf,
+						   PAGE_ALIGN(buf_size),
+						   DMA_TO_DEVICE);
+					codec_mm_unmap_phyaddr(tmpbuf);
+				}
 			}
 		}
-	}
-	hw->buffer_spec[i].buf_adr =
-	hw->buffer_spec[i].cma_alloc_addr;
-	addr = hw->buffer_spec[i].buf_adr;
+		hw->buffer_spec[i].buf_adr =
+		hw->buffer_spec[i].cma_alloc_addr;
+		addr = hw->buffer_spec[i].buf_adr;
 
 
-	hw->buffer_spec[i].y_addr = addr;
-	addr += hw->mb_total << 8;
-	hw->buffer_spec[i].u_addr = addr;
-	hw->buffer_spec[i].v_addr = addr;
-	addr += hw->mb_total << 7;
-
-	hw->buffer_spec[i].canvas_config[0].phy_addr =
-		hw->buffer_spec[i].y_addr;
-	hw->buffer_spec[i].canvas_config[0].width =
-		hw->mb_width << 4;
-	hw->buffer_spec[i].canvas_config[0].height =
-		hw->mb_height << 4;
-	hw->buffer_spec[i].canvas_config[0].block_mode =
-		hw->canvas_mode;
-
-	hw->buffer_spec[i].canvas_config[1].phy_addr =
-			hw->buffer_spec[i].u_addr;
-	hw->buffer_spec[i].canvas_config[1].width =
-			hw->mb_width << 4;
-	hw->buffer_spec[i].canvas_config[1].height =
-			hw->mb_height << 3;
-	hw->buffer_spec[i].canvas_config[1].block_mode =
-			hw->canvas_mode;
-	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-	"%s, alloc buf for bufspec%d\n",
-			__func__, i
-	);
-#ifdef  VDEC_DW
-
-	if (!IS_VDEC_DW(hw))
-		return 0;
-	else if (IS_VDEC_DW(hw) == 1) {
-		addr = hw->buffer_spec[i].cma_alloc_addr + orig_buf_size;
-		hw->buffer_spec[i].vdec_dw_y_addr = addr;
+		hw->buffer_spec[i].y_addr = addr;
+		addr += hw->mb_total << 8;
+		hw->buffer_spec[i].u_addr = addr;
+		hw->buffer_spec[i].v_addr = addr;
 		addr += hw->mb_total << 7;
-		hw->buffer_spec[i].vdec_dw_u_addr = addr;
-		hw->buffer_spec[i].vdec_dw_v_addr = addr;
-		addr += hw->mb_total << 6;
 
-		hw->buffer_spec[i].vdec_dw_canvas_config[0].phy_addr =
-			hw->buffer_spec[i].vdec_dw_y_addr;
-		hw->buffer_spec[i].vdec_dw_canvas_config[0].width =
-			hw->mb_width << 3;
-		hw->buffer_spec[i].vdec_dw_canvas_config[0].height =
+		hw->buffer_spec[i].canvas_config[0].phy_addr =
+			hw->buffer_spec[i].y_addr;
+		hw->buffer_spec[i].canvas_config[0].width =
+			hw->mb_width << 4;
+		hw->buffer_spec[i].canvas_config[0].height =
 			hw->mb_height << 4;
-		hw->buffer_spec[i].vdec_dw_canvas_config[0].block_mode =
-			CANVAS_BLKMODE_32X32;
+		hw->buffer_spec[i].canvas_config[0].block_mode =
+			hw->canvas_mode;
 
-		hw->buffer_spec[i].vdec_dw_canvas_config[1].phy_addr =
-				hw->buffer_spec[i].vdec_dw_u_addr;
-		hw->buffer_spec[i].vdec_dw_canvas_config[1].width =
-				hw->mb_width << 3;
-		hw->buffer_spec[i].vdec_dw_canvas_config[1].height =
+		hw->buffer_spec[i].canvas_config[1].phy_addr =
+				hw->buffer_spec[i].u_addr;
+		hw->buffer_spec[i].canvas_config[1].width =
+				hw->mb_width << 4;
+		hw->buffer_spec[i].canvas_config[1].height =
 				hw->mb_height << 3;
-		hw->buffer_spec[i].vdec_dw_canvas_config[1].block_mode =
-				CANVAS_BLKMODE_32X32;
-	}else {
-		addr = hw->buffer_spec[i].cma_alloc_addr + orig_buf_size;
-		hw->buffer_spec[i].vdec_dw_y_addr = addr;
-		addr += hw->mb_total << 6;
-		hw->buffer_spec[i].vdec_dw_u_addr = addr;
-		hw->buffer_spec[i].vdec_dw_v_addr = addr;
-		addr += hw->mb_total << 5;
+		hw->buffer_spec[i].canvas_config[1].block_mode =
+				hw->canvas_mode;
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+		"%s, alloc buf for bufspec%d\n",
+				__func__, i);
+#ifdef  VDEC_DW
+		if (!IS_VDEC_DW(hw))
+			return 0;
+		else {
+			int w_shift = 3, h_shift = 3;
 
-		hw->buffer_spec[i].vdec_dw_canvas_config[0].phy_addr =
-			hw->buffer_spec[i].vdec_dw_y_addr;
-		hw->buffer_spec[i].vdec_dw_canvas_config[0].width =
-			hw->mb_width << 3;
-		hw->buffer_spec[i].vdec_dw_canvas_config[0].height =
-			hw->mb_height << 3;
-		hw->buffer_spec[i].vdec_dw_canvas_config[0].block_mode =
-			CANVAS_BLKMODE_32X32;
+			if (IS_VDEC_DW(hw) == 1) {
+				w_shift = 3;
+				h_shift = 4;
+			} else if (IS_VDEC_DW(hw) == 2) {
+				w_shift = 3;
+				h_shift = 3;
+			} else if (IS_VDEC_DW(hw) == 4) {
+				w_shift = 2;
+				h_shift = 2;
+			} else if (IS_VDEC_DW(hw) == 8) {
+				w_shift = 1;
+				h_shift = 1;
+			}
 
-		hw->buffer_spec[i].vdec_dw_canvas_config[1].phy_addr =
+			addr = hw->buffer_spec[i].cma_alloc_addr + PAGE_ALIGN(orig_buf_size);
+			hw->buffer_spec[i].vdec_dw_y_addr = addr;
+			addr += ALIGN_WIDTH(hw->mb_width << w_shift) * ALIGN_HEIGHT(hw->mb_height << h_shift);
+			hw->buffer_spec[i].vdec_dw_u_addr = addr;
+			hw->buffer_spec[i].vdec_dw_v_addr = addr;
+			addr += hw->mb_total << (w_shift + h_shift - 1);
+
+			hw->buffer_spec[i].vdec_dw_canvas_config[0].phy_addr =
+				hw->buffer_spec[i].vdec_dw_y_addr;
+			hw->buffer_spec[i].vdec_dw_canvas_config[0].width =
+				ALIGN_WIDTH(hw->mb_width << w_shift);
+			hw->buffer_spec[i].vdec_dw_canvas_config[0].height =
+				ALIGN_HEIGHT(hw->mb_height << h_shift);
+			hw->buffer_spec[i].vdec_dw_canvas_config[0].block_mode =
+				hw->canvas_mode;
+
+			hw->buffer_spec[i].vdec_dw_canvas_config[1].phy_addr =
 				hw->buffer_spec[i].vdec_dw_u_addr;
-		hw->buffer_spec[i].vdec_dw_canvas_config[1].width =
-				hw->mb_width << 3;
-		hw->buffer_spec[i].vdec_dw_canvas_config[1].height =
-				hw->mb_height << 2;
-		hw->buffer_spec[i].vdec_dw_canvas_config[1].block_mode =
-				CANVAS_BLKMODE_32X32;
-	}
-	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-	"%s, vdec_dw: alloc buf for bufspec%d\n",
-			__func__, i
-	);
+			hw->buffer_spec[i].vdec_dw_canvas_config[1].width =
+				ALIGN_WIDTH(hw->mb_width << w_shift);
+			hw->buffer_spec[i].vdec_dw_canvas_config[1].height =
+				ALIGN_HEIGHT(hw->mb_height << (h_shift - 1));
+			hw->buffer_spec[i].vdec_dw_canvas_config[1].block_mode =
+				hw->canvas_mode;
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"%s, vdec_dw: alloc buf for bufspec%d blkmod %d\n",
+					__func__, i, hw->canvas_mode);
+		}
 #endif
 	}
 	return 0;
@@ -2006,7 +2009,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 	if (hw->is_used_v4l)
 		endian = 7;
 
-	canvas_config_ex(hw->buffer_spec[i].
+	config_cav_lut_ex(hw->buffer_spec[i].
 		y_canvas_index,
 		hw->buffer_spec[i].y_addr,
 		hw->mb_width << 4,
@@ -2024,7 +2027,7 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 				);
 	}
 
-	canvas_config_ex(hw->buffer_spec[i].
+	config_cav_lut_ex(hw->buffer_spec[i].
 		u_canvas_index,
 		hw->buffer_spec[i].u_addr,
 		hw->mb_width << 4,
@@ -2048,43 +2051,12 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 #ifdef  VDEC_DW
 	if (!IS_VDEC_DW(hw))
 		return;
-	else if (IS_VDEC_DW(hw) == 1) {
-		canvas_config_ex(hw->buffer_spec[i].
+	else {
+		config_cav_lut_ex(hw->buffer_spec[i].
 			vdec_dw_y_canvas_index,
-			hw->buffer_spec[i].vdec_dw_y_addr,
-			hw->mb_width << 3,
-			hw->mb_height << 4,
-			CANVAS_ADDR_NOWRAP,
-			blkmode,
-			endian);
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
-			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
-				(1 << 11) |
-				(blkmode << 10) |
-				(1 << 8) |
-				(hw->buffer_spec[i].vdec_dw_y_canvas_index << 0));
-		}
-		canvas_config_ex(hw->buffer_spec[i].
-			vdec_dw_u_canvas_index,
-			hw->buffer_spec[i].vdec_dw_u_addr,
-			hw->mb_width << 3,
-			hw->mb_height << 3,
-			CANVAS_ADDR_NOWRAP,
-			blkmode,
-			endian);
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
-			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
-				(1 << 11) |
-				(blkmode << 10) |
-				(1 << 8) |
-				(hw->buffer_spec[i].vdec_dw_u_canvas_index << 0));
-		}
-	} else {
-		canvas_config_ex(hw->buffer_spec[i].
-			vdec_dw_y_canvas_index,
-			hw->buffer_spec[i].vdec_dw_y_addr,
-			hw->mb_width << 3,
-			hw->mb_height << 3,
+			hw->buffer_spec[i].vdec_dw_canvas_config[0].phy_addr,
+			hw->buffer_spec[i].vdec_dw_canvas_config[0].width,
+			hw->buffer_spec[i].vdec_dw_canvas_config[0].height,
 			CANVAS_ADDR_NOWRAP,
 			blkmode,
 			endian);
@@ -2096,11 +2068,11 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 				(hw->buffer_spec[i].vdec_dw_y_canvas_index << 0));
 		}
 
-		canvas_config_ex(hw->buffer_spec[i].
+		config_cav_lut_ex(hw->buffer_spec[i].
 			vdec_dw_u_canvas_index,
-			hw->buffer_spec[i].vdec_dw_u_addr,
-			hw->mb_width << 3,
-			hw->mb_height << 2,
+			hw->buffer_spec[i].vdec_dw_canvas_config[1].phy_addr,
+			hw->buffer_spec[i].vdec_dw_canvas_config[1].width,
+			hw->buffer_spec[i].vdec_dw_canvas_config[1].height,
 			CANVAS_ADDR_NOWRAP,
 			blkmode,
 			endian);
@@ -2132,7 +2104,7 @@ static void config_decode_canvas_ex(struct vdec_h264_hw_s *hw, int i)
 		canvas_w = ALIGN(canvas_w, 64);
 	canvas_h = ALIGN(canvas_h, 32);
 
-	canvas_config_ex(hw->buffer_spec[i].
+	config_cav_lut_ex(hw->buffer_spec[i].
 		y_canvas_index,
 		hw->buffer_spec[i].dw_y_adr,
 		canvas_w,
@@ -2141,7 +2113,7 @@ static void config_decode_canvas_ex(struct vdec_h264_hw_s *hw, int i)
 		blkmode,
 		7);
 
-	canvas_config_ex(hw->buffer_spec[i].
+	config_cav_lut_ex(hw->buffer_spec[i].
 		u_canvas_index,
 		hw->buffer_spec[i].dw_u_v_adr,
 		canvas_w,
@@ -2183,7 +2155,7 @@ static int v4l_get_free_buf_idx(struct vdec_s *vdec)
 	struct buffer_spec_s *pic = NULL;
 	int i, rt, idx = INVALID_IDX;
 	ulong flags;
-	u32 state, index;
+	u32 state = 0, index;
 
 	spin_lock_irqsave(&hw->bufspec_lock, flags);
 	for (i = 0; i < pool->in; ++i) {
@@ -2991,9 +2963,14 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->canvas0Addr = vf->canvas1Addr =
 			spec2canvas(&hw->buffer_spec[buffer_index]);
 #ifdef VDEC_DW
-			if (IS_VDEC_DW(hw))
-				vf->canvas0Addr = vf->canvas1Addr =
-					vdec_dw_spec2canvas(&hw->buffer_spec[buffer_index]);
+			if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) {
+				if (IS_VDEC_DW(hw))
+					vf->canvas0Addr = vf->canvas1Addr =
+						vdec_dw_spec2canvas(&hw->buffer_spec[buffer_index]);
+			} else {
+				if (IS_VDEC_DW(hw))
+					vf->canvas0Addr = vf->canvas1Addr = -1;
+			}
 #endif
 
 		}
@@ -3522,6 +3499,98 @@ static void dump_aux_buf(struct vdec_h264_hw_s *hw)
 	}
 }
 
+#ifdef VDEC_DW
+
+struct vdec_dw_param_set{
+	char dw_x_shrink_1st;
+	char dw_x_shrink_2nd;
+	char dw_x_shrink_3rd;
+	char dw_y_shrink_1st;
+	char dw_y_shrink_2nd;
+	char dw_y_shrink_3rd;
+	char dw_merge_8to16;
+	char dw_merge_16to32;
+	char dw_dma_blk_mode;
+	char dw_bwsave_mode;
+};
+//#define FOR_LPDDR4_EFFICIENCY
+
+static void h264_vdec_dw_cfg(struct vdec_h264_hw_s *hw, int canvas_pos)
+{
+	u32 data32 = 0, stride = 0;
+	struct vdec_dw_param_set *p = NULL;
+	struct vdec_dw_param_set dw_param_set_pool[] = {
+		/*x1, x2, x3, y1, y2, y3, m8t6, m16to32 */
+		//{0, 0, 0, 0, 0, 0, 0, 0, 0, 1},	/* 1/1, 1/1 */
+		{1, 0, 0, 0, 0, 0, 0, 0, 0, 1},		/* 1/2, 1/1 */
+		{1, 0, 0, 1, 0, 0, 0, 0, 0, 1},		/* 1/2, 1/2 */
+		//{1, 0, 0, 1, 1, 0, 0, 0, 0, 1},	/* 1/4, 1/2 */
+		{2, 0, 1, 1, 3, 0, 0, 1, 0, 1},		/* 1/4, 1/4 */
+		//{1, 1, 1, 0, 1, 1, 1, 1, 0, 1},	/*> 1080p 1/8, 1/4 */
+		{1, 1, 1, 1, 1, 1, 1, 1, 0, 1},		/*> 1080p 1/8, 1/8 */
+	};
+
+	if (IS_VDEC_DW(hw))
+		p = &dw_param_set_pool[__ffs(IS_VDEC_DW(hw))];
+	else
+		return;
+
+	WRITE_VREG(MDEC_DOUBLEW_CFG3,
+		hw->buffer_spec[canvas_pos].vdec_dw_y_addr); // luma start address
+	WRITE_VREG(MDEC_DOUBLEW_CFG4,
+		hw->buffer_spec[canvas_pos].vdec_dw_u_addr); // chroma start address
+
+	stride = ALIGN_WIDTH((hw->mb_width << 4) / (IS_VDEC_DW(hw)));
+	if ((IS_VDEC_DW(hw)) == 1)	//width 1/2
+		stride >>= 1;
+	data32 = (stride << 16) | stride;
+	WRITE_VREG(MDEC_DOUBLEW_CFG5, data32); // chroma stride | luma stride
+
+	data32 = 0;
+	p->dw_dma_blk_mode = hw->canvas_mode;
+	data32 |= ((p->dw_x_shrink_1st << 0 ) |     // 1st down-scale horizontal, 00:no-scale 01:1/2avg 10:left 11:right
+		(p->dw_y_shrink_1st << 2 ) |     // 1st down-scale vertical,   00:no-scale 01:1/2avg 10:up   11:down
+		(p->dw_x_shrink_2nd << 4 ) |     // 2nd down-scale horizontal, 00:no-scale 01:1/2avg 10:left 11:right
+		(p->dw_y_shrink_2nd << 6 ) |     // 2nd down-scale vertical,   00:no-scale 01:1/2avg 10:up   11:down
+		(p->dw_x_shrink_3rd << 8 ) |     // 3rd down-scale horizontal, 00:no-scale 01:1/2avg 10:left 11:right
+		(p->dw_y_shrink_3rd << 10) |     // 3rd down-scale vertical,   00:no-scale 01:1/2avg 10:up   11:down
+		(p->dw_merge_8to16 << 12 ) |     //  8->16 horizontal block merge for better ddr efficiency
+		(p->dw_merge_16to32 << 13) |     // 16->32 horizontal block merge for better ddr efficiency
+		(p->dw_dma_blk_mode << 14) |     // DMA block mode, 0:linear 1:32x32 2:64x32
+#ifdef FOR_LPDDR4_EFFICIENCY
+		(1 << 19) |
+#endif
+		(p->dw_bwsave_mode << 22));      // Save line buffers to save band width
+	WRITE_VREG(MDEC_DOUBLEW_CFG1, data32); // add some special tests here
+
+	data32 = 0;
+	data32 |= (1 << 0) | (0 << 27);
+	WRITE_VREG(MDEC_DOUBLEW_CFG0, data32); // Double Write Enable | source from dblk
+
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+		"vdec_double_write mode %d\n",
+		IS_VDEC_DW(hw));
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+		"param {%d, %d, %d, %d, %d, %d, %d, %d, %d}\n",
+		p->dw_x_shrink_1st,
+		p->dw_y_shrink_1st,
+		p->dw_x_shrink_2nd,
+		p->dw_y_shrink_2nd,
+		p->dw_x_shrink_3rd,
+		p->dw_y_shrink_3rd,
+		p->dw_merge_8to16,
+		p->dw_merge_16to32,
+		p->dw_dma_blk_mode);
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+		"cfg0,1,3,4,5 = {%x, %x, %x, %x, %x}\n",
+		READ_VREG(MDEC_DOUBLEW_CFG0),
+		READ_VREG(MDEC_DOUBLEW_CFG1),
+		READ_VREG(MDEC_DOUBLEW_CFG3),
+		READ_VREG(MDEC_DOUBLEW_CFG4),
+		READ_VREG(MDEC_DOUBLEW_CFG5));
+}
+#endif
+
 static void config_decode_mode(struct vdec_h264_hw_s *hw)
 {
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
@@ -3552,6 +3621,7 @@ static void config_decode_mode(struct vdec_h264_hw_s *hw)
 	else
 		WRITE_VREG(INIT_FLAG_REG, 1);
 }
+
 int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 {
 	/* static int count = 0; */
@@ -3613,9 +3683,11 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 	print_pic_info(DECODE_ID(hw), "cur", pic, pSlice->slice_type);
 
 #ifdef VDEC_DW
-	if (IS_VDEC_DW(hw) && pic->mb_aff_frame_flag)
-		WRITE_VREG(MDEC_DOUBLEW_CFG0,
-			( READ_VREG(MDEC_DOUBLEW_CFG0) & (~(1 << 30))));
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) {
+		if (IS_VDEC_DW(hw) && pic->mb_aff_frame_flag)
+			WRITE_VREG(MDEC_DOUBLEW_CFG0,
+				(READ_VREG(MDEC_DOUBLEW_CFG0) & (~(1 << 30))));
+	}
 #endif
 	WRITE_VREG(CURR_CANVAS_CTRL, canvas_pos << 24);
 	canvas_adr = READ_VREG(CURR_CANVAS_CTRL) & 0xffffff;
@@ -3625,9 +3697,13 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 		WRITE_VREG(DBKR_CANVAS_ADDR, canvas_adr);
 		WRITE_VREG(DBKW_CANVAS_ADDR, canvas_adr);
 #ifdef VDEC_DW
-		WRITE_VREG(MDEC_DOUBLEW_CFG1,
-			(hw->buffer_spec[canvas_pos].vdec_dw_y_canvas_index
-			| (hw->buffer_spec[canvas_pos].vdec_dw_u_canvas_index << 8)));
+		if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) {
+			WRITE_VREG(MDEC_DOUBLEW_CFG1,
+				(hw->buffer_spec[canvas_pos].vdec_dw_y_canvas_index |
+				(hw->buffer_spec[canvas_pos].vdec_dw_u_canvas_index << 8)));
+		} else {
+				h264_vdec_dw_cfg(hw, canvas_pos);
+		}
 #endif
 	} else
 		hevc_sao_set_pic_buffer(hw, pic);
@@ -7520,12 +7596,14 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 #endif
 
 #ifdef VDEC_DW
-	if (IS_VDEC_DW(hw)) {
-		u32 data = ((1   << 30) |(1   <<  0) |(1   <<  8));
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) {
+		if (IS_VDEC_DW(hw)) {
+			u32 data = ((1   << 30) |(1   <<  0) |(1   <<  8));
 
-		if (IS_VDEC_DW(hw) == 2)
-			data |= (1   <<  9);
-		WRITE_VREG(MDEC_DOUBLEW_CFG0, data); /* Double Write Enable*/
+			if (IS_VDEC_DW(hw) == 2)
+				data |= (1   <<  9);
+			WRITE_VREG(MDEC_DOUBLEW_CFG0, data); /* Double Write Enable*/
+		}
 	}
 #endif
 	if (hw->dpb.mDPB.size > 0) {
@@ -7914,6 +7992,7 @@ static int vh264_stop(struct vdec_h264_hw_s *hw)
 	}
 #ifdef VDEC_DW
 	WRITE_VREG(MDEC_DOUBLEW_CFG0, 0);
+	WRITE_VREG(MDEC_DOUBLEW_CFG1, 0);
 #endif
 #ifdef MH264_USERDATA_ENABLE
 	cancel_work_sync(&hw->user_data_ready_work);

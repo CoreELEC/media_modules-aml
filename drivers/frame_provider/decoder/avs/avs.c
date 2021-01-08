@@ -945,30 +945,30 @@ static int vavs_canvas_init(void)
 		else
 			endian = 0;
 #ifdef NV21
-			canvas_config_ex(canvas_base + canvas_num * i + 0,
+			config_cav_lut_ex(canvas_base + canvas_num * i + 0,
 					buf_start,
 					canvas_width, canvas_height,
 					CANVAS_ADDR_NOWRAP,
 					vdec->canvas_mode, endian);
-			canvas_config_ex(canvas_base + canvas_num * i + 1,
+			config_cav_lut_ex(canvas_base + canvas_num * i + 1,
 					buf_start +
 					decbuf_y_size, canvas_width,
 					canvas_height / 2,
 					CANVAS_ADDR_NOWRAP,
 					vdec->canvas_mode, endian);
 #else
-			canvas_config_ex(canvas_num * i + 0,
+			config_cav_lut_ex(canvas_num * i + 0,
 					buf_start,
 					canvas_width, canvas_height,
 					CANVAS_ADDR_NOWRAP,
 					vdec->canvas_mode, endian);
-			canvas_config_ex(canvas_num * i + 1,
+			config_cav_lut_ex(canvas_num * i + 1,
 					buf_start +
 					decbuf_y_size, canvas_width / 2,
 					canvas_height / 2,
 					CANVAS_ADDR_NOWRAP,
 					vdec->canvas_mode, endian);
-			canvas_config_ex(canvas_num * i + 2,
+			config_cav_lut_ex(canvas_num * i + 2,
 					buf_start +
 					decbuf_y_size + decbuf_uv_size,
 					canvas_width / 2, canvas_height / 2,

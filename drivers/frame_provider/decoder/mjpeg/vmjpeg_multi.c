@@ -623,7 +623,7 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 			hw->buffer_spec[i].v_canvas_index = canvas_v(canvas);
 		}
 
-		canvas_config_ex(hw->buffer_spec[i].y_canvas_index,
+		config_cav_lut_ex(hw->buffer_spec[i].y_canvas_index,
 			hw->buffer_spec[i].y_addr,
 			canvas_width,
 			canvas_height,
@@ -640,7 +640,7 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 		hw->buffer_spec[i].canvas_config[0].endian =
 			endian;
 
-		canvas_config_ex(hw->buffer_spec[i].u_canvas_index,
+		config_cav_lut_ex(hw->buffer_spec[i].u_canvas_index,
 			hw->buffer_spec[i].u_addr,
 			canvas_width / 2,
 			canvas_height / 2,
@@ -657,7 +657,7 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 		hw->buffer_spec[i].canvas_config[1].endian =
 			endian;
 
-		canvas_config_ex(hw->buffer_spec[i].v_canvas_index,
+		config_cav_lut_ex(hw->buffer_spec[i].v_canvas_index,
 			hw->buffer_spec[i].v_addr,
 			canvas_width / 2,
 			canvas_height / 2,
@@ -1049,7 +1049,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	hw->buffer_spec[i].canvas_config[0].endian =
 		hw->canvas_endian;
 
-	canvas_config_config(hw->buffer_spec[i].y_canvas_index,
+	config_cav_lut(hw->buffer_spec[i].y_canvas_index,
 			&hw->buffer_spec[i].canvas_config[0]);
 
 	hw->buffer_spec[i].canvas_config[1].phy_addr =
@@ -1063,7 +1063,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	hw->buffer_spec[i].canvas_config[1].endian =
 		hw->canvas_endian;
 
-	canvas_config_config(hw->buffer_spec[i].u_canvas_index,
+	config_cav_lut(hw->buffer_spec[i].u_canvas_index,
 			&hw->buffer_spec[i].canvas_config[1]);
 
 	hw->buffer_spec[i].canvas_config[2].phy_addr =
@@ -1077,7 +1077,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	hw->buffer_spec[i].canvas_config[2].endian =
 		hw->canvas_endian;
 
-	canvas_config_config(hw->buffer_spec[i].v_canvas_index,
+	config_cav_lut(hw->buffer_spec[i].v_canvas_index,
 			&hw->buffer_spec[i].canvas_config[2]);
 
 	/* mjpeg decoder canvas need to be revert to match display. */
@@ -1157,11 +1157,11 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 		if (!hw->is_used_v4l) {
 			for (i = 0; i < hw->buf_num; i++) {
 				buff_spec = &hw->buffer_spec[i];
-				canvas_config_config(buff_spec->y_canvas_index,
+				config_cav_lut(buff_spec->y_canvas_index,
 							&buff_spec->canvas_config[0]);
-				canvas_config_config(buff_spec->u_canvas_index,
+				config_cav_lut(buff_spec->u_canvas_index,
 							&buff_spec->canvas_config[1]);
-				canvas_config_config(buff_spec->v_canvas_index,
+				config_cav_lut(buff_spec->v_canvas_index,
 							&buff_spec->canvas_config[2]);
 			}
 		}

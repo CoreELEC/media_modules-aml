@@ -416,8 +416,9 @@ void set_clock_gate(struct gate_switch_node *nodes, int num)
 	struct gate_switch_node *node = NULL;
 	char *hevc_mux_str = NULL;
 
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2 ||
-	    get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
+	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D))
 		hevc_mux_str = "clk_hevc_mux";
 	else
 		hevc_mux_str = "clk_hevcf_mux";
@@ -1037,6 +1038,7 @@ static int vdec_clock_get(enum vdec_type_e core)
 	AM_MESON_CPU_MAJOR_ID_SC2,\
 	AM_MESON_CPU_MAJOR_ID_T5,\
 	AM_MESON_CPU_MAJOR_ID_T5D,\
+	AM_MESON_CPU_MAJOR_ID_T7,\
 	0}
 #include "clk.h"
 

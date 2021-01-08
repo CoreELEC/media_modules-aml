@@ -338,7 +338,7 @@ static ssize_t store_data(struct class *class, struct class_attribute *attr,
 	ssize_t r;
 
 	r = kstrtoint(buf, 0, &address);
-	if ((r == 0))
+	if (r == (ssize_t)0)
 		return -EINVAL;
 #if 0
 	if (subtitle_data[subtitle_write_pos].subtitle_size > 0) {

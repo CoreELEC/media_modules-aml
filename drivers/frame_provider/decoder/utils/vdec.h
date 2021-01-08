@@ -62,6 +62,7 @@ enum vdec_type_e {
 	VDEC_2,
 	VDEC_HEVC,
 	VDEC_HEVCB,
+	VDEC_WAVE,
 	VDEC_MAX
 };
 
@@ -201,7 +202,7 @@ struct vdec_s {
 	int flag;
 	int sched;
 	int need_more_data;
-	u32 canvas_mode;
+	u32 canvas_mode;	//canvas block mode
 
 	struct completion inactive_done;
 
@@ -498,4 +499,9 @@ void vdec_set_vld_wp(struct vdec_s *vdec, u32 wp);
 void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size);
 
 extern u32 timestamp_avsync_counter_get(void);
+
+void config_cav_lut(int index, struct canvas_config_s *cfg);
+
+void config_cav_lut_ex(u32 index, ulong addr, u32 width,
+	u32 height, u32 wrap, u32 blkmode, u32 endian);
 #endif				/* VDEC_H */

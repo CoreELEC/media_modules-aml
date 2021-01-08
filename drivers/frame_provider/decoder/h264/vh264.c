@@ -460,12 +460,12 @@ void spec_set_canvas(struct buffer_spec_s *spec,
 	int endian;
 
 	endian = (canvas_mode == CANVAS_BLKMODE_LINEAR)?7:0;
-	canvas_config_ex(spec->y_canvas_index,
+	config_cav_lut_ex(spec->y_canvas_index,
 			spec->y_addr,
 			width, height,
 			CANVAS_ADDR_NOWRAP, canvas_mode, endian);
 
-	canvas_config_ex(spec->u_canvas_index,
+	config_cav_lut_ex(spec->u_canvas_index,
 			spec->u_addr,
 			width, height / 2,
 			CANVAS_ADDR_NOWRAP, canvas_mode, endian);
@@ -2196,12 +2196,12 @@ static void vh264_set_params(struct work_struct *work)
 				buffer_spec[i].v_canvas_height = mb_height << 4;
 
 				endian = (canvas_mode == CANVAS_BLKMODE_LINEAR)?7:0;
-				canvas_config_ex(128 + i * 2,
+				config_cav_lut_ex(128 + i * 2,
 						buffer_spec[i].y_addr,
 						mb_width << 4, mb_height << 4,
 						CANVAS_ADDR_NOWRAP,
 						canvas_mode, endian);
-				canvas_config_ex(128 + i * 2 + 1,
+				config_cav_lut_ex(128 + i * 2 + 1,
 						buffer_spec[i].u_addr,
 						mb_width << 4, mb_height << 3,
 						CANVAS_ADDR_NOWRAP,
@@ -4207,17 +4207,17 @@ static void stream_switching_do(struct work_struct *work)
 			canvas_read(y_index, &csy);
 			canvas_read(u_index, &csu);
 
-			canvas_config(fense_buffer_spec[i].y_canvas_index,
+			config_cav_lut_ex(fense_buffer_spec[i].y_canvas_index,
 				fense_buffer_spec[i].phy_addr,
 				mb_width_num << 4, mb_height_num << 4,
 				CANVAS_ADDR_NOWRAP,
-				CANVAS_BLKMODE_LINEAR);
-			canvas_config(fense_buffer_spec[i].u_canvas_index,
+				CANVAS_BLKMODE_LINEAR, 0);
+			config_cav_lut_ex(fense_buffer_spec[i].u_canvas_index,
 				fense_buffer_spec[i].phy_addr +
 				(mb_total_num << 8),
 				mb_width_num << 4, mb_height_num << 3,
 				CANVAS_ADDR_NOWRAP,
-				CANVAS_BLKMODE_LINEAR);
+				CANVAS_BLKMODE_LINEAR, 0);
 
 			y_desindex = fense_buffer_spec[i].y_canvas_index;
 			u_desindex = fense_buffer_spec[i].u_canvas_index;

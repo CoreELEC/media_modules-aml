@@ -1764,30 +1764,30 @@ static int vmpeg12_canvas_init(void)
 
 		} else {
 #ifdef NV21
-			canvas_config(2 * i + 0,
+			config_cav_lut_ex(2 * i + 0,
 				buf_start,
 				canvas_width, canvas_height,
-				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32);
-			canvas_config(2 * i + 1,
+				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+			config_cav_lut_ex(2 * i + 1,
 				buf_start +
 				decbuf_y_size, canvas_width,
 				canvas_height / 2, CANVAS_ADDR_NOWRAP,
-				CANVAS_BLKMODE_32X32);
+				CANVAS_BLKMODE_32X32, 0);
 #else
-			canvas_config(3 * i + 0,
+			config_cav_lut_ex(3 * i + 0,
 				buf_start,
 				canvas_width, canvas_height,
-				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32);
-			canvas_config(3 * i + 1,
+				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+			config_cav_lut_ex(3 * i + 1,
 				buf_start +
 				decbuf_y_size, canvas_width / 2,
 				canvas_height / 2, CANVAS_ADDR_NOWRAP,
-				CANVAS_BLKMODE_32X32);
-			canvas_config(3 * i + 2,
+				CANVAS_BLKMODE_32X32, 0);
+			config_cav_lut_ex(3 * i + 2,
 				buf_start +
 				decbuf_y_size + decbuf_uv_size,
 				canvas_width / 2, canvas_height / 2,
-				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32);
+				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
 #endif
 		}
 	}
