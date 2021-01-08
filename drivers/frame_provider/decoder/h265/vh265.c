@@ -13583,7 +13583,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hevc->dec_result = DEC_RESULT_NONE;
 	if (vdec_frame_based(vdec) &&
 		((get_dbg_flag(hevc) & PRINT_FLAG_VDEC_STATUS)
-		|| is_log_enable(hevc)))
+		|| is_log_enable(hevc)) &&
+		!vdec_secure(vdec))
 		check_sum = get_data_check_sum(hevc, r);
 
 	if (is_log_enable(hevc))
@@ -13610,7 +13611,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc->start_shift_bytes
 		);
 	if ((get_dbg_flag(hevc) & PRINT_FRAMEBASE_DATA) &&
-		input_frame_based(vdec)) {
+		input_frame_based(vdec) &&
+		!vdec_secure(vdec)) {
 		int jj;
 		u8 *data = NULL;
 
