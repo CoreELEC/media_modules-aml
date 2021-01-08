@@ -2451,7 +2451,8 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	hw->vfbuf_use[vf->index]--;
 	if  (hw->vfbuf_use[vf->index] < 0) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-			"warn: vf %lx, index %d putback repetitive\n", (ulong)vf, vf->index);
+			"warn: vf %lx, index %d putback repetitive, set use to 0\n", (ulong)vf, vf->index);
+		hw->vfbuf_use[vf->index] = 0;
 	}
 	hw->put_num++;
 	debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
