@@ -717,6 +717,7 @@ struct vdec_h264_hw_s {
 	u32 reflist_error_count;
 	int start_search_pos;
 	u32 reg_iqidct_control;
+	bool reg_iqidct_control_init_flag;
 	u32 reg_vcop_ctrl_reg;
 	u32 reg_rv_ai_mb_count;
 	u32 vld_dec_control;
@@ -6307,6 +6308,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		WRITE_VREG(DPB_STATUS_REG, H264_ACTION_CONFIG_DONE);
 		reset_process_time(hw);
 		hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
+		hw->reg_iqidct_control_init_flag = 1;
 		hw->dec_result = DEC_RESULT_CONFIG_PARAM;
 #ifdef DETECT_WRONG_MULTI_SLICE
 		/*restart check count and set 'unknown'*/
@@ -6386,6 +6388,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 #endif
 
 		hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
+		hw->reg_iqidct_control_init_flag = 1;
 		hw->reg_vcop_ctrl_reg = READ_VREG(VCOP_CTRL_REG);
 		hw->reg_rv_ai_mb_count = READ_VREG(RV_AI_MB_COUNT);
 		hw->vld_dec_control = READ_VREG(VLD_DECODE_CONTROL);
@@ -6934,6 +6937,7 @@ send_again:
 			__func__, hw->get_data_count);
 			hw->dec_result = DEC_RESULT_GET_DATA;
 			hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
+			hw->reg_iqidct_control_init_flag = 1;
 			hw->get_data_start_time = jiffies;
 			hw->get_data_count++;
 			if (hw->get_data_count >= frame_max_data_packet)
@@ -7631,8 +7635,17 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 	WRITE_VREG(DEBUG_REG1, 0);
 	WRITE_VREG(DEBUG_REG2, 0);
 
+	/*Because CSD data is not found at playback start,
+	  the IQIDCT_CONTROL register is not saved,
+	  the initialized value 0x200 of IQIDCT_CONTROL is set*/
+	if (hw->init_flag && (hw->reg_iqidct_control_init_flag == 0))
+		WRITE_VREG(IQIDCT_CONTROL, 0x200);
+
 	if (hw->reg_iqidct_control)
 		WRITE_VREG(IQIDCT_CONTROL, hw->reg_iqidct_control);
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+		"IQIDCT_CONTROL = 0x%x\n", READ_VREG(IQIDCT_CONTROL));
+
 	if (hw->reg_vcop_ctrl_reg)
 		WRITE_VREG(VCOP_CTRL_REG, hw->reg_vcop_ctrl_reg);
 	if (hw->vld_dec_control)
@@ -7671,6 +7684,7 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset)
 	hw->data_flag = 0;
 	hw->skip_frame_count = 0;
 	hw->reg_iqidct_control = 0;
+	hw->reg_iqidct_control_init_flag = 0;
 	hw->reg_vcop_ctrl_reg = 0;
 	hw->reg_rv_ai_mb_count = 0;
 	hw->vld_dec_control = 0;
