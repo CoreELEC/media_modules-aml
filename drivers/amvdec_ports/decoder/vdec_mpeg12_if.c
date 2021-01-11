@@ -28,7 +28,6 @@
 #include "../aml_vcodec_dec.h"
 #include "../aml_vcodec_adapt.h"
 #include "../vdec_drv_base.h"
-#include "../aml_vcodec_vfm.h"
 #include "aml_mpeg12_parser.h"
 
 #define NAL_TYPE(value)				((value) & 0x1F)
@@ -111,7 +110,6 @@ struct vdec_mpeg12_inst {
 	struct aml_vcodec_ctx *ctx;
 	struct aml_vdec_adapt vdec;
 	struct vdec_mpeg12_vsi *vsi;
-	struct vcodec_vfm_s vfm;
 	struct aml_dec_params parms;
 	struct completion comp;
 };
@@ -187,12 +185,12 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 {
 	struct vdec_mpeg12_inst *inst = NULL;
 	int ret = -1;
-	bool dec_init = false;
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst)
 		return -ENOMEM;
 
+	inst->vdec.frm_name	= "MPEG2";
 	inst->vdec.video_type	= VFORMAT_MPEG12;
 	inst->vdec.filp		= ctx->dev->filp;
 	inst->vdec.config	= ctx->config;
@@ -208,25 +206,6 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	/* to eable mpeg12 hw.*/
 	inst->vdec.port.type = PORT_TYPE_VIDEO;
 
-	/* init vfm */
-	inst->vfm.ctx		= ctx;
-	inst->vfm.ada_ctx	= &inst->vdec;
-	ret = vcodec_vfm_init(&inst->vfm);
-	if (ret) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"init vfm failed.\n");
-		goto err;
-	}
-
-	ctx->vfm = &inst->vfm;
-	ret = video_decoder_init(&inst->vdec);
-	if (ret) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"vdec_mpeg12 init err=%d\n", ret);
-		goto err;
-	}
-	dec_init = true;
-
 	/* probe info from the stream */
 	inst->vsi = kzalloc(sizeof(struct vdec_mpeg12_vsi), GFP_KERNEL);
 	if (!inst->vsi) {
@@ -241,21 +220,23 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"mpeg12 Instance >> %lx\n", (ulong) inst);
 	init_completion(&inst->comp);
 	ctx->ada_ctx	= &inst->vdec;
 	*h_vdec		= (unsigned long)inst;
 
-	//dump_init();
+	ret = video_decoder_init(&inst->vdec);
+	if (ret) {
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"vdec_mpeg12 init err=%d\n", ret);
+		goto err;
+	}
+
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"mpeg12 Instance >> %lx\n", (ulong) inst);
 
 	return 0;
 
 err:
-	if (dec_init)
-		video_decoder_release(&inst->vdec);
-	if (inst)
-		vcodec_vfm_release(&inst->vfm);
 	if (inst && inst->vsi && inst->vsi->header_buf)
 		kfree(inst->vsi->header_buf);
 	if (inst && inst->vsi)
@@ -418,10 +399,6 @@ static void vdec_mpeg12_deinit(unsigned long h_vdec)
 
 	video_decoder_release(&inst->vdec);
 
-	vcodec_vfm_release(&inst->vfm);
-
-	//dump_deinit();
-
 	if (inst->vsi && inst->vsi->header_buf)
 		kfree(inst->vsi->header_buf);
 
@@ -429,48 +406,6 @@ static void vdec_mpeg12_deinit(unsigned long h_vdec)
 		kfree(inst->vsi);
 
 	kfree(inst);
-}
-
-static int vdec_mpeg12_get_fb(struct vdec_mpeg12_inst *inst, struct vdec_v4l2_buffer **out)
-{
-	return get_fb_from_queue(inst->ctx, out, false);
-}
-
-static void vdec_mpeg12_get_vf(struct vdec_mpeg12_inst *inst, struct vdec_v4l2_buffer **out)
-{
-	struct vframe_s *vf = NULL;
-	struct vdec_v4l2_buffer *fb = NULL;
-
-	vf = peek_video_frame(&inst->vfm);
-	if (!vf) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"there is no vframe.\n");
-		*out = NULL;
-		return;
-	}
-
-	vf = get_video_frame(&inst->vfm);
-	if (!vf) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"the vframe is avalid.\n");
-		*out = NULL;
-		return;
-	}
-
-	atomic_set(&vf->use_cnt, 1);
-
-	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-	fb->vf_handle = (unsigned long)vf;
-	fb->status = FB_ST_DISPLAY;
-
-	*out = fb;
-
-	//pr_info("%s, %d\n", __func__, fb->base_y.bytes_used);
-	//dump_write(fb->base_y.va, fb->base_y.bytes_used);
-	//dump_write(fb->base_c.va, fb->base_c.bytes_used);
-
-	/* convert yuv format. */
-	//swap_uv(fb->base_c.va, fb->base_c.size);
 }
 
 static int vdec_write_nalu(struct vdec_mpeg12_inst *inst,
@@ -536,14 +471,6 @@ static int vdec_mpeg12_get_param(unsigned long h_vdec,
 	}
 
 	switch (type) {
-	case GET_PARAM_DISP_FRAME_BUFFER:
-		vdec_mpeg12_get_vf(inst, out);
-		break;
-
-	case GET_PARAM_FREE_FRAME_BUFFER:
-		ret = vdec_mpeg12_get_fb(inst, out);
-		break;
-
 	case GET_PARAM_PIC_INFO:
 		get_pic_info(inst, out);
 		break;
@@ -562,6 +489,7 @@ static int vdec_mpeg12_get_param(unsigned long h_vdec,
 		*mode = VDEC_DW_NO_AFBC;
 		break;
 	}
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);

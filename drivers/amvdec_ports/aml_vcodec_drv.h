@@ -28,9 +28,11 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
+#include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "aml_vcodec_util.h"
+#include "aml_vcodec_dec.h"
 
 #define AML_VCODEC_DRV_NAME	"aml_vcodec_drv"
 #define AML_VCODEC_DEC_NAME	"aml-vcodec-dec"
@@ -385,8 +387,8 @@ struct aml_vdec_thread {
  * @frame_buffer_size: SG buffer page number from
  * @priv_data use for video composer
  *  struct vdec_comp_buf_info
- * @idx_vb: vb index and uvm buffer pair.
- * @lock: use for lock reuse of compress buffer.
+ * @buf_used: buffer used state.
+ * @vframe: store vframe from dec.
  */
 struct internal_comp_buf {
 	u32		index;
@@ -399,8 +401,23 @@ struct internal_comp_buf {
 	u32		header_size;
 	u32		frame_buffer_size;
 	struct file_private_data priv_data;
-	u32		idx_vb;
+	bool		buf_used;
+	struct vframe_s *vframe;
 };
+
+/*
+ * @token: token is used for the hold allocation right.
+ * @try_lock: try to achieved fb token.
+ * @unlock: used for release fb token.
+ * @alloc: used for allocte fb buffer.
+ */
+struct aml_fb_ops {
+	ulong		token;
+	bool		(*try_lock)(struct aml_fb_ops *, ulong *);
+	void		(*unlock)(struct aml_fb_ops *, ulong);
+	int		(*alloc)(struct aml_fb_ops *, ulong, struct vdec_v4l2_buffer **, bool);
+};
+
 /**
  * struct aml_vcodec_ctx - Context (instance) private data.
  * @id: index of the context that this structure describes.
@@ -410,7 +427,6 @@ struct internal_comp_buf {
  * @m2m_ctx: pointer to the v4l2_m2m_ctx of the context.
  * @ada_ctx: pointer to the aml_vdec_adapt of the context.
  * @vpp: pointer to video post processor
- * @vfm: pointer to video frame manager
  * @dec_if: hooked decoder driver interface.
  * @drv_handle: driver handle for specific decode instance
  * @fh: struct v4l2_fh.
@@ -454,12 +470,14 @@ struct internal_comp_buf {
  * @wq: wait recycle dma buffer finish.
  * @dmabuff_recycle_work: used for recycle dmabuff.
  * @dmabuff_recycle: kfifo used for store vb buff.
+ * @capture_buffer: kfifo used for store capture vb buff.
  * @mmu_box: mmu_box of context.
  * @bmmu_box: bmmu_box of context.
  * @box_ref: box_ref of context.
  * @comp_info: compress buffer information.
  * @comp_bufs: compress buffer describe.
  * @comp_lock: used for lock ibuf free cb.
+ * @fb_ops: frame buffer ops interface.
  */
 struct aml_vcodec_ctx {
 	int				id;
@@ -469,7 +487,6 @@ struct aml_vcodec_ctx {
 	struct v4l2_m2m_ctx		*m2m_ctx;
 	struct aml_vdec_adapt		*ada_ctx;
 	struct aml_v4l2_vpp		*vpp;
-	struct vcodec_vfm_s 		*vfm;
 	const struct vdec_common_if	*dec_if;
 	ulong				drv_handle;
 	struct v4l2_fh			fh;
@@ -515,6 +532,7 @@ struct aml_vcodec_ctx {
 	wait_queue_head_t		wq;
 	struct work_struct		dmabuff_recycle_work;
 	DECLARE_KFIFO(dmabuff_recycle, struct vb2_v4l2_buffer *, 32);
+	DECLARE_KFIFO(capture_buffer, struct vb2_v4l2_buffer *, 32);
 
 	/* compressed buffer support */
 	void				*bmmu_box;
@@ -524,6 +542,8 @@ struct aml_vcodec_ctx {
 	struct internal_comp_buf	*comp_bufs;
 	struct uvm_hook_mod_info	*uvm_proxy;
 	struct mutex			comp_lock;
+
+	struct aml_fb_ops		fb_ops;
 };
 
 /**
@@ -568,5 +588,11 @@ static inline struct aml_vcodec_ctx *ctrl_to_ctx(struct v4l2_ctrl *ctrl)
 {
 	return container_of(ctrl->handler, struct aml_vcodec_ctx, ctrl_hdl);
 }
+
+void aml_thread_capture_worker(struct aml_vcodec_ctx *ctx);
+void aml_thread_post_task(struct aml_vcodec_ctx *ctx, enum aml_thread_type type);
+int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
+	enum aml_thread_type type, const char *thread_name);
+void aml_thread_stop(struct aml_vcodec_ctx *ctx);
 
 #endif /* _AML_VCODEC_DRV_H_ */

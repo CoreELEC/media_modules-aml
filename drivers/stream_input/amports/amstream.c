@@ -635,7 +635,7 @@ static int video_port_init(struct port_priv_s *priv,
 	if (port->type & PORT_TYPE_FRAME) {
 		r = vdec_init(vdec,
 			(priv->vdec->sys_info->height *
-			priv->vdec->sys_info->width) > 1920*1088);
+			priv->vdec->sys_info->width) > 1920*1088, false);
 		if (r < 0) {
 			pr_err("video_port_init %d, vdec_init failed\n",
 				__LINE__);
@@ -673,7 +673,7 @@ static int video_port_init(struct port_priv_s *priv,
 	/* todo: set path based on port flag */
 	r = vdec_init(vdec,
 		(priv->vdec->sys_info->height *
-		 priv->vdec->sys_info->width) > 1920*1088);
+		 priv->vdec->sys_info->width) > 1920*1088, false);
 
 	if (r < 0) {
 		pr_err("video_port_init %d, vdec_init failed\n", __LINE__);
@@ -683,7 +683,7 @@ static int video_port_init(struct port_priv_s *priv,
 	if (vdec_dual(vdec)) {
 		r = vdec_init(vdec->slave,
 			(priv->vdec->sys_info->height *
-			priv->vdec->sys_info->width) > 1920*1088);
+			priv->vdec->sys_info->width) > 1920*1088, false);
 		if (r < 0) {
 			pr_err("video_port_init %d, vdec_init failed\n", __LINE__);
 			goto err;

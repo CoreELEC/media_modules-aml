@@ -29,7 +29,6 @@
 #include "../aml_vcodec_drv.h"
 #include "../aml_vcodec_adapt.h"
 #include "../vdec_drv_base.h"
-#include "../aml_vcodec_vfm.h"
 #include "aml_vp9_parser.h"
 #include "vdec_vp9_trigger.h"
 
@@ -123,7 +122,6 @@ struct vdec_vp9_inst {
 	struct aml_vcodec_ctx *ctx;
 	struct aml_vdec_adapt vdec;
 	struct vdec_vp9_vsi *vsi;
-	struct vcodec_vfm_s vfm;
 	struct aml_dec_params parms;
 	struct completion comp;
 	struct vdec_comp_buf_info comp_info;
@@ -265,6 +263,7 @@ static int vdec_vp9_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	if (!inst)
 		return -ENOMEM;
 
+	inst->vdec.frm_name	= "VP9";
 	inst->vdec.video_type	= VFORMAT_VP9;
 	inst->vdec.filp		= ctx->dev->filp;
 	inst->vdec.ctx		= ctx;
@@ -279,17 +278,6 @@ static int vdec_vp9_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	/* to eable vp9 hw.*/
 	inst->vdec.port.type	= PORT_TYPE_HEVC;
 
-	/* init vfm */
-	inst->vfm.ctx		= ctx;
-	inst->vfm.ada_ctx	= &inst->vdec;
-	ret = vcodec_vfm_init(&inst->vfm);
-	if (ret) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"init vfm failed.\n");
-		goto err;
-	}
-
-	ctx->vfm = &inst->vfm;
 	/* probe info from the stream */
 	inst->vsi = kzalloc(sizeof(struct vdec_vp9_vsi), GFP_KERNEL);
 	if (!inst->vsi) {
@@ -320,12 +308,8 @@ static int vdec_vp9_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
-	//dump_init();
-
 	return 0;
 err:
-	if (inst)
-		vcodec_vfm_release(&inst->vfm);
 	if (inst && inst->vsi && inst->vsi->header_buf)
 		kfree(inst->vsi->header_buf);
 	if (inst && inst->vsi)
@@ -553,17 +537,11 @@ static int vdec_vp9_probe(unsigned long h_vdec,
 
 static void vdec_vp9_deinit(unsigned long h_vdec)
 {
-	ulong flags;
 	struct vdec_vp9_inst *inst = (struct vdec_vp9_inst *)h_vdec;
 	struct aml_vcodec_ctx *ctx = inst->ctx;
 
 	video_decoder_release(&inst->vdec);
 
-	vcodec_vfm_release(&inst->vfm);
-
-	//dump_deinit();
-
-	spin_lock_irqsave(&ctx->slock, flags);
 	if (inst->vsi && inst->vsi->header_buf)
 		kfree(inst->vsi->header_buf);
 
@@ -573,52 +551,9 @@ static void vdec_vp9_deinit(unsigned long h_vdec)
 	kfree(inst);
 
 	ctx->drv_handle = 0;
-	spin_unlock_irqrestore(&ctx->slock, flags);
 
 	need_trigger = false;
 	dump_cnt = 0;
-}
-
-static int vdec_vp9_get_fb(struct vdec_vp9_inst *inst, struct vdec_v4l2_buffer **out)
-{
-	return get_fb_from_queue(inst->ctx, out, false);
-}
-
-static void vdec_vp9_get_vf(struct vdec_vp9_inst *inst, struct vdec_v4l2_buffer **out)
-{
-	struct vframe_s *vf = NULL;
-	struct vdec_v4l2_buffer *fb = NULL;
-
-	vf = peek_video_frame(&inst->vfm);
-	if (!vf) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"there is no vframe.\n");
-		*out = NULL;
-		return;
-	}
-
-	vf = get_video_frame(&inst->vfm);
-	if (!vf) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"the vframe is avalid.\n");
-		*out = NULL;
-		return;
-	}
-
-	atomic_set(&vf->use_cnt, 1);
-
-	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-	fb->vf_handle = (unsigned long)vf;
-	fb->status = FB_ST_DISPLAY;
-
-	*out = fb;
-
-	//pr_info("%s, %d\n", __func__, fb->base_y.bytes_used);
-	//dump_write(fb->base_y.vaddr, fb->base_y.bytes_used);
-	//dump_write(fb->base_c.vaddr, fb->base_c.bytes_used);
-
-	/* convert yuv format. */
-	//swap_uv(fb->base_c.vaddr, fb->base_c.size);
 }
 
 static void add_prefix_data(struct vp9_superframe_split *s,
@@ -934,14 +869,6 @@ static int vdec_vp9_get_param(unsigned long h_vdec,
 	}
 
 	switch (type) {
-	case GET_PARAM_DISP_FRAME_BUFFER:
-		vdec_vp9_get_vf(inst, out);
-		break;
-
-	case GET_PARAM_FREE_FRAME_BUFFER:
-		ret = vdec_vp9_get_fb(inst, out);
-		break;
-
 	case GET_PARAM_PIC_INFO:
 		get_pic_info(inst, out);
 		break;

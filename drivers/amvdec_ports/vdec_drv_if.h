@@ -50,12 +50,16 @@ struct aml_video_stream {
 
 /**
  * struct vdec_fb_status  - decoder frame buffer status
- * @FB_ST_NORMAL	: initial state
- * @FB_ST_DISPLAY	: frmae buffer is ready to be displayed
+ * @FB_ST_INIT		: initial state
+ * @FB_ST_DECODER	: frame buffer be allocted by decoder.
+ * @FB_ST_VPP		: frame buffer be allocate by vpp.
+ * @FB_ST_DISPLAY	: frame buffer is ready to be displayed.
  * @FB_ST_FREE		: frame buffer is not used by decoder any more
  */
 enum vdec_fb_status {
-	FB_ST_NORMAL,
+	FB_ST_INIT,
+	FB_ST_DECODER,
+	FB_ST_VPP,
 	FB_ST_DISPLAY,
 	FB_ST_FREE
 };
@@ -69,12 +73,9 @@ enum vdec_dw_mode {
 	VDEC_DW_NO_AFBC = 16,
 };
 
-/* For GET_PARAM_DISP_FRAME_BUFFER and GET_PARAM_FREE_FRAME_BUFFER,
+/*
  * the caller does not own the returned buffer. The buffer will not be
  *				released before vdec_if_deinit.
- * GET_PARAM_DISP_FRAME_BUFFER	: get next displayable frame buffer,
- *				struct vdec_fb**
- * GET_PARAM_FREE_FRAME_BUFFER	: get non-referenced framebuffer, vdec_fb**
  * GET_PARAM_PIC_INFO		: get picture info, struct vdec_pic_info*
  * GET_PARAM_CROP_INFO		: get crop info, struct v4l2_crop*
  * GET_PARAM_DPB_SIZE		: get dpb size, unsigned int*
@@ -82,14 +83,12 @@ enum vdec_dw_mode {
  * GET_PARAM_COMP_BUF_INFO	: get compressed buf info,  struct vdec_comp_buf_info*
  */
 enum vdec_get_param_type {
-	GET_PARAM_DISP_FRAME_BUFFER,
-	GET_PARAM_FREE_FRAME_BUFFER,
 	GET_PARAM_PIC_INFO,
 	GET_PARAM_CROP_INFO,
 	GET_PARAM_DPB_SIZE,
 	GET_PARAM_CONFIG_INFO,
 	GET_PARAM_DW_MODE,
-	GET_PARAM_COMP_BUF_INFO,
+	GET_PARAM_COMP_BUF_INFO
 };
 
 /*

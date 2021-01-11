@@ -23,7 +23,6 @@
 #include <linux/videodev2.h>
 #include <uapi/linux/sched/types.h>
 #include "aml_vcodec_vpp.h"
-#include "aml_vcodec_vfm.h"
 #include "aml_vcodec_adapt.h"
 #include "vdec_drv_if.h"
 
@@ -38,23 +37,34 @@ static enum DI_ERRORTYPE
 {
 	struct aml_v4l2_vpp *vpp = buf->caller_data;
 	struct aml_v4l2_vpp_buf *vpp_buf;
+	struct vdec_v4l2_buffer *fb = NULL;
+	bool bypass = false;
 
 	if (!vpp || !vpp->ctx) {
-		pr_err("fatal %s %d vpp:%p\n",
+		pr_err("fatal %s %d vpp:%px\n",
 			__func__, __LINE__, vpp);
 		return DI_ERR_UNDEFINED;
 	}
 
-	vpp_buf = container_of(buf, struct aml_v4l2_vpp_buf, di_buf);
-	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-			"vpp vf %p flag:%x done\n",
-			buf->vf, buf->flag);
+	vpp_buf	= container_of(buf, struct aml_v4l2_vpp_buf, di_buf);
+	fb 	= &vpp_buf->aml_buf->frame_buffer;
+	bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
 
-	if (!(buf->flag & DI_FLAG_BUF_BY_PASS)) {
+	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
+		"vpp_input done: vf:%px, idx: %d, flag:%x %s, in:%d, out:%d, vf:%d, vpp done:%d\n",
+		buf->vf, buf->vf->index,
+		buf->flag,
+		bypass ? "bypass" : "",
+		kfifo_len(&vpp->input),
+		kfifo_len(&vpp->output),
+		kfifo_len(&vpp->frame),
+		kfifo_len(&vpp->out_done_q));
+
+	if (!bypass) {
 		/* recycle vf only in non-bypass mode */
-		vpp_vf_put(vpp->ctx->ada_ctx->recv_name,
-			vpp_buf->di_buf.vf, vpp->ctx->id);
+		fb->put_vframe(fb->caller, vpp_buf->di_buf.vf);
 	}
+
 	vpp->out_num[INPUT_PORT]++;
 	kfree(vpp_buf);
 	return DI_ERR_NONE;
@@ -65,42 +75,69 @@ static enum DI_ERRORTYPE
 {
 	struct aml_v4l2_vpp *vpp = buf->caller_data;
 	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
+	struct vdec_v4l2_buffer *fb = NULL;
+	bool bypass = false;
 
-	if (!vpp || !vpp->ctx || !vpp->ctx->vfm) {
-	    pr_err("fatal %s %d vpp:%p\n",
+	if (!vpp || !vpp->ctx) {
+	    pr_err("fatal %s %d vpp:%px\n",
 		    __func__, __LINE__, vpp);
 	    return DI_ERR_UNDEFINED;
 	}
-	vpp_buf = container_of(buf, struct aml_v4l2_vpp_buf, di_buf);
+
+	vpp_buf	= container_of(buf, struct aml_v4l2_vpp_buf, di_buf);
+	fb	= &vpp_buf->aml_buf->frame_buffer;
+	bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
+
+	/* recovery fb handle. */
+	buf->vf->v4l_mem_handle = (ulong)fb;
 
 	kfifo_put(&vpp->out_done_q, vpp_buf);
-	queue_work(vpp->wq, &vpp->vpp_work);
+
+	if (bypass) {
+		struct vframe_s *vf_dec = buf->vf->vf_ext;
+		struct vdec_v4l2_buffer *fb_dec = NULL;
+		struct aml_video_dec_buf *aml_buf = NULL;
+
+		fb_dec	= (struct vdec_v4l2_buffer *) vf_dec->v4l_mem_handle;
+		aml_buf	= container_of(fb_dec, struct aml_video_dec_buf, frame_buffer);
+		aml_buf->vpp_buf_handle = (ulong)vpp_buf;
+	}
+
+	fb->fill_buf_done(vpp->ctx, fb);
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
-		"vpp di out done idx:%d flag:%x\n",
-		VPP_BUF_GET_IDX(vpp_buf), buf->flag);
+		"vpp_output done: vf:%px, idx:%d, flag:%x %s, in:%d, out:%d, vf:%d, vpp done:%d\n",
+		buf->vf, bypass ? buf->vf->index : VPP_BUF_GET_IDX(vpp_buf),
+		buf->flag, bypass ? "bypass" : "",
+		kfifo_len(&vpp->input),
+		kfifo_len(&vpp->output),
+		kfifo_len(&vpp->frame),
+		kfifo_len(&vpp->out_done_q));
+
 	vpp->out_num[OUTPUT_PORT]++;
 	return DI_ERR_NONE;
 }
 
-static void aml_vpp_disp_worker(struct work_struct *work)
+static void vpp_vf_get(void *caller, struct vframe_s **vf_out)
 {
-	struct aml_v4l2_vpp *vpp =
-		container_of(work, struct aml_v4l2_vpp, vpp_work);
+	struct aml_v4l2_vpp *vpp = (struct aml_v4l2_vpp *)caller;
 	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
-	struct di_buffer *buf;
-	struct vframe_s *vf;
+	struct di_buffer *buf = NULL;
+	struct vframe_s *vf = NULL;
 
-	if (!vpp || !vpp->ctx || !vpp->ctx->vfm) {
-	    pr_err("fatal %s %d vpp:%p\n",
+	if (!vpp || !vpp->ctx) {
+	    pr_err("fatal %s %d vpp:%px\n",
 		    __func__, __LINE__, vpp);
 	    return;
 	}
-	while (kfifo_get(&vpp->out_done_q, &vpp_buf)) {
-		bool eos = false;
 
-		buf = &vpp_buf->di_buf;
-		vf = buf->vf;
+	if (kfifo_get(&vpp->out_done_q, &vpp_buf)) {
+		bool eos = false;
+		bool bypass = false;
+
+		buf	= &vpp_buf->di_buf;
+		bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
+		vf	= buf->vf;
 
 		if (buf->flag & DI_FLAG_EOS) {
 			v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
@@ -111,35 +148,55 @@ static void aml_vpp_disp_worker(struct work_struct *work)
 			eos = true;
 		}
 
-		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
-			"vpp output %p idx:%d flag:%x\n",
-			buf, VPP_BUF_GET_IDX(vpp_buf), buf->flag);
-
-		if (buf->flag & DI_FLAG_BUF_BY_PASS && !eos) {
+		if (bypass && !eos) {
 			/* retrieve input buffer info */
 			vf = buf->vf->vf_ext;
+		}
 
-			v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
-				"vpp bypass %p idx:%d\n",
-				buf, VPP_BUF_GET_IDX(vpp_buf));
+		*vf_out = vf;
 
-			/* recycle output buffer directly */
-			mutex_lock(&vpp->output_lock);
-			kfifo_put(&vpp->frame, buf->vf);
-			kfifo_put(&vpp->output, vpp_buf);
-			mutex_unlock(&vpp->output_lock);
-			up(&vpp->sem_out);
-		} else
-			vf->v4l_mem_handle =
-				(ulong) &vpp_buf->aml_buf->frame_buffer;
-
-		vfq_push(&vpp->ctx->vfm->vf_que, vf);
-		vdec_device_vf_run(vpp->ctx);
-
-		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
-			"vpp send out idx:%d\n",
-			VPP_BUF_GET_IDX(vpp_buf));
+		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
+			"%s: vf:%px, index:%d, flag:%x %s, ts:%lld\n",
+			__func__, vf,
+			bypass ? vf->index : VPP_BUF_GET_IDX(vpp_buf),
+			buf->flag, bypass ? "bypass" : "",
+			vf->timestamp);
 	}
+}
+
+static void vpp_vf_put(void *caller, struct vframe_s *vf)
+{
+	struct aml_v4l2_vpp *vpp = (struct aml_v4l2_vpp *)caller;
+	struct vdec_v4l2_buffer *fb = NULL;
+	struct aml_video_dec_buf *aml_buf = NULL;
+	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
+	struct di_buffer *buf = NULL;
+	bool bypass = false;
+
+	fb	= (struct vdec_v4l2_buffer *) vf->v4l_mem_handle;
+	aml_buf	= container_of(fb, struct aml_video_dec_buf, frame_buffer);
+	vpp_buf	= (struct aml_v4l2_vpp_buf *) aml_buf->vpp_buf_handle;
+	buf	= &vpp_buf->di_buf;
+	bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
+
+	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
+		"%s: vf:%px, index:%d, flag:%x %s, ts:%lld\n",
+		__func__, vf,
+		bypass ? vf->index : VPP_BUF_GET_IDX(vpp_buf),
+		buf->flag, bypass ? "bypass" : "",
+		vf->timestamp);
+
+	if (bypass) {
+		vf = buf->vf->vf_ext;
+		fb = (struct vdec_v4l2_buffer *) vf->v4l_mem_handle;
+		fb->put_vframe(fb->caller, vf);
+	}
+
+	mutex_lock(&vpp->output_lock);
+	kfifo_put(&vpp->frame, buf->vf);
+	kfifo_put(&vpp->output, vpp_buf);
+	mutex_unlock(&vpp->output_lock);
+	up(&vpp->sem_out);
 }
 
 static int aml_v4l2_vpp_thread(void* param)
@@ -179,7 +236,7 @@ retry:
 		if (!out_buf->aml_buf) {
 			struct vdec_v4l2_buffer *out;
 
-			if (get_fb_from_queue(vpp->ctx, &out, true)) {
+			if (ctx->fb_ops.alloc(&ctx->fb_ops, vpp->fb_token, &out, true)) {
 				usleep_range(5000, 5500);
 				mutex_lock(&vpp->output_lock);
 				kfifo_put(&vpp->output, out_buf);
@@ -190,9 +247,13 @@ retry:
 				struct aml_video_dec_buf, frame_buffer);
 			out_buf->aml_buf->vpp_buf_handle = (ulong) out_buf;
 			v4l_dbg(ctx, V4L_DEBUG_VPP_BUFMGR,
-				"vpp bind buf:%d to vpp_buf:%p\n",
+				"vpp bind buf:%d to vpp_buf:%px\n",
 				VPP_BUF_GET_IDX(out_buf), out_buf);
-			out->status = FB_ST_DISPLAY;
+
+			out->caller	= vpp;
+			out->put_vframe	= vpp_vf_put;
+			out->get_vframe	= vpp_vf_get;
+
 			out->m.mem[0].bytes_used = out->m.mem[0].size;
 			out->m.mem[1].bytes_used = out->m.mem[1].size;
 		}
@@ -215,6 +276,8 @@ retry:
 		mutex_unlock(&vpp->output_lock);
 
 		fb = &out_buf->aml_buf->frame_buffer;
+		fb->status = FB_ST_VPP;
+
 		memcpy(vf_out->canvas0_config,
 			in_buf->di_buf.vf->canvas0_config,
 			2 * sizeof(struct canvas_config_s));
@@ -229,24 +292,32 @@ retry:
 		if (eos)
 			memset(vf_out, 0, sizeof(*vf_out));
 
+		vf_out->v4l_mem_handle = (ulong)fb;
+
 		out_buf->di_buf.vf = vf_out;
 		out_buf->di_buf.flag = 0;
 		out_buf->di_buf.caller_data = vpp;
 		di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
 
 		v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL,
-				"v4l vpp handle in vf:%p outp:%p/%d iphy:%x/%x %dx%d ophy:%x/%x %dx%d\n",
-				in_buf->di_buf.vf, out_buf->di_buf.vf,
-				VPP_BUF_GET_IDX(out_buf),
-				in_buf->di_buf.vf->canvas0_config[0].phy_addr,
-				in_buf->di_buf.vf->canvas0_config[1].phy_addr,
-				in_buf->di_buf.vf->canvas0_config[0].width,
-				in_buf->di_buf.vf->canvas0_config[0].height,
-				vf_out->canvas0_config[0].phy_addr,
-				vf_out->canvas0_config[1].phy_addr,
-				vf_out->canvas0_config[0].width,
-				vf_out->canvas0_config[0].height
-				);
+			"vpp_handle start: dec vf:%px, vpp vf:%px/%d, iphy:%x/%x %dx%d ophy:%x/%x %dx%d, "
+			"in:%d, out:%d, vf:%d, vpp done:%d",
+			in_buf->di_buf.vf,
+			out_buf->di_buf.vf,
+			VPP_BUF_GET_IDX(out_buf),
+			in_buf->di_buf.vf->canvas0_config[0].phy_addr,
+			in_buf->di_buf.vf->canvas0_config[1].phy_addr,
+			in_buf->di_buf.vf->canvas0_config[0].width,
+			in_buf->di_buf.vf->canvas0_config[0].height,
+			vf_out->canvas0_config[0].phy_addr,
+			vf_out->canvas0_config[1].phy_addr,
+			vf_out->canvas0_config[0].width,
+			vf_out->canvas0_config[0].height,
+			kfifo_len(&vpp->input),
+			kfifo_len(&vpp->output),
+			kfifo_len(&vpp->frame),
+			kfifo_len(&vpp->out_done_q));
+
 		in_buf->di_buf.caller_data = vpp;
 		di_empty_input_buffer(vpp->di_handle, &(in_buf->di_buf));
 	}
@@ -348,7 +419,6 @@ int aml_v4l2_vpp_init(
 	mutex_init(&vpp->output_lock);
 	sema_init(&vpp->sem_in, 0);
 	sema_init(&vpp->sem_out, 0);
-	INIT_WORK(&vpp->vpp_work, aml_vpp_disp_worker);
 
 	vpp->wq = alloc_ordered_workqueue("aml-v4l-vpp",
 			WQ_MEM_RECLAIM | WQ_FREEZABLE);
@@ -427,16 +497,8 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 
 	if (!vpp)
 		return -EINVAL;
-#if 0
-	/* TODO: delete it after VPP supports bypass mode well */
-	if ((vf->type & VIDTYPE_TYPEMASK) == VIDTYPE_PROGRESSIVE &&
-		vpp->work_mode == VPP_MODE_DI) {
-		vfq_push(&vpp->ctx->vfm->vf_que, vf);
-		vdec_device_vf_run(vpp->ctx);
-		return 0;
-	}
-#endif
-	in_buf = kzalloc(sizeof(*in_buf), GFP_KERNEL);
+
+	in_buf = kzalloc(sizeof(*in_buf), GFP_ATOMIC);
 	if (!in_buf)
 		return -ENOMEM;
 
@@ -456,8 +518,8 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 		in_buf->di_buf.flag |= DI_FLAG_EOS;
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"vpp got input vf:%p type:%d ts:%llx\n",
-		vf, vf->type, vf->timestamp);
+		"vpp_push_vframe: vf:%px, idx:%d, type:%x, ts:%lld\n",
+		vf, vf->index, vf->type, vf->timestamp);
 
 	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 	in_buf->aml_buf = container_of(fb, struct aml_video_dec_buf, frame_buffer);
@@ -495,25 +557,18 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 }
 EXPORT_SYMBOL(aml_v4l2_vpp_push_vframe);
 
-int aml_v4l2_vpp_rel_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
+void fill_vpp_buf_cb(void *v4l_ctx, struct vdec_v4l2_buffer *fb)
 {
-	struct vdec_v4l2_buffer *fb = NULL;
-	struct aml_video_dec_buf *aml_buf = NULL;
-	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)v4l_ctx;
+	struct vframe_s *vf = NULL;
+	int ret = -1;
 
-	fb = (struct vdec_v4l2_buffer *) vf->v4l_mem_handle;
-	aml_buf = container_of(fb, struct aml_video_dec_buf, frame_buffer);
-	vpp_buf = (struct aml_v4l2_vpp_buf *) aml_buf->vpp_buf_handle;
-	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-			"vpp rel output vf:%p index:%d\n",
-			vf, VPP_BUF_GET_IDX(vpp_buf));
+	fb->get_vframe(fb->caller, &vf);
 
-	mutex_lock(&vpp->output_lock);
-	kfifo_put(&vpp->frame, vf);
-	kfifo_put(&vpp->output, vpp_buf);
-	mutex_unlock(&vpp->output_lock);
-	up(&vpp->sem_out);
-	vpp->in_num[OUTPUT_PORT]++;
-	return 0;
+	ret = aml_v4l2_vpp_push_vframe(ctx->vpp, vf);
+	if (ret < 0) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"vpp push vframe err, ret: %d\n", ret);
+	}
 }
-EXPORT_SYMBOL(aml_v4l2_vpp_rel_vframe);

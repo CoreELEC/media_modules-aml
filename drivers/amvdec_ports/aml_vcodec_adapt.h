@@ -40,8 +40,7 @@ struct aml_vdec_adapt {
 	struct dec_sysinfo dec_prop;
 	struct v4l2_config_parm config;
 	int video_type;
-	char *recv_name;
-	int vfm_path;
+	char *frm_name;
 };
 
 int video_decoder_init(struct aml_vdec_adapt *ada_ctx);

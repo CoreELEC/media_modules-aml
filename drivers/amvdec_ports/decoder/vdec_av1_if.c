@@ -29,7 +29,6 @@
 #include "../aml_vcodec_drv.h"
 #include "../aml_vcodec_adapt.h"
 #include "../vdec_drv_base.h"
-#include "../aml_vcodec_vfm.h"
 #include "../utils/common.h"
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
@@ -118,7 +117,6 @@ struct vdec_av1_inst {
 	struct aml_vcodec_ctx *ctx;
 	struct aml_vdec_adapt vdec;
 	struct vdec_av1_vsi *vsi;
-	struct vcodec_vfm_s vfm;
 	struct aml_dec_params parms;
 	struct completion comp;
 	struct vdec_comp_buf_info comp_info;
@@ -340,6 +338,7 @@ static int vdec_av1_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	if (!inst)
 		return -ENOMEM;
 
+	inst->vdec.frm_name	= "AV1";
 	inst->vdec.video_type	= VFORMAT_AV1;
 	inst->vdec.filp		= ctx->dev->filp;
 	inst->vdec.ctx		= ctx;
@@ -353,16 +352,6 @@ static int vdec_av1_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 
 	/* to eable av1 hw.*/
 	inst->vdec.port.type	= PORT_TYPE_HEVC;
-
-	/* init vfm */
-	inst->vfm.ctx		= ctx;
-	inst->vfm.ada_ctx	= &inst->vdec;
-	ret = vcodec_vfm_init(&inst->vfm);
-	if (ret) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"init vfm failed.\n");
-		goto err;
-	}
 
 	/* probe info from the stream */
 	inst->vsi = kzalloc(sizeof(struct vdec_av1_vsi), GFP_KERNEL);
@@ -380,9 +369,6 @@ static int vdec_av1_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 
 	init_completion(&inst->comp);
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"av1 Instance >> %lx\n", (ulong) inst);
-
 	ctx->ada_ctx	= &inst->vdec;
 	*h_vdec		= (unsigned long)inst;
 
@@ -394,12 +380,11 @@ static int vdec_av1_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
-	//dump_init();
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"av1 Instance >> %lx\n", (ulong) inst);
 
 	return 0;
 err:
-	if (inst)
-		vcodec_vfm_release(&inst->vfm);
 	if (inst && inst->vsi && inst->vsi->header_buf)
 		kfree(inst->vsi->header_buf);
 	if (inst && inst->vsi)
@@ -503,17 +488,11 @@ static int vdec_av1_probe(unsigned long h_vdec,
 
 static void vdec_av1_deinit(unsigned long h_vdec)
 {
-	ulong flags;
 	struct vdec_av1_inst *inst = (struct vdec_av1_inst *)h_vdec;
 	struct aml_vcodec_ctx *ctx = inst->ctx;
 
 	video_decoder_release(&inst->vdec);
 
-	vcodec_vfm_release(&inst->vfm);
-
-	//dump_deinit();
-
-	spin_lock_irqsave(&ctx->slock, flags);
 	if (inst->vsi && inst->vsi->header_buf)
 		kfree(inst->vsi->header_buf);
 
@@ -523,42 +502,6 @@ static void vdec_av1_deinit(unsigned long h_vdec)
 	kfree(inst);
 
 	ctx->drv_handle = 0;
-	spin_unlock_irqrestore(&ctx->slock, flags);
-}
-
-static int vdec_av1_get_fb(struct vdec_av1_inst *inst, struct vdec_v4l2_buffer **out)
-{
-	return get_fb_from_queue(inst->ctx, out, false);
-}
-
-static void vdec_av1_get_vf(struct vdec_av1_inst *inst, struct vdec_v4l2_buffer **out)
-{
-	struct vframe_s *vf = NULL;
-	struct vdec_v4l2_buffer *fb = NULL;
-
-	vf = peek_video_frame(&inst->vfm);
-	if (!vf) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"there is no vframe.\n");
-		*out = NULL;
-		return;
-	}
-
-	vf = get_video_frame(&inst->vfm);
-	if (!vf) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-			"the vframe is avalid.\n");
-		*out = NULL;
-		return;
-	}
-
-	atomic_set(&vf->use_cnt, 1);
-
-	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-	fb->vf_handle = (unsigned long)vf;
-	fb->status = FB_ST_DISPLAY;
-
-	*out = fb;
 }
 
 // Returns 1 when OBU type is valid, and 0 otherwise.
@@ -1175,14 +1118,6 @@ static int vdec_av1_get_param(unsigned long h_vdec,
 	}
 
 	switch (type) {
-	case GET_PARAM_DISP_FRAME_BUFFER:
-		vdec_av1_get_vf(inst, out);
-		break;
-
-	case GET_PARAM_FREE_FRAME_BUFFER:
-		ret = vdec_av1_get_fb(inst, out);
-		break;
-
 	case GET_PARAM_PIC_INFO:
 		get_pic_info(inst, out);
 		break;

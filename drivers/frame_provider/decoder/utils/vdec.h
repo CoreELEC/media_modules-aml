@@ -291,6 +291,7 @@ struct vdec_s {
 	u32 profile_idc;
 	u32 level_idc;
 	bool prog_only;
+	bool disable_vfm;
 };
 
 /* common decoder vframe provider name to use default vfm path */
@@ -397,7 +398,7 @@ extern void vdec_set_next_status(struct vdec_s *vdec, int status);
 
 extern int vdec_set_decinfo(struct vdec_s *vdec, struct dec_sysinfo *p);
 
-extern int vdec_init(struct vdec_s *vdec, int is_4k);
+extern int vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l);
 
 extern void vdec_release(struct vdec_s *vdec);
 

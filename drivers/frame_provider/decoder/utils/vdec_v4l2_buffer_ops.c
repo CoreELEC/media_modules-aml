@@ -21,21 +21,6 @@
 #include <media/v4l2-mem2mem.h>
 #include <linux/printk.h>
 
-int vdec_v4l_get_buffer(struct aml_vcodec_ctx *ctx,
-	struct vdec_v4l2_buffer **out)
-{
-	int ret = -1;
-
-	if (ctx->drv_handle == 0)
-		return -EIO;
-
-	ret = ctx->dec_if->get_param(ctx->drv_handle,
-		GET_PARAM_FREE_FRAME_BUFFER, out);
-
-	return ret;
-}
-EXPORT_SYMBOL(vdec_v4l_get_buffer);
-
 int vdec_v4l_get_pic_info(struct aml_vcodec_ctx *ctx,
 	struct vdec_pic_info *pic)
 {
@@ -97,25 +82,6 @@ int vdec_v4l_set_hdr_infos(struct aml_vcodec_ctx *ctx,
 }
 EXPORT_SYMBOL(vdec_v4l_set_hdr_infos);
 
-static void aml_wait_buf_ready(struct aml_vcodec_ctx *ctx)
-{
-	ulong expires;
-
-	expires = jiffies + msecs_to_jiffies(1000);
-	while (!ctx->v4l_codec_dpb_ready) {
-		u32 ready_num = 0;
-
-		if (time_after(jiffies, expires)) {
-			pr_err("the DPB state has not ready.\n");
-			break;
-		}
-
-		ready_num = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
-		if ((ready_num + ctx->buf_used_count) >= CTX_BUF_TOTAL(ctx))
-			ctx->v4l_codec_dpb_ready = true;
-	}
-}
-
 void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 {
 	unsigned int dpbsize = 0;
@@ -166,9 +132,6 @@ int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 	if (ctx->drv_handle == 0)
 		return -EIO;
 
-	/* wait the DPB state to be ready. */
-	aml_wait_buf_ready(ctx);
-
 	aml_vdec_pic_info_update(ctx);
 
 	mutex_lock(&ctx->state_lock);
@@ -179,7 +142,6 @@ int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 
 	mutex_unlock(&ctx->state_lock);
 
-	ctx->q_data[AML_Q_DATA_SRC].resolution_changed = true;
 	while (ctx->m2m_ctx->job_flags & TRANS_RUNNING) {
 		v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
 	}

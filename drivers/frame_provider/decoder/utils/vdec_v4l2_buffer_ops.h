@@ -23,10 +23,6 @@
 #include "../../../amvdec_ports/vdec_drv_base.h"
 #include "../../../amvdec_ports/aml_vcodec_adapt.h"
 
-int vdec_v4l_get_buffer(
-	struct aml_vcodec_ctx *ctx,
-	struct vdec_v4l2_buffer **out);
-
 int vdec_v4l_get_pic_info(
 	struct aml_vcodec_ctx *ctx,
 	struct vdec_pic_info *pic);
@@ -56,4 +52,5 @@ int vdec_v4l_res_ch_event(
 int vdec_v4l_get_dw_mode(
 	struct aml_vcodec_ctx *ctx,
 	unsigned int *dw_mode);
+
 #endif

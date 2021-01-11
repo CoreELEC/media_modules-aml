@@ -50,6 +50,11 @@
  * @vf_fd	: the file handle of video frame
  * @vf_handle	: video frame handle
  * @status      : frame buffer status (vdec_fb_status)
+ * @caller	: caller is handle of decoer or vpp.
+ * @get_vframe	: get vframe from caller.
+ * @put_vframe	: put vframe to caller.
+ * @fill_buf	: recycle buf to pool will be alloc by caller.
+ * @fill_buf_done : be invoked if caller fill data done.
  */
 
 struct vdec_v4l2_buffer {
@@ -62,6 +67,11 @@ struct vdec_v4l2_buffer {
 	ulong	vf_handle;
 	u32	status;
 	u32	buf_idx;
+	void	*caller;
+	void	(*get_vframe) (void *caller, struct vframe_s **vf);
+	void	(*put_vframe) (void *caller, struct vframe_s *vf);
+	void	(*fill_buf) (void *v4l, struct vdec_v4l2_buffer *fb);
+	void	(*fill_buf_done) (void *v4l, struct vdec_v4l2_buffer *fb);
 };
 
 
@@ -114,13 +124,6 @@ int aml_vcodec_dec_queue_init(void *priv, struct vb2_queue *src_vq,
 void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx);
 void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx);
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx);
-void vdec_device_vf_run(struct aml_vcodec_ctx *ctx);
-void try_to_capture(struct aml_vcodec_ctx *ctx);
-void aml_thread_notify(struct aml_vcodec_ctx *ctx,
-	enum aml_thread_type type);
-int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
-	enum aml_thread_type type, const char *thread_name);
-void aml_thread_stop(struct aml_vcodec_ctx *ctx);
 void wait_vcodec_ending(struct aml_vcodec_ctx *ctx);
 void vdec_frame_buffer_release(void *data);
 void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes);

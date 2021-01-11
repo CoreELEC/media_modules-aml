@@ -2664,11 +2664,12 @@ EXPORT_SYMBOL(vdec_resource_checking);
  *register vdec_device
  * create output, vfm or create ionvideo output
  */
-s32 vdec_init(struct vdec_s *vdec, int is_4k)
+s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 {
 	int r = 0;
 	struct vdec_s *p = vdec;
-	const char *dev_name;
+	const char *pdev_name;
+	char dev_name[32] = {0};
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
 
 	if (is_res_locked(vdec_core->vdec_resouce_status,
@@ -2676,13 +2677,15 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 		return -EBUSY;
 
 	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
-	dev_name = get_dev_name(vdec_single(vdec), vdec->format);
-
-	if (dev_name == NULL)
+	pdev_name = get_dev_name(vdec_single(vdec), vdec->format);
+	if (pdev_name == NULL)
 		return -ENODEV;
 
-	pr_info("vdec_init, dev_name:%s, vdec_type=%s\n",
-		dev_name, vdec_type_str(vdec));
+	snprintf(dev_name, sizeof(dev_name),
+		"%s%s", pdev_name, is_v4l ? "_v4l": "");
+
+	pr_info("vdec_init, dev_name:%s, vdec_type=%s, format: %d\n",
+		dev_name, vdec_type_str(vdec), vdec->format);
 
 	/*
 	 *todo: VFM patch control should be configurable,
@@ -2802,7 +2805,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	if (p->use_vfm_path) {
 		vdec->vf_receiver_inst = -1;
 		vdec->vfm_map_id[0] = 0;
-	} else if (!vdec_dual(vdec)) {
+	} else if (!vdec_dual(vdec) && !vdec->disable_vfm) {
 		/* create IONVIDEO instance and connect decoder's
 		 * vf_provider interface to it
 		 */
@@ -3033,7 +3036,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 
 	}
 
-	if (!vdec_single(vdec)) {
+	if (!vdec_single(vdec) && !vdec->disable_vfm) {
 		vf_reg_provider(&p->vframe_provider);
 
 		vf_notify_receiver(p->vf_provider_name,
@@ -3131,7 +3134,7 @@ void vdec_release(struct vdec_s *vdec)
 	vdec_frame_rate_uevent(0);
 	vdec_disconnect(vdec);
 
-	if (vdec->vframe_provider.name) {
+	if (!vdec->disable_vfm && vdec->vframe_provider.name) {
 		if (!vdec_single(vdec)) {
 			if (vdec_core->hint_fr_vdec == vdec
 			&& vdec->fr_hint_state == VDEC_HINTED)
@@ -3207,11 +3210,13 @@ int vdec_reset(struct vdec_s *vdec)
 
 	vdec_disconnect(vdec);
 
-	if (vdec->vframe_provider.name)
-		vf_unreg_provider(&vdec->vframe_provider);
+	if (!vdec->disable_vfm) {
+		if (vdec->vframe_provider.name)
+			vf_unreg_provider(&vdec->vframe_provider);
 
-	if ((vdec->slave) && (vdec->slave->vframe_provider.name))
-		vf_unreg_provider(&vdec->slave->vframe_provider);
+		if ((vdec->slave) && (vdec->slave->vframe_provider.name))
+			vf_unreg_provider(&vdec->slave->vframe_provider);
+	}
 
 	if (vdec->reset) {
 		vdec->reset(vdec);
@@ -3226,15 +3231,17 @@ int vdec_reset(struct vdec_s *vdec)
 	vdec_input_prepare_bufs(&vdec->input, vdec->sys_info->width,
 		vdec->sys_info->height);
 
-	vf_reg_provider(&vdec->vframe_provider);
-	vf_notify_receiver(vdec->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_START, vdec);
+	if (!vdec->disable_vfm) {
+		vf_reg_provider(&vdec->vframe_provider);
+		vf_notify_receiver(vdec->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_START, vdec);
 
-	if (vdec->slave) {
-		vf_reg_provider(&vdec->slave->vframe_provider);
-		vf_notify_receiver(vdec->slave->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_START, vdec->slave);
-		vdec->slave->mc_loaded = 0;/*clear for reload firmware*/
+		if (vdec->slave) {
+			vf_reg_provider(&vdec->slave->vframe_provider);
+			vf_notify_receiver(vdec->slave->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_START, vdec->slave);
+			vdec->slave->mc_loaded = 0;/*clear for reload firmware*/
+		}
 	}
 
 	vdec_connect(vdec);
@@ -3249,11 +3256,13 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 	pr_debug("vdec_v4l2_reset %d\n", flag);
 	vdec_disconnect(vdec);
 	if (flag != 2) {
-		if (vdec->vframe_provider.name)
-			vf_unreg_provider(&vdec->vframe_provider);
+		if (!vdec->disable_vfm) {
+			if (vdec->vframe_provider.name)
+				vf_unreg_provider(&vdec->vframe_provider);
 
-		if ((vdec->slave) && (vdec->slave->vframe_provider.name))
-			vf_unreg_provider(&vdec->slave->vframe_provider);
+			if ((vdec->slave) && (vdec->slave->vframe_provider.name))
+				vf_unreg_provider(&vdec->slave->vframe_provider);
+		}
 
 		if (vdec->reset) {
 			vdec->reset(vdec);
@@ -3269,15 +3278,17 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 		vdec_input_prepare_bufs(&vdec->input, vdec->sys_info->width,
 			vdec->sys_info->height);
 
-		vf_reg_provider(&vdec->vframe_provider);
-		vf_notify_receiver(vdec->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_START, vdec);
+		if (!vdec->disable_vfm) {
+			vf_reg_provider(&vdec->vframe_provider);
+			vf_notify_receiver(vdec->vf_provider_name,
+					VFRAME_EVENT_PROVIDER_START, vdec);
 
-		if (vdec->slave) {
-			vf_reg_provider(&vdec->slave->vframe_provider);
-			vf_notify_receiver(vdec->slave->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_START, vdec->slave);
-			vdec->slave->mc_loaded = 0;/*clear for reload firmware*/
+			if (vdec->slave) {
+				vf_reg_provider(&vdec->slave->vframe_provider);
+				vf_notify_receiver(vdec->slave->vf_provider_name,
+					VFRAME_EVENT_PROVIDER_START, vdec->slave);
+				vdec->slave->mc_loaded = 0;/*clear for reload firmware*/
+			}
 		}
 	} else {
 		if (vdec->reset) {

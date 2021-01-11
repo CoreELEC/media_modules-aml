@@ -1234,6 +1234,7 @@ struct VP9Decoder_s {
 	u32 error_frame_width;
 	u32 error_frame_height;
 	u32 endian;
+	ulong fb_token;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -1620,6 +1621,8 @@ static void trigger_schedule(struct VP9Decoder_s *pbi)
 		if (ctx->param_sets_from_ucode &&
 			!pbi->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
+
+		ctx->fb_ops.unlock(&ctx->fb_ops, pbi->fb_token);
 	}
 
 	if (pbi->vdec_cb)
@@ -2384,6 +2387,14 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 
 	unlock_buffer_pool(cm->buffer_pool, flags);
 
+	if (free_pic) {
+		struct vdec_v4l2_buffer *fb =
+			(struct vdec_v4l2_buffer *)
+			pbi->m_BUF[i].v4l_ref_buf_addr;
+
+		fb->status = FB_ST_DECODER;
+	}
+
 	if (debug & VP9_DEBUG_OUT_PTS) {
 		if (free_pic) {
 			pr_debug("%s, idx: %d, ts: %lld\n",
@@ -2412,7 +2423,7 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 			}
 		}
 
-		if (ctx->cap_pool.out < pbi->used_buf_num) {
+		if (ctx->cap_pool.dec < pbi->used_buf_num) {
 			free_buf_count +=
 				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
 		}
@@ -4965,6 +4976,16 @@ static int vp9_max_mmu_buf_size(int max_w, int max_h)
 	return buf_size;
 }
 
+static void vp9_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
+{
+	vvp9_vf_put(vf, vdec_ctx);
+}
+
+static void vp9_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
+{
+	*vf = vvp9_vf_get(vdec_ctx);
+}
+
 static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	struct PIC_BUFFER_CONFIG_s *pic)
 {
@@ -4976,17 +4997,23 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	u32 mpred_mv_end = pbi->work_space_buf->mpred_mv.buf_start +
 		pbi->work_space_buf->mpred_mv.buf_size;
 #endif
+	struct aml_vcodec_ctx * ctx = (struct aml_vcodec_ctx *)pbi->v4l2_ctx;
 	struct vdec_v4l2_buffer *fb = NULL;
 
 	if (i < 0)
 		return ret;
 
-	ret = vdec_v4l_get_buffer(pbi->v4l2_ctx, &fb);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, pbi->fb_token, &fb, false);
 	if (ret < 0) {
 		vp9_print(pbi, 0, "[%d] VP9 get buffer fail.\n",
 			((struct aml_vcodec_ctx *) (pbi->v4l2_ctx))->id);
 		return ret;
 	}
+
+	fb->caller	= pbi;
+	fb->put_vframe	= vp9_put_video_frame;
+	fb->get_vframe	= vp9_get_video_frame;
+	fb->status	= FB_ST_DECODER;
 
 	if (pbi->mmu_enable) {
 		struct internal_comp_buf *ibuf = v4lfb_to_icomp_buf(pbi, fb);
@@ -7074,6 +7101,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 	if (kfifo_get(&pbi->display_q, &vf)) {
 		struct vframe_s *next_vf;
 		uint8_t index = vf->index & 0xff;
+
 		if (index < pbi->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			vf->index_disp = pbi->vf_get_count;
@@ -7095,6 +7123,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 			return vf;
 		}
 	}
+
 	return NULL;
 }
 
@@ -7331,6 +7360,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 	int stream_offset = pic_config->stream_offset;
 	unsigned short slice_type = pic_config->slice_type;
 	struct aml_vcodec_ctx * v4l2_ctx = pbi->v4l2_ctx;
+	struct vdec_v4l2_buffer *fb = NULL;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	u32 pts_valid = 0, pts_us64_valid = 0;
 	u32 pts_save;
@@ -7381,6 +7411,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		if (pbi->is_used_v4l) {
 			vf->v4l_mem_handle
 				= pbi->m_BUF[pic_config->BUF_index].v4l_ref_buf_addr;
+			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 			if (pbi->mmu_enable) {
 				vf->mm_box.bmmu_box	= pbi->bmmu_box;
 				vf->mm_box.bmmu_idx	= HEADER_BUFFER_IDX(pbi->buffer_wrap[pic_config->BUF_index]);
@@ -7650,8 +7681,16 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				vf, pic_config->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
 			if (without_display_mode == 0) {
-				vf_notify_receiver(pbi->provider_name,
+				if (pbi->is_used_v4l) {
+					if (v4l2_ctx->is_stream_off) {
+						vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+					} else {
+						fb->fill_buf_done(v4l2_ctx, fb);
+					}
+				} else {
+					vf_notify_receiver(pbi->provider_name,
 						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+				}
 			} else
 				vvp9_vf_put(vvp9_vf_get(pbi), pbi);
 		} else {
@@ -7685,7 +7724,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			}
 
 			if (index == INVALID_IDX) {
-				if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb) < 0) {
+				ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, 0, &fb, false) < 0) {
 					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
 					return -1;
 				}
@@ -7697,11 +7737,22 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
 		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
 					hw->m_BUF[index].v4l_ref_buf_addr;
+		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		if (fb->caller == NULL) {
+			fb->caller	= hw;
+			fb->put_vframe	= vp9_put_video_frame;
+			fb->get_vframe	= vp9_get_video_frame;
+			fb->status	= FB_ST_DECODER;
+		}
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-		vf_notify_receiver(vdec->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+
+		if (hw->is_used_v4l)
+			fb->fill_buf_done(ctx, fb);
+		else
+			vf_notify_receiver(vdec->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
 		pr_info("[%d] VP9 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
@@ -9638,16 +9689,18 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 
 	pbi->provider_name = PROVIDER_NAME;
 #ifdef MULTI_INSTANCE_SUPPORT
-	vf_provider_init(&vvp9_vf_prov, PROVIDER_NAME,
-				&vvp9_vf_provider, pbi);
-	vf_reg_provider(&vvp9_vf_prov);
-	vf_notify_receiver(PROVIDER_NAME, VFRAME_EVENT_PROVIDER_START, NULL);
-	if (pbi->frame_dur != 0) {
-		if (!is_reset)
-			vf_notify_receiver(pbi->provider_name,
-					VFRAME_EVENT_PROVIDER_FR_HINT,
-					(void *)
-					((unsigned long)pbi->frame_dur));
+	if (!pbi->is_used_v4l) {
+		vf_provider_init(&vvp9_vf_prov, PROVIDER_NAME,
+					&vvp9_vf_provider, pbi);
+		vf_reg_provider(&vvp9_vf_prov);
+		vf_notify_receiver(PROVIDER_NAME, VFRAME_EVENT_PROVIDER_START, NULL);
+		if (pbi->frame_dur != 0) {
+			if (!is_reset)
+				vf_notify_receiver(pbi->provider_name,
+						VFRAME_EVENT_PROVIDER_FR_HINT,
+						(void *)
+						((unsigned long)pbi->frame_dur));
+		}
 	}
 #else
 	vf_provider_init(&vvp9_vf_prov, PROVIDER_NAME, &vvp9_vf_provider,
@@ -9693,7 +9746,7 @@ static int vmvp9_stop(struct VP9Decoder_s *pbi)
 		pbi->stat &= ~STAT_TIMER_ARM;
 	}
 
-	if (pbi->stat & STAT_VF_HOOK) {
+	if (!pbi->is_used_v4l && (pbi->stat & STAT_VF_HOOK)) {
 		if (!is_reset)
 			vf_notify_receiver(pbi->provider_name,
 					VFRAME_EVENT_PROVIDER_FR_END_HINT,
@@ -9742,7 +9795,7 @@ static int vvp9_stop(struct VP9Decoder_s *pbi)
 		pbi->stat &= ~STAT_TIMER_ARM;
 	}
 
-	if (pbi->stat & STAT_VF_HOOK) {
+	if (!pbi->is_used_v4l && (pbi->stat & STAT_VF_HOOK)) {
 		if (!is_reset)
 			vf_notify_receiver(pbi->provider_name,
 					VFRAME_EVENT_PROVIDER_FR_END_HINT,
@@ -10374,7 +10427,17 @@ static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
 {
 	struct VP9_Common_s *const cm = &pbi->common;
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	int i, free_count = 0;
+
+	if (ctx->cap_pool.dec < pbi->used_buf_num) {
+		free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
+		if (free_count &&
+			!ctx->fb_ops.try_lock(&ctx->fb_ops, &pbi->fb_token)) {
+			return false;
+		}
+	}
 
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if ((frame_bufs[i].ref_count == 0) &&
@@ -10478,12 +10541,10 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (ctx->param_sets_from_ucode) {
 			if (pbi->v4l_params_parsed) {
-				if (ctx->cap_pool.in < pbi->used_buf_num) {
-					if (is_avaliable_buffer(pbi) ||
-						(v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) >=
-						pbi->run_ready_min_buf_num)) {
+				if (ctx->cap_pool.dec < pbi->used_buf_num) {
+					if (is_avaliable_buffer(pbi))
 						ret = CORE_MASK_HEVC;
-					} else
+					else
 						ret = 0;
 				}
 			} else {
@@ -10948,7 +11009,7 @@ static void vp9_dump_state(struct vdec_s *vdec)
 		pbi->no_head
 		);
 
-	if (vf_get_receiver(vdec->vf_provider_name)) {
+	if (!pbi->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
 		enum receviver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
@@ -11123,9 +11184,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			MULTI_INSTANCE_PROVIDER_NAME ".%02x", pdev->id & 0xff);
 
-	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-		&vvp9_vf_provider, pbi);
-
 	pbi->provider_name = pdata->vf_provider_name;
 	platform_set_drvdata(pdev, pdata);
 
@@ -11292,6 +11350,11 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pbi->vvp9_amstream_dec_info.height = 0;
 		pbi->vvp9_amstream_dec_info.rate = 30;*/
 		pbi->double_write_mode = double_write_mode;
+	}
+
+	if (!pbi->is_used_v4l) {
+		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
+			&vvp9_vf_provider, pbi);
 	}
 
 	if (no_head & 0x10) {
@@ -11463,6 +11526,13 @@ static int ammvdec_vp9_remove(struct platform_device *pdev)
 
 	if (pbi->enable_fence)
 		vdec_fence_release(pbi, &vdec->sync);
+
+	if (pbi->is_used_v4l) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
+
+		ctx->fb_ops.unlock(&ctx->fb_ops, pbi->fb_token);
+	}
 
 #ifdef DEBUG_PTS
 	pr_info("pts missed %ld, pts hit %ld, duration %d\n",

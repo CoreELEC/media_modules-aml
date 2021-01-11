@@ -349,6 +349,7 @@ struct vdec_mpeg12_hw_s {
 	u32 level_idc;
 	int dec_again_cnt;
 	int vdec_pg_enable_flag;
+	ulong fb_token;
 };
 
 static unsigned char aspect_ratio_table[16] = {
@@ -449,6 +450,16 @@ static const u32 frame_rate_tab[16] = {
 	96000 / 24, 96000 / 24, 96000 / 24
 };
 
+static void mpeg12_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
+{
+	vmpeg_vf_put(vf, vdec_ctx);
+}
+
+static void mpeg12_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
+{
+	*vf = vmpeg_vf_get(vdec_ctx);
+}
+
 static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int i)
 {
 	int ret;
@@ -461,16 +472,27 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-	if (hw->pics[i].v4l_ref_buf_addr)
-		return 0;
+	if (hw->pics[i].v4l_ref_buf_addr) {
+		struct vdec_v4l2_buffer *fb =
+			(struct vdec_v4l2_buffer *)
+			hw->pics[i].v4l_ref_buf_addr;
 
-	ret = vdec_v4l_get_buffer(hw->v4l2_ctx, &fb);
+		fb->status = FB_ST_DECODER;
+		return 0;
+	}
+
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false);
 	if (ret < 0) {
 		debug_print(DECODE_ID(hw), 0,
 			"[%d] get fb fail %d/%d.\n",
 			ctx->id, i, hw->buf_num);
 		return ret;
 	}
+
+	fb->caller	= hw_to_vdec(hw);
+	fb->put_vframe	= mpeg12_put_video_frame;
+	fb->get_vframe	= mpeg12_get_video_frame;
+	fb->status	= FB_ST_DECODER;
 
 	if (!hw->frame_width || !hw->frame_height) {
 		struct vdec_pic_info pic;
@@ -602,6 +624,9 @@ static int find_free_buffer(struct vdec_mpeg12_hw_s *hw)
 			/*run to parser csd data*/
 			i = 0;
 		} else {
+			if (!ctx->fb_ops.try_lock(&ctx->fb_ops, &hw->fb_token))
+				return -1;
+
 			if (vmpeg12_v4l_alloc_buff_config_canvas(hw, i))
 				return -1;
 		}
@@ -1668,6 +1693,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	u32 info = pic->buffer_info;
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	struct vdec_v4l2_buffer *fb = NULL;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	bool pb_skip = false;
 
@@ -1718,6 +1744,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		if (hw->is_used_v4l) {
 			vf->v4l_mem_handle
 				= hw->pics[index].v4l_ref_buf_addr;
+			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 			debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 				"[%d] %s(), v4l mem handle: 0x%lx\n",
 				((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
@@ -1826,9 +1853,17 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 					__func__);
 			}
 			if (without_display_mode == 0) {
-				vf_notify_receiver(vdec->vf_provider_name,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY,
-					NULL);
+				if (hw->is_used_v4l) {
+					if (v4l2_ctx->is_stream_off) {
+						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
+					} else {
+						fb->fill_buf_done(v4l2_ctx, fb);
+					}
+				} else {
+					vf_notify_receiver(vdec->vf_provider_name,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY,
+						NULL);
+				}
 			} else
 				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 
@@ -2249,7 +2284,7 @@ static void vmpeg12_notify_work(struct work_struct *work)
 					struct vdec_mpeg12_hw_s, notify_work);
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
-	if (vdec->fr_hint_state == VDEC_NEED_HINT) {
+	if (!hw->is_used_v4l && vdec->fr_hint_state == VDEC_NEED_HINT) {
 		vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_FR_HINT,
 				(void *)((unsigned long)hw->frame_dur));
@@ -2311,10 +2346,12 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			return -1;
 		}
 		index = find_free_buffer(hw);
-		if ((index == -1) &&
-			vdec_v4l_get_buffer(hw->v4l2_ctx, &fb)) {
-			pr_err("[%d] get fb fail.\n", ctx->id);
-			return -1;
+		if (index == -1) {
+			ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
+			if (ctx->fb_ops.alloc(&ctx->fb_ops, 0, &fb, false) < 0) {
+				pr_err("[%d] get fb fail.\n", ctx->id);
+				return -1;
+			}
 		}
 
 		vf->type |= VIDTYPE_V4L_EOS;
@@ -2322,11 +2359,22 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf->v4l_mem_handle = (index == -1) ? (ulong)fb :
 							hw->pics[index].v4l_ref_buf_addr;
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
+		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		if (fb->caller == NULL) {
+			fb->caller	= hw_to_vdec(hw);
+			fb->put_vframe	= mpeg12_put_video_frame;
+			fb->get_vframe	= mpeg12_get_video_frame;
+			fb->status	= FB_ST_DECODER;
+		}
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-		vf_notify_receiver(vdec->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+
+		if (hw->is_used_v4l)
+			fb->fill_buf_done(ctx, fb);
+		else
+			vf_notify_receiver(vdec->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
 		pr_info("[%d] mpeg12 EOS notify.\n", ctx->id);
 	}
@@ -2472,6 +2520,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		if (ctx->param_sets_from_ucode &&
 			!hw->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
+
+		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
 	}
 
 	if (hw->vdec_cb)
@@ -2786,7 +2836,7 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 			hw->vfbuf_use[i], hw->ref_use[i]);
 	}
 
-	if (vf_get_receiver(vdec->vf_provider_name)) {
+	if (!hw->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
 		enum receviver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
@@ -3737,6 +3787,13 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 #ifdef DUMP_USER_DATA
 	amvdec_mmpeg12_uninit_userdata_dump(hw);
 #endif
+
+	if (hw->is_used_v4l) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
+		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
+	}
 
 	if (hw->fw) {
 		vfree(hw->fw);

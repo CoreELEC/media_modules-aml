@@ -291,13 +291,13 @@ static int video_component_init(struct stream_port_s *port,
 		|| port->vformat == VFORMAT_H264_4K2K) {
 		port->is_4k = true;
 		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX
-				&& port->vformat == VFORMAT_H264)
+				&& (port->vformat == VFORMAT_H264))
 			vdec_poweron(VDEC_HEVC);
 	} else
 		port->is_4k = false;
 
 	if (port->type & PORT_TYPE_FRAME) {
-		ret = vdec_init(vdec, port->is_4k);
+		ret = vdec_init(vdec, port->is_4k, true);
 		if (ret < 0) {
 			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "failed\n");
 			video_component_release(port, pbuf, 2);
@@ -325,7 +325,7 @@ static int video_component_init(struct stream_port_s *port,
 	}
 
 	/* todo: set path based on port flag */
-	ret = vdec_init(vdec, port->is_4k);
+	ret = vdec_init(vdec, port->is_4k, true);
 	if (ret < 0) {
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "vdec_init failed\n");
 		video_component_release(port, pbuf, 2);
@@ -333,7 +333,7 @@ static int video_component_init(struct stream_port_s *port,
 	}
 
 	if (vdec_dual(vdec)) {
-		ret = vdec_init(vdec->slave, port->is_4k);
+		ret = vdec_init(vdec->slave, port->is_4k, true);
 		if (ret < 0) {
 			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "vdec_init failed\n");
 			video_component_release(port, pbuf, 2);
@@ -362,8 +362,8 @@ static int vdec_ports_release(struct stream_port_s *port)
 	struct stream_buf_s *pvbuf = &bufs[BUF_TYPE_VIDEO];
 
 	if (has_hevc_vdec()) {
-		if (port->vformat == VFORMAT_HEVC
-			|| port->vformat == VFORMAT_VP9)
+		if (port->vformat == VFORMAT_HEVC ||
+			port->vformat == VFORMAT_VP9)
 			pvbuf = &bufs[BUF_TYPE_HEVC];
 	}
 
@@ -391,7 +391,6 @@ static void set_vdec_properity(struct vdec_s *vdec,
 	vdec->port	= &ada_ctx->port;
 	vdec->format	= ada_ctx->video_type;
 	vdec->sys_info_store = ada_ctx->dec_prop;
-	vdec->vf_receiver_name = ada_ctx->recv_name;
 
 	/* binding v4l2 ctx to vdec. */
 	vdec->private = ada_ctx->ctx;
@@ -425,7 +424,6 @@ static void set_vdec_properity(struct vdec_s *vdec,
 		vdec->frame_base_video_path = aml_set_vfm_path;
 
 	vdec->port->flag = vdec->port_flag;
-	ada_ctx->vfm_path = vdec->frame_base_video_path;
 
 	vdec->config_len = ada_ctx->config.length >
 		PAGE_SIZE ? PAGE_SIZE : ada_ctx->config.length;
@@ -445,6 +443,7 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 	if (IS_ERR_OR_NULL(vdec))
 		return -1;
 
+	vdec->disable_vfm = true;
 	set_vdec_properity(vdec, ada_ctx);
 
 	/* init hw and gate*/
@@ -461,8 +460,8 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 		&& (vdec->port_flag & PORT_FLAG_VFORMAT)) {
 		vdec->port->is_4k = false;
 		if (has_hevc_vdec()) {
-			if (vdec->port->vformat == VFORMAT_HEVC
-				|| vdec->port->vformat == VFORMAT_VP9)
+			if (vdec->port->vformat == VFORMAT_HEVC ||
+				vdec->port->vformat == VFORMAT_VP9)
 				pvbuf = &bufs[BUF_TYPE_HEVC];
 		}
 
@@ -667,7 +666,8 @@ int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *mode)
 			vdec_set_eos(vdec, false);
 
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_PRINFO,
-			"reset mode: %d\n", *mode);
+			"reset mode: %d, es frames buffering: %d\n",
+			*mode, vdec_frame_number(ada_ctx));
 
 		ret = vdec_v4l2_reset(vdec, *mode);
 		*mode = V4L_RESET_MODE_NORMAL;

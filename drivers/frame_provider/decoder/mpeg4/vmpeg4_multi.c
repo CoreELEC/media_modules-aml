@@ -337,6 +337,7 @@ struct vdec_mpeg4_hw_s {
 	unsigned int b_lost_frames;
 	unsigned int b_concealed_frames;
 	int vdec_pg_enable_flag;
+	ulong fb_token;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -382,6 +383,16 @@ static int vmpeg4_get_buf_num(struct vdec_mpeg4_hw_s *hw)
 	return buf_num;
 }
 
+static void mpeg4_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
+{
+	vmpeg_vf_put(vf, vdec_ctx);
+}
+
+static void mpeg4_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
+{
+	*vf = vmpeg_vf_get(vdec_ctx);
+}
+
 static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i)
 {
 	int ret;
@@ -394,10 +405,16 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-	if (hw->pic[i].v4l_ref_buf_addr)
-		return 0;
+	if (hw->pic[i].v4l_ref_buf_addr) {
+		struct vdec_v4l2_buffer *fb =
+			(struct vdec_v4l2_buffer *)
+			hw->pic[i].v4l_ref_buf_addr;
 
-	ret = vdec_v4l_get_buffer(hw->v4l2_ctx, &fb);
+		fb->status = FB_ST_DECODER;
+		return 0;
+	}
+
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false);
 	if (ret < 0) {
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"[%d] get fb fail.\n",
@@ -405,6 +422,11 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 			(hw->v4l2_ctx))->id);
 		return ret;
 	}
+
+	fb->caller	= hw_to_vdec(hw);
+	fb->put_vframe	= mpeg4_put_video_frame;
+	fb->get_vframe	= mpeg4_get_video_frame;
+	fb->status	= FB_ST_DECODER;
 
 	if (!hw->frame_width || !hw->frame_height) {
 			struct vdec_pic_info pic;
@@ -521,11 +543,13 @@ static int find_free_buffer(struct vdec_mpeg4_hw_s *hw)
 			/*run to parser csd data*/
 			i = 0xffffff;
 		} else {
+			if (!ctx->fb_ops.try_lock(&ctx->fb_ops, &hw->fb_token))
+				return -1;
+
 			if (vmpeg4_v4l_alloc_buff_config_canvas(hw, i))
 				return -1;
 		}
 	}
-
 
 	return i;
 }
@@ -694,6 +718,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 	struct vframe_s *vf = NULL;
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	struct vdec_v4l2_buffer *fb = NULL;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	int index = pic->index;
 	bool pb_skip = false;
@@ -720,6 +745,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		if (hw->is_used_v4l) {
 			vf->v4l_mem_handle
 				= hw->pic[index].v4l_ref_buf_addr;
+			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 				"[%d] %s(), v4l mem handle: 0x%lx\n",
 				((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
@@ -780,8 +806,16 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				hw->b_decoded_frames++;
 			}
 			if (without_display_mode == 0) {
-				vf_notify_receiver(vdec->vf_provider_name,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+				if (hw->is_used_v4l) {
+					if (v4l2_ctx->is_stream_off) {
+						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
+					} else {
+						fb->fill_buf_done(v4l2_ctx, fb);
+					}
+				} else {
+					vf_notify_receiver(vdec->vf_provider_name,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+				}
 			} else
 				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 		}
@@ -847,8 +881,16 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				hw->b_decoded_frames++;
 			}
 			if (without_display_mode == 0) {
-				vf_notify_receiver(vdec->vf_provider_name,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+				if (hw->is_used_v4l) {
+					if (v4l2_ctx->is_stream_off) {
+						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
+					} else {
+						fb->fill_buf_done(v4l2_ctx, fb);
+					}
+				} else {
+					vf_notify_receiver(vdec->vf_provider_name,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+				}
 			} else
 				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 		}
@@ -933,8 +975,16 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vdec_fill_vdec_frame(vdec, NULL,
 				&vinfo, vf, pic->hw_decode_time);
 			if (without_display_mode == 0) {
-				vf_notify_receiver(vdec->vf_provider_name,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+				if (hw->is_used_v4l) {
+					if (v4l2_ctx->is_stream_off) {
+						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
+					} else {
+						fb->fill_buf_done(v4l2_ctx, fb);
+					}
+				} else {
+					vf_notify_receiver(vdec->vf_provider_name,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+				}
 			} else
 				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 		}
@@ -1524,10 +1574,12 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 		if (hw->is_used_v4l) {
 			index = find_free_buffer(hw);
-			if (((index == -1) || (index == 0xffffff)) &&
-				vdec_v4l_get_buffer(hw->v4l2_ctx, &fb)) {
-				pr_err("[%d] get fb fail.\n", ctx->id);
-				return -1;
+			if ((index == -1) || (index == 0xffffff)) {
+				ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, 0, &fb, false) < 0) {
+					pr_err("[%d] get fb fail.\n", ctx->id);
+					return -1;
+				}
 			}
 		}
 
@@ -1536,11 +1588,22 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf->v4l_mem_handle = (index == -1) ? (ulong)fb :
 							hw->pic[index].v4l_ref_buf_addr;;
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
+		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		if (fb->caller == NULL) {
+			fb->caller	= hw_to_vdec(hw);
+			fb->put_vframe	= mpeg4_put_video_frame;
+			fb->get_vframe	= mpeg4_get_video_frame;
+			fb->status	= FB_ST_DECODER;
+		}
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-		vf_notify_receiver(vdec->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+
+		if (hw->is_used_v4l)
+			fb->fill_buf_done(ctx, fb);
+		else
+			vf_notify_receiver(vdec->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
 		pr_info("[%d] mpeg4 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
@@ -1627,6 +1690,8 @@ static void vmpeg4_work(struct work_struct *work)
 		if (ctx->param_sets_from_ucode &&
 			!hw->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
+
+		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
 	}
 
 	/* mark itself has all HW resource released and input released */
@@ -1916,7 +1981,7 @@ static void vmpeg4_dump_state(struct vdec_s *vdec)
 		hw->drop_frame_count
 		);
 
-	if (vf_get_receiver(vdec->vf_provider_name)) {
+	if (!hw->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
 		enum receviver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
@@ -2659,9 +2724,6 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 			hw->canvas_spec[i] = 0xffffff;
 	}
 
-	vf_provider_init(&pdata->vframe_provider,
-		pdata->vf_provider_name, &vf_provider_ops, pdata);
-
 	hw->blkmode = pdata->canvas_mode;
 
 	if (pdata->sys_info) {
@@ -2711,6 +2773,10 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 			hw->blkmode = config_val;
 	} else
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
+
+	if (!hw->is_used_v4l)
+		vf_provider_init(&pdata->vframe_provider,
+			pdata->vf_provider_name, &vf_provider_ops, pdata);
 
 	hw->buf_num = vmpeg4_get_buf_num(hw);
 
@@ -2772,6 +2838,13 @@ static int ammvdec_mpeg4_remove(struct platform_device *pdev)
 			vdec->free_canvas_ex(canvas_y(hw->canvas_spec[i]), vdec->id);
 			vdec->free_canvas_ex(canvas_u(hw->canvas_spec[i]), vdec->id);
 		}
+	}
+
+	if (hw->is_used_v4l) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
+		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
 	}
 
 	mmpeg4_debug_print(DECODE_ID(hw), 0, "%s\n", __func__);

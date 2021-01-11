@@ -63,7 +63,6 @@ struct aml_v4l2_vpp {
 	struct task_struct *task;
 	bool running;
 	struct semaphore sem_in, sem_out;
-	struct work_struct vpp_work;
 
 	/* In p to i transition, output/frame can be multi writer */
 	struct mutex output_lock;
@@ -75,6 +74,7 @@ struct aml_v4l2_vpp {
 	 */
 	int in_num[2];
 	int out_num[2];
+	ulong fb_token;
 };
 
 #ifdef SUPPORT_V4L_VPP
@@ -88,6 +88,7 @@ int aml_v4l2_vpp_init(
 int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp);
 int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf);
 int aml_v4l2_vpp_rel_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf);
+void fill_vpp_buf_cb(void *v4l_ctx, struct vdec_v4l2_buffer *fb);
 #else
 static inline int aml_v4l2_vpp_get_buf_num(u32 mode) { return -1; }
 static inline int aml_v4l2_vpp_init(
@@ -98,6 +99,7 @@ static inline int aml_v4l2_vpp_init(
 static inline int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp) { return -1; }
 static inline int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf) { return -1; }
 static inline int aml_v4l2_vpp_rel_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf) { return -1; }
+static inline void fill_vpp_buf_cb(void *v4l_ctx, struct vdec_v4l2_buffer *fb) { return; }
 #endif
 
 #endif

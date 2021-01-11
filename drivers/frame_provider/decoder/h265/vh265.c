@@ -1852,6 +1852,7 @@ struct hevc_state_s {
 	int used_buf_num;
 	u32 dirty_shift_flag;
 	u32 endian;
+	ulong fb_token;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -2775,7 +2776,7 @@ static int get_free_buf_idx(struct hevc_state_s *hevc)
 	struct PIC_s *pic;
 	int i;
 
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+	for (i = 0; i < hevc->used_buf_num; i++) {
 		pic = hevc->m_PIC[i];
 		if ((pic == NULL) ||
 			(pic->index == -1) ||
@@ -3238,6 +3239,16 @@ static int hevc_get_header_size(int w, int h)
 		return ALIGN(MMU_COMPRESS_HEADER_SIZE, 0x10000);
 }
 
+static void hevc_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
+{
+	vh265_vf_put(vf, vdec_ctx);
+}
+
+static void hevc_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
+{
+	*vf = vh265_vf_get(vdec_ctx);
+}
+
 static struct internal_comp_buf* v4lfb_to_icomp_buf(
 		struct hevc_state_s *hevc,
 		struct vdec_v4l2_buffer *fb)
@@ -3266,14 +3277,19 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
 	int ret = -1;
 	int i = pic->index;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)hevc->v4l2_ctx;
 	struct vdec_v4l2_buffer *fb = NULL;
 
-	ret = vdec_v4l_get_buffer(hevc->v4l2_ctx, &fb);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hevc->fb_token, &fb, false);
 	if (ret < 0) {
-		hevc_print(hevc, 0, "[%d] H265 get buffer fail.\n",
-			((struct aml_vcodec_ctx *)(hevc->v4l2_ctx))->id);
+		hevc_print(hevc, 0, "[%d] H265 get buffer fail.\n", ctx->id);
 		return ret;
 	}
+
+	fb->caller	= hw_to_vdec(hevc);
+	fb->put_vframe	= hevc_put_video_frame;
+	fb->get_vframe	= hevc_get_video_frame;
+	fb->status	= FB_ST_DECODER;
 
 	if (hevc->mmu_enable) {
 		struct internal_comp_buf *ibuf = v4lfb_to_icomp_buf(hevc, fb);
@@ -6140,6 +6156,13 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 		hevc->param.p.conf_win_bottom_offset;
 	new_pic->chroma_format_idc =
 			hevc->param.p.chroma_format_idc;
+
+	if (new_pic) {
+		struct vdec_v4l2_buffer *fb =
+			(struct vdec_v4l2_buffer *)new_pic->cma_alloc_addr;
+
+		fb->status = FB_ST_DECODER;
+	}
 
 	hevc_print(hevc, H265_DEBUG_BUFMGR,
 		"%s: index %d, buf_idx %d, decode_idx %d, POC %d\n",
@@ -9285,6 +9308,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 	u32 frame_size = 0;
 	struct vdec_info tmp4x;
 	struct aml_vcodec_ctx * v4l2_ctx = hevc->v4l2_ctx;
+	struct vdec_v4l2_buffer *fb = NULL;
 
 	/* swap uv */
 	if (hevc->is_used_v4l) {
@@ -9307,6 +9331,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		if (hevc->is_used_v4l) {
 			vf->v4l_mem_handle
 				= hevc->m_BUF[pic->BUF_index].v4l_ref_buf_addr;
+			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 			if (hevc->mmu_enable) {
 				vf->mm_box.bmmu_box	= hevc->bmmu_box;
 				vf->mm_box.bmmu_idx	= VF_BUFFER_IDX(hevc->buffer_wrap[pic->BUF_index]);
@@ -9908,8 +9933,16 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		}
 
 		if (without_display_mode == 0) {
-			vf_notify_receiver(hevc->provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			if (hevc->is_used_v4l) {
+				if (v4l2_ctx->is_stream_off) {
+					vh265_vf_put(vh265_vf_get(vdec), vdec);
+				} else {
+					fb->fill_buf_done(v4l2_ctx, fb);
+				}
+			} else {
+				vf_notify_receiver(hevc->provider_name,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			}
 		}
 		else
 			vh265_vf_put(vh265_vf_get(vdec), vdec);
@@ -9993,7 +10026,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			}
 
 			if (index == INVALID_IDX) {
-				if (vdec_v4l_get_buffer(hw->v4l2_ctx, &fb) < 0) {
+				ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, 0, &fb, false) < 0) {
 					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
 					return -1;
 				}
@@ -10005,10 +10039,22 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
 		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
 					hw->m_BUF[index].v4l_ref_buf_addr;
+		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		if (fb->caller == NULL) {
+			fb->caller	= hw_to_vdec(hw);
+			fb->put_vframe	= hevc_put_video_frame;
+			fb->get_vframe	= hevc_get_video_frame;
+			fb->status	= FB_ST_DECODER;
+		}
+
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-		vf_notify_receiver(vdec->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+
+		if (hw->is_used_v4l)
+			fb->fill_buf_done(ctx, fb);
+		else
+			vf_notify_receiver(vdec->vf_provider_name,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
 		pr_info("[%d] H265 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
@@ -12532,21 +12578,23 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	hevc->provider_name = PROVIDER_NAME;
 
 #ifdef MULTI_INSTANCE_SUPPORT
-	vf_provider_init(&vh265_vf_prov, hevc->provider_name,
-				&vh265_vf_provider, vdec);
-	vf_reg_provider(&vh265_vf_prov);
-	vf_notify_receiver(hevc->provider_name, VFRAME_EVENT_PROVIDER_START,
-				NULL);
-	if (hevc->frame_dur != 0) {
-		if (!is_reset) {
-			vf_notify_receiver(hevc->provider_name,
-					VFRAME_EVENT_PROVIDER_FR_HINT,
-					(void *)
-					((unsigned long)hevc->frame_dur));
-			fr_hint_status = VDEC_HINTED;
-		}
-	} else
-		fr_hint_status = VDEC_NEED_HINT;
+	if (!hevc->is_used_v4l) {
+		vf_provider_init(&vh265_vf_prov, hevc->provider_name,
+					&vh265_vf_provider, vdec);
+		vf_reg_provider(&vh265_vf_prov);
+		vf_notify_receiver(hevc->provider_name, VFRAME_EVENT_PROVIDER_START,
+					NULL);
+		if (hevc->frame_dur != 0) {
+			if (!is_reset) {
+				vf_notify_receiver(hevc->provider_name,
+						VFRAME_EVENT_PROVIDER_FR_HINT,
+						(void *)
+						((unsigned long)hevc->frame_dur));
+				fr_hint_status = VDEC_HINTED;
+			}
+		} else
+			fr_hint_status = VDEC_NEED_HINT;
+	}
 #else
 	vf_provider_init(&vh265_vf_prov, PROVIDER_NAME, &vh265_vf_provider,
 					 hevc);
@@ -12860,7 +12908,15 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 	struct PIC_s *pic = NULL;
 	int i, free_count = 0;
 
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+	if (ctx->cap_pool.dec < hevc->used_buf_num) {
+		free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
+		if (free_count &&
+			!ctx->fb_ops.try_lock(&ctx->fb_ops, &hevc->fb_token)) {
+			return false;
+		}
+	}
+
+	for (i = 0; i < hevc->used_buf_num; i++) {
 		pic = hevc->m_PIC[i];
 		if (pic == NULL ||
 			pic->index == -1 ||
@@ -12875,12 +12931,7 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 		}
 	}
 
-	if (ctx->cap_pool.out < hevc->used_buf_num) {
-		free_count +=
-			v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
-	}
-
-	return free_count ? 1 : 0;
+	return free_count < run_ready_min_buf_num ? 0 : 1;
 }
 
 static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
@@ -12912,7 +12963,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 				new_pic = pic;
 		}
 	}
-	if (new_pic == NULL) {
+	if (!hevc->is_used_v4l && new_pic == NULL) {
 		enum receviver_start_e state = RECEIVER_INACTIVE;
 		if (vf_get_receiver(vdec->vf_provider_name)) {
 			state =
@@ -12968,6 +13019,10 @@ static void check_buffer_status(struct hevc_state_s *hevc)
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 
 	enum receviver_start_e state = RECEIVER_INACTIVE;
+
+	if (hevc->is_used_v4l)
+		return;
+
 	if (vf_get_receiver(vdec->vf_provider_name)) {
 		state =
 		vf_notify_receiver(vdec->vf_provider_name,
@@ -13037,7 +13092,7 @@ static int vmh265_stop(struct hevc_state_s *hevc)
 		hevc->stat &= ~STAT_ISR_REG;
 	}
 
-	if (hevc->stat & STAT_VF_HOOK) {
+	if (!hevc->is_used_v4l && hevc->stat & STAT_VF_HOOK) {
 		if (fr_hint_status == VDEC_HINTED)
 			vf_notify_receiver(hevc->provider_name,
 					VFRAME_EVENT_PROVIDER_FR_END_HINT,
@@ -13120,6 +13175,10 @@ static void vh265_notify_work(struct work_struct *work)
 						struct hevc_state_s,
 						notify_work);
 	struct vdec_s *vdec = hw_to_vdec(hevc);
+
+	if (hevc->is_used_v4l)
+		return;
+
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (vdec->fr_hint_state == VDEC_NEED_HINT) {
 		vf_notify_receiver(hevc->provider_name,
@@ -13621,6 +13680,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		if (ctx->param_sets_from_ucode &&
 			!hevc->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
+
+		ctx->fb_ops.unlock(&ctx->fb_ops, hevc->fb_token);
 	}
 
 	if (hevc->vdec_cb)
@@ -13781,7 +13842,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (ctx->param_sets_from_ucode) {
 			if (hevc->v4l_params_parsed) {
-				if (ctx->cap_pool.in < hevc->used_buf_num) {
+				if (ctx->cap_pool.dec < hevc->used_buf_num) {
 					if (is_avaliable_buffer(hevc))
 						ret = 1;
 					else
@@ -14312,7 +14373,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		input_empty[hevc->index]
 		);
 
-	if (vf_get_receiver(vdec->vf_provider_name)) {
+	if (hevc->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
 		enum receviver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
@@ -14518,9 +14579,6 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			MULTI_INSTANCE_PROVIDER_NAME ".%02x", pdev->id & 0xff);
 
-	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-		&vh265_vf_provider, pdata);
-
 	hevc->provider_name = pdata->vf_provider_name;
 	platform_set_drvdata(pdev, pdata);
 
@@ -14619,6 +14677,10 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		}
 		hevc->double_write_mode = double_write_mode;
 	}
+
+	if (!hevc->is_used_v4l)
+		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
+			&vh265_vf_provider, pdata);
 
 	if (force_config_fence) {
 		hevc->enable_fence = true;
@@ -14826,6 +14888,13 @@ static int ammvdec_h265_remove(struct platform_device *pdev)
 
 	if (hevc->enable_fence)
 		vdec_fence_release(hevc, &vdec->sync);
+
+	if (hevc->is_used_v4l) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+
+		ctx->fb_ops.unlock(&ctx->fb_ops, hevc->fb_token);
+	}
 
 	vfree((void *)hevc);
 

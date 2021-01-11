@@ -33,7 +33,6 @@
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
-#include "aml_vcodec_vfm.h"
 #include "aml_vcodec_vpp.h"
 #include <linux/file.h>
 #include <linux/anon_inodes.h>
@@ -90,6 +89,7 @@ static int fops_vcodec_open(struct file *file)
 	init_waitqueue_head(&ctx->wq);
 	INIT_WORK(&ctx->dmabuff_recycle_work, dmabuff_recycle_worker);
 	INIT_KFIFO(ctx->dmabuff_recycle);
+	INIT_KFIFO(ctx->capture_buffer);
 
 	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
 
@@ -121,7 +121,7 @@ static int fops_vcodec_open(struct file *file)
 	aml_vcodec_dec_set_default_params(ctx);
 	ctx->is_stream_off = true;
 
-	ret = aml_thread_start(ctx, try_to_capture, AML_THREAD_CAPTURE, "cap");
+	ret = aml_thread_start(ctx, aml_thread_capture_worker, AML_THREAD_CAPTURE, "cap");
 	if (ret) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"Failed to creat capture thread.\n");
@@ -492,8 +492,8 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 	}
 
 	dev->decode_workqueue =
-		alloc_ordered_workqueue(AML_VCODEC_DEC_NAME,
-			WQ_MEM_RECLAIM | WQ_FREEZABLE);
+		alloc_ordered_workqueue("output-worker",
+			__WQ_LEGACY | WQ_MEM_RECLAIM | WQ_HIGHPRI);
 	if (!dev->decode_workqueue) {
 		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"Failed to create decode workqueue\n");
