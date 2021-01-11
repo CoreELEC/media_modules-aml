@@ -4374,6 +4374,7 @@ void dmx_free_chan(struct aml_dmx *dmx, int cid)
 	if (cid <= 3 && dmx->channel[cid].dvr_feed) {
 		/*start the dvr feed */
 		dmx_add_feed(dmx, dmx->channel[cid].dvr_feed);
+		dmx->channel[cid].dvr_feed = NULL;
 	}
 }
 
