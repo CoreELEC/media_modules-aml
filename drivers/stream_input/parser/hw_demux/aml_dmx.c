@@ -4804,6 +4804,7 @@ void dmx_free_chan(struct aml_dmx *dmx, int cid)
 		pr_dbg("raw ch fix: dmx:%d: ch[%d] -> ch[(dvr)]\n",
 			dmx->id, cid);
 		dmx_add_feed(dmx, dmx->channel[cid].dvr_feed);
+		dmx->channel[cid].dvr_feed = NULL;
 	}
 }
 
