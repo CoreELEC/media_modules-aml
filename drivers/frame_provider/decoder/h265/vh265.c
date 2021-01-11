@@ -11808,10 +11808,10 @@ int vh265_dec_status(struct vdec_info *vstatus)
 	if (!hevc)
 		return -1;
 
-	vstatus->frame_width = hevc->frame_width;
+	vstatus->frame_width = hevc->pic_w;
 	/* for hevc interlace for disp height x2 */
 	vstatus->frame_height =
-		(hevc->frame_height << hevc->interlace_flag);
+		(hevc->pic_h << hevc->interlace_flag);
 	if (hevc->frame_dur != 0)
 		vstatus->frame_rate = ((96000 * 10 / hevc->frame_dur) % 10) < 5 ?
 				96000 / hevc->frame_dur : (96000 / hevc->frame_dur +1);

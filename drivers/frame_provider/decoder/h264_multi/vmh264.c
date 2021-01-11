@@ -931,6 +931,8 @@ struct vdec_h264_hw_s {
 	u32 start_bit_cnt;
 	u32 right_frame_count;
 	u32 wrong_frame_count;
+	u32 error_frame_width;
+	u32 error_frame_height;
 };
 
 static u32 again_threshold;
@@ -5041,8 +5043,12 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			seq_info2,
 			mb_width,
 			mb_height);
+			hw->error_frame_width = mb_width << 4;
+			hw->error_frame_height = mb_height << 4;
 		return -1;
 	}
+	hw->error_frame_width = 0;
+	hw->error_frame_height = 0;
 
 	if (seq_info2 != 0 &&
 		hw->seq_info2 != (seq_info2 & (~0x80000000)) &&
@@ -7443,6 +7449,11 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
+	if (hw->error_frame_width &&
+		hw->error_frame_height) {
+		vstatus->frame_width = hw->error_frame_width;
+		vstatus->frame_height = hw->error_frame_height;
+	}
 	if (hw->frame_dur != 0) {
 		vstatus->frame_dur = hw->frame_dur;
 		vstatus->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
@@ -8740,8 +8751,12 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 			param1,
 			mb_width,
 			mb_height);
+		hw->error_frame_width = mb_width << 4;
+		hw->error_frame_height = mb_height << 4;
 		return -1;
 	}
+	hw->error_frame_width = 0;
+	hw->error_frame_height = 0;
 
 	reorder_pic_num =
 		get_max_dec_frame_buf_size(level_idc,
