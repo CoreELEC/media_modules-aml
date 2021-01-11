@@ -2738,8 +2738,12 @@ static void timeout_process(struct vdec_avs_hw_s *hw)
 	} else {
 		vavs_save_regs(hw);
 
-		if (hw->decode_pic_count == 0)
+		//if (hw->decode_pic_count == 0)
+		hw->decode_pic_count++;
+		if ((hw->decode_pic_count & 0xffff) == 0) {
+		/*make ucode do not handle it as first picture*/
 			hw->decode_pic_count++;
+		}
 	}
 	hw->dec_result = DEC_RESULT_DONE;
 
@@ -2913,8 +2917,12 @@ static void check_timer_func(struct timer_list *timer)
 			} else {
 				vavs_save_regs(hw);
 
-				if (hw->decode_pic_count == 0)
+				//if (hw->decode_pic_count == 0)
+				hw->decode_pic_count++;
+				if ((hw->decode_pic_count & 0xffff) == 0) {
+				/*make ucode do not handle it as first picture*/
 					hw->decode_pic_count++;
+				}
 			}
 			hw->dec_result = DEC_RESULT_DONE;
 
@@ -3769,7 +3777,11 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 #endif
 				if (vdec_frame_based(hw_to_vdec(hw))) {
 					hw->dec_result = DEC_RESULT_DONE;
-					if (hw->decode_pic_count == 0) {
+					//if (hw->decode_pic_count == 0) {
+						hw->decode_pic_count++;
+					//}
+					if ((hw->decode_pic_count & 0xffff) == 0) {
+					/*make ucode do not handle it as first picture*/
 						hw->decode_pic_count++;
 					}
 					vavs_save_regs(hw);
