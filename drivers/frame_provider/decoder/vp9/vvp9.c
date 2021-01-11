@@ -1234,6 +1234,8 @@ struct VP9Decoder_s {
 	int buffer_wrap[FRAME_BUFFERS];
 	int last_width;
 	int last_height;
+	u32 error_frame_width;
+	u32 error_frame_height;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -1353,9 +1355,13 @@ static int setup_frame_size(
 	width = params->p.width;
 	height = params->p.height;
 	if (is_oversize(width, height)) {
+		pbi->error_frame_width = width;
+		pbi->error_frame_height = height;
 		vp9_print(pbi, 0, "%s, Error: Invalid frame size\n", __func__);
 		return -1;
 	}
+	pbi->error_frame_width = 0;
+	pbi->error_frame_height = 0;
 
 	/*vp9_read_frame_size(rb, &width, &height);*/
 	if (print_header_info)
@@ -1480,9 +1486,13 @@ static int setup_frame_size_with_refs(
 	}
 
 	if (is_oversize(width, height)) {
+		pbi->error_frame_width = width;
+		pbi->error_frame_height = height;
 		vp9_print(pbi, 0, "%s, Error: Invalid frame size\n", __func__);
 		return -1;
 	}
+	pbi->error_frame_width = 0;
+	pbi->error_frame_height = 0;
 
 	params->p.width = width;
 	params->p.height = height;
@@ -9271,6 +9281,12 @@ int vvp9_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 
 	vstatus->frame_width = frame_width;
 	vstatus->frame_height = frame_height;
+	if (vp9->error_frame_width &&
+		vp9->error_frame_height) {
+		vstatus->frame_width = vp9->error_frame_width;
+		vstatus->frame_height = vp9->error_frame_height;
+	}
+
 	if (vp9->frame_dur != 0)
 		vstatus->frame_rate = ((96000 * 10 / vp9->frame_dur) % 10) < 5 ?
 				96000 / vp9->frame_dur : (96000 / vp9->frame_dur +1);
