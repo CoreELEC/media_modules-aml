@@ -11261,7 +11261,12 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	if (!pbi->is_used_v4l) {
 		pbi->mem_map_mode = mem_map_mode;
 	}
-	pbi->run_ready_min_buf_num = run_ready_min_buf_num;
+
+	if (pbi->is_used_v4l)
+		pbi->run_ready_min_buf_num = run_ready_min_buf_num - 1 ;
+	else
+		pbi->run_ready_min_buf_num = run_ready_min_buf_num;
+
 	if (is_oversize(pbi->max_pic_w, pbi->max_pic_h)) {
 		pr_err("over size: %dx%d, probe failed\n",
 			pbi->max_pic_w, pbi->max_pic_h);
