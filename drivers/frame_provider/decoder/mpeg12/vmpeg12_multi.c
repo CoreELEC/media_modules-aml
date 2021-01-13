@@ -3406,7 +3406,20 @@ void (*callback)(struct vdec_s *, void *),
 
 static void reset(struct vdec_s *vdec)
 {
+	struct vdec_mpeg12_hw_s *hw = (struct vdec_mpeg12_hw_s *)vdec->private;
+
 	pr_info("ammvdec_mpeg12: reset.\n");
+
+	vmpeg12_local_init(hw);
+
+	if (hw->is_used_v4l) {
+		u32 i, buf_num = vmpeg12_get_buf_num(hw);
+		for (i = 0; i < buf_num; i++) {
+			hw->pics[i].v4l_ref_buf_addr = 0;
+		}
+	}
+
+	hw->ctx_valid = 0;
 }
 
 static int vmpeg12_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)

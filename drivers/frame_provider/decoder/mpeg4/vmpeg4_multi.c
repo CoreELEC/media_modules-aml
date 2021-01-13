@@ -2557,6 +2557,12 @@ static void reset(struct vdec_s *vdec)
 
 	vmpeg4_local_init(hw);
 
+	if (hw->is_used_v4l) {
+		u32 i, buf_num = vmpeg4_get_buf_num(hw);
+		for (i = 0; i < buf_num; i++) {
+			hw->pic[i].v4l_ref_buf_addr = 0;
+		}
+	}
 	hw->ctx_valid = 0;
 }
 
