@@ -4560,7 +4560,7 @@ struct vdec_s *vdec_get_default_vdec_for_userdata(void)
 }
 EXPORT_SYMBOL(vdec_get_default_vdec_for_userdata);
 
-struct vdec_s *vdec_get_vdec_by_id(int vdec_id)
+struct vdec_s *vdec_get_vdec_by_id(int video_id)
 {
 	struct vdec_s *vdec;
 	struct vdec_s *ret_vdec;
@@ -4572,7 +4572,7 @@ struct vdec_s *vdec_get_vdec_by_id(int vdec_id)
 	ret_vdec = NULL;
 	if (!list_empty(&core->connected_vdec_list)) {
 		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
-			if (vdec->id == vdec_id) {
+			if (vdec->video_id == video_id) {
 				ret_vdec = vdec;
 				break;
 			}

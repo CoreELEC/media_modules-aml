@@ -299,6 +299,7 @@ struct vdec_s {
 	char dec_spend_time[32];
 	char dec_spend_time_ave[32];
 	u32 discard_start_data_flag;
+	u32 video_id;
 };
 
 /* common decoder vframe provider name to use default vfm path */
@@ -470,7 +471,7 @@ int vdec_wakeup_userdata_poll(struct vdec_s *vdec);
 
 void vdec_reset_userdata_fifo(struct vdec_s *vdec, int bInit);
 
-struct vdec_s *vdec_get_vdec_by_id(int vdec_id);
+struct vdec_s *vdec_get_vdec_by_id(int video_id);
 
 #ifdef VDEC_DEBUG_SUPPORT
 extern void vdec_set_step_mode(void);
