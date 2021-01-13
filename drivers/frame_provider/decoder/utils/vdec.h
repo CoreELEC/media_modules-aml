@@ -314,6 +314,7 @@ struct vdec_s {
 	u32 jump_back_error;
 	u32 jump_back_rp;
 #endif
+	u32 video_id;
 };
 
 /* common decoder vframe provider name to use default vfm path */
@@ -484,7 +485,7 @@ int vdec_wakeup_userdata_poll(struct vdec_s *vdec);
 
 void vdec_reset_userdata_fifo(struct vdec_s *vdec, int bInit);
 
-struct vdec_s *vdec_get_vdec_by_id(int vdec_id);
+struct vdec_s *vdec_get_vdec_by_id(int video_id);
 
 #ifdef VDEC_FCC_SUPPORT
 int vdec_wakeup_fcc_poll(struct vdec_s *vdec);

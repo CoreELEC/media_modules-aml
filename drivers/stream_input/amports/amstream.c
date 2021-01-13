@@ -1506,17 +1506,17 @@ EXPORT_SYMBOL(wakeup_userdata_poll);
 
 void amstream_wakeup_userdata_poll(struct vdec_s *vdec)
 {
-	int vdec_id;
+	int video_id;
 
-	vdec_id = vdec->id;
-	if (vdec_id > 31) {
+	video_id = vdec->video_id;
+	if (video_id > 31) {
 		pr_info("Error, not support so many instances(%d) user data push\n",
-			vdec_id);
+			video_id);
 		return;
 	}
 
 	mutex_lock(&userdata_mutex);
-	ud_ready_vdec_flag |= (1<<vdec_id);
+	ud_ready_vdec_flag |= (1<<video_id);
 
 	atomic_set(&userdata_ready, 1);
 	mutex_unlock(&userdata_mutex);
@@ -2535,6 +2535,10 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		break;
 	case AMSTREAM_SET_NO_POWERDOWN:
 		vdec_set_no_powerdown(parm.data_32);
+		break;
+	case AMSTREAM_SET_VIDEO_ID:
+		priv->vdec->video_id = parm.data_32;
+		pr_info("AMSTREAM_SET_VIDEO_ID video_id: %d\n", parm.data_32);
 		break;
 	default:
 		r = -ENOIOCTLCMD;
