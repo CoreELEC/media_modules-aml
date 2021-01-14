@@ -9937,7 +9937,9 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 	__func__, hw->decode_pic_count+1,
 	hw->skip_frame_count);
 
-	flush_dpb(&hw->dpb);
+	/* Only the caller from inside decoder we call flush_dbp */
+	if (!hw->reset_bufmgr_flag)
+		flush_dpb(&hw->dpb);
 
 	if (!hw->is_used_v4l) {
 		timeout = jiffies + HZ;
