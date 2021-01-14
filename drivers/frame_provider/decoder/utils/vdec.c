@@ -5724,9 +5724,6 @@ int vdec_module_init(void)
 	}
 	INIT_REG_NODE_CONFIGS("media.decoder", &vdec_node,
 		"vdec", vdec_configs, CONFIG_FOR_RW);
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2) {
-		amvdec_common_profile.profile = "vdec, no_single";
-	}
 	vcodec_profile_register(&amvdec_common_profile);
 
 	vcodec_profile_register(&amvdec_input_profile);
