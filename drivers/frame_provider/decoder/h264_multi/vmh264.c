@@ -2729,10 +2729,22 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 	if (frame->frame == NULL &&
 			((frame->is_used == 1 && frame->top_field)
 			|| (frame->is_used == 2 && frame->bottom_field))) {
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
-				"%s Error  frame_num %d  used %d\n",
-				__func__, frame->frame_num, frame->is_used);
-			frame->data_flag |= ERROR_FLAG;
+			if (hw->i_only) {
+				if (frame->is_used == 1)
+					dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+						"%s   No bottom_field !!  frame_num %d  used %d\n",
+						__func__, frame->frame_num, frame->is_used);
+				if (frame->is_used == 2)
+					dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+						"%s   No top_field !!  frame_num %d  used %d\n",
+						__func__, frame->frame_num, frame->is_used);
+			}
+			else {
+				frame->data_flag |= ERROR_FLAG;
+					dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
+					"%s Error  frame_num %d  used %d\n",
+					__func__, frame->frame_num, frame->is_used);
+			}
 	}
 	if (vdec_stream_based(vdec) && !(frame->data_flag & NODISP_FLAG)) {
 		if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
@@ -3051,6 +3063,26 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 					"%s %d type = 0x%x pic_struct = %d pts = 0x%x pts_us64 = 0x%llx bForceInterlace = %d\n",
 					__func__, __LINE__, vf->type, frame->frame->pic_struct,
 					vf->pts, vf->pts_us64, bForceInterlace);
+			}
+		}
+
+		if (hw->i_only) {
+			if (vf_count == 1 && frame->is_used == 1 && frame->top_field
+				&& frame->bottom_field == NULL && frame->frame == NULL) {
+				vf->type =
+					VIDTYPE_INTERLACE_FIRST |
+					nv_order;
+				vf->type |= VIDTYPE_INTERLACE_TOP;
+				vf->duration = vf->duration/2;
+			}
+
+			if (vf_count == 1 && frame->is_used == 2 && frame->bottom_field
+				&& frame->top_field == NULL && frame->frame == NULL) {
+				vf->type =
+					VIDTYPE_INTERLACE_FIRST |
+					nv_order;
+				vf->type |= VIDTYPE_INTERLACE_BOTTOM;
+				vf->duration = vf->duration/2;
 			}
 		}
 
