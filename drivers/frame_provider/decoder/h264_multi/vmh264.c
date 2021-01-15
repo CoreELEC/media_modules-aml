@@ -10543,8 +10543,10 @@ static int __init ammvdec_h264_driver_init_module(void)
 		return -ENODEV;
 	}
 
-	if ((vdec_is_support_4k()) &&
-		(get_cpu_major_id()!= AM_MESON_CPU_MAJOR_ID_T5D)) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+		ammvdec_h264_profile.profile =
+					"dwrite, compressed, frame_dv, fence, v4l";
+	} else if (vdec_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) {
 			ammvdec_h264_profile.profile =
 					"4k, dwrite, compressed, frame_dv, fence, v4l";
