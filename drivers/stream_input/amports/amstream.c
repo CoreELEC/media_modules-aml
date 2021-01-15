@@ -2879,9 +2879,11 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 						sizeof(struct vframe_counter_s),GFP_KERNEL);
 			struct av_param_mvdec_t  __user *uarg = (void *)arg;
 
+			mutex_lock(&amstream_mutex);
 			if (!tmpbuf) {
 				r = -EFAULT;
 				pr_err("kmalloc vframe_counter_s failed!\n");
+				mutex_unlock(&amstream_mutex);
 				break;
 			}
 
@@ -2889,6 +2891,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 			if (!vdec) {
 				r = 0;
 				kfree(tmpbuf);
+				mutex_unlock(&amstream_mutex);
 				break;
 			}
 
@@ -2901,6 +2904,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 					get_user(struct_size, &uarg->struct_size) < 0) {
 						r = -EFAULT;
 						kfree(tmpbuf);
+						mutex_unlock(&amstream_mutex);
 						break;
 					}
 					if (copy_to_user((void *)&uarg->comm,
@@ -2908,6 +2912,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 								sizeof(struct vframe_comm_s))) {
 						r = -EFAULT;
 						kfree(tmpbuf);
+						mutex_unlock(&amstream_mutex);
 						break;
 					}
 					if (struct_size == sizeof(struct av_param_mvdec_t_old)) {//old struct
@@ -2918,11 +2923,13 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 										&tmpbuf[m],
 										sizeof(struct vframe_counter_s_old))) {
 								r = -EFAULT;
+								mutex_unlock(&amstream_mutex);
 								break;
 							}
 						}
 						if (r < 0) {
 							kfree(tmpbuf);
+							mutex_unlock(&amstream_mutex);
 							break;
 						}
 					} else if (struct_size == sizeof(struct av_param_mvdec_t)) {//new struct
@@ -2931,6 +2938,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 									slots*sizeof(struct vframe_counter_s))) {
 							r = -EFAULT;
 							kfree(tmpbuf);
+							mutex_unlock(&amstream_mutex);
 							break;
 						}
 					} else {
@@ -2946,11 +2954,13 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 									&tmpbuf[i].qos,
 									sizeof(struct vframe_qos_s))) {
 							r = -EFAULT;
+							mutex_unlock(&amstream_mutex);
 							break;
 						}
 					}
 					if (r < 0) {
 						kfree(tmpbuf);
+						mutex_unlock(&amstream_mutex);
 						break;
 					}
 				}
@@ -2961,6 +2971,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 			}
 			kfree(tmpbuf);
 		}
+		mutex_unlock(&amstream_mutex);
 		break;
 	case AMSTREAM_IOC_GET_AVINFO:
 		{
