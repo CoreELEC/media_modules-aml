@@ -810,6 +810,8 @@ struct AV1HW_s {
 	u32 cur_obu_type;
 	u32 multi_frame_cnt;
 	u32 endian;
+	u32 run_ready_min_buf_num;
+	int one_package_frame_cnt;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -1566,7 +1568,7 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 		}
 		/* trigger to parse head data. */
 		if (!hw->v4l_params_parsed) {
-			free_buf_count = run_ready_min_buf_num;
+			free_buf_count = hw->run_ready_min_buf_num;
 		}
 		if ((debug & AV1_DEBUG_BUFMGR_MORE) &&
 			(free_buf_count <= 0)) {
@@ -6334,6 +6336,21 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		vdec_count_info(gvs, 0, stream_offset);
 #endif
 		hw_to_vdec(hw)->vdec_fps_detec(hw_to_vdec(hw)->id);
+
+#ifdef AUX_DATA_CRC
+		decoder_do_aux_data_check(hw_to_vdec(hw), pic_config->aux_data_buf,
+			pic_config->aux_data_size);
+#endif
+
+		if (hw->is_used_v4l) {
+			av1_print(hw, AV1_DEBUG_BUFMGR_MORE, "%s aux_data_size = %d\n",
+					__func__, pic_config->aux_data_size);
+			update_vframe_src_fmt(vf,
+				pic_config->aux_data_buf,
+				pic_config->aux_data_size,
+				false, hw->provider_name, NULL);
+		}
+
 		if (without_display_mode == 0) {
 			vf_notify_receiver(hw->provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -8114,11 +8131,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				av1_print(hw, AOM_DEBUG_HW_MORE,
 				"PIC_END, fgs_valid %d search head ...\n",
 				hw->fgs_valid);
-				hw->multi_frame_cnt++;
 				if (hw->config_next_ref_info_flag)
 					config_next_ref_info_hw(hw);
 			} else {
-				hw->multi_frame_cnt = 0;
 				hw->dec_result = DEC_RESULT_DONE;
 				amhevc_stop();
 #ifdef MCRCC_ENABLE
@@ -8374,15 +8389,17 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		}
 	}
 
-	if (hw->multi_frame_cnt) {
+	if (hw->one_package_frame_cnt) {
 		if (get_free_buf_count(hw) <= 0) {
 			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
 			hw->cur_obu_type = obu_type;
 			hw->process_busy = 0;
+			hw->run_ready_min_buf_num = hw->one_package_frame_cnt + 1;
 			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
 		}
 	}
+	hw->one_package_frame_cnt++;
 
 	ret = av1_continue_decoding(hw, obu_type);
 	hw->postproc_done = 0;
@@ -8913,7 +8930,6 @@ static int vav1_local_init(struct AV1HW_s *hw)
 		 0) ? 3200 : hw->vav1_amstream_dec_info.rate;
 	if (width && height)
 		hw->frame_ar = height * 0x100 / width;
-	hw->multi_frame_cnt = 0;
 /*
  *TODO:FOR VERSION
  */
@@ -9580,7 +9596,7 @@ static void av1_work(struct work_struct *work)
 		}
 
 		if (get_free_buf_count(hw) >=
-			run_ready_min_buf_num) {
+			hw->run_ready_min_buf_num) {
 			int r;
 			int decode_size;
 			r = vdec_prepare_input(vdec, &hw->chunk);
@@ -9724,7 +9740,7 @@ static bool is_avaliable_buffer(struct AV1HW_s *hw)
 		}
 	}
 
-	return free_count < run_ready_min_buf_num ? 0 : 1;
+	return free_count < hw->run_ready_min_buf_num ? 0 : 1;
 }
 
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
@@ -9763,7 +9779,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	}
 
 	if (get_free_buf_count(hw) >=
-		run_ready_min_buf_num) {
+		hw->run_ready_min_buf_num) {
 		if (vdec->parallel_dec == 1)
 			ret = CORE_MASK_HEVC;
 		else
@@ -9779,7 +9795,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				if (ctx->cap_pool.in < hw->used_buf_num) {
 					if (is_avaliable_buffer(hw) ||
 						(v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) >=
-						run_ready_min_buf_num)) {
+						hw->run_ready_min_buf_num)) {
 						ret = CORE_MASK_HEVC;
 					} else
 						ret = 0;
@@ -9790,7 +9806,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			}
 		} else if (ctx->cap_pool.in < ctx->dpb_size) {
 			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
-				run_ready_min_buf_num)
+				hw->run_ready_min_buf_num)
 				ret = 0;
 		}
 	}
@@ -10051,6 +10067,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	run_count[hw->index]++;
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
+	hw->one_package_frame_cnt = 0;
 		run_front(vdec);
 }
 
@@ -10186,7 +10203,7 @@ static void av1_dump_state(struct vdec_s *vdec)
 	hw->vf_get_count,
 	hw->vf_put_count,
 	get_free_buf_count(hw),
-	run_ready_min_buf_num
+	hw->run_ready_min_buf_num
 	);
 
 	dump_pic_list(hw);
@@ -10609,6 +10626,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	hw->first_sc_checked = 0;
 	hw->fatal_error = 0;
 	hw->show_frame_num = 0;
+	hw->run_ready_min_buf_num = run_ready_min_buf_num;
 
 	if (debug) {
 		av1_print(hw, AOM_DEBUG_HW_MORE, "===AV1 decoder mem resource 0x%lx size 0x%x\n",
@@ -10626,6 +10644,11 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return -ENODEV;
 	}
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_init(pdata);
+#endif
+
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 	hevc_source_changed(VFORMAT_AV1, 4096, 2048, 60);
 
@@ -10647,6 +10670,10 @@ static int ammvdec_av1_remove(struct platform_device *pdev)
 	int i;
 	if (debug)
 		av1_print(hw, AOM_DEBUG_HW_MORE, "amvdec_av1_remove\n");
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_exit(vdec);
+#endif
 
 	vmav1_stop(hw);
 
