@@ -565,6 +565,8 @@ static void set_frame_info(struct vdec_mpeg4_hw_s *hw, struct vframe_s *vf,
 
 	if (hw->vmpeg4_ratio == 0) {
 		vf->ratio_control |= (0x90 << DISP_RATIO_ASPECT_RATIO_BIT);
+		vf->sar_width = 1;
+		vf->sar_height = 1;
 		/* always stretch to 16:9 */
 	} else if (pixel_ratio > 0x0f) {
 		num = (pixel_ratio >> 8) *
@@ -575,35 +577,49 @@ static void set_frame_info(struct vdec_mpeg4_hw_s *hw, struct vframe_s *vf,
 	} else {
 		switch (aspect_ratio_table[pixel_ratio]) {
 		case 0:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
 			num = hw->frame_width * num;
 			ar = (hw->frame_height * den *
 				0x100 + (num >> 1)) / num;
 			break;
 		case 1:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
 			num = vf->width * num;
 			ar = (vf->height * den * 0x100 + (num >> 1)) / num;
 			break;
 		case 2:
+			vf->sar_width = 12;
+			vf->sar_height = 11;
 			num = (vf->width * 12) * num;
 			ar = (vf->height * den * 0x100 * 11 +
 				  ((num) >> 1)) / num;
 			break;
 		case 3:
+			vf->sar_width = 10;
+			vf->sar_height = 11;
 			num = (vf->width * 10) * num;
 			ar = (vf->height * den * 0x100 * 11 + (num >> 1)) /
 				num;
 			break;
 		case 4:
+			vf->sar_width = 16;
+			vf->sar_height = 11;
 			num = (vf->width * 16) * num;
 			ar = (vf->height * den * 0x100 * 11 + (num >> 1)) /
 				num;
 			break;
 		case 5:
+			vf->sar_width = 40;
+			vf->sar_height = 33;
 			num = (vf->width * 40) * num;
 			ar = (vf->height * den * 0x100 * 33 + (num >> 1)) /
 				num;
 			break;
 		default:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
 			num = vf->width * num;
 			ar = (vf->height * den * 0x100 + (num >> 1)) / num;
 			break;

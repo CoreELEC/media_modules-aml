@@ -8385,6 +8385,7 @@ static int parse_sei(struct hevc_state_s *hevc,
 	return 0;
 }
 
+/*
 static unsigned calc_ar(unsigned idc, unsigned sar_w, unsigned sar_h,
 			unsigned w, unsigned h)
 {
@@ -8451,7 +8452,7 @@ static unsigned calc_ar(unsigned idc, unsigned sar_w, unsigned sar_h,
 
 	return ar;
 }
-
+*/
 static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 			struct PIC_s *pic)
 {
@@ -8475,7 +8476,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	ar = min_t(u32, hevc->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 
-
+/*
 	if (((pic->aspect_ratio_idc == 255) &&
 		pic->sar_width &&
 		pic->sar_height) ||
@@ -8491,6 +8492,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 		vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 		vf->ratio_control <<= hevc->interlace_flag;
 	}
+*/
 	hevc->ratio_control = vf->ratio_control;
 	if (pic->aux_data_buf
 		&& pic->aux_data_size) {
@@ -9603,6 +9605,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					pic->conf_win_bottom_offset,
 					vf->width, vf->height, vf->compWidth, vf->compHeight);
 		}
+		vf->sar_width = hevc->cur_pic->sar_width;
+		vf->sar_height = hevc->cur_pic->sar_height;
 
 		vf->width = vf->width /
 			get_double_write_ratio(pic->double_write_mode);
@@ -10509,6 +10513,100 @@ static int hevc_skip_nal(struct hevc_state_s *hevc)
 	return 0;
 }
 
+static void aspect_ratio_set(struct hevc_state_s *hevc)
+{
+	int  aspect_ratio_idc = hevc->param.p.aspect_ratio_idc;
+
+	switch (aspect_ratio_idc) {
+		case 1:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 1;
+			hevc->cur_pic->sar_width = 1;
+			break;
+		case 2:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 11;
+			hevc->cur_pic->sar_width = 12;
+			break;
+		case 3:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 11;
+			hevc->cur_pic->sar_width = 10;
+			break;
+		case 4:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 11;
+			hevc->cur_pic->sar_width = 16;
+			break;
+		case 5:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 33;
+			hevc->cur_pic->sar_width = 40;
+			break;
+		case 6:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 11;
+			hevc->cur_pic->sar_width = 24;
+			break;
+		case 7:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 11;
+			hevc->cur_pic->sar_width = 20;
+			break;
+		case 8:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 11;
+			hevc->cur_pic->sar_width = 32;
+			break;
+		case 9:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 33;
+			hevc->cur_pic->sar_width = 80;
+			break;
+		case 10:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 11;
+			hevc->cur_pic->sar_width = 18;
+			break;
+		case 11:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 11;
+			hevc->cur_pic->sar_width = 15;
+			break;
+		case 12:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 33;
+			hevc->cur_pic->sar_width = 64;
+			break;
+		case 13:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 99;
+			hevc->cur_pic->sar_width = 160;
+			break;
+		case 14:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 3;
+			hevc->cur_pic->sar_width = 4;
+			break;
+		case 15:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 2;
+			hevc->cur_pic->sar_width = 3;
+			break;
+		case 16:
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 1;
+			hevc->cur_pic->sar_width = 2;
+			break;
+		default:
+
+			hevc->frame_ar = 0x3ff;
+			hevc->cur_pic->sar_height = 1;
+			hevc->cur_pic->sar_width = 1;
+			break;
+		}
+
+}
 static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 {
 	struct hevc_state_s *hevc = (struct hevc_state_s *) data;
@@ -11470,6 +11568,7 @@ force_output:
 				hevc->param.p.sar_height;
 		}
 
+		aspect_ratio_set(hevc);
 		WRITE_VREG(HEVC_DEC_STATUS_REG,
 			HEVC_CODED_SLICE_SEGMENT_DAT);
 		/* Interrupt Amrisc to excute */

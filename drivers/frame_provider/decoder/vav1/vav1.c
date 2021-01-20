@@ -5662,7 +5662,7 @@ static void set_canvas(struct AV1HW_s *hw,
 
 static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
 {
-	unsigned int ar;
+	unsigned int ar = DISP_RATIO_ASPECT_RATIO_MAX;
 	vf->duration = hw->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
@@ -5670,8 +5670,10 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
 	vf->signal_type = hw->video_signal_type;
 	if (vf->compWidth && vf->compHeight)
 		hw->frame_ar = vf->compHeight * 0x100 / vf->compWidth;
-	ar = min_t(u32, hw->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
+	ar = min_t(u32, ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
+	vf->sar_width = 1;
+	vf->sar_height = 1;
 
 	if (hw->is_used_v4l && hw->vf_dp.present_flag) {
 		struct aml_vdec_hdr_infos hdr;

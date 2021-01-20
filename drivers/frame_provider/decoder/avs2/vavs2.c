@@ -630,6 +630,7 @@ struct AVS2Decoder_s {
 	struct timer_list timer;
 	u32 frame_dur;
 	u32 frame_ar;
+	u32 vavs2_ratio;
 	int fatal_error;
 	uint8_t init_flag;
 	uint8_t first_sc_checked;
@@ -4121,7 +4122,8 @@ static void set_canvas(struct AVS2Decoder_s *dec,
 
 static void set_frame_info(struct AVS2Decoder_s *dec, struct vframe_s *vf)
 {
-	unsigned int ar;
+	unsigned int ar = 0;
+	unsigned int pixel_ratio = 0;;
 
 	vf->duration = dec->frame_dur;
 	vf->duration_pulldown = 0;
@@ -4129,7 +4131,46 @@ static void set_frame_info(struct AVS2Decoder_s *dec, struct vframe_s *vf)
 	vf->prop.master_display_colour = dec->vf_dp;
 	vf->signal_type = dec->video_signal_type;
 
-	ar = min_t(u32, dec->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
+	pixel_ratio = dec->vavs2_amstream_dec_info.ratio;
+
+	if (dec->vavs2_ratio == 0) {
+			/* always stretch to 16:9 */
+			vf->ratio_control |= (0x90 <<
+					DISP_RATIO_ASPECT_RATIO_BIT);
+			vf->sar_width = 1;
+			vf->sar_height = 1;
+		} else {
+			switch (pixel_ratio) {
+			case 1:
+				vf->sar_width = 1;
+				vf->sar_height = 1;
+				ar = (vf->height * dec->vavs2_ratio) / vf->width;
+				break;
+			case 2:
+				vf->sar_width = 4;
+				vf->sar_height = 3;
+				ar = (vf->height * 3 * dec->vavs2_ratio) / (vf->width * 4);
+				break;
+			case 3:
+				vf->sar_width = 16;
+				vf->sar_height = 9;
+				ar = (vf->height * 9 * dec->vavs2_ratio) / (vf->width * 16);
+				break;
+			case 4:
+				vf->sar_width = 221;
+				vf->sar_height = 100;
+				ar = (vf->height * 100 * dec->vavs2_ratio) / (vf->width *
+						221);
+				break;
+			default:
+				vf->sar_width = 1;
+				vf->sar_height = 1;
+				ar = (vf->height * dec->vavs2_ratio) / vf->width;
+				break;
+			}
+		}
+
+	ar = min_t(u32, ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 
 	vf->sidebind_type = dec->sidebind_type;
@@ -6361,6 +6402,8 @@ static int vavs2_local_init(struct AVS2Decoder_s *dec)
 	int i;
 	int ret;
 	int width, height;
+
+	dec->vavs2_ratio = dec->vavs2_amstream_dec_info.ratio;
 
 	dec->gvs = vzalloc(sizeof(struct vdec_info));
 	if (NULL == dec->gvs) {

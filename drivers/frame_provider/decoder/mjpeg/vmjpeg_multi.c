@@ -256,7 +256,9 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 	else if (temp > 0)
 		vf->height = hw->frame_height = temp;
 	vf->duration = hw->frame_dur;
-	vf->ratio_control = 0;
+	vf->ratio_control = DISP_RATIO_ASPECT_RATIO_MAX << DISP_RATIO_ASPECT_RATIO_BIT;
+	vf->sar_width = 1;
+	vf->sar_height = 1;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 

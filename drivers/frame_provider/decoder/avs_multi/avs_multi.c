@@ -771,22 +771,34 @@ static void set_frame_info(struct vdec_avs_hw_s *hw, struct vframe_s *vf,
 		/* always stretch to 16:9 */
 		vf->ratio_control |= (0x90 <<
 				DISP_RATIO_ASPECT_RATIO_BIT);
+		vf->sar_width = 1;
+		vf->sar_height = 1;
 	} else {
 		switch (pixel_ratio) {
 		case 1:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
 			ar = (vf->height * hw->vavs_ratio) / vf->width;
 			break;
 		case 2:
+			vf->sar_width = 4;
+			vf->sar_height = 3;
 			ar = (vf->height * 3 * hw->vavs_ratio) / (vf->width * 4);
 			break;
 		case 3:
+			vf->sar_width = 16;
+			vf->sar_height = 9;
 			ar = (vf->height * 9 * hw->vavs_ratio) / (vf->width * 16);
 			break;
 		case 4:
+			vf->sar_width = 221;
+			vf->sar_height = 100;
 			ar = (vf->height * 100 * hw->vavs_ratio) / (vf->width *
 					221);
 			break;
 		default:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
 			ar = (vf->height * hw->vavs_ratio) / vf->width;
 			break;
 		}
