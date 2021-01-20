@@ -186,6 +186,17 @@ enum {
 #define DECODE_ID(hw) (hw_to_vdec(hw)->id)
 #define DECODE_STOP_POS         AV_SCRATCH_K
 
+#define PARC_FORBIDDEN              0
+#define PARC_SQUARE                 1
+#define PARC_3_4                    2
+#define PARC_9_16                   3
+#define PARC_100_221                4
+#define PARC_RESERVED               5
+/* values between 5 and 14 are reserved */
+#define PARC_EXTENDED              15
+
+
+
 struct mmpeg2_userdata_record_t {
 	struct userdata_meta_info_t meta_info;
 	u32 rec_start;
@@ -241,6 +252,8 @@ struct vdec_mpeg12_hw_s {
 	u8 init_flag;
 	unsigned long buf_start;
 	u32 buf_size;
+	u32 vmpeg12_ratio;
+	u64 vmpeg12_ratio64;
 	u32 reg_pic_width;
 	u32 reg_pic_height;
 	u32 reg_mpeg1_2_reg;
@@ -338,6 +351,19 @@ struct vdec_mpeg12_hw_s {
 	int dec_again_cnt;
 	int vdec_pg_enable_flag;
 };
+
+static unsigned char aspect_ratio_table[16] = {
+	PARC_FORBIDDEN,
+	PARC_SQUARE,
+	PARC_3_4,
+	PARC_9_16,
+	PARC_100_221,
+	PARC_RESERVED, PARC_RESERVED, PARC_RESERVED, PARC_RESERVED,
+	PARC_RESERVED, PARC_RESERVED, PARC_RESERVED, PARC_RESERVED,
+	PARC_RESERVED, PARC_RESERVED, PARC_EXTENDED
+};
+
+
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
 static void reset_process_time(struct vdec_mpeg12_hw_s *hw);
@@ -681,11 +707,23 @@ static void fill_frame_info(struct vdec_mpeg12_hw_s *hw, u32 slice_type,
 
 static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 {
-	u32 ar_bits;
+	int ar = 0;
 	u32 buffer_index = vf->index;
+	unsigned int num = 0;
+	unsigned int den = 0;
+	unsigned int pixel_ratio = 0;
 
 	vf->width = hw->pics[buffer_index].width;
 	vf->height = hw->pics[buffer_index].height;
+
+	if (hw->vmpeg12_ratio64 != 0) {
+		num = hw->vmpeg12_ratio64>>32;
+		den = hw->vmpeg12_ratio64 & 0xffffffff;
+	} else {
+		num = hw->vmpeg12_ratio>>16;
+		den = hw->vmpeg12_ratio & 0xffff;
+
+	}
 
 	if (hw->frame_dur > 0)
 		vf->duration = hw->frame_dur;
@@ -694,7 +732,7 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 		frame_rate_tab[(READ_VREG(MREG_SEQ_INFO) >> 4) & 0xf];
 		vdec_schedule_work(&hw->notify_work);
 	}
-
+/*
 	ar_bits = READ_VREG(MREG_SEQ_INFO) & 0xf;
 
 	if (ar_bits == 0x2)
@@ -707,6 +745,73 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 		vf->ratio_control = 0x74 << DISP_RATIO_ASPECT_RATIO_BIT;
 	else
 		vf->ratio_control = 0;
+*/
+	pixel_ratio = READ_VREG(MREG_SEQ_INFO);
+
+	if (hw->vmpeg12_ratio == 0) {
+		vf->ratio_control |= (0x90 << DISP_RATIO_ASPECT_RATIO_BIT);
+		vf->sar_width = 1;
+		vf->sar_height = 1;
+		/* always stretch to 16:9 */
+	} else if (pixel_ratio > 0x0f) {
+		num = (pixel_ratio >> 8) *
+			hw->frame_width * num;
+		ar = div_u64((pixel_ratio & 0xff) *
+			hw->frame_height * den * 0x100ULL +
+			(num >> 1), num);
+	} else {
+		switch (aspect_ratio_table[pixel_ratio]) {
+		case 0:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
+			num = hw->frame_width * num;
+			ar = (hw->frame_height * den *
+				0x100 + (num >> 1)) / num;
+			break;
+		case 1:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
+			num = vf->width * num;
+			ar = (vf->height * den * 0x100 + (num >> 1)) / num;
+			break;
+		case 2:
+			vf->sar_width = 12;
+			vf->sar_height = 11;
+			num = (vf->width * 12) * num;
+			ar = (vf->height * den * 0x100 * 11 +
+				  ((num) >> 1)) / num;
+			break;
+		case 3:
+			vf->sar_width = 10;
+			vf->sar_height = 11;
+			num = (vf->width * 10) * num;
+			ar = (vf->height * den * 0x100 * 11 + (num >> 1)) /
+				num;
+			break;
+		case 4:
+			vf->sar_width = 16;
+			vf->sar_height = 11;
+			num = (vf->width * 16) * num;
+			ar = (vf->height * den * 0x100 * 11 + (num >> 1)) /
+				num;
+			break;
+		case 5:
+			vf->sar_width = 40;
+			vf->sar_height = 33;
+			num = (vf->width * 40) * num;
+			ar = (vf->height * den * 0x100 * 33 + (num >> 1)) /
+				num;
+			break;
+		default:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
+			num = vf->width * num;
+			ar = (vf->height * den * 0x100 + (num >> 1)) / num;
+			break;
+		}
+	}
+	ar = min(ar, DISP_RATIO_ASPECT_RATIO_MAX);
+	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 
 	hw->ratio_control = vf->ratio_control;
 
@@ -3046,6 +3151,10 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 	int i;
 	INIT_KFIFO(hw->display_q);
 	INIT_KFIFO(hw->newframe_q);
+
+	hw->vmpeg12_ratio = hw->vmpeg12_amstream_dec_info.ratio;
+
+	hw->vmpeg12_ratio64 = hw->vmpeg12_amstream_dec_info.ratio64;
 
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		const struct vframe_s *vf;

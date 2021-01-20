@@ -333,14 +333,103 @@ static void set_frame_info(struct vframe_s *vf)
 		/* always stretch to 16:9 */
 		vf->ratio_control |= (0x90 <<
 				DISP_RATIO_ASPECT_RATIO_BIT);
+		vf->sar_height = 1;
+		vf->sar_width = 1;
 	} else {
 		/* h264mvc_ar = ((float)frame_height/frame_width)
 		 *customer_ratio;
 		 */
-		ar =  min_t(u32, h264mvc_ar, DISP_RATIO_ASPECT_RATIO_MAX);
-
-		vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
+		switch (h264mvc_ar) {
+		case 1:
+			ar = 0x3ff;
+			vf->sar_height = 1;
+			vf->sar_width = 1;
+			break;
+		case 2:
+			ar = 0x3ff;
+			vf->sar_height = 11;
+			vf->sar_width = 12;
+			break;
+		case 3:
+			ar = 0x3ff;
+			vf->sar_height = 11;
+			vf->sar_width = 10;
+			break;
+		case 4:
+			ar = 0x3ff;
+			vf->sar_height = 11;
+			vf->sar_width = 16;
+			break;
+		case 5:
+			ar = 0x3ff;
+			vf->sar_height = 33;
+			vf->sar_width = 40;
+			break;
+		case 6:
+			ar = 0x3ff;
+			vf->sar_height = 11;
+			vf->sar_width = 24;
+			break;
+		case 7:
+			ar = 0x3ff;
+			vf->sar_height = 11;
+			vf->sar_width = 20;
+			break;
+		case 8:
+			ar = 0x3ff;
+			vf->sar_height = 11;
+			vf->sar_width = 32;
+			break;
+		case 9:
+			ar = 0x3ff;
+			vf->sar_height = 33;
+			vf->sar_width = 80;
+			break;
+		case 10:
+			ar = 0x3ff;
+			vf->sar_height = 11;
+			vf->sar_width = 18;
+			break;
+		case 11:
+			ar = 0x3ff;
+			vf->sar_height = 11;
+			vf->sar_width = 15;
+			break;
+		case 12:
+			ar = 0x3ff;
+			vf->sar_height = 33;
+			vf->sar_width = 64;
+			break;
+		case 13:
+			ar = 0x3ff;
+			vf->sar_height = 99;
+			vf->sar_width = 160;
+			break;
+		case 14:
+			ar = 0x3ff;
+			vf->sar_height = 3;
+			vf->sar_width = 4;
+			break;
+		case 15:
+			ar = 0x3ff;
+			vf->sar_height = 2;
+			vf->sar_width = 3;
+			break;
+		case 16:
+			ar = 0x3ff;
+			vf->sar_height = 1;
+			vf->sar_width = 2;
+			break;
+		default:
+			ar = 0x3ff;
+			vf->sar_height = 1;
+			vf->sar_width = 1;
+			break;
+		}
 	}
+	ar =  min_t(u32, ar, DISP_RATIO_ASPECT_RATIO_MAX);
+
+	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 }
 
 static int vh264mvc_vf_states(struct vframe_states *states, void *op_arg)

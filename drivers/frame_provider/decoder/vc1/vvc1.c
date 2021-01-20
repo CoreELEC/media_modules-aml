@@ -224,46 +224,74 @@ static void set_aspect_ratio(struct vframe_s *vf, unsigned int pixel_ratio)
 				 vvc1_amstream_dec_info.width;
 			break;
 		case 1:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
 			ar = (vf->height * vvc1_ratio) / vf->width;
 			break;
 		case 2:
+			vf->sar_width = 12;
+			vf->sar_height = 11;
 			ar = (vf->height * 11 * vvc1_ratio) / (vf->width * 12);
 			break;
 		case 3:
+			vf->sar_width = 10;
+			vf->sar_height = 11;
 			ar = (vf->height * 11 * vvc1_ratio) / (vf->width * 10);
 			break;
 		case 4:
+			vf->sar_width = 16;
+			vf->sar_height = 11;
 			ar = (vf->height * 11 * vvc1_ratio) / (vf->width * 16);
 			break;
 		case 5:
+			vf->sar_width = 40;
+			vf->sar_height = 33;
 			ar = (vf->height * 33 * vvc1_ratio) / (vf->width * 40);
 			break;
 		case 6:
+			vf->sar_width = 24;
+			vf->sar_height = 11;
 			ar = (vf->height * 11 * vvc1_ratio) / (vf->width * 24);
 			break;
 		case 7:
+			vf->sar_width = 20;
+			vf->sar_height = 11;
 			ar = (vf->height * 11 * vvc1_ratio) / (vf->width * 20);
 			break;
 		case 8:
+			vf->sar_width = 32;
+			vf->sar_height = 11;
 			ar = (vf->height * 11 * vvc1_ratio) / (vf->width * 32);
 			break;
 		case 9:
+			vf->sar_width = 80;
+			vf->sar_height = 33;
 			ar = (vf->height * 33 * vvc1_ratio) / (vf->width * 80);
 			break;
 		case 10:
+			vf->sar_width = 18;
+			vf->sar_height = 11;
 			ar = (vf->height * 11 * vvc1_ratio) / (vf->width * 18);
 			break;
 		case 11:
+			vf->sar_width = 15;
+			vf->sar_height = 11;
 			ar = (vf->height * 11 * vvc1_ratio) / (vf->width * 15);
 			break;
 		case 12:
+			vf->sar_width = 64;
+			vf->sar_height = 33;
 			ar = (vf->height * 33 * vvc1_ratio) / (vf->width * 64);
 			break;
 		case 13:
+			vf->sar_width = 160;
+			vf->sar_height = 99;
 			ar = (vf->height * 99 * vvc1_ratio) /
 				(vf->width * 160);
 			break;
 		default:
+			vf->sar_width = 1;
+			vf->sar_height = 1;
 			ar = (vf->height * vvc1_ratio) / vf->width;
 			break;
 		}
@@ -965,8 +993,8 @@ static void vvc1_local_init(bool is_reset)
 {
 	int i;
 
-	/* vvc1_ratio = vvc1_amstream_dec_info.ratio; */
-	vvc1_ratio = 0x100;
+	/* vvc1_ratio = 0x100; */
+	vvc1_ratio = vvc1_amstream_dec_info.ratio;
 
 	avi_flag = (unsigned long) vvc1_amstream_dec_info.param & 0x01;
 
