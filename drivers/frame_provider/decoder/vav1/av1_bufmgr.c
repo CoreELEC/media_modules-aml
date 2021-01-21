@@ -530,16 +530,23 @@ static void reset_frame_buffers(AV1Decoder *const pbi);
 
 void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *cm)
 {
+	u32 save_w, save_h;
+
 	if (!pbi || !pool || !cm)
 		return;
 
 	reset_frame_buffers(pbi);
 	memset(pbi, 0, sizeof(*pbi));
+	/*save w,h for resolution change after seek */
+	save_w = cm->width;
+	save_h = cm->height;
 	memset(cm, 0, sizeof(*cm));
 
 	cm->current_frame.frame_number	= 0;
 	cm->seq_params.bit_depth	= AOM_BITS_8;
 	cm->error.setjmp = 0;
+	cm->width = save_w;
+	cm->height = save_h;
 
 	pbi->bufmgr_proc_count		= 0;
 	pbi->need_resync		= 1;
