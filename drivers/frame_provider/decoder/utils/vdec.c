@@ -915,55 +915,131 @@ static void vdec_stop_armrisc(int hw)
 	}
 }
 
+#define VDEC_ASSIST_DBUS_DISABLE		0x0046
+#define HEVC_ASSIST_AXI_STATUS2_LO		0x307f
+
+static void vdec_dbus_ctrl(bool enable)
+{
+	if (enable) {
+		WRITE_VREG(VDEC_ASSIST_DBUS_DISABLE, 0);
+	} else {
+		u32 nop_cnt = 200;
+		WRITE_VREG(VDEC_ASSIST_DBUS_DISABLE, 0xffff);
+		while (READ_VREG(VDEC_ASSIST_DBUS_DISABLE) != 0xffff);
+		while (nop_cnt--);
+	}
+}
+
+static void hevc_arb_ctrl(bool enable)
+{
+	u32 axi_ctrl, axi_status, nop_cnt = 200;
+
+	if (enable) {
+		axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
+		axi_ctrl &= (~((1 << 6) | (1 << 14)));
+		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);		//enable front/back arbitor
+	} else {
+		axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
+		axi_ctrl |= (1 << 6);
+		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable front arbitor
+
+		do {
+			axi_status = READ_VREG(HEVC_ASSIST_AXI_STATUS);
+			if (axi_status & ((1 << 15) | (1 << 11)))		//read/write disable
+				break;
+		} while (1);
+
+		axi_ctrl |= (1 << 14);
+		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable back arbitor
+
+		do {
+			axi_status = READ_VREG(HEVC_ASSIST_AXI_STATUS2_LO);
+			if (axi_status & ((1 << 15) | (1 << 11)))		//read/write disable
+				break;
+		} while (1);
+
+		while (nop_cnt--);
+	}
+}
+
+static void dec_dmc_port_ctrl(bool dmc_on, u32 mask)
+{
+	unsigned long flags;
+	unsigned int sts_reg_addr = DMC_CHAN_STS;
+
+	if (dmc_on) {
+		/* dmc async on requset */
+		spin_lock_irqsave(&vdec_spin_lock, flags);
+
+		codec_dmcbus_write(DMC_REQ_CTRL,
+			codec_dmcbus_read(DMC_REQ_CTRL) | mask);
+
+		spin_unlock_irqrestore(&vdec_spin_lock, flags);
+	} else {
+		/* dmc async off requset */
+		spin_lock_irqsave(&vdec_spin_lock, flags);
+
+		codec_dmcbus_write(DMC_REQ_CTRL,
+			codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
+
+		spin_unlock_irqrestore(&vdec_spin_lock, flags);
+
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5)
+			sts_reg_addr = T5_DMC_CHAN_STS;
+		else if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2) ||
+			is_cpu_tm2_revb())
+			sts_reg_addr = TM2_REVB_DMC_CHAN_STS;
+		else
+			sts_reg_addr = DMC_CHAN_STS;
+
+		while (!(codec_dmcbus_read(sts_reg_addr)
+				& mask))
+				;
+	}
+}
+
 static void vdec_disable_DMC(struct vdec_s *vdec)
 {
 	/*close first,then wait pedding end,timing suggestion from vlsi*/
 	struct vdec_input_s *input = &vdec->input;
-	unsigned long flags;
 	unsigned int mask = 0;
-
-	if (input->target == VDEC_INPUT_TARGET_VLD) {
-		mask = (1 << 13);
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-			mask = (1 << 21);
-	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
-		mask = (1 << 4); /*hevc*/
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-			mask |= (1 << 8); /*hevcb */
-	}
 
 	/* need to stop armrisc. */
 	if (!IS_ERR_OR_NULL(vdec->dev))
 		vdec_stop_armrisc(input->target);
 
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
-
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5) {
-		while (!(codec_dmcbus_read(T5_DMC_CHAN_STS)
-			& mask))
-			;
-	} else if (is_cpu_tm2_revb() ||
-		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)) {
-		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
-			& mask))
-			;
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		if (input->target == VDEC_INPUT_TARGET_VLD)
+			vdec_dbus_ctrl(0);
+		else if (input->target == VDEC_INPUT_TARGET_HEVC)
+			hevc_arb_ctrl(0);
 	} else {
-		while (!(codec_dmcbus_read(DMC_CHAN_STS)
-				& mask))
-				;
+		if (input->target == VDEC_INPUT_TARGET_VLD) {
+			mask = (1 << 13);
+			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+				mask = (1 << 21);
+		} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+			mask = (1 << 4); /*hevc*/
+			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+				mask |= (1 << 8); /*hevcb */
+		}
+		dec_dmc_port_ctrl(0, mask);
 	}
-
 	pr_debug("%s input->target= 0x%x\n", __func__,  input->target);
 }
 
 static void vdec_enable_DMC(struct vdec_s *vdec)
 {
 	struct vdec_input_s *input = &vdec->input;
-	unsigned long flags;
 	unsigned int mask = 0;
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		if (input->target == VDEC_INPUT_TARGET_VLD)
+			vdec_dbus_ctrl(1);
+		else if (input->target == VDEC_INPUT_TARGET_HEVC)
+			hevc_arb_ctrl(1);
+		return;
+	}
 
 	if (input->target == VDEC_INPUT_TARGET_VLD) {
 		mask = (1 << 13);
@@ -979,10 +1055,8 @@ static void vdec_enable_DMC(struct vdec_s *vdec)
 	if (get_cpu_type() == AM_MESON_CPU_MAJOR_ID_G12B)
 		vdec_dmc_pipeline_reset();
 
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) | mask);
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
+	dec_dmc_port_ctrl(1, mask);
+
 	pr_debug("%s input->target= 0x%x\n", __func__,  input->target);
 }
 
@@ -2189,33 +2263,18 @@ bool vdec_need_more_data(struct vdec_s *vdec)
 EXPORT_SYMBOL(vdec_need_more_data);
 
 
-void hevc_wait_ddr(void)
+static void hevc_wait_ddr(void)
 {
-	unsigned long flags;
 	unsigned int mask = 0;
 
-	mask = 1 << 4; /* hevc */
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-		mask |= (1 << 8); /* hevcb */
-
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
-
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5) {
-		while (!(codec_dmcbus_read(T5_DMC_CHAN_STS)
-			& mask))
-			;
-	} else if (is_cpu_tm2_revb() ||
-		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)) {
-		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
-			& mask))
-			;
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		hevc_arb_ctrl(0);
 	} else {
-		while (!(codec_dmcbus_read(DMC_CHAN_STS)
-			& mask))
-			;
+		mask = 1 << 4; /* hevc */
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+			mask |= (1 << 8); /* hevcb */
+
+		dec_dmc_port_ctrl(0, mask);
 	}
 }
 
@@ -4021,31 +4080,17 @@ EXPORT_SYMBOL(vdec_source_changed);
 
 void vdec_reset_core(struct vdec_s *vdec)
 {
-	unsigned long flags;
 	unsigned int mask = 0;
 
-	mask = 1 << 13; /*bit13: DOS VDEC interface*/
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-		mask = 1 << 21; /*bit21: DOS VDEC interface*/
-
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
-
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5) {
-		while (!(codec_dmcbus_read(T5_DMC_CHAN_STS)
-			& mask))
-			;
-	} else if (is_cpu_tm2_revb() ||
-	(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2)) {
-		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
-			& mask))
-			;
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		/* t7 no dmc req for vdec only */
+		vdec_dbus_ctrl(0);
 	} else {
-		while (!(codec_dmcbus_read(DMC_CHAN_STS)
-			& mask))
-			;
+		mask = 1 << 13; /*bit13: DOS VDEC interface*/
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
+			mask = 1 << 21; /*bit21: DOS VDEC interface*/
+
+		dec_dmc_port_ctrl(0, mask);
 	}
 	/*
 	 * 2: assist
@@ -4065,10 +4110,10 @@ void vdec_reset_core(struct vdec_s *vdec)
 	WRITE_VREG(DOS_SW_RESET0, (1<<3)|(1<<4)|(1<<5)|(1<<7)|(1<<8)|(1<<9));
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) | mask);
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+		vdec_dbus_ctrl(1);
+	else
+		dec_dmc_port_ctrl(1, mask);
 }
 EXPORT_SYMBOL(vdec_reset_core);
 
@@ -4105,45 +4150,32 @@ void hevc_mmu_dma_check(struct vdec_s *vdec)
 	}
 }
 EXPORT_SYMBOL(hevc_mmu_dma_check);
+
 void hevc_reset_core(struct vdec_s *vdec)
 {
-	unsigned long flags;
 	unsigned int mask = 0;
-	int cpu_type;
+	int cpu_type = get_cpu_major_id();
 
-	mask = 1 << 4; /*bit4: hevc*/
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
-		mask |= 1 << 8; /*bit8: hevcb*/
-
-	WRITE_VREG(HEVC_STREAM_CONTROL, 0);
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) & ~mask);
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
-
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5) {
-		while (!(codec_dmcbus_read(T5_DMC_CHAN_STS)
-			& mask))
-			;
-	} else if (is_cpu_tm2_revb() ||
-		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)) {
-		while (!(codec_dmcbus_read(TM2_REVB_DMC_CHAN_STS)
-			& mask))
-			;
+	if (cpu_type == AM_MESON_CPU_MAJOR_ID_T7) {
+		/* t7 no dmc req for hevc only */
+		hevc_arb_ctrl(0);
 	} else {
-		while (!(codec_dmcbus_read(DMC_CHAN_STS)
-			& mask))
-			;
+		mask = 1 << 4; /*bit4: hevc*/
+		if (cpu_type >= AM_MESON_CPU_MAJOR_ID_G12A)
+			mask |= 1 << 8; /*bit8: hevcb*/
+
+		WRITE_VREG(HEVC_STREAM_CONTROL, 0);
+
+		dec_dmc_port_ctrl(0, mask);
 	}
 
 	if (vdec == NULL || input_frame_based(vdec))
 		WRITE_VREG(HEVC_STREAM_CONTROL, 0);
 
-
 	WRITE_VREG(HEVC_SAO_MMU_RESET_CTRL,
 			READ_VREG(HEVC_SAO_MMU_RESET_CTRL) | 1);
 
-		/*
+	/*
 	 * 2: assist
 	 * 3: parser
 	 * 4: parser_state
@@ -4160,7 +4192,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 	 * 24:hevc_afifo
 	 * 26:rst_mmu_n
 	 */
-	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2) &&
+	if ((cpu_type >= AM_MESON_CPU_MAJOR_ID_SC2) &&
 		(vdec->format == VFORMAT_AVS2)) {
 			WRITE_VREG(DOS_SW_RESET3,
 		(1<<3)|(1<<4)|(1<<8)|(1<<11)|
@@ -4178,7 +4210,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 		;
 	WRITE_VREG(HEVC_SAO_MMU_RESET_CTRL,
 			READ_VREG(HEVC_SAO_MMU_RESET_CTRL) & (~1));
-	cpu_type = get_cpu_major_id();
+
 	if (cpu_type == AM_MESON_CPU_MAJOR_ID_TL1 &&
 			is_meson_rev_b())
 		cpu_type = AM_MESON_CPU_MAJOR_ID_G12B;
@@ -4210,12 +4242,10 @@ void hevc_reset_core(struct vdec_s *vdec)
 		break;
 	}
 
-
-	spin_lock_irqsave(&vdec_spin_lock, flags);
-	codec_dmcbus_write(DMC_REQ_CTRL,
-		codec_dmcbus_read(DMC_REQ_CTRL) | mask);
-	spin_unlock_irqrestore(&vdec_spin_lock, flags);
-
+	if (cpu_type == AM_MESON_CPU_MAJOR_ID_T7)
+		hevc_arb_ctrl(1);
+	else
+		dec_dmc_port_ctrl(1, mask);
 }
 EXPORT_SYMBOL(hevc_reset_core);
 
