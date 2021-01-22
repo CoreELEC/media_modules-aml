@@ -9028,6 +9028,9 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 {
 	struct vframe_s *vf;
 
+	if (!pair_pic)
+		return -1;
+
 	if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 		hevc_print(hevc, 0,
 			"%s: pair_pic index 0x%x %s\n",
@@ -9059,6 +9062,10 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 		kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 		spin_lock_irqsave(&lock, flags);
 		vf->index &= 0xff;
+		if (vf->index >= MAX_REF_PIC_NUM) {
+			spin_unlock_irqrestore(&lock, flags);
+			return -1;
+		}
 		hevc->m_PIC[vf->index]->vf_ref = 0;
 		hevc->m_PIC[vf->index]->output_ready = 0;
 		if (hevc->wait_buf != 0)
