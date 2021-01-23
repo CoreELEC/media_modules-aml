@@ -557,6 +557,18 @@ static u32 force_bypass_dvenl;
  */
 static u32 force_config_fence;
 
+/*
+ *The parameter sps_max_dec_pic_buffering_minus1_0+1
+ *in SPS is the minimum DPB size required for stream
+ *(note: this parameter does not include the frame
+ *currently being decoded) +1 (decoding the current
+ *frame) +1 (decoding the current frame will only
+ *update refrence frame information, such as reference
+ *relation, when the next frame is decoded)
+ */
+static u32 detect_stuck_buffer_margin = 3;
+
+
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 #define get_dbg_flag(hevc) ((debug_mask & (1 << hevc->index)) ? debug : 0)
 #define get_dbg_flag2(hevc) ((debug_mask & (1 << get_idx(hevc))) ? debug : 0)
@@ -12939,10 +12951,11 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	int i;
 	int ref_pic = 0;
 	struct vdec_s *vdec = hw_to_vdec(hevc);
+	unsigned long flags;
 	/*return 1 if pic_list is not initialized yet*/
 	if (hevc->pic_list_init_flag != 3)
 		return 1;
-
+	spin_lock_irqsave(&lock, flags);
 	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 		pic = hevc->m_PIC[i];
 		if (pic == NULL || pic->index == -1)
@@ -12999,12 +13012,34 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 					if ((pic->referenced == 1) && (pic->error_mark == 1)) {
 						flush_output(hevc, pic);
 						hevc_print(hevc, 0, "DPB error, neeed fornce flush  recieve_state %d \n", state);
-						break;
+						spin_unlock_irqrestore(&lock, flags);
+						return 0;
 					}
 				}
 			}
 		}
 	}
+	if (new_pic == NULL) {
+		int decode_count = 0;
+
+		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+			pic = hevc->m_PIC[i];
+			if (pic == NULL || pic->index == -1)
+				continue;
+			if (pic->output_ready == 0)
+				decode_count++;
+		}
+		if (decode_count >=
+				hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + detect_stuck_buffer_margin) {
+			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
+				dump_pic_list(hevc);
+			if (!(error_handle_policy & 0x400))
+				flush_output(hevc, NULL);
+			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE, "flush dpb, ref_error_count %d, sps_max_dec_pic_buffering_minus1_0 %d\n",
+					decode_count, hevc->param.p.sps_max_dec_pic_buffering_minus1_0);
+		}
+	}
+	spin_unlock_irqrestore(&lock, flags);
 	return (new_pic != NULL) ? 1 : 0;
 }
 
@@ -14042,7 +14077,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	if (hevc->pic_list_init_flag == 3)
 		init_pic_list_hw(hevc);
-
+	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
+		dump_pic_list(hevc);
 	backup_decode_state(hevc);
 
 	start_process_time(hevc);
@@ -15357,6 +15393,9 @@ MODULE_PARM_DESC(dirty_buffersize_threshold, "\n dirty_buffersize_threshold\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
+
+module_param(detect_stuck_buffer_margin, uint, 0664);
+MODULE_PARM_DESC(detect_stuck_buffer_margin, "\n detect_stuck_buffer_margin\n");
 
 module_init(amvdec_h265_driver_init_module);
 module_exit(amvdec_h265_driver_remove_module);
