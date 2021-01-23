@@ -2620,10 +2620,10 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 				return;
 			}
 
-			v4l2_m2m_buf_queue(ctx->m2m_ctx, vb2_v4l2);
-			buf->que_in_m2m = true;
 			ctx->cap_pool.seq[ctx->cap_pool.in++] =
 				(V4L_CAP_BUFF_IN_M2M << 16 | vb->index);
+			v4l2_m2m_buf_queue(ctx->m2m_ctx, vb2_v4l2);
+			buf->que_in_m2m = true;
 
 			/* check dpb ready */
 			aml_check_dpb_ready(ctx);

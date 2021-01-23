@@ -255,8 +255,8 @@ static unsigned int not_run_ready[MAX_DECODE_INSTANCE_NUM];
 #ifdef AOM_AV1_MMU_DW
 static unsigned int dw_mmu_enable[MAX_DECODE_INSTANCE_NUM];
 #endif
-/* disable timeout for av1 mosaic JIRA SWPL-23326 */
-static u32 decode_timeout_val = 0;
+
+static u32 decode_timeout_val = 600;
 static int start_decode_buf_level = 0x8000;
 static u32 work_buf_size;
 static u32 force_pts_unstable;
@@ -1572,12 +1572,10 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 		}
 		if ((debug & AV1_DEBUG_BUFMGR_MORE) &&
 			(free_buf_count <= 0)) {
-			for (i = 0; i < hw->used_buf_num; ++i) {
-				pr_info("[%d], ref_cnt %d, vf_ref %d, cma_addr %lx\n",
-					i, frame_bufs[i].ref_count,
-					frame_bufs[i].buf.vf_ref,
-					frame_bufs[i].buf.cma_alloc_addr);
-			}
+			pr_info("%s, free count %d, m2m_ready %d\n",
+				__func__,
+				free_buf_count,
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx));
 		}
 	} else {
 		for (i = 0; i < hw->used_buf_num; ++i)
@@ -7118,11 +7116,11 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		pbi->bufmgr_proc_count++;
 		hw->frame_decoded = 1;
 		return 0;
-	}
-	else if (ret < 0) {
+	} else if (ret < 0) {
 		hw->frame_decoded = 1;
 		av1_print(hw, AOM_DEBUG_HW_MORE,
-		"aom_bufmgr_process=> %d, bufmgr e.r.r.o.r., AOM_AV1_SEARCH_HEAD\r\n", ret);
+		"aom_bufmgr_process=> %d, bufmgr e.r.r.o.r. %d, AOM_AV1_SEARCH_HEAD\r\n",
+		ret, cm->error.error_code);
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
 		return 0;
 	}
