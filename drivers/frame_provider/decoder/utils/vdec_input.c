@@ -304,6 +304,8 @@ void vdec_input_init(struct vdec_input_s *input, struct vdec_s *vdec)
 	input->vdec = vdec;
 	input->block_id_seq = 0;
 	input->size = 0;
+	/* set no target init with -1 */
+	input->target = -1;
 	input->default_block_size = VFRAME_BLOCK_SIZE;
 }
 int vdec_input_prepare_bufs(struct vdec_input_s *input,

@@ -1009,10 +1009,15 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 		vdec_stop_armrisc(input->target);
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
-		if (input->target == VDEC_INPUT_TARGET_VLD)
+		if (input->target == VDEC_INPUT_TARGET_VLD) {
+			if (!vdec_on(VDEC_1))
+				return;
 			vdec_dbus_ctrl(0);
-		else if (input->target == VDEC_INPUT_TARGET_HEVC)
+		} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+			if (!vdec_on(VDEC_HEVC))
+				return;
 			hevc_arb_ctrl(0);
+		}
 	} else {
 		if (input->target == VDEC_INPUT_TARGET_VLD) {
 			mask = (1 << 13);
