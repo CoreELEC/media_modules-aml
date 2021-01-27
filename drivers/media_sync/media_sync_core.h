@@ -32,6 +32,7 @@ typedef struct instance{
 	s64 mLastRealTime;
 	s64 mLastMediaTime;
 	mediasync_speed mSpeed;
+	s32 mSyncModeChange;
 }mediasync_ins;
 
 long mediasync_ins_alloc(s32 sDemuxId,

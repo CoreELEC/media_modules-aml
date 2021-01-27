@@ -221,13 +221,15 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 				diff_system_time = current_systemtime - pInstance->mLastRealTime;
 				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			}
-			if (diff_mediatime < 0
+			if (pInstance->mSyncModeChange == 1
+				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
 				pr_info("MEDIA_SYNC_PCRMASTER update time\n");
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = current_systemtime;
 				pInstance->mLastStc = current_stc;
+				pInstance->mSyncModeChange = 0;
 			}
 		} else {
 			if (current_stc != 0) {
@@ -238,23 +240,53 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			}
 
-			if (diff_mediatime < 0
+			if (pInstance->mSyncModeChange == 1
+				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = lSystemTime;
 				pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
+				pInstance->mSyncModeChange = 0;
 			}
 		}
 	} else {
 		if (lSystemTime == 0) {
-			pInstance->mLastMediaTime = lMediaTime;
-			pInstance->mLastRealTime = current_systemtime;
-			pInstance->mLastStc = current_stc;
-		} else {
-			pInstance->mLastMediaTime = lMediaTime;
-			pInstance->mLastRealTime = lSystemTime;
-			pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
+			diff_system_time = current_systemtime - pInstance->mLastRealTime;
+			diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
+
+			if (pInstance->mSyncModeChange == 1
+				|| diff_mediatime < 0
+				|| ((diff_mediatime > 0)
+				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
+				pr_info("mSyncMode:%d update time system diff:%lld media diff:%lld current:%lld\n",
+					pInstance->mSyncMode,
+					diff_system_time,
+					diff_mediatime,
+					current_systemtime);
+				pInstance->mLastMediaTime = lMediaTime;
+				pInstance->mLastRealTime = current_systemtime;
+				pInstance->mLastStc = current_stc;
+				pInstance->mSyncModeChange = 0;
+			}
+	} else {
+			diff_system_time = lSystemTime - pInstance->mLastRealTime;
+			diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
+			if (pInstance->mSyncModeChange == 1
+				|| diff_mediatime < 0
+				|| ((diff_mediatime > 0)
+				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
+				pr_info("mSyncMode:%d update time stc diff:%lld media diff:%lld lSystemTime:%lld lMediaTime:%lld\n",
+					pInstance->mSyncMode,
+					diff_system_time,
+					diff_mediatime,
+					lSystemTime,
+					lMediaTime);
+				pInstance->mLastMediaTime = lMediaTime;
+				pInstance->mLastRealTime = lSystemTime;
+				pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
+				pInstance->mSyncModeChange = 0;
+			}
 		}
 	}
 	return 0;
@@ -329,6 +361,7 @@ long mediasync_ins_set_syncmode(s32 sSyncInsId, s32 sSyncMode){
 		return -1;
 
 	pInstance->mSyncMode = sSyncMode;
+	pInstance->mSyncModeChange = 1;
 	return 0;
 }
 
