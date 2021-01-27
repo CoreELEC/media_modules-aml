@@ -9045,8 +9045,11 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						amhevc_stop();
 				} else {
 					if (vh264_set_params(hw, param1,
-					param2, param3, param4, false) < 0)
-						dpb_print(DECODE_ID(hw), 0, "set parameters error\n");
+					param2, param3, param4, false) < 0) {
+						hw->init_flag = 0;
+						dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
+							hw->init_flag);
+					}
 
 					WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
 						(hw->dpb.mDPB.size<<16) |
@@ -9058,8 +9061,11 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			}
 		} else {
 			if (vh264_set_params(hw, param1,
-				param2, param3, param4, false) < 0)
-					dpb_print(DECODE_ID(hw), 0, "set parameters error\n");
+				param2, param3, param4, false) < 0) {
+					hw->init_flag = 0;
+					dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
+						hw->init_flag);
+				}
 
 			WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
 				(hw->dpb.mDPB.size<<16) |
