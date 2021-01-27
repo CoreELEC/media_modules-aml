@@ -2235,6 +2235,8 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 	if (vdec_stream_based(vdec) &&
 		(hevc->decode_idx - hevc->decode_idx_bak > 1)) {
 		int i;
+		hevc_print(hevc, 0, "decode_idx %d, decode_idx_bak %d\n",
+								hevc->decode_idx, hevc->decode_idx_bak);
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			struct PIC_s *pic;
 			pic = hevc->m_PIC[i];
@@ -2243,8 +2245,8 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 				(pic->BUF_index == -1) ||
 				(pic->POC == INVALID_POC))
 				continue;
-			if ((hevc->decode_idx > hevc->decode_idx_bak) &&
-					pic->decode_idx != hevc->decode_idx) {
+			if ((pic->decode_idx >= hevc->decode_idx_bak) &&
+					pic->decode_idx != (hevc->decode_idx - 1)) {
 					hevc_print(hevc, 0, "release error buffer\n");
 					pic->error_mark = 0;
 					pic->output_ready = 0;
@@ -7478,18 +7480,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			hevc->first_pic_after_recover = 0;
 			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 				dump_pic_list(hevc);
-			/* prev pic */
-			hevc_pre_pic(hevc, pic);
-			/*
-			 *update referenced of old pictures
-			 *(cur_pic->referenced is 1 and not updated)
-			 */
-			apply_ref_pic_set(hevc, hevc->curr_POC,
-							  rpm_param);
-
-			/*if (hevc->mmu_enable)
-				recycle_mmu_bufs(hevc);*/
-
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			if (vdec->master) {
 				struct hevc_state_s *hevc_ba =
@@ -7512,6 +7502,20 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 #else
 			set_aux_data(hevc, hevc->cur_pic, 1, 0);
 #endif
+
+			/* prev pic */
+			hevc_pre_pic(hevc, pic);
+			/*
+			 *update referenced of old pictures
+			 *(cur_pic->referenced is 1 and not updated)
+			 */
+			apply_ref_pic_set(hevc, hevc->curr_POC,
+							  rpm_param);
+
+			/*if (hevc->mmu_enable)
+				recycle_mmu_bufs(hevc);*/
+
+
 			/* new pic */
 			hevc->cur_pic = hevc->is_used_v4l ?
 				v4l_get_new_pic(hevc, rpm_param) :
@@ -10890,7 +10894,8 @@ pic_done:
 
 			reset_process_time(hevc);
 
-			if (hevc->vf_pre_count == 0 || hevc->ip_mode) {
+			if ((!input_stream_based(vdec) &&
+					hevc->vf_pre_count == 0) || hevc->ip_mode) {
 				decoded_poc = hevc->curr_POC;
 				pic = get_pic_by_POC(hevc, decoded_poc);
 				if (pic && (pic->POC != INVALID_POC)) {
