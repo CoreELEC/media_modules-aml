@@ -49,11 +49,6 @@ struct aml_dvb {
 	spinlock_t slock;
 
 	int ts_out_invert;
-
-	unsigned int tuner_num;
-	unsigned int tuner_cur;
-	struct aml_tuner *tuners;
-	bool tuner_attached;
 };
 
 struct aml_dvb *aml_get_dvb_device(void);

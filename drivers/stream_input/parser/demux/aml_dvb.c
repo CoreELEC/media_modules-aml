@@ -49,12 +49,6 @@
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
-extern ssize_t tuner_setting_show(struct class *class,
-				   struct class_attribute *attr, char *buf);
-extern ssize_t tuner_setting_store(struct class *class,
-				    struct class_attribute *attr,
-				    const char *buf, size_t count);
-
 static struct aml_dvb aml_dvb_device;
 typedef struct _ChainPath
 {
@@ -343,7 +337,6 @@ static CLASS_ATTR_RW(path0_work_mode);
 static CLASS_ATTR_RW(path1_work_mode);
 static CLASS_ATTR_RW(path0_buf_status);
 static CLASS_ATTR_RW(path1_buf_status);
-static CLASS_ATTR_RW(tuner_setting);
 
 #define DVB_ATTR(name) &class_attr_##name.attr
 
@@ -358,7 +351,6 @@ static struct attribute *aml_dvb_class_attrs[] = {
 	DVB_ATTR(path1_work_mode),
 	DVB_ATTR(path0_buf_status),
 	DVB_ATTR(path1_buf_status),
-	DVB_ATTR(tuner_setting),
 	NULL
 };
 

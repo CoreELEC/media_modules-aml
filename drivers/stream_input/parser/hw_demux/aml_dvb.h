@@ -303,11 +303,6 @@ struct aml_dvb {
 	int                  dmx_watchdog_disable[DMX_DEV_COUNT];
 	struct aml_swfilter  swfilter;
 	int	ts_out_invert;
-
-	unsigned int tuner_num;
-	unsigned int tuner_cur;
-	struct aml_tuner *tuners;
-	bool tuner_attached;
 };
 
 
@@ -364,6 +359,7 @@ extern struct aml_dvb *aml_get_dvb_device(void);
 
 extern int aml_regist_dmx_class(void);
 extern int aml_unregist_dmx_class(void);
+extern void aml_register_parser_mconfig(void);
 
 struct devio_aml_platform_data {
 	int (*io_setup)(void *);
