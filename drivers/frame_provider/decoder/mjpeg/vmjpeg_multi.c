@@ -463,6 +463,21 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	return IRQ_HANDLED;
 }
 
+static int valid_vf_check(struct vframe_s *vf, struct vdec_mjpeg_hw_s *hw)
+{
+	int i;
+
+	if (!vf || (vf->index == -1))
+		return 0;
+
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		if (vf == &hw->vfpool[i])
+			return 1;
+	}
+
+	return 0;
+}
+
 static struct vframe_s *vmjpeg_vf_peek(void *op_arg)
 {
 	struct vframe_s *vf;
@@ -498,8 +513,11 @@ static void vmjpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)vdec->private;
 
-	if (!vf)
-		return;
+	if (!valid_vf_check(vf, hw)) {
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+			"invalid vf: %lx\n", (ulong)vf);
+		return ;
+	}
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,
 		"%s:put_num:%d\n", __func__, hw->put_num);
