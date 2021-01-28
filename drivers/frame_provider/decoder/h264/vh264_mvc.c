@@ -1181,6 +1181,11 @@ static void vh264mvc_put_timer_func(struct timer_list *timer)
 {
 	int valid_frame = 0;
 
+	if (is_support_no_parser()) {
+		STBUF_WRITE(&vdec->vbuf, set_rp,
+			READ_VREG(VLD_MEM_VIFIFO_RP));
+	}
+
 	if (enable_recycle == 0) {
 		if (dbg_mode & TIME_TASK_PRINT_ENABLE) {
 			/* valid_frame = get_valid_frame(); */
