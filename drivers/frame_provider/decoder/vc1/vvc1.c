@@ -1100,6 +1100,11 @@ static void vvc1_put_timer_func(unsigned long arg)
 	if (READ_VREG(VC1_SOS_COUNT) > 10)
 		schedule_work(&error_wd_work);
 
+	if (is_support_no_parser()) {
+		STBUF_WRITE(&vdec->vbuf, set_rp,
+			READ_VREG(VLD_MEM_VIFIFO_RP));
+	}
+
 	while (!kfifo_is_empty(&recycle_q) && (READ_VREG(VC1_BUFFERIN) == 0)) {
 		struct vframe_s *vf;
 
