@@ -92,6 +92,7 @@ to enable DV of frame mode
 #define RATE_2397_FPS  4004   /* 23.97 */
 #define RATE_25_FPS  3840   /* 25 */
 #define RATE_2997_FPS  3203   /* 29.97 */
+#define RATE_5994_FPS  1601   /* 59.94 */
 #define DUR2PTS(x) ((x)*90/96)
 #define PTS2DUR(x) ((x)*96/90)
 #define DUR2PTS_REM(x) (x*90 - DUR2PTS(x)*96)
@@ -5544,6 +5545,27 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 	if (hw->timing_info_present_flag) {
 		hw->fixed_frame_rate_flag =
 			p_H264_Dpb->fixed_frame_rate_flag;
+
+		if (hw->is_used_v4l && (p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] == I_Slice)) {
+			if (hw->num_units_in_tick == 1001) {
+				if (hw->time_scale == 60000) {
+					hw->frame_dur = RATE_5994_FPS;
+				} else if (hw->time_scale == 30000) {
+					hw->frame_dur = RATE_2997_FPS;
+					if (hw->fixed_frame_rate_flag == 1)
+						hw->frame_dur = RATE_5994_FPS;
+				} else if (hw->time_scale == 24000) {
+					hw->frame_dur = RATE_2397_FPS;
+				}
+			} else {
+				u32 frame_rate = hw->time_scale / hw->num_units_in_tick;
+
+				if (hw->fixed_frame_rate_flag == 1) {
+					frame_rate = frame_rate / 2;
+				}
+				hw->frame_dur = 96000 / frame_rate;
+			}
+		}
 
 		if (((hw->num_units_in_tick * 120) >= hw->time_scale &&
 			((!hw->sync_outside) ||
