@@ -2704,6 +2704,22 @@ static long amstream_ioctl_get_ex(struct port_priv_s *priv, ulong arg)
 		} else
 			r = -EINVAL;
 		break;
+	case AMSTREAM_GET_EX_WR_COUNT:
+	{
+		struct am_ioctl_parm_ex *p = &parm;
+		struct vdec_s *vdec = priv->vdec;
+
+		mutex_lock(&amstream_mutex);
+		if (!vdec)
+			vdec = vdec_get_vdec_by_id(0); //Use id 0 as default
+		if (vdec && vdec->mvfrm)
+			p->wr_count = vdec->mvfrm->wr;
+		else
+			p->wr_count = 0;
+		mutex_unlock(&amstream_mutex);
+		r = 0;
+	}
+		break;
 	default:
 		r = -ENOIOCTLCMD;
 		break;
