@@ -313,7 +313,7 @@ retry:
 int aml_v4l2_vpp_get_buf_num(u32 mode)
 {
 	if (mode == VPP_MODE_DI)
-		return 6;
+		return 8;
 	//TODO: support more modes
 	return 2;
 }

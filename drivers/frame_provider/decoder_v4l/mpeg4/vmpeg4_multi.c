@@ -512,18 +512,6 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 	return 0;
 }
 
-static bool is_enough_free_buffer(struct vdec_mpeg4_hw_s *hw)
-{
-	int i;
-
-	for (i = 0; i < hw->buf_num; i++) {
-		if (hw->vfbuf_use[i] == 0)
-			break;
-	}
-
-	return i == hw->buf_num ? false : true;
-}
-
 static int find_free_buffer(struct vdec_mpeg4_hw_s *hw)
 {
 	int i;
@@ -539,13 +527,11 @@ static int find_free_buffer(struct vdec_mpeg4_hw_s *hw)
 	if (hw->is_used_v4l) {
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
 		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 			/*run to parser csd data*/
 			i = 0xffffff;
 		} else {
-			if (!ctx->fb_ops.try_lock(&ctx->fb_ops, &hw->fb_token))
-				return -1;
-
 			if (vmpeg4_v4l_alloc_buff_config_canvas(hw, i))
 				return -1;
 		}
@@ -890,6 +876,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		if (hw->is_used_v4l) {
 			vf->v4l_mem_handle
 				= hw->pic[index].v4l_ref_buf_addr;
+			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 				"[%d] %s(), v4l mem handle: 0x%lx\n",
 				((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
@@ -2126,6 +2113,7 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 {
 	int index, i;
 	void *workspace_buf = NULL;
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 
 	index = find_free_buffer(hw);
 	if (index < 0)
@@ -2202,6 +2190,14 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 #endif
+
+	/* cbcr_merge_swap_en */
+	if (hw->is_used_v4l
+		&& (v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21
+		|| v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
+		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+	else
+		CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
 
 #if 1/* /MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8 */
 	WRITE_VREG(MDEC_PIC_DC_THRESH, 0x404038aa);
@@ -2375,11 +2371,41 @@ static s32 vmmpeg4_init(struct vdec_mpeg4_hw_s *hw)
 	return 0;
 }
 
+static bool is_avaliable_buffer(struct vdec_mpeg4_hw_s *hw)
+{
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	int i, free_count = 0;
+
+	if (ctx->cap_pool.dec < hw->buf_num) {
+		free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
+		if (free_count &&
+			!ctx->fb_ops.try_lock(&ctx->fb_ops, &hw->fb_token)) {
+			return false;
+		}
+	}
+
+	for (i = 0; i < hw->buf_num; ++i) {
+		if ((hw->vfbuf_use[i] == 0) &&
+			hw->pic[i].v4l_ref_buf_addr) {
+			free_count++;
+		}
+	}
+
+	return free_count < run_ready_min_buf_num ? 0 : 1;
+}
+
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 {
-	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
+	struct vdec_mpeg4_hw_s *hw =
+		(struct vdec_mpeg4_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	int ret = 0;
+
 	if (hw->eos)
 		return 0;
+
 	if (vdec_stream_based(vdec) && (hw->init_flag == 0)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
@@ -2396,38 +2422,16 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		}
 	}
 
-	if (hw->is_used_v4l) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-		if (ctx->param_sets_from_ucode) {
-			if (hw->v4l_params_parsed) {
-				if (!ctx->v4l_codec_dpb_ready &&
-					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
-					run_ready_min_buf_num)
-					return 0;
-			} else {
-				if (ctx->v4l_resolution_change)
-					return 0;
-			}
-		} else if (!ctx->v4l_codec_dpb_ready) {
-			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
-				run_ready_min_buf_num)
-				return 0;
-		}
-	}
-
-	if (!is_enough_free_buffer(hw)) {
-		hw->buffer_not_ready++;
-		return 0;
+	if (hw->v4l_params_parsed) {
+		ret = is_avaliable_buffer(hw) ? 1 : 0;
+	} else {
+		ret = ctx->v4l_resolution_change ? 0 : 1;
 	}
 
 	hw->not_run_ready = 0;
 	hw->buffer_not_ready = 0;
-	if (vdec->parallel_dec == 1)
-		return (unsigned long)(CORE_MASK_VDEC_1);
-	else
-		return (unsigned long)(CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
+
+	return ret ? CORE_MASK_VDEC_1 : 0;
 }
 
 static unsigned char get_data_check_sum
@@ -2616,19 +2620,39 @@ static int vmpeg4_stop(struct vdec_mpeg4_hw_s *hw)
 }
 static void reset(struct vdec_s *vdec)
 {
-	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
+	struct vdec_mpeg4_hw_s *hw =
+		(struct vdec_mpeg4_hw_s *)vdec->private;
+	int i;
 
-	pr_info("amvdec_mmpeg4: reset.\n");
-
-	vmpeg4_local_init(hw);
-
-	if (hw->is_used_v4l) {
-		u32 i, buf_num = vmpeg4_get_buf_num(hw);
-		for (i = 0; i < buf_num; i++) {
-			hw->pic[i].v4l_ref_buf_addr = 0;
-		}
+	if (hw->stat & STAT_VDEC_RUN) {
+		amvdec_stop();
+		hw->stat &= ~STAT_VDEC_RUN;
 	}
+
+	flush_work(&hw->work);
+	reset_process_time(hw);
+
+	for (i = 0; i < hw->buf_num; i++) {
+		hw->pic[i].v4l_ref_buf_addr = 0;
+		hw->vfbuf_use[i] = 0;
+	}
+
+	INIT_KFIFO(hw->display_q);
+	INIT_KFIFO(hw->newframe_q);
+
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		const struct vframe_s *vf = &hw->vfpool[i];
+
+		hw->vfpool[i].index = -1;
+		kfifo_put(&hw->newframe_q, vf);
+	}
+
+	hw->refs[0] = -1;
+	hw->refs[1] = -1;
+	hw->first_i_frame_ready = 0;
 	hw->ctx_valid = 0;
+
+	pr_info("mpeg4: reset.\n");
 }
 
 static int vmpeg4_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
