@@ -816,8 +816,8 @@ struct vdec_h264_hw_s {
 	/**/
 	unsigned int last_frame_time;
 	u32 vf_pre_count;
-	u32 vf_get_count;
-	u32 vf_put_count;
+	atomic_t vf_get_count;
+	atomic_t vf_put_count;
 
 	/* timeout handle */
 	unsigned long int start_process_time;
@@ -3146,16 +3146,18 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
 
+		hw->vf_pre_count++;
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
-		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-
 		if (!frame->show_frame) {
-			vh264_vf_put(vh264_vf_get(vdec), vdec);
+			vh264_vf_put(vf, vdec);
+			atomic_add(1, &hw->vf_get_count);
 			continue;
 		}
+		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+
+
 
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
-		hw->vf_pre_count++;
 		vdec->vdec_fps_detec(vdec->id);
 #ifdef AUX_DATA_CRC
 		decoder_do_aux_data_check(vdec, hw->buffer_spec[buffer_index].aux_data_buf,
@@ -4423,8 +4425,8 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 				= frame_interval;
 		}
 		hw->last_frame_time = time;
-		vf->index_disp = hw->vf_get_count;
-		hw->vf_get_count++;
+		vf->index_disp = atomic_read(&hw->vf_get_count);
+		atomic_add(1, &hw->vf_get_count);
 		if (kfifo_peek(&hw->display_q, &next_vf)) {
 			vf->next_vf_pts_valid = true;
 			vf->next_vf_pts = next_vf->pts;
@@ -4540,7 +4542,7 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 
 	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 
-	hw->vf_put_count++;
+	atomic_add(1, &hw->vf_put_count);
 	if (vf && (vf_valid_check(vf, hw) == true))
 		kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 
@@ -4569,7 +4571,7 @@ static int vh264_event_cb(int type, void *data, void *op_arg)
 		int buf_spec_num;
 
 		if (!req->vf) {
-			req->aux_size = hw->vf_put_count;
+			req->aux_size = atomic_read(&hw->vf_put_count);
 			return 0;
 		}
 		buf_spec_num = BUFSPEC_INDEX(req->vf->index);

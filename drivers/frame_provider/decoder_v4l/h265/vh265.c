@@ -1782,8 +1782,8 @@ struct hevc_state_s {
 	u32 start_shift_bytes;
 
 	u32 vf_pre_count;
-	u32 vf_get_count;
-	u32 vf_put_count;
+	atomic_t vf_get_count;
+	atomic_t vf_put_count;
 #ifdef SWAP_HEVC_UCODE
 	dma_addr_t mc_dma_handle;
 	void *mc_cpu_addr;
@@ -8811,8 +8811,8 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 		}
 #endif
 		hevc->show_frame_num++;
-		vf->index_disp = hevc->vf_get_count;
-		hevc->vf_get_count++;
+		vf->index_disp = atomic_read(&hevc->vf_get_count);
+		atomic_add(1, &hevc->vf_get_count);
 
 		if (kfifo_peek(&hevc->display_q, &next_vf)) {
 			vf->next_vf_pts_valid = true;
@@ -8875,7 +8875,7 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 			, vf->canvas0Addr
 #endif
 			);
-	hevc->vf_put_count++;
+	atomic_add(1, &hevc->vf_put_count);
 	kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 
 	if (hevc->enable_fence && vf->fence) {
@@ -8957,7 +8957,7 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 		unsigned char index;
 
 		if (!req->vf) {
-			req->aux_size = hevc->vf_put_count;
+			req->aux_size = atomic_read(&hevc->vf_put_count);
 			return 0;
 		}
 		spin_lock_irqsave(&lock, flags);
@@ -9673,13 +9673,10 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				(const struct vframe_s *)vf2);
 				ATRACE_COUNTER(MODULE_NAME, vf2->pts);
 			} else {
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf);
-				vh265_vf_put(vh265_vf_get(vdec), vdec);
-
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf2);
-				vh265_vf_put(vh265_vf_get(vdec), vdec);
+				vh265_vf_put(vf, vdec);
+				vh265_vf_put(vf2, vdec);
+				atomic_add(2, &hevc->vf_get_count);
+				hevc->vf_pre_count += 2;
 				return 0;
 			}
 		} else if (pic->pic_struct == 5
@@ -9735,18 +9732,11 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				(const struct vframe_s *)vf3);
 				ATRACE_COUNTER(MODULE_NAME, vf3->pts);
 			} else {
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf);
-				vh265_vf_put(vh265_vf_get(vdec), vdec);
-
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf2);
-				vh265_vf_put(vh265_vf_get(vdec), vdec);
-
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf3);
-				vh265_vf_put(vh265_vf_get(vdec), vdec);
-
+				vh265_vf_put(vf, vdec);
+				vh265_vf_put(vf2, vdec);
+				vh265_vf_put(vf3, vdec);
+				atomic_add(3, &hevc->vf_get_count);
+				hevc->vf_pre_count += 3;;
 				return 0;
 			}
 		} else if (pic->pic_struct == 9
@@ -9790,9 +9780,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				else
 					hevc->pre_bot_pic = pic;
 			} else {
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf);
-				vh265_vf_put(vh265_vf_get(vdec), vdec);
+				vh265_vf_put(vf, vdec);
+				atomic_add(1, &hevc->vf_get_count);
+				hevc->vf_pre_count++;
 				return 0;
 			}
 		} else if (pic->pic_struct == 11
@@ -9831,9 +9821,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				else
 					hevc->pre_bot_pic = pic;
 			} else {
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf);
-				vh265_vf_put(vh265_vf_get(vdec), vdec);
+				vh265_vf_put(vf, vdec);
+				atomic_add(1, &hevc->vf_get_count);
+				hevc->vf_pre_count++;
 				return 0;
 			}
 		} else {
@@ -9871,9 +9861,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			if (pic->show_frame) {
 				put_vf_to_display_q(hevc, vf);
 			} else {
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf);
-				vh265_vf_put(vh265_vf_get(vdec), vdec);
+				vh265_vf_put(vf, vdec);
+				atomic_add(1, &hevc->vf_get_count);
+				hevc->vf_pre_count++;
 				return 0;
 			}
 		}
