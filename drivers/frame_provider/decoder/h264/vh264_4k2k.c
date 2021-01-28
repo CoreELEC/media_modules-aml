@@ -444,7 +444,7 @@ static int init_canvas(int refbuf_size, long dpb_size, int dpb_number,
 				addr,
 				mb_width << 4,
 				mb_height << 4,
-				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 
 		addr += mb_total << 8;
 		index++;
@@ -455,7 +455,7 @@ static int init_canvas(int refbuf_size, long dpb_size, int dpb_number,
 				addr,
 				mb_width << 4,
 				mb_height << 3,
-				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 
 		addr += mb_total << 7;
 		index++;
@@ -467,7 +467,7 @@ static int init_canvas(int refbuf_size, long dpb_size, int dpb_number,
 				addr,
 				mb_width << 3,
 				mb_height << 3,
-				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 
 		addr += mb_total << 6;
 		index++;
@@ -478,7 +478,7 @@ static int init_canvas(int refbuf_size, long dpb_size, int dpb_number,
 				addr,
 				mb_width << 3,
 				mb_height << 2,
-				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 
 		index++;
 #endif

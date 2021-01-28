@@ -642,7 +642,7 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 			canvas_width,
 			canvas_height,
 			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR, endian);
+			CANVAS_BLKMODE_LINEAR, endian, VDEC_1);
 		hw->buffer_spec[i].canvas_config[0].phy_addr =
 			hw->buffer_spec[i].y_addr;
 		hw->buffer_spec[i].canvas_config[0].width =
@@ -659,7 +659,7 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 			canvas_width / 2,
 			canvas_height / 2,
 			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR, endian);
+			CANVAS_BLKMODE_LINEAR, endian, VDEC_1);
 		hw->buffer_spec[i].canvas_config[1].phy_addr =
 			hw->buffer_spec[i].u_addr;
 		hw->buffer_spec[i].canvas_config[1].width =
@@ -676,7 +676,7 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 			canvas_width / 2,
 			canvas_height / 2,
 			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR, endian);
+			CANVAS_BLKMODE_LINEAR, endian, VDEC_1);
 		hw->buffer_spec[i].canvas_config[2].phy_addr =
 			hw->buffer_spec[i].v_addr;
 		hw->buffer_spec[i].canvas_config[2].width =
@@ -1085,7 +1085,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 		hw->canvas_endian;
 
 	config_cav_lut(hw->buffer_spec[i].y_canvas_index,
-			&hw->buffer_spec[i].canvas_config[0]);
+			&hw->buffer_spec[i].canvas_config[0], VDEC_1);
 
 	hw->buffer_spec[i].canvas_config[1].phy_addr =
 		decbuf_u_start;
@@ -1099,7 +1099,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 		hw->canvas_endian;
 
 	config_cav_lut(hw->buffer_spec[i].u_canvas_index,
-			&hw->buffer_spec[i].canvas_config[1]);
+			&hw->buffer_spec[i].canvas_config[1], VDEC_1);
 
 	hw->buffer_spec[i].canvas_config[2].phy_addr =
 		decbuf_v_start;
@@ -1113,7 +1113,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 		hw->canvas_endian;
 
 	config_cav_lut(hw->buffer_spec[i].v_canvas_index,
-			&hw->buffer_spec[i].canvas_config[2]);
+			&hw->buffer_spec[i].canvas_config[2], VDEC_1);
 
 	/* mjpeg decoder canvas need to be revert to match display. */
 	hw->buffer_spec[i].canvas_config[0].endian = hw->canvas_endian ? 0 : 7;
@@ -1196,11 +1196,11 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 			for (i = 0; i < hw->buf_num; i++) {
 				buff_spec = &hw->buffer_spec[i];
 				config_cav_lut(buff_spec->y_canvas_index,
-							&buff_spec->canvas_config[0]);
+							&buff_spec->canvas_config[0], VDEC_1);
 				config_cav_lut(buff_spec->u_canvas_index,
-							&buff_spec->canvas_config[1]);
+							&buff_spec->canvas_config[1], VDEC_1);
 				config_cav_lut(buff_spec->v_canvas_index,
-							&buff_spec->canvas_config[2]);
+							&buff_spec->canvas_config[2], VDEC_1);
 			}
 		}
 	}

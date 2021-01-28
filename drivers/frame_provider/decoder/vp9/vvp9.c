@@ -6957,10 +6957,10 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 
 		config_cav_lut_ex(pic_config->y_canvas_index,
 			pic_config->dw_y_adr, canvas_w, canvas_h,
-			CANVAS_ADDR_NOWRAP, blkmode, pbi->is_used_v4l ? 0 : 7);
+			CANVAS_ADDR_NOWRAP, blkmode, pbi->is_used_v4l ? 0 : 7, VDEC_HEVC);
 		config_cav_lut_ex(pic_config->uv_canvas_index,
 			pic_config->dw_u_v_adr,	canvas_w, canvas_h,
-			CANVAS_ADDR_NOWRAP, blkmode, pbi->is_used_v4l ? 0 : 7);
+			CANVAS_ADDR_NOWRAP, blkmode, pbi->is_used_v4l ? 0 : 7, VDEC_HEVC);
 
 #ifdef MULTI_INSTANCE_SUPPORT
 		pic_config->canvas_config[0].phy_addr =

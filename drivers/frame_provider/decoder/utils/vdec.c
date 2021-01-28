@@ -807,7 +807,8 @@ void cav_lut_info_store(u32 index, ulong addr, u32 width,
 }
 
 void config_cav_lut_ex(u32 index, ulong addr, u32 width,
-	u32 height, u32 wrap, u32 blkmode, u32 endian)
+	u32 height, u32 wrap, u32 blkmode,
+	u32 endian, enum vdec_type_e core)
 {
 	unsigned long datah_temp, datal_temp;
 
@@ -837,10 +838,12 @@ void config_cav_lut_ex(u32 index, ulong addr, u32 width,
 		datal_temp = addr_bits_l | width_l;
 		datah_temp = width_h | height_h | wrap_h | blkmod_h | switch_bits_ctl;
 
-		WRITE_VREG(MDEC_CAV_CFG0, 0);	//[0]canv_mode, by default is non-canv-mode
-		WRITE_VREG(MDEC_CAV_LUT_DATAL, datal_temp);
-		WRITE_VREG(MDEC_CAV_LUT_DATAH, datah_temp);
-		WRITE_VREG(MDEC_CAV_LUT_ADDR,  index);
+		if (core == VDEC_1) {
+			WRITE_VREG(MDEC_CAV_CFG0, 0);	//[0]canv_mode, by default is non-canv-mode
+			WRITE_VREG(MDEC_CAV_LUT_DATAL, datal_temp);
+			WRITE_VREG(MDEC_CAV_LUT_DATAH, datah_temp);
+			WRITE_VREG(MDEC_CAV_LUT_ADDR,  index);
+		}
 
 		cav_lut_info_store(index, addr, width, height, wrap, blkmode, endian);
 
@@ -853,7 +856,8 @@ void config_cav_lut_ex(u32 index, ulong addr, u32 width,
 }
 EXPORT_SYMBOL(config_cav_lut_ex);
 
-void config_cav_lut(int index, struct canvas_config_s *cfg)
+void config_cav_lut(int index, struct canvas_config_s *cfg,
+	enum vdec_type_e core)
 {
 	config_cav_lut_ex(index,
 		cfg->phy_addr,
@@ -861,7 +865,8 @@ void config_cav_lut(int index, struct canvas_config_s *cfg)
 		cfg->height,
 		CANVAS_ADDR_NOWRAP,
 		cfg->block_mode,
-		cfg->endian);
+		cfg->endian,
+		core);
 }
 EXPORT_SYMBOL(config_cav_lut);
 

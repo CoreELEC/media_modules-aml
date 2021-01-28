@@ -501,8 +501,9 @@ void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size);
 
 extern u32 timestamp_avsync_counter_get(void);
 
-void config_cav_lut(int index, struct canvas_config_s *cfg);
+void config_cav_lut(int index, struct canvas_config_s *cfg, enum vdec_type_e core);
 
 void config_cav_lut_ex(u32 index, ulong addr, u32 width,
-	u32 height, u32 wrap, u32 blkmode, u32 endian);
+	u32 height, u32 wrap, u32 blkmode,
+	u32 endian, enum vdec_type_e core);
 #endif				/* VDEC_H */

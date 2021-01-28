@@ -875,27 +875,27 @@ static int vmpeg4_canvas_init(void)
 		config_cav_lut_ex(2 * i + 0,
 			buf_start,
 			canvas_width, canvas_height,
-			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 		config_cav_lut_ex(2 * i + 1,
 			buf_start +
 			decbuf_y_size, canvas_width,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_32X32, 0);
+			CANVAS_BLKMODE_32X32, 0, VDEC_1);
 #else
 		config_cav_lut_ex(3 * i + 0,
 			buf_start,
 			canvas_width, canvas_height,
-			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 		config_cav_lut_ex(3 * i + 1,
 			buf_start +
 			decbuf_y_size, canvas_width / 2,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_32X32, 0);
+			CANVAS_BLKMODE_32X32, 0, VDEC_1);
 		config_cav_lut_ex(3 * i + 2,
 			buf_start +
 			decbuf_y_size + decbuf_uv_size,
 			canvas_width / 2, canvas_height / 2,
-			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 #endif
 
 	}

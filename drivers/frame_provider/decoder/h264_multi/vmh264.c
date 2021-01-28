@@ -2033,7 +2033,8 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		hw->mb_height << 4,
 		CANVAS_ADDR_NOWRAP,
 		blkmode,
-		endian);
+		endian,
+		VDEC_1);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
@@ -2051,7 +2052,8 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		hw->mb_height << 3,
 		CANVAS_ADDR_NOWRAP,
 		blkmode,
-		endian);
+		endian,
+		VDEC_1);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
@@ -2076,7 +2078,8 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 			hw->buffer_spec[i].vdec_dw_canvas_config[0].height,
 			CANVAS_ADDR_NOWRAP,
 			blkmode,
-			endian);
+			endian,
+			VDEC_1);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) |
@@ -2092,7 +2095,8 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 			hw->buffer_spec[i].vdec_dw_canvas_config[1].height,
 			CANVAS_ADDR_NOWRAP,
 			blkmode,
-			endian);
+			endian,
+			VDEC_1);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
 				(1 << 11) |
@@ -2128,7 +2132,8 @@ static void config_decode_canvas_ex(struct vdec_h264_hw_s *hw, int i)
 		canvas_h,
 		CANVAS_ADDR_NOWRAP,
 		blkmode,
-		7);
+		7,
+		VDEC_HEVC);
 
 	config_cav_lut_ex(hw->buffer_spec[i].
 		u_canvas_index,
@@ -2137,7 +2142,8 @@ static void config_decode_canvas_ex(struct vdec_h264_hw_s *hw, int i)
 		canvas_h,
 		CANVAS_ADDR_NOWRAP,
 		blkmode,
-		7);
+		7,
+		VDEC_HEVC);
 }
 
 static int v4l_get_free_buffer_spec(struct vdec_h264_hw_s *hw)

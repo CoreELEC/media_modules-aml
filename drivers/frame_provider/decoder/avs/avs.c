@@ -949,31 +949,31 @@ static int vavs_canvas_init(void)
 					buf_start,
 					canvas_width, canvas_height,
 					CANVAS_ADDR_NOWRAP,
-					vdec->canvas_mode, endian);
+					vdec->canvas_mode, endian, VDEC_1);
 			config_cav_lut_ex(canvas_base + canvas_num * i + 1,
 					buf_start +
 					decbuf_y_size, canvas_width,
 					canvas_height / 2,
 					CANVAS_ADDR_NOWRAP,
-					vdec->canvas_mode, endian);
+					vdec->canvas_mode, endian, VDEC_1);
 #else
 			config_cav_lut_ex(canvas_num * i + 0,
 					buf_start,
 					canvas_width, canvas_height,
 					CANVAS_ADDR_NOWRAP,
-					vdec->canvas_mode, endian);
+					vdec->canvas_mode, endian, VDEC_1);
 			config_cav_lut_ex(canvas_num * i + 1,
 					buf_start +
 					decbuf_y_size, canvas_width / 2,
 					canvas_height / 2,
 					CANVAS_ADDR_NOWRAP,
-					vdec->canvas_mode, endian);
+					vdec->canvas_mode, endian, VDEC_1);
 			config_cav_lut_ex(canvas_num * i + 2,
 					buf_start +
 					decbuf_y_size + decbuf_uv_size,
 					canvas_width / 2, canvas_height / 2,
 					CANVAS_ADDR_NOWRAP,
-					vdec->canvas_mode, endian);
+					vdec->canvas_mode, endian, VDEC_1);
 #endif
 			if (debug_flag & AVS_DEBUG_PRINT) {
 				pr_info("canvas config %d, addr %p\n", i,

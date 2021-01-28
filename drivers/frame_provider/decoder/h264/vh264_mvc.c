@@ -701,21 +701,21 @@ static long init_canvas(int view_index, int refbuf_size, long dpb_size,
 		buffer_spec[i].y_canvas_index = index;
 		config_cav_lut_ex(index, addr,
 			mb_width << 4, mb_height << 4,
-			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 
 		addr += mb_total << 8;
 		index++;
 		buffer_spec[i].u_addr = addr;
 		buffer_spec[i].u_canvas_index = index;
 		config_cav_lut_ex(index, addr, mb_width << 3, mb_height << 3,
-				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 
 		addr += mb_total << 6;
 		index++;
 		buffer_spec[i].v_addr = addr;
 		buffer_spec[i].v_canvas_index = index;
 		config_cav_lut_ex(index, addr, mb_width << 3, mb_height << 3,
-				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0);
+				CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
 
 		index++;
 	}

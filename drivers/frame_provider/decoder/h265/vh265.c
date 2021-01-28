@@ -8167,10 +8167,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 		config_cav_lut_ex(pic->y_canvas_index,
 			pic->dw_y_adr, canvas_w, canvas_h,
-			CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+			CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7, VDEC_HEVC);
 		config_cav_lut_ex(pic->uv_canvas_index, pic->dw_u_v_adr,
 			canvas_w, canvas_h,
-			CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+			CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7, VDEC_HEVC);
 #ifdef MULTI_INSTANCE_SUPPORT
 		pic->canvas_config[0].phy_addr =
 				pic->dw_y_adr;
@@ -8214,10 +8214,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 			config_cav_lut_ex(pic->y_canvas_index,
 				pic->mc_y_adr, canvas_w, canvas_h,
-				CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+				CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7, VDEC_HEVC);
 			config_cav_lut_ex(pic->uv_canvas_index, pic->mc_u_v_adr,
 				canvas_w, canvas_h,
-				CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+				CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7, VDEC_HEVC);
 		}
 		ATRACE_COUNTER("set canvas0 addr", spec2canvas(pic));
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
@@ -8236,10 +8236,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 
 	config_cav_lut_ex(pic->y_canvas_index, pic->mc_y_adr, canvas_w, canvas_h,
-		CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+		CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7, VDEC_HEVC);
 	config_cav_lut_ex(pic->uv_canvas_index, pic->mc_u_v_adr,
 		canvas_w, canvas_h,
-		CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+		CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7, VDEC_HEVC);
 
 	ATRACE_COUNTER("set canvas0 addr", spec2canvas(pic));
 	hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
