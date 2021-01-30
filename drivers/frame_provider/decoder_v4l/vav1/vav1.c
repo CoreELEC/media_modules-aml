@@ -8437,7 +8437,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
 			hw->cur_obu_type = obu_type;
 			hw->process_busy = 0;
-			hw->run_ready_min_buf_num = hw->one_package_frame_cnt + 1;
 			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
 		}
