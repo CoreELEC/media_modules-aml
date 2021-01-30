@@ -2870,7 +2870,7 @@ static struct platform_driver ammvdec_mpeg4_driver = {
 
 static struct codec_profile_t amvdec_mpeg4_profile = {
 	.name = "mmpeg4",
-	.profile = "v4l"
+	.profile = "v4l, no_single"
 };
 
 static int __init ammvdec_mpeg4_driver_init_module(void)
