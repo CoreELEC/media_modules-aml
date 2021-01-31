@@ -6369,6 +6369,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		if (hw->is_used_v4l) {
 			av1_print(hw, AV1_DEBUG_BUFMGR_MORE, "%s aux_data_size = %d\n",
 					__func__, pic_config->aux_data_size);
+			vf->src_fmt.comp_buf = fb->dv_comp_buf;
+			vf->src_fmt.md_buf = fb->dv_md_buf;
 			update_vframe_src_fmt(vf,
 				pic_config->aux_data_buf,
 				pic_config->aux_data_size,

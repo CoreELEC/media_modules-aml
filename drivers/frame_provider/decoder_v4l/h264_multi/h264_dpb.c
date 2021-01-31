@@ -2266,6 +2266,27 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 	int i;
 	int none_displayed_num = 0;
 	unsigned char fast_output_flag = 0;
+
+	/*
+	 * When the sei data(dv data) after the PIC done and no flush,
+	 * it is necessary to output a frame of data until
+	 * the number of frames not displayed is greater than the reorder.
+	 */
+	if ((p_H264_Dpb->wait_aux_data_flag) && (!flush_flag)) {
+		int no_output_num = 0;
+
+		for (i = 0; i < p_Dpb->used_size; i++) {
+			if ((!p_Dpb->fs[i]->is_output) &&
+				(!p_Dpb->fs[i]->pre_output) &&
+				((p_Dpb->fs[i]->is_used == 3) ||
+				(p_Dpb->fs[i]->data_flag & ERROR_FLAG)))
+				no_output_num++;
+		}
+
+		if (no_output_num <= p_H264_Dpb->reorder_output)
+			return 0;
+	}
+
 	if (!flush_flag) {
 		for (i = 0; i < p_Dpb->used_size; i++) {
 			if ((!p_Dpb->fs[i]->is_output) &&

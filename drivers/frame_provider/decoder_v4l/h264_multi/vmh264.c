@@ -3161,11 +3161,16 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		decoder_do_aux_data_check(vdec, hw->buffer_spec[buffer_index].aux_data_buf,
 			hw->buffer_spec[buffer_index].aux_data_size);
 #endif
-		if (hw->is_used_v4l)
+		if (hw->is_used_v4l) {
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "aux data: (size %d)\n",
+				hw->buffer_spec[buffer_index].aux_data_size);
+			vf->src_fmt.comp_buf = fb->dv_comp_buf;
+			vf->src_fmt.md_buf = fb->dv_md_buf;
 			update_vframe_src_fmt(vf,
 				hw->buffer_spec[buffer_index].aux_data_buf,
 				hw->buffer_spec[buffer_index].aux_data_size,
 				false, vdec->vf_provider_name, NULL);
+		}
 		if (without_display_mode == 0) {
 			if (hw->is_used_v4l) {
 				if (v4l2_ctx->is_stream_off) {
@@ -6297,6 +6302,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 						hw->loop_flag = 0;
 				}
 			}
+			p_H264_Dpb->wait_aux_data_flag = ((!hw->discard_dv_data) && (hw->frmbase_cont_flag));
 				ret = store_picture_in_dpb(p_H264_Dpb,
 					p_H264_Dpb->mVideo.dec_picture,
 					hw->data_flag | hw->dec_flag |
@@ -10192,21 +10198,27 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			&config_val) == 0)
 			hw->fence_usage = config_val;
 
-		if (get_config_int(pdata->config,
-			"negative_dv",
-			&config_val) == 0) {
-			hw->discard_dv_data = config_val;
+		if (hw->is_used_v4l) {
+			if (get_config_int(pdata->config,
+				"parm_v4l_metadata_config_flag",
+				&config_val) == 0) {
+				hw->metadata_config_flag = config_val;
+				hw->discard_dv_data = hw->metadata_config_flag & VDEC_CFG_FLAG_DV_NEGATIVE;
+			} else {
+				hw->discard_dv_data = 1; //default
+			}
+		} else {
+			if (get_config_int(pdata->config,
+				"negative_dv",
+				&config_val) == 0) {
+				hw->discard_dv_data = config_val;
+			} else {
+				hw->discard_dv_data = 1; //default
+			}
+		}
+		if (hw->discard_dv_data)
 			dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
-		}
 
-		if (get_config_int(pdata->config,
-			"parm_v4l_metadata_config_flag",
-			&config_val) == 0) {
-			hw->metadata_config_flag = config_val;
-			hw->discard_dv_data = hw->metadata_config_flag & VDEC_CFG_FLAG_DV_NEGATIVE;
-			if (hw->discard_dv_data)
-				dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
-		}
 
 	} else
 		hw->double_write_mode = double_write_mode;

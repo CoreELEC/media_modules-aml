@@ -40,6 +40,8 @@
 #define VDEC_SCATTER_MEMORY_TYPE	1
 
 #define META_DATA_SIZE       (256)
+#define MD_BUF_SIZE		(1024)
+#define COMP_BUF_SIZE		(8196)
 
 /**
  * struct vdec_fb  - decoder frame buffer
@@ -55,6 +57,8 @@
  * @put_vframe	: put vframe to caller.
  * @fill_buf	: recycle buf to pool will be alloc by caller.
  * @fill_buf_done : be invoked if caller fill data done.
+ * @dv_comp_buf[COMP_BUF_SIZE] : Stores dv data parsed from aux data.
+ * @dv_md_buf[MD_BUF_SIZE] : Stores dv data parsed from aux data.
  */
 
 struct vdec_v4l2_buffer {
@@ -72,6 +76,8 @@ struct vdec_v4l2_buffer {
 	void	(*put_vframe) (void *caller, struct vframe_s *vf);
 	void	(*fill_buf) (void *v4l, struct vdec_v4l2_buffer *fb);
 	void	(*fill_buf_done) (void *v4l, struct vdec_v4l2_buffer *fb);
+	char	dv_comp_buf[COMP_BUF_SIZE];
+	char	dv_md_buf[MD_BUF_SIZE];
 };
 
 

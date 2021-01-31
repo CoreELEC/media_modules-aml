@@ -9913,11 +9913,16 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			decoder_do_aux_data_check(vdec, hevc->m_PIC[vf->index & 0xff]->aux_data_buf,
 				hevc->m_PIC[vf->index & 0xff]->aux_data_size);
 #endif
-		if (hevc->is_used_v4l)
+		if (hevc->is_used_v4l) {
+			hevc_print(hevc, H265_DEBUG_BUFMGR,
+				"aux data: (size %d)\n", hevc->m_PIC[vf->index & 0xff]->aux_data_size);
+			vf->src_fmt.comp_buf = fb->dv_comp_buf;
+			vf->src_fmt.md_buf = fb->dv_md_buf;
 			update_vframe_src_fmt(vf,
 				hevc->m_PIC[vf->index & 0xff]->aux_data_buf,
 				hevc->m_PIC[vf->index & 0xff]->aux_data_size,
 				hevc->dv_duallayer, hevc->provider_name, NULL);
+		}
 
 		/*if (pic->vf_ref == hevc->vf_pre_count) {*/
 		if (hevc->kpi_first_i_decoded == 0) {
