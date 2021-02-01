@@ -5827,7 +5827,8 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			(kfifo_len(&hw->display_q) <= 0) &&
 			((p_H264_Dpb->mDPB.used_size >=
 				(p_H264_Dpb->mDPB.size - 1)) ||
-			(!have_free_buf_spec(vdec)))) {
+			(!have_free_buf_spec(vdec))) &&
+			(!hw->is_used_v4l)) {
 			enum receviver_start_e state = RECEIVER_INACTIVE;
 
 			if (hw->timeout_flag == false)
