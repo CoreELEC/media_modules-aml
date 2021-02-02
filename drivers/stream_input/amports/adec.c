@@ -19,6 +19,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/platform_device.h>
+#include <linux/of_platform.h>
 #include <linux/slab.h>
 #include <linux/uio_driver.h>
 #include <linux/amlogic/media/utils/aformat.h>
@@ -351,21 +352,23 @@ s32 astream_dev_register(void)
 	}
 
 	if (AM_MESON_CPU_MAJOR_ID_TXL < get_cpu_major_id()) {
-		node = of_find_node_by_path("/codec_io/io_cbus_base");
+		struct resource *res_mem;
+		struct platform_device *pdev;
+
+		node = of_find_node_by_path("/codec_io");
 		if (!node) {
 			pr_info("No io_cbus_base node found.");
 			goto err_1;
 		}
 
-#ifdef CONFIG_ARM64_A32
-		r = of_property_read_u32_index(node, "reg", 0, &cbus_base);
-#else
-		r = of_property_read_u32_index(node, "reg", 1, &cbus_base);
-#endif
-		if (r) {
+		pdev = of_find_device_by_node(node);
+		res_mem = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cbus");
+		if (!res_mem) {
 			pr_info("No find node.\n");
 			goto err_1;
 		}
+		cbus_base = res_mem->start;
+		of_node_put(node);
 
 		/*need to offset -0x100 in txlx.*/
 		astream_dev->offset = -0x100;
