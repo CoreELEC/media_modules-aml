@@ -132,7 +132,8 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 
 	stbuf->flag |= BUF_FLAG_ALLOC;
 	stbuf->flag |= BUF_FLAG_IN_USE;
-
+	if (vdec_single(vdec))
+		pts_start(stbuf->type);
 	pr_info("[%d]: [%s-%s] addr: %lx, size: %x, thrRW: %d, extbuf: %d, secure: %d\n",
 		stbuf->id, type_to_str(stbuf->type), stbuf->name,
 		stbuf->buf_start, stbuf->buf_size,
@@ -151,6 +152,8 @@ static void stream_buffer_release(struct stream_buf_s *stbuf)
 {
 	if (stbuf->write_thread)
 		threadrw_release(stbuf);
+	if (vdec_single(container_of(stbuf, struct vdec_s, vbuf)))
+		pts_stop(stbuf->type);
 
 	if (stbuf->flag & BUF_FLAG_ALLOC && stbuf->buf_start) {
 		if (!stbuf->ext_buf_addr)
