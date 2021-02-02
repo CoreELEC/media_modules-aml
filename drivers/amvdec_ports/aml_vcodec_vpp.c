@@ -91,19 +91,25 @@ static enum DI_ERRORTYPE
 	/* recovery fb handle. */
 	buf->vf->v4l_mem_handle = (ulong)fb;
 
-	kfifo_put(&vpp->out_done_q, vpp_buf);
-
 	if (bypass) {
 		struct vframe_s *vf_dec = buf->vf->vf_ext;
-		struct vdec_v4l2_buffer *fb_dec = NULL;
-		struct aml_video_dec_buf *aml_buf = NULL;
+		struct vdec_v4l2_buffer *fb_dec =
+			(struct vdec_v4l2_buffer *) vf_dec->v4l_mem_handle;
 
-		fb_dec	= (struct vdec_v4l2_buffer *) vf_dec->v4l_mem_handle;
-		aml_buf	= container_of(fb_dec, struct aml_video_dec_buf, frame_buffer);
-		aml_buf->vpp_buf_handle = (ulong)vpp_buf;
+		fb_dec->is_vpp_bypass = true;
+		fb->fill_buf_done(vpp->ctx, fb_dec);
+
+		/* recycle output buffer directly */
+		mutex_lock(&vpp->output_lock);
+		kfifo_put(&vpp->frame, buf->vf);
+		kfifo_put(&vpp->output, vpp_buf);
+		mutex_unlock(&vpp->output_lock);
+		up(&vpp->sem_out);
+	} else {
+		kfifo_put(&vpp->out_done_q, vpp_buf);
+
+		fb->fill_buf_done(vpp->ctx, fb);
 	}
-
-	fb->fill_buf_done(vpp->ctx, fb);
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
 		"vpp_output done: vf:%px, idx:%d, flag:%x %s, in:%d, out:%d, vf:%d, vpp done:%d\n",
@@ -133,10 +139,8 @@ static void vpp_vf_get(void *caller, struct vframe_s **vf_out)
 
 	if (kfifo_get(&vpp->out_done_q, &vpp_buf)) {
 		bool eos = false;
-		bool bypass = false;
 
 		buf	= &vpp_buf->di_buf;
-		bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
 		vf	= buf->vf;
 
 		if (buf->flag & DI_FLAG_EOS) {
@@ -148,18 +152,11 @@ static void vpp_vf_get(void *caller, struct vframe_s **vf_out)
 			eos = true;
 		}
 
-		if (bypass && !eos) {
-			/* retrieve input buffer info */
-			vf = buf->vf->vf_ext;
-		}
-
 		*vf_out = vf;
 
 		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-			"%s: vf:%px, index:%d, flag:%x %s, ts:%lld\n",
-			__func__, vf,
-			bypass ? vf->index : VPP_BUF_GET_IDX(vpp_buf),
-			buf->flag, bypass ? "bypass" : "",
+			"%s: vf:%px, index:%d, flag:%x, ts:%lld\n",
+			__func__, vf, VPP_BUF_GET_IDX(vpp_buf), buf->flag,
 			vf->timestamp);
 	}
 }
@@ -171,29 +168,19 @@ static void vpp_vf_put(void *caller, struct vframe_s *vf)
 	struct aml_video_dec_buf *aml_buf = NULL;
 	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
 	struct di_buffer *buf = NULL;
-	bool bypass = false;
 
 	fb	= (struct vdec_v4l2_buffer *) vf->v4l_mem_handle;
 	aml_buf	= container_of(fb, struct aml_video_dec_buf, frame_buffer);
 	vpp_buf	= (struct aml_v4l2_vpp_buf *) aml_buf->vpp_buf_handle;
 	buf	= &vpp_buf->di_buf;
-	bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"%s: vf:%px, index:%d, flag:%x %s, ts:%lld\n",
-		__func__, vf,
-		bypass ? vf->index : VPP_BUF_GET_IDX(vpp_buf),
-		buf->flag, bypass ? "bypass" : "",
+		"%s: vf:%px, index:%d, flag:%x, ts:%lld\n",
+		__func__, vf, VPP_BUF_GET_IDX(vpp_buf), buf->flag,
 		vf->timestamp);
 
-	if (bypass) {
-		vf = buf->vf->vf_ext;
-		fb = (struct vdec_v4l2_buffer *) vf->v4l_mem_handle;
-		fb->put_vframe(fb->caller, vf);
-	}
-
 	mutex_lock(&vpp->output_lock);
-	kfifo_put(&vpp->frame, buf->vf);
+	kfifo_put(&vpp->frame, vf);
 	kfifo_put(&vpp->output, vpp_buf);
 	mutex_unlock(&vpp->output_lock);
 	up(&vpp->sem_out);
@@ -291,8 +278,6 @@ retry:
 
 		if (eos)
 			memset(vf_out, 0, sizeof(*vf_out));
-
-		vf_out->v4l_mem_handle = (ulong)fb;
 
 		out_buf->di_buf.vf = vf_out;
 		out_buf->di_buf.flag = 0;
@@ -523,7 +508,7 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 
 	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 	in_buf->aml_buf = container_of(fb, struct aml_video_dec_buf, frame_buffer);
-	fb->vf_handle = (ulong) vf;
+	fb->vframe = (void *)vf;
 
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;

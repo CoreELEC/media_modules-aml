@@ -438,7 +438,7 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 {
 	struct aml_video_dec_buf *dstbuf = NULL;
 	struct vb2_buffer *vb2_buf = NULL;
-	struct vframe_s *vf = (struct vframe_s *)fb->vf_handle;
+	struct vframe_s *vf = fb->vframe;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d) vf: %px, idx: %d, disp: %d, ts: %lld, "
@@ -1117,8 +1117,10 @@ void aml_thread_capture_worker(struct aml_vcodec_ctx *ctx)
 		if (ctx->is_stream_off)
 			continue;
 
-		fb->get_vframe(fb->caller, &vf);
-		fb->vf_handle = (ulong)vf;
+		if (!fb->is_vpp_bypass) {
+			fb->get_vframe(fb->caller, &vf);
+			fb->vframe = (void *)vf;
+		}
 
 		post_frame_to_upper(ctx, fb);
 	}
@@ -2628,8 +2630,6 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	 */
 	if (!V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
 		u32 dw_mode = VDEC_DW_NO_AFBC;
-		struct vframe_s *vf =
-			(struct vframe_s *)fb->vf_handle;
 
 		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
@@ -2660,11 +2660,13 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			/* check dpb ready */
 			aml_check_dpb_ready(ctx);
 		} else {
+			struct vframe_s *vf = fb->vframe;
+
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 				"IN__BUFF (%s, st:%d) vf: %px, idx: %d, disp: %d, ts: %lld, "
 				"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 				ctx->ada_ctx->frm_name, fb->status,
-				vf,  vf ? vf->index & 0xff : -1,
+				vf, vf ? vf->index & 0xff : -1,
 				vf ? vf->index_disp : -1,
 				vf ? vf->timestamp : 0,
 				fb->m.mem[0].addr, fb->m.mem[0].size,
@@ -2883,11 +2885,11 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 			if (ibuf) {
 				if (ibuf->buf_used) {
 					update_vdec_buf_plane(ctx, fb, vb);
-					fb->vf_handle = (ulong)ibuf->vframe;
+					fb->vframe = ibuf->vframe;
 					ibuf->vframe->v4l_mem_handle = (ulong)fb;
 				} else {
 					fb->caller = NULL;
-					fb->vf_handle = 0;
+					fb->vframe = NULL;
 				}
 			}
 		}
@@ -3001,11 +3003,14 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		for (i = 0; i < q->num_buffers; ++i) {
 			vb2_v4l2 = to_vb2_v4l2_buffer(q->bufs[i]);
 			buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
-			buf->frame_buffer.status = FB_ST_FREE;
-			buf->que_in_m2m = false;
-			buf->used = false;
-			buf->vb.flags = 0;
-			ctx->cap_pool.seq[i] = 0;
+			buf->frame_buffer.status	= FB_ST_FREE;
+			buf->frame_buffer.vframe	= NULL;
+			buf->frame_buffer.caller	= NULL;
+			buf->frame_buffer.is_vpp_bypass	= false;
+			buf->que_in_m2m			= false;
+			buf->used			= false;
+			buf->vb.flags			= 0;
+			ctx->cap_pool.seq[i]		= 0;
 
 			if (vb2_v4l2->vb2_buf.state == VB2_BUF_STATE_ACTIVE)
 				v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
@@ -3237,28 +3242,11 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 	return 0;
 }
 
-//fixme
-/*
-static void m2mops_vdec_lock(void *m2m_priv)
-{
-	struct aml_vcodec_ctx *ctx = m2m_priv;
 
-	mutex_lock(&ctx->dev->dev_mutex);
-}
-
-static void m2mops_vdec_unlock(void *m2m_priv)
-{
-	struct aml_vcodec_ctx *ctx = m2m_priv;
-
-	mutex_unlock(&ctx->dev->dev_mutex);
-}
-*/
 const struct v4l2_m2m_ops aml_vdec_m2m_ops = {
 	.device_run	= m2mops_vdec_device_run,
 	.job_ready	= m2mops_vdec_job_ready,
 	.job_abort	= m2mops_vdec_job_abort,
-	//.lock		= m2mops_vdec_lock, //fixme
-	//.unlock		= m2mops_vdec_unlock,
 };
 
 static const struct vb2_ops aml_vdec_vb2_ops = {

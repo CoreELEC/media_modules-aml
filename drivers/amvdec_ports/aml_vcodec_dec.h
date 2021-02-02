@@ -50,15 +50,16 @@
  * @mem[4]	: array mem for used planes,
  *		  mem[0]: Y, mem[1]: C/U, mem[2]: V
  * @vf_fd	: the file handle of video frame
- * @vf_handle	: video frame handle
  * @status      : frame buffer status (vdec_fb_status)
  * @caller	: caller is handle of decoer or vpp.
+ * @vframe	: video frame from caller.
  * @get_vframe	: get vframe from caller.
  * @put_vframe	: put vframe to caller.
  * @fill_buf	: recycle buf to pool will be alloc by caller.
  * @fill_buf_done : be invoked if caller fill data done.
  * @dv_comp_buf[COMP_BUF_SIZE] : Stores dv data parsed from aux data.
  * @dv_md_buf[MD_BUF_SIZE] : Stores dv data parsed from aux data.
+ * @is_vpp_bypass : fb processed bypass vpp module.
  */
 
 struct vdec_v4l2_buffer {
@@ -68,16 +69,17 @@ struct vdec_v4l2_buffer {
 		struct	aml_vcodec_mem mem[4];
 		u32	vf_fd;
 	} m;
-	ulong	vf_handle;
 	u32	status;
 	u32	buf_idx;
 	void	*caller;
+	void	*vframe;
 	void	(*get_vframe) (void *caller, struct vframe_s **vf);
 	void	(*put_vframe) (void *caller, struct vframe_s *vf);
 	void	(*fill_buf) (void *v4l, struct vdec_v4l2_buffer *fb);
 	void	(*fill_buf_done) (void *v4l, struct vdec_v4l2_buffer *fb);
 	char	dv_comp_buf[COMP_BUF_SIZE];
 	char	dv_md_buf[MD_BUF_SIZE];
+	bool	is_vpp_bypass;
 };
 
 
