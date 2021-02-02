@@ -278,11 +278,9 @@ static u32 double_write_mode;
 
 #ifdef DEBUG_USE_VP9_DEVICE_NAME
 #define DRIVER_NAME "amvdec_vp9"
-#define MODULE_NAME "amvdec_vp9"
 #define DRIVER_HEADER_NAME "amvdec_vp9_header"
 #else
 #define DRIVER_NAME "amvdec_av1"
-#define MODULE_NAME "amvdec_av1"
 #define DRIVER_HEADER_NAME "amvdec_av1_header"
 #endif
 
@@ -807,6 +805,10 @@ struct AV1HW_s {
 	int buffer_wrap[FRAME_BUFFERS];
 	int sidebind_type;
 	int sidebind_channel_id;
+	char vdec_name[32];
+	char pts_name[32];
+	char new_q_name[32];
+	char disp_q_name[32];
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -5669,6 +5671,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 	if (kfifo_get(&hw->display_q, &vf)) {
 		struct vframe_s *next_vf;
 		uint8_t index = vf->index & 0xff;
+		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		if (index < hw->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			hw->vf_get_count++;
@@ -5726,6 +5729,7 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 	index = vf->index & 0xff;
 
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
+	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 	hw->vf_put_count++;
 	if (debug & AOM_DEBUG_VFRAME) {
 		lock_buffer_pool(hw->common.buffer_pool, flags);
@@ -5987,7 +5991,6 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		av1_print(hw, 0, "fatal error, no available buffer slot.");
 		return -1;
 	}
-
 	/* swap uv */
 	if (hw->is_used_v4l) {
 		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
@@ -6292,7 +6295,10 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		decoder_do_frame_check(hw_to_vdec(hw), vf);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(MODULE_NAME, vf->pts);
+		ATRACE_COUNTER(hw->pts_name, vf->pts);
+		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
+
 		hw->vf_pre_count++;
 #ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 		/*count info*/
@@ -10158,6 +10164,14 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 	hw->index = pdev->id;
 
+	snprintf(hw->vdec_name, sizeof(hw->vdec_name),
+		"av1-%d", hw->index);
+	snprintf(hw->pts_name, sizeof(hw->pts_name),
+		"%s-pts", hw->vdec_name);
+	snprintf(hw->new_q_name, sizeof(hw->new_q_name),
+		"%s-newframe_q", hw->vdec_name);
+	snprintf(hw->disp_q_name, sizeof(hw->disp_q_name),
+		"%s-dispframe_q", hw->vdec_name);
 	if (pdata->use_vfm_path)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			VFM_DEC_PROVIDER_NAME);

@@ -180,7 +180,6 @@ static u32 mv_buf_margin;
 static u32 double_write_mode;
 
 #define DRIVER_NAME "amvdec_vp9"
-#define MODULE_NAME "amvdec_vp9"
 #define DRIVER_HEADER_NAME "amvdec_vp9_header"
 
 
@@ -1228,6 +1227,10 @@ struct VP9Decoder_s {
 	int one_package_frame_cnt;
 	u32 error_frame_width;
 	u32 error_frame_height;
+	char vdec_name[32];
+	char pts_name[32];
+	char new_q_name[32];
+	char disp_q_name[32];
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -6978,6 +6981,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 	if (kfifo_get(&pbi->display_q, &vf)) {
 		struct vframe_s *next_vf;
 		uint8_t index = vf->index & 0xff;
+		ATRACE_COUNTER(pbi->disp_q_name, kfifo_len(&pbi->display_q));
 		if (index < pbi->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			vf->index_disp = pbi->vf_get_count;
@@ -7026,6 +7030,7 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 	kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
+	ATRACE_COUNTER(pbi->new_q_name, kfifo_len(&pbi->newframe_q));
 	pbi->vf_put_count++;
 	if (index < pbi->used_buf_num) {
 		struct VP9_Common_s *cm = &pbi->common;
@@ -7238,7 +7243,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		pr_info("fatal error, no available buffer slot.");
 		return -1;
 	}
-
 	/* swap uv */
 	if (pbi->is_used_v4l) {
 		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
@@ -7518,7 +7522,9 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+			ATRACE_COUNTER(pbi->pts_name, vf->pts);
+			ATRACE_COUNTER(pbi->new_q_name, kfifo_len(&pbi->newframe_q));
+			ATRACE_COUNTER(pbi->disp_q_name, kfifo_len(&pbi->display_q));
 			pbi->vf_pre_count++;
 			pbi_update_gvs(pbi);
 			/*count info*/
@@ -10840,6 +10846,15 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	memcpy(&pbi->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
 
 	pbi->index = pdev->id;
+
+	snprintf(pbi->vdec_name, sizeof(pbi->vdec_name),
+		"vp9-%d", pbi->index);
+	snprintf(pbi->pts_name, sizeof(pbi->pts_name),
+		"%s-pts", pbi->vdec_name);
+	snprintf(pbi->new_q_name, sizeof(pbi->new_q_name),
+		"%s-newframe_q", pbi->vdec_name);
+	snprintf(pbi->disp_q_name, sizeof(pbi->disp_q_name),
+		"%s-dispframe_q", pbi->vdec_name);
 
 	if (pdata->use_vfm_path)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,

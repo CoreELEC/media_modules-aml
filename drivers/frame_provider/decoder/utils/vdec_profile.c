@@ -197,6 +197,8 @@ static void vdec_profile_statistics(struct vdec_s *vdec, int event)
 
 		time_stat->cb_lasttimestamp = timestamp;
 		time_stat->cb_cnt++;
+		ATRACE_COUNTER(vdec->dec_spend_time, timestamp - time_stat->run_lasttimestamp);
+		ATRACE_COUNTER(vdec->dec_spend_time_ave, div_u64(time_stat->run2cb_time_stat.time_total_us, time_stat->cb_cnt));
 	}
 
 	mutex_unlock(&vdec_profile_mutex);

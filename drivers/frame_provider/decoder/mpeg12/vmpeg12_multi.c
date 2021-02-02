@@ -58,7 +58,6 @@
 #define CHECK_INTERVAL        (HZ/100)
 
 #define DRIVER_NAME "ammvdec_mpeg12"
-#define MODULE_NAME "ammvdec_mpeg12"
 #define MREG_REF0        AV_SCRATCH_2
 #define MREG_REF1        AV_SCRATCH_3
 /* protocol registers */
@@ -340,6 +339,10 @@ struct vdec_mpeg12_hw_s {
 	u32 level_idc;
 	int dec_again_cnt;
 	int vdec_pg_enable_flag;
+	char vdec_name[32];
+	char pts_name[32];
+	char new_q_name[32];
+	char disp_q_name[32];
 };
 
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
@@ -1760,8 +1763,10 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				}
 			}
 			vdec_vframe_ready(vdec, vf);
-			kfifo_put(&hw->display_q,
-				(const struct vframe_s *)vf);
+			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+			ATRACE_COUNTER(hw->pts_name, vf->pts);
+			ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+			ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 			/* if (hw->disp_num == 1) { */
 			if (hw->kpi_first_i_decoded == 0) {
 				hw->kpi_first_i_decoded = 1;
@@ -2333,6 +2338,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+		ATRACE_COUNTER(hw->pts_name, vf->pts);
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
@@ -2533,9 +2539,10 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 		(struct vdec_mpeg12_hw_s *)vdec->private;
 
 	hw->get_num++;
-	if (kfifo_get(&hw->display_q, &vf))
+	if (kfifo_get(&hw->display_q, &vf)) {
+		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		return vf;
-
+	}
 	return NULL;
 }
 
@@ -2576,6 +2583,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		vf->index, hw->vfbuf_use[vf->index]);
 	kfifo_put(&hw->newframe_q,
 		(const struct vframe_s *)vf);
+	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 }
 
 
@@ -3624,6 +3632,14 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 #ifdef VDEC_FCC_SUPPORT
 	pdata->wakeup_fcc_poll = vmmpeg2_wakeup_fcc_poll;
 #endif
+	snprintf(hw->vdec_name, sizeof(hw->vdec_name),
+		"mpeg12-%d", pdev->id);
+	snprintf(hw->pts_name, sizeof(hw->pts_name),
+		"%s-pts", hw->vdec_name);
+	snprintf(hw->new_q_name, sizeof(hw->new_q_name),
+		"%s-newframe_q", hw->vdec_name);
+	snprintf(hw->disp_q_name, sizeof(hw->disp_q_name),
+		"%s-dispframe_q", hw->vdec_name);
 
 	if (pdata->use_vfm_path) {
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,

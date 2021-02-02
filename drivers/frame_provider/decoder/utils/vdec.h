@@ -315,6 +315,9 @@ struct vdec_s {
 	u32 jump_back_rp;
 #endif
 	u32 video_id;
+	char name[32];
+	char dec_spend_time[32];
+	char dec_spend_time_ave[32];
 };
 
 /* common decoder vframe provider name to use default vfm path */

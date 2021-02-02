@@ -81,7 +81,6 @@ to enable DV of frame mode
 /* #define SEND_PARAM_WITH_REG */
 
 #define DRIVER_NAME "ammvdec_h264"
-#define MODULE_NAME "ammvdec_h264"
 #define DRIVER_HEADER_NAME "ammvdec_h264_header"
 
 #define CHECK_INTERVAL        (HZ/100)
@@ -933,6 +932,10 @@ struct vdec_h264_hw_s {
 	u32 wrong_frame_count;
 	u32 error_frame_width;
 	u32 error_frame_height;
+	char vdec_name[32];
+	char pts_name[32];
+	char new_q_name[32];
+	char disp_q_name[32];
 };
 
 static u32 again_threshold;
@@ -3146,7 +3149,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(MODULE_NAME, vf->pts);
+		ATRACE_COUNTER(hw->pts_name, vf->pts);
+		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
+		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 		hw->vf_pre_count++;
 		vdec->vdec_fps_detec(vdec->id);
 #ifdef AUX_DATA_CRC
@@ -3276,8 +3281,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-
-		ATRACE_COUNTER(MODULE_NAME, vf->pts);
+		ATRACE_COUNTER(hw->pts_name, vf->pts);
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
@@ -4280,6 +4284,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 		unsigned int frame_interval =
 			1000*(time - hw->last_frame_time)/HZ;
 		struct vframe_s *next_vf;
+		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		if (dpb_is_debug(DECODE_ID(hw),
 			PRINT_FLAG_VDEC_DETAIL)) {
 			struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
@@ -4413,9 +4418,10 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 
 	hw->vf_put_count++;
-	if (vf_valid_check(vf, hw) == true)
+	if (vf_valid_check(vf, hw) == true) {
 		kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
-
+		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+	}
 #define ASSIST_MBOX1_IRQ_REG    VDEC_ASSIST_MBOX1_IRQ_REG
 	if (hw->buffer_empty_flag)
 		WRITE_VREG(ASSIST_MBOX1_IRQ_REG, 0x1);
@@ -10061,6 +10067,15 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	}
 	hw->id = pdev->id;
 	hw->platform_dev = pdev;
+
+	snprintf(hw->vdec_name, sizeof(hw->vdec_name),
+		"h264-%d", hw->id);
+	snprintf(hw->pts_name, sizeof(hw->pts_name),
+		"%s-pts", hw->vdec_name);
+	snprintf(hw->new_q_name, sizeof(hw->new_q_name),
+		"%s-newframe_q", hw->vdec_name);
+	snprintf(hw->disp_q_name, sizeof(hw->disp_q_name),
+		"%s-dispframe_q", hw->vdec_name);
 
 	/* the ctx from v4l2 driver. */
 	hw->v4l2_ctx = pdata->private;
