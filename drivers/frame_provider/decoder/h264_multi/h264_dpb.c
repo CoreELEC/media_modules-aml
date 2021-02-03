@@ -2331,7 +2331,8 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 			"%s first_insert_frame %d \n", __func__, p_H264_Dpb->first_insert_frame);
 	}
 	if (prepare_display_buf(p_H264_Dpb->vdec, p_Dpb->fs[pos]) >= 0) {
-		p_Dpb->fs[pos]->pre_output = 1;
+		if (!p_H264_Dpb->without_display_mode)
+			p_Dpb->fs[pos]->pre_output = 1;
 	} else {
 		if (h264_debug_flag & PRINT_FLAG_DPB_DETAIL) {
 			dpb_print(p_H264_Dpb->decoder_index, 0,
@@ -3524,7 +3525,7 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	/* struct VideoParameters *p_Vid = p_Dpb->p_Vid; */
 	struct VideoParameters *p_Vid = &p_H264_Dpb->mVideo;
 	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
-	unsigned int i;
+	unsigned int i, frame_outside_count = 0;
 #if 0
 	int poc, pos;
 #endif
@@ -3676,11 +3677,18 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	update_ltref_list(p_Dpb);
 
 	check_num_ref(p_Dpb);
+	for (i = 0; i < p_Dpb->used_size; i++) {
+		if (p_Dpb->fs[i]->pre_output)
+			frame_outside_count++;
+	}
+
 	if (p_H264_Dpb->fast_output_enable == H264_OUTPUT_MODE_FAST)
 		i = 1;
 	else
 		i = 0;
-	if (i || (p_H264_Dpb->first_insert_frame < FirstInsertFrm_SKIPDONE)) {
+
+	if (i || (p_H264_Dpb->first_insert_frame < FirstInsertFrm_SKIPDONE) ||
+		((p_Dpb->size - frame_outside_count) == p_H264_Dpb->dec_dpb_size)) {
 		while (output_frames(p_H264_Dpb, i))
 			;
 	}
