@@ -10343,6 +10343,9 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		vdec_source_changed(VFORMAT_H264, 1920, 1080, 29);
 	}
 
+	if (hw->mmu_enable)
+		hevc_source_changed(VFORMAT_HEVC, 3840, 2160, 60);
+
 	if (vh264_init(hw) < 0) {
 		pr_info("\nammvdec_h264 init failed.\n");
 		ammvdec_h264_mmu_release(hw);
