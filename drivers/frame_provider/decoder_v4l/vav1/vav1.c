@@ -1572,9 +1572,13 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 		}
 
 		if (ctx->cap_pool.dec < hw->used_buf_num) {
-			free_buf_count +=
-				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
+			int free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
+			if (free_count &&
+				ctx->fb_ops.try_lock(&ctx->fb_ops, &hw->fb_token)) {
+				free_buf_count += free_count;
+			}
 		}
+
 		/* trigger to parse head data. */
 		if (!hw->v4l_params_parsed) {
 			free_buf_count = hw->run_ready_min_buf_num;

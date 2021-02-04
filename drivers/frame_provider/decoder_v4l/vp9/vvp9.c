@@ -2422,8 +2422,11 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 		}
 
 		if (ctx->cap_pool.dec < pbi->used_buf_num) {
-			free_buf_count +=
-				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
+			int free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
+			if (free_count &&
+				ctx->fb_ops.try_lock(&ctx->fb_ops, &pbi->fb_token)) {
+				free_buf_count += free_count;
+			}
 		}
 
 		/* trigger to parse head data. */
