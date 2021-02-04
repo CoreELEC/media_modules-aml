@@ -45,9 +45,9 @@ struct aml_vcodec_mem {
 	u32	bytes_used;
 	u32	offset;
 	u64	timestamp;
-	dma_addr_t dma_addr;
 	u32	model;
 	ulong	meta_ptr;
+	struct dma_buf *dbuf;
 };
 
 struct aml_vcodec_ctx;

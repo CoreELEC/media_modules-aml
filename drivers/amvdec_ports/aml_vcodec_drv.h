@@ -418,6 +418,20 @@ struct aml_fb_ops {
 	int		(*alloc)(struct aml_fb_ops *, ulong, struct vdec_v4l2_buffer **, bool);
 };
 
+/*
+ * struct aml_fb_map_table - record some buffer map infos
+ * @caller	: caller is handle of decoer or vpp.
+ * @addr	: yuv linear buffer address.
+ * @header_addr	: used for compress buffer.
+ * @vframe	: which is from decoder or vpp vf pool.
+ */
+struct aml_fb_map_table {
+	void		*caller;
+	ulong		addr;
+	ulong		header_addr;
+	struct vframe_s	*vframe;
+};
+
 /**
  * struct aml_vcodec_ctx - Context (instance) private data.
  * @id: index of the context that this structure describes.
@@ -544,6 +558,7 @@ struct aml_vcodec_ctx {
 	struct mutex			comp_lock;
 
 	struct aml_fb_ops		fb_ops;
+	struct aml_fb_map_table		fb_map[32];
 };
 
 /**

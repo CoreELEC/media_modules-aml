@@ -2495,10 +2495,21 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 		"%s: vf: %lx, index: %d, use: %d\n", __func__, (ulong)vf,
 		vf->index, hw->vfbuf_use[vf->index]);
+
+	if (vf->v4l_mem_handle !=
+		hw->pics[vf->index].v4l_ref_buf_addr) {
+		hw->pics[vf->index].v4l_ref_buf_addr
+			= vf->v4l_mem_handle;
+
+		debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
+			"MPEG12 update fb handle, old:%llx, new:%llx\n",
+			hw->pics[vf->index].v4l_ref_buf_addr,
+			vf->v4l_mem_handle);
+	}
+
 	kfifo_put(&hw->newframe_q,
 		(const struct vframe_s *)vf);
 }
-
 
 static int vmpeg_event_cb(int type, void *data, void *op_arg)
 {

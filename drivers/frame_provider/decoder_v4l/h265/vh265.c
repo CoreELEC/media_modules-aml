@@ -8922,6 +8922,17 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 						0x1);
 			}
 		}
+
+		if (vf->v4l_mem_handle !=
+			hevc->m_PIC[index_top]->cma_alloc_addr) {
+			hevc->m_PIC[index_top]->cma_alloc_addr
+				= vf->v4l_mem_handle;
+
+			hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,
+				"H265 top update fb handle, old:%llx, new:%llx\n",
+				hevc->m_PIC[index_top]->cma_alloc_addr,
+				vf->v4l_mem_handle);
+		}
 	}
 
 	if (index_bot != 0xff
@@ -8939,7 +8950,19 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 						0x1);
 			}
 		}
+
+		if (vf->v4l_mem_handle !=
+			hevc->m_PIC[index_bot]->cma_alloc_addr) {
+			hevc->m_PIC[index_bot]->cma_alloc_addr
+				= vf->v4l_mem_handle;
+
+			hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,
+				"H265 bot update fb handle, old:%llx, new:%llx\n",
+				hevc->m_PIC[index_bot]->cma_alloc_addr,
+				vf->v4l_mem_handle);
+		}
 	}
+
 	spin_unlock_irqrestore(&lock, flags);
 }
 

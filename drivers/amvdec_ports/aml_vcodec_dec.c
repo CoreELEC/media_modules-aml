@@ -433,6 +433,88 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	dmabuf_set_vframe(vb->planes[0].dbuf, vf, VF_SRC_DECODER);
 }
 
+static void fb_map_table_clean(struct aml_vcodec_ctx *ctx)
+{
+	int i;
+	ulong flags;
+
+	flags = aml_vcodec_ctx_lock(ctx);
+
+	for (i = 0; i < ARRAY_SIZE(ctx->fb_map); i++) {
+		ctx->fb_map[i].addr	= 0;
+		ctx->fb_map[i].vframe	= NULL;
+		ctx->fb_map[i].caller	= NULL;
+	}
+
+	aml_vcodec_ctx_unlock(ctx, flags);
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "%s done\n", __func__);
+}
+
+static void fb_map_table_hold(struct aml_vcodec_ctx *ctx,
+				struct vb2_buffer *vb,
+				struct vframe_s *vf,
+				void *caller)
+{
+	int i;
+	ulong addr, flags;
+
+	flags = aml_vcodec_ctx_lock(ctx);
+
+	addr = vb2_dma_contig_plane_dma_addr(vb, 0);
+
+	for (i = 0; i < ARRAY_SIZE(ctx->fb_map); i++) {
+		if (!ctx->fb_map[i].addr ||
+			(addr == ctx->fb_map[i].addr)) {
+			ctx->fb_map[i].caller	= caller;
+			ctx->fb_map[i].addr	= addr;
+			ctx->fb_map[i].vframe	= vf;
+			break;
+		}
+	}
+
+	aml_vcodec_ctx_unlock(ctx, flags);
+
+	if (i >= ARRAY_SIZE(ctx->fb_map)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"%s, table is full. addr:%llx, vf:%px\n",
+			__func__, addr, vf);
+	}
+}
+
+static void fb_map_table_fetch(struct aml_vcodec_ctx *ctx,
+				struct vb2_buffer *vb,
+				struct vframe_s **vf,
+				void **caller)
+{
+	int i;
+	ulong addr, flags;
+
+	flags = aml_vcodec_ctx_lock(ctx);
+
+	addr = vb2_dma_contig_plane_dma_addr(vb, 0);
+
+	for (i = 0; i < ARRAY_SIZE(ctx->fb_map); i++) {
+		if (addr == ctx->fb_map[i].addr) {
+			*caller = ctx->fb_map[i].caller;
+			*vf = ctx->fb_map[i].vframe;
+
+			ctx->fb_map[i].caller	= NULL;
+			ctx->fb_map[i].vframe	= NULL;
+			ctx->fb_map[i].addr	= 0;
+			break;
+		}
+	}
+
+	aml_vcodec_ctx_unlock(ctx, flags);
+
+	if (i >= ARRAY_SIZE(ctx->fb_map)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+			"%s, there is new addr:%llx.\n",
+			__func__, addr);
+	}
+}
+
  static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
 	struct vdec_v4l2_buffer *fb)
 {
@@ -551,6 +633,8 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 					"set vf(%px) into %dth buf\n",
 					vf, vb2_buf->index);
 			}
+
+			fb_map_table_hold(ctx, vb2_buf, vf, fb->caller);
 		}
 		v4l2_m2m_buf_done(&dstbuf->vb, VB2_BUF_STATE_DONE);
 
@@ -607,8 +691,8 @@ static void update_vdec_buf_plane(struct aml_vcodec_ctx *ctx,
 	char plane_n[3] = {'Y','U','V'};
 
 	for (i = 0 ; i < vb->num_planes ; i++) {
-		fb->m.mem[i].dma_addr	= vb2_dma_contig_plane_dma_addr(vb, i);
-		fb->m.mem[i].addr	= fb->m.mem[i].dma_addr;
+		fb->m.mem[i].addr	= vb2_dma_contig_plane_dma_addr(vb, i);
+		fb->m.mem[i].dbuf	= vb->planes[i].dbuf;
 		if (i == 0) {
 			//Y
 			if (vb->num_planes == 1) {
@@ -686,7 +770,7 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb,
 	if (fb->token != token) {
 		aml_vcodec_ctx_unlock(ctx, flags);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-			"fb be loaked wait token release.\n");
+			"fb be locked wait token release.\n");
 		return -1;
 	}
 
@@ -2878,21 +2962,24 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 	}
 
 	if (!V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
-		if ((vb->memory == VB2_MEMORY_DMABUF) &&
-			dmabuf_is_uvm(vb->planes[0].dbuf)) {
-			struct internal_comp_buf *ibuf = vb_to_comp(ctx, vb);
+		struct vframe_s *vf = NULL;
+		void *caller = NULL;
 
-			if (ibuf) {
-				if (ibuf->buf_used) {
-					update_vdec_buf_plane(ctx, fb, vb);
-					fb->vframe = ibuf->vframe;
-					ibuf->vframe->v4l_mem_handle = (ulong)fb;
-				} else {
-					fb->caller = NULL;
-					fb->vframe = NULL;
-				}
-			}
-		}
+		fb_map_table_fetch(ctx, vb, &vf, &caller);
+
+		if (vf) {
+			fb->caller		= caller;
+			fb->vframe		= vf;
+			vf->v4l_mem_handle	= (ulong)fb;
+			update_vdec_buf_plane(ctx, fb, vb);
+		} else
+			buf->que_in_m2m = false;
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+			"init buffer(%s), vb idx:%d, addr: old:%llx, new:%llx \n",
+			vf ? "update" : "idel",
+			vb->index, fb->m.mem[0].addr,
+			vb2_dma_contig_plane_dma_addr(vb, 0));
 	}
 
 	return 0;
@@ -3025,6 +3112,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 
 			ctx->comp_bufs[i].buf_used = false;
 		}
+
+		fb_map_table_clean(ctx);
 
 		INIT_KFIFO(ctx->capture_buffer);
 		ctx->buf_used_count = 0;

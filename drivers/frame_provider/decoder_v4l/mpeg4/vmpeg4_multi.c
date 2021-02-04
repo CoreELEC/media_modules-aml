@@ -1717,6 +1717,18 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		"%s: put num:%d\n",__func__, hw->put_num);
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"index=%d, used=%d\n", vf->index, hw->vfbuf_use[vf->index]);
+
+	if (vf->v4l_mem_handle !=
+		hw->pic[vf->index].v4l_ref_buf_addr) {
+		hw->pic[vf->index].v4l_ref_buf_addr
+			= vf->v4l_mem_handle;
+
+		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
+			"MPEG4 update fb handle, old:%llx, new:%llx\n",
+			hw->pic[vf->index].v4l_ref_buf_addr,
+			vf->v4l_mem_handle);
+	}
+
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 }
 

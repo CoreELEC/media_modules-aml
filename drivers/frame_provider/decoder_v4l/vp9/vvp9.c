@@ -7161,6 +7161,8 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	if (index < pbi->used_buf_num) {
 		struct VP9_Common_s *cm = &pbi->common;
 		struct BufferPool_s *pool = cm->buffer_pool;
+		struct PIC_BUFFER_CONFIG_s *pic = &pool->frame_bufs[index].buf;
+
 		unsigned long flags;
 
 		lock_buffer_pool(pool, flags);
@@ -7172,6 +7174,15 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 						0x1);
 		pbi->last_put_idx = index;
 		pbi->new_frame_displayed++;
+
+		if (vf->v4l_mem_handle != pic->cma_alloc_addr) {
+			pic->cma_alloc_addr = vf->v4l_mem_handle;
+
+			vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+				"VP9 update fb handle, old:%llx, new:%llx\n",
+				pic->cma_alloc_addr, vf->v4l_mem_handle);
+		}
+
 		unlock_buffer_pool(pool, flags);
 #ifdef SUPPORT_FB_DECODING
 		if (pbi->used_stage_buf_num > 0 &&

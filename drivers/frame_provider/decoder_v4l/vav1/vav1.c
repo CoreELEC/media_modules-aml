@@ -5829,6 +5829,7 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 	if (index < hw->used_buf_num) {
 		struct AV1_Common_s *cm = &hw->common;
 		struct BufferPool_s *pool = cm->buffer_pool;
+		PIC_BUFFER_CONFIG *pic = &pool->frame_bufs[index].buf;
 
 		lock_buffer_pool(hw->common.buffer_pool, flags);
 		if ((debug & AV1_DEBUG_IGNORE_VF_REF) == 0) {
@@ -5840,9 +5841,17 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 						0x1);
 		hw->last_put_idx = index;
 		hw->new_frame_displayed++;
+
+		if (vf->v4l_mem_handle != pic->cma_alloc_addr) {
+			pic->cma_alloc_addr = vf->v4l_mem_handle;
+
+			av1_print(hw, PRINT_FLAG_V4L_DETAIL,
+				"AV1 update fb handle, old:%llx, new:%llx\n",
+				pic->cma_alloc_addr, vf->v4l_mem_handle);
+		}
+
 		unlock_buffer_pool(hw->common.buffer_pool, flags);
 	}
-
 }
 
 static int vav1_event_cb(int type, void *data, void *op_arg)
