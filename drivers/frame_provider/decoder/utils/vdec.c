@@ -111,6 +111,10 @@ static void vdec_fcc_jump_back(struct vdec_s *vdec);
 #define VDEC_DBG_CANVAS_STATUS	(0x4)
 #define VDEC_DBG_ENABLE_FENCE	(0x100)
 
+#define FRAME_BASE_PATH_DI_V4LVIDEO_0 (29)
+#define FRAME_BASE_PATH_DI_V4LVIDEO_1 (30)
+#define FRAME_BASE_PATH_DI_V4LVIDEO_2 (31)
+
 u32 debug = VDEC_DBG_ALWAYS_LOAD_FW;
 EXPORT_SYMBOL(debug);
 
@@ -2275,10 +2279,41 @@ static bool is_tunnel_pipeline(u32 pl)
 		true : false;
 }
 
-static bool is_res_locked(u32 pre, u32 cur)
+static bool is_nontunnel_pipeline(u32 pl)
 {
-	return is_tunnel_pipeline(pre) ?
-		(is_tunnel_pipeline(cur) ? true : false) : false;
+	return (pl & BIT(FRAME_BASE_PATH_DI_V4LVIDEO)) ? true : false;
+}
+
+static bool is_v4lvideo_already_used(u32 pre, int vf_receiver_inst)
+{
+	if (vf_receiver_inst == 0) {
+		if (pre & BIT(FRAME_BASE_PATH_DI_V4LVIDEO_0)) {
+			return true;
+		}
+	} else if (vf_receiver_inst == 1) {
+		if (pre & BIT(FRAME_BASE_PATH_DI_V4LVIDEO_1)) {
+			return true;
+		}
+	} else if (vf_receiver_inst == 2) {
+		if (pre & BIT(FRAME_BASE_PATH_DI_V4LVIDEO_2)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool is_res_locked(u32 pre, u32 cur, int vf_receiver_inst)
+{
+	if (is_tunnel_pipeline(pre)) {
+		if (is_tunnel_pipeline(cur)) {
+			return true;
+		}
+	} else if (is_nontunnel_pipeline(cur)) {
+		if (is_v4lvideo_already_used(pre,vf_receiver_inst)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 int vdec_resource_checking(struct vdec_s *vdec)
@@ -2289,9 +2324,9 @@ int vdec_resource_checking(struct vdec_s *vdec)
 	 * pipeline these are being released.
 	 */
 	ulong expires = jiffies + msecs_to_jiffies(2000);
-
 	while (is_res_locked(vdec_core->vdec_resouce_status,
-		BIT(vdec->frame_base_video_path))) {
+		BIT(vdec->frame_base_video_path),
+		vdec->vf_receiver_inst)) {
 		if (time_after(jiffies, expires)) {
 			pr_err("wait vdec resource timeout.\n");
 			return -EBUSY;
@@ -2313,11 +2348,10 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	struct vdec_s *p = vdec;
 	const char *dev_name;
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
-
 	if (is_res_locked(vdec_core->vdec_resouce_status,
-		BIT(vdec->frame_base_video_path)))
+		BIT(vdec->frame_base_video_path),
+		vdec->vf_receiver_inst))
 		return -EBUSY;
-
 	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
 	dev_name = get_dev_name(vdec_single(vdec), vdec->format);
 
@@ -2701,6 +2735,15 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 
 	mutex_lock(&vdec_mutex);
 	vdec_core->vdec_resouce_status |= BIT(p->frame_base_video_path);
+	if (p->frame_base_video_path == FRAME_BASE_PATH_DI_V4LVIDEO) {
+		if (p->vf_receiver_inst == 0) {
+			vdec_core->vdec_resouce_status |= BIT(FRAME_BASE_PATH_DI_V4LVIDEO_0);
+		} else if (p->vf_receiver_inst == 1) {
+			vdec_core->vdec_resouce_status |= BIT(FRAME_BASE_PATH_DI_V4LVIDEO_1);
+		} else if (p->vf_receiver_inst == 2) {
+			vdec_core->vdec_resouce_status |= BIT(FRAME_BASE_PATH_DI_V4LVIDEO_2);
+		}
+	}
 	mutex_unlock(&vdec_mutex);
 
 	vdec_input_prepare_bufs(/*prepared buffer for fast playing.*/
@@ -2831,6 +2874,15 @@ void vdec_release(struct vdec_s *vdec)
 		atomic_read(&vdec_core->vdec_nr), vdec->id);
 
 	mutex_lock(&vdec_mutex);
+	if (vdec->frame_base_video_path == FRAME_BASE_PATH_DI_V4LVIDEO) {
+		if (vdec->vf_receiver_inst == 0) {
+			vdec_core->vdec_resouce_status &= ~BIT(FRAME_BASE_PATH_DI_V4LVIDEO_0);
+		} else if (vdec->vf_receiver_inst == 1) {
+			vdec_core->vdec_resouce_status &= ~BIT(FRAME_BASE_PATH_DI_V4LVIDEO_1);
+		} else if (vdec->vf_receiver_inst == 2) {
+			vdec_core->vdec_resouce_status &= ~BIT(FRAME_BASE_PATH_DI_V4LVIDEO_2);
+		}
+	}
 	vdec_core->vdec_resouce_status &= ~BIT(vdec->frame_base_video_path);
 	mutex_unlock(&vdec_mutex);
 
