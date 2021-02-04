@@ -2890,7 +2890,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 			u32 slots = 0;
 			u32 struct_size = 0;
 			int vdec_id = 0;
-			struct vdec_s *vdec = NULL;
+			struct vdec_s *vdec = priv->vdec;
 			struct vframe_counter_s *tmpbuf = kmalloc(QOS_FRAME_NUM *
 						sizeof(struct vframe_counter_s),GFP_KERNEL);
 			struct av_param_mvdec_t  __user *uarg = (void *)arg;
@@ -2903,7 +2903,18 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 				break;
 			}
 
-			vdec = vdec_get_vdec_by_id(vdec_id);
+			if (get_user(vdec_id, &uarg->vdec_id) < 0 ||
+				get_user(struct_size, &uarg->struct_size) < 0) {
+				r = -EFAULT;
+				kfree(tmpbuf);
+				mutex_unlock(&amstream_mutex);
+				break;
+			}
+
+			if (vdec && !vdec_id) //If vdec_id is > 0, it means user require to use it.
+				r = 0;//vdec =priv->vdec;//Nothing to do.
+			else
+				vdec = vdec_get_vdec_by_id(vdec_id);
 			if (!vdec) {
 				r = 0;
 				kfree(tmpbuf);
@@ -2916,14 +2927,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 				put_user(slots, &uarg->slots);
 			if (slots) {
 				if (AMSTREAM_IOC_GET_MVDECINFO == cmd) {
-					if (get_user(vdec_id, &uarg->vdec_id) < 0 ||
-					get_user(struct_size, &uarg->struct_size) < 0) {
-						r = -EFAULT;
-						kfree(tmpbuf);
-						mutex_unlock(&amstream_mutex);
-						break;
-					}
-					if (copy_to_user((void *)&uarg->comm,
+					if (vdec->mvfrm && copy_to_user((void *)&uarg->comm,
 								&vdec->mvfrm->comm,
 								sizeof(struct vframe_comm_s))) {
 						r = -EFAULT;
