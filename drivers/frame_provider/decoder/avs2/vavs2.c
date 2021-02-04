@@ -272,7 +272,6 @@ static u32 double_write_mode;
 static u32 without_display_mode;
 
 #define DRIVER_NAME "amvdec_avs2"
-#define MODULE_NAME "amvdec_avs2"
 #define DRIVER_HEADER_NAME "amvdec_avs2_header"
 
 
@@ -764,6 +763,10 @@ struct AVS2Decoder_s {
 	int sidebind_type;
 	int sidebind_channel_id;
 	u32 endian;
+	char vdec_name[32];
+	char pts_name[32];
+	char new_q_name[32];
+	char disp_q_name[32];
 };
 
 static int  compute_losless_comp_body_size(
@@ -4257,6 +4260,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 
 	if (kfifo_get(&dec->display_q, &vf)) {
 		uint8_t index = vf->index & 0xff;
+		ATRACE_COUNTER(dec->disp_q_name, kfifo_len(&dec->display_q));
 		if (index < dec->used_buf_num) {
 			struct avs2_frame_s *pic = get_pic_by_index(dec, index);
 			if (pic == NULL &&
@@ -4306,6 +4310,7 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 	index = vf->index & 0xff;
 
 	kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
+	ATRACE_COUNTER(dec->new_q_name, kfifo_len(&dec->newframe_q));
 	dec->vf_put_count++;
 	avs2_print(dec, AVS2_DBG_BUFMGR,
 		"%s index putcount 0x%x %d\n",
@@ -4733,7 +4738,9 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+			ATRACE_COUNTER(dec->pts_name, vf->pts);
+			ATRACE_COUNTER(dec->new_q_name, kfifo_len(&dec->newframe_q));
+			ATRACE_COUNTER(dec->disp_q_name, kfifo_len(&dec->display_q));
 
 			dec_update_gvs(dec);
 			/*count info*/
@@ -7486,6 +7493,15 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 
 	dec->index = pdev->id;
 	dec->m_ins_flag = 1;
+
+	snprintf(dec->vdec_name, sizeof(dec->vdec_name),
+		"avs2-%d", dec->index);
+	snprintf(dec->pts_name, sizeof(dec->pts_name),
+		"%s-pts", dec->vdec_name);
+	snprintf(dec->new_q_name, sizeof(dec->new_q_name),
+		"%s-newframe_q", dec->vdec_name);
+	snprintf(dec->disp_q_name, sizeof(dec->disp_q_name),
+		"%s-dispframe_q", dec->vdec_name);
 
 	if (pdata->use_vfm_path) {
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,

@@ -51,7 +51,6 @@
 #include <media/v4l2-mem2mem.h>
 
 #define DRIVER_NAME "ammvdec_mpeg4"
-#define MODULE_NAME "ammvdec_mpeg4"
 
 #define MEM_NAME "codec_mmpeg4"
 
@@ -338,6 +337,10 @@ struct vdec_mpeg4_hw_s {
 	unsigned int b_concealed_frames;
 	int vdec_pg_enable_flag;
 	ulong fb_token;
+	char vdec_name[32];
+	char pts_name[32];
+	char new_q_name[32];
+	char disp_q_name[32];
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -793,10 +796,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hw->mm_blk_handle, index);
-			kfifo_put(&hw->display_q,
-				(const struct vframe_s *)vf);
-			ATRACE_COUNTER(MODULE_NAME, vf->pts);
-			vdec->vdec_fps_detec(vdec->id);
+			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+			ATRACE_COUNTER(hw->pts_name, vf->pts);
 			hw->frame_num++;
 			if (pic->pic_type == I_PICTURE) {
 				hw->i_decoded_frames++;
@@ -870,7 +871,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vdec_vframe_ready(vdec, vf);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
-			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+			vdec->vdec_fps_detec(vdec->id);
 			vdec->vdec_fps_detec(vdec->id);
 			hw->frame_num++;
 			if (pic->pic_type == I_PICTURE) {
@@ -959,9 +960,10 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					hw->mm_blk_handle, index);
 			decoder_do_frame_check(vdec, vf);
 			vdec_vframe_ready(vdec, vf);
-			kfifo_put(&hw->display_q,
-				(const struct vframe_s *)vf);
-			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+			ATRACE_COUNTER(hw->pts_name, vf->pts);
+			ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+			ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 			vdec->vdec_fps_detec(vdec->id);
 			hw->frame_num++;
 			if (pic->pic_type == I_PICTURE) {
@@ -1604,6 +1606,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		else
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		pr_info("[%d] mpeg4 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
@@ -1724,9 +1727,10 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
 	hw->get_num++;
-	if (kfifo_get(&hw->display_q, &vf))
+	if (kfifo_get(&hw->display_q, &vf)) {
+		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		return vf;
-
+	}
 	return NULL;
 }
 
@@ -1745,6 +1749,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"index=%d, used=%d\n", vf->index, hw->vfbuf_use[vf->index]);
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
+	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 }
 
 static int vmpeg_event_cb(int type, void *data, void *op_arg)
@@ -2693,6 +2698,15 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	pdata->irq_handler = vmpeg4_isr;
 	pdata->threaded_irq_handler = vmpeg4_isr_thread_fn;
 	pdata->dump_state = vmpeg4_dump_state;
+
+	snprintf(hw->vdec_name, sizeof(hw->vdec_name),
+		"mpeg4-%d", pdev->id);
+	snprintf(hw->pts_name, sizeof(hw->pts_name),
+		"%s-pts", hw->vdec_name);
+	snprintf(hw->new_q_name, sizeof(hw->new_q_name),
+		"%s-newframe_q", hw->vdec_name);
+	snprintf(hw->disp_q_name, sizeof(hw->disp_q_name),
+		"%s-dispframe_q", hw->vdec_name);
 
 	if (pdata->use_vfm_path)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,

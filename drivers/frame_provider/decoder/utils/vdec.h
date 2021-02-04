@@ -292,6 +292,9 @@ struct vdec_s {
 	u32 level_idc;
 	bool prog_only;
 	bool disable_vfm;
+	char name[32];
+	char dec_spend_time[32];
+	char dec_spend_time_ave[32];
 };
 
 /* common decoder vframe provider name to use default vfm path */
