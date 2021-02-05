@@ -874,6 +874,7 @@ struct h264_dpb_stru {
 	int buf_num;
 	int curr_POC;
 	int reorder_pic_num;
+	unsigned int dec_dpb_size;
 	u8 fast_output_enable;
 		/*poc_even_flag:
 		 0, init; 1, odd; 2, even*/
@@ -924,6 +925,7 @@ struct h264_dpb_stru {
 	int dpb_frame_count;
 	/* need wait aux data when there is data after pic done in dv stream */
 	bool wait_aux_data_flag;
+	u32 without_display_mode;
 };
 
 
