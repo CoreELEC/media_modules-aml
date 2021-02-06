@@ -31,6 +31,7 @@ typedef struct instance{
 	s64 mLastStc;
 	s64 mLastRealTime;
 	s64 mLastMediaTime;
+	s64 mTrackMediaTime;
 	mediasync_speed mSpeed;
 	u64 last_system;
 	u64 last_pcr;
@@ -51,6 +52,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 long mediasync_ins_set_mediatime_speed(s32 sSyncInsId, mediasync_speed fSpeed);
 long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused);
 long mediasync_ins_get_paused(s32 sSyncInsId, s32* spPaused);
+long mediasync_ins_get_trackmediatime(s32 sSyncInsId, s64* lpTrackMediaTime);
 long mediasync_ins_set_syncmode(s32 sSyncInsId, s32 sSyncMode);
 long mediasync_ins_get_syncmode(s32 sSyncInsId, s32 *sSyncMode);
 long mediasync_ins_get_mediatime_speed(s32 sSyncInsId, mediasync_speed *fpSpeed);

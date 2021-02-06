@@ -252,6 +252,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
 		}
 	}
+	pInstance->mTrackMediaTime = lMediaTime;
 	return 0;
 }
 
@@ -398,6 +399,19 @@ long mediasync_ins_get_nextvsync_systemtime(s32 sSyncInsId, s64* lpSystemTime) {
 	return 0;
 }
 
+long mediasync_ins_get_trackmediatime(s32 sSyncInsId, s64* lpTrackMediaTime) {
+
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+	*lpTrackMediaTime = pInstance->mTrackMediaTime;
+	return 0;
+}
 
 
 
