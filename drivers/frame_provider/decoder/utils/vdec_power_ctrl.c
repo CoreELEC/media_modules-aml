@@ -23,7 +23,6 @@
 //#include <linux/amlogic/pwr_ctrl.h>
 #include <linux/amlogic/power_domain.h>
 #include <dt-bindings/power/sc2-pd.h>
-#include <dt-bindings/power/t7-pd.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include "../../../common/media_clock/switch/amports_gate.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
@@ -153,10 +152,16 @@ static void pm_vdec_clock_on(int id)
 			amports_switch_gate("clk_hevc_mux", 1);
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4))
 			amports_switch_gate("clk_hevcb_mux", 1);
+
 		hevc_clock_hi_enable();
-		hevc_back_clock_hi_enable();
+
+		if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4))
+			hevc_back_clock_hi_enable();
 	}
 }
 
@@ -171,7 +176,8 @@ static void pm_vdec_clock_off(int id)
 		hevc_clock_off();
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4))
 			hevc_back_clock_off();
 	}
 }

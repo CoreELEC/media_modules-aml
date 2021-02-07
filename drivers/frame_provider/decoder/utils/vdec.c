@@ -350,7 +350,8 @@ bool is_support_no_parser(void)
 {
 	if ((enable_stream_mode_multi_dec) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4))
 		return true;
 	return false;
 }
@@ -812,7 +813,7 @@ void config_cav_lut_ex(u32 index, ulong addr, u32 width,
 {
 	unsigned long datah_temp, datal_temp;
 
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) {
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7) {
 		canvas_config_ex(index, addr, width, height, wrap, blkmode, endian);
 	    if (debug & 0x40000000) {
 			pr_info("%s %2d) addr: %lx, width: %d, height: %d, blkm: %d, endian: %d\n",
@@ -989,7 +990,9 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 mask)
 
 		spin_unlock_irqrestore(&vdec_spin_lock, flags);
 
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5)
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S4)
+			sts_reg_addr = S4_DMC_CHAN_STS;
+		else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5)
 			sts_reg_addr = T5_DMC_CHAN_STS;
 		else if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2) ||
 			is_cpu_tm2_revb())
@@ -4213,18 +4216,10 @@ void hevc_reset_core(struct vdec_s *vdec)
 	 * 24:hevc_afifo
 	 * 26:rst_mmu_n
 	 */
-	if ((cpu_type >= AM_MESON_CPU_MAJOR_ID_SC2) &&
-		(vdec->format == VFORMAT_AVS2)) {
-			WRITE_VREG(DOS_SW_RESET3,
-		(1<<3)|(1<<4)|(1<<8)|(1<<11)|
-		(1<<12)|(1<<14)|(1<<15)|
-		(1<<17)|(1<<18)|(1<<19));
-	} else {
-		WRITE_VREG(DOS_SW_RESET3,
-			(1<<3)|(1<<4)|(1<<8)|(1<<10)|(1<<11)|
-			(1<<12)|(1<<13)|(1<<14)|(1<<15)|
-			(1<<17)|(1<<18)|(1<<19)|(1<<24)|(1<<26));
-	}
+	WRITE_VREG(DOS_SW_RESET3,
+		(1<<3)|(1<<4)|(1<<8)|(1<<10)|(1<<11)|
+		(1<<12)|(1<<13)|(1<<14)|(1<<15)|
+		(1<<17)|(1<<18)|(1<<19)|(1<<24)|(1<<26));
 
 	WRITE_VREG(DOS_SW_RESET3, 0);
 	while (READ_VREG(HEVC_WRRSP_LMEM) & 0xfff)
@@ -4254,6 +4249,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 				READ_RESET_REG((RESET7_REGISTER_LEVEL)) | ((1<<13)));
 		break;
 	case AM_MESON_CPU_MAJOR_ID_SC2:
+	case AM_MESON_CPU_MAJOR_ID_S4:
 		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,
 				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) & (~((1<<1)|(1<<12)|(1<<13))));
 		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,

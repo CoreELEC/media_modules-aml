@@ -68,7 +68,8 @@ static enum AM_MESON_CPU_MAJOR_ID cpu_ver_info[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR
 	AM_MESON_CPU_MAJOR_ID_C2,
 	AM_MESON_CPU_MAJOR_ID_T5,
 	AM_MESON_CPU_MAJOR_ID_T5D,
-	AM_MESON_CPU_MAJOR_ID_T7
+	AM_MESON_CPU_MAJOR_ID_T7,
+	AM_MESON_CPU_MAJOR_ID_S4
 };
 
 static const struct of_device_id cpu_ver_of_match[] = {
@@ -131,12 +132,17 @@ static const struct of_device_id cpu_ver_of_match[] = {
 		.compatible = "amlogic, cpu-major-id-t7",
 		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_T7 - MAJOR_ID_START],
 	},
+	{
+		.compatible = "amlogic, cpu-major-id-s4",
+		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_S4 - MAJOR_ID_START],
+	},
 	{},
 };
 
 static const int cpu_sub_info[] = {
 		AM_MESON_CPU_MINOR_ID_REVB_G12B,
 		AM_MESON_CPU_MINOR_ID_REVB_TM2,
+		AM_MESON_CPU_MINOR_ID_S4_S805X2,
 };
 
 static const struct of_device_id cpu_sub_id_of_match[] = {
@@ -147,6 +153,10 @@ static const struct of_device_id cpu_sub_id_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-tm2-b",
 		.data = &cpu_sub_info[1],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-s4-805x2",
+		.data = &cpu_sub_info[2],
 	},
 };
 
@@ -210,6 +220,12 @@ enum AM_MESON_CPU_MAJOR_ID get_cpu_major_id(void)
 }
 EXPORT_SYMBOL(get_cpu_major_id);
 
+int get_cpu_sub_id(void)
+{
+	return cpu_sub_id;
+}
+EXPORT_SYMBOL(get_cpu_sub_id);
+
 bool is_cpu_meson_revb(void)
 {
 	if (AM_MESON_CPU_MAJOR_ID_MAX == cpu_ver_id)
@@ -225,4 +241,11 @@ bool is_cpu_tm2_revb(void)
 		&& (is_cpu_meson_revb()));
 }
 EXPORT_SYMBOL(is_cpu_tm2_revb);
+
+bool is_cpu_s4_s805x2(void)
+{
+	return ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4)
+		&& (get_cpu_sub_id() == CHIP_REVX));
+}
+EXPORT_SYMBOL(is_cpu_s4_s805x2);
 

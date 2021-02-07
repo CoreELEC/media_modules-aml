@@ -4668,9 +4668,11 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 #endif
 
 	if (IS_VDEC_DW(hw)) {
-		vf->width = (hw->frame_width /2);
-		 if (IS_VDEC_DW(hw) == 2)
-			vf->height = (hw->frame_height /2);
+		if (IS_VDEC_DW(hw) == 1)
+			vf->width = hw->frame_width / 2;
+		else
+			vf->width = (hw->frame_width / IS_VDEC_DW(hw));
+		vf->height = (hw->frame_height / IS_VDEC_DW(hw));
 		p_canvas_config = &hw->buffer_spec[index].vdec_dw_canvas_config[0];
 	} else
 		p_canvas_config = &hw->buffer_spec[index].canvas_config[0];

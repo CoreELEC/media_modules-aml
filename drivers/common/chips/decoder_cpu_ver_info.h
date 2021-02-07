@@ -57,6 +57,7 @@ enum AM_MESON_CPU_MAJOR_ID {
 	AM_MESON_CPU_MAJOR_ID_T5	= 0x34,
 	AM_MESON_CPU_MAJOR_ID_T5D	= 0x35,
 	AM_MESON_CPU_MAJOR_ID_T7	= 0x36,
+	AM_MESON_CPU_MAJOR_ID_S4	= 0x37,
 	AM_MESON_CPU_MAJOR_ID_MAX,
 };
 
@@ -64,14 +65,17 @@ enum AM_MESON_CPU_MAJOR_ID {
 #define CHIP_REVA 0x0
 #define CHIP_REVB 0x1
 #define CHIP_REVC 0x2
+#define CHIP_REVX 0x10
 
-#define REVB_MASK 0x100
-#define REVC_MASK 0x200
+#define REVB_MASK (CHIP_REVB << 8)
+#define REVC_MASK (CHIP_REVC << 8)
+#define REVX_MASK (CHIP_REVX << 8)
 
-#define SUB_ID_MASK (REVB_MASK | REVC_MASK)
+#define SUB_ID_MASK (REVB_MASK | REVC_MASK | REVX_MASK)
 
 #define AM_MESON_CPU_MINOR_ID_REVB_G12B	 (REVB_MASK | AM_MESON_CPU_MAJOR_ID_G12B)
 #define AM_MESON_CPU_MINOR_ID_REVB_TM2   (REVB_MASK | AM_MESON_CPU_MAJOR_ID_TM2)
+#define AM_MESON_CPU_MINOR_ID_S4_S805X2  (REVX_MASK | AM_MESON_CPU_MAJOR_ID_S4)
 
 /* export functions */
 enum AM_MESON_CPU_MAJOR_ID get_cpu_major_id(void);
@@ -79,5 +83,9 @@ enum AM_MESON_CPU_MAJOR_ID get_cpu_major_id(void);
 bool is_cpu_meson_revb(void);
 
 bool is_cpu_tm2_revb(void);
+
+int get_cpu_sub_id(void);
+
+bool is_cpu_s4_s805x2(void);
 
 #endif
