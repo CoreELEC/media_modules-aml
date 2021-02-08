@@ -1871,6 +1871,7 @@ struct hevc_state_s {
 	char new_q_name[32];
 	char disp_q_name[32];
 	char pts_name[32];
+	int send_frame_flag;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -9142,6 +9143,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 					vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 				atomic_add(1, &hevc->vf_pre_count);
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
+				hevc->send_frame_flag = 1;
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
 				ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
@@ -9166,6 +9168,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vf->index |= (pair_pic->index << 8);
 				pair_pic->vf_ref++;
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
+				hevc->send_frame_flag = 1;
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
 				ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
@@ -9195,6 +9198,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vf->index |= pair_pic->index;
 				pair_pic->vf_ref++;
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
+				hevc->send_frame_flag = 1;
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
 				ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
@@ -9322,6 +9326,7 @@ static void put_vf_to_display_q(struct hevc_state_s *hevc, struct vframe_s *vf)
 	atomic_add(1, &hevc->vf_pre_count);
 	decoder_do_frame_check(hw_to_vdec(hevc), vf);
 	vdec_vframe_ready(hw_to_vdec(hevc), vf);
+	hevc->send_frame_flag = 1;
 	kfifo_put(&hevc->display_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
 }
@@ -9355,6 +9360,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 	struct aml_vcodec_ctx * v4l2_ctx = hevc->v4l2_ctx;
 	struct vdec_v4l2_buffer *fb = NULL;
 
+	hevc->send_frame_flag = 0;
 	/* swap uv */
 	if (hevc->is_used_v4l) {
 		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
@@ -9800,6 +9806,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			/* process previous pending vf*/
 			process_pending_vframe(hevc,
 			pic, (pic->pic_struct == 9));
+
 			if (pic->show_frame) {
 				decoder_do_frame_check(vdec, vf);
 				vdec_vframe_ready(vdec, vf);
@@ -9842,6 +9849,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				pic->pic_struct,
 				pic->index);
 			pic->vf_ref = 1;
+
 			/* process previous pending vf*/
 			process_pending_vframe(hevc, pic,
 			(pic->pic_struct == 11));
@@ -9977,7 +9985,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				if (v4l2_ctx->is_stream_off) {
 					vh265_vf_put(vh265_vf_get(vdec), vdec);
 				} else {
-					fb->fill_buf_done(v4l2_ctx, fb);
+					if (hevc->send_frame_flag == 1)
+						fb->fill_buf_done(v4l2_ctx, fb);
 				}
 			} else {
 				vf_notify_receiver(hevc->provider_name,
