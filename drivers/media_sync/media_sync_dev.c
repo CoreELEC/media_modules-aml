@@ -95,6 +95,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	s32 SyncPaused = 0;
 	s32 SyncMode = -1;
 	s64 NextVsyncSystemTime = 0;
+	s64 TrackMediaTime = 0;
 	mediasync_priv_s *priv = (mediasync_priv_s *)file->private_data;
 	mediasync_ins *SyncIns = NULL;
 	mediasync_alloc_para parm = {0};
@@ -296,6 +297,21 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 					return -EFAULT;
 			}
 		break;
+		case MEDIASYNC_IOC_GET_TRACKMEDIATIME:
+			if (priv->mSyncIns == NULL) {
+				return -EFAULT;
+			}
+
+			ret = mediasync_ins_get_trackmediatime(priv->mSyncInsId,
+								&TrackMediaTime);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&TrackMediaTime,
+						sizeof(TrackMediaTime))) {
+					return -EFAULT;
+				}
+			}
+		break;
 
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
@@ -323,6 +339,7 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_PAUSE:
 		case MEDIASYNC_IOC_SET_SYNCMODE:
 		case MEDIASYNC_IOC_GET_SYNCMODE:
+		case MEDIASYNC_IOC_GET_TRACKMEDIATIME:
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;
