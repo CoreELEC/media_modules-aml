@@ -41,6 +41,7 @@
 #include <linux/earlysuspend.h>
 #endif
 
+
 #include <dvbdev.h>
 #include <demux.h>
 #include <dvb_demux.h>
@@ -74,6 +75,7 @@
 #define SEC_BUF_BUSY_SIZE 4
 #define SEC_BUF_COUNT     (SEC_BUF_GRP_COUNT*8)
 
+
 struct aml_sec_buf {
 	unsigned long        addr;
 	int                  len;
@@ -87,6 +89,7 @@ struct aml_channel {
 	int                  filter_count;
 	struct dvb_demux_feed     *feed;
 	struct dvb_demux_feed     *dvr_feed;
+	int                  pkt_type;
 };
 
 struct aml_filter {
@@ -228,6 +231,7 @@ struct aml_dmx {
 
 	int                   crc_check_count;
 	u32                 crc_check_time;
+	int                 om_status_error_count;
 };
 
 struct aml_dvr_block {
@@ -250,6 +254,7 @@ struct aml_asyncfifo {
 	struct tasklet_struct     asyncfifo_tasklet;
 	struct aml_dvb *dvb;
 	struct aml_dvr_block blk;
+	unsigned long stored_pages;
 };
 
 enum{
@@ -303,6 +308,14 @@ struct aml_dvb {
 	int                  dmx_watchdog_disable[DMX_DEV_COUNT];
 	struct aml_swfilter  swfilter;
 	int	ts_out_invert;
+
+	/*bufs for dmx shared*/
+	unsigned long        pes_pages;
+	unsigned long        pes_pages_map;
+	int                  pes_buf_len;
+	unsigned long        sub_pages;
+	unsigned long        sub_pages_map;
+	int                  sub_buf_len;
 };
 
 
@@ -337,8 +350,7 @@ extern int dsc_set_key(struct aml_dsc_channel *ch, int flags,
 					enum ca_cw_type type, u8 *key);
 extern void dsc_release(void);
 extern int aml_ciplus_hw_set_source(int src);
-extern int dsc_set_key_endia(int key_endia);
-extern int aml_s2p_add(int num);
+
 /*AMLogic ASYNC FIFO interface*/
 extern int aml_asyncfifo_hw_init(struct aml_asyncfifo *afifo);
 extern int aml_asyncfifo_hw_deinit(struct aml_asyncfifo *afifo);
