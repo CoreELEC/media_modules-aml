@@ -9140,7 +9140,6 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 					vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 				vf->index &= 0xff;
 				vf->index |= (pair_pic->index << 8);
-				vf->canvas1Addr = spec2canvas(pair_pic);
 				pair_pic->vf_ref++;
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
@@ -9170,7 +9169,6 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 					vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 				vf->index &= 0xff00;
 				vf->index |= pair_pic->index;
-				vf->canvas0Addr = spec2canvas(pair_pic);
 				pair_pic->vf_ref++;
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
