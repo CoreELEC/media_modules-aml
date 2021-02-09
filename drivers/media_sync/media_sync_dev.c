@@ -44,6 +44,7 @@ typedef struct systime_para {
 typedef struct updatetime_para {
 	int64_t mMediaTimeUs;
 	int64_t mSystemTimeUs;
+	bool mForceUpdate;
 }mediasync_updatetime_para;
 
 typedef struct arthortime_para {
@@ -162,7 +163,8 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 
 			ret = mediasync_ins_update_mediatime(priv->mSyncInsId,
 							UpdateTime.mMediaTimeUs,
-							UpdateTime.mSystemTimeUs);
+							UpdateTime.mSystemTimeUs,
+							UpdateTime.mForceUpdate);
 		break;
 
 		case MEDIASYNC_IOC_GET_MEDIATIME:

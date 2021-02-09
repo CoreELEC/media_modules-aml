@@ -193,7 +193,7 @@ long mediasync_ins_unbinder(s32 sSyncInsId) {
 
 long mediasync_ins_update_mediatime(s32 sSyncInsId,
 				s64 lMediaTime,
-				s64 lSystemTime) {
+				s64 lSystemTime, bool forceUpdate) {
 	mediasync_ins* pInstance = NULL;
 	u64 current_stc = 0;
 	s64 current_systemtime = 0;
@@ -256,6 +256,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 
 			if (pInstance->mSyncModeChange == 1
+				|| forceUpdate
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
@@ -273,6 +274,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			diff_system_time = lSystemTime - pInstance->mLastRealTime;
 			diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			if (pInstance->mSyncModeChange == 1
+				|| forceUpdate
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
