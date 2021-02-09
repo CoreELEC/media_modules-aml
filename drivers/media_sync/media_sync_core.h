@@ -48,7 +48,7 @@ long mediasync_ins_binder(s32 sSyncInsId,
 long mediasync_ins_unbinder(s32 sSyncInsId);
 long mediasync_ins_update_mediatime(s32 sSyncInsId,
 					s64 lMediaTime,
-					s64 lSystemTime);
+					s64 lSystemTime, bool forceUpdate);
 long mediasync_ins_set_mediatime_speed(s32 sSyncInsId, mediasync_speed fSpeed);
 long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused);
 long mediasync_ins_get_paused(s32 sSyncInsId, s32* spPaused);
