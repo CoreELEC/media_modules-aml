@@ -220,6 +220,8 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 		u8 *pbuf = ctx->config.buf + ctx->config.length;
 
 		pbuf += sprintf(pbuf, "HDRStaticInfo:%d;", 1);
+		pbuf += sprintf(pbuf, "signal_type:%d;",
+			ctx->config.parm.dec.hdr.signal_type);
 		pbuf += sprintf(pbuf, "mG.x:%d;",
 			ctx->config.parm.dec.hdr.color_parms.primaries[0][0]);
 		pbuf += sprintf(pbuf, "mG.y:%d;",

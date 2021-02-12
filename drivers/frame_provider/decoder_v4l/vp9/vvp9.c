@@ -11077,6 +11077,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
 				&& vf_dp.present_flag == 1) {
+			get_config_int(pdata->config, "signal_type",
+					&pbi->video_signal_type);
 			get_config_int(pdata->config, "mG.x",
 					&vf_dp.primaries[0][0]);
 			get_config_int(pdata->config, "mG.y",
@@ -11112,13 +11114,15 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			vp9_print(pbi, 0, "transfer_val=%d\n",transfer_val);
 
 			vf_dp.content_light_level = content_light_level;
-			pbi->video_signal_type = (1 << 29)
+			if (!pbi->video_signal_type) {
+				pbi->video_signal_type = (1 << 29)
 					| (5 << 26)	/* unspecified */
 					| (0 << 25)	/* limit */
 					| (1 << 24)	/* color available */
 					| (9 << 16)	/* 2020 */
 					| (transfer_val << 8)	/* 2084 */
 					| (9 << 0);	/* 2020 */
+			}
 		}
 		pbi->vf_dp = vf_dp;
 	} else {
