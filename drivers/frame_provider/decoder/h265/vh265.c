@@ -13186,8 +13186,6 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	}
 
 	if (!hevc->is_used_v4l) {
-		/* get valid double write from configure or node */
-		hevc->double_write_mode = get_double_write_mode(hevc);
 		if (hevc->save_buffer_mode && dynamic_buf_num_margin > 2)
 			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin -2;
 		else
