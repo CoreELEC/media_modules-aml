@@ -2557,7 +2557,7 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 		if (ctx->cap_pool.dec < hw->dpb.mDPB.size) {
 			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) >=
 				run_ready_min_buf_num) {
-				if (ctx->fb_ops.try_lock(&ctx->fb_ops, &hw->fb_token))
+				if (ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token))
 					return 1;
 			}
 		}
@@ -3279,8 +3279,8 @@ int notify_v4l_eos(struct vdec_s *vdec)
 			}
 
 			if (index == INVALID_IDX) {
-				ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, 0, &fb, false) < 0) {
+				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
 					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
 					return -1;
 				}
@@ -9369,8 +9369,6 @@ result_done:
 		if (ctx->param_sets_from_ucode &&
 			!hw->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
 	}
 
 	if (hw->vdec_cb)
@@ -10568,13 +10566,6 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 
 	if (hw->enable_fence)
 		vdec_fence_release(hw, &vdec->sync);
-
-	if (hw->is_used_v4l) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
-	}
 
 	ammvdec_h264_mmu_release(hw);
 	h264_free_hw_stru(&pdev->dev, (void *)hw);

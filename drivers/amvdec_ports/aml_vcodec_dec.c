@@ -477,7 +477,7 @@ static void fb_map_table_hold(struct aml_vcodec_ctx *ctx,
 
 	if (i >= ARRAY_SIZE(ctx->fb_map)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-			"%s, table is full. addr:%llx, vf:%px\n",
+			"%s, table is full. addr:%lx, vf:%px\n",
 			__func__, addr, vf);
 	}
 }
@@ -510,7 +510,7 @@ static void fb_map_table_fetch(struct aml_vcodec_ctx *ctx,
 
 	if (i >= ARRAY_SIZE(ctx->fb_map)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-			"%s, there is new addr:%llx.\n",
+			"%s, there is new addr:%lx.\n",
 			__func__, addr);
 	}
 }
@@ -720,36 +720,86 @@ static void update_vdec_buf_plane(struct aml_vcodec_ctx *ctx,
 	}
 }
 
-static bool fb_buff_try_lock(struct aml_fb_ops *fb, ulong *token)
+static bool fb_token_insert(struct aml_vcodec_ctx *ctx,
+			    ulong *token)
 {
-	struct aml_vcodec_ctx *ctx =
-		container_of(fb, struct aml_vcodec_ctx, fb_ops);
-	ulong flags;
+	ulong vb_handle;
+	int i;
 
-	flags = aml_vcodec_ctx_lock(ctx);
-	if (!fb->token) {
-		if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx)) {
-			fb->token =
-				(ulong) v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
-			*token = fb->token;
+	for (i = 0; i < ARRAY_SIZE(ctx->token_table); i++) {
+		if (ctx->token_table[i] &&
+			(ctx->token_table[i] == *token)) {
+			return true;
 		}
 	}
-	aml_vcodec_ctx_unlock(ctx, flags);
 
-	return (fb->token && (fb->token == *token)) ? true : false;
+	vb_handle = (ulong)v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
+
+	for (i = 0; i < ARRAY_SIZE(ctx->token_table); i++) {
+		if (!ctx->token_table[i]) {
+			ctx->token_table[i] = vb_handle;
+			break;
+		}
+	}
+
+	if (i >= ARRAY_SIZE(ctx->token_table)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"%s, table is full. token:%lx\n",
+			__func__, vb_handle);
+		return false;
+	}
+
+	*token = vb_handle;
+
+	return true;
 }
 
-static void fb_buff_unlock(struct aml_fb_ops *fb, ulong token)
+static void fb_token_remove(struct aml_vcodec_ctx *ctx,
+			    ulong token)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ctx->token_table); i++) {
+		if (token == ctx->token_table[i]) {
+			ctx->token_table[i] = 0;
+			break;
+		}
+	}
+
+	if (i >= ARRAY_SIZE(ctx->token_table)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"%s, remove token err, token:%lx.\n",
+			__func__, token);
+	}
+}
+
+static void fb_token_clean(struct aml_vcodec_ctx *ctx)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ctx->token_table); i++) {
+		ctx->token_table[i] = 0;
+	}
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "%s done\n", __func__);
+}
+
+static bool fb_buff_query(struct aml_fb_ops *fb, ulong *token)
 {
 	struct aml_vcodec_ctx *ctx =
 		container_of(fb, struct aml_vcodec_ctx, fb_ops);
+	bool ret = false;
 	ulong flags;
 
 	flags = aml_vcodec_ctx_lock(ctx);
-	if (fb->token == token) {
-		fb->token = 0;
+
+	if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx)) {
+		ret = fb_token_insert(ctx, token);
 	}
+
 	aml_vcodec_ctx_unlock(ctx, flags);
+
+	return ret;
 }
 
 static int fb_buff_from_queue(struct aml_fb_ops *fb,
@@ -767,19 +817,12 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb,
 
 	flags = aml_vcodec_ctx_lock(ctx);
 
-	if (fb->token != token) {
-		aml_vcodec_ctx_unlock(ctx, flags);
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-			"fb be locked wait token release.\n");
-		return -1;
-	}
-
 	if (ctx->state == AML_STATE_ABORT) {
 		aml_vcodec_ctx_unlock(ctx, flags);
 		return -1;
 	}
 
-	dst_vb2_v4l2 = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
+	dst_vb2_v4l2 = (struct vb2_v4l2_buffer *) token;
 	if (!dst_vb2_v4l2) {
 		aml_vcodec_ctx_unlock(ctx, flags);
 		return -1;
@@ -821,7 +864,7 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb,
 	ctx->cap_pool.seq[ctx->cap_pool.out++] =
 		(buf_flag << 16 | dst_buf->index);
 
-	v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
+	fb_token_remove(ctx, token);
 
 	aml_vcodec_ctx_unlock(ctx, flags);
 
@@ -1585,9 +1628,7 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	q_data->bytesperline[1] = q_data->coded_width;
 	ctx->reset_flag = V4L_RESET_MODE_NORMAL;
 
-	ctx->fb_ops.token	= 0;
-	ctx->fb_ops.try_lock	= fb_buff_try_lock;
-	ctx->fb_ops.unlock	= fb_buff_unlock;
+	ctx->fb_ops.query	= fb_buff_query;
 	ctx->fb_ops.alloc	= fb_buff_from_queue;
 
 	ctx->state = AML_STATE_IDLE;
@@ -2976,7 +3017,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 			buf->que_in_m2m = false;
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-			"init buffer(%s), vb idx:%d, addr: old:%llx, new:%llx \n",
+			"init buffer(%s), vb idx:%d, addr: old:%lx, new:%lx \n",
 			vf ? "update" : "idel",
 			vb->index, fb->m.mem[0].addr,
 			vb2_dma_contig_plane_dma_addr(vb, 0));
@@ -3114,6 +3155,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		}
 
 		fb_map_table_clean(ctx);
+
+		fb_token_clean(ctx);
 
 		INIT_KFIFO(ctx->capture_buffer);
 		ctx->buf_used_count = 0;

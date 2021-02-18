@@ -406,15 +406,11 @@ struct internal_comp_buf {
 };
 
 /*
- * @token: token is used for the hold allocation right.
- * @try_lock: try to achieved fb token.
- * @unlock: used for release fb token.
+ * @query: try to achieved fb token.
  * @alloc: used for allocte fb buffer.
  */
 struct aml_fb_ops {
-	ulong		token;
-	bool		(*try_lock)(struct aml_fb_ops *, ulong *);
-	void		(*unlock)(struct aml_fb_ops *, ulong);
+	bool		(*query)(struct aml_fb_ops *, ulong *);
 	int		(*alloc)(struct aml_fb_ops *, ulong, struct vdec_v4l2_buffer **, bool);
 };
 
@@ -558,6 +554,8 @@ struct aml_vcodec_ctx {
 	struct mutex			comp_lock;
 
 	struct aml_fb_ops		fb_ops;
+	ulong				token_table[32];
+
 	struct aml_fb_map_table		fb_map[32];
 };
 

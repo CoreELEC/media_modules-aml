@@ -624,7 +624,7 @@ static int find_free_buffer(struct vdec_mpeg12_hw_s *hw)
 			/*run to parser csd data*/
 			i = 0;
 		} else {
-			if (!ctx->fb_ops.try_lock(&ctx->fb_ops, &hw->fb_token))
+			if (!ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token))
 				return -1;
 
 			if (vmpeg12_v4l_alloc_buff_config_canvas(hw, i))
@@ -2347,8 +2347,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		}
 		index = find_free_buffer(hw);
 		if (index == -1) {
-			ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
-			if (ctx->fb_ops.alloc(&ctx->fb_ops, 0, &fb, false) < 0) {
+			ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
+			if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
 				pr_err("[%d] get fb fail.\n", ctx->id);
 				return -1;
 			}
@@ -2520,8 +2520,6 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		if (ctx->param_sets_from_ucode &&
 			!hw->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
 	}
 
 	if (hw->vdec_cb)
@@ -3787,13 +3785,6 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 #ifdef DUMP_USER_DATA
 	amvdec_mmpeg12_uninit_userdata_dump(hw);
 #endif
-
-	if (hw->is_used_v4l) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
-	}
 
 	if (hw->fw) {
 		vfree(hw->fw);

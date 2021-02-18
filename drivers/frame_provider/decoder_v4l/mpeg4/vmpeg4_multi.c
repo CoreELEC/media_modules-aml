@@ -1546,8 +1546,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		if (hw->is_used_v4l) {
 			index = find_free_buffer(hw);
 			if ((index == -1) || (index == 0xffffff)) {
-				ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, 0, &fb, false) < 0) {
+				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
 					pr_err("[%d] get fb fail.\n", ctx->id);
 					return -1;
 				}
@@ -1661,8 +1661,6 @@ static void vmpeg4_work(struct work_struct *work)
 		if (ctx->param_sets_from_ucode &&
 			!hw->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
 	}
 
 	/* mark itself has all HW resource released and input released */
@@ -2392,7 +2390,7 @@ static bool is_avaliable_buffer(struct vdec_mpeg4_hw_s *hw)
 	if (ctx->cap_pool.dec < hw->buf_num) {
 		free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
 		if (free_count &&
-			!ctx->fb_ops.try_lock(&ctx->fb_ops, &hw->fb_token)) {
+			!ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token)) {
 			return false;
 		}
 	}
@@ -2858,13 +2856,6 @@ static int ammvdec_mpeg4_remove(struct platform_device *pdev)
 			vdec->free_canvas_ex(canvas_y(hw->canvas_spec[i]), vdec->id);
 			vdec->free_canvas_ex(canvas_u(hw->canvas_spec[i]), vdec->id);
 		}
-	}
-
-	if (hw->is_used_v4l) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
 	}
 
 	mmpeg4_debug_print(DECODE_ID(hw), 0, "%s\n", __func__);

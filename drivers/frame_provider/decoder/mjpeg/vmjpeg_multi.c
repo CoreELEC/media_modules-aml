@@ -1184,7 +1184,7 @@ static int find_free_buffer(struct vdec_mjpeg_hw_s *hw)
 			/*run to parser csd data*/
 			i = 0;
 		} else {
-			if (!ctx->fb_ops.try_lock(&ctx->fb_ops, &hw->fb_token))
+			if (!ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token))
 				return -1;
 
 			if (vmjpeg_v4l_alloc_buff_config_canvas(hw, i))
@@ -1518,8 +1518,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		if (hw->is_used_v4l) {
 			index = find_free_buffer(hw);
 			if (index == -1) {
-				ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, 0, &fb, false) < 0) {
+				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
 					pr_err("[%d] get fb fail.\n", ctx->id);
 					return -1;
 				}
@@ -1616,8 +1616,6 @@ static void vmjpeg_work(struct work_struct *work)
 		if (ctx->param_sets_from_ucode &&
 			!hw->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
 	}
 
 	/* mark itself has all HW resource released and input released */
@@ -1809,13 +1807,6 @@ static int ammvdec_mjpeg_remove(struct platform_device *pdev)
 			vdec->free_canvas_ex(hw->buffer_spec[i].u_canvas_index, vdec->id);
 			vdec->free_canvas_ex(hw->buffer_spec[i].v_canvas_index, vdec->id);
 		}
-	}
-
-	if (hw->is_used_v4l) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
 	}
 
 	vfree(hw);

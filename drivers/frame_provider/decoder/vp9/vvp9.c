@@ -1621,8 +1621,6 @@ static void trigger_schedule(struct VP9Decoder_s *pbi)
 		if (ctx->param_sets_from_ucode &&
 			!pbi->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, pbi->fb_token);
 	}
 
 	if (pbi->vdec_cb)
@@ -7724,8 +7722,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			}
 
 			if (index == INVALID_IDX) {
-				ctx->fb_ops.unlock(&ctx->fb_ops, hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, 0, &fb, false) < 0) {
+				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
 					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
 					return -1;
 				}
@@ -10434,7 +10432,7 @@ static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
 	if (ctx->cap_pool.dec < pbi->used_buf_num) {
 		free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
 		if (free_count &&
-			!ctx->fb_ops.try_lock(&ctx->fb_ops, &pbi->fb_token)) {
+			!ctx->fb_ops.query(&ctx->fb_ops, &pbi->fb_token)) {
 			return false;
 		}
 	}
@@ -11526,13 +11524,6 @@ static int ammvdec_vp9_remove(struct platform_device *pdev)
 
 	if (pbi->enable_fence)
 		vdec_fence_release(pbi, &vdec->sync);
-
-	if (pbi->is_used_v4l) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
-
-		ctx->fb_ops.unlock(&ctx->fb_ops, pbi->fb_token);
-	}
 
 #ifdef DEBUG_PTS
 	pr_info("pts missed %ld, pts hit %ld, duration %d\n",

@@ -76,6 +76,8 @@ static enum DI_ERRORTYPE
 	struct aml_v4l2_vpp *vpp = buf->caller_data;
 	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
 	struct vdec_v4l2_buffer *fb = NULL;
+	struct vdec_v4l2_buffer *fb_dec = NULL;
+	struct vframe_s *vf_dec = NULL;
 	bool bypass = false;
 
 	if (!vpp || !vpp->ctx) {
@@ -92,9 +94,8 @@ static enum DI_ERRORTYPE
 	buf->vf->v4l_mem_handle = (ulong)fb;
 
 	if (bypass) {
-		struct vframe_s *vf_dec = buf->vf->vf_ext;
-		struct vdec_v4l2_buffer *fb_dec =
-			(struct vdec_v4l2_buffer *) vf_dec->v4l_mem_handle;
+		vf_dec = buf->vf->vf_ext;
+		fb_dec = (struct vdec_v4l2_buffer *) vf_dec->v4l_mem_handle;
 
 		fb_dec->is_vpp_bypass = true;
 		fb->fill_buf_done(vpp->ctx, fb_dec);
@@ -113,7 +114,8 @@ static enum DI_ERRORTYPE
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
 		"vpp_output done: vf:%px, idx:%d, flag:%x %s, in:%d, out:%d, vf:%d, vpp done:%d\n",
-		buf->vf, bypass ? buf->vf->index : VPP_BUF_GET_IDX(vpp_buf),
+		bypass ? vf_dec : buf->vf,
+		bypass ? vf_dec->index : buf->vf->index,
 		buf->flag, bypass ? "bypass" : "",
 		kfifo_len(&vpp->input),
 		kfifo_len(&vpp->output),
@@ -156,7 +158,7 @@ static void vpp_vf_get(void *caller, struct vframe_s **vf_out)
 
 		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 			"%s: vf:%px, index:%d, flag:%x, ts:%lld\n",
-			__func__, vf, VPP_BUF_GET_IDX(vpp_buf), buf->flag,
+			__func__, vf, vf->index, buf->flag,
 			vf->timestamp);
 	}
 }
@@ -176,7 +178,7 @@ static void vpp_vf_put(void *caller, struct vframe_s *vf)
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"%s: vf:%px, index:%d, flag:%x, ts:%lld\n",
-		__func__, vf, VPP_BUF_GET_IDX(vpp_buf), buf->flag,
+		__func__, vf, vf->index, buf->flag,
 		vf->timestamp);
 
 	mutex_lock(&vpp->output_lock);
@@ -223,6 +225,10 @@ retry:
 		if (!out_buf->aml_buf) {
 			struct vdec_v4l2_buffer *out;
 
+			if (!ctx->fb_ops.query(&ctx->fb_ops, &vpp->fb_token)) {
+				goto retry;
+			}
+
 			if (ctx->fb_ops.alloc(&ctx->fb_ops, vpp->fb_token, &out, true)) {
 				usleep_range(5000, 5500);
 				mutex_lock(&vpp->output_lock);
@@ -230,6 +236,7 @@ retry:
 				mutex_unlock(&vpp->output_lock);
 				goto retry;
 			}
+
 			out_buf->aml_buf = container_of(out,
 				struct aml_video_dec_buf, frame_buffer);
 			out_buf->aml_buf->vpp_buf_handle = (ulong) out_buf;
@@ -285,11 +292,10 @@ retry:
 		di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
 
 		v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL,
-			"vpp_handle start: dec vf:%px, vpp vf:%px/%d, iphy:%x/%x %dx%d ophy:%x/%x %dx%d, "
+			"vpp_handle start: dec vf:%px/%d, vpp vf:%px/%d, iphy:%x/%x %dx%d ophy:%x/%x %dx%d, "
 			"in:%d, out:%d, vf:%d, vpp done:%d",
-			in_buf->di_buf.vf,
-			out_buf->di_buf.vf,
-			VPP_BUF_GET_IDX(out_buf),
+			in_buf->di_buf.vf, in_buf->di_buf.vf->index,
+			out_buf->di_buf.vf, VPP_BUF_GET_IDX(out_buf),
 			in_buf->di_buf.vf->canvas0_config[0].phy_addr,
 			in_buf->di_buf.vf->canvas0_config[1].phy_addr,
 			in_buf->di_buf.vf->canvas0_config[0].width,
