@@ -177,8 +177,6 @@ static unsigned int amstream_sub_poll
 (struct file *file, poll_table *wait_table);
 static unsigned int amstream_userdata_poll
 (struct file *file, poll_table *wait_table);
-static ssize_t amstream_userdata_read
-(struct file *file, char *buf, size_t count, loff_t *ppos);
 static int (*amstream_adec_status)
 (struct adec_status *astatus);
 #ifdef CONFIG_AM_VDEC_REAL
@@ -281,7 +279,6 @@ static const struct file_operations userdata_fops = {
 	.owner = THIS_MODULE,
 	.open = amstream_open,
 	.release = amstream_release,
-	.read = amstream_userdata_read,
 	.poll = amstream_userdata_poll,
 	.unlocked_ioctl = amstream_ioctl,
 #ifdef CONFIG_COMPAT
@@ -1486,125 +1483,6 @@ static unsigned int amstream_userdata_poll(struct file *file,
 		return POLLIN | POLLRDNORM;
 	}
 	return 0;
-}
-
-static ssize_t amstream_userdata_read(struct file *file, char __user *buf,
-			size_t count, loff_t *ppos)
-{
-	u32 data_size, res, retVal = 0;
-	u32 buf_wp, buf_rp, buf_size;
-	unsigned long buf_start;
-	struct stream_buf_s *userdata_buf = &bufs[BUF_TYPE_USERDATA];
-#ifdef DEBUG_USER_DATA
-	int old_wi;
-#endif
-
-	mutex_lock(&userdata_mutex);
-
-	if (userdata_poc_ri != last_read_wi) {
-		/***********************************************
-		app picks up poc counter wrong from last read user data
-		for H264. So, we need to recalculate userdata_poc_ri
-		to the userdata_poc_wi from the last read.
-		***********************************************/
-#if 0
-		pr_info("app pick up poc error: ri = %d, last_wi = %d\n",
-			userdata_poc_ri, last_read_wi);
-#endif
-		userdata_poc_ri = last_read_wi;
-	}
-
-	buf_wp = userdata_buf->buf_wp;
-	buf_rp = userdata_buf->buf_rp;
-	buf_size = userdata_buf->buf_size;
-	buf_start = userdata_buf->buf_start;
-#ifdef DEBUG_USER_DATA
-	old_wi = last_read_wi;
-#endif
-	last_read_wi = userdata_poc_wi;
-	mutex_unlock(&userdata_mutex);
-
-	if (buf_start == 0 || buf_size == 0)
-		return 0;
-	if (buf_wp == buf_rp)
-		return 0;
-	if (buf_wp > buf_rp)
-		data_size = buf_wp - buf_rp;
-	else
-		data_size = buf_size - buf_rp + buf_wp;
-
-	if (data_size > count)
-		data_size = count;
-#ifdef DEBUG_USER_DATA
-	pr_info("wi:%d ri:%d wp:%d rp:%d size:%d, last_read_wi=%d\n",
-		userdata_poc_wi, userdata_poc_ri,
-		buf_wp, buf_rp, data_size, old_wi);
-#endif
-	if (buf_wp < buf_rp) {
-		int first_num = buf_size - buf_rp;
-		if (data_size <= first_num) {
-			res = copy_to_user((void *)buf,
-				(void *)((buf_rp +
-				buf_start)), data_size);
-			if (res)
-				pr_info("p1 read not end res=%d, request=%d\n",
-					res, data_size);
-
-			mutex_lock(&userdata_mutex);
-			userdata_buf->buf_rp += data_size - res;
-			mutex_unlock(&userdata_mutex);
-			retVal = data_size - res;
-		} else {
-			if (first_num > 0) {
-				res = copy_to_user((void *)buf,
-				(void *)((buf_rp +
-				buf_start)), first_num);
-				if (res)
-					pr_info("p2 read not end res=%d, request=%d\n",
-						res, first_num);
-
-				res = copy_to_user((void *)buf+first_num,
-				(void *)(buf_start),
-				data_size - first_num);
-
-				if (res)
-					pr_info("p3 read not end res=%d, request=%d\n",
-						res, data_size - first_num);
-
-				mutex_lock(&userdata_mutex);
-				userdata_buf->buf_rp += data_size;
-				if (userdata_buf->buf_rp >= buf_size)
-					userdata_buf->buf_rp =
-						userdata_buf->buf_rp - buf_size;
-				mutex_unlock(&userdata_mutex);
-
-				retVal = data_size;
-			} else {
-				/* first_num == 0*/
-				res = copy_to_user((void *)buf,
-				(void *)((buf_start)),
-				data_size - first_num);
-				mutex_lock(&userdata_mutex);
-				userdata_buf->buf_rp =
-					data_size - first_num - res;
-				mutex_unlock(&userdata_mutex);
-				retVal = data_size - first_num - res;
-			}
-		}
-	} else {
-		res = copy_to_user((void *)buf,
-			(void *)((buf_rp + buf_start)),
-			data_size);
-		if (res)
-			pr_info("p4 read not end res=%d, request=%d\n",
-				res, data_size);
-
-		mutex_lock(&userdata_mutex);
-		userdata_buf->buf_rp += data_size - res;
-		mutex_unlock(&userdata_mutex);
-		retVal = data_size - res;
-	}
-	return retVal;
 }
 
 static int amstream_open(struct inode *inode, struct file *file)
