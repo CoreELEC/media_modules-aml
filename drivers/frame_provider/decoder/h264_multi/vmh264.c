@@ -9187,8 +9187,12 @@ result_done:
 		if (!vdec_is_support_4k()) {
 			if (clk_adj_frame_count < VDEC_CLOCK_ADJUST_FRAME) {
 				clk_adj_frame_count++;
-				if (clk_adj_frame_count == VDEC_CLOCK_ADJUST_FRAME)
-					vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
+				if (clk_adj_frame_count == VDEC_CLOCK_ADJUST_FRAME) {
+					if (hw->frame_height <= 144)
+						vdec_source_changed(VFORMAT_H264, 1920, 1080, 29);
+					else
+						vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
+				}
 			}
 		}
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
