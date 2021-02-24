@@ -2781,21 +2781,23 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 			}
 	}
 	if (vdec_stream_based(vdec) && !(frame->data_flag & NODISP_FLAG)) {
-		if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
-			frame->offset_delimiter, &frame->pts, &frame->frame_size,
-			0, &frame->pts64) == 0)) {
-			if ((lookup_check_conut && (hw->vf_pre_count > lookup_check_conut) &&
-				(hw->wrong_frame_count > hw->right_frame_count)) &&
-				((frame->decoded_frame_size * 2 < frame->frame_size))) {
-				/*resolve many frame only one check in pts, cause playback unsmooth issue*/
+		if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+			if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
+				frame->offset_delimiter, &frame->pts, &frame->frame_size,
+				0, &frame->pts64) == 0)) {
+				if ((lookup_check_conut && (hw->vf_pre_count > lookup_check_conut) &&
+					(hw->wrong_frame_count > hw->right_frame_count)) &&
+					((frame->decoded_frame_size * 2 < frame->frame_size))) {
+					/*resolve many frame only one check in pts, cause playback unsmooth issue*/
+					frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
+					frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+				}
+				hw->right_frame_count++;
+			} else {
 				frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
 				frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
+				hw->wrong_frame_count++;
 			}
-			hw->right_frame_count++;
-		} else {
-			frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
-			frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
-			hw->wrong_frame_count++;
 		}
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -3148,6 +3150,18 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
+		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+			/* offset for tsplayer pts lookup */
+			if (i == 0) {
+				vf->pts_us64 =
+					(((u64)vf->duration << 32) &
+					0xffffffff00000000) | frame->offset_delimiter;
+				vf->pts = 0;
+			} else {
+				vf->pts_us64 = (u64)-1;
+				vf->pts = 0;
+			}
+		}
 
 		hw->vf_pre_count++;
 		vdec_vframe_ready(hw_to_vdec(hw), vf);

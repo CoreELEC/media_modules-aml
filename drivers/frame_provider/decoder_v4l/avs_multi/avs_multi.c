@@ -3510,7 +3510,8 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 					set_vframe_pts(hw, decode_pic_count, vf);
 
 				if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-					vf->pts_us64 = offset;
+					vf->pts_us64 =
+						(((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
 					vf->pts = 0;
 				}
 
@@ -3593,7 +3594,7 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 					set_vframe_pts(hw, decode_pic_count, vf);
 
 				if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-					vf->pts_us64 = offset;
+					vf->pts_us64 = (u64)-1;
 					vf->pts = 0;
 				}
 				debug_print(hw, PRINT_FLAG_PTS,
@@ -3694,7 +3695,8 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 					set_vframe_pts(hw, decode_pic_count, vf);
 
 				if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-					vf->pts_us64 = offset;
+					vf->pts_us64 =
+						(((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
 					vf->pts = 0;
 				}
 				decoder_do_frame_check(hw_to_vdec(hw), vf);

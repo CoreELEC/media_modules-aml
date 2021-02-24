@@ -4400,6 +4400,7 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 	int stream_offset;
 	unsigned int frame_size = 0;
 	int pts_discontinue;
+	struct vdec_s *vdec = hw_to_vdec(dec);
 	stream_offset = pic->stream_offset;
 	avs2_print(dec, AVS2_DBG_BUFMGR,
 		"%s index = %d pos = %d\r\n",
@@ -4413,22 +4414,25 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 
 	if (!dummy) {
 #ifdef MULTI_INSTANCE_SUPPORT
-		if (vdec_frame_based(hw_to_vdec(dec))) {
+		if (vdec_frame_based(vdec)) {
 			vf->pts = pic->pts;
 			vf->pts_us64 = pic->pts64;
-		} else
+		} else {
 #endif
-		/* if (pts_lookup_offset(PTS_TYPE_VIDEO,
-		   stream_offset, &vf->pts, 0) != 0) { */
-		if (pts_lookup_offset_us64
-			(PTS_TYPE_VIDEO, stream_offset,
-			&vf->pts, &frame_size, 0,
-			 &vf->pts_us64) != 0) {
+			if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+				/* if (pts_lookup_offset(PTS_TYPE_VIDEO,
+				   stream_offset, &vf->pts, 0) != 0) { */
+				if (pts_lookup_offset_us64
+					(PTS_TYPE_VIDEO, stream_offset,
+					&vf->pts, &frame_size, 0,
+					 &vf->pts_us64) != 0) {
 #ifdef DEBUG_PTS
-			dec->pts_missed++;
+					dec->pts_missed++;
 #endif
-			vf->pts = 0;
-			vf->pts_us64 = 0;
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+				}
+			}
 		}
 #ifdef DEBUG_PTS
 		else
@@ -4615,7 +4619,10 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 			dec->bmmu_box,
 			VF_BUFFER_IDX(pic->index));
 #endif
-
+	if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+		vf->pts_us64 = stream_offset;
+		vf->pts = 0;
+	}
 	if (!dummy) {
 		lock_buffer(dec, flags);
 		pic->vf_ref = 1;

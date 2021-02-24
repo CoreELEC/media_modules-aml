@@ -7454,23 +7454,25 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		/* if (pts_lookup_offset(PTS_TYPE_VIDEO,
 		 *   stream_offset, &vf->pts, 0) != 0) {
 		 */
-		if (pts_lookup_offset_us64
-			(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
-			&frame_size, 0,
-			&vf->pts_us64) != 0) {
+		if ((pvdec->vbuf.no_parser == 0) || (pvdec->vbuf.use_ptsserv)) {
+			if (pts_lookup_offset_us64
+				(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
+				&frame_size, 0,
+				&vf->pts_us64) != 0) {
 #ifdef DEBUG_PTS
-			pbi->pts_missed++;
+				pbi->pts_missed++;
 #endif
-			vf->pts = 0;
-			vf->pts_us64 = 0;
-			pts_valid = 0;
-			pts_us64_valid = 0;
-		} else {
+				vf->pts = 0;
+				vf->pts_us64 = 0;
+				pts_valid = 0;
+				pts_us64_valid = 0;
+			} else {
 #ifdef DEBUG_PTS
-			pbi->pts_hit++;
+				pbi->pts_hit++;
 #endif
-			pts_valid = 1;
-			pts_us64_valid = 1;
+				pts_valid = 1;
+				pts_us64_valid = 1;
+			}
 		}
 
 		fill_frame_info(pbi, pic_config, frame_size, vf->pts);
@@ -7654,7 +7656,10 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				vf->duration = 0;
 		}
 		update_vf_memhandle(pbi, vf, pic_config);
-
+		if (vdec_stream_based(pvdec) && (!pvdec->vbuf.use_ptsserv)) {
+			vf->pts_us64 = stream_offset;
+			vf->pts = 0;
+		}
 		if (!(pic_config->y_crop_width == 196
 		&& pic_config->y_crop_height == 196
 		&& (debug & VP9_DEBUG_NO_TRIGGER_FRAME) == 0

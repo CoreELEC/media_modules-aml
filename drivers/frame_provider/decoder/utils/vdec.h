@@ -295,6 +295,7 @@ struct vdec_s {
 	char name[32];
 	char dec_spend_time[32];
 	char dec_spend_time_ave[32];
+	u32 discard_start_data_flag;
 };
 
 /* common decoder vframe provider name to use default vfm path */

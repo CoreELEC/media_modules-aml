@@ -216,6 +216,7 @@ struct pic_info_t {
 	u32 hw_decode_time;
 	u32 frame_size; // For frame base mode;
 	u64 timestamp;
+	u32 offset;
 };
 
 struct vdec_mpeg4_hw_s {
@@ -745,6 +746,12 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			"field0: pts %d, pts64 %lld, w %d, h %d, dur %d\n",
 			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
 
+		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+			vf->pts_us64 =
+				(((u64)vf->duration << 32) &
+				0xffffffff00000000) | pic->offset;
+			vf->pts = 0;
+		}
 		if (((hw->first_i_frame_ready == 0) || pb_skip)
 			 && (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
@@ -819,6 +826,11 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
 			"filed1: pts %d, pts64 %lld, w %d, h %d, dur: %d\n",
 			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
+
+		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+			vf->pts_us64 = (u64)-1;
+			vf->pts = 0;
+		}
 		if (((hw->first_i_frame_ready == 0) || pb_skip)
 			&& (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
@@ -909,6 +921,12 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			"prog: pts %d, pts64 %lld, w %d, h %d, dur %d\n",
 			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
 
+		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+			vf->pts_us64 =
+				(((u64)vf->duration << 32) &
+				0xffffffff00000000) | pic->offset;
+			vf->pts = 0;
+		}
 		if (((hw->first_i_frame_ready == 0) || pb_skip)
 			&& (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
@@ -1293,15 +1311,18 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 				dec_pic->pts64 = hw->chunk->pts64;
 				dec_pic->timestamp = hw->chunk->timestamp;
 			} else {
-				if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset,
-					&pts, &frame_size, 3000, &pts_us64) == 0) {
-					dec_pic->pts_valid = true;
-					dec_pic->pts = pts;
-					dec_pic->pts64 = pts_us64;
-					hw->pts_hit++;
-				} else {
-					dec_pic->pts_valid = false;
-					hw->pts_missed++;
+				dec_pic->offset = offset;
+				if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+					if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset,
+						&pts, &frame_size, 3000, &pts_us64) == 0) {
+						dec_pic->pts_valid = true;
+						dec_pic->pts = pts;
+						dec_pic->pts64 = pts_us64;
+						hw->pts_hit++;
+					} else {
+						dec_pic->pts_valid = false;
+						hw->pts_missed++;
+					}
 				}
 			}
 			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
