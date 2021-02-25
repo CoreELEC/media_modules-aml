@@ -2556,10 +2556,8 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 		}
 
 		if (ctx->cap_pool.dec < hw->dpb.mDPB.size) {
-			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) >=
-				run_ready_min_buf_num) {
-				if (ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token))
-					return 1;
+			if (ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token)) {
+				return 1;
 			}
 		}
 

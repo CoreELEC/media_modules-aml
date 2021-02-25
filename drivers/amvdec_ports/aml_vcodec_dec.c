@@ -733,6 +733,9 @@ static bool fb_token_insert(struct aml_vcodec_ctx *ctx,
 		}
 	}
 
+	if (!v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx))
+		return false;
+
 	vb_handle = (ulong)v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
 
 	for (i = 0; i < ARRAY_SIZE(ctx->token_table); i++) {
@@ -793,9 +796,7 @@ static bool fb_buff_query(struct aml_fb_ops *fb, ulong *token)
 
 	flags = aml_vcodec_ctx_lock(ctx);
 
-	if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx)) {
-		ret = fb_token_insert(ctx, token);
-	}
+	ret = fb_token_insert(ctx, token);
 
 	aml_vcodec_ctx_unlock(ctx, flags);
 

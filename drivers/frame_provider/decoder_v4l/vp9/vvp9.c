@@ -2420,10 +2420,9 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 		}
 
 		if (ctx->cap_pool.dec < pbi->used_buf_num) {
-			int free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
-			if (free_count &&
-				ctx->fb_ops.query(&ctx->fb_ops, &pbi->fb_token)) {
-				free_buf_count += free_count;
+			if (ctx->fb_ops.query(&ctx->fb_ops, &pbi->fb_token)) {
+				free_buf_count +=
+					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) + 1;
 			}
 		}
 
@@ -8820,8 +8819,10 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 
 	if (pbi->m_ins_flag &&
 			!get_free_buf_count(pbi)) {
-		pbi->run_ready_min_buf_num = pbi->one_package_frame_cnt + 1;
-		pr_err("need buffer, one package frame count = %d\n", pbi->one_package_frame_cnt + 1);
+		vp9_print(pbi, VP9_DEBUG_OUT_PTS,
+			"detected %d frames in a packet, ts: %lld.\n",
+			pbi->one_package_frame_cnt + 1,
+			pbi->chunk->timestamp);
 		pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
 		vdec_schedule_work(&pbi->work);
 		return IRQ_HANDLED;
@@ -10181,10 +10182,9 @@ static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
 	int i, free_count = 0;
 
 	if (ctx->cap_pool.dec < pbi->used_buf_num) {
-		free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
-		if (free_count &&
-			!ctx->fb_ops.query(&ctx->fb_ops, &pbi->fb_token)) {
-			return false;
+		if (ctx->fb_ops.query(&ctx->fb_ops, &pbi->fb_token)) {
+			free_count =
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) + 1;
 		}
 	}
 
@@ -10196,7 +10196,7 @@ static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
 		}
 	}
 
-	return free_count < pbi->run_ready_min_buf_num ? 0 : 1;
+	return free_count >= pbi->run_ready_min_buf_num ? 1 : 0;
 }
 
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)

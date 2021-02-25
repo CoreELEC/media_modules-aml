@@ -2388,10 +2388,9 @@ static bool is_avaliable_buffer(struct vdec_mpeg4_hw_s *hw)
 	int i, free_count = 0;
 
 	if (ctx->cap_pool.dec < hw->buf_num) {
-		free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
-		if (free_count &&
-			!ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token)) {
-			return false;
+		if (ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token)) {
+			free_count =
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) + 1;
 		}
 	}
 
@@ -2402,7 +2401,7 @@ static bool is_avaliable_buffer(struct vdec_mpeg4_hw_s *hw)
 		}
 	}
 
-	return free_count < run_ready_min_buf_num ? 0 : 1;
+	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
 
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)

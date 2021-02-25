@@ -12771,10 +12771,9 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 	int i, free_count = 0;
 
 	if (ctx->cap_pool.dec < hevc->used_buf_num) {
-		free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx);
-		if (free_count &&
-			!ctx->fb_ops.query(&ctx->fb_ops, &hevc->fb_token)) {
-			return false;
+		if (ctx->fb_ops.query(&ctx->fb_ops, &hevc->fb_token)) {
+			free_count =
+				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) + 1;
 		}
 	}
 
@@ -12793,7 +12792,7 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 		}
 	}
 
-	return free_count < run_ready_min_buf_num ? 0 : 1;
+	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
 
 static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
