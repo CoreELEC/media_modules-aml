@@ -12547,6 +12547,7 @@ static int check_dirty_data(struct vdec_s *vdec)
 				rp_set = rp + skip_size - input->size;
 			}
 			STBUF_WRITE(&vdec->vbuf, set_rp, rp_set);
+			vdec->discard_start_data_flag = 1;
 			vdec->input.stream_cookie += skip_size;
 			hevc->dirty_shift_flag = 1;
 		}

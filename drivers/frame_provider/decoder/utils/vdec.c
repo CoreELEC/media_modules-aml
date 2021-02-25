@@ -1643,8 +1643,12 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 		} else {
 			if (vdec->vbuf.ext_buf_addr)
 				first_set_rp = STBUF_READ(&vdec->vbuf, get_rp);
-			else
-				first_set_rp = input->start;
+			else {
+				if (vdec->discard_start_data_flag)
+					first_set_rp = STBUF_READ(&vdec->vbuf, get_rp);
+				else
+					first_set_rp = input->start;
+			}
 
 			if (input->target == VDEC_INPUT_TARGET_VLD) {
 				WRITE_VREG(VLD_MEM_VIFIFO_START_PTR,
