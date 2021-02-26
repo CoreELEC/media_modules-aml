@@ -146,6 +146,7 @@ static DEFINE_SPINLOCK(vdec_spin_lock);
 static int frameinfo_flag = 0;
 static int v4lvideo_add_di = 1;
 static int max_di_instance = 2;
+static int max_supported_di_instance = 4;
 
 //static int path_debug = 0;
 
@@ -2352,6 +2353,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 	struct vdec_s *p = vdec;
 	const char *dev_name;
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
+	int max_di_count = max_di_instance;
+
+	if (vdec_stream_based(vdec))
+		max_di_count = max_supported_di_instance;
+
 	if (is_res_locked(vdec_core->vdec_resouce_status,
 		BIT(vdec->frame_base_video_path),
 		vdec->vf_receiver_inst))
@@ -2609,8 +2615,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 					vdec->vf_receiver_name);
 			else {
 				if ((vdec->vf_receiver_inst == 0)
-					&& (max_di_instance > 0))
-					if (max_di_instance == 1)
+					&& (max_di_count > 0))
+					if (max_di_count == 1)
 						snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 							"%s %s %s", vdec->vf_provider_name,
 							"deinterlace",
@@ -2621,7 +2627,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 							"dimulti.1",
 							vdec->vf_receiver_name);
 				else if ((vdec->vf_receiver_inst <
-					  max_di_instance) &&
+					  max_di_count) &&
 					  (vdec->vf_receiver_inst == 1))
 					snprintf(vdec->vfm_map_chain,
 						 VDEC_MAP_NAME_SIZE,
@@ -2630,7 +2636,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 						 "deinterlace",
 						 vdec->vf_receiver_name);
 				else if (vdec->vf_receiver_inst <
-					 max_di_instance)
+					 max_di_count)
 					snprintf(vdec->vfm_map_chain,
 						 VDEC_MAP_NAME_SIZE,
 						 "%s %s%d %s",
@@ -5975,6 +5981,10 @@ MODULE_PARM_DESC(v4lvideo_add_di,
 module_param(max_di_instance, int, 0664);
 MODULE_PARM_DESC(max_di_instance,
 				"\n max_di_instance\n");
+
+module_param(max_supported_di_instance, int, 0664);
+MODULE_PARM_DESC(max_supported_di_instance,
+				"\n max_supported_di_instance\n");
 
 module_param(debug_vdetect, int, 0664);
 MODULE_PARM_DESC(debug_vdetect, "\n debug_vdetect\n");
