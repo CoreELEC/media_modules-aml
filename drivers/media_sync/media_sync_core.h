@@ -21,6 +21,59 @@ typedef struct speed{
 	u32 mDenominator;
 }mediasync_speed;
 
+typedef enum {
+	MEDIASYNC_INIT = 0,
+	MEDIASYNC_AUDIO_ARRIVED,
+	MEDIASYNC_VIDEO_ARRIVED,
+	MEDIASYNC_AV_ARRIVED,
+	MEDIASYNC_AV_SYNCED,
+	MEDIASYNC_RUNNING,
+	MEDIASYNC_LOST_SYNC,
+	MEDIASYNC_EXIT,
+} avsync_state;
+
+typedef enum {
+	UNKNOWN_CLOCK = 0,
+	AUDIO_CLOCK,
+	VIDEO_CLOCK,
+	PCR_CLOCK,
+	REF_CLOCK,
+} mediasync_clocktype;
+
+typedef struct frameinfo{
+	int64_t framePts;
+	int64_t frameSystemTime;
+}mediasync_frameinfo;
+
+typedef struct syncinfo {
+	avsync_state state;
+	mediasync_frameinfo firstAframeInfo;
+	mediasync_frameinfo firstVframeInfo;
+	mediasync_frameinfo firstDmxPcrInfo;
+	mediasync_frameinfo refClockInfo;
+	mediasync_frameinfo curAudioInfo;
+	mediasync_frameinfo curVideoInfo;
+	mediasync_frameinfo curDmxPcrInfo;
+}mediasync_syncinfo;
+
+typedef struct audioinfo{
+	int cacheSize;
+	int cacheDuration;
+}mediasync_audioinfo;
+
+typedef struct videoinfo{
+	int cacheSize;
+	int cacheDuration;
+}mediasync_videoinfo;
+
+typedef enum {
+    CLOCK_PROVIDER_NONE = 0,
+    CLOCK_PROVIDER_DISCONTINUE,
+    CLOCK_PROVIDER_NORMAL,
+    CLOCK_PROVIDER_LOST,
+    CLOCK_PROVIDER_RECOVERING,
+} mediasync_clockprovider_state;
+
 typedef struct instance{
 	s32 mSyncInsId;
 	s32 mDemuxId;
@@ -34,6 +87,16 @@ typedef struct instance{
 	s64 mTrackMediaTime;
 	mediasync_speed mSpeed;
 	s32 mSyncModeChange;
+
+	int mHasAudio;
+	int mHasVideo;
+	int64_t mStartThreshold;
+	int64_t mPtsAdjust;
+	mediasync_clocktype mSourceClockType;
+	mediasync_clockprovider_state mSourceClockState;
+	mediasync_audioinfo mAudioInfo;
+	mediasync_videoinfo mVideoInfo;
+	mediasync_syncinfo mSyncInfo;
 }mediasync_ins;
 
 long mediasync_ins_alloc(s32 sDemuxId,
@@ -63,6 +126,40 @@ long mediasync_ins_get_systemtime(s32 sSyncInsId,
 				s64* lpSTC,
 				s64* lpSystemTime);
 long mediasync_ins_get_nextvsync_systemtime(s32 sSyncInsId, s64* lpSystemTime);
+
+//chenchen
+long mediasync_ins_init_syncinfo(s32 sSyncInsId);
+long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type);
+long mediasync_ins_get_clocktype(s32 sSyncInsId, mediasync_clocktype* type);
+long mediasync_ins_set_avsyncstate(s32 sSyncInsId, s32 state);
+long mediasync_ins_get_avsyncstate(s32 sSyncInsId, s32* state);
+long mediasync_ins_set_hasaudio(s32 sSyncInsId, int hasaudio);
+long mediasync_ins_get_hasaudio(s32 sSyncInsId, int* hasaudio);
+long mediasync_ins_set_hasvideo(s32 sSyncInsId, int hasvideo);
+long mediasync_ins_get_hasvideo(s32 sSyncInsId, int* hasvideo);
+long mediasync_ins_set_audioinfo(s32 sSyncInsId, mediasync_audioinfo info);
+long mediasync_ins_get_audioinfo(s32 sSyncInsId, mediasync_audioinfo* info);
+long mediasync_ins_set_videoinfo(s32 sSyncInsId, mediasync_videoinfo info);
+long mediasync_ins_get_videoinfo(s32 sSyncInsId, mediasync_videoinfo* info);
+long mediasync_ins_set_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_refclockinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_refclockinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_clockstate(s32 sSyncInsId, mediasync_clockprovider_state state);
+long mediasync_ins_get_clockstate(s32 sSyncInsId, mediasync_clockprovider_state* state);
+long mediasync_ins_set_startthreshold(s32 sSyncInsId, s64 threshold);
+long mediasync_ins_get_startthreshold(s32 sSyncInsId, s64* threshold);
+long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s64 adujstpts);
+long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s64* adujstpts);
+
 #endif
-
-

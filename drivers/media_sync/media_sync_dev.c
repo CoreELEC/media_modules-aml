@@ -91,11 +91,21 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 {
 	long ret = 0;
 	mediasync_speed SyncSpeed = {0};
+	mediasync_frameinfo FrameInfo = {-1, -1};
+	mediasync_audioinfo AudioInfo = {0, 0};
+	mediasync_videoinfo VideoInfo = {0, 0};
+	mediasync_clocktype ClockType = UNKNOWN_CLOCK;
+	mediasync_clockprovider_state state;
 	s32 SyncInsId = -1;
 	s32 SyncPaused = 0;
 	s32 SyncMode = -1;
+	s32 SyncState = 0;
 	s64 NextVsyncSystemTime = 0;
 	s64 TrackMediaTime = 0;
+	int HasAudio = -1;
+	int HasVideo = -1;
+	s64 StartThreshold = 0;
+	s64 PtsAdjust = 0;
 	mediasync_priv_s *priv = (mediasync_priv_s *)file->private_data;
 	mediasync_ins *SyncIns = NULL;
 	mediasync_alloc_para parm = {0};
@@ -313,6 +323,439 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_SET_FIRST_AFRAME_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_firstaudioframeinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_FIRST_AFRAME_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_firstaudioframeinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_FIRST_VFRAME_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_firstvideoframeinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_FIRST_VFRAME_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_firstvideoframeinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+
+		case MEDIASYNC_IOC_SET_FIRST_DMXPCR_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_firstdmxpcrinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_FIRST_DMXPCR_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_firstdmxpcrinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_REFCLOCK_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_refclockinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_REFCLOCK_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_refclockinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_CUR_AFRAME_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_curaudioframeinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_CUR_AFRAME_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_curaudioframeinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_CUR_VFRAME_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_curvideoframeinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_CUR_VFRAME_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_curvideoframeinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_CUR_DMXPCR_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_curdmxpcrinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_CUR_DMXPCR_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_curdmxpcrinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_AUDIO_INFO:
+			if (copy_from_user((void *)&AudioInfo,
+					(void *)arg,
+					sizeof(AudioInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_audioinfo(priv->mSyncInsId,
+								AudioInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_AUDIO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_audioinfo(priv->mSyncInsId,
+								&AudioInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&AudioInfo,
+						sizeof(AudioInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_VIDEO_INFO:
+			if (copy_from_user((void *)&VideoInfo,
+					(void *)arg,
+					sizeof(VideoInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_videoinfo(priv->mSyncInsId,
+								VideoInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_VIDEO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_videoinfo(priv->mSyncInsId,
+								&VideoInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&VideoInfo,
+						sizeof(VideoInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_HASAUDIO:
+			if (copy_from_user((void *)&HasAudio,
+					(void *)arg,
+					sizeof(HasAudio)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_hasaudio(priv->mSyncInsId,
+								HasAudio);
+		break;
+
+		case MEDIASYNC_IOC_GET_HASAUDIO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_hasaudio(priv->mSyncInsId,
+								&HasAudio);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&HasAudio,
+						sizeof(HasAudio)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_HASVIDEO:
+			if (copy_from_user((void *)&HasVideo,
+					(void *)arg,
+					sizeof(HasVideo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_hasvideo(priv->mSyncInsId,
+								HasVideo);
+		break;
+
+		case MEDIASYNC_IOC_GET_HASVIDEO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_hasvideo(priv->mSyncInsId,
+								&HasVideo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&HasVideo,
+						sizeof(HasVideo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_AVSTATE:
+			if (copy_from_user((void *)&SyncState,
+					(void *)arg,
+					sizeof(SyncState)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_avsyncstate(priv->mSyncInsId,
+								SyncState);
+		break;
+
+		case MEDIASYNC_IOC_GET_AVSTATE:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_avsyncstate(priv->mSyncInsId,
+								&SyncState);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&SyncState,
+						sizeof(SyncState)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_CLOCKTYPE:
+			if (copy_from_user((void *)&ClockType,
+					(void *)arg,
+					sizeof(ClockType)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_clocktype(priv->mSyncInsId,
+								ClockType);
+		break;
+
+		case MEDIASYNC_IOC_GET_CLOCKTYPE:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_clocktype(priv->mSyncInsId,
+								&ClockType);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&ClockType,
+						sizeof(ClockType)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_CLOCKSTATE:
+			if (copy_from_user((void *)&state,
+					(void *)arg,
+					sizeof(state)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_clockstate(priv->mSyncInsId,
+								state);
+		break;
+
+		case MEDIASYNC_IOC_GET_CLOCKSTATE:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_clockstate(priv->mSyncInsId,
+								&state);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&state,
+						sizeof(state)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_STARTTHRESHOLD:
+			if (copy_from_user((void *)&StartThreshold,
+					(void *)arg,
+					sizeof(StartThreshold)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_startthreshold(priv->mSyncInsId,
+								StartThreshold);
+		break;
+
+		case MEDIASYNC_IOC_GET_STARTTHRESHOLD:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_startthreshold(priv->mSyncInsId,
+								&StartThreshold);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&StartThreshold,
+						sizeof(StartThreshold)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_PTSADJUST:
+			if (copy_from_user((void *)&PtsAdjust,
+					(void *)arg,
+					sizeof(PtsAdjust)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_ptsadjust(priv->mSyncInsId,
+								PtsAdjust);
+		break;
+
+		case MEDIASYNC_IOC_GET_PTSADJUST:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_ptsadjust(priv->mSyncInsId,
+								&PtsAdjust);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&PtsAdjust,
+						sizeof(PtsAdjust)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -340,6 +783,38 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_SET_SYNCMODE:
 		case MEDIASYNC_IOC_GET_SYNCMODE:
 		case MEDIASYNC_IOC_GET_TRACKMEDIATIME:
+		case MEDIASYNC_IOC_SET_FIRST_AFRAME_INFO:
+		case MEDIASYNC_IOC_GET_FIRST_AFRAME_INFO:
+		case MEDIASYNC_IOC_SET_FIRST_VFRAME_INFO:
+		case MEDIASYNC_IOC_GET_FIRST_VFRAME_INFO:
+		case MEDIASYNC_IOC_SET_FIRST_DMXPCR_INFO:
+		case MEDIASYNC_IOC_GET_FIRST_DMXPCR_INFO:
+		case MEDIASYNC_IOC_SET_REFCLOCK_INFO:
+		case MEDIASYNC_IOC_GET_REFCLOCK_INFO:
+		case MEDIASYNC_IOC_SET_CUR_AFRAME_INFO:
+		case MEDIASYNC_IOC_GET_CUR_AFRAME_INFO:
+		case MEDIASYNC_IOC_SET_CUR_VFRAME_INFO:
+		case MEDIASYNC_IOC_GET_CUR_VFRAME_INFO:
+		case MEDIASYNC_IOC_SET_CUR_DMXPCR_INFO:
+		case MEDIASYNC_IOC_GET_CUR_DMXPCR_INFO:
+		case MEDIASYNC_IOC_SET_AUDIO_INFO:
+		case MEDIASYNC_IOC_GET_AUDIO_INFO:
+		case MEDIASYNC_IOC_SET_VIDEO_INFO:
+		case MEDIASYNC_IOC_GET_VIDEO_INFO:
+		case MEDIASYNC_IOC_SET_AVSTATE:
+		case MEDIASYNC_IOC_GET_AVSTATE:
+		case MEDIASYNC_IOC_SET_HASAUDIO:
+		case MEDIASYNC_IOC_GET_HASAUDIO:
+		case MEDIASYNC_IOC_SET_HASVIDEO:
+		case MEDIASYNC_IOC_GET_HASVIDEO:
+		case MEDIASYNC_IOC_GET_CLOCKTYPE:
+		case MEDIASYNC_IOC_SET_CLOCKTYPE:
+		case MEDIASYNC_IOC_GET_CLOCKSTATE:
+		case MEDIASYNC_IOC_SET_CLOCKSTATE:
+		case MEDIASYNC_IOC_SET_STARTTHRESHOLD:
+		case MEDIASYNC_IOC_GET_STARTTHRESHOLD:
+		case MEDIASYNC_IOC_SET_PTSADJUST:
+		case MEDIASYNC_IOC_GET_PTSADJUST:
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;
