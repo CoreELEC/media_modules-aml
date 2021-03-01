@@ -3530,11 +3530,8 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 	struct vdec_input_s *input = &vdec->input;
 
 	/* Wait the matching irq_thread finished */
-	if (vdec->irq_cnt > vdec->irq_thread_cnt) {
-		pr_debug("%s vdec[%lx]: %lld > %lld\n",__func__, (unsigned long)vdec,
-			vdec->irq_cnt,vdec->irq_thread_cnt);
+	if (vdec->irq_cnt > vdec->irq_thread_cnt)
 		return false;
-	}
 
 	if ((vdec->status != VDEC_STATUS_CONNECTED) &&
 	    (vdec->status != VDEC_STATUS_ACTIVE))
