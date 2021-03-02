@@ -84,9 +84,6 @@ EXPORT_SYMBOL(vdec_v4l_set_hdr_infos);
 
 void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 {
-	unsigned int dpbsize = 0;
-	int ret;
-
 	if (ctx->dec_if->get_param(ctx->drv_handle, GET_PARAM_PIC_INFO, &ctx->last_decoded_picinfo)) {
 		pr_err("Cannot get param : GET_PARAM_PICTURE_INFO ERR\n");
 		return;
@@ -100,13 +97,30 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 		return;
 	}
 
-	ret = ctx->dec_if->get_param(ctx->drv_handle, GET_PARAM_DPB_SIZE, &dpbsize);
-	if (dpbsize == 0)
-		pr_err("Incorrect dpb size, ret=%d\n", ret);
+	if (ctx->last_decoded_picinfo.reorder_frames == 0)
+		pr_err("Incorrect dpb size\n");
+
+	if ((ctx->last_decoded_picinfo.reorder_frames +
+		ctx->last_decoded_picinfo.reorder_margin +
+		ctx->vpp_size) > V4L_CAP_BUFF_MAX) {
+		ctx->last_decoded_picinfo.reorder_margin =
+			V4L_CAP_BUFF_MAX -
+			ctx->last_decoded_picinfo.reorder_frames -
+			ctx->vpp_size;
+		ctx->dec_if->set_param(ctx->drv_handle, SET_PARAM_PIC_INFO,
+			&ctx->last_decoded_picinfo);
+	}
 
 	/* update picture information */
-	ctx->dpb_size = dpbsize;
+	ctx->dpb_size = ctx->last_decoded_picinfo.reorder_frames +
+		ctx->last_decoded_picinfo.reorder_margin;
 	ctx->picinfo = ctx->last_decoded_picinfo;
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		"Update picture buffer count: dec:%u, vpp:%u, margin:%u, total:%u\n",
+		ctx->picinfo.reorder_frames, ctx->vpp_size,
+		ctx->picinfo.reorder_margin,
+		CTX_BUF_TOTAL(ctx));
 }
 
 int vdec_v4l_post_evet(struct aml_vcodec_ctx *ctx, u32 event)

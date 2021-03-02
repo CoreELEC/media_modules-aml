@@ -479,7 +479,6 @@ static void fill_vdec_params(struct vdec_h264_inst *inst, struct h264_SPS_t *sps
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 	pic->profile_idc	= sps->profile_idc;
-	pic->ref_frame_count= sps->ref_frame_count;
 	/* calc DPB size */
 	dec->dpb_sz		= sps->num_reorder_frames + margin;
 
@@ -564,7 +563,7 @@ static int parse_stream_ucode(struct vdec_h264_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->dec.dpb_sz ? 0 : -1;
+	return inst->vsi->pic.reorder_frames ? 0 : -1;
 }
 
 static int parse_stream_ucode_dma(struct vdec_h264_inst *inst,
@@ -585,7 +584,7 @@ static int parse_stream_ucode_dma(struct vdec_h264_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->dec.dpb_sz ? 0 : -1;
+	return inst->vsi->pic.reorder_frames ? 0 : -1;
 }
 
 static int parse_stream_cpu(struct vdec_h264_inst *inst, u8 *buf, u32 size)
@@ -793,9 +792,7 @@ static bool monitor_res_change(struct vdec_h264_inst *inst, u8 *buf, u32 size)
 		inst->vsi->cur_pic.coded_height !=
 		inst->vsi->pic.coded_height) ||
 		(inst->vsi->pic.profile_idc !=
-		inst->vsi->cur_pic.profile_idc) ||
-		(inst->vsi->pic.ref_frame_count !=
-		inst->vsi->cur_pic.ref_frame_count))) {
+		inst->vsi->cur_pic.profile_idc))) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "res change\n");
 		inst->vsi->cur_pic = inst->vsi->pic;
 		return true;
@@ -957,7 +954,9 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 	pic->profile_idc	= ps->profile;
-	pic->ref_frame_count	= ps->ref_frames;
+	pic->field		= ps->field;
+	pic->reorder_frames	= ps->reorder_frames;
+	pic->reorder_margin	= ps->reorder_margin;
 	dec->dpb_sz		= ps->dpb_size;
 
 	inst->parms.ps 	= *ps;
@@ -970,10 +969,10 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, visible(%d x %d), coded(%d x %d) dpb: %d\n",
+		"Parse from ucode, visible(%d x %d), coded(%d x %d), scan:%s\n",
 		ps->visible_width, ps->visible_height,
 		ps->coded_width, ps->coded_height,
-		dec->dpb_sz);
+		ps->field == V4L2_FIELD_NONE ? "P" : "I");
 }
 
 static void set_param_hdr_info(struct vdec_h264_inst *inst,
@@ -990,6 +989,12 @@ static void set_param_hdr_info(struct vdec_h264_inst *inst,
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
 			"H264 set HDR infos\n");
 	}
+}
+
+static void set_pic_info(struct vdec_h264_inst *inst,
+	struct vdec_pic_info *pic)
+{
+	inst->vsi->pic = *pic;
 }
 
 static void set_param_post_event(struct vdec_h264_inst *inst, u32 *event)
@@ -1027,6 +1032,11 @@ static int vdec_h264_set_param(unsigned long h_vdec,
 	case SET_PARAM_POST_EVENT:
 		set_param_post_event(inst, in);
 		break;
+
+	case SET_PARAM_PIC_INFO:
+		set_pic_info(inst, in);
+		break;
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid set parameter type=%d\n", type);

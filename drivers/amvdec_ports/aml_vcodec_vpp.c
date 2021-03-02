@@ -226,6 +226,9 @@ retry:
 			struct vdec_v4l2_buffer *out;
 
 			if (!ctx->fb_ops.query(&ctx->fb_ops, &vpp->fb_token)) {
+				mutex_lock(&vpp->output_lock);
+				kfifo_put(&vpp->output, out_buf);
+				mutex_unlock(&vpp->output_lock);
 				goto retry;
 			}
 

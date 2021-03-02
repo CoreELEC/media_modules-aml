@@ -116,6 +116,19 @@ int vdec_if_get_param(struct aml_vcodec_ctx *ctx,
 	return ret;
 }
 
+int vdec_if_set_param(struct aml_vcodec_ctx *ctx,
+	enum vdec_set_param_type type, void *in)
+{
+	int ret = 0;
+
+	if (ctx->drv_handle == 0)
+		return -EIO;
+
+	ret = ctx->dec_if->set_param(ctx->drv_handle, type, in);
+
+	return ret;
+}
+
 void vdec_if_deinit(struct aml_vcodec_ctx *ctx)
 {
 	if (ctx->drv_handle == 0)

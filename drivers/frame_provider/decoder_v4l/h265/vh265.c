@@ -3534,34 +3534,31 @@ static int v4l_parser_work_pic_num(struct hevc_state_s *hevc)
 {
 	int used_buf_num = 0;
 	int sps_pic_buf_diff = 0;
+
 	pr_debug("margin = %d, sps_max_dec_pic_buffering_minus1_0 = %d,  sps_num_reorder_pics_0 = %d\n",
 		get_dynamic_buf_num_margin(hevc),
 		hevc->param.p.sps_max_dec_pic_buffering_minus1_0,
 		hevc->param.p.sps_num_reorder_pics_0);
-	if (get_dynamic_buf_num_margin(hevc) > 0) {
-		if ((!hevc->param.p.sps_num_reorder_pics_0) &&
-			(hevc->param.p.sps_max_dec_pic_buffering_minus1_0)) {
-			/* the range of sps_num_reorder_pics_0 is in
-			[0, sps_max_dec_pic_buffering_minus1_0] */
-			used_buf_num = get_dynamic_buf_num_margin(hevc) +
-						hevc->param.p.sps_max_dec_pic_buffering_minus1_0;
-		} else
-			used_buf_num = hevc->param.p.sps_num_reorder_pics_0
-						+ get_dynamic_buf_num_margin(hevc);
 
-		sps_pic_buf_diff = hevc->param.p.sps_max_dec_pic_buffering_minus1_0
-						- hevc->param.p.sps_num_reorder_pics_0;
-#ifdef MULTI_INSTANCE_SUPPORT
-		/*
-		need one more for multi instance, as
-		apply_ref_pic_set() has no chanch to run to
-		to clear referenced flag in some case
-		*/
-		if (hevc->m_ins_flag)
-			used_buf_num++;
-#endif
+	if ((!hevc->param.p.sps_num_reorder_pics_0) &&
+		(hevc->param.p.sps_max_dec_pic_buffering_minus1_0)) {
+		/* the range of sps_num_reorder_pics_0 is in
+		[0, sps_max_dec_pic_buffering_minus1_0] */
+		used_buf_num = hevc->param.p.sps_max_dec_pic_buffering_minus1_0;
 	} else
-		used_buf_num = max_buf_num;
+		used_buf_num = hevc->param.p.sps_num_reorder_pics_0;
+
+	sps_pic_buf_diff = hevc->param.p.sps_max_dec_pic_buffering_minus1_0
+					- hevc->param.p.sps_num_reorder_pics_0;
+#ifdef MULTI_INSTANCE_SUPPORT
+	/*
+	need one more for multi instance, as
+	apply_ref_pic_set() has no chanch to run to
+	to clear referenced flag in some case
+	*/
+	if (hevc->m_ins_flag)
+		used_buf_num++;
+#endif
 
 	if (hevc->save_buffer_mode)
 		hevc_print(hevc, 0,
@@ -3574,8 +3571,8 @@ static int v4l_parser_work_pic_num(struct hevc_state_s *hevc)
 	/* for eos add more buffer to flush.*/
 	used_buf_num++;
 
-	if (used_buf_num > MAX_BUF_NUM)
-		used_buf_num = MAX_BUF_NUM;
+	if (used_buf_num > max_buf_num)
+		used_buf_num = max_buf_num;
 	return used_buf_num;
 }
 
@@ -10500,7 +10497,9 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 	ps->visible_height 	= height;
 	ps->coded_width 	= ALIGN(width, 64);
 	ps->coded_height 	= ALIGN(height, 64);
-	ps->dpb_size 		= v4l_parser_work_pic_num(hevc);
+	ps->field 		= hevc->interlace_flag ? V4L2_FIELD_INTERLACED : V4L2_FIELD_NONE;
+	ps->reorder_frames	= v4l_parser_work_pic_num(hevc);
+	ps->reorder_margin	= get_dynamic_buf_num_margin(hevc);
 
 	return 0;
 }
@@ -11343,6 +11342,12 @@ force_output:
 						reset_process_time(hevc);
 						vdec_schedule_work(&hevc->work);
 						return IRQ_HANDLED;
+					} else {
+						struct vdec_pic_info pic;
+
+						vdec_v4l_get_pic_info(ctx, &pic);
+						hevc->used_buf_num = pic.reorder_frames +
+							pic.reorder_margin;
 					}
 				}else {
 					pr_debug("resolution change\n");

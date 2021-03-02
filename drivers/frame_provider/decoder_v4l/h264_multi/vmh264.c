@@ -5392,6 +5392,18 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			hw->dpb.reorder_pic_num = active_buffer_spec_num
 				- used_reorder_dpb_size_margin;
 		}
+
+		if (hw->is_used_v4l) {
+			struct aml_vcodec_ctx *ctx =
+				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+			struct vdec_pic_info pic;
+
+			vdec_v4l_get_pic_info(ctx, &pic);
+
+			active_buffer_spec_num = pic.reorder_frames +
+				pic.reorder_margin;
+		}
+
 		hw->dpb.mDPB.size = active_buffer_spec_num;
 		if (hw->max_reference_size > MAX_VF_BUF_NUM)
 			hw->max_reference_size = MAX_VF_BUF_NUM;
@@ -9007,7 +9019,9 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	ps->coded_width		= ALIGN(mb_width << 4, 64);
 	ps->coded_height	= ALIGN(mb_height << 4, 64);
 	ps->reorder_frames	= reorder_pic_num;
+	ps->reorder_margin	= used_reorder_dpb_size_margin;
 	ps->dpb_size		= active_buffer_spec_num;
+	ps->field		= frame_mbs_only_flag ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 
 	return 0;
 }
@@ -9104,7 +9118,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						amhevc_stop();
 				} else {
 					if (vh264_set_params(hw, param1,
-					param2, param3, param4, false) < 0) {
+						param2, param3, param4, false) < 0) {
 						hw->init_flag = 0;
 						dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
 							hw->init_flag);

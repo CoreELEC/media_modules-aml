@@ -415,7 +415,7 @@ static int parse_stream_ucode(struct vdec_hevc_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->dec.dpb_sz ? 0 : -1;
+	return inst->vsi->pic.reorder_frames ? 0 : -1;
 }
 
 static int parse_stream_ucode_dma(struct vdec_hevc_inst *inst,
@@ -436,7 +436,7 @@ static int parse_stream_ucode_dma(struct vdec_hevc_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->dec.dpb_sz ? 0 : -1;
+	return inst->vsi->pic.reorder_frames ? 0 : -1;
 }
 
 static int parse_stream_cpu(struct vdec_hevc_inst *inst, u8 *buf, u32 size)
@@ -731,7 +731,10 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 				  ALIGN(vdec_pic_scale(inst, pic->coded_height, dw), 64);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
+	pic->reorder_frames	= ps->reorder_frames;
+	pic->reorder_margin	= ps->reorder_margin;
 	dec->dpb_sz		= ps->dpb_size;
+	pic->field		= ps->field;
 
 	inst->parms.ps		= *ps;
 	inst->parms.parms_status |=
@@ -741,10 +744,10 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, visible(%d x %d), coded(%d x %d) dpb: %d\n",
+		"Parse from ucode, visible(%d x %d), coded(%d x %d), scan:%s\n",
 		pic->visible_width, pic->visible_height,
 		pic->coded_width, pic->coded_height,
-		dec->dpb_sz);
+		pic->field == V4L2_FIELD_NONE ? "P" : "I");
 }
 
 static void set_param_comp_buf_info(struct vdec_hevc_inst *inst,
@@ -773,6 +776,12 @@ static void set_param_post_event(struct vdec_hevc_inst *inst, u32 *event)
 	aml_vdec_dispatch_event(inst->ctx, *event);
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
 		"H265 post event: %d\n", *event);
+}
+
+static void set_pic_info(struct vdec_hevc_inst *inst,
+	struct vdec_pic_info *pic)
+{
+	inst->vsi->pic = *pic;
 }
 
 static int vdec_hevc_set_param(unsigned long h_vdec,
@@ -807,6 +816,11 @@ static int vdec_hevc_set_param(unsigned long h_vdec,
 	case SET_PARAM_POST_EVENT:
 		set_param_post_event(inst, in);
 		break;
+
+	case SET_PARAM_PIC_INFO:
+		set_pic_info(inst, in);
+		break;
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid set parameter type=%d\n", type);

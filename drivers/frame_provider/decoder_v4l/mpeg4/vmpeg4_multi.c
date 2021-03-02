@@ -1051,6 +1051,8 @@ static int vmpeg4_get_ps_info(struct vdec_mpeg4_hw_s *hw, int width, int height,
 	ps->coded_width		= ALIGN(width, 64);
 	ps->coded_height 	= ALIGN(height, 64);
 	ps->dpb_size 		= hw->buf_num;
+	ps->reorder_frames	= DECODE_BUFFER_NUM_DEF;
+	ps->reorder_margin	= hw->dynamic_buf_num_margin;
 
 	return 0;
 }
@@ -1125,6 +1127,14 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 					hw->dec_result = DEC_RESULT_AGAIN;
 					vdec_schedule_work(&hw->work);
 				} else {
+					struct vdec_pic_info pic;
+
+					vdec_v4l_get_pic_info(ctx, &pic);
+					hw->buf_num = pic.reorder_frames +
+						pic.reorder_margin;
+					if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
+						hw->buf_num = DECODE_BUFFER_NUM_MAX;
+
 					WRITE_VREG(MP4_PIC_INFO, 0);
 				}
 			} else {
@@ -1579,7 +1589,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 		vf->type |= VIDTYPE_V4L_EOS;
 		vf->timestamp = ULONG_MAX;
-		vf->v4l_mem_handle = (index == -1) ? (ulong)fb :
+		vf->v4l_mem_handle = ((index == -1) || (index == 0xffffff)) ? (ulong)fb :
 							hw->pic[index].v4l_ref_buf_addr;;
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;

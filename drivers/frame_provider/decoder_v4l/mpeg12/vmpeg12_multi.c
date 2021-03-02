@@ -556,7 +556,6 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 	return 0;
 }
 
-
 static unsigned int vmpeg12_get_buf_num(struct vdec_mpeg12_hw_s *hw)
 {
 	unsigned int buf_num = DECODE_BUFFER_NUM_DEF;
@@ -1841,18 +1840,22 @@ static bool is_ref_error(struct vdec_mpeg12_hw_s *hw)
 	return 0;
 }
 
-static int vmpeg2_get_ps_info(struct vdec_mpeg12_hw_s *hw, int width, int height, struct aml_vdec_ps_infos *ps)
+static int vmpeg2_get_ps_info(struct vdec_mpeg12_hw_s *hw, int width, int height,
+	bool frame_prog, struct aml_vdec_ps_infos *ps)
 {
 	ps->visible_width	= width;
 	ps->visible_height	= height;
 	ps->coded_width		= ALIGN(width, 64);
 	ps->coded_height 	= ALIGN(height, 32);
 	ps->dpb_size 		= hw->buf_num;
+	ps->reorder_frames	= DECODE_BUFFER_NUM_DEF;
+	ps->reorder_margin	= hw->dynamic_buf_num_margin;
+	ps->field 		= frame_prog ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 
 	return 0;
 }
 
-static int v4l_res_change(struct vdec_mpeg12_hw_s *hw, int width, int height)
+static int v4l_res_change(struct vdec_mpeg12_hw_s *hw, int width, int height, bool frame_prog)
 {
 	struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -1871,7 +1874,7 @@ static int v4l_res_change(struct vdec_mpeg12_hw_s *hw, int width, int height)
 				hw->frame_width, hw->frame_height,
 				width,
 				height);
-			vmpeg2_get_ps_info(hw, width, height, &ps);
+			vmpeg2_get_ps_info(hw, width, height, frame_prog, &ps);
 			vdec_v4l_set_ps_infos(ctx, &ps);
 			vdec_v4l_res_ch_event(ctx);
 			hw->v4l_params_parsed = false;
@@ -1923,13 +1926,16 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 		if (hw->is_used_v4l) {
 			int frame_width = READ_VREG(MREG_PIC_WIDTH);
 			int frame_height = READ_VREG(MREG_PIC_HEIGHT);
-			if (!v4l_res_change(hw, frame_width, frame_height)) {
+			int info = READ_VREG(MREG_SEQ_INFO);
+			bool frame_prog = info & 0x10000;
+
+			if (!v4l_res_change(hw, frame_width, frame_height, frame_prog)) {
 				struct aml_vcodec_ctx *ctx =
 					(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 				if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 					struct aml_vdec_ps_infos ps;
 
-					vmpeg2_get_ps_info(hw, frame_width, frame_height, &ps);
+					vmpeg2_get_ps_info(hw, frame_width, frame_height, frame_prog, &ps);
 					hw->v4l_params_parsed = true;
 					vdec_v4l_set_ps_infos(ctx, &ps);
 					userdata_pushed_drop(hw);
@@ -1937,6 +1943,14 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 					hw->dec_result = DEC_RESULT_AGAIN;
 					vdec_schedule_work(&hw->work);
 				} else {
+					struct vdec_pic_info pic;
+
+					vdec_v4l_get_pic_info(ctx, &pic);
+					hw->buf_num = pic.reorder_frames +
+						pic.reorder_margin;
+					if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
+						hw->buf_num = DECODE_BUFFER_NUM_MAX;
+
 					WRITE_VREG(AV_SCRATCH_G, 0);
 				}
 			} else {

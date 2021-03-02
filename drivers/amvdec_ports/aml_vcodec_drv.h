@@ -248,6 +248,10 @@ struct aml_enc_params {
  *		plane
  * E.g. suppose picture size is 176x144,
  *      buffer size will be aligned to 176x160.
+ * @profile_idc: source profile level
+ * @field: frame/field information.
+ * @reorder_frames: used for DPB size of calculation.
+ * @reorder_margin: extra buffers for pipeline.
  */
 struct vdec_pic_info {
 	u32 visible_width;
@@ -259,7 +263,9 @@ struct vdec_pic_info {
 	u32 y_len_sz;
 	u32 c_len_sz;
 	int profile_idc;
-	int ref_frame_count;
+	enum v4l2_field field;
+	u32 reorder_frames;
+	u32 reorder_margin;
 };
 
 /**
@@ -318,6 +324,8 @@ struct aml_vdec_ps_infos {
 	u32 dpb_size;
 	u32 ref_frames;
 	u32 reorder_frames;
+	u32 reorder_margin;
+	u32 field;
 };
 
 struct aml_vdec_cnt_infos {

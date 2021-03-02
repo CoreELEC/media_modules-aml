@@ -8016,6 +8016,8 @@ static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 	ps->coded_width 	= ALIGN(hw->frame_width, 64);
 	ps->coded_height 	= ALIGN(hw->frame_height, 64);
 	ps->dpb_size 		= hw->used_buf_num;
+	ps->reorder_margin	= hw->dynamic_buf_num_margin;
+	ps->reorder_frames	= 5;
 
 	return 0;
 }
@@ -8443,6 +8445,12 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				hw->process_busy = 0;
 				dec_again_process(hw);
 				return IRQ_HANDLED;
+			} else {
+				struct vdec_pic_info pic;
+
+				vdec_v4l_get_pic_info(ctx, &pic);
+				hw->used_buf_num = pic.reorder_frames +
+					pic.reorder_margin;
 			}
 		} else {
 			hw->postproc_done = 0;

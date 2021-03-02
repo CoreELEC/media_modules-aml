@@ -99,7 +99,8 @@ enum vdec_set_param_type {
 	SET_PARAM_PS_INFO,
 	SET_PARAM_COMP_BUF_INFO,
 	SET_PARAM_HDR_INFO,
-	SET_PARAM_POST_EVENT
+	SET_PARAM_POST_EVENT,
+	SET_PARAM_PIC_INFO
 };
 
 /**
@@ -151,7 +152,10 @@ int vdec_if_decode(struct aml_vcodec_ctx *ctx,
  * @type	: [in] input parameter type
  * @out	: [out] buffer to store query result
  */
-int vdec_if_get_param(struct aml_vcodec_ctx *ctx, enum vdec_get_param_type type,
-		      void *out);
+int vdec_if_get_param(struct aml_vcodec_ctx *ctx,
+	enum vdec_get_param_type type, void *out);
+
+int vdec_if_set_param(struct aml_vcodec_ctx *ctx,
+	enum vdec_set_param_type type, void *in);
 
 #endif

@@ -504,6 +504,12 @@ static void set_param_write_sync(struct vdec_mpeg12_inst *inst)
 	complete(&inst->comp);
 }
 
+static void set_pic_info(struct vdec_mpeg12_inst *inst,
+	struct vdec_pic_info *pic)
+{
+	inst->vsi->pic = *pic;
+}
+
 static void set_param_ps_info(struct vdec_mpeg12_inst *inst,
 	struct aml_vdec_ps_infos *ps)
 {
@@ -527,7 +533,10 @@ static void set_param_ps_info(struct vdec_mpeg12_inst *inst,
 	pic->y_len_sz		= pic->coded_width * pic->coded_height;
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
+	pic->reorder_frames	= ps->reorder_frames;
+	pic->reorder_margin	= ps->reorder_margin;
 	dec->dpb_sz		= ps->dpb_size;
+	pic->field		= ps->field;
 
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=
@@ -537,10 +546,10 @@ static void set_param_ps_info(struct vdec_mpeg12_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, visible(%d x %d), coded(%d x %d) dpb: %d\n",
+		"Parse from ucode, visible(%d x %d), coded(%d x %d), scan:%s\n",
 		ps->visible_width, ps->visible_height,
 		ps->coded_width, ps->coded_height,
-		dec->dpb_sz);
+		pic->field == V4L2_FIELD_NONE ? "P" : "I");
 }
 
 static int vdec_mpeg12_set_param(unsigned long h_vdec,
@@ -559,8 +568,13 @@ static int vdec_mpeg12_set_param(unsigned long h_vdec,
 	case SET_PARAM_WRITE_FRAME_SYNC:
 		set_param_write_sync(inst);
 		break;
+
 	case SET_PARAM_PS_INFO:
 		set_param_ps_info(inst, in);
+		break;
+
+	case SET_PARAM_PIC_INFO:
+		set_pic_info(inst, in);
 		break;
 
 	default:

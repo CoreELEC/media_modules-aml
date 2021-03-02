@@ -8643,6 +8643,8 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 	ps->coded_width 	= ALIGN(pbi->frame_width, 64);
 	ps->coded_height 	= ALIGN(pbi->frame_height, 64);
 	ps->dpb_size 		= pbi->used_buf_num;
+	ps->reorder_margin	= pbi->dynamic_buf_num_margin;
+	ps->reorder_frames	= 5;
 
 	return 0;
 }
@@ -8967,6 +8969,12 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				pbi->process_busy = 0;
 				dec_again_process(pbi);
 				return IRQ_HANDLED;
+			} else {
+				struct vdec_pic_info pic;
+
+				vdec_v4l_get_pic_info(ctx, &pic);
+				pbi->used_buf_num = pic.reorder_frames +
+					pic.reorder_margin;
 			}
 		} else {
 			pbi->postproc_done = 0;
