@@ -244,11 +244,6 @@ static int aml_ci_bus_io(struct aml_ci_bus *ci_bus_dev,
 	int enable = 0;
 
 	int count = 0;
-	while (1) {
-		count++;
-		if (count < aml_ci_bus_time)
-			break;
-	}
 	//only used hi addr. we to change tsout to addr
 	if (addr >= 4) {
 		enable = 1;
@@ -262,6 +257,11 @@ static int aml_ci_bus_io(struct aml_ci_bus *ci_bus_dev,
 	fetch_done = 0;
 	//gpio select gpio func
 	aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR, enable);
+	while (1) {
+		count++;
+		if (count < aml_ci_bus_time)
+			break;
+	}
 	//enable delay reg,defalue is disable
 	if (aml_ci_bus_set_delay)
 		aml_ci_bus_set_delay_time(mode);
@@ -678,8 +678,13 @@ static int aml_gio_reset(struct aml_pcmcia *pc, int enable)
 		pr_dbg("rst by ci bus- ci bus dev-null-\r\n");
 		return -1;
 	}
+	if (enable == AML_H)
+		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR, 1);
+
 	aml_ci_bus_rst((struct aml_ci *)ci_bus_dev->priv, 0, enable);
 
+	if (enable == AML_L)
+		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS, 1);
 	return ret;
 }
 
