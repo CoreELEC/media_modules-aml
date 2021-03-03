@@ -121,7 +121,6 @@ to enable DV of frame mode
 #define MULTI_DRIVER_NAME "ammvdec_h265_v4l"
 #endif
 #define DRIVER_NAME "amvdec_h265_v4l"
-#define MODULE_NAME "amvdec_h265_v4l"
 #define DRIVER_HEADER_NAME "amvdec_h265_header"
 
 #define PUT_INTERVAL        (HZ/100)
@@ -1863,6 +1862,15 @@ struct hevc_state_s {
 	u32 dirty_shift_flag;
 	u32 endian;
 	ulong fb_token;
+	char vdec_name[32];
+	char set_canvas0_addr[32];
+	char get_canvas0_addr[32];
+	char put_canvas0_addr[32];
+	char vf_put_name[32];
+	char vf_get_name[32];
+	char new_q_name[32];
+	char disp_q_name[32];
+	char pts_name[32];
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -8206,11 +8214,11 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 				blkmode;
 		pic->canvas_config[1].endian = hevc->is_used_v4l ? 0 : 7;
 
-		ATRACE_COUNTER("set canvas0 addr", pic->canvas_config[0].phy_addr);
+		ATRACE_COUNTER(hevc->set_canvas0_addr, pic->canvas_config[0].phy_addr);
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
 			__func__, pic->canvas_config[0].phy_addr);
 #else
-		ATRACE_COUNTER("set canvas0 addr", spec2canvas(pic));
+		ATRACE_COUNTER(hevc->set_canvas0_addr, spec2canvas(pic));
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
 			__func__, spec2canvas(pic));
 #endif
@@ -8233,7 +8241,7 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 				canvas_w, canvas_h,
 				CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7, VDEC_HEVC);
 		}
-		ATRACE_COUNTER("set canvas0 addr", spec2canvas(pic));
+		ATRACE_COUNTER(hevc->set_canvas0_addr, spec2canvas(pic));
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
 			__func__, spec2canvas(pic));
 	}
@@ -8255,7 +8263,7 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 		canvas_w, canvas_h,
 		CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7, VDEC_HEVC);
 
-	ATRACE_COUNTER("set canvas0 addr", spec2canvas(pic));
+	ATRACE_COUNTER(hevc->set_canvas0_addr, spec2canvas(pic));
 	hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
 		__func__, spec2canvas(pic));
 #endif
@@ -8788,11 +8796,12 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 	if (kfifo_get(&hevc->display_q, &vf)) {
 		struct vframe_s *next_vf;
 
-		ATRACE_COUNTER(__func__, (long)vf);
+		ATRACE_COUNTER(hevc->vf_get_name, (long)vf);
+		ATRACE_COUNTER(hevc->disp_q_name, kfifo_len(&hevc->display_q));
 #ifdef MULTI_INSTANCE_SUPPORT
-		ATRACE_COUNTER("get canvas0 addr", vf->canvas0_config[0].phy_addr);
+		ATRACE_COUNTER(hevc->set_canvas0_addr, vf->canvas0_config[0].phy_addr);
 #else
-		ATRACE_COUNTER("get canvas0 addr", vf->canvas0Addr);
+		ATRACE_COUNTER(hevc->get_canvas0_addr, vf->canvas0Addr);
 #endif
 
 		if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT) {
@@ -8873,11 +8882,11 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	if (vf && (vf_valid_check(vf, hevc) == false))
 		return;
 
-	ATRACE_COUNTER(__func__, (long)vf);
+	ATRACE_COUNTER(hevc->vf_put_name, (long)vf);
 #ifdef MULTI_INSTANCE_SUPPORT
-	ATRACE_COUNTER("put canvas0 addr", vf->canvas0_config[0].phy_addr);
+	ATRACE_COUNTER(hevc->put_canvas0_addr, vf->canvas0_config[0].phy_addr);
 #else
-	ATRACE_COUNTER("put canvas0 addr", vf->canvas0Addr);
+	ATRACE_COUNTER(hevc->put_canvas0_addr, vf->canvas0Addr);
 #endif
 	index_top = vf->index & 0xff;
 	index_bot = (vf->index >> 8) & 0xff;
@@ -8893,7 +8902,7 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 			);
 	atomic_add(1, &hevc->vf_put_count);
 	kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
-
+	ATRACE_COUNTER(hevc->new_q_name, kfifo_len(&hevc->newframe_q));
 	if (hevc->enable_fence && vf->fence) {
 		vdec_fence_put(vf->fence);
 		vf->fence = NULL;
@@ -9108,7 +9117,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				0x1);
 		spin_unlock_irqrestore(&lock, flags);
 
-		ATRACE_COUNTER(MODULE_NAME, vf->pts);
+		ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
 	}
 
 	if (kfifo_peek(&hevc->pending_q, &vf)) {
@@ -9139,7 +9148,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
-				ATRACE_COUNTER(MODULE_NAME, vf->pts);
+				ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
 			}
 		} else if ((!pair_frame_top_flag) &&
 			(((vf->index >> 8) & 0xff) == 0xff)) {
@@ -9163,7 +9172,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
-				ATRACE_COUNTER(MODULE_NAME, vf->pts);
+				ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
 				hevc->vf_pre_count++;
 				if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 					hevc_print(hevc, 0,
@@ -9192,7 +9201,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
-				ATRACE_COUNTER(MODULE_NAME, vf->pts);
+				ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
 				hevc->vf_pre_count++;
 				if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 					hevc_print(hevc, 0,
@@ -9318,7 +9327,7 @@ static void put_vf_to_display_q(struct hevc_state_s *hevc, struct vframe_s *vf)
 	decoder_do_frame_check(hw_to_vdec(hevc), vf);
 	vdec_vframe_ready(hw_to_vdec(hevc), vf);
 	kfifo_put(&hevc->display_q, (const struct vframe_s *)vf);
-	ATRACE_COUNTER(MODULE_NAME, vf->pts);
+	ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
 }
 
 static int post_prepare_process(struct vdec_s *vdec, struct PIC_s *frame)
@@ -9715,7 +9724,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vdec_vframe_ready(hw_to_vdec(hevc), vf2);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf2);
-				ATRACE_COUNTER(MODULE_NAME, vf2->pts);
+				ATRACE_COUNTER(hevc->pts_name, vf2->timestamp);
 			} else {
 				vh265_vf_put(vf, vdec);
 				vh265_vf_put(vf2, vdec);
@@ -9769,12 +9778,12 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vdec_vframe_ready(hw_to_vdec(hevc), vf2);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf2);
-				ATRACE_COUNTER(MODULE_NAME, vf2->pts);
+				ATRACE_COUNTER(hevc->pts_name, vf2->timestamp);
 				hevc->vf_pre_count++;
 				vdec_vframe_ready(hw_to_vdec(hevc), vf3);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf3);
-				ATRACE_COUNTER(MODULE_NAME, vf3->pts);
+				ATRACE_COUNTER(hevc->pts_name, vf3->timestamp);
 			} else {
 				vh265_vf_put(vf, vdec);
 				vh265_vf_put(vf2, vdec);
@@ -9916,6 +9925,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		pic->vf_ref = 1;
 		put_vf_to_display_q(hevc, vf);
 #endif
+		ATRACE_COUNTER(hevc->new_q_name, kfifo_len(&hevc->newframe_q));
+		ATRACE_COUNTER(hevc->disp_q_name, kfifo_len(&hevc->display_q));
 		/*count info*/
 		vdec_count_info(hevc->gvs, 0, stream_offset);
 		if (hevc->cur_pic->slice_type == I_SLICE) {
@@ -14230,6 +14241,25 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 
 	hevc->index = pdev->id;
 	hevc->m_ins_flag = 1;
+
+	snprintf(hevc->vdec_name, sizeof(hevc->vdec_name),
+		"h265-%d", hevc->index);
+	snprintf(hevc->pts_name, sizeof(hevc->pts_name),
+		"%s-timestamp", hevc->vdec_name);
+	snprintf(hevc->vf_get_name, sizeof(hevc->vf_get_name),
+		"%s-vf_get", hevc->vdec_name);
+	snprintf(hevc->vf_put_name, sizeof(hevc->vf_put_name),
+		"%s-vf_put", hevc->vdec_name);
+	snprintf(hevc->set_canvas0_addr, sizeof(hevc->set_canvas0_addr),
+		"%s-set_canvas0_addr", hevc->vdec_name);
+	snprintf(hevc->get_canvas0_addr, sizeof(hevc->get_canvas0_addr),
+		"%s-get_canvas0_addr", hevc->vdec_name);
+	snprintf(hevc->put_canvas0_addr, sizeof(hevc->put_canvas0_addr),
+		"%s-put_canvas0_addr", hevc->vdec_name);
+	snprintf(hevc->new_q_name, sizeof(hevc->new_q_name),
+		"%s-newframe_q", hevc->vdec_name);
+	snprintf(hevc->disp_q_name, sizeof(hevc->disp_q_name),
+		"%s-dispframe_q", hevc->vdec_name);
 
 	if (pdata->use_vfm_path) {
 		snprintf(pdata->vf_provider_name,

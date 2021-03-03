@@ -3309,14 +3309,13 @@ int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-		ATRACE_COUNTER(MODULE_NAME, vf->pts);
+		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (hw->is_used_v4l)
 			fb->fill_buf_done(ctx, fb);
 		else
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
-		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		pr_info("[%d] H264 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}

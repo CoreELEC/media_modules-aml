@@ -882,7 +882,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vdec_vframe_ready(vdec, vf);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
-			vdec->vdec_fps_detec(vdec->id);
+			ATRACE_COUNTER(hw->pts_name, vf->pts);
 			vdec->vdec_fps_detec(vdec->id);
 			hw->frame_num++;
 			if (pic->pic_type == I_PICTURE) {

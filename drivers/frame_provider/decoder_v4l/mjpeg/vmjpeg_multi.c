@@ -52,7 +52,6 @@
 #define MEM_NAME "codec_mmjpeg"
 
 #define DRIVER_NAME "ammvdec_mjpeg_v4l"
-#define MODULE_NAME "ammvdec_mjpeg_v4l"
 #define CHECK_INTERVAL        (HZ/100)
 
 /* protocol register usage
@@ -238,6 +237,10 @@ struct vdec_mjpeg_hw_s {
 	u32 canvas_mode;
 	u32 canvas_endian;
 	ulong fb_token;
+	char vdec_name[32];
+	char pts_name[32];
+	char new_q_name[32];
+	char disp_q_name[32];
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
@@ -454,7 +457,9 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	decoder_do_frame_check(vdec, vf);
 	vdec_vframe_ready(vdec, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-	ATRACE_COUNTER(MODULE_NAME, vf->pts);
+	ATRACE_COUNTER(hw->pts_name, vf->timestamp);
+	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+	ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 	hw->frame_num++;
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,
 		"%s:frame num:%d,pts=%d,pts64=%lld. dur=%d\n",
@@ -522,9 +527,10 @@ static struct vframe_s *vmjpeg_vf_get(void *op_arg)
 	if (!hw)
 		return NULL;
 	hw->get_num++;
-	if (kfifo_get(&hw->display_q, &vf))
+	if (kfifo_get(&hw->display_q, &vf)) {
+		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		return vf;
-
+	}
 	return NULL;
 }
 
@@ -555,6 +561,7 @@ static void vmjpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
+	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 	hw->put_num++;
 }
 
@@ -1733,6 +1740,15 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 	pdata->irq_handler = vmjpeg_isr;
 	pdata->threaded_irq_handler = vmjpeg_isr_thread_fn;
 	pdata->dump_state = vmjpeg_dump_state;
+
+	snprintf(hw->vdec_name, sizeof(hw->vdec_name),
+		"vmjpeg-%d", pdev->id);
+	snprintf(hw->pts_name, sizeof(hw->pts_name),
+		"%s-timestamp", hw->vdec_name);
+	snprintf(hw->new_q_name, sizeof(hw->new_q_name),
+		"%s-newframe_q", hw->vdec_name);
+	snprintf(hw->disp_q_name, sizeof(hw->disp_q_name),
+		"%s-dispframe_q", hw->vdec_name);
 
 	if (pdata->parallel_dec == 1) {
 		int i;
