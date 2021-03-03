@@ -65,8 +65,8 @@ define media-modules
 	PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH \
 		$(MAKE) -C $(KDIR) M=$(MEDIA_MODULES) ARCH=$(KERNEL_ARCH) \
 		CROSS_COMPILE=$(PREFIX_CROSS_COMPILE) $(CONFIGS) \
-		EXTRA_CFLAGS+=-I$(INCLUDE) modules; \
-		find $(MEDIA_MODULES) -name "*.ko" | PATH=$$(cd ./$(TARGET_HOST_TOOL_PATH); pwd):$$PATH xargs -i cp {} $(MODS_OUT)
+		EXTRA_CFLAGS+=-I$(INCLUDE) modules;
+		sh $(TOP)/device/amlogic/common/copy_modules.sh $(MEDIA_MODULES) $(MODS_OUT)
 endef
 
 else
