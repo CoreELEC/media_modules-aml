@@ -271,6 +271,8 @@ static u32 again_threshold;
 static u32 double_write_mode;
 static u32 without_display_mode;
 
+static u32 mv_buf_dynamic_alloc;
+
 #define DRIVER_NAME "amvdec_avs2"
 #define DRIVER_HEADER_NAME "amvdec_avs2_header"
 
@@ -466,6 +468,7 @@ bool is_avs2_print_bufmgr_detail(void)
 }
 static bool is_reset;
 /*for debug*/
+static u32 force_bufspec;
 /*
 	udebug_flag:
 	bit 0, enable ucode print
@@ -507,10 +510,13 @@ static void WRITE_VREG_DBG2(unsigned adr, unsigned val)
 #endif
 
 
-#ifdef AVS2_10B_MMU
-#define MMU_COMPRESS_HEADER_SIZE  0x48000
-#define MMU_COMPRESS_8K_HEADER_SIZE  0x48000*4
-#endif
+//#ifdef AVS2_10B_MMU
+//#define MMU_COMPRESS_HEADER_SIZE  0x48000
+//#define MMU_COMPRESS_8K_HEADER_SIZE  0x48000*4
+//#endif
+#define MMU_COMPRESS_HEADER_SIZE_1080P  0x10000
+#define MMU_COMPRESS_HEADER_SIZE_4K  0x48000
+#define MMU_COMPRESS_HEADER_SIZE_8K  0x120000
 
 #define INVALID_IDX -1  /* Invalid buffer index.*/
 
@@ -522,6 +528,7 @@ static void WRITE_VREG_DBG2(unsigned adr, unsigned val)
 #define FRAME_CONTEXTS_LOG2 2
 #define FRAME_CONTEXTS (1 << FRAME_CONTEXTS_LOG2)
 /*buffer + header buffer + workspace*/
+#undef MV_USE_FIXED_BUF
 #ifdef MV_USE_FIXED_BUF
 #define MAX_BMMU_BUFFER_NUM ((FRAME_BUFFERS + HEADER_FRAME_BUFFERS + 1)+1)
 #define VF_BUFFER_IDX(n) (n)
@@ -534,6 +541,10 @@ static void WRITE_VREG_DBG2(unsigned adr, unsigned val)
 #define MV_BUFFER_IDX(n) ((FRAME_BUFFERS * 2) + n+1)
 #define WORK_SPACE_BUF_ID ((FRAME_BUFFERS * 2) + HEADER_FRAME_BUFFERS+1)
 #endif
+
+#define CO_MV_BUF_SIZE_1080P  0x3fc00
+#define CO_MV_BUF_SIZE_4K     0x120000
+#define CO_MV_BUF_SIZE_8K     0x480000
 /*
 static void set_canvas(struct AVS2Decoder_s *dec,
 	struct avs2_frame_s *pic);
@@ -818,6 +829,7 @@ static int avs2_print_cont(struct AVS2Decoder_s *dec,
 #define MAX_FRAME_8K_NUM 0x4800
 #define MAX_SIZE_4K (4096 * 2304)
 #define IS_8K_SIZE(w, h)	(((w) * (h)) > MAX_SIZE_4K)
+#define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
 
 static int get_frame_mmu_map_size(struct AVS2Decoder_s *dec)
 {
@@ -831,8 +843,10 @@ static int get_compress_header_size(struct AVS2Decoder_s *dec)
 {
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 		(IS_8K_SIZE(dec->init_pic_w, dec->init_pic_h)))
-		return MMU_COMPRESS_8K_HEADER_SIZE;
-	return MMU_COMPRESS_HEADER_SIZE;
+		return MMU_COMPRESS_HEADER_SIZE_8K;
+	else if (IS_4K_SIZE(dec->init_pic_w, dec->init_pic_h))
+		return MMU_COMPRESS_HEADER_SIZE_4K;
+	return MMU_COMPRESS_HEADER_SIZE_1080P;
 }
 
 static void reset_process_time(struct AVS2Decoder_s *dec)
@@ -954,7 +968,7 @@ int avs2_alloc_mmu(
 		if (decoder_bmmu_box_alloc_buf_phy
 				(dec->bmmu_box,
 				HEADER_BUFFER_IDX(cur_buf_idx),
-				MMU_COMPRESS_HEADER_SIZE,
+				get_compress_header_size(dec),
 				DRIVER_HEADER_NAME,
 				&buf_addr) < 0){
 			avs2_print(dec, 0,
@@ -1386,7 +1400,7 @@ static DEFINE_MUTEX(vavs2_mutex);
 #define HEVC_RCS_BUFFER           HEVC_ASSIST_SCRATCH_3
 #define HEVC_SPS_BUFFER           HEVC_ASSIST_SCRATCH_4
 #define HEVC_PPS_BUFFER           HEVC_ASSIST_SCRATCH_5
-#define HEVC_SAO_UP               HEVC_ASSIST_SCRATCH_6
+//#define HEVC_SAO_UP               HEVC_ASSIST_SCRATCH_6
 #ifdef AVS2_10B_MMU
 #define AVS2_MMU_MAP_BUFFER       HEVC_ASSIST_SCRATCH_7
 #else
@@ -1398,7 +1412,7 @@ static DEFINE_MUTEX(vavs2_mutex);
 #define VP9_COUNT_SWAP_BUFFER     HEVC_ASSIST_SCRATCH_A
 #define VP9_SEG_MAP_BUFFER        HEVC_ASSIST_SCRATCH_B
 */
-#define HEVC_SCALELUT             HEVC_ASSIST_SCRATCH_D
+//#define HEVC_SCALELUT             HEVC_ASSIST_SCRATCH_D
 #define HEVC_WAIT_FLAG            HEVC_ASSIST_SCRATCH_E
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
 #define LMEM_DUMP_ADR             HEVC_ASSIST_SCRATCH_9
@@ -1444,6 +1458,18 @@ bit [31:20]: used by ucode for debug purpose
 #define RPM_BUF_SIZE (0x600 * 2)
 #define LMEM_BUF_SIZE (0x600 * 2)
 
+	/*mmu_vbh buf is used by HEVC_SAO_MMU_VH0_ADDR, HEVC_SAO_MMU_VH1_ADDR*/
+#define VBH_BUF_SIZE_1080P 0x3000
+#define VBH_BUF_SIZE_4K 0x5000
+#define VBH_BUF_SIZE_8K 0xa000
+#define VBH_BUF_SIZE(bufspec) (bufspec->mmu_vbh.buf_size / 2)
+	/*mmu_vbh_dw buf is used by HEVC_SAO_MMU_VH0_ADDR2,HEVC_SAO_MMU_VH1_ADDR2,
+		HEVC_DW_VH0_ADDDR, HEVC_DW_VH1_ADDDR*/
+#define DW_VBH_BUF_SIZE_1080P (VBH_BUF_SIZE_1080P * 2)
+#define DW_VBH_BUF_SIZE_4K (VBH_BUF_SIZE_4K * 2)
+#define DW_VBH_BUF_SIZE_8K (VBH_BUF_SIZE_8K * 2)
+#define DW_VBH_BUF_SIZE(bufspec) (bufspec->mmu_vbh_dw.buf_size / 4)
+
 #define WORK_BUF_SPEC_NUM 3
 static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 	{
@@ -1453,13 +1479,13 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.ipp = {
 			/* IPP work space calculation :
 			   4096 * (Y+CbCr+Flags) = 12k, round to 16k */
-			.buf_size = 0x4000,
+			.buf_size = 0x1e00,
 		},
 		.sao_abv = {
-			.buf_size = 0x30000,
+			.buf_size = 0,
 		},
 		.sao_vb = {
-			.buf_size = 0x30000,
+			.buf_size = 0,
 		},
 		.short_term_rps = {
 			/* SHORT_TERM_RPS - Max 64 set, 16 entry every set,
@@ -1484,7 +1510,7 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.sao_up = {
 			/* SAO UP STORE AREA - Max 640(10240/16) LCU,
 			   each has 16 bytes total 0x2800 bytes */
-			.buf_size = 0x2800,
+			.buf_size = 0,
 		},
 		.swap_buf = {
 			/* 256cyclex64bit = 2K bytes 0x800
@@ -1497,23 +1523,23 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.scalelut = {
 			/* support up to 32 SCALELUT 1024x32 =
 			   32Kbytes (0x8000) */
-			.buf_size = 0x8000,
+			.buf_size = 0,
 		},
 		.dblk_para = {
 			/* DBLK -> Max 256(4096/16) LCU,
 			each para 1024bytes(total:0x40000),
 			data 1024bytes(total:0x40000)*/
-			.buf_size = 0x40000,
+			.buf_size = 0x3d00, //0x3c80,
 		},
 		.dblk_data = {
-			.buf_size = 0x40000,
+			.buf_size = 0x62800,
 		},
 		.dblk_data2 = {
-			.buf_size = 0x40000,
+			.buf_size = 0x62800,
 		},
 #ifdef AVS2_10B_MMU
 		.mmu_vbh = {
-			.buf_size = 0x5000, /*2*16*(more than 2304)/4, 4K*/
+			.buf_size = VBH_BUF_SIZE_1080P, /*2*16*(more than 2304)/4, 4K*/
 		},
 #if 0
 		.cm_header = {
@@ -1525,11 +1551,11 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 #endif
 #endif
 		.mpred_above = {
-			.buf_size = 0x8000, /* 2 * size of hevc*/
+			.buf_size = 0x1e00, /* 2 * size of hevc*/
 		},
 #ifdef MV_USE_FIXED_BUF
 		.mpred_mv = {/* 1080p, 0x40000 per buffer */
-			.buf_size = 0x40000 * FRAME_BUFFERS,
+			.buf_size = CO_MV_BUF_SIZE_1080P * FRAME_BUFFERS,
 		},
 #endif
 		.rpm = {
@@ -1548,10 +1574,10 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			.buf_size = 0x4000,
 		},
 		.sao_abv = {
-			.buf_size = 0x30000,
+			.buf_size = 0,
 		},
 		.sao_vb = {
-			.buf_size = 0x30000,
+			.buf_size = 0,
 		},
 		.short_term_rps = {
 			/* SHORT_TERM_RPS - Max 64 set, 16 entry every set,
@@ -1576,7 +1602,7 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.sao_up = {
 			/* SAO UP STORE AREA - Max 640(10240/16) LCU,
 			   each has 16 bytes total 0x2800 bytes */
-			.buf_size = 0x2800,
+			.buf_size = 0,
 		},
 		.swap_buf = {
 			/* 256cyclex64bit = 2K bytes 0x800
@@ -1589,26 +1615,26 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.scalelut = {
 			/* support up to 32 SCALELUT 1024x32 = 32Kbytes
 			   (0x8000) */
-			.buf_size = 0x8000,
+			.buf_size = 0,
 		},
 		.dblk_para = {
 			/* DBLK -> Max 256(4096/16) LCU,
 			each para 1024bytes(total:0x40000),
 			data 1024bytes(total:0x40000)*/
-			.buf_size = 0x80000,
+			.buf_size = 0x8100, //0x8080,
 		},
 		.dblk_data = {
 			/*DBLK -> Max 256(4096/16) LCU,
 			each para 1024bytes(total:0x40000),
 			data 1024bytes(total:0x40000)*/
-			.buf_size = 0x80000,
+			.buf_size = 0x88800,
 		},
 		.dblk_data2 = {
-			.buf_size = 0x80000,
+			.buf_size = 0x88800,
 		},
 #ifdef AVS2_10B_MMU
 		.mmu_vbh = {
-			.buf_size = 0x5000,/*2*16*(more than 2304)/4, 4K*/
+			.buf_size = VBH_BUF_SIZE_4K,/*2*16*(more than 2304)/4, 4K*/
 		},
 #if 0
 		.cm_header = {
@@ -1620,14 +1646,14 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 #endif
 #endif
 		.mpred_above = {
-			.buf_size = 0x10000, /* 2 * size of hevc*/
+			.buf_size = 0x4000, /* 2 * size of hevc*/
 		},
 #ifdef MV_USE_FIXED_BUF
 		.mpred_mv = {
 			/* .buf_size = 0x100000*16,
 			//4k2k , 0x100000 per buffer */
 			/* 4096x2304 , 0x120000 per buffer */
-			.buf_size = 0x120000 * FRAME_BUFFERS,
+			.buf_size = CO_MV_BUF_SIZE_4K * FRAME_BUFFERS,
 		},
 #endif
 		.rpm = {
@@ -1646,10 +1672,10 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			.buf_size = 0x4000 * 2,
 		},
 		.sao_abv = {
-			.buf_size = 0x30000 * 2,
+			.buf_size = 0,
 		},
 		.sao_vb = {
-			.buf_size = 0x30000 * 2,
+			.buf_size = 0,
 		},
 		.short_term_rps = {
 		/*SHORT_TERM_RPS - Max 64 set, 16 entry every set,
@@ -1674,7 +1700,7 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.sao_up = {
 		/*SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes i
 				total 0x2800 bytes*/
-			.buf_size = 0x2800 * 2,
+			.buf_size = 0,
 		},
 		.swap_buf = {
 		/*256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)*/
@@ -1685,20 +1711,20 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 		.scalelut = {
 		/*support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)*/
-			.buf_size = 0x8000 * 2,
+			.buf_size = 0,
 		},
 		.dblk_para  = {
-			.buf_size = 0x40000 * 2,
+			.buf_size = 0x10100, //0x10080,
 		},
 		.dblk_data  = {
-			.buf_size = 0x80000 * 2,
+			.buf_size = 0x110800,
 		},
 		.dblk_data2 = {
-			.buf_size = 0x80000 * 2,
+			.buf_size = 0x110800,
 		},
 #ifdef AVS2_10B_MMU
 		.mmu_vbh = {
-		  .buf_size = 0x5000 * 2, /*2*16*2304/4, 4K*/
+		  .buf_size = VBH_BUF_SIZE_8K, /*2*16*2304/4, 4K*/
 		},
 #if 0
 		.cm_header = {
@@ -1708,12 +1734,12 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 #endif
 #endif
 		.mpred_above = {
-			.buf_size = 0x8000 * 2,
+			.buf_size = 0x8000,
 		},
 #ifdef MV_USE_FIXED_BUF
 		.mpred_mv = {
 			/*4k2k , 0x100000 per buffer*/
-			.buf_size = 0x120000 * FRAME_BUFFERS * 4,
+			.buf_size = CO_MV_BUF_SIZE_8K * FRAME_BUFFERS,
 		},
 #endif
 		.rpm = {
@@ -1725,6 +1751,36 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 	}
 };
 
+#define IS_8K_SIZE(w, h)  (((w) * (h)) > MAX_SIZE_4K)
+#define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
+#ifndef MV_USE_FIXED_BUF
+static uint32_t get_mv_buf_size(struct AVS2Decoder_s *dec, int width, int height) {
+	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
+	uint32_t size;
+	if (mv_buf_dynamic_alloc == 1) {
+		int mv_mem_unit =
+			avs2_dec->lcu_size_log2 == 6 ? 0x200 : avs2_dec->lcu_size_log2 ==
+			5 ? 0x80 : 0x20;
+		int extended_pic_width = (width + avs2_dec->lcu_size -1)
+				& (~(avs2_dec->lcu_size - 1));
+		int extended_pic_height = (height + avs2_dec->lcu_size -1)
+				& (~(avs2_dec->lcu_size - 1));
+		int lcu_x_num = extended_pic_width / avs2_dec->lcu_size;
+		int lcu_y_num = extended_pic_height / avs2_dec->lcu_size;
+		int new_size =  lcu_x_num * lcu_y_num * mv_mem_unit;
+		size = (new_size + 0xffff) & (~0xffff);
+
+	} else {
+		if (IS_8K_SIZE(width, height))
+			size = CO_MV_BUF_SIZE_8K;
+		else if (IS_4K_SIZE(width, height))
+			size = CO_MV_BUF_SIZE_4K;
+		else
+			size = CO_MV_BUF_SIZE_1080P;
+	}
+	return size;
+}
+#endif
 
 /*Losless compression body buffer size 4K per 64x32 (jt)*/
 static int  compute_losless_comp_body_size(struct AVS2Decoder_s *dec,
@@ -3502,14 +3558,23 @@ static void avs2_config_work_space_hw(struct AVS2Decoder_s *dec)
 	WRITE_VREG(HEVC_RCS_BUFFER, buf_spec->rcs.buf_start);
 	WRITE_VREG(HEVC_SPS_BUFFER, buf_spec->sps.buf_start);
 	WRITE_VREG(HEVC_PPS_BUFFER, buf_spec->pps.buf_start);
-	WRITE_VREG(HEVC_SAO_UP, buf_spec->sao_up.buf_start);
+	//WRITE_VREG(HEVC_SAO_UP, buf_spec->sao_up.buf_start);
 #ifdef AVS2_10B_MMU
 	WRITE_VREG(AVS2_MMU_MAP_BUFFER, dec->frame_mmu_map_phy_addr);
 #else
 	WRITE_VREG(HEVC_STREAM_SWAP_BUFFER, buf_spec->swap_buf.buf_start);
 #endif
 	WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, buf_spec->swap_buf2.buf_start);
-	WRITE_VREG(HEVC_SCALELUT, buf_spec->scalelut.buf_start);
+	//WRITE_VREG(HEVC_SCALELUT, buf_spec->scalelut.buf_start);
+
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
+		if (buf_spec->max_width <= 4096 && buf_spec->max_height <= 2304)
+			WRITE_VREG(HEVC_DBLK_CFG3, 0x404010); //default value
+		else
+			WRITE_VREG(HEVC_DBLK_CFG3, 0x808020); // make left storage 2 x 4k]
+		avs2_print(dec, AVS2_DBG_BUFMGR,
+			"HEVC_DBLK_CFG3 = %x\n", READ_VREG(HEVC_DBLK_CFG3));
+	}
 
 	/* cfg_p_addr */
 	WRITE_VREG(HEVC_DBLK_CFG4, buf_spec->dblk_para.buf_start);
@@ -3552,7 +3617,7 @@ static void avs2_config_work_space_hw(struct AVS2Decoder_s *dec)
 #ifdef AVS2_10B_MMU
 	WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR, buf_spec->mmu_vbh.buf_start);
 	WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR, buf_spec->mmu_vbh.buf_start
-			+ buf_spec->mmu_vbh.buf_size/2);
+			+ VBH_BUF_SIZE(buf_spec));
 	/*data32 = READ_VREG(HEVC_SAO_CTRL9);*/
 	/*data32 |= 0x1;*/
 	/*WRITE_VREG(HEVC_SAO_CTRL9, data32);*/
@@ -3889,8 +3954,11 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 	struct BuffInfo_s *cur_buf_info = NULL;
 
 	cur_buf_info = &dec->work_space_buf_store;
-
-	if (vdec_is_support_4k()) {
+	if (force_bufspec) {
+		memcpy(cur_buf_info, &amvavs2_workbuff_spec[force_bufspec & 0xf],
+		sizeof(struct BuffInfo_s));
+		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
+	} else if (vdec_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 			memcpy(cur_buf_info, &amvavs2_workbuff_spec[2],	/* 8k */
 			sizeof(struct BuffInfo_s));
@@ -5842,10 +5910,13 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			dec->avs2_dec.hc.cur_pic->
 			mpred_mv_wr_start_addr == 0) {
 			unsigned long buf_addr;
-			unsigned mv_buf_size = 0x120000;
+			unsigned mv_buf_size = get_mv_buf_size(
+				dec,
+				dec->avs2_dec.hc.cur_pic->pic_w,
+				dec->avs2_dec.hc.cur_pic->pic_h);
 			int i = dec->avs2_dec.hc.cur_pic->index;
-			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
-				mv_buf_size = 0x120000 * 4;
+			/*if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
+				mv_buf_size = 0x120000 * 4;*/
 			if (decoder_bmmu_box_alloc_buf_phy
 			(dec->bmmu_box,
 			MV_BUFFER_IDX(i),
@@ -7991,6 +8062,8 @@ MODULE_PARM_DESC(force_video_signal_type, "\n amvdec_avs2 force_video_signal_typ
 module_param(enable_force_video_signal_type, uint, 0664);
 MODULE_PARM_DESC(enable_force_video_signal_type, "\n amvdec_avs2 enable_force_video_signal_type\n");
 
+module_param(force_bufspec, uint, 0664);
+MODULE_PARM_DESC(force_bufspec, "\n amvdec_h265 force_bufspec\n");
 
 module_param(udebug_flag, uint, 0664);
 MODULE_PARM_DESC(udebug_flag, "\n amvdec_h265 udebug_flag\n");
@@ -8018,6 +8091,9 @@ MODULE_PARM_DESC(force_disp_pic_index,
 
 module_param(without_display_mode, uint, 0664);
 MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
+
+module_param(mv_buf_dynamic_alloc, uint, 0664);
+MODULE_PARM_DESC(mv_buf_dynamic_alloc, "\n mv_buf_dynamic_alloc\n");
 
 module_init(amvdec_avs2_driver_init_module);
 module_exit(amvdec_avs2_driver_remove_module);

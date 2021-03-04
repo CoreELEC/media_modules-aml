@@ -78,10 +78,12 @@ to enable DV of frame mode
 			/* 4096x2304 , 0x120000 per buffer */
 #define MPRED_8K_MV_BUF_SIZE		(0x120000*4)
 #define MPRED_4K_MV_BUF_SIZE		(0x120000)
-#define MPRED_MV_BUF_SIZE		(0x40000)
+#define MPRED_MV_BUF_SIZE		(0x3fc00)
 
-#define MMU_COMPRESS_HEADER_SIZE  0x48000
-#define MMU_COMPRESS_8K_HEADER_SIZE  (0x48000*4)
+#define MMU_COMPRESS_HEADER_SIZE_1080P  0x10000
+#define MMU_COMPRESS_HEADER_SIZE_4K  0x48000
+#define MMU_COMPRESS_HEADER_SIZE_8K  0x120000
+#define DB_NUM 20
 
 #define MAX_FRAME_4K_NUM 0x1200
 #define MAX_FRAME_8K_NUM ((MAX_FRAME_4K_NUM) * 4)
@@ -347,6 +349,8 @@ static u32 dbg_nal_skip_flag;
 static u32 dbg_nal_skip_count;
 #endif
 /*for debug*/
+static u32 force_bufspec;
+
 /*
 	udebug_flag:
 	bit 0, enable ucode print
@@ -605,6 +609,8 @@ static DEFINE_MUTEX(vh265_log_mutex);
 //static struct vdec_info *gvs;
 
 static u32 without_display_mode;
+
+static u32 mv_buf_dynamic_alloc;
 
 /**************************************************
  *
@@ -971,43 +977,59 @@ struct BuffInfo_s {
 	struct buff_s rpm;
 	struct buff_s lmem;
 };
+
+//#define VBH_BUF_SIZE (2 * 16 * 2304)
+//#define VBH_BUF_COUNT 4
+
+	/*mmu_vbh buf is used by HEVC_SAO_MMU_VH0_ADDR, HEVC_SAO_MMU_VH1_ADDR*/
+#define VBH_BUF_SIZE_1080P 0x3000
+#define VBH_BUF_SIZE_4K 0x5000
+#define VBH_BUF_SIZE_8K 0xa000
+#define VBH_BUF_SIZE(bufspec) (bufspec->mmu_vbh.buf_size / 2)
+	/*mmu_vbh_dw buf is used by HEVC_SAO_MMU_VH0_ADDR2,HEVC_SAO_MMU_VH1_ADDR2,
+		HEVC_DW_VH0_ADDDR, HEVC_DW_VH1_ADDDR*/
+#define DW_VBH_BUF_SIZE_1080P (VBH_BUF_SIZE_1080P * 2)
+#define DW_VBH_BUF_SIZE_4K (VBH_BUF_SIZE_4K * 2)
+#define DW_VBH_BUF_SIZE_8K (VBH_BUF_SIZE_8K * 2)
+#define DW_VBH_BUF_SIZE(bufspec) (bufspec->mmu_vbh_dw.buf_size / 4)
+
 #define WORK_BUF_SPEC_NUM 3
 static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 	{
 		/* 8M bytes */
 		.max_width = 1920,
 		.max_height = 1088,
-		.ipp = {
+		.ipp = {/*checked*/
 			/* IPP work space calculation :
 			 *   4096 * (Y+CbCr+Flags) = 12k, round to 16k
 			 */
-			.buf_size = 0x4000,
+			.buf_size = 0x1e00,
 		},
 		.sao_abv = {
-			.buf_size = 0x30000,
+			.buf_size = 0, //0x30000,
 		},
 		.sao_vb = {
-			.buf_size = 0x30000,
+			.buf_size = 0, //0x30000,
 		},
-		.short_term_rps = {
+		.short_term_rps = {/*checked*/
 			/* SHORT_TERM_RPS - Max 64 set, 16 entry every set,
 			 *   total 64x16x2 = 2048 bytes (0x800)
 			 */
 			.buf_size = 0x800,
 		},
-		.vps = {
+		.vps = {/*checked*/
 			/* VPS STORE AREA - Max 16 VPS, each has 0x80 bytes,
 			 *   total 0x0800 bytes
 			 */
 			.buf_size = 0x800,
 		},
-		.sps = {
+		.sps = {/*checked*/
 			/* SPS STORE AREA - Max 16 SPS, each has 0x80 bytes,
 			 *   total 0x0800 bytes
 			 */
 			.buf_size = 0x800,
 		},
-		.pps = {
+		.pps = {/*checked*/
 			/* PPS STORE AREA - Max 64 PPS, each has 0x80 bytes,
 			 *   total 0x2000 bytes
 			 */
@@ -1017,60 +1039,47 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			/* SAO UP STORE AREA - Max 640(10240/16) LCU,
 			 *   each has 16 bytes total 0x2800 bytes
 			 */
-			.buf_size = 0x2800,
+			.buf_size = 0, //0x2800,
 		},
-		.swap_buf = {
+		.swap_buf = {/*checked*/
 			/* 256cyclex64bit = 2K bytes 0x800
 			 *   (only 144 cycles valid)
 			 */
 			.buf_size = 0x800,
 		},
-		.swap_buf2 = {
+		.swap_buf2 = {/*checked*/
 			.buf_size = 0x800,
 		},
-		.scalelut = {
+		.scalelut = {/*checked*/
 			/* support up to 32 SCALELUT 1024x32 =
 			 *   32Kbytes (0x8000)
 			 */
 			.buf_size = 0x8000,
 		},
-		.dblk_para = {
-#ifdef SUPPORT_10BIT
-			.buf_size = 0x40000,
-#else
-			/* DBLK -> Max 256(4096/16) LCU, each para
-			 *512bytes(total:0x20000), data 1024bytes(total:0x40000)
-			 */
-			.buf_size = 0x20000,
-#endif
-		},
-		.dblk_data = {
-			.buf_size = 0x40000,
-		},
-		.dblk_data2 = {
-			.buf_size = 0x80000 * 2,
-		}, /*dblk data for adapter*/
-		.mmu_vbh = {
-			.buf_size = 0x5000, /*2*16*2304/4, 4K*/
+		.dblk_para  = {.buf_size = 0x14500, }, // dblk parameter
+		.dblk_data  = {.buf_size = 0x62800, }, // dblk data for left/top
+		.dblk_data2 = {.buf_size = 0x22800, }, // dblk data for adapter
+		.mmu_vbh = {/*checked*/
+			.buf_size = VBH_BUF_SIZE_1080P, /*2*16*2304/4, 4K*/
 		},
 #if 0
-		.cm_header = {/* 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)*/
-			.buf_size = MMU_COMPRESS_HEADER_SIZE *
+		.cm_header = {/*checked*//* 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)*/
+			.buf_size = MMU_COMPRESS_HEADER_SIZE_1080P *
 			(MAX_REF_PIC_NUM + 1),
 		},
 #endif
-		.mpred_above = {
-			.buf_size = 0x8000,
+		.mpred_above = {/*checked*/
+			.buf_size = 0x1e00,
 		},
 #ifdef MV_USE_FIXED_BUF
-		.mpred_mv = {/* 1080p, 0x40000 per buffer */
-			.buf_size = 0x40000 * MAX_REF_PIC_NUM,
+		.mpred_mv = {/*checked*//* 1080p, 0x40000 per buffer */
+			.buf_size = MPRED_MV_BUF_SIZE * MAX_REF_PIC_NUM,
 		},
 #endif
-		.rpm = {
+		.rpm = {/*checked*/
 			.buf_size = RPM_BUF_SIZE,
 		},
-		.lmem = {
+		.lmem = {/*checked*/
 			.buf_size = 0x500 * 2,
 		}
 	},
@@ -1084,10 +1093,10 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			.buf_size = 0x4000,
 		},
 		.sao_abv = {
-			.buf_size = 0x30000,
+			.buf_size = 0, //0x30000,
 		},
 		.sao_vb = {
-			.buf_size = 0x30000,
+			.buf_size = 0, //0x30000,
 		},
 		.short_term_rps = {
 			/* SHORT_TERM_RPS - Max 64 set, 16 entry every set,
@@ -1117,7 +1126,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			/* SAO UP STORE AREA - Max 640(10240/16) LCU,
 			 *   each has 16 bytes total 0x2800 bytes
 			 */
-			.buf_size = 0x2800,
+			.buf_size = 0, //0x2800,
 		},
 		.swap_buf = {
 			/* 256cyclex64bit = 2K bytes 0x800
@@ -1134,30 +1143,20 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			 */
 			.buf_size = 0x8000,
 		},
-		.dblk_para = {
-			/* DBLK -> Max 256(4096/16) LCU, each para
-			 *   512bytes(total:0x20000),
-			 *   data 1024bytes(total:0x40000)
-			 */
-			.buf_size = 0x20000,
-		},
-		.dblk_data = {
-			.buf_size = 0x80000,
-		},
-		.dblk_data2 = {
-			.buf_size = 0x80000,
-		}, /*dblk data for adapter*/
+		.dblk_para  = {.buf_size = 0x19100, }, // dblk parameter
+		.dblk_data  = {.buf_size = 0x88800, }, // dblk data for left/top
+		.dblk_data2 = {.buf_size = 0x48800, }, // dblk data for adapter
 		.mmu_vbh = {
-			.buf_size = 0x5000, /*2*16*2304/4, 4K*/
+			.buf_size = VBH_BUF_SIZE_4K, /*2*16*2304/4, 4K*/
 		},
 #if 0
 		.cm_header = {/*0x44000 = ((1088*2*1024*4)/32/4)*(32/8)*/
-			.buf_size = MMU_COMPRESS_HEADER_SIZE *
+			.buf_size = MMU_COMPRESS_HEADER_SIZE_4K *
 			(MAX_REF_PIC_NUM + 1),
 		},
 #endif
 		.mpred_above = {
-			.buf_size = 0x8000,
+			.buf_size = 0x4000,
 		},
 #ifdef MV_USE_FIXED_BUF
 		.mpred_mv = {
@@ -1183,10 +1182,10 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			.buf_size = 0x4000*2,
 		},
 		.sao_abv = {
-			.buf_size = 0x30000*2,
+			.buf_size = 0, //0x30000*2,
 		},
 		.sao_vb = {
-			.buf_size = 0x30000*2,
+			.buf_size = 0, //0x30000*2,
 		},
 		.short_term_rps = {
 			// SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
@@ -1206,7 +1205,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 		.sao_up = {
 			// SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
-			.buf_size = 0x2800*2,
+			.buf_size = 0, //0x2800*2,
 		},
 		.swap_buf = {
 			// 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
@@ -1217,22 +1216,22 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 		.scalelut = {
 			// support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
-			.buf_size = 0x8000*2,
+			.buf_size = 0x8000, //0x8000*2,
 		},
-		.dblk_para  = {.buf_size = 0x40000*2, }, // dblk parameter
-		.dblk_data  = {.buf_size = 0x80000*2, }, // dblk data for left/top
-		.dblk_data2 = {.buf_size = 0x80000*2, }, // dblk data for adapter
+		.dblk_para  = {.buf_size = 0x32100, }, // dblk parameter
+		.dblk_data  = {.buf_size = 0x110800, }, // dblk data for left/top
+		.dblk_data2 = {.buf_size = 0x90800, }, // dblk data for adapter
 		.mmu_vbh = {
-			.buf_size = 0x5000*2, //2*16*2304/4, 4K
+			.buf_size = VBH_BUF_SIZE_8K, //2*16*2304/4, 4K
 		},
 #if 0
 		.cm_header = {
-			.buf_size = MMU_COMPRESS_8K_HEADER_SIZE *
+			.buf_size = MMU_COMPRESS_HEADER_SIZE_8K *
 				MAX_REF_PIC_NUM, 	// 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
 		},
 #endif
 		.mpred_above = {
-			.buf_size = 0x8000*2,
+			.buf_size = 0x8000,
 		},
 #ifdef MV_USE_FIXED_BUF
 		.mpred_mv = {
@@ -1430,6 +1429,7 @@ struct PIC_s {
 	unsigned long cma_alloc_addr;
 	struct page *alloc_pages;
 	unsigned int mpred_mv_wr_start_addr;
+	int mv_size;
 	unsigned int mc_y_adr;
 	unsigned int mc_u_v_adr;
 #ifdef SUPPORT_10BIT
@@ -3018,37 +3018,55 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
 #ifdef MV_USE_FIXED_BUF
 	if (pic && pic->index >= 0) {
-		if (IS_8K_SIZE(pic->width, pic->height)) {
-			pic->mpred_mv_wr_start_addr =
-				hevc->work_space_buf->mpred_mv.buf_start
-				+ (pic->index * MPRED_8K_MV_BUF_SIZE);
-		} else {
-			pic->mpred_mv_wr_start_addr =
-				hevc->work_space_buf->mpred_mv.buf_start
-				+ (pic->index * MPRED_4K_MV_BUF_SIZE);
-		}
+		int mv_size;
+		if (IS_8K_SIZE(pic->width, pic->height))
+			mv_size = MPRED_8K_MV_BUF_SIZE;
+		else if (IS_4K_SIZE(pic->width, pic->height))
+			mv_size = MPRED_4K_MV_BUF_SIZE; /*0x120000*/
+		else
+			mv_size = MPRED_MV_BUF_SIZE;
+
+		pic->mpred_mv_wr_start_addr =
+			hevc->work_space_buf->mpred_mv.buf_start
+			+ (pic->index * mv_size);
+		pic->mv_size = mv_size;
 	}
 	return 0;
 #else
 	int i;
 	int ret = -1;
 	int new_size;
-	if (IS_8K_SIZE(pic->width, pic->height))
-		new_size = MPRED_8K_MV_BUF_SIZE + 0x10000;
-	else if (IS_4K_SIZE(pic->width, pic->height))
-		new_size = MPRED_4K_MV_BUF_SIZE + 0x10000; /*0x120000*/
-	else
-		new_size = MPRED_MV_BUF_SIZE + 0x10000;
-	if (new_size != hevc->mv_buf_size) {
-		dealloc_mv_bufs(hevc);
-		hevc->mv_buf_size = new_size;
-	}
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
-		if (hevc->m_mv_BUF[i].start_adr &&
-			hevc->m_mv_BUF[i].used_flag == 0) {
-			hevc->m_mv_BUF[i].used_flag = 1;
-			ret = i;
-			break;
+	if (mv_buf_dynamic_alloc) {
+		int MV_MEM_UNIT =
+			hevc->lcu_size_log2 == 6 ? 0x200 : hevc->lcu_size_log2 ==
+			5 ? 0x80 : 0x20;
+		int extended_pic_width = (pic->width + hevc->lcu_size -1)
+				& (~(hevc->lcu_size - 1));
+		int extended_pic_height = (pic->height + hevc->lcu_size -1)
+				& (~(hevc->lcu_size - 1));
+		int lcu_x_num = extended_pic_width / hevc->lcu_size;
+		int lcu_y_num = extended_pic_height / hevc->lcu_size;
+		new_size =  lcu_x_num * lcu_y_num * MV_MEM_UNIT;
+		hevc->mv_buf_size = (new_size + 0xffff) & (~0xffff);
+	} else {
+		if (IS_8K_SIZE(pic->width, pic->height))
+			new_size = MPRED_8K_MV_BUF_SIZE;
+		else if (IS_4K_SIZE(pic->width, pic->height))
+			new_size = MPRED_4K_MV_BUF_SIZE; /*0x120000*/
+		else
+			new_size = MPRED_MV_BUF_SIZE;
+
+		if (new_size != hevc->mv_buf_size) {
+			dealloc_mv_bufs(hevc);
+			hevc->mv_buf_size = new_size;
+		}
+		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+			if (hevc->m_mv_BUF[i].start_adr &&
+				hevc->m_mv_BUF[i].used_flag == 0) {
+				hevc->m_mv_BUF[i].used_flag = 1;
+				ret = i;
+				break;
+			}
 		}
 	}
 	if (ret < 0) {
@@ -3065,6 +3083,7 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 	if (ret >= 0) {
 		pic->mv_buf_index = ret;
+		pic->mv_size = hevc->m_mv_BUF[ret].size;
 		pic->mpred_mv_wr_start_addr =
 			(hevc->m_mv_BUF[ret].start_adr + 0xffff) &
 			(~0xffff);
@@ -3072,7 +3091,7 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		"%s => %d (0x%x) size 0x%x\n",
 		__func__, ret,
 		pic->mpred_mv_wr_start_addr,
-		hevc->m_mv_BUF[ret].size);
+		pic->mv_size);
 
 	} else {
 		hevc_print(hevc, 0,
@@ -3095,6 +3114,21 @@ static void put_mv_buf(struct hevc_state_s *hevc,
 		__func__, i);
 		return;
 	}
+	if (mv_buf_dynamic_alloc) {
+		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+		"%s(%d)\n",
+		__func__, i);
+
+		decoder_bmmu_box_free_idx(
+			hevc->bmmu_box,
+			MV_BUFFER_IDX(i));
+		hevc->m_mv_BUF[i].start_adr = 0;
+		hevc->m_mv_BUF[i].size = 0;
+		hevc->m_mv_BUF[i].used_flag = 0;
+		pic->mv_buf_index = -1;
+		return;
+	}
+
 	hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
 	"%s(%d): used_flag(%d)\n",
 	__func__, i,
@@ -3135,10 +3169,10 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 	if (hevc->mmu_enable) {
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 			(IS_8K_SIZE(hevc->pic_w, hevc->pic_h)))
-			buf_size = ((MMU_COMPRESS_8K_HEADER_SIZE + 0xffff) >> 16)
+			buf_size = ((MMU_COMPRESS_HEADER_SIZE_8K + 0xffff) >> 16)
 				<< 16;
 		else
-			buf_size = ((MMU_COMPRESS_HEADER_SIZE + 0xffff) >> 16)
+			buf_size = ((MMU_COMPRESS_HEADER_SIZE_4K + 0xffff) >> 16)
 				<< 16;
 	} else
 		buf_size = 0;
@@ -3192,9 +3226,9 @@ static int hevc_get_header_size(int w, int h)
 {
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 			(IS_8K_SIZE(w, h)))
-		return ALIGN(MMU_COMPRESS_8K_HEADER_SIZE, 0x10000);
+		return ALIGN(MMU_COMPRESS_HEADER_SIZE_8K, 0x10000);
 	else
-		return ALIGN(MMU_COMPRESS_HEADER_SIZE, 0x10000);
+		return ALIGN(MMU_COMPRESS_HEADER_SIZE_4K, 0x10000);
 }
 
 static void hevc_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
@@ -3519,10 +3553,10 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 			(IS_8K_SIZE(hevc->pic_w, hevc->pic_h)))
 			y_adr = hevc->m_BUF[i].start_adr +
-				MMU_COMPRESS_8K_HEADER_SIZE;
+				MMU_COMPRESS_HEADER_SIZE_8K;
 		else
 			y_adr = hevc->m_BUF[i].start_adr +
-				MMU_COMPRESS_HEADER_SIZE;
+				MMU_COMPRESS_HEADER_SIZE_4K;
 	} else
 		y_adr = hevc->m_BUF[i].start_adr;
 
@@ -4677,9 +4711,13 @@ static void hevc_config_work_space_hw(struct hevc_state_s *hevc)
 	WRITE_VREG(HEVC_SCALELUT, buf_spec->scalelut.buf_start);
 #ifdef HEVC_8K_LFTOFFSET_FIX
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
-		WRITE_VREG(HEVC_DBLK_CFG3, 0x808020); /*offset should x2 if 8k*/
+		if (buf_spec->max_width <= 4096 && buf_spec->max_height <= 2304)
+			WRITE_VREG(HEVC_DBLK_CFG3, 0x4010);
+		else
+			WRITE_VREG(HEVC_DBLK_CFG3, 0x8020);
+		//WRITE_VREG(HEVC_DBLK_CFG3, 0x808020); /*offset should x2 if 8k*/
 		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
-				"write HEVC_DBLK_CFG3\n");
+			"write HEVC_DBLK_CFG3 to %x\n", READ_VREG(HEVC_DBLK_CFG3));
 	}
 #endif
 	/* cfg_p_addr */
@@ -5166,7 +5204,8 @@ static void config_mpred_hw(struct hevc_state_s *hevc)
 	mpred_mv_rd_ptr_p1 = mpred_mv_rd_ptr + MV_MEM_UNIT;
 	mpred_mv_rd_end_addr =
 		mpred_mv_rd_start_addr +
-		((hevc->lcu_x_num * hevc->lcu_y_num) * MV_MEM_UNIT);
+		col_pic->mv_size;
+		//((hevc->lcu_x_num * hevc->lcu_y_num) * MV_MEM_UNIT);
 
 	mpred_above_buf_start = hevc->work_space_buf->mpred_above.buf_start;
 
@@ -7937,8 +7976,11 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 	memset(&hevc->param, 0, sizeof(union param_u));
 
 	cur_buf_info = &hevc->work_space_buf_store;
-
-	if (vdec_is_support_4k()) {
+	if (force_bufspec) {
+		memcpy(cur_buf_info, &amvh265_workbuff_spec[force_bufspec & 0xf],
+		sizeof(struct BuffInfo_s));
+		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
+	} else if (vdec_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 			memcpy(cur_buf_info, &amvh265_workbuff_spec[2],	/* 4k */
 			sizeof(struct BuffInfo_s));
@@ -14913,6 +14955,9 @@ MODULE_PARM_DESC(force_disp_pic_index,
 module_param(frmbase_cont_bitlevel, uint, 0664);
 MODULE_PARM_DESC(frmbase_cont_bitlevel,	"\n frmbase_cont_bitlevel\n");
 
+module_param(force_bufspec, uint, 0664);
+MODULE_PARM_DESC(force_bufspec, "\n amvdec_h265 force_bufspec\n");
+
 module_param(udebug_flag, uint, 0664);
 MODULE_PARM_DESC(udebug_flag, "\n amvdec_h265 udebug_flag\n");
 
@@ -14955,6 +15000,9 @@ MODULE_PARM_DESC(dirty_buffersize_threshold, "\n dirty_buffersize_threshold\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
+
+module_param(mv_buf_dynamic_alloc, uint, 0664);
+MODULE_PARM_DESC(mv_buf_dynamic_alloc, "\n mv_buf_dynamic_alloc\n");
 
 module_param(detect_stuck_buffer_margin, uint, 0664);
 MODULE_PARM_DESC(detect_stuck_buffer_margin, "\n detect_stuck_buffer_margin\n");
