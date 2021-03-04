@@ -4576,7 +4576,7 @@ static struct codec_profile_t amvenc_avc_profile = {
 
 static s32 __init amvenc_avc_driver_init_module(void)
 {
-	if (get_cpu_major_id() == MESON_CPU_MAJOR_ID_T7) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
 		pr_err("T7 doesn't support hcodec avc encoder!!\n");
 		return -1;
 	}

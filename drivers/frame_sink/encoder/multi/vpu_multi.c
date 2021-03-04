@@ -223,7 +223,7 @@ static void vpu_clk_enable(struct vpu_clks *clks)
 		pr_err("powering on wave521 for t7\n");
 		vdec_poweron(VDEC_WAVE);
 		mdelay(5);
-		pr_err("wave power stauts after poweron: %lu\n", vdec_on(VDEC_WAVE));
+		pr_err("wave power stauts after poweron: %d\n", vdec_on(VDEC_WAVE));
 	} else {
 		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, true);
 		mdelay(5);
@@ -266,7 +266,7 @@ static void vpu_clk_disable(struct vpu_clks *clks)
 		pr_err("powering off wave521 for t7\n");
 		vdec_poweron(VDEC_WAVE);
 		mdelay(5);
-		pr_err("wave power stauts after poweroff: %lu\n", vdec_on(VDEC_WAVE));
+		pr_err("wave power stauts after poweroff: %d\n", vdec_on(VDEC_WAVE));
 	} else {
 		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, false);
 		mdelay(5);
@@ -892,7 +892,7 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 	bool first_open = false;
 	s32 r = 0;
 
-	enc_pr(LOG_DEBUG, "[+] %s, filp=%lu, %lu, f_count=%d\n", __func__,
+	enc_pr(LOG_DEBUG, "[+] %s, filp=%lu, %lu, f_count=%lld\n", __func__,
 			(unsigned long)filp, ( ((unsigned long)filp)%8), filp->f_count.counter);
 	spin_lock(&s_vpu_lock);
 	s_vpu_drv_context.open_count++;
@@ -2176,7 +2176,7 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 	u32 open_count;
 	s32 i;
 
-	enc_pr(LOG_DEBUG, "vpu_release filp=%lu, f_counter=%d\n",
+	enc_pr(LOG_DEBUG, "vpu_release filp=%lu, f_counter=%lld\n",
 			(unsigned long)filp, filp->f_count.counter);
 	ret = down_interruptible(&s_vpu_sem);
 
@@ -2570,7 +2570,7 @@ static ssize_t encode_status_show(struct class *cla,
 
 	vmem_get_info(&s_vmem, &info);
 	pbuf += snprintf(buf, 40, "\nmultienc memory usage info:\n");
-	pbuf += snprintf(buf, 120, "Total %ld used %ld free %ld page sz %ld, open_count=%u, in_interrupt=%u, flag=%u\n",
+	pbuf += snprintf(buf, 120, "Total %ld used %ld free %ld page sz %ld, open_count=%u, in_interrupt=%lu, flag=%u\n",
 		info.total_pages*info.page_size,
 		info.alloc_pages*info.page_size,
 		info.free_pages*info.page_size,

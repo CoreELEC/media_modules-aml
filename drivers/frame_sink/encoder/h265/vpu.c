@@ -569,7 +569,7 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 	dma_cfg[2].fd = -1;
 
 	if (r != 0) {
-		enc_pr(LOG_DEBUG, "vpu_open, error handling, r=%d, s_vpu_drv_context.open_count\n",
+		enc_pr(LOG_DEBUG, "vpu_open, error handling, r=%d, s_vpu_drv_context.open_count=%d\n",
 				r, s_vpu_drv_context.open_count);
 		s_vpu_drv_context.open_count--;
 	}
