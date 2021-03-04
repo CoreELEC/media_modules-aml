@@ -332,6 +332,7 @@ int aml_v4l2_vpp_init(
 		struct aml_vcodec_ctx *ctx,
 		u32 mode,
 		u32 fmt,
+		bool is_drm,
 		struct aml_v4l2_vpp** vpp_handle)
 {
 	struct di_init_parm init;
@@ -360,6 +361,9 @@ int aml_v4l2_vpp_init(
 		init.output_format = DI_OUTPUT_NV12 | DI_OUTPUT_LINEAR;
 	else
 		init.output_format = DI_OUTPUT_NV21 | DI_OUTPUT_LINEAR;
+
+	if (is_drm)
+		init.output_format |= DI_OUTPUT_TVP;
 
 	vpp->di_handle = di_create_instance(init);
 	if (vpp->di_handle < 0) {

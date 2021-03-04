@@ -84,6 +84,7 @@ int aml_v4l2_vpp_init(
 	struct aml_vcodec_ctx *ctx,
 	u32 mode,
 	u32 fmt,
+	bool is_drm,
 	struct aml_v4l2_vpp** vpp_handle);
 int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp);
 int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf);

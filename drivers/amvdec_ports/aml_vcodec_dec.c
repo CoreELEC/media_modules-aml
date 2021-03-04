@@ -1471,8 +1471,11 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 			if (vpp_needed(ctx, &mode)) {
 				int ret;
 
-				ret = aml_v4l2_vpp_init(ctx, mode,
-					ctx->cap_pix_fmt, &ctx->vpp);
+				ret = aml_v4l2_vpp_init(ctx,
+					mode,
+					ctx->cap_pix_fmt,
+					ctx->is_drm_mode,
+					&ctx->vpp);
 				if (ret) {
 					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 						"init vpp err:%d\n", ret);
