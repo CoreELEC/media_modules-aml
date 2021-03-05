@@ -111,6 +111,7 @@ static u32 vh264mvc_ratio;
 static u32 h264mvc_ar;
 static u32 no_dropping_cnt;
 static s32 init_drop_cnt;
+spinlock_t mvc_rp_lock;
 
 #ifdef DEBUG_SKIP
 static unsigned long view_total, view_dropped;
@@ -973,6 +974,14 @@ static void do_alloc_work(struct work_struct *work)
 
 }
 
+static void mvc_set_rp(void) {
+	unsigned long flags;
+
+	spin_lock_irqsave(&mvc_rp_lock, flags);
+	STBUF_WRITE(&vdec->vbuf, set_rp,
+		READ_VREG(VLD_MEM_VIFIFO_RP));
+	spin_unlock_irqrestore(&mvc_rp_lock, flags);
+}
 
 #ifdef HANDLE_h264mvc_IRQ
 static irqreturn_t vh264mvc_isr(int irq, void *dev_id)
@@ -987,10 +996,8 @@ static void vh264mvc_isr(void)
 	u32 frame_size;
 	int ret = READ_VREG(MAILBOX_COMMAND);
 
-	if (is_support_no_parser()) {
-		STBUF_WRITE(&vdec->vbuf, set_rp,
-			READ_VREG(VLD_MEM_VIFIFO_RP));
-	}
+	mvc_set_rp();
+
 	/* pr_info("vh264mvc_isr, cmd =%x\n", ret); */
 	switch (ret & 0xff) {
 	case CMD_ALLOC_VIEW_0:
@@ -1181,10 +1188,7 @@ static void vh264mvc_put_timer_func(struct timer_list *timer)
 {
 	int valid_frame = 0;
 
-	if (is_support_no_parser()) {
-		STBUF_WRITE(&vdec->vbuf, set_rp,
-			READ_VREG(VLD_MEM_VIFIFO_RP));
-	}
+	mvc_set_rp();
 
 	if (enable_recycle == 0) {
 		if (dbg_mode & TIME_TASK_PRINT_ENABLE) {
@@ -1730,6 +1734,7 @@ static int amvdec_h264mvc_probe(struct platform_device *pdev)
 
 	INIT_WORK(&error_wd_work, error_do_work);
 	INIT_WORK(&set_clk_work, vh264_mvc_set_clk);
+	spin_lock_init(&mvc_rp_lock);
 
 	vdec = pdata;
 
