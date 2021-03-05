@@ -283,7 +283,7 @@ static u32 stream_buffer_get_wp(struct stream_buf_s *stbuf)
 static void stream_buffer_set_wp(struct stream_buf_s *stbuf, u32 val)
 {
 	int len = (val >= stbuf->buf_wp) ? (val - stbuf->buf_wp) :
-		((stbuf->buf_start + stbuf->buf_size) - stbuf->buf_wp);
+		(stbuf->buf_size - stbuf->buf_wp + val);
 
 	stbuf->buf_wp = val;
 	vdec_set_vld_wp(container_of(stbuf, struct vdec_s, vbuf), stbuf->buf_wp);
@@ -299,7 +299,7 @@ static u32 stream_buffer_get_rp(struct stream_buf_s *stbuf)
 static void stream_buffer_set_rp(struct stream_buf_s *stbuf, u32 val)
 {
 	int len = (val >= stbuf->buf_rp) ? (val - stbuf->buf_rp) :
-		((stbuf->buf_start + stbuf->buf_size) - stbuf->buf_rp);
+		(stbuf->buf_size - stbuf->buf_rp  + val);
 
 	stbuf->buf_rp = val;
 	atomic_sub(len, &stbuf->payload);

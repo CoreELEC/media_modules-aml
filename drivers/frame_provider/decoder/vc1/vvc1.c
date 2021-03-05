@@ -146,6 +146,8 @@ static u64 next_pts_us64;
 static bool is_reset;
 static struct work_struct set_clk_work;
 static struct work_struct error_wd_work;
+spinlock_t vc1_rp_lock;
+
 
 #ifdef DEBUG_PTS
 static u32 pts_hit, pts_missed, pts_i_hit, pts_i_missed;
@@ -303,6 +305,15 @@ static void set_aspect_ratio(struct vframe_s *vf, unsigned int pixel_ratio)
 	/*vf->ratio_control |= DISP_RATIO_FORCECONFIG | DISP_RATIO_KEEPRATIO;*/
 }
 
+static void vc1_set_rp(void) {
+	unsigned long flags;
+
+	spin_lock_irqsave(&vc1_rp_lock, flags);
+	STBUF_WRITE(&vdec->vbuf, set_rp,
+		READ_VREG(VLD_MEM_VIFIFO_RP));
+	spin_unlock_irqrestore(&vc1_rp_lock, flags);
+}
+
 static irqreturn_t vvc1_isr(int irq, void *dev_id)
 {
 	u32 reg;
@@ -321,10 +332,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 		v_width = READ_VREG(AV_SCRATCH_J);
 		v_height = READ_VREG(AV_SCRATCH_K);
 
-		if (is_support_no_parser()) {
-			STBUF_WRITE(&vdec->vbuf, set_rp,
-				READ_VREG(VLD_MEM_VIFIFO_RP));
-		}
+		vc1_set_rp();
 
 		if (v_width && v_width <= 4096
 			&& (v_width != vvc1_amstream_dec_info.width)) {
@@ -1100,10 +1108,7 @@ static void vvc1_put_timer_func(unsigned long arg)
 	if (READ_VREG(VC1_SOS_COUNT) > 10)
 		schedule_work(&error_wd_work);
 
-	if (is_support_no_parser()) {
-		STBUF_WRITE(&vdec->vbuf, set_rp,
-			READ_VREG(VLD_MEM_VIFIFO_RP));
-	}
+	vc1_set_rp();
 
 	while (!kfifo_is_empty(&recycle_q) && (READ_VREG(VC1_BUFFERIN) == 0)) {
 		struct vframe_s *vf;
@@ -1256,6 +1261,7 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 
 	INIT_WORK(&error_wd_work, error_do_work);
 	INIT_WORK(&set_clk_work, vvc1_set_clk);
+	spin_lock_init(&vc1_rp_lock);
 	if (vvc1_init() < 0) {
 		pr_info("amvdec_vc1 init failed.\n");
 		kfree(gvs);
