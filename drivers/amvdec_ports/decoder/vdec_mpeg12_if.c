@@ -458,6 +458,19 @@ static int vdec_mpeg12_decode(unsigned long h_vdec,
 	return ret;
 }
 
+static void get_param_config_info(struct vdec_mpeg12_inst *inst,
+  struct aml_dec_params *parms)
+{
+
+	if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_HDRINFO)
+		parms->hdr = inst->parms.hdr;
+
+	parms->parms_status |= inst->parms.parms_status;
+
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"parms status: %u\n", parms->parms_status);
+}
+
 static int vdec_mpeg12_get_param(unsigned long h_vdec,
 			       enum vdec_get_param_type type, void *out)
 {
@@ -481,6 +494,10 @@ static int vdec_mpeg12_get_param(unsigned long h_vdec,
 
 	case GET_PARAM_CROP_INFO:
 		get_crop_info(inst, out);
+		break;
+
+	case GET_PARAM_CONFIG_INFO:
+		get_param_config_info(inst, out);
 		break;
 
 	case GET_PARAM_DW_MODE:
@@ -552,6 +569,22 @@ static void set_param_ps_info(struct vdec_mpeg12_inst *inst,
 		pic->field == V4L2_FIELD_NONE ? "P" : "I");
 }
 
+static void set_param_hdr_info(struct vdec_mpeg12_inst *inst,
+	struct aml_vdec_hdr_infos *hdr)
+{
+	inst->parms.hdr = *hdr;
+	if (!(inst->parms.parms_status &
+		V4L2_CONFIG_PARM_DECODE_HDRINFO)) {
+		inst->parms.hdr = *hdr;
+		inst->parms.parms_status |=
+			V4L2_CONFIG_PARM_DECODE_HDRINFO;
+		aml_vdec_dispatch_event(inst->ctx,
+			V4L2_EVENT_SRC_CH_HDRINFO);
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+			"mpeg12 set HDR infos\n");
+	}
+}
+
 static int vdec_mpeg12_set_param(unsigned long h_vdec,
 	enum vdec_set_param_type type, void *in)
 {
@@ -567,6 +600,10 @@ static int vdec_mpeg12_set_param(unsigned long h_vdec,
 	switch (type) {
 	case SET_PARAM_WRITE_FRAME_SYNC:
 		set_param_write_sync(inst);
+		break;
+
+	case SET_PARAM_HDR_INFO:
+		set_param_hdr_info(inst, in);
 		break;
 
 	case SET_PARAM_PS_INFO:

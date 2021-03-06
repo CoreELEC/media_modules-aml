@@ -716,6 +716,18 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 		vdec_schedule_work(&hw->notify_work);
 	}
 
+	vf->signal_type = hw->reg_signal_type;
+
+	if (hw->is_used_v4l) {
+		struct aml_vdec_hdr_infos hdr;
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
+		memset(&hdr, 0, sizeof(hdr));
+		hdr.signal_type = hw->reg_signal_type;
+		vdec_v4l_set_hdr_infos(ctx, &hdr);
+	}
+
 	ar_bits = READ_VREG(MREG_SEQ_INFO) & 0xf;
 
 	if (ar_bits == 0x2)
@@ -1666,12 +1678,11 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		}
 		vf->duration += vf->duration_pulldown;
 		vf->type = type;
-		vf->signal_type = hw->reg_signal_type;
 		vf->orientation = 0;
 		if (i > 0) {
 			vf->pts = 0;
 			vf->pts_us64 = 0;
-			vf->timestamp = 0;
+			vf->timestamp = pic->timestamp;
 		} else {
 			vf->pts = (pic->pts_valid) ? pic->pts : 0;
 			vf->pts_us64 = (pic->pts_valid) ? pic->pts64 : 0;
@@ -3529,6 +3540,7 @@ static void reset(struct vdec_s *vdec)
 	hw->refs[1] = -1;
 	hw->first_i_frame_ready = 0;
 	hw->ctx_valid = 0;
+	hw->dec_num = 0;
 
 	atomic_set(&hw->disp_num, 0);
 	atomic_set(&hw->get_num, 0);
