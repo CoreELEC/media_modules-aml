@@ -2837,7 +2837,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			"Invalid flush buffer.\n");
 		buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-		if (ctx->is_drm_mode && (src_mem.model == VB2_MEMORY_DMABUF))
+		if (ctx->is_drm_mode && (vb->memory == VB2_MEMORY_DMABUF))
 			wake_up_interruptible(&ctx->wq);
 
 		return;

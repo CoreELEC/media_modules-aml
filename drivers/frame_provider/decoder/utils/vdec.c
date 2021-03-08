@@ -2767,9 +2767,6 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	p->parallel_dec = parallel_decode;
 	p->prog_only = prog_only;
 
-	if (is_v4l)
-		p->prog_only = true;
-
 	vdec_core->parallel_dec = parallel_decode;
 	vdec->canvas_mode = CANVAS_BLKMODE_32X32;
 #ifdef FRAME_CHECK

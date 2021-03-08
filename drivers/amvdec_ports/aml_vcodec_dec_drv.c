@@ -635,7 +635,7 @@ module_param(param_sets_from_ucode, bool, 0644);
 EXPORT_SYMBOL(enable_drm_mode);
 module_param(enable_drm_mode, bool, 0644);
 
-int bypass_vpp = 1;
+int bypass_vpp;
 EXPORT_SYMBOL(bypass_vpp);
 module_param(bypass_vpp, int, 0644);
 
