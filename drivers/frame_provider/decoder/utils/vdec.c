@@ -851,7 +851,7 @@ void config_cav_lut_ex(u32 index, ulong addr, u32 width,
 		if (debug & 0x40000000) {
 			pr_info("%s %2d) addr: %lx, width: %d, height: %d, blkm: %d, endian: %d\n",
 				__func__, index, addr, width, height, blkmode, endian);
-			pr_info("data(h,l): 0x%8x, 0x%8x\n", datah_temp, datal_temp);
+			pr_info("data(h,l): 0x%8lx, 0x%8lx\n", datah_temp, datal_temp);
 	    }
 	}
 }

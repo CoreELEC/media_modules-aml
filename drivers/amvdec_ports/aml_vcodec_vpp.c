@@ -295,7 +295,7 @@ retry:
 		di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
 
 		v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL,
-			"vpp_handle start: dec vf:%px/%d, vpp vf:%px/%d, iphy:%x/%x %dx%d ophy:%x/%x %dx%d, "
+			"vpp_handle start: dec vf:%px/%d, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, "
 			"in:%d, out:%d, vf:%d, vpp done:%d",
 			in_buf->di_buf.vf, in_buf->di_buf.vf->index,
 			out_buf->di_buf.vf, VPP_BUF_GET_IDX(out_buf),

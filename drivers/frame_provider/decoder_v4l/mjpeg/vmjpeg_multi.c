@@ -813,7 +813,7 @@ static void init_scaler(void)
 #else
 	WRITE_RESET_REG(RESET2_REGISTER, RESET_PSCALE);
 #endif
-	if (get_cpu_major_id() < MESON_CPU_MAJOR_ID_SC2) {
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2) {
 		READ_RESET_REG(RESET2_REGISTER);
 		READ_RESET_REG(RESET2_REGISTER);
 		READ_RESET_REG(RESET2_REGISTER);

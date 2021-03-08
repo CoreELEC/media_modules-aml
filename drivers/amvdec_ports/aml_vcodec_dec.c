@@ -3051,7 +3051,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 			"init buffer(%s), vb idx:%d, addr: old:%lx, new:%lx \n",
 			vf ? "update" : "idel",
 			vb->index, fb->m.mem[0].addr,
-			vb2_dma_contig_plane_dma_addr(vb, 0));
+			(ulong) vb2_dma_contig_plane_dma_addr(vb, 0));
 	}
 
 	return 0;
