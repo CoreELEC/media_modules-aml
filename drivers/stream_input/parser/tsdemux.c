@@ -257,9 +257,9 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 			}
 
 			if (pdts_status & (1 << VIDEO_PTS_READY))
-				;//pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
-				//	READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
-				//	vpts);
+				pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
+					READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
+					vpts);
 
 			if (pdts_status & (1 << AUDIO_PTS_READY))
 				pts_checkin_wrptr(PTS_TYPE_AUDIO,
@@ -280,9 +280,9 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 			}
 
 			if (pdts_status & (1 << VIDEO_PTS_READY))
-				;//pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
-				//	DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
-				//	vpts);
+				pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
+					DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
+					vpts);
 
 			if (pdts_status & (1 << AUDIO_PTS_READY))
 				pts_checkin_wrptr(PTS_TYPE_AUDIO,
