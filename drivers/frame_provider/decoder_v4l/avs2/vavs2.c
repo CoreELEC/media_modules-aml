@@ -666,9 +666,9 @@ struct AVS2Decoder_s {
 	DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
 	DECLARE_KFIFO(pending_q, struct vframe_s *, VF_POOL_SIZE);
 	struct vframe_s vfpool[VF_POOL_SIZE];
-	u32 vf_pre_count;
-	u32 vf_get_count;
-	u32 vf_put_count;
+	atomic_t vf_pre_count;
+	atomic_t vf_get_count;
+	atomic_t vf_put_count;
 	int buf_num;
 	unsigned int losless_comp_body_size;
 
@@ -4234,7 +4234,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 				debug |= AVS2_DBG_PIC_LEAK_WAIT;
 			return NULL;
 		}
-		dec->vf_get_count++;
+		atomic_add(1, &dec->vf_get_count);
 		if (pic)
 			avs2_print(dec, AVS2_DBG_BUFMGR,
 			"%s index 0x%x pos %d getcount %d type 0x%x w/h %d/%d, pts %d, %lld\n",
@@ -4266,7 +4266,7 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 
 	kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(dec->new_q_name, kfifo_len(&dec->newframe_q));
-	dec->vf_put_count++;
+	atomic_add(1, &dec->vf_put_count);
 	avs2_print(dec, AVS2_DBG_BUFMGR,
 		"%s index putcount 0x%x %d\n",
 		__func__, vf->index,
@@ -4633,7 +4633,7 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 		pic->vf_ref = 1;
 		unlock_buffer(dec, flags);
 	}
-	dec->vf_pre_count++;
+	atomic_add(1, &dec->vf_pre_count);
 }
 
 static inline void dec_update_gvs(struct AVS2Decoder_s *dec)
@@ -7055,6 +7055,10 @@ static void reset(struct vdec_s *vdec)
 
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
+
+	atomic_set(&dec->vf_pre_count, 0);
+	atomic_set(&dec->vf_get_count, 0);
+	atomic_set(&dec->vf_put_count, 0);
 
 	avs2_print(dec,
 		PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);

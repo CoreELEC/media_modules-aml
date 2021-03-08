@@ -689,9 +689,9 @@ struct AV1HW_s {
 	DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
 	DECLARE_KFIFO(pending_q, struct vframe_s *, VF_POOL_SIZE);
 	struct vframe_s vfpool[VF_POOL_SIZE];
-	u32 vf_pre_count;
-	u32 vf_get_count;
-	u32 vf_put_count;
+	atomic_t  vf_pre_count;
+	atomic_t  vf_get_count;
+	atomic_t  vf_put_count;
 	int buf_num;
 	int pic_num;
 	int lcu_size_log2;
@@ -5765,8 +5765,8 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		if (index < hw->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
-			hw->vf_get_count++;
-			vf->index_disp = hw->vf_get_count;
+			atomic_add(1, &hw->vf_get_count);
+			vf->index_disp =  atomic_read(&hw->vf_get_count);
 			if (debug & AOM_DEBUG_VFRAME) {
 				struct BufferPool_s *pool = hw->common.buffer_pool;
 				struct PIC_BUFFER_CONFIG_s *pic =
@@ -5820,7 +5820,7 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
-	hw->vf_put_count++;
+	atomic_add(1, &hw->vf_put_count);
 	if (debug & AOM_DEBUG_VFRAME) {
 		lock_buffer_pool(hw->common.buffer_pool, flags);
 		av1_print(hw, AOM_DEBUG_VFRAME, "%s index 0x%x type 0x%x w/h %d/%d, pts %d, %lld, ts: %llu\n",
@@ -6371,7 +6371,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 
-		hw->vf_pre_count++;
+		atomic_add(1, &hw->vf_pre_count);
 #ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 		/*count info*/
 		gvs->frame_dur = hw->frame_dur;
@@ -9945,6 +9945,10 @@ static void reset(struct vdec_s *vdec)
 		av1_print(hw, 0, "%s local_init failed \r\n", __func__);
 
 	av1_decode_ctx_reset(hw);
+
+	atomic_set(&hw->vf_pre_count, 0);
+	atomic_set(&hw->vf_get_count, 0);
+	atomic_set(&hw->vf_put_count, 0);
 
 	av1_print(hw, PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);
 }

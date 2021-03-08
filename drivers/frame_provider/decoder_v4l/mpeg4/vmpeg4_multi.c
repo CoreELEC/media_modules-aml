@@ -300,14 +300,14 @@ struct vdec_mpeg4_hw_s {
 	void (*vdec_cb)(struct vdec_s *, void *);
 	void *vdec_cb_arg;
 	u32 frame_num;
-	u32 put_num;
 	u32 sys_mp4_rate;
 	u32 run_count;
 	u32	not_run_ready;
 	u32 buffer_not_ready;
 	u32	input_empty;
-	u32 peek_num;
-	u32 get_num;
+	atomic_t peek_num;
+	atomic_t get_num;
+	atomic_t put_num;
 	u32 first_i_frame_ready;
 	u32 drop_frame_count;
 	u32 unstable_pts;
@@ -1716,7 +1716,7 @@ static struct vframe_s *vmpeg_vf_peek(void *op_arg)
 
 	if (!hw)
 		return NULL;
-	hw->peek_num++;
+	atomic_add(1, &hw->peek_num);
 	if (kfifo_peek(&hw->display_q, &vf))
 		return vf;
 
@@ -1728,7 +1728,7 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 	struct vframe_s *vf;
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
-	hw->get_num++;
+	atomic_add(1, &hw->get_num);
 	if (kfifo_get(&hw->display_q, &vf)) {
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		return vf;
@@ -1745,7 +1745,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		return;
 
 	hw->vfbuf_use[vf->index]--;
-	hw->put_num++;
+	atomic_add(1, &hw->put_num);
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,
 		"%s: put num:%d\n",__func__, hw->put_num);
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
@@ -2320,12 +2320,12 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 	hw->last_pts64 = 0;
 	hw->frame_num_since_last_anch = 0;
 	hw->frame_num = 0;
-	hw->put_num = 0;
 	hw->run_count = 0;
 	hw->not_run_ready = 0;
 	hw->input_empty = 0;
-	hw->peek_num = 0;
-	hw->get_num = 0;
+	atomic_set(&hw->peek_num, 0);
+	atomic_set(&hw->get_num, 0);
+	atomic_set(&hw->put_num, 0);
 
 	hw->pts_hit = hw->pts_missed = hw->pts_i_hit = hw->pts_i_missed = 0;
 	hw->refs[0] = -1;
@@ -2696,6 +2696,10 @@ static void reset(struct vdec_s *vdec)
 	hw->refs[1] = -1;
 	hw->first_i_frame_ready = 0;
 	hw->ctx_valid = 0;
+
+	atomic_set(&hw->peek_num, 0);
+	atomic_set(&hw->get_num, 0);
+	atomic_set(&hw->put_num, 0);
 
 	pr_info("mpeg4: reset.\n");
 }

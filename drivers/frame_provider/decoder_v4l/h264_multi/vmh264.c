@@ -815,7 +815,7 @@ struct vdec_h264_hw_s {
 
 	/**/
 	unsigned int last_frame_time;
-	u32 vf_pre_count;
+	atomic_t vf_pre_count;
 	atomic_t vf_get_count;
 	atomic_t vf_put_count;
 
@@ -2784,7 +2784,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 			if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
 				frame->offset_delimiter, &frame->pts, &frame->frame_size,
 				0, &frame->pts64) == 0)) {
-				if ((lookup_check_conut && (hw->vf_pre_count > lookup_check_conut) &&
+				if ((lookup_check_conut && (atomic_read(&hw->vf_pre_count) > lookup_check_conut) &&
 					(hw->wrong_frame_count > hw->right_frame_count)) &&
 					((frame->decoded_frame_size * 2 < frame->frame_size))) {
 					/*resolve many frame only one check in pts, cause playback unsmooth issue*/
@@ -3161,7 +3161,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				vf->pts = 0;
 			}
 		}
-		hw->vf_pre_count++;
+		atomic_add(1, &hw->vf_pre_count);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		if (!frame->show_frame) {
 			vh264_vf_put(vf, vdec);
@@ -9907,6 +9907,10 @@ static void reset(struct vdec_s *vdec)
 	reset_process_time(hw);
 	h264_reset_bufmgr(vdec);
 	clear_refer_bufs(hw);
+
+	atomic_set(&hw->vf_pre_count, 0);
+	atomic_set(&hw->vf_get_count, 0);
+	atomic_set(&hw->vf_put_count, 0);
 
 	dpb_print(DECODE_ID(hw), 0, "%s\n", __func__);
 }

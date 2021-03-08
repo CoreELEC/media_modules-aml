@@ -1792,7 +1792,7 @@ struct hevc_state_s {
 	u32 ucode_pause_pos;
 	u32 start_shift_bytes;
 
-	u32 vf_pre_count;
+	atomic_t vf_pre_count;
 	atomic_t vf_get_count;
 	atomic_t vf_put_count;
 #ifdef SWAP_HEVC_UCODE
@@ -4017,7 +4017,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 			if (pic->output_mark)
 				num_pic_not_yet_display++;
 			if (pic->slice_type == 2 &&
-				hevc->vf_pre_count == 0 &&
+				atomic_read(&hevc->vf_pre_count) == 0 &&
 				fast_output_enable & 0x1) {
 				/*fast output for first I picture*/
 				pic->num_reorder_pic = 0;
@@ -4080,7 +4080,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 	}
 
 	if (pic_display && hevc->sps_num_reorder_pics_0 &&
-		(hevc->vf_pre_count == 1) && (hevc->first_pic_flag == 1)) {
+		(atomic_read(&hevc->vf_pre_count) == 1) && (hevc->first_pic_flag == 1)) {
 		pic_display = NULL;
 		hevc->first_pic_flag = 2;
 	}
@@ -6653,7 +6653,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 		}
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 			dump_pic_list(hevc);
-		if (hevc->vf_pre_count == 1 &&
+		if (atomic_read(&hevc->vf_pre_count) == 1 &&
 				hevc->first_pic_flag == 1) {
 			hevc->first_pic_flag = 2;
 			pic = NULL;
@@ -9099,7 +9099,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 		}
 		if (hevc->is_used_v4l && hevc->double_write_mode != 16)
 			vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
-		hevc->vf_pre_count++;
+		atomic_add(1, &hevc->vf_pre_count);
 		kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 		spin_lock_irqsave(&lock, flags);
 		vf->index &= 0xff;
@@ -9141,7 +9141,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				}
 				if (hevc->is_used_v4l && hevc->double_write_mode != 16)
 					vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
-				hevc->vf_pre_count++;
+				atomic_add(1, &hevc->vf_pre_count);
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
@@ -9170,7 +9170,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
 				ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
-				hevc->vf_pre_count++;
+				atomic_add(1, &hevc->vf_pre_count);
 				if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 					hevc_print(hevc, 0,
 					"%s vf => display_q: (index 0x%x)\n",
@@ -9199,7 +9199,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
 				ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
-				hevc->vf_pre_count++;
+				atomic_add(1, &hevc->vf_pre_count);
 				if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 					hevc_print(hevc, 0,
 					"%s vf => display_q: (index 0x%x)\n",
@@ -9320,7 +9320,7 @@ static inline void hevc_update_gvs(struct hevc_state_s *hevc)
 
 static void put_vf_to_display_q(struct hevc_state_s *hevc, struct vframe_s *vf)
 {
-	hevc->vf_pre_count++;
+	atomic_add(1, &hevc->vf_pre_count);
 	decoder_do_frame_check(hw_to_vdec(hevc), vf);
 	vdec_vframe_ready(hw_to_vdec(hevc), vf);
 	kfifo_put(&hevc->display_q, (const struct vframe_s *)vf);
@@ -9717,7 +9717,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			}
 			if (pic->show_frame) {
 				put_vf_to_display_q(hevc, vf);
-				hevc->vf_pre_count++;
+				atomic_add(1, &hevc->vf_pre_count);
 				vdec_vframe_ready(hw_to_vdec(hevc), vf2);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf2);
@@ -9726,7 +9726,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vh265_vf_put(vf, vdec);
 				vh265_vf_put(vf2, vdec);
 				atomic_add(2, &hevc->vf_get_count);
-				hevc->vf_pre_count += 2;
+				atomic_add(2, &hevc->vf_pre_count);
 				return 0;
 			}
 		} else if (pic->pic_struct == 5
@@ -9771,12 +9771,12 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			}
 			if (pic->show_frame) {
 				put_vf_to_display_q(hevc, vf);
-				hevc->vf_pre_count++;
+				atomic_add(1, &hevc->vf_pre_count);
 				vdec_vframe_ready(hw_to_vdec(hevc), vf2);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf2);
 				ATRACE_COUNTER(hevc->pts_name, vf2->timestamp);
-				hevc->vf_pre_count++;
+				atomic_add(1, &hevc->vf_pre_count);
 				vdec_vframe_ready(hw_to_vdec(hevc), vf3);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf3);
@@ -9786,7 +9786,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vh265_vf_put(vf2, vdec);
 				vh265_vf_put(vf3, vdec);
 				atomic_add(3, &hevc->vf_get_count);
-				hevc->vf_pre_count += 3;;
+				atomic_add(3, &hevc->vf_pre_count);
 				return 0;
 			}
 		} else if (pic->pic_struct == 9
@@ -9821,8 +9821,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					hevc->pre_top_pic, 1);
 				}
 
-				if (hevc->vf_pre_count == 0)
-					hevc->vf_pre_count++;
+				if (atomic_read(&hevc->vf_pre_count) == 0)
+					atomic_add(1, &hevc->vf_pre_count);
 
 				/**/
 				if (pic->pic_struct == 9)
@@ -9832,7 +9832,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			} else {
 				vh265_vf_put(vf, vdec);
 				atomic_add(1, &hevc->vf_get_count);
-				hevc->vf_pre_count++;
+				atomic_add(1, &hevc->vf_pre_count);
 				return 0;
 			}
 		} else if (pic->pic_struct == 11
@@ -9862,8 +9862,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vdec_vframe_ready(vdec, vf);
 				kfifo_put(&hevc->pending_q,
 				(const struct vframe_s *)vf);
-				if (hevc->vf_pre_count == 0)
-					hevc->vf_pre_count++;
+				if (atomic_read(&hevc->vf_pre_count) == 0)
+					atomic_add(1, &hevc->vf_pre_count);
 
 				/**/
 				if (pic->pic_struct == 11)
@@ -9873,7 +9873,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			} else {
 				vh265_vf_put(vf, vdec);
 				atomic_add(1, &hevc->vf_get_count);
-				hevc->vf_pre_count++;
+				atomic_add(1, &hevc->vf_pre_count);
 				return 0;
 			}
 		} else {
@@ -9913,7 +9913,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			} else {
 				vh265_vf_put(vf, vdec);
 				atomic_add(1, &hevc->vf_get_count);
-				hevc->vf_pre_count++;
+				atomic_add(1, &hevc->vf_pre_count);
 				return 0;
 			}
 		}
@@ -10831,7 +10831,7 @@ pic_done:
 			reset_process_time(hevc);
 
 			if ((!input_stream_based(vdec) &&
-					hevc->vf_pre_count == 0) || hevc->ip_mode) {
+					atomic_read(&hevc->vf_pre_count) == 0) || hevc->ip_mode) {
 				decoded_poc = hevc->curr_POC;
 				pic = get_pic_by_POC(hevc, decoded_poc);
 				if (pic && (pic->POC != INVALID_POC)) {
@@ -11012,7 +11012,7 @@ force_output:
 			if (aux_data_is_avaible(hevc))
 				dolby_get_meta(hevc);
 			if(hevc->cur_pic && hevc->cur_pic->slice_type == 2 &&
-				hevc->vf_pre_count == 0) {
+				atomic_read(&hevc->vf_pre_count) == 0) {
 				hevc_print(hevc, 0,
 						"first slice_type %x no_switch_dvlayer_count %x\n",
 						hevc->cur_pic->slice_type,
@@ -14005,6 +14005,10 @@ static void reset(struct vdec_s *vdec)
 	for (i = 0; i < BUF_POOL_SIZE; i++) {
 		hevc->m_BUF[i].start_adr = 0;
 	}
+
+	atomic_set(&hevc->vf_pre_count, 0);
+	atomic_set(&hevc->vf_get_count, 0);
+	atomic_set(&hevc->vf_put_count, 0);
 
 	hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);
 }

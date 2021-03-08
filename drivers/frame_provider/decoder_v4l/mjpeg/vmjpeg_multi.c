@@ -219,13 +219,13 @@ struct vdec_mjpeg_hw_s {
 	u32 last_vld_level;
 	u8 eos;
 	u32 frame_num;
-	u32 put_num;
 	u32 run_count;
 	u32	not_run_ready;
 	u32 buffer_not_ready;
 	u32	input_empty;
-	u32 peek_num;
-	u32 get_num;
+	atomic_t peek_num;
+	atomic_t get_num;
+	atomic_t put_num;
 	bool is_used_v4l;
 	void *v4l2_ctx;
 	bool v4l_params_parsed;
@@ -521,7 +521,7 @@ static struct vframe_s *vmjpeg_vf_peek(void *op_arg)
 
 	if (!hw)
 		return NULL;
-	hw->peek_num++;
+	atomic_add(1, &hw->peek_num);
 	if (kfifo_peek(&hw->display_q, &vf))
 		return vf;
 
@@ -536,7 +536,7 @@ static struct vframe_s *vmjpeg_vf_get(void *op_arg)
 
 	if (!hw)
 		return NULL;
-	hw->get_num++;
+	atomic_add(1, &hw->get_num);
 	if (kfifo_get(&hw->display_q, &vf)) {
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		return vf;
@@ -572,7 +572,7 @@ static void vmjpeg_vf_put(struct vframe_s *vf, void *op_arg)
 
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
-	hw->put_num++;
+	atomic_add(1, &hw->put_num);
 }
 
 static int vmjpeg_event_cb(int type, void *data, void *op_arg)
@@ -1297,12 +1297,13 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 	hw->eos = 0;
 	hw->init_flag = 0;
 	hw->frame_num = 0;
-	hw->put_num = 0;
 	hw->run_count = 0;
 	hw->not_run_ready = 0;
 	hw->input_empty = 0;
-	hw->peek_num = 0;
-	hw->get_num = 0;
+	atomic_set(&hw->peek_num, 0);
+	atomic_set(&hw->get_num, 0);
+	atomic_set(&hw->put_num, 0);
+
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++)
 		hw->vfbuf_use[i] = 0;
 
@@ -1717,6 +1718,10 @@ static void reset(struct vdec_s *vdec)
 		hw->vfpool[i].index = -1;
 		kfifo_put(&hw->newframe_q, vf);
 	}
+
+	atomic_set(&hw->peek_num, 0);
+	atomic_set(&hw->get_num, 0);
+	atomic_set(&hw->put_num, 0);
 
 	pr_info("mjpeg: reset.\n");
 }

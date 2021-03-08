@@ -534,10 +534,10 @@ struct vdec_avs_hw_s {
 	u32 run_count;
 	u32	not_run_ready;
 	u32	input_empty;
-	u32 prepare_num;
-	u32 put_num;
-	u32 peek_num;
-	u32 get_num;
+	atomic_t prepare_num;
+	atomic_t put_num;
+	atomic_t peek_num;
+	atomic_t get_num;
 	u32 drop_frame_count;
 	u32 buffer_not_ready;
 	int frameinfo_enable;
@@ -738,7 +738,7 @@ static void set_frame_info(struct vdec_avs_hw_s *hw, struct vframe_s *vf,
 	int ar = 0;
 
 	unsigned int pixel_ratio = READ_VREG(AVS_PIC_RATIO);
-	hw->prepare_num++;
+	atomic_add(1, &hw->prepare_num);
 #ifndef USE_AVS_SEQ_INFO
 	if (hw->vavs_amstream_dec_info.width > 0
 		&& hw->vavs_amstream_dec_info.height > 0) {
@@ -975,7 +975,7 @@ static struct vframe_s *vavs_vf_peek(void *op_arg)
 	struct vframe_s *vf;
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)op_arg;
-	hw->peek_num++;
+	atomic_add(1, &hw->peek_num);
 	if (step == 2)
 		return NULL;
 	if (hw->recover_flag)
@@ -1016,7 +1016,7 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 
 	if (kfifo_get(&hw->display_q, &vf)) {
 		if (vf) {
-			hw->get_num++;
+			atomic_add(1, &hw->get_num);
 			if (force_fps & 0x100) {
 				u32 rate = force_fps & 0xff;
 
@@ -1049,7 +1049,7 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 	(struct vdec_avs_hw_s *)op_arg;
 
 	if (vf) {
-		hw->put_num++;
+		atomic_add(1, &hw->put_num);
 		debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
 			"%s, index = %d, w %d h %d, type 0x%x detached 0x%x\n",
 			__func__,

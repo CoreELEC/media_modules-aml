@@ -1082,9 +1082,9 @@ struct VP9Decoder_s {
 	DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
 	DECLARE_KFIFO(pending_q, struct vframe_s *, VF_POOL_SIZE);
 	struct vframe_s vfpool[VF_POOL_SIZE];
-	u32 vf_pre_count;
-	u32 vf_get_count;
-	u32 vf_put_count;
+	atomic_t vf_pre_count;
+	atomic_t vf_get_count;
+	atomic_t vf_put_count;
 	int buf_num;
 	int pic_num;
 	int lcu_size_log2;
@@ -7102,8 +7102,9 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 		ATRACE_COUNTER(pbi->disp_q_name, kfifo_len(&pbi->display_q));
 		if (index < pbi->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
-			vf->index_disp = pbi->vf_get_count;
-			pbi->vf_get_count++;
+			vf->index_disp = atomic_read(&pbi->vf_get_count);
+			atomic_add(1, &pbi->vf_get_count);
+
 			if (debug & VP9_DEBUG_BUFMGR)
 				pr_info("%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
 					__func__, index, vf->type,
@@ -7151,7 +7152,7 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 
 	kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(pbi->new_q_name, kfifo_len(&pbi->newframe_q));
-	pbi->vf_put_count++;
+	atomic_add(1, &pbi->vf_put_count);
 
 	if (debug & VP9_DEBUG_BUFMGR)
 		pr_info("%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
@@ -7677,7 +7678,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			ATRACE_COUNTER(pbi->pts_name, vf->timestamp);
 			ATRACE_COUNTER(pbi->new_q_name, kfifo_len(&pbi->newframe_q));
 			ATRACE_COUNTER(pbi->disp_q_name, kfifo_len(&pbi->display_q));
-			pbi->vf_pre_count++;
+			atomic_add(1, &pbi->vf_pre_count);
 			pbi_update_gvs(pbi);
 			/*count info*/
 			vdec_count_info(pbi->gvs, 0, stream_offset);
@@ -8766,7 +8767,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #endif
 			{
 				reset_process_time(pbi);
-				if (pbi->vf_pre_count == 0 || pbi->low_latency_flag)
+				if (atomic_read(&pbi->vf_pre_count) == 0 || pbi->low_latency_flag)
 					vp9_bufmgr_postproc(pbi);
 
 				pbi->dec_result = DEC_RESULT_DONE;
@@ -10729,6 +10730,10 @@ static void reset(struct vdec_s *vdec)
 		vp9_print(pbi, 0, "%s local_init failed \r\n", __func__);
 
 	vp9_decoder_ctx_reset(pbi);
+
+	atomic_set(&pbi->vf_pre_count, 0);
+	atomic_set(&pbi->vf_get_count, 0);
+	atomic_set(&pbi->vf_put_count, 0);
 
 	vp9_print(pbi, 0, "%s\r\n", __func__);
 }

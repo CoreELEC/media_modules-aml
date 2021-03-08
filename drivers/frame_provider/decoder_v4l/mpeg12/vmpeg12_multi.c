@@ -248,7 +248,6 @@ struct vdec_mpeg12_hw_s {
 	u32 reg_mb_info;
 	u32 reg_signal_type;
 	u32 dec_num;
-	u32 disp_num;
 	struct timer_list check_timer;
 	u32 decode_timeout_count;
 	unsigned long int start_process_time;
@@ -283,9 +282,10 @@ struct vdec_mpeg12_hw_s {
 	u32 run_count;
 	u32	not_run_ready;
 	u32	input_empty;
-	u32 put_num;
-	u32 peek_num;
-	u32 get_num;
+	atomic_t disp_num;
+	atomic_t put_num;
+	atomic_t peek_num;
+	atomic_t get_num;
 	u32 drop_frame_count;
 	u32 buffer_not_ready;
 	u32 ratio_control;
@@ -1713,7 +1713,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				"%s, vf: %lx, num[%d]: %d(%c), dur: %d, type: %x, pts: %d(%lld)\n",
 				__func__, (ulong)vf, i, hw->disp_num, GET_SLICE_TYPE(info),
 				vf->duration, vf->type, vf->pts, vf->pts_us64);
-			hw->disp_num++;
+			atomic_add(1, &hw->disp_num);
 			if (i == 0) {
 				decoder_do_frame_check(vdec, vf);
 				hw_update_gvs(hw);
@@ -2471,7 +2471,7 @@ static struct vframe_s *vmpeg_vf_peek(void *op_arg)
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg12_hw_s *hw =
 	(struct vdec_mpeg12_hw_s *)vdec->private;
-	hw->peek_num++;
+	atomic_add(1, &hw->peek_num);
 	if (kfifo_peek(&hw->display_q, &vf))
 		return vf;
 
@@ -2485,7 +2485,7 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)vdec->private;
 
-	hw->get_num++;
+	atomic_add(1, &hw->get_num);
 	if (kfifo_get(&hw->display_q, &vf)) {
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		return vf;
@@ -2524,7 +2524,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 			"warn: vf %lx, index %d putback repetitive, set use to 0\n", (ulong)vf, vf->index);
 		hw->vfbuf_use[vf->index] = 0;
 	}
-	hw->put_num++;
+	atomic_add(1, &hw->put_num);
 	debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 		"%s: vf: %lx, index: %d, use: %d\n", __func__, (ulong)vf,
 		vf->index, hw->vfbuf_use[vf->index]);
@@ -3105,20 +3105,20 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 	hw->dec_control &= DEC_CONTROL_INTERNAL_MASK;
 	hw->refs[0] = -1;
 	hw->refs[1] = -1;
-	hw->disp_num = 0;
 	hw->dec_num = 0;
-	hw->put_num = 0;
 	hw->run_count = 0;
 	hw->not_run_ready = 0;
 	hw->input_empty = 0;
-	hw->peek_num = 0;
-	hw->get_num = 0;
 	hw->drop_frame_count = 0;
 	hw->buffer_not_ready = 0;
 	hw->start_process_time = 0;
 	hw->init_flag = 0;
 	hw->dec_again_cnt = 0;
 	hw->error_frame_skip_level = error_frame_skip_level;
+	atomic_set(&hw->disp_num, 0);
+	atomic_set(&hw->put_num, 0);
+	atomic_set(&hw->get_num, 0);
+	atomic_set(&hw->peek_num, 0);
 
 	if (dec_control)
 		hw->dec_control = dec_control;
@@ -3529,6 +3529,10 @@ static void reset(struct vdec_s *vdec)
 	hw->refs[1] = -1;
 	hw->first_i_frame_ready = 0;
 	hw->ctx_valid = 0;
+
+	atomic_set(&hw->disp_num, 0);
+	atomic_set(&hw->get_num, 0);
+	atomic_set(&hw->put_num, 0);
 
 	pr_info("mpeg12: reset.\n");
 }
