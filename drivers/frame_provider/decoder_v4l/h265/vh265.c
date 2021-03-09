@@ -3576,7 +3576,6 @@ static int v4l_parser_work_pic_num(struct hevc_state_s *hevc)
 	return used_buf_num;
 }
 
-
 static int get_alloc_pic_count(struct hevc_state_s *hevc)
 {
 	int alloc_pic_count = 0;
@@ -3702,7 +3701,7 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 static void init_pic_list(struct hevc_state_s *hevc)
 {
 	int i;
-	int init_buf_num = get_work_pic_num(hevc);
+	int init_buf_num = hevc->used_buf_num;
 	int dw_mode = get_double_write_mode(hevc);
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 	/*alloc decoder buf will be delay if work on v4l. */
@@ -5837,7 +5836,7 @@ static unsigned char test_flag = 1;
 
 static void pic_list_process(struct hevc_state_s *hevc)
 {
-	int work_pic_num = get_work_pic_num(hevc);
+	int work_pic_num = hevc->used_buf_num;
 	int alloc_pic_count = 0;
 	int i;
 	struct PIC_s *pic;
@@ -10491,7 +10490,6 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 	hevc->last_height = rpm_param->p.pic_height_in_luma_samples;
 	hevc->sps_num_reorder_pics_0 =
 		rpm_param->p.sps_num_reorder_pics_0;
-	hevc->used_buf_num = v4l_parser_work_pic_num(hevc);
 
 	ps->visible_width 	= width;
 	ps->visible_height 	= height;
@@ -14064,7 +14062,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		hevc->frame_height,
 		hevc->sps_num_reorder_pics_0,
 		hevc->ip_mode,
-		get_work_pic_num(hevc),
+		hevc->used_buf_num,
 		hevc->video_signal_type_debug,
 		hevc->is_swap
 		);

@@ -8017,11 +8017,10 @@ static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 	ps->coded_height 	= ALIGN(hw->frame_height, 64);
 	ps->dpb_size 		= hw->used_buf_num;
 	ps->reorder_margin	= hw->dynamic_buf_num_margin;
-	ps->reorder_frames	= 5;
+	ps->reorder_frames	= 9;
 
 	return 0;
 }
-
 
 static int v4l_res_change(struct AV1HW_s *hw)
 {
