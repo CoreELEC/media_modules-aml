@@ -29,6 +29,7 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/device.h>
 #include <linux/delay.h>
+#include <linux/module.h>
 
 #include <linux/uaccess.h>
 /* #include <mach/am_regs.h> */
@@ -50,6 +51,10 @@
 
 #define MAX_DRM_PACKAGE_SIZE 0x500000
 
+
+MODULE_PARM_DESC(reset_demux_enable, "\n\t\t Reset demux enable");
+static int reset_demux_enable = 1;
+module_param(reset_demux_enable, int, 0644);
 
 static const char tsdemux_fetch_id[] = "tsdemux-fetch-id";
 static const char tsdemux_irq_id[] = "tsdemux-irq-id";
@@ -1128,6 +1133,8 @@ void tsdemux_audio_reset(void)
 	if (demux_ops && demux_ops->hw_dmx_unlock)
 		demux_ops->hw_dmx_unlock(xflags);
 	spin_unlock_irqrestore(&demux_ops_lock, flags);
+	if (reset_demux_enable == 1)
+		tsdemux_reset();
 }
 
 void tsdemux_sub_reset(void)
