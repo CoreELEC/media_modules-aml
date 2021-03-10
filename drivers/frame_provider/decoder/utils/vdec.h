@@ -37,6 +37,7 @@
 #include "vdec_input.h"
 #include "frame_check.h"
 #include "vdec_sync.h"
+#include "vdec_canvas_utils.h"
 
 s32 vdec_dev_register(void);
 s32 vdec_dev_unregister(void);
@@ -505,9 +506,8 @@ void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size);
 
 extern u32 timestamp_avsync_counter_get(void);
 
-void config_cav_lut(int index, struct canvas_config_s *cfg, enum vdec_type_e core);
+void vdec_canvas_unlock(unsigned long flags);
 
-void config_cav_lut_ex(u32 index, ulong addr, u32 width,
-	u32 height, u32 wrap, u32 blkmode,
-	u32 endian, enum vdec_type_e core);
+unsigned long vdec_canvas_lock(void);
+
 #endif				/* VDEC_H */

@@ -25,7 +25,7 @@
 #include <linux/timer.h>
 #include <linux/kfifo.h>
 #include <linux/kthread.h>
- #include <linux/vmalloc.h>
+#include <linux/vmalloc.h>
 #include <linux/platform_device.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
@@ -71,7 +71,7 @@ static unsigned int size_yuv_buf = (YUV_DEF_SIZE * YUV_DEF_NUM);
 #define dbg_print(mask, ...) do {					\
 			if ((fc_debug & mask) ||				\
 				(mask == FC_ERROR))					\
-				printk("[FRMAE_CHECK] "__VA_ARGS__);\
+				printk("[FRAME_CHECK] "__VA_ARGS__);\
 		} while(0)
 
 

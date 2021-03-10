@@ -145,6 +145,7 @@ static u64 next_pts_us64;
 static bool is_reset;
 static struct work_struct set_clk_work;
 static struct work_struct error_wd_work;
+static struct canvas_config_s vc1_canvas_config[DECODE_BUFFER_NUM_MAX][3];
 spinlock_t vc1_rp_lock;
 
 
@@ -549,7 +550,17 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 				decoder_bmmu_box_get_mem_handle(
 					mm_blk_handle,
 					buffer_index);
-
+			if (is_support_vdec_canvas()) {
+				vf->canvas0Addr = vf->canvas1Addr = -1;
+				vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+				vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+#ifdef NV21
+				vf->plane_num = 2;
+#else
+				vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
+				vf->plane_num = 3;
+#endif
+			}
 			kfifo_put(&display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -615,6 +626,17 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 					mm_blk_handle,
 					buffer_index);
 
+			if (is_support_vdec_canvas()) {
+				vf->canvas0Addr = vf->canvas1Addr = -1;
+				vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+				vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+#ifdef NV21
+				vf->plane_num = 2;
+#else
+				vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
+				vf->plane_num = 3;
+#endif
+			}
 			kfifo_put(&display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -710,6 +732,17 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 				decoder_bmmu_box_get_mem_handle(
 					mm_blk_handle,
 					buffer_index);
+			if (is_support_vdec_canvas()) {
+				vf->canvas0Addr = vf->canvas1Addr = -1;
+				vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+				vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+#ifdef NV21
+				vf->plane_num = 2;
+#else
+				vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
+				vf->plane_num = 3;
+#endif
+			}
 			kfifo_put(&display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -897,26 +930,53 @@ static int vvc1_canvas_init(void)
 			buf_start,
 			canvas_width, canvas_height,
 			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
+		vc1_canvas_config[i][0].endian = 0;
+		vc1_canvas_config[i][0].width = canvas_width;
+		vc1_canvas_config[i][0].height = canvas_height;
+		vc1_canvas_config[i][0].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][0].phy_addr = buf_start;
+
 		config_cav_lut_ex(2 * i + 1,
 			buf_start +
 			decbuf_y_size, canvas_width,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
 			CANVAS_BLKMODE_32X32, 0, VDEC_1);
+		vc1_canvas_config[i][1].endian = 0;
+		vc1_canvas_config[i][1].width = canvas_width;
+		vc1_canvas_config[i][1].height = canvas_height >> 1;
+		vc1_canvas_config[i][1].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][1].phy_addr = buf_start + decbuf_y_size;
 #else
 		config_cav_lut_ex(3 * i + 0,
 			buf_start,
 			canvas_width, canvas_height,
 			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
+		vc1_canvas_config[i][0].endian = 0;
+		vc1_canvas_config[i][0].width = canvas_width;
+		vc1_canvas_config[i][0].height = canvas_height;
+		vc1_canvas_config[i][0].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][0].phy_addr = buf_start;
 		config_cav_lut_ex(3 * i + 1,
 			buf_start +
 			decbuf_y_size, canvas_width / 2,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
 			CANVAS_BLKMODE_32X32, 0, VDEC_1);
+		vc1_canvas_config[i][1].endian = 0;
+		vc1_canvas_config[i][1].width = canvas_width >> 1;
+		vc1_canvas_config[i][1].height = canvas_height >> 1;
+		vc1_canvas_config[i][1].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][1].phy_addr = buf_start + decbuf_y_size;
 		config_cav_lut_ex(3 * i + 2,
 			buf_start +
 			decbuf_y_size + decbuf_uv_size,
 			canvas_width / 2, canvas_height / 2,
 			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
+		vc1_canvas_config[i][2].endian = 0;
+		vc1_canvas_config[i][2].width = canvas_width >> 1;
+		vc1_canvas_config[i][2].height = canvas_height >> 1;
+		vc1_canvas_config[i][2].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][2].phy_addr = buf_start +
+			decbuf_y_size + decbuf_uv_size;
 #endif
 
 	}

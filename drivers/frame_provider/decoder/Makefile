@@ -7,7 +7,6 @@ obj-y	+=	h264_multi/
 obj-y	+=	h265/
 obj-y	+=	vp9/
 obj-y	+=	mjpeg/
-obj-y	+=	real/
 obj-y	+=	avs/
 obj-y	+=	avs2/
 obj-y	+=	avs_multi/
