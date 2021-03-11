@@ -5528,21 +5528,6 @@ static int av1_local_init(struct AV1HW_s *hw)
 #endif
 
 	hw->mv_buf_margin = mv_buf_margin;
-	if (IS_4K_SIZE(hw->init_pic_w, hw->init_pic_h)) {
-		hw->used_buf_num = MAX_BUF_NUM_LESS + dynamic_buf_num_margin;
-		if (hw->used_buf_num > REF_FRAMES_4K)
-			hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
-	}
-	else
-		hw->used_buf_num = max_buf_num + dynamic_buf_num_margin;
-
-	if (hw->is_used_v4l)
-		hw->used_buf_num = 9 + hw->dynamic_buf_num_margin;
-
-	if (hw->used_buf_num > MAX_BUF_NUM)
-		hw->used_buf_num = MAX_BUF_NUM;
-	if (hw->used_buf_num > FRAME_BUFFERS)
-		hw->used_buf_num = FRAME_BUFFERS;
 
 	hw->pts_unstable = ((unsigned long)(hw->vav1_amstream_dec_info.param)
 			& 0x40) >> 6;
@@ -8273,48 +8258,42 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-    obu_type = load_param(hw, &hw->aom_param, dec_status);
-    if (obu_type < 0) {
+	obu_type = load_param(hw, &hw->aom_param, dec_status);
+	if (obu_type < 0) {
 		hw->process_busy = 0;
 		return IRQ_HANDLED;
 	}
 
-    if (obu_type == OBU_SEQUENCE_HEADER) {
+	if (obu_type == OBU_SEQUENCE_HEADER) {
 		int next_lcu_size;
-	    hw->has_sequence = 1;
-	    av1_bufmgr_process(hw->pbi, &hw->aom_param, 0, obu_type);
+
+		av1_bufmgr_process(hw->pbi, &hw->aom_param, 0, obu_type);
 
 		if ((hw->max_pic_w < hw->aom_param.p.max_frame_width) ||
 			(hw->max_pic_h < hw->aom_param.p.max_frame_height)) {
 			av1_print(hw, 0, "%s, max size change (%d, %d) -> (%d, %d)\n",
 				__func__, hw->max_pic_w, hw->max_pic_h,
 				hw->aom_param.p.max_frame_width, hw->aom_param.p.max_frame_height);
+
 			vav1_mmu_map_free(hw);
+
 			hw->max_pic_w = hw->aom_param.p.max_frame_width;
 			hw->max_pic_h = hw->aom_param.p.max_frame_height;
 			hw->init_pic_w = hw->max_pic_w;
 			hw->init_pic_h = hw->max_pic_h;
 			hw->pbi->frame_width = hw->init_pic_w;
 			hw->pbi->frame_height = hw->init_pic_h;
-			if (IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h)) {
-				hw->double_write_mode = 4;
-				hw->used_buf_num = MAX_BUF_NUM_LESS;
-				if (hw->used_buf_num > REF_FRAMES_4K)
-					hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
-				if (((hw->max_pic_w % 64) != 0) &&
-					(hw_to_vdec(hw)->canvas_mode != CANVAS_BLKMODE_LINEAR))
-					mem_map_mode = 2;
-				av1_print(hw, 0, "force 8k double write 4, mem_map_mode %d\n", mem_map_mode);
-			}
+
 			vav1_mmu_map_alloc(hw);
+
 			if (hw->mmu_enable)
-			    WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL, hw->frame_mmu_map_phy_addr);
+				WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL, hw->frame_mmu_map_phy_addr);
 #ifdef AOM_AV1_MMU_DW
 			if (hw->dw_mmu_enable) {
 				WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2, hw->dw_frame_mmu_map_phy_addr);
 				//default of 0xffffffff will disable dw
-			    WRITE_VREG(HEVC_SAO_Y_START_ADDR, 0);
-			    WRITE_VREG(HEVC_SAO_C_START_ADDR, 0);
+				WRITE_VREG(HEVC_SAO_Y_START_ADDR, 0);
+				WRITE_VREG(HEVC_SAO_C_START_ADDR, 0);
 			}
 #endif
 
@@ -8327,44 +8306,102 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				}
 			}
 		}
+
 		bit_depth_luma = hw->aom_param.p.bit_depth;
 		bit_depth_chroma = hw->aom_param.p.bit_depth;
 		next_lcu_size = ((hw->aom_param.p.seq_flags >> 6) & 0x1) ? 128 : 64;
-		hw->video_signal_type = (hw->aom_param.p.video_signal_type << 16
+			hw->video_signal_type = (hw->aom_param.p.video_signal_type << 16
 			| hw->aom_param.p.color_description);
 
-	    if (next_lcu_size != hw->current_lcu_size) {
+		if (next_lcu_size != hw->current_lcu_size) {
 			av1_print(hw, AOM_DEBUG_HW_MORE,
 				" ## lcu_size changed from %d to %d\n",
 				hw->current_lcu_size, next_lcu_size);
-			hw->current_lcu_size = next_lcu_size;
+				hw->current_lcu_size = next_lcu_size;
 		}
 
-	    if (!hw->pic_list_init_done) {
-#if 0
-			if (hw->m_ins_flag) {
-				/* picture list init.*/
-				hw->dec_result = DEC_INIT_PICLIST;
-				vdec_schedule_work(&hw->work);
-			} else
-#endif
-			{
-				init_pic_list(hw);
-				init_pic_list_hw(hw);
-#ifndef MV_USE_FIXED_BUF
-				if (init_mv_buf_list(hw) < 0) {
-					pr_err("%s: !!!!Error, init_mv_buf_list fail\n", __func__);
-				}
-#endif
-			}
-			hw->pic_list_init_done = true;
-		}
-	    av1_print(hw, AOM_DEBUG_HW_MORE,
+		av1_print(hw, AOM_DEBUG_HW_MORE,
 			"AOM_AV1_SEQ_HEAD_PARSER_DONE, search head ...\n");
-	    WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
+			WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
+
 		hw->process_busy = 0;
+		hw->has_sequence = 1;
+
 		return IRQ_HANDLED;
 	}
+
+	if (hw->is_used_v4l) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
+		hw->frame_width = hw->common.seq_params.max_frame_width;
+		hw->frame_height = hw->common.seq_params.max_frame_height;
+
+		if (!v4l_res_change(hw)) {
+			if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
+				struct aml_vdec_ps_infos ps;
+				struct vdec_comp_buf_info comp;
+
+				pr_info("set ucode parse\n");
+				if (get_valid_double_write_mode(hw) != 16) {
+					vav1_get_comp_buf_info(hw, &comp);
+					vdec_v4l_set_comp_buf_info(ctx, &comp);
+				}
+
+				vav1_get_ps_info(hw, &ps);
+				/*notice the v4l2 codec.*/
+				vdec_v4l_set_ps_infos(ctx, &ps);
+				hw->v4l_params_parsed = true;
+				hw->postproc_done = 0;
+				hw->process_busy = 0;
+				dec_again_process(hw);
+				return IRQ_HANDLED;
+			} else {
+				struct vdec_pic_info pic;
+
+				if (!hw->pic_list_init_done) {
+					vdec_v4l_get_pic_info(ctx, &pic);
+					hw->used_buf_num = pic.reorder_frames +
+						pic.reorder_margin;
+
+					if (IS_4K_SIZE(hw->init_pic_w, hw->init_pic_h)) {
+						hw->used_buf_num = MAX_BUF_NUM_LESS + pic.reorder_margin;
+						if (hw->used_buf_num > REF_FRAMES_4K)
+							hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
+					}
+
+					if (IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h)) {
+						hw->double_write_mode = 4;
+						hw->used_buf_num = MAX_BUF_NUM_LESS;
+						if (hw->used_buf_num > REF_FRAMES_4K)
+							hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
+						if (((hw->max_pic_w % 64) != 0) &&
+							(hw_to_vdec(hw)->canvas_mode != CANVAS_BLKMODE_LINEAR))
+							mem_map_mode = 2;
+						av1_print(hw, 0, "force 8k double write 4, mem_map_mode %d\n", mem_map_mode);
+					}
+
+					if (hw->used_buf_num > MAX_BUF_NUM)
+						hw->used_buf_num = MAX_BUF_NUM;
+
+					init_pic_list(hw);
+					init_pic_list_hw(hw);
+#ifndef MV_USE_FIXED_BUF
+					if (init_mv_buf_list(hw) < 0) {
+						pr_err("%s: !!!!Error, init_mv_buf_list fail\n", __func__);
+					}
+#endif
+					hw->pic_list_init_done = true;
+				}
+			}
+		} else {
+			hw->postproc_done = 0;
+			hw->process_busy = 0;
+			dec_again_process(hw);
+			return IRQ_HANDLED;
+		}
+	}
+
 #ifndef USE_DEC_PIC_END
 		//if (pbi->wait_buf) {
 	    if (pbi->bufmgr_proc_count > 0) {
@@ -8416,47 +8453,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	        put_un_used_mv_bufs(hw);
 #endif
 	    }
-	}
-
-	if (hw->is_used_v4l) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-		hw->frame_width = hw->common.seq_params.max_frame_width;
-		hw->frame_height = hw->common.seq_params.max_frame_height;
-
-		if (!v4l_res_change(hw)) {
-			if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
-				struct aml_vdec_ps_infos ps;
-				struct vdec_comp_buf_info comp;
-
-				pr_info("set ucode parse\n");
-				if (get_valid_double_write_mode(hw) != 16) {
-					vav1_get_comp_buf_info(hw, &comp);
-					vdec_v4l_set_comp_buf_info(ctx, &comp);
-				}
-
-				vav1_get_ps_info(hw, &ps);
-				/*notice the v4l2 codec.*/
-				vdec_v4l_set_ps_infos(ctx, &ps);
-				hw->v4l_params_parsed = true;
-				hw->postproc_done = 0;
-				hw->process_busy = 0;
-				dec_again_process(hw);
-				return IRQ_HANDLED;
-			} else {
-				struct vdec_pic_info pic;
-
-				vdec_v4l_get_pic_info(ctx, &pic);
-				hw->used_buf_num = pic.reorder_frames +
-					pic.reorder_margin;
-			}
-		} else {
-			hw->postproc_done = 0;
-			hw->process_busy = 0;
-			dec_again_process(hw);
-			return IRQ_HANDLED;
-		}
 	}
 
 	if (hw->one_package_frame_cnt) {
@@ -9536,7 +9532,8 @@ static bool is_avaliable_buffer(struct AV1HW_s *hw)
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
 
-	if (ctx->cap_pool.dec < hw->used_buf_num) {
+	if ((hw->used_buf_num == 0) ||
+		(ctx->cap_pool.dec < hw->used_buf_num)) {
 		if (ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token)) {
 			free_count =
 				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) + 1;
@@ -9590,34 +9587,20 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 #endif
 	}
 
-	if (get_free_buf_count(hw) >=
-		hw->run_ready_min_buf_num) {
-		if (vdec->parallel_dec == 1)
-			ret = CORE_MASK_HEVC;
-		else
-			ret = CORE_MASK_VDEC_1 | CORE_MASK_HEVC;
-	}
-
 	if (hw->is_used_v4l) {
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-		if (ctx->param_sets_from_ucode) {
-			if (hw->v4l_params_parsed) {
-				if (ctx->cap_pool.dec < hw->used_buf_num) {
-					if (is_avaliable_buffer(hw))
-						ret = CORE_MASK_HEVC;
-					else
-						ret = 0;
-				}
-			} else {
-				if (ctx->v4l_resolution_change)
-					ret = 0;
-			}
-		} else if (ctx->cap_pool.in < ctx->dpb_size) {
-			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
-				hw->run_ready_min_buf_num)
+		if (hw->v4l_params_parsed) {
+			if (is_avaliable_buffer(hw))
+				ret = CORE_MASK_HEVC;
+			else
 				ret = 0;
+		} else {
+			if (ctx->v4l_resolution_change)
+				ret = 0;
+			else
+				ret = CORE_MASK_HEVC;
 		}
 	}
 
