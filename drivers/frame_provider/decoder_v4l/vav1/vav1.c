@@ -9364,6 +9364,8 @@ static void av1_work(struct work_struct *work)
 		reset_process_time(hw);
 		if (get_free_buf_count(hw) <= 0) {
 			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
+			if (vdec->next_status == VDEC_STATUS_DISCONNECTED)
+				hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
 		} else {
 			av1_continue_decoding(hw, hw->cur_obu_type);

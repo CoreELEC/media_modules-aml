@@ -9978,6 +9978,8 @@ static void vp9_work(struct work_struct *work)
 		reset_process_time(pbi);
 		if (!get_free_buf_count(pbi)) {
 			pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+			if (vdec->next_status == VDEC_STATUS_DISCONNECTED)
+				pbi->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&pbi->work);
 		} else {
 			int i;
