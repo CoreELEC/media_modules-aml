@@ -43,7 +43,6 @@ struct aml_v4l2_vpp_buf {
 	struct di_buffer di_buf;
 #endif
 	struct aml_video_dec_buf *aml_buf;
-	bool is_bypass_p;
 };
 
 struct aml_v4l2_vpp {
@@ -76,17 +75,16 @@ struct aml_v4l2_vpp {
 	int in_num[2];
 	int out_num[2];
 	ulong fb_token;
+	bool is_bypass_p;
 };
 
 #ifdef SUPPORT_V4L_VPP
 /* get number of buffer needed for a working mode */
 int aml_v4l2_vpp_get_buf_num(u32 mode);
 int aml_v4l2_vpp_init(
-	struct aml_vcodec_ctx *ctx,
-	u32 mode,
-	u32 fmt,
-	bool is_drm,
-	struct aml_v4l2_vpp** vpp_handle);
+		struct aml_vcodec_ctx *ctx,
+		struct aml_vpp_cfg_infos *cfg,
+		struct aml_v4l2_vpp** vpp_handle);
 int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp);
 int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf);
 int aml_v4l2_vpp_rel_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf);
@@ -94,10 +92,9 @@ void fill_vpp_buf_cb(void *v4l_ctx, struct vdec_v4l2_buffer *fb);
 #else
 static inline int aml_v4l2_vpp_get_buf_num(u32 mode) { return -1; }
 static inline int aml_v4l2_vpp_init(
-	struct aml_vcodec_ctx *ctx,
-	u32 mode,
-	u32 fmt,
-	struct aml_v4l2_vpp** vpp_handle) { return -1; }
+		struct aml_vcodec_ctx *ctx,
+		struct aml_vpp_cfg_infos *cfg,
+		struct aml_v4l2_vpp** vpp_handle) { return -1; }
 static inline int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp) { return -1; }
 static inline int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf) { return -1; }
 static inline int aml_v4l2_vpp_rel_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf) { return -1; }

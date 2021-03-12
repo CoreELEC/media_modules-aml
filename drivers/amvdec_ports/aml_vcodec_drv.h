@@ -446,8 +446,23 @@ struct dv_data_info {
 	char	dv_md_buf[MD_BUF_SIZE];
 };
 
+/*
+ * struct aml_vpp_cfg_infos - config vpp init param
+ * @mode	: vpp work mode
+ * @fmt		: picture format used to switch nv21 or nv12.
+ * @is_drm	: is drm mode
+ * @buf_size: config buffer size for vpp
+ * @is_bypass_p: to set progressive bypass in vpp
+ */
+struct aml_vpp_cfg_infos {
+	u32 mode;
+	u32 fmt;
+	u32 buf_size;
+	bool is_drm;
+	bool is_bypass_p;
+};
 
-/**
+/*
  * struct aml_vcodec_ctx - Context (instance) private data.
  * @id: index of the context that this structure describes.
  * @ctx_ref: for deferred free of this context.
@@ -580,6 +595,7 @@ struct aml_vcodec_ctx {
 	struct aml_fb_map_table		fb_map[32];
 	struct dv_data_info		*dv_bufs;
 	int				dv_index;
+	struct aml_vpp_cfg_infos 	vpp_cfg;
 };
 
 /**

@@ -31,7 +31,6 @@
 #define OUTPUT_PORT 1
 
 extern int dump_vpp_input;
-extern int bypass_progressive;
 
 static enum DI_ERRORTYPE
 	v4l_vpp_empty_input_done(struct di_buffer *buf)
@@ -312,13 +311,13 @@ retry:
 			vf_out->canvas0_config[1].phy_addr,
 			vf_out->canvas0_config[0].width,
 			vf_out->canvas0_config[0].height,
-			in_buf->is_bypass_p ? "bypass-prog" : "",
+			vpp->is_bypass_p ? "bypass-prog" : "",
 			kfifo_len(&vpp->input),
 			kfifo_len(&vpp->output),
 			kfifo_len(&vpp->frame),
 			kfifo_len(&vpp->out_done_q));
 
-		if (in_buf->is_bypass_p) {
+		if (vpp->is_bypass_p) {
 			in_buf->di_buf.flag |= DI_FLAG_BUF_BY_PASS;
 			v4l_vpp_empty_input_done(&in_buf->di_buf);
 
@@ -343,16 +342,14 @@ exit:
 int aml_v4l2_vpp_get_buf_num(u32 mode)
 {
 	if (mode == VPP_MODE_DI)
-		return 8;
+		return 4;
 	//TODO: support more modes
 	return 2;
 }
 
 int aml_v4l2_vpp_init(
 		struct aml_vcodec_ctx *ctx,
-		u32 mode,
-		u32 fmt,
-		bool is_drm,
+		struct aml_vpp_cfg_infos *cfg,
 		struct aml_v4l2_vpp** vpp_handle)
 {
 	struct di_init_parm init;
@@ -361,10 +358,10 @@ int aml_v4l2_vpp_init(
 	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
 	struct aml_v4l2_vpp *vpp;
 
-	if (mode > VPP_MODE_MAX || !ctx || !vpp_handle)
+	if (!cfg || cfg->mode > VPP_MODE_MAX || !ctx || !vpp_handle)
 		return -EINVAL;
-	if (fmt != V4L2_PIX_FMT_NV12 && fmt != V4L2_PIX_FMT_NV12M &&
-		fmt != V4L2_PIX_FMT_NV21 && fmt != V4L2_PIX_FMT_NV21M)
+	if (cfg->fmt != V4L2_PIX_FMT_NV12 && cfg->fmt != V4L2_PIX_FMT_NV12M &&
+		cfg->fmt != V4L2_PIX_FMT_NV21 && cfg->fmt != V4L2_PIX_FMT_NV21M)
 		return -EINVAL;
 
 	vpp = kzalloc(sizeof(*vpp), GFP_KERNEL);
@@ -377,12 +374,12 @@ int aml_v4l2_vpp_init(
 	init.ops.fill_output_done = v4l_vpp_fill_output_done;
 	init.caller_data = (void *)vpp;
 
-	if ((fmt == V4L2_PIX_FMT_NV12) || (fmt == V4L2_PIX_FMT_NV12M))
+	if ((cfg->fmt == V4L2_PIX_FMT_NV12) || (cfg->fmt == V4L2_PIX_FMT_NV12M))
 		init.output_format = DI_OUTPUT_NV12 | DI_OUTPUT_LINEAR;
 	else
 		init.output_format = DI_OUTPUT_NV21 | DI_OUTPUT_LINEAR;
 
-	if (is_drm)
+	if (cfg->is_drm)
 		init.output_format |= DI_OUTPUT_TVP;
 
 	vpp->di_handle = di_create_instance(init);
@@ -396,8 +393,9 @@ int aml_v4l2_vpp_init(
 	INIT_KFIFO(vpp->frame);
 	INIT_KFIFO(vpp->out_done_q);
 	vpp->ctx = ctx;
+	vpp->is_bypass_p = cfg->is_bypass_p;
 
-	buf_size = aml_v4l2_vpp_get_buf_num(mode);
+	buf_size = cfg->buf_size;
 	vpp->buf_size = buf_size;
 
 	/* setup output fifo */
@@ -535,11 +533,6 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 	in_buf->di_buf.flag = 0;
 	if (vf->type & VIDTYPE_V4L_EOS)
 		in_buf->di_buf.flag |= DI_FLAG_EOS;
-
-	if (vpp->ctx->picinfo.field == V4L2_FIELD_NONE) {
-		if (bypass_progressive)
-			in_buf->is_bypass_p = true;
-	}
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"vpp_push_vframe: vf:%px, idx:%d, type:%x, ts:%lld\n",

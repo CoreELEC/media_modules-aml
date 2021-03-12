@@ -3335,7 +3335,7 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			 *each para 1024bytes(total:0x40000),
 			 *data 1024bytes(total:0x40000)
 			 */
-			.buf_size = 0x80000,
+			.buf_size = 0x80000 * 2,
 		},
 		.dblk_data = {
 			.buf_size = 0x80000,
@@ -3435,7 +3435,7 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			 *each para 1024bytes(total:0x40000),
 			 *data 1024bytes(total:0x40000)
 			 */
-			.buf_size = 0x80000,
+			.buf_size = 0x80000 * 2,
 		},
 		.dblk_data = {
 			.buf_size = 0x80000,
@@ -9906,8 +9906,7 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 	pbi->init_flag = 0;
 	pbi->first_sc_checked= 0;
 
-	if (!vdec_is_support_4k() ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)) {
+	if (!vdec_is_support_4k()) {
 		pbi->max_pic_w = 1920;
 		pbi->max_pic_h = 1088;
 	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
@@ -11209,8 +11208,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->platform_dev = pdev;
 	pbi->video_signal_type = 0;
 	pbi->m_ins_flag = 1;
-	if (!vdec_is_support_4k() ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)) {
+	if (!vdec_is_support_4k()) {
 		pbi->max_pic_w = 1920;
 		pbi->max_pic_h = 1088;
 	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
@@ -11659,8 +11657,7 @@ static int __init amvdec_vp9_driver_init_module(void)
 		amvdec_vp9_profile.profile =
 			"8k, 10bit, dwrite, compressed, fence, v4l-uvm";
 	} else {
-		if ((vdec_is_support_4k()) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+		if (vdec_is_support_4k())
 			amvdec_vp9_profile.profile =
 				"4k, 10bit, dwrite, compressed, fence, v4l-uvm";
 		else

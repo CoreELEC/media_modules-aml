@@ -897,7 +897,9 @@ void  vdec_count_info(struct vdec_info *vs, unsigned int err,
 EXPORT_SYMBOL(vdec_count_info);
 int vdec_is_support_4k(void)
 {
-	return !is_meson_gxl_package_805X();
+	return ((!is_meson_gxl_package_805X()) &&
+			(!is_cpu_s4_s805x2()) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D));
 }
 EXPORT_SYMBOL(vdec_is_support_4k);
 

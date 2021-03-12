@@ -1911,11 +1911,11 @@ static int init_mv_buf_list(struct VP9Decoder_s *pbi)
 	int lcu_total       = pic_width_lcu * pic_height_lcu;
 	int size = ((lcu_total * MV_MEM_UNIT) + 0xffff) &
 		(~0xffff);
-	if (mv_buf_margin > 0)
-		count = REF_FRAMES + mv_buf_margin;
 
 	if (pbi->init_pic_w > 2048 && pbi->init_pic_h > 1088)
 		count = REF_FRAMES_4K + mv_buf_margin;
+	else
+		count = REF_FRAMES + mv_buf_margin;
 
 	if (debug) {
 		pr_info("%s w:%d, h:%d, count: %d\n",
@@ -3194,13 +3194,12 @@ static u32 max_decoding_time;
 
 static u32 error_handle_policy;
 /*static u32 parser_sei_enable = 1;*/
-#define MAX_BUF_NUM_NORMAL     12
+#define MAX_BUF_NUM_NORMAL     14
 #define MAX_BUF_NUM_LESS   10
 static u32 max_buf_num = MAX_BUF_NUM_NORMAL;
 #define MAX_BUF_NUM_SAVE_BUF  8
 
 static u32 run_ready_min_buf_num = 2;
-
 
 static DEFINE_MUTEX(vvp9_mutex);
 #ifndef MULTI_INSTANCE_SUPPORT
@@ -3335,7 +3334,7 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			 *each para 1024bytes(total:0x40000),
 			 *data 1024bytes(total:0x40000)
 			 */
-			.buf_size = 0x80000,
+			.buf_size = 0x80000 * 2,
 		},
 		.dblk_data = {
 			.buf_size = 0x80000,
@@ -3435,7 +3434,7 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			 *each para 1024bytes(total:0x40000),
 			 *data 1024bytes(total:0x40000)
 			 */
-			.buf_size = 0x80000,
+			.buf_size = 0x80000 * 2,
 		},
 		.dblk_data = {
 			.buf_size = 0x80000,
@@ -6814,19 +6813,6 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		}
 	}
 #endif
-	if (pbi->save_buffer_mode)
-		pbi->used_buf_num = MAX_BUF_NUM_SAVE_BUF;
-	else {
-		if (pbi->is_used_v4l)
-			pbi->used_buf_num = 5 + pbi->dynamic_buf_num_margin;
-		else
-			pbi->used_buf_num = max_buf_num;
-	}
-
-	if (pbi->used_buf_num > MAX_BUF_NUM)
-		pbi->used_buf_num = MAX_BUF_NUM;
-	if (pbi->used_buf_num > FRAME_BUFFERS)
-		pbi->used_buf_num = FRAME_BUFFERS;
 
 	pbi->pts_unstable = ((unsigned long)(pbi->vvp9_amstream_dec_info.param)
 			& 0x40) >> 6;
@@ -8645,7 +8631,22 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 	ps->coded_height 	= ALIGN(pbi->frame_height, 64);
 	ps->dpb_size 		= pbi->used_buf_num;
 	ps->reorder_margin	= pbi->dynamic_buf_num_margin;
-	ps->reorder_frames	= 5;
+	if (pbi->frame_width > 2048 && pbi->frame_height > 1088)
+		ps->reorder_frames	= 4;	 /* > level 4.1*/
+	else
+		ps->reorder_frames	= 8;	/* < level 4.1 */
+	/*
+	1. curruent decoding frame is not include in dpb;
+	2. for frame push out, one more buffer necessary.
+	*/
+	ps->reorder_frames += 2;
+
+	if (ps->reorder_margin + ps->reorder_frames > MAX_BUF_NUM_NORMAL) {
+		u32 delta;
+		delta = ps->reorder_margin + ps->reorder_frames - MAX_BUF_NUM_NORMAL;
+		ps->reorder_margin -= delta;
+		pbi->dynamic_buf_num_margin = ps->reorder_margin;
+	}
 
 	return 0;
 }
@@ -8832,7 +8833,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	}
 
 	if (pbi->m_ins_flag &&
-			!get_free_buf_count(pbi)) {
+			!get_free_buf_count(pbi) && pbi->pic_list_init_done) {
 		vp9_print(pbi, VP9_DEBUG_OUT_PTS,
 			"detected %d frames in a packet, ts: %lld.\n",
 			pbi->one_package_frame_cnt + 1,
@@ -8963,7 +8964,6 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 
 				pbi->init_pic_w = pbi->frame_width;
 				pbi->init_pic_h = pbi->frame_height;
-				init_mv_buf_list(pbi);
 
 				pbi->v4l_params_parsed	= true;
 				pbi->postproc_done = 0;
@@ -8971,11 +8971,18 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				dec_again_process(pbi);
 				return IRQ_HANDLED;
 			} else {
-				struct vdec_pic_info pic;
+				if (!pbi->pic_list_init_done) {
+					struct vdec_pic_info pic;
 
-				vdec_v4l_get_pic_info(ctx, &pic);
-				pbi->used_buf_num = pic.reorder_frames +
-					pic.reorder_margin;
+					vdec_v4l_get_pic_info(ctx, &pic);
+					pbi->used_buf_num = pic.reorder_frames +
+						pic.reorder_margin;
+					init_pic_list(pbi);
+					init_pic_list_hw(pbi);
+
+					init_mv_buf_list(pbi);
+					pbi->pic_list_init_done = true;
+				}
 			}
 		} else {
 			pbi->postproc_done = 0;
@@ -9676,10 +9683,6 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 #endif
 		pbi->fw = fw;
 
-		/* picture list init.*/
-		pbi->dec_result = DEC_INIT_PICLIST;
-		vdec_schedule_work(&pbi->work);
-
 		return 0;
 	}
 #endif
@@ -10203,7 +10206,8 @@ static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
 		(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	int i, free_count = 0;
 
-	if (ctx->cap_pool.dec < pbi->used_buf_num) {
+	if ((pbi->used_buf_num == 0) ||
+		(ctx->cap_pool.dec < pbi->used_buf_num)) {
 		if (ctx->fb_ops.query(&ctx->fb_ops, &pbi->fb_token)) {
 			free_count =
 				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) + 1;
@@ -10229,7 +10233,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		CODEC_MM_FLAGS_TVP : 0;
 	unsigned long ret = 0;
 
-	if (!(pbi->pic_list_init_done && pbi->pic_list_init_done2) || pbi->eos)
+	if (!pbi->pic_list_init_done2 || pbi->eos)
 		return ret;
 	if (!pbi->first_sc_checked && pbi->mmu_enable) {
 		int size;
@@ -10298,34 +10302,21 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	return ret;
 
 #else
-	if (get_free_buf_count(pbi) >=
-		pbi->run_ready_min_buf_num) {
-		if (vdec->parallel_dec == 1)
-			ret = CORE_MASK_HEVC;
-		else
-			ret = CORE_MASK_VDEC_1 | CORE_MASK_HEVC;
-	}
 
 	if (pbi->is_used_v4l) {
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 
-		if (ctx->param_sets_from_ucode) {
-			if (pbi->v4l_params_parsed) {
-				if (ctx->cap_pool.dec < pbi->used_buf_num) {
-					if (is_avaliable_buffer(pbi))
-						ret = CORE_MASK_HEVC;
-					else
-						ret = 0;
-				}
-			} else {
-				if (ctx->v4l_resolution_change)
-					ret = 0;
-			}
-		} else if (ctx->cap_pool.in < ctx->dpb_size) {
-			if (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) <
-				pbi->run_ready_min_buf_num)
+		if (pbi->v4l_params_parsed) {
+			if (is_avaliable_buffer(pbi))
+				ret = CORE_MASK_HEVC;
+			else
 				ret = 0;
+		} else {
+			if (ctx->v4l_resolution_change)
+				ret = 0;
+			else
+				ret = CORE_MASK_HEVC;
 		}
 	}
 
@@ -10974,8 +10965,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->platform_dev = pdev;
 	pbi->video_signal_type = 0;
 	pbi->m_ins_flag = 1;
-	if (!vdec_is_support_4k() ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)) {
+	if (!vdec_is_support_4k()) {
 		pbi->max_pic_w = 1920;
 		pbi->max_pic_h = 1088;
 	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
@@ -11420,8 +11410,7 @@ static int __init amvdec_vp9_driver_init_module(void)
 		amvdec_vp9_profile.profile =
 			"8k, 10bit, dwrite, compressed, fence, uvm";
 	} else {
-		if ((vdec_is_support_4k()) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+		if (vdec_is_support_4k())
 			amvdec_vp9_profile.profile =
 				"4k, 10bit, dwrite, compressed, fence, uvm";
 		else

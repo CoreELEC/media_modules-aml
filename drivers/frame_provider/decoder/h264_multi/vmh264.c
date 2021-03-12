@@ -9271,13 +9271,6 @@ result_done:
 		}
 		amvdec_stop();
 
-		if (!vdec_is_support_4k()) {
-			if (clk_adj_frame_count < VDEC_CLOCK_ADJUST_FRAME) {
-				clk_adj_frame_count++;
-				if (clk_adj_frame_count == VDEC_CLOCK_ADJUST_FRAME)
-					vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
-			}
-		}
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s dec_result %d %x %x %x\n",
 			__func__,
@@ -10421,16 +10414,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	dpb_print(DECODE_ID(hw), 0, "ammvdec_h264 mem-addr=%lx,buff_offset=%x,buf_start=%lx\n",
 		pdata->mem_start, hw->buf_offset, hw->cma_alloc_addr);
 
-	if (vdec_is_support_4k() ||
-		(clk_adj_frame_count > (VDEC_CLOCK_ADJUST_FRAME - 1)))
-		vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
-	else if (pdata->sys_info->height * pdata->sys_info->width <= 1280 * 720)
-	{
-		vdec_source_changed(VFORMAT_H264, 1280, 720, 29);
-	}else
-	{
-		vdec_source_changed(VFORMAT_H264, 1920, 1080, 29);
-	}
+	vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
 
 	if (hw->mmu_enable)
 		hevc_source_changed(VFORMAT_HEVC, 3840, 2160, 60);
@@ -10642,15 +10626,17 @@ static int __init ammvdec_h264_driver_init_module(void)
 		return -ENODEV;
 	}
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
-		ammvdec_h264_profile.profile =
-					"dwrite, compressed, frame_dv, fence, v4l";
-	} else if (vdec_is_support_4k()) {
+	if (vdec_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) {
 			ammvdec_h264_profile.profile =
 					"4k, dwrite, compressed, frame_dv, fence, v4l";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) {
 			ammvdec_h264_profile.profile = "4k, frame_dv, fence, v4l";
+		}
+	} else {
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+			ammvdec_h264_profile.profile =
+						"dwrite, compressed, frame_dv, fence, v4l";
 		}
 	}
 

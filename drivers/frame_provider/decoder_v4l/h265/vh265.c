@@ -3483,94 +3483,26 @@ static void dealloc_pic_buf(struct hevc_state_s *hevc,
 	}
 }
 
-static int get_work_pic_num(struct hevc_state_s *hevc)
-{
-	int used_buf_num = 0;
-	int sps_pic_buf_diff = 0;
-
-	if (get_dynamic_buf_num_margin(hevc) > 0) {
-		if ((!hevc->sps_num_reorder_pics_0) &&
-			(hevc->param.p.sps_max_dec_pic_buffering_minus1_0)) {
-			/* the range of sps_num_reorder_pics_0 is in
-			  [0, sps_max_dec_pic_buffering_minus1_0] */
-			used_buf_num = get_dynamic_buf_num_margin(hevc) +
-				hevc->param.p.sps_max_dec_pic_buffering_minus1_0;
-		} else
-			used_buf_num = hevc->sps_num_reorder_pics_0
-				+ get_dynamic_buf_num_margin(hevc);
-
-		sps_pic_buf_diff = hevc->param.p.sps_max_dec_pic_buffering_minus1_0
-					- hevc->sps_num_reorder_pics_0;
-#ifdef MULTI_INSTANCE_SUPPORT
-		/*
-		need one more for multi instance, as
-		apply_ref_pic_set() has no chanch to run to
-		to clear referenced flag in some case
-		*/
-		if (hevc->m_ins_flag)
-			used_buf_num++;
-#endif
-	} else
-		used_buf_num = max_buf_num;
-
-	if (hevc->save_buffer_mode)
-			hevc_print(hevc, 0,
-				"save buf _mode : dynamic_buf_num_margin %d ----> %d \n",
-				dynamic_buf_num_margin,  hevc->dynamic_buf_num_margin);
-
-	if (sps_pic_buf_diff >= 3)
-		used_buf_num += sps_pic_buf_diff;
-
-	if (hevc->is_used_v4l) {
-		/* for eos add more buffer to flush.*/
-		used_buf_num++;
-	}
-
-	if (used_buf_num > MAX_BUF_NUM)
-		used_buf_num = MAX_BUF_NUM;
-	return used_buf_num;
-}
-
 static int v4l_parser_work_pic_num(struct hevc_state_s *hevc)
 {
 	int used_buf_num = 0;
-	int sps_pic_buf_diff = 0;
 
-	pr_debug("margin = %d, sps_max_dec_pic_buffering_minus1_0 = %d,  sps_num_reorder_pics_0 = %d\n",
+	pr_debug("margin = %d, sps_max_dec_pic_buffering_minus1_0 = %d\n",
 		get_dynamic_buf_num_margin(hevc),
-		hevc->param.p.sps_max_dec_pic_buffering_minus1_0,
-		hevc->param.p.sps_num_reorder_pics_0);
+		hevc->param.p.sps_max_dec_pic_buffering_minus1_0);
 
-	if ((!hevc->param.p.sps_num_reorder_pics_0) &&
-		(hevc->param.p.sps_max_dec_pic_buffering_minus1_0)) {
-		/* the range of sps_num_reorder_pics_0 is in
-		[0, sps_max_dec_pic_buffering_minus1_0] */
-		used_buf_num = hevc->param.p.sps_max_dec_pic_buffering_minus1_0;
-	} else
-		used_buf_num = hevc->param.p.sps_num_reorder_pics_0;
-
-	sps_pic_buf_diff = hevc->param.p.sps_max_dec_pic_buffering_minus1_0
-					- hevc->param.p.sps_num_reorder_pics_0;
-#ifdef MULTI_INSTANCE_SUPPORT
+	used_buf_num = hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + 1;
 	/*
-	need one more for multi instance, as
-	apply_ref_pic_set() has no chanch to run to
-	to clear referenced flag in some case
+	1. need one more for multi instance, as apply_ref_pic_set()
+	   has no chanch to run to clear referenced flag in some case
+	2. for eos add more buffer to flush.
 	*/
-	if (hevc->m_ins_flag)
-		used_buf_num++;
-#endif
+	used_buf_num += 2;
 
 	if (hevc->save_buffer_mode)
 		hevc_print(hevc, 0,
 			"save buf _mode : dynamic_buf_num_margin %d ----> %d \n",
 			dynamic_buf_num_margin,  hevc->dynamic_buf_num_margin);
-
-	if (sps_pic_buf_diff >= 3)
-		used_buf_num += sps_pic_buf_diff;
-
-	/* for eos add more buffer to flush.*/
-	used_buf_num++;
 
 	if (used_buf_num > max_buf_num)
 		used_buf_num = max_buf_num;
@@ -13737,8 +13669,9 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		/*avoid more buffers consumed when
 		switching resolution*/
 		if (run_ready_max_buf_num == 0xff &&
-			get_used_buf_count(hevc) >=
-			get_work_pic_num(hevc)) {
+			(get_used_buf_count(hevc) >=
+			v4l_parser_work_pic_num(hevc) +
+			get_dynamic_buf_num_margin(hevc))) {
 			check_buffer_status(hevc);
 			ret = 0;
 		}
@@ -14748,8 +14681,7 @@ static int __init amvdec_h265_driver_init_module(void)
 		/* not support hevc */
 		amvdec_h265_profile.name = "hevc_unsupport";
 	}
-	if ((vdec_is_support_4k()) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D)) {
+	if ((vdec_is_support_4k())) {
 		if (is_meson_m8m2_cpu()) {
 			/* m8m2 support 4k */
 			amvdec_h265_profile.profile = "4k";
@@ -14761,6 +14693,11 @@ static int __init amvdec_h265_driver_init_module(void)
 				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_MG9TV)
 			amvdec_h265_profile.profile = "4k";
+	} else {
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+			amvdec_h265_profile.profile =
+				"8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm";
+		}
 	}
 #endif
 	if (codec_mm_get_total_size() < 80 * SZ_1M) {

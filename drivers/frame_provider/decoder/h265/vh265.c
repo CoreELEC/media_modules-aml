@@ -15081,10 +15081,7 @@ static int __init amvdec_h265_driver_init_module(void)
 		/* not support hevc */
 		amvdec_h265_profile.name = "hevc_unsupport";
 	}
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
-		amvdec_h265_profile.profile =
-				"8bit, 10bit, dwrite, compressed, frame_dv, fence, v4l-uvm";
-	} else if (vdec_is_support_4k()) {
+	if (vdec_is_support_4k()) {
 		if (is_meson_m8m2_cpu()) {
 			/* m8m2 support 4k */
 			amvdec_h265_profile.profile = "4k";
@@ -15096,13 +15093,17 @@ static int __init amvdec_h265_driver_init_module(void)
 				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, v4l-uvm";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_MG9TV)
 			amvdec_h265_profile.profile = "4k";
+	} else {
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+			amvdec_h265_profile.profile =
+				"8bit, 10bit, dwrite, compressed, frame_dv, fence, v4l-uvm";
+			}
 	}
 #endif
 	if (codec_mm_get_total_size() < 80 * SZ_1M) {
 		pr_info("amvdec_h265 default mmu enabled.\n");
 		mmu_enable = 1;
 	}
-
 	vcodec_profile_register(&amvdec_h265_profile);
 	amvdec_h265_profile_single = amvdec_h265_profile;
 	amvdec_h265_profile_single.name = "h265";
