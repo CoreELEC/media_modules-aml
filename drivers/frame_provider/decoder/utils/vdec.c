@@ -73,9 +73,9 @@
 #include <linux/amlogic/media/video_sink/video_keeper.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
-#include "secprot.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "frame_check.h"
+#include <linux/amlogic/tee.h>
 
 #ifdef CONFIG_AMLOGIC_POWER
 #include <linux/amlogic/power_ctrl.h>
@@ -3641,6 +3641,9 @@ static void vdec_route_interrupt(struct vdec_s *vdec, unsigned long mask,
  * Perform need_more_data checking and set flag is decoder
  * is not consuming data.
  */
+#define DMC_DEV_TYPE_NON_SECURE        0
+#define DMC_DEV_TYPE_SECURE            1
+
 void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 {
 	struct vdec_input_s *input = &vdec->input;
@@ -3654,12 +3657,12 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 
 	if (vdec_stream_based(vdec) && !vdec_secure(vdec))
 	{
-		tee_config_device_secure(DMC_DEV_ID_PARSER, 0);
+		tee_config_device_state(DMC_DEV_ID_PARSER, 0);
 	}
 	if (input->target == VDEC_INPUT_TARGET_VLD)
-		tee_config_device_secure(DMC_DEV_ID_VDEC, secure);
+		tee_config_device_state(DMC_DEV_ID_VDEC, secure);
 	else if (input->target == VDEC_INPUT_TARGET_HEVC)
-		tee_config_device_secure(DMC_DEV_ID_HEVC, secure);
+		tee_config_device_state(DMC_DEV_ID_HEVC, secure);
 
 	if (vdec_stream_based(vdec) &&
 		((vdec->need_more_data & VDEC_NEED_MORE_DATA_RUN) &&
