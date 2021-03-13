@@ -1105,8 +1105,9 @@ static void aml_vdec_worker(struct work_struct *work)
 		goto out;
 
 	aml_buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
-
 	if (aml_buf->lastframe) {
+		ulong expires;
+
 		/*the empty data use to flushed the decoder.*/
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"Got empty flush input buffer.\n");
@@ -1114,13 +1115,22 @@ static void aml_vdec_worker(struct work_struct *work)
 		/*
 		 * when inputs a small amount of src buff, then soon to
 		 * switch state FLUSHING, must to wait the DBP to be ready.
-		 * (!ctx->v4l_codec_dpb_ready) change to  only need 2 buf
+		 * (!ctx->v4l_codec_dpb_ready) change to  only need one buf
 		 * for run ready in new version.
 		 */
-		 if ((vdec_frame_number(ctx->ada_ctx) > 0) &&
-			(ctx->cap_pool.in < 2)) {
-			v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
-			goto out;
+		expires = jiffies + msecs_to_jiffies(5000);
+		while ((vdec_frame_number(ctx->ada_ctx) > 0) &&
+			(ctx->cap_pool.in < 1)) {
+			if (time_after(jiffies, expires)) {
+				aml_vdec_flush_decoder(ctx);
+				v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+				v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
+				aml_vdec_dispatch_event(ctx, V4L2_EVENT_REQUEST_EXIT);
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"capture buffer waiting timeout.\n");
+				goto out;
+			}
+			usleep_range(5000, 5500);
 		}
 
 		mutex_lock(&ctx->state_lock);

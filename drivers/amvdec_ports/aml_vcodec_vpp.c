@@ -503,6 +503,7 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
 		"vpp destroy done\n");
 	kfree(vpp);
+
 	return 0;
 }
 EXPORT_SYMBOL(aml_v4l2_vpp_destroy);
@@ -581,11 +582,16 @@ void fill_vpp_buf_cb(void *v4l_ctx, struct vdec_v4l2_buffer *fb)
 	struct vframe_s *vf = NULL;
 	int ret = -1;
 
-	fb->get_vframe(fb->caller, &vf);
+	for (;;) {
+		fb->get_vframe(fb->caller, &vf);
 
-	ret = aml_v4l2_vpp_push_vframe(ctx->vpp, vf);
-	if (ret < 0) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-			"vpp push vframe err, ret: %d\n", ret);
+		if (vf == NULL)
+			break;
+
+		ret = aml_v4l2_vpp_push_vframe(ctx->vpp, vf);
+		if (ret < 0) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+				"vpp push vframe err, ret: %d\n", ret);
+		}
 	}
 }

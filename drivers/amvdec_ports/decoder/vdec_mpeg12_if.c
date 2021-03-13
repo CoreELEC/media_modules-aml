@@ -298,7 +298,7 @@ static int parse_stream_ucode(struct vdec_mpeg12_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->dec.dpb_sz ? 0 : -1;
+	return inst->vsi->pic.reorder_frames ? 0 : -1;
 }
 
 static int parse_stream_ucode_dma(struct vdec_mpeg12_inst *inst,
@@ -319,7 +319,7 @@ static int parse_stream_ucode_dma(struct vdec_mpeg12_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->dec.dpb_sz ? 0 : -1;
+	return inst->vsi->pic.reorder_frames ? 0 : -1;
 }
 
 static int parse_stream_cpu(struct vdec_mpeg12_inst *inst, u8 *buf, u32 size)

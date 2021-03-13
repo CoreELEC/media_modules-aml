@@ -244,7 +244,6 @@ struct vdec_mjpeg_hw_s {
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
-static int notify_v4l_eos(struct vdec_s *vdec);
 
 static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 {
@@ -336,8 +335,7 @@ static int v4l_res_change(struct vdec_mjpeg_hw_s *hw, int width, int height)
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
-			if (hw->is_used_v4l)
-				notify_v4l_eos(hw_to_vdec(hw));
+			notify_v4l_eos(hw_to_vdec(hw));
 
 			ret = 1;
 		}
@@ -385,13 +383,17 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 				} else {
 					struct vdec_pic_info pic;
 
-					vdec_v4l_get_pic_info(ctx, &pic);
-					hw->buf_num = pic.reorder_frames +
-						pic.reorder_margin;
-					if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
-						hw->buf_num = DECODE_BUFFER_NUM_MAX;
+					if (!hw->buf_num) {
+						vdec_v4l_get_pic_info(ctx, &pic);
+						hw->buf_num = pic.reorder_frames +
+							pic.reorder_margin;
+						if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
+							hw->buf_num = DECODE_BUFFER_NUM_MAX;
+					}
 
 					WRITE_VREG(DEC_STATUS_REG, 0);
+
+					hw->res_ch_flag = 1;
 				}
 			} else {
 				reset_process_time(hw);
@@ -557,7 +559,6 @@ static void vmjpeg_vf_put(struct vframe_s *vf, void *op_arg)
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,
 		"%s:put_num:%d\n", __func__, hw->put_num);
-	hw->vfbuf_use[vf->index]--;
 
 	if (vf->v4l_mem_handle !=
 		hw->buffer_spec[vf->index].v4l_ref_buf_addr) {
@@ -569,6 +570,8 @@ static void vmjpeg_vf_put(struct vframe_s *vf, void *op_arg)
 			hw->buffer_spec[vf->index].v4l_ref_buf_addr,
 			vf->v4l_mem_handle);
 	}
+
+	hw->vfbuf_use[vf->index]--;
 
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
@@ -626,115 +629,6 @@ static int vmjpeg_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->status = hw->stat;
 
 	return 0;
-}
-
-/****************************************/
-static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
-{
-	int i, ret;
-	u32 canvas_width, canvas_height;
-	u32 decbuf_size, decbuf_y_size, decbuf_uv_size;
-	unsigned long buf_start, addr;
-	u32 endian;
-	struct vdec_s *vdec = hw_to_vdec(hw);
-
-	endian = (vdec->canvas_mode ==
-		CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-	canvas_width = 1920;
-	canvas_height = 1088;
-	decbuf_y_size = 0x200000;
-	decbuf_uv_size = 0x80000;
-	decbuf_size = 0x300000;
-
-	for (i = 0; i < hw->buf_num; i++) {
-		int canvas;
-
-		if (hw->is_used_v4l) {
-			continue;
-		} else {
-			ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, i,
-					decbuf_size, DRIVER_NAME, &buf_start);
-			if (ret < 0) {
-				pr_err("CMA alloc failed! size 0x%d  idx %d\n",
-					decbuf_size, i);
-				return;
-			}
-		}
-
-		hw->buffer_spec[i].buf_adr = buf_start;
-		addr = hw->buffer_spec[i].buf_adr;
-
-		hw->buffer_spec[i].y_addr = addr;
-		addr += decbuf_y_size;
-		hw->buffer_spec[i].u_addr = addr;
-		addr += decbuf_uv_size;
-		hw->buffer_spec[i].v_addr = addr;
-
-		if (vdec->parallel_dec == 1) {
-			if (hw->buffer_spec[i].y_canvas_index == -1)
-				hw->buffer_spec[i].y_canvas_index = vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
-			if (hw->buffer_spec[i].u_canvas_index == -1)
-				hw->buffer_spec[i].u_canvas_index = vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
-			if (hw->buffer_spec[i].v_canvas_index == -1)
-				hw->buffer_spec[i].v_canvas_index = vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
-		} else {
-			canvas = vdec->get_canvas(i, 3);
-			hw->buffer_spec[i].y_canvas_index = canvas_y(canvas);
-			hw->buffer_spec[i].u_canvas_index = canvas_u(canvas);
-			hw->buffer_spec[i].v_canvas_index = canvas_v(canvas);
-		}
-
-		config_cav_lut_ex(hw->buffer_spec[i].y_canvas_index,
-			hw->buffer_spec[i].y_addr,
-			canvas_width,
-			canvas_height,
-			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR, endian, VDEC_1);
-		hw->buffer_spec[i].canvas_config[0].phy_addr =
-			hw->buffer_spec[i].y_addr;
-		hw->buffer_spec[i].canvas_config[0].width =
-			canvas_width;
-		hw->buffer_spec[i].canvas_config[0].height =
-			canvas_height;
-		hw->buffer_spec[i].canvas_config[0].block_mode =
-			CANVAS_BLKMODE_LINEAR;
-		hw->buffer_spec[i].canvas_config[0].endian =
-			endian;
-
-		config_cav_lut_ex(hw->buffer_spec[i].u_canvas_index,
-			hw->buffer_spec[i].u_addr,
-			canvas_width / 2,
-			canvas_height / 2,
-			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR, endian, VDEC_1);
-		hw->buffer_spec[i].canvas_config[1].phy_addr =
-			hw->buffer_spec[i].u_addr;
-		hw->buffer_spec[i].canvas_config[1].width =
-			canvas_width / 2;
-		hw->buffer_spec[i].canvas_config[1].height =
-			canvas_height / 2;
-		hw->buffer_spec[i].canvas_config[1].block_mode =
-			CANVAS_BLKMODE_LINEAR;
-		hw->buffer_spec[i].canvas_config[1].endian =
-			endian;
-
-		config_cav_lut_ex(hw->buffer_spec[i].v_canvas_index,
-			hw->buffer_spec[i].v_addr,
-			canvas_width / 2,
-			canvas_height / 2,
-			CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_LINEAR, endian, VDEC_1);
-		hw->buffer_spec[i].canvas_config[2].phy_addr =
-			hw->buffer_spec[i].v_addr;
-		hw->buffer_spec[i].canvas_config[2].width =
-			canvas_width / 2;
-		hw->buffer_spec[i].canvas_config[2].height =
-			canvas_height / 2;
-		hw->buffer_spec[i].canvas_config[2].block_mode =
-			CANVAS_BLKMODE_LINEAR;
-		hw->buffer_spec[i].canvas_config[2].endian =
-			endian;
-	}
 }
 
 static void init_scaler(void)
@@ -1171,18 +1065,6 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	return 0;
 }
 
-static int vmjpeg_get_buf_num(struct vdec_mjpeg_hw_s *hw)
-{
-	int buf_num = DECODE_BUFFER_NUM_DEF;
-
-	buf_num += hw->dynamic_buf_num_margin;
-
-	if (buf_num > DECODE_BUFFER_NUM_MAX)
-		buf_num = DECODE_BUFFER_NUM_MAX;
-
-	return buf_num;
-}
-
 static int find_free_buffer(struct vdec_mjpeg_hw_s *hw)
 {
 	int i;
@@ -1192,55 +1074,36 @@ static int find_free_buffer(struct vdec_mjpeg_hw_s *hw)
 			break;
 	}
 
-	if (i == hw->buf_num)
+	if ((i == hw->buf_num) &&
+		(hw->buf_num != 0)) {
 		return -1;
-
-	if (hw->is_used_v4l) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
-			/*run to parser csd data*/
-			i = 0;
-		} else {
-			if (vmjpeg_v4l_alloc_buff_config_canvas(hw, i))
-				return -1;
-		}
 	}
+
+	if (vmjpeg_v4l_alloc_buff_config_canvas(hw, i))
+		return -1;
 
 	return i;
 }
 
 static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 {
-	struct buffer_spec_s *buff_spec;
-	int index, i;
+	int index = -1;
 
-	index = find_free_buffer(hw);
-	if (index < 0)
-		return -1;
+	if (hw->v4l_params_parsed) {
+		index = find_free_buffer(hw);
+		if (hw->buf_num &&
+			((index < 0) || (index >= hw->buf_num)))
+			return -1;
+
+		/* find next decode buffer index */
+		WRITE_VREG(AV_SCRATCH_4, spec2canvas(&hw->buffer_spec[index]));
+		WRITE_VREG(AV_SCRATCH_5, index | 1 << 24);
+
+	} else
+		WRITE_VREG(AV_SCRATCH_5, 1 << 24);
 
 	WRITE_VREG(DOS_SW_RESET0, (1 << 7) | (1 << 6));
 	WRITE_VREG(DOS_SW_RESET0, 0);
-
-	if (!hw->init_flag) {
-		vmjpeg_canvas_init(hw);
-	} else {
-		if (!hw->is_used_v4l) {
-			for (i = 0; i < hw->buf_num; i++) {
-				buff_spec = &hw->buffer_spec[i];
-				config_cav_lut(buff_spec->y_canvas_index,
-							&buff_spec->canvas_config[0], VDEC_1);
-				config_cav_lut(buff_spec->u_canvas_index,
-							&buff_spec->canvas_config[1], VDEC_1);
-				config_cav_lut(buff_spec->v_canvas_index,
-							&buff_spec->canvas_config[2], VDEC_1);
-			}
-		}
-	}
-
-	/* find next decode buffer index */
-	WRITE_VREG(AV_SCRATCH_4, spec2canvas(&hw->buffer_spec[index]));
-	WRITE_VREG(AV_SCRATCH_5, index | 1 << 24);
 	init_scaler();
 
 	/* clear buffer IN/OUT registers */
@@ -1348,7 +1211,8 @@ static bool is_avaliable_buffer(struct vdec_mjpeg_hw_s *hw)
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
 
-	if (ctx->cap_pool.dec < hw->buf_num) {
+	if ((hw->buf_num == 0) ||
+		(ctx->cap_pool.dec < hw->buf_num)) {
 		if (ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token)) {
 			free_count =
 				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) + 1;
@@ -1411,23 +1275,13 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 {
 	struct vdec_mjpeg_hw_s *hw =
 		(struct vdec_mjpeg_hw_s *)vdec->private;
-	int i, ret;
+	int ret;
 
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
 
 	hw->run_count++;
 	vdec_reset_core(vdec);
-	for (i = 0; i < hw->buf_num; i++) {
-		if (hw->vfbuf_use[i] == 0)
-			break;
-	}
-
-	if (i == hw->buf_num) {
-		hw->dec_result = DEC_RESULT_AGAIN;
-		vdec_schedule_work(&hw->work);
-		return;
-	}
 
 	ret = vdec_prepare_input(vdec, &hw->chunk);
 	if (ret <= 0) {
@@ -1542,7 +1396,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			index = find_free_buffer(hw);
 			if (index == -1) {
 				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
+				if (!(ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token)) ||
+					(ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0)) {
 					pr_err("[%d] get fb fail.\n", ctx->id);
 					return -1;
 				}
@@ -1715,10 +1570,25 @@ static void reset(struct vdec_s *vdec)
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		const struct vframe_s *vf = &hw->vfpool[i];
 
+		memset((void *)vf, 0, sizeof(*vf));
 		hw->vfpool[i].index = -1;
 		kfifo_put(&hw->newframe_q, vf);
 	}
 	hw->eos = 0;
+
+	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
+		vdec->free_canvas_ex(hw->buffer_spec[i].y_canvas_index, vdec->id);
+		vdec->free_canvas_ex(hw->buffer_spec[i].u_canvas_index, vdec->id);
+		vdec->free_canvas_ex(hw->buffer_spec[i].v_canvas_index, vdec->id);
+		hw->buffer_spec[i].y_canvas_index = -1;
+		hw->buffer_spec[i].u_canvas_index = -1;
+		hw->buffer_spec[i].v_canvas_index = -1;
+	}
+
+	hw->eos			= 0;
+	hw->buf_num		= 0;
+	hw->frame_width		= 0;
+	hw->frame_height	= 0;
 
 	atomic_set(&hw->peek_num, 0);
 	atomic_set(&hw->get_num, 0);
@@ -1818,8 +1688,6 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 	} else {
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 	}
-
-	hw->buf_num = vmjpeg_get_buf_num(hw);
 
 	if (!hw->is_used_v4l)
 		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
