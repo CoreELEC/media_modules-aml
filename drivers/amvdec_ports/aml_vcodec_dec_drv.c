@@ -639,6 +639,10 @@ int bypass_vpp;
 EXPORT_SYMBOL(bypass_vpp);
 module_param(bypass_vpp, int, 0644);
 
+int bypass_progressive = 1;
+EXPORT_SYMBOL(bypass_progressive);
+module_param(bypass_progressive, int, 0644);
+
 bool support_mjpeg;
 EXPORT_SYMBOL(support_mjpeg);
 module_param(support_mjpeg, bool, 0644);

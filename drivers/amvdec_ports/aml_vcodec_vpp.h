@@ -43,6 +43,7 @@ struct aml_v4l2_vpp_buf {
 	struct di_buffer di_buf;
 #endif
 	struct aml_video_dec_buf *aml_buf;
+	bool is_bypass_p;
 };
 
 struct aml_v4l2_vpp {

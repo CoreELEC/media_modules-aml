@@ -31,6 +31,7 @@
 #define OUTPUT_PORT 1
 
 extern int dump_vpp_input;
+extern int bypass_progressive;
 
 static enum DI_ERRORTYPE
 	v4l_vpp_empty_input_done(struct di_buffer *buf)
@@ -226,7 +227,7 @@ retry:
 			struct vdec_v4l2_buffer *out;
 
 			if (!ctx->fb_ops.query(&ctx->fb_ops, &vpp->fb_token)) {
-				usleep_range(5000, 5500);
+				usleep_range(500, 550);
 				mutex_lock(&vpp->output_lock);
 				kfifo_put(&vpp->output, out_buf);
 				mutex_unlock(&vpp->output_lock);
@@ -290,13 +291,16 @@ retry:
 		if (eos)
 			memset(vf_out, 0, sizeof(*vf_out));
 
+		/* fill outbuf parms. */
 		out_buf->di_buf.vf = vf_out;
 		out_buf->di_buf.flag = 0;
 		out_buf->di_buf.caller_data = vpp;
-		di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
+
+		/* fill inbuf parms. */
+		in_buf->di_buf.caller_data = vpp;
 
 		v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL,
-			"vpp_handle start: dec vf:%px/%d, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, "
+			"vpp_handle start: dec vf:%px/%d, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, %s "
 			"in:%d, out:%d, vf:%d, vpp done:%d",
 			in_buf->di_buf.vf, in_buf->di_buf.vf->index,
 			out_buf->di_buf.vf, VPP_BUF_GET_IDX(out_buf),
@@ -308,13 +312,23 @@ retry:
 			vf_out->canvas0_config[1].phy_addr,
 			vf_out->canvas0_config[0].width,
 			vf_out->canvas0_config[0].height,
+			in_buf->is_bypass_p ? "bypass-prog" : "",
 			kfifo_len(&vpp->input),
 			kfifo_len(&vpp->output),
 			kfifo_len(&vpp->frame),
 			kfifo_len(&vpp->out_done_q));
 
-		in_buf->di_buf.caller_data = vpp;
-		di_empty_input_buffer(vpp->di_handle, &(in_buf->di_buf));
+		if (in_buf->is_bypass_p) {
+			in_buf->di_buf.flag |= DI_FLAG_BUF_BY_PASS;
+			v4l_vpp_empty_input_done(&in_buf->di_buf);
+
+			out_buf->di_buf.flag = in_buf->di_buf.flag;
+			out_buf->di_buf.vf->vf_ext = in_buf->di_buf.vf;
+			v4l_vpp_fill_output_done(&out_buf->di_buf);
+		} else {
+			di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
+			di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
+		}
 	}
 	v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL, "exit vpp thread\n");
 	return 0;
@@ -515,6 +529,11 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 	in_buf->di_buf.flag = 0;
 	if (vf->type & VIDTYPE_V4L_EOS)
 		in_buf->di_buf.flag |= DI_FLAG_EOS;
+
+	if (vf->type & VIDTYPE_PROGRESSIVE) {
+		if (bypass_progressive)
+			in_buf->is_bypass_p = true;
+	}
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"vpp_push_vframe: vf:%px, idx:%d, type:%x, ts:%lld\n",
