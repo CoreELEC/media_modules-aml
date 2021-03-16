@@ -58,8 +58,6 @@
  * @put_vframe	: put vframe to caller.
  * @fill_buf	: recycle buf to pool will be alloc by caller.
  * @fill_buf_done : be invoked if caller fill data done.
- * @dv_comp_buf[COMP_BUF_SIZE] : Stores dv data parsed from aux data.
- * @dv_md_buf[MD_BUF_SIZE] : Stores dv data parsed from aux data.
  * @is_vpp_bypass : fb processed bypass vpp module.
  */
 
@@ -78,8 +76,6 @@ struct vdec_v4l2_buffer {
 	void	(*put_vframe) (void *caller, struct vframe_s *vf);
 	void	(*fill_buf) (void *v4l, struct vdec_v4l2_buffer *fb);
 	void	(*fill_buf_done) (void *v4l, struct vdec_v4l2_buffer *fb);
-	char	dv_comp_buf[COMP_BUF_SIZE];
-	char	dv_md_buf[MD_BUF_SIZE];
 	bool	is_vpp_bypass;
 };
 

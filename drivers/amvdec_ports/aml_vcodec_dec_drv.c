@@ -70,7 +70,15 @@ static int fops_vcodec_open(struct file *file)
 		return -ENOMEM;
 	}
 
+	ctx->dv_bufs = vzalloc(sizeof(*ctx->dv_bufs) * V4L_CAP_BUFF_MAX);
+	if (ctx->dv_bufs == NULL) {
+		kfree(aml_buf);
+		kfree(ctx);
+		return -ENOMEM;
+	}
+
 	mutex_lock(&dev->dev_mutex);
+	ctx->dv_index = 0;
 	ctx->empty_flush_buf = aml_buf;
 	ctx->id = dev->id_counter++;
 	v4l2_fh_init(&ctx->fh, video_devdata(file));
@@ -144,6 +152,7 @@ err_m2m_ctx_init:
 err_ctrls_setup:
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
+	vfree(ctx->dv_bufs);
 	kfree(ctx->empty_flush_buf);
 	kfree(ctx);
 	mutex_unlock(&dev->dev_mutex);
@@ -181,6 +190,7 @@ static int fops_vcodec_release(struct file *file)
 	v4l2_ctrl_handler_free(&ctx->ctrl_hdl);
 
 	list_del_init(&ctx->list);
+	vfree(ctx->dv_bufs);
 	kfree(ctx->empty_flush_buf);
 	kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
 	mutex_unlock(&dev->dev_mutex);
