@@ -53,7 +53,7 @@
 
 
 MODULE_PARM_DESC(reset_demux_enable, "\n\t\t Reset demux enable");
-static int reset_demux_enable = 1;
+static int reset_demux_enable = 0;
 module_param(reset_demux_enable, int, 0644);
 
 static const char tsdemux_fetch_id[] = "tsdemux-fetch-id";
