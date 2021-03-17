@@ -805,6 +805,16 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			return -1;
 		}
 
+		if (hw->is_used_v4l) {
+			vf->v4l_mem_handle
+				= hw->pic[index].v4l_ref_buf_addr;
+			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
+				"[%d] %s(), v4l mem handle: 0x%lx\n",
+				((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
+				__func__, vf->v4l_mem_handle);
+		}
+
 		vf->index = pic->index;
 		vf->width = hw->frame_width;
 		vf->height = hw->frame_height;
@@ -813,7 +823,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->orientation = hw->vmpeg4_rotation;
 		vf->pts = 0;
 		vf->pts_us64 = 0;
-		vf->timestamp = 0;
+		vf->timestamp = pic->timestamp;
 		vf->duration = pic->duration >> 1;
 		vf->duration_pulldown = 0;
 		vf->type = (pic->pic_info & TOP_FIELD_FIRST_FLAG) ?
@@ -1044,7 +1054,7 @@ static void vmpeg4_prepare_input(struct vdec_mpeg4_hw_s *hw)
 	}
 }
 
-static int vmpeg4_get_ps_info(struct vdec_mpeg4_hw_s *hw, int width, int height, struct aml_vdec_ps_infos *ps)
+static int vmpeg4_get_ps_info(struct vdec_mpeg4_hw_s *hw, int width, int height, int interlace, struct aml_vdec_ps_infos *ps)
 {
 	ps->visible_width	= width;
 	ps->visible_height	= height;
@@ -1053,11 +1063,12 @@ static int vmpeg4_get_ps_info(struct vdec_mpeg4_hw_s *hw, int width, int height,
 	ps->dpb_size 		= hw->buf_num;
 	ps->reorder_frames	= DECODE_BUFFER_NUM_DEF;
 	ps->reorder_margin	= hw->dynamic_buf_num_margin;
+	ps->field       	= interlace ? V4L2_FIELD_INTERLACED : V4L2_FIELD_NONE;
 
 	return 0;
 }
 
-static int v4l_res_change(struct vdec_mpeg4_hw_s *hw, int width, int height)
+static int v4l_res_change(struct vdec_mpeg4_hw_s *hw, int width, int height, int interlace)
 {
 	struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -1076,7 +1087,7 @@ static int v4l_res_change(struct vdec_mpeg4_hw_s *hw, int width, int height)
 				hw->frame_width, hw->frame_height,
 				width,
 				height);
-			vmpeg4_get_ps_info(hw, width, height, &ps);
+			vmpeg4_get_ps_info(hw, width, height, interlace, &ps);
 			vdec_v4l_set_ps_infos(ctx, &ps);
 			vdec_v4l_res_ch_event(ctx);
 			hw->v4l_params_parsed = false;
@@ -1114,13 +1125,16 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		if (hw->is_used_v4l) {
 			int frame_width = READ_VREG(MP4_PIC_WH)>> 16;
 			int frame_height = READ_VREG(MP4_PIC_WH) & 0xffff;
-			if (!v4l_res_change(hw, frame_width, frame_height)) {
+			int interlace = (READ_VREG(MP4_PIC_RATIO) & 0x80000000) >> 31;
+			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
+				"interlace = %d\n", interlace);
+			if (!v4l_res_change(hw, frame_width, frame_height, interlace)) {
 				struct aml_vcodec_ctx *ctx =
 					(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 				if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 					struct aml_vdec_ps_infos ps;
 
-					vmpeg4_get_ps_info(hw, frame_width, frame_height, &ps);
+					vmpeg4_get_ps_info(hw, frame_width, frame_height, interlace, &ps);
 					hw->v4l_params_parsed = true;
 					vdec_v4l_set_ps_infos(ctx, &ps);
 					reset_process_time(hw);

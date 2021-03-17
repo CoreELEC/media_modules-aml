@@ -357,6 +357,13 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 		}
 	}
 
+	if (ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG4) {
+		if (!is_over_size(width, height, size)) {
+			*mode = VPP_MODE_DI;
+			return true;
+		}
+	}
+
 #if 0//enable later
 	if (ctx->output_pix_fmt == V4L2_PIX_FMT_HEVC ||
 		ctx->output_pix_fmt == V4L2_PIX_FMT_VP9) {
