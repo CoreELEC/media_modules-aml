@@ -11355,6 +11355,8 @@ force_output:
 						vdec_v4l_get_pic_info(ctx, &pic);
 						hevc->used_buf_num = pic.reorder_frames +
 							pic.reorder_margin;
+						if (hevc->used_buf_num > MAX_BUF_NUM)
+							hevc->used_buf_num = MAX_BUF_NUM;
 					}
 				}else {
 					pr_debug("resolution change\n");

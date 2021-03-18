@@ -2508,7 +2508,7 @@ static int mpeg12_valid_vf_check(struct vframe_s *vf, struct vdec_mpeg12_hw_s *h
 {
 	int i;
 
-	if (vf == NULL)
+	if (vf == NULL || vf->index == -1)
 		return 0;
 
 	for (i = 0; i < VF_POOL_SIZE; i++) {
@@ -3541,6 +3541,7 @@ static void reset(struct vdec_s *vdec)
 	hw->first_i_frame_ready = 0;
 	hw->ctx_valid = 0;
 	hw->dec_num = 0;
+	hw->eos = 0;
 
 	atomic_set(&hw->disp_num, 0);
 	atomic_set(&hw->get_num, 0);

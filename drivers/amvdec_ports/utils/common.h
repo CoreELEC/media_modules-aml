@@ -150,4 +150,6 @@ u8 *nal_unit_extract_rbsp(const u8 *src, u32 src_len, u32 *dst_len);
 //debug
 void print_hex_debug(u8 *data, u32 len, int max);
 
+bool is_over_size(int w, int h, int size);
+
 #endif

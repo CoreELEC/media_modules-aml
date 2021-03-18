@@ -1718,6 +1718,7 @@ static void reset(struct vdec_s *vdec)
 		hw->vfpool[i].index = -1;
 		kfifo_put(&hw->newframe_q, vf);
 	}
+	hw->eos = 0;
 
 	atomic_set(&hw->peek_num, 0);
 	atomic_set(&hw->get_num, 0);

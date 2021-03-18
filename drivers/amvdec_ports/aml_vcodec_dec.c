@@ -37,6 +37,7 @@
 #include "aml_vcodec_vpp.h"
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
+#include "utils/common.h"
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
 #include <trace/events/meson_atrace.h>
@@ -309,28 +310,29 @@ static void aml_vdec_flush_decoder(struct aml_vcodec_ctx *ctx)
  */
 static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 {
+	int width = ctx->picinfo.coded_width;
+	int height = ctx->picinfo.coded_height;
+	int size = 1920 * 1088;
+
 	if (bypass_vpp)
 		return false;
 
 	if (ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG2) {
-		if (ctx->picinfo.coded_width <= 1920 &&
-			ctx->picinfo.coded_height <= 1088) {
+		if (!is_over_size(width, height, size)) {
 			*mode = VPP_MODE_DI;
 			return true;
 		}
 	}
 
 	if (ctx->output_pix_fmt == V4L2_PIX_FMT_H264) {
-		if (ctx->picinfo.coded_width <= 1920 &&
-			ctx->picinfo.coded_height <= 1088) {
+		if (!is_over_size(width, height, size)) {
 			*mode = VPP_MODE_DI;
 			return true;
 		}
 	}
 
 	if (ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG1) {
-		if (ctx->picinfo.coded_width <= 1920 &&
-			ctx->picinfo.coded_height <= 1088) {
+		if (!is_over_size(width, height, size)) {
 			*mode = VPP_MODE_DI;
 			return true;
 		}

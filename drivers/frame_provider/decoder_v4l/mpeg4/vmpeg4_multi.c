@@ -1736,13 +1736,32 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 	return NULL;
 }
 
+static int valid_vf_check(struct vframe_s *vf, struct vdec_mpeg4_hw_s *hw)
+{
+	int i;
+
+	if (!vf || (vf->index == -1))
+		return 0;
+
+	for (i = 0; i < VF_POOL_SIZE; i++) {
+		if (vf == &hw->vfpool[i])
+			return 1;
+	}
+
+	return 0;
+}
+
+
 static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
 
-	if (!vf)
-		return;
+	if (!valid_vf_check(vf, hw)) {
+		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+			"invalid vf: %lx\n", (ulong)vf);
+		return ;
+	}
 
 	hw->vfbuf_use[vf->index]--;
 	atomic_add(1, &hw->put_num);
@@ -2696,6 +2715,7 @@ static void reset(struct vdec_s *vdec)
 	hw->refs[1] = -1;
 	hw->first_i_frame_ready = 0;
 	hw->ctx_valid = 0;
+	hw->eos = 0;
 
 	atomic_set(&hw->peek_num, 0);
 	atomic_set(&hw->get_num, 0);

@@ -221,3 +221,12 @@ void print_hex_debug(u8 *data, u32 len, int max)
 	_pr_hex("print hex ending. len %d\n\n", l);
 }
 
+bool is_over_size(int w, int h, int size)
+{
+	if (h != 0 && (w > size / h))
+		return true;
+
+	return false;
+}
+
+

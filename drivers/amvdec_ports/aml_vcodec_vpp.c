@@ -203,14 +203,14 @@ static int aml_v4l2_vpp_thread(void* param)
 		struct vdec_v4l2_buffer *fb;
 
 		if (down_interruptible(&vpp->sem_in))
-			return -EINTR;
+			goto exit;
 retry:
 		if (!vpp->running)
 			break;
 
 		if (kfifo_is_empty(&vpp->output)) {
 			if (down_interruptible(&vpp->sem_out))
-				return -EINTR;
+				goto exit;
 			goto retry;
 		}
 
@@ -218,7 +218,7 @@ retry:
 		if (!kfifo_get(&vpp->output, &out_buf)) {
 			mutex_unlock(&vpp->output_lock);
 			v4l_dbg(ctx, 0, "vpp can not get output\n");
-			return -EAGAIN;
+			goto exit;
 		}
 		mutex_unlock(&vpp->output_lock);
 
@@ -260,7 +260,7 @@ retry:
 		/* safe to pop in_buf */
 		if (!kfifo_get(&vpp->input, &in_buf)) {
 			v4l_dbg(ctx, 0, "vpp can not get input\n");
-			return -EAGAIN;
+			goto exit;
 		}
 
 		if (in_buf->di_buf.flag & DI_FLAG_EOS)
@@ -270,7 +270,7 @@ retry:
 		if (!kfifo_get(&vpp->frame, &vf_out)) {
 			mutex_unlock(&vpp->output_lock);
 			v4l_dbg(ctx, 0, "vpp can not get frame\n");
-			return -EAGAIN;
+			goto exit;
 		}
 		mutex_unlock(&vpp->output_lock);
 
@@ -330,6 +330,12 @@ retry:
 			di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 		}
 	}
+exit:
+	while (!kthread_should_stop()) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
+	}
+
 	v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL, "exit vpp thread\n");
 	return 0;
 }
@@ -496,9 +502,9 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 		kfree(in_buf);
 	kfifo_free(&vpp->input);
 	mutex_destroy(&vpp->output_lock);
-	kfree(vpp);
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
 		"vpp destroy done\n");
+	kfree(vpp);
 	return 0;
 }
 EXPORT_SYMBOL(aml_v4l2_vpp_destroy);
@@ -530,7 +536,7 @@ int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 	if (vf->type & VIDTYPE_V4L_EOS)
 		in_buf->di_buf.flag |= DI_FLAG_EOS;
 
-	if (vf->type & VIDTYPE_PROGRESSIVE) {
+	if (vpp->ctx->picinfo.field == V4L2_FIELD_NONE) {
 		if (bypass_progressive)
 			in_buf->is_bypass_p = true;
 	}
