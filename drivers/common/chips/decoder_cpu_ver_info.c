@@ -69,7 +69,8 @@ static enum AM_MESON_CPU_MAJOR_ID cpu_ver_info[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR
 	AM_MESON_CPU_MAJOR_ID_T5,
 	AM_MESON_CPU_MAJOR_ID_T5D,
 	AM_MESON_CPU_MAJOR_ID_T7,
-	AM_MESON_CPU_MAJOR_ID_S4
+	AM_MESON_CPU_MAJOR_ID_S4,
+	AM_MESON_CPU_MAJOR_ID_T3,
 };
 
 static const struct of_device_id cpu_ver_of_match[] = {
@@ -135,6 +136,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-s4",
 		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_S4 - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-t3",
+		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_T3 - MAJOR_ID_START],
 	},
 	{},
 };

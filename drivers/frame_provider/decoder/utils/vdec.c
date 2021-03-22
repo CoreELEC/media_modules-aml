@@ -336,7 +336,8 @@ bool is_support_no_parser(void)
 	if ((enable_stream_mode_multi_dec) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3))
 		return true;
 	return false;
 }
@@ -642,7 +643,8 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 	if (!IS_ERR_OR_NULL(vdec->dev))
 		vdec_stop_armrisc(input->target);
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)) {
 		if (input->target == VDEC_INPUT_TARGET_VLD) {
 			if (!vdec_on(VDEC_1))
 				return;
@@ -672,7 +674,8 @@ static void vdec_enable_DMC(struct vdec_s *vdec)
 	struct vdec_input_s *input = &vdec->input;
 	unsigned int mask = 0;
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)) {
 		if (input->target == VDEC_INPUT_TARGET_VLD)
 			vdec_dbus_ctrl(1);
 		else if (input->target == VDEC_INPUT_TARGET_HEVC)
@@ -1922,7 +1925,8 @@ static void hevc_wait_ddr(void)
 {
 	unsigned int mask = 0;
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)) {
 		hevc_arb_ctrl(0);
 	} else {
 		mask = 1 << 4; /* hevc */
@@ -3757,7 +3761,8 @@ void vdec_reset_core(struct vdec_s *vdec)
 {
 	unsigned int mask = 0;
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)) {
 		/* t7 no dmc req for vdec only */
 		vdec_dbus_ctrl(0);
 	} else {
@@ -3785,7 +3790,8 @@ void vdec_reset_core(struct vdec_s *vdec)
 	WRITE_VREG(DOS_SW_RESET0, (1<<3)|(1<<4)|(1<<5)|(1<<7)|(1<<8)|(1<<9));
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3))
 		vdec_dbus_ctrl(1);
 	else
 		dec_dmc_port_ctrl(1, mask);
@@ -3831,7 +3837,8 @@ void hevc_reset_core(struct vdec_s *vdec)
 	unsigned int mask = 0;
 	int cpu_type = get_cpu_major_id();
 
-	if (cpu_type == AM_MESON_CPU_MAJOR_ID_T7) {
+	if ((cpu_type == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(cpu_type == AM_MESON_CPU_MAJOR_ID_T3)) {
 		/* t7 no dmc req for hevc only */
 		hevc_arb_ctrl(0);
 	} else {
@@ -3910,7 +3917,8 @@ void hevc_reset_core(struct vdec_s *vdec)
 		break;
 	}
 
-	if (cpu_type == AM_MESON_CPU_MAJOR_ID_T7)
+	if ((cpu_type == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(cpu_type == AM_MESON_CPU_MAJOR_ID_T3))
 		hevc_arb_ctrl(1);
 	else
 		dec_dmc_port_ctrl(1, mask);

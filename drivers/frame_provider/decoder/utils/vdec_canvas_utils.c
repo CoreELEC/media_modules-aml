@@ -21,7 +21,7 @@
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "vdec.h"
 
-static struct canvas_status_s canvas_stat[AMVDEC_CANVAS_MAX1 - AMVDEC_CANVAS_START_INDEX + 1 + AMVDEC_CANVAS_MAX2 + 1];
+static struct canvas_status_s canvas_stat[CANVAS_MAX_SIZE];
 static struct canvas_status_s mdec_cav_stat[MDEC_CAV_LUT_MAX];
 static struct canvas_config_s *mdec_cav_pool = NULL;
 
@@ -30,7 +30,15 @@ extern u32 vdec_get_debug(void);
 
 bool is_support_vdec_canvas(void)
 {
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+	/* vdec canvas note:
+	 * 1. canvas params config to display, do not use
+	 *    vf->canvasxAddr, should use vf->canvasxconfig[].
+	 * 2. the endian can not config with canvas. and hevc
+	 *    core should not config canvas. config endian in 
+	 *    probe function like h265/vp9/av1/avs2.
+	*/
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3))
 		return true;
 	return false;
 }

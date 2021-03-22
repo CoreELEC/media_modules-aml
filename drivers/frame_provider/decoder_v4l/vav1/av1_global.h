@@ -52,13 +52,15 @@
 #define AOMMIN(x, y) (((x) < (y)) ? (x) : (y))
 #define AOMMAX(x, y) (((x) > (y)) ? (x) : (y))
 
-//typedef char int8_t;
-//#ifndef BUFMGR_FOR_SIM
-typedef unsigned char uint8_t;
-//#endif
-typedef unsigned int uint32_t;
-//typedef int int32_t;
-//typedef long long int64_t;
+/*
+ *typedef char int8_t;
+ *#ifndef BUFMGR_FOR_SIM
+ *typedef unsigned char uint8_t;
+ *#endif
+ *typedef unsigned int uint32_t;
+ *typedef int int32_t;
+ *typedef long long int64_t;
+ */
 
 #ifdef AML
 #define AOM_AV1_MMU
@@ -2230,6 +2232,10 @@ typedef union param_u {
         unsigned short seg_lf_info_c[8];
 		unsigned short video_signal_type;
 		unsigned short color_description;
+
+        unsigned short mmu_used_num;
+        unsigned short dw_mmu_used_num;
+        unsigned short seq_flags_2;
 
         /*ucode end*/
         /*other*/

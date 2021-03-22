@@ -3264,8 +3264,10 @@ static int config_pic_size(struct AV1HW_s *hw, unsigned short bit_depth)
     seg_map_size =
 	((frame_width + 127) >> 7) * ((frame_height + 127) >> 7) * 384 ;
 	*/
-	WRITE_VREG(HEVC_PARSER_PICTURE_SIZE,
-		(frame_height << 16) | frame_width);
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3) {
+		WRITE_VREG(HEVC_PARSER_PICTURE_SIZE,
+			(frame_height << 16) | frame_width);
+	}
 #ifdef DUAL_DECODE
 #else
 	WRITE_VREG(HEVC_ASSIST_PIC_SIZE_FB_READ,
@@ -7035,6 +7037,30 @@ static void  config_mcrcc_axi_hw_nearest_ref(struct AV1HW_s *hw)
 
 #endif
 
+#if 0
+void release_unused_4k_ext(MMU_BUFF_MGR *mmumgr, int32_t cur_buf_idx, long used_4k_num)
+{
+  int32_t release_4k_position;
+  int32_t i;
+
+  if(mmumgr->mmu_pic_count < 0) return;
+
+  mmumgr->mmu_offset_seed = used_4k_num & 0xff;
+  if(used_4k_num > mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number) {
+    printk("[MMU MEM ERROR] : Use more 4K Page than allocated  %d > ([%d] = %d)!!\r\n", used_4k_num, cur_buf_idx, mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number);
+  }
+  else printk("[MMU MEM RELEASE] : P%d(buffer %d) used %d of %d 4k buffer (%d%c)\r\n", mmumgr->mmu_pic_count, cur_buf_idx, used_4k_num, mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number, used_4k_num*100/mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number, '%'); 
+
+  for(i = used_4k_num; i<mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number; i++){
+    release_4k_position = mmumgr->mmu_buf[cur_buf_idx].mmu_4k_index[i] - mmumgr->MC_BUFFER_START_4K_ADR;
+    printk("[MMU MEM RELEASE DEBUG] release_4k_position[%d] : 0x%x\n", i, release_4k_position+mmumgr->MC_BUFFER_START_4K_ADR);
+    mmumgr->mmu_4k_status[release_4k_position] = 0;
+  }
+  mmumgr->cur_mem_usage -= (mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number - used_4k_num)*4096;
+  mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number = used_4k_num;
+}
+#endif
+
 int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 {
 	int ret = 0;
@@ -7084,6 +7110,27 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 	} else {
 		hw->new_compressed_data = 0;
 	}
+#ifdef SEND_MMU_USED_NUM
+      if (cm->prev_fb_idx != INVALID_IDX) {
+            long used_4k_num = aom_param.p.mmu_used_num;
+            if (used_4k_num != 0) {
+                  printk("mmu free tail, index %d used_num 0x%x\n",
+                  cm->prev_fb_idx, used_4k_num);
+                  release_unused_4k_ext(&av1_mmumgr_m, cm->prev_fb_idx, used_4k_num);
+            }
+
+#ifdef AOM_AV1_MMU_DW
+            used_4k_num = aom_param.p.dw_mmu_used_num;
+            if (used_4k_num != 0) {
+                  release_unused_4k_ext(&av1_mmumgr_dw, cm->prev_fb_idx, used_4k_num);
+                  printk("dw mmu free tail, index %d used_num 0x%x\n",
+                        cm->prev_fb_idx, used_4k_num);
+            }
+#endif
+      }
+      cm->prev_fb_idx = INVALID_IDX;
+
+#endif
 #ifdef SANITY_CHECK
 	ret = 0;
 	av1_print(hw, AOM_DEBUG_HW_MORE,
@@ -7217,6 +7264,10 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		pbi->bufmgr_proc_count);
 		pbi->decode_idx++;
 		hw->frame_count++;
+#ifdef SEND_MMU_USED_NUM
+		cm->prev_fb_idx = cm->cur_fb_idx_mmu;
+		cm->cur_fb_idx_mmu = cm->cur_frame->buf.index;
+#endif
 		cur_pic_config->slice_type = cm->cur_frame->frame_type;
 		if (hw->chunk) {
 			av1_print(hw, AV1_DEBUG_OUT_PTS,
@@ -9411,7 +9462,7 @@ static int amvdec_av1_probe(struct platform_device *pdev)
 #endif
 
 	hw->endian = HEVC_CONFIG_LITTLE_ENDIAN;
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+	if (is_support_vdec_canvas())
 		hw->endian = HEVC_CONFIG_BIG_ENDIAN;
 	if (endian)
 		hw->endian = endian;
@@ -10606,7 +10657,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	}
 
 	hw->mem_map_mode = mem_map_mode;
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+	if (is_support_vdec_canvas())
 		hw->endian = HEVC_CONFIG_BIG_ENDIAN;
 	if (endian)
 		hw->endian = endian;

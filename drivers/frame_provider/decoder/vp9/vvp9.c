@@ -2281,7 +2281,8 @@ static int get_free_fb(struct VP9Decoder_s *pbi)
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if ((frame_bufs[i].ref_count == 0) &&
 			(frame_bufs[i].buf.vf_ref == 0) &&
-			(frame_bufs[i].buf.index != -1)
+			(frame_bufs[i].buf.index != -1) &&
+			(cm->cur_frame != &frame_bufs[i])
 			)
 			break;
 	}
@@ -5885,7 +5886,7 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	}
 #ifdef CO_MV_COMPRESS
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
 	    data32 = READ_VREG(HEVC_MPRED_CTRL4);
 	    data32 |=  (1 << 1);
 	    WRITE_VREG(HEVC_MPRED_CTRL4, data32);
@@ -9968,7 +9969,7 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 #endif
 	/* config endian */
 	pbi->endian = HEVC_CONFIG_LITTLE_ENDIAN;
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+	if (is_support_vdec_canvas())
 		pbi->endian = HEVC_CONFIG_BIG_ENDIAN;
 	if (endian)
 		pbi->endian = endian;
@@ -11364,7 +11365,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->endian = HEVC_CONFIG_LITTLE_ENDIAN;
 	if (!pbi->is_used_v4l) {
 		pbi->mem_map_mode = mem_map_mode;
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+		if (is_support_vdec_canvas())
 			pbi->endian = HEVC_CONFIG_BIG_ENDIAN;
 	}
 	if (endian)

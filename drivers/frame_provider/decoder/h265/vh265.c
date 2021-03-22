@@ -14221,7 +14221,7 @@ static int amvdec_h265_probe(struct platform_device *pdev)
 	}
 
 	hevc->endian = HEVC_CONFIG_LITTLE_ENDIAN;
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+	if (is_support_vdec_canvas())
 		hevc->endian = HEVC_CONFIG_BIG_ENDIAN;
 	if (endian)
 		hevc->endian = endian;
@@ -14712,7 +14712,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin;
 
 		hevc->mem_map_mode = mem_map_mode;
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+		if (is_support_vdec_canvas())
 			hevc->endian = HEVC_CONFIG_BIG_ENDIAN;
 	}
 	if (endian)

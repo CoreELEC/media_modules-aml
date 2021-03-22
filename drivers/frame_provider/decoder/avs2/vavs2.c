@@ -6758,7 +6758,7 @@ static int amvdec_avs2_probe(struct platform_device *pdev)
 	dec->cma_dev = pdata->cma_dev;
 
 	dec->endian = HEVC_CONFIG_LITTLE_ENDIAN;
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+	if (is_support_vdec_canvas())
 		dec->endian = HEVC_CONFIG_BIG_ENDIAN;
 	if (endian)
 		dec->endian = endian;
@@ -7648,7 +7648,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	}
 
 	dec->endian = HEVC_CONFIG_LITTLE_ENDIAN;
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+	if (is_support_vdec_canvas())
 		dec->endian = HEVC_CONFIG_BIG_ENDIAN;
 	if (endian)
 		dec->endian = endian;
