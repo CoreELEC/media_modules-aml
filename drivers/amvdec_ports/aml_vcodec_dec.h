@@ -21,6 +21,7 @@
 #define _AML_VCODEC_DEC_H_
 
 #include <linux/kref.h>
+#include <linux/scatterlist.h>
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
@@ -114,6 +115,9 @@ struct aml_video_dec_buf {
 	ulong vpp_buf_handle;
 	/*4 bytes data for data len*/
 	char meta_data[META_DATA_SIZE + 4];
+
+	struct sg_table *out_sgt;
+	struct sg_table *cap_sgt;
 };
 
 extern const struct v4l2_ioctl_ops aml_vdec_ioctl_ops;

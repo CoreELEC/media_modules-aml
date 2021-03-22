@@ -20,20 +20,24 @@
 #include <media/v4l2-event.h>
 #include <media/v4l2-mem2mem.h>
 #include <media/videobuf2-dma-contig.h>
+#include <media/videobuf2-dma-sg.h>
+
+#include <linux/delay.h>
+#include <linux/atomic.h>
+#include <linux/crc32.h>
+#include <linux/sched.h>
+#include <linux/spinlock.h>
+#include <linux/amlogic/meson_uvm_core.h>
+#include <linux/scatterlist.h>
+#include <linux/sched/clock.h>
+#include <linux/highmem.h>
+#include <uapi/linux/sched/types.h>
 
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
 #include "vdec_drv_if.h"
-#include <linux/delay.h>
-#include <linux/atomic.h>
-#include <linux/crc32.h>
-#include <linux/sched.h>
-#include <uapi/linux/sched/types.h>
 #include "aml_vcodec_adapt.h"
-#include <linux/spinlock.h>
-#include <linux/amlogic/meson_uvm_core.h>
-
 #include "aml_vcodec_vpp.h"
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
@@ -42,8 +46,6 @@
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
 #include <trace/events/meson_atrace.h>
 
-#include <linux/sched/clock.h>
-#include <linux/highmem.h>
 
 #define OUT_FMT_IDX		(0) //default h264
 #define CAP_FMT_IDX		(9) //capture nv21
@@ -240,6 +242,23 @@ static ulong aml_vcodec_ctx_lock(struct aml_vcodec_ctx *ctx)
 static void aml_vcodec_ctx_unlock(struct aml_vcodec_ctx *ctx, ulong flags)
 {
 	spin_unlock_irqrestore(&ctx->slock, flags);
+}
+
+static ulong dmabuf_contiguous_size(struct sg_table *sgt)
+{
+	struct scatterlist *s;
+	dma_addr_t expected = sg_dma_address(sgt->sgl);
+	ulong size = 0;
+	u32 i;
+
+	for_each_sg(sgt->sgl, s, sgt->nents, i) {
+		if (sg_dma_address(s) != expected)
+			break;
+		expected = sg_dma_address(s) + sg_dma_len(s);
+		size += sg_dma_len(s);
+	}
+
+	return size;
 }
 
 static struct aml_video_fmt *aml_vdec_find_format(struct v4l2_format *f)
@@ -996,7 +1015,7 @@ void dmabuff_recycle_worker(struct work_struct *work)
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
 			"recycle buff idx: %d, vbuf: %lx\n", vb->vb2_buf.index,
-			(ulong)vb2_dma_contig_plane_dma_addr(&vb->vb2_buf, 0));
+			(ulong)sg_dma_address(buf->out_sgt->sgl));
 
 		v4l2_m2m_buf_done(vb, buf->error ? VB2_BUF_STATE_ERROR :
 			VB2_BUF_STATE_DONE);
@@ -1030,12 +1049,12 @@ static void aml_vdec_worker(struct work_struct *work)
 	struct aml_vcodec_ctx *ctx =
 		container_of(work, struct aml_vcodec_ctx, decode_work);
 	struct aml_vcodec_dev *dev = ctx->dev;
-	struct vb2_buffer *src_buf;
+	struct aml_video_dec_buf *aml_buf;
+	struct vb2_v4l2_buffer *vb2_v4l2;
+	struct vb2_buffer *vb;
 	struct aml_vcodec_mem buf;
 	bool res_chg = false;
 	int ret;
-	struct aml_video_dec_buf *src_buf_info;
-	struct vb2_v4l2_buffer *src_vb2_v4l2;
 
 	if (ctx->state < AML_STATE_INIT ||
 		ctx->state > AML_STATE_FLUSHED) {
@@ -1049,32 +1068,22 @@ static void aml_vdec_worker(struct work_struct *work)
 		goto out;
 	}
 
-	//fixme
-	/*src_buf = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
-	if (src_buf == NULL) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-			"src_buf empty.\n");
-		goto out;
-	}*/
-
-	src_vb2_v4l2 = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
-	if (src_vb2_v4l2 == NULL) {
+	vb2_v4l2 = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
+	if (vb2_v4l2 == NULL) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"src_buf empty.\n");
 		goto out;
 	}
 
-	src_buf = (struct vb2_buffer *)src_vb2_v4l2;
+	vb = (struct vb2_buffer *)vb2_v4l2;
 
 	/*this case for google, but some frames are droped on ffmpeg, so disabled temp.*/
 	if (0 && !is_enough_work_items(ctx))
 		goto out;
 
-	//fixme
-	//src_vb2_v4l2 = container_of(src_buf, struct vb2_v4l2_buffer, vb2_buf);
-	src_buf_info = container_of(src_vb2_v4l2, struct aml_video_dec_buf, vb);
+	aml_buf = container_of(vb2_v4l2, struct aml_video_dec_buf, vb);
 
-	if (src_buf_info->lastframe) {
+	if (aml_buf->lastframe) {
 		/*the empty data use to flushed the decoder.*/
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"Got empty flush input buffer.\n");
@@ -1109,22 +1118,22 @@ static void aml_vdec_worker(struct work_struct *work)
 		goto out;
 	}
 
-	buf.index	= src_buf->index;
-	buf.vaddr	= vb2_plane_vaddr(src_buf, 0);
-	buf.addr	= vb2_dma_contig_plane_dma_addr(src_buf, 0);
-	buf.size	= src_buf->planes[0].bytesused;
-	buf.model	= src_buf->memory;
-	buf.timestamp	= src_buf->timestamp;
-	buf.meta_ptr	= (ulong)src_buf_info->meta_data;
+	buf.index	= vb->index;
+	buf.vaddr	= vb2_plane_vaddr(vb, 0);
+	buf.addr	= sg_dma_address(aml_buf->out_sgt->sgl);
+	buf.size	= vb->planes[0].bytesused;
+	buf.model	= vb->memory;
+	buf.timestamp	= vb->timestamp;
+	buf.meta_ptr	= (ulong)aml_buf->meta_data;
 
 	if (!buf.vaddr && !buf.addr) {
 		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-			"id=%d src_addr is NULL.\n", src_buf->index);
+			"id=%d src_addr is NULL.\n", vb->index);
 		goto out;
 	}
 
-	src_buf_info->used = true;
+	aml_buf->used = true;
 
 	/* v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 		"size: 0x%zx, crc: 0x%x\n",
@@ -1140,25 +1149,25 @@ static void aml_vdec_worker(struct work_struct *work)
 		 * we only return src buffer with VB2_BUF_STATE_DONE
 		 * when decode success without resolution change.
 		 */
-		src_buf_info->used = false;
+		aml_buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 		if (ctx->is_drm_mode &&
 			(buf.model == VB2_MEMORY_DMABUF)) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
-			v4l2_m2m_buf_done(&src_buf_info->vb,
+			v4l2_m2m_buf_done(&aml_buf->vb,
 				VB2_BUF_STATE_DONE);
 		}
 	} else if (ret && ret != -EAGAIN) {
-		src_buf_info->used = false;
+		aml_buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 		if (ctx->is_drm_mode &&
 			(buf.model == VB2_MEMORY_DMABUF)) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
-			v4l2_m2m_buf_done(&src_buf_info->vb,
+			v4l2_m2m_buf_done(&aml_buf->vb,
 				VB2_BUF_STATE_ERROR);
 		}
 
@@ -1168,7 +1177,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		/* wait the DPB state to be ready. */
 		aml_wait_buf_ready(ctx);
 
-		src_buf_info->used = false;
+		aml_buf->used = false;
 		aml_vdec_pic_info_update(ctx);
 		/*
 		 * On encountering a resolution change in the stream.
@@ -2345,8 +2354,10 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 		for (i = 0; i < *nplanes; i++) {
 			if (sizes[i] < q_data->sizeimage[i])
 				return -EINVAL;
-			//alloc_devs[i] = &ctx->dev->plat_dev->dev;
-			alloc_devs[i] = v4l_get_dev_from_codec_mm();//alloc mm from the codec mm
+			alloc_devs[i] = &ctx->dev->plat_dev->dev;
+
+			if (!V4L2_TYPE_IS_OUTPUT(vq->type))
+				alloc_devs[i] = v4l_get_dev_from_codec_mm();
 		}
 	} else {
 		int dw_mode = VDEC_DW_NO_AFBC;
@@ -2365,8 +2376,10 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 			sizes[i] = q_data->sizeimage[i];
 			if (V4L2_TYPE_IS_OUTPUT(vq->type) && ctx->output_dma_mode)
 				sizes[i] = 1;
-			//alloc_devs[i] = &ctx->dev->plat_dev->dev;
-			alloc_devs[i] = v4l_get_dev_from_codec_mm();//alloc mm from the codec mm
+			alloc_devs[i] = &ctx->dev->plat_dev->dev;
+
+			if (!V4L2_TYPE_IS_OUTPUT(vq->type))
+				alloc_devs[i] = v4l_get_dev_from_codec_mm();
 		}
 	}
 
@@ -2850,7 +2863,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 	src_mem.index	= vb->index;
 	src_mem.vaddr	= vb2_plane_vaddr(vb, 0);
-	src_mem.addr	= vb2_dma_contig_plane_dma_addr(vb, 0);
+	src_mem.addr	= sg_dma_address(buf->out_sgt->sgl);
 	src_mem.size	= vb->planes[0].bytesused;
 	src_mem.model	= vb->memory;
 	src_mem.timestamp = vb->timestamp;
@@ -2967,6 +2980,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 					struct aml_video_dec_buf, vb);
 	struct vdec_v4l2_buffer *fb = &buf->frame_buffer;
 	u32 size, phy_addr = 0;
+	int i;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d, idx: %d\n",
 		__func__, vb->vb2_queue->type, vb->index);
@@ -2976,26 +2990,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 	}
 
 	/* codec_mm buffers count */
-	if (V4L2_TYPE_IS_OUTPUT(vb->type)) {
-		if (vb->memory == VB2_MEMORY_MMAP) {
-			char *owner = __getname();
-
-			size = vb->planes[0].length;
-			phy_addr = vb2_dma_contig_plane_dma_addr(vb, 0);
-			snprintf(owner, PATH_MAX, "%s-%d", "v4l-input", ctx->id);
-			strncpy(buf->mem_onwer, owner, sizeof(buf->mem_onwer));
-			buf->mem_onwer[sizeof(buf->mem_onwer) - 1] = '\0';
-			__putname(owner);
-
-			buf->mem[0] = v4l_reqbufs_from_codec_mm(buf->mem_onwer,
-					phy_addr, size, vb->index);
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-				"IN alloc, addr: %x, size: %u, idx: %u\n",
-				phy_addr, size, vb->index);
-		}
-	} else {
-		int i;
-
+	if (!V4L2_TYPE_IS_OUTPUT(vb->type)) {
 		if (vb->memory == VB2_MEMORY_MMAP) {
 			char *owner = __getname();
 
@@ -3038,7 +3033,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 		}
 	}
 
-	if (!V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
+	if (!V4L2_TYPE_IS_OUTPUT(vb->type)) {
 		struct vframe_s *vf = NULL;
 		void *caller = NULL;
 
@@ -3059,6 +3054,20 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 			(ulong) vb2_dma_contig_plane_dma_addr(vb, 0));
 	}
 
+	if (V4L2_TYPE_IS_OUTPUT(vb->type)) {
+		ulong contig_size;
+
+		buf->out_sgt = vb2_dma_sg_plane_desc(vb, 0);
+
+		contig_size = dmabuf_contiguous_size(buf->out_sgt);
+		if (contig_size < vb->planes[0].bytesused) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+				"contiguous mapping is too small %lu/%lu\n",
+				contig_size, size);
+			return -EFAULT;
+		}
+	}
+
 	return 0;
 }
 
@@ -3074,16 +3083,7 @@ static void vb2ops_vdec_buf_cleanup(struct vb2_buffer *vb)
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d, idx: %d\n",
 		__func__, vb->vb2_queue->type, vb->index);
 
-	if (V4L2_TYPE_IS_OUTPUT(vb->type)) {
-		if (vb->memory == VB2_MEMORY_MMAP) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-				"IN clean, addr: %lx, size: %u, idx: %u\n",
-				buf->mem[0]->phy_addr, buf->mem[0]->buffer_size, vb->index);
-
-			v4l_freebufs_back_to_codec_mm(buf->mem_onwer, buf->mem[0]);
-			buf->mem[0] = NULL;
-		}
-	} else {
+	if (!V4L2_TYPE_IS_OUTPUT(vb->type)) {
 		if (vb->memory == VB2_MEMORY_MMAP) {
 			int i;
 
@@ -3486,11 +3486,11 @@ int aml_vcodec_dec_queue_init(void *priv, struct vb2_queue *src_vq,
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "%s\n", __func__);
 
 	src_vq->type		= V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	src_vq->io_modes	= VB2_DMABUF | VB2_MMAP;
+	src_vq->io_modes	= VB2_DMABUF | VB2_MMAP | VB2_USERPTR;
 	src_vq->drv_priv	= ctx;
 	src_vq->buf_struct_size = sizeof(struct aml_video_dec_buf);
 	src_vq->ops		= &aml_vdec_vb2_ops;
-	src_vq->mem_ops		= &vb2_dma_contig_memops;
+	src_vq->mem_ops		= &vb2_dma_sg_memops;
 	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	src_vq->lock		= &ctx->dev->dev_mutex;
 	ret = vb2_queue_init(src_vq);
