@@ -1255,8 +1255,7 @@ static int dvb_ca_en50221_io_do_ioctl(struct file *file,
 	struct dvb_ca_private *ca = dvbdev->priv;
 	int err = 0;
 	int slot;
-
-	dprintk("%s\n", __func__);
+	u8 info = 0x80;
 
 	if (mutex_lock_interruptible(&ca->ioctl_mutex)) {
 		printk("ci lock interrupt error\r\n");
@@ -1264,23 +1263,36 @@ static int dvb_ca_en50221_io_do_ioctl(struct file *file,
 	}
 
 	switch (cmd) {
-	case CA_RESET:
-		dprintk("ci reset---\r\n");
-		for (slot = 0; slot < ca->slot_count; slot++) {
-			mutex_lock(&ca->slot_info[slot].slot_lock);
-			if (ca->slot_info[slot].slot_state != DVB_CA_SLOTSTATE_NONE) {
-				dvb_ca_en50221_slot_shutdown(ca, slot);
-				if (ca->flags & DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE)
-					dvb_ca_en50221_cimcu_camchange_irq(ca->pub,
-								     slot,
-								     DVB_CA_EN50221_CAMCHANGE_INSERTED);
+	case CA_RESET: {
+		if (copy_from_user(&info, (void __user *)parg, 1))
+	          printk("ci reset-cp error--\r\n");
+		if (info >> 7 == 1 ) {
+			for (slot = 0; slot < ca->slot_count; slot++) {
+				mutex_lock(&ca->slot_info[slot].slot_lock);
+				if (ca->pub->write_cam_control(ca->pub, slot,
+							       CTRLIF_COMMAND, CMDREG_RS) != 0) {
+					printk("dvb_ca adapter %d: Unable to reset CAM IF\n",
+					       ca->dvbdev->adapter->num);
+				}
+				mutex_unlock(&ca->slot_info[slot].slot_lock);
 			}
-			mutex_unlock(&ca->slot_info[slot].slot_lock);
+		} else {
+			for (slot = 0; slot < ca->slot_count; slot++) {
+				mutex_lock(&ca->slot_info[slot].slot_lock);
+				if (ca->slot_info[slot].slot_state != DVB_CA_SLOTSTATE_NONE) {
+					dvb_ca_en50221_slot_shutdown(ca, slot);
+					if (ca->flags & DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE)
+						dvb_ca_en50221_cimcu_camchange_irq(ca->pub,
+										slot,
+										DVB_CA_EN50221_CAMCHANGE_INSERTED);
+				}
+				mutex_unlock(&ca->slot_info[slot].slot_lock);
+			}
 		}
 		ca->next_read_slot = 0;
 		dvb_ca_en50221_thread_wakeup(ca);
 		break;
-
+	}
 	case CA_GET_CAP: {
 		struct ca_caps *caps = parg;
 
