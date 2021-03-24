@@ -2660,108 +2660,90 @@ static void check_num_ref(struct DecodedPictureBuffer *p_Dpb)
 
 void dump_dpb(struct DecodedPictureBuffer *p_Dpb, u8 force)
 {
-	unsigned i;
+	unsigned int i;
+	unsigned char *buf = NULL;
+	unsigned int buf_size = 512, len = 0;
 	struct h264_dpb_stru *p_H264_Dpb =
 		container_of(p_Dpb, struct h264_dpb_stru, mDPB);
+
+#define DPB_STRCAT(args...)  do {	\
+		len += snprintf(buf + len,	\
+			buf_size - len, ##args);\
+	} while (0)
+
 	if ((h264_debug_flag & PRINT_FLAG_DUMP_DPB) == 0 &&
 		force == 0)
 		return;
+
+	buf = kzalloc(buf_size, GFP_ATOMIC);
+	if (buf == NULL)
+		return;
+
 	for (i = 0; i < p_Dpb->used_size; i++) {
-		dpb_print(p_H264_Dpb->decoder_index,
-			0,
-			"(");
-		dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"fn=%d  is_used %d ",
+		len = 0;
+		memset(buf, 0, buf_size);
+		DPB_STRCAT("fn=%d  is_used %d ",
 			p_Dpb->fs[i]->frame_num,
 			p_Dpb->fs[i]->is_used);
+
 		if (p_Dpb->fs[i]->is_used & 1) {
 			if (p_Dpb->fs[i]->top_field)
-				dpb_print_cont(p_H264_Dpb->decoder_index,
-				0,
-				"T: poc=%d  pic_num=%d ",
+				DPB_STRCAT("T: poc=%d  pic_num=%d ",
 				p_Dpb->fs[i]->top_field->poc,
 				p_Dpb->fs[i]->top_field->pic_num);
 			else
-				dpb_print_cont(p_H264_Dpb->decoder_index,
-				0,
-				"T: poc=%d  ",
+				DPB_STRCAT("T: poc=%d  ",
 				p_Dpb->fs[i]->frame->top_poc);
 		}
 		if (p_Dpb->fs[i]->is_used & 2) {
 			if (p_Dpb->fs[i]->bottom_field)
-				dpb_print_cont(p_H264_Dpb->decoder_index,
-				0,
-				"B: poc=%d  pic_num=%d ",
+				DPB_STRCAT("B: poc=%d  pic_num=%d ",
 				p_Dpb->fs[i]->bottom_field->poc,
 				p_Dpb->fs[i]->bottom_field->pic_num);
 			else
-				dpb_print_cont(p_H264_Dpb->decoder_index,
-				0,
-				"B: poc=%d  ",
+				DPB_STRCAT("B: poc=%d  ",
 				p_Dpb->fs[i]->frame->bottom_poc);
 		}
 		if (p_Dpb->fs[i]->is_used == 3) {
 			if (p_Dpb->fs[i]->frame != NULL)
-				dpb_print_cont(p_H264_Dpb->decoder_index,
-				0,
-				"F: poc=%d pic_num=%d ",
+				DPB_STRCAT("F: poc=%d pic_num=%d ",
 				p_Dpb->fs[i]->frame->poc,
 				p_Dpb->fs[i]->frame->pic_num);
 			else
-				dpb_print_cont(p_H264_Dpb->decoder_index,
-				0, "fs[%d] frame is null ", i);
+				DPB_STRCAT("fs[%d] frame is null ", i);
 		}
-		dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"G: poc=%d)  ", p_Dpb->fs[i]->poc);
+		DPB_STRCAT("G: poc=%d)  ", p_Dpb->fs[i]->poc);
 		if (p_Dpb->fs[i]->is_reference)
-			dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"ref (%d) ", p_Dpb->fs[i]->is_reference);
+			DPB_STRCAT("ref (%d) ", p_Dpb->fs[i]->is_reference);
 		if (p_Dpb->fs[i]->is_long_term)
-			dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"lt_ref (%d) ", p_Dpb->fs[i]->is_reference);
+			DPB_STRCAT("lt_ref (%d) ", p_Dpb->fs[i]->is_reference);
 		if (p_Dpb->fs[i]->is_output)
-			dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"out(displayed)  ");
+			DPB_STRCAT("out(displayed)  ");
 		if (p_Dpb->fs[i]->pre_output)
-			dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"pre_output(in dispq or displaying)  ");
+			DPB_STRCAT("pre_output(in dispq or displaying)  ");
 		if (p_Dpb->fs[i]->is_used == 3) {
 			if (p_Dpb->fs[i]->frame != NULL && p_Dpb->fs[i]->frame->non_existing)
-				dpb_print_cont(p_H264_Dpb->decoder_index,
-				0,
-				"non_existing  ");
+				DPB_STRCAT("non_existing  ");
 			else
-				dpb_print_cont(p_H264_Dpb->decoder_index,
-				0, "fs[%d] frame is null ", i);
+				DPB_STRCAT("fs[%d] frame is null ", i);
 		}
-		dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"dpb_frame_count %d  ",
+		DPB_STRCAT("dpb_frame_count %d  ",
 			p_Dpb->fs[i]->dpb_frame_count);
 
 #if (MVC_EXTENSION_ENABLE)
 		if (p_Dpb->fs[i]->is_reference)
-			dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"view_id (%d) ", p_Dpb->fs[i]->view_id);
+			DPB_STRCAT("view_id (%d) ", p_Dpb->fs[i]->view_id);
 #endif
 		if (p_Dpb->fs[i]->data_flag) {
-			dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			"data_flag(0x%x)",
+			DPB_STRCAT("data_flag(0x%x)",
 			p_Dpb->fs[i]->data_flag);
 		}
-		dpb_print_cont(p_H264_Dpb->decoder_index,
-			0,
-			" bufspec %d\n",
+		DPB_STRCAT(" bufspec %d\n",
 			p_Dpb->fs[i]->buf_spec_num);
+		dpb_print(p_H264_Dpb->decoder_index, 0, "%s", buf);
 	}
+
+	kfree(buf);
 }
 
 /*!

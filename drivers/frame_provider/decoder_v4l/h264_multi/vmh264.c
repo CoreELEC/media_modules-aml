@@ -9027,7 +9027,15 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	ps->reorder_frames	= reorder_pic_num;
 	ps->reorder_margin	= used_reorder_dpb_size_margin;
 	ps->dpb_size		= active_buffer_spec_num;
-	ps->field		= frame_mbs_only_flag ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
+	/* vpp_needed() return false when resolution over 1920x1088 */
+	if ((frame_height != 0) &&
+		(frame_width > (1920 * 1088) / frame_height)) {
+		vdec->prog_only = 1;
+		ps->field = V4L2_FIELD_NONE;
+	} else {
+		ps->field = frame_mbs_only_flag ?
+			V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
+	}
 
 	return 0;
 }
