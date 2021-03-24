@@ -437,13 +437,23 @@ struct aml_fb_map_table {
 };
 
 /*
- * struct dv_data_info - record some dv data infos
- * @dv_comp_buf[COMP_BUF_SIZE] : Stores dv data parsed from aux data.
- * @dv_md_buf[MD_BUF_SIZE] : Stores dv data parsed from aux data.
+ * struct dv_data - record some dv data
+ * @comp_buf[COMP_BUF_SIZE] : Stores dv data parsed from aux data.
+ * @md_buf[MD_BUF_SIZE] : Stores dv data parsed from aux data.
  */
-struct dv_data_info {
-	char	dv_comp_buf[COMP_BUF_SIZE];
-	char	dv_md_buf[MD_BUF_SIZE];
+struct dv_data {
+	char	comp_buf[COMP_BUF_SIZE];
+	char	md_buf[MD_BUF_SIZE];
+};
+
+/*
+ * struct dv_data_info - record some dv data infos
+ * @index: dv data index.
+ * @dv_bufs: Stores dv data.
+ */
+struct dv_info {
+	int		index;
+	struct dv_data *dv_bufs;
 };
 
 /*
@@ -522,8 +532,7 @@ struct aml_vpp_cfg_infos {
  * @comp_bufs: compress buffer describe.
  * @comp_lock: used for lock ibuf free cb.
  * @fb_ops: frame buffer ops interface.
- * @dv_bufs: parsed dv data information.
- * @dv_index: dv data index.
+ * @dv_infos: dv data information.
  */
 struct aml_vcodec_ctx {
 	int				id;
@@ -593,8 +602,7 @@ struct aml_vcodec_ctx {
 	ulong				token_table[32];
 
 	struct aml_fb_map_table		fb_map[32];
-	struct dv_data_info		*dv_bufs;
-	int				dv_index;
+	struct dv_info			dv_infos;
 	struct aml_vpp_cfg_infos 	vpp_cfg;
 };
 

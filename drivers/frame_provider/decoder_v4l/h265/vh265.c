@@ -9898,10 +9898,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			hevc_print(hevc, H265_DEBUG_BUFMGR,
 				"aux data: (size %d)\n", hevc->m_PIC[vf->index & 0xff]->aux_data_size);
 
-			vf->src_fmt.comp_buf = v4l2_ctx->dv_bufs[v4l2_ctx->dv_index].dv_comp_buf;
-			vf->src_fmt.md_buf = v4l2_ctx->dv_bufs[v4l2_ctx->dv_index].dv_md_buf;
-
-			v4l2_ctx->dv_index = (v4l2_ctx->dv_index++) % V4L_CAP_BUFF_MAX;
+			vf->src_fmt.comp_buf = v4l2_ctx->dv_infos.dv_bufs[v4l2_ctx->dv_infos.index].comp_buf;
+			vf->src_fmt.md_buf = v4l2_ctx->dv_infos.dv_bufs[v4l2_ctx->dv_infos.index].md_buf;
+			v4l2_ctx->dv_infos.index = (++v4l2_ctx->dv_infos.index) % V4L_CAP_BUFF_MAX;
 
 			update_vframe_src_fmt(vf,
 				hevc->m_PIC[vf->index & 0xff]->aux_data_buf,
