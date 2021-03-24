@@ -5750,8 +5750,8 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		if (index < hw->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
-			atomic_add(1, &hw->vf_get_count);
 			vf->index_disp =  atomic_read(&hw->vf_get_count);
+			atomic_add(1, &hw->vf_get_count);
 			if (debug & AOM_DEBUG_VFRAME) {
 				struct BufferPool_s *pool = hw->common.buffer_pool;
 				struct PIC_BUFFER_CONFIG_s *pic =

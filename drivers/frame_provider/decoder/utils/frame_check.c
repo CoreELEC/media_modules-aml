@@ -1149,7 +1149,8 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 		resize = 0;
 	mgr->last_size_pic = mgr->size_pic;
 
-	if ((vf->type & VIDTYPE_VIU_NV21) || (mgr->mjpeg_flag)) {
+	if ((vf->type & VIDTYPE_VIU_NV21) || (mgr->mjpeg_flag) ||
+		(vf->type & VIDTYPE_VIU_NV12)) {
 		int flush_size;
 
 		if (canvas_get_virt_addr(mgr, vf) < 0)

@@ -611,10 +611,6 @@ static void fb_map_table_fetch(struct aml_vcodec_ctx *ctx,
 		if (dw_mode == VDEC_DW_AFBC_ONLY)
 			break;
 
-		/* interlaced frame case 2 vf bind to the same vb2 */
-		if (ctx->vpp && (vb2_buf->state == V4L2_BUF_FLAG_DONE))
-			break;
-
 		fp = filp_open("/data/dec_dump.raw",
 				O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
 

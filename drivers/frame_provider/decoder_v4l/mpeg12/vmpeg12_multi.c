@@ -214,6 +214,7 @@ struct pic_info_t {
 	u32 hw_decode_time;
 	u32 frame_size; // For frame base mode
 	u64 timestamp;
+	u64 last_timestamp;
 };
 
 struct vdec_mpeg12_hw_s {
@@ -339,6 +340,11 @@ struct vdec_mpeg12_hw_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	u32 chunk_header_offset;
+	u32 chunk_res_size;
+	u64 first_field_timestamp;
+	u64 first_field_timestamp_valid;
+	u32 report_field;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -487,7 +493,7 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 		decbuf_uv_start	= decbuf_start + decbuf_y_size;
 		decbuf_uv_size	= decbuf_y_size / 2;
 		canvas_width	= ALIGN(hw->frame_width, 64);
-		canvas_height	= ALIGN(hw->frame_height, 32);
+		canvas_height	= ALIGN(hw->frame_height, 64);
 		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
 	} else if (fb->num_planes == 2) {
 		decbuf_start	= fb->m.mem[0].addr;
@@ -495,7 +501,7 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 		decbuf_uv_start	= fb->m.mem[1].addr;
 		decbuf_uv_size	= fb->m.mem[1].size;
 		canvas_width	= ALIGN(hw->frame_width, 64);
-		canvas_height	= ALIGN(hw->frame_height, 32);
+		canvas_height	= ALIGN(hw->frame_height, 64);
 		fb->m.mem[0].bytes_used = decbuf_y_size;
 		fb->m.mem[1].bytes_used = decbuf_uv_size;
 	}
@@ -1605,7 +1611,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	}
 
 	if ((hw->is_used_v4l) &&
-		(vdec->prog_only))
+		((vdec->prog_only) || (hw->report_field & V4L2_FIELD_NONE)))
 		field_num = 1;
 
 	for (i = 0; i < field_num; i++) {
@@ -1634,8 +1640,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			vf->duration = vf->duration / field_num;
 			vf->duration_pulldown = (field_num == 3) ?
 				(vf->duration >> 1):0;
-			if (i > 0)
-				type = nv_order;
+			type = nv_order;
 			if (i == 1) /* second field*/
 				type |= (first_field_type == VIDTYPE_INTERLACE_TOP) ?
 					VIDTYPE_INTERLACE_BOTTOM : VIDTYPE_INTERLACE_TOP;
@@ -1668,7 +1673,10 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		} else {
 			vf->pts = (pic->pts_valid) ? pic->pts : 0;
 			vf->pts_us64 = (pic->pts_valid) ? pic->pts64 : 0;
-			vf->timestamp = pic->timestamp;
+			if (field_num == 1)
+				vf->timestamp = pic->timestamp;
+			else
+				vf->timestamp = pic->last_timestamp;
 		}
 		vf->type_original = vf->type;
 
@@ -1703,9 +1711,9 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				(const struct vframe_s *)vf);
 		} else {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
-				"%s, vf: %lx, num[%d]: %d(%c), dur: %d, type: %x, pts: %d(%lld)\n",
+				"%s, vf: %lx, num[%d]: %d(%c), dur: %d, type: %x, pts: %d(%lld), ts(%lld)\n",
 				__func__, (ulong)vf, i, hw->disp_num, GET_SLICE_TYPE(info),
-				vf->duration, vf->type, vf->pts, vf->pts_us64);
+				vf->duration, vf->type, vf->pts, vf->pts_us64, vf->timestamp);
 			atomic_add(1, &hw->disp_num);
 			if (i == 0) {
 				decoder_do_frame_check(vdec, vf);
@@ -1839,7 +1847,7 @@ static int vmpeg2_get_ps_info(struct vdec_mpeg12_hw_s *hw, int width, int height
 	ps->visible_width	= width;
 	ps->visible_height	= height;
 	ps->coded_width		= ALIGN(width, 64);
-	ps->coded_height 	= ALIGN(height, 32);
+	ps->coded_height 	= ALIGN(height, 64);
 	ps->dpb_size 		= hw->buf_num;
 	ps->reorder_frames	= DECODE_BUFFER_NUM_DEF;
 	ps->reorder_margin	= hw->dynamic_buf_num_margin;
@@ -1882,6 +1890,24 @@ static int v4l_res_change(struct vdec_mpeg12_hw_s *hw, int width, int height, bo
 	}
 
 	return ret;
+}
+
+void cal_chunk_offset_and_size(struct vdec_mpeg12_hw_s *hw)
+{
+	u32 consume_byte, res_byte;
+
+	res_byte = READ_VREG(VIFF_BIT_CNT) >> 3;
+
+	if (hw->chunk->size > res_byte) {
+		consume_byte = hw->chunk->size - res_byte;
+
+		if (consume_byte > VDEC_FIFO_ALIGN) {
+			consume_byte -= VDEC_FIFO_ALIGN;
+			res_byte += VDEC_FIFO_ALIGN;
+		}
+		hw->chunk_header_offset = hw->chunk->offset + consume_byte;
+		hw->chunk_res_size = res_byte;
+	}
 }
 
 static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
@@ -1928,7 +1954,9 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 					vmpeg2_get_ps_info(hw, frame_width, frame_height, frame_prog, &ps);
 					hw->v4l_params_parsed = true;
+					hw->report_field = frame_prog ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 					vdec_v4l_set_ps_infos(ctx, &ps);
+					cal_chunk_offset_and_size(hw);
 					userdata_pushed_drop(hw);
 					reset_process_time(hw);
 					hw->dec_result = DEC_RESULT_AGAIN;
@@ -2060,6 +2088,11 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 				new_pic->pts_valid = hw->chunk->pts_valid;
 				new_pic->pts = hw->chunk->pts;
 				new_pic->pts64 = hw->chunk->pts64;
+				if (hw->first_field_timestamp_valid)
+					new_pic->last_timestamp = hw->first_field_timestamp;
+				else
+					new_pic->last_timestamp = hw->chunk->timestamp;
+				hw->first_field_timestamp_valid = false;
 				new_pic->timestamp = hw->chunk->timestamp;
 				if (hw->last_chunk_pts == hw->chunk->pts) {
 					new_pic->pts_valid = 0;
@@ -2080,6 +2113,11 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 		} else {
 			if (hw->chunk) {
 				hw->last_chunk_pts = hw->chunk->pts;
+				if (hw->first_field_timestamp_valid)
+					new_pic->last_timestamp = hw->first_field_timestamp;
+				else
+					new_pic->last_timestamp = hw->chunk->timestamp;
+				hw->first_field_timestamp_valid = false;
 				new_pic->timestamp = hw->chunk->timestamp;
 			}
 			new_pic->pts_valid = false;
@@ -2142,7 +2180,7 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"mmpeg12: disp_pic=%d(%c), ind=%d, offst=%x, pts=(%d,%lld,%llx)(%d)\n",
+			"mmpeg12: disp_pic=%d(%c), ind=%d, offst=%x, pts=(%d,%lld,%lld)(%d)\n",
 			hw->disp_num, GET_SLICE_TYPE(info), index, disp_pic->offset,
 			disp_pic->pts, disp_pic->pts64,
 			disp_pic->timestamp, disp_pic->pts_valid);
@@ -2307,6 +2345,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			hw->dec_again_cnt = 0;
 		vdec_vframe_dirty(vdec, hw->chunk);
 		hw->chunk = NULL;
+		hw->chunk_header_offset = 0;
+		hw->chunk_res_size = 0;
 	} else if (hw->dec_result == DEC_RESULT_AGAIN &&
 	(vdec->next_status != VDEC_STATUS_DISCONNECTED)) {
 		/*
@@ -2335,7 +2375,14 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(VLD_MEM_VIFIFO_WP),
 			READ_VREG(VLD_MEM_VIFIFO_RP));
+		if (hw->chunk != NULL) {
+			hw->first_field_timestamp = hw->chunk->timestamp;
+			hw->first_field_timestamp_valid = true;
+		}
+
 		vdec_vframe_dirty(vdec, hw->chunk);
+		hw->chunk_header_offset = 0;
+		hw->chunk_res_size = 0;
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 
@@ -2349,6 +2396,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			vdec_schedule_work(&hw->work);
 			return;
 		}
+
 		hw->input_empty = 0;
 		if (vdec_frame_based(vdec) && (hw->chunk != NULL)) {
 			r = hw->chunk->size +
@@ -2387,6 +2435,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		}
 		hw->eos = 1;
 		vdec_vframe_dirty(vdec, hw->chunk);
+		hw->chunk_header_offset = 0;
+		hw->chunk_res_size = 0;
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 		flush_output(hw);
@@ -2480,8 +2530,9 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)vdec->private;
 
-	atomic_add(1, &hw->get_num);
 	if (kfifo_get(&hw->display_q, &vf)) {
+		vf->index_disp = atomic_read(&hw->get_num);
+		atomic_add(1, &hw->get_num);
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		return vf;
 	}
@@ -3281,6 +3332,17 @@ void (*callback)(struct vdec_s *, void *),
 	}
 #endif
 
+	if ((vdec_frame_based(vdec)) && (hw->chunk_header_offset != 0) &&
+		(hw->res_ch_flag == 1) && (hw->chunk != NULL) &&
+		(hw->chunk_res_size != 0)) {
+
+		hw->chunk->offset = hw->chunk_header_offset;
+		hw->chunk->size = hw->chunk_res_size;
+		hw->chunk_header_offset = 0;
+		hw->chunk_res_size = 0;
+		debug_print(DECODE_ID(hw), 0, "Multiple heads are parsed in a chunk and resolution changed.\n");
+	}
+
 	size = vdec_prepare_input(vdec, &hw->chunk);
 	if (size < 0) {
 		hw->input_empty++;
@@ -3455,6 +3517,8 @@ static void reset(struct vdec_s *vdec)
 	hw->frame_width		= 0;
 	hw->frame_height	= 0;
 	hw->first_i_frame_ready = 0;
+	hw->first_field_timestamp = 0;
+	hw->first_field_timestamp_valid = false;
 
 	atomic_set(&hw->disp_num, 0);
 	atomic_set(&hw->get_num, 0);
@@ -3571,6 +3635,10 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 	}
 
 	hw->platform_dev = pdev;
+	hw->chunk_header_offset = 0;
+	hw->chunk_res_size = 0;
+	hw->first_field_timestamp = 0;
+	hw->first_field_timestamp_valid = false;
 
 	hw->tvp_flag = vdec_secure(pdata) ? CODEC_MM_FLAGS_TVP : 0;
 	if (pdata->sys_info)
