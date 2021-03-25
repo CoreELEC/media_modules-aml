@@ -8055,7 +8055,9 @@ static int v4l_res_change(struct AV1HW_s *hw)
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
-			//del_timer_sync(&pbi->timer);
+
+			av1_postproc(hw);
+
 			notify_v4l_eos(hw_to_vdec(hw));
 			ret = 1;
 		}
