@@ -993,7 +993,6 @@ static void vmpeg4_prepare_input(struct vdec_mpeg4_hw_s *hw)
 	WRITE_VREG(DOS_SW_RESET0, (1<<5) | (1<<4) | (1<<3));
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
-	dummy = READ_RESET_REG(RESET0_REGISTER);
 	WRITE_VREG(POWER_CTL_VLD, 1 << 4);
 
 	/*
@@ -2579,6 +2578,7 @@ static void reset(struct vdec_s *vdec)
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
 
+	hw->dec_result = DEC_RESULT_NONE;
 	flush_work(&hw->work);
 	reset_process_time(hw);
 
