@@ -161,9 +161,10 @@ enum aml_fmt_type {
  * struct aml_video_fmt - Structure used to store information about pixelformats
  */
 struct aml_video_fmt {
-	u32	fourcc;
+	u32			fourcc;
 	enum aml_fmt_type	type;
-	u32	num_planes;
+	u32			num_planes;
+	const u8		*name;
 };
 
 /**
@@ -291,6 +292,8 @@ struct aml_vdec_cfg_infos {
 	u32 uvm_hook_type;
 	/*
 	 * bit 16	: force progressive output flag.
+	 * bit 15	: enable nr.
+	 * bit 14	: enable di local buff.
 	 * bit 1	: Non-standard dv flag.
 	 * bit 0	: dv two layer flag.
 	 */
@@ -431,16 +434,16 @@ struct aml_fb_ops {
 
 /*
  * struct aml_fb_map_table - record some buffer map infos
- * @caller	: caller is handle of decoer or vpp.
  * @addr	: yuv linear buffer address.
  * @header_addr	: used for compress buffer.
  * @vframe	: which is from decoder or vpp vf pool.
+ * @task	: context of task chain.
  */
 struct aml_fb_map_table {
-	void		*caller;
 	ulong		addr;
 	ulong		header_addr;
 	struct vframe_s	*vframe;
+	struct task_chain_s *task;
 };
 
 /*
@@ -467,16 +470,22 @@ struct dv_info {
  * struct aml_vpp_cfg_infos - config vpp init param
  * @mode	: vpp work mode
  * @fmt		: picture format used to switch nv21 or nv12.
- * @is_drm	: is drm mode
  * @buf_size: config buffer size for vpp
- * @is_bypass_p: to set progressive bypass in vpp
+ * @is_drm	: is drm mode
+ * @is_prog	: is a progressive source.
+ * @is_bypass_p	: to set progressive bypass in vpp
+ * @enable_nr	: enable nosie reduce.
+ * @enable_local_buf: DI used buff alloc by itself.
  */
 struct aml_vpp_cfg_infos {
-	u32 mode;
-	u32 fmt;
-	u32 buf_size;
-	bool is_drm;
-	bool is_bypass_p;
+	u32	mode;
+	u32	fmt;
+	u32	buf_size;
+	bool	is_drm;
+	bool	is_prog;
+	bool	is_bypass_p;
+	bool	enable_nr;
+	bool	enable_local_buf;
 };
 
 /*
@@ -540,6 +549,8 @@ struct aml_vpp_cfg_infos {
  * @comp_lock: used for lock ibuf free cb.
  * @fb_ops: frame buffer ops interface.
  * @dv_infos: dv data information.
+ * @vpp_cfg: vpp init parms of configuration.
+ * @vdec_pic_info_update: update pic info cb.
  * @vpp_is_need: the instance is need vpp.
  */
 struct aml_vcodec_ctx {
@@ -619,20 +630,21 @@ struct aml_vcodec_ctx {
 
 /**
  * struct aml_vcodec_dev - driver data.
- * @v4l2_dev: V4L2 device to register video devices for.
- * @vfd_dec: Video device for decoder.
- * @plat_dev: platform device.
- * @m2m_dev_dec: m2m device for decoder.
- * @curr_ctx: The context that is waiting for codec hardware.
- * @id_counter: used to identify current opened instance.
- * @dec_capability: used to identify decode capability, ex: 4k
- * @decode_workqueue: the worker used to output buffer schedule.
- * @ctx_list: list of struct aml_vcodec_ctx.
- * @irqlock: protect data access by irq handler and work thread.
- * @dev_mutex: video_device lock.
- * @dec_mutex: decoder hardware lock.
- * @queue: waitqueue for waiting for completion of device commands.
- * @vpp_count: count the number of open vpp.
+ * @v4l2_dev		: V4L2 device to register video devices for.
+ * @vfd_dec		: Video device for decoder.
+ * @plat_dev		: platform device.
+ * @m2m_dev_dec		: m2m device for decoder.
+ * @curr_ctx		: The context that is waiting for codec hardware.
+ * @id_counter		: used to identify current opened instance.
+ * @dec_capability	: used to identify decode capability, ex: 4k
+ * @decode_workqueue	: the worker used to output buffer schedule.
+ * @ctx_list		: list of struct aml_vcodec_ctx.
+ * @irqlock		: protect data access by irq handler and work thread.
+ * @dev_mutex		: video_device lock.
+ * @dec_mutex		: decoder hardware lock.
+ * @queue		: waitqueue for waiting for completion of device commands.
+ * @vpp_count		: count the number of open vpp.
+ * @v4ldec_class	: creat class sysfs uesd to show some information.
  */
 struct aml_vcodec_dev {
 	struct v4l2_device		v4l2_dev;
@@ -650,6 +662,7 @@ struct aml_vcodec_dev {
 	struct mutex			dec_mutex;
 	wait_queue_head_t		queue;
 	atomic_t			vpp_count;
+	struct class			v4ldec_class;
 };
 
 static inline struct aml_vcodec_ctx *fh_to_ctx(struct v4l2_fh *fh)

@@ -81,6 +81,9 @@
 #define MAX_BMMU_BUFFER_NUM		DECODE_BUFFER_NUM_MAX
 
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
+
+#define INVALID_IDX 		(-1)  /* Invalid buffer index.*/
+
 static int debug_enable;
 static u32 udebug_flag;
 #define DECODE_ID(hw) (hw_to_vdec(hw)->id)
@@ -193,6 +196,8 @@ struct vdec_mjpeg_hw_s {
 	DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
 
 	struct vframe_s vfpool[VF_POOL_SIZE];
+	struct vframe_s vframe_dummy;
+
 	struct buffer_spec_s buffer_spec[DECODE_BUFFER_NUM_MAX];
 	s32 vfbuf_use[DECODE_BUFFER_NUM_MAX];
 
@@ -483,7 +488,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if (v4l2_ctx->is_stream_off) {
 				vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
 			} else {
-				fb->fill_buf_done(v4l2_ctx, fb);
+				fb->task->submit(fb->task, TASK_TYPE_DEC);
 			}
 		} else {
 			vf_notify_receiver(vdec->vf_provider_name,
@@ -916,6 +921,12 @@ static void mjpeg_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
 	*vf = vmjpeg_vf_get(vdec_ctx);
 }
 
+static struct task_ops_s task_dec_ops = {
+	.type		= TASK_TYPE_DEC,
+	.get_vframe	= mjpeg_get_video_frame,
+	.put_vframe	= mjpeg_put_video_frame,
+};
+
 static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i)
 {
 	int ret;
@@ -946,10 +957,8 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 		return ret;
 	}
 
-	fb->caller	= hw_to_vdec(hw);
-	fb->put_vframe	= mjpeg_put_video_frame;
-	fb->get_vframe	= mjpeg_get_video_frame;
-	fb->status	= FB_ST_DECODER;
+	fb->task->attach(fb->task, &task_dec_ops, hw_to_vdec(hw));
+	fb->status = FB_ST_DECODER;
 
 	if (!hw->frame_width || !hw->frame_height) {
 			struct vdec_pic_info pic;
@@ -1382,53 +1391,40 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 {
 	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	struct vframe_s *vf = NULL;
+	struct vframe_s *vf = &hw->vframe_dummy;
 	struct vdec_v4l2_buffer *fb = NULL;
-	int index = -1;
+	int index = INVALID_IDX;
+	ulong expires;
 
 	if (hw->eos) {
-		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
-			mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-				"%s fatal error, no available buffer slot.\n",
-				__func__);
-			return -1;
-		}
-
-		if (hw->is_used_v4l) {
-			index = find_free_buffer(hw);
-			if (index == -1) {
-				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-				if (!(ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token)) ||
-					(ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0)) {
-					pr_err("[%d] get fb fail.\n", ctx->id);
-					return -1;
-				}
+		expires = jiffies + msecs_to_jiffies(2000);
+		while (!is_avaliable_buffer(hw)) {
+			if (time_after(jiffies, expires)) {
+				pr_err("[%d] MJPEG isn't enough buff for notify eos.\n", ctx->id);
+				return 0;
 			}
 		}
 
-		vf->type |= VIDTYPE_V4L_EOS;
-		vf->timestamp = ULONG_MAX;
-		vf->v4l_mem_handle = (index == -1) ? (ulong)fb :
-			hw->buffer_spec[index].v4l_ref_buf_addr;
-		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
-		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-		if (fb->caller == NULL) {
-			fb->caller	= hw_to_vdec(hw);
-			fb->put_vframe	= mjpeg_put_video_frame;
-			fb->get_vframe	= mjpeg_get_video_frame;
-			fb->status	= FB_ST_DECODER;
+		index = find_free_buffer(hw);
+		if (INVALID_IDX == index) {
+			pr_err("[%d] MJPEG EOS get free buff fail.\n", ctx->id);
+			return 0;
 		}
+
+		fb = (struct vdec_v4l2_buffer *)
+			hw->buffer_spec[index].v4l_ref_buf_addr;
+
+		vf->type		|= VIDTYPE_V4L_EOS;
+		vf->timestamp		= ULONG_MAX;
+		vf->v4l_mem_handle	= (ulong)fb;
+		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-		if (hw->is_used_v4l)
-			fb->fill_buf_done(ctx, fb);
-		else
-			vf_notify_receiver(vdec->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
-		pr_info("[%d] mjpeg EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
+		pr_info("[%d] mjpeg EOS notify.\n", ctx->id);
 	}
 
 	return 0;

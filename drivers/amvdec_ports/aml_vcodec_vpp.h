@@ -33,14 +33,18 @@ enum vpp_work_mode {
 	VPP_MODE_DI,
 	VPP_MODE_COLOR_CONV,
 	VPP_MODE_NOISE_REDUC,
-	VPP_MODE_MAX
+	VPP_MODE_DI_LOCAL = 0x81,
+	VPP_MODE_COLOR_CONV_LOCAL = 0x82,
+	VPP_MODE_NOISE_REDUC_LOCAL = 0x83,
+	VPP_MODE_MAX = 0xff
 };
 
-#define VPP_FRAME_SIZE 32
+#define VPP_FRAME_SIZE 64
 
 struct aml_v4l2_vpp_buf {
 #ifdef SUPPORT_V4L_VPP
 	struct di_buffer di_buf;
+	struct di_buffer *di_local_buf;
 #endif
 	struct aml_video_dec_buf *aml_buf;
 };
@@ -50,8 +54,10 @@ struct aml_v4l2_vpp {
 	struct aml_vcodec_ctx *ctx;
 	u32 buf_size; /* buffer size for vpp */
 	u32 work_mode; /* enum vpp_work_mode */
+	u32 buffer_mode;
 	DECLARE_KFIFO(input, typeof(struct aml_v4l2_vpp_buf*), VPP_FRAME_SIZE);
 	DECLARE_KFIFO_PTR(output, typeof(struct aml_v4l2_vpp_buf*));
+	DECLARE_KFIFO_PTR(processing, typeof(struct aml_v4l2_vpp_buf*));
 	DECLARE_KFIFO_PTR(frame, typeof(struct vframe_s *));
 
 	/* handle fill_output_done() in irq context */
@@ -75,8 +81,14 @@ struct aml_v4l2_vpp {
 	int in_num[2];
 	int out_num[2];
 	ulong fb_token;
+
+	bool is_prog;
 	bool is_bypass_p;
+	int di_ibuf_num;
+	int di_obuf_num;
 };
+
+struct task_ops_s *get_vpp_ops(void);
 
 #ifdef SUPPORT_V4L_VPP
 /* get number of buffer needed for a working mode */
@@ -86,9 +98,6 @@ int aml_v4l2_vpp_init(
 		struct aml_vpp_cfg_infos *cfg,
 		struct aml_v4l2_vpp** vpp_handle);
 int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp);
-int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf);
-int aml_v4l2_vpp_rel_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf);
-void fill_vpp_buf_cb(void *v4l_ctx, struct vdec_v4l2_buffer *fb);
 #else
 static inline int aml_v4l2_vpp_get_buf_num(u32 mode) { return -1; }
 static inline int aml_v4l2_vpp_init(
@@ -96,9 +105,6 @@ static inline int aml_v4l2_vpp_init(
 		struct aml_vpp_cfg_infos *cfg,
 		struct aml_v4l2_vpp** vpp_handle) { return -1; }
 static inline int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp) { return -1; }
-static inline int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf) { return -1; }
-static inline int aml_v4l2_vpp_rel_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf) { return -1; }
-static inline void fill_vpp_buf_cb(void *v4l_ctx, struct vdec_v4l2_buffer *fb) { return; }
 #endif
 
 #endif

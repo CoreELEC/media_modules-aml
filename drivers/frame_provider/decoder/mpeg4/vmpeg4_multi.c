@@ -387,16 +387,6 @@ static int vmpeg4_get_buf_num(struct vdec_mpeg4_hw_s *hw)
 	return buf_num;
 }
 
-static void mpeg4_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
-{
-	vmpeg_vf_put(vf, vdec_ctx);
-}
-
-static void mpeg4_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
-{
-	*vf = vmpeg_vf_get(vdec_ctx);
-}
-
 static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i)
 {
 	int ret;
@@ -427,9 +417,6 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 		return ret;
 	}
 
-	fb->caller	= hw_to_vdec(hw);
-	fb->put_vframe	= mpeg4_put_video_frame;
-	fb->get_vframe	= mpeg4_get_video_frame;
 	fb->status	= FB_ST_DECODER;
 
 	if (!hw->frame_width || !hw->frame_height) {
@@ -820,7 +807,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					if (v4l2_ctx->is_stream_off) {
 						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 					} else {
-						fb->fill_buf_done(v4l2_ctx, fb);
+						fb->task->submit(fb->task, TASK_TYPE_DEC);
 					}
 				} else {
 					vf_notify_receiver(vdec->vf_provider_name,
@@ -902,7 +889,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					if (v4l2_ctx->is_stream_off) {
 						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 					} else {
-						fb->fill_buf_done(v4l2_ctx, fb);
+						fb->task->submit(fb->task, TASK_TYPE_DEC);
 					}
 				} else {
 					vf_notify_receiver(vdec->vf_provider_name,
@@ -1004,7 +991,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					if (v4l2_ctx->is_stream_off) {
 						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 					} else {
-						fb->fill_buf_done(v4l2_ctx, fb);
+						fb->task->submit(fb->task, TASK_TYPE_DEC);
 					}
 				} else {
 					vf_notify_receiver(vdec->vf_provider_name,
@@ -1616,18 +1603,12 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 							hw->pic[index].v4l_ref_buf_addr;;
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-		if (fb->caller == NULL) {
-			fb->caller	= hw_to_vdec(hw);
-			fb->put_vframe	= mpeg4_put_video_frame;
-			fb->get_vframe	= mpeg4_get_video_frame;
-			fb->status	= FB_ST_DECODER;
-		}
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 		if (hw->is_used_v4l)
-			fb->fill_buf_done(ctx, fb);
+			fb->task->submit(fb->task, TASK_TYPE_DEC);
 		else
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);

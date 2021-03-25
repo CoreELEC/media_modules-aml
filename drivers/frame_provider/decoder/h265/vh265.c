@@ -3256,16 +3256,6 @@ static int hevc_get_header_size(int w, int h)
 		return ALIGN(MMU_COMPRESS_HEADER_SIZE, 0x10000);
 }
 
-static void hevc_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
-{
-	vh265_vf_put(vf, vdec_ctx);
-}
-
-static void hevc_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
-{
-	*vf = vh265_vf_get(vdec_ctx);
-}
-
 static struct internal_comp_buf* v4lfb_to_icomp_buf(
 		struct hevc_state_s *hevc,
 		struct vdec_v4l2_buffer *fb)
@@ -3303,9 +3293,6 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		return ret;
 	}
 
-	fb->caller	= hw_to_vdec(hevc);
-	fb->put_vframe	= hevc_put_video_frame;
-	fb->get_vframe	= hevc_get_video_frame;
 	fb->status	= FB_ST_DECODER;
 
 	if (hevc->mmu_enable) {
@@ -9920,7 +9907,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				if (v4l2_ctx->is_stream_off) {
 					vh265_vf_put(vh265_vf_get(vdec), vdec);
 				} else {
-					fb->fill_buf_done(v4l2_ctx, fb);
+					fb->task->submit(fb->task, TASK_TYPE_DEC);
 				}
 			} else {
 				vf_notify_receiver(hevc->provider_name,
@@ -10023,18 +10010,12 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
 					hw->m_BUF[index].v4l_ref_buf_addr;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-		if (fb->caller == NULL) {
-			fb->caller	= hw_to_vdec(hw);
-			fb->put_vframe	= hevc_put_video_frame;
-			fb->get_vframe	= hevc_get_video_frame;
-			fb->status	= FB_ST_DECODER;
-		}
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 		if (hw->is_used_v4l)
-			fb->fill_buf_done(ctx, fb);
+			fb->task->submit(fb->task, TASK_TYPE_DEC);
 		else
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);

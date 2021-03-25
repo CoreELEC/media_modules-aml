@@ -4977,16 +4977,6 @@ static int vp9_max_mmu_buf_size(int max_w, int max_h)
 	return buf_size;
 }
 
-static void vp9_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
-{
-	vvp9_vf_put(vf, vdec_ctx);
-}
-
-static void vp9_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
-{
-	*vf = vvp9_vf_get(vdec_ctx);
-}
-
 static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	struct PIC_BUFFER_CONFIG_s *pic)
 {
@@ -5011,9 +5001,6 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 		return ret;
 	}
 
-	fb->caller	= pbi;
-	fb->put_vframe	= vp9_put_video_frame;
-	fb->get_vframe	= vp9_get_video_frame;
 	fb->status	= FB_ST_DECODER;
 
 	if (pbi->mmu_enable) {
@@ -7693,7 +7680,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					if (v4l2_ctx->is_stream_off) {
 						vvp9_vf_put(vvp9_vf_get(pbi), pbi);
 					} else {
-						fb->fill_buf_done(v4l2_ctx, fb);
+						fb->task->submit(fb->task, TASK_TYPE_DEC);
 					}
 				} else {
 					vf_notify_receiver(pbi->provider_name,
@@ -7746,18 +7733,12 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
 					hw->m_BUF[index].v4l_ref_buf_addr;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-		if (fb->caller == NULL) {
-			fb->caller	= hw;
-			fb->put_vframe	= vp9_put_video_frame;
-			fb->get_vframe	= vp9_get_video_frame;
-			fb->status	= FB_ST_DECODER;
-		}
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 		if (hw->is_used_v4l)
-			fb->fill_buf_done(ctx, fb);
+			fb->task->submit(fb->task, TASK_TYPE_DEC);
 		else
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);

@@ -1914,16 +1914,6 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i)
 	return 0;
 }
 
-static void vh264_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
-{
-	vh264_vf_put(vf, vdec_ctx);
-}
-
-static void vh264_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
-{
-	*vf = vh264_vf_get(vdec_ctx);
-}
-
 static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 {
 	int ret = 0;
@@ -1972,9 +1962,6 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 		fb->m.mem[1].bytes_used = fb->m.mem[1].size;
 	}
 
-	fb->caller	= hw_to_vdec(hw);
-	fb->put_vframe	= vh264_put_video_frame;
-	fb->get_vframe	= vh264_get_video_frame;
 	fb->status	= FB_ST_DECODER;
 
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
@@ -3178,17 +3165,19 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		decoder_do_aux_data_check(vdec, hw->buffer_spec[buffer_index].aux_data_buf,
 			hw->buffer_spec[buffer_index].aux_data_size);
 #endif
-		if (hw->is_used_v4l)
+		if (hw->is_used_v4l) {
 			update_vframe_src_fmt(vf,
 				hw->buffer_spec[buffer_index].aux_data_buf,
 				hw->buffer_spec[buffer_index].aux_data_size,
 				false, vdec->vf_provider_name, NULL);
+		}
+
 		if (without_display_mode == 0) {
 			if (hw->is_used_v4l) {
 				if (v4l2_ctx->is_stream_off) {
 					vh264_vf_put(vh264_vf_get(vdec), vdec);
 				} else {
-					fb->fill_buf_done(v4l2_ctx, fb);
+					fb->task->submit(fb->task, TASK_TYPE_DEC);
 				}
 			} else
 				vf_notify_receiver(vdec->vf_provider_name,
@@ -3310,7 +3299,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (hw->is_used_v4l)
-			fb->fill_buf_done(ctx, fb);
+			fb->task->submit(fb->task, TASK_TYPE_DEC);
 		else
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);

@@ -27,6 +27,7 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "aml_vcodec_util.h"
+#include "aml_task_chain.h"
 
 #define VCODEC_CAPABILITY_4K_DISABLED	0x10
 #define VCODEC_DEC_4K_CODED_WIDTH	4096U
@@ -40,25 +41,21 @@
 #define VDEC_GATHER_MEMORY_TYPE		0
 #define VDEC_SCATTER_MEMORY_TYPE	1
 
-#define META_DATA_SIZE       (256)
-#define MD_BUF_SIZE		(1024)
-#define COMP_BUF_SIZE		(8196)
+#define META_DATA_SIZE			(256)
+#define MD_BUF_SIZE			(1024)
+#define COMP_BUF_SIZE			(8196)
 
-/**
- * struct vdec_fb  - decoder frame buffer
+/*
+ * struct vdec_v4l2_buffer - decoder frame buffer
  * @mem_type	: gather or scatter memory.
  * @num_planes	: used number of the plane
  * @mem[4]	: array mem for used planes,
  *		  mem[0]: Y, mem[1]: C/U, mem[2]: V
  * @vf_fd	: the file handle of video frame
  * @status      : frame buffer status (vdec_fb_status)
- * @caller	: caller is handle of decoer or vpp.
- * @vframe	: video frame from caller.
- * @get_vframe	: get vframe from caller.
- * @put_vframe	: put vframe to caller.
- * @fill_buf	: recycle buf to pool will be alloc by caller.
- * @fill_buf_done : be invoked if caller fill data done.
- * @is_vpp_bypass : fb processed bypass vpp module.
+ * @buf_idx	: the index from vb2 index.
+ * @vframe	: store the vframe that get from caller.
+ * @task	: the context of task chain manager.
  */
 
 struct vdec_v4l2_buffer {
@@ -70,15 +67,10 @@ struct vdec_v4l2_buffer {
 	} m;
 	u32	status;
 	u32	buf_idx;
-	void	*caller;
 	void	*vframe;
-	void	(*get_vframe) (void *caller, struct vframe_s **vf);
-	void	(*put_vframe) (void *caller, struct vframe_s *vf);
-	void	(*fill_buf) (void *v4l, struct vdec_v4l2_buffer *fb);
-	void	(*fill_buf_done) (void *v4l, struct vdec_v4l2_buffer *fb);
-	bool	is_vpp_bypass;
-};
 
+	struct task_chain_s *task;
+};
 
 /**
  * struct aml_video_dec_buf - Private data related to each VB2 buffer.
@@ -138,5 +130,7 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes);
 void* v4l_get_vf_handle(int fd);
 void aml_v4l_ctx_release(struct kref *kref);
 void dmabuff_recycle_worker(struct work_struct *work);
+void aml_buffer_status(struct aml_vcodec_ctx *ctx);
+void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx);
 
 #endif /* _AML_VCODEC_DEC_H_ */

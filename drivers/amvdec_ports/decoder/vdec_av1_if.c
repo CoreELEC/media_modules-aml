@@ -1243,6 +1243,7 @@ static void set_param_ps_info(struct vdec_av1_inst *inst,
 	pic->reorder_frames	= ps->reorder_frames;
 	pic->reorder_margin	= ps->reorder_margin;
 	dec->dpb_sz		= ps->dpb_size;
+	pic->field		= ps->field;
 
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=

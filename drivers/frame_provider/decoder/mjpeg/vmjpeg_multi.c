@@ -471,7 +471,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if (v4l2_ctx->is_stream_off) {
 				vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
 			} else {
-				fb->fill_buf_done(v4l2_ctx, fb);
+				fb->task->submit(fb->task, TASK_TYPE_DEC);
 			}
 		} else {
 			vf_notify_receiver(vdec->vf_provider_name,
@@ -987,16 +987,6 @@ static void check_timer_func(struct timer_list *timer)
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 }
 
-static void mjpeg_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
-{
-	vmjpeg_vf_put(vf, vdec_ctx);
-}
-
-static void mjpeg_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
-{
-	*vf = vmjpeg_vf_get(vdec_ctx);
-}
-
 static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i)
 {
 	int ret;
@@ -1027,9 +1017,6 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 		return ret;
 	}
 
-	fb->caller	= hw_to_vdec(hw);
-	fb->put_vframe	= mjpeg_put_video_frame;
-	fb->get_vframe	= mjpeg_get_video_frame;
 	fb->status	= FB_ST_DECODER;
 
 	if (!hw->frame_width || !hw->frame_height) {
@@ -1539,18 +1526,12 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			hw->buffer_spec[index].v4l_ref_buf_addr;
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-		if (fb->caller == NULL) {
-			fb->caller	= hw_to_vdec(hw);
-			fb->put_vframe	= mjpeg_put_video_frame;
-			fb->get_vframe	= mjpeg_get_video_frame;
-			fb->status	= FB_ST_DECODER;
-		}
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 		if (hw->is_used_v4l)
-			fb->fill_buf_done(ctx, fb);
+			fb->task->submit(fb->task, TASK_TYPE_DEC);
 		else
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);

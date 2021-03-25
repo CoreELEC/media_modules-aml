@@ -1925,6 +1925,12 @@ static void vh264_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
 	*vf = vh264_vf_get(vdec_ctx);
 }
 
+static struct task_ops_s task_dec_ops = {
+	.type		= TASK_TYPE_DEC,
+	.get_vframe	= vh264_get_video_frame,
+	.put_vframe	= vh264_put_video_frame,
+};
+
 static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 {
 	int ret = 0;
@@ -1973,10 +1979,8 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 		fb->m.mem[1].bytes_used = fb->m.mem[1].size;
 	}
 
-	fb->caller	= hw_to_vdec(hw);
-	fb->put_vframe	= vh264_put_video_frame;
-	fb->get_vframe	= vh264_get_video_frame;
-	fb->status	= FB_ST_DECODER;
+	fb->task->attach(fb->task, &task_dec_ops, hw_to_vdec(hw));
+	fb->status = FB_ST_DECODER;
 
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 		"[%d] %s(), y_addr: %x, size: %u\n",
@@ -3198,7 +3202,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				if (v4l2_ctx->is_stream_off) {
 					vh264_vf_put(vh264_vf_get(vdec), vdec);
 				} else {
-					fb->fill_buf_done(v4l2_ctx, fb);
+					fb->task->submit(fb->task, TASK_TYPE_DEC);
 				}
 			} else
 				vf_notify_receiver(vdec->vf_provider_name,
@@ -3290,42 +3294,36 @@ int notify_v4l_eos(struct vdec_s *vdec)
 	ulong expires;
 
 	if (hw->eos) {
-		if (hw->is_used_v4l) {
-			expires = jiffies + msecs_to_jiffies(2000);
-			while (INVALID_IDX == (index = v4l_get_free_buf_idx(vdec))) {
-				if (time_after(jiffies, expires) ||
-					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx))
-					break;
-			}
-
-			if (index == INVALID_IDX) {
-				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
-					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
-					return -1;
-				}
+		expires = jiffies + msecs_to_jiffies(2000);
+		while (!have_free_buf_spec(vdec)) {
+			if (time_after(jiffies, expires)) {
+				pr_err("[%d] H264 isn't enough buff for notify eos.\n", ctx->id);
+				return 0;
 			}
 		}
+
+		index = v4l_get_free_buf_idx(vdec);
+		if (INVALID_IDX == index) {
+			pr_err("[%d] H264 EOS get free buff fail.\n", ctx->id);
+			return 0;
+		}
+
+		fb = (struct vdec_v4l2_buffer *)
+			hw->buffer_spec[index].cma_alloc_addr;
 
 		vf->type		|= VIDTYPE_V4L_EOS;
 		vf->timestamp		= ULONG_MAX;
 		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
-		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
-					hw->buffer_spec[index].cma_alloc_addr;
-		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		vf->v4l_mem_handle	= (ulong)fb;
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 		ATRACE_COUNTER(hw->pts_name, vf->timestamp);
 
-		if (hw->is_used_v4l)
-			fb->fill_buf_done(ctx, fb);
-		else
-			vf_notify_receiver(vdec->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
-		pr_info("[%d] H264 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
+		pr_info("[%d] H264 EOS notify.\n", ctx->id);
 	}
 
 	return 0;
@@ -10299,8 +10297,6 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		}
 		if (hw->discard_dv_data)
 			dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
-
-
 	} else
 		hw->double_write_mode = double_write_mode;
 
@@ -10711,6 +10707,7 @@ static int __init ammvdec_h264_driver_init_module(void)
 	}
 
 	vcodec_profile_register(&ammvdec_h264_profile);
+
 	INIT_REG_NODE_CONFIGS("media.decoder", &hm264_node,
 		"mh264-v4l", hm264_configs, CONFIG_FOR_RW);
 	return 0;

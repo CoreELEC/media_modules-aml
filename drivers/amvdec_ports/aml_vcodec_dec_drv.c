@@ -443,6 +443,43 @@ static const struct v4l2_file_operations aml_vcodec_fops = {
 	.mmap		= v4l2_m2m_fop_mmap,
 };
 
+static ssize_t status_show(struct class *cls,
+	struct class_attribute *attr, char *buf)
+{
+	struct aml_vcodec_dev *dev = container_of(cls,
+		struct aml_vcodec_dev, v4ldec_class);
+	struct aml_vcodec_ctx *ctx = NULL;
+	char *pbuf = buf;
+
+	mutex_lock(&dev->dev_mutex);
+
+	if (list_empty(&dev->ctx_list)) {
+		pbuf += sprintf(pbuf, "No v4ldec context.\n");
+		goto out;
+	}
+
+	list_for_each_entry(ctx, &dev->ctx_list, list) {
+		/* basic information. */
+		aml_vdec_basic_information(ctx);
+
+		/* buffers status. */
+		aml_buffer_status(ctx);
+	}
+out:
+	mutex_unlock(&dev->dev_mutex);
+
+	return pbuf - buf;
+}
+
+static CLASS_ATTR_RO(status);
+
+static struct attribute *v4ldec_class_attrs[] = {
+	&class_attr_status.attr,
+	NULL
+};
+
+ATTRIBUTE_GROUPS(v4ldec_class);
+
 static int aml_vcodec_probe(struct platform_device *pdev)
 {
 	struct aml_vcodec_dev *dev;
@@ -466,8 +503,7 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 
 	ret = v4l2_device_register(&pdev->dev, &dev->v4l2_dev);
 	if (ret) {
-		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
-			"v4l2_device_register err=%d\n", ret);
+		dev_err(&pdev->dev, "v4l2_device_register err=%d\n", ret);
 		goto err_res;
 	}
 
@@ -475,8 +511,7 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 
 	vfd_dec = video_device_alloc();
 	if (!vfd_dec) {
-		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
-			"Failed to allocate video device\n");
+		dev_err(&pdev->dev, "Failed to allocate video device\n");
 		ret = -ENOMEM;
 		goto err_dec_alloc;
 	}
@@ -498,8 +533,7 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 
 	dev->m2m_dev_dec = v4l2_m2m_init(&aml_vdec_m2m_ops);
 	if (IS_ERR((__force void *)dev->m2m_dev_dec)) {
-		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
-			"Failed to init mem2mem dec device\n");
+		dev_err(&pdev->dev, "Failed to init mem2mem dec device\n");
 		ret = PTR_ERR((__force void *)dev->m2m_dev_dec);
 		goto err_dec_mem_init;
 	}
@@ -508,8 +542,7 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 		alloc_ordered_workqueue("output-worker",
 			__WQ_LEGACY | WQ_MEM_RECLAIM | WQ_HIGHPRI);
 	if (!dev->decode_workqueue) {
-		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
-			"Failed to create decode workqueue\n");
+		dev_err(&pdev->dev, "Failed to create decode workqueue\n");
 		ret = -EINVAL;
 		goto err_event_workq;
 	}
@@ -518,16 +551,26 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 
 	ret = video_register_device(vfd_dec, VFL_TYPE_GRABBER, 26);
 	if (ret) {
-		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
-			"Failed to register video device\n");
+		dev_err(&pdev->dev, "Failed to register video device\n");
 		goto err_dec_reg;
 	}
 
-	v4l_dbg(0, V4L_DEBUG_CODEC_PRINFO,
-		"decoder registered as /dev/video%d\n", vfd_dec->num);
+	/*init class*/
+	dev->v4ldec_class.name = "v4ldec";
+	dev->v4ldec_class.owner = THIS_MODULE;
+	dev->v4ldec_class.class_groups = v4ldec_class_groups;
+	ret = class_register(&dev->v4ldec_class);
+	if (ret) {
+		dev_err(&pdev->dev, "v4l dec class create fail.\n");
+		goto err_reg_class;
+	}
+
+	dev_info(&pdev->dev, "v4ldec registered as /dev/video%d\n", vfd_dec->num);
 
 	return 0;
 
+err_reg_class:
+	video_unregister_device(dev->vfd_dec);
 err_dec_reg:
 	destroy_workqueue(dev->decode_workqueue);
 err_event_workq:
@@ -541,19 +584,14 @@ err_res:
 	return ret;
 }
 
-static const struct of_device_id aml_vcodec_match[] = {
-	{.compatible = "amlogic, vcodec-dec",},
-	{},
-};
-
-MODULE_DEVICE_TABLE(of, aml_vcodec_match);
-
 static int aml_vcodec_dec_remove(struct platform_device *pdev)
 {
 	struct aml_vcodec_dev *dev = platform_get_drvdata(pdev);
 
 	flush_workqueue(dev->decode_workqueue);
 	destroy_workqueue(dev->decode_workqueue);
+
+	class_unregister(&dev->v4ldec_class);
 
 	if (dev->m2m_dev_dec)
 		v4l2_m2m_release(dev->m2m_dev_dec);
@@ -563,8 +601,17 @@ static int aml_vcodec_dec_remove(struct platform_device *pdev)
 
 	v4l2_device_unregister(&dev->v4l2_dev);
 
+	dev_info(&pdev->dev, "v4ldec removed.\n");
+
 	return 0;
 }
+
+static const struct of_device_id aml_vcodec_match[] = {
+	{.compatible = "amlogic, vcodec-dec",},
+	{},
+};
+
+MODULE_DEVICE_TABLE(of, aml_vcodec_match);
 
 static struct platform_driver aml_vcodec_dec_driver = {
 	.probe	= aml_vcodec_probe,
@@ -577,11 +624,10 @@ static struct platform_driver aml_vcodec_dec_driver = {
 
 static int __init amvdec_ports_init(void)
 {
-	v4l_dbg(0, V4L_DEBUG_CODEC_PRINFO, "v4l dec module init\n");
+	pr_info("v4l dec module init\n");
 
 	if (platform_driver_register(&aml_vcodec_dec_driver)) {
-		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
-			"failed to register v4l dec driver\n");
+		pr_err("failed to register v4l dec driver\n");
 		return -ENODEV;
 	}
 
@@ -590,7 +636,7 @@ static int __init amvdec_ports_init(void)
 
 static void __exit amvdec_ports_exit(void)
 {
-	v4l_dbg(0, V4L_DEBUG_CODEC_PRINFO, "v4l dec module exit\n");
+	pr_info("v4l dec module exit\n");
 
 	platform_driver_unregister(&aml_vcodec_dec_driver);
 }
@@ -663,6 +709,14 @@ module_param(support_mjpeg, bool, 0644);
 bool support_format_I420;
 EXPORT_SYMBOL(support_format_I420);
 module_param(support_format_I420, bool, 0644);
+
+int force_enable_nr;
+EXPORT_SYMBOL(force_enable_nr);
+module_param(force_enable_nr, int, 0644);
+
+int force_enable_di_local_buffer;
+EXPORT_SYMBOL(force_enable_di_local_buffer);
+module_param(force_enable_di_local_buffer, int, 0644);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("AML video codec V4L2 decoder driver");

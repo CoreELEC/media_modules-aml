@@ -4991,6 +4991,12 @@ static void vp9_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
 	*vf = vvp9_vf_get(vdec_ctx);
 }
 
+static struct task_ops_s task_dec_ops = {
+	.type		= TASK_TYPE_DEC,
+	.get_vframe	= vp9_get_video_frame,
+	.put_vframe	= vp9_put_video_frame,
+};
+
 static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	struct PIC_BUFFER_CONFIG_s *pic)
 {
@@ -5014,10 +5020,8 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 		return ret;
 	}
 
-	fb->caller	= pbi;
-	fb->put_vframe	= vp9_put_video_frame;
-	fb->get_vframe	= vp9_get_video_frame;
-	fb->status	= FB_ST_DECODER;
+	fb->task->attach(fb->task, &task_dec_ops, pbi);
+	fb->status = FB_ST_DECODER;
 
 	if (pbi->mmu_enable) {
 		struct internal_comp_buf *ibuf = v4lfb_to_icomp_buf(pbi, fb);
@@ -7693,7 +7697,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					if (v4l2_ctx->is_stream_off) {
 						vvp9_vf_put(vvp9_vf_get(pbi), pbi);
 					} else {
-						fb->fill_buf_done(v4l2_ctx, fb);
+						fb->task->submit(fb->task, TASK_TYPE_DEC);
 					}
 				} else {
 					vf_notify_receiver(pbi->provider_name,
@@ -7713,6 +7717,8 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 	return 0;
 }
 
+static bool is_avaliable_buffer(struct VP9Decoder_s *pbi);
+
 static int notify_v4l_eos(struct vdec_s *vdec)
 {
 	struct VP9Decoder_s *hw = (struct VP9Decoder_s *)vdec->private;
@@ -7723,46 +7729,34 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	ulong expires;
 
 	if (hw->eos) {
-		if (hw->is_used_v4l) {
-			expires = jiffies + msecs_to_jiffies(2000);
-			while (INVALID_IDX == (index = v4l_get_free_fb(hw))) {
-				if (time_after(jiffies, expires) ||
-					v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx))
-					break;
-			}
-
-			if (index == INVALID_IDX) {
-				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
-					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
-					return -1;
-				}
+		expires = jiffies + msecs_to_jiffies(2000);
+		while (!is_avaliable_buffer(hw)) {
+			if (time_after(jiffies, expires)) {
+				pr_err("[%d] VP9 isn't enough buff for notify eos.\n", ctx->id);
+				return 0;
 			}
 		}
+
+		index = v4l_get_free_fb(hw);
+		if (INVALID_IDX == index) {
+			pr_err("[%d] VP9 EOS get free buff fail.\n", ctx->id);
+			return 0;
+		}
+
+		fb = (struct vdec_v4l2_buffer *)
+			hw->m_BUF[index].v4l_ref_buf_addr;
 
 		vf->type		|= VIDTYPE_V4L_EOS;
 		vf->timestamp		= ULONG_MAX;
 		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
-		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
-					hw->m_BUF[index].v4l_ref_buf_addr;
-		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-		if (fb->caller == NULL) {
-			fb->caller	= hw;
-			fb->put_vframe	= vp9_put_video_frame;
-			fb->get_vframe	= vp9_get_video_frame;
-			fb->status	= FB_ST_DECODER;
-		}
+		vf->v4l_mem_handle	= (ulong)fb;
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-		if (hw->is_used_v4l)
-			fb->fill_buf_done(ctx, fb);
-		else
-			vf_notify_receiver(vdec->vf_provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
-		pr_info("[%d] VP9 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
+		pr_info("[%d] VP9 EOS notify.\n", ctx->id);
 	}
 
 	return 0;
@@ -8651,6 +8645,7 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 		ps->reorder_margin -= delta;
 		pbi->dynamic_buf_num_margin = ps->reorder_margin;
 	}
+	ps->field = V4L2_FIELD_NONE;
 
 	return 0;
 }
