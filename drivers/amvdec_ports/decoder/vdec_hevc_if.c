@@ -750,6 +750,15 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 		pic->field == V4L2_FIELD_NONE ? "P" : "I");
 }
 
+static void set_cfg_info(struct vdec_hevc_inst *inst,
+	struct aml_vdec_cfg_infos *cfg)
+{
+	memcpy(&inst->ctx->config.parm.dec.cfg,
+		cfg, sizeof(struct aml_vdec_cfg_infos));
+	memcpy(&inst->parms.cfg,
+		cfg, sizeof(struct aml_vdec_cfg_infos));
+}
+
 static void set_param_comp_buf_info(struct vdec_hevc_inst *inst,
 		struct vdec_comp_buf_info *info)
 {
@@ -801,6 +810,10 @@ static int vdec_hevc_set_param(unsigned long h_vdec,
 		set_param_write_sync(inst);
 		break;
 
+	case SET_PARAM_CFG_INFO:
+		set_cfg_info(inst, in);
+		break;
+
 	case SET_PARAM_PS_INFO:
 		set_param_ps_info(inst, in);
 		break;
@@ -820,7 +833,6 @@ static int vdec_hevc_set_param(unsigned long h_vdec,
 	case SET_PARAM_PIC_INFO:
 		set_pic_info(inst, in);
 		break;
-
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid set parameter type=%d\n", type);

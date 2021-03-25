@@ -27,6 +27,10 @@ int vdec_v4l_get_pic_info(
 	struct aml_vcodec_ctx *ctx,
 	struct vdec_pic_info *pic);
 
+int vdec_v4l_set_cfg_infos(
+	struct aml_vcodec_ctx *ctx,
+	struct aml_vdec_cfg_infos *cfg);
+
 int vdec_v4l_set_ps_infos(
 	struct aml_vcodec_ctx *ctx,
 	struct aml_vdec_ps_infos *ps);

@@ -36,6 +36,21 @@ int vdec_v4l_get_pic_info(struct aml_vcodec_ctx *ctx,
 }
 EXPORT_SYMBOL(vdec_v4l_get_pic_info);
 
+int vdec_v4l_set_cfg_infos(struct aml_vcodec_ctx *ctx,
+	struct aml_vdec_cfg_infos *cfg)
+{
+	int ret = 0;
+
+	if (ctx->drv_handle == 0)
+		return -EIO;
+
+	ret = ctx->dec_if->set_param(ctx->drv_handle,
+		SET_PARAM_CFG_INFO, cfg);
+
+	return ret;
+}
+EXPORT_SYMBOL(vdec_v4l_set_cfg_infos);
+
 int vdec_v4l_set_ps_infos(struct aml_vcodec_ctx *ctx,
 	struct aml_vdec_ps_infos *ps)
 {
