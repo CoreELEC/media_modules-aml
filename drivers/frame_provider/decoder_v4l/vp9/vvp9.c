@@ -1649,6 +1649,11 @@ static void start_process_time(struct VP9Decoder_s *pbi)
 static void timeout_process(struct VP9Decoder_s *pbi)
 {
 	pbi->timeout_num++;
+	if (pbi->process_busy) {
+		vp9_print(pbi,
+			0, "%s decoder timeout but process_busy\n", __func__);
+		return;
+	}
 	amhevc_stop();
 	vp9_print(pbi,
 		0, "%s decoder timeout\n", __func__);
@@ -9981,8 +9986,11 @@ static void vp9_work(struct work_struct *work)
 		reset_process_time(pbi);
 		if (!get_free_buf_count(pbi)) {
 			pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
-			if (vdec->next_status == VDEC_STATUS_DISCONNECTED)
+			if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
 				pbi->dec_result = DEC_RESULT_AGAIN;
+				pbi->postproc_done = 0;
+				pbi->process_busy = 0;
+			}
 			vdec_schedule_work(&pbi->work);
 		} else {
 			int i;
@@ -10697,6 +10705,8 @@ static void  vp9_decoder_ctx_reset(struct VP9Decoder_s *pbi)
 	pbi->fatal_error	= 0;
 	pbi->show_frame_num	= 0;
 	pbi->eos		= 0;
+	pbi->postproc_done	= 0;
+	pbi->process_busy	= 0;
 }
 
 static void reset(struct vdec_s *vdec)
