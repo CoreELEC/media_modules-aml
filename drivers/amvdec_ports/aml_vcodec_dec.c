@@ -2530,6 +2530,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 	struct aml_vcodec_ctx * ctx;
 
 	ctx = container_of(kref, struct aml_vcodec_ctx, ctx_ref);
+	vfree(ctx->dv_infos.dv_bufs);
 	kfree(ctx);
 }
 

@@ -190,7 +190,7 @@ static int fops_vcodec_release(struct file *file)
 	v4l2_ctrl_handler_free(&ctx->ctrl_hdl);
 
 	list_del_init(&ctx->list);
-	vfree(ctx->dv_infos.dv_bufs);
+
 	kfree(ctx->empty_flush_buf);
 	kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
 	mutex_unlock(&dev->dev_mutex);
