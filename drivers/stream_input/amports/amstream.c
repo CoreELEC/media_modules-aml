@@ -327,7 +327,20 @@ static wait_queue_head_t amstream_userdata_wait;
 static struct userdata_poc_info_t userdata_poc_info[USERDATA_FIFO_NUM];
 static int userdata_poc_ri, userdata_poc_wi;
 static int last_read_wi;
-static u32 ud_ready_vdec_flag;
+
+#define MAX_USERDATA_CHANNEL_NUM 9
+
+typedef struct {
+	struct mutex mutex;
+	wait_queue_head_t userdata_wait;
+	u32 video_id;
+	u32 set_id_flag;
+	u32 ready_flag[MAX_USERDATA_CHANNEL_NUM];
+	int used[MAX_USERDATA_CHANNEL_NUM];
+	u32 id[MAX_USERDATA_CHANNEL_NUM];
+} st_userdata;
+
+st_userdata  userdata;
 
 /*bit 1 force dual layer
  *bit 2 force frame mode
@@ -1503,34 +1516,96 @@ EXPORT_SYMBOL(wakeup_userdata_poll);
 
 void amstream_wakeup_userdata_poll(struct vdec_s *vdec)
 {
-	int video_id;
+	int i;
 
-	video_id = vdec->video_id;
-	if (video_id > 31) {
-		pr_info("Error, not support so many instances(%d) user data push\n",
-			video_id);
+	if (vdec == NULL) {
+		pr_info("Error, invalid vdec instance!\n");
 		return;
 	}
 
-	mutex_lock(&userdata_mutex);
-	ud_ready_vdec_flag |= (1<<video_id);
+	mutex_lock(&userdata.mutex);
 
-	atomic_set(&userdata_ready, 1);
-	mutex_unlock(&userdata_mutex);
+	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
+		if (userdata.set_id_flag && (userdata.id[i] == vdec->video_id)) {
+			userdata.ready_flag[i] = 1;
+			break;
+		} else if (!userdata.set_id_flag) {
+			if (!userdata.used[0]) {
+				vdec->video_id = vdec->id;
+				userdata.id[0] = vdec->id;
+				userdata.used[0] = 1;
+			}
 
-	wake_up_interruptible(&amstream_userdata_wait);
+			userdata.ready_flag[i] = 1;
+			break;
+		}
+	}
+
+	mutex_unlock(&userdata.mutex);
+
+	wake_up_interruptible(&userdata.userdata_wait);
 }
 EXPORT_SYMBOL(amstream_wakeup_userdata_poll);
 
 static unsigned int amstream_userdata_poll(struct file *file,
 		poll_table *wait_table)
 {
-	poll_wait(file, &amstream_userdata_wait, wait_table);
-	if (atomic_read(&userdata_ready)) {
-		atomic_set(&userdata_ready, 0);
+	int fd_match = 0;
+	int i;
+
+	poll_wait(file, &userdata.userdata_wait, wait_table);
+	mutex_lock(&userdata.mutex);
+	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
+		if (userdata.id[i] == userdata.video_id && userdata.ready_flag[i] == 1) {
+			fd_match = 1;
+			break;
+		}
+	}
+
+	if (fd_match) {
+		mutex_unlock(&userdata.mutex);
 		return POLLIN | POLLRDNORM;
 	}
+
+	mutex_unlock(&userdata.mutex);
 	return 0;
+}
+
+static void amstream_userdata_init(void)
+{
+	int i;
+
+	init_waitqueue_head(&userdata.userdata_wait);
+	mutex_init(&userdata.mutex);
+	userdata.set_id_flag = 0;
+
+	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
+		userdata.ready_flag[i] = 0;
+		userdata.id[i] = -1;
+		userdata.used[i] = 0;
+	}
+
+	return;
+}
+
+static void amstream_userdata_deinit(void)
+{
+	int i;
+
+	mutex_lock(&userdata.mutex);
+
+	userdata.set_id_flag = 0;
+	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
+		if (userdata.used[i] == 1) {
+			userdata.ready_flag[i] = 0;
+			userdata.id[i] = -1;
+			userdata.used[i] = 0;
+		}
+	}
+
+	mutex_unlock(&userdata.mutex);
+
+	return;
 }
 
 #ifdef VDEC_FCC_SUPPORT
@@ -1908,6 +1983,8 @@ static int amstream_release(struct inode *inode, struct file *file)
 		amports_switch_gate("demux", 0);
 	}
 
+	amstream_userdata_deinit();
+
 	mutex_destroy(&priv->mutex);
 
 	kfree(priv);
@@ -2109,6 +2186,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 	struct  stream_port_s *this = priv->port;
 	struct am_ioctl_parm parm;
 	long r = 0;
+	int i;
 
 	if (copy_from_user
 		((void *)&parm, (void *)arg,
@@ -2416,6 +2494,18 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		break;
 	case AMSTREAM_SET_VIDEO_ID:
 		priv->vdec->video_id = parm.data_32;
+		mutex_lock(&userdata.mutex);
+		for (i = 0;i < MAX_USERDATA_CHANNEL_NUM; i++) {
+			if (userdata.used[i] == 0) {
+				userdata.id[i] = priv->vdec->video_id;
+				userdata.used[i] = 1;
+				userdata.video_id = priv->vdec->video_id;
+				userdata.set_id_flag = 1;
+				break;
+			}
+		}
+		mutex_unlock(&userdata.mutex);
+
 		pr_info("AMSTREAM_SET_VIDEO_ID video_id: %d\n", parm.data_32);
 		break;
 	default:
@@ -2916,6 +3006,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 {
 	struct stream_port_s *this = priv->port;
 	long r = 0;
+	int i;
 
 	switch (cmd) {
 
@@ -3379,7 +3470,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 					break;
 				}
 				mutex_lock(&amstream_mutex);
-				vdec = vdec_get_vdec_by_id(p_userdata_param->instance_id);
+				vdec = vdec_get_vdec_by_video_id(p_userdata_param->instance_id);
 				if (vdec) {
 					if (vdec_read_user_data(vdec,
 							p_userdata_param) == 0) {
@@ -3401,12 +3492,22 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 
 	case AMSTREAM_IOC_UD_AVAILABLE_VDEC:
 		{
-			unsigned int ready_vdec;
+			unsigned int ready_vdec = 0;
+			u32 ready_flag = 0;
 
-			mutex_lock(&userdata_mutex);
-			ready_vdec = ud_ready_vdec_flag;
-			ud_ready_vdec_flag = 0;
-			mutex_unlock(&userdata_mutex);
+			mutex_lock(&userdata.mutex);
+			for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
+				if (userdata.video_id == userdata.id[i] &&
+					userdata.ready_flag[i] == 1) {
+					ready_vdec = userdata.id[i];
+					userdata.ready_flag[i] = 0;
+					ready_flag = 1;
+					break;
+				}
+			}
+			if (!ready_flag)
+				r = -EINVAL;
+			mutex_unlock(&userdata.mutex);
 
 			put_user(ready_vdec, (uint32_t __user *)arg);
 		}
@@ -4636,6 +4737,8 @@ static int amstream_probe(struct platform_device *pdev)
 	if (fcc_enable & 0x1)
 		amstream_fcc_init();
 #endif
+
+	amstream_userdata_init();
 	/* poweroff the decode core because dos can not be reset when reboot */
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12A)
 		vdec_power_reset();
