@@ -471,7 +471,9 @@ int vdec_wakeup_userdata_poll(struct vdec_s *vdec);
 
 void vdec_reset_userdata_fifo(struct vdec_s *vdec, int bInit);
 
-struct vdec_s *vdec_get_vdec_by_id(int video_id);
+struct vdec_s *vdec_get_vdec_by_video_id(int video_id);
+struct vdec_s *vdec_get_vdec_by_id(int vdec_id);
+
 
 #ifdef VDEC_DEBUG_SUPPORT
 extern void vdec_set_step_mode(void);
