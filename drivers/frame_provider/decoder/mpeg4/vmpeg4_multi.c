@@ -690,6 +690,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	int index = pic->index;
 	bool pb_skip = false;
+	unsigned long flags;
 
 	/* swap uv */
 	if (hw->is_used_v4l) {
@@ -756,8 +757,10 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				hw->b_lost_frames++;
 			}
 			hw->vfbuf_use[index]--;
+			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
+			spin_unlock_irqrestore(&hw->lock, flags);
 			return 0;
 		} else {
 			vf->mem_handle =
@@ -834,8 +837,10 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				hw->b_lost_frames++;
 			}
 			hw->vfbuf_use[index]--;
+			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
+			spin_unlock_irqrestore(&hw->lock, flags);
 		} else {
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
@@ -920,8 +925,10 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				hw->b_lost_frames++;
 			}
 			hw->vfbuf_use[index]--;
+			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
+			spin_unlock_irqrestore(&hw->lock, flags);
 		} else {
 			struct vdec_info vinfo;
 
@@ -1678,6 +1685,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
+	unsigned long flags;
 
 	if (!vf)
 		return;
@@ -1688,7 +1696,9 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		"%s: put num:%d\n",__func__, hw->put_num);
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"index=%d, used=%d\n", vf->index, hw->vfbuf_use[vf->index]);
+	spin_lock_irqsave(&hw->lock, flags);
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
+	spin_unlock_irqrestore(&hw->lock, flags);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 }
 
