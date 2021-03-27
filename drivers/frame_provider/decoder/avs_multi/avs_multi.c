@@ -1008,6 +1008,7 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 	struct vframe_s *vf;
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)op_arg;
+	unsigned long flags;
 
 	if (hw->recover_flag)
 		return NULL;
@@ -1017,6 +1018,7 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 	else if (step == 1)
 		step = 2;
 
+	spin_lock_irqsave(&lock, flags);
 	if (kfifo_get(&hw->display_q, &vf)) {
 		if (vf) {
 			hw->get_num++;
@@ -1038,9 +1040,10 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 				vf->type,
 				buf_of_vf(vf)->detached);
 		}
+		spin_unlock_irqrestore(&lock, flags);
 		return vf;
 	}
-
+	spin_unlock_irqrestore(&lock, flags);
 	return NULL;
 
 }

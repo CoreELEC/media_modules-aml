@@ -8798,6 +8798,7 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 #endif
 			);
 	atomic_add(1, &hevc->vf_put_count);
+	spin_lock_irqsave(&lock, flags);
 	kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hevc->new_q_name, kfifo_len(&hevc->newframe_q));
 	if (hevc->enable_fence && vf->fence) {
@@ -8811,7 +8812,6 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 		vf->hdr10p_data_size = 0;
 	}
 
-	spin_lock_irqsave(&lock, flags);
 
 	if (index_top != 0xff
 		&& index_top < MAX_REF_PIC_NUM
@@ -8990,8 +8990,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				__func__, vf->index);
 		/* recycle vframe */
 		atomic_add(1, &hevc->vf_pre_count);
-		kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 		spin_lock_irqsave(&lock, flags);
+		kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 		vf->index &= 0xff;
 		if (vf->index >= MAX_REF_PIC_NUM) {
 			spin_unlock_irqrestore(&lock, flags);

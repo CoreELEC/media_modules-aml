@@ -1756,6 +1756,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			(((hw->first_i_frame_ready == 0) || pb_skip) &&
 			((PICINFO_TYPE_MASK & pic->buffer_info) !=
 			 PICINFO_TYPE_I))) {
+			unsigned long flags;
 			hw->drop_frame_count++;
 			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
 				hw->gvs.i_lost_frames++;
@@ -1779,8 +1780,10 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			}
 		}
 			hw->vfbuf_use[index]--;
+			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
+			spin_unlock_irqrestore(&hw->lock, flags);
 		} else {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
 				"%s, vf: %lx, num[%d]: %d(%c), dur: %d, type: %x, pts: %d(%lld)\n",
@@ -2568,12 +2571,14 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)vdec->private;
+	unsigned long flags;
 
 	if (!mpeg12_valid_vf_check(vf, hw)) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 			"invalid vf: %lx\n", (ulong)vf);
 		return ;
 	}
+	spin_lock_irqsave(&hw->lock, flags);
 	hw->vfbuf_use[vf->index]--;
 	if  (hw->vfbuf_use[vf->index] < 0) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
@@ -2587,6 +2592,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	kfifo_put(&hw->newframe_q,
 		(const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+	spin_unlock_irqrestore(&hw->lock, flags);
 }
 
 

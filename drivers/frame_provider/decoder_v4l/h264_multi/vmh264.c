@@ -2867,7 +2867,6 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 		(frame->data_flag & ERROR_FLAG)) ||
 		((hw->i_only & 0x1) &&
 		(!(frame->data_flag & I_FLAG)))) {
-		set_frame_output_flag(&hw->dpb, frame->index);
 		frame->show_frame = false;
 		return 0;
 	}
@@ -4567,7 +4566,6 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 		}
 	}
 
-	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 
 	if (vf && (vf_valid_check(vf, hw) == true)) {
 		atomic_add(1, &hw->vf_put_count);
@@ -4577,6 +4575,7 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 #define ASSIST_MBOX1_IRQ_REG    VDEC_ASSIST_MBOX1_IRQ_REG
 	if (hw->buffer_empty_flag)
 		WRITE_VREG(ASSIST_MBOX1_IRQ_REG, 0x1);
+	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 }
 
 void * vh264_get_bufspec_lock(struct vdec_s *vdec)
