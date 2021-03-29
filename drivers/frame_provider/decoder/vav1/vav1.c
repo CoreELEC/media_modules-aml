@@ -10200,6 +10200,7 @@ static void av1_work(struct work_struct *work)
 			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
 			vdec_schedule_work(&hw->work);
 		} else {
+			av1_release_bufs(hw);
 			av1_continue_decoding(hw, hw->cur_obu_type);
 			hw->postproc_done = 0;
 			start_process_time(hw);
