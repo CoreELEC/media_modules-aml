@@ -605,6 +605,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 	/*
 	NAL_SEARCH_CTL: bit 0, enable itu_t35
 	NAL_SEARCH_CTL: bit 1, enable mmu
+	NAL_SEARCH_CTL: bit 2, detect frame_mbs_only_flag whether switch resolution
 	*/
 #define NAL_SEARCH_CTL		AV_SCRATCH_9
 #define MBY_MBX                 MB_MOTION_MODE /*0xc07*/
@@ -5259,7 +5260,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	hw->error_frame_height = 0;
 
 	if (seq_info2 != 0 &&
-		hw->seq_info2 != (seq_info2 & (~0x80000000)) &&
+		hw->seq_info2 != seq_info2 &&
 		hw->seq_info2 != 0
 		) /*picture size changed*/
 		h264_reconfig(hw);
@@ -5274,7 +5275,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		hw->cfg_param3 = param3;
 		hw->cfg_param4 = param4;
 
-		hw->seq_info2 = seq_info2 & (~0x80000000);
+		hw->seq_info2 = seq_info2;
 		dpb_print(DECODE_ID(hw), 0,
 			"AV_SCRATCH_1 = %x, AV_SCRATCH_2 %x\r\n",
 			seq_info2, hw->seq_info);
@@ -9046,7 +9047,7 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 	if (ctx->param_sets_from_ucode &&
 			hw->res_ch_flag == 0) {
 		if (param1 != 0 &&
-			hw->seq_info2 != (param1 & (~0x80000000)) &&
+			hw->seq_info2 != param1 &&
 			hw->seq_info2 != 0) /*picture size changed*/ {
 			struct aml_vdec_ps_infos ps;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
@@ -9825,6 +9826,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			WRITE_VREG(NAL_SEARCH_CTL,
 					READ_VREG(NAL_SEARCH_CTL) & (~0x2));
 	}
+	WRITE_VREG(NAL_SEARCH_CTL, READ_VREG(NAL_SEARCH_CTL) | (1 << 2));
+
 	if (udebug_flag)
 		WRITE_VREG(AV_SCRATCH_K, udebug_flag);
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
