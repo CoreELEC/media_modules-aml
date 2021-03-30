@@ -319,11 +319,12 @@ retry:
 
 		if (vpp->is_bypass_p) {
 			in_buf->di_buf.flag |= DI_FLAG_BUF_BY_PASS;
-			v4l_vpp_empty_input_done(&in_buf->di_buf);
 
 			out_buf->di_buf.flag = in_buf->di_buf.flag;
 			out_buf->di_buf.vf->vf_ext = in_buf->di_buf.vf;
 			v4l_vpp_fill_output_done(&out_buf->di_buf);
+
+			v4l_vpp_empty_input_done(&in_buf->di_buf);
 		} else {
 			di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
 			di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
