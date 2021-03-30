@@ -512,4 +512,5 @@ void vdec_canvas_unlock(unsigned long flags);
 
 unsigned long vdec_canvas_lock(void);
 
+int vdec_get_core_nr(void);
 #endif				/* VDEC_H */

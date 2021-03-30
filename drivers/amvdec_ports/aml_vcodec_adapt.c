@@ -702,6 +702,11 @@ int vdec_frame_number(struct aml_vdec_adapt *ada_ctx)
 		return -1;
 }
 
+int vdec_get_instance_num(void)
+{
+	return vdec_get_core_nr();
+}
+
 void v4l2_config_vdec_parm(struct aml_vdec_adapt *ada_ctx, u8 *data, u32 len)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;

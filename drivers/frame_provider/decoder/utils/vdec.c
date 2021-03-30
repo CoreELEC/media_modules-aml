@@ -926,6 +926,12 @@ struct device *get_codec_cma_device(void)
 	return vdec_core->cma_dev;
 }
 
+int vdec_get_core_nr(void)
+{
+	return (int)atomic_read(&vdec_core->vdec_nr);
+}
+EXPORT_SYMBOL(vdec_get_core_nr);
+
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static const char * const vdec_device_name[] = {
 	"amvdec_mpeg12",     "ammvdec_mpeg12",

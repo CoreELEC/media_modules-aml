@@ -1236,7 +1236,8 @@ static void aml_vdec_worker(struct work_struct *work)
 		goto out;
 	} else {
 		/* decoder is lack of resource, retry after short delay */
-		usleep_range(50000, 55000);
+		if (vdec_get_instance_num() < 2)
+			usleep_range(2000, 4000);
 	}
 
 	v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
