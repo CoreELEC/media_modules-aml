@@ -419,7 +419,7 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 	return total_size;
 }
 
-static void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
+void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 {
 	if (vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->last_decoded_picinfo)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,

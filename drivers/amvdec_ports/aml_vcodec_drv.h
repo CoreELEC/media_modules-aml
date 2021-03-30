@@ -611,6 +611,7 @@ struct aml_vcodec_ctx {
 	struct aml_fb_map_table		fb_map[32];
 	struct dv_info			dv_infos;
 	struct aml_vpp_cfg_infos 	vpp_cfg;
+	void (*vdec_pic_info_update)(struct aml_vcodec_ctx *ctx);
 };
 
 /**

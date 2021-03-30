@@ -50,6 +50,7 @@
 
 bool param_sets_from_ucode = 1;
 bool enable_drm_mode;
+extern void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx);
 
 static int fops_vcodec_open(struct file *file)
 {
@@ -126,6 +127,7 @@ static int fops_vcodec_open(struct file *file)
 	ctx->output_thread_ready = true;
 	ctx->empty_flush_buf->vb.vb2_buf.vb2_queue = src_vq;
 	ctx->empty_flush_buf->lastframe = true;
+	ctx->vdec_pic_info_update = aml_vdec_pic_info_update;
 	aml_vcodec_dec_set_default_params(ctx);
 	ctx->is_stream_off = true;
 
