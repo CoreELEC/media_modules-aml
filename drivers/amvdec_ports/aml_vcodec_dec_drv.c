@@ -453,6 +453,7 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 
 	INIT_LIST_HEAD(&dev->ctx_list);
 	dev->plat_dev = pdev;
+	atomic_set(&dev->vpp_count, 0);
 
 	mutex_init(&dev->dec_mutex);
 	mutex_init(&dev->dev_mutex);

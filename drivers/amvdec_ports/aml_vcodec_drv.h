@@ -621,6 +621,7 @@ struct aml_vcodec_ctx {
  * @dev_mutex: video_device lock.
  * @dec_mutex: decoder hardware lock.
  * @queue: waitqueue for waiting for completion of device commands.
+ * @vpp_count: count the number of open vpp.
  */
 struct aml_vcodec_dev {
 	struct v4l2_device		v4l2_dev;
@@ -637,6 +638,7 @@ struct aml_vcodec_dev {
 	struct mutex			dev_mutex;
 	struct mutex			dec_mutex;
 	wait_queue_head_t		queue;
+	atomic_t			vpp_count;
 };
 
 static inline struct aml_vcodec_ctx *fh_to_ctx(struct v4l2_fh *fh)

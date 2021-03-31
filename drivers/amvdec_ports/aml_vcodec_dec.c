@@ -337,6 +337,9 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	if (bypass_vpp)
 		return false;
 
+	if (atomic_read(&ctx->dev->vpp_count) >= 2)
+		return false;
+
 	if (ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG2) {
 		if (!is_over_size(width, height, size)) {
 			*mode = VPP_MODE_DI;
