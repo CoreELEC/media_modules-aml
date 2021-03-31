@@ -336,6 +336,7 @@ struct vdec_mpeg12_hw_s {
 	int dec_again_cnt;
 	int vdec_pg_enable_flag;
 	ulong fb_token;
+	bool force_prog_only;
 	char vdec_name[32];
 	char pts_name[32];
 	char new_q_name[32];
@@ -3620,6 +3621,11 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 			&config_val) == 0)
 			hw->canvas_mode = config_val;
 
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag",
+			&config_val) == 0)
+			hw->force_prog_only = (config_val & VDEC_CFG_FLAG_PROG_ONLY) ? 1 : 0;
+
 		if ((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0 &&
 			get_config_int(pdata->config,
 			"parm_v4l_buffer_margin",
@@ -3639,6 +3645,12 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 	hw->chunk_res_size = 0;
 	hw->first_field_timestamp = 0;
 	hw->first_field_timestamp_valid = false;
+
+	if (hw->force_prog_only) {
+		pdata->prog_only = 1;
+		debug_print(DECODE_ID(hw), 0,
+			"forced progressive output\n");
+	}
 
 	hw->tvp_flag = vdec_secure(pdata) ? CODEC_MM_FLAGS_TVP : 0;
 	if (pdata->sys_info)

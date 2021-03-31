@@ -289,7 +289,13 @@ struct aml_vdec_cfg_infos {
 	u32 canvas_mem_endian;
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
+	/*
+	 * bit 16	: force progressive output flag.
+	 * bit 1	: Non-standard dv flag.
+	 * bit 0	: dv two layer flag.
+	 */
 	u32 metadata_config_flag; // for metadata config flag
+	u32 data[5];
 };
 
 struct aml_vdec_hdr_infos {
@@ -326,6 +332,7 @@ struct aml_vdec_ps_infos {
 	u32 reorder_frames;
 	u32 reorder_margin;
 	u32 field;
+	u32 data[3];
 };
 
 struct aml_vdec_cnt_infos {
