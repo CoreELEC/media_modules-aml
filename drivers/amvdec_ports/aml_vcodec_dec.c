@@ -2303,6 +2303,12 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 			"GET_PARAM_PICTURE_INFO err\n");
 	}
 
+	if (ctx->picinfo.visible_height < 16 || ctx->picinfo.visible_width < 16) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"The width or height of the stream is less than 16\n");
+		return -EPERM;
+	}
+
 	if (V4L2_TYPE_IS_MULTIPLANAR(f->type)) {
 		pix_mp->field = ret ? V4L2_FIELD_NONE : ctx->picinfo.field;
 		pix_mp->colorspace = ctx->colorspace;

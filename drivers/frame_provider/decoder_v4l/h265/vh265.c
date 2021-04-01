@@ -193,7 +193,7 @@ static u32 video_signal_type;
 static int start_decode_buf_level = 0x8000;
 static unsigned int decode_timeout_val = 200;
 
-static u32 run_ready_min_buf_num = 2;
+static u32 run_ready_min_buf_num = 1;
 static u32 disable_ip_mode;
 static u32 print_lcu_error = 1;
 /*data_resend_policy:
@@ -14809,6 +14809,9 @@ MODULE_PARM_DESC(run_ready_display_q_num, "\n run_ready_display_q_num\n");
 
 module_param(run_ready_max_buf_num, uint, 0664);
 MODULE_PARM_DESC(run_ready_max_buf_num, "\n run_ready_max_buf_num\n");
+
+module_param(run_ready_min_buf_num, uint, 0664);
+MODULE_PARM_DESC(run_ready_min_buf_num, "\n run_ready_min_buf_num\n");
 #endif
 
 #if 0

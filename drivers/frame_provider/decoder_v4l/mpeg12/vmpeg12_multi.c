@@ -1914,7 +1914,7 @@ void cal_chunk_offset_and_size(struct vdec_mpeg12_hw_s *hw)
 
 static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
-	u32 reg, index, info, seqinfo, offset, pts, frame_size=0, tmp;
+	u32 reg, index, info, seqinfo, offset, pts, frame_size=0, tmp_h, tmp_w;
 	u64 pts_us64 = 0;
 	struct pic_info_t *new_pic, *disp_pic;
 	struct vdec_mpeg12_hw_s *hw =
@@ -2063,23 +2063,14 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 			new_pic->hw_decode_time =
 			local_clock() - vdec->mvfrm->hw_decode_start;
 		}
-		tmp = READ_VREG(MREG_PIC_WIDTH);
-		if ((tmp > 1920) || (tmp == 0)) {
-			new_pic->width = 1920;
-			hw->frame_width = 1920;
-		} else {
-			new_pic->width = tmp;
-			hw->frame_width = tmp;
-		}
 
-		tmp = READ_VREG(MREG_PIC_HEIGHT);
-		if ((tmp > 1088) || (tmp == 0)) {
-			new_pic->height = 1088;
-			hw->frame_height = 1088;
-		} else {
-			new_pic->height = tmp;
-			hw->frame_height = tmp;
-		}
+		tmp_w = READ_VREG(MREG_PIC_WIDTH);
+		tmp_h = READ_VREG(MREG_PIC_HEIGHT);
+
+		new_pic->width = tmp_w;
+		hw->frame_width = tmp_w;
+		new_pic->height = tmp_h;
+		hw->frame_height = tmp_h;
 
 		new_pic->buffer_info = info;
 		new_pic->offset = offset;
