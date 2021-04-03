@@ -9385,6 +9385,7 @@ static void av1_work(struct work_struct *work)
 				hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
 		} else {
+			av1_release_bufs(hw);
 			av1_continue_decoding(hw, hw->cur_obu_type);
 			hw->postproc_done = 0;
 			start_process_time(hw);
