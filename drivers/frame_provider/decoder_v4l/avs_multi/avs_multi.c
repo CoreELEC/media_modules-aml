@@ -1016,6 +1016,7 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 
 	if (kfifo_get(&hw->display_q, &vf)) {
 		if (vf) {
+			vf->index_disp = atomic_read(&hw->get_num);
 			atomic_add(1, &hw->get_num);
 			if (force_fps & 0x100) {
 				u32 rate = force_fps & 0xff;

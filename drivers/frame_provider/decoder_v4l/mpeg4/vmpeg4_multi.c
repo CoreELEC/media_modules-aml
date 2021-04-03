@@ -1724,8 +1724,10 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 	struct vframe_s *vf;
 	struct vdec_s *vdec = op_arg;
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
-	atomic_add(1, &hw->get_num);
+
 	if (kfifo_get(&hw->display_q, &vf)) {
+		vf->index_disp = atomic_read(&hw->get_num);
+		atomic_add(1, &hw->get_num);
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		return vf;
 	}

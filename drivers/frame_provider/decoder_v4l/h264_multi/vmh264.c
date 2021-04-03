@@ -4568,8 +4568,8 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 
 	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 
-	atomic_add(1, &hw->vf_put_count);
 	if (vf && (vf_valid_check(vf, hw) == true)) {
+		atomic_add(1, &hw->vf_put_count);
 		kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 	}
