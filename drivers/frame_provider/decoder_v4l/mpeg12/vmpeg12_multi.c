@@ -1853,6 +1853,7 @@ static int vmpeg2_get_ps_info(struct vdec_mpeg12_hw_s *hw, int width, int height
 	ps->reorder_frames	= DECODE_BUFFER_NUM_DEF;
 	ps->reorder_margin	= hw->dynamic_buf_num_margin;
 	ps->field 		= frame_prog ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
+	ps->field 		= hw->force_prog_only ? V4L2_FIELD_NONE : ps->field;
 
 	return 0;
 }
