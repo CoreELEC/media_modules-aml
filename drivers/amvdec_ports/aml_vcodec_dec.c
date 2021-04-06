@@ -1877,8 +1877,10 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
 	struct v4l2_pix_format_mplane *pix_mp = &f->fmt.pix_mp;
+	struct v4l2_pix_format *pix = &f->fmt.pix;
 	struct vb2_queue *vq;
 	struct aml_q_data *q_data;
+	int ret = 0;
 
 	vq = v4l2_m2m_get_vq(ctx->m2m_ctx, f->type);
 	if (!vq) {
@@ -1889,11 +1891,25 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 
 	q_data = aml_vdec_get_q_data(ctx, f->type);
 
-	pix_mp->field = V4L2_FIELD_NONE;
-	pix_mp->colorspace = ctx->colorspace;
-	pix_mp->ycbcr_enc = ctx->ycbcr_enc;
-	pix_mp->quantization = ctx->quantization;
-	pix_mp->xfer_func = ctx->xfer_func;
+	ret = vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->picinfo);
+	if (ret) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"GET_PARAM_PICTURE_INFO err\n");
+	}
+
+	if (V4L2_TYPE_IS_MULTIPLANAR(f->type)) {
+		pix_mp->field = ret ? V4L2_FIELD_NONE : ctx->picinfo.field;
+		pix_mp->colorspace = ctx->colorspace;
+		pix_mp->ycbcr_enc = ctx->ycbcr_enc;
+		pix_mp->quantization = ctx->quantization;
+		pix_mp->xfer_func = ctx->xfer_func;
+	} else {
+		pix->field = ret ? V4L2_FIELD_NONE : ctx->picinfo.field;
+		pix->colorspace = ctx->colorspace;
+		pix->ycbcr_enc = ctx->ycbcr_enc;
+		pix->quantization = ctx->quantization;
+		pix->xfer_func = ctx->xfer_func;
+	}
 
 	if ((!V4L2_TYPE_IS_OUTPUT(f->type)) &&
 	    (ctx->state >= AML_STATE_PROBE)) {

@@ -788,6 +788,7 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	dec->dpb_sz		= ps->dpb_size;
+	pic->field		= ps->field;
 
 	inst->parms.ps		= *ps;
 	inst->parms.parms_status |=
@@ -797,10 +798,11 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, crop(%d x %d), coded(%d x %d) dpb: %d\n",
+		"Parse from ucode, crop(%d x %d), coded(%d x %d) dpb: %d, scan: %s\n",
 		pic->visible_width, pic->visible_height,
 		pic->coded_width, pic->coded_height,
-		dec->dpb_sz);
+		dec->dpb_sz,
+		pic->field == V4L2_FIELD_NONE ? "P" : "I");
 }
 
 static void set_param_hdr_info(struct vdec_hevc_inst *inst,

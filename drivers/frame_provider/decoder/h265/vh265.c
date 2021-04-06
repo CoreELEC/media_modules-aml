@@ -10287,6 +10287,7 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc, int width, int height, s
 	ps->coded_width 	= ALIGN(width, 32) / get_double_write_ratio(hevc, dw_mode);
 	ps->coded_height 	= ALIGN(height, 32) / get_double_write_ratio(hevc, dw_mode);
 	ps->dpb_size 		= v4l_parser_work_pic_num(hevc);
+	ps->field 		= hevc->interlace_flag ? V4L2_FIELD_INTERLACED : V4L2_FIELD_NONE;
 
 	return 0;
 }

@@ -8886,6 +8886,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	ps->coded_height	= ALIGN(mb_height << 4, 64);
 	ps->reorder_frames	= dec_dpb_size + 1; /* +1 for two frames in one packet */
 	ps->dpb_size		= active_buffer_spec_num;
+	ps->field		= frame_mbs_only_flag ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 
 	return 0;
 }

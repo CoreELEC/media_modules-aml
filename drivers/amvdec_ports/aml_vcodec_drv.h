@@ -266,6 +266,7 @@ struct aml_vcodec_pm {
  *		plane
  * E.g. suppose picture size is 176x144,
  *      buffer size will be aligned to 176x160.
+ * @field: frame/field information.
  */
 struct vdec_pic_info {
 	unsigned int visible_width;
@@ -278,6 +279,7 @@ struct vdec_pic_info {
 	unsigned int c_len_sz;
 	int profile_idc;
 	int ref_frame_count;
+	enum v4l2_field field;
 };
 
 struct aml_vdec_cfg_infos {
@@ -322,6 +324,7 @@ struct aml_vdec_ps_infos {
 	u32 dpb_size;
 	u32 ref_frames;
 	u32 reorder_frames;
+	u32 field;
 };
 
 struct aml_vdec_cnt_infos {
