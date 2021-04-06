@@ -10982,7 +10982,7 @@ force_output:
 
 			hevc_print(hevc, 0, "get NAL_UNIT_EOS, flush output\n");
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-			if ((vdec_dual(vdec)) && aux_data_is_avaible(hevc)) {
+			if ((!hevc->discard_dv_data) && aux_data_is_avaible(hevc)) {
 				if (hevc->decoding_pic)
 					dolby_get_meta(hevc);
 			}
@@ -13405,7 +13405,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		struct PIC_s *pic;
 		hevc->eos = 1;
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-		if ((vdec_dual(vdec)) && aux_data_is_avaible(hevc))
+		if ((!hevc->discard_dv_data) && aux_data_is_avaible(hevc))
 			if (hevc->decoding_pic)
 				dolby_get_meta(hevc);
 #endif
