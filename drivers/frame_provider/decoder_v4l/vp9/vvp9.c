@@ -7207,7 +7207,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 			step = 2;
 
 	if (kfifo_get(&pbi->display_q, &vf)) {
-		struct vframe_s *next_vf;
+		struct vframe_s *next_vf = NULL;
 		uint8_t index = vf->index & 0xff;
 		ATRACE_COUNTER(pbi->disp_q_name, kfifo_len(&pbi->display_q));
 		if (index < pbi->used_buf_num ||
@@ -7223,7 +7223,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 					vf->pts_us64,
 					vf->timestamp);
 
-			if (kfifo_peek(&pbi->display_q, &next_vf)) {
+			if (kfifo_peek(&pbi->display_q, &next_vf) && next_vf) {
 				vf->next_vf_pts_valid = true;
 				vf->next_vf_pts = next_vf->pts;
 			} else
