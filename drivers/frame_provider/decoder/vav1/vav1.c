@@ -5512,6 +5512,7 @@ static int av1_local_init(struct AV1HW_s *hw)
 	}
 	memset(hw->count_buffer_addr, 0, COUNT_BUF_SIZE);
 
+	vdec_set_vframe_comm(hw_to_vdec(hw), DRIVER_NAME);
 	ret = vav1_mmu_map_alloc(hw);
 	if (ret < 0)
 		goto dma_alloc_fail;
@@ -5975,10 +5976,34 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 	}
 }
 
+static inline void av1_update_gvs(struct AV1HW_s *hw, struct vframe_s *vf,
+				  struct PIC_BUFFER_CONFIG_s *pic_config)
+{
+	if (hw->gvs->frame_height != pic_config->y_crop_height) {
+		hw->gvs->frame_width = pic_config->y_crop_width;
+		hw->gvs->frame_height = pic_config->y_crop_height;
+	}
+	if (hw->gvs->frame_dur != hw->frame_dur) {
+		hw->gvs->frame_dur = hw->frame_dur;
+		if (hw->frame_dur != 0)
+			hw->gvs->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
+					96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
+		else
+			hw->gvs->frame_rate = -1;
+	}
+	if (vf && hw->gvs->ratio_control != vf->ratio_control)
+		hw->gvs->ratio_control = vf->ratio_control;
+
+	hw->gvs->status = hw->stat | hw->fatal_error;
+	hw->gvs->error_count = hw->gvs->error_frame_count;
+
+}
+
 static int prepare_display_buf(struct AV1HW_s *hw,
 				struct PIC_BUFFER_CONFIG_s *pic_config)
 {
 	struct vframe_s *vf = NULL;
+	struct vdec_info tmp4x;
 	int stream_offset = pic_config->stream_offset;
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	ulong nv_order = VIDTYPE_VIU_NV21;
@@ -6300,12 +6325,17 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 
 		hw->vf_pre_count++;
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 		/*count info*/
-		gvs->frame_dur = hw->frame_dur;
-		vdec_count_info(gvs, 0, stream_offset);
-#endif
+		hw->gvs->frame_dur = hw->frame_dur;
+		vdec_count_info(hw->gvs, 0, stream_offset);
+
 		hw_to_vdec(hw)->vdec_fps_detec(hw_to_vdec(hw)->id);
+		av1_update_gvs(hw, vf, pic_config);
+		memcpy(&tmp4x, hw->gvs, sizeof(struct vdec_info));
+		tmp4x.bit_depth_luma = bit_depth_luma;
+		tmp4x.bit_depth_chroma = bit_depth_chroma;
+		tmp4x.double_write_mode = pic_config->double_write_mode;
+		vdec_fill_vdec_frame(hw_to_vdec(hw), &hw->vframe_qos, &tmp4x, vf, pic_config->hw_decode_time);
 		if (without_display_mode == 0) {
 			vf_notify_receiver(hw->provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -7910,6 +7940,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	} else if (dec_status == AOM_AV1_DEC_PIC_END) {
 		struct AV1_Common_s *const cm = &hw->common;
+		struct PIC_BUFFER_CONFIG_s *frame = &cm->cur_frame->buf;
+		struct vdec_s *vdec = hw_to_vdec(hw);
 #if 1
 		u32 fg_reg0, fg_reg1, num_y_points, num_cb_points, num_cr_points;
 		WRITE_VREG(HEVC_FGS_IDX, 0);
@@ -7939,6 +7971,12 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 #ifdef USE_DEC_PIC_END
 			if (READ_VREG(PIC_END_LCU_COUNT) != 0) {
 				hw->frame_decoded = 1;
+				if (cm->cur_frame && vdec->mvfrm && frame) {
+					frame->hw_decode_time =
+					local_clock() - vdec->mvfrm->hw_decode_start;
+					frame->frame_size2 = vdec->mvfrm->frame_size;
+				}
+				hw->gvs->frame_count = hw->frame_count;
 				/*
 				In c module, multi obus are put in one packet, which is decoded
 				with av1_receive_compressed_data().
@@ -8613,19 +8651,18 @@ int vav1_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->error_count = 0;
 	vstatus->status = av1->stat | av1->fatal_error;
 	vstatus->frame_dur = av1->frame_dur;
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	vstatus->bit_rate = gvs->bit_rate;
-	vstatus->frame_data = gvs->frame_data;
-	vstatus->total_data = gvs->total_data;
-	vstatus->frame_count = gvs->frame_count;
-	vstatus->error_frame_count = gvs->error_frame_count;
-	vstatus->drop_frame_count = gvs->drop_frame_count;
-	vstatus->total_data = gvs->total_data;
-	vstatus->samp_cnt = gvs->samp_cnt;
-	vstatus->offset = gvs->offset;
+//#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+	vstatus->bit_rate = av1->gvs->bit_rate;
+	vstatus->frame_data = av1->gvs->frame_data;
+	vstatus->total_data = av1->gvs->total_data;
+	vstatus->frame_count = av1->gvs->frame_count;
+	vstatus->error_frame_count = av1->gvs->error_frame_count;
+	vstatus->drop_frame_count = av1->gvs->drop_frame_count;
+	vstatus->samp_cnt = av1->gvs->samp_cnt;
+	vstatus->offset = av1->gvs->offset;
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s", DRIVER_NAME);
-#endif
+//#endif
 	return 0;
 }
 
@@ -9839,6 +9876,8 @@ static void run_front(struct vdec_s *vdec)
 		WRITE_VREG(HEVC_SHIFT_BYTE_COUNT, 0);
 		size = hw->chunk->size +
 			(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+		if (vdec->mvfrm)
+			vdec->mvfrm->frame_size = hw->chunk->size;
 	}
 	hw->data_size = size;
 	WRITE_VREG(HEVC_DECODE_SIZE, size);
@@ -9876,6 +9915,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		__func__, mask);
 
 	run_count[hw->index]++;
+	if (vdec->mvfrm)
+		vdec->mvfrm->hw_decode_start = local_clock();
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
 		run_front(vdec);
