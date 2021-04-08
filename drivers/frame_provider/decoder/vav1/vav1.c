@@ -5669,7 +5669,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 			step = 2;
 
 	if (kfifo_get(&hw->display_q, &vf)) {
-		struct vframe_s *next_vf;
+		struct vframe_s *next_vf = NULL;
 		uint8_t index = vf->index & 0xff;
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 		if (index < hw->used_buf_num ||
@@ -5691,7 +5691,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 				unlock_buffer_pool(hw->common.buffer_pool, flags);
 			}
 
-			if (kfifo_peek(&hw->display_q, &next_vf)) {
+			if (kfifo_peek(&hw->display_q, &next_vf) && next_vf) {
 				vf->next_vf_pts_valid = true;
 				vf->next_vf_pts = next_vf->pts;
 			} else

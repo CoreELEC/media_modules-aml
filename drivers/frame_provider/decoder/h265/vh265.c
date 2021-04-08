@@ -8702,7 +8702,7 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 #endif
 
 	if (kfifo_get(&hevc->display_q, &vf)) {
-		struct vframe_s *next_vf;
+		struct vframe_s *next_vf = NULL;
 
 		ATRACE_COUNTER(hevc->vf_get_name, (long)vf);
 		ATRACE_COUNTER(hevc->disp_q_name, kfifo_len(&hevc->display_q));
@@ -8747,7 +8747,7 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 		vf->index_disp = hevc->vf_get_count;
 		hevc->vf_get_count++;
 
-		if (kfifo_peek(&hevc->display_q, &next_vf)) {
+		if (kfifo_peek(&hevc->display_q, &next_vf) && next_vf) {
 			vf->next_vf_pts_valid = true;
 			vf->next_vf_pts = next_vf->pts;
 		} else
