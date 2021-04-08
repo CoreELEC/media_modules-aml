@@ -7753,11 +7753,12 @@ static void update_vf_memhandle(struct VP9Decoder_s *pbi,
 	}
 }
 
-static inline void pbi_update_gvs(struct VP9Decoder_s *pbi)
+static inline void pbi_update_gvs(struct VP9Decoder_s *pbi,
+				  struct PIC_BUFFER_CONFIG_s *pic_config)
 {
-	if (pbi->gvs->frame_height != frame_height) {
-		pbi->gvs->frame_width = frame_width;
-		pbi->gvs->frame_height = frame_height;
+	if (pbi->gvs->frame_height != pic_config->y_crop_height) {
+		pbi->gvs->frame_width = pic_config->y_crop_width;
+		pbi->gvs->frame_height = pic_config->y_crop_height;
 	}
 	if (pbi->gvs->frame_dur != pbi->frame_dur) {
 		pbi->gvs->frame_dur = pbi->frame_dur;
@@ -8111,7 +8112,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			ATRACE_COUNTER(pbi->new_q_name, kfifo_len(&pbi->newframe_q));
 			ATRACE_COUNTER(pbi->disp_q_name, kfifo_len(&pbi->display_q));
 			pbi->vf_pre_count++;
-			pbi_update_gvs(pbi);
+			pbi_update_gvs(pbi, pic_config);
 			/*count info*/
 			vdec_count_info(pbi->gvs, 0, stream_offset);
 			if (stream_offset) {
@@ -8126,7 +8127,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			memcpy(&tmp4x, pbi->gvs, sizeof(struct vdec_info));
 			tmp4x.bit_depth_luma = pbi->vp9_param.p.bit_depth;
 			tmp4x.bit_depth_chroma = pbi->vp9_param.p.bit_depth;
-			tmp4x.double_write_mode = get_double_write_mode(pbi);
+			tmp4x.double_write_mode = pic_config->double_write_mode;
 			vdec_fill_vdec_frame(pvdec, &pbi->vframe_qos, &tmp4x,
 				vf, pic_config->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
