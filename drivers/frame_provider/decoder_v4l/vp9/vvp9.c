@@ -7577,8 +7577,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				if (pbi->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-			if (pbi->is_used_v4l && pic_config->double_write_mode != 16)
-				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
+
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (pbi->m_ins_flag) {
 				vf->canvas0Addr = vf->canvas1Addr = -1;

@@ -9032,10 +9032,6 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 					vf->type |= VIDTYPE_SCATTER;
 			}
 
-			if (hevc->is_used_v4l &&
-				(hevc->double_write_mode == 3))
-				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
-
 			atomic_add(1, &hevc->vf_pre_count);
 			vdec_vframe_ready(hw_to_vdec(hevc), vf);
 			hevc->send_frame_flag = 1;
@@ -9049,10 +9045,6 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-
-			if (hevc->is_used_v4l &&
-				(hevc->double_write_mode == 3))
-				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 
 			vf->index &= 0xff;
 			vf->index |= (pair_pic->index << 8);
@@ -9073,10 +9065,6 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-
-			if (hevc->is_used_v4l &&
-				(hevc->double_write_mode == 3))
-				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 
 			vf->index &= 0xff00;
 			vf->index |= pair_pic->index;
@@ -9420,8 +9408,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-			if (hevc->is_used_v4l && pic->double_write_mode != 16)
-				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hevc->m_ins_flag &&
 				(get_dbg_flag(hevc)
@@ -11245,8 +11231,10 @@ force_output:
 
 						pr_debug("set ucode parse\n");
 						hevc_interlace_check(hevc, &hevc->param);
-						vh265_get_cfg_info(hevc, &hevc->param, &cfg);
-						vdec_v4l_set_cfg_infos(ctx, &cfg);
+						if (hevc->interlace_flag) {
+							vh265_get_cfg_info(hevc, &hevc->param, &cfg);
+							vdec_v4l_set_cfg_infos(ctx, &cfg);
+						}
 						if (get_valid_double_write_mode(hevc) != 16) {
 							struct vdec_comp_buf_info info;
 
