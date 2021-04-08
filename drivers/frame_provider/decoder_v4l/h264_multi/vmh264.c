@@ -5189,6 +5189,11 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 
 	size += 1;	/* need one more buffer */
 
+	if (!hw->discard_dv_data)  {
+		size += 1;
+		dpb_print(DECODE_ID(hw), 0, "dv stream need one more buffer.\n");
+	}
+
 	return size;
 }
 
@@ -5902,7 +5907,8 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			(kfifo_len(&hw->display_q) <= 0) &&
 			((p_H264_Dpb->mDPB.used_size >=
 				(p_H264_Dpb->mDPB.size - 1)) ||
-			(!have_free_buf_spec(vdec)))) {
+			(!have_free_buf_spec(vdec))) &&
+			(hw->discard_dv_data)) {
 			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
 
 			for (i = 0; i < p_Dpb->used_size; i++) {
