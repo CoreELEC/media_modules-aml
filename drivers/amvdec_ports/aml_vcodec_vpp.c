@@ -455,7 +455,6 @@ int aml_v4l2_vpp_init(
 		goto error7;
 	}
 	sched_setscheduler_nocheck(vpp->task, SCHED_FIFO, &param);
-	atomic_inc(&ctx->dev->vpp_count);
 
 	*vpp_handle = vpp;
 	return 0;
@@ -504,7 +503,6 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 	mutex_destroy(&vpp->output_lock);
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
 		"vpp destroy done\n");
-	atomic_dec(&vpp->ctx->dev->vpp_count);
 	kfree(vpp);
 
 	return 0;

@@ -91,9 +91,9 @@ static int fops_vcodec_open(struct file *file)
 	ctx->dev = dev;
 	init_waitqueue_head(&ctx->queue);
 	mutex_init(&ctx->state_lock);
-	mutex_init(&ctx->lock);
 	mutex_init(&ctx->comp_lock);
 	spin_lock_init(&ctx->slock);
+	spin_lock_init(&ctx->tsplock);
 	init_completion(&ctx->comp);
 	init_waitqueue_head(&ctx->wq);
 	INIT_WORK(&ctx->dmabuff_recycle_work, dmabuff_recycle_worker);

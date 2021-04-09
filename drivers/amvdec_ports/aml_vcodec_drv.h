@@ -493,11 +493,11 @@ struct aml_vpp_cfg_infos {
  * @fh: struct v4l2_fh.
  * @ctrl_hdl: handler for v4l2 framework.
  * @slock: protect v4l2 codec context.
+ * @tsplock: protect the vdec thread context.
  * @empty_flush_buf: a fake size-0 capture buffer that indicates flush.
  * @list: link to ctx_list of aml_vcodec_dev.
  * @q_data: store information of input and output queue of the context.
  * @queue: waitqueue that can be used to wait for this context to finish.
- * @lock: protect the vdec thread.
  * @state_lock: protect the codec status.
  * @state: state of the context.
  * @decode_work: decoder work be used to output buffer.
@@ -540,6 +540,7 @@ struct aml_vpp_cfg_infos {
  * @comp_lock: used for lock ibuf free cb.
  * @fb_ops: frame buffer ops interface.
  * @dv_infos: dv data information.
+ * @vpp_is_need: the instance is need vpp.
  */
 struct aml_vcodec_ctx {
 	int				id;
@@ -554,12 +555,13 @@ struct aml_vcodec_ctx {
 	struct v4l2_fh			fh;
 	struct v4l2_ctrl_handler	ctrl_hdl;
 	spinlock_t			slock;
+	spinlock_t			tsplock;
 	struct aml_video_dec_buf	*empty_flush_buf;
 	struct list_head		list;
 
 	struct aml_q_data		q_data[2];
 	wait_queue_head_t		queue;
-	struct mutex			lock, state_lock;
+	struct mutex			state_lock;
 	enum aml_instance_state		state;
 	struct work_struct		decode_work;
 	bool				output_thread_ready;
@@ -612,6 +614,7 @@ struct aml_vcodec_ctx {
 	struct dv_info			dv_infos;
 	struct aml_vpp_cfg_infos 	vpp_cfg;
 	void (*vdec_pic_info_update)(struct aml_vcodec_ctx *ctx);
+	bool vpp_is_need;
 };
 
 /**

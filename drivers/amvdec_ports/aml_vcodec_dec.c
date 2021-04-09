@@ -60,6 +60,7 @@
 #define AML_V4L2_SET_DRMMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
 
 #define WORK_ITEMS_MAX (32)
+#define MAX_DI_INSTANCE (2)
 
 //#define USEC_PER_SEC 1000000
 
@@ -337,7 +338,7 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	if (bypass_vpp)
 		return false;
 
-	if (atomic_read(&ctx->dev->vpp_count) >= 2)
+	if (atomic_read(&ctx->dev->vpp_count) >= MAX_DI_INSTANCE)
 		return false;
 
 	if (ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG2) {
@@ -408,8 +409,11 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 				+ picinfo->reorder_margin;
 			picinfo->reorder_margin = 2;
 		}
+		atomic_inc(&ctx->dev->vpp_count);
+		ctx->vpp_is_need = true;
 	} else {
 		vpp->buf_size = 0;
+		ctx->vpp_is_need = false;
 	}
 
 	ctx->dpb_size = picinfo->reorder_frames + picinfo->reorder_margin;
@@ -874,7 +878,7 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb,
 	struct vdec_v4l2_buffer *pfb;
 	struct aml_video_dec_buf *dst_buf_info;
 	struct vb2_v4l2_buffer *dst_vb2_v4l2;
-	u32 buf_flag, mode;
+	u32 buf_flag;
 	ulong flags;
 
 	flags = aml_vcodec_ctx_lock(ctx);
@@ -908,7 +912,7 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb,
 	pfb->fill_buf_done	= fill_capture_done_cb;
 
 	/* frames first submit to vpp from dec. */
-	if (vpp_needed(ctx, &mode) && !for_vpp)
+	if ((ctx->vpp_is_need) && (!for_vpp))
 		pfb->fill_buf_done = fill_vpp_buf_cb;
 
 	dst_buf_info->used	= true;
@@ -1354,8 +1358,9 @@ void aml_thread_post_task(struct aml_vcodec_ctx *ctx,
 	enum aml_thread_type type)
 {
 	struct aml_vdec_thread *thread = NULL;
+	ulong flags;
 
-	mutex_lock(&ctx->lock);
+	spin_lock_irqsave(&ctx->tsplock, flags);
 	list_for_each_entry(thread, &ctx->vdec_thread_list, node) {
 		if (thread->task == NULL)
 			continue;
@@ -1363,7 +1368,7 @@ void aml_thread_post_task(struct aml_vcodec_ctx *ctx,
 		if (thread->type == type)
 			up(&thread->sem);
 	}
-	mutex_unlock(&ctx->lock);
+	spin_unlock_irqrestore(&ctx->tsplock, flags);
 }
 EXPORT_SYMBOL_GPL(aml_thread_post_task);
 
@@ -1405,13 +1410,14 @@ EXPORT_SYMBOL_GPL(aml_thread_start);
 void aml_thread_stop(struct aml_vcodec_ctx *ctx)
 {
 	struct aml_vdec_thread *thread = NULL;
+	ulong flags;
 
 	while (!list_empty(&ctx->vdec_thread_list)) {
 		thread = list_entry(ctx->vdec_thread_list.next,
 			struct aml_vdec_thread, node);
-		mutex_lock(&ctx->lock);
+		spin_lock_irqsave(&ctx->tsplock, flags);
 		list_del(&thread->node);
-		mutex_unlock(&ctx->lock);
+		spin_unlock_irqrestore(&ctx->tsplock, flags);
 
 		thread->stop = true;
 		up(&thread->sem);
@@ -1517,9 +1523,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 	q = v4l2_m2m_get_vq(fh->m2m_ctx, i);
 	if (!V4L2_TYPE_IS_OUTPUT(q->type)) {
 		if (ctx->is_stream_off) {
-			u32 mode;
-
-			if (vpp_needed(ctx, &mode)) {
+			if (ctx->vpp_is_need) {
 				int ret;
 				ret = aml_v4l2_vpp_init(ctx, &ctx->vpp_cfg, &ctx->vpp);
 				if (ret) {
@@ -2543,6 +2547,8 @@ void aml_v4l_ctx_release(struct kref *kref)
 	struct aml_vcodec_ctx * ctx;
 
 	ctx = container_of(kref, struct aml_vcodec_ctx, ctx_ref);
+	if (ctx->vpp_is_need)
+		atomic_dec(&ctx->dev->vpp_count);
 	vfree(ctx->dv_infos.dv_bufs);
 	kfree(ctx);
 }

@@ -3331,9 +3331,8 @@ void (*callback)(struct vdec_s *, void *),
 #endif
 
 	if ((vdec_frame_based(vdec)) && (hw->chunk_header_offset != 0) &&
-		(hw->res_ch_flag == 1) && (hw->chunk != NULL) &&
+		(!hw->v4l_params_parsed) && (hw->chunk != NULL) &&
 		(hw->chunk_res_size != 0)) {
-
 		hw->chunk->offset = hw->chunk_header_offset;
 		hw->chunk->size = hw->chunk_res_size;
 		hw->chunk_header_offset = 0;
