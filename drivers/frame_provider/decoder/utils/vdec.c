@@ -4810,6 +4810,41 @@ int vdec_has_get_fcc_new_msg(struct vdec_s *vdec)
 	return ret;
 }
 EXPORT_SYMBOL(vdec_has_get_fcc_new_msg);
+void vdec_set_dmc_urgent(struct vdec_s *vdec, int urgentType)
+{
+#ifndef DMC_AXI4_G12_CHAN_CTRL
+#define DMC_AXI4_G12_CHAN_CTRL 		(0x90 << 2)
+#endif
+#define DMC_URGENT_TYPE_NORMAL 1
+#define DMC_URGENT_TYPE_URGENT 2
+#define DMC_URGENT_TYPE_SUPERURGENT 4
+
+	if (vdec) {
+		if (urgentType == DMC_URGENT_TYPE_NORMAL ||
+			urgentType == DMC_URGENT_TYPE_URGENT ||
+			urgentType == DMC_URGENT_TYPE_SUPERURGENT) {
+			int type;
+			unsigned int val;
+
+			type = vdec_get_hw_type(vdec->port->vformat);
+			if (type == CORE_MASK_HEVC) {
+				if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) {
+					val = READ_DMCREG(DMC_AXI4_CHAN_CTRL);
+					val &= (~(0x7 << 16));
+					val |= ((urgentType & 0x7) << 16);
+					WRITE_DMCREG(DMC_AXI4_CHAN_CTRL, val);
+				} else {
+					val = READ_DMCREG(DMC_AXI4_G12_CHAN_CTRL);
+					val &= (~(0x7 << 16));
+					val |= ((urgentType & 0x7) << 16);
+					WRITE_DMCREG(DMC_AXI4_G12_CHAN_CTRL, val);
+				}
+			}
+		}
+	}
+
+}
+EXPORT_SYMBOL(vdec_set_dmc_urgent);
 
 int fcc_debug_enable(void)
 {
