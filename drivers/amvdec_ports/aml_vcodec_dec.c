@@ -3094,7 +3094,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 		contig_size = dmabuf_contiguous_size(buf->out_sgt);
 		if (contig_size < vb->planes[0].bytesused) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-				"contiguous mapping is too small %lu/%lu\n",
+				"contiguous mapping is too small %lu/%u\n",
 				contig_size, size);
 			return -EFAULT;
 		}

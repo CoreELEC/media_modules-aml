@@ -252,7 +252,17 @@ struct stream_buf_s *pbuf, int release_num)
 	case 4: {
 		if ((port->type & PORT_TYPE_FRAME) == 0)
 			esparser_release(pbuf);
+		if (vdec->slave)
+			slave = vdec->slave;
+		vdec_release(vdec);
+
+		if (slave)
+			vdec_release(slave);
+		vdec = NULL;
+		if ((port->type & PORT_TYPE_FRAME) == 0)
+			stbuf_release(pbuf);
 	}
+	break;
 
 	case 3: {
 		if (vdec->slave)
@@ -262,12 +272,16 @@ struct stream_buf_s *pbuf, int release_num)
 		if (slave)
 			vdec_release(slave);
 		vdec = NULL;
+		if ((port->type & PORT_TYPE_FRAME) == 0)
+			stbuf_release(pbuf);
 	}
+	break;
 
 	case 2: {
 		if ((port->type & PORT_TYPE_FRAME) == 0)
 			stbuf_release(pbuf);
 	}
+	break;
 
 	case 1:
 		;

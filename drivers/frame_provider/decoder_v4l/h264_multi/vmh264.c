@@ -3186,7 +3186,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 			vf->src_fmt.comp_buf = v4l2_ctx->dv_infos.dv_bufs[v4l2_ctx->dv_infos.index].comp_buf;
 			vf->src_fmt.md_buf = v4l2_ctx->dv_infos.dv_bufs[v4l2_ctx->dv_infos.index].md_buf;
-			v4l2_ctx->dv_infos.index = (++v4l2_ctx->dv_infos.index) % V4L_CAP_BUFF_MAX;
+			v4l2_ctx->dv_infos.index = (v4l2_ctx->dv_infos.index + 1) % V4L_CAP_BUFF_MAX;
 
 			update_vframe_src_fmt(vf,
 				hw->buffer_spec[buffer_index].aux_data_buf,
