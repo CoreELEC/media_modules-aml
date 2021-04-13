@@ -1017,6 +1017,11 @@ u32 stage_buf_num;
 #endif
 #endif
 
+struct vp9_fence_vf_t {
+	u32 used_size;
+	struct vframe_s *fence_vf[VF_POOL_SIZE];
+};
+
 struct VP9Decoder_s {
 #ifdef MULTI_INSTANCE_SUPPORT
 	unsigned char index;
@@ -1243,6 +1248,8 @@ struct VP9Decoder_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	struct vp9_fence_vf_t fence_vf_s;
+	struct mutex fence_mutex;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -2841,11 +2848,11 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		struct vdec_s *vdec = hw_to_vdec(pbi);
 
 		/* create fence for each buffers. */
-		ret = vdec_timeline_create_fence(&vdec->sync);
+		ret = vdec_timeline_create_fence(vdec->sync);
 		if (ret < 0)
 			return ret;
 
-		pic->fence		= vdec->sync.fence;
+		pic->fence		= vdec->sync->fence;
 		pic->bit_depth		= cm->bit_depth;
 		pic->slice_type		= cm->frame_type;
 		pic->stream_offset	= pbi->pre_stream_offset;
@@ -3015,8 +3022,32 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 		sd.stream_offset = pbi->pre_stream_offset;
 
 		if (pbi->enable_fence) {
+			int i, j, used_size, ret;
+			int signed_count = 0;
+			struct vframe_s *signed_fence[VF_POOL_SIZE];
 			/* notify signal to wake up wq of fence. */
-			vdec_timeline_increase(&vdec->sync, 1);
+			vdec_timeline_increase(vdec->sync, 1);
+			mutex_lock(&pbi->fence_mutex);
+			used_size = pbi->fence_vf_s.used_size;
+			if (used_size) {
+				for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
+					if (pbi->fence_vf_s.fence_vf[i] != NULL) {
+						ret = fence_get_status(pbi->fence_vf_s.fence_vf[i]->fence);
+						if (ret == 1) {
+							signed_fence[signed_count] = pbi->fence_vf_s.fence_vf[i];
+							pbi->fence_vf_s.fence_vf[i] = NULL;
+							pbi->fence_vf_s.used_size--;
+							signed_count++;
+						}
+						j++;
+					}
+				}
+			}
+			mutex_unlock(&pbi->fence_mutex);
+			if (signed_count != 0) {
+				for (i = 0; i < signed_count; i++)
+					vvp9_vf_put(signed_fence[i], vdec);
+			}
 		} else {
 			prepare_display_buf(pbi, &sd);
 		}
@@ -5110,6 +5141,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 	int mc_buffer_size_u_v = 0;
 	int mc_buffer_size_u_v_h = 0;
 	int dw_mode = get_double_write_mode_init(pbi);
+	struct vdec_s *vdec = hw_to_vdec(pbi);
 
 	pbi->lcu_total = lcu_total;
 
@@ -5169,6 +5201,13 @@ static int config_pic(struct VP9Decoder_s *pbi,
 					buf_size
 					);
 				return ret;
+			}
+
+			if (pbi->enable_fence) {
+				//mm->fence_ref_release = vdec_fence_buffer_count_decrease;
+				vdec_fence_buffer_count_increase((ulong)vdec->sync);
+				INIT_LIST_HEAD(&vdec->sync->release_callback[VF_BUFFER_IDX(i)].node);
+				decoder_bmmu_box_add_callback_func(pbi->bmmu_box, VF_BUFFER_IDX(i), (void *)&vdec->sync->release_callback[VF_BUFFER_IDX(i)]);
 			}
 
 			if (pic_config->cma_alloc_addr)
@@ -5278,6 +5317,12 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 				DRIVER_HEADER_NAME, i);
 				pbi->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
 				return;
+			}
+			if (pbi->enable_fence) {
+				vdec_fence_buffer_count_increase((ulong)vdec->sync);
+				INIT_LIST_HEAD(&vdec->sync->release_callback[HEADER_BUFFER_IDX(i)].node);
+				decoder_bmmu_box_add_callback_func(pbi->bmmu_box, HEADER_BUFFER_IDX(i), (void *)&vdec->sync->release_callback[HEADER_BUFFER_IDX(i)]);
+				//mm->fence_ref_release = vdec_fence_buffer_count_decrease;
 			}
 		}
 	}
@@ -7126,6 +7171,24 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 
 	if (!vf)
 		return;
+
+	if (pbi->enable_fence && vf->fence) {
+		int ret, i;
+
+		mutex_lock(&pbi->fence_mutex);
+		ret = fence_get_status(vf->fence);
+		if (ret == 0) {
+			for (i = 0; i < VF_POOL_SIZE; i++) {
+				if (pbi->fence_vf_s.fence_vf[i] == NULL) {
+					pbi->fence_vf_s.fence_vf[i] = vf;
+					pbi->fence_vf_s.used_size++;
+					mutex_unlock(&pbi->fence_mutex);
+					return;
+				}
+			}
+		}
+		mutex_unlock(&pbi->fence_mutex);
+	}
 
 	index = vf->index & 0xff;
 
@@ -9882,7 +9945,6 @@ static void vdec_fence_release(struct VP9Decoder_s *pbi,
 			       struct vdec_sync *sync)
 {
 	ulong expires;
-	int i;
 
 	/* notify signal to wake up all fences. */
 	vdec_timeline_increase(sync, VF_POOL_SIZE);
@@ -9892,15 +9954,6 @@ static void vdec_fence_release(struct VP9Decoder_s *pbi,
 		if (time_after(jiffies, expires)) {
 			pr_err("wait fence signaled timeout.\n");
 			break;
-		}
-	}
-
-	for (i = 0; i < VF_POOL_SIZE; i++) {
-		struct vframe_s *vf = &pbi->vfpool[i];
-
-		if (vf->fence) {
-			vdec_fence_put(vf->fence);
-			vf->fence = NULL;
 		}
 	}
 
@@ -9939,7 +9992,7 @@ static int amvdec_vp9_remove(struct platform_device *pdev)
 	mem_map_mode = 0;
 
 	if (pbi->enable_fence)
-		vdec_fence_release(pbi, &vdec->sync);
+		vdec_fence_release(pbi, vdec->sync);
 
 	vfree(pbi);
 	mutex_unlock(&vvp9_mutex);
@@ -11179,9 +11232,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			pbi->enable_fence, pbi->fence_usage);
 	}
 
-	if (pbi->enable_fence)
-		pdata->sync.usage = pbi->fence_usage;
-
 	pbi->mmu_enable = 1;
 	video_signal_type = pbi->video_signal_type;
 
@@ -11236,8 +11286,25 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	}
 
 	pbi->cma_dev = pdata->cma_dev;
+
+	if (pbi->enable_fence) {
+		pdata->sync = vdec_sync_get();
+		if (!pdata->sync) {
+			vp9_print(pbi, 0, "alloc fence timeline error\n");
+			vp9_local_uninit(pbi);
+			uninit_mmu_buffers(pbi);
+			/* devm_kfree(&pdev->dev, (void *)pbi); */
+			vfree((void *)pbi);
+			pdata->dec_status = NULL;
+			return -1;
+		}
+		pdata->sync->usage = pbi->fence_usage;
+		vdec_timeline_create(pdata->sync, DRIVER_NAME);
+	}
+
 	if (vvp9_init(pdata) < 0) {
 		pr_info("\namvdec_vp9 init failed.\n");
+		vdec_timeline_put(pdata->sync);
 		vp9_local_uninit(pbi);
 		uninit_mmu_buffers(pbi);
 		/* devm_kfree(&pdev->dev, (void *)pbi); */
@@ -11264,11 +11331,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 					| CORE_MASK_COMBINE);
 #endif
 	pbi->pic_list_init_done2 = true;
-
-	if (pbi->enable_fence) {
-		/* creat timeline. */
-		vdec_timeline_create(&pdata->sync, DRIVER_NAME);
-	}
+	mutex_init(&pbi->fence_mutex);
 
 	return 0;
 }
@@ -11308,7 +11371,7 @@ static int ammvdec_vp9_remove(struct platform_device *pdev)
 	}
 
 	if (pbi->enable_fence)
-		vdec_fence_release(pbi, &vdec->sync);
+		vdec_fence_release(pbi, vdec->sync);
 
 #ifdef DEBUG_PTS
 	pr_info("pts missed %ld, pts hit %ld, duration %d\n",

@@ -296,7 +296,7 @@ struct vdec_s {
 	u64 irq_cnt;
 	int parallel_dec;
 	struct vdec_frames_s *mvfrm;
-	struct vdec_sync sync;
+	struct vdec_sync *sync;
 
 	/*aux data check*/
 	struct aux_data_check_mgr_t adc;
