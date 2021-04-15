@@ -2331,8 +2331,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 			"%s first_insert_frame %d \n", __func__, p_H264_Dpb->first_insert_frame);
 	}
 	if (prepare_display_buf(p_H264_Dpb->vdec, p_Dpb->fs[pos]) >= 0) {
-		if (!p_H264_Dpb->without_display_mode &&
-				p_Dpb->fs[pos]->show_frame != false)
+		if (!p_H264_Dpb->without_display_mode)
 			p_Dpb->fs[pos]->pre_output = 1;
 	} else {
 		if (h264_debug_flag & PRINT_FLAG_DPB_DETAIL) {

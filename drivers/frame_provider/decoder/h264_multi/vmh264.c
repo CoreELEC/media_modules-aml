@@ -2868,6 +2868,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 		(frame->data_flag & ERROR_FLAG)) ||
 		((hw->i_only & 0x1) &&
 		(!(frame->data_flag & I_FLAG)))) {
+		set_frame_output_flag(&hw->dpb, frame->index);
 		frame->show_frame = false;
 		return 0;
 	}
