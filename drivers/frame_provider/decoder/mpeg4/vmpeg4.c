@@ -436,7 +436,7 @@ static irqreturn_t vmpeg4_isr(int irq, void *dev_id)
 
 				pts += vop_time_inc_since_last_anch *
 					PTS_UNIT / rate;
-				pts_us64 += (vop_time_inc_since_last_anch *
+				pts_us64 += (u64)(vop_time_inc_since_last_anch *
 					PTS_UNIT / rate) * 100 / 9;
 
 				if (vop_time_inc_since_last_anch > (1 << 14)) {
