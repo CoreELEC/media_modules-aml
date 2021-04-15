@@ -786,17 +786,14 @@ static int audio_port_reset(struct stream_port_s *port,
 				struct stream_buf_s *pbuf)
 {
 	int r;
-	mutex_lock(&amstream_mutex);
 	if ((port->flag & PORT_FLAG_AFORMAT) == 0) {
 		pr_err("aformat not set\n");
-		mutex_unlock(&amstream_mutex);
 		return 0;
 	}
 
 	pr_info("audio port reset, flag:0x%x\n", port->flag);
 	if ((port->flag & PORT_FLAG_INITED) == 0) {
 		pr_info("audio port not inited,return\n");
-		mutex_unlock(&amstream_mutex);
 		return 0;
 	}
 
@@ -807,14 +804,12 @@ static int audio_port_reset(struct stream_port_s *port,
 
 	r = stbuf_init(pbuf, NULL);
 	if (r < 0) {
-		mutex_unlock(&amstream_mutex);
 		return r;
 	}
 
 	r = adec_init(port);
 	if (r < 0) {
 		audio_port_release(port, pbuf, 2);
-		mutex_unlock(&amstream_mutex);
 		return r;
 	}
 
@@ -841,7 +836,6 @@ static int audio_port_reset(struct stream_port_s *port,
 	//tsync_audio_break(0);
 
 	pr_info("audio_port_reset done\n");
-	mutex_unlock(&amstream_mutex);
 	return r;
 }
 
@@ -2369,7 +2363,9 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		if (this->type & PORT_TYPE_AUDIO) {
 			struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
 
+			mutex_lock(&amstream_mutex);
 			r = audio_port_reset(this, pabuf);
+			mutex_unlock(&amstream_mutex);
 		} else
 			r = -EINVAL;
 
@@ -2563,7 +2559,7 @@ static long amstream_ioctl_get_ex(struct port_priv_s *priv, ulong arg)
 			struct am_ioctl_parm_ex *p = &parm;
 			struct stream_buf_s *buf = NULL;
 
-			mutex_unlock(&amstream_mutex);
+			mutex_lock(&amstream_mutex);
 
 			/*
 			 *todo: check upper layer for decoder
@@ -3369,7 +3365,9 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 		if (this->type & PORT_TYPE_AUDIO) {
 			struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
 
+			mutex_lock(&amstream_mutex);
 			r = audio_port_reset(this, pabuf);
+			mutex_unlock(&amstream_mutex);
 		} else
 			r = -EINVAL;
 
@@ -4456,6 +4454,7 @@ static ssize_t audio_path_store(struct class *class,
 		return -EINVAL;
 	if (val != 1)
 		return -EINVAL;
+	mutex_lock(&amstream_mutex);
 	for (i = 0; i < MAX_AMSTREAM_PORT_NUM; i++) {
 		if (strcmp(ports[i].name, "amstream_mpts") == 0 ||
 			strcmp(ports[i].name, "amstream_mpts_sched") == 0) {
@@ -4466,6 +4465,7 @@ static ssize_t audio_path_store(struct class *class,
 			}
 		}
 	}
+	mutex_unlock(&amstream_mutex);
 	return size;
 }
 
