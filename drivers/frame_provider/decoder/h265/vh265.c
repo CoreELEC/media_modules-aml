@@ -9608,9 +9608,10 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					pic->conf_win_bottom_offset,
 					vf->width, vf->height, vf->compWidth, vf->compHeight);
 		}
-		vf->sar_width = hevc->cur_pic->sar_width;
-		vf->sar_height = hevc->cur_pic->sar_height;
-
+		if (hevc->cur_pic != NULL) {
+			vf->sar_width = hevc->cur_pic->sar_width;
+			vf->sar_height = hevc->cur_pic->sar_height;
+		}
 		vf->width = vf->width /
 			get_double_write_ratio(pic->double_write_mode);
 		vf->height = vf->height /

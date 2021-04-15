@@ -516,7 +516,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 					}
 					if (next_pts_us64 != 0) {
 						next_pts_us64 +=
-						((vf->duration) -
+						(u64)((vf->duration) -
 						((vf->duration) >> 4)) *
 						100 / 9;
 					}
@@ -593,7 +593,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 						 ((vf->duration) >> 4));
 				}
 				if (next_pts_us64 != 0) {
-					next_pts_us64 += ((vf->duration) -
+					next_pts_us64 += (u64)((vf->duration) -
 					((vf->duration) >> 4)) * 100 / 9;
 				}
 			} else {
@@ -696,7 +696,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 					}
 					if (next_pts_us64 != 0) {
 						next_pts_us64 +=
-						((vf->duration) -
+						(u64)((vf->duration) -
 						((vf->duration) >> 4)) *
 						100 / 9;
 					}
