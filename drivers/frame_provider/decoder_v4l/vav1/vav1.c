@@ -3901,7 +3901,7 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 #ifdef DOS_PROJECT
     data32 = READ_VREG(HEVC_SAO_CTRL1);
     data32 &= (~0x3000);
-    data32 |= (MEM_MAP_MODE << 12); // [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
+    data32 |= (hw->mem_map_mode << 12); // [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
     data32 &= (~0x3);
     data32 |= 0x1; // [1]:dw_disable [0]:cm_disable
     WRITE_VREG(HEVC_SAO_CTRL1, data32);
@@ -3912,13 +3912,13 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 
     data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
     data32 &= (~0x30);
-    data32 |= (MEM_MAP_MODE << 4); // [5:4]	-- address_format 00:linear 01:32x32 10:64x32
+    data32 |= (hw->mem_map_mode << 4); // [5:4]	-- address_format 00:linear 01:32x32 10:64x32
     WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
 #else
 // m8baby test1902
    data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~0x3000);
-	data32 |= (MEM_MAP_MODE << 12); // [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
+	data32 |= (hw->mem_map_mode << 12); // [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
     data32 &= (~0xff0);
 	//data32 |= 0x670;  // Big-Endian per 64-bit
     data32 |= 0x880;  // Big-Endian per 64-bit
@@ -3932,7 +3932,7 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 
     data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
-	data32 |= (MEM_MAP_MODE << 4); // [5:4]	-- address_format 00:linear 01:32x32 10:64x32
+	data32 |= (hw->mem_map_mode << 4); // [5:4]	-- address_format 00:linear 01:32x32 10:64x32
 	data32 &= (~0xF);
     data32 |= 0x8;	// Big-Endian per 64-bit
     WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
@@ -3941,7 +3941,7 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 /*CHANGE_DONE nnn*/
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~0x3000);
-	data32 |= (mem_map_mode << 12); /* [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32 */
+	data32 |= (hw->mem_map_mode << 12); /* [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32 */
 	data32 &= (~0xff0);
 	/* data32 |= 0x670;  // Big-Endian per 64-bit */
 #ifdef AOM_AV1_MMU_DW
@@ -4022,7 +4022,7 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
 	/* [5:4]	-- address_format 00:linear 01:32x32 10:64x32 */
-	data32 |= (mem_map_mode << 4);
+	data32 |= (hw->mem_map_mode << 4);
 	data32 &= (~0xf);
 	data32 |= (hw->endian & 0xf);  /* valid only when double write only */
 
@@ -5515,9 +5515,9 @@ static int av1_local_init(struct AV1HW_s *hw)
 		(hw->vav1_amstream_dec_info.width % 64) != 0)) {
 		if (hw_to_vdec(hw)->canvas_mode !=
 			CANVAS_BLKMODE_LINEAR)
-			mem_map_mode = 2;
+			hw->mem_map_mode = 2;
 		else {
-			mem_map_mode = 0;
+			hw->mem_map_mode = 0;
 			av1_print(hw, AOM_DEBUG_HW_MORE, "vdec blkmod linear, force mem_map_mode 0\n");
 		}
 	}
@@ -5619,7 +5619,7 @@ static void set_canvas(struct AV1HW_s *hw,
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	int canvas_w = ALIGN(pic_config->y_crop_width, 64)/4;
 	int canvas_h = ALIGN(pic_config->y_crop_height, 32)/4;
-	int blkmode = mem_map_mode;
+	int blkmode = hw->mem_map_mode;
 	/*CANVAS_BLKMODE_64X32*/
 	if	(pic_config->double_write_mode) {
 		canvas_w = pic_config->y_crop_width	/
@@ -8388,8 +8388,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 							hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
 						if (((hw->max_pic_w % 64) != 0) &&
 							(hw_to_vdec(hw)->canvas_mode != CANVAS_BLKMODE_LINEAR))
-							mem_map_mode = 2;
-						av1_print(hw, 0, "force 8k double write 4, mem_map_mode %d\n", mem_map_mode);
+							hw->mem_map_mode = 2;
+						av1_print(hw, 0,
+							"force 8k double write 4, mem_map_mode %d\n", hw->mem_map_mode);
 					}
 
 					if (hw->used_buf_num > MAX_BUF_NUM)
