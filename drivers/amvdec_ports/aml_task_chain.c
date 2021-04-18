@@ -281,7 +281,7 @@ void task_order_attach(struct task_chain_s *task,
 }
 EXPORT_SYMBOL(task_order_attach);
 
-void task_chain_init(struct task_chain_s **task_out,
+int task_chain_init(struct task_chain_s **task_out,
 			    void *v4l_ctx,
 			    void *obj,
 			    int vb_idx)
@@ -292,7 +292,7 @@ void task_chain_init(struct task_chain_s **task_out,
 	if (!task) {
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
 			"TASK_CHAIN:%d alloc task fail.\n", task->id);
-		return;
+		return -ENOMEM;
 	}
 
 	task->id	= vb_idx;
@@ -310,6 +310,7 @@ void task_chain_init(struct task_chain_s **task_out,
 
 	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
 		"TASK_CHAIN:%d task chain creat success.\n", task->id);
+	return 0;
 }
 EXPORT_SYMBOL(task_chain_init);
 

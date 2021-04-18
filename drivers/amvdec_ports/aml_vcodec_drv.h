@@ -405,8 +405,6 @@ struct aml_vdec_thread {
  * @frame_buffer_size: SG buffer page number from
  * @priv_data use for video composer
  *  struct vdec_comp_buf_info
- * @buf_used: buffer used state.
- * @vframe: store vframe from dec.
  */
 struct internal_comp_buf {
 	u32		index;
@@ -419,8 +417,18 @@ struct internal_comp_buf {
 	u32		header_size;
 	u32		frame_buffer_size;
 	struct file_private_data priv_data;
-	bool		buf_used;
-	struct vframe_s *vframe;
+};
+
+/*
+ * struct aml_uvm_buff_ref - uvm buff is used reseve ctx ref count.
+ * @index	: index of video buffer.
+ * @addr	: physic address of video buffer.
+ * @ref		: reference of v4ldec context.
+ */
+struct aml_uvm_buff_ref {
+	int		index;
+	ulong		addr;
+	struct kref	*ref;
 };
 
 /*

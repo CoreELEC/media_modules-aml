@@ -506,13 +506,6 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 			 struct vb2_buffer *vb,
 			 struct vframe_s *vf)
 {
-	struct internal_comp_buf *ibuf = vb_to_comp(ctx, vb);
-
-	if (ibuf) {
-		ibuf->buf_used = true;
-		ibuf->vframe = vf;
-	}
-
 	dmabuf_set_vframe(vb->planes[0].dbuf, vf, VF_SRC_DECODER);
 }
 
@@ -2658,9 +2651,14 @@ void aml_v4l_ctx_release(struct kref *kref)
 	struct aml_vcodec_ctx * ctx;
 
 	ctx = container_of(kref, struct aml_vcodec_ctx, ctx_ref);
+
 	if (ctx->vpp_is_need)
 		atomic_dec(&ctx->dev->vpp_count);
+
 	vfree(ctx->dv_infos.dv_bufs);
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		"v4ldec has been destroyed.\n", ctx->id);
 	kfree(ctx);
 }
 
@@ -2669,7 +2667,7 @@ static void box_release(struct kref *kref)
 	struct aml_vcodec_ctx * ctx
 		= container_of(kref, struct aml_vcodec_ctx, box_ref);
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, bmmu: %px, mmu: %px\n",
 		__func__, ctx->bmmu_box, ctx->mmu_box);
 
@@ -2687,7 +2685,8 @@ static void internal_buf_free(void *arg)
 	struct aml_vcodec_ctx * ctx
 		= container_of(ibuf->box_ref,struct aml_vcodec_ctx, box_ref);
 
-	pr_info("[%d]: %s, idx:%d\n", ctx->id, __func__, ibuf->index);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, idx:%d\n", __func__, ibuf->index);
 
 	mutex_lock(&ctx->comp_lock);
 
@@ -2709,7 +2708,8 @@ static void internal_buf_free2(void *arg)
 	struct aml_vcodec_ctx * ctx
 		= container_of(ibuf->box_ref, struct aml_vcodec_ctx, box_ref);
 
-	pr_info("[%d]: %s, idx: %d\n", ctx->id, __func__, ibuf->index);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, idx: %d\n", __func__, ibuf->index);
 
 	mutex_lock(&ctx->comp_lock);
 
@@ -2724,31 +2724,18 @@ static void internal_buf_free2(void *arg)
 	kref_put(ibuf->box_ref, box_release);
 }
 
-static void internal_buf_free_priv(void *arg)
+static void aml_uvm_buf_free(void *arg)
 {
-	struct internal_comp_buf* ibuf =
-		(struct internal_comp_buf*)arg;
+	struct aml_uvm_buff_ref * ubuf =
+		(struct aml_uvm_buff_ref*)arg;
 	struct aml_vcodec_ctx * ctx
-		= container_of(ibuf->box_ref,struct aml_vcodec_ctx, box_ref);
+		= container_of(ubuf->ref, struct aml_vcodec_ctx, ctx_ref);
 
-	pr_info("[%d]: %s, idx:%d\n", ctx->id, __func__, ibuf->index);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, idx:%d\n", __func__, ubuf->index);
 
-	ibuf->vframe = NULL;
-	kref_put(ibuf->box_ref, box_release);
-
-}
-
-static void internal_buf_free_priv2(void *arg)
-{
-	struct internal_comp_buf *ibuf =
-		container_of(arg, struct internal_comp_buf, priv_data);
-	struct aml_vcodec_ctx * ctx
-		= container_of(ibuf->box_ref, struct aml_vcodec_ctx, box_ref);
-
-	pr_info("[%d]: %s, idx: %d\n", ctx->id, __func__, ibuf->index);
-
-	ibuf->vframe = NULL;
-	kref_put(ibuf->box_ref, box_release);
+	kref_put(ubuf->ref, aml_v4l_ctx_release);
+	vfree(ubuf);
 }
 
 static int uvm_attach_hook_mod_local(struct aml_vcodec_ctx *ctx,
@@ -2882,22 +2869,6 @@ static int bind_comp_buffer_to_uvm(struct aml_vcodec_ctx *ctx,
 		goto bmmu_box_free;
 	}
 
-	u_info.type = VF_PROCESS_DECODER;
-
-	if (parms->cfg.uvm_hook_type == VF_PROCESS_V4LVIDEO)
-		u_info.free = internal_buf_free_priv2;
-	else
-		u_info.free = internal_buf_free_priv;
-
-	ret = dmabuf_is_uvm(dma) ?
-		uvm_attach_hook_mod(dma, &u_info) :
-		uvm_attach_hook_mod_local(ctx, &u_info);
-	if (ret < 0) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to set dmabuf priv buf\n");
-		goto bmmu_box_free;
-	}
-	kref_get(&ctx->box_ref);
-
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, bind vb2:(%d, %px) <--> internal: (%d, %px) header_addr 0x%lx, size: %u\n",
 		__func__, buf->vb.vb2_buf.index,
@@ -2913,23 +2884,58 @@ bmmu_box_free:
 	return -EINVAL;
 }
 
+static int aml_uvm_buff_attach(struct vb2_buffer * vb)
+{
+	int ret = 0;
+	struct dma_buf *dma = vb->planes[0].dbuf;
+	struct uvm_hook_mod_info u_info;
+	struct aml_vcodec_ctx *ctx =
+		vb2_get_drv_priv(vb->vb2_queue);
+	struct aml_uvm_buff_ref *ubuf = NULL;
+
+	if (!dmabuf_is_uvm(dma))
+		return 0;
+
+	ubuf = vzalloc(sizeof(struct aml_uvm_buff_ref));
+	if (ubuf == NULL)
+		return -ENOMEM;
+
+	ubuf->index	= vb->index;
+	ubuf->addr	= vb2_dma_contig_plane_dma_addr(vb, 0);
+	ubuf->ref	= &ctx->ctx_ref;
+
+	u_info.type	= VF_PROCESS_DECODER;
+	u_info.arg	= (void *)ubuf;
+	u_info.free	= aml_uvm_buf_free;
+	ret = uvm_attach_hook_mod(dma, &u_info);
+	if (ret < 0) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"aml uvm buffer attach fail.\n");
+	} else
+		kref_get(ubuf->ref);
+
+	return ret;
+}
+
 static struct internal_comp_buf* vb_to_comp(struct aml_vcodec_ctx *ctx,
 					    struct vb2_buffer *vb)
 {
 	struct aml_dec_params *parms = &ctx->config.parm.dec;
+	bool is_v4lvideo = (parms->cfg.uvm_hook_type == VF_PROCESS_V4LVIDEO);
+	enum uvm_hook_mod_type u_type =
+		is_v4lvideo ? VF_PROCESS_V4LVIDEO : VF_SRC_DECODER;
 	struct dma_buf *dbuf = vb->planes[0].dbuf;
 	struct internal_comp_buf *ibuf = NULL;
 	struct uvm_hook_mod *uhmod = NULL;
 
-	uhmod = uvm_get_hook_mod(dbuf, VF_PROCESS_DECODER);
+	uhmod = uvm_get_hook_mod(dbuf, u_type);
 	if (IS_ERR_OR_NULL(uhmod))
 		return NULL;
 
-	ibuf = (parms->cfg.uvm_hook_type == VF_PROCESS_V4LVIDEO) ?
-		container_of(uhmod->arg, struct internal_comp_buf, priv_data) :
-		(struct internal_comp_buf *) uhmod->arg;
+	ibuf = !is_v4lvideo ? (struct internal_comp_buf *) uhmod->arg :
+		container_of(uhmod->arg, struct internal_comp_buf, priv_data);
 
-	uvm_put_hook_mod(dbuf, VF_PROCESS_DECODER);
+	uvm_put_hook_mod(dbuf, u_type);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 		"%s, vb2: (%d, %px) --> comp: (%d, %px)\n",
@@ -3207,10 +3213,14 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 		} else {
 			buf->que_in_m2m = false;
 
+			if (aml_uvm_buff_attach(vb))
+				return -EFAULT;
+
 			if (fb->task)
 				task_chain_clean(fb->task);
 
-			task_chain_init(&fb->task, ctx, fb, vb->index);
+			if (task_chain_init(&fb->task, ctx, fb, vb->index))
+				return -EFAULT;
 		}
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
@@ -3353,13 +3363,6 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 
 			/*v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "idx: %d, state: %d\n",
 				q->bufs[i]->index, q->bufs[i]->state);*/
-		}
-
-		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
-			if (!ctx->comp_bufs)
-				break;
-
-			ctx->comp_bufs[i].buf_used = false;
 		}
 
 		fb_map_table_clean(ctx);

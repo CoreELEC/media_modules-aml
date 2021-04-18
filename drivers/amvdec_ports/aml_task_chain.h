@@ -106,7 +106,7 @@ struct task_chain_s {
 };
 
 
-void task_chain_init(struct task_chain_s **task_out,
+int task_chain_init(struct task_chain_s **task_out,
 		     void *v4l_ctx,
 		     void *obj,
 		     int vb_idx);
