@@ -185,7 +185,7 @@ void task_chain_show(struct task_chain_s *task)
 			}
 		}
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_PRINFO,
-			"vb:%2d, phy:%x  %s\n",
+			"vb:%2d, phy:%lx  %s\n",
 			task->id, fb->m.mem[0].addr, buf);
 	}
 
