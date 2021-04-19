@@ -150,6 +150,7 @@ static DEFINE_SPINLOCK(vdec_spin_lock);
 
 static int frameinfo_flag = 0;
 static int v4lvideo_add_di = 1;
+static int v4lvideo_add_ppmgr = 0;
 static int max_di_instance = 2;
 
 //static int path_debug = 0;
@@ -2320,6 +2321,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	const char *pdev_name;
 	char dev_name[32] = {0};
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
+	char postprocess_name[64] = {0};
 
 	if (is_res_locked(vdec_core->vdec_resouce_status,
 		BIT(vdec->frame_base_video_path)))
@@ -2576,21 +2578,27 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				mutex_unlock(&vdec_mutex);
 				goto error;
 			}
+			if (v4lvideo_add_ppmgr)
+				snprintf(postprocess_name, sizeof(postprocess_name),
+					"%s ", "ppmgr");
 			if (!v4lvideo_add_di)
 				snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
-					"%s %s", vdec->vf_provider_name,
+					"%s %s%s", vdec->vf_provider_name,
+					postprocess_name,
 					vdec->vf_receiver_name);
 			else {
 				if ((vdec->vf_receiver_inst == 0)
 					&& (max_di_instance > 0))
 					if (max_di_instance == 1)
 						snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
-							"%s %s %s", vdec->vf_provider_name,
+							"%s %s%s %s", vdec->vf_provider_name,
+							postprocess_name,
 							"deinterlace",
 							vdec->vf_receiver_name);
 					else
 						snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
-							"%s %s %s", vdec->vf_provider_name,
+							"%s %s%s %s", vdec->vf_provider_name,
+							postprocess_name,
 							"dimulti.1",
 							vdec->vf_receiver_name);
 				else if ((vdec->vf_receiver_inst <
@@ -5784,6 +5792,10 @@ MODULE_PARM_DESC(frameinfo_flag,
 module_param(v4lvideo_add_di, int, 0664);
 MODULE_PARM_DESC(v4lvideo_add_di,
 				"\n v4lvideo_add_di\n");
+
+module_param(v4lvideo_add_ppmgr, int, 0664);
+MODULE_PARM_DESC(v4lvideo_add_ppmgr,
+				"\n v4lvideo_add_ppmgr\n");
 
 module_param(max_di_instance, int, 0664);
 MODULE_PARM_DESC(max_di_instance,
