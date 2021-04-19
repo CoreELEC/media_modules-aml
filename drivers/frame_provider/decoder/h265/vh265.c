@@ -184,6 +184,8 @@ static void vh265_prot_init(struct hevc_state_s *hevc);
 static int vh265_local_init(struct hevc_state_s *hevc);
 static void vh265_check_timer_func(struct timer_list *timer);
 static void config_decode_mode(struct hevc_state_s *hevc);
+static int check_data_size(struct vdec_s *vdec);
+
 
 static const char vh265_dec_id[] = "vh265-dev";
 
@@ -216,8 +218,7 @@ static u32 data_resend_policy = 1;
 static int poc_num_margin = 1000;
 static int poc_error_limit = 30;
 
-static u32 dirty_time_threshold = 2000;
-static u32 dirty_count_threshold = 200;
+static u32 dirty_again_threshold = 100;
 static u32 dirty_buffersize_threshold = 0x800000;
 
 
@@ -501,7 +502,8 @@ static u32 max_decoding_time;
  *       1, NOT use interlace policy
  *bit 9: 0, discard dirty data on playback start
  *       1, do not discard dirty data on playback start
- *
+ *bit 10:0, when ucode always returns again, it supports discarding data
+ *		 1, When ucode always returns again, it does not support discarding data
  */
 
 static u32 error_handle_policy;
@@ -1913,8 +1915,6 @@ struct hevc_state_s {
 	u32 kpi_first_i_decoded;
 	int sidebind_type;
 	int sidebind_channel_id;
-	u32 again_count;
-	u64 again_timeout_jiffies;
 	u32 pre_parser_video_rp;
 	u32 pre_parser_video_wp;
 	bool dv_duallayer;
@@ -1942,6 +1942,7 @@ struct hevc_state_s {
 	char new_q_name[32];
 	char disp_q_name[32];
 	char pts_name[32];
+	int dec_again_cnt;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -12606,6 +12607,7 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 	hevc->get_frame_dur = false;
 	hevc->frame_width = hevc->vh265_amstream_dec_info.width;
 	hevc->frame_height = hevc->vh265_amstream_dec_info.height;
+	hevc->dec_again_cnt = 0;
 
 	if (is_oversize(hevc->frame_width, hevc->frame_height)) {
 		pr_info("over size : %u x %u.\n",
@@ -12980,6 +12982,30 @@ static int check_dirty_data(struct vdec_s *vdec)
 	return 0;
 }
 
+static int check_data_size(struct vdec_s *vdec)
+{
+	struct hevc_state_s *hw =
+		(struct hevc_state_s *)(vdec->private);
+	u32 wp, rp, level;
+
+	rp = STBUF_READ(&vdec->vbuf, get_rp);
+	wp = STBUF_READ(&vdec->vbuf, get_wp);
+
+	if (wp > rp)
+		level = wp - rp;
+	else
+		level = wp + vdec->input.size - rp ;
+
+	if (level > (vdec->input.size / 2))
+		hw->dec_again_cnt++;
+
+	if (hw->dec_again_cnt > dirty_again_threshold) {
+		hevc_print(hw, 0, "h265 data skipped %x\n", level);
+		hw->dec_again_cnt = 0;
+		return 1;
+	}
+	return 0;
+}
 
 static int vh265_stop(struct hevc_state_s *hevc)
 {
@@ -13659,6 +13685,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		/* if (!hevc->ctx_valid)
 			hevc->ctx_valid = 1; */
 			int i;
+		hevc->dec_again_cnt = 0;
 		decode_frame_count[hevc->index]++;
 #ifdef DETREFILL_ENABLE
 	if (hevc->is_swap &&
@@ -13815,40 +13842,10 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		hevc->next_again_flag = 1;
 #endif
 		if (input_stream_based(vdec)) {
-			u32 rp, wp, level;
-			struct vdec_input_s *input = &vdec->input;
-			rp = STBUF_READ(&vdec->vbuf, get_rp);;
-			wp = STBUF_READ(&vdec->vbuf, get_wp);
-			if (wp < rp)
-				level = input->size + wp - rp;
-			else
-				level = wp - rp;
-			if ((level >= dirty_buffersize_threshold) &&
-				(hevc->pre_parser_video_rp ==
-					STBUF_READ(&vdec->vbuf, get_rp)) &&
-				(hevc->pre_parser_video_wp ==
-					STBUF_READ(&vdec->vbuf, get_wp))) {
-				if (hevc->again_count == 0) {
-					hevc->again_timeout_jiffies =
-						get_jiffies_64() + dirty_time_threshold * HZ/1000;
-				}
-				hevc->again_count++;
-			}
-			else
-				hevc->again_count = 0;
-
-			hevc->pre_parser_video_rp = STBUF_READ(&vdec->vbuf, get_rp);
-			hevc->pre_parser_video_wp = STBUF_READ(&vdec->vbuf, get_wp);
-
-			if (((hevc->again_count > dirty_count_threshold) &&
-					time_after64(get_jiffies_64(), hevc->again_timeout_jiffies))) {
-				mutex_lock(&hevc->chunks_mutex);
-				hevc->again_count = 0;
-				vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
-				hevc->chunk = NULL;
-				hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
-					"Discard dirty data\n");
-				mutex_unlock(&hevc->chunks_mutex);
+			if (!(error_handle_policy & 0x400) && check_data_size(vdec)) {
+				hevc->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&hevc->work);
+				return;
 			} else if ((((error_handle_policy & 0x200) == 0) &&
 						(hevc->pic_list_init_flag == 0))) {
 				check_dirty_data(vdec);
@@ -15660,11 +15657,8 @@ MODULE_PARM_DESC(performance_profile, "\n amvdec_h265 performance_profile\n");
 module_param(disable_ip_mode, uint, 0664);
 MODULE_PARM_DESC(disable_ip_mode, "\n amvdec_h265 disable ip_mode\n");
 
-module_param(dirty_time_threshold, uint, 0664);
-MODULE_PARM_DESC(dirty_time_threshold, "\n dirty_time_threshold\n");
-
-module_param(dirty_count_threshold, uint, 0664);
-MODULE_PARM_DESC(dirty_count_threshold, "\n dirty_count_threshold\n");
+module_param(dirty_again_threshold, uint, 0664);
+MODULE_PARM_DESC(dirty_again_threshold, "\n dirty_again_threshold\n");
 
 module_param(dirty_buffersize_threshold, uint, 0664);
 MODULE_PARM_DESC(dirty_buffersize_threshold, "\n dirty_buffersize_threshold\n");

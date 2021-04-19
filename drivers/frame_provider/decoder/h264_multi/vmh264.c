@@ -152,6 +152,9 @@ static unsigned int error_recovery_mode_in;
 static int start_decode_buf_level = 0x4000;
 static int pre_decode_buf_level = 0x1000;
 static int stream_mode_start_num = 4;
+static int dirty_again_threshold = 100;
+
+static int check_dirty_data(struct vdec_s *vdec);
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 /*to make reorder size difference of bl and el not too big*/
 static unsigned int reorder_dpb_size_margin_dv = 16;
@@ -282,8 +285,9 @@ static unsigned int i_only_flag;
 	bit[19] 1: If a lot b frames are wrong consecutively, the DPB queue reset.
 	bit[20] 1: fixed some error stream will lead to the diffusion of the error, resulting playback stuck.
 	bit[21] 1: fixed DVB loop playback cause jetter issue.
+	bit[22] 1: In streaming mode, support for discarding data.
 */
-static unsigned int error_proc_policy = 0x3fCfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0x7fCfb6; /*0x1f14*/
 
 
 /*
@@ -938,6 +942,7 @@ struct vdec_h264_hw_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	int dec_again_cnt;
 };
 
 static u32 again_threshold;
@@ -7814,6 +7819,7 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset)
 	hw->vld_dec_control = 0;
 	hw->decode_timeout_count = 0;
 	hw->no_mem_count = 0;
+	hw->dec_again_cnt = 0;
 	hw->vh264_ratio = hw->vh264_amstream_dec_info.ratio;
 	/* vh264_ratio = 0x100; */
 
@@ -9006,6 +9012,31 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 
 }
 
+static int check_dirty_data(struct vdec_s *vdec)
+{
+	struct vdec_h264_hw_s *hw =
+		(struct vdec_h264_hw_s *)(vdec->private);
+	u32 wp, rp, level;
+
+	rp = STBUF_READ(&vdec->vbuf, get_rp);
+	wp = STBUF_READ(&vdec->vbuf, get_wp);
+
+	if (wp > rp)
+		level = wp - rp;
+	else
+		level = wp + vdec->input.size - rp ;
+
+	if (level > (vdec->input.size / 2))
+		hw->dec_again_cnt++;
+
+	if (hw->dec_again_cnt > dirty_again_threshold) {
+		dpb_print(DECODE_ID(hw), 0, "h264 data skipped %x\n", level);
+		hw->dec_again_cnt = 0;
+		return 1;
+	}
+	return 0;
+}
+
 static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	struct vdec_s *vdec, int from)
 {
@@ -9190,6 +9221,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 					hw->dec_result == DEC_RESULT_TIMEOUT) {
 		/* if (!hw->ctx_valid)
 			hw->ctx_valid = 1; */
+		hw->dec_again_cnt = 0;
 		if ((hw->dec_result == DEC_RESULT_TIMEOUT) &&
 				!hw->i_only && (error_proc_policy & 0x2)) {
 			struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
@@ -9274,6 +9306,15 @@ result_done:
 			vdec_schedule_work(&hw->work);
 			return;
 		}
+
+		if ((vdec_stream_based(vdec)) &&
+			(error_proc_policy & 0x400000) &&
+			check_dirty_data(vdec)) {
+			hw->dec_result = DEC_RESULT_DONE;
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+
 		hw->next_again_flag = 1;
 	} else if (hw->dec_result == DEC_RESULT_EOS) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
@@ -10839,6 +10880,9 @@ MODULE_PARM_DESC(poc_threshold, "\n poc_threshold\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
+
+module_param(dirty_again_threshold, uint, 0664);
+MODULE_PARM_DESC(dirty_again_threshold, "\n amvdec_h264 dirty_again_threshold\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);
