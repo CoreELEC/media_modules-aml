@@ -362,10 +362,8 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 		return false;
 	}
 
-	if ((ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG1) ||
-		(ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG2) ||
-		(ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG4) ||
-		(ctx->output_pix_fmt == V4L2_PIX_FMT_H264)) {
+	if (!ctx->vpp_cfg.enable_nr &&
+		(ctx->output_pix_fmt == V4L2_PIX_FMT_HEVC)) {
 		if (is_over_size(width, height, size)) {
 			return false;
 		}
@@ -591,6 +589,30 @@ static void fb_map_table_fetch(struct aml_vcodec_ctx *ctx,
 	}
 }
 
+static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
+{
+	int i;
+	ulong flags;
+
+	flags = aml_vcodec_ctx_lock(ctx);
+
+	for (i = 0; i < ARRAY_SIZE(ctx->fb_map); i++) {
+		if (addr == ctx->fb_map[i].addr)
+			break;
+	}
+
+	aml_vcodec_ctx_unlock(ctx, flags);
+
+	if (i >= ARRAY_SIZE(ctx->fb_map)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+			"%s, addr:%lx isn't output.\n",
+			__func__, addr);
+		return false;
+	}
+
+	return true;
+}
+
  static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
 	struct vdec_v4l2_buffer *fb)
 {
@@ -705,9 +727,10 @@ static void fb_map_table_fetch(struct aml_vcodec_ctx *ctx,
 					"set vf(%px) into %dth buf\n",
 					vf, vb2_buf->index);
 			}
-
-			fb_map_table_hold(ctx, vb2_buf, vf, fb->task);
 		}
+
+		fb_map_table_hold(ctx, vb2_buf, vf, fb->task);
+
 		v4l2_m2m_buf_done(&dstbuf->vb, VB2_BUF_STATE_DONE);
 
 		fb->status = FB_ST_DISPLAY;
@@ -864,6 +887,19 @@ static bool fb_buff_query(struct aml_fb_ops *fb, ulong *token)
 	aml_vcodec_ctx_unlock(ctx, flags);
 
 	return ret;
+}
+
+static void aml_task_chain_remove(struct aml_vcodec_ctx *ctx)
+{
+	struct task_chain_s *task, *tmp;
+
+	list_for_each_entry_safe(task, tmp, &ctx->task_chain_pool, node) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			"remove task chain:%d, %px\n", task->id, task);
+		list_del(&task->node);
+		task_chain_clean(task);
+		task_chain_release(task);
+	}
 }
 
 static struct task_ops_s *get_v4l_sink_ops(void);
@@ -2653,6 +2689,8 @@ void aml_v4l_ctx_release(struct kref *kref)
 
 	vfree(ctx->dv_infos.dv_bufs);
 
+	aml_task_chain_remove(ctx);
+
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"v4ldec has been destroyed.\n");
 
@@ -2729,7 +2767,9 @@ static void aml_uvm_buf_free(void *arg)
 		= container_of(ubuf->ref, struct aml_vcodec_ctx, ctx_ref);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, idx:%d\n", __func__, ubuf->index);
+		"%s, vb:%d, dbuf:%px, ino:%lu\n",
+		__func__, ubuf->index, ubuf->dbuf,
+		file_inode(ubuf->dbuf->file)->i_ino);
 
 	kref_put(ubuf->ref, aml_v4l_ctx_release);
 	vfree(ubuf);
@@ -2884,13 +2924,13 @@ bmmu_box_free:
 static int aml_uvm_buff_attach(struct vb2_buffer * vb)
 {
 	int ret = 0;
-	struct dma_buf *dma = vb->planes[0].dbuf;
+	struct dma_buf *dbuf = vb->planes[0].dbuf;
 	struct uvm_hook_mod_info u_info;
 	struct aml_vcodec_ctx *ctx =
 		vb2_get_drv_priv(vb->vb2_queue);
 	struct aml_uvm_buff_ref *ubuf = NULL;
 
-	if (!dmabuf_is_uvm(dma))
+	if (!dmabuf_is_uvm(dbuf))
 		return 0;
 
 	ubuf = vzalloc(sizeof(struct aml_uvm_buff_ref));
@@ -2899,17 +2939,26 @@ static int aml_uvm_buff_attach(struct vb2_buffer * vb)
 
 	ubuf->index	= vb->index;
 	ubuf->addr	= vb2_dma_contig_plane_dma_addr(vb, 0);
+	ubuf->dbuf	= dbuf;
 	ubuf->ref	= &ctx->ctx_ref;
 
 	u_info.type	= VF_PROCESS_DECODER;
 	u_info.arg	= (void *)ubuf;
 	u_info.free	= aml_uvm_buf_free;
-	ret = uvm_attach_hook_mod(dma, &u_info);
+	ret = uvm_attach_hook_mod(dbuf, &u_info);
 	if (ret < 0) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-			"aml uvm buffer attach fail.\n");
-	} else
-		kref_get(ubuf->ref);
+			"aml uvm buffer %d attach fail.\n",
+			ubuf->index);
+		return ret;
+	}
+
+	kref_get(ubuf->ref);
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, vb:%d, dbuf:%px, ino:%lu\n",
+		__func__, ubuf->index, ubuf->dbuf,
+		file_inode(ubuf->dbuf->file)->i_ino);
 
 	return ret;
 }
@@ -2957,6 +3006,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		"%s, vb: %lx, type: %d, idx: %d, state: %d, used: %d, ts: %llu\n",
 		__func__, (ulong) vb, vb->vb2_queue->type,
 		vb->index, vb->state, buf->used, vb->timestamp);
+
 	/*
 	 * check if this buffer is ready to be used after decode
 	 */
@@ -2992,6 +3042,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 						"dmabuf without attach DI hook.\n");
 				}
 			}
+
+			task_chain_clean(fb->task);
 
 			ctx->cap_pool.seq[ctx->cap_pool.in++] =
 				(V4L_CAP_BUFF_IN_M2M << 16 | vb->index);
@@ -3199,32 +3251,34 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 	if (!V4L2_TYPE_IS_OUTPUT(vb->type)) {
 		struct vframe_s *vf = NULL;
 		struct task_chain_s *task = NULL;
+		struct task_chain_s *task_pre = fb->task;
 
 		fb_map_table_fetch(ctx, vb, &vf, &task);
-
 		if (vf) {
 			fb->task		= task;
 			fb->vframe		= vf;
 			vf->v4l_mem_handle	= (ulong)fb;
-			update_vdec_buf_plane(ctx, fb, vb);
+			task_chain_update_object(task, fb);
 		} else {
 			buf->que_in_m2m = false;
 
 			if (aml_uvm_buff_attach(vb))
 				return -EFAULT;
 
-			if (fb->task)
-				task_chain_clean(fb->task);
-
 			if (task_chain_init(&fb->task, ctx, fb, vb->index))
 				return -EFAULT;
-		}
+
+			list_add(&fb->task->node, &ctx->task_chain_pool);
+ 		}
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-			"init buffer(%s), vb idx:%d, addr: old:%lx, new:%lx\n",
+			"init buffer(%s), vb idx:%d, task:(%px -> %px), addr:(%lx -> %lx)\n",
 			vf ? "update" : "idel",
-			vb->index, fb->m.mem[0].addr,
+			vb->index, task_pre, fb->task,
+			fb->m.mem[0].addr,
 			(ulong) vb2_dma_contig_plane_dma_addr(vb, 0));
+
+		update_vdec_buf_plane(ctx, fb, vb);
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(vb->type)) {
@@ -3251,6 +3305,7 @@ static void vb2ops_vdec_buf_cleanup(struct vb2_buffer *vb)
 					struct vb2_v4l2_buffer, vb2_buf);
 	struct aml_video_dec_buf *buf = container_of(vb2_v4l2,
 					struct aml_video_dec_buf, vb);
+	struct vdec_v4l2_buffer *fb = &buf->frame_buffer;;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d, idx: %d\n",
 		__func__, vb->vb2_queue->type, vb->index);
@@ -3269,7 +3324,11 @@ static void vb2ops_vdec_buf_cleanup(struct vb2_buffer *vb)
 			}
 		}
 
-		task_chain_release(buf->frame_buffer.task);
+		if (!is_fb_mapped(ctx, fb->m.mem[0].addr)) {
+			list_del(&fb->task->node);
+			task_chain_clean(fb->task);
+			task_chain_release(fb->task);
+		}
 	}
 }
 
@@ -3350,13 +3409,6 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 
 			if (vb2_v4l2->vb2_buf.state == VB2_BUF_STATE_ACTIVE)
 				v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
-
-			if (buf->frame_buffer.task) {
-				task_chain_clean(buf->frame_buffer.task);
-			} else {
-				v4l_dbg(ctx, V4L_DEBUG_TASK_CHAIN,
-					"TASK_CHAIN:%d task chain isn't init thus doesn't need clean.\n", i);
-			}
 
 			/*v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "idx: %d, state: %d\n",
 				q->bufs[i]->index, q->bufs[i]->state);*/

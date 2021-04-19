@@ -4556,14 +4556,13 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 		struct buffer_spec_s *pic = &hw->buffer_spec[buf_spec_num];
 
 		if (vf->v4l_mem_handle != pic->cma_alloc_addr) {
-			pic->cma_alloc_addr = vf->v4l_mem_handle;
-
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 				"H264 update fb handle, old:%llx, new:%llx\n",
 				pic->cma_alloc_addr, vf->v4l_mem_handle);
+
+				pic->cma_alloc_addr = vf->v4l_mem_handle;
 		}
 	}
-
 
 	if (vf && (vf_valid_check(vf, hw) == true)) {
 		atomic_add(1, &hw->vf_put_count);

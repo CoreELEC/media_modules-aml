@@ -87,6 +87,7 @@ static int fops_vcodec_open(struct file *file)
 	v4l2_fh_add(&ctx->fh);
 	INIT_LIST_HEAD(&ctx->list);
 	INIT_LIST_HEAD(&ctx->vdec_thread_list);
+	INIT_LIST_HEAD(&ctx->task_chain_pool);
 	dev->filp = file;
 	ctx->dev = dev;
 	init_waitqueue_head(&ctx->queue);

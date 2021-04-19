@@ -37,7 +37,6 @@ extern int dump_vpp_input;
 static void di_release_keep_buf_wrap(void *arg)
 {
 	struct di_buffer *buf = (struct di_buffer *)arg;
-	//struct aml_v4l2_vpp *vpp = buf->caller_data;
 
 	di_release_keep_buf(buf);
 
@@ -88,8 +87,8 @@ static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 	}
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"%s attach di local buffer %px\n",
-		__func__ , vpp_buf->di_local_buf);
+		"%s attach di local buffer %px, dbuf:%px\n",
+		__func__ , vpp_buf->di_local_buf, dma);
 
 	return ret;
 }
@@ -119,8 +118,8 @@ static int detach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 	}
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"%s detach di local buffer %px\n",
-		__func__ , vpp_buf->di_local_buf);
+		"%s detach di local buffer %px, dbuf:%px\n",
+		__func__ , vpp_buf->di_local_buf, dma);
 
 	return ret;
 }
@@ -141,7 +140,7 @@ static void release_DI_buff(struct aml_v4l2_vpp* vpp)
 
 static int is_di_input_buff_full(struct aml_v4l2_vpp *vpp)
 {
-	return ((vpp->in_num[INPUT_PORT] - vpp->out_num[INPUT_PORT])
+	return ((vpp->in_num[INPUT_PORT] - vpp->in_num[OUTPUT_PORT])
 		> vpp->di_ibuf_num) ? true : false;
 }
 
@@ -203,6 +202,7 @@ static enum DI_ERRORTYPE
 	fb->task->submit(fb->task, TASK_TYPE_VPP);
 
 	vpp->out_num[OUTPUT_PORT]++;
+	vpp->in_num[OUTPUT_PORT]++;
 
 	return DI_ERR_NONE;
 }
@@ -246,7 +246,9 @@ static enum DI_ERRORTYPE
 		fb->task->recycle(fb->task, TASK_TYPE_VPP);
 	}
 
-	vpp->out_num[INPUT_PORT]++;
+	if (vpp->buffer_mode != BUFFER_MODE_ALLOC_BUF)
+		vpp->in_num[OUTPUT_PORT]++;
+
 	kfree(vpp_buf);
 	return DI_ERR_NONE;
 }
@@ -374,7 +376,7 @@ static void vpp_vf_put(void *caller, struct vframe_s *vf)
 		buf->flag,
 		vf->timestamp);
 
-	if (vf->vf_ext && vpp->is_prog) {
+	if (vpp->is_prog) {
 		fb->task->recycle(fb->task, TASK_TYPE_VPP);
 	}
 
@@ -552,6 +554,8 @@ retry:
 				di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 			}
 		}
+		vpp->in_num[INPUT_PORT]++;
+		vpp->out_num[INPUT_PORT]++;
 	}
 exit:
 	while (!kthread_should_stop()) {
@@ -858,7 +862,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 
 	kfifo_put(&vpp->input, in_buf);
 	up(&vpp->sem_in);
-	vpp->in_num[INPUT_PORT]++;
+
 	return 0;
 }
 

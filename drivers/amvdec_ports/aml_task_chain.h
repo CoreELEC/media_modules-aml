@@ -77,6 +77,7 @@ struct task_item_s {
 /*
  * struct task_chain_s - the manager struct of the task chain.
  * @list_item	: all task items be attached are store in the list.
+ * @node	: will register to the task chain pool.
  * @ref		: reference count of task chain be used by others.
  * @slock	: used for list item write and read safely.
  * @id		: it's vb index to be a mark used for task chain.
@@ -91,6 +92,7 @@ struct task_item_s {
  */
 struct task_chain_s {
 	struct list_head	list_item;
+	struct list_head	node;
 	struct kref		ref;
 	spinlock_t		slock;
 	int			id;
@@ -116,6 +118,7 @@ void task_order_attach(struct task_chain_s *task,
 void task_chain_clean(struct task_chain_s *task);
 void task_chain_release(struct task_chain_s *task);
 void task_chain_show(struct task_chain_s *task);
+void task_chain_update_object(struct task_chain_s *task, void *obj);
 
 #endif //AML_TASK_CHAIN_H
 

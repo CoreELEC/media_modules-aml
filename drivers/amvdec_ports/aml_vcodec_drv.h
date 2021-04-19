@@ -424,11 +424,13 @@ struct internal_comp_buf {
  * @index	: index of video buffer.
  * @addr	: physic address of video buffer.
  * @ref		: reference of v4ldec context.
+ * @dma		: dma buf of associated with vb.
  */
 struct aml_uvm_buff_ref {
 	int		index;
 	ulong		addr;
 	struct kref	*ref;
+	struct dma_buf	*dbuf;
 };
 
 /*
@@ -560,6 +562,7 @@ struct aml_vpp_cfg_infos {
  * @vpp_cfg: vpp init parms of configuration.
  * @vdec_pic_info_update: update pic info cb.
  * @vpp_is_need: the instance is need vpp.
+ * @task_chain_pool: used to store task chain inst.
  */
 struct aml_vcodec_ctx {
 	int				id;
@@ -633,7 +636,8 @@ struct aml_vcodec_ctx {
 	struct dv_info			dv_infos;
 	struct aml_vpp_cfg_infos 	vpp_cfg;
 	void (*vdec_pic_info_update)(struct aml_vcodec_ctx *ctx);
-	bool vpp_is_need;
+	bool				vpp_is_need;
+	struct list_head		task_chain_pool;
 };
 
 /**

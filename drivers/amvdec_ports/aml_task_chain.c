@@ -114,7 +114,7 @@ static struct task_item_s *task_item_get(struct task_chain_s *task,
 	item = find_task_item(task, type);
 	if (!item) {
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
-			"TASK_CHAIN:%d get item:%d fail.\n", task->id, type);
+			"TSK(%px):%d get item:%d fail.\n", task, task->id, type);
 	}
 
 	return item;
@@ -147,8 +147,8 @@ static void task_buffer_submit(struct task_chain_s *task,
 			item2->ops->fill_buffer(task->ctx, fb);
 
 			v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
-				"TASK_CHAIN:%d, vf:%px, phy:%lx, submit %d => %d.\n",
-				task->id, vf, fb->m.mem[0].addr,
+				"TSK(%px):%d, vf:%px, phy:%lx, submit %d => %d.\n",
+				task, task->id, vf, fb->m.mem[0].addr,
 				type, task->map[0][type]);
 
 			task->direction = TASK_DIR_SUBMIT;
@@ -180,8 +180,8 @@ static void task_buffer_recycle(struct task_chain_s *task,
 			item2->ops->put_vframe(item2->caller, vf);
 
 			v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
-				"TASK_CHAIN:%d, vf:%px, phy:%lx, recycle %d => %d.\n",
-				task->id, vf, fb->m.mem[0].addr,
+				"TSK(%px):%d, vf:%px, phy:%lx, recycle %d => %d.\n",
+				task, task->id, vf, fb->m.mem[0].addr,
 				type, task->map[1][type]);
 
 			task->direction = TASK_DIR_RECYCLE;
@@ -236,7 +236,7 @@ static void task_chain_destroy(struct kref *kref)
 	memset(task->map, 0, sizeof(task->map));
 
 	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
-		"TASK_CHAIN:%d task chain has been destroyed.\n", task->id);
+		"TSK(%px):%d task chain destroyed.\n", task, task->id);
 
 	kfree(task);
 }
@@ -247,11 +247,12 @@ static void task_item_release(struct kref *kref)
 
 	item = container_of(kref, struct task_item_s, ref);
 	list_del(&item->node);
-	kref_put(&item->task->ref, task_chain_destroy);
 
 	v4l_dbg(item->task->ctx, V4L_DEBUG_TASK_CHAIN,
-		"TASK_CHAIN:%d task item:(%px,%d) has been released.\n",
-		item->task->id, item, item->ops->type);
+		"TSK(%px):%d task item:(%px,%d) released.\n",
+		item->task, item->task->id, item, item->ops->type);
+
+	kref_put(&item->task->ref, task_chain_destroy);
 
 	kfree(item);
 }
@@ -259,26 +260,23 @@ static void task_item_release(struct kref *kref)
 void task_chain_clean(struct task_chain_s *task)
 {
 	struct task_item_s *item, *tmp;
-	ulong flags;
 
-	spin_lock_irqsave(&task->slock, flags);
+	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
+		"TSK(%px):%d task chain clean.\n", task, task->id);
 
 	if (!list_empty(&task->list_item)) {
 		list_for_each_entry_safe(item, tmp, &task->list_item, node)
 			kref_put(&item->ref, task_item_release);
 	}
-
-	spin_unlock_irqrestore(&task->slock, flags);
-
-	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
-		"TASK_CHAIN:%d task chain clean.\n", task->id);
 }
 EXPORT_SYMBOL(task_chain_clean);
 
 void task_chain_release(struct task_chain_s *task)
 {
-	if (kref_read(&task->ref))
-		kref_put(&task->ref, task_chain_destroy);
+	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
+		"TSK(%px):%d task chain release.\n", task, task->id);
+
+	kref_put(&task->ref, task_chain_destroy);
 }
 EXPORT_SYMBOL(task_chain_release);
 
@@ -291,7 +289,7 @@ void task_order_attach(struct task_chain_s *task,
 	item = kzalloc(sizeof(struct task_item_s), GFP_ATOMIC);
 	if (!item) {
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
-			"TASK_CHAIN:%d alloc item fail.\n", task->id);
+			"TSK(%px):%d alloc item fail.\n", task, task->id);
 		return;
 	}
 
@@ -309,10 +307,24 @@ void task_order_attach(struct task_chain_s *task,
 	list_add(&item->node, &task->list_item);
 
 	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
-		"TASK_CHAIN:%d attach item:(%px,%d).\n",
-		task->id, item, ops->type);
+		"TSK(%px):%d attach item:(%px,%d).\n",
+		task, task->id, item, ops->type);
 }
 EXPORT_SYMBOL(task_order_attach);
+
+void task_chain_update_object(struct task_chain_s *task, void *obj)
+{
+	/*
+	 * Note: have to invoke this funtion
+	 * if the task object has been changed.
+	 */
+	task->obj = obj;
+
+	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
+		"TSK(%px):%d update task obj:%px.\n",
+		task, task->id, obj);
+}
+EXPORT_SYMBOL(task_chain_update_object);
 
 int task_chain_init(struct task_chain_s **task_out,
 			    void *v4l_ctx,
@@ -324,7 +336,7 @@ int task_chain_init(struct task_chain_s **task_out,
 	task = kzalloc(sizeof(struct task_chain_s), GFP_ATOMIC);
 	if (!task) {
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
-			"TASK_CHAIN:%d alloc task fail.\n", task->id);
+			"TSK(%px):%d alloc task fail.\n", task, task->id);
 		return -ENOMEM;
 	}
 
@@ -342,7 +354,7 @@ int task_chain_init(struct task_chain_s **task_out,
 	*task_out = task;
 
 	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
-		"TASK_CHAIN:%d task chain creat success.\n", task->id);
+		"TSK(%px):%d task chain creat success.\n", task, task->id);
 	return 0;
 }
 EXPORT_SYMBOL(task_chain_init);
