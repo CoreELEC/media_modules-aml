@@ -1774,7 +1774,13 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	//fs->pts = p->pts;
 	//fs->pts64 = p->pts64;
 	}
-	fs->timestamp = p->timestamp;
+	if ((fs->frame != NULL) &&
+		((fs->bottom_field != NULL) || (fs->top_field != NULL))) {
+		fs->last_field_timestamp = fs->timestamp;
+		fs->timestamp = p->timestamp;
+	} else {
+		fs->timestamp = p->timestamp;
+	}
 	if (mvfrm) {
 		fs->frame_size2 = mvfrm->frame_size;
 		fs->hw_decode_time = mvfrm->hw_decode_time;

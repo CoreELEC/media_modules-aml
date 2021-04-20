@@ -38,7 +38,8 @@
 #define RRINT_FLAG_RPM                0x0400
 #define DEBUG_DISABLE_RUNREADY_RMBUF  0x0800
 #define PRINT_FLAG_DUMP_BUFSPEC       0x1000
-#define PRINT_FLAG_SEI_DETAIL         0x2000
+#define PRINT_FLAG_FCC_STATUS         0x2000
+#define PRINT_FLAG_SEI_DETAIL         0x4000
 #define PRINT_FLAG_V4L_DETAIL         0x8000
 #define DISABLE_ERROR_HANDLE          0x10000
 #define DEBUG_DUMP_STAT               0x80000
@@ -825,6 +826,7 @@ struct FrameStore {
 	bool show_frame;
 	struct dma_fence *fence;
 	u32 decoded_frame_size;
+	u64 last_field_timestamp;
 };
 
 /* #define DPB_SIZE_MAX     16 */

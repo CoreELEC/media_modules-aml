@@ -2977,9 +2977,12 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->timestamp = 0;
 			vf->index = VF_INDEX(frame->index, buffer_index);
 		} else {
+			if ((i == 0) && (vf_count == 2))
+				vf->timestamp = frame->last_field_timestamp;
+			else
+				vf->timestamp = frame->timestamp;
 			vf->pts = frame->pts;
 			vf->pts_us64 = frame->pts64;
-			vf->timestamp = frame->timestamp;
 			if ((i > 0) && v4l2_ctx->second_field_pts_mode) {
 				vf->timestamp = 0;
 			}
