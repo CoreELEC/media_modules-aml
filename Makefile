@@ -1,3 +1,6 @@
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+MEDIA_MODULE_PATH := $(dir $(mkfile_path))
+VERSION_CONTROL_CFLAGS := $(shell ${MEDIA_MODULE_PATH}/version_control.sh)
 
 CONFIGS := CONFIG_AMLOGIC_MEDIA_VDEC_MPEG12=m \
 	CONFIG_AMLOGIC_MEDIA_VDEC_MPEG2_MULTI=m \
@@ -33,7 +36,7 @@ CONFIGS_BUILD := -Wno-parentheses-equality -Wno-pointer-bool-conversion \
 KBUILD_CFLAGS_MODULE += $(GKI_EXT_MODULE_PREDEFINE)
 
 modules:
-	$(MAKE) -C  $(KERNEL_SRC) M=$(M)/drivers modules "EXTRA_CFLAGS+=-I$(INCLUDE) -Wno-error $(CONFIGS_BUILD) $(EXTRA_INCLUDE) $(KBUILD_CFLAGS_MODULE)" $(CONFIGS)
+	$(MAKE) -C  $(KERNEL_SRC) M=$(M)/drivers modules "EXTRA_CFLAGS+=-I$(INCLUDE) -Wno-error $(CONFIGS_BUILD) $(EXTRA_INCLUDE) $(KBUILD_CFLAGS_MODULE) ${VERSION_CONTROL_CFLAGS}" $(CONFIGS)
 
 all: modules
 

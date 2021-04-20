@@ -1,0 +1,43 @@
+Major_V=5
+Minor_V=1
+BaseChangeId=Ia57ed2cc0f9b837e16cb5afd27c8d30a97ad2976
+
+
+#history version
+#V5.1.0 Release Notes
+#support version control
+#
+#V5.0.0 Release Notes
+#upgrade Kernel version to 5.4
+#Android R + v4l2dec (no vpp)   xts clean
+#v4ldec driver seperate from amports drivers
+#
+#V4.0.0 Release Notes
+#upgrade Kernel version to 4.19
+#v4l2 support  for h264/h265/vp9 
+#add fra support in decoder driver
+#
+#V3.0.0 Release Notes
+#upgrade Kernel version to 4.9
+#media_module remove from kernel 
+#new firmware management
+#mjpeg/mpeg12/mpeg2 multi-instance decoder support
+#h264 4k afbc support
+#AVS2 decoder support
+#vdec double write support
+#add av1 decoder support
+#add decoder QOS info report
+#upgrade TA ucode to 0.2 version
+#
+#V2.0.0 Release Notes
+#upgrade  Kernel version to 3.14 
+#Introduce codec_mm memory managment
+#add afbc scatter memory support
+#add vp9 decoder support
+#add 264/265/vp9 multi-instance decoder support
+#
+#V1.0.0 Release Notes
+#based kernel to 3.10
+#add H264 4K decoder support
+#add H265 video decoder support
+#H265 decoder support afbc output
