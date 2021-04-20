@@ -2658,7 +2658,8 @@ void aml_v4l_ctx_release(struct kref *kref)
 	vfree(ctx->dv_infos.dv_bufs);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"v4ldec has been destroyed.\n", ctx->id);
+		"v4ldec has been destroyed.\n");
+
 	kfree(ctx);
 }
 
