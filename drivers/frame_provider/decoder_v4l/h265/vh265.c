@@ -12729,9 +12729,9 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 					if (pic == NULL || pic->index == -1)
 						continue;
 					if ((pic->referenced == 1) && (pic->error_mark == 1)) {
+						spin_unlock_irqrestore(&lock, flags);
 						flush_output(hevc, pic);
 						hevc_print(hevc, 0, "DPB error, neeed fornce flush  recieve_state %d \n", state);
-						spin_unlock_irqrestore(&lock, flags);
 						return 0;
 					}
 				}
@@ -12752,10 +12752,12 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 				hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + detect_stuck_buffer_margin) {
 			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 				dump_pic_list(hevc);
-			if (!(error_handle_policy & 0x400))
+			if (!(error_handle_policy & 0x400)) {
+				spin_unlock_irqrestore(&lock, flags);
 				flush_output(hevc, NULL);
-			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE, "flush dpb, ref_error_count %d, sps_max_dec_pic_buffering_minus1_0 %d\n",
-					decode_count, hevc->param.p.sps_max_dec_pic_buffering_minus1_0);
+				hevc_print(hevc, H265_DEBUG_BUFMGR_MORE, "flush dpb, ref_error_count %d, sps_max_dec_pic_buffering_minus1_0 %d\n",
+						decode_count, hevc->param.p.sps_max_dec_pic_buffering_minus1_0);
+			}
 		}
 	}
 	spin_unlock_irqrestore(&lock, flags);
