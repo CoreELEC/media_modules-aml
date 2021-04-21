@@ -58,7 +58,7 @@ struct task_ops_s {
  * @ref		: reference count of item be used by others.
  * @name	: name of task item, map with task type.
  * @is_active	: indicate this item whether is active.
- * @vframe	: store the vframe that get from caller.
+ * @vframe[3]	: store the vframes that get from caller.
  * @task	: the context of the task chain.
  * @caller	: it's the handle, meght it's dec, vpp or v4l-sink etc.
  * @ops		: sets of interface which attach from task item.
@@ -68,7 +68,7 @@ struct task_item_s {
 	struct kref		ref;
 	const u8		*name;
 	bool			is_active;
-	void			*vframe;
+	void			*vframe[3];
 	struct task_chain_s	*task;
 	void			*caller;
 	struct task_ops_s	*ops;

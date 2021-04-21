@@ -78,6 +78,34 @@ static struct task_item_s *find_task_item(struct task_chain_s *task,
 
 static void task_item_release(struct kref *kref);
 
+static void task_item_vframe_push(struct task_item_s *item, struct vframe_s *vframe)
+{
+	int i = 0;
+
+	for (i = 0 ; i < 3; i++) {
+		if (item->vframe[i] == NULL) {
+			item->vframe[i] = vframe;
+			break;
+		}
+	}
+}
+
+static struct vframe_s *task_item_vframe_pop(struct task_item_s *item)
+{
+	struct vframe_s *vframe = NULL;
+	int i = 0;
+
+	for (i = 0 ; i < 3; i++) {
+		if (item->vframe[i] != NULL) {
+			vframe = item->vframe[i];
+			item->vframe[i] = NULL;
+			break;
+		}
+	}
+
+	return vframe;
+}
+
 static struct task_item_s *task_item_get(struct task_chain_s *task,
 				  enum task_type_e type)
 {
@@ -109,7 +137,8 @@ static void task_buffer_submit(struct task_chain_s *task,
 	item = task_item_get(task, type);
 	if (item) {
 		item->ops->get_vframe(item->caller, &vf);
-		fb->vframe = item->vframe = (void *)vf;
+		fb->vframe = (void *)vf;
+		task_item_vframe_push(item, vf);
 		item->is_active = false;
 
 		item2 = task_item_get(task, task->map[0][type]);
@@ -143,12 +172,16 @@ static void task_buffer_recycle(struct task_chain_s *task,
 
 		item2 = task_item_get(task, task->map[1][type]);
 		if (item2) {
+			struct vframe_s *vf = NULL;
+
 			item2->is_active = true;
-			item2->ops->put_vframe(item2->caller, item2->vframe);
+
+			vf = task_item_vframe_pop(item2);
+			item2->ops->put_vframe(item2->caller, vf);
 
 			v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
 				"TASK_CHAIN:%d, vf:%px, phy:%lx, recycle %d => %d.\n",
-				task->id, item2->vframe, fb->m.mem[0].addr,
+				task->id, vf, fb->m.mem[0].addr,
 				type, task->map[1][type]);
 
 			task->direction = TASK_DIR_RECYCLE;
