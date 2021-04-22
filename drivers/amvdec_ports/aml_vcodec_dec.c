@@ -873,13 +873,12 @@ static void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 			       bool for_vpp)
 {
 	struct task_chain_s *task = fb->task;
-	u32 mode;
 	/*
 	 * line 1: dec <==> vpp <==> v4l-sink, for P / P + DI.NR.
 	 * line 2: dec <==> vpp, vpp <==> v4l-sink, for I / I + DI.NR.
 	 * line 3: dec <==> v4l-sink, only for P.
 	 */
-	if (vpp_needed(ctx, &mode)) {
+	if (ctx->vpp_is_need) {
 		if (ctx->vpp->is_prog) {
 			/* line 1: dec <==> vpp <==> v4l-sink. */
 			task->attach(task, get_v4l_sink_ops(), ctx);
@@ -2652,9 +2651,6 @@ void aml_v4l_ctx_release(struct kref *kref)
 
 	ctx = container_of(kref, struct aml_vcodec_ctx, ctx_ref);
 
-	if (ctx->vpp_is_need)
-		atomic_dec(&ctx->dev->vpp_count);
-
 	vfree(ctx->dv_infos.dv_bufs);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
@@ -3369,6 +3365,9 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		fb_map_table_clean(ctx);
 
 		fb_token_clean(ctx);
+
+		if (ctx->vpp_is_need)
+			atomic_dec(&ctx->dev->vpp_count);
 
 		INIT_KFIFO(ctx->capture_buffer);
 		ctx->buf_used_count = 0;
