@@ -1867,6 +1867,7 @@ struct hevc_state_s {
 	char disp_q_name[32];
 	char pts_name[32];
 	int send_frame_flag;
+	struct vdec_v4l2_buffer  *pair_fb[2];
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -8939,6 +8940,29 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 	return 0;
 }
 
+static void get_pair_fb(struct hevc_state_s *hevc, struct vframe_s *vf)
+{
+	int i;
+	for (i = 0; i < 2; i ++) {
+		if (hevc->pair_fb[i] == NULL) {
+			hevc->pair_fb[i] = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+			break;
+		}
+	}
+
+	if (i >= 2) {
+		hevc->pair_fb[0] = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		hevc->pair_fb[1] = NULL;
+	}
+}
+
+static void clear_pair_fb(struct hevc_state_s *hevc)
+{
+	int i;
+	for (i = 0; i < 2; i ++)
+		hevc->pair_fb[i] = NULL;
+}
+
 #ifdef HEVC_PIC_STRUCT_SUPPORT
 static int process_pending_vframe(struct hevc_state_s *hevc,
 	struct PIC_s *pair_pic, unsigned char pair_frame_top_flag)
@@ -9027,6 +9051,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			pair_pic->vf_ref++;
 			vdec_vframe_ready(hw_to_vdec(hevc), vf);
 			hevc->send_frame_flag = 1;
+			get_pair_fb(hevc, vf);
 			kfifo_put(&hevc->display_q,
 			(const struct vframe_s *)vf);
 			ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
@@ -9047,6 +9072,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			pair_pic->vf_ref++;
 			vdec_vframe_ready(hw_to_vdec(hevc), vf);
 			hevc->send_frame_flag = 1;
+			get_pair_fb(hevc, vf);
 			kfifo_put(&hevc->display_q,
 			(const struct vframe_s *)vf);
 			ATRACE_COUNTER(hevc->pts_name, vf->timestamp);
@@ -9523,6 +9549,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					"fatal error, no available buffer slot.");
 				return -1;
 			}
+
 			pic->vf_ref = 2;
 			vf->duration = vf->duration>>1;
 			memcpy(vf2, vf, sizeof(struct vframe_s));
@@ -9797,8 +9824,13 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					vh265_vf_put(vh265_vf_get(vdec), vdec);
 				} else {
 					if (hevc->send_frame_flag == 1) {
-						while (kfifo_len(&hevc->display_q)) {
-							fb->task->submit(fb->task, TASK_TYPE_DEC);
+						 while (kfifo_len(&hevc->display_q)) {
+							if (hevc->pair_fb[0] != NULL && hevc->pair_fb[1] != NULL) {
+								hevc->pair_fb[0]->task->submit(hevc->pair_fb[0]->task, TASK_TYPE_DEC);
+								hevc->pair_fb[1]->task->submit(hevc->pair_fb[1]->task, TASK_TYPE_DEC);
+								clear_pair_fb(hevc);
+							} else
+								fb->task->submit(fb->task, TASK_TYPE_DEC);
 						}
 					}
 				}
