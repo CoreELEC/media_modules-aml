@@ -2327,6 +2327,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
 	char postprocess_name[64] = {0};
 
+	vdec->is_v4l = is_v4l ? 1 : 0;
 	if (is_res_locked(vdec_core->vdec_resouce_status,
 		BIT(vdec->frame_base_video_path)))
 		return -EBUSY;
@@ -4791,10 +4792,11 @@ static ssize_t core_show(struct class *class, struct class_attribute *attr,
 
 		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
 			pbuf += sprintf(pbuf,
-				"\tvdec.%d (%p (%s)), status = %s,\ttype = %s, \tactive_mask = %lx\n",
+				"\tvdec.%d (%p (%s%s)), status = %s,\ttype = %s, \tactive_mask = %lx\n",
 				vdec->id,
 				vdec,
 				vdec_device_name[vdec->format * 2],
+				(vdec->is_v4l == 1) ? "_v4l" : "",
 				vdec_status_str(vdec),
 				vdec_type_str(vdec),
 				vdec->active_mask);

@@ -13988,14 +13988,15 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		"====== %s\n", __func__);
 
 	hevc_print(hevc, 0,
-		"width/height (%d/%d), reorder_pic_num %d ip_mode %d buf count(bufspec size) %d, video_signal_type 0x%x, is_swap %d\n",
+		"width/height (%d/%d), reorder_pic_num %d ip_mode %d buf count(bufspec size) %d, video_signal_type 0x%x, is_swap %d i_only 0x%x\n",
 		hevc->frame_width,
 		hevc->frame_height,
 		hevc->sps_num_reorder_pics_0,
 		hevc->ip_mode,
 		hevc->used_buf_num,
 		hevc->video_signal_type_debug,
-		hevc->is_swap
+		hevc->is_swap,
+		hevc->i_only
 		);
 
 	hevc_print(hevc, 0,

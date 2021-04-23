@@ -300,6 +300,7 @@ struct vdec_s {
 	char dec_spend_time_ave[32];
 	u32 discard_start_data_flag;
 	u32 video_id;
+	int is_v4l;
 };
 
 /* common decoder vframe provider name to use default vfm path */
