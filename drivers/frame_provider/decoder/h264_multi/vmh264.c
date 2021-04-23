@@ -10659,9 +10659,12 @@ static int __init ammvdec_h264_driver_init_module(void)
 			ammvdec_h264_profile.profile = "4k, frame_dv, fence, v4l";
 		}
 	} else {
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D || is_cpu_s4_s805x2()) {
 			ammvdec_h264_profile.profile =
-						"dwrite, compressed, frame_dv, fence, v4l";
+						"dwrite, compressed, frame_dv, v4l";
+		} else {
+			ammvdec_h264_profile.profile =
+				        "dwrite, compressed, v4l";
 		}
 	}
 
