@@ -19,6 +19,8 @@ extern int demux_get_stc(int demux_device_index, int index,
                   u64 *stc, unsigned int *base);
 extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
 
+static unsigned int MinUpDateTimeThresholdUs = 50000;
+
 static u64 get_llabs(s64 value){
 	u64 llvalue;
 	if (value > 0) {
@@ -210,7 +212,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			}
 			if (diff_mediatime < 0
 				|| ((diff_mediatime > 0)
-				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
+				&& (get_llabs(diff_system_time - diff_mediatime) > MinUpDateTimeThresholdUs ))) {
 				pr_info("MEDIA_SYNC_PCRMASTER update time system diff:%lld media diff:%lld current:%lld\n",
 											diff_system_time,
 											diff_mediatime,
@@ -221,7 +223,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			}
 		} else {
 			if (current_stc != 0) {
-				diff_system_time = current_stc + lSystemTime - current_systemtime - pInstance->mLastStc;
+				diff_system_time = (current_stc - pInstance->mLastStc) + (lSystemTime - current_systemtime);
 				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			} else {
 				diff_system_time = lSystemTime - pInstance->mLastRealTime;
@@ -230,10 +232,11 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 
 			if (diff_mediatime < 0
 				|| ((diff_mediatime > 0)
-				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
-				pr_info("MEDIA_SYNC_PCRMASTER update time stc diff:%lld media diff:%lld lSystemTime:%lld lMediaTime:%lld\n",
+				&& (get_llabs(diff_system_time - diff_mediatime) > MinUpDateTimeThresholdUs ))) {
+				pr_info("MEDIA_SYNC_PCRMASTER update time stc_diff:%lld media_diff:%lld (%lld) lSystemTime:%lld lMediaTime:%lld\n",
 											diff_system_time,
 											diff_mediatime,
+											diff_system_time - diff_mediatime,
 											lSystemTime,
 											lMediaTime);
 				pInstance->mLastMediaTime = lMediaTime;
@@ -414,6 +417,8 @@ long mediasync_ins_get_trackmediatime(s32 sSyncInsId, s64* lpTrackMediaTime) {
 }
 
 
+module_param(MinUpDateTimeThresholdUs, uint, 0664);
+MODULE_PARM_DESC(MinUpDateTimeThresholdUs, "\n amemdiasync MinUpDateTimeThresholdUs\n");
 
 
 
