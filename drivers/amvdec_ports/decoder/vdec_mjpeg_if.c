@@ -539,6 +539,7 @@ static void set_param_ps_info(struct vdec_mjpeg_inst *inst,
 	pic->reorder_frames	= ps->reorder_frames;
 	pic->reorder_margin	= ps->reorder_margin;
 	dec->dpb_sz		= ps->dpb_size;
+	pic->field		= ps->field;
 
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=
@@ -548,9 +549,10 @@ static void set_param_ps_info(struct vdec_mjpeg_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, visible(%d x %d), coded(%d x %d)\n",
+		"Parse from ucode, visible(%d x %d), coded(%d x %d), scan:%s\n",
 		ps->visible_width, ps->visible_height,
-		ps->coded_width, ps->coded_height);
+		ps->coded_width, ps->coded_height,
+		pic->field == V4L2_FIELD_NONE ? "P" : "I");
 }
 
 static void set_param_write_sync(struct vdec_mjpeg_inst *inst)

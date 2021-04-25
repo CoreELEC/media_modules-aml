@@ -703,6 +703,10 @@ int bypass_vpp;
 EXPORT_SYMBOL(bypass_vpp);
 module_param(bypass_vpp, int, 0644);
 
+int max_di_instance = 2;
+EXPORT_SYMBOL(max_di_instance);
+module_param(max_di_instance, int, 0644);
+
 int bypass_progressive = 1;
 EXPORT_SYMBOL(bypass_progressive);
 module_param(bypass_progressive, int, 0644);

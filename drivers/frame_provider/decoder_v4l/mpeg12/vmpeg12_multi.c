@@ -546,10 +546,6 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 		(hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 	config_cav_lut(canvas_y(canvas), &hw->canvas_config[i][0], VDEC_1);
 
-	/* mpeg2 decoder canvas need to be revert to match display canvas */
-	hw->canvas_config[i][0].endian          =
-		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-
 	hw->canvas_config[i][1].phy_addr	= decbuf_uv_start;
 	hw->canvas_config[i][1].width		= canvas_width;
 	hw->canvas_config[i][1].height		= canvas_height / 2;
@@ -557,10 +553,6 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 	hw->canvas_config[i][1].endian		=
 		(hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 	config_cav_lut(canvas_u(canvas), &hw->canvas_config[i][1], VDEC_1);
-
-	/* mpeg2 decoder canvas need to be revert to match display canvas */
-	hw->canvas_config[i][1].endian          =
-		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 
 	debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"[%d] %s(), canvas: 0x%x mode: %d y: %x uv: %x w: %d h: %d\n",
@@ -748,6 +740,15 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 
 	vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 	vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
+
+	vf->canvas0_config[0].endian          =
+		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	vf->canvas0_config[1].endian          =
+		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	vf->canvas1_config[0].endian          =
+		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	vf->canvas1_config[1].endian          =
+		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
@@ -2909,35 +2910,58 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 {
 	u32 index = -1;
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	int i;
+
+	if (!hw->init_flag)
+		vmpeg12_workspace_init(hw);
 
 	if (hw->v4l_params_parsed) {
+		struct vdec_pic_info pic;
+
+		if (!hw->buf_num) {
+			vdec_v4l_get_pic_info(v4l2_ctx, &pic);
+			hw->buf_num = pic.reorder_frames +
+				pic.reorder_margin;
+			if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
+				hw->buf_num = DECODE_BUFFER_NUM_MAX;
+		}
+
 		index = find_free_buffer(hw);
-		if (hw->buf_num &&
-			((index < 0) || (index >= hw->buf_num)))
+		if ((index < 0) || (index >= hw->buf_num))
 			return -1;
+
+		WRITE_VREG(MREG_CO_MV_START, hw->buf_start);
+		WRITE_VREG(MREG_CC_ADDR, hw->ccbuf_phyAddress);
+
+		for (i = 0; i < hw->buf_num; i++) {
+			if (hw->pics[i].v4l_ref_buf_addr) {
+				config_cav_lut(canvas_y(hw->canvas_spec[i]),
+					&hw->canvas_config[i][0], VDEC_1);
+				config_cav_lut(canvas_u(hw->canvas_spec[i]),
+					&hw->canvas_config[i][1], VDEC_1);
+			}
+		}
 
 		/* prepare REF0 & REF1
 		points to the past two IP buffers
 		prepare REC_CANVAS_ADDR and ANC2_CANVAS_ADDR
 		points to the output buffer*/
-		if (hw->buf_num != 0) {
-			WRITE_VREG(MREG_REF0,
-				(hw->refs[0] == -1) ? 0xffffffff :
-				hw->canvas_spec[hw->refs[0]]);
-			WRITE_VREG(MREG_REF1,
-				(hw->refs[1] == -1) ? 0xffffffff :
-				hw->canvas_spec[hw->refs[1]]);
-			WRITE_VREG(REC_CANVAS_ADDR, hw->canvas_spec[index]);
-			WRITE_VREG(ANC2_CANVAS_ADDR, hw->canvas_spec[index]);
+		WRITE_VREG(MREG_REF0,
+			(hw->refs[0] == -1) ? 0xffffffff :
+			hw->canvas_spec[hw->refs[0]]);
+		WRITE_VREG(MREG_REF1,
+			(hw->refs[1] == -1) ? 0xffffffff :
+			hw->canvas_spec[hw->refs[1]]);
+		WRITE_VREG(REC_CANVAS_ADDR, hw->canvas_spec[index]);
+		WRITE_VREG(ANC2_CANVAS_ADDR, hw->canvas_spec[index]);
 
-			debug_print(DECODE_ID(hw), PRINT_FLAG_RESTORE,
-				"%s,ref0=0x%x, ref1=0x%x,rec=0x%x, ctx_valid=%d,index=%d\n",
-				__func__,
-				READ_VREG(MREG_REF0),
-				READ_VREG(MREG_REF1),
-				READ_VREG(REC_CANVAS_ADDR),
-				hw->ctx_valid, index);
-		}
+		debug_print(DECODE_ID(hw), PRINT_FLAG_RESTORE,
+			"%s,ref0=0x%x, ref1=0x%x,rec=0x%x, ctx_valid=%d,index=%d\n",
+			__func__,
+			READ_VREG(MREG_REF0),
+			READ_VREG(MREG_REF1),
+			READ_VREG(REC_CANVAS_ADDR),
+			hw->ctx_valid, index);
 	}
 
 	/* set to mpeg1 default */
@@ -3058,8 +3082,6 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
 			hw->tvp_flag);
-
-	vmpeg12_workspace_init(hw);
 
 	hw->eos = 0;
 	hw->frame_width = hw->frame_height = 0;

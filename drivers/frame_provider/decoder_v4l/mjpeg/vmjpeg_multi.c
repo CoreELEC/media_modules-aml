@@ -281,6 +281,15 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 	vf->canvas1_config[1] = hw->buffer_spec[vf->index].canvas_config[1];
 	vf->canvas1_config[2] = hw->buffer_spec[vf->index].canvas_config[2];
 
+	/* mjpeg decoder canvas need to be revert to match display. */
+	vf->canvas0_config[0].endian = hw->canvas_endian ? 0 : 7;
+	vf->canvas0_config[1].endian = hw->canvas_endian ? 0 : 7;
+	vf->canvas0_config[2].endian = hw->canvas_endian ? 0 : 7;
+
+	vf->canvas1_config[0].endian = hw->canvas_endian ? 0 : 7;
+	vf->canvas1_config[1].endian = hw->canvas_endian ? 0 : 7;
+	vf->canvas1_config[2].endian = hw->canvas_endian ? 0 : 7;
+
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
 }
@@ -310,6 +319,7 @@ static int vmjpeg_get_ps_info(struct vdec_mjpeg_hw_s *hw, int width, int height,
 	ps->dpb_size 		= hw->buf_num;
 	ps->reorder_frames	= DECODE_BUFFER_NUM_DEF;
 	ps->reorder_margin	= hw->dynamic_buf_num_margin;
+	ps->field = V4L2_FIELD_NONE;
 
 	return 0;
 }
@@ -1068,11 +1078,6 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	config_cav_lut(hw->buffer_spec[i].v_canvas_index,
 			&hw->buffer_spec[i].canvas_config[2], VDEC_1);
 
-	/* mjpeg decoder canvas need to be revert to match display. */
-	hw->buffer_spec[i].canvas_config[0].endian = hw->canvas_endian ? 0 : 7;
-	hw->buffer_spec[i].canvas_config[1].endian = hw->canvas_endian ? 0 : 7;
-	hw->buffer_spec[i].canvas_config[2].endian = hw->canvas_endian ? 0 : 7;
-
 	return 0;
 }
 
@@ -1099,18 +1104,38 @@ static int find_free_buffer(struct vdec_mjpeg_hw_s *hw)
 static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 {
 	int index = -1;
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	int i = 0;
 
 	if (hw->v4l_params_parsed) {
+		struct vdec_pic_info pic;
+
+		if (!hw->buf_num) {
+			vdec_v4l_get_pic_info(v4l2_ctx, &pic);
+			hw->buf_num = pic.reorder_frames +
+				pic.reorder_margin;
+			if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
+				hw->buf_num = DECODE_BUFFER_NUM_MAX;
+		}
+
 		index = find_free_buffer(hw);
-		if (hw->buf_num &&
-			((index < 0) || (index >= hw->buf_num)))
+		if ((index < 0) || (index >= hw->buf_num))
 			return -1;
 
-		/* find next decode buffer index */
-		if (hw->buf_num != 0) {
-			WRITE_VREG(AV_SCRATCH_4, spec2canvas(&hw->buffer_spec[index]));
-			WRITE_VREG(AV_SCRATCH_5, index | 1 << 24);
+		for (i = 0; i < hw->buf_num; i++) {
+			if (hw->buffer_spec[i].v4l_ref_buf_addr) {
+				config_cav_lut(hw->buffer_spec[i].y_canvas_index,
+						&hw->buffer_spec[i].canvas_config[0], VDEC_1);
+				config_cav_lut(hw->buffer_spec[i].u_canvas_index,
+					&hw->buffer_spec[i].canvas_config[1], VDEC_1);
+				config_cav_lut(hw->buffer_spec[i].v_canvas_index,
+					&hw->buffer_spec[i].canvas_config[2], VDEC_1);
+			}
 		}
+
+		/* find next decode buffer index */
+		WRITE_VREG(AV_SCRATCH_4, spec2canvas(&hw->buffer_spec[index]));
+		WRITE_VREG(AV_SCRATCH_5, index | 1 << 24);
 
 	} else
 		WRITE_VREG(AV_SCRATCH_5, 1 << 24);

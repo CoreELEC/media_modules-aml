@@ -236,6 +236,7 @@ extern bool support_mjpeg;
 extern int bypass_progressive;
 extern int force_enable_nr;
 extern int force_enable_di_local_buffer;
+extern int max_di_instance;
 
 extern int dmabuf_fd_install_data(int fd, void* data, u32 size);
 extern bool is_v4l2_buf_file(struct file *file);
@@ -354,7 +355,7 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	if (bypass_vpp)
 		return false;
 
-	if (atomic_read(&ctx->dev->vpp_count) >= MAX_DI_INSTANCE)
+	if (atomic_read(&ctx->dev->vpp_count) >= max_di_instance)
 		return false;
 
 	if (!ctx->vpp_cfg.enable_nr &&
