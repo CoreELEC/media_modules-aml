@@ -1666,10 +1666,12 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 		if (ctx->is_stream_off) {
 			if (ctx->vpp_is_need) {
 				int ret;
+				if (ctx->vpp_cfg.fmt == 0)
+					ctx->vpp_cfg.fmt = ctx->cap_pix_fmt;
 				ret = aml_v4l2_vpp_init(ctx, &ctx->vpp_cfg, &ctx->vpp);
 				if (ret) {
 					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-						"init vpp err:%d\n", ret);
+						"init vpp err:%d vpp_cfg.fmt: %d\n", ret, ctx->vpp_cfg.fmt);
 					mutex_unlock(&ctx->state_lock);
 					return ret;
 				} else {
