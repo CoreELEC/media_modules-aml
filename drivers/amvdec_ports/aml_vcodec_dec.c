@@ -776,6 +776,8 @@ static void update_vdec_buf_plane(struct aml_vcodec_ctx *ctx,
 	int i;
 	char plane_n[3] = {'Y','U','V'};
 
+	fb->num_planes = vb->num_planes;
+
 	for (i = 0 ; i < vb->num_planes ; i++) {
 		fb->m.mem[i].addr	= vb2_dma_contig_plane_dma_addr(vb, i);
 		fb->m.mem[i].dbuf	= vb->planes[i].dbuf;
@@ -939,11 +941,10 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb_ops,
 {
 	struct aml_vcodec_ctx *ctx =
 		container_of(fb_ops, struct aml_vcodec_ctx, fb_ops);
-	struct vb2_buffer *dst_buf = NULL;
-	struct vdec_v4l2_buffer *fb;
-	struct aml_video_dec_buf *dst_buf_info;
-	struct vb2_v4l2_buffer *dst_vb2_v4l2;
-	u32 buf_flag;
+	struct aml_video_dec_buf *aml_buf = NULL;
+	struct vb2_v4l2_buffer *v4l_buf = NULL;
+	struct vdec_v4l2_buffer *fb = NULL;
+	u32 buf_status = 0;
 	ulong flags;
 
 	flags = aml_vcodec_ctx_lock(ctx);
@@ -953,45 +954,45 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb_ops,
 		return -1;
 	}
 
-	dst_vb2_v4l2 = (struct vb2_v4l2_buffer *) token;
-	if (!dst_vb2_v4l2) {
+	v4l_buf = (struct vb2_v4l2_buffer *) token;
+	if (!v4l_buf) {
 		aml_vcodec_ctx_unlock(ctx, flags);
 		return -1;
 	}
 
-	dst_buf = (struct vb2_buffer *)dst_vb2_v4l2;
+	aml_buf = container_of(v4l_buf, struct aml_video_dec_buf, vb);
+	fb = &aml_buf->frame_buffer;
+	if (fb->task == NULL) {
+		aml_vcodec_ctx_unlock(ctx, flags);
+		return -1;
+	}
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-		"vbuf idx: %d, state: %d, ready: %d vpp: %d\n",
-		dst_buf->index, dst_buf->state,
-		v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx), for_vpp);
-
-	dst_buf_info = container_of(dst_vb2_v4l2, struct aml_video_dec_buf, vb);
-	fb = &dst_buf_info->frame_buffer;
-
-	update_vdec_buf_plane(ctx, fb, dst_buf);
-
-	fb->buf_idx		= dst_buf->index;
-	fb->num_planes		= dst_buf->num_planes;
-
-	aml_creat_pipeline(ctx, fb, for_vpp);
-
-	dst_buf_info->used	= true;
+	fb->buf_idx	= v4l_buf->vb2_buf.index;
+	aml_buf->used	= true;
 	ctx->buf_used_count++;
 
-	*out_fb = fb;
-
 	if (for_vpp) {
-		buf_flag = V4L_CAP_BUFF_IN_VPP;
+		buf_status = V4L_CAP_BUFF_IN_VPP;
 		ctx->cap_pool.vpp++;
 	} else {
-		buf_flag = V4L_CAP_BUFF_IN_DEC;
+		buf_status = V4L_CAP_BUFF_IN_DEC;
 		ctx->cap_pool.dec++;
 	}
 	ctx->cap_pool.seq[ctx->cap_pool.out++] =
-		(buf_flag << 16 | dst_buf->index);
+		(buf_status << 16 | fb->buf_idx);
+
+	update_vdec_buf_plane(ctx, fb, &v4l_buf->vb2_buf);
+
+	aml_creat_pipeline(ctx, fb, for_vpp);
 
 	fb_token_remove(ctx, token);
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+		"vid:%d, task:%px, phy:%lx, state:%d, ready:%d, for_vpp:%d\n",
+		fb->buf_idx, fb->task, fb->m.mem[0].addr, v4l_buf->vb2_buf.state,
+		v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx), for_vpp);
+
+	*out_fb = fb;
 
 	aml_vcodec_ctx_unlock(ctx, flags);
 
