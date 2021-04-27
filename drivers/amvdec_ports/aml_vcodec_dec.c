@@ -879,8 +879,12 @@ static bool fb_buff_query(struct aml_fb_ops *fb, ulong *token)
 {
 	struct aml_vcodec_ctx *ctx =
 		container_of(fb, struct aml_vcodec_ctx, fb_ops);
+	struct vb2_queue * que = v4l2_m2m_get_dst_vq(ctx->m2m_ctx);
 	bool ret = false;
 	ulong flags;
+
+	if (!que->streaming)
+		return false;
 
 	flags = aml_vcodec_ctx_lock(ctx);
 
@@ -949,7 +953,7 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb_ops,
 
 	flags = aml_vcodec_ctx_lock(ctx);
 
-	if (ctx->state == AML_STATE_ABORT) {
+	if (ctx->is_stream_off) {
 		aml_vcodec_ctx_unlock(ctx, flags);
 		return -1;
 	}
@@ -961,12 +965,8 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb_ops,
 	}
 
 	aml_buf = container_of(v4l_buf, struct aml_video_dec_buf, vb);
-	fb = &aml_buf->frame_buffer;
-	if (fb->task == NULL) {
-		aml_vcodec_ctx_unlock(ctx, flags);
-		return -1;
-	}
 
+	fb		= &aml_buf->frame_buffer;
 	fb->buf_idx	= v4l_buf->vb2_buf.index;
 	aml_buf->used	= true;
 	ctx->buf_used_count++;
@@ -1693,16 +1693,25 @@ static int vidioc_decoder_streamoff(struct file *file, void *priv,
 	struct v4l2_fh *fh = file->private_data;
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(fh);
 	struct vb2_queue *q;
+	ulong flags;
 
 	q = v4l2_m2m_get_vq(fh->m2m_ctx, i);
-	if (!V4L2_TYPE_IS_OUTPUT(q->type)) {
+
+	flags = aml_vcodec_ctx_lock(ctx);
+
+	if (V4L2_TYPE_IS_OUTPUT(q->type))
+		ctx->is_out_stream_off = true;
+	else
 		ctx->is_stream_off = true;
+
+	aml_vcodec_ctx_unlock(ctx, flags);
+
+	if (!V4L2_TYPE_IS_OUTPUT(q->type)) {
 		if (ctx->vpp) {
 			aml_v4l2_vpp_destroy(ctx->vpp);
 			ctx->vpp = NULL;
 		}
-	} else
-		ctx->is_out_stream_off = true;
+	}
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d\n", __func__, q->type);
@@ -1939,10 +1948,12 @@ static int vidioc_vdec_querycap(struct file *file, void *priv,
 	struct v4l2_capability *cap)
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
+	struct video_device *vfd_dec = video_devdata(file);
 
 	strlcpy(cap->driver, AML_VCODEC_DEC_NAME, sizeof(cap->driver));
 	strlcpy(cap->bus_info, AML_PLATFORM_STR, sizeof(cap->bus_info));
 	strlcpy(cap->card, AML_PLATFORM_STR, sizeof(cap->card));
+	cap->device_caps = vfd_dec->device_caps;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, %s\n", __func__, cap->card);
 
@@ -3749,7 +3760,7 @@ int aml_vcodec_dec_queue_init(void *priv, struct vb2_queue *src_vq,
 	dst_vq->mem_ops		= &vb2_dma_contig_memops;
 	dst_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	dst_vq->lock		= &ctx->dev->dev_mutex;
-	dst_vq->min_buffers_needed = 2;
+	dst_vq->min_buffers_needed = 1;
 	ret = vb2_queue_init(dst_vq);
 	if (ret) {
 		vb2_queue_release(src_vq);

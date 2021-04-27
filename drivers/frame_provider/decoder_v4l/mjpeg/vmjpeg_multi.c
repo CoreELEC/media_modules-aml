@@ -1107,8 +1107,10 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 			return -1;
 
 		/* find next decode buffer index */
-		WRITE_VREG(AV_SCRATCH_4, spec2canvas(&hw->buffer_spec[index]));
-		WRITE_VREG(AV_SCRATCH_5, index | 1 << 24);
+		if (hw->buf_num != 0) {
+			WRITE_VREG(AV_SCRATCH_4, spec2canvas(&hw->buffer_spec[index]));
+			WRITE_VREG(AV_SCRATCH_5, index | 1 << 24);
+		}
 
 	} else
 		WRITE_VREG(AV_SCRATCH_5, 1 << 24);

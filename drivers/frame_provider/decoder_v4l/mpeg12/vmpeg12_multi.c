@@ -2920,22 +2920,24 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 		points to the past two IP buffers
 		prepare REC_CANVAS_ADDR and ANC2_CANVAS_ADDR
 		points to the output buffer*/
-		WRITE_VREG(MREG_REF0,
-			(hw->refs[0] == -1) ? 0xffffffff :
-			hw->canvas_spec[hw->refs[0]]);
-		WRITE_VREG(MREG_REF1,
-			(hw->refs[1] == -1) ? 0xffffffff :
-			hw->canvas_spec[hw->refs[1]]);
-		WRITE_VREG(REC_CANVAS_ADDR, hw->canvas_spec[index]);
-		WRITE_VREG(ANC2_CANVAS_ADDR, hw->canvas_spec[index]);
+		if (hw->buf_num != 0) {
+			WRITE_VREG(MREG_REF0,
+				(hw->refs[0] == -1) ? 0xffffffff :
+				hw->canvas_spec[hw->refs[0]]);
+			WRITE_VREG(MREG_REF1,
+				(hw->refs[1] == -1) ? 0xffffffff :
+				hw->canvas_spec[hw->refs[1]]);
+			WRITE_VREG(REC_CANVAS_ADDR, hw->canvas_spec[index]);
+			WRITE_VREG(ANC2_CANVAS_ADDR, hw->canvas_spec[index]);
 
-		debug_print(DECODE_ID(hw), PRINT_FLAG_RESTORE,
-			"%s,ref0=0x%x, ref1=0x%x,rec=0x%x, ctx_valid=%d,index=%d\n",
-			__func__,
-			READ_VREG(MREG_REF0),
-			READ_VREG(MREG_REF1),
-			READ_VREG(REC_CANVAS_ADDR),
-			hw->ctx_valid, index);
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RESTORE,
+				"%s,ref0=0x%x, ref1=0x%x,rec=0x%x, ctx_valid=%d,index=%d\n",
+				__func__,
+				READ_VREG(MREG_REF0),
+				READ_VREG(MREG_REF1),
+				READ_VREG(REC_CANVAS_ADDR),
+				hw->ctx_valid, index);
+		}
 	}
 
 	/* set to mpeg1 default */

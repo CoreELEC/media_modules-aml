@@ -2102,29 +2102,31 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 		 * prepare REC_CANVAS_ADDR and ANC2_CANVAS_ADDR
 		 * points to the output buffer
 		 */
-		if (hw->refs[0] == -1) {
-			WRITE_VREG(MREG_REF0, (hw->refs[1] == -1) ? 0xffffffff :
+		if (hw->buf_num != 0) {
+			if (hw->refs[0] == -1) {
+				WRITE_VREG(MREG_REF0, (hw->refs[1] == -1) ? 0xffffffff :
+							hw->canvas_spec[hw->refs[1]]);
+			} else {
+				WRITE_VREG(MREG_REF0, (hw->refs[0] == -1) ? 0xffffffff :
+							hw->canvas_spec[hw->refs[0]]);
+			}
+			WRITE_VREG(MREG_REF1, (hw->refs[1] == -1) ? 0xffffffff :
 						hw->canvas_spec[hw->refs[1]]);
-		} else {
-			WRITE_VREG(MREG_REF0, (hw->refs[0] == -1) ? 0xffffffff :
-						hw->canvas_spec[hw->refs[0]]);
-		}
-		WRITE_VREG(MREG_REF1, (hw->refs[1] == -1) ? 0xffffffff :
-					hw->canvas_spec[hw->refs[1]]);
-		if ((hw->is_used_v4l) && (index == 0xffffff)) {
-			WRITE_VREG(REC_CANVAS_ADDR, 0xffffff);
-			WRITE_VREG(ANC2_CANVAS_ADDR, 0xffffff);
-		} else {
-			WRITE_VREG(REC_CANVAS_ADDR, hw->canvas_spec[index]);
-			WRITE_VREG(ANC2_CANVAS_ADDR, hw->canvas_spec[index]);
-		}
+			if ((hw->is_used_v4l) && (index == 0xffffff)) {
+				WRITE_VREG(REC_CANVAS_ADDR, 0xffffff);
+				WRITE_VREG(ANC2_CANVAS_ADDR, 0xffffff);
+			} else {
+				WRITE_VREG(REC_CANVAS_ADDR, hw->canvas_spec[index]);
+				WRITE_VREG(ANC2_CANVAS_ADDR, hw->canvas_spec[index]);
+			}
 
-		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RESTORE,
-			"restore ref0=0x%x, ref1=0x%x, rec=0x%x, ctx_valid=%d,index=%d\n",
-			READ_VREG(MREG_REF0),
-			READ_VREG(MREG_REF1),
-			READ_VREG(REC_CANVAS_ADDR),
-			hw->ctx_valid, index);
+			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RESTORE,
+				"restore ref0=0x%x, ref1=0x%x, rec=0x%x, ctx_valid=%d,index=%d\n",
+				READ_VREG(MREG_REF0),
+				READ_VREG(MREG_REF1),
+				READ_VREG(REC_CANVAS_ADDR),
+				hw->ctx_valid, index);
+		}
 	}
 
 	/* disable PSCALE for hardware sharing */
