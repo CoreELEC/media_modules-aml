@@ -357,6 +357,7 @@ static int vmpeg_vf_states(struct vframe_states *states, void *);
 static int vmpeg_event_cb(int type, void *data, void *private_data);
 static int notify_v4l_eos(struct vdec_s *vdec);
 static void start_process_time_set(struct vdec_mpeg12_hw_s *hw);
+static int check_dirty_data(struct vdec_s *vdec);
 
 static int debug_enable;
 /*static struct work_struct userdata_push_work;*/
@@ -2381,6 +2382,13 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			vdec_schedule_work(&hw->work);
 			return;
 		}
+		if ((vdec_stream_based(vdec)) &&
+			(error_proc_policy & 0x1) &&
+			check_dirty_data(vdec)) {
+			hw->dec_result = DEC_RESULT_DONE;
+			vdec_schedule_work(&hw->work);
+			return;
+		}
 #ifdef AGAIN_HAS_THRESHOLD
 		hw->next_again_flag = 1;
 #endif
@@ -3394,17 +3402,11 @@ static int check_dirty_data(struct vdec_s *vdec)
 	else
 		level = wp + vdec->input.size - rp ;
 
-	if (hw->next_again_flag &&
-		hw->pre_parser_wr_ptr !=
-			STBUF_READ(&vdec->vbuf, get_wp))
+	if (level > (vdec->input.size / 2))
 		hw->dec_again_cnt++;
-	if ((level > (vdec->input.size * 2 / 3) ) &&
-			(hw->dec_again_cnt > dirty_again_threshold)) {
-		debug_print(DECODE_ID(hw), 0, "mpeg12 data skipped %x, level %x\n", ((level / 2) >> 20) << 20, level);
-		if (vdec->input.swap_valid) {
-			vdec_stream_skip_data(vdec, ((level / 2) >> 20) << 20);
-			hw->dec_again_cnt = 0;
-		}
+	if (hw->dec_again_cnt > dirty_again_threshold) {
+		debug_print(DECODE_ID(hw), 0, "mpeg12 data skipped %x\n", level);
+		hw->dec_again_cnt = 0;
 		return 1;
 	}
 	return 0;
@@ -3432,21 +3434,6 @@ void (*callback)(struct vdec_s *, void *),
 	vdec_reset_core(vdec);
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
-
-	if ((vdec_stream_based(vdec)) &&
-			(error_proc_policy & 0x1) &&
-			check_dirty_data(vdec)) {
-		hw->dec_result = DEC_RESULT_AGAIN;
-		if (!vdec->input.swap_valid) {
-			debug_print(DECODE_ID(hw), 0, "mpeg12 start dirty data skipped\n");
-			if (vdec_prepare_input(vdec, &hw->chunk) == -1) {
-				debug_print(DECODE_ID(hw), 0, "%s vdec_prepare_input failed\n", __func__);
-		    }
-			hw->dec_result = DEC_RESULT_DONE;
-		}
-		vdec_schedule_work(&hw->work);
-		return;
-	}
 
 #ifdef AGAIN_HAS_THRESHOLD
 	if (vdec_stream_based(vdec)) {
