@@ -65,7 +65,7 @@ static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 	}
 
 	if (!vpp_buf->di_local_buf) {
-		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 			"attach_DI_buffer nothing\n");
 		return 0;
 	}
@@ -113,7 +113,7 @@ static int detach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 
 	ret = uvm_detach_hook_mod(dma, VF_PROCESS_DI);
 	if (ret < 0) {
-		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 			"fail to remove dmabuf DI hook\n");
 	}
 
@@ -297,6 +297,10 @@ static enum DI_ERRORTYPE
 	fb->task->submit(fb->task, TASK_TYPE_VPP);
 
 	vpp->out_num[OUTPUT_PORT]++;
+
+	/* count for bypass nr */
+	if (vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF)
+		vpp->in_num[OUTPUT_PORT]++;
 
 	return DI_ERR_NONE;
 }
@@ -513,6 +517,22 @@ retry:
 
 		/* fill inbuf parms. */
 		in_buf->di_buf.caller_data = vpp;
+
+		/*
+		 * HWC or SF should hold di buffres refcnt after resolution changed
+		 * that might cause stuck, thus sumbit 10 frames from dec to display directly.
+		 * then frames will be pushed out from these buffer queuen and
+		 * recycle local buffers to DI module.
+		 */
+		if ((ctx->vpp_cfg.res_chg) && (vpp->is_prog) &&
+			(vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF)) {
+			if (vpp->in_num[INPUT_PORT] < 10) {
+				vpp->is_bypass_p = true;
+			} else {
+				vpp->is_bypass_p = false;
+				ctx->vpp_cfg.res_chg = false;
+			}
+		}
 
 		v4l_dbg(ctx, V4L_DEBUG_VPP_BUFMGR,
 			"vpp_handle start: dec vf:%px/%d, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, %s %s "

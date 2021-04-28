@@ -694,6 +694,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 			/* make the run to stanby until new buffs to enque. */
 			ctx->v4l_codec_dpb_ready = false;
 			ctx->reset_flag = V4L_RESET_MODE_LIGHT;
+			ctx->vpp_cfg.res_chg = true;
 
 			/*
 			 * After all buffers containing decoded frames from

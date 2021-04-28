@@ -486,6 +486,7 @@ struct dv_info {
  * @is_bypass_p	: to set progressive bypass in vpp
  * @enable_nr	: enable nosie reduce.
  * @enable_local_buf: DI used buff alloc by itself.
+ * @res_chg	: indicate resolution changed.
  */
 struct aml_vpp_cfg_infos {
 	u32	mode;
@@ -496,6 +497,7 @@ struct aml_vpp_cfg_infos {
 	bool	is_bypass_p;
 	bool	enable_nr;
 	bool	enable_local_buf;
+	bool	res_chg;
 };
 
 /*
