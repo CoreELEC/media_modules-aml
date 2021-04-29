@@ -8530,32 +8530,34 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 
 	if ((hevc->sei_present_flag & SEI_HDR10PLUS_MASK) && (pic->hdr10p_data_buf != NULL)
 		&& (pic->hdr10p_data_size != 0)) {
-		char *new_buf;
-		new_buf = vzalloc(pic->hdr10p_data_size);
+		if (pic->hdr10p_data_size <= 128) {
+			char *new_buf;
+			new_buf = kzalloc(pic->hdr10p_data_size, GFP_ATOMIC);
 
-		if (new_buf) {
-			memcpy(new_buf, pic->hdr10p_data_buf, pic->hdr10p_data_size);
-			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE) {
-				hevc_print(hevc, 0,
-					"hdr10p data: (size %d)\n",
-					pic->hdr10p_data_size);
-				for (i = 0; i < pic->hdr10p_data_size; i++) {
-					hevc_print_cont(hevc, 0,
-						"%02x ", pic->hdr10p_data_buf[i]);
-					if (((i + 1) & 0xf) == 0)
-						hevc_print_cont(hevc, 0, "\n");
+			if (new_buf) {
+				memcpy(new_buf, pic->hdr10p_data_buf, pic->hdr10p_data_size);
+				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE) {
+					hevc_print(hevc, 0,
+						"hdr10p data: (size %d)\n",
+						pic->hdr10p_data_size);
+					for (i = 0; i < pic->hdr10p_data_size; i++) {
+						hevc_print_cont(hevc, 0,
+							"%02x ", pic->hdr10p_data_buf[i]);
+						if (((i + 1) & 0xf) == 0)
+							hevc_print_cont(hevc, 0, "\n");
+					}
+					hevc_print_cont(hevc, 0, "\n");
 				}
-				hevc_print_cont(hevc, 0, "\n");
-			}
 
-			vf->hdr10p_data_size = pic->hdr10p_data_size;
-			vf->hdr10p_data_buf = new_buf;
-		} else {
-			hevc_print(hevc, 0,
-				"%s:hdr10p data vzalloc size(%d) fail\n",
-				__func__, pic->hdr10p_data_size);
-			vf->hdr10p_data_buf = NULL;
-			vf->hdr10p_data_size = 0;
+				vf->hdr10p_data_size = pic->hdr10p_data_size;
+				vf->hdr10p_data_buf = new_buf;
+			} else {
+				hevc_print(hevc, 0,
+					"%s:hdr10p data vzalloc size(%d) fail\n",
+					__func__, pic->hdr10p_data_size);
+				vf->hdr10p_data_buf = NULL;
+				vf->hdr10p_data_size = 0;
+			}
 		}
 
 		vfree(pic->hdr10p_data_buf);
@@ -8826,7 +8828,7 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 	if (vf->hdr10p_data_buf) {
-		vfree(vf->hdr10p_data_buf);
+		kfree(vf->hdr10p_data_buf);
 		vf->hdr10p_data_buf = NULL;
 		vf->hdr10p_data_size = 0;
 	}

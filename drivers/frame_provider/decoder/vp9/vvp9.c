@@ -7418,32 +7418,34 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 
 	if ((pbi->chunk != NULL) && (pbi->chunk->hdr10p_data_buf != NULL)
 		&& (pbi->chunk->hdr10p_data_size != 0)) {
-		char *new_buf;
-		int i = 0;
-		new_buf = vzalloc(pbi->chunk->hdr10p_data_size);
+		if (pbi->chunk->hdr10p_data_size <= 128) {
+			char *new_buf;
+			int i = 0;
+			new_buf = kzalloc(pbi->chunk->hdr10p_data_size, GFP_ATOMIC);
 
-		if (new_buf) {
-			memcpy(new_buf, pbi->chunk->hdr10p_data_buf, pbi->chunk->hdr10p_data_size);
-			if (debug & VP9_DEBUG_BUFMGR_MORE) {
-				vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
-					"hdr10p data: (size %d)\n",
-					pbi->chunk->hdr10p_data_size);
-				for (i = 0; i < pbi->chunk->hdr10p_data_size; i++) {
+			if (new_buf) {
+				memcpy(new_buf, pbi->chunk->hdr10p_data_buf, pbi->chunk->hdr10p_data_size);
+				if (debug & VP9_DEBUG_BUFMGR_MORE) {
 					vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
-						"%02x ", pbi->chunk->hdr10p_data_buf[i]);
-					if (((i + 1) & 0xf) == 0)
-						vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
+						"hdr10p data: (size %d)\n",
+						pbi->chunk->hdr10p_data_size);
+					for (i = 0; i < pbi->chunk->hdr10p_data_size; i++) {
+						vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
+							"%02x ", pbi->chunk->hdr10p_data_buf[i]);
+						if (((i + 1) & 0xf) == 0)
+							vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
+					}
+					vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
 				}
-				vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
-			}
 
-			vf->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
-			vf->hdr10p_data_buf = new_buf;
-		} else {
-			vp9_print(pbi, 0, "%s:hdr10p data vzalloc size(%d) fail\n",
-				__func__, pbi->chunk->hdr10p_data_size);
-			vf->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
-			vf->hdr10p_data_buf = new_buf;
+				vf->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
+				vf->hdr10p_data_buf = new_buf;
+			} else {
+				vp9_print(pbi, 0, "%s:hdr10p data vzalloc size(%d) fail\n",
+					__func__, pbi->chunk->hdr10p_data_size);
+				vf->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
+				vf->hdr10p_data_buf = new_buf;
+			}
 		}
 
 		vfree(pbi->chunk->hdr10p_data_buf);
@@ -7546,7 +7548,7 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 	if (vf->hdr10p_data_buf) {
-		vfree(vf->hdr10p_data_buf);
+		kfree(vf->hdr10p_data_buf);
 		vf->hdr10p_data_buf = NULL;
 		vf->hdr10p_data_size = 0;
 	}
