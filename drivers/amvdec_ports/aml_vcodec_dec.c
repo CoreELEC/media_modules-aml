@@ -665,7 +665,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 				kernel_write(fp,vb2_plane_vaddr(vb, 1),
 						vb->planes[1].length, 0);
 			pr_info("dump idx: %d %dx%d\n", dump_capture_frame, vf->width, vf->height);
-			dump_capture_frame--;
+			dump_capture_frame = false;
 			filp_close(fp, NULL);
 		}
 	} while(0);
