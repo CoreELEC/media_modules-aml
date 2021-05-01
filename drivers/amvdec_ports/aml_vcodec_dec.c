@@ -41,6 +41,7 @@
 #include "aml_vcodec_vpp.h"
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
+#include "../common/chips/decoder_cpu_ver_info.h"
 #include "utils/common.h"
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
@@ -237,6 +238,7 @@ extern int bypass_progressive;
 extern int force_enable_nr;
 extern int force_enable_di_local_buffer;
 extern int max_di_instance;
+extern int vpp_bypass_frames;
 
 extern int dmabuf_fd_install_data(int fd, void* data, u32 size);
 extern bool is_v4l2_buf_file(struct file *file);
@@ -1858,6 +1860,9 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 
 	ctx->fb_ops.query	= fb_buff_query;
 	ctx->fb_ops.alloc	= fb_buff_from_queue;
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
+		vpp_bypass_frames = 30;
 
 	ctx->state = AML_STATE_IDLE;
 	ATRACE_COUNTER("v4l2_state", ctx->state);

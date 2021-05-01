@@ -33,6 +33,7 @@
 #define OUTPUT_PORT 1
 
 extern int dump_vpp_input;
+extern int vpp_bypass_frames;
 
 static void di_release_keep_buf_wrap(void *arg)
 {
@@ -524,9 +525,9 @@ retry:
 		 * then frames will be pushed out from these buffer queuen and
 		 * recycle local buffers to DI module.
 		 */
-		if ((ctx->vpp_cfg.res_chg) && (vpp->is_prog) &&
+		if (/*(ctx->vpp_cfg.res_chg) && */(vpp->is_prog) &&
 			(vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF)) {
-			if (vpp->in_num[INPUT_PORT] < 10) {
+			if (vpp->in_num[INPUT_PORT] < vpp_bypass_frames) {
 				vpp->is_bypass_p = true;
 			} else {
 				vpp->is_bypass_p = false;

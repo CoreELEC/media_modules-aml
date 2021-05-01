@@ -727,6 +727,10 @@ int force_enable_di_local_buffer;
 EXPORT_SYMBOL(force_enable_di_local_buffer);
 module_param(force_enable_di_local_buffer, int, 0644);
 
+int vpp_bypass_frames;
+EXPORT_SYMBOL(vpp_bypass_frames);
+module_param(vpp_bypass_frames, int, 0644);
+
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("AML video codec V4L2 decoder driver");
 

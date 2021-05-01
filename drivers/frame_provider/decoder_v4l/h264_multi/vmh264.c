@@ -8891,6 +8891,9 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	struct vdec_s *vdec = hw_to_vdec(hw);
 #endif
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct vdec_pic_info pic;
 	int mb_width, mb_total;
 	int mb_height = 0;
 	int active_buffer_spec_num, dec_dpb_size;
@@ -9032,6 +9035,13 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	} else {
 		ps->field = frame_mbs_only_flag ?
 			V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
+	}
+
+	/* update reoder and margin num. */
+	if (hw->res_ch_flag) {
+		vdec_v4l_get_pic_info(ctx, &pic);
+		ps->reorder_frames = pic.reorder_frames;
+		ps->reorder_margin = pic.reorder_margin;
 	}
 
 	return 0;
