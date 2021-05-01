@@ -15,7 +15,7 @@
  *
 */
 #define LOG_LINE()
-//pr_err("[%s:%d]\n", __FUNCTION__, __LINE__)
+//pr_err("[%s:%d]\n", __FUNCTION__, __LINE__);
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -39,6 +39,7 @@
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
 #include <linux/amlogic/media/utils/vdec_reg.h>
+#include "../../../frame_provider/decoder/utils/vdec_canvas_utils.h"
 #include <linux/delay.h>
 #include <linux/poll.h>
 #include <linux/of.h>
@@ -67,8 +68,8 @@
 #include "encoder.h"
 #endif
 
-#define JPEGENC_CANVAS_INDEX 0xE4
-#define JPEGENC_CANVAS_MAX_INDEX 0xE7
+#define JPEGENC_CANVAS_INDEX 0x64
+#define JPEGENC_CANVAS_MAX_INDEX 0x67
 
 #define ENC_CANVAS_OFFSET  JPEGENC_CANVAS_INDEX
 
@@ -122,6 +123,9 @@ static u32 g_canv0_stride;
 static u32 g_canv1_stride;
 static u32 g_canv2_stride;
 static u32 g_canvas_height;
+
+static u32 jpeg_in_full_hcodec;
+static u32 mfdin_ambus_canv_conv;
 
 #define MHz (1000000)
 
@@ -556,6 +560,69 @@ static void dump_requst(struct jpegenc_request_s *request) {
     jenc_pr(LOG_DEBUG, "v_stride=%u\n", request->v_stride);
     jenc_pr(LOG_DEBUG, "h_stride=%u\n", request->h_stride);
     jenc_pr(LOG_DEBUG, "jpegenc: dump request end\n");
+}
+
+static void canvas_config_proxy(u32 index, ulong addr, u32 width, u32 height,
+		   u32 wrap, u32 blkmode) {
+	unsigned long datah_temp, datal_temp;
+
+	if (!is_support_vdec_canvas()) {
+		canvas_config(index, addr, width, height, wrap, blkmode);
+	} else {
+#if 1
+		ulong start_addr = addr >> 3;
+		u32 cav_width = (((width + 31)>>5)<<2);
+		u32 cav_height = height;
+		u32 x_wrap_en = 0;
+		u32 y_wrap_en = 0;
+		u32 blk_mode = 0;//blkmode;
+		u32 cav_endian = 0;
+
+		datal_temp = (start_addr & 0x1fffffff) |
+					((cav_width & 0x7 ) << 29 );
+
+		datah_temp = ((cav_width  >> 3) & 0x1ff) |
+					((cav_height & 0x1fff) <<9 ) |
+					((x_wrap_en & 1) << 22 ) |
+					((y_wrap_en & 1) << 23) |
+					((blk_mode & 0x3) << 24) |
+					( cav_endian << 26);
+
+#else
+		u32 endian = 0;
+		u32 addr_bits_l = ((((addr + 7) >> 3) & CANVAS_ADDR_LMASK) << CAV_WADDR_LBIT);
+		u32 width_l     = ((((width    + 7) >> 3) & CANVAS_WIDTH_LMASK) << CAV_WIDTH_LBIT);
+		u32 width_h     = ((((width    + 7) >> 3) >> CANVAS_WIDTH_LWID) << CAV_WIDTH_HBIT);
+		u32 height_h    = (height & CANVAS_HEIGHT_MASK) << CAV_HEIGHT_HBIT;
+		u32 blkmod_h    = (blkmode & CANVAS_BLKMODE_MASK) << CAV_BLKMODE_HBIT;
+		u32 switch_bits_ctl = (endian & 0xf) << CAV_ENDIAN_HBIT;
+		u32 wrap_h      = (0 << 23);
+		datal_temp = addr_bits_l | width_l;
+		datah_temp = width_h | height_h | wrap_h | blkmod_h | switch_bits_ctl;
+#endif
+		/*
+		if (core == VDEC_1) {
+			WRITE_VREG(MDEC_CAV_CFG0, 0);	//[0]canv_mode, by default is non-canv-mode
+			WRITE_VREG(MDEC_CAV_LUT_DATAL, datal_temp);
+			WRITE_VREG(MDEC_CAV_LUT_DATAH, datah_temp);
+			WRITE_VREG(MDEC_CAV_LUT_ADDR,  index);
+		} else if (core == VDEC_HCODEC) */ {
+			WRITE_HREG(HCODEC_MDEC_CAV_CFG0, 0);	//[0]canv_mode, by default is non-canv-mode
+			WRITE_HREG(HCODEC_MDEC_CAV_LUT_DATAL, datal_temp);
+			WRITE_HREG(HCODEC_MDEC_CAV_LUT_DATAH, datah_temp);
+			WRITE_HREG(HCODEC_MDEC_CAV_LUT_ADDR,  index);
+		}
+
+		/*
+		cav_lut_info_store(index, addr, width, height, wrap, blkmode, 0);
+
+		if (vdec_get_debug() & 0x40000000) {
+			pr_info("(%s %2d) addr: %lx, width: %d, height: %d, blkm: %d, endian: %d\n",
+				__func__, index, addr, width, height, blkmode, 0);
+			pr_info("data(h,l): 0x%8lx, 0x%8lx\n", datah_temp, datal_temp);
+	    }
+	    */
+	}
 }
 
 static u64 jpegenc_time_count_start(void)
@@ -2639,11 +2706,23 @@ static void mfdin_basic_jpeg(
 
         data32 = READ_HREG(HCODEC_MFDIN_REG6_DCFG + reg_offset);
         data32 = data32 & 0x3ff;
-        WRITE_HREG(HCODEC_MFDIN_REG6_DCFG + reg_offset,
-            data32 | (1 << 16) |            // AXI Enable
-            (mfdin_canvas0_blkmode << 14) |        // V canvas block mode
-            (mfdin_canvas1_blkmode << 12) |        // U canvas block mode
-            (mfdin_canvas2_blkmode << 10));        // Y canvas block mode
+
+        if (jpeg_in_full_hcodec) {
+            pr_err("JPEG_IN_FULL_HCODEC\n");
+            data32 |= (0<<16);
+
+            if(mfdin_ambus_canv_conv) {
+                data32 |= (1<<17); // AMBUS
+            }
+        } else {
+            data32 |= (1 << 16); // AXI Enable
+        }
+
+        data32 |= (mfdin_canvas0_blkmode << 14) |        // V canvas block mode
+                  (mfdin_canvas1_blkmode << 12) |        // U canvas block mode
+                  (mfdin_canvas2_blkmode << 10);         // Y canvas block mode
+
+        WRITE_HREG(HCODEC_MFDIN_REG6_DCFG + reg_offset, data32);
 
         if (mfdin_canvas_bias)
             WRITE_HREG(HCODEC_MFDIN_REGA_CAV1 + reg_offset, mfdin_canvas_bias);
@@ -2656,9 +2735,13 @@ static void mfdin_basic_jpeg(
             (1 << 18) | (0 << 21));
     }
 
+    if (jpeg_in_full_hcodec) {//#ifdef JPEG_IN_FULL_HCODEC
+        data32 = READ_HREG(HCODEC_MFDIN_REG3_CANV + reg_offset);
+        WRITE_HREG(HCODEC_MFDIN_REG3_CANV + reg_offset, data32|(0x1 << 8)|(0x2 << 16));
+    }
+
     data32 = READ_HREG(HCODEC_MFDIN_REG7_SCMD + reg_offset);
-    WRITE_HREG(HCODEC_MFDIN_REG7_SCMD + reg_offset,
-        data32 | (0x1 << 28)); // MFDIN Enabled
+    WRITE_HREG(HCODEC_MFDIN_REG7_SCMD + reg_offset, data32 | (0x1 << 28)); // MFDIN Enabled
 
     jenc_pr(LOG_INFO, "MFDIN Enabled\n");
 
@@ -2812,7 +2895,6 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
                     mfdin_canvas1_stride = mfdin_canvas0_stride / 2;
                     mfdin_canvas2_stride = mfdin_canvas0_stride / 2;
                 }
-
                 mfdin_canvas0_addr = input;
                 mfdin_canvas1_addr = input + mfdin_canvas0_stride * mfdin_canvas_height;
 
@@ -2844,7 +2926,6 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
             } else if (iformat == 5 /*&& oformat == 0*/) {    /*case1007, 444 plane -> 420*/
                 mfdin_canvas1_stride = mfdin_canvas0_stride;
                 mfdin_canvas2_stride = mfdin_canvas0_stride;
-
                 mfdin_canvas0_addr = input;
                 mfdin_canvas1_addr = input              + mfdin_canvas0_stride * mfdin_canvas_height;
                 mfdin_canvas2_addr = mfdin_canvas1_addr + mfdin_canvas1_stride * mfdin_canvas_height;
@@ -2853,6 +2934,150 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
                 pr_err("config input or output format err!\n");
                 return -1;
             }
+
+            if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+                if ((cmd->input_fmt == JPEGENC_FMT_RGB565)
+                    || (cmd->input_fmt >= JPEGENC_MAX_FRAME_FMT))
+                    return -1;
+
+                if (cmd->output_fmt     == JPEGENC_FMT_YUV420) {
+                    oformat = 0;
+                } else if (cmd->output_fmt == JPEGENC_FMT_YUV422_SINGLE) {
+                    oformat = 1;
+                } else if (cmd->output_fmt == JPEGENC_FMT_YUV444_SINGLE) {
+                    oformat = 2;
+                }
+
+                if ((cmd->input_fmt <= JPEGENC_FMT_YUV444_PLANE) ||
+                    (cmd->input_fmt >= JPEGENC_FMT_YUV422_12BIT))
+                    r2y_en = 0;
+                else
+                    r2y_en = 1;
+
+                if (cmd->input_fmt >= JPEGENC_FMT_YUV422_12BIT) {
+                    iformat = 7;
+                    ifmt_extra =
+                        cmd->input_fmt - JPEGENC_FMT_YUV422_12BIT;
+
+    #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
+
+                    if (cmd->input_fmt == JPEGENC_FMT_YUV422_12BIT)
+                        canvas_w = picsize_x * 24 / 8;
+                    else if (cmd->input_fmt == JPEGENC_FMT_YUV444_10BIT)
+                        canvas_w = picsize_x * 32 / 8;
+                    else
+                        canvas_w = (picsize_x * 20 + 7) / 8;
+                    canvas_w = ((canvas_w + 31) >> 5) << 5;
+                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                        input,
+                        canvas_w, picsize_y,
+                        CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    input = ENC_CANVAS_OFFSET;
+                    input = input & 0xff;
+    #endif
+                } else if (cmd->input_fmt == JPEGENC_FMT_YUV422_SINGLE) {
+                    iformat = 0;
+
+    #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
+                    canvas_w = picsize_x * 2;
+                    canvas_w = ((canvas_w + 31) >> 5) << 5;
+                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                        input,
+                        canvas_w, picsize_y,
+                        CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    input = ENC_CANVAS_OFFSET;
+    #endif
+                } else if ((cmd->input_fmt == JPEGENC_FMT_YUV444_SINGLE)
+                    || (cmd->input_fmt == JPEGENC_FMT_RGB888)) {
+                    iformat = 1;
+                    if (cmd->input_fmt == JPEGENC_FMT_RGB888)
+                        r2y_en = 1;
+
+    #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
+                    canvas_w = picsize_x * 3;
+                    canvas_w = ((canvas_w + 31) >> 5) << 5;
+                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                        input,
+                        canvas_w, picsize_y,
+                        CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    input = ENC_CANVAS_OFFSET;
+    #endif
+                } else if ((cmd->input_fmt == JPEGENC_FMT_NV21)
+                    || (cmd->input_fmt == JPEGENC_FMT_NV12)) {
+                    iformat = (cmd->input_fmt == JPEGENC_FMT_NV21) ? 2 : 3;
+    #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
+                    canvas_w = ((cmd->encoder_width + 31) >> 5) << 5;
+                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                        input,
+                        canvas_w, picsize_y,
+                        CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    canvas_config_proxy(ENC_CANVAS_OFFSET + 1,
+                        input + canvas_w * picsize_y, canvas_w,
+                        picsize_y / 2, CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    input = ((ENC_CANVAS_OFFSET + 1) << 8) |
+                        ENC_CANVAS_OFFSET;
+    #endif
+                } else if (cmd->input_fmt == JPEGENC_FMT_YUV420) {
+                    iformat = 4;
+
+    #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
+                    canvas_w = ((cmd->encoder_width + 63) >> 6) << 6;
+                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                        input,
+                        canvas_w, picsize_y,
+                        CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
+                        input + canvas_w * picsize_y,
+                        canvas_w / 2, picsize_y / 2,
+                        CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
+                        input + canvas_w * picsize_y * 5 / 4,
+                        canvas_w / 2, picsize_y / 2,
+                        CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    input = ((ENC_CANVAS_OFFSET + 2) << 16) |
+                        ((ENC_CANVAS_OFFSET + 1) << 8) |
+                        ENC_CANVAS_OFFSET;
+    #endif
+                } else if ((cmd->input_fmt == JPEGENC_FMT_YUV444_PLANE)
+                    || (cmd->input_fmt == JPEGENC_FMT_RGB888_PLANE)) {
+                    iformat = 5;
+                    if (cmd->input_fmt == JPEGENC_FMT_RGB888_PLANE)
+                        r2y_en = 1;
+
+    #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
+                    canvas_w = ((cmd->encoder_width + 31) >> 5) << 5;
+                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                        input,
+                        canvas_w, picsize_y,
+                        CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    canvas_config_proxy(ENC_CANVAS_OFFSET + 1,
+                        input + canvas_w * picsize_y, canvas_w,
+                        picsize_y, CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
+                        input + canvas_w * picsize_y * 2,
+                        canvas_w, picsize_y, CANVAS_ADDR_NOWRAP,
+                        CANVAS_BLKMODE_LINEAR);
+                    input = ((ENC_CANVAS_OFFSET + 2) << 16) |
+                        ((ENC_CANVAS_OFFSET + 1) << 8) |
+                        ENC_CANVAS_OFFSET;
+    #endif
+                } else if (cmd->input_fmt == JPEGENC_FMT_RGBA8888) {
+                    iformat = 12;
+                    r2y_en = 1;
+                }
+                ret = 0;
+            }
+
         } else {
             if ((cmd->input_fmt == JPEGENC_FMT_RGB565)
                 || (cmd->input_fmt >= JPEGENC_MAX_FRAME_FMT))
@@ -2882,7 +3107,7 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
                 else
                     canvas_w = (picsize_x * 20 + 7) / 8;
                 canvas_w = ((canvas_w + 31) >> 5) << 5;
-                canvas_config(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(ENC_CANVAS_OFFSET,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
@@ -2896,7 +3121,7 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = picsize_x * 2;
                 canvas_w = ((canvas_w + 31) >> 5) << 5;
-                canvas_config(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(ENC_CANVAS_OFFSET,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
@@ -2912,7 +3137,7 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = picsize_x * 3;
                 canvas_w = ((canvas_w + 31) >> 5) << 5;
-                canvas_config(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(ENC_CANVAS_OFFSET,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
@@ -2925,12 +3150,12 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = ((cmd->encoder_width + 31) >> 5) << 5;
-                canvas_config(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(ENC_CANVAS_OFFSET,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config(ENC_CANVAS_OFFSET + 1,
+                canvas_config_proxy(ENC_CANVAS_OFFSET + 1,
                     input + canvas_w * picsize_y, canvas_w,
                     picsize_y / 2, CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
@@ -2942,17 +3167,17 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = ((cmd->encoder_width + 63) >> 6) << 6;
-                canvas_config(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(ENC_CANVAS_OFFSET,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config(ENC_CANVAS_OFFSET + 2,
+                canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
                     input + canvas_w * picsize_y,
                     canvas_w / 2, picsize_y / 2,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config(ENC_CANVAS_OFFSET + 2,
+                canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
                     input + canvas_w * picsize_y * 5 / 4,
                     canvas_w / 2, picsize_y / 2,
                     CANVAS_ADDR_NOWRAP,
@@ -2969,16 +3194,16 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = ((cmd->encoder_width + 31) >> 5) << 5;
-                canvas_config(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(ENC_CANVAS_OFFSET,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config(ENC_CANVAS_OFFSET + 1,
+                canvas_config_proxy(ENC_CANVAS_OFFSET + 1,
                     input + canvas_w * picsize_y, canvas_w,
                     picsize_y, CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config(ENC_CANVAS_OFFSET + 2,
+                canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
                     input + canvas_w * picsize_y * 2,
                     canvas_w, picsize_y, CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
@@ -3065,7 +3290,7 @@ static irqreturn_t jpegenc_isr(s32 irq_number, void *para)
         return IRQ_NONE;
 
     if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1) {
-        if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+        if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
             WRITE_HREG(HCODEC_ASSIST_MBOX2_CLR_REG, 1);
         else
             WRITE_HREG(HCODEC_ASSIST_MBOX0_CLR_REG, 1);
@@ -3183,7 +3408,14 @@ s32 jpegenc_loadmc(const char *p)
     timeout = jiffies + HZ;
     WRITE_HREG(HCODEC_IMEM_DMA_ADR, mc_addr_map);
     WRITE_HREG(HCODEC_IMEM_DMA_COUNT, 0x1000);
-    WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (0xf << 16)));
+
+    if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+        WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (0xf << 16))); // ucode test c is 0x8000 | (0xf << 16)
+    else if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+        pr_err("t3 HCODEC_IMEM_DMA_CTRL (0x8000 | (0 & 0xffff))\n");
+        WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (0 & 0xffff))); // Endian : 4'b1000);
+    } else
+        WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (0 & 0xffff))); // Endian : 4'b1000);
 
     while (READ_HREG(HCODEC_IMEM_DMA_CTRL) & 0x8000) {
         if (time_before(jiffies, timeout)) {
@@ -3215,8 +3447,8 @@ static s32 jpegenc_poweron_ex(u32 clock)
     /* Powerup HCODEC memories */
     WRITE_VREG(DOS_MEM_PD_HCODEC, 0x0);
 
-    if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
-        pr_err("powering on hcodec for t7\n");
+    if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
+        pr_err("powering on hcodec\n");
         vdec_poweron(VDEC_HCODEC);
         pr_err("hcodec power status after poweron:%d\n", vdec_on(VDEC_HCODEC));
     } else {
@@ -3244,7 +3476,7 @@ static s32 jpegenc_poweroff_ex(void)
 {
     WRITE_VREG_BITS(DOS_GCLK_EN0, 0, 12, 15);
 
-    if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+    if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
         pr_err("powering off hcodec for t7\n");
         vdec_poweroff(VDEC_HCODEC);
         pr_err("hcodec power status after poweroff:%d\n", vdec_on(VDEC_HCODEC));
@@ -3388,20 +3620,18 @@ static s32 jpegenc_init(void)
 
     jenc_pr(LOG_ALL, "start to load microcode\n");
 
-    if (!legacy_load && get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+    if (!legacy_load && (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7 )) {
         char *buf = vmalloc(0x1000 * 16);
         int ret = -1;
-        pr_err("load ucode for t7\n");
+        pr_err("load ucode\n");
         if (get_firmware_data(VIDEO_ENC_JPEG, buf) < 0) {
             //amvdec_disable();
-            pr_err("get firmware for jpeg enc on t7 fail!!!\n");
+            pr_err("get firmware for jpeg enc fail!\n");
             vfree(buf);
             return -1;
         }
-
         WRITE_HREG(HCODEC_MPSR, 0);
         WRITE_HREG(HCODEC_CPSR, 0);
-
         ret = amvdec_loadmc_ex(VFORMAT_JPEG_ENC, NULL, buf);
 
         if (ret < 0) {
@@ -3411,7 +3641,6 @@ static s32 jpegenc_init(void)
                 tee_enabled() ? "TEE" : "local", ret);
             return -EBUSY;
         }
-
         vfree(buf);
     } else {
         if (jpegenc_loadmc(jpegenc_ucode[0]) < 0)
@@ -3426,6 +3655,7 @@ static s32 jpegenc_init(void)
         gJpegenc.irq_requested = true;
     else
         gJpegenc.irq_requested = false;
+
     WRITE_HREG(JPEGENC_ENCODER_STATUS, JPEGENC_ENCODER_IDLE);
     gJpegenc.inited = true;
     return 0;
@@ -3502,7 +3732,7 @@ static void jpegenc_start_cmd(struct jpegenc_wq_s *wq)
 
     /* clear mailbox interrupt */
     if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1) {
-        if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+        if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
             WRITE_HREG(HCODEC_ASSIST_MBOX2_CLR_REG, 1);
         else
             WRITE_HREG(HCODEC_ASSIST_MBOX0_CLR_REG, 1);
@@ -3511,7 +3741,7 @@ static void jpegenc_start_cmd(struct jpegenc_wq_s *wq)
 
     /* enable mailbox interrupt */
     if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1) {
-        if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+        if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
             WRITE_HREG(HCODEC_ASSIST_MBOX2_MASK, 0xffffffff);
         else
             WRITE_HREG(HCODEC_ASSIST_MBOX0_MASK, 0xffffffff);
@@ -3576,6 +3806,7 @@ static s32 jpegenc_open(struct inode *inode, struct file *file)
     wq->buf_size = gJpegenc.mem.buf_size;
     gJpegenc.opened++;
     spin_unlock(&gJpegenc.sem_lock);
+
 #ifdef CONFIG_CMA
     if (gJpegenc.use_reserve == false) {
         if (gJpegenc.use_cma) {
@@ -3631,6 +3862,7 @@ static s32 jpegenc_open(struct inode *inode, struct file *file)
 #endif
     spin_unlock(&gJpegenc.sem_lock);
     r = 0;
+
     return r;
 }
 
@@ -4340,6 +4572,16 @@ static s32 jpegenc_probe(struct platform_device *pdev)
     gJpegenc.this_pdev = pdev;
     gJpegenc.use_reserve = false;
     gJpegenc.use_cma = false;
+
+    jpeg_in_full_hcodec = 0;
+    mfdin_ambus_canv_conv = 0;
+
+    if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+        pr_err("jpegenc_probe: jpeg_in_full_hcodec\n");
+        jpeg_in_full_hcodec = 1;
+        mfdin_ambus_canv_conv = 1;
+    }
+
     memset(&gJpegenc.mem, 0, sizeof(struct jpegenc_meminfo_s));
 
     idx = of_reserved_mem_device_init(&pdev->dev);
@@ -4439,7 +4681,7 @@ static s32 jpegenc_probe(struct platform_device *pdev)
         gJpegenc.mem.buf_size = 0;
         return -EFAULT;
     }
-#if 0
+#if 1
     res_irq = platform_get_irq(pdev, 0);
 #else
     switch (manual_irq_num) {

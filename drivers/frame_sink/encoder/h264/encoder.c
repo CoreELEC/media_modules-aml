@@ -34,7 +34,7 @@
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-
+#include "../../../frame_provider/decoder/utils/vdec_canvas_utils.h"
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../frame_provider/decoder/utils/vdec.h"
 #include <linux/delay.h>
@@ -50,15 +50,18 @@
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../../../frame_provider/decoder/utils/vdec.h"
 #include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
+
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/power_ctrl.h>
 #include <dt-bindings/power/sc2-pd.h>
+#include <dt-bindings/power/t3-pd.h>
 #include <linux/amlogic/power_domain.h>
 #include <linux/amlogic/power_ctrl.h>
 
 #include <linux/amlogic/media/utils/amlog.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../../../frame_provider/decoder/utils/firmware.h"
+#include <linux/amlogic/media/registers/register.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/version.h>
 
@@ -78,8 +81,8 @@
 		__FUNCTION__, __LINE__, _ret);}
 
 #define ENCODE_NAME "encoder"
-#define AMVENC_CANVAS_INDEX 0xE4
-#define AMVENC_CANVAS_MAX_INDEX 0xEF
+#define AMVENC_CANVAS_INDEX 0x64
+#define AMVENC_CANVAS_MAX_INDEX 0x6F
 
 #define MIN_SIZE amvenc_buffspec[0].min_buffsize
 #define DUMP_INFO_BYTES_PER_MB 80
@@ -463,6 +466,100 @@ static void cache_flush(u32 buf_start, u32 buf_size);
 static int enc_dma_buf_get_phys(struct enc_dma_cfg *cfg, unsigned long *addr);
 static void enc_dma_buf_unmap(struct enc_dma_cfg *cfg);
 
+//static struct canvas_status_s canvas_stat[CANVAS_MAX_SIZE];
+//static struct canvas_status_s mdec_cav_stat[MDEC_CAV_LUT_MAX];
+/*
+static struct canvas_config_s *mdec_cav_pool = NULL;
+
+static void cav_lut_info_store(u32 index, ulong addr, u32 width,
+	u32 height, u32 wrap, u32 blkmode, u32 endian)
+{
+	struct canvas_config_s *pool = NULL;
+
+	if (index < 0 || index >= MDEC_CAV_LUT_MAX) {
+		pr_err("%s, error index %d\n", __func__, index);
+		return;
+	}
+	if (mdec_cav_pool == NULL)
+		mdec_cav_pool = vzalloc(sizeof(struct canvas_config_s)
+			* (MDEC_CAV_LUT_MAX + 1));
+
+	if (mdec_cav_pool == NULL) {
+		pr_err("%s failed, mdec_cav_pool null\n", __func__);
+		return;
+	}
+	pool = &mdec_cav_pool[index];
+	pool->width = width;
+	pool->height = height;
+	pool->block_mode = blkmode;
+	pool->endian = endian;
+	pool->phy_addr = addr;
+}
+
+*/
+static void canvas_config_proxy(u32 index, ulong addr, u32 width, u32 height,
+		   u32 wrap, u32 blkmode) {
+	unsigned long datah_temp, datal_temp;
+
+	if (!is_support_vdec_canvas()) {
+		canvas_config(index, addr, width, height, wrap, blkmode);
+	} else {
+#if 1
+		ulong start_addr = addr >> 3;
+		u32 cav_width = (((width + 31)>>5)<<2);
+		u32 cav_height = height;
+		u32 x_wrap_en = 0;
+		u32 y_wrap_en = 0;
+		u32 blk_mode = 0;//blkmode;
+		u32 cav_endian = 0;
+
+		datal_temp = (start_addr & 0x1fffffff) |
+					((cav_width & 0x7 ) << 29 );
+
+		datah_temp = ((cav_width  >> 3) & 0x1ff) |
+					((cav_height & 0x1fff) <<9 ) |
+					((x_wrap_en & 1) << 22 ) |
+					((y_wrap_en & 1) << 23) |
+					((blk_mode & 0x3) << 24) |
+					( cav_endian << 26);
+
+#else
+		u32 endian = 0;
+		u32 addr_bits_l = ((((addr + 7) >> 3) & CANVAS_ADDR_LMASK) << CAV_WADDR_LBIT);
+		u32 width_l     = ((((width    + 7) >> 3) & CANVAS_WIDTH_LMASK) << CAV_WIDTH_LBIT);
+		u32 width_h     = ((((width    + 7) >> 3) >> CANVAS_WIDTH_LWID) << CAV_WIDTH_HBIT);
+		u32 height_h    = (height & CANVAS_HEIGHT_MASK) << CAV_HEIGHT_HBIT;
+		u32 blkmod_h    = (blkmode & CANVAS_BLKMODE_MASK) << CAV_BLKMODE_HBIT;
+		u32 switch_bits_ctl = (endian & 0xf) << CAV_ENDIAN_HBIT;
+		u32 wrap_h      = (0 << 23);
+		datal_temp = addr_bits_l | width_l;
+		datah_temp = width_h | height_h | wrap_h | blkmod_h | switch_bits_ctl;
+#endif
+		/*
+		if (core == VDEC_1) {
+			WRITE_VREG(MDEC_CAV_CFG0, 0);	//[0]canv_mode, by default is non-canv-mode
+			WRITE_VREG(MDEC_CAV_LUT_DATAL, datal_temp);
+			WRITE_VREG(MDEC_CAV_LUT_DATAH, datah_temp);
+			WRITE_VREG(MDEC_CAV_LUT_ADDR,  index);
+		} else if (core == VDEC_HCODEC) */ {
+			WRITE_HREG(HCODEC_MDEC_CAV_CFG0, 0);	//[0]canv_mode, by default is non-canv-mode
+			WRITE_HREG(HCODEC_MDEC_CAV_LUT_DATAL, datal_temp);
+			WRITE_HREG(HCODEC_MDEC_CAV_LUT_DATAH, datah_temp);
+			WRITE_HREG(HCODEC_MDEC_CAV_LUT_ADDR,  index);
+		}
+
+		/*
+		cav_lut_info_store(index, addr, width, height, wrap, blkmode, 0);
+
+		if (vdec_get_debug() & 0x40000000) {
+			pr_info("(%s %2d) addr: %lx, width: %d, height: %d, blkm: %d, endian: %d\n",
+				__func__, index, addr, width, height, blkmode, 0);
+			pr_info("data(h,l): 0x%8lx, 0x%8lx\n", datah_temp, datal_temp);
+	    }
+	    */
+	}
+}
+
 s32 hcodec_hw_reset(void)
 {
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2 && use_reset_control) {
@@ -773,29 +870,30 @@ static void avc_canvas_init(struct encode_wq_s *wq)
 	canvas_width = ((wq->pic.encoder_width + 31) >> 5) << 5;
 	canvas_height = ((wq->pic.encoder_height + 15) >> 4) << 4;
 
-	canvas_config(ENC_CANVAS_OFFSET,
+	canvas_config_proxy(ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec0_y.buf_start,
 	      canvas_width, canvas_height,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
-	canvas_config(1 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(1 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec0_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 	/*here the third plane use the same address as the second plane*/
-	canvas_config(2 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(2 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec0_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
-	canvas_config(3 + ENC_CANVAS_OFFSET,
+
+	canvas_config_proxy(3 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec1_y.buf_start,
 	      canvas_width, canvas_height,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
-	canvas_config(4 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(4 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec1_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 	/*here the third plane use the same address as the second plane*/
-	canvas_config(5 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(5 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec1_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
@@ -1184,12 +1282,12 @@ static int scale_frame(struct encode_wq_s *wq,
 			|| (request->fmt == FMT_NV12)) {
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
-			canvas_config(ENC_CANVAS_OFFSET + 9,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 9,
 				src_addr,
 				src_canvas_w, src_h,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 10,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 10,
 				src_addr + src_canvas_w * src_h,
 				src_canvas_w, src_h / 2,
 				CANVAS_ADDR_NOWRAP,
@@ -1202,7 +1300,7 @@ static int scale_frame(struct encode_wq_s *wq,
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
 
-			canvas_config(ENC_CANVAS_OFFSET + 9,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 9,
 				src_addr,
 				src_canvas_w * 3, src_h,
 				CANVAS_ADDR_NOWRAP,
@@ -1212,7 +1310,7 @@ static int scale_frame(struct encode_wq_s *wq,
 		} else if (request->fmt == FMT_RGBA8888) {
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
-			canvas_config(
+			canvas_config_proxy(
 				ENC_CANVAS_OFFSET + 9,
 				src_addr,
 				src_canvas_w * 4,
@@ -1224,17 +1322,17 @@ static int scale_frame(struct encode_wq_s *wq,
 		} else {
 			src_canvas_w =
 				((request->src_w + 63) >> 6) << 6;
-			canvas_config(ENC_CANVAS_OFFSET + 9,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 9,
 				src_addr,
 				src_canvas_w, src_h,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 10,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 10,
 				src_addr + src_canvas_w * src_h,
 				src_canvas_w / 2, src_h / 2,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 11,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 11,
 				src_addr + src_canvas_w * src_h * 5 / 4,
 				src_canvas_w / 2, src_h / 2,
 				CANVAS_ADDR_NOWRAP,
@@ -1249,12 +1347,12 @@ static int scale_frame(struct encode_wq_s *wq,
 
 	dst_canvas_w =  ((dst_w + 31) >> 5) << 5;
 
-	canvas_config(ENC_CANVAS_OFFSET + 6,
+	canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 		wq->mem.scaler_buff_start_addr,
 		dst_canvas_w, dst_h,
 		CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 
-	canvas_config(ENC_CANVAS_OFFSET + 7,
+	canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 		wq->mem.scaler_buff_start_addr + dst_canvas_w * dst_h,
 		dst_canvas_w, dst_h / 2,
 		CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
@@ -1436,7 +1534,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			else
 				canvas_w = (picsize_x * 20 + 7) / 8;
 			canvas_w = ((canvas_w + 31) >> 5) << 5;
-			canvas_config(ENC_CANVAS_OFFSET + 6,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 				input,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
@@ -1452,7 +1550,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				r2y_en = 1;
 			canvas_w =  picsize_x * 3;
 			canvas_w = ((canvas_w + 31) >> 5) << 5;
-			canvas_config(ENC_CANVAS_OFFSET + 6,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 				input,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
@@ -1463,23 +1561,23 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
 			iformat = (request->fmt == FMT_NV21) ? 2 : 3;
 			if (request->type == DMA_BUFF) {
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					input_y,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					input_u,
 					canvas_w, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 			} else {
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					input,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					input + canvas_w * picsize_y,
 					canvas_w, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
@@ -1491,33 +1589,33 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			iformat = 4;
 			canvas_w = ((wq->pic.encoder_width + 63) >> 6) << 6;
 			if (request->type == DMA_BUFF) {
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					input_y,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					input_u,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 8,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 8,
 					input_v,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 			} else {
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					input,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					input + canvas_w * picsize_y,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 8,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 8,
 					input + canvas_w * picsize_y * 5 / 4,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
@@ -1533,17 +1631,17 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				r2y_en = 1;
 			iformat = 5;
 			canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
-			canvas_config(ENC_CANVAS_OFFSET + 6,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 				input,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 7,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 				input + canvas_w * picsize_y,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 8,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 8,
 				input + canvas_w * picsize_y * 2,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
@@ -2454,11 +2552,9 @@ void amvenc_start(void)
 		READ_VREG(DOS_SW_RESET1);
 		READ_VREG(DOS_SW_RESET1);
 		READ_VREG(DOS_SW_RESET1);
-
 		WRITE_VREG(DOS_SW_RESET1,
 			(1 << 12) | (1 << 11));
 		WRITE_VREG(DOS_SW_RESET1, 0);
-
 		READ_VREG(DOS_SW_RESET1);
 		READ_VREG(DOS_SW_RESET1);
 		READ_VREG(DOS_SW_RESET1);
@@ -2473,6 +2569,7 @@ void amvenc_stop(void)
 
 	WRITE_HREG(HCODEC_MPSR, 0);
 	WRITE_HREG(HCODEC_CPSR, 0);
+
 	while (READ_HREG(HCODEC_IMEM_DMA_CTRL) & 0x8000) {
 		if (time_after(jiffies, timeout))
 			break;
@@ -2509,6 +2606,32 @@ s32 amvenc_loadmc(const char *p, struct encode_wq_s *wq)
 {
 	ulong timeout;
 	s32 ret = 0;
+
+    if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
+        char *buf = vmalloc(0x1000 * 16);
+        int ret = -1;
+        pr_err("load firmware for t3 avc encoder\n");
+        if (get_firmware_data(VIDEO_ENC_H264, buf) < 0) {
+            //amvdec_disable();
+            pr_err("get firmware for 264 enc fail!\n");
+            vfree(buf);
+            return -1;
+        }
+
+        WRITE_HREG(HCODEC_MPSR, 0);
+        WRITE_HREG(HCODEC_CPSR, 0);
+        ret = amvdec_loadmc_ex(VFORMAT_H264_ENC, NULL, buf);
+
+        if (ret < 0) {
+            //amvdec_disable();
+            vfree(buf);
+            pr_err("amvenc: the %s fw loading failed, err: %x\n",
+                tee_enabled() ? "TEE" : "local", ret);
+            return -EBUSY;
+        }
+        vfree(buf);
+        return 0;
+    }
 
 	/* use static mempry*/
 	if (mc_addr == NULL) {
@@ -2549,7 +2672,8 @@ s32 amvenc_loadmc(const char *p, struct encode_wq_s *wq)
 
 	WRITE_HREG(HCODEC_IMEM_DMA_ADR, mc_addr_map);
 	WRITE_HREG(HCODEC_IMEM_DMA_COUNT, 0x1000);
-	WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (7 << 16)));
+	//WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (7 << 16)));
+	WRITE_VREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (0xf << 16)));
 
 	while (READ_HREG(HCODEC_IMEM_DMA_CTRL) & 0x8000) {
 		if (time_before(jiffies, timeout))
@@ -2637,11 +2761,19 @@ static s32 avc_poweron(u32 clock)
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
 		hcodec_clk_config(1);
 		udelay(20);
-		pwr_ctrl_psci_smc(PDID_SC2_DOS_HCODEC, PWR_ON);
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+			vdec_poweron(VDEC_HCODEC);
+			pr_err("vdec_poweron VDEC_HCODEC\n");
+		} else {
+			pwr_ctrl_psci_smc(PDID_T3_DOS_HCODEC, PWR_ON);
+			pr_err("pwr_ctrl_psci_smc PDID_T3_DOS_HCODEC off\n");
+		}
 		udelay(20);
-		pr_err("hcodec powered on, hcodec clk rate:%ld, pwr_state:%d\n",
-			clk_get_rate(s_hcodec_clks.hcodec_aclk),
-			!pwr_ctrl_status_psci_smc(PDID_SC2_DOS_HCODEC));
+        /*
+        pr_err("hcodec powered on, hcodec clk rate:%ld, pwr_state:%d\n",
+            clk_get_rate(s_hcodec_clks.hcodec_aclk),
+            !pwr_ctrl_status_psci_smc(PDID_T3_DOS_HCODEC));
+        */
 	} else {
 		WRITE_AOREG(AO_RTI_PWR_CNTL_REG0,
 			(READ_AOREG(AO_RTI_PWR_CNTL_REG0) & (~0x18)));
@@ -2653,15 +2785,18 @@ static s32 avc_poweron(u32 clock)
 				((get_cpu_type() == MESON_CPU_MAJOR_ID_SM1 ||
 				 get_cpu_type() >= MESON_CPU_MAJOR_ID_TM2)
 				? ~0x1 : ~0x3));
-
 		udelay(10);
 	}
 	WRITE_VREG(DOS_SW_RESET1, 0xffffffff);
 	WRITE_VREG(DOS_SW_RESET1, 0);
-
 	/* Enable Dos internal clock gating */
-	hvdec_clock_enable(clock);
-
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+		WRITE_VREG_BITS(DOS_GCLK_EN0, 0x7fff, 12, 15);
+		/*
+		 * WRITE_VREG(DOS_GCLK_EN0, 0xffffffff);
+		*/
+	} else
+		hvdec_clock_enable(clock);
 	/* Powerup HCODEC memories */
 	WRITE_VREG(DOS_MEM_PD_HCODEC, 0x0);
 
@@ -2680,9 +2815,9 @@ static s32 avc_poweron(u32 clock)
 		(READ_VREG(DOS_GEN_CTRL0) | 0x1));
 	WRITE_VREG(DOS_GEN_CTRL0,
 		(READ_VREG(DOS_GEN_CTRL0) & 0xFFFFFFFE));
-
 	spin_unlock_irqrestore(&lock, flags);
 	mdelay(10);
+
 	return 0;
 }
 
@@ -2695,7 +2830,14 @@ static s32 avc_poweroff(void)
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
 		hcodec_clk_config(0);
 		udelay(20);
-		pwr_ctrl_psci_smc(PDID_SC2_DOS_HCODEC, PWR_OFF);
+
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+			vdec_poweroff(VDEC_HCODEC);
+			pr_err("vdec_poweroff VDEC_HCODEC\n");
+		} else {
+			pwr_ctrl_psci_smc(PDID_T3_DOS_HCODEC, PWR_OFF);
+			pr_err("pwr_ctrl_psci_smc PDID_T3_DOS_HCODEC on\n");
+		}
 		udelay(20);
 	} else {
 		/* enable HCODEC isolation */
@@ -2709,7 +2851,10 @@ static s32 avc_poweroff(void)
 	WRITE_VREG(DOS_MEM_PD_HCODEC, 0xffffffffUL);
 
 	/* disable HCODEC clock */
-	hvdec_clock_disable();
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+		WRITE_VREG_BITS(DOS_GCLK_EN0, 0, 12, 15);
+	} else
+		hvdec_clock_disable();
 
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
 
@@ -2791,6 +2936,7 @@ static irqreturn_t enc_isr(s32 irq_number, void *para)
 		manager->process_irq = true;
 		if (manager->encode_hw_status != ENCODER_SEQUENCE_DONE)
 			manager->need_reset = true;
+
 		tasklet_schedule(&manager->encode_tasklet);
 	}
 	return IRQ_HANDLED;
@@ -3134,6 +3280,7 @@ s32 amvenc_avc_start(struct encode_wq_s *wq, u32 clock)
 	const char *p = select_ucode(encode_manager.ucode_index);
 
 	avc_poweron(clock);
+
 	avc_canvas_init(wq);
 
 	WRITE_HREG(HCODEC_ASSIST_MMC_CTRL1, 0x32);
@@ -3179,7 +3326,9 @@ s32 amvenc_avc_start(struct encode_wq_s *wq, u32 clock)
 #else
 	WRITE_HREG(FIXED_SLICE_CFG, 0);
 #endif
+
 	amvenc_start();
+
 	return 0;
 }
 
@@ -3246,6 +3395,7 @@ static s32 amvenc_avc_open(struct inode *inode, struct file *file)
 
 	file->private_data = NULL;
 	enc_pr(LOG_DEBUG, "avc open\n");
+
 #ifdef CONFIG_AM_JPEG_ENCODER
 	if (jpegenc_on() == true) {
 		enc_pr(LOG_ERROR,
@@ -3656,6 +3806,8 @@ static s32 encode_process_request(struct encode_manager_s *manager,
 		}
 	}
 #endif
+
+
 
 Again:
 	amvenc_avc_start_cmd(wq, request);
@@ -4536,6 +4688,7 @@ static s32 amvenc_avc_probe(struct platform_device *pdev)
 
 	r = init_avc_device();
 	enc_pr(LOG_INFO, "amvenc_avc probe end.\n");
+
 	return r;
 }
 

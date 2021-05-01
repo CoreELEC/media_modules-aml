@@ -165,7 +165,7 @@ EXPORT_SYMBOL(hcodec_clock_set);
 
 void hcodec_clock_enable(void)
 {
-	hcodec_clock_set(1);
+	hcodec_clock_set(667);
 }
 EXPORT_SYMBOL(hcodec_clock_enable);
 
