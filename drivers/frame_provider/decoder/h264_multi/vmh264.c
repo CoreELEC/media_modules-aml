@@ -140,9 +140,7 @@ unsigned int h264_debug_cmd;
 
 static int ref_b_frame_error_max_count = 50;
 
-static unsigned int dec_control =
-	DEC_CONTROL_FLAG_FORCE_2997_1080P_INTERLACE |
-	DEC_CONTROL_FLAG_FORCE_2500_576P_INTERLACE;
+static unsigned int dec_control = 0;
 
 static unsigned int force_rate_streambase;
 static unsigned int force_rate_framebase;
