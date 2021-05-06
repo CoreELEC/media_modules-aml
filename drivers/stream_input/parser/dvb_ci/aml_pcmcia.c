@@ -96,27 +96,35 @@ static void aml_pcmcia_work(struct work_struct *work)
 	struct aml_pcmcia *pc = container_of(
 		work, struct aml_pcmcia, pcmcia_work);
 
+	if (pc->start_work == 0) {
+		return;
+	}
 	cd1 = pc->get_cd1(pc);
 	cd2 = pc->get_cd2(pc);
 
 	if (cd1 != cd2)
-		pr_error("CAM card not inerted.\n");
+		pr_error("work CAM card not inerted.\n");
 	else {
 		if (!cd1) {
-			pr_error("Adapter(%d) Slot(0): CAM Plugin\n", 0);
+			pr_error("work Adapter(%d) Slot(0): CAM Plugin\n", 0);
 			pcmcia_plugin(pc);
 		} else {
-			pr_error("Adapter(%d) Slot(0): CAM Unplug\n", 0);
+			pr_error("work Adapter(%d) Slot(0): CAM Unplug\n", 0);
 			pcmcia_unplug(pc);
 		}
 	}
 }
 
-static void aml_pcmcia_detect_cam(struct aml_pcmcia *pc)
+void aml_pcmcia_detect_cam(struct aml_pcmcia *pc)
 {
 	int cd1, cd2;
 
 	if (pc == NULL) {
+		pr_error("pc is null\n");
+		return;
+	}
+	if (pc->start_work == 0) {
+	pr_error("pc start work is 0\n");
 		return;
 	}
 	cd1 = pc->get_cd1(pc);
@@ -134,6 +142,7 @@ static void aml_pcmcia_detect_cam(struct aml_pcmcia *pc)
 		}
 	}
 }
+EXPORT_SYMBOL(aml_pcmcia_detect_cam);
 static struct aml_pcmcia *pc_cur;
 
 int aml_pcmcia_init(struct aml_pcmcia *pc)
@@ -245,7 +254,6 @@ static void __exit aml_pcmcia_mod_exit(void)
 
 	class_unregister(&aml_pcmcia_class);
 }
-
 
 
 module_init(aml_pcmcia_mod_init);

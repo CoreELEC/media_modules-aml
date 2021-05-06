@@ -113,6 +113,7 @@ static int aml_ci_bus_select_gpio(struct aml_ci_bus *ci_bus_dev,
 
 	if (old_select == select)
 		return 0;
+
 	if (!ci_bus_dev->pinctrl) {
 		ci_bus_dev->pinctrl = devm_pinctrl_get(&ci_bus_dev->pdev->dev);
 		if (IS_ERR_OR_NULL(ci_bus_dev->pinctrl)) {
@@ -133,8 +134,9 @@ static int aml_ci_bus_select_gpio(struct aml_ci_bus *ci_bus_dev,
 						"could not get ci_addr_pins state\n");
 				return -EINVAL;
 			}
-			if (enable == 1)
+			if (enable == 1) {
 				ret = pinctrl_select_state(ci_bus_dev->pinctrl, s);
+			}
 			if (ret) {
 				dev_err(&ci_bus_dev->pdev->dev, "failed to set ci_addr_pins pinctrl\n");
 				return -EINVAL;
@@ -147,8 +149,9 @@ static int aml_ci_bus_select_gpio(struct aml_ci_bus *ci_bus_dev,
 						"could not get ci_ts_pins state\n");
 				return -EINVAL;
 			}
-			if (enable == 1)
+			if (enable == 1) {
 				ret = pinctrl_select_state(ci_bus_dev->pinctrl, s);
+			}
 			if (ret) {
 				dev_err(&ci_bus_dev->pdev->dev, "failed to set ci_ts_pins pinctrl\n");
 				return -EINVAL;
@@ -601,16 +604,14 @@ static int aml_ci_slot_status(struct aml_ci *ci_dev, int slot, int open)
 {
 	struct aml_ci_bus *ci_bus_dev = ci_dev->data;
 
-	pr_dbg("Slot(%d): Poll Slot status\n", slot);
-
+	if (ci_bus_dev->pc.start_work == 0) {
+		return DVB_CA_EN50221_POLL_CAM_CHANGED;
+	}
 	if (ci_bus_dev->pc.slot_state == MODULE_INSERTED) {
-		pr_dbg("CA Module present and ready\n");
 		return DVB_CA_EN50221_POLL_CAM_PRESENT |
 		DVB_CA_EN50221_POLL_CAM_READY;
-	} else {
-		pr_error("CA Module not present or not ready\n");
 	}
-	return -EINVAL;
+	return DVB_CA_EN50221_POLL_CAM_CHANGED;
 }
 
 /**\brief aml_ci_gio_get_irq:get gpio cd1 irq pin value
@@ -775,6 +776,7 @@ static void aml_pcmcia_alloc(struct aml_ci_bus *ci_bus_dev,
 	(*pcmcia)->priv = ci_bus_dev;
 	(*pcmcia)->run_type = 0;/*0:irq;1:poll*/
 	(*pcmcia)->io_device_type = AML_DVB_IO_TYPE_CIMAX;
+	(*pcmcia)->start_work = 0;
 }
 
 /**\brief aml_ci_bus_get_config_from_dts:
@@ -998,7 +1000,7 @@ int aml_ci_bus_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 
 	aml_pcmcia_alloc(ci_bus_dev, &pc);
 	pc->io_device_type = ci_bus_dev->io_device_type;
-	pr_dbg("*********ci bus aml_pcmcia_init\n");
+	pr_dbg("*********ci bus aml_pcmcia_init start_work:%d\n", pc->start_work);
 	result = aml_pcmcia_init(pc);
 	if (result < 0) {
 		pr_error("aml_pcmcia_init failed\n");
@@ -1544,6 +1546,30 @@ struct class_attribute *attr, const char *buf, size_t size)
 
 static CLASS_ATTR_RW(pwr);
 
+static ssize_t start_show(struct class *class,
+struct class_attribute *attr, char *buf)
+{
+	int ret;
+	ret = sprintf(buf, "start:%d\n", ci_bus.pc.start_work);
+	return ret;
+}
+
+static ssize_t start_store(struct class *class,
+struct class_attribute *attr, const char *buf, size_t size)
+{
+	int enable = 0;
+	long value;
+	if (kstrtol(buf, 0, &value) == 0) {
+		enable = (int)value;
+		ci_bus.pc.start_work = enable;
+		printk("start set start\n");
+		aml_pcmcia_detect_cam(&ci_bus.pc);
+	}
+	return size;
+}
+
+static CLASS_ATTR_RW(start);
+
 static ssize_t status_show(struct class *class,
 struct class_attribute *attr, char *buf)
 {
@@ -1667,6 +1693,7 @@ static struct attribute *aml_ci_bus_attrs[] = {
 	&class_attr_irq.attr,
 	&class_attr_reset.attr,
 	&class_attr_pwr.attr,
+	&class_attr_start.attr,
 	NULL
 };
 

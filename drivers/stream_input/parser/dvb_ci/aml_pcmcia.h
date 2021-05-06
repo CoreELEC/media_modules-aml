@@ -50,12 +50,14 @@ struct aml_pcmcia {
 	void *priv;
 	/*device type*/
 	int io_device_type;
+	/*start detect card and work*/
+	int start_work;
 };
 
 int aml_pcmcia_init(struct aml_pcmcia *pc);
 int aml_pcmcia_exit(struct aml_pcmcia *pc);
 int aml_pcmcia_reset(struct aml_pcmcia *pc);
-
+void aml_pcmcia_detect_cam(struct aml_pcmcia *pc);
 
 #endif /*_AML_PCMCIA_*/
 

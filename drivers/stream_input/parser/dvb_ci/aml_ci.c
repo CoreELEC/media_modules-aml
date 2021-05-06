@@ -216,7 +216,7 @@ static int aml_ci_slot_status(struct dvb_ca_en50221_cimcu *en50221,
 {
 	struct aml_ci *ci = en50221->data;
 
-	pr_dbg("Slot(%d): Poll Slot status\n", slot);
+	//pr_dbg("Slot(%d): Poll Slot status\n", slot);
 
 	if (ci->ci_poll_slot_status != NULL) {
 		return ci->ci_poll_slot_status(ci, slot, open);
@@ -562,7 +562,7 @@ int aml_ci_init(struct platform_device *pdev,
 	} else
 #endif
 	{
-		ca_flags		= DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE;
+		ca_flags		= ~DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE;
 		/* register CA interface */
 		ci->en50221_cimcu.owner		= THIS_MODULE;
 		ci->en50221_cimcu.read_attribute_mem	= aml_ci_mem_read;
