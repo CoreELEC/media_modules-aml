@@ -333,6 +333,11 @@ long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused) {
 	current_systemtime = get_system_time_us();
 
 	pInstance->mPaused = sPaused;
+
+	if (pInstance->mSyncMode == MEDIA_SYNC_AMASTER)
+		pInstance->mLastMediaTime = pInstance->mLastMediaTime +
+		(current_systemtime - pInstance->mLastRealTime);
+
 	pInstance->mLastRealTime = current_systemtime;
 	pInstance->mLastStc = current_stc;
 
