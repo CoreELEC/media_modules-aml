@@ -239,6 +239,7 @@ extern int force_enable_nr;
 extern int force_enable_di_local_buffer;
 extern int max_di_instance;
 extern int vpp_bypass_frames;
+extern int bypass_nr_flag;
 
 extern int dmabuf_fd_install_data(int fd, void* data, u32 size);
 extern bool is_v4l2_buf_file(struct file *file);
@@ -1104,6 +1105,19 @@ static void aml_check_dpb_ready(struct aml_vcodec_ctx *ctx)
 	}
 }
 
+static void reconfig_vpp_status(struct aml_vcodec_ctx *ctx)
+{
+	if (bypass_nr_flag &&
+		ctx->vpp_is_need && !ctx->vpp_cfg.is_prog &&
+		((ctx->vpp_cfg.mode == VPP_MODE_NOISE_REDUC_LOCAL) ||
+		(ctx->vpp_cfg.mode == VPP_MODE_NOISE_REDUC))) {
+		ctx->vpp_cfg.enable_nr = 0;
+		ctx->vpp_cfg.enable_local_buf = 0;
+
+		ctx->vpp_cfg.mode = VPP_MODE_DI;
+	}
+}
+
 static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 {
 	struct aml_vcodec_dev *dev = ctx->dev;
@@ -1861,8 +1875,9 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	ctx->fb_ops.query	= fb_buff_query;
 	ctx->fb_ops.alloc	= fb_buff_from_queue;
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
+	if (!vpp_bypass_frames)
 		vpp_bypass_frames = 30;
+	bypass_nr_flag = 1;
 
 	ctx->state = AML_STATE_IDLE;
 	ATRACE_COUNTER("v4l2_state", ctx->state);
@@ -3441,6 +3456,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 
 		if (ctx->vpp_is_need)
 			atomic_dec(&ctx->dev->vpp_count);
+
+		reconfig_vpp_status(ctx);
 
 		INIT_KFIFO(ctx->capture_buffer);
 		ctx->buf_used_count = 0;
