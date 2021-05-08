@@ -2951,7 +2951,7 @@ static int aml_uvm_buff_attach(struct vb2_buffer * vb)
 		vb2_get_drv_priv(vb->vb2_queue);
 	struct aml_uvm_buff_ref *ubuf = NULL;
 
-	if (!dmabuf_is_uvm(dbuf))
+	if (vb->memory != VB2_MEMORY_DMABUF || !dmabuf_is_uvm(dbuf))
 		return 0;
 
 	ubuf = vzalloc(sizeof(struct aml_uvm_buff_ref));
