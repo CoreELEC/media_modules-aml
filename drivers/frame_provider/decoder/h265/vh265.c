@@ -3406,7 +3406,7 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)hevc->v4l2_ctx;
 	struct vdec_v4l2_buffer *fb = NULL;
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hevc->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hevc->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		hevc_print(hevc, 0, "[%d] H265 get buffer fail.\n", ctx->id);
 		return ret;
@@ -10381,7 +10381,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 			if (index == INVALID_IDX) {
 				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC) < 0) {
 					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
 					return -1;
 				}

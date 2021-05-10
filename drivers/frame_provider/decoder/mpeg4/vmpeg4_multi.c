@@ -408,7 +408,7 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 		return 0;
 	}
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"[%d] get fb fail.\n",
@@ -1590,7 +1590,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			index = find_free_buffer(hw);
 			if ((index == -1) || (index == 0xffffff)) {
 				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC) < 0) {
 					pr_err("[%d] get fb fail.\n", ctx->id);
 					return -1;
 				}

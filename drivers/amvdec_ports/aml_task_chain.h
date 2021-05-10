@@ -27,6 +27,7 @@ enum task_type_e {
 	TASK_TYPE_DEC,
 	TASK_TYPE_VPP,
 	TASK_TYPE_V4L_SINK,
+	TASK_TYPE_GE2D,
 	TASK_TYPE_MAX
 };
 

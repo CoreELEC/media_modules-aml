@@ -2965,7 +2965,7 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 	if (i < 0)
 		return ret;
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		av1_print(hw, 0, "[%d] AV1 get buffer fail.\n", ctx->id);
 		return ret;

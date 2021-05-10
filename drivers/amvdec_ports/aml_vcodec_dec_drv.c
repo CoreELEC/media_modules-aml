@@ -685,6 +685,10 @@ int dump_vpp_input;
 EXPORT_SYMBOL(dump_vpp_input);
 module_param(dump_vpp_input, int, 0644);
 
+int dump_ge2d_input;
+EXPORT_SYMBOL(dump_ge2d_input);
+module_param(dump_ge2d_input, int, 0644);
+
 int dump_output_frame;
 EXPORT_SYMBOL(dump_output_frame);
 module_param(dump_output_frame, int, 0644);

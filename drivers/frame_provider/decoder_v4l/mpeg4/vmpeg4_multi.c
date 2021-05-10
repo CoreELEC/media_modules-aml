@@ -416,7 +416,7 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 		return 0;
 	}
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"[%d] get fb fail.\n",
@@ -543,6 +543,7 @@ static void set_frame_info(struct vdec_mpeg4_hw_s *hw, struct vframe_s *vf,
 			int buffer_index)
 {
 	int ar = 0;
+	int endian_tmp;
 	unsigned int num = 0;
 	unsigned int den = 0;
 	unsigned int pixel_ratio = READ_VREG(MP4_PIC_RATIO);
@@ -632,22 +633,20 @@ static void set_frame_info(struct vdec_mpeg4_hw_s *hw, struct vframe_s *vf,
 	vf->canvas1_config[2] = hw->canvas_config[buffer_index][2];
 #endif
 
-	/* mpeg4 decoder canvas need to be revert to match display canvas */
-	vf->canvas0_config[0].endian          =
-		(hw->blkmode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-	vf->canvas0_config[1].endian          =
-		(hw->blkmode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-	vf->canvas1_config[0].endian          =
-		(hw->blkmode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-	vf->canvas1_config[1].endian          =
-		(hw->blkmode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		endian_tmp = (hw->blkmode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	} else {
+		endian_tmp = (hw->blkmode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+	}
+	/* mpeg4 convert endian to match display */
+	vf->canvas0_config[0].endian = endian_tmp;
+	vf->canvas0_config[1].endian = endian_tmp;
+	vf->canvas1_config[0].endian = endian_tmp;
+	vf->canvas1_config[1].endian = endian_tmp;
 #ifndef NV21
-	vf->canvas0_config[2].endian          =
-		(hw->blkmode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-	vf->canvas1_config[2].endian          =
-		(hw->blkmode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	vf->canvas0_config[2].endian = endian_tmp;
+	vf->canvas1_config[2].endian = endian_tmp;
 #endif
-
 }
 
 static inline void vmpeg4_save_hw_context(struct vdec_mpeg4_hw_s *hw)
@@ -2814,10 +2813,6 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 
 	if (hw->is_used_v4l) {
-		if ((pdata->canvas_mode != CANVAS_BLKMODE_LINEAR)
-		&& (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7))
-		hw->blkmode = CANVAS_BLKMODE_32X32;
-	} else {
 		vf_provider_init(&pdata->vframe_provider,
 			pdata->vf_provider_name, &vf_provider_ops, pdata);
 	}

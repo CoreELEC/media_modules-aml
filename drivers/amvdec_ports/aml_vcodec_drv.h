@@ -72,6 +72,7 @@
 #define V4L_CAP_BUFF_IN_M2M		(1)
 #define V4L_CAP_BUFF_IN_DEC		(2)
 #define V4L_CAP_BUFF_IN_VPP		(3)
+#define V4L_CAP_BUFF_IN_GE2D		(4)
 
 /* v4l reset mode */
 #define V4L_RESET_MODE_NORMAL		(1 << 0) /* reset vdec_input and decoder. */
@@ -85,7 +86,7 @@
 /* Instance is currently aborting */
 #define TRANS_ABORT		(1 << 2)
 
-#define CTX_BUF_TOTAL(ctx) (ctx->dpb_size + ctx->vpp_size)
+#define CTX_BUF_TOTAL(ctx) (ctx->dpb_size + ctx->vpp_size + ctx->ge2d_size)
 /**
  * enum aml_hw_reg_idx - AML hw register base index
  */
@@ -375,7 +376,7 @@ struct v4l_buff_pool {
 	 */
 	u32 seq[V4L_CAP_BUFF_MAX];
 	u32 in, out;
-	u32 dec, vpp;
+	u32 dec, vpp, ge2d;
 };
 
 enum aml_thread_type {
@@ -437,12 +438,22 @@ struct aml_uvm_buff_ref {
 };
 
 /*
+ * enum aml_fb_requester - indicate which module request fb buffers.
+ */
+enum aml_fb_requester {
+	AML_FB_REQ_DEC,
+	AML_FB_REQ_VPP,
+	AML_FB_REQ_GE2D,
+	AML_FB_REQ_MAX
+};
+
+/*
  * @query: try to achieved fb token.
  * @alloc: used for allocte fb buffer.
  */
 struct aml_fb_ops {
 	bool		(*query)(struct aml_fb_ops *, ulong *);
-	int		(*alloc)(struct aml_fb_ops *, ulong, struct vdec_v4l2_buffer **, bool);
+	int		(*alloc)(struct aml_fb_ops *, ulong, struct vdec_v4l2_buffer **, u32);
 };
 
 /*
@@ -522,6 +533,12 @@ struct aml_vpp_cfg_infos {
 	bool	enable_local_buf;
 	bool	res_chg;
 	bool	is_vpp_reset;
+};
+
+struct aml_ge2d_cfg_infos {
+	u32	mode;
+	u32	buf_size;
+	bool	is_drm;
 };
 
 /*
@@ -620,6 +637,7 @@ struct aml_vcodec_ctx {
 
 	int				dpb_size;
 	int				vpp_size;
+	int				ge2d_size;
 	bool				param_sets_from_ucode;
 	bool				v4l_codec_dpb_ready;
 	bool				v4l_resolution_change;
@@ -670,6 +688,11 @@ struct aml_vcodec_ctx {
 	struct meta_info		meta_infos;
 	struct vdec_sync		*sync;
 	u32             		internal_dw_scale;
+
+	/* ge2d field. */
+	struct aml_v4l2_ge2d		*ge2d;
+	struct aml_ge2d_cfg_infos 	ge2d_cfg;
+	bool				ge2d_is_need;
 };
 
 /**

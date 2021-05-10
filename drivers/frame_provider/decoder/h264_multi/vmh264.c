@@ -1964,7 +1964,7 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 		ctx->id, __func__,
 		(hw->mb_total << 8) + (hw->mb_total << 7));
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 			"[%d] get fb fail.\n", ctx->id);
@@ -3333,7 +3333,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 
 			if (index == INVALID_IDX) {
 				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC) < 0) {
 					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
 					return -1;
 				}

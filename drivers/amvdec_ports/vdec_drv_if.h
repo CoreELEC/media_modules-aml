@@ -60,6 +60,7 @@ enum vdec_fb_status {
 	FB_ST_INIT,
 	FB_ST_DECODER,
 	FB_ST_VPP,
+	FB_ST_GE2D,
 	FB_ST_DISPLAY,
 	FB_ST_FREE
 };

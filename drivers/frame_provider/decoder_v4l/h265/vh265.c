@@ -3286,7 +3286,7 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)hevc->v4l2_ctx;
 	struct vdec_v4l2_buffer *fb = NULL;
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hevc->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hevc->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		hevc_print(hevc, 0, "[%d] H265 get buffer fail.\n", ctx->id);
 		return ret;

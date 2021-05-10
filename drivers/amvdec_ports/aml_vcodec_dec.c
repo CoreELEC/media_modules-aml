@@ -39,6 +39,8 @@
 #include "vdec_drv_if.h"
 #include "aml_vcodec_adapt.h"
 #include "aml_vcodec_vpp.h"
+#include "aml_vcodec_ge2d.h"
+
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
 #include "../common/chips/decoder_cpu_ver_info.h"
@@ -399,11 +401,44 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	return true;
 }
 
+static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
+{
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		if ((ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
+			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
+			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG2) &&
+			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG4) &&
+			(ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG)) {
+			return false;
+		}
+	} else if (ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG) {
+			return false;
+	}
+
+	if (ctx->picinfo.field != V4L2_FIELD_NONE) {
+		return false;
+	}
+
+	if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
+		(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
+		*mode = GE2D_MODE_CONVERT_NV12;
+	else if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+		(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
+		*mode = GE2D_MODE_CONVERT_NV21;
+	else
+		*mode = GE2D_MODE_CONVERT_NV21;
+
+	*mode |= GE2D_MODE_CONVERT_LE;
+
+	return true;
+}
+
 static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 {
 	u32 mode, total_size;
 	struct vdec_pic_info *picinfo = &ctx->picinfo;
 	struct aml_vpp_cfg_infos *vpp = &ctx->vpp_cfg;
+	struct aml_ge2d_cfg_infos *ge2d = &ctx->ge2d_cfg;
 
 	if (vpp_needed(ctx, &mode)) {
 		vpp->mode        = mode;
@@ -432,13 +467,25 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 		ctx->vpp_is_need = false;
 	}
 
+	if (ge2d_needed(ctx, &mode)) {
+		ge2d->mode = mode;
+		ge2d->buf_size = 4 + picinfo->dpb_margin;
+		ctx->ge2d_is_need = true;
+		picinfo->dpb_margin = 2;
+	} else {
+		ge2d->buf_size = 0;
+		ctx->ge2d_is_need = false;
+	}
+
 	ctx->dpb_size = picinfo->dpb_frames + picinfo->dpb_margin;
 	ctx->vpp_size = vpp->buf_size;
-	total_size = ctx->dpb_size + ctx->vpp_size;
+	ctx->ge2d_size = ge2d->buf_size;
+
+	total_size = ctx->dpb_size + ctx->vpp_size + ctx->ge2d_size;
 
 	if (total_size > V4L_CAP_BUFF_MAX) {
 		picinfo->dpb_margin = V4L_CAP_BUFF_MAX -
-			picinfo->dpb_frames - ctx->vpp_size;
+			picinfo->dpb_frames - ctx->vpp_size - ctx->ge2d_size;
 		total_size = V4L_CAP_BUFF_MAX;
 	}
 	vdec_if_set_param(ctx, SET_PARAM_PIC_INFO, picinfo);
@@ -483,8 +530,8 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	v4l_buf_size_decision(ctx);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Update picture buffer count: dec:%u, vpp:%u, margin:%u, total:%u\n",
-		ctx->picinfo.dpb_frames, ctx->vpp_size,
+		"Update picture buffer count: dec:%u, vpp:%u, ge2d:%u, margin:%u, total:%u\n",
+		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
 		ctx->picinfo.dpb_margin,
 		CTX_BUF_TOTAL(ctx));
 }
@@ -935,36 +982,72 @@ static struct task_ops_s *get_v4l_sink_ops(void);
 
 static void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 			       struct vdec_v4l2_buffer *fb,
-			       bool for_vpp)
+			       u32 requester)
 {
 	struct task_chain_s *task = fb->task;
 	/*
 	 * line 1: dec <==> vpp <==> v4l-sink, for P / P + DI.NR.
 	 * line 2: dec <==> vpp, vpp <==> v4l-sink, for I / I + DI.NR.
 	 * line 3: dec <==> v4l-sink, only for P.
+	 * line 4: dec <==> ge2d, ge2d <==> v4l-sink, used for fmt convert.
+	 * line 5: dec <==> ge2d, ge2d <==>vpp, vpp <==> v4l-sink.
+	 * line 6: dec <==> ge2d, ge2d <==> vpp <==> v4l-sink.
 	 */
-	if (ctx->vpp) {
-		if (ctx->vpp->is_prog) {
-			/* line 1: dec <==> vpp <==> v4l-sink. */
-			task->attach(task, get_v4l_sink_ops(), ctx);
-			task->attach(task, get_vpp_ops(), ctx->vpp);
-		} else if (for_vpp) {
-			/* line 2a: vpp <==> v4l-sink. */
-			task->attach(task, get_v4l_sink_ops(), ctx);
-			task->attach(task, get_vpp_ops(), ctx->vpp);
+
+	switch (requester) {
+	case AML_FB_REQ_DEC:
+		if (ctx->ge2d) {
+			/* dec <==> ge2d. */
+			task->attach(task, get_ge2d_ops(), ctx->ge2d);
+		} else if (ctx->vpp) {
+			if (ctx->vpp->is_prog) {
+				/* dec <==> vpp <==> v4l-sink. */
+				task->attach(task, get_v4l_sink_ops(), ctx);
+				task->attach(task, get_vpp_ops(), ctx->vpp);
+			} else {
+				/* dec <==> vpp. */
+				task->attach(task, get_vpp_ops(), ctx->vpp);
+			}
 		} else {
-			/* line 2b: dec <==> vpp. */
-			task->attach(task, get_vpp_ops(), ctx->vpp);
+			/* dec <==> v4l-sink. */
+			task->attach(task, get_v4l_sink_ops(), ctx);
 		}
-	} else {
-		/* line 3: dec <==> v4l-sink. */
+		break;
+
+	case AML_FB_REQ_GE2D:
+		if (ctx->vpp) {
+			if (ctx->vpp->is_prog) {
+				/* ge2d <==> vpp <==> v4l-sink. */
+				task->attach(task, get_v4l_sink_ops(), ctx);
+				task->attach(task, get_vpp_ops(), ctx->vpp);
+				task->attach(task, get_ge2d_ops(), ctx->ge2d);
+			} else {
+				/* ge2d <==> vpp. */
+				task->attach(task, get_vpp_ops(), ctx->vpp);
+				task->attach(task, get_ge2d_ops(), ctx->ge2d);
+			}
+		} else {
+			/* ge2d <==> v4l-sink. */
+			task->attach(task, get_v4l_sink_ops(), ctx);
+			task->attach(task, get_ge2d_ops(), ctx->ge2d);
+		}
+		break;
+
+	case AML_FB_REQ_VPP:
+		/* vpp <==> v4l-sink. */
 		task->attach(task, get_v4l_sink_ops(), ctx);
+		task->attach(task, get_vpp_ops(), ctx->vpp);
+		break;
+
+	default:
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"unsupport requester %x\n", requester);
 	}
 }
 
 static int fb_buff_from_queue(struct aml_fb_ops *fb_ops,
 		ulong token, struct vdec_v4l2_buffer **out_fb,
-		bool for_vpp)
+		u32 requester)
 {
 	struct aml_vcodec_ctx *ctx =
 		container_of(fb_ops, struct aml_vcodec_ctx, fb_ops);
@@ -994,26 +1077,30 @@ static int fb_buff_from_queue(struct aml_fb_ops *fb_ops,
 	aml_buf->used	= true;
 	ctx->buf_used_count++;
 
-	if (for_vpp) {
+	if (requester == AML_FB_REQ_VPP) {
 		buf_status = V4L_CAP_BUFF_IN_VPP;
 		ctx->cap_pool.vpp++;
-	} else {
+	} else if (requester == AML_FB_REQ_DEC) {
 		buf_status = V4L_CAP_BUFF_IN_DEC;
 		ctx->cap_pool.dec++;
+	} else if (requester == AML_FB_REQ_GE2D) {
+		buf_status = V4L_CAP_BUFF_IN_GE2D;
+		ctx->cap_pool.ge2d++;
 	}
+
 	ctx->cap_pool.seq[ctx->cap_pool.out++] =
 		(buf_status << 16 | fb->buf_idx);
 
 	update_vdec_buf_plane(ctx, fb, &v4l_buf->vb2_buf);
 
-	aml_creat_pipeline(ctx, fb, for_vpp);
+	aml_creat_pipeline(ctx, fb, requester);
 
 	fb_token_remove(ctx, token);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-		"vid:%d, task:%px, phy:%lx, state:%d, ready:%d, for_vpp:%d\n",
+		"vid:%d, task:%px, phy:%lx, state:%d, ready:%d, requester:%d\n",
 		fb->buf_idx, fb->task, fb->m.mem[0].addr, v4l_buf->vb2_buf.state,
-		v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx), for_vpp);
+		v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx), requester);
 
 	ATRACE_COUNTER("v4l_fetch_capture_buffer", v4l_buf->vb2_buf.index);
 
@@ -1066,16 +1153,17 @@ void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx)
 		pic.visible_width, pic.visible_height,
 		pic.coded_width, pic.coded_height);
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Buffer num : dec:%d, vpp:%d, margin:%d, total:%d\n",
-		ctx->picinfo.dpb_frames, ctx->vpp_size,
+		"Buffer num : dec:%d, vpp:%d, ge2d:%d, margin:%d, total:%d\n",
+		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
 		ctx->picinfo.dpb_margin, CTX_BUF_TOTAL(ctx));
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Config     : dw:%d, drm:%d, byp:%d, lc:%d, nr:%d\n",
+		"Config     : dw:%d, drm:%d, byp:%d, lc:%d, nr:%d, ge2d:%x\n",
 		ctx->config.parm.dec.cfg.double_write_mode,
 		ctx->is_drm_mode,
 		ctx->vpp_cfg.is_bypass_p,
 		ctx->vpp_cfg.enable_local_buf,
-		ctx->vpp_cfg.enable_nr);
+		ctx->vpp_cfg.enable_nr,
+		ctx->ge2d_cfg.mode);
 }
 
 void aml_buffer_status(struct aml_vcodec_ctx *ctx)
@@ -1788,6 +1876,23 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 			}
 			ctx->vpp_cfg.is_vpp_reset = false;
 		}
+
+		if (ctx->ge2d_is_need) {
+			int ret;
+
+			if (ctx->ge2d) {
+				aml_v4l2_ge2d_destroy(ctx->ge2d);
+				ctx->ge2d = NULL;
+			}
+
+			ret = aml_v4l2_ge2d_init(ctx, &ctx->ge2d_cfg, &ctx->ge2d);
+			if (ret) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"ge2d_wrapper init err:%d\n", ret);
+				return ret;
+			}
+		}
+
 		ctx->is_stream_off = false;
 	} else
 		ctx->is_out_stream_off = false;
@@ -2938,6 +3043,13 @@ void aml_v4l_ctx_release(struct kref *kref)
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 			"vpp destory inst count:%d.\n",
 			atomic_read(&ctx->dev->vpp_count));
+	}
+
+	if (ctx->ge2d) {
+		aml_v4l2_ge2d_destroy(ctx->ge2d);
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			"ge2d destory.\n");
 	}
 
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);

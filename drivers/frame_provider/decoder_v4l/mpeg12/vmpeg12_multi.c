@@ -475,7 +475,7 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 		return 0;
 	}
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		debug_print(DECODE_ID(hw), 0,
 			"[%d] get fb fail %d/%d.\n",
@@ -693,6 +693,7 @@ static void fill_frame_info(struct vdec_mpeg12_hw_s *hw, u32 slice_type,
 static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 {
 	u32 ar_bits;
+	u32 endian_tmp;
 	u32 buffer_index = vf->index;
 
 	vf->width = hw->pics[buffer_index].width;
@@ -738,18 +739,19 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 
 	vf->canvas0_config[0] = hw->canvas_config[buffer_index][0];
 	vf->canvas0_config[1] = hw->canvas_config[buffer_index][1];
-
 	vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 	vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
 
-	vf->canvas0_config[0].endian          =
-		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-	vf->canvas0_config[1].endian          =
-		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-	vf->canvas1_config[0].endian          =
-		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-	vf->canvas1_config[1].endian          =
-		(hw->canvas_mode != CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	} else {
+		endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+	}
+
+	vf->canvas0_config[0].endian = endian_tmp;
+	vf->canvas0_config[1].endian = endian_tmp;
+	vf->canvas1_config[0].endian = endian_tmp;
+	vf->canvas1_config[1].endian = endian_tmp;
 
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
@@ -3670,9 +3672,6 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 				&config_val) == 0)
 			hw->sidebind_channel_id = config_val;
 	}
-	if (hw->is_used_v4l && (pdata->canvas_mode != CANVAS_BLKMODE_LINEAR)
-		&& (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7))
-		hw->canvas_mode = CANVAS_BLKMODE_32X32;
 	hw->platform_dev = pdev;
 	hw->chunk_header_offset = 0;
 	hw->chunk_res_size = 0;

@@ -4,6 +4,7 @@ amvdec_ports-objs += aml_vcodec_dec.o
 amvdec_ports-objs += aml_vcodec_util.o
 amvdec_ports-objs += aml_vcodec_adapt.o
 amvdec_ports-objs += aml_vcodec_vpp.o
+amvdec_ports-objs += aml_vcodec_ge2d.o
 amvdec_ports-objs += vdec_drv_if.o
 amvdec_ports-objs += aml_task_chain.o
 amvdec_ports-objs += decoder/vdec_h264_if.o

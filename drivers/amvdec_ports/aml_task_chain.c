@@ -36,6 +36,7 @@ static const struct task_item_name_s iname[] = {
 	{TASK_TYPE_DEC,		"dec"},
 	{TASK_TYPE_VPP,		"vpp"},
 	{TASK_TYPE_V4L_SINK,	"v4l-sink"},
+	{TASK_TYPE_GE2D,	"ge2d"},
 	{TASK_TYPE_MAX,		"unknown"},
 };
 

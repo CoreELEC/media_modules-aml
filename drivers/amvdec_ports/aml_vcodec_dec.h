@@ -101,6 +101,8 @@ struct aml_video_dec_buf {
 	unsigned int internal_index;
 
 	ulong vpp_buf_handle;
+	ulong ge2d_buf_handle;
+
 	/*4 bytes data for data len*/
 	char meta_data[META_DATA_SIZE + 4];
 

@@ -514,7 +514,7 @@ retry:
 				goto retry;
 			}
 
-			if (ctx->fb_ops.alloc(&ctx->fb_ops, vpp->fb_token, &out, true)) {
+			if (ctx->fb_ops.alloc(&ctx->fb_ops, vpp->fb_token, &out, AML_FB_REQ_VPP)) {
 				usleep_range(5000, 5500);
 				mutex_lock(&vpp->output_lock);
 				kfifo_put(&vpp->output, out_buf);
@@ -721,7 +721,7 @@ int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp)
 
 	vpp->running = true;
 	vpp->task = kthread_run(aml_v4l2_vpp_thread, vpp,
-		"aml-%s", "aml-v4l2-vpp");
+		"%s", "aml-v4l2-vpp");
 	if (IS_ERR(vpp->task)) {
 		return PTR_ERR(vpp->task);
 	}

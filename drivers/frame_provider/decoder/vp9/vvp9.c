@@ -5331,7 +5331,7 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	if (i < 0)
 		return ret;
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, pbi->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, pbi->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		vp9_print(pbi, 0, "[%d] VP9 get buffer fail.\n",
 			((struct aml_vcodec_ctx *) (pbi->v4l2_ctx))->id);
@@ -8258,7 +8258,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 			if (index == INVALID_IDX) {
 				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false) < 0) {
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC) < 0) {
 					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
 					return -1;
 				}

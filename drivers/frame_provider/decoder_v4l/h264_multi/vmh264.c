@@ -1974,7 +1974,7 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 		ctx->id, __func__,
 		(hw->mb_total << 8) + (hw->mb_total << 7));
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 			"[%d] get fb fail.\n", ctx->id);
@@ -4766,6 +4766,7 @@ static int vh264_event_cb(int type, void *data, void *op_arg)
 static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 				u32 index)
 {
+	int endian_tmp;
 	struct canvas_config_s *p_canvas_config;
 	int force_rate = input_frame_based(hw_to_vdec(hw)) ?
 		force_rate_framebase : force_rate_streambase;
@@ -4827,13 +4828,24 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 
 	vf->canvas0_config[0] = p_canvas_config[0];
 	vf->canvas0_config[1] = p_canvas_config[1];
-#ifndef NV21
-	vf->canvas0_config[2] = p_canvas_config[2];
-#endif
 	vf->canvas1_config[0] = p_canvas_config[0];
 	vf->canvas1_config[1] = p_canvas_config[1];
 #ifndef NV21
+	vf->canvas0_config[2] = p_canvas_config[2];
 	vf->canvas1_config[2] = p_canvas_config[2];
+#endif
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	} else {
+		endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+	}
+	vf->canvas0_config[0].endian = endian_tmp;
+	vf->canvas0_config[1].endian = endian_tmp;
+	vf->canvas1_config[0].endian = endian_tmp;
+	vf->canvas1_config[1].endian = endian_tmp;
+#ifndef NV21
+	vf->canvas0_config[2].endian = endian_tmp;
+	vf->canvas1_config[2].endian = endian_tmp;
 #endif
 }
 
@@ -10528,11 +10540,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			hw->enable_fence, hw->fence_usage);
 	}
 
-	if (hw->is_used_v4l) {
-		if ((pdata->canvas_mode != CANVAS_BLKMODE_LINEAR)
-			&& (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7))
-			hw->canvas_mode = CANVAS_BLKMODE_32X32;
-	} else {
+	if (!hw->is_used_v4l) {
 		hw->reorder_dpb_size_margin = reorder_dpb_size_margin;
 		hw->canvas_mode = mem_map_mode;
 

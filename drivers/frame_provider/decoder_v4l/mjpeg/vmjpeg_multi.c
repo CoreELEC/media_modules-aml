@@ -253,6 +253,8 @@ static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
 static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 {
 	u32 temp;
+	u32 temp_endian;
+
 	temp = READ_VREG(MREG_PIC_WIDTH);
 	if (temp > 1920)
 		vf->width = hw->frame_width = 1920;
@@ -281,14 +283,20 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 	vf->canvas1_config[1] = hw->buffer_spec[vf->index].canvas_config[1];
 	vf->canvas1_config[2] = hw->buffer_spec[vf->index].canvas_config[2];
 
-	/* mjpeg decoder canvas need to be revert to match display. */
-	vf->canvas0_config[0].endian = hw->canvas_endian ? 0 : 7;
-	vf->canvas0_config[1].endian = hw->canvas_endian ? 0 : 7;
-	vf->canvas0_config[2].endian = hw->canvas_endian ? 0 : 7;
+	/* mjpeg convert endian to match display. */
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)) {
+		temp_endian = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	} else {
+		temp_endian = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+	}
 
-	vf->canvas1_config[0].endian = hw->canvas_endian ? 0 : 7;
-	vf->canvas1_config[1].endian = hw->canvas_endian ? 0 : 7;
-	vf->canvas1_config[2].endian = hw->canvas_endian ? 0 : 7;
+	vf->canvas0_config[0].endian = temp_endian;
+	vf->canvas0_config[1].endian = temp_endian;
+	vf->canvas0_config[2].endian = temp_endian;
+	vf->canvas1_config[0].endian = temp_endian;
+	vf->canvas1_config[1].endian = temp_endian;
+	vf->canvas1_config[2].endian = temp_endian;
 
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
@@ -958,7 +966,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 		return 0;
 	}
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, false);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		mmjpeg_debug_print(DECODE_ID(hw), 0,
 			"[%d] get fb fail.\n",
@@ -1045,7 +1053,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	hw->buffer_spec[i].canvas_config[0].block_mode =
 		hw->canvas_mode;
 	hw->buffer_spec[i].canvas_config[0].endian =
-		hw->canvas_endian;
+		(hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 
 	config_cav_lut(hw->buffer_spec[i].y_canvas_index,
 			&hw->buffer_spec[i].canvas_config[0], VDEC_1);
@@ -1059,7 +1067,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	hw->buffer_spec[i].canvas_config[1].block_mode =
 		hw->canvas_mode;
 	hw->buffer_spec[i].canvas_config[1].endian =
-		hw->canvas_endian;
+		(hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 
 	config_cav_lut(hw->buffer_spec[i].u_canvas_index,
 			&hw->buffer_spec[i].canvas_config[1], VDEC_1);
@@ -1073,7 +1081,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	hw->buffer_spec[i].canvas_config[2].block_mode =
 		hw->canvas_mode;
 	hw->buffer_spec[i].canvas_config[2].endian =
-		hw->canvas_endian;
+		(hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 
 	config_cav_lut(hw->buffer_spec[i].v_canvas_index,
 			&hw->buffer_spec[i].canvas_config[2], VDEC_1);
@@ -1714,11 +1722,7 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 	}
 
-	if (hw->is_used_v4l) {
-		if ((pdata->canvas_mode != CANVAS_BLKMODE_LINEAR)
-		&& (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7))
-		hw->canvas_mode = CANVAS_BLKMODE_32X32;
-	} else {
+	if (!hw->is_used_v4l) {
 		vf_provider_init(&pdata->vframe_provider,
 			pdata->vf_provider_name, &vf_provider_ops, pdata);
 	}
