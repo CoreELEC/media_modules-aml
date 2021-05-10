@@ -340,7 +340,8 @@ bool is_support_no_parser(void)
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D))
 		return true;
 	return false;
 }
@@ -3914,6 +3915,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 		break;
 	case AM_MESON_CPU_MAJOR_ID_SC2:
 	case AM_MESON_CPU_MAJOR_ID_S4:
+	case AM_MESON_CPU_MAJOR_ID_S4D:
 		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,
 				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) & (~((1<<1)|(1<<12)|(1<<13))));
 		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,

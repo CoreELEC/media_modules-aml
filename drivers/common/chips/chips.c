@@ -83,6 +83,8 @@ static const struct type_name cpu_type_name[] = {
 	{AM_MESON_CPU_MAJOR_ID_T7, "t7"},
 	{AM_MESON_CPU_MAJOR_ID_S4, "s4"},
 	{AM_MESON_CPU_MAJOR_ID_T3, "t3"},
+	{AM_MESON_CPU_MAJOR_ID_P1, "p1"},
+	{AM_MESON_CPU_MAJOR_ID_S4D, "s4d"},
 	{0, NULL},
 };
 

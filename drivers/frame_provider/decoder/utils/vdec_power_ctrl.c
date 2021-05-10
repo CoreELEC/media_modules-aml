@@ -151,16 +151,12 @@ static void pm_vdec_clock_on(int id)
 		else
 			amports_switch_gate("clk_hevc_mux", 1);
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4))
+			!is_hevc_front_back_clk_combined())
 			amports_switch_gate("clk_hevcb_mux", 1);
 
 		hevc_clock_hi_enable();
 
-		if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4))
+		if (!is_hevc_front_back_clk_combined())
 			hevc_back_clock_hi_enable();
 	}
 }
@@ -175,9 +171,7 @@ static void pm_vdec_clock_off(int id)
 		/* disable hevc clock */
 		hevc_clock_off();
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4))
+			!is_hevc_front_back_clk_combined())
 			hevc_back_clock_off();
 	}
 }
