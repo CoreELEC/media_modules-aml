@@ -1186,6 +1186,9 @@ u32 vdec_input_get_freed_handle(struct vdec_s *vdec)
 	unsigned long flags;
 	u32 handle = 0;
 
+	if (!vdec)
+		return 0;
+
 	if (!vdec_secure(vdec))
 		return 0;
 
