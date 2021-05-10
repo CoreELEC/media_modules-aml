@@ -791,7 +791,6 @@ static int vdec_vp9_decode(unsigned long h_vdec,
 		return -1;
 
 	if (vdec_input_full(vdec)) {
-		ATRACE_COUNTER("vdec_input_full", 0);
 		return -EAGAIN;
 	}
 
@@ -829,7 +828,6 @@ static int vdec_vp9_decode(unsigned long h_vdec,
 			return 0;
 		ret = vdec_write_nalu(inst, buf, size, bs->timestamp, bs->meta_ptr);
 	}
-	ATRACE_COUNTER("v4l2_decode_write", ret);
 
 	return ret;
 }

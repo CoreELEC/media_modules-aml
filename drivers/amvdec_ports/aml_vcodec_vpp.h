@@ -55,13 +55,11 @@ struct aml_v4l2_vpp {
 	u32 buf_size; /* buffer size for vpp */
 	u32 work_mode; /* enum vpp_work_mode */
 	u32 buffer_mode;
+
 	DECLARE_KFIFO(input, typeof(struct aml_v4l2_vpp_buf*), VPP_FRAME_SIZE);
 	DECLARE_KFIFO_PTR(output, typeof(struct aml_v4l2_vpp_buf*));
 	DECLARE_KFIFO_PTR(processing, typeof(struct aml_v4l2_vpp_buf*));
 	DECLARE_KFIFO_PTR(frame, typeof(struct vframe_s *));
-
-	/* handle fill_output_done() in irq context */
-	struct workqueue_struct	*wq;
 	DECLARE_KFIFO(out_done_q, struct aml_v4l2_vpp_buf *, VPP_FRAME_SIZE);
 
 	struct vframe_s *vfpool;
@@ -98,6 +96,7 @@ int aml_v4l2_vpp_init(
 		struct aml_vpp_cfg_infos *cfg,
 		struct aml_v4l2_vpp** vpp_handle);
 int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp);
+int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp);
 #else
 static inline int aml_v4l2_vpp_get_buf_num(u32 mode) { return -1; }
 static inline int aml_v4l2_vpp_init(

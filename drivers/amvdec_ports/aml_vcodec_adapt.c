@@ -540,8 +540,8 @@ void dump(const char* path, const char *data, unsigned int size)
 		kernel_write(fp, data, size, 0);
 		filp_close(fp, NULL);
 	}
-
 }
+
 int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count)
 {

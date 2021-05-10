@@ -506,6 +506,7 @@ struct meta_info {
  * @enable_nr	: enable nosie reduce.
  * @enable_local_buf: DI used buff alloc by itself.
  * @res_chg	: indicate resolution changed.
+ * @is_vpp_reset: vpp reset just used to res chg.
  */
 struct aml_vpp_cfg_infos {
 	u32	mode;
@@ -517,6 +518,7 @@ struct aml_vpp_cfg_infos {
 	bool	enable_nr;
 	bool	enable_local_buf;
 	bool	res_chg;
+	bool	is_vpp_reset;
 };
 
 /*

@@ -1037,7 +1037,6 @@ static int vdec_av1_decode(unsigned long h_vdec,
 		return -1;
 
 	if (vdec_input_full(vdec)) {
-		ATRACE_COUNTER("vdec_input_full", 0);
 		return -EAGAIN;
 	}
 
@@ -1076,7 +1075,6 @@ static int vdec_av1_decode(unsigned long h_vdec,
 
 		ret = vdec_write_nalu(inst, buf, size, bs->timestamp);
 	}
-	ATRACE_COUNTER("v4l2_decode_write", ret);
 
 	return ret;
 }

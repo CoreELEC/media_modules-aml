@@ -8928,6 +8928,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 
 	level_idc = param4 & 0xff;
 	max_reference_size = (param4 >> 8) & 0xff;
+	hw->dpb.mSPS.level_idc = level_idc;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	if (vdec->master || vdec->slave)
@@ -8957,7 +8958,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height);
 
 	dpb_print(DECODE_ID(hw), 0,
-		"restriction_flag=%d, max_dec_frame_buffering=%d, dec_dpb_size=%d num_reorder_frames %d used_reorder_dpb_size_margin %d\n",
+		"v4l restriction:%d, max buffering:%d, DPB size:%d, reorder frames:%d, margin:%d\n",
 		hw->bitstream_restriction_flag,
 		hw->max_dec_frame_buffering,
 		dec_dpb_size,
@@ -9071,6 +9072,12 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 			ps->reorder_frames = adjust_dpb_size - 2;
 		}
 	}
+
+	dpb_print(DECODE_ID(hw), 0,
+		"Res:%dx%d, DPB size:%d, margin:%d, scan:%s\n",
+		ps->visible_width, ps->visible_height,
+		ps->reorder_frames, ps->reorder_margin,
+		(ps->field == V4L2_FIELD_NONE) ? "P" : "I");
 
 	return 0;
 }
