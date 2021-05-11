@@ -358,9 +358,6 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	if (bypass_vpp)
 		return false;
 
-	if (atomic_read(&ctx->dev->vpp_count) >= max_di_instance)
-		return false;
-
 	if (!ctx->vpp_cfg.enable_nr &&
 		(ctx->picinfo.field == V4L2_FIELD_NONE)) {
 		return false;
@@ -415,6 +412,7 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 			vpp->is_prog = true;
 			vpp->buf_size = 0;
 		} else {
+			vpp->is_prog = false;
 			/* for between with dec & vpp. */
 			picinfo->reorder_margin = 2;
 		}
@@ -424,8 +422,6 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 			bypass_progressive) {
 			vpp->is_bypass_p = true;
 		}
-
-		atomic_inc(&ctx->dev->vpp_count);
 		ctx->vpp_is_need = true;
 	} else {
 		vpp->buf_size = 0;
@@ -925,7 +921,7 @@ static void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 	 * line 2: dec <==> vpp, vpp <==> v4l-sink, for I / I + DI.NR.
 	 * line 3: dec <==> v4l-sink, only for P.
 	 */
-	if (ctx->vpp_is_need) {
+	if (ctx->vpp) {
 		if (ctx->vpp->is_prog) {
 			/* line 1: dec <==> vpp <==> v4l-sink. */
 			task->attach(task, get_v4l_sink_ops(), ctx);
@@ -1108,7 +1104,7 @@ static void aml_check_dpb_ready(struct aml_vcodec_ctx *ctx)
 static void reconfig_vpp_status(struct aml_vcodec_ctx *ctx)
 {
 	if (bypass_nr_flag &&
-		ctx->vpp_is_need && !ctx->vpp_cfg.is_prog &&
+		!ctx->vpp_cfg.is_prog &&
 		((ctx->vpp_cfg.mode == VPP_MODE_NOISE_REDUC_LOCAL) ||
 		(ctx->vpp_cfg.mode == VPP_MODE_NOISE_REDUC))) {
 		ctx->vpp_cfg.enable_nr = 0;
@@ -1685,15 +1681,20 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 				int ret;
 				if (ctx->vpp_cfg.fmt == 0)
 					ctx->vpp_cfg.fmt = ctx->cap_pix_fmt;
-				ret = aml_v4l2_vpp_init(ctx, &ctx->vpp_cfg, &ctx->vpp);
-				if (ret) {
-					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-						"init vpp err:%d vpp_cfg.fmt: %d\n", ret, ctx->vpp_cfg.fmt);
-					mutex_unlock(&ctx->state_lock);
-					return ret;
+				if (atomic_read(&ctx->dev->vpp_count) < max_di_instance) {
+					atomic_inc(&ctx->dev->vpp_count);
+					ret = aml_v4l2_vpp_init(ctx, &ctx->vpp_cfg, &ctx->vpp);
+					if (ret) {
+						v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+							"init vpp err:%d vpp_cfg.fmt: %d\n", ret, ctx->vpp_cfg.fmt);
+						atomic_dec(&ctx->dev->vpp_count);
+						return ret;
+					} else {
+						v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+							"vl42 vpp init, vpp_count: %d\n", atomic_read(&ctx->dev->vpp_count));
+					}
 				} else {
-					v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-						"vl42 vpp init\n");
+					ctx->vpp_is_need = false;
 				}
 			}
 			ctx->is_stream_off = false;
@@ -1730,6 +1731,10 @@ static int vidioc_decoder_streamoff(struct file *file, void *priv,
 		if (ctx->vpp) {
 			aml_v4l2_vpp_destroy(ctx->vpp);
 			ctx->vpp = NULL;
+			atomic_dec(&ctx->dev->vpp_count);
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+				"vl42 vpp destory, vpp_count: %d\n", atomic_read(&ctx->dev->vpp_count));
+			reconfig_vpp_status(ctx);
 		}
 	}
 
@@ -3453,11 +3458,6 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		fb_map_table_clean(ctx);
 
 		fb_token_clean(ctx);
-
-		if (ctx->vpp_is_need)
-			atomic_dec(&ctx->dev->vpp_count);
-
-		reconfig_vpp_status(ctx);
 
 		INIT_KFIFO(ctx->capture_buffer);
 		ctx->buf_used_count = 0;
