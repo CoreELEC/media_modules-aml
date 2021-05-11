@@ -842,10 +842,14 @@ enum NalUnitType {
 #ifdef SUPPORT_LONG_TERM_RPS
 /*
   */
-#define RPS_END  0x8000
-#define RPS_LT_BIT 		14
-#define RPS_USED_BIT        13
-#define RPS_SIGN_BIT        12
+//#define RPS_END  0x8000
+//#define RPS_LT_BIT 		14
+//#define RPS_USED_BIT        13
+//#define RPS_SIGN_BIT        12
+#define RPS_END  0xa000
+#define RPS_LT_BIT 		15
+#define RPS_USED_BIT        14
+#define RPS_SIGN_BIT        13
 #else
 #define RPS_END		0x8000
 #define RPS_USED_BIT        14
