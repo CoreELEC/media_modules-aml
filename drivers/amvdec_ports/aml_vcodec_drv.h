@@ -665,6 +665,7 @@ struct aml_vcodec_ctx {
 	bool				vpp_is_need;
 	struct list_head		task_chain_pool;
 	struct meta_info		meta_infos;
+	struct vdec_sync *sync;
 };
 
 /**

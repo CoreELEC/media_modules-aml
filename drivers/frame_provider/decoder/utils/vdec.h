@@ -286,7 +286,7 @@ struct vdec_s {
 	u64 irq_cnt;
 	int parallel_dec;
 	struct vdec_frames_s *mvfrm;
-	struct vdec_sync sync;
+	struct vdec_sync *sync;
 
 	/*aux data check*/
 	struct aux_data_check_mgr_t adc;
@@ -562,6 +562,7 @@ void vdec_canvas_unlock(unsigned long flags);
 unsigned long vdec_canvas_lock(void);
 
 int vdec_get_core_nr(void);
+
 
 int vdec_post_task(post_task_handler func, void *args);
 

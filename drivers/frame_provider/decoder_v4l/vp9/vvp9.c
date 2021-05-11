@@ -224,7 +224,6 @@ static int vp9_alloc_mmu(
 		unsigned short bit_depth,
 		unsigned int *mmu_index_adr);
 
-
 static const char vvp9_dec_id[] = "vvp9-dev";
 
 #define PROVIDER_NAME   "decoder.vp9"
@@ -1017,6 +1016,11 @@ u32 stage_buf_num;
 #endif
 #endif
 
+struct vp9_fence_vf_t {
+	u32 used_size;
+	struct vframe_s *fence_vf[VF_POOL_SIZE];
+};
+
 struct VP9Decoder_s {
 #ifdef MULTI_INSTANCE_SUPPORT
 	unsigned char index;
@@ -1249,6 +1253,8 @@ struct VP9Decoder_s {
 	char new_q_name[32];
 	char disp_q_name[32];
 	bool wait_more_buf;
+	struct vp9_fence_vf_t fence_vf_s;
+	struct mutex fence_mutex;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -2969,11 +2975,11 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		struct vdec_s *vdec = hw_to_vdec(pbi);
 
 		/* create fence for each buffers. */
-		ret = vdec_timeline_create_fence(&vdec->sync);
+		ret = vdec_timeline_create_fence(vdec->sync);
 		if (ret < 0)
 			return ret;
 
-		pic->fence		= vdec->sync.fence;
+		pic->fence		= vdec->sync->fence;
 		pic->bit_depth		= cm->bit_depth;
 		pic->slice_type		= cm->frame_type;
 		pic->stream_offset	= pbi->pre_stream_offset;
@@ -3146,8 +3152,32 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 		sd.stream_offset = pbi->pre_stream_offset;
 
 		if (pbi->enable_fence) {
+			int i, j, used_size, ret;
+			int signed_count = 0;
+			struct vframe_s *signed_fence[VF_POOL_SIZE];
 			/* notify signal to wake up wq of fence. */
-			vdec_timeline_increase(&vdec->sync, 1);
+			vdec_timeline_increase(vdec->sync, 1);
+			mutex_lock(&pbi->fence_mutex);
+			used_size = pbi->fence_vf_s.used_size;
+			if (used_size) {
+				for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
+					if (pbi->fence_vf_s.fence_vf[i] != NULL) {
+						ret = dma_fence_get_status(pbi->fence_vf_s.fence_vf[i]->fence);
+						if (ret == 1) {
+							signed_fence[signed_count] = pbi->fence_vf_s.fence_vf[i];
+							pbi->fence_vf_s.fence_vf[i] = NULL;
+							pbi->fence_vf_s.used_size--;
+							signed_count++;
+						}
+						j++;
+					}
+				}
+			}
+			mutex_unlock(&pbi->fence_mutex);
+			if (signed_count != 0) {
+				for (i = 0; i < signed_count; i++)
+					vvp9_vf_put(signed_fence[i], vdec);
+			}
 		} else {
 			prepare_display_buf(pbi, &sd);
 		}
@@ -7251,6 +7281,24 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	if (!vf)
 		return;
 
+	if (pbi->enable_fence && vf->fence) {
+		int ret, i;
+
+		mutex_lock(&pbi->fence_mutex);
+		ret = dma_fence_get_status(vf->fence);
+		if (ret == 0) {
+			for (i = 0; i < VF_POOL_SIZE; i++) {
+				if (pbi->fence_vf_s.fence_vf[i] == NULL) {
+					pbi->fence_vf_s.fence_vf[i] = vf;
+					pbi->fence_vf_s.used_size++;
+					mutex_unlock(&pbi->fence_mutex);
+					return;
+				}
+			}
+		}
+		mutex_unlock(&pbi->fence_mutex);
+	}
+
 	index = vf->index & 0xff;
 
 	if (pbi->enable_fence && vf->fence) {
@@ -7323,6 +7371,7 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 }
+
 
 static int vvp9_event_cb(int type, void *data, void *private_data)
 {
@@ -9752,7 +9801,6 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 	INIT_KFIFO(pbi->display_q);
 	INIT_KFIFO(pbi->newframe_q);
 
-
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		const struct vframe_s *vf = &pbi->vfpool[i];
 
@@ -9979,7 +10027,6 @@ static void vdec_fence_release(struct VP9Decoder_s *pbi,
 			       struct vdec_sync *sync)
 {
 	ulong expires;
-	int i;
 
 	/* notify signal to wake up all fences. */
 	vdec_timeline_increase(sync, VF_POOL_SIZE);
@@ -9989,15 +10036,6 @@ static void vdec_fence_release(struct VP9Decoder_s *pbi,
 		if (time_after(jiffies, expires)) {
 			pr_err("wait fence signaled timeout.\n");
 			break;
-		}
-	}
-
-	for (i = 0; i < VF_POOL_SIZE; i++) {
-		struct vframe_s *vf = &pbi->vfpool[i];
-
-		if (vf->fence) {
-			vdec_fence_put(vf->fence);
-			vf->fence = NULL;
 		}
 	}
 
@@ -11086,6 +11124,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	struct vframe_master_display_colour_s vf_dp;
 
 	struct VP9Decoder_s *pbi = NULL;
+	struct aml_vcodec_ctx *ctx = NULL;
 
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
 		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXL ||
@@ -11111,7 +11150,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 
 	/* the ctx from v4l2 driver. */
 	pbi->v4l2_ctx = pdata->private;
-
+	ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	pdata->private = pbi;
 	pdata->dec_status = vvp9_dec_status;
 	/* pdata->set_trickmode = set_trickmode; */
@@ -11242,8 +11281,10 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_low_latency_mode",
-			&config_val) == 0)
-			pbi->low_latency_flag = config_val;
+			&config_val) == 0) {
+			pbi->low_latency_flag = (config_val & 1) ? 1 : 0;
+			pbi->enable_fence = (config_val & 2) ? 1 : 0;
+		}
 #endif
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
@@ -11350,9 +11391,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			pbi->enable_fence, pbi->fence_usage);
 	}
 
-	if (pbi->enable_fence)
-		pdata->sync.usage = pbi->fence_usage;
-
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
 		pbi->double_write_mode == 0x10)
 		pbi->mmu_enable = 0;
@@ -11412,8 +11450,29 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	}
 
 	pbi->cma_dev = pdata->cma_dev;
+
+	mutex_init(&pbi->fence_mutex);
+
+	if (pbi->enable_fence) {
+		pdata->sync = vdec_sync_get();
+		if (!pdata->sync) {
+			vp9_print(pbi, 0, "alloc fence timeline error\n");
+			vp9_local_uninit(pbi);
+			uninit_mmu_buffers(pbi);
+			/* devm_kfree(&pdev->dev, (void *)pbi); */
+			vfree((void *)pbi);
+			pdata->dec_status = NULL;
+			return -1;
+		}
+		ctx->sync = pdata->sync;
+		pdata->sync->usage = pbi->fence_usage;
+		vdec_timeline_create(pdata->sync, DRIVER_NAME);
+		vdec_timeline_get(pdata->sync);
+	}
+
 	if (vvp9_init(pdata) < 0) {
 		pr_info("\namvdec_vp9 init failed.\n");
+		vdec_timeline_put(pdata->sync);
 		vp9_local_uninit(pbi);
 		uninit_mmu_buffers(pbi);
 		/* devm_kfree(&pdev->dev, (void *)pbi); */
@@ -11440,11 +11499,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 					| CORE_MASK_COMBINE);
 #endif
 	pbi->pic_list_init_done2 = true;
-
-	if (pbi->enable_fence) {
-		/* creat timeline. */
-		vdec_timeline_create(&pdata->sync, DRIVER_NAME);
-	}
 
 	return 0;
 }
@@ -11484,7 +11538,7 @@ static int ammvdec_vp9_remove(struct platform_device *pdev)
 	}
 
 	if (pbi->enable_fence)
-		vdec_fence_release(pbi, &vdec->sync);
+		vdec_fence_release(pbi, vdec->sync);
 
 #ifdef DEBUG_PTS
 	pr_info("pts missed %ld, pts hit %ld, duration %d\n",

@@ -43,6 +43,8 @@
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
 #include "../common/chips/decoder_cpu_ver_info.h"
 #include "utils/common.h"
+#include "../frame_provider/decoder/utils/vdec_sync.h"
+
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
 #include <trace/events/meson_atrace.h>
@@ -2798,6 +2800,10 @@ void aml_v4l_ctx_release(struct kref *kref)
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"v4ldec has been destroyed.\n");
+
+	if (ctx->sync) {
+		vdec_clean_all_fence(ctx->sync);
+	}
 
 	kfree(ctx);
 }

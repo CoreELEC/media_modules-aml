@@ -414,6 +414,25 @@ int decoder_bmmu_box_alloc_buf_phy(
 }
 EXPORT_SYMBOL(decoder_bmmu_box_alloc_buf_phy);
 
+int decoder_bmmu_box_add_callback_func(
+	void *handle, int idx,
+	void *cb)
+{
+	struct decoder_bmmu_box *box = handle;
+	struct codec_mm_s *mm;
+
+	if (!box || idx < 0 || idx >= box->max_mm_num)
+		return 0;
+
+	mutex_lock(&box->mutex);
+	mm = box->mm_list[idx];
+	codec_mm_add_release_callback(mm, (struct codec_mm_cb_s *)cb);
+	mutex_unlock(&box->mutex);
+
+	return 0;
+}
+EXPORT_SYMBOL(decoder_bmmu_box_add_callback_func);
+
 static int decoder_bmmu_box_dump(struct decoder_bmmu_box *box, void *buf,
 								 int size)
 {

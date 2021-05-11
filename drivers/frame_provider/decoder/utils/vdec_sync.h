@@ -23,6 +23,8 @@
 #include <linux/dma-fence.h>
 #include <linux/sync_file.h>
 #include <uapi/linux/sync_file.h>
+#include <linux/device.h>
+#include <linux/amlogic/media/codec_mm/codec_mm.h>
 
 #define FENCE_USE_FOR_DRIVER	(0)
 #define FENCE_USE_FOR_APP	(1)
@@ -40,6 +42,7 @@ struct sync_timeline {
 	spinlock_t		lock;
 
 	u64			timestamp;
+	struct vdec_sync *parent_sync;
 };
 
 struct sync_pt {
@@ -55,6 +58,9 @@ struct vdec_sync {
 	int			usage;
 	int			fd;
 	struct dma_fence		*fence;
+	atomic_t 		buffer_count;
+	atomic_t 		use_flag;
+	struct codec_mm_cb_s release_callback[64];
 };
 
 static inline struct sync_timeline *fence_parent(struct dma_fence *fence)
@@ -79,6 +85,8 @@ int vdec_timeline_create_fence(struct vdec_sync *sync);
 
 void vdec_timeline_increase(struct vdec_sync *sync, u32 value);
 
+void vdec_timeline_get(struct vdec_sync *sync);
+
 void vdec_timeline_put(struct vdec_sync *sync);
 
 int vdec_fence_status_get(struct dma_fence *fence);
@@ -88,4 +96,12 @@ void vdec_fence_status_set(struct dma_fence *fence, int status);
 bool check_objs_all_signaled(struct vdec_sync *sync);
 
 int vdec_clean_all_fence(struct vdec_sync *sync);
+
+void vdec_fence_buffer_count_increase(ulong fence);
+
+void vdec_fence_buffer_count_decrease(struct codec_mm_s *mm, struct codec_mm_cb_s *cb);
+
+struct vdec_sync *vdec_sync_get(void);
+
+void vdec_sync_core_init(void);
 

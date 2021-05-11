@@ -26,6 +26,14 @@
 #include "vdec_sync.h"
 
 #define VDEC_DBG_ENABLE_FENCE	(0x100)
+#define VDEC_SYNC_COUNT 32
+
+struct vdec_sync_core_s {
+	struct vdec_sync s_vdec_sync[VDEC_SYNC_COUNT];
+	spinlock_t vdec_sync_lock;
+};
+
+static struct vdec_sync_core_s vdec_sync_core;
 
 extern u32 vdec_get_debug(void);
 
@@ -67,9 +75,12 @@ static void sync_timeline_free(struct kref *kref)
 {
 	struct sync_timeline *obj =
 		container_of(kref, struct sync_timeline, kref);
+	struct vdec_sync *sync = obj->parent_sync;
 
 	pr_info("[VDEC-FENCE] free timeline: %lx\n", (ulong) obj);
 	kfree(obj);
+	atomic_set(&sync->use_flag, 0);
+	sync->timeline = NULL;
 }
 
 static void sync_timeline_get(struct sync_timeline *obj)
@@ -191,7 +202,7 @@ static void sync_timeline_signal(struct sync_timeline *obj, unsigned int inc)
 	obj->value += inc;
 	list_for_each_entry_safe(pt, next, &obj->active_list_head,
 				 active_list) {
-		if (dma_fence_is_signaled(&pt->fence))
+		if (dma_fence_is_signaled_locked(&pt->fence))
 			list_del_init(&pt->active_list);
 	}
 	spin_unlock_irqrestore(&obj->lock, flags);
@@ -315,11 +326,39 @@ int vdec_fence_wait(struct dma_fence *fence, long timeout)
 }
 EXPORT_SYMBOL(vdec_fence_wait);
 
+struct vdec_sync *vdec_sync_get(void)
+{
+	int i;
+	struct vdec_sync_core_s *core = &vdec_sync_core;
+	ulong flags;
+
+	spin_lock_irqsave(&core->vdec_sync_lock, flags);
+
+	for (i = 0; i < VDEC_SYNC_COUNT; i++) {
+		if (atomic_read(&core->s_vdec_sync[i].use_flag) == 0) {
+			int j;
+			atomic_set(&core->s_vdec_sync[i].use_flag, 1);
+			for (j = 0; j < 64; j++) {
+				core->s_vdec_sync[i].release_callback[j].func = vdec_fence_buffer_count_decrease;
+				core->s_vdec_sync[i].release_callback[j].private_data = (void *)&core->s_vdec_sync[i];
+			}
+			spin_unlock_irqrestore(&core->vdec_sync_lock, flags);
+			return &core->s_vdec_sync[i];
+		}
+	}
+	spin_unlock_irqrestore(&core->vdec_sync_lock, flags);
+	return 0;
+}
+EXPORT_SYMBOL(vdec_sync_get);
+
 void vdec_timeline_create(struct vdec_sync *sync, u8 *name)
 {
-	snprintf(sync->name, sizeof(sync->name), "%s", name);
+	struct sync_timeline *obj;
 
-	sync->timeline = (void *)sync_timeline_create(sync->name);
+	obj = sync_timeline_create(sync->name);
+	obj->parent_sync = sync;
+	sync->timeline = (void *)obj;
+
 	if (sync->timeline)
 		pr_info("[VDEC-FENCE]: create timeline %lx, name: %s\n",
 			(ulong) sync->timeline, sync->name);
@@ -376,6 +415,15 @@ void vdec_timeline_increase(struct vdec_sync *sync, u32 value)
 }
 EXPORT_SYMBOL(vdec_timeline_increase);
 
+void vdec_timeline_get(struct vdec_sync *sync)
+{
+	struct sync_timeline *obj = sync->timeline;
+
+	sync_timeline_get(obj);
+}
+EXPORT_SYMBOL(vdec_timeline_get);
+
+
 void vdec_timeline_put(struct vdec_sync *sync)
 {
 	struct sync_timeline *obj = sync->timeline;
@@ -412,7 +460,7 @@ EXPORT_SYMBOL(check_objs_all_signaled);
 
 int vdec_clean_all_fence(struct vdec_sync *sync)
 {
-	struct sync_timeline *obj = sync->timeline;
+	/*struct sync_timeline *obj = sync->timeline;
 	struct sync_pt *pt, *next;
 
 	spin_lock_irq(&obj->lock);
@@ -422,9 +470,53 @@ int vdec_clean_all_fence(struct vdec_sync *sync)
 		dma_fence_signal_locked(&pt->fence);
 	}
 
-	spin_unlock_irq(&obj->lock);
+	spin_unlock_irq(&obj->lock);*/
+
+	struct sync_pt *pt, *next;
+	struct sync_timeline *obj = sync->timeline;
+
+	list_for_each_entry_safe(pt, next, &obj->pt_list, link) {
+		pr_err("vdec_clean_all_fence %px\n" , obj->parent_sync);
+			vdec_fence_put(&pt->fence);
+	}
+
+	sync_timeline_put(obj);
 
 	return 0;
 }
 EXPORT_SYMBOL(vdec_clean_all_fence);
+
+void vdec_fence_buffer_count_increase(ulong fence)
+{
+	struct vdec_sync *sync = (struct vdec_sync *)fence;
+
+	atomic_inc(&sync->buffer_count);
+
+}
+EXPORT_SYMBOL(vdec_fence_buffer_count_increase);
+
+void vdec_fence_buffer_count_decrease(struct codec_mm_s *mm, struct codec_mm_cb_s *cb)
+{
+	struct vdec_sync *sync = (struct vdec_sync *)cb->private_data;
+	struct sync_pt *pt, *next;
+	struct sync_timeline *obj = sync->timeline;
+
+	atomic_dec(&sync->buffer_count);
+
+	if (atomic_read(&sync->buffer_count) == 0) {
+		list_for_each_entry_safe(pt, next, &obj->pt_list, link) {
+			vdec_fence_put(&pt->fence);
+		}
+		return;
+	}
+	return ;
+}
+EXPORT_SYMBOL(vdec_fence_buffer_count_decrease);
+
+void vdec_sync_core_init(void)
+{
+	spin_lock_init(&vdec_sync_core.vdec_sync_lock);
+}
+EXPORT_SYMBOL(vdec_sync_core_init);
+
 
