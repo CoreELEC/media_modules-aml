@@ -343,6 +343,7 @@ struct vdec_mpeg12_hw_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	u32 last_frame_offset;
 };
 
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
@@ -2237,25 +2238,27 @@ static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 		return IRQ_HANDLED;
 	info = READ_VREG(MREG_PIC_INFO);
 	offset = READ_VREG(MREG_FRAME_OFFSET);
-
-	vdec_count_info(&hw->gvs, info & PICINFO_ERROR, offset);
-	if (info &PICINFO_ERROR) {
-		if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
-			hw->gvs.i_concealed_frames++;
-		} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
-			hw->gvs.p_concealed_frames++;
-		} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
-			hw->gvs.b_concealed_frames++;
+	if (offset != hw->last_frame_offset) {
+		vdec_count_info(&hw->gvs, info & PICINFO_ERROR, offset);
+		if (info & PICINFO_ERROR) {
+			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
+				hw->gvs.i_concealed_frames++;
+			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+				hw->gvs.p_concealed_frames++;
+			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+				hw->gvs.b_concealed_frames++;
+			}
 		}
-	}
-	if (offset) {
-		if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
-			hw->gvs.i_decoded_frames++;
-		} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
-			hw->gvs.p_decoded_frames++;
-		} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
-			hw->gvs.b_decoded_frames++;
+		if (offset) {
+			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
+				hw->gvs.i_decoded_frames++;
+			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+				hw->gvs.p_decoded_frames++;
+			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+				hw->gvs.b_decoded_frames++;
+			}
 		}
+		hw->last_frame_offset = offset;
 	}
 
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
@@ -3722,6 +3725,7 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
 					| CORE_MASK_COMBINE);
 	}
+	hw->last_frame_offset = 0xFFFFFFFF;
 #ifdef DUMP_USER_DATA
 	amvdec_mmpeg12_init_userdata_dump(hw);
 	reset_user_data_buf(hw);
