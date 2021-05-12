@@ -401,6 +401,10 @@ void vdec_canvas_port_register(struct vdec_s *vdec)
 		vdec->get_canvas = get_internal_cav_lut;
 		vdec->get_canvas_ex = get_internal_cav_lut_ex;
 		vdec->free_canvas_ex = free_internal_cav_lut;
+		if (mdec_cav_pool == NULL) {
+			mdec_cav_pool = vzalloc(sizeof(struct canvas_config_s)
+			* (MDEC_CAV_LUT_MAX + 1));
+		}
 	} else {
 		vdec->get_canvas = get_canvas;
 		vdec->get_canvas_ex = get_canvas_ex;

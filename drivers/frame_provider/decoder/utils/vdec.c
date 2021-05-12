@@ -2589,7 +2589,9 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			if (v4lvideo_add_ppmgr)
 				snprintf(postprocess_name, sizeof(postprocess_name),
 					"%s ", "ppmgr");
-			if (!v4lvideo_add_di)
+			/* 8K remove di */
+			if ((vdec->sys_info->width * vdec->sys_info->height > (4096 * 2304))
+				|| (!v4lvideo_add_di))
 				snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 					"%s %s%s", vdec->vf_provider_name,
 					postprocess_name,
