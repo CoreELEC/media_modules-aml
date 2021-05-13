@@ -644,8 +644,10 @@ static void swap_frame_buffers(AV1Decoder *pbi, int frame_decoded) {
         if (pbi->num_output_frames > 0) {
           decrease_ref_count(pbi, pbi->output_frames[0], pool);
         }
-        pbi->output_frames[0] = cm->cur_frame;
-        pbi->num_output_frames = 1;
+	if (cm->cur_frame) {
+          pbi->output_frames[0] = cm->cur_frame;
+          pbi->num_output_frames = 1;
+	}
       }
     } else {
       decrease_ref_count(pbi, cm->cur_frame, pool);
@@ -3257,7 +3259,7 @@ int av1_get_raw_frame(AV1Decoder *pbi, size_t index, PIC_BUFFER_CONFIG **sd) {
 
 int av1_bufmgr_postproc(AV1Decoder *pbi, unsigned char frame_decoded)
 {
-    PIC_BUFFER_CONFIG *sd;
+    PIC_BUFFER_CONFIG *sd = NULL;
     int index;
 #if 0
     if (frame_decoded) {
@@ -3280,7 +3282,8 @@ int av1_bufmgr_postproc(AV1Decoder *pbi, unsigned char frame_decoded)
     for (index = 0;;index++) {
       if (av1_get_raw_frame(pbi, index, &sd) < 0)
           break;
-      av1_raw_write_image(pbi, sd);
+      if (sd)
+	      av1_raw_write_image(pbi, sd);
     }
     return 0;
 }
