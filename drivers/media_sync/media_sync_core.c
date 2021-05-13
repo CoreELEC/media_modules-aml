@@ -780,6 +780,8 @@ long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 
 	pInstance->mSyncInfo.curVideoInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.curVideoInfo.frameSystemTime = info.frameSystemTime;
+	pInstance->mTrackMediaTime = info.framePts * 100 / 9;
+
 	return 0;
 }
 
