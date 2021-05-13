@@ -357,6 +357,8 @@ static u32 lookup_check_conut = 30;
  */
 static u32 force_config_fence;
 
+static u32 adjust_dpb_size = 13;
+
 #define IS_VDEC_DW(hw)  (hw->double_write_mode >> 16 & 0xf)
 
 static void vmh264_dump_state(struct vdec_s *vdec);
@@ -9044,6 +9046,14 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		ps->reorder_margin = pic.reorder_margin;
 	}
 
+	if (ps->reorder_frames >= 16) {
+		if (ps->field == V4L2_FIELD_NONE) {
+			ps->reorder_frames = adjust_dpb_size;
+		} else {
+			ps->reorder_frames = adjust_dpb_size - 2;
+		}
+	}
+
 	return 0;
 }
 
@@ -10934,6 +10944,9 @@ MODULE_PARM_DESC(poc_threshold, "\n poc_threshold\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
+
+module_param(adjust_dpb_size, uint, 0664);
+MODULE_PARM_DESC(adjust_dpb_size, "\n adjust dpb size\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);
