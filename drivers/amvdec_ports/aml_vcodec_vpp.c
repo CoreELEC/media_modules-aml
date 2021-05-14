@@ -145,6 +145,12 @@ static int is_di_input_buff_full(struct aml_v4l2_vpp *vpp)
 		> vpp->di_ibuf_num) ? true : false;
 }
 
+static int is_di_output_buff_full(struct aml_v4l2_vpp *vpp)
+{
+	return ((vpp->out_num[INPUT_PORT] - vpp->out_num[OUTPUT_PORT])
+		> vpp->di_obuf_num) ? true : false;
+}
+
 static enum DI_ERRORTYPE
 	v4l_vpp_fill_output_done_alloc_buffer(struct di_buffer *buf)
 {
@@ -423,7 +429,7 @@ retry:
 		}
 
 		if ((vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF) &&
-			is_di_input_buff_full(vpp)) {
+			(is_di_input_buff_full(vpp) || is_di_output_buff_full(vpp))) {
 			usleep_range(500, 550);
 			goto retry;
 		}
@@ -672,7 +678,7 @@ int aml_v4l2_vpp_init(
 	vpp->is_prog = cfg->is_prog;
 	vpp->is_bypass_p = cfg->is_bypass_p;
 
-	buf_size = vpp->is_prog ? 8 : cfg->buf_size;
+	buf_size = vpp->is_prog ? 16 : cfg->buf_size;
 	vpp->buf_size = buf_size;
 
 	/* setup output fifo */
