@@ -77,21 +77,54 @@ MODULE_PARM_DESC(ci_bus_time, "set ci bus time");
 
 int  aml_ci_bus_mod_init(void);
 void  aml_ci_bus_mod_exit(void);
+static  int aml_read_self(unsigned int reg);
+static void aml_write_self(unsigned int reg, unsigned int val);
+
+#define WRITE_CIBUS_REG(_r, _v)   aml_write_self(_r, _v)
+#define READ_CIBUS_REG(_r)        aml_read_self(_r)
 
 
-static ulong s_ci_register_base;
+static void *p_hw_base;
+//write reg
+static void aml_write_self(unsigned int reg, unsigned int val)
+{
+	void *ptr = (void *)(p_hw_base + reg);
+	writel(val, ptr);
+}
+//read reg
+static  int aml_read_self(unsigned int reg)
+{
+	void *addr = p_hw_base + reg;
+	int ret = readl(addr);
+	return ret;
+}
 
-//#define WRITE_CIBUS_REG(_r, _v)   aml_write_cbus(_r, _v)
-//#define READ_CIBUS_REG(_r)        aml_read_cbus(_r)
+/**\brief init_ci_addr:ci bus init mem addr
+* \param pdev: 
+* \return
+*   - read value:ok
+*   - -EINVAL : error
+*/
+int init_ci_addr(struct platform_device *pdev)
+{
+	struct resource *res;
 
-#define READ_CIBUS_REG(addr) \
-	readl((void __iomem *)(s_ci_register_base + (addr)))
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		pr_dbg("%s fail\n", __func__);
+		return -1;
+	}
 
-#define WRITE_CIBUS_REG(addr, val) \
-	writel((u32)val, (void __iomem *)(s_ci_register_base + (addr)))
-
-#define CI_REG_BASE_ADDR	(0xffd20000)
-#define CI_REG_SIZE		(0x100)
+	p_hw_base = devm_ioremap_nocache(&pdev->dev, res->start,
+					 resource_size(res));
+	if (p_hw_base) {
+		pr_dbg("%s base addr = %lx\n", __func__,
+		       (unsigned long)p_hw_base);
+	} else {
+		pr_dbg("%s base addr error\n", __func__);
+	}
+	return 0;
+}
 
 
 /**\brief aml_ci_bus_io:ci bus read or write api with bus
@@ -951,13 +984,7 @@ int aml_ci_bus_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 	/*get config from dts*/
 	aml_ci_bus_get_config_from_dts(ci_bus_dev);
 	//iomap ci reg
-	ci_bus_dev->ci_reg.phys_addr = CI_REG_BASE_ADDR;
-	ci_bus_dev->ci_reg.base =
-			(ulong)ioremap_nocache(
-			ci_bus_dev->ci_reg.phys_addr, CI_REG_SIZE);
-
-	ci_bus_dev->ci_reg.size = CI_REG_SIZE;
-	s_ci_register_base = ci_bus_dev->ci_reg.base;
+	init_ci_addr(pdev);
 	/*Register irq handlers */
 	if (ci_bus_dev->irq_cmp != -1) {
 		irq = request_irq(ci_bus_dev->irq_cmp,

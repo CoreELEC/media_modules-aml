@@ -192,14 +192,13 @@ EXPORT_SYMBOL(aml_pcmcia_exit);
 
 int aml_pcmcia_reset(struct aml_pcmcia *pc)
 {
-		pr_dbg("CAM RESET-->\n");
+		pr_dbg("CAM RESET-->start\n");
 		/* viaccess neotion cam need delay 2000 and 3000 */
 		/* smit cam need delay 1000 and 1500 */
 		/* need change delay according cam vendor */
 		pc->rst(pc, AML_H);/*HI is reset*/
 		mdelay(1000);
 		pc->rst(pc, AML_L);/*defaule LOW*/
-		pr_dbg("CAM RESET--\n");
 		mdelay(1500);
 		pr_dbg("CAM RESET--end\n");
 	return 0;

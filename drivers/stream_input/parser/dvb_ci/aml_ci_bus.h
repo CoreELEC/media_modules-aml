@@ -27,18 +27,12 @@
 #include "aml_ci.h"
 #include "dvb_ca_en50221.h"
 
-struct ci_reg_t {
-	u32 size;
-	ulong phys_addr; /* physical address */
-	ulong base; /* kernel logical address */
-};
 /*
 aml spi dev
 */
 struct aml_ci_bus {
 	struct mutex mutex;
 	struct class	cls;
-	struct ci_reg_t ci_reg;
 	/* add gpio pin */
 	struct gpio_desc *cd_pin1;
 	int cd_pin1_value;
