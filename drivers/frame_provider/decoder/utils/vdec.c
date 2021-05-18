@@ -77,6 +77,8 @@
 #include "frame_check.h"
 #include <linux/amlogic/tee.h>
 #include "vdec_canvas_utils.h"
+#include "../../../amvdec_ports/aml_vcodec_drv.h"
+
 
 #ifdef CONFIG_AMLOGIC_POWER
 #include <linux/amlogic/power_ctrl.h>
@@ -161,6 +163,7 @@ static int max_di_instance = 2;
 static int enable_mvdec_info = 1;
 
 int decode_underflow = 0;
+u32 debug_meta;
 
 static int enable_stream_mode_multi_dec;
 
@@ -5681,6 +5684,76 @@ void vdec_vframe_ready(struct vdec_s *vdec, struct vframe_s *vf) {
 }
 EXPORT_SYMBOL(vdec_vframe_ready);
 
+void set_meta_data_to_vf(struct vframe_s *vf, u32 type, void *v4l2_ctx)
+{
+	struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(v4l2_ctx);
+	struct aml_meta_head_s		head;
+	struct aml_vf_base_info_s	vfb_infos;
+
+	if ((ctx == NULL) || (vf == NULL))
+		return ;
+
+	if (vf->meta_data_buf == NULL) {
+		vf->meta_data_buf = ctx->meta_infos.meta_bufs[ctx->meta_infos.index].buf;
+		ctx->meta_infos.index = (ctx->meta_infos.index + 1) % V4L_CAP_BUFF_MAX;
+	}
+
+	switch (type) {
+	case UVM_META_DATA_VF_BASE_INFOS:
+		if ((vf->meta_data_size + sizeof(struct aml_vf_base_info_s) + AML_META_HEAD_SIZE) <= META_DATA_SIZE) {
+			head.magic = META_DATA_MAGIC;
+			head.type = UVM_META_DATA_VF_BASE_INFOS;
+			head.data_size = sizeof(struct aml_vf_base_info_s);
+
+			memcpy(vf->meta_data_buf + vf->meta_data_size,
+				&head, AML_META_HEAD_SIZE);
+			vf->meta_data_size += AML_META_HEAD_SIZE;
+
+			vfb_infos.width = vf->width;
+			vfb_infos.height = vf->height;
+			vfb_infos.duration = vf->duration;
+			vfb_infos.frame_type = vf->frame_type;
+			vfb_infos.type = vf->type;
+
+			memcpy(vf->meta_data_buf + vf->meta_data_size,
+				&vfb_infos, sizeof(struct aml_vf_base_info_s));
+			vf->meta_data_size += sizeof(struct aml_vf_base_info_s);
+
+			if (debug_meta) {
+				pr_debug("vf->meta_data_size = %d\n", vf->meta_data_size);
+				pr_debug("vf:width:%d height:%d duration:%d frame_type:%d type:%d\n",
+					vfb_infos.width, vfb_infos.height, vfb_infos.duration,
+					vfb_infos.frame_type, vfb_infos.type);
+			}
+		}
+		break;
+	case UVM_META_DATA_HDR10P_DATA:
+		if ((vf->meta_data_size + vf->hdr10p_data_size + AML_META_HEAD_SIZE) <= META_DATA_SIZE) {
+			head.magic = META_DATA_MAGIC;
+			head.type = UVM_META_DATA_HDR10P_DATA;
+			head.data_size = vf->hdr10p_data_size;
+
+			memcpy(vf->meta_data_buf + vf->meta_data_size,
+				&head, AML_META_HEAD_SIZE);
+			vf->meta_data_size += AML_META_HEAD_SIZE;
+
+			memcpy(vf->meta_data_buf + vf->meta_data_size,
+				vf->hdr10p_data_buf, vf->hdr10p_data_size);
+			vf->meta_data_size += vf->hdr10p_data_size;
+
+			if (debug_meta) {
+				pr_debug("vf->meta_data_size = %d\n", vf->meta_data_size);
+				pr_debug("vf->hdr10p_data_size = %d\n", vf->hdr10p_data_size);
+			}
+		}
+		break;
+	default:
+		break;
+	}
+}
+EXPORT_SYMBOL(set_meta_data_to_vf);
+
 /* In this function,if we use copy_to_user, we may encounter sleep,
 which may block the vdec_fill_vdec_frame,this is not acceptable.
 So, we should use a tmp buffer(passed by caller) to get the content */
@@ -5819,6 +5892,8 @@ module_param(fps_detection, int, 0664);
 module_param(fps_clear, int, 0664);
 module_param(force_nosecure_even_drm, int, 0664);
 module_param(disable_switch_single_to_mult, int, 0664);
+
+module_param(debug_meta, uint, 0664);
 
 module_param(frameinfo_flag, int, 0664);
 MODULE_PARM_DESC(frameinfo_flag,

@@ -508,6 +508,9 @@ retry:
 
 			if (in_buf->di_buf.flag & DI_FLAG_EOS)
 				memset(vf_out, 0, sizeof(*vf_out));
+
+			vf_out->meta_data_size = in_buf->di_buf.vf->meta_data_size;
+			vf_out->meta_data_buf = in_buf->di_buf.vf->meta_data_buf;
 		} else {
 			/* submit P to DI. */
 			out_buf->aml_buf = in_buf->aml_buf;

@@ -78,6 +78,14 @@ static int fops_vcodec_open(struct file *file)
 		return -ENOMEM;
 	}
 
+	ctx->meta_infos.meta_bufs = vzalloc(sizeof(struct meta_data) * V4L_CAP_BUFF_MAX);
+	if (ctx->meta_infos.meta_bufs == NULL) {
+		vfree(ctx->dv_infos.dv_bufs);
+		kfree(aml_buf);
+		kfree(ctx);
+		return -ENOMEM;
+	}
+
 	mutex_lock(&dev->dev_mutex);
 	ctx->dv_infos.index = 0;
 	ctx->empty_flush_buf = aml_buf;
@@ -155,6 +163,7 @@ err_m2m_ctx_init:
 err_ctrls_setup:
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
+	vfree(ctx->meta_infos.meta_bufs);
 	vfree(ctx->dv_infos.dv_bufs);
 	kfree(ctx->empty_flush_buf);
 	kfree(ctx);

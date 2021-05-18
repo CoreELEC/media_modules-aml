@@ -467,13 +467,32 @@ struct dv_data {
 };
 
 /*
- * struct dv_data_info - record some dv data infos
+ * struct dv_info - record some dv data infos
  * @index: dv data index.
  * @dv_bufs: Stores dv data.
  */
 struct dv_info {
 	int		index;
 	struct dv_data *dv_bufs;
+};
+
+
+/*
+ * struct meta_data - record meta data.
+ * @buf[META_DATA_SIZE]: meta data information.
+ */
+struct meta_data {
+	char buf[META_DATA_SIZE];
+};
+
+/*
+ * struct meta_info - record some meta data infos
+ * @index: meta data index.
+ * @meta_bufs: record meta data.
+ */
+struct meta_info {
+	int		index;
+	struct meta_data *meta_bufs;
 };
 
 /*
@@ -640,6 +659,7 @@ struct aml_vcodec_ctx {
 	void (*vdec_pic_info_update)(struct aml_vcodec_ctx *ctx);
 	bool				vpp_is_need;
 	struct list_head		task_chain_pool;
+	struct meta_info		meta_infos;
 };
 
 /**

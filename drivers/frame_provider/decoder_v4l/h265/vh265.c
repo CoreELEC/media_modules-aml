@@ -8551,6 +8551,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 
 				vf->hdr10p_data_size = pic->hdr10p_data_size;
 				vf->hdr10p_data_buf = new_buf;
+				set_meta_data_to_vf(vf, UVM_META_DATA_HDR10P_DATA, hevc->v4l2_ctx);
 			} else {
 				hevc_print(hevc, 0,
 					"%s:hdr10p data vzalloc size(%d) fail\n",
@@ -8833,6 +8834,10 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 		vf->hdr10p_data_size = 0;
 	}
 
+	if (vf->meta_data_buf) {
+		vf->meta_data_buf = NULL;
+		vf->meta_data_size = 0;
+	}
 
 	if (index_top != 0xff
 		&& index_top < MAX_REF_PIC_NUM
@@ -9870,11 +9875,14 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					if (hevc->send_frame_flag == 1) {
 						 while (kfifo_len(&hevc->display_q)) {
 							if (hevc->pair_fb[0] != NULL && hevc->pair_fb[1] != NULL) {
+								set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
 								hevc->pair_fb[0]->task->submit(hevc->pair_fb[0]->task, TASK_TYPE_DEC);
 								hevc->pair_fb[1]->task->submit(hevc->pair_fb[1]->task, TASK_TYPE_DEC);
 								clear_pair_fb(hevc);
-							} else
+							} else {
+								set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
 								fb->task->submit(fb->task, TASK_TYPE_DEC);
+							}
 						}
 					}
 				}

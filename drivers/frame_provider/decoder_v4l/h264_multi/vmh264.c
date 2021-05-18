@@ -92,6 +92,7 @@ to enable DV of frame mode
 #define RATE_25_FPS  3840   /* 25 */
 #define RATE_2997_FPS  3203   /* 29.97 */
 #define RATE_5994_FPS  1601   /* 59.94 */
+#define RATE_11990_FPS  800   /* 119.90 */
 #define DUR2PTS(x) ((x)*90/96)
 #define PTS2DUR(x) ((x)*96/90)
 #define DUR2PTS_REM(x) (x*90 - DUR2PTS(x)*96)
@@ -3205,6 +3206,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				if (v4l2_ctx->is_stream_off) {
 					vh264_vf_put(vh264_vf_get(vdec), vdec);
 				} else {
+					set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hw->v4l2_ctx);
 					fb->task->submit(fb->task, TASK_TYPE_DEC);
 				}
 			} else
@@ -4523,6 +4525,11 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 		vf->fence = NULL;
 	}
 
+	if (vf->meta_data_buf) {
+		vf->meta_data_buf = NULL;
+		vf->meta_data_size = 0;
+	}
+
 	spin_lock_irqsave(&hw->bufspec_lock, flags);
 	if (hw->buffer_spec[buf_spec_num].used == 2) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
@@ -5593,12 +5600,16 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 
 		if (hw->is_used_v4l && (p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] == I_Slice)) {
 			if (hw->num_units_in_tick == 1001) {
-				if (hw->time_scale == 60000) {
-					hw->frame_dur = RATE_5994_FPS;
-				} else if (hw->time_scale == 30000) {
-					hw->frame_dur = RATE_2997_FPS;
+				if (hw->time_scale == 120000) {
+					hw->frame_dur = RATE_11990_FPS;
 					if (hw->fixed_frame_rate_flag == 1)
 						hw->frame_dur = RATE_5994_FPS;
+				} else if (hw->time_scale == 60000) {
+					hw->frame_dur = RATE_5994_FPS;
+					if (hw->fixed_frame_rate_flag == 1)
+						hw->frame_dur = RATE_2997_FPS;
+				} else if (hw->time_scale == 30000) {
+					hw->frame_dur = RATE_2997_FPS;
 				} else if (hw->time_scale == 24000) {
 					hw->frame_dur = RATE_2397_FPS;
 				}

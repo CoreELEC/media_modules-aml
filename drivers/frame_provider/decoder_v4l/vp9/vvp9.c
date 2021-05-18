@@ -7148,6 +7148,7 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 
 				vf->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
 				vf->hdr10p_data_buf = new_buf;
+				set_meta_data_to_vf(vf, UVM_META_DATA_HDR10P_DATA, pbi->v4l2_ctx);
 			} else {
 				vp9_print(pbi, 0, "%s:hdr10p data vzalloc size(%d) fail\n",
 					__func__, pbi->chunk->hdr10p_data_size);
@@ -7260,6 +7261,11 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 		kfree(vf->hdr10p_data_buf);
 		vf->hdr10p_data_buf = NULL;
 		vf->hdr10p_data_size = 0;
+	}
+
+	if (vf->meta_data_buf) {
+		vf->meta_data_buf = NULL;
+		vf->meta_data_size = 0;
 	}
 
 	kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);

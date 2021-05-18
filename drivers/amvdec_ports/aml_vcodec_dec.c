@@ -2730,6 +2730,8 @@ void aml_v4l_ctx_release(struct kref *kref)
 
 	vfree(ctx->dv_infos.dv_bufs);
 
+	vfree(ctx->meta_infos.meta_bufs);
+
 	aml_task_chain_remove(ctx);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,

@@ -72,6 +72,9 @@ enum vdec_type_e {
 
 #define VDEC_CFG_FLAG_PROG_ONLY (1 << 16)
 
+#define UVM_META_DATA_VF_BASE_INFOS (1 << 0)
+#define UVM_META_DATA_HDR10P_DATA (1 << 1)
+
 #define CORE_MASK_VDEC_1 (1 << VDEC_1)
 #define CORE_MASK_HCODEC (1 << VDEC_HCODEC)
 #define CORE_MASK_VDEC_2 (1 << VDEC_2)
@@ -303,6 +306,38 @@ struct vdec_s {
 	int is_v4l;
 };
 
+#define CODEC_MODE(a, b, c, d)\
+	(((u8)(a) << 24) | ((u8)(b) << 16) | ((u8)(c) << 8) | (u8)(d))
+
+#define META_DATA_MAGIC		CODEC_MODE('M', 'E', 'T', 'A')
+#define AML_META_HEAD_NUM	8
+#define AML_META_HEAD_SIZE	(AML_META_HEAD_NUM * sizeof(u32))
+
+
+struct aml_meta_head_s {
+	u32 magic;
+	u32 type;
+	u32 data_size;
+	u32 data[5];
+};
+
+struct aml_vf_base_info_s {
+	u32 width;
+	u32 height;
+	u32 duration;
+	u32 frame_type;
+	u32 type;
+	u32 data[12];
+};
+
+struct aml_meta_info_s {
+	union {
+		struct aml_meta_head_s head;
+		u32 buf[AML_META_HEAD_NUM];
+	};
+	u8 data[0];
+};
+
 /* common decoder vframe provider name to use default vfm path */
 #define VFM_DEC_PROVIDER_NAME "decoder"
 #define VFM_DEC_DVBL_PROVIDER_NAME "dvbldec"
@@ -503,6 +538,7 @@ bool is_support_no_parser(void);
 
 int vdec_resource_checking(struct vdec_s *vdec);
 
+void set_meta_data_to_vf(struct vframe_s *vf, u32 type, void *v4l2_ctx);
 
 void vdec_set_profile_level(struct vdec_s *vdec, u32 profile_idc, u32 level_idc);
 

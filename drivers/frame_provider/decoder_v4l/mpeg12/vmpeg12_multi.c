@@ -1767,6 +1767,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 					if (v4l2_ctx->is_stream_off) {
 						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 					} else {
+						set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hw->v4l2_ctx);
 						fb->task->submit(fb->task, TASK_TYPE_DEC);
 					}
 				} else {
@@ -2563,6 +2564,11 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 			"invalid vf: %lx\n", (ulong)vf);
 		return ;
+	}
+
+	if (vf->meta_data_buf) {
+		vf->meta_data_buf = NULL;
+		vf->meta_data_size = 0;
 	}
 
 	if (vf->v4l_mem_handle !=
