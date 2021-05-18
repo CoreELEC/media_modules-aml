@@ -556,6 +556,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DEC_RESULT_EOS              7
 #define DEC_RESULT_FORCE_EXIT       8
 #define DEC_RESULT_TIMEOUT			9
+#define DEC_RESULT_NEED_MORE_BUFFER 10
 
 
 /*
@@ -5444,7 +5445,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		mutex_lock(&vmh264_mutex);
 		if (!hw->mmu_enable) {
-			if (!buffer_reset_flag || hw->is_used_v4l)
+			if (!buffer_reset_flag)
 				config_buf_specs(vdec);
 			i = get_buf_spec_by_canvas_pos(hw, 0);
 
@@ -6935,6 +6936,12 @@ pic_done_proc:
 		vh264_pic_done_proc(vdec);
 
 		if (hw->frmbase_cont_flag) {
+			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
+			if (!have_free_buf_spec(vdec)) {
+				hw->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
 			/*do not DEC_RESULT_GET_DATA*/
 			hw->get_data_count = 0x7fffffff;
 			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD);
@@ -9396,6 +9403,26 @@ result_done:
 			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
 			hw->stat &= ~STAT_ISR_REG;
 		}
+	} else if (hw->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
+		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+		bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
+		if (!have_free_buf_spec(vdec)) {
+			hw->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+			vdec_schedule_work(&hw->work);
+		} else {
+			hw->get_data_count = 0x7fffffff;
+			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD);
+			decode_frame_count[DECODE_ID(hw)]++;
+			if (p_H264_Dpb->mSlice.slice_type == I_SLICE) {
+				hw->gvs.i_decoded_frames++;
+			} else if (p_H264_Dpb->mSlice.slice_type == P_SLICE) {
+				hw->gvs.p_decoded_frames++;
+			} else if (p_H264_Dpb->mSlice.slice_type == B_SLICE) {
+				hw->gvs.b_decoded_frames++;
+			}
+			start_process_time(hw);
+		}
+		return;
 	}
 	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	del_timer_sync(&hw->check_timer);
@@ -10117,7 +10144,7 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 		hw->cfg_param1,
 		hw->cfg_param2,
 		hw->cfg_param3,
-		hw->cfg_param4, true) < 0)
+		hw->cfg_param4, hw->reset_bufmgr_flag) < 0)
 		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 	else
 		hw->stat &= (~DECODER_FATAL_ERROR_SIZE_OVERFLOW);
