@@ -8960,6 +8960,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			"detected %d frames in a packet, ts: %lld.\n",
 			pbi->one_package_frame_cnt + 1,
 			pbi->chunk->timestamp);
+		pbi->process_busy = 0;
 		pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
 		vdec_schedule_work(&pbi->work);
 		return IRQ_HANDLED;
@@ -9143,8 +9144,11 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 		return IRQ_HANDLED;
 	if (pbi->init_flag == 0)
 		return IRQ_HANDLED;
-	if (pbi->process_busy)/*on process.*/
+	if (pbi->process_busy) { /*on process.*/
+		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
+			"%s: process_busy isr return\n", __func__);
 		return IRQ_HANDLED;
+	}
 	pbi->dec_status = dec_status;
 	pbi->process_busy = 1;
 	if (debug & VP9_DEBUG_BUFMGR)
