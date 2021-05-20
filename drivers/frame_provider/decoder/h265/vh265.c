@@ -9180,11 +9180,11 @@ static void fill_frame_info(struct hevc_state_s *hevc,
 
 }
 
-static inline void hevc_update_gvs(struct hevc_state_s *hevc, struct PIC_s *pic)
+static inline void hevc_update_gvs(struct hevc_state_s *hevc)
 {
-	if (hevc->gvs->frame_height != pic->height) {
-		hevc->gvs->frame_width = pic->width;
-		hevc->gvs->frame_height = pic->height;
+	if (hevc->gvs->frame_height != hevc->frame_height) {
+		hevc->gvs->frame_width = hevc->frame_width;
+		hevc->gvs->frame_height = hevc->frame_height;
 	}
 	if (hevc->gvs->frame_dur != hevc->frame_dur) {
 		hevc->gvs->frame_dur = hevc->frame_dur;
@@ -9751,11 +9751,11 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				hevc->gvs->b_decoded_frames++;
 			}
 		}
-		hevc_update_gvs(hevc, pic);
+		hevc_update_gvs(hevc);
 		memcpy(&tmp4x, hevc->gvs, sizeof(struct vdec_info));
-		tmp4x.bit_depth_luma = pic->bit_depth_luma;
-		tmp4x.bit_depth_chroma = pic->bit_depth_chroma;
-		tmp4x.double_write_mode = pic->double_write_mode;
+		tmp4x.bit_depth_luma = hevc->bit_depth_luma;
+		tmp4x.bit_depth_chroma = hevc->bit_depth_chroma;
+		tmp4x.double_write_mode = get_double_write_mode(hevc);
 		vdec_fill_vdec_frame(vdec, &hevc->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 		vdec->vdec_fps_detec(vdec->id);
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
