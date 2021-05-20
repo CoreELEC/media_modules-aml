@@ -1327,9 +1327,7 @@ typedef struct PIC_BUFFER_CONFIG_s {
   int min_mv;
   int avg_mv;
 #endif
-  u64 timestamp;
-  u32 hw_decode_time;
-  u32 frame_size2; // For frame base mode
+	u64 timestamp;
 } PIC_BUFFER_CONFIG;
 
 /*
