@@ -7820,7 +7820,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			memcpy(&tmp4x, pbi->gvs, sizeof(struct vdec_info));
 			tmp4x.bit_depth_luma = pbi->vp9_param.p.bit_depth;
 			tmp4x.bit_depth_chroma = pbi->vp9_param.p.bit_depth;
-			tmp4x.double_write_mode = get_double_write_mode(pbi);
+			tmp4x.double_write_mode = pic_config->double_write_mode;
 			vdec_fill_vdec_frame(pvdec, &pbi->vframe_qos, &tmp4x,
 				vf, pic_config->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);

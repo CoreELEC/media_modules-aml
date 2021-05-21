@@ -620,6 +620,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DECODE_MODE_MULTI_DVBAL				0x3
 #define DECODE_MODE_MULTI_DVENL				0x4
 static DEFINE_MUTEX(vmh264_mutex);
+static DEFINE_MUTEX(reset_mutex);
 
 
 
@@ -951,7 +952,7 @@ static void timeout_process(struct vdec_h264_hw_s *hw);
 static void dump_bufspec(struct vdec_h264_hw_s *hw,
 	const char *caller);
 static void h264_reconfig(struct vdec_h264_hw_s *hw);
-static void h264_reset_bufmgr(struct vdec_s *vdec);
+static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag);
 static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset);
 static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw);
 static int vh264_stop(struct vdec_h264_hw_s *hw);
@@ -3149,6 +3150,10 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			pvdec = hw_to_vdec(hw);
 			memset(&vs, 0, sizeof(struct vdec_info));
 			pvdec->dec_status(pvdec, &vs);
+			if (frame->frame && (vs.frame_height != frame->frame->height)) {
+				vs.frame_height = frame->frame->height;
+				vs.frame_width = frame->frame->width;
+			}
 			decoder_do_frame_check(pvdec, vf);
 			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
 
@@ -9723,7 +9728,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (hw->reset_bufmgr_flag ||
 		((error_proc_policy & 0x40) &&
 		p_H264_Dpb->buf_alloc_fail)) {
-		h264_reset_bufmgr(vdec);
+		h264_reset_bufmgr_v4l(vdec, 1);
 		//flag must clear after reset for v4l buf_spec_init use
 		hw->reset_bufmgr_flag = 0;
 	}
@@ -9979,7 +9984,7 @@ static void reset(struct vdec_s *vdec)
 	hw->decode_pic_count = 0;
 
 	reset_process_time(hw);
-	h264_reset_bufmgr(vdec);
+	h264_reset_bufmgr_v4l(vdec, 0);
 	clear_refer_bufs(hw);
 
 	atomic_set(&hw->vf_pre_count, 0);
@@ -10081,7 +10086,7 @@ static void h264_clear_dpb(struct vdec_h264_hw_s *hw)
 }
 #endif
 
-static void h264_reset_bufmgr(struct vdec_s *vdec)
+static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag)
 {
 	ulong timeout;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
@@ -10137,13 +10142,14 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 	p_H264_Dpb->fast_output_enable = fast_output_enable;
 	hw->has_i_frame = 0;
 #else
+	mutex_lock(&reset_mutex);
 	dpb_print(DECODE_ID(hw), 0,
 	"%s frame count %d to skip %d\n\n",
 	__func__, hw->decode_pic_count+1,
 	hw->skip_frame_count);
 
-	/* Only the caller from inside decoder we call flush_dbp */
-	if (!hw->reset_bufmgr_flag)
+	/* If the caller is from reset, then we don't call flush_dbp */
+	if (flush_flag)
 		flush_dpb(&hw->dpb);
 
 	if (!hw->is_used_v4l) {
@@ -10182,6 +10188,7 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 		hw->init_flag = 1;
 
 	hw->reset_bufmgr_count++;
+	mutex_unlock(&reset_mutex);
 #endif
 }
 

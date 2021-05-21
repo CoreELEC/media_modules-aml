@@ -9829,9 +9829,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		}
 		hevc_update_gvs(hevc);
 		memcpy(&tmp4x, hevc->gvs, sizeof(struct vdec_info));
-		tmp4x.bit_depth_luma = hevc->bit_depth_luma;
-		tmp4x.bit_depth_chroma = hevc->bit_depth_chroma;
-		tmp4x.double_write_mode = get_double_write_mode(hevc);
+		tmp4x.bit_depth_luma = pic->bit_depth_luma;
+		tmp4x.bit_depth_chroma = pic->bit_depth_chroma;
+		tmp4x.double_write_mode = pic->double_write_mode;
 		vdec_fill_vdec_frame(vdec, &hevc->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 		vdec->vdec_fps_detec(vdec->id);
 		hevc_print(hevc, H265_DEBUG_BUFMGR,

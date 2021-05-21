@@ -4787,7 +4787,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			memcpy(&tmp4x, dec->gvs, sizeof(struct vdec_info));
 			tmp4x.bit_depth_luma = bit_depth_luma;
 			tmp4x.bit_depth_chroma = bit_depth_chroma;
-			tmp4x.double_write_mode = get_double_write_mode(dec);
+			tmp4x.double_write_mode = pic->double_write_mode;
 			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
 			if (without_display_mode == 0) {
