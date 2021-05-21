@@ -3130,6 +3130,10 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			pvdec = hw_to_vdec(hw);
 			memset(&vs, 0, sizeof(struct vdec_info));
 			pvdec->dec_status(pvdec, &vs);
+			if (frame->frame && (vs.frame_height != frame->frame->height)) {
+				vs.frame_height = frame->frame->height;
+				vs.frame_width = frame->frame->width;
+			}
 			decoder_do_frame_check(pvdec, vf);
 			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
 
@@ -9998,9 +10002,7 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 	__func__, hw->decode_pic_count+1,
 	hw->skip_frame_count);
 
-	/* Only the caller from inside decoder we call flush_dbp */
-	if (!hw->reset_bufmgr_flag)
-		flush_dpb(&hw->dpb);
+	flush_dpb(&hw->dpb);
 
 	timeout = jiffies + HZ;
 	while (kfifo_len(&hw->display_q) > 0) {
