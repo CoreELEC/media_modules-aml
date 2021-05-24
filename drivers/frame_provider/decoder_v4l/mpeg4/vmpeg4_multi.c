@@ -1362,6 +1362,13 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 				"%c, offset=0x%x, pts=0x%x(%d), index=%d, used=%d\n",
 				GET_PIC_TYPE(picture_type), offset, dec_pic->pts,
 				dec_pic->pts_valid, index, hw->vfbuf_use[index]);
+		} else if (B_PICTURE == picture_type) {
+			if (hw->chunk) {
+				dec_pic->pts_valid = hw->chunk->pts_valid;
+				dec_pic->pts = hw->chunk->pts;
+				dec_pic->pts64 = hw->chunk->pts64;
+				dec_pic->timestamp = hw->chunk->timestamp;
+			}
 		}
 
 		dec_pic->index = index;
