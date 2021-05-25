@@ -12761,7 +12761,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	spin_lock_irqsave(&lock, flags);
 	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 		pic = hevc->m_PIC[i];
-		if (pic == NULL || pic->index == -1)
+		if (pic == NULL || pic->index == -1 || pic->BUF_index == -1)
 			continue;
 		if (pic->referenced == 1)
 			ref_pic++;
@@ -12827,7 +12827,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			pic = hevc->m_PIC[i];
-			if (pic == NULL || pic->index == -1)
+			if (pic == NULL || pic->index == -1 || pic->BUF_index == -1)
 				continue;
 			if (pic->output_ready == 0)
 				decode_count++;
@@ -12841,6 +12841,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 				flush_output(hevc, NULL);
 				hevc_print(hevc, H265_DEBUG_BUFMGR_MORE, "flush dpb, ref_error_count %d, sps_max_dec_pic_buffering_minus1_0 %d\n",
 						decode_count, hevc->param.p.sps_max_dec_pic_buffering_minus1_0);
+				return 0;
 			}
 		}
 	}
