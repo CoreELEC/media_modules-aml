@@ -9418,7 +9418,10 @@ result_done:
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 		bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
 		if (!have_free_buf_spec(vdec)) {
-			hw->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+			if (vdec->next_status == VDEC_STATUS_DISCONNECTED)
+				hw->dec_result = DEC_RESULT_AGAIN;
+			else
+				hw->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
 			vdec_schedule_work(&hw->work);
 		} else {
 			hw->get_data_count = 0x7fffffff;
