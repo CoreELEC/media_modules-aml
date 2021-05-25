@@ -3173,6 +3173,30 @@ thread_isr_done:
 	return ret;
 }
 
+int vdec_check_rec_num_enough(struct vdec_s *vdec) {
+
+	if (vdec->vbuf.use_ptsserv) {
+		return (pts_get_rec_num(PTS_TYPE_VIDEO,
+					vdec->input.total_rd_count) >= 2);
+	} else {
+		u64 total_rd_count = vdec->input.total_rd_count;
+
+		if (vdec->input.target == VDEC_INPUT_TARGET_VLD) {
+			//total_rd_count -= vdec->input.start;
+			/*just like use ptsserv, alway return true*/
+			return 1;
+		}
+		if ((total_rd_count >= vdec->vbuf.last_offset[0]) &&
+			(total_rd_count - vdec->vbuf.last_offset[0] < 0x80000000))
+			return 0;
+		else if ((total_rd_count >= vdec->vbuf.last_offset[1]) &&
+			(total_rd_count - vdec->vbuf.last_offset[1] < 0x80000000))
+			return 0;
+
+		return 1;
+	}
+}
+
 unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 {
 	unsigned long ready_mask;
@@ -3220,8 +3244,7 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 				level = wp - rp;
 
 			if ((level < input->prepare_level) &&
-				(pts_get_rec_num(PTS_TYPE_VIDEO,
-					vdec->input.total_rd_count) < 2)) {
+				!vdec_check_rec_num_enough(vdec)) {
 				vdec->need_more_data |= VDEC_NEED_MORE_DATA;
 #ifdef VDEC_DEBUG_SUPPORT
 				inc_profi_count(mask, vdec->input_underrun_count);

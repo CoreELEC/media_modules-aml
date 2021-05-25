@@ -96,6 +96,8 @@ struct stream_buf_s {
 	u32 stream_offset;
 	struct parser_args pars;
 	struct stream_buf_ops *ops;
+	u32 last_offset[2];
+	u32 write_count;
 } /*stream_buf_t */;
 
 struct stream_port_s {
