@@ -212,6 +212,9 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 #ifdef VDEC_FCC_SUPPORT
 	fcc_wakeup_jump_back(container_of(stbuf, struct vdec_s, vbuf), meta);
 #endif
+
+	stbuf->last_offset[stbuf->write_count % 2] = stbuf->stream_offset;
+	stbuf->write_count++;
 	/*
 	pr_debug("%s, update wp 0x%x + sz 0x%x --> 0x%x, stream_offset 0x%x\n",
 		__func__, meta->stbuf_pktaddr, meta->stbuf_pktsize, wp, stbuf->stream_offset);
