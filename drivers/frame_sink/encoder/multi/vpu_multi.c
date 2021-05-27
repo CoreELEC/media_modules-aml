@@ -540,7 +540,7 @@ static s32 get_vpu_inst_idx(struct vpu_drv_context_t *dev, u32 *reason,
 	u32 int_reason;
 
 	int_reason = *reason;
-	enc_pr(LOG_DEBUG,
+	enc_pr(LOG_INFO,
 		"[+]%s, reason=0x%x, empty_inst=0x%x, done_inst=0x%x\n",
 		__func__, int_reason, empty_inst, done_inst);
 
@@ -637,7 +637,7 @@ static s32 get_vpu_inst_idx(struct vpu_drv_context_t *dev, u32 *reason,
 
 GET_VPU_INST_IDX_HANDLED:
 
-	enc_pr(LOG_DEBUG, "[-]%s, inst_idx=%d. *reason=0x%x\n", __func__,
+	enc_pr(LOG_INFO, "[-]%s, inst_idx=%d. *reason=0x%x\n", __func__,
 		inst_idx, *reason);
 
 	return inst_idx;

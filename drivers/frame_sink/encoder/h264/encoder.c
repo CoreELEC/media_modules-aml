@@ -1260,7 +1260,7 @@ static int scale_frame(struct encode_wq_s *wq,
 	src_left = request->crop_left;
 	src_width = request->src_w - src_left - request->crop_right;
 	src_height = request->src_h - src_top - request->crop_bottom;
-	pr_err("request->fmt=%d, %d %d, canvas=%d\n", request->fmt, FMT_NV21, FMT_BGR888, canvas);
+	enc_pr(LOG_INFO, "request->fmt=%d, %d %d, canvas=%d\n", request->fmt, FMT_NV21, FMT_BGR888, canvas);
 
 	if (canvas) {
 		if ((request->fmt == FMT_NV21)
