@@ -1714,9 +1714,14 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 	}
 
-	if (!hw->is_used_v4l)
-		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-			&vf_provider_ops, pdata);
+	if (hw->is_used_v4l) {
+		if ((pdata->canvas_mode != CANVAS_BLKMODE_LINEAR)
+		&& (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7))
+		hw->canvas_mode = CANVAS_BLKMODE_32X32;
+	} else {
+		vf_provider_init(&pdata->vframe_provider,
+			pdata->vf_provider_name, &vf_provider_ops, pdata);
+	}
 
 	platform_set_drvdata(pdev, pdata);
 

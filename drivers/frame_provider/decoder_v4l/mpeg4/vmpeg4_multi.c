@@ -37,7 +37,7 @@
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
-
+#include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../../decoder/utils/amvdec.h"
 #include "../../decoder/utils/vdec_input.h"
 #include "../../decoder/utils/vdec.h"
@@ -2188,7 +2188,7 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 #endif
 
 	/* cbcr_merge_swap_en */
-	if (hw->is_used_v4l
+	if (hw->is_used_v4l && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7)
 		&& (v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21
 		|| v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
 		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
@@ -2803,9 +2803,14 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	} else
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 
-	if (!hw->is_used_v4l)
+	if (hw->is_used_v4l) {
+		if ((pdata->canvas_mode != CANVAS_BLKMODE_LINEAR)
+		&& (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7))
+		hw->blkmode = CANVAS_BLKMODE_32X32;
+	} else {
 		vf_provider_init(&pdata->vframe_provider,
 			pdata->vf_provider_name, &vf_provider_ops, pdata);
+	}
 
 	if (vmmpeg4_init(hw) < 0) {
 		pr_err("%s init failed.\n", __func__);

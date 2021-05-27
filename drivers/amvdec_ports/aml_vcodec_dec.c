@@ -716,7 +716,8 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 
 	if (dstbuf->vb.vb2_buf.state == VB2_BUF_STATE_ACTIVE) {
 		/* binding vframe handle. */
-		vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
+			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
 		dstbuf->privdata.vf = *vf;
 		dstbuf->privdata.vf.omx_index =
 			vf->index_disp;

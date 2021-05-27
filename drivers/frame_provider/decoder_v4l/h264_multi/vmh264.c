@@ -7752,7 +7752,7 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 #endif
 
 	/* cbcr_merge_swap_en */
-	if (hw->is_used_v4l
+	if (hw->is_used_v4l && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7)
 		&& (v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21
 		|| v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
 		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
@@ -10383,7 +10383,11 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	if (hw->enable_fence)
 		pdata->sync.usage = hw->fence_usage;
 
-	if (!hw->is_used_v4l) {
+	if (hw->is_used_v4l) {
+		if ((pdata->canvas_mode != CANVAS_BLKMODE_LINEAR)
+			&& (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7))
+			hw->canvas_mode = CANVAS_BLKMODE_32X32;
+	} else {
 		hw->reorder_dpb_size_margin = reorder_dpb_size_margin;
 		hw->canvas_mode = mem_map_mode;
 
