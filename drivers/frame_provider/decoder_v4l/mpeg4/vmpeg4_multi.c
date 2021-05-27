@@ -127,6 +127,7 @@
 #define DEC_RESULT_FORCE_EXIT 4
 #define DEC_RESULT_EOS		5
 #define DEC_RESULT_UNFINISH	6
+#define DEC_RESULT_ERROR_SZIE	7
 
 #define DEC_DECODE_TIMEOUT         0x21
 #define DECODE_ID(hw) (hw_to_vdec(hw)->id)
@@ -1695,6 +1696,15 @@ static void vmpeg4_work(struct work_struct *work)
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"%s: eos flushed, frame_num %d\n",
 			__func__, hw->frame_num);
+	} else if (hw->dec_result == DEC_RESULT_ERROR_SZIE) {
+		if (!vdec_has_more_input(vdec)) {
+			hw->dec_result = DEC_RESULT_EOS;
+			vdec_schedule_work(&hw->work);
+			return;
+		} else {
+			vdec_vframe_dirty(vdec, hw->chunk);
+			hw->chunk = NULL;
+		}
 	}
 
 	if (hw->stat & STAT_VDEC_RUN) {
@@ -2475,7 +2485,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		size = vdec_prepare_input(vdec, &hw->chunk);
 		if (size < 4) { /*less than start code size 00 00 01 xx*/
 			hw->input_empty++;
-			hw->dec_result = DEC_RESULT_AGAIN;
+			hw->dec_result = DEC_RESULT_ERROR_SZIE;
 			vdec_schedule_work(&hw->work);
 			return;
 		}
