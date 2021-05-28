@@ -636,15 +636,21 @@ static int aml_ci_ts_control(struct aml_ci *ci_dev, int slot)
 static int aml_ci_slot_status(struct aml_ci *ci_dev, int slot, int open)
 {
 	struct aml_ci_bus *ci_bus_dev = ci_dev->data;
-
+	int state = 0;
 	if (ci_bus_dev->pc.start_work == 0) {
-		return DVB_CA_EN50221_POLL_CAM_CHANGED;
+		return 0;
 	}
 	if (ci_bus_dev->pc.slot_state == MODULE_INSERTED) {
-		return DVB_CA_EN50221_POLL_CAM_PRESENT |
+		state = DVB_CA_EN50221_POLL_CAM_PRESENT |
 		DVB_CA_EN50221_POLL_CAM_READY;
 	}
-	return DVB_CA_EN50221_POLL_CAM_CHANGED;
+	if (ci_bus_dev->slot_state != ci_bus_dev->pc.slot_state)
+	{
+		printk("cam crad change-----\r\n");
+		ci_bus_dev->slot_state = ci_bus_dev->pc.slot_state;
+		state = state | DVB_CA_EN50221_POLL_CAM_CHANGED;
+	}
+	return state;
 }
 
 /**\brief aml_ci_gio_get_irq:get gpio cd1 irq pin value

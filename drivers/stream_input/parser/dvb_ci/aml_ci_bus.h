@@ -54,6 +54,8 @@ struct aml_ci_bus {
 	struct pinctrl *pinctrl;
 	struct pinctrl *bus_pinctrl;
 	struct platform_device *pdev;
+	/*save cam cur state*/
+	enum aml_slot_state		slot_state;
 };
 
 enum aml_gpio_select_e {

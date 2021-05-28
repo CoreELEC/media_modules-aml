@@ -320,7 +320,7 @@ static int dvb_ca_en50221_wait_if_status(struct dvb_ca_private *ca, int slot,
 		msleep(1);
 	}
 
-	dprintk("%s failed timeout:%lu\n", __func__, jiffies - start);
+	printk("%s failed timeout:%lu\n", __func__, jiffies - start);
 
 	/* if we get here, we've timed out */
 	return -ETIMEDOUT;
@@ -406,8 +406,12 @@ static int dvb_ca_en50221_read_tuple(struct dvb_ca_private *ca, int slot,
 	int _address = *address;
 
 	/* grab the next tuple length and type */
-	if ((_tupleType = ca->pub->read_attribute_mem(ca->pub, slot, _address)) < 0)
+	msleep(10);
+	if ((_tupleType = ca->pub->read_attribute_mem(ca->pub, slot, _address)) < 0) {
+		printk("read_attribute_mem error\r\n");
 		return _tupleType;
+	}
+
 	if (_tupleType == 0xff) {
 		dprintk("END OF CHAIN TUPLE type:0x%x\n", _tupleType);
 		*address += 2;
@@ -415,14 +419,17 @@ static int dvb_ca_en50221_read_tuple(struct dvb_ca_private *ca, int slot,
 		*tupleLength = 0;
 		return 0;
 	}
+	msleep(10);
 	if ((_tupleLength = ca->pub->read_attribute_mem(ca->pub, slot, _address + 2)) < 0)
 		return _tupleLength;
 	_address += 4;
 
 	dprintk("TUPLE type:0x%x length:%i\n", _tupleType, _tupleLength);
+	msleep(10);
 
 	/* read in the whole tuple */
 	for (i = 0; i < _tupleLength; i++) {
+	    msleep(10);
 		tuple[i] = ca->pub->read_attribute_mem(ca->pub, slot, _address + (i * 2));
 		dprintk("  0x%02x: 0x%02x %c\n",
 			i, tuple[i] & 0xff,
@@ -465,39 +472,63 @@ static int dvb_ca_en50221_parse_attributes(struct dvb_ca_private *ca, int slot)
 
 	// CISTPL_DEVICE_0A
 	if ((status =
-	     dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType, &tupleLength, tuple)) < 0)
-		return status;
-	if (tupleType != 0x1D)
+	     dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType, &tupleLength, tuple)) < 0) {
+	     printk("read tuple error\r\n");
+	     return status;
+	     }
+	if (tupleType != 0x1D) {
+		printk("read tupleType error\r\n");
 		return -EINVAL;
+	}
+
 
 
 
 	// CISTPL_DEVICE_0C
 	if ((status =
-	     dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType, &tupleLength, tuple)) < 0)
-		return status;
-	if (tupleType != 0x1C)
+	     dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType, &tupleLength, tuple)) < 0) {
+	     printk("read tupleType error line[%d]\r\n", __LINE__);
+	     return status;
+	 }
+
+	if (tupleType != 0x1C) {
+	     printk("read tupleType error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
+	}
 
 
 
 	// CISTPL_VERS_1
 	if ((status =
-	     dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType, &tupleLength, tuple)) < 0)
-		return status;
-	if (tupleType != 0x15)
+	     dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType, &tupleLength, tuple)) < 0){
+	     printk("dvb ci error  line[%d]\r\n", __LINE__);
+	     return status;
+	 }
+
+	if (tupleType != 0x15) {
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
+	}
 
 
 
 	// CISTPL_MANFID
 	if ((status = dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType,
-						&tupleLength, tuple)) < 0)
+						&tupleLength, tuple)) < 0) {
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return status;
-	if (tupleType != 0x20)
+	}
+
+	if (tupleType != 0x20){
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
-	if (tupleLength != 4)
+	}
+
+	if (tupleLength != 4) {
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
+	}
+
 	manfid = (tuple[1] << 8) | tuple[0];
 	devid = (tuple[3] << 8) | tuple[2];
 
@@ -506,16 +537,28 @@ static int dvb_ca_en50221_parse_attributes(struct dvb_ca_private *ca, int slot)
 	// CISTPL_CONFIG
 	if ((status = dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType,
 						&tupleLength, tuple)) < 0)
+	{
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return status;
-	if (tupleType != 0x1A)
+	}
+
+	if (tupleType != 0x1A) {
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
-	if (tupleLength < 3)
+	}
+	if (tupleLength < 3) {
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
+	}
 
 	/* extract the configbase */
 	rasz = tuple[0] & 3;
 	if (tupleLength < (3 + rasz + 14))
+	{
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
+	}
+
 	ca->slot_info[slot].config_base = 0;
 	for (i = 0; i < rasz + 1; i++) {
 		ca->slot_info[slot].config_base |= (tuple[2 + i] << (8 * i));
@@ -523,10 +566,17 @@ static int dvb_ca_en50221_parse_attributes(struct dvb_ca_private *ca, int slot)
 
 	/* check it contains the correct DVB string */
 	dvb_str = findstr((char *)tuple, tupleLength, "DVB_CI_V", 8);
-	if (dvb_str == NULL)
+	if (dvb_str == NULL){
+		printk("dvb ci error 5 line[%d]\r\n", __LINE__);
 		return -EINVAL;
+	}
+
 	if (tupleLength < ((dvb_str - (char *) tuple) + 12))
+	{
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
+	}
+
 
 	/* is it a version we support? */
 	if (strncmp(dvb_str + 8, "1.00", 4)) {
@@ -539,11 +589,17 @@ static int dvb_ca_en50221_parse_attributes(struct dvb_ca_private *ca, int slot)
 	while ((!end_chain) && (address < 0x1000)) {
 		if ((status = dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType,
 							&tupleLength, tuple)) < 0)
+							{
+				printk("dvb ci error  line[%d]\r\n", __LINE__);
 			return status;
+							}
+
 		switch (tupleType) {
 		case 0x1B:	// CISTPL_CFTABLE_ENTRY
-			if (tupleLength < (2 + 11 + 17))
+			if (tupleLength < (2 + 11 + 17)) {
+				printk("dvb ci error 0x1b error  line[%d]\r\n", __LINE__);
 				break;
+			}
 
 			/* if we've already parsed one, just use it */
 			if (got_cftableentry)
@@ -561,6 +617,7 @@ static int dvb_ca_en50221_parse_attributes(struct dvb_ca_private *ca, int slot)
 			break;
 
 		case 0x14:	// CISTPL_NO_LINK
+		printk("dvb ci no link");
 			break;
 
 		case 0xFF:	// CISTPL_END
@@ -568,14 +625,17 @@ static int dvb_ca_en50221_parse_attributes(struct dvb_ca_private *ca, int slot)
 			break;
 
 		default:	/* Unknown tuple type - just skip this tuple and move to the next one */
-			dprintk("dvb_ca: Skipping unknown tuple type:0x%x length:0x%x\n", tupleType,
+			printk("dvb_ca: Skipping unknown tuple type:0x%x length:0x%x\n", tupleType,
 				tupleLength);
 			break;
 		}
 	}
 
 	if ((address > 0x1000) || (!got_cftableentry))
+	{
+		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
+	}
 
 	dprintk("Valid DVB CAM detected MANID:%x DEVID:%x CONFIGBASE:0x%x CONFIGOPTION:0x%x\n",
 		manfid, devid, ca->slot_info[slot].config_base, ca->slot_info[slot].config_option);
@@ -1014,11 +1074,11 @@ static void dvb_ca_en50221_thread_update_delay(struct dvb_ca_private *ca)
 		case DVB_CA_SLOTSTATE_RUNNING:
 			delay = HZ * 60;  /* 60s */
 			if (!(ca->flags & DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE))
-				delay = HZ / 10;  /* 100ms */
+				delay = HZ / 100;  /* 100ms */
 			if (ca->open) {
 				if ((!ca->slot_info[slot].da_irq_supported) ||
 				    (!(ca->flags & DVB_CA_EN50221_FLAG_IRQ_DA)))
-					delay = HZ / 10;  /* 100ms */
+					delay = HZ / 100;  /* 100ms */
 			}
 			break;
 		}
