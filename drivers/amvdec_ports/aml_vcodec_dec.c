@@ -1704,7 +1704,8 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 			if (ctx->vpp_cfg.fmt == 0)
 				ctx->vpp_cfg.fmt = ctx->cap_pix_fmt;
 
-			if (atomic_read(&ctx->dev->vpp_count) < max_di_instance) {
+			if ((atomic_read(&ctx->dev->vpp_count) < max_di_instance) ||
+				(ctx->vpp != NULL)) {
 				if (ctx->vpp && ctx->vpp_cfg.is_vpp_reset &&
 					(ctx->vpp->is_prog == ctx->vpp_cfg.is_prog) &&
 					(ctx->vpp->is_bypass_p == ctx->vpp_cfg.is_bypass_p) &&
