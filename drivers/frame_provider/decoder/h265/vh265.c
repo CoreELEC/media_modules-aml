@@ -1500,6 +1500,8 @@ struct tile_s {
 #define SEI_MASTER_DISPLAY_COLOR_MASK 0x00000001
 #define SEI_CONTENT_LIGHT_LEVEL_MASK  0x00000002
 #define SEI_HDR10PLUS_MASK			  0x00000004
+#define SEI_HDR_CUVA_MASK	      0x00000008
+
 
 #define VF_POOL_SIZE        32
 
@@ -8314,6 +8316,25 @@ static int parse_sei(struct hevc_state_s *hevc,
 						pic->hdr10p_data_buf = NULL;
 						pic->hdr10p_data_size = 0;
 					}
+				} else if (p_sei[0] == 0x26
+					&& p_sei[1] == 0x00
+					&& p_sei[2] == 0x04
+					&& p_sei[3] == 0x00
+					&& p_sei[4] == 0x05) {
+					hevc->sei_present_flag |= SEI_HDR_CUVA_MASK;
+
+					if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE) {
+						hevc_print(hevc, 0,
+							"hdr cuva data: (size %d)\n",
+							payload_size);
+						for (i = 0; i < payload_size; i++) {
+							hevc_print_cont(hevc, 0,
+								"%02x ", p_sei[i]);
+							if (((i + 1) & 0xf) == 0)
+								hevc_print_cont(hevc, 0, "\n");
+						}
+						hevc_print_cont(hevc, 0, "\n");
+					}
 				}
 
 				break;
@@ -8531,6 +8552,14 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 			data = vf->signal_type;
 			data = data & 0xFFFF00FF;
 			data = data | (0x30<<8);
+			vf->signal_type = data;
+		}
+
+		if (hevc->sei_present_flag & SEI_HDR_CUVA_MASK) {
+			u32 data;
+			data = vf->signal_type;
+			data = data & 0x7FFFFFFF;
+			data = data | (1<<31);
 			vf->signal_type = data;
 		}
 	}
