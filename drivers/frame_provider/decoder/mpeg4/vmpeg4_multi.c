@@ -24,6 +24,7 @@
 #include <linux/kfifo.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <linux/delay.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 
@@ -337,6 +338,7 @@ struct vdec_mpeg4_hw_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	bool run_flag;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -1851,7 +1853,7 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 			ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, i,
 					decbuf_size, DRIVER_NAME, &decbuf_start);
 			if (ret < 0) {
-				pr_err("mmu alloc failed! size %d  idx %d\n",
+				pr_err("bmmu alloc failed! size %d  idx %d\n",
 					decbuf_size, i);
 				return ret;
 			}
@@ -1935,12 +1937,13 @@ static void vmpeg4_dump_state(struct vdec_s *vdec)
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"====== %s\n", __func__);
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
-		"width/height (%d/%d), i_fram:%d, buffer_not_ready %d, buf_num %d\n",
+		"width/height (%d/%d), i_fram:%d, buffer_not_ready %d, buf_num %d, run_flag %d\n",
 		hw->frame_width,
 		hw->frame_height,
 		hw->first_i_frame_ready,
 		hw->buffer_not_ready,
-		hw->buf_num
+		hw->buf_num,
+		hw->run_flag
 		);
 	for (i = 0; i < hw->buf_num; i++) {
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
@@ -2452,6 +2455,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 {
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
 	int size = 0, ret = 0;
+
+	hw->run_flag = 1;
 	if (!hw->vdec_pg_enable_flag) {
 		hw->vdec_pg_enable_flag = 1;
 		amvdec_enable();
@@ -2471,6 +2476,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			hw->input_empty++;
 			hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
+			hw->run_flag = 0;
 			return;
 		}
 		if ((vdec_frame_based(vdec)) &&
@@ -2555,6 +2561,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 				hw->fw->name, tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);
+			hw->run_flag = 0;
 			return;
 		}
 		vdec->mc_loaded = 1;
@@ -2564,7 +2571,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hw->dec_result = DEC_RESULT_ERROR;
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"amvdec_mpeg4: error HW context restore\n");
-		vdec_schedule_work(&hw->work);
+		hw->run_flag = 0;
 		return;
 	}
 	if (vdec_frame_based(vdec)) {
@@ -2587,6 +2594,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->stat |= STAT_VDEC_RUN;
 	hw->init_flag = 1;
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
+	hw->run_flag = 0;
 }
 
 static int vmpeg4_stop(struct vdec_mpeg4_hw_s *hw)
@@ -2594,8 +2602,12 @@ static int vmpeg4_stop(struct vdec_mpeg4_hw_s *hw)
 	cancel_work_sync(&hw->work);
 
 	if (hw->mm_blk_handle) {
-			decoder_bmmu_box_free(hw->mm_blk_handle);
-			hw->mm_blk_handle = NULL;
+		void *bmmu_box_tmp = hw->mm_blk_handle;
+		hw->mm_blk_handle = NULL;
+		while (hw->run_flag)
+			usleep_range(1000, 2000);
+		decoder_bmmu_box_free(bmmu_box_tmp);
+		bmmu_box_tmp = NULL;
 	}
 
 	if (hw->stat & STAT_TIMER_ARM) {

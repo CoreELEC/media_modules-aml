@@ -141,7 +141,7 @@ int decoder_bmmu_box_alloc_idx(void *handle, int idx, int size, int aligned_2n,
 	int memflags = mem_flags;
 
 	if (!box || idx < 0 || idx >= box->max_mm_num) {
-		pr_err("can't alloc mmu box(%p),idx:%d\n",
+		pr_err("can't alloc bmmu box(%p),idx:%d\n",
 				box, idx);
 		return -1;
 	}
@@ -382,6 +382,10 @@ int decoder_bmmu_box_alloc_buf_phy(
 	int size, unsigned char *driver_name,
 	unsigned long *buf_phy_addr)
 {
+
+	if (handle == NULL)
+		return -EINVAL;
+
 	if (!decoder_bmmu_box_check_and_wait_size(
 			size,
 			1)) {

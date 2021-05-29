@@ -2273,8 +2273,7 @@ int vdec_disconnect(struct vdec_s *vdec)
 
 	return 0;
 discon_timeout:
-	pr_err("%s timeout!!! status: 0x%x force it to 2\n", __func__, vdec->status);
-	vdec_set_status(vdec, VDEC_STATUS_CONNECTED);
+	pr_err("%s timeout!!! status: 0x%x\n", __func__, vdec->status);
 	return 0;
 }
 EXPORT_SYMBOL(vdec_disconnect);
