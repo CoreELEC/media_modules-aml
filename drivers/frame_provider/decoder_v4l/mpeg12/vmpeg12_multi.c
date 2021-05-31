@@ -1621,8 +1621,10 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	}
 
 	if ((hw->is_used_v4l) &&
-		((vdec->prog_only) || (hw->report_field & V4L2_FIELD_NONE)))
+		((vdec->prog_only) || (hw->report_field & V4L2_FIELD_NONE))) {
 		field_num = 1;
+		type |= VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD | nv_order;
+	}
 
 	for (i = 0; i < field_num; i++) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
