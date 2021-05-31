@@ -2013,16 +2013,13 @@ static u32 seg_map_size = 0x36000;
 #define VBH_BUF_SIZE_1080P 0x3000
 #define VBH_BUF_SIZE_4K 0x5000
 #define VBH_BUF_SIZE_8K 0xa000
-//#define VBH_BUF_SIZE(bufspec) (bufspec->mmu_vbh.buf_size / 2)
+#define VBH_BUF_SIZE(bufspec) (bufspec->mmu_vbh.buf_size / 2)
 	/*mmu_vbh_dw buf is used by HEVC_SAO_MMU_VH0_ADDR2,HEVC_SAO_MMU_VH1_ADDR2,
 		HEVC_DW_VH0_ADDDR, HEVC_DW_VH1_ADDDR*/
 #define DW_VBH_BUF_SIZE_1080P (VBH_BUF_SIZE_1080P * 2)
 #define DW_VBH_BUF_SIZE_4K (VBH_BUF_SIZE_4K * 2)
 #define DW_VBH_BUF_SIZE_8K (VBH_BUF_SIZE_8K * 2)
 #define DW_VBH_BUF_SIZE(bufspec) (bufspec->mmu_vbh_dw.buf_size / 4)
-
-#define VBH_BUF_SIZE (((2 * 16 * 2304) + 0xffff) & (~0xffff))
-#define VBH_BUF_COUNT 4
 
 #define WORK_BUF_SPEC_NUM 3
 
@@ -2032,13 +2029,13 @@ static struct BuffInfo_s  aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.max_height = 1088,
 		.ipp = {
 			// IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
-			.buf_size = 0x4000,
+			.buf_size = 0x1E00,
 		},
 		.sao_abv = {
-			.buf_size = 0x30000,
+			.buf_size = 0x0, //0x30000,
 		},
 		.sao_vb = {
-			.buf_size = 0x30000,
+			.buf_size = 0x0, //0x30000,
 		},
 		.short_term_rps = {
 			// SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
@@ -2054,11 +2051,11 @@ static struct BuffInfo_s  aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 		.daala_top = {
 			// DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128. Total 4096/128*256 = 0x2000
-			.buf_size = 0x2000,
+			.buf_size = 0xf00,
 		},
 		.sao_up = {
 			// SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
-			.buf_size = 0x2800,
+			.buf_size = 0x0, //0x2800,
 		},
 		.swap_buf = {
 			// 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
@@ -2074,31 +2071,31 @@ static struct BuffInfo_s  aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 		.scalelut = {
 			// support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
-			.buf_size = 0x8000,
+			.buf_size = 0x0, //0x8000,
 		},
 		.dblk_para = {
 			// DBLK -> Max 256(4096/16) LCU, each para 1024bytes(total:0x40000), data 1024bytes(total:0x40000)
-			.buf_size = 0x80000,
+			.buf_size = 0xd00, /*0xc40*/
 		},
 		.dblk_data = {
-			.buf_size = 0x80000,
+			.buf_size = 0x49000,
 		},
 		.cdef_data = {
-			.buf_size = 0x40000,
+			.buf_size = 0x22400,
 		},
 		.ups_data = {
-			.buf_size = 0x60000,
+			.buf_size = 0x36000,
 		},
 		.fgs_table = {
 			.buf_size = FGS_TABLE_SIZE * FRAME_BUFFERS, // 512x128bits
 		},
 #ifdef AOM_AV1_MMU
 		.mmu_vbh = {
-			.buf_size = VBH_BUF_SIZE * VBH_BUF_COUNT, //2*16*(more than 2304)/4, 4K
+			.buf_size = VBH_BUF_SIZE_1080P, //2*16*(more than 2304)/4, 4K
 		},
 		.cm_header = {
 	#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
-			.buf_size = MMU_COMPRESS_HEADER_SIZE * FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
+			.buf_size = MMU_COMPRESS_HEADER_SIZE_1080P * FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
 	#else
 			.buf_size = 0,
 	#endif
@@ -2106,22 +2103,22 @@ static struct BuffInfo_s  aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 #endif
 #ifdef AOM_AV1_MMU_DW
 		.mmu_vbh_dw = {
-			.buf_size = VBH_BUF_SIZE * VBH_BUF_COUNT, //2*16*(more than 2304)/4, 4K
+			.buf_size = DW_VBH_BUF_SIZE_1080P, //2*16*(more than 2304)/4, 4K
 		},
 		.cm_header_dw = {
 	#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
-			.buf_size = MMU_COMPRESS_HEADER_SIZE_DW*FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
+			.buf_size = MMU_COMPRESS_HEADER_SIZE_1080P*FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
 	#else
 			.buf_size = 0,
 	#endif
 		},
 #endif
 		.mpred_above = {
-			.buf_size = 0x10000, /* 2 * size of hw*/
+			.buf_size = 0x2800, /*round from 0x2760*/ /* 2 * size of hw*/
 		},
 #ifdef MV_USE_FIXED_BUF
 		.mpred_mv = {
-		   .buf_size = 0x40000*FRAME_BUFFERS, //1080p, 0x40000 per buffer
+		   .buf_size = MAX_ONE_MV_BUFFER_SIZE_1080P_TM2REVB * FRAME_BUFFERS,/*round from 203A0*/ //1080p, 0x40000 per buffer
 		},
 #endif
 		.rpm = {
@@ -2872,8 +2869,6 @@ static void init_buff_spec(struct AV1HW_s *hw,
 	}
 }
 
-
-
 static void uninit_mmu_buffers(struct AV1HW_s *hw)
 {
 #ifndef MV_USE_FIXED_BUF
@@ -3325,7 +3320,7 @@ static void init_pic_list(struct AV1HW_s *hw)
 
 #ifndef USE_SPEC_BUF_FOR_MMU_HEAD
 	u32 header_size;
-	if (hw->mmu_enable && ((hw->double_write_mode & 0x10) == 0)) {
+	if (!hw->is_used_v4l && hw->mmu_enable && ((hw->double_write_mode & 0x10) == 0)) {
 		header_size = vav1_mmu_compress_header_size(hw);
 		/*alloc AV1 compress header first*/
 		for (i = 0; i < hw->used_buf_num; i++) {
@@ -5262,7 +5257,7 @@ static void aom_config_work_space_hw(struct AV1HW_s *hw, u32 mask)
 			buf_spec->dblk_para.buf_start,
 			buf_spec->dblk_data.buf_start);
 	if (mask & HW_MASK_FRONT) {
-	av1_print(hw, AOM_DEBUG_HW_MORE, "%s %d\n", __func__, __LINE__);
+		av1_print(hw, AOM_DEBUG_HW_MORE, "%s %d\n", __func__, __LINE__);
 		if ((debug & AOM_AV1_DEBUG_SEND_PARAM_WITH_REG) == 0)
 			WRITE_VREG(HEVC_RPM_BUFFER, (u32)hw->rpm_phy_addr);
 
@@ -5362,7 +5357,7 @@ static void aom_config_work_space_hw(struct AV1HW_s *hw, u32 mask)
 	if (hw->mmu_enable) {
 		WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR, buf_spec->mmu_vbh.buf_start);
 		WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR, buf_spec->mmu_vbh.buf_start
-				+ VBH_BUF_SIZE);
+				+ VBH_BUF_SIZE(buf_spec));
 		/*data32 = READ_VREG(HEVC_SAO_CTRL9);*/
 		/*data32 |= 0x1;*/
 		/*WRITE_VREG(HEVC_SAO_CTRL9, data32);*/
@@ -5386,12 +5381,12 @@ static void aom_config_work_space_hw(struct AV1HW_s *hw, u32 mask)
 
 	    WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR2, buf_spec->mmu_vbh_dw.buf_start);
 	    WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR2, buf_spec->mmu_vbh_dw.buf_start
-			+ VBH_BUF_SIZE);
+			+ DW_VBH_BUF_SIZE(buf_spec));
 
 		WRITE_VREG(HEVC_DW_VH0_ADDDR, buf_spec->mmu_vbh_dw.buf_start
-			+ (2 * VBH_BUF_SIZE));
+			+ (2 * DW_VBH_BUF_SIZE(buf_spec)));
 		WRITE_VREG(HEVC_DW_VH1_ADDDR, buf_spec->mmu_vbh_dw.buf_start
-			+ (3 * VBH_BUF_SIZE));
+			+ (3 * DW_VBH_BUF_SIZE(buf_spec)));
 
 		/* use HEVC_CM_HEADER_START_ADDR */
 	    data32 |= (1<<15);
@@ -8446,6 +8441,48 @@ static int v4l_res_change(struct AV1HW_s *hw)
 	return ret;
 }
 
+static int work_space_size_update(struct AV1HW_s *hw)
+{
+	int workbuf_size, cma_alloc_cnt, ret;
+	struct BuffInfo_s *p_buf_info = &hw->work_space_buf_store;
+
+	/* only for 8k workspace update */
+	if (!IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h))
+		return 0;
+
+	if (hw->cma_alloc_addr && hw->buf_size) {
+		memcpy(p_buf_info, &aom_workbuff_spec[2],
+			sizeof(struct BuffInfo_s));
+		workbuf_size = (p_buf_info->end_adr -
+			p_buf_info->start_adr + 0xffff) & (~0xffff);
+		cma_alloc_cnt = PAGE_ALIGN(workbuf_size) / PAGE_SIZE;
+		if (hw->cma_alloc_count < cma_alloc_cnt) {
+			decoder_bmmu_box_free_idx(hw->bmmu_box, WORK_SPACE_BUF_ID);
+			hw->buffer_spec_index = 2;
+			hw->cma_alloc_count = cma_alloc_cnt;
+			ret = decoder_bmmu_box_alloc_buf_phy(hw->bmmu_box,
+				WORK_SPACE_BUF_ID, hw->cma_alloc_count * PAGE_SIZE,
+				DRIVER_NAME, &hw->cma_alloc_addr);
+			if(ret < 0) {
+				hw->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
+				pr_err("8k workspace recalloc failed\n");
+				return ret;
+			}
+			hw->buf_start = hw->cma_alloc_addr;
+			hw->buf_size = workbuf_size;
+			pr_info("8k work_space_buf recalloc, size 0x%x\n", hw->buf_size);
+			p_buf_info->start_adr = hw->buf_start;
+			if (!hw->mmu_enable)
+				hw->mc_buf_spec.buf_end = hw->buf_start + hw->buf_size;
+			init_buff_spec(hw, p_buf_info);
+			hw->work_space_buf = p_buf_info;
+			hw->pbi->work_space_buf = p_buf_info;
+		}
+	}
+
+	return 0;
+}
+
 static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)data;
@@ -8703,9 +8740,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 #endif
 
 			/*v4l2 alloc new mv when max size changed */
-			if (hw->is_used_v4l) {
+			if (hw->is_used_v4l && IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h)) {
 				/* now less than 8k use fix mv buf size */
-				if (IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h) && hw->pic_list_init_done) {
+				if (hw->pic_list_init_done) {
 					if (init_mv_buf_list(hw) < 0)
 						pr_err("%s: !!!!Error, reinit_mv_buf_list fail\n", __func__);
 				}
@@ -8757,6 +8794,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				/*notice the v4l2 codec.*/
 				vdec_v4l_set_ps_infos(ctx, &ps);
 				hw->v4l_params_parsed = true;
+				work_space_size_update(hw);
 				hw->postproc_done = 0;
 				hw->process_busy = 0;
 				dec_again_process(hw);
@@ -10796,16 +10834,6 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	}
 
 	hw->endian = HEVC_CONFIG_LITTLE_ENDIAN;
-	if (!hw->is_used_v4l) {
-		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-			&vav1_vf_provider, hw);
-	}
-
-	if (!hw->is_used_v4l) {
-		hw->mem_map_mode = mem_map_mode;
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
-			hw->endian = HEVC_CONFIG_BIG_ENDIAN;
-	}
 	if (endian)
 		hw->endian = endian;
 
@@ -10818,12 +10846,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		hw->buffer_spec_index = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else if (vdec_is_support_4k()) {
-		if (IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h))
-			hw->buffer_spec_index = 2;
-		else if (IS_4K_SIZE(hw->max_pic_w, hw->max_pic_h))
-			hw->buffer_spec_index = 1;
-		else
-			hw->buffer_spec_index = 0;
+		hw->buffer_spec_index = 1;
 	} else
 		hw->buffer_spec_index = 0;
 

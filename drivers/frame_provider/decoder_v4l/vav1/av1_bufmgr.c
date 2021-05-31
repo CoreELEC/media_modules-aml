@@ -1941,8 +1941,9 @@ int av1_decode_frame_headers_and_setup(AV1Decoder *pbi, int trailing_bits_presen
       existing_frame_idx = params->p.existing_frame_idx; //aom_rb_read_literal(rb, 3);
       frame_to_show = cm->ref_frame_map[existing_frame_idx];
       if (frame_to_show == NULL) {
-        aom_internal_error(&cm->error, AOM_CODEC_UNSUP_BITSTREAM,
+          aom_internal_error(&cm->error, AOM_CODEC_UNSUP_BITSTREAM,
                            "Buffer does not contain a decoded frame");
+          return 0;
       }
       if (seq_params->decoder_model_info_present_flag &&
           cm->timing_info.equal_picture_interval == 0) {
