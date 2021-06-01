@@ -186,6 +186,10 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 {
 	struct aml_vcodec_ctx *ctx = inst->ctx;
 
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+		"%s:parms_status = 0x%x, present_flag = %d\n",
+		__func__, ctx->config.parm.dec.parms_status,
+		ctx->config.parm.dec.hdr.color_parms.present_flag);
 	if (ctx->config.parm.dec.parms_status &
 		V4L2_CONFIG_PARM_DECODE_CFGINFO) {
 		u8 *pbuf = ctx->config.buf;
@@ -250,6 +254,8 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 		inst->parms.hdr		= ctx->config.parm.dec.hdr;
 		inst->parms.parms_status |= V4L2_CONFIG_PARM_DECODE_HDRINFO;
 	}
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+		"config.buf = %s\n", ctx->config.buf);
 
 	inst->vdec.config	= ctx->config;
 	inst->parms.cfg		= ctx->config.parm.dec.cfg;

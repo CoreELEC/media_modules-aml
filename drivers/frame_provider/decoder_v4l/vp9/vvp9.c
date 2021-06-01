@@ -11367,8 +11367,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 
 	pbi->low_latency_flag = 1;
 	vp9_print(pbi, 0,
-			"no_head %d  low_latency %d\n",
-			pbi->no_head, pbi->low_latency_flag);
+			"no_head %d  low_latency %d video_signal_type 0x%x\n",
+			pbi->no_head, pbi->low_latency_flag, pbi->video_signal_type);
 #if 0
 	pbi->buf_start = pdata->mem_start;
 	pbi->buf_size = pdata->mem_end - pdata->mem_start + 1;

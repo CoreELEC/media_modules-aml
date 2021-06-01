@@ -6081,6 +6081,7 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
 		memset(&hdr, 0, sizeof(hdr));
 		hdr.signal_type = vf->signal_type;
 		hdr.color_parms = hw->vf_dp;
+		hdr.color_parms.luminance[0] = hdr.color_parms.luminance[0] / 1000;
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
 
@@ -10870,6 +10871,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
 				&& vf_dp.present_flag == 1) {
+			get_config_int(pdata->config, "signal_type",
+					&hw->video_signal_type);
 			get_config_int(pdata->config, "mG.x",
 					&vf_dp.primaries[0][0]);
 			get_config_int(pdata->config, "mG.y",
@@ -10896,13 +10899,15 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			get_config_int(pdata->config, "mMaxFALL",
 					&content_light_level.max_pic_average);
 			vf_dp.content_light_level = content_light_level;
-			hw->video_signal_type = (1 << 29)
+			if (!hw->video_signal_type) {
+				hw->video_signal_type = (1 << 29)
 					| (5 << 26)	/* unspecified */
 					| (0 << 25)	/* limit */
 					| (1 << 24)	/* color available */
 					| (9 << 16)	/* 2020 */
 					| (16 << 8)	/* 2084 */
 					| (9 << 0);	/* 2020 */
+                        }
 		}
 		hw->vf_dp = vf_dp;
 	} else {
@@ -10992,8 +10997,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 #endif
 	av1_print(hw, 0,
-			"no_head %d  low_latency %d\n",
-			hw->no_head, hw->low_latency_flag);
+			"no_head %d  low_latency %d video_signal_type 0x%x\n",
+			hw->no_head, hw->low_latency_flag, hw->video_signal_type);
 #if 0
 	hw->buf_start = pdata->mem_start;
 	hw->buf_size = pdata->mem_end - pdata->mem_start + 1;

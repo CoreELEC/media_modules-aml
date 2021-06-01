@@ -263,6 +263,10 @@ static void vdec_parser_parms(struct vdec_av1_inst *inst)
 {
 	struct aml_vcodec_ctx *ctx = inst->ctx;
 
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+		"%s:parms_status = 0x%x, present_flag = %d\n",
+		__func__, ctx->config.parm.dec.parms_status,
+		ctx->config.parm.dec.hdr.color_parms.present_flag);
 	if (ctx->config.parm.dec.parms_status &
 		V4L2_CONFIG_PARM_DECODE_CFGINFO) {
 		u8 *pbuf = ctx->config.buf;
@@ -291,10 +295,12 @@ static void vdec_parser_parms(struct vdec_av1_inst *inst)
 
 	if ((ctx->config.parm.dec.parms_status &
 		V4L2_CONFIG_PARM_DECODE_HDRINFO) &&
-		inst->parms.hdr.color_parms.present_flag) {
+		ctx->config.parm.dec.hdr.color_parms.present_flag) {
 		u8 *pbuf = ctx->config.buf + ctx->config.length;
 
 		pbuf += sprintf(pbuf, "HDRStaticInfo:%d;", 1);
+		pbuf += sprintf(pbuf, "signal_type:%d;",
+			ctx->config.parm.dec.hdr.signal_type);
 		pbuf += sprintf(pbuf, "mG.x:%d;",
 			ctx->config.parm.dec.hdr.color_parms.primaries[0][0]);
 		pbuf += sprintf(pbuf, "mG.y:%d;",
@@ -323,6 +329,8 @@ static void vdec_parser_parms(struct vdec_av1_inst *inst)
 		inst->parms.hdr		= ctx->config.parm.dec.hdr;
 		inst->parms.parms_status |= V4L2_CONFIG_PARM_DECODE_HDRINFO;
 	}
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+		"config.buf = %s\n", ctx->config.buf);
 
 	inst->vdec.config	= ctx->config;
 	inst->parms.cfg		= ctx->config.parm.dec.cfg;
@@ -1093,7 +1101,7 @@ static int vdec_av1_decode(unsigned long h_vdec,
 
 	 parms->parms_status |= inst->parms.parms_status;
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
 		"parms status: %u\n", parms->parms_status);
  }
 
@@ -1273,7 +1281,7 @@ static void set_param_hdr_info(struct vdec_av1_inst *inst,
 			V4L2_CONFIG_PARM_DECODE_HDRINFO;
 		aml_vdec_dispatch_event(inst->ctx,
 			V4L2_EVENT_SRC_CH_HDRINFO);
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
 			"av1 set HDR infos\n");
 	}
 }
