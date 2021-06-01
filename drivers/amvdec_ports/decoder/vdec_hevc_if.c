@@ -415,7 +415,7 @@ static int parse_stream_ucode(struct vdec_hevc_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->pic.reorder_frames ? 0 : -1;
+	return inst->vsi->pic.dpb_frames ? 0 : -1;
 }
 
 static int parse_stream_ucode_dma(struct vdec_hevc_inst *inst,
@@ -436,7 +436,7 @@ static int parse_stream_ucode_dma(struct vdec_hevc_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->pic.reorder_frames ? 0 : -1;
+	return inst->vsi->pic.dpb_frames ? 0 : -1;
 }
 
 static int parse_stream_cpu(struct vdec_hevc_inst *inst, u8 *buf, u32 size)
@@ -731,8 +731,9 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 				  ALIGN(vdec_pic_scale(inst, pic->coded_height, dw), 64);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
-	pic->reorder_frames	= ps->reorder_frames;
-	pic->reorder_margin	= ps->reorder_margin;
+	pic->dpb_frames		= ps->dpb_frames;
+	pic->dpb_margin		= ps->dpb_margin;
+	pic->vpp_margin		= ps->dpb_margin;
 	dec->dpb_sz		= ps->dpb_size;
 	pic->field		= ps->field;
 

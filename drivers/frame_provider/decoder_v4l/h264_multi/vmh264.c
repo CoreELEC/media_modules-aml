@@ -5425,8 +5425,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 			vdec_v4l_get_pic_info(ctx, &pic);
 
-			active_buffer_spec_num = pic.reorder_frames +
-				pic.reorder_margin;
+			active_buffer_spec_num = pic.dpb_frames +
+				pic.dpb_margin;
 		}
 
 		hw->dpb.mDPB.size = active_buffer_spec_num;
@@ -9045,8 +9045,8 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	ps->visible_height	= frame_height;
 	ps->coded_width		= ALIGN(mb_width << 4, 64);
 	ps->coded_height	= ALIGN(mb_height << 4, 64);
-	ps->reorder_frames	= dec_dpb_size + 1; /* +1 for two frames in one packet */
-	ps->reorder_margin	= used_reorder_dpb_size_margin;
+	ps->dpb_frames		= dec_dpb_size + 1; /* +1 for two frames in one packet */
+	ps->dpb_margin		= used_reorder_dpb_size_margin;
 	ps->dpb_size		= active_buffer_spec_num;
 	/* vpp_needed() return false when resolution over 1920x1088 */
 	if ((frame_height != 0) &&
@@ -9061,22 +9061,22 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	/* update reoder and margin num. */
 	if (hw->res_ch_flag) {
 		vdec_v4l_get_pic_info(ctx, &pic);
-		ps->reorder_frames = pic.reorder_frames;
-		ps->reorder_margin = pic.reorder_margin;
+		ps->dpb_frames = pic.dpb_frames;
+		ps->dpb_margin = pic.dpb_margin;
 	}
 
-	if (ps->reorder_frames >= 16) {
+	if (ps->dpb_frames >= 16) {
 		if (ps->field == V4L2_FIELD_NONE) {
-			ps->reorder_frames = adjust_dpb_size;
+			ps->dpb_frames = adjust_dpb_size;
 		} else {
-			ps->reorder_frames = adjust_dpb_size - 2;
+			ps->dpb_frames = adjust_dpb_size - 2;
 		}
 	}
 
 	dpb_print(DECODE_ID(hw), 0,
 		"Res:%dx%d, DPB size:%d, margin:%d, scan:%s\n",
 		ps->visible_width, ps->visible_height,
-		ps->reorder_frames, ps->reorder_margin,
+		ps->dpb_frames, ps->dpb_margin,
 		(ps->field == V4L2_FIELD_NONE) ? "P" : "I");
 
 	return 0;

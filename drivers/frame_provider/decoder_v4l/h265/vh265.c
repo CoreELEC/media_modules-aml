@@ -10394,8 +10394,8 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 	ps->coded_width 	= ALIGN(width, 64);
 	ps->coded_height 	= ALIGN(height, 64);
 	ps->field 		= hevc->interlace_flag ? V4L2_FIELD_INTERLACED : V4L2_FIELD_NONE;
-	ps->reorder_frames	= v4l_parser_work_pic_num(hevc);
-	ps->reorder_margin	= get_dynamic_buf_num_margin(hevc);
+	ps->dpb_frames		= v4l_parser_work_pic_num(hevc);
+	ps->dpb_margin		= get_dynamic_buf_num_margin(hevc);
 
 	return 0;
 }
@@ -11283,8 +11283,8 @@ force_output:
 						struct vdec_pic_info pic;
 
 						vdec_v4l_get_pic_info(ctx, &pic);
-						hevc->used_buf_num = pic.reorder_frames +
-							pic.reorder_margin;
+						hevc->used_buf_num = pic.dpb_frames +
+							pic.dpb_margin;
 						if (hevc->used_buf_num > MAX_BUF_NUM)
 							hevc->used_buf_num = MAX_BUF_NUM;
 					}

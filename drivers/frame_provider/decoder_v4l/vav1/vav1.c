@@ -8389,19 +8389,19 @@ static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 	ps->coded_width 	= ALIGN(hw->frame_width, 64);
 	ps->coded_height 	= ALIGN(hw->frame_height, 64);
 	ps->dpb_size 		= hw->used_buf_num;
-	ps->reorder_margin	= hw->dynamic_buf_num_margin;
+	ps->dpb_margin		= hw->dynamic_buf_num_margin;
 	if (hw->frame_width > 1920 && hw->frame_height > 1088)
-		ps->reorder_frames = 8;
+		ps->dpb_frames = 8;
 	else
-		ps->reorder_frames = 10;
+		ps->dpb_frames = 10;
 
-	ps->reorder_frames += 2;
+	ps->dpb_frames += 2;
 
-	if (ps->reorder_margin + ps->reorder_frames > MAX_BUF_NUM_NORMAL) {
+	if (ps->dpb_margin + ps->dpb_frames > MAX_BUF_NUM_NORMAL) {
 		u32 delta;
-		delta = ps->reorder_margin + ps->reorder_frames - MAX_BUF_NUM_NORMAL;
-		ps->reorder_margin -= delta;
-		hw->dynamic_buf_num_margin = ps->reorder_margin;
+		delta = ps->dpb_margin + ps->dpb_frames - MAX_BUF_NUM_NORMAL;
+		ps->dpb_margin -= delta;
+		hw->dynamic_buf_num_margin = ps->dpb_margin;
 	}
 	ps->field = V4L2_FIELD_NONE;
 
@@ -8815,11 +8815,11 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 				if (!hw->pic_list_init_done) {
 					vdec_v4l_get_pic_info(ctx, &pic);
-					hw->used_buf_num = pic.reorder_frames +
-						pic.reorder_margin;
+					hw->used_buf_num = pic.dpb_frames +
+						pic.dpb_margin;
 
 					if (IS_4K_SIZE(hw->init_pic_w, hw->init_pic_h)) {
-						hw->used_buf_num = MAX_BUF_NUM_LESS + pic.reorder_margin;
+						hw->used_buf_num = MAX_BUF_NUM_LESS + pic.dpb_margin;
 						if (hw->used_buf_num > REF_FRAMES_4K)
 							hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
 					}

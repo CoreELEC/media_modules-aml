@@ -405,7 +405,7 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 		vpp->fmt         = ctx->cap_pix_fmt;
 		vpp->is_drm      = ctx->is_drm_mode;
 		vpp->buf_size = aml_v4l2_vpp_get_buf_num(vpp->mode)
-			+ picinfo->reorder_margin;
+			+ picinfo->vpp_margin;
 
 		if (picinfo->field == V4L2_FIELD_NONE) {
 			vpp->is_prog = true;
@@ -413,7 +413,7 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 		} else {
 			vpp->is_prog = false;
 			/* for between with dec & vpp. */
-			picinfo->reorder_margin = 2;
+			picinfo->dpb_margin = 2;
 		}
 
 		if (vpp->is_prog &&
@@ -427,13 +427,13 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 		ctx->vpp_is_need = false;
 	}
 
-	ctx->dpb_size = picinfo->reorder_frames + picinfo->reorder_margin;
+	ctx->dpb_size = picinfo->dpb_frames + picinfo->dpb_margin;
 	ctx->vpp_size = vpp->buf_size;
 	total_size = ctx->dpb_size + ctx->vpp_size;
 
 	if (total_size > V4L_CAP_BUFF_MAX) {
-		picinfo->reorder_margin = V4L_CAP_BUFF_MAX -
-			picinfo->reorder_frames - ctx->vpp_size;
+		picinfo->dpb_margin = V4L_CAP_BUFF_MAX -
+			picinfo->dpb_frames - ctx->vpp_size;
 		total_size = V4L_CAP_BUFF_MAX;
 	}
 	vdec_if_set_param(ctx, SET_PARAM_PIC_INFO, picinfo);
@@ -479,8 +479,8 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"Update picture buffer count: dec:%u, vpp:%u, margin:%u, total:%u\n",
-		ctx->picinfo.reorder_frames, ctx->vpp_size,
-		ctx->picinfo.reorder_margin,
+		ctx->picinfo.dpb_frames, ctx->vpp_size,
+		ctx->picinfo.dpb_margin,
 		CTX_BUF_TOTAL(ctx));
 }
 
@@ -1053,8 +1053,8 @@ void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx)
 		pic.coded_width, pic.coded_height);
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"Buffer num : dec:%d, vpp:%d, margin:%d, total:%d\n",
-		ctx->picinfo.reorder_frames, ctx->vpp_size,
-		ctx->picinfo.reorder_margin, CTX_BUF_TOTAL(ctx));
+		ctx->picinfo.dpb_frames, ctx->vpp_size,
+		ctx->picinfo.dpb_margin, CTX_BUF_TOTAL(ctx));
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"Config     : dw:%d, drm:%d, byp:%d, lc:%d, nr:%d\n",
 		ctx->config.parm.dec.cfg.double_write_mode,
@@ -1801,15 +1801,15 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 					"reqbufs (st:%d) %d -> %d\n",
 					ctx->state, rb->count, CTX_BUF_TOTAL(ctx));
-			ctx->picinfo.reorder_margin += (rb->count - CTX_BUF_TOTAL(ctx));
-			ctx->dpb_size = ctx->picinfo.reorder_frames + ctx->picinfo.reorder_margin;
+			ctx->picinfo.dpb_margin += (rb->count - CTX_BUF_TOTAL(ctx));
+			ctx->dpb_size = ctx->picinfo.dpb_frames + ctx->picinfo.dpb_margin;
 			vdec_if_set_param(ctx, SET_PARAM_PIC_INFO, &ctx->picinfo);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 					"%s buf updated, dec: %d (%d + %d), vpp %d\n",
 					__func__,
 					ctx->dpb_size,
-					ctx->picinfo.reorder_frames,
-					ctx->picinfo.reorder_margin,
+					ctx->picinfo.dpb_frames,
+					ctx->picinfo.dpb_margin,
 					ctx->vpp_size);
 			//rb->count = ctx->dpb_size;
 		}
@@ -3249,7 +3249,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		return;
 	}
 
-	if (!ctx->picinfo.reorder_frames)
+	if (!ctx->picinfo.dpb_frames)
 		return;
 
 	v4l_buf_size_decision(ctx);
@@ -3257,8 +3257,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"Picture buffer count: dec:%u, vpp:%u, margin:%u, total:%u\n",
-		ctx->picinfo.reorder_frames, ctx->vpp_size,
-		ctx->picinfo.reorder_margin,
+		ctx->picinfo.dpb_frames, ctx->vpp_size,
+		ctx->picinfo.dpb_margin,
 		CTX_BUF_TOTAL(ctx));
 
 	aml_vdec_dispatch_event(ctx, V4L2_EVENT_SRC_CH_RESOLUTION);

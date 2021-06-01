@@ -490,7 +490,7 @@ static void fill_vdec_params(struct vdec_h264_inst *inst, struct h264_SPS_t *sps
 	inst->parms.ps.mb_width		= sps->mb_width;
 	inst->parms.ps.mb_height	= sps->mb_height;
 	inst->parms.ps.ref_frames	= sps->ref_frame_count;
-	inst->parms.ps.reorder_frames	= sps->num_reorder_frames;
+	inst->parms.ps.dpb_frames	= sps->num_reorder_frames;
 	inst->parms.ps.dpb_size		= dec->dpb_sz;
 	inst->parms.parms_status	|= V4L2_CONFIG_PARM_DECODE_PSINFO;
 
@@ -563,7 +563,7 @@ static int parse_stream_ucode(struct vdec_h264_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->pic.reorder_frames ? 0 : -1;
+	return inst->vsi->pic.dpb_frames ? 0 : -1;
 }
 
 static int parse_stream_ucode_dma(struct vdec_h264_inst *inst,
@@ -584,7 +584,7 @@ static int parse_stream_ucode_dma(struct vdec_h264_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
-	return inst->vsi->pic.reorder_frames ? 0 : -1;
+	return inst->vsi->pic.dpb_frames ? 0 : -1;
 }
 
 static int parse_stream_cpu(struct vdec_h264_inst *inst, u8 *buf, u32 size)
@@ -955,8 +955,9 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 	pic->profile_idc	= ps->profile;
 	pic->field		= ps->field;
-	pic->reorder_frames	= ps->reorder_frames;
-	pic->reorder_margin	= ps->reorder_margin;
+	pic->dpb_frames		= ps->dpb_frames;
+	pic->dpb_margin		= ps->dpb_margin;
+	pic->vpp_margin		= ps->dpb_margin;
 	dec->dpb_sz		= ps->dpb_size;
 
 	inst->parms.ps 	= *ps;

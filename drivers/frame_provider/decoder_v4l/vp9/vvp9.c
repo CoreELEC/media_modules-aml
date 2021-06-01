@@ -8760,22 +8760,22 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 	ps->coded_width 	= ALIGN(pbi->frame_width, 64);
 	ps->coded_height 	= ALIGN(pbi->frame_height, 64);
 	ps->dpb_size 		= pbi->used_buf_num;
-	ps->reorder_margin	= pbi->dynamic_buf_num_margin;
+	ps->dpb_margin	= pbi->dynamic_buf_num_margin;
 	if (pbi->frame_width > 2048 && pbi->frame_height > 1088)
-		ps->reorder_frames	= 4;	 /* > level 4.1*/
+		ps->dpb_frames	= 4;	 /* > level 4.1*/
 	else
-		ps->reorder_frames	= 8;	/* < level 4.1 */
+		ps->dpb_frames	= 8;	/* < level 4.1 */
 	/*
 	1. curruent decoding frame is not include in dpb;
 	2. for frame push out, one more buffer necessary.
 	*/
-	ps->reorder_frames += 2;
+	ps->dpb_frames += 2;
 
-	if (ps->reorder_margin + ps->reorder_frames > MAX_BUF_NUM_NORMAL) {
+	if (ps->dpb_margin + ps->dpb_frames > MAX_BUF_NUM_NORMAL) {
 		u32 delta;
-		delta = ps->reorder_margin + ps->reorder_frames - MAX_BUF_NUM_NORMAL;
-		ps->reorder_margin -= delta;
-		pbi->dynamic_buf_num_margin = ps->reorder_margin;
+		delta = ps->dpb_margin + ps->dpb_frames - MAX_BUF_NUM_NORMAL;
+		ps->dpb_margin -= delta;
+		pbi->dynamic_buf_num_margin = ps->dpb_margin;
 	}
 	ps->field = V4L2_FIELD_NONE;
 
@@ -9107,8 +9107,8 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 					struct vdec_pic_info pic;
 
 					vdec_v4l_get_pic_info(ctx, &pic);
-					pbi->used_buf_num = pic.reorder_frames +
-						pic.reorder_margin;
+					pbi->used_buf_num = pic.dpb_frames +
+						pic.dpb_margin;
 					init_pic_list(pbi);
 					init_pic_list_hw(pbi);
 

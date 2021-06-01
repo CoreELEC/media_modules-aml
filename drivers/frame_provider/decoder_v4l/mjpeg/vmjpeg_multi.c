@@ -317,8 +317,8 @@ static int vmjpeg_get_ps_info(struct vdec_mjpeg_hw_s *hw, int width, int height,
 	ps->coded_width		= ALIGN(width, 64);
 	ps->coded_height 	= ALIGN(height, 64);
 	ps->dpb_size 		= hw->buf_num;
-	ps->reorder_frames	= DECODE_BUFFER_NUM_DEF;
-	ps->reorder_margin	= hw->dynamic_buf_num_margin;
+	ps->dpb_frames		= DECODE_BUFFER_NUM_DEF;
+	ps->dpb_margin		= hw->dynamic_buf_num_margin;
 	ps->field = V4L2_FIELD_NONE;
 
 	return 0;
@@ -400,8 +400,8 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 					if (!hw->buf_num) {
 						vdec_v4l_get_pic_info(ctx, &pic);
-						hw->buf_num = pic.reorder_frames +
-							pic.reorder_margin;
+						hw->buf_num = pic.dpb_frames +
+							pic.dpb_margin;
 						if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
 							hw->buf_num = DECODE_BUFFER_NUM_MAX;
 					}
@@ -1112,8 +1112,8 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 
 		if (!hw->buf_num) {
 			vdec_v4l_get_pic_info(v4l2_ctx, &pic);
-			hw->buf_num = pic.reorder_frames +
-				pic.reorder_margin;
+			hw->buf_num = pic.dpb_frames +
+				pic.dpb_margin;
 			if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
 				hw->buf_num = DECODE_BUFFER_NUM_MAX;
 		}
