@@ -2593,6 +2593,9 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			if (v4lvideo_add_ppmgr)
 				snprintf(postprocess_name, sizeof(postprocess_name),
 					"%s ", "ppmgr");
+			if (debug_vdetect && (vdec->vf_receiver_inst == 0))
+				snprintf(postprocess_name + strlen(postprocess_name), sizeof(postprocess_name),
+					 "%s ", "vdetect.0");
 			/* 8K remove di */
 			if ((vdec->sys_info->width * vdec->sys_info->height > (4096 * 2304))
 				|| (!v4lvideo_add_di))
