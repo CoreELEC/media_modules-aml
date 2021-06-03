@@ -2788,11 +2788,12 @@ void aml_v4l_ctx_release(struct kref *kref)
 			atomic_read(&ctx->dev->vpp_count));
 	}
 
+	v4l2_m2m_ctx_release(ctx->m2m_ctx);
+	aml_task_chain_remove(ctx);
+
 	vfree(ctx->dv_infos.dv_bufs);
 
 	vfree(ctx->meta_infos.meta_bufs);
-
-	aml_task_chain_remove(ctx);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"v4ldec has been destroyed.\n");

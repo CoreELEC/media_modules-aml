@@ -181,17 +181,10 @@ static int fops_vcodec_release(struct file *file)
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "release decoder %lx\n", (ulong) ctx);
 	mutex_lock(&dev->dev_mutex);
 
-	/*
-	 * Call v4l2_m2m_ctx_release before aml_vcodec_dec_release. First, it
-	 * makes sure the worker thread is not running after vdec_if_deinit.
-	 * Second, the decoder will be flushed and all the buffers will be
-	 * returned in stop_streaming.
-	 */
 	aml_thread_stop(ctx);
 	wait_vcodec_ending(ctx);
-	v4l2_m2m_ctx_release(ctx->m2m_ctx);
-	aml_vcodec_dec_release(ctx);
 
+	aml_vcodec_dec_release(ctx);
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
 	v4l2_ctrl_handler_free(&ctx->ctrl_hdl);
