@@ -157,6 +157,7 @@ static int frameinfo_flag = 0;
 static int v4lvideo_add_di = 1;
 static int v4lvideo_add_ppmgr = 0;
 static int max_di_instance = 2;
+static int max_supported_di_instance = 4;
 
 //static int path_debug = 0;
 
@@ -2332,8 +2333,10 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	const char *pdev_name;
 	char dev_name[32] = {0};
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
+	int max_di_count = max_di_instance;
 	char postprocess_name[64] = {0};
-
+	if (vdec_stream_based(vdec))
+		max_di_count = max_supported_di_instance;
 	vdec->is_v4l = is_v4l ? 1 : 0;
 	if (is_res_locked(vdec_core->vdec_resouce_status,
 		BIT(vdec->frame_base_video_path)))
@@ -2605,8 +2608,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 					vdec->vf_receiver_name);
 			else {
 				if ((vdec->vf_receiver_inst == 0)
-					&& (max_di_instance > 0))
-					if (max_di_instance == 1)
+					&& (max_di_count > 0))
+					if (max_di_count == 1)
 						snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 							"%s %s%s %s", vdec->vf_provider_name,
 							postprocess_name,
@@ -2619,7 +2622,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 							"dimulti.1",
 							vdec->vf_receiver_name);
 				else if ((vdec->vf_receiver_inst <
-					  max_di_instance) &&
+					  max_di_count) &&
 					  (vdec->vf_receiver_inst == 1))
 					snprintf(vdec->vfm_map_chain,
 						 VDEC_MAP_NAME_SIZE,
@@ -2628,7 +2631,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 						 "deinterlace",
 						 vdec->vf_receiver_name);
 				else if (vdec->vf_receiver_inst <
-					 max_di_instance)
+					 max_di_count)
 					snprintf(vdec->vfm_map_chain,
 						 VDEC_MAP_NAME_SIZE,
 						 "%s %s%d %s",
@@ -5983,6 +5986,9 @@ module_param(max_di_instance, int, 0664);
 MODULE_PARM_DESC(max_di_instance,
 				"\n max_di_instance\n");
 
+module_param(max_supported_di_instance, int, 0664);
+MODULE_PARM_DESC(max_supported_di_instance,
+				"\n max_supported_di_instance\n");
 module_param(debug_vdetect, int, 0664);
 MODULE_PARM_DESC(debug_vdetect, "\n debug_vdetect\n");
 
