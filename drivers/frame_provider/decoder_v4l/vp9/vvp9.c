@@ -1248,6 +1248,7 @@ struct VP9Decoder_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	bool wait_more_buf;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -7284,8 +7285,18 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 		struct VP9_Common_s *cm = &pbi->common;
 		struct BufferPool_s *pool = cm->buffer_pool;
 		struct PIC_BUFFER_CONFIG_s *pic = &pool->frame_bufs[index].buf;
-
 		unsigned long flags;
+
+		if (vf->v4l_mem_handle !=
+			pbi->m_BUF[pic->BUF_index].v4l_ref_buf_addr) {
+			vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+				"VP9 update fb handle, old:%llx, new:%llx\n",
+				pbi->m_BUF[pic->BUF_index].v4l_ref_buf_addr,
+				vf->v4l_mem_handle);
+
+			pbi->m_BUF[pic->BUF_index].v4l_ref_buf_addr =
+				vf->v4l_mem_handle;
+		}
 
 		lock_buffer_pool(pool, flags);
 		if (pool->frame_bufs[index].buf.vf_ref > 0)
@@ -7297,12 +7308,10 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 		pbi->last_put_idx = index;
 		pbi->new_frame_displayed++;
 
-		if (vf->v4l_mem_handle != pic->cma_alloc_addr) {
-			pic->cma_alloc_addr = vf->v4l_mem_handle;
-
-			vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
-				"VP9 update fb handle, old:%llx, new:%llx\n",
-				pic->cma_alloc_addr, vf->v4l_mem_handle);
+		if (pbi->wait_more_buf) {
+			pbi->wait_more_buf = false;
+			pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+			vdec_schedule_work(&pbi->work);
 		}
 
 		unlock_buffer_pool(pool, flags);
@@ -10081,6 +10090,38 @@ static void dump_data(struct VP9Decoder_s *pbi, int size)
 		codec_mm_unmap_phyaddr(data);
 }
 
+static int vp9_wait_cap_buf(void *args)
+{
+	struct VP9Decoder_s *pbi =
+		(struct VP9Decoder_s *) args;
+	struct VP9_Common_s *const cm = &pbi->common;
+	struct aml_vcodec_ctx * ctx =
+		(struct aml_vcodec_ctx *)pbi->v4l2_ctx;
+	ulong flags;
+	int ret = 0;
+
+	ret = wait_event_interruptible_timeout(ctx->cap_wq,
+		get_free_buf_count(pbi) > 0,
+		msecs_to_jiffies(300));
+	if (ret <= 0){
+		pr_err("%s, wait cap buf timeout or err %d\n",
+			__func__, ret);
+	}
+
+	lock_buffer_pool(cm->buffer_pool, flags);
+	if (pbi->wait_more_buf) {
+		pbi->wait_more_buf = false;
+		pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+		vdec_schedule_work(&pbi->work);
+	}
+	unlock_buffer_pool(cm->buffer_pool, flags);
+
+	vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+		"%s wait capture buffer end, ret:%d\n",
+		__func__, ret);
+	return 0;
+}
+
 static void vp9_work(struct work_struct *work)
 {
 	struct VP9Decoder_s *pbi = container_of(work,
@@ -10106,13 +10147,22 @@ static void vp9_work(struct work_struct *work)
 	if (pbi->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
 		reset_process_time(pbi);
 		if (!get_free_buf_count(pbi)) {
-			pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+			struct VP9_Common_s *const cm = &pbi->common;
+			ulong flags;
+
+			lock_buffer_pool(cm->buffer_pool, flags);
 			if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
 				pbi->dec_result = DEC_RESULT_AGAIN;
 				pbi->postproc_done = 0;
 				pbi->process_busy = 0;
+				vdec_schedule_work(&pbi->work);
+			} else {
+				pbi->wait_more_buf = true;
 			}
-			vdec_schedule_work(&pbi->work);
+			unlock_buffer_pool(cm->buffer_pool, flags);
+
+			if (pbi->wait_more_buf)
+				vdec_post_task(vp9_wait_cap_buf, pbi);
 		} else {
 			int i;
 

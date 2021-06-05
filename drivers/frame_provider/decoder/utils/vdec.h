@@ -338,6 +338,15 @@ struct aml_meta_info_s {
 	u8 data[0];
 };
 
+typedef int (*post_task_handler)(void *args);
+
+struct vdec_post_task_parms_s {
+	struct task_struct	*task;
+	struct completion	park;
+	post_task_handler	func;
+	void			*private;
+};
+
 /* common decoder vframe provider name to use default vfm path */
 #define VFM_DEC_PROVIDER_NAME "decoder"
 #define VFM_DEC_DVBL_PROVIDER_NAME "dvbldec"
@@ -553,4 +562,7 @@ void vdec_canvas_unlock(unsigned long flags);
 unsigned long vdec_canvas_lock(void);
 
 int vdec_get_core_nr(void);
+
+int vdec_post_task(post_task_handler func, void *args);
+
 #endif				/* VDEC_H */

@@ -3177,6 +3177,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 			task->recycle(task, TASK_TYPE_V4L_SINK);
 		}
+
+		wake_up_interruptible(&ctx->cap_wq);
 		return;
 	}
 
@@ -3493,14 +3495,17 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 			ctx->reset_flag = V4L_RESET_MODE_NORMAL;
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 				"force reset to drop es frames.\n");
+			wake_up_interruptible(&ctx->cap_wq);
 			aml_vdec_reset(ctx);
 		}
 
 		INIT_KFIFO(ctx->dmabuff_recycle);
 	} else {
 		/* clean output cache and decoder status . */
-		if (ctx->state > AML_STATE_INIT)
+		if (ctx->state > AML_STATE_INIT) {
+			wake_up_interruptible(&ctx->cap_wq);
 			aml_vdec_reset(ctx);
+		}
 
 		while ((vb2_v4l2 = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx)))
 			v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);

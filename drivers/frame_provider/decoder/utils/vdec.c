@@ -5850,6 +5850,53 @@ int get_double_write_ratio(int dw_mode)
 }
 EXPORT_SYMBOL(get_double_write_ratio);
 
+static int vdec_post_handler(void *args)
+{
+	struct vdec_post_task_parms_s *parms =
+		(struct vdec_post_task_parms_s *) args;
+
+	complete(&parms->park);
+
+	/* process client task. */
+	parms->func(parms->private);
+
+	while (!kthread_should_stop()) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
+	}
+
+	kfree(parms);
+	return 0;
+}
+
+int vdec_post_task(post_task_handler func, void *args)
+{
+	struct vdec_post_task_parms_s *parms;
+
+	parms = kzalloc(sizeof(*parms), GFP_KERNEL);
+	if (parms == NULL)
+		return -ENOMEM;
+
+	parms->func	= func;
+	parms->private	= args;
+	init_completion(&parms->park);
+
+	parms->task = kthread_run(vdec_post_handler,
+				  parms, "task-post-thread");
+	if (IS_ERR(parms->task)) {
+		pr_err("%s, creat task post thread faild %ld\n",
+			__func__, PTR_ERR(parms->task));
+		return PTR_ERR(parms->task);
+	}
+
+	if (!__kthread_should_park(parms->task))
+		wait_for_completion(&parms->park);
+
+	kthread_stop(parms->task);
+	return 0;
+}
+EXPORT_SYMBOL(vdec_post_task);
+
 void vdec_set_vld_wp(struct vdec_s *vdec, u32 wp)
 {
 	if (vdec_single(vdec)) {

@@ -869,6 +869,7 @@ struct AV1HW_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	bool wait_more_buf;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -1010,6 +1011,7 @@ static void timeout_process(struct AV1HW_s *hw)
 	}
 	hw->timeout_num++;
 	amhevc_stop();
+
 	av1_print(hw,
 		0, "%s decoder timeout\n", __func__);
 
@@ -6205,23 +6207,32 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 		struct BufferPool_s *pool = cm->buffer_pool;
 		PIC_BUFFER_CONFIG *pic = &pool->frame_bufs[index].buf;
 
+		if (vf->v4l_mem_handle !=
+			hw->m_BUF[pic->BUF_index].v4l_ref_buf_addr) {
+			av1_print(hw, PRINT_FLAG_V4L_DETAIL,
+				"AV1 update fb handle, old:%llx, new:%llx\n",
+				hw->m_BUF[pic->BUF_index].v4l_ref_buf_addr,
+				vf->v4l_mem_handle);
+
+			hw->m_BUF[pic->BUF_index].v4l_ref_buf_addr =
+				vf->v4l_mem_handle;
+		}
+
 		lock_buffer_pool(hw->common.buffer_pool, flags);
 		if ((debug & AV1_DEBUG_IGNORE_VF_REF) == 0) {
 			if (pool->frame_bufs[index].buf.vf_ref > 0)
 				pool->frame_bufs[index].buf.vf_ref--;
 		}
 		if (hw->wait_buf)
-			WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
-						0x1);
+			WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG, 0x1);
+
 		hw->last_put_idx = index;
 		hw->new_frame_displayed++;
 
-		if (vf->v4l_mem_handle != pic->cma_alloc_addr) {
-			pic->cma_alloc_addr = vf->v4l_mem_handle;
-
-			av1_print(hw, PRINT_FLAG_V4L_DETAIL,
-				"AV1 update fb handle, old:%llx, new:%llx\n",
-				pic->cma_alloc_addr, vf->v4l_mem_handle);
+		if (hw->wait_more_buf) {
+			hw->wait_more_buf = false;
+			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
+			vdec_schedule_work(&hw->work);
 		}
 
 		unlock_buffer_pool(hw->common.buffer_pool, flags);
@@ -9814,6 +9825,38 @@ static void dump_data(struct AV1HW_s *hw, int size)
 		codec_mm_unmap_phyaddr(data);
 }
 
+static int av1_wait_cap_buf(void *args)
+{
+	struct AV1HW_s *hw =
+		(struct AV1HW_s *) args;
+	struct AV1_Common_s *const cm = &hw->common;
+	struct aml_vcodec_ctx * ctx =
+		(struct aml_vcodec_ctx *)hw->v4l2_ctx;
+	ulong flags;
+	int ret = 0;
+
+	ret = wait_event_interruptible_timeout(ctx->cap_wq,
+		get_free_buf_count(hw) > 0,
+		msecs_to_jiffies(300));
+	if (ret <= 0){
+		pr_err("%s, wait cap buf timeout or err %d\n",
+			__func__, ret);
+	}
+
+	lock_buffer_pool(cm->buffer_pool, flags);
+	if (hw->wait_more_buf) {
+		hw->wait_more_buf = false;
+		hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
+		vdec_schedule_work(&hw->work);
+	}
+	unlock_buffer_pool(cm->buffer_pool, flags);
+
+	av1_print(hw, PRINT_FLAG_V4L_DETAIL,
+		"%s wait capture buffer end, ret:%d\n",
+		__func__, ret);
+	return 0;
+}
+
 static void av1_work(struct work_struct *work)
 {
 	struct AV1HW_s *hw = container_of(work,
@@ -9833,10 +9876,23 @@ static void av1_work(struct work_struct *work)
 	if (hw->dec_result == AOM_AV1_RESULT_NEED_MORE_BUFFER) {
 		reset_process_time(hw);
 		if (get_free_buf_count(hw) <= 0) {
+			struct AV1_Common_s *const cm = &hw->common;
+			ulong flags;
+
+			lock_buffer_pool(cm->buffer_pool, flags);
+
 			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
-			if (vdec->next_status == VDEC_STATUS_DISCONNECTED)
+			if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
 				hw->dec_result = DEC_RESULT_AGAIN;
-			vdec_schedule_work(&hw->work);
+				vdec_schedule_work(&hw->work);
+			} else {
+				hw->wait_more_buf = true;
+			}
+			unlock_buffer_pool(cm->buffer_pool, flags);
+
+			if (hw->wait_more_buf)
+				vdec_post_task(av1_wait_cap_buf, hw);
+
 		} else {
 			av1_release_bufs(hw);
 			av1_continue_decoding(hw, hw->cur_obu_type);

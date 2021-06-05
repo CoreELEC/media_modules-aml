@@ -571,6 +571,7 @@ struct aml_vpp_cfg_infos {
  * @decoded_frame_cnt: the capture buffer deque number to be count.
  * @buf_used_count: means that decode allocate how many buffs from v4l.
  * @wq: wait recycle dma buffer finish.
+ * @cap_wq: the wq used for wait capture buffer.
  * @dmabuff_recycle_work: used for recycle dmabuff.
  * @dmabuff_recycle: kfifo used for store vb buff.
  * @capture_buffer: kfifo used for store capture vb buff.
@@ -638,7 +639,7 @@ struct aml_vcodec_ctx {
 	int				reset_flag;
 	int				decoded_frame_cnt;
 	int				buf_used_count;
-	wait_queue_head_t		wq;
+	wait_queue_head_t		wq, cap_wq;
 	struct work_struct		dmabuff_recycle_work;
 	DECLARE_KFIFO(dmabuff_recycle, struct vb2_v4l2_buffer *, 32);
 	DECLARE_KFIFO(capture_buffer, struct vb2_v4l2_buffer *, 32);
