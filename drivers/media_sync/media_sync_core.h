@@ -92,6 +92,8 @@ typedef struct instance{
 	int mHasVideo;
 	int64_t mStartThreshold;
 	int64_t mPtsAdjust;
+	int mVideoWorkMode;
+	int mFccEnable;
 	mediasync_clocktype mSourceClockType;
 	mediasync_clockprovider_state mSourceClockState;
 	mediasync_audioinfo mAudioInfo;
@@ -161,5 +163,10 @@ long mediasync_ins_set_startthreshold(s32 sSyncInsId, s64 threshold);
 long mediasync_ins_get_startthreshold(s32 sSyncInsId, s64* threshold);
 long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s64 adujstpts);
 long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s64* adujstpts);
+long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode);
+long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode);
+long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable);
+long mediasync_ins_get_fccenable(s32 sSyncInsId, s64* enable);
+
 
 #endif

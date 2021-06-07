@@ -140,6 +140,8 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	mediasync_ins_init_syncinfo(pInstance->mSyncInsId);
 	pInstance->mHasAudio = -1;
 	pInstance->mHasVideo = -1;
+	pInstance->mVideoWorkMode = 0;
+	pInstance->mFccEnable = 0;
 	pInstance->mSourceClockType = UNKNOWN_CLOCK;
 	pInstance->mSyncInfo.state = MEDIASYNC_INIT;
 	*pIns = pInstance;
@@ -985,6 +987,62 @@ long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s64* adujstpts) {
 		return -1;
 
 	*adujstpts = pInstance->mPtsAdjust;
+	return 0;
+}
+
+long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	pInstance->mVideoWorkMode = mode;
+	return 0;
+}
+
+long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	*mode = pInstance->mVideoWorkMode;
+	return 0;
+}
+
+long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	pInstance->mFccEnable = enable;
+	return 0;
+}
+
+long mediasync_ins_get_fccenable(s32 sSyncInsId, s64* enable) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	*enable = pInstance->mFccEnable;
 	return 0;
 }
 

@@ -106,6 +106,8 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	int HasVideo = -1;
 	s64 StartThreshold = 0;
 	s64 PtsAdjust = 0;
+	s64 VideoWorkMode = 0;
+	s64 FccEnable = 0;
 	mediasync_priv_s *priv = (mediasync_priv_s *)file->private_data;
 	mediasync_ins *SyncIns = NULL;
 	mediasync_alloc_para parm = {0};
@@ -756,6 +758,60 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_SET_VIDEOWORKMODE:
+			if (copy_from_user((void *)&VideoWorkMode,
+					(void *)arg,
+					sizeof(VideoWorkMode)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_videoworkmode(priv->mSyncInsId,
+								VideoWorkMode);
+		break;
+
+		case MEDIASYNC_IOC_GET_VIDEOWORKMODE:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_videoworkmode(priv->mSyncInsId,
+								&VideoWorkMode);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&VideoWorkMode,
+						sizeof(VideoWorkMode)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_FCCENABLE:
+			if (copy_from_user((void *)&FccEnable,
+					(void *)arg,
+					sizeof(FccEnable)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_fccenable(priv->mSyncInsId,
+								FccEnable);
+		break;
+
+		case MEDIASYNC_IOC_GET_FCCENABLE:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_fccenable(priv->mSyncInsId,
+								&FccEnable);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FccEnable,
+						sizeof(FccEnable)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -815,6 +871,11 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_STARTTHRESHOLD:
 		case MEDIASYNC_IOC_SET_PTSADJUST:
 		case MEDIASYNC_IOC_GET_PTSADJUST:
+		case MEDIASYNC_IOC_SET_VIDEOWORKMODE:
+		case MEDIASYNC_IOC_GET_VIDEOWORKMODE:
+		case MEDIASYNC_IOC_SET_FCCENABLE:
+		case MEDIASYNC_IOC_GET_FCCENABLE:
+
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;
