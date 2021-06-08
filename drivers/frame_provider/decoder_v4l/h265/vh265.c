@@ -12823,6 +12823,8 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	int ref_pic = 0;
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 	unsigned long flags;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 	/*return 1 if pic_list is not initialized yet*/
 	if (hevc->pic_list_init_flag != 3)
 		return 1;
@@ -12891,14 +12893,22 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 			}
 		}
 	}
-	if (new_pic == NULL) {
+	if ((new_pic == NULL) ||
+		(hevc->is_used_v4l &&
+		(ctx->param_sets_from_ucode) &&
+		(hevc->v4l_params_parsed) &&
+		(ctx->cap_pool.dec < hevc->used_buf_num) && !is_avaliable_buffer(hevc))) {
+
 		int decode_count = 0;
 
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			pic = hevc->m_PIC[i];
 			if (pic == NULL || pic->index == -1 || pic->BUF_index == -1)
 				continue;
-			if (pic->output_ready == 0)
+			if ((pic->output_ready == 0) && (pic->output_mark != 0 ||
+				pic->referenced != 0 ||
+				pic->output_ready != 0 ||
+				pic->vf_ref != 0))
 				decode_count++;
 		}
 		if (decode_count >=
