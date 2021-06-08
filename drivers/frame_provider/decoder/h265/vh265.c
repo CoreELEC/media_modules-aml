@@ -10036,13 +10036,13 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			/* process previous pending vf*/
 			process_pending_vframe(hevc,
 			pic, (pic->pic_struct == 9));
+			vf->height <<= 1;
 			if (pic->show_frame) {
 				decoder_do_frame_check(vdec, vf);
 				vdec_vframe_ready(vdec, vf);
 				/* process current vf */
 				kfifo_put(&hevc->pending_q,
 				(const struct vframe_s *)vf);
-				vf->height <<= 1;
 				if (pic->pic_struct == 9) {
 					vf->type = VIDTYPE_INTERLACE_TOP
 					| nv_order | VIDTYPE_VIU_FIELD;
