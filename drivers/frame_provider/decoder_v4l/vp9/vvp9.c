@@ -3135,8 +3135,8 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 	}
 	cm->last_width = cm->width;
 	cm->last_height = cm->height;
-	pbi->last_width = cm->width;
-	pbi->last_height = cm->height;
+	//pbi->last_width = cm->width;
+	//pbi->last_height = cm->height;
 
 	if (cm->show_frame)
 		cm->current_video_frame++;
@@ -8815,6 +8815,7 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 			pbi->init_pic_h = pbi->frame_height;
 			init_mv_buf_list(pbi);
 
+			pbi->process_state = PROC_STATE_INIT;
 			pbi->v4l_params_parsed = false;
 			pbi->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
@@ -9096,6 +9097,9 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 
 				pbi->init_pic_w = pbi->frame_width;
 				pbi->init_pic_h = pbi->frame_height;
+
+				pbi->last_width = pbi->frame_width;
+				pbi->last_height = pbi->frame_height;
 
 				pbi->v4l_params_parsed	= true;
 				pbi->postproc_done = 0;
