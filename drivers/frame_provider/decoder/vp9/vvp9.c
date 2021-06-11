@@ -10935,7 +10935,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	struct vframe_content_light_level_s content_light_level;
 	struct vframe_master_display_colour_s vf_dp;
 
-	struct BUF_s BUF[MAX_BUF_NUM];
 	struct VP9Decoder_s *pbi = NULL;
 	pr_debug("%s\n", __func__);
 
@@ -10965,9 +10964,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pdata->irq_handler = vp9_irq_cb;
 	pdata->threaded_irq_handler = vp9_threaded_irq_cb;
 	pdata->dump_state = vp9_dump_state;
-
-	memcpy(&BUF[0], &pbi->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
-	memcpy(&pbi->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
 
 	pbi->index = pdev->id;
 
