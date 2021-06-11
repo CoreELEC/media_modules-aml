@@ -10852,7 +10852,6 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	u32 work_buf_size;
 	struct BuffInfo_s *p_buf_info;
 
-	struct BUF_s BUF[MAX_BUF_NUM];
 	struct AV1HW_s *hw = NULL;
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TM2) ||
@@ -10902,9 +10901,6 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	pdata->irq_handler = av1_irq_cb;
 	pdata->threaded_irq_handler = av1_threaded_irq_cb;
 	pdata->dump_state = av1_dump_state;
-
-	memcpy(&BUF[0], &hw->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
-	memcpy(&hw->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
 
 	hw->index = pdev->id;
 
