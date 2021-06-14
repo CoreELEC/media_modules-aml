@@ -56,7 +56,7 @@ static int pcmcia_plugin(struct aml_pcmcia *pc)
 		pr_error("repeat into pcmcia insert \r\n");
 		aml_pcmcia_reset(pc);
 	}
-	udelay(100);
+	msleep(1);
 	pc->pcmcia_plugin(pc, 1);
 
 	return 0;
@@ -74,7 +74,7 @@ static int pcmcia_unplug(struct aml_pcmcia *pc)
 		udelay(500);
 		pc->slot_state = MODULE_XTRACTED;
 	}
-	udelay(100);
+	msleep(1);
 	pc->pcmcia_plugin(pc, 0);
 
 	return 0;
@@ -197,9 +197,9 @@ int aml_pcmcia_reset(struct aml_pcmcia *pc)
 		/* smit cam need delay 1000 and 1500 */
 		/* need change delay according cam vendor */
 		pc->rst(pc, AML_H);/*HI is reset*/
-		mdelay(1000);
+		msleep(2000);
 		pc->rst(pc, AML_L);/*defaule LOW*/
-		mdelay(1500);
+		msleep(2500);
 		pr_dbg("CAM RESET--end\n");
 	return 0;
 }

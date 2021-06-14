@@ -413,7 +413,7 @@ static int dvb_ca_en50221_read_tuple(struct dvb_ca_private *ca, int slot,
 	}
 
 	if (_tupleType == 0xff) {
-		dprintk("END OF CHAIN TUPLE type:0x%x\n", _tupleType);
+		printk("END OF CHAIN TUPLE type:0x%x\n", _tupleType);
 		*address += 2;
 		*tupleType = _tupleType;
 		*tupleLength = 0;
