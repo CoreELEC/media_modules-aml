@@ -3491,7 +3491,7 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 	u32 buf_start;
 	s32 canvas = -1;
 	struct canvas_s dst;
-
+	u32 cpuid;
 	switch (cmd) {
 	case AMVENC_AVC_IOC_GET_ADDR:
 		if ((wq->mem.ref_buf_canvas & 0xff) == (ENC_CANVAS_OFFSET))
@@ -3706,6 +3706,11 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 	case AMVENC_AVC_IOC_QP_MODE:
 		get_user(qp_mode, ((u32 *)arg));
 		pr_info("qp_mode %d\n", qp_mode);
+		break;
+	case AMVENC_AVC_IOC_GET_CPU_ID:
+		cpuid = (u32) get_cpu_major_id();
+		pr_err("AMVENC_AVC_IOC_GET_CPU_ID return %u\n", cpuid);
+		put_user(cpuid, (u32 *)arg);
 		break;
 	default:
 		r = -1;
