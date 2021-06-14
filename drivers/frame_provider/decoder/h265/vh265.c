@@ -1135,7 +1135,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 		.dblk_para  = {.buf_size = 0x19100, }, // dblk parameter
 		.dblk_data  = {.buf_size = 0x88800, }, // dblk data for left/top
-		.dblk_data2 = {.buf_size = 0x48800, }, // dblk data for adapter
+		.dblk_data2 = {.buf_size = 0x80000, }, // dblk data for adapter
 		.mmu_vbh = {
 			.buf_size = VBH_BUF_SIZE_4K, /*2*16*2304/4, 4K*/
 		},
