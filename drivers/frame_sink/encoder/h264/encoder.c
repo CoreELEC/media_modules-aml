@@ -29,6 +29,10 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/ctype.h>
+#include <linux/fs.h>
+//#include <asm/segment.h>
+#include <asm/uaccess.h>
+#include <linux/buffer_head.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/canvas/canvas.h>
@@ -120,6 +124,7 @@ static int nr_mode = -1;
 static u32 qp_table_debug;
 static u32 use_reset_control;
 static u32 use_ge2d;
+static u32 dump_input;
 
 #ifdef H264_ENC_SVC
 static u32 svc_enable = 0; /* Enable sac feature or not */
@@ -497,6 +502,61 @@ static void cav_lut_info_store(u32 index, ulong addr, u32 width,
 }
 
 */
+
+static struct file *file_open(const char *path, int flags, int rights)
+{
+    struct file *filp = NULL;
+    mm_segment_t oldfs;
+    int err = 0;
+
+    oldfs = get_fs();
+    //set_fs(get_ds());
+    set_fs(KERNEL_DS);
+    filp = filp_open(path, flags, rights);
+    set_fs(oldfs);
+    if (IS_ERR(filp)) {
+        err = PTR_ERR(filp);
+        return NULL;
+    }
+    return filp;
+}
+static void file_close(struct file *file)
+{
+    filp_close(file, NULL);
+}
+/*
+static int file_read(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size)
+{
+    mm_segment_t oldfs;
+    int ret;
+
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+
+    ret = vfs_read(file, data, size, &offset);
+
+    set_fs(oldfs);
+    return ret;
+}*/
+static int file_write(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size)
+{
+    mm_segment_t oldfs;
+    int ret;
+
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+
+    ret = vfs_write(file, data, size, &offset);
+
+    set_fs(oldfs);
+    return ret;
+}
+static int file_sync(struct file *file)
+{
+    vfs_fsync(file, 0);
+    return 0;
+}
+
 static void canvas_config_proxy(u32 index, ulong addr, u32 width, u32 height,
 		   u32 wrap, u32 blkmode) {
 	unsigned long datah_temp, datal_temp;
@@ -1282,12 +1342,12 @@ static int scale_frame(struct encode_wq_s *wq,
 			|| (request->fmt == FMT_NV12)) {
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 9,
+			canvas_config(ENC_CANVAS_OFFSET + 9,
 				src_addr,
 				src_canvas_w, src_h,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 10,
+			canvas_config(ENC_CANVAS_OFFSET + 10,
 				src_addr + src_canvas_w * src_h,
 				src_canvas_w, src_h / 2,
 				CANVAS_ADDR_NOWRAP,
@@ -1300,7 +1360,7 @@ static int scale_frame(struct encode_wq_s *wq,
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
 
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 9,
+			canvas_config(ENC_CANVAS_OFFSET + 9,
 				src_addr,
 				src_canvas_w * 3, src_h,
 				CANVAS_ADDR_NOWRAP,
@@ -1310,7 +1370,7 @@ static int scale_frame(struct encode_wq_s *wq,
 		} else if (request->fmt == FMT_RGBA8888) {
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
-			canvas_config_proxy(
+			canvas_config(
 				ENC_CANVAS_OFFSET + 9,
 				src_addr,
 				src_canvas_w * 4,
@@ -1322,17 +1382,17 @@ static int scale_frame(struct encode_wq_s *wq,
 		} else {
 			src_canvas_w =
 				((request->src_w + 63) >> 6) << 6;
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 9,
+			canvas_config(ENC_CANVAS_OFFSET + 9,
 				src_addr,
 				src_canvas_w, src_h,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 10,
+			canvas_config(ENC_CANVAS_OFFSET + 10,
 				src_addr + src_canvas_w * src_h,
 				src_canvas_w / 2, src_h / 2,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 11,
+			canvas_config(ENC_CANVAS_OFFSET + 11,
 				src_addr + src_canvas_w * src_h * 5 / 4,
 				src_canvas_w / 2, src_h / 2,
 				CANVAS_ADDR_NOWRAP,
@@ -1347,12 +1407,12 @@ static int scale_frame(struct encode_wq_s *wq,
 
 	dst_canvas_w =  ((dst_w + 31) >> 5) << 5;
 
-	canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+	canvas_config(ENC_CANVAS_OFFSET + 6,
 		wq->mem.scaler_buff_start_addr,
 		dst_canvas_w, dst_h,
 		CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 
-	canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+	canvas_config(ENC_CANVAS_OFFSET + 7,
 		wq->mem.scaler_buff_start_addr + dst_canvas_w * dst_h,
 		dst_canvas_w, dst_h / 2,
 		CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
@@ -1430,6 +1490,39 @@ static int scale_frame(struct encode_wq_s *wq,
 }
 #endif
 
+static s32 dump_raw_input(struct encode_wq_s *wq, struct encode_request_s *request) {
+	u8 *data;
+	struct canvas_s cs0, cs1;//, cs2
+	u32 y_addr, uv_addr, canvas_w, picsize_y;
+	u32 input = request->src;
+	//u8 iformat = MAX_FRAME_FMT;
+	struct file *filp;
+	if (request->type == CANVAS_BUFF) {
+		if ((request->fmt == FMT_NV21) || (request->fmt == FMT_NV12)) {
+			input = input & 0xffff;
+			canvas_read(input & 0xff, &cs0);
+			canvas_read((input >> 8) & 0xff, &cs1);
+			pr_err("dump raw input for canvas source\n");
+			y_addr = cs0.addr;
+			uv_addr = cs1.addr;
+
+			canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
+			picsize_y = wq->pic.encoder_height;
+
+			data = (u8*)phys_to_virt(y_addr);
+			filp = file_open("/data/encoder.yuv", O_APPEND | O_RDWR, 0644);
+			if (filp) {
+				file_write(filp, 0, data, canvas_w * picsize_y);
+				file_sync(filp);
+				file_close(filp);
+			} else
+				pr_err("open encoder.yuv failed\n");
+
+		}
+	}
+	return 0;
+}
+
 static s32 set_input_format(struct encode_wq_s *wq,
 			    struct encode_request_s *request)
 {
@@ -1445,6 +1538,9 @@ static s32 set_input_format(struct encode_wq_s *wq,
 
 	if ((request->fmt == FMT_RGB565) || (request->fmt >= MAX_FRAME_FMT))
 		return -1;
+
+	if (dump_input)
+		dump_raw_input(wq, request);
 
 	picsize_x = ((wq->pic.encoder_width + 15) >> 4) << 4;
 	picsize_y = ((wq->pic.encoder_height + 15) >> 4) << 4;
@@ -1511,6 +1607,30 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			input = ((ENC_CANVAS_OFFSET + 7) << 8) |
 				(ENC_CANVAS_OFFSET + 6);
 			ret = 0;
+
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+				/*
+				 * for t3, after scaling before goto MFDIN, need to config canvas with scaler buffer
+				 * */
+				enc_pr(LOG_INFO, "reconfig with scaler buffer\n");
+				canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
+				iformat = 2;
+
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+					wq->mem.scaler_buff_start_addr,
+					canvas_w, picsize_y,
+					CANVAS_ADDR_NOWRAP,
+					CANVAS_BLKMODE_LINEAR);
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+					wq->mem.scaler_buff_start_addr + canvas_w * picsize_y,
+					canvas_w, picsize_y / 2,
+					CANVAS_ADDR_NOWRAP,
+					CANVAS_BLKMODE_LINEAR);
+
+				input = ((ENC_CANVAS_OFFSET + 7) << 8) |
+					(ENC_CANVAS_OFFSET + 6);
+			}
+
 			goto MFDIN;
 #else
 			enc_pr(LOG_ERROR,
@@ -1655,6 +1775,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 		}
 		ret = 0;
 	} else if (request->type == CANVAS_BUFF) {
+
 		r2y_en = 0;
 		if (request->scale_enable) {
 #ifdef CONFIG_AMLOGIC_MEDIA_GE2D
@@ -1670,6 +1791,29 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			input = ((ENC_CANVAS_OFFSET + 7) << 8) |
 				(ENC_CANVAS_OFFSET + 6);
 			ret = 0;
+
+			/*
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+				pr_info("reconfig with scaler buffer\n");
+				canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
+				iformat = 2;
+
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+					wq->mem.scaler_buff_start_addr,
+					canvas_w, picsize_y,
+					CANVAS_ADDR_NOWRAP,
+					CANVAS_BLKMODE_LINEAR);
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+					wq->mem.scaler_buff_start_addr + canvas_w * picsize_y,
+					canvas_w, picsize_y / 2,
+					CANVAS_ADDR_NOWRAP,
+					CANVAS_BLKMODE_LINEAR);
+
+				input = ((ENC_CANVAS_OFFSET + 7) << 8) |
+					(ENC_CANVAS_OFFSET + 6);
+			}
+			*/
+
 			goto MFDIN;
 #else
 			enc_pr(LOG_ERROR,
@@ -1677,6 +1821,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			return -1;
 #endif
 		}
+		//pr_err("request->type=%u\n", request->type);
 		if (request->fmt == FMT_YUV422_SINGLE) {
 			iformat = 0;
 			input = input & 0xff;
@@ -1687,6 +1832,40 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			|| (request->fmt == FMT_NV12)) {
 			iformat = (request->fmt == FMT_NV21) ? 2 : 3;
 			input = input & 0xffff;
+
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
+				struct canvas_s cs0, cs1;//, cs2
+				u32 y_addr, uv_addr, canvas_w, picsize_y;
+				u8 iformat = MAX_FRAME_FMT;
+				canvas_read(input & 0xff, &cs0);
+				canvas_read((input >> 8) & 0xff, &cs1);
+				//pr_err("t3 canvas source input reconfig\n");
+				y_addr = cs0.addr;
+				uv_addr = cs1.addr;
+
+				canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
+				picsize_y = wq->pic.encoder_height;
+				iformat = (request->fmt == FMT_NV21) ? 2 : 3;
+
+				canvas_config_proxy(
+					ENC_CANVAS_OFFSET + 6,
+					y_addr,
+					canvas_w,
+					picsize_y,
+					CANVAS_ADDR_NOWRAP,
+					CANVAS_BLKMODE_LINEAR);
+
+				canvas_config_proxy(
+					ENC_CANVAS_OFFSET + 7,
+					uv_addr,
+					canvas_w,
+					picsize_y / 2,
+					CANVAS_ADDR_NOWRAP,
+					CANVAS_BLKMODE_LINEAR);
+
+				input = ((ENC_CANVAS_OFFSET + 7) << 8) |
+					(ENC_CANVAS_OFFSET + 6);
+			}
 		} else if (request->fmt == FMT_YUV420) {
 			iformat = 4;
 			input = input & 0xffffff;
@@ -2955,6 +3134,7 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 
 	if (!wq)
 		return -1;
+
 	memset(&wq->request, 0, sizeof(struct encode_request_s));
 	wq->request.me_weight = ME_WEIGHT_OFFSET;
 	wq->request.i4_weight = I4MB_WEIGHT_OFFSET;
@@ -2997,6 +3177,14 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 			wq->request.src_h = wq->pic.encoder_height;
 			enc_pr(LOG_INFO, "hwenc: force wq->request.scale_enable=%d\n", wq->request.scale_enable);
 		}
+		/*
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3 && wq->request.type == CANVAS_BUFF) {
+			wq->request.scale_enable = 1;
+			wq->request.src_w = wq->pic.encoder_width;
+			wq->request.src_h = wq->pic.encoder_height;
+			enc_pr(LOG_DEBUG, "hwenc: t3 canvas source, force wq->request.scale_enable=%d\n", wq->request.scale_enable);
+		}
+		*/
 
 		wq->request.nr_mode =
 			(nr_mode > 0) ? nr_mode : cmd_info[16];
@@ -3336,8 +3524,8 @@ void amvenc_avc_stop(void)
 {
 	if ((encode_manager.irq_num >= 0) &&
 		(encode_manager.irq_requested == true)) {
-		free_irq(encode_manager.irq_num, &encode_manager);
 		encode_manager.irq_requested = false;
+		free_irq(encode_manager.irq_num, &encode_manager);
 	}
 	amvenc_stop();
 	avc_poweroff();
@@ -4924,6 +5112,9 @@ MODULE_PARM_DESC(use_reset_control, "\n use_reset_control\n");
 
 module_param(use_ge2d, uint, 0664);
 MODULE_PARM_DESC(use_ge2d, "\n use_ge2d\n");
+
+module_param(dump_input, uint, 0664);
+MODULE_PARM_DESC(dump_input, "\n dump_input\n");
 
 #ifdef H264_ENC_SVC
 module_param(svc_enable, uint, 0664);
