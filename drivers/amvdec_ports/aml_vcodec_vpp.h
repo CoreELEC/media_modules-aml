@@ -47,6 +47,7 @@ struct aml_v4l2_vpp_buf {
 	struct di_buffer *di_local_buf;
 #endif
 	struct aml_video_dec_buf *aml_buf;
+	struct aml_v4l2_vpp_buf *inbuf;
 };
 
 struct aml_v4l2_vpp {
@@ -56,14 +57,16 @@ struct aml_v4l2_vpp {
 	u32 work_mode; /* enum vpp_work_mode */
 	u32 buffer_mode;
 
-	DECLARE_KFIFO(input, typeof(struct aml_v4l2_vpp_buf*), VPP_FRAME_SIZE);
+	DECLARE_KFIFO_PTR(input, typeof(struct aml_v4l2_vpp_buf*));
 	DECLARE_KFIFO_PTR(output, typeof(struct aml_v4l2_vpp_buf*));
 	DECLARE_KFIFO_PTR(processing, typeof(struct aml_v4l2_vpp_buf*));
 	DECLARE_KFIFO_PTR(frame, typeof(struct vframe_s *));
 	DECLARE_KFIFO(out_done_q, struct aml_v4l2_vpp_buf *, VPP_FRAME_SIZE);
+	DECLARE_KFIFO(in_done_q, struct aml_v4l2_vpp_buf *, VPP_FRAME_SIZE);
 
 	struct vframe_s *vfpool;
-	struct aml_v4l2_vpp_buf *vbpool;
+	struct aml_v4l2_vpp_buf *ovbpool;
+	struct aml_v4l2_vpp_buf *ivbpool;
 	struct task_struct *task;
 	bool running;
 	struct semaphore sem_in, sem_out;
