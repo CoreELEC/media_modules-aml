@@ -324,7 +324,7 @@ void *decoder_bmmu_box_get_virt_addr(void *box_handle, int idx)
 }
 
 /*flags: &0x1 for wait,*/
-int decoder_bmmu_box_check_and_wait_size(int size, int flags)
+int decoder_bmmu_box_check_and_wait_size(int size, int flags, int mem_flags)
 {
 	if ((flags & BMMU_ALLOC_FLAGS_CAN_CLEAR_KEEPER) &&
 		codec_mm_get_free_size() < size) {
@@ -335,7 +335,7 @@ int decoder_bmmu_box_check_and_wait_size(int size, int flags)
 	}
 
 	return codec_mm_enough_for_size(size,
-			flags & BMMU_ALLOC_FLAGS_WAIT);
+			flags & BMMU_ALLOC_FLAGS_WAIT, mem_flags);
 }
 
 int decoder_bmmu_box_alloc_idx_wait(
@@ -361,7 +361,8 @@ int decoder_bmmu_box_alloc_idx_wait(
 	}
 	have_space = decoder_bmmu_box_check_and_wait_size(
 					size,
-					wait_flags);
+					wait_flags,
+					mem_flags);
 	if (have_space) {
 		ret = decoder_bmmu_box_alloc_idx(handle,
 				idx, size, aligned_2n, mem_flags);
@@ -382,9 +383,10 @@ int decoder_bmmu_box_alloc_buf_phy(
 	int size, unsigned char *driver_name,
 	unsigned long *buf_phy_addr)
 {
+	struct decoder_bmmu_box *bmmu_box = (struct decoder_bmmu_box *)handle;
 	if (!decoder_bmmu_box_check_and_wait_size(
 			size,
-			1)) {
+			1, bmmu_box->mem_flags)) {
 		pr_info("%s not enough buf for buf_idx = %d\n",
 					driver_name, idx);
 		return	-ENOMEM;
@@ -394,9 +396,8 @@ int decoder_bmmu_box_alloc_buf_phy(
 			idx,
 			size,
 			-1,
-			-1,
-			BMMU_ALLOC_FLAGS_WAITCLEAR
-			)) {
+			bmmu_box->mem_flags,
+			BMMU_ALLOC_FLAGS_WAITCLEAR)) {
 		*buf_phy_addr =
 			decoder_bmmu_box_get_phy_addr(
 			handle,

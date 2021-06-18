@@ -41,7 +41,7 @@ void *decoder_bmmu_box_get_virt_addr(
 
 /*flags: &0x1 for wait,*/
 int decoder_bmmu_box_check_and_wait_size(
-	int size, int flags);
+	int size, int flags, int mem_flags);
 
 int decoder_bmmu_box_alloc_buf_phy(
 	void *handle, int idx,
