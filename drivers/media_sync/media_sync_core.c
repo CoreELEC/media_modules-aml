@@ -144,6 +144,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	pInstance->mFccEnable = 0;
 	pInstance->mSourceClockType = UNKNOWN_CLOCK;
 	pInstance->mSyncInfo.state = MEDIASYNC_INIT;
+	pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
 	*pIns = pInstance;
 	return 0;
 }
