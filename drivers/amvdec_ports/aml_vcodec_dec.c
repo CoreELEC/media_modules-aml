@@ -3701,7 +3701,8 @@ static int check_dec_cfginfo(struct aml_vdec_cfg_infos *cfg)
 		cfg->double_write_mode != 2 &&
 		cfg->double_write_mode != 3 &&
 		cfg->double_write_mode != 4 &&
-		cfg->double_write_mode != 16) {
+		cfg->double_write_mode != 16 &&
+		cfg->double_write_mode != 0x100) {
 		pr_err("invalid double write mode %d\n", cfg->double_write_mode);
 		return -1;
 	}

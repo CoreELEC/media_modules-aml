@@ -340,8 +340,8 @@ static int refer_buffer_num(int level_idc, int poc_cnt,
 static int vdec_get_dw_mode(struct vdec_vp9_inst *inst, int dw_mode)
 {
 	u32 valid_dw_mode = inst->parms.cfg.double_write_mode;
-	int w = inst->parms.cfg.init_width;
-	int h = inst->parms.cfg.init_height;
+	int w = inst->vsi->pic.coded_width;
+	int h = inst->vsi->pic.coded_height;
 	u32 dw = 0x1; /*1:1*/
 
 	switch (valid_dw_mode) {
@@ -893,8 +893,12 @@ static int vdec_vp9_get_param(unsigned long h_vdec,
 
 	case GET_PARAM_DW_MODE:
 	{
-		unsigned int *mode = out;
-		*mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
+		u32 *mode = out;
+		u32 m = inst->ctx->config.parm.dec.cfg.double_write_mode;
+		if (m <= 16)
+			*mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
+		else
+			*mode = vdec_get_dw_mode(inst, 0);
 		break;
 	}
 	case GET_PARAM_COMP_BUF_INFO:
