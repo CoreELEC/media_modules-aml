@@ -245,6 +245,7 @@ struct vdec_core_s {
 	unsigned long stream_buff_flag;
 	struct power_manager_s *pm;
 	u32 vdec_resouce_status;
+	struct post_task_mgr_s post;
 };
 
 static struct vdec_core_s *vdec_core;
@@ -5353,6 +5354,113 @@ struct device *get_vdec_device(void)
 }
 EXPORT_SYMBOL(get_vdec_device);
 
+static int vdec_post_task_recycle(void *args)
+{
+	struct post_task_mgr_s *post =
+		(struct post_task_mgr_s *)args;
+
+	while (down_interruptible(&post->sem) == 0) {
+		if (kthread_should_stop())
+			break;
+		mutex_lock(&post->mutex);
+		if (!list_empty(&post->task_recycle)) {
+			struct vdec_post_task_parms_s *parms, *tmp;
+			list_for_each_entry_safe(parms, tmp, &post->task_recycle, recycle) {
+				list_del(&parms->recycle);
+				kthread_stop(parms->task);
+				kfree(parms);
+				parms = NULL;
+			}
+		}
+		mutex_unlock(&post->mutex);
+	}
+
+	return 0;
+}
+
+static void vdec_post_task_exit(void)
+{
+	struct post_task_mgr_s *post = &vdec_core->post;
+
+	up(&post->sem);
+
+	kthread_stop(post->task);
+}
+
+static int vdec_post_task_init(void)
+{
+	struct post_task_mgr_s *post = &vdec_core->post;
+
+	sema_init(&post->sem, 0);
+	INIT_LIST_HEAD(&post->task_recycle);
+	mutex_init(&post->mutex);
+
+	post->task = kthread_run(vdec_post_task_recycle,
+		post, "task-post-daemon-thread");
+	if (IS_ERR(post->task)) {
+		pr_err("%s, creat task post daemon thread faild %ld\n",
+			__func__, PTR_ERR(post->task));
+		return PTR_ERR(post->task);
+	}
+
+	return 0;
+}
+
+static int vdec_post_handler(void *args)
+{
+	struct vdec_post_task_parms_s *parms =
+		(struct vdec_post_task_parms_s *) args;
+	struct post_task_mgr_s *post = &vdec_core->post;
+
+	complete(&parms->park);
+
+	/* process client task. */
+	parms->func(parms->private);
+
+	up(&post->sem);
+
+	while (!kthread_should_stop()) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		usleep_range(1000, 2000);
+	}
+
+	return 0;
+}
+
+int vdec_post_task(post_task_handler func, void *args)
+{
+	struct vdec_post_task_parms_s *parms;
+	struct post_task_mgr_s *post = &vdec_core->post;
+
+	parms = kzalloc(sizeof(*parms), GFP_KERNEL);
+	if (parms == NULL)
+		return -ENOMEM;
+
+	parms->func	= func;
+	parms->private	= args;
+	init_completion(&parms->park);
+	parms->task	= kthread_run(vdec_post_handler,
+				parms, "task-post-thread");
+	if (IS_ERR(parms->task)) {
+		pr_err("%s, creat task post thread faild %ld\n",
+			__func__, PTR_ERR(parms->task));
+		kfree(parms);
+		return PTR_ERR(parms->task);
+	}
+	if (!__kthread_should_park(parms->task))
+		wait_for_completion(&parms->park);
+
+	mutex_lock(&post->mutex);
+	/* add to list for resource recycle in post daemon kthread */
+	list_add_tail(&parms->recycle, &post->task_recycle);
+	mutex_unlock(&post->mutex);
+
+	return 0;
+}
+EXPORT_SYMBOL(vdec_post_task);
+
+
+
 static int vdec_probe(struct platform_device *pdev)
 {
 	s32 i, r;
@@ -5433,6 +5541,8 @@ static int vdec_probe(struct platform_device *pdev)
 		WQ_MEM_RECLAIM |WQ_HIGHPRI/*high priority*/, "vdec-work");
 	/*work queue priority lower than vdec-core.*/
 
+	vdec_post_task_init();
+
 	/* power manager init. */
 	vdec_core->pm = (struct power_manager_s *)
 		of_device_get_match_data(&pdev->dev);
@@ -5462,6 +5572,8 @@ static int vdec_remove(struct platform_device *pdev)
 			vdec_core->isr_context[i].dev_id = NULL;
 		}
 	}
+
+	vdec_post_task_exit();
 
 	kthread_stop(vdec_core->thread);
 
@@ -5855,53 +5967,6 @@ int get_double_write_ratio(int dw_mode)
 	return ratio;
 }
 EXPORT_SYMBOL(get_double_write_ratio);
-
-static int vdec_post_handler(void *args)
-{
-	struct vdec_post_task_parms_s *parms =
-		(struct vdec_post_task_parms_s *) args;
-
-	complete(&parms->park);
-
-	/* process client task. */
-	parms->func(parms->private);
-
-	while (!kthread_should_stop()) {
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule();
-	}
-
-	kfree(parms);
-	return 0;
-}
-
-int vdec_post_task(post_task_handler func, void *args)
-{
-	struct vdec_post_task_parms_s *parms;
-
-	parms = kzalloc(sizeof(*parms), GFP_KERNEL);
-	if (parms == NULL)
-		return -ENOMEM;
-
-	parms->func	= func;
-	parms->private	= args;
-	init_completion(&parms->park);
-
-	parms->task = kthread_run(vdec_post_handler,
-				  parms, "task-post-thread");
-	if (IS_ERR(parms->task)) {
-		pr_err("%s, creat task post thread faild %ld\n",
-			__func__, PTR_ERR(parms->task));
-		return PTR_ERR(parms->task);
-	}
-
-	if (!__kthread_should_park(parms->task))
-		wait_for_completion(&parms->park);
-
-	kthread_stop(parms->task);
-	return 0;
-}
-EXPORT_SYMBOL(vdec_post_task);
 
 void vdec_set_vld_wp(struct vdec_s *vdec, u32 wp)
 {

@@ -4333,6 +4333,7 @@ ssize_t dump_stream_store(struct class *class,
 			pr_info("fail write retry, total %d, write %d\n", vmap_size, write_size);
 			if (write_size < vmap_size) {
 				pr_info("retry fail, interrupt dump stream, break\n");
+				set_fs(old_fs);
 				break;
 			}
 		}

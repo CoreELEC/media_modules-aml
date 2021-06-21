@@ -10146,7 +10146,7 @@ static int vp9_wait_cap_buf(void *args)
 	int ret = 0;
 
 	ret = wait_event_interruptible_timeout(ctx->cap_wq,
-		get_free_buf_count(pbi) > 0,
+		(ctx->is_stream_off || (get_free_buf_count(pbi) > 0)),
 		msecs_to_jiffies(300));
 	if (ret <= 0){
 		pr_err("%s, wait cap buf timeout or err %d\n",
@@ -10156,7 +10156,9 @@ static int vp9_wait_cap_buf(void *args)
 	lock_buffer_pool(cm->buffer_pool, flags);
 	if (pbi->wait_more_buf) {
 		pbi->wait_more_buf = false;
-		pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+		pbi->dec_result = ctx->is_stream_off ?
+		DEC_RESULT_FORCE_EXIT :
+		DEC_RESULT_NEED_MORE_BUFFER;
 		vdec_schedule_work(&pbi->work);
 	}
 	unlock_buffer_pool(cm->buffer_pool, flags);

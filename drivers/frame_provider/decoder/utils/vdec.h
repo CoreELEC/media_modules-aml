@@ -340,7 +340,16 @@ struct aml_meta_info_s {
 
 typedef int (*post_task_handler)(void *args);
 
+struct post_task_mgr_s {
+	struct list_head	task_recycle;
+	struct task_struct	*task;
+	struct semaphore        sem;
+	struct mutex		mutex;
+	void			*private;
+};
+
 struct vdec_post_task_parms_s {
+	struct list_head	recycle;
 	struct task_struct	*task;
 	struct completion	park;
 	post_task_handler	func;

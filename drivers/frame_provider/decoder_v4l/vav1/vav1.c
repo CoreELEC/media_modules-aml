@@ -8689,19 +8689,19 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				vdec_schedule_work(&hw->work);
 			}
 		} else {
-            av1_print(hw, AOM_DEBUG_HW_MORE,
-            	"PIC_END, fgs_valid %d search head ...\n",
-            	hw->fgs_valid);
+			av1_print(hw, AOM_DEBUG_HW_MORE,
+				"PIC_END, fgs_valid %d search head ...\n",
+				hw->fgs_valid);
 #ifdef USE_DEC_PIC_END
-		    if (READ_VREG(PIC_END_LCU_COUNT) != 0) {
-			    hw->frame_decoded = 1;
-					/*
-				    In c module, multi obus are put in one packet, which is decoded
-				    with av1_receive_compressed_data().
-				    For STREAM_MODE or SINGLE_MODE, there is no packet boundary,
-				    we assume each packet must and only include one picture of data (LCUs)
-					 or cm->show_existing_frame is 1
-					*/
+			if (READ_VREG(PIC_END_LCU_COUNT) != 0) {
+				hw->frame_decoded = 1;
+				/*
+				In c module, multi obus are put in one packet, which is decoded
+				with av1_receive_compressed_data().
+				For STREAM_MODE or SINGLE_MODE, there is no packet boundary,
+				we assume each packet must and only include one picture of data (LCUs)
+				or cm->show_existing_frame is 1
+				*/
 				av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
 					cm->cur_frame? cm->cur_frame->buf.index:-1);
 				config_next_ref_info_hw(hw);
@@ -8820,7 +8820,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 		av1_print(hw, AOM_DEBUG_HW_MORE,
 			"AOM_AV1_SEQ_HEAD_PARSER_DONE, search head ...\n");
-			WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
+		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
 
 		hw->process_busy = 0;
 		hw->has_sequence = 1;
@@ -9006,8 +9006,10 @@ static irqreturn_t vav1_isr(int irq, void *data)
 		return IRQ_HANDLED;
 	if (hw->init_flag == 0)
 		return IRQ_HANDLED;
-	if (hw->process_busy)/*on process.*/
+	if (hw->process_busy) {/*on process.*/
+		pr_err("err: %s, process busy\n", __func__);
 		return IRQ_HANDLED;
+	}
 	hw->dec_status = dec_status;
 	hw->process_busy = 1;
 	if (debug & AV1_DEBUG_BUFMGR)
@@ -9892,7 +9894,7 @@ static int av1_wait_cap_buf(void *args)
 	int ret = 0;
 
 	ret = wait_event_interruptible_timeout(ctx->cap_wq,
-		get_free_buf_count(hw) > 0,
+		(ctx->is_stream_off || (get_free_buf_count(hw) > 0)),
 		msecs_to_jiffies(300));
 	if (ret <= 0){
 		av1_print(hw, PRINT_FLAG_V4L_DETAIL, "%s, wait cap buf timeout or err %d\n",
@@ -9902,7 +9904,9 @@ static int av1_wait_cap_buf(void *args)
 	lock_buffer_pool(cm->buffer_pool, flags);
 	if (hw->wait_more_buf) {
 		hw->wait_more_buf = false;
-		hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
+		hw->dec_result = ctx->is_stream_off ?
+		DEC_RESULT_FORCE_EXIT :
+		AOM_AV1_RESULT_NEED_MORE_BUFFER;
 		vdec_schedule_work(&hw->work);
 	}
 	unlock_buffer_pool(cm->buffer_pool, flags);
@@ -9934,6 +9938,7 @@ static void av1_work(struct work_struct *work)
 		if (get_free_buf_count(hw) <= 0) {
 			struct AV1_Common_s *const cm = &hw->common;
 			ulong flags;
+			int ret;
 
 			lock_buffer_pool(cm->buffer_pool, flags);
 
@@ -9946,8 +9951,17 @@ static void av1_work(struct work_struct *work)
 			}
 			unlock_buffer_pool(cm->buffer_pool, flags);
 
-			if (hw->wait_more_buf)
-				vdec_post_task(av1_wait_cap_buf, hw);
+			if (hw->wait_more_buf) {
+				ret = vdec_post_task(av1_wait_cap_buf, hw);
+				if (ret != 0) {
+					pr_err("post task create failed!!!! ret %d\n", ret);
+					lock_buffer_pool(cm->buffer_pool, flags);
+					hw->wait_more_buf = false;
+					hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
+					vdec_schedule_work(&hw->work);
+					unlock_buffer_pool(cm->buffer_pool, flags);
+				}
+			}
 
 		} else {
 			av1_release_bufs(hw);
@@ -10466,7 +10480,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
 	hw->one_package_frame_cnt = 0;
-		run_front(vdec);
+	run_front(vdec);
 }
 
 static void  av1_decode_ctx_reset(struct AV1HW_s *hw)
