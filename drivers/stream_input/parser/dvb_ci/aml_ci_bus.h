@@ -56,6 +56,8 @@ struct aml_ci_bus {
 	struct platform_device *pdev;
 	/*save cam cur state*/
 	enum aml_slot_state		slot_state;
+	/*wake up thread mode at cimcu thread*/
+	int wakeup_thread;
 };
 
 enum aml_gpio_select_e {

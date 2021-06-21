@@ -49,6 +49,11 @@ static int dvb_ca_en50221_debug;
 module_param_named(cammcu_debug, dvb_ca_en50221_debug, int, 0644);
 MODULE_PARM_DESC(cammcu_debug, "enable verbose debug messages");
 
+static int dvb_ca_en50221_usleep = 800;
+
+module_param_named(cammcu_usleep, dvb_ca_en50221_usleep, int, 0644);
+MODULE_PARM_DESC(cammcu_usleep, "enable verbose debug messages");
+
 #define dprintk if (dvb_ca_en50221_debug) printk
 
 #define INIT_TIMEOUT_SECS 10
@@ -1113,10 +1118,19 @@ static int dvb_ca_en50221_thread(void *data)
 	while (!kthread_should_stop()) {
 		/* sleep for a bit */
 		if (!ca->wakeup) {
-			set_current_state(TASK_INTERRUPTIBLE);
-			schedule_timeout(ca->delay);
+			if (ca->slot_count > 0
+				&& ca->slot_info[0].slot_state == DVB_CA_SLOTSTATE_RUNNING
+				&& ca->pub->get_slot_wakeup(ca->pub, 0) == 0) {
+				usleep_range(dvb_ca_en50221_usleep, dvb_ca_en50221_usleep + 100);
+			} else {
+				set_current_state(TASK_INTERRUPTIBLE);
+				schedule_timeout(ca->delay);
+			}
 			if (kthread_should_stop())
 				return 0;
+		} else {
+			if (ca->pub->get_slot_wakeup(ca->pub, 0) == 0)
+				usleep_range(dvb_ca_en50221_usleep, dvb_ca_en50221_usleep + 100);
 		}
 		ca->wakeup = 0;
 

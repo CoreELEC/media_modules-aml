@@ -58,6 +58,7 @@ MODULE_PARM_DESC(ci_bus_set_delay, "enable ci bus delay set");
 module_param_named(ci_bus_time, aml_ci_bus_time, int, 0644);
 MODULE_PARM_DESC(ci_bus_time, "set ci bus time");
 
+
 #define pr_dbg(args...)\
 	do {\
 		if (aml_ci_bus_debug)\
@@ -83,6 +84,7 @@ static void aml_write_self(unsigned int reg, unsigned int val);
 #define WRITE_CIBUS_REG(_r, _v)   aml_write_self(_r, _v)
 #define READ_CIBUS_REG(_r)        aml_read_self(_r)
 
+#define USED_IRQ  0
 
 static void *p_hw_base;
 //write reg
@@ -278,13 +280,13 @@ static int aml_ci_bus_io(struct aml_ci_bus *ci_bus_dev,
 	u32 reg = 0;
 	u32 ctrl = 0;
 	int enable = 0;
-
 	int count = 0;
+	u32 int_status;
 	//only used hi addr. we to change tsout to addr
 	if (addr >= 4) {
 		enable = 1;
 	}
-		//clear irq
+	//clear irq
 	ctrl = READ_CIBUS_REG(CIPLUS_CTRL_REG);
 	ctrl = ctrl | (1 << CLEAR_CMP_IRQ);
 	ctrl = ctrl | (1 << CLEAR_TIMEOUT_IRQ);
@@ -292,7 +294,9 @@ static int aml_ci_bus_io(struct aml_ci_bus *ci_bus_dev,
 	WRITE_CIBUS_REG(CIPLUS_CTRL_REG, ctrl);
 	fetch_done = 0;
 	//gpio select gpio func
-	aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR, enable);
+	if (enable)
+		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR, enable);
+
 	while (1) {
 		count++;
 		if (count < aml_ci_bus_time)
@@ -326,15 +330,31 @@ static int aml_ci_bus_io(struct aml_ci_bus *ci_bus_dev,
 	//Wwrite cmd reg
 	WRITE_CIBUS_REG(CIPLUS_CMD_REG, reg);
 	//wait cmp irq or timwout irq
-	ret =
-		 wait_event_interruptible_timeout(wq, fetch_done != 0,
+	if (USED_IRQ == 1) {
+		ret =
+			wait_event_interruptible_timeout(wq, fetch_done != 0,
 					HZ / 100);//10ms
+	} else {
+		count = 0;
+		while(1) {
+			count++;
+			int_status = READ_CIBUS_REG(CIPLUS_STATUS_REG);
+			if ((int_status&(1 << COMPLETE_IRQ_STATE)) == (1 << COMPLETE_IRQ_STATE)) {
+				break;
+			}
+			if (count > 50) {
+				printk("count timeout:%d\r\n", count);
+				break;
+			}
+		}
+	}
 	rd = READ_CIBUS_REG(CIPLUS_RDATA_REG);
 	//gpio select tsout func
-	aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS, enable);
+	if (enable)
+		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS, enable);
+
 	return rd;
 }
-
 /**\brief aml_ci_bus_init_reg:ci bus init reg,enable ci bus
 * \param ci_bus_dev: ci_bus_dev obj,used this data to ctl
 * \return
@@ -566,8 +586,6 @@ static int aml_ci_bus_io_write(
 static int aml_ci_bus_rst(
 	struct aml_ci *ci_dev, int slot, int level)
 {
-	u8  data = (u8)level;
-	u16 addres = 0;
 	int value = 0;
 	u32 ctrl = 0;
 	struct aml_ci_bus *ci_bus_dev = ci_dev->data;
@@ -579,7 +597,6 @@ static int aml_ci_bus_rst(
 		ctrl = ctrl & (~(1 << CAM_RESET));
 	//Wwrite cmd crtl
 	WRITE_CIBUS_REG(CIPLUS_CTRL_REG, ctrl);
-	value = aml_ci_bus_io(ci_bus_dev, data, addres, AM_CI_CMD_RESET);
 	mutex_unlock(&(ci_bus_dev->mutex));
 	return value;
 }
@@ -652,6 +669,21 @@ static int aml_ci_slot_status(struct aml_ci *ci_dev, int slot, int open)
 	}
 	return state;
 }
+/**\brief aml_ci_slot_wakeup:get slot wake up thread flag
+* \param ci_dev: aml_ci obj,used this data to get ci_bus_dev obj
+* \param slot: slot index
+* \return
+*   - cam wake up flag
+*   - -EINVAL : error
+*/
+static int aml_ci_slot_wakeup(struct aml_ci *ci_dev, int slot)
+{
+	struct aml_ci_bus *ci_bus_dev = ci_dev->data;
+	if (ci_bus_dev) {
+		return ci_bus_dev->wakeup_thread;
+	}
+	return 1;
+}
 
 /**\brief aml_ci_gio_get_irq:get gpio cd1 irq pin value
 * \return
@@ -710,19 +742,24 @@ static int aml_gio_reset(struct aml_pcmcia *pc, int enable)
 	int ret = 0;
 	struct aml_ci_bus *ci_bus_dev = pc->priv;
 
-	if (ci_bus_dev != NULL)
-		pr_dbg("%s : %d  \r\n", __func__, enable);
+	if (ci_bus_dev == NULL) {
+		pr_dbg("ci bus dev is null %s : %d\r\n", __func__, enable);
+		return -1;
+	}
 
 	pr_dbg("%s : %d  type: %d\r\n", __func__, enable, ci_bus_dev->io_device_type);
 	if (ci_bus_dev == NULL || ci_bus_dev->priv == NULL) {
 		pr_dbg("rst by ci bus- ci bus dev-null-\r\n");
 		return -1;
 	}
-	if (enable == AML_H)
+	if (enable == AML_H) {
 		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR, 1);
+		//set ts type and not set to real ts type when reset is end
+		ci_bus_dev->select = AML_GPIO_TS;
+	}
 
 	aml_ci_bus_rst((struct aml_ci *)ci_bus_dev->priv, 0, enable);
-
+	pr_dbg("rst by ci bus- ci bus [%d]-\r\n", ci_bus_dev->select);
 	if (enable == AML_L)
 		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS, 1);
 	return ret;
@@ -983,6 +1020,8 @@ int aml_ci_bus_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 	ci_bus_dev->priv = ci_dev;
 	ci_bus_dev->bus_pinctrl = NULL;
 	ci_bus_dev->pinctrl = NULL;
+	/*default mode is wake up,when trans a lot data,used sleep mode*/
+	ci_bus_dev->wakeup_thread = 1;
 	mutex_init(&(ci_bus_dev->mutex));
 	/*init io device type*/
 	ci_bus_dev->io_device_type = ci_dev->io_type;
@@ -993,30 +1032,38 @@ int aml_ci_bus_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 	init_ci_addr(pdev);
 	/*Register irq handlers */
 	if (ci_bus_dev->irq_cmp != -1) {
-		irq = request_irq(ci_bus_dev->irq_cmp,
-				cmp_isr,
-				IRQF_SHARED|IRQF_TRIGGER_RISING,
-				"ciplus cmp irq", ci_bus_dev);
-		if (irq == 0)
-			pr_dbg("request cmp irq sucess\r\n");
-		else if (irq == -EBUSY)
-			pr_err("request cmp irq busy\r\n");
-		else
-			pr_err("request cmp irq error [%d]\r\n", irq);
+		if (USED_IRQ) {
+			irq = request_irq(ci_bus_dev->irq_cmp,
+					cmp_isr,
+					IRQF_SHARED|IRQF_TRIGGER_RISING,
+					"ciplus cmp irq", ci_bus_dev);
+			if (irq == 0)
+				pr_dbg("request cmp irq sucess\r\n");
+			else if (irq == -EBUSY)
+				pr_err("request cmp irq busy\r\n");
+			else
+				pr_err("request cmp irq error [%d]\r\n", irq);
+		} else {
+			disable_irq(ci_bus_dev->irq_cmp);
+		}
 	}
 	/*Register irq handlers */
 	if (ci_bus_dev->irq_timeout != -1) {
-		pr_dbg("request timeout irq\n");
-		irq = request_irq(ci_bus_dev->irq_timeout,
-				timeout_isr,
-				IRQF_SHARED|IRQF_TRIGGER_RISING,
-				"ciplus timeout irq", ci_bus_dev);
-		if (irq == 0)
-			pr_err("request timeout irq sucess\r\n");
-		else if (irq == -EBUSY)
-			pr_err("request timeout irq busy\r\n");
-		else
-			pr_err("request timeout irq error [%d]\r\n", irq);
+		if (USED_IRQ) {
+			pr_dbg("request timeout irq\n");
+			irq = request_irq(ci_bus_dev->irq_timeout,
+					timeout_isr,
+					IRQF_SHARED|IRQF_TRIGGER_RISING,
+					"ciplus timeout irq", ci_bus_dev);
+			if (irq == 0)
+				pr_err("request timeout irq sucess\r\n");
+			else if (irq == -EBUSY)
+				pr_err("request timeout irq busy\r\n");
+			else
+				pr_err("request timeout irq error [%d]\r\n", irq);
+		} else {
+			disable_irq(ci_bus_dev->irq_timeout);
+		}
 	}
 	pr_dbg("*********ci bus init bus reg\n");
 	aml_ci_bus_init_reg(ci_bus_dev);
@@ -1029,6 +1076,7 @@ int aml_ci_bus_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 	ci_dev->ci_slot_shutdown = aml_ci_slot_shutdown;
 	ci_dev->ci_slot_ts_enable = aml_ci_ts_control;
 	ci_dev->ci_poll_slot_status = aml_ci_slot_status;
+	ci_dev->ci_get_slot_wakeup = aml_ci_slot_wakeup;
 	ci_dev->data = ci_bus_dev;
 
 	aml_pcmcia_alloc(ci_bus_dev, &pc);
@@ -1603,6 +1651,29 @@ struct class_attribute *attr, const char *buf, size_t size)
 
 static CLASS_ATTR_RW(start);
 
+static ssize_t wakeup_show(struct class *class,
+struct class_attribute *attr, char *buf)
+{
+	int ret;
+	ret = sprintf(buf, "wakeup:%d\n", ci_bus.wakeup_thread);
+	return ret;
+}
+
+static ssize_t wakeup_store(struct class *class,
+struct class_attribute *attr, const char *buf, size_t size)
+{
+	int enable = 0;
+	long value;
+	if (kstrtol(buf, 0, &value) == 0) {
+		enable = (int)value;
+		ci_bus.wakeup_thread = enable;
+		printk("wakeup is set\n");
+	}
+	return size;
+}
+
+static CLASS_ATTR_RW(wakeup);
+
 static ssize_t status_show(struct class *class,
 struct class_attribute *attr, char *buf)
 {
@@ -1727,6 +1798,7 @@ static struct attribute *aml_ci_bus_attrs[] = {
 	&class_attr_reset.attr,
 	&class_attr_pwr.attr,
 	&class_attr_start.attr,
+	&class_attr_wakeup.attr,
 	NULL
 };
 

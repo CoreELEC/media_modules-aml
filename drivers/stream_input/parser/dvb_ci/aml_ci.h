@@ -88,6 +88,7 @@ struct aml_ci {
 	*/
 	int (*ci_poll_slot_status)(struct aml_ci *ca, int slot, int open);
 
+	int (*ci_get_slot_wakeup)(struct aml_ci *ca, int slot);
 
 	//struct dvb_ca_en50221_cimax en50221_cimax;
 

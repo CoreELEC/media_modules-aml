@@ -71,6 +71,7 @@ struct dvb_ca_en50221_cimcu {
 	int (*slot_ts_enable)(struct dvb_ca_en50221_cimcu *ca, int slot);
 
 	int (*poll_slot_status)(struct dvb_ca_en50221_cimcu *ca, int slot, int open);
+	int (*get_slot_wakeup)(struct dvb_ca_en50221_cimcu *ca, int slot);
 
 	void *data;
 

@@ -226,6 +226,28 @@ static int aml_ci_slot_status(struct dvb_ca_en50221_cimcu *en50221,
 
 	return 0;
 }
+/**\brief aml_ci_slot_status:get slot status
+ * \param en50221: en50221 obj,used this data to get dvb_ci obj
+ * \param slot: slot index
+ * \param open: no used
+ * \return
+ *   - cam status
+ *   - -EINVAL : error
+ */
+static int aml_ci_slot_wakeup(struct dvb_ca_en50221_cimcu *en50221,
+		int slot)
+{
+	struct aml_ci *ci = en50221->data;
+
+	if (ci->ci_get_slot_wakeup != NULL) {
+		return ci->ci_get_slot_wakeup(ci, slot);
+	} else {
+		/*pr_error("aml_ci_slot_wakeup is null %s\r\n", __func__);*/
+	}
+
+	return 1;
+}
+
 #if 0
 static int aml_ci_cimax_slot_reset(struct dvb_ca_en50221_cimax *en50221,
 		int slot)
@@ -573,6 +595,8 @@ int aml_ci_init(struct platform_device *pdev,
 		ci->en50221_cimcu.slot_shutdown	= aml_ci_slot_shutdown;
 		ci->en50221_cimcu.slot_ts_enable	= aml_ci_ts_control;
 		ci->en50221_cimcu.poll_slot_status	= aml_ci_slot_status;
+		ci->en50221_cimcu.get_slot_wakeup	= aml_ci_slot_wakeup;
+
 		ci->en50221_cimcu.data		= ci;
 
 
