@@ -370,6 +370,7 @@ struct vdec_s {
 	u32 discard_start_data_flag;
 	u32 video_id;
 	int is_v4l;
+	bool is_stream_mode_dv_multi;
 };
 
 #define CODEC_MODE(a, b, c, d)\
@@ -439,6 +440,9 @@ typedef struct {
 #define VFM_DEC_PROVIDER_NAME "decoder"
 #define VFM_DEC_DVBL_PROVIDER_NAME "dvbldec"
 #define VFM_DEC_DVEL_PROVIDER_NAME "dveldec"
+
+#define VFM_DEC_DVBL_PROVIDER_NAME2 "dvbldec2"
+#define VFM_DEC_DVEL_PROVIDER_NAME2 "dveldec2"
 
 #define hw_to_vdec(hw) ((struct vdec_s *) \
 	(platform_get_drvdata(hw->platform_dev)))

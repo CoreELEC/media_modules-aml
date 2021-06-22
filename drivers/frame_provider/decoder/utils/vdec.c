@@ -276,6 +276,7 @@ static const char * const vdec_status_string[] = {
 	"VDEC_STATUS_ACTIVE"
 };
 /*
+bit [29] enable steam mode dv multi;
 bit [28] enable print
 bit [23:16] etc
 bit [15:12]
@@ -2434,6 +2435,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			vdec_single(vdec) :
 			vdec_stream_based(vdec);
 	}
+
+	if (debugflags & (1 << 29))
+		p->is_stream_mode_dv_multi = true;
+	else
+		p->is_stream_mode_dv_multi = false;
 
 	if (debugflags & 0x4)
 		p->use_vfm_path = 1;

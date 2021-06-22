@@ -15355,16 +15355,30 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	else if (vdec_dual(pdata)) {
 		struct hevc_state_s *hevc_pair = NULL;
 
-		if (dv_toggle_prov_name) /*debug purpose*/
-			snprintf(pdata->vf_provider_name,
-			VDEC_PROVIDER_NAME_SIZE,
-				(pdata->master) ? VFM_DEC_DVBL_PROVIDER_NAME :
-				VFM_DEC_DVEL_PROVIDER_NAME);
-		else
-			snprintf(pdata->vf_provider_name,
-			VDEC_PROVIDER_NAME_SIZE,
-				(pdata->master) ? VFM_DEC_DVEL_PROVIDER_NAME :
-				VFM_DEC_DVBL_PROVIDER_NAME);
+		if (!pdata->is_stream_mode_dv_multi) {
+			if (dv_toggle_prov_name) /*debug purpose*/
+				snprintf(pdata->vf_provider_name,
+				VDEC_PROVIDER_NAME_SIZE,
+					(pdata->master) ? VFM_DEC_DVBL_PROVIDER_NAME :
+					VFM_DEC_DVEL_PROVIDER_NAME);
+			else
+				snprintf(pdata->vf_provider_name,
+				VDEC_PROVIDER_NAME_SIZE,
+					(pdata->master) ? VFM_DEC_DVEL_PROVIDER_NAME :
+					VFM_DEC_DVBL_PROVIDER_NAME);
+		} else {
+			if (dv_toggle_prov_name) /*debug purpose*/
+				snprintf(pdata->vf_provider_name,
+				VDEC_PROVIDER_NAME_SIZE,
+					(pdata->master) ? VFM_DEC_DVBL_PROVIDER_NAME2 :
+					VFM_DEC_DVEL_PROVIDER_NAME2);
+			else
+				snprintf(pdata->vf_provider_name,
+				VDEC_PROVIDER_NAME_SIZE,
+					(pdata->master) ? VFM_DEC_DVEL_PROVIDER_NAME2 :
+					VFM_DEC_DVBL_PROVIDER_NAME2);
+		}
+
 		hevc->dolby_enhance_flag = pdata->master ? 1 : 0;
 		if (pdata->master)
 			hevc_pair = (struct hevc_state_s *)

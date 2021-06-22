@@ -10572,16 +10572,29 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	}
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	else if (vdec_dual(pdata)) {
-		if (dv_toggle_prov_name) /*debug purpose*/
-			snprintf(pdata->vf_provider_name,
-			VDEC_PROVIDER_NAME_SIZE,
-				(pdata->master) ? VFM_DEC_DVBL_PROVIDER_NAME :
-				VFM_DEC_DVEL_PROVIDER_NAME);
-		else
-			snprintf(pdata->vf_provider_name,
-			VDEC_PROVIDER_NAME_SIZE,
-				(pdata->master) ? VFM_DEC_DVEL_PROVIDER_NAME :
-				VFM_DEC_DVBL_PROVIDER_NAME);
+		if (!pdata->is_stream_mode_dv_multi) {
+			if (dv_toggle_prov_name) /*debug purpose*/
+				snprintf(pdata->vf_provider_name,
+				VDEC_PROVIDER_NAME_SIZE,
+					(pdata->master) ? VFM_DEC_DVBL_PROVIDER_NAME :
+					VFM_DEC_DVEL_PROVIDER_NAME);
+			else
+				snprintf(pdata->vf_provider_name,
+				VDEC_PROVIDER_NAME_SIZE,
+					(pdata->master) ? VFM_DEC_DVEL_PROVIDER_NAME :
+					VFM_DEC_DVBL_PROVIDER_NAME);
+		} else {
+			if (dv_toggle_prov_name) /*debug purpose*/
+				snprintf(pdata->vf_provider_name,
+				VDEC_PROVIDER_NAME_SIZE,
+					(pdata->master) ? VFM_DEC_DVBL_PROVIDER_NAME2 :
+					VFM_DEC_DVEL_PROVIDER_NAME2);
+			else
+				snprintf(pdata->vf_provider_name,
+				VDEC_PROVIDER_NAME_SIZE,
+					(pdata->master) ? VFM_DEC_DVEL_PROVIDER_NAME2 :
+					VFM_DEC_DVBL_PROVIDER_NAME2);
+		}
 	}
 #endif
 	else
