@@ -6714,21 +6714,30 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 				pbi->lmem_phy_addr);
 		pbi->lmem_addr = NULL;
 	}
-	if (pbi->prob_buffer_addr) {
-		if (pbi->prob_buffer_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
-				PROB_BUF_SIZE, pbi->prob_buffer_addr,
-				pbi->prob_buffer_phy_addr);
-
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+		(vdec_secure(hw_to_vdec(pbi)))) {
+		tee_vp9_prob_free((u32)pbi->prob_buffer_phy_addr);
+		pbi->prob_buffer_phy_addr = 0;
+		pbi->count_buffer_phy_addr = 0;
 		pbi->prob_buffer_addr = NULL;
-	}
-	if (pbi->count_buffer_addr) {
-		if (pbi->count_buffer_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
-				COUNT_BUF_SIZE, pbi->count_buffer_addr,
-				pbi->count_buffer_phy_addr);
-
 		pbi->count_buffer_addr = NULL;
+	} else {
+		if (pbi->prob_buffer_addr) {
+			if (pbi->prob_buffer_phy_addr)
+				dma_free_coherent(amports_get_dma_device(),
+					PROB_BUF_SIZE, pbi->prob_buffer_addr,
+					pbi->prob_buffer_phy_addr);
+
+			pbi->prob_buffer_addr = NULL;
+		}
+		if (pbi->count_buffer_addr) {
+			if (pbi->count_buffer_phy_addr)
+				dma_free_coherent(amports_get_dma_device(),
+					COUNT_BUF_SIZE, pbi->count_buffer_addr,
+					pbi->count_buffer_phy_addr);
+
+			pbi->count_buffer_addr = NULL;
+		}
 	}
 	if (pbi->mmu_enable) {
 		u32 mmu_map_size = vvp9_frame_mmu_map_size(pbi);
@@ -6888,24 +6897,38 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
 		return -1;
 	}
-		pbi->lmem_ptr = pbi->lmem_addr;
+	pbi->lmem_ptr = pbi->lmem_addr;
 
-	pbi->prob_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
-				PROB_BUF_SIZE,
-				&pbi->prob_buffer_phy_addr, GFP_KERNEL);
-	if (pbi->prob_buffer_addr == NULL) {
-		pr_err("%s: failed to alloc prob_buffer\n", __func__);
-		return -1;
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+		(vdec_secure(hw_to_vdec(pbi)))) {
+		u32 prob_addr, id;
+		id = tee_vp9_prob_malloc(&prob_addr);
+		if (prob_addr <= 0)
+			pr_err("%s, tee[%d] malloc prob buf failed\n", __func__, id);
+		else {
+			pbi->prob_buffer_phy_addr = prob_addr;
+			pbi->count_buffer_phy_addr = pbi->prob_buffer_phy_addr + PROB_BUF_SIZE;
+		}
+		pbi->prob_buffer_addr = NULL;
+		pbi->count_buffer_addr = NULL;
+	} else {
+		pbi->prob_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
+					PROB_BUF_SIZE,
+					&pbi->prob_buffer_phy_addr, GFP_KERNEL);
+		if (pbi->prob_buffer_addr == NULL) {
+			pr_err("%s: failed to alloc prob_buffer\n", __func__);
+			return -1;
+		}
+		memset(pbi->prob_buffer_addr, 0, PROB_BUF_SIZE);
+		pbi->count_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
+					COUNT_BUF_SIZE,
+					&pbi->count_buffer_phy_addr, GFP_KERNEL);
+		if (pbi->count_buffer_addr == NULL) {
+			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			return -1;
+		}
+		memset(pbi->count_buffer_addr, 0, COUNT_BUF_SIZE);
 	}
-	memset(pbi->prob_buffer_addr, 0, PROB_BUF_SIZE);
-	pbi->count_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
-				COUNT_BUF_SIZE,
-				&pbi->count_buffer_phy_addr, GFP_KERNEL);
-	if (pbi->count_buffer_addr == NULL) {
-		pr_err("%s: failed to alloc count_buffer\n", __func__);
-		return -1;
-	}
-	memset(pbi->count_buffer_addr, 0, COUNT_BUF_SIZE);
 
 	if (pbi->mmu_enable) {
 		u32 mmu_map_size = vvp9_frame_mmu_map_size(pbi);
@@ -8916,7 +8939,6 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	unsigned int dec_status;
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)data;
 	unsigned int adapt_prob_status;
-	struct VP9_Common_s *const cm = &pbi->common;
 	uint debug_tag;
 
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
@@ -9021,33 +9043,41 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	}
 #endif
 	if ((adapt_prob_status & 0xff) == 0xfd) {
-		/*VP9_REQ_ADAPT_PROB*/
-		int pre_fc = (cm->frame_type == KEY_FRAME) ? 1 : 0;
-		uint8_t *prev_prob_b =
-		((uint8_t *)pbi->prob_buffer_addr) +
-		((adapt_prob_status >> 8) * 0x1000);
-		uint8_t *cur_prob_b =
-		((uint8_t *)pbi->prob_buffer_addr) + 0x4000;
-		uint8_t *count_b = (uint8_t *)pbi->count_buffer_addr;
-#ifdef MULTI_INSTANCE_SUPPORT
-		if (pbi->m_ins_flag)
-			reset_process_time(pbi);
-#endif
-		adapt_coef_probs(pbi->pic_count,
-			(cm->last_frame_type == KEY_FRAME),
-			pre_fc, (adapt_prob_status >> 8),
-			(unsigned int *)prev_prob_b,
-			(unsigned int *)cur_prob_b, (unsigned int *)count_b);
+		struct VP9_Common_s *const cm = &pbi->common;
 
-		memcpy(prev_prob_b, cur_prob_b, PROB_SIZE);
+		if (pbi->m_ins_flag)
+				reset_process_time(pbi);
+
+		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+			(vdec_secure(hw_to_vdec(pbi)))) {
+			tee_vp9_prob_process(cm->frame_type, cm->last_frame_type,
+				adapt_prob_status, (unsigned int)pbi->prob_buffer_phy_addr);
+		} else {
+			int pre_fc = 0;
+			uint8_t *prev_prob_b, *cur_prob_b, *count_b;
+
+			/*VP9_REQ_ADAPT_PROB*/
+			pre_fc = (cm->frame_type == KEY_FRAME) ? 1 : 0;
+			prev_prob_b = ((uint8_t *)pbi->prob_buffer_addr) +
+				((adapt_prob_status >> 8) * 0x1000);
+			cur_prob_b = ((uint8_t *)pbi->prob_buffer_addr) + 0x4000;
+			count_b = (uint8_t *)pbi->count_buffer_addr;
+
+			adapt_coef_probs(pbi->pic_count,
+				(cm->last_frame_type == KEY_FRAME),
+				pre_fc, (adapt_prob_status >> 8),
+				(unsigned int *)prev_prob_b,
+				(unsigned int *)cur_prob_b, (unsigned int *)count_b);
+
+			memcpy(prev_prob_b, cur_prob_b, PROB_SIZE);
+		}
+
 		WRITE_VREG(VP9_ADAPT_PROB_REG, 0);
 		pbi->pic_count += 1;
 #ifdef MULTI_INSTANCE_SUPPORT
 		if (pbi->m_ins_flag)
 			start_process_time(pbi);
 #endif
-
-		/*return IRQ_HANDLED;*/
 	}
 	return IRQ_WAKE_THREAD;
 }
