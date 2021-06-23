@@ -354,6 +354,7 @@ EXPORT_SYMBOL(vdec_sync_get);
 void vdec_timeline_create(struct vdec_sync *sync, u8 *name)
 {
 	struct sync_timeline *obj;
+	snprintf(sync->name, sizeof(sync->name), "%s", name);
 
 	obj = sync_timeline_create(sync->name);
 	obj->parent_sync = sync;
@@ -379,13 +380,12 @@ int vdec_timeline_create_fence(struct vdec_sync *sync)
 
 	spin_lock_irqsave(&obj->lock, flags);
 
-	pt = list_last_entry(&obj->pt_list, struct sync_pt, link);
 	value = obj->value + 1;
 
 	if (!list_empty(&obj->pt_list)) {
 		pt = list_last_entry(&obj->pt_list, struct sync_pt, link);
-		if (value == pt->fence.seqno) {
-			value++;
+		if (value <= pt->fence.seqno) {
+			value = pt->fence.seqno + 1;
 		}
 	}
 	spin_unlock_irqrestore(&obj->lock, flags);
@@ -489,9 +489,17 @@ EXPORT_SYMBOL(vdec_clean_all_fence);
 void vdec_fence_buffer_count_increase(ulong fence)
 {
 	struct vdec_sync *sync = (struct vdec_sync *)fence;
+	struct sync_timeline *obj = sync->timeline;
+
+	spin_lock_irq(&obj->lock);
+
+	if (atomic_read(&sync->buffer_count) == 0) {
+			sync_timeline_get(obj);
+	}
 
 	atomic_inc(&sync->buffer_count);
 
+	spin_unlock_irq(&obj->lock);
 }
 EXPORT_SYMBOL(vdec_fence_buffer_count_increase);
 
@@ -504,6 +512,7 @@ void vdec_fence_buffer_count_decrease(struct codec_mm_s *mm, struct codec_mm_cb_
 	atomic_dec(&sync->buffer_count);
 
 	if (atomic_read(&sync->buffer_count) == 0) {
+		sync_timeline_put(obj);
 		list_for_each_entry_safe(pt, next, &obj->pt_list, link) {
 			vdec_fence_put(&pt->fence);
 		}
