@@ -9065,6 +9065,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			hevc_print(hevc, 0,
 			"%s warning(1), vf=>display_q: (index 0x%x)\n",
 				__func__, vf->index);
+		if (hevc->is_used_v4l && pair_pic->double_write_mode != 16)
+			vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 		/* recycle vframe */
 		atomic_add(1, &hevc->vf_pre_count);
 		spin_lock_irqsave(&lock, flags);
@@ -9108,7 +9110,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-
+			if (hevc->is_used_v4l && pair_pic->double_write_mode != 16)
+				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 			atomic_add(1, &hevc->vf_pre_count);
 			vdec_vframe_ready(hw_to_vdec(hevc), vf);
 			hevc->send_frame_flag = 1;
@@ -9122,7 +9125,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-
+			if (hevc->is_used_v4l && pair_pic->double_write_mode != 16)
+				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 			vf->index &= 0xff;
 			vf->index |= (pair_pic->index << 8);
 			pair_pic->vf_ref++;
@@ -9462,6 +9466,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
+			if (hevc->is_used_v4l && pic->double_write_mode != 16)
+				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hevc->m_ins_flag &&
 				(get_dbg_flag(hevc)

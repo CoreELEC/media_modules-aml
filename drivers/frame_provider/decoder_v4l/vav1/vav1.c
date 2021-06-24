@@ -6684,6 +6684,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				if (hw->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
+			if (hw->is_used_v4l && pic_config->double_write_mode != 16)
+				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hw->m_ins_flag) {
 				vf->canvas0Addr = vf->canvas1Addr = -1;
