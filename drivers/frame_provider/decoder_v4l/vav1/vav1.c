@@ -611,6 +611,7 @@ void clear_frame_buf_ref_count(AV1Decoder *pbi);
 #define DEC_RESULT_GET_DATA_RETRY   8
 #define DEC_RESULT_EOS              9
 #define DEC_RESULT_FORCE_EXIT       10
+#define DEC_RESULT_DISCARD_DATA     11
 
 #define DEC_S1_RESULT_NONE          0
 #define DEC_S1_RESULT_DONE          1
@@ -8832,6 +8833,14 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		hw->frame_width = hw->common.seq_params.max_frame_width;
 		hw->frame_height = hw->common.seq_params.max_frame_height;
 
+		if (hw->frame_width == 0 || hw->frame_height == 0) {
+			hw->dec_result = DEC_RESULT_DISCARD_DATA;
+			hw->process_busy = 0;
+			amhevc_stop();
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
+		}
+
 		if (!v4l_res_change(hw)) {
 			if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 				struct aml_vdec_ps_infos ps;
@@ -9884,7 +9893,7 @@ static int av1_wait_cap_buf(void *args)
 		get_free_buf_count(hw) > 0,
 		msecs_to_jiffies(300));
 	if (ret <= 0){
-		pr_err("%s, wait cap buf timeout or err %d\n",
+		av1_print(hw, PRINT_FLAG_V4L_DETAIL, "%s, wait cap buf timeout or err %d\n",
 			__func__, ret);
 	}
 
@@ -10073,7 +10082,23 @@ static void av1_work(struct work_struct *work)
 			vdec_free_irq(VDEC_IRQ_0, (void *)hw);
 			hw->stat &= ~STAT_ISR_REG;
 		}
+	} else if (hw->dec_result == DEC_RESULT_DISCARD_DATA) {
+		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
+			"%s (===> %d) dec_result %d (%d) %x %x %x shiftbytes 0x%x decbytes 0x%x discard pic!\n",
+			__func__,
+			hw->frame_count,
+			hw->dec_result,
+			hw->result_done_count,
+			READ_VREG(HEVC_STREAM_LEVEL),
+			READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT) -
+			hw->start_shift_bytes
+			);
+		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 	}
+
 	if (hw->stat & STAT_VDEC_RUN) {
 		amhevc_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
