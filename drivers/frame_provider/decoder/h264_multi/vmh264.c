@@ -6552,7 +6552,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			hw->cur_picture_slice_count,
 			hw->multi_slice_pic_flag);
 
-			if (pic->mb_aff_frame_flag == 1)
+			if ((pic != NULL) && (pic->mb_aff_frame_flag == 1))
 				first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3] * 2;
 			else
 				first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3];
