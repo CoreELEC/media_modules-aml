@@ -997,4 +997,6 @@ void update_ref_list(struct DecodedPictureBuffer *p_Dpb);
 
 int post_picture_early(struct vdec_s *vdec, int index);
 
+int is_used_for_reference(struct FrameStore *fs);
+
 #endif

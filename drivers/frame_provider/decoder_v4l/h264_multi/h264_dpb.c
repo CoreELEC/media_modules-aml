@@ -2091,7 +2091,7 @@ static void remove_frame_from_dpb(struct h264_dpb_stru *p_H264_Dpb, int pos)
 		p_Dpb->used_size--;
 }
 
-static int is_used_for_reference(struct FrameStore *fs)
+int is_used_for_reference(struct FrameStore *fs)
 {
 	if (fs->is_reference)
 		return 1;
@@ -3707,8 +3707,7 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	else
 		i = 0;
 
-	if (i || (p_H264_Dpb->first_insert_frame < FirstInsertFrm_SKIPDONE) ||
-		((p_Dpb->size - frame_outside_count) == p_H264_Dpb->dec_dpb_size)) {
+	if (i || (p_H264_Dpb->first_insert_frame < FirstInsertFrm_SKIPDONE)) {
 		while (output_frames(p_H264_Dpb, i))
 			;
 	}
