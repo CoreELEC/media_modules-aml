@@ -154,6 +154,8 @@ static unsigned int error_recovery_mode_in;
 static int start_decode_buf_level = 0x4000;
 static int pre_decode_buf_level = 0x1000;
 static int stream_mode_start_num = 4;
+static unsigned int colocate_old_cal;
+
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 /*to make reorder size difference of bl and el not too big*/
 static unsigned int reorder_dpb_size_margin_dv = 16;
@@ -3160,10 +3162,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			pvdec = hw_to_vdec(hw);
 			memset(&vs, 0, sizeof(struct vdec_info));
 			pvdec->dec_status(pvdec, &vs);
-			if (frame->frame && (vs.frame_height != frame->frame->height)) {
-				vs.frame_height = frame->frame->height;
-				vs.frame_width = frame->frame->width;
-			}
 			decoder_do_frame_check(pvdec, vf);
 			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
 
@@ -4178,12 +4176,15 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 		 * 00 - top field, 01 - bottom field,
 		 * 10 - frame, 11 - mbaff frame
 		 */
-		int l10_structure;
+		int l10_structure, cur_structure;
 		int cur_colocate_ref_type;
 		/* H264_CO_MB_RD_ADDR[bit 29], top/bot for B field pciture,
 		 * 0 - top, 1 - bot
 		 */
 		unsigned int val;
+		unsigned int colocate_rd_adr_offset;
+		unsigned int mby_mbx;
+		unsigned int mby, mbx;
 #ifdef ERROR_CHECK
 		if (colocate_pic == NULL) {
 			hw->data_flag |= ERROR_FLAG;
@@ -4209,6 +4210,60 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 				l10_structure =	(colocate_pic->structure ==
 					BOTTOM_FIELD) ?	1 : 0;
 		}
+
+		//ALLEGRO_FIX, ported from single mode ucode
+		mby_mbx = READ_VREG(MBY_MBX);
+		mby = pSlice->first_mb_in_slice / hw->mb_width;
+		mbx = pSlice->first_mb_in_slice % hw->mb_width;
+		if (pic->mb_aff_frame_flag)
+			cur_structure = 3;
+		else {
+			if (pic->coded_frame)
+				cur_structure = 2;
+			else
+				cur_structure = (pic->structure ==
+					BOTTOM_FIELD) ? 1 : 0;
+		}
+		if (cur_structure < 2) {
+			//current_field_structure
+			if (l10_structure != 2) {
+				colocate_rd_adr_offset = pSlice->first_mb_in_slice * 2;
+			} else {
+				// field_ref_from_frame co_mv_rd_addr :
+				// mby*2*mb_width + mbx
+				colocate_rd_adr_offset = mby * 2 * hw->mb_width + mbx;
+			}
+
+		} else {
+			//current_frame_structure
+			if (l10_structure < 2) {
+				//calculate_co_mv_offset_frame_ref_field:
+				// frame_ref_from_field co_mv_rd_addr :
+				// (mby/2*mb_width+mbx)*2
+				colocate_rd_adr_offset = ((mby / 2) * hw->mb_width + mbx) * 2;
+			} else if (cur_structure == 2) {
+				colocate_rd_adr_offset = pSlice->first_mb_in_slice;
+			} else {
+				//mbaff frame case1196
+				colocate_rd_adr_offset = pSlice->first_mb_in_slice * 2;
+			}
+
+		}
+
+		colocate_rd_adr_offset *= 96;
+		if (use_direct_8x8)
+			colocate_rd_adr_offset >>= 2;
+
+		if (colocate_old_cal)
+			colocate_rd_adr_offset = colocate_adr_offset;
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+			"first_mb_in_slice 0x%x 0x%x 0x%x (MBY_MBX reg 0x%x) use_direct_8x8 %d cur %d (mb_aff_frame_flag %d, coded_frame %d structure %d) col %d (mb_aff_frame_flag %d, coded_frame %d structure %d) offset 0x%x rdoffset 0x%x\n",
+				pSlice->first_mb_in_slice, mby, mbx, mby_mbx, use_direct_8x8,
+				cur_structure, pic->mb_aff_frame_flag, pic->coded_frame, pic->structure,
+				l10_structure, colocate_pic->mb_aff_frame_flag, colocate_pic->coded_frame, colocate_pic->structure,
+				colocate_adr_offset,
+				colocate_rd_adr_offset);
+
 #if 0
 		/*case0016, p16,
 		 *cur_colocate_ref_type should be configured base on current pic
@@ -4268,14 +4323,14 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 			 * [2:0] will set to 3'b000
 			 */
 			/* #define H264_CO_MB_RD_ADDR        VLD_C39 0xc39 */
-			val = ((colocate_rd_adr+colocate_adr_offset) >> 3) |
+			val = ((colocate_rd_adr+colocate_rd_adr_offset) >> 3) |
 				(l10_structure << 30) |
 				(cur_colocate_ref_type << 29);
 			WRITE_VREG(H264_CO_MB_RD_ADDR, val);
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 				"co idx %d, WRITE_VREG(H264_CO_MB_RD_ADDR) = %x, addr %x L1(0) pic_structure %d mbaff %d\n",
 				colocate_pic->colocated_buf_index,
-				val, colocate_rd_adr + colocate_adr_offset,
+				val, colocate_rd_adr + colocate_rd_adr_offset,
 				colocate_pic->structure,
 				colocate_pic->mb_aff_frame_flag);
 		} else {
@@ -4307,7 +4362,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 		 * [2:0] will set to 3'b000
 		 */
 		/* #define H264_CO_MB_RD_ADDR        VLD_C39 0xc39 */
-		val = ((colocate_rd_adr+colocate_adr_offset)>>3) |
+		val = ((colocate_rd_adr+colocate_rd_adr_offset)>>3) |
 			(l10_structure << 30) | (cur_colocate_ref_type << 29);
 		WRITE_VREG(H264_CO_MB_RD_ADDR, val);
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
@@ -11020,6 +11075,9 @@ MODULE_PARM_DESC(again_threshold, "\n again_threshold\n");
 
 module_param(stream_mode_start_num, uint, 0664);
 MODULE_PARM_DESC(stream_mode_start_num, "\n stream_mode_start_num\n");
+
+module_param(colocate_old_cal, uint, 0664);
+MODULE_PARM_DESC(colocate_old_cal, "\n amvdec_mh264 colocate_old_cal\n");
 
 /*
 module_param(trigger_task, uint, 0664);
