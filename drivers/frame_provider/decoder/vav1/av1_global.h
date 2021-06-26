@@ -2297,6 +2297,7 @@ void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *c
 #define AV1_DEBUG_BUFMGR                   0x01
 #define AV1_DEBUG_BUFMGR_MORE              0x02
 #define AV1_DEBUG_BUFMGR_DETAIL            0x04
+#define AV1_DEBUG_TIMEOUT_INFO             0x08
 #define AV1_DEBUG_OUT_PTS                  0x10
 #define AOM_DEBUG_HW_MORE                  0x20
 #define AOM_DEBUG_VFRAME                   0x40

@@ -8480,6 +8480,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			}
 		}
 
+		start_process_time(hw);
 		hw->process_busy = 0;
 		return IRQ_HANDLED;
 	}
@@ -8920,6 +8921,8 @@ static void vav1_put_timer_func(unsigned long arg)
 	}
 #ifdef MULTI_INSTANCE_SUPPORT
 	else {
+		av1_print(hw, AV1_DEBUG_TIMEOUT_INFO, "timeout!!!start_process_time %d\n",
+			hw->start_process_time);
 		if (
 			(decode_timeout_val > 0) &&
 			(hw->start_process_time > 0) &&
@@ -8929,6 +8932,8 @@ static void vav1_put_timer_func(unsigned long arg)
 			int current_lcu_idx =
 				READ_VREG(HEVC_PARSER_LCU_START)
 				& 0xffffff;
+			av1_print(hw, AV1_DEBUG_TIMEOUT_INFO, "timeout!!!current_lcu_idx = %u last_lcu_idx = %u decode_timeout_count = %d\n",
+						current_lcu_idx, hw->last_lcu_idx, hw->decode_timeout_count);
 			if (hw->last_lcu_idx == current_lcu_idx) {
 				if (hw->decode_timeout_count > 0)
 					hw->decode_timeout_count--;
