@@ -622,8 +622,6 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DECODE_MODE_MULTI_DVENL				0x4
 static DEFINE_MUTEX(vmh264_mutex);
 
-
-
 #ifdef MH264_USERDATA_ENABLE
 
 struct mh264_userdata_record_t {
@@ -943,14 +941,11 @@ struct vdec_h264_hw_s {
 	u32 wrong_frame_count;
 	u32 error_frame_width;
 	u32 error_frame_height;
-	char vdec_name[32];
-	char pts_name[32];
-	char new_q_name[32];
-	char disp_q_name[32];
 	int dec_again_cnt;
 	struct mh264_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
 	u32 no_decoder_buffer_flag;
+	struct trace_decoder_name trace;
 };
 
 static u32 again_threshold;
@@ -3178,9 +3173,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(hw->pts_name, vf->pts);
-		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
-		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+		ATRACE_COUNTER(hw->trace.pts_name, vf->pts);
+		ATRACE_COUNTER(hw->trace.disp_q_name, kfifo_len(&hw->display_q));
+		ATRACE_COUNTER(hw->trace.new_q_name, kfifo_len(&hw->newframe_q));
 		hw->vf_pre_count++;
 		vdec->vdec_fps_detec(vdec->id);
 #ifdef AUX_DATA_CRC
@@ -3337,7 +3332,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(hw->pts_name, vf->pts);
+		ATRACE_COUNTER(hw->trace.pts_name, vf->pts);
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
@@ -4405,7 +4400,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 		unsigned int frame_interval =
 			1000*(time - hw->last_frame_time)/HZ;
 		struct vframe_s *next_vf = NULL;
-		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
+		ATRACE_COUNTER(hw->trace.disp_q_name, kfifo_len(&hw->display_q));
 		if (dpb_is_debug(DECODE_ID(hw),
 			PRINT_FLAG_VDEC_DETAIL)) {
 			struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
@@ -4558,7 +4553,7 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 	hw->vf_put_count++;
 	if (vf_valid_check(vf, hw) == true) {
 		kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+		ATRACE_COUNTER(hw->trace.new_q_name, kfifo_len(&hw->newframe_q));
 	}
 
 #define ASSIST_MBOX1_IRQ_REG    VDEC_ASSIST_MBOX1_IRQ_REG
@@ -6437,6 +6432,18 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 	unsigned int dec_dpb_status = p_H264_Dpb->dec_dpb_status;
 	u32 debug_tag;
 
+	if (dec_dpb_status == H264_SLICE_HEAD_DONE ||
+		p_H264_Dpb->dec_dpb_status == H264_CONFIG_REQUEST) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_START);
+	}
+	else if (dec_dpb_status == H264_PIC_DATA_DONE) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
+	}
+	else if (dec_dpb_status == H264_SEI_DATA_READY)
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_SEI_START);
+	else if (dec_dpb_status == H264_AUX_DATA_READY)
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_AUX_START);
+
 	if (dec_dpb_status == H264_CONFIG_REQUEST) {
 #if 1
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
@@ -6521,6 +6528,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		hw->multi_slice_pic_flag = 0;
 		hw->picture_slice_count = 0;
 #endif
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 		vdec_schedule_work(&hw->work);
 	} else if (dec_dpb_status == H264_SLICE_HEAD_DONE) {
 		u16 data_hight;
@@ -6659,6 +6667,9 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 #else
 		dpb_param_bak = p_H264_Dpb->dpb_param;
+
+		ATRACE_COUNTER(hw->trace.decode_header_time_name, TRACE_HEADER_RPM_START);
+
 		for (i = 0; i < (RPM_END-RPM_BEGIN); i += 4) {
 			int ii;
 
@@ -6681,6 +6692,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				}
 			}
 		}
+		ATRACE_COUNTER(hw->trace.decode_header_time_name, TRACE_HEADER_RPM_END);
 #endif
 #ifdef DETECT_WRONG_MULTI_SLICE
 
@@ -6915,9 +6927,10 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					return IRQ_HANDLED;
 				}
 			}
-
+			ATRACE_COUNTER(hw->trace.decode_header_time_name, TRACE_HEADER_REGISTER_START);
 			cfg_ret = config_decode_buf(hw,
 				p_H264_Dpb->mVideo.dec_picture);
+			ATRACE_COUNTER(hw->trace.decode_header_time_name, TRACE_HEADER_REGISTER_END);
 			if (cfg_ret < 0) {
 				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 					"config_decode_buf fail (%d)\n",
@@ -6935,6 +6948,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			}
 		}
 
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 		if (slice_header_process_status == 1) {
 			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_DECODE_NEWPIC);
 		} else {
@@ -7025,6 +7039,7 @@ pic_done_proc:
 			hw->got_valid_nal = 1;
 		}
 #endif
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 
 		hw->dec_result = DEC_RESULT_DONE;
 		vdec_schedule_work(&hw->work);
@@ -7077,6 +7092,7 @@ pic_done_proc:
 #endif
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s H264_AUX_DATA_READY\n", __func__);
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 		hw->dec_result = DEC_RESULT_DONE;
 		vdec_schedule_work(&hw->work);
 	} else if (/*(dec_dpb_status == H264_DATA_REQUEST) ||*/
@@ -7237,6 +7253,7 @@ send_again:
 						left_len);
 			}
 		}
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 		WRITE_VREG(DPB_STATUS_REG, H264_SEI_DATA_DONE);
 
 		return IRQ_HANDLED;
@@ -7317,6 +7334,17 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 
 	p_H264_Dpb->vdec = vdec;
 	p_H264_Dpb->dec_dpb_status = READ_VREG(DPB_STATUS_REG);
+	if (p_H264_Dpb->dec_dpb_status == H264_SLICE_HEAD_DONE ||
+		p_H264_Dpb->dec_dpb_status == H264_CONFIG_REQUEST) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
+	}
+	else if (p_H264_Dpb->dec_dpb_status == H264_PIC_DATA_DONE) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_PIC_DONE);
+	}
+	else if (p_H264_Dpb->dec_dpb_status == H264_SEI_DATA_READY)
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_SEI_DONE);
+	else if (p_H264_Dpb->dec_dpb_status == H264_AUX_DATA_READY)
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_AUX_DONE);
 
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
 			"%s DPB_STATUS_REG: 0x%x, run(%d) last_state (%x) ERROR_STATUS_REG 0x%x, sb (0x%x 0x%x 0x%x) bitcnt 0x%x mby_mbx 0x%x\n",
@@ -7337,6 +7365,7 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 		WRITE_VREG(DPB_STATUS_REG, H264_WRRSP_DONE);
 		return IRQ_HANDLED;
 	}
+	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_END);
 	return IRQ_WAKE_THREAD;
 
 }
@@ -9141,6 +9170,11 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
+	if (hw->dec_result == DEC_RESULT_DONE) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
+	} else if (hw->dec_result == DEC_RESULT_AGAIN)
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_AGAIN);
+
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
 		"%s dec_result %d %x %x %x\n",
 		__func__,
@@ -9465,7 +9499,9 @@ result_done:
 	if (hw->dec_result != DEC_RESULT_AGAIN)
 		hw->last_picture_slice_count = 0;
 #endif
+	ATRACE_COUNTER(hw->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_START);
 	wait_vmh264_search_done(hw);
+	ATRACE_COUNTER(hw->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_END);
 	/* mark itself has all HW resource released and input released */
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
@@ -9487,6 +9523,9 @@ result_done:
 			 */
 			return;
 		}
+	}
+	if (hw->dec_result == DEC_RESULT_DONE) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_END);
 	}
 
 	/* mark itself has all HW resource released and input released */
@@ -9730,6 +9769,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		if (hw->mmu_enable)
 			amhevc_enable();
 	}
+	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_RUN_START);
+
 	run_count[DECODE_ID(hw)]++;
 	vdec_reset_core(vdec);
 	if (hw->mmu_enable)
@@ -9858,7 +9899,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			*/
 		WRITE_VREG(AV_SCRATCH_G, hw->reg_g_status);
 	} else {
-
+		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
 		ret = amvdec_vdec_loadmc_ex(VFORMAT_H264, "mh264", vdec, hw->fw->data);
 		if (ret < 0) {
 			amvdec_enable_flag = false;
@@ -9889,13 +9930,15 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			vdec->mc_type = ((1 << 16) | VFORMAT_H264);
 		}
 		vdec->mc_loaded = 0;
+		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 	}
 	vmh264_reset_udr_mgr(hw);
-
+	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 	if (vh264_hw_ctx_restore(hw) < 0) {
 		vdec_schedule_work(&hw->work);
 		return;
 	}
+	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
 	if (input_frame_based(vdec)) {
 		int decode_size = 0;
 
@@ -9959,6 +10002,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	/* } */
 
 	hw->init_flag = 1;
+	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_RUN_END);
 }
 
 static void clear_refer_bufs(struct vdec_h264_hw_s *hw)
@@ -10265,7 +10309,6 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	struct vdec_h264_hw_s *hw = NULL;
 	char *tmpbuf;
 	int config_val;
-
 	if (pdata == NULL) {
 		pr_info("\nammvdec_h264 memory resource undefined.\n");
 		return -EFAULT;
@@ -10280,14 +10323,22 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	hw->id = pdev->id;
 	hw->platform_dev = pdev;
 
-	snprintf(hw->vdec_name, sizeof(hw->vdec_name),
+	snprintf(hw->trace.vdec_name, sizeof(hw->trace.vdec_name),
 		"h264-%d", hw->id);
-	snprintf(hw->pts_name, sizeof(hw->pts_name),
-		"%s-pts", hw->vdec_name);
-	snprintf(hw->new_q_name, sizeof(hw->new_q_name),
-		"%s-newframe_q", hw->vdec_name);
-	snprintf(hw->disp_q_name, sizeof(hw->disp_q_name),
-		"%s-dispframe_q", hw->vdec_name);
+	snprintf(hw->trace.pts_name, sizeof(hw->trace.pts_name),
+		"%s-pts", hw->trace.vdec_name);
+	snprintf(hw->trace.new_q_name, sizeof(hw->trace.new_q_name),
+		"%s-newframe_q", hw->trace.vdec_name);
+	snprintf(hw->trace.disp_q_name, sizeof(hw->trace.disp_q_name),
+		"%s-dispframe_q", hw->trace.vdec_name);
+	snprintf(hw->trace.decode_time_name, sizeof(hw->trace.decode_time_name),
+		"decoder_time%d", pdev->id);
+	snprintf(hw->trace.decode_run_time_name, sizeof(hw->trace.decode_run_time_name),
+		"decoder_run_time%d", pdev->id);
+	snprintf(hw->trace.decode_header_time_name, sizeof(hw->trace.decode_header_time_name),
+		"decoder_header_time%d", pdev->id);
+	snprintf(hw->trace.decode_work_time_name, sizeof(hw->trace.decode_work_time_name),
+		"decoder_work_time%d", pdev->id);
 
 	/* the ctx from v4l2 driver. */
 	hw->v4l2_ctx = pdata->private;

@@ -861,13 +861,11 @@ struct AV1HW_s {
 	int buffer_wrap[FRAME_BUFFERS];
 	int sidebind_type;
 	int sidebind_channel_id;
-	char vdec_name[32];
-	char pts_name[32];
-	char new_q_name[32];
-	char disp_q_name[32];
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
+	struct trace_decoder_name trace;
 };
+
 static void av1_dump_state(struct vdec_s *vdec);
 
 int av1_print(struct AV1HW_s *hw,
@@ -6067,7 +6065,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 	if (kfifo_get(&hw->display_q, &vf)) {
 		struct vframe_s *next_vf = NULL;
 		uint8_t index = vf->index & 0xff;
-		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
+		ATRACE_COUNTER(hw->trace.disp_q_name, kfifo_len(&hw->display_q));
 		if (index < hw->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			hw->vf_get_count++;
@@ -6125,7 +6123,7 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 	index = vf->index & 0xff;
 
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
-	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+	ATRACE_COUNTER(hw->trace.new_q_name, kfifo_len(&hw->newframe_q));
 	hw->vf_put_count++;
 	if (debug & AOM_DEBUG_VFRAME) {
 		lock_buffer_pool(hw->common.buffer_pool, flags);
@@ -6716,9 +6714,9 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		decoder_do_frame_check(hw_to_vdec(hw), vf);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(hw->pts_name, vf->pts);
-		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
-		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
+		ATRACE_COUNTER(hw->trace.pts_name, vf->pts);
+		ATRACE_COUNTER(hw->trace.new_q_name, kfifo_len(&hw->newframe_q));
+		ATRACE_COUNTER(hw->trace.disp_q_name, kfifo_len(&hw->display_q));
 
 		hw->vf_pre_count++;
 		/*count info*/
@@ -7536,6 +7534,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 			hw->chunk->pts64 = 0;
 			hw->chunk->timestamp = 0;
 		}
+		ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_START);
 #ifdef DUAL_DECODE
 #else
 		config_pic_size(hw, hw->aom_param.p.bit_depth);
@@ -7548,12 +7547,14 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		}
 
 		if (ret >= 0 && hw->mmu_enable && ((hw->double_write_mode & 0x10) == 0)) {
+			ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 			ret = av1_alloc_mmu(hw,
 				cm->cur_frame->buf.index,
 				cur_pic_config->y_crop_width,
 				cur_pic_config->y_crop_height,
 				hw->aom_param.p.bit_depth,
 				hw->frame_mmu_map_addr);
+			ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 			if (ret >= 0)
 				cm->cur_fb_idx_mmu = cm->cur_frame->buf.index;
 			else
@@ -7626,6 +7627,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		else
 			WRITE_VREG(HEVC_PARSER_MEM_RW_DATA, 0);
 	}
+	ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_END);
 	return ret;
 
 #else
@@ -8220,19 +8222,20 @@ static int load_param(struct AV1HW_s *hw, union param_u *params, uint32_t dec_st
 	  //printf("Error, dec_status of 0x%x, not supported!!!\n", dec_status);
 	  return -1;
 	}
-    av1_print2(AOM_DEBUG_HW_MORE, "load_param: ret 0x%x\n", head_type);
-
-	    if (debug&AOM_AV1_DEBUG_SEND_PARAM_WITH_REG) {
-		    get_rpm_param(params);
-		}
-	    else {
-		    for (i = 0; i < (RPM_END-RPM_BEGIN); i += 4) {
-			    int32_t ii;
-			    for (ii = 0; ii < 4; ii++) {
-				    params->l.data[i+ii]=hw->rpm_ptr[i+3-ii];
-				}
+	av1_print2(AOM_DEBUG_HW_MORE, "load_param: ret 0x%x\n", head_type);
+	ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_START);
+	if (debug&AOM_AV1_DEBUG_SEND_PARAM_WITH_REG) {
+		get_rpm_param(params);
+	}
+	else {
+		for (i = 0; i < (RPM_END-RPM_BEGIN); i += 4) {
+			int32_t ii;
+			for (ii = 0; ii < 4; ii++) {
+				params->l.data[i+ii]=hw->rpm_ptr[i+3-ii];
 			}
 		}
+	}
+	ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_END);
 
     params->p.enable_ref_frame_mvs = (params->p.seq_flags >> 7) & 0x1;
     params->p.enable_superres = (params->p.seq_flags >> 15) & 0x1;
@@ -8319,6 +8322,17 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	/*if (hw->wait_buf)
 	 *	pr_info("set wait_buf to 0\r\n");
 	 */
+
+	if (dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE ||
+		dec_status == AOM_AV1_SEQ_HEAD_PARSER_DONE ||
+		dec_status == AOM_AV1_FRAME_PARSER_DONE) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_START);
+	}
+	else if (dec_status == AOM_AV1_DEC_PIC_END ||
+		dec_status == AOM_NAL_DECODE_DONE) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
+	}
+
 	if (hw->eos)
 		return IRQ_HANDLED;
 	hw->wait_buf = 0;
@@ -8332,6 +8346,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				dec_again_process(hw);
 			else {
 				hw->dec_result = DEC_RESULT_DONE;
+				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 				vdec_schedule_work(&hw->work);
 			}
 		}
@@ -8446,6 +8461,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				hw->fgs_valid);
 				if (hw->config_next_ref_info_flag)
 					config_next_ref_info_hw(hw);
+				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 			} else {
 #ifdef DEBUG_CRC_ERROR
 				if ((crc_debug_flag & 0x40) && cm->cur_frame)
@@ -8457,6 +8473,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				if (mcrcc_cache_alg_flag)
 					dump_hit_rate(hw);
 #endif
+				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 				vdec_schedule_work(&hw->work);
 			}
 		} else {
@@ -8609,6 +8626,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			"AOM_AV1_SEQ_HEAD_PARSER_DONE, search head ...\n");
 	    WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
 		hw->process_busy = 0;
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 		return IRQ_HANDLED;
 	}
 #ifndef USE_DEC_PIC_END
@@ -8707,7 +8725,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			vdec_schedule_work(&hw->work);
 		}
 	}
-
+	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
 
@@ -8722,6 +8740,16 @@ static irqreturn_t vav1_isr(int irq, void *data)
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
+
+	if (dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE ||
+		dec_status == AOM_AV1_SEQ_HEAD_PARSER_DONE ||
+		dec_status == AOM_AV1_FRAME_PARSER_DONE) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
+	}
+	else if (dec_status == AOM_AV1_DEC_PIC_END ||
+		dec_status == AOM_NAL_DECODE_DONE) {
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_PIC_DONE);
+	}
 	if (!hw)
 		return IRQ_HANDLED;
 	if (hw->init_flag == 0)
@@ -8859,6 +8887,7 @@ static irqreturn_t vav1_isr(int irq, void *data)
 			get_free_buf_count(hw));
 		return IRQ_HANDLED;
 	}
+	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_END);
 	return IRQ_WAKE_THREAD;
 }
 
@@ -9912,6 +9941,11 @@ static void av1_work(struct work_struct *work)
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
+	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
+
+	if (hw->dec_result == DEC_RESULT_AGAIN)
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_AGAIN);
+
 	av1_print(hw, PRINT_FLAG_VDEC_DETAIL,
 		"%s dec_result %d %x %x %x\n",
 		__func__,
@@ -10054,6 +10088,7 @@ static void av1_work(struct work_struct *work)
 		del_timer_sync(&hw->timer);
 		hw->stat &= ~STAT_TIMER_ARM;
 	}
+	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_END);
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(vdec, CORE_MASK_HEVC);
@@ -10308,6 +10343,7 @@ static void run_front(struct vdec_s *vdec)
 				hw->start_shift_bytes);
 		}
 	}
+	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
 	if (vdec->mc_loaded) {
 	/*firmware have load before,
 	  and not changes to another.
@@ -10335,12 +10371,14 @@ static void run_front(struct vdec_s *vdec)
 		vdec->mc_type = VFORMAT_AV1;
 #endif
 	}
+	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
+	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 	if (av1_hw_ctx_restore(hw) < 0) {
 		vdec_schedule_work(&hw->work);
 		return;
 	}
-
+	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
 	vdec_enable_input(vdec);
 
 	WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
@@ -10386,6 +10424,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	struct AV1HW_s *hw =
 		(struct AV1HW_s *)vdec->private;
 
+	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_RUN_START);
 	av1_print(hw,
 		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx\r\n",
 		__func__, mask);
@@ -10396,6 +10435,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
 		run_front(vdec);
+	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_RUN_END);
 }
 
 static void  av1_decode_ctx_reset(struct AV1HW_s *hw)
@@ -10705,14 +10745,22 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		}
 	}
 
-	snprintf(hw->vdec_name, sizeof(hw->vdec_name),
+	snprintf(hw->trace.vdec_name, sizeof(hw->trace.vdec_name),
 		"av1-%d", hw->index);
-	snprintf(hw->pts_name, sizeof(hw->pts_name),
-		"%s-pts", hw->vdec_name);
-	snprintf(hw->new_q_name, sizeof(hw->new_q_name),
-		"%s-newframe_q", hw->vdec_name);
-	snprintf(hw->disp_q_name, sizeof(hw->disp_q_name),
-		"%s-dispframe_q", hw->vdec_name);
+	snprintf(hw->trace.pts_name, sizeof(hw->trace.pts_name),
+		"%s-pts", hw->trace.vdec_name);
+	snprintf(hw->trace.new_q_name, sizeof(hw->trace.new_q_name),
+		"%s-newframe_q", hw->trace.vdec_name);
+	snprintf(hw->trace.disp_q_name, sizeof(hw->trace.disp_q_name),
+		"%s-dispframe_q", hw->trace.vdec_name);
+	snprintf(hw->trace.decode_time_name, sizeof(hw->trace.decode_time_name),
+		"decoder_time%d", pdev->id);
+	snprintf(hw->trace.decode_run_time_name, sizeof(hw->trace.decode_run_time_name),
+		"decoder_run_time%d", pdev->id);
+	snprintf(hw->trace.decode_header_memory_time_name, sizeof(hw->trace.decode_header_memory_time_name),
+		"decoder_header_time%d", pdev->id);
+	snprintf(hw->trace.decode_work_time_name, sizeof(hw->trace.decode_work_time_name),
+		"decoder_work_time%d", pdev->id);
 	if (pdata->use_vfm_path)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			VFM_DEC_PROVIDER_NAME);
