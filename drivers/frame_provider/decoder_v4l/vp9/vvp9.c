@@ -1248,15 +1248,12 @@ struct VP9Decoder_s {
 	u32 error_frame_height;
 	u32 endian;
 	ulong fb_token;
-	char vdec_name[32];
-	char pts_name[32];
-	char new_q_name[32];
-	char disp_q_name[32];
 	bool wait_more_buf;
 	struct vp9_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
+	struct trace_decoder_name trace;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -1845,7 +1842,7 @@ int vp9_alloc_mmu(
 				bit_depth_10);
 	if (cur_mmu_4k_number < 0)
 		return -1;
-
+	ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 	if (pbi->is_used_v4l) {
 		struct internal_comp_buf *ibuf =
 			index_to_icomp_buf(pbi, cur_buf_idx);
@@ -1862,7 +1859,7 @@ int vp9_alloc_mmu(
 				cur_mmu_4k_number,
 				mmu_index_adr);
 	}
-
+	ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 	return ret;
 }
 
@@ -7574,7 +7571,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 	if (kfifo_get(&pbi->display_q, &vf)) {
 		struct vframe_s *next_vf = NULL;
 		uint8_t index = vf->index & 0xff;
-		ATRACE_COUNTER(pbi->disp_q_name, kfifo_len(&pbi->display_q));
+		ATRACE_COUNTER(pbi->trace.disp_q_name, kfifo_len(&pbi->display_q));
 		if (index < pbi->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			vf->index_disp = atomic_read(&pbi->vf_get_count);
@@ -7649,7 +7646,7 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 	kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
-	ATRACE_COUNTER(pbi->new_q_name, kfifo_len(&pbi->newframe_q));
+	ATRACE_COUNTER(pbi->trace.new_q_name, kfifo_len(&pbi->newframe_q));
 	atomic_add(1, &pbi->vf_put_count);
 
 	if (debug & VP9_DEBUG_BUFMGR)
@@ -8185,9 +8182,9 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(pbi->pts_name, vf->timestamp);
-			ATRACE_COUNTER(pbi->new_q_name, kfifo_len(&pbi->newframe_q));
-			ATRACE_COUNTER(pbi->disp_q_name, kfifo_len(&pbi->display_q));
+			ATRACE_COUNTER(pbi->trace.pts_name, vf->timestamp);
+			ATRACE_COUNTER(pbi->trace.new_q_name, kfifo_len(&pbi->newframe_q));
+			ATRACE_COUNTER(pbi->trace.disp_q_name, kfifo_len(&pbi->display_q));
 			atomic_add(1, &pbi->vf_pre_count);
 			pbi_update_gvs(pbi);
 			/*count info*/
@@ -8521,8 +8518,11 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		 ret);
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VP9_10B_DISCARD_NAL);
 		cm->show_frame = 0;
-		if (pbi->mmu_enable)
+		if (pbi->mmu_enable) {
+			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 			vp9_recycle_mmu_buf(pbi);
+			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
+		}
 #ifdef MULTI_INSTANCE_SUPPORT
 		if (pbi->m_ins_flag) {
 			pbi->dec_result = DEC_RESULT_DONE;
@@ -8556,6 +8556,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 #endif
 		}
 		/*pr_info("Decode Frame Data %d\n", pbi->frame_count);*/
+		ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_START);
 		config_pic_size(pbi, pbi->vp9_param.p.bit_depth);
 
 		if ((pbi->common.frame_type != KEY_FRAME)
@@ -8640,14 +8641,19 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 					struct internal_comp_buf *ibuf =
 						index_to_icomp_buf(pbi, i);
 
+					ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 					decoder_mmu_box_free_idx(ibuf->mmu_box, ibuf->index);
+					ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 				} else {
+					ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 					decoder_mmu_box_free_idx(pbi->mmu_box, i);
+					ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 				}
 			}
 			pbi->last_put_idx = -1;
 		}
 	}
+	ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_START);
 	return ret;
 }
 
@@ -9226,6 +9232,13 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	unsigned int dec_status = pbi->dec_status;
 	int i;
 
+	if (dec_status == VP9_HEAD_PARSER_DONE) {
+		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_START);
+	}
+	else if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
+	}
+
 	/*if (pbi->wait_buf)
 	 *	pr_info("set wait_buf to 0\r\n");
 	 */
@@ -9296,6 +9309,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				amhevc_stop();
 				if (mcrcc_cache_alg_flag)
 					dump_hit_rate(pbi);
+				ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 				vdec_schedule_work(&pbi->work);
 			}
 		} else {
@@ -9361,6 +9375,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			pbi->chunk->timestamp);
 		pbi->process_busy = 0;
 		pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 		vdec_schedule_work(&pbi->work);
 		return IRQ_HANDLED;
 	}
@@ -9383,9 +9398,11 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		&& pbi->used_stage_buf_num == 0
 #endif
 		) {
-		if (pbi->mmu_enable)
+		if (pbi->mmu_enable) {
+			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 			vp9_recycle_mmu_buf_tail(pbi);
-
+			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
+		}
 
 		if (pbi->frame_count > 0)
 			vp9_bufmgr_postproc(pbi);
@@ -9444,12 +9461,14 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		} else
 #endif
 		{
+			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_START);
 			for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
 				int ii;
 				for (ii = 0; ii < 4; ii++)
 					pbi->vp9_param.l.data[i + ii] =
 						pbi->rpm_ptr[i + 3 - ii];
 			}
+			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_END);
 		}
 	}
 
@@ -9493,6 +9512,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				pbi->v4l_params_parsed	= true;
 				pbi->postproc_done = 0;
 				pbi->process_busy = 0;
+				ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 				dec_again_process(pbi);
 				return IRQ_HANDLED;
 			} else {
@@ -9512,6 +9532,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		} else {
 			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
+			ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 			dec_again_process(pbi);
 			return IRQ_HANDLED;
 		}
@@ -9525,7 +9546,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	if (pbi->m_ins_flag)
 		start_process_time(pbi);
 #endif
-
+	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
 
@@ -9540,6 +9561,13 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 	ATRACE_COUNTER("V_ST_DEC-decode_state", dec_status);
+
+	if (dec_status == VP9_HEAD_PARSER_DONE) {
+		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
+	}
+	else if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_PIC_DONE);
+	}
 
 	adapt_prob_status = READ_VREG(VP9_ADAPT_PROB_REG);
 	if (!pbi)
@@ -9676,6 +9704,7 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 			start_process_time(pbi);
 #endif
 	}
+	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_END);
 	return IRQ_WAKE_THREAD;
 }
 
@@ -10522,6 +10551,11 @@ static void vp9_work(struct work_struct *work)
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
+	if (pbi->dec_result == DEC_RESULT_AGAIN)
+		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_WORKER_AGAIN);
+
+	if (pbi->dec_result != DEC_RESULT_NEED_MORE_BUFFER)
+		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_WORKER_START);
 	vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
 		"%s dec_result %d %x %x %x\n",
 		__func__,
@@ -10582,6 +10616,7 @@ static void vp9_work(struct work_struct *work)
 
 			start_process_time(pbi);
 		}
+
 		return;
 	}
 
@@ -10742,6 +10777,8 @@ static void vp9_work(struct work_struct *work)
 		del_timer_sync(&pbi->timer);
 		pbi->stat &= ~STAT_TIMER_ARM;
 	}
+	if (pbi->dec_result != DEC_RESULT_NEED_MORE_BUFFER)
+		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_WORKER_END);
 	/* mark itself has all HW resource released and input released */
 #ifdef SUPPORT_FB_DECODING
 	if (pbi->used_stage_buf_num > 0)
@@ -11018,6 +11055,7 @@ static void run_front(struct vdec_s *vdec)
 		}
 		vp9_print_cont(pbi, 0, "\r\n");
 	}
+	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
 	if (vdec->mc_loaded) {
 	/*firmware have load before,
 	  and not changes to another.
@@ -11037,12 +11075,14 @@ static void run_front(struct vdec_s *vdec)
 		vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_VP9;
 	}
+	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
+	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 	if (vp9_hw_ctx_restore(pbi) < 0) {
 		vdec_schedule_work(&pbi->work);
 		return;
 	}
-
+	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
 	vdec_enable_input(vdec);
 
 	WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
@@ -11216,7 +11256,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 {
 	struct VP9Decoder_s *pbi =
 		(struct VP9Decoder_s *)vdec->private;
-
+	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_RUN_START);
 	vp9_print(pbi,
 		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx\r\n",
 		__func__, mask);
@@ -11238,7 +11278,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 #else
 	run_front(vdec);
 #endif
-
+	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_RUN_END);
 }
 
 static void  vp9_decoder_ctx_reset(struct VP9Decoder_s *pbi)
@@ -11544,14 +11584,20 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		}
 	}
 
-	snprintf(pbi->vdec_name, sizeof(pbi->vdec_name),
+	snprintf(pbi->trace.vdec_name, sizeof(pbi->trace.vdec_name),
 		"vp9-%d", pbi->index);
-	snprintf(pbi->pts_name, sizeof(pbi->pts_name),
-		"%s-timestamp", pbi->vdec_name);
-	snprintf(pbi->new_q_name, sizeof(pbi->new_q_name),
-		"%s-newframe_q", pbi->vdec_name);
-	snprintf(pbi->disp_q_name, sizeof(pbi->disp_q_name),
-		"%s-dispframe_q", pbi->vdec_name);
+	snprintf(pbi->trace.pts_name, sizeof(pbi->trace.pts_name),
+		"%s-timestamp", pbi->trace.vdec_name);
+	snprintf(pbi->trace.new_q_name, sizeof(pbi->trace.new_q_name),
+		"%s-newframe_q", pbi->trace.vdec_name);
+	snprintf(pbi->trace.disp_q_name, sizeof(pbi->trace.disp_q_name),
+		"%s-dispframe_q", pbi->trace.vdec_name);
+	snprintf(pbi->trace.decode_time_name, sizeof(pbi->trace.decode_time_name),
+		"decoder_time%d", pdev->id);
+	snprintf(pbi->trace.decode_run_time_name, sizeof(pbi->trace.decode_run_time_name),
+		"decoder_run_time%d", pdev->id);
+	snprintf(pbi->trace.decode_header_memory_time_name, sizeof(pbi->trace.decode_header_memory_time_name),
+		"decoder_header_time%d", pdev->id);
 
 	if (pdata->use_vfm_path)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,

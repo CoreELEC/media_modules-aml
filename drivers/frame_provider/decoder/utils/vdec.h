@@ -67,6 +67,65 @@ enum vdec_type_e {
 	VDEC_MAX
 };
 
+struct trace_decoder_name {
+	char set_canvas0_addr[32];
+	char get_canvas0_addr[32];
+	char put_canvas0_addr[32];
+	char vf_put_name[32];
+	char vf_get_name[32];
+	char vdec_name[32];
+	char pts_name[32];
+	char new_q_name[32];
+	char disp_q_name[32];
+	char decode_time_name[32];
+	char decode_run_time_name[32];
+	char decode_header_time_name[32];
+	char decode_work_time_name[32];
+	char decode_header_memory_time_name[32];
+};
+
+
+enum e_trace_decoder_status {
+	DECODER_RUN_START = 1,
+	DECODER_RUN_END   = 2,
+	DECODER_ISR_HEAD_DONE = 3,
+	DECODER_ISR_PIC_DONE = 4,
+	DECODER_ISR_END   = 5,
+	DECODER_ISR_THREAD_HEAD_START = 6,
+	DECODER_ISR_THREAD_PIC_DONE_START = 7,
+	DECODER_ISR_THREAD_EDN = 8,
+	DECODER_WORKER_START   = 9,
+	DECODER_WORKER_END = 10,
+	DECODER_WORKER_AGAIN = 11,
+	DECODER_ISR_SEI_DONE = 12,
+	DECODER_ISR_THREAD_SEI_START = 13,
+	DECODER_ISR_AUX_DONE = 14,
+	DECODER_ISR_THREAD_AUX_START = 15,
+	DECODER_ISR_THREAD_HEAD_END = 16,
+};
+
+enum e_trace_run_status {
+	TRACE_RUN_LOADING_FW_START = 1,
+	TRACE_RUN_LOADING_FW_END   = 2,
+	TRACE_RUN_LOADING_RESTORE_START = 3,
+	TRACE_RUN_LOADING_RESTORE_END = 4,
+};
+
+enum e_trace_header_status {
+	TRACE_HEADER_MEMORY_START = 1,
+	TRACE_HEADER_MEMORY_END   = 2,
+	TRACE_HEADER_REGISTER_START = 3,
+	TRACE_HEADER_REGISTER_END   = 4,
+	TRACE_HEADER_RPM_START = 5,
+	TRACE_HEADER_RPM_END   = 6,
+};
+
+enum e_trace_work_status {
+	TRACE_WORK_WAIT_SEARCH_DONE_START = 1,
+	TRACE_WORK_WAIT_SEARCH_DONE_END   = 2,
+};
+
+
 #define VDEC_CFG_FLAG_DV_TWOLARYER (1 << 0)
 #define VDEC_CFG_FLAG_DV_NEGATIVE  (1 << 1)
 #define VDEC_CFG_FLAG_DIS_ERR_POLICY (1 << 11)
