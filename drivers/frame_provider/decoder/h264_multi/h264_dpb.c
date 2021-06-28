@@ -1839,6 +1839,35 @@ void unmark_for_reference(struct DecodedPictureBuffer *p_Dpb,
 
 }
 
+static void unmark_for_long_term_reference(struct FrameStore *fs)
+{
+	if (fs->is_used & 1) {
+		if (fs->top_field) {
+			fs->top_field->used_for_reference = 0;
+			fs->top_field->is_long_term = 0;
+		}
+	}
+	if (fs->is_used & 2) {
+		if (fs->bottom_field) {
+			fs->bottom_field->used_for_reference = 0;
+			fs->bottom_field->is_long_term = 0;
+		}
+	}
+	if (fs->is_used == 3) {
+		if (fs->top_field && fs->bottom_field) {
+			fs->top_field->used_for_reference = 0;
+			fs->top_field->is_long_term = 0;
+			fs->bottom_field->used_for_reference = 0;
+			fs->bottom_field->is_long_term = 0;
+		}
+		fs->frame->used_for_reference = 0;
+		fs->frame->is_long_term = 0;
+	}
+
+	fs->is_reference = 0;
+	fs->is_long_term = 0;
+}
+
 int get_long_term_flag_by_buf_spec_num(struct h264_dpb_stru *p_H264_Dpb,
 	int buf_spec_num)
 {
@@ -2555,6 +2584,14 @@ static void idr_memory_management(struct h264_dpb_stru *p_H264_Dpb,
 
 
 	if (p->no_output_of_prior_pics_flag) {
+		int i;
+		for (i = 0; i < p_Dpb->used_size; i++) {
+			unmark_for_reference(p_Dpb, p_Dpb->fs[i]);
+			if (p_Dpb->fs[i]->is_long_term)
+				unmark_for_long_term_reference(p_Dpb->fs[i]);
+			if (!p_Dpb->fs[i]->is_output && !p_Dpb->fs[i]->pre_output)
+				set_frame_output_flag(p_H264_Dpb, i);
+		}
 #if 0
 		/*???*/
 		/* free all stored pictures */
@@ -2870,35 +2907,6 @@ static void mm_unmark_short_term_for_reference(struct DecodedPictureBuffer
 			}
 		}
 	}
-}
-
-static void unmark_for_long_term_reference(struct FrameStore *fs)
-{
-	if (fs->is_used & 1) {
-		if (fs->top_field) {
-			fs->top_field->used_for_reference = 0;
-			fs->top_field->is_long_term = 0;
-		}
-	}
-	if (fs->is_used & 2) {
-		if (fs->bottom_field) {
-			fs->bottom_field->used_for_reference = 0;
-			fs->bottom_field->is_long_term = 0;
-		}
-	}
-	if (fs->is_used == 3) {
-		if (fs->top_field && fs->bottom_field) {
-			fs->top_field->used_for_reference = 0;
-			fs->top_field->is_long_term = 0;
-			fs->bottom_field->used_for_reference = 0;
-			fs->bottom_field->is_long_term = 0;
-		}
-		fs->frame->used_for_reference = 0;
-		fs->frame->is_long_term = 0;
-	}
-
-	fs->is_reference = 0;
-	fs->is_long_term = 0;
 }
 
 /*!
