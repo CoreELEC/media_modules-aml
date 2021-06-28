@@ -9518,6 +9518,9 @@ result_done:
 			vdec_schedule_work(&hw->work);
 			return;
 		}
+		amvdec_stop();
+		if (hw->mmu_enable)
+			amhevc_stop();
 		hw->next_again_flag = 1;
 	} else if (hw->dec_result == DEC_RESULT_EOS) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
