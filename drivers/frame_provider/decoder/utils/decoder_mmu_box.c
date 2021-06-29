@@ -251,6 +251,7 @@ int decoder_mmu_box_free_idx(void *handle, int idx)
 			box ? (box->max_sc_num - 1) : 0);
 		return -1;
 	}
+
 	mutex_lock(&box->mutex);
 	sc = box->sc_list[idx];
 	if (sc && sc->page_cnt > 0) {
@@ -258,10 +259,11 @@ int decoder_mmu_box_free_idx(void *handle, int idx)
 		box->sc_list[idx] = NULL;
 		box->box_ref_cnt--;
 	}
-	mutex_unlock(&box->mutex);
 
-	if (sc && box->box_ref_cnt == 0)
+	if (sc && (box->box_ref_cnt == 0)) {
 		codec_mm_scatter_mgt_delay_free_switch(0, 0, 0, box->tvp_mode);
+	}
+	mutex_unlock(&box->mutex);
 
 	return 0;
 }
@@ -271,24 +273,33 @@ int decoder_mmu_box_free(void *handle)
 {
 	struct decoder_mmu_box *box = handle;
 	struct codec_mm_scatter *sc;
+	bool free_cache = false;
 	int i;
 
 	if (!box) {
 		pr_err("can't free box of NULL box!\n");
 		return -1;
 	}
+
 	mutex_lock(&box->mutex);
 	for (i = 0; i < box->max_sc_num; i++) {
 		sc = box->sc_list[i];
 		if (sc) {
 			codec_mm_scatter_dec_owner_user(sc, 0);
 			box->sc_list[i] = NULL;
+			box->box_ref_cnt--;
+			free_cache = true;
 		}
 	}
+
+	if (free_cache && (box->box_ref_cnt == 0)) {
+		codec_mm_scatter_mgt_delay_free_switch(0, 0, 0, box->tvp_mode);
+	}
 	mutex_unlock(&box->mutex);
+
 	decoder_mmu_box_mgr_del_box(box);
-	codec_mm_scatter_mgt_delay_free_switch(0, 0, 0, box->tvp_mode);
 	kfree(box);
+
 	return 0;
 }
 EXPORT_SYMBOL(decoder_mmu_box_free);
