@@ -1121,7 +1121,7 @@ static int dvb_ca_en50221_thread(void *data)
 			if (ca->slot_count > 0
 				&& ca->slot_info[0].slot_state == DVB_CA_SLOTSTATE_RUNNING
 				&& ca->pub->get_slot_wakeup(ca->pub, 0) == 0) {
-				usleep_range(dvb_ca_en50221_usleep, dvb_ca_en50221_usleep + 100);
+				    usleep_range(dvb_ca_en50221_usleep, dvb_ca_en50221_usleep + 100);
 			} else {
 				set_current_state(TASK_INTERRUPTIBLE);
 				schedule_timeout(ca->delay);
@@ -1561,7 +1561,8 @@ static ssize_t dvb_ca_en50221_io_write(struct file *file,
 			if (status != -EAGAIN)
 				goto exit;
 
-			msleep(1);
+			//msleep(1);
+			usleep_range(dvb_ca_en50221_usleep, dvb_ca_en50221_usleep + 100);
 		}
 		if (!written) {
 			status = -EIO;
@@ -1600,6 +1601,11 @@ static int dvb_ca_en50221_io_read_condition(struct dvb_ca_private *ca,
 			return 0;
 #ifdef READ_LPDU_PKT
 		if (ca->slot_info[slot].rx_offset != 0) {
+			idx = dvb_ringbuffer_pkt_next(&ca->slot_info[slot].rx_buffer, -1, &fraglen);
+			if (idx == -1) {
+				//printk("no data to read----[%d]-\r\n", ca->slot_info[slot].rx_offset);
+				return 0;
+			}
 			*_slot = slot;
 			return 1;
 		}
