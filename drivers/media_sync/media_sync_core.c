@@ -935,7 +935,7 @@ long mediasync_ins_get_avsyncstate(s32 sSyncInsId, s32* state) {
 	return 0;
 }
 
-long mediasync_ins_set_startthreshold(s32 sSyncInsId, s64 threshold) {
+long mediasync_ins_set_startthreshold(s32 sSyncInsId, s32 threshold) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -949,7 +949,7 @@ long mediasync_ins_set_startthreshold(s32 sSyncInsId, s64 threshold) {
 	return 0;
 }
 
-long mediasync_ins_get_startthreshold(s32 sSyncInsId, s64* threshold) {
+long mediasync_ins_get_startthreshold(s32 sSyncInsId, s32* threshold) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -963,7 +963,7 @@ long mediasync_ins_get_startthreshold(s32 sSyncInsId, s64* threshold) {
 	return 0;
 }
 
-long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s64 adujstpts) {
+long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adujstpts) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -977,7 +977,7 @@ long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s64 adujstpts) {
 	return 0;
 }
 
-long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s64* adujstpts) {
+long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adujstpts) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)

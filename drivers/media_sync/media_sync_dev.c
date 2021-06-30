@@ -104,8 +104,8 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	s64 TrackMediaTime = 0;
 	int HasAudio = -1;
 	int HasVideo = -1;
-	s64 StartThreshold = 0;
-	s64 PtsAdjust = 0;
+	s32 StartThreshold = 0;
+	s32 PtsAdjust = 0;
 	s64 VideoWorkMode = 0;
 	s64 FccEnable = 0;
 	mediasync_priv_s *priv = (mediasync_priv_s *)file->private_data;

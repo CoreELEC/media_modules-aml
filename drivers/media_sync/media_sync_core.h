@@ -90,8 +90,8 @@ typedef struct instance{
 
 	int mHasAudio;
 	int mHasVideo;
-	int64_t mStartThreshold;
-	int64_t mPtsAdjust;
+	int mStartThreshold;
+	int mPtsAdjust;
 	int mVideoWorkMode;
 	int mFccEnable;
 	mediasync_clocktype mSourceClockType;
@@ -159,10 +159,10 @@ long mediasync_ins_set_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_set_clockstate(s32 sSyncInsId, mediasync_clockprovider_state state);
 long mediasync_ins_get_clockstate(s32 sSyncInsId, mediasync_clockprovider_state* state);
-long mediasync_ins_set_startthreshold(s32 sSyncInsId, s64 threshold);
-long mediasync_ins_get_startthreshold(s32 sSyncInsId, s64* threshold);
-long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s64 adujstpts);
-long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s64* adujstpts);
+long mediasync_ins_set_startthreshold(s32 sSyncInsId, s32 threshold);
+long mediasync_ins_get_startthreshold(s32 sSyncInsId, s32* threshold);
+long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adujstpts);
+long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adujstpts);
 long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode);
 long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode);
 long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable);
