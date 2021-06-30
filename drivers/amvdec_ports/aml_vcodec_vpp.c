@@ -777,7 +777,7 @@ int aml_v4l2_vpp_init(
 	}
 
 	if (vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF)
-		init.output_format = DI_OUTPUT_422 | DI_OUTPUT_LINEAR;
+		init.output_format = DI_OUTPUT_BY_DI_DEFINE;
 	else if ((vpp->buffer_mode == BUFFER_MODE_USE_BUF) &&
 		((cfg->fmt == V4L2_PIX_FMT_NV21M) || (cfg->fmt == V4L2_PIX_FMT_NV21)))
 		init.output_format = DI_OUTPUT_NV21 | DI_OUTPUT_LINEAR;
