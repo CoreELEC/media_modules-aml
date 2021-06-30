@@ -244,6 +244,7 @@ extern int bypass_nr_flag;
 
 extern int dmabuf_fd_install_data(int fd, void* data, u32 size);
 extern bool is_v4l2_buf_file(struct file *file);
+extern int get_double_write_ratio(int dw_mode);
 static void box_release(struct kref *kref);
 static struct internal_comp_buf* vb_to_comp(struct aml_vcodec_ctx *ctx,
 					    struct vb2_buffer *vb);
@@ -2205,10 +2206,20 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
 	struct aml_q_data *q_data;
+	int ratio = 1;
 
 	if ((s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) &&
 		(s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE))
 		return -EINVAL;
+
+	if (ctx->internal_dw_scale) {
+		if (ctx->state >= AML_STATE_PROBE) {
+			unsigned int dw_mode = VDEC_DW_NO_AFBC;
+			if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
+				return -EBUSY;
+			ratio = get_double_write_ratio(dw_mode);
+		}
+	}
 
 	q_data = &ctx->q_data[AML_Q_DATA_DST];
 
@@ -2217,14 +2228,14 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 	case V4L2_SEL_TGT_COMPOSE:
 		s->r.left = 0;
 		s->r.top = 0;
-		s->r.width = ctx->picinfo.visible_width;
-		s->r.height = ctx->picinfo.visible_height;
+		s->r.width = ctx->picinfo.visible_width / ratio;
+		s->r.height = ctx->picinfo.visible_height / ratio;
 		break;
 	case V4L2_SEL_TGT_COMPOSE_BOUNDS:
 		s->r.left = 0;
 		s->r.top = 0;
-		s->r.width = ctx->picinfo.coded_width;
-		s->r.height = ctx->picinfo.coded_height;
+		s->r.width = ctx->picinfo.coded_width / ratio;
+		s->r.height = ctx->picinfo.coded_height / ratio;
 		break;
 	default:
 		return -EINVAL;
@@ -2248,6 +2259,7 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 	struct v4l2_selection *s)
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
+	int ratio = 1;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d\n",
 		__func__, s->type);
@@ -2255,12 +2267,22 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 	if (s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
+
+	if (ctx->internal_dw_scale) {
+		if (ctx->state >= AML_STATE_PROBE) {
+			unsigned int dw_mode = VDEC_DW_NO_AFBC;
+			if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
+				return -EBUSY;
+			ratio = get_double_write_ratio(dw_mode);
+		}
+	}
+
 	switch (s->target) {
 	case V4L2_SEL_TGT_COMPOSE:
 		s->r.left = 0;
 		s->r.top = 0;
-		s->r.width = ctx->picinfo.visible_width;
-		s->r.height = ctx->picinfo.visible_height;
+		s->r.width = ctx->picinfo.visible_width / ratio;
+		s->r.height = ctx->picinfo.visible_height / ratio;
 		break;
 	default:
 		return -EINVAL;
@@ -2273,24 +2295,32 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 {
 	struct aml_q_data *q_data;
+	unsigned int dw_mode = VDEC_DW_NO_AFBC;
+	int ratio = 1;
 
 	q_data = aml_vdec_get_q_data(ctx, type);
 
+	if (ctx->internal_dw_scale) {
+		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
+			return;
+		ratio = get_double_write_ratio(dw_mode);
+	}
+
 	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
-		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
-		q_data->sizeimage[1] = ctx->picinfo.c_len_sz;
+		q_data->sizeimage[0] = ctx->picinfo.y_len_sz / ratio / ratio;
+		q_data->sizeimage[1] = ctx->picinfo.c_len_sz / ratio / ratio;
 
-		q_data->coded_width = ctx->picinfo.coded_width;
-		q_data->coded_height = ctx->picinfo.coded_height;
+		q_data->coded_width = ctx->picinfo.coded_width / ratio;
+		q_data->coded_height = ctx->picinfo.coded_height / ratio;
 
-		q_data->bytesperline[0] = ctx->picinfo.coded_width;
-		q_data->bytesperline[1] = ctx->picinfo.coded_width;
+		q_data->bytesperline[0] = ctx->picinfo.coded_width / ratio;
+		q_data->bytesperline[1] = ctx->picinfo.coded_width / ratio;
 	} else {
-		q_data->coded_width = ctx->picinfo.coded_width;
-		q_data->coded_height = ctx->picinfo.coded_height;
-		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
-		q_data->sizeimage[0] += ctx->picinfo.c_len_sz;
-		q_data->bytesperline[0] = ctx->picinfo.coded_width;
+		q_data->coded_width = ctx->picinfo.coded_width / ratio;
+		q_data->coded_height = ctx->picinfo.coded_height / ratio;
+		q_data->sizeimage[0] = ctx->picinfo.y_len_sz / ratio / ratio;
+		q_data->sizeimage[0] += ctx->picinfo.c_len_sz / ratio / ratio;
+		q_data->bytesperline[0] = ctx->picinfo.coded_width / ratio;
 	}
 }
 
@@ -3762,8 +3792,10 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		if (force_enable_di_local_buffer)
 			ctx->vpp_cfg.enable_local_buf = true;
 
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s parms:%x\n",
-				__func__, in->parms_status);
+		ctx->internal_dw_scale = dec->cfg.metadata_config_flag & (1 << 13);
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s parms:%x metadata_config_flag: 0x%x\n",
+				__func__, in->parms_status, dec->cfg.metadata_config_flag);
 	}
 
 	return 0;

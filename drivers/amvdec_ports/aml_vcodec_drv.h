@@ -296,6 +296,7 @@ struct aml_vdec_cfg_infos {
 	 * bit 16	: force progressive output flag.
 	 * bit 15	: enable nr.
 	 * bit 14	: enable di local buff.
+	 * bit 13	: report downscale yuv buffer size flag.
 	 * bit 1	: Non-standard dv flag.
 	 * bit 0	: dv two layer flag.
 	 */
@@ -665,7 +666,8 @@ struct aml_vcodec_ctx {
 	bool				vpp_is_need;
 	struct list_head		task_chain_pool;
 	struct meta_info		meta_infos;
-	struct vdec_sync *sync;
+	struct vdec_sync		*sync;
+	u32             		internal_dw_scale;
 };
 
 /**
