@@ -7762,7 +7762,9 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				if (pbi->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-			if (pbi->is_used_v4l && pic_config->double_write_mode != 16)
+			if (pbi->is_used_v4l && pic_config->double_write_mode != 16 &&
+				(!IS_8K_SIZE(pic_config->y_crop_width,
+				pic_config->y_crop_height)))
 				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (pbi->m_ins_flag) {

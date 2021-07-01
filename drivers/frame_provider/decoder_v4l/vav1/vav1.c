@@ -6685,7 +6685,9 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				if (hw->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-			if (hw->is_used_v4l && pic_config->double_write_mode != 16)
+			if (hw->is_used_v4l && pic_config->double_write_mode != 16 &&
+				(!IS_8K_SIZE(pic_config->y_crop_width,
+				pic_config->y_crop_height)))
 				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hw->m_ins_flag) {

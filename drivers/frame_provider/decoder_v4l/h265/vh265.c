@@ -9040,6 +9040,15 @@ static void clear_pair_fb(struct hevc_state_s *hevc)
 		hevc->pair_fb[i] = NULL;
 }
 
+static bool v4l_output_dw_with_compress(struct hevc_state_s *hevc, int dw)
+{
+	if ((!hevc->is_used_v4l) || (dw == 0x10) ||
+		IS_8K_SIZE(hevc->frame_width, hevc->frame_height))
+		return false;
+
+	return true;
+}
+
 #ifdef HEVC_PIC_STRUCT_SUPPORT
 static int process_pending_vframe(struct hevc_state_s *hevc,
 	struct PIC_s *pair_pic, unsigned char pair_frame_top_flag)
@@ -9065,7 +9074,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			hevc_print(hevc, 0,
 			"%s warning(1), vf=>display_q: (index 0x%x)\n",
 				__func__, vf->index);
-		if (hevc->is_used_v4l && pair_pic->double_write_mode != 16)
+
+		if (v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode))
 			vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 		/* recycle vframe */
 		atomic_add(1, &hevc->vf_pre_count);
@@ -9110,7 +9120,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-			if (hevc->is_used_v4l && pair_pic->double_write_mode != 16)
+			if (v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode))
 				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 			atomic_add(1, &hevc->vf_pre_count);
 			vdec_vframe_ready(hw_to_vdec(hevc), vf);
@@ -9125,7 +9135,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-			if (hevc->is_used_v4l && pair_pic->double_write_mode != 16)
+			if (v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode))
 				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 			vf->index &= 0xff;
 			vf->index |= (pair_pic->index << 8);
@@ -9466,7 +9476,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-			if (hevc->is_used_v4l && pic->double_write_mode != 16)
+			if (v4l_output_dw_with_compress(hevc, pic->double_write_mode))
 				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hevc->m_ins_flag &&
