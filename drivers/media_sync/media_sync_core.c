@@ -145,6 +145,8 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	pInstance->mSourceClockType = UNKNOWN_CLOCK;
 	pInstance->mSyncInfo.state = MEDIASYNC_INIT;
 	pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
+	pInstance->mute_flag = false;
+	pInstance->mSourceType = TS_DEMOD;
 	*pIns = pInstance;
 	return 0;
 }
@@ -845,6 +847,34 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 	return 0;
 }
 
+long mediasync_ins_set_audiomute(s32 sSyncInsId, int mute_flag) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	pInstance->mute_flag = mute_flag;
+
+	return 0;
+}
+
+long mediasync_ins_get_audiomute(s32 sSyncInsId, int* mute_flag) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	*mute_flag = pInstance->mute_flag;
+	return 0;
+}
 
 long mediasync_ins_set_audioinfo(s32 sSyncInsId, mediasync_audioinfo info) {
 	mediasync_ins* pInstance = NULL;
@@ -1046,5 +1076,35 @@ long mediasync_ins_get_fccenable(s32 sSyncInsId, s64* enable) {
 	*enable = pInstance->mFccEnable;
 	return 0;
 }
+
+
+long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	pInstance->mSourceType = sourceType;
+	return 0;
+}
+
+long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	*sourceType = pInstance->mSourceType;
+	return 0;
+}
+
 
 

@@ -108,12 +108,15 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	s32 PtsAdjust = 0;
 	s64 VideoWorkMode = 0;
 	s64 FccEnable = 0;
+	int mute_flag  = 0;
 	mediasync_priv_s *priv = (mediasync_priv_s *)file->private_data;
 	mediasync_ins *SyncIns = NULL;
 	mediasync_alloc_para parm = {0};
 	mediasync_arthortime_para ArthorTime = {0};
 	mediasync_updatetime_para UpdateTime = {0};
 	mediasync_systime_para SystemTime = {0};
+	aml_Source_Type sourceType = TS_DEMOD;
+
 
 	switch (cmd) {
 		case MEDIASYNC_IOC_INSTANCE_ALLOC:
@@ -542,6 +545,35 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+
+		case MEDIASYNC_IOC_SET_AUDIO_MUTEFLAG:
+			if (copy_from_user((void *)&mute_flag,
+					(void *)arg,
+					sizeof(mute_flag))) {
+				return -EFAULT;
+			}
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_audiomute(priv->mSyncInsId,
+								mute_flag);
+		break;
+
+		case MEDIASYNC_IOC_GET_AUDIO_MUTEFLAG:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_audiomute(priv->mSyncInsId,
+								&mute_flag);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&mute_flag,
+						sizeof(mute_flag)))
+					return -EFAULT;
+			}
+		break;
+
 		case MEDIASYNC_IOC_SET_VIDEO_INFO:
 			if (copy_from_user((void *)&VideoInfo,
 					(void *)arg,
@@ -812,6 +844,33 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_SET_SOURCE_TYPE:
+			if (copy_from_user((void *)&sourceType,
+					(void *)arg,
+					sizeof(sourceType)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_source_type(priv->mSyncInsId,
+								sourceType);
+		break;
+
+		case MEDIASYNC_IOC_GET_SOURCE_TYPE:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_source_type(priv->mSyncInsId,
+								&sourceType);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&sourceType,
+						sizeof(sourceType)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -875,7 +934,10 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_VIDEOWORKMODE:
 		case MEDIASYNC_IOC_SET_FCCENABLE:
 		case MEDIASYNC_IOC_GET_FCCENABLE:
-
+		case MEDIASYNC_IOC_SET_AUDIO_MUTEFLAG:
+		case MEDIASYNC_IOC_GET_AUDIO_MUTEFLAG:
+		case MEDIASYNC_IOC_SET_SOURCE_TYPE:
+		case MEDIASYNC_IOC_GET_SOURCE_TYPE:
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;

@@ -66,6 +66,13 @@ typedef struct videoinfo{
 	int cacheDuration;
 }mediasync_videoinfo;
 
+typedef enum
+{
+	TS_DEMOD = 0,                          // TS Data input from demod
+	TS_MEMORY = 1,                         // TS Data input from memory
+	ES_MEMORY = 2,                         // ES Data input from memory
+} aml_Source_Type;
+
 typedef enum {
     CLOCK_PROVIDER_NONE = 0,
     CLOCK_PROVIDER_DISCONTINUE,
@@ -90,6 +97,7 @@ typedef struct instance{
 
 	int mHasAudio;
 	int mHasVideo;
+	int mute_flag;
 	int mStartThreshold;
 	int mPtsAdjust;
 	int mVideoWorkMode;
@@ -99,6 +107,7 @@ typedef struct instance{
 	mediasync_audioinfo mAudioInfo;
 	mediasync_videoinfo mVideoInfo;
 	mediasync_syncinfo mSyncInfo;
+	aml_Source_Type mSourceType;
 }mediasync_ins;
 
 long mediasync_ins_alloc(s32 sDemuxId,
@@ -142,6 +151,8 @@ long mediasync_ins_get_hasvideo(s32 sSyncInsId, int* hasvideo);
 long mediasync_ins_set_audioinfo(s32 sSyncInsId, mediasync_audioinfo info);
 long mediasync_ins_get_audioinfo(s32 sSyncInsId, mediasync_audioinfo* info);
 long mediasync_ins_set_videoinfo(s32 sSyncInsId, mediasync_videoinfo info);
+long mediasync_ins_set_audiomute(s32 sSyncInsId, int mute_flag);
+long mediasync_ins_get_audiomute(s32 sSyncInsId, int* mute_flag);
 long mediasync_ins_get_videoinfo(s32 sSyncInsId, mediasync_videoinfo* info);
 long mediasync_ins_set_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* info);
@@ -167,6 +178,8 @@ long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode);
 long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode);
 long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable);
 long mediasync_ins_get_fccenable(s32 sSyncInsId, s64* enable);
+long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType);
+long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType);
 
 
 #endif
