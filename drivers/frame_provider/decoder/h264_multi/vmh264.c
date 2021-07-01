@@ -10034,6 +10034,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	if (udebug_flag)
 		WRITE_VREG(AV_SCRATCH_K, udebug_flag);
+	hw->stat |= STAT_TIMER_ARM;
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
