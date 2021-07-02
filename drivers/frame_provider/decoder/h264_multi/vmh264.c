@@ -5163,7 +5163,7 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 		size = size_vui;
 	}
 
-	size += 1;	/* need one more buffer */
+	size += 2;	/* need two more buffer */
 
 	return size;
 }
@@ -5847,13 +5847,19 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			((p_H264_Dpb->mDPB.used_size >=
 				(p_H264_Dpb->mDPB.size - 1)) ||
 			(!have_free_buf_spec(vdec)))) {
-			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
+			unsigned long flags;
+			spin_lock_irqsave(&hw->bufspec_lock, flags);
 
 			for (i = 0; i < p_Dpb->used_size; i++) {
 				if (p_Dpb->fs[i]->pre_output)
 					frame_outside_count++;
+				else if (p_Dpb->fs[i]->is_output && !is_used_for_reference(p_Dpb->fs[i])) {
+					spin_unlock_irqrestore(&hw->bufspec_lock, flags);
+					bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
+					return 0;
+				}
 			}
-
+			spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 			inner_size = p_Dpb->size - frame_outside_count;
 
 			if (inner_size >= p_H264_Dpb->dec_dpb_size) {
@@ -5867,6 +5873,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 					}
 				}
 			}
+			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
 		} else if ((error_proc_policy & 0x8) &&
 			(p_Dpb->ref_frames_in_buffer >
 			(imax(
@@ -9303,7 +9310,7 @@ result_done:
 
 				for (i = 0; i < p_Dpb->used_size; i++) {
 					int i_flag = p_Dpb->fs[i]->bottom_field || p_Dpb->fs[i]->top_field;
-					int threshold = i_flag ? ((50 + p_Dpb->used_size) * 2)  : 50 + p_Dpb->used_size;
+					int threshold = (i_flag || (hw->max_reference_size >= 12)) ? ((50 + p_Dpb->used_size) * 2)  : 50 + p_Dpb->used_size;
 					if ((p_Dpb->fs[i]->dpb_frame_count + threshold
 							< p_H264_Dpb->dpb_frame_count) &&
 						p_Dpb->fs[i]->is_reference &&
