@@ -1737,6 +1737,11 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 			"parm_v4l_codec_enable",
 			&config_val) == 0)
 			hw->is_used_v4l = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			vdec_frame_rate_uevent(config_val);
 	} else {
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 	}

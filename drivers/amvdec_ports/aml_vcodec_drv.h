@@ -304,7 +304,8 @@ struct aml_vdec_cfg_infos {
 	 * bit 0	: dv two layer flag.
 	 */
 	u32 metadata_config_flag; // for metadata config flag
-	u32 data[5];
+	u32 duration;
+	u32 data[4];
 };
 
 struct aml_vdec_hdr_infos {

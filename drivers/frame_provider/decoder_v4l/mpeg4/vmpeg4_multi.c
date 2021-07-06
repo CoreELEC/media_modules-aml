@@ -2847,6 +2847,11 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 			"parm_v4l_canvas_mem_mode",
 			&config_val) == 0)
 			hw->blkmode = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			vdec_frame_rate_uevent(config_val);
 	} else
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 

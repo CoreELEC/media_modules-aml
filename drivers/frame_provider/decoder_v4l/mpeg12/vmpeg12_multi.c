@@ -3692,6 +3692,11 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 			&config_val) == 0)
 			hw->force_prog_only = (config_val & VDEC_CFG_FLAG_PROG_ONLY) ? 1 : 0;
 
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			vdec_frame_rate_uevent(config_val);
+
 		if ((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0 &&
 			get_config_int(pdata->config,
 			"parm_v4l_buffer_margin",

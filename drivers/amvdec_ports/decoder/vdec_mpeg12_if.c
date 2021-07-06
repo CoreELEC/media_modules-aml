@@ -173,6 +173,8 @@ static void vdec_parser_parms(struct vdec_mpeg12_inst *inst)
 			ctx->config.parm.dec.cfg.ref_buf_margin);
 		pbuf += sprintf(pbuf, "parm_v4l_metadata_config_flag:%d;",
 			ctx->config.parm.dec.cfg.metadata_config_flag);
+		pbuf += sprintf(pbuf, "parm_v4l_duration:%d;",
+			ctx->config.parm.dec.cfg.duration);
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
 		ctx->config.length = vdec_config_default_parms(ctx->config.buf);

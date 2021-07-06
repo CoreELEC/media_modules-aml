@@ -196,16 +196,18 @@ vdec_frame_rate_event_func frame_rate_notify = vframe_rate_uevent;
 vdec_frame_rate_event_func frame_rate_notify = NULL;
 #endif
 
-static void vdec_frame_rate_uevent(int dur)
+void vdec_frame_rate_uevent(int dur)
 {
 	if (frame_rate_notify == NULL)
 		return;
 
 	if (unlikely(in_interrupt()))
 		return;
-
+	pr_info("vdec_frame_rate_uevent %d\n", dur);
 	frame_rate_notify(dur);
 }
+EXPORT_SYMBOL(vdec_frame_rate_uevent);
+
 
 void register_frame_rate_uevent_func(vdec_frame_rate_event_func func)
 {
@@ -5900,7 +5902,7 @@ void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 		fifo_buf[i].pts_us64 = vf->pts_us64;
 
 		/* Calculate the duration from pts */
-		if (mvfrm->wr < MINIMUM_FRAMES && mvfrm->wr > 0)
+		if (!vdec->is_v4l && (mvfrm->wr < MINIMUM_FRAMES && mvfrm->wr > 0))
 			cal_dur_from_pts(vdec, i);
 	}
 	mvfrm->wr++;

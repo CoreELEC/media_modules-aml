@@ -11721,6 +11721,11 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			pbi->low_latency_flag = (config_val & 1) ? 1 : 0;
 			pbi->enable_fence = (config_val & 2) ? 1 : 0;
 		}
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			vdec_frame_rate_uevent(config_val);
 #endif
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0

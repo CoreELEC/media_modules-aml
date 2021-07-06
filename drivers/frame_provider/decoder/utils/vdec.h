@@ -685,5 +685,7 @@ int is_rdma_enable(void);
 
 st_userdata *get_vdec_userdata_ctx(void);
 
+void vdec_frame_rate_uevent(int dur);
+
 
 #endif				/* VDEC_H */
