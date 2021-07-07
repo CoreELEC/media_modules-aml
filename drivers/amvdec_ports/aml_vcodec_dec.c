@@ -1704,6 +1704,20 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 	return 0;
 }
 
+static void aml_wait_resource(struct aml_vcodec_ctx *ctx)
+{
+	ulong expires = jiffies + msecs_to_jiffies(1000);
+
+	while (atomic_read(&ctx->dev->vpp_count) >= max_di_instance) {
+		if (time_after(jiffies, expires)) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+				"wait resource timeout.\n");
+			break;
+		}
+		usleep_range(2000, 4000);
+	}
+}
+
 static int vidioc_decoder_streamon(struct file *file, void *priv,
 	enum v4l2_buf_type i)
 {
@@ -1719,6 +1733,8 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 
 			if (ctx->vpp_cfg.fmt == 0)
 				ctx->vpp_cfg.fmt = ctx->cap_pix_fmt;
+
+			aml_wait_resource(ctx);
 
 			if ((atomic_read(&ctx->dev->vpp_count) < max_di_instance) ||
 				(ctx->vpp != NULL)) {
