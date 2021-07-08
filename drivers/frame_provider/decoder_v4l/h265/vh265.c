@@ -1877,6 +1877,7 @@ struct hevc_state_s {
 	struct vdec_v4l2_buffer  *pair_fb[2];
 	struct mh265_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
+	bool resolution_change;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -10560,6 +10561,7 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 			hevc->v4l_params_parsed = false;
 			ctx->v4l_resolution_change = 1;
 			hevc->eos = 1;
+			hevc->resolution_change = true;
 
 			/*
 			 * marks frame valid on the dpb is the ouput state,
@@ -12369,8 +12371,10 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 		kfifo_put(&hevc->newframe_q, vf);
 	}
 
-
-	ret = hevc_local_init(hevc);
+	if (!hevc->resolution_change)
+		ret = hevc_local_init(hevc);
+	else
+		ret = 0;
 
 	return ret;
 }
@@ -14016,7 +14020,8 @@ static void reset(struct vdec_s *vdec)
 	hevc->pic_list_init_flag = 0;
 	dealloc_mv_bufs(hevc);
 	aml_free_canvas(vdec);
-	hevc_local_uninit(hevc);
+	if (!hevc->resolution_change)
+		hevc_local_uninit(hevc);
 	if (vh265_local_init(hevc) < 0)
 		pr_debug(" %s local init fail\n", __func__);
 	for (i = 0; i < BUF_POOL_SIZE; i++) {
@@ -14026,6 +14031,8 @@ static void reset(struct vdec_s *vdec)
 	atomic_set(&hevc->vf_pre_count, 0);
 	atomic_set(&hevc->vf_get_count, 0);
 	atomic_set(&hevc->vf_put_count, 0);
+	hevc->eos = 0;
+	hevc->resolution_change = false;
 
 	hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);
 }
