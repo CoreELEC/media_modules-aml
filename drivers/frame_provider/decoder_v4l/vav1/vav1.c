@@ -1691,7 +1691,7 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_buf_count = 0;
 
-	clear_frame_buf_ref_count(hw->pbi);
+	//clear_frame_buf_ref_count(hw->pbi);
 
 	if (hw->is_used_v4l) {
 		for (i = 0; i < hw->used_buf_num; ++i) {

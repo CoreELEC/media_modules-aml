@@ -3506,6 +3506,11 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		"%s, type: %d, state: %x, frame_cnt: %d\n",
 		__func__, q->type, ctx->state, ctx->decoded_frame_cnt);
 
+	if (V4L2_TYPE_IS_OUTPUT(q->type))
+		ctx->is_out_stream_off = true;
+	else
+		ctx->is_stream_off = true;
+
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
 		struct vb2_queue * que = v4l2_m2m_get_dst_vq(ctx->m2m_ctx);
 
