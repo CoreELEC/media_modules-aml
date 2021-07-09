@@ -1381,6 +1381,7 @@ static void vavs_recover(struct vdec_avs_hw_s *hw)
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 #endif
+	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
 
 #ifdef PIC_DC_NEED_CLEAR
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 31);
@@ -1684,6 +1685,8 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 #endif
+	/* V4L2_PIX_FMT_NV21  V4L2_PIX_FMT_NV21M */
+	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
 
 #ifdef PIC_DC_NEED_CLEAR
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 31);
@@ -4441,6 +4444,9 @@ if (run_flag) {
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 #endif
+	/* V4L2_PIX_FMT_NV21  V4L2_PIX_FMT_NV21M */
+	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+
 	if (start_decoding_delay & 0x20000)
 		msleep(start_decoding_delay&0xffff);
 
