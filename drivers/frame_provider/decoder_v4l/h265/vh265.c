@@ -9295,6 +9295,7 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 		index = req->vf->index & 0xff;
 		req->aux_buf = NULL;
 		req->aux_size = 0;
+		req->format = VFORMAT_HEVC;
 		if (req->bot_flag)
 			index = (req->vf->index >> 8) & 0xff;
 		if (index != 0xff

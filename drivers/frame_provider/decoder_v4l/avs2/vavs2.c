@@ -229,6 +229,9 @@ static int32_t g_WqMDefault8x8[64] = {
 #define unlock_buffer(dec, flags) \
 		spin_unlock_irqrestore(&dec->buffer_lock, flags)
 
+static u32 debug_mask = 0xffffffff;
+#define get_dbg_flag(dec) ((debug_mask & (1 << dec->index)) ? debug : 0)
+
 static unsigned int max_decode_instance_num
 				= MAX_DECODE_INSTANCE_NUM;
 static unsigned int decode_frame_count[MAX_DECODE_INSTANCE_NUM];
@@ -330,6 +333,8 @@ static u32 on_no_keyframe_skiped;
 static u32 force_video_signal_type;
 static u32 enable_force_video_signal_type;
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
+#define HDR_CUVA_MASK                           0x40000000
+
 
 static const char * const video_format_names[] = {
 	"component", "PAL", "NTSC", "SECAM",
@@ -420,6 +425,7 @@ struct MVBUF_s {
 #define AVS2_DBG_PIC_LEAK                 0x1000
 #define AVS2_DBG_PIC_LEAK_WAIT            0x2000
 #define AVS2_DBG_HDR_INFO                 0x4000
+#define AVS2_DBG_HDR_DATA                 0x8000
 #define AVS2_DBG_DIS_LOC_ERROR_PROC       0x10000
 #define AVS2_DBG_DIS_SYS_ERROR_PROC   0x20000
 #define AVS2_DBG_DUMP_PIC_LIST       0x40000
@@ -491,6 +497,9 @@ static u32 udebug_pause_val;
 static u32 udebug_pause_decode_idx;
 
 static u32 force_disp_pic_index;
+
+#define AUX_BUF_ALIGN(adr) ((adr + 0xf) & (~0xf))
+static u32 cuva_buf_size = 512;
 
 #define DEBUG_REG
 #ifdef DEBUG_REG
@@ -662,6 +671,10 @@ struct AVS2Decoder_s {
 	unsigned short *lmem_ptr;
 	unsigned short *debug_ptr;
 
+	u32 cuva_size;
+	void *cuva_addr;
+	dma_addr_t cuva_phy_addr;
+
 #if 1
 	/*AVS2_10B_MMU*/
 	void *frame_mmu_map_addr;
@@ -776,6 +789,7 @@ struct AVS2Decoder_s {
 	char disp_q_name[32];
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
+	int hdr_flag;
 };
 
 static int  compute_losless_comp_body_size(
@@ -1411,6 +1425,9 @@ static DEFINE_MUTEX(vavs2_mutex);
 #define VP9_SEG_MAP_BUFFER        HEVC_ASSIST_SCRATCH_B
 */
 //#define HEVC_SCALELUT             HEVC_ASSIST_SCRATCH_D
+#define AVS2_CUVA_ADR             HEVC_ASSIST_SCRATCH_A
+#define AVS2_CUVA_DATA_SIZE       HEVC_ASSIST_SCRATCH_B
+
 #define HEVC_WAIT_FLAG            HEVC_ASSIST_SCRATCH_E
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
 #define LMEM_DUMP_ADR             HEVC_ASSIST_SCRATCH_9
@@ -3789,6 +3806,110 @@ static void config_other_hw(struct AVS2Decoder_s *dec)
 #endif
 }
 
+static u32 init_cuva_size;
+static int cuva_data_is_avaible(struct AVS2Decoder_s *dec)
+{
+	u32 reg_val;
+
+	reg_val = READ_VREG(AVS2_CUVA_DATA_SIZE);
+	avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
+		"%s:reg_val: %u \n",
+		__func__, reg_val);
+	if (reg_val != 0 && reg_val != init_cuva_size)
+		return 1;
+	else
+		return 0;
+}
+
+static void config_cuva_buf(struct AVS2Decoder_s *dec)
+{
+	WRITE_VREG(AVS2_CUVA_ADR, dec->cuva_phy_addr);
+	init_cuva_size = (dec->cuva_size >> 4) << 16;
+	WRITE_VREG(AVS2_CUVA_DATA_SIZE, init_cuva_size);
+}
+
+static void set_cuva_data(struct AVS2Decoder_s *dec)
+{
+	int i;
+	unsigned short *cuva_adr;
+	unsigned int size_reg_val =
+		READ_VREG(AVS2_CUVA_DATA_SIZE);
+	unsigned int cuva_count = 0;
+	int cuva_size = 0;
+	struct avs2_frame_s *pic = dec->avs2_dec.hc.cur_pic;
+	if (pic == NULL || 0 == cuva_data_is_avaible(dec)) {
+		avs2_print(dec, AVS2_DBG_HDR_INFO,
+		"%s:pic 0x%p or data not avaible\n",
+		__func__, pic);
+		return;
+	}
+
+	cuva_adr = (unsigned short *)dec->cuva_addr;
+	cuva_count = ((size_reg_val >> 16) << 4) >> 1;
+	cuva_size = dec->cuva_size;
+	dec->hdr_flag |= HDR_CUVA_MASK;
+
+	avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
+			"%s:pic 0x%p cuva_count(%d) cuva_size(%d) hdr_flag 0x%x\n",
+			__func__, pic, cuva_count, cuva_size, dec->hdr_flag);
+	if (cuva_size > 0 && cuva_count > 0) {
+		int new_size;
+		char *new_buf;
+
+		new_size = cuva_size;
+		new_buf = vzalloc(new_size);
+		if (new_buf) {
+			unsigned char *p = new_buf;
+			int len = 0;
+			pic->cuva_data_buf = new_buf;
+
+			for (i = 0; i < cuva_count; i += 4) {
+				int j;
+
+				for (j = 0; j < 4; j++) {
+					unsigned short aa = cuva_adr[i + 3 - j];
+					*p = aa & 0xff;
+					p++;
+					len++;
+				}
+			}
+			if (len > 0) {
+				pic->cuva_data_size = len;
+			}
+
+			avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
+				"cuva: (size %d)\n",
+				pic->cuva_data_size);
+			if (get_dbg_flag(dec) & AVS2_DBG_HDR_DATA) {
+				for (i = 0; i < pic->cuva_data_size; i++) {
+					pr_info("%02x ", pic->cuva_data_buf[i]);
+					if (((i + 1) & 0xf) == 0)
+						pr_info("\n");
+				}
+				pr_info("\n");
+			}
+
+		} else {
+			avs2_print(dec, 0, "new buf alloc failed\n");
+			if (pic->cuva_data_buf)
+				vfree(pic->cuva_data_buf);
+			pic->cuva_data_buf = NULL;
+			pic->cuva_data_size = 0;
+		}
+	}
+}
+
+static void release_cuva_data(struct avs2_frame_s *pic)
+{
+	if (pic == NULL)
+		return;
+	if (pic->cuva_data_buf) {
+		vfree(pic->cuva_data_buf);
+	}
+	pic->cuva_data_buf = NULL;
+	pic->cuva_data_size = 0;
+}
+
 static void avs2_config_work_space_hw(struct AVS2Decoder_s *dec)
 {
 	struct BuffInfo_s *buf_spec = dec->work_space_buf;
@@ -4195,6 +4316,14 @@ static void avs2_local_uninit(struct AVS2Decoder_s *dec)
 						dec->rpm_phy_addr);
 		dec->rpm_addr = NULL;
 	}
+
+	if (dec->cuva_addr) {
+		dma_free_coherent(amports_get_dma_device(),
+				dec->cuva_size, dec->cuva_addr,
+					dec->cuva_phy_addr);
+		dec->cuva_addr = NULL;
+	}
+
 	if (dec->lmem_addr) {
 			if (dec->lmem_phy_addr)
 				dma_free_coherent(amports_get_dma_device(),
@@ -4326,6 +4455,20 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 		avs2_print(dec, AVS2_DBG_BUFMGR,
 			"rpm_phy_addr %x\n", (u32) dec->rpm_phy_addr);
 		dec->rpm_ptr = dec->rpm_addr;
+	}
+
+	if (cuva_buf_size > 0) {
+		dec->cuva_size = AUX_BUF_ALIGN(cuva_buf_size);
+
+		dec->cuva_addr = dma_alloc_coherent(amports_get_dma_device(),
+				dec->cuva_size, &dec->cuva_phy_addr, GFP_KERNEL);
+	        avs2_print(dec, AVS2_DBG_BUFMGR,
+			"%s, cuva_size = %d cuva_phy_addr %x dec->cuva_addr = %px\n",
+			__func__, dec->cuva_size, (u32)dec->cuva_phy_addr, dec->cuva_addr);
+		if (dec->cuva_addr == NULL) {
+			pr_err("%s: failed to alloc cuva buffer\n", __func__);
+			return -1;
+		}
 	}
 
 	dec->lmem_addr = dma_alloc_coherent(amports_get_dma_device(),
@@ -4481,7 +4624,13 @@ static void set_frame_info(struct AVS2Decoder_s *dec, struct vframe_s *vf)
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 	vf->prop.master_display_colour = dec->vf_dp;
+	if (dec->hdr_flag & HDR_CUVA_MASK)
+		dec->video_signal_type |= 1 << 31;
 	vf->signal_type = dec->video_signal_type;
+
+	avs2_print(dec, AVS2_DBG_HDR_INFO,
+			"signal_typesignal_type 0x%x \n",
+			vf->signal_type);
 
 	ar = min_t(u32, dec->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
@@ -4667,6 +4816,32 @@ static int vavs2_event_cb(int type, void *data, void *private_data)
 			req->req_result[0] = vdec_secure(hw_to_vdec(dec));
 		else
 			req->req_result[0] = 0xffffffff;
+	} else if (type & VFRAME_EVENT_RECEIVER_GET_AUX_DATA) {
+		struct provider_aux_req_s *req =
+			(struct provider_aux_req_s *)data;
+		unsigned char index;
+		unsigned long flags;
+		struct avs2_frame_s *pic;
+
+		if (!req->vf) {
+			req->aux_size = atomic_read(&dec->vf_put_count);
+			return 0;
+		}
+		lock_buffer(dec, flags);
+		index = req->vf->index & 0xff;
+		req->aux_buf = NULL;
+		req->aux_size = 0;
+		req->format = VFORMAT_AVS2;
+		if (index < dec->used_buf_num) {
+			pic = get_pic_by_index(dec, index);
+			req->aux_buf = pic->cuva_data_buf;
+			req->aux_size = pic->cuva_data_size;
+		}
+		unlock_buffer(dec, flags);
+
+		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+		"%s pic 0x%p index %d =>size %d\n",
+		__func__, pic, index, req->aux_size);
 	}
 
 	return 0;
@@ -5736,6 +5911,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		PRINT_LINE();
 		dec->start_decoding_flag |= 0x3;
 		if (dec->m_ins_flag) {
+			set_cuva_data(dec);
 			update_decoded_pic(dec);
 			get_picture_qos_info(dec);
 			reset_process_time(dec);
@@ -5933,7 +6109,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		debug_buffer_mgr_more(dec);
 		get_frame_rate(&dec->avs2_dec.param, dec);
 
-#if 0 // The video_signal_type is type of uint16_t and result false, so comment it out.
+#if 1 // The video_signal_type is type of uint16_t and result false, so comment it out.
 		if (dec->avs2_dec.param.p.video_signal_type
 				& (1<<30)) {
 			union param_u *pPara;
@@ -6017,9 +6193,9 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			u32 convert_c = c;
 
 			if (v & 0x2000) {
-				avs2_print(dec, 0,
+				avs2_print(dec, AVS2_DBG_HDR_INFO,
 					"video_signal_type present:\n");
-				avs2_print(dec, 0,
+				avs2_print(dec, AVS2_DBG_HDR_INFO,
 					" %s %s\n",
 					video_format_names[(v >> 10) & 7],
 					((v >> 9) & 1) ?
@@ -6028,21 +6204,21 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 					u32 transfer;
 					u32 maxtrix;
 
-					avs2_print(dec, 0,
+					avs2_print(dec, AVS2_DBG_HDR_INFO,
 						"color_description present:\n");
-					avs2_print(dec, 0,
+					avs2_print(dec, AVS2_DBG_HDR_INFO,
 						"color_primarie = %d\n",
 						v & 0xff);
-					avs2_print(dec, 0,
+					avs2_print(dec, AVS2_DBG_HDR_INFO,
 						"transfer_characteristic = %d\n",
 						(c >> 8) & 0xff);
-					avs2_print(dec, 0,
+					avs2_print(dec, AVS2_DBG_HDR_INFO,
 						"  matrix_coefficient = %d\n",
 						c & 0xff);
 
 					transfer = (c >> 8) & 0xFF;
 					if (transfer >= 15)
-						avs2_print(dec, 0,
+						avs2_print(dec, AVS2_DBG_HDR_INFO,
 							"unsupport transfer_characteristic\n");
 					else if (transfer  == 14)
 						transfer = 18; /* HLG */
@@ -6055,7 +6231,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 
 					maxtrix = c & 0xFF;
 					if (maxtrix >= 10)
-						avs2_print(dec, 0,
+						avs2_print(dec, AVS2_DBG_HDR_INFO,
 							"unsupport matrix_coefficient\n");
 					else if (maxtrix == 9)
 						maxtrix = 10;
@@ -6064,7 +6240,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 
 					convert_c = (transfer << 8) | (maxtrix);
 
-					avs2_print(dec, 0,
+					avs2_print(dec, AVS2_DBG_HDR_INFO,
 						" convered c:0x%x\n",
 						convert_c);
 				}
@@ -6122,6 +6298,10 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		ret = avs2_process_header(&dec->avs2_dec);
 		if (!dec->m_ins_flag)
 			dec->slice_idx++;
+
+		if (dec->m_ins_flag && ret
+			&& dec->avs2_dec.hc.cur_pic->cuva_data_buf != NULL)
+			release_cuva_data(dec->avs2_dec.hc.cur_pic);
 
 		PRINT_LINE();
 #ifdef I_ONLY_SUPPORT
@@ -6708,6 +6888,7 @@ static void vavs2_prot_init(struct AVS2Decoder_s *dec)
 
 	WRITE_VREG(DECODE_STOP_POS, udebug_flag);
 
+	config_cuva_buf(dec);
 }
 
 #ifdef I_ONLY_SUPPORT
@@ -7828,6 +8009,8 @@ static int ammvdec_avs2_remove(struct platform_device *pdev)
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)
 		(((struct vdec_s *)(platform_get_drvdata(pdev)))->private);
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
+	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
+	struct avs2_frame_s *pic;
 	int i;
 
 	if (debug)
@@ -7846,6 +8029,14 @@ static int ammvdec_avs2_remove(struct platform_device *pdev)
 			pdata->free_canvas_ex(dec->avs2_dec.frm_pool[i].y_canvas_index, pdata->id);
 			pdata->free_canvas_ex(dec->avs2_dec.frm_pool[i].uv_canvas_index, pdata->id);
 		}
+	}
+
+	for (i = 0; i < dec->used_buf_num; i++) {
+		if (i == (dec->used_buf_num - 1))
+			pic = avs2_dec->m_bg;
+		else
+			pic = avs2_dec->fref[i];
+		release_cuva_data(pic);
 	}
 
 

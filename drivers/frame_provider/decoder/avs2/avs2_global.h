@@ -817,6 +817,9 @@ struct avs2_frame_s {
 
 	u32 hw_decode_time;
 	u32 frame_size; // For frame base mode
+
+	char *cuva_data_buf;
+	int  cuva_data_size;
 };
 
 
