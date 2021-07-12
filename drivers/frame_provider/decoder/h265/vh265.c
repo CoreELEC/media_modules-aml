@@ -13325,7 +13325,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			& 0xffffff;
 
 		if ((!vdec_dual(vdec)) &&
-			hevc->empty_flag == 0) {
+			hevc->empty_flag == 0 && input_stream_based(vdec)) {
 			hevc->over_decode =
 				(READ_VREG(HEVC_SHIFT_STATUS) >> 15) & 0x1;
 			if (hevc->over_decode)
