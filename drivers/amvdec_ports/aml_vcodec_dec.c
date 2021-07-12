@@ -2402,8 +2402,6 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 		vidioc_try_fmt(f, q_data->fmt);
 
 	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-		if (ctx->is_drm_mode)
-			pix_mp->plane_fmt[0].sizeimage = 1;
 		q_data->sizeimage[0] = pix_mp->plane_fmt[0].sizeimage;
 		q_data->coded_width = pix_mp->width;
 		q_data->coded_height = pix_mp->height;
