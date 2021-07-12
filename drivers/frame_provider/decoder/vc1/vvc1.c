@@ -994,6 +994,8 @@ static int vvc1_prot_init(void)
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 #endif
+	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+
 	return r;
 }
 
