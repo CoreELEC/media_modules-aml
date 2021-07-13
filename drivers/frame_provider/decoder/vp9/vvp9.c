@@ -2210,10 +2210,18 @@ static void	put_un_used_mv_bufs(struct VP9Decoder_s *pbi)
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
 	int i;
 	for (i = 0; i < pbi->used_buf_num; ++i) {
+#if 0
 		if ((frame_bufs[i].ref_count == 0) &&
 			(frame_bufs[i].buf.index != -1) &&
 			(frame_bufs[i].buf.mv_buf_index >= 0)
 			)
+#else
+		if ((&frame_bufs[i] != cm->prev_frame) &&
+			(frame_bufs[i].buf.index != -1) &&
+			(frame_bufs[i].buf.mv_buf_index >= 0)
+			)
+#endif
+
 			put_mv_buf(pbi, &frame_bufs[i].buf.mv_buf_index);
 	}
 }

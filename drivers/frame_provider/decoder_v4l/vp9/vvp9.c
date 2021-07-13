@@ -2094,7 +2094,7 @@ static void	put_un_used_mv_bufs(struct VP9Decoder_s *pbi)
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
 	int i;
 	for (i = 0; i < pbi->used_buf_num; ++i) {
-		if ((frame_bufs[i].ref_count == 0) &&
+		if ((&frame_bufs[i] != cm->prev_frame) &&
 			(frame_bufs[i].buf.index != -1) &&
 			(frame_bufs[i].buf.mv_buf_index >= 0)
 			)
