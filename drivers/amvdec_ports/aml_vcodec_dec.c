@@ -1622,7 +1622,17 @@ static int vidioc_try_decoder_cmd(struct file *file, void *priv,
 	switch (cmd->cmd) {
 	case V4L2_DEC_CMD_STOP:
 	case V4L2_DEC_CMD_START:
-		if (cmd->flags != 0) {
+		if (cmd->cmd == V4L2_DEC_CMD_START) {
+			if (cmd->start.speed == ~0)
+				cmd->start.speed = 0;
+			if (cmd->start.format == ~0)
+				cmd->start.format = 0;
+		}
+
+		if (cmd->flags == ~0)
+			cmd->flags = 0;
+
+		if ((cmd->flags != 0) && (cmd->flags != ~0)) {
 			v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 				"cmd->flags=%u\n", cmd->flags);
 			return -EINVAL;
@@ -1886,6 +1896,8 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	memset(q_data, 0, sizeof(struct aml_q_data));
 	q_data->visible_width = DFT_CFG_WIDTH;
 	q_data->visible_height = DFT_CFG_HEIGHT;
+	q_data->coded_width = DFT_CFG_WIDTH;
+	q_data->coded_height = DFT_CFG_HEIGHT;
 	q_data->fmt = &aml_video_formats[OUT_FMT_IDX];
 	q_data->field = V4L2_FIELD_NONE;
 
@@ -2084,14 +2096,16 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
 	if (V4L2_TYPE_IS_MULTIPLANAR(f->type)) {
 		if (V4L2_TYPE_IS_OUTPUT(f->type)) {
 			pix_mp->num_planes = 1;
-			pix_mp->plane_fmt[0].bytesperline = AML_VDEC_MAX_W;
-			pix_mp->plane_fmt[0].sizeimage = AML_VDEC_MAX_W * AML_VDEC_MAX_H;
+			pix_mp->plane_fmt[0].bytesperline = 0;
 
 			if ((pix_mp->pixelformat != V4L2_PIX_FMT_MPEG2) &&
 			    (pix_mp->pixelformat != V4L2_PIX_FMT_H264) &&
 			    (pix_mp->pixelformat != V4L2_PIX_FMT_MPEG1)) {
 				pix_mp->field = V4L2_FIELD_NONE;
 			} else if (pix_mp->field != V4L2_FIELD_NONE) {
+				if (pix_mp->field == V4L2_FIELD_ANY)
+					pix_mp->field = V4L2_FIELD_NONE;
+
 				pr_info("%s, field: %u, fmt: %x\n",
 					__func__, pix_mp->field,
 					pix_mp->pixelformat);
@@ -2125,13 +2139,15 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
 		pix_mp->flags = 0;
 	} else {
 		if (V4L2_TYPE_IS_OUTPUT(f->type)) {
-			pix->bytesperline = AML_VDEC_MAX_W;
-			pix->sizeimage = AML_VDEC_MAX_W * AML_VDEC_MAX_H;
+			pix->bytesperline = 0;
 			if ((pix->pixelformat != V4L2_PIX_FMT_MPEG2) &&
 			    (pix->pixelformat != V4L2_PIX_FMT_H264) &&
 			    (pix->pixelformat != V4L2_PIX_FMT_MPEG1)) {
 				pix->field = V4L2_FIELD_NONE;
 			} else if (pix->field != V4L2_FIELD_NONE) {
+				if (pix->field == V4L2_FIELD_ANY)
+					pix->field = V4L2_FIELD_NONE;
+
 				pr_info("%s, field: %u, fmt: %x\n",
 					__func__, pix->field,
 					pix->pixelformat);
@@ -2162,6 +2178,7 @@ static int vidioc_try_fmt_vid_cap_out(struct file *file, void *priv,
 	struct aml_q_data *q_data = NULL;
 	struct aml_video_fmt *fmt = NULL;
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
+	struct vb2_queue *dst_vq;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %u, planes: %u, fmt: %x\n",
@@ -2170,9 +2187,24 @@ static int vidioc_try_fmt_vid_cap_out(struct file *file, void *priv,
 		f->fmt.pix_mp.num_planes : 1,
 		f->fmt.pix_mp.pixelformat);
 
-	fmt = aml_vdec_find_format(f);
-	if (!fmt)
+	dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	if (!dst_vq) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"no vb2 queue for type=%d\n", V4L2_BUF_TYPE_VIDEO_CAPTURE);
 		return -EINVAL;
+	}
+
+	if (!V4L2_TYPE_IS_MULTIPLANAR(f->type) && dst_vq->is_multiplanar)
+		return -EINVAL;
+
+	fmt = aml_vdec_find_format(f);
+	if (!fmt) {
+		if (V4L2_TYPE_IS_OUTPUT(f->type))
+			f->fmt.pix.pixelformat = aml_video_formats[OUT_FMT_IDX].fourcc;
+		else
+			f->fmt.pix.pixelformat = aml_video_formats[CAP_FMT_IDX].fourcc;
+		fmt = aml_vdec_find_format(f);
+	}
 
 	vidioc_try_fmt(f, fmt);
 
@@ -2180,7 +2212,8 @@ static int vidioc_try_fmt_vid_cap_out(struct file *file, void *priv,
 	if (!q_data)
 		return -EINVAL;
 
-	update_ctx_dimension(ctx, f->type);
+	if (ctx->state >= AML_STATE_PROBE)
+		update_ctx_dimension(ctx, f->type);
 	copy_v4l2_format_dimention(pix_mp, pix, q_data, f->type);
 
 	if (!V4L2_TYPE_IS_OUTPUT(f->type))
@@ -2268,7 +2301,6 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 
 	if (s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
-
 
 	if (ctx->internal_dw_scale) {
 		if (ctx->state >= AML_STATE_PROBE) {
@@ -2364,6 +2396,7 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 	struct v4l2_pix_format *pix = &f->fmt.pix;
 	struct aml_q_data *q_data = NULL;
 	struct aml_video_fmt *fmt;
+	struct vb2_queue *dst_vq;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %u, planes: %u, fmt: %x\n",
@@ -2371,6 +2404,16 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 		V4L2_TYPE_IS_MULTIPLANAR(f->type) ?
 		f->fmt.pix_mp.num_planes : 1,
 		f->fmt.pix_mp.pixelformat);
+
+	dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	if (!dst_vq) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"no vb2 queue for type=%d\n", V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		return -EINVAL;
+	}
+
+	if (!V4L2_TYPE_IS_MULTIPLANAR(f->type) && dst_vq->is_multiplanar)
+		return -EINVAL;
 
 	q_data = aml_vdec_get_q_data(ctx, f->type);
 	if (!q_data)
@@ -2380,28 +2423,27 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 	    vb2_is_busy(&ctx->m2m_ctx->out_q_ctx.q)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"out_q_ctx buffers already requested\n");
+		ret = -EBUSY;
 	}
 
 	if ((!V4L2_TYPE_IS_OUTPUT(f->type)) &&
 	    vb2_is_busy(&ctx->m2m_ctx->cap_q_ctx.q)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"cap_q_ctx buffers already requested\n");
+		ret = -EBUSY;
 	}
 
 	fmt = aml_vdec_find_format(f);
 	if (fmt == NULL) {
-		if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		if (V4L2_TYPE_IS_OUTPUT(f->type))
 			fmt = &aml_video_formats[OUT_FMT_IDX];
-		} else if (!V4L2_TYPE_IS_OUTPUT(f->type)) {
+		else
 			fmt = &aml_video_formats[CAP_FMT_IDX];
-		}
 		f->fmt.pix.pixelformat = fmt->fourcc;
 	}
 
 	q_data->fmt = fmt;
-
-	if (!pix_mp->plane_fmt[0].sizeimage)
-		vidioc_try_fmt(f, q_data->fmt);
+	vidioc_try_fmt(f, q_data->fmt);
 
 	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		q_data->sizeimage[0] = pix_mp->plane_fmt[0].sizeimage;
@@ -2418,6 +2460,37 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 		ctx->ycbcr_enc = f->fmt.pix_mp.ycbcr_enc;
 		ctx->quantization = f->fmt.pix_mp.quantization;
 		ctx->xfer_func = f->fmt.pix_mp.xfer_func;
+
+		mutex_lock(&ctx->state_lock);
+		if (ctx->state == AML_STATE_IDLE) {
+			ret = vdec_if_init(ctx, q_data->fmt->fourcc);
+			if (ret) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"vdec_if_init() fail ret=%d\n", ret);
+				mutex_unlock(&ctx->state_lock);
+				return -EINVAL;
+			}
+			ctx->state = AML_STATE_INIT;
+			ATRACE_COUNTER("v4l_state", ctx->state);
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
+				"vcodec state (AML_STATE_INIT)\n");
+		}
+		mutex_unlock(&ctx->state_lock);
+	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+		q_data->sizeimage[0] = pix->sizeimage;
+		q_data->coded_width = pix->width;
+		q_data->coded_height = pix->height;
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+			"w: %d, h: %d, size: %d\n",
+			pix->width, pix->height,
+			pix->sizeimage);
+
+		ctx->output_pix_fmt = pix->pixelformat;
+		ctx->colorspace = f->fmt.pix.colorspace;
+		ctx->ycbcr_enc = f->fmt.pix.ycbcr_enc;
+		ctx->quantization = f->fmt.pix.quantization;
+		ctx->xfer_func = f->fmt.pix.xfer_func;
 
 		mutex_lock(&ctx->state_lock);
 		if (ctx->state == AML_STATE_IDLE) {
@@ -2553,6 +2626,7 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 	struct v4l2_pix_format_mplane *pix_mp = &f->fmt.pix_mp;
 	struct v4l2_pix_format *pix = &f->fmt.pix;
 	struct vb2_queue *vq;
+	struct vb2_queue *dst_vq;
 	struct aml_q_data *q_data;
 	int ret = 0;
 
@@ -2563,18 +2637,29 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 		return -EINVAL;
 	}
 
+	dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	if (!dst_vq) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"no vb2 queue for type=%d\n", V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		return -EINVAL;
+	}
+
+	if (!V4L2_TYPE_IS_MULTIPLANAR(f->type) && dst_vq->is_multiplanar)
+		return -EINVAL;
+
 	q_data = aml_vdec_get_q_data(ctx, f->type);
 
 	ret = vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->picinfo);
 	if (ret) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"GET_PARAM_PICTURE_INFO err\n");
-	}
-
-	if (ctx->picinfo.visible_height < 16 || ctx->picinfo.visible_width < 16) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-			"The width or height of the stream is less than 16\n");
-		return -EPERM;
+	} else {
+		if ((ctx->picinfo.visible_height < 16 && ctx->picinfo.visible_height > 0) ||
+			(ctx->picinfo.visible_width < 16 && ctx->picinfo.visible_width > 0)) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+				"The width or height of the stream is less than 16\n");
+			return -EPERM;
+		}
 	}
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(f->type)) {
@@ -2609,7 +2694,6 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 			"type=%d state=%d Format information could not be read, not ready yet!\n",
 			f->type, ctx->state);
-		return -EINVAL;
 	}
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
@@ -2686,10 +2770,10 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 		else
 			*nplanes = 1;
 
-		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
-			return -EACCES;
-		if (dw_mode == VDEC_DW_AFBC_ONLY)
-			*nplanes = 1;
+		if (!vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
+			if (dw_mode == VDEC_DW_AFBC_ONLY)
+				*nplanes = 1;
+		}
 
 		for (i = 0; i < *nplanes; i++) {
 			sizes[i] = q_data->sizeimage[i];
@@ -3626,14 +3710,14 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 				"Seqinfo not ready.\n");
 			ctrl->val = 0;
-			ret = -EINVAL;
 		}
 		break;
 	case V4L2_CID_MIN_BUFFERS_FOR_OUTPUT:
 		ctrl->val = 4;
 		break;
 	case AML_V4L2_GET_INPUT_BUFFER_NUM:
-		ctrl->val = vdec_frame_number(ctx->ada_ctx);
+		if (ctx->ada_ctx != NULL)
+			ctrl->val = vdec_frame_number(ctx->ada_ctx);
 		break;
 	default:
 		ret = -EINVAL;
@@ -3739,16 +3823,25 @@ static int vidioc_vdec_g_parm(struct file *file, void *fh,
 	struct v4l2_streamparm *a)
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(fh);
+	struct vb2_queue *dst_vq;
+
+	dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	if (!dst_vq) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"no vb2 queue for type=%d\n", V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		return -EINVAL;
+	}
+
+	if (!V4L2_TYPE_IS_MULTIPLANAR(a->type) && dst_vq->is_multiplanar)
+		return -EINVAL;
 
 	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
-		if (vdec_if_get_param(ctx, GET_PARAM_CONFIG_INFO,
-			&ctx->config.parm.dec)) {
+		if (vdec_if_get_param(ctx, GET_PARAM_CONFIG_INFO, &ctx->config.parm.dec))
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 				"GET_PARAM_CONFIG_INFO err\n");
-			return -1;
-		}
-		memcpy(a->parm.raw_data, ctx->config.parm.data,
-			sizeof(a->parm.raw_data));
+		else
+			memcpy(a->parm.raw_data, ctx->config.parm.data,
+				sizeof(a->parm.raw_data));
 	}
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s\n", __func__);
@@ -3782,8 +3875,19 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 	struct v4l2_streamparm *a)
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(fh);
+	struct vb2_queue *dst_vq;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s\n", __func__);
+
+	dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	if (!dst_vq) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"no vb2 queue for type=%d\n", V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		return -EINVAL;
+	}
+
+	if (!V4L2_TYPE_IS_MULTIPLANAR(a->type) && dst_vq->is_multiplanar)
+		return -EINVAL;
 
 	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT ||
 		a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
@@ -3822,6 +3926,10 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s parms:%x metadata_config_flag: 0x%x\n",
 				__func__, in->parms_status, dec->cfg.metadata_config_flag);
+
+		memset(a->parm.output.reserved, 0, sizeof(a->parm.output.reserved));
+	} else {
+		memset(a->parm.capture.reserved, 0, sizeof(a->parm.capture.reserved));
 	}
 
 	return 0;

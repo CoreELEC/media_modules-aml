@@ -520,12 +520,8 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 	vfd_dec->lock		= &dev->dev_mutex;
 	vfd_dec->v4l2_dev	= &dev->v4l2_dev;
 	vfd_dec->vfl_dir	= VFL_DIR_M2M;
-	vfd_dec->device_caps	= V4L2_CAP_VIDEO_CAPTURE |
-				V4L2_CAP_VIDEO_OUTPUT |
-				V4L2_CAP_VIDEO_CAPTURE_MPLANE |
-				V4L2_CAP_VIDEO_OUTPUT_MPLANE |
-				V4L2_CAP_VIDEO_M2M_MPLANE |
-				V4L2_CAP_STREAMING;
+	vfd_dec->device_caps	= V4L2_CAP_VIDEO_M2M_MPLANE |
+					V4L2_CAP_STREAMING;
 
 	snprintf(vfd_dec->name, sizeof(vfd_dec->name), "%s",
 		AML_VCODEC_DEC_NAME);
