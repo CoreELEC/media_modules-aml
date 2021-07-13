@@ -61,6 +61,8 @@
 
 #define V4L2_CID_USER_AMLOGIC_BASE (V4L2_CID_USER_BASE + 0x1100)
 #define AML_V4L2_SET_DRMMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
+#define AML_V4L2_GET_INPUT_BUFFER_NUM (V4L2_CID_USER_AMLOGIC_BASE + 1)
+
 
 #define WORK_ITEMS_MAX (32)
 #define MAX_DI_INSTANCE (2)
@@ -3630,6 +3632,9 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MIN_BUFFERS_FOR_OUTPUT:
 		ctrl->val = 4;
 		break;
+	case AML_V4L2_GET_INPUT_BUFFER_NUM:
+		ctrl->val = vdec_frame_number(ctx->ada_ctx);
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -3669,6 +3674,18 @@ static const struct v4l2_ctrl_config ctrl_st_mode = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_gt_input_buffer_number = {
+	.name	= "input buffer number",
+	.id	= AML_V4L2_GET_INPUT_BUFFER_NUM,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_VOLATILE,
+	.min	= 0,
+	.max	= 128,
+	.step	= 1,
+	.def	= 0,
+};
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -3679,24 +3696,30 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 				&aml_vcodec_dec_ctrl_ops,
 				V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
 				0, 32, 1, 2);
-	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE;
-	if (ctx->ctrl_hdl.error) {
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;
 	}
+	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE;
 
 	ctrl = v4l2_ctrl_new_std(&ctx->ctrl_hdl,
 				&aml_vcodec_dec_ctrl_ops,
 				V4L2_CID_MIN_BUFFERS_FOR_OUTPUT,
 				0, 32, 1, 8);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
 	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE;
-	if (ctx->ctrl_hdl.error) {
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_mode, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;
 	}
 
-	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_mode, NULL);
-	if (ctx->ctrl_hdl.error) {
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_input_buffer_number, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;
 	}

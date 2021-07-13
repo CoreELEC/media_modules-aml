@@ -572,7 +572,7 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 	return 0;
 
 err_reg_class:
-	video_unregister_device(dev->vfd_dec);
+	class_unregister(&dev->v4ldec_class);
 err_dec_reg:
 	destroy_workqueue(dev->decode_workqueue);
 err_event_workq:
