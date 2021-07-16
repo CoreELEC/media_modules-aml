@@ -821,7 +821,7 @@ int aml_v4l2_vpp_init(
 		goto error2;
 	}
 
-	vpp->ovbpool = kzalloc(buf_size * sizeof(*vpp->ovbpool), GFP_KERNEL);
+	vpp->ovbpool = vzalloc(buf_size * sizeof(*vpp->ovbpool));
 	if (!vpp->ovbpool) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"alloc output vb pool fail.\n");
@@ -838,7 +838,7 @@ int aml_v4l2_vpp_init(
 		goto error4;
 	}
 
-	vpp->vfpool = kzalloc(buf_size * sizeof(*vpp->vfpool), GFP_KERNEL);
+	vpp->vfpool = vzalloc(buf_size * sizeof(*vpp->vfpool));
 	if (!vpp->vfpool) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"alloc vf pool fail.\n");
@@ -863,7 +863,7 @@ int aml_v4l2_vpp_init(
 		goto error7;
 	}
 
-	vpp->ivbpool = kzalloc(VPP_FRAME_SIZE * sizeof(*vpp->ivbpool), GFP_KERNEL);
+	vpp->ivbpool = vzalloc(VPP_FRAME_SIZE * sizeof(*vpp->ivbpool));
 	if (!vpp->ivbpool) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"alloc input vb pool fail.\n");
@@ -915,17 +915,17 @@ int aml_v4l2_vpp_init(
 	return 0;
 
 error9:
-	kfree(vpp->ivbpool);
+	vfree(vpp->ivbpool);
 error8:
 	kfifo_free(&vpp->input);
 error7:
 	kfifo_free(&vpp->processing);
 error6:
-	kfree(vpp->vfpool);
+	vfree(vpp->vfpool);
 error5:
 	kfifo_free(&vpp->frame);
 error4:
-	kfree(vpp->ovbpool);
+	vfree(vpp->ovbpool);
 error3:
 	kfifo_free(&vpp->output);
 error2:
@@ -953,11 +953,11 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 
 	kfifo_free(&vpp->processing);
 	kfifo_free(&vpp->frame);
-	kfree(vpp->vfpool);
+	vfree(vpp->vfpool);
 	kfifo_free(&vpp->output);
-	kfree(vpp->ovbpool);
+	vfree(vpp->ovbpool);
 	kfifo_free(&vpp->input);
-	kfree(vpp->ivbpool);
+	vfree(vpp->ivbpool);
 	mutex_destroy(&vpp->output_lock);
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
 		"vpp_wrapper destroy done\n");

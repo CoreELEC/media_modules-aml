@@ -232,7 +232,7 @@ static int vdec_hevc_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	}
 
 	/* alloc the header buffer to be used cache sps or spp etc.*/
-	inst->vsi->header_buf = kzalloc(HEADER_BUFFER_SIZE, GFP_KERNEL);
+	inst->vsi->header_buf = vzalloc(HEADER_BUFFER_SIZE);
 	if (!inst->vsi->header_buf) {
 		ret = -ENOMEM;
 		goto err;
@@ -256,7 +256,7 @@ static int vdec_hevc_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	return 0;
 err:
 	if (inst && inst->vsi && inst->vsi->header_buf)
-		kfree(inst->vsi->header_buf);
+		vfree(inst->vsi->header_buf);
 	if (inst && inst->vsi)
 		kfree(inst->vsi);
 	if (inst)
@@ -515,7 +515,7 @@ static void vdec_hevc_deinit(unsigned long h_vdec)
 	video_decoder_release(&inst->vdec);
 
 	if (inst->vsi && inst->vsi->header_buf)
-		kfree(inst->vsi->header_buf);
+		vfree(inst->vsi->header_buf);
 
 	if (inst->vsi)
 		kfree(inst->vsi);
