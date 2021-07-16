@@ -1777,6 +1777,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 					} else {
 						set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hw->v4l2_ctx);
+						ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 						fb->task->submit(fb->task, TASK_TYPE_DEC);
 					}
 				} else {
@@ -1907,7 +1908,9 @@ static int v4l_res_change(struct vdec_mpeg12_hw_s *hw, int width, int height, bo
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			flush_output(hw);
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
 
 			ret = 1;
 		}
@@ -2018,6 +2021,9 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 	}
 
 	reg = READ_VREG(MREG_BUFFEROUT);
+
+	ATRACE_COUNTER("V_ST_DEC-decode_state", reg);
+
 	if (reg == MPEG12_DATA_REQUEST) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 			"%s: data request, bcnt=%x\n",
@@ -2331,6 +2337,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->timestamp);
 
+		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		pr_info("[%d] mpeg12 EOS notify.\n", ctx->id);
@@ -2348,6 +2355,9 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 			"%s, result=%d, status=%d\n", __func__,
 			hw->dec_result, vdec->next_status);
+
+	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
+
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		if (vdec->input.swap_valid)
 			hw->dec_again_cnt = 0;
@@ -2448,8 +2458,11 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 		flush_output(hw);
-		if (hw->is_used_v4l)
+		if (hw->is_used_v4l) {
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(vdec);
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		}
 
 		debug_print(DECODE_ID(hw), 0,
 			"%s: end of stream, num %d(%d)\n",
@@ -2490,6 +2503,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			!hw->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
 
 	if (hw->vdec_cb)
 		hw->vdec_cb(vdec, hw->vdec_cb_arg);
@@ -3196,6 +3211,7 @@ static bool is_avaliable_buffer(struct vdec_mpeg12_hw_s *hw)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
+	int used_count = 0;
 
 	if ((hw->buf_num == 0) ||
 		(ctx->cap_pool.dec < hw->buf_num)) {
@@ -3210,8 +3226,12 @@ static bool is_avaliable_buffer(struct vdec_mpeg12_hw_s *hw)
 			(hw->ref_use[i] == 0) &&
 			hw->pics[i].v4l_ref_buf_addr) {
 			free_count++;
-		}
+		} else if (hw->pics[i].v4l_ref_buf_addr)
+			used_count++;
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
+	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
@@ -3397,6 +3417,8 @@ void (*callback)(struct vdec_s *, void *),
 		vdec_schedule_work(&hw->work);
 		return;
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-chunk_size", size);
 
 	hw->input_empty = 0;
 	if ((vdec_frame_based(vdec)) &&

@@ -9987,11 +9987,14 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 						 while (kfifo_len(&hevc->display_q)) {
 							if (hevc->pair_fb[0] != NULL && hevc->pair_fb[1] != NULL) {
 								set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
+								ATRACE_COUNTER("VC_OUT_DEC-submit", hevc->pair_fb[0]->buf_idx);
 								hevc->pair_fb[0]->task->submit(hevc->pair_fb[0]->task, TASK_TYPE_DEC);
+								ATRACE_COUNTER("VC_OUT_DEC-submit", hevc->pair_fb[1]->buf_idx);
 								hevc->pair_fb[1]->task->submit(hevc->pair_fb[1]->task, TASK_TYPE_DEC);
 								clear_pair_fb(hevc);
 							} else {
 								set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
+								ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 								fb->task->submit(fb->task, TASK_TYPE_DEC);
 							}
 						}
@@ -10127,6 +10130,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
+		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		pr_info("[%d] H265 EOS notify.\n", ctx->id);
@@ -10664,7 +10668,9 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 
 			flush_output(hevc, NULL);
 			//del_timer_sync(&hevc->timer);
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(hevc));
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
 
 			ret = 1;
 		}
@@ -11785,6 +11791,9 @@ static irqreturn_t vh265_isr(int irq, void *data)
 
 	if (hevc->init_flag == 0)
 		return IRQ_HANDLED;
+
+	ATRACE_COUNTER("V_ST_DEC-decode_state", dec_status);
+
 	hevc->dec_status = dec_status;
 	if (is_log_enable(hevc))
 		add_log(hevc,
@@ -12925,6 +12934,7 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 	struct PIC_s *pic = NULL;
 	int i, free_count = 0;
+	int used_count = 0;
 
 	if ((hevc->used_buf_num == 0) ||
 		(ctx->cap_pool.dec < hevc->used_buf_num)) {
@@ -12947,8 +12957,12 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 			(pic->vf_ref == 0) &&
 			pic->cma_alloc_addr) {
 			free_count++;
-		}
+		} else if (pic->cma_alloc_addr)
+			used_count++;
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
+	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
@@ -13265,6 +13279,8 @@ static void vh265_notify_work(struct work_struct *work)
 static void vh265_work_implement(struct hevc_state_s *hevc,
 	struct vdec_s *vdec,int from)
 {
+	ATRACE_COUNTER("V_ST_DEC-work_state", hevc->dec_result);
+
 	if (hevc->dec_result == DEC_RESULT_FREE_CANVAS) {
 		/*USE_BUF_BLOCK*/
 		uninit_pic_list(hevc);
@@ -13642,8 +13658,11 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			__func__, hevc->curr_POC, pic);
 		flush_output(hevc, pic);
 		/* dummy vf with eos flag to backend */
-		if (hevc->is_used_v4l)
+		if (hevc->is_used_v4l) {
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(hevc));
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		}
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		hevc->shift_byte_count_lo
 			= READ_VREG(HEVC_SHIFT_BYTE_COUNT);
@@ -13733,6 +13752,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			!hevc->v4l_params_parsed)
 			vdec_v4l_write_frame_sync(ctx);
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
 
 	if (hevc->vdec_cb)
 		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg);
@@ -13945,6 +13966,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec_schedule_work(&hevc->work);
 		return;
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-chunk_size", r);
+
 	input_empty[hevc->index] = 0;
 	hevc->dec_result = DEC_RESULT_NONE;
 	if (vdec_frame_based(vdec) &&

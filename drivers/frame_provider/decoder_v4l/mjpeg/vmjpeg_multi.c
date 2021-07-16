@@ -358,7 +358,9 @@ static int v4l_res_change(struct vdec_mjpeg_hw_s *hw, int width, int height)
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
 
 			ret = 1;
 		}
@@ -506,6 +508,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if (v4l2_ctx->is_stream_off) {
 				vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
 			} else {
+				ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 				fb->task->submit(fb->task, TASK_TYPE_DEC);
 			}
 		} else {
@@ -1256,6 +1259,7 @@ static bool is_avaliable_buffer(struct vdec_mjpeg_hw_s *hw)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
+	int used_count = 0;
 
 	if ((hw->buf_num == 0) ||
 		(ctx->cap_pool.dec < hw->buf_num)) {
@@ -1269,8 +1273,12 @@ static bool is_avaliable_buffer(struct vdec_mjpeg_hw_s *hw)
 		if ((hw->vfbuf_use[i] == 0) &&
 			hw->buffer_spec[i].v4l_ref_buf_addr) {
 			free_count++;
-		}
+		} else if (hw->buffer_spec[i].v4l_ref_buf_addr)
+			used_count++;
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
+	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
@@ -1343,6 +1351,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec_schedule_work(&hw->work);
 		return;
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-chunk_size", ret);
+
 	hw->input_empty = 0;
 	hw->dec_result = DEC_RESULT_NONE;
 	if (vdec->mc_loaded) {
@@ -1457,6 +1468,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
+		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		pr_info("[%d] mjpeg EOS notify.\n", ctx->id);
@@ -1476,6 +1488,9 @@ static void vmjpeg_work(struct work_struct *work)
 			__func__, hw->dec_result,
 			kfifo_len(&hw->newframe_q),
 			kfifo_len(&hw->display_q));
+
+	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
+
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
@@ -1505,8 +1520,11 @@ static void vmjpeg_work(struct work_struct *work)
 			hw->stat &= ~STAT_VDEC_RUN;
 		}
 		hw->eos = 1;
-		if (hw->is_used_v4l)
+		if (hw->is_used_v4l) {
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(vdec);
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		}
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;

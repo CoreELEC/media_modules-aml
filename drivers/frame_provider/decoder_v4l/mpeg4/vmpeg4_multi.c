@@ -992,6 +992,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					if (v4l2_ctx->is_stream_off) {
 						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 					} else {
+						ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 						fb->task->submit(fb->task, TASK_TYPE_DEC);
 					}
 				} else {
@@ -1106,7 +1107,9 @@ static int v4l_res_change(struct vdec_mpeg4_hw_s *hw, int width, int height, int
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			flush_output(hw);
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
 
 			ret = 1;
 		}
@@ -1196,6 +1199,8 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		return IRQ_HANDLED;
 	}
 	reg = READ_VREG(MREG_BUFFEROUT);
+
+	ATRACE_COUNTER("V_ST_DEC-decode_state", reg);
 
 	time_increment_resolution = READ_VREG(MP4_RATE);
 	fixed_vop_rate = time_increment_resolution >> 16;
@@ -1635,6 +1640,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
+		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 		ATRACE_COUNTER(hw->pts_name, vf->timestamp);
 
@@ -1657,6 +1663,8 @@ static void vmpeg4_work(struct work_struct *work)
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 			"vmpeg4_work: result=%d,status=%d\n",
 			hw->dec_result, hw_to_vdec(hw)->next_status);
+
+	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
 
 	if (hw->dec_result == DEC_RESULT_UNFINISH) {
 		if (!hw->ctx_valid)
@@ -1699,8 +1707,11 @@ static void vmpeg4_work(struct work_struct *work)
 		vdec_clean_input(vdec);
 		flush_output(hw);
 
-		if (hw->is_used_v4l)
+		if (hw->is_used_v4l) {
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(vdec);
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		}
 
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"%s: eos flushed, frame_num %d\n",
@@ -1739,6 +1750,8 @@ static void vmpeg4_work(struct work_struct *work)
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1);
 	else
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
+
+	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
 
 	wake_up_interruptible(&hw->wait_q);
 	if (hw->vdec_cb)
@@ -2399,6 +2412,7 @@ static bool is_avaliable_buffer(struct vdec_mpeg4_hw_s *hw)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
+	int used_count = 0;
 
 	if ((hw->buf_num == 0) ||
 		(ctx->cap_pool.dec < hw->buf_num)) {
@@ -2412,8 +2426,12 @@ static bool is_avaliable_buffer(struct vdec_mpeg4_hw_s *hw)
 		if ((hw->vfbuf_use[i] == 0) &&
 			hw->pic[i].v4l_ref_buf_addr) {
 			free_count++;
-		}
+		} else if (hw->pic[i].v4l_ref_buf_addr)
+			used_count++;
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
+	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
@@ -2512,6 +2530,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			hw->chunk_frame_count = 0;
 		}
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-chunk_size", size);
+
 	if (vdec_frame_based(vdec) && !vdec_secure(vdec)) {
 		/* HW needs padding (NAL start) for frame ending */
 		char* tail = (char *)hw->chunk->block->start_virt;

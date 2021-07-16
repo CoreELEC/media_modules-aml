@@ -981,6 +981,8 @@ static void trigger_schedule(struct AV1HW_s *hw)
 			vdec_v4l_write_frame_sync(ctx);
 	}
 
+	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
+
 	if (hw->vdec_cb)
 		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
 }
@@ -6818,6 +6820,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				if (v4l2_ctx->is_stream_off) {
 					vav1_vf_put(vav1_vf_get(hw), hw);
 				} else {
+					ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 					fb->task->submit(fb->task, TASK_TYPE_DEC);
 				}
 			} else {
@@ -6875,6 +6878,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
+		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		av1_print(hw, 0, "[%d] AV1 EOS notify.\n", ctx->id);
@@ -8482,7 +8486,9 @@ static int v4l_res_change(struct AV1HW_s *hw)
 
 			av1_postproc(hw);
 
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
 			ret = 1;
 		}
 	}
@@ -9015,6 +9021,9 @@ static irqreturn_t vav1_isr(int irq, void *data)
 		pr_err("err: %s, process busy\n", __func__);
 		return IRQ_HANDLED;
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-decode_state", dec_status);
+
 	hw->dec_status = dec_status;
 	hw->process_busy = 1;
 	if (debug & AV1_DEBUG_BUFMGR)
@@ -9938,6 +9947,8 @@ static void av1_work(struct work_struct *work)
 		READ_VREG(HEVC_STREAM_WR_PTR),
 		READ_VREG(HEVC_STREAM_RD_PTR));
 
+	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
+
 	if (hw->dec_result == AOM_AV1_RESULT_NEED_MORE_BUFFER) {
 		reset_process_time(hw);
 		if (get_free_buf_count(hw) <= 0) {
@@ -9957,6 +9968,7 @@ static void av1_work(struct work_struct *work)
 			unlock_buffer_pool(cm->buffer_pool, flags);
 
 			if (hw->wait_more_buf) {
+				ATRACE_COUNTER("V_ST_DEC-wait_more_buff", __LINE__);
 				ret = vdec_post_task(av1_wait_cap_buf, hw);
 				if (ret != 0) {
 					pr_err("post task create failed!!!! ret %d\n", ret);
@@ -9969,6 +9981,7 @@ static void av1_work(struct work_struct *work)
 			}
 
 		} else {
+			ATRACE_COUNTER("V_ST_DEC-wait_more_buff", 0);
 			av1_release_bufs(hw);
 			av1_continue_decoding(hw, hw->cur_obu_type);
 			hw->postproc_done = 0;
@@ -10082,8 +10095,11 @@ static void av1_work(struct work_struct *work)
 		hw->eos = 1;
 		av1_postproc(hw);
 
-		if (hw->is_used_v4l)
+		if (hw->is_used_v4l) {
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
+			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		}
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
@@ -10151,6 +10167,7 @@ static bool is_avaliable_buffer(struct AV1HW_s *hw)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
+	int used_count = 0;
 
 	if ((hw->used_buf_num == 0) ||
 		(ctx->cap_pool.dec < hw->used_buf_num)) {
@@ -10166,8 +10183,12 @@ static bool is_avaliable_buffer(struct AV1HW_s *hw)
 			(frame_bufs[i].buf.index >= 0) &&
 			frame_bufs[i].buf.cma_alloc_addr) {
 			free_count++;
-		}
+		} else if (frame_bufs[i].buf.cma_alloc_addr)
+			used_count++;
 	}
+
+	ATRACE_COUNTER("av1_free_buff_count", free_count);
+	ATRACE_COUNTER("av1_used_buff_count", used_count);
 
 	return free_count >= hw->run_ready_min_buf_num ? 1 : 0;
 }
@@ -10346,6 +10367,9 @@ static void run_front(struct vdec_s *vdec)
 		vdec_schedule_work(&hw->work);
 		return;
 	}
+
+	ATRACE_COUNTER("V_ST_DEC-chunk_size", size);
+
 	input_empty[hw->index] = 0;
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->start_shift_bytes = READ_VREG(HEVC_SHIFT_BYTE_COUNT);

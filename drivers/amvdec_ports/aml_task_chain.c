@@ -150,8 +150,6 @@ static void task_buffer_submit(struct task_chain_s *task,
 			item2->is_active = true;
 			item2->ops->fill_buffer(task->ctx, fb);
 
-			ATRACE_COUNTER("v4l_task_submit", task->id);
-
 			v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
 				"TSK(%px):%d, vf:%px, phy:%lx, submit %d => %d.\n",
 				task, task->id, vf, fb->m.mem[0].addr,
@@ -184,8 +182,6 @@ static void task_buffer_recycle(struct task_chain_s *task,
 
 			vf = task_item_vframe_pop(item2);
 			item2->ops->put_vframe(item2->caller, vf);
-
-			ATRACE_COUNTER("v4l_task_recycle", task->id);
 
 			v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
 				"TSK(%px):%d, vf:%px, phy:%lx, recycle %d => %d.\n",

@@ -214,7 +214,8 @@ static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 
 	kfifo_put(&ge2d->input, buf);
 
-	ATRACE_COUNTER("v4l_ge2d_input_done", fb->buf_idx);
+	ATRACE_COUNTER("VC_IN_GE2D-1.recycle", fb->buf_idx);
+
 	return 0;
 }
 
@@ -257,7 +258,7 @@ static int v4l_ge2d_fill_output_done(struct aml_v4l2_ge2d_buf *buf)
 		kfifo_len(&ge2d->out_done_q),
 		buf->vf->width, buf->vf->height);
 
-	ATRACE_COUNTER("v4l_ge2d_output_done", fb->buf_idx);
+	ATRACE_COUNTER("VC_OUT_GE2D-2.submit", fb->buf_idx);
 
 	fb->task->submit(fb->task, TASK_TYPE_GE2D);
 
@@ -298,7 +299,7 @@ static void ge2d_vf_get(void *caller, struct vframe_s **vf_out)
 
 		*vf_out = vf;
 
-		ATRACE_COUNTER("v4l_ge2d_get_vframe", fb->buf_idx);
+		ATRACE_COUNTER("VC_OUT_GE2D-3.vf_get", fb->buf_idx);
 
 		v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
 			"%s: vf:%px, index:%d, flag(vf:%x ge2d:%x), ts:%lld, type:%x, wxh:%ux%u\n",
@@ -333,7 +334,7 @@ static void ge2d_vf_put(void *caller, struct vframe_s *vf)
 		buf->flag,
 		vf->timestamp);
 
-	ATRACE_COUNTER("v4l_vpp_put_vframe", fb->buf_idx);
+	ATRACE_COUNTER("VC_IN_GE2D-0.vf_put", fb->buf_idx);
 
 	mutex_lock(&ge2d->output_lock);
 	kfifo_put(&ge2d->frame, vf);
@@ -582,7 +583,7 @@ retry:
 		ge2d_config.dst_xy_swap		= 0;
 		ge2d_config.src2_para.mem_type	= CANVAS_TYPE_INVALID;
 
-		ATRACE_COUNTER("v4l_ge2d_handle_start",
+		ATRACE_COUNTER("VC_OUT_GE2D-1.handle_start",
 			in_buf->aml_buf->frame_buffer.buf_idx);
 
 		v4l_dbg(ctx, V4L_DEBUG_GE2D_BUFMGR,
@@ -919,7 +920,7 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 		}
 	} while(0);
 
-	ATRACE_COUNTER("v4l_ge2d_fill_buffer", fb->buf_idx);
+	ATRACE_COUNTER("VC_OUT_GE2D-0.receive", fb->buf_idx);
 
 	kfifo_put(&ge2d->in_done_q, in_buf);
 	up(&ge2d->sem_in);

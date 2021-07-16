@@ -49,7 +49,7 @@ static void di_release_keep_buf_wrap(void *arg)
 
 	di_release_keep_buf(buf);
 
-	ATRACE_COUNTER("v4l_vpp_lc_release", buf->mng.index);
+	ATRACE_COUNTER("VC_OUT_VPP_LC-2.lc_release", buf->mng.index);
 }
 
 static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
@@ -93,7 +93,7 @@ static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 			"fail to set dmabuf DI hook\n");
 	}
 
-	ATRACE_COUNTER("v4l_vpp_lc_attach", vpp_buf->di_local_buf->mng.index);
+	ATRACE_COUNTER("VC_OUT_VPP_LC-0.lc_attach", vpp_buf->di_local_buf->mng.index);
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"%s attach di local buffer %px, dbuf:%px\n",
@@ -126,7 +126,7 @@ static int detach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 		return 0;
 	}
 
-	ATRACE_COUNTER("v4l_vpp_lc_detach", vpp_buf->di_local_buf->mng.index);
+	ATRACE_COUNTER("VC_OUT_VPP_LC-1.lc_detach", vpp_buf->di_local_buf->mng.index);
 
 	ret = uvm_detach_hook_mod(dma, VF_PROCESS_DI);
 	if (ret < 0) {
@@ -221,8 +221,9 @@ static enum DI_ERRORTYPE
 		kfifo_put(&vpp->input, vpp_buf->inbuf);
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"vpp_output local done: vf:%px, ext vf:%px, idx:%d, flag(vf:%x di:%x) %s %s, ts:%lld, "
+		"vpp_output local done: idx:%d, vf:%px, ext vf:%px, idx:%d, flag(vf:%x di:%x) %s %s, ts:%lld, "
 		"in:%d, out:%d, vf:%d, in done:%d, out done:%d\n",
+		fb->buf_idx,
 		vpp_buf->di_buf.vf,
 		vpp_buf->di_buf.vf->vf_ext,
 		vpp_buf->di_buf.vf->index,
@@ -237,7 +238,7 @@ static enum DI_ERRORTYPE
 		kfifo_len(&vpp->in_done_q),
 		kfifo_len(&vpp->out_done_q));
 
-	ATRACE_COUNTER("v4l_vpp_lc_output_done", fb->buf_idx);
+	ATRACE_COUNTER("VC_OUT_VPP-2.lc_submit", fb->buf_idx);
 
 	fb->task->submit(fb->task, TASK_TYPE_VPP);
 
@@ -274,8 +275,9 @@ static enum DI_ERRORTYPE
 	eos	= (buf->flag & DI_FLAG_EOS);
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"vpp_input done: vf:%px, idx: %d, flag(vf:%x di:%x) %s %s, ts:%lld, "
+		"vpp_input done: idx:%d, vf:%px, idx: %d, flag(vf:%x di:%x) %s %s, ts:%lld, "
 		"in:%d, out:%d, vf:%d, in done:%d, out done:%d\n",
+		fb->buf_idx,
 		buf->vf,
 		buf->vf->index,
 		buf->vf->flag,
@@ -299,7 +301,7 @@ static enum DI_ERRORTYPE
 	if (vpp->buffer_mode != BUFFER_MODE_ALLOC_BUF)
 		vpp->in_num[OUTPUT_PORT]++;
 
-	ATRACE_COUNTER("v4l_vpp_input_done", fb->buf_idx);
+	ATRACE_COUNTER("VC_IN_VPP-1.recycle", fb->buf_idx);
 
 	return DI_ERR_NONE;
 }
@@ -338,8 +340,9 @@ static enum DI_ERRORTYPE
 	kfifo_put(&vpp->out_done_q, vpp_buf);
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"vpp_output done: vf:%px, idx:%d, flag(vf:%x di:%x) %s %s, ts:%lld, "
+		"vpp_output done: idx:%d, vf:%px, idx:%d, flag(vf:%x di:%x) %s %s, ts:%lld, "
 		"in:%d, out:%d, vf:%d, in done:%d, out done:%d\n",
+		fb->buf_idx,
 		buf->vf,
 		buf->vf->index,
 		buf->vf->flag,
@@ -353,7 +356,7 @@ static enum DI_ERRORTYPE
 		kfifo_len(&vpp->in_done_q),
 		kfifo_len(&vpp->out_done_q));
 
-	ATRACE_COUNTER("v4l_vpp_output_done", fb->buf_idx);
+	ATRACE_COUNTER("VC_OUT_VPP-2.submit", fb->buf_idx);
 
 	fb->task->submit(fb->task, TASK_TYPE_VPP);
 
@@ -406,7 +409,7 @@ static void vpp_vf_get(void *caller, struct vframe_s **vf_out)
 
 		*vf_out = vf;
 
-		ATRACE_COUNTER("v4l_vpp_get_vframe", fb->buf_idx);
+		ATRACE_COUNTER("VC_OUT_VPP-3.vf_get", fb->buf_idx);
 
 		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 			"%s: vf:%px, index:%d, flag(vf:%x di:%x), ts:%lld\n",
@@ -445,9 +448,10 @@ static void vpp_vf_put(void *caller, struct vframe_s *vf)
 		buf->flag,
 		vf->timestamp);
 
-	ATRACE_COUNTER("v4l_vpp_put_vframe", fb->buf_idx);
+	ATRACE_COUNTER("VC_IN_VPP-0.vf_put", fb->buf_idx);
 
 	if (vpp->is_prog) {
+		ATRACE_COUNTER("VC_IN_VPP-1.recycle", fb->buf_idx);
 		fb->task->recycle(fb->task, TASK_TYPE_VPP);
 	}
 
@@ -605,8 +609,10 @@ retry:
 		}
 
 		v4l_dbg(ctx, V4L_DEBUG_VPP_BUFMGR,
-			"vpp_handle start: dec vf:%px/%d, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, %s %s "
+			"vpp_handle start: idx:(%d, %d), dec vf:%px/%d, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, %s %s "
 			"in:%d, out:%d, vf:%d, in done:%d, out done:%d",
+			in_buf->aml_buf->frame_buffer.buf_idx,
+			out_buf->aml_buf->frame_buffer.buf_idx,
 			in_buf->di_buf.vf, in_buf->di_buf.vf->index,
 			out_buf->di_buf.vf, VPP_BUF_GET_IDX(out_buf),
 			in_buf->di_buf.vf->canvas0_config[0].phy_addr,
@@ -626,7 +632,7 @@ retry:
 			kfifo_len(&vpp->out_done_q));
 
 		if (vpp->is_bypass_p) {
-			ATRACE_COUNTER("v4l_vpp_direct_handle_start",
+			ATRACE_COUNTER("V4L_OUT_VPP-1.direct_handle_start",
 				in_buf->aml_buf->frame_buffer.buf_idx);
 			out_buf->di_buf.flag = in_buf->di_buf.flag;
 			out_buf->di_buf.vf->vf_ext = in_buf->di_buf.vf;
@@ -639,18 +645,18 @@ retry:
 				 * the flow of DI local buffer:
 				 * empty input -> output done cb -> fetch processing fifo.
 				 */
-				ATRACE_COUNTER("v4l_vpp_lc_handle_start",
+				ATRACE_COUNTER("VC_OUT_VPP-1.lc_handle_start",
 					in_buf->aml_buf->frame_buffer.buf_idx);
 				out_buf->inbuf = in_buf;
 				kfifo_put(&vpp->processing, out_buf);
 
 				di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 			} else {
-				ATRACE_COUNTER("v4l_vpp_fill_output_start",
+				ATRACE_COUNTER("VC_OUT_VPP-1.fill_output_start",
 					out_buf->aml_buf->frame_buffer.buf_idx);
 				di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
 
-				ATRACE_COUNTER("v4l_vpp_empty_input_start",
+				ATRACE_COUNTER("VC_OUT_VPP-1.empty_input_start",
 					in_buf->aml_buf->frame_buffer.buf_idx);
 				di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 			}
@@ -995,12 +1001,12 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 	if (vf->type & VIDTYPE_V4L_EOS)
 		in_buf->di_buf.flag |= DI_FLAG_EOS;
 
-	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"vpp_push_vframe: vf:%px, idx:%d, type:%x, ts:%lld\n",
-		vf, vf->index, vf->type, vf->timestamp);
-
 	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 	in_buf->aml_buf = container_of(fb, struct aml_video_dec_buf, frame_buffer);
+
+	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
+		"vpp_push_vframe: idx:%d, vf:%px, idx:%d, type:%x, ts:%lld\n",
+		fb->buf_idx, vf, vf->index, vf->type, vf->timestamp);
 
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;
@@ -1027,7 +1033,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		}
 	} while(0);
 
-	ATRACE_COUNTER("v4l_vpp_fill_buffer", fb->buf_idx);
+	ATRACE_COUNTER("VC_OUT_VPP-0.receive", fb->buf_idx);
 
 	kfifo_put(&vpp->in_done_q, in_buf);
 	up(&vpp->sem_in);
