@@ -7224,10 +7224,21 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			(rpm_param->p.profile_etc >> 2) & 0x1;
 		hevc->curr_pic_struct =
 			(rpm_param->p.sei_frame_field_info >> 3) & 0xf;
-		if (parser_sei_enable & 0x4) {
-			hevc->frame_field_info_present_flag =
-				(rpm_param->p.sei_frame_field_info >> 8) & 0x1;
+		hevc->frame_field_info_present_flag =
+			(rpm_param->p.sei_frame_field_info >> 8) & 0x1;
+
+		if (hevc->frame_field_info_present_flag) {
+			if (hevc->curr_pic_struct == 0
+				|| hevc->curr_pic_struct == 7
+				|| hevc->curr_pic_struct == 8)
+				hevc->interlace_flag = 0;
 		}
+
+		hevc_print(hevc, 0,
+				"frame_field_info_present_flag = %d curr_pic_struct = %d interlace_flag = %d\n",
+				   hevc->frame_field_info_present_flag,
+				   hevc->curr_pic_struct,
+				   hevc->interlace_flag);
 
 		/* if (interlace_enable == 0 || hevc->m_ins_flag) */
 		if (interlace_enable == 0)
