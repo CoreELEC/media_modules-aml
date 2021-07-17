@@ -10661,6 +10661,9 @@ static void av1_dump_state(struct vdec_s *vdec)
 		"HEVC_SHIFT_BYTE_COUNT=0x%x\n",
 		READ_VREG(HEVC_SHIFT_BYTE_COUNT));
 	av1_print(hw, 0,
+		"HEVC_SHIFTED_DATA=0x%x\n",
+		READ_VREG(HEVC_SHIFTED_DATA));
+	av1_print(hw, 0,
 		"HEVC_STREAM_START_ADDR=0x%x\n",
 		READ_VREG(HEVC_STREAM_START_ADDR));
 	av1_print(hw, 0,

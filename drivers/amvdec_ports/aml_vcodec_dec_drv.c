@@ -183,6 +183,8 @@ static int fops_vcodec_release(struct file *file)
 
 	aml_thread_stop(ctx);
 	wait_vcodec_ending(ctx);
+	vb2_queue_release(&ctx->m2m_ctx->cap_q_ctx.q);
+	vb2_queue_release(&ctx->m2m_ctx->out_q_ctx.q);
 
 	aml_vcodec_dec_release(ctx);
 	v4l2_fh_del(&ctx->fh);
