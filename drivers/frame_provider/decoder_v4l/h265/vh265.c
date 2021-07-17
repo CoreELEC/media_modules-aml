@@ -7160,10 +7160,22 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			(rpm_param->p.profile_etc >> 2) & 0x1;
 		hevc->curr_pic_struct =
 			(rpm_param->p.sei_frame_field_info >> 3) & 0xf;
-		if (parser_sei_enable & 0x4) {
-			hevc->frame_field_info_present_flag =
-				(rpm_param->p.sei_frame_field_info >> 8) & 0x1;
+
+		hevc->frame_field_info_present_flag =
+			(rpm_param->p.sei_frame_field_info >> 8) & 0x1;
+
+		if (hevc->frame_field_info_present_flag) {
+			if (hevc->curr_pic_struct == 0
+				|| hevc->curr_pic_struct == 7
+				|| hevc->curr_pic_struct == 8)
+				hevc->interlace_flag = 0;
 		}
+
+		hevc_print(hevc, 0,
+				"frame_field_info_present_flag = %d curr_pic_struct = %d interlace_flag = %d\n",
+				   hevc->frame_field_info_present_flag,
+				   hevc->curr_pic_struct,
+				   hevc->interlace_flag);
 
 		/* if (interlace_enable == 0 || hevc->m_ins_flag) */
 		if (interlace_enable == 0)
@@ -10536,6 +10548,24 @@ static void get_comp_buf_info(struct hevc_state_s *hevc,
 			info->frame_buffer_size);
 }
 
+static int is_interlace(struct hevc_state_s *hevc)
+{
+	int pic_struct = (hevc->param.p.sei_frame_field_info >> 3) & 0xf;
+	int frame_field_info_present_flag =
+			(hevc->param.p.sei_frame_field_info >> 8) & 0x1;
+
+	if ((hevc->param.p.profile_etc & 0xc) == 0x4
+		&& (frame_field_info_present_flag
+		&& (pic_struct == 0
+		|| pic_struct == 7
+		|| pic_struct == 8)))
+		return 0;
+	else if ((hevc->param.p.profile_etc & 0xc) == 0x4)
+		return 1;
+
+	return 0;
+}
+
 static void hevc_interlace_check(struct hevc_state_s *hevc,
 	union param_u *rpm_param)
 {
@@ -10546,7 +10576,7 @@ static void hevc_interlace_check(struct hevc_state_s *hevc,
 	/* interlace check, 4k force no interlace */
 	if ((interlace_enable != 0) &&
 		(!IS_4K_SIZE(w, h)) &&
-		((hevc->param.p.profile_etc & 0xc) == 0x4)) {
+		(is_interlace(hevc))) {
 		hevc->interlace_flag = 1;
 		hevc->frame_ar = (hevc->pic_h * 0x100 / hevc->pic_w) * 2;
 		hevc_print(hevc, 0,
