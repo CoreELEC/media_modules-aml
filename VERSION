@@ -4,7 +4,7 @@ BaseChangeId=If5117e472d5019293383ce5de816969934a50526
 
 
 #history version
-#V5.1.0 Release Notes
+#V5.1.77-g0cdebf27.003009 Release Notes
 #Release_ChangeId_V5_1=Id7e315bbf379d166ca4b335cef13c983a8ca5078
 #Feature develop total count: 6
 #    critical feature develop count: 0
@@ -37,7 +37,8 @@ BaseChangeId=If5117e472d5019293383ce5de816969934a50526
 #    fixed AV1 seek freezing.
 #    fixed failed to allocate tvp memory
 #    fixed issue of reports resolution change.
-#V5.0.0 Release Notes
+#V5.0 Release Notes
+#Release_ChangeId_V5_0=I6053e02900215d9006469c38ca375ace498b849f
 #upgrade Kernel version to 5.4
 #Android R + v4l2dec (no vpp)   xts clean
 #v4ldec driver seperate from amports drivers

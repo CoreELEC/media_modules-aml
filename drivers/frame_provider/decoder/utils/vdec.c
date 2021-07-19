@@ -5061,11 +5061,18 @@ static ssize_t version_show(struct class *class,
 {
 	char *pbuf = buf;
 #ifdef DECODER_VERSION
-	pbuf += sprintf(pbuf, "DECODER VERSION: " xstr(DECODER_VERSION) "\n");
+	pbuf += sprintf(pbuf, "DECODER VERSION: V" xstr(DECODER_VERSION) "\n");
+#else
+#ifdef RELEASED_VERSION
+		pbuf += sprintf(pbuf, "Due to project compilation environment problems,\
+the current decoder version could not be detected,\
+Please Use The DECODER BASE Version for traceability\n");
+		pbuf += sprintf(pbuf, "DECODER BASE Version: " xstr(RELEASED_VERSION) "\n");
+#endif
 #endif
 
 #ifdef UCODE_VERSION
-		pbuf += sprintf(pbuf, "UCODE VERSION: " xstr(UCODE_VERSION) "\n");
+		pbuf += sprintf(pbuf, "UCODE VERSION: V" xstr(UCODE_VERSION) "\n");
 #endif
 
 	return pbuf - buf;

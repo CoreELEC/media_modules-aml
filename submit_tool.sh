@@ -27,3 +27,5 @@ echo ${Signed} >>  tmp.txt
 
 git status
 cat tmp.txt | xargs -0 git commit --amend -m
+
+rm -f tmp.txt

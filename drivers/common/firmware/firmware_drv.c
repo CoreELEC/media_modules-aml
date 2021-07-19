@@ -357,11 +357,10 @@ static ssize_t info_show(struct class *class,
 	/* shows version of driver. */
 	pr_info("The ucode driver version is %s\n", PACK_VERS);
 
-	pr_info("The firmware version is %d.%d.%d-%s.%s\n",
+	pr_info("The firmware version is %d.%d.%d-g%s\n",
 			(package_head.version >> 16) & 0xff,
 			package_head.version & 0xff,
 			package_head.submit_count,
-			package_head.change_id,
 			package_head.commit);
 
 	pr_info("change id history:\n");
