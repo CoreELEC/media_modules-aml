@@ -183,6 +183,9 @@ enum vformat_t;
 #define VDEC_NEED_MORE_DATA_DIRTY 0x02
 #define VDEC_NEED_MORE_DATA       0x04
 
+#define SCALELUT_DATA_WRITE_NUM   1024
+#define RDMA_SIZE                 (1024 * 4 * 4)
+
 struct vdec_s {
 	u32 magic;
 	struct list_head list;
@@ -575,5 +578,11 @@ int vdec_get_core_nr(void);
 
 
 int vdec_post_task(post_task_handler func, void *args);
+
+void rdma_front_end_wrok(dma_addr_t ddr_phy_addr, u32 size);
+
+void rdma_back_end_work(dma_addr_t back_ddr_phy_addr, u32 size);
+
+int is_rdma_enable(void);
 
 #endif				/* VDEC_H */

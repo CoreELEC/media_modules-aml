@@ -1305,6 +1305,8 @@ struct VP9Decoder_s {
 	char disp_q_name[32];
 	struct vp9_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
+	dma_addr_t rdma_phy_adr;
+	unsigned *rdma_adr;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -6723,10 +6725,13 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 	if (mask & HW_MASK_BACK) {
 		/*Initial IQIT_SCALELUT memory
 		-- just to avoid X in simulation*/
-
-		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
-		for (i = 0; i < 1024; i++)
-			WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+		if (is_rdma_enable())
+			rdma_back_end_work(pbi->rdma_phy_adr, RDMA_SIZE);
+		else {
+			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
+			for (i = 0; i < 1024; i++)
+				WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+		}
 	}
 
 	if (mask & HW_MASK_FRONT) {
@@ -11698,8 +11703,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	int transfer_val;
 	struct vframe_content_light_level_s content_light_level;
 	struct vframe_master_display_colour_s vf_dp;
-
 	struct VP9Decoder_s *pbi = NULL;
+	int i;
 
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
 		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXL ||
@@ -11737,6 +11742,19 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pdata->dump_state = vp9_dump_state;
 
 	pbi->index = pdev->id;
+
+	if (is_rdma_enable()) {
+		pbi->rdma_adr = dma_alloc_coherent(amports_get_dma_device(), RDMA_SIZE, &pbi->rdma_phy_adr, GFP_KERNEL);
+		for (i = 0; i < SCALELUT_DATA_WRITE_NUM; i++) {
+			pbi->rdma_adr[i * 4] = HEVC_IQIT_SCALELUT_WR_ADDR & 0xfff;
+			pbi->rdma_adr[i * 4 + 1] = i;
+			pbi->rdma_adr[i * 4 + 2] = HEVC_IQIT_SCALELUT_DATA & 0xfff;
+			pbi->rdma_adr[i * 4 + 3] = 0;
+			if (i == SCALELUT_DATA_WRITE_NUM - 1) {
+				pbi->rdma_adr[i * 4 + 2] = (HEVC_IQIT_SCALELUT_DATA & 0xfff) | 0x20000;
+			}
+		}
+	}
 
 	snprintf(pbi->vdec_name, sizeof(pbi->vdec_name),
 		"vp9-%d", pbi->index);
@@ -12126,6 +12144,8 @@ static int ammvdec_vp9_remove(struct platform_device *pdev)
 	mem_map_mode = 0;
 
 	/* devm_kfree(&pdev->dev, (void *)pbi); */
+	if (is_rdma_enable())
+		dma_free_coherent(amports_get_dma_device(), RDMA_SIZE, pbi->rdma_adr, pbi->rdma_phy_adr);
 	vfree((void *)pbi);
 	return 0;
 }

@@ -774,6 +774,8 @@ struct AVS2Decoder_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	dma_addr_t rdma_phy_adr;
+	unsigned *rdma_adr;
 };
 
 static int  compute_losless_comp_body_size(
@@ -3718,11 +3720,13 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 	WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 
 	/*Initial IQIT_SCALELUT memory -- just to avoid X in simulation*/
-
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
-	for (i = 0; i < 1024; i++)
-		WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
-
+	if (is_rdma_enable())
+		rdma_back_end_work(dec->rdma_phy_adr, RDMA_SIZE);
+	else {
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
+		for (i = 0; i < 1024; i++)
+			WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+	}
 
 #ifdef ENABLE_SWAP_TEST
 	WRITE_VREG(HEVC_STREAM_SWAP_TEST, 100);
@@ -7290,6 +7294,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	int ret;
 	int config_val;
+	int i;
 	struct vframe_content_light_level_s content_light_level;
 	struct vframe_master_display_colour_s vf_dp;
 	/*struct BUF_s BUF[MAX_BUF_NUM];*/
@@ -7341,6 +7346,19 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 
 	dec->index = pdev->id;
 	dec->m_ins_flag = 1;
+
+	if (is_rdma_enable()) {
+		dec->rdma_adr = dma_alloc_coherent(amports_get_dma_device(), RDMA_SIZE , &dec->rdma_phy_adr, GFP_KERNEL);
+		for (i = 0; i < SCALELUT_DATA_WRITE_NUM; i++) {
+			dec->rdma_adr[i * 4] = HEVC_IQIT_SCALELUT_WR_ADDR & 0xfff;
+			dec->rdma_adr[i * 4 + 1] = i;
+			dec->rdma_adr[i * 4 + 2] = HEVC_IQIT_SCALELUT_DATA & 0xfff;
+			dec->rdma_adr[i * 4 + 3] = 0;
+			if (i == SCALELUT_DATA_WRITE_NUM - 1) {
+				dec->rdma_adr[i * 4 + 2] = (HEVC_IQIT_SCALELUT_DATA & 0xfff) | 0x20000;
+			}
+		}
+	}
 
 	snprintf(dec->vdec_name, sizeof(dec->vdec_name),
 		"avs2-%d", dec->index);
@@ -7547,6 +7565,8 @@ static int ammvdec_avs2_remove(struct platform_device *pdev)
 	pr_info("pts missed %ld, pts hit %ld, duration %d\n",
 		   dec->pts_missed, dec->pts_hit, dec->frame_dur);
 #endif
+	if (is_rdma_enable())
+		dma_free_coherent(amports_get_dma_device(), RDMA_SIZE, dec->rdma_adr, dec->rdma_phy_adr);
 	/* devm_kfree(&pdev->dev, (void *)dec); */
 	vfree((void *)dec);
 	return 0;

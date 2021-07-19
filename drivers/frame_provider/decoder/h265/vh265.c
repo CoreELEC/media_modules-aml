@@ -1948,6 +1948,8 @@ struct hevc_state_s {
 	int dec_again_cnt;
 	struct mh265_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
+	dma_addr_t rdma_phy_adr;
+	unsigned *rdma_adr;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -5105,9 +5107,13 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 	WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 
 	/* Initial IQIT_SCALELUT memory -- just to avoid X in simulation */
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);	/* cfg_p_addr */
-	for (i = 0; i < 1024; i++)
-		WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+	if (is_rdma_enable())
+		rdma_back_end_work(hevc->rdma_phy_adr, RDMA_SIZE);
+	else {
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
+		for (i = 0; i < 1024; i++)
+			WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+	}
 
 #ifdef ENABLE_SWAP_TEST
 	WRITE_VREG(HEVC_STREAM_SWAP_TEST, 100);
@@ -14879,6 +14885,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	struct hevc_state_s *hevc = NULL;
 	int ret;
+	int i;
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	int config_val;
 #endif
@@ -14912,6 +14919,18 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	hevc->index = pdev->id;
 	hevc->m_ins_flag = 1;
 
+	if (is_rdma_enable()) {
+		hevc->rdma_adr = dma_alloc_coherent(amports_get_dma_device(), RDMA_SIZE, &hevc->rdma_phy_adr, GFP_KERNEL);
+		for (i = 0; i < SCALELUT_DATA_WRITE_NUM; i++) {
+			hevc->rdma_adr[i * 4] = HEVC_IQIT_SCALELUT_WR_ADDR & 0xfff;
+			hevc->rdma_adr[i * 4 + 1] = i;
+			hevc->rdma_adr[i * 4 + 2] = HEVC_IQIT_SCALELUT_DATA & 0xfff;
+			hevc->rdma_adr[i * 4 + 3] = 0;
+			if (i == SCALELUT_DATA_WRITE_NUM - 1) {
+				hevc->rdma_adr[i * 4 + 2] = (HEVC_IQIT_SCALELUT_DATA & 0xfff) | 0x20000;
+			}
+		}
+	}
 	snprintf(hevc->vdec_name, sizeof(hevc->vdec_name),
 		"h265-%d", hevc->index);
 	snprintf(hevc->pts_name, sizeof(hevc->pts_name),
@@ -15288,7 +15307,8 @@ static int ammvdec_h265_remove(struct platform_device *pdev)
 
 	if (hevc->enable_fence)
 		vdec_fence_release(hevc, vdec->sync);
-
+	if (is_rdma_enable())
+		dma_free_coherent(amports_get_dma_device(), RDMA_SIZE, hevc->rdma_adr, hevc->rdma_phy_adr);
 	vfree((void *)hevc);
 
 	return 0;
