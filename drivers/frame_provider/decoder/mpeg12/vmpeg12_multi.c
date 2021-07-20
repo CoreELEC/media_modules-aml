@@ -2159,9 +2159,14 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 				}
 			}
 		} else {
-			if (hw->chunk)
+			if (hw->chunk) {
 				hw->last_chunk_pts = hw->chunk->pts;
-			new_pic->pts_valid = false;
+				new_pic->pts_valid = hw->chunk->pts_valid;
+				new_pic->pts = hw->chunk->pts;
+				new_pic->pts64 = hw->chunk->pts64;
+			} else {
+				new_pic->pts_valid = false;
+			}
 		}
 
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
@@ -3482,8 +3487,8 @@ void (*callback)(struct vdec_s *, void *),
 		u8 *data = NULL;
 		if (hw->chunk)
 			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-				"run: chunk offset 0x%x, size %d\n",
-				hw->chunk->offset, hw->chunk->size);
+				"run: chunk offset 0x%x, size %d, pts %d, pts64 %lld\n",
+				hw->chunk->offset, hw->chunk->size, hw->chunk->pts, hw->chunk->pts64);
 
 		if (!hw->chunk->block->is_mapped)
 			data = codec_mm_vmap(hw->chunk->block->start +
