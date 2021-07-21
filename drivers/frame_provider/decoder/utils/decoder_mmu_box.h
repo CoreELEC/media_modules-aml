@@ -40,11 +40,13 @@ int decoder_mmu_box_free(void *handle);
 int decoder_mmu_box_move_keep_idx(void *box_handle,
 	int keep_idx);
 int decoder_mmu_box_free_keep(int keep_id);
+
 int decoder_mmu_box_free_all_keep(void);
+
 void *decoder_mmu_box_get_mem_handle(void *box_handle, int idx);
-bool decoder_mmu_box_valide_check(void *box);
-void decoder_mmu_try_to_release_box(void *handle);
+
 int decoder_mmu_box_init(void);
+
 void decoder_mmu_box_exit(void);
 
 #endif

@@ -14856,14 +14856,13 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	int config_val;
 #endif
-	//pr_err("[%s pid=%d tgid=%d] \n",__func__, current->pid, current->tgid);
+
 	if (pdata == NULL) {
 		pr_info("\nammvdec_h265 memory resource undefined.\n");
 		return -EFAULT;
 	}
 
-	/* hevc = (struct hevc_state_s *)devm_kzalloc(&pdev->dev,
-		sizeof(struct hevc_state_s), GFP_KERNEL); */
+
 	hevc = vmalloc(sizeof(struct hevc_state_s));
 	if (hevc == NULL) {
 		pr_info("\nammvdec_h265 device data allocation failed\n");
@@ -15041,9 +15040,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		hevc->double_write_mode = double_write_mode;
 	}
 
-	if (!hevc->is_used_v4l)
-		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-			&vh265_vf_provider, pdata);
+
+	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
+		&vh265_vf_provider, pdata);
 
 	if (force_config_fence) {
 		hevc->enable_fence = true;
@@ -15055,33 +15054,36 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->enable_fence, hevc->fence_usage);
 	}
 
+	if (hevc->save_buffer_mode && dynamic_buf_num_margin > 2)
+		hevc->dynamic_buf_num_margin = dynamic_buf_num_margin -2;
+	else
+		hevc->dynamic_buf_num_margin = dynamic_buf_num_margin;
+
+	hevc->mem_map_mode = mem_map_mode;
+
+	hevc->endian = HEVC_CONFIG_LITTLE_ENDIAN;
+	if (is_support_vdec_canvas())
+		hevc->endian = HEVC_CONFIG_BIG_ENDIAN;
+	if (endian)
+		hevc->endian = endian;
+
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) &&
 			(hevc->double_write_mode == 3))
 		hevc->double_write_mode = 0x1000;
 
-	hevc->endian = HEVC_CONFIG_LITTLE_ENDIAN;
-	if (!hevc->is_used_v4l) {
-		/* get valid double write from configure or node */
-		//hevc->double_write_mode = get_double_write_mode(hevc);
-		if (hevc->save_buffer_mode && dynamic_buf_num_margin > 2)
-			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin -2;
-		else
-			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin;
+	/* get valid double write from node */
+	if (double_write_mode)
+		hevc->double_write_mode = get_double_write_mode(hevc);
 
-		hevc->mem_map_mode = mem_map_mode;
-		if (is_support_vdec_canvas())
-			hevc->endian = HEVC_CONFIG_BIG_ENDIAN;
-	}
-	if (endian)
-		hevc->endian = endian;
-
-	if (mmu_enable_force == 0) {
-		if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL)
+	if (mmu_enable_force) {
+		hevc->mmu_enable = 1;
+	} else {
+		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL) ||
+			(hevc->double_write_mode & 0x10))
 			hevc->mmu_enable = 0;
 		else
 			hevc->mmu_enable = 1;
 	}
-
 #ifdef H265_10B_MMU_DW
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
 		hevc->dw_mmu_enable =
@@ -15090,14 +15092,6 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		hevc->dw_mmu_enable = 0;
 	}
 #endif
-
-	if (hevc->is_used_v4l) {
-		if (hevc->double_write_mode & 0x10)
-			hevc->mmu_enable = 0;
-		else
-			hevc->mmu_enable = 1;
-	}
-
 	if (init_mmu_buffers(hevc, 0) < 0) {
 		hevc_print(hevc, 0,
 			"\n 265 mmu init failed!\n");
