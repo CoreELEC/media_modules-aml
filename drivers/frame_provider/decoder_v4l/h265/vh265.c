@@ -9044,7 +9044,8 @@ static void clear_pair_fb(struct hevc_state_s *hevc)
 static bool v4l_output_dw_with_compress(struct hevc_state_s *hevc, int dw)
 {
 	if ((!hevc->is_used_v4l) || (dw == 0x10) ||
-		IS_8K_SIZE(hevc->frame_width, hevc->frame_height))
+		IS_8K_SIZE(hevc->frame_width, hevc->frame_height) ||
+		hevc->interlace_flag)
 		return false;
 
 	return true;
