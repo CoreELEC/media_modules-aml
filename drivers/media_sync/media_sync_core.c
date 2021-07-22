@@ -837,11 +837,6 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 		pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = get_system_time_us();
 	}
 
-	if (pInstance->mSyncInfo.firstDmxPcrInfo.framePts == -1) {
-		pInstance->mSyncInfo.firstDmxPcrInfo.framePts = pcr;
-		pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime;
-	}
-
 	info->framePts = pInstance->mSyncInfo.curDmxPcrInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime;
 	return 0;
