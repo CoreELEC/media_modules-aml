@@ -7459,7 +7459,7 @@ void release_unused_4k_ext(MMU_BUFF_MGR *mmumgr, int32_t cur_buf_idx, long used_
   if(used_4k_num > mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number) {
     printk("[MMU MEM ERROR] : Use more 4K Page than allocated  %d > ([%d] = %d)!!\r\n", used_4k_num, cur_buf_idx, mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number);
   }
-  else printk("[MMU MEM RELEASE] : P%d(buffer %d) used %d of %d 4k buffer (%d%c)\r\n", mmumgr->mmu_pic_count, cur_buf_idx, used_4k_num, mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number, used_4k_num*100/mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number, '%'); 
+  else printk("[MMU MEM RELEASE] : P%d(buffer %d) used %d of %d 4k buffer (%d%c)\r\n", mmumgr->mmu_pic_count, cur_buf_idx, used_4k_num, mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number, used_4k_num*100/mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number, '%');
 
   for(i = used_4k_num; i<mmumgr->mmu_buf[cur_buf_idx].mmu_4k_number; i++){
     release_4k_position = mmumgr->mmu_buf[cur_buf_idx].mmu_4k_index[i] - mmumgr->MC_BUFFER_START_4K_ADR;
@@ -8631,7 +8631,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			hw->frame_decoded &&
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
 #ifdef DEBUG_CRC_ERROR
-				if (crc_debug_flag & 0x40)
+				if ((crc_debug_flag & 0x40) && cm->cur_frame)
 					dump_mv_buffer(hw, &cm->cur_frame->buf);
 #endif
 				WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
@@ -8642,7 +8642,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					config_next_ref_info_hw(hw);
 			} else {
 #ifdef DEBUG_CRC_ERROR
-				if (crc_debug_flag & 0x40)
+				if ((crc_debug_flag & 0x40) && cm->cur_frame)
 					dump_mv_buffer(hw, &cm->cur_frame->buf);
 #endif
 				hw->dec_result = DEC_RESULT_DONE;
@@ -8667,8 +8667,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				    we assume each packet must and only include one picture of data (LCUs)
 					 or cm->show_existing_frame is 1
 					*/
-				av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
-					cm->cur_frame? cm->cur_frame->buf.index:-1);
+				if (cm->cur_frame)
+					av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
+						cm->cur_frame? cm->cur_frame->buf.index:-1);
 				config_next_ref_info_hw(hw);
 			}
 #endif
@@ -8825,8 +8826,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			    we assume each packet must and only include one picture of data (LCUs)
 				 or cm->show_existing_frame is 1
 				*/
-				av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
-					cm->cur_frame? cm->cur_frame->buf.index:-1);
+				if (cm->cur_frame)
+					av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
+						cm->cur_frame? cm->cur_frame->buf.index:-1);
 			}
 		}
 #endif
