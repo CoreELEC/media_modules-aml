@@ -8407,7 +8407,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 #endif
 				}
 
-
 			}
 			/*
 			if (debug &
@@ -8423,7 +8422,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			hw->frame_decoded &&
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
 #ifdef DEBUG_CRC_ERROR
-				if (crc_debug_flag & 0x40)
+				if ((crc_debug_flag & 0x40) && cm->cur_frame)
 					dump_mv_buffer(hw, &cm->cur_frame->buf);
 #endif
 				WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
@@ -8434,7 +8433,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					config_next_ref_info_hw(hw);
 			} else {
 #ifdef DEBUG_CRC_ERROR
-				if (crc_debug_flag & 0x40)
+				if ((crc_debug_flag & 0x40) && cm->cur_frame)
 					dump_mv_buffer(hw, &cm->cur_frame->buf);
 #endif
 				hw->dec_result = DEC_RESULT_DONE;
@@ -8460,8 +8459,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				    we assume each packet must and only include one picture of data (LCUs)
 					 or cm->show_existing_frame is 1
 					*/
-				av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
-					cm->cur_frame? cm->cur_frame->buf.index:-1);
+				if (cm->cur_frame)
+					av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
+						cm->cur_frame? cm->cur_frame->buf.index:-1);
 				config_next_ref_info_hw(hw);
 			}
 #endif
@@ -8608,8 +8608,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			    we assume each packet must and only include one picture of data (LCUs)
 				 or cm->show_existing_frame is 1
 				*/
-				av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
-					cm->cur_frame? cm->cur_frame->buf.index:-1);
+				if (cm->cur_frame)
+					av1_print(hw, AOM_DEBUG_HW_MORE, "Decoding done (index %d)\n",
+						cm->cur_frame? cm->cur_frame->buf.index:-1);
 			}
 		}
 #endif
@@ -8921,7 +8922,7 @@ static void vav1_put_timer_func(unsigned long arg)
 	}
 #ifdef MULTI_INSTANCE_SUPPORT
 	else {
-		av1_print(hw, AV1_DEBUG_TIMEOUT_INFO, "timeout!!!start_process_time %d\n",
+		av1_print(hw, AV1_DEBUG_TIMEOUT_INFO, "timeout!!!start_process_time %ld\n",
 			hw->start_process_time);
 		if (
 			(decode_timeout_val > 0) &&
