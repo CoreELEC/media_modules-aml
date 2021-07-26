@@ -63,7 +63,7 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	if (!amldemux_pcrscr_get)
 		return 0;
 	ktime_get_ts64(&ts_monotonic);
-	timeus = ts_monotonic.tv_sec * 1000000LL + ts_monotonic.tv_nsec / 1000LL;
+	timeus = ts_monotonic.tv_sec * 1000000LL + div_u64(ts_monotonic.tv_nsec , 1000);
 	if (pInstance->mDemuxId < 0)
 		return timeus;
 
@@ -75,14 +75,14 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	} else {
 		if (last_pcr == 0) {
 			stc = timeus;
-			last_pcr = pcr * 100 / 9;
+			last_pcr = div_u64(pcr * 100 , 9);
 			last_system = timeus;
 		} else {
-			pcr_diff = pcr * 100 / 9 - last_pcr;
+			pcr_diff = div_u64(pcr * 100 , 9) - last_pcr;
 			time_diff = timeus - last_system;
-			if (time_diff && (get_llabs(pcr_diff) / time_diff
+			if (time_diff && (div_u64(get_llabs(pcr_diff) , (s32)time_diff)
 					    > 100)) {
-				last_pcr = pcr * 100 / 9;
+				last_pcr = div_u64(pcr * 100 , 9);
 				last_system = timeus;
 				stc = timeus;
 			} else {
@@ -91,12 +91,12 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 				else
 					stc = timeus;
 
-				last_pcr = pcr * 100 / 9;
+				last_pcr = div_u64(pcr * 100 , 9);
 				last_system = stc;
 			}
 		}
 	}
-	pr_debug("get_stc_time_us stc:%lld pcr:%lld system_time:%lld\n", stc,  pcr * 100 / 9,  timeus);
+	pr_debug("get_stc_time_us stc:%lld pcr:%lld system_time:%lld\n", stc,  div_u64(pcr * 100 , 9),  timeus);
 	return stc;
 }
 
@@ -104,7 +104,7 @@ static s64 get_system_time_us(void) {
 	s64 TimeUs;
 	struct timespec64 ts_monotonic;
 	ktime_get_ts64(&ts_monotonic);
-	TimeUs = ts_monotonic.tv_sec * 1000000LL + ts_monotonic.tv_nsec / 1000LL;
+	TimeUs = ts_monotonic.tv_sec * 1000000LL + div_u64(ts_monotonic.tv_nsec , 1000);
 	pr_debug("get_system_time_us %lld\n", TimeUs);
 	return TimeUs;
 }
@@ -785,7 +785,7 @@ long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 
 	pInstance->mSyncInfo.curVideoInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.curVideoInfo.frameSystemTime = info.frameSystemTime;
-	pInstance->mTrackMediaTime = info.framePts * 100 / 9;
+	pInstance->mTrackMediaTime = div_u64(info.framePts * 100 , 9);
 
 	return 0;
 }
