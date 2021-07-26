@@ -627,6 +627,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 	struct aml_video_dec_buf *dstbuf = NULL;
 	struct vb2_buffer *vb2_buf = NULL;
 	struct vframe_s *vf = fb->vframe;
+	struct vb2_v4l2_buffer *vb2_v4l2 = NULL;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d) vf: %px, idx: %d, disp: %d, ts: %lld, "
@@ -641,6 +642,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 
 	dstbuf = container_of(fb, struct aml_video_dec_buf, frame_buffer);
 	vb2_buf = &dstbuf->vb.vb2_buf;
+	vb2_v4l2 = container_of(vb2_buf, struct vb2_v4l2_buffer, vb2_buf);
 
 	if (dstbuf->frame_buffer.num_planes == 1) {
 		vb2_set_plane_payload(vb2_buf, 0, fb->m.mem[0].bytes_used);
@@ -650,6 +652,10 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 	}
 	vb2_buf->timestamp = vf->timestamp;
 	dstbuf->vb.flags |= vf->frame_type;
+
+	if ((ctx->picinfo.field == V4L2_FIELD_INTERLACED) && (!ctx->vpp_is_need)) {
+		vb2_v4l2->field = V4L2_FIELD_INTERLACED;
+	}
 
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;
@@ -1771,6 +1777,12 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 						atomic_read(&ctx->dev->vpp_count));
 				}
 			} else {
+				ctx->vpp_cfg.enable_local_buf = 0;
+				ctx->vpp_cfg.enable_nr = 0;
+				ctx->picinfo.dpb_margin += ctx->vpp_size;
+				ctx->dpb_size = ctx->picinfo.dpb_margin + ctx->picinfo.dpb_frames;
+				ctx->vpp_size = 0;
+				vdec_if_set_param(ctx, SET_PARAM_PIC_INFO, &ctx->picinfo);
 				ctx->vpp_is_need = false;
 			}
 			ctx->vpp_cfg.is_vpp_reset = false;

@@ -2944,7 +2944,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	fill_frame_info(hw, frame);
 
 	if ((hw->is_used_v4l) &&
-		(vdec->prog_only))
+		((vdec->prog_only) || (!v4l2_ctx->vpp_is_need)))
 		vf_count = 1;
 
 	for (i = 0; i < vf_count; i++) {

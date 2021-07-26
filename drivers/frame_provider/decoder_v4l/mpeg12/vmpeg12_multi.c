@@ -1622,7 +1622,8 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	}
 
 	if ((hw->is_used_v4l) &&
-		((vdec->prog_only) || (hw->report_field & V4L2_FIELD_NONE))) {
+		((vdec->prog_only) || (hw->report_field & V4L2_FIELD_NONE) ||
+		(!v4l2_ctx->vpp_is_need))) {
 		field_num = 1;
 		type |= VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD | nv_order;
 	}

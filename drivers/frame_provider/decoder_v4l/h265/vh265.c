@@ -9663,7 +9663,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		vf->height = vf->height /
 			get_double_write_ratio(pic->double_write_mode);
 
-		if (hevc->is_used_v4l && vdec->prog_only)
+		if (hevc->is_used_v4l && (vdec->prog_only || (!v4l2_ctx->vpp_is_need)))
 			pic->pic_struct = 0;
 
 		vf->height <<= hevc->interlace_flag;
