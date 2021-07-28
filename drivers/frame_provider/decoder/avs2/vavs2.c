@@ -1360,6 +1360,9 @@ bit [31:20]: used by ucode for debug purpose
 #define DW_VBH_BUF_SIZE_8K (VBH_BUF_SIZE_8K * 2)
 #define DW_VBH_BUF_SIZE(bufspec) (bufspec->mmu_vbh_dw.buf_size / 4)
 
+/* necessary 4K page size align for t7/t3 decoder and after */
+#define WORKBUF_ALIGN(addr) (ALIGN(addr, PAGE_SIZE))
+
 #define WORK_BUF_SPEC_NUM 3
 static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 	{
@@ -1754,79 +1757,70 @@ static void init_buff_spec(struct AVS2Decoder_s *dec,
 	struct BuffInfo_s *buf_spec)
 {
 	void *mem_start_virt;
-	buf_spec->ipp.buf_start = buf_spec->start_adr;
+	buf_spec->ipp.buf_start =
+		WORKBUF_ALIGN(buf_spec->start_adr);
 	buf_spec->sao_abv.buf_start =
-		buf_spec->ipp.buf_start + buf_spec->ipp.buf_size;
-
+		WORKBUF_ALIGN(buf_spec->ipp.buf_start + buf_spec->ipp.buf_size);
 	buf_spec->sao_vb.buf_start =
-		buf_spec->sao_abv.buf_start + buf_spec->sao_abv.buf_size;
+		WORKBUF_ALIGN(buf_spec->sao_abv.buf_start + buf_spec->sao_abv.buf_size);
 	buf_spec->short_term_rps.buf_start =
-		buf_spec->sao_vb.buf_start + buf_spec->sao_vb.buf_size;
+		WORKBUF_ALIGN(buf_spec->sao_vb.buf_start + buf_spec->sao_vb.buf_size);
 	buf_spec->rcs.buf_start =
-		buf_spec->short_term_rps.buf_start +
-		buf_spec->short_term_rps.buf_size;
+		WORKBUF_ALIGN(buf_spec->short_term_rps.buf_start + buf_spec->short_term_rps.buf_size);
 	buf_spec->sps.buf_start =
-		buf_spec->rcs.buf_start + buf_spec->rcs.buf_size;
+		WORKBUF_ALIGN(buf_spec->rcs.buf_start + buf_spec->rcs.buf_size);
 	buf_spec->pps.buf_start =
-		buf_spec->sps.buf_start + buf_spec->sps.buf_size;
+		WORKBUF_ALIGN(buf_spec->sps.buf_start + buf_spec->sps.buf_size);
 	buf_spec->sao_up.buf_start =
-		buf_spec->pps.buf_start + buf_spec->pps.buf_size;
+		WORKBUF_ALIGN(buf_spec->pps.buf_start + buf_spec->pps.buf_size);
 	buf_spec->swap_buf.buf_start =
-		buf_spec->sao_up.buf_start + buf_spec->sao_up.buf_size;
+		WORKBUF_ALIGN(buf_spec->sao_up.buf_start + buf_spec->sao_up.buf_size);
 	buf_spec->swap_buf2.buf_start =
-		buf_spec->swap_buf.buf_start + buf_spec->swap_buf.buf_size;
+		WORKBUF_ALIGN(buf_spec->swap_buf.buf_start + buf_spec->swap_buf.buf_size);
 	buf_spec->scalelut.buf_start =
-		buf_spec->swap_buf2.buf_start + buf_spec->swap_buf2.buf_size;
+		WORKBUF_ALIGN(buf_spec->swap_buf2.buf_start + buf_spec->swap_buf2.buf_size);
 	buf_spec->dblk_para.buf_start =
-		buf_spec->scalelut.buf_start + buf_spec->scalelut.buf_size;
+		WORKBUF_ALIGN(buf_spec->scalelut.buf_start + buf_spec->scalelut.buf_size);
 	buf_spec->dblk_data.buf_start =
-		buf_spec->dblk_para.buf_start + buf_spec->dblk_para.buf_size;
+		WORKBUF_ALIGN(buf_spec->dblk_para.buf_start + buf_spec->dblk_para.buf_size);
 	buf_spec->dblk_data2.buf_start =
-		buf_spec->dblk_data.buf_start + buf_spec->dblk_data.buf_size;
+		WORKBUF_ALIGN(buf_spec->dblk_data.buf_start + buf_spec->dblk_data.buf_size);
 #ifdef AVS2_10B_MMU
 	buf_spec->mmu_vbh.buf_start  =
-		buf_spec->dblk_data2.buf_start + buf_spec->dblk_data2.buf_size;
+		WORKBUF_ALIGN(buf_spec->dblk_data2.buf_start + buf_spec->dblk_data2.buf_size);
 	#ifdef AVS2_10B_MMU_DW
-		buf_spec->mmu_vbh_dw.buf_start =
-			buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size;
-		buf_spec->mpred_above.buf_start =
-			buf_spec->mmu_vbh_dw.buf_start + buf_spec->mmu_vbh_dw.buf_size;
+	buf_spec->mmu_vbh_dw.buf_start =
+		WORKBUF_ALIGN(buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size);
+	buf_spec->mpred_above.buf_start =
+		WORKBUF_ALIGN(buf_spec->mmu_vbh_dw.buf_start + buf_spec->mmu_vbh_dw.buf_size);
 	#else
-		buf_spec->mpred_above.buf_start =
-			buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size;
+	buf_spec->mpred_above.buf_start =
+		WORKBUF_ALIGN(buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size);
 	#endif
-
 #else /* AVS2_10B_MMU */
-
 	#ifdef AVS2_10B_MMU_DW
-		buf_spec->mmu_vbh_dw.buf_start =
-			buf_spec->dblk_data2.buf_start + buf_spec->dblk_data2.buf_size;
-		buf_spec->mpred_above.buf_start =
-			buf_spec->mmu_vbh_dw.buf_start + buf_spec->mmu_vbh_dw.buf_size;
+	buf_spec->mmu_vbh_dw.buf_start =
+		WORKBUF_ALIGN(buf_spec->dblk_data2.buf_start + buf_spec->dblk_data2.buf_size);
+	buf_spec->mpred_above.buf_start =
+		WORKBUF_ALIGN(buf_spec->mmu_vbh_dw.buf_start + buf_spec->mmu_vbh_dw.buf_size);
 	#else
-		buf_spec->mpred_above.buf_start =
-			buf_spec->dblk_data2.buf_start + buf_spec->dblk_data2.buf_size;
+	buf_spec->mpred_above.buf_start =
+		WORKBUF_ALIGN(buf_spec->dblk_data2.buf_start + buf_spec->dblk_data2.buf_size);
 	#endif
-
 #endif /* AVS2_10B_MMU */
-
 #ifdef MV_USE_FIXED_BUF
 	buf_spec->mpred_mv.buf_start =
-		buf_spec->mpred_above.buf_start + buf_spec->mpred_above.buf_size;
-
+		WORKBUF_ALIGN(buf_spec->mpred_above.buf_start + buf_spec->mpred_above.buf_size);
 	buf_spec->rpm.buf_start =
-		buf_spec->mpred_mv.buf_start + buf_spec->mpred_mv.buf_size;
+		WORKBUF_ALIGN(buf_spec->mpred_mv.buf_start + buf_spec->mpred_mv.buf_size);
 #else
 	buf_spec->rpm.buf_start =
-		buf_spec->mpred_above.buf_start + buf_spec->mpred_above.buf_size;
-
+		WORKBUF_ALIGN(buf_spec->mpred_above.buf_start + buf_spec->mpred_above.buf_size);
 #endif
 	buf_spec->lmem.buf_start =
-		buf_spec->rpm.buf_start +
-		buf_spec->rpm.buf_size;
+		WORKBUF_ALIGN(buf_spec->rpm.buf_start + buf_spec->rpm.buf_size);
 	buf_spec->end_adr =
-		buf_spec->lmem.buf_start +
-		buf_spec->lmem.buf_size;
+		WORKBUF_ALIGN(buf_spec->lmem.buf_start + buf_spec->lmem.buf_size);
 
 	if (dec) {
 		mem_start_virt =

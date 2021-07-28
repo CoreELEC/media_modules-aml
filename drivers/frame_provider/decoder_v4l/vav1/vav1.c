@@ -2025,9 +2025,12 @@ static u32 seg_map_size = 0x36000;
 #define DW_VBH_BUF_SIZE_8K (VBH_BUF_SIZE_8K * 2)
 #define DW_VBH_BUF_SIZE(bufspec) (bufspec->mmu_vbh_dw.buf_size / 4)
 
+/* necessary 4K page size align for t7/t3 decoder and after. fix case1440 dec timeout */
+#define WORKBUF_ALIGN(addr) (ALIGN(addr, PAGE_SIZE))
+
 #define WORK_BUF_SPEC_NUM 3
 
-static struct BuffInfo_s  aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
+static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 	{ //8M bytes
 		.max_width = 1920,
 		.max_height = 1088,
@@ -2710,82 +2713,73 @@ static void init_buff_spec(struct AV1HW_s *hw,
 {
 	void *mem_start_virt;
 
-    buf_spec->ipp.buf_start =
-		buf_spec->start_adr;
-    buf_spec->sao_abv.buf_start =
-		buf_spec->ipp.buf_start + buf_spec->ipp.buf_size;
-
-    buf_spec->sao_vb.buf_start =
-		buf_spec->sao_abv.buf_start + buf_spec->sao_abv.buf_size;
-    buf_spec->short_term_rps.buf_start =
-		buf_spec->sao_vb.buf_start + buf_spec->sao_vb.buf_size;
-    buf_spec->vps.buf_start =
-		buf_spec->short_term_rps.buf_start + buf_spec->short_term_rps.buf_size;
-    buf_spec->seg_map.buf_start =
-		buf_spec->vps.buf_start + buf_spec->vps.buf_size;
-    buf_spec->daala_top.buf_start =
-		buf_spec->seg_map.buf_start + buf_spec->seg_map.buf_size;
-    buf_spec->sao_up.buf_start =
-		buf_spec->daala_top.buf_start + buf_spec->daala_top.buf_size;
-    buf_spec->swap_buf.buf_start =
-		buf_spec->sao_up.buf_start + buf_spec->sao_up.buf_size;
-    buf_spec->cdf_buf.buf_start =
-		buf_spec->swap_buf.buf_start + buf_spec->swap_buf.buf_size;
-    buf_spec->gmc_buf.buf_start =
-		buf_spec->cdf_buf.buf_start + buf_spec->cdf_buf.buf_size;
-    buf_spec->scalelut.buf_start =
-		buf_spec->gmc_buf.buf_start + buf_spec->gmc_buf.buf_size;
-    buf_spec->dblk_para.buf_start =
-		buf_spec->scalelut.buf_start + buf_spec->scalelut.buf_size;
-    buf_spec->dblk_data.buf_start =
-		buf_spec->dblk_para.buf_start + buf_spec->dblk_para.buf_size;
-    buf_spec->cdef_data.buf_start =
-		buf_spec->dblk_data.buf_start + buf_spec->dblk_data.buf_size;
-    buf_spec->ups_data.buf_start =
-		buf_spec->cdef_data.buf_start + buf_spec->cdef_data.buf_size;
-    buf_spec->fgs_table.buf_start =
-		buf_spec->ups_data.buf_start + buf_spec->ups_data.buf_size;
+	buf_spec->ipp.buf_start =
+		WORKBUF_ALIGN(buf_spec->start_adr);
+	buf_spec->sao_abv.buf_start =
+		WORKBUF_ALIGN(buf_spec->ipp.buf_start + buf_spec->ipp.buf_size);
+	buf_spec->sao_vb.buf_start =
+		WORKBUF_ALIGN(buf_spec->sao_abv.buf_start + buf_spec->sao_abv.buf_size);
+	buf_spec->short_term_rps.buf_start =
+		WORKBUF_ALIGN(buf_spec->sao_vb.buf_start + buf_spec->sao_vb.buf_size);
+	buf_spec->vps.buf_start =
+		WORKBUF_ALIGN(buf_spec->short_term_rps.buf_start + buf_spec->short_term_rps.buf_size);
+	buf_spec->seg_map.buf_start =
+		WORKBUF_ALIGN(buf_spec->vps.buf_start + buf_spec->vps.buf_size);
+	buf_spec->daala_top.buf_start =
+		WORKBUF_ALIGN(buf_spec->seg_map.buf_start + buf_spec->seg_map.buf_size);
+	buf_spec->sao_up.buf_start =
+		WORKBUF_ALIGN(buf_spec->daala_top.buf_start + buf_spec->daala_top.buf_size);
+	buf_spec->swap_buf.buf_start =
+		WORKBUF_ALIGN(buf_spec->sao_up.buf_start + buf_spec->sao_up.buf_size);
+	buf_spec->cdf_buf.buf_start =
+		WORKBUF_ALIGN(buf_spec->swap_buf.buf_start + buf_spec->swap_buf.buf_size);
+	buf_spec->gmc_buf.buf_start =
+		WORKBUF_ALIGN(buf_spec->cdf_buf.buf_start + buf_spec->cdf_buf.buf_size);
+	buf_spec->scalelut.buf_start =
+		WORKBUF_ALIGN(buf_spec->gmc_buf.buf_start + buf_spec->gmc_buf.buf_size);
+	buf_spec->dblk_para.buf_start =
+		WORKBUF_ALIGN(buf_spec->scalelut.buf_start + buf_spec->scalelut.buf_size);
+	buf_spec->dblk_data.buf_start =
+		WORKBUF_ALIGN(buf_spec->dblk_para.buf_start + buf_spec->dblk_para.buf_size);
+	buf_spec->cdef_data.buf_start =
+		WORKBUF_ALIGN(buf_spec->dblk_data.buf_start + buf_spec->dblk_data.buf_size);
+	buf_spec->ups_data.buf_start =
+		WORKBUF_ALIGN(buf_spec->cdef_data.buf_start + buf_spec->cdef_data.buf_size);
+	buf_spec->fgs_table.buf_start =
+		WORKBUF_ALIGN(buf_spec->ups_data.buf_start + buf_spec->ups_data.buf_size);
 #ifdef AOM_AV1_MMU
-    buf_spec->mmu_vbh.buf_start =
-		buf_spec->fgs_table.buf_start + buf_spec->fgs_table.buf_size;
-    buf_spec->cm_header.buf_start =
-		buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size;
+	buf_spec->mmu_vbh.buf_start =
+		WORKBUF_ALIGN(buf_spec->fgs_table.buf_start + buf_spec->fgs_table.buf_size);
+	buf_spec->cm_header.buf_start =
+		WORKBUF_ALIGN(buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size);
 #ifdef AOM_AV1_MMU_DW
-    buf_spec->mmu_vbh_dw.buf_start =
-		buf_spec->cm_header.buf_start + buf_spec->cm_header.buf_size;
-    buf_spec->cm_header_dw.buf_start =
-		buf_spec->mmu_vbh_dw.buf_start + buf_spec->mmu_vbh_dw.buf_size;
-    buf_spec->mpred_above.buf_start =
-		buf_spec->cm_header_dw.buf_start + buf_spec->cm_header_dw.buf_size;
+	buf_spec->mmu_vbh_dw.buf_start =
+		WORKBUF_ALIGN(buf_spec->cm_header.buf_start + buf_spec->cm_header.buf_size);
+	buf_spec->cm_header_dw.buf_start =
+		WORKBUF_ALIGN(buf_spec->mmu_vbh_dw.buf_start + buf_spec->mmu_vbh_dw.buf_size);
+	buf_spec->mpred_above.buf_start =
+		WORKBUF_ALIGN(buf_spec->cm_header_dw.buf_start + buf_spec->cm_header_dw.buf_size);
 #else
-    buf_spec->mpred_above.buf_start =
-		buf_spec->cm_header.buf_start + buf_spec->cm_header.buf_size;
+	buf_spec->mpred_above.buf_start =
+		WORKBUF_ALIGN(buf_spec->cm_header.buf_start + buf_spec->cm_header.buf_size);
 #endif
 #else
-    buf_spec->mpred_above.buf_start =
-		buf_spec->fgs_table.buf_start + buf_spec->fgs_table.buf_size;
+	buf_spec->mpred_above.buf_start =
+		WORKBUF_ALIGN(buf_spec->fgs_table.buf_start + buf_spec->fgs_table.buf_size);
 #endif
-
 #ifdef MV_USE_FIXED_BUF
 	buf_spec->mpred_mv.buf_start =
-		buf_spec->mpred_above.buf_start +
-		buf_spec->mpred_above.buf_size;
-
+		WORKBUF_ALIGN(buf_spec->mpred_above.buf_start + buf_spec->mpred_above.buf_size);
 	buf_spec->rpm.buf_start =
-		buf_spec->mpred_mv.buf_start +
-		buf_spec->mpred_mv.buf_size;
+		WORKBUF_ALIGN(buf_spec->mpred_mv.buf_start + buf_spec->mpred_mv.buf_size);
 #else
 	buf_spec->rpm.buf_start =
-		buf_spec->mpred_above.buf_start +
-		buf_spec->mpred_above.buf_size;
-
+		WORKBUF_ALIGN(buf_spec->mpred_above.buf_start + buf_spec->mpred_above.buf_size);
 #endif
 	buf_spec->lmem.buf_start =
-		buf_spec->rpm.buf_start +
-		buf_spec->rpm.buf_size;
+		WORKBUF_ALIGN(buf_spec->rpm.buf_start + buf_spec->rpm.buf_size);
 	buf_spec->end_adr =
-		buf_spec->lmem.buf_start +
-		buf_spec->lmem.buf_size;
+		WORKBUF_ALIGN(buf_spec->lmem.buf_start + buf_spec->lmem.buf_size);
 
 	if (!hw)
 		return;
