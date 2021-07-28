@@ -772,6 +772,9 @@ struct avs2_frame_s {
 	uint8_t bg_flag;
 	/**/
 	unsigned long header_adr;
+	/*AVS2_10B_MMU_DW*/
+	unsigned long dw_header_adr;
+
 	int buf_size;
 	int lcu_total;
 	int comp_body_size;

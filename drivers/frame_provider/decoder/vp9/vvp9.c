@@ -1758,9 +1758,12 @@ static u32 get_valid_double_write_mode(struct VP9Decoder_s *pbi)
 	u32 dw = ((double_write_mode & 0x80000000) == 0) ?
 		pbi->double_write_mode :
 		(double_write_mode & 0x7fffffff);
-	if ((dw & 0x20) && ((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
-		pr_info("MMU doueble write 1:4 not supported !!!\n");
-		dw = 0;
+	if (dw & 0x20) {
+		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3)
+			&& ((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
+			pr_info("MMU doueble write 1:4 not supported !!!\n");
+			dw = 0;
+		}
 	}
 	return dw;
 }
@@ -6317,9 +6320,9 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
 			if (get_double_write_mode(pbi) & 0x20) {
 				WRITE_VREG(HEVC_DW_VH0_ADDDR,
-					buf_spec->mmu_vbh_dw.buf_size + DW_VBH_BUF_SIZE(buf_spec) * 2);
+					buf_spec->mmu_vbh_dw.buf_start + DW_VBH_BUF_SIZE(buf_spec) * 2);
 				WRITE_VREG(HEVC_DW_VH1_ADDDR,
-					buf_spec->mmu_vbh_dw.buf_size + DW_VBH_BUF_SIZE(buf_spec) * 3);
+					buf_spec->mmu_vbh_dw.buf_start + DW_VBH_BUF_SIZE(buf_spec) * 3);
 			}
 		}
 		data32 = READ_VREG(HEVC_SAO_CTRL5);

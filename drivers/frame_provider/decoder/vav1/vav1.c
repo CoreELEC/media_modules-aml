@@ -1024,10 +1024,12 @@ static u32 get_valid_double_write_mode(struct AV1HW_s *hw)
 	u32 dw = ((double_write_mode & 0x80000000) == 0) ?
 		hw->double_write_mode :
 		(double_write_mode & 0x7fffffff);
-	if ((dw & 0x20) &&
-		((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
-		pr_info("MMU doueble write 1:4 not supported !!!\n");
-		dw = 0;
+	if (dw & 0x20) {
+		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3)
+			&& ((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
+			pr_info("MMU doueble write 1:4 not supported !!!\n");
+			dw = 0;
+		}
 	}
 	return dw;
 }
@@ -6635,10 +6637,10 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 						vf->dwHeadAddr = pic_config->header_dw_adr;
 					else if ((mode == 1 || mode == 2 || mode == 4)
 					&& (debug & AOM_DEBUG_DW_DISP_MAIN) == 0) {
-					vf->compHeadAddr = pic_config->header_dw_adr;
-					vf->fgs_valid = 0;
-					av1_print(hw, AOM_DEBUG_VFRAME,
-						"Use dw mmu for display\n");
+						vf->compHeadAddr = pic_config->header_dw_adr;
+						vf->fgs_valid = 0;
+						av1_print(hw, 0,
+							"Use dw mmu for display\n");
 					}
 				}
 #endif

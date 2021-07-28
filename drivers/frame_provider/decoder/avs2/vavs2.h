@@ -19,7 +19,7 @@
 #define VAVS2_H
 
 #define AVS2_10B_MMU
-#define MV_USE_FIXED_BUF
+#define AVS2_10B_MMU_DW
 
 void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 unsigned int *prev_prob, unsigned int *cur_prob, unsigned int *count);

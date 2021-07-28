@@ -120,7 +120,7 @@ to enable DV of frame mode
 
 #define SEND_LMEM_WITH_RPM
 #define SUPPORT_10BIT
-/* #define H265_10B_MMU_DW */
+#define H265_10B_MMU_DW
 /* #define ERROR_HANDLE_DEBUG */
 
 #ifndef STAT_KTHREAD
@@ -1003,7 +1003,7 @@ struct BuffInfo_s {
 //#define VBH_BUF_SIZE (2 * 16 * 2304)
 //#define VBH_BUF_COUNT 4
 
-	/*mmu_vbh buf is used by HEVC_SAO_MMU_VH0_ADDR, HEVC_SAO_MMU_VH1_ADDR*/
+/*mmu_vbh buf is used by HEVC_SAO_MMU_VH0_ADDR, HEVC_SAO_MMU_VH1_ADDR*/
 #define VBH_BUF_SIZE_1080P 0x3000
 #define VBH_BUF_SIZE_4K 0x5000
 #define VBH_BUF_SIZE_8K 0xa000
@@ -1334,8 +1334,14 @@ static void init_buff_spec(struct hevc_state_s *hevc,
 	buf_spec->mmu_vbh.buf_start  =
 		buf_spec->dblk_data2.buf_start + buf_spec->dblk_data2.buf_size;
 #ifdef H265_10B_MMU_DW
+	/*
+	buf_spec->cm_header.buf_start =
+		buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size;
 	buf_spec->mmu_vbh_dw.buf_start =
-		buf_spec->cm_header.buf_start + buf_spec->mmu_vbh.buf_size;
+		buf_spec->cm_header.buf_start + buf_spec->cm_header.buf_size;
+	*/
+	buf_spec->mmu_vbh_dw.buf_start =
+		buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size;
 	buf_spec->cm_header_dw.buf_start =
 		buf_spec->mmu_vbh_dw.buf_start + buf_spec->mmu_vbh_dw.buf_size;
 	buf_spec->mpred_above.buf_start =
@@ -2154,9 +2160,12 @@ static int get_valid_double_write_mode(struct hevc_state_s *hevc)
 		((double_write_mode & 0x80000000) == 0)) ?
 		hevc->double_write_mode :
 		(double_write_mode & 0x7fffffff);
-	if ((dw & 0x20) && ((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
-		pr_info("MMU doueble write 1:4 not supported !!!\n");
-		dw = 0;
+	if (dw & 0x20) {
+		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3)
+			&& ((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
+			pr_info("MMU doueble write 1:4 not supported !!!\n");
+			dw = 0;
+		}
 	}
 	return dw;
 }
@@ -3326,8 +3335,10 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 	else
 		buf_size = 0;
 #ifdef H265_10B_MMU_DW
-	if (hevc->dw_mmu_enable)
-		buf_size += hevc_get_header_size(hevc->pic_w, hevc->pic_h);
+	if (hevc->dw_mmu_enable) {
+		buf_size = ((buf_size + 0xffff) >> 16) << 16;
+		buf_size <<= 1;
+	}
 #endif
 	if (dw_mode && ((dw_mode & 0x20) == 0)) {
 		int pic_width_dw = pic_width /
@@ -3963,11 +3974,11 @@ static void init_decode_head_hw(struct hevc_state_s *hevc)
 		data_tmp |= (1 << 10);
 		WRITE_VREG(HEVC_SAO_CTRL9, data_tmp);
 
-	    WRITE_VREG(HEVC_CM_BODY_LENGTH2,
+		WRITE_VREG(HEVC_CM_BODY_LENGTH2,
 			losless_comp_body_size);
-	    WRITE_VREG(HEVC_CM_HEADER_OFFSET2,
+		WRITE_VREG(HEVC_CM_HEADER_OFFSET2,
 			losless_comp_body_size);
-	    WRITE_VREG(HEVC_CM_HEADER_LENGTH2,
+		WRITE_VREG(HEVC_CM_HEADER_LENGTH2,
 			losless_comp_header_size);
 
 		WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR2,
@@ -3978,8 +3989,8 @@ static void init_decode_head_hw(struct hevc_state_s *hevc)
 			buf_spec->mmu_vbh_dw.buf_start + (2 * DW_VBH_BUF_SIZE(buf_spec)));
 		WRITE_VREG(HEVC_DW_VH1_ADDDR,
 			buf_spec->mmu_vbh_dw.buf_start + (3 * DW_VBH_BUF_SIZE(buf_spec)));
-	    /* use HEVC_CM_HEADER_START_ADDR */
-	    data32 |= (1 << 15);
+		/* use HEVC_CM_HEADER_START_ADDR */
+		data32 |= (1 << 15);
 	} else
 		data32 &= ~(1 << 15);
 	WRITE_VREG(HEVC_SAO_CTRL5, data32);
@@ -4963,9 +4974,6 @@ static void hevc_config_work_space_hw(struct hevc_state_s *hevc)
 	if (hevc->dw_mmu_enable) {
 	    //WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR2, FRAME_MMU_MAP_ADDR_DW);
 	    WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2, hevc->frame_dw_mmu_map_phy_addr);
-		//default of 0xffffffff will disable dw
-	    WRITE_VREG(HEVC_SAO_Y_START_ADDR, 0);
-	    WRITE_VREG(HEVC_SAO_C_START_ADDR, 0);
 	}
 #endif
 	/* cfg_p_addr */
@@ -5917,18 +5925,6 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	* [31:13] reserved
 	*/
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
-#endif
-#if 0 /* H265_10B_MMU_DW */
-	if (hevc->dw_mmu_enable) {
-		WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR2,
-			hevc->work_space_buf->mmu_vbh_dw.buf_start);
-		WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR2,
-			hevc->work_space_buf->mmu_vbh_dw.buf_start + DW_VBH_BUF_SIZE(hevc->work_space_buf));
-		WRITE_VREG(HEVC_DW_VH0_ADDDR,
-			hevc->work_space_buf->mmu_vbh_dw.buf_start + (2 * DW_VBH_BUF_SIZE(hevc->work_space_buf)));
-		WRITE_VREG(HEVC_DW_VH1_ADDDR,
-			hevc->work_space_buf->mmu_vbh_dw.buf_start + (3 * DW_VBH_BUF_SIZE(hevc->work_space_buf)));
-	}
 #endif
 	data32 = 0;
 	data32_2 = READ_VREG(HEVC_SAO_CTRL0);
