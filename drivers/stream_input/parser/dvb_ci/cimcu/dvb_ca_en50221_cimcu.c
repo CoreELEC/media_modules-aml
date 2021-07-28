@@ -1194,7 +1194,8 @@ static int dvb_ca_en50221_thread(void *data)
 
 					printk("dvb_ca adapter %d: Invalid PC card inserted :(\n",
 					       ca->dvbdev->adapter->num);
-					ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_INVALID;
+					//ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_INVALID;
+					ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_UNINITIALISED;
 					dvb_ca_en50221_thread_update_delay(ca);
 					break;
 				}

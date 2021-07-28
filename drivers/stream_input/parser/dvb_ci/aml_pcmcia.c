@@ -40,22 +40,25 @@ MODULE_PARM_DESC(pcmcia_debug, "enable verbose debug messages");
 #define pr_error(fmt, args...) printk("PCMCIA: " fmt, ## args)
 
 
-static int pcmcia_plugin(struct aml_pcmcia *pc)
+static int pcmcia_plugin(struct aml_pcmcia *pc, int reset)
 {
 	if (pc->slot_state == MODULE_XTRACTED) {
 		pc->pwr(pc, AML_PWR_OPEN);/*hi is open power*/
 		pr_dbg(" CAM Plugged IN: Adapter(%d) Slot(0)\n", 0);
 		udelay(50);
-		if (pc->io_device_type != AML_DVB_IO_TYPE_CIBUS)
+		//if (pc->io_device_type != AML_DVB_IO_TYPE_CIBUS)
 			aml_pcmcia_reset(pc);
 		/*wait unplug*/
 		pc->init_irq(pc, IRQF_TRIGGER_RISING);
 		udelay(500);
 		pc->slot_state = MODULE_INSERTED;
+
 	} else {
 		pr_error("repeat into pcmcia insert \r\n");
-		aml_pcmcia_reset(pc);
+		if (reset)
+			aml_pcmcia_reset(pc);
 	}
+
 	msleep(1);
 	pc->pcmcia_plugin(pc, 1);
 
@@ -65,13 +68,14 @@ static int pcmcia_plugin(struct aml_pcmcia *pc)
 static int pcmcia_unplug(struct aml_pcmcia *pc)
 {
 	if (pc->slot_state == MODULE_INSERTED) {
-		pc->pwr(pc, AML_PWR_CLOSE);/*hi is open power*/
 		pr_dbg(" CAM Unplugged: Adapter(%d) Slot(0)\n", 0);
 		/*udelay(50);*/
 		/*aml_pcmcia_reset(pc);*/
 		/*wait plugin*/
 		pc->init_irq(pc, IRQF_TRIGGER_FALLING);
 		udelay(500);
+		pc->pwr(pc, AML_PWR_CLOSE);/*hi is open power*/
+
 		pc->slot_state = MODULE_XTRACTED;
 	}
 	msleep(1);
@@ -107,7 +111,7 @@ static void aml_pcmcia_work(struct work_struct *work)
 	else {
 		if (!cd1) {
 			pr_error("work Adapter(%d) Slot(0): CAM Plugin\n", 0);
-			pcmcia_plugin(pc);
+			pcmcia_plugin(pc, 0);
 		} else {
 			pr_error("work Adapter(%d) Slot(0): CAM Unplug\n", 0);
 			pcmcia_unplug(pc);
@@ -135,7 +139,7 @@ void aml_pcmcia_detect_cam(struct aml_pcmcia *pc)
 	else {
 		if (!cd1) {
 			pr_error("Adapter(%d) Slot(0): CAM Plugin\n", 0);
-			pcmcia_plugin(pc);
+			pcmcia_plugin(pc, 1);
 		} else {
 			pr_error("Adapter(%d) Slot(0): CAM Unplug\n", 0);
 			pcmcia_unplug(pc);

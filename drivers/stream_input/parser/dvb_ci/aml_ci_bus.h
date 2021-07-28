@@ -40,6 +40,9 @@ struct aml_ci_bus {
 	int cd_pin2_value;
 	struct gpio_desc *pwr_pin;
 	int pwr_pin_value;
+	struct gpio_desc *le_pin;
+	int le_pin_value;
+	int le_enable_level;
 
 	/* cam irq */
 	int irq;

@@ -80,6 +80,8 @@ int  aml_ci_bus_mod_init(void);
 void  aml_ci_bus_mod_exit(void);
 static  int aml_read_self(unsigned int reg);
 static void aml_write_self(unsigned int reg, unsigned int val);
+static int aml_set_gpio_out(struct gpio_desc *gpio, int val);
+static int aml_set_gpio_in(struct gpio_desc *gpio);
 
 #define WRITE_CIBUS_REG(_r, _v)   aml_write_self(_r, _v)
 #define READ_CIBUS_REG(_r)        aml_read_self(_r)
@@ -139,7 +141,7 @@ int init_ci_addr(struct platform_device *pdev)
 *   - -EINVAL : error
 */
 static int aml_ci_bus_select_gpio(struct aml_ci_bus *ci_bus_dev,
-				int select, int enable)
+				int select/*, int enable*/)
 {
 	//SELECT GPIO FUNCTION
 	unsigned int old_select = ci_bus_dev->select;
@@ -169,24 +171,28 @@ static int aml_ci_bus_select_gpio(struct aml_ci_bus *ci_bus_dev,
 						"could not get ci_addr_pins state\n");
 				return -EINVAL;
 			}
-			if (enable == 1) {
-				ret = pinctrl_select_state(ci_bus_dev->pinctrl, s);
-			}
+			ret = pinctrl_select_state(ci_bus_dev->pinctrl, s);
 			if (ret) {
 				dev_err(&ci_bus_dev->pdev->dev, "failed to set ci_addr_pins pinctrl\n");
 				return -EINVAL;
 			}
+			if (ci_bus_dev->le_pin) {
+				aml_set_gpio_out(ci_bus_dev->le_pin, ci_bus_dev->le_enable_level);
+				pr_dbg("set le pin to low");
+			}
 			break;
 		case AML_GPIO_TS:
+			if (ci_bus_dev->le_pin) {
+				aml_set_gpio_out(ci_bus_dev->le_pin, !ci_bus_dev->le_enable_level);
+				pr_dbg("set le pin to high");
+			}
 			s = pinctrl_lookup_state(ci_bus_dev->pinctrl, "ci_ts_pins");
 			if (IS_ERR_OR_NULL(s)) {
 				dev_err(&ci_bus_dev->pdev->dev,
 						"could not get ci_ts_pins state\n");
 				return -EINVAL;
 			}
-			if (enable == 1) {
-				ret = pinctrl_select_state(ci_bus_dev->pinctrl, s);
-			}
+			ret = pinctrl_select_state(ci_bus_dev->pinctrl, s);
 			if (ret) {
 				dev_err(&ci_bus_dev->pdev->dev, "failed to set ci_ts_pins pinctrl\n");
 				return -EINVAL;
@@ -294,9 +300,7 @@ static int aml_ci_bus_io(struct aml_ci_bus *ci_bus_dev,
 	WRITE_CIBUS_REG(CIPLUS_CTRL_REG, ctrl);
 	fetch_done = 0;
 	//gpio select gpio func
-	if (enable)
-		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR, enable);
-
+	//aml_ci_bus_select_gpio(ci_bus_dev, enable ? AML_GPIO_ADDR : AML_GPIO_TS);
 	while (1) {
 		count++;
 		if (count < aml_ci_bus_time)
@@ -350,9 +354,7 @@ static int aml_ci_bus_io(struct aml_ci_bus *ci_bus_dev,
 	}
 	rd = READ_CIBUS_REG(CIPLUS_RDATA_REG);
 	//gpio select tsout func
-	if (enable)
-		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS, enable);
-
+	//aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS, enable);
 	return rd;
 }
 /**\brief aml_ci_bus_init_reg:ci bus init reg,enable ci bus
@@ -363,7 +365,7 @@ static int aml_ci_bus_io(struct aml_ci_bus *ci_bus_dev,
 static int aml_ci_bus_init_reg(struct aml_ci_bus *ci_bus_dev)
 {
 	u32 ctrl = 0;
-	aml_ci_bus_select_gpio(ci_bus_dev,AML_GPIO_ADDR, 1);
+	aml_ci_bus_select_gpio(ci_bus_dev,AML_GPIO_ADDR);
 	//init ci bus reg
 	pr_dbg("aml_ci_bus_init_reg---\r\n");
     ctrl = READ_CIBUS_REG(CIPLUS_CTRL_REG);
@@ -376,7 +378,7 @@ static int aml_ci_bus_init_reg(struct aml_ci_bus *ci_bus_dev)
 	ctrl = ctrl | (TIMEOUT_IRQ_HOLD_TIME << WATT_TIMEOUT_TIME);
 	//timeout hold time
 	//WRITE_CIBUS_REG(CIPLUS_WAIT_TIMEOUT, ctrl);
-	aml_ci_bus_select_gpio(ci_bus_dev,AML_GPIO_TS, 1);
+	//aml_ci_bus_select_gpio(ci_bus_dev,AML_GPIO_TS);
 	return 0;
 }
 /********************************************************/
@@ -404,7 +406,7 @@ static int aml_set_gpio_out(struct gpio_desc *gpio, int val)
 	pr_dbg("dvb ci gpio out ret %d set val:%d\n", ret, val);
 	return ret;
 }
-#if 0//no used
+
 /**\brief aml_set_gpio_in:set gio in
 * \param gpio: gpio_desc obj,
 * \return
@@ -416,7 +418,6 @@ static int aml_set_gpio_in(struct gpio_desc *gpio)
 	gpiod_direction_input(gpio);
 	return 0;
 }
-#endif
 
 /**\brief aml_get_gpio_value:get gio value
 * \param gpio: gpio_desc obj,
@@ -508,6 +509,7 @@ static  int aml_ci_bus_mem_read(
 	int value = 0;
 	struct aml_ci_bus *ci_bus_dev = ci_dev->data;
 	mutex_lock(&(ci_bus_dev->mutex));
+	aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR);
 	value = aml_ci_bus_io(ci_bus_dev, data, addres, AM_CI_CMD_MEMR);
 	mutex_unlock(&(ci_bus_dev->mutex));
 	return value;
@@ -529,6 +531,7 @@ static int aml_ci_bus_mem_write(
 	int value = 0;
 	struct aml_ci_bus *ci_bus_dev = ci_dev->data;
 	mutex_lock(&(ci_bus_dev->mutex));
+	aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR);
 	value = aml_ci_bus_io(ci_bus_dev, data, addres, AM_CI_CMD_MEMW);
 	mutex_unlock(&(ci_bus_dev->mutex));
 	return value;
@@ -549,6 +552,7 @@ static int aml_ci_bus_io_read(
 	int value = 0;
 	struct aml_ci_bus *ci_bus_dev = ci_dev->data;
 	mutex_lock(&(ci_bus_dev->mutex));
+	aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS);
 	value = aml_ci_bus_io(ci_bus_dev, data, addres, AM_CI_CMD_IOR);
 	mutex_unlock(&(ci_bus_dev->mutex));
 	return value;
@@ -570,6 +574,7 @@ static int aml_ci_bus_io_write(
 	int value = 0;
 	struct aml_ci_bus *ci_bus_dev = ci_dev->data;
 	mutex_lock(&(ci_bus_dev->mutex));
+	aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS);
 	value = aml_ci_bus_io(ci_bus_dev, data, addres, AM_CI_CMD_IOW);
 	mutex_unlock(&(ci_bus_dev->mutex));
 	return value;
@@ -720,11 +725,11 @@ static int aml_gio_power(struct aml_pcmcia *pc, int enable)
 	pr_dbg("%s : %d\r\n", __func__, enable);
 
 	if (enable == AML_PWR_OPEN) {
-	/*hi level ,open power*/
-	ret = aml_set_gpio_out(ci_bus_dev->pwr_pin, AML_GPIO_LOW);
+		/*hi level ,open power*/
+		ret = aml_set_gpio_out(ci_bus_dev->pwr_pin, AML_GPIO_LOW);
 	} else {
 		/*low level ,close power*/
-		ret = aml_set_gpio_out(ci_bus_dev->pwr_pin, AML_GPIO_HIGH);
+		ret = aml_set_gpio_in(ci_bus_dev->pwr_pin);
 	}
 
 	return ret;
@@ -752,16 +757,15 @@ static int aml_gio_reset(struct aml_pcmcia *pc, int enable)
 		pr_dbg("rst by ci bus- ci bus dev-null-\r\n");
 		return -1;
 	}
-	if (enable == AML_H) {
-		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR, 1);
-		//set ts type and not set to real ts type when reset is end
-		ci_bus_dev->select = AML_GPIO_TS;
-	}
+	/*if (enable == AML_H) {*/
+		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_ADDR);
+		/*ci_bus_dev->select = AML_GPIO_TS;
+	}*/
 
 	aml_ci_bus_rst((struct aml_ci *)ci_bus_dev->priv, 0, enable);
 	pr_dbg("rst by ci bus- ci bus [%d]-\r\n", ci_bus_dev->select);
-	if (enable == AML_L)
-		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS, 1);
+	/*if (enable == AML_L)
+		aml_ci_bus_select_gpio(ci_bus_dev, AML_GPIO_TS);*/
 	return ret;
 }
 
@@ -880,6 +884,8 @@ static int aml_ci_bus_get_config_from_dts(struct aml_ci_bus *ci_bus_dev)
 	if (ci_bus_dev->io_device_type == AML_DVB_IO_TYPE_CIBUS) {
 		struct resource *res;
 		char buf[32];
+		int ival;
+
 		/*get irq value*/
 		ci_bus_dev->irq_cmp = 186;
 		memset(buf, 0, 32);
@@ -952,6 +958,29 @@ static int aml_ci_bus_get_config_from_dts(struct aml_ci_bus *ci_bus_dev)
 			pr_error("dvb ci pwr_pin pin request failed\n");
 			return -1;
 		}
+		aml_set_gpio_in(ci_bus_dev->pwr_pin);
+
+		/*get le pin*/
+		ci_bus_dev->le_pin = NULL;
+		ci_bus_dev->le_enable_level = 1;
+		ret = ci_bus_get_gpio_by_name(ci_bus_dev,
+			&ci_bus_dev->le_pin, &ci_bus_dev->le_pin_value,
+			"le_pin", OUTPUT, OUTLEVEL_HIGH);
+		if (ret) {
+			pr_error("dvb ci le_pin pin request failed\n");
+		} else {
+			pr_dbg("ci_bus_dev->le_value %d\n", ci_bus_dev->le_pin_value);
+		}
+
+		snprintf(buf, sizeof(buf), "%s", "le_enable_level");
+		ret = of_property_read_u32(pdev->dev.of_node, buf, &ival);
+		if (ret) {
+			pr_error("dvb ci le_enable_level request failed\n");
+		} else {
+			ci_bus_dev->le_enable_level = ival;
+			pr_dbg("ci_bus_dev->le_enable_level %d\n", ci_bus_dev->le_enable_level);
+		}
+
 	}
 	return 0;
 }
@@ -976,6 +1005,10 @@ static void aml_ci_free_gpio(struct aml_ci_bus *ci_bus_dev)
 		aml_gpio_free(ci_bus_dev->cd_pin1);
 		ci_bus_dev->cd_pin1 = NULL;
 		ci_bus_dev->cd_pin2 = NULL;
+	}
+	if (ci_bus_dev->le_pin) {
+		aml_gpio_free(ci_bus_dev->le_pin);
+		ci_bus_dev->le_pin = NULL;
 	}
 	return;
 }
