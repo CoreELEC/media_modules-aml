@@ -8899,6 +8899,17 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	if (index_top != 0xff
 		&& index_top < MAX_REF_PIC_NUM
 		&& hevc->m_PIC[index_top]) {
+		if (vf->v4l_mem_handle !=
+			hevc->m_PIC[index_top]->cma_alloc_addr) {
+			hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,
+				"H265 top update fb handle, old:%llx, new:%llx\n",
+				hevc->m_PIC[index_top]->cma_alloc_addr,
+				vf->v4l_mem_handle);
+
+			hevc->m_PIC[index_top]->cma_alloc_addr
+				= vf->v4l_mem_handle;
+		}
+
 		if (hevc->m_PIC[index_top]->vf_ref > 0) {
 			hevc->m_PIC[index_top]->vf_ref--;
 
@@ -8911,22 +8922,22 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 						0x1);
 			}
 		}
-
-		if (vf->v4l_mem_handle !=
-			hevc->m_PIC[index_top]->cma_alloc_addr) {
-			hevc->m_PIC[index_top]->cma_alloc_addr
-				= vf->v4l_mem_handle;
-
-			hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,
-				"H265 top update fb handle, old:%llx, new:%llx\n",
-				hevc->m_PIC[index_top]->cma_alloc_addr,
-				vf->v4l_mem_handle);
-		}
 	}
 
 	if (index_bot != 0xff
 		&& index_bot < MAX_REF_PIC_NUM
 		&& hevc->m_PIC[index_bot]) {
+		if (vf->v4l_mem_handle !=
+			hevc->m_PIC[index_bot]->cma_alloc_addr) {
+			hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,
+				"H265 bot update fb handle, old:%llx, new:%llx\n",
+				hevc->m_PIC[index_bot]->cma_alloc_addr,
+				vf->v4l_mem_handle);
+
+			hevc->m_PIC[index_bot]->cma_alloc_addr
+				= vf->v4l_mem_handle;
+		}
+
 		if (hevc->m_PIC[index_bot]->vf_ref > 0) {
 			hevc->m_PIC[index_bot]->vf_ref--;
 
@@ -8938,17 +8949,6 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 					WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
 						0x1);
 			}
-		}
-
-		if (vf->v4l_mem_handle !=
-			hevc->m_PIC[index_bot]->cma_alloc_addr) {
-			hevc->m_PIC[index_bot]->cma_alloc_addr
-				= vf->v4l_mem_handle;
-
-			hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,
-				"H265 bot update fb handle, old:%llx, new:%llx\n",
-				hevc->m_PIC[index_bot]->cma_alloc_addr,
-				vf->v4l_mem_handle);
 		}
 	}
 
@@ -9374,8 +9374,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			__func__, pic->index);*/
 
 		if (hevc->is_used_v4l) {
-			vf->v4l_mem_handle
-				= hevc->m_BUF[pic->BUF_index].v4l_ref_buf_addr;
+			vf->v4l_mem_handle = pic->cma_alloc_addr;
 			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 			if (hevc->mmu_enable) {
 				vf->mm_box.bmmu_box	= hevc->bmmu_box;
@@ -10081,7 +10080,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		}
 
 		fb = (struct vdec_v4l2_buffer *)
-			hw->m_BUF[pic->BUF_index].v4l_ref_buf_addr;
+			pic->cma_alloc_addr;
 
 		vf->type		|= VIDTYPE_V4L_EOS;
 		vf->timestamp		= ULONG_MAX;
