@@ -3420,6 +3420,15 @@ static int dmx_enable(struct aml_dmx *dmx)
 			   (hi_bsf << USE_HI_BSF_INTERFACE));
 		}
 
+		if (!fec_core_sel) {
+			if (ciplus_out_sel != CIPLUS_OUTPUT_AUTO) {
+				int mask = 1 << dmx->id;
+
+				if (ciplus_out_sel & mask)
+					fec_core_sel = 1;
+			}
+		}
+
 		if (fec_sel == -1) {
 			dmx_cascade_set(dmx->id,dmx->source);
 			DMX_WRITE_REG(dmx->id, FEC_INPUT_CONTROL,
