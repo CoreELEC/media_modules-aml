@@ -3272,7 +3272,7 @@ static struct internal_comp_buf* index_to_icomp_buf(
 	struct vdec_v4l2_buffer *fb = NULL;
 
 	fb = (struct vdec_v4l2_buffer *)
-		hevc->m_BUF[index].v4l_ref_buf_addr;
+		hevc->m_PIC[index]->cma_alloc_addr;
 	aml_fb = container_of(fb, struct aml_video_dec_buf, frame_buffer);
 	return &v4l2_ctx->comp_bufs[aml_fb->internal_index];
 }

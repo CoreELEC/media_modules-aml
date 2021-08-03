@@ -154,7 +154,7 @@ static u32 vdec_config_default_parms(u8 *parm)
 
 	pbuf += sprintf(pbuf, "parm_v4l_codec_enable:1;");
 	pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:7;");
-	pbuf += sprintf(pbuf, "hevc_double_write_mode:16;");
+	pbuf += sprintf(pbuf, "hevc_double_write_mode:1;");
 	pbuf += sprintf(pbuf, "hevc_buf_width:4096;");
 	pbuf += sprintf(pbuf, "hevc_buf_height:2304;");
 	pbuf += sprintf(pbuf, "save_buffer_mode:0;");
@@ -190,7 +190,7 @@ static void vdec_parser_parms(struct vdec_hevc_inst *inst)
 			ctx->config.parm.dec.cfg.metadata_config_flag);
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
-		ctx->config.parm.dec.cfg.double_write_mode = 16;
+		ctx->config.parm.dec.cfg.double_write_mode = 1;
 		ctx->config.parm.dec.cfg.ref_buf_margin = 7;
 		ctx->config.length = vdec_config_default_parms(ctx->config.buf);
 	}
