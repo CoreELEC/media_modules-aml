@@ -1230,8 +1230,11 @@ void dmabuff_recycle_worker(struct work_struct *work)
 
 		ATRACE_COUNTER("v4l_stream_write_sec_end", vb->vb2_buf.index);
 
-		v4l2_m2m_buf_done(vb, buf->error ? VB2_BUF_STATE_ERROR :
-			VB2_BUF_STATE_DONE);
+		mutex_lock(&ctx->dmabuff_recycle_lock);
+		if (vb->vb2_buf.state != VB2_BUF_STATE_ERROR)
+			v4l2_m2m_buf_done(vb, buf->error ? VB2_BUF_STATE_ERROR :
+				VB2_BUF_STATE_DONE);
+		mutex_unlock(&ctx->dmabuff_recycle_lock);
 	}
 }
 
@@ -3622,11 +3625,13 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		while ((vb2_v4l2 = v4l2_m2m_src_buf_remove(ctx->m2m_ctx)))
 			v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
 
+		mutex_lock(&ctx->dmabuff_recycle_lock);
 		for (i = 0; i < q->num_buffers; ++i) {
 			vb2_v4l2 = to_vb2_v4l2_buffer(q->bufs[i]);
 			if (vb2_v4l2->vb2_buf.state == VB2_BUF_STATE_ACTIVE)
 				v4l2_m2m_buf_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
 		}
+		mutex_unlock(&ctx->dmabuff_recycle_lock);
 
 		/*
 		 * drop es frame was stored in the vdec_input
