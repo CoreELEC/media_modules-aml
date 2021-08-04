@@ -119,6 +119,8 @@ static int slow_input;
 /* #define DATA_DEBUG */
 static int use_bufferlevelx10000 = 10000;
 static int reset_canuse_buferlevel(int level);
+void amstream_userdata_deinit(struct vdec_s *vdec);
+
 static struct platform_device *amstream_pdev;
 struct device *amports_get_dma_device(void)
 {
@@ -1089,8 +1091,10 @@ static int amstream_port_release(struct port_priv_s *priv)
 		psparser_release();
 	}
 
-	if (port->type & PORT_TYPE_VIDEO)
+	if (port->type & PORT_TYPE_VIDEO) {
+		amstream_userdata_deinit(priv->vdec);
 		video_port_release(priv, pvbuf, 0);
+	}
 
 	if (port->type & PORT_TYPE_AUDIO)
 		audio_port_release(port, pabuf, 0);
@@ -1474,6 +1478,8 @@ void amstream_wakeup_userdata_poll(struct vdec_s *vdec)
 	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
 		if (userdata.set_id_flag && (userdata.id[i] == vdec->video_id)) {
 			userdata.ready_flag[i] = 1;
+			if (vdec_get_debug_flags() & 0x10000000)
+				pr_info("%s, wakeup! id = %d\n", __func__, vdec->video_id);
 			break;
 		} else if (!userdata.set_id_flag) {
 			if (!userdata.used[0]) {
@@ -1504,6 +1510,8 @@ static unsigned int amstream_userdata_poll(struct file *file,
 	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
 		if (userdata.id[i] == userdata.video_id && userdata.ready_flag[i] == 1) {
 			fd_match = 1;
+			if (vdec_get_debug_flags() & 0x10000000)
+				pr_info("%s, success! id = %d\n", __func__, userdata.video_id);
 			break;
 		}
 	}
@@ -1534,18 +1542,21 @@ static void amstream_userdata_init(void)
 	return;
 }
 
-static void amstream_userdata_deinit(void)
+void amstream_userdata_deinit(struct vdec_s *vdec)
 {
 	int i;
 
 	mutex_lock(&userdata.mutex);
 
-	userdata.set_id_flag = 0;
 	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-		if (userdata.used[i] == 1) {
+		if (userdata.used[i] == 1 && vdec->video_id != 0xffffffff) {
+			if (vdec_get_debug_flags() & 0x10000000)
+				pr_info("deinit clear i: %d userdata.id %d\n",
+				i, userdata.id[i]);
 			userdata.ready_flag[i] = 0;
 			userdata.id[i] = -1;
 			userdata.used[i] = 0;
+			userdata.set_id_flag = 0;
 		}
 	}
 
@@ -1562,6 +1573,8 @@ static int amstream_open(struct inode *inode, struct file *file)
 	struct port_priv_s *priv;
 
 	VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
+	if (vdec_get_debug_flags() & 0x10000000)
+		pr_info("%s, port type %d\n", __func__, port->type);
 #ifdef G12A_BRINGUP_DEBUG
 	if (vdec_get_debug_flags() & 0xff0000) {
 		pr_info("%s force open port %d\n",
@@ -1713,6 +1726,8 @@ static int amstream_release(struct inode *inode, struct file *file)
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	u32 port_flag = 0;
 #endif
+	if (vdec_get_debug_flags() & 0x10000000)
+		pr_info("%s, port type %d\n", __func__, port->type);
 
 	if (iminor(inode) >= amstream_port_num)
 		return -ENODEV;
@@ -1726,6 +1741,7 @@ static int amstream_release(struct inode *inode, struct file *file)
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 		port_flag = priv->vdec->port_flag;
 #endif
+		amstream_userdata_deinit(priv->vdec);
 		if (priv->vdec->slave)
 			slave = priv->vdec->slave;
 		vdec_release(priv->vdec);
@@ -1807,8 +1823,6 @@ static int amstream_release(struct inode *inode, struct file *file)
 		/* switch_mod_gate_by_name("demux", 0); */
 		amports_switch_gate("demux", 0);
 	}
-
-	amstream_userdata_deinit();
 
 	mutex_destroy(&priv->mutex);
 
@@ -3242,6 +3256,8 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 					break;
 				}
 				mutex_lock(&amstream_mutex);
+				if (vdec_get_debug_flags() & 0x10000000)
+					pr_info("%s, instance_id = %d\n", __func__, p_userdata_param->instance_id);
 				vdec = vdec_get_vdec_by_video_id(p_userdata_param->instance_id);
 				if (vdec) {
 					if (vdec_read_user_data(vdec,
@@ -3277,11 +3293,15 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 					break;
 				}
 			}
-			if (!ready_flag)
+			if (!ready_flag) {
+				pr_info("instance %d not ready!\n", userdata.video_id);
 				r = -EINVAL;
+			}
 			mutex_unlock(&userdata.mutex);
 
 			put_user(ready_vdec, (uint32_t __user *)arg);
+			if (vdec_get_debug_flags() & 0x10000000)
+				pr_info("%s, ready_vdec = %u\n", __func__, ready_vdec);
 		}
 		break;
 
@@ -3296,14 +3316,16 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 	case AMSTREAM_IOC_UD_FLUSH_USERDATA:
 		if (this->type & PORT_TYPE_USERDATA) {
 			struct vdec_s *vdec;
-			int vdec_id;
+			int video_id;
 
 			mutex_lock(&amstream_mutex);
-			get_user(vdec_id, (int __user *)arg);
-			vdec = vdec_get_vdec_by_id(vdec_id);
+			get_user(video_id, (int __user *)arg);
+			pr_info("userdata flush id: %d\n", video_id);
+			vdec = vdec_get_vdec_by_video_id(video_id);
 			if (vdec) {
 				vdec_reset_userdata_fifo(vdec, 0);
-				pr_info("reset_userdata_fifo for vdec: %d\n", vdec_id);
+				pr_info("reset_userdata_fifo for vdec_id: %d video_id: %d\\n",
+					vdec->id, vdec->video_id);
 			}
 			mutex_unlock(&amstream_mutex);
 		} else

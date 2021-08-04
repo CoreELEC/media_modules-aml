@@ -1149,6 +1149,7 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 		v4lvideo_dec_count_increase();
 #endif
 		vdec->id = id;
+		vdec->video_id = 0xffffffff;
 		vdec_input_init(&vdec->input, vdec);
 		vdec->input.vdec_is_input_frame_empty = vdec_is_input_frame_empty;
 		vdec->input.vdec_up = vdec_up;
