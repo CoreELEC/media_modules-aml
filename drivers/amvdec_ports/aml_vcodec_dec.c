@@ -654,6 +654,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;
 		struct file *fp;
+		char file_name[32] = {0};
 
 		if (!dump_capture_frame || ctx->is_drm_mode)
 			break;
@@ -662,7 +663,9 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 		if (dw_mode == VDEC_DW_AFBC_ONLY)
 			break;
 
-		fp = filp_open("/data/dec_dump.raw",
+		snprintf(file_name, 32, "/data/dec_dump_%ux%u.raw", vf->width, vf->height);
+
+		fp = filp_open(file_name,
 				O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
 
 		if (!IS_ERR(fp)) {
@@ -2357,20 +2360,20 @@ static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 	}
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
-		q_data->sizeimage[0] = ctx->picinfo.y_len_sz / ratio / ratio;
-		q_data->sizeimage[1] = ctx->picinfo.c_len_sz / ratio / ratio;
+		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
+		q_data->sizeimage[1] = ctx->picinfo.c_len_sz;
 
-		q_data->coded_width = ctx->picinfo.coded_width / ratio;
-		q_data->coded_height = ctx->picinfo.coded_height / ratio;
+		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->coded_height = ALIGN(ctx->picinfo.coded_height / ratio, 64);
 
-		q_data->bytesperline[0] = ctx->picinfo.coded_width / ratio;
-		q_data->bytesperline[1] = ctx->picinfo.coded_width / ratio;
+		q_data->bytesperline[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->bytesperline[1] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
 	} else {
-		q_data->coded_width = ctx->picinfo.coded_width / ratio;
-		q_data->coded_height = ctx->picinfo.coded_height / ratio;
-		q_data->sizeimage[0] = ctx->picinfo.y_len_sz / ratio / ratio;
-		q_data->sizeimage[0] += ctx->picinfo.c_len_sz / ratio / ratio;
-		q_data->bytesperline[0] = ctx->picinfo.coded_width / ratio;
+		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->coded_height = ALIGN(ctx->picinfo.coded_height / ratio, 64);
+		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
+		q_data->sizeimage[0] += ctx->picinfo.c_len_sz;
+		q_data->bytesperline[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
 	}
 }
 
