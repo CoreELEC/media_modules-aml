@@ -7234,7 +7234,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				hevc->interlace_flag = 0;
 		}
 
-		hevc_print(hevc, 0,
+		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
 				"frame_field_info_present_flag = %d curr_pic_struct = %d interlace_flag = %d\n",
 				   hevc->frame_field_info_present_flag,
 				   hevc->curr_pic_struct,
