@@ -3010,8 +3010,14 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 					r = vdec_set_pts64(priv->vdec, pts);
 			} else if ((this->type & PORT_TYPE_HEVC) ||
 					(this->type & PORT_TYPE_VIDEO)) {
-					r = es_vpts_checkin_us64(
-					&priv->vdec->vbuf, pts);
+					struct stream_buf_s *vbuf = &priv->vdec->vbuf;
+					if (vbuf->no_parser) {
+						pts_checkin_offset_us64(PTS_TYPE_VIDEO,
+							vbuf->stream_offset, pts);
+					} else {
+						r = es_vpts_checkin_us64(
+						&priv->vdec->vbuf, pts);
+					}
 			} else if (this->type & PORT_TYPE_AUDIO) {
 					r = es_vpts_checkin_us64(
 					&bufs[BUF_TYPE_AUDIO], pts);
