@@ -15028,6 +15028,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc_print(hevc, 0, "discard dv data\n");
 		}
 
+		if (get_config_int(pdata->config, "dv_duallayer",
+			&config_val) == 0) {
+			hevc->dv_duallayer = config_val;
+			hevc_print(hevc, 0, "dv dual layer\n");
+		}
+
 		if (get_config_int(pdata->config,
 			"parm_enable_fence",
 			&config_val) == 0)
