@@ -116,6 +116,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	mediasync_updatetime_para UpdateTime = {0};
 	mediasync_systime_para SystemTime = {0};
 	aml_Source_Type sourceType = TS_DEMOD;
+	s64 UpdateTimeThreshold = 0;
 
 
 	switch (cmd) {
@@ -871,6 +872,33 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_SET_UPDATETIME_THRESHOLD:
+			if (copy_from_user((void *)&UpdateTimeThreshold,
+					(void *)arg,
+					sizeof(UpdateTimeThreshold)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_updatetime_threshold(priv->mSyncInsId,
+								UpdateTimeThreshold);
+		break;
+
+		case MEDIASYNC_IOC_GET_UPDATETIME_THRESHOLD:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_updatetime_threshold(priv->mSyncInsId,
+								&UpdateTimeThreshold);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&UpdateTimeThreshold,
+						sizeof(UpdateTimeThreshold)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -938,6 +966,8 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_AUDIO_MUTEFLAG:
 		case MEDIASYNC_IOC_SET_SOURCE_TYPE:
 		case MEDIASYNC_IOC_GET_SOURCE_TYPE:
+		case MEDIASYNC_IOC_SET_UPDATETIME_THRESHOLD:
+		case MEDIASYNC_IOC_GET_UPDATETIME_THRESHOLD:
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;

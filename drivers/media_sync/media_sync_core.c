@@ -147,6 +147,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
 	pInstance->mute_flag = false;
 	pInstance->mSourceType = TS_DEMOD;
+	pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
 	*pIns = pInstance;
 	return 0;
 }
@@ -267,7 +268,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			if (pInstance->mSyncModeChange == 1
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
-				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
+				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
 				pr_info("MEDIA_SYNC_PCRMASTER update time\n");
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = current_systemtime;
@@ -286,7 +287,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 			if (pInstance->mSyncModeChange == 1
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
-				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
+				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = lSystemTime;
 				pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
@@ -302,7 +303,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 				|| forceUpdate
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
-				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
+				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
 				pr_info("mSyncMode:%d update time system diff:%lld media diff:%lld current:%lld\n",
 					pInstance->mSyncMode,
 					diff_system_time,
@@ -320,7 +321,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 				|| forceUpdate
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
-				&& (get_llabs(diff_system_time - diff_mediatime) > MIN_UPDATETIME_THRESHOLD_US ))) {
+				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
 				pr_info("mSyncMode:%d update time stc diff:%lld media diff:%lld lSystemTime:%lld lMediaTime:%lld\n",
 					pInstance->mSyncMode,
 					diff_system_time,
@@ -487,6 +488,32 @@ long mediasync_ins_get_systemtime(s32 sSyncInsId, s64* lpSTC, s64* lpSystemTime)
 
 long mediasync_ins_get_nextvsync_systemtime(s32 sSyncInsId, s64* lpSystemTime) {
 
+	return 0;
+}
+
+long mediasync_ins_set_updatetime_threshold(s32 sSyncInsId, s64 lTimeThreshold) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+	pInstance->mUpdateTimeThreshold = lTimeThreshold;
+	return 0;
+}
+
+long mediasync_ins_get_updatetime_threshold(s32 sSyncInsId, s64* lpTimeThreshold) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+	*lpTimeThreshold = pInstance->mUpdateTimeThreshold;
 	return 0;
 }
 

@@ -94,6 +94,7 @@ typedef struct instance{
 	s64 mTrackMediaTime;
 	mediasync_speed mSpeed;
 	s32 mSyncModeChange;
+	s64 mUpdateTimeThreshold;
 
 	int mHasAudio;
 	int mHasVideo;
@@ -137,6 +138,8 @@ long mediasync_ins_get_systemtime(s32 sSyncInsId,
 				s64* lpSTC,
 				s64* lpSystemTime);
 long mediasync_ins_get_nextvsync_systemtime(s32 sSyncInsId, s64* lpSystemTime);
+long mediasync_ins_set_updatetime_threshold(s32 sSyncInsId, s64 lTimeThreshold);
+long mediasync_ins_get_updatetime_threshold(s32 sSyncInsId, s64* lpTimeThreshold);
 
 //chenchen
 long mediasync_ins_init_syncinfo(s32 sSyncInsId);
