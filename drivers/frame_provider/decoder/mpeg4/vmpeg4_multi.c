@@ -1903,6 +1903,24 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 			}
 		}
 
+		if (!vdec_secure(vdec)) {
+			/*init internal buf*/
+			char *tmpbuf = (char *)codec_mm_phys_to_virt(decbuf_start);
+			if (tmpbuf) {
+				memset(tmpbuf, 0, decbuf_size);
+				codec_mm_dma_flush(tmpbuf,
+					   decbuf_size, DMA_TO_DEVICE);
+			} else {
+				tmpbuf = codec_mm_vmap(decbuf_start, decbuf_size);
+				if (tmpbuf) {
+					memset(tmpbuf, 0, decbuf_size);
+					codec_mm_dma_flush(tmpbuf,
+						   decbuf_size, DMA_TO_DEVICE);
+					codec_mm_unmap_phyaddr(tmpbuf);
+				}
+			}
+		}
+
 		if (i == hw->buf_num) {
 			hw->buf_start = decbuf_start;
 		} else {
