@@ -1165,8 +1165,8 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 				/*TODO check equal condition*/
 				list_for_each_entry_safe(vbp, n,
 					&s_vbp_head, list) {
-					if ((compat_ulong_t)vbp->vb.base
-						== buf32.base) {
+					if ((compat_ulong_t)vbp->vb.phys_addr
+						== buf32.phys_addr) {
 						spin_lock(&s_vpu_lock);
 						list_del(&vbp->list);
 						spin_unlock(&s_vpu_lock);
@@ -1922,6 +1922,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 					&& find == false){
 						cached = vb.cached;
 						find = true;
+						break;
 					}
 				}
 			}
