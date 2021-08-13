@@ -5718,19 +5718,22 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 		hw->fixed_frame_rate_flag =
 			p_H264_Dpb->fixed_frame_rate_flag;
 
-		if (hw->is_used_v4l && (p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] == I_Slice)) {
-			if (hw->num_units_in_tick == 1001) {
-				if (hw->time_scale == 120000) {
+		if (hw->is_used_v4l && (p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] == I_Slice) &&
+			(hw->num_units_in_tick != 0)) {
+			if (hw->num_units_in_tick % 1001 == 0) {
+				int multiple = hw->num_units_in_tick / 1001;
+
+				if (hw->time_scale / multiple == 120000) {
 					hw->frame_dur = RATE_11990_FPS;
 					if (hw->fixed_frame_rate_flag == 1)
 						hw->frame_dur = RATE_5994_FPS;
-				} else if (hw->time_scale == 60000) {
+				} else if (hw->time_scale / multiple ==  60000) {
 					hw->frame_dur = RATE_5994_FPS;
 					if (hw->fixed_frame_rate_flag == 1)
 						hw->frame_dur = RATE_2997_FPS;
-				} else if (hw->time_scale == 30000) {
+				} else if (hw->time_scale / multiple  == 30000) {
 					hw->frame_dur = RATE_2997_FPS;
-				} else if (hw->time_scale == 24000) {
+				} else if (hw->time_scale / multiple  == 24000) {
 					hw->frame_dur = RATE_2397_FPS;
 				}
 			} else {
