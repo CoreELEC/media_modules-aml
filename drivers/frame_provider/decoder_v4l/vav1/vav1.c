@@ -8615,11 +8615,11 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				(debug & AOM_DEBUG_DIS_RECYCLE_MMU_TAIL) == 0) {
 				long used_4k_num =
 				(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
-				if (cm->cur_frame != NULL) {
+				if ((cm->cur_frame != NULL) && (cm->cur_fb_idx_mmu != INVALID_IDX)) {
 					hevc_mmu_dma_check(hw_to_vdec(hw));
 
 					av1_print(hw, AOM_DEBUG_HW_MORE, "mmu free tail, index %d used_num 0x%x\n",
-						cm->cur_frame->buf.index, used_4k_num);
+						cm->cur_fb_idx_mmu, used_4k_num);
 					if (hw->is_used_v4l) {
 						struct internal_comp_buf *ibuf =
 							index_to_icomp_buf(hw, cm->cur_fb_idx_mmu);
@@ -8628,6 +8628,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 							ibuf->mmu_box,
 							ibuf->index,
 							used_4k_num);
+
+						cm->cur_fb_idx_mmu = INVALID_IDX;
 					} else {
 						decoder_mmu_box_free_idx_tail(hw->mmu_box,
 							cm->cur_frame->buf.index, used_4k_num);
