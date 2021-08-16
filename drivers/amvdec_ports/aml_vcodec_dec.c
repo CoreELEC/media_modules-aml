@@ -1518,14 +1518,10 @@ EXPORT_SYMBOL_GPL(aml_thread_capture_worker);
 
 static int vdec_capture_thread(void *data)
 {
-	struct sched_param param =
-		{.sched_priority = MAX_RT_PRIO / 2};
 	struct aml_vdec_thread *thread =
 		(struct aml_vdec_thread *) data;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *) thread->priv;
-
-	sched_setscheduler(current, SCHED_FIFO, &param);
 
 	for (;;) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
@@ -1590,6 +1586,10 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 		goto err;
 	}
 	sched_setscheduler_nocheck(thread->task, SCHED_FIFO, &param);
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+			"%s, policy is:%d priority is:%d\n",
+			__func__, thread->task->policy, thread->task->rt_priority);
 
 	list_add(&thread->node, &ctx->vdec_thread_list);
 

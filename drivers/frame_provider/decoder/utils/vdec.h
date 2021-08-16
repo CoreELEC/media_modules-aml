@@ -345,6 +345,7 @@ struct post_task_mgr_s {
 	struct task_struct	*task;
 	struct semaphore        sem;
 	struct mutex		mutex;
+	bool 			running;
 	void			*private;
 };
 

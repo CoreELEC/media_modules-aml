@@ -5380,7 +5380,8 @@ static int vdec_post_task_recycle(void *args)
 	struct post_task_mgr_s *post =
 		(struct post_task_mgr_s *)args;
 
-	while (down_interruptible(&post->sem) == 0) {
+	while (post->running &&
+		down_interruptible(&post->sem) == 0) {
 		if (kthread_should_stop())
 			break;
 		mutex_lock(&post->mutex);
@@ -5403,6 +5404,7 @@ static void vdec_post_task_exit(void)
 {
 	struct post_task_mgr_s *post = &vdec_core->post;
 
+	post->running = false;
 	up(&post->sem);
 
 	kthread_stop(post->task);
@@ -5415,6 +5417,7 @@ static int vdec_post_task_init(void)
 	sema_init(&post->sem, 0);
 	INIT_LIST_HEAD(&post->task_recycle);
 	mutex_init(&post->mutex);
+	post->running = true;
 
 	post->task = kthread_run(vdec_post_task_recycle,
 		post, "task-post-daemon-thread");

@@ -660,8 +660,7 @@ retry:
 	}
 exit:
 	while (!kthread_should_stop()) {
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule();
+		usleep_range(1000, 2000);
 	}
 
 	v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL, "exit vpp thread\n");
