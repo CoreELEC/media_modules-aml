@@ -3064,8 +3064,6 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 
 	vdec_connect(vdec);
 
-	vdec_frame_check_init(vdec);
-
 	return 0;
 }
 EXPORT_SYMBOL(vdec_v4l2_reset);
