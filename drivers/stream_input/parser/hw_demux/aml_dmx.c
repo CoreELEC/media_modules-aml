@@ -193,6 +193,18 @@ MODULE_PARM_DESC(use_of_sop, "\n\t\t Enable use of sop input");
 static int use_of_sop;
 module_param(use_of_sop, int, 0644);
 
+/*
+  As the default value of unused channel's PID_TYPE is 0x7,
+  if we use PID_TYPE(RECORDER_STREAM:0x7) for recording channel,
+  the data with the pid which assigned in unused channel's setting will be captured also.
+  To avoid the high bitrate(exists) of this pid's data flood the buffers in the data path,
+  which will causes the record data corruption, and bad picture decoded.
+*/
+MODULE_PARM_DESC(g_chan_def_pid, "\n\t\t default pid for unused channel");
+static int g_chan_def_pid = 0x1FFE;
+module_param(g_chan_def_pid, int, 0644);
+
+
 /*#define CIPLUS_KEY0   0x16f8
 #define CIPLUS_KEY1   0x16f9
 #define CIPLUS_KEY2   0x16fa
@@ -3451,7 +3463,6 @@ static int dmx_enable(struct aml_dmx *dmx)
 			      (1 << AUDIO_PACKET) |
 			      (1 << SUB_PACKET) |
 			      (1 << SCR_ONLY_PACKET) |
-			      (1 << RECORDER_STREAM) |
 				(1 << OTHER_PES_PACKET));
 		DMX_WRITE_REG(dmx->id, PES_STRONG_SYNC, 0x1234);
 		DMX_WRITE_REG(dmx->id, DEMUX_ENDIAN,
@@ -3507,8 +3518,15 @@ static int dmx_enable(struct aml_dmx *dmx)
 			      (0x40 << MAX_OM_DMA_COUNT) |
 			      (0x7f << LAST_OM_ADDR));
 
+		/*RECORDER_STREAM depends on video2*/
+		/*VIDEO_STREAM_ID: video2_stream_id (bit[31:16])*/
+		/*DEMUX_CONTROL:
+		  bit[25] video2_en
+		  bit[24:22] video2_type*/
+		#define VIDEO2_FOR_RECORDER_STREAM (1 << 25 | 7 << 22)
+
 		DMX_WRITE_REG(dmx->id, VIDEO_STREAM_ID,
-				((record && !hi_bsf) ? 0xFFFF : 0));
+				((record) ? 0xFFFF0000 : 0));
 
 		DMX_WRITE_REG(dmx->id, DEMUX_CONTROL,
 			      (0 << BYPASS_USE_RECODER_PATH) |
@@ -3523,7 +3541,10 @@ static int dmx_enable(struct aml_dmx *dmx)
 			      (1 << ENABLE_FREE_CLK_FEC_DATA_VALID) |
 			      (1 << ENABLE_FREE_CLK_STB_REG) |
 			      (1 << STB_DEMUX_ENABLE) |
-			      (use_sop << NOT_USE_OF_SOP_INPUT));
+			      (use_sop << NOT_USE_OF_SOP_INPUT) |
+			      ((record)? VIDEO2_FOR_RECORDER_STREAM : 0));
+		pr_dbg("dmx control[%#x]\n",
+			DMX_READ_REG(dmx->id, DEMUX_CONTROL));
 	} else {
 		DMX_WRITE_REG(dmx->id, STB_INT_MASK, 0);
 		/* if disable FEC_INPUT_CONTROL, background and unattended record will fail */
@@ -3588,7 +3609,7 @@ static u32 dmx_get_chan_target(struct aml_dmx *dmx, int cid)
 	u32 type;
 
 	if (!dmx->channel[cid].used)
-		return 0xFFFF;
+		return (0x7 << PID_TYPE) | g_chan_def_pid;
 
 	if (dmx->channel[cid].type == DMX_TYPE_SEC) {
 		type = SECTION_PACKET;
@@ -3611,8 +3632,7 @@ static u32 dmx_get_chan_target(struct aml_dmx *dmx, int cid)
 			type = OTHER_PES_PACKET;
 			break;
 		default:
-			type = (dmx->channel[0].used || dmx->channel[1].used) ?
-				RECORDER_STREAM : VIDEO_PACKET;
+			type = RECORDER_STREAM;
 			break;
 		}
 	}
@@ -4816,19 +4836,6 @@ int dmx_alloc_chan(struct aml_dmx *dmx, int type, int pes_type, int pid)
 
 	dmx_set_chan_regs(dmx, id);
 
-	/* If video/audio channel started,
-	* visit all channels with type:VIDEO_PACKET
-	* change them to type:RECORDER_STREAM
-	*/
-	if (id == 0 || id == 1) {
-		int i;
-		for (i = SYS_CHAN_COUNT; i < CHANNEL_COUNT; i++) {
-			if (dmx->channel[i].used
-				&& dmx->channel[i].pkt_type == VIDEO_PACKET)
-				dmx_set_chan_regs(dmx, i);
-		}
-	}
-
 	set_debug_dmx_chanpids(dmx->id, id, pid);
 
 	dmx->chan_count++;
@@ -4845,25 +4852,6 @@ void dmx_free_chan(struct aml_dmx *dmx, int cid)
 	dmx->channel[cid].used = 0;
 	dmx->channel[cid].pid = 0x1fff;
 	dmx_set_chan_regs(dmx, cid);
-
-	/* video/audio channel gone,
-	 * RECORDER_STREAM channels depends on AV channel's existence
-	 * setup one fake video channel,
-	 * then other RECORDER_STREAM channels will be happy to run.
-	 */
-	if (cid == 0 || cid == 1) {
-		int i;
-		struct aml_channel *pch;
-
-		for (i = SYS_CHAN_COUNT; i < CHANNEL_COUNT; i++) {
-			pch = &dmx->channel[i];
-
-			if (pch->used) {
-				if (pch->pkt_type == RECORDER_STREAM)
-					dmx_set_chan_regs(dmx, i);
-			}
-		}
-	}
 
 	if (cid == 2) {
 		u32 parser_sub_start_ptr;
