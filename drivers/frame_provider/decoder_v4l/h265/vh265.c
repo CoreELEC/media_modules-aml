@@ -9110,6 +9110,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 
 	if (kfifo_len(&hevc->pending_q) > 1) {
 		unsigned long flags;
+		int index1;
+		int index2;
 		/* do not pending more than 1 frame */
 		if (kfifo_get(&hevc->pending_q, &vf) == 0) {
 			hevc_print(hevc, 0,
@@ -9118,8 +9120,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 		}
 		if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 			hevc_print(hevc, 0,
-			"%s warning(1), vf=>display_q: (index 0x%x)\n",
-				__func__, vf->index);
+			"%s warning(1), vf=>display_q: (index 0x%x), vf 0x%px\n",
+				__func__, vf->index, vf);
 
 		if (v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode))
 			vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
@@ -9127,13 +9129,22 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 		atomic_add(1, &hevc->vf_pre_count);
 		spin_lock_irqsave(&lock, flags);
 		kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
-		vf->index &= 0xff;
-		if (vf->index >= MAX_REF_PIC_NUM) {
+		index1 = vf->index & 0xff;
+		index2 = (vf->index >> 8) & 0xff;
+		if (index1 >= MAX_REF_PIC_NUM &&
+			index2 >= MAX_REF_PIC_NUM) {
 			spin_unlock_irqrestore(&lock, flags);
 			return -1;
 		}
-		hevc->m_PIC[vf->index]->vf_ref = 0;
-		hevc->m_PIC[vf->index]->output_ready = 0;
+
+		if (index1 < MAX_REF_PIC_NUM) {
+			hevc->m_PIC[index1]->vf_ref = 0;
+			hevc->m_PIC[index1]->output_ready = 0;
+		}
+		if (index2 < MAX_REF_PIC_NUM) {
+			hevc->m_PIC[index2]->vf_ref = 0;
+			hevc->m_PIC[index2]->output_ready = 0;
+		}
 		if (hevc->wait_buf != 0)
 			WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
 				0x1);
