@@ -9854,14 +9854,12 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		ATRACE_COUNTER(hevc->disp_q_name, kfifo_len(&hevc->display_q));
 		/*count info*/
 		vdec_count_info(hevc->gvs, 0, stream_offset);
-		if (hevc->cur_pic != NULL) {
-			if (hevc->cur_pic->slice_type == I_SLICE) {
-				hevc->gvs->i_decoded_frames++;
-			} else if (hevc->cur_pic->slice_type == P_SLICE) {
-				hevc->gvs->p_decoded_frames++;
-			} else if (hevc->cur_pic->slice_type == B_SLICE) {
-				hevc->gvs->b_decoded_frames++;
-			}
+		if (pic->slice_type == I_SLICE) {
+			hevc->gvs->i_decoded_frames++;
+		} else if (pic->slice_type == P_SLICE) {
+			hevc->gvs->p_decoded_frames++;
+		} else if (pic->slice_type == B_SLICE) {
+			hevc->gvs->b_decoded_frames++;
 		}
 		hevc_update_gvs(hevc, pic);
 		memcpy(&tmp4x, hevc->gvs, sizeof(struct vdec_info));
