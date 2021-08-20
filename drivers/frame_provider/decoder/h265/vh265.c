@@ -8025,10 +8025,25 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 	//pr_err("[%s line %d] hevc->gvs=0x%p operation\n",__func__, __LINE__, hevc->gvs);
 }
 
+static void modify_workbuff_size(struct BuffInfo_s *cur_buf_info, int num)
+{
+	if ((get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2) &&
+		(!is_cpu_tm2_revb())) {
+		if (num == 2) {
+			cur_buf_info->sao_abv.buf_size = 0x30000*2;
+		} else if (num == 1) {
+			cur_buf_info->sao_abv.buf_size = 0x30000;
+		} else if (num == 0) {
+			cur_buf_info->sao_abv.buf_size = 0x30000;
+		}
+	}
+}
+
 static int hevc_local_init(struct hevc_state_s *hevc)
 {
 	int ret = -1;
 	struct BuffInfo_s *cur_buf_info = NULL;
+	int num = 0;
 
 	memset(&hevc->param, 0, sizeof(union param_u));
 
@@ -8036,17 +8051,25 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 	if (force_bufspec) {
 		memcpy(cur_buf_info, &amvh265_workbuff_spec[force_bufspec & 0xf],
 		sizeof(struct BuffInfo_s));
+		num = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else if (vdec_is_support_4k()) {
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 			memcpy(cur_buf_info, &amvh265_workbuff_spec[2],	/* 4k */
 			sizeof(struct BuffInfo_s));
-		else
+			num = 2;
+		} else {
 			memcpy(cur_buf_info, &amvh265_workbuff_spec[1],	/* 4k */
 			sizeof(struct BuffInfo_s));
-	} else
+			num = 1;
+		}
+	} else {
 		memcpy(cur_buf_info, &amvh265_workbuff_spec[0],	/* 1080p */
 		sizeof(struct BuffInfo_s));
+		num = 0;
+	}
+
+	modify_workbuff_size(cur_buf_info, num);
 
 	cur_buf_info->start_adr = hevc->buf_start;
 	init_buff_spec(hevc, cur_buf_info);
