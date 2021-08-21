@@ -940,6 +940,7 @@ long mediasync_ins_set_videoinfo(s32 sSyncInsId, mediasync_videoinfo info) {
 
 	pInstance->mVideoInfo.cacheDuration = info.cacheDuration;
 	pInstance->mVideoInfo.cacheSize = info.cacheSize;
+	pInstance->mVideoInfo.specialSizeCount = info.specialSizeCount;
 	return 0;
 
 }
@@ -955,7 +956,8 @@ long mediasync_ins_get_videoinfo(s32 sSyncInsId, mediasync_videoinfo* info) {
 		return -1;
 
 	info->cacheDuration = pInstance->mVideoInfo.cacheDuration;
-	info->cacheDuration = pInstance->mVideoInfo.cacheDuration;
+	info->cacheSize = pInstance->mVideoInfo.cacheSize;
+	info->specialSizeCount = pInstance->mVideoInfo.specialSizeCount;
 	return 0;
 }
 

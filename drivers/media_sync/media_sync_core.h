@@ -63,6 +63,7 @@ typedef struct audioinfo{
 
 typedef struct videoinfo{
 	int cacheSize;
+	int specialSizeCount;
 	int cacheDuration;
 }mediasync_videoinfo;
 
