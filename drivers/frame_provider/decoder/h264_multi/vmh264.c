@@ -950,6 +950,7 @@ struct vdec_h264_hw_s {
 	int dec_again_cnt;
 	struct mh264_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
+	u32 no_decoder_buffer_flag;
 };
 
 static u32 again_threshold;
@@ -6535,6 +6536,11 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
 		reset_process_time(hw);
 
+		if ((pic != NULL) && (pic->mb_aff_frame_flag == 1))
+			first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3] * 2;
+		else
+			first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3];
+
 #ifdef DETECT_WRONG_MULTI_SLICE
 		hw->cur_picture_slice_count++;
 		if (hw->multi_slice_pic_flag == 1 &&
@@ -6542,9 +6548,16 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			(error_proc_policy & 0x10000)) {
 			hw->first_pre_frame_num = p_H264_Dpb->mVideo.pre_frame_num;
 		}
-		if (hw->multi_slice_pic_flag == 1 &&
-			hw->cur_picture_slice_count > 1 &&
-			(error_proc_policy & 0x10000)) {
+
+		if ((error_proc_policy & 0x10000) &&
+			(hw->cur_picture_slice_count > 1) &&
+			(first_mb_in_slice == 0) &&
+			(hw->multi_slice_pic_flag == 0))
+				hw->multi_slice_pic_check_count = 0;
+
+		if ((error_proc_policy & 0x10000) &&
+			(hw->cur_picture_slice_count > 1) &&
+			(hw->multi_slice_pic_flag == 1)) {
 			dpb_print(DECODE_ID(hw), 0,
 			"%s MULTI_SLICE_DETECT (check_count %d slice_count %d cur_slice_count %d flag %d), WRONG_MULTI_SLICE detected, insert picture\n",
 			__func__,
@@ -6553,10 +6566,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			hw->cur_picture_slice_count,
 			hw->multi_slice_pic_flag);
 
-			if ((pic != NULL) && (pic->mb_aff_frame_flag == 1))
-				first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3] * 2;
-			else
-				first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3];
 			mby_mbx = READ_VREG(MBY_MBX);
 			decode_mb_count = ((mby_mbx & 0xff) * mb_width +
 					(((mby_mbx >> 8) & 0xff) + 1));
@@ -6569,8 +6578,19 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 				hw->multi_slice_pic_flag = 0;
 				hw->multi_slice_pic_check_count = 0;
-			} else if (hw->cur_picture_slice_count > hw->last_picture_slice_count)
+			} else if (hw->cur_picture_slice_count > hw->last_picture_slice_count) {
 				vh264_pic_done_proc(vdec);
+				//if (p_H264_Dpb->mDPB.used_size == p_H264_Dpb->mDPB.size) {
+				if (!have_free_buf_spec(vdec)) {
+					dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "dpb full, wait buffer\n");
+					p_H264_Dpb->mVideo.pre_frame_num = hw->first_pre_frame_num;
+					hw->last_picture_slice_count = hw->cur_picture_slice_count;
+					hw->no_decoder_buffer_flag = 1;
+					hw->dec_result = DEC_RESULT_AGAIN;
+					vdec_schedule_work(&hw->work);
+					return IRQ_HANDLED;
+				}
+			}
 			else {
 				if (p_H264_Dpb->mVideo.dec_picture) {
 					if (p_H264_Dpb->mVideo.dec_picture->colocated_buf_index >= 0) {
@@ -7118,9 +7138,7 @@ empty_proc:
 		} else {
 			/* WRITE_VREG(DPB_STATUS_REG, H264_ACTION_INIT); */
 #ifdef DETECT_WRONG_MULTI_SLICE
-			if (hw->multi_slice_pic_flag == 1 &&
-				hw->cur_picture_slice_count > 1 &&
-				(error_proc_policy & 0x10000)) {
+			if (error_proc_policy & 0x10000) {
 				p_H264_Dpb->mVideo.pre_frame_num = hw->first_pre_frame_num;
 			}
 			hw->last_picture_slice_count = hw->cur_picture_slice_count;
@@ -9391,7 +9409,7 @@ result_done:
 			frame base: vdec_prepare_input fail
 		*/
 		if (!vdec_has_more_input(vdec) && (hw_to_vdec(hw)->next_status !=
-			VDEC_STATUS_DISCONNECTED)) {
+			VDEC_STATUS_DISCONNECTED) && (hw->no_decoder_buffer_flag == 0)) {
 			hw->dec_result = DEC_RESULT_EOS;
 			vdec_schedule_work(&hw->work);
 			return;
@@ -9403,6 +9421,7 @@ result_done:
 			vdec_schedule_work(&hw->work);
 			return;
 		}
+		hw->no_decoder_buffer_flag = 0;
 		hw->next_again_flag = 1;
 	} else if (hw->dec_result == DEC_RESULT_EOS) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
