@@ -62,6 +62,7 @@ static const struct format_name_s format_name[] = {
 };
 
 static const struct cpu_type_s cpu_type[] = {
+	{AM_MESON_CPU_MAJOR_ID_M8B,	"m8b"},
 	{AM_MESON_CPU_MAJOR_ID_GXL,	"gxl"},
 	{AM_MESON_CPU_MAJOR_ID_GXM,	"gxm"},
 	{AM_MESON_CPU_MAJOR_ID_TXL,	"txl"},

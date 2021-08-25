@@ -68,6 +68,11 @@ static enum AM_MESON_CPU_MAJOR_ID cpu_ver_info[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR
 
 static const struct of_device_id cpu_ver_of_match[] = {
 	{
+		.compatible = "amlogic, cpu-major-id-m8b",
+		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_M8B - MAJOR_ID_START],
+	},
+
+	{
 		.compatible = "amlogic, cpu-major-id-axg",
 		.data = &cpu_ver_info[AM_MESON_CPU_MAJOR_ID_AXG - MAJOR_ID_START],
 	},

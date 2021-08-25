@@ -330,7 +330,11 @@ static u32 rval;
 static u32 dbg_cmd;
 static u32 dump_nal;
 static u32 dbg_skip_decode_index;
-static u32 endian = 0xff0;
+
+#define HEVC_CONFIG_BIG_ENDIAN     ((0x880 << 8) | 0x8)
+#define HEVC_CONFIG_LITTLE_ENDIAN  ((0xff0 << 8) | 0xf)
+
+static u32 endian;
 #ifdef ERROR_HANDLE_DEBUG
 static u32 dbg_nal_skip_flag;
 		/* bit[0], skip vps; bit[1], skip sps; bit[2], skip pps */
@@ -993,13 +997,13 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			/* IPP work space calculation :
 			 *   4096 * (Y+CbCr+Flags) = 12k, round to 16k
 			 */
-			.buf_size = 0x1e00,
+			.buf_size = 0x4000,
 		},
 		.sao_abv = {
-			.buf_size = 0, //0x30000,
+			.buf_size = 0x30000,
 		},
 		.sao_vb = {
-			.buf_size = 0, //0x30000,
+			.buf_size = 0x30000,
 		},
 		.short_term_rps = {/*checked*/
 			/* SHORT_TERM_RPS - Max 64 set, 16 entry every set,
@@ -1029,7 +1033,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			/* SAO UP STORE AREA - Max 640(10240/16) LCU,
 			 *   each has 16 bytes total 0x2800 bytes
 			 */
-			.buf_size = 0, //0x2800,
+			.buf_size = 0x2800,
 		},
 		.swap_buf = {/*checked*/
 			/* 256cyclex64bit = 2K bytes 0x800
@@ -1046,7 +1050,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			 */
 			.buf_size = 0x8000,
 		},
-		.dblk_para  = {.buf_size = 0x14500, }, // dblk parameter
+		.dblk_para  = {.buf_size = 0x40000, }, // dblk parameter
 		.dblk_data  = {.buf_size = 0x62800, }, // dblk data for left/top
 		.dblk_data2 = {.buf_size = 0x22800, }, // dblk data for adapter
 		.mmu_vbh = {/*checked*/
@@ -1059,7 +1063,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 #endif
 		.mpred_above = {/*checked*/
-			.buf_size = 0x1e00,
+			.buf_size = 0x8000,
 		},
 #ifdef MV_USE_FIXED_BUF
 		.mpred_mv = {/*checked*//* 1080p, 0x40000 per buffer */
@@ -1856,6 +1860,7 @@ struct hevc_state_s {
 	int dec_again_cnt;
 	struct mh265_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
+	u32 endian;
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
 } /*hevc_stru_t */;
@@ -5710,7 +5715,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
  */
 	data32 &= (~0xff0);
 	/* data32 |= 0x670;  // Big-Endian per 64-bit */
-	data32 |= endian;	/* Big-Endian per 64-bit */
+	data32 |= ((hevc->endian >> 8) & 0xff0);	/* Big-Endian per 64-bit */
 	data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
 	if (get_double_write_mode(hevc) == 0)
 		data32 |= 0x2; /*disable double write*/
@@ -5775,8 +5780,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	data32 |= (hevc->mem_map_mode <<
 			   4);
 	data32 &= (~0xF);
-	data32 |= 0xf;  /* valid only when double write only */
-		/*data32 |= 0x8;*/		/* Big-Endian per 64-bit */
+	data32 |= (hevc->endian & 0xf);  /* valid only when double write only */
 
 	/* swap uv */
 	if (hevc->is_used_v4l) {
@@ -7312,7 +7316,9 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		}
 
 		if (hevc->bit_depth_chroma > 10 ||
-			hevc->bit_depth_luma > 10) {
+			hevc->bit_depth_luma > 10 ||
+			((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_M8B) &&
+			(hevc->bit_depth_chroma > 8 || hevc->bit_depth_luma > 8))) {
 			hevc_print(hevc, 0, "unsupport bitdepth : %u,%u\n",
 				hevc->bit_depth_chroma,
 				hevc->bit_depth_luma);
@@ -8167,7 +8173,12 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 	int canvas_w = ALIGN(pic->width, 64)/4;
 	int canvas_h = ALIGN(pic->height, 32)/4;
 	int blkmode = hevc->mem_map_mode;
+	int cfg_endian = 0;
 
+	if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_M8B)
+		cfg_endian = hevc->is_used_v4l ? 0 : 7;
+	else
+		cfg_endian = 0;
 	/*CANVAS_BLKMODE_64X32*/
 #ifdef SUPPORT_10BIT
 	if	(pic->double_write_mode) {
@@ -8194,10 +8205,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 		canvas_config_ex(pic->y_canvas_index,
 			pic->dw_y_adr, canvas_w, canvas_h,
-			CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+			CANVAS_ADDR_NOWRAP, blkmode, cfg_endian);
 		canvas_config_ex(pic->uv_canvas_index, pic->dw_u_v_adr,
 			canvas_w, canvas_h,
-			CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+			CANVAS_ADDR_NOWRAP, blkmode, cfg_endian);
 #ifdef MULTI_INSTANCE_SUPPORT
 		pic->canvas_config[0].phy_addr =
 				pic->dw_y_adr;
@@ -8207,7 +8218,7 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 				canvas_h;
 		pic->canvas_config[0].block_mode =
 				blkmode;
-		pic->canvas_config[0].endian = hevc->is_used_v4l ? 0 : 7;
+		pic->canvas_config[0].endian = cfg_endian;
 
 		pic->canvas_config[1].phy_addr =
 				pic->dw_u_v_adr;
@@ -8217,7 +8228,7 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 				canvas_h;
 		pic->canvas_config[1].block_mode =
 				blkmode;
-		pic->canvas_config[1].endian = hevc->is_used_v4l ? 0 : 7;
+		pic->canvas_config[1].endian = cfg_endian;
 
 		ATRACE_COUNTER(hevc->set_canvas0_addr, pic->canvas_config[0].phy_addr);
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
@@ -8241,10 +8252,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 			canvas_config_ex(pic->y_canvas_index,
 				pic->mc_y_adr, canvas_w, canvas_h,
-				CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+				CANVAS_ADDR_NOWRAP, blkmode, cfg_endian);
 			canvas_config_ex(pic->uv_canvas_index, pic->mc_u_v_adr,
 				canvas_w, canvas_h,
-				CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+				CANVAS_ADDR_NOWRAP, blkmode, cfg_endian);
 		}
 		ATRACE_COUNTER(hevc->set_canvas0_addr, spec2canvas(pic));
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
@@ -8263,10 +8274,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 
 	canvas_config_ex(pic->y_canvas_index, pic->mc_y_adr, canvas_w, canvas_h,
-		CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+		CANVAS_ADDR_NOWRAP, blkmode, cfg_endian);
 	canvas_config_ex(pic->uv_canvas_index, pic->mc_u_v_adr,
 		canvas_w, canvas_h,
-		CANVAS_ADDR_NOWRAP, blkmode, hevc->is_used_v4l ? 0 : 7);
+		CANVAS_ADDR_NOWRAP, blkmode, cfg_endian);
 
 	ATRACE_COUNTER(hevc->set_canvas0_addr, spec2canvas(pic));
 	hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
@@ -9522,18 +9533,15 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->compBodyAddr = 0;
 			vf->compHeadAddr = 0;
 		} else {
-
-		if (hevc->mmu_enable) {
-			vf->compBodyAddr = 0;
-			vf->compHeadAddr = pic->header_adr;
-		} else {
-			vf->compBodyAddr = pic->mc_y_adr; /*body adr*/
-			vf->compHeadAddr = pic->mc_y_adr +
-						pic->losless_comp_body_size;
-			vf->mem_head_handle = NULL;
-		}
-
-					/*head adr*/
+			if (hevc->mmu_enable) {
+				vf->compBodyAddr = 0;
+				vf->compHeadAddr = pic->header_adr;
+			} else {
+				vf->compBodyAddr = pic->mc_y_adr; /*body adr*/
+				vf->compHeadAddr = pic->mc_y_adr +
+							pic->losless_comp_body_size; /*head adr*/
+				vf->mem_head_handle = NULL;
+			}
 			vf->canvas0Addr = vf->canvas1Addr = 0;
 		}
 		if (pic->double_write_mode) {
@@ -10866,9 +10874,7 @@ pic_done:
 				get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
 				if (hevc->delrefill_check != 2)
 #endif
-
 			amhevc_stop();
-
 			reset_process_time(hevc);
 
 			if ((!input_stream_based(vdec) &&
@@ -10879,9 +10885,7 @@ pic_done:
 					/*PB skip control */
 					if (pic->error_mark == 0
 							&& hevc->PB_skip_mode == 1) {
-						/* start decoding after
-						 *   first I
-						 */
+						/* start decoding after first I */
 						hevc->ignore_bufmgr_error |= 0x1;
 					}
 					if (hevc->ignore_bufmgr_error & 1) {
@@ -11303,7 +11307,6 @@ force_output:
 		if (hevc->m_ins_flag) {
 			reset_process_time(hevc);
 			read_decode_info(hevc);
-
 		}
 #endif
 		if (hevc->start_decoding_time > 0) {
@@ -11388,7 +11391,7 @@ force_output:
 						vdec_schedule_work(&hevc->work);
 						return IRQ_HANDLED;
 					}
-				}else {
+				} else {
 					pr_debug("resolution change\n");
 					hevc->dec_result = DEC_RESULT_AGAIN;
 					amhevc_stop();
@@ -11396,7 +11399,6 @@ force_output:
 					reset_process_time(hevc);
 					vdec_schedule_work(&hevc->work);
 					return IRQ_HANDLED;
-
 				}
 			}
 
@@ -11468,111 +11470,111 @@ force_output:
 
 			if (hevc->video_signal_type !=
 				((hevc->param.p.video_signal_type << 16)
-				| hevc->param.p.color_description)) {
-				u32 v = hevc->param.p.video_signal_type;
-				u32 c = hevc->param.p.color_description;
+					| hevc->param.p.color_description)) {
+					u32 v = hevc->param.p.video_signal_type;
+					u32 c = hevc->param.p.color_description;
 #if 0
-			if (v & 0x2000) {
-				hevc_print(hevc, 0,
-				"video_signal_type present:\n");
-				hevc_print(hevc, 0, " %s %s\n",
-				video_format_names[(v >> 10) & 7],
-					((v >> 9) & 1) ?
-					"full_range" : "limited");
-				if (v & 0x100) {
+				if (v & 0x2000) {
 					hevc_print(hevc, 0,
-					" color_description present:\n");
-					hevc_print(hevc, 0,
-					"  color_primarie = %s\n",
-					color_primaries_names
-					[v & 0xff]);
-					hevc_print(hevc, 0,
-					"  transfer_characteristic = %s\n",
-					transfer_characteristics_names
-					[(c >> 8) & 0xff]);
-					hevc_print(hevc, 0,
-					"  matrix_coefficient = %s\n",
-					matrix_coeffs_names[c & 0xff]);
+					"video_signal_type present:\n");
+					hevc_print(hevc, 0, " %s %s\n",
+					video_format_names[(v >> 10) & 7],
+						((v >> 9) & 1) ?
+						"full_range" : "limited");
+					if (v & 0x100) {
+						hevc_print(hevc, 0,
+						" color_description present:\n");
+						hevc_print(hevc, 0,
+						"  color_primarie = %s\n",
+						color_primaries_names
+						[v & 0xff]);
+						hevc_print(hevc, 0,
+						"  transfer_characteristic = %s\n",
+						transfer_characteristics_names
+						[(c >> 8) & 0xff]);
+						hevc_print(hevc, 0,
+						"  matrix_coefficient = %s\n",
+						matrix_coeffs_names[c & 0xff]);
+					}
 				}
-			}
 #endif
-		hevc->video_signal_type = (v << 16) | c;
-		video_signal_type = hevc->video_signal_type;
-	}
-
-	if (use_cma &&
-		(hevc->param.p.slice_segment_address == 0)
-		&& (hevc->pic_list_init_flag == 0)) {
-		int log = hevc->param.p.log2_min_coding_block_size_minus3;
-		int log_s = hevc->param.p.log2_diff_max_min_coding_block_size;
-
-		hevc->pic_w = hevc->param.p.pic_width_in_luma_samples;
-		hevc->pic_h = hevc->param.p.pic_height_in_luma_samples;
-		hevc->lcu_size = 1 << (log + 3 + log_s);
-		hevc->lcu_size_log2 = log2i(hevc->lcu_size);
-		if (performance_profile &&( (!is_oversize(hevc->pic_w, hevc->pic_h)) && IS_8K_SIZE(hevc->pic_w,hevc->pic_h)))
-			hevc->performance_profile = 1;
-		else
-			hevc->performance_profile = 0;
-		hevc_print(hevc, 0, "hevc->performance_profile %d\n", hevc->performance_profile);
-		if (hevc->pic_w == 0 || hevc->pic_h == 0
-						|| hevc->lcu_size == 0
-						|| is_oversize(hevc->pic_w, hevc->pic_h)
-						||  hevc_skip_nal(hevc)) {
-			/* skip search next start code */
-			WRITE_VREG(HEVC_WAIT_FLAG, READ_VREG(HEVC_WAIT_FLAG)
-						& (~0x2));
-			if  ((hevc->pic_h == 96) && (hevc->pic_w  == 160))
-				hevc->skip_nal_count++;
-			hevc->skip_flag = 1;
-			WRITE_VREG(HEVC_DEC_STATUS_REG,	HEVC_ACTION_DONE);
-			/* Interrupt Amrisc to excute */
-			WRITE_VREG(HEVC_MCPU_INTR_REQ,	AMRISC_MAIN_REQ);
-#ifdef MULTI_INSTANCE_SUPPORT
-			if (hevc->m_ins_flag)
-				start_process_time(hevc);
-#endif
-		} else {
-			hevc->sps_num_reorder_pics_0 =
-			hevc->param.p.sps_num_reorder_pics_0;
-			hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 &&
-								!(vdec->slave || vdec->master) &&
-								!disable_ip_mode &&
-								hevc->low_latency_flag) ? true : false;
-			hevc->pic_list_init_flag = 1;
-			if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
-				((hevc->param.p.profile_etc & 0xc) == 0x4)
-				&& (interlace_enable != 0)) {
-				hevc->double_write_mode = 1;
-				hevc->interlace_flag = 1;
-				hevc->frame_ar = (hevc->pic_h * 0x100 / hevc->pic_w) * 2;
-				hevc_print(hevc, 0,
-					"interlace (%d, %d), profile_etc %x, ar 0x%x, dw %d\n",
-					hevc->pic_w, hevc->pic_h, hevc->param.p.profile_etc, hevc->frame_ar,
-					get_double_write_mode(hevc));
-				/* When dw changed from 0x10 to 1, the mmu_box is NULL */
-				if (!hevc->mmu_box && init_mmu_box(hevc) != 0) {
-					hevc->dec_result = DEC_RESULT_FORCE_EXIT;
-					hevc->fatal_error |=
-						DECODER_FATAL_ERROR_NO_MEM;
-					vdec_schedule_work(&hevc->work);
-					hevc_print(hevc,
-						0, "can not alloc mmu box, force exit\n");
-					return IRQ_HANDLED;
-				}
-			}
-#ifdef MULTI_INSTANCE_SUPPORT
-			if (hevc->m_ins_flag) {
-				vdec_schedule_work(&hevc->work);
-			} else
-#endif
-				up(&h265_sema);
-			hevc_print(hevc, 0, "set pic_list_init_flag 1\n");
+			hevc->video_signal_type = (v << 16) | c;
+			video_signal_type = hevc->video_signal_type;
 		}
-		return IRQ_HANDLED;
-	}
 
-}
+		if (use_cma &&
+		(hevc->param.p.slice_segment_address == 0)
+			&& (hevc->pic_list_init_flag == 0)) {
+			int log = hevc->param.p.log2_min_coding_block_size_minus3;
+			int log_s = hevc->param.p.log2_diff_max_min_coding_block_size;
+
+			hevc->pic_w = hevc->param.p.pic_width_in_luma_samples;
+			hevc->pic_h = hevc->param.p.pic_height_in_luma_samples;
+			hevc->lcu_size = 1 << (log + 3 + log_s);
+			hevc->lcu_size_log2 = log2i(hevc->lcu_size);
+			if (performance_profile &&( (!is_oversize(hevc->pic_w, hevc->pic_h)) && IS_8K_SIZE(hevc->pic_w,hevc->pic_h)))
+				hevc->performance_profile = 1;
+			else
+				hevc->performance_profile = 0;
+			hevc_print(hevc, 0, "hevc->performance_profile %d\n", hevc->performance_profile);
+			if (hevc->pic_w == 0 || hevc->pic_h == 0
+							|| hevc->lcu_size == 0
+							|| is_oversize(hevc->pic_w, hevc->pic_h)
+							||  hevc_skip_nal(hevc)) {
+				/* skip search next start code */
+				WRITE_VREG(HEVC_WAIT_FLAG, READ_VREG(HEVC_WAIT_FLAG)
+							& (~0x2));
+				if  ((hevc->pic_h == 96) && (hevc->pic_w  == 160))
+					hevc->skip_nal_count++;
+				hevc->skip_flag = 1;
+				WRITE_VREG(HEVC_DEC_STATUS_REG,	HEVC_ACTION_DONE);
+				/* Interrupt Amrisc to excute */
+				WRITE_VREG(HEVC_MCPU_INTR_REQ,	AMRISC_MAIN_REQ);
+#ifdef MULTI_INSTANCE_SUPPORT
+				if (hevc->m_ins_flag)
+					start_process_time(hevc);
+#endif
+			} else {
+				hevc->sps_num_reorder_pics_0 =
+				hevc->param.p.sps_num_reorder_pics_0;
+				hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 &&
+									!(vdec->slave || vdec->master) &&
+									!disable_ip_mode &&
+									hevc->low_latency_flag) ? true : false;
+				hevc->pic_list_init_flag = 1;
+				if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
+					((hevc->param.p.profile_etc & 0xc) == 0x4)
+					&& (interlace_enable != 0)) {
+					hevc->double_write_mode = 1;
+					hevc->interlace_flag = 1;
+					hevc->frame_ar = (hevc->pic_h * 0x100 / hevc->pic_w) * 2;
+					hevc_print(hevc, 0,
+						"interlace (%d, %d), profile_etc %x, ar 0x%x, dw %d\n",
+						hevc->pic_w, hevc->pic_h, hevc->param.p.profile_etc, hevc->frame_ar,
+						get_double_write_mode(hevc));
+					/* When dw changed from 0x10 to 1, the mmu_box is NULL */
+					if (!hevc->mmu_box && init_mmu_box(hevc) != 0) {
+						hevc->dec_result = DEC_RESULT_FORCE_EXIT;
+						hevc->fatal_error |=
+							DECODER_FATAL_ERROR_NO_MEM;
+						vdec_schedule_work(&hevc->work);
+						hevc_print(hevc,
+							0, "can not alloc mmu box, force exit\n");
+						return IRQ_HANDLED;
+					}
+				}
+#ifdef MULTI_INSTANCE_SUPPORT
+				if (hevc->m_ins_flag) {
+					vdec_schedule_work(&hevc->work);
+				} else
+#endif
+					up(&h265_sema);
+				hevc_print(hevc, 0, "set pic_list_init_flag 1\n");
+			}
+			return IRQ_HANDLED;
+		}
+
+	}
 	ret =
 		hevc_slice_segment_header_process(hevc,
 			&hevc->param, decode_pic_begin);
@@ -13948,7 +13950,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
 			WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->swap_addr);
 	} else {
-		if (hevc->mmu_enable)
+		if (hevc->mmu_enable) {
 			if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_GXM)
 				loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
 						"h265_mmu", hevc->fw->data);
@@ -13966,14 +13968,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 							VFORMAT_HEVC, vdec,
 							"h265_mmu",
 							hevc->fw->data);
-					else
+					else {
 						hevc->is_swap = true;
+						//pr_info("ucode swap enabled...\n");
+					}
 				} else
 					loadr = amhevc_vdec_loadmc_ex(
 						VFORMAT_HEVC, vdec,
 						"h265_mmu", hevc->fw->data);
 			}
-		else
+		} else
 			loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
 					NULL, hevc->fw->data);
 		if (loadr < 0) {
@@ -14696,6 +14700,13 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	}
 
 
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_M8B)
+		hevc->endian = HEVC_CONFIG_BIG_ENDIAN;
+	else
+		hevc->endian = HEVC_CONFIG_LITTLE_ENDIAN;
+	if (endian)
+		hevc->endian = endian;
+
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) &&
 			(hevc->double_write_mode == 3))
 		hevc->double_write_mode = 0x1000;
@@ -14711,9 +14722,10 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	}
 
 	if (mmu_enable_force == 0) {
-		if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL)
+		if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL) {
 			hevc->mmu_enable = 0;
-		else
+			hevc->double_write_mode = 0x10;
+		} else
 			hevc->mmu_enable = 1;
 	}
 

@@ -1029,6 +1029,7 @@ static int vdec_clock_get(enum vdec_type_e core)
 #define VDEC_HAS_VDEC_HCODEC
 #define VDEC_HAS_CLK_SETTINGS
 #define CLK_FOR_CPU {\
+	AM_MESON_CPU_MAJOR_ID_M8B,\
 	AM_MESON_CPU_MAJOR_ID_GXBB,\
 	AM_MESON_CPU_MAJOR_ID_GXTVBB,\
 	AM_MESON_CPU_MAJOR_ID_GXL,\
