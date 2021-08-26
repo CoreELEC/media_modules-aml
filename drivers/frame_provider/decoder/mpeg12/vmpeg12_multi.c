@@ -2549,6 +2549,14 @@ static struct vframe_s *vmpeg_vf_peek(void *op_arg)
 	struct vdec_mpeg12_hw_s *hw =
 	(struct vdec_mpeg12_hw_s *)vdec->private;
 	hw->peek_num++;
+
+	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
+		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+			"kfifo len:%d invaild, peek error\n",
+			kfifo_len(&hw->display_q));
+		return NULL;
+	}
+
 	if (kfifo_peek(&hw->display_q, &vf))
 		return vf;
 

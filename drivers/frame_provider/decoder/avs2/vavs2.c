@@ -4211,6 +4211,13 @@ static struct vframe_s *vavs2_vf_peek(void *op_arg)
 		return &dec->vframe_dummy;
 	}
 
+	if (kfifo_len(&dec->display_q) > VF_POOL_SIZE) {
+		avs2_print(dec, AVS2_DBG_BUFMGR,
+			"kfifo len:%d invaild, peek error\n",
+			kfifo_len(&dec->display_q));
+		return NULL;
+	}
+
 	if (kfifo_peek(&dec->display_q, &vf))
 		return vf;
 
