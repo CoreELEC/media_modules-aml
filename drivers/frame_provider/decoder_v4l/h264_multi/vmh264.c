@@ -9774,7 +9774,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		ret = is_buffer_available(vdec);
 
 #ifdef CONSTRAIN_MAX_BUF_NUM
-	if (hw->dpb.mDPB.size > 0) { /*make sure initilized*/
+	if (ret && (hw->dpb.mDPB.size > 0)) { /*make sure initilized*/
 		if (run_ready_max_vf_only_num > 0 &&
 			get_vf_ref_only_buf_count(hw) >=
 			run_ready_max_vf_only_num
@@ -9794,6 +9794,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			get_used_buf_count(hw) >=
 			run_ready_max_buf_num)
 			ret = 0;
+		if (ret == 0)
+			bufmgr_h264_remove_unused_frame(&hw->dpb, 0);
 	}
 #endif
 	if (hw->is_used_v4l) {
