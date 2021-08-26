@@ -984,6 +984,13 @@ static struct vframe_s *vavs_vf_peek(void *op_arg)
 	if (hw->recover_flag)
 		return NULL;
 
+	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
+		debug_print(hw, PRINT_FLAG_RUN_FLOW,
+			"kfifo len:%d invaild, peek error\n",
+			kfifo_len(&hw->display_q));
+		return NULL;
+	}
+
 	if (kfifo_peek(&hw->display_q, &vf)) {
 		if (vf) {
 			if (force_fps & 0x100) {

@@ -6106,6 +6106,13 @@ static struct vframe_s *vav1_vf_peek(void *op_arg)
 	if (step == 2)
 		return NULL;
 
+	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
+		av1_print(hw, AV1_DEBUG_BUFMGR,
+			"kfifo len:%d invaild, peek error\n",
+			kfifo_len(&hw->display_q));
+		return NULL;
+	}
+
 	if (kfifo_out_peek(&hw->display_q, (void *)&vf, 2)) {
 		if (vf[1]) {
 			vf[0]->next_vf_pts_valid = true;

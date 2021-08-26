@@ -8985,6 +8985,12 @@ static struct vframe_s *vh265_vf_peek(void *op_arg)
 		return &hevc->vframe_dummy;
 	}
 
+	if (kfifo_len(&hevc->display_q) > VF_POOL_SIZE) {
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
+			"kfifo len:%d invaild, peek error\n",
+			kfifo_len(&hevc->display_q));
+		return NULL;
+	}
 
 	if (kfifo_out_peek(&hevc->display_q, (void *)&vf, 2)) {
 		if (vf[1]) {

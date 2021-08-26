@@ -4397,6 +4397,13 @@ static struct vframe_s *vh264_vf_peek(void *op_arg)
 		return &hw->vframe_dummy;
 	}
 
+	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"kfifo len:%d invaild, peek error\n",
+			kfifo_len(&hw->display_q));
+		return NULL;
+	}
+
 	if (kfifo_out_peek(&hw->display_q, (void *)&vf, 2)) {
 		if (vf[1]) {
 			vf[0]->next_vf_pts_valid = true;
