@@ -7507,7 +7507,7 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 		hevc_sao_wait_done(hw);
 	}
 	dpb_print(DECODE_ID(hw),
-		PRINT_FLAG_ERROR, "%s decoder timeout\n", __func__);
+		PRINT_FLAG_ERROR, "%s decoder timeout, DPB_STATUS_REG 0x%x\n", __func__, READ_VREG(DPB_STATUS_REG));
 	release_cur_decoding_buf(hw);
 	hw->dec_result = DEC_RESULT_TIMEOUT;
 	hw->data_flag |= ERROR_FLAG;
@@ -7751,7 +7751,9 @@ static void check_timer_func(struct timer_list *timer)
 		if ((dpb_status == H264_ACTION_DECODE_NEWPIC) ||
 			(dpb_status == H264_ACTION_DECODE_SLICE) ||
 			(dpb_status == H264_SEI_DATA_DONE) ||
-			(dpb_status == H264_STATE_SEARCH_HEAD)) {
+			(dpb_status == H264_STATE_SEARCH_HEAD) ||
+			(dpb_status == H264_SLICE_HEAD_DONE) ||
+			(dpb_status == H264_SEI_DATA_READY)) {
 			if (h264_debug_flag & DEBUG_TIMEOUT_DEC_STAT)
 				pr_debug("%s dpb_status = 0x%x last_mby_mbx = %u mby_mbx = %u\n",
 				__func__, dpb_status, hw->last_mby_mbx, mby_mbx);
