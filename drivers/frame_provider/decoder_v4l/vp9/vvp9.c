@@ -2422,7 +2422,8 @@ static int get_free_fb_idx(struct VP9Decoder_s *pbi)
 
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if ((frame_bufs[i].ref_count == 0) &&
-			(frame_bufs[i].buf.vf_ref == 0))
+			(frame_bufs[i].buf.vf_ref == 0) &&
+			(cm->cur_frame != &frame_bufs[i]))
 			break;
 	}
 
@@ -2452,7 +2453,8 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 			if ((frame_bufs[i].ref_count == 0) &&
 				(pic->vf_ref == 0) &&
 				(pic->index != -1) &&
-				pic->cma_alloc_addr) {
+				pic->cma_alloc_addr &&
+				(cm->cur_frame != &frame_bufs[i])) {
 				free_pic = pic;
 			}
 			break;
