@@ -13392,7 +13392,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 			if (!(error_handle_policy & 0x400)) {
 				spin_unlock_irqrestore(&lock, flags);
 				flush_output(hevc, NULL);
-				hevc_print(hevc, H265_DEBUG_BUFMGR_MORE, "flush dpb, ref_error_count %d, sps_max_dec_pic_buffering_minus1_0 %d\n",
+				hevc_print(hevc, H265_DEBUG_BUFMGR, "flush dpb, ref_error_count %d, sps_max_dec_pic_buffering_minus1_0 %d\n",
 						decode_count, hevc->param.p.sps_max_dec_pic_buffering_minus1_0);
 				return 0;
 			}

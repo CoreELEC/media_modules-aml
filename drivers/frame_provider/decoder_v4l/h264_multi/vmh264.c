@@ -286,6 +286,8 @@ static unsigned int i_only_flag;
 	bit[19] 1: If a lot b frames are wrong consecutively, the DPB queue reset.
 	bit[20] 1: fixed some error stream will lead to the diffusion of the error, resulting playback stuck.
 	bit[21] 1: fixed DVB loop playback cause jetter issue.
+	bit[22] 1: In streaming mode, support for discarding data.
+	bit[23] 0: set error flag on frame number gap error and drop it, 1: ignore error.
 */
 static unsigned int error_proc_policy = 0x3fCfb6; /*0x1f14*/
 
@@ -6975,9 +6977,11 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				}
 
 			if (!I_flag && frame_num_gap) {
-				hw->data_flag |= ERROR_FLAG;
-				p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
-				dpb_print(DECODE_ID(hw), 0, "frame number gap error\n");
+				if (!(error_proc_policy & 0x800000)) {
+					hw->data_flag |= ERROR_FLAG;
+					p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
+					dpb_print(DECODE_ID(hw), 0, "frame number gap error\n");
+				}
 			}
 
 			if (error_proc_policy & 0x400) {
