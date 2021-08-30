@@ -117,6 +117,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	mediasync_systime_para SystemTime = {0};
 	aml_Source_Type sourceType = TS_DEMOD;
 	s64 UpdateTimeThreshold = 0;
+	s64 StartMediaTime = -1;
 
 
 	switch (cmd) {
@@ -898,6 +899,29 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 					return -EFAULT;
 			}
 		break;
+		case MEDIASYNC_IOC_SET_START_MEDIA_TIME:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			if (copy_from_user((void *)&StartMediaTime,
+				(void *)arg,
+				sizeof(StartMediaTime)))
+			return -EFAULT;
+			ret = mediasync_ins_set_start_media_time(priv->mSyncInsId, StartMediaTime);
+		break;
+
+		case MEDIASYNC_IOC_GET_START_MEDIA_TIME:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_start_media_time(priv->mSyncInsId, &StartMediaTime);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+					&StartMediaTime,
+					sizeof(StartMediaTime)))
+				return -EFAULT;
+			}
+		break;
 
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
@@ -968,6 +992,8 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_SOURCE_TYPE:
 		case MEDIASYNC_IOC_SET_UPDATETIME_THRESHOLD:
 		case MEDIASYNC_IOC_GET_UPDATETIME_THRESHOLD:
+		case MEDIASYNC_IOC_SET_START_MEDIA_TIME:
+		case MEDIASYNC_IOC_GET_START_MEDIA_TIME:
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;

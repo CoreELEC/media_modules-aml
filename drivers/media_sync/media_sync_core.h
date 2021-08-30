@@ -92,6 +92,7 @@ typedef struct instance{
 	s64 mLastRealTime;
 	s64 mLastMediaTime;
 	s64 mTrackMediaTime;
+	s64 mStartMediaTime;
 	mediasync_speed mSpeed;
 	s32 mSyncModeChange;
 	s64 mUpdateTimeThreshold;
@@ -183,6 +184,7 @@ long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable);
 long mediasync_ins_get_fccenable(s32 sSyncInsId, s64* enable);
 long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType);
 long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType);
-
+long mediasync_ins_set_start_media_time(s32 sSyncInsId, s64 startime);
+long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime);
 
 #endif

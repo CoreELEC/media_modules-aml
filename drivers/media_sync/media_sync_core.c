@@ -1128,5 +1128,30 @@ long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType) 
 	return 0;
 }
 
+long mediasync_ins_set_start_media_time(s32 sSyncInsId, s64 startime) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+	pInstance->mStartMediaTime = startime;
+	return 0;
+}
+
+long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+	*starttime = pInstance->mStartMediaTime;
+	return 0;
+}
 
 
