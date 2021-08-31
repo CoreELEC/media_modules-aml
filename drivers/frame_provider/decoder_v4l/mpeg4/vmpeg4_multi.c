@@ -2197,12 +2197,19 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 #endif
 
 	/* cbcr_merge_swap_en */
-	if (hw->is_used_v4l && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7)
-		&& (v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21
-		|| v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
-		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
-	else
-		CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		if ((v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21) ||
+			(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
+			CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+		else
+			SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+	} else {
+		if ((v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21) ||
+			(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
+			SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+		else
+			CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+	}
 
 #if 1/* /MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8 */
 	WRITE_VREG(MDEC_PIC_DC_THRESH, 0x404038aa);

@@ -238,6 +238,7 @@ static const struct aml_codec_framesizes aml_vdec_framesizes[] = {
 extern bool multiplanar;
 extern int dump_capture_frame;
 extern int bypass_vpp;
+extern int bypass_ge2d;
 extern bool support_format_I420;
 extern bool support_mjpeg;
 extern int bypass_progressive;
@@ -403,6 +404,9 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 
 static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 {
+	if (bypass_ge2d)
+		return false;
+
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
 		if ((ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
@@ -2655,6 +2659,7 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 		if (ctx->state >= AML_STATE_PROBE) {
 			update_ctx_dimension(ctx, f->type);
 			copy_v4l2_format_dimention(pix_mp, pix, q_data, f->type);
+			v4l_buf_size_decision(ctx);
 		}
 	}
 
