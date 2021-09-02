@@ -693,6 +693,10 @@ int dump_output_frame;
 EXPORT_SYMBOL(dump_output_frame);
 module_param(dump_output_frame, int, 0644);
 
+u32 dump_output_start_position;
+EXPORT_SYMBOL(dump_output_start_position);
+module_param(dump_output_start_position, uint, 0644);
+
 EXPORT_SYMBOL(param_sets_from_ucode);
 module_param(param_sets_from_ucode, bool, 0644);
 

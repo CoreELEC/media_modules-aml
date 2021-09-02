@@ -388,6 +388,24 @@ struct vdec_post_task_parms_s {
 #define vdec_secure(vdec) \
 	(((vdec)->port_flag & PORT_FLAG_DRM))
 
+#define PR_INIT(s)					\
+	int __len = 0, __size = s;			\
+	u8 __buf[s] = {0}
+
+#define PR_FILL(args...)				\
+	do {						\
+		if ((__size - __len) <= 0) break;	\
+		__len += snprintf(__buf + __len,	\
+		__size - __len, ##args);		\
+	} while (0)
+
+#define PR_INFO(id)					\
+	do {						\
+		if (__len == 0) break;			\
+		pr_info("[%d] %s\n", id, __buf);	\
+		__len = 0;				\
+	} while (0)
+
 /* construct vdec strcture */
 extern struct vdec_s *vdec_create(struct stream_port_s *port,
 				struct vdec_s *master);

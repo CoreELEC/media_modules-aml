@@ -56,6 +56,7 @@
 //#define DATA_DEBUG
 
 extern int dump_output_frame;
+extern u32 dump_output_start_position;
 extern void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx, u32 handle);
 static int def_4k_vstreambuf_sizeM =
 	(DEFAULT_VIDEO_BUFFER_SIZE_4K >> 20);
@@ -539,6 +540,8 @@ void dump(const char* path, const char *data, unsigned int size)
 	if (!IS_ERR(fp)) {
 		kernel_write(fp, data, size, 0);
 		filp_close(fp, NULL);
+	} else {
+		pr_info("Dump ES fail, should check RW permission, size:%x\n", size);
 	}
 }
 
@@ -615,9 +618,12 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 		msleep(30);
 	}
 
-	if (dump_output_frame > 0) {
+	if (dump_output_frame > 0 &&
+		(!dump_output_start_position ||
+		(dump_output_start_position == crc32_le(0, buf, count)))) {
 		dump("/data/es.data", buf, count);
 		dump_output_frame--;
+		dump_output_start_position = 0;
 	}
 
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
