@@ -9370,6 +9370,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 	struct vdec_info tmp4x;
 	struct aml_vcodec_ctx * v4l2_ctx = hevc->v4l2_ctx;
 	struct vdec_v4l2_buffer *fb = NULL;
+	int index;
 
 	hevc->send_frame_flag = 0;
 	/* swap uv */
@@ -9937,22 +9938,27 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			get_pic_poc(hevc, (vf->index >> 8) & 0xff),
 			vf->pts, vf->pts_us64,
 			vf->duration);
+		if (pic->pic_struct == 10 || pic->pic_struct == 12) {
+			index = (vf->index >> 8) & 0xff;
+		} else {
+			index = vf->index & 0xff;
+		}
 #ifdef AUX_DATA_CRC
-		if ((vf->index & 0xff) <= MAX_REF_PIC_NUM)
-			decoder_do_aux_data_check(vdec, hevc->m_PIC[vf->index & 0xff]->aux_data_buf,
-				hevc->m_PIC[vf->index & 0xff]->aux_data_size);
+		if (index <= MAX_REF_PIC_NUM)
+			decoder_do_aux_data_check(vdec, hevc->m_PIC[index]->aux_data_buf,
+				hevc->m_PIC[index]->aux_data_size);
 #endif
 		if (hevc->is_used_v4l) {
 			hevc_print(hevc, H265_DEBUG_BUFMGR,
-				"aux data: (size %d)\n", hevc->m_PIC[vf->index & 0xff]->aux_data_size);
+				"aux data: (size %d)\n", hevc->m_PIC[index]->aux_data_size);
 
 			vf->src_fmt.comp_buf = v4l2_ctx->dv_infos.dv_bufs[v4l2_ctx->dv_infos.index].comp_buf;
 			vf->src_fmt.md_buf = v4l2_ctx->dv_infos.dv_bufs[v4l2_ctx->dv_infos.index].md_buf;
 			v4l2_ctx->dv_infos.index = (v4l2_ctx->dv_infos.index + 1) % V4L_CAP_BUFF_MAX;
 
 			update_vframe_src_fmt(vf,
-				hevc->m_PIC[vf->index & 0xff]->aux_data_buf,
-				hevc->m_PIC[vf->index & 0xff]->aux_data_size,
+				hevc->m_PIC[index]->aux_data_buf,
+				hevc->m_PIC[index]->aux_data_size,
 				hevc->dv_duallayer, hevc->provider_name, NULL);
 		}
 
