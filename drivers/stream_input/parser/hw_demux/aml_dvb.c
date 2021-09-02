@@ -75,6 +75,12 @@ module_param(debug_dvb, int, 0644);
 
 #define DVB_VERSION "V2.02"
 
+
+//echo 0xff646180 0x40 > /sys/kernel/debug/aml_reg/paddr
+//echo 0xff634590 0x1 > /sys/kernel/debug/aml_reg/paddr
+#define TSINB_DEGLITCH0 0xff646180
+#define TSINB_DEGLITCH1 0xff634590
+
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
 MODULE_PARM_DESC(dsc_max, "max number of dsc");
@@ -2432,6 +2438,19 @@ static int aml_dvb_probe(struct platform_device *pdev)
 		if (!ret) {
 			pr_inf("%s: 0x%x\n", buf, value);
 				advb->ts_out_invert = value;
+		}
+		memset(buf, 0, 32);
+		snprintf(buf, sizeof(buf), "tsin_deglitch");
+		ret =
+			of_property_read_u32(pdev->dev.of_node, buf,
+				&value);
+		if (!ret) {
+			pr_inf("%s: 0x%x\n", buf, value);
+			if (value) {
+			   pr_inf("TSINB_DEGLITCH0 is set %s: 0x%x\n", buf, value);
+			   dmx_phyreg_access(TSINB_DEGLITCH0, 0x40, NULL);
+			   dmx_phyreg_access(TSINB_DEGLITCH1, 0x1, NULL);
+			}
 		}
 	}
 #endif

@@ -52,7 +52,15 @@ MODULE_PARM_DESC(cammcu_debug, "enable verbose debug messages");
 static int dvb_ca_en50221_usleep = 800;
 
 module_param_named(cammcu_usleep, dvb_ca_en50221_usleep, int, 0644);
-MODULE_PARM_DESC(cammcu_usleep, "enable verbose debug messages");
+MODULE_PARM_DESC(cammcu_usleep, "enable sleep");
+
+static int dvb_ca_ciplus_enable = 0;
+module_param_named(ciplus_enable, dvb_ca_ciplus_enable, int, 0644);
+MODULE_PARM_DESC(ciplus_enable, "get ci plus enable");
+
+static unsigned int dvb_ca_ci_profire = 0;
+module_param_named(ci_profire, dvb_ca_ci_profire, int, 0644);
+MODULE_PARM_DESC(ci_profire, "get ci plus profire");
 
 #define dprintk if (dvb_ca_en50221_debug) printk
 
@@ -436,7 +444,7 @@ static int dvb_ca_en50221_read_tuple(struct dvb_ca_private *ca, int slot,
 	for (i = 0; i < _tupleLength; i++) {
 	    msleep(10);
 		tuple[i] = ca->pub->read_attribute_mem(ca->pub, slot, _address + (i * 2));
-		dprintk("  0x%02x: 0x%02x %c\n",
+		printk("  0x%02x: 0x%02x %c\n",
 			i, tuple[i] & 0xff,
 			((tuple[i] > 31) && (tuple[i] < 127)) ? tuple[i] : '.');
 	}
@@ -449,6 +457,136 @@ static int dvb_ca_en50221_read_tuple(struct dvb_ca_private *ca, int slot,
 	return 0;
 }
 
+static void parseCiplusCompatibility(char *tuple, int len, int *ci_plus_enabled)
+{
+	char flag = '+';
+	int number;
+	int i;
+
+	number = 0;
+	if (tuple[0] == '0') {
+		flag = '0';
+	} else if (tuple[0] == '*') {
+		flag = '*';
+	} else {
+		flag = '+';
+	}
+//    printk("--flag[%c]----\r\n", flag);
+/* Expected one or more decimal digits */
+	for (i = 0; i < len; i++)
+	{
+		if (tuple[i] >= '0' && tuple[i] <= '9') {
+			number *= 10;
+			number += tuple[i] - '0';
+			printk("--tuple[%d]=[%c]----\r\n", i, tuple[i]);
+		} else if (tuple[i] == '*' || tuple[i] == '+' || tuple[i] == '-') {
+			continue;
+		} else {
+			break;
+		}
+	}
+	if ((flag == '-') && (number == 1))
+	{
+		/* CI+ "v1" not supported */
+		printk("--tuple[%s]=set 0----\r\n",tuple);
+		*ci_plus_enabled = 0;
+	}
+	else if ((flag == '*') && (number >= 1))
+	{
+		/* CI+ "v1" is supported */
+		*ci_plus_enabled = 1;
+		printk("--tuple[%s]=set 1----\r\n",tuple);
+	}
+	else if ((flag == '+') && (number == 1))
+	{
+		/* CI+ "v1" is supported */
+		*ci_plus_enabled = 1;
+		printk("--tuple[%s]=set 1----\r\n",tuple);
+	}
+}
+
+/**
+ * @brief   Handle "ciprof" compatibilty item in compatiblity string
+ * @param   identity - item's identity
+ * @param   flag - compatibility flag
+ * @param   ci_plus_profile - the value of ciprof
+ */
+static void parseCiprofCompatibility(char *tuple, int len, unsigned int *ci_plus_profile)
+{
+	int valid;
+	int number;
+	int i;
+
+	valid = 1;
+	number = 0;
+
+	/* Expected decimal or hexadecimal number (note: string is lowercase) */
+	if ((len >= 2) &&
+	(tuple[0] == '0') && (tuple[1] == 'x'))
+	{
+		/* Hexadecimal prefix */
+		for (i = 2; (valid) && (i < len); i++)
+		{
+			printk("--tuple[%d]=[%c]----\r\n", i, tuple[i]);
+			if (tuple[i] >= '0' && tuple[i] <= '9')
+			{
+				number *= 16;
+				number += tuple[i] - '0';
+			}
+			else if (tuple[i] >= 'a' && tuple[i] <= 'f')
+			{
+				number *= 16;
+				number += tuple[i] + 10 - 'a';
+			}
+			else
+			{
+				break;
+			}
+		}
+	}
+	else
+	{
+		/* Decimal expected */
+		for (i = 0; (valid) && (i < len); i++)
+		{
+			printk("--tuple[%d]=[%c]----\r\n", i, tuple[i]);
+			if (tuple[i] >= '0' && tuple[i] <= '9')
+			{
+				number *= 10;
+				number += tuple[i] - '0';
+			}
+			else
+			{
+				break;
+			}
+		}
+	}
+
+	if (valid)
+	{
+		printk("--tuple[%s] number [%u]-[0x%x]---\r\n",  tuple, number, number);
+		*ci_plus_profile = number;
+	}
+}
+
+static int dvb_ca_parse_ciinfo(struct dvb_ca_private *ca, char *tuple, int len) {
+
+	/* check it contains the correct ciplus= string */
+	char * ciplus_str = findstr((char *)tuple, len, "ciplus=", 7);
+
+	if (ciplus_str == NULL)
+	    printk("ciplus_str  error  line[%d]\r\n", __LINE__);
+	else
+	    parseCiplusCompatibility(ciplus_str + 7, len - (ciplus_str + 7 - tuple), &dvb_ca_ciplus_enable);
+
+	ciplus_str = findstr((char *)tuple, len, "ciprof=", 7);
+	if (ciplus_str == NULL)
+	    printk("ciprof str  error  line[%d]\r\n", __LINE__);
+	else
+	    parseCiprofCompatibility(ciplus_str + 7, len - (ciplus_str + 7 - tuple), &dvb_ca_ci_profire);
+
+	return 0;
+}
 
 /**
  * dvb_ca_en50221_parse_attributes - Parse attribute memory of a CAM module,
@@ -486,9 +624,6 @@ static int dvb_ca_en50221_parse_attributes(struct dvb_ca_private *ca, int slot)
 		return -EINVAL;
 	}
 
-
-
-
 	// CISTPL_DEVICE_0C
 	if ((status =
 	     dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType, &tupleLength, tuple)) < 0) {
@@ -514,8 +649,9 @@ static int dvb_ca_en50221_parse_attributes(struct dvb_ca_private *ca, int slot)
 		printk("dvb ci error  line[%d]\r\n", __LINE__);
 		return -EINVAL;
 	}
-
-
+	//parse cipls and prof info
+	printk("dvb ci parse ci  line[%d]\r\n", __LINE__);
+	dvb_ca_parse_ciinfo(ca, (char *)tuple, tupleLength);
 
 	// CISTPL_MANFID
 	if ((status = dvb_ca_en50221_read_tuple(ca, slot, &address, &tupleType,

@@ -189,6 +189,7 @@ EXPORT_SYMBOL(aml_pcmcia_init);
 
 int aml_pcmcia_exit(struct aml_pcmcia *pc)
 {
+	pc->pwr(pc, AML_PWR_CLOSE);/*hi is open power*/
 	free_irq(pc->irq, pc);
 	return 0;
 }

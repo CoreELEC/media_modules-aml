@@ -373,6 +373,9 @@ extern int aml_regist_dmx_class(void);
 extern int aml_unregist_dmx_class(void);
 extern void aml_register_parser_mconfig(void);
 
+extern int dmx_phyreg_access(unsigned int reg, unsigned int writeval,
+		   unsigned int *readval);
+
 struct devio_aml_platform_data {
 	int (*io_setup)(void *);
 	int (*io_cleanup)(void *);

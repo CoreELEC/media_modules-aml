@@ -825,9 +825,11 @@ static int aml_cam_plugin(struct aml_pcmcia *pc, int plugin)
 	((struct aml_ci_bus *)(pc->priv))->priv;
 	pr_dbg("%s : %d\r\n", __func__, plugin);
 	if (plugin) {
+		aml_ci_bus_select_gpio((struct aml_ci_bus *)(pc->priv), AML_GPIO_TS);
 		dvb_ca_en50221_cimcu_camchange_irq(&ci->en50221_cimcu,
 			0, DVB_CA_EN50221_CAMCHANGE_INSERTED);
 	} else {
+		aml_ci_bus_select_gpio((struct aml_ci_bus *)(pc->priv), AML_GPIO_ADDR);
 		dvb_ca_en50221_cimcu_camchange_irq(&ci->en50221_cimcu,
 			0, DVB_CA_EN50221_CAMCHANGE_REMOVED);
 	}

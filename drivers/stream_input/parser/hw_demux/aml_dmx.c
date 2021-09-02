@@ -501,6 +501,23 @@ static int asyncfifo_buf_len = ASYNCFIFO_BUFFER_SIZE_DEFAULT;
 #define asyncfifo_get_dev(afifo) ((afifo)->dvb->dev)
 
 
+int dmx_phyreg_access(unsigned int reg, unsigned int writeval,
+		   unsigned int *readval)
+{
+	void __iomem *vaddr;
+
+	reg = round_down(reg, 0x3);
+	vaddr = ioremap(reg, 0x4);
+	if (!vaddr)
+		return -ENOMEM;
+
+	if (readval)
+		*readval = readl_relaxed(vaddr);
+	else
+		writel_relaxed(writeval, vaddr);
+	iounmap(vaddr);
+	return 0;
+}
 
 /*Section buffer watchdog*/
 static void section_buffer_watchdog_func(struct timer_list * timer)
