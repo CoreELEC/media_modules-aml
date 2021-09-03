@@ -488,8 +488,14 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 	total_size = ctx->dpb_size + ctx->vpp_size + ctx->ge2d_size;
 
 	if (total_size > V4L_CAP_BUFF_MAX) {
-		picinfo->dpb_margin = V4L_CAP_BUFF_MAX -
-			picinfo->dpb_frames - ctx->vpp_size - ctx->ge2d_size;
+		if (ctx->ge2d_size) {
+			ctx->dpb_size = V4L_CAP_BUFF_MAX - ctx->ge2d_size - ctx->vpp_size;
+		} else if (ctx->vpp_size) {
+			ctx->dpb_size = V4L_CAP_BUFF_MAX - ctx->vpp_size;
+		} else {
+			ctx->dpb_size = V4L_CAP_BUFF_MAX;
+		}
+		picinfo->dpb_margin = ctx->dpb_size - picinfo->dpb_frames;
 		total_size = V4L_CAP_BUFF_MAX;
 	}
 	vdec_if_set_param(ctx, SET_PARAM_PIC_INFO, picinfo);
@@ -3528,8 +3534,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	ctx->last_decoded_picinfo = ctx->picinfo;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Picture buffer count: dec:%u, vpp:%u, margin:%u, total:%u\n",
-		ctx->picinfo.dpb_frames, ctx->vpp_size,
+		"Picture buffer count: dec:%u, vpp:%u, margin:%u, ge2d:%u, total:%u\n",
+		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
 		ctx->picinfo.dpb_margin,
 		CTX_BUF_TOTAL(ctx));
 
