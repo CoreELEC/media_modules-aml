@@ -94,6 +94,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	mediasync_frameinfo FrameInfo = {-1, -1};
 	mediasync_audioinfo AudioInfo = {0, 0};
 	mediasync_videoinfo VideoInfo = {0, 0};
+	mediasync_audioformat AudioFormat;
 	mediasync_clocktype ClockType = UNKNOWN_CLOCK;
 	mediasync_clockprovider_state state;
 	s32 SyncInsId = -1;
@@ -923,6 +924,33 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_SET_AUDIO_FORMAT:
+			if (copy_from_user((void *)&AudioFormat,
+					(void *)arg,
+					sizeof(AudioFormat)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_audioformat(priv->mSyncInsId,
+								AudioFormat);
+		break;
+
+		case MEDIASYNC_IOC_GET_AUDIO_FORMAT:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_audioformat(priv->mSyncInsId,
+								&AudioFormat);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&AudioFormat,
+						sizeof(AudioFormat)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -994,6 +1022,9 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_UPDATETIME_THRESHOLD:
 		case MEDIASYNC_IOC_SET_START_MEDIA_TIME:
 		case MEDIASYNC_IOC_GET_START_MEDIA_TIME:
+		case MEDIASYNC_IOC_SET_AUDIO_FORMAT:
+		case MEDIASYNC_IOC_GET_AUDIO_FORMAT:
+
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;

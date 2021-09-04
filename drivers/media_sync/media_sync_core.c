@@ -1156,4 +1156,39 @@ long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime) {
 	return 0;
 }
 
+long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audioformat format) {
 
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+	return -1;
+	pInstance->mAudioFormat.channels = format.channels;
+	pInstance->mAudioFormat.datawidth = format.datawidth;
+	pInstance->mAudioFormat.format = format.format;
+	pInstance->mAudioFormat.samplerate = format.samplerate;
+	return 0;
+
+}
+
+
+long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audioformat* format) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+	return -1;
+
+	format->channels = pInstance->mAudioFormat.channels;
+	format->datawidth = pInstance->mAudioFormat.datawidth;
+	format->format = pInstance->mAudioFormat.format;
+	format->samplerate = pInstance->mAudioFormat.samplerate;
+
+	return 0;
+}

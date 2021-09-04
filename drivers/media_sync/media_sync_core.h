@@ -67,6 +67,13 @@ typedef struct videoinfo{
 	int cacheDuration;
 }mediasync_videoinfo;
 
+typedef struct audioforamt{
+	int samplerate;
+	int datawidth;
+	int channels;
+	int format;
+}mediasync_audioformat;
+
 typedef enum
 {
 	TS_DEMOD = 0,                          // TS Data input from demod
@@ -111,6 +118,7 @@ typedef struct instance{
 	mediasync_videoinfo mVideoInfo;
 	mediasync_syncinfo mSyncInfo;
 	aml_Source_Type mSourceType;
+	mediasync_audioformat mAudioFormat;
 }mediasync_ins;
 
 long mediasync_ins_alloc(s32 sDemuxId,
@@ -187,5 +195,7 @@ long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType);
 long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType);
 long mediasync_ins_set_start_media_time(s32 sSyncInsId, s64 startime);
 long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime);
+long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audioformat format);
+long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audioformat* format);
 
 #endif
