@@ -2302,19 +2302,21 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct vdec_v4l2_buffer *fb = NULL;
 	int index;
 
-	if (hw->is_used_v4l && hw->eos) {
+	if (hw->eos) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"%s fatal error, no available buffer slot.\n",
 				__func__);
 			return -1;
 		}
-		index = find_free_buffer(hw);
-		if (index == -1) {
-			ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-			if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC) < 0) {
-				pr_err("[%d] get fb fail.\n", ctx->id);
-				return -1;
+		if (hw->is_used_v4l) {
+			index = find_free_buffer(hw);
+			if (index == -1) {
+				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC) < 0) {
+					pr_err("[%d] get fb fail.\n", ctx->id);
+					return -1;
+				}
 			}
 		}
 
@@ -2335,7 +2337,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
-		pr_info("[%d] mpeg12 EOS notify.\n", ctx->id);
+		pr_info("[%d] mpeg12 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
 
 	return 0;
@@ -2445,8 +2447,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 		flush_output(hw);
-		if (hw->is_used_v4l)
-			notify_v4l_eos(vdec);
+		notify_v4l_eos(vdec);
 
 		debug_print(DECODE_ID(hw), 0,
 			"%s: end of stream, num %d(%d)\n",

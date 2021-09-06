@@ -10933,8 +10933,7 @@ static void vp9_work(struct work_struct *work)
 		pbi->eos = 1;
 		vp9_bufmgr_postproc(pbi);
 
-		if (pbi->is_used_v4l)
-			notify_v4l_eos(hw_to_vdec(pbi));
+		notify_v4l_eos(hw_to_vdec(pbi));
 
 		vdec_vframe_dirty(hw_to_vdec(pbi), pbi->chunk);
 	} else if (pbi->dec_result == DEC_RESULT_FORCE_EXIT) {

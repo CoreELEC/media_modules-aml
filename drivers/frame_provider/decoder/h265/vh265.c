@@ -13988,8 +13988,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			__func__, hevc->curr_POC, pic);
 		flush_output(hevc, pic);
 		/* dummy vf with eos flag to backend */
-		if (hevc->is_used_v4l)
-			notify_v4l_eos(hw_to_vdec(hevc));
+		notify_v4l_eos(hw_to_vdec(hevc));
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		hevc->shift_byte_count_lo
 			= READ_VREG(HEVC_SHIFT_BYTE_COUNT);

@@ -10265,8 +10265,7 @@ static void av1_work(struct work_struct *work)
 		hw->eos = 1;
 		av1_postproc(hw);
 
-		if (hw->is_used_v4l)
-			notify_v4l_eos(hw_to_vdec(hw));
+		notify_v4l_eos(hw_to_vdec(hw));
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {

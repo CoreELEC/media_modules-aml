@@ -1683,8 +1683,7 @@ static void vmpeg4_work(struct work_struct *work)
 		vdec_clean_input(vdec);
 		flush_output(hw);
 
-		if (hw->is_used_v4l)
-			notify_v4l_eos(vdec);
+		notify_v4l_eos(vdec);
 
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"%s: eos flushed, frame_num %d\n",

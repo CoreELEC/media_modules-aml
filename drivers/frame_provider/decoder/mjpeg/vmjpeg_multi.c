@@ -1590,8 +1590,7 @@ static void vmjpeg_work(struct work_struct *work)
 			hw->stat &= ~STAT_VDEC_RUN;
 		}
 		hw->eos = 1;
-		if (hw->is_used_v4l)
-			notify_v4l_eos(vdec);
+		notify_v4l_eos(vdec);
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;

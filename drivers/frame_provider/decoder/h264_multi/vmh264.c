@@ -9476,8 +9476,7 @@ result_done:
 			amhevc_stop();
 		hw->eos = 1;
 		flush_dpb(p_H264_Dpb);
-		if (hw->is_used_v4l)
-			notify_v4l_eos(hw_to_vdec(hw));
+		notify_v4l_eos(hw_to_vdec(hw));
 		mutex_lock(&hw->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
