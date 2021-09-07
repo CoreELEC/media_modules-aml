@@ -11919,6 +11919,7 @@ force_output:
 				((hevc->param.p.profile_etc & 0xc) == 0x4)
 				&& (interlace_enable != 0)) {
 				hevc->double_write_mode = 1;
+				hevc->mmu_enable = 1;
 				hevc->interlace_flag = 1;
 				hevc->frame_ar = (hevc->pic_h * 0x100 / hevc->pic_w) * 2;
 				hevc_print(hevc, 0,
@@ -11934,6 +11935,17 @@ force_output:
 					hevc_print(hevc,
 						0, "can not alloc mmu box, force exit\n");
 					return IRQ_HANDLED;
+				}
+				if (hevc->frame_mmu_map_addr == NULL) {
+					hevc->frame_mmu_map_addr =
+						dma_alloc_coherent(amports_get_dma_device(),
+						get_frame_mmu_map_size(),
+						&hevc->frame_mmu_map_phy_addr, GFP_KERNEL);
+					if (hevc->frame_mmu_map_addr == NULL) {
+						pr_err("%s: failed to alloc count_buffer\n", __func__);
+						return IRQ_HANDLED;
+					}
+					memset(hevc->frame_mmu_map_addr, 0, get_frame_mmu_map_size());
 				}
 			}
 #ifdef MULTI_INSTANCE_SUPPORT
