@@ -11534,35 +11534,48 @@ force_output:
 				if (hevc->m_ins_flag)
 					start_process_time(hevc);
 #endif
-			} else {
-				hevc->sps_num_reorder_pics_0 =
-				hevc->param.p.sps_num_reorder_pics_0;
-				hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 &&
-									!(vdec->slave || vdec->master) &&
-									!disable_ip_mode &&
-									hevc->low_latency_flag) ? true : false;
-				hevc->pic_list_init_flag = 1;
-				if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
-					((hevc->param.p.profile_etc & 0xc) == 0x4)
-					&& (interlace_enable != 0)) {
-					hevc->double_write_mode = 1;
-					hevc->interlace_flag = 1;
-					hevc->frame_ar = (hevc->pic_h * 0x100 / hevc->pic_w) * 2;
-					hevc_print(hevc, 0,
-						"interlace (%d, %d), profile_etc %x, ar 0x%x, dw %d\n",
-						hevc->pic_w, hevc->pic_h, hevc->param.p.profile_etc, hevc->frame_ar,
-						get_double_write_mode(hevc));
-					/* When dw changed from 0x10 to 1, the mmu_box is NULL */
-					if (!hevc->mmu_box && init_mmu_box(hevc) != 0) {
-						hevc->dec_result = DEC_RESULT_FORCE_EXIT;
-						hevc->fatal_error |=
-							DECODER_FATAL_ERROR_NO_MEM;
-						vdec_schedule_work(&hevc->work);
-						hevc_print(hevc,
-							0, "can not alloc mmu box, force exit\n");
+		} else {
+			hevc->sps_num_reorder_pics_0 =
+			hevc->param.p.sps_num_reorder_pics_0;
+			hevc->ip_mode = (!hevc->sps_num_reorder_pics_0 &&
+								!(vdec->slave || vdec->master) &&
+								!disable_ip_mode &&
+								hevc->low_latency_flag) ? true : false;
+			hevc->pic_list_init_flag = 1;
+			if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
+				((hevc->param.p.profile_etc & 0xc) == 0x4)
+				&& (interlace_enable != 0)) {
+				hevc->double_write_mode = 1;
+				hevc->mmu_enable = 1;
+				hevc->interlace_flag = 1;
+				hevc->frame_ar = (hevc->pic_h * 0x100 / hevc->pic_w) * 2;
+				hevc_print(hevc, 0,
+					"interlace (%d, %d), profile_etc %x, ar 0x%x, dw %d\n",
+					hevc->pic_w, hevc->pic_h, hevc->param.p.profile_etc, hevc->frame_ar,
+					get_double_write_mode(hevc));
+				/* When dw changed from 0x10 to 1, the mmu_box is NULL */
+				if (!hevc->mmu_box && init_mmu_box(hevc) != 0) {
+					hevc->dec_result = DEC_RESULT_FORCE_EXIT;
+					hevc->fatal_error |=
+						DECODER_FATAL_ERROR_NO_MEM;
+					vdec_schedule_work(&hevc->work);
+					hevc_print(hevc,
+						0, "can not alloc mmu box, force exit\n");
+					return IRQ_HANDLED;
+				}
+
+				if (hevc->frame_mmu_map_addr == NULL) {
+					hevc->frame_mmu_map_addr =
+						dma_alloc_coherent(amports_get_dma_device(),
+						get_frame_mmu_map_size(),
+						&hevc->frame_mmu_map_phy_addr, GFP_KERNEL);
+					if (hevc->frame_mmu_map_addr == NULL) {
+						pr_err("%s: failed to alloc count_buffer\n", __func__);
 						return IRQ_HANDLED;
 					}
+					memset(hevc->frame_mmu_map_addr, 0, get_frame_mmu_map_size());
 				}
+			}
 #ifdef MULTI_INSTANCE_SUPPORT
 				if (hevc->m_ins_flag) {
 					vdec_schedule_work(&hevc->work);
