@@ -826,6 +826,10 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->pts = 0;
 		vf->pts_us64 = 0;
 		vf->timestamp = pic->timestamp;
+		if (v4l2_ctx->second_field_pts_mode) {
+			vf->timestamp = 0;
+		}
+
 		vf->duration = pic->duration >> 1;
 		vf->duration_pulldown = 0;
 		vf->type = (pic->pic_info & TOP_FIELD_FIRST_FLAG) ?

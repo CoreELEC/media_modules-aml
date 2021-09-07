@@ -9703,6 +9703,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->duration = vf->duration>>1;
 			memcpy(vf2, vf, sizeof(struct vframe_s));
 
+			if (v4l2_ctx->second_field_pts_mode) {
+				vf2->timestamp = 0;
+			}
 			if (pic->pic_struct == 3) {
 				vf->type = VIDTYPE_INTERLACE_TOP
 				| nv_order;
@@ -9750,6 +9753,11 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->duration = vf->duration/3;
 			memcpy(vf2, vf, sizeof(struct vframe_s));
 			memcpy(vf3, vf, sizeof(struct vframe_s));
+
+			if (v4l2_ctx->second_field_pts_mode) {
+				vf2->timestamp = 0;
+				vf3->timestamp = 0;
+			}
 
 			if (pic->pic_struct == 5) {
 				vf->type = VIDTYPE_INTERLACE_TOP

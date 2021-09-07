@@ -298,6 +298,7 @@ struct aml_vdec_cfg_infos {
 	 * bit 15	: enable nr.
 	 * bit 14	: enable di local buff.
 	 * bit 13	: report downscale yuv buffer size flag.
+	 * bit 12	: for second field pts mode.
 	 * bit 1	: Non-standard dv flag.
 	 * bit 0	: dv two layer flag.
 	 */
@@ -693,6 +694,8 @@ struct aml_vcodec_ctx {
 	struct aml_v4l2_ge2d		*ge2d;
 	struct aml_ge2d_cfg_infos 	ge2d_cfg;
 	bool				ge2d_is_need;
+
+	bool 				second_field_pts_mode;
 };
 
 /**

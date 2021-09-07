@@ -1686,6 +1686,9 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			vf->pts = 0;
 			vf->pts_us64 = 0;
 			vf->timestamp = pic->timestamp;
+			if (v4l2_ctx->second_field_pts_mode) {
+				vf->timestamp = 0;
+			}
 		} else {
 			vf->pts = (pic->pts_valid) ? pic->pts : 0;
 			vf->pts_us64 = (pic->pts_valid) ? pic->pts64 : 0;

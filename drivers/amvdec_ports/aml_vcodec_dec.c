@@ -4077,6 +4077,7 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 			ctx->vpp_cfg.enable_local_buf = true;
 
 		ctx->internal_dw_scale = dec->cfg.metadata_config_flag & (1 << 13);
+		ctx->second_field_pts_mode = dec->cfg.metadata_config_flag & (1 << 12);
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s parms:%x metadata_config_flag: 0x%x\n",
 				__func__, in->parms_status, dec->cfg.metadata_config_flag);
