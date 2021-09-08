@@ -7579,6 +7579,8 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 	if (ret >= 0) {
 		ret = av1_bufmgr_process(pbi, &hw->aom_param,
 			hw->new_compressed_data, obu_type);
+		if (ret < 0)
+			return -1;
 		av1_print(hw, AOM_DEBUG_HW_MORE,
 			"%s: pbi %p cm %p cur_frame %p\n",
 			__func__, pbi, cm, cm->cur_frame);
