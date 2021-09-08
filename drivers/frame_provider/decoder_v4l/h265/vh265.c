@@ -2513,7 +2513,7 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 		release_aux_data(hevc, hevc->decoding_pic);
 		hevc->decoding_pic = NULL;
 	}
-	if (vdec_stream_based(vdec) &&
+	/*if (vdec_stream_based(vdec) &&
 		(hevc->decode_idx - hevc->decode_idx_bak > 1)) {
 		int i;
 		hevc_print(hevc, 0, "decode_idx %d, decode_idx_bak %d\n",
@@ -2539,7 +2539,7 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 					release_aux_data(hevc, pic);
 			}
 		}
-	}
+	}*/
 	hevc->decode_idx = hevc->decode_idx_bak;
 	hevc->m_pocRandomAccess = hevc->m_pocRandomAccess_bak;
 	hevc->curr_POC = hevc->curr_POC_bak;
@@ -7689,6 +7689,10 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				check_pic_decoded_error_pre(hevc,
 					READ_VREG(HEVC_PARSER_LCU_START)
 					& 0xffffff);
+			if (vdec_stream_based(vdec) && ((READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff) != 0)) {
+				if (hevc->cur_pic)
+					hevc->cur_pic->error_mark = 1;
+			}
 			/**/ if (use_cma == 0) {
 				if (hevc->pic_list_init_flag == 0) {
 					init_pic_list(hevc);
