@@ -190,6 +190,9 @@ enum vformat_t;
 #define VDEC_NEED_MORE_DATA_DIRTY 0x02
 #define VDEC_NEED_MORE_DATA       0x04
 
+#define SCALELUT_DATA_WRITE_NUM   1024
+#define RDMA_SIZE                 (1024 * 4 * 4)
+
 struct vdec_s {
 	u32 magic;
 	struct list_head list;
@@ -536,4 +539,7 @@ extern void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size);
 void vdec_set_vld_wp(struct vdec_s *vdec, u32 wp);
 void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size);
 
+void rdma_front_end_wrok(dma_addr_t ddr_phy_addr, u32 size);
+void rdma_back_end_work(dma_addr_t back_ddr_phy_addr, u32 size);
+int is_rdma_enable(void);
 #endif				/* VDEC_H */

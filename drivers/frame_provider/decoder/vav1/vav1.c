@@ -865,6 +865,8 @@ struct AV1HW_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	dma_addr_t rdma_phy_adr;
+	unsigned *rdma_adr;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -5427,10 +5429,13 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 	if (mask & HW_MASK_BACK) {
 		/*Initial IQIT_SCALELUT memory
 		-- just to avoid X in simulation*/
-
-		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
-		for (i = 0; i < 1024; i++)
-			WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+		if (is_rdma_enable())
+			rdma_back_end_work(hw->rdma_phy_adr, RDMA_SIZE);
+		else {
+			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
+			for (i = 0; i < 1024; i++)
+				WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+		}
 	}
 
 	if (mask & HW_MASK_FRONT) {
@@ -10619,6 +10624,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	int ret;
 	int config_val;
+	int i;
 	struct vframe_content_light_level_s content_light_level;
 	struct vframe_master_display_colour_s vf_dp;
 	u32 work_buf_size;
@@ -10675,6 +10681,19 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	pdata->dump_state = av1_dump_state;
 
 	hw->index = pdev->id;
+
+	if (is_rdma_enable()) {
+		hw->rdma_adr = dma_alloc_coherent(amports_get_dma_device(), RDMA_SIZE, &hw->rdma_phy_adr, GFP_KERNEL);
+		for (i = 0; i < SCALELUT_DATA_WRITE_NUM; i++) {
+			hw->rdma_adr[i * 4] = HEVC_IQIT_SCALELUT_WR_ADDR & 0xfff;
+			hw->rdma_adr[i * 4 + 1] = i;
+			hw->rdma_adr[i * 4 + 2] = HEVC_IQIT_SCALELUT_DATA & 0xfff;
+			hw->rdma_adr[i * 4 + 3] = 0;
+			if (i == SCALELUT_DATA_WRITE_NUM - 1) {
+				hw->rdma_adr[i * 4 + 2] = (HEVC_IQIT_SCALELUT_DATA & 0xfff) | 0x20000;
+			}
+		}
+	}
 
 	snprintf(hw->vdec_name, sizeof(hw->vdec_name),
 		"av1-%d", hw->index);
@@ -10948,6 +10967,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 #else
 	if (amvdec_av1_mmu_init(hw) < 0) {
 		pr_err("av1 alloc bmmu box failed!!\n");
+		if (is_rdma_enable())
+			dma_free_coherent(amports_get_dma_device(), RDMA_SIZE, hw->rdma_adr, hw->rdma_phy_adr);
 		/* devm_kfree(&pdev->dev, (void *)hw); */
 		vfree((void *)hw);
 		pdata->dec_status = NULL;

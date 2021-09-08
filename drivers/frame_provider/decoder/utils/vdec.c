@@ -101,6 +101,12 @@ static int fcc_debug;
 static void vdec_fcc_jump_back(struct vdec_s *vdec);
 #endif
 /*
+0x1 : enable rdma
+0x2 : check rdma result
+*/
+static int rdma_mode = 0x1;
+
+/*
  * 0x1  : sched_priority to MAX_RT_PRIO -1.
  * 0x2  : always reload firmware.
  * 0x4  : vdec canvas debug enable
@@ -114,6 +120,16 @@ static void vdec_fcc_jump_back(struct vdec_s *vdec);
 #define FRAME_BASE_PATH_DI_V4LVIDEO_0 (29)
 #define FRAME_BASE_PATH_DI_V4LVIDEO_1 (30)
 #define FRAME_BASE_PATH_DI_V4LVIDEO_2 (31)
+
+#define HEVC_RDMA_F_CTRL                           0x30f0
+#define HEVC_RDMA_F_START_ADDR                     0x30f1
+#define HEVC_RDMA_F_END_ADDR                       0x30f2
+#define HEVC_RDMA_F_STATUS0                        0x30f3
+
+#define HEVC_RDMA_B_CTRL                           0x30f8
+#define HEVC_RDMA_B_START_ADDR                     0x30f9
+#define HEVC_RDMA_B_END_ADDR                       0x30fa
+#define HEVC_RDMA_B_STATUS0                        0x30fb
 
 u32 debug = VDEC_DBG_ALWAYS_LOAD_FW;
 EXPORT_SYMBOL(debug);
@@ -6054,6 +6070,111 @@ void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size)
 }
 EXPORT_SYMBOL(vdec_config_vld_reg);
 
+static void check_rdma_result(int num)
+{
+	int i, wr,rd,data;
+	int flag = 1;
+	for (i = 0; i < num; i++) {
+		wr = READ_VREG(HEVC_IQIT_SCALELUT_WR_ADDR);
+		rd = READ_VREG(HEVC_IQIT_SCALELUT_RD_ADDR);
+		data = READ_VREG(HEVC_IQIT_SCALELUT_DATA);
+		if (wr != (num & 0x3ff)) {
+			pr_info("--->HEVC_IQIT_SCALELUT_WR_ADDR = 0x%x\n", wr);
+			flag = 0;
+			break;
+		}
+		if (rd != i) {
+			pr_info("--->HEVC_IQIT_SCALELUT_RD_ADDR = 0x%x\n", rd);
+			flag = 0;
+			break;
+		}
+
+		if (data != 0) {
+			pr_info("--->HEVC_IQIT_SCALELUT_DATA = 0x%x\n", data);
+			flag = 0;
+			break;
+		}
+	}
+	if (flag == 0)
+		pr_info("-->%d--rdma flail\n", i);
+	else
+		pr_info("rdma ok\n");
+	return;
+
+}
+
+int is_rdma_enable(void)
+{
+	if (rdma_mode && (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3))
+		return 1;
+	else
+		return 0;
+}
+EXPORT_SYMBOL(is_rdma_enable);
+
+void rdma_front_end_wrok(dma_addr_t ddr_phy_addr, u32 size)
+{
+	ulong expires;
+
+	WRITE_VREG(HEVC_RDMA_F_CTRL,
+		(0X0 << 7) | //axi id
+		(0X7 << 3) | //axi length
+		(0X0 << 2) | //rdma force cg en
+		(0X1 << 1)); //rdma path en
+	WRITE_VREG(HEVC_RDMA_F_START_ADDR, ddr_phy_addr); //rdma start address
+	WRITE_VREG(HEVC_RDMA_F_END_ADDR,   ddr_phy_addr + 0xff); //rdma end address
+	WRITE_VREG(HEVC_RDMA_F_STATUS0,    0X1); //trigger rdma start to work
+
+	expires = jiffies + msecs_to_jiffies(2000);
+	while (1) {
+		if ((READ_VREG(HEVC_RDMA_F_STATUS0) & 0x1) == 0) {
+			//pr_info("rdma front_end done\n");
+			break;
+		}
+		if (time_after(jiffies, expires)) {
+			pr_info("wait rdma done timeout\n");
+			break;
+		}
+	}
+
+	if (rdma_mode & 0x2)
+		check_rdma_result(SCALELUT_DATA_WRITE_NUM);
+
+	return;
+}
+EXPORT_SYMBOL(rdma_front_end_wrok);
+
+void rdma_back_end_work(dma_addr_t back_ddr_phy_addr, u32 size)
+{
+	ulong expires;
+
+	WRITE_VREG(HEVC_RDMA_B_CTRL,
+		(0X0 << 7) | //axi id
+		(0X7 << 3) | //axi length
+		(0X0 << 2) | //rdma force cg en
+		(0X1 << 1)); //rdma path en
+	WRITE_VREG(HEVC_RDMA_B_START_ADDR, back_ddr_phy_addr); //rdma start address
+	WRITE_VREG(HEVC_RDMA_B_END_ADDR,   back_ddr_phy_addr + size -1); //rdma end address
+	WRITE_VREG(HEVC_RDMA_B_STATUS0,    0X1); //trigger rdma start to work
+
+	expires = jiffies + msecs_to_jiffies(2000);
+	while (1) {
+		if ((READ_VREG(HEVC_RDMA_B_STATUS0) & 0x1) == 0) {
+			//pr_info("rdma back_end done\n");
+			break;
+		}
+		if (time_after(jiffies, expires)) {
+			pr_info("wait rdma done timeout\n");
+			break;
+		}
+	}
+	if (rdma_mode & 0x2)
+		check_rdma_result(SCALELUT_DATA_WRITE_NUM);
+
+	return;
+}
+EXPORT_SYMBOL(rdma_back_end_work);
+
 RESERVEDMEM_OF_DECLARE(vdec, "amlogic, vdec-memory", vdec_mem_setup);
 /*
 uint force_hevc_clock_cntl;
@@ -6100,6 +6221,10 @@ module_param(enable_stream_mode_multi_dec, int, 0664);
 EXPORT_SYMBOL(enable_stream_mode_multi_dec);
 MODULE_PARM_DESC(enable_stream_mode_multi_dec,
 	"\n enable multi-decoding on stream mode. \n");
+
+module_param(rdma_mode, int, 0664);
+MODULE_PARM_DESC(rdma_mode, "\n rdma_enable\n");
+
 /*
 *module_init(vdec_module_init);
 *module_exit(vdec_module_exit);
