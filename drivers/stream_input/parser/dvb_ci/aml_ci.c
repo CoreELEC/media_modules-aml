@@ -526,6 +526,12 @@ static int aml_ci_get_config_from_dts(struct platform_device *pdev,
 		pr_dbg("%s: 0x%x\n", buf, value);
 		ci->io_type = value;
 	}
+	snprintf(buf, sizeof(buf), "%s", "raw_mode");
+	ret = of_property_read_u32(pdev->dev.of_node, buf, &value);
+	if (!ret) {
+		pr_dbg("%s: 0x%x\n", buf, value);
+		ci->raw_mode = value;
+	}
 	return 0;
 }
 
@@ -597,14 +603,15 @@ int aml_ci_init(struct platform_device *pdev,
 
 		ci->en50221_cimcu.data		= ci;
 
-
-		pr_dbg("Registering EN50221 device\n");
-		result = dvb_ca_en50221_cimcu_init(dvb_adapter,
-			&ci->en50221_cimcu, ca_flags, 1);
-		if (result != 0) {
-			pr_error("EN50221_cimcu: Initialization failed <%d>\n",
-				result);
-			goto err;
+		if (ci->raw_mode == 0) {
+			pr_dbg("Registering EN50221 device\n");
+			result = dvb_ca_en50221_cimcu_init(dvb_adapter,
+				&ci->en50221_cimcu, ca_flags, 1);
+			if (result != 0) {
+				pr_error("EN50221_cimcu: Initialization failed <%d>\n",
+					result);
+				goto err;
+			}
 		}
 	}
 	*cip = ci;
@@ -650,7 +657,8 @@ void aml_ci_exit(struct aml_ci *ci)
 			dvb_ca_en50221_cimax_release(&ci->en50221_cimax);
 		else
 #endif
-		dvb_ca_en50221_cimcu_release(&ci->en50221_cimcu);
+		if (ci->raw_mode == 0)
+			dvb_ca_en50221_cimcu_release(&ci->en50221_cimcu);
 		if (ci->ci_exit)
 			ci->ci_exit(ci);
 		kfree(ci);

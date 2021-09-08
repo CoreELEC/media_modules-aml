@@ -61,12 +61,16 @@ struct aml_ci_bus {
 	enum aml_slot_state		slot_state;
 	/*wake up thread mode at cimcu thread*/
 	int wakeup_thread;
+	/*for raw mode used*/
+	int used;
+	int raw_mode;
 };
 
 enum aml_gpio_select_e {
 		AML_GPIO_ADDR = 0,
 		AML_GPIO_TS,
 };
+
 
 #define IORD 		0x0
 #define IOWR 		0x1

@@ -34,7 +34,7 @@
 #include <linux/irq.h>
 #include "aml_ci_bus.h"
 #include "aml_ci.h"
-
+#include "amci.h"
 
 
 //can see jtag dts and driver to select gpio function.
@@ -631,7 +631,8 @@ static int aml_ci_slot_reset(struct aml_ci *ci_dev, int slot)
 	struct aml_ci_bus *ci_bus_dev = ci_dev->data;
 	pr_dbg("Slot(%d): Slot RESET CAM\n", slot);
 	aml_pcmcia_reset(&ci_bus_dev->pc);
-	dvb_ca_en50221_cimcu_camready_irq(&ci_dev->en50221_cimcu, 0);
+	if (ci_bus_dev->raw_mode == 0)
+		dvb_ca_en50221_cimcu_camready_irq(&ci_dev->en50221_cimcu, 0);
 	return 0;
 }
 /**\brief aml_ci_slot_shutdown:show slot
@@ -837,14 +838,16 @@ static int aml_cam_plugin(struct aml_pcmcia *pc, int plugin)
 	struct aml_ci *ci = (struct aml_ci *)
 	((struct aml_ci_bus *)(pc->priv))->priv;
 	pr_dbg("%s : %d\r\n", __func__, plugin);
-	if (plugin) {
-		aml_ci_bus_select_gpio((struct aml_ci_bus *)(pc->priv), AML_GPIO_TS);
-		dvb_ca_en50221_cimcu_camchange_irq(&ci->en50221_cimcu,
-			0, DVB_CA_EN50221_CAMCHANGE_INSERTED);
-	} else {
-		aml_ci_bus_select_gpio((struct aml_ci_bus *)(pc->priv), AML_GPIO_ADDR);
-		dvb_ca_en50221_cimcu_camchange_irq(&ci->en50221_cimcu,
-			0, DVB_CA_EN50221_CAMCHANGE_REMOVED);
+	if (((struct aml_ci_bus *)(pc->priv))->raw_mode == 0) {
+		if (plugin) {
+			aml_ci_bus_select_gpio((struct aml_ci_bus *)(pc->priv), AML_GPIO_TS);
+			dvb_ca_en50221_cimcu_camchange_irq(&ci->en50221_cimcu,
+				0, DVB_CA_EN50221_CAMCHANGE_INSERTED);
+		} else {
+			aml_ci_bus_select_gpio((struct aml_ci_bus *)(pc->priv), AML_GPIO_ADDR);
+			dvb_ca_en50221_cimcu_camchange_irq(&ci->en50221_cimcu,
+				0, DVB_CA_EN50221_CAMCHANGE_REMOVED);
+		}
 	}
 	return 0;
 }
@@ -1077,6 +1080,7 @@ int aml_ci_bus_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 
 	ci_bus_dev = &ci_bus;
 	ci_bus_dev->pdev = pdev;
+	ci_bus_dev->raw_mode = ci_dev->raw_mode;
 	ci_bus_dev->priv = ci_dev;
 	ci_bus_dev->bus_pinctrl = NULL;
 	ci_bus_dev->pinctrl = NULL;
@@ -1865,12 +1869,137 @@ static struct attribute *aml_ci_bus_attrs[] = {
 ATTRIBUTE_GROUPS(aml_ci_bus);
 
 
+#define RAWCI_DEV_NAME "rawci"
+int rawci_major = 0;
+
+static int rawci_open(struct inode *inode, struct file *filp)
+{
+	int id = iminor(inode);
+
+	if (ci_bus.used) {
+		pr_error("smartcard %d already openned!", id);
+		return -EBUSY;
+	}
+
+	ci_bus.used = 1;
+
+	filp->private_data = &ci_bus;
+	return 0;
+}
+
+static int rawci_close(struct inode *inode, struct file *filp)
+{
+	ci_bus.used = 0;
+	return 0;
+}
+
+static ssize_t rawci_read(struct file *filp,
+			char __user *buff, size_t size, loff_t *ppos)
+{
+	return size;
+}
+
+static ssize_t rawci_write(struct file *filp,
+			 const char __user *buff, size_t size, loff_t *offp)
+{
+	return size;
+}
+
+static unsigned int rawci_poll(struct file *filp, struct poll_table_struct *wait)
+{
+	return 0;
+}
+
+
+static long rawci_ioctl(struct file *file, unsigned int cmd, ulong arg)
+{
+	struct aml_ci_bus *ci_bus_dev = (struct aml_ci_bus *)file->private_data;
+	int ret = 0;
+	long cr;
+	int value;
+	struct ci_rw_param param;
+	memset(&param, 0, sizeof(struct ci_rw_param));
+
+	switch (cmd) {
+		case AMCI_IOC_RESET:
+		{
+			aml_pcmcia_reset(&(ci_bus_dev->pc));
+		}
+		break;
+		case AMCI_IOC_IO:
+		{
+			cr = copy_from_user(&param, (void *)arg,
+			sizeof(struct ci_rw_param));
+			if (param.mode == AM_CI_IOW)
+				aml_ci_bus_io_write(ci_bus_dev->priv, 0, param.addr, param.value);
+			else if (param.mode == AM_CI_IOR)
+				value = aml_ci_bus_io_read(ci_bus_dev->priv, 0, param.addr);
+			else if (param.mode == AM_CI_MEMW)
+				aml_ci_bus_mem_write(ci_bus_dev->priv, 0, param.addr, param.value);
+			else if (param.mode == AM_CI_MEMR)
+				value = aml_ci_bus_mem_read(ci_bus_dev->priv, 0, param.addr);
+
+			param.value = (u8)value;
+			cr = copy_to_user((void *)arg, &param, sizeof(struct ci_rw_param));
+		}
+		break;
+		case AMCI_IOC_GET_DETECT:
+		{
+			int value = aml_gio_get_cd1(&(ci_bus_dev->pc));
+			if (value == 1)
+				value = 0;
+			else
+				value = 1;
+			cr = copy_to_user((void *)arg, &value, sizeof(int));
+		}
+		break;
+		case AMCI_IOC_SET_POWER:
+		{
+			int value = 0;
+			cr = copy_from_user(&value, (void *)arg, sizeof(int));
+			aml_gio_power(&(ci_bus_dev->pc), value > 0 ? AML_PWR_OPEN : AML_PWR_CLOSE);
+		}
+		break;
+		default:
+			ret = -EINVAL;
+			break;
+	}
+
+	return ret;
+}
+
+
+#ifdef CONFIG_COMPAT
+static long rawci_ioctl_compat(struct file *filp, unsigned int cmd,
+			     unsigned long args)
+{
+	unsigned long ret;
+
+	args = (unsigned long)compat_ptr(args);
+	ret = rawci_ioctl(filp, cmd, args);
+	return ret;
+}
+#endif
+
+static const struct file_operations rawci_fops = {
+	.owner = THIS_MODULE,
+	.open = rawci_open,
+	.write = rawci_write,
+	.read = rawci_read,
+	.release = rawci_close,
+	.unlocked_ioctl = rawci_ioctl,
+	.poll = rawci_poll,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = rawci_ioctl_compat,
+#endif
+};
+
 int  aml_ci_bus_mod_init(void)
 {
 	int ret;
 	struct class *clp;
-        #define CLASS_NAME_LEN 48
-	pr_dbg("Amlogic DVB CI BUS Init\n");
+	#define CLASS_NAME_LEN 48
+	pr_dbg("Amlogic DVB CI BUS Init---\n");
 
 	clp = &(ci_bus.cls);
 
@@ -1884,12 +2013,31 @@ int  aml_ci_bus_mod_init(void)
 	ret = class_register(clp);
 	if (ret)
 		kfree(clp->name);
+	if (ci_bus.raw_mode == 1) {
+		pr_dbg("register CI chrdev [%s]\n", RAWCI_DEV_NAME);
+		rawci_major = register_chrdev(0, RAWCI_DEV_NAME, &rawci_fops);
+		if (rawci_major <= 0) {
+			pr_error("register CI chrdev error\n");
+		} else {
+			device_create(clp, NULL,
+				MKDEV(rawci_major, 0), NULL,
+				RAWCI_DEV_NAME);
+		}
+	} else {
+		pr_dbg("register CI chrdev [%s]\n", RAWCI_DEV_NAME);
+	}
+
 	return 0;
 }
 
 void  aml_ci_bus_mod_exit(void)
 {
 	pr_dbg("Amlogic DVB CI BUS Exit\n");
+	if (ci_bus.raw_mode == 1 && rawci_major > 0)
+		device_destroy(&(ci_bus.cls), MKDEV(rawci_major, 0));
+	class_destroy(&(ci_bus.cls));
+	if (ci_bus.raw_mode == 1 && rawci_major > 0)
+		unregister_chrdev(rawci_major, RAWCI_DEV_NAME);
 	class_unregister(&(ci_bus.cls));
 }
 

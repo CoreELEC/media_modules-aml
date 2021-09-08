@@ -60,6 +60,7 @@ struct aml_ci {
 	void				*priv;
 	int				id;
 	struct class			class;
+	int				raw_mode;
 
 	int (*ci_init)(struct platform_device *pdev, struct aml_ci *ci);
 	int (*ci_exit)(struct aml_ci *ci);
