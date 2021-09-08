@@ -2851,7 +2851,11 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 		      wq->pic.encoder_height, wq->request.fmt);
 
 		if (wq->pic.encoder_width >= 1280 && wq->pic.encoder_height >= 720
-			&& wq->request.fmt == FMT_RGBA8888 && wq->pic.color_space != GE2D_FORMAT_BT601) {
+			&& wq->request.fmt == FMT_RGBA8888
+#ifdef CONFIG_AMLOGIC_MEDIA_GE2D
+			&& wq->pic.color_space != GE2D_FORMAT_BT601
+#endif
+			) {
 			wq->request.scale_enable = 1;
 			wq->request.src_w = wq->pic.encoder_width;
 			wq->request.src_h = wq->pic.encoder_height;
