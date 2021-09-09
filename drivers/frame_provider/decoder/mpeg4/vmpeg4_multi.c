@@ -216,6 +216,8 @@ struct pic_info_t {
 	u32 frame_size; // For frame base mode;
 	u64 timestamp;
 	u32 offset;
+	u32 height;
+	u32 width;
 };
 
 struct vdec_mpeg4_hw_s {
@@ -745,8 +747,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		}
 
 		vf->index = pic->index;
-		vf->width = hw->frame_width;
-		vf->height = hw->frame_height;
+		vf->width = pic->width;
+		vf->height = pic->height;
 		vf->bufWidth = 1920;
 		vf->flag = 0;
 		vf->orientation = hw->vmpeg4_rotation;
@@ -825,8 +827,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		}
 
 		vf->index = pic->index;
-		vf->width = hw->frame_width;
-		vf->height = hw->frame_height;
+		vf->width = pic->width;
+		vf->height = pic->height;
 		vf->bufWidth = 1920;
 		vf->flag = 0;
 		vf->orientation = hw->vmpeg4_rotation;
@@ -917,8 +919,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		}
 
 		vf->index = index;
-		vf->width = hw->frame_width;
-		vf->height = hw->frame_height;
+		vf->width = pic->width;
+		vf->height = pic->height;
 		vf->bufWidth = 1920;
 		vf->flag = 0;
 		vf->orientation = hw->vmpeg4_rotation;
@@ -1269,10 +1271,14 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		dec_w = READ_VREG(MP4_PIC_WH)>> 16;
 		dec_h = READ_VREG(MP4_PIC_WH) & 0xffff;
-		if (dec_w != 0)
+		if (dec_w != 0) {
 			hw->frame_width = dec_w;
-		if (dec_h != 0)
+			dec_pic->width = dec_w;
+		}
+		if (dec_h != 0) {
 			hw->frame_height = dec_h;
+			dec_pic->height = dec_h;
+		}
 		hw->res_ch_flag = 0;
 
 		if (hw->vmpeg4_amstream_dec_info.rate == 0) {
