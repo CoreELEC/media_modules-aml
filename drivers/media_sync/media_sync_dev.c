@@ -94,7 +94,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	mediasync_frameinfo FrameInfo = {-1, -1};
 	mediasync_audioinfo AudioInfo = {0, 0};
 	mediasync_videoinfo VideoInfo = {0, 0};
-	mediasync_audioformat AudioFormat;
+	mediasync_audio_format AudioFormat;
 	mediasync_clocktype ClockType = UNKNOWN_CLOCK;
 	mediasync_clockprovider_state state;
 	s32 SyncInsId = -1;
@@ -110,6 +110,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	s64 VideoWorkMode = 0;
 	s64 FccEnable = 0;
 	int mute_flag  = 0;
+	int PauseResumeFlag  = 0;
 	mediasync_priv_s *priv = (mediasync_priv_s *)file->private_data;
 	mediasync_ins *SyncIns = NULL;
 	mediasync_alloc_para parm = {0};
@@ -951,6 +952,33 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_SET_PAUSERESUME_FLAG:
+			if (copy_from_user((void *)&PauseResumeFlag,
+					(void *)arg,
+					sizeof(PauseResumeFlag)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_pauseresume(priv->mSyncInsId,
+								PauseResumeFlag);
+		break;
+
+		case MEDIASYNC_IOC_GET_PAUSERESUME_FLAG:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_pauseresume(priv->mSyncInsId,
+								&PauseResumeFlag);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&PauseResumeFlag,
+						sizeof(PauseResumeFlag)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -1024,6 +1052,8 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_START_MEDIA_TIME:
 		case MEDIASYNC_IOC_SET_AUDIO_FORMAT:
 		case MEDIASYNC_IOC_GET_AUDIO_FORMAT:
+		case MEDIASYNC_IOC_SET_PAUSERESUME_FLAG:
+		case MEDIASYNC_IOC_GET_PAUSERESUME_FLAG:
 
 			return mediasync_ioctl(file, cmd, arg);
 		default:

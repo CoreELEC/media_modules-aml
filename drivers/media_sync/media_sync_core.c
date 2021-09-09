@@ -231,6 +231,7 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	pInstance->mAudioInfo.cacheDuration = -1;
 	pInstance->mVideoInfo.cacheSize = -1;
 	pInstance->mVideoInfo.cacheDuration = -1;
+	pInstance->mPauseResumeFlag = -1;
 
 	return 0;
 }
@@ -1156,7 +1157,7 @@ long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime) {
 	return 0;
 }
 
-long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audioformat format) {
+long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audio_format format) {
 
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
@@ -1174,8 +1175,7 @@ long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audioformat format)
 
 }
 
-
-long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audioformat* format) {
+long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audio_format* format) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1192,3 +1192,34 @@ long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audioformat* format
 
 	return 0;
 }
+
+long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	pInstance->mPauseResumeFlag = flag;
+
+	return 0;
+}
+
+long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	*flag = pInstance->mPauseResumeFlag;
+	return 0;
+}
+
+

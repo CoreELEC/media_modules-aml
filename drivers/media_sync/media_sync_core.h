@@ -72,7 +72,7 @@ typedef struct audioforamt{
 	int datawidth;
 	int channels;
 	int format;
-}mediasync_audioformat;
+}mediasync_audio_format;
 
 typedef enum
 {
@@ -112,13 +112,14 @@ typedef struct instance{
 	int mPtsAdjust;
 	int mVideoWorkMode;
 	int mFccEnable;
+    int mPauseResumeFlag;
 	mediasync_clocktype mSourceClockType;
 	mediasync_clockprovider_state mSourceClockState;
 	mediasync_audioinfo mAudioInfo;
 	mediasync_videoinfo mVideoInfo;
 	mediasync_syncinfo mSyncInfo;
 	aml_Source_Type mSourceType;
-	mediasync_audioformat mAudioFormat;
+	mediasync_audio_format mAudioFormat;
 }mediasync_ins;
 
 long mediasync_ins_alloc(s32 sDemuxId,
@@ -151,7 +152,6 @@ long mediasync_ins_get_nextvsync_systemtime(s32 sSyncInsId, s64* lpSystemTime);
 long mediasync_ins_set_updatetime_threshold(s32 sSyncInsId, s64 lTimeThreshold);
 long mediasync_ins_get_updatetime_threshold(s32 sSyncInsId, s64* lpTimeThreshold);
 
-//chenchen
 long mediasync_ins_init_syncinfo(s32 sSyncInsId);
 long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type);
 long mediasync_ins_get_clocktype(s32 sSyncInsId, mediasync_clocktype* type);
@@ -195,7 +195,9 @@ long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType);
 long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType);
 long mediasync_ins_set_start_media_time(s32 sSyncInsId, s64 startime);
 long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime);
-long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audioformat format);
-long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audioformat* format);
+long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audio_format format);
+long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audio_format* format);
+long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag);
+long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag);
 
 #endif
