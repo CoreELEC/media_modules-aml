@@ -7460,7 +7460,8 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 	display_frame_count[pbi->index]++;
 	if (vf) {
 		if (!force_pts_unstable) {
-			if ((pic_config->pts == 0) || (pic_config->pts <= pbi->last_pts)) {
+			if ((pic_config->pts == 0) || ((pic_config->pts <= pbi->last_pts) &&
+				(pic_config->pts64 <= pbi->last_pts_us64))) {
 					for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
 						if ((pbi->last_pts == pbi->frame_mode_pts_save[i]) ||
 								(pbi->last_pts_us64 == pbi->frame_mode_pts64_save[i])) {
@@ -7593,12 +7594,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				(DUR2PTS(pbi->frame_dur) * 100 / 9);
 		}
 		pbi->last_pts_us64 = vf->pts_us64;
-		if ((debug & VP9_DEBUG_OUT_PTS) != 0) {
-			pr_info
-			("VP9 dec out pts: pts_mode=%d,dur=%d,pts(%d,%lld)(%d,%lld)\n",
-			pbi->pts_mode, pbi->frame_dur, vf->pts,
-			vf->pts_us64, pts_save, pts_us64_save);
-		}
 
 		if (pbi->pts_mode == PTS_NONE_REF_USE_DURATION) {
 			vf->disp_pts = vf->pts;
@@ -7715,6 +7710,12 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		if (vdec_stream_based(pvdec) && (!pvdec->vbuf.use_ptsserv)) {
 			vf->pts_us64 = stream_offset;
 			vf->pts = 0;
+		}
+		if ((debug & VP9_DEBUG_OUT_PTS) != 0) {
+			pr_info
+			("VP9 dec out pts: pts_mode=%d,dur=%d,pts(%d,%lld)(%d,%lld)\n",
+			pbi->pts_mode, pbi->frame_dur, vf->pts,
+			vf->pts_us64, pts_save, pts_us64_save);
 		}
 		if (!(pic_config->y_crop_width == 196
 		&& pic_config->y_crop_height == 196

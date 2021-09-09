@@ -6419,7 +6419,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 	if (vf) {
 		if (!force_pts_unstable && (hw->av1_first_pts_ready)) {
 			if (hw->is_used_v4l) {
-				if ((pic_config->timestamp == 0) || (pic_config->timestamp <= hw->last_timestamp)) {
+				if ((pic_config->timestamp == 0) || ((pic_config->timestamp <= hw->last_timestamp) &&
+					(pic_config->pts64 <= hw->last_pts_us64))) {
 					for (i = (FRAME_BUFFERS - 1); i > 0; i--) {
 						if (hw->last_timestamp == hw->frame_mode_timestamp_save[i]) {
 							pic_config->timestamp = hw->frame_mode_timestamp_save[i - 1];

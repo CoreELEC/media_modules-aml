@@ -210,6 +210,8 @@ struct pic_info_t {
 	u32 hw_decode_time;
 	u32 frame_size; // For frame base mode;
 	u32 offset;
+	u32 height;
+	u32 width;
 };
 
 struct vdec_mpeg4_hw_s {
@@ -719,8 +721,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		}
 
 		vf->index = pic->index;
-		vf->width = hw->frame_width;
-		vf->height = hw->frame_height;
+		vf->width = pic->width;
+		vf->height = pic->height;
 		vf->bufWidth = 1920;
 		vf->flag = 0;
 		vf->orientation = hw->vmpeg4_rotation;
@@ -800,8 +802,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 
 
 		vf->index = pic->index;
-		vf->width = hw->frame_width;
-		vf->height = hw->frame_height;
+		vf->width = pic->width;
+		vf->height = pic->height;
 		vf->bufWidth = 1920;
 		vf->flag = 0;
 		vf->orientation = hw->vmpeg4_rotation;
@@ -883,8 +885,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		}
 
 		vf->index = index;
-		vf->width = hw->frame_width;
-		vf->height = hw->frame_height;
+		vf->width = pic->width;
+		vf->height = pic->height;
 		vf->bufWidth = 1920;
 		vf->flag = 0;
 		vf->orientation = hw->vmpeg4_rotation;
@@ -1224,10 +1226,14 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		dec_w = READ_VREG(MP4_PIC_WH)>> 16;
 		dec_h = READ_VREG(MP4_PIC_WH) & 0xffff;
-		if (dec_w != 0)
+		if (dec_w != 0) {
 			hw->frame_width = dec_w;
-		if (dec_h != 0)
+			dec_pic->width = dec_w;
+		}
+		if (dec_h != 0) {
 			hw->frame_height = dec_h;
+			dec_pic->height = dec_h;
+		}
 
 		if (hw->vmpeg4_amstream_dec_info.rate == 0) {
 			if (vop_time_inc < hw->last_vop_time_inc) {
@@ -1311,11 +1317,10 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 		dec_pic->duration = duration;
 		hw->vfbuf_use[index] = 0;
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"mmpeg4: pic_num: %d, index %d, type %c, pts %x\n",
+			"mmpeg4: pic_num: %d, index %d, type %c, pts %x, pts64 %lld, height %d, width %d\n",
 			hw->frame_num, index,
 			GET_PIC_TYPE(picture_type),
-			dec_pic->pts);
-
+			dec_pic->pts, dec_pic->pts64, dec_pic->height, dec_pic->width);
 		/* buffer management */
 		if ((picture_type == I_PICTURE) ||
 			(picture_type == P_PICTURE)) {
