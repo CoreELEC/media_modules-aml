@@ -98,12 +98,37 @@ struct vpudrv_dma_buf_info_t {
 	int fd[3];
 	ulong phys_addr[3]; /* phys address for DMA buffer */
 };
+
+//hoan add for canvas
+struct vpudrv_dma_buf_canvas_info_t {
+	u32 num_planes;
+	u32 canvas_index;
+	int fd[3];
+	ulong phys_addr[3]; /* phys address for DMA buffer */
+};
+
+
+
+//end
+
+
+
 #ifdef CONFIG_COMPAT
 struct compat_vpudrv_dma_buf_info_t {
 	u32 num_planes;
 	compat_int_t fd[3];
 	compat_ulong_t phys_addr[3]; /* phys address for DMA buffer */
 };
+
+
+struct compat_vpudrv_dma_buf_canvas_info_t {
+	u32 num_planes;
+	u32 canvas_index;
+	compat_int_t fd[3];
+	compat_ulong_t phys_addr[3]; /* phys address for DMA buffer */
+};
+
+
 #endif
 
 struct vpu_dma_cfg {
@@ -127,9 +152,17 @@ struct vpudrv_dma_buf_pool_t {
 #define VPUDRV_BUF_LEN struct vpudrv_buffer_t
 #define VPUDRV_INST_LEN struct vpudrv_inst_info_t
 #define VPUDRV_DMABUF_LEN struct vpudrv_dma_buf_info_t
+	//hoan add for canvas
+#define VPUDRV_DMABUF_CANVAS_LEN struct vpudrv_dma_buf_canvas_info_t
+	//end
+
 #ifdef CONFIG_COMPAT
 #define VPUDRV_BUF_LEN32 struct compat_vpudrv_buffer_t
 #define VPUDRV_DMABUF_LEN32 struct compat_vpudrv_dma_buf_info_t
+		//hoan add for canvas
+#define VPUDRV_DMABUF_CANVAS_LEN32 struct compat_vpudrv_dma_buf_canvas_info_t
+		//end
+
 #endif
 
 #define VDI_MAGIC  'V'
@@ -184,6 +217,12 @@ struct vpudrv_dma_buf_pool_t {
 #define VDI_IOCTL_UNMAP_DMA \
 	_IOW(VDI_MAGIC, 17, VPUDRV_DMABUF_LEN)
 
+
+//hoan add for canvas
+#define VDI_IOCTL_READ_CANVAS \
+	_IOW(VDI_MAGIC, 20, VPUDRV_DMABUF_CANVAS_LEN)
+//end
+
 #ifdef CONFIG_COMPAT
 #define VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY32 \
 	_IOW(VDI_MAGIC, 0, VPUDRV_BUF_LEN32)
@@ -214,6 +253,14 @@ struct vpudrv_dma_buf_pool_t {
 
 #define VDI_IOCTL_UNMAP_DMA32 \
 	_IOW(VDI_MAGIC, 17, VPUDRV_DMABUF_LEN32)
+
+//hoan add for canvas
+#define VDI_IOCTL_READ_CANVAS32 \
+	_IOW(VDI_MAGIC, 20, VPUDRV_DMABUF_CANVAS_LEN32)
+//end
+
+
+
 #endif
 /* implement to power management functions */
 #define BIT_BASE		0x0000

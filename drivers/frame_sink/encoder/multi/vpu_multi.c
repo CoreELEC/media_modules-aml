@@ -46,6 +46,9 @@
 #include <linux/amlogic/cpu_version.h>
 //#include <linux/amlogic/pwr_ctrl.h>
 
+#include <linux/amlogic/media/canvas/canvas.h>
+#include <linux/amlogic/media/canvas/canvas_mgr.h>
+
 #include <linux/amlogic/power_ctrl.h>
 #include <dt-bindings/power/t7-pd.h>
 #include <linux/amlogic/power_domain.h>
@@ -54,6 +57,7 @@
 #include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
 #include "vpu_multi.h"
 #include "vmm_multi.h"
+
 #define MAX_INTERRUPT_QUEUE (16*MAX_NUM_INSTANCE)
 
 /* definitions to be changed as customer  configuration */
@@ -95,7 +99,8 @@ static ulong cma_pool_size;
 static u32 cma_cfg_size;
 
 static u32 clock_a, clock_b, clock_c;
-
+static int dump_input;
+static int dump_es;
 static int vpu_hw_reset(void);
 static void hw_reset(bool reset);
 
@@ -108,6 +113,132 @@ struct vpu_clks {
 };
 
 static struct vpu_clks s_vpu_clks;
+
+static struct file *file_open(const char *path, int flags, int rights)
+{
+    struct file *filp = NULL;
+    mm_segment_t oldfs;
+    long err1 = 0;
+    void *err2 = NULL;
+
+    oldfs = get_fs();
+    //set_fs(get_ds());
+    set_fs(KERNEL_DS);
+    filp = filp_open(path, flags, rights);
+    set_fs(oldfs);
+
+    if (IS_ERR(filp)) {
+        err1 = PTR_ERR(filp);
+        err2 = ERR_PTR(err1);
+        pr_err("filp_open return %p, %ld, %p\n", filp, err1, err2);
+        return NULL;
+    }
+
+    return filp;
+}
+
+static void file_close(struct file *file)
+{
+    filp_close(file, NULL);
+}
+/*
+static int file_read(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size)
+{
+    mm_segment_t oldfs;
+    int ret;
+
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+
+    ret = vfs_read(file, data, size, &offset);
+
+    set_fs(oldfs);
+    return ret;
+}*/
+static int file_write(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size)
+{
+    mm_segment_t oldfs;
+    int ret;
+    //loff_t pos;
+
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+    //pos = file->f_pos;
+    ret = vfs_write(file, data, size, &offset);
+    //file->f_pos = pos;
+
+    set_fs(oldfs);
+    return ret;
+}
+
+static int file_sync(struct file *file)
+{
+    vfs_fsync(file, 0);
+    return 0;
+}
+
+static s32 dump_raw_input(struct canvas_s *cs0) {
+	u8 *data;
+
+	u32 addr, canvas_w, picsize_y;
+	//u32 input = request->src;
+	//u8 iformat = MAX_FRAME_FMT;
+	struct file *filp;
+	int ret;
+
+	addr  = cs0->addr;
+
+	canvas_w  = ((cs0->width + 31) >> 5) << 5;
+	picsize_y = cs0->height;
+
+	filp = file_open("/data/multienc.yuv", O_CREAT | O_RDWR | O_APPEND, 0777);
+
+	if (filp) {
+		data = (u8*)phys_to_virt(addr);
+		ret = file_write(filp, 0, data, canvas_w * picsize_y);
+
+		file_sync(filp);
+		file_close(filp);
+	} else
+		pr_err("open encoder.yuv failed\n");
+
+	return 0;
+}
+
+static s32 dump_data(u32 phy_addr, u32 size) {
+	u8 *data ;
+
+	struct file *filp;
+	int ret;
+
+	filp = file_open("/data/multienc.es", O_CREAT | O_RDWR | O_APPEND, 0777);
+
+	if (filp) {
+		data = (u8*)phys_to_virt(phy_addr);
+		ret = file_write(filp, 0, data, size);
+
+		file_sync(filp);
+		file_close(filp);
+	} else
+		pr_err("open encoder.es failed\n");
+
+	return 0;
+}
+
+/*static s32 dump_encoded_data(u8 *data, u32 size) {
+	struct file *filp;
+
+	filp = file_open("/data/multienc_output.es", O_APPEND | O_RDWR, 0644);
+
+	if (filp) {
+		file_write(filp, 0, data, size);
+		file_sync(filp);
+		file_close(filp);
+	} else
+		pr_err("/data/multienc_output.es failed\n");
+
+	return 0;
+}*/
 
 static void vpu_clk_put(struct device *dev, struct vpu_clks *clks)
 {
@@ -517,7 +648,6 @@ static s32 vpu_dma_buf_release(struct file *filp)
 	return 0;
 }
 
-
 static inline u32 get_inst_idx(u32 reg_val)
 {
 	u32 inst_idx;
@@ -530,7 +660,6 @@ static inline u32 get_inst_idx(u32 reg_val)
 	inst_idx = i;
 	return inst_idx;
 }
-
 
 static s32 get_vpu_inst_idx(struct vpu_drv_context_t *dev, u32 *reason,
 			    u32 empty_inst, u32 done_inst, u32 seq_inst)
@@ -571,7 +700,7 @@ static s32 get_vpu_inst_idx(struct vpu_drv_context_t *dev, u32 *reason,
 		reg_val = (done_inst & 0xffff);
 		inst_idx = get_inst_idx(reg_val);
 		*reason = (1 << INT_DEC_PIC);
-		enc_pr(LOG_DEBUG,
+		enc_pr(LOG_INFO,
 			"%s, RET_QUEUE_CMD_DONE DEC_PIC val=0x%x, idx=%d\n",
 			__func__, reg_val, inst_idx);
 
@@ -972,6 +1101,9 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 	enc_pr(LOG_DEBUG, "[-] %s, ret: %d\n", __func__, r);
 	return r;
 }
+ulong phys_addrY;
+ulong phys_addrU;
+ulong phys_addrV;
 
 static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 {
@@ -1870,14 +2002,10 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				return -EFAULT;
 
 			spin_lock(&s_vpu_lock);
-			list_for_each_entry_safe(pool, n,
-				&s_vbp_head, list) {
+			list_for_each_entry_safe(pool, n, &s_vbp_head, list) {
 				if (pool->filp == filp) {
 					vb = pool->vb;
-					if ((vb.phys_addr <= buf.phys_addr)
-						&& ((vb.phys_addr + vb.size)
-							> buf.phys_addr)
-						&& find == false){
+					if ((vb.phys_addr <= buf.phys_addr) && ((vb.phys_addr + vb.size) > buf.phys_addr) && find == false) {
 						cached = vb.cached;
 						find = true;
 						break;
@@ -1885,12 +2013,12 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				}
 			}
 			spin_unlock(&s_vpu_lock);
-			if (find && cached)
-				cache_flush(
-					(u32)buf.phys_addr,
-					(u32)buf.size);
-			enc_pr(LOG_ALL,
-				"[-]VDI_IOCTL_CACHE_INV_BUFFER\n");
+			if (find && cached) {
+				//pr_err("[%d]doing cache flush for %p~%p\n", __LINE__, (long)(buf.phys_addr), (long)(buf.phys_addr+buf.size));
+				cache_flush((u32)buf.phys_addr,(u32)buf.size);
+			}
+
+			enc_pr(LOG_ALL,"[-]VDI_IOCTL_CACHE_INV_BUFFER\n");
 		}
 		break;
 #ifdef CONFIG_COMPAT
@@ -1901,8 +2029,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 			struct vpudrv_buffer_t vb;
 			bool find = false;
 			u32 cached = 0;
-			enc_pr(LOG_ALL,
-				"[+]VDI_IOCTL_CACHE_INV_BUFFER32\n");
+			enc_pr(LOG_ALL, "[+]VDI_IOCTL_CACHE_INV_BUFFER32\n");
 
 			ret = copy_from_user(&buf32,
 				(struct compat_vpudrv_buffer_t *)arg,
@@ -1928,19 +2055,22 @@ INTERRUPT_REMAIN_IN_QUEUE:
 			}
 			spin_unlock(&s_vpu_lock);
 
-			if (find && cached)
-				cache_flush(
-					(u32)buf32.phys_addr,
-					(u32)buf32.size);
-			enc_pr(LOG_ALL,
-				"[-]VVDI_IOCTL_CACHE_INV_BUFFER32\n");
+			if (find && cached) {
+				cache_flush((u32)buf32.phys_addr, (u32)buf32.size);
+
+				if (dump_es) {
+					pr_err("dump es frame, size=%u\n", (u32)buf32.size);
+					dump_data((u32)buf32.phys_addr, (u32)buf32.size);
+				}
+			}
+			enc_pr(LOG_INFO, "[-]VVDI_IOCTL_CACHE_INV_BUFFER32\n");
 		}
 		break;
 #endif
 	case VDI_IOCTL_CONFIG_DMA:
 		{
 			struct vpudrv_dma_buf_info_t dma_info;
-			enc_pr(LOG_ALL,
+			enc_pr(LOG_DEBUG,
 				"[+]VDI_IOCTL_CONFIG_DMA_BUF\n");
 
 			if (copy_from_user(&dma_info,
@@ -1965,13 +2095,87 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				ret = -EFAULT;
 				break;
 			}
-			enc_pr(LOG_ALL,
+			enc_pr(LOG_DEBUG,
 				"[-]VDI_IOCTL_CONFIG_DMA_BUF %d, %d, %d\n",
 				dma_info.fd[0],
 				dma_info.fd[1],
 				dma_info.fd[2]);
 		}
 		break;
+
+		//hoan add for canvas
+		case VDI_IOCTL_READ_CANVAS:
+		{
+			struct vpudrv_dma_buf_canvas_info_t dma_info;
+
+			struct canvas_s dst ;
+		    u32 canvas = 0;
+
+			if (copy_from_user(&dma_info,
+					(struct vpudrv_dma_buf_canvas_info_t *)arg,
+					sizeof(struct vpudrv_dma_buf_canvas_info_t)))
+			{
+				return -EFAULT;
+			}
+
+			ret = down_interruptible(&s_vpu_sem);
+			if (ret != 0)
+			{
+				up(&s_vpu_sem);
+				break;
+			}
+
+			canvas = dma_info.canvas_index;
+			enc_pr(LOG_DEBUG,"[+]VDI_IOCTL_READ_CANVAS,canvas = 0x%x\n",canvas);
+			if (canvas & 0xff)
+			{
+				canvas_read(canvas & 0xff, &dst);
+				dma_info.phys_addr[0] = dst.addr;
+
+				if ((canvas & 0xff00) >> 8)
+				{
+					canvas_read((canvas & 0xff00) >> 8, &dst);
+					dma_info.phys_addr[1] = dst.addr;
+
+				}
+
+				if ((canvas & 0xff0000) >> 16)
+				{
+					canvas_read((canvas & 0xff0000) >> 16, &dst);
+					dma_info.phys_addr[2] = dst.addr;
+				}
+
+				enc_pr(LOG_DEBUG,"[+]VDI_IOCTL_READ_CANVAS,phys_addr[0] = 0x%lx,phys_addr[1] = 0x%lx,phys_addr[2] = 0x%lx\n",dma_info.phys_addr[0],dma_info.phys_addr[1],dma_info.phys_addr[2]);
+
+			}
+			else
+			{
+				dma_info.phys_addr[0] = 0;
+				dma_info.phys_addr[1] = 0;
+				dma_info.phys_addr[2] = 0;
+			}
+			up(&s_vpu_sem);
+			#if 0
+			dma_info.phys_addr[0] = phys_addrY;
+			dma_info.phys_addr[1] = phys_addrU;
+			dma_info.phys_addr[2] = phys_addrV;
+			#endif
+
+			ret = copy_to_user((void __user *)arg,
+				&dma_info,
+				sizeof(struct vpudrv_dma_buf_canvas_info_t));
+
+			enc_pr(LOG_DEBUG,"[-]VDI_IOCTL_READ_CANVAS,copy_to_user End\n");
+			if (ret)
+			{
+				ret = -EFAULT;
+				break;
+			}
+
+		}
+		break;
+		//end
+
 #ifdef CONFIG_COMPAT
 	case VDI_IOCTL_CONFIG_DMA32:
 		{
@@ -2019,6 +2223,95 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				dma_info.fd[2]);
 		}
 		break;
+
+#if 1
+
+	//hoan add for canvas
+	case VDI_IOCTL_READ_CANVAS32:
+	{
+		struct vpudrv_dma_buf_canvas_info_t dma_info;
+		struct compat_vpudrv_dma_buf_canvas_info_t dma_info32;
+		struct canvas_s dst;
+		u32 canvas = 0;
+
+		if (copy_from_user(&dma_info32,
+				(struct compat_vpudrv_dma_buf_canvas_info_t *)arg,
+				sizeof(struct compat_vpudrv_dma_buf_canvas_info_t)))
+		{
+			return -EFAULT;
+		}
+
+		ret = down_interruptible(&s_vpu_sem);
+		if (ret != 0)
+		{
+			up(&s_vpu_sem);
+			break;
+		}
+
+		canvas = dma_info32.canvas_index;
+		enc_pr(LOG_INFO,"[+]VDI_IOCTL_READ_CANVAS32,canvas = 0x%x\n",dma_info32.canvas_index);
+		if (canvas & 0xff)
+		{
+			canvas_read(canvas & 0xff, &dst);
+			dma_info.phys_addr[0] = dst.addr;
+
+			if (dump_input) {
+				dump_raw_input(&dst);
+			}
+
+			if ((canvas & 0xff00) >> 8)
+			{
+				canvas_read((canvas & 0xff00) >> 8, &dst);
+				dma_info.phys_addr[1] = dst.addr;
+				if (dump_input) {
+					dump_raw_input(&dst);
+				}
+			}
+
+			if ((canvas & 0xff0000) >> 16)
+			{
+				canvas_read((canvas & 0xff0000) >> 16, &dst);
+				dma_info.phys_addr[2] = dst.addr;
+				if (dump_input) {
+					dump_raw_input(&dst);
+				}
+			}
+
+			enc_pr(LOG_INFO,"VDI_IOCTL_READ_CANVAS32_1,phys_addr[0] = 0x%lx,phys_addr[1] = 0x%lx,phys_addr[2] = 0x%lx\n",
+				dma_info.phys_addr[0],dma_info.phys_addr[1],dma_info.phys_addr[2]);
+		}
+		else
+		{
+			dma_info.phys_addr[0] = 0;
+			dma_info.phys_addr[1] = 0;
+			dma_info.phys_addr[2] = 0;
+		}
+
+		up(&s_vpu_sem);
+
+		dma_info32.phys_addr[0] =  (compat_ulong_t)dma_info.phys_addr[0];
+		dma_info32.phys_addr[1] =  (compat_ulong_t)dma_info.phys_addr[1];
+		dma_info32.phys_addr[2] =  (compat_ulong_t)dma_info.phys_addr[2];
+
+		enc_pr(LOG_INFO,"VDI_IOCTL_READ_CANVAS32_2,phys_addr[0] = 0x%lx,phys_addr[1] = 0x%lx,phys_addr[2] = 0x%lx\n",dma_info.phys_addr[0],  dma_info.phys_addr[1],  dma_info.phys_addr[2]);
+		enc_pr(LOG_INFO,"VDI_IOCTL_READ_CANVAS32_3,phys_addr[0] = 0x%x,phys_addr[1] = 0x%x,phys_addr[2] = 0x%x\n",   dma_info32.phys_addr[0],dma_info32.phys_addr[1],dma_info32.phys_addr[2]);
+
+		ret = copy_to_user((void __user *)arg,
+			&dma_info32,
+			sizeof(struct compat_vpudrv_dma_buf_canvas_info_t));
+
+		enc_pr(LOG_INFO,"[-]VDI_IOCTL_READ_CANVAS,copy_to_user End\n");
+		if (ret)
+		{
+			ret = -EFAULT;
+			break;
+		}
+
+	}
+	break;
+	//end
+#endif
+
 	case VDI_IOCTL_UNMAP_DMA32:
 		{
 			struct vpudrv_dma_buf_info_t dma_info;
@@ -2465,8 +2758,14 @@ static s32 vpu_src_addr_config(struct vpudrv_dma_buf_info_t *pinfo,
 		list_add(&vbp->list, &s_dma_bufp_head);
 		spin_unlock(&s_dma_buf_lock);
 	}
-	enc_pr(LOG_INFO, "vpu_src_addr_config phy_addr 0x%lx, 0x%lx, 0x%lx\n",
+	enc_pr(LOG_DEBUG, "vpu_src_addr_config phy_addr 0x%lx, 0x%lx, 0x%lx\n",
 		pinfo->phys_addr[0], pinfo->phys_addr[1], pinfo->phys_addr[2]);
+	//hoan add for canvas test
+	phys_addrY = pinfo->phys_addr[0];
+	phys_addrU = pinfo->phys_addr[1];
+	phys_addrV = pinfo->phys_addr[2];
+
+	//end
 	return ret;
 }
 
@@ -2483,11 +2782,10 @@ static s32 vpu_src_addr_unmap(struct vpudrv_dma_buf_info_t *pinfo,
 	if (pinfo->num_planes == 0 || pinfo->num_planes > 3)
 		return -EFAULT;
 
-	enc_pr(LOG_DEBUG,
+	enc_pr(LOG_INFO,
 		"dma_unmap planes %d fd: %d-%d-%d, phy_add: 0x%lx-%lx-%lx\n",
 		pinfo->num_planes, pinfo->fd[0],pinfo->fd[1], pinfo->fd[2],
 		pinfo->phys_addr[0], pinfo->phys_addr[1], pinfo->phys_addr[2]);
-
 
 	list_for_each_entry_safe(pool, n, &s_dma_bufp_head, list) {
 		found = 0;
@@ -3142,6 +3440,12 @@ MODULE_PARM_DESC(clock_b, "\n clock_b\n");
 
 module_param(clock_c, uint, 0664);
 MODULE_PARM_DESC(clock_c, "\n clock_c\n");
+
+module_param(dump_input, uint, 0664);
+MODULE_PARM_DESC(dump_input, "\n dump_input\n");
+
+module_param(dump_es, uint, 0664);
+MODULE_PARM_DESC(dump_es, "\n dump_es\n");
 
 MODULE_AUTHOR("Amlogic Inc.");
 MODULE_DESCRIPTION("VPU linux driver");
