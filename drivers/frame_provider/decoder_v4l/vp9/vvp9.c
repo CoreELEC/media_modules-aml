@@ -2503,6 +2503,7 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 				__func__, free_pic->index, free_pic->timestamp);
 		} else {
 			pr_debug("%s, vp9 get free pic null\n", __func__);
+			dump_pic_list(pbi);
 		}
 	}
 
@@ -2520,7 +2521,8 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 		for (i = 0; i < pbi->used_buf_num; ++i) {
 			if ((frame_bufs[i].ref_count == 0) &&
 				(frame_bufs[i].buf.vf_ref == 0) &&
-				frame_bufs[i].buf.cma_alloc_addr) {
+				frame_bufs[i].buf.cma_alloc_addr &&
+				(cm->cur_frame != &frame_bufs[i])) {
 				free_buf_count++;
 			}
 		}
@@ -3318,7 +3320,7 @@ static u32 max_decoding_time;
 
 static u32 error_handle_policy;
 /*static u32 parser_sei_enable = 1;*/
-#define MAX_BUF_NUM_NORMAL     14
+#define MAX_BUF_NUM_NORMAL     15
 #define MAX_BUF_NUM_LESS   10
 static u32 max_buf_num = MAX_BUF_NUM_NORMAL;
 #define MAX_BUF_NUM_SAVE_BUF  8
@@ -8844,8 +8846,9 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 	/*
 	1. curruent decoding frame is not include in dpb;
 	2. for frame push out, one more buffer necessary.
+	3. Two consecutive frames cannot use the same buffer.
 	*/
-	ps->dpb_frames += 2;
+	ps->dpb_frames += 3;
 
 	if (ps->dpb_margin + ps->dpb_frames > MAX_BUF_NUM_NORMAL) {
 		u32 delta;
@@ -10474,7 +10477,8 @@ static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if ((frame_bufs[i].ref_count == 0) &&
 			(frame_bufs[i].buf.vf_ref == 0) &&
-			frame_bufs[i].buf.cma_alloc_addr) {
+			frame_bufs[i].buf.cma_alloc_addr &&
+			(cm->cur_frame != &frame_bufs[i])) {
 			free_count++;
 		}
 	}
