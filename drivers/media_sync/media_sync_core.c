@@ -231,7 +231,7 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	pInstance->mAudioInfo.cacheDuration = -1;
 	pInstance->mVideoInfo.cacheSize = -1;
 	pInstance->mVideoInfo.cacheDuration = -1;
-	pInstance->mPauseResumeFlag = -1;
+	pInstance->mPauseResumeFlag = 0;
 
 	return 0;
 }
