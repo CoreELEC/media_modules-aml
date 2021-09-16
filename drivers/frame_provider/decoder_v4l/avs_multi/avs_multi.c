@@ -87,8 +87,7 @@
 
 /* protocol registers */
 #define AVS_PIC_RATIO       AV_SCRATCH_0
-#define AVS_PIC_WIDTH      AV_SCRATCH_1
-#define AVS_PIC_HEIGHT     AV_SCRATCH_2
+#define AVS_PIC_INFO      AV_SCRATCH_1
 #define AVS_FRAME_RATE     AV_SCRATCH_3
 
 /*#define AVS_ERROR_COUNT    AV_SCRATCH_6*/
@@ -113,6 +112,7 @@
 #define DECODE_STATUS_DECODE_BUF_EMPTY	0x2
 #define DECODE_STATUS_SEARCH_BUF_EMPTY	0x3
 #define DECODE_STATUS_SKIP_PIC_DONE     0x4
+#define DECODE_STATUS_INFO     0x5
 #define DECODE_SEARCH_HEAD	0xff
 
 #define DECODE_STOP_POS		AV_SCRATCH_J
@@ -394,6 +394,24 @@ struct pic_pts_s {
 	unsigned short decode_pic_count;
 };
 
+struct pic_info_t {
+	u32 buffer_info;
+	u32 index;
+	u32 offset;
+	u32 width;
+	u32 height;
+	u32 pts;
+	u64 pts64;
+	bool pts_valid;
+	ulong v4l_ref_buf_addr;
+	u32 hw_decode_time;
+	u32 frame_size; // For frame base mode
+	u64 timestamp;
+	u32 picture_type;
+	unsigned short decode_pic_count;
+	u32 repeat_cnt;
+};
+
 struct vdec_avs_hw_s {
 	spinlock_t lock;
 	unsigned char m_ins_flag;
@@ -551,6 +569,10 @@ struct vdec_avs_hw_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	s32 ref_use[DECODE_BUFFER_NUM_MAX];
+	s32 buf_use[DECODE_BUFFER_NUM_MAX];
+	u32 decoding_index;
+	struct pic_info_t pics[DECODE_BUFFER_NUM_MAX];
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -657,6 +679,59 @@ static int debug_print_cont(struct vdec_avs_hw_s *hw,
 	return 0;
 }
 
+static bool is_enough_free_buffer(struct vdec_avs_hw_s *hw)
+{
+	int i;
+
+	for (i = 0; i < hw->vf_buf_num_used; i++) {
+		if ((hw->vfbuf_use[i] == 0) && (hw->ref_use[i] == 0) &&
+			(hw->buf_use[i] == 0))
+			break;
+	}
+
+	return (i == hw->vf_buf_num_used) ? false : true;
+}
+
+static int find_free_buffer(struct vdec_avs_hw_s *hw)
+{
+	int i;
+
+	for (i = 0; i < hw->vf_buf_num_used; i++) {
+		if ((hw->vfbuf_use[i] == 0) &&
+			(hw->ref_use[i] == 0) &&
+			(hw->buf_use[i] == 0))
+			break;
+	}
+
+	return i;
+}
+
+int update_reference(struct vdec_avs_hw_s *hw,
+	int index)
+{
+	hw->ref_use[index]++;
+	if (hw->refs[1] == -1) {
+		hw->refs[1] = index;
+		/*
+		* first pic need output to show
+		* usecnt do not decrease.
+		*/
+	} else if (hw->refs[0] == -1) {
+		hw->refs[0] = hw->refs[1];
+		hw->refs[1] = index;
+		/* second pic do not output */
+		index = hw->vf_buf_num_used;
+	} else {
+		hw->ref_use[hw->refs[0]]--; 	//old ref0 ununsed
+		hw->refs[0] = hw->refs[1];
+		hw->refs[1] = index;
+		index = hw->refs[0];
+	}
+	debug_print(hw, PRINT_FLAG_DEC_DETAIL,
+		"hw->refs[0] = %d, hw->refs[1] = %d\n", hw->refs[0], hw->refs[1]);
+	return index;
+}
+
 static void avs_pts_check_in(struct vdec_avs_hw_s *hw,
 	unsigned short decode_pic_count, struct vframe_chunk_s *chunk)
 {
@@ -748,11 +823,10 @@ static void set_frame_info(struct vdec_avs_hw_s *hw, struct vframe_s *vf,
 	} else
 #endif
 	{
-		vf->width = READ_VREG(AVS_PIC_WIDTH);
-		vf->height = READ_VREG(AVS_PIC_HEIGHT);
+		vf->width = READ_VREG(AVS_PIC_INFO) & 0x3fff;
+		vf->height = (READ_VREG(AVS_PIC_INFO) >> 14) & 0x3fff;
 		hw->frame_width = vf->width;
 		hw->frame_height = vf->height;
-		/* pr_info("%s: (%d,%d)\n", __func__,vf->width, vf->height);*/
 	}
 
 #ifndef USE_AVS_SEQ_INFO
@@ -1186,6 +1260,30 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 		decbuf_size = 0x300000;
 	}
 
+	for (i = 0; i < hw->vf_buf_num_used; i++) {
+		unsigned canvas;
+		if (vdec->parallel_dec == 1) {
+			unsigned tmp;
+			if (canvas_u(hw->canvas_spec[i]) == 0xff) {
+				tmp =
+					vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
+				hw->canvas_spec[i] &= ~(0xffff << 8);
+				hw->canvas_spec[i] |= tmp << 8;
+				hw->canvas_spec[i] |= tmp << 16;
+			}
+			if (canvas_y(hw->canvas_spec[i]) == 0xff) {
+				tmp =
+					vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
+				hw->canvas_spec[i] &= ~0xff;
+				hw->canvas_spec[i] |= tmp;
+			}
+			canvas = hw->canvas_spec[i];
+		} else {
+			canvas = vdec->get_canvas(i, 2);
+			hw->canvas_spec[i] = canvas;
+		}
+	}
+
 #ifdef AVSP_LONG_CABAC
 	need_alloc_buf_num = hw->vf_buf_num_used + 2;
 #else
@@ -1218,83 +1316,63 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 			continue;
 		}
 #endif
-		if (hw->m_ins_flag) {
-			unsigned canvas;
+		if (i < hw->vf_buf_num_used) {
+			if (hw->m_ins_flag) {
+				hw->canvas_config[i][0].phy_addr =
+				buf_start;
+				hw->canvas_config[i][0].width =
+				canvas_width;
+				hw->canvas_config[i][0].height =
+				canvas_height;
+				hw->canvas_config[i][0].block_mode =
+					vdec->canvas_mode;
+				hw->canvas_config[i][0].endian = 0;
+				hw->canvas_config[i][1].phy_addr =
+				buf_start + decbuf_y_size;
+				hw->canvas_config[i][1].width =
+				canvas_width;
+				hw->canvas_config[i][1].height =
+				canvas_height / 2;
+				hw->canvas_config[i][1].block_mode =
+					vdec->canvas_mode;
+				hw->canvas_config[i][1].endian = 0;
 
-			if (vdec->parallel_dec == 1) {
-				unsigned tmp;
-				if (canvas_u(hw->canvas_spec[i]) == 0xff) {
-					tmp =
-						vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
-					hw->canvas_spec[i] &= ~(0xffff << 8);
-					hw->canvas_spec[i] |= tmp << 8;
-					hw->canvas_spec[i] |= tmp << 16;
-				}
-				if (canvas_y(hw->canvas_spec[i]) == 0xff) {
-					tmp =
-						vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
-					hw->canvas_spec[i] &= ~0xff;
-					hw->canvas_spec[i] |= tmp;
-				}
-				canvas = hw->canvas_spec[i];
 			} else {
-				canvas = vdec->get_canvas(i, 2);
-				hw->canvas_spec[i] = canvas;
-			}
-
-			hw->canvas_config[i][0].phy_addr =
-			buf_start;
-			hw->canvas_config[i][0].width =
-			canvas_width;
-			hw->canvas_config[i][0].height =
-			canvas_height;
-			hw->canvas_config[i][0].block_mode =
-			CANVAS_BLKMODE_32X32;
-
-			hw->canvas_config[i][1].phy_addr =
-			buf_start + decbuf_y_size;
-			hw->canvas_config[i][1].width =
-			canvas_width;
-			hw->canvas_config[i][1].height =
-			canvas_height / 2;
-			hw->canvas_config[i][1].block_mode =
-			CANVAS_BLKMODE_32X32;
-
-		} else {
 #ifdef NV21
-			config_cav_lut_ex(canvas_base + canvas_num * i + 0,
-					buf_start,
-					canvas_width, canvas_height,
-					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32, 0, VDEC_1);
-			config_cav_lut_ex(canvas_base + canvas_num * i + 1,
-					buf_start +
-					decbuf_y_size, canvas_width,
-					canvas_height / 2,
-					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32, 0, VDEC_1);
+				canvas_config(canvas_base + canvas_num * i + 0,
+						buf_start,
+						canvas_width, canvas_height,
+						CANVAS_ADDR_NOWRAP,
+						CANVAS_BLKMODE_32X32);
+				canvas_config(canvas_base + canvas_num * i + 1,
+						buf_start +
+						decbuf_y_size, canvas_width,
+						canvas_height / 2,
+						CANVAS_ADDR_NOWRAP,
+						CANVAS_BLKMODE_32X32);
 #else
-			config_cav_lut_ex(canvas_num * i + 0,
-					buf_start,
-					canvas_width, canvas_height,
-					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32, 0, VDEC_1);
-			config_cav_lut_ex(canvas_num * i + 1,
-					buf_start +
-					decbuf_y_size, canvas_width / 2,
-					canvas_height / 2,
-					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32, 0, VDEC_1);
-			config_cav_lut_ex(canvas_num * i + 2,
-					buf_start +
-					decbuf_y_size + decbuf_uv_size,
-					canvas_width / 2, canvas_height / 2,
-					CANVAS_ADDR_NOWRAP,
-					CANVAS_BLKMODE_32X32, 0, VDEC_1);
+				canvas_config(canvas_num * i + 0,
+						buf_start,
+						canvas_width, canvas_height,
+						CANVAS_ADDR_NOWRAP,
+						CANVAS_BLKMODE_32X32);
+				canvas_config(canvas_num * i + 1,
+						buf_start +
+						decbuf_y_size, canvas_width / 2,
+						canvas_height / 2,
+						CANVAS_ADDR_NOWRAP,
+						CANVAS_BLKMODE_32X32);
+				canvas_config(canvas_num * i + 2,
+						buf_start +
+						decbuf_y_size + decbuf_uv_size,
+						canvas_width / 2, canvas_height / 2,
+						CANVAS_ADDR_NOWRAP,
+						CANVAS_BLKMODE_32X32);
 #endif
-			debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
-				"canvas config %d, addr %p\n", i,
-					   (void *)buf_start);
+				debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
+					"canvas config %d, addr %p\n", i,
+						   (void *)buf_start);
+			}
 		}
 	}
 	return 0;
@@ -1414,14 +1492,12 @@ static void vavs_save_regs(struct vdec_avs_hw_s *hw)
 	hw->reg_scratch_1 = READ_VREG(AV_SCRATCH_1);
 	hw->reg_scratch_2 = READ_VREG(AV_SCRATCH_2);
 	hw->reg_scratch_3 = READ_VREG(AV_SCRATCH_3);
-	hw->reg_scratch_4 = READ_VREG(AV_SCRATCH_4);
 	hw->reg_scratch_5 = READ_VREG(AV_SCRATCH_5);
 	hw->reg_scratch_6 = READ_VREG(AV_SCRATCH_6);
 	hw->reg_scratch_7 = READ_VREG(AV_SCRATCH_7);
 	hw->reg_scratch_8 = READ_VREG(AV_SCRATCH_8);
 	hw->reg_scratch_9 = READ_VREG(AV_SCRATCH_9);
 	hw->reg_scratch_A = READ_VREG(AV_SCRATCH_A);
-	hw->reg_scratch_B = READ_VREG(AV_SCRATCH_B);
 	hw->reg_scratch_C = READ_VREG(AV_SCRATCH_C);
 	hw->reg_scratch_D = READ_VREG(AV_SCRATCH_D);
 	hw->reg_scratch_E = READ_VREG(AV_SCRATCH_E);
@@ -1442,6 +1518,10 @@ static void vavs_save_regs(struct vdec_avs_hw_s *hw)
 	hw->reg_anc3_canvas_addr = READ_VREG(ANC3_CANVAS_ADDR);
 	hw->reg_anc4_canvas_addr = READ_VREG(ANC4_CANVAS_ADDR);
 	hw->reg_anc5_canvas_addr = READ_VREG(ANC5_CANVAS_ADDR);
+
+	debug_print(hw, PRINT_FLAG_DEC_DETAIL,
+		"%s ANC0_CANVAS_ADDR = 0x%x, ANC1_CANVAS_ADDR = 0x%x, ANC2_CANVAS_ADDR = 0x%x\n",
+		__func__, READ_VREG(ANC0_CANVAS_ADDR), READ_VREG(ANC1_CANVAS_ADDR), READ_VREG(ANC2_CANVAS_ADDR));
 
 	hw->slice_ver_pos_pic_type = READ_VREG(SLICE_VER_POS_PIC_TYPE);
 
@@ -1476,14 +1556,12 @@ static void vavs_restore_regs(struct vdec_avs_hw_s *hw)
 	WRITE_VREG(AV_SCRATCH_1, hw->reg_scratch_1);
 	WRITE_VREG(AV_SCRATCH_2, hw->reg_scratch_2);
 	WRITE_VREG(AV_SCRATCH_3, hw->reg_scratch_3);
-	WRITE_VREG(AV_SCRATCH_4, hw->reg_scratch_4);
 	WRITE_VREG(AV_SCRATCH_5, hw->reg_scratch_5);
 	WRITE_VREG(AV_SCRATCH_6, hw->reg_scratch_6);
 	WRITE_VREG(AV_SCRATCH_7, hw->reg_scratch_7);
 	WRITE_VREG(AV_SCRATCH_8, hw->reg_scratch_8);
 	WRITE_VREG(AV_SCRATCH_9, hw->reg_scratch_9);
 	WRITE_VREG(AV_SCRATCH_A, hw->reg_scratch_A);
-	WRITE_VREG(AV_SCRATCH_B, hw->reg_scratch_B);
 	WRITE_VREG(AV_SCRATCH_C, hw->reg_scratch_C);
 	WRITE_VREG(AV_SCRATCH_D, hw->reg_scratch_D);
 	WRITE_VREG(AV_SCRATCH_E, hw->reg_scratch_E);
@@ -1496,14 +1574,28 @@ static void vavs_restore_regs(struct vdec_avs_hw_s *hw)
 	WRITE_VREG(VIFF_BIT_CNT, hw->reg_viff_bit_cnt);
 
 	WRITE_VREG(REC_CANVAS_ADDR, hw->reg_canvas_addr);
-    WRITE_VREG(DBKR_CANVAS_ADDR, hw->reg_dbkr_canvas_addr);
-    WRITE_VREG(DBKW_CANVAS_ADDR, hw->reg_dbkw_canvas_addr);
-    WRITE_VREG(ANC2_CANVAS_ADDR, hw->reg_anc2_canvas_addr);
-    WRITE_VREG(ANC0_CANVAS_ADDR, hw->reg_anc0_canvas_addr);
-    WRITE_VREG(ANC1_CANVAS_ADDR, hw->reg_anc1_canvas_addr);
-    WRITE_VREG(ANC3_CANVAS_ADDR, hw->reg_anc3_canvas_addr);
-    WRITE_VREG(ANC4_CANVAS_ADDR, hw->reg_anc4_canvas_addr);
-    WRITE_VREG(ANC5_CANVAS_ADDR, hw->reg_anc5_canvas_addr);
+	WRITE_VREG(DBKR_CANVAS_ADDR, hw->reg_dbkr_canvas_addr);
+	WRITE_VREG(DBKW_CANVAS_ADDR, hw->reg_dbkw_canvas_addr);
+	WRITE_VREG(ANC2_CANVAS_ADDR, hw->reg_anc2_canvas_addr);
+	WRITE_VREG(ANC0_CANVAS_ADDR, hw->reg_anc0_canvas_addr);
+	WRITE_VREG(ANC1_CANVAS_ADDR, hw->reg_anc1_canvas_addr);
+	WRITE_VREG(ANC3_CANVAS_ADDR, hw->reg_anc3_canvas_addr);
+	WRITE_VREG(ANC4_CANVAS_ADDR, hw->reg_anc4_canvas_addr);
+	WRITE_VREG(ANC5_CANVAS_ADDR, hw->reg_anc5_canvas_addr);
+
+	if (hw->refs[1] == -1)
+		WRITE_VREG(ANC0_CANVAS_ADDR, 0xffffffff);
+	else
+		WRITE_VREG(ANC0_CANVAS_ADDR, hw->canvas_spec[hw->refs[1]]);
+
+	if (hw->refs[0] == -1)
+		WRITE_VREG(ANC1_CANVAS_ADDR, hw->canvas_spec[hw->refs[1]]);
+	else
+		WRITE_VREG(ANC1_CANVAS_ADDR, hw->canvas_spec[hw->refs[0]]);
+
+	debug_print(hw, PRINT_FLAG_DEC_DETAIL,
+			"%s ANC0_CANVAS_ADDR = 0x%x, ANC1_CANVAS_ADDR = 0x%x, ANC2_CANVAS_ADDR = 0x%x\n",
+			__func__, READ_VREG(ANC0_CANVAS_ADDR), READ_VREG(ANC1_CANVAS_ADDR), READ_VREG(ANC2_CANVAS_ADDR));
 
     WRITE_VREG(SLICE_VER_POS_PIC_TYPE, hw->slice_ver_pos_pic_type);
 
@@ -1566,6 +1658,16 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 	/*************************************************************/
 	if (hw->m_ins_flag) {
 		int i;
+		u32 index = -1;
+		index = find_free_buffer(hw);
+		if (index < 0)
+			return -1;
+		hw->decoding_index = index;
+		debug_print(hw, PRINT_FLAG_DECODING,
+			"hw->decoding_index = %d\n",
+			hw->decoding_index);
+		WRITE_VREG(AV_SCRATCH_4, index);
+		WRITE_VREG(AV_SCRATCH_B, 0);
 		if (hw->decode_pic_count == 0) {
 			r = vavs_canvas_init(hw);
 #ifndef USE_DYNAMIC_BUF_NUM
@@ -1592,21 +1694,24 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 			vavs_restore_regs(hw);
 
 		for (i = 0; i < hw->vf_buf_num_used; i++) {
-			config_cav_lut_ex(canvas_y(hw->canvas_spec[i]),
-				hw->canvas_config[i][0].phy_addr,
-				hw->canvas_config[i][0].width,
-				hw->canvas_config[i][0].height,
-				CANVAS_ADDR_NOWRAP,
-				hw->canvas_config[i][0].block_mode,
-				0, VDEC_1);
+			if (hw->canvas_config[i][0].phy_addr &&
+				hw->canvas_config[i][1].phy_addr) {
+				config_cav_lut_ex(canvas_y(hw->canvas_spec[i]),
+					hw->canvas_config[i][0].phy_addr,
+					hw->canvas_config[i][0].width,
+					hw->canvas_config[i][0].height,
+					CANVAS_ADDR_NOWRAP,
+					hw->canvas_config[i][0].block_mode,
+					0, VDEC_1);
 
-			config_cav_lut_ex(canvas_u(hw->canvas_spec[i]),
-				hw->canvas_config[i][1].phy_addr,
-				hw->canvas_config[i][1].width,
-				hw->canvas_config[i][1].height,
-				CANVAS_ADDR_NOWRAP,
-				hw->canvas_config[i][1].block_mode,
-				0, VDEC_1);
+				config_cav_lut_ex(canvas_u(hw->canvas_spec[i]),
+					hw->canvas_config[i][1].phy_addr,
+					hw->canvas_config[i][1].width,
+					hw->canvas_config[i][1].height,
+					CANVAS_ADDR_NOWRAP,
+					hw->canvas_config[i][1].block_mode,
+					0, VDEC_1);
+			}
 		}
 	} else {
 		r = vavs_canvas_init(hw);
@@ -1768,6 +1873,9 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 	INIT_KFIFO(hw->display_q);
 	INIT_KFIFO(hw->recycle_q);
 	INIT_KFIFO(hw->newframe_q);
+
+	hw->refs[0] = -1;
+	hw->refs[1] = -1;
 
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		const struct vframe_s *vf = &hw->vfpool[i].vf;
@@ -2523,7 +2631,6 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)vdec->private;
 	int ret = 1;
-	unsigned buf_busy_mask = (1 << hw->vf_buf_num_used) - 1;
 #ifdef DEBUG_MULTI_FRAME_INS
 	if ((DECODE_ID(hw) == 0) && run_count[0] > run_count[1] &&
 		run_count[1] < max_run_count[1])
@@ -2554,12 +2661,11 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		}
 	}
 
-	if (hw->reset_decode_flag == 0 &&
-		hw->again_flag == 0 &&
-		(hw->buf_status & buf_busy_mask) == buf_busy_mask) {
-		recycle_frames(hw);
-		if (hw->buf_recycle_status == 0)
-			ret = 0;
+	recycle_frames(hw);
+
+	if (!is_enough_free_buffer(hw)) {
+		hw->buffer_not_ready++;
+		return 0;
 	}
 
 	if (again_threshold > 0 &&
@@ -2723,6 +2829,12 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 			hw->vfbuf_use[vf->index] = 0;
 		}
 	}
+	for (i = 0; i < VF_BUF_NUM_MAX; i++) {
+		hw->ref_use[i] = 0;
+		hw->buf_use[i] = 0;
+	}
+	hw->refs[0] = -1;
+	hw->refs[1] = -1;
 	if (error_handle_policy & 0x2) {
 		while (!kfifo_is_empty(&hw->display_q)) {
 			if (kfifo_get(&hw->display_q, &vf)) {
@@ -2827,6 +2939,7 @@ static void recycle_frames(struct vdec_avs_hw_s *hw)
 			if ((vf->index < hw->vf_buf_num_used) &&
 				(buf_of_vf(vf)->detached == 0) &&
 			 (--hw->vfbuf_use[vf->index] == 0)) {
+				hw->buf_use[vf->index]--;
 				hw->buf_recycle_status |= (1 << vf->index);
 				debug_print(hw, PRINT_FLAG_DECODING,
 					"%s for vf index of %d => buf_recycle_status 0x%x\n",
@@ -3010,6 +3123,7 @@ void (*callback)(struct vdec_s *, void *),
 	(struct vdec_avs_hw_s *)vdec->private;
 	int save_reg;
 	int size, ret;
+	int i;
 	if (!hw->vdec_pg_enable_flag) {
 		hw->vdec_pg_enable_flag = 1;
 		amvdec_enable();
@@ -3153,6 +3267,18 @@ void (*callback)(struct vdec_s *, void *),
 		vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_AVS;
 	}
+	debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "vfbuf_use:\n");
+	for (i = 0; i < hw->vf_buf_num_used; i++)
+		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "%d: vf_buf_use %d\n",
+			i, hw->vfbuf_use[i]);
+	debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "ref_use:\n");
+	for (i = 0; i < hw->vf_buf_num_used; i++)
+		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "%d: ref_use %d\n",
+			i, hw->ref_use[i]);
+	debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "buf_use:\n");
+	for (i = 0; i < hw->vf_buf_num_used; i++)
+		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "%d: buf_use %d\n",
+			i, hw->buf_use[i]);
 	if (avs_hw_ctx_restore(hw) < 0) {
 		hw->dec_result = DEC_RESULT_ERROR;
 		debug_print(hw, PRINT_FLAG_ERROR,
@@ -3223,19 +3349,350 @@ static void reset(struct vdec_s *vdec)
 {
 }
 
+static int prepare_display_buf(struct vdec_avs_hw_s *hw,
+	struct pic_info_t *pic)
+{
+	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct vframe_s *vf = NULL;
+	u32 reg = pic->buffer_info;
+	bool force_interlaced_frame = false;
+	u32 picture_type = pic->picture_type;
+	u32 repeat_count = pic->repeat_cnt;
+	unsigned int pts = pic->pts;
+	unsigned int pts_valid = pic->pts_valid;
+	unsigned int offset = pic->offset;
+	u64 pts_us64 = pic->pts64;
+	u32 buffer_index = pic->index;
+	u32 dur;
+	unsigned short decode_pic_count = pic->decode_pic_count;
+
+	if ((dec_control & DEC_CONTROL_FLAG_FORCE_2500_1080P_INTERLACE)
+		&& hw->frame_width == 1920 && hw->frame_height == 1080) {
+			force_interlaced_frame = true;
+	}
+
+	if (reg & INTERLACE_FLAG || force_interlaced_frame) {	/* interlace */
+		hw->throw_pb_flag = 0;
+
+		debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
+			"interlace, picture type %d\n",
+				   picture_type);
+
+		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
+			pr_info
+			("fatal error, no available buffer slot.");
+			return IRQ_HANDLED;
+		}
+		set_frame_info(hw, vf, &dur);
+		vf->bufWidth = 1920;
+		hw->pic_type = 2;
+		if ((picture_type == I_PICTURE) && pts_valid) {
+			vf->pts = pts;
+			vf->pts_us64 = pts_us64;
+			if ((repeat_count > 1) && hw->avi_flag) {
+				/* hw->next_pts = pts +
+				 *	 (hw->vavs_amstream_dec_info.rate *
+				 *	 repeat_count >> 1)*15/16;
+				 */
+				hw->next_pts =
+					pts +
+					(dur * repeat_count >> 1) *
+					15 / 16;
+			} else
+				hw->next_pts = 0;
+		} else {
+			vf->pts = hw->next_pts;
+			if (vf->pts == 0) {
+				vf->pts_us64 = 0;
+			}
+			if ((repeat_count > 1) && hw->avi_flag) {
+				/* vf->duration =
+				 *	 hw->vavs_amstream_dec_info.rate *
+				 *	 repeat_count >> 1;
+				 */
+				vf->duration = dur * repeat_count >> 1;
+				if (hw->next_pts != 0) {
+					hw->next_pts +=
+						((vf->duration) -
+						 ((vf->duration) >> 4));
+				}
+			} else {
+				/* vf->duration =
+				 *	 hw->vavs_amstream_dec_info.rate >> 1;
+				 */
+				vf->duration = dur >> 1;
+				hw->next_pts = 0;
+			}
+		}
+		vf->signal_type = 0;
+		vf->index = buffer_index;
+		vf->duration_pulldown = 0;
+		if (force_interlaced_frame) {
+			vf->type = VIDTYPE_INTERLACE_TOP;
+		}else{
+			vf->type =
+			(reg & TOP_FIELD_FIRST_FLAG)
+			? VIDTYPE_INTERLACE_TOP
+			: VIDTYPE_INTERLACE_BOTTOM;
+			}
+#ifdef NV21
+		vf->type |= VIDTYPE_VIU_NV21;
+#endif
+		if (hw->m_ins_flag) {
+			vf->canvas0Addr = vf->canvas1Addr = -1;
+			vf->plane_num = 2;
+
+			vf->canvas0_config[0] = hw->canvas_config[buffer_index][0];
+			vf->canvas0_config[1] = hw->canvas_config[buffer_index][1];
+
+			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
+			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
+		} else
+			vf->canvas0Addr = vf->canvas1Addr =
+				index2canvas(buffer_index);
+		vf->type_original = vf->type;
+
+		debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
+			"buffer_index %d, canvas addr %x\n",
+				   buffer_index, vf->canvas0Addr);
+		vf->pts = (pts_valid)?pts:0;
+		//vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+		hw->vfbuf_use[buffer_index]++;
+		vf->mem_handle =
+			decoder_bmmu_box_get_mem_handle(
+				hw->mm_blk_handle,
+				buffer_index);
+
+		if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
+			set_vframe_pts(hw, decode_pic_count, vf);
+
+		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+			vf->pts_us64 =
+				(((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
+			vf->pts = 0;
+		}
+
+		debug_print(hw, PRINT_FLAG_PTS,
+			"interlace1 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
+		vdec_vframe_ready(vdec, vf);
+		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+		ATRACE_COUNTER(hw->pts_name, vf->pts);
+		avs_vf_notify_receiver(hw, PROVIDER_NAME,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY,
+				NULL);
+
+		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
+			pr_info("fatal error, no available buffer slot.");
+			return IRQ_HANDLED;
+					}
+		set_frame_info(hw, vf, &dur);
+		vf->bufWidth = 1920;
+		if (force_interlaced_frame)
+			vf->pts = 0;
+		else
+		vf->pts = hw->next_pts;
+
+		if (vf->pts == 0) {
+			vf->pts_us64 = 0;
+		}
+
+		if ((repeat_count > 1) && hw->avi_flag) {
+			/* vf->duration = hw->vavs_amstream_dec_info.rate *
+			 *	 repeat_count >> 1;
+			 */
+			vf->duration = dur * repeat_count >> 1;
+			if (hw->next_pts != 0) {
+				hw->next_pts +=
+					((vf->duration) -
+					 ((vf->duration) >> 4));
+			}
+		} else {
+			/* vf->duration = hw->vavs_amstream_dec_info.rate
+			 *	 >> 1;
+			 */
+			vf->duration = dur >> 1;
+			hw->next_pts = 0;
+		}
+		vf->signal_type = 0;
+		vf->index = buffer_index;
+		vf->duration_pulldown = 0;
+		if (force_interlaced_frame) {
+			vf->type = VIDTYPE_INTERLACE_BOTTOM;
+		} else {
+					vf->type =
+					(reg & TOP_FIELD_FIRST_FLAG) ?
+					VIDTYPE_INTERLACE_BOTTOM :
+					VIDTYPE_INTERLACE_TOP;
+				}
+#ifdef NV21
+		vf->type |= VIDTYPE_VIU_NV21;
+#endif
+		if (hw->m_ins_flag) {
+			vf->canvas0Addr = vf->canvas1Addr = -1;
+			vf->plane_num = 2;
+
+			vf->canvas0_config[0] = hw->canvas_config[buffer_index][0];
+			vf->canvas0_config[1] = hw->canvas_config[buffer_index][1];
+
+			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
+			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
+		} else
+			vf->canvas0Addr = vf->canvas1Addr =
+				index2canvas(buffer_index);
+		vf->type_original = vf->type;
+		vf->pts_us64 = 0;
+		hw->vfbuf_use[buffer_index]++;
+		vf->mem_handle =
+			decoder_bmmu_box_get_mem_handle(
+				hw->mm_blk_handle,
+				buffer_index);
+
+		if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
+			set_vframe_pts(hw, decode_pic_count, vf);
+
+		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+			vf->pts_us64 = (u64)-1;
+			vf->pts = 0;
+		}
+		debug_print(hw, PRINT_FLAG_PTS,
+			"interlace2 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
+		vdec_vframe_ready(vdec, vf);
+		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+		ATRACE_COUNTER(hw->pts_name, vf->pts);
+		avs_vf_notify_receiver(hw, PROVIDER_NAME,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY,
+				NULL);
+		hw->total_frame++;
+	} else {	/* progressive */
+		hw->throw_pb_flag = 0;
+
+		debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
+			"progressive picture type %d\n",
+				   picture_type);
+		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
+			pr_info
+			("fatal error, no available buffer slot.");
+			return IRQ_HANDLED;
+		}
+		set_frame_info(hw, vf, &dur);
+		vf->bufWidth = 1920;
+		hw->pic_type = 1;
+
+		if ((picture_type == I_PICTURE) && pts_valid) {
+			vf->pts = pts;
+			if ((repeat_count > 1) && hw->avi_flag) {
+				/* hw->next_pts = pts +
+				 *	 (hw->vavs_amstream_dec_info.rate *
+				 *	 repeat_count)*15/16;
+				 */
+				hw->next_pts =
+					pts +
+					(dur * repeat_count) * 15 / 16;
+			} else
+				hw->next_pts = 0;
+		} else {
+			vf->pts = hw->next_pts;
+			if (vf->pts == 0) {
+				vf->pts_us64 = 0;
+			}
+			if ((repeat_count > 1) && hw->avi_flag) {
+				/* vf->duration =
+				 *	 hw->vavs_amstream_dec_info.rate *
+				 *	 repeat_count;
+				 */
+				vf->duration = dur * repeat_count;
+				if (hw->next_pts != 0) {
+					hw->next_pts +=
+						((vf->duration) -
+						 ((vf->duration) >> 4));
+				}
+			} else {
+				/* vf->duration =
+				 *	 hw->vavs_amstream_dec_info.rate;
+				 */
+				vf->duration = dur;
+				hw->next_pts = 0;
+			}
+		}
+		vf->signal_type = 0;
+		vf->index = buffer_index;
+		vf->duration_pulldown = 0;
+		vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
+#ifdef NV21
+		vf->type |= VIDTYPE_VIU_NV21;
+#endif
+		if (hw->m_ins_flag) {
+			vf->canvas0Addr = vf->canvas1Addr = -1;
+			vf->plane_num = 2;
+
+			vf->canvas0_config[0] = hw->canvas_config[buffer_index][0];
+			vf->canvas0_config[1] = hw->canvas_config[buffer_index][1];
+
+			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
+			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
+		} else
+			vf->canvas0Addr = vf->canvas1Addr =
+				index2canvas(buffer_index);
+		vf->type_original = vf->type;
+
+		vf->pts = (pts_valid)?pts:0;
+		//vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+		debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
+			"buffer_index %d, canvas addr %x\n",
+				   buffer_index, vf->canvas0Addr);
+		debug_print(hw, PRINT_FLAG_PTS,
+			"progressive vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
+		hw->vfbuf_use[buffer_index]++;
+		vf->mem_handle =
+			decoder_bmmu_box_get_mem_handle(
+				hw->mm_blk_handle,
+				buffer_index);
+
+		if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
+			set_vframe_pts(hw, decode_pic_count, vf);
+
+		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+			vf->pts_us64 =
+				(((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
+			vf->pts = 0;
+		}
+		decoder_do_frame_check(hw_to_vdec(hw), vf);
+		vdec_vframe_ready(vdec, vf);
+		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+		ATRACE_COUNTER(hw->pts_name, vf->pts);
+		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
+		avs_vf_notify_receiver(hw, PROVIDER_NAME,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY,
+				NULL);
+		hw->total_frame++;
+	}
+
+	/*count info*/
+	vdec_count_info(hw->gvs, 0, offset);
+	if (offset) {
+		if (picture_type == I_PICTURE) {
+			hw->gvs->i_decoded_frames++;
+		} else if (picture_type == P_PICTURE) {
+			hw->gvs->p_decoded_frames++;
+		} else if (picture_type == B_PICTURE) {
+			hw->gvs->b_decoded_frames++;
+		}
+	}
+	avs_update_gvs(hw);
+	vdec_fill_vdec_frame(hw_to_vdec(hw), NULL, hw->gvs, vf, 0);
+	return 0;
+}
+
 static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
 		struct vdec_avs_hw_s *hw =
 			(struct vdec_avs_hw_s *)vdec->private;
 		u32 reg;
-		struct vframe_s *vf = NULL;
-		u32 dur;
-		u32 repeat_count;
 		u32 picture_type;
 		u32 buffer_index;
 		u32 frame_size;
-		bool force_interlaced_frame = false;
-		unsigned int pts, pts_valid = 0, offset = 0;
+		unsigned int pts, offset = 0;
 		u64 pts_us64;
 		u32 debug_tag;
 		u32 buffer_status_debug;
@@ -3248,9 +3705,8 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 				WRITE_VREG(AV_SCRATCH_E, 0);
 			}
 		}*/
-
-		debug_print(hw, PRINT_FLAG_RUN_FLOW, "READ_VREG(AVS_BUFFEROUT) 0x%x, READ_VREG(DECODE_STATUS) 0x%x READ_VREG(AV_SCRATCH_N) 0x%x, READ_VREG(DEBUG_REG1) 0x%x\n",
-				READ_VREG(AVS_BUFFEROUT),READ_VREG(DECODE_STATUS), READ_VREG(AV_SCRATCH_N), READ_VREG(DEBUG_REG1));
+		debug_print(hw, PRINT_FLAG_RUN_FLOW, "READ_VREG(AVS_BUFFEROUT) 0x%x, READ_VREG(DECODE_STATUS) 0x%x READ_VREG(AV_SCRATCH_N) 0x%x, READ_VREG(DEBUG_REG1) 0x%x, READ_VREG(AV_SCRATCH_2) 0x%x\n",
+				READ_VREG(AVS_BUFFEROUT),READ_VREG(DECODE_STATUS), READ_VREG(AV_SCRATCH_N), READ_VREG(DEBUG_REG1), READ_VREG(AV_SCRATCH_2));
 
 		debug_tag = READ_VREG(DEBUG_REG1);
 		buffer_status_debug = debug_tag >> 16;
@@ -3347,6 +3803,12 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 				READ_VREG(DECODE_STATUS),
 				buffer_status_debug);
 		}
+		reg = READ_VREG(DECODE_STATUS); // need find a null register pyx
+		if (reg == DECODE_STATUS_INFO) {
+			WRITE_VREG(DECODE_STATUS, 0);
+			pr_err("READ_VREG(AVS_PIC_INFO) = 0x%x\n", READ_VREG(AVS_PIC_INFO));
+			return IRQ_HANDLED;
+		}
 
 #ifdef AVSP_LONG_CABAC
 		if (firmware_sel == 0 && READ_VREG(LONG_CABAC_REQ)) {
@@ -3369,17 +3831,27 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 				= READ_VREG(DECODE_PIC_COUNT);
 			debug_print(hw, PRINT_FLAG_DECODING, "AVS_BUFFEROUT=0x%x decode_pic_count %d\n",
 				reg, decode_pic_count);
+			hw->pics[hw->decoding_index].offset = READ_VREG(AVS_OFFSET_REG);
+			hw->pics[hw->decoding_index].repeat_cnt = READ_VREG(AVS_REPEAT_COUNT);
+			hw->pics[hw->decoding_index].buffer_info = reg;
+			hw->pics[hw->decoding_index].index = hw->decoding_index;
+			hw->pics[hw->decoding_index].decode_pic_count = decode_pic_count;
 			if (pts_by_offset) {
 				offset = READ_VREG(AVS_OFFSET_REG);
 				debug_print(hw, PRINT_FLAG_DECODING, "AVS OFFSET=%x\n", offset);
 				if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
 					if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset, &pts,
 						&frame_size, 0, &pts_us64) == 0) {
-						pts_valid = 1;
+						hw->pics[hw->decoding_index].pts_valid = 1;
+						hw->pics[hw->decoding_index].pts = pts;
+						hw->pics[hw->decoding_index].pts64 = pts_us64;
 #ifdef DEBUG_PTS
 						hw->pts_hit++;
 #endif
 					} else {
+						hw->pics[hw->decoding_index].pts_valid = 0;
+						hw->pics[hw->decoding_index].pts = 0;
+						hw->pics[hw->decoding_index].pts64 = 0;
 #ifdef DEBUG_PTS
 						hw->pts_missed++;
 #endif
@@ -3387,7 +3859,6 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 				}
 			}
 
-			repeat_count = READ_VREG(AVS_REPEAT_COUNT);
 #ifdef USE_DYNAMIC_BUF_NUM
 			buffer_index =
 				((reg & 0x7) +
@@ -3402,349 +3873,49 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 					((reg & 0x7) - 1) & 3;
 #endif
 			picture_type = (reg >> 3) & 7;
+			hw->pics[hw->decoding_index].picture_type = picture_type;
 #ifdef DEBUG_PTS
 			if (picture_type == I_PICTURE) {
 				/* pr_info("I offset 0x%x, pts_valid %d\n",
 				 *	 offset, pts_valid);
 				 */
-				if (!pts_valid)
+				if (!hw->pics[hw->decoding_index].pts_valid)
 					hw->pts_i_missed++;
 				else
 					hw->pts_i_hit++;
 			}
 #endif
-
-			if ((dec_control & DEC_CONTROL_FLAG_FORCE_2500_1080P_INTERLACE)
-				&& hw->frame_width == 1920 && hw->frame_height == 1080) {
-				force_interlaced_frame = true;
-			}
-
 			if (hw->throw_pb_flag && picture_type != I_PICTURE) {
-
 				debug_print(hw, PRINT_FLAG_DECODING,
 					"%s WRITE_VREG(AVS_BUFFERIN, 0x%x) for throwing picture with type of %d\n",
 					__func__,
-					~(1 << buffer_index), picture_type);
+					~(1 << hw->decoding_index), picture_type);
 
-				WRITE_VREG(AVS_BUFFERIN, ~(1 << buffer_index));
-			} else if (reg & INTERLACE_FLAG || force_interlaced_frame) {	/* interlace */
-				hw->throw_pb_flag = 0;
-
-				debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
-					"interlace, picture type %d\n",
-						   picture_type);
-
-				if (kfifo_get(&hw->newframe_q, &vf) == 0) {
-					pr_info
-					("fatal error, no available buffer slot.");
-					return IRQ_HANDLED;
-				}
-				set_frame_info(hw, vf, &dur);
-				vf->bufWidth = 1920;
-				hw->pic_type = 2;
-				if ((picture_type == I_PICTURE) && pts_valid) {
-					vf->pts = pts;
-					vf->pts_us64 = pts_us64;
-					if ((repeat_count > 1) && hw->avi_flag) {
-						/* hw->next_pts = pts +
-						 *	 (hw->vavs_amstream_dec_info.rate *
-						 *	 repeat_count >> 1)*15/16;
-						 */
-						hw->next_pts =
-							pts +
-							(dur * repeat_count >> 1) *
-							15 / 16;
-					} else
-						hw->next_pts = 0;
+				WRITE_VREG(AVS_BUFFERIN, ~(1 << hw->decoding_index));
+				hw->buf_use[hw->decoding_index]--;
+			} else {
+				if ((picture_type == I_PICTURE) ||
+					(picture_type == P_PICTURE)) {
+					buffer_index = update_reference(hw, hw->decoding_index);
 				} else {
-					vf->pts = hw->next_pts;
-					if (vf->pts == 0) {
-						vf->pts_us64 = 0;
-					}
-					if ((repeat_count > 1) && hw->avi_flag) {
-						/* vf->duration =
-						 *	 hw->vavs_amstream_dec_info.rate *
-						 *	 repeat_count >> 1;
-						 */
-						vf->duration = dur * repeat_count >> 1;
-						if (hw->next_pts != 0) {
-							hw->next_pts +=
-								((vf->duration) -
-								 ((vf->duration) >> 4));
-						}
-					} else {
-						/* vf->duration =
-						 *	 hw->vavs_amstream_dec_info.rate >> 1;
-						 */
-						vf->duration = dur >> 1;
-						hw->next_pts = 0;
-					}
-				}
-				vf->signal_type = 0;
-				vf->index = buffer_index;
-				vf->duration_pulldown = 0;
-				if (force_interlaced_frame) {
-					vf->type = VIDTYPE_INTERLACE_TOP;
-				}else{
-					vf->type =
-					(reg & TOP_FIELD_FIRST_FLAG)
-					? VIDTYPE_INTERLACE_TOP
-					: VIDTYPE_INTERLACE_BOTTOM;
-					}
-#ifdef NV21
-				vf->type |= VIDTYPE_VIU_NV21;
-#endif
-				if (hw->m_ins_flag) {
-					vf->canvas0Addr = vf->canvas1Addr = -1;
-					vf->plane_num = 2;
-
-					vf->canvas0_config[0] = hw->canvas_config[buffer_index][0];
-					vf->canvas0_config[1] = hw->canvas_config[buffer_index][1];
-
-					vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
-					vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
-				} else
-					vf->canvas0Addr = vf->canvas1Addr =
-						index2canvas(buffer_index);
-				vf->type_original = vf->type;
-
-				debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
-					"buffer_index %d, canvas addr %x\n",
-						   buffer_index, vf->canvas0Addr);
-				vf->pts = (pts_valid)?pts:0;
-				//vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
-				hw->vfbuf_use[buffer_index]++;
-				vf->mem_handle =
-					decoder_bmmu_box_get_mem_handle(
-						hw->mm_blk_handle,
-						buffer_index);
-
-				if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
-					set_vframe_pts(hw, decode_pic_count, vf);
-
-				if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-					vf->pts_us64 =
-						(((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
-					vf->pts = 0;
+					/* drop b frame before reference pic ready */
+					if (hw->refs[0] == -1)
+						buffer_index = hw->vf_buf_num_used;
 				}
 
-				debug_print(hw, PRINT_FLAG_PTS,
-					"interlace1 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
-				vdec_vframe_ready(vdec, vf);
-				kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-				ATRACE_COUNTER(hw->pts_name, vf->timestamp);
-				avs_vf_notify_receiver(hw, PROVIDER_NAME,
-						VFRAME_EVENT_PROVIDER_VFRAME_READY,
-						NULL);
-
-				if (kfifo_get(&hw->newframe_q, &vf) == 0) {
-					pr_info("fatal error, no available buffer slot.");
-					return IRQ_HANDLED;
-							}
-				set_frame_info(hw, vf, &dur);
-				vf->bufWidth = 1920;
-				if (force_interlaced_frame)
-					vf->pts = 0;
-				else
-				vf->pts = hw->next_pts;
-
-				if (vf->pts == 0) {
-					vf->pts_us64 = 0;
-				}
-
-				if ((repeat_count > 1) && hw->avi_flag) {
-					/* vf->duration = hw->vavs_amstream_dec_info.rate *
-					 *	 repeat_count >> 1;
-					 */
-					vf->duration = dur * repeat_count >> 1;
-					if (hw->next_pts != 0) {
-						hw->next_pts +=
-							((vf->duration) -
-							 ((vf->duration) >> 4));
-					}
+				if (buffer_index < hw->vf_buf_num_used) {
+					debug_print(hw, PRINT_FLAG_RUN_FLOW,
+						"avs: show num %d, type %d, index %d, offset %x\n",
+						decode_pic_count, picture_type, buffer_index, offset);
+					prepare_display_buf(hw, &hw->pics[buffer_index]);
 				} else {
-					/* vf->duration = hw->vavs_amstream_dec_info.rate
-					 *	 >> 1;
-					 */
-					vf->duration = dur >> 1;
-					hw->next_pts = 0;
-				}
-				vf->signal_type = 0;
-				vf->index = buffer_index;
-				vf->duration_pulldown = 0;
-				if (force_interlaced_frame) {
-					vf->type = VIDTYPE_INTERLACE_BOTTOM;
-				} else {
-							vf->type =
-							(reg & TOP_FIELD_FIRST_FLAG) ?
-							VIDTYPE_INTERLACE_BOTTOM :
-							VIDTYPE_INTERLACE_TOP;
-						}
-#ifdef NV21
-				vf->type |= VIDTYPE_VIU_NV21;
-#endif
-				if (hw->m_ins_flag) {
-					vf->canvas0Addr = vf->canvas1Addr = -1;
-					vf->plane_num = 2;
-
-					vf->canvas0_config[0] = hw->canvas_config[buffer_index][0];
-					vf->canvas0_config[1] = hw->canvas_config[buffer_index][1];
-
-					vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
-					vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
-				} else
-					vf->canvas0Addr = vf->canvas1Addr =
-						index2canvas(buffer_index);
-				vf->type_original = vf->type;
-				vf->pts_us64 = 0;
-				hw->vfbuf_use[buffer_index]++;
-				vf->mem_handle =
-					decoder_bmmu_box_get_mem_handle(
-						hw->mm_blk_handle,
-						buffer_index);
-
-				if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
-					set_vframe_pts(hw, decode_pic_count, vf);
-
-				if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-					vf->pts_us64 = (u64)-1;
-					vf->pts = 0;
-				}
-				debug_print(hw, PRINT_FLAG_PTS,
-					"interlace2 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
-				vdec_vframe_ready(vdec, vf);
-				kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-				ATRACE_COUNTER(hw->pts_name, vf->timestamp);
-				avs_vf_notify_receiver(hw, PROVIDER_NAME,
-						VFRAME_EVENT_PROVIDER_VFRAME_READY,
-						NULL);
-				hw->total_frame++;
-			} else {	/* progressive */
-				hw->throw_pb_flag = 0;
-
-				debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
-					"progressive picture type %d\n",
-						   picture_type);
-				if (kfifo_get(&hw->newframe_q, &vf) == 0) {
-					pr_info
-					("fatal error, no available buffer slot.");
-					return IRQ_HANDLED;
-				}
-				set_frame_info(hw, vf, &dur);
-				vf->bufWidth = 1920;
-				hw->pic_type = 1;
-
-				if ((picture_type == I_PICTURE) && pts_valid) {
-					vf->pts = pts;
-					if ((repeat_count > 1) && hw->avi_flag) {
-						/* hw->next_pts = pts +
-						 *	 (hw->vavs_amstream_dec_info.rate *
-						 *	 repeat_count)*15/16;
-						 */
-						hw->next_pts =
-							pts +
-							(dur * repeat_count) * 15 / 16;
-					} else
-						hw->next_pts = 0;
-				} else {
-					vf->pts = hw->next_pts;
-					if (vf->pts == 0) {
-						vf->pts_us64 = 0;
-					}
-					if ((repeat_count > 1) && hw->avi_flag) {
-						/* vf->duration =
-						 *	 hw->vavs_amstream_dec_info.rate *
-						 *	 repeat_count;
-						 */
-						vf->duration = dur * repeat_count;
-						if (hw->next_pts != 0) {
-							hw->next_pts +=
-								((vf->duration) -
-								 ((vf->duration) >> 4));
-						}
-					} else {
-						/* vf->duration =
-						 *	 hw->vavs_amstream_dec_info.rate;
-						 */
-						vf->duration = dur;
-						hw->next_pts = 0;
-					}
-				}
-				vf->signal_type = 0;
-				vf->index = buffer_index;
-				vf->duration_pulldown = 0;
-				vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
-#ifdef NV21
-				vf->type |= VIDTYPE_VIU_NV21;
-#endif
-				if (hw->m_ins_flag) {
-					vf->canvas0Addr = vf->canvas1Addr = -1;
-					vf->plane_num = 2;
-
-					vf->canvas0_config[0] = hw->canvas_config[buffer_index][0];
-					vf->canvas0_config[1] = hw->canvas_config[buffer_index][1];
-
-					vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
-					vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
-				} else
-					vf->canvas0Addr = vf->canvas1Addr =
-						index2canvas(buffer_index);
-				vf->type_original = vf->type;
-
-				vf->pts = (pts_valid)?pts:0;
-				//vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
-				debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
-					"buffer_index %d, canvas addr %x\n",
-						   buffer_index, vf->canvas0Addr);
-				debug_print(hw, PRINT_FLAG_PTS,
-					"progressive vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
-				hw->vfbuf_use[buffer_index]++;
-				vf->mem_handle =
-					decoder_bmmu_box_get_mem_handle(
-						hw->mm_blk_handle,
-						buffer_index);
-
-				if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
-					set_vframe_pts(hw, decode_pic_count, vf);
-
-				if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-					vf->pts_us64 =
-						(((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
-					vf->pts = 0;
-				}
-				decoder_do_frame_check(hw_to_vdec(hw), vf);
-				vdec_vframe_ready(vdec, vf);
-				kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-				ATRACE_COUNTER(hw->pts_name, vf->timestamp);
-				ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
-				ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
-				avs_vf_notify_receiver(hw, PROVIDER_NAME,
-						VFRAME_EVENT_PROVIDER_VFRAME_READY,
-						NULL);
-				hw->total_frame++;
-			}
-
-			/*count info*/
-			vdec_count_info(hw->gvs, 0, offset);
-			if (offset) {
-				if (picture_type == I_PICTURE) {
-					hw->gvs->i_decoded_frames++;
-				} else if (picture_type == P_PICTURE) {
-					hw->gvs->p_decoded_frames++;
-				} else if (picture_type == B_PICTURE) {
-					hw->gvs->b_decoded_frames++;
+					debug_print(hw, PRINT_FLAG_RUN_FLOW,
+						"avs: drop pic num %d, type %d, index %d, offset %x\n",
+						decode_pic_count, picture_type, buffer_index, offset);
 				}
 			}
-			avs_update_gvs(hw);
-			vdec_fill_vdec_frame(hw_to_vdec(hw), NULL, hw->gvs, vf, 0);
-
-			/* pr_info("PicType = %d, PTS = 0x%x\n",
-			 *	 picture_type, vf->pts);
-			 */
 			WRITE_VREG(AVS_BUFFEROUT, 0);
 		}
-		//WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
-
 
 		if (hw->m_ins_flag) {
 			u32 status_reg = READ_VREG(DECODE_STATUS);
@@ -3779,15 +3950,19 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 				amvdec_stop();
 #endif
 				vavs_save_regs(hw);
+				if (reg) {
+					hw->buf_use[hw->decoding_index]++;
+				}
+
 				debug_print(hw, PRINT_FLAG_DECODING,
-					"%s %s, READ_VREG(DECODE_STATUS) = 0x%x, decode_status 0x%x, buf_status 0x%x, dec_result = 0x%x, decode_pic_count = %d, bit_cnt=0x%x\n",
+					"%s %s, READ_VREG(DECODE_STATUS) = 0x%x, decode_status 0x%x, buf_status 0x%x, dec_result = 0x%x, decode_pic_count = %d, bit_cnt=0x%x, AV_SCRATCH_B=0x%x\n",
 					__func__,
 					(decode_status == DECODE_STATUS_PIC_DONE) ?
 					"DECODE_STATUS_PIC_DONE" : "DECODE_STATUS_SKIP_PIC_DONE",
 					status_reg, decode_status,
 					hw->buf_status,
 					hw->dec_result, hw->decode_pic_count,
-					READ_VREG(VIFF_BIT_CNT));
+					READ_VREG(VIFF_BIT_CNT), READ_VREG(AV_SCRATCH_B));
 				vdec_schedule_work(&hw->work);
 				return IRQ_HANDLED;
 			} else if (decode_status == DECODE_STATUS_DECODE_BUF_EMPTY ||
@@ -3809,16 +3984,19 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 						hw->decode_pic_count++;
 					}
 					vavs_save_regs(hw);
+					if (reg) {
+						hw->buf_use[hw->decoding_index]++;
+					}
 				} else
 					hw->dec_result = DEC_RESULT_AGAIN;
 
 				debug_print(hw, PRINT_FLAG_DECODING,
-					"%s BUF_EMPTY, READ_VREG(DECODE_STATUS) = 0x%x, decode_status 0x%x, buf_status 0x%x, scratch_8 (AVS_BUFFERIN) 0x%x, dec_result = 0x%x, decode_pic_count = %d, bit_cnt=0x%x, hw->decode_status_skip_pic_done_flag = %d, hw->decode_decode_cont_start_code = 0x%x\n",
+					"%s BUF_EMPTY, READ_VREG(DECODE_STATUS) = 0x%x, decode_status 0x%x, buf_status 0x%x, scratch_8 (AVS_BUFFERIN) 0x%x, dec_result = 0x%x, decode_pic_count = %d, bit_cnt=0x%x, hw->decode_status_skip_pic_done_flag = %d, hw->decode_decode_cont_start_code = 0x%x, AV_SCRATCH_B=0x%x\n",
 					__func__, status_reg, decode_status,
 					hw->buf_status,
 					hw->reg_scratch_8,
 					hw->dec_result, hw->decode_pic_count,
-					READ_VREG(VIFF_BIT_CNT), hw->decode_status_skip_pic_done_flag, hw->decode_decode_cont_start_code);
+					READ_VREG(VIFF_BIT_CNT), hw->decode_status_skip_pic_done_flag, hw->decode_decode_cont_start_code, READ_VREG(AV_SCRATCH_B));
 				vdec_schedule_work(&hw->work);
 				return IRQ_HANDLED;
 			}
@@ -3905,6 +4083,14 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 	for (i = 0; i < hw->vf_buf_num_used; i++)
 		debug_print(hw, 0, "%d: vf_buf_use %d\n",
 			i, hw->vfbuf_use[i]);
+	debug_print(hw, 0, "ref_use:\n");
+	for (i = 0; i < hw->vf_buf_num_used; i++)
+		debug_print(hw, 0, "%d: ref_use %d\n",
+			i, hw->ref_use[i]);
+	debug_print(hw, 0, "buf_use:\n");
+	for (i = 0; i < hw->vf_buf_num_used; i++)
+		debug_print(hw, 0, "%d: buf_use %d\n",
+			i, hw->buf_use[i]);
 
 	debug_print(hw, 0,
 		"DECODE_STATUS=0x%x\n",
