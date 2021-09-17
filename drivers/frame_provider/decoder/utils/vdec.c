@@ -2275,6 +2275,18 @@ int vdec_disconnect(struct vdec_s *vdec)
 	return 0;
 discon_timeout:
 	pr_err("%s timeout!!! status: 0x%x\n", __func__, vdec->status);
+	if (vdec->status == VDEC_STATUS_ACTIVE) {
+		if (vdec->input.target == VDEC_INPUT_TARGET_VLD) {
+			amvdec_stop();
+			WRITE_VREG(ASSIST_MBOX1_MASK, 0);
+			vdec_free_irq(VDEC_IRQ_1, NULL);
+		} else if (vdec->input.target == VDEC_INPUT_TARGET_HEVC) {
+			amhevc_stop();
+			WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG, 0);
+			vdec_free_irq(VDEC_IRQ_0, NULL);
+		}
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(vdec_disconnect);
