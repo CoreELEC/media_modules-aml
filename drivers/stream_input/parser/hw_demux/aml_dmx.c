@@ -3486,7 +3486,8 @@ static int dmx_enable(struct aml_dmx *dmx)
 			      (use_sop << NOT_USE_OF_SOP_INPUT));
 	} else {
 		DMX_WRITE_REG(dmx->id, STB_INT_MASK, 0);
-		DMX_WRITE_REG(dmx->id, FEC_INPUT_CONTROL, 0);
+		/* if disable FEC_INPUT_CONTROL, background and unattended record will fail */
+		// DMX_WRITE_REG(dmx->id, FEC_INPUT_CONTROL, 0);
 		DMX_WRITE_REG(dmx->id, DEMUX_CONTROL, 0);
 		//dmx not used, but it can cascade for other dmx
 		if ((dmx->source == AM_TS_SRC_DMX0 ||
