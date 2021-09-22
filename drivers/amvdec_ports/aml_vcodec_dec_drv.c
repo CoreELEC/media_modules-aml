@@ -71,23 +71,14 @@ static int fops_vcodec_open(struct file *file)
 		return -ENOMEM;
 	}
 
-	ctx->dv_infos.dv_bufs = vzalloc(sizeof(struct dv_data) * V4L_CAP_BUFF_MAX);
-	if (ctx->dv_infos.dv_bufs == NULL) {
-		kfree(aml_buf);
-		kfree(ctx);
-		return -ENOMEM;
-	}
-
 	ctx->meta_infos.meta_bufs = vzalloc(sizeof(struct meta_data) * V4L_CAP_BUFF_MAX);
 	if (ctx->meta_infos.meta_bufs == NULL) {
-		vfree(ctx->dv_infos.dv_bufs);
 		kfree(aml_buf);
 		kfree(ctx);
 		return -ENOMEM;
 	}
 
 	mutex_lock(&dev->dev_mutex);
-	ctx->dv_infos.index = 0;
 	ctx->empty_flush_buf = aml_buf;
 	ctx->id = dev->id_counter++;
 	v4l2_fh_init(&ctx->fh, video_devdata(file));
@@ -142,6 +133,14 @@ static int fops_vcodec_open(struct file *file)
 	aml_vcodec_dec_set_default_params(ctx);
 	ctx->is_stream_off = true;
 
+	ctx->aux_infos.dv_index = 0;
+	ctx->aux_infos.sei_index = 0;
+	ctx->aux_infos.alloc_buffer = aml_alloc_buffer;
+	ctx->aux_infos.free_buffer = aml_free_buffer;
+	ctx->aux_infos.bind_sei_buffer = aml_bind_sei_buffer;
+	ctx->aux_infos.bind_dv_buffer = aml_bind_dv_buffer;
+	ctx->aux_infos.free_one_sei_buffer = aml_free_one_sei_buffer;
+
 	ret = aml_thread_start(ctx, aml_thread_capture_worker, AML_THREAD_CAPTURE, "cap");
 	if (ret) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -166,7 +165,6 @@ err_ctrls_setup:
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
 	vfree(ctx->meta_infos.meta_bufs);
-	vfree(ctx->dv_infos.dv_bufs);
 	kfree(ctx->empty_flush_buf);
 	kfree(ctx);
 	mutex_unlock(&dev->dev_mutex);

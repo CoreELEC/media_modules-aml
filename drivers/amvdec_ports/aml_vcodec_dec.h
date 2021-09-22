@@ -44,6 +44,10 @@
 #define META_DATA_SIZE			(256)
 #define MD_BUF_SIZE			(1024)
 #define COMP_BUF_SIZE			(8196)
+#define SEI_BUF_SIZE			(2 * 12 * 1024)
+#define SEI_TYPE	(1)
+#define DV_TYPE		(2)
+
 
 /*
  * struct vdec_v4l2_buffer - decoder frame buffer
@@ -134,5 +138,11 @@ void aml_v4l_ctx_release(struct kref *kref);
 void dmabuff_recycle_worker(struct work_struct *work);
 void aml_buffer_status(struct aml_vcodec_ctx *ctx);
 void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx);
+
+void aml_alloc_buffer(struct aml_vcodec_ctx *ctx, int flag);
+void aml_free_buffer(struct aml_vcodec_ctx *ctx, int flag);
+void aml_free_one_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size, int idx);
+void aml_bind_sei_buffer(struct aml_vcodec_ctx *v4l, char **addr, int *size, int *idx);
+void aml_bind_dv_buffer(struct aml_vcodec_ctx *v4l, char **comp_buf, char **md_buf);
 
 #endif /* _AML_VCODEC_DEC_H_ */

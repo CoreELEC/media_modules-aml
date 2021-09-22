@@ -3094,6 +3094,150 @@ free_mmubox:
 	return -1;
 }
 
+void aml_alloc_buffer(struct aml_vcodec_ctx *ctx, int flag)
+{
+	int i = 0;
+
+	if (flag & DV_TYPE) {
+		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
+			ctx->aux_infos.bufs[i].md_buf = vzalloc(MD_BUF_SIZE);
+			if (ctx->aux_infos.bufs[i].md_buf == NULL) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"v4l2 alloc %dth dv md buffer fail\n", i);
+			}
+
+			ctx->aux_infos.bufs[i].comp_buf = vzalloc(COMP_BUF_SIZE);
+			if (ctx->aux_infos.bufs[i].comp_buf == NULL) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"v4l2 alloc %dth dv comp buffer fail\n", i);
+			}
+		}
+	}
+
+	if (flag & SEI_TYPE) {
+		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
+			ctx->aux_infos.bufs[i].sei_buf = vzalloc(SEI_BUF_SIZE);
+			if (ctx->aux_infos.bufs[i].sei_buf) {
+				ctx->aux_infos.bufs[i].sei_size  = 0;
+				ctx->aux_infos.bufs[i].sei_state = 1;
+				ctx->aux_infos.sei_need_free = false;
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+					"v4l2 alloc %dth aux buffer:%px\n",
+					i, ctx->aux_infos.bufs[i].sei_buf);
+			} else {
+				ctx->aux_infos.bufs[i].sei_buf = NULL;
+				ctx->aux_infos.bufs[i].sei_state = 0;
+				ctx->aux_infos.bufs[i].sei_size  = 0;
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"v4l2 alloc %dth aux buffer fail\n", i);
+			}
+		}
+	}
+}
+
+void aml_free_buffer(struct aml_vcodec_ctx *ctx, int flag)
+{
+	int i = 0;
+
+	if (flag & DV_TYPE) {
+		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
+			if (ctx->aux_infos.bufs[i].md_buf != NULL) {
+				vfree(ctx->aux_infos.bufs[i].md_buf);
+				ctx->aux_infos.bufs[i].md_buf = NULL;
+			}
+
+			if (ctx->aux_infos.bufs[i].comp_buf != NULL) {
+				vfree(ctx->aux_infos.bufs[i].comp_buf);
+				ctx->aux_infos.bufs[i].comp_buf = NULL;
+			}
+		}
+	}
+
+	if (flag & SEI_TYPE) {
+		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
+			if (ctx->aux_infos.bufs[i].sei_buf != NULL) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+					"v4l2 free %dth aux buffer:%px\n",
+					i, ctx->aux_infos.bufs[i].sei_buf);
+				vfree(ctx->aux_infos.bufs[i].sei_buf);
+				ctx->aux_infos.bufs[i].sei_state = 0;
+				ctx->aux_infos.bufs[i].sei_size = 0;
+				ctx->aux_infos.bufs[i].sei_buf = NULL;
+			}
+		}
+	}
+}
+
+void aml_free_one_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size, int idx)
+{
+	if (ctx->aux_infos.bufs[idx].sei_buf != NULL) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+			"v4l2 free %dth aux buffer:%px\n",
+			idx, ctx->aux_infos.bufs[idx].sei_buf);
+
+		vfree(ctx->aux_infos.bufs[idx].sei_buf);
+		ctx->aux_infos.bufs[idx].sei_state = 0;
+		ctx->aux_infos.bufs[idx].sei_size = 0;
+		ctx->aux_infos.bufs[idx].sei_buf = NULL;
+		*addr = NULL;
+		*size = 0;
+		ctx->aux_infos.sei_need_free = true;
+	}
+}
+
+void aml_bind_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size, int *idx)
+{
+	int index = ctx->aux_infos.sei_index;
+	int count = 0;
+
+	if (ctx->aux_infos.sei_need_free) {
+		for (count = 0; count < V4L_CAP_BUFF_MAX; count++) {
+			if ((ctx->aux_infos.bufs[index].sei_buf != NULL) &&
+				(ctx->aux_infos.bufs[index].sei_state == 1)) {
+				break;
+			}
+			index = (index + 1) % V4L_CAP_BUFF_MAX;
+		}
+	} else {
+		for (count = 0; count < V4L_CAP_BUFF_MAX; count++) {
+			if ((ctx->aux_infos.bufs[index].sei_buf != NULL) &&
+				((ctx->aux_infos.bufs[index].sei_state == 1) ||
+				(ctx->aux_infos.bufs[index].sei_state == 2))) {
+				memset(ctx->aux_infos.bufs[index].sei_buf, 0, SEI_BUF_SIZE);
+				ctx->aux_infos.bufs[index].sei_size = 0;
+				break;
+			}
+			index = (index + 1) % V4L_CAP_BUFF_MAX;
+		}
+	}
+
+	if (count == V4L_CAP_BUFF_MAX) {
+		*addr = NULL;
+		*size = 0;
+	} else {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+			"v4l2 bind %dth aux buffer:%px, count = %d\n",
+			index, ctx->aux_infos.bufs[index].sei_buf, count);
+		*addr = ctx->aux_infos.bufs[index].sei_buf;
+		*size = ctx->aux_infos.bufs[index].sei_size;
+		*idx  = index;
+		ctx->aux_infos.bufs[index].sei_state = 2;
+		ctx->aux_infos.sei_index = (index + 1) % V4L_CAP_BUFF_MAX;
+	}
+}
+
+void aml_bind_dv_buffer(struct aml_vcodec_ctx *ctx, char **comp_buf, char **md_buf)
+{
+	int index = ctx->aux_infos.dv_index;
+
+	if ((ctx->aux_infos.bufs[index].comp_buf != NULL) &&
+		(ctx->aux_infos.bufs[index].md_buf != NULL)) {
+		*comp_buf = ctx->aux_infos.bufs[index].comp_buf;
+		*md_buf = ctx->aux_infos.bufs[index].md_buf;
+		ctx->aux_infos.dv_index = (index + 1) % V4L_CAP_BUFF_MAX;
+	}
+}
+
 void aml_v4l_ctx_release(struct kref *kref)
 {
 	struct aml_vcodec_ctx * ctx;
@@ -3119,9 +3263,9 @@ void aml_v4l_ctx_release(struct kref *kref)
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
 	aml_task_chain_remove(ctx);
 
-	vfree(ctx->dv_infos.dv_bufs);
-
 	vfree(ctx->meta_infos.meta_bufs);
+	ctx->aux_infos.free_buffer(ctx, SEI_TYPE | DV_TYPE);
+	ctx->aux_infos.free_buffer(ctx, 1);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"v4ldec has been destroyed.\n");

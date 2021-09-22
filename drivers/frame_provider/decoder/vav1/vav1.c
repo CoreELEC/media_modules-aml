@@ -879,7 +879,7 @@ static void av1_dump_state(struct vdec_s *vdec);
 int av1_print(struct AV1HW_s *hw,
 	int flag, const char *fmt, ...)
 {
-#define HEVC_PRINT_BUF		256
+#define HEVC_PRINT_BUF		512
 	unsigned char buf[HEVC_PRINT_BUF];
 	int len = 0;
 
@@ -6775,9 +6775,21 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			pic_config->aux_data_size);
 #endif
 
+		av1_print(hw, AV1_DEBUG_SEI_DETAIL, "%s aux_data_size = %d\n",
+				__func__, pic_config->aux_data_size);
+
+		if (debug & AV1_DEBUG_SEI_DETAIL) {
+			int i = 0;
+			PR_INIT(128);
+			for (i = 0; i < pic_config->aux_data_size; i++) {
+				PR_FILL("%02x ", pic_config->aux_data_buf[i]);
+				if (((i + 1) & 0xf) == 0)
+					PR_INFO(hw->index);
+			}
+			PR_INFO(hw->index);
+		}
+
 		if (hw->is_used_v4l) {
-			av1_print(hw, AV1_DEBUG_BUFMGR_MORE, "%s aux_data_size = %d\n",
-					__func__, pic_config->aux_data_size);
 			update_vframe_src_fmt(vf,
 				pic_config->aux_data_buf,
 				pic_config->aux_data_size,
@@ -11241,8 +11253,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 #endif
 	av1_print(hw, 0,
-			"no_head %d  low_latency %d\n",
-			hw->no_head, hw->low_latency_flag);
+			"no_head %d  low_latency %d, signal_type 0x%x\n",
+			hw->no_head, hw->low_latency_flag, hw->video_signal_type);
 #if 0
 	hw->buf_start = pdata->mem_start;
 	hw->buf_size = pdata->mem_end - pdata->mem_start + 1;

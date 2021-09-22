@@ -1312,7 +1312,7 @@ struct VP9Decoder_s {
 static int vp9_print(struct VP9Decoder_s *pbi,
 	int flag, const char *fmt, ...)
 {
-#define HEVC_PRINT_BUF		256
+#define HEVC_PRINT_BUF		512
 	unsigned char buf[HEVC_PRINT_BUF];
 	int len = 0;
 
@@ -12311,8 +12311,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 
 	pbi->low_latency_flag = 1;
 	vp9_print(pbi, 0,
-			"no_head %d  low_latency %d\n",
-			pbi->no_head, pbi->low_latency_flag);
+			"no_head %d  low_latency %d, signal_type 0x%x\n",
+			pbi->no_head, pbi->low_latency_flag, pbi->video_signal_type);
 #if 0
 	pbi->buf_start = pdata->mem_start;
 	pbi->buf_size = pdata->mem_end - pdata->mem_start + 1;

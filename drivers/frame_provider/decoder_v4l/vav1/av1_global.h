@@ -1330,6 +1330,7 @@ typedef struct PIC_BUFFER_CONFIG_s {
   u64 timestamp;
   u32 hw_decode_time;
   u32 frame_size2; // For frame base mode
+  int ctx_buf_idx;
 } PIC_BUFFER_CONFIG;
 
 /*
@@ -2329,6 +2330,7 @@ void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *c
 #define AV1_DEBUG_DUMP_DATA              0x800000
 #define AV1_DEBUG_CACHE                  0x1000000
 #define AV1_DEBUG_CACHE_HIT_RATE         0x2000000
+#define AV1_DEBUG_SEI_DETAIL             0x4000000
 #define IGNORE_PARAM_FROM_CONFIG         0x8000000
 #if 1
 /*def MULTI_INSTANCE_SUPPORT*/

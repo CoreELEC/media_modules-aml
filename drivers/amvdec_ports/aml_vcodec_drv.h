@@ -474,25 +474,44 @@ struct aml_fb_map_table {
 };
 
 /*
- * struct dv_data - record some dv data
- * @comp_buf[COMP_BUF_SIZE] : Stores dv data parsed from aux data.
- * @md_buf[MD_BUF_SIZE] : Stores dv data parsed from aux data.
+ * struct aux_data - record sei data and dv data
+ * @sei_size:	sei data size.
+ * @sei_buf:	sei data addr.
+ * @sei_state:	sei buffer state. (0 free, 1 not used, 2 used)
+ * @comp_buf:	stores comp data parsed from sei data.
+ * @md_buf:	stores md data parsed from sei data.
  */
-struct dv_data {
-	char	comp_buf[COMP_BUF_SIZE];
-	char	md_buf[MD_BUF_SIZE];
+struct aux_data {
+	int		sei_size;
+	char*		sei_buf;
+	int		sei_state;
+	char*		comp_buf;
+	char*		md_buf;
 };
 
 /*
- * struct dv_info - record some dv data infos
- * @index: dv data index.
- * @dv_bufs: Stores dv data.
+ * struct aux_info - record aux data infos
+ * @sei_index:		sei data index.
+ * @dv_index:		dv data index.
+ * @sei_need_free:	sei buffer need to free.
+ * @bufs:		stores aux data.
+ * @alloc_buffer:	alloc aux buffer functions.
+ * @free_buffer:	free aux buffer functions.
+ * @free_one_sei_buffer:free sei buffer with index functions.
+ * @bind_sei_buffer:	bind sei buffer functions.
+ * @bind_dv_buffer:	bind dv buffer functions.
  */
-struct dv_info {
-	int		index;
-	struct dv_data *dv_bufs;
+struct aux_info {
+	int	sei_index;
+	int 	dv_index;
+	bool    sei_need_free;
+	struct aux_data bufs[V4L_CAP_BUFF_MAX];
+	void 	(*alloc_buffer)(struct aml_vcodec_ctx *ctx, int flag);
+	void 	(*free_buffer)(struct aml_vcodec_ctx *ctx, int flag);
+	void 	(*free_one_sei_buffer)(struct aml_vcodec_ctx *ctx, char **addr, int *size, int idx);
+	void 	(*bind_sei_buffer)(struct aml_vcodec_ctx *ctx, char **addr, int *size, int *idx);
+	void	(*bind_dv_buffer)(struct aml_vcodec_ctx *ctx, char **comp_buf, char **md_buf);
 };
-
 
 /*
  * struct meta_data - record meta data.
@@ -683,7 +702,6 @@ struct aml_vcodec_ctx {
 	ulong				token_table[32];
 
 	struct aml_fb_map_table		fb_map[32];
-	struct dv_info			dv_infos;
 	struct aml_vpp_cfg_infos 	vpp_cfg;
 	void (*vdec_pic_info_update)(struct aml_vcodec_ctx *ctx);
 	bool				vpp_is_need;
@@ -698,6 +716,7 @@ struct aml_vcodec_ctx {
 	bool				ge2d_is_need;
 
 	bool 				second_field_pts_mode;
+	struct aux_info			aux_infos;
 };
 
 /**
