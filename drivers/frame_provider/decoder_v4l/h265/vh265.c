@@ -2356,9 +2356,18 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 	if (hevc->is_used_v4l) {
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			if (hevc->m_PIC[i] != NULL) {
-				release_aux_data(hevc, hevc->m_PIC[i]);
+				char *addr = NULL;
+				int size;
+				unsigned long flags;
+
+				spin_lock_irqsave(&lock, flags);
+				addr = hevc->m_PIC[i]->aux_data_buf;
+				size = hevc->m_PIC[i]->aux_data_size;
 				memset(hevc->m_PIC[i], 0 ,sizeof(struct PIC_s));
 				hevc->m_PIC[i]->index = i;
+				hevc->m_PIC[i]->aux_data_buf = addr;
+				hevc->m_PIC[i]->aux_data_size = size;
+				spin_unlock_irqrestore(&lock, flags);
 			}
 		}
 	}
