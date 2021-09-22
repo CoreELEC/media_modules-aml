@@ -38,7 +38,8 @@ bool is_support_vdec_canvas(void)
 	 *    probe function like h265/vp9/av1/avs2.
 	*/
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W))
 		return true;
 	return false;
 }

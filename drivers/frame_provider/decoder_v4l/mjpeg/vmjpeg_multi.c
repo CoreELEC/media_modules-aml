@@ -285,7 +285,8 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 
 	/* mjpeg convert endian to match display. */
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)) {
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)) {
 		temp_endian = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 	} else {
 		temp_endian = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
