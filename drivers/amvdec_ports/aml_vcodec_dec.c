@@ -1901,6 +1901,12 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 				ctx->vpp_is_need = false;
 			}
 			ctx->vpp_cfg.is_vpp_reset = false;
+		} else {
+			if (ctx->vpp) {
+				atomic_dec(&ctx->dev->vpp_count);
+				aml_v4l2_vpp_destroy(ctx->vpp);
+				ctx->vpp = NULL;
+			}
 		}
 
 		if (ctx->ge2d_is_need) {
