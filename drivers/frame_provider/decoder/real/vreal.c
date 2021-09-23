@@ -52,7 +52,7 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
-#include <linux/amlogic/tee.h>
+#include "../utils/secprot.h"
 
 
 
@@ -865,7 +865,7 @@ s32 vreal_init(struct vdec_s *vdec)
 		amvdec_disable();
 		vfree(buf);
 		pr_err("%s: the %s fw loading failed, err: %x\n",
-			fw_name, tee_enabled() ? "TEE" : "local", ret);
+			fw_name, vdec_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 

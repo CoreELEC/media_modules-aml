@@ -40,7 +40,7 @@
 #include "../utils/decoder_bmmu_box.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include <linux/amlogic/tee.h>
+#include "../utils/secprot.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 
 
@@ -1093,7 +1093,7 @@ static s32 vmpeg4_init(void)
 		amvdec_disable();
 		vfree(buf);
 		pr_err("%s: the %s fw loading failed, err: %x\n",
-			fw_name, tee_enabled() ? "TEE" : "local", ret);
+			fw_name, vdec_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 

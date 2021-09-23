@@ -145,7 +145,6 @@ EXPORT_SYMBOL(vdec_v4l_post_evet);
 int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 {
 	int ret = 0;
-	struct aml_vcodec_dev *dev = ctx->dev;
 
 	if (ctx->drv_handle == 0)
 		return -EIO;
@@ -164,8 +163,9 @@ int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 	mutex_unlock(&ctx->state_lock);
 
 	ctx->q_data[AML_Q_DATA_SRC].resolution_changed = true;
-	v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
-
+#ifdef CONFIG_V4L2_MEM2MEM_DEV
+	v4l2_m2m_job_pause(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
+#endif
 	return ret;
 }
 EXPORT_SYMBOL(vdec_v4l_res_ch_event);

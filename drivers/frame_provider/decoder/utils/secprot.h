@@ -35,5 +35,18 @@
 
 extern int tee_config_device_secure(int dev_id, int secure);
 
+bool vdec_tee_enabled(void);
+
+int vdec_tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap);
+
+int vdec_tee_load_video_fw(u32 index, u32 vdec);
+
+int vdec_tee_vp9_prob_process(u32 cur_frame_type, u32 prev_frame_type,
+		u32 prob_status, u32 prob_addr);
+
+int vdec_tee_vp9_prob_malloc(u32 *prob_addr);
+
+int vdec_tee_vp9_prob_free(u32 prob_addr);
+
 #endif /* __SECPROT_H_ */
 

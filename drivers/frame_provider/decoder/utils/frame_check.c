@@ -426,9 +426,15 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 static int write_crc_work(struct pic_check_mgr_t *mgr)
 {
 	unsigned int wr_size;
-	char *crc_buf, crc_tmp[64*30];
+	char *crc_buf, *crc_tmp;
 	mm_segment_t old_fs;
 	struct pic_check_t *check = &mgr->pic_check;
+
+	crc_tmp = (char *)vmalloc(64*32);
+	if (!crc_tmp) {
+		dbg_print(0, "%s, vmalloc tmp buf failed\n", __func__);
+		return -ENOMEM;
+	}
 
 	if (mgr->enable & CRC_MASK) {
 		wr_size = 0;
@@ -453,6 +459,10 @@ static int write_crc_work(struct pic_check_mgr_t *mgr)
 			set_fs(old_fs);
 		}
 	}
+
+	vfree(crc_tmp);
+	crc_tmp = NULL;
+
 	return 0;
 }
 
@@ -460,9 +470,15 @@ static int write_crc_work(struct pic_check_mgr_t *mgr)
 static int write_aux_data_crc_work(struct aux_data_check_mgr_t *mgr)
 {
 	unsigned int wr_size;
-	char *crc_buf, crc_tmp[64*30];
+	char *crc_buf, *crc_tmp;
 	mm_segment_t old_fs;
 	struct aux_data_check_t *check = &mgr->aux_data_check;
+
+	crc_tmp = (char *)vmalloc(64*32);
+	if (!crc_tmp) {
+		dbg_print(0, "%s, vmalloc tmp buf failed\n", __func__);
+		return -ENOMEM;
+	}
 
 	if (mgr->enable & AUX_MASK) {
 		wr_size = 0;
@@ -487,6 +503,10 @@ static int write_aux_data_crc_work(struct aux_data_check_mgr_t *mgr)
 			set_fs(old_fs);
 		}
 	}
+
+	vfree(crc_tmp);
+	crc_tmp = NULL;
+
 	return 0;
 }
 

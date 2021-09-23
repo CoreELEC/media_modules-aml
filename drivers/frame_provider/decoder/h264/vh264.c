@@ -46,14 +46,13 @@
 #include "../../../stream_input/amports/streambuf.h"
 #include <linux/delay.h>
 #include <linux/amlogic/media/video_sink/video.h>
-#include <linux/amlogic/tee.h>
 #include <linux/amlogic/media/ge2d/ge2d.h>
 #include "../utils/decoder_mmu_box.h"
 #include "../utils/decoder_bmmu_box.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
-#include <linux/amlogic/tee.h>
+#include "../utils/secprot.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/uaccess.h>
 
@@ -3612,7 +3611,7 @@ static void vh264_prot_init(void)
 
 	WRITE_VREG(AV_SCRATCH_0, 0);
 	WRITE_VREG(AV_SCRATCH_1, buf_offset);
-	if (!tee_enabled())
+	if (!vdec_tee_enabled())
 		WRITE_VREG(AV_SCRATCH_G, mc_dma_handle);
 	WRITE_VREG(AV_SCRATCH_7, 0);
 	WRITE_VREG(AV_SCRATCH_8, 0);
@@ -3830,12 +3829,12 @@ static s32 vh264_init(void)
 	query_video_status(0, &trickmode_fffb);
 
 	amvdec_enable();
-	if (!firmwareloaded && tee_enabled()) {
+	if (!firmwareloaded && vdec_tee_enabled()) {
 		ret = amvdec_loadmc_ex(VFORMAT_H264, NULL, NULL);
 		if (ret < 0) {
 			amvdec_disable();
 			pr_err("H264: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				vdec_tee_enabled() ? "TEE" : "local", ret);
 			return ret;
 		}
 	} else {
@@ -3945,7 +3944,7 @@ static s32 vh264_init(void)
 				mc_cpu_addr = NULL;
 			}
 			pr_err("H264: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				vdec_tee_enabled() ? "TEE" : "local", ret);
 			return -EBUSY;
 		}
 	}

@@ -2539,8 +2539,12 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 				"vdec-map-%d", vdec->id);
 		} else if (p->frame_base_video_path == FRAME_BASE_PATH_IONVIDEO) {
 #if 1
+#ifdef CONFIG_AMLOGIC_IONVIDEO
 			r = ionvideo_assign_map(&vdec->vf_receiver_name,
 					&vdec->vf_receiver_inst);
+#else
+			r = -1;
+#endif
 #else
 			/*
 			 * temporarily just use decoder instance ID as iondriver ID
@@ -2550,8 +2554,12 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k)
 			 * formats.
 			 */
 			vdec->vf_receiver_inst = p->dev->id;
+#ifdef CONFIG_AMLOGIC_IONVIDEO
 			r = ionvideo_assign_map(&vdec->vf_receiver_name,
 					&vdec->vf_receiver_inst);
+#else
+			r = -1;
+#endif
 #endif
 			if (r < 0) {
 				pr_err("IonVideo frame receiver allocation failed.\n");

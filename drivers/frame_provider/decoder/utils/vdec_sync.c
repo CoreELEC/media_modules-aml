@@ -22,6 +22,7 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/sync_file.h>
+#include <linux/vmalloc.h>
 #include "vdec_sync.h"
 
 #define VDEC_DBG_ENABLE_FENCE	(0x100)
@@ -32,7 +33,7 @@ struct vdec_sync_core_s {
 	spinlock_t vdec_sync_lock;
 };
 
-static struct vdec_sync_core_s vdec_sync_core;
+static struct vdec_sync_core_s *vdec_sync_core = NULL;
 
 extern u32 debug;
 
@@ -326,8 +327,15 @@ EXPORT_SYMBOL(vdec_fence_wait);
 struct vdec_sync *vdec_sync_get(void)
 {
 	int i;
-	struct vdec_sync_core_s *core = &vdec_sync_core;
 	ulong flags;
+	struct vdec_sync_core_s *core;
+
+	if (!vdec_sync_core) {
+		vdec_sync_core = (struct vdec_sync_core_s *)vzalloc(sizeof(struct vdec_sync_core_s));
+		if (IS_ERR_OR_NULL(vdec_sync_core))
+			return NULL;
+		core = vdec_sync_core;
+	}
 
 	spin_lock_irqsave(&core->vdec_sync_lock, flags);
 
@@ -506,7 +514,7 @@ EXPORT_SYMBOL(vdec_fence_buffer_count_decrease);
 
 void vdec_sync_core_init(void)
 {
-	spin_lock_init(&vdec_sync_core.vdec_sync_lock);
+	spin_lock_init(&vdec_sync_core->vdec_sync_lock);
 }
 EXPORT_SYMBOL(vdec_sync_core_init);
 

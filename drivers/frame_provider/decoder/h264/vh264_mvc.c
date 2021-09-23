@@ -31,7 +31,7 @@
 #include <linux/workqueue.h>
 #include <linux/dma-mapping.h>
 #include <linux/atomic.h>
-#include <linux/amlogic/tee.h>
+
 
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -45,7 +45,7 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/firmware.h"
-#include <linux/amlogic/tee.h>
+#include "../utils/secprot.h"
 #include "../utils/config_parser.h"
 
 #define TIME_TASK_PRINT_ENABLE  0x100
@@ -1547,13 +1547,13 @@ static s32 vh264mvc_init(void)
 
 	amvdec_enable();
 
-	if (tee_enabled()) {
+	if (vdec_tee_enabled()) {
 		ret = amvdec_loadmc_ex(VFORMAT_H264MVC, NULL, buf);
 		if (ret != 0) {
 			amvdec_disable();
 			vfree(buf);
 			pr_err("H264_MVC: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				vdec_tee_enabled() ? "TEE" : "local", ret);
 			return -1;
 		}
 	} else {

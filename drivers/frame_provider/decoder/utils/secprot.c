@@ -22,6 +22,86 @@
 #include <asm/opcodes-sec.h>
 #endif
 
+#ifdef CONFIG_AMLOGIC_TEE
+#include <linux/amlogic/tee.h>
+
+bool vdec_tee_enabled(void)
+{
+	return tee_enabled();
+}
+
+int vdec_tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
+{
+	return (tee_load_video_fw_swap(index, vdec, is_swap));
+}
+
+int vdec_tee_load_video_fw(u32 index, u32 vdec)
+{
+	return (tee_load_video_fw(index, vdec));
+}
+
+int vdec_tee_vp9_prob_process(u32 cur_frame_type, u32 prev_frame_type,
+		u32 prob_status, u32 prob_addr)
+{
+	return tee_vp9_prob_process(cur_frame_type, prev_frame_type, prob_status, prob_addr);
+}
+
+int vdec_tee_vp9_prob_malloc(u32 *prob_addr)
+{
+	return tee_vp9_prob_malloc(prob_addr);
+}
+
+int vdec_tee_vp9_prob_free(u32 prob_addr)
+{
+	return tee_vp9_prob_free(prob_addr);
+}
+
+#else
+bool vdec_tee_enabled(void)
+{
+	//pr_info("no tee config\n");
+	return 0;
+}
+
+int vdec_tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
+{
+	pr_info("no tee config\n");
+	return (-1);
+}
+
+int vdec_tee_load_video_fw(u32 index, u32 vdec)
+{
+	pr_info("no tee config\n");
+	return (-1);
+}
+
+int vdec_tee_vp9_prob_process(u32 cur_frame_type, u32 prev_frame_type,
+		u32 prob_status, u32 prob_addr)
+{
+	return -1;
+}
+
+int vdec_tee_vp9_prob_malloc(u32 *prob_addr)
+{
+	*prob_addr = 0;
+	return -1;
+}
+
+int vdec_tee_vp9_prob_free(u32 prob_addr)
+{
+	return -1;
+}
+
+#endif
+EXPORT_SYMBOL(vdec_tee_enabled);
+EXPORT_SYMBOL(vdec_tee_load_video_fw_swap);
+EXPORT_SYMBOL(vdec_tee_load_video_fw);
+
+EXPORT_SYMBOL(vdec_tee_vp9_prob_process);
+EXPORT_SYMBOL(vdec_tee_vp9_prob_malloc);
+EXPORT_SYMBOL(vdec_tee_vp9_prob_free);
+
+
 #ifdef CONFIG_ARM64
 
 int tee_config_device_secure(int dev_id, int secure)

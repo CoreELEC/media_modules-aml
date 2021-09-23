@@ -43,19 +43,17 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 
 #include "../utils/vdec_input.h"
-#include <linux/amlogic/tee.h>
 
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
-#include "../h264/vh264.h"
 #include "../../../stream_input/amports/streambuf.h"
 #include <linux/delay.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/decoder_mmu_box.h"
 #include "../utils/decoder_bmmu_box.h"
 #include "../utils/firmware.h"
-#include <linux/amlogic/tee.h>
+#include "../utils/secprot.h"
 #include <linux/uaccess.h>
 #include "../utils/config_parser.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
@@ -7823,7 +7821,7 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 
 	WRITE_VREG(FRAME_COUNTER_REG, hw->decode_pic_count);
 	WRITE_VREG(AV_SCRATCH_8, hw->buf_offset);
-	if (!tee_enabled())
+	if (!vdec_tee_enabled())
 		WRITE_VREG(AV_SCRATCH_G, hw->mc_dma_handle);
 
 	/* hw->error_recovery_mode = (error_recovery_mode != 0) ?
@@ -8055,7 +8053,7 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 		hw->fw_mmu = fw_mmu;
 	}
 
-	if (!tee_enabled()) {
+	if (!vdec_tee_enabled()) {
 		/* -- ucode loading (amrisc and swap code) */
 		hw->mc_cpu_addr =
 			dma_alloc_coherent(amports_get_dma_device(), MC_TOTAL_SIZE,
@@ -9847,7 +9845,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			hw->vdec_pg_enable_flag = 0;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"MH264 the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				vdec_tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);
 			return;
@@ -9862,7 +9860,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 				amhevc_disable();
 				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 					"MH264_MMU the %s fw loading failed, err: %x\n",
-					tee_enabled() ? "TEE" : "local", ret);
+					vdec_tee_enabled() ? "TEE" : "local", ret);
 				hw->dec_result = DEC_RESULT_FORCE_EXIT;
 				vdec_schedule_work(&hw->work);
 				return;

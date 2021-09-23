@@ -36,7 +36,7 @@
 #include "../utils/decoder_bmmu_box.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include <linux/amlogic/tee.h>
+#include "../utils/secprot.h"
 
 
 
@@ -761,7 +761,7 @@ static s32 vmjpeg_init(void)
 		amvdec_disable();
 		vfree(buf);
 		pr_err("MJPEG: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			vdec_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 

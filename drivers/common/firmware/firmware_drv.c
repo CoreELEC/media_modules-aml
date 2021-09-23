@@ -28,12 +28,14 @@
 #include <linux/amlogic/cpu_version.h>
 #include "../../stream_input/amports/amports_priv.h"
 #include "../../frame_provider/decoder/utils/vdec.h"
+#ifdef CONFIG_AMLOGIC_TEE
+#include <linux/amlogic/tee.h>
+#endif
 #include "firmware_priv.h"
 #include "../chips/chips.h"
 #include <linux/string.h>
 #include <linux/amlogic/media/utils/log.h>
 #include <linux/firmware.h>
-#include <linux/amlogic/tee.h>
 #include <linux/amlogic/major.h>
 #include <linux/cdev.h>
 #include <linux/crc32.h>
@@ -85,13 +87,17 @@ int get_firmware_data(unsigned int format, char *buf)
 	struct fw_mgr_s *mgr = g_mgr;
 	struct fw_info_s *info;
 
+#ifdef CONFIG_AMLOGIC_TEE
 	pr_info("[%s], the fw (%s) will be loaded.\n",
 		tee_enabled() ? "TEE" : "LOCAL",
 		get_fw_format_name(format));
 
 	if (tee_enabled())
 		return 0;
-
+#else
+	pr_info("[%s], the fw (%s) will be loaded.\n",
+		"LOCAL", get_fw_format_name(format));
+#endif
 	mutex_lock(&mutex);
 
 	if (list_empty(&mgr->fw_head)) {
@@ -837,9 +843,10 @@ int video_fw_reload(int mode)
 	int ret = 0;
 	struct fw_mgr_s *mgr = g_mgr;
 
+#ifdef CONFIG_AMLOGIC_TEE
 	if (tee_enabled())
 		return 0;
-
+#endif
 	mutex_lock(&mutex);
 
 	if (mode & FW_LOAD_FORCE) {

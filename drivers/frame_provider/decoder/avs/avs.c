@@ -43,7 +43,7 @@
 #include "../utils/decoder_bmmu_box.h"
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
-#include <linux/amlogic/tee.h>
+#include "../utils/secprot.h"
 
 
 #define DRIVER_NAME "amvdec_avs"
@@ -1611,7 +1611,7 @@ static s32 vavs_init(void)
 		amvdec_disable();
 		vfree(buf);
 		pr_err("AVS: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			vdec_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 

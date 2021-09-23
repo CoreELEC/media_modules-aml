@@ -37,7 +37,7 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/video_sink/video_keeper.h>
 #include "../utils/firmware.h"
-#include <linux/amlogic/tee.h>
+#include "../utils/secprot.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 
 
@@ -1467,7 +1467,7 @@ static s32 vh264_4k2k_init(void)
 			MC_TOTAL_SIZE, mc_cpu_addr, mc_dma_handle);
 		mc_cpu_addr = NULL;
 		pr_err("H264_4K2K: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			vdec_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 

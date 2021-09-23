@@ -37,7 +37,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/dma-contiguous.h>
 #include <linux/slab.h>
-#include <linux/amlogic/tee.h>
+#include "../utils/secprot.h"
 #include "../../../stream_input/amports/amports_priv.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include "../utils/decoder_mmu_box.h"
@@ -6721,7 +6721,7 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 	}
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
 		(vdec_secure(hw_to_vdec(pbi)))) {
-		tee_vp9_prob_free((u32)pbi->prob_buffer_phy_addr);
+		vdec_tee_vp9_prob_free((u32)pbi->prob_buffer_phy_addr);
 		pbi->prob_buffer_phy_addr = 0;
 		pbi->count_buffer_phy_addr = 0;
 		pbi->prob_buffer_addr = NULL;
@@ -6907,7 +6907,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
 		(vdec_secure(hw_to_vdec(pbi)))) {
 		u32 prob_addr, id;
-		id = tee_vp9_prob_malloc(&prob_addr);
+		id = vdec_tee_vp9_prob_malloc(&prob_addr);
 		if (prob_addr <= 0)
 			pr_err("%s, tee[%d] malloc prob buf failed\n", __func__, id);
 		else {
@@ -9063,7 +9063,7 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
 			(vdec_secure(hw_to_vdec(pbi)))) {
-			tee_vp9_prob_process(cm->frame_type, cm->last_frame_type,
+			vdec_tee_vp9_prob_process(cm->frame_type, cm->last_frame_type,
 				adapt_prob_status, (unsigned int)pbi->prob_buffer_phy_addr);
 		} else {
 			int pre_fc = 0;
@@ -9654,7 +9654,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 		amhevc_disable();
 		vfree(fw);
 		pr_err("VP9: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			vdec_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
@@ -9863,7 +9863,6 @@ static struct VP9Decoder_s *gHevc;
 static int amvdec_vp9_probe(struct platform_device *pdev)
 {
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
-	struct BUF_s BUF[MAX_BUF_NUM];
 	struct VP9Decoder_s *pbi;
 	int ret;
 #ifndef MULTI_INSTANCE_SUPPORT
@@ -9872,18 +9871,13 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 	pr_debug("%s\n", __func__);
 
 	mutex_lock(&vvp9_mutex);
-	pbi = vmalloc(sizeof(struct VP9Decoder_s));
+	pbi = vzalloc(sizeof(struct VP9Decoder_s));
 	if (pbi == NULL) {
 		pr_info("\namvdec_vp9 device data allocation failed\n");
 		mutex_unlock(&vvp9_mutex);
 		return -ENOMEM;
 	}
-
 	gHevc = pbi;
-	memcpy(&BUF[0], &pbi->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
-	memset(pbi, 0, sizeof(struct VP9Decoder_s));
-	memcpy(&pbi->m_BUF[0], &BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
-
 	pbi->init_flag = 0;
 	pbi->first_sc_checked= 0;
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
@@ -10597,7 +10591,7 @@ static void run_front(struct vdec_s *vdec)
 			amhevc_disable();
 			vp9_print(pbi, PRINT_FLAG_ERROR,
 				"VP9: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				vdec_tee_enabled() ? "TEE" : "local", ret);
 			pbi->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&pbi->work);
 			return;
