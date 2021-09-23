@@ -3654,7 +3654,7 @@ static void init_pic_list(struct hevc_state_s *hevc)
 		struct PIC_s *pic = hevc->m_PIC[i];
 
 		if (!pic) {
-			pic = vmalloc(sizeof(struct PIC_s));
+			pic = vzalloc(sizeof(struct PIC_s));
 			if (pic == NULL) {
 				hevc_print(hevc, 0,
 					"%s: alloc pic %d fail!!!\n",
@@ -3662,8 +3662,16 @@ static void init_pic_list(struct hevc_state_s *hevc)
 				break;
 			}
 			hevc->m_PIC[i] = pic;
+		} else {
+			char *aux_data_tmp;
+			u32 aux_data_size;
+
+			aux_data_tmp = pic->aux_data_buf;
+			aux_data_size = pic->aux_data_size;
+			memset(pic, 0, sizeof(struct PIC_s));
+			pic->aux_data_buf = aux_data_tmp;
+			pic->aux_data_size = aux_data_size;
 		}
-		memset(pic, 0, sizeof(struct PIC_s));
 
 		pic->index = i;
 		pic->BUF_index = -1;
