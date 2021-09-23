@@ -10575,6 +10575,10 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			hw->double_write_mode &= 0xffff;
 	}
 
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) && hw->enable_fence) {
+		hw->canvas_mode = 1;
+	}
+
 	if (pdata->parallel_dec == 1) {
 		int i;
 		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {

@@ -404,6 +404,12 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 
 static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 {
+	bool enable_fence = (ctx->config.parm.dec.cfg.low_latency_mode & 2) ? 1 : 0;
+
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) && enable_fence) {
+		return false;
+	}
+
 	if (bypass_ge2d)
 		return false;
 
