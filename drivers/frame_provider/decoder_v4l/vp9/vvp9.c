@@ -1249,6 +1249,7 @@ struct VP9Decoder_s {
 	u32 endian;
 	ulong fb_token;
 	bool wait_more_buf;
+	spinlock_t wait_buf_lock;
 	struct vp9_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
 	dma_addr_t rdma_phy_adr;
@@ -7683,14 +7684,17 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 						0x1);
 		pbi->last_put_idx = index;
 		pbi->new_frame_displayed++;
+		unlock_buffer_pool(pool, flags);
+
+		spin_lock_irqsave(&pbi->wait_buf_lock, flags);
 
 		if (pbi->wait_more_buf) {
 			pbi->wait_more_buf = false;
 			pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
 			vdec_schedule_work(&pbi->work);
 		}
+		spin_unlock_irqrestore(&pbi->wait_buf_lock, flags);
 
-		unlock_buffer_pool(pool, flags);
 #ifdef SUPPORT_FB_DECODING
 		if (pbi->used_stage_buf_num > 0 &&
 			pbi->back_not_run_ready)
@@ -10231,6 +10235,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 
 	INIT_WORK(&pbi->set_clk_work, vp9_set_clk);
 	timer_setup(&pbi->timer, vvp9_put_timer_func, 0);
+	spin_lock_init(&pbi->wait_buf_lock);
 
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (pbi->m_ins_flag) {
@@ -10515,7 +10520,6 @@ static int vp9_wait_cap_buf(void *args)
 {
 	struct VP9Decoder_s *pbi =
 		(struct VP9Decoder_s *) args;
-	struct VP9_Common_s *const cm = &pbi->common;
 	struct aml_vcodec_ctx * ctx =
 		(struct aml_vcodec_ctx *)pbi->v4l2_ctx;
 	ulong flags;
@@ -10529,7 +10533,7 @@ static int vp9_wait_cap_buf(void *args)
 			__func__, ret);
 	}
 
-	lock_buffer_pool(cm->buffer_pool, flags);
+	spin_lock_irqsave(&pbi->wait_buf_lock, flags);
 	if (pbi->wait_more_buf) {
 		pbi->wait_more_buf = false;
 		pbi->dec_result = ctx->is_stream_off ?
@@ -10537,7 +10541,7 @@ static int vp9_wait_cap_buf(void *args)
 		DEC_RESULT_NEED_MORE_BUFFER;
 		vdec_schedule_work(&pbi->work);
 	}
-	unlock_buffer_pool(cm->buffer_pool, flags);
+	spin_unlock_irqrestore(&pbi->wait_buf_lock, flags);
 
 	vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
 		"%s wait capture buffer end, ret:%d\n",
@@ -10577,10 +10581,9 @@ static void vp9_work(struct work_struct *work)
 	if (pbi->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
 		reset_process_time(pbi);
 		if (!get_free_buf_count(pbi)) {
-			struct VP9_Common_s *const cm = &pbi->common;
 			ulong flags;
 
-			lock_buffer_pool(cm->buffer_pool, flags);
+			spin_lock_irqsave(&pbi->wait_buf_lock, flags);
 			if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
 				pbi->dec_result = DEC_RESULT_AGAIN;
 				pbi->postproc_done = 0;
@@ -10589,7 +10592,7 @@ static void vp9_work(struct work_struct *work)
 			} else {
 				pbi->wait_more_buf = true;
 			}
-			unlock_buffer_pool(cm->buffer_pool, flags);
+			spin_unlock_irqrestore(&pbi->wait_buf_lock, flags);
 
 			if (pbi->wait_more_buf) {
 				ATRACE_COUNTER("V_ST_DEC-wait_more_buff", __LINE__);
