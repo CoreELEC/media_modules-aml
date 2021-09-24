@@ -5452,10 +5452,12 @@ static int vdec_post_task_recycle(void *args)
 		if (!list_empty(&post->task_recycle)) {
 			struct vdec_post_task_parms_s *parms, *tmp;
 			list_for_each_entry_safe(parms, tmp, &post->task_recycle, recycle) {
-				list_del(&parms->recycle);
-				kthread_stop(parms->task);
-				kfree(parms);
-				parms = NULL;
+				if (parms->scheduled) {
+					list_del(&parms->recycle);
+					kthread_stop(parms->task);
+					kfree(parms);
+					parms = NULL;
+				}
 			}
 		}
 		mutex_unlock(&post->mutex);
@@ -5504,7 +5506,7 @@ static int vdec_post_handler(void *args)
 
 	/* process client task. */
 	parms->func(parms->private);
-
+	parms->scheduled = 1;
 	up(&post->sem);
 
 	while (!kthread_should_stop()) {
@@ -5527,6 +5529,7 @@ int vdec_post_task(post_task_handler func, void *args)
 	parms->func	= func;
 	parms->private	= args;
 	init_completion(&parms->park);
+	parms->scheduled = 0;
 	parms->task	= kthread_run(vdec_post_handler,
 				parms, "task-post-thread");
 	if (IS_ERR(parms->task)) {

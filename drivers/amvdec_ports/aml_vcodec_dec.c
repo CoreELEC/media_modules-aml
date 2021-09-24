@@ -1683,8 +1683,7 @@ static int vdec_capture_thread(void *data)
 	}
 
 	while (!kthread_should_stop()) {
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule();
+		usleep_range(1000, 2000);
 	}
 
 	return 0;

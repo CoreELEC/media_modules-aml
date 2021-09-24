@@ -422,6 +422,7 @@ struct vdec_post_task_parms_s {
 	struct completion	park;
 	post_task_handler	func;
 	void			*private;
+	int			scheduled;
 };
 
 #define MAX_USERDATA_CHANNEL_NUM 9
