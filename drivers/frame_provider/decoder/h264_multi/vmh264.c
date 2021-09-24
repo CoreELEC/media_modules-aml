@@ -2661,6 +2661,9 @@ static int check_force_interlace(struct vdec_h264_hw_s *hw,
 	if (vdec_secure(hw_to_vdec(hw)))
 		return 0;
 
+	if (hw->i_only)
+		return 0;
+
 	if ((dec_control & DEC_CONTROL_FLAG_FORCE_2997_1080P_INTERLACE)
 		&& hw->bitstream_restriction_flag
 		&& (hw->frame_width == 1920)
