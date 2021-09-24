@@ -377,6 +377,13 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 		}
 	}
 
+	if ((ctx->output_pix_fmt == V4L2_PIX_FMT_H264) &&
+		(ctx->picinfo.field != V4L2_FIELD_NONE)) {
+		if (is_over_size(width, height, size)) {
+			return false;
+		}
+	}
+
 	if (ctx->vpp_cfg.enable_nr) {
 		if (ctx->vpp_cfg.enable_local_buf)
 			*mode = VPP_MODE_NOISE_REDUC_LOCAL;
@@ -792,8 +799,13 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 
 	if (dstbuf->vb.vb2_buf.state == VB2_BUF_STATE_ACTIVE) {
 		/* binding vframe handle. */
-		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
-			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+			if ((vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR) && (fb->status == FB_ST_GE2D))
+				vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+		} else {
+			if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
+				vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+		}
 		vf->omx_index = vf->index_disp;
 		dstbuf->privdata.vf = *vf;
 
@@ -3535,7 +3547,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	ctx->last_decoded_picinfo = ctx->picinfo;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Picture buffer count: dec:%u, vpp:%u, margin:%u, ge2d:%u, total:%u\n",
+		"Picture buffer count: dec:%u, vpp:%u, ge2d:%u, margin:%u, total:%u\n",
 		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
 		ctx->picinfo.dpb_margin,
 		CTX_BUF_TOTAL(ctx));

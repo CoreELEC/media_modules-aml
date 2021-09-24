@@ -27,6 +27,7 @@
 #include "aml_vcodec_vpp.h"
 #include "aml_vcodec_adapt.h"
 #include "vdec_drv_if.h"
+#include "../common/chips/decoder_cpu_ver_info.h"
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
 #include <trace/events/meson_atrace.h>
@@ -993,9 +994,6 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		vf->type |= VIDTYPE_V4L_EOS;
 #endif
 
-	if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
-		vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
-
 	in_buf->di_buf.vf = vf;
 	in_buf->di_buf.flag = 0;
 	if (vf->type & VIDTYPE_V4L_EOS)
@@ -1003,6 +1001,14 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 
 	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 	in_buf->aml_buf = container_of(fb, struct aml_video_dec_buf, frame_buffer);
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		if ((vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR) && (fb->status == FB_ST_GE2D))
+			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+	} else {
+		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
+			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+	}
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"vpp_push_vframe: idx:%d, vf:%px, idx:%d, type:%x, ts:%lld\n",
