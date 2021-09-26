@@ -185,6 +185,8 @@ u32 debug_meta;
 
 static int enable_stream_mode_multi_dec;
 
+st_userdata userdata;
+
 typedef void (*vdec_frame_rate_event_func)(int);
 
 #if 1
@@ -2845,6 +2847,36 @@ static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_
 	vdec_core_unlock(core, flags);
 }
 
+st_userdata *get_vdec_userdata_ctx()
+{
+	return &userdata;
+}
+EXPORT_SYMBOL(get_vdec_userdata_ctx);
+
+static void vdec_userdata_ctx_release(struct vdec_s *vdec)
+{
+	int i;
+	st_userdata *userdata = get_vdec_userdata_ctx();
+
+	mutex_lock(&userdata->mutex);
+
+	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
+		if (userdata->used[i] == 1 && vdec->video_id != 0xffffffff) {
+			if (vdec_get_debug_flags() & 0x10000000)
+				pr_info("ctx_release i: %d userdata.id %d\n",
+				i, userdata->id[i]);
+			userdata->ready_flag[i] = 0;
+			userdata->id[i] = -1;
+			userdata->used[i] = 0;
+			userdata->set_id_flag = 0;
+		}
+	}
+
+	mutex_unlock(&userdata->mutex);
+
+	return;
+}
+
 /* vdec_create/init/release/destroy are applied to both dual running decoders
  */
 void vdec_release(struct vdec_s *vdec)
@@ -2916,6 +2948,8 @@ void vdec_release(struct vdec_s *vdec)
 
 	if (vdec->vbuf.ops && !vdec->master)
 		vdec->vbuf.ops->release(&vdec->vbuf);
+
+	vdec_userdata_ctx_release(vdec);
 
 	pr_debug("vdec_release instance %p, total %d\n", vdec,
 		atomic_read(&vdec_core->vdec_nr));
