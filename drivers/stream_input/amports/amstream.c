@@ -126,7 +126,6 @@ static int slow_input;
 /* #define DATA_DEBUG */
 static int use_bufferlevelx10000 = 10000;
 static int reset_canuse_buferlevel(int level);
-void amstream_userdata_deinit(struct vdec_s *vdec);
 
 static struct platform_device *amstream_pdev;
 struct device *amports_get_dma_device(void)
@@ -329,20 +328,6 @@ static wait_queue_head_t amstream_userdata_wait;
 static struct userdata_poc_info_t userdata_poc_info[USERDATA_FIFO_NUM];
 static int userdata_poc_ri, userdata_poc_wi;
 static int last_read_wi;
-
-#define MAX_USERDATA_CHANNEL_NUM 9
-
-typedef struct {
-	struct mutex mutex;
-	wait_queue_head_t userdata_wait;
-	u32 video_id;
-	u32 set_id_flag;
-	u32 ready_flag[MAX_USERDATA_CHANNEL_NUM];
-	int used[MAX_USERDATA_CHANNEL_NUM];
-	u32 id[MAX_USERDATA_CHANNEL_NUM];
-} st_userdata;
-
-st_userdata  userdata;
 
 /*bit 1 force dual layer
  *bit 2 force frame mode
@@ -1139,7 +1124,6 @@ static int amstream_port_release(struct port_priv_s *priv)
 	}
 
 	if (port->type & PORT_TYPE_VIDEO) {
-		amstream_userdata_deinit(priv->vdec);
 		video_port_release(priv, pvbuf, 0);
 	}
 
@@ -1515,35 +1499,40 @@ EXPORT_SYMBOL(wakeup_userdata_poll);
 void amstream_wakeup_userdata_poll(struct vdec_s *vdec)
 {
 	int i;
+	st_userdata *userdata = get_vdec_userdata_ctx();
 
 	if (vdec == NULL) {
 		pr_info("Error, invalid vdec instance!\n");
 		return;
 	}
 
-	mutex_lock(&userdata.mutex);
+	mutex_lock(&userdata->mutex);
 
 	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-		if (userdata.set_id_flag && (userdata.id[i] == vdec->video_id)) {
-			userdata.ready_flag[i] = 1;
+		if (userdata->set_id_flag && (userdata->id[i] == vdec->video_id)) {
+			userdata->ready_flag[i] = 1;
 			if (vdec_get_debug_flags() & 0x10000000)
 				pr_info("%s, wakeup! id = %d\n", __func__, vdec->video_id);
 			break;
-		} else if (!userdata.set_id_flag) {
-			if (!userdata.used[0]) {
+		} else if (!userdata->set_id_flag) {
+			if (!userdata->used[0]) {
 				vdec->video_id = vdec->id;
-				userdata.id[0] = vdec->id;
-				userdata.used[0] = 1;
+				userdata->id[0] = vdec->id;
+				userdata->used[0] = 1;
 			}
 
-			userdata.ready_flag[i] = 1;
+			if (vdec_get_debug_flags() & 0x10000000)
+				pr_info("%s[%d] userdata instance %d ready!\n",
+				__func__, i, userdata->id[i]);
+
+			userdata->ready_flag[i] = 1;
 			break;
 		}
 	}
 
-	mutex_unlock(&userdata.mutex);
+	mutex_unlock(&userdata->mutex);
 
-	wake_up_interruptible(&userdata.userdata_wait);
+	wake_up_interruptible(&userdata->userdata_wait);
 }
 EXPORT_SYMBOL(amstream_wakeup_userdata_poll);
 
@@ -1552,63 +1541,42 @@ static unsigned int amstream_userdata_poll(struct file *file,
 {
 	int fd_match = 0;
 	int i;
+	st_userdata *userdata = get_vdec_userdata_ctx();
 
-	poll_wait(file, &userdata.userdata_wait, wait_table);
-	mutex_lock(&userdata.mutex);
+	poll_wait(file, &userdata->userdata_wait, wait_table);
+	mutex_lock(&userdata->mutex);
 	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-		if (userdata.id[i] == userdata.video_id && userdata.ready_flag[i] == 1) {
+		if (userdata->id[i] == userdata->video_id && userdata->ready_flag[i] == 1) {
 			fd_match = 1;
 			if (vdec_get_debug_flags() & 0x10000000)
-				pr_info("%s, success! id = %d\n", __func__, userdata.video_id);
+				pr_info("%s, success! id = %d\n", __func__, userdata->video_id);
 			break;
 		}
 	}
 
 	if (fd_match) {
-		mutex_unlock(&userdata.mutex);
+		mutex_unlock(&userdata->mutex);
 		return POLLIN | POLLRDNORM;
 	}
 
-	mutex_unlock(&userdata.mutex);
+	mutex_unlock(&userdata->mutex);
 	return 0;
 }
 
 static void amstream_userdata_init(void)
 {
 	int i;
+	st_userdata *userdata = get_vdec_userdata_ctx();
 
-	init_waitqueue_head(&userdata.userdata_wait);
-	mutex_init(&userdata.mutex);
-	userdata.set_id_flag = 0;
-
-	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-		userdata.ready_flag[i] = 0;
-		userdata.id[i] = -1;
-		userdata.used[i] = 0;
-	}
-
-	return;
-}
-
-void amstream_userdata_deinit(struct vdec_s *vdec)
-{
-	int i;
-
-	mutex_lock(&userdata.mutex);
+	init_waitqueue_head(&userdata->userdata_wait);
+	mutex_init(&userdata->mutex);
+	userdata->set_id_flag = 0;
 
 	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-		if (userdata.used[i] == 1 && vdec->video_id != 0xffffffff) {
-			if (vdec_get_debug_flags() & 0x10000000)
-				pr_info("deinit clear i: %d userdata.id %d\n",
-				i, userdata.id[i]);
-			userdata.ready_flag[i] = 0;
-			userdata.id[i] = -1;
-			userdata.used[i] = 0;
-			userdata.set_id_flag = 0;
-		}
+		userdata->ready_flag[i] = 0;
+		userdata->id[i] = -1;
+		userdata->used[i] = 0;
 	}
-
-	mutex_unlock(&userdata.mutex);
 
 	return;
 }
@@ -1911,7 +1879,6 @@ static int amstream_release(struct inode *inode, struct file *file)
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 		port_flag = priv->vdec->port_flag;
 #endif
-		amstream_userdata_deinit(priv->vdec);
 		if (priv->vdec->slave)
 			slave = priv->vdec->slave;
 		vdec_release(priv->vdec);
@@ -2196,6 +2163,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 	struct am_ioctl_parm parm;
 	long r = 0;
 	int i;
+	st_userdata *userdata = get_vdec_userdata_ctx();
 
 	if (copy_from_user
 		((void *)&parm, (void *)arg,
@@ -2505,17 +2473,17 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		break;
 	case AMSTREAM_SET_VIDEO_ID:
 		priv->vdec->video_id = parm.data_32;
-		mutex_lock(&userdata.mutex);
+		mutex_lock(&userdata->mutex);
 		for (i = 0;i < MAX_USERDATA_CHANNEL_NUM; i++) {
-			if (userdata.used[i] == 0) {
-				userdata.id[i] = priv->vdec->video_id;
-				userdata.used[i] = 1;
-				userdata.video_id = priv->vdec->video_id;
-				userdata.set_id_flag = 1;
+			if (userdata->used[i] == 0) {
+				userdata->id[i] = priv->vdec->video_id;
+				userdata->used[i] = 1;
+				userdata->video_id = priv->vdec->video_id;
+				userdata->set_id_flag = 1;
 				break;
 			}
 		}
-		mutex_unlock(&userdata.mutex);
+		mutex_unlock(&userdata->mutex);
 
 		pr_info("AMSTREAM_SET_VIDEO_ID video_id: %d\n", parm.data_32);
 		break;
@@ -3513,22 +3481,23 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 		{
 			unsigned int ready_vdec = 0;
 			u32 ready_flag = 0;
+			st_userdata *userdata = get_vdec_userdata_ctx();
 
-			mutex_lock(&userdata.mutex);
+			mutex_lock(&userdata->mutex);
 			for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-				if (userdata.video_id == userdata.id[i] &&
-					userdata.ready_flag[i] == 1) {
-					ready_vdec = userdata.id[i];
-					userdata.ready_flag[i] = 0;
+				if (userdata->video_id == userdata->id[i] &&
+					userdata->ready_flag[i] == 1) {
+					ready_vdec = userdata->id[i];
+					userdata->ready_flag[i] = 0;
 					ready_flag = 1;
 					break;
 				}
 			}
 			if (!ready_flag) {
-				pr_info("instance %d not ready!\n", userdata.video_id);
+				pr_info("instance %d not ready!\n", userdata->video_id);
 				r = -EINVAL;
 			}
-			mutex_unlock(&userdata.mutex);
+			mutex_unlock(&userdata->mutex);
 
 			put_user(ready_vdec, (uint32_t __user *)arg);
 			if (vdec_get_debug_flags() & 0x10000000)

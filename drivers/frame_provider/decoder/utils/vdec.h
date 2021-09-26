@@ -327,6 +327,18 @@ struct vdec_s {
 	u32 discard_start_data_flag;
 };
 
+#define MAX_USERDATA_CHANNEL_NUM 9
+
+typedef struct {
+	struct mutex mutex;
+	wait_queue_head_t userdata_wait;
+	u32 video_id;
+	u32 set_id_flag;
+	u32 ready_flag[MAX_USERDATA_CHANNEL_NUM];
+	int used[MAX_USERDATA_CHANNEL_NUM];
+	u32 id[MAX_USERDATA_CHANNEL_NUM];
+} st_userdata;
+
 /* common decoder vframe provider name to use default vfm path */
 #define VFM_DEC_PROVIDER_NAME "decoder"
 #define VFM_DEC_DVBL_PROVIDER_NAME "dvbldec"
@@ -542,4 +554,7 @@ void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size);
 void rdma_front_end_wrok(dma_addr_t ddr_phy_addr, u32 size);
 void rdma_back_end_work(dma_addr_t back_ddr_phy_addr, u32 size);
 int is_rdma_enable(void);
+
+st_userdata *get_vdec_userdata_ctx(void);
+
 #endif				/* VDEC_H */
