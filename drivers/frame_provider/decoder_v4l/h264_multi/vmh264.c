@@ -6702,8 +6702,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 #ifdef DETECT_WRONG_MULTI_SLICE
 		hw->cur_picture_slice_count++;
-		if (hw->multi_slice_pic_flag == 1 &&
-			hw->cur_picture_slice_count == 1 &&
+		if (hw->cur_picture_slice_count == 1 &&
 			(error_proc_policy & 0x10000)) {
 			hw->first_pre_frame_num = p_H264_Dpb->mVideo.pre_frame_num;
 		}
