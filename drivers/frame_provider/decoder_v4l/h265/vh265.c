@@ -8551,8 +8551,8 @@ static int parse_sei(struct hevc_state_s *hevc,
 	char *p = sei_buf;
 	char *p_sei;
 	uint16_t header;
-	uint8_t nal_unit_type;
-	uint8_t payload_type, payload_size;
+	uint16_t nal_unit_type;
+	uint16_t payload_type, payload_size;
 	int i, j;
 
 	if (size < 2)
@@ -8564,9 +8564,16 @@ static int parse_sei(struct hevc_state_s *hevc,
 	if ((nal_unit_type != NAL_UNIT_SEI)
 	&& (nal_unit_type != NAL_UNIT_SEI_SUFFIX))
 		return 0;
-	while (p+2 <= sei_buf+size) {
+	while (p+4 <= sei_buf+size) {
 		payload_type = *p++;
+		if (payload_type == 0xff) {
+			payload_type += *p++;
+		}
 		payload_size = *p++;
+		if (payload_size == 0xff) {
+			payload_size += *p++;
+		}
+
 		if (p+payload_size <= sei_buf+size) {
 			switch (payload_type) {
 			case SEI_PicTiming:
