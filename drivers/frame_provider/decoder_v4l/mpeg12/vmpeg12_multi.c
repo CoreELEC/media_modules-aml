@@ -2149,7 +2149,7 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 			hw->dec_num, index, info, seqinfo, offset);
 
 		hw->frame_prog = info & PICINFO_PROG;
-#if 0
+#if 1
 		if ((seqinfo & SEQINFO_EXT_AVAILABLE) &&
 			((seqinfo & SEQINFO_PROG) == 0))
 			hw->frame_prog = 0;

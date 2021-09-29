@@ -559,6 +559,7 @@ retry:
 			fb = &out_buf->aml_buf->frame_buffer;
 			fb->status = FB_ST_VPP;
 
+			memcpy(vf_out, in_buf->di_buf.vf, sizeof(*vf_out));
 			memcpy(vf_out->canvas0_config,
 				in_buf->di_buf.vf->canvas0_config,
 				2 * sizeof(struct canvas_config_s));
