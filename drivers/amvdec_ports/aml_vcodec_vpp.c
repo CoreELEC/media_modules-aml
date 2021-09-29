@@ -1004,8 +1004,19 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 	in_buf->aml_buf = container_of(fb, struct aml_video_dec_buf, frame_buffer);
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
-		if ((vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR) && (fb->status == FB_ST_GE2D))
-			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR) {
+			if ((vpp->ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
+				(vpp->ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
+				(vpp->ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG2) &&
+				(vpp->ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG4) &&
+				(vpp->ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG)) {
+				vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+			}
+			else {
+				if (fb->status == FB_ST_GE2D)
+					vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+			}
+		}
 	} else {
 		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
 			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
