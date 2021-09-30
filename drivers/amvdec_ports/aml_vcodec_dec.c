@@ -201,6 +201,11 @@ static const struct aml_codec_framesizes aml_vdec_framesizes[] = {
 				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
 	{
+		.fourcc = V4L2_PIX_FMT_AV1,
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
+	},
+	{
 		.fourcc = V4L2_PIX_FMT_NV21,
 		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
 				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
@@ -596,6 +601,7 @@ static void fb_map_table_clean(struct aml_vcodec_ctx *ctx)
 		ctx->fb_map[i].addr	= 0;
 		ctx->fb_map[i].vframe	= NULL;
 		ctx->fb_map[i].task	= NULL;
+		ctx->fb_map[i].icomp	= 0;
 	}
 
 	aml_vcodec_ctx_unlock(ctx, flags);
@@ -606,7 +612,8 @@ static void fb_map_table_clean(struct aml_vcodec_ctx *ctx)
 static void fb_map_table_hold(struct aml_vcodec_ctx *ctx,
 				struct vb2_buffer *vb,
 				struct vframe_s *vf,
-				struct task_chain_s *task)
+				struct task_chain_s *task,
+				u32 icomp)
 {
 	int i;
 	ulong addr, flags;
@@ -621,6 +628,11 @@ static void fb_map_table_hold(struct aml_vcodec_ctx *ctx,
 			ctx->fb_map[i].task	= task;
 			ctx->fb_map[i].addr	= addr;
 			ctx->fb_map[i].vframe	= vf;
+			ctx->fb_map[i].icomp	= icomp;
+
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+				"%s, task:%px, vf:%px, addr:%lx, icomp:%u\n",
+				__func__, task, vf, addr, icomp);
 			break;
 		}
 	}
@@ -637,7 +649,8 @@ static void fb_map_table_hold(struct aml_vcodec_ctx *ctx,
 static void fb_map_table_fetch(struct aml_vcodec_ctx *ctx,
 				struct vb2_buffer *vb,
 				struct vframe_s **vf,
-				struct task_chain_s **task)
+				struct task_chain_s **task,
+				u32 *icomp)
 {
 	int i;
 	ulong addr, flags;
@@ -650,10 +663,16 @@ static void fb_map_table_fetch(struct aml_vcodec_ctx *ctx,
 		if (addr == ctx->fb_map[i].addr) {
 			*task = ctx->fb_map[i].task;
 			*vf = ctx->fb_map[i].vframe;
+			*icomp = ctx->fb_map[i].icomp;
+
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+				"%s, task:%px, vf:%px, addr:%lx, icomp:%u\n",
+				__func__, task, vf, addr, *icomp);
 
 			ctx->fb_map[i].task	= NULL;
 			ctx->fb_map[i].vframe	= NULL;
 			ctx->fb_map[i].addr	= 0;
+			ctx->fb_map[i].icomp	= 0;
 			break;
 		}
 	}
@@ -834,7 +853,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 			}
 		}
 
-		fb_map_table_hold(ctx, vb2_buf, vf, fb->task);
+		fb_map_table_hold(ctx, vb2_buf, vf, fb->task, dstbuf->internal_index);
 
 		v4l2_m2m_buf_done(&dstbuf->vb, VB2_BUF_STATE_DONE);
 
@@ -3671,12 +3690,14 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 		struct vframe_s *vf = NULL;
 		struct task_chain_s *task = NULL;
 		struct task_chain_s *task_pre = fb->task;
+		u32 icomp = -1;
 
-		fb_map_table_fetch(ctx, vb, &vf, &task);
+		fb_map_table_fetch(ctx, vb, &vf, &task, &icomp);
 		if (vf) {
 			fb->task		= task;
 			fb->vframe		= vf;
 			vf->v4l_mem_handle	= (ulong)fb;
+			buf->internal_index	= icomp;
 			task_chain_update_object(task, fb);
 		} else {
 			buf->que_in_m2m = false;
@@ -3691,11 +3712,12 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
  		}
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-			"init buffer(%s), vb idx:%d, task:(%px -> %px), addr:(%lx -> %lx)\n",
+			"init buffer(%s), vb idx:%d, task:(%px -> %px), addr:(%lx -> %lx), icomp:%d\n",
 			vf ? "update" : "idel",
 			vb->index, task_pre, fb->task,
 			fb->m.mem[0].addr,
-			(ulong) vb2_dma_contig_plane_dma_addr(vb, 0));
+			(ulong) vb2_dma_contig_plane_dma_addr(vb, 0),
+			(int)icomp);
 
 		update_vdec_buf_plane(ctx, fb, vb);
 	}

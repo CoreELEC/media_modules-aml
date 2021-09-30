@@ -463,12 +463,14 @@ struct aml_fb_ops {
  * @header_addr	: used for compress buffer.
  * @vframe	: which is from decoder or vpp vf pool.
  * @task	: context of task chain.
+ * @icomp	: compress buffer index.
  */
 struct aml_fb_map_table {
 	ulong		addr;
 	ulong		header_addr;
 	struct vframe_s	*vframe;
 	struct task_chain_s *task;
+	u32		icomp;
 };
 
 /*

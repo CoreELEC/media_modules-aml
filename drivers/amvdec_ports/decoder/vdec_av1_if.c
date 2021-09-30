@@ -246,12 +246,12 @@ static u32 vdec_config_default_parms(u8 *parm)
 	u8 *pbuf = parm;
 
 	pbuf += sprintf(pbuf, "parm_v4l_codec_enable:1;");
-	pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:11;");
-	pbuf += sprintf(pbuf, "av1_double_write_mode:3;");
+	pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:7;");
+	pbuf += sprintf(pbuf, "av1_double_write_mode:1;");
 	pbuf += sprintf(pbuf, "av1_buf_width:1920;");
 	pbuf += sprintf(pbuf, "av1_buf_height:1088;");
-	pbuf += sprintf(pbuf, "av1_max_pic_w:8192;");
-	pbuf += sprintf(pbuf, "av1_max_pic_h:4608;");
+	pbuf += sprintf(pbuf, "av1_max_pic_w:4096;");
+	pbuf += sprintf(pbuf, "av1_max_pic_h:2304;");
 	pbuf += sprintf(pbuf, "save_buffer_mode:0;");
 	pbuf += sprintf(pbuf, "no_head:0;");
 	pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:0;");
@@ -289,7 +289,7 @@ static void vdec_parser_parms(struct vdec_av1_inst *inst)
 			ctx->config.parm.dec.cfg.low_latency_mode);
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
-		ctx->config.parm.dec.cfg.double_write_mode = 16;
+		ctx->config.parm.dec.cfg.double_write_mode = 1;
 		ctx->config.parm.dec.cfg.ref_buf_margin = 7;
 		ctx->config.length = vdec_config_default_parms(ctx->config.buf);
 	}

@@ -169,7 +169,7 @@ static u32 vdec_config_default_parms(u8 *parm)
 
 	pbuf += sprintf(pbuf, "parm_v4l_codec_enable:1;");
 	pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:7;");
-	pbuf += sprintf(pbuf, "vp9_double_write_mode:16;");
+	pbuf += sprintf(pbuf, "vp9_double_write_mode:1;");
 	pbuf += sprintf(pbuf, "vp9_buf_width:1920;");
 	pbuf += sprintf(pbuf, "vp9_buf_height:1088;");
 	pbuf += sprintf(pbuf, "vp9_max_pic_w:4096;");
@@ -213,7 +213,7 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 			ctx->config.parm.dec.cfg.low_latency_mode);
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
-		ctx->config.parm.dec.cfg.double_write_mode = 16;
+		ctx->config.parm.dec.cfg.double_write_mode = 1;
 		ctx->config.parm.dec.cfg.ref_buf_margin = 7;
 		ctx->config.length = vdec_config_default_parms(ctx->config.buf);
 	}
