@@ -12455,6 +12455,12 @@ int vh265_dec_status(struct vdec_info *vstatus)
 		vstatus->frame_rate = -1;
 
 	vstatus->status = hevc->stat | hevc->fatal_error;
+	if (!vdec_is_support_4k() &&
+		(IS_4K_SIZE(vstatus->frame_width, vstatus->frame_height)) &&
+		(vstatus->frame_width <= 4096 && vstatus->frame_height <= 2304)) {
+		vstatus->status |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+	}
+
 	vstatus->frame_dur = hevc->frame_dur;
 	if (hevc->gvs) {
 		vstatus->error_count = hevc->gvs->error_frame_count;
