@@ -5943,8 +5943,15 @@ int dpb_check_ref_list_error(
 	/*int j;*/
 	struct Slice *currSlice = &p_H264_Dpb->mSlice;
 	/* in first output, ignore ref check */
-	if (p_H264_Dpb->first_insert_frame < FirstInsertFrm_SKIPDONE)
+	if ((p_H264_Dpb->first_insert_frame == FirstInsertFrm_OUT) &&
+		(p_H264_Dpb->mVideo.dec_picture) &&
+		p_H264_Dpb->first_output_poc > p_H264_Dpb->mVideo.dec_picture->poc) {
+
+		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
+			"p_H264_Dpb->first_output_poc %d, p_H264_Dpb->mVideo.dec_picture->poc %d\n",
+			p_H264_Dpb->first_output_poc, p_H264_Dpb->mVideo.dec_picture->poc);
 		return 0;
+	}
 	if ((currSlice->slice_type != I_SLICE) &&
 		(currSlice->slice_type != SI_SLICE)) {
 		for (i = 0; i < currSlice->listXsize[0]; i++) {

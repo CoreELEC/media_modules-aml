@@ -3146,21 +3146,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			}
 		}
 
-		if (i == 0) {
-			struct vdec_s *pvdec;
-			struct vdec_info vs;
-
-			pvdec = hw_to_vdec(hw);
-			memset(&vs, 0, sizeof(struct vdec_info));
-			pvdec->dec_status(pvdec, &vs);
-			decoder_do_frame_check(pvdec, vf);
-			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
-
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
-			"[%s:%d] i_decoded_frame = %d p_decoded_frame = %d b_decoded_frame = %d\n",
-			__func__, __LINE__,vs.i_decoded_frames,vs.p_decoded_frames,vs.b_decoded_frames);
-		}
-
 		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
@@ -3184,6 +3169,22 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			atomic_add(1, &hw->vf_get_count);
 			continue;
 		}
+
+		if (i == 0) {
+			struct vdec_s *pvdec;
+			struct vdec_info vs;
+
+			pvdec = hw_to_vdec(hw);
+			memset(&vs, 0, sizeof(struct vdec_info));
+			pvdec->dec_status(pvdec, &vs);
+			decoder_do_frame_check(pvdec, vf);
+			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
+
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
+			"[%s:%d] i_decoded_frame = %d p_decoded_frame = %d b_decoded_frame = %d\n",
+			__func__, __LINE__,vs.i_decoded_frames,vs.p_decoded_frames,vs.b_decoded_frames);
+		}
+
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->trace.pts_name, vf->pts);
 		ATRACE_COUNTER(hw->trace.disp_q_name, kfifo_len(&hw->display_q));
@@ -6345,8 +6346,11 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 		mb_width = 256;
 	decode_mb_count = ((mby_mbx & 0xff) * mb_width +
 		(((mby_mbx >> 8) & 0xff) + 1));
-	if (mby_mbx == 0)
+	if ((mby_mbx == 0) && (p_H264_Dpb->dec_dpb_status != H264_SLICE_HEAD_DONE)) {
+		dpb_print(DECODE_ID(hw), 0,
+			"mby_mbx is zero\n");
 		return;
+	}
 	if (get_cur_slice_picture_struct(p_H264_Dpb) != FRAME)
 		mb_total /= 2;
 
@@ -6355,7 +6359,7 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 		p->data_flag |= ERROR_FLAG;
 	}
 
-	if (error_proc_policy & 0x100) {
+	if (error_proc_policy & 0x100 && !(p->data_flag & ERROR_FLAG)) {
 		if (decode_mb_count < mb_total) {
 			p->data_flag |= ERROR_FLAG;
 			if (((error_proc_policy & 0x20000) &&
@@ -6718,6 +6722,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		unsigned int decode_mb_count, mby_mbx;
 		struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
 		reset_process_time(hw);
+		hw->frmbase_cont_flag = 0;
 
 		if ((pic != NULL) && (pic->mb_aff_frame_flag == 1))
 			first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3] * 2;
@@ -7159,6 +7164,16 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 pic_done_proc:
 		reset_process_time(hw);
+		if ((dec_dpb_status == H264_SEARCH_BUFEMPTY) ||
+			(dec_dpb_status == H264_DECODE_BUFEMPTY) ||
+			(dec_dpb_status == H264_DECODE_TIMEOUT) ||
+			((dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
+			hw->data_flag |= ERROR_FLAG;
+			if (hw->dpb.mVideo.dec_picture)
+				hw->dpb.mVideo.dec_picture->data_flag |= ERROR_FLAG;
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+				"%s, mark err_frame\n", __func__);
+		}
 		vh264_pic_done_proc(vdec);
 
 		if (hw->frmbase_cont_flag) {
@@ -7273,7 +7288,8 @@ pic_done_proc:
 empty_proc:
 		reset_process_time(hw);
 		if ((error_proc_policy & 0x40000) &&
-			dec_dpb_status == H264_DECODE_TIMEOUT)
+			((dec_dpb_status == H264_DECODE_TIMEOUT) ||
+			(!hw->frmbase_cont_flag && (dec_dpb_status == H264_SEARCH_BUFEMPTY || dec_dpb_status == H264_DECODE_BUFEMPTY) && input_frame_based(vdec))))
 			goto pic_done_proc;
 		if (!hw->frmbase_cont_flag)
 			release_cur_decoding_buf(hw);
@@ -7913,6 +7929,7 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 	int i, j;
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 
+	hw->frmbase_cont_flag = 0;
 	/* if (hw->init_flag == 0) { */
 	if (h264_debug_flag & 0x40000000) {
 		/* if (1) */
@@ -9348,6 +9365,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
 	} else if (hw->dec_result == DEC_RESULT_AGAIN)
@@ -9654,6 +9673,13 @@ result_done:
 			hw->stat &= ~STAT_ISR_REG;
 		}
 	}
+
+	if (p_H264_Dpb->mVideo.dec_picture) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"%s, release decoded picture\n", __func__);
+		release_cur_decoding_buf(hw);
+	}
+
 	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	del_timer_sync(&hw->check_timer);
 	hw->stat &= ~STAT_TIMER_ARM;

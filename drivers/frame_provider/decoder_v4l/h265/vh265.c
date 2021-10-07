@@ -11205,11 +11205,20 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 #endif
 			hevc->empty_flag = 0;
 pic_done:
+			if (vdec->master == NULL && vdec->slave == NULL &&
+				hevc->empty_flag == 0) {
+				hevc->over_decode =
+					(READ_VREG(HEVC_SHIFT_STATUS) >> 15) & 0x1;
+				if (hevc->over_decode)
+					hevc_print(hevc, 0,
+						"!!!Over decode %d\n", __LINE__);
+			}
 			if (input_frame_based(hw_to_vdec(hevc)) &&
 				frmbase_cont_bitlevel != 0 &&
 				(hevc->decode_size > READ_VREG(HEVC_SHIFT_BYTE_COUNT)) &&
 				(hevc->decode_size - (READ_VREG(HEVC_SHIFT_BYTE_COUNT))
 				 >	frmbase_cont_bitlevel)) {
+				 check_pic_decoded_error(hevc, READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff);
 				/*handle the case: multi pictures in one packet*/
 				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 				"%s  has more data index= %d, size=0x%x shiftcnt=0x%x)\n",
@@ -13806,7 +13815,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			& 0xffffff;
 
 		if (vdec->master == NULL && vdec->slave == NULL &&
-			hevc->empty_flag == 0 && input_stream_based(vdec)) {
+			hevc->empty_flag == 0) {
 			hevc->over_decode =
 				(READ_VREG(HEVC_SHIFT_STATUS) >> 15) & 0x1;
 			if (hevc->over_decode)
