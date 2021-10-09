@@ -9479,10 +9479,12 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		pbi->frame_width = pbi->vp9_param.p.width;
 		pbi->frame_height = pbi->vp9_param.p.height;
 
-		if (!pbi->has_keyframe &&
-			((pbi->frame_width == 0) ||
-			(pbi->frame_height == 0))) {
+		if (is_oversize(pbi->frame_width, pbi->frame_height)) {
 			continue_decoding(pbi);
+			vp9_print(pbi, 0, "pic size(%d x %d) is oversize\n",
+				pbi->frame_width, pbi->frame_height);
+			if (pbi->m_ins_flag)
+				start_process_time(pbi);
 			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
 			return IRQ_HANDLED;
