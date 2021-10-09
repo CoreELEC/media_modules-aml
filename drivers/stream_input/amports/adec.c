@@ -377,7 +377,7 @@ s32 astream_dev_register(void)
 			0x100)) & (PAGE_MASK);
 	}
 
-#if 1
+#ifdef CONFIG_UIO
 	if (uio_register_device(&astream_dev->dev, &astream_uio_info)) {
 		pr_info("astream UIO device register fail.\n");
 		r = -ENODEV;
@@ -404,7 +404,7 @@ err_3:
 void astream_dev_unregister(void)
 {
 	if (astream_dev) {
-#if 1
+#ifdef CONFIG_UIO
 		uio_unregister_device(&astream_uio_info);
 #endif
 
