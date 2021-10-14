@@ -2210,7 +2210,7 @@ static void init_jpeg_encoder(struct jpegenc_wq_s *wq)
     s32 pic_format; /* 0=RGB; 1=YUV; 2=YUV422; 3=YUV420 */
     s32 pic_x_start, pic_x_end, pic_y_start, pic_y_end;
     s32 pic_width, pic_height;
-    s32 q_sel_comp0, q_sel_comp1, q_sel_comp2;
+    u32 q_sel_comp0, q_sel_comp1, q_sel_comp2;
     s32 dc_huff_sel_comp0, dc_huff_sel_comp1, dc_huff_sel_comp2;
     s32 ac_huff_sel_comp0, ac_huff_sel_comp1, ac_huff_sel_comp2;
     s32 lastcoeff_sel;
@@ -2258,7 +2258,12 @@ static void init_jpeg_encoder(struct jpegenc_wq_s *wq)
         q_sel_comp1 = q_sel_comp0 + 1;
         q_sel_comp2 = q_sel_comp1;
     }
-
+    if (q_sel_comp0 >= 6 || q_sel_comp1 >= 6)
+    {
+        jenc_pr(LOG_ERROR, "error, q_sel_comp0, q_sel_comp1 is invalid %d,%d\n",
+            q_sel_comp0, q_sel_comp1);
+        return;
+    }
     dc_huff_sel_comp0 = DC_HUFF_SEL_COMP0;
     dc_huff_sel_comp1 = DC_HUFF_SEL_COMP1;
     dc_huff_sel_comp2 = DC_HUFF_SEL_COMP2;
@@ -4199,17 +4204,18 @@ static const struct file_operations jpegenc_fops = {
 static s32 jpegenc_wq_init(void)
 {
     jenc_pr(LOG_DEBUG, "jpegenc_wq_init.\n");
+    spin_lock_init(&gJpegenc.sem_lock);
+    spin_lock(&gJpegenc.sem_lock);
     gJpegenc.irq_requested = false;
     gJpegenc.process_irq = false;
     gJpegenc.inited = false;
     gJpegenc.opened = 0;
     gJpegenc.encode_hw_status = JPEGENC_ENCODER_IDLE;
-    spin_lock_init(&gJpegenc.sem_lock);
 
     tasklet_init(&gJpegenc.tasklet,
              jpegenc_isr_tasklet,
              (ulong)&gJpegenc);
-
+    spin_unlock(&gJpegenc.sem_lock);
     if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB)
         clock_level = 5;
     else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_M8M2)

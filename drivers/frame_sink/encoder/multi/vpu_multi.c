@@ -860,8 +860,7 @@ static irqreturn_t vpu_irq_handler(s32 irq, void *dev_id)
 			enc_pr(LOG_INFO, " done_inst: %08x", done_inst);
 			enc_pr(LOG_INFO, " seq_inst: %08x\n", seq_inst);
 
-			if (intr_inst_index >= 0
-				&& intr_inst_index < MAX_NUM_INSTANCE) {
+			if (intr_inst_index < MAX_NUM_INSTANCE) {
 				if (intr_reason == (1 << INT_BSBUF_EMPTY)) {
 					empty_inst = empty_inst &
 						~(1 << intr_inst_index);
@@ -1338,7 +1337,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_GET_RESERVED_VIDEO_MEMORY32\n");
-
+			memset(&buf32, 0, sizeof(struct compat_vpudrv_buffer_t));
 			buf32.size = s_video_memory.size;
 			buf32.phys_addr =
 				(compat_ulong_t)s_video_memory.phys_addr;
@@ -1372,10 +1371,15 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 				sizeof(struct vpudrv_intr_info_t));
 			if (ret != 0)
 				return -EFAULT;
-
 			intr_inst_index = info.intr_inst_index;
 
 			intr_reason_in_q = 0;
+			if (intr_inst_index >= MAX_NUM_INSTANCE)
+			{
+				enc_pr(LOG_ALL,
+					"error, intr_inst_index is invalid !\n");
+				return -EFAULT;
+			}
 			interrupt_flag_in_q = kfifo_out_spinlocked(
 				&s_interrupt_pending_q[intr_inst_index],
 				&intr_reason_in_q, sizeof(u32),
@@ -1517,6 +1521,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_GET_INSTANCE_POOL32\n");
+			memset(&buf32, 0, sizeof(struct compat_vpudrv_buffer_t));
 			ret = down_interruptible(&s_vpu_sem);
 			if (ret != 0)
 				break;
@@ -1627,6 +1632,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_GET_COMMON_MEMORY32\n");
 
+			memset(&buf32, 0, sizeof(struct compat_vpudrv_buffer_t));
 			buf32.size = s_common_memory.size;
 			buf32.phys_addr =
 				(compat_ulong_t)
@@ -1691,10 +1697,16 @@ INTERRUPT_REMAIN_IN_QUEUE:
 			if (copy_from_user(&inst_info,
 				(struct vpudrv_inst_info_t *)arg,
 				sizeof(struct vpudrv_inst_info_t)))
+			{
+				kfree(vil);
 				return -EFAULT;
+			}
 			ret = down_interruptible(&s_vpu_sem);
 			if (ret != 0)
+			{
+				kfree(vil);
 				break;
+			}
 			vil->inst_idx = inst_info.inst_idx;
 			vil->core_idx = inst_info.core_idx;
 			vil->filp = filp;
@@ -1706,6 +1718,14 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				&s_inst_list_head, list) {
 				if (vil->core_idx == inst_info.core_idx)
 					inst_info.inst_open_count++;
+			}
+			if (inst_info.inst_idx >= MAX_NUM_INSTANCE)
+			{
+				enc_pr(LOG_ALL,
+					"error, inst_info.inst_idx is invalid !\n");
+				kfree(vil);
+				spin_unlock(&s_vpu_lock);
+				return -EFAULT;
 			}
 			kfifo_reset(
 				&s_interrupt_pending_q[inst_info.inst_idx]);
@@ -1875,6 +1895,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_GET_REGISTER_INFO32\n");
 
+			memset(&buf32, 0, sizeof(struct compat_vpudrv_buffer_t));
 			buf32.size = s_vpu_register.size;
 			buf32.phys_addr =
 				(compat_ulong_t)
@@ -2427,6 +2448,7 @@ static ssize_t vpu_write(struct file *filp,
 		if (copy_from_user(bit_firmware_info, buf, len)) {
 			enc_pr(LOG_ERROR,
 				"copy_from_user error for firmware_info\n");
+			kfree(bit_firmware_info);
 			return -EFAULT;
 		}
 
@@ -2452,9 +2474,17 @@ static ssize_t vpu_write(struct file *filp,
 				enc_pr(LOG_ERROR,
 					"exceeded than MAX_NUM_VPU_CORE[%d]\n",
 					MAX_NUM_VPU_CORE);
+				kfree(bit_firmware_info);
 				return -ENODEV;
 			}
+			if (bit_firmware_info->core_idx >= MAX_NUM_VPU_CORE)
+			{
+				enc_pr(LOG_ERROR,
+					"bit_firmware_info->core_idx invalid\n");
+				kfree(bit_firmware_info);
+				return -ENODEV;
 
+			}
 			memcpy((void *)&s_bit_firmware_info[bit_firmware_info->core_idx], bit_firmware_info, sizeof(struct vpu_bit_firmware_info_t));
 			kfree(bit_firmware_info);
 			return len;
@@ -2981,7 +3011,9 @@ static s32 vpu_probe(struct platform_device *pdev)
 	s_vpu_irq = -1;
 	cma_pool_size = 0;
 	s_vpu_irq_requested = false;
+	spin_lock(&s_vpu_lock);
 	s_vpu_open_ref_count = 0;
+	spin_unlock(&s_vpu_lock);
 	multienc_dev = NULL;
 	multienc_pdev = NULL;
 	s_register_flag = 0;

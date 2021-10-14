@@ -497,7 +497,9 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 			if (err) {
 				enc_pr(LOG_ERROR,
 					"fail to register interrupt handler\n");
+				spin_lock(&s_vpu_lock);
 				s_vpu_drv_context.open_count--;
+				spin_unlock(&s_vpu_lock);
 				return -EFAULT;
 			}
 			s_vpu_irq_requested = true;
@@ -569,9 +571,11 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 	dma_cfg[2].fd = -1;
 
 	if (r != 0) {
+		spin_lock(&s_vpu_lock);
 		enc_pr(LOG_DEBUG, "vpu_open, error handling, r=%d, s_vpu_drv_context.open_count=%d\n",
 				r, s_vpu_drv_context.open_count);
 		s_vpu_drv_context.open_count--;
+		spin_unlock(&s_vpu_lock);
 	}
 	enc_pr(LOG_DEBUG, "[-] %s, ret: %d\n", __func__, r);
 	return r;
@@ -643,6 +647,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY32\n");
+			memset(&buf32, 0, sizeof(struct compat_vpudrv_buffer_t));
 			ret = down_interruptible(&s_vpu_sem);
 			if (ret == 0) {
 				vbp = kzalloc(sizeof(*vbp), GFP_KERNEL);
@@ -807,6 +812,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 		{
 			struct compat_vpudrv_buffer_t buf32;
 
+			memset(&buf32, 0, sizeof(struct compat_vpudrv_buffer_t));
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_GET_RESERVED_VIDEO_MEMORY_INFO32\n");
 
@@ -955,6 +961,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 		{
 			struct compat_vpudrv_buffer_t buf32;
 
+			memset(&buf32, 0, sizeof(struct compat_vpudrv_buffer_t));
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_GET_INSTANCE_POOL32\n");
 			ret = down_interruptible(&s_vpu_sem);
@@ -1057,6 +1064,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 		{
 			struct compat_vpudrv_buffer_t buf32;
 
+			memset(&buf32, 0, sizeof(struct compat_vpudrv_buffer_t));
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_GET_COMMON_MEMORY32\n");
 
@@ -1118,7 +1126,10 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 			if (copy_from_user(&inst_info,
 				(struct vpudrv_inst_info_t *)arg,
 				sizeof(struct vpudrv_inst_info_t)))
+			{
+				kfree(vil);
 				return -EFAULT;
+			}
 
 			vil->inst_idx = inst_info.inst_idx;
 			vil->core_idx = inst_info.core_idx;
@@ -1279,6 +1290,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 		{
 			struct compat_vpudrv_buffer_t buf32;
 
+			memset(&buf32, 0, sizeof(struct compat_vpudrv_buffer_t));
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_GET_REGISTER_INFO32\n");
 
@@ -1473,6 +1485,7 @@ static ssize_t vpu_write(struct file *filp,
 		if (copy_from_user(bit_firmware_info, buf, len)) {
 			enc_pr(LOG_ERROR,
 				"vpu_write copy_from_user error for bit_firmware_info\n");
+			kfree(bit_firmware_info);
 			return -EFAULT;
 		}
 
@@ -1495,9 +1508,15 @@ static ssize_t vpu_write(struct file *filp,
 				enc_pr(LOG_ERROR,
 					"exceeded than MAX_NUM_VPU_CORE[%d]\n",
 					MAX_NUM_VPU_CORE);
+				kfree(bit_firmware_info);
 				return -ENODEV;
 			}
-
+			if (bit_firmware_info->core_idx >= MAX_NUM_VPU_CORE)
+			{
+				enc_pr(LOG_ERROR,"bit_firmware_info->core_idx %d is invalid!\n", bit_firmware_info->core_idx);
+				kfree(bit_firmware_info);
+				return -1;
+			}
 			memcpy((void *)&s_bit_firmware_info
 				[bit_firmware_info->core_idx],
 				bit_firmware_info,
@@ -1519,21 +1538,26 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 	ret = down_interruptible(&s_vpu_sem);
 	enc_pr(LOG_DEBUG, "vpu_release, ret = %d\n", ret);
 
+	spin_lock(&s_vpu_lock);
 	if (s_vpu_drv_context.open_count <= 0) {
 		enc_pr(LOG_DEBUG, "vpu_release, open_count=%d, already released or even not inited\n",
 			s_vpu_drv_context.open_count);
 		s_vpu_drv_context.open_count = 0;
+		spin_unlock(&s_vpu_lock);
 		goto exit_release;
 	}
+	spin_unlock(&s_vpu_lock);
 
 	if (ret == 0) {
 		vpu_free_buffers(filp);
 		vpu_free_instances(filp);
 
+		spin_lock(&s_vpu_lock);
 		enc_pr(LOG_DEBUG, "vpu_release, decrease open_count from %d\n",
 				s_vpu_drv_context.open_count);
 
 		s_vpu_drv_context.open_count--;
+		spin_unlock(&s_vpu_lock);
 		if (s_vpu_drv_context.open_count == 0) {
 			enc_pr(LOG_DEBUG,
 			       "vpu_release: s_interrupt_flag(%d), reason(0x%08lx)\n",
@@ -2367,11 +2391,13 @@ static s32 vpu_resume(struct platform_device *pdev)
 			WriteVpuRegister(W4_HW_OPTION, hwOption);
 
 			/* Interrupt */
+#if 0
 			regVal = (1 << W4_INT_DEC_PIC_HDR);
 			regVal |= (1 << W4_INT_DEC_PIC);
 			regVal |= (1 << W4_INT_QUERY_DEC);
 			regVal |= (1 << W4_INT_SLEEP_VPU);
 			regVal |= (1 << W4_INT_BSBUF_EMPTY);
+#endif
 			regVal = 0xfffffefe;
 			WriteVpuRegister(W4_VPU_VINT_ENABLE, regVal);
 			Wave4BitIssueCommand(core, W4_CMD_INIT_VPU);

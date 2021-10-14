@@ -3147,7 +3147,7 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 		wq->request.ucode_mode = cmd_info[1];
 		wq->request.quant = cmd_info[2];
 		wq->request.flush_flag = cmd_info[3];
-		wq->request.timeout = cmd_info[4];
+		//wq->request.timeout = cmd_info[4];
 		wq->request.timeout = 5000; /* 5000 ms */
 	} else if ((cmd == ENCODER_IDR) || (cmd == ENCODER_NON_IDR)) {
 		wq->request.cmd = cmd;
@@ -3266,6 +3266,11 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 			if (wq->request.fmt == FMT_NV12 ||
 				wq->request.fmt == FMT_NV21 ||
 				wq->request.fmt == FMT_YUV420) {
+				if (wq->request.plane_num > 3) {
+					enc_pr(LOG_ERROR, "wq->request.plane_num is invalid %d.\n",
+							wq->request.plane_num);
+					return -1;
+				}
 				for (i = 0; i < wq->request.plane_num; i++) {
 					cfg = &wq->request.dma_cfg[i];
 					cfg->dir = DMA_TO_DEVICE;
@@ -3682,6 +3687,7 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 	s32 canvas = -1;
 	struct canvas_s dst;
 	u32 cpuid;
+	memset(&dst, 0, sizeof(struct canvas_s));
 	switch (cmd) {
 	case AMVENC_AVC_IOC_GET_ADDR:
 		if ((wq->mem.ref_buf_canvas & 0xff) == (ENC_CANVAS_OFFSET))
@@ -3996,7 +4002,7 @@ static s32 encode_process_request(struct encode_manager_s *manager,
 			&& get_cpu_type() >= MESON_CPU_MAJOR_ID_GXTVBB) {
 			void *vaddr = wq->mem.cbr_info_ddr_virt_addr;
 			ConvertTable2Risc(vaddr, 0xa00);
-			buf_start = getbuffer(wq, ENCODER_BUFFER_CBR);
+			//buf_start = getbuffer(wq, ENCODER_BUFFER_CBR);
 			codec_mm_dma_flush(vaddr, wq->mem.cbr_info_ddr_size, DMA_TO_DEVICE);
 		}
 	}
@@ -4498,9 +4504,10 @@ static s32 encode_wq_init(void)
 	struct encode_queue_item_s *pitem = NULL;
 
 	enc_pr(LOG_DEBUG, "encode_wq_init.\n");
-	encode_manager.irq_requested = false;
 
 	spin_lock_init(&encode_manager.event.sem_lock);
+	spin_lock(&encode_manager.event.sem_lock);
+	encode_manager.irq_requested = false;
 	init_completion(&encode_manager.event.request_in_com);
 	init_waitqueue_head(&encode_manager.event.hw_complete);
 	init_completion(&encode_manager.event.process_complete);
@@ -4529,6 +4536,7 @@ static s32 encode_wq_init(void)
 	encode_manager.current_item = NULL;
 	encode_manager.wq_count = 0;
 	encode_manager.remove_flag = false;
+	spin_unlock(&encode_manager.event.sem_lock);
 	InitEncodeWeight();
 	if (encode_start_monitor()) {
 		enc_pr(LOG_ERROR, "encode create thread error.\n");
@@ -4614,7 +4622,7 @@ static ssize_t encode_status_show(struct class *cla,
 	head = &encode_manager.process_queue;
 	list_for_each_entry(pitem, head, list) {
 		process_count++;
-		if (free_count > MAX_ENCODE_REQUEST)
+		if (process_count > MAX_ENCODE_REQUEST)
 			break;
 	}
 
