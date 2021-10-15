@@ -2314,7 +2314,8 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
 					pix_mp->pixelformat);
 			}
 		} else {
-			pix_mp->field = V4L2_FIELD_NONE;
+			if (pix_mp->field != V4L2_FIELD_INTERLACED)
+				pix_mp->field = V4L2_FIELD_NONE;
 			pix_mp->height = clamp(pix_mp->height,
 						AML_VDEC_MIN_H,
 						AML_VDEC_MAX_H);
@@ -2356,7 +2357,9 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
 					pix->pixelformat);
 			}
 		} else {
-			pix->field = V4L2_FIELD_NONE;
+			if (pix->field != V4L2_FIELD_INTERLACED)
+				pix->field = V4L2_FIELD_NONE;
+
 			pix->height = clamp(pix->height,
 						AML_VDEC_MIN_H,
 						AML_VDEC_MAX_H);
