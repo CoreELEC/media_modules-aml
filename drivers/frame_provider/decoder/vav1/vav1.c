@@ -871,7 +871,7 @@ static void av1_dump_state(struct vdec_s *vdec);
 int av1_print(struct AV1HW_s *hw,
 	int flag, const char *fmt, ...)
 {
-#define HEVC_PRINT_BUF		256
+#define HEVC_PRINT_BUF		512
 	unsigned char buf[HEVC_PRINT_BUF];
 	int len = 0;
 
@@ -6724,6 +6724,26 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		vdec_count_info(hw->gvs, 0, stream_offset);
 
 		hw_to_vdec(hw)->vdec_fps_detec(hw_to_vdec(hw)->id);
+
+#ifdef AUX_DATA_CRC
+		decoder_do_aux_data_check(hw_to_vdec(hw), pic_config->aux_data_buf,
+			pic_config->aux_data_size);
+#endif
+
+		av1_print(hw, AV1_DEBUG_SEI_DETAIL, "%s aux_data_size = %d\n",
+				__func__, pic_config->aux_data_size);
+
+		if (debug & AV1_DEBUG_SEI_DETAIL) {
+			int i = 0;
+			PR_INIT(128);
+			for (i = 0; i < pic_config->aux_data_size; i++) {
+				PR_FILL("%02x ", pic_config->aux_data_buf[i]);
+				if (((i + 1) & 0xf) == 0)
+					PR_INFO(hw->index);
+			}
+			PR_INFO(hw->index);
+		}
+
 		av1_update_gvs(hw, vf, pic_config);
 		memcpy(&tmp4x, hw->gvs, sizeof(struct vdec_info));
 		tmp4x.bit_depth_luma = bit_depth_luma;
@@ -10533,10 +10553,11 @@ static void av1_dump_state(struct vdec_s *vdec)
 	av1_print(hw, 0, "====== %s\n", __func__);
 
 	av1_print(hw, 0,
-		"width/height (%d/%d), used_buf_num %d\n",
+		"width/height (%d/%d), used_buf_num %d, video_signal_type 0x%x\n",
 		cm->width,
 		cm->height,
-		hw->used_buf_num
+		hw->used_buf_num,
+		hw->video_signal_type
 		);
 
 	av1_print(hw, 0,
@@ -11017,8 +11038,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 #endif
 	av1_print(hw, 0,
-			"no_head %d  low_latency %d\n",
-			hw->no_head, hw->low_latency_flag);
+			"no_head %d  low_latency %d, signal_type 0x%x\n",
+			hw->no_head, hw->low_latency_flag, hw->video_signal_type);
 #if 0
 	hw->buf_start = pdata->mem_start;
 	hw->buf_size = pdata->mem_end - pdata->mem_start + 1;
@@ -11069,6 +11090,11 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return -ENODEV;
 	}
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_init(pdata);
+#endif
+
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 	hevc_source_changed(VFORMAT_AV1, 4096, 2048, 60);
 
@@ -11090,6 +11116,10 @@ static int ammvdec_av1_remove(struct platform_device *pdev)
 	int i;
 	if (debug)
 		av1_print(hw, AOM_DEBUG_HW_MORE, "amvdec_av1_remove\n");
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_exit(vdec);
+#endif
 
 	vmav1_stop(hw);
 

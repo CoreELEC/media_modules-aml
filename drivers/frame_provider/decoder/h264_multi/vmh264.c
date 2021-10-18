@@ -946,6 +946,7 @@ struct vdec_h264_hw_s {
 	struct mutex fence_mutex;
 	u32 no_decoder_buffer_flag;
 	struct trace_decoder_name trace;
+	u32 video_signal_type;
 };
 
 static u32 again_threshold;
@@ -3182,6 +3183,22 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		decoder_do_aux_data_check(vdec, hw->buffer_spec[buffer_index].aux_data_buf,
 			hw->buffer_spec[buffer_index].aux_data_size);
 #endif
+
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL, "aux_data_size: %d, signal_type: 0x%x\n",
+			hw->buffer_spec[buffer_index].aux_data_size, hw->video_signal_type);
+
+		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
+			int i = 0;
+			PR_INIT(128);
+
+			for (i = 0; i < hw->buffer_spec[buffer_index].aux_data_size; i++) {
+				PR_FILL("%02x ", hw->buffer_spec[buffer_index].aux_data_buf[i]);
+				if (((i + 1) & 0xf) == 0)
+					PR_INFO(hw->id);
+			}
+			PR_INFO(hw->id);
+		}
+
 		if (hw->is_used_v4l)
 			update_vframe_src_fmt(vf,
 				hw->buffer_spec[buffer_index].aux_data_buf,
@@ -3441,7 +3458,7 @@ static void set_aux_data(struct vdec_h264_hw_s *hw,
 			hw_buf->prefix_aux_size;
 	}
 	if (dpb_is_debug(DECODE_ID(hw),
-		 PRINT_FLAG_DEC_DETAIL)) {
+		 PRINT_FLAG_SEI_DETAIL)) {
 		dpb_print(DECODE_ID(hw), 0,
 			"%s:poc %d old size %d count %d,suf %d dv_flag %d\r\n",
 			__func__, pic->poc, AUX_DATA_SIZE(pic),
@@ -3540,7 +3557,7 @@ static void set_aux_data(struct vdec_h264_hw_s *hw,
 				h[7] = (padding_len) & 0xff;
 			}
 			if (dpb_is_debug(DECODE_ID(hw),
-				PRINT_FLAG_DEC_DETAIL)) {
+				PRINT_FLAG_SEI_DETAIL)) {
 				dpb_print(DECODE_ID(hw), 0,
 					"aux: (size %d) suffix_flag %d\n",
 					AUX_DATA_SIZE(pic), suffix_flag);
@@ -4644,6 +4661,7 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 		}
 	} else
 		vf->signal_type = 0;
+	hw->video_signal_type = vf->signal_type;
 
 	vf->width = hw->frame_width;
 	vf->height = hw->frame_height;
@@ -7054,7 +7072,7 @@ pic_done_proc:
 		reset_process_time(hw);
 		if (READ_VREG(H264_AUX_DATA_SIZE) != 0) {
 			if (dpb_is_debug(DECODE_ID(hw),
-				PRINT_FLAG_DPB_DETAIL))
+				PRINT_FLAG_SEI_DETAIL))
 				dump_aux_buf(hw);
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			if (vdec_frame_based(vdec)) {
@@ -7440,7 +7458,7 @@ static void vmh264_dump_state(struct vdec_s *vdec)
 	dpb_print(DECODE_ID(hw), 0,
 		"====== %s\n", __func__);
 	dpb_print(DECODE_ID(hw), 0,
-		"width/height (%d/%d), num_reorder_frames %d dec_dpb_size %d dpb size(bufspec count) %d max_reference_size(collocate count) %d i_only %d  send_err %d\n",
+		"width/height (%d/%d), num_reorder_frames %d dec_dpb_size %d dpb size(bufspec count) %d max_reference_size(collocate count) %d i_only %d video_signal_type 0x%x send_err %d \n",
 		hw->frame_width,
 		hw->frame_height,
 		hw->num_reorder_frames,
@@ -7448,6 +7466,7 @@ static void vmh264_dump_state(struct vdec_s *vdec)
 		hw->dpb.mDPB.size,
 		hw->max_reference_size,
 		hw->i_only,
+		hw->video_signal_type,
 		hw->send_error_frame_flag
 		);
 
