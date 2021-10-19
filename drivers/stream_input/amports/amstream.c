@@ -84,6 +84,7 @@
 #include "../../common/chips/decoder_cpu_ver_info.h"
 #include "../subtitle/subtitle.h"
 #include "stream_buffer_base.h"
+#include "../../frame_provider/decoder/utils/vdec_feature.h"
 
 //#define G12A_BRINGUP_DEBUG
 
@@ -4355,6 +4356,12 @@ static ssize_t vcodec_profile_show(struct class *class,
 	return vcodec_profile_read(buf);
 }
 
+static ssize_t vcodec_feature_show(struct class *class,
+			struct class_attribute *attr, char *buf)
+{
+	return vcodec_feature_read(buf);
+}
+
 static int reset_canuse_buferlevel(int levelx10000)
 {
 	int i;
@@ -4570,12 +4577,11 @@ ssize_t dump_stream_store(struct class *class,
 }
 
 
-
-
 static struct class_attribute amstream_class_attrs[] = {
 	__ATTR_RO(ports),
 	__ATTR_RO(bufs),
 	__ATTR_RO(vcodec_profile),
+	__ATTR_RO(vcodec_feature),
 	__ATTR_RO(videobufused),
 	__ATTR(canuse_buferlevel, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_canuse_buferlevel, store_canuse_buferlevel),

@@ -60,6 +60,8 @@
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include <linux/crc32.h>
 #include <media/v4l2-mem2mem.h>
+#include "../utils/vdec_feature.h"
+
 
 #define DETECT_WRONG_MULTI_SLICE
 
@@ -10960,6 +10962,7 @@ static struct mconfig_node hm264_node;
 
 static int __init ammvdec_h264_driver_init_module(void)
 {
+
 	pr_info("ammvdec_h264 module init\n");
 	if (platform_driver_register(&ammvdec_h264_driver)) {
 		pr_info("failed to register ammvdec_h264 driver\n");
@@ -10978,6 +10981,8 @@ static int __init ammvdec_h264_driver_init_module(void)
 	vcodec_profile_register(&ammvdec_h264_profile);
 	INIT_REG_NODE_CONFIGS("media.decoder", &hm264_node,
 	"mh264", hm264_configs, CONFIG_FOR_RW);
+
+	vcodec_feature_register(VFORMAT_H264, 0);
 	return 0;
 }
 

@@ -56,7 +56,7 @@
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../utils/secprot.h"
-
+#include "../utils/vdec_feature.h"
 
 #define I_ONLY_SUPPORT
 #define MIX_STREAM_SUPPORT
@@ -8140,6 +8140,7 @@ static int __init amvdec_avs2_driver_init_module(void)
 
 	INIT_REG_NODE_CONFIGS("media.decoder", &avs2_node,
 		"avs2", avs2_configs, CONFIG_FOR_RW);
+	vcodec_feature_register(VFORMAT_AVS2, 0);
 
 	return 0;
 }

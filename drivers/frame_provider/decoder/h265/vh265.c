@@ -105,6 +105,7 @@ to enable DV of frame mode
 #include "../utils/amvdec.h"
 #include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
+#include "../utils/vdec_feature.h"
 
 #define SEND_LMEM_WITH_RPM
 #define SUPPORT_10BIT
@@ -15434,6 +15435,7 @@ static int __init amvdec_h265_driver_init_module(void)
 	vcodec_profile_register(&amvdec_h265_profile_mult);
 	INIT_REG_NODE_CONFIGS("media.decoder", &decoder_265_node,
 		"h265", h265_configs, CONFIG_FOR_RW);
+	vcodec_feature_register(VFORMAT_HEVC, 0);
 	return 0;
 }
 
