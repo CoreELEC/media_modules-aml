@@ -60,6 +60,7 @@
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../../decoder/utils/vdec_v4l2_buffer_ops.h"
 #include <media/v4l2-mem2mem.h>
+#include "../../decoder/utils/vdec_feature.h"
 
 #define MIX_STREAM_SUPPORT
 
@@ -12128,6 +12129,7 @@ static int __init amvdec_vp9_driver_init_module(void)
 	vcodec_profile_register(&amvdec_vp9_profile);
 	INIT_REG_NODE_CONFIGS("media.decoder", &vp9_node,
 		"vp9-v4l", vp9_configs, CONFIG_FOR_RW);
+	vcodec_feature_register(VFORMAT_VP9, 1);
 
 	return 0;
 }

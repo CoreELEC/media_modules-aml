@@ -49,6 +49,7 @@
 #include "../../decoder/utils/vdec_v4l2_buffer_ops.h"
 #include "../../decoder/utils/config_parser.h"
 #include <media/v4l2-mem2mem.h>
+#include "../../decoder/utils/vdec_feature.h"
 
 #define DRIVER_NAME "ammvdec_mpeg4_v4l"
 
@@ -2955,6 +2956,7 @@ static int __init ammvdec_mpeg4_driver_init_module(void)
 		return -ENODEV;
 	}
 	vcodec_profile_register(&amvdec_mpeg4_profile);
+	vcodec_feature_register(VFORMAT_MPEG4, 1);
 	return 0;
 }
 

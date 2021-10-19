@@ -52,6 +52,7 @@
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include "../utils/config_parser.h"
 #include <media/v4l2-mem2mem.h>
+#include "../utils/vdec_feature.h"
 
 #define MEM_NAME "codec_mmpeg12"
 #define CHECK_INTERVAL        (HZ/100)
@@ -3871,6 +3872,7 @@ static int __init ammvdec_mpeg12_driver_init_module(void)
 	vcodec_profile_register(&ammvdec_mpeg12_profile);
 	INIT_REG_NODE_CONFIGS("media.decoder", &mmpeg12_node,
 		"mmpeg12", mmpeg12_configs, CONFIG_FOR_RW);
+	vcodec_feature_register(VFORMAT_MPEG12, 0);
 	return 0;
 }
 

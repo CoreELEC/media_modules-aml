@@ -44,6 +44,7 @@
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/amlogic/tee.h>
+#include "../utils/vdec_feature.h"
 
 #define DEBUG_MULTI_FLAG  0
 /*
@@ -4875,6 +4876,7 @@ static int __init ammvdec_avs_driver_init_module(void)
 	vcodec_profile_register(&ammvdec_avs_profile);
 	INIT_REG_NODE_CONFIGS("media.decoder", &mavs_node,
 		"mavs", mavs_configs, CONFIG_FOR_RW);
+	vcodec_feature_register(VFORMAT_AVS, 0);
 	return 0;
 }
 

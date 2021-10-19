@@ -74,6 +74,7 @@
 #include <media/v4l2-mem2mem.h>
 #endif
 #include "../../../amvdec_ports/utils/common.h"
+#include "../utils/vdec_feature.h"
 
 #define AML
 #include "aom_av1_define.h"
@@ -11541,6 +11542,7 @@ static int __init amvdec_av1_driver_init_module(void)
 	INIT_REG_NODE_CONFIGS("media.decoder", &av1_node,
 		"av1", av1_configs, CONFIG_FOR_RW);
 #endif
+	vcodec_feature_register(VFORMAT_AV1, 0);
 
 	return 0;
 }

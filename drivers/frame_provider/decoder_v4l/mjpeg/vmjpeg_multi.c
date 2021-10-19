@@ -48,6 +48,7 @@
 #include "../../decoder/utils/vdec_v4l2_buffer_ops.h"
 #include "../../decoder/utils/config_parser.h"
 #include <media/v4l2-mem2mem.h>
+#include "../../decoder/utils/vdec_feature.h"
 
 #define MEM_NAME "codec_mmjpeg"
 
@@ -1837,6 +1838,7 @@ static int __init ammvdec_mjpeg_driver_init_module(void)
 		return -ENODEV;
 	}
 	vcodec_profile_register(&ammvdec_mjpeg_profile);
+	vcodec_feature_register(VFORMAT_MJPEG, 1);
 	return 0;
 }
 

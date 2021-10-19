@@ -8,4 +8,5 @@ decoder_common-objs	+=	vdec_v4l2_buffer_ops.o
 decoder_common-objs	+=	vdec_sync.o
 decoder_common-objs	+=	vdec_power_ctrl.o
 decoder_common-objs	+=	vdec_canvas_utils.o
+decoder_common-objs	+=	vdec_feature.o
 

@@ -44,6 +44,7 @@
 #include <uapi/linux/tee.h>
 #include <linux/delay.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
+#include "../utils/vdec_feature.h"
 
 #define DRIVER_NAME "amvdec_vc1"
 #define MODULE_NAME "amvdec_vc1"
@@ -1417,6 +1418,7 @@ static int __init amvdec_vc1_driver_init_module(void)
 		return -ENODEV;
 	}
 	vcodec_profile_register(&amvdec_vc1_profile);
+	vcodec_feature_register(VFORMAT_VC1, 0);
 	return 0;
 }
 
