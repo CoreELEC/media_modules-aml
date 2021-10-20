@@ -2215,8 +2215,7 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 		WRITE_VREG(MREG_REF0, (hw->refs[1] == -1) ? 0xffffffff :
 					hw->canvas_spec[hw->refs[1]]);
 	} else {
-		WRITE_VREG(MREG_REF0, (hw->refs[0] == -1) ? 0xffffffff :
-					hw->canvas_spec[hw->refs[0]]);
+		WRITE_VREG(MREG_REF0, hw->canvas_spec[hw->refs[0]]);
 	}
 	WRITE_VREG(MREG_REF1, (hw->refs[1] == -1) ? 0xffffffff :
 				hw->canvas_spec[hw->refs[1]]);
@@ -2567,10 +2566,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 		if (!hw->chunk->block->is_mapped)
 			data = codec_mm_vmap(hw->chunk->block->start +
-				hw->chunk->offset, size);
+				hw->chunk_offset, size);
 		else
 			data = ((u8 *)hw->chunk->block->start_virt) +
-				hw->chunk->offset;
+				hw->chunk_offset;
 
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s: size 0x%x sum 0x%x %02x %02x %02x %02x %02x %02x .. %02x %02x %02x %02x\n",
