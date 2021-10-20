@@ -1994,6 +1994,7 @@ static int get_mv_buf(struct VP9Decoder_s *pbi,
 			pic_config->mpred_mv_wr_start_addr,
 			pic_config->mv_size);
 	} else {
+		dump_pic_list(pbi);
 		pr_info(
 		"%s: Error, mv buf is not enough\n",
 		__func__);
@@ -2334,7 +2335,8 @@ static int get_free_fb(struct VP9Decoder_s *pbi)
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if ((frame_bufs[i].ref_count == 0) &&
 			(frame_bufs[i].buf.vf_ref == 0) &&
-			(frame_bufs[i].buf.index != -1)
+			(frame_bufs[i].buf.index != -1) &&
+			(cm->cur_frame != &frame_bufs[i])
 			)
 			break;
 	}
@@ -2346,6 +2348,7 @@ static int get_free_fb(struct VP9Decoder_s *pbi)
 		/* Reset i to be INVALID_IDX to indicate
 			no free buffer found*/
 		i = INVALID_IDX;
+		dump_pic_list(pbi);
 	}
 
 	unlock_buffer_pool(cm->buffer_pool, flags);
@@ -2413,8 +2416,8 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 	for (i = 0; i < pbi->used_buf_num; ++i)
 		if ((frame_bufs[i].ref_count == 0) &&
 			(frame_bufs[i].buf.vf_ref == 0) &&
-			(frame_bufs[i].buf.index != -1)
-			)
+			(frame_bufs[i].buf.index != -1) &&
+			(cm->cur_frame != &frame_bufs[i]))
 			free_buf_count++;
 	return free_buf_count;
 }
