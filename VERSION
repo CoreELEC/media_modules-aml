@@ -1,9 +1,11 @@
 Major_V=5
-Minor_V=2
-BaseChangeId=If5117e472d5019293383ce5de816969934a50526
+Minor_V=3
+BaseChangeId=Ifc17e92ef9c9e211b8f01ebae1e97c5855fea084
 
 
 #history version
+#V5.2.104-g795aee00.003025 Release Notes
+#Release_ChangeId_V5_2=I34801cba60d54bfd9f459f7445d0362989c23496
 #V5.1.77-g0cdebf27.003009 Release Notes
 #Release_ChangeId_V5_1=Id7e315bbf379d166ca4b335cef13c983a8ca5078
 #Feature develop total count: 6
