@@ -997,8 +997,21 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 
 	in_buf->di_buf.vf = vf;
 	in_buf->di_buf.flag = 0;
-	if (vf->type & VIDTYPE_V4L_EOS)
+	if (vf->type & VIDTYPE_V4L_EOS) {
+		u32 dw_mode = VDEC_DW_NO_AFBC;
+
 		in_buf->di_buf.flag |= DI_FLAG_EOS;
+
+		if (vdec_if_get_param(vpp->ctx, GET_PARAM_DW_MODE, &dw_mode))
+			return -1;
+
+		vf->type |= vpp->ctx->vpp_cfg.is_prog ?
+			VIDTYPE_PROGRESSIVE :
+			VIDTYPE_INTERLACE;
+
+		if (dw_mode != VDEC_DW_NO_AFBC)
+			vf->type |= VIDTYPE_COMPRESS;
+	}
 
 	fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 	in_buf->aml_buf = container_of(fb, struct aml_video_dec_buf, frame_buffer);
