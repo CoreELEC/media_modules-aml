@@ -2993,7 +2993,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			} else if ((this->type & PORT_TYPE_HEVC) ||
 					(this->type & PORT_TYPE_VIDEO)) {
 					struct stream_buf_s *vbuf = &priv->vdec->vbuf;
-					if (vbuf->no_parser) {
+					if (vbuf->no_parser && !vdec_single(priv->vdec)) {
 						pts_checkin_offset_us64(PTS_TYPE_VIDEO,
 							vbuf->stream_offset, pts);
 					} else {
