@@ -3592,6 +3592,7 @@ void (*callback)(struct vdec_s *, void *),
 		vdec->mvfrm->hw_decode_start = local_clock();
 	amvdec_start();
 	hw->stat |= STAT_VDEC_RUN;
+	hw->stat |= STAT_TIMER_ARM;
 	hw->init_flag = 1;
 
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
