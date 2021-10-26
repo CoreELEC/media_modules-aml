@@ -13,6 +13,12 @@
 #include "media_sync_core.h"
 
 #define MAX_INSTANCE_NUM 10
+
+typedef int (*pfun_aml_demux_pcrscr_get)(int demux_device_index, int index,
+					u64 *stc);
+
+pfun_aml_demux_pcrscr_get aml_demux_pcrscr_get_cb;
+
 mediasync_ins* vMediaSyncInsList[MAX_INSTANCE_NUM] = {0};
 
 extern int demux_get_stc(int demux_device_index, int index,
@@ -20,6 +26,15 @@ extern int demux_get_stc(int demux_device_index, int index,
 extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
 
 static unsigned int MinUpDateTimeThresholdUs = 50000;
+
+static int aml_demux_get_pcr(int demux_device_index, int index, u64 *pcr) {
+	if (!aml_demux_pcrscr_get_cb)
+		aml_demux_pcrscr_get_cb = symbol_request(demux_get_pcr);
+	if (aml_demux_pcrscr_get_cb) {
+	    return aml_demux_pcrscr_get_cb(demux_device_index,index,pcr);
+	}
+	return -1;
+}
 
 static u64 get_llabs(s64 value){
 	u64 llvalue;
@@ -55,25 +70,25 @@ static u64 get_stc_time_us(s32 sSyncInsId, u64 *systemtime)
 		return -1;
 	pInstance = vMediaSyncInsList[index];
 	ktime_get_ts64(&ts_monotonic);
-	timeus = ts_monotonic.tv_sec * 1000000LL + ts_monotonic.tv_nsec / 1000LL;
+	timeus = ts_monotonic.tv_sec * 1000000LL + div_u64(ts_monotonic.tv_nsec  , 1000);
 	*systemtime = timeus;
 	if (pInstance->mDemuxId < 0)
 		return timeus;
 
-	ret = demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
+	ret = aml_demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 	if (ret != 0) {
 		stc = timeus;
 	} else {
 		if (pInstance->last_pcr == 0) {
 			stc = timeus;
-			pInstance->last_pcr = pcr * 100 / 9;
+			pInstance->last_pcr = div_u64(pcr * 100 , 9);
 			pInstance->last_system = timeus;
 		} else {
-			pcr_diff = pcr * 100 / 9 - pInstance->last_pcr;
+			pcr_diff = div_u64(pcr * 100 , 9) - pInstance->last_pcr;
 			time_diff = timeus - pInstance->last_system;
-			if (time_diff && (get_llabs(pcr_diff) / time_diff
+			if (time_diff && (div_u64(get_llabs(pcr_diff) , time_diff)
 					    > 100)) {
-				pInstance->last_pcr = pcr * 100 / 9;
+				pInstance->last_pcr = div_u64(pcr * 100 , 9);
 				pInstance->last_system = timeus;
 				stc = timeus;
 			} else {
@@ -82,12 +97,12 @@ static u64 get_stc_time_us(s32 sSyncInsId, u64 *systemtime)
 				else
 					stc = timeus;
 
-				pInstance->last_pcr = pcr * 100 / 9;
+				pInstance->last_pcr = div_u64(pcr * 100 , 9);
 				pInstance->last_system = stc;
 			}
 		}
 	}
-	pr_debug("get_stc_time_us stc:%lld pcr:%lld system_time:%lld\n", stc,  pcr * 100 / 9,  timeus);
+	pr_debug("get_stc_time_us stc:%lld pcr:%lld system_time:%lld\n", stc,  div_u64(pcr * 100 , 9),  timeus);
 	return stc;
 }
 
