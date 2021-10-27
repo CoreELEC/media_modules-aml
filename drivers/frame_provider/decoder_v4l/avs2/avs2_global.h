@@ -817,6 +817,7 @@ struct avs2_frame_s {
 
 	char *cuva_data_buf;
 	int  cuva_data_size;
+	u64 timestamp;
 };
 
 
@@ -1684,5 +1685,6 @@ extern int32_t avs2_init_global_buffers(struct avs2_decoder *avs2_dec);
 
 extern bool is_avs2_print_param(void);
 extern bool is_avs2_print_bufmgr_detail(void);
+extern int get_free_frame_buffer(struct avs2_decoder *avs2_dec);
 #endif
 

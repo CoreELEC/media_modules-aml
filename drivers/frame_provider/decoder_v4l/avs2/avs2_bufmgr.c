@@ -992,7 +992,7 @@ void get_reference_list_info(struct avs2_decoder *avs2_dec, int8_t *str)
 	}
 }
 
-void prepare_RefInfo(struct avs2_decoder *avs2_dec)
+int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 {
 	struct ImageParameters_s    *img = &avs2_dec->img;
 	struct Video_Com_data_s *hc = &avs2_dec->hc;
@@ -1108,9 +1108,10 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 				avs2_dec->fref[0]->imgtr_fwRefDistance,
 				avs2_dec->fref[1]->imgtr_fwRefDistance,
 				img->tr);
-		hc->f_rec->error_mark = 1;
+		if (hc->f_rec)
+			hc->f_rec->error_mark = 1;
 		avs2_dec->bufmgr_error_flag = 1;
-		return; /* exit(-1);*/
+		return -1; /* exit(-1);*/
 		/*******************************************/
 	}
 
@@ -1140,30 +1141,14 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 #endif
 
 	/* add inter-view reference picture*/
-
-	/*   add current frame to ref buffer*/
-	for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
-		if ((avs2_dec->fref[i]->imgcoi_ref < -256
-			|| abs(avs2_dec->fref[i]->
-				imgtr_fwRefDistance - img->tr) >= 128)
-				&& avs2_dec->fref[i]->is_output == -1
-				&& avs2_dec->fref[i]->bg_flag == 0
-#ifndef NO_DISPLAY
-				&& avs2_dec->fref[i]->vf_ref == 0
-				&& avs2_dec->fref[i]->to_prepare_disp == 0
-#endif
-				) {
-			break;
-		}
-	}
-	if (i == avs2_dec->ref_maxbuffer) {
-		pr_info(
-			"%s, warning, no enough buf\n",
+	i = get_free_frame_buffer(avs2_dec);
+	if (i < 0) {
+		pr_info("%s, warning, no enough buf\n",
 			__func__);
-		i--;
-	}
+		return -2;
+		}
 
-	hc->f_rec        = avs2_dec->fref[i];
+	hc->f_rec = avs2_dec->fref[i];
 	hc->currentFrame = hc->f_rec->ref;
 	hc->f_rec->imgtr_fwRefDistance = img->tr;
 	hc->f_rec->imgcoi_ref = img->coding_order;
@@ -1251,6 +1236,7 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	}
 	}
 #endif
+	return 0;
 }
 
 int32_t init_frame(struct avs2_decoder *avs2_dec)
@@ -1277,7 +1263,8 @@ int32_t init_frame(struct avs2_decoder *avs2_dec)
 		hc->cur_pic = avs2_dec->m_bg;
 #endif
 	} else {
-		prepare_RefInfo(avs2_dec);
+		if (prepare_RefInfo(avs2_dec) < 0)
+			return -1;
 #ifdef AML
 		hc->cur_pic = hc->f_rec;
 #endif
@@ -1969,7 +1956,10 @@ int32_t avs2_process_header(struct avs2_decoder *avs2_dec)
 #endif
 	img->current_mb_nr = 0;
 
-	init_frame(avs2_dec);
+	if (init_frame(avs2_dec) < 0) {
+		pr_info("%s, warning, init_frame error!\n", __func__);
+		return -1;
+	}
 
 	img->types = img->type;   /* jlzheng 7.15*/
 
