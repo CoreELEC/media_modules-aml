@@ -6769,10 +6769,11 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 					if ((!is_skip_decoding(hevc, pic)) &&
 						(hevc->used_4k_num >= 0) &&
 						(hevc->cur_pic->scatter_alloc
-						== 1))
+						== 1)) {
 						ATRACE_COUNTER(hevc->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 						recycle_mmu_buf_tail(hevc, true);
 						ATRACE_COUNTER(hevc->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
+					}
 				}
 			}
 			if (!pic->ip_mode)
