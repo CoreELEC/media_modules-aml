@@ -2758,7 +2758,7 @@ static s32 vpu_src_addr_config(struct vpudrv_dma_buf_info_t *pinfo,
 		list_add(&vbp->list, &s_dma_bufp_head);
 		spin_unlock(&s_dma_buf_lock);
 	}
-	enc_pr(LOG_DEBUG, "vpu_src_addr_config phy_addr 0x%lx, 0x%lx, 0x%lx\n",
+	enc_pr(LOG_INFO, "vpu_src_addr_config phy_addr 0x%lx, 0x%lx, 0x%lx\n",
 		pinfo->phys_addr[0], pinfo->phys_addr[1], pinfo->phys_addr[2]);
 	//hoan add for canvas test
 	phys_addrY = pinfo->phys_addr[0];
