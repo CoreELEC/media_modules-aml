@@ -766,6 +766,9 @@ void tsdemux_release(void)
 	WRITE_PARSER_REG(PARSER_VIDEO_RP, 0);
 #endif
 
+	if (enable_demux_driver())
+		tsdemux_reset();
+
 	/* #if MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
 	/*TODO clk */
 	/*
