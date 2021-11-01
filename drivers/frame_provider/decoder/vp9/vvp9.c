@@ -7493,7 +7493,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		sizeof(struct BuffInfo_s));
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
-		if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2  ||  !is_cpu_tm2_revb()) {
+		if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) {
 			if (vdec_is_support_4k()) {
 				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 					memcpy(cur_buf_info, &amvvp9_workbuff_spec[2],	/* 8k */
@@ -7504,7 +7504,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 			} else
 				memcpy(cur_buf_info, &amvvp9_workbuff_spec[0],/* 1080p */
 				sizeof(struct BuffInfo_s));
-		} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2  &&  is_cpu_tm2_revb()
+		} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2 || is_cpu_tm2_revb()
 			if (vdec_is_support_4k()) {
 				memcpy(cur_buf_info, &amvvp9_workbuff_spec[5],	/* 8k */
 				sizeof(struct BuffInfo_s));
@@ -12552,7 +12552,7 @@ static int __init amvdec_vp9_driver_init_module(void)
 
 	struct BuffInfo_s *p_buf_info;
 
-	if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2  ||  !is_cpu_tm2_revb()) {
+	if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) {
 		if (vdec_is_support_4k()) {
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 				p_buf_info = &amvvp9_workbuff_spec[2];
@@ -12560,7 +12560,7 @@ static int __init amvdec_vp9_driver_init_module(void)
 				p_buf_info = &amvvp9_workbuff_spec[1];
 		} else
 			p_buf_info = &amvvp9_workbuff_spec[0];
-	} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2  &&  is_cpu_tm2_revb()
+	} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2 || is_cpu_tm2_revb()
 		if (vdec_is_support_4k())
 			p_buf_info = &amvvp9_workbuff_spec[5];
 		else
