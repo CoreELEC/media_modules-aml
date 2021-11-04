@@ -59,6 +59,16 @@ enum videocom_source_type {
 	DECODER_10BIT_TOP
 };
 
+#ifndef  CONFIG_AMLOGIC_MEDIA_GE2D
+inline void stretchblt_noalpha(struct ge2d_context_s *wq,
+		int src_x, int src_y, int src_w, int src_h,
+		int dst_x, int dst_y, int dst_w, int dst_h) { return; }
+inline int ge2d_context_config_ex(struct ge2d_context_s *context,
+		struct config_para_ex_s *ge2d_config) { return -1; }
+inline struct ge2d_context_s *create_ge2d_work_queue(void) { return NULL; }
+inline int destroy_ge2d_work_queue(struct ge2d_context_s *ge2d_work_queue) { return -1; }
+#endif
+
 static int get_source_type(struct vframe_s *vf)
 {
 	enum videocom_source_type ret;
