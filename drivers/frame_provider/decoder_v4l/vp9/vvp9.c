@@ -2747,6 +2747,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		int frame_to_show_idx = params->p.frame_to_show_idx;
 		int frame_to_show;
 		unsigned long flags;
+		struct PIC_BUFFER_CONFIG_s *tmp_pic = NULL;
 		if (frame_to_show_idx >= REF_FRAMES) {
 			pr_info("frame_to_show_idx %d exceed max index\r\n",
 					frame_to_show_idx);
@@ -2766,6 +2767,9 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		}
 
 		ref_cnt_fb(frame_bufs, &cm->new_fb_idx, frame_to_show);
+		tmp_pic = &cm->buffer_pool->frame_bufs[cm->new_fb_idx].buf;
+		tmp_pic->timestamp = pbi->chunk->timestamp;
+		update_hide_frame_timestamp(pbi);
 		unlock_buffer_pool(pool, flags);
 		pbi->refresh_frame_flags = 0;
 		/*cm->lf.filter_level = 0;*/
