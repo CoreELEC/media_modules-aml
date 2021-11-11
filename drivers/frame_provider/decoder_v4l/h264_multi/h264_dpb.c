@@ -5913,14 +5913,13 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 				}
 			}
 #endif
+			if (post_picture_early(p_H264_Dpb->vdec,
+				p_H264_Dpb->mVideo.dec_picture->buf_spec_num))
+				return -1;
 		}
 	}
 
 	if (p_H264_Dpb->buf_alloc_fail)
-		return -1;
-
-	if (post_picture_early(p_H264_Dpb->vdec,
-		p_H264_Dpb->mVideo.dec_picture->buf_spec_num))
 		return -1;
 
 	if (p_H264_Dpb->mSlice.slice_type == P_SLICE)
