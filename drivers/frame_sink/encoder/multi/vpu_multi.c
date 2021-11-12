@@ -114,6 +114,7 @@ struct vpu_clks {
 
 static struct vpu_clks s_vpu_clks;
 
+#ifdef CONFIG_COMPAT
 static struct file *file_open(const char *path, int flags, int rights)
 {
     struct file *filp = NULL;
@@ -176,7 +177,6 @@ static int file_sync(struct file *file)
     vfs_fsync(file, 0);
     return 0;
 }
-
 static s32 dump_raw_input(struct canvas_s *cs0) {
 	u8 *data;
 
@@ -224,6 +224,7 @@ static s32 dump_data(u32 phy_addr, u32 size) {
 
 	return 0;
 }
+#endif
 
 /*static s32 dump_encoded_data(u8 *data, u32 size) {
 	struct file *filp;
