@@ -3246,6 +3246,36 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 				sizeof(wq->quant_tbl_i16));
 			data_offset += 3;
 		}
+		//add qp range check
+		enc_pr(LOG_INFO, "wq->request.quant %d \n", wq->request.quant);
+		{
+			u8 *qp_tb = (u8 *)(&wq->quant_tbl_i4[0]);
+			for (i = 0; i < 32; i++) {
+				if (*qp_tb > 51) {
+					enc_pr(LOG_ERROR, "i4 %d ", *qp_tb);
+					*qp_tb = 51;
+				}
+				qp_tb++;
+			}
+
+			qp_tb = (u8 *)(&wq->quant_tbl_i16[0]);
+			for (i = 0; i < 32; i++) {
+				if (*qp_tb > 51) {
+					enc_pr(LOG_ERROR, "i16 %d ", *qp_tb);
+					*qp_tb = 51;
+				}
+				qp_tb++;
+			}
+
+			qp_tb = (u8 *)(&wq->quant_tbl_me[0]);
+			for (i = 0; i < 32; i++) {
+				if (*qp_tb > 51) {
+					enc_pr(LOG_ERROR, "me %d ", *qp_tb);
+					*qp_tb = 51;
+				}
+				qp_tb++;
+			}
+		}
 #ifdef H264_ENC_CBR
 		wq->cbr_info.block_w = cmd_info[data_offset++];
 		wq->cbr_info.block_h = cmd_info[data_offset++];
