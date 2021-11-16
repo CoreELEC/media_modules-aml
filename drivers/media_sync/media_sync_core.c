@@ -1222,4 +1222,35 @@ long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag) {
 	return 0;
 }
 
+long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	pInstance->mPcrSlope.mNumerator = pcrslope.mNumerator;
+	pInstance->mPcrSlope.mDenominator = pcrslope.mDenominator;
+	return 0;
+
+}
+
+long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope){
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	pcrslope->mNumerator = pInstance->mPcrSlope.mNumerator;
+	pcrslope->mDenominator = pInstance->mPcrSlope.mDenominator;
+	return 0;
+}
+
 

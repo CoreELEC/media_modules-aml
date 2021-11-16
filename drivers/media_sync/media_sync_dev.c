@@ -91,6 +91,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 {
 	long ret = 0;
 	mediasync_speed SyncSpeed = {0};
+	mediasync_speed PcrSlope = {0};
 	mediasync_frameinfo FrameInfo = {-1, -1};
 	mediasync_audioinfo AudioInfo = {0, 0};
 	mediasync_videoinfo VideoInfo = {0, 0};
@@ -979,6 +980,33 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_SET_PCRSLOPE:
+			if (copy_from_user((void *)&PcrSlope,
+					(void *)arg,
+					sizeof(PcrSlope)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_pcrslope(priv->mSyncInsId,
+								PcrSlope);
+		break;
+
+		case MEDIASYNC_IOC_GET_PCRSLOPE:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_pcrslope(priv->mSyncInsId,
+								&PcrSlope);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&PcrSlope,
+						sizeof(PcrSlope)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -1054,6 +1082,8 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_AUDIO_FORMAT:
 		case MEDIASYNC_IOC_SET_PAUSERESUME_FLAG:
 		case MEDIASYNC_IOC_GET_PAUSERESUME_FLAG:
+		case MEDIASYNC_IOC_SET_PCRSLOPE:
+		case MEDIASYNC_IOC_GET_PCRSLOPE:
 
 			return mediasync_ioctl(file, cmd, arg);
 		default:

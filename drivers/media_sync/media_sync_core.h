@@ -102,6 +102,7 @@ typedef struct instance{
 	s64 mTrackMediaTime;
 	s64 mStartMediaTime;
 	mediasync_speed mSpeed;
+	mediasync_speed mPcrSlope;
 	s32 mSyncModeChange;
 	s64 mUpdateTimeThreshold;
 
@@ -199,5 +200,9 @@ long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audio_format format
 long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audio_format* format);
 long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag);
 long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag);
+long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope);
+long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope);
+
+
 
 #endif
