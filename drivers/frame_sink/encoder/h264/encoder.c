@@ -2785,7 +2785,6 @@ s32 amvenc_loadmc(const char *p, struct encode_wq_s *wq)
 {
 	ulong timeout;
 	s32 ret = 0;
-
     if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
         char *buf = vmalloc(0x1000 * 16);
         int ret = -1;
@@ -2936,7 +2935,6 @@ static s32 avc_poweron(u32 clock)
 
 	data32 = 0;
 	amports_switch_gate("vdec", 1);
-	spin_lock_irqsave(&lock, flags);
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
 		hcodec_clk_config(1);
 		udelay(20);
@@ -2954,6 +2952,7 @@ static s32 avc_poweron(u32 clock)
             !pwr_ctrl_status_psci_smc(PDID_T3_DOS_HCODEC));
         */
 	} else {
+		spin_lock_irqsave(&lock, flags);
 		WRITE_AOREG(AO_RTI_PWR_CNTL_REG0,
 			(READ_AOREG(AO_RTI_PWR_CNTL_REG0) & (~0x18)));
 		udelay(10);
@@ -2965,7 +2964,9 @@ static s32 avc_poweron(u32 clock)
 				 get_cpu_type() >= MESON_CPU_MAJOR_ID_TM2)
 				? ~0x1 : ~0x3));
 		udelay(10);
+		spin_unlock_irqrestore(&lock, flags);
 	}
+	spin_lock_irqsave(&lock, flags);
 	WRITE_VREG(DOS_SW_RESET1, 0xffffffff);
 	WRITE_VREG(DOS_SW_RESET1, 0);
 	/* Enable Dos internal clock gating */
@@ -3004,8 +3005,6 @@ static s32 avc_poweroff(void)
 {
 	ulong flags;
 
-	spin_lock_irqsave(&lock, flags);
-
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2) {
 		hcodec_clk_config(0);
 		udelay(20);
@@ -3020,12 +3019,15 @@ static s32 avc_poweroff(void)
 		udelay(20);
 	} else {
 		/* enable HCODEC isolation */
+		spin_lock_irqsave(&lock, flags);
 		WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
 				READ_AOREG(AO_RTI_GEN_PWR_ISO0) |
 				((get_cpu_type() == MESON_CPU_MAJOR_ID_SM1 ||
 				  get_cpu_type() >= MESON_CPU_MAJOR_ID_TM2)
 				? 0x1 : 0x30));
+		spin_unlock_irqrestore(&lock, flags);
 	}
+	spin_lock_irqsave(&lock, flags);
 	/* power off HCODEC memories */
 	WRITE_VREG(DOS_MEM_PD_HCODEC, 0xffffffffUL);
 
