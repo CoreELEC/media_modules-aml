@@ -58,7 +58,7 @@ struct AVRational{
 #ifndef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 /**
  * YUV colorspace type.
- * These values match the ones defined by ISO/IEC 23001-8_2013 ¡ì 7.3.
+ * These values match the ones defined by ISO/IEC 23001-8_2013 Â¡Ã¬ 7.3.
  */
 enum AVColorSpace {
 	AVCOL_SPC_RGB         = 0,  ///< order of coefficients is actually GBR, also IEC 61966-2-1 (sRGB)
@@ -82,7 +82,7 @@ enum AVColorSpace {
 
 /**
   * Chromaticity coordinates of the source primaries.
-  * These values match the ones defined by ISO/IEC 23001-8_2013 ¡ì 7.1.
+  * These values match the ones defined by ISO/IEC 23001-8_2013 Â¡Ã¬ 7.1.
   */
 enum AVColorPrimaries {
 	AVCOL_PRI_RESERVED0   = 0,
@@ -106,7 +106,7 @@ enum AVColorPrimaries {
 
 /**
  * Color Transfer Characteristic.
- * These values match the ones defined by ISO/IEC 23001-8_2013 ¡ì 7.2.
+ * These values match the ones defined by ISO/IEC 23001-8_2013 Â¡Ã¬ 7.2.
  */
 enum AVColorTransferCharacteristic {
 	AVCOL_TRC_RESERVED0    = 0,
@@ -152,4 +152,5 @@ void print_hex_debug(u8 *data, u32 len, int max);
 
 bool is_over_size(int w, int h, int size);
 
+u8 *aml_yuv_dump(struct file *fp, u8 *start_addr, u32 real_width, u32 real_height, u32 align);
 #endif
