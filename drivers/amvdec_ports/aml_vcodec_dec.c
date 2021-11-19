@@ -243,6 +243,7 @@ static const struct aml_codec_framesizes aml_vdec_framesizes[] = {
 
 extern bool multiplanar;
 extern int dump_capture_frame;
+extern char dump_path[32];
 extern int bypass_vpp;
 extern int bypass_ge2d;
 extern bool support_format_I420;
@@ -782,7 +783,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;
 		struct file *fp;
-		char file_name[32] = {0};
+		char file_name[64] = {0};
 
 		if (!dump_capture_frame || ctx->is_drm_mode)
 			break;
@@ -791,18 +792,25 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 		if (dw_mode == VDEC_DW_AFBC_ONLY)
 			break;
 
-		snprintf(file_name, 32, "/data/dec_dump_%ux%u.raw", vf->width, vf->height);
+		snprintf(file_name, 64, "%s/dec_dump_%ux%u.raw", dump_path, vf->width, vf->height);
 
 		fp = filp_open(file_name,
 				O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
 
 		if (!IS_ERR(fp)) {
 			struct vb2_buffer *vb = vb2_buf;
+			// dump y data
+			u8 *yuv_data_addr = aml_yuv_dump(fp, (u8 *)vb2_plane_vaddr(vb, 0),
+				vf->width, vf->height, 64);
+			// dump uv data
+			if (dstbuf->frame_buffer.num_planes == 1) {
+				aml_yuv_dump(fp, yuv_data_addr, vf->width,
+					vf->height / 2, 64);
+			} else {
+				aml_yuv_dump(fp, (u8 *)vb2_plane_vaddr(vb, 1),
+					vf->width, vf->height / 2, 64);
+			}
 
-			kernel_write(fp,vb2_plane_vaddr(vb, 0),vb->planes[0].length, 0);
-			if (dstbuf->frame_buffer.num_planes == 2)
-				kernel_write(fp,vb2_plane_vaddr(vb, 1),
-						vb->planes[1].length, 0);
 			pr_info("dump idx: %d %dx%d\n", dump_capture_frame, vf->width, vf->height);
 			dump_capture_frame--;
 			filp_close(fp, NULL);

@@ -52,6 +52,7 @@
 bool param_sets_from_ucode = 1;
 bool enable_drm_mode;
 extern void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx);
+char dump_path[32] = "/data";
 
 static int fops_vcodec_open(struct file *file)
 {
@@ -473,10 +474,33 @@ out:
 	return pbuf - buf;
 }
 
+static ssize_t dump_path_show(struct class *class,
+		struct class_attribute *attr, char *buf)
+{
+	return snprintf(buf, sizeof(dump_path), "%s\n", dump_path);
+}
+
+static ssize_t dump_path_store(struct class *class,
+		struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	ssize_t n;
+	if (size > sizeof(dump_path))
+		pr_err("path too long\n");
+	n = snprintf(dump_path, sizeof(dump_path), "%s", buf);
+	if (n > 0 && dump_path[n-1] == '\n') {
+		dump_path[n-1] = 0;
+		pr_info("dump path changed to %s\n", dump_path);
+	}
+	return size;
+}
+
 static CLASS_ATTR_RO(status);
+static CLASS_ATTR_RW(dump_path);
 
 static struct attribute *v4ldec_class_attrs[] = {
 	&class_attr_status.attr,
+	&class_attr_dump_path.attr,
 	NULL
 };
 

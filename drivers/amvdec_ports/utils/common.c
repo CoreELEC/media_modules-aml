@@ -229,4 +229,21 @@ bool is_over_size(int w, int h, int size)
 	return false;
 }
 
+u8 *aml_yuv_dump(struct file *fp, u8 *start_addr, u32 real_width, u32 real_height, u32 align)
+{
+	u32 index;
+	u32 coded_width = ALIGN(real_width, align);
+	u32 coded_height = ALIGN(real_height, align);
+	u8 *yuv_data_addr = start_addr;
 
+	if (real_width != coded_width) {
+		for (index = 0; index < real_height; index++) {
+			kernel_write(fp, yuv_data_addr, real_width, 0);
+			yuv_data_addr += coded_width;
+		}
+	} else {
+		kernel_write(fp, yuv_data_addr, real_width * real_height, 0);
+	}
+
+	return (start_addr + coded_width * coded_height);
+}

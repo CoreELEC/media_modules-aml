@@ -56,6 +56,7 @@
 //#define DATA_DEBUG
 
 extern int dump_output_frame;
+extern char dump_path[32];
 extern u32 dump_output_start_position;
 extern void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx, u32 handle);
 
@@ -464,7 +465,10 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	if (dump_output_frame > 0 &&
 		(!dump_output_start_position ||
 		(dump_output_start_position == crc32_le(0, buf, count)))) {
-		dump("/data/es.data", buf, count);
+		char file_name[64] = {0};
+
+		snprintf(file_name, 64, "%s/es.data", dump_path);
+		dump(file_name, buf, count);
 		dump_output_frame--;
 		dump_output_start_position = 0;
 	}
