@@ -14949,10 +14949,10 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			if (hevc->dv_duallayer)
 				hevc_print(hevc, 0, "dv_duallayer\n");
 		}
-		if (get_config_int(pdata->config,
+		/*if (get_config_int(pdata->config,
 			"parm_v4l_duration",
 			&config_val) == 0)
-			vdec_frame_rate_uevent(config_val);
+			vdec_frame_rate_uevent(config_val);*/
 #endif
 	} else {
 		if (pdata->sys_info)

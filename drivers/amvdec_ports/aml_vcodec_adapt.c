@@ -734,3 +734,8 @@ void v4l2_config_vdec_parm(struct aml_vdec_adapt *ada_ctx, u8 *data, u32 len)
 	vdec->config_len = len > PAGE_SIZE ? PAGE_SIZE : len;
 	memcpy(vdec->config, data, vdec->config_len);
 }
+
+void vdec_set_duration(s32 duration)
+{
+	vdec_frame_rate_uevent(duration);
+}

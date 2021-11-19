@@ -64,7 +64,7 @@
 #define V4L2_CID_USER_AMLOGIC_BASE (V4L2_CID_USER_BASE + 0x1100)
 #define AML_V4L2_SET_DRMMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
 #define AML_V4L2_GET_INPUT_BUFFER_NUM (V4L2_CID_USER_AMLOGIC_BASE + 1)
-
+#define AML_V4L2_SET_DURATION (V4L2_CID_USER_AMLOGIC_BASE + 2)
 
 #define WORK_ITEMS_MAX (32)
 #define MAX_DI_INSTANCE (2)
@@ -4136,6 +4136,10 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 		ctx->param_sets_from_ucode = true;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 			"set stream mode: %x\n", ctrl->val);
+	} else if (ctrl->id == AML_V4L2_SET_DURATION) {
+		vdec_set_duration(ctrl->val);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			"set duration: %x\n", ctrl->val);
 	}
 
 	return 0;
@@ -4170,6 +4174,19 @@ static const struct v4l2_ctrl_config ctrl_gt_input_buffer_number = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_st_duration = {
+	.name	= "duration",
+	.id	= AML_V4L2_SET_DURATION,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_WRITE_ONLY,
+	.min	= 0,
+	.max	= 96000,
+	.step	= 1,
+	.def	= 0,
+};
+
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -4203,6 +4220,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_input_buffer_number, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_duration, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;

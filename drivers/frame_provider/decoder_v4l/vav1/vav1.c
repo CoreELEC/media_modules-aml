@@ -11007,10 +11007,10 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			"parm_v4l_low_latency_mode",
 			&config_val) == 0)
 			hw->low_latency_flag = config_val;
-		if (get_config_int(pdata->config,
+		/*if (get_config_int(pdata->config,
 			"parm_v4l_duration",
 			&config_val) == 0)
-			vdec_frame_rate_uevent(config_val);
+			vdec_frame_rate_uevent(config_val);*/
 
 #endif
 		if (get_config_int(pdata->config, "HDRStaticInfo",

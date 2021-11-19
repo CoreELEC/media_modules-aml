@@ -73,5 +73,7 @@ int vdec_frame_number(struct aml_vdec_adapt *ada_ctx);
 
 int vdec_get_instance_num(void);
 
+void vdec_set_duration(s32 duration);
+
 #endif /* VDEC_ADAPT_H */
 

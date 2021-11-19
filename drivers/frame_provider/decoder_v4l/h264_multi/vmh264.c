@@ -10798,10 +10798,10 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 				hw->discard_dv_data = 1; //default
 			}
 		}
-		if (get_config_int(pdata->config,
+		/*if (get_config_int(pdata->config,
 			"parm_v4l_duration",
 			&config_val) == 0)
-			vdec_frame_rate_uevent(config_val);
+			vdec_frame_rate_uevent(config_val);*/
 		if (hw->discard_dv_data)
 			dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
 	} else
