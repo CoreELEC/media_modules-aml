@@ -122,6 +122,8 @@ static u32 udebug_flag;
 static unsigned int radr;
 static unsigned int rval;
 
+#define DUR2PTS(x) ((x)*90/96)
+
 static u32 without_display_mode;
 static u32 dynamic_buf_num_margin = 2;
 
@@ -348,6 +350,7 @@ struct vdec_mpeg12_hw_s {
 	char new_q_name[32];
 	char disp_q_name[32];
 	bool run_flag;
+	u64 last_pts;
 };
 
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
@@ -1169,6 +1172,8 @@ static void user_data_ready_notify(struct vdec_mpeg12_hw_s *hw,
 
 			hw->ud_record[i].meta_info.vpts_valid = pts_valid;
 			hw->ud_record[i].meta_info.vpts = pts;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
+				"%s, pts %lld, pts_valid %d\n", __func__, pts, pts_valid);
 
 			*p_userdata_rec = hw->ud_record[i];
 #ifdef DUMP_USER_DATA
@@ -1644,6 +1649,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	struct vdec_v4l2_buffer *fb = NULL;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	bool pb_skip = false;
+	static u32 frame_dur = 0;
 
 	/* swap uv */
 	if (hw->is_used_v4l) {
@@ -1659,7 +1665,20 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		pb_skip = 1;
 	}
 
-	user_data_ready_notify(hw, pic->pts, pic->pts_valid);
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+		u32 pts_tmp;
+
+		if (frame_dur == 0) {
+			frame_dur = frame_rate_tab[(READ_VREG(MREG_SEQ_INFO) >> 4) & 0xf];
+		}
+
+		pts_tmp  = hw->last_pts + DUR2PTS(frame_dur);
+		hw->last_pts = pts_tmp;
+		user_data_ready_notify(hw, pts_tmp, true);
+	} else {
+		hw->last_pts = pic->pts;
+		user_data_ready_notify(hw, pic->pts, pic->pts_valid);
+	}
 
 	if (hw->frame_prog & PICINFO_PROG) {
 		field_num = 1;
