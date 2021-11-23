@@ -368,7 +368,7 @@ static int dvb_ca_en50221_link_init(struct dvb_ca_private *ca, int slot)
 	/* read the buffer size from the CAM */
 	if ((ret = ca->pub->write_cam_control(ca->pub, slot, CTRLIF_COMMAND, IRQEN | CMDREG_SR)) != 0)
 		return ret;
-	if ((ret = dvb_ca_en50221_wait_if_status(ca, slot, STATUSREG_DA, HZ / 3)) != 0)
+	if ((ret = dvb_ca_en50221_wait_if_status(ca, slot, STATUSREG_DA, HZ / 10)) != 0)
 		return ret;
 	if ((ret = dvb_ca_en50221_read_data(ca, slot, buf, 2)) != 2)
 		return -EIO;
@@ -387,7 +387,7 @@ static int dvb_ca_en50221_link_init(struct dvb_ca_private *ca, int slot)
 	/* write the buffer size to the CAM */
 	if ((ret = ca->pub->write_cam_control(ca->pub, slot, CTRLIF_COMMAND, IRQEN | CMDREG_SW)) != 0)
 		return ret;
-	if ((ret = dvb_ca_en50221_wait_if_status(ca, slot, STATUSREG_FR, HZ / 3)) != 0)
+	if ((ret = dvb_ca_en50221_wait_if_status(ca, slot, STATUSREG_FR, HZ / 10)) != 0)
 		return ret;
 	if ((ret = dvb_ca_en50221_write_data(ca, slot, buf, 2)) != 2)
 		return -EIO;
@@ -1444,7 +1444,7 @@ static int dvb_ca_en50221_thread(void *data)
 }
 
 
-
+int cam_state = 0;
 /* ******************************************************************************** */
 /* EN50221 IO interface functions */
 
@@ -1472,7 +1472,6 @@ static int dvb_ca_en50221_io_do_ioctl(struct file *file,
 		printk("ci lock interrupt error\r\n");
 		return -ERESTARTSYS;
 	}
-
 	switch (cmd) {
 	case CA_RESET: {
 		if (copy_from_user(&info, (void __user *)parg, 1))
@@ -1491,6 +1490,8 @@ static int dvb_ca_en50221_io_do_ioctl(struct file *file,
 			for (slot = 0; slot < ca->slot_count; slot++) {
 				mutex_lock(&ca->slot_info[slot].slot_lock);
 				if (ca->slot_info[slot].slot_state != DVB_CA_SLOTSTATE_NONE) {
+					//if reset camcard,need send all state to app
+					cam_state = 0;
 					dvb_ca_en50221_slot_shutdown(ca, slot);
 					if (ca->flags & DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE)
 						dvb_ca_en50221_cimcu_camchange_irq(ca->pub,
@@ -1519,17 +1520,28 @@ static int dvb_ca_en50221_io_do_ioctl(struct file *file,
 
 		if ((info->num > ca->slot_count) || (info->num < 0)) {
 			err = -EINVAL;
+			printk("info->num==%d\r\n",info->num);
 			goto out_unlock;
 		}
 
 		info->type = CA_CI_LINK;
 		info->flags = 0;
-		if ((ca->slot_info[info->num].slot_state != DVB_CA_SLOTSTATE_NONE)
+		if (cam_state != 0 && (ca->slot_info[info->num].slot_state != DVB_CA_SLOTSTATE_NONE)
 			&& (ca->slot_info[info->num].slot_state != DVB_CA_SLOTSTATE_INVALID)) {
 			info->flags = CA_CI_MODULE_PRESENT;
 		}
-		if (ca->slot_info[info->num].slot_state == DVB_CA_SLOTSTATE_RUNNING) {
+
+		if (cam_state != 0 && cam_state != 1 && ca->slot_info[info->num].slot_state == DVB_CA_SLOTSTATE_RUNNING) {
 			info->flags |= CA_CI_MODULE_READY;
+		}
+		if (cam_state == 1 && ca->slot_info[info->num].slot_state == DVB_CA_SLOTSTATE_RUNNING) {
+			info->flags = CA_CI_MODULE_PRESENT;
+			cam_state++;
+			printk("info->flags==%d\r\n",info->flags);
+		}
+		if (cam_state == 0) {
+			cam_state++;
+			printk("info->flags==%d\r\n",info->flags);
 		}
 		break;
 	}
@@ -1944,7 +1956,7 @@ static int dvb_ca_en50221_io_open(struct inode *inode, struct file *file)
 	int err;
 	int i;
 
-	dprintk("%s\n", __func__);
+	printk("%s\n", __func__);
 
 	if (!try_module_get(ca->pub->owner))
 		return -EIO;

@@ -43,7 +43,7 @@ struct aml_ci_bus {
 	struct gpio_desc *le_pin;
 	int le_pin_value;
 	int le_enable_level;
-
+	int addr_ts_mode_multiplex;
 	/* cam irq */
 	int irq;
 	int irq_cmp;
@@ -65,7 +65,7 @@ struct aml_ci_bus {
 
 enum aml_gpio_select_e {
 		AML_GPIO_ADDR = 0,
-		AML_GPIO_TS
+		AML_GPIO_TS,
 };
 
 #define IORD 		0x0

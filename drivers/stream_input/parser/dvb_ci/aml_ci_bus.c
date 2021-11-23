@@ -151,6 +151,13 @@ static int aml_ci_bus_select_gpio(struct aml_ci_bus *ci_bus_dev,
 	if (old_select == select)
 		return 0;
 
+	if (ci_bus_dev->addr_ts_mode_multiplex == 0) {
+		//not multiplex ts and ci addr, so no need to
+		//change ts and addr
+		if (select == AML_GPIO_ADDR) {
+			return 0;
+		}
+	}
 	if (!ci_bus_dev->pinctrl) {
 		ci_bus_dev->pinctrl = devm_pinctrl_get(&ci_bus_dev->pdev->dev);
 		if (IS_ERR_OR_NULL(ci_bus_dev->pinctrl)) {
@@ -365,7 +372,13 @@ static int aml_ci_bus_io(struct aml_ci_bus *ci_bus_dev,
 static int aml_ci_bus_init_reg(struct aml_ci_bus *ci_bus_dev)
 {
 	u32 ctrl = 0;
-	aml_ci_bus_select_gpio(ci_bus_dev,AML_GPIO_ADDR);
+
+	if (ci_bus_dev->addr_ts_mode_multiplex == 0) {
+		aml_ci_bus_select_gpio(ci_bus_dev,AML_GPIO_TS);
+	} else {
+		aml_ci_bus_select_gpio(ci_bus_dev,AML_GPIO_ADDR);
+	}
+
 	//init ci bus reg
 	pr_dbg("aml_ci_bus_init_reg---\r\n");
     ctrl = READ_CIBUS_REG(CIPLUS_CTRL_REG);
@@ -874,7 +887,7 @@ static int aml_ci_bus_get_config_from_dts(struct aml_ci_bus *ci_bus_dev)
 	struct platform_device *pdev = ci_bus_dev->pdev;
 	struct device_node *np = pdev->dev.of_node;
 	int ret = 0;
-	pr_dbg("into get ci bus dts \r\n");
+	pr_dbg("into get ci bus dts -----\r\n");
 	/*get gpio config from dts*/
 	/* get device config for dvbci_io*/
 	child = of_get_child_by_name(np, "dvbci_io");
@@ -973,15 +986,27 @@ static int aml_ci_bus_get_config_from_dts(struct aml_ci_bus *ci_bus_dev)
 		} else {
 			pr_dbg("ci_bus_dev->le_value %d\n", ci_bus_dev->le_pin_value);
 		}
-
+		memset(buf, 0, 32);
 		snprintf(buf, sizeof(buf), "%s", "le_enable_level");
 		ret = of_property_read_u32(pdev->dev.of_node, buf, &ival);
 		if (ret) {
 			pr_error("dvb ci le_enable_level request failed\n");
 		} else {
 			ci_bus_dev->le_enable_level = ival;
-			pr_dbg("ci_bus_dev->le_enable_level %d\n", ci_bus_dev->le_enable_level);
+			pr_dbg("ci_bus_dev->le_enable_level-- %d\n", ci_bus_dev->le_enable_level);
 		}
+		/*get addr_ts_mode_multiplex mode*/
+		ci_bus_dev->addr_ts_mode_multiplex = 1;
+		memset(buf, 0, 32);
+		snprintf(buf, sizeof(buf), "%s", "addr_ts_mode_multiplex");
+		ret = of_property_read_u32(pdev->dev.of_node, buf, &ival);
+		if (ret) {
+			pr_error("dvb ci addr_ts_mode_multiplex request failed\n");
+		} else {
+			ci_bus_dev->addr_ts_mode_multiplex = ival;
+			pr_dbg("ci_bus_dev->addr_ts_mode_multiplex %d ******\n", ci_bus_dev->addr_ts_mode_multiplex);
+		}
+
 
 	}
 	return 0;
@@ -1182,7 +1207,7 @@ static void aml_ci_bus_full_test(struct aml_ci *ci_dev)
 		int count = 1000;
 		mdelay(1000);
 		pr_dbg("READ CIS START\r\n");
-		for (i = 0; i < 267; i++) {
+		for (i = 0; i < 200; i++) {
 			mdelay(100);
 			cc = aml_ci_bus_mem_read(ci_dev, 0, i);
 			pr_dbg("0x%x ", cc);
