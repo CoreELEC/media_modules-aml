@@ -9597,8 +9597,15 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			if (!vdec_frame_based(hw_to_vdec(pbi)))
 				dec_again_process(pbi);
 			else {
-				pbi->dec_result = DEC_RESULT_GET_DATA;
-				vdec_schedule_work(&pbi->work);
+				if (pbi->common.show_existing_frame) {
+					pbi->dec_result = DEC_RESULT_DONE;
+					amhevc_stop();
+					vdec_schedule_work(&pbi->work);
+				}
+				else {
+					pbi->dec_result = DEC_RESULT_GET_DATA;
+					vdec_schedule_work(&pbi->work);
+				}
 			}
 		}
 		pbi->process_busy = 0;
