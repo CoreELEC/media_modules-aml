@@ -6843,10 +6843,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 #ifdef DETECT_WRONG_MULTI_SLICE
 		hw->cur_picture_slice_count++;
-		if (hw->cur_picture_slice_count == 1 &&
-			(hw->error_proc_policy & 0x10000)) {
-			hw->first_pre_frame_num = p_H264_Dpb->mVideo.pre_frame_num;
-		}
 
 		if ((hw->error_proc_policy & 0x10000) &&
 			(hw->cur_picture_slice_count > 1) &&
@@ -10277,6 +10273,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (vh264_hw_ctx_restore(hw) < 0) {
 		vdec_schedule_work(&hw->work);
 		return;
+	}
+	if (error_proc_policy & 0x10000) {
+		hw->first_pre_frame_num = p_H264_Dpb->mVideo.pre_frame_num;
 	}
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
 	if (input_frame_based(vdec)) {
