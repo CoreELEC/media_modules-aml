@@ -110,6 +110,8 @@
 #define CTX_DECBUF_OFFSET       (CTX_CO_MV_OFFSET + 0x11000)
 
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
+#define INVALID_IDX 		(-1)  /* Invalid buffer index.*/
+
 static u32 buf_size = 32 * 1024 * 1024;
 static int pre_decode_buf_level = 0x800;
 static int start_decode_buf_level = 0x4000;
@@ -2300,7 +2302,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = NULL;
 	struct vdec_v4l2_buffer *fb = NULL;
-	int index;
+	int index = INVALID_IDX;
 
 	if (hw->eos) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
@@ -2311,7 +2313,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		}
 		if (hw->is_used_v4l) {
 			index = find_free_buffer(hw);
-			if (index == -1) {
+			if (index == INVALID_IDX) {
 				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
 				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC) < 0) {
 					pr_err("[%d] get fb fail.\n", ctx->id);
@@ -2322,7 +2324,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 		vf->type |= VIDTYPE_V4L_EOS;
 		vf->timestamp = ULONG_MAX;
-		vf->v4l_mem_handle = (index == -1) ? (ulong)fb :
+		vf->v4l_mem_handle = (index == INVALID_IDX) ? (ulong)fb :
 							hw->pics[index].v4l_ref_buf_addr;
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
