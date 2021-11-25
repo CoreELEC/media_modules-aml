@@ -2667,9 +2667,11 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 
 	pbi->ready_for_new_data = 0;
 
-	if (pbi->has_keyframe == 0 &&
-		params->p.frame_type != KEY_FRAME){
+	if ((pbi->has_keyframe == 0) &&
+		(params->p.frame_type != KEY_FRAME) &&
+		(!params->p.intra_only)){
 		on_no_keyframe_skiped++;
+		pr_info("vp9_bufmgr_process no key frame return\n");
 		return -2;
 	}
 	pbi->has_keyframe = 1;
@@ -6336,6 +6338,10 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 		data32 |= (1<<10);
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	}
+
+	/* config mpred axi burst threshold */
+	WRITE_VREG(HEVC_MPRED_CTRL3, 0x24122412);
+
 #ifdef CO_MV_COMPRESS
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
 	    data32 = READ_VREG(HEVC_MPRED_CTRL4);
@@ -9686,20 +9692,21 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 #endif
 	if ((adapt_prob_status & 0xff) == 0xfd) {
 		struct VP9_Common_s *const cm = &pbi->common;
+		int pre_fc = 0;
 
 		if (pbi->m_ins_flag)
 				reset_process_time(pbi);
 
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
 			(vdec_secure(hw_to_vdec(pbi)))) {
-			tee_vp9_prob_process(cm->frame_type, cm->last_frame_type,
+			pre_fc = ((cm->frame_type == KEY_FRAME) || (cm->intra_only)) ? 0 : 1;
+			tee_vp9_prob_process(pre_fc, cm->last_frame_type,
 				adapt_prob_status, (unsigned int)pbi->prob_buffer_phy_addr);
 		} else {
-			int pre_fc = 0;
 			uint8_t *prev_prob_b, *cur_prob_b, *count_b;
 
 			/*VP9_REQ_ADAPT_PROB*/
-			pre_fc = (cm->frame_type == KEY_FRAME) ? 1 : 0;
+			pre_fc = ((cm->frame_type == KEY_FRAME) || (cm->intra_only));
 			prev_prob_b = ((uint8_t *)pbi->prob_buffer_addr) +
 				((adapt_prob_status >> 8) * 0x1000);
 			cur_prob_b = ((uint8_t *)pbi->prob_buffer_addr) + 0x4000;
