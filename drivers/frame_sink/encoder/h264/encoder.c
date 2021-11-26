@@ -4549,6 +4549,7 @@ static s32 encode_wq_init(void)
 		encode_isr_tasklet,
 		(ulong)&encode_manager);
 
+	spin_unlock(&encode_manager.event.sem_lock);
 	for (i = 0; i < MAX_ENCODE_REQUEST; i++) {
 		pitem = kcalloc(1,
 			sizeof(struct encode_queue_item_s),
@@ -4560,6 +4561,7 @@ static s32 encode_wq_init(void)
 		pitem->request.parent = NULL;
 		list_add_tail(&pitem->list, &encode_manager.free_queue);
 	}
+	spin_lock(&encode_manager.event.sem_lock);
 	encode_manager.current_wq = NULL;
 	encode_manager.last_wq = NULL;
 	encode_manager.encode_thread = NULL;
