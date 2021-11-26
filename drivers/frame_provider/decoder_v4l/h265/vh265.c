@@ -11741,6 +11741,8 @@ force_output:
 
 				memset(&pic, 0, sizeof(pic));
 
+				pic.aux_data_buf = vzalloc(hevc->prefix_aux_size);
+
 				set_aux_data(hevc, &pic, 0, 0);
 
 				if (pic.aux_data_buf
