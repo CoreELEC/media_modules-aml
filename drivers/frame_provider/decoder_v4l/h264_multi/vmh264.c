@@ -93,7 +93,7 @@ to enable DV of frame mode
 #define RATE_25_FPS  3840   /* 25 */
 #define RATE_2997_FPS  3203   /* 29.97 */
 #define RATE_5994_FPS  1601   /* 59.94 */
-#define RATE_11990_FPS  800   /* 119.90 */
+#define RATE_11988_FPS  801   /* 119.88 */
 #define DUR2PTS(x) ((x)*90/96)
 #define PTS2DUR(x) ((x)*96/90)
 #define DUR2PTS_REM(x) (x*90 - DUR2PTS(x)*96)
@@ -5862,32 +5862,31 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 
 		if (hw->is_used_v4l && (p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] == I_Slice) &&
 			(hw->num_units_in_tick != 0)) {
-			if (hw->num_units_in_tick % 1001 == 0) {
-				int multiple = hw->num_units_in_tick / 1001;
+			u32 frame_rate = hw->time_scale / hw->num_units_in_tick;
+			u32 rem = hw->time_scale % hw->num_units_in_tick;
 
-				if (hw->time_scale / multiple == 120000) {
-					hw->frame_dur = RATE_11990_FPS;
-					if (hw->fixed_frame_rate_flag == 1)
-						hw->frame_dur = RATE_5994_FPS;
-				} else if (hw->time_scale / multiple ==  60000) {
-					hw->frame_dur = RATE_5994_FPS;
-					if (hw->fixed_frame_rate_flag == 1)
-						hw->frame_dur = RATE_2997_FPS;
-				} else if ((hw->time_scale / multiple  == 48000) &&
-					(hw->fixed_frame_rate_flag == 1)) {
-					hw->frame_dur = RATE_2397_FPS;
-				} else if (hw->time_scale / multiple  == 30000) {
-					hw->frame_dur = RATE_2997_FPS;
-				} else if (hw->time_scale / multiple  == 24000) {
-					hw->frame_dur = RATE_2397_FPS;
-				}
-			} else {
-				u32 frame_rate = hw->time_scale / hw->num_units_in_tick;
-
+			if (rem == 0) {
 				if (hw->fixed_frame_rate_flag == 1) {
 					frame_rate = frame_rate / 2;
 				}
 				hw->frame_dur = 96000 / frame_rate;
+			} else {
+				if (frame_rate == 119) {
+					hw->frame_dur = RATE_11988_FPS;
+					if (hw->fixed_frame_rate_flag == 1)
+						hw->frame_dur = RATE_5994_FPS;
+				} else if (frame_rate == 59) {
+					hw->frame_dur = RATE_5994_FPS;
+					if (hw->fixed_frame_rate_flag == 1)
+						hw->frame_dur = RATE_2997_FPS;
+				} else if (frame_rate == 47) {
+					if (hw->fixed_frame_rate_flag == 1)
+						hw->frame_dur = RATE_2397_FPS;
+				} else if (frame_rate == 29) {
+					hw->frame_dur = RATE_2997_FPS;
+				} else if (frame_rate == 23) {
+					hw->frame_dur = RATE_2397_FPS;
+				}
 			}
 		}
 
