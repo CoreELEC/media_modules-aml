@@ -1898,10 +1898,10 @@ int dsc_set_key(struct aml_dsc_channel *ch, int flags, enum ca_cw_type type,
 	case CA_CW_SM4_ODD:
 	case CA_CW_SM4_EVEN_IV:
 	case CA_CW_SM4_ODD_IV:
-		am_ci_plus_set_output(ch);
 		ret = dsc_set_aes_des_sm4_key(ch, flags, type, key);
 		if (ret != 0)
 			goto END;
+		am_ci_plus_set_output(ch);
 		/* Different with old mode, do change */
 		if (ch->work_mode == DVBCSA_MODE || ch->work_mode == -1) {
 			if (ch->work_mode == -1)
@@ -2221,12 +2221,46 @@ static void aml_ci_plus_config(int key_endian, int mode, int algo)
 	pr_dbg("CIPLUS_CONFIG is 0x%x\n",data);
 }
 
+static void set_fec_core_sel (struct aml_dvb *dvb)
+{
+	int i;
+
+	for (i = 0; i < DMX_DEV_COUNT; i ++) {
+		int set = 0;
+		u32 ctrl = DMX_READ_REG(i, FEC_INPUT_CONTROL);
+
+		if ((dvb->dsc[0].dst != -1) && (dvb->dsc[0].dst - AM_TS_SRC_DMX0 == i)) {
+			set = 1;
+		} else if ((dvb->dsc[1].dst != -1) && (dvb->dsc[1].dst - AM_TS_SRC_DMX0 == i)) {
+			set = 1;
+		} else {
+			u32 cfg = READ_MPEG_REG(CIPLUS_CONFIG);
+
+			if (cfg & (1 << CNTL_ENABLE)) {
+				if (!ciplus_out_auto_mode) {
+					if (ciplus_out_sel & (1 << i))
+						set = 1;
+				}
+			}
+		}
+
+		if (set) {
+			ctrl |= (1 << FEC_CORE_SEL);
+		} else {
+			ctrl &= ~(1 << FEC_CORE_SEL);
+		}
+
+		DMX_WRITE_REG(i, FEC_INPUT_CONTROL, ctrl);
+	}
+}
+
 /*
  * Set output to demux set.
  */
 static void am_ci_plus_set_output(struct aml_dsc_channel *ch)
 {
 	struct aml_dsc *dsc = ch->dsc;
+	struct aml_dvb *dvb = dsc->dvb;
 	u32 data;
 	u32 in = 0, out = 0;
 	int set = 0;
@@ -2287,6 +2321,8 @@ static void am_ci_plus_set_output(struct aml_dsc_channel *ch)
 		WRITE_MPEG_REG(STB_TOP_CONFIG, data);
 		pr_inf("dsc ciplus in[%x] out[%x] %s\n", in, out,
 			(ciplus_out_auto_mode) ? "" : "force");
+
+		set_fec_core_sel(dvb);
 	}
 }
 
@@ -3438,11 +3474,15 @@ static int dmx_enable(struct aml_dmx *dmx)
 		}
 
 		if (!fec_core_sel) {
-			if (ciplus_out_sel != CIPLUS_OUTPUT_AUTO) {
-				int mask = 1 << dmx->id;
+			u32 cfg = READ_MPEG_REG(CIPLUS_CONFIG);
 
-				if (ciplus_out_sel & mask)
-					fec_core_sel = 1;
+			if (cfg & (1 << CNTL_ENABLE)) {
+				if (!ciplus_out_auto_mode) {
+					int mask = 1 << dmx->id;
+
+					if (ciplus_out_sel & mask)
+						fec_core_sel = 1;
+				}
 			}
 		}
 
@@ -4142,6 +4182,13 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 			}
 		}
 	}
+
+	{
+		u32 data;
+		data = READ_MPEG_REG(STB_TOP_CONFIG);
+		ciplus = 0x7C000000 & data;
+	}
+
 	WRITE_MPEG_REG(RESET1_REGISTER, RESET_DEMUXSTB);
 	/*WRITE_MPEG_REG(RESET3_REGISTER, RESET_DEMUX2|RESET_DEMUX1|RESET_DEMUX0|RESET_S2P1|RESET_S2P0|RESET_TOP);*/
 
@@ -4151,11 +4198,6 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 			if (!(DMX_READ_REG(id, OM_CMD_STATUS) & 0x01))
 				break;
 		}
-	}
-	{
-		u32 data;
-		data = READ_MPEG_REG(STB_TOP_CONFIG);
-		ciplus = 0x7C000000 & data;
 	}
 
 	WRITE_MPEG_REG(STB_TOP_CONFIG, 0);
@@ -4317,7 +4359,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 				dsc_set_pid(ch, ch->pid);
 				if (flag)
 					ch->used = 0;
-				//dsc_set_keys(ch);
+				dsc_set_keys(ch);
 			}
 		}
 	}
@@ -4360,6 +4402,13 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 		dvb->dmx_watchdog_disable[dmx->id] = 1;
 	}
 #endif
+
+	{
+		u32 data;
+		data = READ_MPEG_REG(STB_TOP_CONFIG);
+		ciplus = 0x7C000000 & data;
+	}
+
 	pr_error("dmx_reset_dmx_hw_ex_unlock into\n");
 	WRITE_MPEG_REG(RESET3_REGISTER,
 		       (dmx->id) ? ((dmx->id ==
@@ -4378,11 +4427,6 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 	}
 
 	/*WRITE_MPEG_REG(STB_TOP_CONFIG, 0); */
-	{
-		u32 data;
-		data = READ_MPEG_REG(STB_TOP_CONFIG);
-		ciplus = 0x7C000000 & data;
-	}
 
 	{
 		u32 version, data;
@@ -4546,7 +4590,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 				dsc_set_pid(ch, ch->pid);
 				if (flag)
 					ch->used = 0;
-				//dsc_set_keys(ch);
+				dsc_set_keys(ch);
 				}
 			}
 		}
@@ -6077,7 +6121,9 @@ static ssize_t ciplus_output_ctrl_store(struct class *class,
 					  struct class_attribute *attr,
 					  const char *buf, size_t size)
 {
+	struct aml_dvb *dvb = aml_get_dvb_device();
 	int i, tmp;
+	u32 top_cfg, ci_cfg;
 
 	i = kstrtoint(buf, -1, &tmp);
 	if (tmp > 8 || tmp < 0)
@@ -6091,6 +6137,27 @@ static ssize_t ciplus_output_ctrl_store(struct class *class,
 		ciplus_out_sel = tmp;
 		pr_error("Auto set output mode disable\n");
 	}
+
+	top_cfg = READ_MPEG_REG(STB_TOP_CONFIG);
+	ci_cfg  = READ_MPEG_REG(CIPLUS_CONFIG);
+
+	if (ci_cfg & (1 << CNTL_ENABLE)) {
+		int out = 0;
+
+		if (ciplus_out_auto_mode) {
+			if (dvb->dsc[0].source != -1)
+				out = 1 << (dvb->dsc[0].source - AM_TS_SRC_DMX0);
+		} else {
+			out = ciplus_out_sel;
+		}
+
+		top_cfg &=  ~(7<<CIPLUS_OUT_SEL);
+		top_cfg |= (out<<CIPLUS_OUT_SEL);
+		WRITE_MPEG_REG(STB_TOP_CONFIG, top_cfg);
+
+		set_fec_core_sel(dvb);
+	}
+
 	return size;
 }
 static ssize_t reset_fec_input_ctrl_show(struct class *class,
