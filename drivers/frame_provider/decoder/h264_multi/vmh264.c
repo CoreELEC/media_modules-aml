@@ -10292,6 +10292,12 @@ static void h264_reconfig(struct vdec_h264_hw_s *hw)
 			hw->buffer_spec[i].used = 4;
 
 		hw->buffer_spec[i].canvas_pos = -1;
+
+		if (hw->buffer_spec[i].used == 4 &&
+			hw->buffer_spec[i].vf_ref != 0 &&
+			hw->buffer_spec[i].cma_alloc_addr) {
+			hw->buffer_spec[i].used = 3;
+		}
 	}
 	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 	hw->has_i_frame = 0;
