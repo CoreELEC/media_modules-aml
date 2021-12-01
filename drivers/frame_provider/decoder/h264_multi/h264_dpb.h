@@ -926,6 +926,7 @@ struct h264_dpb_stru {
 	int first_output_poc;
 	int dpb_frame_count;
 	u32 without_display_mode;
+	int long_term_reference_flag;
 };
 
 
