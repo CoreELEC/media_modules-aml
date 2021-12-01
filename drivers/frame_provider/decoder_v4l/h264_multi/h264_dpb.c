@@ -421,6 +421,8 @@ void slice_prepare(struct h264_dpb_stru *p_H264_Dpb,
 		pSlice->long_term_reference_flag,
 		pSlice->no_output_of_prior_pics_flag);
 
+		p_H264_Dpb->long_term_reference_flag = pSlice->long_term_reference_flag;
+
 		dpb_print(p_H264_Dpb->decoder_index,
 		PRINT_FLAG_DPB_DETAIL,
 		"idr set pre_frame_num(%d) to frame_num (%d)\n",
