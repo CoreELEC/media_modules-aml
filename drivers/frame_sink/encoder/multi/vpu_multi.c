@@ -1021,8 +1021,8 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 	bool first_open = false;
 	s32 r = 0;
 
-	enc_pr(LOG_DEBUG, "[+] %s, filp=%lu, %lu, f_count=%lld\n", __func__,
-			(unsigned long)filp, ( ((unsigned long)filp)%8), filp->f_count.counter);
+	//enc_pr(LOG_DEBUG, "[+] %s, filp=%lu, %lu, f_count=%lld\n", __func__,
+			//(unsigned long)filp, ( ((unsigned long)filp)%8), filp->f_count.counter);
 	spin_lock(&s_vpu_lock);
 	s_vpu_drv_context.open_count++;
 	if (s_vpu_drv_context.open_count == 1) {
@@ -2501,8 +2501,8 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 	u32 open_count;
 	s32 i;
 
-	enc_pr(LOG_DEBUG, "vpu_release filp=%lu, f_counter=%lld\n",
-			(unsigned long)filp, filp->f_count.counter);
+	//enc_pr(LOG_DEBUG, "vpu_release filp=%lu, f_counter=%lld\n",
+			//(unsigned long)filp, filp->f_count.counter);
 	ret = down_interruptible(&s_vpu_sem);
 
 	if (ret == 0) {
