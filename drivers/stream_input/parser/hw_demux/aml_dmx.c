@@ -2513,7 +2513,7 @@ static int dsc_set_aes_des_sm4_key(struct aml_dsc_channel *ch, int flags,
 
 void dsc_release(void)
 {
-	aml_ci_plus_disable();
+	//aml_ci_plus_disable();
 }
 /************************* AES DESC************************************/
 void set_ciplus_input_source(struct aml_dsc *dsc)
