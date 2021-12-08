@@ -1667,6 +1667,8 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 		}
 		fs->pts = p->pts;
 		fs->pts64 = p->pts64;
+		fs->last_field_timestamp = p->timestamp;
+		fs->timestamp = p->timestamp;
 		fs->layer_id = p->layer_id;
 #if (MVC_EXTENSION_ENABLE)
 		fs->view_id = p->view_id;
@@ -1689,6 +1691,8 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 //			fs->pts = p->pts;
 //			fs->pts64 = p->pts64;
 		}
+		fs->last_field_timestamp = fs->timestamp;
+		fs->timestamp = p->timestamp;
 		fs->frame_size += p->frame_size;
 #if (MVC_EXTENSION_ENABLE)
 		fs->view_id = p->view_id;
@@ -1721,6 +1725,8 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 //			fs->pts = p->pts;
 //			fs->pts64 = p->pts64;
 		}
+		fs->last_field_timestamp = fs->timestamp;
+		fs->timestamp = p->timestamp;
 		fs->frame_size += p->frame_size;
 #if (MVC_EXTENSION_ENABLE)
 		fs->view_id = p->view_id;
@@ -1773,13 +1779,6 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 #endif
 	//fs->pts = p->pts;
 	//fs->pts64 = p->pts64;
-	}
-	if ((fs->frame != NULL) &&
-		((fs->bottom_field != NULL) || (fs->top_field != NULL))) {
-		fs->last_field_timestamp = fs->timestamp;
-		fs->timestamp = p->timestamp;
-	} else {
-		fs->timestamp = p->timestamp;
 	}
 	if (mvfrm) {
 		fs->frame_size2 = mvfrm->frame_size;
