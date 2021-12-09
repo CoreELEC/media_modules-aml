@@ -6139,18 +6139,10 @@ static bool is_buffer_available(struct vdec_s *vdec)
 				}
 			}
 			spin_unlock_irqrestore(&hw->bufspec_lock, flags);
-			inner_size = p_Dpb->size - frame_outside_count;
+			inner_size = p_Dpb->used_size - frame_outside_count;
 
 			if (inner_size >= p_H264_Dpb->dec_dpb_size) {
-				if (p_H264_Dpb->mDPB.used_size >=
-					p_H264_Dpb->mDPB.size) {
-					bufmgr_recover(hw);
-				} else if (p_H264_Dpb->mDPB.used_size >=
-					(p_H264_Dpb->mDPB.size - 1)) {
-					if (inner_size > p_H264_Dpb->dec_dpb_size) {
-						bufmgr_recover(hw);
-					}
-				}
+				bufmgr_recover(hw);
 			}
 			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
 		} else if ((hw->error_proc_policy & 0x8) &&
