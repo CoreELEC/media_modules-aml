@@ -158,7 +158,9 @@ struct stream_buffer_metainfo {
 	};
 	u32 stbuf_flag;
 	u32 stbuf_private;
-	u32 reserved[16];
+	u32 jump_back_flag;
+	u32 pts_server_id;
+	u32 reserved[14];
 };
 
 struct stream_buffer_status {

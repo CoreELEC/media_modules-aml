@@ -208,6 +208,17 @@ extern void vdec_fill_vdec_frame(struct vdec_s *vdec,
 extern void vdec_vframe_ready(struct vdec_s *vdec, struct vframe_s *vf);
 extern void vdec_set_vframe_comm(struct vdec_s *vdec, char *n);
 
+typedef struct checkoutptsoffset {
+	u64 offset;
+	u32 pts;
+	u64 pts_64;
+} checkout_pts_offset;
+
+typedef long (*pfun_ptsserver_peek_pts_offset)(int pServerInsId,
+	checkout_pts_offset* mCheckoutPtsOffset);
+
+long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPtsOffset);
+
 struct vdec_s;
 enum vformat_t;
 
@@ -371,6 +382,8 @@ struct vdec_s {
 	u32 video_id;
 	int is_v4l;
 	bool is_stream_mode_dv_multi;
+	int pts_server_id;
+	pfun_ptsserver_peek_pts_offset ptsserver_peek_pts_offset;
 };
 
 #define CODEC_MODE(a, b, c, d)\

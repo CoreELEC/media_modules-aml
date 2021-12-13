@@ -3559,6 +3559,10 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			sizeof(struct stream_buffer_metainfo))) {
 			return -EFAULT;
 		}
+
+		priv->vdec->pts_server_id = parm.pts_server_id;
+		pr_info("pts server id = %x\n", parm.pts_server_id);
+
 		stream_buffer_set_ext_buf(vbuf, parm.stbuf_start,
 			parm.stbuf_size, parm.stbuf_flag);
 		break;

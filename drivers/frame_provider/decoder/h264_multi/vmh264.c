@@ -6487,24 +6487,43 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				struct StorablePicture *pic =
 					p_H264_Dpb->mVideo.dec_picture;
 				u32 offset = pic->offset_delimiter;
-				pic->pic_size = (hw->start_bit_cnt - READ_VREG(VIFF_BIT_CNT)) >> 3;
-				if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
-					offset, &pic->pts, 0, &pic->pts64)) {
-					pic->pts = 0;
-					pic->pts64 = 0;
-#ifdef MH264_USERDATA_ENABLE
-					vmh264_udc_fill_vpts(hw,
-						p_H264_Dpb->mSlice.slice_type,
-						pic->pts, 0);
-#endif
-				} else {
-#ifdef MH264_USERDATA_ENABLE
-					vmh264_udc_fill_vpts(hw,
-						p_H264_Dpb->mSlice.slice_type,
-						pic->pts, 1);
-#endif
-				}
+				u32 vpts_valid = 0;
+				u32 vpts = 0;
+				checkout_pts_offset pts_info;
 
+				pic->pic_size = (hw->start_bit_cnt - READ_VREG(VIFF_BIT_CNT)) >> 3;
+				if (vdec->pts_server_id == 0) {
+					if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
+						offset, &pic->pts, 0, &pic->pts64)) {
+						pic->pts = 0;
+						pic->pts64 = 0;
+					} else {
+						vpts = pic->pts;
+						vpts_valid = 1;
+					}
+				} else {
+
+					if (!vdec->ptsserver_peek_pts_offset)
+						vdec->ptsserver_peek_pts_offset = symbol_request(ptsserver_peek_pts_offset);
+
+					if (vdec->ptsserver_peek_pts_offset) {
+						pts_info.offset = (((u64)hw->frame_dur << 32) & 0xffffffff00000000) | offset;
+						if (!vdec->ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+							vpts = pts_info.pts;
+							vpts_valid = 1;
+						}
+					}
+				}
+#ifdef MH264_USERDATA_ENABLE
+
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+					"%s: id = %x, offset: %x, vpts: %d, vpts_valid %d\n",
+					__func__, vdec->pts_server_id, offset, vpts, vpts_valid);
+
+				vmh264_udc_fill_vpts(hw,
+					p_H264_Dpb->mSlice.slice_type,
+					vpts, vpts_valid);
+#endif
 	}
 			mutex_unlock(&hw->chunks_mutex);
 
