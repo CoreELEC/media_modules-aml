@@ -721,6 +721,7 @@ struct aml_vcodec_ctx {
 
 	bool 				second_field_pts_mode;
 	struct aux_info			aux_infos;
+	u32				capture_memory_mode;
 };
 
 /**

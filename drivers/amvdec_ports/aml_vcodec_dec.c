@@ -583,6 +583,20 @@ void vdec_frame_buffer_release(void *data)
 	kfree(data);
 }
 
+void aml_clean_proxy_uvm(struct aml_vcodec_ctx *ctx)
+{
+	struct uvm_hook_mod_info *uvm = NULL;
+	int i;
+
+	for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
+		if (ctx && ctx->uvm_proxy) {
+			uvm = &ctx->uvm_proxy[i];
+			if (uvm->free)
+				uvm->free(uvm->arg);
+		}
+	}
+}
+
 static void v4l2_buff_done(struct vb2_v4l2_buffer *buf, enum vb2_buffer_state state)
 {
 	struct aml_vcodec_ctx *ctx = vb2_get_drv_priv(buf->vb2_buf.vb2_queue);
@@ -2065,6 +2079,9 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 					ctx->vpp_size);
 			//rb->count = ctx->dpb_size;
 		}
+		ctx->capture_memory_mode = rb->memory;
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
+			"capture buffer memory mode is %d\n", rb->memory);
 	} else {
 		ctx->output_dma_mode =
 			(rb->memory == VB2_MEMORY_DMABUF) ? 1 : 0;
@@ -2101,6 +2118,10 @@ static int vidioc_vdec_expbuf(struct file *file, void *priv,
 void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx)
 {
 	ulong flags;
+	if (ctx->capture_memory_mode == VB2_MEMORY_MMAP) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,"clean proxy uvm\n");
+		aml_clean_proxy_uvm(ctx);
+	}
 
 	if (kref_read(&ctx->box_ref))
 		kref_put(&ctx->box_ref, box_release);
@@ -3118,6 +3139,7 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 	ctx->uvm_proxy = vzalloc(sizeof(*ctx->uvm_proxy) * V4L_CAP_BUFF_MAX);
 	if (!ctx->uvm_proxy)
 		goto free_mmubox;
+	memset(ctx->uvm_proxy, 0, sizeof(*ctx->uvm_proxy) * V4L_CAP_BUFF_MAX);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "box init, bmmu: %px, mmu: %px\n",
 		ctx->bmmu_box, ctx->mmu_box);
@@ -3515,7 +3537,7 @@ static int bind_comp_buffer_to_uvm(struct aml_vcodec_ctx *ctx,
 		u_info.free = internal_buf_free2;
 	}
 
-	ret = dmabuf_is_uvm(dma) ?
+	ret = ((dma != NULL) && dmabuf_is_uvm(dma)) ?
 		uvm_attach_hook_mod(dma, &u_info) :
 		uvm_attach_hook_mod_local(ctx, &u_info);
 	if (ret < 0) {
@@ -3640,7 +3662,6 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 			/* bind compressed buffer to uvm */
 			if ((dw_mode != VDEC_DW_NO_AFBC) &&
-				vb->memory == VB2_MEMORY_DMABUF &&
 				bind_comp_buffer_to_uvm(ctx, buf)) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to bind comp buffer\n");
 				return;
