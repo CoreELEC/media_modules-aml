@@ -4687,29 +4687,30 @@ static s32 jpegenc_probe(struct platform_device *pdev)
         gJpegenc.mem.buf_size = 0;
         return -EFAULT;
     }
-#if 1
-    res_irq = platform_get_irq(pdev, 0);
-#else
-    switch (manual_irq_num) {
-        case 0:
-            res_irq = platform_get_irq_byname(pdev, "dos_mbox_slow_irq0");
-            pr_err("[%s:%d] get irq dos_mbox_slow_irq0, res_irq=%d\n", __FUNCTION__, __LINE__, res_irq);
-            break;
-        case 1:
-            res_irq = platform_get_irq_byname(pdev, "dos_mbox_slow_irq1");
-            pr_err("[%s:%d] get irq dos_mbox_slow_irq1, res_irq=%d\n", __FUNCTION__, __LINE__, res_irq);
-            break;
-        case 2:
-            res_irq = platform_get_irq_byname(pdev, "dos_mbox_slow_irq2");
-            pr_err("[%s:%d] get irq dos_mbox_slow_irq2, res_irq=%d\n", __FUNCTION__, __LINE__, res_irq);
-            break;
-        default:
 
-            res_irq = platform_get_irq_byname(pdev, "dos_mbox_slow_irq0");
-            pr_err("[%s:%d] get irq dos_mbox_slow_irq0, res_irq=%d\n", __FUNCTION__, __LINE__, res_irq);
-            break;
+    if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+        switch (manual_irq_num) {
+            case 0:
+                res_irq = platform_get_irq_byname(pdev, "dos_mbox_slow_irq0");
+                pr_err("[%s:%d] get irq dos_mbox_slow_irq0, res_irq=%d\n", __FUNCTION__, __LINE__, res_irq);
+                break;
+            case 1:
+                res_irq = platform_get_irq_byname(pdev, "dos_mbox_slow_irq1");
+                pr_err("[%s:%d] get irq dos_mbox_slow_irq1, res_irq=%d\n", __FUNCTION__, __LINE__, res_irq);
+                break;
+            case 2:
+                res_irq = platform_get_irq_byname(pdev, "dos_mbox_slow_irq2");
+                pr_err("[%s:%d] get irq dos_mbox_slow_irq2, res_irq=%d\n", __FUNCTION__, __LINE__, res_irq);
+                break;
+            default:
+
+                res_irq = platform_get_irq_byname(pdev, "dos_mbox_slow_irq0");
+                pr_err("[%s:%d] get irq dos_mbox_slow_irq0, res_irq=%d\n", __FUNCTION__, __LINE__, res_irq);
+                break;
+        }
+    } else {
+        res_irq = platform_get_irq(pdev, 0);
     }
-#endif
 
     if (res_irq < 0) {
         jenc_pr(LOG_ERROR, "[%s] get irq error!", __func__);
