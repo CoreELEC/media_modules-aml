@@ -11895,12 +11895,12 @@ force_output:
 						~(0xf << 3);
 					hevc->param.p.sei_frame_field_info |=
 						(pic.pic_struct << 3);
-
-					if (pic.hdr10p_data_buf)
-						vfree(pic.hdr10p_data_buf);
-					if (pic.aux_data_buf)
-						vfree(pic.aux_data_buf);
 				}
+
+				if (pic.hdr10p_data_buf)
+					vfree(pic.hdr10p_data_buf);
+				if (pic.aux_data_buf)
+					vfree(pic.aux_data_buf);
 			}
 
 			aspect_ratio_set(hevc, &hevc->frame_ar, &ctx->height_aspect_ratio, &ctx->width_aspect_ratio);
