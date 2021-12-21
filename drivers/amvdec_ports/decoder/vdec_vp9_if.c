@@ -31,6 +31,7 @@
 #include "../vdec_drv_base.h"
 #include "aml_vp9_parser.h"
 #include "vdec_vp9_trigger.h"
+#include "../utils/common.h"
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
 #include <trace/events/meson_atrace.h>
@@ -348,15 +349,15 @@ static int vdec_get_dw_mode(struct vdec_vp9_inst *inst, int dw_mode)
 
 	switch (valid_dw_mode) {
 	case 0x100:
-		if (w > 1920 && h > 1088)
+		if (is_over_size(w, h, 1920 * 1088))
 			dw = 0x4; /*1:2*/
 		break;
 	case 0x200:
-		if (w > 1920 && h > 1088)
+		if (is_over_size(w, h, 1920 * 1088))
 			dw = 0x2; /*1:4*/
 		break;
 	case 0x300:
-		if (w > 1280 && h > 720)
+		if (is_over_size(w, h, 1280 * 768))
 			dw = 0x4; /*1:2*/
 		break;
 	default:

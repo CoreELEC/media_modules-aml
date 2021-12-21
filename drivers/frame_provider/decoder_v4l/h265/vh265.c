@@ -2377,21 +2377,21 @@ static int get_double_write_mode(struct hevc_state_s *hevc)
 
 	switch (valid_dw_mode) {
 	case 0x100:
-		if (w > 1920 && h > 1088)
+		if (w * h > 1920 * 1088)
 			dw = 0x4; /*1:2*/
 		break;
 	case 0x200:
-		if (w > 1920 && h > 1088)
+		if (w * h > 1920 * 1088)
 			dw = 0x2; /*1:4*/
 		break;
 	case 0x300:
-		if (w > 1280 && h > 720)
+		if (w * h > 1280 * 768)
 			dw = 0x4; /*1:2*/
 		break;
 	case 0x1000:
-		if (w * h > 1920 * 1080)
+		if (w * h > 1920 * 1088)
 			dw = 3;
-		else if (w * h > 960 * 540)
+		else if (w * h > 960 * 576)
 			dw = 5;
 		else
 			dw = 1;
