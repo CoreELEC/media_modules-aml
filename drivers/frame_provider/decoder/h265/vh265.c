@@ -9982,6 +9982,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			"%s: pic index 0x%x\n",
 			__func__, pic->index);*/
 
+		vf->frame_type = 0;
 		if (hevc->is_used_v4l) {
 			vf->v4l_mem_handle
 				= hevc->m_BUF[pic->BUF_index].v4l_ref_buf_addr;

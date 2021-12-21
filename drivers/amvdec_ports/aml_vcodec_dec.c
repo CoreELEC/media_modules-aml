@@ -884,7 +884,10 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 
 		fb_map_table_hold(ctx, vb2_buf, vf, fb->task, dstbuf->internal_index);
 
-		v4l2_buff_done(&dstbuf->vb, VB2_BUF_STATE_DONE);
+		if (vf->frame_type & V4L2_BUF_FLAG_ERROR)
+			v4l2_buff_done(&dstbuf->vb, VB2_BUF_STATE_ERROR);
+		else
+			v4l2_buff_done(&dstbuf->vb, VB2_BUF_STATE_DONE);
 
 		fb->status = FB_ST_DISPLAY;
 	}

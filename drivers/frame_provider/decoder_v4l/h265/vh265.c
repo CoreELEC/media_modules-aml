@@ -9687,6 +9687,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			"%s: pic index 0x%x\n",
 			__func__, pic->index);*/
 
+		vf->frame_type = 0;
 		if (hevc->is_used_v4l) {
 			vf->v4l_mem_handle = pic->cma_alloc_addr;
 			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
