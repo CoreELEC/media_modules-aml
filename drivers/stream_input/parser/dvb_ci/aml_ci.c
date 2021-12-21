@@ -47,8 +47,6 @@ module_param(aml_ci_debug, int, S_IRUGO);
 	} while (0)
 #define pr_error(fmt, args...) printk("DVBCI: " fmt, ## args)
 
-
-extern struct dvb_adapter *aml_get_dvb_adapter(void);
 /**\brief aml_ci_mem_read:mem read from cam
  * \param en50221: en50221 obj,used this data to get dvb_ci obj
  * \param slot: slot index
@@ -706,16 +704,36 @@ static int aml_ci_unregister_class(struct aml_ci *ci)
 	return 0;
 }
 
+static struct dvb_adapter *aml_get_dvb_adapter(void)
+{
+	return NULL;
+}
 
 static int aml_ci_probe(struct platform_device *pdev)
 {
-	struct dvb_adapter *dvb_adapter = aml_get_dvb_adapter();
+	struct dvb_adapter *dvb_adapter;
 	int err = 0;
+	typeof(&aml_get_dvb_adapter) __a;
+
+	__a = symbol_request(aml_get_dvb_adapter);
+	if (__a) {
+		dvb_adapter = (struct dvb_adapter *)__a();
+		if (!dvb_adapter) {
+			pr_dbg("aml_get_dvb_adapter is null\n");
+			symbol_put_addr(aml_get_dvb_adapter);
+			return 0;
+		}
+	} else {
+		pr_dbg("load aml_get_dvb_adapter fail\n");
+		return 0;
+	}
 	pr_dbg("---Amlogic CI Init---[%p]\n", dvb_adapter);
 
 	err = aml_ci_init(pdev, dvb_adapter, &ci_dev);
-	if (err < 0)
+	if (err < 0) {
+		symbol_put_addr(aml_get_dvb_adapter);
 		return err;
+	}
 	platform_set_drvdata(pdev, ci_dev);
 	aml_ci_register_class(ci_dev);
 #if 0
@@ -746,6 +764,7 @@ static int aml_ci_remove(struct platform_device *pdev)
 		pr_dbg("---Amlogic CI remove unkown io type---\n");
 
 	aml_ci_exit(ci_dev);
+	symbol_put_addr(aml_get_dvb_adapter);
 	return 0;
 }
 
