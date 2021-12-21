@@ -12440,7 +12440,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 
 	if (vvp9_init(pdata) < 0) {
 		pr_info("\namvdec_vp9 init failed.\n");
-		vdec_timeline_put(pdata->sync);
+		if (pbi->enable_fence)
+			vdec_timeline_put(pdata->sync);
 		vp9_local_uninit(pbi);
 		uninit_mmu_buffers(pbi);
 		/* devm_kfree(&pdev->dev, (void *)pbi); */
