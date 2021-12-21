@@ -308,15 +308,15 @@ static int vdec_get_dw_mode(struct vdec_hevc_inst *inst, int dw_mode)
 
 	switch (valid_dw_mode) {
 	case 0x100:
-		if (w > 1920 && h > 1088)
+		if (is_over_size(w, h, 1920 * 1088))
 			dw = 0x4; /*1:2*/
 		break;
 	case 0x200:
-		if (w > 1920 && h > 1088)
+		if (is_over_size(w, h, 1920 * 1088))
 			dw = 0x2; /*1:4*/
 		break;
 	case 0x300:
-		if (w > 1280 && h > 720)
+		if (is_over_size(w, h, 1280 * 768))
 			dw = 0x4; /*1:2*/
 		break;
 	default:

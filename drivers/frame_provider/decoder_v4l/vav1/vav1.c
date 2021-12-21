@@ -1064,15 +1064,15 @@ static int get_double_write_mode(struct AV1HW_s *hw)
 	dw = 0x1; /*1:1*/
 	switch (valid_dw_mode) {
 	case 0x100:
-		if (w > 1920 && h > 1088)
+		if (h * w > 1920 * 1088)
 			dw = 0x4; /*1:2*/
 		break;
 	case 0x200:
-		if (w > 1920 && h > 1088)
+		if (h * w > 1920 * 1088)
 			dw = 0x2; /*1:4*/
 		break;
 	case 0x300:
-		if (w > 1280 && h > 720)
+		if (w * h > 1280 * 768)
 			dw = 0x4; /*1:2*/
 		break;
 	default:
