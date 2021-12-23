@@ -924,13 +924,6 @@ static void check_timer_func(struct timer_list *timer)
 		WRITE_VREG(DEC_STATUS_REG, 0);
 	}
 
-	if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
-		hw->dec_result = DEC_RESULT_FORCE_EXIT;
-		vdec_schedule_work(&hw->work);
-		pr_info("vdec requested to be disconnected\n");
-		return;
-	}
-
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 }
 
