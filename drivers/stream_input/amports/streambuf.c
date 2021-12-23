@@ -196,12 +196,10 @@ void stbuf_fetch_release(void)
 
 static void _stbuf_timer_func(struct timer_list *arg)
 {
-	struct stream_buf_s *p = (struct stream_buf_s *)arg;
+	struct stream_buf_s *p = container_of(arg, struct stream_buf_s, timer);
 
 	if (stbuf_space(p) < p->wcnt) {
-		p->timer.expires = jiffies + STBUF_WAIT_INTERVAL;
-
-		add_timer(&p->timer);
+		mod_timer(&p->timer, jiffies + STBUF_WAIT_INTERVAL);
 	} else
 		wake_up_interruptible(&p->wq);
 
@@ -412,9 +410,9 @@ s32 stbuf_wait_space(struct stream_buf_s *stream_buf, size_t count)
 
 	p->wcnt = count;
 
-	timer_setup(&p->timer, _stbuf_timer_func, (ulong) p);
-
-	mod_timer(&p->timer, jiffies + STBUF_WAIT_INTERVAL);
+	timer_setup(&p->timer, _stbuf_timer_func, 0);
+	p->timer.expires = jiffies + STBUF_WAIT_INTERVAL;
+	add_timer(&p->timer);
 
 	if (wait_event_interruptible_timeout
 		(p->wq, stbuf_space(p) >= count,
