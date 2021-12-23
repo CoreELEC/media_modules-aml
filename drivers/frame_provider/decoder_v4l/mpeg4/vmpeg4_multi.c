@@ -2099,7 +2099,6 @@ static void check_timer_func(struct timer_list *timer)
 {
 	struct vdec_mpeg4_hw_s *hw = container_of(timer,
 		struct vdec_mpeg4_hw_s, check_timer);
-	struct vdec_s *vdec = hw_to_vdec(hw);
 	unsigned int timeout_val = decode_timeout_val;
 
 	if (radr != 0) {
@@ -2124,14 +2123,6 @@ static void check_timer_func(struct timer_list *timer)
 				timeout_process(hw);
 		}
 		hw->last_vld_level = READ_VREG(VLD_MEM_VIFIFO_LEVEL);
-	}
-
-	if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
-		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-			"vdec requested to be disconnected\n");
-		hw->dec_result = DEC_RESULT_FORCE_EXIT;
-		vdec_schedule_work(&hw->work);
-		return;
 	}
 
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
