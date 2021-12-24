@@ -851,6 +851,7 @@ struct AV1HW_s {
 	bool high_bandwidth_flag;
 	int film_grain_present;
 	ulong fg_table_handle;
+	spinlock_t wait_buf_lock;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -2490,7 +2491,7 @@ static void set_aux_data(struct AV1HW_s *hw,
 				h[6] = (padding_len >> 8) & 0xff;
 				h[7] = (padding_len) & 0xff;
 			}
-			if (debug & AV1_DEBUG_BUFMGR_MORE) {
+			if (debug & AOM_DEBUG_AUX_DATA) {
 				av1_print(hw, 0, "aux: (size %d) suffix_flag %d\n",
 					*aux_data_size, suffix_flag);
 				for (i = 0; i < *aux_data_size; i++) {
@@ -5695,13 +5696,15 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 		hw->last_put_idx = index;
 		hw->new_frame_displayed++;
 
+		unlock_buffer_pool(hw->common.buffer_pool, flags);
+
+		spin_lock_irqsave(&hw->wait_buf_lock, flags);
 		if (hw->wait_more_buf) {
 			hw->wait_more_buf = false;
 			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
 			vdec_schedule_work(&hw->work);
 		}
-
-		unlock_buffer_pool(hw->common.buffer_pool, flags);
+		spin_unlock_irqrestore(&hw->wait_buf_lock, flags);
 	}
 }
 
@@ -6875,7 +6878,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		if (cm->cur_frame) {
 			PIC_BUFFER_CONFIG* cur_pic_config = &cm->cur_frame->buf;
 			if (debug &
-				AV1_DEBUG_BUFMGR_MORE)
+				AOM_DEBUG_AUX_DATA)
 				dump_aux_buf(hw);
 			set_pic_aux_data(hw,
 				cur_pic_config, 0, 0);
@@ -6901,7 +6904,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		PIC_BUFFER_CONFIG* cur_pic_config = &cm->cur_frame->buf;
 		PIC_BUFFER_CONFIG* prev_pic_config = &cm->prev_frame->buf;
 		if (debug &
-			AV1_DEBUG_BUFMGR_MORE)
+			AOM_DEBUG_AUX_DATA)
 			dump_aux_buf(hw);
 		set_dv_data(hw);
 		if (cm->show_frame &&
@@ -7564,7 +7567,7 @@ static int load_param(struct AV1HW_s *hw, union param_u *params, uint32_t dec_st
 	params->p.enable_ref_frame_mvs = (params->p.seq_flags >> 7) & 0x1;
 	params->p.enable_superres = (params->p.seq_flags >> 15) & 0x1;
 
-    if (debug & AV1_DEBUG_BUFMGR_MORE) {
+    if (debug & AV1_DEBUG_DUMP_DATA) {
 		lock_buffer_pool(hw->common.buffer_pool, flags);
 	    pr_info("aom_param: (%d)\n", hw->pbi->decode_idx);
 	    for ( i = 0; i < (RPM_END-RPM_BEGIN); i++) {
@@ -8782,6 +8785,7 @@ static s32 vav1_init(struct AV1HW_s *hw)
 
 	INIT_WORK(&hw->set_clk_work, av1_set_clk);
 	timer_setup(&hw->timer, vav1_put_timer_func, 0);
+	spin_lock_init(&hw->wait_buf_lock);
 
 	for (i = 0; i < FILM_GRAIN_REG_SIZE; i++) {
 		WRITE_VREG(HEVC_FGS_DATA, 0);
@@ -9003,7 +9007,6 @@ static int av1_wait_cap_buf(void *args)
 {
 	struct AV1HW_s *hw =
 		(struct AV1HW_s *) args;
-	struct AV1_Common_s *const cm = &hw->common;
 	struct aml_vcodec_ctx * ctx =
 		(struct aml_vcodec_ctx *)hw->v4l2_ctx;
 	ulong flags;
@@ -9013,11 +9016,11 @@ static int av1_wait_cap_buf(void *args)
 		(ctx->is_stream_off || (get_free_buf_count(hw) > 0)),
 		msecs_to_jiffies(300));
 	if (ret <= 0){
-		av1_print(hw, PRINT_FLAG_V4L_DETAIL, "%s, wait cap buf timeout or err %d\n",
+		av1_print(hw, PRINT_FLAG_V4L_DETAIL, "%s, wait cap buf %d\n",
 			__func__, ret);
 	}
 
-	lock_buffer_pool(cm->buffer_pool, flags);
+	spin_lock_irqsave(&hw->wait_buf_lock, flags);
 	if (hw->wait_more_buf) {
 		hw->wait_more_buf = false;
 		hw->dec_result = ctx->is_stream_off ?
@@ -9025,7 +9028,7 @@ static int av1_wait_cap_buf(void *args)
 		AOM_AV1_RESULT_NEED_MORE_BUFFER;
 		vdec_schedule_work(&hw->work);
 	}
-	unlock_buffer_pool(cm->buffer_pool, flags);
+	spin_unlock_irqrestore(&hw->wait_buf_lock, flags);
 
 	av1_print(hw, PRINT_FLAG_V4L_DETAIL,
 		"%s wait capture buffer end, ret:%d\n",
@@ -9058,11 +9061,10 @@ static void av1_work(struct work_struct *work)
 	if (hw->dec_result == AOM_AV1_RESULT_NEED_MORE_BUFFER) {
 		reset_process_time(hw);
 		if (get_free_buf_count(hw) <= 0) {
-			struct AV1_Common_s *const cm = &hw->common;
 			ulong flags;
 			int ret;
 
-			lock_buffer_pool(cm->buffer_pool, flags);
+			spin_lock_irqsave(&hw->wait_buf_lock, flags);
 
 			hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
 			if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
@@ -9071,27 +9073,29 @@ static void av1_work(struct work_struct *work)
 			} else {
 				hw->wait_more_buf = true;
 			}
-			unlock_buffer_pool(cm->buffer_pool, flags);
+			spin_unlock_irqrestore(&hw->wait_buf_lock, flags);
 
 			if (hw->wait_more_buf) {
 				ATRACE_COUNTER("V_ST_DEC-wait_more_buff", __LINE__);
 				ret = vdec_post_task(av1_wait_cap_buf, hw);
 				if (ret != 0) {
 					pr_err("post task create failed!!!! ret %d\n", ret);
-					lock_buffer_pool(cm->buffer_pool, flags);
+					spin_lock_irqsave(&hw->wait_buf_lock, flags);
 					hw->wait_more_buf = false;
 					hw->dec_result = AOM_AV1_RESULT_NEED_MORE_BUFFER;
 					vdec_schedule_work(&hw->work);
-					unlock_buffer_pool(cm->buffer_pool, flags);
+					spin_unlock_irqrestore(&hw->wait_buf_lock, flags);
 				}
 			}
 
 		} else {
 			ATRACE_COUNTER("V_ST_DEC-wait_more_buff", 0);
 			av1_release_bufs(hw);
-			av1_continue_decoding(hw, hw->cur_obu_type);
 			hw->postproc_done = 0;
+			av1_continue_decoding(hw, hw->cur_obu_type);
 			start_process_time(hw);
+			av1_print(hw, PRINT_FLAG_VDEC_DETAIL,
+				"NEED_MORE_BUFFER work done!\n");
 		}
 		return;
 	}
