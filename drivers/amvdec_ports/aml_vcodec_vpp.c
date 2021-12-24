@@ -585,6 +585,7 @@ retry:
 			memcpy(vf_out, in_buf->di_buf.vf, sizeof(*vf_out));
 		}
 
+		vf_out->mem_sec = ctx->is_drm_mode ? 1 : 0;
 		/* fill outbuf parms. */
 		out_buf->di_buf.vf	= vf_out;
 		out_buf->di_buf.flag	= 0;

@@ -504,6 +504,7 @@ retry:
 			vf_out->canvas0_config[2].endian = 7;
 		}
 
+		vf_out->mem_sec = ctx->is_drm_mode ? 1 : 0;
 		start_time = local_clock();
 		/* src canvas configure. */
 		if ((in_buf->vf->canvas0Addr == 0) ||
@@ -592,6 +593,7 @@ retry:
 		ge2d_config.src1_gb_alpha	= 0;
 		ge2d_config.dst_xy_swap		= 0;
 		ge2d_config.src2_para.mem_type	= CANVAS_TYPE_INVALID;
+		ge2d_config.mem_sec	= ctx->is_drm_mode ? 1 : 0;
 
 		ATRACE_COUNTER("VC_OUT_GE2D-1.handle_start",
 			in_buf->aml_buf->frame_buffer.buf_idx);
