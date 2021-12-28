@@ -2025,7 +2025,7 @@ int  aml_ci_bus_mod_init(void)
 				RAWCI_DEV_NAME);
 		}
 	} else {
-		pr_dbg("register CI chrdev [%s]\n", RAWCI_DEV_NAME);
+		pr_dbg("not register CI chrdev [%s]\n", RAWCI_DEV_NAME);
 	}
 
 	return 0;
@@ -2036,7 +2036,6 @@ void  aml_ci_bus_mod_exit(void)
 	pr_dbg("Amlogic DVB CI BUS Exit\n");
 	if (ci_bus.raw_mode == 1 && rawci_major > 0)
 		device_destroy(&(ci_bus.cls), MKDEV(rawci_major, 0));
-	class_destroy(&(ci_bus.cls));
 	if (ci_bus.raw_mode == 1 && rawci_major > 0)
 		unregister_chrdev(rawci_major, RAWCI_DEV_NAME);
 	class_unregister(&(ci_bus.cls));
