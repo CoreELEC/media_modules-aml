@@ -9224,19 +9224,6 @@ static void vav1_put_timer_func(struct timer_list *timer)
 
 	enum receviver_start_e state = RECEIVER_INACTIVE;
 
-	if (hw->m_ins_flag) {
-		if (hw_to_vdec(hw)->next_status
-			== VDEC_STATUS_DISCONNECTED) {
-			struct aml_vcodec_ctx *ctx =
-				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-			if (!hw->is_used_v4l || ctx->is_stream_off) {
-				hw->dec_result = DEC_RESULT_FORCE_EXIT;
-				vdec_schedule_work(&hw->work);
-				pr_debug("vdec requested to be disconnected\n");
-				return;
-			}
-		}
-	}
 	if (hw->init_flag == 0) {
 		if (hw->stat & STAT_TIMER_ARM) {
 			timer->expires = jiffies + PUT_INTERVAL;
