@@ -795,10 +795,10 @@ static int limited_delay_check(struct file *file,
 
 	if (!((port->flag & PORT_FLAG_VID) &&
 		(port->flag & PORT_FLAG_AID))) {
-		struct stream_buf_s *buf =
+		struct stream_buf_s *buf_tmp =
 			(port->flag & PORT_FLAG_VID) ? vbuf : abuf;
 
-		return min_t(int, count, stbuf_space(buf));
+		return min_t(int, count, stbuf_space(buf_tmp));
 	}
 
 	if (vbuf->max_buffer_delay_ms > 0 && abuf->max_buffer_delay_ms > 0 &&
@@ -934,10 +934,10 @@ ssize_t drm_tswrite(struct file *file,
 			write_size = min(stbuf_space(vbuf), stbuf_space(abuf));
 			write_size = min(count, write_size);
 		} else {
-			struct stream_buf_s *buf =
+			struct stream_buf_s *buf_tmp =
 				(port->flag & PORT_FLAG_VID) ? vbuf : abuf;
 
-			write_size = min_t(int, count, stbuf_space(buf));
+			write_size = min_t(int, count, stbuf_space(buf_tmp));
 		}
 		/* pr_info("write_size = %d,count = %d,\n",*/
 		   /*write_size, count); */

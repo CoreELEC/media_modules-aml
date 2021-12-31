@@ -662,9 +662,11 @@ static int cimax_usb_access_cam(struct cimax_usb *usb, int slot,
 	u8 *out = NULL;
 	int err = 0;
 
+	lock_lock(usb);
 	out = kzalloc(CIMAX_CAM_HDR_SIZE + CIMAX_CAM_PLD_SIZE, GFP_KERNEL);
 	if (!out) {
 		pr_err("no mem for access cam.\n");
+		lock_unlock(usb);
 		return -ENOMEM;
 	}
 
@@ -672,8 +674,6 @@ static int cimax_usb_access_cam(struct cimax_usb *usb, int slot,
 	init_cam_hdr(out, cmd, tx_size);
 	memcpy(&out[CIMAX_CAM_HDR_SIZE], tx, tx_size);
 	/*dump("access cam:", out, CIMAX_CAM_HDR_SIZE+size);*/
-
-	lock_lock(usb);
 
 	err = cimax_usb_ci_write(dev,
 			out, CIMAX_CAM_HDR_SIZE + tx_size, rx, rx_size);

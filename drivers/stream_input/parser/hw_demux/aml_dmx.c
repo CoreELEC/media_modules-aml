@@ -1576,7 +1576,8 @@ static void dvr_irq_bh_handler(unsigned long arg)
 	pr_dbg_irq_dvr("async fifo %d irq, interval:%d ms, %d data\n", afifo->id,
 			jiffies_to_msecs(jiffies - last_afifo_time), afifo->flush_size);
 
-	spin_lock_irqsave(&dvb->slock, flags);
+	if (dvb)
+		spin_lock_irqsave(&dvb->slock, flags);
 
 	if (dvb && afifo->source >= AM_DMX_0 && afifo->source < AM_DMX_MAX) {
 		dmx = &dvb->dmx[afifo->source];
@@ -1606,7 +1607,8 @@ static void dvr_irq_bh_handler(unsigned long arg)
 
 		}
 	}
-	spin_unlock_irqrestore(&dvb->slock, flags);
+	if (dvb)
+		spin_unlock_irqrestore(&dvb->slock, flags);
 	last_afifo_time = jiffies;
 }
 
@@ -1963,8 +1965,6 @@ int dsc_set_keys(struct aml_dsc_channel *ch)
 			case CA_CW_AES_ODD_IV:
 			case CA_CW_SM4_ODD_IV:
 				k = ch->odd_iv;
-				break;
-			default:
 				break;
 			}
 			/*
@@ -4170,6 +4170,9 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 	u32 pcr_reg[DMX_DEV_COUNT];
 
 	pr_dbg("[dmx_kpi] demux reset begin\n");
+
+	memset(&pcr_reg, 0, sizeof(pcr_reg));
+	memset(&pcr_num, 0, sizeof(pcr_num));
 
 	for (id = 0; id < DMX_DEV_COUNT; id++) {
 		if (!dvb->dmx[id].init)
