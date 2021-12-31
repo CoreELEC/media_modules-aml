@@ -384,6 +384,30 @@ struct vdec_s {
 	char dec_spend_time[32];
 	char dec_spend_time_ave[32];
 	u32 discard_start_data_flag;
+	int is_v4l;
+	bool is_stream_mode_dv_multi;
+	u32 video_id;
+	u32 play_num;
+};
+
+typedef int (*post_task_handler)(void *args);
+
+struct post_task_mgr_s {
+	struct list_head	task_recycle;
+	struct task_struct	*task;
+	struct semaphore        sem;
+	struct mutex		mutex;
+	bool 			running;
+	void			*private;
+};
+
+struct vdec_post_task_parms_s {
+	struct list_head	recycle;
+	struct task_struct	*task;
+	struct completion	park;
+	post_task_handler	func;
+	void			*private;
+	int			scheduled;
 };
 
 #define MAX_USERDATA_CHANNEL_NUM 9
