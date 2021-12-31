@@ -153,6 +153,8 @@ static int fps_detection;
 static int fps_clear;
 static bool prog_only;
 
+static u32 play_num = 0;
+
 static int force_nosecure_even_drm;
 static int disable_switch_single_to_mult;
 
@@ -2808,7 +2810,17 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 
 	mutex_lock(&vdec_mutex);
 	vdec_core->vdec_resouce_status |= BIT(p->frame_base_video_path);
+
+	if (vdec_dual(vdec)) {
+		if (vdec->slave)
+			vdec->play_num = (++play_num);
+		else
+			vdec->play_num = play_num;
+	} else {
+		vdec->play_num = (++play_num);
+	}
 	mutex_unlock(&vdec_mutex);
+	pr_debug("vdec_init, play_num = %d\n", vdec->play_num);
 
 	vdec_input_prepare_bufs(/*prepared buffer for fast playing.*/
 		&vdec->input,
