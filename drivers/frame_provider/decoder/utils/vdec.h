@@ -385,6 +385,7 @@ struct vdec_s {
 	bool is_stream_mode_dv_multi;
 	int pts_server_id;
 	pfun_ptsserver_peek_pts_offset ptsserver_peek_pts_offset;
+	u32 play_num;
 };
 
 #define CODEC_MODE(a, b, c, d)\

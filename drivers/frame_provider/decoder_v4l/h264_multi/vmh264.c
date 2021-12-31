@@ -3213,6 +3213,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			continue;
 		}
 
+		vf->src_fmt.play_id = vdec->play_num;
+
 		if (i == 0) {
 			struct vdec_s *pvdec;
 			struct vdec_info vs;
@@ -3238,8 +3240,10 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			hw->buffer_spec[buffer_index].aux_data_size);
 #endif
 
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL, "aux_data_size: %d, signal_type: 0x%x\n",
-			hw->buffer_spec[buffer_index].aux_data_size, hw->video_signal_type);
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
+			"aux_data_size:%d signal_type:0x%x play_num:%d vf:%p\n",
+			hw->buffer_spec[buffer_index].aux_data_size, hw->video_signal_type,
+			vdec->play_num, vf);
 
 		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
 			int i = 0;
