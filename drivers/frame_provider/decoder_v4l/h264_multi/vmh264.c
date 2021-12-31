@@ -289,10 +289,11 @@ static unsigned int i_only_flag;
 	bit[21] 1: fixed DVB loop playback cause jetter issue.
 	bit[22] 1: In streaming mode, support for discarding data.
 	bit[23] 0: set error flag on frame number gap error and drop it, 1: ignore error.
+	bit[24] 0: not output no_display frame, 1: output no_display frame.
 */
 static unsigned int error_proc_policy = 0x3fCfb6; /*0x1f14*/
 
-static unsigned int v4l_error_policy = 0x8017C3B5; //default
+static unsigned int v4l_error_policy = 0x8117C3B5; //default
 
 /*
 	error_skip_count:
@@ -2740,9 +2741,9 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 	}
 
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
-		"%s, buffer_index 0x%x  frame_error %x  poc %d hw error %x hw error_proc_policy %x\n",
+		"%s, buffer_index 0x%x  frame_error %x  data_flag %x poc %d hw error %x hw error_proc_policy %x\n",
 		__func__, buffer_index,
-		frame->data_flag & ERROR_FLAG,
+		frame->data_flag & ERROR_FLAG, frame->data_flag,
 		frame->poc, hw->data_flag & ERROR_FLAG,
 		hw->error_proc_policy);
 
@@ -2845,7 +2846,8 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 	}
 
 	if ((!hw->enable_fence) &&
-		((frame->data_flag & NODISP_FLAG) ||
+		(((frame->data_flag & NODISP_FLAG) &&
+		(!(hw->error_proc_policy & 0x1000000))) ||
 		(frame->data_flag & NULL_FLAG) ||
 		((!hw->send_error_frame_flag) &&
 		(frame->data_flag & ERROR_FLAG)) ||
@@ -6445,10 +6447,10 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 		p->data_flag |= ERROR_FLAG;
 	}
 
-	if (error_proc_policy & 0x100 && !(p->data_flag & ERROR_FLAG)) {
+	if (hw->error_proc_policy & 0x100 && !(p->data_flag & ERROR_FLAG)) {
 		if (decode_mb_count < mb_total) {
 			p->data_flag |= ERROR_FLAG;
-			if (((error_proc_policy & 0x20000) &&
+			if (((hw->error_proc_policy & 0x20000) &&
 				decode_mb_count >= mb_total * (100 - mb_count_threshold) / 100)) {
 				p->data_flag &= ~ERROR_FLAG;
 			}
@@ -10354,7 +10356,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec_schedule_work(&hw->work);
 		return;
 	}
-	if (error_proc_policy & 0x10000) {
+	if (hw->error_proc_policy & 0x10000) {
 		hw->first_pre_frame_num = p_H264_Dpb->mVideo.pre_frame_num;
 	}
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);

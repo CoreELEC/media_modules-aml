@@ -430,6 +430,8 @@ static u32 buffer_mode_dbg = 0xffff0000;
  */
 static u32 nal_skip_policy = 2;
 
+static u32 c2_nal_skip_policy = 0;
+
 /*
  *bit 0, 1: only display I picture;
  *bit 1, 1: only decode I picture;
@@ -2147,6 +2149,7 @@ struct hevc_state_s {
 	unsigned *rdma_adr;
 	bool no_need_aux_data;
 	struct trace_decoder_name trace;
+	u32 nal_skip_policy;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -2614,8 +2617,8 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 	hevc->pts_mode_switching_count = 0;
 	hevc->pts_mode_recovery_count = 0;
 
-	hevc->PB_skip_mode = nal_skip_policy & 0x3;
-	hevc->PB_skip_count_after_decoding = (nal_skip_policy >> 16) & 0xffff;
+	hevc->PB_skip_mode = hevc->nal_skip_policy & 0x3;
+	hevc->PB_skip_count_after_decoding = (hevc->nal_skip_policy >> 16) & 0xffff;
 	if (hevc->PB_skip_mode == 0)
 		hevc->ignore_bufmgr_error = 0x1;
 	else
@@ -7678,7 +7681,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				   NAL_UNIT_CODED_SLICE_BLA_N_LP)
 			hevc->m_pocRandomAccess = hevc->curr_POC;
 		else if ((hevc->curr_POC < hevc->m_pocRandomAccess) &&
-				(nal_skip_policy >= 3) &&
+				(hevc->nal_skip_policy >= 3) &&
 				 (hevc->m_nalUnitType ==
 				  NAL_UNIT_CODED_SLICE_RASL_N ||
 				  hevc->m_nalUnitType ==
@@ -9713,11 +9716,16 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 	}
 
 	if (vf) {
-		/*hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-			"%s: pic index 0x%x\n",
-			__func__, pic->index);*/
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+			"%s: pic index 0x%x error_mark %d\n",
+			__func__, pic->index, pic->error_mark);
 
 		vf->frame_type = 0;
+
+		if (pic->error_mark) {
+			vf->frame_type |= V4L2_BUF_FLAG_ERROR;
+		}
+
 		if (hevc->is_used_v4l) {
 			vf->v4l_mem_handle = pic->cma_alloc_addr;
 			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
@@ -15006,6 +15014,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, pdata);
 
 	hevc->platform_dev = pdev;
+	hevc->nal_skip_policy = nal_skip_policy;  //default;
 
 	if (((get_dbg_flag(hevc) & IGNORE_PARAM_FROM_CONFIG) == 0) &&
 			pdata->config_len) {
@@ -15084,8 +15093,11 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			"parm_v4l_metadata_config_flag",
 			&config_val) == 0) {
 			hevc->metadata_config_flag = config_val;
-			hevc->discard_dv_data = hevc->metadata_config_flag & VDEC_CFG_FLAG_DV_NEGATIVE;
-			hevc->dv_duallayer = hevc->metadata_config_flag & VDEC_CFG_FLAG_DV_TWOLARYER;
+			hevc->discard_dv_data = config_val & VDEC_CFG_FLAG_DV_NEGATIVE;
+			hevc->dv_duallayer = config_val & VDEC_CFG_FLAG_DV_TWOLARYER;
+			if (config_val & VDEC_CFG_FLAG_DIS_ERR_POLICY) {
+				hevc->nal_skip_policy = c2_nal_skip_policy;
+			}
 			if (hevc->discard_dv_data)
 				hevc_print(hevc, 0, "discard dv data\n");
 			if (hevc->dv_duallayer)
@@ -15220,6 +15232,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	hevc_print(hevc, 0,
 		"double_write_mode=%d\n",
 		hevc->double_write_mode);
+	hevc_print(hevc, 0,
+		"nal_skip_policy=%d\n",
+		hevc->nal_skip_policy);
 
 	hevc->cma_dev = pdata->cma_dev;
 	vh265_vdec_info_init(hevc);
@@ -15376,6 +15391,7 @@ static struct mconfig h265_configs[] = {
 	MC_PU32("decode_pic_begin", &decode_pic_begin),
 	MC_PU32("slice_parse_begin", &slice_parse_begin),
 	MC_PU32("nal_skip_policy", &nal_skip_policy),
+	MC_PU32("c2_nal_skip_policy", &c2_nal_skip_policy),
 	MC_PU32("i_only_flag", &i_only_flag),
 	MC_PU32("error_handle_policy", &error_handle_policy),
 	MC_PU32("error_handle_threshold", &error_handle_threshold),
@@ -15557,6 +15573,9 @@ MODULE_PARM_DESC(slice_parse_begin, "\n amvdec_h265 slice_parse_begin\n");
 
 module_param(nal_skip_policy, uint, 0664);
 MODULE_PARM_DESC(nal_skip_policy, "\n amvdec_h265 nal_skip_policy\n");
+
+module_param(c2_nal_skip_policy, uint, 0664);
+MODULE_PARM_DESC(c2_nal_skip_policy, "\n amvdec_h265 c2_nal_skip_policy\n");
 
 module_param(i_only_flag, uint, 0664);
 MODULE_PARM_DESC(i_only_flag, "\n amvdec_h265 i_only_flag\n");
