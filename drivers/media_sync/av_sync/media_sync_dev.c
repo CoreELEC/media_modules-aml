@@ -112,6 +112,8 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	s64 FccEnable = 0;
 	int mute_flag  = 0;
 	int PauseResumeFlag  = 0;
+	int AvRefFlag = 0;
+	int AvRef = 0;
 	mediasync_priv_s *priv = (mediasync_priv_s *)file->private_data;
 	mediasync_ins *SyncIns = NULL;
 	mediasync_alloc_para parm = {0};
@@ -1007,6 +1009,33 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_UPDATE_AVREF:
+			if (copy_from_user((void *)&AvRefFlag,
+						(void *)arg,
+						sizeof(AvRefFlag)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_update_avref(priv->mSyncInsId,
+							AvRefFlag);
+		break;
+
+		case MEDIASYNC_IOC_GET_AVREF:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_avref(priv->mSyncInsId,
+							&AvRef);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&AvRef,
+						sizeof(AvRef)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -1084,6 +1113,8 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_PAUSERESUME_FLAG:
 		case MEDIASYNC_IOC_SET_PCRSLOPE:
 		case MEDIASYNC_IOC_GET_PCRSLOPE:
+		case MEDIASYNC_IOC_UPDATE_AVREF:
+		case MEDIASYNC_IOC_GET_AVREF:
 
 			return mediasync_ioctl(file, cmd, arg);
 		default:

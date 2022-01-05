@@ -113,7 +113,8 @@ typedef struct instance{
 	int mPtsAdjust;
 	int mVideoWorkMode;
 	int mFccEnable;
-    int mPauseResumeFlag;
+	int mPauseResumeFlag;
+	int mAVRef;
 	mediasync_clocktype mSourceClockType;
 	mediasync_clockprovider_state mSourceClockState;
 	mediasync_audioinfo mAudioInfo;
@@ -121,6 +122,7 @@ typedef struct instance{
 	mediasync_syncinfo mSyncInfo;
 	aml_Source_Type mSourceType;
 	mediasync_audio_format mAudioFormat;
+
 }mediasync_ins;
 
 long mediasync_ins_alloc(s32 sDemuxId,
@@ -202,7 +204,8 @@ long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag);
 long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag);
 long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope);
 long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope);
-
-
+long mediasync_ins_reset(s32 sSyncInsId);
+long mediasync_ins_update_avref(s32 sSyncInsId, int flag);
+long mediasync_ins_get_avref(s32 sSyncInsId, int *ref);
 
 #endif

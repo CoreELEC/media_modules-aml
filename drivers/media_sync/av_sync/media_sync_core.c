@@ -181,6 +181,7 @@ long mediasync_ins_binder(s32 sSyncInsId,
 
 	pInstance->mRef++;
 	*pIns = pInstance;
+
 	return 0;
 }
 
@@ -196,8 +197,38 @@ long mediasync_ins_unbinder(s32 sSyncInsId) {
 
 	pInstance->mRef--;
 
+	if (pInstance->mRef > 0 && pInstance->mAVRef == 0)
+		mediasync_ins_reset(sSyncInsId);
+
 	if (pInstance->mRef <= 0)
 		mediasync_ins_delete(sSyncInsId);
+
+	return 0;
+}
+
+long mediasync_ins_reset(s32 sSyncInsId) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	mediasync_ins_init_syncinfo(pInstance->mSyncInsId);
+	pInstance->mHasAudio = -1;
+	pInstance->mHasVideo = -1;
+	pInstance->mVideoWorkMode = 0;
+	pInstance->mFccEnable = 0;
+	pInstance->mPaused = 0;
+	pInstance->mSourceClockType = UNKNOWN_CLOCK;
+	pInstance->mSyncInfo.state = MEDIASYNC_INIT;
+	pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
+	pInstance->mute_flag = false;
+	pInstance->mSourceType = TS_DEMOD;
+	pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
+	pr_info("mediasync_ins_reset.");
 
 	return 0;
 }
@@ -232,6 +263,11 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	pInstance->mVideoInfo.cacheSize = -1;
 	pInstance->mVideoInfo.cacheDuration = -1;
 	pInstance->mPauseResumeFlag = 0;
+	pInstance->mSpeed.mNumerator = 1;
+	pInstance->mSpeed.mDenominator = 1;
+	pInstance->mPcrSlope.mNumerator = 1;
+	pInstance->mPcrSlope.mDenominator = 1;
+	pInstance->mAVRef = 0;
 
 	return 0;
 }
@@ -1250,6 +1286,38 @@ long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope){
 
 	pcrslope->mNumerator = pInstance->mPcrSlope.mNumerator;
 	pcrslope->mDenominator = pInstance->mPcrSlope.mDenominator;
+	return 0;
+}
+
+long mediasync_ins_update_avref(s32 sSyncInsId, int flag) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	if (flag)
+		pInstance->mAVRef ++;
+	else
+		pInstance->mAVRef --;
+	return 0;
+
+}
+
+long mediasync_ins_get_avref(s32 sSyncInsId, int *ref) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	pInstance = vMediaSyncInsList[index];
+	if (pInstance == NULL)
+		return -1;
+
+	*ref = pInstance->mAVRef;
 	return 0;
 }
 
