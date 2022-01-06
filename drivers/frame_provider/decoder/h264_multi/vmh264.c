@@ -129,6 +129,9 @@ to enable DV of frame mode
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 #define INVALID_IDX -1  /* Invalid buffer index.*/
 
+#define H264_ERROR_FRAME_DISPLAY 0x80001BD5
+#define H264_ERROR_FRAME_DROP 0x7fCfb6
+
 static int mmu_enable;
 /*mmu do not support mbaff*/
 static int force_enable_mmu = 0;
@@ -712,6 +715,7 @@ struct vdec_h264_hw_s {
 	unsigned long extif_addr;
 	int double_write_mode;
 	int mmu_enable;
+	int error_proc_policy;
 #endif
 
 	DECLARE_KFIFO(newframe_q, struct vframe_s *, VF_POOL_SIZE);
@@ -2761,7 +2765,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 		/*make pre_output not set*/
 		return -1;
 	}
-	if (error_proc_policy & 0x1000) {
+	if (hw->error_proc_policy & 0x1000) {
 		int error_skip_i_count = (error_skip_count >> 12) & 0xf;
 		int error_skip_frame_count = error_skip_count & 0xfff;
 		if (((hw->no_error_count < error_skip_frame_count)
@@ -2776,7 +2780,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 		__func__, buffer_index,
 		frame->data_flag & ERROR_FLAG,
 		frame->poc, hw->data_flag & ERROR_FLAG,
-		error_proc_policy);
+		hw->error_proc_policy);
 
 	if (frame->frame == NULL &&
 			((frame->is_used == 1 && frame->top_field)
@@ -3976,7 +3980,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
 				"last_pic->data_flag %x   slice_type %x last_pic->slice_type %x\n",
 				last_pic->data_flag, pSlice->slice_type, last_pic->slice_type);
-	if (!hw->i_only && !(error_proc_policy & 0x2000) &&
+	if (!hw->i_only && !(hw->error_proc_policy & 0x2000) &&
 		last_pic && (last_pic->data_flag & ERROR_FLAG)
 		&& (!(last_pic->slice_type == B_SLICE))
 		&& (!(pSlice->slice_type == I_SLICE))) {
@@ -4006,7 +4010,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG, " ref error mark1 \n");
 		}
 
-		if (error_proc_policy & 0x80000) {
+		if (hw->error_proc_policy & 0x80000) {
 			if (ref_b_frame_error_max_count &&
 				ref->slice_type == B_SLICE) {
 				if (ref->data_flag & ERROR_FLAG)
@@ -6024,7 +6028,7 @@ static void bufmgr_recover(struct vdec_h264_hw_s *hw)
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 
 	bufmgr_h264_remove_unused_frame(p_H264_Dpb, 2);
-	if (error_proc_policy & 0x20) {
+	if (hw->error_proc_policy & 0x20) {
 		if (!hw->is_used_v4l)
 			hw->reset_bufmgr_flag = 1;
 	}
@@ -6093,8 +6097,8 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			DEBUG_DISABLE_RUNREADY_RMBUF))
 			return buffer_available;
 
-		if ((error_proc_policy & 0x4) &&
-			(error_proc_policy & 0x8)) {
+		if ((hw->error_proc_policy & 0x4) &&
+			(hw->error_proc_policy & 0x8)) {
 			if ((kfifo_len(&hw->display_q) <= 0) &&
 			(p_H264_Dpb->mDPB.used_size >=
 				(p_H264_Dpb->mDPB.size - 1)) &&
@@ -6107,7 +6111,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			} else {
 				bufmgr_h264_remove_unused_frame(p_H264_Dpb, 1);
 			}
-		} else if ((error_proc_policy & 0x4) &&
+		} else if ((hw->error_proc_policy & 0x4) &&
 			(kfifo_len(&hw->display_q) <= 0) &&
 			((p_H264_Dpb->mDPB.used_size >=
 				(p_H264_Dpb->mDPB.size - 1)) ||
@@ -6139,7 +6143,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 				}
 			}
 			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
-		} else if ((error_proc_policy & 0x8) &&
+		} else if ((hw->error_proc_policy & 0x8) &&
 			(p_Dpb->ref_frames_in_buffer >
 			(imax(
 			1, p_Dpb->num_ref_frames)
@@ -6389,22 +6393,22 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 	if (get_cur_slice_picture_struct(p_H264_Dpb) != FRAME)
 		mb_total /= 2;
 
-	if ((error_proc_policy & 0x200) &&
+	if ((hw->error_proc_policy & 0x200) &&
 		READ_VREG(ERROR_STATUS_REG) != 0) {
 		p->data_flag |= ERROR_FLAG;
 	}
 
-	if (error_proc_policy & 0x100 && !(p->data_flag & ERROR_FLAG)) {
+	if (hw->error_proc_policy & 0x100 && !(p->data_flag & ERROR_FLAG)) {
 		if (decode_mb_count < mb_total) {
 			p->data_flag |= ERROR_FLAG;
-			if (((error_proc_policy & 0x20000) &&
+			if (((hw->error_proc_policy & 0x20000) &&
 				decode_mb_count >= mb_total * (100 - mb_count_threshold) / 100)) {
 				p->data_flag &= ~ERROR_FLAG;
 			}
 		}
 	}
 
-	if ((error_proc_policy & 0x100000) &&
+	if ((hw->error_proc_policy & 0x100000) &&
 			hw->last_dec_picture &&
 				(hw->last_dec_picture->slice_type == I_SLICE) &&
 				(hw->dpb.mSlice.slice_type == P_SLICE)) {
@@ -6562,7 +6566,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 			check_decoded_pic_error(hw);
 #ifdef ERROR_HANDLE_TEST
 			if ((hw->data_flag & ERROR_FLAG)
-				&& (error_proc_policy & 0x80)) {
+				&& (hw->error_proc_policy & 0x80)) {
 				release_cur_decoding_buf(hw);
 				h264_clear_dpb(hw);
 				hw->dec_flag = 0;
@@ -6573,7 +6577,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				hw->no_error_i_count = 0xf;
 			} else
 #endif
-			if (error_proc_policy & 0x200000) {
+			if (hw->error_proc_policy & 0x200000) {
 				if (!hw->loop_flag) {
 					for (i = 0; i < p_Dpb->used_size; i++) {
 						if ((p_H264_Dpb->mVideo.dec_picture->poc + loop_playback_poc_threshold < p_Dpb->fs[i]->poc) &&
@@ -6886,13 +6890,14 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 #ifdef DETECT_WRONG_MULTI_SLICE
 		hw->cur_picture_slice_count++;
 
-		if ((error_proc_policy & 0x10000) &&
+
+		if ((hw->error_proc_policy & 0x10000) &&
 			(hw->cur_picture_slice_count > 1) &&
 			(first_mb_in_slice == 0) &&
 			(hw->multi_slice_pic_flag == 0))
 				hw->multi_slice_pic_check_count = 0;
 
-		if ((error_proc_policy & 0x10000) &&
+		if ((hw->error_proc_policy & 0x10000) &&
 			(hw->cur_picture_slice_count > 1) &&
 			(hw->multi_slice_pic_flag == 1)) {
 			dpb_print(DECODE_ID(hw), 0,
@@ -7189,7 +7194,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				"==================> frame count %d to skip %d\n",
 				hw->decode_pic_count+1,
 				hw->skip_frame_count);
-				} else if (error_proc_policy & 0x100){
+				} else if (hw->error_proc_policy & 0x100){
 					unsigned decode_mb_count =
 						((mby_mbx & 0xff) * hw->mb_width +
 						(((mby_mbx >> 8) & 0xff) + 1));
@@ -7211,14 +7216,14 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				}
 
 			if (!I_flag && frame_num_gap && !p_H264_Dpb->long_term_reference_flag) {
-				if (!(error_proc_policy & 0x800000)) {
+				if (!(hw->error_proc_policy & 0x800000)) {
 					hw->data_flag |= ERROR_FLAG;
 					p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
 					dpb_print(DECODE_ID(hw), 0, "frame number gap error\n");
 				}
 			}
 
-			if ((error_proc_policy & 0x400) && !hw->enable_fence) {
+			if ((hw->error_proc_policy & 0x400) && !hw->enable_fence) {
 				int ret = dpb_check_ref_list_error(p_H264_Dpb);
 				if (ret != 0) {
 					hw->reflist_error_count ++;
@@ -7230,7 +7235,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						hw->reflist_error_count);
 
 					p_H264_Dpb->mVideo.dec_picture->data_flag = NODISP_FLAG;
-					if (((error_proc_policy & 0x80)
+					if (((hw->error_proc_policy & 0x80)
 						&& ((hw->dec_flag &
 							NODISP_FLAG) == 0)) ||(hw->reflist_error_count > 50)) {
 						hw->reset_bufmgr_flag = 1;
@@ -7244,14 +7249,14 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				} else
 					hw->reflist_error_count = 0;
 			}
-			if ((error_proc_policy & 0x800) && (!(hw->i_only & 0x2))
+			if ((hw->error_proc_policy & 0x800) && (!(hw->i_only & 0x2))
 				&& p_H264_Dpb->dpb_error_flag != 0) {
 				dpb_print(DECODE_ID(hw), 0,
 					"dpb error %d\n",
 					p_H264_Dpb->dpb_error_flag);
 				hw->data_flag |= ERROR_FLAG;
 				p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
-				if ((error_proc_policy & 0x80) &&
+				if ((hw->error_proc_policy & 0x80) &&
 					((hw->dec_flag & NODISP_FLAG) == 0)) {
 					hw->reset_bufmgr_flag = 1;
 					amvdec_stop();
@@ -7269,7 +7274,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 					"config_decode_buf fail (%d)\n",
 					cfg_ret);
-				if (error_proc_policy & 0x2) {
+				if (hw->error_proc_policy & 0x2) {
 					release_cur_decoding_buf(hw);
 					/*hw->data_flag |= ERROR_FLAG;*/
 					hw->reset_bufmgr_flag = 1;
@@ -7449,7 +7454,7 @@ pic_done_proc:
 			(dec_dpb_status == H264_DECODE_TIMEOUT)) {
 empty_proc:
 		reset_process_time(hw);
-		if ((error_proc_policy & 0x40000) &&
+		if ((hw->error_proc_policy & 0x40000) &&
 			((dec_dpb_status == H264_DECODE_TIMEOUT) ||
 			(!hw->frmbase_cont_flag &&
 			(dec_dpb_status == H264_SEARCH_BUFEMPTY || dec_dpb_status == H264_DECODE_BUFEMPTY)
@@ -7488,7 +7493,7 @@ empty_proc:
 				hw->search_dataempty_num++;
 			else if (dec_dpb_status == H264_DECODE_TIMEOUT) {
 				hw->decode_timeout_num++;
-				if (error_proc_policy & 0x4000) {
+				if (hw->error_proc_policy & 0x4000) {
 					hw->data_flag |= ERROR_FLAG;
 					if ((p_H264_Dpb->last_dpb_status == H264_DECODE_TIMEOUT) ||
 						(p_H264_Dpb->last_dpb_status == H264_PIC_DATA_DONE) ||
@@ -7509,7 +7514,7 @@ empty_proc:
 		} else {
 			/* WRITE_VREG(DPB_STATUS_REG, H264_ACTION_INIT); */
 #ifdef DETECT_WRONG_MULTI_SLICE
-			if (error_proc_policy & 0x10000) {
+			if (hw->error_proc_policy & 0x10000) {
 				p_H264_Dpb->mVideo.pre_frame_num = hw->first_pre_frame_num;
 			}
 			hw->last_picture_slice_count = hw->cur_picture_slice_count;
@@ -8351,8 +8356,8 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset)
 		hw->no_poc_reorder_flag = 1;
 
 	error_recovery_mode_in = 1; /*ucode control?*/
-	if (error_proc_policy & 0x80000000)
-		hw->send_error_frame_flag = error_proc_policy & 0x1;
+	if (hw->error_proc_policy & 0x80000000)
+		hw->send_error_frame_flag = hw->error_proc_policy & 0x1;
 	else if ((unsigned long) hw->vh264_amstream_dec_info.param & 0x20)
 		hw->send_error_frame_flag = 0; /*Don't display mark err frames*/
 
@@ -9742,7 +9747,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			hw->ctx_valid = 1; */
 		hw->dec_again_cnt = 0;
 		if ((hw->dec_result == DEC_RESULT_TIMEOUT) &&
-				!hw->i_only && (error_proc_policy & 0x2)) {
+				!hw->i_only && (hw->error_proc_policy & 0x2)) {
 			struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 			dpb_print(DECODE_ID(hw), 0,
 				"%s, decode timeout flush dpb\n",
@@ -9751,7 +9756,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		}
 result_done:
 		{
-			if (error_proc_policy & 0x8000) {
+			if (hw->error_proc_policy & 0x8000) {
 				struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 				int i;
 				struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
@@ -9829,7 +9834,7 @@ result_done:
 			return;
 		}
 		if ((vdec_stream_based(vdec)) &&
-			(error_proc_policy & 0x400000) &&
+			(hw->error_proc_policy & 0x400000) &&
 			check_dirty_data(vdec)) {
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
@@ -10157,7 +10162,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 
 	if (hw->reset_bufmgr_flag ||
-		((error_proc_policy & 0x40) &&
+		((hw->error_proc_policy & 0x40) &&
 		p_H264_Dpb->buf_alloc_fail)) {
 		h264_reset_bufmgr(vdec);
 		//flag must clear after reset for v4l buf_spec_init use
@@ -10301,7 +10306,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec_schedule_work(&hw->work);
 		return;
 	}
-	if (error_proc_policy & 0x10000) {
+	if (hw->error_proc_policy & 0x10000) {
 		hw->first_pre_frame_num = p_H264_Dpb->mVideo.pre_frame_num;
 	}
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
@@ -10813,8 +10818,24 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 				dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
 		}
 
-	} else
+		if (get_config_int(pdata->config,
+			"api_error_policy", &config_val) == 0) {
+			if (config_val == 0) {
+				hw->error_proc_policy = H264_ERROR_FRAME_DISPLAY;
+			} else if (config_val == 1) {
+				hw->error_proc_policy = H264_ERROR_FRAME_DROP;
+				mb_count_threshold = 0;
+			} else {
+				hw->error_proc_policy = error_proc_policy;
+			}
+		} else {
+			hw->error_proc_policy = error_proc_policy;
+		}
+	} else {
 		hw->double_write_mode = double_write_mode;
+		hw->error_proc_policy = error_proc_policy;
+	}
+
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5)
 		hw->double_write_mode = 3;

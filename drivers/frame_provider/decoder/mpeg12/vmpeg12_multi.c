@@ -113,6 +113,9 @@
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
 #define INVALID_IDX 		(-1)  /* Invalid buffer index.*/
 
+#define MPEG2_ERROR_FRAME_DISPLAY 0
+#define MPEG2_ERROR_FRAME_DROP 1
+
 static u32 buf_size = 32 * 1024 * 1024;
 static int pre_decode_buf_level = 0x800;
 static int start_decode_buf_level = 0x4000;
@@ -3335,7 +3338,6 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 	hw->start_process_time = 0;
 	hw->init_flag = 0;
 	hw->dec_again_cnt = 0;
-	hw->error_frame_skip_level = error_frame_skip_level;
 
 	init_waitqueue_head(&hw->wait_q);
 	if (dec_control)
@@ -3821,6 +3823,21 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "sidebind_channel_id",
 				&config_val) == 0)
 			hw->sidebind_channel_id = config_val;
+
+		if (get_config_int(pdata->config,
+			"api_error_policy", &config_val) == 0) {
+			if (config_val == 0) {
+				hw->error_frame_skip_level  = MPEG2_ERROR_FRAME_DISPLAY;
+			} else if (config_val == 1) {
+				hw->error_frame_skip_level  = MPEG2_ERROR_FRAME_DROP;
+			} else {
+				hw->error_frame_skip_level  = error_frame_skip_level;
+			}
+		} else {
+			hw->error_frame_skip_level = error_frame_skip_level;
+		}
+	}else {
+		hw->error_frame_skip_level  = error_frame_skip_level;
 	}
 
 	hw->buf_num = vmpeg12_get_buf_num(hw);

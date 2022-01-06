@@ -10850,8 +10850,10 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			vdec_frame_rate_uevent(config_val);*/
 		if (hw->discard_dv_data)
 			dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
-	} else
+	} else {
 		hw->double_write_mode = double_write_mode;
+		hw->error_proc_policy = error_proc_policy;
+	}
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5)
 		hw->double_write_mode = 3;

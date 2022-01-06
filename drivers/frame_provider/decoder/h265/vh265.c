@@ -344,6 +344,9 @@ static u32 pts_unstable;
 #define HEVC_QP_INFO   0x3137
 #define HEVC_SKIP_INFO 0x3136
 
+#define HEVC_ERROR_FRAME_DISPLAY 0
+#define HEVC_ERROR_FRAME_DROP 2
+
 const u32 h265_version = 201602101;
 static u32 debug_mask = 0xffffffff;
 static u32 log_mask;
@@ -2216,6 +2219,7 @@ struct hevc_state_s {
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
 	struct trace_decoder_name trace;
+	int nal_skip_policy;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -2691,8 +2695,8 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 	hevc->pts_mode_switching_count = 0;
 	hevc->pts_mode_recovery_count = 0;
 
-	hevc->PB_skip_mode = nal_skip_policy & 0x3;
-	hevc->PB_skip_count_after_decoding = (nal_skip_policy >> 16) & 0xffff;
+	hevc->PB_skip_mode = hevc->nal_skip_policy & 0x3;
+	hevc->PB_skip_count_after_decoding = (hevc->nal_skip_policy >> 16) & 0xffff;
 	if (hevc->PB_skip_mode == 0)
 		hevc->ignore_bufmgr_error = 0x1;
 	else
@@ -7905,7 +7909,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				   NAL_UNIT_CODED_SLICE_BLA_N_LP)
 			hevc->m_pocRandomAccess = hevc->curr_POC;
 		else if ((hevc->curr_POC < hevc->m_pocRandomAccess) &&
-				(nal_skip_policy >= 3) &&
+				(hevc->nal_skip_policy >= 3) &&
 				 (hevc->m_nalUnitType ==
 				  NAL_UNIT_CODED_SLICE_RASL_N ||
 				  hevc->m_nalUnitType ==
@@ -15516,6 +15520,18 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			if (hevc->dv_duallayer)
 				hevc_print(hevc, 0, "dv_duallayer\n");
 		}
+		if (get_config_int(pdata->config,
+			"api_error_policy", &config_val) == 0) {
+			if (config_val == 0) {
+				hevc->nal_skip_policy = HEVC_ERROR_FRAME_DISPLAY;
+			} else if (config_val == 1) {
+				hevc->nal_skip_policy = HEVC_ERROR_FRAME_DROP;
+			} else {
+				hevc->nal_skip_policy = nal_skip_policy;
+			}
+		} else {
+			hevc->nal_skip_policy  = nal_skip_policy;
+		}
 #endif
 	} else {
 		if (pdata->sys_info)
@@ -15526,6 +15542,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->vh265_amstream_dec_info.rate = 30;
 		}
 		hevc->double_write_mode = double_write_mode;
+		hevc->nal_skip_policy = nal_skip_policy;
 	}
 
 
