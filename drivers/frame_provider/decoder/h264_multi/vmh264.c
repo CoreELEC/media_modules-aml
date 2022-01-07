@@ -5742,10 +5742,13 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 					if (hw->is_used_v4l) {
 						pr_info("v4l: delay alloc the buffer.\n");
 						break;
-					} else if (alloc_one_buf_spec(hw, i) < 0)
-						break;
-
-					config_decode_canvas(hw, i);
+					} else {
+							if ((-1 != i) && alloc_one_buf_spec(hw, i) >= 0) {
+								config_decode_canvas(hw, i);
+							} else {
+								return -1;
+							}
+					}
 				}
 			}
 			mutex_unlock(&vmh264_mutex);
@@ -7225,8 +7228,12 @@ pic_done_proc:
 			__func__,
 			(dec_dpb_status == H264_PIC_DATA_DONE) ?
 			"H264_PIC_DATA_DONE" :
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			(dec_dpb_status == H264_FIND_NEXT_PIC_NAL) ?
 			"H264_FIND_NEXT_PIC_NAL" : "H264_FIND_NEXT_DVEL_NAL",
+#else
+			" "
+#endif
 			hw->decode_pic_count);
 		if (hw->kpi_first_i_decoded == 0) {
 			hw->kpi_first_i_decoded = 1;

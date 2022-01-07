@@ -10575,7 +10575,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		}
 
 #ifdef AUX_DATA_CRC
-		if (index <= MAX_REF_PIC_NUM)
+		if (index < MAX_REF_PIC_NUM)
 			decoder_do_aux_data_check(vdec, hevc->m_PIC[index]->aux_data_buf,
 				hevc->m_PIC[index]->aux_data_size);
 #endif

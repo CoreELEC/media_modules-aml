@@ -2564,12 +2564,13 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 
 				goto error;
 			}
-
+#ifdef CONFIG_AMLOGIC_IONVIDEO
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 				"%s %s", vdec->vf_provider_name,
 				vdec->vf_receiver_name);
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
+#endif
 		} else if (p->frame_base_video_path ==
 				FRAME_BASE_PATH_AMLVIDEO_AMVIDEO) {
 			if (vdec_secure(vdec)) {
@@ -2637,6 +2638,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				mutex_unlock(&vdec_mutex);
 				goto error;
 			}
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 			if (v4lvideo_add_ppmgr)
 				snprintf(postprocess_name, sizeof(postprocess_name),
 					"%s ", "ppmgr");
@@ -2690,6 +2692,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			}
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
+#endif
 		} else if (p->frame_base_video_path ==
 				FRAME_BASE_PATH_V4LVIDEO) {
 #ifdef CONFIG_AMLOGIC_V4L_VIDEO3
@@ -2705,11 +2708,13 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				mutex_unlock(&vdec_mutex);
 				goto error;
 			}
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 				"%s %s", vdec->vf_provider_name,
 				vdec->vf_receiver_name);
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
+#endif
 		} else if (p->frame_base_video_path ==
 			FRAME_BASE_PATH_DTV_TUNNEL_MODE) {
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
@@ -2739,12 +2744,13 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				mutex_unlock(&vdec_mutex);
 				goto error;
 			}
-
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
 					"%s %s", vdec->vf_provider_name,
 					vdec->vf_receiver_name);
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 					"vdec-map-%d", vdec->id);
+#endif
 		}
 
 		if (vfm_map_add(vdec->vfm_map_id,
