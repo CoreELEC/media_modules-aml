@@ -2183,6 +2183,8 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 			return IRQ_HANDLED;
 		}
 
+		vdec_count_info(&hw->gvs, info & PICINFO_ERROR, offset);
+
 		disp_pic = &hw->pics[index];
 		info = hw->pics[index].buffer_info;
 		if (disp_pic->pts_valid && hw->lastpts64 == disp_pic->pts64)
@@ -2223,7 +2225,6 @@ static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 	info = READ_VREG(MREG_PIC_INFO);
 	offset = READ_VREG(MREG_FRAME_OFFSET);
 
-	vdec_count_info(&hw->gvs, info & PICINFO_ERROR, offset);
 	if (info &PICINFO_ERROR) {
 		if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
 			hw->gvs.i_concealed_frames++;
