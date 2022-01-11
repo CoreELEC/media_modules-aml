@@ -11041,9 +11041,110 @@ static int hevc_skip_nal(struct hevc_state_s *hevc)
 	return 0;
 }
 
+static void aspect_ratio_set(struct hevc_state_s *hevc, u32 *out_frame_ar,
+	u32 *out_sar_height, u32 *out_sar_width)
+{
+	int aspect_ratio_idc = hevc->param.p.aspect_ratio_idc;
+	u32 frame_ar, sar_height, sar_width;
+
+	switch (aspect_ratio_idc) {
+		case 1:
+			frame_ar = 0x3ff;
+			sar_height = 1;
+			sar_width = 1;
+			break;
+		case 2:
+			frame_ar = 0x3ff;
+			sar_height = 11;
+			sar_width = 12;
+			break;
+		case 3:
+			frame_ar = 0x3ff;
+			sar_height = 11;
+			sar_width = 10;
+			break;
+		case 4:
+			frame_ar = 0x3ff;
+			sar_height = 11;
+			sar_width = 16;
+			break;
+		case 5:
+			frame_ar = 0x3ff;
+			sar_height = 33;
+			sar_width = 40;
+			break;
+		case 6:
+			frame_ar = 0x3ff;
+			sar_height = 11;
+			sar_width = 24;
+			break;
+		case 7:
+			frame_ar = 0x3ff;
+			sar_height = 11;
+			sar_width = 20;
+			break;
+		case 8:
+			frame_ar = 0x3ff;
+			sar_height = 11;
+			sar_width = 32;
+			break;
+		case 9:
+			frame_ar = 0x3ff;
+			sar_height = 33;
+			sar_width = 80;
+			break;
+		case 10:
+			frame_ar = 0x3ff;
+			sar_height = 11;
+			sar_width = 18;
+			break;
+		case 11:
+			frame_ar = 0x3ff;
+			sar_height = 11;
+			sar_width = 15;
+			break;
+		case 12:
+			frame_ar = 0x3ff;
+			sar_height = 33;
+			sar_width = 64;
+			break;
+		case 13:
+			frame_ar = 0x3ff;
+			sar_height = 99;
+			sar_width = 160;
+			break;
+		case 14:
+			frame_ar = 0x3ff;
+			sar_height = 3;
+			sar_width = 4;
+			break;
+		case 15:
+			frame_ar = 0x3ff;
+			sar_height = 2;
+			sar_width = 3;
+			break;
+		case 16:
+			frame_ar = 0x3ff;
+			sar_height = 1;
+			sar_width = 2;
+			break;
+		default:
+			frame_ar = 0x3ff;
+			sar_height = 1;
+			sar_width = 1;
+			break;
+	}
+
+	(*out_frame_ar) = frame_ar;
+	(*out_sar_height) = sar_height;
+	(*out_sar_width) = sar_width;
+
+	return;
+}
 static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 {
 	struct hevc_state_s *hevc = (struct hevc_state_s *) data;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 	unsigned int dec_status = hevc->dec_status;
 	int i, ret;
 
@@ -11817,9 +11918,9 @@ force_output:
 					vfree(pic.aux_data_buf);
 			}
 
+			aspect_ratio_set(hevc, &hevc->frame_ar, &ctx->height_aspect_ratio, &ctx->width_aspect_ratio);
+
 			if (hevc->is_used_v4l) {
-				struct aml_vcodec_ctx *ctx =
-					(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 				if (!v4l_res_change(hevc, &hevc->param)) {
 					if (ctx->param_sets_from_ucode && !hevc->v4l_params_parsed) {
 						struct aml_vdec_ps_infos ps;
@@ -12081,6 +12182,9 @@ force_output:
 			hevc->cur_pic->sar_height =
 				hevc->param.p.sar_height;
 		}
+
+		aspect_ratio_set(hevc, &hevc->frame_ar, &hevc->cur_pic->sar_height,
+			&hevc->cur_pic->sar_width);
 
 		WRITE_VREG(HEVC_DEC_STATUS_REG,
 			HEVC_CODED_SLICE_SEGMENT_DAT);

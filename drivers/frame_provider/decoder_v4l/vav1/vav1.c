@@ -8878,6 +8878,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if (hw->is_used_v4l) {
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+		// get pixelaspect
+		ctx->height_aspect_ratio = 1;
+		ctx->width_aspect_ratio = 1;
 
 		hw->frame_width = hw->common.seq_params.max_frame_width;
 		hw->frame_height = hw->common.seq_params.max_frame_height;

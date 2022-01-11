@@ -2566,6 +2566,18 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 		s->r.width = ctx->picinfo.coded_width / ratio;
 		s->r.height = ctx->picinfo.coded_height / ratio;
 		break;
+	case V4L2_SEL_TGT_CROP_DEFAULT:
+		s->r.left = 0;
+		s->r.top = 0;
+		s->r.width = ctx->picinfo.visible_width;
+		s->r.height = ctx->picinfo.visible_height;
+		break;
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+		s->r.left = 0;
+		s->r.top = 0;
+		s->r.width = ctx->picinfo.coded_width;
+		s->r.height = ctx->picinfo.coded_height;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -4415,6 +4427,32 @@ static int vidioc_vdec_g_parm(struct file *file, void *fh,
 	return 0;
 }
 
+static int vidioc_vdec_g_pixelaspect(struct file *file, void *fh,
+	int buf_type, struct v4l2_fract *aspect)
+{
+	struct aml_vcodec_ctx *ctx = fh_to_ctx(fh);
+	u32 height_aspect_ratio, width_aspect_ratio;
+
+	if ((aspect == NULL) || (ctx == NULL)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"GET_PARAM_PIXEL_ASPECT_INFO err\n");
+		return -EFAULT;
+	}
+
+	height_aspect_ratio = ctx->height_aspect_ratio;
+	width_aspect_ratio = ctx->width_aspect_ratio;
+
+	if ((height_aspect_ratio != 0) && (width_aspect_ratio != 0)) {
+		aspect->numerator = height_aspect_ratio;
+		aspect->denominator = width_aspect_ratio;
+	}
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s: numerator is %d, denominator is %d\n",
+		__func__, aspect->numerator, aspect->denominator);
+
+	return 0;
+}
+
 static int check_dec_cfginfo(struct aml_vdec_cfg_infos *cfg)
 {
 	if (cfg->double_write_mode != 0 &&
@@ -4570,6 +4608,8 @@ const struct v4l2_ioctl_ops aml_vdec_ioctl_ops = {
 
 	.vidioc_g_parm			= vidioc_vdec_g_parm,
 	.vidioc_s_parm			= vidioc_vdec_s_parm,
+
+	.vidioc_g_pixelaspect		= vidioc_vdec_g_pixelaspect,
 };
 
 int aml_vcodec_dec_queue_init(void *priv, struct vb2_queue *src_vq,

@@ -9535,6 +9535,9 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	if (pbi->is_used_v4l) {
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
+		// get pixelaspect
+		ctx->height_aspect_ratio = 1;
+		ctx->width_aspect_ratio = 1;
 
 		pbi->frame_width = pbi->vp9_param.p.width;
 		pbi->frame_height = pbi->vp9_param.p.height;

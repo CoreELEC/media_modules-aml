@@ -735,6 +735,8 @@ struct aml_vcodec_ctx {
 	bool 				second_field_pts_mode;
 	struct aux_info			aux_infos;
 	u32				capture_memory_mode;
+	u32				height_aspect_ratio;
+	u32				width_aspect_ratio;
 };
 
 /**
