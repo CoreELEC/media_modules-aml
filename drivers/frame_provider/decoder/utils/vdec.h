@@ -128,6 +128,7 @@ enum e_trace_work_status {
 
 #define VDEC_CFG_FLAG_DV_TWOLARYER (1 << 0)
 #define VDEC_CFG_FLAG_DV_NEGATIVE  (1 << 1)
+#define VDEC_CFG_FLAG_HIGH_BANDWIDTH  (1 << 2)
 #define VDEC_CFG_FLAG_DIS_ERR_POLICY (1 << 11)
 
 #define VDEC_CFG_FLAG_PROG_ONLY (1 << 16)

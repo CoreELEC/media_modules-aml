@@ -761,12 +761,13 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 	struct vb2_v4l2_buffer *vb2_v4l2 = NULL;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
-		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, "
+		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, flag: 0x%x "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 		ctx->ada_ctx->frm_name, fb->status, vf->index_disp,
 		vb2_buf->index, vb2_buf,
 		vf->index & 0xff, vf,
 		vf->timestamp,
+		vf->flag,
 		fb->m.mem[0].addr, fb->m.mem[0].size,
 		fb->m.mem[1].addr, fb->m.mem[1].size,
 		fb->m.mem[2].addr, fb->m.mem[2].size);
