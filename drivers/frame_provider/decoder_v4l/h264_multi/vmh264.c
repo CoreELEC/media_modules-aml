@@ -2574,6 +2574,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
 	struct vframe_s *vf = NULL;
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int buffer_index = frame->buf_spec_num;
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	struct vdec_v4l2_buffer *fb = NULL;
@@ -2755,7 +2756,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				frame->frame->coded_frame, frame->frame->frame_mbs_only_flag, frame->frame->structure);
 		}
 
-		if (bForceInterlace || is_interlace(frame)) {
+		if (bForceInterlace || is_interlace(frame) || (!p_H264_Dpb->mSPS.frame_mbs_only_flag)) {
 			vf->type =
 				VIDTYPE_INTERLACE_FIRST |
 				nv_order;
@@ -2782,6 +2783,12 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 					vf->type |= (i == 0 ?
 						VIDTYPE_INTERLACE_BOTTOM :
 						VIDTYPE_INTERLACE_TOP);
+			} else if (frame->frame == NULL) {
+				if (frame->top_field != NULL) {
+					vf->type |= VIDTYPE_INTERLACE_TOP;
+				} else {
+					vf->type |= VIDTYPE_INTERLACE_BOTTOM;
+				}
 			} else {
 				vf->type |= (i == 0 ?
 					VIDTYPE_INTERLACE_TOP :
