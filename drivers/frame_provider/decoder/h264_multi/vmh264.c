@@ -8252,8 +8252,10 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 	/*Because CSD data is not found at playback start,
 	  the IQIDCT_CONTROL register is not saved,
 	  the initialized value 0x200 of IQIDCT_CONTROL is set*/
-	if (hw->init_flag && (hw->reg_iqidct_control_init_flag == 0))
-		WRITE_VREG(IQIDCT_CONTROL, 0x200);
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) {
+		if (hw->init_flag && (hw->reg_iqidct_control_init_flag == 0))
+			WRITE_VREG(IQIDCT_CONTROL, 0x200);
+	}
 
 	if (hw->reg_iqidct_control)
 		WRITE_VREG(IQIDCT_CONTROL, hw->reg_iqidct_control);
