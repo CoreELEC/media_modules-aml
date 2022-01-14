@@ -13,6 +13,7 @@ amvdec_ports-objs += decoder/vdec_vp9_if.o
 amvdec_ports-objs += decoder/vdec_mpeg12_if.o
 amvdec_ports-objs += decoder/vdec_mpeg4_if.o
 amvdec_ports-objs += decoder/vdec_mjpeg_if.o
+amvdec_ports-objs += decoder/vdec_avs_if.o
 amvdec_ports-objs += decoder/vdec_av1_if.o
 amvdec_ports-objs += decoder/vdec_avs2_if.o
 ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
