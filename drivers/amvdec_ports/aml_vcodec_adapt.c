@@ -156,6 +156,10 @@ static int disable_hardware(struct stream_port_s *port)
 				vdec_poweroff(VDEC_1);
 		}
 
+		if ((get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX)
+			&& (port->vformat == VFORMAT_H264))
+			vdec_poweroff(VDEC_HEVC);
+
 		amports_switch_gate("vdec", 0);
 	}
 
@@ -200,14 +204,10 @@ static int video_component_init(struct stream_port_s *port,
 		return -EPERM;
 	}
 
-	if ((vdec->sys_info->height * vdec->sys_info->width) > 1920 * 1088
-		|| port->vformat == VFORMAT_H264_4K2K) {
-		port->is_4k = true;
-		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX
-				&& (port->vformat == VFORMAT_H264))
-			vdec_poweron(VDEC_HEVC);
-	} else
-		port->is_4k = false;
+	port->is_4k = false;
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX
+			&& (port->vformat == VFORMAT_H264))
+		vdec_poweron(VDEC_HEVC);
 
 	if (port->type & PORT_TYPE_FRAME ||
 		(port->type & PORT_TYPE_ES)) {

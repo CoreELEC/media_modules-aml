@@ -5893,7 +5893,7 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 			if (p_H264_Dpb->mVideo.dec_picture->buf_spec_num ==
 				-1) {
 				p_H264_Dpb->mVideo.dec_picture->buf_spec_num =
-					get_free_buf_idx(p_H264_Dpb->vdec);
+					v4l_get_free_buf_idx(p_H264_Dpb->vdec);
 				if (p_H264_Dpb->mVideo.dec_picture->buf_spec_num
 					< 0) {
 					p_H264_Dpb->buf_alloc_fail = 1;

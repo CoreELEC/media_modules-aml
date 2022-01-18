@@ -958,7 +958,7 @@ void init_colocate_buf(struct h264_dpb_stru *p_H264_Dpb, int count);
 
 int release_colocate_buf(struct h264_dpb_stru *p_H264_Dpb, int index);
 
-int get_free_buf_idx(struct vdec_s *vdec);
+int v4l_get_free_buf_idx(struct vdec_s *vdec);
 
 int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 			struct StorablePicture *p, unsigned char data_flag);
