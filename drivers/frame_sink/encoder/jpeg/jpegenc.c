@@ -126,6 +126,7 @@ static u32 g_canvas_height;
 
 static u32 jpeg_in_full_hcodec;
 static u32 mfdin_ambus_canv_conv;
+static u32 dump_input;
 
 #define MHz (1000000)
 
@@ -2753,6 +2754,69 @@ static void mfdin_basic_jpeg(
     return;
 }
 
+static struct file *file_open(const char *path, int flags, int rights)
+{
+    struct file *filp = NULL;
+    mm_segment_t oldfs;
+    int err = 0;
+
+    oldfs = get_fs();
+    //set_fs(get_ds());
+    set_fs(KERNEL_DS);
+    filp = filp_open(path, flags, rights);
+    set_fs(oldfs);
+    if (IS_ERR(filp)) {
+        err = PTR_ERR(filp);
+        return NULL;
+    }
+    return filp;
+}
+
+static void file_close(struct file *file)
+{
+    filp_close(file, NULL);
+}
+
+static int file_write(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size)
+{
+    mm_segment_t oldfs;
+    int ret;
+
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+
+    ret = vfs_write(file, data, size, &offset);
+
+    set_fs(oldfs);
+    return ret;
+}
+
+static int file_sync(struct file *file)
+{
+    vfs_fsync(file, 0);
+    return 0;
+}
+
+static s32 dump_raw_input(struct jpegenc_wq_s *wq, u32 y_addr, u32 u_addr, u32 v_addr) {
+    u32 canvas_w, picsize_y;
+    struct file *filp;
+
+    canvas_w = ((wq->cmd.encoder_width + 31) >> 5) << 5;
+    picsize_y = wq->cmd.encoder_height;
+    jenc_pr(LOG_DEBUG, "canvas_w,picsize_y %d,%d\n", canvas_w,picsize_y);
+    filp = file_open("/data/encoder.yuv", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (filp) {
+        file_write(filp, 0, (u8*)phys_to_virt(y_addr), canvas_w * picsize_y);
+        file_write(filp, canvas_w * picsize_y, (u8*)phys_to_virt(u_addr), canvas_w * picsize_y / 2);
+        file_sync(filp);
+        file_close(filp);
+    } else{
+        jenc_pr(LOG_ERROR, "dump file open fail\n");
+    }
+
+    return 0;
+}
+
 //#define CONFIG_AMLOGIC_MEDIA_CANVAS
 
 static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
@@ -3267,6 +3331,11 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
             mfdin_canvas2_addr,
             mfdin_canvas_bias,
             mfdin_big_endian);
+
+    if (dump_input) {
+        dump_raw_input(wq, mfdin_canvas0_addr, mfdin_canvas1_addr, mfdin_canvas2_addr);
+    }
+
     return ret;
 }
 
@@ -4865,6 +4934,9 @@ MODULE_PARM_DESC(manual_interrupt, "\n manual_interrupt\n");
 module_init(jpegenc_driver_init_module);
 module_exit(jpegenc_driver_remove_module);
 RESERVEDMEM_OF_DECLARE(jpegenc, "amlogic, jpegenc-memory", jpegenc_mem_setup);
+
+module_param(dump_input, uint, 0664);
+MODULE_PARM_DESC(dump_input, "\n dump_input\n");
 
 MODULE_DESCRIPTION("AMLOGIC JPEG Encoder Driver");
 MODULE_LICENSE("GPL");
