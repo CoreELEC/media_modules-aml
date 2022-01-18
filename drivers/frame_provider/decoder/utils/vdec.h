@@ -644,7 +644,8 @@ void vdec_reset_userdata_fifo(struct vdec_s *vdec, int bInit);
 
 struct vdec_s *vdec_get_vdec_by_video_id(int video_id);
 struct vdec_s *vdec_get_vdec_by_id(int vdec_id);
-
+/* set 4k flag */
+void vdec_close_extra_hevc_core(struct vdec_s *vdec, bool interlace_flag, u32 double_write_mode);
 
 #ifdef VDEC_DEBUG_SUPPORT
 extern void vdec_set_step_mode(void);

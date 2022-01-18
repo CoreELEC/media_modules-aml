@@ -1831,6 +1831,20 @@ bool vdec_has_more_input(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(vdec_has_more_input);
 
+void vdec_close_extra_hevc_core(struct vdec_s *vdec, bool interlace_flag, u32 double_write_mode)
+{
+	if ((vdec->port->type & PORT_TYPE_VIDEO) && (vdec->port_flag & PORT_FLAG_VFORMAT) &&
+		(get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX)) {
+		if ((interlace_flag == true) || (double_write_mode == 16)) {
+			vdec_poweroff(VDEC_HEVC);
+			pr_info("the vdec does not support afbc, so close hevc core\n");
+		}
+	}
+
+	return;
+}
+EXPORT_SYMBOL(vdec_close_extra_hevc_core);
+
 void vdec_set_prepare_level(struct vdec_s *vdec, int level)
 {
 	vdec->input.prepare_level = level;
@@ -3784,6 +3798,10 @@ void vdec_poweroff(enum vdec_type_e core)
 		return;
 
 	mutex_lock(&vdec_mutex);
+	if (vdec_core->power_ref_count[core] == 0) {
+		mutex_unlock(&vdec_mutex);
+		return;
+	}
 
 	vdec_core->power_ref_count[core]--;
 	if (vdec_core->power_ref_count[core] > 0) {

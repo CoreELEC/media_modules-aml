@@ -151,6 +151,7 @@ struct vdec_h264_inst {
 	struct vdec_h264_vsi *vsi;
 	struct aml_dec_params parms;
 	struct completion comp;
+	struct vdec_comp_buf_info comp_info;
 };
 
 #if 0
@@ -445,6 +446,32 @@ static void vdec_config_dw_mode(struct vdec_pic_info *pic, int dw_mode)
 	default: /* nothing to do */
 		break;
 	}
+}
+static int vdec_h264_pic_scale(int length, int dw_mode)
+{
+	int ret = 64;
+
+	switch (dw_mode) {
+	case 0x0: /* only afbc, output afbc */
+		ret = 64;
+		break;
+	case 0x1: /* afbc and (w x h), output YUV420 */
+		ret = length;
+		break;
+	case 0x2: /* afbc and (w/4 x h/4), output YUV420 */
+	case 0x3: /* afbc and (w/4 x h/4), output afbc and YUV420 */
+		ret = length >> 2;
+		break;
+	case 0x4: /* afbc and (w/2 x h/2), output YUV420 */
+		ret = length >> 1;
+		break;
+	case 0x10: /* (w x h), output YUV420-8bit)*/
+	default:
+		ret = length;
+		break;
+	}
+
+	return ret;
 }
 
 static void fill_vdec_params(struct vdec_h264_inst *inst, struct h264_SPS_t *sps)
@@ -882,6 +909,12 @@ static void get_param_config_info(struct vdec_h264_inst *inst,
 		"parms status: %u\n", parms->parms_status);
 }
 
+static void get_param_comp_buf_info(struct vdec_h264_inst *inst,
+	struct vdec_comp_buf_info *params)
+{
+	memcpy(params, &inst->comp_info, sizeof(*params));
+}
+
 static int vdec_h264_get_param(unsigned long h_vdec,
 			       enum vdec_get_param_type type, void *out)
 {
@@ -918,6 +951,10 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 		break;
 	}
 
+	case GET_PARAM_COMP_BUF_INFO:
+		get_param_comp_buf_info(inst, out);
+		break;
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);
@@ -951,9 +988,11 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	rect->height		= pic->visible_height;
 
 	/* config canvas size that be used for decoder. */
-	pic->coded_width	= ps->coded_width;
-	pic->coded_height	= ps->coded_height;
-	pic->y_len_sz		= pic->coded_width * pic->coded_height;
+	pic->coded_width 	= ps->coded_width;
+	pic->coded_height 	= ps->coded_height;
+
+	pic->y_len_sz		= vdec_h264_pic_scale(ALIGN(ps->coded_width, 64), dw) *
+		vdec_h264_pic_scale(ALIGN(ps->coded_height, 64), dw);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 	pic->profile_idc	= ps->profile;
 	pic->field		= ps->field;
@@ -965,8 +1004,6 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=
 		V4L2_CONFIG_PARM_DECODE_PSINFO;
-
-	vdec_config_dw_mode(pic, dw);
 
 	/*wake up*/
 	complete(&inst->comp);
@@ -1006,6 +1043,11 @@ static void set_param_post_event(struct vdec_h264_inst *inst, u32 *event)
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
 		"H264 post event: %d\n", *event);
 }
+static void set_param_comp_buf_info(struct vdec_h264_inst *inst,
+		struct vdec_comp_buf_info *info)
+{
+	memcpy(&inst->comp_info, info, sizeof(*info));
+}
 
 static int vdec_h264_set_param(unsigned long h_vdec,
 	enum vdec_set_param_type type, void *in)
@@ -1039,7 +1081,9 @@ static int vdec_h264_set_param(unsigned long h_vdec,
 	case SET_PARAM_PIC_INFO:
 		set_pic_info(inst, in);
 		break;
-
+	case SET_PARAM_COMP_BUF_INFO:
+		set_param_comp_buf_info(inst, in);
+		break;
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid set parameter type=%d\n", type);
