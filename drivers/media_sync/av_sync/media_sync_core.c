@@ -11,6 +11,8 @@
 #include <linux/time.h>
 #include <linux/time64.h>
 #include "media_sync_core.h"
+#define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_MEDIA_SYNC
+#include <trace/events/meson_atrace.h>
 
 #define MAX_INSTANCE_NUM 10
 mediasync_ins* vMediaSyncInsList[MAX_INSTANCE_NUM] = {0};
@@ -148,6 +150,12 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	pInstance->mute_flag = false;
 	pInstance->mSourceType = TS_DEMOD;
 	pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
+	snprintf(pInstance->atrace_video,
+		sizeof(pInstance->atrace_video), "msync_v_%d", *sSyncInsId);
+	snprintf(pInstance->atrace_audio,
+		sizeof(pInstance->atrace_audio), "msync_a_%d", *sSyncInsId);
+	snprintf(pInstance->atrace_pcrscr,
+		sizeof(pInstance->atrace_pcrscr), "msync_s_%d", *sSyncInsId);
 	*pIns = pInstance;
 	return 0;
 }
@@ -817,6 +825,7 @@ long mediasync_ins_set_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 	if (pInstance == NULL)
 		return -1;
 
+	ATRACE_COUNTER(pInstance->atrace_audio, info.framePts);
 	pInstance->mSyncInfo.curAudioInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.curAudioInfo.frameSystemTime = info.frameSystemTime;
 	return 0;
@@ -847,6 +856,7 @@ long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 	if (pInstance == NULL)
 		return -1;
 
+	ATRACE_COUNTER(pInstance->atrace_video, info.framePts);
 	pInstance->mSyncInfo.curVideoInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.curVideoInfo.frameSystemTime = info.frameSystemTime;
 	pInstance->mTrackMediaTime = div_u64(info.framePts * 100 , 9);
