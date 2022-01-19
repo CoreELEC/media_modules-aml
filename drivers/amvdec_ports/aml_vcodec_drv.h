@@ -645,6 +645,7 @@ struct canvas_cache {
  * @vdec_pic_info_update: update pic info cb.
  * @vpp_is_need: the instance is need vpp.
  * @task_chain_pool: used to store task chain inst.
+ * @index_disp: the number of frames output.
  */
 struct aml_vcodec_ctx {
 	int				id;
@@ -737,6 +738,7 @@ struct aml_vcodec_ctx {
 	u32				capture_memory_mode;
 	u32				height_aspect_ratio;
 	u32				width_aspect_ratio;
+	u32				index_disp;
 };
 
 /**

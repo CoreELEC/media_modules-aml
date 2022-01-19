@@ -775,6 +775,9 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 	struct vframe_s *vf = fb->vframe;
 	struct vb2_v4l2_buffer *vb2_v4l2 = NULL;
 
+	vf->index_disp = ctx->index_disp;
+	ctx->index_disp++;
+
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, flag: 0x%x "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
@@ -2074,6 +2077,8 @@ static int vidioc_decoder_streamoff(struct file *file, void *priv,
 		if (ctx->vpp) {
 			reconfig_vpp_status(ctx);
 		}
+	} else {
+		ctx->index_disp = 0;
 	}
 
 	if (ctx->ge2d && ctx->is_stream_off) {
