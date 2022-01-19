@@ -122,7 +122,9 @@ typedef struct instance{
 	mediasync_syncinfo mSyncInfo;
 	aml_Source_Type mSourceType;
 	mediasync_audio_format mAudioFormat;
-
+	char atrace_video[32];
+	char atrace_audio[32];
+	char atrace_pcrscr[32];
 }mediasync_ins;
 
 long mediasync_ins_alloc(s32 sDemuxId,
