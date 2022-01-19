@@ -10407,6 +10407,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		else
 			CLEAR_VREG_MASK(VDEC_ASSIST_MMC_CTRL1, 1 << 3);
 	}
+	if (hw->i_only)
+		hw->dpb.first_insert_frame = FirstInsertFrm_SKIPDONE;
 	if (vdec->mvfrm)
 		vdec->mvfrm->hw_decode_start = local_clock();
 	amvdec_start();
