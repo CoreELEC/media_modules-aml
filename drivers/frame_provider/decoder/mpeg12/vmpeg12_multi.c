@@ -2203,10 +2203,6 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 				hw->profile_idc, hw->level_idc);
 		}
 
-		if ((info & PICINFO_PROG) == 0 &&
-			(info & FRAME_PICTURE_MASK) != FRAME_PICTURE) {
-			hw->first_i_frame_ready = 1; /* for field struct case*/
-		}
 		if (index >= hw->buf_num) {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"mmpeg12: invalid buf index: %d\n", index);
