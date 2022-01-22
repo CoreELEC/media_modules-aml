@@ -10890,94 +10890,78 @@ static void aspect_ratio_set(struct hevc_state_s *hevc)
 
 	switch (aspect_ratio_idc) {
 		case 1:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 1;
 			hevc->cur_pic->sar_width = 1;
 			break;
 		case 2:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 11;
 			hevc->cur_pic->sar_width = 12;
 			break;
 		case 3:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 11;
 			hevc->cur_pic->sar_width = 10;
 			break;
 		case 4:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 11;
 			hevc->cur_pic->sar_width = 16;
 			break;
 		case 5:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 33;
 			hevc->cur_pic->sar_width = 40;
 			break;
 		case 6:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 11;
 			hevc->cur_pic->sar_width = 24;
 			break;
 		case 7:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 11;
 			hevc->cur_pic->sar_width = 20;
 			break;
 		case 8:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 11;
 			hevc->cur_pic->sar_width = 32;
 			break;
 		case 9:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 33;
 			hevc->cur_pic->sar_width = 80;
 			break;
 		case 10:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 11;
 			hevc->cur_pic->sar_width = 18;
 			break;
 		case 11:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 11;
 			hevc->cur_pic->sar_width = 15;
 			break;
 		case 12:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 33;
 			hevc->cur_pic->sar_width = 64;
 			break;
 		case 13:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 99;
 			hevc->cur_pic->sar_width = 160;
 			break;
 		case 14:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 3;
 			hevc->cur_pic->sar_width = 4;
 			break;
 		case 15:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 2;
 			hevc->cur_pic->sar_width = 3;
 			break;
 		case 16:
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 1;
 			hevc->cur_pic->sar_width = 2;
 			break;
 		default:
-
-			hevc->frame_ar = 0x3ff;
 			hevc->cur_pic->sar_height = 1;
 			hevc->cur_pic->sar_width = 1;
 			break;
 		}
 
+		hevc->frame_ar = !hevc->pic_w ? 0x3ff : 0x100 * hevc->pic_h * hevc->cur_pic->sar_height / (hevc->pic_w * hevc->cur_pic->sar_width);
 }
+
 static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 {
 	struct hevc_state_s *hevc = (struct hevc_state_s *) data;

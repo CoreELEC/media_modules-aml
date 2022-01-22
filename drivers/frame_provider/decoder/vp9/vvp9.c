@@ -247,6 +247,8 @@ static u32 frame_width;
 static u32 frame_height;
 static u32 video_signal_type;
 
+static int ar = DISP_RATIO_ASPECT_RATIO_MAX;
+
 static u32 on_no_keyframe_skiped;
 
 #define PROB_SIZE    (496 * 2 * 4)
@@ -7375,7 +7377,6 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 
 static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 {
-	unsigned int ar = DISP_RATIO_ASPECT_RATIO_MAX;
 	vf->duration = pbi->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
@@ -7383,7 +7384,7 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 	vf->signal_type = pbi->video_signal_type;
 	if (vf->compWidth && vf->compHeight)
 		pbi->frame_ar = vf->compHeight * 0x100 / vf->compWidth;
-	ar = min_t(u32, ar, DISP_RATIO_ASPECT_RATIO_MAX);
+	ar = min_t(u32, pbi->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 	vf->sar_width = 1;
 	vf->sar_height = 1;
@@ -9714,6 +9715,7 @@ int vvp9_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->total_data = vp9->gvs->total_data;
 	vstatus->samp_cnt = vp9->gvs->samp_cnt;
 	vstatus->offset = vp9->gvs->offset;
+	vstatus->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s", DRIVER_NAME);
 	return 0;
