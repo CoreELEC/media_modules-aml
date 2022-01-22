@@ -138,6 +138,8 @@ static u32 buf_size = 32 * 1024 * 1024;
 #define DECODE_STOP_POS         AV_SCRATCH_K
 static u32 udebug_flag;
 
+static int ar;
+
 static struct vframe_s *vmpeg_vf_peek(void *);
 static struct vframe_s *vmpeg_vf_get(void *);
 static void vmpeg_vf_put(struct vframe_s *, void *);
@@ -568,7 +570,6 @@ static int spec_to_index(struct vdec_mpeg4_hw_s *hw, u32 spec)
 static void set_frame_info(struct vdec_mpeg4_hw_s *hw, struct vframe_s *vf,
 			int buffer_index)
 {
-	int ar = 0;
 	unsigned int num = 0;
 	unsigned int den = 0;
 	unsigned int pixel_ratio = READ_VREG(MP4_PIC_RATIO);
@@ -1881,6 +1882,7 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->b_decoded_frames = hw->b_decoded_frames;
 	vstatus->b_lost_frames = hw->b_lost_frames;
 	vstatus->b_concealed_frames = hw->b_concealed_frames;
+	vstatus->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 			"%s", DRIVER_NAME);
 
