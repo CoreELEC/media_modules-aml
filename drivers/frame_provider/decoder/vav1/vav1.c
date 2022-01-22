@@ -278,6 +278,8 @@ static u32 mv_buf_margin = REF_FRAMES;
 static u32 mv_buf_dynamic_alloc;
 static u32 force_max_one_mv_buffer_size;
 
+unsigned int ar = DISP_RATIO_ASPECT_RATIO_MAX;
+
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
 /* double_write_mode:
  *	0, no double write;
@@ -6069,7 +6071,6 @@ static void set_canvas(struct AV1HW_s *hw,
 
 static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
 {
-	unsigned int ar = DISP_RATIO_ASPECT_RATIO_MAX;
 	vf->duration = hw->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
@@ -6077,7 +6078,7 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
 	vf->signal_type = hw->video_signal_type;
 	if (vf->compWidth && vf->compHeight)
 		hw->frame_ar = vf->compHeight * 0x100 / vf->compWidth;
-	ar = min_t(u32, ar, DISP_RATIO_ASPECT_RATIO_MAX);
+	ar = min_t(u32, hw->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 	vf->sar_width = 1;
 	vf->sar_height = 1;
@@ -9376,6 +9377,7 @@ int vav1_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->drop_frame_count = av1->gvs->drop_frame_count;
 	vstatus->samp_cnt = av1->gvs->samp_cnt;
 	vstatus->offset = av1->gvs->offset;
+	vstatus->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s", DRIVER_NAME);
 //#endif

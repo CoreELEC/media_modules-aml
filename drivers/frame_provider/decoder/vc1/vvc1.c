@@ -136,6 +136,8 @@ static u32 unstable_pts;
 static u32 vvc1_ratio;
 static u32 vvc1_format;
 
+static int ar = 0;
+
 static u32 intra_output;
 static u32 frame_width, frame_height, frame_dur;
 static u32 saved_resolution;
@@ -211,8 +213,6 @@ static inline u32 index2canvas(u32 index)
 
 static void set_aspect_ratio(struct vframe_s *vf, unsigned int pixel_ratio)
 {
-	int ar = 0;
-
 	if (vvc1_ratio == 0) {
 		/* always stretch to 16:9 */
 		vf->ratio_control |= (0x90 << DISP_RATIO_ASPECT_RATIO_BIT);
@@ -864,6 +864,7 @@ int vvc1_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->total_data = gvs->total_data;
 	vstatus->samp_cnt = gvs->samp_cnt;
 	vstatus->offset = gvs->offset;
+	vstatus->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s", DRIVER_NAME);
 
@@ -1065,7 +1066,7 @@ static void vvc1_local_init(bool is_reset)
 	int i;
 
 	/* vvc1_ratio = 0x100; */
-	vvc1_ratio = vvc1_amstream_dec_info.ratio;
+	vvc1_ratio = (vvc1_amstream_dec_info.ratio >> DISP_RATIO_ASPECT_RATIO_BIT);
 
 	avi_flag = (unsigned long) vvc1_amstream_dec_info.param & 0x01;
 
