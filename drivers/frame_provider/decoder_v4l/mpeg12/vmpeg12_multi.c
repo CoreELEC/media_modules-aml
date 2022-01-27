@@ -34,11 +34,12 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-//#include <linux/amlogic/tee.h>
-#include <uapi/linux/tee.h>
-
+#include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
+#include <media/v4l2-mem2mem.h>
+#include <uapi/linux/tee.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../../decoder/utils/vdec_input.h"
@@ -46,13 +47,10 @@
 #include "../../decoder/utils/amvdec.h"
 #include "../../decoder/utils/decoder_mmu_box.h"
 #include "../../decoder/utils/decoder_bmmu_box.h"
-#include <linux/amlogic/media/codec_mm/codec_mm.h>
-#include <linux/amlogic/media/codec_mm/configs.h>
 #include "../../decoder/utils/config_parser.h"
 #include "../../decoder/utils/firmware.h"
 #include "../../decoder/utils/vdec_v4l2_buffer_ops.h"
 #include "../../decoder/utils/config_parser.h"
-#include <media/v4l2-mem2mem.h>
 #include "../../decoder/utils/vdec_feature.h"
 
 #define MEM_NAME "codec_mmpeg12"
@@ -152,10 +150,6 @@ static unsigned int decode_timeout_val = 200;
 static u32 again_threshold;
 #endif
 
-/*
-#define DUMP_USER_DATA
-*/
-
 enum {
 	FRAME_REPEAT_TOP,
 	FRAME_REPEAT_BOT,
@@ -185,15 +179,14 @@ enum {
 #define DEC_DECODE_TIMEOUT         0x21
 #define DECODE_ID(hw) (hw_to_vdec(hw)->id)
 #define DECODE_STOP_POS         AV_SCRATCH_K
+#define USERDATA_FIFO_NUM    256
+#define MAX_FREE_USERDATA_NODES		5
 
 struct mmpeg2_userdata_record_t {
 	struct userdata_meta_info_t meta_info;
 	u32 rec_start;
 	u32 rec_len;
 };
-
-#define USERDATA_FIFO_NUM    256
-#define MAX_FREE_USERDATA_NODES		5
 
 struct mmpeg2_userdata_info_t {
 	struct mmpeg2_userdata_record_t records[USERDATA_FIFO_NUM];
@@ -280,7 +273,7 @@ struct vdec_mpeg12_hw_s {
 	u32 cc_buf_size;
 	unsigned long ccbuf_phyAddress_is_remaped_nocache;
 	u32 frame_rpt_state;
-/* for error handling */
+	/* for error handling */
 	s32 frame_force_skip_flag;
 	s32 error_frame_skip_level;
 	s32 wait_buffer_counter;
@@ -366,11 +359,10 @@ static int vmpeg_event_cb(int type, void *data, void *private_data);
 static int notify_v4l_eos(struct vdec_s *vdec);
 static void start_process_time_set(struct vdec_mpeg12_hw_s *hw);
 static int debug_enable;
-/*static struct work_struct userdata_push_work;*/
+
 #undef pr_info
 #define pr_info printk
 unsigned int mpeg12_debug_mask = 0xff;
-/*static int counter_max = 5;*/
 static u32 run_ready_min_buf_num = 2;
 static int dirty_again_threshold = 100;
 static int error_proc_policy = 0x1;
@@ -394,8 +386,6 @@ static int error_proc_policy = 0x1;
 #define PRINT_FLAG_V4L_DETAIL         0x8000
 #define IGNORE_PARAM_FROM_CONFIG      0x8000000
 
-
-
 int debug_print(int index, int debug_flag, const char *fmt, ...)
 {
 	if (((debug_enable & debug_flag) &&
@@ -418,8 +408,6 @@ int debug_print(int index, int debug_flag, const char *fmt, ...)
 	return 0;
 }
 
-
-/*static bool is_reset;*/
 #define PROVIDER_NAME   "vdec.mpeg12"
 static const struct vframe_operations_s vf_provider_ops = {
 	.peek = vmpeg_vf_peek,
@@ -789,7 +777,6 @@ static inline void vmpeg12_save_hw_context(struct vdec_mpeg12_hw_s *hw, u32 reg)
 {
 	if (reg == 3) {
 		hw->ctx_valid = 0;
-		//pr_info("%s, hw->userdata_wp_ctx %d\n", __func__, hw->userdata_wp_ctx);
 	} else {
 		hw->seqinfo = READ_VREG(MREG_SEQ_INFO);
 		hw->reg_pic_width = READ_VREG(MREG_PIC_WIDTH);
@@ -814,10 +801,8 @@ static void vmmpeg2_reset_udr_mgr(struct vdec_mpeg12_hw_s *hw)
 	memset(&hw->ud_record, 0, sizeof(hw->ud_record));
 }
 
-static void vmmpeg2_crate_userdata_manager(
-						struct vdec_mpeg12_hw_s *hw,
-						u8 *userdata_buf,
-						int buf_len)
+static void vmmpeg2_crate_userdata_manager(struct vdec_mpeg12_hw_s *hw,
+	u8 *userdata_buf, int buf_len)
 {
 	if (hw) {
 		mutex_init(&hw->userdata_mutex);
@@ -836,9 +821,7 @@ static void vmmpeg2_crate_userdata_manager(
 static void vmmpeg2_destroy_userdata_manager(struct vdec_mpeg12_hw_s *hw)
 {
 	if (hw)
-		memset(&hw->userdata_info,
-				0,
-				sizeof(struct mmpeg2_userdata_info_t));
+		memset(&hw->userdata_info, 0, sizeof(struct mmpeg2_userdata_info_t));
 }
 
 static void aml_swap_data(uint8_t *user_data, int ud_size)
@@ -953,7 +936,6 @@ static void dump_userdata_info(struct vdec_mpeg12_hw_s *hw,
 #endif
 }
 
-
 static void print_data(unsigned char *pdata,
 						int len,
 						unsigned int flag,
@@ -968,9 +950,8 @@ static void print_data(unsigned char *pdata,
 	nLeft = len;
 
 	pr_info("%d len:%d, flag:0x%x, dur:%d, vpts:0x%x, valid:%d, refer:%d\n",
-				rec_id,	len, flag,
-				duration, vpts, vpts_valid,
-				reference);
+		rec_id,	len, flag, duration, vpts, vpts_valid, reference);
+
 	while (nLeft >= 16) {
 		pr_info("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
 			pdata[0], pdata[1], pdata[2], pdata[3],
@@ -980,7 +961,6 @@ static void print_data(unsigned char *pdata,
 		nLeft -= 16;
 		pdata += 16;
 	}
-
 
 	while (nLeft > 0) {
 		pr_info("%02x %02x %02x %02x %02x %02x %02x %02x\n",
@@ -1001,7 +981,6 @@ static void dump_data(u8 *pdata,
 						u32 reference)
 {
 	unsigned char szBuf[256];
-
 
 	memset(szBuf, 0, 256);
 	memcpy(szBuf, pdata, user_data_length);
@@ -1127,13 +1106,6 @@ static void user_data_ready_notify(struct vdec_mpeg12_hw_s *hw,
 				hw->reference[i]);
 			hw->n_userdata_id++;
 #endif
-/*
-			pr_info("notify: rec_start:%d, rec_len:%d, wi:%d, reference:%d\n",
-				p_userdata_rec->rec_start,
-				p_userdata_rec->rec_len,
-				hw->userdata_info.write_index,
-				hw->reference[i]);
-*/
 			hw->userdata_info.write_index++;
 			if (hw->userdata_info.write_index >= USERDATA_FIFO_NUM)
 				hw->userdata_info.write_index = 0;
@@ -1169,11 +1141,6 @@ static int vmmpeg2_user_data_read(struct vdec_s *vdec,
 
 	mutex_lock(&hw->userdata_mutex);
 
-/*
-	pr_info("ri = %d, wi = %d\n",
-		hw->userdata_info.read_index,
-		hw->userdata_info.write_index);
-*/
 	rec_ri = hw->userdata_info.read_index;
 	rec_wi = hw->userdata_info.write_index;
 
@@ -1186,13 +1153,7 @@ static int vmmpeg2_user_data_read(struct vdec_s *vdec,
 
 	rec_len = p_userdata_rec->rec_len;
 	rec_data_start = p_userdata_rec->rec_start + hw->userdata_info.data_buf;
-/*
-	pr_info("ri:%d, wi:%d, rec_len:%d, rec_start:%d, buf_len:%d\n",
-		rec_ri, rec_wi,
-		p_userdata_rec->rec_len,
-		p_userdata_rec->rec_start,
-		puserdata_para->buf_len);
-*/
+
 	if (rec_len <= puserdata_para->buf_len) {
 		/* dvb user data buffer is enought to
 		copy the whole recored. */
@@ -1364,9 +1325,6 @@ static void vmmpeg2_wakeup_userdata_poll(struct vdec_s *vdec)
 	amstream_wakeup_userdata_poll(vdec);
 }
 
-/*
-#define PRINT_HEAD_INFO
-*/
 static void userdata_push_do_work(struct work_struct *work)
 {
 	u32 reg;
@@ -1459,41 +1417,30 @@ static void userdata_push_do_work(struct work_struct *work)
 
 	switch (picture_type) {
 	case 1:
-			/* pr_info("I type, pos:%d\n",
-					(meta_info.flags>>1)&0x3); */
 			meta_info.flags |= (1<<7);
 #ifdef PRINT_HEAD_INFO
 			ptype_str = " I";
 #endif
 			break;
 	case 2:
-			/* pr_info("P type, pos:%d\n",
-					(meta_info.flags>>1)&0x3); */
 			meta_info.flags |= (2<<7);
 #ifdef PRINT_HEAD_INFO
 			ptype_str = " P";
 #endif
 			break;
 	case 3:
-			/* pr_info("B type, pos:%d\n",
-					(meta_info.flags>>1)&0x3); */
 			meta_info.flags |= (3<<7);
 #ifdef PRINT_HEAD_INFO
 			ptype_str = " B";
 #endif
 			break;
 	case 4:
-			/* pr_info("D type, pos:%d\n",
-					(meta_info.flags>>1)&0x3); */
 			meta_info.flags |= (4<<7);
 #ifdef PRINT_HEAD_INFO
 			ptype_str = " D";
 #endif
 			break;
 	default:
-			/* pr_info("Unknown type:0x%x, pos:%d\n",
-					pheader->picture_coding_type,
-					(meta_info.flags>>1)&0x3); */
 #ifdef PRINT_HEAD_INFO
 			ptype_str = " U";
 #endif
@@ -1552,9 +1499,7 @@ void userdata_pushed_drop(struct vdec_mpeg12_hw_s *hw)
 	hw->ucode_cc_last_wp = hw->notify_ucode_cc_last_wp;
 	hw->cur_ud_idx = 0;
 	hw->wait_for_udr_send = 0;
-
 }
-
 
 static inline void hw_update_gvs(struct vdec_mpeg12_hw_s *hw)
 {
@@ -1788,8 +1733,6 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				}
 			} else
 				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
-
-
 		}
 	}
 	return 0;
@@ -2377,7 +2320,6 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 #ifdef AGAIN_HAS_THRESHOLD
 		hw->next_again_flag = 1;
 #endif
-		//hw->dec_again_cnt++;
 	} else if (hw->dec_result == DEC_RESULT_GET_DATA &&
 		vdec->next_status != VDEC_STATUS_DISCONNECTED) {
 		if (!vdec_has_more_input(vdec)) {
@@ -3181,11 +3123,7 @@ static s32 vmpeg12_init(struct vdec_mpeg12_hw_s *hw)
 			hw->user_data_buffer,
 			USER_DATA_SIZE);
 
-	//amvdec_enable();
 	timer_setup(&hw->check_timer, check_timer_func, 0);
-	//init_timer(&hw->check_timer);
-	//hw->check_timer.data = (unsigned long)hw;
-	//hw->check_timer.function = check_timer_func;
 	hw->check_timer.expires = jiffies + CHECK_INTERVAL;
 
 	hw->stat |= STAT_TIMER_ARM;
@@ -3511,7 +3449,7 @@ void (*callback)(struct vdec_s *, void *),
 		vdec_schedule_work(&hw->work);
 		return;
 	}
-	/*wmb();*/
+
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->stat |= STAT_MC_LOAD;
 	vdec_enable_input(vdec);
@@ -3594,10 +3532,8 @@ static int vmpeg12_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
 
 	if (trickmode == TRICKMODE_I) {
 		hw->i_only = 0x3;
-		//trickmode_i = 1;
 	} else if (trickmode == TRICKMODE_NONE) {
 		hw->i_only = 0x0;
-		//trickmode_i = 0;
 	}
 	return 0;
 }
@@ -3683,11 +3619,6 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 			&config_val) == 0)
 			hw->force_prog_only = (config_val & VDEC_CFG_FLAG_PROG_ONLY) ? 1 : 0;
 
-		/*if (get_config_int(pdata->config,
-			"parm_v4l_duration",
-			&config_val) == 0)
-			vdec_frame_rate_uevent(config_val);*/
-
 		if ((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0 &&
 			get_config_int(pdata->config,
 			"parm_v4l_buffer_margin",
@@ -3748,7 +3679,6 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 	reset_user_data_buf(hw);
 #endif
 
-	/*INIT_WORK(&userdata_push_work, userdata_push_do_work);*/
 	return 0;
 }
 

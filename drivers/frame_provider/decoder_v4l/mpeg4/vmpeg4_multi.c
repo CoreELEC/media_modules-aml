@@ -31,11 +31,12 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-//#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
 #include <linux/sched/clock.h>
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
+#include <linux/amlogic/media/codec_mm/configs.h>
+#include <media/v4l2-mem2mem.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../../decoder/utils/amvdec.h"
@@ -44,11 +45,9 @@
 #include "../../decoder/utils/firmware.h"
 #include "../../decoder/utils/decoder_mmu_box.h"
 #include "../../decoder/utils/decoder_bmmu_box.h"
-#include <linux/amlogic/media/codec_mm/configs.h>
 #include "../../decoder/utils/firmware.h"
 #include "../../decoder/utils/vdec_v4l2_buffer_ops.h"
 #include "../../decoder/utils/config_parser.h"
-#include <media/v4l2-mem2mem.h>
 #include "../../decoder/utils/vdec_feature.h"
 
 #define DRIVER_NAME "ammvdec_mpeg4_v4l"
@@ -227,7 +226,6 @@ struct pic_info_t {
 struct vdec_mpeg4_hw_s {
 	spinlock_t lock;
 	struct platform_device *platform_dev;
-	/* struct device *cma_dev; */
 
 	DECLARE_KFIFO(newframe_q, struct vframe_s *, VF_POOL_SIZE);
 	DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
@@ -268,10 +266,7 @@ struct vdec_mpeg4_hw_s {
 	u32 stat;
 	unsigned long buf_start;
 	u32 buf_size;
-	/*
-	unsigned long cma_alloc_addr;
-	int cma_alloc_count;
-	*/
+
 	u32 vmpeg4_ratio;
 	u64 vmpeg4_ratio64;
 	u32 rate_detect;
@@ -357,9 +352,6 @@ static void flush_output(struct vdec_mpeg4_hw_s * hw);
 
 #define PROVIDER_NAME   "vdec.mpeg4"
 
-/*
- *int query_video_status(int type, int *value);
- */
 static const struct vframe_operations_s vf_provider_ops = {
 	.peek = vmpeg_vf_peek,
 	.get = vmpeg_vf_get,
@@ -1333,11 +1325,6 @@ static irqreturn_t vmpeg4_isr_thread_fn(struct vdec_s *vdec, int irq)
 			}
 		} else {
 			duration = hw->vmpeg4_amstream_dec_info.rate;
-#if 0
-			pr_info("info rate = %d, ucode rate = 0x%x:0x%x\n",
-				   hw->vmpeg4_amstream_dec_info.rate,
-				   READ_VREG(MP4_RATE), vop_time_inc);
-#endif
 		}
 
 		/* frame mode with unstable pts */
@@ -2225,9 +2212,7 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 			CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
 	}
 
-#if 1/* /MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8 */
 	WRITE_VREG(MDEC_PIC_DC_THRESH, 0x404038aa);
-#endif
 
 	WRITE_VREG(MP4_PIC_WH, (hw->ctx_valid) ?
 		hw->reg_mp4_pic_wh :
@@ -2381,12 +2366,8 @@ static s32 vmmpeg4_init(struct vdec_mpeg4_hw_s *hw)
 
 	pr_info("%s\n", __func__);
 
-	//amvdec_enable();
-
 	timer_setup(&hw->check_timer, check_timer_func, 0);
-	//init_timer(&hw->check_timer);
-	//hw->check_timer.data = (unsigned long)hw;
-	//hw->check_timer.function = check_timer_func;
+
 	hw->check_timer.expires = jiffies + CHECK_INTERVAL;
 	hw->stat |= STAT_TIMER_ARM;
 	hw->eos = 0;
@@ -2747,7 +2728,6 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 
 	pdata->private = hw;
 	pdata->dec_status = dec_status;
-	/* pdata->set_trickmode = set_trickmode; */
 	pdata->set_trickmode = vmpeg4_set_trickmode;
 	pdata->run_ready = run_ready;
 	pdata->run = run;
@@ -2839,11 +2819,6 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 			"parm_v4l_canvas_mem_mode",
 			&config_val) == 0)
 			hw->blkmode = config_val;
-
-		/*if (get_config_int(pdata->config,
-			"parm_v4l_duration",
-			&config_val) == 0)
-			vdec_frame_rate_uevent(config_val);*/
 	} else
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 
