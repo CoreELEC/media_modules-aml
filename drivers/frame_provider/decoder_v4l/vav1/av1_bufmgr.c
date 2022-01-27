@@ -100,12 +100,6 @@ static void qsort(void *base, size_t num, size_t width,
 /*  stack for saving sub-array to be
  *          processed
  */
-#if 0
-  /* validation section */
-  _VALIDATE_RETURN_VOID(base != NULL || num == 0, EINVAL);
-  _VALIDATE_RETURN_VOID(width > 0, EINVAL);
-  _VALIDATE_RETURN_VOID(comp != NULL, EINVAL);
-#endif
   if (num < 2)
     return;                 /* nothing to do */
 
@@ -557,11 +551,6 @@ void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *c
 }
 
 int release_fb_cb(void *cb_priv, aom_codec_frame_buffer_t *fb) {
-#if 0
-  InternalFrameBuffer *const int_fb = (InternalFrameBuffer *)fb->priv;
-  (void)cb_priv;
-  if (int_fb) int_fb->in_use = 0;
-#endif
   return 0;
 }
 
@@ -2339,15 +2328,6 @@ int av1_decode_frame_headers_and_setup(AV1Decoder *pbi, int trailing_bits_presen
                          "Reference frame containing this frame's initial "
                          "frame context is unavailable.");
     }
-#if 0
-    av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%d,%d,%d,%d\n",cm->error_resilient_mode,
-      cm->seq_params.order_hint_info.enable_ref_frame_mvs,
-      cm->seq_params.order_hint_info.enable_order_hint,frame_is_intra_only(cm));
-
-    printf("frame_might_allow_ref_frame_mvs()=>%d, current_frame->frame_type=%d, pbi->need_resync=%d, params->p.allow_ref_frame_mvs=%d\n",
-        frame_might_allow_ref_frame_mvs(cm), current_frame->frame_type, pbi->need_resync,
-        params->p.allow_ref_frame_mvs);
-#endif
     if (!(current_frame->frame_type == INTRA_ONLY_FRAME) &&
         pbi->need_resync != 1) {
       if (frame_might_allow_ref_frame_mvs(cm))
@@ -2981,9 +2961,6 @@ int aom_decode_frame_from_obus(AV1Decoder *pbi, union param_u *params, int obu_t
 #endif
           break;
         }
-#if 0 //def AML
-        frame_decoding_finished = 1;
-#endif
         if (obu_header.type != OBU_FRAME) break;
         obu_payload_offset = frame_header_size;
         // Byte align the reader before reading the tile group.
@@ -3288,12 +3265,6 @@ int av1_bufmgr_postproc(AV1Decoder *pbi, unsigned char frame_decoded)
 {
     PIC_BUFFER_CONFIG *sd = NULL;
     int index;
-#if 0
-    if (frame_decoded) {
-      printf("before swap_frame_buffers: ");
-      dump_buffer_status(pbi);
-    }
-#endif
     swap_frame_buffers(pbi, frame_decoded);
     if (frame_decoded) {
       if (av1_is_debug(AOM_DEBUG_PRINT_LIST_INFO)) {
