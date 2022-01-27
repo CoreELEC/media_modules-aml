@@ -127,7 +127,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			vMediaSyncInsList[index] = pInstance;
 			pInstance->mSyncInsId = index;
 			*sSyncInsId = index;
-			pr_info("mediasync_ins_alloc index:%d\n", index);
+			pr_info("mediasync_ins_alloc index:%d, demuxid:%d.\n", index, sDemuxId);
 			break;
 		}
 	}
@@ -773,8 +773,11 @@ long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info
 		return -1;
 
 	if (pInstance->mSyncInfo.firstDmxPcrInfo.framePts == -1) {
-		if (amldemux_pcrscr_get) {
+		if (amldemux_pcrscr_get && pInstance->mDemuxId >= 0) {
 			amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
+			pInstance->mSyncInfo.firstDmxPcrInfo.framePts = pcr;
+			pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = get_system_time_us();
+		} else {
 			pInstance->mSyncInfo.firstDmxPcrInfo.framePts = pcr;
 			pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = get_system_time_us();
 		}
@@ -905,10 +908,13 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 	if (pInstance == NULL)
 		return -1;
 
-	if (amldemux_pcrscr_get) {
+	if (amldemux_pcrscr_get && pInstance->mDemuxId >= 0) {
 		amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
 		pInstance->mSyncInfo.curDmxPcrInfo.framePts = pcr;
 		pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = get_system_time_us();
+	} else {
+		pInstance->mSyncInfo.curDmxPcrInfo.framePts = -1;
+		pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = -1;
 	}
 
 	info->framePts = pInstance->mSyncInfo.curDmxPcrInfo.framePts;
