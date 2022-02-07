@@ -437,6 +437,9 @@ static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	if (bypass_ge2d)
 		return false;
 
+	if (ctx->ge2d_cfg.bypass)
+		return false;
+
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
 		if ((ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
@@ -4431,6 +4434,9 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 			(dec->cfg.metadata_config_flag & (1 << 14));
 		if (force_enable_di_local_buffer)
 			ctx->vpp_cfg.enable_local_buf = true;
+
+		ctx->ge2d_cfg.bypass =
+			(dec->cfg.metadata_config_flag & (1 << 9));
 
 		ctx->internal_dw_scale = dec->cfg.metadata_config_flag & (1 << 13);
 		ctx->second_field_pts_mode = dec->cfg.metadata_config_flag & (1 << 12);
