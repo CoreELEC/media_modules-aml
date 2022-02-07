@@ -299,7 +299,8 @@ struct aml_vdec_cfg_infos {
 	 * bit 14	: enable di local buff.
 	 * bit 13	: report downscale yuv buffer size flag.
 	 * bit 12	: for second field pts mode.
-	 * bit 11	: disable error policy
+	 * bit 11	: disable error policy.
+	 * bit 9	: disable ge2d wrapper.
 	 * bit 1	: Non-standard dv flag.
 	 * bit 0	: dv two layer flag.
 	 */
@@ -563,6 +564,7 @@ struct aml_ge2d_cfg_infos {
 	u32	mode;
 	u32	buf_size;
 	bool	is_drm;
+	bool	bypass;
 };
 
 /*
