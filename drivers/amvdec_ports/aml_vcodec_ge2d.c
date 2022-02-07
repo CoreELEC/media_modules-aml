@@ -696,11 +696,6 @@ exit:
 	return 0;
 }
 
-int aml_v4l2_ge2d_get_buf_num(u32 mode)
-{
-	return 4;
-}
-
 int aml_v4l2_ge2d_init(
 		struct aml_vcodec_ctx *ctx,
 		struct aml_ge2d_cfg_infos *cfg,

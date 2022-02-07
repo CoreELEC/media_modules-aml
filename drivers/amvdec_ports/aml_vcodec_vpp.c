@@ -815,17 +815,6 @@ exit:
 	return 0;
 }
 
-int aml_v4l2_vpp_get_buf_num(u32 mode)
-{
-	if ((mode == VPP_MODE_DI) ||
-		(mode == VPP_MODE_COLOR_CONV) ||
-		(mode == VPP_MODE_NOISE_REDUC)) {
-		return 4;
-	}
-	//TODO: support more modes
-	return 2;
-}
-
 int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp)
 {
 	int i;

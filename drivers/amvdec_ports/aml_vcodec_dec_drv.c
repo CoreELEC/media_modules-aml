@@ -783,6 +783,15 @@ int bypass_nr_flag;
 EXPORT_SYMBOL(bypass_nr_flag);
 module_param(bypass_nr_flag, int, 0644);
 
+int debug_margin;
+EXPORT_SYMBOL(debug_margin);
+module_param(debug_margin, int, 0644);
+
+int debug_dpb;
+EXPORT_SYMBOL(debug_dpb);
+module_param(debug_dpb, int, 0644);
+
+
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("AML video codec V4L2 decoder driver");
 

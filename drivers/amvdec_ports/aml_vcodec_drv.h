@@ -553,6 +553,8 @@ struct meta_info {
  * @enable_local_buf: DI used buff alloc by itself.
  * @res_chg	: indicate resolution changed.
  * @is_vpp_reset: vpp reset just used to res chg.
+ * @sink_buf_num: Minimum number of buffers required by sink pad.
+ * @src_buf_num: Maximum number of buffers required by source pad.
  */
 struct aml_vpp_cfg_infos {
 	u32	mode;
@@ -565,13 +567,26 @@ struct aml_vpp_cfg_infos {
 	bool	enable_local_buf;
 	bool	res_chg;
 	bool	is_vpp_reset;
+	u32	sink_buf_num;
+	u32	src_buf_num;
 };
 
+/*
+ * struct aml_ge2d_cfg_infos - config ge2d init param
+ * @mode	: ge2d work mode
+ * @buf_size	: config buffer size for ge2d
+ * @is_drm	: indicate work mode is drm state.
+ * @bypass	: bypass ge2d wrapper.
+ * @sink_buf_num: Minimum number of buffers required by sink pad.
+ * @src_buf_num	: Maximum number of buffers required by source pad.
+ */
 struct aml_ge2d_cfg_infos {
 	u32	mode;
 	u32	buf_size;
 	bool	is_drm;
 	bool	bypass;
+	u32	sink_buf_num;
+	u32	src_buf_num;
 };
 
 struct canvas_res {
@@ -621,6 +636,7 @@ struct aml_decoder_status_info {
  * @dpb_size: store dpb count after header parsing
  * @vpp_size: store vpp buffer count after header parsing
  * @param_change: indicate encode parameter type
+ * @ext_margin: The number of additional buffers set to the driver.
  * @param_sets_from_ucode: if true indicate ps from ucode.
  * @v4l_codec_dpb_ready: queue buffer number greater than dpb.
  # @v4l_resolution_change: indicate resolution change happend.
@@ -691,6 +707,7 @@ struct aml_vcodec_ctx {
 	int				dpb_size;
 	int				vpp_size;
 	int				ge2d_size;
+	int				margin;
 	bool				param_sets_from_ucode;
 	bool				v4l_codec_dpb_ready;
 	bool				v4l_resolution_change;
