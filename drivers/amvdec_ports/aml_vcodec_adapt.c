@@ -58,15 +58,8 @@
 extern int dump_output_frame;
 extern u32 dump_output_start_position;
 extern void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx, u32 handle);
-static int def_4k_vstreambuf_sizeM =
-	(DEFAULT_VIDEO_BUFFER_SIZE_4K >> 20);
-static int def_vstreambuf_sizeM =
-	(DEFAULT_VIDEO_BUFFER_SIZE >> 20);
 
 static int slow_input = 0;
-
-static int use_bufferlevelx10000 = 10000;
-static unsigned int amstream_buf_num = BUF_MAX_NUM;
 
 static struct stream_buf_s bufs[BUF_MAX_NUM] = {
 	{
@@ -174,60 +167,6 @@ static int disable_hardware(struct stream_port_s *port)
 	return 0;
 }
 
-static int reset_canuse_buferlevel(int levelx10000)
-{
-	int i;
-	struct stream_buf_s *p = NULL;
-
-	if (levelx10000 >= 0 && levelx10000 <= 10000)
-		use_bufferlevelx10000 = levelx10000;
-	else
-		use_bufferlevelx10000 = 10000;
-	for (i = 0; i < amstream_buf_num; i++) {
-		p = &bufs[i];
-		p->canusebuf_size = ((p->buf_size / 1024) *
-			use_bufferlevelx10000 / 10000) * 1024;
-		p->canusebuf_size += 1023;
-		p->canusebuf_size &= ~1023;
-
-		if (p->canusebuf_size > p->buf_size)
-			p->canusebuf_size = p->buf_size;
-	}
-
-	return 0;
-}
-
-static void change_vbufsize(struct vdec_s *vdec,
-	struct stream_buf_s *pvbuf)
-{
-	if (pvbuf->buf_start != 0) {
-		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR, "streambuf is alloced before\n");
-		return;
-	}
-
-	if (vdec->port->is_4k) {
-		pvbuf->buf_size = def_4k_vstreambuf_sizeM * SZ_1M;
-
-		if (vdec->port_flag & PORT_FLAG_DRM)
-			pvbuf->buf_size = DEFAULT_VIDEO_BUFFER_SIZE_4K_TVP;
-
-		if ((pvbuf->buf_size > 30 * SZ_1M)
-			&& (codec_mm_get_total_size() < 220 * SZ_1M)) {
-			/*if less than 250M, used 20M for 4K & 265*/
-			pvbuf->buf_size = pvbuf->buf_size >> 1;
-		}
-	} else if (pvbuf->buf_size > def_vstreambuf_sizeM * SZ_1M) {
-		if (vdec->port_flag & PORT_FLAG_DRM)
-			pvbuf->buf_size = DEFAULT_VIDEO_BUFFER_SIZE_TVP;
-	} else {
-		pvbuf->buf_size = def_vstreambuf_sizeM * SZ_1M;
-		if (vdec->port_flag & PORT_FLAG_DRM)
-			pvbuf->buf_size = DEFAULT_VIDEO_BUFFER_SIZE_TVP;
-	}
-
-	reset_canuse_buferlevel(10000);
-}
-
 static void user_buffer_init(void)
 {
 	struct stream_buf_s *pubuf = &bufs[BUF_TYPE_USERDATA];
@@ -238,55 +177,14 @@ static void user_buffer_init(void)
 	pubuf->buf_rp = 0;
 }
 
-static void video_component_release(struct stream_port_s *port,
-struct stream_buf_s *pbuf, int release_num)
+static void video_component_release(struct stream_port_s *port)
 {
 	struct aml_vdec_adapt *ada_ctx
 		= container_of(port, struct aml_vdec_adapt, port);
 	struct vdec_s *vdec = ada_ctx->vdec;
 
-	struct vdec_s *slave = NULL;
+	vdec_release(vdec);
 
-	switch (release_num) {
-	default:
-	case 0:
-	case 4: {
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-			esparser_release(pbuf);
-		if (vdec->slave)
-			slave = vdec->slave;
-		vdec_release(vdec);
-
-		if (slave)
-			vdec_release(slave);
-		vdec = NULL;
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-			stbuf_release(pbuf);
-	}
-	break;
-
-	case 3: {
-		if (vdec->slave)
-			slave = vdec->slave;
-		vdec_release(vdec);
-
-		if (slave)
-			vdec_release(slave);
-		vdec = NULL;
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-			stbuf_release(pbuf);
-	}
-	break;
-
-	case 2: {
-		if ((port->type & PORT_TYPE_FRAME) == 0)
-			stbuf_release(pbuf);
-	}
-	break;
-
-	case 1:
-		;
-	}
 }
 
 static int video_component_init(struct stream_port_s *port,
@@ -311,63 +209,15 @@ static int video_component_init(struct stream_port_s *port,
 	} else
 		port->is_4k = false;
 
-	if (port->type & PORT_TYPE_FRAME) {
+	if (port->type & PORT_TYPE_FRAME ||
+		(port->type & PORT_TYPE_ES)) {
 		ret = vdec_init(vdec, port->is_4k, true);
 		if (ret < 0) {
 			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "failed\n");
-			video_component_release(port, pbuf, 2);
-			return ret;
-		}
-
-		return 0;
-	}
-
-	change_vbufsize(vdec, pbuf);
-
-	if (has_hevc_vdec()) {
-		if (port->type & PORT_TYPE_MPTS) {
-			if (pbuf->type == BUF_TYPE_HEVC)
-				vdec_poweroff(VDEC_1);
-			else
-				vdec_poweroff(VDEC_HEVC);
-		}
-	}
-
-	ret = stbuf_init(pbuf, vdec);
-	if (ret < 0) {
-		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "stbuf_init failed\n");
-		return ret;
-	}
-
-	/* todo: set path based on port flag */
-	ret = vdec_init(vdec, port->is_4k, true);
-	if (ret < 0) {
-		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "vdec_init failed\n");
-		video_component_release(port, pbuf, 2);
-		return ret;
-	}
-
-	if (vdec_dual(vdec)) {
-		ret = vdec_init(vdec->slave, port->is_4k, true);
-		if (ret < 0) {
-			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "vdec_init failed\n");
-			video_component_release(port, pbuf, 2);
+			video_component_release(port);
 			return ret;
 		}
 	}
-
-	if (port->type & PORT_TYPE_ES) {
-		ret = esparser_init(pbuf, vdec);
-		if (ret < 0) {
-			video_component_release(port, pbuf, 3);
-			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "esparser_init() failed\n");
-			return ret;
-		}
-	}
-
-	pbuf->flag |= BUF_FLAG_IN_USE;
-
-	vdec_connect(vdec);
 
 	return 0;
 }
@@ -391,7 +241,7 @@ static int vdec_ports_release(struct stream_port_s *port)
 		psparser_release();
 
 	if (port->type & PORT_TYPE_VIDEO)
-		video_component_release(port, pvbuf, 0);
+		video_component_release(port);
 
 	port->pcr_inited = 0;
 	port->flag = 0;
