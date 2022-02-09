@@ -946,7 +946,7 @@ static int amstream_port_init(struct port_priv_s *priv)
 	}
 
 	if ((port->type & PORT_TYPE_VIDEO) &&
-		(port->flag & PORT_FLAG_VFORMAT)) {
+		(vdec->port_flag & PORT_FLAG_VFORMAT)) {
 		if (vdec_stream_based(vdec)) {
 			struct stream_buf_ops *ops = NULL;
 			struct parser_args pars	= {

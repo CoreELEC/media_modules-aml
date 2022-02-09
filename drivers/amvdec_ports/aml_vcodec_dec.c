@@ -1974,20 +1974,19 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 					aml_v4l2_vpp_reset(ctx->vpp);
 				} else {
 					if (ctx->vpp) {
-						atomic_dec(&ctx->dev->vpp_count);
 						aml_v4l2_vpp_destroy(ctx->vpp);
+						atomic_dec(&ctx->dev->vpp_count);
 						ctx->vpp = NULL;
 					}
-
+					atomic_inc(&ctx->dev->vpp_count);
 					ret = aml_v4l2_vpp_init(ctx, &ctx->vpp_cfg, &ctx->vpp);
 					if (ret) {
+						atomic_dec(&ctx->dev->vpp_count);
 						v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 							"vpp_wrapper init err:%d vpp_cfg.fmt: %d\n",
 							ret, ctx->vpp_cfg.fmt);
 						return ret;
 					}
-
-					atomic_inc(&ctx->dev->vpp_count);
 
 					v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 						"vpp_wrapper instance count: %d\n",
@@ -2005,8 +2004,8 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 			ctx->vpp_cfg.is_vpp_reset = false;
 		} else {
 			if (ctx->vpp) {
-				atomic_dec(&ctx->dev->vpp_count);
 				aml_v4l2_vpp_destroy(ctx->vpp);
+				atomic_dec(&ctx->dev->vpp_count);
 				ctx->vpp = NULL;
 			}
 		}
@@ -3317,8 +3316,8 @@ void aml_v4l_ctx_release(struct kref *kref)
 	ctx = container_of(kref, struct aml_vcodec_ctx, ctx_ref);
 
 	if (ctx->vpp) {
-		atomic_dec(&ctx->dev->vpp_count);
 		aml_v4l2_vpp_destroy(ctx->vpp);
+		atomic_dec(&ctx->dev->vpp_count);
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 			"vpp destory inst count:%d.\n",
