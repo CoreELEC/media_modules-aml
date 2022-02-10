@@ -1937,6 +1937,22 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 	q = v4l2_m2m_get_vq(fh->m2m_ctx, i);
 	if (!V4L2_TYPE_IS_OUTPUT(q->type) &&
 		ctx->is_stream_off) {
+		if (ctx->ge2d_is_need) {
+			int ret;
+
+			if (ctx->ge2d) {
+				aml_v4l2_ge2d_destroy(ctx->ge2d);
+				ctx->ge2d = NULL;
+			}
+
+			ret = aml_v4l2_ge2d_init(ctx, &ctx->ge2d_cfg, &ctx->ge2d);
+			if (ret) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"ge2d_wrapper init err:%d\n", ret);
+				return ret;
+			}
+		}
+
 		if (ctx->vpp_is_need) {
 			int ret;
 
@@ -1989,22 +2005,6 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 				atomic_dec(&ctx->dev->vpp_count);
 				aml_v4l2_vpp_destroy(ctx->vpp);
 				ctx->vpp = NULL;
-			}
-		}
-
-		if (ctx->ge2d_is_need) {
-			int ret;
-
-			if (ctx->ge2d) {
-				aml_v4l2_ge2d_destroy(ctx->ge2d);
-				ctx->ge2d = NULL;
-			}
-
-			ret = aml_v4l2_ge2d_init(ctx, &ctx->ge2d_cfg, &ctx->ge2d);
-			if (ret) {
-				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-					"ge2d_wrapper init err:%d\n", ret);
-				return ret;
 			}
 		}
 
