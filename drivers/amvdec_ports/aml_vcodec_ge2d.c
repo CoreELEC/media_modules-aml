@@ -31,6 +31,7 @@
 #include "aml_vcodec_ge2d.h"
 #include "aml_vcodec_adapt.h"
 #include "vdec_drv_if.h"
+#include "utils/common.h"
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
 #include <trace/events/meson_atrace.h>
@@ -41,6 +42,7 @@
 
 extern int dump_ge2d_input;
 extern int ge2d_bypass_frames;
+extern char dump_path[32];
 
 enum GE2D_FLAG {
 	GE2D_FLAG_P		= 0x1,
@@ -908,6 +910,7 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;
 		struct file *fp;
+		char file_name[64] = {0};
 
 		if (!dump_ge2d_input || ge2d->ctx->is_drm_mode)
 			break;
@@ -918,15 +921,27 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 		if (dw_mode == VDEC_DW_AFBC_ONLY)
 			break;
 
-		fp = filp_open("/data/dec_dump_before.raw",
-				O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
+		snprintf(file_name, 64, "%s/dec_dump_ge2d_input_%ux%u.raw", dump_path, vf->width, vf->height);
+		fp = filp_open(file_name, O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
 		if (!IS_ERR(fp)) {
 			struct vb2_buffer *vb = &in_buf->aml_buf->vb.vb2_buf;
 
-			kernel_write(fp,vb2_plane_vaddr(vb, 0),vb->planes[0].length, 0);
-			if (in_buf->aml_buf->frame_buffer.num_planes == 2)
-				kernel_write(fp,vb2_plane_vaddr(vb, 1),
-						vb->planes[1].length, 0);
+			// dump y data
+			u8 *yuv_data_addr = aml_yuv_dump(fp, (u8 *)vb2_plane_vaddr(vb, 0),
+				vf->width, vf->height, 64);
+
+			// dump uv data
+			if (in_buf->aml_buf->frame_buffer.num_planes == 1) {
+				aml_yuv_dump(fp, yuv_data_addr, vf->width,
+					vf->height / 2, 64);
+			} else {
+				aml_yuv_dump(fp, (u8 *)vb2_plane_vaddr(vb, 1),
+					vf->width, vf->height / 2, 64);
+			}
+
+			pr_info("dump idx: %d %dx%d num_planes %d\n", dump_ge2d_input,
+				vf->width, vf->height, in_buf->aml_buf->frame_buffer.num_planes);
+
 			dump_ge2d_input--;
 			filp_close(fp, NULL);
 		}

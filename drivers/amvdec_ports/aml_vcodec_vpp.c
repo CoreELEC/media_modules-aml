@@ -28,6 +28,7 @@
 #include "aml_vcodec_adapt.h"
 #include "vdec_drv_if.h"
 #include "../common/chips/decoder_cpu_ver_info.h"
+#include "utils/common.h"
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
 #include <trace/events/meson_atrace.h>
@@ -38,6 +39,7 @@
 
 extern int dump_vpp_input;
 extern int vpp_bypass_frames;
+extern char dump_path[32];
 
 static void di_release_keep_buf_wrap(void *arg)
 {
@@ -1043,7 +1045,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;
 		struct file *fp;
-
+		char file_name[64] = {0};
 		if (!dump_vpp_input || vpp->ctx->is_drm_mode)
 			break;
 		if (vdec_if_get_param(vpp->ctx, GET_PARAM_DW_MODE, &dw_mode))
@@ -1051,15 +1053,27 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		if (dw_mode == VDEC_DW_AFBC_ONLY)
 			break;
 
-		fp = filp_open("/data/dec_dump_before.raw",
-				O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
+		snprintf(file_name, 64, "%s/dec_dump_vpp_input_%ux%u.raw", dump_path, vf->width, vf->height);
+		fp = filp_open(file_name, O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
 		if (!IS_ERR(fp)) {
 			struct vb2_buffer *vb = &in_buf->aml_buf->vb.vb2_buf;
 
-			kernel_write(fp,vb2_plane_vaddr(vb, 0),vb->planes[0].length, 0);
-			if (in_buf->aml_buf->frame_buffer.num_planes == 2)
-				kernel_write(fp,vb2_plane_vaddr(vb, 1),
-						vb->planes[1].length, 0);
+			// dump y data
+			u8 *yuv_data_addr = aml_yuv_dump(fp, (u8 *)vb2_plane_vaddr(vb, 0),
+				vf->width, vf->height, 64);
+
+			// dump uv data
+			if (in_buf->aml_buf->frame_buffer.num_planes == 1) {
+				aml_yuv_dump(fp, yuv_data_addr, vf->width,
+					vf->height / 2, 64);
+			} else {
+				aml_yuv_dump(fp, (u8 *)vb2_plane_vaddr(vb, 1),
+					vf->width, vf->height / 2, 64);
+			}
+
+			pr_info("dump idx: %d %dx%d num_planes %d\n", dump_vpp_input,
+				vf->width, vf->height, in_buf->aml_buf->frame_buffer.num_planes);
+
 			dump_vpp_input--;
 			filp_close(fp, NULL);
 		}
