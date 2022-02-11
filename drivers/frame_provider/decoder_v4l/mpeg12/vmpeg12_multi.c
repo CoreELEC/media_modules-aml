@@ -3008,7 +3008,8 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 
 	if (!hw->ctx_valid)
 		WRITE_VREG(AV_SCRATCH_J, hw->userdata_wp_ctx);
-
+	else
+		WRITE_VREG(AV_SCRATCH_J, 0);
 	if (hw->chunk) {
 		/*frame based input*/
 		WRITE_VREG(MREG_INPUT,
