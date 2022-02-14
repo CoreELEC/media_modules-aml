@@ -21,6 +21,12 @@ typedef struct speed{
 	u32 mDenominator;
 }mediasync_speed;
 
+typedef struct mediasync_lock{
+	struct mutex m_mutex;
+	int Is_init;
+}mediasync_lock;
+
+
 typedef enum {
 	MEDIASYNC_INIT = 0,
 	MEDIASYNC_AUDIO_ARRIVED,

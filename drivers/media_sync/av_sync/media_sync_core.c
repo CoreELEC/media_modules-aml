@@ -18,6 +18,8 @@
 mediasync_ins* vMediaSyncInsList[MAX_INSTANCE_NUM] = {0};
 u64 last_system;
 u64 last_pcr;
+mediasync_lock mMutex[MAX_INSTANCE_NUM] = {0};
+
 typedef int (*pfun_amldemux_pcrscr_get)(int demux_device_index, int index,
 					u64 *stc);
 static pfun_amldemux_pcrscr_get amldemux_pcrscr_get = NULL;
@@ -157,6 +159,10 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	snprintf(pInstance->atrace_pcrscr,
 		sizeof(pInstance->atrace_pcrscr), "msync_s_%d", *sSyncInsId);
 	*pIns = pInstance;
+	if (!mMutex[index].Is_init) {
+		mutex_init(&mMutex[index].m_mutex);
+		mMutex[index].Is_init = 1;
+	}
 	return 0;
 }
 
@@ -202,7 +208,7 @@ long mediasync_ins_unbinder(s32 sSyncInsId) {
 	pInstance = vMediaSyncInsList[index];
 	if (pInstance == NULL)
 		return -1;
-
+	mutex_lock(&mMutex[index].m_mutex);
 	pInstance->mRef--;
 
 	if (pInstance->mRef > 0 && pInstance->mAVRef == 0)
@@ -210,7 +216,7 @@ long mediasync_ins_unbinder(s32 sSyncInsId) {
 
 	if (pInstance->mRef <= 0)
 		mediasync_ins_delete(sSyncInsId);
-
+	mutex_unlock(&mMutex[index].m_mutex);
 	return 0;
 }
 
