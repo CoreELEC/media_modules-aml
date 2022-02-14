@@ -54,8 +54,8 @@
 
 
 #define OUT_FMT_IDX		(0) //default h264
-#define CAP_FMT_IDX		(9) //capture nv21
-#define CAP_FMT_I420_IDX	(12) //use for mjpeg
+#define CAP_FMT_IDX		(10) //capture nv21m
+#define CAP_FMT_I420_IDX	(14) //use for mjpeg
 
 #define AML_VDEC_MIN_W	64U
 #define AML_VDEC_MIN_H	64U
