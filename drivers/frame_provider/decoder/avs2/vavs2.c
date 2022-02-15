@@ -818,6 +818,7 @@ struct AVS2Decoder_s {
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
 	int hdr_flag;
+	bool high_bandwidth_flag;
 };
 
 static int  compute_losless_comp_body_size(
@@ -5128,6 +5129,11 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 			vf->bitdepth |= BITDEPTH_SAVING_MODE;
 
 		set_frame_info(dec, vf);
+
+		if (dec->high_bandwidth_flag) {
+			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
+		}
+
 		/* if((vf->width!=pic->width)|
 			(vf->height!=pic->height)) */
 		/* pr_info("aaa: %d/%d, %d/%d\n",
@@ -8129,6 +8135,14 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "sidebind_channel_id",
 				&config_val) == 0)
 			dec->sidebind_channel_id = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_metadata_config_flag",
+			&config_val) == 0) {
+			dec->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
+			if (dec->high_bandwidth_flag)
+				avs2_print(dec, 0, "high bandwidth\n");
+		}
 
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0

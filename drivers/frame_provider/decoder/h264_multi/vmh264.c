@@ -963,6 +963,7 @@ struct vdec_h264_hw_s {
 	u32 video_signal_type;
 	struct trace_decoder_name trace;
 	int csd_change_flag;
+	bool high_bandwidth_flag;
 };
 
 static u32 again_threshold;
@@ -3132,6 +3133,10 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		if (frame->data_flag & ERROR_FLAG)
 			vf->flag |= VFRAME_FLAG_ERROR_RECOVERY;
 		update_vf_memhandle(hw, vf, buffer_index);
+
+		if (hw->high_bandwidth_flag) {
+			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
+		}
 
 		if (!hw->enable_fence) {
 			hw->buffer_spec[buffer_index].used = 2;
@@ -10875,12 +10880,12 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		}
 
 		if (get_config_int(pdata->config,
-			"parm_v4l_metadata_config_flag",
+			"parm_metadata_config_flag",
 			&config_val) == 0) {
 			hw->metadata_config_flag = config_val;
-			hw->discard_dv_data = hw->metadata_config_flag & VDEC_CFG_FLAG_DV_NEGATIVE;
-			if (hw->discard_dv_data)
-				dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
+			hw->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
+			if (hw->high_bandwidth_flag)
+				dpb_print(DECODE_ID(hw), 0, "high bandwidth\n");
 		}
 
 		if (get_config_int(pdata->config,

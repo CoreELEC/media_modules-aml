@@ -846,6 +846,7 @@ struct AV1HW_s {
 	bool no_need_aux_data;
 	struct trace_decoder_name trace;
 	struct vav1_assit_task assit_task;
+	bool high_bandwidth_flag;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -6476,6 +6477,11 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			vf->compHeight = pic_config->y_crop_height;
 		}
 		set_frame_info(hw, vf);
+
+		if (hw->high_bandwidth_flag) {
+			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
+		}
+
 		if (force_fps & 0x100) {
 			u32 rate = force_fps & 0xff;
 
@@ -10522,6 +10528,13 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			&config_val) == 0)
 			hw->low_latency_flag = config_val;
 
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag",
+			&config_val) == 0) {
+			hw->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
+			if (hw->high_bandwidth_flag)
+				av1_print(hw, 0, "high bandwidth\n");
+		}
 #endif
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0

@@ -816,6 +816,7 @@ struct AVS2Decoder_s {
 	int last_height;
 	ulong fb_token;
 	int buffer_wrap[FRAME_BUFFERS];
+	bool high_bandwidth_flag;
 };
 
 static int  compute_losless_comp_body_size(
@@ -5481,6 +5482,11 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 			vf->bitdepth |= BITDEPTH_SAVING_MODE;
 
 		set_frame_info(dec, vf);
+
+		if (dec->high_bandwidth_flag) {
+			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
+		}
+
 		/* if((vf->width!=pic->width)|
 			(vf->height!=pic->height)) */
 		/* pr_info("aaa: %d/%d, %d/%d\n",
@@ -8652,6 +8658,14 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "parm_v4l_codec_enable",
 				&config_val) == 0)
 			dec->is_used_v4l = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag",
+			&config_val) == 0) {
+			dec->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
+			if (dec->high_bandwidth_flag)
+				avs2_print(dec, 0, "high bandwidth\n");
+		}
 
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0

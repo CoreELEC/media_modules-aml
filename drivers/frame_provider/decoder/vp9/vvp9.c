@@ -1309,6 +1309,7 @@ struct VP9Decoder_s {
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
 	struct trace_decoder_name trace;
+	bool high_bandwidth_flag;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -8496,6 +8497,11 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			else
 				vf->duration = 0;
 		}
+
+		if (pbi->high_bandwidth_flag) {
+			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
+		}
+
 		update_vf_memhandle(pbi, vf, pic_config);
 		if (vdec_stream_based(pvdec) && (!pvdec->vbuf.use_ptsserv)) {
 			vf->pts_us64 = stream_offset;
@@ -12250,6 +12256,15 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			"parm_v4l_low_latency_mode",
 			&config_val) == 0)
 			pbi->low_latency_flag = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_metadata_config_flag",
+			&config_val) == 0) {
+			pbi->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
+			if (pbi->high_bandwidth_flag)
+				vp9_print(pbi, 0, "high bandwidth\n");
+		}
+
 #endif
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0

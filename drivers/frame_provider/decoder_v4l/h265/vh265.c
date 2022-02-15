@@ -2153,6 +2153,7 @@ struct hevc_state_s {
 	bool no_need_aux_data;
 	struct trace_decoder_name trace;
 	u32 nal_skip_policy;
+	bool high_bandwidth_flag;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -9927,6 +9928,10 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->discard_dv_data = true;
 		}
 
+		if (hevc->high_bandwidth_flag) {
+			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
+		}
+
 		vf->width = pic->width;
 		vf->height = pic->height;
 
@@ -15101,10 +15106,13 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			if (config_val & VDEC_CFG_FLAG_DIS_ERR_POLICY) {
 				hevc->nal_skip_policy = c2_nal_skip_policy;
 			}
+			hevc->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
 			if (hevc->discard_dv_data)
 				hevc_print(hevc, 0, "discard dv data\n");
 			if (hevc->dv_duallayer)
 				hevc_print(hevc, 0, "dv_duallayer\n");
+			if (hevc->high_bandwidth_flag)
+				hevc_print(hevc, 0, "high bandwidth\n");
 		}
 		/*if (get_config_int(pdata->config,
 			"parm_v4l_duration",

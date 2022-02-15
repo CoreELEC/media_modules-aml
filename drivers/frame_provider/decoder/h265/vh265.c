@@ -2223,6 +2223,7 @@ struct hevc_state_s {
 	unsigned *rdma_adr;
 	struct trace_decoder_name trace;
 	int nal_skip_policy;
+	bool high_bandwidth_flag;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -10214,6 +10215,10 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->discard_dv_data = true;
 		}
 
+		if (hevc->high_bandwidth_flag) {
+			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
+		}
+
 		/* if((vf->width!=pic->width)||(vf->height!=pic->height)) */
 		/* hevc_print(hevc, 0,
 			"aaa: %d/%d, %d/%d\n",
@@ -15495,6 +15500,13 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			&config_val) == 0) {
 			hevc->dv_duallayer = config_val;
 			hevc_print(hevc, 0, "dv dual layer\n");
+		}
+
+		if (get_config_int(pdata->config, "parm_metadata_config_flag",
+			&config_val) == 0) {
+			hevc->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
+			if (hevc->high_bandwidth_flag)
+				hevc_print(hevc, 0, "high bandwidth\n");
 		}
 
 		if (get_config_int(pdata->config,

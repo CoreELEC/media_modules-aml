@@ -1208,6 +1208,7 @@ struct VP9Decoder_s {
 	struct trace_decoder_name trace;
 	int existing_buff_index;
 	u32 check_existing_buff_flag;
+	bool high_bandwidth_flag;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -7659,6 +7660,11 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		vf->compWidth = pic_config->y_crop_width;
 		vf->compHeight = pic_config->y_crop_height;
 		set_frame_info(pbi, vf);
+
+		if (pbi->high_bandwidth_flag) {
+			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
+		}
+
 		if (force_fps & 0x100) {
 			u32 rate = force_fps & 0xff;
 
@@ -11212,6 +11218,13 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			pbi->enable_fence = (config_val & 2) ? 1 : 0;
 		}
 
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag",
+			&config_val) == 0) {
+			pbi->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
+			if (pbi->high_bandwidth_flag)
+				vp9_print(pbi, 0, "high bandwidth\n");
+		}
 #endif
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
