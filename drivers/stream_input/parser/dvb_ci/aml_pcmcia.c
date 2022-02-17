@@ -32,6 +32,14 @@ static int aml_pcmcia_debug = 1;
 module_param_named(pcmcia_debug, aml_pcmcia_debug, int, 0644);
 MODULE_PARM_DESC(pcmcia_debug, "enable verbose debug messages");
 
+static int reset_time_h_t = 2000;
+module_param_named(reset_time_h, reset_time_h_t, int, 0644);
+MODULE_PARM_DESC(reset_time_h, "reset time h");
+
+static int reset_time_l_t = 2000;
+module_param_named(reset_time_l, reset_time_l_t, int, 0644);
+MODULE_PARM_DESC(reset_time_l, "reset time l");
+
 #define pr_dbg(args...)\
 	do {\
 		if (aml_pcmcia_debug)\
@@ -46,7 +54,7 @@ static int pcmcia_plugin(struct aml_pcmcia *pc, int reset)
 		pc->pwr(pc, AML_PWR_OPEN);/*hi is open power*/
 		pr_dbg(" CAM Plugged IN: Adapter(%d) Slot(0)\n", 0);
 		udelay(50);
-		//if (pc->io_device_type != AML_DVB_IO_TYPE_CIBUS)
+		if (pc->io_device_type != AML_DVB_IO_TYPE_CIBUS)
 			aml_pcmcia_reset(pc);
 		/*wait unplug*/
 		pc->init_irq(pc, IRQF_TRIGGER_RISING);
@@ -202,9 +210,9 @@ int aml_pcmcia_reset(struct aml_pcmcia *pc)
 		/* smit cam need delay 1000 and 1500 */
 		/* need change delay according cam vendor */
 		pc->rst(pc, AML_H);/*HI is reset*/
-		msleep(2000);
+		msleep(reset_time_h_t);
 		pc->rst(pc, AML_L);/*defaule LOW*/
-		msleep(2500);
+		msleep(reset_time_l_t);
 		pr_dbg("CAM RESET--end\n");
 	return 0;
 }
