@@ -63,6 +63,14 @@ static unsigned int dvb_ca_ci_profire = 0;
 module_param_named(ci_profire, dvb_ca_ci_profire, int, 0644);
 MODULE_PARM_DESC(ci_profire, "get ci plus profire");
 
+static unsigned int ca_slotstate_validate_t = 1;
+module_param_named(ca_slotstate_validate, ca_slotstate_validate_t, int, 0644);
+MODULE_PARM_DESC(ca_slotstate_validate, "slotstate validate on off");
+
+static unsigned int read_tuple_time_t = 500;
+module_param_named(read_tuple_time, read_tuple_time_t, int, 0644);
+MODULE_PARM_DESC(read_tuple_time, "read tuple time");
+
 #define dprintk if (dvb_ca_en50221_debug) printk
 
 #define INIT_TIMEOUT_SECS 10
@@ -369,7 +377,7 @@ static int dvb_ca_en50221_link_init(struct dvb_ca_private *ca, int slot)
 	/* read the buffer size from the CAM */
 	if ((ret = ca->pub->write_cam_control(ca->pub, slot, CTRLIF_COMMAND, IRQEN | CMDREG_SR)) != 0)
 		return ret;
-	if ((ret = dvb_ca_en50221_wait_if_status(ca, slot, STATUSREG_DA, HZ / 10)) != 0)
+	if ((ret = dvb_ca_en50221_wait_if_status(ca, slot, STATUSREG_DA, HZ / 2)) != 0)
 		return ret;
 	if ((ret = dvb_ca_en50221_read_data(ca, slot, buf, 2)) != 2)
 		return -EIO;
@@ -420,7 +428,7 @@ static int dvb_ca_en50221_read_tuple(struct dvb_ca_private *ca, int slot,
 	int _address = *address;
 
 	/* grab the next tuple length and type */
-	msleep(10);
+	usleep_range(read_tuple_time_t, read_tuple_time_t + 10);
 	if ((_tupleType = ca->pub->read_attribute_mem(ca->pub, slot, _address)) < 0) {
 		printk("read_attribute_mem error\r\n");
 		return _tupleType;
@@ -433,17 +441,17 @@ static int dvb_ca_en50221_read_tuple(struct dvb_ca_private *ca, int slot,
 		*tupleLength = 0;
 		return 0;
 	}
-	msleep(10);
+	usleep_range(read_tuple_time_t, read_tuple_time_t + 10);
 	if ((_tupleLength = ca->pub->read_attribute_mem(ca->pub, slot, _address + 2)) < 0)
 		return _tupleLength;
 	_address += 4;
 
 	dprintk("TUPLE type:0x%x length:%i\n", _tupleType, _tupleLength);
-	msleep(10);
+	usleep_range(read_tuple_time_t, read_tuple_time_t + 10);
 
 	/* read in the whole tuple */
 	for (i = 0; i < _tupleLength; i++) {
-	    msleep(10);
+	    usleep_range(read_tuple_time_t, read_tuple_time_t + 10);
 		tuple[i] = ca->pub->read_attribute_mem(ca->pub, slot, _address + (i * 2));
 		printk("  0x%02x: 0x%02x %c\n",
 			i, tuple[i] & 0xff,
@@ -1317,32 +1325,35 @@ static int dvb_ca_en50221_thread(void *data)
 				break;
 
 			case DVB_CA_SLOTSTATE_VALIDATE:
-				if (dvb_ca_en50221_parse_attributes(ca, slot) != 0) {
-					/* we need this extra check for annoying interfaces like the budget-av */
-					if ((!(ca->flags & DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE)) &&
-					    (ca->pub->poll_slot_status)) {
-						status = ca->pub->poll_slot_status(ca->pub, slot, 0);
-						if (!(status & DVB_CA_EN50221_POLL_CAM_PRESENT)) {
-							ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_NONE;
-							dvb_ca_en50221_thread_update_delay(ca);
-							break;
+				if (ca_slotstate_validate_t) {
+					if (dvb_ca_en50221_parse_attributes(ca, slot) != 0) {
+						/* we need this extra check for annoying interfaces like the budget-av */
+						if ((!(ca->flags & DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE)) &&
+							(ca->pub->poll_slot_status)) {
+							status = ca->pub->poll_slot_status(ca->pub, slot, 0);
+							if (!(status & DVB_CA_EN50221_POLL_CAM_PRESENT)) {
+								ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_NONE;
+								dvb_ca_en50221_thread_update_delay(ca);
+								break;
+							}
 						}
-					}
 
-					printk("dvb_ca adapter %d: Invalid PC card inserted :(\n",
-					       ca->dvbdev->adapter->num);
-					//ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_INVALID;
-					ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_UNINITIALISED;
-					dvb_ca_en50221_thread_update_delay(ca);
-					break;
+						printk("dvb_ca adapter %d: Invalid PC card inserted :(\n",
+							ca->dvbdev->adapter->num);
+						//ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_INVALID;
+						ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_UNINITIALISED;
+						dvb_ca_en50221_thread_update_delay(ca);
+						break;
+					}
+					if (dvb_ca_en50221_set_configoption(ca, slot) != 0) {
+						printk("dvb_ca adapter %d: Unable to initialise CAM :(\n",
+							ca->dvbdev->adapter->num);
+						ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_INVALID;
+						dvb_ca_en50221_thread_update_delay(ca);
+						break;
+					}
 				}
-				if (dvb_ca_en50221_set_configoption(ca, slot) != 0) {
-					printk("dvb_ca adapter %d: Unable to initialise CAM :(\n",
-					       ca->dvbdev->adapter->num);
-					ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_INVALID;
-					dvb_ca_en50221_thread_update_delay(ca);
-					break;
-				}
+				//////end
 				if (ca->pub->write_cam_control(ca->pub, slot,
 							       CTRLIF_COMMAND, CMDREG_RS) != 0) {
 					printk("dvb_ca adapter %d: Unable to reset CAM IF\n",
