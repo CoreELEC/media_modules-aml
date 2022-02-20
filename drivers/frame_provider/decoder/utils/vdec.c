@@ -1850,6 +1850,57 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 }
 EXPORT_SYMBOL(vdec_prepare_input);
 
+u32 vdec_offset_prepare_input(struct vdec_s *vdec, u32 consume_byte, u32 data_offset, u32 data_size)
+{
+	struct vdec_input_s *input = &vdec->input;
+	u32 res_byte, header_offset, header_data_size, data_invalid;
+
+	res_byte = data_size - consume_byte;
+	header_offset = data_offset;
+	header_data_size = data_size;
+	data_offset += consume_byte;
+	data_size = res_byte;
+
+	if (input->target == VDEC_INPUT_TARGET_VLD) {
+		//to do
+	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+		data_invalid = data_offset - round_down(data_offset, 0x40);
+		data_offset -= data_invalid;
+		data_size += data_invalid;
+
+		if (data_offset < header_offset) {
+			data_invalid = consume_byte;
+			data_offset = header_offset;
+			data_size = header_data_size;
+		}
+
+		if (input_frame_based(input)) {
+			struct vframe_chunk_s *chunk = vdec_input_next_chunk(&vdec->input);
+			struct vframe_block_list_s *block = NULL;
+			int dummy;
+
+			block = chunk->block;
+			WRITE_VREG(HEVC_STREAM_START_ADDR, block->start);
+			WRITE_VREG(HEVC_STREAM_END_ADDR, block->start +
+					block->size);
+			WRITE_VREG(HEVC_STREAM_RD_PTR, block->start +
+					data_offset);
+			dummy = data_offset + data_size +
+					HEVC_PADDING_SIZE;
+			if (dummy >= block->size)
+				dummy -= block->size;
+			WRITE_VREG(HEVC_STREAM_WR_PTR,
+				round_down(block->start + dummy,
+					VDEC_FIFO_ALIGN));
+
+			/* set endian */
+			SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+		}
+	}
+	return data_invalid;
+}
+EXPORT_SYMBOL(vdec_offset_prepare_input);
+
 void vdec_enable_input(struct vdec_s *vdec)
 {
 	struct vdec_input_s *input = &vdec->input;

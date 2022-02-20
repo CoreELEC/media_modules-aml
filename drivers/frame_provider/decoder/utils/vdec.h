@@ -576,6 +576,9 @@ extern void vdec_vframe_dirty(struct vdec_s *vdec,
 /* prepare decoder input */
 extern int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p);
 
+extern u32 vdec_offset_prepare_input(struct vdec_s *vdec, u32 consume_byte,
+	u32 data_offset, u32 data_size);
+
 /* clean decoder input */
 extern void vdec_clean_input(struct vdec_s *vdec);
 
