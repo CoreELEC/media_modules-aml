@@ -13,9 +13,10 @@
 #include "media_sync_core.h"
 
 #define MAX_INSTANCE_NUM 10
-mediasync_ins* vMediaSyncInsList[MAX_INSTANCE_NUM] = {0};
+MediaSyncManage vMediaSyncInsList[MAX_INSTANCE_NUM];
 u64 last_system;
 u64 last_pcr;
+
 typedef int (*pfun_amldemux_pcrscr_get)(int demux_device_index, int index,
 					u64 *stc);
 static pfun_amldemux_pcrscr_get amldemux_pcrscr_get = NULL;
@@ -55,7 +56,7 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	struct timespec64 ts_monotonic;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance->mSyncMode != MEDIA_SYNC_PCRMASTER)
 		return 0;
 	if (!amldemux_pcrscr_get)
@@ -109,6 +110,15 @@ static s64 get_system_time_us(void) {
 	return TimeUs;
 }
 
+long mediasync_init(void) {
+	int index = 0;
+	for (index = 0; index < MAX_INSTANCE_NUM; index++) {
+		vMediaSyncInsList[index].pInstance = NULL;
+		mutex_init(&(vMediaSyncInsList[index].m_lock));
+	}
+	return 0;
+}
+
 long mediasync_ins_alloc(s32 sDemuxId,
 			s32 sPcrPid,
 			s32 *sSyncInsId,
@@ -121,8 +131,9 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	}
 
 	for (index = 0; index < MAX_INSTANCE_NUM - 1; index++) {
-		if (vMediaSyncInsList[index] == NULL) {
-			vMediaSyncInsList[index] = pInstance;
+		if (vMediaSyncInsList[index].pInstance == NULL) {
+			mutex_lock(&(vMediaSyncInsList[index].m_lock));
+			vMediaSyncInsList[index].pInstance = pInstance;
 			pInstance->mSyncInsId = index;
 			*sSyncInsId = index;
 			pr_info("mediasync_ins_alloc index:%d\n", index);
@@ -159,12 +170,12 @@ long mediasync_ins_delete(s32 sSyncInsId) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
 	kzfree(pInstance);
-	vMediaSyncInsList[index] = NULL;
+	vMediaSyncInsList[index].pInstance = NULL;
 	return 0;
 }
 
@@ -175,7 +186,7 @@ long mediasync_ins_binder(s32 sSyncInsId,
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -190,7 +201,7 @@ long mediasync_ins_unbinder(s32 sSyncInsId) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -198,7 +209,6 @@ long mediasync_ins_unbinder(s32 sSyncInsId) {
 
 	if (pInstance->mRef <= 0)
 		mediasync_ins_delete(sSyncInsId);
-
 	return 0;
 }
 
@@ -208,7 +218,7 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -248,7 +258,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -347,7 +357,7 @@ long mediasync_ins_set_mediatime_speed(s32 sSyncInsId,
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -365,7 +375,7 @@ long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -396,7 +406,7 @@ long mediasync_ins_get_paused(s32 sSyncInsId, s32* spPaused) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 	*spPaused = pInstance->mPaused ;
@@ -409,7 +419,7 @@ long mediasync_ins_set_syncmode(s32 sSyncInsId, s32 sSyncMode){
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -424,7 +434,7 @@ long mediasync_ins_get_syncmode(s32 sSyncInsId, s32 *sSyncMode) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 	*sSyncMode = pInstance->mSyncMode;
@@ -437,7 +447,7 @@ long mediasync_ins_get_mediatime_speed(s32 sSyncInsId, mediasync_speed *fpSpeed)
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 	fpSpeed->mNumerator = pInstance->mSpeed.mNumerator;
@@ -455,7 +465,7 @@ long mediasync_ins_get_anchor_time(s32 sSyncInsId,
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -474,7 +484,7 @@ long mediasync_ins_get_systemtime(s32 sSyncInsId, s64* lpSTC, s64* lpSystemTime)
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -498,7 +508,7 @@ long mediasync_ins_set_updatetime_threshold(s32 sSyncInsId, s64 lTimeThreshold) 
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 	pInstance->mUpdateTimeThreshold = lTimeThreshold;
@@ -511,7 +521,7 @@ long mediasync_ins_get_updatetime_threshold(s32 sSyncInsId, s64* lpTimeThreshold
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 	*lpTimeThreshold = pInstance->mUpdateTimeThreshold;
@@ -525,7 +535,7 @@ long mediasync_ins_get_trackmediatime(s32 sSyncInsId, s64* lpTrackMediaTime) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 	*lpTrackMediaTime = pInstance->mTrackMediaTime;
@@ -537,7 +547,7 @@ long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -551,7 +561,7 @@ long mediasync_ins_get_clocktype(s32 sSyncInsId, mediasync_clocktype* type) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -565,7 +575,7 @@ long mediasync_ins_set_clockstate(s32 sSyncInsId, mediasync_clockprovider_state 
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -579,7 +589,7 @@ long mediasync_ins_get_clockstate(s32 sSyncInsId, mediasync_clockprovider_state*
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -593,7 +603,7 @@ long mediasync_ins_set_hasaudio(s32 sSyncInsId, int hasaudio) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -607,7 +617,7 @@ long mediasync_ins_get_hasaudio(s32 sSyncInsId, int* hasaudio) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -620,7 +630,7 @@ long mediasync_ins_set_hasvideo(s32 sSyncInsId, int hasvideo) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -634,7 +644,7 @@ long mediasync_ins_get_hasvideo(s32 sSyncInsId, int* hasvideo) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -648,7 +658,7 @@ long mediasync_ins_set_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo i
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -663,7 +673,7 @@ long mediasync_ins_get_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* 
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -678,7 +688,7 @@ long mediasync_ins_set_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo i
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -693,7 +703,7 @@ long mediasync_ins_get_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* 
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -708,7 +718,7 @@ long mediasync_ins_set_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info)
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -724,7 +734,7 @@ long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -747,7 +757,7 @@ long mediasync_ins_set_refclockinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -762,7 +772,7 @@ long mediasync_ins_get_refclockinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -777,7 +787,7 @@ long mediasync_ins_set_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -792,7 +802,7 @@ long mediasync_ins_get_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* in
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -807,7 +817,7 @@ long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -824,7 +834,7 @@ long mediasync_ins_get_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* in
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -839,7 +849,7 @@ long mediasync_ins_set_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -855,7 +865,7 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -876,7 +886,7 @@ long mediasync_ins_set_audiomute(s32 sSyncInsId, int mute_flag) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -891,7 +901,7 @@ long mediasync_ins_get_audiomute(s32 sSyncInsId, int* mute_flag) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -905,7 +915,7 @@ long mediasync_ins_set_audioinfo(s32 sSyncInsId, mediasync_audioinfo info) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -920,7 +930,7 @@ long mediasync_ins_get_audioinfo(s32 sSyncInsId, mediasync_audioinfo* info) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -935,7 +945,7 @@ long mediasync_ins_set_videoinfo(s32 sSyncInsId, mediasync_videoinfo info) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -952,7 +962,7 @@ long mediasync_ins_get_videoinfo(s32 sSyncInsId, mediasync_videoinfo* info) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -968,7 +978,7 @@ long mediasync_ins_set_avsyncstate(s32 sSyncInsId, s32 state) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -982,7 +992,7 @@ long mediasync_ins_get_avsyncstate(s32 sSyncInsId, s32* state) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -996,7 +1006,7 @@ long mediasync_ins_set_startthreshold(s32 sSyncInsId, s32 threshold) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1010,7 +1020,7 @@ long mediasync_ins_get_startthreshold(s32 sSyncInsId, s32* threshold) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1024,7 +1034,7 @@ long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adujstpts) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1038,7 +1048,7 @@ long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adujstpts) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1052,7 +1062,7 @@ long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1066,7 +1076,7 @@ long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1080,7 +1090,7 @@ long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1094,7 +1104,7 @@ long mediasync_ins_get_fccenable(s32 sSyncInsId, s64* enable) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1109,7 +1119,7 @@ long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1123,7 +1133,7 @@ long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType) 
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1137,7 +1147,7 @@ long mediasync_ins_set_start_media_time(s32 sSyncInsId, s64 startime) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 	pInstance->mStartMediaTime = startime;
@@ -1150,7 +1160,7 @@ long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 	*starttime = pInstance->mStartMediaTime;
@@ -1164,7 +1174,7 @@ long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audio_format format
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 	return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 	return -1;
 	pInstance->mAudioFormat.channels = format.channels;
@@ -1181,7 +1191,7 @@ long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audio_format* forma
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 	return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 	return -1;
 
@@ -1199,7 +1209,7 @@ long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1214,7 +1224,7 @@ long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1228,7 +1238,7 @@ long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope) {
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1244,7 +1254,7 @@ long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope){
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
-	pInstance = vMediaSyncInsList[index];
+	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
 
@@ -1252,5 +1262,4 @@ long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope){
 	pcrslope->mDenominator = pInstance->mPcrSlope.mDenominator;
 	return 0;
 }
-
 
