@@ -133,6 +133,12 @@ typedef struct instance{
 	char atrace_pcrscr[32];
 }mediasync_ins;
 
+typedef struct Media_Sync_Manage {
+	mediasync_ins* pInstance;
+	struct mutex m_lock;
+} MediaSyncManage;
+
+long mediasync_init(void);
 long mediasync_ins_alloc(s32 sDemuxId,
 			s32 sPcrPid,
 			s32 *sSyncInsId,
