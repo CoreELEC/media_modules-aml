@@ -1256,6 +1256,8 @@ struct VP9Decoder_s {
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
 	struct trace_decoder_name trace;
+	int existing_buff_index;
+	u32 check_existing_buff_flag;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -2762,8 +2764,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		frame_to_show = cm->ref_frame_map[frame_to_show_idx];
 		/*pr_info("frame_to_show %d\r\n", frame_to_show);*/
 		lock_buffer_pool(pool, flags);
-		if (frame_to_show < 0 ||
-			frame_bufs[frame_to_show].ref_count < 1) {
+		if (frame_to_show < 0) {
 			unlock_buffer_pool(pool, flags);
 			pr_err
 			("Error:Buffer %d does not contain a decoded frame",
@@ -9246,6 +9247,34 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 	return ret;
 }
 
+static int v4l_check_and_config_existing_buff(struct VP9Decoder_s *pbi)
+{
+	struct VP9_Common_s *const cm = &pbi->common;
+	struct PIC_BUFFER_CONFIG_s *pic = NULL;
+	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
+	int index = pbi->existing_buff_index;
+	int ret = 1;
+	pic = &frame_bufs[index].buf;
+
+	if (pbi->check_existing_buff_flag) {
+		if ((pic->vf_ref == 0) &&
+			(pic->index != -1) &&
+			pic->cma_alloc_addr &&
+			(cm->cur_frame != &frame_bufs[index])) {
+			pbi->check_existing_buff_flag = 0;
+			vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+				"%s existing buff is back, index:%d\n",
+				__func__, index);
+		} else {
+			ret = 0;
+			vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+				"%s waiting existing buff back, index:%d\n",
+				__func__, index);
+			}
+	}
+
+	return ret;
+}
 
 static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 {
@@ -9560,6 +9589,50 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				}
 			}
 		} else {
+			pbi->postproc_done = 0;
+			pbi->process_busy = 0;
+			ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
+			dec_again_process(pbi);
+			return IRQ_HANDLED;
+		}
+	}
+
+	if (pbi->vp9_param.p.show_existing_frame) {
+		int frame_to_show_idx = pbi->vp9_param.p.frame_to_show_idx;
+		int frame_to_show;
+		struct VP9_Common_s *const cm = &pbi->common;
+		struct BufferPool_s *pool = cm->buffer_pool;
+		unsigned long flags;
+
+		cm->show_existing_frame = pbi->vp9_param.p.show_existing_frame;
+		pr_info("%s show_existing_frame!\n",__func__);
+		pbi->one_package_frame_cnt--;
+		if (frame_to_show_idx >= REF_FRAMES) {
+			pr_info("frame_to_show_idx %d exceed max index\r\n",
+					frame_to_show_idx);
+
+			pbi->dec_result = DEC_RESULT_DONE;
+			amhevc_stop();
+			vdec_schedule_work(&pbi->work);
+			return IRQ_HANDLED;
+		}
+
+		frame_to_show = cm->ref_frame_map[frame_to_show_idx];
+		lock_buffer_pool(pool, flags);
+		if (frame_to_show < 0) {
+			unlock_buffer_pool(pool, flags);
+			pr_err("Error:Buffer %d does not contain a decoded frame",
+				frame_to_show);
+			WRITE_VREG(HEVC_DEC_STATUS_REG, VP9_10B_DISCARD_NAL);
+			pbi->dec_result = DEC_RESULT_DONE;
+			amhevc_stop();
+			vdec_schedule_work(&pbi->work);
+			return IRQ_HANDLED;
+		}
+		pbi->existing_buff_index = frame_to_show;
+		unlock_buffer_pool(pool, flags);
+		pbi->check_existing_buff_flag = 1;
+		if (!v4l_check_and_config_existing_buff(pbi)) {
 			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
 			ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
@@ -10886,6 +10959,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		CODEC_MM_FLAGS_TVP : 0;
 	unsigned long ret = 0;
 
+	if (!v4l_check_and_config_existing_buff(pbi))
+		return ret;
 	if (!pbi->pic_list_init_done2 || pbi->eos)
 		return ret;
 	if (!pbi->first_sc_checked && pbi->mmu_enable) {
@@ -11357,6 +11432,7 @@ static void  vp9_decoder_ctx_reset(struct VP9Decoder_s *pbi)
 	pbi->eos		= 0;
 	pbi->postproc_done	= 0;
 	pbi->process_busy	= 0;
+	pbi->check_existing_buff_flag = 0;
 }
 
 static void reset(struct vdec_s *vdec)
@@ -11908,6 +11984,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->first_sc_checked = 0;
 	pbi->fatal_error = 0;
 	pbi->show_frame_num = 0;
+	pbi->check_existing_buff_flag = 0;
 
 	if (debug) {
 		pr_info("===VP9 decoder mem resource 0x%lx size 0x%x\n",
