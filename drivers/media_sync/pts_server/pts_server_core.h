@@ -7,6 +7,13 @@
 #include <linux/platform_device.h>
 #include <linux/amlogic/cpu_version.h>
 
+typedef struct ptsnode {
+	struct list_head node;
+	u32 offset;
+	u32 pts;
+	u64 pts_64;
+} pts_node;
+
 typedef struct psinstance {
 	struct list_head pts_list;
 	s32 mPtsServerInsId;
@@ -38,6 +45,7 @@ typedef struct psinstance {
 	u32 kDoubleCheckThredhold;
 	struct mutex mPtsListLock;
 	u32 mListSize;
+	u32 mLastCheckoutCurOffset;
 } ptsserver_ins;
 
 
@@ -45,13 +53,6 @@ typedef struct Pts_Server_Manage {
 	ptsserver_ins* pInstance;
 	struct mutex mListLock;
 } PtsServerManage;
-
-typedef struct ptsnode {
-	struct list_head node;
-	u32 offset;
-	u32 pts;
-	u64 pts_64;
-} pts_node;
 
 typedef struct ps_alloc_para {
 	u32 mMaxCount;
