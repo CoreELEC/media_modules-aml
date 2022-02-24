@@ -143,7 +143,6 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv != NULL) {
 				priv->mSyncInsId = SyncInsId;
 				priv->mSyncIns = SyncIns;
-				priv->mSyncIns->mRef++;
 			}
 
 		break;
