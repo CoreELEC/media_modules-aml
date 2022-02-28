@@ -1931,7 +1931,8 @@ static void vmpeg12_local_init(void)
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
-			tvp_flag);
+			tvp_flag,
+			BMMU_ALLOC_FLAGS_WAITCLEAR);
 
 
 	frame_width = frame_height = frame_dur = frame_prog = 0;

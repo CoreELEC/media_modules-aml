@@ -48,6 +48,7 @@ struct decoder_bmmu_box {
 	int change_size_on_need_smaller;
 	int align2n;		/*can overwite on idx alloc */
 	int mem_flags;		/*can overwite on idx alloc */
+	u32 alloc_flags;
 	struct codec_mm_s *mm_list[1];
 };
 
@@ -103,7 +104,8 @@ EXPORT_SYMBOL(decoder_bmmu_box_valide_check);
 
 void *decoder_bmmu_box_alloc_box(const char *name,
 		int channel_id, int max_num,
-		int aligned, int mem_flags)
+		int aligned, int mem_flags,
+		u32 alloc_flags)
 /*min_size_M:wait alloc this size*/
 {
 	struct decoder_bmmu_box *box;
@@ -127,6 +129,7 @@ void *decoder_bmmu_box_alloc_box(const char *name,
 	box->channel_id = channel_id;
 	box->align2n = aligned;
 	box->mem_flags = mem_flags | tvp_flags;
+	box->alloc_flags = alloc_flags;
 	mutex_init(&box->mutex);
 	INIT_LIST_HEAD(&box->list);
 	decoder_bmmu_box_mgr_add_box(box);
@@ -370,11 +373,16 @@ int decoder_bmmu_box_alloc_idx_wait(
 		ret = decoder_bmmu_box_alloc_idx(handle,
 				idx, size, aligned_2n, mem_flags);
 		if (ret == -ENOMEM) {
-			pr_info("bmmu alloc idx fail, try free keep video.\n");
-			try_free_keep_video(1);
+			if (wait_flags & BMMU_ALLOC_FLAGS_CAN_CLEAR_KEEPER) {
+				pr_info("bmmu alloc idx fail, try free keep video.\n");
+				try_free_keep_video(1);
+			}
 		}
 	} else {
-		try_free_keep_video(1);
+		if (wait_flags & BMMU_ALLOC_FLAGS_CAN_CLEAR_KEEPER) {
+			try_free_keep_video(1);
+		}
+
 		ret = -ENOMEM;
 	}
 	return ret;
@@ -404,7 +412,7 @@ int decoder_bmmu_box_alloc_buf_phy(
 			size,
 			-1,
 			bmmu_box->mem_flags,
-			BMMU_ALLOC_FLAGS_WAITCLEAR)) {
+			bmmu_box->alloc_flags)) {
 		*buf_phy_addr =
 			decoder_bmmu_box_get_phy_addr(
 			handle,

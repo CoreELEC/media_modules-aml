@@ -3205,7 +3205,8 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 	bmmu_flag |= CODEC_MM_FLAGS_CMA_CLEAR | CODEC_MM_FLAGS_FOR_VDECODER;
 	ctx->bmmu_box  = decoder_bmmu_box_alloc_box("v4l2_dec",
 			ctx->id, V4L_CAP_BUFF_MAX,
-			4 + PAGE_SHIFT, bmmu_flag);
+			4 + PAGE_SHIFT, bmmu_flag,
+			BMMU_ALLOC_FLAGS_WAIT);
 	if (!ctx->bmmu_box) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create bmmu box\n");
 		goto free_mmubox;
@@ -3225,7 +3226,8 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 		bmmu_flag |= CODEC_MM_FLAGS_CMA_CLEAR | CODEC_MM_FLAGS_FOR_VDECODER;
 		ctx->bmmu_box_dw  = decoder_bmmu_box_alloc_box("v4l2_dec_dw",
 				ctx->id, V4L_CAP_BUFF_MAX,
-				4 + PAGE_SHIFT, bmmu_flag);
+				4 + PAGE_SHIFT, bmmu_flag,
+				BMMU_ALLOC_FLAGS_WAIT);
 		if (!ctx->bmmu_box_dw) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create nmmu box dw\n");
 			goto free_mmubox_dw;

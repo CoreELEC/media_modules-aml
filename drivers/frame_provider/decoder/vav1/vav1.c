@@ -9792,7 +9792,8 @@ static int amvdec_av1_mmu_init(struct AV1HW_s *hw)
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
-			tvp_flag);
+			tvp_flag,
+			BMMU_ALLOC_FLAGS_WAITCLEAR);
 	av1_print(hw, AV1_DEBUG_BUFMGR,
 		"%s, MAX_BMMU_BUFFER_NUM = %d\n",
 		__func__,

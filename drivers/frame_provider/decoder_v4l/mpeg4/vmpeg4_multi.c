@@ -2277,7 +2277,8 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 			MAX_BMMU_BUFFER_NUM,
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
-			CODEC_MM_FLAGS_FOR_VDECODER);
+			CODEC_MM_FLAGS_FOR_VDECODER,
+			BMMU_ALLOC_FLAGS_WAIT);
 
 	INIT_WORK(&hw->work, vmpeg4_work);
 

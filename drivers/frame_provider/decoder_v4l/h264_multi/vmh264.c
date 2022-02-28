@@ -9805,7 +9805,8 @@ int ammvdec_h264_mmu_init(struct vdec_h264_hw_s *hw)
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
-			tvp_flag);
+			tvp_flag,
+			BMMU_ALLOC_FLAGS_WAIT);
 		if (hw->bmmu_box)
 			ret = 0;
 	}

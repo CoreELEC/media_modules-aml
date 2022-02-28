@@ -21,10 +21,11 @@
 #define DECODER_BLOCK_BUFFER_BOX
 
 void *decoder_bmmu_box_alloc_box(const char *name,
-								 int channel_id,
-								 int max_num,
-								 int aligned,
-								 int mem_flags);
+				int channel_id,
+				int max_num,
+				int aligned,
+				int mem_flags,
+				u32 wait_flags);
 
 int decoder_bmmu_box_alloc_idx(
 	void *handle, int idx, int size,

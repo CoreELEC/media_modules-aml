@@ -1561,7 +1561,8 @@ static int vh264mvc_local_init(void)
 		TOTAL_BMMU_BUFF_NUM,
 		4 + PAGE_SHIFT,
 		CODEC_MM_FLAGS_CMA_CLEAR |
-		CODEC_MM_FLAGS_FOR_VDECODER);
+		CODEC_MM_FLAGS_FOR_VDECODER,
+		BMMU_ALLOC_FLAGS_WAITCLEAR);
 
 	size = DECODER_WORK_SPACE_SIZE;
 	ret = decoder_bmmu_box_alloc_buf_phy(mm_blk_handle, 0,

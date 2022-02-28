@@ -3012,7 +3012,8 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
-			hw->tvp_flag);
+			hw->tvp_flag,
+			BMMU_ALLOC_FLAGS_WAIT);
 
 	hw->eos = 0;
 	hw->frame_width = hw->frame_height = 0;

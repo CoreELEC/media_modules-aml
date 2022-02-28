@@ -6642,7 +6642,8 @@ static int amvdec_avs2_mmu_init(struct AVS2Decoder_s *dec)
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
-			tvp_flag);
+			tvp_flag,
+			BMMU_ALLOC_FLAGS_WAITCLEAR);
 	if (!dec->bmmu_box) {
 		pr_err("avs2 alloc bmmu box failed!!\n");
 		return -1;

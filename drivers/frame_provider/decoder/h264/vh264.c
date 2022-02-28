@@ -3679,7 +3679,8 @@ static int vh264_local_init(void)
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
-			tvp_flag);
+			tvp_flag,
+			BMMU_ALLOC_FLAGS_WAITCLEAR);
 	}
 	pr_info
 	("H264 sysinfo: %dx%d duration=%d, pts_outside=%d \n",

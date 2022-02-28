@@ -3038,7 +3038,8 @@ static int init_mmu_buffers(struct hevc_state_s *hevc, bool bmmu_flag)
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
-			tvp_flag);
+			tvp_flag,
+			BMMU_ALLOC_FLAGS_WAIT);
 	if (!hevc->bmmu_box) {
 		if (hevc->mmu_box)
 			decoder_mmu_box_free(hevc->mmu_box);

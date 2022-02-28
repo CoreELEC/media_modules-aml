@@ -1797,7 +1797,8 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 		MAX_BMMU_BUFFER_NUM,
 		4 + PAGE_SHIFT,
 		CODEC_MM_FLAGS_CMA_CLEAR |
-		CODEC_MM_FLAGS_FOR_VDECODER);
+		CODEC_MM_FLAGS_FOR_VDECODER,
+		BMMU_ALLOC_FLAGS_WAITCLEAR);
 	if (hw->mm_blk_handle == NULL)
 		pr_info("Error, decoder_bmmu_box_alloc_box fail\n");
 

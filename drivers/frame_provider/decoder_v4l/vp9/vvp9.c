@@ -9454,7 +9454,8 @@ static int amvdec_vp9_mmu_init(struct VP9Decoder_s *pbi)
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
-			tvp_flag);
+			tvp_flag,
+			BMMU_ALLOC_FLAGS_WAIT);
 	if (!pbi->bmmu_box) {
 		pr_err("vp9 alloc bmmu box failed!!\n");
 		return -1;
