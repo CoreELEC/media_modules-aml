@@ -1664,6 +1664,7 @@ struct avs2_decoder {
 	int32_t to_prepare_disp_count;
 	int8_t bufmgr_error_flag;
 #endif
+	uint8_t init_fref_flag;
 };
 
 
