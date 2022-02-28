@@ -858,6 +858,7 @@ int32_t img_height = (hd->vertical_size + img->auto_crop_bottom);
 		avs2_dec->fref[refnum]->index = refnum;
 #endif
 	}
+	avs2_dec->init_fref_flag = 1;
 #ifdef AML
 	avs2_dec->f_bg = NULL;
 
@@ -1740,15 +1741,19 @@ void avs2_prepare_header(struct avs2_decoder *avs2_dec, int32_t start_code)
 			if (is_avs2_print_bufmgr_detail())
 				pr_info(
 				"new_sequence_flag after sequence_end_flag, flushDPB and reinit bugmgr\n");
-			flushDPB(avs2_dec);
-			for (k = 0; k < avs2_dec->ref_maxbuffer; k++)
-				cleanRefMVBufRef(k);
+			if (avs2_dec->init_fref_flag) {
+				flushDPB(avs2_dec);
+				for (k = 0; k < avs2_dec->ref_maxbuffer; k++)
+					cleanRefMVBufRef(k);
 
 #ifdef AML
-			free_unused_buffers(avs2_dec);
+				free_unused_buffers(avs2_dec);
 #else
-			free_global_buffers(avs2_dec);
+				free_global_buffers(avs2_dec);
 #endif
+			} else
+				pr_info("%s fref has no init\n",__func__);
+
 			img->number = 0;
 			img->PrevPicDistanceLsb = 0;
 			avs2_dec->init_hw_flag = 0;
