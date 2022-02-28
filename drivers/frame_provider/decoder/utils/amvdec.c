@@ -978,6 +978,14 @@ EXPORT_SYMBOL(amhevc_disable);
 #ifdef CONFIG_PM
 int amvdec_suspend(struct platform_device *dev, pm_message_t event)
 {
+	struct vdec_s *vdec = *(struct vdec_s **)dev->dev.platform_data;;
+
+	if (vdec) {
+		wait_event_interruptible_timeout(vdec->idle_wait,
+			(vdec->status != VDEC_STATUS_ACTIVE),
+			msecs_to_jiffies(100));
+	}
+
 	amvdec_pg_enable(false);
 
 	/* #if MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6TVD */
@@ -1012,6 +1020,14 @@ EXPORT_SYMBOL(amvdec_resume);
 
 int amhevc_suspend(struct platform_device *dev, pm_message_t event)
 {
+	struct vdec_s *vdec = *(struct vdec_s **)dev->dev.platform_data;;
+
+	if (vdec) {
+		wait_event_interruptible_timeout(vdec->idle_wait,
+			(vdec->status != VDEC_STATUS_ACTIVE),
+			msecs_to_jiffies(100));
+	}
+
 	if (has_hevc_vdec()) {
 		amhevc_pg_enable(false);
 		/*vdec_set_suspend_clk(1, 1);*//*DEBUG_TMP*/

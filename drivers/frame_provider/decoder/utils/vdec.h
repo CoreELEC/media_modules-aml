@@ -386,6 +386,7 @@ struct vdec_s {
 	int pts_server_id;
 	pfun_ptsserver_peek_pts_offset ptsserver_peek_pts_offset;
 	u32 play_num;
+	wait_queue_head_t idle_wait;
 };
 
 #define CODEC_MODE(a, b, c, d)\
