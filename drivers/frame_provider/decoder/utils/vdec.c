@@ -1157,6 +1157,8 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 
 		INIT_LIST_HEAD(&vdec->list);
 
+		init_waitqueue_head(&vdec->idle_wait);
+
 		atomic_inc(&vdec_core->vdec_nr);
 #ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 		v4lvideo_dec_count_increase();
@@ -3150,8 +3152,10 @@ void vdec_core_finish_run(struct vdec_s *vdec, unsigned long mask)
 		t &= ~(1 << i);
 	}
 
-	if (vdec->active_mask == 0)
+	if (vdec->active_mask == 0) {
 		vdec_set_status(vdec, VDEC_STATUS_CONNECTED);
+		wake_up_interruptible(&vdec->idle_wait);
+	}
 
 	mutex_unlock(&vdec_mutex);
 }
