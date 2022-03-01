@@ -847,6 +847,7 @@ struct AV1HW_s {
 	struct trace_decoder_name trace;
 	struct vav1_assit_task assit_task;
 	bool high_bandwidth_flag;
+	int film_grain_present;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -1236,7 +1237,7 @@ int av1_alloc_mmu(
 	int cur_mmu_4k_number;
 	struct internal_comp_buf *ibuf;
 
-	if (hw->double_write_mode & 0x10)
+	if (get_double_write_mode(hw) & 0x10)
 		return 0;
 
 	if (bit_depth >= AOM_BITS_12) {
@@ -1285,7 +1286,7 @@ int av1_alloc_mmu_dw(
 		pr_err("error no mmu box!\n");
 		return -1;
 	}
-	if (hw->double_write_mode & 0x10)
+	if (get_double_write_mode(hw) & 0x10)
 		return 0;
 	if (bit_depth >= AOM_BITS_12) {
 		hw->fatal_error = DECODER_FATAL_ERROR_SIZE_OVERFLOW;
@@ -2993,6 +2994,7 @@ static void init_pic_list(struct AV1HW_s *hw)
 	struct PIC_BUFFER_CONFIG_s *pic_config;
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
+		/*alloc AV1 compress header first*/
 	for (i = 0; i < hw->used_buf_num; i++) {
 		pic_config = &cm->buffer_pool->frame_bufs[i].buf;
 		pic_config->index = i;
@@ -5339,7 +5341,7 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 	** vdec canvas mode will be linear when dump yuv is set
 	*/
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(hw->double_write_mode != 0) &&
+		(get_double_write_mode(hw) != 0) &&
 		(((hw->max_pic_w % 64) != 0) ||
 		(hw->vav1_amstream_dec_info.width % 64) != 0)) {
 		if (hw_to_vdec(hw)->canvas_mode !=
@@ -5986,8 +5988,13 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			}
 			if (pic_config->double_write_mode != 16 &&
 				(!IS_8K_SIZE(pic_config->y_crop_width,
-				pic_config->y_crop_height)))
-				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
+				pic_config->y_crop_height))) {
+				if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4 &&
+					get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4D)
+					|| (!hw->film_grain_present) || (get_double_write_mode(hw) != 1)) {
+					vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
+				}
+			}
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hw->m_ins_flag) {
 				vf->canvas0Addr = vf->canvas1Addr = -1;
@@ -6253,7 +6260,7 @@ static int recycle_mmu_buf_tail(struct AV1HW_s *hw,
 static void av1_recycle_mmu_buf_tail(struct AV1HW_s *hw)
 {
 	struct AV1_Common_s *const cm = &hw->common;
-	if (hw->double_write_mode & 0x10)
+	if (get_double_write_mode(hw) & 0x10)
 		return;
 
 	if (cm->cur_fb_idx_mmu != INVALID_IDX) {
@@ -6960,7 +6967,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 			ret = -1;
 		}
 
-		if (ret >= 0 && hw->mmu_enable && ((hw->double_write_mode & 0x10) == 0)) {
+		if (ret >= 0 && hw->mmu_enable && ((get_double_write_mode(hw) & 0x10) == 0)) {
 			ret = av1_alloc_mmu(hw,
 				cm->cur_frame->buf.index,
 				cur_pic_config->y_crop_width,
@@ -7980,6 +7987,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 		bit_depth_luma = hw->aom_param.p.bit_depth;
 		bit_depth_chroma = hw->aom_param.p.bit_depth;
+		hw->film_grain_present = hw->aom_param.p.film_grain_present_flag;
+
 		next_lcu_size = ((hw->aom_param.p.seq_flags >> 6) & 0x1) ? 128 : 64;
 		hw->video_signal_type = (hw->aom_param.p.video_signal_type << 16
 			| hw->aom_param.p.color_description);
@@ -8028,9 +8037,11 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			struct aml_vdec_ps_infos ps;
 			struct vdec_comp_buf_info comp;
 
-			pr_info("set ucode parse\n");
-			if (get_valid_double_write_mode(hw) != 16) {
-				vav1_get_comp_buf_info(hw, &comp);
+				pr_info("set ucode parse\n");
+
+				ctx->film_grain_present = hw->film_grain_present;
+				if (get_valid_double_write_mode(hw) != 16) {
+					vav1_get_comp_buf_info(hw, &comp);
 				vdec_v4l_set_comp_buf_info(ctx, &comp);
 			}
 

@@ -66,6 +66,7 @@
 #define AML_V4L2_SET_DRMMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
 #define AML_V4L2_GET_INPUT_BUFFER_NUM (V4L2_CID_USER_AMLOGIC_BASE + 1)
 #define AML_V4L2_SET_DURATION (V4L2_CID_USER_AMLOGIC_BASE + 2)
+#define AML_V4L2_GET_FILMGRAIN_INFO (V4L2_CID_USER_AMLOGIC_BASE + 3)
 
 #define WORK_ITEMS_MAX (32)
 #define MAX_DI_INSTANCE (2)
@@ -4305,6 +4306,9 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		if (ctx->ada_ctx != NULL)
 			ctrl->val = vdec_frame_number(ctx->ada_ctx);
 		break;
+	case AML_V4L2_GET_FILMGRAIN_INFO:
+		ctrl->val = ctx->film_grain_present;
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -4372,6 +4376,17 @@ static const struct v4l2_ctrl_config ctrl_st_duration = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_gt_filmgrain_info = {
+	.name	= "filmgrain info",
+	.id	= AML_V4L2_GET_FILMGRAIN_INFO,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_VOLATILE,
+	.min	= 0,
+	.max	= 1,
+	.step	= 1,
+	.def	= 0,
+};
 
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
@@ -4417,6 +4432,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 		goto err;
 	}
 
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_filmgrain_info, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
 	v4l2_ctrl_handler_setup(&ctx->ctrl_hdl);
 
 	return 0;
@@ -4444,7 +4465,7 @@ static int vidioc_vdec_g_parm(struct file *file, void *fh,
 	if (!V4L2_TYPE_IS_MULTIPLANAR(a->type) && dst_vq->is_multiplanar)
 		return -EINVAL;
 
-	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+	if ((a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) || (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)) {
 		if (vdec_if_get_param(ctx, GET_PARAM_CONFIG_INFO, &ctx->config.parm.dec))
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 				"GET_PARAM_CONFIG_INFO err\n");

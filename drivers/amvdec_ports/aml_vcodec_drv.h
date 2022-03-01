@@ -740,6 +740,7 @@ struct aml_vcodec_ctx {
 	u32				width_aspect_ratio;
 	u32				index_disp;
 	bool				post_to_upper_done;
+	bool			film_grain_present;
 };
 
 /**

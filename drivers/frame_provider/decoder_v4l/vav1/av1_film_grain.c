@@ -536,8 +536,8 @@ static void init_arrays(struct aom_film_grain_t *params,
 		++num_pos_chroma;
 
 	if (debug_fgs & DEBUG_FGS_DETAIL) {
-		pr_info("num_pos_luma %d, sizeof(*pred_pos_luma):%ld\n", num_pos_luma, sizeof(*pred_pos_luma));
-		pr_info("num_pos_chroma %d, sizeof(*pred_pos_chroma):%ld\n", num_pos_chroma, sizeof(*pred_pos_chroma));
+		pr_info("num_pos_luma %d, sizeof(*pred_pos_luma):%zd\n", num_pos_luma, sizeof(*pred_pos_luma));
+		pr_info("num_pos_chroma %d, sizeof(*pred_pos_chroma):%zd\n", num_pos_chroma, sizeof(*pred_pos_chroma));
 	}
 	pred_pos_luma = (s32 **)fgs_alloc(sizeof(*pred_pos_luma) * num_pos_luma);
 
@@ -588,14 +588,14 @@ static void init_arrays(struct aom_film_grain_t *params,
 	*luma_grain_block =
 		(s32 *)fgs_alloc(sizeof(**luma_grain_block) * luma_grain_samples);
 	if (debug_fgs & DEBUG_FGS_DETAIL) {
-		pr_info("luma block size %ld, luma_grain_samples:%d\n", sizeof(**luma_grain_block) * luma_grain_samples, luma_grain_samples);
+		pr_info("luma block size %zd, luma_grain_samples:%d\n", sizeof(**luma_grain_block) * luma_grain_samples, luma_grain_samples);
 	}
 	*cb_grain_block =
 		(s32 *)fgs_alloc(sizeof(**cb_grain_block) * chroma_grain_samples);
 	*cr_grain_block =
 		(s32*)fgs_alloc(sizeof(**cr_grain_block) * chroma_grain_samples);
 	if (debug_fgs & DEBUG_FGS_DETAIL) {
-		pr_info("chroma block size %ld, chroma_grain_samples:%d\n", sizeof(**cb_grain_block) * chroma_grain_samples, chroma_grain_samples);
+		pr_info("chroma block size %zd, chroma_grain_samples:%d\n", sizeof(**cb_grain_block) * chroma_grain_samples, chroma_grain_samples);
 	}
 }
 
