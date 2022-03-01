@@ -271,7 +271,6 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance == NULL)
 		return -1;
-
 	pInstance->mSyncInfo.state = MEDIASYNC_INIT;
 	pInstance->mSyncInfo.firstAframeInfo.framePts = -1;
 	pInstance->mSyncInfo.firstAframeInfo.frameSystemTime = -1;
@@ -287,6 +286,15 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	pInstance->mSyncInfo.curVideoInfo.frameSystemTime = -1;
 	pInstance->mSyncInfo.curDmxPcrInfo.framePts = -1;
 	pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = -1;
+	pInstance->mSyncInfo.queueAudioInfo.framePts = -1;
+	pInstance->mSyncInfo.queueAudioInfo.frameSystemTime = -1;
+	pInstance->mSyncInfo.queueVideoInfo.framePts = -1;
+	pInstance->mSyncInfo.queueVideoInfo.frameSystemTime = -1;
+	pInstance->mSyncInfo.firstQAudioInfo.framePts = -1;
+	pInstance->mSyncInfo.firstQAudioInfo.frameSystemTime = -1;
+	pInstance->mSyncInfo.firstQVideoInfo.framePts = -1;
+	pInstance->mSyncInfo.firstQVideoInfo.frameSystemTime = -1;
+
 	pInstance->mAudioInfo.cacheSize = -1;
 	pInstance->mAudioInfo.cacheDuration = -1;
 	pInstance->mVideoInfo.cacheSize = -1;
@@ -1665,4 +1673,161 @@ long mediasync_ins_get_avref(s32 sSyncInsId, int *ref) {
 	return 0;
 }
 
+long mediasync_ins_set_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	pInstance->mSyncInfo.queueAudioInfo.framePts = info.framePts;
+	pInstance->mSyncInfo.queueAudioInfo.frameSystemTime = info.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	return 0;
+}
+
+long mediasync_ins_get_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	info->framePts = pInstance->mSyncInfo.queueAudioInfo.framePts;
+	info->frameSystemTime = pInstance->mSyncInfo.queueAudioInfo.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_set_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	pInstance->mSyncInfo.queueVideoInfo.framePts = info.framePts;
+	pInstance->mSyncInfo.queueVideoInfo.frameSystemTime = info.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	return 0;
+
+}
+
+long mediasync_ins_get_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	info->framePts = pInstance->mSyncInfo.queueVideoInfo.framePts;
+	info->frameSystemTime = pInstance->mSyncInfo.queueVideoInfo.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_set_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	pInstance->mSyncInfo.firstQAudioInfo.framePts = info.framePts;
+	pInstance->mSyncInfo.firstQAudioInfo.frameSystemTime = info.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	return 0;
+}
+
+long mediasync_ins_get_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	info->framePts = pInstance->mSyncInfo.firstQAudioInfo.framePts;
+	info->frameSystemTime = pInstance->mSyncInfo.firstQAudioInfo.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_set_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	pInstance->mSyncInfo.firstQVideoInfo.framePts = info.framePts;
+	pInstance->mSyncInfo.firstQVideoInfo.frameSystemTime = info.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	return 0;
+
+}
+
+long mediasync_ins_get_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = sSyncInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	info->framePts = pInstance->mSyncInfo.firstQVideoInfo.framePts;
+	info->frameSystemTime = pInstance->mSyncInfo.firstQVideoInfo.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
 
