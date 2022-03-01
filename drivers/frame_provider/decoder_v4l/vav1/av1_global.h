@@ -2244,6 +2244,7 @@ typedef union param_u {
         unsigned short mmu_used_num;
         unsigned short dw_mmu_used_num;
         unsigned short seq_flags_2;
+		unsigned short film_grain_present_flag;
 
         /*ucode end*/
         /*other*/
