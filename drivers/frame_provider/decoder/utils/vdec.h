@@ -138,6 +138,23 @@ enum e_trace_work_status {
 #define UVM_META_DATA_VF_BASE_INFOS (1 << 0)
 #define UVM_META_DATA_HDR10P_DATA (1 << 1)
 
+//WARNING(0-15)
+#define	DECODER_WARNING_DECODER_TIMEOUT		1 << 0
+#define	DECODER_WARNING_DATA_ERROR		1 << 1
+
+//ERROR(16-23)
+#define	DECODER_ERROR_ALLOC_BUFFER_FAIL		1 << 16
+#define	DECODER_ERROR_PARAM_ERROR		1 << 17
+
+//EMERGENCY(24-31)
+#define	DECODER_EMERGENCY_NO_MEM		1 << 24
+#define	DECODER_EMERGENCY_UNSUPPORT		1 << 25
+#define	DECODER_EMERGENCY_FW_LOAD_ERROR		1 << 26
+
+#define	IS_WARNING_TYPE(error_type)		((error_type) & 0xffff)
+#define	IS_ERROR_TYPE(error_type)		(((error_type) >> 16) & 0xff)
+#define	IS_EMERGENCY_TYPE(error_type)		(((error_type) >> 24) & 0xff)
+
 #define CORE_MASK_VDEC_1 (1 << VDEC_1)
 #define CORE_MASK_HCODEC (1 << VDEC_HCODEC)
 #define CORE_MASK_VDEC_2 (1 << VDEC_2)
