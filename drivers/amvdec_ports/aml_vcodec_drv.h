@@ -62,6 +62,7 @@
 /* exception handing */
 #define V4L2_EVENT_REQUEST_RESET	(1 << 8)
 #define V4L2_EVENT_REQUEST_EXIT		(1 << 9)
+#define V4L2_EVENT_SEND_ERROR		(1 << 10)
 
 /* eos event */
 #define V4L2_EVENT_SEND_EOS		(1 << 16)
@@ -584,6 +585,14 @@ struct canvas_cache {
 	struct mutex		lock;
 };
 
+struct aml_decoder_status_info {
+	u32 error_type;
+	u32 frame_width;
+	u32 frame_height;
+	u32 decoder_count;
+	u32 decoder_error_count;
+};
+
 /*
  * struct aml_vcodec_ctx - Context (instance) private data.
  * @id: index of the context that this structure describes.
@@ -749,6 +758,7 @@ struct aml_vcodec_ctx {
 	bool			film_grain_present;
 	void			*bmmu_box_dw;
 	void			*mmu_box_dw;
+	struct aml_decoder_status_info	decoder_status_info;
 };
 
 /**

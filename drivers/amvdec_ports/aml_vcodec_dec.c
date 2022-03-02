@@ -67,6 +67,11 @@
 #define AML_V4L2_GET_INPUT_BUFFER_NUM (V4L2_CID_USER_AMLOGIC_BASE + 1)
 #define AML_V4L2_SET_DURATION (V4L2_CID_USER_AMLOGIC_BASE + 2)
 #define AML_V4L2_GET_FILMGRAIN_INFO (V4L2_CID_USER_AMLOGIC_BASE + 3)
+#define AML_V4L2_GET_DECODER_INFO (V4L2_CID_USER_AMLOGIC_BASE + 5)
+
+#define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
+#define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
+#define V4L2_EVENT_PRIVATE_EXT_SEND_ERROR (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 2)
 
 #define WORK_ITEMS_MAX (32)
 #define MAX_DI_INSTANCE (2)
@@ -357,6 +362,9 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 		break;
 	case V4L2_EVENT_SEND_EOS:
 		event.type = V4L2_EVENT_EOS;
+		break;
+	case V4L2_EVENT_SEND_ERROR:
+		event.type = V4L2_EVENT_PRIVATE_EXT_SEND_ERROR;
 		break;
 	default:
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -2061,6 +2069,12 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 	} else
 		ctx->is_out_stream_off = false;
 
+	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
+		memset(&ctx->decoder_status_info, 0,
+			sizeof(ctx->decoder_status_info));
+	}
+
+
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d\n", __func__, q->type);
 
@@ -2400,6 +2414,8 @@ static int vidioc_vdec_subscribe_evt(struct v4l2_fh *fh,
 		return v4l2_event_subscribe(fh, sub, 2, NULL);
 	case V4L2_EVENT_SOURCE_CHANGE:
 		return v4l2_src_change_event_subscribe(fh, sub);
+	case V4L2_EVENT_PRIVATE_EXT_SEND_ERROR:
+		return v4l2_event_subscribe(fh, sub, 5, NULL);
 	default:
 		return v4l2_ctrl_subscribe_event(fh, sub);
 	}
@@ -4409,6 +4425,11 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 	case AML_V4L2_GET_FILMGRAIN_INFO:
 		ctrl->val = ctx->film_grain_present;
 		break;
+	case AML_V4L2_GET_DECODER_INFO:
+		memcpy(ctrl->p_new.p, &ctx->decoder_status_info,
+			sizeof(struct aml_decoder_status_info));
+		ctx->decoder_status_info.error_type = 0;
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -4488,6 +4509,19 @@ static const struct v4l2_ctrl_config ctrl_gt_filmgrain_info = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_gt_decoder_info = {
+	.name		= "decoder information",
+	.id		= AML_V4L2_GET_DECODER_INFO,
+	.ops		= &aml_vcodec_dec_ctrl_ops,
+	.type		= V4L2_CTRL_COMPOUND_TYPES,
+	.flags		= V4L2_CTRL_FLAG_VOLATILE,
+	.min		= 0,
+	.max		= sizeof(struct aml_decoder_status_info),
+	.step		= 1,
+	.elem_size	= 1,
+	.dims		= { sizeof(struct aml_decoder_status_info) },
+};
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -4533,6 +4567,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_filmgrain_info, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_decoder_info, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;
