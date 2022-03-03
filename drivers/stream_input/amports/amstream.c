@@ -1604,7 +1604,15 @@ static int amstream_open(struct inode *inode, struct file *file)
 
 	mutex_init(&priv->mutex);
 
-	priv->port = port;
+	//priv->port = port;
+	priv->port = kzalloc(sizeof(struct stream_port_s), GFP_KERNEL);
+	if (priv->port == NULL) {
+		kfree(priv);
+		mutex_unlock(&amstream_mutex);
+		return -ENOMEM;
+	}
+	memcpy(priv->port, port, sizeof(struct stream_port_s));
+	port = priv->port;
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_M6) {
 		/* TODO: mod gate */
@@ -1664,6 +1672,7 @@ static int amstream_open(struct inode *inode, struct file *file)
 
 		if (priv->vdec == NULL) {
 			port->flag = 0;
+			kfree(priv->port);
 			kfree(priv);
 			pr_err("amstream: vdec creation failed\n");
 			return -ENOMEM;
@@ -1676,6 +1685,7 @@ static int amstream_open(struct inode *inode, struct file *file)
 				if (priv->vdec->slave == NULL) {
 					vdec_release(priv->vdec);
 					port->flag = 0;
+					kfree(priv->port);
 					kfree(priv);
 					pr_err("amstream: sub vdec creation failed\n");
 					return -ENOMEM;
@@ -1794,6 +1804,7 @@ static int amstream_release(struct inode *inode, struct file *file)
 
 	mutex_destroy(&priv->mutex);
 
+	kfree(priv->port);
 	kfree(priv);
 
 	mutex_unlock(&amstream_mutex);
