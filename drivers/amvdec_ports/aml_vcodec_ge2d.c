@@ -204,6 +204,13 @@ static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 		return -1;
 	}
 
+	if (ge2d->ctx->is_stream_off) {
+		v4l_dbg(ge2d->ctx, V4L_DEBUG_CODEC_EXINFO,
+			"ge2d discard recycle frame %s %d ge2d:%p\n",
+			__func__, __LINE__, ge2d);
+		return -1;
+	}
+
 	fb 	= &buf->aml_buf->frame_buffer;
 	eos	= (buf->flag & GE2D_FLAG_EOS);
 
@@ -241,6 +248,13 @@ static int v4l_ge2d_fill_output_done(struct aml_v4l2_ge2d_buf *buf)
 	if (!ge2d || !ge2d->ctx) {
 		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"fatal %s %d ge2d:%px\n",
+			__func__, __LINE__, ge2d);
+		return -1;
+	}
+
+	if (ge2d->ctx->is_stream_off) {
+		v4l_dbg(ge2d->ctx, V4L_DEBUG_CODEC_EXINFO,
+			"ge2d discard submit frame %s %d ge2d:%p\n",
 			__func__, __LINE__, ge2d);
 		return -1;
 	}
