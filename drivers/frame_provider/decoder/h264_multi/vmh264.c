@@ -505,6 +505,8 @@ struct buffer_spec_s {
 	unsigned int dw_y_adr;
 	unsigned int dw_u_v_adr;
 	int fs_idx;
+	u8  user_data_buf[SEI_ITU_DATA_SIZE];
+	struct userdata_param_t ud_param;
 };
 
 #define AUX_DATA_SIZE(pic) (hw->buffer_spec[pic->buf_spec_num].aux_data_size)
@@ -2914,6 +2916,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	int bForceInterlace = 0;
 	int vf_count = 1;
 	int i;
+	struct buffer_spec_s *pic = &hw->buffer_spec[buffer_index];
 
 	/* swap uv */
 	if (hw->is_used_v4l) {
@@ -3188,6 +3191,26 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
 			"[%s:%d] i_decoded_frame = %d p_decoded_frame = %d b_decoded_frame = %d\n",
 			__func__, __LINE__,vs.i_decoded_frames,vs.p_decoded_frames,vs.b_decoded_frames);
+		}
+
+		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
+		vf->vf_ud_param.ud_param = pic->ud_param;
+
+		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_UD_DETAIL))
+		{
+			struct userdata_param_t ud_param = pic->ud_param;
+			{
+				int i = 0;
+				u8 *pstart = (u8 *)ud_param.pbuf_addr;
+				PR_INIT(128);
+
+				for (i = 0; i < ud_param.buf_len; i++) {
+					PR_FILL("%02x ", pstart[i]);
+					if (((i + 1) & 0xf) == 0)
+						PR_INFO(DECODE_ID(hw));
+				}
+				PR_INFO(DECODE_ID(hw));
+			}
 		}
 
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
@@ -8978,7 +9001,7 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 						u32 vpts_valid)
 {
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
-
+	struct vdec_s *vdec = hw_to_vdec(hw);
 	unsigned char *pdata;
 	u8 *pmax_sei_data_buffer;
 	u8 *sei_data_buf;
@@ -8986,7 +9009,7 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	int wp;
 	int data_length;
 	struct mh264_userdata_record_t *p_userdata_rec;
-
+	struct StorablePicture *p = p_H264_Dpb->mVideo.dec_picture;
 
 #ifdef MH264_USERDATA_ENABLE
 	struct userdata_meta_info_t meta_info;
@@ -8995,6 +9018,28 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 
 	if (hw->sei_itu_data_len <= 0)
 		return;
+
+	if (p != NULL) {
+		struct buffer_spec_s *pic = &hw->buffer_spec[p->buf_spec_num];
+		memset(pic->user_data_buf, 0, SEI_ITU_DATA_SIZE);
+		if (hw->sei_itu_data_len < SEI_ITU_DATA_SIZE) {
+			memcpy(pic->user_data_buf, hw->sei_itu_data_buf,
+				hw->sei_itu_data_len);
+			pic->ud_param.buf_len = hw->sei_itu_data_len;
+		} else {
+			pic->ud_param.buf_len = 0;
+		}
+		pic->ud_param.pbuf_addr = pic->user_data_buf;
+		pic->ud_param.instance_id = vdec->video_id;
+		pic->ud_param.meta_info.duration = hw->frame_dur;
+		pic->ud_param.meta_info.flags = (VFORMAT_H264 << 3);
+		pic->ud_param.meta_info.poc_number =
+			p_H264_Dpb->mVideo.dec_picture->poc;
+		pic->ud_param.meta_info.flags |=
+			p_H264_Dpb->mVideo.dec_picture->pic_struct << 12;
+		pic->ud_param.meta_info.vpts = vpts;
+		pic->ud_param.meta_info.vpts_valid = vpts_valid;
+	}
 
 	pdata = (u8 *)hw->sei_user_data_buffer + hw->sei_user_data_wp;
 	pmax_sei_data_buffer = (u8 *)hw->sei_user_data_buffer + USER_DATA_SIZE;

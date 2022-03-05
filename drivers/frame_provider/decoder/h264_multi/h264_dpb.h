@@ -42,6 +42,7 @@
 #define PRINT_FLAG_SEI_DETAIL         0x4000
 #define PRINT_FLAG_V4L_DETAIL         0x8000
 #define DISABLE_ERROR_HANDLE          0x10000
+#define PRINT_FLAG_UD_DETAIL          0x20000
 #define DEBUG_DUMP_STAT               0x80000
 #define DEBUG_TIMEOUT_DEC_STAT        0x800000
 
