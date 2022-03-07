@@ -251,17 +251,17 @@ static int notify_v4l_eos(struct vdec_s *vdec);
 
 static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 {
-	u32 temp;
-	temp = READ_VREG(MREG_PIC_WIDTH);
-	if (temp > 1920)
-		vf->width = hw->frame_width = 1920;
-	else if (temp > 0)
-		vf->width = hw->frame_width = temp;
-	temp = READ_VREG(MREG_PIC_HEIGHT);
-	if (temp > 1088)
-		vf->height = hw->frame_height = 1088;
-	else if (temp > 0)
-		vf->height = hw->frame_height = temp;
+	u32 width, height;
+	width = READ_VREG(MREG_PIC_WIDTH);
+	height = READ_VREG(MREG_PIC_HEIGHT);
+
+	vf->width = hw->frame_width = ((width > 1920) ? 1920 : width);
+	vf->height = hw->frame_height = ((height > 1088) ? 1088 : height);
+
+	if (hw->vmjpeg_amstream_dec_info.width < hw->vmjpeg_amstream_dec_info.height) {
+		vf->width = hw->frame_width = ((width > 1088) ? 1088 : width);
+		vf->height = hw->frame_height = ((height > 1920) ? 1920 : height);
+	}
 	vf->duration = hw->frame_dur;
 	vf->ratio_control = DISP_RATIO_ASPECT_RATIO_MAX << DISP_RATIO_ASPECT_RATIO_BIT;
 	vf->sar_width = 1;
@@ -631,6 +631,12 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 		CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 	canvas_width = 1920;
 	canvas_height = 1088;
+	if (hw->vmjpeg_amstream_dec_info.width > 0
+		&& hw->vmjpeg_amstream_dec_info.height > 0
+		&& (hw->vmjpeg_amstream_dec_info.width < hw->vmjpeg_amstream_dec_info.height)) {
+		canvas_width = 1088;
+		canvas_height = 1920;
+	}
 	decbuf_y_size = 0x200000;
 	decbuf_uv_size = 0x80000;
 	decbuf_size = 0x300000;
@@ -1278,6 +1284,9 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 		hw->frame_width = 0;
 		hw->frame_height = 0;
 	} else {
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+			"%s, hw->vmjpeg_amstream_dec_info.width:%d, hw->vmjpeg_amstream_dec_info.height:%d\n",
+			__func__, hw->vmjpeg_amstream_dec_info.width, hw->vmjpeg_amstream_dec_info.height);
 		hw->frame_width = hw->vmjpeg_amstream_dec_info.width;
 		hw->frame_height = hw->vmjpeg_amstream_dec_info.height;
 	}
