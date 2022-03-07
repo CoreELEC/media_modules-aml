@@ -330,11 +330,11 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 		}
 	}
 	if (!find) {
+		pInstance->mPtsCheckoutFailCount++;
 		if (ptsserver_debuglevel >= 1 || pInstance->mPtsCheckoutFailCount % 10 == 0) {
 			pts_pr_info(index,"Checkout fail mPtsCheckoutFailCount:%d level:%d \n",
 				pInstance->mPtsCheckoutFailCount,pInstance->mLastCheckinOffset - cur_offset);
 		}
-		pInstance->mPtsCheckoutFailCount++;
 		if (pInstance->mDecoderDuration != 0) {
 			pInstance->mLastCheckoutPts = pInstance->mLastCheckoutPts + pInstance->mDecoderDuration;
 			pInstance->mLastCheckoutPts64 = pInstance->mLastCheckoutPts64 + pInstance->mDecoderDuration * 1000 / 96;
