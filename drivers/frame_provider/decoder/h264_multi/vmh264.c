@@ -5477,7 +5477,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		if (p_H264_Dpb->bitstream_restriction_flag &&
 			p_H264_Dpb->num_reorder_frames <= p_H264_Dpb->max_dec_frame_buffering) {
-			hw->dpb.reorder_output = hw->num_reorder_frames + 1;
+			hw->dpb.reorder_output = max(max_reference_size, hw->num_reorder_frames + 1);
 		}
 
 		active_buffer_spec_num =
