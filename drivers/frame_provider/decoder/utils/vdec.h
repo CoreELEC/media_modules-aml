@@ -703,5 +703,7 @@ st_userdata *get_vdec_userdata_ctx(void);
 
 void vdec_frame_rate_uevent(int dur);
 
+void vdec_sync_irq(enum vdec_irq_num num);
+
 
 #endif				/* VDEC_H */

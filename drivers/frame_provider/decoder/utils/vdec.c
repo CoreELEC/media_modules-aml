@@ -4696,6 +4696,20 @@ void vdec_free_irq(enum vdec_irq_num num, void *dev)
 }
 EXPORT_SYMBOL(vdec_free_irq);
 
+void vdec_sync_irq(enum vdec_irq_num num)
+{
+#if 0
+	if (!vdec)
+		return;
+	if (vdec->input.target == VDEC_INPUT_TARGET_HEVC)
+		synchronize_irq(vdec_core->isr_context[VDEC_IRQ_0].irq);
+	else (vdec->input.target == VDEC_INPUT_TARGET_VLD)
+		synchronize_irq(vdec_core->isr_context[VDEC_IRQ_1].irq);
+#endif
+	synchronize_irq(vdec_core->isr_context[num].irq);
+}
+EXPORT_SYMBOL(vdec_sync_irq);
+
 struct vdec_s *vdec_get_default_vdec_for_userdata(void)
 {
 	struct vdec_s *vdec;
