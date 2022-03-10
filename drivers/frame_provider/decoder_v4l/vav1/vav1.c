@@ -5896,7 +5896,7 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
 	ar = min_t(u32, hw->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 
-	if (hw->is_used_v4l && hw->vf_dp.present_flag) {
+	if (hw->is_used_v4l && (vf->signal_type != 0)) {
 		struct aml_vdec_hdr_infos hdr;
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
