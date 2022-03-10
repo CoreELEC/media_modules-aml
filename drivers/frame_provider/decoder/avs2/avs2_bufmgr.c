@@ -31,26 +31,25 @@
 #include <linux/platform_device.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/utils/amstream.h>
+#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
+#include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/sched/clock.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-contiguous.h>
 #include <linux/slab.h>
-//#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
-#include <linux/sched/clock.h>
+
 #include "../../../stream_input/amports/amports_priv.h"
-#include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include "../utils/decoder_mmu_box.h"
 #include "../utils/decoder_bmmu_box.h"
-#include "avs2_global.h"
-
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
+#include "avs2_global.h"
 
 #undef pr_info
 #define pr_info printk
@@ -83,13 +82,11 @@ void readAlfCoeff(struct avs2_decoder *avs2_dec, struct ALFParam_s *Alfp)
 		for (pos = 0; pos < numCoeff; pos++) {
 			if (Alfp->componentID == ALF_Cb)
 				Alfp->coeffmulti[0][pos] =
-					get_param(
-					rpm_param->alf.alf_cb_coeffmulti[pos],
+					get_param(rpm_param->alf.alf_cb_coeffmulti[pos],
 					"Chroma ALF coefficients");
 			else
 				Alfp->coeffmulti[0][pos] =
-					get_param(
-					rpm_param->alf.alf_cr_coeffmulti[pos],
+					get_param(rpm_param->alf.alf_cr_coeffmulti[pos],
 					"Chroma ALF coefficients");
 #if Check_Bitstream
 			if (pos <= 7)
@@ -119,8 +116,7 @@ void readAlfCoeff(struct avs2_decoder *avs2_dec, struct ALFParam_s *Alfp)
 		for (f = 0; f < Alfp->filters_per_group; f++) {
 			if (f > 0) {
 				if (Alfp->filters_per_group != 16) {
-					symbol =
-					get_param(rpm_param->alf.region_distance
+					symbol = get_param(rpm_param->alf.region_distance
 						[region_distance_idx++],
 						"Region distance");
 				} else {
@@ -132,30 +128,21 @@ void readAlfCoeff(struct avs2_decoder *avs2_dec, struct ALFParam_s *Alfp)
 
 			for (pos = 0; pos < numCoeff; pos++) {
 				Alfp->coeffmulti[f][pos] =
-				get_param(
-					rpm_param->alf.alf_y_coeffmulti[f][pos],
+					get_param(rpm_param->alf.alf_y_coeffmulti[f][pos],
 					"Luma ALF coefficients");
 #if Check_Bitstream
 				if (pos <= 7)
-					assert(
-						Alfp->coeffmulti[f][pos]
-						>= -64 &&
-						Alfp->coeffmulti[f][pos]
-						<= 63);
+					assert(Alfp->coeffmulti[f][pos] >= -64 &&
+						Alfp->coeffmulti[f][pos] <= 63);
 				if (pos == 8)
-					assert(
-						Alfp->coeffmulti[f][pos]
-						>= -1088 &&
-						Alfp->coeffmulti[f][pos]
-						<= 1071);
+					assert(Alfp->coeffmulti[f][pos] >= -1088 &&
+						Alfp->coeffmulti[f][pos] <= 1071);
 #endif
-
 			}
 		}
 
 #if Check_Bitstream
 		assert(pre_symbole >= 0 && pre_symbole <= 15);
-
 #endif
 	}
 	break;
@@ -175,16 +162,13 @@ void Read_ALF_param(struct avs2_decoder *avs2_dec)
 	int32_t compIdx;
 	if (input->alf_enable) {
 		img->pic_alf_on[0] =
-			get_param(
-			rpm_param->alf.picture_alf_enable_Y,
+			get_param(rpm_param->alf.picture_alf_enable_Y,
 			"alf_pic_flag_Y");
 		img->pic_alf_on[1] =
-			get_param(
-			rpm_param->alf.picture_alf_enable_Cb,
+			get_param(rpm_param->alf.picture_alf_enable_Cb,
 			"alf_pic_flag_Cb");
 		img->pic_alf_on[2] =
-			get_param(
-			rpm_param->alf.picture_alf_enable_Cr,
+			get_param(rpm_param->alf.picture_alf_enable_Cr,
 			"alf_pic_flag_Cr");
 
 		avs2_dec->m_alfPictureParam[ALF_Y].alf_flag
@@ -219,24 +203,16 @@ void Get_SequenceHeader(struct avs2_decoder *avs2_dec)
 	union param_u *rpm_param = &avs2_dec->param;
 	/*int32_t i, j;*/
 
-	/*fpr_info(stdout, "Sequence Header\n");*/
-	/*memcpy(currStream->streamBuffer, buf, length);*/
-	/*currStream->code_len = currStream->bitstream_length = length;*/
-	/*currStream->read_len = currStream->frame_bitoffset = (startcodepos +
-	  1) * 8;*/
-
 	input->profile_id           =
 		get_param(rpm_param->p.profile_id, "profile_id");
 	input->level_id             =
 		get_param(rpm_param->p.level_id, "level_id");
 	hd->progressive_sequence        =
-		get_param(
-			rpm_param->p.progressive_sequence,
+		get_param(rpm_param->p.progressive_sequence,
 			"progressive_sequence");
 #if INTERLACE_CODING
 	hd->is_field_sequence           =
-		get_param(
-			rpm_param->p.is_field_sequence,
+		get_param(rpm_param->p.is_field_sequence,
 			"field_coded_sequence");
 #endif
 #if HALF_PIXEL_COMPENSATION || HALF_PIXEL_CHROMA
@@ -255,41 +231,35 @@ void Get_SequenceHeader(struct avs2_decoder *avs2_dec)
 		input->output_bit_depth =
 			get_param(rpm_param->p.sample_precision,
 			"sample_precision");
-		input->output_bit_depth =
-			6 + (input->output_bit_depth) * 2;
+		input->output_bit_depth = 6 + (input->output_bit_depth) * 2;
 		input->sample_bit_depth =
 			get_param(rpm_param->p.encoding_precision,
 			"encoding_precision");
-		input->sample_bit_depth =
-			6 + (input->sample_bit_depth) * 2;
+		input->sample_bit_depth = 6 + (input->sample_bit_depth) * 2;
 	} else { /* other profile*/
 		hd->sample_precision =
 			get_param(rpm_param->p.sample_precision,
-				"sample_precision");
+			"sample_precision");
 	}
 	hd->aspect_ratio_information    =
 		get_param(rpm_param->p.aspect_ratio_information,
-			"aspect_ratio_information");
+		"aspect_ratio_information");
 	hd->frame_rate_code             =
 		get_param(rpm_param->p.frame_rate_code, "frame_rate_code");
 
 	hd->bit_rate_lower              =
 		get_param(rpm_param->p.bit_rate_lower, "bit_rate_lower");
-	/*hd->marker_bit                  = get_param(rpm_param->p.marker_bit,
-	 * "marker bit");*/
 	/*CHECKMARKERBIT*/
 	hd->bit_rate_upper              =
 		get_param(rpm_param->p.bit_rate_upper, "bit_rate_upper");
 	hd->low_delay                   =
 		get_param(rpm_param->p.low_delay, "low_delay");
-	/*hd->marker_bit                  =
-		get_param(rpm_param->p.marker_bit2,
-	 "marker bit");*/
+
 	/*CHECKMARKERBIT*/
 #if M3480_TEMPORAL_SCALABLE
 	hd->temporal_id_exist_flag      =
 		get_param(rpm_param->p.temporal_id_exist_flag,
-			"temporal_id exist flag"); /*get
+		"temporal_id exist flag"); /*get
 		Extention Flag*/
 #endif
 	/*u_v(18, "bbv buffer size");*/
@@ -297,60 +267,48 @@ void Get_SequenceHeader(struct avs2_decoder *avs2_dec)
 		get_param(rpm_param->p.g_uiMaxSizeInBit,
 		"Largest Coding Block Size");
 
-
-	/*hd->background_picture_enable = 0x01 ^
-		(get_param(rpm_param->p.avs2_seq_flags,
-		"background_picture_disable")
-		>> BACKGROUND_PICTURE_DISABLE_BIT) & 0x1;*/
-	/*rain???*/
 	hd->background_picture_enable = 0x01 ^
 		((get_param(rpm_param->p.avs2_seq_flags,
-		"background_picture_disable")
-		>> BACKGROUND_PICTURE_DISABLE_BIT) & 0x1);
-
+		"background_picture_disable") >> BACKGROUND_PICTURE_DISABLE_BIT) & 0x1);
 
 	hd->b_dmh_enabled           = 1;
 
 	hd->b_mhpskip_enabled       =
 		get_param(rpm_param->p.avs2_seq_flags >> B_MHPSKIP_ENABLED_BIT,
-			"mhpskip enabled") & 0x1;
+		"mhpskip enabled") & 0x1;
 	hd->dhp_enabled             =
 		get_param(rpm_param->p.avs2_seq_flags >> DHP_ENABLED_BIT,
-			"dhp enabled") & 0x1;
+		"dhp enabled") & 0x1;
 	hd->wsm_enabled             =
 		get_param(rpm_param->p.avs2_seq_flags >> WSM_ENABLED_BIT,
-			"wsm enabled") & 0x1;
+		"wsm enabled") & 0x1;
 
 	img->inter_amp_enable       =
 		get_param(rpm_param->p.avs2_seq_flags >> INTER_AMP_ENABLE_BIT,
-			"Asymmetric Motion Partitions") & 0x1;
+		"Asymmetric Motion Partitions") & 0x1;
 	input->useNSQT              =
 		get_param(rpm_param->p.avs2_seq_flags >> USENSQT_BIT,
-			"useNSQT") & 0x1;
+		"useNSQT") & 0x1;
 	input->useSDIP              =
 		get_param(rpm_param->p.avs2_seq_flags >> USESDIP_BIT,
-			"useNSIP") & 0x1;
+		"useNSIP") & 0x1;
 
 	hd->b_secT_enabled          =
 		get_param(rpm_param->p.avs2_seq_flags >> B_SECT_ENABLED_BIT,
-			"secT enabled") & 0x1;
+		"secT enabled") & 0x1;
 
 	input->sao_enable           =
 		get_param(rpm_param->p.avs2_seq_flags >> SAO_ENABLE_BIT,
-			"SAO Enable Flag") & 0x1;
+		"SAO Enable Flag") & 0x1;
 	input->alf_enable           =
 		get_param(rpm_param->p.avs2_seq_flags >> ALF_ENABLE_BIT,
-			"ALF Enable Flag") & 0x1;
+		"ALF Enable Flag") & 0x1;
 	hd->b_pmvr_enabled          =
 		get_param(rpm_param->p.avs2_seq_flags >> B_PMVR_ENABLED_BIT,
-			"pmvr enabled") & 0x1;
-
+		"pmvr enabled") & 0x1;
 
 	hd->gop_size = get_param(rpm_param->p.num_of_RPS,
 		"num_of_RPS");
-#if Check_Bitstream
-	/*assert(hd->gop_size<=32);*/
-#endif
 
 	if (hd->low_delay == 0) {
 		hd->picture_reorder_delay  =
@@ -359,23 +317,19 @@ void Get_SequenceHeader(struct avs2_decoder *avs2_dec)
 	}
 
 	input->crossSliceLoopFilter    =
-		get_param(rpm_param->p.avs2_seq_flags
-			>> CROSSSLICELOOPFILTER_BIT,
-			"Cross Loop Filter Flag") & 0x1;
+		get_param(rpm_param->p.avs2_seq_flags >> CROSSSLICELOOPFILTER_BIT,
+		"Cross Loop Filter Flag") & 0x1;
 
 #if BCBR
 	if ((input->profile_id == SCENE_PROFILE ||
 		input->profile_id == SCENE10_PROFILE) &&
 		hd->background_picture_enable) {
-		hd->bcbr_enable = u_v(1,
-			"block_composed_background_picture_enable");
+		hd->bcbr_enable = u_v(1, "block_composed_background_picture_enable");
 		u_v(1, "reserved bits");
 	} else {
 		hd->bcbr_enable = 0;
 		u_v(2, "reserved bits");
 	}
-#else
-	/*u_v(2, "reserved bits");*/
 #endif
 
 	img->width          = hd->horizontal_size;
@@ -383,25 +337,21 @@ void Get_SequenceHeader(struct avs2_decoder *avs2_dec)
 	img->width_cr       = (img->width >> 1);
 
 	if (input->chroma_format == 1) {
-		img->height_cr
-		= (img->height >> 1);
+		img->height_cr = (img->height >> 1);
 	}
 
 	img->PicWidthInMbs  = img->width / MIN_CU_SIZE;
 	img->PicHeightInMbs = img->height / MIN_CU_SIZE;
 	img->PicSizeInMbs   = img->PicWidthInMbs * img->PicHeightInMbs;
 	img->buf_cycle      = input->buf_cycle + 1;
-	img->max_mb_nr      = (img->width * img->height)
-		/ (MIN_CU_SIZE * MIN_CU_SIZE);
+	img->max_mb_nr      = (img->width * img->height) / (MIN_CU_SIZE * MIN_CU_SIZE);
 
 #ifdef AML
-avs2_dec->lcu_size =
-	get_param(rpm_param->p.lcu_size, "lcu_size");
+avs2_dec->lcu_size = get_param(rpm_param->p.lcu_size, "lcu_size");
 avs2_dec->lcu_size = 1<<(avs2_dec->lcu_size);
 #endif
 hc->seq_header++;
 }
-
 
 void Get_I_Picture_Header(struct avs2_decoder *avs2_dec)
 {
@@ -416,13 +366,11 @@ void Get_I_Picture_Header(struct avs2_decoder *avs2_dec)
 #endif
 
 	hd->time_code_flag       =
-		get_param(rpm_param->p.time_code_flag,
-		"time_code_flag");
+		get_param(rpm_param->p.time_code_flag, "time_code_flag");
 
 	if (hd->time_code_flag) {
 		hd->time_code        =
-			get_param(rpm_param->p.time_code,
-			"time_code");
+			get_param(rpm_param->p.time_code, "time_code");
 	}
 	if (hd->background_picture_enable) {
 		hd->background_picture_flag =
@@ -430,16 +378,14 @@ void Get_I_Picture_Header(struct avs2_decoder *avs2_dec)
 			"background_picture_flag");
 
 		if (hd->background_picture_flag) {
-			img->typeb =
-				BACKGROUND_IMG;
+			img->typeb = BACKGROUND_IMG;
 		} else {
 			img->typeb = 0;
 		}
 
 		if (img->typeb == BACKGROUND_IMG) {
 			hd->background_picture_output_flag =
-				get_param(
-				rpm_param->p.background_picture_output_flag,
+				get_param(rpm_param->p.background_picture_output_flag,
 				"background_picture_output_flag");
 		}
 	}
@@ -447,10 +393,7 @@ void Get_I_Picture_Header(struct avs2_decoder *avs2_dec)
 
 	{
 		img->coding_order         =
-			get_param(rpm_param->p.coding_order,
-			"coding_order");
-
-
+			get_param(rpm_param->p.coding_order, "coding_order");
 
 #if M3480_TEMPORAL_SCALABLE
 		if (hd->temporal_id_exist_flag == 1) {
@@ -478,19 +421,12 @@ void Get_I_Picture_Header(struct avs2_decoder *avs2_dec)
 			int32_t RPS_idx;/* = (img->coding_order-1) % gop_size;*/
 			int32_t predict;
 			int32_t j;
-			predict =
-				get_param(rpm_param->p.predict,
-				"use RCS in SPS");
-			/*if (predict) {*/
-			RPS_idx =
-				get_param(rpm_param->p.RPS_idx,
+			predict = get_param(rpm_param->p.predict, "use RCS in SPS");
+			RPS_idx = get_param(rpm_param->p.RPS_idx,
 				"predict for RCS");
-			/*    hd->curr_RPS = hd->decod_RPS[RPS_idx];*/
-			/*} else {*/
 			/*gop size16*/
 			hd->curr_RPS.referd_by_others =
-				get_param(rpm_param->p.referd_by_others_cur,
-				"refered by others");
+				get_param(rpm_param->p.referd_by_others_cur, "refered by others");
 			hd->curr_RPS.num_of_ref =
 				get_param(rpm_param->p.num_of_ref_cur,
 				"num of reference picture");
@@ -516,51 +452,34 @@ void Get_I_Picture_Header(struct avs2_decoder *avs2_dec)
 					rpm_param->p.remove_pic_cur[j],
 					"delta COI of removed pic");
 			}
-			/*u_v(1, "marker bit");*/
-
-			/*}*/
 		}
 		/*xyji 12.23*/
-		if (hd->low_delay) {
-			/*ue_v(
-			"bbv check times");*/
-		}
 
-		hd->progressive_frame =
-			get_param(rpm_param->p.progressive_frame,
+		hd->progressive_frame = get_param(rpm_param->p.progressive_frame,
 			"progressive_frame");
 
 		if (!hd->progressive_frame) {
-			img->picture_structure   =
-				get_param(rpm_param->p.picture_structure,
+			img->picture_structure   = get_param(rpm_param->p.picture_structure,
 				"picture_structure");
 		} else {
-			img->picture_structure
-				= 1;
+			img->picture_structure = 1;
 		}
 
-		hd->top_field_first =
-			get_param(rpm_param->p.top_field_first,
+		hd->top_field_first = get_param(rpm_param->p.top_field_first,
 			"top_field_first");
-		hd->repeat_first_field =
-			get_param(rpm_param->p.repeat_first_field,
+		hd->repeat_first_field = get_param(rpm_param->p.repeat_first_field,
 			"repeat_first_field");
 #if INTERLACE_CODING
 		if (hd->is_field_sequence) {
-			hd->is_top_field         =
-				get_param(rpm_param->p.is_top_field,
+			hd->is_top_field         = get_param(rpm_param->p.is_top_field,
 				"is_top_field");
 #if HALF_PIXEL_COMPENSATION || HALF_PIXEL_CHROMA
 			img->is_top_field       = hd->is_top_field;
 #endif
 		}
 #endif
-
-
 	img->qp                = hd->picture_qp;
-
 	img->type              = I_IMG;
-
 }
 
 /*
@@ -577,9 +496,6 @@ void Get_PB_Picture_Header(struct avs2_decoder *avs2_dec)
 	struct Video_Dec_data_s *hd = &avs2_dec->hd;
 	union param_u *rpm_param = &avs2_dec->param;
 
-
-	/*u_v(32, "bbv delay");*/
-
 	hd->picture_coding_type                =
 		get_param(rpm_param->p.picture_coding_type,
 		"picture_coding_type");
@@ -589,8 +505,7 @@ void Get_PB_Picture_Header(struct avs2_decoder *avs2_dec)
 			hd->picture_coding_type == 3)) {
 		if (hd->picture_coding_type == 1) {
 			hd->background_pred_flag       =
-				get_param(
-				rpm_param->p.background_pred_flag,
+				get_param(rpm_param->p.background_pred_flag,
 				"background_pred_flag");
 		} else {
 			hd->background_pred_flag = 0;
@@ -598,11 +513,8 @@ void Get_PB_Picture_Header(struct avs2_decoder *avs2_dec)
 		if (hd->background_pred_flag == 0) {
 
 			hd->background_reference_enable =
-				get_param(
-				rpm_param->
-				p.background_reference_enable,
+				get_param(rpm_param->p.background_reference_enable,
 				"background_reference_enable");
-
 		} else {
 #if RD170_FIX_BG
 			hd->background_reference_enable = 1;
@@ -616,19 +528,13 @@ void Get_PB_Picture_Header(struct avs2_decoder *avs2_dec)
 		hd->background_reference_enable = 0;
 	}
 
-
-
 	if (hd->picture_coding_type == 1) {
-		img->type =
-			P_IMG;
+		img->type = P_IMG;
 	} else if (hd->picture_coding_type == 3) {
-		img->type =
-			F_IMG;
+		img->type = F_IMG;
 	} else {
-		img->type =
-			B_IMG;
+		img->type = B_IMG;
 	}
-
 
 	if (hd->picture_coding_type == 1 &&
 		hd->background_pred_flag) {
@@ -637,60 +543,45 @@ void Get_PB_Picture_Header(struct avs2_decoder *avs2_dec)
 		img->typeb = 0;
 	}
 
-
 	{
 		img->coding_order         =
-			get_param(
-			rpm_param->p.coding_order,
-			"coding_order");
-
+			get_param(rpm_param->p.coding_order, "coding_order");
 
 #if M3480_TEMPORAL_SCALABLE
 		if (hd->temporal_id_exist_flag == 1) {
-			hd->cur_layer =
-				get_param(rpm_param->p.cur_layer,
-				"temporal_id");
+			hd->cur_layer = get_param(rpm_param->p.cur_layer, "temporal_id");
 		}
 #endif
 
 		if (hd->low_delay == 0) {
 			hd->displaydelay      =
-			get_param(rpm_param->p.displaydelay,
-			"displaydelay");
+				get_param(rpm_param->p.displaydelay, "displaydelay");
 		}
 	}
 	{
 		int32_t RPS_idx;/* = (img->coding_order-1) % gop_size;*/
 		int32_t predict;
-		predict    =
-			get_param(rpm_param->p.predict,
-			"use RPS in SPS");
+		predict    = get_param(rpm_param->p.predict, "use RPS in SPS");
 		if (predict) {
-			RPS_idx =
-				get_param(rpm_param->p.RPS_idx,
-				"predict for RPS");
+			RPS_idx = get_param(rpm_param->p.RPS_idx, "predict for RPS");
 			hd->curr_RPS = hd->decod_RPS[RPS_idx];
 		} /*else*/
 		{
 			/*gop size16*/
 			int32_t j;
 			hd->curr_RPS.referd_by_others =
-				get_param(
-				rpm_param->p.referd_by_others_cur,
+				get_param(rpm_param->p.referd_by_others_cur,
 				"refered by others");
 			hd->curr_RPS.num_of_ref =
-				get_param(
-				rpm_param->p.num_of_ref_cur,
+				get_param(rpm_param->p.num_of_ref_cur,
 				"num of reference picture");
 			for (j = 0; j < hd->curr_RPS.num_of_ref; j++) {
 				hd->curr_RPS.ref_pic[j] =
-					get_param(
-					rpm_param->p.ref_pic_cur[j],
+					get_param(rpm_param->p.ref_pic_cur[j],
 					"delta COI of ref pic");
 			}
 			hd->curr_RPS.num_to_remove =
-				get_param(
-				rpm_param->p.num_to_remove_cur,
+				get_param(rpm_param->p.num_to_remove_cur,
 				"num of removed picture");
 #ifdef SANITY_CHECK
 			if (hd->curr_RPS.num_to_remove > MAXREF)	{
@@ -706,75 +597,52 @@ void Get_PB_Picture_Header(struct avs2_decoder *avs2_dec)
 					rpm_param->p.remove_pic_cur[j],
 					"delta COI of removed pic");
 			}
-			/*u_v(1, "marker bit");*/
-
 		}
-	}
-	/*xyji 12.23*/
-	if (hd->low_delay) {
-		/*ue_v(
-		"bbv check times");*/
 	}
 
 	hd->progressive_frame       =
-	get_param(rpm_param->p.progressive_frame,
+		get_param(rpm_param->p.progressive_frame,
 		"progressive_frame");
 
 	if (!hd->progressive_frame) {
 		img->picture_structure  =
-		get_param(rpm_param->p.picture_structure,
+			get_param(rpm_param->p.picture_structure,
 			"picture_structure");
 	} else {
 		img->picture_structure  = 1;
 	}
 
 	hd->top_field_first         =
-	get_param(rpm_param->p.top_field_first,
+		get_param(rpm_param->p.top_field_first,
 		"top_field_first");
 	hd->repeat_first_field      =
-	get_param(rpm_param->p.repeat_first_field,
+		get_param(rpm_param->p.repeat_first_field,
 		"repeat_first_field");
 #if INTERLACE_CODING
 	if (hd->is_field_sequence) {
 		hd->is_top_field        =
-		get_param(rpm_param->p.is_top_field,
+			get_param(rpm_param->p.is_top_field,
 			"is_top_field");
 #if HALF_PIXEL_COMPENSATION || HALF_PIXEL_CHROMA
 		img->is_top_field = hd->is_top_field;
 #endif
-		/*u_v(1, "reserved bit for interlace coding");*/
 	}
 #endif
 
-#if Check_Bitstream
-	/*assert(hd->picture_qp>=0&&hd->picture_qp<=(63 + 8 *
-	  (input->sample_bit_depth - 8)));*/
-#endif
-
 	img->random_access_decodable_flag =
-	get_param(rpm_param->p.random_access_decodable_flag,
+		get_param(rpm_param->p.random_access_decodable_flag,
 		"random_access_decodable_flag");
 
 	img->qp                = hd->picture_qp;
 }
-
-
-
 
 void calc_picture_distance(struct avs2_decoder *avs2_dec)
 {
 	struct ImageParameters_s    *img = &avs2_dec->img;
 	struct Video_Com_data_s *hc = &avs2_dec->hc;
 	struct Video_Dec_data_s *hd = &avs2_dec->hd;
-	/*
-	union param_u *rpm_param = &avs2_dec->param;
 
-	for POC mode 0:
-	uint32_t        MaxPicDistanceLsb = (1 << 8);
-	 */
-	if (img->coding_order  <  img->PrevPicDistanceLsb)
-
-	{
+	if (img->coding_order  <  img->PrevPicDistanceLsb) {
 		int32_t i, j;
 
 		hc->total_frames++;
@@ -810,8 +678,7 @@ void calc_picture_distance(struct avs2_decoder *avs2_dec)
 		img->tr = img->coding_order +
 		hd->displaydelay - hd->picture_reorder_delay;
 	} else {
-		img->tr =
-		img->coding_order;
+		img->tr = img->coding_order;
 	}
 
 #if REMOVE_UNUSED
@@ -820,7 +687,6 @@ void calc_picture_distance(struct avs2_decoder *avs2_dec)
 	img->pic_distance = img->tr % 256;
 #endif
 	hc->picture_distance = img->pic_distance;
-
 }
 
 int32_t avs2_init_global_buffers(struct avs2_decoder *avs2_dec)
@@ -832,9 +698,7 @@ int32_t avs2_init_global_buffers(struct avs2_decoder *avs2_dec)
 	int32_t refnum;
 
 	int32_t memory_size = 0;
-	/*
-int32_t img_height = (hd->vertical_size + img->auto_crop_bottom);
-	 */
+
 	img->buf_cycle = input->buf_cycle + 1;
 
 	img->buf_cycle *= 2;
@@ -844,15 +708,13 @@ int32_t img_height = (hd->vertical_size + img->auto_crop_bottom);
 	for (refnum = 0; refnum < REF_MAXBUFFER; refnum++) {
 		avs2_dec->fref[refnum] = &avs2_dec->frm_pool[refnum];
 
-		/*//avs2_dec->fref[i] memory allocation*/
 		if (is_avs2_print_bufmgr_detail())
 			pr_info("[t] avs2_dec->fref[%d]@0x%p\n",
 			refnum, avs2_dec->fref[refnum]);
 		avs2_dec->fref[refnum]->imgcoi_ref = -257;
 		avs2_dec->fref[refnum]->is_output = -1;
 		avs2_dec->fref[refnum]->refered_by_others = -1;
-		avs2_dec->fref[refnum]->
-			imgtr_fwRefDistance = -256;
+		avs2_dec->fref[refnum]->imgtr_fwRefDistance = -256;
 		init_frame_t(avs2_dec->fref[refnum]);
 #ifdef AML
 		avs2_dec->fref[refnum]->index = refnum;
@@ -862,7 +724,7 @@ int32_t img_height = (hd->vertical_size + img->auto_crop_bottom);
 	avs2_dec->f_bg = NULL;
 
 	avs2_dec->m_bg = &avs2_dec->frm_pool[REF_MAXBUFFER];
-		/*///avs2_dec->fref[i] memory allocation*/
+
 	if (is_avs2_print_bufmgr_detail())
 		pr_info("[t] avs2_dec->m_bg@0x%p\n",
 		avs2_dec->m_bg);
@@ -880,9 +742,6 @@ int32_t img_height = (hd->vertical_size + img->auto_crop_bottom);
 		((img->width + MAX_CU_SIZE - 1) / MAX_CU_SIZE)
 		* ((img->height + MAX_CU_SIZE - 1)
 		/ MAX_CU_SIZE);
-	/*img->BLCUidx =  (int32_t*) calloc(
-	  img->iNumCUsInFrame, sizeof(int32_t));*/
-	/*memset( img->BLCUidx, 0, img->iNumCUsInFrame);*/
 #endif
 	return memory_size;
 }
@@ -910,12 +769,11 @@ static void free_unused_buffers(struct avs2_decoder *avs2_dec)
 #endif
 		if (is_avs2_print_bufmgr_detail())
 			pr_info("%s[t] avs2_dec->fref[%d]@0x%p\n",
-			__func__, refnum, avs2_dec->fref[refnum]);
+				__func__, refnum, avs2_dec->fref[refnum]);
 		avs2_dec->fref[refnum]->imgcoi_ref = -257;
 		avs2_dec->fref[refnum]->is_output = -1;
 		avs2_dec->fref[refnum]->refered_by_others = -1;
-		avs2_dec->fref[refnum]->
-			imgtr_fwRefDistance = -256;
+		avs2_dec->fref[refnum]->imgtr_fwRefDistance = -256;
 		memset(avs2_dec->fref[refnum]->ref_poc, 0,
 			sizeof(avs2_dec->fref[refnum]->ref_poc));
 	}
@@ -923,7 +781,7 @@ static void free_unused_buffers(struct avs2_decoder *avs2_dec)
 
 	if (is_avs2_print_bufmgr_detail())
 		pr_info("%s[t] avs2_dec->m_bg@0x%p\n",
-		__func__, avs2_dec->m_bg);
+			__func__, avs2_dec->m_bg);
 	avs2_dec->m_bg->imgcoi_ref = -257;
 	avs2_dec->m_bg->is_output = -1;
 	avs2_dec->m_bg->refered_by_others = -1;
@@ -937,9 +795,6 @@ static void free_unused_buffers(struct avs2_decoder *avs2_dec)
 		((img->width + MAX_CU_SIZE - 1) / MAX_CU_SIZE)
 		* ((img->height + MAX_CU_SIZE - 1)
 		/ MAX_CU_SIZE);
-	/*img->BLCUidx =  (int32_t*) calloc(
-	  img->iNumCUsInFrame, sizeof(int32_t));*/
-	/*memset( img->BLCUidx, 0, img->iNumCUsInFrame);*/
 #endif
 }
 #endif
@@ -961,8 +816,6 @@ void get_reference_list_info(struct avs2_decoder *avs2_dec, int8_t *str)
 
 	int8_t str_tmp[16];
 	int32_t i;
-	/* int32_t poc = hc->f_rec->imgtr_fwRefDistance;
-	  fred.chiu@mediatek.com*/
 
 	if (img->num_of_references > 0) {
 		strcpy(str, "[");
@@ -970,9 +823,7 @@ void get_reference_list_info(struct avs2_decoder *avs2_dec, int8_t *str)
 #if RD1510_FIX_BG
 			if (img->type == B_IMG) {
 				sprintf(str_tmp, "%4d    ",
-					hc->f_rec->
-					ref_poc[
-					img->num_of_references - 1 - i]);
+					hc->f_rec->ref_poc[img->num_of_references - 1 - i]);
 			} else {
 				sprintf(str_tmp, "%4d    ",
 					hc->f_rec->ref_poc[i]);
@@ -981,7 +832,6 @@ void get_reference_list_info(struct avs2_decoder *avs2_dec, int8_t *str)
 			sprintf(str_tmp, "%4d     ",
 				avs2_dec->fref[i]->imgtr_fwRefDistance);
 #endif
-
 			str_tmp[5] = '\0';
 			strcat(str, str_tmp);
 		}
@@ -1009,7 +859,6 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	/* re-order the ref buffer according to RPS*/
 	img->num_of_references = hd->curr_RPS.num_of_ref;
 
-#if 1
 	/*rain*/
 	if (is_avs2_print_bufmgr_detail()) {
 		pr_info("%s: coding_order is %d, curr_IDRcoi is %d\n",
@@ -1026,7 +875,6 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 			avs2_dec->fref[ii]->imgtr_fwRefDistance);
 	}
 	}
-#endif
 
 	for (i = 0; i < hd->curr_RPS.num_of_ref; i++) {
 		/*int32_t accumulate = 0;*/
@@ -1036,8 +884,7 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 #if REMOVE_UNUSED
 		for (j = i; j < avs2_dec->ref_maxbuffer; j++) {
 			/*/////////////to be modified  IDR*/
-			if (avs2_dec->fref[j]->imgcoi_ref ==
-				img->coding_order -
+			if (avs2_dec->fref[j]->imgcoi_ref == img->coding_order -
 				hd->curr_RPS.ref_pic[i]) {
 				break;
 			}
@@ -1056,15 +903,12 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 				}
 			}
 			if (k == avs2_dec->ref_maxbuffer) {
-				tmp_tr =
-				-1-1;
+				tmp_tr = -1-1;
 			} else {
-				tmp_tr =
-					avs2_dec->fref[k]->imgtr_fwRefDistance;
+				tmp_tr = avs2_dec->fref[k]->imgtr_fwRefDistance;
 			}
 			if (tmp_tr < hd->curr_IDRtr) {
-				hd->curr_RPS.ref_pic[i] =
-					img->coding_order - hd->curr_IDRcoi;
+				hd->curr_RPS.ref_pic[i] = img->coding_order - hd->curr_IDRcoi;
 
 				for (k = 0; k < i; k++) {
 					if (hd->curr_RPS.ref_pic[k] ==
@@ -1089,10 +933,8 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 			avs2_dec->fref[j] = tmp_fref;
 			if (is_avs2_print_bufmgr_detail()) {
 				pr_info("%s, switch %d %d: ", __func__, i, j);
-				for (ii = 0; ii < hd->curr_RPS.num_of_ref
-				|| ii <= j; ii++)
-					pr_info("%d ",
-					avs2_dec->fref[ii]->index);
+				for (ii = 0; ii < hd->curr_RPS.num_of_ref || ii <= j; ii++)
+					pr_info("%d ",avs2_dec->fref[ii]->index);
 				pr_info("\n");
 			}
 		}
@@ -1102,11 +944,10 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 		|| avs2_dec->fref[1]->imgtr_fwRefDistance >= img->tr)) {
 
 		pr_info("wrong reference configuration for B frame\n");
-		pr_info(
-			"fref0 imgtr_fwRefDistance %d, fref1 imgtr_fwRefDistance %d, img->tr %d\n",
-				avs2_dec->fref[0]->imgtr_fwRefDistance,
-				avs2_dec->fref[1]->imgtr_fwRefDistance,
-				img->tr);
+		pr_info("fref0 imgtr_fwRefDistance %d, fref1 imgtr_fwRefDistance %d, img->tr %d\n",
+			avs2_dec->fref[0]->imgtr_fwRefDistance,
+			avs2_dec->fref[1]->imgtr_fwRefDistance,
+			img->tr);
 		hc->f_rec->error_mark = 1;
 		avs2_dec->bufmgr_error_flag = 1;
 		return; /* exit(-1);*/
@@ -1131,8 +972,7 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 			avs2_dec->fref[j]->temporal_id = -1;
 #endif
 			if (avs2_dec->fref[j]->is_output == -1) {
-				avs2_dec->fref[j]->
-				imgtr_fwRefDistance = -256;
+				avs2_dec->fref[j]->imgtr_fwRefDistance = -256;
 			}
 		}
 	}
@@ -1143,22 +983,17 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	/*   add current frame to ref buffer*/
 	for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
 		if ((avs2_dec->fref[i]->imgcoi_ref < -256
-			|| abs(avs2_dec->fref[i]->
-				imgtr_fwRefDistance - img->tr) >= 128)
+			|| abs(avs2_dec->fref[i]->imgtr_fwRefDistance - img->tr) >= 128)
 				&& avs2_dec->fref[i]->is_output == -1
 				&& avs2_dec->fref[i]->bg_flag == 0
-#ifndef NO_DISPLAY
 				&& avs2_dec->fref[i]->vf_ref == 0
 				&& avs2_dec->fref[i]->to_prepare_disp == 0
-#endif
 				) {
 			break;
 		}
 	}
 	if (i == avs2_dec->ref_maxbuffer) {
-		pr_info(
-			"%s, warning, no enough buf\n",
-			__func__);
+		pr_info("%s, warning, no enough buf\n", __func__);
 		i--;
 	}
 
@@ -1177,22 +1012,17 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 #endif
 	hc->f_rec->refered_by_others = hd->curr_RPS.referd_by_others;
 	if (is_avs2_print_bufmgr_detail())
-		pr_info(
-			"%s, set f_rec (cur_pic) <= fref[%d] img->tr %d coding_order %d img_type %d\n",
-			__func__, i, img->tr, img->coding_order,
-			img->type);
+		pr_info("%s, set f_rec (cur_pic) <= fref[%d] img->tr %d coding_order %d img_type %d\n",
+			__func__, i, img->tr, img->coding_order, img->type);
 
 	if (img->type != B_IMG) {
 		for (j = 0;
 			j < img->num_of_references; j++) {
-			hc->f_rec->ref_poc[j] =
-			avs2_dec->fref[j]->imgtr_fwRefDistance;
+			hc->f_rec->ref_poc[j] = avs2_dec->fref[j]->imgtr_fwRefDistance;
 		}
 	} else {
-		hc->f_rec->ref_poc[0] =
-			avs2_dec->fref[1]->imgtr_fwRefDistance;
-		hc->f_rec->ref_poc[1] =
-			avs2_dec->fref[0]->imgtr_fwRefDistance;
+		hc->f_rec->ref_poc[0] = avs2_dec->fref[1]->imgtr_fwRefDistance;
+		hc->f_rec->ref_poc[1] = avs2_dec->fref[0]->imgtr_fwRefDistance;
 	}
 
 #if M3480_TEMPORAL_SCALABLE
@@ -1206,8 +1036,7 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	if (img->type == INTRA_IMG) {
 		int32_t l;
 		for (l = 0; l < 4; l++) {
-			hc->f_rec->ref_poc[l]
-			= img->tr;
+			hc->f_rec->ref_poc[l] = img->tr;
 		}
 	}
 
@@ -1223,10 +1052,10 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 		if (img->type == B_IMG) {
 			hd->trtmp = avs2_dec->fref[0]->imgtr_fwRefDistance;
 			avs2_dec->fref[0]->imgtr_fwRefDistance =
-			avs2_dec->fref[1]->imgtr_fwRefDistance;
+				avs2_dec->fref[1]->imgtr_fwRefDistance;
 		}
 	}
-#if 1
+
 	/*rain*/
 	if (is_avs2_print_bufmgr_detail()) {
 		for (ii = 0; ii < avs2_dec->ref_maxbuffer; ii++) {
@@ -1245,11 +1074,9 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 			avs2_dec->fref[ii]->ref_poc[3],
 			avs2_dec->fref[ii]->ref_poc[4],
 			avs2_dec->fref[ii]->ref_poc[5],
-			avs2_dec->fref[ii]->ref_poc[6]
-		);
+			avs2_dec->fref[ii]->ref_poc[6]);
+		}
 	}
-	}
-#endif
 }
 
 int32_t init_frame(struct avs2_decoder *avs2_dec)
@@ -1282,12 +1109,10 @@ int32_t init_frame(struct avs2_decoder *avs2_dec)
 #endif
 	}
 
-
 #ifdef FIX_CHROMA_FIELD_MV_BK_DIST
 	if (img->typeb == BACKGROUND_IMG
 		&& img->is_field_sequence) {
-		avs2_dec->bk_img_is_top_field
-			= img->is_top_field;
+		avs2_dec->bk_img_is_top_field = img->is_top_field;
 	}
 #endif
 	return 0;
@@ -1296,10 +1121,8 @@ int32_t init_frame(struct avs2_decoder *avs2_dec)
 void delete_trbuffer(struct outdata_s *data, int32_t pos)
 {
 	int32_t i;
-	for (i = pos;
-		i < data->buffer_num - 1; i++) {
-		data->stdoutdata[i] =
-		data->stdoutdata[i + 1];
+	for (i = pos; i < data->buffer_num - 1; i++) {
+		data->stdoutdata[i] = data->stdoutdata[i + 1];
 	}
 	data->buffer_num--;
 }
@@ -1331,9 +1154,8 @@ void flushDPB(struct avs2_decoder *avs2_dec)
 			report_frame(avs2_dec, &avs2_dec->outprint, pos);
 			if (avs2_dec->outprint.stdoutdata[pos].typeb
 				== BACKGROUND_IMG &&
-			avs2_dec->outprint.stdoutdata[pos].
-			background_picture_output_flag
-			== 0) {
+				avs2_dec->outprint.stdoutdata[pos].background_picture_output_flag
+				== 0) {
 				/*write_GB_frame(hd->p_out_background);*/
 			} else {
 				write_frame(avs2_dec,
@@ -1351,31 +1173,6 @@ void flushDPB(struct avs2_decoder *avs2_dec)
 		avs2_dec->fref[j]->temporal_id = -1;
 		avs2_dec->fref[j]->refered_by_others = 0;
 	}
-}
-#endif
-
-
-
-#if M3480_TEMPORAL_SCALABLE
-void cleanRefMVBufRef(int pos)
-{
-#if 0
-	int k, x, y;
-	/*re-init mvbuf*/
-	for (k = 0; k < 2; k++) {
-		for (y = 0; y < img->height / MIN_BLOCK_SIZE; y++) {
-			for (x = 0; x < img->width / MIN_BLOCK_SIZE; x++)
-				fref[pos]->mvbuf[y][x][k] = 0;
-
-		}
-	}
-	/*re-init refbuf*/
-	for (y = 0; y < img->height / MIN_BLOCK_SIZE; y++) {
-		for (x = 0; x < img->width / MIN_BLOCK_SIZE ; x++)
-			fref[pos]->refbuf[y][x] = -1;
-
-	}
-#endif
 }
 #endif
 
@@ -1402,22 +1199,14 @@ static int frame_postprocessing(struct avs2_decoder *avs2_dec)
 	p_outdata->typeb = img->typeb;
 	p_outdata->framenum = img->tr;
 	p_outdata->tr = img->tr;
-#if 0 /*def ORI*/
-	p_outdata->qp = img->qp;
-#else
+
 	p_outdata->qp = 0;
-#endif
-	/*p_outdata->snr_y = snr->snr_y;*/
-	/*p_outdata->snr_u = snr->snr_u;*/
-	/*p_outdata->snr_v = snr->snr_v;*/
+
 	p_outdata->tmp_time = hd->tmp_time;
 	p_outdata->picture_structure = img->picture_structure;
-	/*p_outdata->curr_frame_bits =
-	  StatBitsPtr->curr_frame_bits;*/
-	/*p_outdata->emulate_bits = StatBitsPtr->emulate_bits;*/
+
 #if RD1501_FIX_BG
-	p_outdata->background_picture_output_flag
-		= hd->background_picture_output_flag;
+	p_outdata->background_picture_output_flag = hd->background_picture_output_flag;
 		/*Longfei.Wang@mediatek.com*/
 #endif
 
@@ -1441,10 +1230,6 @@ static int frame_postprocessing(struct avs2_decoder *avs2_dec)
 			== (hd->last_output + 1)) {
 			hd->last_output = avs2_dec->outprint.stdoutdata[pos].tr;
 			report_frame(avs2_dec, &avs2_dec->outprint, pos);
-#if 0 /*def ORI*/
-			write_frame(hd->p_out,
-			avs2_dec->outprint.stdoutdata[pos].tr);
-#endif
 			delete_trbuffer(&avs2_dec->outprint, pos);
 			i--;
 		} else {
@@ -1464,8 +1249,7 @@ static int frame_postprocessing(struct avs2_decoder *avs2_dec)
 		for (i = 0; i < avs2_dec->outprint.buffer_num; i++) {
 			if ((avs2_dec->outprint.stdoutdata[i].tr < tmp_min) &&
 				((avs2_dec->outprint.stdoutdata[i].tr
-				+ avs2_dec->outprint.stdoutdata[i].
-					picture_reorder_delay)
+				+ avs2_dec->outprint.stdoutdata[i].picture_reorder_delay)
 				<= (int32_t)img->coding_order)) {
 				pos = i;
 				tmp_min = avs2_dec->outprint.stdoutdata[i].tr;
@@ -1483,18 +1267,12 @@ static int frame_postprocessing(struct avs2_decoder *avs2_dec)
 		if (pos != -1) {
 			hd->last_output = avs2_dec->outprint.stdoutdata[pos].tr;
 			report_frame(avs2_dec, &avs2_dec->outprint, pos);
-#if 1 /*def ORI*/
 			if (avs2_dec->outprint.stdoutdata[pos].typeb
 				== BACKGROUND_IMG &&
-				avs2_dec->outprint.stdoutdata[pos].
-				background_picture_output_flag == 0) {
-				/**/
-				/**/
+				avs2_dec->outprint.stdoutdata[pos].background_picture_output_flag == 0) {
 			} else {
-				write_frame(avs2_dec,
-				avs2_dec->outprint.stdoutdata[pos].tr);
+				write_frame(avs2_dec, avs2_dec->outprint.stdoutdata[pos].tr);
 			}
-#endif
 			delete_trbuffer(&avs2_dec->outprint, pos);
 		}
 
@@ -1508,16 +1286,14 @@ static int frame_postprocessing(struct avs2_decoder *avs2_dec)
 		int32_t tmp_min, pos = -1;
 		tmp_min = 1 << 20;
 
-		for (i = 0; i <
-			avs2_dec->outprint.buffer_num; i++) {
+		for (i = 0; i < avs2_dec->outprint.buffer_num; i++) {
 			if (avs2_dec->outprint.stdoutdata[i].tr
 				< tmp_min &&
 				avs2_dec->outprint.stdoutdata[i].tr
 				>= hd->last_output) {
 				/*GB has the same "tr" with "last_output"*/
 				pos = i;
-				tmp_min =
-				avs2_dec->outprint.stdoutdata[i].tr;
+				tmp_min = avs2_dec->outprint.stdoutdata[i].tr;
 			}
 		}
 
@@ -1532,24 +1308,20 @@ static int frame_postprocessing(struct avs2_decoder *avs2_dec)
 #else
 				if (avs2_dec->outprint.stdoutdata[pos].typeb
 					== BACKGROUND_IMG &&
-					hd->background_picture_output_flag
-					== 0) {
+					hd->background_picture_output_flag == 0) {
 #endif
-					write_GB_frame(
-						hd->p_out_background);
+					write_GB_frame(hd->p_out_background);
 				} else {
 					write_frame(avs2_dec,
 					avs2_dec->outprint.stdoutdata[pos].tr);
 				}
 				delete_trbuffer(&avs2_dec->outprint, pos);
-
 			}
 
 		}
 #endif
 #endif
 	return pos;
-
 	}
 
 void write_frame(struct avs2_decoder *avs2_dec, int32_t pos)
@@ -1566,17 +1338,14 @@ void write_frame(struct avs2_decoder *avs2_dec, int32_t pos)
 			avs2_dec->fref[j]->to_prepare_disp =
 				avs2_dec->to_prepare_disp_count++;
 			if (avs2_dec->fref[j]->refered_by_others == 0
-				|| avs2_dec->fref[j]->imgcoi_ref
-				== -257) {
-				avs2_dec->fref[j]->imgtr_fwRefDistance
-					= -256;
+				|| avs2_dec->fref[j]->imgcoi_ref == -257) {
+				avs2_dec->fref[j]->imgtr_fwRefDistance = -256;
 				avs2_dec->fref[j]->imgcoi_ref = -257;
 #if M3480_TEMPORAL_SCALABLE
 				avs2_dec->fref[j]->temporal_id = -1;
 #endif
 				if (is_avs2_print_bufmgr_detail())
-					pr_info("%s, fref index %d\n",
-						 __func__, j);
+					pr_info("%s, fref index %d\n", __func__, j);
 			}
 			break;
 		}
@@ -1594,25 +1363,10 @@ void report_frame(struct avs2_decoder *avs2_dec,
 	int8_t *Frmfld;
 	int8_t Frm[] = "FRM";
 	int8_t Fld[] = "FLD";
-	struct STDOUT_DATA_s *p_stdoutdata
-	= &data->stdoutdata[pos];
+	struct STDOUT_DATA_s *p_stdoutdata = &data->stdoutdata[pos];
 	const int8_t *typ;
 
-#if 0
-	if (input->MD5Enable & 0x02) {
-		sprintf(MD5str, "%08X%08X%08X%08X\0",
-				p_stdoutdata->DecMD5Value[0],
-				p_stdoutdata->DecMD5Value[1],
-				p_stdoutdata->DecMD5Value[2],
-				p_stdoutdata->DecMD5Value[3]);
-	} else {
-		memset(MD5val, 0, 16);
-		memset(MD5str, 0, 33);
-	}
-#endif
-
-	if (p_stdoutdata->
-		picture_structure) {
+	if (p_stdoutdata->picture_structure) {
 		Frmfld = Frm;
 	} else {
 		Frmfld = Fld;
@@ -1624,11 +1378,8 @@ void report_frame(struct avs2_decoder *avs2_dec,
 #endif
 	if ((p_stdoutdata->tr + hc->total_frames * 256)
 	    == hd->end_SeqTr) {   /* I picture*/
-		/*if ( img->new_sequence_flag == 1 )*/
 		{
 			img->sequence_end_flag = 0;
-			/*fprintf(stdout, "Sequence
-			  End\n\n");*/
 		}
 	}
 	if ((p_stdoutdata->tr + hc->total_frames * 256)
@@ -1638,8 +1389,6 @@ void report_frame(struct avs2_decoder *avs2_dec,
 #endif
 		{
 			hd->vec_flag = 0;
-			/*fprintf(stdout, "Video Edit
-			  Code\n");*/
 		}
 	}
 
@@ -1659,22 +1408,9 @@ void report_frame(struct avs2_decoder *avs2_dec,
 #endif
 	}
 
-#if 0
-	/*rain???*/
-	pr_info("%3d(%s)  %3d %5d %7.4f %7.4f %7.4f %5d\t\t%s %8d %6d\t%s",
-			p_stdoutdata->framenum + hc->total_frames * 256,
-			typ, p_stdoutdata->tr + hc->total_frames * 256,
-			p_stdoutdata->qp, p_stdoutdata->snr_y,
-			p_stdoutdata->snr_u, p_stdoutdata->snr_v,
-			p_stdoutdata->tmp_time, Frmfld,
-			p_stdoutdata->curr_frame_bits,
-			p_stdoutdata->emulate_bits,
-			"");
-#endif
 	if (is_avs2_print_bufmgr_detail())
 		pr_info(" %s\n", p_stdoutdata->str_reference_list);
 
-	/*fflush(stdout);*/
 	hd->FrameNum++;
 }
 
@@ -1698,11 +1434,6 @@ void avs2_prepare_header(struct avs2_decoder *avs2_dec, int32_t start_code)
 			if ((seq_checker_length != length) ||
 				(memcmp(seq_checker_buf, Buf, length) != 0)) {
 				free(seq_checker_buf);
-				/*fprintf(stdout,
-				  "Non-conformance
-				  stream: sequence
-				  header cannot change
-				  !!\n");*/
 #if RD170_FIX_BG
 				seq_checker_buf = NULL;
 				seq_checker_length = 0;
@@ -1711,13 +1442,10 @@ void avs2_prepare_header(struct avs2_decoder *avs2_dec, int32_t start_code)
 				memcpy(seq_checker_buf, Buf, length);
 #endif
 			}
-
-
 		}
 #endif
 #if RD170_FIX_BG
-		if (input->alf_enable
-			&& alfParAllcoated == 1) {
+		if (input->alf_enable && alfParAllcoated == 1) {
 			ReleaseAlfGlobalBuffer();
 			alfParAllcoated = 0;
 		}
@@ -1726,13 +1454,10 @@ void avs2_prepare_header(struct avs2_decoder *avs2_dec, int32_t start_code)
 #endif
 #if FIX_FLUSH_DPB_BY_LF
 		if (hd->vec_flag) {
-			int32_t k;
 			if (is_avs2_print_bufmgr_detail())
 				pr_info("vec_flag is 1, flushDPB and reinit bugmgr\n");
 
 			flushDPB(avs2_dec);
-			for (k = 0; k < avs2_dec->ref_maxbuffer; k++)
-				cleanRefMVBufRef(k);
 
 			hd->vec_flag = 0;
 #ifdef AML
@@ -1749,13 +1474,9 @@ void avs2_prepare_header(struct avs2_decoder *avs2_dec, int32_t start_code)
 #if FIX_SEQ_END_FLUSH_DPB_BY_LF
 		if (img->new_sequence_flag
 			&& img->sequence_end_flag) {
-			int32_t k;
 			if (is_avs2_print_bufmgr_detail())
-				pr_info(
-				"new_sequence_flag after sequence_end_flag, flushDPB and reinit bugmgr\n");
+				pr_info("new_sequence_flag after sequence_end_flag, flushDPB and reinit bugmgr\n");
 			flushDPB(avs2_dec);
-			for (k = 0; k < avs2_dec->ref_maxbuffer; k++)
-				cleanRefMVBufRef(k);
 
 #ifdef AML
 			free_unused_buffers(avs2_dec);
@@ -1778,9 +1499,6 @@ void avs2_prepare_header(struct avs2_decoder *avs2_dec, int32_t start_code)
 		Read_ALF_param(avs2_dec);
 		if (!img->seq_header_indicate) {
 			img->B_discard_flag = 1;
-			/*fprintf(stdout, "    I
-			  %3d\t\tDIDSCARD!!\n",
-			  img->tr);*/
 			break;
 		}
 		break;
@@ -1794,22 +1512,6 @@ void avs2_prepare_header(struct avs2_decoder *avs2_dec, int32_t start_code)
 		/* xiaozhen zheng, 20071009*/
 		if (!img->seq_header_indicate) {
 			img->B_discard_flag = 1;
-
-			if (img->type == P_IMG) {
-				/*fprintf(stdout, "    P
-				  %3d\t\tDIDSCARD!!\n",
-				  img->tr);*/
-			}
-			if (img->type == F_IMG) {
-				/*fprintf(stdout, "    F
-				  %3d\t\tDIDSCARD!!\n",
-				  img->tr);*/
-			} else {
-				/*fprintf(stdout, "    B
-				  %3d\t\tDIDSCARD!!\n",
-				  img->tr);*/
-			}
-
 			break;
 		}
 
@@ -1819,9 +1521,6 @@ void avs2_prepare_header(struct avs2_decoder *avs2_dec, int32_t start_code)
 		}
 		if (img->type == B_IMG && img->B_discard_flag == 1
 			&& !img->random_access_decodable_flag) {
-			/*fprintf(stdout, "    B
-			  %3d\t\tDIDSCARD!!\n",
-			  img->tr);*/
 			break;
 		}
 
@@ -1844,7 +1543,6 @@ break;
 	case VIDEO_EDIT_CODE:
 		if (is_avs2_print_bufmgr_detail())
 			pr_info("VIDEO_EDIT_CODE\n");
-		/*video_edit_code_data(Buf, startcodepos, length);*/
 		hd->vec_flag = 1;
 #ifdef TO_CHECK
 #if SEQ_CHANGE_CHECKER
@@ -1881,7 +1579,6 @@ int32_t avs2_process_header(struct avs2_decoder *avs2_dec)
 	int32_t lcu_y_num_div;
 
 	int32_t N8_SizeScale;
-	/*pr_info("%s\n", __func__);*/
 	{
 		N8_SizeScale = 1;
 
@@ -1922,20 +1619,10 @@ int32_t avs2_process_header(struct avs2_decoder *avs2_dec)
 		img->PicWidthInMbs  = img->width / MIN_CU_SIZE;
 		img->PicHeightInMbs = img->height / MIN_CU_SIZE;
 		img->PicSizeInMbs   = img->PicWidthInMbs * img->PicHeightInMbs;
-		img->max_mb_nr      = (img->width * img->height) /
-			(MIN_CU_SIZE * MIN_CU_SIZE);
+		img->max_mb_nr      = (img->width * img->height) / (MIN_CU_SIZE * MIN_CU_SIZE);
 	}
 
 	if (img->new_sequence_flag && img->sequence_end_flag) {
-#if 0/*RD170_FIX_BG //*/
-		int32_t k;
-		flushDPB();
-		for (k = 0; k < avs2_dec->ref_maxbuffer; k++)
-			cleanRefMVBufRef(k);
-
-		free_global_buffers();
-		img->number = 0;
-#endif
 		hd->end_SeqTr = img->tr;
 		img->sequence_end_flag = 0;
 	}
@@ -1944,24 +1631,7 @@ int32_t avs2_process_header(struct avs2_decoder *avs2_dec)
 		hd->next_IDRcoi = img->coding_order;
 		img->new_sequence_flag = 0;
 	}
-#if 0/*RD170_FIX_BG*/
-	if (hd->vec_flag) {
-		int32_t k;
-		flushDPB();
-		for (k = 0; k < avs2_dec->ref_maxbuffer; k++)
-			cleanRefMVBufRef(k);
 
-		hd->vec_flag = 0;
-		free_global_buffers();
-		img->number = 0;
-	}
-#endif
-/* allocate memory for frame buffers*/
-#if 0
-/* called in vavs2.c*/
-	if (img->number == 0)
-		avs2_init_global_buffers(avs2_dec);
-#endif
 	img->current_mb_nr = 0;
 
 	init_frame(avs2_dec);
@@ -2031,7 +1701,6 @@ int avs2_post_process(struct avs2_decoder *avs2_dec)
 	/* record the reference list information*/
 	get_reference_list_info(avs2_dec, avs2_dec->hc.str_list_reference);
 
-	/*pr_info("%s\n", __func__);*/
 	ret = frame_postprocessing(avs2_dec);
 
 #if FIX_PROFILE_LEVEL_DPB_RPS_1
@@ -2039,8 +1708,7 @@ int avs2_post_process(struct avs2_decoder *avs2_dec)
 	{
 		int32_t i, j;
 		if (is_avs2_print_bufmgr_detail()) {
-			pr_info(
-				"%s, coding_order %d to remove %d buf: ",
+			pr_info("%s, coding_order %d to remove %d buf: ",
 				__func__,
 				img->coding_order,
 				hd->curr_RPS.num_to_remove);
@@ -2064,8 +1732,7 @@ int avs2_post_process(struct avs2_decoder *avs2_dec)
 
 				/* remove frames which have been outputted */
 				if (avs2_dec->fref[j]->is_output == -1) {
-					avs2_dec->fref[j]->
-					imgtr_fwRefDistance = -256;
+					avs2_dec->fref[j]->imgtr_fwRefDistance = -256;
 					avs2_dec->fref[j]->imgcoi_ref = -257;
 					avs2_dec->fref[j]->temporal_id = -1;
 
@@ -2076,15 +1743,13 @@ int avs2_post_process(struct avs2_decoder *avs2_dec)
 				avs2_dec->fref[j]->temporal_id = -1;
 #endif
 				if (avs2_dec->fref[j]->is_output == -1) {
-					avs2_dec->fref[j]->imgtr_fwRefDistance
-						= -256;
+					avs2_dec->fref[j]->imgtr_fwRefDistance = -256;
 				}
 #endif
 			}
 		}
 	}
 #endif
-
 
 	/*! TO 19.11.2001 Known Problem: for init_frame
 	 * we have to know the picture type of the
@@ -2143,8 +1808,7 @@ void init_avs2_decoder(struct avs2_decoder *avs2_dec)
 		}
 		for (j = 0; j < 16; j++) {
 			for (k = 0; k < 9; k++) {
-				avs2_dec->
-				m_alfPictureParam[i].coeffmulti[j][k] = 0;
+				avs2_dec->m_alfPictureParam[i].coeffmulti[j][k] = 0;
 				/*16*9*/
 			}
 		}
@@ -2158,15 +1822,6 @@ void init_avs2_decoder(struct avs2_decoder *avs2_dec)
 	if (input->ref_pic_order) {   /*ref order*/
 		hd->dec_ref_num = 0;
 	}
-
-	/*
-	memset(g_log2size, -1, MAX_CU_SIZE + 1);
-	c = 2;
-	for (k = 4; k <= MAX_CU_SIZE; k *= 2) {
-		g_log2size[k] = c;
-		c++;
-	}
-	 */
 
 	avs2_dec->outprint.buffer_num = 0;
 
@@ -2184,7 +1839,6 @@ void init_avs2_decoder(struct avs2_decoder *avs2_dec)
 
 	img->imgcoi_next_ref = 0;
 
-
 	img->num_of_references = 0;
 	hc->seq_header = 0;
 
@@ -2200,6 +1854,5 @@ void init_avs2_decoder(struct avs2_decoder *avs2_dec)
 
 	/* time for total decoding session*/
 	hc->tot_time = 0;
-
 }
 
