@@ -1281,8 +1281,7 @@ static void set_param_comp_buf_info(struct vdec_av1_inst *inst,
 static void set_param_hdr_info(struct vdec_av1_inst *inst,
 	struct aml_vdec_hdr_infos *hdr)
 {
-	if ((inst->parms.parms_status &
-		V4L2_CONFIG_PARM_DECODE_HDRINFO)) {
+	if (hdr->signal_type != 0) {
 		inst->parms.hdr = *hdr;
 		inst->parms.parms_status |=
 			V4L2_CONFIG_PARM_DECODE_HDRINFO;
