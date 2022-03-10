@@ -612,8 +612,6 @@ static struct vdec_common_if vdec_mjpeg_if = {
 	.deinit		= vdec_mjpeg_deinit,
 };
 
-struct vdec_common_if *get_mjpeg_dec_comm_if(void);
-
 struct vdec_common_if *get_mjpeg_dec_comm_if(void)
 {
 	return &vdec_mjpeg_if;

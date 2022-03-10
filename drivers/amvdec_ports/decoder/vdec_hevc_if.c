@@ -858,8 +858,6 @@ static struct vdec_common_if vdec_hevc_if = {
 	.deinit		= vdec_hevc_deinit,
 };
 
-struct vdec_common_if *get_hevc_dec_comm_if(void);
-
 struct vdec_common_if *get_hevc_dec_comm_if(void)
 {
 	return &vdec_hevc_if;

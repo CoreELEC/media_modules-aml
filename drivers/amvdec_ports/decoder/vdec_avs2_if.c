@@ -790,8 +790,6 @@ static struct vdec_common_if vdec_avs2_if = {
 	.deinit		= vdec_avs2_deinit,
 };
 
-struct vdec_common_if *get_avs2_dec_comm_if(void);
-
 struct vdec_common_if *get_avs2_dec_comm_if(void)
 {
 	return &vdec_avs2_if;
