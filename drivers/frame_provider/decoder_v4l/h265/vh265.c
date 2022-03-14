@@ -11113,6 +11113,11 @@ static void aspect_ratio_set(struct hevc_state_s *hevc, u32 *out_frame_ar,
 			sar_height = 1;
 			sar_width = 2;
 			break;
+		case 0xff:
+			frame_ar = 0x3ff;
+			sar_height = hevc->param.p.sar_height;
+			sar_width = hevc->param.p.sar_width;
+			break;
 		default:
 			frame_ar = 0x3ff;
 			sar_height = 1;
