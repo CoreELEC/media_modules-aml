@@ -533,7 +533,7 @@ static void amstream_change_vbufsize(struct port_priv_s *priv,
 			pvbuf->buf_start, pvbuf->ext_buf_addr);
 		return;
 	}
-	if (priv->port->is_4k) {
+	if (priv->is_4k) {
 		pvbuf->buf_size = def_4k_vstreambuf_sizeM * SZ_1M;
 		if (priv->vdec->port_flag & PORT_FLAG_DRM)
 			pvbuf->buf_size = DEFAULT_VIDEO_BUFFER_SIZE_4K_TVP;
@@ -625,13 +625,13 @@ static int video_port_init(struct port_priv_s *priv,
 	if (port->vformat == VFORMAT_H264_4K2K ||
 		(priv->vdec->sys_info->height *
 			priv->vdec->sys_info->width) > 1920*1088) {
-		port->is_4k = true;
+		priv->is_4k = true;
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
 				&& port->vformat == VFORMAT_H264) {
 			vdec_poweron(VDEC_HEVC);
 		}
 	} else {
-		port->is_4k = false;
+		priv->is_4k = false;
 	}
 
 	if (port->type & PORT_TYPE_FRAME) {
@@ -1608,15 +1608,7 @@ static int amstream_open(struct inode *inode, struct file *file)
 
 	mutex_init(&priv->mutex);
 
-	//priv->port = port;
-	priv->port = kzalloc(sizeof(struct stream_port_s), GFP_KERNEL);
-	if (priv->port == NULL) {
-		kfree(priv);
-		mutex_unlock(&amstream_mutex);
-		return -ENOMEM;
-	}
-	memcpy(priv->port, port, sizeof(struct stream_port_s));
-	port = priv->port;
+	priv->port = port;
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_M6) {
 		/* TODO: mod gate */
@@ -1676,7 +1668,6 @@ static int amstream_open(struct inode *inode, struct file *file)
 
 		if (priv->vdec == NULL) {
 			port->flag = 0;
-			kfree(priv->port);
 			kfree(priv);
 			pr_err("amstream: vdec creation failed\n");
 			return -ENOMEM;
@@ -1689,7 +1680,6 @@ static int amstream_open(struct inode *inode, struct file *file)
 				if (priv->vdec->slave == NULL) {
 					vdec_release(priv->vdec);
 					port->flag = 0;
-					kfree(priv->port);
 					kfree(priv);
 					pr_err("amstream: sub vdec creation failed\n");
 					return -ENOMEM;
@@ -1771,7 +1761,7 @@ static int amstream_release(struct inode *inode, struct file *file)
 #else
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
 				&& port->vformat == VFORMAT_H264
-				&& port->is_4k) {
+				&& priv->is_4k) {
 				vdec_poweroff(VDEC_HEVC);
 			}
 
@@ -1808,7 +1798,6 @@ static int amstream_release(struct inode *inode, struct file *file)
 
 	mutex_destroy(&priv->mutex);
 
-	kfree(priv->port);
 	kfree(priv);
 
 	mutex_unlock(&amstream_mutex);
