@@ -777,6 +777,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 
 	vf->index_disp = ctx->index_disp;
 	ctx->index_disp++;
+	ctx->post_to_upper_done = false;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, flag: 0x%x "
@@ -939,6 +940,11 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 			"vcodec state (AML_STATE_FLUSHED)\n");
 	}
 	mutex_unlock(&ctx->state_lock);
+
+	if (ctx->post_to_upper_done == false) {
+		ctx->post_to_upper_done = true;
+		wake_up_interruptible(&ctx->post_done_wq);
+	}
 
 	ctx->decoded_frame_cnt++;
 }
@@ -2103,8 +2109,17 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 
 	q = v4l2_m2m_get_vq(fh->m2m_ctx, rb->type);
 
-	if (!rb->count)
+	if (!rb->count) {
+		if (!V4L2_TYPE_IS_OUTPUT(rb->type)) {
+			if (wait_event_interruptible_timeout
+				(ctx->post_done_wq, ctx->post_to_upper_done == true,
+				 msecs_to_jiffies(200)) == 0) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"wait post frame to upper finish timeout.\n");
+			}
+		}
 		vb2_queue_release(q);
+	}
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d, count: %d\n",

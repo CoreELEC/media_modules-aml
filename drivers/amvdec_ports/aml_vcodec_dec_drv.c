@@ -101,10 +101,12 @@ static int fops_vcodec_open(struct file *file)
 	init_completion(&ctx->comp);
 	init_waitqueue_head(&ctx->wq);
 	init_waitqueue_head(&ctx->cap_wq);
+	init_waitqueue_head(&ctx->post_done_wq);
 	INIT_WORK(&ctx->dmabuff_recycle_work, dmabuff_recycle_worker);
 	INIT_KFIFO(ctx->dmabuff_recycle);
 	INIT_KFIFO(ctx->capture_buffer);
 
+	ctx->post_to_upper_done = true;
 	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
 
 	if (enable_drm_mode) {

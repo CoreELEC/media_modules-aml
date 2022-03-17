@@ -699,7 +699,7 @@ struct aml_vcodec_ctx {
 	int				reset_flag;
 	int				decoded_frame_cnt;
 	int				buf_used_count;
-	wait_queue_head_t		wq, cap_wq;
+	wait_queue_head_t		wq, cap_wq, post_done_wq;
 	struct mutex			capture_buffer_lock;
 	spinlock_t			dmabuff_recycle_lock;
 	struct mutex			buff_done_lock;
@@ -739,6 +739,7 @@ struct aml_vcodec_ctx {
 	u32				height_aspect_ratio;
 	u32				width_aspect_ratio;
 	u32				index_disp;
+	bool				post_to_upper_done;
 };
 
 /**
