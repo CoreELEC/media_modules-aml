@@ -7231,7 +7231,7 @@ pic_done_proc:
 			(dec_dpb_status == H264_FIND_NEXT_PIC_NAL) ?
 			"H264_FIND_NEXT_PIC_NAL" : "H264_FIND_NEXT_DVEL_NAL",
 #else
-			" "
+			" ",
 #endif
 			hw->decode_pic_count);
 		if (hw->kpi_first_i_decoded == 0) {
