@@ -2265,12 +2265,22 @@ static int get_pic_poc(struct hevc_state_s *hevc,
 	return INVALID_POC;
 }
 
+static int get_double_write_mode(struct hevc_state_s *hevc)
+{
+	u32 dw = 0x1; /*1:1*/
+	unsigned int out;
+
+	vdec_v4l_get_dw_mode(hevc->v4l2_ctx, &out);
+	dw = out;
+	return dw;
+}
+
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static int get_valid_double_write_mode(struct hevc_state_s *hevc)
 {
 	return (hevc->m_ins_flag &&
 		((double_write_mode & 0x80000000) == 0)) ?
-		hevc->double_write_mode :
+		get_double_write_mode(hevc) :
 		(double_write_mode & 0x7fffffff);
 }
 
@@ -2282,16 +2292,6 @@ static int get_dynamic_buf_num_margin(struct hevc_state_s *hevc)
 		(dynamic_buf_num_margin & 0x7fffffff);
 }
 #endif
-
-static int get_double_write_mode(struct hevc_state_s *hevc)
-{
-	u32 dw = 0x1; /*1:1*/
-	unsigned int out;
-
-	vdec_v4l_get_dw_mode(hevc->v4l2_ctx, &out);
-	dw = out;
-	return dw;
-}
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static unsigned char get_idx(struct hevc_state_s *hevc)
@@ -5952,7 +5952,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 				}
 			}
 			if (hevc->mmu_enable
-				&& ((hevc->double_write_mode & 0x10) == 0)) {
+				&& ((get_double_write_mode(hevc) & 0x10) == 0)) {
 				if (!hevc->m_ins_flag) {
 					hevc->used_4k_num =
 					READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
@@ -7136,7 +7136,7 @@ static void release_pic_mmu_buf(struct hevc_state_s *hevc,
 	pic->scatter_alloc);
 
 	if (hevc->mmu_enable
-		&& !(hevc->double_write_mode & 0x10)
+		&& !(get_double_write_mode(hevc) & 0x10)
 		&& pic->scatter_alloc) {
 		struct internal_comp_buf *ibuf =
 			ibuf = index_to_icomp_buf(hevc, pic->BUF_index);
@@ -8224,7 +8224,6 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			hevc_print(hevc, 0,
 				"%s warning(1), vf=>display_q: (index 0x%x), vf 0x%px\n",
 				__func__, vf->index, vf);
-
 		if (v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode)) {
 			vf->type |= VIDTYPE_COMPRESS;
 			if (hevc->mmu_enable)
@@ -9536,24 +9535,6 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 	return 0;
 }
 
-static int vh265_get_cfg_info(struct hevc_state_s *hevc,
-			     union param_u *rpm_param,
-			     struct aml_vdec_cfg_infos *cfg)
-{
-	/* force h265 interlace video to double write 1*/
-	if (hevc->interlace_flag) {
-		cfg->double_write_mode = 1;
-		hevc->double_write_mode = 1;
-		hevc_print(hevc, 0,
-			"hevc interlace force dw 1\n");
-	}
-	cfg->init_width = rpm_param->p.pic_width_in_luma_samples;
-	cfg->init_height = rpm_param->p.pic_height_in_luma_samples
-		<< hevc->interlace_flag;
-
-	return 0;
-}
-
 static void get_comp_buf_info(struct hevc_state_s *hevc,
 		struct vdec_comp_buf_info *info)
 {
@@ -9797,6 +9778,7 @@ static void aspect_ratio_set(struct hevc_state_s *hevc, u32 *out_frame_ar,
 
 	return;
 }
+
 static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 {
 	struct hevc_state_s *hevc = (struct hevc_state_s *) data;
@@ -10052,7 +10034,7 @@ pic_done:
 						}
 					}
 					if (hevc->mmu_enable
-							&& ((hevc->double_write_mode & 0x10) == 0)) {
+							&& ((get_double_write_mode(hevc) & 0x10) == 0)) {
 						if (!hevc->m_ins_flag) {
 							hevc->used_4k_num =
 							READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
@@ -10536,7 +10518,6 @@ force_output:
 			if (!v4l_res_change(hevc, &hevc->param)) {
 				if (ctx->param_sets_from_ucode && !hevc->v4l_params_parsed) {
 					struct aml_vdec_ps_infos ps;
-					struct aml_vdec_cfg_infos cfg;
 					int log = hevc->param.p.log2_min_coding_block_size_minus3;
 					int log_s = hevc->param.p.log2_diff_max_min_coding_block_size;
 
@@ -10546,10 +10527,7 @@ force_output:
 
 					pr_debug("set ucode parse\n");
 					hevc_interlace_check(hevc, &hevc->param);
-					if (hevc->interlace_flag) {
-						vh265_get_cfg_info(hevc, &hevc->param, &cfg);
-						vdec_v4l_set_cfg_infos(ctx, &cfg);
-					}
+
 					if (get_valid_double_write_mode(hevc) != 16) {
 						struct vdec_comp_buf_info info;
 
@@ -12103,7 +12081,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		}
 	}
 #endif
-		if (hevc->mmu_enable && ((hevc->double_write_mode & 0x10) == 0)) {
+		if (hevc->mmu_enable && ((get_double_write_mode(hevc) & 0x10) == 0)) {
 			hevc->used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
 			if (hevc->used_4k_num >= 0 &&
 				hevc->cur_pic &&

@@ -4656,6 +4656,10 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 			if (check_dec_cfginfo(&in->cfg))
 				return -EINVAL;
 			dec->cfg = in->cfg;
+			if (!vdec_if_set_param(ctx, SET_PARAM_CFG_INFO, &dec->cfg) &&
+				!vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->picinfo)) {
+				update_ctx_dimension(ctx, dst_vq->type);
+			}
 		}
 		if (in->parms_status & V4L2_CONFIG_PARM_DECODE_PSINFO)
 			dec->ps = in->ps;
