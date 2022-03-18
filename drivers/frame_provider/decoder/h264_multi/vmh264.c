@@ -6628,6 +6628,106 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 		return 0;
 }
 
+static void vh264_cal_frame_size(struct vdec_s *vdec)
+{
+	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	unsigned char i_flag =	(p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] == I_Slice);
+	unsigned int frame_crop_left_offset = 0;
+	unsigned int frame_crop_right_offset = 0;
+	unsigned int frame_crop_top_offset = 0;
+	unsigned int frame_crop_bottom_offset = 0;
+	unsigned int frame_mbs_only_flag = 0;
+	unsigned int chroma_format_idc = 0;
+	unsigned int crop_bottom = 0, crop_right = 0;
+	int sub_width_c = 0, sub_height_c = 0;
+	u32 frame_width = 0, frame_height = 0;
+	int mb_width = 0, mb_total = 0, mb_height = 0;
+
+	if (!i_flag)
+		return ;
+
+	mb_width = hw->seq_info2 & 0xff;
+	mb_total = (hw->seq_info2 >> 8) & 0xffff;
+	if (!mb_width && mb_total) /*for 4k2k*/
+		mb_width = 256;
+	if (mb_width)
+		mb_height = mb_total/mb_width;
+	if (mb_width <= 0 || mb_height <= 0 ||
+		is_oversize(mb_width << 4, mb_height << 4)) {
+		return ;
+	}
+
+	if (!i_flag)
+		return ;
+
+	chroma_format_idc = p_H264_Dpb->dpb_param.dpb.chroma_format_idc;
+	frame_crop_left_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_left_offset;
+	frame_crop_right_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_right_offset;
+	frame_crop_top_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_top_offset;
+	frame_crop_bottom_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_bottom_offset;
+
+	frame_mbs_only_flag = (hw->seq_info >> 15) & 0x01;
+	if (hw->dpb.mSPS.profile_idc != 100 &&
+		hw->dpb.mSPS.profile_idc != 110 &&
+		hw->dpb.mSPS.profile_idc != 122 &&
+		hw->dpb.mSPS.profile_idc != 144) {
+		chroma_format_idc = 1;
+	}
+
+	switch (chroma_format_idc) {
+		case 1:
+			sub_width_c = 2;
+			sub_height_c = 2;
+			break;
+
+		case 2:
+			sub_width_c = 2;
+			sub_height_c = 1;
+			break;
+
+		case 3:
+			sub_width_c = 1;
+			sub_height_c = 1;
+			break;
+
+		default:
+			break;
+	}
+
+	if (chroma_format_idc == 0) {
+		crop_right = frame_crop_right_offset;
+		crop_bottom = frame_crop_bottom_offset *
+			(2 - frame_mbs_only_flag);
+	} else {
+		crop_right = sub_width_c * frame_crop_right_offset;
+		crop_bottom = sub_height_c * frame_crop_bottom_offset *
+			(2 - frame_mbs_only_flag);
+	}
+
+	frame_width = mb_width << 4;
+	frame_height = mb_height << 4;
+
+	frame_width = frame_width - crop_right;
+	frame_height = frame_height - crop_bottom;
+
+	if (((frame_width != hw->frame_width) || (frame_height != hw->frame_height)) &&
+		(!is_oversize(frame_width, frame_height))) {
+		dpb_print(DECODE_ID(hw), 0,
+		"%s frame size from (%d x %d) change to (%d x %d)\n",
+		__func__, hw->frame_width, hw->frame_height, frame_width, frame_height);
+		hw->frame_width = frame_width;
+		hw->frame_height = frame_height;
+		dpb_print(p_H264_Dpb->decoder_index, 0,
+		"%s chroma_format_idc %d crop offset: left %d right %d top %d bottom %d\n",
+		__func__, chroma_format_idc,
+		frame_crop_left_offset,
+		frame_crop_right_offset,
+		frame_crop_top_offset,
+		frame_crop_bottom_offset);
+	}
+}
+
 static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
 	int i;
@@ -7010,6 +7110,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				slice_header_process_status,
 					hw->dpb.mSlice.idr_flag);
 		vui_config(hw);
+
+		vh264_cal_frame_size(vdec);
 
 		if (p_H264_Dpb->mVideo.dec_picture) {
 			int cfg_ret = 0;
