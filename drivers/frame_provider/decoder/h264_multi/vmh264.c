@@ -511,7 +511,7 @@ struct buffer_spec_s {
 	unsigned int dw_y_adr;
 	unsigned int dw_u_v_adr;
 	int fs_idx;
-	u8  user_data_buf[SEI_ITU_DATA_SIZE];
+	char*  user_data_buf;
 	struct userdata_param_t ud_param;
 };
 
@@ -1204,6 +1204,34 @@ static void hevc_mcr_config_canv2axitbl(struct vdec_h264_hw_s *hw, int restore)
 					DRIVER_HEADER_NAME, i);
 				return;
 			}
+
+			if (vdec->vdata == NULL) {
+				vdec->vdata = vdec_data_get();
+			}
+
+			if (vdec->vdata != NULL) {
+				struct buffer_spec_s *pic = &hw->buffer_spec[i];
+				int index = 0;
+
+				if ((pic->user_data_buf != NULL)) {
+					pic->user_data_buf = NULL;
+				}
+
+				index = vdec_data_get_index((ulong)vdec->vdata);
+				if (index >= 0) {
+					pic->user_data_buf = vzalloc(SEI_ITU_DATA_SIZE);
+					if (pic->user_data_buf == NULL) {
+						dpb_print(DECODE_ID(hw), 0, "alloc %dth userdata failed\n", i);
+					}
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
+					vdec->vdata->data[index].user_data_buf = pic->user_data_buf;
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
+					decoder_bmmu_box_add_callback_func(hw->bmmu_box, i, (void *)&vdec->vdata->release_callback[i]);
+				} else {
+					dpb_print(DECODE_ID(hw), 0, "vdec data is full\n");
+				}
+			}
+
 			if (hw->enable_fence) {
 				vdec_fence_buffer_count_increase((ulong)vdec->sync);
 				INIT_LIST_HEAD(&vdec->sync->release_callback[HEADER_BUFFER_IDX(i)].node);
@@ -1839,6 +1867,33 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i)
 			);
 			return -1;
 		} else {
+			if (vdec->vdata == NULL) {
+				vdec->vdata = vdec_data_get();
+			}
+
+			if (vdec->vdata != NULL) {
+				struct buffer_spec_s *pic = &hw->buffer_spec[i];
+				int index = 0;
+
+				if (pic->user_data_buf != NULL) {
+					pic->user_data_buf = NULL;
+				}
+
+				index = vdec_data_get_index((ulong)vdec->vdata);
+				if (index >= 0) {
+					pic->user_data_buf = vzalloc(SEI_ITU_DATA_SIZE);
+					if (pic->user_data_buf == NULL) {
+						dpb_print(DECODE_ID(hw), 0, "alloc %dth userdata failed\n", i);
+					}
+					vdec->vdata->data[index].user_data_buf = pic->user_data_buf;
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
+					decoder_bmmu_box_add_callback_func(hw->bmmu_box, i, (void *)&vdec->vdata->release_callback[i]);
+				} else {
+					dpb_print(DECODE_ID(hw), 0, "vdec data is full\n");
+				}
+			}
+
 			if (hw->enable_fence) {
 				vdec_fence_buffer_count_increase((ulong)vdec->sync);
 				INIT_LIST_HEAD(&vdec->sync->release_callback[i].node);
@@ -9037,11 +9092,18 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 
 	if (p != NULL) {
 		struct buffer_spec_s *pic = &hw->buffer_spec[p->buf_spec_num];
-		memset(pic->user_data_buf, 0, SEI_ITU_DATA_SIZE);
-		if (hw->sei_itu_data_len < SEI_ITU_DATA_SIZE) {
-			memcpy(pic->user_data_buf, hw->sei_itu_data_buf,
-				hw->sei_itu_data_len);
-			pic->ud_param.buf_len = hw->sei_itu_data_len;
+
+		if (pic->user_data_buf != NULL) {
+			memset(pic->user_data_buf, 0, SEI_ITU_DATA_SIZE);
+			if (hw->sei_itu_data_len < SEI_ITU_DATA_SIZE) {
+				memcpy(pic->user_data_buf, hw->sei_itu_data_buf,
+					hw->sei_itu_data_len);
+				pic->ud_param.buf_len = hw->sei_itu_data_len;
+			} else {
+				pic->ud_param.buf_len = 0;
+				dpb_print(DECODE_ID(hw), 0,
+					"sei data len is over 4k\n", hw->sei_itu_data_len);
+			}
 		} else {
 			pic->ud_param.buf_len = 0;
 		}

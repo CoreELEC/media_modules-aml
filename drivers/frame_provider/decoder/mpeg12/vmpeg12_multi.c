@@ -225,7 +225,7 @@ struct pic_info_t {
 	u32 hw_decode_time;
 	u32 frame_size; // For frame base mode
 	u64 timestamp;
-	u8  user_data_buf[CCBUF_SIZE];
+	char *user_data_buf;
 	struct userdata_param_t ud_param;
 };
 
@@ -2078,10 +2078,16 @@ static void copy_user_data_to_pic(struct vdec_mpeg12_hw_s *hw, struct pic_info_t
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
-	memset(pic->user_data_buf, 0, CCBUF_SIZE);
-	if (hw->parse_user_data_size < CCBUF_SIZE) {
-		memcpy(pic->user_data_buf, hw->parse_user_data_buf, hw->parse_user_data_size);
-		pic->ud_param.buf_len = hw->parse_user_data_size;
+	if (pic->user_data_buf != NULL) {
+		memset(pic->user_data_buf, 0, CCBUF_SIZE);
+		if (hw->parse_user_data_size < CCBUF_SIZE) {
+			memcpy(pic->user_data_buf, hw->parse_user_data_buf, hw->parse_user_data_size);
+			pic->ud_param.buf_len = hw->parse_user_data_size;
+		} else {
+			pic->ud_param.buf_len = 0;
+			debug_print(DECODE_ID(hw), 0,
+				"sei data len is over 5k\n", hw->parse_user_data_size);
+		}
 	} else {
 		pic->ud_param.buf_len = 0;
 	}
@@ -2877,6 +2883,34 @@ static int vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 				pr_err("bmmu alloc failed! size 0x%d  idx %d\n",
 					decbuf_size, i);
 				return ret;
+			}
+
+			if (vdec->vdata == NULL) {
+				vdec->vdata = vdec_data_get();
+			}
+
+			if (vdec->vdata != NULL) {
+				struct pic_info_t *pic = NULL;
+				int index = 0;
+
+				pic = &hw->pics[i];
+				if (pic != NULL) {
+					pic->user_data_buf = NULL;
+				}
+
+				index = vdec_data_get_index((ulong)vdec->vdata);
+				if (index >= 0) {
+					pic->user_data_buf = vzalloc(CCBUF_SIZE);
+					if (pic->user_data_buf == NULL) {
+						debug_print(DECODE_ID(hw), 0, "alloc %dth userdata failed\n", i);
+					}
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
+					vdec->vdata->data[index].user_data_buf = pic->user_data_buf;
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
+					decoder_bmmu_box_add_callback_func(hw->mm_blk_handle, i, (void *)&vdec->vdata->release_callback[i]);
+				} else {
+					debug_print(DECODE_ID(hw), 0, "vdec data is full\n");
+				}
 			}
 		}
 
