@@ -263,6 +263,27 @@ enum vformat_t;
 #define SCALELUT_DATA_WRITE_NUM   1024
 #define RDMA_SIZE                 (1024 * 4 * 4)
 
+#define VDEC_DATA_MAX_INSTANCE_NUM (MAX_INSTANCE_MUN * 2)
+#define VDEC_DATA_NUM 64
+
+struct vdec_data_s {
+	void *private_data;
+	atomic_t  use_count;
+	char *user_data_buf;
+};
+
+struct vdec_data_info_s {
+	atomic_t  buffer_count;
+	atomic_t use_flag;
+	struct codec_mm_cb_s release_callback[VDEC_DATA_NUM];
+	struct vdec_data_s data[VDEC_DATA_NUM];
+};
+
+struct vdec_data_core_s {
+	struct vdec_data_info_s vdata[VDEC_DATA_MAX_INSTANCE_NUM];
+	spinlock_t vdec_data_lock;
+};
+
 struct vdec_s {
 	u32 magic;
 	struct list_head list;
@@ -390,6 +411,7 @@ struct vdec_s {
 	pfun_ptsserver_peek_pts_offset ptsserver_peek_pts_offset;
 	u32 play_num;
 	wait_queue_head_t idle_wait;
+	struct vdec_data_info_s *vdata;
 };
 
 #define CODEC_MODE(a, b, c, d)\
@@ -707,5 +729,12 @@ void vdec_frame_rate_uevent(int dur);
 
 void vdec_sync_irq(enum vdec_irq_num num);
 
+void vdec_data_buffer_count_increase(ulong data, int index, int cb_index);
+
+struct vdec_data_info_s *vdec_data_get(void);
+
+int vdec_data_get_index(ulong data);
+
+void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb);
 
 #endif				/* VDEC_H */
