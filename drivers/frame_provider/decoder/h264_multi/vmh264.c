@@ -2811,12 +2811,12 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 					(hw->wrong_frame_count > hw->right_frame_count)) &&
 					((frame->decoded_frame_size * 2 < frame->frame_size))) {
 					/*resolve many frame only one check in pts, cause playback unsmooth issue*/
-					frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
+					frame->pts64 = hw->last_pts64 +(DUR2PTS(hw->frame_dur) * 100 / 9);
 					frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
 				}
 				hw->right_frame_count++;
 			} else {
-				frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
+				frame->pts64 = hw->last_pts64 + (DUR2PTS(hw->frame_dur) * 100 / 9);
 				frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
 				hw->wrong_frame_count++;
 			}
