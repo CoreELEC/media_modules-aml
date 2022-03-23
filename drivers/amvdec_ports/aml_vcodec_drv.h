@@ -425,6 +425,9 @@ struct internal_comp_buf {
 	u32		header_size;
 	u32		frame_buffer_size;
 	struct file_private_data priv_data;
+	ulong	header_dw_addr;
+	void	*mmu_box_dw;
+	void	*bmmu_box_dw;
 };
 
 /*
@@ -741,6 +744,8 @@ struct aml_vcodec_ctx {
 	u32				index_disp;
 	bool				post_to_upper_done;
 	bool			film_grain_present;
+	void			*bmmu_box_dw;
+	void			*mmu_box_dw;
 };
 
 /**

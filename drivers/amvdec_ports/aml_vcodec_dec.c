@@ -3175,10 +3175,16 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 	int i;
 	int mmu_flag = ctx->is_drm_mode? CODEC_MM_FLAGS_TVP:0;
 	int bmmu_flag = mmu_flag;
+	u32 dw_mode = VDEC_DW_NO_AFBC;
 
 	ctx->comp_bufs = vzalloc(sizeof(*ctx->comp_bufs) * V4L_CAP_BUFF_MAX);
 	if (!ctx->comp_bufs)
 		return -ENOMEM;
+
+	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
+		return -EINVAL;
+	}
 
 	/* init bmmu box */
 	ctx->mmu_box = decoder_mmu_box_alloc_box("v4l2_dec",
@@ -3186,7 +3192,7 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 			ctx->comp_info.max_size * SZ_1M, mmu_flag);
 	if (!ctx->mmu_box) {
 		vfree(ctx->comp_bufs);
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create bmmu box\n");
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box\n");
 		return -EINVAL;
 	}
 
@@ -3196,8 +3202,29 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 			ctx->id, V4L_CAP_BUFF_MAX,
 			4 + PAGE_SHIFT, bmmu_flag);
 	if (!ctx->bmmu_box) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box\n");
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create bmmu box\n");
 		goto free_mmubox;
+	}
+
+	if (dw_mode & 0x20) {
+		/* init mmu box dw*/
+		ctx->mmu_box_dw = decoder_mmu_box_alloc_box("v4l2_dec_dw",
+				ctx->id, V4L_CAP_BUFF_MAX,
+				ctx->comp_info.max_size * SZ_1M, mmu_flag);
+		if (!ctx->mmu_box_dw) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box dw\n");
+			goto free_bmmubox;
+		}
+
+		/* init bmmu box dw*/
+		bmmu_flag |= CODEC_MM_FLAGS_CMA_CLEAR | CODEC_MM_FLAGS_FOR_VDECODER;
+		ctx->bmmu_box_dw  = decoder_bmmu_box_alloc_box("v4l2_dec_dw",
+				ctx->id, V4L_CAP_BUFF_MAX,
+				4 + PAGE_SHIFT, bmmu_flag);
+		if (!ctx->bmmu_box_dw) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create nmmu box dw\n");
+			goto free_mmubox_dw;
+		}
 	}
 
 	kref_init(&ctx->box_ref);
@@ -3209,6 +3236,8 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 		buf->box_ref = &ctx->box_ref;
 		buf->mmu_box = ctx->mmu_box;
 		buf->bmmu_box = ctx->bmmu_box;
+		buf->mmu_box_dw = ctx->mmu_box_dw;
+		buf->bmmu_box_dw = ctx->bmmu_box_dw;
 	}
 	kref_get(&ctx->ctx_ref);
 
@@ -3217,10 +3246,18 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 		goto free_mmubox;
 	memset(ctx->uvm_proxy, 0, sizeof(*ctx->uvm_proxy) * V4L_CAP_BUFF_MAX);
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "box init, bmmu: %px, mmu: %px\n",
-		ctx->bmmu_box, ctx->mmu_box);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		"box init, bmmu: %px, mmu: %px, mmu_dw: %px bmmu_dw: %px\n",
+		ctx->bmmu_box, ctx->mmu_box, ctx->mmu_box_dw, ctx->bmmu_box_dw);
 
 	return 0;
+free_mmubox_dw:
+	decoder_mmu_box_free(ctx->mmu_box_dw);
+	ctx->mmu_box_dw = NULL;
+
+free_bmmubox:
+	decoder_bmmu_box_free(ctx->bmmu_box);
+	ctx->bmmu_box = NULL;
 
 free_mmubox:
 	vfree(ctx->comp_bufs);
@@ -3507,11 +3544,16 @@ static void box_release(struct kref *kref)
 		= container_of(kref, struct aml_vcodec_ctx, box_ref);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, bmmu: %px, mmu: %px\n",
-		__func__, ctx->bmmu_box, ctx->mmu_box);
+		"%s, bmmu: %px, mmu: %px mmu_dw: %pu\n",
+		__func__, ctx->bmmu_box, ctx->mmu_box,ctx->mmu_box_dw);
 
 	decoder_bmmu_box_free(ctx->bmmu_box);
 	decoder_mmu_box_free(ctx->mmu_box);
+
+	if (ctx->config.parm.dec.cfg.double_write_mode & 0x20) {
+		decoder_mmu_box_free(ctx->mmu_box_dw);
+		decoder_bmmu_box_free(ctx->bmmu_box_dw);
+	}
 	vfree(ctx->comp_bufs);
 	vfree(ctx->uvm_proxy);
 	kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
@@ -3532,6 +3574,11 @@ static void internal_buf_free(void *arg)
 	if (!(ibuf->ref & 0xff00)) {
 		decoder_mmu_box_free_idx(ibuf->mmu_box, ibuf->index);
 		decoder_bmmu_box_free_idx(ibuf->bmmu_box, ibuf->index);
+
+		if (ctx->config.parm.dec.cfg.double_write_mode & 0x20) {
+			decoder_mmu_box_free_idx(ibuf->mmu_box_dw, ibuf->index);
+			decoder_bmmu_box_free_idx(ibuf->bmmu_box_dw, ibuf->index);
+		}
 	}
 	ibuf->ref = 0;
 
@@ -3555,6 +3602,11 @@ static void internal_buf_free2(void *arg)
 	if (!(ibuf->ref & 0xff00)) {
 		decoder_mmu_box_free_idx(ibuf->mmu_box, ibuf->index);
 		decoder_bmmu_box_free_idx(ibuf->bmmu_box, ibuf->index);
+
+		if (ctx->config.parm.dec.cfg.double_write_mode & 0x20) {
+			decoder_mmu_box_free_idx(ibuf->mmu_box_dw, ibuf->index);
+			decoder_bmmu_box_free_idx(ibuf->bmmu_box_dw, ibuf->index);
+		}
 	}
 	ibuf->ref = 0;
 
@@ -3643,6 +3695,7 @@ static int bind_comp_buffer_to_uvm(struct aml_vcodec_ctx *ctx,
 	struct aml_dec_params *parms = &ctx->config.parm.dec;
 	struct uvm_hook_mod_info u_info;
 	struct internal_comp_buf* ibuf;
+	u32 dw_mode = VDEC_DW_NO_AFBC;
 
 	/* get header and page size */
 	if (vdec_if_get_param(ctx, GET_PARAM_COMP_BUF_INFO, &ctx->comp_info)) {
@@ -3671,6 +3724,11 @@ static int bind_comp_buffer_to_uvm(struct aml_vcodec_ctx *ctx,
 		return -EINVAL;
 	}
 
+	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
+		return -EINVAL;
+	}
+
 	buf->internal_index	= i;
 	ibuf			= &ctx->comp_bufs[i];
 	ibuf->frame_buffer_size	= ctx->comp_info.frame_buffer_size;
@@ -3684,6 +3742,17 @@ static int bind_comp_buffer_to_uvm(struct aml_vcodec_ctx *ctx,
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to alloc %dth bmmu\n", i);
 		return -ENOMEM;
 	}
+
+	if (dw_mode & 0x20) {
+		ret = decoder_bmmu_box_alloc_buf_phy(ctx->bmmu_box_dw,
+			ibuf->index, ctx->comp_info.header_size,
+			"v4l2_dec", &ibuf->header_dw_addr);
+		if (ret < 0) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to alloc %dth bmmu dw\n", i);
+			return -ENOMEM;
+		}
+	}
+
 	kref_get(&ctx->box_ref);
 	ibuf->ref = 1;
 
@@ -3719,6 +3788,9 @@ static int bind_comp_buffer_to_uvm(struct aml_vcodec_ctx *ctx,
 	return 0;
 
 bmmu_box_free:
+	if (dw_mode & 0x20) {
+		decoder_bmmu_box_free_idx(ibuf->bmmu_box_dw, ibuf->index);
+	}
 	decoder_bmmu_box_free_idx(ibuf->bmmu_box, ibuf->index);
 	kref_put(&ctx->box_ref, box_release);
 	ibuf->ref = 0;
@@ -4513,6 +4585,7 @@ static int check_dec_cfginfo(struct aml_vdec_cfg_infos *cfg)
 		cfg->double_write_mode != 3 &&
 		cfg->double_write_mode != 4 &&
 		cfg->double_write_mode != 16 &&
+		cfg->double_write_mode != 0x21 &&
 		cfg->double_write_mode != 0x100 &&
 		cfg->double_write_mode != 0x200) {
 		pr_err("invalid double write mode %d\n", cfg->double_write_mode);
@@ -4522,6 +4595,11 @@ static int check_dec_cfginfo(struct aml_vdec_cfg_infos *cfg)
 		pr_err("invalid margin %d\n", cfg->ref_buf_margin);
 		return -1;
 	}
+
+	if (mandatory_dw_mmu) {
+		cfg->double_write_mode = 0x21;
+	}
+
 	pr_info("double write mode %d margin %d\n",
 		cfg->double_write_mode, cfg->ref_buf_margin);
 	return 0;

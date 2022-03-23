@@ -277,8 +277,8 @@ static void vdec_parser_parms(struct vdec_av1_inst *inst)
 			ctx->config.parm.dec.cfg.ref_buf_margin);
 		pbuf += sprintf(pbuf, "av1_double_write_mode:%d;",
 			ctx->config.parm.dec.cfg.double_write_mode);
-		pbuf += sprintf(pbuf, "av1_buf_width:1920;");
-		pbuf += sprintf(pbuf, "av1_buf_height:1088;");
+		pbuf += sprintf(pbuf, "av1_buf_width:4096;");
+		pbuf += sprintf(pbuf, "av1_buf_height:2304;");
 		pbuf += sprintf(pbuf, "save_buffer_mode:0;");
 		pbuf += sprintf(pbuf, "no_head:0;");
 		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:%d;",
@@ -1093,8 +1093,12 @@ static int vdec_av1_decode(unsigned long h_vdec,
  static void get_param_config_info(struct vdec_av1_inst *inst,
 	struct aml_dec_params *parms)
  {
-	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_CFGINFO)
-		 parms->cfg = inst->parms.cfg;
+	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_CFGINFO) {
+		/* dw use v4l cfg */
+		inst->parms.cfg.double_write_mode =
+			inst->ctx->config.parm.dec.cfg.double_write_mode;
+		parms->cfg = inst->parms.cfg;
+	 }
 	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_PSINFO)
 		 parms->ps = inst->parms.ps;
 	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_HDRINFO)
@@ -1173,7 +1177,7 @@ static void set_param_write_sync(struct vdec_av1_inst *inst)
 
 static int vdec_get_dw_mode(struct vdec_av1_inst *inst, int dw_mode)
 {
-	u32 valid_dw_mode = inst->parms.cfg.double_write_mode;
+	u32 valid_dw_mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
 	int w = inst->vsi->pic.coded_width;
 	int h = inst->vsi->pic.coded_height;
 	u32 dw = 0x1; /*1:1*/
@@ -1205,6 +1209,7 @@ static int vdec_pic_scale(struct vdec_av1_inst *inst, int length, int dw_mode)
 
 	switch (vdec_get_dw_mode(inst, dw_mode)) {
 	case 0x0: /* only afbc, output afbc */
+	case 0x21: /* only afbc, output afbc */
 		ret = 64;
 		break;
 	case 0x1: /* afbc and (w x h), output YUV420 */

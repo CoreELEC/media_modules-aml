@@ -685,6 +685,10 @@ u32 debug_mode;
 EXPORT_SYMBOL(debug_mode);
 module_param(debug_mode, uint, 0644);
 
+u32 mandatory_dw_mmu;
+EXPORT_SYMBOL(mandatory_dw_mmu);
+module_param(mandatory_dw_mmu, uint, 0644);
+
 bool aml_set_vfm_enable;
 EXPORT_SYMBOL(aml_set_vfm_enable);
 module_param(aml_set_vfm_enable, bool, 0644);
