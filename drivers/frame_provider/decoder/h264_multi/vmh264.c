@@ -7449,11 +7449,16 @@ empty_proc:
 		reset_process_time(hw);
 		if ((error_proc_policy & 0x40000) &&
 			((dec_dpb_status == H264_DECODE_TIMEOUT) ||
-			(!hw->frmbase_cont_flag && (dec_dpb_status == H264_SEARCH_BUFEMPTY || dec_dpb_status == H264_DECODE_BUFEMPTY) && input_frame_based(vdec))))
+			(!hw->frmbase_cont_flag &&
+			(dec_dpb_status == H264_SEARCH_BUFEMPTY || dec_dpb_status == H264_DECODE_BUFEMPTY)
+			&& input_frame_based(vdec)))) {
+			WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 			goto pic_done_proc;
+		}
 		if (!hw->frmbase_cont_flag)
 			release_cur_decoding_buf(hw);
 
+		amvdec_stop();
 		if (input_frame_based(vdec) ||
 			(READ_VREG(VLD_MEM_VIFIFO_LEVEL) > 0x200)) {
 			if (h264_debug_flag &
@@ -7465,7 +7470,6 @@ empty_proc:
 					READ_VREG(VLD_MEM_VIFIFO_LEVEL));
 				goto send_again;
 			}
-			amvdec_stop();
 			vdec->mc_loaded = 0;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 				"%s %s\n", __func__,
@@ -9811,13 +9815,15 @@ result_done:
 			stream base: stream buf empty or timeout
 			frame base: vdec_prepare_input fail
 		*/
+		amvdec_stop();
+		if (hw->mmu_enable)
+			amhevc_stop();
 		if (!vdec_has_more_input(vdec) && (hw_to_vdec(hw)->next_status !=
 			VDEC_STATUS_DISCONNECTED) && (hw->no_decoder_buffer_flag == 0)) {
 			hw->dec_result = DEC_RESULT_EOS;
 			vdec_schedule_work(&hw->work);
 			return;
 		}
-
 		if ((vdec_stream_based(vdec)) &&
 			(error_proc_policy & 0x400000) &&
 			check_dirty_data(vdec)) {
