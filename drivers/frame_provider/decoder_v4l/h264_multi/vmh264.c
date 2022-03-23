@@ -920,6 +920,7 @@ struct vdec_h264_hw_s {
 	struct trace_decoder_name trace;
 	int csd_change_flag;
 	bool high_bandwidth_flag;
+	bool hevc_enable_flag;
 };
 
 static u32 again_threshold;
@@ -9106,7 +9107,6 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 	u32 param1, u32 param2, u32 param3, u32 param4)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int ret = 0;
 	int dec_dpb_size_change = hw->dpb.dec_dpb_size != get_dec_dpb_size_active(hw, param1, param4);
@@ -9136,7 +9136,6 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 				amvdec_stop();
 				if (hw->mmu_enable)
 					amhevc_stop();
-				vdec_close_extra_hevc_core(vdec, (ps.field != V4L2_FIELD_NONE), hw->double_write_mode);
 				hw->eos = 1;
 				flush_dpb(p_H264_Dpb);
 				ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
@@ -9207,9 +9206,16 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						h264_set_comp_info(ctx, &ps);
 					}
 					amvdec_stop();
-					if (hw->mmu_enable)
+					if (hw->mmu_enable) {
 						amhevc_stop();
-					vdec_close_extra_hevc_core(vdec, (ps.field != V4L2_FIELD_NONE), hw->double_write_mode);
+						if ((ps.field != V4L2_FIELD_NONE) && (hw->hevc_enable_flag == true)) {
+							vdec_poweroff(VDEC_HEVC);
+							hw->hevc_enable_flag = false;
+							hw->mmu_enable = 0;
+							dpb_print(DECODE_ID(hw), 0,
+								"h264 interlace video disable mmu\n");
+						}
+					}
 					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
 				} else {
 					if (vh264_set_params(hw, param1,
@@ -10285,6 +10291,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	hw->mmu_enable = 0;
 	hw->first_head_check_flag = 0;
+	hw->hevc_enable_flag = 0;
 
 	if (pdata->sys_info)
 		hw->vh264_amstream_dec_info = *pdata->sys_info;
@@ -10429,6 +10436,10 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	if (hw->mmu_enable) {
 		hw->canvas_mode = CANVAS_BLKMODE_LINEAR;
 		hw->double_write_mode &= 0xffff;
+		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX) {
+			vdec_poweron(VDEC_HEVC);
+			hw->hevc_enable_flag = true;
+		}
 	}
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) && hw->enable_fence) {
@@ -10706,6 +10717,12 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 
 	if (hw->enable_fence)
 		vdec_fence_release(hw, vdec->sync);
+
+	if (hw->mmu_enable) {
+		if (hw->hevc_enable_flag == true) {
+			vdec_poweroff(VDEC_HEVC);
+		}
+	}
 
 	ammvdec_h264_mmu_release(hw);
 	h264_free_hw_stru(&pdev->dev, (void *)hw);
