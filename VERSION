@@ -1,44 +1,15 @@
 Major_V=5
-Minor_V=3
-BaseChangeId=Ifc17e92ef9c9e211b8f01ebae1e97c5855fea084
+Minor_V=4
+BaseChangeId=Idcaf85d3c995994630493d9061f8a913bc215861
 
 
 #history version
+#V5.3.111-g94c902c6.003040 Release Notes
+#Release_ChangeId_V5_3=I6dbc48815c5a1f816cfa941f1f867f14d11972af
 #V5.2.104-g795aee00.003025 Release Notes
 #Release_ChangeId_V5_2=I34801cba60d54bfd9f459f7445d0362989c23496
 #V5.1.77-g0cdebf27.003009 Release Notes
 #Release_ChangeId_V5_1=Id7e315bbf379d166ca4b335cef13c983a8ca5078
-#Feature develop total count: 6
-#    critical feature develop count: 0
-#    important feature develop count: 4
-#    normal feature develop count: 2
-#Feature develop detail information:
-#    improve pip channel play
-#    support decoder fence
-#    fixed can't get hdr information correctly.
-#    add multi-vdec info for new format av1 after revert
-#    change ptsadjust and threshold from s64 to s32.
-#    support dw 0x100
-#Fixed BUG total count: 30
-#    fixed critical BUG count: 3
-#    fixed important feature develop count: 15
-#    fixed normal feature develop count: 12
-#Fixed BUG detail information:
-#    add VIDTYPE_COMPRESS in vf for dw mode with afbc buffer
-#    fix some the crash caused by null pointer
-#    fixed vpp wrapper memory leak.
-#    metadata lose the last byte every frame in frame mode
-#    fix avs color abnormal.
-#    fix gst secure v4l2 decoder not work
-#    fix the playback stuck when resolution changed
-#    h265 ucode send 2 interrupts cause playback stuck
-#    fix av1 freeze when burn-in test.
-#    fixed playback stuck after seek.
-#    fix 8k display abnormal.
-#    fixed irq-vdec-0 takes more cpu slice.
-#    fixed AV1 seek freezing.
-#    fixed failed to allocate tvp memory
-#    fixed issue of reports resolution change.
 #V5.0 Release Notes
 #Release_ChangeId_V5_0=I6053e02900215d9006469c38ca375ace498b849f
 #upgrade Kernel version to 5.4
