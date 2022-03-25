@@ -9965,9 +9965,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->sar_width = hevc->cur_pic->sar_width;
 			vf->sar_height = hevc->cur_pic->sar_height;
 		}
-
-		vf->src_fmt.play_id = vdec->play_num;
-
 		vf->width = vf->width /
 			get_double_write_ratio(hevc, pic->double_write_mode);
 		vf->height = vf->height /
@@ -10248,9 +10245,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 #endif
 
 		hevc_print(hevc, H265_DEBUG_PRINT_SEI,
-			"aux_data_size:%d signal_type:0x%x sei_present_flag:%d play_num:%d vf:%p\n",
-			hevc->m_PIC[index]->aux_data_size, hevc->video_signal_type,
-			hevc->sei_present_flag, vdec->play_num, vf);
+			"aux_data_size:%d, signal_type: %d, sei_present_flag: %d\n",
+			hevc->m_PIC[index]->aux_data_size, hevc->video_signal_type, hevc->sei_present_flag);
 
 		if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
 			int i = 0;
