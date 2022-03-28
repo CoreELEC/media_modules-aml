@@ -2790,7 +2790,6 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 		if (ctx->state >= AML_STATE_PROBE) {
 			update_ctx_dimension(ctx, f->type);
 			copy_v4l2_format_dimention(pix_mp, pix, q_data, f->type);
-			v4l_buf_size_decision(ctx);
 		}
 	}
 
