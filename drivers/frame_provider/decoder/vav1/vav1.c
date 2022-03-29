@@ -2914,6 +2914,9 @@ static int av1_max_mmu_buf_size(int max_w, int max_h)
 
 static int av1_get_header_size(int w, int h)
 {
+	w = ALIGN(w, 64);
+	h = ALIGN(h, 64);
+
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 		IS_8K_SIZE(w, h))
 		return MMU_COMPRESS_HEADER_SIZE_8K;
@@ -3261,11 +3264,14 @@ static int config_pic(struct AV1HW_s *hw,
 #ifndef USE_SPEC_BUF_FOR_MMU_HEAD
 static int vav1_mmu_compress_header_size(struct AV1HW_s *hw)
 {
+	int w = ALIGN(hw->max_pic_w, 64);
+	int h = ALIGN(hw->max_pic_h, 64);
+
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h))
+		IS_8K_SIZE(w, h))
 		return (MMU_COMPRESS_HEADER_SIZE_8K);
 
-	if (IS_4K_SIZE(hw->max_pic_w, hw->max_pic_h))
+	if (IS_4K_SIZE(w, h))
 		return MMU_COMPRESS_HEADER_SIZE_4K;
 
 	return (MMU_COMPRESS_HEADER_SIZE_1080P);

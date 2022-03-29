@@ -876,10 +876,13 @@ static int get_frame_mmu_map_size(struct AVS2Decoder_s *dec)
 
 static int get_compress_header_size(struct AVS2Decoder_s *dec)
 {
+	int w = ALIGN(dec->init_pic_w, 64);
+	int h = ALIGN(dec->init_pic_h, 64);
+
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(IS_8K_SIZE(dec->init_pic_w, dec->init_pic_h)))
+		(IS_8K_SIZE(w, h)))
 		return MMU_COMPRESS_HEADER_SIZE_8K;
-	else if (IS_4K_SIZE(dec->init_pic_w, dec->init_pic_h))
+	else if (IS_4K_SIZE(w, h))
 		return MMU_COMPRESS_HEADER_SIZE_4K;
 	return MMU_COMPRESS_HEADER_SIZE_1080P;
 }
@@ -6341,6 +6344,9 @@ static int avs2_mmu_page_num(struct AVS2Decoder_s *dec,
 
 static int avs2_get_header_size(int w, int h)
 {
+	w = ALIGN(w, 64);
+	h = ALIGN(h, 64);
+
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 		IS_8K_SIZE(w, h))
 		return MMU_COMPRESS_HEADER_SIZE_8K;

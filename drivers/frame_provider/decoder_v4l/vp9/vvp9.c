@@ -1301,6 +1301,9 @@ static int is_oversize(int w, int h)
 
 static int vvp9_mmu_compress_header_size(int w, int h)
 {
+	w = ALIGN(w, 64);
+	h = ALIGN(h, 64);
+
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 		IS_8K_SIZE(w, h))
 		return (MMU_COMPRESS_HEADER_SIZE_8K);

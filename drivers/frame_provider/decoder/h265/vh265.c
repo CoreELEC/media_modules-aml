@@ -3555,6 +3555,9 @@ static void put_mv_buf(struct hevc_state_s *hevc,
 
 static int hevc_get_header_size(int w, int h)
 {
+	w = ALIGN(w, 64);
+	h = ALIGN(h, 64);
+
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 			(IS_8K_SIZE(w, h)))
 		return MMU_COMPRESS_HEADER_SIZE_8K;

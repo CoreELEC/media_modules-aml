@@ -3516,6 +3516,9 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 
 static int hevc_get_header_size(int w, int h)
 {
+	w = ALIGN(w, 64);
+	h = ALIGN(h, 64);
+
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 			(IS_8K_SIZE(w, h)))
 		return ALIGN(MMU_COMPRESS_HEADER_SIZE_8K, 0x10000);
