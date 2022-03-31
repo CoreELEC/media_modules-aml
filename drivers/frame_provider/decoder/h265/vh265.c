@@ -1129,13 +1129,13 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			/* IPP work space calculation :
 			 *   4096 * (Y+CbCr+Flags) = 12k, round to 16k
 			 */
-			.buf_size = 0x1e00,
+			.buf_size = 0x4000,
 		},
 		.sao_abv = {
-			.buf_size = 0, //0x30000,
+			.buf_size = 0x30000,
 		},
 		.sao_vb = {
-			.buf_size = 0, //0x30000,
+			.buf_size = 0x30000,
 		},
 		.short_term_rps = {
 			/* SHORT_TERM_RPS - Max 64 set, 16 entry every set,
