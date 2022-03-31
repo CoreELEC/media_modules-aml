@@ -1579,7 +1579,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				}
 			}
 			src_addr = input_y;
-			picsize_y = wq->pic.encoder_height;
+			//picsize_y = wq->pic.encoder_height;
 			enc_pr(LOG_INFO, "dma addr[0x%lx 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx]\n",
 				(unsigned long)request->dma_cfg[0].vaddr,
 				(unsigned long)request->dma_cfg[0].paddr,
@@ -3295,7 +3295,8 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 				wq->request.plane_num);
 			if (wq->request.fmt == FMT_NV12 ||
 				wq->request.fmt == FMT_NV21 ||
-				wq->request.fmt == FMT_YUV420) {
+				wq->request.fmt == FMT_YUV420 ||
+				wq->request.fmt == FMT_RGBA8888) {
 				if (wq->request.plane_num > 3) {
 					enc_pr(LOG_ERROR, "wq->request.plane_num is invalid %d.\n",
 							wq->request.plane_num);
