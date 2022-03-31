@@ -557,6 +557,33 @@ static bool check_frame_combine(u8 *buf, u32 size, int *pos)
 	return combine;
 }
 
+static bool cloudgame_check_frame_combine(u8 *buf, u32 size)
+{
+	bool combine = false;
+	int i = 0, j = 0, cnt = 0;
+	u32 nal_type = 0;
+	u8 *p = buf;
+
+	for (i = 4; i < size; i++) {
+		j = find_start_code(p, 7);
+		if (j > 0) {
+			if (++cnt > 1) {
+				combine = true;
+				break;
+			}
+
+			nal_type = AVC_NAL_TYPE(p[j]);
+			if (nal_type != NAL_H264_AUD &&
+				(nal_type > NAL_H264_PPS || nal_type < NAL_H264_SEI))
+				break;
+			p += j;
+			i += j;
+		}
+		p++;
+	}
+	return combine;
+}
+
 static int vdec_search_startcode(u8 *buf, u32 range)
 {
 	int pos = -1;
@@ -875,8 +902,12 @@ static int vdec_h264_decode(unsigned long h_vdec,
 	} else {
 		if (inst->ctx->param_sets_from_ucode) {
 			int nal_idx = 0;
+			bool enable_fence = (inst->parms.cfg.low_latency_mode & 2) ? 1 : 0;
 			/* if the st compose from csd + slice that is the combine data. */
-			inst->vsi->is_combine = check_frame_combine(buf, size, &nal_idx);
+			if (enable_fence)
+				inst->vsi->is_combine = cloudgame_check_frame_combine(buf, size);
+			else
+				inst->vsi->is_combine = check_frame_combine(buf, size, &nal_idx);
 			/*if (nal_idx < 0)
 				return -1;*/
 		} else {
