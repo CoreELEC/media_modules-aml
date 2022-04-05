@@ -104,7 +104,7 @@ static int start_decode_buf_level = 0x2000;
 static u32 without_display_mode;
 static u32 dynamic_buf_num_margin;
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 unsigned int mmjpeg_debug_mask = 0xff;
 #define PRINT_FLAG_ERROR              0x0
 #define PRINT_FLAG_RUN_FLOW           0X0001

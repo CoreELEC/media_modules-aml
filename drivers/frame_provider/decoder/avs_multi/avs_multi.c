@@ -573,7 +573,7 @@ static void WRITE_VREG_DBG2(unsigned adr, unsigned val)
 #endif
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 static int debug_print(struct vdec_avs_hw_s *hw,
 	int flag, const char *fmt, ...)
 {

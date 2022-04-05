@@ -52,7 +52,7 @@
 #include "avs2_global.h"
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 
 #define assert(chk_cond) {\
 	if (!(chk_cond))\

@@ -363,7 +363,7 @@ static void start_process_time_set(struct vdec_mpeg12_hw_s *hw);
 static int debug_enable;
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 unsigned int mpeg12_debug_mask = 0xff;
 static u32 run_ready_min_buf_num = 2;
 static int dirty_again_threshold = 100;

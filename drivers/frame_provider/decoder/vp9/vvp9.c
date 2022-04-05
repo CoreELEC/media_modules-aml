@@ -123,7 +123,7 @@
 #define VF_POOL_SIZE        32
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 
 #define DECODE_MODE_SINGLE		((0x80 << 24) | 0)
 #define DECODE_MODE_MULTI_STREAMBASE	((0x80 << 24) | 1)
@@ -1328,7 +1328,10 @@ static int vp9_print(struct VP9Decoder_s *pbi,
 		if (pbi)
 			len = sprintf(buf, "[%d]", pbi->index);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_debug("%s", buf);
+		if (flag == 0)
+			pr_debug("%s", buf);
+		else
+			pr_info("%s", buf);
 		va_end(args);
 	}
 	return 0;
@@ -1710,7 +1713,7 @@ static int vp9_print_cont(struct VP9Decoder_s *pbi,
 
 		va_start(args, fmt);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_debug("%s", buf);
+		pr_info("%s", buf);
 		va_end(args);
 	}
 	return 0;
@@ -11091,7 +11094,7 @@ static void dump_data(struct VP9Decoder_s *pbi, int size)
 		data = ((u8 *)pbi->chunk->block->start_virt) +
 			pbi->chunk->offset;
 
-	vp9_print(pbi, 0, "padding: ");
+	vp9_print(pbi, PRINT_FLAG_VDEC_DATA, "padding: ");
 	for (jj = padding_size; jj > 0; jj--)
 		vp9_print_cont(pbi,
 			0,
@@ -11102,19 +11105,14 @@ static void dump_data(struct VP9Decoder_s *pbi, int size)
 	for (jj = 0; jj < size; jj++) {
 		if ((jj & 0xf) == 0)
 			vp9_print(pbi,
-				0,
-				"%06x:", jj);
+				PRINT_FLAG_VDEC_DATA, "%06x:", jj);
 		vp9_print_cont(pbi,
 			0,
 			"%02x ", data[jj]);
 		if (((jj + 1) & 0xf) == 0)
-			vp9_print(pbi,
-			 0,
-				"\n");
+			vp9_print_cont(pbi, 0, "\n");
 	}
-	vp9_print(pbi,
-	 0,
-		"\n");
+	vp9_print_cont(pbi, 0, "\n");
 
 	if (!pbi->chunk->block->is_mapped)
 		codec_mm_unmap_phyaddr(data);
@@ -12054,7 +12052,7 @@ static void vp9_dump_state(struct vdec_s *vdec)
 				pbi->chunk->size);
 			for (jj = 0; jj < pbi->chunk->size; jj++) {
 				if ((jj & 0xf) == 0)
-					vp9_print(pbi, 0,
+					vp9_print(pbi, PRINT_FLAG_VDEC_DATA,
 						"%06x:", jj);
 				vp9_print_cont(pbi, 0,
 					"%02x ", data[jj]);

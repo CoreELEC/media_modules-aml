@@ -32,7 +32,7 @@
 #include <linux/amlogic/media/canvas/canvas.h>
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 
 #define __COMPARE(context, p1, p2) comp(p1, p2)
 #define __SHORTSORT(lo, hi, width, comp, context) \

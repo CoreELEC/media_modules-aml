@@ -73,7 +73,7 @@ to enable DV of frame mode
 */
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 #define VDEC_DW
 #define DEBUG_UCODE
 #define MEM_NAME "codec_m264"
@@ -2765,6 +2765,11 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			"[%s:%d] i_decoded_frame = %d p_decoded_frame = %d b_decoded_frame = %d\n",
 			__func__, __LINE__,vs.i_decoded_frames,vs.p_decoded_frames,vs.b_decoded_frames);
 		}
+
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"%s: index %d poc %d frame_type %d dur %d type %x pts %d(0x%x), pts64 %lld(0x%x) ts %lld(0x%x)\n",
+			__func__, vf->index, frame->poc, vf->frame_type, vf->duration, vf->type, vf->pts, vf->pts,
+			vf->pts_us64, vf->pts_us64, vf->timestamp, vf->timestamp);
 
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->trace.pts_name, vf->timestamp);
@@ -6106,7 +6111,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					RRINT_FLAG_RPM)) {
 					if (((i + ii) & 0xf) == 0)
 						dpb_print(DECODE_ID(hw),
-							0, "%04x:",
+							RRINT_FLAG_RPM, "%04x:",
 							i);
 					dpb_print_cont(DECODE_ID(hw),
 						0, "%04x ",
@@ -6319,7 +6324,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					RRINT_FLAG_RPM)) {
 					if (((i + ii) & 0xf) == 0)
 						dpb_print(DECODE_ID(hw),
-							0, "%04x:", i);
+							RRINT_FLAG_RPM, "%04x:", i);
 					dpb_print_cont(DECODE_ID(hw),
 						0, "%04x ", p[i+3-ii]);
 					if (((i + ii + 1) & 0xf) == 0)
@@ -7051,7 +7056,7 @@ static void dump_bufspec(struct vdec_h264_hw_s *hw,
 	for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
 		if (hw->buffer_spec[i].used == -1)
 			continue;
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DUMP_BUFSPEC,
 			"bufspec (%d): used %d adr 0x%x(%lx) canvas(%d) vf_ref(%d) ",
 			i, hw->buffer_spec[i].used,
 			hw->buffer_spec[i].buf_adr,

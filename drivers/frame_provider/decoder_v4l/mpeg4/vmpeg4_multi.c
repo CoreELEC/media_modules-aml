@@ -163,7 +163,7 @@ static unsigned int decode_timeout_val = 200;
 static u32 without_display_mode;
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 unsigned int mpeg4_debug_mask = 0xff;
 static u32 run_ready_min_buf_num = 2;
 

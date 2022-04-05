@@ -381,7 +381,7 @@ static int check_dirty_data(struct vdec_s *vdec);
 static int debug_enable;
 /*static struct work_struct userdata_push_work;*/
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 unsigned int mpeg12_debug_mask = 0xff;
 /*static int counter_max = 5;*/
 static u32 run_ready_min_buf_num = 2;

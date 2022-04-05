@@ -193,7 +193,7 @@ Bit[10:8] - film_grain_params_ref_idx, For Write request
 #define VF_POOL_SIZE        32
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 
 #define DECODE_MODE_SINGLE		((0x80 << 24) | 0)
 #define DECODE_MODE_MULTI_STREAMBASE	((0x80 << 24) | 1)
@@ -8505,8 +8505,6 @@ static void vav1_put_timer_func(struct timer_list *timer)
 	}
 #ifdef MULTI_INSTANCE_SUPPORT
 	else {
-		av1_print(hw, AV1_DEBUG_TIMEOUT_INFO, "timeout!!!start_process_time %ld\n",
-			hw->start_process_time);
 		if (
 			(decode_timeout_val > 0) &&
 			(hw->start_process_time > 0) &&
@@ -8516,8 +8514,8 @@ static void vav1_put_timer_func(struct timer_list *timer)
 			int current_lcu_idx =
 				READ_VREG(HEVC_PARSER_LCU_START)
 				& 0xffffff;
-			av1_print(hw, AV1_DEBUG_TIMEOUT_INFO, "timeout!!!current_lcu_idx = %u last_lcu_idx = %u decode_timeout_count = %d\n",
-						current_lcu_idx, hw->last_lcu_idx, hw->decode_timeout_count);
+			av1_print(hw, AV1_DEBUG_TIMEOUT_INFO, "%s:current_lcu_idx = %u last_lcu_idx = %u decode_timeout_count = %d\n",
+						__func__, current_lcu_idx, hw->last_lcu_idx, hw->decode_timeout_count);
 			if (hw->last_lcu_idx == current_lcu_idx) {
 				if (hw->decode_timeout_count > 0)
 					hw->decode_timeout_count--;

@@ -2306,7 +2306,7 @@ static unsigned char get_idx(struct hevc_state_s *hevc)
 #endif
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 static int hevc_print(struct hevc_state_s *hevc,
 	int flag, const char *fmt, ...)
 {
@@ -2325,7 +2325,10 @@ static int hevc_print(struct hevc_state_s *hevc,
 		if (hevc)
 			len = sprintf(buf, "[%d]", hevc->index);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_debug("%s", buf);
+		if (flag == 0)
+			pr_debug("%s", buf);
+		else
+			pr_info("%s", buf);
 		va_end(args);
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	}
@@ -4070,7 +4073,7 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 	total_num = num_neg + num_pos;
 #endif
 	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
-		hevc_print(hevc, 0,
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s: curpoc %d slice_type %d, total %d ",
 			__func__, pic->POC, params->p.slice_type, total_num);
 #ifdef SUPPORT_LONG_TERM_RPS
@@ -4086,7 +4089,7 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 	}
 
 	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
-		hevc_print(hevc, 0,
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"HEVC Stream buf start ");
 		hevc_print_cont(hevc, 0,
 			"%x end %x wr %x rd %x lev %x ctl %x intctl %x\n",
@@ -4101,8 +4104,7 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 
 	if (total_num > 0) {
 		if (params->p.modification_flag & 0x1) {
-			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
-				hevc_print(hevc, 0, "ref0 POC (modification):");
+			hevc_print(hevc, H265_DEBUG_BUFMGR, "ref0 POC (modification):");
 			for (rIdx = 0; rIdx < num_ref_idx_l0_active; rIdx++) {
 				int cIdx = params->p.modification_list[rIdx];
 
@@ -4121,8 +4123,7 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 				}
 			}
 		} else {
-			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
-				hevc_print(hevc, 0, "ref0 POC:");
+			hevc_print(hevc, H265_DEBUG_BUFMGR, "ref0 POC:");
 			for (rIdx = 0; rIdx < num_ref_idx_l0_active; rIdx++) {
 				int cIdx = rIdx % total_num;
 
@@ -4145,8 +4146,7 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 			PR_INFO(hevc->index);
 		if (params->p.slice_type == B_SLICE) {
 			if (params->p.modification_flag & 0x2) {
-				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
-					hevc_print(hevc, 0, "ref1 POC (modification):");
+				hevc_print(hevc, H265_DEBUG_BUFMGR, "ref1 POC (modification):");
 				for (rIdx = 0; rIdx < num_ref_idx_l1_active; rIdx++) {
 					int cIdx;
 
@@ -4167,9 +4167,7 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 					}
 				}
 			} else {
-				if (get_dbg_flag(hevc) &
-					H265_DEBUG_BUFMGR)
-					hevc_print(hevc, 0, "ref1 POC:");
+				hevc_print(hevc, H265_DEBUG_BUFMGR, "ref1 POC:");
 				for (rIdx = 0; rIdx < num_ref_idx_l1_active; rIdx++) {
 					int cIdx = rIdx % total_num;
 
@@ -5711,7 +5709,7 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					H265_DEBUG_NO_DISPLAY)) {
 				pic_display->output_ready = 0;
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
-					hevc_print(hevc, 0,
+					hevc_print(hevc, H265_DEBUG_BUFMGR,
 					"[BM] Display: POC %d, ",
 					 pic_display->POC);
 					hevc_print_cont(hevc, 0,
@@ -5750,7 +5748,7 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					prepare_display_buf(hw_to_vdec(hevc), pic_display);
 					if (get_dbg_flag(hevc)
 						& H265_DEBUG_BUFMGR) {
-						hevc_print(hevc, 0,
+						hevc_print(hevc, H265_DEBUG_BUFMGR,
 						"[BM] flush Display: POC %d, ",
 						 pic_display->POC);
 						hevc_print_cont(hevc, 0,
@@ -6008,7 +6006,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 					pic_display->output_ready = 0;
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
-						hevc_print(hevc, 0,
+						hevc_print(hevc, H265_DEBUG_BUFMGR,
 							"[BM] Display: POC %d, ",
 							pic_display->POC);
 						hevc_print_cont(hevc, 0,
@@ -6047,7 +6045,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 						prepare_display_buf(hw_to_vdec(hevc),pic_display);
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
-						hevc_print(hevc, 0,
+						hevc_print(hevc, H265_DEBUG_BUFMGR,
 							"[BM] Display: POC %d, ",
 							pic_display->POC);
 						hevc_print_cont(hevc, 0,
@@ -6060,9 +6058,9 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 		} while (pic_display);
 	} else {
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
-			hevc_print(hevc, 0,
+			hevc_print(hevc, H265_DEBUG_BUFMGR,
 				"[BM] current pic is IDR, ");
-			hevc_print(hevc, 0,
+			hevc_print_cont(hevc, 0,
 				"clear referenced flag of all buffers\n");
 		}
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
@@ -10127,7 +10125,7 @@ force_output:
 						pic_display->output_ready = 0;
 						if (get_dbg_flag(hevc) &
 							H265_DEBUG_BUFMGR) {
-							hevc_print(hevc, 0,
+							hevc_print(hevc, H265_DEBUG_BUFMGR,
 							"[BM] Display: POC %d, ",
 								 pic_display->POC);
 							hevc_print_cont(hevc, 0,
