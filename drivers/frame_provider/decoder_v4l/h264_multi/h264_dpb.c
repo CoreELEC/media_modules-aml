@@ -31,7 +31,7 @@
 #define FRAME_NUM_MAX_SIZE 0x10000
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 int dpb_print(int index, int debug_flag, const char *fmt, ...)
 {
 	if (((h264_debug_flag & debug_flag) &&
@@ -47,7 +47,10 @@ int dpb_print(int index, int debug_flag, const char *fmt, ...)
 		va_start(args, fmt);
 		len = sprintf(buf, "%d: ", index);
 		vsnprintf(buf + len, 512-len, fmt, args);
-		pr_debug("%s", buf);
+		if (debug_flag == 0)
+			pr_debug("%s", buf);
+		else
+			pr_info("%s", buf);
 		va_end(args);
 		kfree(buf);
 	}
@@ -2243,7 +2246,7 @@ void update_ref_list(struct DecodedPictureBuffer *p_Dpb)
 			  p_Dpb->fs[i]->bottom_field->used_for_reference : 0);
 
 		if (is_short_term_reference(p_Dpb, p_Dpb->fs[i])) {
-			dpb_print(p_H264_Dpb->decoder_index,
+			dpb_print_cont(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL,
 			"fs_ref[%d]=fs[%d]: fs %p\n", j, i, p_Dpb->fs[i]);
 			p_Dpb->fs_ref[j++] = p_Dpb->fs[i];
@@ -3982,11 +3985,11 @@ static void init_lists_p_slice(struct Slice *currSlice)
 				PRINT_FLAG_DPB_DETAIL,
 				  "listX[0] (PicNum): ");
 			for (i = 0; i < list0idx; i++) {
-				dpb_print(p_H264_Dpb->decoder_index,
+				dpb_print_cont(p_H264_Dpb->decoder_index,
 					PRINT_FLAG_DPB_DETAIL, "%d  ",
 					currSlice->listX[0][i]->pic_num);
 			}
-			dpb_print(p_H264_Dpb->decoder_index,
+			dpb_print_cont(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL, "\n");
 		}
 		/* long term handling */
@@ -4025,11 +4028,11 @@ static void init_lists_p_slice(struct Slice *currSlice)
 		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 			  "fs_list0 (FrameNum): ");
 		for (i = 0; i < list0idx; i++) {
-			dpb_print(p_H264_Dpb->decoder_index,
+			dpb_print_cont(p_H264_Dpb->decoder_index,
 				  PRINT_FLAG_DPB_DETAIL, "%d  ",
 				  fs_list0[i]->frame_num_wrap);
 		}
-		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
+		dpb_print_cont(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 			  "\n");
 
 		currSlice->listXsize[0] = 0;
@@ -4040,11 +4043,11 @@ static void init_lists_p_slice(struct Slice *currSlice)
 		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 			  "listX[0] (PicNum): ");
 		for (i = 0; i < currSlice->listXsize[0]; i++) {
-			dpb_print(p_H264_Dpb->decoder_index,
+			dpb_print_cont(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL, "%d  ",
 				currSlice->listX[0][i]->pic_num);
 		}
-		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
+		dpb_print_cont(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 			  "\n");
 
 		/* long term handling */
@@ -4285,21 +4288,21 @@ static void init_lists_b_slice(struct Slice *currSlice)
 				PRINT_FLAG_DPB_DETAIL,
 				"listX[0] (PicNum): ");
 			for (i = 0; i < currSlice->listXsize[0]; i++) {
-				dpb_print(p_H264_Dpb->decoder_index,
+				dpb_print_cont(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL, "%d  ",
 				currSlice->listX[0][i]->pic_num);
 			}
-			dpb_print(p_H264_Dpb->decoder_index,
+			dpb_print_cont(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL, "\n");
 			dpb_print(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL,
 				"listX[1] (PicNum): ");
 			for (i = 0; i < currSlice->listXsize[1]; i++) {
-				dpb_print(p_H264_Dpb->decoder_index,
+				dpb_print_cont(p_H264_Dpb->decoder_index,
 					PRINT_FLAG_DPB_DETAIL, "%d  ",
 					currSlice->listX[1][i]->pic_num);
 			}
-			dpb_print(p_H264_Dpb->decoder_index,
+			dpb_print_cont(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL, "\n");
 
 			/* long term handling */
@@ -4389,22 +4392,22 @@ static void init_lists_b_slice(struct Slice *currSlice)
 				"fs_list0 currPoc=%d (Poc): ",
 				currSlice->ThisPOC);
 			for (i = 0; i < list0idx; i++) {
-				dpb_print(p_H264_Dpb->decoder_index,
+				dpb_print_cont(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL, "%d  ",
 				fs_list0[i]->poc);
 			}
-			dpb_print(p_H264_Dpb->decoder_index,
+			dpb_print_cont(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL, "\n");
 			dpb_print(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL,
 				"fs_list1 currPoc=%d (Poc): ",
 				currSlice->ThisPOC);
 			for (i = 0; i < list0idx; i++) {
-				dpb_print(p_H264_Dpb->decoder_index,
+				dpb_print_cont(p_H264_Dpb->decoder_index,
 					PRINT_FLAG_DPB_DETAIL, "%d  ",
 					fs_list1[i]->poc);
 			}
-			dpb_print(p_H264_Dpb->decoder_index,
+			dpb_print_cont(p_H264_Dpb->decoder_index,
 					PRINT_FLAG_DPB_DETAIL, "\n");
 
 			currSlice->listXsize[0] = 0;
