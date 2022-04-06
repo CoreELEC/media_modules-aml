@@ -8282,9 +8282,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					wait_event_interruptible_timeout(cm->cur_frame->wait_sfgs,
 						(atomic_read(&cm->cur_frame->fgs_done) == 1), msecs_to_jiffies(50));
 				if (get_debug_fgs() & DEBUG_FGS_CONSUME_TIME) {
-					pr_info("%s, pic %d, fgs_valid %d, wait consume time %d us\n", __func__,
+					pr_info("%s, pic %d, fgs_valid %d, wait consume time %ld us\n", __func__,
 						hw->frame_count - 1, hw->fgs_valid,
-						div64_u64(local_clock() - start_time, 1000));
+						(ulong)(div64_u64(local_clock() - start_time, 1000)));
 				}
 			}
 			if (hw->low_latency_flag)

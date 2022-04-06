@@ -1136,8 +1136,8 @@ void av1_add_film_grain_run(char *fg_table_buf, struct aom_film_grain_t *params)
 
 	if (debug_fgs & DEBUG_FGS_CONSUME_TIME) {
 		time6 = div64_u64(local_clock() - step_time, 1000);
-		pr_info("fgs consume time %d (%d, %d, %d, %d, %d, %d)us\n",
-			div64_u64(local_clock() - start_time, 1000), time1, time2, time3, time4, time5, time6);
+		pr_info("fgs consume time %ld (%d, %d, %d, %d, %d, %d)us\n",
+			(ulong)(div64_u64(local_clock() - start_time, 1000)), time1, time2, time3, time4, time5, time6);
 	}
 }
 
