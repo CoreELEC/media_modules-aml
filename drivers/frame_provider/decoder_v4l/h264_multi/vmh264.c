@@ -4790,13 +4790,9 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 
 static int get_dec_dpb_size_active(struct vdec_h264_hw_s *hw, u32 param1, u32 param4)
 {
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-	struct vdec_s *vdec = hw_to_vdec(hw);
-#endif
 	int mb_width, mb_total;
 	int mb_height = 0;
-	int active_buffer_spec_num, dec_dpb_size;
-	u32 used_reorder_dpb_size_margin = hw->reorder_dpb_size_margin;
+	int dec_dpb_size;
 	int level_idc = param4 & 0xff;
 
 	mb_width = param1 & 0xff;
@@ -4819,25 +4815,7 @@ static int get_dec_dpb_size_active(struct vdec_h264_hw_s *hw, u32 param1, u32 pa
 	hw->error_frame_width = 0;
 	hw->error_frame_height = 0;
 
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-		if (vdec->master || vdec->slave)
-			used_reorder_dpb_size_margin =
-				reorder_dpb_size_margin_dv;
-#endif
-
 	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
-
-	active_buffer_spec_num =
-		dec_dpb_size
-		+ used_reorder_dpb_size_margin;
-
-	if (active_buffer_spec_num > MAX_VF_BUF_NUM) {
-		active_buffer_spec_num = MAX_VF_BUF_NUM;
-		dec_dpb_size = active_buffer_spec_num
-			- used_reorder_dpb_size_margin;
-	}
-
-	hw->dpb.mDPB.size = active_buffer_spec_num;
 
 	if (hw->no_poc_reorder_flag)
 		dec_dpb_size = 1;
@@ -5075,30 +5053,18 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			hw->dpb.reorder_output = hw->num_reorder_frames + 1;
 		}
 
-		active_buffer_spec_num =
-			hw->dpb.dec_dpb_size
-			+ used_reorder_dpb_size_margin;
 		hw->max_reference_size =
 			max_reference_size + reference_buf_margin;
 
-		if (active_buffer_spec_num > MAX_VF_BUF_NUM) {
-			active_buffer_spec_num = MAX_VF_BUF_NUM;
-			hw->dpb.dec_dpb_size = active_buffer_spec_num
-				- used_reorder_dpb_size_margin;
-			dpb_print(DECODE_ID(hw), 0,
-				"active_buffer_spec_num is larger than MAX %d, set dec_dpb_size to %d\n",
-				MAX_VF_BUF_NUM, hw->dpb.dec_dpb_size);
-		}
-
-		vdec_v4l_get_pic_info(ctx, &pic);
-
-		active_buffer_spec_num = pic.dpb_frames +
-			pic.dpb_margin;
-
-		hw->dpb.mDPB.size = active_buffer_spec_num;
 		if (hw->max_reference_size > MAX_VF_BUF_NUM)
 			hw->max_reference_size = MAX_VF_BUF_NUM;
 		hw->dpb.max_reference_size = hw->max_reference_size;
+
+		vdec_v4l_get_pic_info(ctx, &pic);
+
+		active_buffer_spec_num = pic.dpb_frames + pic.dpb_margin;
+
+		hw->dpb.mDPB.size = active_buffer_spec_num;
 
 		if (hw->no_poc_reorder_flag)
 			hw->dpb.dec_dpb_size = 1;
