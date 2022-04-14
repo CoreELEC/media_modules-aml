@@ -520,16 +520,18 @@ retry:
 
 		vf_out->mem_sec = ctx->is_drm_mode ? 1 : 0;
 		start_time = local_clock();
+
+		mutex_lock(&ctx->dev->canche.lock);
 		/* src canvas configure. */
 		if ((in_buf->vf->canvas0Addr == 0) ||
 			(in_buf->vf->canvas0Addr == (u32)-1)) {
-			canvas_config_config(ge2d->src_canvas_id[0], &in_buf->vf->canvas0_config[0]);
-			canvas_config_config(ge2d->src_canvas_id[1], &in_buf->vf->canvas0_config[1]);
-			canvas_config_config(ge2d->src_canvas_id[2], &in_buf->vf->canvas0_config[2]);
+			canvas_config_config(ctx->dev->canche.res[0].cid, &in_buf->vf->canvas0_config[0]);
+			canvas_config_config(ctx->dev->canche.res[1].cid, &in_buf->vf->canvas0_config[1]);
+			canvas_config_config(ctx->dev->canche.res[2].cid, &in_buf->vf->canvas0_config[2]);
 			ge2d_config.src_para.canvas_index =
-				ge2d->src_canvas_id[0] |
-				ge2d->src_canvas_id[1] << 8 |
-				ge2d->src_canvas_id[2] << 16;
+				ctx->dev->canche.res[0].cid |
+				ctx->dev->canche.res[1].cid << 8 |
+				ctx->dev->canche.res[2].cid << 16;
 
 			ge2d_config.src_planes[0].addr =
 				in_buf->vf->canvas0_config[0].phy_addr;
@@ -568,20 +570,20 @@ retry:
 			ge2d_config.src_para.height = in_buf->vf->height;
 
 		/* dst canvas configure. */
-		canvas_config_config(ge2d->dst_canvas_id[0], &vf_out->canvas0_config[0]);
+		canvas_config_config(ctx->dev->canche.res[3].cid, &vf_out->canvas0_config[0]);
 		if ((ge2d_config.src_para.format & 0xfffff) == GE2D_FORMAT_M24_YUV420) {
 			vf_out->canvas0_config[1].width <<= 1;
 		}
-		canvas_config_config(ge2d->dst_canvas_id[1], &vf_out->canvas0_config[1]);
-		canvas_config_config(ge2d->dst_canvas_id[2], &vf_out->canvas0_config[2]);
+		canvas_config_config(ctx->dev->canche.res[4].cid, &vf_out->canvas0_config[1]);
+		canvas_config_config(ctx->dev->canche.res[5].cid, &vf_out->canvas0_config[2]);
 		ge2d_config.dst_para.canvas_index =
-			ge2d->dst_canvas_id[0] |
-			ge2d->dst_canvas_id[1] << 8;
-		canvas_read(ge2d->dst_canvas_id[0], &cd);
+			ctx->dev->canche.res[3].cid |
+			ctx->dev->canche.res[4].cid << 8;
+		canvas_read(ctx->dev->canche.res[3].cid, &cd);
 		ge2d_config.dst_planes[0].addr	= cd.addr;
 		ge2d_config.dst_planes[0].w	= cd.width;
 		ge2d_config.dst_planes[0].h	= cd.height;
-		canvas_read(ge2d->dst_canvas_id[1], &cd);
+		canvas_read(ctx->dev->canche.res[4].cid, &cd);
 		ge2d_config.dst_planes[1].addr	= cd.addr;
 		ge2d_config.dst_planes[1].w	= cd.width;
 		ge2d_config.dst_planes[1].h	= cd.height;
@@ -636,6 +638,7 @@ retry:
 		if (ge2d_context_config_ex(ge2d->ge2d_context, &ge2d_config) < 0) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 				"ge2d_context_config_ex error.\n");
+			mutex_unlock(&ctx->dev->canche.lock);
 			goto exit;
 		}
 
@@ -650,6 +653,7 @@ retry:
 					0, 0, in_buf->vf->width, in_buf->vf->height);
 			}
 		}
+		mutex_unlock(&ctx->dev->canche.lock);
 
 		//pr_info("consume time %d us\n", div64_u64(local_clock() - start_time, 1000));
 
@@ -776,26 +780,15 @@ int aml_v4l2_ge2d_init(
 		kfifo_put(&ge2d->frame, &ge2d->vfpool[i]);
 	}
 
-	ge2d->src_canvas_id[0] = canvas_pool_map_alloc_canvas("v4ldec-ge2d");
-	ge2d->src_canvas_id[1] = canvas_pool_map_alloc_canvas("v4ldec-ge2d");
-	ge2d->src_canvas_id[2] = canvas_pool_map_alloc_canvas("v4ldec-ge2d");
-	ge2d->dst_canvas_id[0] = canvas_pool_map_alloc_canvas("v4ldec-ge2d");
-	ge2d->dst_canvas_id[1] = canvas_pool_map_alloc_canvas("v4ldec-ge2d");
-	ge2d->dst_canvas_id[2] = canvas_pool_map_alloc_canvas("v4ldec-ge2d");
-	if ((ge2d->src_canvas_id[0] <= 0) ||
-		(ge2d->src_canvas_id[1] <= 0) ||
-		(ge2d->src_canvas_id[2] <= 0) ||
-		(ge2d->dst_canvas_id[0] <= 0) ||
-		(ge2d->dst_canvas_id[1] <= 0) ||
-		(ge2d->dst_canvas_id[2] <= 0)) {
+	if (aml_canvas_cache_get(ctx->dev, "v4ldec-ge2d") < 0) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"canvas pool alloc fail. src(%d, %d, %d) dst(%d, %d, %d).\n",
-			ge2d->src_canvas_id[0],
-			ge2d->src_canvas_id[1],
-			ge2d->src_canvas_id[2],
-			ge2d->dst_canvas_id[0],
-			ge2d->dst_canvas_id[1],
-			ge2d->dst_canvas_id[2]);
+			ctx->dev->canche.res[0].cid,
+			ctx->dev->canche.res[1].cid,
+			ctx->dev->canche.res[2].cid,
+			ctx->dev->canche.res[3].cid,
+			ctx->dev->canche.res[4].cid,
+			ctx->dev->canche.res[5].cid);
 		goto error8;
 	}
 
@@ -824,18 +817,7 @@ int aml_v4l2_ge2d_init(
 	return 0;
 
 error9:
-	if (ge2d->src_canvas_id[0] > 0)
-		canvas_pool_map_free_canvas(ge2d->src_canvas_id[0]);
-	if (ge2d->src_canvas_id[1] > 0)
-		canvas_pool_map_free_canvas(ge2d->src_canvas_id[1]);
-	if (ge2d->src_canvas_id[2] > 0)
-		canvas_pool_map_free_canvas(ge2d->src_canvas_id[2]);
-	if (ge2d->dst_canvas_id[0] > 0)
-		canvas_pool_map_free_canvas(ge2d->dst_canvas_id[0]);
-	if (ge2d->dst_canvas_id[1] > 0)
-		canvas_pool_map_free_canvas(ge2d->dst_canvas_id[1]);
-	if (ge2d->dst_canvas_id[2] > 0)
-		canvas_pool_map_free_canvas(ge2d->dst_canvas_id[2]);
+	aml_canvas_cache_put(ctx->dev);
 error8:
 	vfree(ge2d->ivbpool);
 error7:
@@ -878,12 +860,7 @@ int aml_v4l2_ge2d_destroy(struct aml_v4l2_ge2d* ge2d)
 	vfree(ge2d->ivbpool);
 	mutex_destroy(&ge2d->output_lock);
 
-	canvas_pool_map_free_canvas(ge2d->src_canvas_id[0]);
-	canvas_pool_map_free_canvas(ge2d->src_canvas_id[1]);
-	canvas_pool_map_free_canvas(ge2d->src_canvas_id[2]);
-	canvas_pool_map_free_canvas(ge2d->dst_canvas_id[0]);
-	canvas_pool_map_free_canvas(ge2d->dst_canvas_id[1]);
-	canvas_pool_map_free_canvas(ge2d->dst_canvas_id[2]);
+	aml_canvas_cache_put(ge2d->ctx->dev);
 
 	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_DETAIL,
 		"ge2d destroy done\n");

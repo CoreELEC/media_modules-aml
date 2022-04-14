@@ -566,18 +566,26 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 		goto err_reg_class;
 	}
 
+	ret = aml_canvas_cache_init(dev);
+	if (ret) {
+		dev_err(&pdev->dev, "v4l dec alloc canvas fail.\n");
+		goto err_alloc_canvas;
+	}
+
 	dev_info(&pdev->dev, "v4ldec registered as /dev/video%d\n", vfd_dec->num);
 
 	return 0;
 
-err_reg_class:
+err_alloc_canvas:
 	class_unregister(&dev->v4ldec_class);
+err_reg_class:
+	video_unregister_device(vfd_dec);
 err_dec_reg:
 	destroy_workqueue(dev->decode_workqueue);
 err_event_workq:
 	v4l2_m2m_release(dev->m2m_dev_dec);
 err_dec_mem_init:
-	video_unregister_device(vfd_dec);
+	video_device_release(vfd_dec);
 err_dec_alloc:
 	v4l2_device_unregister(&dev->v4l2_dev);
 err_res:
@@ -601,6 +609,8 @@ static int aml_vcodec_dec_remove(struct platform_device *pdev)
 		video_unregister_device(dev->vfd_dec);
 
 	v4l2_device_unregister(&dev->v4l2_dev);
+
+	aml_canvas_cache_put(dev);
 
 	dev_info(&pdev->dev, "v4ldec removed.\n");
 

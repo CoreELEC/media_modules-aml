@@ -567,6 +567,17 @@ struct aml_ge2d_cfg_infos {
 	bool	bypass;
 };
 
+struct canvas_res {
+	int			cid;
+	u8			name[32];
+};
+
+struct canvas_cache {
+	int			ref;
+	struct canvas_res	res[8];
+	struct mutex		lock;
+};
+
 /*
  * struct aml_vcodec_ctx - Context (instance) private data.
  * @id: index of the context that this structure describes.
@@ -743,6 +754,7 @@ struct aml_vcodec_ctx {
  * @queue		: waitqueue for waiting for completion of device commands.
  * @vpp_count		: count the number of open vpp.
  * @v4ldec_class	: creat class sysfs uesd to show some information.
+ * @canche		: canvas pool specific used for v4ldec context.
  */
 struct aml_vcodec_dev {
 	struct v4l2_device		v4l2_dev;
@@ -761,6 +773,7 @@ struct aml_vcodec_dev {
 	wait_queue_head_t		queue;
 	atomic_t			vpp_count;
 	struct class			v4ldec_class;
+	struct canvas_cache		canche;
 };
 
 static inline struct aml_vcodec_ctx *fh_to_ctx(struct v4l2_fh *fh)

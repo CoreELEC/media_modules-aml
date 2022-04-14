@@ -32,6 +32,7 @@
 #include <linux/sched/clock.h>
 #include <linux/highmem.h>
 #include <uapi/linux/sched/types.h>
+#include <linux/amlogic/media/canvas/canvas_mgr.h>
 
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
@@ -3307,6 +3308,95 @@ void aml_bind_dv_buffer(struct aml_vcodec_ctx *ctx, char **comp_buf, char **md_b
 		*md_buf = ctx->aux_infos.bufs[index].md_buf;
 		ctx->aux_infos.dv_index = (index + 1) % V4L_CAP_BUFF_MAX;
 	}
+}
+
+static void aml_canvas_cache_free(struct canvas_cache *canche)
+{
+	int i = -1;
+
+	for (i = 0; i < ARRAY_SIZE(canche->res); i++) {
+		if (canche->res[i].cid > 0) {
+			v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
+				"canvas-free, name:%s, canvas id:%d\n",
+				canche->res[i].name,
+				canche->res[i].cid);
+
+			canvas_pool_map_free_canvas(canche->res[i].cid);
+
+			canche->res[i].cid = 0;
+		}
+	}
+}
+
+void aml_canvas_cache_put(struct aml_vcodec_dev *dev)
+{
+	struct canvas_cache *canche = &dev->canche;
+
+	mutex_lock(&canche->lock);
+
+	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
+		"canvas-put, ref:%d\n", canche->ref);
+
+	canche->ref--;
+
+	if (canche->ref == 0) {
+		aml_canvas_cache_free(canche);
+	}
+
+	mutex_unlock(&canche->lock);
+}
+
+int aml_canvas_cache_get(struct aml_vcodec_dev *dev, char *usr)
+{
+	struct canvas_cache *canche = &dev->canche;
+	int i;
+
+	mutex_lock(&canche->lock);
+
+	canche->ref++;
+
+	for (i = 0; i < ARRAY_SIZE(canche->res); i++) {
+		if (canche->res[i].cid <= 0) {
+			snprintf(canche->res[i].name, 32, "%s-%d", usr, i);
+			canche->res[i].cid =
+				canvas_pool_map_alloc_canvas(canche->res[i].name);
+		}
+
+		v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
+			"canvas-alloc, name:%s, canvas id:%d\n",
+			canche->res[i].name,
+			canche->res[i].cid);
+
+		if (canche->res[i].cid <= 0) {
+			v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
+				"canvas-fail, name:%s, canvas id:%d.\n",
+				canche->res[i].name,
+				canche->res[i].cid);
+
+			mutex_unlock(&canche->lock);
+			goto err;
+		}
+	}
+
+	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
+		"canvas-get, ref:%d\n", canche->ref);
+
+	mutex_unlock(&canche->lock);
+	return 0;
+err:
+	aml_canvas_cache_put(dev);
+	return -1;
+}
+
+int aml_canvas_cache_init(struct aml_vcodec_dev *dev)
+{
+	dev->canche.ref = 0;
+	mutex_init(&dev->canche.lock);
+
+	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
+		"canvas-init, ref:%d\n", dev->canche.ref);
+
+	return 0;
 }
 
 void aml_v4l_ctx_release(struct kref *kref)
