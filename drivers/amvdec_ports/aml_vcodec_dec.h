@@ -145,4 +145,8 @@ void aml_free_one_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size,
 void aml_bind_sei_buffer(struct aml_vcodec_ctx *v4l, char **addr, int *size, int *idx);
 void aml_bind_dv_buffer(struct aml_vcodec_ctx *v4l, char **comp_buf, char **md_buf);
 
+int aml_canvas_cache_init(struct aml_vcodec_dev *dev);
+void aml_canvas_cache_put(struct aml_vcodec_dev *dev);
+int aml_canvas_cache_get(struct aml_vcodec_dev *dev, char *usr);
+
 #endif /* _AML_VCODEC_DEC_H_ */

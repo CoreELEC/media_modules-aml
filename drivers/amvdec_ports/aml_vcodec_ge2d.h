@@ -72,9 +72,6 @@ struct aml_v4l2_ge2d {
 	int			in_num[2];
 	int			out_num[2];
 	ulong			fb_token;
-
-	int			src_canvas_id[3];
-	int			dst_canvas_id[3];
 };
 
 struct task_ops_s *get_ge2d_ops(void);
