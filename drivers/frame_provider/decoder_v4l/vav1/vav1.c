@@ -420,6 +420,8 @@ static u32 get_picture_qos;
 
 static u32 debug;
 static u32 disable_fg;
+/*for debug*/
+static u32 use_dw_mmu;
 
 static bool is_reset;
 /*for debug*/
@@ -852,6 +854,7 @@ struct AV1HW_s {
 	int film_grain_present;
 	ulong fg_table_handle;
 	spinlock_t wait_buf_lock;
+	int double_write_mode_original;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -5471,13 +5474,18 @@ static void set_canvas(struct AV1HW_s *hw,
 	int blkmode = hw->mem_map_mode;
 	/*CANVAS_BLKMODE_64X32*/
 	if	(pic_config->double_write_mode) {
-		canvas_w = pic_config->y_crop_width	/
+		if (pic_config->double_write_mode == 0x21) {
+			canvas_w = pic_config->y_crop_width / 4;
+			canvas_h = pic_config->y_crop_height / 4;
+			av1_print(hw, AV1_DEBUG_BUFMGR_DETAIL,"%s use double_write_mode = 0x21!\n",__func__);
+		} else {
+			canvas_w = pic_config->y_crop_width	/
 				get_double_write_ratio(
 					pic_config->double_write_mode & 0xf);
-		canvas_h = pic_config->y_crop_height /
-				get_double_write_ratio(
-					pic_config->double_write_mode & 0xf);
-
+			canvas_h = pic_config->y_crop_height /
+					get_double_write_ratio(
+						pic_config->double_write_mode & 0xf);
+		}
 		/* sao ctrl1 config aligned with 64, so aligned with 64 same */
 		canvas_w = ALIGN(canvas_w, 64);
 		canvas_h = ALIGN(canvas_h, 32);
@@ -6020,7 +6028,6 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 					pic_config->canvas_config[0];
 				vf->canvas1_config[1] =
 					pic_config->canvas_config[1];
-
 			} else
 #endif
 				vf->canvas0Addr = vf->canvas1Addr =
@@ -6032,6 +6039,25 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				(get_double_write_mode(hw) != 0x10)) {
 				vf->type |= VIDTYPE_SCATTER;
 			}
+		}
+
+		if (pic_config->double_write_mode == 0x21) {
+#ifdef MULTI_INSTANCE_SUPPORT
+			if (hw->m_ins_flag) {
+				vf->canvas0Addr = vf->canvas1Addr = -1;
+				vf->plane_num = 2;
+				vf->canvas0_config[0] =
+					pic_config->canvas_config[0];
+				vf->canvas0_config[1] =
+					pic_config->canvas_config[1];
+				vf->canvas1_config[0] =
+					pic_config->canvas_config[0];
+				vf->canvas1_config[1] =
+					pic_config->canvas_config[1];
+			} else
+#endif
+				vf->canvas0Addr = vf->canvas1Addr =
+					spec2canvas(pic_config);
 		}
 
 		switch (pic_config->bit_depth) {
@@ -8064,13 +8090,16 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				pr_info("set ucode parse\n");
 
 				ctx->film_grain_present = hw->film_grain_present;
-				if (ctx->film_grain_present &&
+				if (use_dw_mmu ||
+					(ctx->film_grain_present &&
 					!disable_fg &&
 					(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
-					get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D)) {
+					get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D))) {
 #ifdef AOM_AV1_MMU_DW
+					hw->double_write_mode_original = get_double_write_mode(hw);
 					ctx->config.parm.dec.cfg.double_write_mode = 0x21;
-					pr_info("AV1 has fg, use dw 0x21!\n");
+					pr_info("AV1 has fg, original dw:0x%x use dw 0x21!\n",
+						hw->double_write_mode_original);
 					if (hw->dw_frame_mmu_map_addr == NULL) {
 						u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
 						hw->dw_frame_mmu_map_addr =
@@ -10423,6 +10452,9 @@ MODULE_PARM_DESC(debug, "\n amvdec_av1 debug\n");
 
 module_param(disable_fg, uint, 0664);
 MODULE_PARM_DESC(disable_fg, "\n amvdec_av1 disable_fg\n");
+
+module_param(use_dw_mmu, uint, 0664);
+MODULE_PARM_DESC(use_dw_mmu, "\n amvdec_av1 use_dw_mmu\n");
 
 module_param(radr, uint, 0664);
 MODULE_PARM_DESC(radr, "\n radr\n");

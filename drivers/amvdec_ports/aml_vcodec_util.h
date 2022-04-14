@@ -54,7 +54,7 @@ struct aml_vcodec_ctx;
 struct aml_vcodec_dev;
 
 extern u32 debug_mode;
-extern u32 mandatory_dw_mmu;
+extern u32 disable_vpp_dw_mmu;
 
 #ifdef v4l_dbg
 #undef v4l_dbg

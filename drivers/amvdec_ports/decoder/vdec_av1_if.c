@@ -1209,7 +1209,6 @@ static int vdec_pic_scale(struct vdec_av1_inst *inst, int length, int dw_mode)
 
 	switch (vdec_get_dw_mode(inst, dw_mode)) {
 	case 0x0: /* only afbc, output afbc */
-	case 0x21: /* only afbc, output afbc */
 		ret = 64;
 		break;
 	case 0x1: /* afbc and (w x h), output YUV420 */
@@ -1217,6 +1216,7 @@ static int vdec_pic_scale(struct vdec_av1_inst *inst, int length, int dw_mode)
 		break;
 	case 0x2: /* afbc and (w/4 x h/4), output YUV420 */
 	case 0x3: /* afbc and (w/4 x h/4), output afbc and YUV420 */
+	case 0x21: /* only afbc, But di will output YUV420 (w/4 x h/4) */
 		ret = length >> 2;
 		break;
 	case 0x4: /* afbc and (w/2 x h/2), output YUV420 */

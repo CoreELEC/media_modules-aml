@@ -396,7 +396,8 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 		return false;
 
 	if (!ctx->vpp_cfg.enable_nr &&
-		(ctx->picinfo.field == V4L2_FIELD_NONE)) {
+		(ctx->picinfo.field == V4L2_FIELD_NONE) &&
+		!(ctx->config.parm.dec.cfg.double_write_mode & 0x20)) {
 		return false;
 	}
 
@@ -426,6 +427,10 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 			*mode = VPP_MODE_DI;
 	}
 
+	if (!disable_vpp_dw_mmu &&
+		(ctx->config.parm.dec.cfg.double_write_mode & 0x20)) {
+		*mode = VPP_MODE_S4_DW_MMU;;
+	}
 #if 0//enable later
 	if (ctx->colorspace != V4L2_COLORSPACE_DEFAULT &&
 		!is_over_size(width, height, size)) {
@@ -4594,10 +4599,6 @@ static int check_dec_cfginfo(struct aml_vdec_cfg_infos *cfg)
 	if (cfg->ref_buf_margin > 20) {
 		pr_err("invalid margin %d\n", cfg->ref_buf_margin);
 		return -1;
-	}
-
-	if (mandatory_dw_mmu) {
-		cfg->double_write_mode = 0x21;
 	}
 
 	pr_info("double write mode %d margin %d\n",
