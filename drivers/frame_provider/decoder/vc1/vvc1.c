@@ -905,6 +905,14 @@ static int vvc1_canvas_init(void)
 		/* HD & SD */
 		canvas_width = 1920;
 		canvas_height = 1088;
+		if (vvc1_amstream_dec_info.width < vvc1_amstream_dec_info.height) {
+			canvas_width = 1088;
+			canvas_height = 1920;
+			if (vvc1_amstream_dec_info.width > 1088) {
+				canvas_width = ALIGN(vvc1_amstream_dec_info.width, 64);
+				canvas_height = ALIGN(vvc1_amstream_dec_info.height, 64);
+			}
+		}
 		decbuf_y_size = 0x200000;
 		decbuf_uv_size = 0x80000;
 		decbuf_size = 0x300000;
