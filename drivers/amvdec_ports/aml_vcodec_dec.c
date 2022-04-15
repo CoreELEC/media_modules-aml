@@ -3651,6 +3651,12 @@ static int update_comp_buffer_to_reuse(struct aml_vcodec_ctx *ctx,
 				       struct aml_video_dec_buf *buf)
 {
 	struct internal_comp_buf* ibuf = NULL;
+	u32 dw_mode = VDEC_DW_NO_AFBC;
+
+	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
+		return -EINVAL;
+	}
 
 	mutex_lock(&ctx->comp_lock);
 
@@ -3674,6 +3680,19 @@ static int update_comp_buffer_to_reuse(struct aml_vcodec_ctx *ctx,
 					ibuf->index);
 				mutex_unlock(&ctx->comp_lock);
 				return -ENOMEM;
+			}
+
+			if (dw_mode & 0x20) {
+				decoder_bmmu_box_free_idx(ctx->bmmu_box_dw, ibuf->index);
+				if (decoder_bmmu_box_alloc_buf_phy(ctx->bmmu_box_dw,
+					ibuf->index, ctx->comp_info.header_size,
+					"v4l2_dec_dw", &ibuf->header_dw_addr) < 0) {
+					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+						"fail to alloc %dth bmmu_dw\n",
+						ibuf->index);
+					mutex_unlock(&ctx->comp_lock);
+					return -ENOMEM;
+				}
 			}
 			ibuf->header_size = ctx->comp_info.header_size;
 		}
@@ -3752,7 +3771,7 @@ static int bind_comp_buffer_to_uvm(struct aml_vcodec_ctx *ctx,
 	if (dw_mode & 0x20) {
 		ret = decoder_bmmu_box_alloc_buf_phy(ctx->bmmu_box_dw,
 			ibuf->index, ctx->comp_info.header_size,
-			"v4l2_dec", &ibuf->header_dw_addr);
+			"v4l2_dec_dw", &ibuf->header_dw_addr);
 		if (ret < 0) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to alloc %dth bmmu dw\n", i);
 			return -ENOMEM;
