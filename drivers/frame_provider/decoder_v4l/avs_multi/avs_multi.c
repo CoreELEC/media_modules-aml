@@ -3604,7 +3604,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (v4l2_ctx->is_stream_off) {
-			vavs_vf_put(vavs_vf_get(vdec), vdec);
+			vavs_vf_put(vavs_vf_get(hw), hw);
 		} else {
 			fb->task->submit(fb->task, TASK_TYPE_DEC);
 		}
@@ -3695,7 +3695,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (v4l2_ctx->is_stream_off) {
-			vavs_vf_put(vavs_vf_get(vdec), vdec);
+			vavs_vf_put(vavs_vf_get(hw), hw);
 		} else {
 			fb->task->submit(fb->task, TASK_TYPE_DEC);
 		}
@@ -3807,7 +3807,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 
 		if (v4l2_ctx->is_stream_off) {
-			vavs_vf_put(vavs_vf_get(vdec), vdec);
+			vavs_vf_put(vavs_vf_get(hw), hw);
 		} else {
 			fb->task->submit(fb->task, TASK_TYPE_DEC);
 		}
