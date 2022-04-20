@@ -277,8 +277,8 @@ static void vdec_parser_parms(struct vdec_av1_inst *inst)
 			ctx->config.parm.dec.cfg.ref_buf_margin);
 		pbuf += sprintf(pbuf, "av1_double_write_mode:%d;",
 			ctx->config.parm.dec.cfg.double_write_mode);
-		pbuf += sprintf(pbuf, "av1_buf_width:4096;");
-		pbuf += sprintf(pbuf, "av1_buf_height:2304;");
+		pbuf += sprintf(pbuf, "av1_buf_width:1920;");
+		pbuf += sprintf(pbuf, "av1_buf_height:1088;");
 		pbuf += sprintf(pbuf, "save_buffer_mode:0;");
 		pbuf += sprintf(pbuf, "no_head:0;");
 		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:%d;",

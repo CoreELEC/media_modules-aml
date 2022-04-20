@@ -10198,6 +10198,11 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	work_buf_size = (p_buf_info->end_adr - p_buf_info->start_adr
 		+ 0xffff) & (~0xffff);
 
+	if (vdec_is_support_4k() &&
+		(hw->max_pic_w * hw->max_pic_h < MAX_SIZE_4K)) {
+		hw->max_pic_w = 4096;
+		hw->max_pic_h = 2304;
+	}
 	av1_print(hw, 0,
 		"vdec_is_support_4k() %d  max_pic_w %d max_pic_h %d buffer_spec_index %d work_buf_size 0x%x\n",
 			vdec_is_support_4k(), hw->max_pic_w, hw->max_pic_h,
