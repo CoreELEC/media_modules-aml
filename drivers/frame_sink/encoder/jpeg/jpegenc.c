@@ -4298,7 +4298,7 @@ static s32 jpegenc_wq_uninit(void)
 {
     s32 r = -1;
     jenc_pr(LOG_DEBUG, "uninit encode wq.\n");
-    if (gJpegenc.encode_hw_status == JPEGENC_ENCODER_IDLE) {
+    if ((gJpegenc.encode_hw_status == JPEGENC_ENCODER_IDLE) || (gJpegenc.encode_hw_status == JPEGENC_ENCODER_DONE)) {
         if ((gJpegenc.irq_num >= 0) &&
             (gJpegenc.irq_requested == true)) {
             free_irq(gJpegenc.irq_num, &gJpegenc);
