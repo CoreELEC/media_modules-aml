@@ -850,6 +850,7 @@ struct AV1HW_s {
 	struct vav1_assit_task assit_task;
 	bool high_bandwidth_flag;
 	int film_grain_present;
+	ulong fg_table_handle;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -5262,9 +5263,7 @@ static void av1_local_uninit(struct AV1HW_s *hw, bool reset_flag)
 		hw->fg_ptr = NULL;
 		if (hw->fg_addr) {
 			if (hw->fg_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
-					FGS_TABLE_SIZE * FRAME_BUFFERS, hw->fg_addr,
-					hw->fg_phy_addr);
+				codec_mm_dma_free_coherent(hw->fg_table_handle);
 			hw->fg_addr = NULL;
 		}
 	}
@@ -5296,22 +5295,6 @@ static void av1_local_uninit(struct AV1HW_s *hw, bool reset_flag)
 				LMEM_BUF_SIZE, hw->lmem_addr,
 				hw->lmem_phy_addr);
 		hw->lmem_addr = NULL;
-	}
-	if (hw->prob_buffer_addr) {
-		if (hw->prob_buffer_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
-				PROB_BUF_SIZE, hw->prob_buffer_addr,
-				hw->prob_buffer_phy_addr);
-
-		hw->prob_buffer_addr = NULL;
-	}
-	if (hw->count_buffer_addr) {
-		if (hw->count_buffer_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
-				COUNT_BUF_SIZE, hw->count_buffer_addr,
-				hw->count_buffer_phy_addr);
-
-		hw->count_buffer_addr = NULL;
 	}
 
 	vav1_mmu_map_free(hw);
@@ -5428,15 +5411,21 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 #endif
 
 	if (!reset_flag) {
-		hw->fg_addr = dma_alloc_coherent(amports_get_dma_device(),
-				FGS_TABLE_SIZE * FRAME_BUFFERS,
-				&hw->fg_phy_addr, GFP_KERNEL);
+		int alloc_num = 1;
+		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)) {
+			alloc_num = FRAME_BUFFERS;
+		}
+		hw->fg_addr = codec_mm_dma_alloc_coherent(&hw->fg_table_handle,
+				(ulong *)&hw->fg_phy_addr,FGS_TABLE_SIZE * alloc_num, MEM_NAME);
 		if (hw->fg_addr == NULL) {
 			pr_err("%s: failed to alloc fg buffer\n", __func__);
 		}
 		hw->fg_ptr = hw->fg_addr;
 		pr_info("%s, alloc fg table addr %lx, size 0x%x\n", __func__,
-			(ulong)hw->fg_phy_addr, FGS_TABLE_SIZE * FRAME_BUFFERS);
+			(ulong)hw->fg_phy_addr, FGS_TABLE_SIZE * alloc_num);
 	}
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
@@ -5452,23 +5441,6 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 		goto dma_alloc_fail;
 	}
 	hw->lmem_ptr = hw->lmem_addr;
-
-	hw->prob_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
-				PROB_BUF_SIZE,
-				&hw->prob_buffer_phy_addr, GFP_KERNEL);
-	if (hw->prob_buffer_addr == NULL) {
-		pr_err("%s: failed to alloc prob_buffer\n", __func__);
-		goto dma_alloc_fail;
-	}
-	memset(hw->prob_buffer_addr, 0, PROB_BUF_SIZE);
-	hw->count_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
-				COUNT_BUF_SIZE,
-				&hw->count_buffer_phy_addr, GFP_KERNEL);
-	if (hw->count_buffer_addr == NULL) {
-		pr_err("%s: failed to alloc count_buffer\n", __func__);
-		goto dma_alloc_fail;
-	}
-	memset(hw->count_buffer_addr, 0, COUNT_BUF_SIZE);
 
 	vdec_set_vframe_comm(hw_to_vdec(hw), DRIVER_NAME);
 	ret = vav1_mmu_map_alloc(hw);
