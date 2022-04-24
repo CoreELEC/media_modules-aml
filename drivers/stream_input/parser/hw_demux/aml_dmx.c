@@ -4200,11 +4200,11 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 		}
 	}
 
-	/*{
+	{
 		u32 data;
 		data = READ_MPEG_REG(STB_TOP_CONFIG);
 		ciplus = 0x7C000000 & data;
-	}*/
+	}
 
 	WRITE_MPEG_REG(RESET1_REGISTER, RESET_DEMUXSTB);
 	/*WRITE_MPEG_REG(RESET3_REGISTER, RESET_DEMUX2|RESET_DEMUX1|RESET_DEMUX0|RESET_S2P1|RESET_S2P0|RESET_TOP);*/
@@ -4420,11 +4420,11 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 	}
 #endif
 
-	/*{
+	{
 		u32 data;
 		data = READ_MPEG_REG(STB_TOP_CONFIG);
 		ciplus = 0x7C000000 & data;
-	}*/
+	}
 
 	pr_error("dmx_reset_dmx_hw_ex_unlock into\n");
 	WRITE_MPEG_REG(RESET3_REGISTER,
