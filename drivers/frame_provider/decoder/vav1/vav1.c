@@ -2052,8 +2052,8 @@ static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			.buf_size = 0x800,
 		},
 		.seg_map = {
-			// SEGMENT MAP AREA - 1920x1088/4/4 * 3 bits = 0xBF40 Bytes * 16 = 0xBF400
-			.buf_size = 0xBF400,
+			// SEGMENT MAP AREA(roundup 128) - 1920x1152/4/4 * 3 bits = 0xBF40 Bytes * 16 = 0xBF400
+			.buf_size = 0xCA800,
 		},
 		.daala_top = {
 			// DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128. Total 4096/128*256 = 0x2000
