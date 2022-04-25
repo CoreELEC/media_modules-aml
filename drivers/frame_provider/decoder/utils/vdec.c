@@ -2811,7 +2811,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			}
 		}
 	}
-
+	if (vdec_single(vdec) && !vdec_secure(vdec)) {
+		if (!is_support_no_parser())
+			tee_config_device_state(DMC_DEV_ID_PARSER, 0);
+		tee_config_device_state(DMC_DEV_ID_VDEC, 0);
+	}
 	p->dolby_meta_with_el = 0;
 	pr_debug("vdec_init, vf_provider_name = %s, b %d\n",
 		p->vf_provider_name, is_cpu_tm2_revb());
