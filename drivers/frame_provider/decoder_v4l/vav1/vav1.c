@@ -5769,6 +5769,11 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 		pr_info("%s, alloc fg table addr %lx, size 0x%x\n", __func__,
 			(ulong)hw->fg_phy_addr, FGS_TABLE_SIZE * FRAME_BUFFERS);
 	}
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)) {
+		cur_buf_info->fgs_table.buf_start = hw->fg_phy_addr;
+	}
 
 	hw->lmem_addr = dma_alloc_coherent(amports_get_dma_device(),
 			LMEM_BUF_SIZE,
@@ -8149,6 +8154,10 @@ static int work_space_size_update(struct AV1HW_s *hw)
 			if (!hw->mmu_enable)
 				hw->mc_buf_spec.buf_end = hw->buf_start + hw->buf_size;
 			init_buff_spec(hw, p_buf_info);
+			if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W))
+				p_buf_info->fgs_table.buf_start = hw->fg_phy_addr;
 			hw->work_space_buf = p_buf_info;
 			hw->pbi->work_space_buf = p_buf_info;
 		}

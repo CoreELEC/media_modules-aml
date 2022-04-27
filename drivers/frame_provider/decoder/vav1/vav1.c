@@ -875,6 +875,7 @@ struct AV1HW_s {
 	unsigned *rdma_adr;
 	struct trace_decoder_name trace;
 	bool high_bandwidth_flag;
+	ulong fg_table_handle;
 };
 
 static void av1_dump_state(struct vdec_s *vdec);
@@ -5750,9 +5751,7 @@ static void av1_local_uninit(struct AV1HW_s *hw)
 	hw->fg_ptr = NULL;
 	if (hw->fg_addr) {
 		if (hw->fg_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
-				FGS_TABLE_SIZE, hw->fg_addr,
-				hw->fg_phy_addr);
+			codec_mm_dma_free_coherent(hw->fg_table_handle);
 		hw->fg_addr = NULL;
 	}
 #endif
@@ -5811,6 +5810,7 @@ static void av1_local_uninit(struct AV1HW_s *hw)
 static int av1_local_init(struct AV1HW_s *hw)
 {
 	int ret = -1;
+	int alloc_num = 1;
 	/*int losless_comp_header_size, losless_comp_body_size;*/
 
 	struct BuffInfo_s *cur_buf_info = NULL;
@@ -5956,13 +5956,23 @@ static int av1_local_init(struct AV1HW_s *hw)
 	//}
 #endif
 #ifdef DUMP_FILMGRAIN
-	hw->fg_addr = dma_alloc_coherent(amports_get_dma_device(),
-			FGS_TABLE_SIZE,
-			&hw->fg_phy_addr, GFP_KERNEL);
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)) {
+		alloc_num = FRAME_BUFFERS;
+	}
+	hw->fg_addr = codec_mm_dma_alloc_coherent(&hw->fg_table_handle,
+		(ulong *)&hw->fg_phy_addr, FGS_TABLE_SIZE * alloc_num,  MEM_NAME);
 	if (hw->fg_addr == NULL) {
 		pr_err("%s: failed to alloc fg buffer\n", __func__);
 	}
 	hw->fg_ptr = hw->fg_addr;
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)) {
+		cur_buf_info->fgs_table.buf_start = hw->fg_phy_addr;
+	}
 #endif
 	hw->lmem_addr = dma_alloc_coherent(amports_get_dma_device(),
 			LMEM_BUF_SIZE,
