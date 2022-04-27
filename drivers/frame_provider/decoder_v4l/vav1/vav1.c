@@ -1769,9 +1769,7 @@ int aom_bufmgr_init(struct AV1HW_s *hw, struct BuffInfo_s *buf_spec_i,
 
 	hw->rpm_addr = NULL;
 	hw->lmem_addr = NULL;
-#ifdef DUMP_FILMGRAIN
-	hw->fg_addr = NULL;
-#endif
+
 	hw->use_cma_flag = 0;
 	hw->decode_idx = 0;
 	hw->result_done_count = 0;
