@@ -2112,10 +2112,6 @@ static s32 vpu_probe(struct platform_device *pdev)
 		}
 	}
 
-#ifndef VPU_SUPPORT_CLOCK_CONTROL
-	vpu_clk_config(1);
-#endif
-
 	np = pdev->dev.of_node;
 	reg_count = 0;
 	for_each_child_of_node(np, child) {
@@ -2201,10 +2197,6 @@ ERROR_PROVE_DEVICE:
 		memset(&s_vmem, 0, sizeof(struct video_mm_t));
 	}
 
-#ifndef VPU_SUPPORT_CLOCK_CONTROL
-	vpu_clk_config(0);
-#endif
-
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2)
 		vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
 
@@ -2260,9 +2252,6 @@ static s32 vpu_remove(struct platform_device *pdev)
 			0, sizeof(struct vpudrv_buffer_t));
 	}
 	hevc_pdev = NULL;
-#ifndef VPU_SUPPORT_CLOCK_CONTROL
-	vpu_clk_config(0);
-#endif
 
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2)
 		vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
