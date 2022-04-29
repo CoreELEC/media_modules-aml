@@ -1,11 +1,5 @@
-/**************************************************************************//**
- * @file    cimax+usb_time.h
- *
- * @brief   CIMaX+ USB Driver for linux based operating systems.
- *
- * Copyright (C) 2009-2011    Bruno Tonelli   <bruno.tonelli@smardtv.com>
- *                          & Franck Descours <franck.descours@smardtv.com>
- *                            for SmarDTV France, La Ciotat
+/*
+ * Copyright (C) 2017 Amlogic, Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,8 +10,20 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- ******************************************************************************/
-
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
+ * Description:
+ * @file    cimax+usb_time.h
+ *
+ * @brief   CIMaX+ USB Driver for linux based operating systems.
+ *
+ * Bruno Tonelli   <bruno.tonelli@smardtv.com>
+ * & Franck Descours <franck.descours@smardtv.com>
+ * for SmarDTV France, La Ciotat
+ */
 #ifndef __CIMAXPLUS_USB_TIME_H
 #define __CIMAXPLUS_USB_TIME_H
 

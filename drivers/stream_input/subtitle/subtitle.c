@@ -1,6 +1,4 @@
 /*
- * drivers/amlogic/media/subtitle/subtitle.c
- *
  * Copyright (C) 2017 Amlogic, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -13,8 +11,12 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
  *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
+ * Description:
  */
-
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/kernel.h>

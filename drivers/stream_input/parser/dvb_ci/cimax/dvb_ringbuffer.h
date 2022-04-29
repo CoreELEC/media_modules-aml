@@ -1,25 +1,24 @@
 /*
+ * Copyright (C) 2017 Amlogic, Inc. All rights reserved.
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
+ * Description:
  * dvb_ringbuffer.h: ring buffer implementation for the dvb driver
- *
- * Copyright (C) 2003 Oliver Endriss
- * Copyright (C) 2004 Andrew de Quincey
- *
  * based on code originally found in av7110.c & dvb_ci.c:
- * Copyright (C) 1999-2003 Ralph Metzler & Marcus Metzler
- *                         for convergence integrated media GmbH
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public License
- * as published by the Free Software Foundation; either version 2.1
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
  */
-
 #ifndef _DVB_RINGBUFFER_H_
 #define _DVB_RINGBUFFER_H_
 
