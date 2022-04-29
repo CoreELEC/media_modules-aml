@@ -4229,7 +4229,7 @@ static void vb2ops_vdec_buf_cleanup(struct vb2_buffer *vb)
 				buf->mem[i] = NULL;
 			}
 		}
-		if (ctx->output_thread_ready) {
+		if (ctx->output_thread_ready && ctx->is_stream_off) {
 			if (!is_fb_mapped(ctx, fb->m.mem[0].addr)) {
 				list_del(&fb->task->node);
 				task_chain_clean(fb->task);
