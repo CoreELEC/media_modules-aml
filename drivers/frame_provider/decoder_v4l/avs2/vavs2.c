@@ -5660,6 +5660,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct vframe_s *vf = &dec->vframe_dummy;
 	struct vdec_v4l2_buffer *fb = NULL;
 	int index = INVALID_IDX;
+	int out_buff_index = INVALID_IDX;
 	ulong expires;
 
 	if (dec->eos) {
@@ -5677,8 +5678,14 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			return 0;
 		}
 
+		out_buff_index = dec->avs2_dec.fref[index]->index;
+		if (INVALID_IDX == out_buff_index) {
+			pr_err("[%d] AVS2 EOS get free buff fail. out_buff_index = INVALID_IDX\n", ctx->id);
+			return 0;
+		}
+
 		fb = (struct vdec_v4l2_buffer *)
-			dec->m_BUF[index].v4l_ref_buf_addr;
+			dec->m_BUF[out_buff_index].v4l_ref_buf_addr;
 
 		vf->type		|= VIDTYPE_V4L_EOS;
 		vf->timestamp		= ULONG_MAX;
