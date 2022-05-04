@@ -3243,6 +3243,7 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 		buf->bmmu_box = ctx->bmmu_box;
 		buf->mmu_box_dw = ctx->mmu_box_dw;
 		buf->bmmu_box_dw = ctx->bmmu_box_dw;
+		buf->used = 0;
 	}
 	kref_get(&ctx->ctx_ref);
 

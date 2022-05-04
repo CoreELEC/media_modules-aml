@@ -413,6 +413,8 @@ struct aml_vdec_thread {
  * @frame_buffer_size: SG buffer page number from
  * @priv_data use for video composer
  *  struct vdec_comp_buf_info
+ * @used: bit[0]: 0, idle; 1, decoder alloc from mmu_box
+ *        bit[1]: 0, idle; 1, decoder alloc from mmu_box_dw.
  */
 struct internal_comp_buf {
 	u32		index;
@@ -428,6 +430,7 @@ struct internal_comp_buf {
 	ulong	header_dw_addr;
 	void	*mmu_box_dw;
 	void	*bmmu_box_dw;
+	u32     used;
 };
 
 /*

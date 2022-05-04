@@ -422,6 +422,7 @@ static u32 debug;
 static u32 disable_fg;
 /*for debug*/
 static u32 use_dw_mmu;
+static u32 mmu_mem_save = 1;
 
 static bool is_reset;
 /*for debug*/
@@ -1264,6 +1265,13 @@ int av1_alloc_mmu(
 			ibuf->index,
 			ibuf->frame_buffer_size,
 			mmu_index_adr);
+
+	if (!ret)
+		ibuf->used |= 1;
+
+	av1_print(hw, AV1_DEBUG_BUFMGR, "%s idx %d used %d cur_mmu_4k_number: %d, frame_buffer_size %u\n",
+			__func__, cur_buf_idx, ibuf->used,
+			cur_mmu_4k_number, ibuf->frame_buffer_size);
 
 	ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 	return ret;
@@ -7088,6 +7096,26 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 			}
 		}
 
+		if (mmu_mem_save && hw->mmu_enable &&
+			(ctx->config.parm.dec.cfg.double_write_mode == 0x21)) {
+			struct RefCntBuffer_s *frame_bufs =
+				cm->buffer_pool->frame_bufs;
+			/*free not used mmu buffers.*/
+			for (i = 0; i< hw->used_buf_num; i++) {
+				if (frame_bufs[i].buf.cma_alloc_addr &&
+					(frame_bufs[i].ref_count == 0) &&
+					(frame_bufs[i].buf.index != -1) &&
+					(cm->cur_frame != &frame_bufs[i])) {
+					struct internal_comp_buf *ibuf = index_to_icomp_buf(hw, i);
+						if (!(ibuf->used & 1))
+							continue;
+					decoder_mmu_box_free_idx(ibuf->mmu_box, ibuf->index);
+					ibuf->used &= ~0x1;
+					av1_print(hw, AV1_DEBUG_BUFMGR, "free mmu buffer frame idx %d used: %d\n", i, ibuf->used);
+				}
+			}
+		}
+
 		av1_print(hw, AOM_DEBUG_HW_MORE, "HEVC_DEC_STATUS_REG <= AOM_AV1_DECODE_SLICE\n");
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_DECODE_SLICE);
 	} else {
@@ -7096,6 +7124,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		//skip, search next start code
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_DECODE_SLICE);
 	}
+
 	ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_END);
 	return ret;
 }
@@ -7856,7 +7885,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					struct internal_comp_buf *ibuf = index_to_icomp_buf(hw, cm->cur_fb_idx_mmu);
 					hevc_mmu_dma_check(hw_to_vdec(hw));
 
-					av1_print(hw, AOM_DEBUG_HW_MORE, "mmu free tail, index %d used_num 0x%x\n",
+					av1_print(hw, AV1_DEBUG_BUFMGR, "mmu free tail, index %d used_num %d\n",
 						cm->cur_fb_idx_mmu, used_4k_num);
 
 					decoder_mmu_box_free_idx_tail(
@@ -9619,6 +9648,7 @@ static void  av1_decode_ctx_reset(struct AV1HW_s *hw)
 {
 	struct AV1_Common_s *const cm = &hw->common;
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)hw->v4l2_ctx;
 	int i;
 
 	for (i = 0; i < FRAME_BUFFERS; ++i) {
@@ -9640,6 +9670,12 @@ static void  av1_decode_ctx_reset(struct AV1HW_s *hw)
 			}
 			hw->m_mv_BUF[i].used_flag = 0;
 		}
+	}
+
+	for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
+		struct internal_comp_buf *buf;
+		buf = &ctx->comp_bufs[i];
+		buf->used = 0;
 	}
 
 	hw->one_compressed_data_done = 0;
@@ -10455,6 +10491,9 @@ MODULE_PARM_DESC(disable_fg, "\n amvdec_av1 disable_fg\n");
 
 module_param(use_dw_mmu, uint, 0664);
 MODULE_PARM_DESC(use_dw_mmu, "\n amvdec_av1 use_dw_mmu\n");
+
+module_param(mmu_mem_save, uint, 0664);
+MODULE_PARM_DESC(mmu_mem_save, "\n amvdec_av1 mmu_mem_save\n");
 
 module_param(radr, uint, 0664);
 MODULE_PARM_DESC(radr, "\n radr\n");
