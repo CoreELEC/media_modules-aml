@@ -1535,6 +1535,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 	u32 input_u = 0;
 	u32 input_v = 0;
 	u8 ifmt_extra = 0;
+	u32 pitch = 0;
 
 	if ((request->fmt == FMT_RGB565) || (request->fmt >= MAX_FRAME_FMT))
 		return -1;
@@ -1570,7 +1571,8 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				input_y = (unsigned long)request->dma_cfg[0].paddr;
 				if (request->fmt == FMT_NV21
 					|| request->fmt == FMT_NV12) {
-					input_u = input_y + picsize_x * picsize_y;
+					pitch = ((wq->pic.encoder_width + 31) >> 5) << 5;
+					input_u = input_y + pitch * picsize_y;
 					input_v = input_u;
 				}
 				if (request->fmt == FMT_YUV420) {
