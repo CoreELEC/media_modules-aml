@@ -2263,6 +2263,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		break;
 	case AMSTREAM_SET_VIDEO_ID:
 		priv->vdec->video_id = parm.data_32;
+		priv->vdec->afd_video_id = parm.data_32;
 		mutex_lock(&userdata->mutex);
 		for (i = 0;i < MAX_USERDATA_CHANNEL_NUM; i++) {
 			if (userdata->used[i] == 0) {
@@ -2275,7 +2276,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		}
 		mutex_unlock(&userdata->mutex);
 
-		pr_info("AMSTREAM_SET_VIDEO_ID video_id: %d\n", parm.data_32);
+		pr_info("AMSTREAM_SET_VIDEO_ID vdec %p video_id: %d\n", priv->vdec, parm.data_32);
 		break;
 	default:
 		r = -ENOIOCTLCMD;

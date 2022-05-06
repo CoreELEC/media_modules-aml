@@ -1889,8 +1889,8 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				int i = 0;
 				u8 *pstart = (u8 *)ud_param.pbuf_addr;
 				PR_INIT(128);
-				debug_print(DECODE_ID(hw), 0,"%s:userdata len %d.\n",
-					__func__,ud_param.buf_len);
+				debug_print(DECODE_ID(hw), 0,"%s:userdata len %d. vdec %p video_id %d\n",
+					__func__,ud_param.buf_len, vdec, ud_param.instance_id);
 				for (i = 0; i < ud_param.buf_len; i++) {
 					PR_FILL("%02x ", pstart[i]);
 					if (((i + 1) & 0xf) == 0)
@@ -2082,7 +2082,7 @@ static void copy_user_data_to_pic(struct vdec_mpeg12_hw_s *hw, struct pic_info_t
 	}
 	pic->ud_param.pbuf_addr = pic->user_data_buf;
 	pic->ud_param.meta_info = hw->meta_info;
-	pic->ud_param.instance_id = vdec->video_id;
+	pic->ud_param.instance_id = vdec->afd_video_id;
 
 	hw->parse_user_data_size = 0;
 	memset(hw->parse_user_data_buf, 0, CCBUF_SIZE);

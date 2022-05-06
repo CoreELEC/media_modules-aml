@@ -384,6 +384,7 @@ struct vdec_s {
 	int is_v4l;
 	bool is_stream_mode_dv_multi;
 	int pts_server_id;
+	u32 afd_video_id;
 	pfun_ptsserver_peek_pts_offset ptsserver_peek_pts_offset;
 	u32 play_num;
 	wait_queue_head_t idle_wait;

@@ -3203,6 +3203,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				int i = 0;
 				u8 *pstart = (u8 *)ud_param.pbuf_addr;
 				PR_INIT(128);
+				dpb_print(DECODE_ID(hw), 0, "%s:userdata len %d. vdec %p video_id %d\n",
+					__func__,ud_param.buf_len, vdec, ud_param.instance_id);
 
 				for (i = 0; i < ud_param.buf_len; i++) {
 					PR_FILL("%02x ", pstart[i]);
@@ -9034,7 +9036,7 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 			pic->ud_param.buf_len = 0;
 		}
 		pic->ud_param.pbuf_addr = pic->user_data_buf;
-		pic->ud_param.instance_id = vdec->video_id;
+		pic->ud_param.instance_id = vdec->afd_video_id;
 		pic->ud_param.meta_info.duration = hw->frame_dur;
 		pic->ud_param.meta_info.flags = (VFORMAT_H264 << 3);
 		pic->ud_param.meta_info.poc_number =
