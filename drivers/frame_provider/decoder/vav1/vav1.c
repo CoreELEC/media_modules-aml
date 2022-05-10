@@ -7832,9 +7832,6 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		else
 			WRITE_VREG(HEVC_PARSER_MEM_RW_DATA, 0);
 
-		av1_print(hw, AOM_DEBUG_HW_MORE, "HEVC_DEC_STATUS_REG <= AOM_AV1_DECODE_SLICE\n");
-		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_DECODE_SLICE);
-
 		// Save segment_feature while hardware decoding
 		if (hw->seg_4lf->enabled) {
 			for (i = 0; i < 8; i++) {
@@ -7845,6 +7842,9 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 				cm->cur_frame->segment_feature[i] = (0x80000000 | (i << 22));
 			}
 		}
+
+		av1_print(hw, AOM_DEBUG_HW_MORE, "HEVC_DEC_STATUS_REG <= AOM_AV1_DECODE_SLICE\n");
+		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_DECODE_SLICE);
 	} else {
 		av1_print(hw, AOM_DEBUG_HW_MORE, "Sequence head, Search next start code\n");
 		cm->prev_fb_idx = INVALID_IDX;
@@ -10248,8 +10248,8 @@ static void av1_work(struct work_struct *work)
 			vdec_schedule_work(&hw->work);
 		} else {
 			av1_release_bufs(hw);
-			av1_continue_decoding(hw, hw->cur_obu_type);
 			hw->postproc_done = 0;
+			av1_continue_decoding(hw, hw->cur_obu_type);
 			start_process_time(hw);
 		}
 		return;
