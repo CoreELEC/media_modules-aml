@@ -2499,7 +2499,8 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 
 		frame_to_show = cm->ref_frame_map[frame_to_show_idx];
 		lock_buffer_pool(pool, flags);
-		if (frame_to_show < 0) {
+		if (frame_to_show < 0 ||
+			frame_bufs[frame_to_show].ref_count < 1) {
 			unlock_buffer_pool(pool, flags);
 			pr_err
 			("Error:Buffer %d does not contain a decoded frame",
@@ -8734,7 +8735,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		unsigned long flags;
 
 		cm->show_existing_frame = pbi->vp9_param.p.show_existing_frame;
-		pr_info("%s show_existing_frame!\n",__func__);
+		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS, "%s show_existing_frame!\n",__func__);
 		pbi->one_package_frame_cnt--;
 		if (frame_to_show_idx >= REF_FRAMES) {
 			pr_info("frame_to_show_idx %d exceed max index\r\n",
@@ -8762,7 +8763,6 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		unlock_buffer_pool(pool, flags);
 		pbi->check_existing_buff_flag = 1;
 		if (!v4l_check_and_config_existing_buff(pbi)) {
-			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
 			ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 			dec_again_process(pbi);
