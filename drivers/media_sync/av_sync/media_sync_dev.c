@@ -176,6 +176,20 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			priv->mSyncInsId = SyncInsId;
 			priv->mSyncIns = SyncIns;
 		break;
+		case MEDIASYNC_IOC_INSTANCE_STATIC_BINDER:
+			if (copy_from_user((void *)&SyncInsId,
+						(void *)arg,
+						sizeof(SyncInsId))) {
+				return -EFAULT;
+			}
+			ret = mediasync_static_ins_binder(SyncInsId, &SyncIns);
+			if (SyncIns == NULL) {
+				return -EFAULT;
+			}
+
+			priv->mSyncInsId = SyncInsId;
+			priv->mSyncIns = SyncIns;
+		break;
 
 		case MEDIASYNC_IOC_UPDATE_MEDIATIME:
 			if (copy_from_user((void *)&UpdateTime,
@@ -1213,6 +1227,7 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_INSTANCE_ALLOC:
 		case MEDIASYNC_IOC_INSTANCE_GET:
 		case MEDIASYNC_IOC_INSTANCE_BINDER:
+		case MEDIASYNC_IOC_INSTANCE_STATIC_BINDER:
 		case MEDIASYNC_IOC_UPDATE_MEDIATIME:
 		case MEDIASYNC_IOC_GET_MEDIATIME:
 		case MEDIASYNC_IOC_GET_SYSTEMTIME:

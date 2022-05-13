@@ -195,6 +195,8 @@ long mediasync_ins_alloc(s32 sDemuxId,
 long mediasync_ins_delete(s32 sSyncInsId);
 long mediasync_ins_binder(s32 sSyncInsId,
 			mediasync_ins **pIns);
+long mediasync_static_ins_binder(s32 sSyncInsId,
+			mediasync_ins **pIns);
 long mediasync_ins_unbinder(s32 sSyncInsId);
 long mediasync_ins_update_mediatime(s32 sSyncInsId,
 					s64 lMediaTime,
