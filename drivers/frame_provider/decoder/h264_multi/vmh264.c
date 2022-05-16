@@ -7278,7 +7278,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					}*/
 				}
 
-			if (!I_flag && frame_num_gap && !p_H264_Dpb->long_term_reference_flag) {
+			if (!I_flag && frame_num_gap && (!p_H264_Dpb->long_term_reference_flag)
+				&& input_frame_based(vdec)) {
 				if (!(hw->error_proc_policy & 0x800000)) {
 					hw->data_flag |= ERROR_FLAG;
 					p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
