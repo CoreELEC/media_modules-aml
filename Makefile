@@ -33,6 +33,10 @@ CONFIGS_BUILD := -Wno-parentheses-equality -Wno-pointer-bool-conversion \
 				-Wno-logical-not-parentheses -Wno-sometimes-uninitialized \
 				-Wno-frame-larger-than=
 
+ifeq ($(CLANG_VERSION), r450784d)
+CONFIGS_BUILD += -Wno-bitwise-instead-of-logical
+endif
+
 KBUILD_CFLAGS_MODULE += $(GKI_EXT_MODULE_PREDEFINE)
 
 modules:
