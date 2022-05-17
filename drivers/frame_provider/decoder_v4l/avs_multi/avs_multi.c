@@ -838,7 +838,7 @@ static int v4l_alloc_buff_config_canvas(struct vdec_avs_hw_s *hw, int i)
 		hw->canvas_config[i][0].height,
 		CANVAS_ADDR_NOWRAP,
 		hw->canvas_config[i][0].block_mode,
-		0, VDEC_1);
+		hw->canvas_config[i][0].endian, VDEC_1);
 
 	hw->canvas_config[i][1].phy_addr	= decbuf_uv_start;
 	hw->canvas_config[i][1].width		= canvas_width;
@@ -852,7 +852,7 @@ static int v4l_alloc_buff_config_canvas(struct vdec_avs_hw_s *hw, int i)
 		hw->canvas_config[i][1].height,
 		CANVAS_ADDR_NOWRAP,
 		hw->canvas_config[i][1].block_mode,
-		0, VDEC_1);
+		hw->canvas_config[i][1].endian, VDEC_1);
 
 	debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
 		"[%d] %s(), canvas: 0x%x mode: %d y: %x uv: %x w: %d h: %d\n",
@@ -1855,9 +1855,11 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 #endif
-	/* V4L2_PIX_FMT_NV21  V4L2_PIX_FMT_NV21M */
-	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
-
+	if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+		(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
+		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+	else
+		CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
 #ifdef PIC_DC_NEED_CLEAR
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 31);
 #endif
@@ -3568,6 +3570,8 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		vf->type |= nv_order;
 #endif
 		if (hw->m_ins_flag) {
+			int endian_tmp;
+
 			vf->canvas0Addr = vf->canvas1Addr = -1;
 			vf->plane_num = 2;
 
@@ -3576,6 +3580,13 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 
 			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
+
+			endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+
+			vf->canvas0_config[0].endian = endian_tmp;
+			vf->canvas0_config[1].endian = endian_tmp;
+			vf->canvas1_config[0].endian = endian_tmp;
+			vf->canvas1_config[1].endian = endian_tmp;
 		} else
 			vf->canvas0Addr = vf->canvas1Addr =
 				index2canvas(buffer_index);
@@ -3666,6 +3677,8 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		vf->type |= nv_order;
 #endif
 		if (hw->m_ins_flag) {
+			int endian_tmp;
+
 			vf->canvas0Addr = vf->canvas1Addr = -1;
 			vf->plane_num = 2;
 
@@ -3674,6 +3687,13 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 
 			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
+
+			endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+
+			vf->canvas0_config[0].endian = endian_tmp;
+			vf->canvas0_config[1].endian = endian_tmp;
+			vf->canvas1_config[0].endian = endian_tmp;
+			vf->canvas1_config[1].endian = endian_tmp;
 		} else
 			vf->canvas0Addr = vf->canvas1Addr =
 				index2canvas(buffer_index);
@@ -3769,6 +3789,8 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		vf->type |= nv_order;
 #endif
 		if (hw->m_ins_flag) {
+			int endian_tmp;
+
 			vf->canvas0Addr = vf->canvas1Addr = -1;
 			vf->plane_num = 2;
 
@@ -3777,6 +3799,13 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 
 			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
+
+			endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+
+			vf->canvas0_config[0].endian = endian_tmp;
+			vf->canvas0_config[1].endian = endian_tmp;
+			vf->canvas1_config[0].endian = endian_tmp;
+			vf->canvas1_config[1].endian = endian_tmp;
 		} else
 			vf->canvas0Addr = vf->canvas1Addr =
 				index2canvas(buffer_index);
@@ -4063,6 +4092,8 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 			hw->frame_width = READ_VREG(AVS_PIC_INFO) & 0x3fff;
 			hw->frame_height = (READ_VREG(AVS_PIC_INFO) >> 14) & 0x3fff;
 			hw->interlace_flag = (READ_VREG(AVS_PIC_INFO) >> 28) & 0x1;
+			debug_print(hw, PRINT_FLAG_DECODING,
+				"READ_VREG(AVS_PIC_INFO) = 0x%x\n", READ_VREG(AVS_PIC_INFO));
 
 			if (!v4l_res_change(hw)) {
 				if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
@@ -4088,7 +4119,6 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 						hw->vf_buf_num_used = VF_BUF_NUM_MAX;
 					hw->res_ch_flag = 0;
 					WRITE_VREG(DECODE_STATUS, 0);
-					pr_err("READ_VREG(AVS_PIC_INFO) = 0x%x\n", READ_VREG(AVS_PIC_INFO));
 				}
 			} else {
 				hw->dec_result = DEC_RESULT_AGAIN;
