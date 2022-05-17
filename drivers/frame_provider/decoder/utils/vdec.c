@@ -1015,8 +1015,8 @@ void  vdec_count_info(struct vdec_info *vs, unsigned int err,
 			/*pr_info("bitrate : %u\n",vs->bit_rate);*/
 			vs->samp_cnt = 0;
 		}
-		vs->frame_count++;
 	}
+		vs->frame_count++;
 	/*pr_info("size : %u, offset : %u, dur : %u, cnt : %u\n",
 		vs->offset,offset,vs->frame_dur,vs->samp_cnt);*/
 	return;

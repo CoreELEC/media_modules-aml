@@ -2132,6 +2132,8 @@ struct hevc_state_s {
 	int nal_skip_policy;
 	bool high_bandwidth_flag;
 	bool enable_ucode_swap;
+	int slice_count;
+	int error_slice_count;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -5878,12 +5880,6 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					hevc_print_cont(hevc, 0,
 						"Debug mode or error, recycle it\n");
 				}
-				/*
-				 * Here the pic/frame error_mark is 1,
-				 * and it won't be displayed, so increase
-				 * the drop count
-				 */
-				hevc->gvs->drop_frame_count++;
 				if (pic_display->slice_type == I_SLICE) {
 					hevc->gvs->i_lost_frames++;
 				} else if (pic_display->slice_type == P_SLICE) {
@@ -5891,8 +5887,6 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 				} else if (pic_display->slice_type == B_SLICE) {
 					hevc->gvs->b_lost_frames++;
 				}
-				/* error frame count also need increase */
-				hevc->gvs->error_frame_count++;
 				if (pic_display->slice_type == I_SLICE) {
 					hevc->gvs->i_concealed_frames++;
 				} else if (pic_display->slice_type == P_SLICE) {
@@ -6179,12 +6173,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 							"decoding index %d ==> ", pic_display->decode_idx);
 						hevc_print_cont(hevc, 0, "Debug or err,recycle it\n");
 					}
-					/*
-					 * Here the pic/frame error_mark is 1,
-					 * and it won't be displayed, so increase
-					 * the drop count
-					 */
-					hevc->gvs->drop_frame_count++;
+
 					if (pic_display->slice_type == I_SLICE) {
 						hevc->gvs->i_lost_frames++;
 					}else if (pic_display->slice_type == P_SLICE) {
@@ -6192,8 +6181,6 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 					} else if (pic_display->slice_type == B_SLICE) {
 						hevc->gvs->b_lost_frames++;
 					}
-					/* error frame count also need increase */
-					hevc->gvs->error_frame_count++;
 					if (pic_display->slice_type == I_SLICE) {
 						hevc->gvs->i_concealed_frames++;
 					} else if (pic_display->slice_type == P_SLICE) {
@@ -7126,9 +7113,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 
 			if (hevc->cur_pic->error_mark
 				&& ((hevc->ignore_bufmgr_error & 0x1) == 0)) {
-				/*count info*/
-				vdec_count_info(hevc->gvs, hevc->cur_pic->error_mark,
-					hevc->cur_pic->stream_offset);
 				if (hevc->cur_pic->slice_type == I_SLICE) {
 					hevc->gvs->i_decoded_frames++;
 				} else if (hevc->cur_pic->slice_type == P_SLICE) {
@@ -7181,9 +7165,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			hevc_print(hevc, 0,
 				"Discard this picture index %d\n",
 				hevc->cur_pic->index);
-		/*count info*/
-		vdec_count_info(hevc->gvs, hevc->cur_pic->error_mark,
-			hevc->cur_pic->stream_offset);
 		if (hevc->cur_pic->slice_type == I_SLICE) {
 			hevc->gvs->i_decoded_frames++;
 		} else if (hevc->cur_pic->slice_type == P_SLICE) {
@@ -9099,8 +9080,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 #endif
 		ATRACE_COUNTER(hevc->trace.new_q_name, kfifo_len(&hevc->newframe_q));
 		ATRACE_COUNTER(hevc->trace.disp_q_name, kfifo_len(&hevc->display_q));
-		/*count info*/
-		vdec_count_info(hevc->gvs, 0, stream_offset);
+
 		if (pic->slice_type == I_SLICE) {
 			hevc->gvs->i_decoded_frames++;
 			vf->frame_type |= V4L2_BUF_FLAG_KEYFRAME;
@@ -10577,7 +10557,11 @@ force_output:
 			if (hevc->m_ins_flag)
 				start_process_time(hevc);
 #endif
-
+			if (hevc->cur_pic) {
+				hevc->slice_count++;
+				if (hevc->cur_pic->error_mark)
+				hevc->error_slice_count++;
+			}
 #ifdef MULTI_INSTANCE_SUPPORT
 		} else if (hevc->m_ins_flag) {
 			hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
@@ -10586,6 +10570,11 @@ force_output:
 			hevc->decoded_poc = INVALID_POC;
 			hevc->decoding_pic = NULL;
 			hevc->dec_result = DEC_RESULT_DONE;
+			if (hevc->cur_pic) {
+				hevc->slice_count++;
+				if (hevc->cur_pic->error_mark)
+					hevc->error_slice_count++;
+			}
 			amhevc_stop();
 			reset_process_time(hevc);
 			vdec_schedule_work(&hevc->work);
@@ -11733,8 +11722,10 @@ static void timeout_process(struct hevc_state_s *hevc)
 	check_pic_decoded_error(hevc, hevc->pic_decoded_lcu_idx);
 	/*The current decoded frame is marked
 		error when the decode timeout*/
-	if (hevc->cur_pic != NULL)
+	if (hevc->cur_pic != NULL) {
 		hevc->cur_pic->error_mark = 1;
+		vdec_count_info(hevc->gvs, hevc->cur_pic->error_mark, hevc->cur_pic->stream_offset);
+	}
 	hevc->decoded_poc = hevc->curr_POC;
 	hevc->decoding_pic = NULL;
 	hevc->dec_result = DEC_RESULT_DONE;
@@ -12339,6 +12330,10 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 
 		check_pic_decoded_error(hevc,
 			hevc->pic_decoded_lcu_idx);
+
+		hevc->gvs->error_frame_count += hevc->error_slice_count;
+		hevc->gvs->frame_count += hevc->slice_count;
+
 		if ((error_handle_policy & 0x100) == 0 && hevc->cur_pic) {
 			for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 				struct PIC_s *pic;
@@ -12920,7 +12915,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec->mvfrm->hw_decode_start = local_clock();
 	amhevc_start();
 	hevc->stat |= STAT_VDEC_RUN;
-
+	hevc->slice_count = 0;
+	hevc->error_slice_count = 0;
 	ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_RUN_END);
 }
 
@@ -13237,7 +13233,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		);
 
 	hevc_print(hevc, 0,
-		"is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d\n",
+		"is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d error_frame_count %d drop_frame_count %d\n",
 		input_frame_based(vdec),
 		hevc->eos,
 		hevc->dec_result,
@@ -13245,7 +13241,9 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		display_frame_count[hevc->index],
 		run_count[hevc->index],
 		not_run_ready[hevc->index],
-		input_empty[hevc->index]
+		input_empty[hevc->index],
+		hevc->gvs->error_frame_count,
+		hevc->gvs->drop_frame_count
 		);
 
 	if (hevc->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
