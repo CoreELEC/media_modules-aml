@@ -10334,14 +10334,14 @@ static int __init ammvdec_h264_driver_init_module(void)
 	if (vdec_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) {
 			ammvdec_h264_profile.profile =
-					"4k, dwrite, compressed, frame_dv, fence";
+					"4k, dwrite, compressed, frame_dv, fence, multi_frame_dv";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) {
-			ammvdec_h264_profile.profile = "4k, frame_dv, fence";
+			ammvdec_h264_profile.profile = "4k, frame_dv, fence, multi_frame_dv";
 		}
 	} else {
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D || is_cpu_s4_s805x2()) {
 			ammvdec_h264_profile.profile =
-						"dwrite, compressed, frame_dv, v4l";
+						"dwrite, compressed, frame_dv, v4l, multi_frame_dv";
 		} else {
 			ammvdec_h264_profile.profile =
 						"dwrite, compressed, v4l";

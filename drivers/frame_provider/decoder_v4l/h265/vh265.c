@@ -13516,16 +13516,16 @@ static int __init amvdec_h265_driver_init_module(void)
 			amvdec_h265_profile.profile = "4k";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 			amvdec_h265_profile.profile =
-				"8k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm";
+				"8k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm, multi_frame_dv";
 		}else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB) {
 			amvdec_h265_profile.profile =
-				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm";
+				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm, multi_frame_dv";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_MG9TV)
 			amvdec_h265_profile.profile = "4k";
 	} else {
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D || is_cpu_s4_s805x2()) {
 			amvdec_h265_profile.profile =
-				"8bit, 10bit, dwrite, compressed, frame_dv, uvm, v4l";
+				"8bit, 10bit, dwrite, compressed, frame_dv, uvm, v4l, multi_frame_dv";
 		} else {
 			amvdec_h265_profile.profile =
 				"8bit, 10bit, dwrite, compressed, v4l";

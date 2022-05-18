@@ -11438,11 +11438,11 @@ static int __init amvdec_av1_driver_init_module(void)
 	}
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
 		amvdec_av1_profile.profile =
-				"10bit, dwrite, compressed, no_head, v4l-uvm";
+				"10bit, dwrite, compressed, no_head, v4l-uvm, multi_frame_dv";
 	} else if (((get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2) || is_cpu_tm2_revb())
 		&& (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5)) {
 		amvdec_av1_profile.profile =
-				"8k, 10bit, dwrite, compressed, no_head, frame_dv, v4l-uvm";
+				"8k, 10bit, dwrite, compressed, no_head, frame_dv, v4l-uvm, multi_frame_dv";
 	} else {
 		amvdec_av1_profile.name = "av1_unsupport";
 	}
