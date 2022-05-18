@@ -463,7 +463,8 @@ static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG2) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG4) &&
-			(ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG)) {
+			(ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG) &&
+			(ctx->output_pix_fmt != V4L2_PIX_FMT_AVS)) {
 			return false;
 		}
 	} else if (ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG) {
