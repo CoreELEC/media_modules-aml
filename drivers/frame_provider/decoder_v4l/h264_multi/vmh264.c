@@ -8608,7 +8608,8 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		ps->dpb_margin = pic.dpb_margin;
 	}
 
-	if ((ps->dpb_frames >= 16) && (ps->coded_width > 1280) &&
+	if ((hw->dpb.max_dec_frame_buffering < 16) &&
+		(ps->dpb_frames >= 16) && (ps->coded_width > 1280) &&
 		(ps->coded_height > 768)) {
 		if (ps->field == V4L2_FIELD_NONE) {
 			ps->dpb_frames = adjust_dpb_size;
