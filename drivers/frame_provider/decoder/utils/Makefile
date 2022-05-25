@@ -10,4 +10,5 @@ decoder_common-objs	+=	vdec_power_ctrl.o
 decoder_common-objs	+=	vdec_canvas_utils.o
 decoder_common-objs	+=	vdec_feature.o
 decoder_common-objs	+=	decoder_dma_alloc.o
+decoder_common-objs	+=	vdec_ge2d_utils.o
 
