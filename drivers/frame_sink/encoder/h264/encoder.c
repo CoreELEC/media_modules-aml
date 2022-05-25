@@ -30,6 +30,7 @@
 #include <linux/spinlock.h>
 #include <linux/ctype.h>
 #include <linux/fs.h>
+#include <linux/compat.h>
 //#include <asm/segment.h>
 #include <asm/uaccess.h>
 #include <linux/buffer_head.h>

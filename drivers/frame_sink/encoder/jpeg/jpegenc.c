@@ -22,7 +22,7 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/timer.h>
-
+#include <linux/compat.h>
 #include <linux/ktime.h>
 #include <linux/timekeeping.h>
 
