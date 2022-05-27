@@ -375,7 +375,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 		picture_type = (reg >> 3) & 7;
 
 		if (buffer_index >= DECODE_BUFFER_NUM_MAX) {
-			pr_info("fatal error, invalid buffer index.");
+			pr_err("fatal error, invalid buffer index.");
 			return IRQ_HANDLED;
 		}
 
@@ -411,7 +411,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 					frm.end_pts = pts;
 					frm.rate = (frm.end_pts -
 						frm.start_pts) / frm.num;
-					pr_info("frate before=%d,%d,num=%d\n",
+					pr_debug("frate before=%d,%d,num=%d\n",
 					frm.rate,
 					DUR2PTS(vvc1_amstream_dec_info.rate),
 					frm.num);
@@ -435,7 +435,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 						vvc1_amstream_dec_info.rate),
 						RATE_30_FPS,
 						RATE_CORRECTION_THRESHOLD))) {
-						pr_info(
+						pr_debug(
 						"vvc1: frate from %d to %d\n",
 						vvc1_amstream_dec_info.rate,
 						PTS2DUR(frm.rate));
@@ -471,7 +471,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 
 		if (reg & INTERLACE_FLAG) {	/* interlace */
 			if (kfifo_get(&newframe_q, &vf) == 0) {
-				pr_info
+				pr_err
 				("fatal error, no available buffer slot.");
 				return IRQ_HANDLED;
 			}
