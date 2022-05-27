@@ -904,7 +904,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 		hw->frame_width = READ_VREG(VC1_PIC_INFO) & 0x3fff;
 		hw->frame_height = (READ_VREG(VC1_PIC_INFO) >> 14) & 0x3fff;
 		hw->interlace_flag = (READ_VREG(VC1_PIC_INFO) >> 28) & 0x1;
-		vc1_print(0, 0, "%s: SEQ_HEADER_DONE frame_width %d/%d, interlace_flag %d\n", __func__,
+		vc1_print(0, VC1_DEBUG_DETAIL, "%s: SEQ_HEADER_DONE frame_width %d/%d, interlace_flag %d\n", __func__,
 			hw->frame_width, hw->frame_height, hw->interlace_flag);
 		WRITE_VREG(DECODE_STATUS, 0);
 		return IRQ_HANDLED;
@@ -1023,7 +1023,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 					frm.end_pts = pts;
 					frm.rate = (frm.end_pts -
 						frm.start_pts) / frm.num;
-					pr_info("frate before=%d,%d,num=%d\n",
+					pr_debug("frate before=%d,%d,num=%d\n",
 					frm.rate,
 					DUR2PTS(vvc1_amstream_dec_info.rate),
 					frm.num);
@@ -1047,7 +1047,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 						vvc1_amstream_dec_info.rate),
 						RATE_30_FPS,
 						RATE_CORRECTION_THRESHOLD))) {
-						pr_info(
+						pr_debug(
 						"vvc1: frate from %d to %d\n",
 						vvc1_amstream_dec_info.rate,
 						PTS2DUR(frm.rate));
