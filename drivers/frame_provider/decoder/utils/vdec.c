@@ -5212,7 +5212,7 @@ static ssize_t dump_fps_show(struct class *class,
 
 int vdec_get_ucode_version(void)
 {
-	char token[32];
+	char token[32] = {0};
 	char ver_c[32] = {0};
 	int i, j, ret, version = 0;
 
