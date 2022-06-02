@@ -3108,9 +3108,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 		}
 		set_frame_info(hw, vf, buffer_index);
-		if (hw->discard_dv_data) {
-			vf->discard_dv_data = true;
-		}
 
 		if (hw->mmu_enable && hw->double_write_mode) {
 			vf->width = hw->frame_width /
@@ -4638,6 +4635,10 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 			1000*(time - hw->last_frame_time)/HZ;
 		struct vframe_s *next_vf = NULL;
 		ATRACE_COUNTER(hw->trace.disp_q_name, kfifo_len(&hw->display_q));
+
+		if (hw->discard_dv_data || (vdec_stream_based(vdec) && (vf->type & VIDTYPE_INTERLACE))) {
+			vf->discard_dv_data = true;
+		}
 		if (dpb_is_debug(DECODE_ID(hw),
 			PRINT_FLAG_VDEC_DETAIL)) {
 			struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
@@ -4649,10 +4650,10 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 						__func__, vf->index);
 			} else {
 				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
-				"%s buf_spec_num %d vf %p poc %d dur %d pts %d interval %dms, ts: %lld\n",
+				"%s buf_spec_num %d vf %p poc %d dur %d pts %d interval %dms, ts:%lld type:%x discard_dv:%d\n",
 				__func__, BUFSPEC_INDEX(vf->index), vf,
 				p_H264_Dpb->mFrameStore[frame_index].poc,
-				vf->duration, vf->pts, frame_interval, vf->timestamp);
+				vf->duration, vf->pts, frame_interval, vf->timestamp, vf->type, vf->discard_dv_data);
 			}
 		}
 		if (hw->last_frame_time > 0) {
@@ -4830,6 +4831,12 @@ static int vh264_event_cb(int type, void *data, void *op_arg)
 			req->aux_size = atomic_read(&hw->vf_put_count);
 			return 0;
 		}
+
+		if (req->vf->discard_dv_data) {
+			req->aux_size = atomic_read(&hw->vf_put_count);
+			return 0;
+		}
+
 		buf_spec_num = BUFSPEC_INDEX(req->vf->index);
 		spin_lock_irqsave(&hw->lock, flags);
 		req->aux_buf = NULL;
@@ -4851,9 +4858,9 @@ static int vh264_event_cb(int type, void *data, void *op_arg)
 		}
 		spin_unlock_irqrestore(&hw->lock, flags);
 
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-		"%s(type 0x%x vf buf_spec_num 0x%x)=>size 0x%x\n",
-		__func__, type, buf_spec_num, req->aux_size);
+		dpb_print(DECODE_ID(hw), 0,
+		"%s(type 0x%x vf %p discard_dv_data %d buf_spec_num 0x%x)=>buf %px size 0x%x\n",
+		__func__, type, req->vf, req->vf->discard_dv_data, buf_spec_num, req->aux_size, req->aux_buf);
 	} else if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {
 		struct provider_state_req_s *req =
 			(struct provider_state_req_s *)data;

@@ -8036,14 +8036,18 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 		ATRACE_COUNTER(hevc->trace.get_canvas0_addr, vf->canvas0Addr);
 #endif
 
+		if (hevc->discard_dv_data || (vdec_stream_based(vdec) && (vf->type & VIDTYPE_INTERLACE))) {
+			vf->discard_dv_data = true;
+		}
+
 		if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT) {
 			hevc_print(hevc, 0,
-				"%s(vf 0x%p type %d index 0x%x poc %d/%d) pts(%d,%d) dur %d\n",
+				"%s(vf 0x%p type %x index 0x%x poc %d/%d) pts(%d,%d) dur %d, discard_dv:%d\n",
 				__func__, vf, vf->type, vf->index,
 				get_pic_poc(hevc, vf->index & 0xff),
 				get_pic_poc(hevc, (vf->index >> 8) & 0xff),
 				vf->pts, vf->pts_us64,
-				vf->duration);
+				vf->duration, vf->discard_dv_data);
 #ifdef MULTI_INSTANCE_SUPPORT
 			hevc_print(hevc, 0, "get canvas0 addr:0x%x\n", vf->canvas0_config[0].phy_addr);
 #else
@@ -8222,6 +8226,12 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 			req->aux_size = atomic_read(&hevc->vf_put_count);
 			return 0;
 		}
+
+		if (req->vf->discard_dv_data) {
+			req->aux_size = atomic_read(&hevc->vf_put_count);
+			return 0;
+		}
+
 		spin_lock_irqsave(&lock, flags);
 		index = req->vf->index & 0xff;
 		req->aux_buf = NULL;
@@ -8777,9 +8787,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->bitdepth |= BITDEPTH_SAVING_MODE;
 
 		set_frame_info(hevc, vf, pic);
-		if (hevc->discard_dv_data) {
-			vf->discard_dv_data = true;
-		}
 
 		if (hevc->high_bandwidth_flag) {
 			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
