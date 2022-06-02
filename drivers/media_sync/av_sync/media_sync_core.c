@@ -63,21 +63,21 @@ static long get_index_from_syncid(s32 sSyncInsId)
 
 	if (sSyncInsId < MAX_DYNAMIC_INSTANCE_NUM) {
 		for (temp = 0; temp < MAX_DYNAMIC_INSTANCE_NUM; temp++) {
-			if (vMediaSyncInsList[temp].pInstance != NULL) {
+			if (vMediaSyncInsList[temp].pInstance != NULL && sSyncInsId == temp) {
 				index = temp;
-				break;
+				return index;
 			}
 		}
 	}
 
 	for (temp = MAX_DYNAMIC_INSTANCE_NUM; temp < MAX_INSTANCE_NUM; temp++) {
-			if (vMediaSyncInsList[temp].pInstance != NULL) {
-				if (sSyncInsId == vMediaSyncInsList[temp].pInstance->mSyncInsId) {
-					index = temp;
-					break;
-				}
+		if (vMediaSyncInsList[temp].pInstance != NULL) {
+			if (sSyncInsId == vMediaSyncInsList[temp].pInstance->mSyncInsId) {
+				index = temp;
+				break;
 			}
 		}
+	}
 
 	return index;
 }
