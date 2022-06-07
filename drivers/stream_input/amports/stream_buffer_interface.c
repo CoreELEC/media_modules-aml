@@ -68,12 +68,28 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 	u32 addr = 0;
 	int pages = 0;
 	u32 size;
+	u32 pts_type;
 
 	if (stbuf->buf_start)
 		return 0;
 
 	snprintf(stbuf->name, sizeof(stbuf->name),
 		"%s-%d", MEM_NAME, vdec->id);
+
+	if (has_hevc_vdec() && (stbuf->type == BUF_TYPE_HEVC))
+		pts_type = PTS_TYPE_HEVC;
+	else
+		/* #endif */
+		if (stbuf->type == BUF_TYPE_VIDEO)
+			pts_type = PTS_TYPE_VIDEO;
+		else if (stbuf->type == BUF_TYPE_AUDIO)
+			pts_type = PTS_TYPE_AUDIO;
+		else if (stbuf->type == BUF_TYPE_SUBTITLE)
+			pts_type = PTS_TYPE_MAX;
+		else {
+			ret = -EINVAL;
+			goto err;
+		}
 
 	if (stbuf->ext_buf_addr) {
 		addr	= stbuf->ext_buf_addr;
@@ -133,6 +149,14 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 	stbuf->flag |= BUF_FLAG_ALLOC;
 	stbuf->flag |= BUF_FLAG_IN_USE;
 
+	if (pts_type < PTS_TYPE_MAX) {
+		ret = pts_start(pts_type);
+		if (ret < 0) {
+			pr_info("stream_buffer_init: pts_start failed\n");
+			goto err;
+		}
+	}
+
 	pr_info("[%d]: [%s-%s] addr: %lx, size: %x, thrRW: %d, extbuf: %d, secure: %d\n",
 		stbuf->id, type_to_str(stbuf->type), stbuf->name,
 		stbuf->buf_start, stbuf->buf_size,
@@ -149,6 +173,8 @@ err:
 
 static void stream_buffer_release(struct stream_buf_s *stbuf)
 {
+	u32 pts_type;
+
 	if (stbuf->write_thread)
 		threadrw_release(stbuf);
 
@@ -162,6 +188,20 @@ static void stream_buffer_release(struct stream_buf_s *stbuf)
 		stbuf->is_secure	= false;
 	}
 	stbuf->flag &= ~BUF_FLAG_IN_USE;
+
+	if (has_hevc_vdec() && (stbuf->type == BUF_TYPE_HEVC))
+		pts_type = PTS_TYPE_VIDEO;
+	else if (stbuf->type == BUF_TYPE_VIDEO)
+		pts_type = PTS_TYPE_VIDEO;
+	else if (stbuf->type == BUF_TYPE_AUDIO)
+		pts_type = PTS_TYPE_AUDIO;
+	else if (stbuf->type == BUF_TYPE_SUBTITLE) {
+		stbuf->flag &= ~BUF_FLAG_PARSER;
+		return;
+	} else
+		return;
+
+	pts_stop(PTS_TYPE_VIDEO);
 }
 
 static int get_free_space(struct stream_buf_s *stbuf)
