@@ -4187,6 +4187,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		ctx->cap_pool.out = 0;
 		ctx->cap_pool.dec = 0;
 		ctx->cap_pool.vpp = 0;
+		ctx->cap_pool.ge2d = 0;
 	}
 }
 
