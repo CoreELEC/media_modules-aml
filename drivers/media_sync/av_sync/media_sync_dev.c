@@ -1139,7 +1139,6 @@ static int __init mediasync_module_init(void)
 		pr_err("Can't create mediasync_dev device\n");
 		goto err1;
 	}
-	mediasync_init();
 	return 0;
 
 err1:

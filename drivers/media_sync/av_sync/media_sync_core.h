@@ -123,12 +123,6 @@ typedef struct instance{
 	mediasync_audio_format mAudioFormat;
 }mediasync_ins;
 
-typedef struct Media_Sync_Manage {
-	mediasync_ins* pInstance;
-	struct mutex m_lock;
-} MediaSyncManage;
-
-long mediasync_init(void);
 long mediasync_ins_alloc(s32 sDemuxId,
 			s32 sPcrPid,
 			s32 *sSyncInsId,
