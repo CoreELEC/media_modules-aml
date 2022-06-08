@@ -737,6 +737,4 @@ int vdec_data_get_index(ulong data);
 
 void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb);
 
-int vdec_get_ucode_version(void);
-
 #endif				/* VDEC_H */

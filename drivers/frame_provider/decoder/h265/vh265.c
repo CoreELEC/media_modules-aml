@@ -199,7 +199,9 @@ static const struct vframe_operations_s vh265_vf_provider = {
 
 static struct vframe_provider_s vh265_vf_prov;
 
-#define UCODE_SWAP_VERSION 342
+//0.3.42-g8104942
+#define UCODE_SWAP_VERSION 3
+#define UCODE_SWAP_SUBMIT_COUNT 42
 
 static u32 enable_swap = 1;
 static u32 bit_depth_luma;
@@ -11351,7 +11353,8 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	INIT_WORK(&hevc->notify_work, vh265_notify_work);
 	INIT_WORK(&hevc->set_clk_work, vh265_set_clk);
 
-	if (vdec_get_ucode_version() < UCODE_SWAP_VERSION) {
+	if ((get_decoder_firmware_version() <= UCODE_SWAP_VERSION) &&
+		(get_decoder_firmware_submit_count() < UCODE_SWAP_SUBMIT_COUNT)) {
 		hevc->enable_ucode_swap = false;
 		if ((get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) && (!hevc->is_4k)) {
 			hevc->enable_ucode_swap = true;
@@ -11363,8 +11366,9 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 			hevc->enable_ucode_swap = false;
 	}
 
-	pr_debug("ucode version %d, swap enable %d\n",
-		vdec_get_ucode_version(), hevc->enable_ucode_swap);
+	pr_debug("ucode version %d.%d, swap enable %d\n",
+		get_decoder_firmware_version(), get_decoder_firmware_submit_count(),
+		hevc->enable_ucode_swap);
 
 	fw = vzalloc(sizeof(struct firmware_s) + fw_size);
 	if (IS_ERR_OR_NULL(fw))

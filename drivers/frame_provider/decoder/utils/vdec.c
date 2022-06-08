@@ -5210,30 +5210,6 @@ static ssize_t dump_fps_show(struct class *class,
 	return pbuf - buf;
 }
 
-int vdec_get_ucode_version(void)
-{
-	char token[32] = {0};
-	char ver_c[32] = {0};
-	int i, j, ret, version = 0;
-
-#ifdef UCODE_VERSION
-	ret = sprintf(token, ""xstr(UCODE_VERSION)"");	//0.3.42-g8104942
-#endif
-	for (i = 0, j = 0; ((token[i] != '\0') && (token[i] != '-')); i++) {
-		if (token[i] >= '0' && token[i] <= '9') {
-			ver_c[j] = token[i];
-			j++;
-		}
-	}
-	if (!strlen(ver_c))
-		return 0;
-
-	ret = sscanf(ver_c, "%d", &version);
-
-	return version;
-}
-EXPORT_SYMBOL(vdec_get_ucode_version);
-
 static ssize_t version_show(struct class *class,
 			struct class_attribute *attr, char *buf)
 {
