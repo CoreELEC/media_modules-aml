@@ -9670,10 +9670,12 @@ static void  av1_decode_ctx_reset(struct AV1HW_s *hw)
 		}
 	}
 
-	for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
-		struct internal_comp_buf *buf;
-		buf = &ctx->comp_bufs[i];
-		buf->used = 0;
+	if (ctx->comp_bufs) {
+		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
+			struct internal_comp_buf *buf;
+			buf = &ctx->comp_bufs[i];
+			buf->used = 0;
+		}
 	}
 
 	hw->one_compressed_data_done = 0;
