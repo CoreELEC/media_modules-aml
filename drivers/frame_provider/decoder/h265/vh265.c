@@ -9819,6 +9819,16 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		if (hevc->m_ins_flag) {
 			read_decode_info(hevc);
 			if (vdec_frame_based(hw_to_vdec(hevc))) {
+				/* Ucode multiplexes HEVC_ASSIST_SCRATCH_4 to output dual layer flags.
+				 * In the decoder driver, the bit0 of the register is read to
+				 * determine whether the DV stream is a dual layer stream
+				 */
+				bool dv_duallayer = READ_VREG(HEVC_ASSIST_SCRATCH_4) & 0x1;
+				if ((!hevc->discard_dv_data) && (!hevc->dv_duallayer)
+					&& (dv_duallayer)) {
+					hevc->dv_duallayer = true;
+					hevc_print(hevc, 0, "dv dual layer\n");
+				}
 				hevc->empty_flag = 1;
 				/*suffix sei or dv meta*/
 				set_aux_data(hevc, hevc->cur_pic, 1, 0);
