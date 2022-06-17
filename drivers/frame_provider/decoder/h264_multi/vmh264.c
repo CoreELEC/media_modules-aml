@@ -3247,7 +3247,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			continue;
 		}
 
-		vf->src_fmt.play_id = vdec->play_num;
+		vf->src_fmt.play_id = vdec->inst_cnt;
 
 		if (i == 0) {
 			struct vdec_s *pvdec;
@@ -3303,9 +3303,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 #endif
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
-			"aux_data_size:%d signal_type:0x%x play_num:%d vf:%p\n",
+			"aux_data_size:%d signal_type:0x%x inst_cnt:%d vf:%p\n",
 			hw->buffer_spec[buffer_index].aux_data_size, hw->video_signal_type,
-			vdec->play_num, vf);
+			vdec->inst_cnt, vf);
 
 		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
 			int i = 0;
@@ -4870,7 +4870,7 @@ static int vh264_event_cb(int type, void *data, void *op_arg)
 		}
 		spin_unlock_irqrestore(&hw->lock, flags);
 
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"%s(type 0x%x vf %p discard_dv_data %d buf_spec_num 0x%x)=>buf %px size 0x%x\n",
 		__func__, type, req->vf, req->vf->discard_dv_data, buf_spec_num, req->aux_size, req->aux_buf);
 	} else if (type & VFRAME_EVENT_RECEIVER_REQ_STATE) {

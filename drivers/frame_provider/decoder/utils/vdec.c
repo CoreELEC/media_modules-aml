@@ -159,8 +159,6 @@ static int fps_detection;
 static int fps_clear;
 static bool prog_only;
 
-static u32 play_num = 0;
-
 static int force_nosecure_even_drm;
 static int disable_switch_single_to_mult;
 
@@ -275,6 +273,7 @@ struct vdec_core_s {
 	struct power_manager_s *pm;
 	u32 vdec_resouce_status;
 	struct post_task_mgr_s post;
+	u32 inst_cnt;
 };
 
 static struct vdec_core_s *vdec_core;
@@ -2910,16 +2909,17 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	mutex_lock(&vdec_mutex);
 	vdec_core->vdec_resouce_status |= BIT(p->frame_base_video_path);
 
-	if (vdec_dual(vdec)) {
+	if (vdec_dual(vdec) && (!(vdec->port->type & PORT_TYPE_FRAME))) {
+		//DV stream mode
 		if (vdec->slave)
-			vdec->play_num = (++play_num);
-		else
-			vdec->play_num = play_num;
+			vdec_core->inst_cnt++;
 	} else {
-		vdec->play_num = (++play_num);
+		//DV frame mode
+		vdec_core->inst_cnt++;
 	}
+	vdec->inst_cnt = vdec_core->inst_cnt;
 	mutex_unlock(&vdec_mutex);
-	pr_debug("vdec_init, play_num = %d\n", vdec->play_num);
+	pr_debug("vdec_init, inst_cnt = %d, port type 0x%x\n", vdec->inst_cnt, vdec->port->type);
 
 	vdec_input_prepare_bufs(/*prepared buffer for fast playing.*/
 		&vdec->input,

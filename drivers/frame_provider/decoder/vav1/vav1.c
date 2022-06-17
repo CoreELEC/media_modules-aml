@@ -6714,7 +6714,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		}
 		update_vf_memhandle(hw, vf, pic_config);
 
-		vf->src_fmt.play_id = vdec->play_num;
+		vf->src_fmt.play_id = vdec->inst_cnt;
 
 		av1_inc_vf_ref(hw, pic_config->index);
 		decoder_do_frame_check(hw_to_vdec(hw), vf);
@@ -6737,8 +6737,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 #endif
 
 		av1_print(hw, AV1_DEBUG_SEI_DETAIL,
-			"%s aux_data_size:%d play_num:%d vf:%p\n",
-			__func__, pic_config->aux_data_size, vdec->play_num, vf);
+			"%s aux_data_size:%d inst_cnt:%d vf:%p\n",
+			__func__, pic_config->aux_data_size, vdec->inst_cnt, vf);
 
 		if (debug & AV1_DEBUG_SEI_DETAIL) {
 			int i = 0;

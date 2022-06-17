@@ -426,7 +426,7 @@ struct vdec_s {
 	int pts_server_id;
 	u32 afd_video_id;
 	pfun_ptsserver_peek_pts_offset ptsserver_peek_pts_offset;
-	u32 play_num;
+	u32 inst_cnt;
 	wait_queue_head_t idle_wait;
 	struct vdec_data_info_s *vdata;
 };
