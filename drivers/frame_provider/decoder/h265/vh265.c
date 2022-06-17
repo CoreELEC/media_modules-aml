@@ -2200,6 +2200,7 @@ struct hevc_state_s {
 	char *hdr10p_data_buf[BUF_POOL_SIZE];
 	int crop_w;
 	int crop_h;
+	bool process_busy;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -11141,6 +11142,11 @@ static irqreturn_t vh265_isr(int irq, void *data)
 
 	if (hevc->init_flag == 0)
 		return IRQ_HANDLED;
+
+	if (hevc->process_busy)
+		return IRQ_HANDLED;
+	hevc->process_busy = 1;
+
 	hevc->dec_status = dec_status;
 	if (is_log_enable(hevc))
 		add_log(hevc,
@@ -11212,12 +11218,16 @@ static irqreturn_t vh265_isr(int irq, void *data)
 			reset_process_time(hevc);
 		else
 			WRITE_HREG(DEBUG_REG1, 0);
+
+		hevc->process_busy = 0;
 		return IRQ_HANDLED;
 	}
 
 
-	if (hevc->pic_list_init_flag == 1)
+	if (hevc->pic_list_init_flag == 1) {
+		hevc->process_busy = 0;
 		return IRQ_HANDLED;
+	}
 
 	if (!hevc->m_ins_flag) {
 		if (dec_status == HEVC_OVER_DECODE) {
@@ -11225,6 +11235,7 @@ static irqreturn_t vh265_isr(int irq, void *data)
 			hevc_print(hevc, 0,
 				"isr: over decode\n"),
 				WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
+			hevc->process_busy = 0;
 			return IRQ_HANDLED;
 		}
 	}
@@ -12231,6 +12242,11 @@ static void restart_process_time(struct hevc_state_s *hevc)
 
 static void timeout_process(struct hevc_state_s *hevc)
 {
+
+	if (hevc->process_busy) {
+		hevc_print(hevc, 0, "%s dec timeout but process_busy\n", __func__);
+		return;
+	}
 	/*
 	 * In this very timeout point,the vh265_work arrives,
 	 * or in some cases the system become slow,  then come
@@ -13029,8 +13045,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			hevc->stat &= ~STAT_VDEC_RUN;
 		}
 		if (hevc->stat & STAT_ISR_REG) {
-				WRITE_VREG(HEVC_ASSIST_MBOX0_MASK, 0);
-			vdec_free_irq(VDEC_IRQ_0, (void *)hevc);
+			WRITE_VREG(HEVC_ASSIST_MBOX0_MASK, 0);
+			vdec_free_irq(VDEC_IRQ_0, (void *)hevc);	//only for single mode
 			hevc->stat &= ~STAT_ISR_REG;
 		}
 		hevc_print(hevc, 0, "%s: force exit end\n",
@@ -13052,6 +13068,12 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
 		hevc->chunk = NULL;
 		mutex_unlock(&hevc->chunks_mutex);
+	}
+
+	if (hevc->stat & STAT_ISR_REG) {
+		WRITE_VREG(HEVC_ASSIST_MBOX0_MASK, 0);
+		vdec_sync_irq(VDEC_IRQ_0);
+		hevc->stat &= ~STAT_ISR_REG;
 	}
 
 	if (hevc->stat & STAT_VDEC_RUN) {
@@ -13544,8 +13566,11 @@ static irqreturn_t vh265_threaded_irq_cb(struct vdec_s *vdec, int irq)
 {
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)vdec->private;
+	irqreturn_t ret = vh265_isr_thread_fn(0, hevc);
 
-	return vh265_isr_thread_fn(0, hevc);
+	hevc->process_busy = 0;
+
+	return ret;
 }
 #endif
 
