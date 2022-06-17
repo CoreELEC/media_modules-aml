@@ -3205,7 +3205,7 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 
 	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
-		return -EINVAL;
+		goto free_comp_bufs;
 	}
 
 	/* init bmmu box */
@@ -3213,9 +3213,8 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 			ctx->id, V4L_CAP_BUFF_MAX,
 			ctx->comp_info.max_size * SZ_1M, mmu_flag);
 	if (!ctx->mmu_box) {
-		vfree(ctx->comp_bufs);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box\n");
-		return -EINVAL;
+		goto free_comp_bufs;
 	}
 
 	/* init mmu box */
@@ -3285,9 +3284,13 @@ free_bmmubox:
 	ctx->bmmu_box = NULL;
 
 free_mmubox:
-	vfree(ctx->comp_bufs);
 	decoder_mmu_box_free(ctx->mmu_box);
 	ctx->mmu_box = NULL;
+
+free_comp_bufs:
+	vfree(ctx->comp_bufs);
+	ctx->comp_bufs = NULL;
+
 	return -1;
 }
 
