@@ -1255,6 +1255,15 @@ static void dmx_irq_bh_handler(unsigned long arg)
 	process_smallsection(dmx);
 }
 
+static irqreturn_t dmx_irq_thread_handler(int irq_number, void *para)
+{
+	struct aml_dmx *dmx = (struct aml_dmx *)para;
+	if (dmx->thread_irq_handler) {
+		dmx->thread_irq_handler(dmx->dmx_irq, (void *)(long)dmx->id);
+	}
+	return IRQ_HANDLED;
+}
+
 static irqreturn_t dmx_irq_handler(int irq_number, void *para)
 {
 	struct aml_dmx *dmx = (struct aml_dmx *)para;
@@ -1347,7 +1356,7 @@ static irqreturn_t dmx_irq_handler(int irq_number, void *para)
 
 irq_handled:
 	spin_unlock_irqrestore(&dvb->slock, flags);
-	return IRQ_HANDLED;
+	return IRQ_WAKE_THREAD;
 }
 
 static inline int dmx_get_order(unsigned long size)
@@ -2871,9 +2880,12 @@ static int dmx_init(struct aml_dmx *dmx)
 		tasklet_init(&dmx->dmx_tasklet,
 				dmx_irq_bh_handler,
 				(unsigned long)dmx);
-		irq = request_irq(dmx->dmx_irq,	dmx_irq_handler,
+		irq = request_threaded_irq(dmx->dmx_irq,
+				dmx_irq_handler,
+				dmx_irq_thread_handler,
 				IRQF_SHARED|IRQF_TRIGGER_RISING,
-				"dmx irq", dmx);
+				"dmx irq",
+				dmx);
 	}
 
 	/*Allocate buffer */
@@ -3954,18 +3966,21 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 	int id, times;
 	u32 pcr_num[DMX_DEV_COUNT];
 	u32 pcr_reg[DMX_DEV_COUNT];
+	u32 pcr_dmx[DMX_DEV_COUNT];
 
 	pr_dbg("[dmx_kpi] demux reset begin\n");
 
 	memset(&pcr_reg, 0, sizeof(pcr_reg));
 	memset(&pcr_num, 0, sizeof(pcr_num));
+	memset(&pcr_dmx, 0, sizeof(pcr_dmx));
 
 	for (id = 0; id < DMX_DEV_COUNT; id++) {
 		if (!dvb->dmx[id].init)
 			continue;
 		pcr_reg[id] = DMX_READ_REG(id, PCR90K_CTL);
 		pcr_num[id] = DMX_READ_REG(id, ASSIGN_PID_NUMBER);
-		pr_dbg("reset demux, pcr_regs[%d]:0x%x, pcr_num[%d]:0x%x\n", id, pcr_reg[id], id, pcr_num[id]);
+		pcr_dmx[id] = DMX_READ_REG(id, PCR_DEMUX);
+		pr_dbg("reset demux, pcr_regs[%d]:0x%x, pcr_num[%d]:0x%x pcr_dmx[%d]:0x%x\n", id, pcr_reg[id], id, pcr_num[id], id, pcr_dmx[id]);
 		if (reset_irq) {
 			if (dvb->dmx[id].dmx_irq != -1)
 				disable_irq(dvb->dmx[id].dmx_irq);
@@ -4137,6 +4152,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 				1);
 		DMX_WRITE_REG(id, ASSIGN_PID_NUMBER,  pcr_num[id]);
 		DMX_WRITE_REG(id, PCR90K_CTL,  pcr_reg[id]);
+		DMX_WRITE_REG(id, PCR_DEMUX, pcr_dmx[id]);
 	}
 
 	for (id = 0; id < DSC_DEV_COUNT; id++) {
@@ -4177,12 +4193,14 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 	int id;
 	u32 pcr_num = 0;
 	u32 pcr_regs = 0;
+	u32 pcr_dmx = 0;
 	{
 		if (!dmx->init)
 			return;
 		pcr_regs = DMX_READ_REG(dmx->id, PCR90K_CTL);
 		pcr_num = DMX_READ_REG(dmx->id, ASSIGN_PID_NUMBER);
-		pr_dbg("reset demux, pcr_regs:0x%x, pcr_num:0x%x\n", pcr_regs, pcr_num);
+		pcr_dmx = DMX_READ_REG(dmx->id, PCR_DEMUX);
+		pr_dbg("reset demux, pcr_regs:0x%x, pcr_num:0x%x pcr_dmx:0x%x\n", pcr_regs, pcr_num,pcr_dmx);
 	}
 	{
 		if (!dmx->init)
@@ -4402,6 +4420,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 	{
 		DMX_WRITE_REG(dmx->id, ASSIGN_PID_NUMBER,  pcr_num);
 		DMX_WRITE_REG(dmx->id, PCR90K_CTL,  pcr_regs);
+		DMX_WRITE_REG(dmx->id, PCR_DEMUX, pcr_dmx);
 	}
 }
 

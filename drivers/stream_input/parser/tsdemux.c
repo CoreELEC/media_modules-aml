@@ -41,13 +41,23 @@
 #include "../amports/streambuf.h"
 #include <linux/amlogic/media/utils/amports_config.h>
 #include <linux/amlogic/media/frame_sync/tsync_pcr.h>
+#include "../../media_sync/av_sync/media_sync_core.h"
+
 
 #include "tsdemux.h"
 #include <linux/reset.h>
 #include "../amports/amports_priv.h"
 
 #define MAX_DRM_PACKAGE_SIZE 0x500000
+static u32 video_pts_bit32 = 0;
+typedef long (*pfun_mediasync_vpts_set)(s32 sSyncInsId, mediasync_video_packets_info info);
+static pfun_mediasync_vpts_set mediasync_vpts_set = NULL;
 
+typedef long (*pfun_mediasync_apts_set)(s32 sSyncInsId, mediasync_audio_packets_info info);
+static pfun_mediasync_apts_set mediasync_apts_set = NULL;
+static int pts_checkin_debug = 0;
+module_param(pts_checkin_debug, int, 0644);
+MODULE_PARM_DESC(pts_checkin_debug, "\n\t\t demux pts check in debug");
 
 MODULE_PARM_DESC(reset_demux_enable, "\n\t\t Reset demux enable");
 static int reset_demux_enable = 0;
@@ -76,6 +86,11 @@ static int demux_skipbyte;
 static struct tsdemux_ops *demux_ops;
 static DEFINE_SPINLOCK(demux_ops_lock);
 
+#define PTS_COUNT 8
+#define PTS_PACKET_SIZE 20
+DECLARE_KFIFO(video_frame,  mediasync_video_packets_info, PTS_COUNT);
+DECLARE_KFIFO(audio_frame,mediasync_audio_packets_info, PTS_COUNT);
+
 static int enable_demux_driver(void)
 {
 	return demux_ops ? 1 : 0;
@@ -84,7 +99,6 @@ static int enable_demux_driver(void)
 void tsdemux_set_ops(struct tsdemux_ops *ops)
 {
 	unsigned long flags;
-
 	spin_lock_irqsave(&demux_ops_lock, flags);
 	demux_ops = ops;
 	spin_unlock_irqrestore(&demux_ops_lock, flags);
@@ -113,6 +127,8 @@ int tsdemux_set_reset_flag(void)
 	return r;
 }
 
+static struct file *fpaudio=0;
+static loff_t audiopos=0;
 static int tsdemux_reset(void)
 {
 	unsigned long flags;
@@ -123,21 +139,21 @@ static int tsdemux_reset(void)
 		tsdemux_set_reset_flag_ext();
 		r = demux_ops->reset();
 	}
+	kfifo_reset(&video_frame);
+	kfifo_reset(&audio_frame);
 	spin_unlock_irqrestore(&demux_ops_lock, flags);
 
 	return r;
 }
 
-static int tsdemux_request_irq(irq_handler_t handler, void *data)
+static int tsdemux_request_irq(irq_handler_t handler, irq_handler_t thread_handler, void *data)
 {
 	unsigned long flags;
 	int r = 0;
-
 	spin_lock_irqsave(&demux_ops_lock, flags);
 	if (demux_ops && demux_ops->request_irq)
-		r = demux_ops->request_irq(handler, data);
+		r = demux_ops->request_irq(handler, thread_handler, data);
 	spin_unlock_irqrestore(&demux_ops_lock, flags);
-
 	return r;
 }
 
@@ -224,6 +240,35 @@ static int tsdemux_config(void)
 	return 0;
 }
 
+static void queue_video_info( u64 pts, int size) {
+	mediasync_video_packets_info dmx_frameinfo;
+	memset(&dmx_frameinfo, 0, sizeof(dmx_frameinfo));
+	dmx_frameinfo.packetsPts = pts;
+	dmx_frameinfo.packetsSize = size;
+	kfifo_put(&video_frame, dmx_frameinfo);
+	if (pts_checkin_debug) {
+		pr_info("%s pts:%lld size:%d kfifo_len:%d \n",
+				__func__,pts,size,kfifo_len(&video_frame));
+	}
+	return ;
+}
+
+static void queue_audio_info( u64 pts, int size) {
+	mediasync_audio_packets_info dmx_frameinfo;
+	memset(&dmx_frameinfo, 0, sizeof(dmx_frameinfo));
+	dmx_frameinfo.packetsPts = pts;
+	dmx_frameinfo.packetsSize = size;
+	kfifo_put(&audio_frame, dmx_frameinfo);
+	if (pts_checkin_debug) {
+		pr_info("%s pts:%lld size:%d kfifo_len:%d \n",
+				__func__,pts,size,kfifo_len(&audio_frame));
+	}
+	return ;
+}
+
+extern int pts_lookup(u8 type, u32 *val, u32 *frame_size, u32 pts_margin);
+extern int pts_getaudiocheckinsize(void);
+
 static void tsdemux_pcr_set(unsigned int pcr);
 /*TODO irq*/
 /* bit 15 ---------------*/
@@ -235,7 +280,6 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 {
 	u32 int_status = 0;
 	int id = (long)dev_id;
-
 	if (!enable_demux_driver()) {
 		int_status = READ_DEMUX_REG(STB_INT_STATUS);
 	} else {
@@ -250,46 +294,87 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 	if (int_status & (1 << NEW_PDTS_READY)) {
 		if (!enable_demux_driver()) {
 			u32 pdts_status = READ_DEMUX_REG(STB_PTS_DTS_STATUS);
-			u64 vpts;
+			u64 vpts,apts;
 
-			vpts = READ_MPEG_REG(VIDEO_PTS_DEMUX);
-			vpts &= 0x00000000FFFFFFFF;
-			if (pdts_status & 0x1000) {
-				vpts = vpts | (1LL<<32);
-			}
-
-			if (pdts_status & (1 << VIDEO_PTS_READY))
+			if (pdts_status & (1 << VIDEO_PTS_READY)) {
+				vpts = READ_MPEG_REG(VIDEO_PTS_DEMUX);
+				vpts &= 0x00000000FFFFFFFF;
+				if (pdts_status & 0x1000) {
+					video_pts_bit32 = 1;
+					vpts = vpts | (1LL<<32);
+				} else {
+					video_pts_bit32 = 0;
+				}
+				if (pts_checkin_debug) {
+					pr_info("%s check_in_vpts:%lld \n",__func__,vpts);
+				}
 				pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
 					READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
 					vpts);
+				queue_video_info(vpts,PTS_PACKET_SIZE);
+			}
 
-			if (pdts_status & (1 << AUDIO_PTS_READY))
-				pts_checkin_wrptr(PTS_TYPE_AUDIO,
+			if (pdts_status & (1 << AUDIO_PTS_READY)) {
+				apts = READ_DEMUX_REG(AUDIO_PTS_DEMUX);
+				apts &= 0x00000000FFFFFFFF;
+				if (pdts_status & 0x4000) {
+					apts = apts | (1LL<<32);
+				}
+				if (pts_checkin_debug) {
+					pr_info("%s check_in_apts:%lld \n",__func__,apts);
+				}
+				pts_checkin_wrptr_pts33(PTS_TYPE_AUDIO,
 					READ_DEMUX_REG(AUDIO_PDTS_WR_PTR),
-					READ_DEMUX_REG(AUDIO_PTS_DEMUX));
+					apts);
+				queue_audio_info(apts,pts_getaudiocheckinsize());
+			}
 
 			WRITE_DEMUX_REG(STB_PTS_DTS_STATUS, pdts_status);
 		} else {
 #define DMX_READ_REG(i, r)\
 	((i) ? ((i == 1) ? READ_DEMUX_REG(r##_2) : \
 		READ_DEMUX_REG(r##_3)) : READ_DEMUX_REG(r))
-			u64 vpts;
+			u64 vpts,apts;
 			u32 pdts_status = DMX_READ_REG(id, STB_PTS_DTS_STATUS);
-			vpts = DMX_READ_REG(id, VIDEO_PTS_DEMUX);
-			vpts &= 0x00000000FFFFFFFF;
-			if (pdts_status & 0x1000) {
-				vpts = vpts | (1LL<<32);
-			}
 
-			if (pdts_status & (1 << VIDEO_PTS_READY))
+			if (pdts_status & (1 << VIDEO_PTS_READY)) {
+				vpts = DMX_READ_REG(id, VIDEO_PTS_DEMUX);
+				vpts &= 0x00000000FFFFFFFF;
+				if (pdts_status & 0x1000) {
+					video_pts_bit32 = 1;
+					vpts = vpts | (1LL<<32);
+				} else {
+					video_pts_bit32 = 0;
+				}
+				if (pts_checkin_debug) {
+					pr_info("%s check_in_vpts:%lld \n",__func__,vpts);
+				}
 				pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
 					DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
 					vpts);
+				queue_video_info(vpts,PTS_PACKET_SIZE);
+			}
 
-			if (pdts_status & (1 << AUDIO_PTS_READY))
+			if (pdts_status & (1 << AUDIO_PTS_READY)) {
+				apts = DMX_READ_REG(id, AUDIO_PTS_DEMUX);
+				apts &= 0x00000000FFFFFFFF;
+				if (pdts_status & 0x4000) {
+				    apts = apts | (1LL<<32);
+				}
+				if (pts_checkin_debug) {
+					pr_info("%s check_in_apts:%lld \n",__func__,apts);
+				}
+			#if 0	//32bit
 				pts_checkin_wrptr(PTS_TYPE_AUDIO,
 					DMX_READ_REG(id, AUDIO_PDTS_WR_PTR),
-					DMX_READ_REG(id, AUDIO_PTS_DEMUX));
+					(u32)apts);
+			#else	//33bit
+				pts_checkin_wrptr_pts33(PTS_TYPE_AUDIO,
+					DMX_READ_REG(id, AUDIO_PDTS_WR_PTR),
+					apts);
+			#endif
+				queue_audio_info(apts,pts_getaudiocheckinsize());
+			}
 
 			if (id == 1)
 				WRITE_DEMUX_REG(STB_PTS_DTS_STATUS_2,
@@ -317,7 +402,75 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 
 	if (!enable_demux_driver())
 		WRITE_DEMUX_REG(STB_INT_STATUS, int_status);
+	return IRQ_HANDLED;
+}
 
+static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
+{
+	mediasync_video_packets_info dmx_video_frameinfo;
+	mediasync_audio_packets_info dmx_audio_frameinfo;
+	if (!kfifo_is_empty(&video_frame)) {
+		memset(&dmx_video_frameinfo, 0, sizeof(dmx_video_frameinfo));
+		if (kfifo_get(&video_frame,&dmx_video_frameinfo)) {
+			//queue videoframe to mediasync
+			s32 sSyncInsId;
+			if (!mediasync_vpts_set) {
+				mediasync_vpts_set = symbol_request(mediasync_ins_set_video_packets_info);
+			}
+			if (mediasync_vpts_set) {
+				sSyncInsId = 0;
+				mediasync_vpts_set(sSyncInsId, dmx_video_frameinfo);
+				if (pts_checkin_debug) {
+					pr_info("%s video sSyncInsId:%d packetsPts:%lld packetsSize:%d\n",
+							__func__,
+							sSyncInsId,
+							dmx_video_frameinfo.packetsPts,
+							dmx_video_frameinfo.packetsSize);
+				}
+			}
+		}
+	}
+	if (!kfifo_is_empty(&audio_frame)) {
+		memset(&dmx_audio_frameinfo, 0, sizeof(dmx_audio_frameinfo));
+		if (kfifo_get(&audio_frame,&dmx_audio_frameinfo)) {
+			//queue audioframe to mediasync
+			s32 sSyncInsId;
+			if (!mediasync_apts_set) {
+				mediasync_apts_set = symbol_request(mediasync_ins_set_audio_packets_info);
+			}
+			if (mediasync_apts_set) {
+				sSyncInsId = 0;
+				mediasync_apts_set(sSyncInsId, dmx_audio_frameinfo);
+				if (pts_checkin_debug) {
+					pr_info("%s audio sSyncInsId:%d packetsPts:%lld packetsSize:%d\n",
+							__func__,
+							sSyncInsId,
+							dmx_audio_frameinfo.packetsPts,
+							dmx_audio_frameinfo.packetsSize);
+				}
+			}
+
+			//add by audioteam zhangjing
+			if (fpaudio == 0) {
+				fpaudio = filp_open("/tmp/paudiofifo",O_WRONLY | O_NONBLOCK ,0);
+			}
+			if (IS_ERR(fpaudio)) {
+				long errret = PTR_ERR(fpaudio);
+				if (pts_checkin_debug) {
+					pr_info("%s errno is 0x%lx errinfo is %s \n",
+							__func__, errret, (char *)(ERR_PTR(errret)));
+				}
+				fpaudio=0;
+			} else {
+				int ret=0;
+				ret=kernel_write(fpaudio,&dmx_audio_frameinfo,sizeof(dmx_audio_frameinfo),&audiopos);
+				if (pts_checkin_debug) {
+					pr_info("kernel_write %d,%d,%lld \n",
+							ret,dmx_audio_frameinfo.packetsSize,dmx_audio_frameinfo.packetsPts);
+				}
+			}
+		}
+	}
 	return IRQ_HANDLED;
 }
 
@@ -457,6 +610,7 @@ static int reset_pcr_regs(void)
 	return 1;
 }
 
+
 s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 		struct vdec_s *vdec)
 {
@@ -467,6 +621,10 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 	pcrvideo_valid = 0;
 	pcraudio_valid = 0;
 	pcr_init_flag = 0;
+	video_pts_bit32 = 0;
+
+	INIT_KFIFO(video_frame);
+	INIT_KFIFO(audio_frame);
 
 	amports_switch_gate("demux", 1);
 
@@ -652,7 +810,6 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 
 	if (!enable_demux_driver()) {
 		/*TODO irq */
-
 		r = vdec_request_irq(DEMUX_IRQ, tsdemux_isr,
 				"tsdemux-irq", (void *)tsdemux_irq_id);
 
@@ -663,7 +820,7 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 			goto err4;
 	} else {
 		tsdemux_config();
-		tsdemux_request_irq(tsdemux_isr, (void *)tsdemux_irq_id);
+		tsdemux_request_irq(tsdemux_isr, tsdemux_thread_isr, (void *)tsdemux_irq_id);
 		if (vid < 0x1FFF) {
 			curr_vid_id = vid;
 			tsdemux_set_vid(vid);
@@ -683,8 +840,9 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 		pcrscr_valid = reset_pcr_regs();
 
 		if ((pcrid < 0x1FFF) && (pcrid != vid) && (pcrid != aid)
-			&& (pcrid != sid))
+			&& (pcrid != sid)) {
 			tsdemux_set_pcrid(pcrid);
+		}
 	}
 
 	first_pcr = 0;
@@ -714,6 +872,7 @@ void tsdemux_release(void)
 	pcrscr_valid = 0;
 	first_pcr = 0;
 	pcr_init_flag = 0;
+	video_pts_bit32 = 0;
 
 	WRITE_PARSER_REG(PARSER_INT_ENABLE, 0);
 	WRITE_PARSER_REG(PARSER_VIDEO_HOLE, 0);
@@ -1149,6 +1308,38 @@ void tsdemux_set_demux(int dev)
 	}
 }
 
+int demux_get_pcr(int demux_device_index, int index, u64 *pcr)
+{
+	u64 pcr_tmp;
+
+	if (pcrscr_valid == 0) {
+		return -1;
+	}
+
+	if (READ_DEMUX_REG(TS_HIU_CTL_2) & 0x80) {
+		pcr_tmp = READ_DEMUX_REG(PCR_DEMUX_2);
+	}
+	else if (READ_DEMUX_REG(TS_HIU_CTL_3) & 0x80) {
+		pcr_tmp = READ_DEMUX_REG(PCR_DEMUX_3);
+	}
+	else {
+		pcr_tmp = READ_DEMUX_REG(PCR_DEMUX);
+	}
+	pcr_tmp &= 0x00000000FFFFFFFF;
+	if (pts_checkin_debug) {
+		pr_info("%s pcr_tmp:%lld \n",__func__, pcr_tmp);
+	}
+	if (video_pts_bit32) {
+		pcr_tmp = pcr_tmp | (1LL << 32);
+		if (pts_checkin_debug) {
+			pr_info("%s 33bit pcr_tmp:%lld \n",__func__, pcr_tmp);
+		}
+	}
+	*pcr = pcr_tmp;
+	return 0;
+}
+EXPORT_SYMBOL(demux_get_pcr);
+
 u32 tsdemux_pcrscr_get(void)
 {
 	u32 pcr = 0;
@@ -1278,5 +1469,3 @@ struct stream_buf_ops *get_tsparser_stbuf_ops(void)
 	return &tsparser_stbuf_ops;
 }
 EXPORT_SYMBOL(get_tsparser_stbuf_ops);
-
-

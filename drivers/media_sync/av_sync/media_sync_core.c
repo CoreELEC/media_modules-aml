@@ -1089,6 +1089,12 @@ long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info
 			amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
 			pInstance->mSyncInfo.firstDmxPcrInfo.framePts = pcr;
 			pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = get_system_time_us();
+			if (media_sync_debug_level) {
+				pr_info("%s sSyncInsId:%d pcr:%lld frameSystemTime:%lld\n",__func__,
+						sSyncInsId,
+						pcr,
+						pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime);
+			}
 		} else {
 			pInstance->mSyncInfo.firstDmxPcrInfo.framePts = pcr;
 			pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = get_system_time_us();
@@ -1271,6 +1277,12 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 		amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
 		pInstance->mSyncInfo.curDmxPcrInfo.framePts = pcr;
 		pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = get_system_time_us();
+		if (media_sync_debug_level) {
+			pr_info("%s sSyncInsId:%d pcr:%lld frameSystemTime:%lld\n",__func__,
+					sSyncInsId,
+					pcr,
+					pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime);
+		}
 	} else {
 		pInstance->mSyncInfo.curDmxPcrInfo.framePts = -1;
 		pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = -1;
@@ -1997,9 +2009,15 @@ long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packet
 		pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime = get_system_time_us();
 	}
 	pInstance->mAudioCacheUpdateCount++;
+	if (media_sync_debug_level) {
+		pr_info("%s sSyncInsId:%d packetsPts:%lld packetsSize:%d\n",__func__,sSyncInsId,
+				pInstance->mSyncInfo.audioPacketsInfo.packetsPts,
+				pInstance->mSyncInfo.audioPacketsInfo.packetsSize);
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 	return 0;
 }
+EXPORT_SYMBOL(mediasync_ins_set_audio_packets_info);
 
 void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance, mediasync_audioinfo* info) {
 	int64_t Before_diff = 0;
@@ -2131,7 +2149,14 @@ long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packet
 
 	pInstance->mSyncInfo.queueVideoInfo.framePts = info.packetsPts;
 	pInstance->mSyncInfo.queueVideoInfo.frameSystemTime = get_system_time_us();
-
+	if (media_sync_debug_level) {
+		pr_info("%s sSyncInsId:%d packetsPts:%lld packetsSize:%d framePts:%lld frameSystemTime:%lld\n",
+				__func__,sSyncInsId,
+				pInstance->mSyncInfo.videoPacketsInfo.packetsPts,
+				pInstance->mSyncInfo.videoPacketsInfo.packetsSize,
+				pInstance->mSyncInfo.queueVideoInfo.framePts,
+				pInstance->mSyncInfo.queueVideoInfo.frameSystemTime);
+	}
 	if (pInstance->mSyncInfo.firstVideoPacketsInfo.framePts == -1) {
 		pInstance->mSyncInfo.firstVideoPacketsInfo.framePts = info.packetsPts;
 		pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime = get_system_time_us();
@@ -2141,6 +2166,9 @@ long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packet
 	return 0;
 
 }
+
+EXPORT_SYMBOL(mediasync_ins_set_video_packets_info);
+
 void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance, mediasync_videoinfo* info) {
 	//pr_info("mediasync_ins_get_videoinfo_2 curVideoInfo.framePts :%lld \n",pInstance->mSyncInfo.curVideoInfo.framePts);
 	int64_t Before_diff = 0;

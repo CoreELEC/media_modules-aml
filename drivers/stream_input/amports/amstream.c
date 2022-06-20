@@ -3009,7 +3009,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 						&priv->vdec->vbuf, pts);
 					}
 			} else if (this->type & PORT_TYPE_AUDIO) {
-					r = es_vpts_checkin_us64(
+					r = es_apts_checkin_us64(
 					&bufs[BUF_TYPE_AUDIO], pts);
 			}
 		}

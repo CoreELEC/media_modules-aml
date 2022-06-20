@@ -100,7 +100,7 @@ static struct clk *aml_dvb_uparsertop_clk;
 
 static int aml_tsdemux_reset(void);
 static int aml_tsdemux_set_reset_flag(void);
-static int aml_tsdemux_request_irq(irq_handler_t handler, void *data);
+static int aml_tsdemux_request_irq(irq_handler_t handler, irq_handler_t thread_handler, void *data);
 static int aml_tsdemux_free_irq(void);
 static int aml_tsdemux_set_vid(int vpid);
 static int aml_tsdemux_set_aid(int apid);
@@ -2692,17 +2692,16 @@ static int aml_tsdemux_set_reset_flag(void)
 }
 
 /*Add the amstream irq handler*/
-static int aml_tsdemux_request_irq(irq_handler_t handler, void *data)
+static int aml_tsdemux_request_irq(irq_handler_t handler, irq_handler_t thread_handler, void *data)
 {
 	struct aml_dvb *dvb = &aml_dvb_device;
 	struct aml_dmx *dmx;
 	unsigned long flags;
-
 	spin_lock_irqsave(&dvb->slock, flags);
-
 	dmx = get_stb_dmx();
 	if (dmx) {
 		dmx->irq_handler = handler;
+		dmx->thread_irq_handler = thread_handler;
 		dmx->irq_data = data;
 	}
 
@@ -2723,6 +2722,7 @@ static int aml_tsdemux_free_irq(void)
 	dmx = get_stb_dmx();
 	if (dmx) {
 		dmx->irq_handler = NULL;
+		dmx->thread_irq_handler = NULL;
 		dmx->irq_data = NULL;
 	}
 

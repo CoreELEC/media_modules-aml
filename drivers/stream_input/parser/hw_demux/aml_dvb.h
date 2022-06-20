@@ -227,6 +227,7 @@ struct aml_dmx {
 	int                   crc_check_count;
 	u32                 crc_check_time;
 	int                 om_status_error_count;
+	irq_handler_t        thread_irq_handler;
 };
 
 struct aml_dvr_block {
