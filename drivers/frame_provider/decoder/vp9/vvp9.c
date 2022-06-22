@@ -7884,6 +7884,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 {
 	struct vframe_s *vf;
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)op_arg;
+	struct vdec_s *vdec = hw_to_vdec(pbi);
 
 	if (step == 2)
 		return NULL;
@@ -7911,6 +7912,17 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 				vf->next_vf_pts = next_vf->pts;
 			} else
 				vf->next_vf_pts_valid = false;
+
+			vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
+			vf->vf_ud_param.ud_param.buf_len = 0;
+			vf->vf_ud_param.ud_param.pbuf_addr = NULL;
+			vf->vf_ud_param.ud_param.instance_id = vdec->afd_video_id;
+
+			vf->vf_ud_param.ud_param.meta_info.duration = vf->duration;
+			vf->vf_ud_param.ud_param.meta_info.flags = (VFORMAT_VP9 << 3);
+			vf->vf_ud_param.ud_param.meta_info.vpts = vf->pts;
+			if (vf->pts)
+				vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
 
 			return vf;
 		}

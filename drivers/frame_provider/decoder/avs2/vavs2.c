@@ -4328,6 +4328,8 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 
 	if (kfifo_get(&dec->display_q, &vf)) {
 		uint8_t index = vf->index & 0xff;
+		struct vdec_s *vdec = hw_to_vdec(dec);
+
 		ATRACE_COUNTER(dec->disp_q_name, kfifo_len(&dec->display_q));
 		if (index < dec->used_buf_num) {
 			struct avs2_frame_s *pic = get_pic_by_index(dec, index);
@@ -4347,6 +4349,18 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 				debug |= AVS2_DBG_PIC_LEAK_WAIT;
 			return NULL;
 		}
+
+		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
+		vf->vf_ud_param.ud_param.buf_len = 0;
+		vf->vf_ud_param.ud_param.pbuf_addr = NULL;
+		vf->vf_ud_param.ud_param.instance_id = vdec->afd_video_id;
+
+		vf->vf_ud_param.ud_param.meta_info.duration = vf->duration;
+		vf->vf_ud_param.ud_param.meta_info.flags = (VFORMAT_AVS2 << 3);
+		vf->vf_ud_param.ud_param.meta_info.vpts = vf->pts;
+		if (vf->pts)
+			vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
+
 		dec->vf_get_count++;
 		if (pic)
 			avs2_print(dec, AVS2_DBG_BUFMGR,

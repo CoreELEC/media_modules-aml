@@ -1006,6 +1006,7 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)op_arg;
 	unsigned long flags;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	if (hw->recover_flag)
 		return NULL;
@@ -1038,6 +1039,18 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 				buf_of_vf(vf)->detached);
 		}
 		spin_unlock_irqrestore(&lock, flags);
+
+		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
+		vf->vf_ud_param.ud_param.buf_len = 0;
+		vf->vf_ud_param.ud_param.pbuf_addr = NULL;
+		vf->vf_ud_param.ud_param.instance_id = vdec->afd_video_id;
+
+		vf->vf_ud_param.ud_param.meta_info.duration = vf->duration;
+		vf->vf_ud_param.ud_param.meta_info.flags = (VFORMAT_AVS << 3);
+		vf->vf_ud_param.ud_param.meta_info.vpts = vf->pts;
+		if (vf->pts)
+			vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
+
 		return vf;
 	}
 	spin_unlock_irqrestore(&lock, flags);
