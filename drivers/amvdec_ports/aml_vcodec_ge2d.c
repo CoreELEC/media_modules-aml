@@ -505,10 +505,11 @@ retry:
 		memset(&ge2d_config, 0, sizeof(ge2d_config));
 
 		src_fmt = get_input_format(in_buf->vf);
+
 		if (in_buf->vf->canvas0_config[0].endian == 7)
-			src_fmt |= GE2D_BIG_ENDIAN;
+			src_fmt |= is_cpu_t7c() ? GE2D_LITTLE_ENDIAN : GE2D_BIG_ENDIAN;
 		else
-			src_fmt |= GE2D_LITTLE_ENDIAN;
+			src_fmt |= is_cpu_t7c() ? GE2D_BIG_ENDIAN : GE2D_LITTLE_ENDIAN;
 
 		/* negotiate format of destination */
 		dst_fmt = get_input_format(in_buf->vf);

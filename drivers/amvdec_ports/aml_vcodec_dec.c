@@ -466,7 +466,7 @@ static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	if (ctx->ge2d_cfg.bypass)
 		return false;
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+	if (is_cpu_t7()) {
 		if ((ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG2) &&
@@ -901,7 +901,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 
 	if (dstbuf->vb.vb2_buf.state == VB2_BUF_STATE_ACTIVE) {
 		/* binding vframe handle. */
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		if (is_cpu_t7()) {
 			if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR) {
 				if ((ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
 					(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&

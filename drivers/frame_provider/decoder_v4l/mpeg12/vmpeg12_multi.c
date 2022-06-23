@@ -731,7 +731,7 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 	vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 	vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+	if (is_cpu_t7()) {
 		endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 	} else {
 		endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
@@ -2966,7 +2966,7 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 #endif
 
 	/* cbcr_merge_swap_en */
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+	if (is_cpu_t7()) {
 		if ((v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21) ||
 			(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
 			CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);

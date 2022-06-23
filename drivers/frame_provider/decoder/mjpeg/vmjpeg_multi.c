@@ -626,7 +626,7 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 	}
 }
 
-static void init_scaler(void)
+static void init_scaler(u32 endian)
 {
 	/* 4 point triangle */
 	const unsigned int filt_coef[] = {
@@ -698,6 +698,13 @@ static void init_scaler(void)
 	/* reset pscaler */
 	WRITE_VREG(DOS_SW_RESET0, (1 << 10));
 	WRITE_VREG(DOS_SW_RESET0, 0);
+
+	if (is_cpu_t7c()) {
+		if (endian == 7)
+			WRITE_VREG(PSCALE_CTRL2, (0x1ff << 16) | READ_VREG(PSCALE_CTRL2));
+		else
+			WRITE_VREG(PSCALE_CTRL2, (0 << 16) | READ_VREG(PSCALE_CTRL2));
+	}
 
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2) {
 		READ_RESET_REG(RESET2_REGISTER);
@@ -931,6 +938,7 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 {
 	struct buffer_spec_s *buff_spec;
 	int index, i;
+	u32 endian;
 
 	index = find_free_buffer(hw);
 	if (index < 0)
@@ -956,7 +964,9 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 	/* find next decode buffer index */
 	WRITE_VREG(AV_SCRATCH_4, spec2canvas(&hw->buffer_spec[index]));
 	WRITE_VREG(AV_SCRATCH_5, index | 1 << 24);
-	init_scaler();
+
+	endian = (hw_to_vdec(hw)->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+	init_scaler(endian);
 
 	/* clear buffer IN/OUT registers */
 	WRITE_VREG(MREG_TO_AMRISC, 0);
@@ -1161,8 +1171,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	start_process_time(hw);
 	hw->last_vld_level = 0;
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
-	amvdec_start();
 	vdec_enable_input(vdec);
+	amvdec_start();
 	hw->stat |= STAT_VDEC_RUN;
 	hw->init_flag = 1;
 
