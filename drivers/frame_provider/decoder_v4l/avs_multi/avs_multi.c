@@ -1763,7 +1763,7 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 #endif
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+	if (is_cpu_t7()) {
 		if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
 			(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
 			CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
@@ -3351,7 +3351,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
 
-			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+			if (is_cpu_t7()) {
 				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 			} else {
 				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
@@ -3452,7 +3452,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
 
-			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+			if (is_cpu_t7()) {
 				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 			} else {
 				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
@@ -3553,7 +3553,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
 
-			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+			if (is_cpu_t7()) {
 				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 			} else {
 				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
