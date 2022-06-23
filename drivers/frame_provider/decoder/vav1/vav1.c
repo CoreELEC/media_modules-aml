@@ -6107,9 +6107,55 @@ static void set_canvas(struct AV1HW_s *hw,
 	}
 }
 
-static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
+#define OBU_METADATA_TYPE_ITUT_T35 4
+
+void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
+{
+	if (pic->aux_data_buf && pic->aux_data_size) {
+		u32 size = 0, type = 0;
+		char *p = pic->aux_data_buf;
+
+		/* parser metadata */
+		while (p + 8 < pic->aux_data_buf + pic->aux_data_size) {
+			size = *p++;
+			size = (size << 8) | *p++;
+			size = (size << 8) | *p++;
+			size = (size << 8) | *p++;
+			type = *p++;
+			type = (type << 8) | *p++;
+			type = (type << 8) | *p++;
+			type = (type << 8) | *p++;
+			if (p + size <= pic->aux_data_buf + pic->aux_data_size) {
+				char metadata_type = ((type >> 24) & 0xff) - 0x10;
+
+				switch (metadata_type) {
+				case OBU_METADATA_TYPE_ITUT_T35:
+					if ((p + 5 < pic->aux_data_buf + pic->aux_data_size) &&
+						p[0] == 0xB5 && p[1] == 0x00 && p[2] == 0x3C &&
+						p[3] == 0x00 && p[4] == 0x01 && p[5] == 0x04) {
+						u32 data;
+						data = hw->video_signal_type;
+						data = data & 0xFFFF00FF;
+						data = data | (0x30<<8);
+						hw->video_signal_type = data;
+						vf->discard_dv_data = true;
+					}
+					break;
+				default:
+					break;
+				}
+			}
+			p += size;
+		}
+	}
+}
+
+static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	unsigned int ar = DISP_RATIO_ASPECT_RATIO_MAX;
+
+	parse_metadata(hw, vf, pic);
+
 	vf->duration = hw->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
@@ -6725,7 +6771,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			vf->compWidth = pic_config->y_crop_width;
 			vf->compHeight = pic_config->y_crop_height;
 		}
-		set_frame_info(hw, vf);
+		set_frame_info(hw, vf, pic_config);
 
 		if (hw->high_bandwidth_flag) {
 			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
@@ -10801,10 +10847,11 @@ static void av1_dump_state(struct vdec_s *vdec)
 	av1_print(hw, 0, "====== %s\n", __func__);
 
 	av1_print(hw, 0,
-		"width/height (%d/%d), used_buf_num %d\n",
+		"width/height (%d/%d), used_buf_num %d, video_signal_type 0x%x\n",
 		cm->width,
 		cm->height,
-		hw->used_buf_num
+		hw->used_buf_num,
+		hw->video_signal_type
 		);
 
 	av1_print(hw, 0,
