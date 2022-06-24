@@ -5931,6 +5931,13 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 		}
 	}
 
+	if (hw->error_proc_policy & 0x100000) {
+		if ((p->data_flag & ERROR_FLAG) && (decode_mb_count < mb_total)) {
+			if (hw->ip_field_error_count > 0)
+				hw->ip_field_error_count = 0;
+		}
+	}
+
 	if ((hw->error_proc_policy & 0x100000) &&
 			hw->last_dec_picture &&
 				(hw->last_dec_picture->slice_type == I_SLICE) &&
@@ -6360,6 +6367,15 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				release_cur_decoding_buf(hw);
 			}
 		}
+
+		if (hw->error_proc_policy & 0x10000) {
+			if (hw->multi_slice_pic_flag == 0 && (first_mb_in_slice == 0 && decode_mb_count > 0) &&
+				(hw->cur_picture_slice_count > 1 &&
+				(hw->cur_picture_slice_count > hw->last_picture_slice_count))) {
+				vh264_pic_done_proc(vdec);
+			}
+		}
+
 #endif
 
 		hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
@@ -6615,7 +6631,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						&& ((hw->dec_flag &
 							NODISP_FLAG) == 0)) ||(hw->reflist_error_count > 50)) {
 						hw->reset_bufmgr_flag = 1;
-						hw->reflist_error_count =0;
+						hw->reflist_error_count = 0;
 						amvdec_stop();
 						vdec->mc_loaded = 0;
 						hw->dec_result = DEC_RESULT_DONE;
@@ -7127,9 +7143,13 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 
 	dpb_print(DECODE_ID(hw),
 		PRINT_FLAG_ERROR, "%s decoder timeout, DPB_STATUS_REG 0x%x\n", __func__, READ_VREG(DPB_STATUS_REG));
-	release_cur_decoding_buf(hw);
+
 	hw->dec_result = DEC_RESULT_TIMEOUT;
 	hw->data_flag |= ERROR_FLAG;
+	if (hw->error_proc_policy & 0x100000) {
+		if (hw->ip_field_error_count > 0)
+			hw->ip_field_error_count = 0;
+	}
 
 	if (work_pending(&hw->work))
 		return;
@@ -9082,10 +9102,17 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		if ((hw->dec_result == DEC_RESULT_TIMEOUT) &&
 				!hw->i_only && (hw->error_proc_policy & 0x2)) {
 			struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+			hw->data_flag |= ERROR_FLAG;
 			dpb_print(DECODE_ID(hw), 0,
-				"%s, decode timeout flush dpb\n",
-				__func__);
-			flush_dpb(p_H264_Dpb);
+				"%s, decode timeout store in dpb\n", __func__);
+			if (p_H264_Dpb->mVideo.dec_picture != NULL) {
+				hw->dpb.mVideo.dec_picture->data_flag |= ERROR_FLAG;
+				dpb_print(DECODE_ID(hw), 0,
+				"%s, dec_picture->data_flag %d hw->data_flag %d\n", __func__, hw->data_flag,
+				hw->dpb.mVideo.dec_picture->data_flag);
+			}
+			vh264_pic_done_proc(vdec);
+
 		}
 result_done:
 		{
