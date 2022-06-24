@@ -4102,6 +4102,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 			return NULL;
 		}
 		vf->index_disp = atomic_read(&dec->vf_get_count);
+		vf->omx_index = atomic_read(&dec->vf_get_count);
 		atomic_add(1, &dec->vf_get_count);
 		if (pic)
 			avs2_print(dec, AVS2_DBG_BUFMGR,

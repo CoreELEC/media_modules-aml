@@ -4070,6 +4070,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 		}
 		hw->last_frame_time = time;
 		vf->index_disp = atomic_read(&hw->vf_get_count);
+		vf->omx_index = atomic_read(&hw->vf_get_count);
 		atomic_add(1, &hw->vf_get_count);
 		if (kfifo_peek(&hw->display_q, &next_vf) && next_vf) {
 			vf->next_vf_pts_valid = true;

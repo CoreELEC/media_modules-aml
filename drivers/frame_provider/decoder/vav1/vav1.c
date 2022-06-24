@@ -6168,6 +6168,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			hw->vf_get_count++;
 			vf->index_disp = hw->vf_get_count;
+			vf->omx_index = hw->vf_get_count;
 			if (debug & AOM_DEBUG_VFRAME) {
 				struct BufferPool_s *pool = hw->common.buffer_pool;
 				struct PIC_BUFFER_CONFIG_s *pic =

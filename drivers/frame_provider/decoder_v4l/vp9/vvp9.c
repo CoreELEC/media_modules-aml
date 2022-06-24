@@ -6820,6 +6820,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 		if (index < pbi->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			vf->index_disp = atomic_read(&pbi->vf_get_count);
+			vf->omx_index = atomic_read(&pbi->vf_get_count);
 			atomic_add(1, &pbi->vf_get_count);
 
 			if (debug & VP9_DEBUG_BUFMGR)
