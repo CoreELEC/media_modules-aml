@@ -430,6 +430,7 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	pInstance->mPcrSlope.mNumerator = 1;
 	pInstance->mPcrSlope.mDenominator = 1;
 	pInstance->mAVRef = 0;
+	pInstance->mPlayerInstanceId = -1;
 
 	return 0;
 }
@@ -2187,6 +2188,49 @@ long mediasync_ins_get_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* 
 
 	info->framePts = pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_set_player_instance_id(s32 sSyncInsId, s32 PlayerInstanceId) {
+
+	mediasync_ins* pInstance = NULL;
+
+	s32 index = get_index_from_syncid(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	pInstance->mPlayerInstanceId = PlayerInstanceId;
+
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_get_player_instance_id(s32 sSyncInsId, s32* PlayerInstanceId) {
+
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_syncid(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	*PlayerInstanceId = pInstance->mPlayerInstanceId ;
+
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;

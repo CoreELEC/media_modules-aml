@@ -157,7 +157,7 @@ typedef struct instance{
 	mediasync_speed mPcrSlope;
 	s32 mSyncModeChange;
 	s64 mUpdateTimeThreshold;
-
+	s32 mPlayerInstanceId;
 	int mHasAudio;
 	int mHasVideo;
 	int mute_flag;
@@ -283,5 +283,7 @@ long mediasync_ins_set_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo i
 long mediasync_ins_get_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_set_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_player_instance_id(s32 sSyncInsId, s32 PlayerInstanceId);
+long mediasync_ins_get_player_instance_id(s32 sSyncInsId, s32* PlayerInstanceId);
 
 #endif
