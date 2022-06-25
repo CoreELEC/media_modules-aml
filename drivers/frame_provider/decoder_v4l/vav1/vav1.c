@@ -3938,6 +3938,8 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 		data32 &= ~(1 << 8); /* NV21 */
 	else
 		data32 |= (1 << 8); /* NV12 */
+	if (get_double_write_mode(hw) & 0x20)
+		data32 &= ~(1 << 8); /* NV21 */
 
 	data32 &= (~(3 << 14));
 	data32 |= (2 << 14);
