@@ -683,6 +683,7 @@ static int video_port_init(struct port_priv_s *priv,
 	}
 
 	if (vdec_dual(vdec)) {
+		vdec->slave->sys_info = vdec->sys_info;
 		r = vdec_init(vdec->slave,
 			(priv->vdec->sys_info->height *
 			priv->vdec->sys_info->width) > 1920*1088, false);
