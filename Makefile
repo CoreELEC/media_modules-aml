@@ -45,7 +45,7 @@ modules_install:
 	mkdir -p ${OUT_DIR}/../vendor_lib/modules
 	cd ${OUT_DIR}/$(M)/; find -name "*.ko" -exec cp {} ${OUT_DIR}/../vendor_lib/modules/ \;
 	mkdir -p ${OUT_DIR}/../vendor_lib/firmware/video
-	cp $(KERNEL_SRC)/$(M)/firmware/* ${OUT_DIR}/../vendor_lib/firmware/video/
+	cp $(KERNEL_SRC)/$(M)/firmware/* ${OUT_DIR}/../vendor_lib/firmware/video -rf
 
 clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) clean
