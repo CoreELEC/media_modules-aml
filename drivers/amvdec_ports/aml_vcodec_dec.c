@@ -509,8 +509,8 @@ static void aml_buffer_assigning(struct aml_vcodec_ctx *ctx)
 	u32 vsink_buf_num = 0;
 	u32 total = 0;
 
-	ctx->vpp_is_need = vpp_needed(ctx, &vpp_mode) ? : false;
-	ctx->ge2d_is_need = ge2d_needed(ctx, &ge2d_mode) ? : false;
+	ctx->vpp_is_need = vpp_needed(ctx, &vpp_mode) ? true : false;
+	ctx->ge2d_is_need = ge2d_needed(ctx, &ge2d_mode) ? true : false;
 
 	if (debug_margin)
 		picinfo->dpb_margin = debug_margin;
@@ -538,7 +538,7 @@ static void aml_buffer_assigning(struct aml_vcodec_ctx *ctx)
 		vpp->mode	= vpp_mode;
 		vpp->fmt	= ctx->cap_pix_fmt;
 		vpp->is_drm	= ctx->is_drm_mode;
-		vpp->is_prog	= (picinfo->field == V4L2_FIELD_NONE) ? : false;
+		vpp->is_prog	= (picinfo->field == V4L2_FIELD_NONE) ? true : false;
 
 		if (vpp->is_prog) {
 			vpp->sink_buf_num	= 0;
