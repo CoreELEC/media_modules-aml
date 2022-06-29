@@ -281,8 +281,6 @@ extern int force_enable_nr;
 extern int force_enable_di_local_buffer;
 extern int max_di_instance;
 extern int bypass_nr_flag;
-extern int debug_margin;
-extern int debug_dpb;
 
 extern int dmabuf_fd_install_data(int fd, void* data, u32 size);
 extern bool is_v4l2_buf_file(struct file *file);
@@ -499,53 +497,27 @@ static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	return true;
 }
 
-static void aml_buffer_assigning(struct aml_vcodec_ctx *ctx)
+static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 {
+	u32 mode, total_size;
 	struct vdec_pic_info *picinfo = &ctx->picinfo;
 	struct aml_vpp_cfg_infos *vpp = &ctx->vpp_cfg;
 	struct aml_ge2d_cfg_infos *ge2d = &ctx->ge2d_cfg;
-	u32 vpp_mode = 0, ge2d_mode = 0;
-	u32 dec_src_buf_num = 0;
-	u32 vsink_buf_num = 0;
-	u32 total = 0;
 
-	ctx->vpp_is_need = vpp_needed(ctx, &vpp_mode) ? true : false;
-	ctx->ge2d_is_need = ge2d_needed(ctx, &ge2d_mode) ? true : false;
+	if (vpp_needed(ctx, &mode)) {
+		vpp->mode        = mode;
+		vpp->fmt         = ctx->cap_pix_fmt;
+		vpp->is_drm      = ctx->is_drm_mode;
+		vpp->buf_size = aml_v4l2_vpp_get_buf_num(vpp->mode)
+			+ picinfo->vpp_margin;
 
-	if (debug_margin)
-		picinfo->dpb_margin = debug_margin;
-	if (debug_dpb)
-		picinfo->dpb_frames = debug_dpb;
-
-	/* Decoder buffer number configuration. */
-	dec_src_buf_num = picinfo->dpb_frames;
-	if (dec_src_buf_num > 18) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"Warning: DPB(%u) overflow, es data maybe wrong.\n",
-			dec_src_buf_num);
-		dec_src_buf_num = 18;
-	}
-
-	/* GE2D wrapper context configuration. */
-	if (ctx->ge2d_is_need) {
-		ge2d->mode		= ge2d_mode;
-		ge2d->sink_buf_num	= 1;
-		ge2d->src_buf_num	= 1;
-	}
-
-	/* VPP wrapper context configuration. */
-	if (ctx->vpp_is_need) {
-		vpp->mode	= vpp_mode;
-		vpp->fmt	= ctx->cap_pix_fmt;
-		vpp->is_drm	= ctx->is_drm_mode;
-		vpp->is_prog	= (picinfo->field == V4L2_FIELD_NONE) ? true : false;
-
-		if (vpp->is_prog) {
-			vpp->sink_buf_num	= 0;
-			vpp->src_buf_num	= 0;
+		if (picinfo->field == V4L2_FIELD_NONE) {
+			vpp->is_prog = true;
+			vpp->buf_size = 0;
 		} else {
-			vpp->sink_buf_num	= 2;
-			vpp->src_buf_num	= 1;
+			vpp->is_prog = false;
+			/* for between with dec & vpp. */
+			picinfo->dpb_margin = 2;
 		}
 
 		if (vpp->is_prog &&
@@ -553,76 +525,42 @@ static void aml_buffer_assigning(struct aml_vcodec_ctx *ctx)
 			bypass_progressive) {
 			vpp->is_bypass_p = true;
 		}
-	}
-
-	/* Video sink buffer number configuration. */
-	vsink_buf_num	= 1;
-	ctx->margin	= picinfo->dpb_margin;
-
-	/* Sanity check for total buffer numbers. */
-	total = dec_src_buf_num + ge2d->sink_buf_num +
-		ge2d->src_buf_num + vpp->sink_buf_num +
-		vpp->src_buf_num + vsink_buf_num + ctx->margin;
-	if (total > V4L_CAP_BUFF_MAX) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"Warning: request buffers(%u) exceeded the maximum of %u buffers.\n",
-			total, V4L_CAP_BUFF_MAX);
-
-		ctx->margin	= V4L_CAP_BUFF_MAX - (total - ctx->margin);
-		total	= V4L_CAP_BUFF_MAX;
-	}
-
-	/*
-	 * According to the pipeline status, configure the number of buffers
-	 * required by the source pad.
-	 */
-	if (ctx->ge2d_is_need && ctx->vpp_is_need) {
-		if (vpp->is_prog) {
-			ctx->dpb_size	= dec_src_buf_num + ge2d->sink_buf_num;
-			ctx->ge2d_size	= ge2d->src_buf_num + vsink_buf_num + ctx->margin;
-			ctx->vpp_size	= 0;
-		} else {
-			ctx->dpb_size	= dec_src_buf_num + ge2d->sink_buf_num;
-			ctx->ge2d_size	= ge2d->src_buf_num + vpp->sink_buf_num;
-			ctx->vpp_size	= vpp->src_buf_num + vsink_buf_num + ctx->margin;
-		}
-	} else if (ctx->ge2d_is_need) {
-		ctx->dpb_size	= dec_src_buf_num + ge2d->sink_buf_num;
-		ctx->ge2d_size	= ge2d->src_buf_num + vsink_buf_num + ctx->margin;
-		ctx->vpp_size	= 0;
-	} else if (ctx->vpp_is_need) {
-		if (vpp->is_prog) {
-			ctx->dpb_size	= dec_src_buf_num + vsink_buf_num + ctx->margin;
-			ctx->ge2d_size	= 0;
-			ctx->vpp_size	= 0;
-		} else {
-			ctx->dpb_size	= dec_src_buf_num + vpp->sink_buf_num;
-			ctx->ge2d_size	= 0;
-			ctx->vpp_size	= vpp->src_buf_num + vsink_buf_num + ctx->margin;
-		}
+		ctx->vpp_is_need = true;
 	} else {
-		ctx->dpb_size	= dec_src_buf_num + vsink_buf_num + ctx->margin;
-		ctx->ge2d_size	= 0;
-		ctx->vpp_size	= 0;
+		vpp->buf_size = 0;
+		ctx->vpp_is_need = false;
 	}
 
-	ge2d->buf_size	= ctx->ge2d_size;
-	vpp->buf_size	= ctx->vpp_size;
+	if (ge2d_needed(ctx, &mode)) {
+		ge2d->mode = mode;
+		ge2d->buf_size = 4 + picinfo->dpb_margin;
+		ctx->ge2d_is_need = true;
+		picinfo->dpb_margin = 2;
+	} else {
+		ge2d->buf_size = 0;
+		ctx->ge2d_is_need = false;
+	}
 
-	/*
-	 * The final decoder driver is based on this margin value and
-	 * the size of the DPB parsed in the coded stream, and they sum
-	 * to get the number of buffers required by the decoding module.
-	 */
-	picinfo->dpb_margin = ctx->dpb_size - dec_src_buf_num;
+	ctx->dpb_size = picinfo->dpb_frames + picinfo->dpb_margin;
+	ctx->vpp_size = vpp->buf_size;
+	ctx->ge2d_size = ge2d->buf_size;
+
+	total_size = ctx->dpb_size + ctx->vpp_size + ctx->ge2d_size;
+
+	if (total_size > V4L_CAP_BUFF_MAX) {
+		if (ctx->ge2d_size) {
+			ctx->dpb_size = V4L_CAP_BUFF_MAX - ctx->ge2d_size - ctx->vpp_size;
+		} else if (ctx->vpp_size) {
+			ctx->dpb_size = V4L_CAP_BUFF_MAX - ctx->vpp_size;
+		} else {
+			ctx->dpb_size = V4L_CAP_BUFF_MAX;
+		}
+		picinfo->dpb_margin = ctx->dpb_size - picinfo->dpb_frames;
+		total_size = V4L_CAP_BUFF_MAX;
+	}
 	vdec_if_set_param(ctx, SET_PARAM_PIC_INFO, picinfo);
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Buffer assigning: Dec(%u), GE2D(%u, %u), VPP(%u, %u), Vsink(%u), Margin(%u), Total(%u)\n",
-		dec_src_buf_num, ge2d->sink_buf_num,
-		ge2d->src_buf_num, vpp->sink_buf_num,
-		vpp->src_buf_num, vsink_buf_num, ctx->margin,
-		total);
+	return total_size;
 }
 
 void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
@@ -659,7 +597,13 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	if (ctx->vpp_is_need)
 		ctx->vpp_cfg.is_vpp_reset = true;
 
-	aml_buffer_assigning(ctx);
+	v4l_buf_size_decision(ctx);
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		"Update picture buffer count: dec:%u, vpp:%u, ge2d:%u, margin:%u, total:%u\n",
+		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
+		ctx->picinfo.dpb_margin,
+		CTX_BUF_TOTAL(ctx));
 }
 
 void vdec_frame_buffer_release(void *data)
@@ -1333,9 +1277,6 @@ void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx)
 	struct aml_q_data *outq = NULL;
 	struct aml_q_data *capq = NULL;
 	struct vdec_pic_info pic;
-	u32 dec = ctx->dpb_size;
-	u32 ge2d = ctx->ge2d_size;
-	u32 vpp = ctx->vpp_size;
 
 	if (vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &pic)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -1362,17 +1303,10 @@ void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx)
 		"Resolution : visible(%dx%d), coded(%dx%d)\n",
 		pic.visible_width, pic.visible_height,
 		pic.coded_width, pic.coded_height);
-
-	if (ctx->vpp_size)
-		vpp = ctx->vpp_size - ctx->margin;
-	else if (ctx->ge2d_size)
-		ge2d = ctx->ge2d_size - ctx->margin;
-	else
-		dec = ctx->dpb_size - ctx->margin;
-
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Buffer num : Dec:%d, GE2D:%d, VPP:%d, Margin:%d, total:%d\n",
-		dec, ge2d, vpp, ctx->margin, CTX_BUF_TOTAL(ctx));
+		"Buffer num : dec:%d, vpp:%d, ge2d:%d, margin:%d, total:%d\n",
+		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
+		ctx->picinfo.dpb_margin, CTX_BUF_TOTAL(ctx));
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"Config     : dw:%d, drm:%d, byp:%d, lc:%d, nr:%d, ge2d:%x\n",
 		ctx->config.parm.dec.cfg.double_write_mode,
@@ -1401,11 +1335,6 @@ void aml_buffer_status(struct aml_vcodec_ctx *ctx)
 	}
 
 	pr_info("\n==== Show Buffer Status ======== \n");
-	pr_info("Buffer valid:%d, used:%d, free:%d\n",
-		ctx->cap_pool.in,
-		ctx->cap_pool.out,
-		ctx->cap_pool.in - ctx->cap_pool.out);
-
 	for (i = 0; i < q->num_buffers; ++i) {
 		vb = to_vb2_v4l2_buffer(q->bufs[i]);
 		aml_buff = container_of(vb, struct aml_video_dec_buf, vb);
@@ -4146,8 +4075,14 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	if (!ctx->picinfo.dpb_frames)
 		return;
 
-	aml_buffer_assigning(ctx);
+	v4l_buf_size_decision(ctx);
 	ctx->last_decoded_picinfo = ctx->picinfo;
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		"Picture buffer count: dec:%u, vpp:%u, ge2d:%u, margin:%u, total:%u\n",
+		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
+		ctx->picinfo.dpb_margin,
+		CTX_BUF_TOTAL(ctx));
 
 	aml_vdec_dispatch_event(ctx, V4L2_EVENT_SRC_CH_RESOLUTION);
 
