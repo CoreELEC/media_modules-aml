@@ -4735,6 +4735,8 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 			(dec->cfg.metadata_config_flag & (1 << 14));
 		if (force_enable_di_local_buffer)
 			ctx->vpp_cfg.enable_local_buf = true;
+		ctx->vpp_cfg.dynamic_bypass_vpp =
+			dec->cfg.metadata_config_flag & (1 << 10);
 
 		ctx->ge2d_cfg.bypass =
 			(dec->cfg.metadata_config_flag & (1 << 9));

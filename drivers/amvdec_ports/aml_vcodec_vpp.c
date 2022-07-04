@@ -591,8 +591,13 @@ static int aml_v4l2_vpp_thread(void* param)
 {
 	struct aml_v4l2_vpp* vpp = param;
 	struct aml_vcodec_ctx *ctx = vpp->ctx;
+	bool dynamic_bypass_vpp_flag = ctx->vpp_cfg.dynamic_bypass_vpp;
 
 	v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL, "enter vpp thread\n");
+
+	if (dynamic_bypass_vpp_flag) {
+		v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL, "dynamic bypass vpp\n");
+	}
 	while (vpp->running) {
 		struct aml_v4l2_vpp_buf *in_buf;
 		struct aml_v4l2_vpp_buf *out_buf = NULL;
@@ -605,6 +610,12 @@ retry:
 		if (!vpp->running)
 			break;
 
+		if (dynamic_bypass_vpp_flag != ctx->vpp_cfg.dynamic_bypass_vpp) {
+			dynamic_bypass_vpp_flag = ctx->vpp_cfg.dynamic_bypass_vpp;
+			di_s_bypass_ch(vpp->di_handle, dynamic_bypass_vpp_flag);
+			v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL, "dynamic bypass vpp:%s\n",
+				dynamic_bypass_vpp_flag ? "enable" : "disable");
+		}
 		if (kfifo_is_empty(&vpp->output)) {
 			if (down_interruptible(&vpp->sem_out))
 				goto exit;
