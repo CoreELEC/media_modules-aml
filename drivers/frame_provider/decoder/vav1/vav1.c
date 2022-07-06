@@ -1442,7 +1442,7 @@ static int get_mv_buf(struct AV1HW_s *hw,
 		pic_config->mpred_mv_wr_start_addr =
 			(hw->m_mv_BUF[ret].start_adr + 0xffff) &
 			(~0xffff);
-		if (debug & AV1_DEBUG_BUFMGR_MORE)
+		if (debug & AV1_DEBUG_BUFMGR)
 			pr_info(
 			"%s => %d (%d) size 0x%x\n",
 			__func__, ret,
@@ -1452,6 +1452,17 @@ static int get_mv_buf(struct AV1HW_s *hw,
 		pr_info(
 		"%s: Error, mv buf is not enough\n",
 		__func__);
+		if (debug & AV1_DEBUG_BUFMGR) {
+			dump_pic_list(hw);
+			for (i = 0; i < MAX_BUF_NUM; i++) {
+				av1_print(hw, 0,
+					"mv_Buf(%d) start_adr 0x%x size 0x%x used %d\n",
+					i,
+					hw->m_mv_BUF[i].start_adr,
+					hw->m_mv_BUF[i].size,
+					hw->m_mv_BUF[i].used_flag);
+			}
+		}
 	}
 	return ret;
 }
@@ -1460,7 +1471,7 @@ static void put_mv_buf(struct AV1HW_s *hw,
 {
 	int i = *mv_buf_index;
 	if (i >= MV_BUFFER_NUM) {
-		if (debug & AV1_DEBUG_BUFMGR_MORE)
+		if (debug & AV1_DEBUG_BUFMGR)
 			pr_info(
 			"%s: index %d beyond range\n",
 			__func__, i);
@@ -1485,7 +1496,7 @@ static void put_mv_buf(struct AV1HW_s *hw,
 		return;
 	}
 
-	if (debug & AV1_DEBUG_BUFMGR_MORE)
+	if (debug & AV1_DEBUG_BUFMGR)
 		pr_info(
 		"%s(%d): used_flag(%d)\n",
 		__func__, i,
@@ -1700,6 +1711,8 @@ static int get_free_fb(AV1_COMMON *cm) {
 int get_free_frame_buffer(struct AV1_Common_s *cm)
 {
 	struct AV1HW_s *hw = container_of(cm, struct AV1HW_s, common);
+
+	put_un_used_mv_bufs(hw);
 
 	return hw->is_used_v4l ? v4l_get_free_fb(hw) : get_free_fb(cm);
 }
@@ -6340,7 +6353,7 @@ void av1_inc_vf_ref(struct AV1HW_s *hw, int index)
 	if ((debug & AV1_DEBUG_IGNORE_VF_REF) == 0) {
 		cm->buffer_pool->frame_bufs[index].buf.vf_ref++;
 
-		av1_print(hw, AV1_DEBUG_BUFMGR_MORE, "%s index = %d new vf_ref = %d\r\n",
+		av1_print(hw, AV1_DEBUG_BUFMGR, "%s index = %d new vf_ref = %d\r\n",
 			__func__, index,
 			cm->buffer_pool->frame_bufs[index].buf.vf_ref);
 	}
