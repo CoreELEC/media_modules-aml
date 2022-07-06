@@ -6897,8 +6897,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		if (p_H264_Dpb->mVideo.dec_picture &&
 				hw->multi_slice_pic_flag == 2 &&
-				(p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] != dpb_param_bak.l.data[SLICE_TYPE] ||
-				dpb_param_bak.l.data[FIRST_MB_IN_SLICE] > p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE])) {
+				(dpb_param_bak.l.data[FIRST_MB_IN_SLICE] > p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE])) {
 			dpb_print(DECODE_ID(hw), 0,
 				"decode next pic, save before, SLICE_TYPE BAK %d, SLICE_TYPE %d, FIRST_MB_IN_SLICE BAK %d, FIRST_MB_IN_SLICE %d\n",
 					dpb_param_bak.l.data[SLICE_TYPE], p_H264_Dpb->dpb_param.l.data[SLICE_TYPE],
