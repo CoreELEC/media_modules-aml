@@ -847,7 +847,6 @@ struct vdec_h264_hw_s {
 	u32 cfg_param2;
 	u32 cfg_param3;
 	u32 cfg_param4;
-	u32 cfg_bitstream_restriction_flag;
 	int valve_count;
 	u8 next_again_flag;
 	u32 pre_parser_wr_ptr;
@@ -4914,10 +4913,10 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 	dec_dpb_size_change = hw->dpb.dec_dpb_size != get_dec_dpb_size_active(hw, param1, param4);
 
-	if (((seq_info2 != 0 &&
+	if ((((seq_info2 != 0 &&
 		(hw->seq_info2 & 0x80ffffff) != (param1 & 0x80ffffff)) || dec_dpb_size_change) &&
 		hw->seq_info2 != 0
-		) { /*picture size changed*/
+		) && (!hw->res_ch_flag)) { /*picture size changed*/
 		h264_reconfig(hw);
 	} else {
 		/*someting changes and not including dpb_size, width, height, ...*/
@@ -4929,7 +4928,6 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		hw->dpb.reorder_output = max_reference_size;
 
 		hw->cfg_param1 = param1;
-		hw->cfg_bitstream_restriction_flag = hw->bitstream_restriction_flag;
 
 		hw->seq_info2 = seq_info2;
 		hw->seq_info3 = seq_info3;
@@ -4957,7 +4955,6 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		hw->cfg_param2 = param2;
 		hw->cfg_param3 = param3;
 		hw->cfg_param4 = param4;
-		hw->cfg_bitstream_restriction_flag = hw->bitstream_restriction_flag;
 
 		hw->seq_info2 = seq_info2;
 		hw->seq_info3 = seq_info3;
@@ -5044,8 +5041,10 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		p_H264_Dpb->mSPS.level_idc = level_idc;
 		max_reference_size = (reg_val >> 8) & 0xff;
 		hw->dpb.reorder_output = max_reference_size;
-		hw->dpb.dec_dpb_size =
-			get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
+		if (!hw->res_ch_flag)
+			hw->dpb.dec_dpb_size =
+				get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
+
 		if (!hw->mmu_enable) {
 			mb_width = (mb_width+3) & 0xfffffffc;
 			mb_height = (mb_height+3) & 0xfffffffc;
@@ -6121,8 +6120,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			p_H264_Dpb->bitstream_restriction_flag,
 			p_H264_Dpb->num_reorder_frames,
 			p_H264_Dpb->max_dec_frame_buffering);
-		hw->bitstream_restriction_flag =
-			p_H264_Dpb->bitstream_restriction_flag;
 		hw->num_reorder_frames =
 			p_H264_Dpb->num_reorder_frames;
 		hw->max_dec_frame_buffering =
@@ -8717,7 +8714,6 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 			vdec_v4l_res_ch_event(ctx);
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
-			hw->bitstream_restriction_flag = hw->cfg_bitstream_restriction_flag; // restore the old value when v4l res change
 			amvdec_stop();
 			if (hw->mmu_enable)
 				amhevc_stop();
@@ -8803,6 +8799,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 					}
 					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
 				} else {
+					hw->res_ch_flag = 0;
+
 					if (vh264_set_params(hw, param1,
 						param2, param3, param4, false) < 0) {
 						hw->init_flag = 0;
@@ -8813,7 +8811,6 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 					WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
 						(hw->dpb.mDPB.size<<16) |
 						(hw->dpb.mDPB.size<<8));
-					hw->res_ch_flag = 0;
 					start_process_time(hw);
 					return;
 				}

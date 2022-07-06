@@ -577,7 +577,8 @@ static bool can_vpp_get_buf_from_m2m(struct aml_v4l2_vpp* vpp)
 	struct aml_vcodec_ctx *ctx = vpp->ctx;
 
 	if (ctx->cap_pool.dec >= (ctx->dpb_size - 1) ||
-		ctx->cap_pool.vpp < aml_v4l2_vpp_get_buf_num(ctx->vpp_cfg.mode))
+		(ctx->cap_pool.vpp < aml_v4l2_vpp_get_buf_num(ctx->vpp_cfg.mode)) ||
+		vpp->get_eos)
 		return true;
 
 	v4l_dbg(ctx, V4L_DEBUG_VPP_BUFMGR, "%s dec: %d dpb_size: %d vpp: %d\n",
@@ -874,6 +875,7 @@ int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp)
 	vpp->out_num[0]	= 0;
 	vpp->out_num[1]	= 0;
 	vpp->fb_token	= 0;
+	vpp->get_eos = false;
 	sema_init(&vpp->sem_in, 0);
 	sema_init(&vpp->sem_out, 0);
 
@@ -1162,6 +1164,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		u32 dw_mode = VDEC_DW_NO_AFBC;
 
 		in_buf->di_buf.flag |= DI_FLAG_EOS;
+		vpp->get_eos = true;
 
 		if (vdec_if_get_param(vpp->ctx, GET_PARAM_DW_MODE, &dw_mode))
 			return -1;

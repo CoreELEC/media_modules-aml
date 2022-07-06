@@ -373,7 +373,8 @@ static bool can_ge2d_get_buf_from_m2m(struct aml_v4l2_ge2d* ge2d)
 	struct aml_vcodec_ctx *ctx = ge2d->ctx;
 
 	if (ctx->cap_pool.dec >= (ctx->dpb_size - 1) ||
-		ctx->cap_pool.ge2d < 4)
+		ctx->cap_pool.ge2d < 4 ||
+		ge2d->get_eos)
 		return true;
 
 	v4l_dbg(ctx, V4L_DEBUG_GE2D_BUFMGR, "%s dec: %d dpb_size: %d ge2d: %d\n",
@@ -908,8 +909,10 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 		return -1;
 	}
 
-	if (vf->type & VIDTYPE_V4L_EOS)
+	if (vf->type & VIDTYPE_V4L_EOS) {
 		in_buf->flag |= GE2D_FLAG_EOS;
+		ge2d->get_eos = true;
+	}
 
 	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
 		"ge2d_push_vframe: vf:%px, idx:%d, type:%x, ts:%lld\n",
