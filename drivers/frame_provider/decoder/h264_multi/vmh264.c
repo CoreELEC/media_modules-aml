@@ -622,6 +622,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 	NAL_SEARCH_CTL: bit 0, enable itu_t35
 	NAL_SEARCH_CTL: bit 1, enable mmu
 	NAL_SEARCH_CTL: bit 2, detect frame_mbs_only_flag whether switch resolution
+	NAL_SEARCH_CTL: bit 7-14,level_idc
 	NAL_SEARCH_CTL: bit 15,bitstream_restriction_flag
 	*/
 #define NAL_SEARCH_CTL		AV_SCRATCH_9
@@ -767,6 +768,7 @@ struct vdec_h264_hw_s {
 
 	u32 seq_info;
 	u32 seq_info2;
+	u32 seq_info3;
 	u32 video_signal_from_vui; /*to do .. */
 	u32 timing_info_present_flag;
 	u32 fixed_frame_rate_flag;
@@ -962,7 +964,6 @@ struct vdec_h264_hw_s {
 	u32 no_decoder_buffer_flag;
 	u32 video_signal_type;
 	struct trace_decoder_name trace;
-	int csd_change_flag;
 	bool high_bandwidth_flag;
 };
 
@@ -5350,12 +5351,11 @@ static void get_picture_qos_info(struct StorablePicture *picture)
 }
 
 static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
-		int mb_height)
+		int mb_height, int level_idc)
 {
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int pic_size = mb_width * mb_height * 384;
 	int size = 0, size_vui;
-	int level_idc = p_H264_Dpb->mSPS.level_idc;
 
 	switch (level_idc) {
 	case 9:
@@ -5434,16 +5434,12 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 	return size;
 }
 
-static int get_dec_dpb_size_active(struct vdec_h264_hw_s *hw, u32 param1)
+static int get_dec_dpb_size_active(struct vdec_h264_hw_s *hw, u32 param1, u32 param4)
 {
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-	struct vdec_s *vdec = hw_to_vdec(hw);
-#endif
 	int mb_width, mb_total;
 	int mb_height = 0;
-	int active_buffer_spec_num, dec_dpb_size;
-	u32 used_reorder_dpb_size_margin
-			= hw->reorder_dpb_size_margin;
+	int dec_dpb_size;
+	int level_idc = param4 & 0xff;
 
 	mb_width = param1 & 0xff;
 	mb_total = (param1 >> 8) & 0xffff;
@@ -5465,25 +5461,7 @@ static int get_dec_dpb_size_active(struct vdec_h264_hw_s *hw, u32 param1)
 	hw->error_frame_width = 0;
 	hw->error_frame_height = 0;
 
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-		if (vdec->master || vdec->slave)
-			used_reorder_dpb_size_margin =
-				reorder_dpb_size_margin_dv;
-#endif
-
-	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height);
-
-	active_buffer_spec_num =
-		dec_dpb_size
-		+ used_reorder_dpb_size_margin;
-
-	if (active_buffer_spec_num > MAX_VF_BUF_NUM) {
-		active_buffer_spec_num = MAX_VF_BUF_NUM;
-		dec_dpb_size = active_buffer_spec_num
-			- used_reorder_dpb_size_margin;
-	}
-
-	hw->dpb.mDPB.size = active_buffer_spec_num;
+	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
 
 	if (hw->no_poc_reorder_flag)
 		dec_dpb_size = 1;
@@ -5519,6 +5497,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	/*int mb_mv_byte;*/
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	u32 seq_info2;
+	u32 seq_info3;
 	int ret = 0;
 	int active_buffer_spec_num;
 	unsigned int buf_size;
@@ -5536,6 +5515,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			reorder_dpb_size_margin_dv;
 #endif
 	seq_info2 = param1;
+	seq_info3 = param4;
 	hw->seq_info = param2;
 
 	mb_width = seq_info2 & 0xff;
@@ -5558,26 +5538,29 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	hw->error_frame_width = 0;
 	hw->error_frame_height = 0;
 
-	dec_dpb_size_change = hw->csd_change_flag && (hw->dpb.dec_dpb_size != get_dec_dpb_size_active(hw, param1));
+	dec_dpb_size_change = hw->dpb.dec_dpb_size != get_dec_dpb_size_active(hw, param1, param4);
 
 	if (((seq_info2 != 0 &&
-		hw->seq_info2 != seq_info2) || hw->csd_change_flag) &&
+		hw->seq_info2 != seq_info2) || dec_dpb_size_change) &&
 		hw->seq_info2 != 0
-		) {
-		if (hw->seq_info2 != seq_info2 || dec_dpb_size_change) { /*picture size changed*/
-			h264_reconfig(hw);
-		} else {
-			/*someting changes and not including dpb_size, width, height, ...*/
-			struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
-			u32 reg_val = param4;
-			max_reference_size = (reg_val >> 8) & 0xff;
-			hw->dpb.reorder_output = max_reference_size;
+		) { /*picture size changed*/
+		h264_reconfig(hw);
+	} else {
+		/*someting changes and not including dpb_size, width, height, ...*/
+		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+		u32 reg_val = param4;
+		level_idc = reg_val & 0xff;
+		p_H264_Dpb->mSPS.level_idc = level_idc;
+		max_reference_size = (reg_val >> 8) & 0xff;
+		hw->dpb.reorder_output = max_reference_size;
 
-			if (p_H264_Dpb->bitstream_restriction_flag &&
-				p_H264_Dpb->num_reorder_frames <= p_H264_Dpb->max_dec_frame_buffering &&
-				p_H264_Dpb->num_reorder_frames >= 0) {
-				hw->dpb.reorder_output = hw->num_reorder_frames + 1;
-			}
+		hw->seq_info2 = seq_info2;
+		hw->seq_info3 = seq_info3;
+
+		if (p_H264_Dpb->bitstream_restriction_flag &&
+			p_H264_Dpb->num_reorder_frames <= p_H264_Dpb->max_dec_frame_buffering &&
+			p_H264_Dpb->num_reorder_frames >= 0) {
+			hw->dpb.reorder_output = hw->num_reorder_frames + 1;
 		}
 	}
 
@@ -5592,9 +5575,10 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		hw->cfg_param4 = param4;
 
 		hw->seq_info2 = seq_info2;
+		hw->seq_info3 = seq_info3;
 		dpb_print(DECODE_ID(hw), 0,
-			"AV_SCRATCH_1 = %x, AV_SCRATCH_2 %x\r\n",
-			seq_info2, hw->seq_info);
+			"AV_SCRATCH_1 = %x, AV_SCRATCH_2 %x, AV_SCRATCH_B: = %x\r\n",
+			seq_info2, hw->seq_info, seq_info3);
 
 		dpb_init_global(&hw->dpb,
 			DECODE_ID(hw), 0, 0);
@@ -5675,7 +5659,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		max_reference_size = (reg_val >> 8) & 0xff;
 		hw->dpb.reorder_output = max_reference_size;
 		hw->dpb.dec_dpb_size =
-			get_dec_dpb_size(hw , mb_width, mb_height);
+			get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
 		if (!hw->mmu_enable) {
 			mb_width = (mb_width+3) & 0xfffffffc;
 			mb_height = (mb_height+3) & 0xfffffffc;
@@ -6881,7 +6865,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 				"p_H264_Dpb->bitstream_restriction_flag 0x%x, new 0x%x\n",
 				p_H264_Dpb->bitstream_restriction_flag, ((p_H264_Dpb->dpb_param.l.data[SPS_FLAGS2] >> 3) & 0x1));
-			hw->csd_change_flag = 1;
 		}
 		p_H264_Dpb->bitstream_restriction_flag =
 			(p_H264_Dpb->dpb_param.l.data[SPS_FLAGS2] >> 3) & 0x1;
@@ -9471,7 +9454,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	hw->error_frame_width = 0;
 	hw->error_frame_height = 0;
 
-	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height);
+	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
 
 	dpb_print(DECODE_ID(hw), 0,
 		"restriction_flag=%d, max_dec_frame_buffering=%d, dec_dpb_size=%d num_reorder_frames %d used_reorder_dpb_size_margin %d\n",
@@ -9575,36 +9558,34 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int ret = 0;
-	int dec_dpb_size_change = hw->csd_change_flag && (hw->dpb.dec_dpb_size != get_dec_dpb_size_active(hw, param1));
+	int dec_dpb_size_change = hw->dpb.dec_dpb_size != get_dec_dpb_size_active(hw, param1, param4);
 
 	if (ctx->param_sets_from_ucode &&
 			hw->res_ch_flag == 0) {
 		if (((param1 != 0 &&
-			hw->seq_info2 != param1) || hw->csd_change_flag) &&
-			hw->seq_info2 != 0) {
-			if (hw->seq_info2 != param1 || dec_dpb_size_change) { /*picture size changed*/
-				struct aml_vdec_ps_infos ps;
-				dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
-					"h264 res_change\n");
-				if (vmh264_get_ps_info(hw, param1,
-					param2, param3, param4, &ps) < 0) {
-					dpb_print(DECODE_ID(hw), 0,
-						"set parameters error\n");
-				}
-				hw->v4l_params_parsed = false;
-				vdec_v4l_set_ps_infos(ctx, &ps);
-				vdec_v4l_res_ch_event(ctx);
-				hw->res_ch_flag = 1;
-				ctx->v4l_resolution_change = 1;
-				amvdec_stop();
-				if (hw->mmu_enable)
-					amhevc_stop();
-				hw->eos = 1;
-				flush_dpb(p_H264_Dpb);
-				//del_timer_sync(&hw->check_timer);
-				notify_v4l_eos(hw_to_vdec(hw));
-				ret = 1;
+			hw->seq_info2 != param1) || dec_dpb_size_change) &&
+			hw->seq_info2 != 0) { /*picture size changed*/
+			struct aml_vdec_ps_infos ps;
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+				"h264 res_change\n");
+			if (vmh264_get_ps_info(hw, param1,
+				param2, param3, param4, &ps) < 0) {
+				dpb_print(DECODE_ID(hw), 0,
+					"set parameters error\n");
 			}
+			hw->v4l_params_parsed = false;
+			vdec_v4l_set_ps_infos(ctx, &ps);
+			vdec_v4l_res_ch_event(ctx);
+			hw->res_ch_flag = 1;
+			ctx->v4l_resolution_change = 1;
+			amvdec_stop();
+			if (hw->mmu_enable)
+				amhevc_stop();
+			hw->eos = 1;
+			flush_dpb(p_H264_Dpb);
+			//del_timer_sync(&hw->check_timer);
+			notify_v4l_eos(hw_to_vdec(hw));
+			ret = 1;
 		}
 	}
 
@@ -10280,7 +10261,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->get_data_count = 0;
-	hw->csd_change_flag = 0;
 #if 0
 	pr_info("VLD_MEM_VIFIFO_LEVEL = 0x%x, rp = 0x%x, wp = 0x%x\n",
 		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
@@ -10426,7 +10406,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			WRITE_VREG(NAL_SEARCH_CTL,
 					READ_VREG(NAL_SEARCH_CTL) & (~0x2));
 	}
-	WRITE_VREG(NAL_SEARCH_CTL, READ_VREG(NAL_SEARCH_CTL) | (1 << 2) | (hw->bitstream_restriction_flag << 15));
+	WRITE_VREG(NAL_SEARCH_CTL, READ_VREG(NAL_SEARCH_CTL) | (1 << 2) | (hw->bitstream_restriction_flag << 15) | (hw->seq_info3&0xff)<<7);
 
 	if (udebug_flag)
 		WRITE_VREG(AV_SCRATCH_K, udebug_flag);
