@@ -1746,6 +1746,38 @@ static int H265_alloc_mmu(struct hevc_state_s *hevc,
 
 static int init_buf_spec(struct hevc_state_s *hevc);
 
+#define H265_USERDATA_ENABLE
+
+#ifdef H265_USERDATA_ENABLE
+
+#define SEI_ITU_DATA_SIZE		(4*1024)
+
+static u32 itu_t_t35_enable = 1;
+
+struct h265_userdata_record_t {
+	struct userdata_meta_info_t meta_info;
+	u32 rec_start;
+	u32 rec_len;
+};
+/*
+struct h265_ud_record_wait_node_t {
+	struct list_head list;
+	struct mh264_userdata_record_t ud_record;
+};*/
+#define USERDATA_FIFO_NUM    256
+#define MAX_FREE_USERDATA_NODES		5
+
+struct h265_userdata_info_t {
+	struct h265_userdata_record_t records[USERDATA_FIFO_NUM];
+	u8 *data_buf;
+	u8 *data_buf_end;
+	u32 buf_len;
+	u32 read_index;
+	u32 write_index;
+	u32 last_wp;
+};
+#endif
+
 struct debug_log_s {
 	struct list_head list;
 	uint8_t data; /*will alloc more size*/
@@ -2089,6 +2121,21 @@ struct hevc_state_s {
 	ulong mc_cpu_handle;
 	ulong det_buf_handle;
 	ulong rdma_mem_handle;
+#ifdef H265_USERDATA_ENABLE
+	/*user data*/
+	struct mutex userdata_mutex;
+	struct h265_userdata_info_t userdata_info;
+	struct h265_userdata_record_t ud_record;
+	int wait_for_udr_send;
+
+	/* buffer for storing one itu35 recored */
+	void *sei_itu_data_buf;
+	u32 sei_itu_data_len;
+	/* recycle buffer for user data storing all itu35 records */
+	void *sei_user_data_buffer;
+	u32 sei_user_data_wp;
+	struct work_struct user_data_ready_work;
+#endif
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -5464,19 +5511,6 @@ static void pic_list_process(struct hevc_state_s *hevc)
 		int new_count = alloc_pic_count;
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			pic = hevc->m_PIC[i];
-			if (new_count < work_pic_num && pic == NULL) {
-				pic = vmalloc(sizeof(struct PIC_s));
-				if (pic == NULL) {
-					hevc_print(hevc, 0,
-						"%s: alloc pic %d fail!!!\n",
-						__func__, i);
-					break;
-				}
-				hevc->m_PIC[i] = pic;
-				memset(pic, 0, sizeof(struct PIC_s));
-				pic->index = -1;
-			}
-
 			if (pic && pic->index == -1) {
 				pic->index = i;
 				pic->BUF_index = -1;
@@ -7494,6 +7528,260 @@ static int init_buf_spec(struct hevc_state_s *hevc)
 	return 0;
 }
 
+#ifdef H265_USERDATA_ENABLE
+
+static void vh265_destroy_userdata_manager(struct hevc_state_s *hevc)
+{
+	if (hevc) {
+		memset(&hevc->userdata_info, 0,
+			sizeof(struct h265_userdata_info_t));
+	}
+}
+
+static void vh265_reset_udr_mgr(struct hevc_state_s *hevc)
+{
+	hevc->wait_for_udr_send = 0;
+	hevc->sei_itu_data_len = 0;
+	memset(&hevc->ud_record, 0, sizeof(hevc->ud_record));
+}
+
+static int vh265_crate_userdata_manager(struct hevc_state_s *hevc,
+	char *userdata_buf, u32 buflen)
+{
+	if (hevc == NULL)
+		return -1;
+
+	mutex_init(&hevc->userdata_mutex);
+
+	memset(&hevc->userdata_info, 0, sizeof(struct h265_userdata_info_t));
+	hevc->userdata_info.data_buf = userdata_buf;
+	hevc->userdata_info.buf_len = buflen;
+	hevc->userdata_info.data_buf_end = userdata_buf + buflen;
+
+	vh265_reset_udr_mgr(hevc);
+
+	return 0;
+}
+
+static int vh265_user_data_read(struct vdec_s *vdec,
+			struct userdata_param_t *puserdata_para)
+{
+	struct hevc_state_s *hevc = (struct hevc_state_s *)vdec->private;
+	int rec_ri, rec_wi;
+	struct h265_userdata_record_t *rec;
+	int rec_len;
+	void *rec_start;
+	void *dest_buf;
+	unsigned long res;
+	u32 data_size;
+	int copy_ok = 0;
+
+#if 0
+	uint32_t version;
+	uint32_t instance_id; /*input, 0~9*/
+	uint32_t buf_len; /*input*/
+	uint32_t data_size; /*output*/
+	void *pbuf_addr; /*input*/
+	struct userdata_meta_info_t meta_info; /*output*/
+#endif
+
+	mutex_lock(&hevc->userdata_mutex);
+	rec_ri = hevc->userdata_info.read_index;
+	rec_wi = hevc->userdata_info.write_index;
+
+	if (rec_ri == rec_wi) {
+		mutex_unlock(&hevc->userdata_mutex);
+		return 0;
+	}
+
+	rec = &hevc->userdata_info.records[rec_ri];
+	rec_start = hevc->userdata_info.data_buf + rec->rec_start;
+	rec_len = rec->rec_len;
+
+	dest_buf = puserdata_para->pbuf_addr;
+	data_size = rec_len;
+
+
+	/* pr_info("%s, ready to copy. size 0x%x, bufsize 0x%x, start %p, end %p\n",
+		__func__, data_size, puserdata_para->buf_len, rec_start, hevc->userdata_info.data_buf_end);
+	*/
+	if (rec_len <= puserdata_para->buf_len) {
+		if ((u8 *)(rec_start + rec_len) > hevc->userdata_info.data_buf_end) {
+			u32 first_len = hevc->userdata_info.data_buf_end - (u8 *)rec_start;
+
+			res = copy_to_user(dest_buf, rec_start, first_len);
+			copy_ok = 1;
+			if (res) {
+				pr_info("%s[1], res %ld, request %d\n", __func__, res, first_len);
+				copy_ok = 0;
+				rec->rec_len -= (first_len - res);
+				rec->rec_start += (first_len - res);
+				puserdata_para->data_size += (first_len - res);
+			} else {
+				res = copy_to_user(dest_buf + first_len,
+					hevc->userdata_info.data_buf, data_size - first_len);
+				if (res) {
+					pr_info("%s[2], res %ld, request %d\n", __func__, res, data_size);
+					copy_ok = 0;
+				}
+				rec->rec_len -= (data_size - res);
+				rec->rec_start = (data_size - first_len - res);
+				puserdata_para->data_size = (data_size - res);
+			}
+		} else {
+			res = copy_to_user(dest_buf, rec_start, data_size);
+			if (res) {
+				pr_info("%s[3], res %ld, request %d\n", __func__, res, data_size);
+				copy_ok = 0;
+			}
+			rec->rec_len -= (data_size - res);
+			rec->rec_start += (data_size - res);
+			puserdata_para->data_size = (data_size - res);
+			copy_ok = 1;
+
+		}
+
+		if (copy_ok) {
+			hevc->userdata_info.read_index++;
+			if (hevc->userdata_info.read_index >= USERDATA_FIFO_NUM)
+				hevc->userdata_info.read_index = 0;
+		}
+	} else {
+		res = (u32)copy_to_user(dest_buf,
+							(void *)rec_start,
+							data_size);
+		if (res) {
+			pr_info("%s[4], res %ld, request %d\n",
+				__func__, res, data_size);
+			copy_ok = 0;
+		}
+
+		rec->rec_len -= data_size - res;
+		rec->rec_start += data_size - res;
+		puserdata_para->data_size = data_size - res;
+	}
+
+	puserdata_para->meta_info = rec->meta_info;
+
+	if (hevc->userdata_info.read_index <= hevc->userdata_info.write_index)
+		puserdata_para->meta_info.records_in_que =
+			hevc->userdata_info.write_index -
+			hevc->userdata_info.read_index;
+	else
+		puserdata_para->meta_info.records_in_que =
+			hevc->userdata_info.write_index +
+			USERDATA_FIFO_NUM - hevc->userdata_info.read_index;
+
+	puserdata_para->version = (0<<24|0<<16|0<<8|1);
+
+	mutex_unlock(&hevc->userdata_mutex);
+
+	return 1;
+}
+
+void vh265_reset_userdata_fifo(struct vdec_s *vdec, int bInit)
+{
+	struct hevc_state_s *hevc = (struct hevc_state_s *)vdec->private;
+
+	if (hevc) {
+		mutex_lock(&hevc->userdata_mutex);
+		pr_info("%s, bInit %d, ri %d, wi %d\n", __func__,
+			bInit, hevc->userdata_info.read_index,
+			hevc->userdata_info.write_index);
+
+		hevc->userdata_info.read_index = 0;
+		hevc->userdata_info.write_index = 0;
+
+		if (bInit)
+			hevc->userdata_info.last_wp = 0;
+		mutex_unlock(&hevc->userdata_mutex);
+	}
+}
+
+static void vh265_wakeup_userdata_poll(struct vdec_s *vdec)
+{
+	amstream_wakeup_userdata_poll(vdec);
+}
+
+static void vh265_userdata_fill_vpts(struct hevc_state_s *hevc,
+	u32 vpts, int pts_valid, u32 poc)
+{
+	u8 *pdata;
+	u8 *pmax_sei_data_buffer;
+	u8 *sei_data_buf;
+	int i;
+	int wp;
+	int data_length;
+	struct h265_userdata_record_t *p_rec;
+	struct userdata_meta_info_t meta_info;
+
+	if (hevc->sei_itu_data_len <= 0)
+		return;
+	sei_data_buf = hevc->sei_itu_data_buf;
+	pdata = hevc->sei_user_data_buffer + hevc->sei_user_data_wp;
+	pmax_sei_data_buffer = hevc->sei_user_data_buffer + USER_DATA_SIZE;
+	memset(&meta_info, 0, sizeof(meta_info));
+
+	for (i = 0; i < hevc->sei_itu_data_len; i++) {
+		*pdata++ = sei_data_buf[i];
+		if (pdata >= pmax_sei_data_buffer)
+			pdata = hevc->sei_user_data_buffer;
+	}
+
+	hevc->sei_user_data_wp = (hevc->sei_user_data_wp
+		+ hevc->sei_itu_data_len) % USER_DATA_SIZE;
+	hevc->sei_itu_data_len = 0;
+
+	meta_info.duration = hevc->frame_dur;
+	meta_info.flags |= (VFORMAT_HEVC << 3);
+	meta_info.flags |= (hevc->cur_pic->pic_struct << 12);
+	meta_info.vpts = vpts;
+	meta_info.vpts_valid = pts_valid;
+	meta_info.poc_number = poc;
+
+	/*pr_info("one record ready pts %d, poc %d\n", vpts, meta_info.poc_number);*/
+	wp = hevc->sei_user_data_wp;
+	if (hevc->sei_user_data_wp > hevc->userdata_info.last_wp)
+		data_length = wp - hevc->userdata_info.last_wp;
+	else
+		data_length = wp + hevc->userdata_info.buf_len
+			- hevc->userdata_info.last_wp;
+
+	if (data_length & 0x7)
+		data_length = (((data_length + 8) >> 3) << 3);
+
+	p_rec = &hevc->ud_record;
+	p_rec->meta_info = meta_info;
+	p_rec->rec_start = hevc->userdata_info.last_wp;
+	p_rec->rec_len = data_length;
+	hevc->userdata_info.last_wp = wp;
+
+	hevc->wait_for_udr_send = 1;
+
+	/* notify userdata ready */
+	mutex_lock(&hevc->userdata_mutex);
+	hevc->userdata_info.records[hevc->userdata_info.write_index]
+		= hevc->ud_record;
+	hevc->userdata_info.write_index++;
+	if (hevc->userdata_info.write_index >= USERDATA_FIFO_NUM)
+		hevc->userdata_info.write_index = 0;
+	mutex_unlock(&hevc->userdata_mutex);
+
+	vdec_wakeup_userdata_poll(hw_to_vdec(hevc));
+	hevc->wait_for_udr_send = 0;
+}
+
+#endif
+
+#ifdef H265_USERDATA_ENABLE
+static int check_hevc_cc_type(char *p_sei)
+{
+	return (p_sei[0] == 0xB5 && p_sei[1] == 0x00 && p_sei[2] == 0x31 && p_sei[3] == 0x47
+					&& p_sei[4] == 0x41 && p_sei[5] == 0x39 && p_sei[6] == 0x34)
+					|| (p_sei[0] == 0xB5 && p_sei[1] == 0x00 && p_sei[2] == 0x31
+					&& p_sei[3] == 0x44 && p_sei[4] == 0x54 && p_sei[5] == 0x47 && p_sei[6] == 0x31);
+}
+#endif
 static int parse_sei(struct hevc_state_s *hevc,
 	struct PIC_s *pic, char *sei_buf, uint32_t size)
 {
@@ -7503,6 +7791,8 @@ static int parse_sei(struct hevc_state_s *hevc,
 	uint16_t nal_unit_type;
 	uint16_t payload_type, payload_size;
 	int i, j;
+	int data_len;
+	u8 *user_data_buf;
 
 	if (size < 2)
 		return 0;
@@ -7580,9 +7870,33 @@ static int parse_sei(struct hevc_state_s *hevc,
 						}
 						PR_INFO(hevc->index);
 					}
+#ifndef H265_USERDATA_ENABLE
 				}
-
-				break;
+#else
+				} else if (check_hevc_cc_type(p_sei)) {
+					user_data_buf = hevc->sei_itu_data_buf
+						+ hevc->sei_itu_data_len;
+					/* user data length should be align with 8 bytes,
+						if not, then padding with zero*/
+					for (i = 0; i < payload_size; i += 8) {
+						for (j = 0; j < 8; j++) {
+							int index;
+							index = i+7-j;
+							if (index >= payload_size)
+								user_data_buf[i+j] = 0;
+							else
+								user_data_buf[i+j] = p_sei[i+7-j];
+							/*pr_info("%x ", p_sei[i+j]);*/
+						}
+					}
+					/*pr_info("\n");*/
+					data_len = payload_size;
+					if (payload_size % 8)
+						data_len = ((payload_size + 8) >> 3) << 3;
+					hevc->sei_itu_data_len += data_len;
+				}
+#endif
+			break;
 			case SEI_MasteringDisplayColorVolume:
 				/* master_display_colour */
 				p_sei = p;
@@ -9735,6 +10049,60 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 	return ret;
 }
 
+#ifdef H265_USERDATA_ENABLE
+static int userdata_prepare(struct hevc_state_s *hevc)
+{
+	struct PIC_s *pic = hevc->cur_pic;
+	char *p;
+	u32 size;
+	int type;
+	u32 vpts = 0;
+	u64 pts64 = 0;
+	int pts_valid = 0;
+
+	if (!itu_t_t35_enable)
+		return 0;
+
+	if (pic->aux_data_buf
+	&& pic->aux_data_size) {
+		/* parser sei */
+		p = pic->aux_data_buf;
+		while (p < pic->aux_data_buf
+			+ pic->aux_data_size - 8) {
+			size = *p++;
+			size = (size << 8) | *p++;
+			size = (size << 8) | *p++;
+			size = (size << 8) | *p++;
+			type = *p++;
+			type = (type << 8) | *p++;
+			type = (type << 8) | *p++;
+			type = (type << 8) | *p++;
+			if (type == 0x02000000) {
+				/* hevc_print(hevc, 0,
+				"sei(%d)\n", size); */
+				parse_sei(hevc, pic, p, size);
+			}
+			p += size;
+		}
+		if (vdec_frame_based(hw_to_vdec(hevc))) {
+			if (hevc->chunk) {
+				vpts = hevc->chunk->pts;
+				pts_valid = hevc->chunk->pts_valid;
+			}
+		} else {
+			if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
+					pic->stream_offset, &vpts, 0, &pts64)) {
+				vpts = 0;
+				pts_valid = 0;
+			}
+		}
+		vh265_userdata_fill_vpts(hevc, vpts, pts_valid, pic->POC);
+	}
+
+	return 0;
+}
+#endif
+
 static int hevc_skip_nal(struct hevc_state_s *hevc)
 {
 	if ((hevc->pic_h == 96) && (hevc->pic_w  == 160) &&
@@ -10083,6 +10451,9 @@ pic_done:
 			hevc->decoded_poc = hevc->curr_POC;
 			hevc->decoding_pic = NULL;
 			hevc->dec_result = DEC_RESULT_DONE;
+#ifdef H265_USERDATA_ENABLE
+			userdata_prepare(hevc);
+#endif
 #ifdef DETREFILL_ENABLE
 			if (hevc->is_swap &&
 				get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
@@ -11617,6 +11988,23 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	}
 #endif
 
+#ifdef H265_USERDATA_ENABLE
+		hevc->sei_itu_data_buf = kmalloc(SEI_ITU_DATA_SIZE, GFP_KERNEL);
+		if (hevc->sei_itu_data_buf == NULL) {
+			pr_err("%s: failed to alloc sei itu data buffer\n",
+				__func__);
+			return -1;
+		} else if (NULL == hevc->sei_user_data_buffer) {
+			hevc->sei_user_data_buffer = kmalloc(USER_DATA_SIZE, GFP_KERNEL);
+			if (!hevc->sei_user_data_buffer) {
+				pr_info("%s: Can not allocate sei_data_buffer\n", __func__);
+				kfree(hevc->sei_itu_data_buf);
+				hevc->sei_itu_data_buf = NULL;
+			}
+			hevc->sei_user_data_wp = 0;
+		}
+#endif
+
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (hevc->m_ins_flag) {
 		hevc->timer.expires = jiffies + PUT_INTERVAL;
@@ -11977,6 +12365,16 @@ static int vmh265_stop(struct hevc_state_s *hevc)
 	cancel_work_sync(&hevc->timeout_work);
 	cancel_work_sync(&hevc->work);
 	uninit_mmu_buffers(hevc);
+#ifdef H265_USERDATA_ENABLE
+	if (hevc->sei_itu_data_buf) {
+		kfree(hevc->sei_itu_data_buf);
+		hevc->sei_itu_data_buf = NULL;
+	}
+	if (hevc->sei_user_data_buffer) {
+		kfree(hevc->sei_user_data_buffer);
+		hevc->sei_user_data_buffer = NULL;
+	}
+#endif
 
 	vfree(hevc->fw);
 	hevc->fw = NULL;
@@ -13068,6 +13466,15 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	pdata->irq_handler = vh265_irq_cb;
 	pdata->threaded_irq_handler = vh265_threaded_irq_cb;
 	pdata->dump_state = vh265_dump_state;
+#ifdef H265_USERDATA_ENABLE
+	pdata->wakeup_userdata_poll = vh265_wakeup_userdata_poll;
+	pdata->user_data_read = vh265_user_data_read;
+	pdata->reset_userdata_fifo = vh265_reset_userdata_fifo;
+#else
+	pdata->wakeup_userdata_poll = NULL;
+	pdata->user_data_read = NULL;
+	pdata->reset_userdata_fifo = NULL;
+#endif
 
 	hevc->index = pdev->id;
 	hevc->m_ins_flag = 1;
@@ -13376,6 +13783,10 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	vdec_aux_data_check_init(pdata);
 #endif
 
+#ifdef H265_USERDATA_ENABLE
+	vh265_crate_userdata_manager(hevc, hevc->sei_user_data_buffer, USER_DATA_SIZE);
+#endif
+
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 
 	/*set the max clk for smooth playing...*/
@@ -13453,6 +13864,9 @@ static int ammvdec_h265_remove(struct platform_device *pdev)
 		hevc_print(hevc, 0, "%s\r\n", __func__);
 
 	vmh265_stop(hevc);
+#ifdef H265_USERDATA_ENABLE
+		vh265_destroy_userdata_manager(hevc);
+#endif
 
 	/* vdec_source_changed(VFORMAT_H264, 0, 0, 0); */
 	if (vdec->parallel_dec == 1)
@@ -13701,6 +14115,9 @@ MODULE_PARM_DESC(error_handle_system_threshold,
 module_param(error_skip_nal_count, uint, 0664);
 MODULE_PARM_DESC(error_skip_nal_count,
 				 "\n amvdec_h265 error_skip_nal_count\n");
+
+module_param(itu_t_t35_enable, int, 0664);
+MODULE_PARM_DESC(itu_t_t35_enable, "\n amvdec_h265 itu_t_t35_enable\n");
 
 module_param(skip_nal_count, uint, 0664);
 MODULE_PARM_DESC(skip_nal_count, "\n skip_nal_count\n");
