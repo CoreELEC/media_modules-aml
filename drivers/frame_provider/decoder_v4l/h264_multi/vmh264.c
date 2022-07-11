@@ -930,6 +930,7 @@ struct vdec_h264_hw_s {
 	ulong aux_mem_handle;
 	ulong frame_mmu_map_handle;
 	ulong mc_cpu_handle;
+	struct mutex pic_mutex;
 };
 
 static u32 again_threshold;
@@ -1564,6 +1565,8 @@ static void  hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 static void release_cur_decoding_buf(struct vdec_h264_hw_s *hw)
 {
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+
+	mutex_lock(&hw->pic_mutex);
 	if (p_H264_Dpb->mVideo.dec_picture) {
 		release_picture(p_H264_Dpb,
 			p_H264_Dpb->mVideo.dec_picture);
@@ -1572,6 +1575,7 @@ static void release_cur_decoding_buf(struct vdec_h264_hw_s *hw)
 		if (hw->mmu_enable)
 			hevc_set_frame_done(hw);
 	}
+	mutex_unlock(&hw->pic_mutex);
 }
 
 static void  hevc_sao_wait_done(struct vdec_h264_hw_s *hw)
@@ -6040,7 +6044,9 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 			bufmgr_post(p_H264_Dpb);
 				hw->last_dec_picture =
 					p_H264_Dpb->mVideo.dec_picture;
+			mutex_lock(&hw->pic_mutex);
 			p_H264_Dpb->mVideo.dec_picture = NULL;
+			mutex_unlock(&hw->pic_mutex);
 			hw->has_i_frame = 1;
 			if (hw->mmu_enable)
 				hevc_set_frame_done(hw);
@@ -10171,6 +10177,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	decode_frame_count[DECODE_ID(hw)] = 0;
 	hw->dpb.without_display_mode = without_display_mode;
 	mutex_init(&hw->fence_mutex);
+	mutex_init(&hw->pic_mutex);
 	if (hw->enable_fence) {
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
