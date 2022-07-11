@@ -970,6 +970,7 @@ struct vdec_h264_hw_s {
 	ulong aux_mem_handle;
 	ulong frame_mmu_map_handle;
 	ulong mc_cpu_handle;
+	struct mutex pic_mutex;
 };
 
 static u32 again_threshold;
@@ -1784,6 +1785,8 @@ static void  hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 static void release_cur_decoding_buf(struct vdec_h264_hw_s *hw)
 {
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+
+	mutex_lock(&hw->pic_mutex);
 	if (p_H264_Dpb->mVideo.dec_picture) {
 		release_picture(p_H264_Dpb,
 			p_H264_Dpb->mVideo.dec_picture);
@@ -1792,6 +1795,7 @@ static void release_cur_decoding_buf(struct vdec_h264_hw_s *hw)
 		if (hw->mmu_enable)
 			hevc_set_frame_done(hw);
 	}
+	mutex_unlock(&hw->pic_mutex);
 }
 
 static void  hevc_sao_wait_done(struct vdec_h264_hw_s *hw)
@@ -6780,7 +6784,9 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 			bufmgr_post(p_H264_Dpb);
 				hw->last_dec_picture =
 					p_H264_Dpb->mVideo.dec_picture;
+			mutex_lock(&hw->pic_mutex);
 			p_H264_Dpb->mVideo.dec_picture = NULL;
+			mutex_unlock(&hw->pic_mutex);
 			/* dump_dpb(&p_H264_Dpb->mDPB); */
 			hw->has_i_frame = 1;
 			if (hw->mmu_enable)
@@ -8117,6 +8123,7 @@ static void check_timer_func(struct timer_list *timer)
 	if (vdec->next_status == VDEC_STATUS_DISCONNECTED &&
 			!hw->is_used_v4l) {
 		hw->dec_result = DEC_RESULT_FORCE_EXIT;
+		WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 		vdec_schedule_work(&hw->work);
 		pr_debug("vdec requested to be disconnected\n");
 		return;
@@ -9712,6 +9719,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	 * notify vdec core to switch context
 	 */
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	u32 wcount = 0;
 
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
@@ -10045,8 +10053,18 @@ result_done:
 		if (hw->mmu_enable)
 			amhevc_stop();
 		if (hw->stat & STAT_ISR_REG) {
-			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
+			do {
+				vdec_free_irq(VDEC_IRQ_1, (void *)hw);
+
+				if (++wcount > 1000)
+					break;
+				usleep_range(100, 200);
+			} while (vdec->irq_cnt > vdec->irq_thread_cnt);
 			hw->stat &= ~STAT_ISR_REG;
+
+			if (work_pending(&hw->work)) {
+				hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			}
 		}
 	} else if (hw->dec_result == DEC_RESULT_ERROR_DATA) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -11257,6 +11275,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	decode_frame_count[DECODE_ID(hw)] = 0;
 	hw->dpb.without_display_mode = without_display_mode;
 	mutex_init(&hw->fence_mutex);
+	mutex_init(&hw->pic_mutex);
 	if (hw->enable_fence) {
 		pdata->sync = vdec_sync_get();
 		if (!pdata->sync) {
