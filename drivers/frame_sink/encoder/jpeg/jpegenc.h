@@ -253,6 +253,12 @@ struct jpegenc_manager_s {
 	struct tasklet_struct tasklet;
 };
 
+struct encdrv_dma_buf_info_t {
+	int fd;
+	ulong phys_addr; /* phys address for DMA buffer */
+	size_t size;
+};
+
 struct enc_dma_cfg {
 	int fd;
 	size_t size;
@@ -263,6 +269,28 @@ struct enc_dma_cfg {
 	struct dma_buf_attachment *attach;
 	struct sg_table *sg;
 	enum dma_data_direction dir;
+};
+
+/* To track the occupied dma_buf  */
+struct encdrv_dma_buf_pool_t {
+	struct list_head list;
+	struct enc_dma_cfg dma_cfg;
+	struct file *filp;
+};
+
+struct encdrv_buffer_t {
+	u32 size;
+	u32 cached;
+	ulong phys_addr;
+	ulong base; /* kernel logical address in use kernel */
+	ulong virt_addr; /* virtual user space address */
+};
+
+/* To track the allocated memory buffer */
+struct encdrv_buffer_pool_t {
+	struct list_head list;
+	struct encdrv_buffer_t vb;
+	struct file *filp;
 };
 
 /********************************************
