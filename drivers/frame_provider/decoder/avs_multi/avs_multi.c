@@ -49,6 +49,7 @@
 #include "../utils/vdec_feature.h"
 #include "../utils/amvdec.h"
 #include "avs_multi.h"
+#include "../utils/decoder_dma_alloc.h"
 
 #define DEBUG_MULTI_FLAG  0
 
@@ -285,6 +286,7 @@ dma_addr_t es_write_addr_phy;
 
 void *bitstream_read_tmp;
 dma_addr_t bitstream_read_tmp_phy;
+ulong bitstream_read_handle;
 void *avsp_heap_adr;
 static uint long_cabac_busy;
 #endif
@@ -518,6 +520,8 @@ struct vdec_avs_hw_s {
 	s32 buf_use[DECODE_BUFFER_NUM_MAX];
 	u32 decoding_index;
 	struct pic_info_t pics[DECODE_BUFFER_NUM_MAX];
+	ulong user_data_handle;
+	ulong lmem_phy_handle;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -2034,9 +2038,9 @@ static void init_avsp_long_cabac_buf(void)
 
 #ifdef BITSTREAM_READ_TMP_NO_CACHE
 	bitstream_read_tmp =
-		(void *)dma_alloc_coherent(amports_get_dma_device(),
+		(void *)decoder_dma_alloc_coherent(&bitstream_read_handle,
 			SVA_STREAM_BUF_SIZE, &bitstream_read_tmp_phy,
-			 GFP_KERNEL);
+			 "AVS_BITSTREAM_BUF");
 
 #else
 
@@ -2246,9 +2250,9 @@ static int amvdec_avs_probe(struct platform_device *pdev)
 #ifdef ENABLE_USER_DATA
 	if (NULL == hw->user_data_buffer) {
 		hw->user_data_buffer =
-			dma_alloc_coherent(amports_get_dma_device(),
+			decoder_dma_alloc_coherent(&hw->user_data_handle,
 				USER_DATA_SIZE,
-				&hw->user_data_buffer_phys, GFP_KERNEL);
+				&hw->user_data_buffer_phys, "AVS_AUX_BUF");
 		if (!hw->user_data_buffer) {
 			pr_info("%s: Can not allocate hw->user_data_buffer\n",
 				   __func__);
@@ -2326,7 +2330,7 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 
 #ifdef BITSTREAM_READ_TMP_NO_CACHE
 		if (bitstream_read_tmp) {
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(bitstream_read_handle,
 				SVA_STREAM_BUF_SIZE, bitstream_read_tmp,
 				bitstream_read_tmp_phy);
 			bitstream_read_tmp = NULL;
@@ -2353,8 +2357,8 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 
 #ifdef ENABLE_USER_DATA
 	if (hw->user_data_buffer != NULL) {
-		dma_free_coherent(
-			amports_get_dma_device(),
+		decoder_dma_free_coherent(
+			hw->user_data_handle,
 			USER_DATA_SIZE,
 			hw->user_data_buffer,
 			hw->user_data_buffer_phys);
@@ -3956,9 +3960,9 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 #ifdef ENABLE_USER_DATA
 	if (NULL == hw->user_data_buffer) {
 		hw->user_data_buffer =
-			dma_alloc_coherent(amports_get_dma_device(),
+			decoder_dma_alloc_coherent(&hw->user_data_handle,
 				USER_DATA_SIZE,
-				&hw->user_data_buffer_phys, GFP_KERNEL);
+				&hw->user_data_buffer_phys, "AVS_AUX_BUF");
 		if (!hw->user_data_buffer) {
 			pr_info("%s: Can not allocate hw->user_data_buffer\n",
 				   __func__);
@@ -3984,8 +3988,8 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		return -1;
 	}*/
 	/*INIT_WORK(&hw->set_clk_work, avs_set_clk);*/
-	hw->lmem_addr = (dma_addr_t)dma_alloc_coherent(amports_get_dma_device(),
-	               LMEM_BUF_SIZE, (dma_addr_t *)&hw->lmem_phy_addr, GFP_KERNEL);
+	hw->lmem_addr = (dma_addr_t)decoder_dma_alloc_coherent(&hw->lmem_phy_handle,
+	               LMEM_BUF_SIZE, (dma_addr_t *)&hw->lmem_phy_addr, "AVS_LMEM_BUF");
 	if (hw->lmem_addr == 0) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
 		r = -1;
@@ -4043,12 +4047,12 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 	return 0;
 
 error4:
-	dma_free_coherent(amports_get_dma_device(),
+	decoder_dma_free_coherent(hw->lmem_phy_handle,
 		LMEM_BUF_SIZE, (void *)hw->lmem_addr,
 		hw->lmem_phy_addr);
 error3:
-	dma_free_coherent(
-		amports_get_dma_device(),
+	decoder_dma_free_coherent(
+		hw->user_data_handle,
 		USER_DATA_SIZE,
 		hw->user_data_buffer,
 		hw->user_data_buffer_phys);
@@ -4109,8 +4113,8 @@ error1:
 		}
 	#ifdef ENABLE_USER_DATA
 		if (hw->user_data_buffer != NULL) {
-			dma_free_coherent(
-				amports_get_dma_device(),
+			decoder_dma_free_coherent(
+				hw->user_data_handle,
 				USER_DATA_SIZE,
 				hw->user_data_buffer,
 				hw->user_data_buffer_phys);
@@ -4125,7 +4129,7 @@ error1:
 			hw->lmem_addr = NULL;
 		}*/
 	if (hw->lmem_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hw->lmem_phy_handle,
 					LMEM_BUF_SIZE, (void *)hw->lmem_addr,
 					hw->lmem_phy_addr);
 		hw->lmem_addr = 0;
@@ -4522,9 +4526,9 @@ static int ammvdec_avs_probe2(struct platform_device *pdev)
 #ifdef ENABLE_USER_DATA
 	if (NULL == hw->user_data_buffer) {
 		hw->user_data_buffer =
-			dma_alloc_coherent(amports_get_dma_device(),
+			decoder_dma_alloc_coherent(&hw->user_data_handle,
 				USER_DATA_SIZE,
-				&hw->user_data_buffer_phys, GFP_KERNEL);
+				&hw->user_data_buffer_phys, "AVS_AUX_BUF");
 		if (!hw->user_data_buffer) {
 			pr_info("%s: Can not allocate hw->user_data_buffer\n",
 				   __func__);
@@ -4656,7 +4660,7 @@ static int ammvdec_avs_remove2(struct platform_device *pdev)
 
 #ifdef BITSTREAM_READ_TMP_NO_CACHE
 		if (bitstream_read_tmp) {
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(bitstream_read_handle,
 				SVA_STREAM_BUF_SIZE, bitstream_read_tmp,
 				bitstream_read_tmp_phy);
 			bitstream_read_tmp = NULL;
@@ -4683,8 +4687,8 @@ static int ammvdec_avs_remove2(struct platform_device *pdev)
 
 #ifdef ENABLE_USER_DATA
 	if (hw->user_data_buffer != NULL) {
-		dma_free_coherent(
-			amports_get_dma_device(),
+		decoder_dma_free_coherent(
+			hw->user_data_handle,
 			USER_DATA_SIZE,
 			hw->user_data_buffer,
 			hw->user_data_buffer_phys);

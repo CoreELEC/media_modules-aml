@@ -71,6 +71,7 @@
 #include "aom_av1_define.h"
 #include "av1_global.h"
 #include "vav1.h"
+#include "../../decoder/utils/decoder_dma_alloc.h"
 
 #define DEBUG_CMD
 #define DEBUG_CRC_ERROR
@@ -862,6 +863,14 @@ struct AV1HW_s {
 	u32 data_offset;
 	u32 data_invalid;
 	u32 consume_byte;
+	ulong rpm_mem_handle;
+	ulong lmem_phy_handle;
+	ulong fg_mem_hanlde;
+	ulong aux_mem_handle;
+	ulong ucode_log_handle;
+	ulong frame_mmu_map_handle;
+	ulong frame_dw_mmu_map_handle;
+	ulong rdma_handle;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -5225,9 +5234,9 @@ static int vav1_mmu_map_alloc(struct AV1HW_s *hw)
 		(get_double_write_mode(hw) != 0x10)) {
 		u32 mmu_map_size = vav1_frame_mmu_map_size(hw);
 		hw->frame_mmu_map_addr =
-			dma_alloc_coherent(amports_get_dma_device(),
+			decoder_dma_alloc_coherent(&hw->frame_mmu_map_handle,
 				mmu_map_size,
-				&hw->frame_mmu_map_phy_addr, GFP_KERNEL);
+				&hw->frame_mmu_map_phy_addr, "AV1_MMU_MAP");
 		if (hw->frame_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -5238,9 +5247,9 @@ static int vav1_mmu_map_alloc(struct AV1HW_s *hw)
 	if (get_double_write_mode(hw) & 0x20) {
 		u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
 		hw->dw_frame_mmu_map_addr =
-			dma_alloc_coherent(amports_get_dma_device(),
+			decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
 				mmu_map_size,
-				&hw->dw_frame_mmu_map_phy_addr, GFP_KERNEL);
+				&hw->dw_frame_mmu_map_phy_addr, "AV1_DWMMU_MAP");
 		if (hw->dw_frame_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -5258,7 +5267,7 @@ static void vav1_mmu_map_free(struct AV1HW_s *hw)
 		u32 mmu_map_size = vav1_frame_mmu_map_size(hw);
 		if (hw->frame_mmu_map_addr) {
 			if (hw->frame_mmu_map_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
+				decoder_dma_free_coherent(hw->frame_mmu_map_handle,
 					mmu_map_size,
 					hw->frame_mmu_map_addr,
 					hw->frame_mmu_map_phy_addr);
@@ -5270,7 +5279,7 @@ static void vav1_mmu_map_free(struct AV1HW_s *hw)
 		u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
 		if (hw->dw_frame_mmu_map_addr) {
 			if (hw->dw_frame_mmu_map_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
+				decoder_dma_free_coherent(hw->frame_dw_mmu_map_handle,
 					mmu_map_size,
 					hw->dw_frame_mmu_map_addr,
 					hw->dw_frame_mmu_map_phy_addr);
@@ -5296,21 +5305,21 @@ static void av1_local_uninit(struct AV1HW_s *hw, bool reset_flag)
 	}
 
 	if (hw->rpm_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hw->rpm_mem_handle,
 					RPM_BUF_SIZE,
 					hw->rpm_addr,
 					hw->rpm_phy_addr);
 		hw->rpm_addr = NULL;
 	}
 	if (hw->aux_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hw->aux_mem_handle,
 				hw->prefix_aux_size + hw->suffix_aux_size, hw->aux_addr,
 					hw->aux_phy_addr);
 		hw->aux_addr = NULL;
 	}
 #if (defined DEBUG_UCODE_LOG) || (defined DEBUG_CMD)
 	if (hw->ucode_log_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hw->ucode_log_handle,
 				UCODE_LOG_BUF_SIZE, hw->ucode_log_addr,
 					hw->ucode_log_phy_addr);
 		hw->ucode_log_addr = NULL;
@@ -5318,7 +5327,7 @@ static void av1_local_uninit(struct AV1HW_s *hw, bool reset_flag)
 #endif
 	if (hw->lmem_addr) {
 		if (hw->lmem_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(hw->lmem_phy_handle,
 				LMEM_BUF_SIZE, hw->lmem_addr,
 				hw->lmem_phy_addr);
 		hw->lmem_addr = NULL;
@@ -5403,9 +5412,9 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 			& 0x40) >> 6;
 
 	if ((debug & AOM_AV1_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-		hw->rpm_addr = dma_alloc_coherent(amports_get_dma_device(),
+		hw->rpm_addr = decoder_dma_alloc_coherent(&hw->rpm_mem_handle,
 				RPM_BUF_SIZE,
-				&hw->rpm_phy_addr, GFP_KERNEL);
+				&hw->rpm_phy_addr, "AV1_RPM_BUF");
 		if (hw->rpm_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
@@ -5420,16 +5429,16 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 		hw->prefix_aux_size = AUX_BUF_ALIGN(prefix_aux_buf_size);
 		hw->suffix_aux_size = AUX_BUF_ALIGN(suffix_aux_buf_size);
 		aux_buf_size = hw->prefix_aux_size + hw->suffix_aux_size;
-		hw->aux_addr = dma_alloc_coherent(amports_get_dma_device(),
-				aux_buf_size, &hw->aux_phy_addr, GFP_KERNEL);
+		hw->aux_addr = decoder_dma_alloc_coherent(&hw->aux_mem_handle,
+				aux_buf_size, &hw->aux_phy_addr, "AV1_AUX_BUF");
 		if (hw->aux_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			goto dma_alloc_fail;
 		}
 	}
 #if (defined DEBUG_UCODE_LOG) || (defined DEBUG_CMD)
-	hw->ucode_log_addr = dma_alloc_coherent(amports_get_dma_device(),
-			UCODE_LOG_BUF_SIZE, &hw->ucode_log_phy_addr, GFP_KERNEL);
+	hw->ucode_log_addr = decoder_dma_alloc_coherent(&hw->ucode_log_handle,
+			UCODE_LOG_BUF_SIZE, &hw->ucode_log_phy_addr,  "UCODE_LOG_BUF");
 	if (hw->ucode_log_addr == NULL) {
 		hw->ucode_log_phy_addr = 0;
 	}
@@ -5460,9 +5469,9 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 		cur_buf_info->fgs_table.buf_start = hw->fg_phy_addr;
 	}
 
-	hw->lmem_addr = dma_alloc_coherent(amports_get_dma_device(),
+	hw->lmem_addr = decoder_dma_alloc_coherent(&hw->lmem_phy_handle,
 			LMEM_BUF_SIZE,
-			&hw->lmem_phy_addr, GFP_KERNEL);
+			&hw->lmem_phy_addr, "LMEM_BUF");
 	if (hw->lmem_addr == NULL) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
 		goto dma_alloc_fail;
@@ -8174,9 +8183,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					if (hw->dw_frame_mmu_map_addr == NULL) {
 						u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
 						hw->dw_frame_mmu_map_addr =
-							dma_alloc_coherent(amports_get_dma_device(),
-								mmu_map_size,
-								&hw->dw_frame_mmu_map_phy_addr, GFP_KERNEL);
+							decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
+								mmu_map_size, &hw->dw_frame_mmu_map_phy_addr, "AV1_DWMMU_MAP");
 						if (hw->dw_frame_mmu_map_addr == NULL) {
 							pr_err("%s: failed to alloc count_buffer\n", __func__);
 							return -1;
@@ -10037,7 +10045,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 	hw->index = pdev->id;
 	if (is_rdma_enable()) {
-		hw->rdma_adr = dma_alloc_coherent(amports_get_dma_device(), RDMA_SIZE, &hw->rdma_phy_adr, GFP_KERNEL);
+		hw->rdma_adr = decoder_dma_alloc_coherent(&hw->rdma_handle,
+				RDMA_SIZE, &hw->rdma_phy_adr, "AV1_RDMA");
 		for (i = 0; i < SCALELUT_DATA_WRITE_NUM; i++) {
 			hw->rdma_adr[i * 4] = HEVC_IQIT_SCALELUT_WR_ADDR & 0xfff;
 			hw->rdma_adr[i * 4 + 1] = i;
@@ -10456,7 +10465,8 @@ static int ammvdec_av1_remove(struct platform_device *pdev)
 		   hw->pts_missed, hw->pts_hit, hw->frame_dur);
 #endif
 	if (is_rdma_enable())
-		dma_free_coherent(amports_get_dma_device(), RDMA_SIZE, hw->rdma_adr, hw->rdma_phy_adr);
+		decoder_dma_free_coherent(hw->rdma_handle,
+			RDMA_SIZE, hw->rdma_adr, hw->rdma_phy_adr);
 	vfree(hw->pbi);
 	release_dblk_struct(hw);
 	vfree((void *)hw);

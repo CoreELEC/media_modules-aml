@@ -55,6 +55,7 @@
 #include "../utils/config_parser.h"
 #include <media/v4l2-mem2mem.h>
 #include "../utils/vdec_feature.h"
+#include "../utils/decoder_dma_alloc.h"
 
 #define MEM_NAME "codec_mmpeg12"
 #define CHECK_INTERVAL        (HZ/100)
@@ -289,6 +290,7 @@ struct vdec_mpeg12_hw_s {
 	dma_addr_t ccbuf_phyAddress;
 	void *ccbuf_phyAddress_virt;
 	u32 cc_buf_size;
+	ulong cc_buf_handle;
 	unsigned long ccbuf_phyAddress_is_remaped_nocache;
 	u32 frame_rpt_state;
 /* for error handling */
@@ -2916,9 +2918,9 @@ static int vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 
 		if (i == hw->buf_num) {
 			hw->cc_buf_size = AUX_BUF_ALIGN(CCBUF_SIZE);
-			hw->ccbuf_phyAddress_virt = dma_alloc_coherent(amports_get_dma_device(),
+			hw->ccbuf_phyAddress_virt = decoder_dma_alloc_coherent(&hw->cc_buf_handle,
 						  hw->cc_buf_size, &hw->ccbuf_phyAddress,
-						  GFP_KERNEL);
+						  "MPEG12_AUX_BUF");
 			if (hw->ccbuf_phyAddress_virt == NULL) {
 				pr_err("%s: failed to alloc cc buffer\n", __func__);
 				return -ENOMEM;
@@ -3980,7 +3982,7 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 	}
 
 	if (hw->ccbuf_phyAddress_virt) {
-		dma_free_coherent(amports_get_dma_device(),hw->cc_buf_size,
+		decoder_dma_free_coherent(hw->cc_buf_handle, hw->cc_buf_size,
 			hw->ccbuf_phyAddress_virt, hw->ccbuf_phyAddress);
 		hw->ccbuf_phyAddress_virt = NULL;
 		hw->ccbuf_phyAddress = 0;

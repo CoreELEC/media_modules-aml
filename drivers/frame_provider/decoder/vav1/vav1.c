@@ -42,6 +42,7 @@
 #include <linux/dma-contiguous.h>
 #include <linux/slab.h>
 #include <linux/amlogic/tee.h>
+#include "../utils/decoder_dma_alloc.h"
 #include "../../../stream_input/amports/amports_priv.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include "../utils/decoder_mmu_box.h"
@@ -872,6 +873,15 @@ struct AV1HW_s {
 	u32 data_offset;
 	u32 data_invalid;
 	u32 consume_byte;
+	ulong rpm_mem_handle;
+	ulong lmem_phy_handle;
+	ulong aux_mem_handle;
+	ulong ucode_log_handle;
+	ulong frame_mmu_map_handle;
+	ulong frame_dw_mmu_map_handle;
+	ulong prob_mem_handle;
+	ulong count_mem_handle;
+	ulong rdma_handle;
 };
 
 static void av1_dump_state(struct vdec_s *vdec);
@@ -5699,9 +5709,10 @@ static int vav1_mmu_map_alloc(struct AV1HW_s *hw)
 	if (hw->mmu_enable) {
 		u32 mmu_map_size = vav1_frame_mmu_map_size(hw);
 		hw->frame_mmu_map_addr =
-			dma_alloc_coherent(amports_get_dma_device(),
+			decoder_dma_alloc_coherent(&hw->frame_mmu_map_handle,
 				mmu_map_size,
-				&hw->frame_mmu_map_phy_addr, GFP_KERNEL);
+				&hw->frame_mmu_map_phy_addr, "AV1_MMU_MAP");
+
 		if (hw->frame_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -5712,9 +5723,9 @@ static int vav1_mmu_map_alloc(struct AV1HW_s *hw)
 	if (hw->dw_mmu_enable) {
 		u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
 		hw->dw_frame_mmu_map_addr =
-			dma_alloc_coherent(amports_get_dma_device(),
+			decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
 				mmu_map_size,
-				&hw->dw_frame_mmu_map_phy_addr, GFP_KERNEL);
+				&hw->dw_frame_mmu_map_phy_addr, "AV1_DWMMU_MAP");
 		if (hw->dw_frame_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -5732,7 +5743,7 @@ static void vav1_mmu_map_free(struct AV1HW_s *hw)
 		u32 mmu_map_size = vav1_frame_mmu_map_size(hw);
 		if (hw->frame_mmu_map_addr) {
 			if (hw->frame_mmu_map_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
+				decoder_dma_free_coherent(hw->frame_mmu_map_handle,
 					mmu_map_size,
 					hw->frame_mmu_map_addr,
 					hw->frame_mmu_map_phy_addr);
@@ -5744,7 +5755,7 @@ static void vav1_mmu_map_free(struct AV1HW_s *hw)
 		u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
 		if (hw->dw_frame_mmu_map_addr) {
 			if (hw->dw_frame_mmu_map_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
+				decoder_dma_free_coherent(hw->frame_dw_mmu_map_handle,
 					mmu_map_size,
 					hw->dw_frame_mmu_map_addr,
 					hw->dw_frame_mmu_map_phy_addr);
@@ -5763,26 +5774,28 @@ static void av1_local_uninit(struct AV1HW_s *hw)
 	hw->fg_ptr = NULL;
 	if (hw->fg_addr) {
 		if (hw->fg_phy_addr)
-			codec_mm_dma_free_coherent(hw->fg_table_handle);
+			decoder_dma_free_coherent(hw->fg_table_handle,
+				FGS_TABLE_SIZE, hw->fg_addr,
+				hw->fg_phy_addr);
 		hw->fg_addr = NULL;
 	}
 #endif
 	if (hw->rpm_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hw->rpm_mem_handle,
 					RPM_BUF_SIZE,
 					hw->rpm_addr,
 					hw->rpm_phy_addr);
 		hw->rpm_addr = NULL;
 	}
 	if (hw->aux_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hw->aux_mem_handle,
 				hw->prefix_aux_size + hw->suffix_aux_size, hw->aux_addr,
 					hw->aux_phy_addr);
 		hw->aux_addr = NULL;
 	}
 #if (defined DEBUG_UCODE_LOG) || (defined DEBUG_CMD)
 	if (hw->ucode_log_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hw->ucode_log_handle,
 				UCODE_LOG_BUF_SIZE, hw->ucode_log_addr,
 					hw->ucode_log_phy_addr);
 		hw->ucode_log_addr = NULL;
@@ -5790,14 +5803,14 @@ static void av1_local_uninit(struct AV1HW_s *hw)
 #endif
 	if (hw->lmem_addr) {
 		if (hw->lmem_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(hw->lmem_phy_handle,
 				LMEM_BUF_SIZE, hw->lmem_addr,
 				hw->lmem_phy_addr);
 		hw->lmem_addr = NULL;
 	}
 	if (hw->prob_buffer_addr) {
 		if (hw->prob_buffer_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(hw->prob_mem_handle,
 				PROB_BUF_SIZE, hw->prob_buffer_addr,
 				hw->prob_buffer_phy_addr);
 
@@ -5805,7 +5818,7 @@ static void av1_local_uninit(struct AV1HW_s *hw)
 	}
 	if (hw->count_buffer_addr) {
 		if (hw->count_buffer_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(hw->count_mem_handle,
 				COUNT_BUF_SIZE, hw->count_buffer_addr,
 				hw->count_buffer_phy_addr);
 
@@ -5932,9 +5945,9 @@ static int av1_local_init(struct AV1HW_s *hw)
 			& 0x40) >> 6;
 
 	if ((debug & AOM_AV1_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-		hw->rpm_addr = dma_alloc_coherent(amports_get_dma_device(),
+		hw->rpm_addr = decoder_dma_alloc_coherent(&hw->rpm_mem_handle,
 				RPM_BUF_SIZE,
-				&hw->rpm_phy_addr, GFP_KERNEL);
+				&hw->rpm_phy_addr, "AV1_RPM_BUF");
 		if (hw->rpm_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
@@ -5949,8 +5962,8 @@ static int av1_local_init(struct AV1HW_s *hw)
 		hw->prefix_aux_size = AUX_BUF_ALIGN(prefix_aux_buf_size);
 		hw->suffix_aux_size = AUX_BUF_ALIGN(suffix_aux_buf_size);
 		aux_buf_size = hw->prefix_aux_size + hw->suffix_aux_size;
-		hw->aux_addr = dma_alloc_coherent(amports_get_dma_device(),
-				aux_buf_size, &hw->aux_phy_addr, GFP_KERNEL);
+		hw->aux_addr = decoder_dma_alloc_coherent(&hw->aux_mem_handle,
+				aux_buf_size, &hw->aux_phy_addr, "AV1_AUX_BUF");
 		if (hw->aux_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			goto dma_alloc_fail;
@@ -5958,8 +5971,8 @@ static int av1_local_init(struct AV1HW_s *hw)
 	}
 #if (defined DEBUG_UCODE_LOG) || (defined DEBUG_CMD)
 	//if (udebug_flag & 0x8) {
-		hw->ucode_log_addr = dma_alloc_coherent(amports_get_dma_device(),
-				UCODE_LOG_BUF_SIZE, &hw->ucode_log_phy_addr, GFP_KERNEL);
+		hw->ucode_log_addr = decoder_dma_alloc_coherent(&hw->ucode_log_handle,
+				UCODE_LOG_BUF_SIZE, &hw->ucode_log_phy_addr, "AVV1_UCODE_LOG_BUF");
 		if (hw->ucode_log_addr == NULL) {
 			hw->ucode_log_phy_addr = 0;
 		}
@@ -5974,8 +5987,8 @@ static int av1_local_init(struct AV1HW_s *hw)
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)) {
 		alloc_num = FRAME_BUFFERS;
 	}
-	hw->fg_addr = codec_mm_dma_alloc_coherent(&hw->fg_table_handle,
-		(ulong *)&hw->fg_phy_addr, FGS_TABLE_SIZE * alloc_num,  MEM_NAME);
+	hw->fg_addr = decoder_dma_alloc_coherent(&hw->fg_table_handle, FGS_TABLE_SIZE * alloc_num,
+			&hw->fg_phy_addr, "AV1_FG_MEM_BUF");
 	if (hw->fg_addr == NULL) {
 		pr_err("%s: failed to alloc fg buffer\n", __func__);
 	}
@@ -5986,26 +5999,26 @@ static int av1_local_init(struct AV1HW_s *hw)
 		cur_buf_info->fgs_table.buf_start = hw->fg_phy_addr;
 	}
 #endif
-	hw->lmem_addr = dma_alloc_coherent(amports_get_dma_device(),
+	hw->lmem_addr = decoder_dma_alloc_coherent(&hw->lmem_phy_handle,
 			LMEM_BUF_SIZE,
-			&hw->lmem_phy_addr, GFP_KERNEL);
+			&hw->lmem_phy_addr, "AV1_LMEM_BUF");
 	if (hw->lmem_addr == NULL) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
 		goto dma_alloc_fail;
 	}
 	hw->lmem_ptr = hw->lmem_addr;
 
-	hw->prob_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
+	hw->prob_buffer_addr = decoder_dma_alloc_coherent(&hw->prob_mem_handle,
 				PROB_BUF_SIZE,
-				&hw->prob_buffer_phy_addr, GFP_KERNEL);
+				&hw->prob_buffer_phy_addr, "AV1_PROBE_BUF");
 	if (hw->prob_buffer_addr == NULL) {
 		pr_err("%s: failed to alloc prob_buffer\n", __func__);
 		goto dma_alloc_fail;
 	}
 	memset(hw->prob_buffer_addr, 0, PROB_BUF_SIZE);
-	hw->count_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
+	hw->count_buffer_addr = decoder_dma_alloc_coherent(&hw->count_mem_handle,
 				COUNT_BUF_SIZE,
-				&hw->count_buffer_phy_addr, GFP_KERNEL);
+				&hw->count_buffer_phy_addr, "AV1_COUNT_BUF");
 	if (hw->count_buffer_addr == NULL) {
 		pr_err("%s: failed to alloc count_buffer\n", __func__);
 		goto dma_alloc_fail;
@@ -10986,7 +10999,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 	hw->index = pdev->id;
 	if (is_rdma_enable()) {
-		hw->rdma_adr = dma_alloc_coherent(amports_get_dma_device(), RDMA_SIZE, &hw->rdma_phy_adr, GFP_KERNEL);
+		hw->rdma_adr = decoder_dma_alloc_coherent(&hw->rdma_handle,
+				RDMA_SIZE, &hw->rdma_phy_adr, "AV1_RDMA");
 		for (i = 0; i < SCALELUT_DATA_WRITE_NUM; i++) {
 			hw->rdma_adr[i * 4] = HEVC_IQIT_SCALELUT_WR_ADDR & 0xfff;
 			hw->rdma_adr[i * 4 + 1] = i;
@@ -11394,7 +11408,8 @@ static int ammvdec_av1_remove(struct platform_device *pdev)
 #endif
 	/* devm_kfree(&pdev->dev, (void *)hw); */
 	if (is_rdma_enable())
-		dma_free_coherent(amports_get_dma_device(), RDMA_SIZE, hw->rdma_adr, hw->rdma_phy_adr);
+		decoder_dma_free_coherent(hw->rdma_handle,
+			RDMA_SIZE, hw->rdma_adr, hw->rdma_phy_adr);
 	vfree(hw->pbi);
 	release_dblk_struct(hw);
 	vfree((void *)hw);

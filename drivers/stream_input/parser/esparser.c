@@ -437,7 +437,7 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 		if (search_pattern == NULL) {
 			search_pattern = kcalloc(1,
 				SEARCH_PATTERN_LEN,
-				GFP_KERNEL);
+				GFP_KERNEL | GFP_DMA32);
 
 			if (search_pattern == NULL) {
 				pr_err("%s: no search_pattern\n", __func__);

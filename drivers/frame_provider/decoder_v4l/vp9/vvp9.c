@@ -62,6 +62,7 @@
 #include "../../decoder/utils/vdec_v4l2_buffer_ops.h"
 #include "../../decoder/utils/vdec_feature.h"
 #include "vvp9.h"
+#include "../../decoder/utils/decoder_dma_alloc.h"
 
 #define MEM_NAME "codec_vp9"
 #define MIX_STREAM_SUPPORT
@@ -1216,6 +1217,13 @@ struct VP9Decoder_s {
 	u32 data_offset;
 	u32 data_invalid;
 	u32 consume_byte;
+	ulong rpm_mem_handle;
+	ulong lmem_phy_handle;
+	ulong prob_buf_handle;
+	ulong count_buf_handle;
+	ulong frame_mmu_map_handle;
+	ulong stage_mmu_map_handle;
+	ulong rdma_mem_handle;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -6381,7 +6389,7 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 	pbi->rpm_ptr = NULL;
 	pbi->lmem_ptr = NULL;
 	if (pbi->rpm_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(pbi->rpm_mem_handle,
 					RPM_BUF_SIZE,
 					pbi->rpm_addr,
 					pbi->rpm_phy_addr);
@@ -6389,7 +6397,7 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 	}
 	if (pbi->lmem_addr) {
 		if (pbi->lmem_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(pbi->lmem_phy_handle,
 				LMEM_BUF_SIZE, pbi->lmem_addr,
 				pbi->lmem_phy_addr);
 		pbi->lmem_addr = NULL;
@@ -6404,7 +6412,7 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 	} else {
 		if (pbi->prob_buffer_addr) {
 			if (pbi->prob_buffer_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
+				decoder_dma_free_coherent(pbi->prob_buf_handle,
 					PROB_BUF_SIZE, pbi->prob_buffer_addr,
 					pbi->prob_buffer_phy_addr);
 
@@ -6412,7 +6420,7 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 		}
 		if (pbi->count_buffer_addr) {
 			if (pbi->count_buffer_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
+				decoder_dma_free_coherent(pbi->count_buf_handle,
 					COUNT_BUF_SIZE, pbi->count_buffer_addr,
 					pbi->count_buffer_phy_addr);
 
@@ -6423,7 +6431,7 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 		u32 mmu_map_size = vvp9_frame_mmu_map_size(pbi);
 		if (pbi->frame_mmu_map_addr) {
 			if (pbi->frame_mmu_map_phy_addr)
-				dma_free_coherent(amports_get_dma_device(),
+				decoder_dma_free_coherent(pbi->frame_mmu_map_handle,
 					mmu_map_size,
 					pbi->frame_mmu_map_addr,
 					pbi->frame_mmu_map_phy_addr);
@@ -6433,7 +6441,7 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 #ifdef SUPPORT_FB_DECODING
 	if (pbi->stage_mmu_map_addr) {
 		if (pbi->stage_mmu_map_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(pbi->stage_mmu_map_handle,
 				STAGE_MMU_MAP_SIZE * STAGE_MAX_BUFFERS,
 				pbi->stage_mmu_map_addr,
 					pbi->stage_mmu_map_phy_addr);
@@ -6557,8 +6565,8 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		& 0x40) >> 6;
 
 	if ((debug & VP9_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-		pbi->rpm_addr = dma_alloc_coherent(amports_get_dma_device(),
-			RPM_BUF_SIZE, &pbi->rpm_phy_addr, GFP_KERNEL);
+		pbi->rpm_addr = decoder_dma_alloc_coherent(&pbi->rpm_mem_handle,
+				RPM_BUF_SIZE, &pbi->rpm_phy_addr, "VP9_RPM_BUF");
 		if (pbi->rpm_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
@@ -6567,8 +6575,8 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		pbi->rpm_ptr = pbi->rpm_addr;
 	}
 
-	pbi->lmem_addr = dma_alloc_coherent(amports_get_dma_device(),
-		LMEM_BUF_SIZE, &pbi->lmem_phy_addr, GFP_KERNEL);
+	pbi->lmem_addr = decoder_dma_alloc_coherent(&pbi->lmem_phy_handle,
+			LMEM_BUF_SIZE, &pbi->lmem_phy_addr, "VP9_LMEM_BUF");
 	if (pbi->lmem_addr == NULL) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
 		return -1;
@@ -6588,15 +6596,15 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		pbi->prob_buffer_addr = NULL;
 		pbi->count_buffer_addr = NULL;
 	} else {
-		pbi->prob_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
-			PROB_BUF_SIZE, &pbi->prob_buffer_phy_addr, GFP_KERNEL);
+		pbi->prob_buffer_addr = decoder_dma_alloc_coherent(&pbi->prob_buf_handle,
+					PROB_BUF_SIZE, &pbi->prob_buffer_phy_addr, "VP9_PROB_BUF");
 		if (pbi->prob_buffer_addr == NULL) {
 			pr_err("%s: failed to alloc prob_buffer\n", __func__);
 			return -1;
 		}
 		memset(pbi->prob_buffer_addr, 0, PROB_BUF_SIZE);
-		pbi->count_buffer_addr = dma_alloc_coherent(amports_get_dma_device(),
-			COUNT_BUF_SIZE, &pbi->count_buffer_phy_addr, GFP_KERNEL);
+		pbi->count_buffer_addr = decoder_dma_alloc_coherent(&pbi->count_buf_handle,
+					COUNT_BUF_SIZE, &pbi->count_buffer_phy_addr, "VP9_COUNT_BUF");
 		if (pbi->count_buffer_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -6607,9 +6615,9 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 	if (pbi->mmu_enable) {
 		u32 mmu_map_size = vvp9_frame_mmu_map_size(pbi);
 		pbi->frame_mmu_map_addr =
-			dma_alloc_coherent(amports_get_dma_device(),
+			decoder_dma_alloc_coherent(&pbi->frame_mmu_map_handle,
 				mmu_map_size,
-				&pbi->frame_mmu_map_phy_addr, GFP_KERNEL);
+				&pbi->frame_mmu_map_phy_addr, "VP9_MMU_BUF");
 		if (pbi->frame_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -6619,9 +6627,9 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 #ifdef SUPPORT_FB_DECODING
 	if (pbi->m_ins_flag && stage_buf_num > 0) {
 		pbi->stage_mmu_map_addr =
-			dma_alloc_coherent(amports_get_dma_device(),
+			decoder_dma_alloc_coherent(&pbi->stage_mmu_map_handle,
 				STAGE_MMU_MAP_SIZE * STAGE_MAX_BUFFERS,
-				&pbi->stage_mmu_map_phy_addr, GFP_KERNEL);
+				&pbi->stage_mmu_map_phy_addr, "VP9_STAGE_MMU_BUF");
 		if (pbi->stage_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -10690,7 +10698,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->index = pdev->id;
 
 	if (is_rdma_enable()) {
-		pbi->rdma_adr = dma_alloc_coherent(amports_get_dma_device(), RDMA_SIZE, &pbi->rdma_phy_adr, GFP_KERNEL);
+		pbi->rdma_adr = decoder_dma_alloc_coherent(&pbi->rdma_mem_handle,
+							RDMA_SIZE, &pbi->rdma_phy_adr, "VP9_RDMA_BUF");
 		for (i = 0; i < SCALELUT_DATA_WRITE_NUM; i++) {
 			pbi->rdma_adr[i * 4] = HEVC_IQIT_SCALELUT_WR_ADDR & 0xfff;
 			pbi->rdma_adr[i * 4 + 1] = i;
@@ -11088,7 +11097,8 @@ static int ammvdec_vp9_remove(struct platform_device *pdev)
 #endif
 	mem_map_mode = 0;
 	if (is_rdma_enable())
-		dma_free_coherent(amports_get_dma_device(), RDMA_SIZE, pbi->rdma_adr, pbi->rdma_phy_adr);
+		decoder_dma_free_coherent(pbi->rdma_mem_handle,
+				RDMA_SIZE, pbi->rdma_adr, pbi->rdma_phy_adr);
 
 	vfree((void *)pbi);
 	return 0;

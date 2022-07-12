@@ -60,6 +60,7 @@
 #include "../../decoder/utils/vdec.h"
 #include "../../decoder/utils/amvdec.h"
 #include "../../decoder/utils/vdec_feature.h"
+#include "../../decoder/utils/decoder_dma_alloc.h"
 
 
 #define HEVC_8K_LFTOFFSET_FIX
@@ -2081,6 +2082,13 @@ struct hevc_state_s {
 	u32 nal_skip_policy;
 	bool high_bandwidth_flag;
 	bool enable_ucode_swap;
+	ulong aux_mem_handle;
+	ulong rpm_mem_handle;
+	ulong lmem_phy_handle;
+	ulong frame_mmu_map_handle;
+	ulong mc_cpu_handle;
+	ulong det_buf_handle;
+	ulong rdma_mem_handle;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -2539,9 +2547,9 @@ static int init_detrefill_buf(struct hevc_state_s *hevc)
 		return 0;
 
 	hevc->detbuf_adr_virt =
-		(void *)dma_alloc_coherent(amports_get_dma_device(),
+		(void *)decoder_dma_alloc_coherent(&hevc->det_buf_handle,
 			DETREFILL_BUF_SIZE, &hevc->detbuf_adr,
-			GFP_KERNEL);
+			"H265_DET_BUF");
 
 	if (hevc->detbuf_adr_virt == NULL) {
 		pr_err("%s: failed to alloc ETREFILL_BUF\n", __func__);
@@ -2554,7 +2562,7 @@ static int init_detrefill_buf(struct hevc_state_s *hevc)
 static void uninit_detrefill_buf(struct hevc_state_s *hevc)
 {
 	if (hevc->detbuf_adr_virt) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hevc->det_buf_handle,
 			DETREFILL_BUF_SIZE, hevc->detbuf_adr_virt,
 			hevc->detbuf_adr);
 
@@ -7200,7 +7208,7 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 #ifdef SWAP_HEVC_UCODE
 	if (hevc->is_swap) {
 		if (hevc->mc_cpu_addr != NULL) {
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(hevc->mc_cpu_handle,
 				hevc->swap_size, hevc->mc_cpu_addr,
 				hevc->mc_dma_handle);
 				hevc->mc_cpu_addr = NULL;
@@ -7213,19 +7221,19 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 		uninit_detrefill_buf(hevc);
 #endif
 	if (hevc->aux_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hevc->aux_mem_handle,
 				hevc->prefix_aux_size + hevc->suffix_aux_size, hevc->aux_addr,
 					hevc->aux_phy_addr);
 		hevc->aux_addr = NULL;
 	}
 	if (hevc->rpm_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hevc->rpm_mem_handle,
 				RPM_BUF_SIZE, hevc->rpm_addr,
 					hevc->rpm_phy_addr);
 		hevc->rpm_addr = NULL;
 	}
 	if (hevc->lmem_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hevc->lmem_phy_handle,
 				RPM_BUF_SIZE, hevc->lmem_addr,
 					hevc->lmem_phy_addr);
 		hevc->lmem_addr = NULL;
@@ -7233,7 +7241,7 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 
 	if (hevc->mmu_enable && hevc->frame_mmu_map_addr) {
 		if (hevc->frame_mmu_map_phy_addr)
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(hevc->frame_mmu_map_handle,
 				get_frame_mmu_map_size(), hevc->frame_mmu_map_addr,
 					hevc->frame_mmu_map_phy_addr);
 
@@ -7291,8 +7299,8 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 	video_signal_type = hevc->video_signal_type;
 
 	if ((get_dbg_flag(hevc) & H265_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-		hevc->rpm_addr = dma_alloc_coherent(amports_get_dma_device(),
-				RPM_BUF_SIZE, &hevc->rpm_phy_addr, GFP_KERNEL);
+		hevc->rpm_addr = decoder_dma_alloc_coherent(&hevc->rpm_mem_handle,
+				RPM_BUF_SIZE, &hevc->rpm_phy_addr, "H265_RPM_BUF");
 		if (hevc->rpm_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
@@ -7307,16 +7315,16 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		hevc->prefix_aux_size = AUX_BUF_ALIGN(prefix_aux_buf_size);
 		hevc->suffix_aux_size = AUX_BUF_ALIGN(suffix_aux_buf_size);
 		aux_buf_size = hevc->prefix_aux_size + hevc->suffix_aux_size;
-		hevc->aux_addr =dma_alloc_coherent(amports_get_dma_device(),
-				aux_buf_size, &hevc->aux_phy_addr, GFP_KERNEL);
+		hevc->aux_addr =decoder_dma_alloc_coherent(&hevc->aux_mem_handle,
+				aux_buf_size, &hevc->aux_phy_addr, "H265_AUX_BUF");
 		if (hevc->aux_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
 		}
 	}
 
-	hevc->lmem_addr = dma_alloc_coherent(amports_get_dma_device(),
-				LMEM_BUF_SIZE, &hevc->lmem_phy_addr, GFP_KERNEL);
+	hevc->lmem_addr = decoder_dma_alloc_coherent(&hevc->lmem_phy_handle,
+				LMEM_BUF_SIZE, &hevc->lmem_phy_addr, "H265_LMEM_BUF");
 	if (hevc->lmem_addr == NULL) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
 		return -1;
@@ -7325,9 +7333,9 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 
 	if (hevc->mmu_enable) {
 		hevc->frame_mmu_map_addr =
-				dma_alloc_coherent(amports_get_dma_device(),
+				decoder_dma_alloc_coherent(&hevc->frame_mmu_map_handle,
 				get_frame_mmu_map_size(),
-				&hevc->frame_mmu_map_phy_addr, GFP_KERNEL);
+				&hevc->frame_mmu_map_phy_addr, "H265_MMU_BUF");
 		if (hevc->frame_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -11591,8 +11599,8 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	if (!tee_enabled() && hevc->is_swap) {
 		if (hevc->mmu_enable) {
 			hevc->swap_size = (4 * (4 * SZ_1K)); /*max 4 swap code, each 0x400*/
-			hevc->mc_cpu_addr = dma_alloc_coherent(amports_get_dma_device(),
-				hevc->swap_size,&hevc->mc_dma_handle, GFP_KERNEL);
+			hevc->mc_cpu_addr = decoder_dma_alloc_coherent(&hevc->mc_cpu_handle,
+					hevc->swap_size, &hevc->mc_dma_handle, "H265_MC_CPU_BUF");
 			if (!hevc->mc_cpu_addr) {
 				amhevc_disable();
 				pr_info("vh265 mmu swap ucode loaded fail.\n");
@@ -13066,7 +13074,8 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 
 
 	if (is_rdma_enable()) {
-		hevc->rdma_adr = dma_alloc_coherent(amports_get_dma_device(), RDMA_SIZE, &hevc->rdma_phy_adr, GFP_KERNEL);
+		hevc->rdma_adr = decoder_dma_alloc_coherent(&hevc->rdma_mem_handle,
+			RDMA_SIZE, &hevc->rdma_phy_adr, "H265_RDMA_BUF");
 		for (i = 0; i < SCALELUT_DATA_WRITE_NUM; i++) {
 			hevc->rdma_adr[i * 4] = HEVC_IQIT_SCALELUT_WR_ADDR & 0xfff;
 			hevc->rdma_adr[i * 4 + 1] = i;
@@ -13456,7 +13465,8 @@ static int ammvdec_h265_remove(struct platform_device *pdev)
 	if (hevc->enable_fence)
 		vdec_fence_release(hevc, vdec->sync);
 	if (is_rdma_enable())
-		dma_free_coherent(amports_get_dma_device(), RDMA_SIZE, hevc->rdma_adr, hevc->rdma_phy_adr);
+		decoder_dma_free_coherent(hevc->rdma_mem_handle,
+			RDMA_SIZE, hevc->rdma_adr, hevc->rdma_phy_adr);
 	vfree((void *)hevc);
 
 	return 0;
