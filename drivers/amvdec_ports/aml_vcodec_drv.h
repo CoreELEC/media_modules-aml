@@ -788,7 +788,6 @@ struct aml_vcodec_ctx {
 	struct mutex			compressed_buf_info_lock;
 	struct v4l_compressed_buffer_info	compressed_buf_info;
 	struct aml_decoder_status_info	decoder_status_info;
-
 	struct vdec_trace		vtr;
 
 #ifdef NEW_FB_CODE
@@ -796,6 +795,7 @@ struct aml_vcodec_ctx {
 	void			*mmu_box_1;
 	void			*mmu_box_dw_1;
 #endif
+	bool			v4l_reqbuff_flag;
 };
 
 /**
