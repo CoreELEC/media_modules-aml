@@ -45,8 +45,11 @@
 #define MD_BUF_SIZE			(1024)
 #define COMP_BUF_SIZE			(8196)
 #define SEI_BUF_SIZE			(2 * 12 * 1024)
+#define HDR10P_BUF_SIZE			(128)
+
 #define SEI_TYPE	(1)
 #define DV_TYPE		(2)
+#define HDR10P_TYPE	(4)
 
 
 /*
@@ -145,6 +148,7 @@ void aml_free_buffer(struct aml_vcodec_ctx *ctx, int flag);
 void aml_free_one_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size, int idx);
 void aml_bind_sei_buffer(struct aml_vcodec_ctx *v4l, char **addr, int *size, int *idx);
 void aml_bind_dv_buffer(struct aml_vcodec_ctx *v4l, char **comp_buf, char **md_buf);
+void aml_bind_hdr10p_buffer(struct aml_vcodec_ctx *v4l, char **addr);
 
 int aml_canvas_cache_init(struct aml_vcodec_dev *dev);
 void aml_canvas_cache_put(struct aml_vcodec_dev *dev);

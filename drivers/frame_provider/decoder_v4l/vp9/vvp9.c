@@ -6755,9 +6755,11 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 	}
 }
 
-static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
+static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	unsigned int ar;
+	struct aml_vcodec_ctx * ctx = pbi->v4l2_ctx;
+
 	vf->duration = pbi->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
@@ -6770,7 +6772,6 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 
 	if (pbi->vf_dp.present_flag) {
 		struct aml_vdec_hdr_infos hdr;
-		struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 
 		memset(&hdr, 0, sizeof(hdr));
 		hdr.signal_type = vf->signal_type;
@@ -6781,42 +6782,31 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
 
-	if ((pbi->chunk != NULL) && (pbi->chunk->hdr10p_data_buf != NULL)
-		&& (pbi->chunk->hdr10p_data_size != 0)) {
-		if (pbi->chunk->hdr10p_data_size <= 128) {
-			char *new_buf;
-			int i = 0;
-			new_buf = kzalloc(pbi->chunk->hdr10p_data_size, GFP_ATOMIC);
-
-			if (new_buf) {
-				memcpy(new_buf, pbi->chunk->hdr10p_data_buf, pbi->chunk->hdr10p_data_size);
-				if (debug & VP9_DEBUG_BUFMGR_MORE) {
+	if ((pbi->chunk->hdr10p_data_buf != NULL) && (pbi->chunk->hdr10p_data_size > 0) &&
+		(pbi->chunk->hdr10p_data_size < HDR10P_BUF_SIZE)) {
+		ctx->aux_infos.bind_hdr10p_buffer(ctx, &pic->hdr10p_data_buf);
+		if (pic->hdr10p_data_buf != NULL) {
+			memcpy(pic->hdr10p_data_buf, pbi->chunk->hdr10p_data_buf,
+				pbi->chunk->hdr10p_data_size);
+			pic->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
+			if (debug & VP9_DEBUG_BUFMGR_MORE) {
+				int i = 0;
+				vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
+					"hdr10p data: (size %d)\n",
+					pbi->chunk->hdr10p_data_size);
+				for (i = 0; i < pbi->chunk->hdr10p_data_size; i++) {
 					vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
-						"hdr10p data: (size %d)\n",
-						pbi->chunk->hdr10p_data_size);
-					for (i = 0; i < pbi->chunk->hdr10p_data_size; i++) {
-						vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
-							"%02x ", pbi->chunk->hdr10p_data_buf[i]);
-						if (((i + 1) & 0xf) == 0)
-							vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
-					}
-					vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
+						"%02x ", pbi->chunk->hdr10p_data_buf[i]);
+					if (((i + 1) & 0xf) == 0)
+						vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
 				}
-
-				vf->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
-				vf->hdr10p_data_buf = new_buf;
-				set_meta_data_to_vf(vf, UVM_META_DATA_HDR10P_DATA, pbi->v4l2_ctx);
-			} else {
-				vp9_print(pbi, 0, "%s:hdr10p data vzalloc size(%d) fail\n",
-					__func__, pbi->chunk->hdr10p_data_size);
-				vf->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
-				vf->hdr10p_data_buf = new_buf;
+				vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
 			}
+			vf->hdr10p_data_buf = pic->hdr10p_data_buf;
+			vf->hdr10p_data_size = pic->hdr10p_data_size;
+		} else {
+			vp9_print(pbi, 0, "bind_hdr10p_buffer fail\n");
 		}
-
-		vfree(pbi->chunk->hdr10p_data_buf);
-		pbi->chunk->hdr10p_data_buf = NULL;
-		pbi->chunk->hdr10p_data_size = 0;
 	}
 
 	vf->sidebind_type = pbi->sidebind_type;
@@ -6931,12 +6921,6 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	if (pbi->enable_fence && vf->fence) {
 		vdec_fence_put(vf->fence);
 		vf->fence = NULL;
-	}
-
-	if (vf->hdr10p_data_buf) {
-		kfree(vf->hdr10p_data_buf);
-		vf->hdr10p_data_buf = NULL;
-		vf->hdr10p_data_size = 0;
 	}
 
 	if (vf->meta_data_buf) {
@@ -7391,7 +7375,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		}
 		vf->compWidth = pic_config->y_crop_width;
 		vf->compHeight = pic_config->y_crop_height;
-		set_frame_info(pbi, vf);
+		set_frame_info(pbi, vf, pic_config);
 
 		if (pbi->high_bandwidth_flag) {
 			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
@@ -11063,6 +11047,9 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return -ENODEV;
 	}
+
+	ctx->aux_infos.alloc_buffer(ctx, HDR10P_TYPE);
+
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 	hevc_source_changed(VFORMAT_VP9,
 			4096, 2048, 60);

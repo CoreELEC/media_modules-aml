@@ -3346,6 +3346,21 @@ void aml_alloc_buffer(struct aml_vcodec_ctx *ctx, int flag)
 			}
 		}
 	}
+
+	if (flag & HDR10P_TYPE) {
+		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
+			ctx->aux_infos.bufs[i].hdr10p_buf = vzalloc(HDR10P_BUF_SIZE);
+			if (ctx->aux_infos.bufs[i].hdr10p_buf) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+					"v4l2 alloc %dth hdr10p buffer:%px\n",
+					i, ctx->aux_infos.bufs[i].hdr10p_buf);
+			} else {
+				ctx->aux_infos.bufs[i].hdr10p_buf = NULL;
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"v4l2 alloc %dth hdr10p buffer fail\n", i);
+			}
+		}
+	}
 }
 
 void aml_free_buffer(struct aml_vcodec_ctx *ctx, int flag)
@@ -3376,6 +3391,18 @@ void aml_free_buffer(struct aml_vcodec_ctx *ctx, int flag)
 				ctx->aux_infos.bufs[i].sei_state = 0;
 				ctx->aux_infos.bufs[i].sei_size = 0;
 				ctx->aux_infos.bufs[i].sei_buf = NULL;
+			}
+		}
+	}
+
+	if (flag & HDR10P_TYPE) {
+		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
+			if (ctx->aux_infos.bufs[i].hdr10p_buf != NULL) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+					"v4l2 free %dth hdr10p buffer:%px\n",
+					i, ctx->aux_infos.bufs[i].hdr10p_buf);
+				vfree(ctx->aux_infos.bufs[i].hdr10p_buf);
+				ctx->aux_infos.bufs[i].hdr10p_buf = NULL;
 			}
 		}
 	}
@@ -3448,6 +3475,16 @@ void aml_bind_dv_buffer(struct aml_vcodec_ctx *ctx, char **comp_buf, char **md_b
 		*comp_buf = ctx->aux_infos.bufs[index].comp_buf;
 		*md_buf = ctx->aux_infos.bufs[index].md_buf;
 		ctx->aux_infos.dv_index = (index + 1) % V4L_CAP_BUFF_MAX;
+	}
+}
+
+void aml_bind_hdr10p_buffer(struct aml_vcodec_ctx *ctx, char **addr)
+{
+	int index = ctx->aux_infos.hdr10p_index;
+
+	if (ctx->aux_infos.bufs[index].hdr10p_buf != NULL) {
+		*addr = ctx->aux_infos.bufs[index].hdr10p_buf;
+		ctx->aux_infos.hdr10p_index = (index + 1) % V4L_CAP_BUFF_MAX;
 	}
 }
 
@@ -3580,8 +3617,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 	aml_task_chain_remove(ctx);
 
 	vfree(ctx->meta_infos.meta_bufs);
-	ctx->aux_infos.free_buffer(ctx, SEI_TYPE | DV_TYPE);
-	ctx->aux_infos.free_buffer(ctx, 1);
+	ctx->aux_infos.free_buffer(ctx, SEI_TYPE | DV_TYPE | HDR10P_TYPE);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"v4ldec has been destroyed.\n");

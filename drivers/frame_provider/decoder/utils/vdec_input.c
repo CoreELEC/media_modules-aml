@@ -949,6 +949,11 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 		chunk->padding_size = need_padding_size;
 		if (vframe_chunk_fill(input, chunk, buf, count, block)) {
 			pr_err("vframe_chunk_fill failed\n");
+			if (chunk->hdr10p_data_buf != NULL) {
+				vfree(chunk->hdr10p_data_buf);
+				chunk->hdr10p_data_buf = NULL;
+				chunk->hdr10p_data_size = 0;
+			}
 			kfree(chunk);
 			return -EFAULT;
 		}
@@ -1088,6 +1093,12 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 		vdec_input_unlock(input, flags);
 		pr_err("%s chunk is deleted,so return.\n", __func__);
 		return;
+	}
+
+	if (chunk->hdr10p_data_buf != NULL) {
+		vfree(chunk->hdr10p_data_buf);
+		chunk->hdr10p_data_buf = NULL;
+		chunk->hdr10p_data_size = 0;
 	}
 
 	list_del(&chunk->list);

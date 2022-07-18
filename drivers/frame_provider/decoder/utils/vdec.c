@@ -465,6 +465,10 @@ void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb)
 	if (atomic_read(&data->use_count) == 0) {
 		if (data->user_data_buf != NULL)
 			vfree(data->user_data_buf);
+		if (data->hdr10p_data_buf != NULL)
+			vfree(data->hdr10p_data_buf);
+
+		data->hdr10p_data_buf = NULL;
 		data->user_data_buf = NULL;
 		atomic_dec(&vdata->buffer_count);
 	}

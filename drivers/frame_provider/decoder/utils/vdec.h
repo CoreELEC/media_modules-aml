@@ -167,6 +167,7 @@ enum e_trace_work_status {
 #define CORE_MASK_COMBINE (1UL << 31)
 
 #define META_DATA_SIZE	(256)
+#define HDR10P_BUF_SIZE	(128)
 
 #define SEI_TYPE	(1)
 #define DV_TYPE		(2)
@@ -290,6 +291,7 @@ struct vdec_data_s {
 	void *private_data;
 	atomic_t  use_count;
 	char *user_data_buf;
+	char *hdr10p_data_buf;
 };
 
 struct vdec_data_info_s {

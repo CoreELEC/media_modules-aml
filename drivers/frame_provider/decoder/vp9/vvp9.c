@@ -661,6 +661,7 @@ struct PIC_BUFFER_CONFIG_s {
 	/* hdr10 plus data */
 	u32 hdr10p_data_size;
 	char *hdr10p_data_buf;
+	int vdec_data_index;
 } PIC_BUFFER_CONFIG;
 
 enum BITSTREAM_PROFILE {
@@ -5843,6 +5844,35 @@ static int config_pic(struct VP9Decoder_s *pbi,
 				return ret;
 			}
 
+			if (vdec->vdata == NULL) {
+				vdec->vdata = vdec_data_get();
+			}
+
+			if (vdec->vdata != NULL) {
+				int index = 0;
+				if (pic_config->vdec_data_index == -1) {
+					index = vdec_data_get_index((ulong)vdec->vdata);
+					pic_config->vdec_data_index = index;
+				} else {
+					index = pic_config->vdec_data_index;
+				}
+
+				if (index >= 0) {
+					if (pic_config->hdr10p_data_buf == NULL) {
+						pic_config->hdr10p_data_buf = vzalloc(HDR10P_BUF_SIZE);
+						if (pic_config->hdr10p_data_buf == NULL)
+							vp9_print(pbi, 0, "alloc %dth hdr10p failed\n", i);
+					}
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, VF_BUFFER_IDX(i));
+					vdec->vdata->data[index].hdr10p_data_buf = pic_config->hdr10p_data_buf;
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[VF_BUFFER_IDX(i)].node);
+					decoder_bmmu_box_add_callback_func(pbi->bmmu_box, VF_BUFFER_IDX(i),
+						(void *)&vdec->vdata->release_callback[VF_BUFFER_IDX(i)]);
+				} else {
+					vp9_print(pbi, 0, "vdec data is full\n");
+				}
+			}
+
 			if (pbi->enable_fence) {
 				//mm->fence_ref_release = vdec_fence_buffer_count_decrease;
 				vdec_fence_buffer_count_increase((ulong)vdec->sync);
@@ -5927,6 +5957,11 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 	u32 header_size;
 	struct vdec_s *vdec = hw_to_vdec(pbi);
 
+	for (i = 0; i < pbi->used_buf_num; i++) {
+		pic_config = &cm->buffer_pool->frame_bufs[i].buf;
+		pic_config->vdec_data_index = -1;
+	}
+
 	if (!pbi->is_used_v4l && pbi->mmu_enable && ((pbi->double_write_mode & 0x10) == 0)) {
 		header_size = vvp9_mmu_compress_header_size(
 			pbi->max_pic_w, pbi->max_pic_h);
@@ -5947,8 +5982,34 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 				pbi->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
 				return;
 			}
+
 			if (!vdec_secure(hw_to_vdec(pbi)))
 				codec_mm_memset(buf_addr, 0, header_size);
+
+			if (vdec->vdata == NULL) {
+				vdec->vdata = vdec_data_get();
+			}
+
+			if (vdec->vdata != NULL) {
+				int index = 0;
+				index = vdec_data_get_index((ulong)vdec->vdata);
+				if (index >= 0) {
+					struct PIC_BUFFER_CONFIG_s *pic;
+					pic = &cm->buffer_pool->frame_bufs[i].buf;
+					pic->vdec_data_index = index;
+					pic->hdr10p_data_buf = vzalloc(HDR10P_BUF_SIZE);
+					if (pic->hdr10p_data_buf == NULL)
+						vp9_print(pbi, 0, "alloc %dth hdr10p failed\n", i);
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, HEADER_BUFFER_IDX(i));
+					vdec->vdata->data[index].hdr10p_data_buf = pic->hdr10p_data_buf;
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[HEADER_BUFFER_IDX(i)].node);
+					decoder_bmmu_box_add_callback_func(pbi->bmmu_box, HEADER_BUFFER_IDX(i),
+						(void *)&vdec->vdata->release_callback[HEADER_BUFFER_IDX(i)]);
+				} else {
+					vp9_print(pbi, 0, "vdec data is full\n");
+				}
+			}
+
 			if (pbi->enable_fence) {
 				vdec_fence_buffer_count_increase((ulong)vdec->sync);
 				INIT_LIST_HEAD(&vdec->sync->release_callback[HEADER_BUFFER_IDX(i)].node);
@@ -7790,7 +7851,7 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 }
 
 
-static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
+static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	unsigned int ar = DISP_RATIO_ASPECT_RATIO_MAX;
 	vf->duration = pbi->frame_dur;
@@ -7819,41 +7880,26 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf)
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
 
-	if ((pbi->chunk != NULL) && (pbi->chunk->hdr10p_data_buf != NULL)
-		&& (pbi->chunk->hdr10p_data_size != 0)) {
-		if (pbi->chunk->hdr10p_data_size <= 128) {
-			char *new_buf;
+	if ((pbi->chunk->hdr10p_data_buf != NULL) && (pbi->chunk->hdr10p_data_size > 0) &&
+		(pbi->chunk->hdr10p_data_size < HDR10P_BUF_SIZE )) {
+		memcpy(pic->hdr10p_data_buf, pbi->chunk->hdr10p_data_buf,
+			pbi->chunk->hdr10p_data_size);
+		pic->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
+		if (debug & VP9_DEBUG_BUFMGR_MORE) {
 			int i = 0;
-			new_buf = kzalloc(pbi->chunk->hdr10p_data_size, GFP_ATOMIC);
-
-			if (new_buf) {
-				memcpy(new_buf, pbi->chunk->hdr10p_data_buf, pbi->chunk->hdr10p_data_size);
-				if (debug & VP9_DEBUG_BUFMGR_MORE) {
-					vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
-						"hdr10p data: (size %d)\n",
-						pbi->chunk->hdr10p_data_size);
-					for (i = 0; i < pbi->chunk->hdr10p_data_size; i++) {
-						vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
-							"%02x ", pbi->chunk->hdr10p_data_buf[i]);
-						if (((i + 1) & 0xf) == 0)
-							vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
-					}
+			vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
+				"hdr10p data: (size %d)\n",
+				pbi->chunk->hdr10p_data_size);
+			for (i = 0; i < pbi->chunk->hdr10p_data_size; i++) {
+				vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
+					"%02x ", pbi->chunk->hdr10p_data_buf[i]);
+				if (((i + 1) & 0xf) == 0)
 					vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
-				}
-
-				vf->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
-				vf->hdr10p_data_buf = new_buf;
-			} else {
-				vp9_print(pbi, 0, "%s:hdr10p data vzalloc size(%d) fail\n",
-					__func__, pbi->chunk->hdr10p_data_size);
-				vf->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
-				vf->hdr10p_data_buf = new_buf;
 			}
+			vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
 		}
-
-		vfree(pbi->chunk->hdr10p_data_buf);
-		pbi->chunk->hdr10p_data_buf = NULL;
-		pbi->chunk->hdr10p_data_size = 0;
+		vf->hdr10p_data_buf = pic->hdr10p_data_buf;
+		vf->hdr10p_data_size = pic->hdr10p_data_size;
 	}
 
 	vf->sidebind_type = pbi->sidebind_type;
@@ -7986,12 +8032,6 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	if (pbi->enable_fence && vf->fence) {
 		vdec_fence_put(vf->fence);
 		vf->fence = NULL;
-	}
-
-	if (vf->hdr10p_data_buf) {
-		kfree(vf->hdr10p_data_buf);
-		vf->hdr10p_data_buf = NULL;
-		vf->hdr10p_data_size = 0;
 	}
 
 	kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
@@ -8518,7 +8558,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vf->compWidth = pic_config->y_crop_width;
 			vf->compHeight = pic_config->y_crop_height;
 		}
-		set_frame_info(pbi, vf);
+		set_frame_info(pbi, vf, pic_config);
 		if (force_fps & 0x100) {
 			u32 rate = force_fps & 0xff;
 

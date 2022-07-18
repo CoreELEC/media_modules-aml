@@ -145,6 +145,7 @@ static int fops_vcodec_open(struct file *file)
 	ctx->aux_infos.bind_sei_buffer = aml_bind_sei_buffer;
 	ctx->aux_infos.bind_dv_buffer = aml_bind_dv_buffer;
 	ctx->aux_infos.free_one_sei_buffer = aml_free_one_sei_buffer;
+	ctx->aux_infos.bind_hdr10p_buffer = aml_bind_hdr10p_buffer;
 
 	ret = aml_thread_start(ctx, aml_thread_capture_worker, AML_THREAD_CAPTURE, "cap");
 	if (ret) {
