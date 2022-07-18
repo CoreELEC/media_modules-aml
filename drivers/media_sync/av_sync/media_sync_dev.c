@@ -102,6 +102,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	mediasync_audio_format AudioFormat;
 	mediasync_clocktype ClockType = UNKNOWN_CLOCK;
 	mediasync_clockprovider_state state;
+	mediasync_avsync_state_cur_time_us avSyncStatusCurTimeUs;
 	s32 SyncInsId = -1;
 	s32 SyncPaused = 0;
 	s32 SyncMode = -1;
@@ -1224,6 +1225,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 								PlayerInstanceId);
 
 		break;
+
 		case MEDIASYNC_IOC_GET_PLAYER_INSTANCE_ID :
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
@@ -1233,6 +1235,19 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 				if (copy_to_user((void *)arg,
 						&PlayerInstanceId,
 						sizeof(PlayerInstanceId)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_GET_AVSTATE_CUR_TIME_US :
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+			ret = mediasync_ins_get_avsyncstate_cur_time_us(priv->mSyncInsId,
+								&avSyncStatusCurTimeUs);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&avSyncStatusCurTimeUs,
+						sizeof(avSyncStatusCurTimeUs)))
 					return -EFAULT;
 			}
 		break;
@@ -1331,7 +1346,7 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_VIDEO_CACHE_INFO :
 		case MEDIASYNC_IOC_SET_PLAYER_INSTANCE_ID :
 		case MEDIASYNC_IOC_GET_PLAYER_INSTANCE_ID :
-
+		case MEDIASYNC_IOC_GET_AVSTATE_CUR_TIME_US:
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;

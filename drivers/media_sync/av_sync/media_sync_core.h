@@ -53,7 +53,8 @@ typedef enum {
 	MEDIASYNC_AV_ARRIVED,
 	MEDIASYNC_AV_SYNCED,
 	MEDIASYNC_RUNNING,
-	MEDIASYNC_LOST_SYNC,
+	MEDIASYNC_VIDEO_LOST_SYNC,
+	MEDIASYNC_AUDIO_LOST_SYNC,
 	MEDIASYNC_EXIT,
 } avsync_state;
 
@@ -88,11 +89,17 @@ typedef struct discontinueframeinfo{
 	int64_t discontinuePtsBefore;
 	int64_t discontinuePtsAfter;
 	int isDiscontinue;
-}mediasync_discontinueframeinfo;
+} mediasync_discontinueframeinfo;
 
+
+typedef struct avsync_state_cur_time_us{
+	avsync_state state;
+	int64_t setStateCurTimeUs;
+} mediasync_avsync_state_cur_time_us;
 
 typedef struct syncinfo {
 	avsync_state state;
+	int64_t setStateCurTimeUs;
 	mediasync_frameinfo firstAframeInfo;
 	mediasync_frameinfo firstVframeInfo;
 	mediasync_frameinfo firstDmxPcrInfo;
@@ -285,5 +292,6 @@ long mediasync_ins_set_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo i
 long mediasync_ins_get_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_set_player_instance_id(s32 sSyncInsId, s32 PlayerInstanceId);
 long mediasync_ins_get_player_instance_id(s32 sSyncInsId, s32* PlayerInstanceId);
+long mediasync_ins_get_avsyncstate_cur_time_us(s32 sSyncInsId, mediasync_avsync_state_cur_time_us* avsynstate);
 
 #endif

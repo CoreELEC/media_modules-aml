@@ -1381,6 +1381,7 @@ long mediasync_ins_set_avsyncstate(s32 sSyncInsId, s32 state) {
 	}
 
 	pInstance->mSyncInfo.state = state;
+	pInstance->mSyncInfo.setStateCurTimeUs = get_system_time_us();
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1404,6 +1405,28 @@ long mediasync_ins_get_avsyncstate(s32 sSyncInsId, s32* state) {
 
 	return 0;
 }
+
+long mediasync_ins_get_avsyncstate_cur_time_us(s32 sSyncInsId, mediasync_avsync_state_cur_time_us* avsynstate) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_syncid(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	avsynstate->state = pInstance->mSyncInfo.state;
+	avsynstate->setStateCurTimeUs = pInstance->mSyncInfo.setStateCurTimeUs;
+
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
 
 long mediasync_ins_set_startthreshold(s32 sSyncInsId, s32 threshold) {
 	mediasync_ins* pInstance = NULL;
