@@ -570,6 +570,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DEC_RESULT_EOS              7
 #define DEC_RESULT_FORCE_EXIT       8
 #define DEC_RESULT_TIMEOUT			9
+#define DEC_RESULT_ERROR_DATA      	12
 
 
 /*
@@ -1037,7 +1038,86 @@ static int is_oversize(int w, int h)
 	if (h != 0 && (w > max / h))
 		return true;
 
+	if (w > h) {
+		if (w > 4096 || h > 2304)
+			return true;
+	} else if (w < h) {
+		if (w > 2304 || h > 4096)
+			return true;
+	} else {
+		if (w*h > 4096*2304)
+			return true;
+	}
+
 	return false;
+}
+
+static int is_crop_valid(struct vdec_h264_hw_s *hw, int mb_width, int mb_height)
+{
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	int sub_width_c = 0, sub_height_c = 0;
+	int frame_width = 0, frame_height = 0;
+	unsigned int frame_mbs_only_flag;
+	unsigned int chroma_format_idc;
+	unsigned int crop_bottom, crop_right;
+
+	/*crop*/
+	/* AV_SCRATCH_2
+	   bit 15: frame_mbs_only_flag
+	   bit 13-14: chroma_format_idc */
+	frame_mbs_only_flag = (hw->seq_info >> 15) & 0x01;
+	p_H264_Dpb->chroma_format_idc = (hw->seq_info >> 13) & 0x03;
+	if (p_H264_Dpb->mSPS.profile_idc != 100 &&
+		p_H264_Dpb->mSPS.profile_idc != 110 &&
+		p_H264_Dpb->mSPS.profile_idc != 122 &&
+		p_H264_Dpb->mSPS.profile_idc != 144) {
+		p_H264_Dpb->chroma_format_idc = 1;
+	}
+	chroma_format_idc = p_H264_Dpb->chroma_format_idc;
+
+	/* @AV_SCRATCH_6.31-16 =  (left  << 8 | right ) << 1
+	   @AV_SCRATCH_6.15-0	=  (top << 8  | bottom ) <<
+	   (2 - frame_mbs_only_flag) */
+
+	switch (chroma_format_idc) {
+		case 1:
+			sub_width_c = 2;
+			sub_height_c = 2;
+			break;
+
+		case 2:
+			sub_width_c = 2;
+			sub_height_c = 1;
+			break;
+
+		case 3:
+			sub_width_c = 1;
+			sub_height_c = 1;
+			break;
+
+		default:
+			break;
+	}
+
+	if (chroma_format_idc == 0) {
+		crop_right = p_H264_Dpb->frame_crop_right_offset;
+		crop_bottom = p_H264_Dpb->frame_crop_bottom_offset *
+			(2 - frame_mbs_only_flag);
+	} else {
+		crop_right = sub_width_c * p_H264_Dpb->frame_crop_right_offset;
+		crop_bottom = sub_height_c * p_H264_Dpb->frame_crop_bottom_offset *
+			(2 - frame_mbs_only_flag);
+	}
+
+	frame_width = mb_width << 4;
+	frame_height = mb_height << 4;
+
+	if (crop_right < 0 || crop_bottom < 0 || frame_width <= crop_right || frame_height <= crop_bottom) {
+		dpb_print(DECODE_ID(hw), 0,
+			"%s(), %d, invalid crop, crop_right:%d, crop_bottom:%d\n", __FUNCTION__, __LINE__, crop_right, crop_bottom);
+		return false;
+	}
+	return true;
 }
 
 static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
@@ -5542,6 +5622,9 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	hw->error_frame_width = 0;
 	hw->error_frame_height = 0;
 
+	if (!is_crop_valid(hw, mb_width, mb_height))
+		return -1;
+
 	dec_dpb_size_change = hw->dpb.dec_dpb_size != get_dec_dpb_size_active(hw, param1, param4);
 
 	if (((seq_info2 != 0 &&
@@ -9657,6 +9740,34 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		struct aml_vcodec_ctx *ctx =
 				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
+		int mb_width = 0;
+		int mb_total = 0;
+		int mb_height = 0;
+		int frame_width = 0;
+		int frame_height = 0;
+		mb_width = param1 & 0xff;
+		mb_total = (param1 >> 8) & 0xffff;
+		if (!mb_width && mb_total) /*for 4k2k*/
+			mb_width = 256;
+		if (mb_width)
+			mb_height = mb_total / mb_width;
+		frame_width = mb_width << 4;
+		frame_height = mb_height << 4;
+
+		if (is_oversize(frame_width, frame_height) ||
+			(frame_width == 0) ||
+			(frame_height == 0)) {
+			dpb_print(DECODE_ID(hw), 0, "is_oversize w:%d h:%d\n", frame_width, frame_height);
+			hw->dec_result = DEC_RESULT_ERROR_DATA;
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+		if (!is_crop_valid(hw, mb_width, mb_height)) {
+			dpb_print(DECODE_ID(hw), 0, "crop invalid\n");
+			hw->dec_result = DEC_RESULT_ERROR_DATA;
+			vdec_schedule_work(&hw->work);
+			return;
+		}
 		if (hw->is_used_v4l &&
 			ctx->param_sets_from_ucode) {
 			if (!v4l_res_change(hw, param1, param2, param3, param4)) {
@@ -9937,6 +10048,18 @@ result_done:
 			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
 			hw->stat &= ~STAT_ISR_REG;
 		}
+	} else if (hw->dec_result == DEC_RESULT_ERROR_DATA) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"%s dec_result %d %x %x %x\n",
+			__func__,
+			hw->dec_result,
+			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+			READ_VREG(VLD_MEM_VIFIFO_WP),
+			READ_VREG(VLD_MEM_VIFIFO_RP));
+		mutex_lock(&hw->chunks_mutex);
+		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		hw->chunk = NULL;
+		mutex_unlock(&hw->chunks_mutex);
 	}
 
 	if (p_H264_Dpb->mVideo.dec_picture) {
