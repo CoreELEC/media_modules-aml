@@ -6289,6 +6289,19 @@ static void pic_list_process(struct hevc_state_s *hevc)
 		int new_count = alloc_pic_count;
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			pic = hevc->m_PIC[i];
+			if (new_count < work_pic_num && pic == NULL) {
+				pic = vmalloc(sizeof(struct PIC_s));
+				if (pic == NULL) {
+					hevc_print(hevc, 0,
+						"%s: alloc pic %d fail!!!\n",
+						__func__, i);
+					break;
+				}
+				hevc->m_PIC[i] = pic;
+				memset(pic, 0, sizeof(struct PIC_s));
+				pic->index = -1;
+			}
+
 			if (pic && pic->index == -1) {
 				pic->index = i;
 				pic->BUF_index = -1;
