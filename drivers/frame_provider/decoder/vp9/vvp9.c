@@ -1027,6 +1027,7 @@ struct BuffInfo_s {
 #define DEC_RESULT_EOS              9
 #define DEC_RESULT_FORCE_EXIT       10
 #define DEC_RESULT_NEED_MORE_BUFFER	11
+#define DEC_RESULT_UNFINISH	        12
 #define DEC_V4L2_CONTINUE_DECODING  18
 
 #define DEC_S1_RESULT_NONE          0
@@ -1310,6 +1311,10 @@ struct VP9Decoder_s {
 	unsigned *rdma_adr;
 	struct trace_decoder_name trace;
 	bool high_bandwidth_flag;
+	u32 data_size;
+	u32 data_offset;
+	u32 data_invalid;
+	u32 consume_byte;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -9662,6 +9667,15 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 
 				pbi->dec_result = DEC_RESULT_DONE;
 				amhevc_stop();
+
+				if (vdec_frame_based(hw_to_vdec(pbi)) &&
+					(READ_VREG(HEVC_SHIFT_BYTE_COUNT) + 4 < pbi->data_size)) {
+					pbi->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+					pbi->dec_result = DEC_RESULT_UNFINISH;
+				} else {
+					pbi->data_size = 0;
+					pbi->data_offset = 0;
+				}
 				if (mcrcc_cache_alg_flag)
 					dump_hit_rate(pbi);
 				ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
@@ -10187,11 +10201,11 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 		vp9_print(pbi, 0,
 			"%s: chunk size 0x%x off 0x%x sum 0x%x\n",
 			__func__,
-			pbi->chunk->size,
-			pbi->chunk->offset,
-			get_data_check_sum(pbi, pbi->chunk->size)
+			pbi->data_size,
+			pbi->data_offset,
+			get_data_check_sum(pbi, pbi->data_size)
 			);
-		dump_data(pbi, pbi->chunk->size);
+		dump_data(pbi, pbi->data_size);
 	}
 #endif
 	if (debug & VP9_DEBUG_DUMP_PIC_LIST) {
@@ -11053,10 +11067,10 @@ static unsigned char get_data_check_sum
 
 	if (!pbi->chunk->block->is_mapped)
 		data = codec_mm_vmap(pbi->chunk->block->start +
-			pbi->chunk->offset, size);
+			pbi->data_offset, size);
 	else
 		data = ((u8 *)pbi->chunk->block->start_virt) +
-			pbi->chunk->offset;
+			pbi->data_offset;
 
 	for (jj = 0; jj < size; jj++)
 		sum += data[jj];
@@ -11084,15 +11098,15 @@ static void dump_data(struct VP9Decoder_s *pbi, int size)
 {
 	int jj;
 	u8 *data = NULL;
-	int padding_size = pbi->chunk->offset &
+	int padding_size = pbi->data_offset &
 		(VDEC_FIFO_ALIGN - 1);
 
 	if (!pbi->chunk->block->is_mapped)
 		data = codec_mm_vmap(pbi->chunk->block->start +
-			pbi->chunk->offset, size);
+			pbi->data_offset, size);
 	else
 		data = ((u8 *)pbi->chunk->block->start_virt) +
-			pbi->chunk->offset;
+			pbi->data_offset;
 
 	vp9_print(pbi, PRINT_FLAG_VDEC_DATA, "padding: ");
 	for (jj = padding_size; jj > 0; jj--)
@@ -11217,10 +11231,10 @@ static void vp9_work(struct work_struct *work)
 				);
 
 			if (debug & PRINT_FLAG_VDEC_DATA)
-				dump_data(pbi, pbi->chunk->size);
+				dump_data(pbi, pbi->data_size);
 
-			decode_size = pbi->chunk->size +
-				(pbi->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+			decode_size = pbi->data_size +
+				(pbi->data_offset & (VDEC_FIFO_ALIGN - 1));
 
 			WRITE_VREG(HEVC_DECODE_SIZE,
 				READ_VREG(HEVC_DECODE_SIZE) + decode_size);
@@ -11315,6 +11329,25 @@ static void vp9_work(struct work_struct *work)
 			vdec_free_irq(VDEC_IRQ_0, (void *)pbi);
 			pbi->stat &= ~STAT_ISR_REG;
 		}
+	} else if (pbi->dec_result == DEC_RESULT_UNFINISH) {
+		pbi->frame_count++;
+		pbi->process_state = PROC_STATE_INIT;
+
+		if (pbi->mmu_enable)
+			pbi->used_4k_num =
+				(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
+			"%s (===> %d) dec_result %d %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
+			__func__,
+			pbi->frame_count,
+			pbi->dec_result,
+			READ_VREG(HEVC_STREAM_LEVEL),
+			READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT) -
+			pbi->start_shift_bytes);
+		amhevc_stop();
 	}
 	if (pbi->stat & STAT_VDEC_RUN) {
 		amhevc_stop();
@@ -11548,17 +11581,42 @@ static void run_front(struct vdec_s *vdec)
 		hevc_reset_core(vdec);
 #endif
 
-	size = vdec_prepare_input(vdec, &pbi->chunk);
-	if (size < 0) {
-		input_empty[pbi->index]++;
+	if ((vdec_frame_based(vdec)) &&
+		(pbi->dec_result == DEC_RESULT_UNFINISH)) {
+		u32 res_byte = pbi->data_size - pbi->consume_byte;
 
-		pbi->dec_result = DEC_RESULT_AGAIN;
+		vp9_print(pbi, VP9_DEBUG_BUFMGR,
+			"%s before, consume 0x%x, size 0x%x, offset 0x%x, res 0x%x\n", __func__,
+			pbi->consume_byte, pbi->data_size, pbi->data_offset + pbi->consume_byte, res_byte);
 
-		vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
-			"ammvdec_vh265: Insufficient data\n");
+		pbi->data_invalid = vdec_offset_prepare_input(vdec, pbi->consume_byte, pbi->data_offset, pbi->data_size);
+		pbi->data_offset -= (pbi->data_invalid - pbi->consume_byte);
+		pbi->data_size += (pbi->data_invalid - pbi->consume_byte);
+		size = pbi->data_size;
+		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, pbi->data_invalid);
 
-		vdec_schedule_work(&pbi->work);
-		return;
+		vp9_print(pbi, VP9_DEBUG_BUFMGR,
+			"%s after, consume 0x%x, size 0x%x, offset 0x%x, invalid 0x%x, res 0x%x\n", __func__,
+			pbi->consume_byte, pbi->data_size, pbi->data_offset, pbi->data_invalid, res_byte);
+	} else {
+		size = vdec_prepare_input(vdec, &pbi->chunk);
+		if (size < 0) {
+			input_empty[pbi->index]++;
+
+			pbi->dec_result = DEC_RESULT_AGAIN;
+
+			vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
+				"ammvdec_vp9: Insufficient data\n");
+
+			vdec_schedule_work(&pbi->work);
+			return;
+		}
+		if ((vdec_frame_based(vdec)) &&
+			(pbi->chunk != NULL)) {
+			pbi->data_offset = pbi->chunk->offset;
+			pbi->data_size = size;
+		}
+		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, 0);
 	}
 
 	input_empty[pbi->index] = 0;
@@ -11573,8 +11631,8 @@ static void run_front(struct vdec_s *vdec)
 			"%s (%d): size 0x%x (0x%x 0x%x) sum 0x%x (%x %x %x %x %x) bytes 0x%x",
 			__func__,
 			pbi->frame_count, size,
-			pbi->chunk ? pbi->chunk->size : 0,
-			pbi->chunk ? pbi->chunk->offset : 0,
+			pbi->chunk ? pbi->data_size : 0,
+			pbi->chunk ? pbi->data_offset : 0,
 			pbi->chunk ? ((vdec_frame_based(vdec) &&
 			(debug & PRINT_FLAG_VDEC_STATUS)) ?
 			get_data_check_sum(pbi, size) : 0) : 0,
@@ -11591,10 +11649,10 @@ static void run_front(struct vdec_s *vdec)
 
 			if (!pbi->chunk->block->is_mapped)
 				data = codec_mm_vmap(pbi->chunk->block->start +
-					pbi->chunk->offset, 8);
+					pbi->data_offset, 8);
 			else
 				data = ((u8 *)pbi->chunk->block->start_virt) +
-					pbi->chunk->offset;
+					pbi->data_offset;
 
 			vp9_print_cont(pbi, 0, "data adr %p:",
 				data);
@@ -11641,13 +11699,13 @@ static void run_front(struct vdec_s *vdec)
 
 	if (vdec_frame_based(vdec)) {
 		if (debug & PRINT_FLAG_VDEC_DATA)
-			dump_data(pbi, pbi->chunk->size);
+			dump_data(pbi, pbi->data_size);
 
 		WRITE_VREG(HEVC_SHIFT_BYTE_COUNT, 0);
-		size = pbi->chunk->size +
-			(pbi->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+		size = pbi->data_size +
+			(pbi->data_offset & (VDEC_FIFO_ALIGN - 1));
 		if (vdec->mvfrm)
-			vdec->mvfrm->frame_size = pbi->chunk->size;
+			vdec->mvfrm->frame_size = pbi->data_size;
 	}
 	WRITE_VREG(HEVC_DECODE_SIZE, size);
 	WRITE_VREG(HEVC_DECODE_COUNT, pbi->slice_idx);
@@ -12036,21 +12094,21 @@ static void vp9_dump_state(struct vdec_s *vdec)
 		) {
 		int jj;
 		if (pbi->chunk && pbi->chunk->block &&
-			pbi->chunk->size > 0) {
+			pbi->data_size > 0) {
 			u8 *data = NULL;
 
 			if (!pbi->chunk->block->is_mapped)
 				data = codec_mm_vmap(
 					pbi->chunk->block->start +
-					pbi->chunk->offset,
-					pbi->chunk->size);
+					pbi->data_offset,
+					pbi->data_size);
 			else
 				data = ((u8 *)pbi->chunk->block->start_virt)
-					+ pbi->chunk->offset;
+					+ pbi->data_offset;
 			vp9_print(pbi, 0,
 				"frame data size 0x%x\n",
-				pbi->chunk->size);
-			for (jj = 0; jj < pbi->chunk->size; jj++) {
+				pbi->data_size);
+			for (jj = 0; jj < pbi->data_size; jj++) {
 				if ((jj & 0xf) == 0)
 					vp9_print(pbi, PRINT_FLAG_VDEC_DATA,
 						"%06x:", jj);

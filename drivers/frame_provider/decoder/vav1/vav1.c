@@ -10515,9 +10515,11 @@ static void run_front(struct vdec_s *vdec)
 
 	if ((vdec_frame_based(vdec)) &&
 		(hw->dec_result == DEC_RESULT_UNFINISH)) {
+		u32 res_byte = hw->data_size - hw->consume_byte;
+
 		av1_print(hw, AV1_DEBUG_BUFMGR,
 			"%s before, consume 0x%x, size 0x%x, offset 0x%x, res 0x%x\n", __func__,
-			hw->consume_byte, hw->data_size, hw->data_offset, hw->data_size - hw->consume_byte);
+			hw->consume_byte, hw->data_size, hw->data_offset + hw->consume_byte, res_byte);
 
 		hw->data_invalid = vdec_offset_prepare_input(vdec, hw->consume_byte, hw->data_offset, hw->data_size);
 		hw->data_offset -= (hw->data_invalid - hw->consume_byte);
@@ -10527,7 +10529,7 @@ static void run_front(struct vdec_s *vdec)
 
 		av1_print(hw, AV1_DEBUG_BUFMGR,
 			"%s after, consume 0x%x, size 0x%x, offset 0x%x, invalid 0x%x, res 0x%x\n", __func__,
-			hw->consume_byte, hw->data_size, hw->data_offset, hw->data_invalid, hw->data_size - hw->consume_byte);
+			hw->consume_byte, hw->data_size, hw->data_offset, hw->data_invalid, res_byte);
 	} else {
 		size = vdec_prepare_input(vdec, &hw->chunk);
 		if (size < 0) {
@@ -11765,7 +11767,7 @@ module_param(v4l_bitstream_id_enable, uint, 0664);
 MODULE_PARM_DESC(v4l_bitstream_id_enable, "\n v4l_bitstream_id_enable\n");
 
 module_param(enable_single_slice, uint, 0664);
-MODULE_PARM_DESC(enable_single_slice, "\n  pyx_test\n");
+MODULE_PARM_DESC(enable_single_slice, "\n  enable_single_slice\n");
 
 module_init(amvdec_av1_driver_init_module);
 module_exit(amvdec_av1_driver_remove_module);
