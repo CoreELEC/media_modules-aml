@@ -10917,6 +10917,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	u32 work_buf_size;
 	struct BuffInfo_s *p_buf_info;
 	struct AV1HW_s *hw = NULL;
+	static struct vframe_operations_s vf_tmp_ops;
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TM2) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) ||
@@ -11189,8 +11190,14 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 	hw->endian = HEVC_CONFIG_LITTLE_ENDIAN;
 	if (!hw->is_used_v4l) {
+		memcpy(&vf_tmp_ops, &vav1_vf_provider, sizeof(struct vframe_operations_s));
+
+		if (without_display_mode == 1) {
+			vf_tmp_ops.get = NULL;
+		}
+
 		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-			&vav1_vf_provider, hw);
+			&vf_tmp_ops, hw);
 	}
 
 	hw->mem_map_mode = mem_map_mode;

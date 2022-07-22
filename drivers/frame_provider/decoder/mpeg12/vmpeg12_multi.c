@@ -3775,6 +3775,7 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	struct vdec_mpeg12_hw_s *hw = NULL;
 	int config_val = 0;
+	static struct vframe_operations_s vf_tmp_ops;
 
 	pr_info("ammvdec_mpeg12 probe start.\n");
 
@@ -3828,8 +3829,13 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++)
 			hw->canvas_spec[i] = 0xffffff;
 	}
+
+	memcpy(&vf_tmp_ops, &vf_provider_ops, sizeof(struct vframe_operations_s));
+	if (without_display_mode == 1) {
+		vf_tmp_ops.get = NULL;
+	}
 	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-		&vf_provider_ops, pdata);
+		&vf_tmp_ops, pdata);
 
 	if (pdata->parallel_dec == 1) {
 		int i;

@@ -10777,6 +10777,8 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	struct vdec_h264_hw_s *hw = NULL;
 	char *tmpbuf;
 	int config_val;
+	static struct vframe_operations_s vf_tmp_ops;
+
 	if (pdata == NULL) {
 		pr_info("\nammvdec_h264 memory resource undefined.\n");
 		return -EFAULT;
@@ -11023,9 +11025,16 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			PROVIDER_NAME ".%02x", pdev->id & 0xff);
 
-	if (!hw->is_used_v4l)
+	if (!hw->is_used_v4l) {
+		memcpy(&vf_tmp_ops, &vf_provider_ops, sizeof(struct vframe_operations_s));
+
+		if (without_display_mode == 1) {
+			vf_tmp_ops.get = NULL;
+		}
+
 		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-			&vf_provider_ops, pdata);
+			&vf_tmp_ops, pdata);
+	}
 
 	platform_set_drvdata(pdev, pdata);
 

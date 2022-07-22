@@ -2740,6 +2740,7 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	struct vdec_mpeg4_hw_s *hw = NULL;
 	int config_val = 0;
+	static struct vframe_operations_s vf_tmp_ops;
 
 	if (pdata == NULL) {
 		pr_err("%s memory resource undefined.\n", __func__);
@@ -2854,9 +2855,16 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	} else
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 
-	if (!hw->is_used_v4l)
-		vf_provider_init(&pdata->vframe_provider,
-			pdata->vf_provider_name, &vf_provider_ops, pdata);
+	if (!hw->is_used_v4l) {
+		memcpy(&vf_tmp_ops, &vf_provider_ops, sizeof(struct vframe_operations_s));
+
+		if (without_display_mode == 1) {
+			vf_tmp_ops.get = NULL;
+		}
+
+		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
+			&vf_tmp_ops, pdata);
+	}
 
 	hw->buf_num = vmpeg4_get_buf_num(hw);
 

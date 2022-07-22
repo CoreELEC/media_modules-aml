@@ -13391,7 +13391,6 @@ static void vh265_dump_state(struct vdec_s *vdec)
 
 static int ammvdec_h265_probe(struct platform_device *pdev)
 {
-
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	struct hevc_state_s *hevc = NULL;
 	int ret;
@@ -13399,6 +13398,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	int config_val;
 #endif
+	static struct vframe_operations_s vf_tmp_ops;
 
 	if (pdata == NULL) {
 		pr_info("\nammvdec_h265 memory resource undefined.\n");
@@ -13643,9 +13643,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		hevc->nal_skip_policy = nal_skip_policy;
 	}
 
-
+	memcpy(&vf_tmp_ops, &vh265_vf_provider, sizeof(struct vframe_operations_s));
+	if (without_display_mode == 1) {
+		vf_tmp_ops.get = NULL;
+	}
 	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-		&vh265_vf_provider, pdata);
+		&vf_tmp_ops, pdata);
 
 	if (force_config_fence) {
 		hevc->enable_fence = true;

@@ -1354,6 +1354,7 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
 	struct vdec_mjpeg_hw_s *hw = NULL;
 	int config_val = 0;
+	static struct vframe_operations_s vf_tmp_ops;
 
 	if (pdata == NULL) {
 		pr_info("ammvdec_mjpeg memory resource undefined.\n");
@@ -1442,8 +1443,12 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 
 	hw->buf_num = vmjpeg_get_buf_num(hw);
 
+	memcpy(&vf_tmp_ops, &vf_provider_ops, sizeof(struct vframe_operations_s));
+	if (without_display_mode == 1) {
+		vf_tmp_ops.get = NULL;
+	}
 	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-		&vf_provider_ops, pdata);
+		&vf_tmp_ops, pdata);
 
 	platform_set_drvdata(pdev, pdata);
 
