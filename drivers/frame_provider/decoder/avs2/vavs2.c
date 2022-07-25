@@ -2197,14 +2197,14 @@ static void init_buf_list(struct AVS2Decoder_s *dec)
 #endif
 
 static int config_pic(struct AVS2Decoder_s *dec,
-				struct avs2_frame_s *pic, int32_t lcu_size_log2)
+				struct avs2_frame_s *pic)
 {
 	int ret = -1;
 	int i;
 	int pic_width = dec->init_pic_w;
 	int pic_height = dec->init_pic_h;
 
-	int32_t lcu_size = 1 << lcu_size_log2;
+	int32_t lcu_size = dec->avs2_dec.lcu_size;
 	int pic_width_64 = (pic_width + 63) & (~0x3f);
 	int pic_height_32 = (pic_height + 31) & (~0x1f);
 	int pic_width_lcu  = (pic_width_64 % lcu_size) ?
@@ -2392,8 +2392,7 @@ static int config_pic(struct AVS2Decoder_s *dec,
 	return ret;
 }
 
-static void init_pic_list(struct AVS2Decoder_s *dec,
-	int32_t lcu_size_log2)
+static void init_pic_list(struct AVS2Decoder_s *dec)
 {
 	int i;
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
@@ -2434,7 +2433,7 @@ static void init_pic_list(struct AVS2Decoder_s *dec,
 		pic->index = i;
 		pic->BUF_index = -1;
 		pic->mv_buf_index = -1;
-		if (config_pic(dec, pic, lcu_size_log2) < 0) {
+		if (config_pic(dec, pic) < 0) {
 			if (debug)
 				avs2_print(dec, 0, "Config_pic %d fail\n", pic->index);
 			pic->index = -1;
@@ -4972,16 +4971,6 @@ static void dec_again_process(struct AVS2Decoder_s *dec)
 	vdec_schedule_work(&dec->work);
 }
 
-static uint32_t log2i(uint32_t val)
-{
-	uint32_t ret = -1;
-	while (val != 0) {
-		val >>= 1;
-		ret++;
-	}
-	return ret;
-}
-
 static void check_pic_error(struct AVS2Decoder_s *dec,
 	struct avs2_frame_s *pic)
 {
@@ -5813,13 +5802,10 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		start_code == PB_PICTURE_START_CODE) {
 		ret = 0;
 		if (dec->pic_list_init_flag == 0) {
-			int32_t lcu_size_log2 =
-				log2i(dec->avs2_dec.param.p.lcu_size);
-
 			avs2_init_global_buffers(&dec->avs2_dec);
 				/*avs2_dec->m_bg->index is
 				set to dec->used_buf_num - 1*/
-			init_pic_list(dec, lcu_size_log2);
+			init_pic_list(dec);
 			init_pic_list_hw(dec);
 		}
 		ret = avs2_process_header(&dec->avs2_dec);

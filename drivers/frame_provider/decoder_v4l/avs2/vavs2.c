@@ -4481,46 +4481,6 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 		break;
 	}
 	if ((vf->type & VIDTYPE_COMPRESS) == 0)
-		vf->bitdepth = BITDEPTH_Y8 | BITDEPTH_U8 | BITDEPTH_V8;
-	if (pic->bit_depth == AVS2_BITS_8)
-		vf->bitdepth |= BITDEPTH_SAVING_MODE;
-
-	set_frame_info(dec, vf);
-
-	vf->width = pic->pic_w /
-		get_double_write_ratio(pic->double_write_mode);
-	vf->height = pic->pic_h /
-		get_double_write_ratio(pic->double_write_mode);
-	if (force_w_h != 0) {
-		vf->width = (force_w_h >> 16) & 0xffff;
-		vf->height = force_w_h & 0xffff;
-	}
-	vf->compWidth = pic->pic_w;
-	vf->compHeight = pic->pic_h;
-	if (force_fps & 0x100) {
-		u32 rate = force_fps & 0xff;
-		if (rate)
-			vf->duration = 96000/rate;
-		else
-			vf->duration = 0;
-	}
-
-	switch (pic->bit_depth) {
-	case AVS2_BITS_8:
-		vf->bitdepth = BITDEPTH_Y8 |
-			BITDEPTH_U8 | BITDEPTH_V8;
-		break;
-	case AVS2_BITS_10:
-	case AVS2_BITS_12:
-		vf->bitdepth = BITDEPTH_Y10 |
-			BITDEPTH_U10 | BITDEPTH_V10;
-		break;
-	default:
-		vf->bitdepth = BITDEPTH_Y10 |
-			BITDEPTH_U10 | BITDEPTH_V10;
-		break;
-	}
-	if ((vf->type & VIDTYPE_COMPRESS) == 0)
 		vf->bitdepth =
 			BITDEPTH_Y8 | BITDEPTH_U8 | BITDEPTH_V8;
 	if (pic->bit_depth == AVS2_BITS_8)
