@@ -556,7 +556,7 @@ static u32 detect_stuck_buffer_margin = 3;
 #define get_buffer_mode(hevc) buffer_mode
 
 
-static DEFINE_SPINLOCK(lock);
+static DEFINE_SPINLOCK(h265_lock);
 struct task_struct *h265_task = NULL;
 #undef DEBUG_REG
 #ifdef DEBUG_REG
@@ -2537,7 +2537,7 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 			int size;
 			unsigned long flags;
 
-			spin_lock_irqsave(&lock, flags);
+			spin_lock_irqsave(&h265_lock, flags);
 			addr = hevc->m_PIC[i]->aux_data_buf;
 			size = hevc->m_PIC[i]->aux_data_size;
 
@@ -2545,7 +2545,7 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 			hevc->m_PIC[i]->index = i;
 			hevc->m_PIC[i]->aux_data_buf = addr;
 			hevc->m_PIC[i]->aux_data_size = size;
-			spin_unlock_irqrestore(&lock, flags);
+			spin_unlock_irqrestore(&h265_lock, flags);
 		}
 	}
 
@@ -8200,7 +8200,7 @@ static int vh265_vf_states(struct vframe_states *states, void *op_arg)
 	struct hevc_state_s *hevc = (struct hevc_state_s *)op_arg;
 #endif
 
-	spin_lock_irqsave(&lock, flags);
+	spin_lock_irqsave(&h265_lock, flags);
 
 	states->vf_pool_size = VF_POOL_SIZE;
 	states->buf_free_num = kfifo_len(&hevc->newframe_q);
@@ -8208,7 +8208,7 @@ static int vh265_vf_states(struct vframe_states *states, void *op_arg)
 
 	if (step == 2)
 		states->buf_avail_num = 0;
-	spin_unlock_irqrestore(&lock, flags);
+	spin_unlock_irqrestore(&h265_lock, flags);
 	return 0;
 }
 
@@ -8386,7 +8386,7 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 #endif
 			);
 	atomic_add(1, &hevc->vf_put_count);
-	spin_lock_irqsave(&lock, flags);
+	spin_lock_irqsave(&h265_lock, flags);
 	kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hevc->trace.new_q_name, kfifo_len(&hevc->newframe_q));
 	if (hevc->enable_fence && vf->fence) {
@@ -8451,7 +8451,7 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 		}
 	}
 
-	spin_unlock_irqrestore(&lock, flags);
+	spin_unlock_irqrestore(&h265_lock, flags);
 }
 
 
@@ -8473,7 +8473,7 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 			req->aux_size = atomic_read(&hevc->vf_put_count);
 			return 0;
 		}
-		spin_lock_irqsave(&lock, flags);
+		spin_lock_irqsave(&h265_lock, flags);
 		index = req->vf->index & 0xff;
 		req->aux_buf = NULL;
 		req->aux_size = 0;
@@ -8503,7 +8503,7 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 			req->dv_enhance_exist = 0;
 #endif
 		}
-		spin_unlock_irqrestore(&lock, flags);
+		spin_unlock_irqrestore(&h265_lock, flags);
 
 		if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 			hevc_print(hevc, 0,
@@ -8600,13 +8600,13 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 
 		/* recycle vframe */
 		atomic_add(1, &hevc->vf_pre_count);
-		spin_lock_irqsave(&lock, flags);
+		spin_lock_irqsave(&h265_lock, flags);
 		kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 		index1 = vf->index & 0xff;
 		index2 = (vf->index >> 8) & 0xff;
 		if (index1 >= MAX_REF_PIC_NUM &&
 			index2 >= MAX_REF_PIC_NUM) {
-			spin_unlock_irqrestore(&lock, flags);
+			spin_unlock_irqrestore(&h265_lock, flags);
 			return -1;
 		}
 
@@ -8621,7 +8621,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 		if (hevc->wait_buf != 0)
 			WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
 				0x1);
-		spin_unlock_irqrestore(&lock, flags);
+		spin_unlock_irqrestore(&h265_lock, flags);
 
 		ATRACE_COUNTER(hevc->trace.pts_name, vf->timestamp);
 	}
@@ -12253,7 +12253,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	if (hevc->pic_list_init_flag != 3)
 		return 1;
 
-	spin_lock_irqsave(&lock, flags);
+	spin_lock_irqsave(&h265_lock, flags);
 	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 		pic = hevc->m_PIC[i];
 		if (pic == NULL || pic->index == -1 || pic->BUF_index == -1)
@@ -12293,7 +12293,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 				dump_pic_list(hevc);
 			if (!(error_handle_policy & 0x400)) {
-				spin_unlock_irqrestore(&lock, flags);
+				spin_unlock_irqrestore(&h265_lock, flags);
 				flush_output(hevc, NULL);
 				hevc_print(hevc, H265_DEBUG_BUFMGR, "flush dpb, ref_error_count %d, sps_max_dec_pic_buffering_minus1_0 %d\n",
 						decode_count, hevc->param.p.sps_max_dec_pic_buffering_minus1_0);
@@ -12302,7 +12302,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 		}
 	}
 
-	spin_unlock_irqrestore(&lock, flags);
+	spin_unlock_irqrestore(&h265_lock, flags);
 
 	return (new_pic != NULL) ? 1 : 0;
 }
