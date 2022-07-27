@@ -1299,6 +1299,8 @@ static int alloc_mv_buf(struct AV1HW_s *hw,
 		hw->m_mv_BUF[i].start_adr = 0;
 		ret = -1;
 	} else {
+		if (!vdec_secure(hw_to_vdec(hw)))
+			codec_mm_memset(hw->m_mv_BUF[i].start_adr, 0, size);
 		hw->m_mv_BUF[i].size = size;
 		hw->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
@@ -3178,9 +3180,11 @@ static int config_pic(struct AV1HW_s *hw,
 				return ret;
 			}
 
-			if (pic_config->cma_alloc_addr)
+			if (pic_config->cma_alloc_addr) {
 				y_adr = pic_config->cma_alloc_addr;
-			else {
+				if (!vdec_secure(hw_to_vdec(hw)))
+					codec_mm_memset(y_adr, 0, buf_size);
+			} else {
 				pr_info(
 					"decoder_bmmu_box_alloc_buf_phy idx %d size %d return null\n",
 					VF_BUFFER_IDX(i),
@@ -3312,6 +3316,8 @@ static void init_pic_list(struct AV1HW_s *hw)
 				hw->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
 				return;
 			}
+			if (!vdec_secure(hw_to_vdec(hw)))
+				codec_mm_memset(buf_addr, 0, header_size);
 #ifdef AOM_AV1_MMU_DW
 			if (hw->dw_mmu_enable) {
 				if (decoder_bmmu_box_alloc_buf_phy
@@ -3324,6 +3330,8 @@ static void init_pic_list(struct AV1HW_s *hw)
 					hw->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
 					return;
 				}
+				if (!vdec_secure(hw_to_vdec(hw)))
+					codec_mm_memset(buf_addr, 0, header_size);
 			}
 #endif
 		}
@@ -9983,6 +9991,8 @@ static int amvdec_av1_probe(struct platform_device *pdev)
 		mutex_unlock(&vav1_mutex);
 		return ret;
 	}
+	if (!vdec_secure(pdata))
+		codec_mm_memset(pdata->mem_start, 0, work_buf_size);
 	hw->buf_size = work_buf_size;
 
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -11333,6 +11343,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return ret;
 	}
+	if (!vdec_secure(pdata))
+		codec_mm_memset(hw->cma_alloc_addr, 0, hw->cma_alloc_count * PAGE_SIZE);
 	hw->buf_start = hw->cma_alloc_addr;
 	hw->buf_size = work_buf_size;
 #endif
