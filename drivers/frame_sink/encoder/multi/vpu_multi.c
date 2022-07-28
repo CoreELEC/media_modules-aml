@@ -1711,6 +1711,14 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				kfree(vil);
 				break;
 			}
+			if (inst_info.inst_idx >= MAX_NUM_INSTANCE)
+			{
+				enc_pr(LOG_ALL,
+					"error, inst_info.inst_idx is invalid !\n");
+				kfree(vil);
+				up(&s_vpu_sem);
+				return -EFAULT;
+			}
 			vil->inst_idx = inst_info.inst_idx;
 			vil->core_idx = inst_info.core_idx;
 			vil->filp = filp;
@@ -1722,14 +1730,6 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				&s_inst_list_head, list) {
 				if (vil->core_idx == inst_info.core_idx)
 					inst_info.inst_open_count++;
-			}
-			if (inst_info.inst_idx >= MAX_NUM_INSTANCE)
-			{
-				enc_pr(LOG_ALL,
-					"error, inst_info.inst_idx is invalid !\n");
-				kfree(vil);
-				spin_unlock(&s_vpu_lock);
-				return -EFAULT;
 			}
 			kfifo_reset(
 				&s_interrupt_pending_q[inst_info.inst_idx]);
