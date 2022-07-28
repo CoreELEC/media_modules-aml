@@ -35,6 +35,7 @@
 
 #define MAX_DYNAMIC_INSTANCE_NUM 10
 #define MAX_INSTANCE_NUM 40
+#define MAX_CACHE_TIME_MS (60*1000)
 MediaSyncManage vMediaSyncInsList[MAX_INSTANCE_NUM];
 u64 last_system;
 u64 last_pcr;
@@ -1977,7 +1978,11 @@ long mediasync_ins_get_audio_cache_info(s32 sSyncInsId, mediasync_audioinfo* inf
 				Beforediff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curAudioInfo.framePts;
 				Afterdiff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
 				info->cacheDuration = Beforediff + Afterdiff;
-
+				// sometimes stream not descramble, lead pts jump, cacheduration will have error
+				if (pInstance->mAudioDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90 * 2)) {
+					pr_info("get_audio_cache, cache=%dms, maybe cache cal have problem, need check more\n", info->cacheDuration/90);
+					info->cacheDuration = 0;
+				}
 			} else {
 				info->cacheDuration = 0;
 			}
@@ -2099,6 +2104,11 @@ long mediasync_ins_get_video_cache_info(s32 sSyncInsId, mediasync_videoinfo* inf
 				Afterdiff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
 				info->cacheDuration = Beforediff + Afterdiff;
 
+				// sometimes stream not descramble, lead pts jump, cacheduration will have error
+				if (pInstance->mVideoDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90)) {
+					pr_info("get_video_cache, cache=%dms, maybe cache cal have problem, need check more\n", info->cacheDuration/90);
+					info->cacheDuration = 0;
+				}
 			} else {
 				info->cacheDuration = 0;
 			}
