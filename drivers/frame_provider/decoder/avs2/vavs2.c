@@ -2424,6 +2424,7 @@ static int config_pic(struct AVS2Decoder_s *dec,
 				VF_BUFFER_IDX(i),
 				buf_size, DRIVER_NAME,
 				&pic->cma_alloc_addr);
+
 		if (ret < 0) {
 			avs2_print(dec, 0,
 				"decoder_bmmu_box_alloc_buf_phy idx %d size %d fail\n",
@@ -2433,9 +2434,11 @@ static int config_pic(struct AVS2Decoder_s *dec,
 			return ret;
 		}
 
-		if (pic->cma_alloc_addr)
+		if (pic->cma_alloc_addr) {
 			y_adr = pic->cma_alloc_addr;
-		else {
+			if (!vdec_secure(hw_to_vdec(dec)))
+				codec_mm_memset(y_adr, 0, buf_size);
+		} else {
 			avs2_print(dec, 0,
 				"decoder_bmmu_box_alloc_buf_phy idx %d size %d return null\n",
 				VF_BUFFER_IDX(i),
@@ -2546,6 +2549,8 @@ static void init_pic_list(struct AVS2Decoder_s *dec,
 				dec->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
 				return;
 			}
+			if (!vdec_secure(hw_to_vdec(dec)))
+				codec_mm_memset(buf_addr, 0, header_size);
 		}
 	}
 #endif
@@ -6384,12 +6389,14 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			MV_BUFFER_IDX(i),
 			mv_buf_size,
 			DRIVER_NAME,
-			&buf_addr) < 0)
+			&buf_addr) < 0) {
 				ret = -1;
-			else
-				dec->avs2_dec.hc.cur_pic->
-				mpred_mv_wr_start_addr
-				= buf_addr;
+			} else {
+				dec->avs2_dec.hc.cur_pic->mpred_mv_wr_start_addr = buf_addr;
+				if (!vdec_secure(hw_to_vdec(dec)))
+					codec_mm_memset(dec->avs2_dec.hc.cur_pic->mpred_mv_wr_start_addr,
+						0, mv_buf_size);
+			}
 		}
 #endif
 		if (ret < 0) {
@@ -8195,6 +8202,9 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		vfree((void *)dec);
 		return ret;
 	}
+	if (!vdec_secure(pdata))
+		codec_mm_memset(dec->cma_alloc_addr, 0, dec->cma_alloc_count * PAGE_SIZE);
+
 	dec->buf_start = dec->cma_alloc_addr;
 	dec->buf_size = work_buf_size;
 
