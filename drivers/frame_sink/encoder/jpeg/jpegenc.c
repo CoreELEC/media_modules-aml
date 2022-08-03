@@ -4334,6 +4334,10 @@ static s32 jpegenc_mmap(struct file *filp, struct vm_area_struct *vma)
         return -EAGAIN;
     }
     off += wq->buf_start;
+    if ((off > (wq->buf_start + wq->buf_size)) || ((off + vma_size) > (wq->buf_start + wq->buf_size))) {
+        jenc_pr(LOG_ERROR, "vma_size is 0x%lx, off is 0x%lx\n", vma_size, off);
+        return -EAGAIN;
+    }
     jenc_pr(LOG_INFO, "vma_size is %ld, off is %ld\n", vma_size, off);
     vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP | VM_IO;
     /* vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot); */
