@@ -18,6 +18,8 @@
  * Description:
  */
 #include <linux/types.h>
+#include <linux/slab.h>
+#include <linux/module.h>
 #include <linux/amlogic/media/ge2d/ge2d.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
 #include "vdec.h"
@@ -481,5 +483,5 @@ int vdec_ge2d_destroy(struct vdec_ge2d *ge2d)
 }
 EXPORT_SYMBOL(vdec_ge2d_destroy);
 
-module_param(vdec_ge2d_debug, uint, 0664);
+module_param(vdec_ge2d_debug, int, 0664);
 MODULE_PARM_DESC(vdec_ge2d_debug, "\n vdec_ge2d_debug\n");
