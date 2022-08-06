@@ -7410,12 +7410,12 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				struct vdec_ge2d_info ge2d_info;
 
 				ge2d_info.dst_vf = vf;
-				ge2d_info.src_canvas0Addr = ge2d_info.src_canvas0Addr = 0;
+				ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr = 0;
 				if (dst_pic->double_write_mode) {
 #ifdef MULTI_INSTANCE_SUPPORT
 					if (pbi->m_ins_flag) {
 						vf->canvas0Addr = vf->canvas1Addr = -1;
-						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas0Addr = -1;
+						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr = -1;
 						vf->plane_num = 2;
 						vf->canvas0_config[0] =
 							dst_pic->canvas_config[0];
@@ -7438,7 +7438,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					{
 						vf->canvas0Addr = vf->canvas1Addr =
 							spec2canvas(dst_pic);
-						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas0Addr =
+						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr =
 							spec2canvas(src_pic);
 					}
 				}
