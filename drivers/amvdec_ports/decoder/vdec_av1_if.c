@@ -321,7 +321,7 @@ static void vdec_parser_parms(struct vdec_av1_inst *inst)
 		pbuf += sprintf(pbuf, "mW.y:%d;",
 			ctx->config.parm.dec.hdr.color_parms.white_point[1]);
 		pbuf += sprintf(pbuf, "mMaxDL:%d;",
-			ctx->config.parm.dec.hdr.color_parms.luminance[0] * 1000);
+			ctx->config.parm.dec.hdr.color_parms.luminance[0]);
 		pbuf += sprintf(pbuf, "mMinDL:%d;",
 			ctx->config.parm.dec.hdr.color_parms.luminance[1]);
 		pbuf += sprintf(pbuf, "mMaxCLL:%d;",
