@@ -538,6 +538,7 @@ struct vdec_avs_hw_s {
 	u32 canvas_mode;
 	ulong user_data_handle;
 	ulong lmem_phy_handle;
+	bool process_busy;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -1844,6 +1845,7 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 	hw->total_frame = 0;
 	hw->saved_resolution = 0;
 	hw->next_pts = 0;
+	hw->process_busy = false;
 
 #ifdef DEBUG_PTS
 	hw->pts_hit = hw->pts_missed = hw->pts_i_hit = hw->pts_i_missed = 0;
@@ -2737,6 +2739,17 @@ static void timeout_process(struct vdec_avs_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+
+	if (hw->process_busy) {
+		pr_info("%s, process busy\n", __func__);
+		return;
+	}
+	if (work_pending(&hw->work) ||
+		work_busy(&hw->work)) {
+		pr_err("avs multi work on busy\n");
+		return;
+	}
+
 	amvdec_stop();
 	if (error_handle_policy & 0x1) {
 		handle_decoding_error(hw);
@@ -3722,7 +3735,7 @@ static int v4l_res_change(struct vdec_avs_hw_s *hw)
 	return ret;
 }
 
-static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
+static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 		struct vdec_avs_hw_s *hw =
 			(struct vdec_avs_hw_s *)vdec->private;
@@ -4033,8 +4046,29 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 #endif
 }
 
+static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
+{
+	irqreturn_t ret;
+	struct vdec_avs_hw_s *hw =
+		(struct vdec_avs_hw_s *)vdec->private;
+
+	ret = vmavs_isr_thread_handler(vdec, irq);
+
+	hw->process_busy = false;
+
+	return ret;
+}
+
 static irqreturn_t vmavs_isr(struct vdec_s *vdec, int irq)
 {
+	struct vdec_avs_hw_s *hw =
+		(struct vdec_avs_hw_s *)vdec->private;
+
+	if (hw->process_busy) {
+		pr_info("%s, process busy\n", __func__);
+		return IRQ_HANDLED;
+	}
+	hw->process_busy = true;
 
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 
