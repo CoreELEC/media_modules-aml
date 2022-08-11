@@ -522,6 +522,7 @@ struct vdec_avs_hw_s {
 	struct pic_info_t pics[DECODE_BUFFER_NUM_MAX];
 	ulong user_data_handle;
 	ulong lmem_phy_handle;
+	bool process_busy;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -1764,6 +1765,7 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 	hw->total_frame = 0;
 	hw->saved_resolution = 0;
 	hw->next_pts = 0;
+	hw->process_busy = false;
 
 #ifdef DEBUG_PTS
 	hw->pts_hit = hw->pts_missed = hw->pts_i_hit = hw->pts_i_missed = 0;
@@ -2643,6 +2645,17 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 static void timeout_process(struct vdec_avs_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
+
+	if (hw->process_busy) {
+		pr_info("%s, process busy\n", __func__);
+		return;
+	}
+	if (work_pending(&hw->work) ||
+		work_busy(&hw->work)) {
+		pr_err("avs multi work on busy\n");
+		return;
+	}
+
 	amvdec_stop();
 	if (error_handle_policy & 0x1) {
 		handle_decoding_error(hw);
@@ -3464,7 +3477,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 }
 
 
-static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
+static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 		struct vdec_avs_hw_s *hw =
 			(struct vdec_avs_hw_s *)vdec->private;
@@ -3735,14 +3748,34 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 #endif
 }
 
+static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
+{
+	irqreturn_t ret;
+	struct vdec_avs_hw_s *hw =
+		(struct vdec_avs_hw_s *)vdec->private;
+
+	ret = vmavs_isr_thread_handler(vdec, irq);
+
+	hw->process_busy = false;
+
+	return ret;
+}
+
 static irqreturn_t vmavs_isr(struct vdec_s *vdec, int irq)
 {
+	struct vdec_avs_hw_s *hw =
+		(struct vdec_avs_hw_s *)vdec->private;
 
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 
+	if (hw->process_busy) {
+		pr_info("%s, process busy\n", hw->process_busy);
+		return IRQ_HANDLED;
+	}
+	hw->process_busy = true;
+
 	return IRQ_WAKE_THREAD;
 	//return vavs_isr(0, hw);
-
 }
 
 static void vmavs_dump_state(struct vdec_s *vdec)

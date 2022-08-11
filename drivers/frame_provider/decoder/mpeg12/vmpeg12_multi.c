@@ -364,6 +364,7 @@ struct vdec_mpeg12_hw_s {
 	u32  parse_user_data_size;
 	struct userdata_meta_info_t meta_info;
 	u32 vf_ucode_cc_last_wp;
+	bool process_busy;
 };
 
 static u32 get_ratio_control(struct vdec_mpeg12_hw_s *hw);
@@ -2101,7 +2102,7 @@ static void copy_user_data_to_pic(struct vdec_mpeg12_hw_s *hw, struct pic_info_t
 	memset(hw->parse_user_data_buf, 0, CCBUF_SIZE);
 }
 
-static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
+static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 	u32 reg, index, info, seqinfo, offset, pts, frame_size=0, tmp;
 	u64 pts_us64 = 0;
@@ -2353,13 +2354,33 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 	return IRQ_HANDLED;
 }
+
+static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
+{
+	irqreturn_t ret;
+	struct vdec_mpeg12_hw_s *hw =
+		(struct vdec_mpeg12_hw_s *)(vdec->private);
+
+	ret = vmpeg12_isr_thread_handler(vdec, irq);
+
+	hw->process_busy = false;
+
+	return ret;
+}
+
 static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 {
 	u32 info, offset;
 	struct vdec_mpeg12_hw_s *hw =
-	(struct vdec_mpeg12_hw_s *)(vdec->private);
+		(struct vdec_mpeg12_hw_s *)(vdec->private);
 	if (hw->eos)
 		return IRQ_HANDLED;
+	if (hw->process_busy) {
+		pr_info("%s, process busy\n", __func__);
+		return IRQ_HANDLED;
+	}
+	hw->process_busy = true;
+
 	info = READ_VREG(MREG_PIC_INFO);
 	offset = READ_VREG(MREG_FRAME_OFFSET);
 
@@ -3115,6 +3136,11 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
+	if (hw->process_busy) {
+		pr_info("%s, process_busy\n", __func__);
+		return;
+	}
+
 	if (work_pending(&hw->work) ||
 	    work_busy(&hw->work) ||
 	    work_busy(&hw->timeout_work) ||
@@ -3377,6 +3403,7 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 	hw->start_process_time = 0;
 	hw->init_flag = 0;
 	hw->dec_again_cnt = 0;
+	hw->process_busy = false;
 
 	init_waitqueue_head(&hw->wait_q);
 	if (dec_control)

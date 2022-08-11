@@ -349,6 +349,7 @@ struct vdec_mpeg12_hw_s {
 	u64 first_field_timestamp;
 	u64 first_field_timestamp_valid;
 	u32 report_field;
+	bool process_busy;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -1872,7 +1873,7 @@ void cal_chunk_offset_and_size(struct vdec_mpeg12_hw_s *hw)
 	}
 }
 
-static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
+static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 	u32 reg, index, info, seqinfo, offset, pts, frame_size=0, tmp_h, tmp_w;
 	u64 pts_us64 = 0;
@@ -2146,14 +2147,35 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 	return IRQ_HANDLED;
 }
+
+static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
+{
+	irqreturn_t ret;
+	struct vdec_mpeg12_hw_s *hw =
+		(struct vdec_mpeg12_hw_s *)(vdec->private);
+
+	ret = vmpeg12_isr_thread_handler(vdec, irq);
+
+	hw->process_busy = false;
+
+	return ret;
+}
+
 static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 {
 	u32 info, offset;
 	struct vdec_mpeg12_hw_s *hw =
-	(struct vdec_mpeg12_hw_s *)(vdec->private);
+		(struct vdec_mpeg12_hw_s *)(vdec->private);
 
 	if (hw->eos)
 		return IRQ_HANDLED;
+
+	if (hw->process_busy) {
+		pr_info("%s process_busy\n", __func__);
+		return IRQ_HANDLED;
+	}
+	hw->process_busy = true;
+
 	info = READ_VREG(MREG_PIC_INFO);
 	offset = READ_VREG(MREG_FRAME_OFFSET);
 
@@ -2781,6 +2803,11 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
+	if (hw->process_busy) {
+		pr_info("%s, process busy\n", __func__);
+		return;
+	}
+
 	if (work_pending(&hw->work) ||
 	    work_busy(&hw->work) ||
 	    work_busy(&hw->timeout_work) ||
@@ -3051,6 +3078,7 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 	atomic_set(&hw->put_num, 0);
 	atomic_set(&hw->get_num, 0);
 	atomic_set(&hw->peek_num, 0);
+	hw->process_busy = false;
 
 	if (dec_control)
 		hw->dec_control = dec_control;
