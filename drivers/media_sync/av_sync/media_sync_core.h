@@ -111,6 +111,8 @@ typedef struct syncinfo {
 	mediasync_frameinfo queueVideoInfo;
 	mediasync_frameinfo firstAudioPacketsInfo;
 	mediasync_frameinfo firstVideoPacketsInfo;
+	mediasync_frameinfo pauseVideoInfo;
+	mediasync_frameinfo pauseAudioInfo;
 	mediasync_video_packets_info videoPacketsInfo;
 	mediasync_audio_packets_info audioPacketsInfo;
 }mediasync_syncinfo;
@@ -293,5 +295,9 @@ long mediasync_ins_get_first_queue_video_info(s32 sSyncInsId, mediasync_frameinf
 long mediasync_ins_set_player_instance_id(s32 sSyncInsId, s32 PlayerInstanceId);
 long mediasync_ins_get_player_instance_id(s32 sSyncInsId, s32* PlayerInstanceId);
 long mediasync_ins_get_avsync_state_cur_time_us(s32 sSyncInsId, mediasync_avsync_state_cur_time_us* avsyncstate);
+long mediasync_ins_set_pause_video_info(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
 
 #endif

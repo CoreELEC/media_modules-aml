@@ -433,6 +433,11 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	pInstance->mAVRef = 0;
 	pInstance->mPlayerInstanceId = -1;
 
+	pInstance->mSyncInfo.pauseVideoInfo.framePts = -1;
+	pInstance->mSyncInfo.pauseVideoInfo.frameSystemTime = -1;
+	pInstance->mSyncInfo.pauseAudioInfo.framePts = -1;
+	pInstance->mSyncInfo.pauseAudioInfo.frameSystemTime = -1;
+
 	return 0;
 }
 
@@ -601,6 +606,7 @@ long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused) {
 
 	pInstance->mLastRealTime = current_systemtime;
 	pInstance->mLastStc = current_stc;
+
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1715,6 +1721,12 @@ long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag) {
 	}
 
 	pInstance->mPauseResumeFlag = flag;
+	if (flag == 1) {
+		pInstance->mSyncInfo.pauseVideoInfo.framePts = -1;
+		pInstance->mSyncInfo.pauseVideoInfo.frameSystemTime = -1;
+		pInstance->mSyncInfo.pauseAudioInfo.framePts = -1;
+		pInstance->mSyncInfo.pauseAudioInfo.frameSystemTime = -1;
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -2264,6 +2276,86 @@ long mediasync_ins_get_player_instance_id(s32 sSyncInsId, s32* PlayerInstanceId)
 
 	*PlayerInstanceId = pInstance->mPlayerInstanceId ;
 
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_set_pause_video_info(s32 sSyncInsId, mediasync_frameinfo info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	pInstance->mSyncInfo.pauseVideoInfo.framePts = info.framePts;
+	pInstance->mSyncInfo.pauseVideoInfo.frameSystemTime = info.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	return 0;
+
+}
+
+long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	info->framePts = pInstance->mSyncInfo.pauseVideoInfo.framePts;
+	info->frameSystemTime = pInstance->mSyncInfo.pauseVideoInfo.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	pInstance->mSyncInfo.pauseAudioInfo.framePts = info.framePts;
+	pInstance->mSyncInfo.pauseAudioInfo.frameSystemTime = info.frameSystemTime;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	return 0;
+
+}
+
+long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	info->framePts = pInstance->mSyncInfo.pauseAudioInfo.framePts;
+	info->frameSystemTime = pInstance->mSyncInfo.pauseAudioInfo.frameSystemTime;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;

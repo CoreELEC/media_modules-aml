@@ -1252,6 +1252,61 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_SET_PAUSE_VIDEO_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_pause_video_info(priv->mSyncInsId,
+								FrameInfo);
+
+		break;
+
+		case MEDIASYNC_IOC_GET_PAUSE_VIDEO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_pause_video_info(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_PAUSE_AUDIO_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_pause_audio_info(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_PAUSE_AUDIO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_pause_audio_info(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -1347,6 +1402,10 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_SET_PLAYER_INSTANCE_ID :
 		case MEDIASYNC_IOC_GET_PLAYER_INSTANCE_ID :
 		case MEDIASYNC_IOC_GET_AVSTATE_CUR_TIME_US:
+		case MEDIASYNC_IOC_SET_PAUSE_VIDEO_INFO:
+		case MEDIASYNC_IOC_GET_PAUSE_VIDEO_INFO:
+		case MEDIASYNC_IOC_SET_PAUSE_AUDIO_INFO:
+		case MEDIASYNC_IOC_GET_PAUSE_AUDIO_INFO:
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;
