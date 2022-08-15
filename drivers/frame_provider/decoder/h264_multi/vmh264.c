@@ -5932,6 +5932,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 							if ((-1 != i) && alloc_one_buf_spec(hw, i) >= 0) {
 								config_decode_canvas(hw, i);
 							} else {
+								mutex_unlock(&vmh264_mutex);
 								return -1;
 							}
 					}
