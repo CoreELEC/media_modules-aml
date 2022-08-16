@@ -1906,6 +1906,8 @@ static int alloc_mv_buf(struct VP9Decoder_s *pbi,
 		pbi->m_mv_BUF[i].start_adr = 0;
 		ret = -1;
 	} else {
+		if (!vdec_secure(hw_to_vdec(pbi)))
+			codec_mm_memset(pbi->m_mv_BUF[i].start_adr, 0, size);
 		pbi->m_mv_BUF[i].size = size;
 		pbi->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
@@ -5450,6 +5452,10 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 		struct internal_comp_buf *ibuf = v4lfb_to_icomp_buf(pbi, fb);
 
 		pbi->m_BUF[i].header_addr = ibuf->header_addr;
+		if (pbi->m_BUF[i].header_addr) {
+			if (!vdec_secure(hw_to_vdec(pbi)))
+				codec_mm_memset(pbi->m_BUF[i].header_addr, 0, ibuf->header_size);
+		}
 		if (debug & VP9_DEBUG_BUFMGR_MORE) {
 			pr_info("MMU header_adr %d: %ld\n",
 				i, pbi->m_BUF[i].header_addr);
@@ -11890,6 +11896,10 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return ret;
 	}
+	if (!vdec_secure(hw_to_vdec(pbi)))
+		codec_mm_memset(pbi->cma_alloc_addr, 0,
+			pbi->cma_alloc_count * PAGE_SIZE);
+
 	pbi->buf_start = pbi->cma_alloc_addr;
 	pbi->buf_size = work_buf_size;
 #endif

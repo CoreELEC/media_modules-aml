@@ -2027,6 +2027,8 @@ static int alloc_mv_buf(struct VP9Decoder_s *pbi,
 		pbi->m_mv_BUF[i].start_adr = 0;
 		ret = -1;
 	} else {
+		if (!vdec_secure(hw_to_vdec(pbi)))
+			codec_mm_memset(pbi->m_mv_BUF[i].start_adr, 0, size);
 		pbi->m_mv_BUF[i].size = size;
 		pbi->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
@@ -5824,9 +5826,11 @@ static int config_pic(struct VP9Decoder_s *pbi,
 				decoder_bmmu_box_add_callback_func(pbi->bmmu_box, VF_BUFFER_IDX(i), (void *)&vdec->sync->release_callback[VF_BUFFER_IDX(i)]);
 			}
 
-			if (pic_config->cma_alloc_addr)
+			if (pic_config->cma_alloc_addr) {
 				y_adr = pic_config->cma_alloc_addr;
-			else {
+				if (!vdec_secure(hw_to_vdec(pbi)))
+					codec_mm_memset(y_adr, 0, buf_size);
+			} else {
 				pr_info(
 					"decoder_bmmu_box_alloc_buf_phy idx %d size %d return null\n",
 					VF_BUFFER_IDX(i),
@@ -5919,6 +5923,8 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 				pbi->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
 				return;
 			}
+			if (!vdec_secure(hw_to_vdec(pbi)))
+				codec_mm_memset(buf_addr, 0, header_size);
 			if (pbi->enable_fence) {
 				vdec_fence_buffer_count_increase((ulong)vdec->sync);
 				INIT_LIST_HEAD(&vdec->sync->release_callback[HEADER_BUFFER_IDX(i)].node);
@@ -12395,6 +12401,9 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return ret;
 	}
+	if (!vdec_secure(hw_to_vdec(pbi)))
+		codec_mm_memset(pbi->cma_alloc_addr, 0,
+			pbi->cma_alloc_count * PAGE_SIZE);
 	pbi->buf_start = pbi->cma_alloc_addr;
 	pbi->buf_size = work_buf_size;
 #endif
