@@ -1544,7 +1544,12 @@ static s32 set_input_format(struct encode_wq_s *wq,
 		dump_raw_input(wq, request);
 
 	picsize_x = ((wq->pic.encoder_width + 15) >> 4) << 4;
-	picsize_y = wq->pic.encoder_height;
+	if (request->scale_enable) {
+		picsize_y = ((wq->pic.encoder_height + 15) >> 4) << 4;
+	}
+	else {
+		picsize_y = wq->pic.encoder_height;
+	}
 	oformat = 0;
 
 	if ((request->type == LOCAL_BUFF)
