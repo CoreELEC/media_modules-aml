@@ -1566,6 +1566,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			input = wq->mem.dct_buff_start_addr;
 			src_addr =
 				wq->mem.dct_buff_start_addr;
+			picsize_y = ((wq->pic.encoder_height + 15) >> 4) << 4;
 		} else if (request->type == DMA_BUFF) {
 			if (request->plane_num == 3) {
 				input_y = (unsigned long)request->dma_cfg[0].paddr;
