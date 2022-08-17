@@ -41,6 +41,7 @@
 
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
+#include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../utils/vdec_input.h"
 #include "../utils/vdec.h"
@@ -1924,6 +1925,10 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				}
 			}
 			vdec_vframe_ready(vdec, vf);
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
+				vdec_stream_based(vdec)) {
+				vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
+			}
 			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(hw->pts_name, vf->pts);
 			ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));

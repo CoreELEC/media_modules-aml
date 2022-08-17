@@ -3473,6 +3473,10 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			hw->total_frame++;
 		}
 
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
+			vdec_stream_based(vdec)) {
+			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
+		}
 		/*count info*/
 		vdec_count_info(hw->gvs, 0, offset);
 		if (offset) {

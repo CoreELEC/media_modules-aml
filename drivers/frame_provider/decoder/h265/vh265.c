@@ -9120,6 +9120,10 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		if (pic->mem_saving_mode == 1)
 			vf->bitdepth |= BITDEPTH_SAVING_MODE;
 
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
+			vdec_stream_based(vdec)) {
+			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
+		}
 		set_frame_info(hevc, vf, pic);
 
 		if (hevc->high_bandwidth_flag) {

@@ -41,6 +41,7 @@
 #include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
 
+#include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../utils/amvdec.h"
 #include "../utils/vdec_input.h"
 #include "../utils/vdec.h"
@@ -943,6 +944,10 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->type = VIDTYPE_PROGRESSIVE |
 			VIDTYPE_VIU_FIELD;
 #endif
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
+			vdec_stream_based(vdec)) {
+			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
+		}
 		set_frame_info(hw, vf, index);
 
 		hw->vfbuf_use[index]++;

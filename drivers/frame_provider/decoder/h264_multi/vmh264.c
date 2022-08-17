@@ -3295,6 +3295,10 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			}
 		}
 
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
+			vdec_stream_based(vdec)) {
+			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
+		}
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s: index %d poc %d frame_type %d dur %d type %x pts %d(0x%x), pts64 %lld(0x%x) ts %lld(0x%x)\n",
 			__func__, vf->index, frame->poc, vf->frame_type, vf->duration, vf->type, vf->pts, vf->pts,
