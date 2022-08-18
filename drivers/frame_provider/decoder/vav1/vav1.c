@@ -317,7 +317,7 @@ static u32 double_write_mode;
 #define PTS_NONE_REF_USE_DURATION 1
 
 #define PTS_MODE_SWITCHING_THRESHOLD           3
-#define PTS_MODE_SWITCHING_RECOVERY_THREASHOLD 3
+#define PTS_MODE_SWITCHING_RECOVERY_THRESHOLD 3
 
 #define DUR2PTS(x) ((x)*90/96)
 #define PTS2DUR(x) ((x)*96/90)
@@ -1039,7 +1039,7 @@ static u32 get_valid_double_write_mode(struct AV1HW_s *hw)
 	if (dw & 0x20) {
 		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3)
 			&& ((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
-			pr_info("MMU doueble write 1:4 not supported !!!\n");
+			pr_info("MMU double write 1:4 not supported !!!\n");
 			dw = 0;
 		}
 	}
@@ -2399,7 +2399,7 @@ static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 * AUX DATA Process
 */
 static u32 init_aux_size;
-static int aux_data_is_avaible(struct AV1HW_s *hw)
+static int aux_data_is_available(struct AV1HW_s *hw)
 {
 	u32 reg_val;
 
@@ -2432,7 +2432,7 @@ static void set_aux_data(struct AV1HW_s *hw,
 		READ_VREG(HEVC_AUX_DATA_SIZE);
 	unsigned int aux_count = 0;
 	int aux_size = 0;
-	if (0 == aux_data_is_avaible(hw))
+	if (0 == aux_data_is_available(hw))
 		return;
 
 	if (hw->aux_data_dirty ||
@@ -3609,7 +3609,7 @@ static void d_dump(struct AV1HW_s *hw, unsigned int phyadr, int size,
 
 static void mv_buffer_fill_zero(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_config)
 {
-	pr_info("fill dummy data pic index %d colocate addreses %x size %x\n",
+	pr_info("fill dummy data pic index %d colocate addresses %x size %x\n",
 		pic_config->index, pic_config->mpred_mv_wr_start_addr,
 		hw->m_mv_BUF[pic_config->mv_buf_index].size);
 	d_fill_zero(hw, pic_config->mpred_mv_wr_start_addr,
@@ -3637,7 +3637,7 @@ static void dump_mv_buffer(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_c
 		size = UCODE_LOG_BUF_SIZE;
 		if (size > (adr_end - adr))
 			size = adr_end - adr;
-		pr_info("dump pic index %d colocate addreses %x size %x\n",
+		pr_info("dump pic index %d colocate addresses %x size %x\n",
 			pic_config->index, adr, size);
 		d_dump(hw, adr, size, fp, &off);
 	}
@@ -4166,7 +4166,7 @@ static void config_mpred_hw(struct AV1HW_s *hw, unsigned char inter_flag)
 		HEVC_MPRED_CTRL0, data32);
 	WRITE_VREG(HEVC_MPRED_CTRL0, data32);
 	/*
-	printk("config_mpred: (%x) wr_start_addr  %x from indx %d;
+	printk("config_mpred: (%x) wr_start_addr  %x from index %d;
 		(%x) rd_start_addr %x from index %d\n",
 		cur_pic_config,  cur_pic_config->mpred_mv_wr_start_addr,  cur_pic_config->index,
 	last_frame_pic_config,  last_frame_pic_config->mpred_mv_wr_start_addr,  last_frame_pic_config->index);
@@ -4369,8 +4369,8 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	data32 &= (~(3 << 14));
 	data32 |= (2 << 14);
 	/*
-	*  [31:24] ar_fifo1_axi_thred
-	*  [23:16] ar_fifo0_axi_thred
+	*  [31:24] ar_fifo1_axi_thread
+	*  [23:16] ar_fifo0_axi_thread
 	*  [15:14] axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes
 	*  [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
 	*  [11:08] axi_lendian_C
@@ -5108,7 +5108,7 @@ static void config_dblk_hw(struct AV1HW_s *hw)
 						seg_4lf->seg_lf_info_y[i] = cm->prev_frame->seg_lf_info_y[i];
 						seg_4lf->seg_lf_info_c[i] = cm->prev_frame->seg_lf_info_c[i];
 		#ifdef DBG_LPF_PRINT
-					  printk(" Refrence seg_lf_info [%d] : 0x%x, 0x%x\n",
+					  printk(" Reference seg_lf_info [%d] : 0x%x, 0x%x\n",
 					  i, seg_4lf->seg_lf_info_y[i], seg_4lf->seg_lf_info_c[i]);
 		#endif
 					}
@@ -5205,10 +5205,10 @@ static void config_dblk_hw(struct AV1HW_s *hw)
 		uint32_t path_wait_count;
 		float path_wait_ratio;
 		if (pbi->decode_idx > 1) {
-			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disabble monitor and set rd_idx to 0
+			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disabled monitor and set rd_idx to 0
 			total_clk_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 
-			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (1<<4)); // Disabble monitor and set rd_idx to 0
+			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (1<<4)); // Disabled monitor and set rd_idx to 0
 
 			// parser --> iqit
 			path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
@@ -5738,7 +5738,7 @@ static int vav1_mmu_map_alloc(struct AV1HW_s *hw)
 		hw->dw_frame_mmu_map_addr =
 			decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
 				mmu_map_size,
-				&hw->dw_frame_mmu_map_phy_addr, "AV1_DWMMU_MAP");
+				&hw->dw_frame_mmu_map_phy_addr, "AV1_DW_MMU_MAP");
 		if (hw->dw_frame_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -6278,7 +6278,7 @@ static struct vframe_s *vav1_vf_peek(void *op_arg)
 
 	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
 		av1_print(hw, AV1_DEBUG_BUFMGR,
-			"kfifo len:%d invaild, peek error\n",
+			"kfifo len:%d invalid, peek error\n",
 			kfifo_len(&hw->display_q));
 		return NULL;
 	}
@@ -7183,10 +7183,10 @@ void datapath_monitor(struct AV1HW_s *hw)
 		  uint32_t path_wait_count;
   float path_wait_ratio;
   if (pbi->decode_idx > 1) {
-    WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disabble monitor and set rd_idx to 0
-    total_clk_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
+	WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disabled monitor and set rd_idx to 0
+	total_clk_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 
-    WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (1<<4)); // Disabble monitor and set rd_idx to 0
+	WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (1<<4)); // Disabled monitor and set rd_idx to 0
 
 // parser --> iqit
     path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
@@ -7402,14 +7402,14 @@ static void decomp_get_hitrate(struct AV1HW_s *hw)
 	return;
 }
 
-static void decomp_get_comprate(struct AV1HW_s *hw)
+static void decomp_get_comp_rate(struct AV1HW_s *hw)
 {
 	unsigned   raw_ucomp_cnt;
 	unsigned   fast_comp_cnt;
 	unsigned   slow_comp_cnt;
-	int      comprate;
+	int      comp_rate;
 
-	av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "[cache_util.c] Entered decomp_get_comprate...\n");
+	av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "[cache_util.c] Entered decomp_get_comp_rate...\n");
 	C_Reg_Wr(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x4<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA, &fast_comp_cnt);
 	C_Reg_Wr(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x5<<1));
@@ -7423,8 +7423,8 @@ static void decomp_get_comprate(struct AV1HW_s *hw)
 
 	if ( raw_ucomp_cnt != 0 )
 	{
-		comprate = 100*(fast_comp_cnt + slow_comp_cnt)/raw_ucomp_cnt;
-		av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "DECOMP_COMP_RATIO : %d\n", comprate);
+		comp_rate = 100*(fast_comp_cnt + slow_comp_cnt)/raw_ucomp_cnt;
+		av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "DECOMP_COMP_RATIO : %d\n", comp_rate);
 	} else
 	{
 		av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "DECOMP_COMP_RATIO : na\n");
@@ -7437,7 +7437,7 @@ static void dump_hit_rate(struct AV1HW_s *hw)
 	if (debug & AV1_DEBUG_CACHE_HIT_RATE) {
 		mcrcc_get_hitrate(hw, hw->m_ins_flag);
 		decomp_get_hitrate(hw);
-		decomp_get_comprate(hw);
+		decomp_get_comp_rate(hw);
 	}
 }
 
@@ -7498,7 +7498,7 @@ static void  config_mcrcc_axi_hw_nearest_ref(struct AV1HW_s *hw)
 	//printk("before call mcrcc_get_hitrate\r\n");
 	mcrcc_get_hitrate(hw);
 	decomp_get_hitrate(hw);
-	decomp_get_comprate(hw);
+	decomp_get_comp_rate(hw);
 #endif
 
 	// Find absolute orderhint delta
@@ -9281,7 +9281,7 @@ static void vav1_put_timer_func(struct timer_list *timer)
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 
 	if (hw->m_ins_flag) {
 		if (hw_to_vdec(hw)->next_status
@@ -10505,7 +10505,7 @@ static int av1_hw_ctx_restore(struct AV1HW_s *hw)
 	return 0;
 }
 
-static bool is_avaliable_buffer(struct AV1HW_s *hw)
+static bool is_available_buffer(struct AV1HW_s *hw)
 {
 	AV1_COMMON *cm = &hw->common;
 	RefCntBuffer *const frame_bufs = cm->buffer_pool->frame_bufs;
@@ -10583,7 +10583,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		if (ctx->param_sets_from_ucode) {
 			if (hw->v4l_params_parsed) {
 				if (ctx->cap_pool.dec < hw->used_buf_num) {
-					if (is_avaliable_buffer(hw))
+					if (is_available_buffer(hw))
 						ret = CORE_MASK_HEVC;
 					else
 						ret = 0;
@@ -10943,7 +10943,7 @@ static void av1_dump_state(struct vdec_s *vdec)
 		);
 
 	if (!hw->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
+		enum receiver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
 			NULL);
@@ -11201,7 +11201,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 #ifdef MULTI_INSTANCE_SUPPORT
 		int av1_buf_width = 0;
 		int av1_buf_height = 0;
-		/*use ptr config for doubel_write_mode, etc*/
+		/*use ptr config for double_write_mode, etc*/
 		av1_print(hw, 0, "pdata->config=%s\n", pdata->config);
 		if (get_config_int(pdata->config, "av1_double_write_mode",
 				&config_val) == 0)

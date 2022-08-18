@@ -128,7 +128,7 @@ enum e_trace_work_status {
 };
 
 
-#define VDEC_CFG_FLAG_DV_TWOLARYER (1 << 0)
+#define VDEC_CFG_FLAG_DV_TWOLAYER (1 << 0)
 #define VDEC_CFG_FLAG_DV_NEGATIVE  (1 << 1)
 #define VDEC_CFG_FLAG_HIGH_BANDWIDTH  (1 << 2)
 #define VDEC_CFG_FLAG_DIS_ERR_POLICY (1 << 11)
@@ -245,7 +245,7 @@ enum vformat_t;
 /* stream based with single instance decoder driver */
 #define VDEC_TYPE_SINGLE           0
 
-/* stream based with multi-instance decoder with HW resouce sharing */
+/* stream based with multi-instance decoder with HW resource sharing */
 #define VDEC_TYPE_STREAM_PARSER    1
 
 /* frame based with multi-instance decoder, input block list based */
@@ -544,7 +544,7 @@ typedef struct {
 		__len = 0;				\
 	} while (0)
 
-/* construct vdec strcture */
+/* construct vdec structure */
 extern struct vdec_s *vdec_create(struct stream_port_s *port,
 				struct vdec_s *master);
 

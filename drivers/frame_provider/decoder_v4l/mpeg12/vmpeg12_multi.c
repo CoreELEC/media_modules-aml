@@ -1659,7 +1659,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				hw->gvs.b_lost_frames++;
 			}
 			/* Though we drop it, it is still an error frame, count it.
-			 * Becase we've counted the error frame in vdec_count_info
+			 * because we've counted the error frame in vdec_count_info
 			 * function, avoid count it twice.
 			 */
 		if (!(info & PICINFO_ERROR)) {
@@ -2256,7 +2256,7 @@ static void flush_output(struct vdec_mpeg12_hw_s *hw)
 	}
 }
 
-static bool is_avaliable_buffer(struct vdec_mpeg12_hw_s *hw);
+static bool is_available_buffer(struct vdec_mpeg12_hw_s *hw);
 
 static int notify_v4l_eos(struct vdec_s *vdec)
 {
@@ -2269,7 +2269,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	if (hw->eos) {
 		expires = jiffies + msecs_to_jiffies(2000);
-		while (!is_avaliable_buffer(hw)) {
+		while (!is_available_buffer(hw)) {
 			if (time_after(jiffies, expires)) {
 				pr_err("[%d] MPEG2 isn't enough buff for notify eos.\n", ctx->id);
 				return 0;
@@ -2443,7 +2443,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 	if (from == 1) {
 		/*This is a timeout work*/
 		if (work_pending(&hw->work)) {
-			pr_err("timeout work return befor finishing.");
+			pr_err("timeout work return before finishing.");
 			/*
 			 * The vmpeg12_work arrives at the last second,
 			 * give it a chance to handle the scenario.
@@ -2482,7 +2482,7 @@ static void vmpeg12_timeout_work(struct work_struct *work)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	if (work_pending(&hw->work)) {
-		pr_err("timeout work return befor executing.");
+		pr_err("timeout work return before executing.");
 		return;
 	}
 
@@ -2827,7 +2827,7 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 	    work_busy(&hw->work) ||
 	    work_busy(&hw->timeout_work) ||
 	    work_pending(&hw->timeout_work)) {
-		pr_err("%s mpeg12[%d] timeout_process return befor do anything.\n",__func__, vdec->id);
+		pr_err("%s mpeg12[%d] timeout_process return before do anything.\n",__func__, vdec->id);
 		return;
 	}
 	reset_process_time(hw);
@@ -2845,7 +2845,7 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 	 * let it to handle the scenario.
 	 */
 	if (work_pending(&hw->work)) {
-		pr_err("%s mpeg12[%d] return befor schedule.", __func__, vdec->id);
+		pr_err("%s mpeg12[%d] return before schedule.", __func__, vdec->id);
 		return;
 	}
 	vdec_schedule_work(&hw->timeout_work);
@@ -3155,7 +3155,7 @@ static s32 vmpeg12_init(struct vdec_mpeg12_hw_s *hw)
 	return 0;
 }
 
-static bool is_avaliable_buffer(struct vdec_mpeg12_hw_s *hw)
+static bool is_available_buffer(struct vdec_mpeg12_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -3239,7 +3239,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 #endif
 
 	if (hw->v4l_params_parsed) {
-		ret = is_avaliable_buffer(hw) ? 1 : 0;
+		ret = is_available_buffer(hw) ? 1 : 0;
 	} else {
 		ret = ctx->v4l_resolution_change ? 0 : 1;
 	}

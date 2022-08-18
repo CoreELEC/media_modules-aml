@@ -1100,7 +1100,7 @@ static void init_dpb(struct h264_dpb_stru *p_H264_Dpb, int type)
 	}
 
 	p_Dpb->num_ref_frames = active_sps->num_ref_frames;
-	/* p_Dpb->num_ref_frames initialzie in vh264.c */
+	/* p_Dpb->num_ref_frames initialize in vh264.c */
 	dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 		  "%s dpb_size is %d  num_ref_frames = %d (%d)\n",
 		  __func__, p_Dpb->size,
@@ -1479,7 +1479,7 @@ static void insert_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	fs->is_output = p->is_output;
 	fs->pre_output = p->pre_output;
 
-	/* picture qos infomation*/
+	/* picture qos information*/
 	fs->max_mv = p->max_mv;
 	fs->avg_mv = p->avg_mv;
 	fs->min_mv = p->min_mv;
@@ -1926,7 +1926,7 @@ void bufmgr_h264_remove_unused_frame(struct h264_dpb_stru *p_H264_Dpb,
 	} else if (force_flag == 2) {
 		if (unmark_one_out_frame(p_H264_Dpb)) {
 			dpb_print(p_H264_Dpb->decoder_index,
-				0, "%s, Warnning, force unmark one frame\r\n",
+				0, "%s, Warning, force unmark one frame\r\n",
 				__func__);
 			update_ref_list(p_Dpb);
 			remove_unused_frame_from_dpb(p_H264_Dpb);
@@ -2661,7 +2661,7 @@ static void mm_unmark_long_term_for_reference(struct DecodedPictureBuffer
  ************************************************************************
  * \brief
  *    Mark a long-term reference frame or complementary
- *    field pair unused for referemce
+ *    field pair unused for reference
  ************************************************************************
  */
 static void unmark_long_term_frame_for_reference_by_frame_idx(

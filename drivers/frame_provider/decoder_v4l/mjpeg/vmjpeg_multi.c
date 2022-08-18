@@ -1228,7 +1228,7 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 	return 0;
 }
 
-static bool is_avaliable_buffer(struct vdec_mjpeg_hw_s *hw)
+static bool is_available_buffer(struct vdec_mjpeg_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -1287,7 +1287,7 @@ static unsigned long run_ready(struct vdec_s *vdec,
 	}
 
 	if (hw->v4l_params_parsed) {
-		ret = is_avaliable_buffer(hw) ? 1 : 0;
+		ret = is_available_buffer(hw) ? 1 : 0;
 	} else {
 		ret = ctx->v4l_resolution_change ? 0 : 1;
 	}
@@ -1413,7 +1413,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	if (hw->eos) {
 		expires = jiffies + msecs_to_jiffies(2000);
-		while (!is_avaliable_buffer(hw)) {
+		while (!is_available_buffer(hw)) {
 			if (time_after(jiffies, expires)) {
 				pr_err("[%d] MJPEG isn't enough buff for notify eos.\n", ctx->id);
 				return 0;

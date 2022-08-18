@@ -57,7 +57,7 @@ static u64 get_llabs(s64 value){
 	}
 }
 
-static long get_index_from_syncid(s32 sSyncInsId)
+static long get_index_from_sync_id(s32 sSyncInsId)
 {
 	long index = -1;
 	long temp = -1;
@@ -88,7 +88,7 @@ static u64 get_stc_time_us(s32 sSyncInsId)
     /*mediasync_ins* pInstance = NULL;
 	u64 stc;
 	unsigned int base;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -101,7 +101,7 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	u64 pcr;
 	s64 pcr_diff;
 	s64 time_diff;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	struct timespec64 ts_monotonic;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
@@ -227,7 +227,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 
 long mediasync_ins_delete(s32 sSyncInsId) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -243,7 +243,7 @@ long mediasync_ins_delete(s32 sSyncInsId) {
 long mediasync_ins_binder(s32 sSyncInsId,
 			mediasync_ins **pIns) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 	mutex_lock(&(vMediaSyncInsList[index].m_lock));
@@ -263,7 +263,7 @@ long mediasync_ins_binder(s32 sSyncInsId,
 long mediasync_static_ins_binder(s32 sSyncInsId,
 			mediasync_ins **pIns) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	s32 temp_ins;
 	if (index >= 0 && index < MAX_DYNAMIC_INSTANCE_NUM)
 		return mediasync_ins_binder(sSyncInsId, pIns);
@@ -327,7 +327,7 @@ long mediasync_static_ins_binder(s32 sSyncInsId,
 
 long mediasync_ins_unbinder(s32 sSyncInsId) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -348,7 +348,7 @@ long mediasync_ins_unbinder(s32 sSyncInsId) {
 
 long mediasync_ins_reset(s32 sSyncInsId) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -375,7 +375,7 @@ long mediasync_ins_reset(s32 sSyncInsId) {
 
 long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -444,7 +444,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 	s64 current_systemtime = 0;
 	s64 diff_system_time = 0;
 	s64 diff_mediatime = 0;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -547,7 +547,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 long mediasync_ins_set_mediatime_speed(s32 sSyncInsId,
 					mediasync_speed fSpeed) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -570,7 +570,7 @@ long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused) {
 	mediasync_ins* pInstance = NULL;
 	u64 current_stc = 0;
 	s64 current_systemtime = 0;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -609,7 +609,7 @@ long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused) {
 long mediasync_ins_get_paused(s32 sSyncInsId, s32* spPaused) {
 
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -627,7 +627,7 @@ long mediasync_ins_get_paused(s32 sSyncInsId, s32* spPaused) {
 
 long mediasync_ins_set_syncmode(s32 sSyncInsId, s32 sSyncMode){
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -647,7 +647,7 @@ long mediasync_ins_set_syncmode(s32 sSyncInsId, s32 sSyncMode){
 
 long mediasync_ins_get_syncmode(s32 sSyncInsId, s32 *sSyncMode) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -665,7 +665,7 @@ long mediasync_ins_get_syncmode(s32 sSyncInsId, s32 *sSyncMode) {
 
 long mediasync_ins_get_mediatime_speed(s32 sSyncInsId, mediasync_speed *fpSpeed) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -687,7 +687,7 @@ long mediasync_ins_get_anchor_time(s32 sSyncInsId,
 				s64* lpSTCTime,
 				s64* lpSystemTime) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
@@ -711,7 +711,7 @@ long mediasync_ins_get_systemtime(s32 sSyncInsId, s64* lpSTC, s64* lpSystemTime)
 	mediasync_ins* pInstance = NULL;
 	u64 current_stc = 0;
 	s64 current_systemtime = 0;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -739,7 +739,7 @@ long mediasync_ins_get_nextvsync_systemtime(s32 sSyncInsId, s64* lpSystemTime) {
 
 long mediasync_ins_set_updatetime_threshold(s32 sSyncInsId, s64 lTimeThreshold) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -757,7 +757,7 @@ long mediasync_ins_set_updatetime_threshold(s32 sSyncInsId, s64 lTimeThreshold) 
 
 long mediasync_ins_get_updatetime_threshold(s32 sSyncInsId, s64* lpTimeThreshold) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -776,7 +776,7 @@ long mediasync_ins_get_updatetime_threshold(s32 sSyncInsId, s64* lpTimeThreshold
 long mediasync_ins_get_trackmediatime(s32 sSyncInsId, s64* lpTrackMediaTime) {
 
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -793,7 +793,7 @@ long mediasync_ins_get_trackmediatime(s32 sSyncInsId, s64* lpTrackMediaTime) {
 }
 long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -812,7 +812,7 @@ long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type) {
 
 long mediasync_ins_get_clocktype(s32 sSyncInsId, mediasync_clocktype* type) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -831,7 +831,7 @@ long mediasync_ins_get_clocktype(s32 sSyncInsId, mediasync_clocktype* type) {
 
 long mediasync_ins_set_clockstate(s32 sSyncInsId, mediasync_clockprovider_state state) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -850,7 +850,7 @@ long mediasync_ins_set_clockstate(s32 sSyncInsId, mediasync_clockprovider_state 
 
 long mediasync_ins_get_clockstate(s32 sSyncInsId, mediasync_clockprovider_state* state) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -869,7 +869,7 @@ long mediasync_ins_get_clockstate(s32 sSyncInsId, mediasync_clockprovider_state*
 
 long mediasync_ins_set_hasaudio(s32 sSyncInsId, int hasaudio) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -888,7 +888,7 @@ long mediasync_ins_set_hasaudio(s32 sSyncInsId, int hasaudio) {
 
 long mediasync_ins_get_hasaudio(s32 sSyncInsId, int* hasaudio) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -906,7 +906,7 @@ long mediasync_ins_get_hasaudio(s32 sSyncInsId, int* hasaudio) {
 }
 long mediasync_ins_set_hasvideo(s32 sSyncInsId, int hasvideo) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -925,7 +925,7 @@ long mediasync_ins_set_hasvideo(s32 sSyncInsId, int hasvideo) {
 
 long mediasync_ins_get_hasvideo(s32 sSyncInsId, int* hasvideo) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -944,7 +944,7 @@ long mediasync_ins_get_hasvideo(s32 sSyncInsId, int* hasvideo) {
 
 long mediasync_ins_set_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -964,7 +964,7 @@ long mediasync_ins_set_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo i
 
 long mediasync_ins_get_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -984,7 +984,7 @@ long mediasync_ins_get_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* 
 
 long mediasync_ins_set_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1004,7 +1004,7 @@ long mediasync_ins_set_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo i
 
 long mediasync_ins_get_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1024,7 +1024,7 @@ long mediasync_ins_get_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* 
 
 long mediasync_ins_set_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1044,7 +1044,7 @@ long mediasync_ins_set_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info)
 
 long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	int64_t pcr = -1;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
@@ -1076,7 +1076,7 @@ long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info
 
 long mediasync_ins_set_refclockinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1096,7 +1096,7 @@ long mediasync_ins_set_refclockinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 
 long mediasync_ins_get_refclockinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1116,7 +1116,7 @@ long mediasync_ins_get_refclockinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
 
 long mediasync_ins_set_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1137,7 +1137,7 @@ long mediasync_ins_set_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 
 long mediasync_ins_get_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1157,7 +1157,7 @@ long mediasync_ins_get_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* in
 
 long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1179,7 +1179,7 @@ long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 
 long mediasync_ins_get_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1199,7 +1199,7 @@ long mediasync_ins_get_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* in
 
 long mediasync_ins_set_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1219,7 +1219,7 @@ long mediasync_ins_set_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info) {
 
 long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	int64_t pcr = -1;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
@@ -1249,7 +1249,7 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 
 long mediasync_ins_set_audiomute(s32 sSyncInsId, int mute_flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1268,7 +1268,7 @@ long mediasync_ins_set_audiomute(s32 sSyncInsId, int mute_flag) {
 
 long mediasync_ins_get_audiomute(s32 sSyncInsId, int* mute_flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1287,7 +1287,7 @@ long mediasync_ins_get_audiomute(s32 sSyncInsId, int* mute_flag) {
 
 long mediasync_ins_set_audioinfo(s32 sSyncInsId, mediasync_audioinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1307,7 +1307,7 @@ long mediasync_ins_set_audioinfo(s32 sSyncInsId, mediasync_audioinfo info) {
 
 long mediasync_ins_get_audioinfo(s32 sSyncInsId, mediasync_audioinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1327,7 +1327,7 @@ long mediasync_ins_get_audioinfo(s32 sSyncInsId, mediasync_audioinfo* info) {
 
 long mediasync_ins_set_videoinfo(s32 sSyncInsId, mediasync_videoinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1349,7 +1349,7 @@ long mediasync_ins_set_videoinfo(s32 sSyncInsId, mediasync_videoinfo info) {
 
 long mediasync_ins_get_videoinfo(s32 sSyncInsId, mediasync_videoinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1370,7 +1370,7 @@ long mediasync_ins_get_videoinfo(s32 sSyncInsId, mediasync_videoinfo* info) {
 
 long mediasync_ins_set_avsyncstate(s32 sSyncInsId, s32 state) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1390,7 +1390,7 @@ long mediasync_ins_set_avsyncstate(s32 sSyncInsId, s32 state) {
 
 long mediasync_ins_get_avsyncstate(s32 sSyncInsId, s32* state) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1407,9 +1407,9 @@ long mediasync_ins_get_avsyncstate(s32 sSyncInsId, s32* state) {
 	return 0;
 }
 
-long mediasync_ins_get_avsyncstate_cur_time_us(s32 sSyncInsId, mediasync_avsync_state_cur_time_us* avsynstate) {
+long mediasync_ins_get_avsync_state_cur_time_us(s32 sSyncInsId, mediasync_avsync_state_cur_time_us* avsync_state) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1420,8 +1420,8 @@ long mediasync_ins_get_avsyncstate_cur_time_us(s32 sSyncInsId, mediasync_avsync_
 		return -1;
 	}
 
-	avsynstate->state = pInstance->mSyncInfo.state;
-	avsynstate->setStateCurTimeUs = pInstance->mSyncInfo.setStateCurTimeUs;
+	avsync_state->state = pInstance->mSyncInfo.state;
+	avsync_state->setStateCurTimeUs = pInstance->mSyncInfo.setStateCurTimeUs;
 
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
@@ -1431,7 +1431,7 @@ long mediasync_ins_get_avsyncstate_cur_time_us(s32 sSyncInsId, mediasync_avsync_
 
 long mediasync_ins_set_startthreshold(s32 sSyncInsId, s32 threshold) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1450,7 +1450,7 @@ long mediasync_ins_set_startthreshold(s32 sSyncInsId, s32 threshold) {
 
 long mediasync_ins_get_startthreshold(s32 sSyncInsId, s32* threshold) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1467,9 +1467,9 @@ long mediasync_ins_get_startthreshold(s32 sSyncInsId, s32* threshold) {
 	return 0;
 }
 
-long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adujstpts) {
+long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adjust_pts) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1480,15 +1480,15 @@ long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adujstpts) {
 		return -1;
 	}
 
-	pInstance->mPtsAdjust = adujstpts;
+	pInstance->mPtsAdjust = adjust_pts;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
 }
 
-long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adujstpts) {
+long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adjust_pts) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1499,7 +1499,7 @@ long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adujstpts) {
 		return -1;
 	}
 
-	*adujstpts = pInstance->mPtsAdjust;
+	*adjust_pts = pInstance->mPtsAdjust;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1507,7 +1507,7 @@ long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adujstpts) {
 
 long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1526,7 +1526,7 @@ long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode) {
 
 long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1545,7 +1545,7 @@ long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode) {
 
 long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1564,7 +1564,7 @@ long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable) {
 
 long mediasync_ins_get_fccenable(s32 sSyncInsId, s64* enable) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1584,7 +1584,7 @@ long mediasync_ins_get_fccenable(s32 sSyncInsId, s64* enable) {
 
 long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1603,7 +1603,7 @@ long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType) {
 
 long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1622,7 +1622,7 @@ long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType) 
 
 long mediasync_ins_set_start_media_time(s32 sSyncInsId, s64 startime) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1640,7 +1640,7 @@ long mediasync_ins_set_start_media_time(s32 sSyncInsId, s64 startime) {
 
 long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1659,7 +1659,7 @@ long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime) {
 long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audio_format format) {
 
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 	return -1;
 
@@ -1681,7 +1681,7 @@ long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audio_format format
 
 long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audio_format* format) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 	return -1;
 
@@ -1703,7 +1703,7 @@ long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audio_format* forma
 
 long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1722,7 +1722,7 @@ long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag) {
 
 long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1741,7 +1741,7 @@ long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag) {
 
 long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1762,7 +1762,7 @@ long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope) {
 
 long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope){
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1782,7 +1782,7 @@ long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope){
 
 long mediasync_ins_update_avref(s32 sSyncInsId, int flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1805,7 +1805,7 @@ long mediasync_ins_update_avref(s32 sSyncInsId, int flag) {
 
 long mediasync_ins_get_avref(s32 sSyncInsId, int *ref) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1822,9 +1822,9 @@ long mediasync_ins_get_avref(s32 sSyncInsId, int *ref) {
 	return 0;
 }
 
-long mediasync_ins_set_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1841,9 +1841,9 @@ long mediasync_ins_set_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info) 
 	return 0;
 }
 
-long mediasync_ins_get_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1861,9 +1861,9 @@ long mediasync_ins_get_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info)
 	return 0;
 }
 
-long mediasync_ins_set_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1881,11 +1881,11 @@ long mediasync_ins_set_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info) 
 
 }
 
-EXPORT_SYMBOL(mediasync_ins_set_queuevideoinfo);
+EXPORT_SYMBOL(mediasync_ins_set_queue_video_info);
 
-long mediasync_ins_get_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1906,7 +1906,7 @@ long mediasync_ins_get_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info)
 /**/
 long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packets_info info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1947,9 +1947,9 @@ long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packet
 
 long mediasync_ins_get_audio_cache_info(s32 sSyncInsId, mediasync_audioinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
-	int64_t Beforediff = 0;
-	int64_t Afterdiff = 0;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	int64_t Before_diff = 0;
+	int64_t After_diff = 0;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -1975,10 +1975,10 @@ long mediasync_ins_get_audio_cache_info(s32 sSyncInsId, mediasync_audioinfo* inf
 			if (pInstance->mAudioDiscontinueInfo.discontinuePtsAfter != -1 &&
 				pInstance->mAudioDiscontinueInfo.discontinuePtsBefore != -1) {
 
-				Beforediff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curAudioInfo.framePts;
-				Afterdiff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
-				info->cacheDuration = Beforediff + Afterdiff;
-				// sometimes stream not descramble, lead pts jump, cacheduration will have error
+				Before_diff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curAudioInfo.framePts;
+				After_diff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
+				info->cacheDuration = Before_diff + After_diff;
+				// sometimes stream not descramble, lead pts jump, cache_duration will have error
 				if (pInstance->mAudioDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90 * 2)) {
 					pr_info("get_audio_cache, cache=%dms, maybe cache cal have problem, need check more\n", info->cacheDuration/90);
 					info->cacheDuration = 0;
@@ -2001,9 +2001,9 @@ long mediasync_ins_get_audio_cache_info(s32 sSyncInsId, mediasync_audioinfo* inf
 			if (pInstance->mAudioDiscontinueInfo.discontinuePtsAfter != -1 &&
 				pInstance->mAudioDiscontinueInfo.discontinuePtsBefore != -1) {
 
-				Beforediff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
-				Afterdiff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts  - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
-				info->cacheDuration = Beforediff + Afterdiff;
+				Before_diff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
+				After_diff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts  - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
+				info->cacheDuration = Before_diff + After_diff;
 
 			} else {
 				info->cacheDuration = 0;
@@ -2022,7 +2022,7 @@ long mediasync_ins_get_audio_cache_info(s32 sSyncInsId, mediasync_audioinfo* inf
 
 long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packets_info info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -2072,9 +2072,9 @@ long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packet
 long mediasync_ins_get_video_cache_info(s32 sSyncInsId, mediasync_videoinfo* info) {
 	mediasync_ins* pInstance = NULL;
 
-	s32 index = get_index_from_syncid(sSyncInsId);
-	int64_t Beforediff = 0;
-	int64_t Afterdiff = 0;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	int64_t Before_diff = 0;
+	int64_t After_diff = 0;
 
 	if (index < 0 || index >= MAX_INSTANCE_NUM) {
 		return -1;
@@ -2100,11 +2100,11 @@ long mediasync_ins_get_video_cache_info(s32 sSyncInsId, mediasync_videoinfo* inf
 			if (pInstance->mVideoDiscontinueInfo.discontinuePtsAfter != -1 &&
 				pInstance->mVideoDiscontinueInfo.discontinuePtsBefore != -1) {
 
-				Beforediff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curVideoInfo.framePts;
-				Afterdiff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
-				info->cacheDuration = Beforediff + Afterdiff;
+				Before_diff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curVideoInfo.framePts;
+				After_diff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
+				info->cacheDuration = Before_diff + After_diff;
 
-				// sometimes stream not descramble, lead pts jump, cacheduration will have error
+				// sometimes stream not descramble, lead pts jump, cache_duration will have error
 				if (pInstance->mVideoDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90)) {
 					pr_info("get_video_cache, cache=%dms, maybe cache cal have problem, need check more\n", info->cacheDuration/90);
 					info->cacheDuration = 0;
@@ -2127,9 +2127,9 @@ long mediasync_ins_get_video_cache_info(s32 sSyncInsId, mediasync_videoinfo* inf
 			if (pInstance->mVideoDiscontinueInfo.discontinuePtsAfter != -1 &&
 				pInstance->mVideoDiscontinueInfo.discontinuePtsBefore != -1) {
 
-				Beforediff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
-				Afterdiff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts  - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
-				info->cacheDuration = Beforediff + Afterdiff;
+				Before_diff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
+				After_diff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts  - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
+				info->cacheDuration = Before_diff + After_diff;
 
 			} else {
 				info->cacheDuration = 0;
@@ -2147,9 +2147,9 @@ long mediasync_ins_get_video_cache_info(s32 sSyncInsId, mediasync_videoinfo* inf
 }
 
 
-long mediasync_ins_set_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -2166,9 +2166,9 @@ long mediasync_ins_set_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo i
 	return 0;
 }
 
-long mediasync_ins_get_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -2186,9 +2186,9 @@ long mediasync_ins_get_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* 
 	return 0;
 }
 
-long mediasync_ins_set_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -2206,9 +2206,9 @@ long mediasync_ins_set_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo i
 
 }
 
-long mediasync_ins_get_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -2230,7 +2230,7 @@ long mediasync_ins_set_player_instance_id(s32 sSyncInsId, s32 PlayerInstanceId) 
 
 	mediasync_ins* pInstance = NULL;
 
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -2251,7 +2251,7 @@ long mediasync_ins_set_player_instance_id(s32 sSyncInsId, s32 PlayerInstanceId) 
 long mediasync_ins_get_player_instance_id(s32 sSyncInsId, s32* PlayerInstanceId) {
 
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_syncid(sSyncInsId);
+	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 

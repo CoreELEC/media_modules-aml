@@ -187,7 +187,7 @@ static u32 double_write_mode;
 #define PTS_NONE_REF_USE_DURATION 1
 
 #define PTS_MODE_SWITCHING_THRESHOLD           3
-#define PTS_MODE_SWITCHING_RECOVERY_THREASHOLD 3
+#define PTS_MODE_SWITCHING_RECOVERY_THRESHOLD 3
 
 #define DUR2PTS(x) ((x)*90/96)
 
@@ -568,7 +568,7 @@ struct PIC_BUFFER_CONFIG_s {
 
 	int double_write_mode;
 
-	/* picture qos infomation*/
+	/* picture qos information*/
 	int max_qp;
 	int avg_qp;
 	int min_qp;
@@ -3961,15 +3961,15 @@ static void decomp_get_hitrate(void)
 	return;
 }
 
-static void decomp_get_comprate(void)
+static void decomp_get_comp_rate(void)
 {
 	unsigned   raw_ucomp_cnt;
 	unsigned   fast_comp_cnt;
 	unsigned   slow_comp_cnt;
-	int      comprate;
+	int      comp_rate;
 
 	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[cache_util.c] Entered decomp_get_comprate...\n");
+		pr_info("[cache_util.c] Entered decomp_get_comp_rate...\n");
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x4<<1));
 	fast_comp_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x5<<1));
@@ -3985,10 +3985,10 @@ static void decomp_get_comprate(void)
 		pr_info("decomp_raw_uncomp_total: %d\n", raw_ucomp_cnt);
 
 	if (raw_ucomp_cnt != 0) {
-		comprate = (fast_comp_cnt + slow_comp_cnt)
+		comp_rate = (fast_comp_cnt + slow_comp_cnt)
 		* 100 / raw_ucomp_cnt;
 		if (debug & VP9_DEBUG_CACHE)
-			pr_info("DECOMP_COMP_RATIO : %d\n", comprate);
+			pr_info("DECOMP_COMP_RATIO : %d\n", comp_rate);
 	} else {
 		if (debug & VP9_DEBUG_CACHE)
 			pr_info("DECOMP_COMP_RATIO : na\n");
@@ -5486,8 +5486,8 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 		data32 |= (1 << 8); /* NV12 */
 
 	/*
-	*  [31:24] ar_fifo1_axi_thred
-	*  [23:16] ar_fifo0_axi_thred
+	*  [31:24] ar_fifo1_axi_thread
+	*  [23:16] ar_fifo0_axi_thread
 	*  [15:14] axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes
 	*  [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
 	*  [11:08] axi_lendian_C
@@ -6165,7 +6165,7 @@ static void dump_hit_rate(struct VP9Decoder_s *pbi)
 	if (debug & VP9_DEBUG_CACHE_HIT_RATE) {
 		mcrcc_get_hitrate(pbi->m_ins_flag);
 		decomp_get_hitrate();
-		decomp_get_comprate();
+		decomp_get_comp_rate();
 	}
 }
 
@@ -6185,7 +6185,7 @@ static void  config_mcrcc_axi_hw(struct VP9Decoder_s *pbi)
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 		mcrcc_get_hitrate(pbi->m_ins_flag);
 		decomp_get_hitrate();
-		decomp_get_comprate();
+		decomp_get_comp_rate();
 	}
 
 	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
@@ -7245,7 +7245,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				}
 
 			} else {
-				int p = PTS_MODE_SWITCHING_RECOVERY_THREASHOLD;
+				int p = PTS_MODE_SWITCHING_RECOVERY_THRESHOLD;
 
 				pbi->pts_mode_recovery_count++;
 				if (pbi->pts_mode_recovery_count > p) {
@@ -7497,7 +7497,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 	return 0;
 }
 
-static bool is_avaliable_buffer(struct VP9Decoder_s *pbi);
+static bool is_available_buffer(struct VP9Decoder_s *pbi);
 
 static int notify_v4l_eos(struct vdec_s *vdec)
 {
@@ -7510,7 +7510,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	if (hw->eos) {
 		expires = jiffies + msecs_to_jiffies(2000);
-		while (!is_avaliable_buffer(hw)) {
+		while (!is_available_buffer(hw)) {
 			if (time_after(jiffies, expires)) {
 				pr_err("[%d] VP9 isn't enough buff for notify eos.\n", ctx->id);
 				return 0;
@@ -8375,7 +8375,7 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 	else
 		ps->dpb_frames	= 8;	/* < level 4.1 */
 	/*
-	1. curruent decoding frame is not include in dpb;
+	1. current decoding frame is not include in dpb;
 	2. for frame push out, one more buffer necessary.
 	3. Two consecutive frames cannot use the same buffer.
 	*/
@@ -8951,7 +8951,7 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 {
 	struct VP9Decoder_s *pbi = container_of(timer,
 		struct VP9Decoder_s, timer);
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
@@ -9942,7 +9942,7 @@ static int vp9_hw_ctx_restore(struct VP9Decoder_s *pbi)
 	return 0;
 }
 
-static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
+static bool is_available_buffer(struct VP9Decoder_s *pbi)
 {
 	struct VP9_Common_s *const cm = &pbi->common;
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
@@ -10039,7 +10039,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 #else
 	if (pbi->v4l_params_parsed) {
-		if (is_avaliable_buffer(pbi))
+		if (is_available_buffer(pbi))
 			ret = CORE_MASK_HEVC;
 		else
 			ret = 0;
@@ -10758,7 +10758,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 #ifdef MULTI_INSTANCE_SUPPORT
 		int vp9_buf_width = 0;
 		int vp9_buf_height = 0;
-		/*use ptr config for doubel_write_mode, etc*/
+		/*use ptr config for double_write_mode, etc*/
 		vp9_print(pbi, 0, "pdata->config=%s\n", pdata->config);
 		if (get_config_int(pdata->config, "vp9_double_write_mode",
 				&config_val) == 0)

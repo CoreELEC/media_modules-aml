@@ -380,7 +380,7 @@ static int aml_ci_bus_init_reg(struct aml_ci_bus *ci_bus_dev)
 
 	//init ci bus reg
 	pr_dbg("aml_ci_bus_init_reg---\r\n");
-    ctrl = READ_CIBUS_REG(CIPLUS_CTRL_REG);
+	ctrl = READ_CIBUS_REG(CIPLUS_CTRL_REG);
 	ctrl = ctrl | (1 << CI_ENABLE);
 	ctrl = ctrl | (1 << ENABLE_CMP_IRQ);
 	WRITE_CIBUS_REG(CIPLUS_CTRL_REG, ctrl);

@@ -1858,7 +1858,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				hw->gvs.b_lost_frames++;
 			}
 			/* Though we drop it, it is still an error frame, count it.
-			 * Becase we've counted the error frame in vdec_count_info
+			 * Because we've counted the error frame in vdec_count_info
 			 * function, avoid count it twice.
 			 */
 		if (!(info & PICINFO_ERROR)) {
@@ -2640,7 +2640,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 	if (from == 1) {
 		/*This is a timeout work*/
 		if (work_pending(&hw->work)) {
-			pr_err("timeout work return befor finishing.");
+			pr_err("timeout work return before finishing.");
 			/*
 			 * The vmpeg12_work arrives at the last second,
 			 * give it a chance to handle the scenario.
@@ -2683,7 +2683,7 @@ static void vmpeg12_timeout_work(struct work_struct *work)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	if (work_pending(&hw->work)) {
-		pr_err("timeout work return befor executing.");
+		pr_err("timeout work return before executing.");
 		return;
 	}
 
@@ -2701,7 +2701,7 @@ static struct vframe_s *vmpeg_vf_peek(void *op_arg)
 
 	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"kfifo len:%d invaild, peek error\n",
+			"kfifo len:%d invalid, peek error\n",
 			kfifo_len(&hw->display_q));
 		return NULL;
 	}
@@ -3043,7 +3043,7 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 	}
 
 	if (!hw->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
+		enum receiver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
 			NULL);
@@ -3153,7 +3153,7 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 	    work_busy(&hw->work) ||
 	    work_busy(&hw->timeout_work) ||
 	    work_pending(&hw->timeout_work)) {
-		pr_err("%s mpeg12[%d] timeout_process return befor do anything.\n",__func__, vdec->id);
+		pr_err("%s mpeg12[%d] timeout_process return before do anything.\n",__func__, vdec->id);
 		return;
 	}
 	reset_process_time(hw);
@@ -3170,7 +3170,7 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 	 * let it to handle the scenario.
 	 */
 	if (work_pending(&hw->work)) {
-		pr_err("%s mpeg12[%d] return befor schedule.", __func__, vdec->id);
+		pr_err("%s mpeg12[%d] return before schedule.", __func__, vdec->id);
 		return;
 	}
 	vdec_schedule_work(&hw->timeout_work);

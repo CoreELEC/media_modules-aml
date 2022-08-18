@@ -871,7 +871,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 		}
 		ctx->has_receive_eos = true;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-			"recevie a empty frame. idx: %d, state: %d\n",
+			"receive a empty frame. idx: %d, state: %d\n",
 			vb2_buf->index, vb2_buf->state);
 	}
 
@@ -881,7 +881,7 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 
 	if (vf->flag & VFRAME_FLAG_EMPTY_FRAME_V4L) {
 		if (ctx->v4l_resolution_change) {
-			/* make the run to stanby until new buffs to enque. */
+			/* make the run to stanby until new buffs to enqueue. */
 			ctx->v4l_codec_dpb_ready = false;
 			ctx->reset_flag = V4L_RESET_MODE_LIGHT;
 			ctx->vpp_cfg.res_chg = true;
@@ -1646,7 +1646,7 @@ static void aml_vdec_worker(struct work_struct *work)
 			(buf.model == VB2_MEMORY_DMABUF)) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
-			ATRACE_COUNTER("VO_OUT_VSINK-0.wrtie_end", buf.size);
+			ATRACE_COUNTER("VO_OUT_VSINK-0.write_end", buf.size);
 			v4l2_buff_done(&aml_buf->vb,
 				VB2_BUF_STATE_DONE);
 		}
@@ -2112,7 +2112,7 @@ static int vidioc_decoder_streamoff(struct file *file, void *priv,
 		aml_v4l2_ge2d_destroy(ctx->ge2d);
 		ctx->ge2d = NULL;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"ge2d destory in streamoff.\n");
+			"ge2d destroy in streamoff.\n");
 	}
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
@@ -3244,7 +3244,7 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 				ctx->comp_info.max_size * SZ_1M, mmu_flag);
 		if (!ctx->mmu_box_dw) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box dw\n");
-			goto free_bmmubox;
+			goto free_bmmu_box;
 		}
 
 		/* init bmmu box dw*/
@@ -3254,7 +3254,7 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 				4 + PAGE_SHIFT, bmmu_flag,
 				BMMU_ALLOC_FLAGS_WAIT);
 		if (!ctx->bmmu_box_dw) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create nmmu box dw\n");
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box dw\n");
 			goto free_mmubox_dw;
 		}
 	}
@@ -3288,7 +3288,7 @@ free_mmubox_dw:
 	decoder_mmu_box_free(ctx->mmu_box_dw);
 	ctx->mmu_box_dw = NULL;
 
-free_bmmubox:
+free_bmmu_box:
 	decoder_bmmu_box_free(ctx->bmmu_box);
 	ctx->bmmu_box = NULL;
 
@@ -3447,78 +3447,78 @@ void aml_bind_dv_buffer(struct aml_vcodec_ctx *ctx, char **comp_buf, char **md_b
 	}
 }
 
-static void aml_canvas_cache_free(struct canvas_cache *canche)
+static void aml_canvas_cache_free(struct canvas_cache *cache)
 {
 	int i = -1;
 
-	for (i = 0; i < ARRAY_SIZE(canche->res); i++) {
-		if (canche->res[i].cid > 0) {
+	for (i = 0; i < ARRAY_SIZE(cache->res); i++) {
+		if (cache->res[i].cid > 0) {
 			v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
 				"canvas-free, name:%s, canvas id:%d\n",
-				canche->res[i].name,
-				canche->res[i].cid);
+				cache->res[i].name,
+				cache->res[i].cid);
 
-			canvas_pool_map_free_canvas(canche->res[i].cid);
+			canvas_pool_map_free_canvas(cache->res[i].cid);
 
-			canche->res[i].cid = 0;
+			cache->res[i].cid = 0;
 		}
 	}
 }
 
 void aml_canvas_cache_put(struct aml_vcodec_dev *dev)
 {
-	struct canvas_cache *canche = &dev->canche;
+	struct canvas_cache *cache = &dev->cache;
 
-	mutex_lock(&canche->lock);
+	mutex_lock(&cache->lock);
 
 	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
-		"canvas-put, ref:%d\n", canche->ref);
+		"canvas-put, ref:%d\n", cache->ref);
 
-	canche->ref--;
+	cache->ref--;
 
-	if (canche->ref == 0) {
-		aml_canvas_cache_free(canche);
+	if (cache->ref == 0) {
+		aml_canvas_cache_free(cache);
 	}
 
-	mutex_unlock(&canche->lock);
+	mutex_unlock(&cache->lock);
 }
 
 int aml_canvas_cache_get(struct aml_vcodec_dev *dev, char *usr)
 {
-	struct canvas_cache *canche = &dev->canche;
+	struct canvas_cache *cache = &dev->cache;
 	int i;
 
-	mutex_lock(&canche->lock);
+	mutex_lock(&cache->lock);
 
-	canche->ref++;
+	cache->ref++;
 
-	for (i = 0; i < ARRAY_SIZE(canche->res); i++) {
-		if (canche->res[i].cid <= 0) {
-			snprintf(canche->res[i].name, 32, "%s-%d", usr, i);
-			canche->res[i].cid =
-				canvas_pool_map_alloc_canvas(canche->res[i].name);
+	for (i = 0; i < ARRAY_SIZE(cache->res); i++) {
+		if (cache->res[i].cid <= 0) {
+			snprintf(cache->res[i].name, 32, "%s-%d", usr, i);
+			cache->res[i].cid =
+				canvas_pool_map_alloc_canvas(cache->res[i].name);
 		}
 
 		v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
 			"canvas-alloc, name:%s, canvas id:%d\n",
-			canche->res[i].name,
-			canche->res[i].cid);
+			cache->res[i].name,
+			cache->res[i].cid);
 
-		if (canche->res[i].cid <= 0) {
+		if (cache->res[i].cid <= 0) {
 			v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 				"canvas-fail, name:%s, canvas id:%d.\n",
-				canche->res[i].name,
-				canche->res[i].cid);
+				cache->res[i].name,
+				cache->res[i].cid);
 
-			mutex_unlock(&canche->lock);
+			mutex_unlock(&cache->lock);
 			goto err;
 		}
 	}
 
 	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
-		"canvas-get, ref:%d\n", canche->ref);
+		"canvas-get, ref:%d\n", cache->ref);
 
-	mutex_unlock(&canche->lock);
+	mutex_unlock(&cache->lock);
 	return 0;
 err:
 	aml_canvas_cache_put(dev);
@@ -3527,11 +3527,11 @@ err:
 
 int aml_canvas_cache_init(struct aml_vcodec_dev *dev)
 {
-	dev->canche.ref = 0;
-	mutex_init(&dev->canche.lock);
+	dev->cache.ref = 0;
+	mutex_init(&dev->cache.lock);
 
 	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
-		"canvas-init, ref:%d\n", dev->canche.ref);
+		"canvas-init, ref:%d\n", dev->cache.ref);
 
 	return 0;
 }
@@ -3547,7 +3547,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 		atomic_dec(&ctx->dev->vpp_count);
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"vpp destory inst count:%d.\n",
+			"vpp destroy inst count:%d.\n",
 			atomic_read(&ctx->dev->vpp_count));
 	}
 
@@ -3555,7 +3555,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 		aml_v4l2_ge2d_destroy(ctx->ge2d);
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"ge2d destory.\n");
+			"ge2d destroy.\n");
 	}
 
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
@@ -3950,7 +3950,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		if (!buf->que_in_m2m) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-				"enque capture buf idx %d, vf: %lx\n",
+				"enqueue capture buf idx %d, vf: %lx\n",
 				vb->index, (ulong) v4l_get_vf_handle(vb2_v4l2->private));
 
 			/* bind compressed buffer to uvm */
@@ -4143,14 +4143,14 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 			char *owner = __getname();
 
 			snprintf(owner, PATH_MAX, "%s-%d", "v4l-output", ctx->id);
-			strncpy(buf->mem_onwer, owner, sizeof(buf->mem_onwer));
-			buf->mem_onwer[sizeof(buf->mem_onwer) - 1] = '\0';
+			strncpy(buf->mem_owner, owner, sizeof(buf->mem_owner));
+			buf->mem_owner[sizeof(buf->mem_owner) - 1] = '\0';
 			__putname(owner);
 
 			for (i = 0; i < vb->num_planes; i++) {
 				size = vb->planes[i].length;
 				phy_addr = vb2_dma_contig_plane_dma_addr(vb, i);
-				buf->mem[i] = v4l_reqbufs_from_codec_mm(buf->mem_onwer,
+				buf->mem[i] = v4l_reqbufs_from_codec_mm(buf->mem_owner,
 						phy_addr, size, vb->index);
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 						"OUT %c alloc, addr: %x, size: %u, idx: %u\n",
@@ -4255,7 +4255,7 @@ static void vb2ops_vdec_buf_cleanup(struct vb2_buffer *vb)
 					"OUT %c clean, addr: %lx, size: %u, idx: %u\n",
 					(i == 0)? 'Y':'C',
 					buf->mem[i]->phy_addr, buf->mem[i]->buffer_size, vb->index);
-				v4l_freebufs_back_to_codec_mm(buf->mem_onwer, buf->mem[i]);
+				v4l_freebufs_back_to_codec_mm(buf->mem_owner, buf->mem[i]);
 				buf->mem[i] = NULL;
 			}
 		}

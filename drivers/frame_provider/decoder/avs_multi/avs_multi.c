@@ -157,14 +157,14 @@ static unsigned int debug_mask = 0xff;
 	udebug_flag:
 	bit 0, enable ucode print
 	bit 1, enable ucode more print
-	bit 3, enable ucdode detail print
+	bit 3, enable ucode detail print
 	bit [31:16] not 0, pos to dump lmem
 		bit 2, pop bits to lmem
 		bit [11:8], pre-pop bits for alignment (when bit 2 is 1)
 
 	avs only:
 	bit [8], disable empty muitl-instance handling
-	bit [9], enable writting of VC1_CONTROL_REG in ucode
+	bit [9], enable writing of VC1_CONTROL_REG in ucode
 */
 static u32 udebug_flag;
 /*
@@ -982,7 +982,7 @@ static struct vframe_s *vavs_vf_peek(void *op_arg)
 
 	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
 		debug_print(hw, PRINT_FLAG_RUN_FLOW,
-			"kfifo len:%d invaild, peek error\n",
+			"kfifo len:%d invalid, peek error\n",
 			kfifo_len(&hw->display_q));
 		return NULL;
 	}
@@ -2473,7 +2473,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			again_threshold) {
 			int r = vdec_sync_input(vdec);
 				debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
-					"%s buf lelvel:%x\n",  __func__, r);
+					"%s buf level:%x\n",  __func__, r);
 			ret = 0;
 		}
 	}
@@ -3093,7 +3093,7 @@ void (*callback)(struct vdec_s *, void *),
 	}
 
 	/*
-		This configureation of VC1_CONTROL_REG will
+		This configuration of VC1_CONTROL_REG will
 		pop bits (even no data in the stream buffer) if input is enabled,
 		so it can only be configured before vdec_enable_input() is called.
 		So move this code from ucode to here
@@ -3828,7 +3828,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		);
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
+		enum receiver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
 			NULL);

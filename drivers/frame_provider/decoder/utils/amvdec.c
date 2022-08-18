@@ -497,7 +497,7 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 		vdec = OPTEE_VDEC_HCDEC;
 		break;
 	default:
-		pr_info("Unknow vdec format: %u\n", (u32)type);
+		pr_info("Unknown vdec format: %u\n", (u32)type);
 		break;
 	}
 

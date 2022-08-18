@@ -300,7 +300,7 @@ static u32 double_write_mode;
 #define PTS_NONE_REF_USE_DURATION 1
 
 #define PTS_MODE_SWITCHING_THRESHOLD           3
-#define PTS_MODE_SWITCHING_RECOVERY_THREASHOLD 3
+#define PTS_MODE_SWITCHING_RECOVERY_THRESHOLD 3
 
 #define DUR2PTS(x) ((x)*90/96)
 #define PTS2DUR(x) ((x)*96/90)
@@ -615,10 +615,10 @@ struct loopfilter;
 struct segmentation_lf;
 #endif
 
-struct vav1_assit_task {
+struct vav1_assist_task {
 	bool                 use_sfgs;
 	bool                 running;
-	struct mutex         assit_mutex;
+	struct mutex         assist_mutex;
 	struct semaphore     sem;
 	struct task_struct  *task;
 	void                *private;
@@ -855,7 +855,7 @@ struct AV1HW_s {
 	u32 aux_data_size;
 	bool no_need_aux_data;
 	struct trace_decoder_name trace;
-	struct vav1_assit_task assit_task;
+	struct vav1_assist_task assist_task;
 	bool high_bandwidth_flag;
 	int film_grain_present;
 	ulong fg_table_handle;
@@ -866,7 +866,7 @@ struct AV1HW_s {
 	u32 consume_byte;
 	ulong rpm_mem_handle;
 	ulong lmem_phy_handle;
-	ulong fg_mem_hanlde;
+	ulong fg_mem_handle;
 	ulong aux_mem_handle;
 	ulong ucode_log_handle;
 	ulong frame_mmu_map_handle;
@@ -1030,7 +1030,7 @@ static u32 get_valid_double_write_mode(struct AV1HW_s *hw)
 		(double_write_mode & 0x7fffffff);
 	if ((dw & 0x20) &&
 		((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
-		pr_info("MMU doueble write 1:4 not supported !!!\n");
+		pr_info("MMU double write 1:4 not supported !!!\n");
 		dw = 0;
 	}
 	return dw;
@@ -1086,7 +1086,7 @@ void film_grain_task_wakeup(struct AV1HW_s *hw)
 	u32 fg_reg0, fg_reg1, num_y_points, num_cb_points, num_cr_points;
 	struct AV1_Common_s *cm = &hw->common;
 
-	if (!hw->assit_task.use_sfgs || hw->eos)
+	if (!hw->assist_task.use_sfgs || hw->eos)
 		return;
 
 	fg_reg0 = cm->cur_frame->film_grain_reg[0];
@@ -1106,8 +1106,8 @@ void film_grain_task_wakeup(struct AV1HW_s *hw)
 		if (((get_debug_fgs() & DEBUG_FGS_BYPASS) == 0)
 			&& hw->fgs_valid) {
 			atomic_set(&cm->cur_frame->fgs_done, 0);
-			hw->assit_task.private = cm->cur_frame;
-			up(&hw->assit_task.sem);
+			hw->assist_task.private = cm->cur_frame;
+			up(&hw->assist_task.sem);
 		} else {
 			atomic_set(&cm->cur_frame->fgs_done, 1);
 		}
@@ -1118,7 +1118,7 @@ EXPORT_SYMBOL(film_grain_task_wakeup);
 static int film_grain_task(void *args)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)args;
-	struct vav1_assit_task *assit = &hw->assit_task;
+	struct vav1_assist_task *assist = &hw->assist_task;
 	struct sched_param param = {.sched_priority = MAX_RT_PRIO/2};
 	RefCntBuffer *cur_frame;
 
@@ -1126,24 +1126,24 @@ static int film_grain_task(void *args)
 
 	allow_signal(SIGTERM);
 
-	while (down_interruptible(&assit->sem) == 0) {
-		if (assit->running == false)
+	while (down_interruptible(&assist->sem) == 0) {
+		if (assist->running == false)
 			break;
 
-		if (assit->private == NULL)
+		if (assist->private == NULL)
 			continue;
 
-		mutex_lock(&assit->assit_mutex);
-		cur_frame = (RefCntBuffer *)assit->private;
+		mutex_lock(&assist->assist_mutex);
+		cur_frame = (RefCntBuffer *)assist->private;
 		if ((!hw->eos) && (atomic_read(&cur_frame->fgs_done) == 0)) {
 				pic_film_grain_run(hw->frame_count, cur_frame->buf.sfgs_table_ptr,
 					cur_frame->film_grain_ctrl, cur_frame->film_grain_reg);
 				atomic_set(&cur_frame->fgs_done, 1);
 				wake_up_interruptible(&cur_frame->wait_sfgs);
-				assit->private = NULL;
+				assist->private = NULL;
 				vdec_sync_irq(VDEC_IRQ_0);
 		}
-		mutex_unlock(&assit->assit_mutex);
+		mutex_unlock(&assist->assist_mutex);
 	}
 
 	while (!kthread_should_stop()) {
@@ -1155,45 +1155,45 @@ static int film_grain_task(void *args)
 
 static int film_grain_task_create(struct AV1HW_s *hw)
 {
-	struct vav1_assit_task *assit = &hw->assit_task;
+	struct vav1_assist_task *assist = &hw->assist_task;
 
-	mutex_init(&assit->assit_mutex);
+	mutex_init(&assist->assist_mutex);
 
 	if ((!vdec_secure(hw_to_vdec(hw)) || (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2))
 		&& !use_sfgs)
 		return 0;
 
-	assit->use_sfgs = 1;
-	sema_init(&assit->sem, 0);
+	assist->use_sfgs = 1;
+	sema_init(&assist->sem, 0);
 
-	assit->task = kthread_run(film_grain_task, hw, "fgs_task");
-	if (IS_ERR(assit->task)) {
+	assist->task = kthread_run(film_grain_task, hw, "fgs_task");
+	if (IS_ERR(assist->task)) {
 		pr_err("%s, creat film grain task thread faild %ld\n",
-			__func__, PTR_ERR(assit->task));
-		return PTR_ERR(assit->task);
+			__func__, PTR_ERR(assist->task));
+		return PTR_ERR(assist->task);
 	}
-	assit->running = true;
-	assit->private = NULL;
-	av1_print(hw, 0, "%s, task %px create sucess\n", __func__, assit->task);
+	assist->running = true;
+	assist->private = NULL;
+	av1_print(hw, 0, "%s, task %px create success\n", __func__, assist->task);
 
 	return 0;
 }
 
 static void film_grain_task_exit(struct AV1HW_s *hw)
 {
-	struct vav1_assit_task *assit = &hw->assit_task;
+	struct vav1_assist_task *assist = &hw->assist_task;
 
-	if ((!assit->use_sfgs) || (IS_ERR(assit->task)))
+	if ((!assist->use_sfgs) || (IS_ERR(assist->task)))
 		return;
 
-	assit->running = false;
-	up(&assit->sem);
+	assist->running = false;
+	up(&assist->sem);
 
-	if (assit->task) {
-		kthread_stop(assit->task);
-		assit->task = NULL;
+	if (assist->task) {
+		kthread_stop(assist->task);
+		assist->task = NULL;
 	}
-	assit->use_sfgs = 0;
+	assist->use_sfgs = 0;
 	av1_print(hw, 0, "%s, task kthread stoped\n", __func__);
 }
 #endif
@@ -2392,7 +2392,7 @@ static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 
 /* AUX DATA Process */
 static u32 init_aux_size;
-static int aux_data_is_avaible(struct AV1HW_s *hw)
+static int aux_data_is_available(struct AV1HW_s *hw)
 {
 	u32 reg_val;
 
@@ -2425,7 +2425,7 @@ static void set_aux_data(struct AV1HW_s *hw,
 		READ_VREG(HEVC_AUX_DATA_SIZE);
 	unsigned int aux_count = 0;
 	int aux_size = 0;
-	if (0 == aux_data_is_avaible(hw))
+	if (0 == aux_data_is_available(hw))
 		return;
 
 	if (hw->aux_data_dirty ||
@@ -3021,7 +3021,7 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 				pic->index, pic->fgs_table_adr);
 		} else {
 #endif
-			if (hw->assit_task.use_sfgs) {
+			if (hw->assist_task.use_sfgs) {
 				pic->sfgs_table_phy = hw->fg_phy_addr + (pic->index * FGS_TABLE_SIZE);
 				pic->sfgs_table_ptr = hw->fg_ptr + (pic->index * FGS_TABLE_SIZE);
 			}
@@ -3263,7 +3263,7 @@ static void d_dump(struct AV1HW_s *hw, unsigned int phyadr, int size,
 
 static void mv_buffer_fill_zero(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_config)
 {
-	pr_info("fill dummy data pic index %d colocate addreses %x size %x\n",
+	pr_info("fill dummy data pic index %d colocate addresses %x size %x\n",
 		pic_config->index, pic_config->mpred_mv_wr_start_addr,
 		hw->m_mv_BUF[pic_config->mv_buf_index].size);
 	d_fill_zero(hw, pic_config->mpred_mv_wr_start_addr,
@@ -3291,7 +3291,7 @@ static void dump_mv_buffer(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_c
 		size = UCODE_LOG_BUF_SIZE;
 		if (size > (adr_end - adr))
 			size = adr_end - adr;
-		pr_info("dump pic index %d colocate addreses %x size %x\n",
+		pr_info("dump pic index %d colocate addresses %x size %x\n",
 			pic_config->index, adr, size);
 		d_dump(hw, adr, size, fp, &off);
 	}
@@ -3965,8 +3965,8 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	data32 &= (~(3 << 14));
 	data32 |= (2 << 14);
 	/*
-	*  [31:24] ar_fifo1_axi_thred
-	*  [23:16] ar_fifo0_axi_thred
+	*  [31:24] ar_fifo1_axi_thread
+	*  [23:16] ar_fifo0_axi_thread
 	*  [15:14] axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes
 	*  [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
 	*  [11:08] axi_lendian_C
@@ -4675,7 +4675,7 @@ static void config_dblk_hw(struct AV1HW_s *hw)
 						seg_4lf->seg_lf_info_y[i] = cm->prev_frame->seg_lf_info_y[i];
 						seg_4lf->seg_lf_info_c[i] = cm->prev_frame->seg_lf_info_c[i];
 		#ifdef DBG_LPF_PRINT
-					  printk(" Refrence seg_lf_info [%d] : 0x%x, 0x%x\n",
+					  printk(" Reference seg_lf_info [%d] : 0x%x, 0x%x\n",
 					  i, seg_4lf->seg_lf_info_y[i], seg_4lf->seg_lf_info_c[i]);
 		#endif
 					}
@@ -4771,10 +4771,10 @@ static void config_dblk_hw(struct AV1HW_s *hw)
 		uint32_t path_wait_count;
 		float path_wait_ratio;
 		if (pbi->decode_idx > 1) {
-			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disabble monitor and set rd_idx to 0
+			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // disabled monitor and set rd_idx to 0
 			total_clk_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 
-			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (1<<4)); // Disabble monitor and set rd_idx to 0
+			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (1<<4)); // disabled monitor and set rd_idx to 0
 
 			// parser --> iqit
 			path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
@@ -5272,7 +5272,7 @@ static int vav1_mmu_map_alloc(struct AV1HW_s *hw)
 		hw->dw_frame_mmu_map_addr =
 			decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
 				mmu_map_size,
-				&hw->dw_frame_mmu_map_phy_addr, "AV1_DWMMU_MAP");
+				&hw->dw_frame_mmu_map_phy_addr, "AV1_DW_MMU_MAP");
 		if (hw->dw_frame_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -1;
@@ -6136,7 +6136,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				vf->compBodyAddr = 0;
 				vf->compHeadAddr = pic_config->header_adr;
 				if (((get_debug_fgs() & DEBUG_FGS_BYPASS) == 0)
-					&& hw->assit_task.use_sfgs)
+					&& hw->assist_task.use_sfgs)
 					vf->fgs_table_adr = pic_config->sfgs_table_phy;
 				else
 					vf->fgs_table_adr = pic_config->fgs_table_adr;
@@ -6420,7 +6420,7 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 	pbi->pre_stream_offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 }
 
-static bool is_avaliable_buffer(struct AV1HW_s *hw);
+static bool is_available_buffer(struct AV1HW_s *hw);
 
 static int notify_v4l_eos(struct vdec_s *vdec)
 {
@@ -6433,7 +6433,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	if (hw->eos) {
 		expires = jiffies + msecs_to_jiffies(2000);
-		while (!is_avaliable_buffer(hw)) {
+		while (!is_available_buffer(hw)) {
 			if (time_after(jiffies, expires)) {
 				pr_err("[%d] AV1 isn't enough buff for notify eos.\n", ctx->id);
 				return 0;
@@ -6636,10 +6636,10 @@ void datapath_monitor(struct AV1HW_s *hw)
 		  uint32_t path_wait_count;
   float path_wait_ratio;
   if (pbi->decode_idx > 1) {
-    WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disabble monitor and set rd_idx to 0
-    total_clk_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
+	WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disabled monitor and set rd_idx to 0
+	total_clk_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 
-    WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (1<<4)); // Disabble monitor and set rd_idx to 0
+	WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (1<<4)); // Disabled monitor and set rd_idx to 0
 
 // parser --> iqit
     path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
@@ -6853,14 +6853,14 @@ static void decomp_get_hitrate(struct AV1HW_s *hw)
 	return;
 }
 
-static void decomp_get_comprate(struct AV1HW_s *hw)
+static void decomp_get_comp_rate(struct AV1HW_s *hw)
 {
 	unsigned   raw_ucomp_cnt;
 	unsigned   fast_comp_cnt;
 	unsigned   slow_comp_cnt;
-	int      comprate;
+	int      comp_rate;
 
-	av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "[cache_util.c] Entered decomp_get_comprate...\n");
+	av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "[cache_util.c] Entered decomp_get_comp_rate...\n");
 	C_Reg_Wr(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x4<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA, &fast_comp_cnt);
 	C_Reg_Wr(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x5<<1));
@@ -6874,8 +6874,8 @@ static void decomp_get_comprate(struct AV1HW_s *hw)
 
 	if ( raw_ucomp_cnt != 0 )
 	{
-		comprate = 100*(fast_comp_cnt + slow_comp_cnt)/raw_ucomp_cnt;
-		av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "DECOMP_COMP_RATIO : %d\n", comprate);
+		comp_rate = 100*(fast_comp_cnt + slow_comp_cnt)/raw_ucomp_cnt;
+		av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "DECOMP_COMP_RATIO : %d\n", comp_rate);
 	} else
 	{
 		av1_print(hw, AV1_DEBUG_CACHE_HIT_RATE, "DECOMP_COMP_RATIO : na\n");
@@ -6888,7 +6888,7 @@ static void dump_hit_rate(struct AV1HW_s *hw)
 	if (debug & AV1_DEBUG_CACHE_HIT_RATE) {
 		mcrcc_get_hitrate(hw, hw->m_ins_flag);
 		decomp_get_hitrate(hw);
-		decomp_get_comprate(hw);
+		decomp_get_comp_rate(hw);
 	}
 }
 
@@ -7933,7 +7933,7 @@ static int v4l_res_change(struct AV1HW_s *hw)
 			hw->v4l_params_parsed = false;
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
-			mutex_lock(&hw->assit_task.assit_mutex);
+			mutex_lock(&hw->assist_task.assist_mutex);
 			hw->eos = 1;
 
 			av1_postproc(hw);
@@ -7941,7 +7941,7 @@ static int v4l_res_change(struct AV1HW_s *hw)
 			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
 			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
-			mutex_unlock(&hw->assit_task.assit_mutex);
+			mutex_unlock(&hw->assist_task.assist_mutex);
 			ret = 1;
 		}
 	}
@@ -8125,7 +8125,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				}
 			}
 
-			if (hw->assit_task.use_sfgs) {
+			if (hw->assist_task.use_sfgs) {
 				ulong start_time;
 				start_time = local_clock();
 				if (cm->cur_frame)
@@ -8369,7 +8369,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 						u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
 						hw->dw_frame_mmu_map_addr =
 							decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
-								mmu_map_size, &hw->dw_frame_mmu_map_phy_addr, "AV1_DWMMU_MAP");
+								mmu_map_size, &hw->dw_frame_mmu_map_phy_addr, "AV1_DW_MMU_MAP");
 						if (hw->dw_frame_mmu_map_addr == NULL) {
 							pr_err("%s: failed to alloc count_buffer\n", __func__);
 							return -1;
@@ -8704,7 +8704,7 @@ static void vav1_put_timer_func(struct timer_list *timer)
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 
 	if (hw->init_flag == 0) {
 		if (hw->stat & STAT_TIMER_ARM) {
@@ -9502,14 +9502,14 @@ static void av1_work(struct work_struct *work)
 	} else if (hw->dec_result == DEC_RESULT_EOS) {
 		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
 			"%s: end of stream\n", __func__);
-		mutex_lock(&hw->assit_task.assit_mutex);
+		mutex_lock(&hw->assist_task.assist_mutex);
 		hw->eos = 1;
 		av1_postproc(hw);
 
 		ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 		notify_v4l_eos(hw_to_vdec(hw));
 		ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
-		mutex_unlock(&hw->assit_task.assit_mutex);
+		mutex_unlock(&hw->assist_task.assist_mutex);
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
@@ -9586,7 +9586,7 @@ static int av1_hw_ctx_restore(struct AV1HW_s *hw)
 	return 0;
 }
 
-static bool is_avaliable_buffer(struct AV1HW_s *hw)
+static bool is_available_buffer(struct AV1HW_s *hw)
 {
 	AV1_COMMON *cm = &hw->common;
 	RefCntBuffer *const frame_bufs = cm->buffer_pool->frame_bufs;
@@ -9648,7 +9648,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	}
 
 	if (hw->v4l_params_parsed) {
-		if (is_avaliable_buffer(hw))
+		if (is_available_buffer(hw))
 			ret = CORE_MASK_HEVC;
 		else
 			ret = 0;
@@ -9719,7 +9719,7 @@ static void av1_frame_mode_pts_save(struct AV1HW_s *hw)
 	}
 
 	if (!valid_pts_diff_cnt) {
-		av1_print(hw, AV1_DEBUG_OUT_PTS, "checked no avaliable pts\n");
+		av1_print(hw, AV1_DEBUG_OUT_PTS, "checked no available pts\n");
 		return;
 	}
 
@@ -10006,11 +10006,11 @@ static void reset(struct vdec_s *vdec)
 
 	av1_bufmgr_ctx_reset(hw->pbi, &hw->av1_buffer_pool, &hw->common);
 	hw->pbi->private_data = hw;
-	mutex_lock(&hw->assit_task.assit_mutex);
+	mutex_lock(&hw->assist_task.assist_mutex);
 	av1_local_uninit(hw, true);
 	if (vav1_local_init(hw, true) < 0)
 		av1_print(hw, 0, "%s local_init failed \r\n", __func__);
-	mutex_unlock(&hw->assit_task.assit_mutex);
+	mutex_unlock(&hw->assist_task.assist_mutex);
 
 	av1_decode_ctx_reset(hw);
 

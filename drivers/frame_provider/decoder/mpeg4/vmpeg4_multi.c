@@ -1758,7 +1758,7 @@ static struct vframe_s *vmpeg_vf_peek(void *op_arg)
 
 	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"kfifo len:%d invaild, peek error\n",
+			"kfifo len:%d invalid, peek error\n",
 			kfifo_len(&hw->display_q));
 		return NULL;
 	}
@@ -2035,7 +2035,7 @@ static void vmpeg4_dump_state(struct vdec_s *vdec)
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"====== %s\n", __func__);
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
-		"width/height (%d/%d), i_fram:%d, buffer_not_ready %d, buf_num %d, run_flag %d\n",
+		"width/height (%d/%d), i_frame:%d, buffer_not_ready %d, buf_num %d, run_flag %d\n",
 		hw->frame_width,
 		hw->frame_height,
 		hw->first_i_frame_ready,
@@ -2067,7 +2067,7 @@ static void vmpeg4_dump_state(struct vdec_s *vdec)
 		);
 
 	if (!hw->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
+		enum receiver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
 			NULL);

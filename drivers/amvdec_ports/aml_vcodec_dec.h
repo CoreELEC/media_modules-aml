@@ -95,7 +95,7 @@ struct aml_video_dec_buf {
 	struct vdec_v4l2_buffer frame_buffer;
 	struct file_private_data privdata;
 	struct codec_mm_s *mem[2];
-	char mem_onwer[32];
+	char mem_owner[32];
 	bool used;
 	bool que_in_m2m;
 	bool lastframe;

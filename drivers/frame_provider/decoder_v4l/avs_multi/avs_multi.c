@@ -158,14 +158,14 @@ static unsigned int debug_mask = 0xff;
 	udebug_flag:
 	bit 0, enable ucode print
 	bit 1, enable ucode more print
-	bit 3, enable ucdode detail print
+	bit 3, enable ucode detail print
 	bit [31:16] not 0, pos to dump lmem
 		bit 2, pop bits to lmem
 		bit [11:8], pre-pop bits for alignment (when bit 2 is 1)
 
 	avs only:
 	bit [8], disable empty muitl-instance handling
-	bit [9], enable writting of VC1_CONTROL_REG in ucode
+	bit [9], enable writing of VC1_CONTROL_REG in ucode
 */
 static u32 udebug_flag;
 /*
@@ -648,7 +648,7 @@ static int debug_print_cont(struct vdec_avs_hw_s *hw,
 	return 0;
 }
 
-static bool is_avaliable_buffer(struct vdec_avs_hw_s *hw)
+static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -2513,7 +2513,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	recycle_frames(hw);
 
 	if (hw->v4l_params_parsed) {
-		if (is_avaliable_buffer(hw))
+		if (is_available_buffer(hw))
 			ret = 1;
 		else
 			ret = 0;
@@ -2535,7 +2535,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			again_threshold) {
 			int r = vdec_sync_input(vdec);
 				debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
-					"%s buf lelvel:%x\n",  __func__, r);
+					"%s buf level:%x\n",  __func__, r);
 			ret = 0;
 		}
 	}
@@ -3147,7 +3147,7 @@ void (*callback)(struct vdec_s *, void *),
 	}
 
 	/*
-		This configureation of VC1_CONTROL_REG will
+		This configuration of VC1_CONTROL_REG will
 		pop bits (even no data in the stream buffer) if input is enabled,
 		so it can only be configured before vdec_enable_input() is called.
 		So move this code from ucode to here
@@ -3652,7 +3652,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	if (hw->eos) {
 		expires = jiffies + msecs_to_jiffies(2000);
 
-		while (!is_avaliable_buffer(hw)) {
+		while (!is_available_buffer(hw)) {
 			if (time_after(jiffies, expires)) {
 				pr_err("[%d] AVS isn't enough buff for notify eos.\n", ctx->id);
 				return 0;

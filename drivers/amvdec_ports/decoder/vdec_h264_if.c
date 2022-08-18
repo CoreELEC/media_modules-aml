@@ -73,7 +73,7 @@ struct h264_fb {
 
 /**
  * struct h264_ring_fb_list - ring frame buffer list
- * @fb_list   : frame buffer arrary
+ * @fb_list   : frame buffer array
  * @read_idx  : read index
  * @write_idx : write index
  * @count     : buffer count in list
@@ -557,7 +557,7 @@ static bool check_frame_combine(u8 *buf, u32 size, int *pos)
 	return combine;
 }
 
-static bool cloudgame_check_frame_combine(u8 *buf, u32 size)
+static bool cloud_game_check_frame_combine(u8 *buf, u32 size)
 {
 	bool combine = false;
 	int i = 0, j = 0, cnt = 0;
@@ -905,7 +905,7 @@ static int vdec_h264_decode(unsigned long h_vdec,
 			bool enable_fence = (inst->parms.cfg.low_latency_mode & 2) ? 1 : 0;
 			/* if the st compose from csd + slice that is the combine data. */
 			if (enable_fence)
-				inst->vsi->is_combine = cloudgame_check_frame_combine(buf, size);
+				inst->vsi->is_combine = cloud_game_check_frame_combine(buf, size);
 			else
 				inst->vsi->is_combine = check_frame_combine(buf, size, &nal_idx);
 			/*if (nal_idx < 0)

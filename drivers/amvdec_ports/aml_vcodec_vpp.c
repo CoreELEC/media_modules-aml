@@ -954,7 +954,7 @@ int aml_v4l2_vpp_init(
 	else if ((vpp->buffer_mode == BUFFER_MODE_USE_BUF) &&
 		((cfg->fmt == V4L2_PIX_FMT_NV12M) || (cfg->fmt == V4L2_PIX_FMT_NV12)))
 		init.output_format = DI_OUTPUT_NV12 | DI_OUTPUT_LINEAR;
-	else /* AFBC deocde case, NV12 as default */
+	else /* AFBC decode case, NV12 as default */
 		init.output_format = DI_OUTPUT_NV12 | DI_OUTPUT_LINEAR;
 
 	if (cfg->is_drm)
