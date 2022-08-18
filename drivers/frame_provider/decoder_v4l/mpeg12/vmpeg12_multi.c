@@ -178,6 +178,8 @@ enum {
 #define DEC_RESULT_EOS 5
 #define DEC_RESULT_GET_DATA         6
 #define DEC_RESULT_GET_DATA_RETRY   7
+#define DEC_RESULT_ERROR_DATA      	12
+
 
 #define DEC_DECODE_TIMEOUT         0x21
 #define DECODE_ID(hw) (hw_to_vdec(hw)->id)
@@ -1909,6 +1911,14 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				__func__);
 		}
 
+		if ((frame_width <= 0) || (frame_height <= 0)) {
+			debug_print(DECODE_ID(hw), 0,
+				"is_oversize w:%d h:%d\n", frame_width, frame_height);
+			hw->dec_result = DEC_RESULT_ERROR_DATA;
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
+		}
+
 		if (!v4l_res_change(hw, frame_width, frame_height, frame_prog)) {
 			struct aml_vcodec_ctx *ctx =
 				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -2414,6 +2424,11 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		debug_print(DECODE_ID(hw), 0,
 			"%s: end of stream, num %d(%d)\n",
 			__func__, hw->disp_num, hw->dec_num);
+	} else if (hw->dec_result == DEC_RESULT_ERROR_DATA) {
+		vdec_vframe_dirty(vdec, hw->chunk);
+		hw->chunk = NULL;
+		hw->chunk_header_offset = 0;
+		hw->chunk_res_size = 0;
 	}
 	if (hw->stat & STAT_VDEC_RUN) {
 		amvdec_stop();

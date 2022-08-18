@@ -130,6 +130,7 @@
 #define DEC_RESULT_EOS		5
 #define DEC_RESULT_UNFINISH	6
 #define DEC_RESULT_ERROR_SZIE	7
+#define DEC_RESULT_ERROR_DATA      	12
 
 #define DEC_DECODE_TIMEOUT         0x21
 #define DECODE_ID(hw) (hw_to_vdec(hw)->id)
@@ -1115,6 +1116,15 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 		int interlace = (READ_VREG(MP4_PIC_RATIO) & 0x80000000) >> 31;
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 			"interlace = %d\n", interlace);
+
+		if ((frame_width <= 0) || (frame_height <= 0)) {
+			mmpeg4_debug_print(DECODE_ID(hw), 0,
+				"is_oversize w:%d h:%d\n", frame_width, frame_height);
+			hw->dec_result = DEC_RESULT_ERROR_DATA;
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
+		}
+
 		if (!v4l_res_change(hw, frame_width, frame_height, interlace)) {
 			struct aml_vcodec_ctx *ctx =
 				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -1712,6 +1722,9 @@ static void vmpeg4_work(struct work_struct *work)
 			vdec_vframe_dirty(vdec, hw->chunk);
 			hw->chunk = NULL;
 		}
+	} else if (hw->dec_result == DEC_RESULT_ERROR_DATA) {
+		vdec_vframe_dirty(vdec, hw->chunk);
+		hw->chunk = NULL;
 	}
 
 	if (hw->stat & STAT_VDEC_RUN) {

@@ -9791,7 +9791,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 		}
 
-		if (pbi->frame_count > 0)
+		if (pbi->vf_pre_count > 0)
 			vp9_bufmgr_postproc(pbi);
 	}
 
