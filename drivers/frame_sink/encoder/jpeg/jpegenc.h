@@ -163,7 +163,7 @@ struct Jpegenc_BuffInfo_s {
 	u32 max_height;
 	u32 min_buffsize;
 	struct Jpegenc_Buff_s input;
-	struct Jpegenc_Buff_s assit;
+	struct Jpegenc_Buff_s assist;
 	struct Jpegenc_Buff_s bitstream;
 };
 
@@ -215,12 +215,12 @@ struct jpegenc_wq_s {
 	u32 InputBuffStart;
 	u32 InputBuffEnd;
 
-	u32 AssitStart;
-	u32 AssitEnd;
+	u32 AssistStart;
+	u32 AssistEnd;
 
 	u32 BitstreamStart;
 	u32 BitstreamEnd;
-	void __iomem *AssitstreamStartVirtAddr;
+	void __iomem *AssiststreamStartVirtAddr;
 
 	u32 max_width;
 	u32 max_height;
