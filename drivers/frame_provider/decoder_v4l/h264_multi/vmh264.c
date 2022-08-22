@@ -2577,6 +2577,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int buffer_index = frame->buf_spec_num;
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
+	struct vdec_pic_info *picinfo = &v4l2_ctx->picinfo;
 	struct vdec_v4l2_buffer *fb = NULL;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	int bForceInterlace = 0;
@@ -2588,7 +2589,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
 		nv_order = VIDTYPE_VIU_NV12;
 
-	if (!is_interlace(frame))
+	if (!is_interlace(frame) || (picinfo->field == V4L2_FIELD_NONE))
 		vf_count = 1;
 	else
 		vf_count = 2;
@@ -2756,7 +2757,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				frame->frame->coded_frame, frame->frame->frame_mbs_only_flag, frame->frame->structure);
 		}
 
-		if (bForceInterlace || is_interlace(frame) || (!p_H264_Dpb->mSPS.frame_mbs_only_flag)) {
+		if ((picinfo->field != V4L2_FIELD_NONE)
+			&& ((bForceInterlace || (is_interlace(frame))
+			|| (!p_H264_Dpb->mSPS.frame_mbs_only_flag)))) {
 			vf->type =
 				VIDTYPE_INTERLACE_FIRST |
 				nv_order;
@@ -8596,6 +8599,14 @@ static void vmh264_wakeup_userdata_poll(struct vdec_s *vdec)
 
 #endif
 
+bool is_over_interlace_size(int w, int h, int size)
+{
+	if (h != 0 && (w > size / h))
+		return true;
+
+	return false;
+}
+
 static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	u32 param1, u32 param2, u32 param3, u32 param4,
 	struct aml_vdec_ps_infos *ps)
@@ -8617,6 +8628,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	u32 frame_width, frame_height;
 	u32 used_reorder_dpb_size_margin
 		= hw->reorder_dpb_size_margin;
+	int interlace_size = 1920 * 1088;
 
 	level_idc = param4 & 0xff;
 	max_reference_size = (param4 >> 8) & 0xff;
@@ -8744,6 +8756,12 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 	ps->field 		= hw->high_bandwidth_flag ?
 		V4L2_FIELD_NONE : ps->field;
+
+	if ((ps->field == V4L2_FIELD_INTERLACED) &&
+		is_over_interlace_size(ps->coded_width, ps->coded_height, interlace_size)) {
+		ps->field = V4L2_FIELD_NONE;
+		dpb_print(DECODE_ID(hw), 0,"Force to set as progressive type\n");
+	}
 
 	/* update reoder and margin num. */
 	if (hw->res_ch_flag) {
