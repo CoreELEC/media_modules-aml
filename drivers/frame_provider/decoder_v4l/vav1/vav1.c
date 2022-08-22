@@ -423,6 +423,8 @@ struct MVBUF_s {
 
 static u32 get_picture_qos;
 
+static u32 disable_repeat;
+
 static u32 debug;
 static u32 disable_fg;
 /*for debug*/
@@ -1615,6 +1617,24 @@ static void update_hide_frame_timestamp(struct AV1HW_s *hw)
 				__func__, i, frame_bufs[i].buf.timestamp);
 		}
 	}
+}
+
+int check_buff_has_show(struct RefCntBuffer_s *frame_buf)
+{
+	int ret = 1;
+
+	if (disable_repeat ||
+		((frame_buf->buf.vf_ref == 0) &&
+		(frame_buf->buf.index != -1) &&
+		frame_buf->buf.cma_alloc_addr)) {
+		ret = 0;
+		if (debug & AV1_DEBUG_BUFMGR)
+			pr_info("existing buff can use\n");
+	} else {
+		if (debug & AV1_DEBUG_BUFMGR)
+			pr_info("existing buff can't use\n");
+	}
+	return ret;
 }
 
 static int get_free_fb_idx(AV1_COMMON *cm)
@@ -6218,13 +6238,19 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 		av1_inc_vf_ref(hw, pic_config->v4l_buf_index);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
-		if (pic_config->v4l_buf_index != pic_config->BUF_index)	{
+		if (pic_config->double_write_mode &&
+			((pic_config->double_write_mode & 0x20) == 0) &&
+			(pic_config->v4l_buf_index != pic_config->BUF_index)) {
 			struct PIC_BUFFER_CONFIG_s *dst_pic =
 				&hw->common.buffer_pool->frame_bufs[pic_config->v4l_buf_index].buf;
 			struct PIC_BUFFER_CONFIG_s *src_pic =
 				&hw->common.buffer_pool->frame_bufs[pic_config->BUF_index].buf;
 			struct vdec_ge2d_info ge2d_info;
 
+			av1_print(hw, PRINT_FLAG_V4L_DETAIL,
+				"ge2d copy start v4l_buf_index:%d repeat_buff_index:%d\n",
+				pic_config->v4l_buf_index,
+				pic_config->BUF_index);
 			ge2d_info.dst_vf = vf;
 			ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr = 0;
 			if (dst_pic->double_write_mode) {
@@ -6265,6 +6291,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				vdec_ge2d_init(&hw->ge2d,  mode);
 			}
 			vdec_ge2d_copy_data(hw->ge2d, &ge2d_info);
+			av1_print(hw, PRINT_FLAG_V4L_DETAIL, "ge2d copy done\n");
 		}
 		decoder_do_frame_check(hw_to_vdec(hw), vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
@@ -10754,6 +10781,9 @@ MODULE_PARM_DESC(dbg_skip_decode_index, "\n dbg_skip_decode_index\n");
 
 module_param(endian, uint, 0664);
 MODULE_PARM_DESC(endian, "\n rval\n");
+
+module_param(disable_repeat, uint, 0664);
+MODULE_PARM_DESC(disable_repeat, "\n disable_repeat\n");
 
 module_param(step, uint, 0664);
 MODULE_PARM_DESC(step, "\n amvdec_av1 step\n");

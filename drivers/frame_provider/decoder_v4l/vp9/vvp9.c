@@ -374,6 +374,8 @@ static u32 udebug_pause_val;
 
 static u32 udebug_pause_decode_idx;
 
+static u32 disable_repeat;
+
 static u32 without_display_mode;
 
 static u32 v4l_bitstream_id_enable = 1;
@@ -2422,6 +2424,24 @@ static void refresh_ref_frames(struct VP9Decoder_s *pbi)
 	return;
 }
 
+static int check_buff_has_show(struct RefCntBuffer_s *frame_buf)
+{
+	int ret = 1;
+
+	if (disable_repeat ||
+		((frame_buf->buf.vf_ref == 0) &&
+		(frame_buf->buf.index != -1) &&
+		frame_buf->buf.cma_alloc_addr)) {
+		ret = 0;
+		if (debug & VP9_DEBUG_BUFMGR)
+			pr_info("existing buff can use\n");
+	} else {
+		if (debug & VP9_DEBUG_BUFMGR)
+			pr_info("existing buff can't use\n");
+	}
+	return ret;
+}
+
 int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 {
 	struct VP9_Common_s *const cm = &pbi->common;
@@ -2515,10 +2535,12 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 			return -1;
 		}
 
-		frame_bufs[frame_to_show].buf.repeat_count ++;
-		frame_bufs[frame_to_show].buf.v4l_buf_index = cm->new_fb_idx;
+		if (check_buff_has_show(&frame_bufs[frame_to_show])) {
+			frame_bufs[frame_to_show].buf.repeat_count ++;
+			frame_bufs[frame_to_show].buf.v4l_buf_index = cm->new_fb_idx;
+			frame_bufs[cm->new_fb_idx].buf.repeat_pic = &frame_bufs[frame_to_show].buf;
+		}
 		frame_bufs[frame_to_show].buf.timestamp = frame_bufs[cm->new_fb_idx].buf.timestamp;
-		frame_bufs[cm->new_fb_idx].buf.repeat_pic = &frame_bufs[frame_to_show].buf;
 		ref_cnt_fb(frame_bufs, &cm->new_fb_idx, frame_to_show);
 		update_hide_frame_timestamp(pbi);
 		unlock_buffer_pool(pool, flags);
@@ -7402,13 +7424,18 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 
 			inc_vf_ref(pbi, pic_config->v4l_buf_index);
 			vdec_vframe_ready(pvdec, vf);
-			if (pic_config->v4l_buf_index != pic_config->BUF_index)	{
+			if (pic_config->double_write_mode &&
+				(pic_config->v4l_buf_index != pic_config->BUF_index)) {
 				struct PIC_BUFFER_CONFIG_s *dst_pic =
 					&pbi->common.buffer_pool->frame_bufs[pic_config->v4l_buf_index].buf;
 				struct PIC_BUFFER_CONFIG_s *src_pic =
 					&pbi->common.buffer_pool->frame_bufs[pic_config->BUF_index].buf;
 				struct vdec_ge2d_info ge2d_info;
 
+				vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+					"ge2d copy start v4l_buf_index:%d repeat_buff_index:%d\n",
+					pic_config->v4l_buf_index,
+					pic_config->BUF_index);
 				ge2d_info.dst_vf = vf;
 				ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr = 0;
 				if (dst_pic->double_write_mode) {
@@ -7449,6 +7476,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					vdec_ge2d_init(&pbi->ge2d, mode);
 				}
 				vdec_ge2d_copy_data(pbi->ge2d, &ge2d_info);
+				vp9_print(pbi, PRINT_FLAG_V4L_DETAIL, "ge2d copy done\n");
 			}
 			decoder_do_frame_check(pvdec, vf);
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
@@ -11302,6 +11330,9 @@ MODULE_PARM_DESC(error_handle_policy, "\n amvdec_vp9 error_handle_policy\n");
 
 module_param(buf_alloc_width, uint, 0664);
 MODULE_PARM_DESC(buf_alloc_width, "\n buf_alloc_width\n");
+
+module_param(disable_repeat, uint, 0664);
+MODULE_PARM_DESC(disable_repeat, "\n disable_repeat\n");
 
 module_param(buf_alloc_height, uint, 0664);
 MODULE_PARM_DESC(buf_alloc_height, "\n buf_alloc_height\n");

@@ -2298,6 +2298,8 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd);
 
 int get_free_frame_buffer(struct AV1_Common_s *cm);
 
+int check_buff_has_show(struct RefCntBuffer_s *frame_buf);
+
 void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *cm);
 
 #if 1
