@@ -211,7 +211,7 @@ int aml_pcmcia_reset(struct aml_pcmcia *pc)
 		/* need change delay according cam vendor */
 		pc->rst(pc, AML_H);/*HI is reset*/
 		msleep(reset_time_h_t);
-		pc->rst(pc, AML_L);/*defaule LOW*/
+		pc->rst(pc, AML_L);/*default LOW*/
 		msleep(reset_time_l_t);
 		pr_dbg("CAM RESET--end\n");
 	return 0;
