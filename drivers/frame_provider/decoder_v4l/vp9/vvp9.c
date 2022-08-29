@@ -9870,6 +9870,7 @@ static void vp9_work(struct work_struct *work)
 			pbi->stat &= ~STAT_ISR_REG;
 		}
 	} else if (pbi->dec_result == DEC_RESULT_UNFINISH) {
+		pbi->slice_idx++;
 		pbi->frame_count++;
 		pbi->process_state = PROC_STATE_INIT;
 
