@@ -1940,6 +1940,11 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 					"[vdec_kpi][%s] First I frame decoded.\n",
 					__func__);
 			}
+			debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+				"[%s] pts: %llx video_id %d\n",
+				__func__,
+				vf->pts_us64,
+				vdec->video_id);
 			if (without_display_mode == 0) {
 				if (hw->is_used_v4l) {
 					if (v4l2_ctx->is_stream_off) {

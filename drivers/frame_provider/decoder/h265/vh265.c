@@ -9498,12 +9498,13 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		vdec_fill_vdec_frame(vdec, &hevc->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 		vdec->vdec_fps_detec(vdec->id);
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
-			"%s(type %d index 0x%x poc %d/%d) pts(%d,%d) dur %d\n",
+			"%s(type %d index 0x%x poc %d/%d) pts(%d,%lld) dur %d, video_id %d\n",
 			__func__, vf->type, vf->index,
 			get_pic_poc(hevc, vf->index & 0xff),
 			get_pic_poc(hevc, (vf->index >> 8) & 0xff),
 			vf->pts, vf->pts_us64,
-			vf->duration);
+			vf->duration,
+			vdec->video_id);
 
 		if (pic->pic_struct == 10 || pic->pic_struct == 12) {
 			index = (vf->index >> 8) & 0xff;
