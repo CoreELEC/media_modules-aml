@@ -2936,6 +2936,30 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 
 	}
 
+	if ((vdec->slave != NULL) &&
+		(p->frame_base_video_path == FRAME_BASE_PATH_V4LVIDEO_AMLVIDEO)){
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
+			r = v4lvideo_assign_map(&vdec->vf_receiver_name,
+					&vdec->vf_receiver_inst);
+#else
+			r = -1;
+#endif
+			 if (r < 0) {
+				pr_err("V4lVideo frame receiver allocation failed.\n");
+				mutex_lock(&vdec_mutex);
+				inited_vcodec_num--;
+				mutex_unlock(&vdec_mutex);
+				goto error;
+			}
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
+			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
+					"%s %s", vdec->vf_provider_name,
+					vdec->vf_receiver_name);
+#endif
+		vfm_map_remove("dvblpath");
+		vfm_map_add("dvblpath", vdec->vfm_map_chain);
+	}
+
 	if (!vdec_single(vdec) && !vdec->disable_vfm) {
 		vf_reg_provider(&p->vframe_provider);
 

@@ -14007,7 +14007,8 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "negative_dv",
 			&config_val) == 0) {
 			hevc->discard_dv_data = config_val;
-			hevc_print(hevc, 0, "discard dv data\n");
+			if (hevc->discard_dv_data)
+			    hevc_print(hevc, 0, "discard dv data\n");
 		}
 
 		if (get_config_int(pdata->config, "dv_duallayer",

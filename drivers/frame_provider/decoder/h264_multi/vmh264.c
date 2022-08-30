@@ -11043,7 +11043,8 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			"negative_dv",
 			&config_val) == 0) {
 			hw->discard_dv_data = config_val;
-			dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
+			if (hw->discard_dv_data)
+			    dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
 		}
 
 		if (get_config_int(pdata->config,
