@@ -2419,18 +2419,24 @@ void dump_dpb(struct DecodedPictureBuffer *p_Dpb, u8 force)
 				DPB_STRCAT("T: poc=%d  pic_num=%d ",
 				p_Dpb->fs[i]->top_field->poc,
 				p_Dpb->fs[i]->top_field->pic_num);
-			else
+			else if (p_Dpb->fs[i]->frame != NULL) {
 				DPB_STRCAT("T: poc=%d  ",
 				p_Dpb->fs[i]->frame->top_poc);
+			}
+			else
+				DPB_STRCAT("fs[%d] frame is null ", i);
 		}
 		if (p_Dpb->fs[i]->is_used & 2) {
 			if (p_Dpb->fs[i]->bottom_field)
 				DPB_STRCAT("B: poc=%d  pic_num=%d ",
 				p_Dpb->fs[i]->bottom_field->poc,
 				p_Dpb->fs[i]->bottom_field->pic_num);
-			else
+			else if (p_Dpb->fs[i]->frame != NULL) {
 				DPB_STRCAT("B: poc=%d  ",
 				p_Dpb->fs[i]->frame->bottom_poc);
+			}
+			else
+				DPB_STRCAT("fs[%d] frame is null ", i);
 		}
 		if (p_Dpb->fs[i]->is_used == 3) {
 			if (p_Dpb->fs[i]->frame != NULL)
