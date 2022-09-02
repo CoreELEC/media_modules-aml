@@ -527,6 +527,21 @@ void vdec_inputbuff_unlock(struct vdec_core_s *core, unsigned long flags)
 	spin_unlock_irqrestore(&core->input_lock, flags);
 }
 
+unsigned long vdec_power_lock(struct vdec_s *vdec)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&vdec->power_lock, flags);
+
+	return flags;
+}
+EXPORT_SYMBOL(vdec_power_lock);
+
+void vdec_power_unlock(struct vdec_s *vdec, unsigned long flags)
+{
+	spin_unlock_irqrestore(&vdec->power_lock, flags);
+}
+EXPORT_SYMBOL(vdec_power_unlock);
 
 static bool vdec_is_input_frame_empty(struct vdec_s *vdec) {
 	struct vdec_core_s *core = vdec_core;

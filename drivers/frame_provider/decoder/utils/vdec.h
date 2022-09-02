@@ -429,6 +429,8 @@ struct vdec_s {
 	u32 play_num;
 	wait_queue_head_t idle_wait;
 	struct vdec_data_info_s *vdata;
+	spinlock_t power_lock;
+	bool suspend;
 };
 
 #define CODEC_MODE(a, b, c, d)\
@@ -756,5 +758,10 @@ struct vdec_data_info_s *vdec_data_get(void);
 int vdec_data_get_index(ulong data);
 
 void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb);
+
+unsigned long vdec_power_lock(struct vdec_s *vdec);
+
+void vdec_power_unlock(struct vdec_s *vdec, unsigned long flags);
+
 
 #endif				/* VDEC_H */

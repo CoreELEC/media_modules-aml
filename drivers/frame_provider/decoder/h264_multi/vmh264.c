@@ -8106,6 +8106,7 @@ static void check_timer_func(struct timer_list *timer)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	int error_skip_frame_count = error_skip_count & 0xfff;
 	unsigned int timeout_val = decode_timeout_val;
+	unsigned long flags;
 	if (timeout_val != 0 &&
 		hw->no_error_count < error_skip_frame_count)
 		timeout_val = errordata_timeout_val;
@@ -8127,11 +8128,15 @@ static void check_timer_func(struct timer_list *timer)
 		return;
 	}
 
-	if (vdec->next_status == VDEC_STATUS_DISCONNECTED &&
-			!hw->is_used_v4l) {
+	flags = vdec_power_lock(vdec);
+
+	if ((vdec->next_status == VDEC_STATUS_DISCONNECTED ||
+		vdec->suspend) &&
+		!hw->is_used_v4l) {
 		hw->dec_result = DEC_RESULT_FORCE_EXIT;
 		WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 		vdec_schedule_work(&hw->work);
+		vdec_power_unlock(vdec, flags);
 		pr_debug("vdec requested to be disconnected\n");
 		return;
 	}
@@ -8190,6 +8195,7 @@ static void check_timer_func(struct timer_list *timer)
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL);
 		hw->last_mby_mbx = mby_mbx;
 	}
+	vdec_power_unlock(vdec, flags);
 
 	if ((hw->ucode_pause_pos != 0) &&
 		(hw->ucode_pause_pos != 0xffffffff) &&
@@ -9727,6 +9733,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	 */
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	u32 wcount = 0;
+	unsigned long flags;
 
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
@@ -9745,7 +9752,11 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			dealloc_buf_specs(hw, 0);
 			mutex_unlock(&vmh264_mutex);
 		}
-	hw->save_reg_f = READ_VREG(AV_SCRATCH_F);
+	flags = vdec_power_lock(vdec);
+	if (!vdec->suspend)
+		hw->save_reg_f = READ_VREG(AV_SCRATCH_F);
+	vdec_power_unlock(vdec, flags);
+
 	hw->dpb.last_dpb_status = hw->dpb.dec_dpb_status;
 	if (hw->dec_result == DEC_RESULT_CONFIG_PARAM) {
 		u32 param1 = READ_VREG(AV_SCRATCH_1);
@@ -10000,17 +10011,24 @@ result_done:
 		} else if (hw->dpb.mSlice.slice_type == B_SLICE) {
 			hw->gvs.b_decoded_frames++;
 		}
-		amvdec_stop();
+		flags = vdec_power_lock(vdec);
+		if (!vdec->suspend) {
+			amvdec_stop();
 
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-			"%s dec_result %d %x %x %x\n",
-			__func__,
-			hw->dec_result,
-			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-			READ_VREG(VLD_MEM_VIFIFO_WP),
-			READ_VREG(VLD_MEM_VIFIFO_RP));
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+				"%s dec_result %d %x %x %x\n",
+				__func__,
+				hw->dec_result,
+				READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+				READ_VREG(VLD_MEM_VIFIFO_WP),
+				READ_VREG(VLD_MEM_VIFIFO_RP));
+		}
+		vdec_power_unlock(vdec, flags);
 		mutex_lock(&hw->chunks_mutex);
-		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		flags = vdec_power_lock(vdec);
+		if (!vdec->suspend)
+			vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		vdec_power_unlock(vdec, flags);
 		hw->chunk = NULL;
 		mutex_unlock(&hw->chunks_mutex);
 	} else if (hw->dec_result == DEC_RESULT_AGAIN) {
