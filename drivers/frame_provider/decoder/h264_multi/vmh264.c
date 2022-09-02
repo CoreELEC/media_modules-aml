@@ -10398,6 +10398,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (hw->reset_bufmgr_flag ||
 		((hw->error_proc_policy & 0x40) &&
 		p_H264_Dpb->buf_alloc_fail)) {
+		if (p_H264_Dpb->buf_alloc_fail)
+		    hw->reset_bufmgr_flag = 1;
+
 		h264_reset_bufmgr(vdec);
 		//flag must clear after reset for v4l buf_spec_init use
 		hw->reset_bufmgr_flag = 0;
