@@ -640,7 +640,7 @@ static int aml_ci_gio_get_irq(void)
 	else if (g_spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI)
 		ret = aml_get_gpio_value(g_spi_dev->mcu_irq_pin);
 	else
-		pr_error("aml_ci_gio_get_irq io type not surport\n");
+		pr_error("aml_ci_gio_get_irq io type not support\n");
 	return ret;
 }
 #endif
@@ -776,7 +776,7 @@ static int aml_gio_get_cd1(struct aml_pcmcia *pc)
 	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
 		ret = aml_ci_getcd12_by_spi((struct aml_ci *)spi_dev->priv, 0, 0);
 	} else {
-		pr_dbg("aml_gio_get_cd1 not surport type [%d] \r\n", spi_dev->io_device_type);
+		pr_dbg("aml_gio_get_cd1 not support type [%d] \r\n", spi_dev->io_device_type);
 	}
 	return ret;
 }
@@ -795,7 +795,7 @@ static int aml_gio_get_cd2(struct aml_pcmcia *pc)
 	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
 		ret = aml_ci_getcd12_by_spi((struct aml_ci *)spi_dev->priv, 0, 1);
 	} else {
-		pr_dbg("aml_gio_get_cd2 not surport type [%d] \r\n", spi_dev->io_device_type);
+		pr_dbg("aml_gio_get_cd2 not support type [%d] \r\n", spi_dev->io_device_type);
 	}
 	return ret;
 }
