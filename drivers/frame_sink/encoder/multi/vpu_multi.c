@@ -482,7 +482,7 @@ static void vpu_clk_config(int enable)
 			clk_disable(clks->b_clk);
 			clk_disable(clks->a_clk);
 		} else if (clock_gate_count < 0)
-			enc_pr(LOG_ERROR, "vpu clock alredy closed %d\n",
+			enc_pr(LOG_ERROR, "vpu clock already closed %d\n",
 				clock_gate_count);
 	} else {
 		clock_gate_count ++;
@@ -525,7 +525,7 @@ static void vpu_free_dma_buffer(struct vpudrv_buffer_t *vb)
 
 static s32 vpu_free_instances(struct file *filp)
 {
-	struct vpudrv_instanace_list_t *vil, *n;
+	struct vpudrv_instance_list_t *vil, *n;
 	struct vpudrv_instance_pool_t *vip;
 	void *vip_base;
 	s32 instance_pool_size_per_core;
@@ -1689,7 +1689,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 	case VDI_IOCTL_OPEN_INSTANCE:
 		{
 			struct vpudrv_inst_info_t inst_info;
-			struct vpudrv_instanace_list_t *vil, *n;
+			struct vpudrv_instance_list_t *vil, *n;
 
 			enc_pr(LOG_DEBUG,
 				"[+]VDI_IOCTL_OPEN_INSTANCE\n");
@@ -1762,7 +1762,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 	case VDI_IOCTL_CLOSE_INSTANCE:
 		{
 			struct vpudrv_inst_info_t inst_info;
-			struct vpudrv_instanace_list_t *vil, *n;
+			struct vpudrv_instance_list_t *vil, *n;
 			u32 found = 0;
 
 			enc_pr(LOG_ALL,
@@ -1830,7 +1830,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 	case VDI_IOCTL_GET_INSTANCE_NUM:
 		{
 			struct vpudrv_inst_info_t inst_info;
-			struct vpudrv_instanace_list_t *vil, *n;
+			struct vpudrv_instance_list_t *vil, *n;
 
 			enc_pr(LOG_ALL,
 				"[+]VDI_IOCTL_GET_INSTANCE_NUM\n");
@@ -3051,7 +3051,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 
 	if (use_reserve == false) {
 #ifndef CONFIG_CMA
-		enc_pr(LOG_ERROR, "MultiEnc reserved memory is invaild, probe fail!\n");
+		enc_pr(LOG_ERROR, "MultiEnc reserved memory is invalid, probe fail!\n");
 		err = -EFAULT;
 		goto ERROR_PROVE_DEVICE;
 #else
