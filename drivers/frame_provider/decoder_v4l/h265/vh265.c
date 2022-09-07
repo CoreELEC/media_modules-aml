@@ -10864,6 +10864,8 @@ force_output:
 					__func__);
 			}
 		} else if (hevc->wait_buf == 0) {
+			int pic_h;
+			int pic_w;
 			u32 vui_time_scale;
 			u32 vui_num_units_in_tick;
 			unsigned char reconfig_flag = 0;
@@ -10956,10 +10958,10 @@ force_output:
 
 			aspect_ratio_set(hevc, &hevc->frame_ar, &ctx->height_aspect_ratio, &ctx->width_aspect_ratio);
 
-			hevc->pic_w = hevc->param.p.pic_width_in_luma_samples;
-			hevc->pic_h = hevc->param.p.pic_height_in_luma_samples;
-			if (is_oversize_ex(hevc->pic_w, hevc->pic_h)) {
-				hevc_print(hevc, 0,"is_oversize w:%d h:%d\n", hevc->pic_w, hevc->pic_h);
+			pic_w = hevc->param.p.pic_width_in_luma_samples;
+			pic_h = hevc->param.p.pic_height_in_luma_samples;
+			if (is_oversize_ex(pic_w, pic_h)) {
+				hevc_print(hevc, 0,"is_oversize w:%d h:%d\n", pic_w, pic_h);
 				hevc->dec_result = DEC_RESULT_ERROR_DATA;
 				amhevc_stop();
 				vdec_schedule_work(&hevc->work);
