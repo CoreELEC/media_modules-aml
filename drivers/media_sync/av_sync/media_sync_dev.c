@@ -23,6 +23,7 @@
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
+#include <linux/compat.h>
 
 #include <linux/platform_device.h>
 #include <linux/amlogic/cpu_version.h>
@@ -129,7 +130,6 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	s64 UpdateTimeThreshold = 0;
 	s64 StartMediaTime = -1;
 	s32 PlayerInstanceId = -1;
-
 	switch (cmd) {
 		case MEDIASYNC_IOC_INSTANCE_ALLOC:
 			if (copy_from_user ((void *)&parm,
@@ -1307,6 +1307,14 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_EXT_CTRLS:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_ext_ctrls(priv->mSyncInsId,arg);
+
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -1406,7 +1414,8 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_PAUSE_VIDEO_INFO:
 		case MEDIASYNC_IOC_SET_PAUSE_AUDIO_INFO:
 		case MEDIASYNC_IOC_GET_PAUSE_AUDIO_INFO:
-			return mediasync_ioctl(file, cmd, arg);
+		case MEDIASYNC_IOC_EXT_CTRLS:
+			return mediasync_ioctl(file, cmd,(ulong)compat_ptr(arg));
 		default:
 			return -EINVAL;
 	}

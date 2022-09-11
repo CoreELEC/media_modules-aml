@@ -28,23 +28,13 @@
 
 
 #define MIN_UPDATETIME_THRESHOLD_US 50000
+
 typedef enum {
 	MEDIA_SYNC_VMASTER = 0,
 	MEDIA_SYNC_AMASTER = 1,
 	MEDIA_SYNC_PCRMASTER = 2,
 	MEDIA_SYNC_MODE_MAX = 255,
-}sync_mode;
-
-typedef struct speed{
-	u32 mNumerator;
-	u32 mDenominator;
-}mediasync_speed;
-
-typedef struct mediasync_lock{
-	struct mutex m_mutex;
-	int Is_init;
-}mediasync_lock;
-
+} sync_mode;
 
 typedef enum {
 	MEDIASYNC_INIT = 0,
@@ -66,10 +56,37 @@ typedef enum {
 	REF_CLOCK,
 } mediasync_clocktype;
 
+typedef enum {
+	GET_UPDATE_INFO = 0,
+	SET_VIDEO_FRAME_ADVANCE = 500,
+} mediasync_control_cmd;
+
+typedef struct m_control {
+	u32 cmd;
+	u32 size;
+	u32 reserved[2];
+	union {
+		s32 value;
+		s64 value64;
+		ulong ptr;
+	};
+} mediasync_control;
+
+
+typedef struct speed{
+	u32 mNumerator;
+	u32 mDenominator;
+} mediasync_speed;
+
+typedef struct mediasync_lock{
+	struct mutex m_mutex;
+	int Is_init;
+} mediasync_lock;
+
 typedef struct frameinfo{
 	int64_t framePts;
 	int64_t frameSystemTime;
-}mediasync_frameinfo;
+} mediasync_frameinfo;
 
 typedef struct video_packets_info{
 	int packetsSize;
@@ -83,7 +100,6 @@ typedef struct audio_packets_info{
 	int isneedupdate;
 	int64_t packetsPts;
 } mediasync_audio_packets_info;
-
 
 typedef struct discontinue_frame_info{
 	int64_t discontinuePtsBefore;
@@ -115,25 +131,25 @@ typedef struct syncinfo {
 	mediasync_frameinfo pauseAudioInfo;
 	mediasync_video_packets_info videoPacketsInfo;
 	mediasync_audio_packets_info audioPacketsInfo;
-}mediasync_syncinfo;
+} mediasync_syncinfo;
 
 typedef struct audioinfo{
 	int cacheSize;
 	int cacheDuration;
-}mediasync_audioinfo;
+} mediasync_audioinfo;
 
 typedef struct videoinfo{
 	int cacheSize;
 	int specialSizeCount;
 	int cacheDuration;
-}mediasync_videoinfo;
+} mediasync_videoinfo;
 
 typedef struct audio_format{
 	int samplerate;
 	int datawidth;
 	int channels;
 	int format;
-}mediasync_audio_format;
+} mediasync_audio_format;
 
 typedef enum
 {
@@ -149,6 +165,19 @@ typedef enum {
     CLOCK_PROVIDER_LOST,
     CLOCK_PROVIDER_RECOVERING,
 } mediasync_clockprovider_state;
+
+typedef struct update_info{
+	u32 mStcParmUpdateCount;
+	u32 debugLevel;
+	s64 mCurrentSystemtime;
+	int mPauseResumeFlag;
+	avsync_state mAvSyncState;
+	int64_t mSetStateCurTimeUs;
+	mediasync_clockprovider_state mSourceClockState;
+	mediasync_audioinfo mAudioInfo;
+	mediasync_videoinfo mVideoInfo;
+	u32 isVideoFrameAdvance;
+} mediasync_update_info;
 
 typedef struct instance{
 	s32 mSyncInsId;
@@ -176,6 +205,12 @@ typedef struct instance{
 	int mFccEnable;
 	int mPauseResumeFlag;
 	int mAVRef;
+	u32 mStcParmUpdateCount;
+	u32 mAudioCacheUpdateCount;
+	u32 mVideoCacheUpdateCount;
+	u32 mGetAudioCacheUpdateCount;
+	u32 mGetVideoCacheUpdateCount;
+	u32 isVideoFrameAdvance;
 	mediasync_clocktype mSourceClockType;
 	mediasync_clockprovider_state mSourceClockState;
 	mediasync_audioinfo mAudioInfo;
@@ -299,5 +334,7 @@ long mediasync_ins_set_pause_video_info(s32 sSyncInsId, mediasync_frameinfo info
 long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_ext_ctrls(s32 sSyncInsId,ulong arg);
+
 
 #endif
