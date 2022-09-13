@@ -554,8 +554,8 @@ struct OldSliceParams {
 	unsigned int field_pic_flag;
 	unsigned int frame_num;
 	int      nal_ref_idc;
-	unsigned int pic_oder_cnt_lsb;
-	int      delta_pic_oder_cnt_bottom;
+	unsigned int pic_order_cnt_lsb;
+	int      delta_pic_order_cnt_bottom;
 	int      delta_pic_order_cnt[2];
 	unsigned char     bottom_field_flag;
 	unsigned char     idr_flag;

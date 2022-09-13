@@ -779,7 +779,7 @@ struct aml_vcodec_ctx {
  * @dec_mutex		: decoder hardware lock.
  * @queue		: waitqueue for waiting for completion of device commands.
  * @vpp_count		: count the number of open vpp.
- * @v4ldec_class	: creat class sysfs uesd to show some information.
+ * @v4ldec_class	: creat class sysfs used to show some information.
  * @cache		: canvas pool specific used for v4ldec context.
  */
 struct aml_vcodec_dev {

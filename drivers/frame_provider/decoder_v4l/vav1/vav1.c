@@ -8334,7 +8334,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		next_lcu_size = ((hw->aom_param.p.seq_flags >> 6) & 0x1) ? 128 : 64;
 		hw->video_signal_type = (hw->aom_param.p.video_signal_type << 16
 			| hw->aom_param.p.color_description);
-		/* When the matrix_coeffiecents, transfer_characteristics and colour_primaries
+		/* When the matrix_coefficients, transfer_characteristics and colour_primaries
 		 * syntax elements are absent, their values shall be presumed to be equal to 2
 		 */
 		if ((hw->video_signal_type & 0x1000000) == 0) {
@@ -10351,7 +10351,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 #ifdef MULTI_INSTANCE_SUPPORT
 		int av1_buf_width = 0;
 		int av1_buf_height = 0;
-		/*use ptr config for doubel_write_mode, etc*/
+		/*use ptr config for double_write_mode, etc*/
 		av1_print(hw, 0, "pdata->config=%s\n", pdata->config);
 		if (get_config_int(pdata->config, "av1_double_write_mode",
 				&config_val) == 0)

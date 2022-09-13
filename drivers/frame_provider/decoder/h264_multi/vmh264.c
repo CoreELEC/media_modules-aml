@@ -600,7 +600,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define MODE_ERROR 0
 #define MODE_FULL  1
 
-#define DFS_HIGH_THEASHOLD 3
+#define DFS_HIGH_THRESHOLD 3
 
 #define INIT_FLAG_REG       AV_SCRATCH_2
 #define HEAD_PADDING_REG     AV_SCRATCH_3
@@ -7228,7 +7228,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					((video_signal & 0xff0000) >> 16) |
 					((video_signal & 0x3f000000));
 
-		/* When the matrix_coeffiecents, transfer_characteristics and colour_primaries
+		/* When the matrix_coefficients, transfer_characteristics and colour_primaries
 		 * syntax elements are absent, their values shall be presumed to be equal to 2
 		 */
 		 if ((hw->video_signal_from_vui & 0x1000000) == 0) {

@@ -5506,8 +5506,8 @@ void init_old_slice(OldSliceParams *p_old_slice)
 	p_old_slice->nal_ref_idc    = INT_MAX;
 	p_old_slice->idr_flag       = 0;
 
-	p_old_slice->pic_oder_cnt_lsb          = UINT_MAX;
-	p_old_slice->delta_pic_oder_cnt_bottom = INT_MAX;
+	p_old_slice->pic_order_cnt_lsb          = UINT_MAX;
+	p_old_slice->delta_pic_order_cnt_bottom = INT_MAX;
 
 	p_old_slice->delta_pic_order_cnt[0] = INT_MAX;
 	p_old_slice->delta_pic_order_cnt[1] = INT_MAX;
@@ -5535,9 +5535,9 @@ void copy_slice_info(struct Slice *currSlice, OldSliceParams *p_old_slice)
 		p_old_slice->idr_pic_id = currSlice->idr_pic_id;
 
 	if (p_Vid->active_sps->pic_order_cnt_type == 0) {
-		p_old_slice->pic_oder_cnt_lsb =
+		p_old_slice->pic_order_cnt_lsb =
 			currSlice->pic_order_cnt_lsb;
-		p_old_slice->delta_pic_oder_cnt_bottom =
+		p_old_slice->delta_pic_order_cnt_bottom =
 			currSlice->delta_pic_order_cnt_bottom;
 	}
 
@@ -5585,12 +5585,12 @@ int is_new_picture(StorablePicture *dec_picture, struct Slice *currSlice,
 		result |= (p_old_slice->idr_pic_id != currSlice->idr_pic_id);
 
 	if (p_Vid->active_sps->pic_order_cnt_type == 0) {
-		result |= (p_old_slice->pic_oder_cnt_lsb !=
+		result |= (p_old_slice->pic_order_cnt_lsb !=
 			   currSlice->pic_order_cnt_lsb);
 		if (p_Vid->active_pps->
 			bottom_field_pic_order_in_frame_present_flag  ==  1 &&
 		    !currSlice->field_pic_flag) {
-			result |= (p_old_slice->delta_pic_oder_cnt_bottom !=
+			result |= (p_old_slice->delta_pic_order_cnt_bottom !=
 				   currSlice->delta_pic_order_cnt_bottom);
 		}
 	}

@@ -2016,7 +2016,7 @@ static int update_reference(struct vdec_mpeg12_hw_s *hw,
 		/* second pic do not output */
 		index = hw->buf_num;
 	} else {
-		hw->ref_use[hw->refs[0]]--;		//old ref0 ununsed
+		hw->ref_use[hw->refs[0]]--;		//old ref0 unused
 		hw->refs[0] = hw->refs[1];
 		hw->refs[1] = index;
 		index = hw->refs[0];
