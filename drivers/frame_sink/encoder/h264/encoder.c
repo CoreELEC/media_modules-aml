@@ -623,6 +623,17 @@ static void canvas_config_proxy(u32 index, ulong addr, u32 width, u32 height,
 	}
 }
 
+static int is_oversize(int w, int h, int max)
+{
+	if (w <= 0 || h <= 0)
+		return true;
+
+	if (h != 0 && (w > max / h))
+		return true;
+
+	return false;
+}
+
 s32 hcodec_hw_reset(void)
 {
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2 && use_reset_control) {
@@ -1466,7 +1477,8 @@ static int scale_frame(struct encode_wq_s *wq,
 	ge2d_config->dst_para.format =
 		GE2D_FORMAT_M24_NV21 | GE2D_LITTLE_ENDIAN;
 
-	if (wq->pic.encoder_width >= 1280 && wq->pic.encoder_height >= 720) {
+	if ((wq->pic.encoder_width >= 1280 && wq->pic.encoder_height >= 720) ||
+		(wq->pic.encoder_width >= 720 && wq->pic.encoder_height >= 1280)) {
 		ge2d_config->dst_para.format |= wq->pic.color_space;
 	}
 
@@ -3183,8 +3195,9 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 		enc_pr(LOG_INFO, "wq->pic.encoder_height:%d, request fmt=%d\n",
 		      wq->pic.encoder_height, wq->request.fmt);
 
-		if (wq->pic.encoder_width >= 1280 && wq->pic.encoder_height >= 720
-			&& wq->request.fmt == FMT_RGBA8888 && wq->pic.color_space != GE2D_FORMAT_BT601) {
+		if (((wq->pic.encoder_width >= 1280 && wq->pic.encoder_height >= 720) ||
+			(wq->pic.encoder_width >= 720 && wq->pic.encoder_height >= 1280))
+			&& wq->request.fmt == FMT_RGBA8888/* && wq->pic.color_space != GE2D_FORMAT_BT601*/) {
 			wq->request.scale_enable = 1;
 			wq->request.src_w = wq->pic.encoder_width;
 			wq->request.src_h = wq->pic.encoder_height;
@@ -3784,8 +3797,9 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 			"avc init as mode %d, wq: %px.\n",
 			wq->ucode_index, (void *)wq);
 
-		if (addr_info[2] > wq->mem.bufspec.max_width ||
-		    addr_info[3] > wq->mem.bufspec.max_height) {
+		if (is_oversize(addr_info[2],
+			addr_info[3],
+			wq->mem.bufspec.max_width * wq->mem.bufspec.max_height)) {
 			enc_pr(LOG_ERROR,
 				"avc config init- encode size %dx%d is larger than supported (%dx%d).  wq:%p.\n",
 				addr_info[2], addr_info[3],
