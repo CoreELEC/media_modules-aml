@@ -1325,7 +1325,7 @@ long mediasync_ins_get_audioinfo(s32 sSyncInsId, mediasync_audioinfo* info) {
 	}
 
 	info->cacheDuration = pInstance->mAudioInfo.cacheDuration;
-	info->cacheDuration = pInstance->mAudioInfo.cacheDuration;
+	info->cacheSize = pInstance->mAudioInfo.cacheSize;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
