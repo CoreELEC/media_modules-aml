@@ -1910,6 +1910,8 @@ struct hevc_state_s {
 	int lcu_x_num_pre;
 	int lcu_y_num_pre;
 	int first_pic_after_recover;
+	u32 sar_width;
+	u32 sar_height;
 
 	int num_tile_col;
 	int num_tile_row;
@@ -10084,8 +10086,9 @@ static void aspect_ratio_set(struct hevc_state_s *hevc)
 			hevc->cur_pic->sar_height = 1;
 			hevc->cur_pic->sar_width = 1;
 			break;
-		}
-
+	}
+	hevc->sar_height = hevc->cur_pic->sar_height;
+	hevc->sar_width = hevc->cur_pic->sar_width;
 }
 static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 {
@@ -11450,8 +11453,12 @@ int vh265_dec_status(struct vdec_info *vstatus)
 #else
 	struct hevc_state_s *hevc = gHevc;
 #endif
-	if (!hevc)
+	struct vdec_info_statistic_s *vstatistic = container_of(
+		vstatus, struct vdec_info_statistic_s, vstatus);
+	if (!hevc || !vstatistic) {
+		pr_info("param invalid!\n");
 		return -1;
+	}
 
 	vstatus->frame_width = hevc->crop_w;
 	/* for hevc interlace for disp height x2 */
@@ -11491,6 +11498,12 @@ int vh265_dec_status(struct vdec_info *vstatus)
 		vstatus->samp_cnt = hevc->gvs->samp_cnt;
 		vstatus->offset = hevc->gvs->offset;
 	}
+
+	vstatistic->aspect_ratio.sar_width = hevc->sar_width;
+	vstatistic->aspect_ratio.sar_height = hevc->sar_height;
+	vstatistic->aspect_ratio.dar_width = -1;
+	vstatistic->aspect_ratio.dar_height = -1;
+	vstatistic->ext_info_valid = 1;
 
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name), "%s", DRIVER_NAME);
 	vstatus->ratio_control = hevc->ratio_control;

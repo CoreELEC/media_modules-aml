@@ -2837,19 +2837,59 @@ static u32 get_ratio_control(struct vdec_mpeg12_hw_s *hw)
 	return ratio_control;
 }
 
+static void vmpeg12_get_aspect_ratio_info(struct vdec_mpeg12_hw_s *hw, struct vdec_info_statistic_s *vstatus)
+{
+	struct aspect_ratio_info *aspect_ratio_info = &vstatus->aspect_ratio;
+
+	if (hw->pixel_ratio == 0) {
+		aspect_ratio_info->dar_width = -1;
+		aspect_ratio_info->dar_height = -1;
+		aspect_ratio_info->sar_width = 1;
+		aspect_ratio_info->sar_height = 1;
+	} else {
+		aspect_ratio_info->sar_width = -1;
+		aspect_ratio_info->sar_height = -1;
+		switch (hw->pixel_ratio) {
+			case 1:
+				aspect_ratio_info->dar_width = 1;
+				aspect_ratio_info->dar_height = 1;
+				break;
+			case 2:
+				aspect_ratio_info->dar_width = 4;
+				aspect_ratio_info->dar_height = 3;
+				break;
+			case 3:
+				aspect_ratio_info->dar_width = 16;
+				aspect_ratio_info->dar_height = 9;
+				break;
+			case 4:
+				aspect_ratio_info->dar_width = 221;
+				aspect_ratio_info->dar_height = 100;
+				break;
+			default:
+				aspect_ratio_info->dar_width = 1;
+				aspect_ratio_info->dar_width = 1;
+				break;
+		}
+	}
+	vstatus->ext_info_valid = 1;
+}
+
 static int vmmpeg12_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	struct vdec_mpeg12_hw_s *hw =
 	(struct vdec_mpeg12_hw_s *)vdec->private;
+	struct vdec_info_statistic_s *vstatistic = container_of(
+		vstatus, struct vdec_info_statistic_s, vstatus);
 
-	if (!hw)
+	if (!hw || !vstatistic)
 		return -1;
 
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
 	if (hw->frame_dur != 0)
 		vstatus->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
-		                    96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
+		    96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(AV_SCRATCH_C);
@@ -2874,14 +2914,13 @@ static int vmmpeg12_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->samp_cnt = hw->gvs.samp_cnt;
 	vstatus->offset = hw->gvs.offset;
 	vstatus->ratio_control = get_ratio_control(hw);
+	vmpeg12_get_aspect_ratio_info(hw, vstatistic);
 
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 			"%s", DRIVER_NAME);
 
 	return 0;
 }
-
-
 
 /****************************************/
 static int vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)

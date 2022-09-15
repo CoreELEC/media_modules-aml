@@ -320,6 +320,12 @@ struct vdec_data_core_s {
 	spinlock_t vdec_data_lock;
 };
 
+struct vdec_info_statistic_s {
+	struct vdec_info vstatus;
+	struct aspect_ratio_info aspect_ratio;
+	int ext_info_valid;
+};
+
 struct vdec_s {
 	u32 magic;
 	struct list_head list;
@@ -658,7 +664,7 @@ extern int vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l);
 
 extern void vdec_release(struct vdec_s *vdec);
 
-extern int vdec_status(struct vdec_s *vdec, struct vdec_info *vstatus);
+extern int vdec_status(struct vdec_s *vdec, struct vdec_info_statistic_s *vstat);
 
 extern int vdec_set_trickmode(struct vdec_s *vdec, unsigned long trickmode);
 

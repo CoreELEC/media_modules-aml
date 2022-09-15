@@ -8240,9 +8240,13 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	u32 ar, ar_tmp;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	struct vdec_info_statistic_s *vstatistic = container_of(
+		vstatus, struct vdec_info_statistic_s, vstatus);
 
-	if (!hw)
+	if (!hw || !vstatistic) {
+		pr_info("param invalid!\n");
 		return -1;
+	}
 
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
@@ -8284,6 +8288,12 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->b_decoded_frames = hw->gvs.b_decoded_frames;
 	vstatus->b_lost_frames = hw->gvs.b_lost_frames;
 	vstatus->b_concealed_frames = hw->gvs.b_concealed_frames;
+	vstatistic->aspect_ratio.sar_height = hw->height_aspect_ratio;
+	vstatistic->aspect_ratio.sar_width = hw->width_aspect_ratio;
+	vstatistic->aspect_ratio.dar_height = -1;
+	vstatistic->aspect_ratio.dar_width = -1;
+	vstatistic->ext_info_valid = 1;
+
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s-%02d", DRIVER_NAME, hw->id);
 

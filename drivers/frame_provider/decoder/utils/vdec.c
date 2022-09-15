@@ -991,12 +991,12 @@ void vdec_update_streambuff_status(void)
 EXPORT_SYMBOL(vdec_update_streambuff_status);
 #endif
 
-int vdec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
+int vdec_status(struct vdec_s *vdec, struct vdec_info_statistic_s *vstat)
 {
 	if (vdec && vdec->dec_status &&
 		((vdec->status == VDEC_STATUS_CONNECTED ||
 		vdec->status == VDEC_STATUS_ACTIVE)))
-		return vdec->dec_status(vdec, vstatus);
+		return vdec->dec_status(vdec, &vstat->vstatus);
 
 	return 0;
 }
@@ -5445,7 +5445,7 @@ static ssize_t vdec_status_show(struct class *class,
 {
 	char *pbuf = buf;
 	struct vdec_s *vdec;
-	struct vdec_info vs;
+	struct vdec_info_statistic_s vs;
 	unsigned char vdec_num = 0;
 	struct vdec_core_s *core = vdec_core;
 	unsigned long flags = vdec_core_lock(vdec_core);
@@ -5468,46 +5468,46 @@ static ssize_t vdec_status_show(struct class *class,
 				vdec_num);
 			pbuf += sprintf(pbuf,
 				"%13s : %s\n", "device name",
-				vs.vdec_name);
+				vs.vstatus.vdec_name);
 			pbuf += sprintf(pbuf,
 				"%13s : %u\n", "frame width",
-				vs.frame_width);
+				vs.vstatus.frame_width);
 			pbuf += sprintf(pbuf,
 				"%13s : %u\n", "frame height",
-				vs.frame_height);
+				vs.vstatus.frame_height);
 			pbuf += sprintf(pbuf,
 				"%13s : %u %s\n", "frame rate",
-				vs.frame_rate, "fps");
+				vs.vstatus.frame_rate, "fps");
 			pbuf += sprintf(pbuf,
 				"%13s : %u %s\n", "bit rate",
-				vs.bit_rate / 1024 * 8, "kbps");
+				vs.vstatus.bit_rate / 1024 * 8, "kbps");
 			pbuf += sprintf(pbuf,
 				"%13s : %u\n", "status",
-				vs.status);
+				vs.vstatus.status);
 			pbuf += sprintf(pbuf,
 				"%13s : %u\n", "frame dur",
-				vs.frame_dur);
+				vs.vstatus.frame_dur);
 			pbuf += sprintf(pbuf,
 				"%13s : %u %s\n", "frame data",
-				vs.frame_data / 1024, "KB");
+				vs.vstatus.frame_data / 1024, "KB");
 			pbuf += sprintf(pbuf,
 				"%13s : %u\n", "frame count",
-				vs.frame_count);
+				vs.vstatus.frame_count);
 			pbuf += sprintf(pbuf,
 				"%13s : %u\n", "drop count",
-				vs.drop_frame_count);
+				vs.vstatus.drop_frame_count);
 			pbuf += sprintf(pbuf,
 				"%13s : %u\n", "fra err count",
-				vs.error_frame_count);
+				vs.vstatus.error_frame_count);
 			pbuf += sprintf(pbuf,
 				"%13s : %u\n", "hw err count",
-				vs.error_count);
+				vs.vstatus.error_count);
 			pbuf += sprintf(pbuf,
 				"%13s : %llu %s\n", "total data",
-				vs.total_data / 1024, "KB");
+				vs.vstatus.total_data / 1024, "KB");
 			pbuf += sprintf(pbuf,
 				"%13s : %x\n\n", "ratio_control",
-				vs.ratio_control);
+				vs.vstatus.ratio_control);
 
 			vdec_num++;
 		}
