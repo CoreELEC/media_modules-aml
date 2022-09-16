@@ -6898,6 +6898,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		}
 
 		if (hw->is_used_v4l) {
+			vf->codec_vfmt = VFORMAT_AV1;
 			update_vframe_src_fmt(vf,
 				pic_config->aux_data_buf,
 				pic_config->aux_data_size,

@@ -2916,6 +2916,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				v4l2_ctx->aux_infos.bind_dv_buffer(v4l2_ctx,
 					&vf->src_fmt.comp_buf,
 					&vf->src_fmt.md_buf);
+			vf->codec_vfmt = VFORMAT_H264;
 			update_vframe_src_fmt(vf,
 				hw->buffer_spec[buffer_index].aux_data_buf,
 				hw->buffer_spec[buffer_index].aux_data_size,

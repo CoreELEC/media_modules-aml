@@ -3413,6 +3413,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 
 		if (hw->is_used_v4l) {
+			vf->codec_vfmt = VFORMAT_H264;
 			update_vframe_src_fmt(vf,
 				hw->buffer_spec[buffer_index].aux_data_buf,
 				hw->buffer_spec[buffer_index].aux_data_size,

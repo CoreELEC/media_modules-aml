@@ -4636,6 +4636,13 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			tmp4x.double_write_mode = pic->double_write_mode;
 			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
+
+			vf->codec_vfmt = VFORMAT_AVS2;
+			update_vframe_src_fmt(vf,
+				pic->cuva_data_buf,
+				pic->cuva_data_size,
+				0, dec->provider_name, NULL);
+
 			if (without_display_mode == 0) {
 				if (v4l2_ctx->is_stream_off) {
 					vavs2_vf_put(vavs2_vf_get(dec), dec);
