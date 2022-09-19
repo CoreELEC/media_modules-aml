@@ -405,7 +405,9 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 
 	if (!ctx->vpp_cfg.enable_nr &&
 		(ctx->picinfo.field == V4L2_FIELD_NONE) &&
-		!(ctx->config.parm.dec.cfg.double_write_mode & 0x20)) {
+		!((ctx->config.parm.dec.cfg.double_write_mode & 0x20) &&
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
+		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D))) {
 		return false;
 	}
 
@@ -436,8 +438,10 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	}
 
 	if (!disable_vpp_dw_mmu &&
-		(ctx->config.parm.dec.cfg.double_write_mode & 0x20)) {
-		*mode = VPP_MODE_S4_DW_MMU;;
+		(ctx->config.parm.dec.cfg.double_write_mode & 0x20) &&
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
+		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D)) {
+		*mode = VPP_MODE_S4_DW_MMU;
 	}
 #if 0//enable later
 	if (ctx->colorspace != V4L2_COLORSPACE_DEFAULT &&

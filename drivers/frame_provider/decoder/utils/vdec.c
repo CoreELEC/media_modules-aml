@@ -2573,8 +2573,14 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	if (pdev_name == NULL)
 		return -ENODEV;
 
-	snprintf(dev_name, sizeof(dev_name),
-		"%s%s", pdev_name, is_v4l ? "_v4l": "");
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) &&
+		(vdec->format == VFORMAT_AV1) &&
+		is_support_profile("AV1-T5D-V4L")) {
+		snprintf(dev_name, sizeof(dev_name),
+			"%s%s", pdev_name, is_v4l ? "_t5d_v4l": "");
+	} else
+		snprintf(dev_name, sizeof(dev_name),
+			"%s%s", pdev_name, is_v4l ? "_v4l": "");
 
 	pr_info("vdec_init, dev_name:%s, vdec_type=%s, format: %d\n",
 		dev_name, vdec_type_str(vdec), vdec->format);
