@@ -54,6 +54,7 @@
 #define FC_ERR_CRC_BLOCK_MODE	0x10
 #define FC_CHECK_CRC_LOOP_MODE	0x20
 #define AD_CHECK_CRC_LOOP_MODE	0x40
+#define DUMP_YUV_LOOP_MODE	0x200
 
 #define YUV_MASK	0x01
 #define CRC_MASK	0x02
@@ -1505,10 +1506,11 @@ int vdec_frame_check_init(struct vdec_s *vdec)
 
 	if (vdec == NULL)
 		return 0;
-
+#if 0
 	if ((vdec->is_reset) &&
 		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXL))
 		return 0;
+#endif
 
 	vdec->vfc.err_crc_block = 0;
 	single_mode_vdec = (vdec_single(vdec))? vdec : NULL;
@@ -1536,9 +1538,11 @@ int vdec_frame_check_init(struct vdec_s *vdec)
 				yuv_num[id]);
 			vdec->canvas_mode = CANVAS_BLKMODE_LINEAR;
 		}
-		yuv_num[id] = 0;
-		yuv_start[id] = 0;
-		yuv_enable &= ~(0x01 << id);
+		if ((fc_debug & DUMP_YUV_LOOP_MODE) == 0) {
+			yuv_num[id] = 0;
+			yuv_start[id] = 0;
+			yuv_enable &= ~(0x01 << id);
+		}
 	}
 
 	return ret;
