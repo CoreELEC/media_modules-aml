@@ -2808,7 +2808,7 @@ s32 amvenc_loadmc(const char *p, struct encode_wq_s *wq)
 {
 	ulong timeout;
 	s32 ret = 0;
-    if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
+    if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2) {
         char *buf = vmalloc(0x1000 * 16);
         int ret = -1;
         enc_pr(LOG_INFO, "load firmware for t3 avc encoder\n");
