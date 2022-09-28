@@ -7341,10 +7341,8 @@ static void check_timer_func(struct timer_list *timer)
 {
 	struct vdec_h264_hw_s *hw = container_of(timer,
 		struct vdec_h264_hw_s, check_timer);
-	struct vdec_s *vdec = hw_to_vdec(hw);
 	int error_skip_frame_count = error_skip_count & 0xfff;
 	unsigned int timeout_val = decode_timeout_val;
-	unsigned long flags;
 	if (timeout_val != 0 &&
 		hw->no_error_count < error_skip_frame_count)
 		timeout_val = errordata_timeout_val;
@@ -7365,7 +7363,6 @@ static void check_timer_func(struct timer_list *timer)
 		h264_debug_cmd = 0;
 		return;
 	}
-	flags = vdec_power_lock(vdec);
 	if (radr != 0) {
 		if (rval != 0) {
 			WRITE_VREG(radr, rval);
@@ -7420,7 +7417,6 @@ static void check_timer_func(struct timer_list *timer)
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL);
 		hw->last_mby_mbx = mby_mbx;
 	}
-	vdec_power_unlock(vdec, flags);
 
 	if ((hw->ucode_pause_pos != 0) &&
 		(hw->ucode_pause_pos != 0xffffffff) &&
