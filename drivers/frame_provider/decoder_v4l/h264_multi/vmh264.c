@@ -3821,6 +3821,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 		unsigned int colocate_rd_adr_offset;
 		unsigned int mby_mbx;
 		unsigned int mby, mbx;
+		unsigned int mb_width = hw->frame_width >> 4;
 #ifdef ERROR_CHECK
 		if (colocate_pic == NULL) {
 			hw->data_flag |= ERROR_FLAG;
@@ -3849,8 +3850,8 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 
 		//ALLEGRO_FIX, ported from single mode ucode
 		mby_mbx = READ_VREG(MBY_MBX);
-		mby = pSlice->first_mb_in_slice / hw->mb_width;
-		mbx = pSlice->first_mb_in_slice % hw->mb_width;
+		mby = pSlice->first_mb_in_slice / mb_width;
+		mbx = pSlice->first_mb_in_slice % mb_width;
 		if (pic->mb_aff_frame_flag)
 			cur_structure = 3;
 		else {
@@ -3867,7 +3868,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 			} else {
 				// field_ref_from_frame co_mv_rd_addr :
 				// mby*2*mb_width + mbx
-				colocate_rd_adr_offset = mby * 2 * hw->mb_width + mbx;
+				colocate_rd_adr_offset = mby * 2 * mb_width + mbx;
 			}
 
 		} else {
@@ -3876,7 +3877,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 				//calculate_co_mv_offset_frame_ref_field:
 				// frame_ref_from_field co_mv_rd_addr :
 				// (mby/2*mb_width+mbx)*2
-				colocate_rd_adr_offset = ((mby / 2) * hw->mb_width + mbx) * 2;
+				colocate_rd_adr_offset = ((mby / 2) * mb_width + mbx) * 2;
 			} else if (cur_structure == 2) {
 				colocate_rd_adr_offset = pSlice->first_mb_in_slice;
 			} else {
