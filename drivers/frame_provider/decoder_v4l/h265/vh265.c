@@ -2178,11 +2178,21 @@ int is_oversize_ex(int w, int h)
 	if (w == 0 || h == 0)
 		return true;
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
-		if (w > 8192 || h > 4608)
-			return true;
+		if (w >= h) {
+			if (w > 8192 || h > 4608)
+				return true;
+		} else if (w < h) {
+			if (w > 4608 || h > 8192)
+				return true;
+		}
 	} else {
-		if (w > 4096 || h > 2304)
-			return true;
+		if (w >= h) {
+			if (w > 4096 || h > 2304)
+				return true;
+		} else if (w < h) {
+			if (w > 2304 || h > 4096)
+				return true;
+		}
 	}
 
 	if (w < 0 || h < 0)
