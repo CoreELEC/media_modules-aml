@@ -141,6 +141,8 @@ void aml_v4l_vpp_release_early(struct aml_vcodec_ctx * ctx);
 void aml_v4l_ctx_release(struct kref *kref);
 void dmabuff_recycle_worker(struct work_struct *work);
 void aml_buffer_status(struct aml_vcodec_ctx *ctx);
+void aml_compressed_info_show(struct aml_vcodec_ctx *ctx);
+
 void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx);
 
 void aml_alloc_buffer(struct aml_vcodec_ctx *ctx, int flag);

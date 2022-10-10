@@ -4742,6 +4742,7 @@ static void avs2_recycle_mmu_buf_tail(struct AVS2Decoder_s *dec)
 {
 	int index = dec->cur_fb_idx_mmu;
 	struct internal_comp_buf *ibuf = index_to_icomp_buf(dec, index);
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(dec->v4l2_ctx);
 
 	if (dec->cur_fb_idx_mmu != INVALID_IDX) {
 		if (dec->used_4k_num == -1) {
@@ -4749,6 +4750,8 @@ static void avs2_recycle_mmu_buf_tail(struct AVS2Decoder_s *dec)
 
 			avs2_print(dec, AVS2_DBG_BUFMGR_MORE, "pic index %d page_start %d\n",
 				dec->cur_fb_idx_mmu, dec->used_4k_num);
+
+			ctx->fb_ops.cal_compress_buff_info(dec->used_4k_num, ctx);
 
 			if (dec->m_ins_flag)
 				hevc_mmu_dma_check(hw_to_vdec(dec));

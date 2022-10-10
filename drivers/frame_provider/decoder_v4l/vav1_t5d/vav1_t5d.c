@@ -6565,12 +6565,15 @@ static int recycle_mmu_buf_tail(struct AV1HW_s *hw,
 	struct AV1_Common_s *const cm = &hw->common;
 	int index = cm->cur_fb_idx_mmu;
 	struct internal_comp_buf *ibuf = index_to_icomp_buf(hw, index);
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	hw->used_4k_num =
 		READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
 
 	av1_print(hw, 0, "pic index %d page_start %d\n",
 		cm->cur_fb_idx_mmu, hw->used_4k_num);
+
+	ctx->fb_ops.cal_compress_buff_info(hw->used_4k_num, ctx);
 
 	if (check_dma)
 		hevc_mmu_dma_check(hw_to_vdec(hw));
@@ -8231,6 +8234,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 					av1_print(hw, AV1_DEBUG_BUFMGR, "mmu free tail, index %d used_num %d\n",
 						cm->cur_fb_idx_mmu, used_4k_num);
+
+					ctx->fb_ops.cal_compress_buff_info(used_4k_num, ctx);
 
 					decoder_mmu_box_free_idx_tail(
 						ibuf->mmu_box,

@@ -5977,6 +5977,7 @@ static int recycle_mmu_buf_tail(struct hevc_state_s *hevc,
 	int index = hevc->cur_pic->BUF_index;
 	struct internal_comp_buf *ibuf =
 		index_to_icomp_buf(hevc, index);
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 
 	hevc_print(hevc,
 			H265_DEBUG_BUFMGR_MORE,
@@ -5985,6 +5986,8 @@ static int recycle_mmu_buf_tail(struct hevc_state_s *hevc,
 			hevc->cur_pic->index,
 			hevc->cur_pic->scatter_alloc,
 			hevc->used_4k_num);
+
+	ctx->fb_ops.cal_compress_buff_info(hevc->used_4k_num, ctx);
 	if (check_dma)
 		hevc_mmu_dma_check(hw_to_vdec(hevc));
 
