@@ -2459,7 +2459,7 @@ long mediasync_ins_get_update_info(mediasync_ins* pInstance, mediasync_update_in
 }
 
 
-long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg) {
+long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_ptr) {
 	mediasync_ins* pInstance = NULL;
 	s32 minSize = 0;
 	long ret = -1;
@@ -2492,11 +2492,15 @@ long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg) {
 				minSize = mediasyncControl.size;
 			}
 
-			#ifdef CONFIG_COMPAT
-			ptr = (ulong)compat_ptr(mediasyncControl.ptr);
-			#else
-			ptr = mediasyncControl.ptr;
-			#endif
+			if (is_compat_ptr == 1) {
+				#ifdef CONFIG_COMPAT
+				ptr = (ulong)compat_ptr(mediasyncControl.ptr);
+				#else
+				ptr = mediasyncControl.ptr;
+				#endif
+			} else {
+				ptr = mediasyncControl.ptr;
+			}
 
 			if (copy_to_user((void *)ptr,(void*)&info,minSize)) {
 				pr_info("copy_to_user ptr -EFAULT \n");

@@ -90,7 +90,7 @@ static int mediasync_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
+static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg, unsigned int is_compat_ptr)
 {
 	long ret = 0;
 	mediasync_speed SyncSpeed = {0};
@@ -1311,7 +1311,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
 
-			ret = mediasync_ins_ext_ctrls(priv->mSyncInsId,arg);
+			ret = mediasync_ins_ext_ctrls(priv->mSyncInsId,arg,is_compat_ptr);
 
 		break;
 
@@ -1322,6 +1322,11 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 
 	return ret;
 }
+
+static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg) {
+   return  mediasync_ioctl_inner(file,cmd,arg,0);
+}
+
 
 #ifdef CONFIG_COMPAT
 static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong arg)
@@ -1415,7 +1420,7 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_SET_PAUSE_AUDIO_INFO:
 		case MEDIASYNC_IOC_GET_PAUSE_AUDIO_INFO:
 		case MEDIASYNC_IOC_EXT_CTRLS:
-			return mediasync_ioctl(file, cmd,(ulong)compat_ptr(arg));
+			return mediasync_ioctl_inner(file, cmd,(ulong)compat_ptr(arg),1);
 		default:
 			return -EINVAL;
 	}

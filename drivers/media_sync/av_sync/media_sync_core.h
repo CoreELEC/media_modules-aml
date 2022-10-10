@@ -334,7 +334,7 @@ long mediasync_ins_set_pause_video_info(s32 sSyncInsId, mediasync_frameinfo info
 long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_ext_ctrls(s32 sSyncInsId,ulong arg);
+long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_ptr);
 
 
 #endif
