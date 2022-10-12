@@ -9198,7 +9198,7 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	if (hw->sei_itu_data_len <= 0)
 		return;
 
-	if (p != NULL) {
+	if (p != NULL && p->buf_spec_num >= 0) {
 		struct buffer_spec_s *pic = &hw->buffer_spec[p->buf_spec_num];
 
 		if (pic->user_data_buf != NULL) {
