@@ -2019,6 +2019,12 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				hw->profile_idc, hw->level_idc);
 		}
 
+		if ((seqinfo & SEQINFO_EXT_AVAILABLE) &&
+			(seqinfo & SEQINFO_PROG) && !(info & PICINFO_PROG)) {
+			info = PICINFO_ERROR | PICINFO_PROG;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"error! info is 0\n");
+		}
 		if (index >= hw->buf_num) {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"mmpeg12: invalid buf index: %d\n", index);
