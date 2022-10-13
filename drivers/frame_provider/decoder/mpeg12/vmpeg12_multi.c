@@ -2759,6 +2759,11 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 			"invalid vf: %lx\n", (ulong)vf);
 		return ;
 	}
+	if (vf->type == VIDTYPE_V4L_EOS) {
+		debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
+			"[%s]EOS frame, return. idx: %d\n", __func__, vf->index);
+		return;
+	}
 	spin_lock_irqsave(&hw->lock, flags);
 	hw->vfbuf_use[vf->index]--;
 	if  (hw->vfbuf_use[vf->index] < 0) {
