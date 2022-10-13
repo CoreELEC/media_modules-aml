@@ -8365,12 +8365,14 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	hw->frame_width = hw->common.seq_params.max_frame_width;
 	hw->frame_height = hw->common.seq_params.max_frame_height;
 
-	if (hw->frame_width == 0 || hw->frame_height == 0) {
-		hw->dec_result = DEC_RESULT_DISCARD_DATA;
-		hw->process_busy = 0;
-		amhevc_stop();
-		vdec_schedule_work(&hw->work);
-		return IRQ_HANDLED;
+	if (input_frame_based(hw_to_vdec(hw))) {
+		if (hw->frame_width == 0 || hw->frame_height == 0) {
+			hw->dec_result = DEC_RESULT_DISCARD_DATA;
+			hw->process_busy = 0;
+			amhevc_stop();
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
+		}
 	}
 
 	if (!v4l_res_change(hw)) {

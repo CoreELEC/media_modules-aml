@@ -1116,12 +1116,14 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 			"interlace = %d\n", interlace);
 
-		if ((frame_width <= 0) || (frame_height <= 0)) {
-			mmpeg4_debug_print(DECODE_ID(hw), 0,
-				"is_oversize w:%d h:%d\n", frame_width, frame_height);
-			hw->dec_result = DEC_RESULT_ERROR_DATA;
-			vdec_schedule_work(&hw->work);
-			return IRQ_HANDLED;
+		if (input_frame_based(vdec)) {
+			if ((frame_width <= 0) || (frame_height <= 0)) {
+				mmpeg4_debug_print(DECODE_ID(hw), 0,
+					"is_oversize w:%d h:%d\n", frame_width, frame_height);
+				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
 		}
 
 		if (!v4l_res_change(hw, frame_width, frame_height, interlace)) {

@@ -9795,33 +9795,35 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		struct aml_vcodec_ctx *ctx =
 				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-		int mb_width = 0;
-		int mb_total = 0;
-		int mb_height = 0;
-		int frame_width = 0;
-		int frame_height = 0;
-		mb_width = param1 & 0xff;
-		mb_total = (param1 >> 8) & 0xffff;
-		if (!mb_width && mb_total) /*for 4k2k*/
-			mb_width = 256;
-		if (mb_width)
-			mb_height = mb_total / mb_width;
-		frame_width = mb_width << 4;
-		frame_height = mb_height << 4;
+		if (input_frame_based(vdec)) {
+			int mb_width = 0;
+			int mb_total = 0;
+			int mb_height = 0;
+			int frame_width = 0;
+			int frame_height = 0;
+			mb_width = param1 & 0xff;
+			mb_total = (param1 >> 8) & 0xffff;
+			if (!mb_width && mb_total) /*for 4k2k*/
+				mb_width = 256;
+			if (mb_width)
+				mb_height = mb_total / mb_width;
+			frame_width = mb_width << 4;
+			frame_height = mb_height << 4;
 
-		if (is_oversize(frame_width, frame_height) ||
-			(frame_width == 0) ||
-			(frame_height == 0)) {
-			dpb_print(DECODE_ID(hw), 0, "is_oversize w:%d h:%d\n", frame_width, frame_height);
-			hw->dec_result = DEC_RESULT_ERROR_DATA;
-			vdec_schedule_work(&hw->work);
-			return;
-		}
-		if (!is_crop_valid(hw, mb_width, mb_height)) {
-			dpb_print(DECODE_ID(hw), 0, "crop invalid\n");
-			hw->dec_result = DEC_RESULT_ERROR_DATA;
-			vdec_schedule_work(&hw->work);
-			return;
+			if (is_oversize(frame_width, frame_height) ||
+				(frame_width == 0) ||
+				(frame_height == 0)) {
+				dpb_print(DECODE_ID(hw), 0, "is_oversize w:%d h:%d\n", frame_width, frame_height);
+				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_schedule_work(&hw->work);
+				return;
+			}
+			if (!is_crop_valid(hw, mb_width, mb_height)) {
+				dpb_print(DECODE_ID(hw), 0, "crop invalid\n");
+				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_schedule_work(&hw->work);
+				return;
+			}
 		}
 		if (hw->is_used_v4l &&
 			ctx->param_sets_from_ucode) {

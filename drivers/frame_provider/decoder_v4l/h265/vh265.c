@@ -10970,7 +10970,7 @@ force_output:
 
 			pic_w = hevc->param.p.pic_width_in_luma_samples;
 			pic_h = hevc->param.p.pic_height_in_luma_samples;
-			if (is_oversize_ex(pic_w, pic_h)) {
+			if (input_frame_based(vdec) && is_oversize_ex(pic_w, pic_h)) {
 				hevc_print(hevc, 0,"is_oversize w:%d h:%d\n", pic_w, pic_h);
 				hevc->dec_result = DEC_RESULT_ERROR_DATA;
 				amhevc_stop();
