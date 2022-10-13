@@ -1362,8 +1362,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	start_process_time(hw);
 	hw->last_vld_level = 0;
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
-	amvdec_start();
 	vdec_enable_input(vdec);
+	amvdec_start();
 	hw->stat |= STAT_VDEC_RUN;
 	hw->init_flag = 1;
 
