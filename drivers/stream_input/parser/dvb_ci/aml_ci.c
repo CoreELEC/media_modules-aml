@@ -31,7 +31,7 @@
 //#include "aml_spi.h"
 #include "aml_ci_bus.h"
 //#include "cimax/aml_cimax.h"
-
+#include "aml_pcmcia.h"
 //#include "dvb_ca_en50221.h"
 #include <dvbdev.h>
 
@@ -45,6 +45,9 @@ module_param(aml_ci_debug, int, S_IRUGO);
 			printk(args);\
 	} while (0)
 #define pr_error(fmt, args...) printk("DVBCI: " fmt, ## args)
+
+static int aml_ci_resume(struct platform_device *pdev);
+static int aml_ci_suspend(struct platform_device *pdev, pm_message_t state);
 
 /**\brief aml_ci_mem_read:mem read from cam
  * \param en50221: en50221 obj,used this data to get dvb_ci obj
@@ -788,7 +791,7 @@ static int aml_ci_suspend(struct platform_device *pdev, pm_message_t state)
 	else
 #endif
 	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS)
-		aml_ci_bus_exit(ci_dev);
+		aml_pcmcia_suspend(&(((struct aml_ci_bus *)(ci_dev->data))->pc));
 	else
 		pr_dbg("---Amlogic CI remove unknown io type---\n");
 
@@ -809,7 +812,7 @@ static int aml_ci_resume(struct platform_device *pdev)
 	else
 #endif
 	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS)
-		aml_ci_bus_init(pdev, ci_dev);
+		aml_pcmcia_resume(&(((struct aml_ci_bus *)(ci_dev->data))->pc));
 	else
 		pr_dbg("---Amlogic CI remove unknown io type---\n");
 	return err;

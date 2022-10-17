@@ -127,6 +127,26 @@ static void aml_pcmcia_work(struct work_struct *work)
 	}
 }
 
+int aml_pcmcia_suspend(struct aml_pcmcia *pc)
+{
+	disable_irq(pc->irq);
+	pc->slot_state = MODULE_XTRACTED;
+	pr_dbg("aml_pcmcia_suspend slot_state == MODULE_XTRACTED\r\n");
+
+	return 0;
+}
+EXPORT_SYMBOL(aml_pcmcia_suspend);
+
+int aml_pcmcia_resume(struct aml_pcmcia *pc)
+{
+	enable_irq(pc->irq);
+	pc->slot_state = MODULE_INSERTED;
+	pr_dbg("aml_pcmcia_resume slot_state == MODULE_INSERTED\r\n");
+
+	return 0;
+}
+EXPORT_SYMBOL(aml_pcmcia_resume);
+
 void aml_pcmcia_detect_cam(struct aml_pcmcia *pc)
 {
 	int cd1, cd2;
