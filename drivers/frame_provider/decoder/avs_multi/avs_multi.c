@@ -4146,7 +4146,7 @@ error1:
 			hw->mm_blk_handle = NULL;
 			if (hw->run_flag)
 				usleep_range(1000, 2000);
-			decoder_bmmu_box_free(hw->mm_blk_handle);
+			decoder_bmmu_box_free(bmmu_box_tmp);
 			bmmu_box_tmp = NULL;
 		}
 		if (vdec->parallel_dec == 1)
