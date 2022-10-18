@@ -35,7 +35,6 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <uapi/linux/tee.h>
 #include <linux/sched/clock.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <media/v4l2-mem2mem.h>
@@ -300,7 +299,7 @@ struct vdec_mpeg4_hw_s {
 	int dec_result;
 	struct work_struct work;
 
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	u32 frame_num;
 	u32 sys_mp4_rate;
@@ -1753,7 +1752,7 @@ static void vmpeg4_work(struct work_struct *work)
 
 	wake_up_interruptible(&hw->wait_q);
 	if (hw->vdec_cb)
-		hw->vdec_cb(vdec, hw->vdec_cb_arg);
+		hw->vdec_cb(vdec, hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 }
 
 static struct vframe_s *vmpeg_vf_peek(void *op_arg)
@@ -2488,7 +2487,7 @@ static unsigned char get_data_check_sum
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-		void (*callback)(struct vdec_s *, void *), void *arg)
+		void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
 	int size = 0, ret = 0;

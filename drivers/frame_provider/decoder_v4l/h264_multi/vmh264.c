@@ -44,7 +44,6 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <uapi/linux/tee.h>
 #include <linux/sched/clock.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/delay.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/uaccess.h>
@@ -796,7 +795,7 @@ struct vdec_h264_hw_s {
 	struct work_struct work;
 	struct work_struct notify_work;
 	struct work_struct timeout_work;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 
 	struct timer_list check_timer;
@@ -9377,7 +9376,7 @@ result_done:
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (hw->vdec_cb)
-		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
+		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 }
 
 
@@ -9563,7 +9562,7 @@ static unsigned char get_data_check_sum
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-	void (*callback)(struct vdec_s *, void *), void *arg)
+	void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct vdec_h264_hw_s *hw =
 		(struct vdec_h264_hw_s *)vdec->private;

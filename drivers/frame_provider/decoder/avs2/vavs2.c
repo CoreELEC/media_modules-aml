@@ -40,7 +40,6 @@
 #include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-contiguous.h>
 #include <linux/slab.h>
@@ -49,6 +48,7 @@
 
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
+#include "../../../include/regs/dos_registers.h"
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
 #include "../utils/config_parser.h"
@@ -70,7 +70,7 @@
 #include "vavs2.h"
 #define HEVC_SHIFT_LENGTH_PROTECT                  0x313a
 #define HEVC_MPRED_CTRL4                           0x324c
-#define HEVC_MPRED_CTRL9                           0x325b
+
 #define HEVC_DBLK_CFGD                             0x350d
 #define HEVC_CM_HEADER_START_ADDR                  0x3628
 #define HEVC_DBLK_CFGB                             0x350b
@@ -615,7 +615,7 @@ struct AVS2Decoder_s {
 	spinlock_t buffer_lock;
 	struct device *cma_dev;
 	struct platform_device *platform_dev;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	struct vframe_chunk_s *chunk;
 	int dec_result;
@@ -7020,7 +7020,7 @@ static void avs2_work(struct work_struct *work)
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
 
 	if (dec->vdec_cb)
-		dec->vdec_cb(hw_to_vdec(dec), dec->vdec_cb_arg);
+		dec->vdec_cb(hw_to_vdec(dec), dec->vdec_cb_arg, CORE_MASK_HEVC);
 }
 
 static int avs2_hw_ctx_restore(struct AVS2Decoder_s *dec)
@@ -7102,7 +7102,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-	void (*callback)(struct vdec_s *, void *), void *arg)
+	void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;

@@ -32,7 +32,6 @@
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "chips.h"
 #include <linux/amlogic/media/utils/log.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "decoder_cpu_ver_info.h"
 
 #define VIDEO_FIRMWARE_FATHER_NAME "video"
@@ -88,6 +87,7 @@ static const struct type_name cpu_type_name[] = {
 	{AM_MESON_CPU_MAJOR_ID_P1, "p1"},
 	{AM_MESON_CPU_MAJOR_ID_S4D, "s4d"},
 	{AM_MESON_CPU_MAJOR_ID_T5W, "t5w"},
+	{AM_MESON_CPU_MAJOR_ID_S5, "s5"},
 	{0, NULL},
 };
 
@@ -136,7 +136,9 @@ EXPORT_SYMBOL(get_cpu_type_name);
  *	VFORMAT_H264_ENC,
  *	VFORMAT_JPEG_ENC,
  *	VFORMAT_VP9,
-*	VFORMAT_AVS2,
+ *	VFORMAT_AVS2,
+ *	VFORMAT_AV1,
+ *	VFORMAT_AVS3,
  *	VFORMAT_MAX
  *};
  */
@@ -158,6 +160,7 @@ static const struct type_name vformat_type_name[] = {
 	{VFORMAT_VP9, "vp9"},
 	{VFORMAT_AVS2, "avs2"},
 	{VFORMAT_AV1, "av1"},
+	{VFORMAT_AVS3, "avs3"},
 	{VFORMAT_YUV, "yuv"},
 	{0, NULL},
 };

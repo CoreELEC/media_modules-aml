@@ -38,7 +38,6 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include <media/v4l2-mem2mem.h>
 #include <uapi/linux/tee.h>
@@ -271,7 +270,7 @@ struct vdec_mpeg12_hw_s {
 	struct work_struct work;
 	struct work_struct timeout_work;
 	struct work_struct notify_work;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	dma_addr_t ccbuf_phyAddress;
 	void *ccbuf_phyAddress_virt;
@@ -2473,7 +2472,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (hw->vdec_cb)
-		hw->vdec_cb(vdec, hw->vdec_cb_arg);
+		hw->vdec_cb(vdec, hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 }
 
 static void vmpeg12_work(struct work_struct *work)
@@ -3316,7 +3315,7 @@ static int check_dirty_data(struct vdec_s *vdec)
 
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-void (*callback)(struct vdec_s *, void *),
+void (*callback)(struct vdec_s *, void *, int),
 		void *arg)
 {
 	struct vdec_mpeg12_hw_s *hw =

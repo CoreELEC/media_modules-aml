@@ -22,7 +22,6 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
 

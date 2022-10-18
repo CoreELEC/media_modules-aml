@@ -32,7 +32,6 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/vfm/vframe.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
@@ -494,7 +493,7 @@ struct vdec_avs_hw_s {
 	struct work_struct notify_work;
 	atomic_t error_handler_run;
 	struct work_struct fatal_error_wd_work;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 /* for error handling */
 	u32 run_count;
@@ -2586,7 +2585,7 @@ static void vavs_work(struct work_struct *work)
 		vdec_core_finish_run(hw_to_vdec(hw), CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
 
 	if (hw->vdec_cb) {
-		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
+		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 		debug_print(hw, 0x80000,
 		"%s:\n", __func__);
 	}
@@ -2922,7 +2921,7 @@ static unsigned char get_data_check_sum
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-void (*callback)(struct vdec_s *, void *),
+void (*callback)(struct vdec_s *, void *, int),
 		void *arg)
 {
 	struct vdec_avs_hw_s *hw =

@@ -30,7 +30,6 @@
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/uaccess.h>
 
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../amports/amports_priv.h"
 #include "../amports/streambuf.h"
 #include "../amports/streambuf_reg.h"

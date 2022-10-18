@@ -53,6 +53,16 @@ extern void amhevc_start(void);
 extern void amhevc_stop(void);
 extern void amhevc_enable(void);
 extern void amhevc_disable(void);
+
+#ifdef NEW_FB_CODE
+extern void amhevc_start_f(void);
+extern void amhevc_start_b(void);
+extern void amhevc_stop_f(void);
+extern void amhevc_stop_b(void);
+extern void amhevc_reset_f(void);
+extern void amhevc_reset_b(void);
+#endif
+
 s32 amhevc_loadmc_ex(enum vformat_e type, const char *name, char *def);
 s32 amhevc_vdec_loadmc_ex(enum vformat_e type, struct vdec_s *vdec,
 	const char *name, char *def);

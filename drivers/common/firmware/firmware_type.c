@@ -56,6 +56,19 @@ static const struct format_name_s format_name[] = {
 	{VIDEO_DEC_AVS2,		"avs2"},
 	{VIDEO_DEC_AVS2_MMU,		"avs2_mmu"},
 	{VIDEO_DEC_AV1_MMU,		"av1_mmu"},
+	{VIDEO_DEC_AVS3,		"avs3_mmu"},
+	/* front/back ucode */
+	{VIDEO_DEC_HEVC_FRONT,		"hevc_front"},
+	{VIDEO_DEC_HEVC_BACK,		"hevc_back"},
+	{VIDEO_DEC_VP9_FRONT,		"vp9_front"},
+	{VIDEO_DEC_VP9_BACK,		"vp9_back"},
+	{VIDEO_DEC_AV1_FRONT,		"av1_front"},
+	{VIDEO_DEC_AV1_BACK,		"av1_back"},
+	{VIDEO_DEC_AVS2_FRONT,		"avs2_front"},
+	{VIDEO_DEC_AVS2_BACK,		"avs2_back"},
+	{VIDEO_DEC_AVS3_FRONT,		"avs3_front"},
+	{VIDEO_DEC_AVS3_BACK,		"avs3_back"},
+
 	{VIDEO_ENC_H264,		"h264_enc"},
 	{VIDEO_ENC_JPEG,		"jpeg_enc"},
 	{FIRMWARE_MAX,			"unknown"},
@@ -83,6 +96,7 @@ static const struct cpu_type_s cpu_type[] = {
 	{AM_MESON_CPU_MAJOR_ID_T3,	"t3"},
 	{AM_MESON_CPU_MAJOR_ID_P1,	"p1"},
 	{AM_MESON_CPU_MAJOR_ID_S4D,	"s4d"},
+	{AM_MESON_CPU_MAJOR_ID_S5,	"s5"},
 };
 
 const char *get_fw_format_name(unsigned int format)

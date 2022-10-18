@@ -31,7 +31,6 @@
 #include <linux/platform_device.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/utils/amstream.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/canvas/canvas.h>

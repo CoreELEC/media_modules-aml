@@ -32,7 +32,6 @@
 #include <linux/vmalloc.h>
 /* #include <mach/am_regs.h> */
 
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "streambuf_reg.h"
 #include "streambuf.h"

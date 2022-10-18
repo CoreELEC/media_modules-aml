@@ -40,7 +40,6 @@
 #include "../../../stream_input/amports/amports_priv.h"
 #include <linux/amlogic/media/canvas/canvas.h>
 #include "../utils/vdec.h"
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/amvdec.h"
 #include "vh264.h"
 #include "../../../stream_input/amports/streambuf.h"

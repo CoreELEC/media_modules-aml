@@ -322,7 +322,8 @@ bool is_hevc_front_back_clk_combined(void)
 		(cpu_id == AM_MESON_CPU_MAJOR_ID_T5D) ||
 		(cpu_id == AM_MESON_CPU_MAJOR_ID_S4) ||
 		(cpu_id == AM_MESON_CPU_MAJOR_ID_S4D) ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_T5W))
+		(cpu_id == AM_MESON_CPU_MAJOR_ID_T5W) ||
+		(cpu_id == AM_MESON_CPU_MAJOR_ID_S5))
 		return true;
 
 	return false;
@@ -353,7 +354,8 @@ int vdec_source_changed_for_clk_set(int format, int width, int height, int fps)
 
 	if (format == VFORMAT_HEVC || format == VFORMAT_VP9
 		|| format == VFORMAT_AVS2
-		|| format == VFORMAT_AV1) {
+		|| format == VFORMAT_AV1
+		|| format == VFORMAT_AVS3) {
 		ret_clk = hevc_clock_set(clk);
 		clock_source_wxhxfps_saved[VDEC_HEVC] = width * height * fps;
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A &&

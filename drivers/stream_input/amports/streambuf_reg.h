@@ -90,20 +90,20 @@
  /*TODO*/
 #define _WRITE_ST_REG(r, val)  do { \
 	if (buf->reg_base == VLD_MEM_VIFIFO_REG_BASE) \
-		codec_dosbus_write((buf->reg_base+(r)), (val)); \
+		write_dos_reg((buf->reg_base+(r)), (val)); \
 	else \
 		codec_aiubus_write((buf->reg_base+(r)), (val)); \
 	} while (0)
 #define _READ_ST_REG(r) \
 	((buf->reg_base == VLD_MEM_VIFIFO_REG_BASE) ? \
-	 codec_dosbus_read(buf->reg_base+(r)) : \
+	 read_dos_reg(buf->reg_base+(r)) : \
 	 codec_aiubus_read(buf->reg_base+(r)))
 
 #define _SET_ST_REG_MASK(r, val) _WRITE_ST_REG(r, _READ_ST_REG(r) | (val))
 #define _CLR_ST_REG_MASK(r, val) _WRITE_ST_REG(r, _READ_ST_REG(r)&~(val))
-#define _READ_VDEC2_ST_REG(r) (codec_dosbus_read(\
+#define _READ_VDEC2_ST_REG(r) (read_dos_reg(\
 			(VDEC2_VLD_MEM_VIFIFO_START_PTR+(r))))
-#define _WRITE_VDEC2_ST_REG(r, val) codec_dosbus_write(\
+#define _WRITE_VDEC2_ST_REG(r, val) write_dos_reg(\
 		(VDEC2_VLD_MEM_VIFIFO_START_PTR+r), val)
 #define MEM_BUFCTRL_MANUAL      (1<<1)
 #define MEM_BUFCTRL_INIT        (1<<0)

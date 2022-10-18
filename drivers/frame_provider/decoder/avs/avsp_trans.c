@@ -36,7 +36,6 @@
 #include <linux/slab.h>
 /* #include <mach/am_regs.h> */
 #include <linux/module.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../stream_input/amports/streambuf_reg.h"
 #include "../utils/amvdec.h"
 #include <linux/amlogic/media/registers/register.h>

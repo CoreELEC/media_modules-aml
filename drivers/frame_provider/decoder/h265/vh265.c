@@ -110,7 +110,6 @@ to enable DV of frame mode
 #define SWAP_HEVC_OFFSET (3 * 0x1000)
 
 #define MEM_NAME "codec_265"
-#include <linux/amlogic/media/utils/vdec_reg.h>
 
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
@@ -1841,7 +1840,7 @@ struct mh265_fence_vf_t {
 struct hevc_state_s {
 #ifdef MULTI_INSTANCE_SUPPORT
 	struct platform_device *platform_dev;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	struct vframe_chunk_s *chunk;
 	int dec_result;
@@ -10888,7 +10887,7 @@ force_output:
 					||  hevc_skip_nal(hevc)) {
 					/* skip search next start code */
 					WRITE_VREG(HEVC_WAIT_FLAG, READ_VREG(HEVC_WAIT_FLAG) & (~0x2));
-					if  ((hevc->pic_h == 96) && (hevc->pic_w  == 160))
+					if ((hevc->pic_h == 96) && (hevc->pic_w == 160))
 						hevc->skip_nal_count++;
 					hevc->skip_flag = 1;
 					WRITE_VREG(HEVC_DEC_STATUS_REG,	HEVC_ACTION_DONE);
@@ -13012,7 +13011,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 	}
 
 	if (hevc->vdec_cb)
-		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg);
+		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg, CORE_MASK_HEVC);
 }
 
 static void vh265_work(struct work_struct *work)
@@ -13197,7 +13196,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-	void (*callback)(struct vdec_s *, void *), void *arg)
+	void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)vdec->private;

@@ -23,6 +23,7 @@
 #include <linux/fs.h>
 #include <uapi/linux/major.h>
 #include "video_framerate_adapter.h"
+#include "../frame_provider/decoder/utils/vdec.h"
 
 #define CLASS_NAME	"framerate_adapter"
 #define DEV_NAME	"framerate_dev"
@@ -103,6 +104,9 @@ static int frame_rate_driver_init(void)
 		ret = -ENODEV;
 		goto err_1;
 	}
+
+	register_frame_rate_uevent_func(vframe_rate_uevent);
+
 	pr_info("Registered frame rate driver success.\n");
 	return 0;
 

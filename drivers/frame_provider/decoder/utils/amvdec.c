@@ -42,7 +42,6 @@
 
 /* #include <mach/am_regs.h> */
 /* #include <mach/power_gate.h> */
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "amvdec.h"
 #include <linux/amlogic/media/utils/amports_config.h>
 #include "firmware.h"
@@ -60,6 +59,9 @@ struct timer_list amvdevtimer;
 #define AMVDEC_USE_STATIC_MEMORY
 static void *mc_addr;
 static dma_addr_t mc_addr_map;
+
+static void *mc_addr_dbe;
+static dma_addr_t mc_addr_map_dbe;
 
 #ifdef CONFIG_WAKELOCK
 static int video_running;
@@ -248,6 +250,34 @@ int amvdec_wake_unlock(void)
 #define amvdec_wake_unlock()
 #endif
 
+static s32 am_vdec_loadmc_back_ex(struct vdec_s *vdec,
+		const char *name, char *def, s32(*load)(const u32 *))
+{
+	int err;
+
+	if (!vdec->mc_back_loaded) {
+		if (!def) {
+			err = get_decoder_firmware_data(vdec->format,
+						name, (u8 *)(vdec->mc_back),
+						(4096 * 4 * 4));
+			if (err <= 0)
+				return -1;
+		} else
+			memcpy((char *)vdec->mc_back, def, sizeof(vdec->mc_back));
+
+		vdec->mc_back_loaded = true;
+	}
+
+	err = (*load)(vdec->mc_back);
+	if (err < 0) {
+		pr_err("loading firmware %s to vdec ram  failed!\n", name);
+		return err;
+	}
+
+	return err;
+}
+
+
 static s32 am_vdec_loadmc_ex(struct vdec_s *vdec,
 		const char *name, char *def, s32(*load)(const u32 *))
 {
@@ -315,7 +345,7 @@ static s32 am_loadmc_ex(enum vformat_e type,
 	}
 	err = (*load)((u32 *) pmc_addr);
 	if (err < 0) {
-		pr_err("loading firmware %s to vdec ram  failed!\n", name);
+		pr_err("loading firmware %s to vdec ram failed!\n", name);
 		vfree(mc_addr);
 		return err;
 	}
@@ -420,18 +450,41 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 	case VFORMAT_VP9:
 		if (!strcmp(name, "vp9_mc"))
 			format = VIDEO_DEC_VP9;
-		else
+		else if (!strcmp(name, "vp9_front")) {
+			format = VIDEO_DEC_VP9_FRONT;
+			vdec = OPTEE_VDEC_HEVC;
+		} else if (!strcmp(name, "vp9_back")) {
+			format = VIDEO_DEC_VP9_BACK;
+			vdec = OPTEE_VDEC_HEVCB;
+		} else
 			format = VIDEO_DEC_VP9_MMU;
 		break;
 
 	case VFORMAT_AVS2:
-		format = VIDEO_DEC_AVS2_MMU;
-		vdec = OPTEE_VDEC_HEVC;
+		if (!strcmp(name, "avs2_front")) {
+			format = VIDEO_DEC_AVS2_FRONT;
+			vdec = OPTEE_VDEC_HEVC;
+		} else if (!strcmp(name, "avs2_back")) {
+			format = VIDEO_DEC_AVS2_BACK;
+			vdec = OPTEE_VDEC_HEVCB;
+		} else {
+			format = VIDEO_DEC_AVS2_MMU;
+			vdec = OPTEE_VDEC_HEVC;
+		}
 		break;
 
 	case VFORMAT_AV1:
-		format = VIDEO_DEC_AV1_MMU;
-		vdec = OPTEE_VDEC_HEVC;
+		if (!strcmp(name, "av1_front")) {
+			format = VIDEO_DEC_AV1_FRONT;
+			vdec = OPTEE_VDEC_HEVC;
+			is_swap = true;
+		} else if (!strcmp(name, "av1_back")) {
+			format = VIDEO_DEC_AV1_BACK;
+			vdec = OPTEE_VDEC_HEVCB;
+		} else {
+			format = VIDEO_DEC_AV1_MMU;
+			vdec = OPTEE_VDEC_HEVC;
+		}
 		break;
 
 	case VFORMAT_HEVC:
@@ -441,6 +494,12 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 			format = VIDEO_DEC_HEVC_MMU_SWAP;
 			vdec = OPTEE_VDEC_HEVC;
 			is_swap = true;
+		} else if (!strcmp(name, "h265_front")) {
+			format = VIDEO_DEC_HEVC_FRONT;
+			vdec = OPTEE_VDEC_HEVC;
+		} else if (!strcmp(name, "h265_back")) {
+			format = VIDEO_DEC_HEVC_BACK;
+			vdec = OPTEE_VDEC_HEVCB;
 		} else
 			format = VIDEO_DEC_HEVC;
 		break;
@@ -488,13 +547,28 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 		} else
 			format = VIDEO_DEC_H264;
 		break;
+
 	case VFORMAT_JPEG_ENC:
 		format = VIDEO_ENC_JPEG;
 		vdec = OPTEE_VDEC_HCDEC;
 		break;
+
 	case VFORMAT_H264_ENC:
 		format = VIDEO_ENC_H264;
 		vdec = OPTEE_VDEC_HCDEC;
+		break;
+
+	case VFORMAT_AVS3:
+		if (!strcmp(name, "avs3_front")) {
+			format = VIDEO_DEC_AVS3_FRONT;
+			vdec = OPTEE_VDEC_HEVC;
+		} else if (!strcmp(name, "avs3_back")) {
+			format = VIDEO_DEC_AVS3_BACK;
+			vdec = OPTEE_VDEC_HEVCB;
+		} else {
+			format = VIDEO_DEC_AVS3;
+			vdec = OPTEE_VDEC_HEVC;
+		}
 		break;
 	default:
 		pr_info("Unknown vdec format: %u\n", (u32)type);
@@ -508,6 +582,9 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 			ret = tee_load_video_fw(format, vdec);
 	}
 
+	if (ret < 0) {
+		pr_info("%s ret %x, core %d, is_swap %d\n", __func__, ret, vdec, is_swap);
+	}
 	__putname(name);
 
 	return ret;
@@ -660,12 +737,11 @@ static s32 amhevc_loadmc(const u32 *p)
 	if (has_hevc_vdec()) {
 #ifdef AMVDEC_USE_STATIC_MEMORY
 		if (mc_addr == NULL) {
-#else
-		{
-#endif
 			mc_addr = kmalloc(MC_SIZE, GFP_KERNEL | GFP_DMA32);
 		}
-
+#else
+		mc_addr = kmalloc(MC_SIZE, GFP_KERNEL | GFP_DMA32);
+#endif
 		if (!mc_addr)
 			return -ENOMEM;
 
@@ -685,9 +761,15 @@ static s32 amhevc_loadmc(const u32 *p)
 		timeout = jiffies + HZ;
 
 		WRITE_VREG(HEVC_IMEM_DMA_ADR, mc_addr_map);
-		WRITE_VREG(HEVC_IMEM_DMA_COUNT, 0x1000);
+
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
+			WRITE_VREG(HEVC_IMEM_DMA_COUNT, 0x1800);
+		else
+			WRITE_VREG(HEVC_IMEM_DMA_COUNT, 0x1000);
+
 		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3))
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5))
 			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0xf << 16)));
 		else
 			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0x7 << 16)));
@@ -714,13 +796,73 @@ static s32 amhevc_loadmc(const u32 *p)
 	return ret;
 }
 
+static s32 amhevc_back_loadmc(const u32 *p)
+{
+	ulong timeout;
+	s32 ret = 0;
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) {
+#ifdef AMVDEC_USE_STATIC_MEMORY
+		if (mc_addr_dbe == NULL)
+			mc_addr_dbe = kmalloc(MC_SIZE, GFP_KERNEL);
+#else
+		mc_addr_dbe = kmalloc(MC_SIZE, GFP_KERNEL);
+#endif
+		if (!mc_addr_dbe)
+			return -ENOMEM;
+
+		memcpy(mc_addr_dbe, p, MC_SIZE);
+
+		mc_addr_map_dbe =
+			dma_map_single(get_vdec_device(),
+			mc_addr_dbe, MC_SIZE, DMA_TO_DEVICE);
+
+		WRITE_VREG(HEVC_MPSR_DBE, 0);
+		WRITE_VREG(HEVC_CPSR_DBE, 0);
+
+		/* Read CBUS register for timing */
+		timeout = READ_VREG(HEVC_MPSR_DBE);
+		timeout = READ_VREG(HEVC_MPSR_DBE);
+
+		timeout = jiffies + HZ;
+
+		WRITE_VREG(HEVC_IMEM_DMA_ADR_DBE, mc_addr_map_dbe);
+		WRITE_VREG(HEVC_IMEM_DMA_COUNT_DBE, 0x1000);
+		WRITE_VREG(HEVC_IMEM_DMA_CTRL_DBE, (0x8000 | (0xf << 16)));
+
+		while (READ_VREG(HEVC_IMEM_DMA_CTRL_DBE) & 0x8000) {
+			if (time_before(jiffies, timeout))
+				schedule();
+			else {
+				pr_err("hevc load mc error\n");
+				ret = -EBUSY;
+				break;
+			}
+		}
+
+		dma_unmap_single(get_vdec_device(),
+				mc_addr_map_dbe, MC_SIZE, DMA_TO_DEVICE);
+
+#ifndef AMVDEC_USE_STATIC_MEMORY
+		kfree(mc_addr_dbe);
+		mc_addr_dbe = NULL;
+#endif
+	}
+
+	return ret;
+}
+
 s32 amhevc_loadmc_ex(enum vformat_e type, const char *name, char *def)
 {
 	if (has_hevc_vdec())
-		if (tee_enabled())
+		if (tee_enabled()) {
 			return optee_load_fw(type, name);
-		else
-			return am_loadmc_ex(type, name, def, &amhevc_loadmc);
+		} else {
+			if (name && strstr(name, "back") != NULL) {
+				return am_loadmc_ex(type, name, def, &amhevc_back_loadmc);
+			} else
+				return am_loadmc_ex(type, name, def, &amhevc_loadmc);
+		}
 	else
 		return -1;
 }
@@ -732,8 +874,12 @@ s32 amhevc_vdec_loadmc_ex(enum vformat_e type, struct vdec_s *vdec,
 	if (has_hevc_vdec())
 		if (tee_enabled())
 			return optee_load_fw(type, name);
-		else
-			return am_vdec_loadmc_ex(vdec, name, def, &amhevc_loadmc);
+		else {
+			if (name && strstr(name, "back") != NULL) {
+				return am_vdec_loadmc_back_ex(vdec, name, def, &amhevc_back_loadmc);
+			} else
+				return am_vdec_loadmc_ex(vdec, name, def, &amhevc_loadmc);
+		}
 	else
 		return -1;
 }
@@ -808,7 +954,6 @@ EXPORT_SYMBOL(amhcodec_start);
 
 void amhevc_start(void)
 {
-
 	if (has_hevc_vdec()) {
 #ifdef CONFIG_WAKELOCK
 		amvdec_wake_lock();
@@ -937,6 +1082,135 @@ void amhevc_stop(void)
 	}
 }
 EXPORT_SYMBOL(amhevc_stop);
+
+void amhevc_start_f(void)
+{
+	WRITE_VREG(HEVC_MPSR, 1);
+	//printk("Enable HEVC Front End MPSR\n");
+}
+EXPORT_SYMBOL(amhevc_start_f);
+
+void amhevc_start_b(void)
+{
+	WRITE_VREG(HEVC_MPSR_DBE, 1);
+	//printk("Enable HEVC Back End MPSR\n");
+}
+EXPORT_SYMBOL(amhevc_start_b);
+
+void amhevc_stop_f(void)
+{
+	uint32_t temp;
+	ulong timeout = jiffies + HZ/10;
+
+	WRITE_VREG(HEVC_MPSR, 0);
+	WRITE_VREG(HEVC_CPSR, 0);
+	//printk("Stop HEVC Front End AmRisc\n");
+
+	do {
+		temp = (uint32_t)READ_VREG(HEVC_IMEM_DMA_CTRL);
+		if (time_after(jiffies, timeout)) {
+			pr_err("%s timeout\n", __func__);
+			break;
+		}
+	} while(temp & 0x8000);
+}
+EXPORT_SYMBOL(amhevc_stop_f);
+
+void amhevc_stop_b(void)
+{
+	uint32_t temp;
+	ulong timeout = jiffies + HZ/10;
+
+	WRITE_VREG(HEVC_MPSR_DBE, 0);
+	WRITE_VREG(HEVC_CPSR_DBE, 0);
+	//printk("Stop HEVC Back End AmRisc\n");
+
+	do {
+		temp = (uint32_t)READ_VREG(HEVC_IMEM_DMA_CTRL_DBE);
+		if (time_after(jiffies, timeout)) {
+			pr_err("%s timeout\n", __func__);
+			break;
+		}
+	} while(temp & 0x8000);
+}
+EXPORT_SYMBOL(amhevc_stop_b);
+
+void amhevc_reset_f(void)
+{
+	WRITE_VREG(HEVC_STREAM_CONTROL, 0);
+
+	/*
+	* 2: assist
+	* 3: parser
+	* 4: parser_state
+	* 5: vcpu1
+	* 6: iqit1
+	* 7: ipp1
+	* 8: dblk0
+	* 9: dblk1
+	* 10:sao1
+	* 11:vcpu0
+	* 12:mmu1
+	* 13:ddr
+	* 14:iqit0
+	* 15:ipp0
+	* 17:qdct
+	* 18:mpred
+	* 19:sao0
+	* 24:hevc_afifo
+	* 26:mmu0
+	*/
+	WRITE_VREG(DOS_SW_RESET3,
+		(1<<3)|(1<<4)|(1<<11)| // parser | parser_state | vcpu0
+		//(1<<14)|(1<<15)|(1<<8)|(1<<19)| // iqidct0 | ipp0 | dblk0 | sao0
+		//(1<<6)|(1<<7)|(1<<9)|(1<<10)| // iqidct1 | ipp1 | dblk1 | sao1
+		//(1<<13)| // ddr
+		(1<<18)  // mpred
+		// | fb_write reset // TODO
+		// | (1<<24) // hevc_afifo
+		);
+
+	WRITE_VREG(DOS_SW_RESET3, 0);
+}
+EXPORT_SYMBOL(amhevc_reset_f);
+
+void amhevc_reset_b(void)
+{
+	/*
+	* 2: assist
+	* 3: parser
+	* 4: parser_state
+	* 5: vcpu1
+	* 6: iqit1
+	* 7: ipp1
+	* 8: dblk0
+	* 9: dblk1
+	* 10:sao1
+	* 11:vcpu0
+	* 12:mmu1
+	* 13:ddr
+	* 14:iqit0
+	* 15:ipp0
+	* 17:qdct
+	* 18:mpred
+	* 19:sao0
+	* 24:hevc_afifo
+	* 26:mmu0
+	*/
+	WRITE_VREG(DOS_SW_RESET3,
+		(1<<14) // iqidct0
+		| (1<<15) // ipp0
+		| (1<<8)  // dblk0
+		| (1<<19) // sao0
+		| (1<<6)|(1<<7)|(1<<9)|(1<<10)   // iqidct1 | ipp1 | dblk1 | sao1
+		| (1<<5) // vcpu1
+		// | fb_read reset // TODO
+		);
+
+	WRITE_VREG(DOS_SW_RESET3, 0);
+}
+EXPORT_SYMBOL(amhevc_reset_b);
+
 
 void amvdec_enable(void)
 {

@@ -22,24 +22,8 @@
 #include "../amports/streambuf.h"
 #include "../../common/media_clock/switch/amports_gate.h"
 #include <linux/amlogic/media/vfm/vframe.h>
-#include <linux/amlogic/media/registers/register.h>
+#include "../../include/regs/dos_registers.h"
 #include <linux/amlogic/media/utils/log.h>
-
-
-#define WRITE_VREG(r, val) WRITE_DOSREG(r, val)
-#define READ_VREG(r)  READ_DOSREG(r)
-
-#define WRITE_VREG_BITS(r, val, start, len) \
-	codec_set_dosbus_bits(r, val, start, len)
-#define SET_VREG_MASK(r, mask) codec_set_dosbus_mask(r, mask)
-#define CLEAR_VREG_MASK(r, mask) codec_clear_dosbus_mask(r, mask)
-
-#define READ_HREG(r) aml_read_dosbus((r) | 0x1000)
-#define WRITE_HREG(r, val) aml_write_dosbus((r) | 0x1000, val)
-#define WRITE_HREG_BITS(r, val, start, len) \
-	codec_set_dosbus_bits((r) | 0x1000, val, start, len)
-#define SET_HREG_MASK(r, mask) codec_set_dosbus_mask((r) | 0x1000, mask)
-#define CLEAR_HREG_MASK(r, mask) codec_clear_dosbus_mask((r) | 0x1000, mask)
 
 struct port_priv_s {
 	struct vdec_s *vdec;

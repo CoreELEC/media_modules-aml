@@ -3315,6 +3315,18 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 		goto free_comp_bufs;
 	}
 
+#ifdef NEW_FB_CODE
+	if (ctx->front_back_mode) {
+		ctx->mmu_box_1 = decoder_mmu_box_alloc_box("v4l2_dec",
+				ctx->id, V4L_CAP_BUFF_MAX,
+				ctx->comp_info.max_size * SZ_1M, mmu_flag);
+		if (!ctx->mmu_box_1) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box1\n");
+			goto free_mmubox;
+		}
+	}
+#endif
+
 	/* init mmu box */
 	bmmu_flag |= CODEC_MM_FLAGS_CMA_CLEAR | CODEC_MM_FLAGS_FOR_VDECODER;
 	ctx->bmmu_box  = decoder_bmmu_box_alloc_box("v4l2_dec",
@@ -3323,7 +3335,7 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 			BMMU_ALLOC_FLAGS_WAIT);
 	if (!ctx->bmmu_box) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create bmmu box\n");
-		goto free_mmubox;
+		goto free_mmubox1;
 	}
 
 	if (dw_mode & 0x20) {
@@ -3333,8 +3345,20 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 				ctx->comp_info.max_size * SZ_1M, mmu_flag);
 		if (!ctx->mmu_box_dw) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box dw\n");
-			goto free_bmmu_box;
+			goto free_bmmubox;
 		}
+
+#ifdef NEW_FB_CODE
+		if (ctx->front_back_mode) {
+			ctx->mmu_box_dw_1 = decoder_mmu_box_alloc_box("v4l2_dec_dw",
+					ctx->id, V4L_CAP_BUFF_MAX,
+					ctx->comp_info.max_size * SZ_1M, mmu_flag);
+			if (!ctx->mmu_box_dw_1) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box dw 1\n");
+				goto free_mmubox_dw;
+			}
+		}
+#endif
 
 		/* init bmmu box dw*/
 		bmmu_flag |= CODEC_MM_FLAGS_CMA_CLEAR | CODEC_MM_FLAGS_FOR_VDECODER;
@@ -3343,8 +3367,8 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 				4 + PAGE_SHIFT, bmmu_flag,
 				BMMU_ALLOC_FLAGS_WAIT);
 		if (!ctx->bmmu_box_dw) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create mmu box dw\n");
-			goto free_mmubox_dw;
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "fail to create nmmu box dw\n");
+			goto free_mmubox_dw1;
 		}
 	}
 
@@ -3359,6 +3383,10 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 		buf->bmmu_box = ctx->bmmu_box;
 		buf->mmu_box_dw = ctx->mmu_box_dw;
 		buf->bmmu_box_dw = ctx->bmmu_box_dw;
+#ifdef NEW_FB_CODE
+		buf->mmu_box_1 = ctx->mmu_box_1;
+		buf->mmu_box_dw_1 = ctx->mmu_box_dw_1;
+#endif
 		buf->used = 0;
 	}
 	kref_get(&ctx->ctx_ref);
@@ -3369,17 +3397,31 @@ static int init_mmu_bmmu_box(struct aml_vcodec_ctx *ctx)
 	memset(ctx->uvm_proxy, 0, sizeof(*ctx->uvm_proxy) * V4L_CAP_BUFF_MAX);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"box init, bmmu: %px, mmu: %px, mmu_dw: %px bmmu_dw: %px\n",
-		ctx->bmmu_box, ctx->mmu_box, ctx->mmu_box_dw, ctx->bmmu_box_dw);
+		"box init, bmmu: %px, mmu: %px, mmu_dw: %px bmmu_dw: %px mmu1: %px mmu_dw1: %px\n",
+		ctx->bmmu_box, ctx->mmu_box, ctx->mmu_box_dw, ctx->bmmu_box_dw
+#ifdef NEW_FB_CODE
+		, ctx->mmu_box_1, ctx->mmu_box_dw_1
+#else
+		, 0, 0
+#endif
+		);
 
 	return 0;
+free_mmubox_dw1:
+	decoder_mmu_box_free(ctx->mmu_box_dw_1);
+	ctx->mmu_box_dw_1 = NULL;
+
 free_mmubox_dw:
 	decoder_mmu_box_free(ctx->mmu_box_dw);
 	ctx->mmu_box_dw = NULL;
 
-free_bmmu_box:
+free_bmmubox:
 	decoder_bmmu_box_free(ctx->bmmu_box);
 	ctx->bmmu_box = NULL;
+
+free_mmubox1:
+	decoder_mmu_box_free(ctx->mmu_box_1);
+	ctx->mmu_box_1 = NULL;
 
 free_mmubox:
 	decoder_mmu_box_free(ctx->mmu_box);
@@ -3723,14 +3765,33 @@ static void box_release(struct kref *kref)
 		= container_of(kref, struct aml_vcodec_ctx, box_ref);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, bmmu: %px, mmu: %px mmu_dw: %pu\n",
-		__func__, ctx->bmmu_box, ctx->mmu_box,ctx->mmu_box_dw);
+		"%s, bmmu: %px, mmu: %px mmu_dw: %px, mmu1: %px, mmu_dw1: %px\n",
+		__func__, ctx->bmmu_box, ctx->mmu_box,ctx->mmu_box_dw
+#ifdef NEW_FB_CODE
+		, ctx->mmu_box_1, ctx->mmu_box_dw_1
+#else
+		, 0, 0
+#endif
+		);
 
 	decoder_bmmu_box_free(ctx->bmmu_box);
 	decoder_mmu_box_free(ctx->mmu_box);
 
+#ifdef NEW_FB_CODE
+	if (ctx->front_back_mode && ctx->mmu_box_1) {
+		decoder_mmu_box_free(ctx->mmu_box_1);
+		ctx->mmu_box_1 = NULL;
+	}
+#endif
+
 	if (ctx->config.parm.dec.cfg.double_write_mode & 0x20) {
 		decoder_mmu_box_free(ctx->mmu_box_dw);
+#ifdef NEW_FB_CODE
+		if (ctx->front_back_mode && ctx->mmu_box_dw_1) {
+			decoder_mmu_box_free(ctx->mmu_box_dw_1);
+			ctx->mmu_box_dw_1 = NULL;
+		}
+#endif
 		decoder_bmmu_box_free(ctx->bmmu_box_dw);
 	}
 	vfree(ctx->comp_bufs);

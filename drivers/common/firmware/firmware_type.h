@@ -66,6 +66,17 @@
 #define VIDEO_DEC_HEVC_MMU_SWAP		TAG('2', '6', '5', 'S')
 #define VIDEO_DEC_AVS_MULTI		TAG('A', 'V', 'S', 'M')
 #define VIDEO_DEC_AV1_MMU		TAG('A', 'V', '1', 'M')
+#define VIDEO_DEC_HEVC_FRONT  TAG('2', '6', '5', 'F')
+#define VIDEO_DEC_HEVC_BACK   TAG('2', '6', '5', 'B')
+#define VIDEO_DEC_VP9_FRONT  TAG('V', 'P', '9', 'F')
+#define VIDEO_DEC_VP9_BACK   TAG('V', 'P', '9', 'B')
+#define VIDEO_DEC_AV1_FRONT  TAG('A', 'V', '1', 'F')
+#define VIDEO_DEC_AV1_BACK   TAG('A', 'V', '1', 'B')
+#define VIDEO_DEC_AVS2_FRONT  TAG('A', 'S', '2', 'F')
+#define VIDEO_DEC_AVS2_BACK   TAG('A', 'S', '2', 'B')
+#define VIDEO_DEC_AVS3			TAG('A', 'V', 'S', '3')
+#define VIDEO_DEC_AVS3_FRONT  TAG('A', 'S', '3', 'F')
+#define VIDEO_DEC_AVS3_BACK   TAG('A', 'S', '3', 'B')
 
 /* ... */
 #define FIRMWARE_MAX			(UINT_MAX)
@@ -81,6 +92,7 @@
 #define OPTEE_VDEC			(1)
 #define OPTEE_VDEC_HEVC			(2)
 #define OPTEE_VDEC_HCDEC			(3)
+#define OPTEE_VDEC_HEVCB			(4)
 
 struct format_name_s {
 	unsigned int format;

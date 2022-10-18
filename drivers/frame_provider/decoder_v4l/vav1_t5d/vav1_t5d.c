@@ -42,7 +42,6 @@
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
@@ -639,7 +638,7 @@ struct AV1HW_s {
 
 	struct device *cma_dev;
 	struct platform_device *platform_dev;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	struct vframe_chunk_s *chunk;
 	int dec_result;
@@ -997,7 +996,7 @@ static void trigger_schedule(struct AV1HW_s *hw)
 	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
 
 	if (hw->vdec_cb)
-		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
+		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_HEVC);
 }
 
 static void reset_process_time(struct AV1HW_s *hw)
@@ -8386,7 +8385,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 			if (hw->low_latency_flag) {
 				av1_postproc(hw);
-				vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_EVENT_CB);
+				vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_EVENT_CB, 0);
 				if (debug & PRINT_FLAG_VDEC_DETAIL)
 					pr_info("%s AV1 frame done \n", __func__);
 			}
@@ -10111,7 +10110,7 @@ static void run_front(struct vdec_s *vdec)
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-	void (*callback)(struct vdec_s *, void *), void *arg)
+	void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct AV1HW_s *hw =
 		(struct AV1HW_s *)vdec->private;

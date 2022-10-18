@@ -144,6 +144,7 @@ static int vcodec_feature_HDR(u8 *buf, int size, int vformat)
 		case VFORMAT_AV1:
 		case VFORMAT_AVS2:
 		case VFORMAT_VP9:
+		case VFORMAT_AVS3:
 				pbuf += snprintf(pbuf, size, "        \"HDR\" : \"true\"\n");
 			break;
 		default:
@@ -165,6 +166,7 @@ static int vcodec_feature_doublewrite(u8 *buf, int size, int vformat)
 		case VFORMAT_VP9:
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
+		case VFORMAT_AVS3:
 			s = snprintf(pbuf, size - tsize, "        \"DoubleWrite\" ");
 			tsize += s;
 			pbuf += s;
@@ -214,6 +216,7 @@ static int vcodec_feature_bitdepth(u8 *buf, int size, int vformat)
 		case VFORMAT_VP9:
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
+		case VFORMAT_AVS3:
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB)
 				pbuf += snprintf(pbuf, size, "        \"BitDepth\" : \"10\"\n");
 			else
@@ -236,6 +239,7 @@ static int vcodec_feature_MaxResolution(u8 *buf, int size, int vformat)
 		case VFORMAT_VP9:
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
+		case VFORMAT_AVS3:
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
 				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"8k\"\n");
@@ -274,6 +278,7 @@ static int vcodec_feature_clock(u8 *buf, int size, int vformat)
 		case VFORMAT_VP9:
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
+		case VFORMAT_AVS3:
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12B) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX2) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
@@ -328,6 +333,10 @@ static int vcodec_feature_support_format(int vformat)
 				return 1;
 			else
 				return 0;
+		case VFORMAT_AVS3:
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
+				return 1;
+			return 0;
 		case VFORMAT_AVS:
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM))
 				return 1;

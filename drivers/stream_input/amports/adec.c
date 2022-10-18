@@ -33,6 +33,7 @@
 #include <linux/of.h>
 #include "amports_priv.h"
 #include "../../common/chips/decoder_cpu_ver_info.h"
+#include "../../include/regs/dos_registers.h"
 #define INFO_VALID ((astream_dev) && (astream_dev->format))
 
 struct astream_device_s {

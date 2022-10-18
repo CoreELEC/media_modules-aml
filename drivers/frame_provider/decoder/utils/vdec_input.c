@@ -71,7 +71,7 @@ static int aml_copy_from_user(void *to, const void *from, ulong n)
 	return ret;
 }
 
-static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
+static int copy_from_user_to_phyaddr(struct vdec_input_s *input, void *virts, const char __user *buf,
 		u32 size, ulong phys, u32 padding, bool is_mapped)
 {
 	u32 i, span = SZ_1M;
@@ -84,8 +84,13 @@ static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 		if (aml_copy_from_user(p, buf, size))
 			return -EFAULT;
 
-		if (padding)
-			memset(p + size, 0, padding);
+		if (padding) {
+			if (input->vdec->format == VFORMAT_AVS2 ||
+				input->vdec->format == VFORMAT_AVS3)
+				memset(p + size, 0xff, padding);
+			else
+				memset(p + size, 0, padding);
+		}
 
 		codec_mm_dma_flush(p, size + padding, DMA_TO_DEVICE);
 
@@ -121,8 +126,13 @@ static int copy_from_user_to_phyaddr(void *virts, const char __user *buf,
 		return -EFAULT;
 	}
 
-	if (padding)
-		memset(p + remain, 0, padding);
+	if (padding) {
+		if (input->vdec->format == VFORMAT_AVS2 ||
+			input->vdec->format == VFORMAT_AVS3)
+			memset(p + remain, 0xff, padding);
+		else
+			memset(p + remain, 0, padding);
+	}
 
 	codec_mm_dma_flush(p, remain + padding, DMA_TO_DEVICE);
 	codec_mm_unmap_phyaddr(p);
@@ -136,7 +146,7 @@ static int vframe_chunk_fill(struct vdec_input_s *input,
 {
 	u8 *p = (u8 *)block->start_virt + block->wp;
 	if (block->type == VDEC_TYPE_FRAME_BLOCK) {
-		copy_from_user_to_phyaddr(p, buf, count,
+		copy_from_user_to_phyaddr(input, p, buf, count,
 			block->start + block->wp,
 			chunk->padding_size,
 			block->is_mapped);
@@ -144,13 +154,13 @@ static int vframe_chunk_fill(struct vdec_input_s *input,
 		size_t len = min((size_t)(block->size - block->wp), count);
 		u32 wp;
 
-		copy_from_user_to_phyaddr(p, buf, len,
+		copy_from_user_to_phyaddr(input, p, buf, len,
 				block->start + block->wp, 0,
 				block->is_mapped);
 		p += len;
 
 		if (count > len) {
-			copy_from_user_to_phyaddr(p, buf + len,
+			copy_from_user_to_phyaddr(input, p, buf + len,
 				count - len,
 				block->start, 0,
 				block->is_mapped);

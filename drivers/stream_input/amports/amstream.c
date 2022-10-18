@@ -1763,10 +1763,8 @@ static int amstream_release(struct inode *inode, struct file *file)
 				vdec_poweroff(VDEC_HEVC);
 			}
 
-			if ((port->vformat == VFORMAT_HEVC
-					|| port->vformat == VFORMAT_AVS2
-					|| port->vformat == VFORMAT_AV1
-					|| port->vformat == VFORMAT_VP9)) {
+			if (port->type & PORT_TYPE_HEVC) {
+					pr_info("vdec_poweroff HEVC\n");
 					vdec_poweroff(VDEC_HEVC);
 				} else {
 					vdec_poweroff(VDEC_1);
@@ -4522,7 +4520,9 @@ static int amstream_probe(struct platform_device *pdev)
 	init_waitqueue_head(&amstream_userdata_wait);
 	reset_canuse_bufferlevel(10000);
 	amstream_pdev = pdev;
-	amports_clock_gate_init(&amstream_pdev->dev);
+
+	if (!is_support_new_dos_dev())
+		amports_clock_gate_init(&amstream_pdev->dev);
 
 	/*prealloc fetch buf to avoid no continue buffer later...*/
 	stbuf_fetch_init();

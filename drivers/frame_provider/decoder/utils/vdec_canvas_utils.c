@@ -21,7 +21,6 @@
 #include "vdec_canvas_utils.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/amlogic/media/canvas/canvas.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "vdec.h"
 
 static struct canvas_status_s canvas_stat[CANVAS_MAX_SIZE];
@@ -42,7 +41,8 @@ bool is_support_vdec_canvas(void)
 	*/
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5))
 		return true;
 	return false;
 }
@@ -366,7 +366,8 @@ void config_cav_lut_ex(u32 index, ulong addr, u32 width,
 		if (core == VDEC_1) {
 			if ((endian == 7) &&
 				((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T3) ||
-				is_cpu_t7c()))
+				 (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+				  is_cpu_t7c()))
 				WRITE_VREG(MDEC_CAV_CFG0, 0x1ff << 17);
 			else
 				WRITE_VREG(MDEC_CAV_CFG0, 0); //[0]canv_mode, by default is non-canv-mode

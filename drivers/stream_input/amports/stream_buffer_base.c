@@ -67,6 +67,7 @@ static struct stream_buf_s *get_def_parms(int f)
 	case VFORMAT_AVS2:
 	case VFORMAT_AV1:
 	case VFORMAT_VP9:
+	case VFORMAT_AVS3:
 		return &hevc_buf_def;
 	default:
 		return &vdec_buf_def;
@@ -100,7 +101,8 @@ int stream_buffer_base_init(struct stream_buf_s *stbuf,
 	stbuf->is_hevc	= ((format == VFORMAT_HEVC) ||
 			(format == VFORMAT_AVS2) ||
 			(format == VFORMAT_AV1) ||
-			(format == VFORMAT_VP9));
+			(format == VFORMAT_VP9) ||
+			(format == VFORMAT_AVS3));
 	stbuf->for_4k	= ((width * height) >
 			(1920 * 1088)) ? 1 : 0;
 	stbuf->is_multi_inst = !vdec_single(vdec);

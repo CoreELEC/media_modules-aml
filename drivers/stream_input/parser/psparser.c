@@ -30,7 +30,6 @@
 #include <linux/amlogic/media/utils/amstream.h>
 
 #include <linux/uaccess.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../amports/streambuf_reg.h"
 #include "../amports/streambuf.h"
 #include "psparser.h"

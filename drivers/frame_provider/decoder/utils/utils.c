@@ -32,7 +32,6 @@
 
 #include "vdec.h"
 #include "vdec_input.h"
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "amvdec.h"
 #include "decoder_mmu_box.h"
 #include "decoder_bmmu_box.h"

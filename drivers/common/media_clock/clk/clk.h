@@ -127,7 +127,13 @@ static struct chip_vdec_clk_s vdec_hcodec_clk_mgr __initdata = {
 
 static int __init vdec_init_clk(void)
 {
+	struct platform_device *pdev;
 	int cpus[] = CLK_FOR_CPU;
+
+	pdev = initial_dos_device();
+
+	if (is_support_new_dos_dev())
+		amports_clock_gate_init(&pdev->dev);
 
 	register_vdec_clk_mgr(cpus, VDEC_1, &vdec_clk_mgr);
 #ifdef VDEC_HAS_VDEC2

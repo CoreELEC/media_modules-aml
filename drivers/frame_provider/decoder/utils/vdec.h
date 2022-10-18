@@ -32,17 +32,23 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_VDEC
 #include <trace/events/meson_atrace.h>
-
-#include "../../../stream_input/amports/amports_priv.h"
-
 /*#define CONFIG_AM_VDEC_DV*/
 #include "../../../stream_input/amports/streambuf.h"
 #include "../../../stream_input/amports/stream_buffer_base.h"
+#include "../../../framerate_adapter/video_framerate_adapter.h"
+#include "../../../include/regs/dos_registers.h"
+#include "../../../common/register/register.h"
 
 #include "vdec_input.h"
 #include "frame_check.h"
 #include "vdec_sync.h"
 #include "vdec_canvas_utils.h"
+
+#define NEW_FB_CODE
+#define FB_DEBUG_ON_OLD_CHIP
+#ifdef NEW_FB_CODE
+#define NEW_FRONT_BACK_CODE
+#endif
 
 s32 vdec_dev_register(void);
 s32 vdec_dev_unregister(void);
@@ -166,6 +172,10 @@ enum e_trace_work_status {
 #define CORE_MASK_HEVC_BACK (1 << VDEC_HEVCB)
 #define CORE_MASK_COMBINE (1UL << 31)
 
+#define mask_front_core(mask) ((mask & ~CORE_MASK_HEVC_BACK) || (mask == 0))
+#define mask_back_core(mask) ((mask & CORE_MASK_HEVC_BACK))
+
+
 #define META_DATA_SIZE	(256)
 #define HDR10P_BUF_SIZE	(128)
 
@@ -201,6 +211,10 @@ enum vdec_irq_num {
 	VDEC_IRQ_0,
 	VDEC_IRQ_1,
 	VDEC_IRQ_2,
+	ASSIST_MAILBOX_IRQ0,
+	ASSIST_MAILBOX_IRQ1,
+	ASSIST_MAILBOX_IRQ2,
+	ASSIST_MAILBOX_IRQ3,
 	VDEC_IRQ_HEVC_BACK,
 	VDEC_IRQ_MAX,
 };
@@ -356,6 +370,11 @@ struct vdec_s {
 	u32 mc[4096 * 4];
 	bool mc_loaded;
 	u32 mc_type;
+#ifdef NEW_FB_CODE
+	u32 mc_back[4096 * 4];
+	bool mc_back_loaded;
+	u32 mc_back_type;
+#endif
 	/* frame provider/receiver interface */
 	char vf_provider_name[VDEC_PROVIDER_NAME_SIZE];
 	struct vframe_provider_s vframe_provider;
@@ -382,13 +401,15 @@ struct vdec_s {
 	void (*vdec_fps_detec)(int id);
 
 	unsigned long (*run_ready)(struct vdec_s *vdec, unsigned long mask);
+	unsigned long (*check_input_data)(struct vdec_s *vdec, unsigned long mask);
 	void (*run)(struct vdec_s *vdec, unsigned long mask,
-			void (*callback)(struct vdec_s *, void *), void *);
+			void (*callback)(struct vdec_s *, void *, int), void *);
 	void (*reset)(struct vdec_s *vdec);
 	void (*dump_state)(struct vdec_s *vdec);
 	irqreturn_t (*irq_handler)(struct vdec_s *vdec, int irq);
 	irqreturn_t (*threaded_irq_handler)(struct vdec_s *vdec, int irq);
-
+	irqreturn_t (*back_irq_handler)(struct vdec_s *vdec, int irq);
+	irqreturn_t (*back_threaded_irq_handler)(struct vdec_s *vdec, int irq);
 	int (*user_data_read)(struct vdec_s *vdec,
 			struct userdata_param_t *puserdata_para);
 	void (*reset_userdata_fifo)(struct vdec_s *vdec, int bInit);
@@ -424,6 +445,9 @@ struct vdec_s {
 	char name[32];
 	char dec_spend_time[32];
 	char dec_spend_time_ave[32];
+	char dec_back_spend_time[32];
+	char dec_back_spend_time_ave[32];
+	char dec_back_event[32];
 	u32 discard_start_data_flag;
 	u32 video_id;
 	int is_v4l;
@@ -753,6 +777,8 @@ int is_rdma_enable(void);
 st_userdata *get_vdec_userdata_ctx(void);
 
 void vdec_frame_rate_uevent(int dur);
+
+void register_frame_rate_uevent_func(vdec_frame_rate_event_func func);
 
 void vdec_sync_irq(enum vdec_irq_num num);
 

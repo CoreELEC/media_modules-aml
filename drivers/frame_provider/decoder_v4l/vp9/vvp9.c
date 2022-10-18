@@ -45,7 +45,6 @@
 #include "../../../stream_input/amports/amports_priv.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/video_sink/video.h>
 #include <media/v4l2-mem2mem.h>
 
@@ -71,10 +70,6 @@
 #define CO_MV_COMPRESS
 #define HW_MASK_FRONT    0x1
 #define HW_MASK_BACK     0x2
-
-#define VP9D_MPP_REFINFO_TBL_ACCCONFIG             0x3442
-#define VP9D_MPP_REFINFO_DATA                      0x3443
-#define VP9D_MPP_REF_SCALE_ENBL                    0x3441
 #define HEVC_MPRED_CTRL4                           0x324c
 #define HEVC_CM_HEADER_START_ADDR                  0x3628
 #define HEVC_DBLK_CFGB                             0x350b
@@ -995,7 +990,7 @@ struct VP9Decoder_s {
 
 	struct device *cma_dev;
 	struct platform_device *platform_dev;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	struct vframe_chunk_s *chunk;
 	int dec_result;
@@ -1524,7 +1519,7 @@ static void trigger_schedule(struct VP9Decoder_s *pbi)
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (pbi->vdec_cb)
-		pbi->vdec_cb(hw_to_vdec(pbi), pbi->vdec_cb_arg);
+		pbi->vdec_cb(hw_to_vdec(pbi), pbi->vdec_cb_arg, CORE_MASK_HEVC);
 }
 
 static void reset_process_time(struct VP9Decoder_s *pbi)
@@ -8558,7 +8553,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				vp9_bufmgr_postproc(pbi);
 				WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-				vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_CB);
+				vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_CB, 0);
 				if (debug & PRINT_FLAG_VDEC_DETAIL)
 					pr_info("%s VP9 frame done \n", __func__);
 #endif
@@ -8628,7 +8623,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #ifdef MULTI_INSTANCE_SUPPORT
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	if (pbi->m_ins_flag ==0 && pbi->low_latency_flag) {
-		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_RUN);
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_RUN, 0);
 		if (debug & PRINT_FLAG_VDEC_DETAIL)
 			pr_info("%s VP9 frame header found \n", __func__);
 	}
@@ -10402,7 +10397,7 @@ static void run_back(struct vdec_s *vdec)
 #endif
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-	void (*callback)(struct vdec_s *, void *), void *arg)
+	void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct VP9Decoder_s *pbi =
 		(struct VP9Decoder_s *)vdec->private;

@@ -31,7 +31,6 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
@@ -209,7 +208,7 @@ struct vdec_mjpeg_hw_s {
 
 	struct vframe_chunk_s *chunk;
 	struct work_struct work;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	struct firmware_s *fw;
 	struct timer_list check_timer;
@@ -712,7 +711,8 @@ static void init_scaler(u32 endian)
 	WRITE_VREG(DOS_SW_RESET0, (1 << 10));
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
-	if (is_cpu_t7c()) {
+	if (is_cpu_t7c() ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)) {
 		if (endian == 7)
 			WRITE_VREG(PSCALE_CTRL2, (0x1ff << 16) | READ_VREG(PSCALE_CTRL2));
 		else
@@ -1118,7 +1118,7 @@ static unsigned long run_ready(struct vdec_s *vdec,
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-	void (*callback)(struct vdec_s *, void *), void *arg)
+	void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct vdec_mjpeg_hw_s *hw =
 		(struct vdec_mjpeg_hw_s *)vdec->private;
@@ -1330,7 +1330,7 @@ static void vmjpeg_work(struct work_struct *work)
 	hw->stat &= ~STAT_TIMER_ARM;
 
 	if (hw->vdec_cb)
-		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
+		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 }
 
 static int vmjpeg_stop(struct vdec_mjpeg_hw_s *hw)

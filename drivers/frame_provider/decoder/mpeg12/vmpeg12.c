@@ -35,7 +35,6 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "vmpeg12.h"
 #include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
@@ -45,7 +44,11 @@
 #include <linux/amlogic/media/codec_mm/configs.h>
 //#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
-
+#include "../utils/amvdec.h"
+#include "../utils/vdec.h"
+#include "../utils/firmware.h"
+#include "../../../common/chips/decoder_cpu_ver_info.h"
+#include <linux/amlogic/media/utils/amlog.h>
 
 
 #ifdef CONFIG_AM_VDEC_MPEG12_LOG
@@ -56,13 +59,8 @@
 #define LOG_LEVEL_INFO      1
 #define LOG_LEVEL_DESC  "0:ERROR, 1:INFO"
 #endif
-#include <linux/amlogic/media/utils/amlog.h>
-MODULE_AMLOG(LOG_LEVEL_ERROR, 0, LOG_LEVEL_DESC, LOG_DEFAULT_MASK_DESC);
 
-#include "../utils/amvdec.h"
-#include "../utils/vdec.h"
-#include "../utils/firmware.h"
-#include "../../../common/chips/decoder_cpu_ver_info.h"
+MODULE_AMLOG(LOG_LEVEL_ERROR, 0, LOG_LEVEL_DESC, LOG_DEFAULT_MASK_DESC);
 
 #define DRIVER_NAME "amvdec_mpeg12"
 #define MODULE_NAME "amvdec_mpeg12"

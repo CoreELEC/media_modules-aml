@@ -32,5 +32,7 @@ struct frame_rate_dev_s  {
 	dev_t dev_no;
 };
 
+typedef void (*vdec_frame_rate_event_func)(int);
+
 #endif
 

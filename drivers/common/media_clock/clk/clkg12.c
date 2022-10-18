@@ -25,7 +25,6 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/amlogic/media/clk/gp_pll.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/utils/amports_config.h>
 #include "../../../frame_provider/decoder/utils/vdec.h"
 #include <linux/amlogic/media/registers/register.h>
@@ -412,7 +411,11 @@ static struct clk_set_setting clks_for_formats[] = {
 		{1920*1080*60, 166}, {4096*2048*30, 333},
 		{4096*2048*60, 630}, {INT_MAX, 630},}
 	},
-
+	{/*VFORMAT_AVS3*/
+		{{1280*720*30, 100}, {1920*1080*30, 100},
+		{1920*1080*60, 166}, {4096*2048*30, 333},
+		{4096*2048*60, 630}, {INT_MAX, 630},}
+	},
 };
 
 void set_clock_gate(struct gate_switch_node *nodes, int num)
@@ -422,7 +425,8 @@ void set_clock_gate(struct gate_switch_node *nodes, int num)
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5))
 		hevc_mux_str = "clk_hevc_mux";
 	else
 		hevc_mux_str = "clk_hevcf_mux";
@@ -1054,6 +1058,7 @@ static int vdec_clock_get(enum vdec_type_e core)
 	AM_MESON_CPU_MAJOR_ID_P1,\
 	AM_MESON_CPU_MAJOR_ID_S4D,\
 	AM_MESON_CPU_MAJOR_ID_T5W,\
+	AM_MESON_CPU_MAJOR_ID_S5,\
 	0}
 #include "clk.h"
 

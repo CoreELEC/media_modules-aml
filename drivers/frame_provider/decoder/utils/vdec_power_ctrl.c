@@ -19,7 +19,8 @@
  */
 #define DEBUG
 #include "vdec_power_ctrl.h"
-#include <linux/amlogic/media/utils/vdec_reg.h>
+#include "../../../include/regs/dos_registers.h"
+#include "../../../common/register/register.h"
 #include <linux/amlogic/power_ctrl.h>
 //#include <dt-bindings/power/sc2-pd.h>
 //#include <linux/amlogic/pwr_ctrl.h>
@@ -74,7 +75,7 @@ static struct pm_pd_s pm_domain_data[] = {
 	{ .name = "pwrc-hcodec",},
 	{ .name = "pwrc-vdec-2", },
 	{ .name = "pwrc-hevc", },
-	{ .name = "pwrc-hevc-b", },
+	{ .name = "pwrc-hevcb", },
 	{ .name = "pwrc-wave", },
 };
 
@@ -148,7 +149,8 @@ static void pm_vdec_clock_on(int id)
 		/* enable hevc clock */
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2 &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5))
 			amports_switch_gate("clk_hevcf_mux", 1);
 		else
 			amports_switch_gate("clk_hevc_mux", 1);
@@ -178,20 +180,99 @@ static void pm_vdec_clock_off(int id)
 	}
 }
 
+#define wait_delay_us(us)  usleep_range(us, us + 100);
+
+static void dos_local_config(bool is_on, int id)
+{
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5)
+		return;
+
+	if (is_on) {
+		wait_delay_us(20);
+
+		switch (id) {
+			case VDEC_1:
+				WRITE_VREG(DOS_MEM_PD_VDEC, 0);
+				WRITE_VREG(DOS_SW_RESET0, 0xfffffffc);
+				wait_delay_us(20);
+				WRITE_VREG(DOS_SW_RESET0, 0);
+				wait_delay_us(10);
+				WRITE_VREG(DOS_MEM_PD_VDEC, 0);
+				break;
+			case VDEC_HEVCB:
+			case VDEC_HEVC:
+				WRITE_VREG(DOS_MEM_PD_HEVC, 0);
+				WRITE_VREG(DOS_MEM_PD_HEVC_DBE, 0);
+				WRITE_VREG(DOS_SW_RESET3, 0xffffffff);
+				wait_delay_us(20);
+				WRITE_VREG(DOS_SW_RESET3, 0);
+				wait_delay_us(10);
+				WRITE_VREG(DOS_MEM_PD_HEVC, 0);
+				WRITE_VREG(DOS_MEM_PD_HEVC_DBE, 0);
+				break;
+			case VDEC_2:
+			case VDEC_HCODEC:
+			case VDEC_WAVE:
+			default:
+				pr_info("%s on, not found id %d\n", __func__, id);
+				break;
+		}
+	} else {
+		switch (id) {
+			case VDEC_1:
+				WRITE_VREG(DOS_SW_RESET0, 0xfffffffc);
+				wait_delay_us(20);
+				WRITE_VREG(DOS_SW_RESET0, 0);
+				wait_delay_us(10);
+				WRITE_VREG(DOS_MEM_PD_VDEC, 0xffffffffUL);
+				break;
+			case VDEC_HEVCB:
+			case VDEC_HEVC:
+				WRITE_VREG(DOS_SW_RESET3, 0xffffffff);
+				wait_delay_us(20);
+				WRITE_VREG(DOS_SW_RESET3, 0);
+				wait_delay_us(10);
+				WRITE_VREG(DOS_MEM_PD_HEVC, 0xffffffffUL);
+				WRITE_VREG(DOS_MEM_PD_HEVC_DBE, 0xffffffffUL);
+				break;
+			case VDEC_2:
+			case VDEC_HCODEC:
+			case VDEC_WAVE:
+				break;
+			default:
+				pr_info("%s off, not found id %d\n", __func__, id);
+				break;
+		}
+	}
+
+	pr_info("%s end, id %d, is_on %d\n", __func__, id, is_on);
+}
+
 static void pm_vdec_power_domain_power_on(struct device *dev, int id)
 {
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
 
 	pm_vdec_clock_on(id);
 	pm_vdec_power_switch(pm->pd_data, id, true);
+	if ((id == VDEC_HEVC) && dos_dev_get()->is_hevc_dual_core_mode_support) {
+		pm_vdec_power_switch(pm->pd_data, VDEC_HEVCB, true);
+	}
+
+	dos_local_config(1, id);
 }
 
 static void pm_vdec_power_domain_power_off(struct device *dev, int id)
 {
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
 
+	dos_local_config(0, id);
+
 	pm_vdec_clock_off(id);
 	pm_vdec_power_switch(pm->pd_data, id, false);
+
+	if ((id == VDEC_HEVC) && dos_dev_get()->is_hevc_dual_core_mode_support) {
+			pm_vdec_power_switch(pm->pd_data, VDEC_HEVCB, false);
+	}
 }
 
 static bool pm_vdec_power_domain_power_state(struct device *dev, int id)

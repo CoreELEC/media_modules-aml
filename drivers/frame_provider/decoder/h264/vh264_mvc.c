@@ -35,7 +35,6 @@
 #include <linux/atomic.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
