@@ -1559,7 +1559,7 @@ static int vmjpeg_stop(struct vdec_mjpeg_hw_s *hw)
 		hw->mm_blk_handle = NULL;
 		if (hw->run_flag)
 			usleep_range(1000, 2000);
-		decoder_bmmu_box_free(hw->mm_blk_handle);
+		decoder_bmmu_box_free(bmmu_box_tmp);
 		bmmu_box_tmp = NULL;
 	}
 
