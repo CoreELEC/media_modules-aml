@@ -2108,13 +2108,6 @@ static int vidioc_decoder_streamoff(struct file *file, void *priv,
 		ctx->index_disp = 0;
 	}
 
-	if (ctx->ge2d && ctx->is_stream_off) {
-		aml_v4l2_ge2d_destroy(ctx->ge2d);
-		ctx->ge2d = NULL;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"ge2d destory in streamoff.\n");
-	}
-
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d\n", __func__, q->type);
 
