@@ -991,8 +991,9 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	pic->coded_width 	= ps->coded_width;
 	pic->coded_height 	= ps->coded_height;
 
-	pic->y_len_sz		= vdec_h264_pic_scale(ALIGN(ps->coded_width, 64), dw) *
-		vdec_h264_pic_scale(ALIGN(ps->coded_height, 64), dw);
+	pic->y_len_sz		= ALIGN(vdec_h264_pic_scale(ps->coded_width, dw), 64) *
+		ALIGN(vdec_h264_pic_scale(ps->coded_height, dw),64);
+
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 	pic->profile_idc	= ps->profile;
 	pic->field		= ps->field;
