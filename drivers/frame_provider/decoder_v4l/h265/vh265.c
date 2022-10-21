@@ -10033,6 +10033,7 @@ static int userdata_prepare(struct hevc_state_s *hevc)
 	u32 vpts = 0;
 	u64 pts64 = 0;
 	int pts_valid = 0;
+	struct vdec_s *vdec = hw_to_vdec(hevc);
 
 	if (!itu_t_t35_enable || pic == NULL)
 		return 0;
@@ -10064,12 +10065,31 @@ static int userdata_prepare(struct hevc_state_s *hevc)
 				pts_valid = hevc->chunk->pts_valid;
 			}
 		} else {
-			if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
+			checkout_pts_offset pts_info;
+			if (vdec->pts_server_id == 0) {
+				if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
 					pic->stream_offset, &vpts, 0, &pts64)) {
-				vpts = 0;
-				pts_valid = 0;
+					vpts = 0;
+					pts_valid = 0;
+				} else {
+					pts_valid = 1;
+				}
+			} else {
+				if (!vdec->ptsserver_peek_pts_offset)
+					vdec->ptsserver_peek_pts_offset = symbol_request(ptsserver_peek_pts_offset);
+
+				if (vdec->ptsserver_peek_pts_offset) {
+					pts_info.offset = pic->stream_offset;
+					if (!vdec->ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+						vpts = pts_info.pts;
+						pts_valid = 1;
+					}
+				}
 			}
 		}
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
+			"%s: id = %x, offset: %x, vpts: %d, pts_valid: %d\n",
+			__func__, vdec->pts_server_id, pic->stream_offset, vpts, pts_valid);
 		vh265_userdata_fill_vpts(hevc, vpts, pts_valid, pic->POC);
 	}
 
