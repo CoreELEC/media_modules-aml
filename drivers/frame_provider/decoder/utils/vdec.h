@@ -32,6 +32,9 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_VDEC
 #include <trace/events/meson_atrace.h>
+
+#include "../../../stream_input/amports/amports_priv.h"
+
 /*#define CONFIG_AM_VDEC_DV*/
 #include "../../../stream_input/amports/streambuf.h"
 #include "../../../stream_input/amports/stream_buffer_base.h"
