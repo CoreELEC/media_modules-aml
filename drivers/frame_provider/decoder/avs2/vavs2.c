@@ -4319,8 +4319,8 @@ static struct avs2_frame_s *get_pic_by_index(
 		pic = dec->avs2_dec.m_bg;
 	else if (index >= 0	&& index < dec->used_buf_num) {
 		for (i = 0; i < dec->used_buf_num; i++) {
-			if (dec->avs2_dec.fref[i]->index == index)
-				pic = dec->avs2_dec.fref[i];
+			if (dec->avs2_dec.frm_pool[i].index == index)
+				pic = &dec->avs2_dec.frm_pool[i];
 		}
 	}
 	return pic;
