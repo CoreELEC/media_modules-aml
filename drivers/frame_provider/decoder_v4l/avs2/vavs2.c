@@ -784,7 +784,7 @@ struct AVS2Decoder_s {
 
 static int  compute_losless_comp_body_size(
 		struct AVS2Decoder_s *dec, int width, int height,
-		uint8_t is_bit_depth_10);
+		bool is_bit_depth_10);
 
 static int avs2_print(struct AVS2Decoder_s *dec,
 	int flag, const char *fmt, ...)
@@ -962,14 +962,14 @@ int avs2_alloc_mmu(
 	unsigned int *mmu_index_adr)
 {
 	int ret;
-	int bit_depth_10 = (bit_depth == AVS2_BITS_10);
+	bool is_bit_depth_10 = (bit_depth == AVS2_BITS_10);
 	int picture_size;
 	int cur_mmu_4k_number, max_frame_num;
 	struct internal_comp_buf *ibuf = index_to_icomp_buf(dec, cur_buf_idx);
 
 	picture_size = compute_losless_comp_body_size(
 		dec, pic_width, pic_height,
-		bit_depth_10);
+		is_bit_depth_10);
 	cur_mmu_4k_number = ((picture_size + (1 << 12) - 1) >> 12);
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 		max_frame_num = MAX_FRAME_8K_NUM;
@@ -1921,7 +1921,7 @@ static uint32_t get_mv_buf_size(struct AVS2Decoder_s *dec, int width, int height
 /*Losless compression body buffer size 4K per 64x32 (jt)*/
 static int  compute_losless_comp_body_size(struct AVS2Decoder_s *dec,
 	int width, int height,
-	uint8_t is_bit_depth_10)
+	bool is_bit_depth_10)
 {
 	int     width_x64;
 	int     height_x32;
@@ -5291,12 +5291,12 @@ static void get_picture_qos_info(struct AVS2Decoder_s *dec)
 }
 
 static int avs2_mmu_page_num(struct AVS2Decoder_s *dec,
-		int w, int h, int save_mode)
+		int w, int h, bool is_bit_depth_10)
 {
 	int picture_size;
 	int cur_mmu_4k_number, max_frame_num;
 
-	picture_size = compute_losless_comp_body_size(dec, w, h, save_mode);
+	picture_size = compute_losless_comp_body_size(dec, w, h, is_bit_depth_10);
 	cur_mmu_4k_number = ((picture_size + (PAGE_SIZE - 1)) >> PAGE_SHIFT);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
@@ -5338,7 +5338,7 @@ static void vavs2_get_comp_buf_info(struct AVS2Decoder_s *dec,
 	info->frame_buffer_size = avs2_mmu_page_num(
 		dec, dec->frame_width,
 		dec->frame_height,
-		bit_depth == 0);
+		bit_depth == AVS2_BITS_10);
 }
 
 static int vavs2_get_ps_info(struct AVS2Decoder_s *dec, struct aml_vdec_ps_infos *ps)
@@ -5408,6 +5408,7 @@ static int v4l_res_change(struct AVS2Decoder_s *dec)
 	return ret;
 }
 
+int16_t get_param(uint16_t value, int8_t *print_info);
 
 static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 {
@@ -5416,6 +5417,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 	int i, ret;
 	int32_t start_code = 0;
 	struct aml_vcodec_ctx *ctx = dec->v4l2_ctx;
+	union param_u *rpm_param = &dec->avs2_dec.param;
 
 	avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
 		"%s decode_status 0x%x process_state %d lcu 0x%x\n",
@@ -5740,6 +5742,15 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 
 		dec->frame_width = dec->avs2_dec.param.p.horizontal_size;
 		dec->frame_height = dec->avs2_dec.param.p.vertical_size;
+		dec->avs2_dec.input.profile_id = get_param(rpm_param->p.profile_id, "profile_id");
+		dec->avs2_dec.input.sample_bit_depth = 8;
+		if (dec->avs2_dec.input.profile_id == BASELINE10_PROFILE) { /* 10bit profile (0x52)*/
+				dec->avs2_dec.input.sample_bit_depth =
+					get_param(rpm_param->p.encoding_precision,
+					"encoding_precision");
+				dec->avs2_dec.input.sample_bit_depth =
+					6 + (dec->avs2_dec.input.sample_bit_depth) * 2;
+			}
 		if (!v4l_res_change(dec)) {
 			if (ctx->param_sets_from_ucode && !dec->v4l_params_parsed) {
 				struct aml_vdec_ps_infos ps;

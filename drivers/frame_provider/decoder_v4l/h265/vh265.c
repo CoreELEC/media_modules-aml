@@ -2236,7 +2236,7 @@ void check_head_error(struct hevc_state_s *hevc)
 #ifdef SUPPORT_10BIT
 /* Losless compression body buffer size 4K per 64x32 (jt) */
 static int compute_losless_comp_body_size(struct hevc_state_s *hevc,
-	int width, int height, int mem_saving_mode)
+	int width, int height, bool is_bit_depth_10)
 {
 	int width_x64;
 	int     height_x32;
@@ -2247,9 +2247,9 @@ static int compute_losless_comp_body_size(struct hevc_state_s *hevc,
 
 	height_x32 = height + 31;
 	height_x32 >>= 5;
-	if (mem_saving_mode == 1 && hevc->mmu_enable)
+	if ((is_bit_depth_10 == 0) && hevc->mmu_enable)
 		bsize = 3200 * width_x64 * height_x32;
-	else if (mem_saving_mode == 1)
+	else if (is_bit_depth_10 == 0)
 		bsize = 3072 * width_x64 * height_x32;
 	else
 		bsize = 4096 * width_x64 * height_x32;
@@ -3599,7 +3599,7 @@ static void init_decode_head_hw(struct hevc_state_s *hevc)
 		compute_losless_comp_header_size(hevc->pic_w,
 			 hevc->pic_h);
 	int losless_comp_body_size = compute_losless_comp_body_size(hevc,
-		hevc->pic_w, hevc->pic_h, hevc->mem_saving_mode);
+		hevc->pic_w, hevc->pic_h, !hevc->mem_saving_mode);
 
 	hevc->losless_comp_body_size = losless_comp_body_size;
 
@@ -7168,14 +7168,14 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 
 /* return page number */
 static int hevc_mmu_page_num(struct hevc_state_s *hevc,
-		int w, int h, int save_mode)
+		int w, int h, bool is_bit_depth_10)
 {
 	int picture_size;
 	int page_num;
 	int max_frame_num;
 
 	picture_size =
-		compute_losless_comp_body_size(hevc, w, h, save_mode);
+		compute_losless_comp_body_size(hevc, w, h, is_bit_depth_10);
 	page_num = ((picture_size + PAGE_SIZE - 1) >> PAGE_SHIFT);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
@@ -7193,7 +7193,7 @@ static int hevc_mmu_page_num(struct hevc_state_s *hevc,
 
 static int H265_alloc_mmu(struct hevc_state_s *hevc, struct PIC_s *new_pic,
 		unsigned short bit_depth, unsigned int *mmu_index_adr) {
-	int bit_depth_10 = (bit_depth != 0x00);
+	bool is_bit_depth_10 = (bit_depth != 0x00);
 	int cur_mmu_4k_number;
 	int ret;
 	struct internal_comp_buf *ibuf =
@@ -7202,7 +7202,7 @@ static int H265_alloc_mmu(struct hevc_state_s *hevc, struct PIC_s *new_pic,
 		return 0;
 
 	cur_mmu_4k_number = hevc_mmu_page_num(hevc, new_pic->width,
-			new_pic->height, !bit_depth_10);
+			new_pic->height, is_bit_depth_10);
 	if (cur_mmu_4k_number < 0)
 		return -1;
 	ATRACE_COUNTER(hevc->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
@@ -9909,7 +9909,7 @@ static void get_comp_buf_info(struct hevc_state_s *hevc,
 			hevc->max_pic_h);
 	info->header_size = hevc_get_header_size(w,h);
 	info->frame_buffer_size = hevc_mmu_page_num(
-			hevc, w, h,	bit_depth == 0);
+			hevc, w, h,	bit_depth != 0x00);
 
 	if (info->frame_buffer_size < 0) {
 		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);

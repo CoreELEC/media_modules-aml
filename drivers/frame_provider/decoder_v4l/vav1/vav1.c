@@ -569,7 +569,7 @@ static void fill_frame_info(struct AV1HW_s *hw,
 	unsigned int pts);
 
 static int  compute_losless_comp_body_size(int width, int height,
-	uint8_t is_bit_depth_10);
+	bool is_bit_depth_10);
 
 void clear_frame_buf_ref_count(AV1Decoder *pbi);
 
@@ -1202,13 +1202,13 @@ static void film_grain_task_exit(struct AV1HW_s *hw)
 
 /* return page number */
 static int av1_mmu_page_num(struct AV1HW_s *hw,
-		int w, int h, int save_mode)
+		int w, int h, bool is_bit_depth_10)
 {
 	int picture_size;
 	int cur_mmu_4k_number, max_frame_num;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
-	picture_size = compute_losless_comp_body_size(w, h, save_mode);
+	picture_size = compute_losless_comp_body_size(w, h, is_bit_depth_10);
 	cur_mmu_4k_number = ((picture_size + (PAGE_SIZE - 1)) >> PAGE_SHIFT);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
@@ -1261,7 +1261,7 @@ int av1_alloc_mmu(
 	unsigned int *mmu_index_adr)
 {
 	int ret = 0;
-	int bit_depth_10 = (bit_depth == AOM_BITS_10);
+	bool is_bit_depth_10 = (bit_depth == AOM_BITS_10);
 	int cur_mmu_4k_number;
 	struct internal_comp_buf *ibuf;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
@@ -1280,7 +1280,7 @@ int av1_alloc_mmu(
 	cur_mmu_4k_number = av1_mmu_page_num(hw,
 				pic_width,
 				pic_height,
-				bit_depth_10);
+				is_bit_depth_10);
 	if (cur_mmu_4k_number < 0)
 		return -1;
 	ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
@@ -1306,7 +1306,7 @@ int av1_alloc_mmu(
 
 #ifdef AOM_AV1_MMU_DW
 static int compute_losless_comp_body_size_dw(int width, int height,
-				uint8_t is_bit_depth_10);
+				bool is_bit_depth_10);
 
 int av1_alloc_mmu_dw(
 	struct AV1HW_s *hw,
@@ -1317,7 +1317,7 @@ int av1_alloc_mmu_dw(
 	unsigned int *mmu_index_adr)
 {
 	int ret = 0;
-	int bit_depth_10 = (bit_depth == AOM_BITS_10);
+	bool is_bit_depth_10 = (bit_depth == AOM_BITS_10);
 	int picture_size;
 	int cur_mmu_4k_number, max_frame_num;
 
@@ -1329,7 +1329,7 @@ int av1_alloc_mmu_dw(
 		return -1;
 	}
 	picture_size = compute_losless_comp_body_size_dw(pic_width, pic_height,
-				   bit_depth_10);
+				   is_bit_depth_10);
 	cur_mmu_4k_number = ((picture_size + (1 << 12) - 1) >> 12);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
@@ -2642,7 +2642,7 @@ static void dump_aux_buf(struct AV1HW_s *hw)
 
 /*Losless compression body buffer size 4K per 64x32 (jt)*/
 static int compute_losless_comp_body_size(int width, int height,
-				uint8_t is_bit_depth_10)
+				bool is_bit_depth_10)
 {
 	int     width_x64;
 	int     height_x32;
@@ -2684,7 +2684,7 @@ static  int  compute_losless_comp_header_size(int width, int height)
 
 #ifdef AOM_AV1_MMU_DW
 static int compute_losless_comp_body_size_dw(int width, int height,
-	uint8_t is_bit_depth_10)
+	bool is_bit_depth_10)
 {
 	return compute_losless_comp_body_size(width, height, is_bit_depth_10);
 }
@@ -7890,7 +7890,7 @@ static int av1_postproc(struct AV1HW_s *hw)
 static void vav1_get_comp_buf_info(struct AV1HW_s *hw,
 					struct vdec_comp_buf_info *info)
 {
-	u16 bit_depth = hw->param.p.bit_depth;
+	u16 bit_depth = hw->aom_param.p.bit_depth;
 
 	info->max_size = av1_max_mmu_buf_size(
 			hw->max_pic_w,
@@ -7901,7 +7901,7 @@ static void vav1_get_comp_buf_info(struct AV1HW_s *hw,
 	info->frame_buffer_size = av1_mmu_page_num(
 			hw, hw->frame_width,
 			hw->frame_height,
-			bit_depth == 0);
+			bit_depth == AOM_BITS_10);
 }
 
 static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
