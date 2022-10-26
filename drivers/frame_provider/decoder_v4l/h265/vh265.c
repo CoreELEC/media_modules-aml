@@ -2137,6 +2137,8 @@ struct hevc_state_s {
 	u32 sei_user_data_wp;
 	struct work_struct user_data_ready_work;
 #endif
+	int crop_w;
+	int crop_h;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -9048,6 +9050,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				(pic->conf_win_top_offset +
 				pic->conf_win_bottom_offset);
 
+
 			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
 				hevc_print(hevc, 0,
 					"conformance_window %d, %d, %d, %d, %d => cropped width %d, height %d com_w %d com_h %d\n",
@@ -9060,6 +9063,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		}
 
 		vf->src_fmt.play_id = vdec->inst_cnt;
+
+		hevc->crop_w = vf->width;
+		hevc->crop_h = vf->height;
 
 		vf->width = vf->width /
 			get_double_write_ratio(pic->double_write_mode);
@@ -11588,9 +11594,9 @@ int vh265_dec_status(struct vdec_info *vstatus)
 	if (!hevc)
 		return -1;
 
-	vstatus->frame_width = hevc->pic_w;
+	vstatus->frame_width = hevc->crop_w;
 	/* for hevc interlace for disp height x2 */
-	vstatus->frame_height = (hevc->pic_h << hevc->interlace_flag);
+	vstatus->frame_height = (hevc->crop_h << hevc->interlace_flag);
 	if (hevc->frame_dur != 0)
 		vstatus->frame_rate = ((96000 * 10 / hevc->frame_dur) % 10) < 5 ?
 				96000 / hevc->frame_dur : (96000 / hevc->frame_dur +1);
