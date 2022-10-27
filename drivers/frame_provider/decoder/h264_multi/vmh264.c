@@ -9197,22 +9197,20 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	memset(&meta_info, 0, sizeof(meta_info));
 #endif
 
-	if (hw->sei_itu_data_len <= 0)
-		return;
-
 	if (p != NULL && p->buf_spec_num >= 0) {
 		struct buffer_spec_s *pic = &hw->buffer_spec[p->buf_spec_num];
 
 		if (pic->user_data_buf != NULL) {
 			memset(pic->user_data_buf, 0, SEI_ITU_DATA_SIZE);
-			if (hw->sei_itu_data_len < SEI_ITU_DATA_SIZE) {
+			if (hw->sei_itu_data_len < SEI_ITU_DATA_SIZE &&
+				(hw->sei_itu_data_len > 0)) {
 				memcpy(pic->user_data_buf, hw->sei_itu_data_buf,
 					hw->sei_itu_data_len);
 				pic->ud_param.buf_len = hw->sei_itu_data_len;
 			} else {
 				pic->ud_param.buf_len = 0;
-				dpb_print(DECODE_ID(hw), 0,
-					"sei data len is over 4k\n", hw->sei_itu_data_len);
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_UD_DETAIL,
+					"set sei data len(%s) to 0\n", hw->sei_itu_data_len);
 			}
 		} else {
 			pic->ud_param.buf_len = 0;
@@ -9228,6 +9226,9 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 		pic->ud_param.meta_info.vpts = vpts;
 		pic->ud_param.meta_info.vpts_valid = vpts_valid;
 	}
+
+	if (hw->sei_itu_data_len <= 0)
+		return;
 
 	pdata = (u8 *)hw->sei_user_data_buffer + hw->sei_user_data_wp;
 	pmax_sei_data_buffer = (u8 *)hw->sei_user_data_buffer + USER_DATA_SIZE;
