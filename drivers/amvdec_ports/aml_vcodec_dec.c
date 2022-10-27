@@ -2103,7 +2103,8 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 			if (ctx->vpp_cfg.fmt == 0)
 				ctx->vpp_cfg.fmt = ctx->cap_pix_fmt;
 
-			if (ctx->vpp == NULL)
+			if (ctx->vpp == NULL &&
+				vdec_get_instance_num() <= max_di_instance)
 				aml_wait_resource(ctx);
 
 			if ((atomic_read(&ctx->dev->vpp_count) < max_di_instance) ||
@@ -3663,7 +3664,8 @@ int aml_canvas_cache_init(struct aml_vcodec_dev *dev)
 
 void aml_v4l_vpp_release_early(struct aml_vcodec_ctx * ctx)
 {
-	if (ctx->vpp && !ctx->vpp_cfg.enable_nr) {
+	if (ctx->vpp && !(ctx->vpp_cfg.enable_nr &&
+		atomic_read(&ctx->vpp->local_buf_out))) {
 		aml_v4l2_vpp_destroy(ctx->vpp);
 		atomic_dec(&ctx->dev->vpp_count);
 		ctx->vpp = NULL;
