@@ -5445,6 +5445,9 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		goto irq_handled_exit;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		PRINT_LINE();
+#ifdef AVS2_10B_MMU
+		avs2_recycle_mmu_buf_tail(dec);
+#endif
 		dec->start_decoding_flag |= 0x3;
 		if (dec->m_ins_flag) {
 			set_cuva_data(dec);
@@ -5523,12 +5526,8 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		PRINT_LINE();
 
 		if (dec->avs2_dec.hc.cur_pic != NULL) {
-			struct internal_comp_buf *ibuf =
-				index_to_icomp_buf(dec, dec->cur_fb_idx_mmu);
 			int32_t ii;
-#ifdef AVS2_10B_MMU
-			avs2_recycle_mmu_buf_tail(dec);
-#endif
+
 			check_pic_error(dec, dec->avs2_dec.hc.cur_pic);
 			avs2_post_process(&dec->avs2_dec);
 
@@ -5543,13 +5542,12 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 					dec->avs2_dec.fref[ii];
 				if (pic->bg_flag == 0 &&
 					pic->is_output == -1 &&
-					dec->cur_fb_idx_mmu != INVALID_IDX &&
+					pic->index != INVALID_IDX &&
 					pic->vf_ref == 0) {
 					if (pic->referred_by_others == 0) {
 						int ret = 99;
 #ifdef AVS2_10B_MMU
-						dec->cur_fb_idx_mmu = INVALID_IDX;
-
+						struct internal_comp_buf *ibuf = index_to_icomp_buf(dec, pic->index);
 						decoder_mmu_box_free_idx(ibuf->mmu_box,
 								ibuf->index);
 
@@ -6695,10 +6693,6 @@ static void avs2_work(struct work_struct *work)
 		decode_frame_count[dec->index] = dec->frame_count;
 		ctx->decoder_status_info.decoder_count++;
 
-#ifdef AVS2_10B_MMU
-		dec->used_4k_num =
-			(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
-#endif
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
 			"%s (===> %d) dec_result %d %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
 			__func__,
