@@ -400,6 +400,12 @@ static int device_cibulk_send(struct device_s *device,
 		/* copy data */
 		ptr = urb->transfer_buffer;
 		res = copyDataFrom(user_space, ptr, userData, size);
+		if (res) {
+			err("copy data failed\n");
+			kfree(urb->transfer_buffer);
+			usb_free_urb(urb);
+			return -1;
+		}
 
 #ifdef TIMESTAMP
 		if (bSetTimestamps) {
@@ -1326,6 +1332,8 @@ static int device_tsiso_send(struct device_s *device,
 					device->channel[index].maxPacketSize)],
 				DEVICE_ISOC_LENGTH(
 					device->channel[index].maxPacketSize));
+		if (ret)
+			continue
 		urb[i]->transfer_buffer_length = DEVICE_ISOC_LENGTH(
 			device->channel[index].maxPacketSize);
 		urb[i]->number_of_packets = DEVICE_NUM_FRAMES_PER_URB;
@@ -1492,6 +1500,12 @@ static int device_tsbulk_send(struct device_s *device,
 
 	/* copy data */
 	ret = copy_from_user(urb->transfer_buffer, data, size);
+	if (ret) {
+		err("copy data from user space failed\n");
+		kfree(urb->transfer_buffer);
+		usb_free_urb(urb);
+		return -EFAULT;
+	}
 
 	/* submit bulk */
 	urb->pipe = usb_sndbulkpipe(device->usbdev, DEVICE_TS_OUT_PIPE + index);
@@ -1850,6 +1864,10 @@ static long device_ioctl(struct file *file,
 		/* send CI message */
 		ret = copy_from_user(&data,
 			(void __user *)arg, sizeof(struct ioctl_data_s));
+		if (ret) {
+			err("copy data from user space failed\n");
+			return -EFAULT;
+		}
 		dbg("inMsg, rx 0x%p, rxSize %d, tx 0x%p, txSize %d",
 			data.rxData,
 			data.rxSize,
@@ -1878,6 +1896,10 @@ static long device_ioctl(struct file *file,
 		/* send CI message */
 		ret = copy_from_user(&data,
 			(void __user *)arg, sizeof(struct ioctl_data_s));
+		if (ret) {
+			err("copy data from user space failed\n");
+			return -EFAULT;
+		}
 		dbg("inMsg, rx 0x%p, rxSize %d, tx 0x%p, txSize %d",
 			data.rxData, data.rxSize,
 			data.txData, data.txSize);
@@ -1922,6 +1944,10 @@ static ssize_t device_write(struct file *file, const char __user *buf,
 
 	/* get transmission buffer */
 	ret = copy_from_user(&data, buf, sizeof(struct rw_data_s));
+	if (ret) {
+		err("copy data from user space failed\n");
+		return -EINVAL;
+	}
 	dbg("txBuffer, moduleId %u, data 0x%p, size %d",
 			data.moduleId, data.data, data.size);
 	if (data.moduleId >= DEVICE_NUM_CAM) {
@@ -1980,6 +2006,10 @@ static ssize_t device_read(struct file *file, char __user *buf,
 		return -EFAULT;
 	} /* if */
 	res = copy_from_user(&data, buf, sizeof(struct rw_data_s));
+	if (res) {
+		err("copy data from user space failed\n");
+		return -EFAULT;
+	}
 	data.copiedSize = 0;
 	if (data.type == DEVICE_TYPE_TS_READ) {
 		res = device_fill_ts(device, data.moduleId, &data);

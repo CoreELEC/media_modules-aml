@@ -1929,6 +1929,10 @@ static long rawci_ioctl(struct file *file, unsigned int cmd, ulong arg)
 		{
 			cr = copy_from_user(&param, (void *)arg,
 			sizeof(struct ci_rw_param));
+			if (cr) {
+				pr_error("copy data from user space failed\n");
+				return -EFAULT;
+			}
 			if (param.mode == AM_CI_IOW)
 				aml_ci_bus_io_write(ci_bus_dev->priv, 0, param.addr, param.value);
 			else if (param.mode == AM_CI_IOR)
@@ -1956,6 +1960,10 @@ static long rawci_ioctl(struct file *file, unsigned int cmd, ulong arg)
 		{
 			int value = 0;
 			cr = copy_from_user(&value, (void *)arg, sizeof(int));
+			if (cr) {
+				pr_error("copy data from user space failed\n");
+				return -EFAULT;
+			}
 			aml_gio_power(&(ci_bus_dev->pc), value > 0 ? AML_PWR_OPEN : AML_PWR_CLOSE);
 		}
 		break;
