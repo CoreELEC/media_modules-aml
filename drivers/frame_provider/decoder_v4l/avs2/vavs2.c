@@ -5398,9 +5398,9 @@ static int v4l_res_change(struct AVS2Decoder_s *dec)
 			ctx->v4l_resolution_change = 1;
 			dec->eos = 1;
 			avs2_prepare_display_buf(dec);
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(dec));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 			ret = 1;
 		}
 	}

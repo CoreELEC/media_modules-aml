@@ -2358,8 +2358,7 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 			used_count++;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
-	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
@@ -2596,6 +2595,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	struct vframe_s *vf = NULL;
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int buffer_index = frame->buf_spec_num;
@@ -2952,7 +2952,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				vh264_vf_put(vh264_vf_get(vdec), vdec);
 			} else {
 				set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hw->v4l2_ctx);
-				ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+				vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 				fb->task->submit(fb->task, TASK_TYPE_DEC);
 			}
 		} else
@@ -3096,7 +3096,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 
 		ATRACE_COUNTER(hw->trace.pts_name, vf->timestamp);
 
-		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		pr_info("[%d] H264 EOS notify.\n", ctx->id);
@@ -7090,7 +7090,7 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
-
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 
@@ -7128,7 +7128,7 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 			READ_VREG(VIFF_BIT_CNT),
 			READ_VREG(MBY_MBX));
 
-	ATRACE_COUNTER("V_ST_DEC-decode_state", p_H264_Dpb->dec_dpb_status);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, p_H264_Dpb->dec_dpb_status);
 
 	if (p_H264_Dpb->dec_dpb_status == H264_WRRSP_REQUEST) {
 		if (hw->mmu_enable)
@@ -8892,9 +8892,9 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 				amhevc_stop();
 			hw->eos = 1;
 			flush_dpb(p_H264_Dpb);
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 			ret = 1;
 		}
 	}
@@ -8923,7 +8923,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		READ_VREG(VLD_MEM_VIFIFO_WP),
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 
-	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hw->dec_result);
 
 	if (!hw->mmu_enable) {
 		mutex_lock(&vmh264_mutex);
@@ -9256,9 +9256,9 @@ result_done:
 		hw->eos = 1;
 		flush_dpb(p_H264_Dpb);
 
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 		notify_v4l_eos(hw_to_vdec(hw));
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 		mutex_lock(&hw->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
@@ -9374,7 +9374,7 @@ result_done:
 		vdec_v4l_write_frame_sync(ctx);
 
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (hw->vdec_cb)
 		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
@@ -9640,7 +9640,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		return;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", size);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, size);
 
 	input_empty[DECODE_ID(hw)] = 0;
 

@@ -812,6 +812,10 @@ int bypass_nr_flag;
 EXPORT_SYMBOL(bypass_nr_flag);
 module_param(bypass_nr_flag, int, 0644);
 
+u32 trace_config = 0xffffffff;
+EXPORT_SYMBOL(trace_config);
+module_param(trace_config, uint, 0644);
+
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("AML video codec V4L2 decoder driver");
 

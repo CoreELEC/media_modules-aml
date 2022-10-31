@@ -9405,14 +9405,14 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					 while (kfifo_len(&hevc->display_q)) {
 						if (hevc->pair_fb[0] != NULL && hevc->pair_fb[1] != NULL) {
 							set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
-							ATRACE_COUNTER("VC_OUT_DEC-submit", hevc->pair_fb[0]->buf_idx);
+							vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, hevc->pair_fb[0]->buf_idx);
 							hevc->pair_fb[0]->task->submit(hevc->pair_fb[0]->task, TASK_TYPE_DEC);
-							ATRACE_COUNTER("VC_OUT_DEC-submit", hevc->pair_fb[1]->buf_idx);
+							vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, hevc->pair_fb[1]->buf_idx);
 							hevc->pair_fb[1]->task->submit(hevc->pair_fb[1]->task, TASK_TYPE_DEC);
 							clear_pair_fb(hevc);
 						} else {
 							set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
-							ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+							vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 							fb->task->submit(fb->task, TASK_TYPE_DEC);
 						}
 					}
@@ -9544,7 +9544,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		pr_info("[%d] H265 EOS notify.\n", ctx->id);
@@ -10013,9 +10013,9 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 			}
 
 			flush_output(hevc, NULL);
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(hevc));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 			ret = 1;
 		}
@@ -11223,6 +11223,7 @@ static irqreturn_t vh265_isr(int irq, void *data)
 	int i, temp;
 	unsigned int dec_status;
 	struct hevc_state_s *hevc = (struct hevc_state_s *)data;
+	struct aml_vcodec_ctx *ctx = hevc->v4l2_ctx;
 	u32 debug_tag;
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 
@@ -11236,7 +11237,7 @@ static irqreturn_t vh265_isr(int irq, void *data)
 	if (hevc->init_flag == 0)
 		return IRQ_HANDLED;
 
-	ATRACE_COUNTER("V_ST_DEC-decode_state", dec_status);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, dec_status);
 
 	hevc->dec_status = dec_status;
 	if (is_log_enable(hevc))
@@ -12236,8 +12237,7 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 			used_count++;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
-	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
@@ -12403,7 +12403,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
-	ATRACE_COUNTER("V_ST_DEC-work_state", hevc->dec_result);
+
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hevc->dec_result);
 
 	if (hevc->dec_result == DEC_RESULT_AGAIN)
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_AGAIN);
@@ -12753,9 +12754,9 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			__func__, hevc->curr_POC, pic);
 		flush_output(hevc, pic);
 		/* dummy vf with eos flag to backend */
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 		notify_v4l_eos(hw_to_vdec(hevc));
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		hevc->shift_byte_count_lo = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
@@ -12853,7 +12854,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		!hevc->v4l_params_parsed)
 		vdec_v4l_write_frame_sync(ctx);
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (hevc->vdec_cb)
 		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg);
@@ -13034,7 +13035,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		return;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", r);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, r);
 
 	input_empty[hevc->index] = 0;
 	hevc->dec_result = DEC_RESULT_NONE;

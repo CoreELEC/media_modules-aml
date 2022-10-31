@@ -572,6 +572,13 @@ int vdec_get_instance_num(void)
 	return vdec_get_core_nr();
 }
 
+int vdec_get_vdec_id(struct aml_vdec_adapt *ada_ctx)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+
+	return vdec ? vdec->id : -1;
+}
+
 void v4l2_config_vdec_parm(struct aml_vdec_adapt *ada_ctx, u8 *data, u32 len)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;

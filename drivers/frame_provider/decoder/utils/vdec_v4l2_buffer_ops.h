@@ -22,6 +22,7 @@
 
 #include "../../../amvdec_ports/vdec_drv_base.h"
 #include "../../../amvdec_ports/aml_vcodec_adapt.h"
+#include "../../../amvdec_ports/utils/aml_dec_trace.h"
 
 int vdec_v4l_get_pic_info(
 	struct aml_vcodec_ctx *ctx,

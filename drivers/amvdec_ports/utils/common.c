@@ -266,3 +266,5 @@ u8 *aml_yuv_dump(struct file *fp, u8 *start_addr, u32 real_width, u32 real_heigh
 
 	return (start_addr + coded_width * coded_height);
 }
+
+

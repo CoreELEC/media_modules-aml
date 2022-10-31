@@ -978,7 +978,7 @@ static void trigger_schedule(struct AV1HW_s *hw)
 		!hw->v4l_params_parsed)
 		vdec_v4l_write_frame_sync(ctx);
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (hw->vdec_cb)
 		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
@@ -6429,7 +6429,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			if (v4l2_ctx->is_stream_off) {
 				vav1_vf_put(vav1_vf_get(hw), hw);
 			} else {
-				ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+				vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 				fb->task->submit(fb->task, TASK_TYPE_DEC);
 			}
 		} else
@@ -6483,7 +6483,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		av1_print(hw, 0, "[%d] AV1 EOS notify.\n", ctx->id);
@@ -7967,9 +7967,9 @@ static int v4l_res_change(struct AV1HW_s *hw)
 
 			av1_postproc(hw);
 
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 			mutex_unlock(&hw->assist_task.assist_mutex);
 			ret = 1;
 		}
@@ -8559,6 +8559,7 @@ static irqreturn_t vav1_isr(int irq, void *data)
 	int i;
 	unsigned int dec_status;
 	struct AV1HW_s *hw = (struct AV1HW_s *)data;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	uint debug_tag;
 
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
@@ -8583,7 +8584,7 @@ static irqreturn_t vav1_isr(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-decode_state", dec_status);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, dec_status);
 
 	hw->dec_status = dec_status;
 	hw->process_busy = 1;
@@ -9377,6 +9378,7 @@ static void av1_work(struct work_struct *work)
 	struct AV1HW_s *hw = container_of(work,
 		struct AV1HW_s, work);
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
@@ -9392,7 +9394,7 @@ static void av1_work(struct work_struct *work)
 		READ_VREG(HEVC_STREAM_WR_PTR),
 		READ_VREG(HEVC_STREAM_RD_PTR));
 
-	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hw->dec_result);
 
 	if (hw->dec_result == AOM_AV1_RESULT_NEED_MORE_BUFFER) {
 		reset_process_time(hw);

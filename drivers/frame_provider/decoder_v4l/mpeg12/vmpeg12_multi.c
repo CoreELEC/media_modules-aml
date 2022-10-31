@@ -1722,7 +1722,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 					vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 				} else {
 					set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hw->v4l2_ctx);
-					ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 					fb->task->submit(fb->task, TASK_TYPE_DEC);
 				}
 			} else
@@ -1846,9 +1846,9 @@ static int v4l_res_change(struct vdec_mpeg12_hw_s *hw, int width, int height, bo
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
 			flush_output(hw);
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 			ret = 1;
 		}
@@ -1882,6 +1882,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 	struct pic_info_t *new_pic, *disp_pic;
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)(vdec->private);
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	if (READ_VREG(AV_SCRATCH_M) != 0 &&
 		(debug_enable & PRINT_FLAG_UCODE_DETAIL)) {
@@ -1971,7 +1972,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 
 	reg = READ_VREG(MREG_BUFFEROUT);
 
-	ATRACE_COUNTER("V_ST_DEC-decode_state", reg);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, reg);
 
 	if (reg == MPEG12_DATA_REQUEST) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
@@ -2302,7 +2303,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->timestamp);
 
-		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		pr_info("[%d] mpeg12 EOS notify.\n", ctx->id);
@@ -2322,7 +2323,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			"%s, result=%d, status=%d\n", __func__,
 			hw->dec_result, vdec->next_status);
 
-	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hw->dec_result);
 
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		if (vdec->input.swap_valid)
@@ -2425,9 +2426,9 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		vdec_clean_input(vdec);
 		flush_output(hw);
 
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 		notify_v4l_eos(vdec);
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 		debug_print(DECODE_ID(hw), 0,
 			"%s: end of stream, num %d(%d)\n",
@@ -2469,7 +2470,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		!hw->v4l_params_parsed)
 		vdec_v4l_write_frame_sync(ctx);
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (hw->vdec_cb)
 		hw->vdec_cb(vdec, hw->vdec_cb_arg);
@@ -3191,8 +3192,7 @@ static bool is_available_buffer(struct vdec_mpeg12_hw_s *hw)
 			used_count++;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
-	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
@@ -3381,7 +3381,7 @@ void (*callback)(struct vdec_s *, void *),
 		return;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", size);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, size);
 
 	hw->input_empty = 0;
 	if ((vdec_frame_based(vdec)) &&

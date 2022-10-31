@@ -369,9 +369,9 @@ static int v4l_res_change(struct vdec_mjpeg_hw_s *hw, int width, int height)
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
 			hw->eos = 1;
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 			ret = 1;
 		}
@@ -512,7 +512,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 		if (v4l2_ctx->is_stream_off) {
 			vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
 		} else {
-			ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+			vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 			fb->task->submit(fb->task, TASK_TYPE_DEC);
 		}
 	} else
@@ -1254,8 +1254,7 @@ static bool is_available_buffer(struct vdec_mjpeg_hw_s *hw)
 			used_count++;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
-	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
@@ -1332,7 +1331,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		return;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", ret);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, ret);
 
 	hw->input_empty = 0;
 	hw->dec_result = DEC_RESULT_NONE;
@@ -1445,7 +1444,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		pr_info("[%d] mjpeg EOS notify.\n", ctx->id);
@@ -1468,7 +1467,7 @@ static void vmjpeg_work(struct work_struct *work)
 		kfifo_len(&hw->newframe_q),
 		kfifo_len(&hw->display_q));
 
-	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hw->dec_result);
 
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
@@ -1498,9 +1497,9 @@ static void vmjpeg_work(struct work_struct *work)
 		}
 		hw->eos = 1;
 
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 		notify_v4l_eos(vdec);
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;

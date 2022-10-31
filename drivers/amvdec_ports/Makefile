@@ -26,3 +26,4 @@ amvdec_ports-objs += decoder/aml_mjpeg_parser.o
 amvdec_ports-objs += utils/golomb.o
 endif
 amvdec_ports-objs += utils/common.o
+amvdec_ports-objs += utils/aml_dec_trace.o

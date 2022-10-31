@@ -31,6 +31,8 @@
 #include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
+
+#include "utils/aml_dec_trace.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_dec.h"
 
@@ -780,6 +782,8 @@ struct aml_vcodec_ctx {
 	struct mutex			compressed_buf_info_lock;
 	struct v4l_compressed_buffer_info	compressed_buf_info;
 	struct aml_decoder_status_info	decoder_status_info;
+
+	struct vdec_trace		vtr;
 };
 
 /**

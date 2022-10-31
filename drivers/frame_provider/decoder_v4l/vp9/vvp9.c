@@ -1521,7 +1521,7 @@ static void trigger_schedule(struct VP9Decoder_s *pbi)
 		!pbi->v4l_params_parsed)
 		vdec_v4l_write_frame_sync(ctx);
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (pbi->vdec_cb)
 		pbi->vdec_cb(hw_to_vdec(pbi), pbi->vdec_cb_arg);
@@ -7492,7 +7492,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				if (v4l2_ctx->is_stream_off) {
 					vvp9_vf_put(vvp9_vf_get(pbi), pbi);
 				} else {
-					ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 					fb->task->submit(fb->task, TASK_TYPE_DEC);
 				}
 			} else
@@ -7546,7 +7546,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, fb->buf_idx);
 		fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 		pr_info("[%d] VP9 EOS notify.\n", ctx->id);
@@ -8446,9 +8446,9 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 			ctx->v4l_resolution_change = 1;
 			pbi->eos = 1;
 			vp9_bufmgr_postproc(pbi);
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(pbi));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 			ret = 1;
 		}
 	}
@@ -8800,12 +8800,13 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	int i;
 	unsigned int dec_status;
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)data;
+	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
 	unsigned int adapt_prob_status;
 	uint debug_tag;
 
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
-	ATRACE_COUNTER("V_ST_DEC-decode_state", dec_status);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, dec_status);
 
 	if (dec_status == VP9_HEAD_PARSER_DONE) {
 		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
@@ -9674,6 +9675,7 @@ static void vp9_work(struct work_struct *work)
 	struct VP9Decoder_s *pbi = container_of(work,
 		struct VP9Decoder_s, work);
 	struct vdec_s *vdec = hw_to_vdec(pbi);
+	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
@@ -9690,7 +9692,7 @@ static void vp9_work(struct work_struct *work)
 		READ_VREG(HEVC_STREAM_WR_PTR),
 		READ_VREG(HEVC_STREAM_RD_PTR));
 
-	ATRACE_COUNTER("V_ST_DEC-work_state", pbi->dec_result);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, pbi->dec_result);
 
 	if (pbi->dec_result == DEC_INIT_PICLIST) {
 		init_pic_list(pbi);
@@ -9715,13 +9717,13 @@ static void vp9_work(struct work_struct *work)
 			spin_unlock_irqrestore(&pbi->wait_buf_lock, flags);
 
 			if (pbi->wait_more_buf) {
-				ATRACE_COUNTER("V_ST_DEC-wait_more_buff", __LINE__);
+				vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_5, __LINE__);
 				vdec_post_task(vp9_wait_cap_buf, pbi);
 			}
 		} else {
 			int i;
 
-			ATRACE_COUNTER("V_ST_DEC-wait_more_buff", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_5, 0);
 
 			if (pbi->mmu_enable)
 				vp9_recycle_mmu_buf_tail(pbi);
@@ -9868,9 +9870,9 @@ static void vp9_work(struct work_struct *work)
 		pbi->eos = 1;
 		vp9_bufmgr_postproc(pbi);
 
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 		notify_v4l_eos(hw_to_vdec(pbi));
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 		vdec_vframe_dirty(hw_to_vdec(pbi), pbi->chunk);
 	} else if (pbi->dec_result == DEC_RESULT_FORCE_EXIT) {
@@ -9986,8 +9988,7 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 			used_count++;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
-	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return free_count >= pbi->run_ready_min_buf_num ? 1 : 0;
 }
@@ -10155,7 +10156,7 @@ static void run_front(struct vdec_s *vdec)
 		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, 0);
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", size);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, size);
 
 	input_empty[pbi->index] = 0;
 	pbi->dec_result = DEC_RESULT_NONE;
