@@ -7880,7 +7880,7 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
 
-	if ((pbi->chunk->hdr10p_data_buf != NULL) && (pbi->chunk->hdr10p_data_size > 0) &&
+	if ((pbi->chunk != NULL) && (pbi->chunk->hdr10p_data_buf != NULL) && (pbi->chunk->hdr10p_data_size > 0) &&
 		(pbi->chunk->hdr10p_data_size < HDR10P_BUF_SIZE )) {
 		memcpy(pic->hdr10p_data_buf, pbi->chunk->hdr10p_data_buf,
 			pbi->chunk->hdr10p_data_size);
