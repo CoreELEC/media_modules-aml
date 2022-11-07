@@ -8553,6 +8553,7 @@ static void check_timer_func(struct timer_list *timer)
 		u32 dpb_status = READ_VREG(DPB_STATUS_REG);
 		u32 mby_mbx = READ_VREG(MBY_MBX);
 		if ((dpb_status == H264_ACTION_DECODE_NEWPIC) ||
+			(dpb_status == H264_ACTION_CONFIG_DONE) ||
 			(dpb_status == H264_ACTION_DECODE_SLICE) ||
 			(dpb_status == H264_SEI_DATA_DONE) ||
 			(dpb_status == H264_STATE_SEARCH_HEAD) ||
