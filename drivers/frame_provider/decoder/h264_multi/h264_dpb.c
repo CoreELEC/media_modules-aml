@@ -911,6 +911,7 @@ void fill_frame_num_gap(struct VideoParameters *p_Vid, struct Slice *currSlice)
 		picture->colocated_buf_index = -1;
 		picture->buf_spec_num = -1;
 		picture->buf_spec_is_alloced = 0;
+		picture->col_buf_is_alloced = 0;
 
 		picture->coded_frame = 1;
 		picture->pic_num = UnusedShortTermFrameNum;
@@ -1147,6 +1148,7 @@ static struct StorablePicture *get_new_pic(struct h264_dpb_stru *p_H264_Dpb,
 
 	if (s) {
 		s->buf_spec_is_alloced = 0;
+		s->col_buf_is_alloced = 0;
 		s->pic_num   = 0;
 		s->frame_num = 0;
 		s->long_term_frame_idx = 0;
@@ -5470,8 +5472,11 @@ int allocate_colocate_buf(struct h264_dpb_stru *p_H264_Dpb)
 	}
 	if (i == p_H264_Dpb->colocated_buf_count) {
 		i = -1;
-		p_H264_Dpb->buf_alloc_fail = 1;
 	}
+
+	dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
+		"%s colocated_buf_index %d\n", __func__, i);
+
 	return i;
 }
 
@@ -5488,6 +5493,8 @@ int release_colocate_buf(struct h264_dpb_stru *p_H264_Dpb, int index)
 				index) & 0x1) == 0x1) {
 				p_H264_Dpb->colocated_buf_map &=
 					(~(1 << index));
+				dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
+					"%s colocated_buf_index %d\n", __func__, index);
 			} else {
 				dpb_print(p_H264_Dpb->decoder_index,
 					PRINT_FLAG_ERROR,
@@ -5662,6 +5669,10 @@ int release_picture(struct h264_dpb_stru *p_H264_Dpb,
 		if (pic->buf_spec_is_alloced == 1)
 			release_buf_spec_num(p_H264_Dpb->vdec,
 				pic->buf_spec_num);
+		if (pic->col_buf_is_alloced == 1) {
+			release_colocate_buf(p_H264_Dpb, pic->colocated_buf_index);
+			pic->colocated_buf_index = -1;
+		}
 	}
 
 	free_picture(p_H264_Dpb, pic);
@@ -5741,6 +5752,7 @@ static void check_frame_store_same_pic_num(struct DecodedPictureBuffer *p_Dpb,
 						p_Dpb->last_picture->
 						buf_spec_num;
 					p->buf_spec_is_alloced = 0;
+					p->col_buf_is_alloced = 0;
 					p->colocated_buf_index = p_Dpb->
 						last_picture->
 						colocated_buf_index;
@@ -5888,6 +5900,8 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 					p_H264_Dpb->buf_alloc_fail = 1;
 					p_H264_Dpb->mVideo.dec_picture->
 						buf_spec_is_alloced = 0;
+					dpb_print(p_H264_Dpb->decoder_index,
+						PRINT_FLAG_DPB_DETAIL, "%s: buf_sepc buf_alloc_fail %d\n",__func__, p_H264_Dpb->buf_alloc_fail);
 				} else
 					p_H264_Dpb->mVideo.dec_picture->
 						buf_spec_is_alloced = 1;
@@ -5898,6 +5912,13 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 						colocated_buf_index =
 						allocate_colocate_buf(
 							p_H264_Dpb);
+					if (p_H264_Dpb->mVideo.dec_picture->colocated_buf_index < 0) {
+						p_H264_Dpb->buf_alloc_fail = 1;
+						p_H264_Dpb->mVideo.dec_picture->col_buf_is_alloced = 0;
+						dpb_print(p_H264_Dpb->decoder_index,
+							PRINT_FLAG_DPB_DETAIL, "%s: col_buf buf_alloc_fail %d\n",__func__, p_H264_Dpb->buf_alloc_fail);
+					} else
+						p_H264_Dpb->mVideo.dec_picture->col_buf_is_alloced = 1;
 				}
 			}
 #endif

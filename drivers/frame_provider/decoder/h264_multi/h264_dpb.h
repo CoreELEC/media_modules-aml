@@ -642,6 +642,7 @@ struct StorablePicture {
 	int         pic_num;
 	int         buf_spec_num;
 	int         buf_spec_is_alloced;
+	int         col_buf_is_alloced;
 	int         colocated_buf_index;
 	int         long_term_pic_num;
 	int         long_term_frame_idx;
