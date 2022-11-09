@@ -1457,6 +1457,8 @@ static int init_mv_buf_list(struct AV1HW_s *hw)
 	int pic_width = hw->init_pic_w;
 	int pic_height = hw->init_pic_h;
 	int size = cal_mv_buf_size(hw, pic_width, pic_height);
+	struct vdec_pic_info pic = { 0 };
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (mv_buf_dynamic_alloc)
 		return 0;
@@ -1485,13 +1487,15 @@ static int init_mv_buf_list(struct AV1HW_s *hw)
 		count, size);
 	}
 
-	for (i = 0;
-		i < count && i < MV_BUFFER_NUM; i++) {
+	vdec_v4l_get_pic_info(ctx, &pic);
+
+	for (i = 0; i < count && i < pic.dpb_frames; i++) {
 		if (alloc_mv_buf(hw, i, size) < 0) {
 			ret = -1;
 			break;
 		}
 	}
+
 	return ret;
 }
 
