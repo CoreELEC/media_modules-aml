@@ -158,6 +158,8 @@ static int fops_vcodec_open(struct file *file)
 
 	list_add(&ctx->list, &dev->ctx_list);
 
+	ctx->dv_id = -1;
+
 	mutex_unlock(&dev->dev_mutex);
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "%s decoder %lx\n",
 		dev_name(&dev->plat_dev->dev), (ulong)ctx);

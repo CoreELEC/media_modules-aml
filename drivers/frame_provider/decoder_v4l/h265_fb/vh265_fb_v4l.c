@@ -9523,6 +9523,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		}
 
 		vf->v4l_mem_handle = pic->cma_alloc_addr;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 
 		if (hevc->enable_fence) {
 			/* fill fence information. */

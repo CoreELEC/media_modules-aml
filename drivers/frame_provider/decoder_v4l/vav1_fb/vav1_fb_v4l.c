@@ -6188,6 +6188,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		vf->v4l_mem_handle
 			= hw->m_BUF[pic_config->BUF_index].v4l_ref_buf_addr;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
 			(get_double_write_mode(hw) != 0x10)) {
 			vf->mm_box.bmmu_box	= hw->bmmu_box;

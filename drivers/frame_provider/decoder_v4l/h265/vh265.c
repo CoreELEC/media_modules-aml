@@ -8870,6 +8870,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			__func__, pic->index, pic->error_mark);
 
 		vf->frame_type = 0;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 
 		if (pic->error_mark) {
 			vf->frame_type |= V4L2_BUF_FLAG_ERROR;

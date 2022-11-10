@@ -5220,6 +5220,7 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 			int stream_offset = pic->stream_offset;
 			vf->v4l_mem_handle = dec->m_BUF[pic->BUF_index].v4l_ref_buf_addr;
 			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+			vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 			set_vframe(dec, vf, pic, 0);
 			if (dec->front_back_mode != 1)
 				decoder_do_frame_check(pvdec, vf);

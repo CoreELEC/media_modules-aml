@@ -714,6 +714,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 
 		vf->v4l_mem_handle = hw->pic[index].v4l_ref_buf_addr;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 			"[%d] %s(), v4l mem handle: 0x%lx\n",
 			((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
@@ -800,6 +801,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->v4l_mem_handle
 			= hw->pic[index].v4l_ref_buf_addr;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 			"[%d] %s(), v4l mem handle: 0x%lx\n",
 			((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
@@ -890,6 +892,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->v4l_mem_handle
 			= hw->pic[index].v4l_ref_buf_addr;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 			"[%d] %s(), v4l mem handle: 0x%lx\n",
 			((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,

@@ -7170,6 +7170,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		vf->v4l_mem_handle
 			= pbi->m_BUF[pic_config->v4l_buf_index].v4l_ref_buf_addr;
 		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 
 		if (pbi->mmu_enable) {
 			vf->mm_box.bmmu_box	= pbi->bmmu_box;

@@ -2661,6 +2661,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 		vf->frame_type = 0;
 		vf->duration_pulldown = 0;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 		if (!(is_iframe(frame)) && hw->unstable_pts) {
 			vf->pts = 0;
 			vf->pts_us64 = 0;

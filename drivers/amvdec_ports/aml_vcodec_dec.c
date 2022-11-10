@@ -48,6 +48,9 @@
 #include "../common/chips/decoder_cpu_ver_info.h"
 #include "utils/common.h"
 #include "../frame_provider/decoder/utils/vdec_sync.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+#include <linux/amlogic/media/amdolbyvision/dolby_vision.h>
+#endif
 
 
 #define OUT_FMT_IDX		(0) //default h264
@@ -2186,8 +2189,17 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 		}
 
 		ctx->is_stream_off = false;
-	} else
+	} else {
 		ctx->is_out_stream_off = false;
+
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+		if (ctx->dv_id < 0) {
+			dv_inst_map(&ctx->dv_id);
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+				"%s: dv_inst_map ctx %p, dv_id %d\n",__func__, ctx, ctx->dv_id);
+		}
+#endif
+	}
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
 		memset(&ctx->decoder_status_info, 0,
@@ -3830,6 +3842,13 @@ void aml_v4l_ctx_release(struct kref *kref)
 
 	vdec_trace_clean(&ctx->vtr);
 
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+	if (ctx->dv_id >= 0) {
+		dv_inst_unmap(ctx->dv_id);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+				"%s: dv_inst_unmap ctx %p, dv_id %d\n", __func__, ctx, ctx->dv_id);
+	}
+#endif
 	kfree(ctx);
 }
 
