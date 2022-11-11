@@ -922,6 +922,7 @@ struct AVS3Decoder_s {
 	unsigned char print_buf[1024*16+16];
 	int print_buf_len;
 	struct trace_decoder_name trace;
+	int has_i_frame;
 };
 
 static int  compute_losless_comp_body_size(
@@ -1369,7 +1370,7 @@ int avs3_dec_init(struct AVS3Decoder_s *dec, struct BuffInfo_s *buf_spec_i,
 	dec->pts_mode_recovery_count = 0;
 
 	dec->buf_num = 0;
-
+	dec->has_i_frame = 0;
 	dec->bufmgr_error_count = 0;
 #ifdef NEW_FB_CODE
 	dec->start_process_time_back = 0;
@@ -6614,6 +6615,20 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		dec->avs3_dec.init_hw_flag = 0;
 	}
 
+	if (dec->has_i_frame == 0 &&
+		start_code == PB_PICTURE_START_CODE) {
+		dec->dec_result = DEC_RESULT_DONE;
+#ifdef NEW_FB_CODE
+		if (dec->front_back_mode == 1)
+			amhevc_stop_f();
+		else
+#endif
+		amhevc_stop();
+		avs3_print(dec, 0, "no i frame!!\n");
+		vdec_schedule_work(&dec->work);
+		goto irq_handled_exit;
+	}
+
 	if (start_code == SEQUENCE_END_CODE) {
 		avs3_bufmgr_process(&dec->avs3_dec, SEQUENCE_END_CODE);
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_ACTION_DONE);
@@ -6936,7 +6951,8 @@ decode_slice:
 			dec->process_state = PROC_STATE_DECODING;
 
 		}
-
+		if (start_code == I_PICTURE_START_CODE)
+			dec->has_i_frame = 1;
 		if (dec->m_ins_flag)
 			start_process_time(dec);
 	}
