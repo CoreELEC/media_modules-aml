@@ -1271,7 +1271,6 @@ static int v4l_get_free_fb(struct AVS2Decoder_s *dec)
 			(struct vdec_v4l2_buffer *)dec->m_BUF[free_pic->index].v4l_ref_buf_addr;
 
 		fb->status = FB_ST_DECODER;
-		free_pic->vf_ref = 1;
 	}
 
 	unlock_buffer(dec, flags);
@@ -4869,6 +4868,7 @@ static void fill_frame_info(struct AVS2Decoder_s *dec,
 static void set_vframe(struct AVS2Decoder_s *dec,
 	struct vframe_s *vf, struct avs2_frame_s *pic, u8 dummy)
 {
+	unsigned long flags;
 	int stream_offset;
 	unsigned int frame_size = 0;
 	int pts_discontinue;
@@ -5080,6 +5080,11 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 		vf->pts = 0;
 	}
 
+	if (!dummy) {
+		lock_buffer(dec, flags);
+		pic->vf_ref = 1;
+		unlock_buffer(dec, flags);
+	}
 	atomic_add(1, &dec->vf_pre_count);
 }
 
@@ -6257,9 +6262,9 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		if (dec->front_back_mode == 1)
 			amhevc_stop_b();
 #endif
-		if (dec->front_back_mode == 1 ||
+		/*if (dec->front_back_mode == 1 ||
 			dec->front_back_mode == 3)
-			release_free_mmu_buffers(dec);
+			release_free_mmu_buffers(dec);*/
 
 #ifdef NEW_FB_CODE
 		dec->dec_back_result = DEC_BACK_RESULT_DONE;
@@ -6934,6 +6939,19 @@ decode_slice:
 				avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
 					"write system instruction, ins_offset = %d, addr = 0x%x\n",
 					avs2_dec->ins_offset, avs2_dec->fr.sys_imem_ptr);
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+				if (avs2_dec->ins_offset > 512) {
+					avs2_print(dec, 0,
+						"!!!!!Error!!!!!!!!, ins_offset %d is too big (>512)\n", avs2_dec->ins_offset);
+					avs2_dec->ins_offset = 512;
+				} else if (avs2_dec->ins_offset < 256) {
+					avs2_dec->ins_offset = 256;
+					WRITE_BACK_RET(avs2_dec);
+				}
+				sys_imem_ptr = avs2_dec->fr.sys_imem_ptr + 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+				avs2_dec->sys_imem_ptr_v = avs2_dec->fr.sys_imem_ptr_v + 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+#else
+
 				if (avs2_dec->ins_offset > 256) {
 					avs2_print(dec, 0,
 						"!!!!!Error!!!!!!!!, ins_offset %d is too big (>256)\n", avs2_dec->ins_offset);
@@ -6941,6 +6959,7 @@ decode_slice:
 				}
 				sys_imem_ptr = avs2_dec->fr.sys_imem_ptr + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
 				avs2_dec->sys_imem_ptr_v = avs2_dec->fr.sys_imem_ptr_v + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+#endif
 				if (sys_imem_ptr >= avs2_dec->fb_buf_sys_imem.buf_end) {
 					avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
 						"sys_imem_ptr is 0x%x, wrap around\n", sys_imem_ptr);
@@ -8019,7 +8038,7 @@ static unsigned long check_input_data(struct vdec_s *vdec, unsigned long mask)
 	if (fbdebug_flag & 0x1)
 		return 0;
 
-	if (dec->timeout_processing_back &&
+	/*if (dec->timeout_processing_back &&
 		(work_pending(&dec->work_back) ||
 		work_busy(&dec->work_back) ||
 		work_busy(&dec->timeout_work_back) ||
@@ -8027,11 +8046,10 @@ static unsigned long check_input_data(struct vdec_s *vdec, unsigned long mask)
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
 				"avs2 work back pending,not ready for run.\n");
 		return 0;
-	}
+	}*/
 	dec->timeout_processing_back = 0;
 	if (dec->front_back_mode == 1) {
-		if ((READ_VREG(HEVC_DEC_STATUS_DBE) == AVS2_DEC_IDLE) &&
-			((avs2_dec->fb_wr_pos != avs2_dec->fb_rd_pos) || avs2_dec->wait_working_buf))
+		if ((avs2_dec->fb_wr_pos != avs2_dec->fb_rd_pos) || avs2_dec->wait_working_buf)
 			return mask;
 		else
 			return 0;

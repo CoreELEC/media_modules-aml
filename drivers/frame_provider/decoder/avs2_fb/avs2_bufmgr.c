@@ -1015,7 +1015,6 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	hc->f_rec->decoded_lcu = 0;
 	hc->f_rec->slice_type = img->type;
 #endif
-	hc->f_rec->vf_ref = 1;
 	hc->f_rec->refered_by_others = hd->curr_RPS.referd_by_others;
 	if (is_avs2_print_bufmgr_detail())
 		pr_info("%s, set f_rec (cur_pic) <= fref[%d] img->tr %d coding_order %d img_type %d\n",

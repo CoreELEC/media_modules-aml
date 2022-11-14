@@ -50,6 +50,13 @@ static void WRITE_BACK_8(struct avs2_decoder *avs2_dec, uint32_t spr_addr, uint8
 		__func__, spr_addr, data,
 	avs2_dec->ins_offset, avs2_dec->instruction[avs2_dec->ins_offset]);
 	avs2_dec->ins_offset++;
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (avs2_dec->ins_offset < 256 && (avs2_dec->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(avs2_dec);
+		avs2_dec->ins_offset = 256;
+	}
+#endif
+
 }
 
 static void WRITE_BACK_16(struct avs2_decoder *avs2_dec, uint32_t spr_addr, uint8_t rd_addr, uint16_t data)
@@ -68,6 +75,13 @@ static void WRITE_BACK_16(struct avs2_decoder *avs2_dec, uint32_t spr_addr, uint
 	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"instruction[%3d] = %8x\n", avs2_dec->ins_offset, avs2_dec->instruction[avs2_dec->ins_offset]);
 		avs2_dec->ins_offset++;
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (avs2_dec->ins_offset < 256 && (avs2_dec->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(avs2_dec);
+		avs2_dec->ins_offset = 256;
+	}
+#endif
+
 }
 
 static void WRITE_BACK_32(struct avs2_decoder *avs2_dec, uint32_t spr_addr, uint32_t data)
@@ -91,6 +105,13 @@ static void WRITE_BACK_32(struct avs2_decoder *avs2_dec, uint32_t spr_addr, uint
 	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"instruction[%3d] = %8x\n", avs2_dec->ins_offset, avs2_dec->instruction[avs2_dec->ins_offset]);
 	avs2_dec->ins_offset++;
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (avs2_dec->ins_offset < 256 && (avs2_dec->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(avs2_dec);
+		avs2_dec->ins_offset = 256;
+	}
+#endif
+
 }
 
 static void READ_INS_WRITE(struct avs2_decoder *avs2_dec, uint32_t spr_addr0, uint32_t spr_addr1, uint8_t rd_addr, uint8_t position, uint8_t size)
@@ -115,6 +136,13 @@ static void READ_INS_WRITE(struct avs2_decoder *avs2_dec, uint32_t spr_addr0, ui
 	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"instruction[%3d] = %8x\n", avs2_dec->ins_offset, avs2_dec->instruction[avs2_dec->ins_offset]);
 	avs2_dec->ins_offset++;
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (avs2_dec->ins_offset < 256 && (avs2_dec->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(avs2_dec);
+		avs2_dec->ins_offset = 256;
+	}
+#endif
+
 }
 
 //Caution:  pc offset fixed to 4, the data of cmp_addr need ready before call this function
@@ -157,6 +185,13 @@ void READ_CMP_WRITE(struct avs2_decoder *avs2_dec, uint32_t spr_addr0, uint32_t 
 	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"instruction[%3d] = %8x\n", avs2_dec->ins_offset, avs2_dec->instruction[avs2_dec->ins_offset]);
 	avs2_dec->ins_offset++;
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (avs2_dec->ins_offset < 256 && (avs2_dec->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(avs2_dec);
+		avs2_dec->ins_offset = 256;
+	}
+#endif
+
 }
 
 static void READ_WRITE_DATA16(struct avs2_decoder *avs2_dec, uint32_t spr_addr, uint16_t data, uint8_t position, uint8_t size)
@@ -183,6 +218,13 @@ static void READ_WRITE_DATA16(struct avs2_decoder *avs2_dec, uint32_t spr_addr, 
 	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"instruction[%3d] = %8x\n", avs2_dec->ins_offset, avs2_dec->instruction[avs2_dec->ins_offset]);
 	avs2_dec->ins_offset++;
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (avs2_dec->ins_offset < 256 && (avs2_dec->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(avs2_dec);
+		avs2_dec->ins_offset = 256;
+	}
+#endif
+
 }
 
 static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)

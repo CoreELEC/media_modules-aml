@@ -43,6 +43,8 @@
 
 #define TRACE                    0 /* !< 0:Trace off 1:Trace on */
 
+#define LARGE_INSTRUCTION_SPACE_SUPORT
+
 /* Type definitions and file operation for Windows/Linux
  * All file operations for windows are replaced with native (FILE *) operations
  * Falei LUO (falei.luo@vipl.ict.ac.cn)
