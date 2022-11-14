@@ -4640,6 +4640,9 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 static void vavs3_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AVS3Decoder_s *dec = (struct AVS3Decoder_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(dec);
+#endif
 	uint8_t index;
 
 	if (vf == (&dec->vframe_dummy))
@@ -4690,7 +4693,9 @@ static void vavs3_vf_put(struct vframe_s *vf, void *op_arg)
 		dec->new_frame_displayed++;
 		unlock_buffer(dec, flags);
 	}
-
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vavs3_event_cb(int type, void *data, void *private_data)
@@ -5973,11 +5978,31 @@ irqreturn_t vavs3_back_isr_thread_fn(struct AVS3Decoder_s *dec)
 #ifdef NEW_FB_CODE
 		pic->back_done_mark = 1;
 #endif
+		mutex_lock(&dec->fb_mutex);
 		pic->backend_ref--;
 		for (j = 0; j < pic->list0_num_refp; j++)
 			avs3_dec->pic_pool[pic->list0_index[j]].buf_cfg.backend_ref--;
 		for (j = 0; j < pic->list1_num_refp; j++)
 			avs3_dec->pic_pool[pic->list1_index[j]].buf_cfg.backend_ref--;
+
+		avs3_dec->fb_rd_pos++;
+		if (avs3_dec->fb_rd_pos >= dec->fb_ifbuf_num)
+			avs3_dec->fb_rd_pos = 0;
+		avs3_dec->wait_working_buf = 0;
+		mutex_unlock(&dec->fb_mutex);
+
+		if (without_display_mode == 0) {
+			struct vframe_s *vf = NULL;
+			if (kfifo_peek(&dec->display_q, &vf) && vf) {
+				uint8_t index = vf->index & 0xff;
+				struct avs3_frame_s *peek_pic = get_pic_by_index(dec, index);
+				if (peek_pic == pic)
+					vf_notify_receiver(dec->provider_name,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			}
+		} else
+			vavs3_vf_put(vavs3_vf_get(dec), dec);
+
 		//if (debug&H265_DEBUG_BUFMGR_MORE) dump_pic_list(dec);
 		if (debug & AVS3_DBG_PRINT_PIC_LIST)
 			print_pic_pool(avs3_dec, "after dec backend_ref");
@@ -6043,17 +6068,11 @@ irqreturn_t vavs3_back_isr_thread_fn(struct AVS3Decoder_s *dec)
 		//pr_err("sleep in\n");
 		//usleep_range(1000, 2000);
 		//pr_err("sleep out\n");
-		mutex_lock(&dec->fb_mutex);
-		avs3_dec->fb_rd_pos++;
-		if (avs3_dec->fb_rd_pos >= dec->fb_ifbuf_num)
-			avs3_dec->fb_rd_pos = 0;
 
-		avs3_dec->wait_working_buf = 0;
 		avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
 			"fb_wr_pos %d, set next fb_rd_pos %d, set wait_working_buf %d\n",
 			avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, avs3_dec->wait_working_buf);
 
-		mutex_unlock(&dec->fb_mutex);
 #if 1 //def RESET_BACK_PER_PICTURE
 		if (dec->front_back_mode == 1)
 			amhevc_stop_b();
@@ -6323,7 +6342,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			} else
 #endif
 			amhevc_stop();
-			ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+			ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_END);
 			vdec_schedule_work(&dec->work);
 		}
 		goto irq_handled_exit;
@@ -8347,7 +8366,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	if (dec->front_back_mode && avs3_dec->wait_working_buf) {
 		run_ready_case = 3;
 		avs3_print(dec, PRINT_FLAG_VDEC_DETAIL, "%s case%d\r\n", __func__, run_ready_case);
-		return 0;
+		return 0xffffffff;
 	}
 #endif
 	if (dec->eos) {

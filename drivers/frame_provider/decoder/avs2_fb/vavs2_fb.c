@@ -5015,6 +5015,9 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(dec);
+#endif
 	uint8_t index;
 
 	if (vf == (&dec->vframe_dummy))
@@ -5065,6 +5068,9 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 		dec->new_frame_displayed++;
 		unlock_buffer(dec, flags);
 	}
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 
 }
 
@@ -6339,11 +6345,32 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 #ifdef NEW_FB_CODE
 		pic->back_done_mark = 1;
 #endif
+
+		mutex_lock(&dec->fb_mutex);
 		pic->backend_ref--;
 		for (i = 0; i < MAXREF; i++) {
-		if (pic->ref_pic[i])
-			pic->ref_pic[i]->backend_ref--;
+			if (pic->ref_pic[i])
+				pic->ref_pic[i]->backend_ref--;
 		}
+
+		avs2_dec->fb_rd_pos++;
+		if (avs2_dec->fb_rd_pos >= dec->fb_ifbuf_num)
+			avs2_dec->fb_rd_pos = 0;
+		avs2_dec->wait_working_buf = 0;
+		mutex_unlock(&dec->fb_mutex);
+
+		if (without_display_mode == 0) {
+			struct vframe_s *vf = NULL;
+			if (kfifo_peek(&dec->display_q, &vf) && vf) {
+				struct avs2_frame_s *peek_pic =
+					&dec->avs2_dec.frm_pool[vf->index & 0xff];
+				if (peek_pic == pic)
+					vf_notify_receiver(dec->provider_name,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			}
+		} else
+			vavs2_vf_put(vavs2_vf_get(dec), dec);
+
 		//if (debug&H265_DEBUG_BUFMGR_MORE) dump_pic_list(dec);
 
 #if 0
@@ -6402,13 +6429,7 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			pic->scatter_alloc = 2;*/
 		}
 #endif
-		mutex_lock(&dec->fb_mutex);
-		avs2_dec->fb_rd_pos++;
-		if (avs2_dec->fb_rd_pos >= dec->fb_ifbuf_num)
-		avs2_dec->fb_rd_pos = 0;
 
-		avs2_dec->wait_working_buf = 0;
-		mutex_unlock(&dec->fb_mutex);
 #if 1 //def RESET_BACK_PER_PICTURE
 		if (dec->front_back_mode == 1)
 			amhevc_stop_b();
@@ -6520,7 +6541,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			} else
 #endif
 			amhevc_stop();
-			ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+			ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_END);
 			vdec_schedule_work(&dec->work);
 		}
 		goto irq_handled_exit;
@@ -8476,7 +8497,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		return ret;
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode && avs2_dec->wait_working_buf)
-		return 0;
+		return 0xffffffff;
 #endif
 
 	if (dec->eos)

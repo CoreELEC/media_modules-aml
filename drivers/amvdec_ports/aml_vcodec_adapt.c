@@ -567,6 +567,15 @@ int vdec_frame_number(struct aml_vdec_adapt *ada_ctx)
 		return -1;
 }
 
+void vdec_thread_wakeup(struct aml_vdec_adapt *ada_ctx)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+
+	if (vdec) {
+		vdec_up(vdec);
+	}
+}
+
 int vdec_get_instance_num(void)
 {
 	return vdec_get_core_nr();

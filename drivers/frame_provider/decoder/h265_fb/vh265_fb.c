@@ -6721,7 +6721,7 @@ static void set_aux_data(struct hevc_state_s *hevc,
 				h[7] = (padding_len) & 0xff;
 			}
 
-			hevc_print(hevc, 0,	"%s: aux: (size %d) suffix_flag %d\n", __func__, pic->aux_data_size, suffix_flag);
+			hevc_print(hevc, H265_DEBUG_PRINT_SEI,	"%s: aux: (size %d) suffix_flag %d\n", __func__, pic->aux_data_size, suffix_flag);
 			if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
 				for (i = 0; i < pic->aux_data_size; i++) {
 					pr_info("%02x ", pic->aux_data_buf[i]);
@@ -9122,6 +9122,10 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 #endif
 		ATRACE_COUNTER(hevc->trace.vf_get_name, (long)vf);
 		ATRACE_COUNTER(hevc->trace.disp_q_name, kfifo_len(&hevc->display_q));
+		ATRACE_COUNTER(hevc->trace.decode_back_ready_name,
+			(hevc->fb_wr_pos >= hevc->fb_rd_pos) ? (hevc->fb_wr_pos - hevc->fb_rd_pos) :
+			(hevc->fb_ifbuf_num + hevc->fb_wr_pos - hevc->fb_rd_pos));
+
 #ifdef MULTI_INSTANCE_SUPPORT
 		ATRACE_COUNTER(hevc->trace.set_canvas0_addr, vf->canvas0_config[0].phy_addr);
 #else
@@ -9262,6 +9266,10 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	spin_lock_irqsave(&h265_lock, flags);
 	kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hevc->trace.new_q_name, kfifo_len(&hevc->newframe_q));
+	ATRACE_COUNTER(hevc->trace.decode_back_ready_name,
+		(hevc->fb_wr_pos >= hevc->fb_rd_pos) ? (hevc->fb_wr_pos - hevc->fb_rd_pos) :
+		(hevc->fb_ifbuf_num + hevc->fb_wr_pos - hevc->fb_rd_pos));
+
 	if (hevc->enable_fence && vf->fence) {
 		vdec_fence_put(vf->fence);
 		vf->fence = NULL;
@@ -9313,6 +9321,9 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 		}
 	}
 	spin_unlock_irqrestore(&h265_lock, flags);
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vh265_event_cb(int type, void *data, void *op_arg)
@@ -10207,6 +10218,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 #endif
 		ATRACE_COUNTER(hevc->trace.new_q_name, kfifo_len(&hevc->newframe_q));
 		ATRACE_COUNTER(hevc->trace.disp_q_name, kfifo_len(&hevc->display_q));
+		ATRACE_COUNTER(hevc->trace.decode_back_ready_name,
+			(hevc->fb_wr_pos >= hevc->fb_rd_pos) ? (hevc->fb_wr_pos - hevc->fb_rd_pos) :
+			(hevc->fb_ifbuf_num + hevc->fb_wr_pos - hevc->fb_rd_pos));
 
 		if (pic->slice_type == I_SLICE) {
 			hevc->gvs->i_decoded_frames++;
@@ -10860,6 +10874,8 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)vdec->private;
 	PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
+
+	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_PIC_DONE);
 	/*BackEnd_Handle()*/
 	if (hevc->front_back_mode != 1) {
 		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
@@ -10924,6 +10940,7 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 		return IRQ_HANDLED;
 	}
 	/**/
+	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_END);
 	return IRQ_WAKE_THREAD;
 }
 
@@ -10933,6 +10950,8 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		(struct hevc_state_s *)vdec->private;
 	unsigned int dec_status = hevc->dec_status_back;
 	int i;
+
+	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE || hevc->front_back_mode == 2
 		|| hevc->front_back_mode == 3) {
@@ -10966,7 +10985,30 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			break;
 		ref_pic->backend_ref--;
 		}
+
+		hevc->fb_rd_pos++;
+		if (hevc->fb_rd_pos >= hevc->fb_ifbuf_num)
+			hevc->fb_rd_pos = 0;
+		hevc->wait_working_buf = 0;
+
 		mutex_unlock(&hevc->fb_mutex);
+		if (without_display_mode == 0) {
+			struct vframe_s *vf = NULL;
+			if (kfifo_peek(&hevc->display_q, &vf) && vf) {
+				PIC_t* peek_pic;
+				int index = 0;
+				index = vf->index & 0xff;
+				if (index == 0xff)
+					index = (vf->index >> 8) & 0xff;
+				peek_pic = hevc->m_PIC[index];
+				if (peek_pic == pic)
+					vf_notify_receiver(hevc->provider_name,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			}
+		} else {
+			vh265_vf_put(vh265_vf_get(vdec), vdec);
+		}
+
 		if (debug&H265_DEBUG_BUFMGR_MORE) dump_pic_list(hevc);
 
 #if 0
@@ -11025,13 +11067,7 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			pic->scatter_alloc = 2;
 		}
 #endif
-		mutex_lock(&hevc->fb_mutex);
-		hevc->fb_rd_pos++;
-		if (hevc->fb_rd_pos >= hevc->fb_ifbuf_num)
-			hevc->fb_rd_pos = 0;
 
-		hevc->wait_working_buf = 0;
-		mutex_unlock(&hevc->fb_mutex);
 #if 1 //def RESET_BACK_PER_PICTURE
 		if (hevc->front_back_mode == 1)
 			amhevc_stop_b();
@@ -11048,7 +11084,7 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			start_process_time(hevc);
 		}
 	}
-
+	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_THREAD_END);
 	return IRQ_HANDLED;
 }
 #endif
@@ -11480,7 +11516,7 @@ force_output:
 					}
 				}
 			}
-			ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+			ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_END);
 			vdec_schedule_work(&hevc->work);
 		}
 
@@ -14439,6 +14475,7 @@ static void vh265_work_back_implement(struct hevc_state_s *hevc,
 			"[BE] %s result %x, backcount %d\n",
 			__func__, hevc->dec_back_result, hevc->backend_decoded_count);
 
+	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_WORKER_START);
 	if (hevc->dec_back_result == DEC_BACK_RESULT_TIMEOUT) {
 		int i;
 		PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
@@ -14475,6 +14512,7 @@ static void vh265_work_back_implement(struct hevc_state_s *hevc,
 		hevc->stat &= ~STAT_TIMER_BACK_ARM;
 	}
 
+	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_WORKER_END);
 	vdec_core_finish_run(vdec, CORE_MASK_HEVC_BACK);
 
 	if (hevc->vdec_back_cb)
@@ -14523,28 +14561,11 @@ static unsigned long check_input_data(struct vdec_s *vdec, unsigned long mask)
 	if (fbdebug_flag & 0x1)
 		return 0;
 
-	if (hevc->timeout_processing_back &&
-		(work_pending(&hevc->work_back) ||
-		work_busy(&hevc->work_back) ||
-		work_busy(&hevc->timeout_work_back) ||
-		work_pending(&hevc->timeout_work_back))) {
-		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-				"h265 work back pending,not ready for run.\n");
+	if (((hevc->fb_wr_pos != hevc->fb_rd_pos) || hevc->wait_working_buf) &&
+		(hevc->front_back_mode))
+		return mask;
+	else
 		return 0;
-	}
-	hevc->timeout_processing_back = 0;
-	if (hevc->front_back_mode == 1) {
-		if (((hevc->fb_wr_pos != hevc->fb_rd_pos) || hevc->wait_working_buf))
-			return mask;
-		else
-			return 0;
-	} else if (hevc->front_back_mode) {
-		if ((hevc->fb_wr_pos != hevc->fb_rd_pos) || hevc->wait_working_buf)
-			return mask;
-		else
-			return 0;
-	}
-	return 0;
 	/*
 	if (hevc->pic_wr_count > hevc->pic_rd_count)
 		return mask;
@@ -14573,7 +14594,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		return 0;
 
 	if (hevc->front_back_mode && hevc->wait_working_buf)
-		return 0;
+		return 0xffffffff;
 #endif
 
 	if ((debug & HEVC_BE_SIMULATE_IRQ)
@@ -15075,7 +15096,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 	if (hevc->front_back_mode &&
 		(mask & CORE_MASK_HEVC_BACK)) {
+		ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_RUN_START);
 		run_back(vdec, callback, arg);
+		ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_RUN_END);
 	}
 #endif
 
@@ -15684,6 +15707,14 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		"decoder_header_time%d", pdev->id);
 	snprintf(hevc->trace.decode_work_time_name, sizeof(hevc->trace.decode_work_time_name),
 		"decoder_work_time%d", pdev->id);
+	snprintf(hevc->trace.decode_back_time_name, sizeof(hevc->trace.decode_back_time_name),
+		"decoder_back_time%d", pdev->id);
+	snprintf(hevc->trace.decode_back_run_time_name, sizeof(hevc->trace.decode_back_run_time_name),
+		"decoder_back_run_time%d", pdev->id);
+	snprintf(hevc->trace.decode_back_work_time_name, sizeof(hevc->trace.decode_back_work_time_name),
+		"decoder_back_work_time%d", pdev->id);
+	snprintf(hevc->trace.decode_back_ready_name, sizeof(hevc->trace.decode_back_ready_name),
+		"decode_back_ready_name%d", pdev->id);
 
 	if (pdata->use_vfm_path) {
 		snprintf(pdata->vf_provider_name,

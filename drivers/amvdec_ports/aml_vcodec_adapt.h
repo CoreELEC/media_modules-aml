@@ -77,5 +77,7 @@ void vdec_set_duration(s32 duration);
 
 int vdec_get_vdec_id(struct aml_vdec_adapt *ada_ctx);
 
+void vdec_thread_wakeup(struct aml_vdec_adapt *ada_ctx);
+
 #endif /* VDEC_ADAPT_H */
 

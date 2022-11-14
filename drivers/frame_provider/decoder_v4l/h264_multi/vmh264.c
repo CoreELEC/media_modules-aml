@@ -4316,6 +4316,7 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 	if (hw->buffer_empty_flag)
 		WRITE_VREG(ASSIST_MBOX1_IRQ_REG, 0x1);
 	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
+	vdec_up(vdec);
 }
 
 void * vh264_get_bufspec_lock(struct vdec_s *vdec)
@@ -6812,7 +6813,7 @@ pic_done_proc:
 			hw->got_valid_nal = 1;
 		}
 #endif
-		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 
 		hw->dec_result = DEC_RESULT_DONE;
 		vdec_schedule_work(&hw->work);
@@ -6858,7 +6859,7 @@ pic_done_proc:
 #endif
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s H264_AUX_DATA_READY\n", __func__);
-		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 		hw->dec_result = DEC_RESULT_DONE;
 		vdec_schedule_work(&hw->work);
 	} else if (
@@ -7020,7 +7021,7 @@ send_again:
 						left_len);
 			}
 		}
-		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 		WRITE_VREG(DPB_STATUS_REG, H264_SEI_DATA_DONE);
 
 		return IRQ_HANDLED;

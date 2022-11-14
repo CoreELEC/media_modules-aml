@@ -9197,6 +9197,9 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(pbi);
+#endif
 	uint8_t index;
 
 	if (vf == (&pbi->vframe_dummy))
@@ -9304,6 +9307,9 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 #endif
 	}
 
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vvp9_event_cb(int type, void *data, void *private_data)
@@ -10944,6 +10950,20 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 #ifdef NEW_FB_CODE
 		pic->back_done_mark = 1;
 #endif
+		mutex_lock(&pbi->fb_mutex);
+		pic->backend_ref--;
+		for (i = 0; i < REFS_PER_FRAME; i++) {
+			ref_pic = pic->pic_refs[i];
+			if (ref_pic)
+				ref_pic->backend_ref--;
+		}
+
+		pbi->fb_rd_pos++;
+		if (pbi->fb_rd_pos >= pbi->fb_ifbuf_num)
+			pbi->fb_rd_pos = 0;
+		pbi->wait_working_buf = 0;
+		mutex_unlock(&pbi->fb_mutex);
+
 		if (without_display_mode == 0) {
 			if (ctx->is_stream_off) {
 				vvp9_vf_put(vvp9_vf_get(pbi), pbi);
@@ -10952,15 +10972,6 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			}
 		} else
 			vvp9_vf_put(vvp9_vf_get(pbi), pbi);
-
-		mutex_lock(&pbi->fb_mutex);
-		pic->backend_ref--;
-		for (i = 0; i < REFS_PER_FRAME; i++) {
-			ref_pic = pic->pic_refs[i];
-			if (ref_pic)
-			ref_pic->backend_ref--;
-		}
-		mutex_unlock(&pbi->fb_mutex);
 
 		if (pbi->front_back_mode == 1 || pbi->front_back_mode == 3) {
 				unsigned used_4k_num0;
@@ -10985,13 +10996,6 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 						used_4k_num1);
 		}
 
-		mutex_lock(&pbi->fb_mutex);
-		pbi->fb_rd_pos++;
-		if (pbi->fb_rd_pos >= pbi->fb_ifbuf_num)
-			pbi->fb_rd_pos = 0;
-
-		pbi->wait_working_buf = 0;
-		mutex_unlock(&pbi->fb_mutex);
 		if (pbi->front_back_mode == 1)
 		amhevc_stop_b();
 		else if (fb_ucode_debug == 1)
@@ -11133,7 +11137,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				}
 				if (mcrcc_cache_alg_flag)
 					dump_hit_rate(pbi);
-				ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+				ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_END);
 				vdec_schedule_work(&pbi->work);
 			}
 		} else {
@@ -12906,7 +12910,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		return ret;
 #ifdef NEW_FB_CODE
 	if (pbi->front_back_mode && pbi->wait_working_buf)
-		return 0;
+		return 0xffffffff;
 #endif
 	if (!pbi->first_sc_checked && pbi->mmu_enable) {
 		int size = decoder_mmu_box_sc_check(ctx->mmu_box, tvp);

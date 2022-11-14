@@ -93,6 +93,10 @@ struct trace_decoder_name {
 	char decode_header_time_name[32];
 	char decode_work_time_name[32];
 	char decode_header_memory_time_name[32];
+	char decode_back_time_name[32];
+	char decode_back_run_time_name[32];
+	char decode_back_work_time_name[32];
+	char decode_back_ready_name[32];
 };
 
 
@@ -104,7 +108,7 @@ enum e_trace_decoder_status {
 	DECODER_ISR_END   = 5,
 	DECODER_ISR_THREAD_HEAD_START = 6,
 	DECODER_ISR_THREAD_PIC_DONE_START = 7,
-	DECODER_ISR_THREAD_EDN = 8,
+	DECODER_ISR_THREAD_END = 8,
 	DECODER_WORKER_START   = 9,
 	DECODER_WORKER_END = 10,
 	DECODER_WORKER_AGAIN = 11,
@@ -453,7 +457,9 @@ struct vdec_s {
 	char dec_spend_time_ave[32];
 	char dec_back_spend_time[32];
 	char dec_back_spend_time_ave[32];
+	char dec_event[32];
 	char dec_back_event[32];
+	char stream_buffer_level[32];
 	u32 discard_start_data_flag;
 	u32 video_id;
 	int is_v4l;
@@ -466,6 +472,11 @@ struct vdec_s {
 	struct vdec_data_info_s *vdata;
 	spinlock_t power_lock;
 	bool suspend;
+	u64 back_irq_thread_cnt;
+	u64 back_irq_cnt;
+#ifdef VDEC_DEBUG_SUPPORT
+	u32 ready_to_run_count[VDEC_MAX];
+#endif
 };
 
 #define CODEC_MODE(a, b, c, d)\
@@ -800,5 +811,6 @@ unsigned long vdec_power_lock(struct vdec_s *vdec);
 
 void vdec_power_unlock(struct vdec_s *vdec, unsigned long flags);
 
+void vdec_up(struct vdec_s *vdec);
 
 #endif				/* VDEC_H */

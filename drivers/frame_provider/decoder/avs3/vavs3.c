@@ -5100,6 +5100,9 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 static void vavs3_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AVS3Decoder_s *dec = (struct AVS3Decoder_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(dec);
+#endif
 	uint8_t index;
 
 	if (vf == (&dec->vframe_dummy))
@@ -5150,7 +5153,9 @@ static void vavs3_vf_put(struct vframe_s *vf, void *op_arg)
 		dec->new_frame_displayed++;
 		unlock_buffer(dec, flags);
 	}
-
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vavs3_event_cb(int type, void *data, void *private_data)
@@ -6807,7 +6812,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			} else
 #endif
 			amhevc_stop();
-			ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+			ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_END);
 			vdec_schedule_work(&dec->work);
 		}
 		goto irq_handled_exit;
@@ -8993,7 +8998,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		run_ready_case = 3;
 		avs3_print(dec,
 			PRINT_FLAG_VDEC_DETAIL, "%s case%d\r\n", __func__, run_ready_case);
-		return 0;
+		return 0xffffffff;
 	}
 #endif
 

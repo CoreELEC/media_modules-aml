@@ -135,11 +135,12 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 	struct stream_buffer_metainfo *meta)
 {
 	u32 wp = stbuf->ops->get_wp(stbuf);
+	u32 rp, size;
+	struct vdec_s *vdec = container_of(stbuf, struct vdec_s, vbuf);
 
 	if ((stbuf->stream_offset == 0) &&
 		(wp == stbuf->ext_buf_addr) &&
 		(meta->stbuf_pktaddr > stbuf->ext_buf_addr)) {
-		struct vdec_s *vdec = container_of(stbuf, struct vdec_s, vbuf);
 		u32 first_ptr;
 		u32 round_down_size = 0;
 
@@ -179,6 +180,18 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 	stbuf->stream_offset += meta->stbuf_pktsize;
 	stbuf->last_offset[stbuf->write_count % 2] = stbuf->stream_offset;
 	stbuf->write_count++;
+
+	rp = STBUF_READ(&vdec->vbuf, get_rp);
+	wp = STBUF_READ(&vdec->vbuf, get_wp);
+	if (wp >= rp)
+		size = wp - rp;
+	else
+		size = wp + vdec->input.size - rp;
+	ATRACE_COUNTER(vdec->stream_buffer_level, size);
+	if (vdec->need_more_data & VDEC_NEED_MORE_DATA) {
+		vdec->need_more_data &= ~VDEC_NEED_MORE_DATA;
+		vdec_up(vdec);
+	}
 
 	if (vdec_get_debug_flags() & 0x10000000) {
 		pr_debug("%s[%d], update wp 0x%x + sz 0x%x --> 0x%x, stream_offset 0x%x\n",

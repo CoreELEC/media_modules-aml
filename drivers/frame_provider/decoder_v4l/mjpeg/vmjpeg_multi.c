@@ -600,6 +600,7 @@ static void vmjpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 	atomic_add(1, &hw->put_num);
+	vdec_up(vdec);
 }
 
 static int vmjpeg_event_cb(int type, void *data, void *op_arg)

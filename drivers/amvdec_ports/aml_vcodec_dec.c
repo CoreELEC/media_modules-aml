@@ -4186,6 +4186,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 			/* check dpb ready */
 			aml_check_dpb_ready(ctx);
+			vdec_thread_wakeup(ctx->ada_ctx);
 		} else {
 			struct vframe_s *vf = fb->vframe;
 			struct task_chain_s *task = fb->task;

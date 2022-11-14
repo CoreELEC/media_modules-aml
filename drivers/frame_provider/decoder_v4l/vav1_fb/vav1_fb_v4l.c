@@ -5986,6 +5986,9 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(hw);
+#endif
 	uint8_t index = vf->index & 0xff;
 	unsigned long flags;
 
@@ -6045,6 +6048,9 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 		}
 		spin_unlock_irqrestore(&hw->wait_buf_lock, flags);
 	}
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vav1_event_cb(int type, void *data, void *op_arg)
@@ -8460,7 +8466,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				dec_again_process(hw);
 			else {
 				hw->dec_result = DEC_RESULT_DONE;
-				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 				vdec_schedule_work(&hw->work);
 			}
 		}
@@ -8603,7 +8609,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					if (mcrcc_cache_alg_flag)
 						dump_hit_rate(hw);
 #endif
-					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 					vdec_schedule_work(&hw->work);
 				} else {
 #ifdef NEW_FB_CODE
@@ -8629,7 +8635,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 						"PIC_END, fgs_valid %d search head ...\n", hw->fgs_valid);
 					if (hw->config_next_ref_info_flag)
 						config_next_ref_info_hw(hw);
-					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 				}
 			} else {
 				hw->data_size = 0;
@@ -8650,7 +8656,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				if (mcrcc_cache_alg_flag)
 					dump_hit_rate(hw);
 #endif
-				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 				vdec_schedule_work(&hw->work);
 			}
 		} else {
@@ -10435,7 +10441,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 #ifdef NEW_FB_CODE
 	if (hw->front_back_mode && hw->pbi->wait_working_buf)
-		return 0;
+		return 0xffffffff;
 #endif
 
 	if (!hw->pic_list_init_done2 || hw->eos)
@@ -11219,14 +11225,6 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 			if (pic->showable_frame || pic->show_frame) {
 				pic->back_done_mark = 1;
-				if (without_display_mode == 0) {
-					if (ctx->is_stream_off) {
-						vav1_vf_put(vav1_vf_get(hw), hw);
-					} else {
-						v4l_submit_vframe(hw);
-					}
-				} else
-					vav1_vf_put(vav1_vf_get(hw), hw);
 			}
 			mutex_lock(&hw->fb_mutex);
 			pic->backend_ref--;
@@ -11238,6 +11236,28 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 				pic->prev_frame->buf.backend_ref--;
 			mutex_unlock(&hw->fb_mutex);
 		}
+
+		mutex_lock(&hw->fb_mutex);
+		pbi->fb_rd_pos++;
+		if (pbi->fb_rd_pos >= hw->fb_ifbuf_num)
+			pbi->fb_rd_pos = 0;
+
+		pbi->wait_working_buf = 0;
+		mutex_unlock(&hw->fb_mutex);
+
+		if (pic) {
+			if (pic->showable_frame || pic->show_frame) {
+				if (without_display_mode == 0) {
+					if (ctx->is_stream_off) {
+						vav1_vf_put(vav1_vf_get(hw), hw);
+					} else {
+						v4l_submit_vframe(hw);
+					}
+				} else
+					vav1_vf_put(vav1_vf_get(hw), hw);
+			}
+		}
+
 		if (debug & AV1_DEBUG_BUFMGR_MORE)
 			dump_pic_list(hw);
 
@@ -11286,13 +11306,6 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			}
 		}
 #endif
-		mutex_lock(&hw->fb_mutex);
-		pbi->fb_rd_pos++;
-		if (pbi->fb_rd_pos >= hw->fb_ifbuf_num)
-			pbi->fb_rd_pos = 0;
-
-		pbi->wait_working_buf = 0;
-		mutex_unlock(&hw->fb_mutex);
 
 		if (hw->front_back_mode == 1)
 			amhevc_stop_b();

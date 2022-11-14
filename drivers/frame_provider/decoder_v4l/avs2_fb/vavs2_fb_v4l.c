@@ -4699,6 +4699,9 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(dec);
+#endif
 	uint8_t index;
 
 	if (vf == (&dec->vframe_dummy))
@@ -4757,7 +4760,9 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 		dec->new_frame_displayed++;
 		unlock_buffer(dec, flags);
 	}
-
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vavs2_event_cb(int type, void *data, void *private_data)
@@ -6190,6 +6195,8 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		(struct AVS2Decoder_s *)vdec->private;
 	unsigned int dec_status = dec->dec_status_back;
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
+	struct aml_vcodec_ctx *ctx = dec->v4l2_ctx;
+
 	int i;
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE || dec->front_back_mode == 2) {
@@ -6215,16 +6222,27 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 #ifdef NEW_FB_CODE
 		pic->back_done_mark = 1;
 #endif
-		v4l_submit_vframe(dec);
-		if (dec->front_back_mode) {
-			mutex_lock(&dec->fb_mutex);
-			pic->backend_ref--;
-			for (i = 0; i < MAXREF; i++) {
-				if (pic->ref_pic[i])
-					pic->ref_pic[i]->backend_ref--;
-			}
-			mutex_unlock(&dec->fb_mutex);
+		mutex_lock(&dec->fb_mutex);
+		pic->backend_ref--;
+		for (i = 0; i < MAXREF; i++) {
+			if (pic->ref_pic[i])
+				pic->ref_pic[i]->backend_ref--;
 		}
+
+		avs2_dec->fb_rd_pos++;
+		if (avs2_dec->fb_rd_pos >= dec->fb_ifbuf_num)
+			avs2_dec->fb_rd_pos = 0;
+		avs2_dec->wait_working_buf = 0;
+		mutex_unlock(&dec->fb_mutex);
+
+		if (without_display_mode == 0) {
+			if (ctx->is_stream_off) {
+				vavs2_vf_put(vavs2_vf_get(dec), dec);
+			} else {
+				v4l_submit_vframe(dec);
+			}
+		} else
+			vavs2_vf_put(vavs2_vf_get(dec), dec);
 #if 0
 #ifdef AVS2_10B_MMU
 		release_unused_4k(&avs2_mmumgr_0, pic->index);
@@ -6263,13 +6281,7 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			pic->scatter_alloc = 2;*/
 		}
 #endif
-		mutex_lock(&dec->fb_mutex);
-		avs2_dec->fb_rd_pos++;
-		if (avs2_dec->fb_rd_pos >= dec->fb_ifbuf_num)
-			avs2_dec->fb_rd_pos = 0;
 
-		avs2_dec->wait_working_buf = 0;
-		mutex_unlock(&dec->fb_mutex);
 #if 1 //def RESET_BACK_PER_PICTURE
 		if (dec->front_back_mode == 1)
 			amhevc_stop_b();
@@ -6380,7 +6392,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			} else
 #endif
 			amhevc_stop();
-			ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+			ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_END);
 			vdec_schedule_work(&dec->work);
 		}
 		goto irq_handled_exit;
@@ -8134,7 +8146,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		return ret;
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode && avs2_dec->wait_working_buf)
-		return 0;
+		return 0xffffffff;
 #endif
 
 	if (dec->eos)

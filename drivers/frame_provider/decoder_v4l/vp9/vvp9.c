@@ -6885,6 +6885,9 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(pbi);
+#endif
 	uint8_t index;
 
 	if (vf == (&pbi->vframe_dummy))
@@ -6986,6 +6989,9 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 #endif
 	}
 
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 
@@ -8545,7 +8551,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				}
 				if (mcrcc_cache_alg_flag)
 					dump_hit_rate(pbi);
-				ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+				ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_END);
 				vdec_schedule_work(&pbi->work);
 			}
 		} else {

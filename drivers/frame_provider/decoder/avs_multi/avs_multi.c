@@ -1068,6 +1068,7 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 	int i;
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)op_arg;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	if (vf) {
 		hw->put_num++;
@@ -1088,9 +1089,9 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 			break;
 	}
 	if (i < VF_POOL_SIZE)
-
 		kfifo_put(&hw->recycle_q, (const struct vframe_s *)vf);
 
+	vdec_up(vdec);
 }
 
 static int vavs_event_cb(int type, void *data, void *private_data)

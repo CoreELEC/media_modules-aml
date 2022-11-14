@@ -8439,6 +8439,9 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 	spin_unlock_irqrestore(&h265_lock, flags);
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 
@@ -10562,7 +10565,7 @@ force_output:
 					}
 				}
 			}
-			ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+			ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_END);
 			vdec_schedule_work(&hevc->work);
 		}
 

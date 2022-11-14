@@ -2590,6 +2590,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		(const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 	spin_unlock_irqrestore(&hw->lock, flags);
+	vdec_up(vdec);
 }
 
 static int vmpeg_event_cb(int type, void *data, void *op_arg)

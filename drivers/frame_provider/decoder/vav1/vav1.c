@@ -6358,6 +6358,9 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(hw);
+#endif
 	uint8_t index = vf->index & 0xff;
 	unsigned long flags;
 
@@ -6394,7 +6397,9 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 		hw->new_frame_displayed++;
 		unlock_buffer_pool(hw->common.buffer_pool, flags);
 	}
-
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vav1_event_cb(int type, void *data, void *op_arg)
@@ -8658,7 +8663,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				dec_again_process(hw);
 			else {
 				hw->dec_result = DEC_RESULT_DONE;
-				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 				vdec_schedule_work(&hw->work);
 			}
 		}
@@ -8782,7 +8787,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					if (mcrcc_cache_alg_flag)
 						dump_hit_rate(hw);
 #endif
-					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 					vdec_schedule_work(&hw->work);
 				}else {
 #ifdef DEBUG_CRC_ERROR
@@ -8795,7 +8800,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 						hw->fgs_valid);
 					if (hw->config_next_ref_info_flag)
 						config_next_ref_info_hw(hw);
-					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 				}
 			} else {
 				hw->data_size = 0;
@@ -8810,7 +8815,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				if (mcrcc_cache_alg_flag)
 					dump_hit_rate(hw);
 #endif
-				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_END);
 				vdec_schedule_work(&hw->work);
 			}
 		} else {

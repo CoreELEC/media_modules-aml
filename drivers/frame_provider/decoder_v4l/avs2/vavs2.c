@@ -4145,6 +4145,9 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(dec);
+#endif
 	uint8_t index;
 
 	if (vf == (&dec->vframe_dummy))
@@ -4196,7 +4199,9 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 		dec->new_frame_displayed++;
 		unlock_buffer(dec, flags);
 	}
-
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vavs2_event_cb(int type, void *data, void *private_data)
