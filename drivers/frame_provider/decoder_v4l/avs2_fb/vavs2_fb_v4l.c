@@ -566,7 +566,7 @@ static void WRITE_VREG_DBG2(unsigned adr, unsigned val)
 #define FB_LOOP_BUF_COUNT	0
 #endif
 
-#undef MV_USE_FIXED_BUF
+#define MV_USE_FIXED_BUF
 #ifdef MV_USE_FIXED_BUF
 #define MAX_BMMU_BUFFER_NUM (FB_LOOP_BUF_COUNT + (FRAME_BUFFERS + HEADER_FRAME_BUFFERS + 1)+1)
 #define VF_BUFFER_IDX(n) (FB_LOOP_BUF_COUNT + n)
