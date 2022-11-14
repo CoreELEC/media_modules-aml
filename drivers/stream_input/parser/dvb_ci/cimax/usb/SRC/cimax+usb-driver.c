@@ -1333,7 +1333,7 @@ static int device_tsiso_send(struct device_s *device,
 				DEVICE_ISOC_LENGTH(
 					device->channel[index].maxPacketSize));
 		if (ret)
-			continue
+			continue;
 		urb[i]->transfer_buffer_length = DEVICE_ISOC_LENGTH(
 			device->channel[index].maxPacketSize);
 		urb[i]->number_of_packets = DEVICE_NUM_FRAMES_PER_URB;
