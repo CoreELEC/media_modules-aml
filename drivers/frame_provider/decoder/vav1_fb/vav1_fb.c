@@ -328,7 +328,7 @@ bit [3:2]: valid when bit1 == 0;
 #ifdef MULTI_INSTANCE_SUPPORT
 #define MAX_DECODE_INSTANCE_NUM     9
 
-#define MULTI_DRIVER_NAME "ammvdec_av1_dual_core"
+#define MULTI_DRIVER_NAME "ammvdec_av1_fb"
 
 #define AUX_BUF_ALIGN(adr) ((adr + 0xf) & (~0xf))
 #ifdef DEBUG_UCODE_LOG
@@ -8207,7 +8207,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		if (hw->seg_4lf->enabled) {
 #endif
 			for (i = 0; i < 8; i++) {
-			cm->cur_frame->segment_feature[i] = READ_VREG(AOM_AV1_SEGMENT_FEATURE);
+				cm->cur_frame->segment_feature[i] = READ_VREG(AOM_AV1_SEGMENT_FEATURE);
 			}
 		} else {
 			for (i = 0; i < 8; i++) {

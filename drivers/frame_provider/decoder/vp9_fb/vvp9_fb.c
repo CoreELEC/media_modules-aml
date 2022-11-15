@@ -5894,10 +5894,10 @@ static void vp9_config_work_space_hw_fb(struct VP9Decoder_s *pbi, int front_flag
 //--rb--
 
 	if (back_flag) {
-	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE,buf_spec->ipp0.buf_start);
-	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE2,buf_spec->ipp1.buf_start);
-	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE_DBE1,buf_spec->ipp1.buf_start);
-	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE2_DBE1,buf_spec->ipp0.buf_start);
+		WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE,buf_spec->ipp0.buf_start);
+		WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE2,buf_spec->ipp1.buf_start);
+		WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE_DBE1,buf_spec->ipp1.buf_start);
+		WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE2_DBE1,buf_spec->ipp0.buf_start);
 	}
 	//--rb--
 	//WRITE_VREG(P_HEVCD_IPP_LINEBUFF_BASE,buf_spec->ipp.buf_start);
@@ -6001,9 +6001,9 @@ static void vp9_config_work_space_hw_fb(struct VP9Decoder_s *pbi, int front_flag
 	}
 	if (front_flag) {
 #ifdef CO_MV_COMPRESS
-	data32 = READ_VREG(HEVC_MPRED_CTRL4);
-	data32 |=  (1<<1);
-	WRITE_VREG(HEVC_MPRED_CTRL4, data32);
+		data32 = READ_VREG(HEVC_MPRED_CTRL4);
+		data32 |=  (1<<1);
+		WRITE_VREG(HEVC_MPRED_CTRL4, data32);
 #endif
 	}
 }

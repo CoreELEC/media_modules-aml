@@ -5294,47 +5294,47 @@ static void vp9_config_work_space_hw_fb(struct VP9Decoder_s *pbi, int front_flag
 //--rb--
 
 	if (back_flag) {
-	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE,buf_spec->ipp0.buf_start);
-	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE2,buf_spec->ipp1.buf_start);
-	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE_DBE1,buf_spec->ipp1.buf_start);
-	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE2_DBE1,buf_spec->ipp0.buf_start);
+		WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE,buf_spec->ipp0.buf_start);
+		WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE2,buf_spec->ipp1.buf_start);
+		WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE_DBE1,buf_spec->ipp1.buf_start);
+		WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE2_DBE1,buf_spec->ipp0.buf_start);
 	}
 	//--rb--
 	//WRITE_VREG(P_HEVCD_IPP_LINEBUFF_BASE,buf_spec->ipp.buf_start);
 
 	if (front_flag) {
-	{
 		WRITE_VREG(HEVC_RPM_BUFFER, pbi->rpm_phy_addr);
+
+		WRITE_VREG(HEVC_SHORT_TERM_RPS, buf_spec->short_term_rps.buf_start);
+		//WRITE_VREG(HEVC_VPS_BUFFER, buf_spec->vps.buf_start);
+		//WRITE_VREG(HEVC_SPS_BUFFER, buf_spec->sps.buf_start);
+		WRITE_VREG(HEVC_PPS_BUFFER, buf_spec->pps.buf_start);
+		WRITE_VREG(HEVC_SAO_UP, buf_spec->sao_up.buf_start);
+		WRITE_VREG(HEVC_STREAM_SWAP_BUFFER, buf_spec->swap_buf.buf_start);
+		WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, buf_spec->swap_buf2.buf_start);
+		WRITE_VREG(HEVC_SCALELUT, buf_spec->scalelut.buf_start);
 	}
-	WRITE_VREG(HEVC_SHORT_TERM_RPS, buf_spec->short_term_rps.buf_start);
-	//WRITE_VREG(HEVC_VPS_BUFFER, buf_spec->vps.buf_start);
-	//WRITE_VREG(HEVC_SPS_BUFFER, buf_spec->sps.buf_start);
-	WRITE_VREG(HEVC_PPS_BUFFER, buf_spec->pps.buf_start);
-	WRITE_VREG(HEVC_SAO_UP, buf_spec->sao_up.buf_start);
-	WRITE_VREG(HEVC_STREAM_SWAP_BUFFER, buf_spec->swap_buf.buf_start);
-	WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, buf_spec->swap_buf2.buf_start);
-	WRITE_VREG(HEVC_SCALELUT, buf_spec->scalelut.buf_start);
-	}
+
 	if (back_flag) {
 #ifdef LPF_OCT2017
-	WRITE_VREG(HEVC_DBLK_CFGE, buf_spec->dblk_para.buf_start); // cfg_addr_adp
-	WRITE_VREG(HEVC_DBLK_CFGE_DBE1, buf_spec->dblk_para.buf_start); // cfg_addr_adp
+		WRITE_VREG(HEVC_DBLK_CFGE, buf_spec->dblk_para.buf_start); // cfg_addr_adp
+		WRITE_VREG(HEVC_DBLK_CFGE_DBE1, buf_spec->dblk_para.buf_start); // cfg_addr_adp
 #else
-	WRITE_VREG(HEVC_DBLK_CFG4, buf_spec->dblk_para.buf_start); // cfg_addr_cif
-	WRITE_VREG(HEVC_DBLK_CFG4_DBE1, buf_spec->dblk_para.buf_start); // cfg_addr_cif
+		WRITE_VREG(HEVC_DBLK_CFG4, buf_spec->dblk_para.buf_start); // cfg_addr_cif
+		WRITE_VREG(HEVC_DBLK_CFG4_DBE1, buf_spec->dblk_para.buf_start); // cfg_addr_cif
 #endif
-	WRITE_VREG(HEVC_DBLK_CFG5, buf_spec->dblk_data.buf_start); // cfg_addr_xio
-	WRITE_VREG(HEVC_DBLK_CFG5_DBE1, buf_spec->dblk_data.buf_start); // cfg_addr_xio
+		WRITE_VREG(HEVC_DBLK_CFG5, buf_spec->dblk_data.buf_start); // cfg_addr_xio
+		WRITE_VREG(HEVC_DBLK_CFG5_DBE1, buf_spec->dblk_data.buf_start); // cfg_addr_xio
 
 #ifdef MAP_8K
-	/*
-	* data32 = (READ_VREG(P_HEVC_DBLK_CFG3)>>8) & 0xff; // xio left offset, default is 0x40
-	* data32 = data32 * 2;
-	* data32 = (READ_VREG(P_HEVC_DBLK_CFG3)>>16) & 0xff; // adp left offset, default is 0x040
-	* data32 = data32 * 2;
-	*/
-	WRITE_VREG(HEVC_DBLK_CFG3, 0x808010); // make left storage 2 x 4k
-	WRITE_VREG(HEVC_DBLK_CFG3_DBE1, 0x808010); // make left storage 2 x 4k
+		/*
+		* data32 = (READ_VREG(P_HEVC_DBLK_CFG3)>>8) & 0xff; // xio left offset, default is 0x40
+		* data32 = data32 * 2;
+		* data32 = (READ_VREG(P_HEVC_DBLK_CFG3)>>16) & 0xff; // adp left offset, default is 0x040
+		* data32 = data32 * 2;
+		*/
+		WRITE_VREG(HEVC_DBLK_CFG3, 0x808010); // make left storage 2 x 4k
+		WRITE_VREG(HEVC_DBLK_CFG3_DBE1, 0x808010); // make left storage 2 x 4k
 #endif
 
 #ifdef LOSLESS_COMPRESS_MODE
@@ -5379,9 +5379,9 @@ static void vp9_config_work_space_hw_fb(struct VP9Decoder_s *pbi, int front_flag
 	}
 	if (front_flag) {
 #ifdef CO_MV_COMPRESS
-	data32 = READ_VREG(HEVC_MPRED_CTRL4);
-	data32 |=  (1<<1);
-	WRITE_VREG(HEVC_MPRED_CTRL4, data32);
+		data32 = READ_VREG(HEVC_MPRED_CTRL4);
+		data32 |=  (1<<1);
+		WRITE_VREG(HEVC_MPRED_CTRL4, data32);
 #endif
 	}
 }
@@ -5400,13 +5400,13 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 
 	if ((pbi->front_back_mode != 1)|| test_debug == 20) {
 		if (front_flag)
-		vp9_hw_ctx_restore(pbi);
+			vp9_hw_ctx_restore(pbi);
 		if (back_flag) {
-		/* clear mailbox interrupt */
-		WRITE_VREG(pbi->backend_ASSIST_MBOX0_CLR_REG, 1);
+			/* clear mailbox interrupt */
+			WRITE_VREG(pbi->backend_ASSIST_MBOX0_CLR_REG, 1);
 
-		/* enable mailbox interrupt */
-		WRITE_VREG(pbi->backend_ASSIST_MBOX0_MASK, 1);
+			/* enable mailbox interrupt */
+			WRITE_VREG(pbi->backend_ASSIST_MBOX0_MASK, 1);
 
 		}
 		return;
@@ -5414,11 +5414,11 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 
 	if (back_flag) {
 #ifdef  MCREAD_MERGE_BYPASS
-	WRITE_VREG(HEVCD_MPP_DECOMP_CTL2, 0x1);
-	WRITE_VREG(HEVCD_MPP_DECOMP_CTL2_DBE1, 0x1);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL2, 0x1);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL2_DBE1, 0x1);
 #else
-	WRITE_VREG(HEVCD_MPP_DECOMP_CTL2, 0x2 << 1);
-	WRITE_VREG(HEVCD_MPP_DECOMP_CTL2_DBE1, 0x2 << 1);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL2, 0x2 << 1);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL2_DBE1, 0x2 << 1);
 #endif
 	}
 	vp9_config_work_space_hw_fb(pbi, front_flag, back_flag);
@@ -5428,21 +5428,21 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 			return;
 		}
 	if (back_flag)
-	init_pic_list_hw_fb(pbi, first_flag);
+		init_pic_list_hw_fb(pbi, first_flag);
 
 	if (front_flag) {
-	WRITE_VREG(VP9_SEG_MAP_BUFFER, buf_spec->seg_map.buf_start);
-	WRITE_VREG(VP9_PROB_SWAP_BUFFER, pbi->prob_buffer_phy_addr);
-	WRITE_VREG(VP9_COUNT_SWAP_BUFFER, pbi->count_buffer_phy_addr);
+		WRITE_VREG(VP9_SEG_MAP_BUFFER, buf_spec->seg_map.buf_start);
+		WRITE_VREG(VP9_PROB_SWAP_BUFFER, pbi->prob_buffer_phy_addr);
+		WRITE_VREG(VP9_COUNT_SWAP_BUFFER, pbi->count_buffer_phy_addr);
 	}
 	if (back_flag) {
 		//pyx need pbi->mmu_enable && ((pbi->double_write_mode & 0x10) == 0)??
-	if (pbi->mmu_enable) {
-		WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR, pbi->frame_mmu_map_phy_addr);
-		WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR_DBE1, pbi->frame_mmu_map_phy_addr_1); //new dual
-		WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL, pbi->frame_mmu_map_phy_addr);
-		WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL_DBE1, pbi->frame_mmu_map_phy_addr_1);
-	}
+		if (pbi->mmu_enable) {
+			WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR, pbi->frame_mmu_map_phy_addr);
+			WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR_DBE1, pbi->frame_mmu_map_phy_addr_1); //new dual
+			WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL, pbi->frame_mmu_map_phy_addr);
+			WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL_DBE1, pbi->frame_mmu_map_phy_addr_1);
+		}
 	}
 
 	vp9_init_decoder_hw_fb(0, 0, first_flag, front_flag, back_flag);
@@ -5450,14 +5450,14 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 
 			test_debug = 10;
 			return;
-		}
+	}
 	vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "Leaving vp9_init_decoder_hw\n");
 //  if (back_flag && first_flag) {
 	if (back_flag) {
 #ifdef VP9_LPF_LVL_UPDATE
-	vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "[test.c] vp9_loop_filter_init (run once before decoding start)\n");
-	lf->sharpness_level = 0; // init to 0
-	vp9_loop_filter_init(pbi);
+		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "[test.c] vp9_loop_filter_init (run once before decoding start)\n");
+		lf->sharpness_level = 0; // init to 0
+		vp9_loop_filter_init(pbi);
 #endif
 	}
 
@@ -5469,9 +5469,9 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 		WRITE_VREG(pbi->backend_ASSIST_MBOX0_MASK, 1);
 		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "back irq enabled\n");
 // Set MCR fetch priorities
-	data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
-	WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
-	WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1, data32);
+		data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
+		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
+		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1, data32);
 
 #ifdef DYN_CACHE
 		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "HEVC DYN MCRCC\n");
@@ -5546,15 +5546,15 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 
 	//WRITE_VREG(DEBUG_REG1, 0x0);  //no debug
 	if (first_flag)
-	WRITE_VREG(NAL_SEARCH_CTL, 0x8); //check vps/sps/pps/i-slice in ucode
-	WRITE_VREG(DECODE_STOP_POS, 0x0);
+		WRITE_VREG(NAL_SEARCH_CTL, 0x8); //check vps/sps/pps/i-slice in ucode
+		WRITE_VREG(DECODE_STOP_POS, 0x0);
 
-	/* clear mailbox interrupt */
-	WRITE_VREG(pbi->ASSIST_MBOX0_CLR_REG, 1);
+		/* clear mailbox interrupt */
+		WRITE_VREG(pbi->ASSIST_MBOX0_CLR_REG, 1);
 
-	/* enable mailbox interrupt */
-	WRITE_VREG(pbi->ASSIST_MBOX0_MASK, 1);
-	vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "front irq enabled\n");
+		/* enable mailbox interrupt */
+		WRITE_VREG(pbi->ASSIST_MBOX0_MASK, 1);
+		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "front irq enabled\n");
 	}
 
 }
@@ -5860,12 +5860,12 @@ static void init_buff_spec_fb(struct VP9Decoder_s *pbi, struct BuffInfo_s* buf_s
 		buf_spec->mpred_mv.buf_start	= buf_spec->mpred_above.buf_start + buf_spec->mpred_above.buf_size;
 		buf_spec->fb_mpred_imp0.buf_start	 = buf_spec->mpred_mv.buf_start + buf_spec->mpred_mv.buf_size;
 		buf_spec->fb_mpred_imp1.buf_start	 = buf_spec->fb_mpred_imp0.buf_start + buf_spec->fb_mpred_imp0.buf_size;
-			buf_spec->tile_header_param.buf_start	 = buf_spec->fb_mpred_imp1.buf_start + buf_spec->fb_mpred_imp1.buf_size;
+		buf_spec->tile_header_param.buf_start	 = buf_spec->fb_mpred_imp1.buf_start + buf_spec->fb_mpred_imp1.buf_size;
 		buf_spec->lmem.buf_start		 = buf_spec->tile_header_param.buf_start + buf_spec->tile_header_param.buf_size;
 		buf_spec->frame_header_lmem.buf_start	  = buf_spec->lmem.buf_start + buf_spec->lmem.buf_size;
 
-			buf_spec->rpm.buf_start 		= buf_spec->frame_header_lmem.buf_start + buf_spec->frame_header_lmem.buf_size;
-			buf_spec->end_adr = buf_spec->rpm.buf_start + buf_spec->rpm.buf_size;
+		buf_spec->rpm.buf_start 		= buf_spec->frame_header_lmem.buf_start + buf_spec->frame_header_lmem.buf_size;
+		buf_spec->end_adr = buf_spec->rpm.buf_start + buf_spec->rpm.buf_size;
 
 		if (debug)printk("%s workspace (%x %x) size = %x\n", __func__,buf_spec->start_adr, buf_spec->end_adr, buf_spec->end_adr-buf_spec->start_adr);
 		if (debug) {
