@@ -2,8 +2,6 @@
 
 #define LPF_SPCC_ENABLE
 
-//#define LMEM_STORE_ADR         HEVC_ASSIST_SCRATCH_O
-
 /* to do */
 //#define DOUBLE_WRITE_VH0_TEMP    0
 //#define DOUBLE_WRITE_VH1_TEMP    0
@@ -1131,6 +1129,7 @@ static void hevc_init_decoder_hw(struct AVS2Decoder_s *dec,
 	uint8_t front_flag, uint8_t back_flag)
 {
 	uint32_t data32;
+	uint32_t tmp = 0;
 	int32_t i;
 
 int32_t g_WqMDefault4x4[16] = {
@@ -1190,7 +1189,23 @@ int32_t g_WqMDefault8x8[64] = {
 	WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
 #endif // JT
 
-#if 1 //def AVS2_10B_HED_FB
+	if (front_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 1);
+		tmp = (1 << 0) | (1 << 9) | (1 << 10);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32); // new dual
+	}
+
+	if (back_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 3) | (1 << 6);
+		tmp = (1 << 2) | (1 << 13) | (1 << 11) | (1 << 5) | (1 << 14) | (1 << 12);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32); // new dual
+	}
+
+#if 0 //def AVS2_10B_HED_FB
 	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"[test.c] Init AVS2_10B_HED_FB\n");
 	data32 = READ_VREG(HEVC_ASSIST_FB_CTL);

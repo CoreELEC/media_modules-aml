@@ -1129,8 +1129,25 @@ static void decomp_perfcount_reset_dual(struct AV1HW_s *hw)
 static void aom_init_decoder_hw_fb(struct AV1HW_s *hw, int32_t decode_pic_begin, int32_t decode_pic_num, int first_flag, int front_flag, int back_flag)
 {
 	uint32_t data32;
+	uint32_t tmp = 0;
 
 	av1_print(hw, AOM_DEBUG_HW_MORE, "[test.c] Entering aom_init_decoder_hw\n");
+
+	if (front_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 10);
+		tmp = (1 << 0) | (1 << 1) | (1 << 9);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
+
+	if (back_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 11) | (1 << 12);
+		tmp = (1 << 2) | (1 << 3) |  (1 << 13) | (1 << 5) | (1 << 6) | (1 << 14);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
 
 	if (front_flag) {
 	//if (debug&AOM_AV1_DEBUG_BUFMGR)

@@ -249,7 +249,7 @@ Bit[10:8] - film_grain_params_ref_idx, For Write request
 #define DEBUG_REG2_DBE            HEVC_ASSIST_SCRATCH_Z
 
 #ifdef NEW_FRONT_BACK_CODE
-#define PIC_DECODE_COUNT_DBE      HEVC_ASSIST_SCRATCH_B
+#define PIC_DECODE_COUNT_DBE      HEVC_ASSIST_SCRATCH_10
 #endif
 
 /*

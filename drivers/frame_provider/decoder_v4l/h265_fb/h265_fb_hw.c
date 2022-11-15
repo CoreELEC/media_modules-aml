@@ -1,6 +1,5 @@
 #include "../../../include/regs/dos_registers.h"
 
-#define LMEM_STORE_ADR         HEVC_ASSIST_SCRATCH_O
 #define DOS_PROJECT
 
 /* to do */
@@ -1260,6 +1259,7 @@ static void hevc_config_work_space_hw_fb(hevc_stru_t* hevc, uint8_t bit_depth, u
 static void hevc_init_decoder_hw_fb(hevc_stru_t* hevc, uint8_t front_flag, uint8_t back_flag)
 {
 	uint32_t data32;
+	uint32_t tmp = 0;
 	int i;
 	//int dw_mode = get_double_write_mode(hevc);
 
@@ -1303,7 +1303,23 @@ static void hevc_init_decoder_hw_fb(hevc_stru_t* hevc, uint8_t front_flag, uint8
 	WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
 #endif // JT
 
-#if 1 //def H265_10B_HED_FB
+	if (front_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7);
+		tmp = (1 << 0) | (1 << 1) | (1 << 9) | (1 << 10);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
+
+	if (back_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7);
+		tmp = (1 << 2) | (1 << 3) |(1 << 13) | (1 << 11) | (1 << 5) | (1 << 6) | (1 << 14) | (1 << 12);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
+
+#if 0 //def H265_10B_HED_FB
 	//if (back_flag) {
 		//printk("[test.c] Init H265_10B_HED_FB\n");
 		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);

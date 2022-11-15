@@ -7237,9 +7237,11 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 		else
 			WRITE_HREG(DEBUG_REG1, 0);
 	} else if (debug_tag != 0) {
-		pr_info("dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
-				READ_HREG(DEBUG_REG2),
-				READ_VREG(HEVC_PARSER_LCU_START));
+		pr_info("dbg%x: %x lcu %x stream crc %x, shiftbytes 0x%x decbytes 0x%x\n",
+			READ_HREG(DEBUG_REG2), READ_VREG(HEVC_PARSER_LCU_START),
+			READ_VREG(HEVC_STREAM_CRC), READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
+
 		if (((udebug_pause_pos & 0xffff)
 			== (debug_tag & 0xffff)) &&
 			(udebug_pause_decode_idx == 0 ||
@@ -8593,7 +8595,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 			return;
 		}
 
-		vdec->mc_back_loaded = 1;
+		//vdec->mc_back_loaded = 1;
 		vdec->mc_back_type = VFORMAT_HEVC;
 	}
 
@@ -8723,11 +8725,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 
 	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-#ifdef FOR_S5
-	if (avs2_dec->frontend_decoded_count > 0) {
-#else
+
 	if (vdec->mc_loaded) {
-#endif
 		/*firmware have load before,
 			and not changes to another.
 			ignore reload.
@@ -8749,7 +8748,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			vdec_schedule_work(&dec->work);
 			return;
 		}
-		vdec->mc_loaded = 1;
+		//vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_AVS2;
 	}
 	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);

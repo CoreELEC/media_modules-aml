@@ -1548,9 +1548,6 @@ static DEFINE_MUTEX(vavs3_mutex);
 #define PIC_DECODE_COUNT_DBE            HEVC_ASSIST_SCRATCH_X
 #define DEBUG_REG1_DBE                  HEVC_ASSIST_SCRATCH_Y
 #define DEBUG_REG2_DBE                  HEVC_ASSIST_SCRATCH_Z
-#define HEVC_ASSIST_SLICE_LMEM_CNT      HEVC_ASSIST_SCRATCH_10
-#define HEVC_ASSIST_SLICE_IMEM_CNT      HEVC_ASSIST_SCRATCH_11
-#define HEVC_ASSIST_SCALELUT_CNT        HEVC_ASSIST_SCRATCH_12
 #endif
 /*
 ucode parser/search control
@@ -8476,8 +8473,8 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 			return;
 		}
 
-		vdec->mc_back_loaded = 1;
-		vdec->mc_back_type = VFORMAT_HEVC;
+		//vdec->mc_back_loaded = 1;
+		vdec->mc_back_type = VFORMAT_AVS3;
 	}
 
 	mod_timer(&dec->timer_back, jiffies);
@@ -8596,11 +8593,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 
 	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-#ifdef PXP_DEBUG
-	if (avs3_dec->frontend_decoded_count > 0) {
-#else
 	if (vdec->mc_loaded) {
-#endif
 		/*firmware have load before,
 			and not changes to another.
 			ignore reload.
@@ -8620,7 +8613,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			vdec_schedule_work(&dec->work);
 			return;
 		}
-		vdec->mc_loaded = 1;
+		//vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_AVS3;
 	}
 	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);

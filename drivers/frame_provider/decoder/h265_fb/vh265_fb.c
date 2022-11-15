@@ -812,6 +812,9 @@ enum NalUnitType {
 #define   MCRCC_ENABLE
 #define INVALID_POC 0x80000000
 
+/********************************************
+ *  AV Scratch Register Re-Define for FrontEnd
+********************************************/
 #define HEVC_DEC_STATUS_REG       HEVC_ASSIST_SCRATCH_0
 #define HEVC_RPM_BUFFER           HEVC_ASSIST_SCRATCH_1
 #define HEVC_SHORT_TERM_RPS       HEVC_ASSIST_SCRATCH_2
@@ -821,10 +824,6 @@ enum NalUnitType {
 #define HEVC_SAO_UP               HEVC_ASSIST_SCRATCH_6
 #define HEVC_STREAM_SWAP_BUFFER   HEVC_ASSIST_SCRATCH_7
 #define HEVC_STREAM_SWAP_BUFFER2  HEVC_ASSIST_SCRATCH_8
-#define HEVC_sao_mem_unit         HEVC_ASSIST_SCRATCH_9
-#define HEVC_SAO_ABV              HEVC_ASSIST_SCRATCH_A
-#define HEVC_sao_vb_size          HEVC_ASSIST_SCRATCH_B
-#define HEVC_SAO_VB               HEVC_ASSIST_SCRATCH_C
 #define HEVC_SCALELUT             HEVC_ASSIST_SCRATCH_D
 #define HEVC_WAIT_FLAG            HEVC_ASSIST_SCRATCH_E
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
@@ -879,8 +878,18 @@ enum NalUnitType {
 #define HEVC_DECODE_MODE		HEVC_ASSIST_SCRATCH_J
 #define HEVC_DECODE_MODE2		HEVC_ASSIST_SCRATCH_H
 #define DECODE_STOP_POS         HEVC_ASSIST_SCRATCH_K
+#define HEVC_DECODE_COUNT		HEVC_ASSIST_SCRATCH_9
+#define LMEM_STORE_ADR			HEVC_ASSIST_SCRATCH_A
+
+/********************************************
+ *  AV Scratch Register Re-Define for BackEnd
+********************************************/
+#define HEVC_sao_mem_unit         HEVC_ASSIST_SCRATCH_P
+#define HEVC_SAO_ABV              HEVC_ASSIST_SCRATCH_Q
+#define HEVC_sao_vb_size          HEVC_ASSIST_SCRATCH_R
+#define HEVC_SAO_VB               HEVC_ASSIST_SCRATCH_S
+
 #ifdef NEW_FRONT_BACK_CODE
-#define HEVC_DECODE_COUNT		HEVC_ASSIST_SCRATCH_P
 #define HEVC_DEC_STATUS_DBE             HEVC_ASSIST_SCRATCH_W
 #define PIC_DECODE_COUNT_DBE            HEVC_ASSIST_SCRATCH_X
 #define DEBUG_REG1_DBE                  HEVC_ASSIST_SCRATCH_Y
@@ -11300,6 +11309,11 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 					hevc->decode_idx,
 					READ_VREG(HEVC_SHIFT_BYTE_COUNT),
 					READ_VREG(HEVC_SAO_CRC));
+			} else {
+				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"FrontEnd data done %d, fb_rd_pos %d, decode_idx %d, stream crc %x shiftbyte %x\n",
+					hevc->frontend_decoded_count, hevc->fb_rd_pos, hevc->decode_idx,
+					READ_VREG(HEVC_STREAM_CRC), READ_VREG(HEVC_SHIFT_BYTE_COUNT));
 			}
 			if (vdec->mvfrm)
 				vdec->mvfrm->hw_decode_time =
@@ -12370,11 +12384,12 @@ static irqreturn_t vh265_isr(int irq, void *data)
 			WRITE_HREG(DEBUG_REG1, 0);
 	} else if (debug_tag != 0) {
 		hevc_print(hevc, 0,
-			"dbg%x: %x l/w/r %x %x %x\n", READ_HREG(DEBUG_REG1),
-			READ_HREG(DEBUG_REG2),
-			READ_VREG(HEVC_STREAM_LEVEL),
-			READ_VREG(HEVC_STREAM_WR_PTR),
-			READ_VREG(HEVC_STREAM_RD_PTR));
+			"dbg%x: %x l/w/r %x %x %x lcu %x stream crc %x, shiftbytes 0x%x decbytes 0x%x\n",
+			READ_HREG(DEBUG_REG1), READ_HREG(DEBUG_REG2),
+			READ_VREG(HEVC_STREAM_LEVEL), READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR), READ_VREG(HEVC_PARSER_LCU_START),
+			READ_VREG(HEVC_STREAM_CRC), READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hevc->start_shift_bytes);
 		if (((udebug_pause_pos & 0xffff)
 			== (debug_tag & 0xffff)) &&
 			(udebug_pause_decode_idx == 0 ||
@@ -14833,7 +14848,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 			init_detrefill_buf(hevc);
 #endif
 #endif
-		vdec->mc_back_loaded = 1;
+		//vdec->mc_back_loaded = 1;
 		vdec->mc_back_type = VFORMAT_HEVC;
 	}
 
@@ -15033,7 +15048,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		if (hevc->is_swap && get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
 			init_detrefill_buf(hevc);
 #endif
-		vdec->mc_loaded = 1;
+		//vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_HEVC;
 	}
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
