@@ -1,0 +1,1 @@
+obj-$(CONFIG_AMLOGIC_MEDIA_VENC_MEMALLOC) += memalloc.o
