@@ -2732,6 +2732,18 @@ static int v4l_alloc_and_config_pic(struct AVS2Decoder_s *dec,
 		pic->mc_canvas_u_v = (pic->index << 1) + 1;
 	}
 
+#ifdef MV_USE_FIXED_BUF
+	pic->mpred_mv_wr_start_addr = dec->work_space_buf->mpred_mv.buf_start +
+		pic->index * (dec->work_space_buf->mpred_mv.buf_size / FRAME_BUFFERS);
+	if (pic->mpred_mv_wr_start_addr >
+		(dec->work_space_buf->mpred_mv.buf_start
+		+ dec->work_space_buf->mpred_mv.buf_size)) {
+		avs2_print(dec, 0, "err: fixed mv buf out of size, 0x0%x\n",
+			pic->mpred_mv_wr_start_addr);
+		pic->mpred_mv_wr_start_addr = dec->work_space_buf->mpred_mv.buf_start;
+	}
+#endif
+
 	if (debug) {
 		pr_info("%s index %d BUF_index %d ",
 			__func__, pic->index,
