@@ -9585,6 +9585,8 @@ static void update_vf_memhandle(struct hevc_state_s *hevc,
 			vf->mem_handle =
 				decoder_mmu_box_get_mem_handle(
 					hevc->mmu_box_dw, pic->index);
+			if (hevc->front_back_mode)
+				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(hevc->mmu_box_dw_1, pic->index);
 			vf->mem_head_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hevc->bmmu_box, VF_BUFFER_IDX(pic->BUF_index));
@@ -9595,6 +9597,8 @@ static void update_vf_memhandle(struct hevc_state_s *hevc,
 			vf->mem_handle =
 				decoder_mmu_box_get_mem_handle(
 					hevc->mmu_box, pic->index);
+			if (hevc->front_back_mode)
+				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(hevc->mmu_box_1, pic->index);
 			vf->mem_head_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hevc->bmmu_box, VF_BUFFER_IDX(pic->BUF_index));

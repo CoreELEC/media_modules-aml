@@ -6740,6 +6740,8 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 			vf->mem_handle =
 				decoder_mmu_box_get_mem_handle(
 					hw->mmu_box_dw, pic->index);
+			if (hw->front_back_mode)
+				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(hw->mmu_box_dw_1, pic->index);
 			vf->mem_head_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hw->bmmu_box,
@@ -6751,6 +6753,8 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 		vf->mem_handle =
 			decoder_mmu_box_get_mem_handle(
 				hw->mmu_box, pic->index);
+		if (hw->front_back_mode)
+			vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(hw->mmu_box_1, pic->index);
 		vf->mem_head_handle =
 			decoder_bmmu_box_get_mem_handle(
 				hw->bmmu_box,

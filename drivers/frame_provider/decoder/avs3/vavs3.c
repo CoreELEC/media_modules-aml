@@ -5512,6 +5512,8 @@ static void set_vframe(struct AVS3Decoder_s *dec,
 			vf->mem_handle =
 				decoder_mmu_box_get_mem_handle(
 					dec->dw_mmu_box, pic->index);
+			if (dec->front_back_mode)
+				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(dec->dw_mmu_box_1, pic->index);
 			vf->mem_head_handle =
 				decoder_bmmu_box_get_mem_handle(
 					dec->bmmu_box,
@@ -5523,6 +5525,8 @@ static void set_vframe(struct AVS3Decoder_s *dec,
 			vf->mem_handle = decoder_mmu_box_get_mem_handle(
 				dec->mmu_box,
 				pic->index);
+			if (dec->front_back_mode)
+				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(dec->mmu_box_1, pic->index);
 			vf->mem_head_handle = decoder_bmmu_box_get_mem_handle(
 				dec->bmmu_box,
 				HEADER_BUFFER_IDX(pic->index));

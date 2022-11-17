@@ -10598,6 +10598,8 @@ static void update_vf_memhandle(struct VP9Decoder_s *pbi,
 			vf->mem_handle =
 				decoder_mmu_box_get_mem_handle(
 					pbi->mmu_box_dw, pic->index);
+			if (pbi->front_back_mode)
+				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(pbi->mmu_box_dw_1, pic->index);
 			vf->mem_head_handle =
 				decoder_bmmu_box_get_mem_handle(
 					pbi->bmmu_box,
@@ -10609,6 +10611,8 @@ static void update_vf_memhandle(struct VP9Decoder_s *pbi,
 		vf->mem_handle =
 			decoder_mmu_box_get_mem_handle(
 				pbi->mmu_box, pic->index);
+		if (pbi->front_back_mode)
+			vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(pbi->mmu_box_1, pic->index);
 		vf->mem_head_handle =
 			decoder_bmmu_box_get_mem_handle(
 				pbi->bmmu_box,
