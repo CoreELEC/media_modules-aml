@@ -4910,133 +4910,134 @@ static void vp9_init_decoder_hw_fb(int32_t decode_pic_begin, int32_t decode_pic_
 //
 //#endif
 	if (front_flag) {
-	//if (debug&VP9_DEBUG_BUFMGR)
-		//printk("[test.c] Enable HEVC Parser Interrupt\n");
-	data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
-	data32 = data32 & 0x1fffffff;
-	data32 = data32 |
-		(3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
-		(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
-		(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+		//if (debug&VP9_DEBUG_BUFMGR)
+			//printk("[test.c] Enable HEVC Parser Interrupt\n");
+		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+		data32 = data32 & 0x1fffffff;
+		data32 = data32 |
+			(3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
+			(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
+			(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
 #ifdef VP9_10B_HED_FB
 #ifdef DUAL_DECODE
-		// For HALT CCPU test. Use Pull inside CCPU to generate interrupt
-		// (1 << 9) |  // fed_fb_slice_done_int_amrisc_enable
+			// For HALT CCPU test. Use Pull inside CCPU to generate interrupt
+			// (1 << 9) |  // fed_fb_slice_done_int_amrisc_enable
 #else
-		(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
+			(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
 #endif
 #endif
-		(1 << 7) |  // dec_done_int_cpu_enable
-		(1 << 4) |  // startcode_found_int_cpu_enable
-		(0 << 3) |  // startcode_found_int_amrisc_enable
-		(1 << 0)    // parser_int_enable
-		;
-	WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+			(1 << 7) |  // dec_done_int_cpu_enable
+			(1 << 4) |  // startcode_found_int_cpu_enable
+			(0 << 3) |  // startcode_found_int_amrisc_enable
+			(1 << 0)    // parser_int_enable
+			;
+		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
-	//if (debug&VP9_DEBUG_BUFMGR)
-		//printk("[test.c] Enable HEVC Parser Shift\n");
+		//if (debug&VP9_DEBUG_BUFMGR)
+			//printk("[test.c] Enable HEVC Parser Shift\n");
 
-	data32 = READ_VREG(HEVC_SHIFT_STATUS);
-	data32 = data32 |
-		(0 << 1) |  // emulation_check_off // VP9 do not have emulation
-		(1 << 0)    // startcode_check_on
-		;
-	WRITE_VREG(HEVC_SHIFT_STATUS, data32);
+		data32 = READ_VREG(HEVC_SHIFT_STATUS);
+		data32 = data32 |
+			(0 << 1) |  // emulation_check_off // VP9 do not have emulation
+			(1 << 0)    // startcode_check_on
+			;
+		WRITE_VREG(HEVC_SHIFT_STATUS, data32);
 
-	WRITE_VREG(HEVC_SHIFT_CONTROL,
-		(0 << 14) | // disable_start_code_protect
-		(1 << 10) | // length_zero_startcode_en // for VP9
-		(1 << 9) | // length_valid_startcode_en // for VP9
-		(3 << 6) | // sft_valid_wr_position
-		(2 << 4) | // emulate_code_length_sub_1
-		(3 << 1) | // start_code_length_sub_1 // VP9 use 0x00000001 as startcode (4 Bytes)
-		(1 << 0)   // stream_shift_enable
-		);
+		WRITE_VREG(HEVC_SHIFT_CONTROL,
+			(0 << 14) | // disable_start_code_protect
+			(1 << 10) | // length_zero_startcode_en // for VP9
+			(1 << 9) | // length_valid_startcode_en // for VP9
+			(3 << 6) | // sft_valid_wr_position
+			(2 << 4) | // emulate_code_length_sub_1
+			(3 << 1) | // start_code_length_sub_1 // VP9 use 0x00000001 as startcode (4 Bytes)
+			(1 << 0)   // stream_shift_enable
+			);
 
-	WRITE_VREG(HEVC_CABAC_CONTROL,
-		(1 << 0)   // cabac_enable
-		);
+		WRITE_VREG(HEVC_CABAC_CONTROL,
+			(1 << 0)   // cabac_enable
+			);
 
-	WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
-		(1 << 0)   // hevc_parser_core_clk_en
-		);
+		WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
+			(1 << 0)   // hevc_parser_core_clk_en
+			);
 
 	}
 
 	if (back_flag && first_flag) {
-	// Initial IQIT_SCALELUT memory -- just to avoid X in simulation
-	//if (debug&VP9_DEBUG_BUFMGR)
-		//printk("[test.c] Initial IQIT_SCALELUT memory -- just to avoid X in simulation...\n");
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0); // cfg_p_addr
-	for (i=0; i<1024; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 0); // cfg_p_addr
-	for (i=0; i<1024; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, 0);
+		// Initial IQIT_SCALELUT memory -- just to avoid X in simulation
+		//if (debug&VP9_DEBUG_BUFMGR)
+			//printk("[test.c] Initial IQIT_SCALELUT memory -- just to avoid X in simulation...\n");
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0); // cfg_p_addr
+		for (i=0; i<1024; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 0); // cfg_p_addr
+		for (i=0; i<1024; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, 0);
 	}
 	if (front_flag) {
-	WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
-	//pyx need check by rain
-	//WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
-	//WRITE_VREG(HEVC_DECODE_PIC_NUM_REG, decode_pic_num);
+		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
+		//pyx need check by rain
+		//WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
+		//WRITE_VREG(HEVC_DECODE_PIC_NUM_REG, decode_pic_num);
 #if 0
-	// Send parser_cmd
-	//if (debug) //printk("[test.c] SEND Parser Command ...\n");
-	WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1<<16) | (0<<0));
-	for (i=0; i<PARSER_CMD_NUMBER; i++) {
-	WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
-	}
+		// Send parser_cmd
+		//if (debug) //printk("[test.c] SEND Parser Command ...\n");
+		WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1<<16) | (0<<0));
+		for (i=0; i<PARSER_CMD_NUMBER; i++) {
+		WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
+		}
 
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 #endif
 
-	WRITE_VREG(HEVC_PARSER_IF_CONTROL,
-		//  (1 << 8) | // sao_sw_pred_enable
-		(1 << 5) | // parser_sao_if_en
-		(1 << 2) | // parser_mpred_if_en
-		(1 << 0) // parser_scaler_if_en
-		);
+		WRITE_VREG(HEVC_PARSER_IF_CONTROL,
+			//  (1 << 8) | // sao_sw_pred_enable
+			(1 << 5) | // parser_sao_if_en
+			(1 << 2) | // parser_mpred_if_en
+			(1 << 0) // parser_scaler_if_en
+			);
 
-	// Changed to Start MPRED in microcode
-	/*
-	//printk("[test.c] Start MPRED\n");
-	WRITE_VREG(P_HEVC_MPRED_INT_STATUS,
-		(1<<31)
-		);
-	*/
+		// Changed to Start MPRED in microcode
+		/*
+		//printk("[test.c] Start MPRED\n");
+		WRITE_VREG(P_HEVC_MPRED_INT_STATUS,
+			(1<<31)
+			);
+		*/
 	}
 	if (back_flag) {
-	//if (debug) //printk("[test.c] Reset IPP\n");
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-		(0 << 1) | // enable ipp
-		(1 << 0)   // software reset ipp and mpp
-		);
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-		(1 << 1) | // enable ipp
-		(0 << 0)   // software reset ipp and mpp
-		);
+		//if (debug) //printk("[test.c] Reset IPP\n");
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+			(0 << 1) | // enable ipp
+			(1 << 0)   // software reset ipp and mpp
+			);
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+			(1 << 1) | // enable ipp
+			(0 << 0)   // software reset ipp and mpp
+			);
 
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
-		(0 << 1) | // enable ipp
-		(1 << 0)   // software reset ipp and mpp
-		);
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
-		(1 << 1) | // enable ipp
-		(0 << 0)   // software reset ipp and mpp
-		);
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
+			(0 << 1) | // enable ipp
+			(1 << 0)   // software reset ipp and mpp
+			);
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
+			(1 << 1) | // enable ipp
+			(0 << 0)   // software reset ipp and mpp
+			);
 #ifdef VP9_10B_NV21
-	WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31); // Enable NV21 reference read mode for MC
-	WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31); // Enable NV21 reference read mode for MC
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31); // Enable NV21 reference read mode for MC
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31); // Enable NV21 reference read mode for MC
 #endif
-	WRITE_VREG(HEVCD_IPP_MULTICORE_CFG, 0x1);// muti core enable
-	WRITE_VREG(HEVCD_IPP_MULTICORE_CFG_DBE1, 0x1);// muti core enable
+		WRITE_VREG(HEVCD_IPP_MULTICORE_CFG, 0x1);// muti core enable
+		WRITE_VREG(HEVCD_IPP_MULTICORE_CFG_DBE1, 0x1);// muti core enable
 
-	WRITE_VREG(HEVC_DBLK_MCP, 0x4);//dual core - core 0
-	WRITE_VREG(HEVC_DBLK_MCP_DBE1, 0x5);//dual core - core 1
+		WRITE_VREG(HEVC_DBLK_MCP, 0x4);//dual core - core 0
+		WRITE_VREG(HEVC_DBLK_MCP_DBE1, 0x5);//dual core - core 1
 
-	// Initialize mcrcc and decomp perf counters
-	mcrcc_perfcount_reset();
-	decomp_perfcount_reset();
+		// Initialize mcrcc and decomp perf counters
+		mcrcc_perfcount_reset();
+		decomp_perfcount_reset();
 	}
 
 	return;
@@ -10318,6 +10319,9 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 			/*free not used buffers.*/
 			if ((frame_bufs[i].ref_count == 0) &&
 				(frame_bufs[i].buf.vf_ref == 0) &&
+#ifdef NEW_FRONT_BACK_CODE
+				(frame_bufs[i].buf.backend_ref == 0) &&
+#endif
 				(frame_bufs[i].buf.index != -1)) {
 				struct internal_comp_buf *ibuf = index_to_icomp_buf(pbi, i);
 
