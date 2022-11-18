@@ -9025,6 +9025,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 
 	vf->sidebind_type = hevc->sidebind_type;
 	vf->sidebind_channel_id = hevc->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_HEVC;
 }
 
 static int vh265_vf_states(struct vframe_states *states, void *op_arg)

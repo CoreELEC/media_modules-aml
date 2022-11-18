@@ -3811,7 +3811,6 @@ static void config_alf_hw(struct AVS3Decoder_s *dec)
 		"[c] cfgALF .done.\n");
 }
 
-#ifndef PXP_DEBUG
 static u32 init_cuva_size;
 
 static int cuva_data_is_available(struct AVS3Decoder_s *dec)
@@ -3827,19 +3826,16 @@ static int cuva_data_is_available(struct AVS3Decoder_s *dec)
 	else
 		return 0;
 }
-#endif
-static void config_cuva_buf(struct AVS3Decoder_s *dec)
+
+void config_cuva_buf(struct AVS3Decoder_s *dec)
 {
-#ifndef PXP_DEBUG
 	WRITE_VREG(AVS3_CUVA_ADR, dec->cuva_phy_addr);
 	init_cuva_size = (dec->cuva_size >> 4) << 16;
 	WRITE_VREG(AVS3_CUVA_DATA_SIZE, init_cuva_size);
-#endif
 }
 
 static void set_cuva_data(struct AVS3Decoder_s *dec)
 {
-#ifndef PXP_DEBUG
 	int i;
 	unsigned short *cuva_adr;
 	unsigned int size_reg_val =
@@ -3857,7 +3853,6 @@ static void set_cuva_data(struct AVS3Decoder_s *dec)
 	cuva_adr = (unsigned short *)dec->cuva_addr;
 	cuva_count = ((size_reg_val >> 16) << 4) >> 1;
 	cuva_size = dec->cuva_size;
-	dec->hdr_flag |= HDR_CUVA_MASK;
 
 	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
 			"%s:pic 0x%p cuva_count(%d) cuva_size(%d) hdr_flag 0x%x\n",
@@ -3887,9 +3882,19 @@ static void set_cuva_data(struct AVS3Decoder_s *dec)
 				pic->cuva_data_size = len;
 			}
 
-			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-				"cuva: (size %d)\n",
-				pic->cuva_data_size);
+			if (pic->cuva_data_buf[0] == 0x26
+				&& pic->cuva_data_buf[1] == 0x00
+				&& pic->cuva_data_buf[2] == 0x04
+				&& pic->cuva_data_buf[3] == 0x00
+				&& pic->cuva_data_buf[4] == 0x05) {
+				dec->hdr_flag |= HDR_CUVA_MASK;
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+					"cuva stream: (size %d)\n", pic->cuva_data_size);
+			} else {
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+					" other hdr stream (size %d)\n", pic->cuva_data_size);
+			}
+
 			if (get_dbg_flag(dec) & AVS3_DBG_HDR_DATA) {
 				for (i = 0; i < pic->cuva_data_size; i++) {
 					pr_info("%02x ", pic->cuva_data_buf[i]);
@@ -3907,12 +3912,10 @@ static void set_cuva_data(struct AVS3Decoder_s *dec)
 			pic->cuva_data_size = 0;
 		}
 	}
-#endif
 }
 
 static void release_cuva_data(struct avs3_frame_s *pic)
 {
-#ifndef PXP_DEBUG
 	if (pic == NULL)
 		return;
 	if (pic->cuva_data_buf) {
@@ -3920,7 +3923,6 @@ static void release_cuva_data(struct avs3_frame_s *pic)
 	}
 	pic->cuva_data_buf = NULL;
 	pic->cuva_data_size = 0;
-#endif
 }
 
 static void avs3_config_work_space_hw(struct AVS3Decoder_s *dec)
@@ -4868,7 +4870,7 @@ static void set_frame_info(struct AVS3Decoder_s *dec, struct vframe_s *vf)
 	vf->signal_type = dec->video_signal_type;
 
 	avs3_print(dec, AVS3_DBG_HDR_INFO,
-			"signal_typesignal_type 0x%x \n",
+			"signal_type 0x%x \n",
 			vf->signal_type);
 
 	pixel_ratio = dec->vavs3_amstream_dec_info.ratio;
@@ -4915,6 +4917,7 @@ static void set_frame_info(struct AVS3Decoder_s *dec, struct vframe_s *vf)
 
 	vf->sidebind_type = dec->sidebind_type;
 	vf->sidebind_channel_id = dec->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_AVS3;
 
 	return;
 }
@@ -6963,7 +6966,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		debug_buffer_mgr_more(dec);
 		get_frame_rate(&dec->avs3_dec.param, dec);
 
-#ifdef VIDEO_SIGNAL_SUPPORT // The video_signal_type is type of uint16_t and result false, so comment it out.
 		if (dec->avs3_dec.param.p.video_signal_type
 				& (1<<30)) {
 			union param_u *pPara;
@@ -7035,9 +7037,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 				"max_pic_average:0x%x\n",
 				dec->vf_dp.content_light_level.max_pic_average);
 		}
-#endif
-
-#ifdef VIDEO_SIGNAL_SUPPORT
 		if (dec->video_ori_signal_type !=
 			((dec->avs3_dec.param.p.video_signal_type << 16)
 			| dec->avs3_dec.param.p.color_description)) {
@@ -7112,7 +7111,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 
 			video_signal_type = dec->video_signal_type;
 		}
-#endif
 	}
 
 #if 0

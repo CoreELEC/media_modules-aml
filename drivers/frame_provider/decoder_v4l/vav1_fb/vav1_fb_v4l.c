@@ -5885,6 +5885,7 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_B
 
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_AV1;
 }
 
 static int vav1_vf_states(struct vframe_states *states, void *op_arg)
@@ -6505,7 +6506,6 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				&vf->src_fmt.md_buf);
 		}
 
-		vf->codec_vfmt = VFORMAT_AV1;
 		update_vframe_src_fmt(vf,
 			pic_config->aux_data_buf,
 			pic_config->aux_data_size,

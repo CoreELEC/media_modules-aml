@@ -159,6 +159,7 @@ static void set_frame_info(struct vframe_s *vf)
 	vf->ratio_control = 0;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
+	vf->codec_vfmt = VFORMAT_MJPEG;
 }
 
 static irqreturn_t vmjpeg_isr(int irq, void *dev_id)

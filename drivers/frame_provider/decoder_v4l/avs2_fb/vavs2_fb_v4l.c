@@ -4568,6 +4568,7 @@ static void set_frame_info(struct AVS2Decoder_s *dec, struct vframe_s *vf)
 
 	vf->sidebind_type = dec->sidebind_type;
 	vf->sidebind_channel_id = dec->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_AVS2;
 
 	return;
 }
@@ -5235,7 +5236,6 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
 
-			vf->codec_vfmt = VFORMAT_AVS2;
 			update_vframe_src_fmt(vf,
 				pic->cuva_data_buf,
 				pic->cuva_data_size,

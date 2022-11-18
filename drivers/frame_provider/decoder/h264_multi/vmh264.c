@@ -3414,7 +3414,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 
 		if (hw->is_used_v4l) {
-			vf->codec_vfmt = VFORMAT_H264;
 			update_vframe_src_fmt(vf,
 				hw->buffer_spec[buffer_index].aux_data_buf,
 				hw->buffer_spec[buffer_index].aux_data_size,
@@ -5056,6 +5055,7 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 #ifndef NV21
 	vf->canvas1_config[2] = p_canvas_config[2];
 #endif
+	vf->codec_vfmt = VFORMAT_H264;
 }
 
 static void get_picture_qos_info(struct StorablePicture *picture)

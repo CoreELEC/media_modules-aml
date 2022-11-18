@@ -1794,6 +1794,7 @@ int32_t g_WqMDefault8x8[64] = {
 	return;
 }
 
+extern void config_cuva_buf(struct AVS3Decoder_s *dec);
 static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8_t back_flag)
 {
 	uint32_t data32;
@@ -1915,6 +1916,7 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 		"%s set decode_mode 0x%x\n", __func__, decode_mode);
 		WRITE_VREG(DECODE_MODE, decode_mode); //DECODE_MODE_MULTI_STREAMBASE
 		WRITE_VREG(HEVC_DECODE_SIZE, 0xffffffff);
+		config_cuva_buf(dec);
 	#endif
 
 		//WRITE_VREG(XIF_DOS_SCRATCH31, 0x0);

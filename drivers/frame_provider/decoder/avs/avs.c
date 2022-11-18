@@ -313,6 +313,7 @@ static void set_frame_info(struct vframe_s *vf, unsigned int *duration)
 	/*vf->ratio_control |= DISP_RATIO_FORCECONFIG | DISP_RATIO_KEEPRATIO; */
 
 	vf->flag = 0;
+	vf->codec_vfmt = VFORMAT_AVS;
 }
 
 

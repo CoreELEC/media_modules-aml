@@ -298,6 +298,7 @@ static void set_frame_info(struct vframe_s *vf)
 		vf->ratio_control = 0;
 
 	ratio_control = vf->ratio_control;
+	vf->codec_vfmt = VFORMAT_MPEG12;
 
 	amlog_level_if(first, LOG_LEVEL_INFO,
 		"mpeg2dec: w(%d), h(%d), dur(%d), dur-ES(%d)\n",

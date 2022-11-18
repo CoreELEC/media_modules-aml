@@ -994,6 +994,7 @@ static void set_frame_info(struct vdec_avs_hw_s *hw, struct vframe_s *vf,
 
 	vf->flag = 0;
 	buf_of_vf(vf)->detached = 0;
+	vf->codec_vfmt = VFORMAT_AVS;
 }
 
 #ifdef ENABLE_USER_DATA

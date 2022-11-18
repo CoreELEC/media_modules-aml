@@ -4455,6 +4455,7 @@ static void set_frame_info(struct AVS3Decoder_s *dec, struct vframe_s *vf)
 
 	vf->sidebind_type = dec->sidebind_type;
 	vf->sidebind_channel_id = dec->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_AVS3;
 
 	return;
 }

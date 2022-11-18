@@ -8181,6 +8181,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 
 	vf->sidebind_type = hevc->sidebind_type;
 	vf->sidebind_channel_id = hevc->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_HEVC;
 }
 
 static int vh265_vf_states(struct vframe_states *states, void *op_arg)
@@ -9386,7 +9387,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				v4l2_ctx->aux_infos.bind_dv_buffer(v4l2_ctx, &vf->src_fmt.comp_buf,
 					&vf->src_fmt.md_buf);
 
-			vf->codec_vfmt = VFORMAT_HEVC;
 			update_vframe_src_fmt(vf,
 				hevc->m_PIC[index]->aux_data_buf,
 				hevc->m_PIC[index]->aux_data_size,

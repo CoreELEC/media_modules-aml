@@ -6810,6 +6810,7 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 
 	vf->sidebind_type = pbi->sidebind_type;
 	vf->sidebind_channel_id = pbi->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_VP9;
 }
 
 static int vvp9_vf_states(struct vframe_states *states, void *op_arg)

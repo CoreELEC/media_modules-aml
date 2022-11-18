@@ -644,6 +644,7 @@ static void set_frame_info(struct vdec_mpeg4_hw_s *hw, struct vframe_s *vf,
 	vf->canvas0_config[2].endian = endian_tmp;
 	vf->canvas1_config[2].endian = endian_tmp;
 #endif
+	vf->codec_vfmt = VFORMAT_MPEG4;
 }
 
 static inline void vmpeg4_save_hw_context(struct vdec_mpeg4_hw_s *hw)

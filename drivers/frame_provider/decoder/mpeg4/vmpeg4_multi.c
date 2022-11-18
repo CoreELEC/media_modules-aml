@@ -673,6 +673,7 @@ static void set_frame_info(struct vdec_mpeg4_hw_s *hw, struct vframe_s *vf,
 #ifndef NV21
 	vf->canvas1_config[2] = hw->canvas_config[buffer_index][2];
 #endif
+	vf->codec_vfmt = VFORMAT_MPEG4;
 }
 
 static inline void vmpeg4_save_hw_context(struct vdec_mpeg4_hw_s *hw)

@@ -1905,7 +1905,7 @@ static void set_frame_info(struct vframe_s *vf)
 		vf->right_eye.height = frame_height;
 	}
 #endif
-
+	vf->codec_vfmt = VFORMAT_H264;
 }
 
 #ifdef CONFIG_AMLOGIC_POST_PROCESS_MANAGER

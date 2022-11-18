@@ -431,6 +431,7 @@ static void set_frame_info(struct vframe_s *vf)
 	ar =  min_t(u32, ar, DISP_RATIO_ASPECT_RATIO_MAX);
 
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
+	vf->codec_vfmt = VFORMAT_H264;
 }
 
 static int vh264mvc_vf_states(struct vframe_states *states, void *op_arg)

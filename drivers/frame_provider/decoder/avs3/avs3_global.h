@@ -86,7 +86,7 @@ typedef union param_u {
 		unsigned short pic_header_beta_offset;
 		unsigned short pic_header_chroma_quant_param_delta_cb;
 		unsigned short pic_header_chroma_quant_param_delta_cr;
-#ifdef AML
+//HDR10
 		uint16_t video_signal_type;
 		uint16_t color_description;
 		uint16_t display_primaries_x[3];
@@ -97,7 +97,6 @@ typedef union param_u {
 		uint16_t min_display_mastering_luminance;
 		uint16_t max_content_light_level;
 		uint16_t max_picture_average_light_level;
-#endif
 	} p;
 	struct {
 		uint16_t padding[ALF_BEGIN - RPM_BEGIN];
