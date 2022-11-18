@@ -1490,6 +1490,7 @@ static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 		if (ctx->m2m_ctx->out_q_ctx.q.streaming &&
 			ctx->m2m_ctx->cap_q_ctx.q.streaming) {
 			ctx->state = AML_STATE_ACTIVE;
+			vdec_thread_wakeup(ctx->ada_ctx);
 			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_ACTIVE)\n");
