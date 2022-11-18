@@ -49,6 +49,7 @@ enum vdec_trace_type_list {
 	VTRACE_V4L_ES_9,	/* write_secure_end.     */
 	VTRACE_V4L_ES_10,	/* write_error.          */
 	VTRACE_V4L_ES_11,	/* write_again.          */
+	VTRACE_V4L_ES_12,	/* in PTS.	 	 */
 
 	VTRACE_V4L_PIC_0,	/* que.                  */
 	VTRACE_V4L_PIC_1,	/* que_again.            */
@@ -59,6 +60,7 @@ enum vdec_trace_type_list {
 	VTRACE_V4L_PIC_6,	/* submit.               */
 	VTRACE_V4L_PIC_7,	/* deque.                */
 	VTRACE_V4L_PIC_8,	/* deque_again.          */
+	VTRACE_V4L_PIC_9,	/* out PTS.		 */
 
 	VTRACE_V4L_ST_0,	/* state.                */
 	VTRACE_V4L_ST_1,	/* input_buffering.      */
@@ -119,7 +121,7 @@ struct vdec_trace_item {
 	bool	enable;
 	u32	group;
 	int	type;
-	int	value;
+	ulong	value;
 	u8	name[64];
 };
 
@@ -131,7 +133,7 @@ void vdec_trace_init(struct vdec_trace *vtr, int ch, int vdec_id);
 
 void vdec_trace_clean(struct vdec_trace *vtr);
 
-static inline void vdec_tracing(struct vdec_trace *vtr, int type, int val)
+static inline void vdec_tracing(struct vdec_trace *vtr, int type, ulong val)
 {
 	if (vtr->item[type].enable) {
 		meson_atrace(KERNEL_ATRACE_TAG_V4L2,

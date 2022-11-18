@@ -36,6 +36,7 @@ static const struct vdec_trace_map trace_map[] = {
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_ES_9,   "V4L", "ES-write_secure_end" },
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_ES_10,  "V4L", "ES-write_error" },
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_ES_11,  "V4L", "ES-write_again" },
+	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_ES_12,  "V4L", "ES-in_pts" },
 
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_0,  "V4L", "PIC-que" },
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_1,  "V4L", "PIC-que_again" },
@@ -46,6 +47,7 @@ static const struct vdec_trace_map trace_map[] = {
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_6,  "V4L", "PIC-submit" },
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_7,  "V4L", "PIC-deque" },
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_8,  "V4L", "PIC-deque_again" },
+	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_9,  "V4L", "PIC-out_pts" },
 
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_ST_0,   "V4L", "ST-state" },
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_ST_1,   "V4L", "ST-input_buffering" },

@@ -32,6 +32,7 @@
 #include <linux/sched/clock.h>
 #include <linux/highmem.h>
 #include <uapi/linux/sched/types.h>
+#include <uapi/linux/videodev2.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
 
 #include "aml_vcodec_drv.h"
@@ -2394,6 +2395,8 @@ static int vidioc_vdec_qbuf(struct file *file, void *priv,
 			else
 				vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_0, buf->length);
 		}
+
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_12, v4l2_timeval_to_ns(&buf->timestamp));
 	} else {
 		if (ret == -EAGAIN)
 			vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_1, buf->index);
@@ -2463,6 +2466,8 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_8, buf->index);
 		else
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_7, buf->index);
+
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_9, v4l2_timeval_to_ns(&buf->timestamp));
 	}
 
 	return ret;
