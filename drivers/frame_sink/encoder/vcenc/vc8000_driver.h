@@ -260,7 +260,6 @@ enum vcmd_module_type {
     MAX_VCMD_TYPE
 };
 
-#ifdef CONFIG_COMPAT
 struct cmdbuf_mem_parameter {
     u32 cmd_virt_addr; //cmdbuf pool base virtual address
     u32 status_virt_addr;
@@ -275,23 +274,7 @@ struct cmdbuf_mem_parameter {
     u16 status_unit_size;  //one status cmdbuf size in bytes. all status cmdbuf have same size.
     u16 cmd_unit_size;  //one cmdbuf size in bytes. all cmdbuf have same size.
 };
-#else
-struct cmdbuf_mem_parameter {
-    u32 *cmd_virt_addr; //cmdbuf pool base virtual address
-    ptr_t cmd_phy_addr; //cmdbuf pool base physical address, it's for cpu
-    ptr_t cmd_hw_addr;  //cmdbuf pool base hardware address, it's for hardware ip
-    u32 cmd_total_size; //cmdbuf pool total size in bytes.
-    u16 cmd_unit_size;  //one cmdbuf size in bytes. all cmdbuf have same size.
-    u32 *status_virt_addr;
-    ptr_t status_phy_addr; //status cmdbuf pool base physical address, it's for cpu
-    ptr_t status_hw_addr;  //status cmdbuf pool base hardware address, it's for hardware ip
-    u32 status_total_size; //status cmdbuf pool total size in bytes.
-    u16 status_unit_size;  //one status cmdbuf size in bytes. all status cmdbuf have same size.
-    ptr_t
-        base_ddr_addr; //for pcie interface, hw can only access phy_cmdbuf_addr-pcie_base_ddr_addr.
-                       //for other interface, this value should be 0?
-};
-#endif
+
 struct config_parameter {
     u16 module_type;         //input vc8000e=0,cutree=1,vc8000d=2，jpege=3, jpegd=4
     u16 vcmd_core_num;       //output, how many vcmd cores are there with corresponding module_type.

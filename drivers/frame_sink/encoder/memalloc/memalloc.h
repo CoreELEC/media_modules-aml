@@ -84,37 +84,20 @@
  * X means "eXchange": G and S atomically
  * H means "sHift": T and Q atomically
  */
-#ifdef CONFIG_COMPAT
 typedef struct MemallocParams_t{
     unsigned int bus_address;
     unsigned int size;
     unsigned int translation_offset;
     unsigned int mem_type;
 } MemallocParams;
-#else
-typedef struct {
-    unsigned long bus_address;
-    unsigned int size;
-    unsigned long translation_offset;
-    unsigned int mem_type;
-} MemallocParams;
-#endif
 
-#ifdef CONFIG_COMPAT
 #define MEMALLOC_IOCXGETBUFFER _IOWR(MEMALLOC_IOC_MAGIC, 1, struct MemallocParams_t)
 #define MEMALLOC_IOCSFREEBUFFER _IOW(MEMALLOC_IOC_MAGIC, 2, u32)
 #define MEMALLOC_IOCGMEMBASE _IOR(MEMALLOC_IOC_MAGIC, 3, u32)
 
 /* ... more to come */
 #define MEMALLOC_IOCHARDRESET _IO(MEMALLOC_IOC_MAGIC, 15) /* debugging tool */
-#else
-#define MEMALLOC_IOCXGETBUFFER _IOWR(MEMALLOC_IOC_MAGIC, 1, MemallocParams *)
-#define MEMALLOC_IOCSFREEBUFFER _IOW(MEMALLOC_IOC_MAGIC, 2, unsigned long *)
-#define MEMALLOC_IOCGMEMBASE _IOR(MEMALLOC_IOC_MAGIC, 3, unsigned long *)
 
-/* ... more to come */
-#define MEMALLOC_IOCHARDRESET _IO(MEMALLOC_IOC_MAGIC, 15) /* debugging tool */
-#endif
 #define MEMALLOC_IOC_MAXNR 15
 
 #endif /* MEMALLOC_H */
