@@ -132,6 +132,7 @@ to enable DV of frame mode
 #define SUPPORT_10BIT
 #define H265_10B_MMU_DW
 #define H265_10B_MMU
+#define LARGE_INSTRUCTION_SPACE_SUPORT
 
 #ifndef STAT_KTHREAD
 #define STAT_KTHREAD 0x40
@@ -12156,6 +12157,21 @@ force_output:
 				hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
 					"write system instruction, ins_offset = %d, addr = 0x%x\n",
 					hevc->ins_offset, hevc->fr.sys_imem_ptr);
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+				if (hevc->ins_offset > 512) {
+					hevc_print(hevc, 0,
+						"!!!!!Error!!!!!!!!, ins_offset %d is too big (>512)\n", hevc->ins_offset);
+					hevc->ins_offset = 512;
+				} else if (hevc->ins_offset < 256) {
+					hevc->ins_offset = 256;
+					WRITE_BACK_RET(hevc);
+				}
+				memcpy(hevc->fr.sys_imem_ptr_v, (void*)(&hevc->instruction[0]), hevc->ins_offset*4);
+				hevc->ins_offset = 0; //for next slice
+				//copyToDDR_32bits(hevc->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
+				sys_imem_ptr = hevc->fr.sys_imem_ptr + 2 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+				hevc->sys_imem_ptr_v = hevc->fr.sys_imem_ptr_v + 2 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+#else
 				if (hevc->ins_offset > 256) {
 				hevc_print(hevc, 0,
 					"!!!!!Error!!!!!!!!, ins_offset %d is too big (>256)\n", hevc->ins_offset);
@@ -12166,6 +12182,7 @@ force_output:
 				//copyToDDR_32bits(hevc->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
 				sys_imem_ptr = hevc->fr.sys_imem_ptr + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
 				hevc->sys_imem_ptr_v = hevc->fr.sys_imem_ptr_v + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+#endif
 				if (sys_imem_ptr >= hevc->fb_buf_sys_imem.buf_end) {
 					hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
 						"sys_imem_ptr is 0x%x, wrap around\n", sys_imem_ptr);
