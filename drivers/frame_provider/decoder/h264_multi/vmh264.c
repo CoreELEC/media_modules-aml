@@ -3339,17 +3339,19 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 		if (i == 0) {
 			struct vdec_s *pvdec;
-			struct vdec_info vs;
+			struct vdec_info_statistic_s vinfos;
+			struct vdec_info *vs = &vinfos.vstatus;
 
 			pvdec = hw_to_vdec(hw);
-			memset(&vs, 0, sizeof(struct vdec_info));
-			pvdec->dec_status(pvdec, &vs);
-			decoder_do_frame_check(pvdec, vf);
-			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, &vs, vf, frame->hw_decode_time);
+			memset(vs, 0, sizeof(struct vdec_info));
+			pvdec->dec_status(pvdec, vs);
+			vdec_fill_vdec_frame(pvdec, &hw->vframe_qos, vs, vf, frame->hw_decode_time);
 
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
 			"[%s:%d] i_decoded_frame = %d p_decoded_frame = %d b_decoded_frame = %d\n",
-			__func__, __LINE__,vs.i_decoded_frames,vs.p_decoded_frames,vs.b_decoded_frames);
+			__func__, __LINE__, vs->i_decoded_frames, vs->p_decoded_frames, vs->b_decoded_frames);
+
+			decoder_do_frame_check(pvdec, vf);
 		}
 
 		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
