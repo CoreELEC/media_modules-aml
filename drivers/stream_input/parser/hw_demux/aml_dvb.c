@@ -2889,6 +2889,12 @@ static int aml_tsdemux_hwdmx_spin_unlock(unsigned long flags)
 	return 0;
 }
 
+int demux_get_pcr(int demux_device_index, int index, u64 *pcr)
+{
+	tsdemux_get_pcr(demux_device_index, index, pcr);
+	return 0;
+}
+
 module_init(aml_dvb_init);
 module_exit(aml_dvb_exit);
 

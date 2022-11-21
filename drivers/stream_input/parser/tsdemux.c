@@ -1308,7 +1308,7 @@ void tsdemux_set_demux(int dev)
 	}
 }
 
-int demux_get_pcr(int demux_device_index, int index, u64 *pcr)
+int tsdemux_get_pcr(int demux_device_index, int index, u64 *pcr)
 {
 	u64 pcr_tmp;
 
@@ -1338,7 +1338,7 @@ int demux_get_pcr(int demux_device_index, int index, u64 *pcr)
 	*pcr = pcr_tmp;
 	return 0;
 }
-EXPORT_SYMBOL(demux_get_pcr);
+EXPORT_SYMBOL(tsdemux_get_pcr);
 
 u32 tsdemux_pcrscr_get(void)
 {
