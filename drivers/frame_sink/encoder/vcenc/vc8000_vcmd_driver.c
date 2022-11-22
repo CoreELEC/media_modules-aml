@@ -108,6 +108,7 @@
 #include <linux/kthread.h>
 #include <linux/ioport.h>
 #include <linux/dma-buf.h>
+#include <linux/compat.h>
 
 
 //#define VCMD_DEBUG_INTERNAL
