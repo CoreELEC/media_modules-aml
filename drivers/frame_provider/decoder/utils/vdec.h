@@ -478,6 +478,9 @@ struct vdec_s {
 #ifdef VDEC_DEBUG_SUPPORT
 	u32 ready_to_run_count[VDEC_MAX];
 #endif
+	char frame_mode_size[32];
+	char stream_rp[32];
+
 };
 
 #define CODEC_MODE(a, b, c, d)\

@@ -1912,6 +1912,7 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 			size = 0;
 		}
 		ATRACE_COUNTER(vdec->stream_buffer_level, size);
+		ATRACE_COUNTER(vdec->stream_rp, rp);
 		return size;
 	}
 }
@@ -2128,9 +2129,10 @@ static void vdec_borrow_input_context(struct vdec_s *vdec)
 
 void vdec_vframe_dirty(struct vdec_s *vdec, struct vframe_chunk_s *chunk)
 {
-	if (chunk)
+	if (chunk) {
 		chunk->flag |= VFRAME_CHUNK_FLAG_CONSUMED;
-
+		ATRACE_COUNTER(vdec->frame_mode_size, chunk->size);
+	}
 	if (vdec_stream_based(vdec)) {
 		vdec->input.swap_needed = true;
 
@@ -2229,6 +2231,7 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			/* pr_info("master->input.last_swap_slave = %d\n",
 				master->input.last_swap_slave); */
 		}
+
 	}
 }
 EXPORT_SYMBOL(vdec_save_input_context);
@@ -2662,6 +2665,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	snprintf(vdec->stream_buffer_level, sizeof(vdec->stream_buffer_level),
 		 "0.stream_buffer_level-%d", vdec->id);
 
+	snprintf(vdec->frame_mode_size, sizeof(vdec->frame_mode_size),
+		 "0.frame_mode_size-%d", vdec->id);
+
+	snprintf(vdec->stream_rp, sizeof(vdec->stream_rp),
+		 "0.stream_rp-%d", vdec->id);
 	/*
 	 *todo: VFM patch control should be configurable,
 	 * for now all stream based input uses default VFM path.
