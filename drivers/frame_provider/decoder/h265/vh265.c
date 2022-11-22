@@ -13144,7 +13144,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				level = wp - rp;
 
 			if (level < pre_decode_buf_level)
-				return 0;
+				return PRE_LEVEL_NOT_ENOUGH;
 	}
 
 #ifdef AGAIN_HAS_THRESHOLD

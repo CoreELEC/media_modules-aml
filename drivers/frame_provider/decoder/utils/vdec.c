@@ -3823,6 +3823,9 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 #endif
 			tmp_mask = 0;
 			core->buff_flag &= ~CORE_MASK_HEVC;
+		} else if (tmp_mask == PRE_LEVEL_NOT_ENOUGH) {
+			tmp_mask = 0;
+			vdec->need_more_data |= VDEC_NEED_MORE_DATA;
 		}
 		ready_mask |= tmp_mask & mask;
 	}

@@ -1286,7 +1286,7 @@ static unsigned long run_ready(struct vdec_s *vdec,
 			level = wp - rp;
 
 		if (level < pre_decode_buf_level)
-			return 0;
+			return PRE_LEVEL_NOT_ENOUGH;
 	}
 
 	if (hw->v4l_params_parsed) {

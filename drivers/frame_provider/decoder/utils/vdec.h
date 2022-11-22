@@ -179,6 +179,7 @@ enum e_trace_work_status {
 #define mask_front_core(mask) ((mask & ~CORE_MASK_HEVC_BACK) || (mask == 0))
 #define mask_back_core(mask) ((mask & CORE_MASK_HEVC_BACK))
 
+#define PRE_LEVEL_NOT_ENOUGH		0xff
 
 #define META_DATA_SIZE	(256)
 #define HDR10P_BUF_SIZE	(128)
