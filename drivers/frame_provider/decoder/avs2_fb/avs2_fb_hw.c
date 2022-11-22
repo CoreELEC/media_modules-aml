@@ -282,6 +282,8 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 		return 0;
 
 	if (avs2_dec->img.type == P_IMG) {
+		int valid_ref_cnt;
+		valid_ref_cnt = 0;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"config_mc_buffer for P_IMG, img type %d\n", avs2_dec->img.type);
 		//refer to prepare_RefInfo()
@@ -289,10 +291,15 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 		WRITE_BACK_8(avs2_dec, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 		pic = avs2_dec->fref[i];
+		if (pic->refered_by_others != 1)
+			continue;
+		valid_ref_cnt++;
 		///WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 		///    (pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
 		WRITE_BACK_32(avs2_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 			(pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
+		if (pic->error_mark)
+			cur_pic->error_mark = 1;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 #if (defined NEW_FRONT_BACK_CODE) && (!defined FB_BUF_DEBUG_NO_PIPLINE)
@@ -307,8 +314,12 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 #endif
 
 		}
+		if (valid_ref_cnt != avs2_dec->img.num_of_references)
+			cur_pic->error_mark = 1;
 	}
 	else if (avs2_dec->img.type == F_IMG) {
+		int valid_ref_cnt;
+		valid_ref_cnt = 0;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"config_mc_buffer for F_IMG, img type %d\n", avs2_dec->img.type);
 		//refer to prepare_RefInfo()
@@ -316,10 +327,15 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 		WRITE_BACK_8(avs2_dec, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 		pic = avs2_dec->fref[i];
+		if (pic->refered_by_others != 1)
+			continue;
+		valid_ref_cnt++;
 		///WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 		///    (pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
 		WRITE_BACK_32(avs2_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 			(pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
+		if (pic->error_mark)
+			cur_pic->error_mark = 1;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 #if (defined NEW_FRONT_BACK_CODE) && (!defined FB_BUF_DEBUG_NO_PIPLINE)
@@ -333,6 +349,8 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 		}
 #endif
 		}
+		if (valid_ref_cnt != avs2_dec->img.num_of_references)
+			cur_pic->error_mark = 1;
 		///WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (16 << 8) | (0<<1) | 1);
 		WRITE_BACK_16(avs2_dec, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, 0, (16 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
@@ -356,7 +374,8 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 		///    (pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
 		WRITE_BACK_32(avs2_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 		(pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
-
+		if (pic->error_mark)
+			cur_pic->error_mark = 1;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", 1, pic->mc_canvas_u_v, pic->mc_canvas_y);
 #if (defined NEW_FRONT_BACK_CODE) && (!defined FB_BUF_DEBUG_NO_PIPLINE)
@@ -375,7 +394,8 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 		WRITE_BACK_16(avs2_dec, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, 0, (16 << 8) | (0<<1) | 1);
 		///WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, (pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
 		WRITE_BACK_32(avs2_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR, (pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
-
+		if (pic->error_mark)
+			cur_pic->error_mark = 1;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", 0, pic->mc_canvas_u_v, pic->mc_canvas_y);
 #if (defined NEW_FRONT_BACK_CODE) && (!defined FB_BUF_DEBUG_NO_PIPLINE)

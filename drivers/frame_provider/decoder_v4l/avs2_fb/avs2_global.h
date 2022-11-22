@@ -1754,6 +1754,7 @@ struct avs2_decoder_fb {
 	//uint32_t	instruction[256];
 	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
 	uint32_t  ins_offset;
+	void *sys_imem_ptr_v;
 };
 
 extern void write_frame(struct avs2_decoder *avs2_dec, int32_t pos);

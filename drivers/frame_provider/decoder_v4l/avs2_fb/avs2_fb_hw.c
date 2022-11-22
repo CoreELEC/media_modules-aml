@@ -266,15 +266,21 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 		return 0;
 
 	if (avs2_dec->img.type == P_IMG) {
+		int valid_ref_cnt;
+		valid_ref_cnt = 0;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"config_mc_buffer for P_IMG, img type %d\n", avs2_dec->img.type);
 
 		WRITE_BACK_8(avs2_dec, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
-
+			if (pic->refered_by_others != 1)
+				continue;
+			valid_ref_cnt++;
 			WRITE_BACK_32(avs2_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 				(pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
+			if (pic->error_mark)
+				cur_pic->error_mark = 1;
 			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 				"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 #if (defined NEW_FRONT_BACK_CODE) && (!defined FB_BUF_DEBUG_NO_PIPLINE)
@@ -288,16 +294,24 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 			}
 #endif
 		}
+		if (valid_ref_cnt != avs2_dec->img.num_of_references)
+			cur_pic->error_mark = 1;
 	} else if (avs2_dec->img.type == F_IMG) {
+		int valid_ref_cnt;
+		valid_ref_cnt = 0;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"config_mc_buffer for F_IMG, img type %d\n", avs2_dec->img.type);
 
 		WRITE_BACK_8(avs2_dec, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
-
+			if (pic->refered_by_others != 1)
+				continue;
+			valid_ref_cnt++;
 			WRITE_BACK_32(avs2_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 				(pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
+			if (pic->error_mark)
+				cur_pic->error_mark = 1;
 			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"	refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 #if (defined NEW_FRONT_BACK_CODE) && (!defined FB_BUF_DEBUG_NO_PIPLINE)
@@ -311,6 +325,8 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 			}
 #endif
 		}
+		if (valid_ref_cnt != avs2_dec->img.num_of_references)
+			cur_pic->error_mark = 1;
 		WRITE_BACK_16(avs2_dec, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, 0, (16 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
@@ -328,7 +344,8 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 
 		WRITE_BACK_32(avs2_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 			(pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
-
+		if (pic->error_mark)
+			cur_pic->error_mark = 1;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", 1, pic->mc_canvas_u_v, pic->mc_canvas_y);
 #if (defined NEW_FRONT_BACK_CODE) && (!defined FB_BUF_DEBUG_NO_PIPLINE)
@@ -344,7 +361,8 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 		pic = avs2_dec->fref[0];
 		WRITE_BACK_16(avs2_dec, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, 0, (16 << 8) | (0<<1) | 1);
 		WRITE_BACK_32(avs2_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR, (pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
-
+		if (pic->error_mark)
+			cur_pic->error_mark = 1;
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", 0, pic->mc_canvas_u_v, pic->mc_canvas_y);
 #if (defined NEW_FRONT_BACK_CODE) && (!defined FB_BUF_DEBUG_NO_PIPLINE)
@@ -1527,18 +1545,21 @@ static int32_t avs2_hw_init(struct AVS2Decoder_s *dec, uint8_t front_flag, uint8
 void avs2_store_pbi_fb(struct avs2_decoder *dec, struct avs2_decoder_fb *dec_fb, u32 res_ch_flag)
 {
 	int i = 0;
-
 	if (res_ch_flag) {
 		dec_fb->wait_working_buf = dec->wait_working_buf;
 		dec_fb->fb_wr_pos = dec->fb_wr_pos;
 		dec_fb->fb_rd_pos = dec->fb_rd_pos;
+		dec_fb->frontend_decoded_count = dec->frontend_decoded_count;
+		dec_fb->backend_decoded_count = dec->backend_decoded_count;
+		dec_fb->ins_offset = dec->ins_offset;
+		for (i = 0; i < 256 * 4; i++)
+			dec_fb->instruction[i] = dec->instruction[i];
+		for (i = 0; i < MAX_FB_IFBUF_NUM; i++) {
+			dec_fb->next_bk[i] = dec->next_bk[i];
+			dec_fb->next_be_decode_pic[i] = dec->next_be_decode_pic[i];
+		}
 	}
 	dec_fb->front_pause_flag = dec->front_pause_flag;
-	dec_fb->frontend_decoded_count = dec->frontend_decoded_count;
-	dec_fb->backend_decoded_count = dec->backend_decoded_count;
-	for (i = 0; i < 256 * 4; i++)
-		dec_fb->instruction[i] = dec->instruction[i];
-	dec_fb->ins_offset = dec->ins_offset;
 	dec_fb->fb_buf_mmu0 = dec->fb_buf_mmu0;
 	dec_fb->fb_buf_mmu1 = dec->fb_buf_mmu1;
 	dec_fb->fb_buf_mpred_imp0 = dec->fb_buf_mpred_imp0;
@@ -1552,27 +1573,27 @@ void avs2_store_pbi_fb(struct avs2_decoder *dec, struct avs2_decoder_fb *dec_fb,
 	dec_fb->fb_buf_parser_sao1 = dec->fb_buf_parser_sao1;
 	dec_fb->fr = dec->fr;
 	dec_fb->bk = dec->bk;
-	for (i = 0; i < MAX_FB_IFBUF_NUM; i++) {
-		dec_fb->next_bk[i] = dec->next_bk[i];
-		dec_fb->next_be_decode_pic[i] = dec->next_be_decode_pic[i];
-	}
+	dec_fb->sys_imem_ptr_v = dec->sys_imem_ptr_v;
 }
 
 void avs2_restore_pbi_fb(struct avs2_decoder *dec, struct avs2_decoder_fb *dec_fb, u32 res_ch_flag)
 {
 	int i = 0;
-
 	if (res_ch_flag) {
 		dec->wait_working_buf = dec_fb->wait_working_buf;
 		dec->fb_wr_pos = dec_fb->fb_wr_pos;
 		dec->fb_rd_pos = dec_fb->fb_rd_pos;
+		dec->frontend_decoded_count = dec_fb->frontend_decoded_count;
+		dec->backend_decoded_count = dec_fb->backend_decoded_count;
+		dec->ins_offset = dec_fb->ins_offset;
+		for (i = 0; i < 256 * 4; i++)
+			dec->instruction[i] = dec_fb->instruction[i];
+		for (i = 0; i < MAX_FB_IFBUF_NUM; i++) {
+			dec->next_bk[i] = dec_fb->next_bk[i];
+			dec->next_be_decode_pic[i] = dec_fb->next_be_decode_pic[i];
+		}
 	}
 	dec->front_pause_flag = dec_fb->front_pause_flag;
-	dec->frontend_decoded_count = dec_fb->frontend_decoded_count;
-	dec->backend_decoded_count = dec_fb->backend_decoded_count;
-	for (i = 0; i < 256 * 4; i++)
-		dec->instruction[i] = dec_fb->instruction[i];
-	dec->ins_offset = dec_fb->ins_offset;
 	dec->fb_buf_mmu0 = dec_fb->fb_buf_mmu0;
 	dec->fb_buf_mmu1 = dec_fb->fb_buf_mmu1;
 	dec->fb_buf_mpred_imp0 = dec_fb->fb_buf_mpred_imp0;
@@ -1586,10 +1607,7 @@ void avs2_restore_pbi_fb(struct avs2_decoder *dec, struct avs2_decoder_fb *dec_f
 	dec->fb_buf_parser_sao1 = dec_fb->fb_buf_parser_sao1;
 	dec->fr = dec_fb->fr;
 	dec->bk = dec_fb->bk;
-	for (i = 0; i < MAX_FB_IFBUF_NUM; i++) {
-		dec->next_bk[i] = dec_fb->next_bk[i];
-		dec->next_be_decode_pic[i] = dec_fb->next_be_decode_pic[i];
-	}
+	dec->sys_imem_ptr_v = dec_fb->sys_imem_ptr_v;
 }
 
 static void release_free_mmu_buffers(struct AVS2Decoder_s *dec)
