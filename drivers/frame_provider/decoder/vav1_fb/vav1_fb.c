@@ -6417,13 +6417,15 @@ static struct vframe_s *vav1_vf_peek(void *op_arg)
 	if (hw->front_back_mode) {
 		struct vframe_s *vf_tmp;
 		if (kfifo_peek(&hw->display_q, &vf_tmp) && vf_tmp) {
-				struct PIC_BUFFER_CONFIG_s *pic =
-					&hw->common.buffer_pool->frame_bufs[vf_tmp->index & 0xff].buf;
-				if (!pic->back_done_mark) {
-					//pr_info("%s %d pic %px\n", __func__, __LINE__, pic);
-					return NULL;
+				u32 index = vf_tmp->index & 0xff;
+				struct PIC_BUFFER_CONFIG_s *pic;
+
+				if (index < FRAME_BUFFERS) {
+					pic = &hw->common.buffer_pool->frame_bufs[index].buf;
+					if (!pic->back_done_mark) {
+						return NULL;
+					}
 				}
-				//pr_info("%s %d, backdone pic %px", __func__, __LINE__, pic);
 		} else
 			return NULL;
 	}
@@ -6461,10 +6463,14 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 #ifdef NEW_FB_CODE
 	if (hw->front_back_mode) {
 		if (kfifo_peek(&hw->display_q, &vf) && vf) {
-			struct PIC_BUFFER_CONFIG_s *pic =
-				&hw->common.buffer_pool->frame_bufs[vf->index & 0xff].buf;
-			if (!pic->back_done_mark)
-				return NULL;
+			struct PIC_BUFFER_CONFIG_s *pic;
+			u32 index = vf->index & 0xff;
+
+			if (index < FRAME_BUFFERS) {
+				pic = &hw->common.buffer_pool->frame_bufs[index].buf;
+				if (!pic->back_done_mark)
+					return NULL;
+			}
 		} else
 			return NULL;
 	}
@@ -11163,8 +11169,6 @@ static void av1_work(struct work_struct *work)
 			__func__);
 		hw->eos = 1;
 		av1_postproc(hw);
-
-		notify_v4l_eos(hw_to_vdec(hw));
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {

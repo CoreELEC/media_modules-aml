@@ -10297,9 +10297,10 @@ static struct vframe_s *vvp9_vf_peek(void *op_arg)
 				struct BufferPool_s *pool = cm->buffer_pool;
 
 				index = vf_tmp->index & 0xff;
-				//pyx todo  modify  need check
-				if (!pool->frame_bufs[index].buf.back_done_mark)
-					return NULL;
+				if (index < FRAME_BUFFERS) {
+					if (!pool->frame_bufs[index].buf.back_done_mark)
+						return NULL;
+				}
 			} else
 				return NULL;
 		}
@@ -10337,9 +10338,10 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 				struct BufferPool_s *pool = cm->buffer_pool;
 
 				index = vf->index & 0xff;
-				//pyx todo  modify  need check
-				if (!pool->frame_bufs[index].buf.back_done_mark)
-					return NULL;
+				if (index < FRAME_BUFFERS) {
+					if (!pool->frame_bufs[index].buf.back_done_mark)
+						return NULL;
+				}
 			} else
 				return NULL;
 		}
@@ -14340,8 +14342,6 @@ static void vp9_work(struct work_struct *work)
 			__func__);
 		pbi->eos = 1;
 		vp9_bufmgr_postproc(pbi);
-
-		notify_v4l_eos(hw_to_vdec(pbi));
 
 		vdec_vframe_dirty(hw_to_vdec(pbi), pbi->chunk);
 	} else if (pbi->dec_result == DEC_RESULT_FORCE_EXIT) {

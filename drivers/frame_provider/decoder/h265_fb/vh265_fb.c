@@ -9080,9 +9080,14 @@ static struct vframe_s *vh265_vf_peek(void *op_arg)
 	if (hevc->front_back_mode) {
 		struct vframe_s *vf_tmp;
 		if (kfifo_peek(&hevc->display_q, &vf_tmp) && vf_tmp) {
-				struct PIC_s *pic = hevc->m_PIC[vf_tmp->index & 0xff];
-				if (!pic->back_done_mark)
-					return NULL;
+				u32 index = vf_tmp->index & 0xff;
+				struct PIC_s *pic;
+
+				if (index < MAX_REF_PIC_NUM) {
+					pic = hevc->m_PIC[index];
+					if (pic && !pic->back_done_mark)
+						return NULL;
+				}
 		} else
 			return NULL;
 	}
@@ -9118,9 +9123,14 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 #ifdef NEW_FB_CODE
 	if (hevc->front_back_mode) {
 		if (kfifo_peek(&hevc->display_q, &vf) && vf) {
-				struct PIC_s *pic = hevc->m_PIC[vf->index & 0xff];
-				if (!pic->back_done_mark)
-					return NULL;
+				u32 index = vf->index & 0xff;
+				struct PIC_s *pic;
+
+				if (index < MAX_REF_PIC_NUM) {
+					pic = hevc->m_PIC[index];
+					if (pic && !pic->back_done_mark)
+						return NULL;
+				}
 		} else
 			return NULL;
 	}
@@ -10391,33 +10401,6 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 		return -1;
 
 	display_frame_count[hevc->index]++;
-	return 0;
-}
-
-static int notify_v4l_eos(struct vdec_s *vdec)
-{
-	struct hevc_state_s *hw = (struct hevc_state_s *)vdec->private;
-	struct vframe_s *vf = &hw->vframe_dummy;
-	struct vdec_v4l2_buffer *fb = NULL;
-	int index = INVALID_IDX;
-
-	if (hw->eos) {
-		vf->type		|= VIDTYPE_V4L_EOS;
-		vf->timestamp		= ULONG_MAX;
-		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
-		vf->v4l_mem_handle	= (index == INVALID_IDX) ? (ulong)fb :
-					hw->m_BUF[index].v4l_ref_buf_addr;
-		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-
-		vdec_vframe_ready(vdec, vf);
-		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-
-		vf_notify_receiver(vdec->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
-
-		pr_info("[%d] H265 EOS notify.\n", vdec->id);
-	}
-
 	return 0;
 }
 
@@ -14377,8 +14360,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			"%s: end of stream, last dec poc %d => 0x%pf\n",
 			__func__, hevc->curr_POC, pic);
 		flush_output(hevc, pic);
-		/* dummy vf with eos flag to backend */
-		notify_v4l_eos(hw_to_vdec(hevc));
+
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		hevc->shift_byte_count_lo
 			= READ_VREG(HEVC_SHIFT_BYTE_COUNT);
