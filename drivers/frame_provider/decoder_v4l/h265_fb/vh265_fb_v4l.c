@@ -2382,6 +2382,7 @@ struct hevc_state_s {
 	/**/
 
 	/*for WRITE_BACK_RET*/
+	uint32_t sys_imem_ptr;
 	void *sys_imem_ptr_v;
 	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
 	uint32_t  ins_offset;
@@ -12193,12 +12194,16 @@ force_output:
 #ifdef NEW_FRONT_BACK_CODE
 			if (hevc->front_back_mode == 1 ||
 				hevc->front_back_mode == 3) {
-				uint32_t sys_imem_ptr;
 
 				WRITE_BACK_RET(hevc);
 				hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
 					"write system instruction, ins_offset = %d, addr = 0x%x\n",
 					hevc->ins_offset, hevc->fr.sys_imem_ptr);
+
+				if (hevc->new_pic) {
+					hevc->sys_imem_ptr = hevc->fr.sys_imem_ptr;
+					hevc->sys_imem_ptr_v = hevc->fr.sys_imem_ptr_v;
+				}
 #ifdef LARGE_INSTRUCTION_SPACE_SUPORT
 				if (hevc->ins_offset > 512) {
 					hevc_print(hevc, 0,
@@ -12208,34 +12213,35 @@ force_output:
 					hevc->ins_offset = 256;
 					WRITE_BACK_RET(hevc);
 				}
-				memcpy(hevc->fr.sys_imem_ptr_v, (void*)(&hevc->instruction[0]), hevc->ins_offset*4);
+				memcpy(hevc->sys_imem_ptr_v, (void*)(&hevc->instruction[0]), hevc->ins_offset*4);
 				hevc->ins_offset = 0; //for next slice
 				//copyToDDR_32bits(hevc->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
-				sys_imem_ptr = hevc->fr.sys_imem_ptr + 2 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
-				hevc->sys_imem_ptr_v = hevc->fr.sys_imem_ptr_v + 2 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+				hevc->sys_imem_ptr += 2 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+				hevc->sys_imem_ptr_v += 2 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
 #else
 				if (hevc->ins_offset > 256) {
 					hevc_print(hevc, 0,
 						"!!!!!Error!!!!!!!!, ins_offset %d is too big (>256)\n", hevc->ins_offset);
 					hevc->ins_offset = 256;
 				}
-				memcpy(hevc->fr.sys_imem_ptr_v, (void*)(&hevc->instruction[0]), hevc->ins_offset*4);
+				memcpy(hevc->sys_imem_ptr_v, (void*)(&hevc->instruction[0]), hevc->ins_offset*4);
 				hevc->ins_offset = 0; //for next slice
 				//copyToDDR_32bits(hevc->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
-				sys_imem_ptr = hevc->fr.sys_imem_ptr + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
-				hevc->sys_imem_ptr_v = hevc->fr.sys_imem_ptr_v + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+				hevc->sys_imem_ptr += FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+				hevc->sys_imem_ptr_v += FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
 #endif
-				if (sys_imem_ptr >= hevc->fb_buf_sys_imem.buf_end) {
+				if (hevc->sys_imem_ptr >= hevc->fb_buf_sys_imem.buf_end) {
 					hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
-						"sys_imem_ptr is 0x%x, wrap around\n", sys_imem_ptr);
-					sys_imem_ptr = hevc->fb_buf_sys_imem.buf_start;
+						"sys_imem_ptr is 0x%x, wrap around\n", hevc->sys_imem_ptr);
+					hevc->sys_imem_ptr = hevc->fb_buf_sys_imem.buf_start;
 					hevc->sys_imem_ptr_v = hevc->fb_buf_sys_imem_addr;
 				}
+
 				if (hevc->front_back_mode == 1) {
-				WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
-				WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, sys_imem_ptr);
-				//imem_count++;
-				WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
+					WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
+					WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->sys_imem_ptr);
+					//imem_count++;
+					WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
 				}
 			}
 #endif
