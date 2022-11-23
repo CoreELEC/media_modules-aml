@@ -35,6 +35,7 @@ typedef struct ptsnode {
 
 typedef struct psinstance {
 	struct list_head pts_list;
+	struct list_head pts_free_list;
 	s32 mPtsServerInsId;
 	u32 mMaxCount;
 	u32 mLookupThreshold;
@@ -65,6 +66,7 @@ typedef struct psinstance {
 	struct mutex mPtsListLock;
 	u32 mListSize;
 	u32 mLastCheckoutCurOffset;
+	pts_node* all_free_ptn;
 } ptsserver_ins;
 
 
