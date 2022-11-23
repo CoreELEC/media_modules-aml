@@ -11561,7 +11561,7 @@ static void run_front(struct vdec_s *vdec)
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 #ifdef NEW_FB_CODE
 	if (hw->front_back_mode == 1) {
-		if (hw->pbi->frontend_decoded_count && (hw->common.prev_frame > 0)) {
+		if (hw->pbi->frontend_decoded_count && hw->common.prev_frame) {
 			int i;
 			WRITE_VREG(VP9_CONTROL, 0x610000); // set av1 mode
 			for (i = 0; i < 8; i++) {

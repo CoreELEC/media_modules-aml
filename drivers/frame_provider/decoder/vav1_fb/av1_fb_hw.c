@@ -2021,7 +2021,8 @@ static void  config_mcrcc_axi_hw_nearest_ref_fb(struct AV1HW_s * hw
 #else
 		pic_config = av1_get_ref_frame_spec_buf(cm,i);
 #endif
-		ref_orderhint = pic_config->order_hint;
+		if (pic_config)
+			ref_orderhint = pic_config->order_hint;
 		//tmp = curr_orderhint - ref_orderhint;
 		//dist_array[i] =  (tmp < 0) ? -tmp : tmp;
 		dist_array[i] =  mcrcc_get_abs_frame_distance(hw, i, ref_orderhint, curr_orderhint, orderhint_bits);;

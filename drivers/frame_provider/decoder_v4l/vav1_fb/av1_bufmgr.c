@@ -3309,22 +3309,22 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
 	av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
 	av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: new_compressed_data= %d\n", __func__, new_compressed_data);
 	for (j = 0; j < pbi->num_output_frames; j++) {
-	decrease_ref_count(pbi, pbi->output_frames[j], pool);
+		decrease_ref_count(pbi, pbi->output_frames[j], pool);
 	}
 	pbi->num_output_frames = 0;
 	//
 	if (new_compressed_data) {
-	if (assign_cur_frame_new_fb(cm) == NULL) {
-	cm->error.error_code = AOM_CODEC_MEM_ERROR;
-	return -1;
-	}
-	pbi->seen_frame_header = 0;
-	av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "New_compressed_data (%d)\n", new_compressed_data_count++);
-
+		if (assign_cur_frame_new_fb(cm) == NULL) {
+			cm->error.error_code = AOM_CODEC_MEM_ERROR;
+			cm->prev_frame = NULL;
+			return -1;
+		}
+		pbi->seen_frame_header = 0;
+		av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "New_compressed_data (%d)\n", new_compressed_data_count++);
 	}
 
 	frame_decoded =
-	aom_decode_frame_from_obus(pbi, params, obu_type);
+		aom_decode_frame_from_obus(pbi, params, obu_type);
 
 	if (pbi->cur_obu_type == OBU_FRAME_HEADER ||
 		pbi->cur_obu_type == OBU_REDUNDANT_FRAME_HEADER ||
@@ -3338,7 +3338,6 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
 	av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
 
 	return frame_decoded;
-
 }
 
 int av1_get_raw_frame(AV1Decoder *pbi, size_t index, PIC_BUFFER_CONFIG **sd) {
