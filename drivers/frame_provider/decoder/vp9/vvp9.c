@@ -6270,6 +6270,10 @@ static void clear_mpred_hw(struct VP9Decoder_s *pbi)
 	data32 = READ_VREG(HEVC_MPRED_CTRL4);
 	data32 &=  (~(1 << 6));
 	WRITE_VREG(HEVC_MPRED_CTRL4, data32);
+
+	data32 = READ_VREG(HEVC_MPRED_CTRL0);
+	data32 &= (~(3 << 9));
+	WRITE_VREG(HEVC_MPRED_CTRL0, data32);
 }
 
 static void config_mpred_hw(struct VP9Decoder_s *pbi)
