@@ -1100,6 +1100,8 @@ static void fill_frame_info(struct VP9Decoder_s *pbi,
 	struct PIC_BUFFER_CONFIG_s *frame,
 	unsigned int framesize,
 	unsigned int pts);
+static void update_vf_memhandle(struct VP9Decoder_s *pbi,
+	struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic);
 
 static struct PIC_BUFFER_CONFIG_s *get_frame_new_buffer(struct VP9_Common_s *cm)
 {
@@ -10346,6 +10348,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 	if (kfifo_get(&pbi->display_q, &vf)) {
 		struct vframe_s *next_vf = NULL;
 		uint8_t index = vf->index & 0xff;
+		struct PIC_BUFFER_CONFIG_s *pic = &pbi->common.buffer_pool->frame_bufs[index].buf;
 		ATRACE_COUNTER(pbi->trace.disp_q_name, kfifo_len(&pbi->display_q));
 		if (index < pbi->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
@@ -10376,6 +10379,9 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 			vf->vf_ud_param.ud_param.meta_info.vpts = vf->pts;
 			if (vf->pts)
 				vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
+
+			if (pbi->front_back_mode == 1)
+				update_vf_memhandle(pbi, vf, pic);
 
 			if (pbi->front_back_mode == 1)
 				decoder_do_frame_check(hw_to_vdec(pbi), vf);
@@ -10585,6 +10591,7 @@ static void update_vf_memhandle(struct VP9Decoder_s *pbi,
 	struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	vf->mem_handle = NULL;
+	vf->mem_handle_1 = NULL;
 	vf->mem_head_handle = NULL;
 	vf->mem_dw_handle = NULL;
 
@@ -10975,8 +10982,8 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		if (pbi->high_bandwidth_flag) {
 			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
 		}
-
-		update_vf_memhandle(pbi, vf, pic_config);
+		if (pbi->front_back_mode != 1)
+			update_vf_memhandle(pbi, vf, pic_config);
 		if (vdec_stream_based(pvdec) && (!pvdec->vbuf.use_ptsserv)) {
 			vf->pts_us64 = stream_offset;
 			vf->pts = 0;

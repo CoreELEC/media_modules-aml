@@ -425,6 +425,8 @@ static unsigned int get_data_check_sum
 static void dump_pic_list(struct AV1HW_s *hw);
 static int vav1_mmu_map_alloc(struct AV1HW_s *hw);
 static void vav1_mmu_map_free(struct AV1HW_s *hw);
+static void update_vf_memhandle(struct AV1HW_s *hw,
+	struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic);
 static int av1_alloc_mmu(
 		struct AV1HW_s *hw,
 		void *mmu_box,
@@ -6471,6 +6473,8 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 	if (kfifo_get(&hw->display_q, &vf)) {
 		struct vframe_s *next_vf = NULL;
 		uint8_t index = vf->index & 0xff;
+		struct BufferPool_s *pool = hw->common.buffer_pool;
+		struct PIC_BUFFER_CONFIG_s *pic = &pool->frame_bufs[index].buf;
 		ATRACE_COUNTER(hw->trace.disp_q_name, kfifo_len(&hw->display_q));
 		if (index < hw->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
@@ -6478,9 +6482,6 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 			vf->index_disp = hw->vf_get_count;
 			vf->omx_index = hw->vf_get_count;
 			if (debug & AOM_DEBUG_VFRAME) {
-				struct BufferPool_s *pool = hw->common.buffer_pool;
-				struct PIC_BUFFER_CONFIG_s *pic =
-					&pool->frame_bufs[index].buf;
 				unsigned long flags;
 				lock_buffer_pool(hw->common.buffer_pool, flags);
 				av1_print(hw, AOM_DEBUG_VFRAME, "%s index 0x%x type 0x%x w/h %d/%d, aux size %d, pts %d, %lld, ts: %llu\n",
@@ -6512,6 +6513,8 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 				unlock_buffer_pool(hw->common.buffer_pool, flags);
 			}
 #endif
+			if (hw->front_back_mode == 1)
+				update_vf_memhandle(hw, vf, pic);
 			if (hw->front_back_mode == 1)
 				decoder_do_frame_check(hw_to_vdec(hw), vf);
 
@@ -6732,6 +6735,7 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 
 	if (pic->index < 0) {
 		vf->mem_handle = NULL;
+		vf->mem_handle_1 = NULL;
 		vf->mem_head_handle = NULL;
 		vf->mem_dw_handle = NULL;
 	} else if (vf->type & VIDTYPE_SCATTER) {
@@ -7032,7 +7036,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			else
 				vf->duration = 0;
 		}
-		update_vf_memhandle(hw, vf, pic_config);
+		if (hw->front_back_mode != 1)
+			update_vf_memhandle(hw, vf, pic_config);
 
 		vf->src_fmt.play_id = vdec->inst_cnt;
 

@@ -9127,6 +9127,7 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 #endif
 	if (kfifo_get(&hevc->display_q, &vf)) {
 		struct vframe_s *next_vf = NULL;
+		struct PIC_s *pic = hevc->m_PIC[vf->index & 0xff];
 #if 0 //def NEW_FB_CODE
 		struct PIC_s *pic = hevc->m_PIC[vf->index & 0xff];
 
@@ -9164,7 +9165,6 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 		}
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		if (get_dbg_flag(hevc) & H265_DEBUG_DV) {
-			struct PIC_s *pic = hevc->m_PIC[vf->index & 0xff];
 			hevc_print(hevc, 0, "pic 0x%p aux size %d:\n",
 					pic, pic->aux_data_size);
 			if (pic->aux_data_buf && pic->aux_data_size > 0) {
@@ -9200,7 +9200,8 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 			vf->next_vf_pts = next_vf->pts;
 		} else
 			vf->next_vf_pts_valid = false;
-
+		if (hevc->front_back_mode == 1)
+			update_vf_memhandle(hevc, vf, pic);
 		return vf;
 	}
 
@@ -9579,7 +9580,9 @@ static void update_vf_memhandle(struct hevc_state_s *hevc,
 	struct vframe_s *vf, struct PIC_s *pic)
 {
 	vf->mem_handle = NULL;
+	vf->mem_handle_1 = NULL;
 	vf->mem_head_handle = NULL;
+	vf->mem_dw_handle = NULL;
 
 	if (vf->type & VIDTYPE_SCATTER) {
 #ifdef H265_10B_MMU_DW
@@ -9894,7 +9897,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		}
 		vf->compWidth = pic->width;
 		vf->compHeight = pic->height;
-		update_vf_memhandle(hevc, vf, pic);
+		if (hevc->front_back_mode != 1)
+			update_vf_memhandle(hevc, vf, pic);
 		switch (pic->bit_depth_luma) {
 		case 9:
 			vf->bitdepth = BITDEPTH_Y9;

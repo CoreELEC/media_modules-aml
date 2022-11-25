@@ -4910,6 +4910,53 @@ static struct avs2_frame_s *get_pic_by_index(
 	return pic;
 }
 
+static void update_vf_memhandle(struct AVS2Decoder_s *dec,
+	struct vframe_s *vf, struct avs2_frame_s *pic)
+{
+	vf->mem_handle = NULL;
+	vf->mem_handle_1 = NULL;
+	vf->mem_head_handle = NULL;
+	vf->mem_dw_handle = NULL;
+
+#ifdef AVS2_10B_MMU
+	if (vf->type & VIDTYPE_SCATTER) {
+#ifdef AVS2_10B_MMU_DW
+		if (pic->double_write_mode & 0x20) {
+			vf->mem_handle =
+				decoder_mmu_box_get_mem_handle(dec->dw_mmu_box, pic->index);
+			if (dec->front_back_mode)
+				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(dec->dw_mmu_box_1, pic->index);
+			vf->mem_head_handle =
+				decoder_bmmu_box_get_mem_handle(dec->bmmu_box,
+				HEADER_BUFFER_IDX(pic->BUF_index));
+			vf->mem_dw_handle = NULL;
+		} else
+#endif
+		{
+			vf->mem_handle = decoder_mmu_box_get_mem_handle(
+				dec->mmu_box,
+				pic->index);
+			if (dec->front_back_mode)
+				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(dec->mmu_box_1, pic->index);
+			vf->mem_head_handle = decoder_bmmu_box_get_mem_handle(
+				dec->bmmu_box,
+				HEADER_BUFFER_IDX(pic->index));
+		}
+	} else {
+		vf->mem_handle = decoder_bmmu_box_get_mem_handle(
+			dec->bmmu_box,
+			VF_BUFFER_IDX(pic->index));
+		vf->mem_head_handle = decoder_bmmu_box_get_mem_handle(
+			dec->bmmu_box,
+			HEADER_BUFFER_IDX(pic->index));
+	}
+#else
+	vf->mem_handle = decoder_bmmu_box_get_mem_handle(
+		dec->bmmu_box,
+		VF_BUFFER_IDX(pic->index));
+#endif
+}
+
 static struct vframe_s *vavs2_vf_get(void *op_arg)
 {
 	struct vframe_s *vf;
@@ -4979,35 +5026,38 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 					pr_info("pic = %p\n", pic);
 				}
 
-			if (debug & AVS2_DBG_PIC_LEAK)
-				debug |= AVS2_DBG_PIC_LEAK_WAIT;
-			return NULL;
-		}
+				if (debug & AVS2_DBG_PIC_LEAK)
+					debug |= AVS2_DBG_PIC_LEAK_WAIT;
+				return NULL;
+			}
 
-		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
-		vf->vf_ud_param.ud_param.buf_len = 0;
-		vf->vf_ud_param.ud_param.pbuf_addr = NULL;
-		vf->vf_ud_param.ud_param.instance_id = vdec->afd_video_id;
+			vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
+			vf->vf_ud_param.ud_param.buf_len = 0;
+			vf->vf_ud_param.ud_param.pbuf_addr = NULL;
+			vf->vf_ud_param.ud_param.instance_id = vdec->afd_video_id;
 
-		vf->vf_ud_param.ud_param.meta_info.duration = vf->duration;
-		vf->vf_ud_param.ud_param.meta_info.flags = (VFORMAT_AVS2 << 3);
-		vf->vf_ud_param.ud_param.meta_info.vpts = vf->pts;
-		if (vf->pts)
-			vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
+			vf->vf_ud_param.ud_param.meta_info.duration = vf->duration;
+			vf->vf_ud_param.ud_param.meta_info.flags = (VFORMAT_AVS2 << 3);
+			vf->vf_ud_param.ud_param.meta_info.vpts = vf->pts;
+			if (vf->pts)
+				vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
 
-		vf->omx_index = dec->vf_get_count;
-		dec->vf_get_count++;
-		if (pic)
-			avs2_print(dec, AVS2_DBG_BUFMGR,
-				"%s index 0x%x pos %d getcount %d type 0x%x w/h %d/%d, pts %d, %lld\n",
-				__func__, index,
-				pic->imgtr_fwRefDistance_bak,
-				dec->vf_get_count,
-				vf->type,
-				vf->width, vf->height,
-				vf->pts,
-				vf->pts_us64);
-		return vf;
+			vf->omx_index = dec->vf_get_count;
+			dec->vf_get_count++;
+			if (pic) {
+				if (dec->front_back_mode == 1)
+					update_vf_memhandle(dec, vf, pic);
+				avs2_print(dec, AVS2_DBG_BUFMGR,
+					"%s index 0x%x pos %d getcount %d type 0x%x w/h %d/%d, pts %d, %lld\n",
+					__func__, index,
+					pic->imgtr_fwRefDistance_bak,
+					dec->vf_get_count,
+					vf->type,
+					vf->width, vf->height,
+					vf->pts,
+					vf->pts_us64);
+			}
+			return vf;
 		}
 	}
 	return NULL;
@@ -5291,158 +5341,123 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 		avs2_print(dec, AVS2_DBG_OUT_PTS,
 			"avs2 dec out pts: vf->pts=%d, vf->pts_us64 = %lld\n",
 			vf->pts, vf->pts_us64);
-		}
+	}
 
-		vf->index = 0xff00 | pic->index;
+	vf->index = 0xff00 | pic->index;
 
-		if (pic->double_write_mode & 0x10) {
-			/* double write only */
-			vf->compBodyAddr = 0;
-			vf->compHeadAddr = 0;
-		} else {
+	if (pic->double_write_mode & 0x10) {
+		/* double write only */
+		vf->compBodyAddr = 0;
+		vf->compHeadAddr = 0;
+	} else {
 #ifdef AVS2_10B_MMU
-			vf->compBodyAddr = 0;
-			vf->compHeadAddr = pic->header_adr;
+		vf->compBodyAddr = 0;
+		vf->compHeadAddr = pic->header_adr;
 #ifdef AVS2_10B_MMU_DW
-			vf->dwBodyAddr = 0;
-			vf->dwHeadAddr = 0;
-			if (pic->double_write_mode & 0x20) {
-				u32 mode = pic->double_write_mode & 0xf;
-				if (mode == 5 || mode == 3)
-					vf->dwHeadAddr = pic->dw_header_adr;
-				else if ((mode == 1 || mode == 2 || mode == 4)
-					&& ((debug & AVS2_DBG_OUT_PTS) == 0)) {
-					vf->compHeadAddr = pic->dw_header_adr;
-					pr_info("Use dw mmu for display\n");
-				}
+		vf->dwBodyAddr = 0;
+		vf->dwHeadAddr = 0;
+		if (pic->double_write_mode & 0x20) {
+			u32 mode = pic->double_write_mode & 0xf;
+			if (mode == 5 || mode == 3)
+				vf->dwHeadAddr = pic->dw_header_adr;
+			else if ((mode == 1 || mode == 2 || mode == 4)
+				&& ((debug & AVS2_DBG_OUT_PTS) == 0)) {
+				vf->compHeadAddr = pic->dw_header_adr;
+				pr_info("Use dw mmu for display\n");
 			}
+		}
 #endif
 #else
-			vf->compBodyAddr = pic->mc_y_adr; /*body adr*/
-			vf->compHeadAddr = pic->mc_y_adr + pic->comp_body_size;
+		vf->compBodyAddr = pic->mc_y_adr; /*body adr*/
+		vf->compHeadAddr = pic->mc_y_adr + pic->comp_body_size;
 #endif
-		}
-		if (pic->double_write_mode &&
-			((pic->double_write_mode & 0x20) == 0)) {
-			vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
-			vf->type |= VIDTYPE_VIU_NV21;
-			if (pic->double_write_mode == 3) {
-				vf->type |= VIDTYPE_COMPRESS;
-#ifdef AVS2_10B_MMU
-				vf->type |= VIDTYPE_SCATTER;
-#endif
-			}
-#ifdef MULTI_INSTANCE_SUPPORT
-			if (dec->m_ins_flag) {
-					vf->canvas0Addr = vf->canvas1Addr = -1;
-					vf->plane_num = 2;
-					vf->canvas0_config[0] = pic->canvas_config[0];
-					vf->canvas0_config[1] = pic->canvas_config[1];
-
-					vf->canvas1_config[0] = pic->canvas_config[0];
-					vf->canvas1_config[1] = pic->canvas_config[1];
-
-			} else
-#endif
-				vf->canvas0Addr = vf->canvas1Addr =
-					spec2canvas(pic);
-		} else {
-			vf->canvas0Addr = vf->canvas1Addr = 0;
-			vf->type = VIDTYPE_COMPRESS | VIDTYPE_VIU_FIELD;
+	}
+	if (pic->double_write_mode &&
+		((pic->double_write_mode & 0x20) == 0)) {
+		vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
+		vf->type |= VIDTYPE_VIU_NV21;
+		if (pic->double_write_mode == 3) {
+			vf->type |= VIDTYPE_COMPRESS;
 #ifdef AVS2_10B_MMU
 			vf->type |= VIDTYPE_SCATTER;
 #endif
 		}
+#ifdef MULTI_INSTANCE_SUPPORT
+		if (dec->m_ins_flag) {
+				vf->canvas0Addr = vf->canvas1Addr = -1;
+				vf->plane_num = 2;
+				vf->canvas0_config[0] = pic->canvas_config[0];
+				vf->canvas0_config[1] = pic->canvas_config[1];
 
-		switch (pic->bit_depth) {
-		case AVS2_BITS_8:
-			vf->bitdepth = BITDEPTH_Y8 |
-				BITDEPTH_U8 | BITDEPTH_V8;
-			break;
-		case AVS2_BITS_10:
-		case AVS2_BITS_12:
-			vf->bitdepth = BITDEPTH_Y10 |
-				BITDEPTH_U10 | BITDEPTH_V10;
-			break;
-		default:
-			vf->bitdepth = BITDEPTH_Y10 |
-				BITDEPTH_U10 | BITDEPTH_V10;
-			break;
-		}
-		if ((vf->type & VIDTYPE_COMPRESS) == 0)
-			vf->bitdepth = BITDEPTH_Y8 | BITDEPTH_U8 | BITDEPTH_V8;
-		if (pic->bit_depth == AVS2_BITS_8)
-			vf->bitdepth |= BITDEPTH_SAVING_MODE;
+				vf->canvas1_config[0] = pic->canvas_config[0];
+				vf->canvas1_config[1] = pic->canvas_config[1];
 
-		set_frame_info(dec, vf);
-
-		if (dec->high_bandwidth_flag) {
-			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
-		}
-
-		vf->width = pic->pic_w /
-			get_double_write_ratio(pic->double_write_mode);
-		vf->height = pic->pic_h /
-			get_double_write_ratio(pic->double_write_mode);
-		if (force_w_h != 0) {
-			vf->width = (force_w_h >> 16) & 0xffff;
-			vf->height = force_w_h & 0xffff;
-		}
-		if ((pic->double_write_mode & 0x20) &&
-			((pic->double_write_mode & 0xf) == 2 ||
-			(pic->double_write_mode & 0xf) == 4)) {
-			vf->compWidth = pic->pic_w /
-				get_double_write_ratio(pic->double_write_mode & 0xf);
-			vf->compHeight = pic->pic_h /
-				get_double_write_ratio(pic->double_write_mode & 0xf);
-		} else {
-			vf->compWidth = pic->pic_w;
-			vf->compHeight = pic->pic_h;
-		}
-		if (force_fps & 0x100) {
-			u32 rate = force_fps & 0xff;
-			if (rate)
-				vf->duration = 96000/rate;
-			else
-				vf->duration = 0;
-		}
-#ifdef AVS2_10B_MMU
-		if (vf->type & VIDTYPE_SCATTER) {
-#ifdef AVS2_10B_MMU_DW
-		if (pic->double_write_mode & 0x20) {
-			vf->mem_handle =
-				decoder_mmu_box_get_mem_handle(dec->dw_mmu_box, pic->index);
-			if (dec->front_back_mode)
-				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(dec->dw_mmu_box_1, pic->index);
-			vf->mem_head_handle =
-				decoder_bmmu_box_get_mem_handle(dec->bmmu_box,
-				HEADER_BUFFER_IDX(pic->BUF_index));
-			vf->mem_dw_handle = NULL;
 		} else
 #endif
-		{
-			vf->mem_handle = decoder_mmu_box_get_mem_handle(
-				dec->mmu_box,
-				pic->index);
-			if (dec->front_back_mode)
-				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(dec->mmu_box_1, pic->index);
-			vf->mem_head_handle = decoder_bmmu_box_get_mem_handle(
-				dec->bmmu_box,
-				HEADER_BUFFER_IDX(pic->index));
-		}
-		} else {
-			vf->mem_handle = decoder_bmmu_box_get_mem_handle(
-				dec->bmmu_box,
-				VF_BUFFER_IDX(pic->index));
-			vf->mem_head_handle = decoder_bmmu_box_get_mem_handle(
-				dec->bmmu_box,
-				HEADER_BUFFER_IDX(pic->index));
-		}
-#else
-		vf->mem_handle = decoder_bmmu_box_get_mem_handle(
-			dec->bmmu_box,
-			VF_BUFFER_IDX(pic->index));
+			vf->canvas0Addr = vf->canvas1Addr =
+				spec2canvas(pic);
+	} else {
+		vf->canvas0Addr = vf->canvas1Addr = 0;
+		vf->type = VIDTYPE_COMPRESS | VIDTYPE_VIU_FIELD;
+#ifdef AVS2_10B_MMU
+		vf->type |= VIDTYPE_SCATTER;
 #endif
+	}
+
+	switch (pic->bit_depth) {
+	case AVS2_BITS_8:
+		vf->bitdepth = BITDEPTH_Y8 |
+			BITDEPTH_U8 | BITDEPTH_V8;
+		break;
+	case AVS2_BITS_10:
+	case AVS2_BITS_12:
+		vf->bitdepth = BITDEPTH_Y10 |
+			BITDEPTH_U10 | BITDEPTH_V10;
+		break;
+	default:
+		vf->bitdepth = BITDEPTH_Y10 |
+			BITDEPTH_U10 | BITDEPTH_V10;
+		break;
+	}
+	if ((vf->type & VIDTYPE_COMPRESS) == 0)
+		vf->bitdepth = BITDEPTH_Y8 | BITDEPTH_U8 | BITDEPTH_V8;
+	if (pic->bit_depth == AVS2_BITS_8)
+		vf->bitdepth |= BITDEPTH_SAVING_MODE;
+
+	set_frame_info(dec, vf);
+
+	if (dec->high_bandwidth_flag) {
+		vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
+	}
+
+	vf->width = pic->pic_w /
+		get_double_write_ratio(pic->double_write_mode);
+	vf->height = pic->pic_h /
+		get_double_write_ratio(pic->double_write_mode);
+	if (force_w_h != 0) {
+		vf->width = (force_w_h >> 16) & 0xffff;
+		vf->height = force_w_h & 0xffff;
+	}
+	if ((pic->double_write_mode & 0x20) &&
+		((pic->double_write_mode & 0xf) == 2 ||
+		(pic->double_write_mode & 0xf) == 4)) {
+		vf->compWidth = pic->pic_w /
+			get_double_write_ratio(pic->double_write_mode & 0xf);
+		vf->compHeight = pic->pic_h /
+			get_double_write_ratio(pic->double_write_mode & 0xf);
+	} else {
+		vf->compWidth = pic->pic_w;
+		vf->compHeight = pic->pic_h;
+	}
+	if (force_fps & 0x100) {
+		u32 rate = force_fps & 0xff;
+		if (rate)
+			vf->duration = 96000/rate;
+		else
+			vf->duration = 0;
+	}
+	if (dec->front_back_mode != 1)
+		update_vf_memhandle(dec, vf, pic);
 	if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 		vf->pts_us64 = stream_offset;
 		vf->pts = 0;
