@@ -263,6 +263,7 @@ struct vdec_core_s {
 	u32 vdec_resource_status;
 	struct post_task_mgr_s post;
 	u32 inst_cnt;
+	unsigned long run_flag;
 };
 
 static struct vdec_core_s *vdec_core;
@@ -3693,6 +3694,7 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 	struct vdec_input_s *input = &vdec->input;
 	unsigned long input_data_mask = 0;
 	struct vdec_core_s *core = vdec_core;
+	bool check_run_ready = true;
 
 #ifdef VDEC_DEBUG_SUPPORT
 	inc_profi_count(mask, vdec->ready_to_run_count);
@@ -3711,29 +3713,34 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 	/* Wait the matching irq_thread finished */
 	if (((mask == CORE_MASK_VDEC_1) || (mask == CORE_MASK_HEVC)) &&
 		(vdec->irq_cnt > vdec->irq_thread_cnt)) {
+		core->run_flag |= DECODER_ON_PROCESS;
 		goto error_handle;
 	} else if ((mask == CORE_MASK_HEVC_BACK) &&
 		(vdec->back_irq_cnt > vdec->back_irq_thread_cnt)) {
+		core->run_flag |= DECODER_ON_PROCESS;
 		goto error_handle;
 	} else if ((vdec->irq_cnt > vdec->irq_thread_cnt) &&
 		(vdec->back_irq_cnt > vdec->back_irq_thread_cnt)) {
+		core->run_flag |= DECODER_ON_PROCESS;
 		goto error_handle;
 	}
 
 	if (!vdec->run_ready) {
-		usleep_range(1000, 2000);
+		core->run_flag |= VDEC_NOT_READY;
 		goto error_handle;
 	}
 
 	/* when crc32 error, block at error frame */
 	if (vdec->vfc.err_crc_block) {
-		usleep_range(1000, 2000);
+		core->run_flag |= VDEC_NOT_READY;
 		goto error_handle;
 	}
 
 	if ((vdec->slave || vdec->master) &&
-		(vdec->sched == 0))
+		(vdec->sched == 0)) {
+		core->run_flag |= VDEC_NOT_READY;
 		goto error_handle;
+	}
 #ifdef VDEC_DEBUG_SUPPORT
 	inc_profi_count(mask, vdec->check_count);
 #endif
@@ -3751,16 +3758,19 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 
 	if (vdec_core_with_input(mask)) {
 		/* check frame based input underrun */
-		if ((input && input_frame_based(input)
-			&& (!vdec_input_next_chunk(input))) && (!input->eos || (input->eos && ready_mask))) {
+		if ((input  && !input->eos && input_frame_based(input)
+			&& (!vdec_input_next_chunk(input)))) {
 #ifdef VDEC_DEBUG_SUPPORT
-			inc_profi_count(mask, vdec->input_underrun_count);
+			inc_profi_count(mask & (~ready_mask), vdec->input_underrun_count);
 #endif
-			return ready_mask;
+			if (ready_mask)
+				check_run_ready = false;
+			else
+				return false;
 		}
 
 		/* check streaming prepare level threshold if not EOS */
-		if (input && input_stream_based(input)) {
+		if (input && input_stream_based(input) && !input->eos) {
 			u32 rp, wp, level;
 
 			rp = STBUF_READ(&vdec->vbuf, get_rp);
@@ -3770,15 +3780,15 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 			else
 				level = wp - rp;
 
-		if (debug & 0x8)
-			pr_info("%s:%d level 0x%x ready_mask = 0x%lx, mask = 0x%lx\n",
-				__func__, vdec->id, level, ready_mask, mask);
+			if (debug & 0x8)
+				pr_info("%s:%d level 0x%x ready_mask = 0x%lx, mask = 0x%lx\n",
+					__func__, vdec->id, level, ready_mask, mask);
 
 			if ((level < input->prepare_level) &&
 				!vdec_check_rec_num_enough(vdec)) {
 				vdec->need_more_data |= VDEC_NEED_MORE_DATA;
 #ifdef VDEC_DEBUG_SUPPORT
-				inc_profi_count(mask, vdec->input_underrun_count);
+				inc_profi_count(mask & (~ready_mask), vdec->input_underrun_count);
 				if (step_mode & 0x200) {
 					if ((step_mode & 0xff) == vdec->id) {
 						step_mode |= 0xff;
@@ -3786,17 +3796,10 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 					}
 				}
 #endif
-				if (!input->eos || (input->eos && ready_mask)) {
-					if (vdec->vbuf.ext_buf_addr) {
-						if (ready_mask)
-							return ready_mask;
-						else {
-							usleep_range(1000, 2000);
-							goto error_handle;
-						}
-					} else
-						return ready_mask;
-				}
+				if (ready_mask)
+					check_run_ready = false;
+				else
+					return false;
 
 			} else if (level > input->prepare_level)
 				vdec->need_more_data &= ~VDEC_NEED_MORE_DATA;
@@ -3822,7 +3825,7 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	vdec_profile(vdec, VDEC_PROFILE_EVENT_CHK_RUN_READY, mask);
 #endif
-	if (mask & ~CORE_MASK_HEVC_BACK) {
+	if ((mask & ~CORE_MASK_HEVC_BACK) && check_run_ready) {
 		unsigned long tmp_mask = 0;
 		tmp_mask = vdec->run_ready(vdec, mask);
 		if (tmp_mask == 0xffffffff) {
@@ -3858,7 +3861,6 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 	return ready_mask;
 
 error_handle:
-	vdec_up(vdec);
 	return 0;
 }
 
@@ -3934,6 +3936,18 @@ static struct vdec_s * vdec_get_last_vdec(int format)
 		return NULL;
 }
 
+static void check_core_run_flag(void)
+{
+	struct vdec_core_s *core = vdec_core;
+
+	if ((core->run_flag & DECODER_ON_PROCESS) ||
+		(core->run_flag & VDEC_NOT_READY)) {
+		if (debug & 8)
+			pr_info("vdec_up, vdec_core\n");
+		up(&core->sem);
+	}
+}
+
 static void vdec_set_last_vdec(struct vdec_s *vdec, int format)
 {
 	if (format == VDEC_1)
@@ -3976,6 +3990,8 @@ static int vdec_core_thread(void *data)
 		thread_start_timestamp = vdec_get_us_time_system();
 		if (debug & 0x8)
 			pr_info("%s:vdec_thread start\n", __func__);
+
+		vdec_core->run_flag = 0;
 
 		/* clean up previous active vdec's input */
 		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
@@ -4211,8 +4227,13 @@ static int vdec_core_thread(void *data)
 			up(&core->sem);
 		}
 		if (debug & 0x8)
-			pr_info("%s:vdec_thread end, time %lld\n", __func__, vdec_get_us_time_system() - thread_start_timestamp);
+			pr_info("%s:vdec_thread end, run_flag %ld, time %lld\n", __func__, core->run_flag,
+				vdec_get_us_time_system() - thread_start_timestamp);
 		ATRACE_COUNTER("0.vdec_thread_thread_time", vdec_get_us_time_system() - thread_start_timestamp);
+
+		if ((!worker) && (core->run_flag != 0)) {
+			check_core_run_flag();
+		}
 
 		ATRACE_COUNTER("0.vdec_thread", 0);
 	}

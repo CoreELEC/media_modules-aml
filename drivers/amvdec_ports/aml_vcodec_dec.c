@@ -1108,7 +1108,7 @@ static bool fb_buff_query(struct aml_fb_ops *fb, ulong *token)
 	bool ret = false;
 	ulong flags;
 
-	if (!que->streaming)
+	if (!que->start_streaming_called)
 		return false;
 
 	flags = aml_vcodec_ctx_lock(ctx);
@@ -1490,7 +1490,6 @@ static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 		if (ctx->m2m_ctx->out_q_ctx.q.streaming &&
 			ctx->m2m_ctx->cap_q_ctx.q.streaming) {
 			ctx->state = AML_STATE_ACTIVE;
-			vdec_thread_wakeup(ctx->ada_ctx);
 			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_ACTIVE)\n");
@@ -4485,6 +4484,8 @@ static int vb2ops_vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 	v4l2_m2m_job_resume(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
 
 	v4l2_m2m_set_dst_buffered(ctx->fh.m2m_ctx, true);
+
+	vdec_thread_wakeup(ctx->ada_ctx);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d\n", __func__, q->type);
