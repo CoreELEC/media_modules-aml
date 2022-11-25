@@ -211,4 +211,6 @@ enum aml_gpio_select_e {
 extern void dvb_ca_en50221_camready_irq(struct dvb_ca_en50221 *pubca, int slot);
 extern int aml_ci_bus_init(struct platform_device *pdev, struct aml_ci *ci_dev);
 extern int aml_ci_bus_exit(struct aml_ci *ci);
+extern int aml_ci_bus_mod_init(void);
+extern void aml_ci_bus_mod_exit(void);
 #endif				/* __AML_CI_BUS_H_ */

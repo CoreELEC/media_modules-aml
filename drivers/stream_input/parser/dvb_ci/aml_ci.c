@@ -744,6 +744,10 @@ static int aml_ci_probe(struct platform_device *pdev)
 		symbol_put_addr(aml_get_dvb_adapter);
 		return err;
 	}
+	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS) {
+		pr_dbg("*********ci bus aml_ci_bus_mod_init---\n");
+		aml_ci_bus_mod_init();
+	}
 	platform_set_drvdata(pdev, ci_dev);
 	aml_ci_register_class(ci_dev);
 #if 0
@@ -768,10 +772,12 @@ static int aml_ci_remove(struct platform_device *pdev)
 		aml_cimax_exit(ci_dev);
 	else
 #endif
-	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS)
+	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS) {
+		aml_ci_bus_mod_exit();
 		aml_ci_bus_exit(ci_dev);
-	else
+	} else {
 		pr_dbg("---Amlogic CI remove unknown io type---\n");
+	}
 
 	aml_ci_exit(ci_dev);
 	symbol_put_addr(aml_get_dvb_adapter);
@@ -791,7 +797,7 @@ static int aml_ci_suspend(struct platform_device *pdev, pm_message_t state)
 	else
 #endif
 	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS)
-		aml_pcmcia_suspend(&(((struct aml_ci_bus *)(ci_dev->data))->pc));
+		aml_ci_bus_exit(ci_dev);
 	else
 		pr_dbg("---Amlogic CI remove unknown io type---\n");
 
@@ -812,7 +818,7 @@ static int aml_ci_resume(struct platform_device *pdev)
 	else
 #endif
 	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS)
-		aml_pcmcia_resume(&(((struct aml_ci_bus *)(ci_dev->data))->pc));
+		aml_ci_bus_init(pdev, ci_dev);
 	else
 		pr_dbg("---Amlogic CI remove unknown io type---\n");
 	return err;
