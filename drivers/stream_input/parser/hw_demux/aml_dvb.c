@@ -2894,6 +2894,7 @@ int demux_get_pcr(int demux_device_index, int index, u64 *pcr)
 	tsdemux_get_pcr(demux_device_index, index, pcr);
 	return 0;
 }
+EXPORT_SYMBOL(demux_get_pcr);
 
 module_init(aml_dvb_init);
 module_exit(aml_dvb_exit);

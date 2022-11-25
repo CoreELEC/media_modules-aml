@@ -41,6 +41,15 @@
 
 static u32 media_sync_debug_level = 0;
 
+/*
+    bit_0: 1:VideoFreeRunBytime 0:disenable VideoFreeRunBytime
+    bit_1: 1:AudioFreeRun       0:disenable AudioFreeRun
+    bit_4-bit_7:mDebugLevel
+    bit_8-bit_11:DeBugVptsOffset Unit: second
+*/
+static u32 media_sync_user_debug_level = 0;
+
+
 MediaSyncManage vMediaSyncInsList[MAX_INSTANCE_NUM];
 u64 last_system;
 u64 last_pcr;
@@ -113,10 +122,15 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance->mSyncMode != MEDIA_SYNC_PCRMASTER)
 		return 0;
-	if (!amldemux_pcrscr_get)
+	if (!amldemux_pcrscr_get) {
 		amldemux_pcrscr_get = symbol_request(demux_get_pcr);
-	if (!amldemux_pcrscr_get)
+	}
+	if (!amldemux_pcrscr_get) {
+		if (media_sync_debug_level) {
+			pr_info("symbol_request demux_get_pcr failed.\n");
+		}
 		return 0;
+	}
 	ktime_get_ts64(&ts_monotonic);
 	timeus = ts_monotonic.tv_sec * 1000000LL + div_u64(ts_monotonic.tv_nsec , 1000);
 	if (pInstance->mDemuxId < 0)
@@ -2473,7 +2487,7 @@ long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* inf
 long mediasync_ins_get_update_info(mediasync_ins* pInstance, mediasync_update_info* info) {
 
 	info->mStcParmUpdateCount = pInstance->mStcParmUpdateCount;
-	info->debugLevel = media_sync_debug_level;
+	info->debugLevel = media_sync_user_debug_level;
 
 	info->mCurrentSystemtime = get_system_time_us();
 	info->mPauseResumeFlag = pInstance->mPauseResumeFlag;
@@ -2560,4 +2574,5 @@ long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_p
 
 module_param(media_sync_debug_level, uint, 0664);
 MODULE_PARM_DESC(media_sync_debug_level, "\n mediasync debug level\n");
-
+module_param(media_sync_user_debug_level, uint, 0664);
+MODULE_PARM_DESC(media_sync_user_debug_level, "\n mediasync user debug level\n");
