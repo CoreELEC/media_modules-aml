@@ -4085,7 +4085,8 @@ static int vdec_core_thread(void *data)
 				vdec = list_entry(vdec->list.next, struct vdec_s, list);
 				list_for_each_entry_from(vdec, &core->connected_vdec_list, list) {
 					sched_mask = vdec_schedule_mask(vdec, core->sched_mask);
-					sched_mask &= (1 << i);
+					if (!(vdec->core_mask & CORE_MASK_COMBINE))
+						sched_mask &= (1 << i);
 					if (!(sched_mask))
 						continue;
 
@@ -4105,7 +4106,8 @@ static int vdec_core_thread(void *data)
 				/* search from beginning */
 				list_for_each_entry(vdec, &core->connected_vdec_list, list) {
 					sched_mask = vdec_schedule_mask(vdec, core->sched_mask);
-					sched_mask &= (1 << i);
+					if (!(vdec->core_mask & CORE_MASK_COMBINE))
+						sched_mask &= (1 << i);
 
 					if (vdec == vdec_get_last_vdec(i)) {
 						if (!sched_mask) {
