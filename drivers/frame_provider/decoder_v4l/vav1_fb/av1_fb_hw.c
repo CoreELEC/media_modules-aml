@@ -217,8 +217,8 @@ static void copy_loopbufs_ptr(buff_ptr_t* trg, buff_ptr_t* src)
 #define IFBUF_LCU_INFO_DATA1_BLKSIZE    0x400
 #define IFBUF_MPRED_IMP0_BLKSIZE        0x4000
 #define IFBUF_MPRED_IMP1_BLKSIZE        0x4000
-#define IFBUF_CU_INFO_DATA0_BLKSIZE     0x6000 //0xc000
-#define IFBUF_CU_INFO_DATA1_BLKSIZE     0x6000 //0xc000
+#define IFBUF_CU_INFO_DATA0_BLKSIZE     0xe000 //0xc000
+#define IFBUF_CU_INFO_DATA1_BLKSIZE     0xe000 //0xc000
 #define IFBUF_GMWM_DATA_BLKSIZE         0x800 // just once per frame
 #define IFBUF_LRF_DATA_BLKSIZE          0x400
 #define IFBUF_TLDAT_DATA0_BLKSIZE       0x5000
