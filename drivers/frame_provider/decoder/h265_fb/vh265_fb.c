@@ -2544,7 +2544,7 @@ static int front_decpic_done_update(struct hevc_state_s *hevc, uint8_t reset_fla
 		read_bufstate_front(hevc);
 		print_loopbufs_ptr(hevc, "fr", &hevc->fr);
 
-		if (hevc->cur_pic && hevc->cur_pic->error_mark)
+		if (hevc->cur_pic->error_mark || hevc->empty_flag)
 			fb_hw_status_clear(hevc, 1);
 		else {
 			WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
@@ -11226,9 +11226,6 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				hevc->empty_flag = 1;
 				/*suffix sei or dv meta*/
 				set_aux_data(hevc, hevc->cur_pic, 1, 0);
-				if (hevc->front_back_mode == 1) {
-					fb_hw_status_clear(hevc, 1);
-				}
 				goto pic_done;
 			} else {
 				if (
@@ -11270,9 +11267,6 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				hevc->empty_flag = 1;
 				/*suffix sei or dv meta*/
 				set_aux_data(hevc, hevc->cur_pic, 1, 0);
-				if (hevc->front_back_mode == 1) {
-					fb_hw_status_clear(hevc, 1);
-				}
 				goto pic_done;
 			} else {
 				hevc->dec_result = DEC_RESULT_AGAIN;
