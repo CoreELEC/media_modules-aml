@@ -10151,6 +10151,9 @@ result_done:
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(VLD_MEM_VIFIFO_WP),
 			READ_VREG(VLD_MEM_VIFIFO_RP));
+		amvdec_stop();
+		if (hw->mmu_enable)
+			amhevc_stop();
 		mutex_lock(&hw->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
