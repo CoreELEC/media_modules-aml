@@ -301,6 +301,7 @@ struct aml_vdec_cfg_infos {
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
 	/*
+	 * bit 17	: force di permission.
 	 * bit 16	: force progressive output flag.
 	 * bit 15	: enable nr.
 	 * bit 14	: enable di local buff.
@@ -778,6 +779,7 @@ struct aml_vcodec_ctx {
 	bool				ge2d_is_need;
 
 	bool 				second_field_pts_mode;
+	bool				force_di_permission;
 	struct aux_info			aux_infos;
 	u32				capture_memory_mode;
 	u32				height_aspect_ratio;

@@ -788,6 +788,10 @@ int bypass_progressive = 1;
 EXPORT_SYMBOL(bypass_progressive);
 module_param(bypass_progressive, int, 0644);
 
+int force_di_permission;
+EXPORT_SYMBOL(force_di_permission);
+module_param(force_di_permission, int, 0644);
+
 bool support_mjpeg;
 EXPORT_SYMBOL(support_mjpeg);
 module_param(support_mjpeg, bool, 0644);
