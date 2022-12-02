@@ -1152,7 +1152,6 @@ int aml_ci_bus_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 	}
 	return 0;
 fail1:
-	kfree(ci_bus_dev);
 	ci_bus_dev = NULL;
 	return 0;
 }
