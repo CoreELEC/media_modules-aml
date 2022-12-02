@@ -6530,6 +6530,28 @@ static int get_display_pic_num(struct hevc_state_s *hevc)
 	return num;
 }
 
+/* clear no pair pic for interlace streams after flush */
+static void interlace_clear_no_pair_pic(struct hevc_state_s *hevc)
+{
+	int i;
+	struct PIC_s *pic;
+
+	if (!hevc->interlace_flag)
+		return;
+
+	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+		pic = hevc->m_PIC[i];
+		if (pic == NULL || pic->index == -1)
+			continue;
+		if (pic->vf_ref == 1) {
+			pic->vf_ref = 0;
+			pic->output_ready = 0;
+			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
+				"%s, pic decode index %d\n", __func__, pic->decode_idx);
+		}
+	}
+}
+
 static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
 	struct PIC_s *pic_display;
@@ -6605,6 +6627,8 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 		}
 	} while (pic_display);
 	clear_referenced_flag(hevc);
+
+	interlace_clear_no_pair_pic(hevc);
 }
 
 /*

@@ -2595,6 +2595,24 @@ int is_oversize_ex(int w, int h)
 	return false;
 }
 
+static int is_interlace(struct hevc_state_s *hevc)
+{
+	int pic_struct = (hevc->param.p.sei_frame_field_info >> 3) & 0xf;
+	int frame_field_info_present_flag =
+			(hevc->param.p.sei_frame_field_info >> 8) & 0x1;
+
+	if ((hevc->param.p.profile_etc & 0xc) == 0x4
+		&& (frame_field_info_present_flag
+		&& (pic_struct == 0
+		|| pic_struct == 7
+		|| pic_struct == 8)))
+		return 0;
+	else if ((hevc->param.p.profile_etc & 0xc) == 0x4)
+		return 1;
+
+	return 0;
+}
+
 void check_head_error(struct hevc_state_s *hevc)
 {
 	hevc->head_error_flag = 0;
@@ -6280,6 +6298,28 @@ static int get_display_pic_num(struct hevc_state_s *hevc)
 	return num;
 }
 
+/* clear no pair pic for interlace streams after flush */
+static void interlace_clear_no_pair_pic(struct hevc_state_s *hevc)
+{
+	int i;
+	struct PIC_s *pic;
+
+	if (!is_interlace(hevc))
+		return;
+
+	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+		pic = hevc->m_PIC[i];
+		if (pic == NULL || pic->index == -1)
+			continue;
+		if (pic->vf_ref == 1) {
+			pic->vf_ref = 0;
+			pic->output_ready = 0;
+			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
+				"%s, pic decode index %d\n", __func__, pic->decode_idx);
+		}
+	}
+}
+
 static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
 	struct PIC_s *pic_display;
@@ -6372,7 +6412,10 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 			}
 		}
 	} while (pic_display);
+
 	clear_referenced_flag(hevc);
+
+	interlace_clear_no_pair_pic(hevc);
 }
 
 /*
@@ -10611,24 +10654,6 @@ static void get_comp_buf_info(struct hevc_state_s *hevc,
 	pr_info("hevc get comp info: %d %d %d\n",
 			info->max_size, info->header_size,
 			info->frame_buffer_size);
-}
-
-static int is_interlace(struct hevc_state_s *hevc)
-{
-	int pic_struct = (hevc->param.p.sei_frame_field_info >> 3) & 0xf;
-	int frame_field_info_present_flag =
-			(hevc->param.p.sei_frame_field_info >> 8) & 0x1;
-
-	if ((hevc->param.p.profile_etc & 0xc) == 0x4
-		&& (frame_field_info_present_flag
-		&& (pic_struct == 0
-		|| pic_struct == 7
-		|| pic_struct == 8)))
-		return 0;
-	else if ((hevc->param.p.profile_etc & 0xc) == 0x4)
-		return 1;
-
-	return 0;
 }
 
 static void hevc_interlace_check(struct hevc_state_s *hevc,
