@@ -1303,7 +1303,6 @@ static void config_work_space_hw(struct AVS3Decoder_s *dec, uint8_t front_flag, 
 static void hevc_init_decoder_hw(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8_t back_flag)
 {
 	uint32_t data32;
-	uint32_t tmp = 0;
 	int32_t i;
 
 int32_t g_WqMDefault4x4[16] = {
@@ -1325,22 +1324,6 @@ int32_t g_WqMDefault8x8[64] = {
 };
 
 	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "[test.c] Entering hevc_init_decoder_hw\n");
-
-	if (front_flag) {
-		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
-		data32 = data32 | (3 << 7) | (1 << 9) | (1 << 1);
-		tmp = (1 << 0) | (1 << 10);
-		data32 &= ~tmp;
-		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
-	}
-
-	if (back_flag) {
-		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
-		data32 = data32 | (3 << 7) | (1 << 3) | (1 << 13) | (1 << 6) | (1 << 14);
-		tmp = (1 << 2) |  (1 << 11) | (1 << 5) | (1 << 12);
-		data32 &= ~tmp;
-		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
-	}
 
 #if 0 //def AVS3_10B_HED_FB
 	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "[test.c] Init AVS3_10B_HED_FB\n");
@@ -1525,6 +1508,8 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 {
 	uint32_t data32;
 	unsigned int decode_mode;
+	uint32_t tmp = 0;
+
 	avs3_print(dec, AVS3_DBG_BUFMGR_MORE, "%s front_flag %d back_flag %d\n", __func__, front_flag, back_flag);
 	if (dec->front_back_mode != 1) {
 		if (front_flag)
@@ -1537,6 +1522,22 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 			WRITE_VREG(dec->backend_ASSIST_MBOX0_MASK, 1);
 		}
 		return 0;
+	}
+
+	if (front_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 9) | (1 << 1);
+		tmp = (1 << 0) | (1 << 10);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
+
+	if (back_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 3) | (1 << 13) | (1 << 6) | (1 << 14);
+		tmp = (1 << 2) |  (1 << 11) | (1 << 5) | (1 << 12);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
 	}
 
 	config_work_space_hw(dec, front_flag, back_flag);

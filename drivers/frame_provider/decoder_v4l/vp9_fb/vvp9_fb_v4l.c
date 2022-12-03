@@ -4827,7 +4827,6 @@ void BackEnd_StartDecoding(struct VP9Decoder_s *pbi)
 static void vp9_init_decoder_hw_fb(int32_t decode_pic_begin, int32_t decode_pic_num, int first_flag, int front_flag, int back_flag)
 {
 	uint32_t data32;
-	uint32_t tmp = 0;
 	int32_t i;
 #if 0
 	const unsigned short parser_cmd[PARSER_CMD_NUMBER] = {
@@ -4878,22 +4877,6 @@ static void vp9_init_decoder_hw_fb(int32_t decode_pic_begin, int32_t decode_pic_
 	WRITE_VREG(P_HEVC_SHIFT_STARTCODE, 0x00000100);
 	WRITE_VREG(P_HEVC_SHIFT_EMULATECODE, 0x00000300);
 #endif // JT
-
-	if (front_flag) {
-		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
-		data32 = data32 | (3 << 7) | (1 << 0);
-		tmp = (1 << 1) | (1 << 9) | (1 << 10);
-		data32 &= ~tmp;
-		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
-	}
-
-	if (back_flag) {
-		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
-		data32 = data32 | (3 << 7) | (1 << 2) | (1 << 5);
-		tmp = (1 << 3) | (1 << 13) |  (1 << 11) | (1 << 6) | (1 << 14) | (1 << 12);
-		data32 &= ~tmp;
-		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
-	}
 
 //    data32 = READ_VREG(P_HEVC_ASSIST_FB_CTL);
 //    data32 = data32 |
@@ -5419,6 +5402,7 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 	//int  decode_pic_begin = 0;
 	//int decode_pic_num = 0;
 	uint32_t data32;
+	uint32_t tmp = 0;
 	struct BuffInfo_s *buf_spec = pbi->work_space_buf;
 	struct loopfilter *lf = pbi->lf;
 	//struct loop_filter_info_n *lfi = pbi->lfi;
@@ -5435,6 +5419,22 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 
 		}
 		return;
+	}
+
+	if (front_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 0);
+		tmp = (1 << 1) | (1 << 9) | (1 << 10);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
+
+	if (back_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 2) | (1 << 5);
+		tmp = (1 << 3) | (1 << 13) |  (1 << 11) | (1 << 6) | (1 << 14) | (1 << 12);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
 	}
 
 	if (back_flag) {

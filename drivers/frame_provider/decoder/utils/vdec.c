@@ -368,6 +368,14 @@ bool is_support_no_parser(void)
 }
 EXPORT_SYMBOL(is_support_no_parser);
 
+bool is_support_dual_core(void)
+{
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
+		return true;
+	return false;
+}
+EXPORT_SYMBOL(is_support_dual_core);
+
 static const bool cores_with_input[VDEC_MAX] = {
 	true,   /* VDEC_1 */
 	false,  /* VDEC_HCODEC */
@@ -3774,7 +3782,8 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 #ifdef VDEC_DEBUG_SUPPORT
 	inc_profi_count(mask, vdec->check_count);
 #endif
-	if (vdec_core_with_back_core(mask)) {
+	if (vdec_core_with_back_core(mask) &&
+		(!(vdec->core_mask & CORE_MASK_COMBINE))) {
 		if (vdec->check_input_data)
 			input_data_mask = vdec->check_input_data(vdec, mask);
 		if (debug & 0x8)
@@ -3870,7 +3879,8 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 		}
 		ready_mask |= tmp_mask & mask;
 	}
-	if (debug & VDEC_DBG_DUAL_CORE_DEBUG) {
+	if ((debug & VDEC_DBG_DUAL_CORE_DEBUG) &&
+		(!(vdec->core_mask & CORE_MASK_COMBINE))) {
 		if (core->sched_mask & (CORE_MASK_HEVC_BACK | CORE_MASK_HEVC))
 			ready_mask = 0;
 		if (ready_mask == (CORE_MASK_HEVC_BACK | CORE_MASK_HEVC))
@@ -3980,12 +3990,18 @@ static void check_core_run_flag(void)
 
 static void vdec_set_last_vdec(struct vdec_s *vdec, int format)
 {
-	if (format == VDEC_1)
+	if (vdec->core_mask & CORE_MASK_COMBINE) {
 		vdec_core->last_vdec = vdec;
-	else if (format == VDEC_HEVC)
 		vdec_core->last_hevc = vdec;
-	else if (format == VDEC_HEVCB)
 		vdec_core->last_hevc_back = vdec;
+	} else {
+		if (format == VDEC_1)
+			vdec_core->last_vdec = vdec;
+		else if (format == VDEC_HEVC)
+			vdec_core->last_hevc = vdec;
+		else if (format == VDEC_HEVCB)
+			vdec_core->last_hevc_back = vdec;
+	}
 }
 
 /* struct vdec_core_shread manages all decoder instance in active list. When
@@ -4060,6 +4076,9 @@ static int vdec_core_thread(void *data)
 
 			vdec->sched_mask &= ~mask;
 			core->sched_mask &= ~mask;
+			if (debug & 0x8)
+				pr_info("%s:%d mask 0x%lx, vdec sched_mask 0x%lx, core sched_mask 0x%lx\n",
+					__func__, vdec->id, mask, vdec->sched_mask, core->sched_mask);
 		}
 		vdec_update_buff_status();
 		/*
@@ -4104,6 +4123,9 @@ static int vdec_core_thread(void *data)
 		mutex_unlock(&vdec_mutex);
 
 		for (i = VDEC_MAX - 1; i >= VDEC_1; i--) {
+			if (debug & 0x8)
+				pr_info("%s:i:%d core sched_mask 0x%lx\n",
+					__func__, i, core->sched_mask);
 			if (!cores_used[i] || (core->sched_mask & (1 << i))) {
 				vdec = NULL;
 				continue;
@@ -4209,8 +4231,8 @@ static int vdec_core_thread(void *data)
 			run_start_timestamp = vdec_get_us_time_system();
 			vdec->run(vdec, mask, vdec_callback, core);
 			if (debug & 0x8)
-				pr_info("%s:vdec_thread run id:%d, mask 0x%lx time %lld\n", __func__, vdec->id, mask,
-					vdec_get_us_time_system() - run_start_timestamp);
+				pr_info("%s:vdec_thread run id:%d, mask 0x%lx core sched_mask 0x%lx, time %lld\n", __func__, vdec->id, mask,
+					core->sched_mask, vdec_get_us_time_system() - run_start_timestamp);
 			ATRACE_COUNTER("0.vdec_thread_thread_time", vdec_get_us_time_system() - run_start_timestamp);
 
 			/* we have some cores scheduled, keep working until

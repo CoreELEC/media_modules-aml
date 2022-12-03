@@ -10184,8 +10184,13 @@ result_done:
 	if (vdec->parallel_dec == 1) {
 		if (hw->mmu_enable == 0)
 			vdec_core_finish_run(vdec, CORE_MASK_VDEC_1);
-		else
-			vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
+		else {
+			if (is_support_dual_core())
+				vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
+					| CORE_MASK_HEVC_BACK);
+			else
+				vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
+		}
 	} else
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
 
@@ -10364,8 +10369,12 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	if (vdec->parallel_dec == 1) {
 		if (hw->mmu_enable == 0)
 			return ret ? (CORE_MASK_VDEC_1) : 0;
-		else
-			return ret ? (CORE_MASK_VDEC_1 | CORE_MASK_HEVC) : 0;
+		else {
+			if (is_support_dual_core())
+				return ret ? (CORE_MASK_VDEC_1 | CORE_MASK_HEVC | CORE_MASK_HEVC_BACK) : 0;
+			else
+				return ret ? (CORE_MASK_VDEC_1 | CORE_MASK_HEVC) : 0;
+		}
 	} else
 		return ret ? (CORE_MASK_VDEC_1 | CORE_MASK_HEVC) : 0;
 }
@@ -10616,6 +10625,11 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 					READ_VREG(NAL_SEARCH_CTL) & (~0x2));
 	}
 	WRITE_VREG(NAL_SEARCH_CTL, READ_VREG(NAL_SEARCH_CTL) | (1 << 2) | (hw->bitstream_restriction_flag << 15) | (hw->seq_info3&0xff)<<7);
+
+	if ((hw->mmu_enable) && (is_support_dual_core())) {
+		WRITE_VREG(HEVC_ASSIST_FB_CTL,
+			READ_VREG(HEVC_ASSIST_FB_CTL) & (~(1 << 8)));
+	}
 
 	if (udebug_flag)
 		WRITE_VREG(AV_SCRATCH_K, udebug_flag);
@@ -11336,8 +11350,12 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		if (hw->mmu_enable == 0)
 			vdec_core_request(pdata, CORE_MASK_VDEC_1);
 		else {
-			vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
-				| CORE_MASK_COMBINE);
+			if (is_support_dual_core())
+				vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
+					| CORE_MASK_HEVC_BACK | CORE_MASK_COMBINE);
+			else
+				vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
+					| CORE_MASK_COMBINE);
 		}
 	} else
 		vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
@@ -11439,9 +11457,14 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 	if (vdec->parallel_dec == 1) {
 		if (hw->mmu_enable == 0)
 			vdec_core_release(vdec, CORE_MASK_VDEC_1);
-		else
-			vdec_core_release(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC |
-				CORE_MASK_COMBINE);
+		else {
+			if (is_support_dual_core())
+				vdec_core_release(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC |
+					CORE_MASK_HEVC_BACK | CORE_MASK_COMBINE);
+			else
+				vdec_core_release(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC |
+					CORE_MASK_COMBINE);
+		}
 	} else
 		vdec_core_release(hw_to_vdec(hw), CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
 
