@@ -3511,10 +3511,10 @@ static void reset(struct vdec_s *vdec)
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
 
-	flush_work(&hw->work);
-	flush_work(&hw->timeout_work);
-	flush_work(&hw->notify_work);
-	flush_work(&hw->userdata_push_work);
+	cancel_work_sync(&hw->work);
+	cancel_work_sync(&hw->timeout_work);
+	cancel_work_sync(&hw->notify_work);
+	cancel_work_sync(&hw->userdata_push_work);
 	reset_process_time(hw);
 
 	for (i = 0; i < hw->buf_num; i++) {

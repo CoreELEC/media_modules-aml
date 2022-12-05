@@ -1583,7 +1583,7 @@ static void reset(struct vdec_s *vdec)
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
 
-	flush_work(&hw->work);
+	cancel_work_sync(&hw->work);
 	reset_process_time(hw);
 
 	for (i = 0; i < hw->buf_num; i++) {

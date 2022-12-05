@@ -2669,7 +2669,7 @@ static void reset(struct vdec_s *vdec)
 	}
 
 	hw->dec_result = DEC_RESULT_NONE;
-	flush_work(&hw->work);
+	cancel_work_sync(&hw->work);
 	reset_process_time(hw);
 
 	for (i = 0; i < hw->buf_num; i++) {
