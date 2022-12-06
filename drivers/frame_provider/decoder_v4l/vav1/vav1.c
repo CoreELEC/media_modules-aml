@@ -7965,7 +7965,30 @@ static int v4l_res_change(struct AV1HW_s *hw)
 				vav1_get_comp_buf_info(hw, &comp);
 				vdec_v4l_set_comp_buf_info(ctx, &comp);
 			}
-
+			ctx->film_grain_present = hw->film_grain_present;
+			if (use_dw_mmu ||
+				(ctx->film_grain_present &&
+				!disable_fg &&
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
+				get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D))) {
+#ifdef AOM_AV1_MMU_DW
+				if (ctx->config.parm.dec.cfg.double_write_mode != 0x21) {
+					ctx->config.parm.dec.cfg.double_write_mode = 0x21;
+					pr_info("AV1 has fg change, no fg to fg, use dw 0x21!\n");
+					if (hw->dw_frame_mmu_map_addr == NULL) {
+						u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
+						hw->dw_frame_mmu_map_addr =
+							decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
+								mmu_map_size, &hw->dw_frame_mmu_map_phy_addr, "AV1_DW_MMU_MAP");
+						if (hw->dw_frame_mmu_map_addr == NULL) {
+							pr_err("%s: failed to alloc count_buffer\n", __func__);
+							return -1;
+						}
+						memset(hw->dw_frame_mmu_map_addr, 0, mmu_map_size);
+					}
+				}
+#endif
+			}
 			vav1_get_ps_info(hw, &ps);
 			vdec_v4l_set_ps_infos(ctx, &ps);
 			vdec_v4l_res_ch_event(ctx);

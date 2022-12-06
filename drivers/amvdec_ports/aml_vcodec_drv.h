@@ -448,6 +448,7 @@ struct internal_comp_buf {
 	void	*mmu_box_dw;
 	void	*bmmu_box_dw;
 	u32     used;
+	u32		header_size_dw;
 #ifdef NEW_FB_CODE
 	void	*mmu_box_1;
 	void	*mmu_box_dw_1;
