@@ -9220,8 +9220,10 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 			vf->next_vf_pts = next_vf->pts;
 		} else
 			vf->next_vf_pts_valid = false;
-		if (hevc->front_back_mode == 1)
+		if (hevc->front_back_mode == 1) {
 			update_vf_memhandle(hevc, vf, pic);
+			decoder_do_frame_check(hw_to_vdec(hevc), vf);
+		}
 		return vf;
 	}
 
@@ -9716,7 +9718,8 @@ static inline void hevc_update_gvs(struct hevc_state_s *hevc, struct PIC_s *pic)
 static void put_vf_to_display_q(struct hevc_state_s *hevc, struct vframe_s *vf)
 {
 	hevc->vf_pre_count++;
-	decoder_do_frame_check(hw_to_vdec(hevc), vf);
+	if (hevc->front_back_mode != 1)
+		decoder_do_frame_check(hw_to_vdec(hevc), vf);
 	vdec_vframe_ready(hw_to_vdec(hevc), vf);
 	kfifo_put(&hevc->display_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hevc->trace.pts_name, vf->pts);
@@ -10149,7 +10152,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			pic, (pic->pic_struct == 9));
 			vf->height <<= 1;
 			if (pic->show_frame) {
-				decoder_do_frame_check(vdec, vf);
+				if (hevc->front_back_mode != 1)
+					decoder_do_frame_check(vdec, vf);
 				vdec_vframe_ready(vdec, vf);
 				/* process current vf */
 				kfifo_put(&hevc->pending_q, (const struct vframe_s *)vf);
@@ -10196,7 +10200,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vf->index = (pic->index << 8) | 0xff;
 			}
 			if (pic->show_frame) {
-				decoder_do_frame_check(vdec, vf);
+				if (hevc->front_back_mode != 1)
+					decoder_do_frame_check(vdec, vf);
 				vdec_vframe_ready(vdec, vf);
 				kfifo_put(&hevc->pending_q, (const struct vframe_s *)vf);
 				if (hevc->vf_pre_count == 0)

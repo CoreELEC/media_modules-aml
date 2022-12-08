@@ -4624,6 +4624,8 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 			vf->compHeadAddr,
 			vf->pts,
 			vf->pts_us64);
+		if (dec->front_back_mode == 1)
+			decoder_do_frame_check(hw_to_vdec(dec), vf);
 		return vf;
 		}
 	}
@@ -5151,7 +5153,8 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 			struct vdec_info tmp4x;
 			int stream_offset = pic->stream_offset;
 			set_vframe(dec, vf, pic, 0);
-			decoder_do_frame_check(pvdec, vf);
+			if (dec->front_back_mode != 1)
+				decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(dec->trace.pts_name, vf->pts);
