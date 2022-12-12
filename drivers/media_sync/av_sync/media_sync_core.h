@@ -335,6 +335,9 @@ long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* inf
 long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_ptr);
+long mediasync_ins_get_status(s32 sSyncInsId, char *buf);
+long mediasync_ins_get_all_status(char *buf, int *size);
+long mediasync_ins_get_status_by_tag(const char *buf, int size);
 
 
 #endif

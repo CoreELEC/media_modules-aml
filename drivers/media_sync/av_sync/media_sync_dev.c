@@ -1428,6 +1428,31 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 }
 #endif
 
+static ssize_t status_show(struct class *class,
+		struct class_attribute *attr, char *buf)
+{
+	char *pbuf = buf;
+	int size = 0;
+
+	mediasync_ins_get_all_status(pbuf, &size);
+	pbuf += size;
+
+	return pbuf - buf;
+}
+
+static ssize_t status_store(struct class *class,
+		struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	const char *pbuf = buf;
+
+	mediasync_ins_get_status_by_tag(pbuf, size);
+
+	return size;
+}
+
+static CLASS_ATTR_RW(status);
+
 static const struct file_operations mediasync_fops = {
 	.owner = THIS_MODULE,
 	.open = mediasync_open,
@@ -1439,6 +1464,7 @@ static const struct file_operations mediasync_fops = {
 };
 
 static struct attribute *mediasync_class_attrs[] = {
+	&class_attr_status.attr,
 	NULL
 };
 

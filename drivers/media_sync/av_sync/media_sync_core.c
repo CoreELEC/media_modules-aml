@@ -2572,6 +2572,97 @@ long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_p
 }
 
 
+long mediasync_ins_get_status(s32 sSyncInsId, char *buf) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_get_status_by_tag(const char *buf, int size) {
+	mediasync_ins* pInstance = NULL;
+	unsigned sSyncInsId;
+	ssize_t ret;
+	char cbuf[32];
+	s32 index;
+
+	cbuf[0] = 0;
+	ret = sscanf(buf, "%d %s",  &sSyncInsId, cbuf);
+	index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	if (strcmp(cbuf, "vpts") == 0) {
+		pr_info("%llx\n", pInstance->mSyncInfo.curVideoInfo.framePts);
+	} else if (strcmp(cbuf, "apts") == 0) {
+		pr_info("%llx\n", pInstance->mSyncInfo.curAudioInfo.framePts);
+	} else if (strcmp(cbuf, "av_diff") == 0) {
+		pr_info("%dms\n", (pInstance->mSyncInfo.curVideoInfo.framePts -
+								pInstance->mSyncInfo.curAudioInfo.framePts) / 90);
+	}
+
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return size;
+}
+
+long mediasync_ins_get_all_status(char *buf, int *size) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = 0;
+	char *pbuf = buf;
+
+	for ( ;index < MAX_INSTANCE_NUM; index ++) {
+		int64_t av_diff = 0;
+		if (vMediaSyncInsList[index].pInstance != NULL) {
+			pInstance = vMediaSyncInsList[index].pInstance;
+
+			pbuf += sprintf(pbuf,
+				"stream_index:%d", pInstance->mSyncInsId);
+
+			pbuf += sprintf(pbuf,
+				",mSpeed:[%d,%d]", pInstance->mSpeed.mNumerator,
+											pInstance->mSpeed.mDenominator);
+
+			pbuf += sprintf(pbuf,
+				",hasVideo:%d,hasAudio:%d", pInstance->mHasVideo,
+												pInstance->mHasAudio);
+
+			pbuf += sprintf(pbuf,
+				",vpts:%llx,apts:%llx", pInstance->mSyncInfo.curVideoInfo.framePts,
+												pInstance->mSyncInfo.curAudioInfo.framePts);
+
+			av_diff = pInstance->mSyncInfo.curVideoInfo.framePts -
+								pInstance->mSyncInfo.curAudioInfo.framePts;
+			pbuf += sprintf(pbuf,
+				",av_diff:%dms", av_diff / 90);
+
+			pbuf += sprintf(pbuf,"\n");
+		}
+	}
+
+	*size = pbuf - buf;
+
+	return 0;
+}
+
 module_param(media_sync_debug_level, uint, 0664);
 MODULE_PARM_DESC(media_sync_debug_level, "\n mediasync debug level\n");
 module_param(media_sync_user_debug_level, uint, 0664);
