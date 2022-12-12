@@ -1014,20 +1014,20 @@ static void update_vdec_buf_plane(struct aml_vcodec_ctx *ctx,
 		if (i == 0) {
 			//Y
 			if (vb->num_planes == 1) {
-				fb->m.mem[0].size	= ctx->picinfo.y_len_sz +
-					ctx->picinfo.c_len_sz;
-				fb->m.mem[0].offset = ctx->picinfo.y_len_sz;
+				fb->m.mem[0].size	= ctx->pinfo_record.y_len_sz +
+					ctx->pinfo_record.c_len_sz;
+				fb->m.mem[0].offset = ctx->pinfo_record.y_len_sz;
 			} else {
-				fb->m.mem[0].size	= ctx->picinfo.y_len_sz;
+				fb->m.mem[0].size	= ctx->pinfo_record.y_len_sz;
 				fb->m.mem[0].offset = 0;
 			}
 		} else {
 			if (vb->num_planes == 2) {
 				//UV
-				fb->m.mem[1].size	= ctx->picinfo.c_len_sz;
-				fb->m.mem[1].offset = ctx->picinfo.c_len_sz >> 1;
+				fb->m.mem[1].size	= ctx->pinfo_record.c_len_sz;
+				fb->m.mem[1].offset = ctx->pinfo_record.c_len_sz >> 1;
 			} else {
-				fb->m.mem[i].size  = ctx->picinfo.c_len_sz >> 1;
+				fb->m.mem[i].size  = ctx->pinfo_record.c_len_sz >> 1;
 				fb->m.mem[i].offset = 0;
 			}
 		}
@@ -2250,6 +2250,7 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 			//rb->count = ctx->dpb_size;
 		}
 		ctx->v4l_reqbuff_flag = true;
+		ctx->pinfo_record = ctx->picinfo;
 		ctx->capture_memory_mode = rb->memory;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 			"capture buffer memory mode is %d\n", rb->memory);

@@ -724,6 +724,7 @@ struct aml_vcodec_ctx {
 	bool				v4l_resolution_change;
 	struct completion		comp;
 	struct v4l2_config_parm		config;
+	struct vdec_pic_info		pinfo_record;
 	struct vdec_pic_info		picinfo;
 	struct vdec_pic_info		last_decoded_picinfo;
 	enum v4l2_colorspace		colorspace;
