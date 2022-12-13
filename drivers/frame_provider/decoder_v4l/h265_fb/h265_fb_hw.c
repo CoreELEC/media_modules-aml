@@ -1011,7 +1011,9 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		pr_err("%s: can not alloc mmu\n", __func__);
 		return;
 	}
+	ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_END);
 
+	ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_START);
 	copy_loopbufs_ptr(&hevc->bk, &hevc->next_bk[hevc->fb_rd_pos]);
 	print_loopbufs_ptr(hevc, "bk", &hevc->bk);
 #if 1 //def RESET_BACK_PER_PICTURE
@@ -1021,13 +1023,18 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 
 	if (hevc->front_back_mode == 3) {
 		WRITE_VREG(hevc->backend_ASSIST_MBOX0_IRQ_REG, 1);
+		ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_END);
 	} else {
 		WRITE_VREG(PIC_DECODE_COUNT_DBE, hevc->backend_decoded_count);
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_BE_DECODE_DATA);
 		WRITE_VREG(HEVC_SAO_CRC, 0);
+		ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_END);
 		//pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", READ_VREG(HEVC_MPC_E_DBE));
 		//print_reg_flag = 1;
+		ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_START);
 		amhevc_start_b();
+		ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_END);
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
 		//pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", READ_VREG(HEVC_MPC_E_DBE));
 		//pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", READ_VREG(HEVC_MPC_E_DBE));
 		//pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", READ_VREG(HEVC_MPC_E_DBE));

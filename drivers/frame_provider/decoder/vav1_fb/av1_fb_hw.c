@@ -3077,7 +3077,9 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 
 	if (front_back_debug)
 		pr_info("%s, alloc mmu time %ld\n", __func__, div64_u64(local_clock() - hw->back_start_time, 1000));
+	ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_END);
 
+	ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_START);
 	hw->back_start_time = local_clock();
 	copy_loopbufs_ptr(&pbi->bk, &pbi->next_bk[pbi->fb_rd_pos]);
 	print_loopbufs_ptr("bk", &pbi->bk);
@@ -3134,6 +3136,7 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 
 	WRITE_VREG(PIC_DECODE_COUNT_DBE, pbi->backend_decoded_count);
 	WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_BE_DECODE_DATA);
+	ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_END);
 #if 0
 #ifdef RESET_BACK_PER_PICTURE
 	amhevc_start_b();

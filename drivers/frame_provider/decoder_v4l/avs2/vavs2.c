@@ -62,6 +62,8 @@
 #include "avs2_global.h"
 #include "vavs2.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#include "../../decoder/utils/vdec_profile.h"
+
 
 #define MEM_NAME "codec_avs2"
 #define I_ONLY_SUPPORT
@@ -5946,6 +5948,7 @@ decode_slice:
 		if (dec->m_ins_flag)
 			start_process_time(dec);
 	}
+	vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 irq_handled_exit:
 	PRINT_LINE();
 	dec->process_busy = 0;
@@ -5962,6 +5965,9 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
 
 	if (!dec)
 		return IRQ_HANDLED;

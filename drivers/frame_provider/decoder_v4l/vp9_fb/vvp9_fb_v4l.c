@@ -4781,7 +4781,9 @@ void BackEnd_StartDecoding(struct VP9Decoder_s *pbi)
 		// pyx need? i think no, should double check
 		pic->mmu_alloc_flag = 1;
 	}
+	ATRACE_COUNTER(pbi->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_END);
 
+	ATRACE_COUNTER(pbi->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_START);
 	copy_loopbufs_ptr(&pbi->bk, &pbi->next_bk[pbi->fb_rd_pos]);
 	print_loopbufs_ptr(pbi, "bk", &pbi->bk);
 #ifdef NEW_FRONT_BACK_CODE
@@ -4807,7 +4809,12 @@ void BackEnd_StartDecoding(struct VP9Decoder_s *pbi)
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_BE_DECODE_DATA);
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5)
 			WRITE_VREG(HEVC_SAO_CRC, 0);
+		ATRACE_COUNTER(pbi->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_END);
+
+		ATRACE_COUNTER(pbi->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_START);
 		amhevc_start_b();
+		ATRACE_COUNTER(pbi->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_END);
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
 	}
 }
 
@@ -10923,6 +10930,12 @@ irqreturn_t vp9_back_irq_cb(struct vdec_s *vdec, int irq)
 {
 	struct VP9Decoder_s *pbi =
 		(struct VP9Decoder_s *)vdec->private;
+	ATRACE_COUNTER(pbi->trace.decode_back_time_name, DECODER_ISR_PIC_DONE);
+
+	pbi->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	if (pbi->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+	}
 
 	WRITE_VREG(pbi->backend_ASSIST_MBOX0_CLR_REG, 1);
 
@@ -10937,7 +10950,8 @@ irqreturn_t vp9_back_irq_cb(struct vdec_s *vdec, int irq)
 		READ_VREG(DEBUG_REG2_DBE));
 		WRITE_VREG(DEBUG_REG1_DBE, 0);
 	}
-	pbi->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	ATRACE_COUNTER(pbi->trace.decode_back_time_name, DECODER_ISR_END);
+
 	if (pbi->dec_status_back == HEVC_DEC_IDLE) {
 		return IRQ_HANDLED;
 	}
@@ -10952,6 +10966,7 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	unsigned int dec_status = pbi->dec_status_back;
 	int i;
+	ATRACE_COUNTER(pbi->trace.decode_back_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if ((dec_status == HEVC_BE_DECODE_DATA_DONE)  || pbi->front_back_mode == 2 || pbi->front_back_mode == 3) {
 		struct PIC_BUFFER_CONFIG_s* pic = pbi->next_be_decode_pic[pbi->fb_rd_pos];
@@ -11025,6 +11040,8 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		//pyx checked no need
 		//release_free_mmu_buffers(pbi);
 		pbi->dec_back_result = DEC_BACK_RESULT_DONE;
+
+		ATRACE_COUNTER(pbi->trace.decode_back_time_name, DECODER_ISR_THREAD_END);
 		vdec_schedule_work(&pbi->work_back);
 	}
 
@@ -11447,6 +11464,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	/*if (pbi->front_back_mode == 3) {
 		goto pic_done;
 	}*/
+	vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 
 	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
@@ -11460,8 +11478,12 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	unsigned int adapt_prob_status;
 	uint debug_tag;
 
-	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
+
+	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 	ATRACE_COUNTER("V_ST_DEC-decode_state", dec_status);
 
 	if (dec_status == VP9_HEAD_PARSER_DONE) {
@@ -12488,6 +12510,7 @@ static void vp9_work_back(struct work_struct *work)
 	struct VP9Decoder_s *pbi = container_of(work,
 		struct VP9Decoder_s, work_back);
 	struct vdec_s *vdec = hw_to_vdec(pbi);
+	ATRACE_COUNTER(pbi->trace.decode_back_time_name, DECODER_WORKER_START);
 
 	if (pbi->dec_back_result == DEC_BACK_RESULT_TIMEOUT) {
 		int i;
@@ -12539,6 +12562,7 @@ static void vp9_work_back(struct work_struct *work)
 	if (without_display_mode == 1) {
 		vvp9_vf_put(vvp9_vf_get(pbi), pbi);
 	}
+	ATRACE_COUNTER(pbi->trace.decode_back_time_name, DECODER_WORKER_END);
 	vdec_core_finish_run(vdec, CORE_MASK_HEVC_BACK);
 
 	if (pbi->vdec_back_cb)
@@ -13472,6 +13496,7 @@ static void run_back_fb(struct vdec_s *vdec, void (*callback)(struct vdec_s *, v
 	struct VP9Decoder_s *pbi =
 		(struct VP9Decoder_s *)vdec->private;
 	int loadr = 0;
+	ATRACE_COUNTER(pbi->trace.decode_back_run_time_name, TRACE_RUN_LOADING_FW_START);
 
 	if (vdec->mc_back_loaded) {
 		/*firmware have load before,
@@ -13524,7 +13549,9 @@ static void run_back_fb(struct vdec_s *vdec, void (*callback)(struct vdec_s *, v
 			vdec->mc_back_type = VFORMAT_VP9;
 		}
 	}
+	ATRACE_COUNTER(pbi->trace.decode_back_run_time_name, TRACE_RUN_LOADING_FW_END);
 
+	ATRACE_COUNTER(pbi->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_START);
 	mod_timer(&pbi->timer_back, jiffies);
 	pbi->stat |= STAT_TIMER_BACK_ARM;
 
@@ -13553,7 +13580,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 {
 	struct VP9Decoder_s *pbi =
 		(struct VP9Decoder_s *)vdec->private;
-	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_RUN_START);
 	vp9_print(pbi,
 		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx\r\n",
 		__func__, mask);
@@ -13574,6 +13600,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	pbi->vdec_cb_arg = arg;
 	pbi->vdec_cb = callback;
 	pbi->one_package_frame_cnt = 0;
+	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_RUN_START);
 #ifdef SUPPORT_FB_DECODING
 	if ((mask & CORE_MASK_HEVC) ||
 		(mask & CORE_MASK_HEVC_FRONT))
@@ -13590,7 +13617,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 	if (pbi->front_back_mode &&
 		(mask & CORE_MASK_HEVC_BACK)) {
+		ATRACE_COUNTER(pbi->trace.decode_back_time_name, DECODER_RUN_START);
 		run_back_fb(vdec, callback, arg);
+		ATRACE_COUNTER(pbi->trace.decode_back_time_name, DECODER_RUN_END);
 	}
 #endif
 
@@ -13939,6 +13968,12 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		"decoder_run_time%d", pdev->id);
 	snprintf(pbi->trace.decode_header_memory_time_name, sizeof(pbi->trace.decode_header_memory_time_name),
 		"decoder_header_time%d", pdev->id);
+	snprintf(pbi->trace.decode_back_time_name, sizeof(pbi->trace.decode_back_time_name),
+		"decoder_back_time%d", pdev->id);
+	snprintf(pbi->trace.decode_back_run_time_name, sizeof(pbi->trace.decode_back_run_time_name),
+		"decoder_back_run_time%d", pdev->id);
+	snprintf(pbi->trace.decode_back_work_time_name, sizeof(pbi->trace.decode_back_work_time_name),
+		"decoder_back_work_time%d", pdev->id);
 #ifdef NEW_FB_CODE
 	config_hevc_irq_num(pbi);
 #endif

@@ -2671,6 +2671,16 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 
 	snprintf(vdec->stream_rp, sizeof(vdec->stream_rp),
 		 "0.stream_rp-%d", vdec->id);
+
+	snprintf(vdec->decode_per_front_time_name, sizeof(vdec->decode_per_front_time_name),
+		"decode_per_front_time-%d", vdec->id);
+	snprintf(vdec->decode_per_back_time_name, sizeof(vdec->decode_per_back_time_name),
+		"decode_per_back_time-%d", vdec->id);
+
+	snprintf(vdec->dec_front_spend_time_avg, sizeof(vdec->dec_front_spend_time_avg),
+		"dec_front_spend_time_avg-%d", vdec->id);
+	snprintf(vdec->dec_back_spend_time_avg, sizeof(vdec->dec_back_spend_time_avg),
+		"dec_back_spend_time_avg-%d", vdec->id);
 	/*
 	 *todo: VFM patch control should be configurable,
 	 * for now all stream based input uses default VFM path.

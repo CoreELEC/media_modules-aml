@@ -8797,6 +8797,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	if (pbi->m_ins_flag)
 		start_process_time(pbi);
 #endif
+	vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
@@ -8812,6 +8813,9 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, dec_status);
 
 	if (dec_status == VP9_HEAD_PARSER_DONE) {

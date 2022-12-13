@@ -33,7 +33,9 @@ struct vdec_s;
 #define VDEC_PROFILE_DECODED_FRAME      8
 #define VDEC_PROFILE_EVENT_WAIT_BACK_CORE    9
 #define VDEC_PROFILE_EVENT_AGAIN       10
-#define VDEC_PROFILE_MAX_EVENT         11
+#define VDEC_PROFILE_DECODER_START     11
+#define VDEC_PROFILE_DECODER_END       12
+#define VDEC_PROFILE_MAX_EVENT         13
 
 extern void vdec_profile(struct vdec_s *vdec, int event, int mask);
 extern void vdec_profile_more(struct vdec_s *vdec, int event, int para1, int para2, int mask);

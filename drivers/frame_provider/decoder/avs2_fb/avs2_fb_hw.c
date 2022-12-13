@@ -1852,6 +1852,9 @@ static void BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 	}
 	pic->mmu_alloc_flag = 1;
 #endif
+	ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_END);
+
+	ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_START);
 	copy_loopbufs_ptr(&avs2_dec->bk, &avs2_dec->next_bk[avs2_dec->fb_rd_pos]);
 	print_loopbufs_ptr(dec, "bk", &avs2_dec->bk);
 
@@ -1860,12 +1863,18 @@ static void BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 	avs2_hw_init(dec, 0, 1);
 	if (dec->front_back_mode == 3) {
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);
+		ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_END);
 	} else {
 		config_bufstate_back_hw(avs2_dec);
 		WRITE_VREG(PIC_DECODE_COUNT_DBE, avs2_dec->backend_decoded_count);
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_BE_DECODE_DATA);
 		WRITE_VREG(HEVC_SAO_CRC, 0);
+		ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_END);
+
+		ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_START);
 		amhevc_start_b();
+		ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_END);
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
 	}
 }
 

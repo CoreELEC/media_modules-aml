@@ -63,6 +63,8 @@
 #include "avs2_global.h"
 #include "vavs2.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#include "../../decoder/utils/vdec_profile.h"
+
 
 #define MEM_NAME "codec_avs2"
 #define FOR_S5
@@ -6054,6 +6056,14 @@ irqreturn_t avs2_back_irq_cb(struct vdec_s *vdec, int irq)
 {
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
+
+	ATRACE_COUNTER(dec->trace.decode_back_time_name, DECODER_ISR_PIC_DONE);
+
+	dec->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	if (dec->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+	}
+
 	/*BackEnd_Handle()*/
 	if (dec->front_back_mode != 1) {
 		avs2_print(dec, AVS2_DBG_IRQ_EVENT,
@@ -6062,7 +6072,6 @@ irqreturn_t avs2_back_irq_cb(struct vdec_s *vdec, int irq)
 			dec->dec_status_back = HEVC_BE_DECODE_DATA_DONE;
 		return IRQ_WAKE_THREAD;
 	}
-	dec->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 
 	if (debug & AVS2_DBG_IRQ_EVENT)
 		avs2_print(dec, 0,
@@ -6109,6 +6118,7 @@ irqreturn_t avs2_back_irq_cb(struct vdec_s *vdec, int irq)
 		pr_info("[BE] HEVC_SAO_CTRL4_DBE1 done= %x\n", READ_VREG(HEVC_SAO_CTRL4_DBE1));
 		pr_info("[BE] HEVC_SAO_CTRL5_DBE1 done= %x\n", READ_VREG(HEVC_SAO_CTRL5_DBE1));
 	}
+	ATRACE_COUNTER(dec->trace.decode_back_time_name, DECODER_ISR_END);
 
 	if (dec->dec_status_back == AVS2_DEC_IDLE) {
 		return IRQ_HANDLED;
@@ -6198,6 +6208,7 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	struct aml_vcodec_ctx *ctx = dec->v4l2_ctx;
 
 	int i;
+	ATRACE_COUNTER(dec->trace.decode_back_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE || dec->front_back_mode == 2) {
 		struct avs2_frame_s *pic = avs2_dec->next_be_decode_pic[avs2_dec->fb_rd_pos];
@@ -6292,6 +6303,7 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 #ifdef NEW_FB_CODE
 		dec->dec_back_result = DEC_BACK_RESULT_DONE;
+		ATRACE_COUNTER(dec->trace.decode_back_time_name, DECODER_ISR_THREAD_END);
 		vdec_schedule_work(&dec->work_back);
 #endif
 		if (avs2_dec->front_pause_flag) {
@@ -7011,6 +7023,7 @@ decode_slice:
 		if (dec->m_ins_flag)
 			start_process_time(dec);
 	}
+	vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 irq_handled_exit:
 	if ((dec_status == AVS2_HEAD_PIC_I_READY) ||
 		(dec_status == AVS2_HEAD_PIC_PB_READY)) {
@@ -7029,6 +7042,11 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)data;
 	uint debug_tag;
 
+	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
+
 	WRITE_VREG(dec->ASSIST_MBOX0_CLR_REG, 1);
 
 	if ((debug & AVS2_DBG_BE_SIMULATE_IRQ)
@@ -7037,8 +7055,6 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 		pr_info("Simulate BE irq\n");
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);
 	}
-
-	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 
 	if ((dec_status == AVS2_HEAD_PIC_I_READY) ||
 		(dec_status == AVS2_HEAD_PIC_PB_READY)) {
@@ -7976,6 +7992,7 @@ static void avs2_work_back_implement(struct AVS2Decoder_s *dec,
 {
 	avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
 		"[BE] %s result %d\n", __func__, dec->dec_back_result);
+	ATRACE_COUNTER(dec->trace.decode_back_time_name, DECODER_WORKER_START);
 
 	if (dec->dec_back_result == DEC_BACK_RESULT_TIMEOUT) {
 		int i;
@@ -8016,6 +8033,7 @@ static void avs2_work_back_implement(struct AVS2Decoder_s *dec,
 		del_timer_sync(&dec->timer_back);
 		dec->stat &= ~STAT_TIMER_BACK_ARM;
 	}
+	ATRACE_COUNTER(dec->trace.decode_back_time_name, DECODER_WORKER_END);
 
 	vdec_core_finish_run(vdec, CORE_MASK_HEVC_BACK);
 
@@ -8245,6 +8263,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
 	int loadr = 0;
+	ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_LOADING_FW_START);
 
 	if (vdec->mc_back_loaded || dec->front_back_mode != 1) {
 		/*firmware have load before,
@@ -8267,6 +8286,9 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 		//vdec->mc_back_loaded = 1;
 		vdec->mc_back_type = VFORMAT_AVS2;
 	}
+	ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_LOADING_FW_END);
+
+	ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_START);
 
 	mod_timer(&dec->timer_back, jiffies);
 	dec->stat |= STAT_TIMER_BACK_ARM;
@@ -8479,7 +8501,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 	if (dec->front_back_mode &&
 		(mask & CORE_MASK_HEVC_BACK)) {
+		ATRACE_COUNTER(dec->trace.decode_back_time_name, DECODER_RUN_START);
 		run_back(vdec, callback, arg);
+		ATRACE_COUNTER(dec->trace.decode_back_time_name, DECODER_RUN_END);
 	}
 #endif
 }
@@ -8840,6 +8864,12 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		"decoder_header_time%d", pdev->id);
 	snprintf(dec->trace.decode_work_time_name, sizeof(dec->trace.decode_work_time_name),
 		"decoder_work_time%d", pdev->id);
+	snprintf(dec->trace.decode_back_time_name, sizeof(dec->trace.decode_back_time_name),
+		"decoder_back_time%d", pdev->id);
+	snprintf(dec->trace.decode_back_run_time_name, sizeof(dec->trace.decode_back_run_time_name),
+		"decoder_back_run_time%d", pdev->id);
+	snprintf(dec->trace.decode_back_work_time_name, sizeof(dec->trace.decode_back_work_time_name),
+		"decoder_back_work_time%d", pdev->id);
 
 	if (pdata->use_vfm_path) {
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,

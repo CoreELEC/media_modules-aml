@@ -9961,6 +9961,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	if (pbi->m_ins_flag)
 		start_process_time(pbi);
 #endif
+	vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
@@ -9981,6 +9982,7 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	}
 	else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_PIC_DONE);
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
 	}
 
 	adapt_prob_status = READ_VREG(VP9_ADAPT_PROB_REG);

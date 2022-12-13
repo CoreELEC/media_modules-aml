@@ -124,6 +124,12 @@ enum e_trace_run_status {
 	TRACE_RUN_LOADING_FW_END   = 2,
 	TRACE_RUN_LOADING_RESTORE_START = 3,
 	TRACE_RUN_LOADING_RESTORE_END = 4,
+	TRACE_RUN_BACK_ALLOC_MMU_START = 5,
+	TRACE_RUN_BACK_ALLOC_MMU_END = 6,
+	TRACE_RUN_BACK_CONFIGURE_REGISTER_START = 7,
+	TRACE_RUN_BACK_CONFIGURE_REGISTER_END = 8,
+	TRACE_RUN_BACK_FW_START = 9,
+	TRACE_RUN_BACK_FW_END = 10,
 };
 
 enum e_trace_header_status {
@@ -483,6 +489,10 @@ struct vdec_s {
 #endif
 	char frame_mode_size[32];
 	char stream_rp[32];
+	char decode_per_front_time_name[32];
+	char decode_per_back_time_name[32];
+	char dec_front_spend_time_avg[32];
+	char dec_back_spend_time_avg[32];
 
 };
 

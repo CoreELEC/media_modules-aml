@@ -63,6 +63,7 @@
 #include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/vdec_feature.h"
+#include "../utils/vdec_profile.h"
 
 /*
 to enable DV of frame mode
@@ -10903,6 +10904,11 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 	PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
 
 	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_PIC_DONE);
+	hevc->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	if (hevc->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+	}
+
 	/*BackEnd_Handle()*/
 	if (hevc->front_back_mode != 1) {
 		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
@@ -10913,8 +10919,6 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 	}
 	if (pic->error_mark)
 		hevc->dec_status_back = HEVC_BE_DECODE_DATA_DONE;
-	else
-		hevc->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 
 	if (debug & H265_DEBUG_BUFMGR)
 		hevc_print(hevc, 0,
@@ -10963,11 +10967,11 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 					READ_VREG(HEVC_SAO_CRC_DBE1) : 0);
 		WRITE_VREG(DEBUG_REG1_DBE, 0);
 	}
+	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_END);
 	if (hevc->dec_status_back == HEVC_DEC_IDLE) {
 		return IRQ_HANDLED;
 	}
 	/**/
-	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_END);
 	return IRQ_WAKE_THREAD;
 }
 
@@ -11102,6 +11106,7 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 #ifdef NEW_FB_CODE
 		hevc->dec_back_result = DEC_BACK_RESULT_DONE;
+		ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_THREAD_END);
 		vdec_schedule_work(&hevc->work_back);
 #endif
 		if (hevc->front_pause_flag) {
@@ -11111,7 +11116,7 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			start_process_time(hevc);
 		}
 	}
-	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_THREAD_END);
+
 	return IRQ_HANDLED;
 }
 #endif
@@ -12281,6 +12286,7 @@ force_output:
 			/* Interrupt Amrisc to excute */
 			WRITE_VREG(HEVC_MCPU_INTR_REQ, AMRISC_MAIN_REQ);
 		}
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 
@@ -12315,14 +12321,18 @@ static irqreturn_t vh265_isr(int irq, void *data)
 	unsigned int dec_status;
 	struct hevc_state_s *hevc = (struct hevc_state_s *)data;
 	u32 debug_tag;
+
+	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
+
 	if ((debug & HEVC_BE_SIMULATE_IRQ)
 		&&(READ_VREG(DEBUG_REG1_DBE) ||
 			READ_VREG(HEVC_DEC_STATUS_DBE)== HEVC_BE_DECODE_DATA_DONE)) {
 		pr_info("Simulate BE irq\n");
 		WRITE_VREG(hevc->backend_ASSIST_MBOX0_IRQ_REG, 1);
 	}
-
-	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 
 	if (dec_status == HEVC_SLICE_SEGMENT_DONE) {
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
@@ -14518,11 +14528,11 @@ static void vh265_timeout_work(struct work_struct *work)
 static void vh265_work_back_implement(struct hevc_state_s *hevc,
 	struct vdec_s *vdec,int from)
 {
+	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_WORKER_START);
 	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 			"[BE] %s result %x, backcount %d\n",
 			__func__, hevc->dec_back_result, hevc->backend_decoded_count);
 
-	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_WORKER_START);
 	if (hevc->dec_back_result == DEC_BACK_RESULT_TIMEOUT) {
 		int i;
 		PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
@@ -14831,6 +14841,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 		(struct hevc_state_s *)vdec->private;
 	int loadr = 0;
 
+	ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_LOADING_FW_START);
 	if (vdec->mc_back_loaded || hevc->front_back_mode != 1) {
 		/*firmware have load before,
 			and not changes to another.
@@ -14866,6 +14877,9 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 		//vdec->mc_back_loaded = 1;
 		vdec->mc_back_type = VFORMAT_HEVC;
 	}
+	ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_LOADING_FW_END);
+
+	ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_START);
 
 	mod_timer(&hevc->timer_back, jiffies);
 	hevc->stat |= STAT_TIMER_BACK_ARM;

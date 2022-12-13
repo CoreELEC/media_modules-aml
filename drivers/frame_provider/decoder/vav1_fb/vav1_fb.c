@@ -9541,6 +9541,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			vdec_schedule_work(&hw->work);
 		}
 	}
+	vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
@@ -9553,11 +9554,15 @@ static irqreturn_t vav1_isr(int irq, void *data)
 	//struct AV1_Common_s *const cm = &hw->common;
 	uint debug_tag;
 
+	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
+	if (dec_status == AOM_AV1_DEC_PIC_END ||
+		dec_status == AOM_NAL_DECODE_DONE) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
+
 	if (hw->front_back_mode == 1) {
 		WRITE_VREG(hw->ASSIST_MBOX0_CLR_REG, 1);
 	}
-
-	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
 
 	if (dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE ||
 		dec_status == AOM_AV1_SEQ_HEAD_PARSER_DONE ||
@@ -10175,6 +10180,7 @@ static void vav1_work_back_implement(struct AV1HW_s *hw,
 {
 	av1_print(hw, AV1_DEBUG_BUFMGR_DETAIL,
 		"%s, dec_result 0x%x\n", __func__, hw->dec_back_result);
+	ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_WORKER_START);
 
 	if (hw->dec_back_result == DEC_BACK_RESULT_TIMEOUT) {
 		u32 i;
@@ -10240,6 +10246,7 @@ static void vav1_work_back_implement(struct AV1HW_s *hw,
 		if (hw->front_back_mode == 1)
 			amhevc_stop_b();
 	}
+	ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_WORKER_END);
 
 	vdec_core_finish_run(vdec, CORE_MASK_HEVC_BACK);
 
@@ -11642,7 +11649,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 	struct AV1HW_s *hw =
 		(struct AV1HW_s *)vdec->private;
 	int loadr = 0;
-
+	ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_LOADING_FW_START);
 	hw->back_start_time = local_clock();
 	if (((fb_ucode_debug == 1) && (hw->front_back_mode == 2)) ||
 		(hw->front_back_mode == 1)) {
@@ -11663,13 +11670,20 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 	run_count_back[hw->index]++;
 	hw->vdec_back_cb_arg = arg;
 	hw->vdec_back_cb = callback;
+	ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_LOADING_FW_END);
+
+	ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_START);
 	BackEnd_StartDecoding(hw);
 
 	if (fb_ucode_debug == 1) {
 		amhevc_start();
 	} else {
-		if (hw->front_back_mode == 1)
+		if (hw->front_back_mode == 1) {
+			ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_START);
 			amhevc_start_b();
+			ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_END);
+			vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
+		}
 
 		if ((hw->front_back_mode == 2) || (hw->front_back_mode == 3)) {
 			WRITE_VREG(EE_ASSIST_MBOX0_IRQ_REG, 1);
@@ -11707,7 +11721,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 
 	if ((hw->front_back_mode) && (mask & CORE_MASK_HEVC_BACK)) {
+		ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_RUN_START);
 		run_back(vdec, callback, arg);
+		ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_RUN_END);
 	}
 #endif
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_RUN_END);
@@ -11788,6 +11804,12 @@ static void reset(struct vdec_s *vdec)
 irqreturn_t vav1_back_irq_cb(struct vdec_s *vdec, int irq)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)vdec->private;
+	ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_ISR_PIC_DONE);
+
+	hw->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	if (hw->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+	}
 
 	if (hw->front_back_mode == 1) {
 		WRITE_VREG(hw->backend_ASSIST_MBOX0_CLR_REG, 1);
@@ -11798,7 +11820,6 @@ irqreturn_t vav1_back_irq_cb(struct vdec_s *vdec, int irq)
 		return IRQ_WAKE_THREAD;
 	}
 
-	hw->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 	av1_print(hw, AV1_DEBUG_BUFMGR,
 		"[BE] av1 back isr (%d) back dec status  = 0x%x\n",
 		irq,hw->dec_status_back);
@@ -11817,6 +11838,7 @@ irqreturn_t vav1_back_irq_cb(struct vdec_s *vdec, int irq)
 	}
 
 	if (hw->dec_status_back == HEVC_DEC_IDLE) {
+		ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_ISR_END);
 		return IRQ_HANDLED;
 	} else if (hw->dec_status_back == AOM_AV1_FGS_PARAM) {
 		u32 dbe_status_val = READ_VREG(HEVC_DEC_STATUS_DBE);
@@ -11832,10 +11854,12 @@ irqreturn_t vav1_back_irq_cb(struct vdec_s *vdec, int irq)
 			read_film_grain_reg(hw);
 		}
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, AOM_AV1_FGS_PARAM_DONE);
+		ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_ISR_END);
 
 		return IRQ_HANDLED;
 	}
 	/**/
+	ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_ISR_END);
 	return IRQ_WAKE_THREAD;
 }
 #if 1
@@ -12020,6 +12044,8 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	AV1Decoder *pbi = hw->pbi;
 	unsigned int dec_status = hw->dec_status_back;
 	int i;
+
+	ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE) {
 		PIC_BUFFER_CONFIG* pic;
@@ -12145,6 +12171,7 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 		hw->back_irq_time = local_clock();
 		hw->dec_back_result = DEC_BACK_RESULT_DONE;
+		ATRACE_COUNTER(hw->trace.decode_back_time_name, DECODER_ISR_THREAD_END);
 		vdec_schedule_work(&hw->work_back);
 	}
 
@@ -12438,6 +12465,12 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		"decoder_header_time%d", pdev->id);
 	snprintf(hw->trace.decode_work_time_name, sizeof(hw->trace.decode_work_time_name),
 		"decoder_work_time%d", pdev->id);
+	snprintf(hw->trace.decode_back_time_name, sizeof(hw->trace.decode_back_time_name),
+		"decoder_back_time%d", pdev->id);
+	snprintf(hw->trace.decode_back_run_time_name, sizeof(hw->trace.decode_back_run_time_name),
+		"decoder_back_run_time%d", pdev->id);
+	snprintf(hw->trace.decode_back_work_time_name, sizeof(hw->trace.decode_back_work_time_name),
+		"decoder_back_work_time%d", pdev->id);
 	if (pdata->use_vfm_path)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			VFM_DEC_PROVIDER_NAME);

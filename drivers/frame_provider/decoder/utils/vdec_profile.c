@@ -19,6 +19,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/debugfs.h>
 #include <linux/moduleparam.h>
@@ -65,9 +66,12 @@ struct vdec_profile_statistics_s {
 	int again_cnt;
 	int decoded_frame_cnt;
 	u64 decode_first_us;
+	u64 hw_lasttimestamp;
+	int hw_cnt;
 	struct vdec_profile_time_stat_s run2cb_time_stat;
 	struct vdec_profile_time_stat_s decode_time_stat;
 	struct vdec_profile_time_stat_s again_time_stat;
+	struct vdec_profile_time_stat_s hw_time_stat;
 };
 
 static struct vdec_profile_statistics_s statistics_s[MAX_INSTANCE_MUN];
@@ -94,7 +98,9 @@ static const char *event_name[VDEC_PROFILE_MAX_EVENT] = {
 	"info",
 	"decoded frame",
 	"wait back core",
-	"again"
+	"again",
+	"decoder start",
+	"decoder end"
 };
 
 #if 0 /* get time from hardware. */
@@ -157,10 +163,29 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 
 	time_stat = statistics_s;
 	timestamp = get_us_time_system();
-
 	if (time_stat->status == false) {
 		time_stat->decode_first_us = timestamp;
 		time_stat->status = true;
+	}
+
+	if (event == VDEC_PROFILE_DECODER_START) {
+		if (!back_core_flag) {
+			time_stat->hw_lasttimestamp = timestamp;
+		} else {
+			time_stat->hw_lasttimestamp = timestamp;
+			time_stat->hw_cnt++;
+		}
+	} else if (event == VDEC_PROFILE_DECODER_END) {
+		if (!back_core_flag) {
+			time_stat->hw_cnt++;
+			vdec_profile_update_alloc_time(&time_stat->hw_time_stat, time_stat->hw_lasttimestamp, timestamp);
+			ATRACE_COUNTER(vdec->decode_per_front_time_name, timestamp - time_stat->hw_lasttimestamp);
+			ATRACE_COUNTER(vdec->dec_front_spend_time_avg, div_u64(time_stat->hw_time_stat.time_total_us, time_stat->hw_cnt));
+			} else {
+			vdec_profile_update_alloc_time(&time_stat->hw_time_stat, time_stat->hw_lasttimestamp, timestamp);
+			ATRACE_COUNTER(vdec->decode_per_back_time_name, timestamp - time_stat->hw_lasttimestamp);
+			ATRACE_COUNTER(vdec->dec_back_spend_time_avg, div_u64(time_stat->hw_time_stat.time_total_us, time_stat->hw_cnt));
+		}
 	}
 
 	if (event == VDEC_PROFILE_EVENT_RUN) {
@@ -194,12 +219,14 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 		vdec_profile_update_alloc_time(&time_stat->again_time_stat, time_stat->run_lasttimestamp, timestamp);
 		time_stat->run_lasttimestamp = -1;
 	}
+
 }
 
 
 static void vdec_profile_statistics(struct vdec_s *vdec, int event, int mask)
 {
 	int i;
+	spinlock_t vdec_profile_spinlock;
 
 	if (vdec->id >= MAX_INSTANCE_MUN)
 		return;
@@ -207,14 +234,16 @@ static void vdec_profile_statistics(struct vdec_s *vdec, int event, int mask)
 	if (event != VDEC_PROFILE_EVENT_RUN &&
 			event != VDEC_PROFILE_EVENT_CB &&
 			event != VDEC_PROFILE_DECODED_FRAME &&
-			event != VDEC_PROFILE_EVENT_AGAIN)
+			event != VDEC_PROFILE_EVENT_AGAIN &&
+			event != VDEC_PROFILE_DECODER_START &&
+			event != VDEC_PROFILE_DECODER_END)
 		return;
 
-	mutex_lock(&vdec_profile_mutex);
+	spin_lock(&vdec_profile_spinlock);
 
 	if (dec_time_stat_reset == 1) {
 		if (event != VDEC_PROFILE_EVENT_RUN) {
-			mutex_unlock(&vdec_profile_mutex);
+			spin_unlock(&vdec_profile_spinlock);
 			return;
 		}
 		for (i = 0; i < MAX_INSTANCE_MUN; i++)
@@ -232,13 +261,21 @@ static void vdec_profile_statistics(struct vdec_s *vdec, int event, int mask)
 	if (mask_back_core(mask))
 		vdec_profile_cal(vdec, event, &statistics_back_s[vdec->id], 1);
 
-	mutex_unlock(&vdec_profile_mutex);
+	spin_unlock(&vdec_profile_spinlock);
 }
 
 
 void vdec_profile_more(struct vdec_s *vdec, int event, int para1, int para2, int mask)
 {
 	u64 timestamp = get_us_time_system();
+
+	if (event != VDEC_PROFILE_EVENT_RUN &&
+			event != VDEC_PROFILE_EVENT_CB &&
+			event != VDEC_PROFILE_EVENT_SAVE_INPUT &&
+			event != VDEC_PROFILE_EVENT_CHK_RUN_READY &&
+			event != VDEC_PROFILE_EVENT_RUN_READY &&
+			event != VDEC_PROFILE_EVENT_DISCONNECT)
+		return;
 
 	mutex_lock(&vdec_profile_mutex);
 
@@ -387,6 +424,7 @@ void print_stat_result(struct seq_file *m, struct vdec_profile_statistics_s *sta
 				\t\t\ttime_max_us:%llu\n\
 				\t\t\t[%d]run2cb ave_us:%llu\n\
 				\t\t\t[%d]decoded_frame ave_us:%llu\n\
+				\t\t\tdec_hw_spend_time_avg:%d\n\
 				\t\t\ttime_6ms_less_cnt:%d\n\
 				\t\t\ttime_6_9ms_cnt:%d\n\
 				\t\t\ttime_9_12ms_cnt:%d\n\
@@ -416,6 +454,7 @@ void print_stat_result(struct seq_file *m, struct vdec_profile_statistics_s *sta
 				i,
 				statistics_s->decoded_frame_cnt ?
 						div_u64(statistics_s->run2cb_time_stat.time_total_us , statistics_s->decoded_frame_cnt) : div_u64(statistics_s->run2cb_time_stat.time_total_us , statistics_s->cb_cnt),
+				div_u64(statistics_s->hw_time_stat.time_total_us, statistics_s->hw_cnt),
 				statistics_s->run2cb_time_stat.time_6ms_less_cnt,
 				statistics_s->run2cb_time_stat.time_6_9ms_cnt,
 				statistics_s->run2cb_time_stat.time_9_12ms_cnt,
@@ -433,7 +472,7 @@ void print_stat_result(struct seq_file *m, struct vdec_profile_statistics_s *sta
 				statistics_s->decode_time_stat.time_12_15ms_cnt,
 				statistics_s->decode_time_stat.time_15_18ms_cnt,
 				statistics_s->decode_time_stat.time_18_21ms_cnt,
-				statistics_s->decode_time_stat.time_21ms_up_cnt);
+				statistics_s->decode_time_stat.time_21ms_up_cnt	);
 	if (statistics_s->again_cnt) {
 		seq_printf(m, "[%d]again_cnt:%d\n\
 				\t\t\ttime_total_us:%llu\n\
@@ -461,6 +500,7 @@ void print_stat_result(struct seq_file *m, struct vdec_profile_statistics_s *sta
 				statistics_s->again_time_stat.time_18_21ms_cnt,
 				statistics_s->again_time_stat.time_21ms_up_cnt);
 	}
+
 
 }
 
