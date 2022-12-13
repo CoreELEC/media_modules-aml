@@ -92,6 +92,7 @@
 #define HW_RESET_CTL   0xfe380040
 #define HW_VCMD_BASE   0xfe380000
 
+extern int venc_file_open_cnt;
 
 struct meson_versenc_data {
 	int id;
@@ -150,10 +151,13 @@ static int meson_versenc_trips_initialize(struct platform_device *pdev)
 
 static void meson_versenc_control(struct platform_device *pdev, bool on)
 {
-    struct meson_versenc_data *data = platform_get_drvdata(pdev);
     unsigned int *kvirt_addr = 0;
+    struct meson_versenc_data *data = NULL;
+
+    data = platform_get_drvdata(pdev);
 
     mutex_lock(&data->lock);
+    pwr_ctrl_psci_smc(PDID_S5_VC9000E, on);
     if (on) {
         //hw init
         kvirt_addr = ioremap(WRAP_RESET_CTL, 4);
@@ -173,7 +177,6 @@ static void meson_versenc_control(struct platform_device *pdev, bool on)
         *kvirt_addr = 0x04000400;
         iounmap(kvirt_addr);
     }
-    pwr_ctrl_psci_smc(PDID_S5_VC9000E, on);
     mdelay(5);
     vers_resume_hw(on);
     mutex_unlock(&data->lock);
@@ -182,15 +185,32 @@ static void meson_versenc_control(struct platform_device *pdev, bool on)
 static int meson_versenc_suspend(struct device *dev)
 {
     meson_versenc_control(to_platform_device(dev), false);
-
     return 0;
 }
 
 static int meson_versenc_resume(struct device *dev)
 {
+    meson_versenc_control(to_platform_device(dev), false);
+    return 0;
     meson_versenc_hw_initialize(to_platform_device(dev));
     meson_versenc_trips_initialize(to_platform_device(dev));
     meson_versenc_control(to_platform_device(dev), true);
+    /*wait versenc work*/
+    msleep(VERSENC_TS_WAIT);
+
+    return 0;
+}
+
+int meson_versenc_suspend_runtime(struct platform_device *pdev)
+{
+    meson_versenc_control(pdev, false);
+
+    return 0;
+}
+
+int meson_versenc_resume_runtime(struct platform_device *pdev)
+{
+    meson_versenc_control(pdev, true);
     /*wait versenc work*/
     msleep(VERSENC_TS_WAIT);
 
@@ -219,6 +239,7 @@ static int __init hantroenc_init(struct platform_device *pf_dev)
 {
     pr_info("vc8000_vcmd_driver: hantroenc_init\n");
     vcmd_supported = 1;
+    venc_file_open_cnt = 0;
     if (vcmd_supported == 0)
         return hantroenc_normal_init();
     else
@@ -235,9 +256,9 @@ static int vc9000e_vce_probe(struct platform_device *pf_dev)
     if (!data)
         return -ENOMEM;
     data->dev = &pf_dev->dev;
-    platform_set_drvdata(pf_dev, data);
     mutex_init(&data->lock);
     data->sys_clk = devm_clk_get(&pf_dev->dev, "vers_sys_clk");
+    platform_set_drvdata(pf_dev, data);
     if (IS_ERR(data->sys_clk)) {
         dev_err(&pf_dev->dev, "Failed to vers_sys_clk\n");
         ret = PTR_ERR(data->sys_clk);

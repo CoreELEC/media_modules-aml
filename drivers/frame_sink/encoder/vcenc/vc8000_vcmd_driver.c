@@ -173,6 +173,10 @@ static unsigned int mmu_enable;
 #endif
 
 int ret;
+int venc_file_open_cnt;
+static struct device*  device;
+extern int meson_versenc_resume_runtime(struct platform_device *pdev);
+extern int meson_versenc_suspend_runtime(struct platform_device *pdev);
 /********variables declaration related with race condition**********/
 
 #define CMDBUF_MAX_SIZE       (512 * 4 * 4)
@@ -2269,6 +2273,12 @@ static int hantrovcmd_open(struct inode *inode, struct file *filp)
 	spin_lock_irqsave(&vcmd_process_manager_lock, flags);
 	bi_list_insert_node_tail(&global_process_manager, process_manager_node);
 	spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
+	if (0 == venc_file_open_cnt) {
+	    meson_versenc_resume_runtime(versenc_pdev);
+	}
+	spin_lock_irqsave(&vcmd_process_manager_lock, flags);
+	venc_file_open_cnt++;
+	spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
 
 	PDEBUG("dev opened\n");
 	return result;
@@ -2633,7 +2643,11 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 	}
 	//remove node from list
 	bi_list_remove_node(&global_process_manager, process_manager_node);
+	venc_file_open_cnt--;
 	spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
+	if (0 == venc_file_open_cnt) {
+	    meson_versenc_suspend_runtime(versenc_pdev);
+	}
 	free_process_manager_node(process_manager_node);
 	up(&vcmd_reserve_cmdbuf_sem[dev->vcmd_core_cfg.sub_module_type]);
 	return 0;
@@ -3438,7 +3452,7 @@ static void create_read_all_registers_cmdbuf(struct exchange_parameter *input_pa
 
 	if (vcmd_manager[input_para->module_type][0]->hw_version_id >
 	    HW_ID_1_0_C) {
-		pr_info("vc8000_vcmd_driver:create cmdbuf data when hw_version_id = 0x%x\n",
+		PDEBUG("vc8000_vcmd_driver:create cmdbuf data when hw_version_id = 0x%x\n",
 			vcmd_manager[input_para->module_type][0]->hw_version_id);
 
 		//read vcmd executing cmdbuf id registers to ddr for balancing core load.
@@ -3583,7 +3597,7 @@ static void create_read_all_registers_cmdbuf(struct exchange_parameter *input_pa
 		input_para->cmdbuf_size =
 			(16 + offset_inc + offset_inc_dec400) * 4;
 	} else {
-		pr_info("vc8000_vcmd_driver:create cmdbuf data when hw_version_id = 0x%x\n",
+		PDEBUG("vc8000_vcmd_driver:create cmdbuf data when hw_version_id = 0x%x\n",
 			vcmd_manager[input_para->module_type][0]->hw_version_id);
 		//read all registers
 		*(set_base_addr + 0) =
@@ -3643,6 +3657,7 @@ static void read_main_module_all_registers(u32 main_module_type)
 	input_para.priority = CMDBUF_PRIORITY_NORMAL;
 	input_para.module_type = main_module_type;
 	input_para.cmdbuf_size = 0;
+	input_para.core_id = 0;
 	ret = reserve_cmdbuf(NULL, &input_para);
 	vcmd_manager[main_module_type][0]->status_cmdbuf_id =
 		input_para.cmdbuf_id;
@@ -3655,23 +3670,20 @@ static void read_main_module_all_registers(u32 main_module_type)
 	status_base_virt_addr =
 		vcmd_status_buf_mem_pool.virtualAddress + input_para.cmdbuf_id * CMDBUF_MAX_SIZE / 4 +
 		(vcmd_manager[input_para.module_type][0]->vcmd_core_cfg.submodule_main_addr / 2 / 4 + 0);
-	pr_info("vc8000_vcmd_driver: main module register 0:0x%x\n", *status_base_virt_addr);
-	pr_info("vc8000_vcmd_driver: main module register 80:0x%x\n", *(status_base_virt_addr + 80));
-	pr_info("vc8000_vcmd_driver: main module register 214:0x%x\n", *(status_base_virt_addr + 214));
-	pr_info("vc8000_vcmd_driver: main module register 226:0x%x\n", *(status_base_virt_addr + 226));
-	pr_info("vc8000_vcmd_driver: main module register 287:0x%x\n", *(status_base_virt_addr + 287));
+	PDEBUG("vc8000_vcmd_driver: main module register 0:0x%x\n", *status_base_virt_addr);
+	PDEBUG("vc8000_vcmd_driver: main module register 80:0x%x\n", *(status_base_virt_addr + 80));
+	PDEBUG("vc8000_vcmd_driver: main module register 214:0x%x\n", *(status_base_virt_addr + 214));
+	PDEBUG("vc8000_vcmd_driver: main module register 226:0x%x\n", *(status_base_virt_addr + 226));
+	PDEBUG("vc8000_vcmd_driver: main module register 287:0x%x\n", *(status_base_virt_addr + 287));
 	//don't release cmdbuf because it can be used repeatedly
 	//release_cmdbuf(input_para.cmdbuf_id);
 }
 
 void vers_resume_hw(u32 on)
 {
-	int ret;
-	struct exchange_parameter input_para;
-	u32 irq_status_ret = 0;
-	u32 *status_base_virt_addr;
-	u32 k = 0;
-	u32 main_module_type = 0;
+	u32 i = 0, k = 0;
+	int result;
+
 	struct hantrovcmd_dev *dev = NULL;
 
 	if (!on) {
@@ -3682,9 +3694,58 @@ void vers_resume_hw(u32 on)
 	    dev->sw_cmdbuf_rdy_num = 0;
 	    return;
 	}
+	vcmd_release_IO();
+	total_vcmd_core_num =
+		sizeof(vcmd_core_array) / sizeof(struct vcmd_config);
+
+	for (i = 0; i < total_vcmd_core_num; i++) {
+		PDEBUG("vcmd: module init - vcmdcore[%d] addr =0x%llx\n", i,
+			(unsigned long long)vcmd_core_array[i].vcmd_base_addr);
+	}
+	PDEBUG("vc8000_vcmd_driver:vmalloc hantrovcmd_data start\n");
+	for (k = 0; k < MAX_VCMD_TYPE; k++) {
+		vcmd_type_core_num[k] = 0;
+		vcmd_position[k] = 0;
+		for (i = 0; i < MAX_VCMD_NUMBER; i++)
+			vcmd_manager[k][i] = NULL;
+	}
 
 	init_bi_list(&global_process_manager);
-	create_kernel_process_manager();
+	result = ConfigAXIFE(1); //1: normal, 2: bypass
+	result = ConfigMMU();
+	result = MMU_Kernel_map();
+	for (i = 0; i < total_vcmd_core_num; i++) {
+		hantrovcmd_data[i].hwregs = NULL;
+		hantrovcmd_data[i].core_id = i;
+		hantrovcmd_data[i].working_state = WORKING_STATE_IDLE;
+		hantrovcmd_data[i].sw_cmdbuf_rdy_num = 0;
+		hantrovcmd_data[i].spinlock = &owner_lock_vcmd[i];
+		spin_lock_init(&owner_lock_vcmd[i]);
+		hantrovcmd_data[i].wait_queue = &wait_queue_vcmd[i];
+		init_waitqueue_head(&wait_queue_vcmd[i]);
+		hantrovcmd_data[i].wait_abort_queue = &abort_queue_vcmd[i];
+		init_waitqueue_head(&abort_queue_vcmd[i]);
+		init_bi_list(&hantrovcmd_data[i].list_manager);
+		hantrovcmd_data[i].duration_without_int = 0;
+		vcmd_manager[vcmd_core_array[i].sub_module_type]
+			    [vcmd_type_core_num[vcmd_core_array[i].sub_module_type]] = &hantrovcmd_data[i];
+		vcmd_type_core_num[vcmd_core_array[i].sub_module_type]++;
+		hantrovcmd_data[i].vcmd_reg_mem_busAddress =
+			vcmd_registers_mem_pool.busAddress + i * VCMD_REGISTER_SIZE - base_ddr_addr;
+		//next todo: split out
+		hantrovcmd_data[i].mmu_vcmd_reg_mem_busAddress =
+			vcmd_registers_mem_pool.mmu_bus_address + i * VCMD_REGISTER_SIZE;
+		hantrovcmd_data[i].vcmd_reg_mem_virtualAddress =
+			vcmd_registers_mem_pool.virtualAddress + i * VCMD_REGISTER_SIZE / 4;
+		hantrovcmd_data[i].vcmd_reg_mem_size = VCMD_REGISTER_SIZE;
+		memset(hantrovcmd_data[i].vcmd_reg_mem_virtualAddress, 0, VCMD_REGISTER_SIZE);
+	}
+
+	result = vcmd_reserve_IO();
+	vcmd_reset_asic(hantrovcmd_data);
+
+	//cmdbuf pool allocation
+	//init_vcmd_non_cachable_memory_allocate();
 	//for cmdbuf management
 	cmdbuf_used_pos = 0;
 	for (k = 0; k < TOTAL_DISCRETE_CMDBUF_NUM; k++) {
@@ -3696,24 +3757,27 @@ void vers_resume_hw(u32 on)
 	cmdbuf_used_pos = 1;
 	cmdbuf_used[0] = 1;
 	cmdbuf_used_residual -= 1;
-	input_para.executing_time = 0;
-	input_para.priority = CMDBUF_PRIORITY_NORMAL;
-	input_para.module_type = main_module_type;
-	input_para.cmdbuf_size = 0;
-	ret = reserve_cmdbuf(NULL, &input_para);
-	vcmd_manager[main_module_type][0]->status_cmdbuf_id =
-	    input_para.cmdbuf_id;
-	create_read_all_registers_cmdbuf(&input_para);
-	link_and_run_cmdbuf(NULL, &input_para);
-	msleep(5);
-	hantrovcmd_isr(input_para.core_id, &hantrovcmd_data[input_para.core_id]);
-	wait_cmdbuf_ready(NULL, input_para.cmdbuf_id, &irq_status_ret);
-	status_base_virt_addr =
-	    vcmd_status_buf_mem_pool.virtualAddress + input_para.cmdbuf_id * CMDBUF_MAX_SIZE / 4 +
-	    (vcmd_manager[input_para.module_type][0]->vcmd_core_cfg.submodule_main_addr / 2 / 4 + 0);
+
+	create_kernel_process_manager();
+	for (i = 0; i < MAX_VCMD_TYPE; i++) {
+		if (vcmd_type_core_num[i] == 0)
+			continue;
+		sema_init(&vcmd_reserve_cmdbuf_sem[i], 1);
+	}
+#ifdef IRQ_SIMULATION
+	for (i = 0; i < 10000; i++)
+		timer_reserve[i].timer = NULL;
+#endif
+	/*read all registers for each type of module for analyzing configuration in cwl*/
+	for (i = 0; i < MAX_VCMD_TYPE; i++) {
+		if (vcmd_type_core_num[i] == 0)
+			continue;
+		PDEBUG("hantrovcmd_init: vcmd_core_type is %d\n", i);
+		read_main_module_all_registers(i);
+	}
+
 }
 
-static struct device*  device;
 int __init hantroenc_vcmd_init(struct platform_device *pf_dev)
 {
 	int i, k;
@@ -3852,8 +3916,8 @@ int __init hantroenc_vcmd_init(struct platform_device *pf_dev)
 	//for cmdbuf management
 	cmdbuf_used_pos = 0;
 	for (k = 0; k < TOTAL_DISCRETE_CMDBUF_NUM; k++) {
-		cmdbuf_used[k] = 0;
-		global_cmdbuf_node[k] = NULL;
+	    cmdbuf_used[k] = 0;
+	    global_cmdbuf_node[k] = NULL;
 	}
 	//cmdbuf_used[0] not be used, because int vector must non-zero
 	cmdbuf_used_residual = TOTAL_DISCRETE_CMDBUF_NUM;
@@ -3882,6 +3946,8 @@ int __init hantroenc_vcmd_init(struct platform_device *pf_dev)
 		read_main_module_all_registers(i);
 	}
 
+	meson_versenc_suspend_runtime(versenc_pdev);
+
 	return 0;
 err:
 #ifdef HANTROMMU_SUPPORT
@@ -3900,7 +3966,6 @@ void __exit hantroenc_vcmd_cleanup(struct platform_device *pf_dev)
 {
 	int i = 0;
 	u32 result;
-
 	for (i = 0; i < total_vcmd_core_num; i++) {
 		if (!hantrovcmd_data[i].hwregs)
 			continue;
@@ -3954,7 +4019,7 @@ static int vcmd_reserve_IO(void)
 	int i;
 	u32 found_hw = 0;
 
-	pr_info("%s: total_vcmd_core_num is %d\n", __func__,
+	PDEBUG("%s: total_vcmd_core_num is %d\n", __func__,
 		total_vcmd_core_num);
 	for (i = 0; i < total_vcmd_core_num; i++) {
 		hantrovcmd_data[i].hwregs = NULL;
@@ -3989,9 +4054,9 @@ static int vcmd_reserve_IO(void)
 
 		/*read hwid and check validness and store it*/
 		hwid = (u32)ioread32((void __iomem *)hantrovcmd_data[i].hwregs);
-		pr_info("%s: hantrovcmd_data[%d].hwregs=0x%p\n", __func__,
+		PDEBUG("%s: hantrovcmd_data[%d].hwregs=0x%p\n", __func__,
 			i, hantrovcmd_data[i].hwregs);
-		pr_info("hwid=0x%08x\n", hwid);
+		PDEBUG("hwid=0x%08x\n", hwid);
 		hantrovcmd_data[i].hw_version_id = hwid;
 
 		/* check for vcmd HW ID */
@@ -4009,7 +4074,7 @@ static int vcmd_reserve_IO(void)
 
 		found_hw = 1;
 
-		pr_info("hantrovcmd: HW at base <0x%llx> with ID <0x%08x>\n",
+		PDEBUG("hantrovcmd: HW at base <0x%llx> with ID <0x%08x>\n",
 			(unsigned long long)hantrovcmd_data[i].vcmd_core_cfg.vcmd_base_addr, hwid);
 	}
 
