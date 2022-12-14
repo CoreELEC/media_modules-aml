@@ -1734,6 +1734,27 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 #endif
 		} else
 			vavs_restore_regs(hw);
+
+		for (i = 0; i < hw->vf_buf_num_used; i++) {
+			if (hw->canvas_config[i][0].phy_addr &&
+				hw->canvas_config[i][1].phy_addr) {
+				config_cav_lut_ex(canvas_y(hw->canvas_spec[i]),
+					hw->canvas_config[i][0].phy_addr,
+					hw->canvas_config[i][0].width,
+					hw->canvas_config[i][0].height,
+					CANVAS_ADDR_NOWRAP,
+					hw->canvas_config[i][0].block_mode,
+					hw->canvas_config[i][0].endian, VDEC_1);
+
+				config_cav_lut_ex(canvas_u(hw->canvas_spec[i]),
+					hw->canvas_config[i][1].phy_addr,
+					hw->canvas_config[i][1].width,
+					hw->canvas_config[i][1].height,
+					CANVAS_ADDR_NOWRAP,
+					hw->canvas_config[i][1].block_mode,
+					hw->canvas_config[i][1].endian, VDEC_1);
+			}
+		}
 	}
 	/* notify ucode the buffer offset */
 	if (hw->decode_pic_count == 0)
