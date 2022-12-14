@@ -424,7 +424,7 @@ void print_stat_result(struct seq_file *m, struct vdec_profile_statistics_s *sta
 				\t\t\ttime_max_us:%llu\n\
 				\t\t\t[%d]run2cb ave_us:%llu\n\
 				\t\t\t[%d]decoded_frame ave_us:%llu\n\
-				\t\t\tdec_hw_spend_time_avg:%d\n\
+				\t\t\tdec_hw_spend_time_avg:%llu\n\
 				\t\t\ttime_6ms_less_cnt:%d\n\
 				\t\t\ttime_6_9ms_cnt:%d\n\
 				\t\t\ttime_9_12ms_cnt:%d\n\
