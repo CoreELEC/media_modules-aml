@@ -2615,7 +2615,7 @@ long mediasync_ins_get_status_by_tag(const char *buf, int size) {
 	} else if (strcmp(cbuf, "apts") == 0) {
 		pr_info("%llx\n", pInstance->mSyncInfo.curAudioInfo.framePts);
 	} else if (strcmp(cbuf, "av_diff") == 0) {
-		pr_info("%dms\n", (pInstance->mSyncInfo.curVideoInfo.framePts -
+		pr_info("%lldms\n", (pInstance->mSyncInfo.curVideoInfo.framePts -
 								pInstance->mSyncInfo.curAudioInfo.framePts) / 90);
 	}
 
@@ -2628,9 +2628,11 @@ long mediasync_ins_get_all_status(char *buf, int *size) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = 0;
 	char *pbuf = buf;
+	int64_t av_diff = 0;
 
 	for ( ;index < MAX_INSTANCE_NUM; index ++) {
-		int64_t av_diff = 0;
+		av_diff = 0;
+
 		if (vMediaSyncInsList[index].pInstance != NULL) {
 			pInstance = vMediaSyncInsList[index].pInstance;
 
@@ -2652,7 +2654,7 @@ long mediasync_ins_get_all_status(char *buf, int *size) {
 			av_diff = pInstance->mSyncInfo.curVideoInfo.framePts -
 								pInstance->mSyncInfo.curAudioInfo.framePts;
 			pbuf += sprintf(pbuf,
-				",av_diff:%dms", av_diff / 90);
+				",av_diff:%lldms", av_diff / 90);
 
 			pbuf += sprintf(pbuf,"\n");
 		}
