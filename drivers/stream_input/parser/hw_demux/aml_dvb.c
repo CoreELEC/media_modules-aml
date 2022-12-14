@@ -176,6 +176,7 @@ static int aml_dvb_dmx_init(struct aml_dvb *advb, struct aml_dmx *dmx, int id)
 	int i, ret;
 	struct device_node *node_dmx = NULL;
 	char buf[32];
+	struct dvb_adapter *padapter = aml_dvb_get_adapter(advb->dev);
 
 	switch (id) {
 	case 0:
@@ -223,7 +224,7 @@ static int aml_dvb_dmx_init(struct aml_dvb *advb, struct aml_dmx *dmx, int id)
 	dmx->dmxdev.filternum = dmx->demux.feednum;
 	dmx->dmxdev.demux = &dmx->demux.dmx;
 	dmx->dmxdev.capabilities = 0;
-	ret = dvb_dmxdev_init(&dmx->dmxdev, &advb->dvb_adapter);
+	ret = dvb_dmxdev_init(&dmx->dmxdev, padapter);
 	if (ret < 0) {
 		pr_error("dvb_dmxdev_init failed: error %d\n", ret);
 		goto error_dmxdev_init;
@@ -286,7 +287,7 @@ static int aml_dvb_dmx_init(struct aml_dvb *advb, struct aml_dmx *dmx, int id)
 		goto error_dmx_hw_init;
 	}
 
-	dvb_net_init(&advb->dvb_adapter, &dmx->dvb_net, &dmx->demux.dmx);
+	dvb_net_init(padapter, &dmx->dvb_net, &dmx->demux.dmx);
 
 	return 0;
 error_dmx_hw_init:
@@ -312,9 +313,15 @@ struct aml_dvb *aml_get_dvb_device(void)
 }
 EXPORT_SYMBOL(aml_get_dvb_device);
 
+struct device *aml_get_device(void)
+{
+	return aml_dvb_device.dev;
+}
+
 struct dvb_adapter *aml_get_dvb_adapter(void)
 {
-	return &aml_dvb_device.dvb_adapter;
+	struct device *dev = aml_get_device();
+	return aml_dvb_get_adapter(dev);
 }
 EXPORT_SYMBOL(aml_get_dvb_adapter);
 
@@ -734,6 +741,7 @@ static int aml_dvb_dsc_init(struct aml_dvb *advb,
 				  struct aml_dsc *dsc, int id)
 {
 	int i;
+	struct dvb_adapter *padapter = aml_dvb_get_adapter(advb->dev);;
 
 	for (i = 0; i < DSC_COUNT; i++) {
 		dsc->channel[i].id    = i;
@@ -748,7 +756,7 @@ static int aml_dvb_dsc_init(struct aml_dvb *advb,
 	dsc->dst = -1;
 
 	/*Register descrambler device */
-	return dvb_register_device(&advb->dvb_adapter, &dsc->dev,
+	return dvb_register_device(padapter, &dsc->dev,
 				  &dvbdev_dsc, dsc, DVB_DEVICE_CA, 0);
 }
 static void aml_dvb_dsc_release(struct aml_dvb *advb,
@@ -2253,6 +2261,7 @@ static int aml_dvb_probe(struct platform_device *pdev)
 	struct aml_dvb *advb;
 	int i, ret = 0;
 	struct devio_aml_platform_data *pd_dvb;
+	struct dvb_adapter *padapter;
 
 	pr_inf("probe amlogic dvb driver [%s]\n", DVB_VERSION);
 
@@ -2431,11 +2440,14 @@ static int aml_dvb_probe(struct platform_device *pdev)
 
 	pd_dvb = (struct devio_aml_platform_data *)advb->dev->platform_data;
 
+	padapter = aml_dvb_get_adapter(advb->dev);
+	/*
 	ret =
 	    dvb_register_adapter(&advb->dvb_adapter, CARD_NAME, THIS_MODULE,
 				 advb->dev, adapter_nr);
 	if (ret < 0)
 		return ret;
+	*/
 
 	for (i = 0; i < DMX_DEV_COUNT; i++)
 		advb->dmx[i].id = -1;
@@ -2446,7 +2458,7 @@ static int aml_dvb_probe(struct platform_device *pdev)
 	for (i = 0; i < advb->async_fifo_total_count; i++)
 		advb->asyncfifo[i].id = -1;
 
-	advb->dvb_adapter.priv = advb;
+	//advb->dvb_adapter.priv = advb;
 	dev_set_drvdata(advb->dev, advb);
 
 	for (i = 0; i < DSC_DEV_COUNT; i++) {
@@ -2482,15 +2494,16 @@ static int aml_dvb_probe(struct platform_device *pdev)
 	tsdemux_set_ops(NULL);
 #endif
 
+/*
 #if (defined CONFIG_AMLOGIC_DVB_EXTERN ||\
 		defined CONFIG_AMLOGIC_DVB_EXTERN_MODULE)
-	ret = dvb_extern_register_frontend(&advb->dvb_adapter);
+	ret = dvb_extern_register_frontend(padater);
 	if (ret) {
 		pr_error("aml register dvb frontend failed\n");
 		goto error;
 	}
 #endif
-
+*/
 	return 0;
 
 error:
@@ -2509,7 +2522,7 @@ error:
 			aml_dvb_dsc_release(advb, &advb->dsc[i]);
 	}
 
-	dvb_unregister_adapter(&advb->dvb_adapter);
+	aml_dvb_put_adapter(padapter);
 
 	return ret;
 }
@@ -2518,13 +2531,18 @@ static int aml_dvb_remove(struct platform_device *pdev)
 {
 	struct aml_dvb *advb = (struct aml_dvb *)dev_get_drvdata(&pdev->dev);
 	int i;
+	struct dvb_adapter *padapter;
 
 	pr_inf("[dmx_kpi] %s Enter.\n", __func__);
 
+	padapter = aml_dvb_get_adapter(advb->dev);
+
+/*
 #if (defined CONFIG_AMLOGIC_DVB_EXTERN ||\
 		defined CONFIG_AMLOGIC_DVB_EXTERN_MODULE)
 	dvb_extern_unregister_frontend();
 #endif
+*/
 
 	tsdemux_set_ops(NULL);
 
@@ -2546,7 +2564,7 @@ static int aml_dvb_remove(struct platform_device *pdev)
 		if (advb->dsc[i].id != -1)
 			aml_dvb_dsc_release(advb, &advb->dsc[i]);
 	}
-	dvb_unregister_adapter(&advb->dvb_adapter);
+	aml_dvb_put_adapter(padapter);
 
 	for (i = 0; i < advb->ts_in_total_count; i++) {
 		if (advb->ts[i].pinctrl && !IS_ERR_VALUE(advb->ts[i].pinctrl))
