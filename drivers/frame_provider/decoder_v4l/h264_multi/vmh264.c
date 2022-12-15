@@ -85,7 +85,6 @@ to enable DV of frame mode
 #define CHECK_INTERVAL        (HZ/100)
 
 #define SEI_DATA_SIZE			(8*1024)
-#define SEI_ITU_DATA_SIZE		(4*1024)
 
 #define RATE_MEASURE_NUM 8
 #define RATE_CORRECTION_THRESHOLD 5

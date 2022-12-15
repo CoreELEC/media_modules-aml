@@ -406,7 +406,20 @@ int vdec_data_get_index(ulong data)
 	int i = 0;
 
 	for (i = 0; i < VDEC_DATA_NUM; i++) {
-		if (atomic_read(&vdata->data[i].use_count) == 0) {
+		if ((atomic_read(&vdata->data[i].use_count) == 0) &&
+			(vdata->data[i].alloc_flag == 0)) {
+			vdata->data[i].user_data_buf = vzalloc(SEI_ITU_DATA_SIZE);
+			if (vdata->data[i].user_data_buf == NULL) {
+				pr_debug("alloc %dth userdata failed\n", i);
+				return -1;
+			}
+			vdata->data[i].hdr10p_data_buf = vzalloc(HDR10P_BUF_SIZE);
+			if (vdata->data[i].hdr10p_data_buf == NULL) {
+				pr_debug("alloc %dth hdr10p failed\n", i);
+				return -1;
+			}
+			vdata->data[i].alloc_flag = 1;
+
 			return i;
 		}
 	}
@@ -442,7 +455,7 @@ struct vdec_data_info_s *vdec_data_get(void)
 				core->vdata[i].data[j].private_data = (void *)&core->vdata[i];
 			}
 			spin_unlock_irqrestore(&core->vdec_data_lock, flags);
-			pr_debug("%s:get %dth vdata %p ok\n", __func__, i, &core->vdata[i]);
+			pr_debug("%s: get %dth vdata %p ok\n", __func__, i, &core->vdata[i]);
 			return &core->vdata[i];
 		}
 	}
@@ -453,22 +466,29 @@ EXPORT_SYMBOL(vdec_data_get);
 
 void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb)
 {
+	u32 i;
 	struct vdec_data_s *data = (struct vdec_data_s *)cb->private_data;
 	struct vdec_data_info_s *vdata = (struct vdec_data_info_s *)data->private_data;
 
 	atomic_dec(&data->use_count);
 	if (atomic_read(&data->use_count) == 0) {
-		if (data->user_data_buf != NULL)
-			vfree(data->user_data_buf);
-		if (data->hdr10p_data_buf != NULL)
-			vfree(data->hdr10p_data_buf);
-
-		data->hdr10p_data_buf = NULL;
-		data->user_data_buf = NULL;
 		atomic_dec(&vdata->buffer_count);
 	}
 
 	if (atomic_read(&vdata->buffer_count) == 0) {
+		for (i = 0; i < VDEC_DATA_NUM; i++) {
+			struct vdec_data_s *rel_data = &vdata->data[i];
+
+			if (rel_data->user_data_buf != NULL) {
+				vfree(rel_data->user_data_buf);
+				rel_data->user_data_buf = NULL;
+			}
+			if (rel_data->hdr10p_data_buf != NULL) {
+				vfree(rel_data->hdr10p_data_buf);
+				rel_data->hdr10p_data_buf = NULL;
+			}
+			rel_data->alloc_flag = 0;
+		}
 		atomic_set(&vdata->use_flag, 0);
 		pr_debug("%s:release vdata %p\n", __func__, vdata);
 	}

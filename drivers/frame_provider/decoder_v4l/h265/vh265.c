@@ -1751,8 +1751,6 @@ static int init_buf_spec(struct hevc_state_s *hevc);
 
 #ifdef H265_USERDATA_ENABLE
 
-#define SEI_ITU_DATA_SIZE		(4*1024)
-
 static u32 itu_t_t35_enable = 1;
 
 struct h265_userdata_record_t {

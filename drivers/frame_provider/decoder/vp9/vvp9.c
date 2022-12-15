@@ -5845,6 +5845,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 
 			if (vdec->vdata != NULL) {
 				int index = 0;
+
 				if (pic_config->vdec_data_index == -1) {
 					index = vdec_data_get_index((ulong)vdec->vdata);
 					pic_config->vdec_data_index = index;
@@ -5853,13 +5854,8 @@ static int config_pic(struct VP9Decoder_s *pbi,
 				}
 
 				if (index >= 0) {
-					if (pic_config->hdr10p_data_buf == NULL) {
-						pic_config->hdr10p_data_buf = vzalloc(HDR10P_BUF_SIZE);
-						if (pic_config->hdr10p_data_buf == NULL)
-							vp9_print(pbi, 0, "alloc %dth hdr10p failed\n", i);
-					}
+					pic_config->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, VF_BUFFER_IDX(i));
-					vdec->vdata->data[index].hdr10p_data_buf = pic_config->hdr10p_data_buf;
 					INIT_LIST_HEAD(&vdec->vdata->release_callback[VF_BUFFER_IDX(i)].node);
 					decoder_bmmu_box_add_callback_func(pbi->bmmu_box, VF_BUFFER_IDX(i),
 						(void *)&vdec->vdata->release_callback[VF_BUFFER_IDX(i)]);
@@ -5988,15 +5984,13 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 			if (vdec->vdata != NULL) {
 				int index = 0;
 				index = vdec_data_get_index((ulong)vdec->vdata);
+
 				if (index >= 0) {
 					struct PIC_BUFFER_CONFIG_s *pic;
 					pic = &cm->buffer_pool->frame_bufs[i].buf;
 					pic->vdec_data_index = index;
-					pic->hdr10p_data_buf = vzalloc(HDR10P_BUF_SIZE);
-					if (pic->hdr10p_data_buf == NULL)
-						vp9_print(pbi, 0, "alloc %dth hdr10p failed\n", i);
+					pic->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, HEADER_BUFFER_IDX(i));
-					vdec->vdata->data[index].hdr10p_data_buf = pic->hdr10p_data_buf;
 					INIT_LIST_HEAD(&vdec->vdata->release_callback[HEADER_BUFFER_IDX(i)].node);
 					decoder_bmmu_box_add_callback_func(pbi->bmmu_box, HEADER_BUFFER_IDX(i),
 						(void *)&vdec->vdata->release_callback[HEADER_BUFFER_IDX(i)]);

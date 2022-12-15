@@ -98,7 +98,7 @@
 
 #define SEQINFO_EXT_AVAILABLE   0x80000000
 #define SEQINFO_PROG            0x00010000
-#define CCBUF_SIZE      (5*1024)
+#define CCBUF_SIZE		SEI_ITU_DATA_SIZE
 
 #define VF_POOL_SIZE        64
 #define DECODE_BUFFER_NUM_MAX 16
@@ -2976,18 +2976,11 @@ static int vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 				int index = 0;
 
 				pic = &hw->pics[i];
-				if (pic != NULL) {
-					pic->user_data_buf = NULL;
-				}
 
 				index = vdec_data_get_index((ulong)vdec->vdata);
 				if (index >= 0) {
-					pic->user_data_buf = vzalloc(CCBUF_SIZE);
-					if (pic->user_data_buf == NULL) {
-						debug_print(DECODE_ID(hw), 0, "alloc %dth userdata failed\n", i);
-					}
+					pic->user_data_buf = vdec->vdata->data[index].user_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
-					vdec->vdata->data[index].user_data_buf = pic->user_data_buf;
 					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
 					decoder_bmmu_box_add_callback_func(hw->mm_blk_handle, i, (void *)&vdec->vdata->release_callback[i]);
 				} else {

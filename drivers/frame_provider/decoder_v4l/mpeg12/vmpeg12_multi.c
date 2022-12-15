@@ -96,7 +96,7 @@
 
 #define SEQINFO_EXT_AVAILABLE   0x80000000
 #define SEQINFO_PROG            0x00010000
-#define CCBUF_SIZE      (5*1024)
+#define CCBUF_SIZE      SEI_ITU_DATA_SIZE
 
 #define VF_POOL_SIZE        64
 #define DECODE_BUFFER_NUM_MAX 16

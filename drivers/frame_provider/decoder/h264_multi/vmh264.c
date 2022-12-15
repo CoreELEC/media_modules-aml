@@ -88,7 +88,6 @@ to enable DV of frame mode
 #define CHECK_INTERVAL        (HZ/100)
 
 #define SEI_DATA_SIZE			(8*1024)
-#define SEI_ITU_DATA_SIZE		(4*1024)
 
 #define RATE_MEASURE_NUM 8
 #define RATE_CORRECTION_THRESHOLD 5
@@ -1299,18 +1298,10 @@ static void hevc_mcr_config_canv2axitbl(struct vdec_h264_hw_s *hw, int restore)
 				struct buffer_spec_s *pic = &hw->buffer_spec[i];
 				int index = 0;
 
-				if ((pic->user_data_buf != NULL)) {
-					pic->user_data_buf = NULL;
-				}
-
 				index = vdec_data_get_index((ulong)vdec->vdata);
 				if (index >= 0) {
-					pic->user_data_buf = vzalloc(SEI_ITU_DATA_SIZE);
-					if (pic->user_data_buf == NULL) {
-						dpb_print(DECODE_ID(hw), 0, "alloc %dth userdata failed\n", i);
-					}
+					pic->user_data_buf = vdec->vdata->data[index].user_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
-					vdec->vdata->data[index].user_data_buf = pic->user_data_buf;
 					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
 					decoder_bmmu_box_add_callback_func(hw->bmmu_box, i, (void *)&vdec->vdata->release_callback[i]);
 				} else {
@@ -1964,17 +1955,9 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i)
 				struct buffer_spec_s *pic = &hw->buffer_spec[i];
 				int index = 0;
 
-				if (pic->user_data_buf != NULL) {
-					pic->user_data_buf = NULL;
-				}
-
 				index = vdec_data_get_index((ulong)vdec->vdata);
 				if (index >= 0) {
-					pic->user_data_buf = vzalloc(SEI_ITU_DATA_SIZE);
-					if (pic->user_data_buf == NULL) {
-						dpb_print(DECODE_ID(hw), 0, "alloc %dth userdata failed\n", i);
-					}
-					vdec->vdata->data[index].user_data_buf = pic->user_data_buf;
+					pic->user_data_buf = vdec->vdata->data[index].user_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
 					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
 					decoder_bmmu_box_add_callback_func(hw->bmmu_box, i, (void *)&vdec->vdata->release_callback[i]);
