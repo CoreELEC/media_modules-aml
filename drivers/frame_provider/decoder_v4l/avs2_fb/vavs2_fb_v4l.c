@@ -5998,7 +5998,6 @@ static int vavs2_get_ps_info(struct AVS2Decoder_s *dec, struct aml_vdec_ps_infos
 		u32 delta;
 		delta = ps->dpb_margin + ps->dpb_frames - max_buf_num;
 		ps->dpb_margin -= delta;
-		dec->dynamic_buf_margin = ps->dpb_margin;
 	}
 
 	ps->field = V4L2_FIELD_NONE;

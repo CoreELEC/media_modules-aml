@@ -10870,7 +10870,6 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 		u32 delta;
 		delta = ps->dpb_margin + ps->dpb_frames - MAX_BUF_NUM_NORMAL;
 		ps->dpb_margin -= delta;
-		pbi->dynamic_buf_num_margin = ps->dpb_margin;
 	}
 	ps->field = V4L2_FIELD_NONE;
 
