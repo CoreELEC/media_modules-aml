@@ -1389,7 +1389,7 @@ static u32 step;
 static u32 buf_alloc_width = 4096;
 static u32 buf_alloc_height = 2304;
 
-static u32 dynamic_buf_num_margin;
+static u32 dynamic_buf_num_margin = 4;
 #else
 static u32 buf_alloc_width;
 static u32 buf_alloc_height;
@@ -2532,7 +2532,11 @@ static void init_buf_list(struct AVS2Decoder_s *dec)
 	int i;
 	int buf_size;
 	int mc_buffer_end = dec->mc_buf->buf_start + dec->mc_buf->buf_size;
-	dec->used_buf_num = max_buf_num;
+
+	if (IS_8K_SIZE(dec->vavs2_amstream_dec_info.width, dec->vavs2_amstream_dec_info.height))
+		dec->used_buf_num = max_buf_num + dec->dynamic_buf_margin;
+	else
+		dec->used_buf_num = max_buf_num + dec->dynamic_buf_margin - 4;
 
 	if (dec->used_buf_num > MAX_BUF_NUM)
 		dec->used_buf_num = MAX_BUF_NUM;
@@ -4573,7 +4577,11 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 #ifndef AVS2_10B_MMU
 	init_buf_list(dec);
 #else
-	dec->used_buf_num = max_buf_num + dec->dynamic_buf_margin;
+	if (IS_8K_SIZE(dec->vavs2_amstream_dec_info.width, dec->vavs2_amstream_dec_info.height))
+		dec->used_buf_num = max_buf_num + dec->dynamic_buf_margin;
+	else
+		dec->used_buf_num = max_buf_num + dec->dynamic_buf_margin - 4;
+
 	if (dec->used_buf_num > MAX_BUF_NUM)
 		dec->used_buf_num = MAX_BUF_NUM;
 	if (dec->used_buf_num > FRAME_BUFFERS)
@@ -9285,6 +9293,8 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		dec->double_write_mode = get_double_write_mode(dec);
 	}
 
+	if (!dec->dynamic_buf_margin && dynamic_buf_num_margin)
+		dec->dynamic_buf_margin = dynamic_buf_num_margin;
 	if ((dec->double_write_mode & 0x10) == 0)
 		dec->mmu_enable = 1;
 

@@ -1501,7 +1501,7 @@ re_search_seq_threshold:
 */
 static u32 re_search_seq_threshold = 0x800; /*0x8;*/
 
-static u32 max_buf_num = (REF_BUFFER + 1);
+static u32 max_buf_num = (REF_BUFFER + 1 + 5); //5:margin
 
 static u32 run_ready_min_buf_num = 2;
 
@@ -5992,8 +5992,10 @@ static int vavs2_get_ps_info(struct AVS2Decoder_s *dec, struct aml_vdec_ps_infos
 	ps->coded_height 	= ALIGN(dec->frame_height, 64);
 	ps->dpb_size 		= dec->used_buf_num;
 	ps->dpb_margin	= dec->dynamic_buf_margin;
-	ps->dpb_frames	= 12;
-
+	if (IS_8K_SIZE(dec->frame_width, dec->frame_height))
+		ps->dpb_frames	= 15;
+	else
+		ps->dpb_frames	= 12;
 	if (ps->dpb_margin + ps->dpb_frames > max_buf_num) {
 		u32 delta;
 		delta = ps->dpb_margin + ps->dpb_frames - max_buf_num;
