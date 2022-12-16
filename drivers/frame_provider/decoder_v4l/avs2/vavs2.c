@@ -5824,7 +5824,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		if (!dec->m_ins_flag)
 			dec->slice_idx++;
 
-		if (dec->m_ins_flag && ret
+		if (dec->m_ins_flag && ret > 0
 			&& dec->avs2_dec.hc.cur_pic->cuva_data_buf != NULL)
 			release_cuva_data(dec->avs2_dec.hc.cur_pic);
 
