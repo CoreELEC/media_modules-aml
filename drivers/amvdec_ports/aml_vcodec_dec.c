@@ -2023,15 +2023,16 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 			return 0;
 		}
 
-		dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx,
-			multiplanar ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
-			V4L2_BUF_TYPE_VIDEO_CAPTURE);
-		if (!vb2_is_streaming(dst_vq)) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-				"Capture stream is off. No need to flush.\n");
-			return 0;
+		if ((vdec_frame_number(ctx->ada_ctx) <= 0) && (v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) == 0)) {
+			dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx,
+				multiplanar ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
+				V4L2_BUF_TYPE_VIDEO_CAPTURE);
+			if (!vb2_is_streaming(dst_vq)) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"Capture stream is off. No need to flush.\n");
+				return 0;
+			}
 		}
-
 		/* flush pipeline */
 		v4l2_m2m_buf_queue(ctx->m2m_ctx, &ctx->empty_flush_buf->vb);
 		v4l2_m2m_try_schedule(ctx->m2m_ctx);//pay attention
