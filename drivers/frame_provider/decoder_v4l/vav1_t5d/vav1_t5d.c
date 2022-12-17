@@ -7978,7 +7978,6 @@ static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 		u32 delta;
 		delta = ps->dpb_margin + ps->dpb_frames - MAX_BUF_NUM_NORMAL;
 		ps->dpb_margin -= delta;
-		hw->dynamic_buf_num_margin = ps->dpb_margin;
 	}
 	ps->field = V4L2_FIELD_NONE;
 
