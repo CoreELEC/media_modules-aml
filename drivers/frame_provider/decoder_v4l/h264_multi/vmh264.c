@@ -4841,6 +4841,7 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int pic_size = mb_width * mb_height * 384;
 	int size = 0, size_vui;
+	PR_INIT(256);
 
 	switch (level_idc) {
 	case 9:
@@ -4897,18 +4898,15 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 
 	size /= pic_size;
 	size = imin(size, 16);
-	dpb_print(DECODE_ID(hw), 0, "level_idc = %d pic_size = %d size = %d\n",
-		level_idc, pic_size, size);
+	PR_FILL("level_idc = %d pic_size = %d size = %d\n", level_idc, pic_size, size);
 	if (p_H264_Dpb->bitstream_restriction_flag) {
 		if ((int)p_H264_Dpb->max_dec_frame_buffering > size) {
-			dpb_print(DECODE_ID(hw), 0,
-				"max_dec_frame_buffering larger than MaxDpbSize.\n");
+			PR_FILL("%d: max_dec_frame_buffering larger than MaxDpbSize.\n", DECODE_ID(hw));
 		}
 		size_vui = imax (1, p_H264_Dpb->max_dec_frame_buffering);
 		if (size_vui < size) {
-			dpb_print(DECODE_ID(hw), 0,
-				"Warning: max_dec_frame_buffering(%d) is less than DPB size(%d) calculated from Profile/Level.\n",
-				size_vui, size);
+			PR_FILL("%d: Warning: max_dec_frame_buffering(%d) is less than DPB size(%d) calculated from Profile and Level.\n",
+				DECODE_ID(hw), size_vui, size);
 		}
 		size = size_vui;
 	}
@@ -4917,8 +4915,11 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 
 	if (!hw->discard_dv_data)  {
 		size += 1;
-		dpb_print(DECODE_ID(hw), 0, "dv stream need one more buffer.\n");
+		PR_FILL("%d: dv stream need one more buffer.\n", DECODE_ID(hw));
 	}
+
+	if (hw->dpb.dec_dpb_size != size)
+		PR_INFO(DECODE_ID(hw));
 
 	return size;
 }
@@ -5064,7 +5065,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 				p_H264_Dpb->num_reorder_frames >= 0) {
 				hw->dpb.reorder_output = hw->num_reorder_frames + 1;
 			}
-			dpb_print(DECODE_ID(hw), 0,
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 				"restriction_flag=%d, max_dec_frame_buffering=%d, dec_dpb_size=%d num_reorder_frames %d used_reorder_dpb_size_margin %d\n",
 				hw->bitstream_restriction_flag,
 				hw->max_dec_frame_buffering,
