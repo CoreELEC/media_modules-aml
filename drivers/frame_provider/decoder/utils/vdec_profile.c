@@ -34,6 +34,8 @@
 #define PROFILE_REC_SIZE 40
 
 static DEFINE_MUTEX(vdec_profile_mutex);
+static DEFINE_SPINLOCK(vdec_profile_spinlock);
+
 static int rec_wp;
 static bool rec_wrapped;
 static uint dec_time_stat_flag;
@@ -226,7 +228,7 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 static void vdec_profile_statistics(struct vdec_s *vdec, int event, int mask)
 {
 	int i;
-	spinlock_t vdec_profile_spinlock;
+	ulong flags;
 
 	if (vdec->id >= MAX_INSTANCE_MUN)
 		return;
@@ -239,11 +241,11 @@ static void vdec_profile_statistics(struct vdec_s *vdec, int event, int mask)
 			event != VDEC_PROFILE_DECODER_END)
 		return;
 
-	spin_lock(&vdec_profile_spinlock);
+	spin_lock_irqsave(&vdec_profile_spinlock, flags);
 
 	if (dec_time_stat_reset == 1) {
 		if (event != VDEC_PROFILE_EVENT_RUN) {
-			spin_unlock(&vdec_profile_spinlock);
+			spin_unlock_irqrestore(&vdec_profile_spinlock, flags);
 			return;
 		}
 		for (i = 0; i < MAX_INSTANCE_MUN; i++)
@@ -261,7 +263,7 @@ static void vdec_profile_statistics(struct vdec_s *vdec, int event, int mask)
 	if (mask_back_core(mask))
 		vdec_profile_cal(vdec, event, &statistics_back_s[vdec->id], 1);
 
-	spin_unlock(&vdec_profile_spinlock);
+	spin_unlock_irqrestore(&vdec_profile_spinlock, flags);
 }
 
 
@@ -424,7 +426,7 @@ void print_stat_result(struct seq_file *m, struct vdec_profile_statistics_s *sta
 				\t\t\ttime_max_us:%llu\n\
 				\t\t\t[%d]run2cb ave_us:%llu\n\
 				\t\t\t[%d]decoded_frame ave_us:%llu\n\
-				\t\t\tdec_hw_spend_time_avg:%llu\n\
+				\t\t\t[%d]dec_hw_spend_time ave_us:%llu\n\
 				\t\t\ttime_6ms_less_cnt:%d\n\
 				\t\t\ttime_6_9ms_cnt:%d\n\
 				\t\t\ttime_9_12ms_cnt:%d\n\
@@ -454,6 +456,7 @@ void print_stat_result(struct seq_file *m, struct vdec_profile_statistics_s *sta
 				i,
 				statistics_s->decoded_frame_cnt ?
 						div_u64(statistics_s->run2cb_time_stat.time_total_us , statistics_s->decoded_frame_cnt) : div_u64(statistics_s->run2cb_time_stat.time_total_us , statistics_s->cb_cnt),
+				i,
 				div_u64(statistics_s->hw_time_stat.time_total_us, statistics_s->hw_cnt),
 				statistics_s->run2cb_time_stat.time_6ms_less_cnt,
 				statistics_s->run2cb_time_stat.time_6_9ms_cnt,
