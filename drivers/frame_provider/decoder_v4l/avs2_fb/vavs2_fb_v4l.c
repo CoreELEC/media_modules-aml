@@ -880,6 +880,7 @@ struct AVS2Decoder_s {
 	unsigned char print_buf[1024*16+16];
 	int print_buf_len;
 	struct trace_decoder_name trace;
+	int decoder_size;
 };
 
 static int  compute_losless_comp_body_size(
@@ -7031,6 +7032,7 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 	unsigned int dec_status;
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)data;
 	uint debug_tag;
+	int shiftbyte = 0;
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 	if (dec_status == HEVC_DECPIC_DATA_DONE) {
@@ -7061,6 +7063,13 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 		return IRQ_HANDLED;
 	dec->dec_status = dec_status;
 	dec->process_busy = 1;
+	shiftbyte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+	if (vdec_frame_based(hw_to_vdec(dec)) &&
+		(shiftbyte > dec->decoder_size + 20)) {
+		avs2_print(dec, 0,"dec status  = 0x%x to AVS2_DECODE_BUFEMPTY, shiftbyte:%d decoder_size:%d\n",
+			dec_status, shiftbyte, dec->decoder_size);
+		dec->dec_status = AVS2_DECODE_BUFEMPTY;
+	}
 	if (debug & AVS2_DBG_IRQ_EVENT) {
 		if (dec->front_back_mode != 1)
 			avs2_print(dec, 0,
@@ -8478,6 +8487,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			vdec->mvfrm->frame_size = dec->chunk->size;
 	}
 
+	dec->decoder_size = r;
 	WRITE_VREG(HEVC_DECODE_SIZE, r);
 	WRITE_VREG(HEVC_DECODE_COUNT, dec->slice_idx);
 	dec->init_flag = 1;
