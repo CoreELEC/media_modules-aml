@@ -10171,7 +10171,8 @@ result_done:
 	wait_vmh264_search_done(hw);
 	ATRACE_COUNTER(hw->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_END);
 	/* mark itself has all HW resource released and input released */
-
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
+		WRITE_VREG(DCAC_DMA_HW_CTL_CFG, 0);
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	if (hw->switch_dvlayer_flag) {
 		if (vdec->slave)
