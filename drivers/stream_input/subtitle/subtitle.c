@@ -571,10 +571,12 @@ static long amsubtitle_ioctl(struct file *file, unsigned int cmd, ulong arg)
 				states->subtitle_info;
 			break;
 		case SUB_DATA_T_DATA: {
-			if (states->subtitle_info > 0) {
+			if (states->subtitle_info > 0 &&
+				states->subtitle_info < 0x100000) {
 				subtitle_data[subtitle_write_pos].data =
 					vmalloc((states->subtitle_info));
-				if (subtitle_data[subtitle_write_pos].data)
+				if (subtitle_data[subtitle_write_pos].data &&
+					access_ok(states->data, states->subtitle_info))
 					memcpy(
 					subtitle_data[subtitle_write_pos].data,
 					(char *)states->data,
