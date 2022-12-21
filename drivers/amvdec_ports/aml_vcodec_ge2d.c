@@ -870,11 +870,12 @@ int aml_v4l2_ge2d_destroy(struct aml_v4l2_ge2d* ge2d)
 	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_DETAIL,
 		"ge2d destroy begin\n");
 
-	ge2d->running = false;
-	up(&ge2d->sem_in);
-	up(&ge2d->sem_out);
-	kthread_stop(ge2d->task);
-
+	if (ge2d->running) {
+		ge2d->running = false;
+		up(&ge2d->sem_in);
+		up(&ge2d->sem_out);
+		kthread_stop(ge2d->task);
+	}
 	destroy_ge2d_work_queue(ge2d->ge2d_context);
 	/* no more ge2d callback below this line */
 
@@ -896,6 +897,24 @@ int aml_v4l2_ge2d_destroy(struct aml_v4l2_ge2d* ge2d)
 	return 0;
 }
 EXPORT_SYMBOL(aml_v4l2_ge2d_destroy);
+
+int aml_v4l2_ge2d_thread_stop(struct aml_v4l2_ge2d* ge2d)
+{
+	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_DETAIL,
+		"ge2d thread stop begin\n");
+
+	if (ge2d->running) {
+		ge2d->running = false;
+		up(&ge2d->sem_in);
+		up(&ge2d->sem_out);
+		kthread_stop(ge2d->task);
+	}
+	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_DETAIL,
+		"ge2d thread stop done\n");
+
+	return 0;
+}
+EXPORT_SYMBOL(aml_v4l2_ge2d_thread_stop);
 
 static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s *vf)
 {

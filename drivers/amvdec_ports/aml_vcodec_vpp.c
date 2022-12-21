@@ -851,10 +851,12 @@ int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp)
 	struct sched_param param =
 		{ .sched_priority = MAX_RT_PRIO - 1 };
 
-	vpp->running = false;
-	up(&vpp->sem_in);
-	up(&vpp->sem_out);
-	kthread_stop(vpp->task);
+	if (vpp->running) {
+		vpp->running = false;
+		up(&vpp->sem_in);
+		up(&vpp->sem_out);
+		kthread_stop(vpp->task);
+	}
 
 	kfifo_reset(&vpp->input);
 	kfifo_reset(&vpp->output);
@@ -1119,11 +1121,13 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
 		"vpp destroy begin\n");
 	atomic_set(&vpp->local_buf_out, 0);
-	vpp->running = false;
-	up(&vpp->sem_in);
-	up(&vpp->sem_out);
-	kthread_stop(vpp->task);
 
+	if (vpp->running) {
+		vpp->running = false;
+		up(&vpp->sem_in);
+		up(&vpp->sem_out);
+		kthread_stop(vpp->task);
+	}
 	di_destroy_instance(vpp->di_handle);
 	/* no more vpp callback below this line */
 
@@ -1145,6 +1149,25 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 	return 0;
 }
 EXPORT_SYMBOL(aml_v4l2_vpp_destroy);
+
+int aml_v4l2_vpp_thread_stop(struct aml_v4l2_vpp* vpp)
+{
+	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
+		"vpp thread stop begin\n");
+
+	if (vpp->running) {
+		vpp->running = false;
+		up(&vpp->sem_in);
+		up(&vpp->sem_out);
+		kthread_stop(vpp->task);
+	}
+
+	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
+		"vpp thread stop done\n");
+
+	return 0;
+}
+EXPORT_SYMBOL(aml_v4l2_vpp_thread_stop);
 
 static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 {

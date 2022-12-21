@@ -1816,6 +1816,19 @@ out:
 	return;
 }
 
+void stop_pipeline(struct aml_vcodec_ctx *ctx)
+{
+	if (ctx->ge2d) {
+		aml_v4l2_ge2d_thread_stop(ctx->ge2d);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "ge2d stop.\n");
+	}
+
+	if (ctx->vpp) {
+		aml_v4l2_vpp_thread_stop(ctx->vpp);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "vpp stop\n");
+	}
+}
+
 void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 {
 	/* disable queue output item to worker. */
@@ -1830,6 +1843,7 @@ void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 	if (ctx->state > AML_STATE_INIT)
 		aml_vdec_reset(ctx);
 
+	stop_pipeline(ctx);
 	/* pause the job and clean trans status. */
 	while (ctx->m2m_ctx->job_flags & TRANS_RUNNING) {
 		v4l2_m2m_job_pause(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);

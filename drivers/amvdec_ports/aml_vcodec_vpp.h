@@ -103,6 +103,7 @@ int aml_v4l2_vpp_init(
 		struct aml_v4l2_vpp** vpp_handle);
 int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp);
 int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp);
+int aml_v4l2_vpp_thread_stop(struct aml_v4l2_vpp* vpp);
 #else
 static inline int aml_v4l2_vpp_get_buf_num(u32 mode) { return -1; }
 static inline int aml_v4l2_vpp_init(

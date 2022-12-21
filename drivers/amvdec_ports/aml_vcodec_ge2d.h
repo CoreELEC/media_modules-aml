@@ -83,5 +83,6 @@ int aml_v4l2_ge2d_init(
 		struct aml_v4l2_ge2d** ge2d_handle);
 
 int aml_v4l2_ge2d_destroy(struct aml_v4l2_ge2d* ge2d);
+int aml_v4l2_ge2d_thread_stop(struct aml_v4l2_ge2d* ge2d);
 
 #endif
