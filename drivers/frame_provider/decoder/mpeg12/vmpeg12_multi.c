@@ -2670,6 +2670,9 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			vdec_v4l_write_frame_sync(ctx);
 	}
 
+	if (from == 1)
+		hw->timeout_processing = 0;
+
 	if (hw->vdec_cb)
 		hw->vdec_cb(vdec, hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 }

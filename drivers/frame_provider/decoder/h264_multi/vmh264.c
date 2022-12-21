@@ -10200,6 +10200,9 @@ result_done:
 			vdec_v4l_write_frame_sync(ctx);
 	}
 
+	if (from == 1)
+		hw->timeout_processing = 0;
+
 	if (hw->vdec_cb)
 		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 }

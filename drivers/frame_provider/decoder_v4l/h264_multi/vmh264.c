@@ -9409,6 +9409,9 @@ result_done:
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
+	if (from == 1)
+		hw->timeout_processing = 0;
+
 	if (hw->vdec_cb)
 		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 }

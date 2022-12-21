@@ -14497,6 +14497,9 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			vdec_v4l_write_frame_sync(ctx);
 	}
 
+	if (from == 1)
+		hevc->timeout_processing = 0;
+
 	if (hevc->vdec_cb)
 		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg, CORE_MASK_HEVC);
 }
