@@ -136,7 +136,7 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 	stbuf->flag |= BUF_FLAG_ALLOC;
 	stbuf->flag |= BUF_FLAG_IN_USE;
 	if (vdec_single(vdec))
-		pts_start(stbuf->type);
+		ret = pts_start(stbuf->type);
 	pr_info("[%d]: [%s-%s] addr: %lx, size: %x, thrRW: %d, extbuf: %d, secure: %d\n",
 		stbuf->id, type_to_str(stbuf->type), stbuf->name,
 		stbuf->buf_start, stbuf->buf_size,
