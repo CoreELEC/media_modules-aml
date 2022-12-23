@@ -6884,8 +6884,8 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 				(start_code == I_PICTURE_START_CODE) &&
 				(dec->mmu_fb_4k_number < cur_mmu_fb_4k_number) &&
 				(cur_mmu_fb_4k_number > 0)) {
-				dec->init_pic_h = dec->avs2_dec.param.p.horizontal_size;
-				dec->init_pic_w = dec->avs2_dec.param.p.vertical_size;
+				dec->init_pic_h = dec->avs2_dec.param.p.vertical_size;
+				dec->init_pic_w = dec->avs2_dec.param.p.horizontal_size;
 
 				amhevc_stop_f();
 				avs2_print(dec, AVS2_DBG_BUFMGR,
