@@ -3431,7 +3431,7 @@ static void config_decode_mode(struct vdec_h264_hw_s *hw)
 	else
 		WRITE_VREG(H264_DECODE_MODE,
 			DECODE_MODE_MULTI_STREAMBASE);
-	WRITE_VREG(H264_DECODE_SEQINFO, 0);
+	WRITE_VREG(H264_DECODE_SEQINFO, hw->seq_info2);
 	WRITE_VREG(HEAD_PADDING_REG, 0);
 
 	if (hw->init_flag == 0)
