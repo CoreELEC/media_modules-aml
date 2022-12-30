@@ -426,6 +426,11 @@ int vdec_data_get_index(ulong data)
 				pr_debug("alloc %dth hdr10p failed\n", i);
 				return -1;
 			}
+			vdata->data[i].aux_data_buff = vzalloc(AUX_DATA_SIZE1);
+			if (vdata->data[i].aux_data_buff == NULL) {
+				pr_debug("alloc %dth aux failed\n", i);
+				return -1;
+			}
 			vdata->data[i].alloc_flag = 1;
 
 			return i;
@@ -501,6 +506,10 @@ void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb)
 			if (rel_data->hdr10p_data_buf != NULL) {
 				vfree(rel_data->hdr10p_data_buf);
 				rel_data->hdr10p_data_buf = NULL;
+			}
+			if (rel_data->aux_data_buff != NULL) {
+				vfree(rel_data->aux_data_buff);
+				rel_data->aux_data_buff = NULL;
 			}
 			rel_data->alloc_flag = 0;
 		}

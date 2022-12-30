@@ -193,6 +193,7 @@ enum e_trace_work_status {
 #define META_DATA_SIZE	(256)
 #define HDR10P_BUF_SIZE	(128)
 #define SEI_ITU_DATA_SIZE		(5*1024)
+#define AUX_DATA_SIZE1 (16 * 1024)
 
 #define SEI_TYPE	(1)
 #define DV_TYPE		(2)
@@ -334,6 +335,7 @@ struct vdec_data_s {
 	 * 2, allocated, free
 	 */
 	u32 alloc_flag;
+	char *aux_data_buff;
 };
 
 struct vdec_data_info_s {

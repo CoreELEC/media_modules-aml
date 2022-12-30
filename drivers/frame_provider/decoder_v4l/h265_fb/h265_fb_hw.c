@@ -790,65 +790,65 @@ static void config_bufstate_front_hw(struct hevc_state_s* hevc)
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, hevc->fb_buf_parser_sao0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, hevc->fb_buf_parser_sao0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->fr.parser_sao0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.parser_sao0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.parser_sao0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 1);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, hevc->fb_buf_parser_sao1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, hevc->fb_buf_parser_sao1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->fr.parser_sao1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.parser_sao1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.parser_sao1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 //    config mpred_imp_if data write buffer start address
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 2);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, hevc->fb_buf_mpred_imp0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, hevc->fb_buf_mpred_imp0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->fr.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.mpred_imp0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 3);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, hevc->fb_buf_mpred_imp1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, hevc->fb_buf_mpred_imp1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->fr.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.mpred_imp1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 // config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 4);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, hevc->fb_buf_scalelut.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, hevc->fb_buf_scalelut.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->fr.scalelut_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.scalelut_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, hevc->fr.scalelut_ptr_pre);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.scalelut_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, hevc->fr.scalelut_ptr_pre);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 7);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, hevc->fb_buf_vcpu_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, hevc->fb_buf_vcpu_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->fr.vcpu_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.vcpu_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.vcpu_imem_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, hevc->fb_buf_sys_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, hevc->fb_buf_sys_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->fr.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.sys_imem_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 //config lmem buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 5);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, hevc->fb_buf_lmem0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, hevc->fb_buf_lmem0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->fr.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.lmem0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 6);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, hevc->fb_buf_lmem1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, hevc->fb_buf_lmem1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->fr.lmem1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.lmem1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, hevc->bk.lmem1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 }
 
 static void config_bufstate_back_hw(struct hevc_state_s* hevc)
@@ -924,11 +924,11 @@ static void read_bufstate_front(struct hevc_state_s* hevc)
 	hevc->fr.mmu1_ptr = READ_VREG(HEVC_ASSIST_FB_MMU_MAP_ADDR1);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 4);
 	hevc->fr.scalelut_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
-	hevc->fr.scalelut_ptr_pre = READ_VREG(HEVC_ASSIST_RING_F_THRESHOLD);
+	//hevc->fr.scalelut_ptr_pre = READ_VREG(HEVC_ASSIST_RING_F_THRESHOLD);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 7);
 	hevc->fr.vcpu_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
-	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
-	hevc->fr.sys_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
+	//hevc->fr.sys_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 5);
 	hevc->fr.lmem0_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 6);
@@ -942,6 +942,7 @@ static void read_bufstate_front(struct hevc_state_s* hevc)
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 3);
 	hevc->fr.mpred_imp1_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
 
+	hevc->fr.sys_imem_ptr = hevc->sys_imem_ptr;
 	hevc->fr.sys_imem_ptr_v = hevc->sys_imem_ptr_v;
 }
 
@@ -1261,7 +1262,7 @@ static void hevc_config_work_space_hw_fb(hevc_stru_t* hevc, uint8_t bit_depth, u
 
 static void hevc_init_decoder_hw_fb(hevc_stru_t* hevc, uint8_t front_flag, uint8_t back_flag)
 {
-	uint32_t data32;
+	//uint32_t data32;
 	int i;
 	//int dw_mode = get_double_write_mode(hevc);
 
@@ -1331,50 +1332,55 @@ static void hevc_init_decoder_hw_fb(hevc_stru_t* hevc, uint8_t front_flag, uint8
 #endif
 
 	if (front_flag) {
-		//if (debug&H265_DEBUG_BUFMGR)
-		//    printk("[test.c] Enable HEVC Parser Interrupt\n");
-		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
-		data32 = data32 |
-			(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
-			(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
-	#if 1 //def H265_10B_HED_FB
-			(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
-	#endif
-			(1 << 7) |  // dec_done_int_amrisc_enable
-			(1 << 4) |  // startcode_found_int_cpu_enable
-			(0 << 3) |  // startcode_found_int_amrisc_enable
-			(1 << 0)    // parser_int_enable
-			;
-		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+#if 0 //Move to ucode
+		if (efficiency_mode == 0) {
 
-		//if (debug&H265_DEBUG_BUFMGR)
-		//    printk("[test.c] Enable HEVC Parser Shift\n");
+			uint32_t data32;
+			//if (debug&H265_DEBUG_BUFMGR)
+			//	  printk("[test.c] Enable HEVC Parser Interrupt\n");
+			data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+			data32 = data32 |
+				(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
+				(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+#if 1 //def H265_10B_HED_FB
+				(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
+#endif
+				(1 << 7) |	// dec_done_int_amrisc_enable
+				(1 << 4) |	// startcode_found_int_cpu_enable
+				(0 << 3) |	// startcode_found_int_amrisc_enable
+				(1 << 0)	// parser_int_enable
+				;
+			WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
-		data32 = READ_VREG(HEVC_SHIFT_STATUS);
-		data32 = data32 |
-			(1 << 1) |  // emulation_check_on
-			(1 << 0)    // startcode_check_on
-			;
-		WRITE_VREG(HEVC_SHIFT_STATUS, data32);
+			//if (debug&H265_DEBUG_BUFMGR)
+			//	  printk("[test.c] Enable HEVC Parser Shift\n");
 
-		WRITE_VREG(HEVC_SHIFT_CONTROL,
-			(0 << 14) | // disable_start_code_protect
-			(3 << 6) | // sft_valid_wr_position
-			(2 << 4) | // emulate_code_length_sub_1
-			(2 << 1) | // start_code_length_sub_1
-			(1 << 0)   // stream_shift_enable
-			);
+			data32 = READ_VREG(HEVC_SHIFT_STATUS);
+			data32 = data32 |
+				(1 << 1) |	// emulation_check_on
+				(1 << 0)	// startcode_check_on
+				;
+			WRITE_VREG(HEVC_SHIFT_STATUS, data32);
 
-		WRITE_VREG(HEVC_CABAC_CONTROL,
-			(1 << 0)   // cabac_enable
-			);
+			WRITE_VREG(HEVC_SHIFT_CONTROL,
+				(0 << 14) | // disable_start_code_protect
+				(3 << 6) | // sft_valid_wr_position
+				(2 << 4) | // emulate_code_length_sub_1
+				(2 << 1) | // start_code_length_sub_1
+				(1 << 0)   // stream_shift_enable
+				);
 
-		/* not used now
-		WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
-			(1 << 0)   // hevc_parser_core_clk_en
-			);
-	 */
+			WRITE_VREG(HEVC_CABAC_CONTROL,
+				(1 << 0)   // cabac_enable
+				);
 
+			/* not used now
+			WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
+				(1 << 0)   // hevc_parser_core_clk_en
+				);
+		 */
+		}
+#endif
 		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 
 #if 0
@@ -1411,20 +1417,25 @@ static void hevc_init_decoder_hw_fb(hevc_stru_t* hevc, uint8_t front_flag, uint8
 		WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
 		WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 #endif
-		WRITE_VREG(HEVC_PARSER_IF_CONTROL,
-			//  (1 << 8) | // sao_sw_pred_enable
-			(1 << 5) | // parser_sao_if_en
-			(1 << 2) | // parser_mpred_if_en
-			(1 << 0) // parser_scaler_if_en
-			);
+#if 0 //Move to ucode
+		if (efficiency_mode == 0) {
+		   WRITE_VREG(HEVC_PARSER_IF_CONTROL,
+			   //  (1 << 8) | // sao_sw_pred_enable
+			   (1 << 5) | // parser_sao_if_en
+			   (1 << 2) | // parser_mpred_if_en
+			   (1 << 0) // parser_scaler_if_en
+			   );
 
-		// Changed to Start MPRED in microcode
-		/*
-		printk("[test.c] Start MPRED\n");
-		WRITE_VREG(HEVC_MPRED_INT_STATUS,
-			(1<<31)
-		);
-	 */
+		   // Changed to Start MPRED in microcode
+		   /*
+		   printk("[test.c] Start MPRED\n");
+		   WRITE_VREG(HEVC_MPRED_INT_STATUS,
+			   (1<<31)
+		   );
+		*/
+
+		}
+#endif
 	}
 	if (back_flag) {
 #if 1
@@ -1545,6 +1556,7 @@ static int32_t hevc_hw_init(hevc_stru_t* hevc, uint8_t bit_depth, uint8_t front_
 		(0xf << 25); // arwlen_axi_max
 		WRITE_VREG(HEVC_STREAM_CONTROL, data32);
 #if 0
+
 		data32 = READ_VREG(HEVC_SHIFT_STARTCODE);
 		if (data32 != 0x00000100) { print_scratch_error(29); return -1; }
 		data32 = READ_VREG(HEVC_SHIFT_EMULATECODE);
@@ -1556,17 +1568,21 @@ static int32_t hevc_hw_init(hevc_stru_t* hevc, uint8_t bit_depth, uint8_t front_
 		data32 = READ_VREG(HEVC_SHIFT_EMULATECODE);
 		if (data32 != 0x9abcdef0) { print_scratch_error(32); return -1; }
 #endif
-		WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x00000100);
-		WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
+#if 0 //Move to ucode
+		if (efficiency_mode == 0) {
+			WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x00000100);
+			WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
 
-	#if 0 //def SIMULATION
-		if (decode_pic_begin == 0)
-		WRITE_VREG(HEVC_WAIT_FLAG, 1);
-		else
-		WRITE_VREG(HEVC_WAIT_FLAG, 0);
-	#else
-		WRITE_VREG(HEVC_WAIT_FLAG, 1);
-	#endif
+#if 0 //def SIMULATION
+			if (decode_pic_begin == 0)
+			WRITE_VREG(HEVC_WAIT_FLAG, 1);
+			else
+			WRITE_VREG(HEVC_WAIT_FLAG, 0);
+#else
+			WRITE_VREG(HEVC_WAIT_FLAG, 1);
+#endif
+		}
+#endif
 
 		/* disable PSCALE for hardware sharing */
 	#ifdef DOS_PROJECT
@@ -1578,8 +1594,11 @@ static int32_t hevc_hw_init(hevc_stru_t* hevc, uint8_t bit_depth, uint8_t front_
 
 		/* enable mailbox interrupt */
 		WRITE_VREG(hevc->ASSIST_MBOX0_MASK, 1);
-
-		WRITE_VREG(DEBUG_REG1, 0x0);  //no debug
+#if 0 //Move to ucode
+		if (efficiency_mode == 0) {
+			WRITE_VREG(DEBUG_REG1, 0x0);  //no debug
+		}
+#endif
 		WRITE_VREG(NAL_SEARCH_CTL, 0x8); //check vps/sps/pps/i-slice in ucode
 		WRITE_VREG(DECODE_STOP_POS, udebug_flag);
 	}
@@ -1702,8 +1721,8 @@ void config_mpred_hw_fb(hevc_stru_t* hevc)
 	int32_t     cu_size_log2 =3;
 
 	int32_t     mpred_mv_rd_start_addr ;
-	int32_t     mpred_curr_lcu_x;
-	int32_t     mpred_curr_lcu_y;
+	//int32_t     mpred_curr_lcu_x;
+	//int32_t     mpred_curr_lcu_y;
 	int32_t     mpred_above_buf_start ;
 	int32_t     mpred_mv_rd_ptr ;
 	int32_t     mpred_mv_rd_ptr_p1 ;
@@ -1736,9 +1755,9 @@ void config_mpred_hw_fb(hevc_stru_t* hevc)
 #endif
 
 	mpred_mv_rd_start_addr=col_pic->mpred_mv_wr_start_addr;
-	data32 = READ_VREG(HEVC_MPRED_CURR_LCU);
-	mpred_curr_lcu_x   =data32 & 0xffff;
-	mpred_curr_lcu_y   =(data32>>16) & 0xffff;
+	//data32 = READ_VREG(HEVC_MPRED_CURR_LCU);
+	//mpred_curr_lcu_x   =data32 & 0xffff;
+	//mpred_curr_lcu_y   =(data32>>16) & 0xffff;
 
 	MV_MEM_UNIT=hevc->lcu_size_log2 == 6 ? 0x200 : hevc->lcu_size_log2 == 5 ? 0x80 : 0x20;
 	mpred_mv_rd_ptr = mpred_mv_rd_start_addr  + (hevc->slice_addr*MV_MEM_UNIT);
