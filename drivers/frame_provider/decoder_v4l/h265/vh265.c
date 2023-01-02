@@ -1725,6 +1725,7 @@ struct tile_s {
 #define DEC_RESULT_FORCE_EXIT       10
 #define DEC_RESULT_FREE_CANVAS      11
 #define DEC_RESULT_ERROR_DATA      	12
+#define DEC_RESULT_NEED_MORE_BUFFER 13
 
 static void vh265_work(struct work_struct *work);
 static void vh265_timeout_work(struct work_struct *work);
@@ -2139,6 +2140,8 @@ struct hevc_state_s {
 #endif
 	int crop_w;
 	int crop_h;
+	bool wait_more_buf;
+	spinlock_t wait_buf_lock;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -8483,6 +8486,14 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 	spin_unlock_irqrestore(&h265_lock, flags);
+
+	spin_lock_irqsave(&hevc->wait_buf_lock, flags);
+	if (hevc->wait_more_buf) {
+		hevc->wait_more_buf = false;
+		hevc->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+		vdec_schedule_work(&hevc->work);
+	}
+	spin_unlock_irqrestore(&hevc->wait_buf_lock, flags);
 #ifdef MULTI_INSTANCE_SUPPORT
 	vdec_up(vdec);
 #endif
@@ -10246,6 +10257,43 @@ static void aspect_ratio_set(struct hevc_state_s *hevc, u32 *out_frame_ar,
 	return;
 }
 
+static int get_free_buf_count( struct hevc_state_s *hevc)
+{
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+	struct PIC_s *pic = NULL;
+	int i, free_count = 0;
+
+	if (ctx->cap_pool.dec < hevc->used_buf_num) {
+		if (ctx->fb_ops.query(&ctx->fb_ops, &hevc->fb_token)) {
+			free_count = v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) + 1;
+		}
+	}
+
+	for (i = 0; i < hevc->used_buf_num; i++) {
+		pic = hevc->m_PIC[i];
+		if (pic == NULL ||
+			pic->index == -1 ||
+			pic->BUF_index == -1)
+			continue;
+
+		if ((pic->output_mark == 0) &&
+			(pic->referenced == 0) &&
+			(pic->output_ready == 0) &&
+			(pic->vf_ref == 0) &&
+			pic->cma_alloc_addr) {
+			free_count++;
+		}
+	}
+
+	/* trigger to parse head data. */
+	if (!hevc->v4l_params_parsed) {
+		free_count = run_ready_min_buf_num;
+	}
+
+	return free_count;
+}
+
 static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 {
 	struct hevc_state_s *hevc = (struct hevc_state_s *) data;
@@ -10474,8 +10522,8 @@ pic_done:
 					__func__,
 					hevc->decode_idx, hevc->decode_size,
 					READ_VREG(HEVC_SHIFT_BYTE_COUNT));
-					WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
-					start_process_time(hevc);
+				hevc->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+				vdec_schedule_work(&hevc->work);
 				return IRQ_HANDLED;
 			}
 
@@ -11965,6 +12013,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 
 	mutex_init(&hevc->chunks_mutex);
 	INIT_WORK(&hevc->set_clk_work, vh265_set_clk);
+	spin_lock_init(&hevc->wait_buf_lock);
 
 	if ((get_decoder_firmware_version() <= UCODE_SWAP_VERSION) &&
 		(get_decoder_firmware_submit_count() < UCODE_SWAP_SUBMIT_COUNT)) {
@@ -12466,6 +12515,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 
 	if (hevc->dec_result == DEC_RESULT_AGAIN)
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_AGAIN);
+	if (hevc->dec_result != DEC_RESULT_NEED_MORE_BUFFER)
+		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_START);
 	if (hevc->dec_result != DEC_RESULT_NONE)
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_START);
 	if (hevc->dec_result == DEC_RESULT_FREE_CANVAS) {
@@ -12501,6 +12552,36 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		READ_VREG(HEVC_STREAM_LEVEL),
 		READ_VREG(HEVC_STREAM_WR_PTR),
 		READ_VREG(HEVC_STREAM_RD_PTR));
+
+	if (hevc->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
+		ulong flags;
+		reset_process_time(hevc);
+		spin_lock_irqsave(&hevc->wait_buf_lock, flags);
+		if (get_free_buf_count(hevc)) {
+			read_decode_info(hevc);
+			get_picture_qos_info(hevc);
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+			hevc->start_parser_type = 0;
+			hevc->switch_dvlayer_flag = 0;
+#endif
+			hevc->decoded_poc = hevc->curr_POC;
+			hevc->decoding_pic = NULL;
+#ifdef H265_USERDATA_ENABLE
+			userdata_prepare(hevc);
+#endif
+			WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
+			reset_process_time(hevc);
+		} else {
+			if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
+				hevc->dec_result = DEC_RESULT_AGAIN;
+				vdec_schedule_work(&hevc->work);
+			} else {
+				hevc->wait_more_buf = true;
+			}
+		}
+		spin_unlock_irqrestore(&hevc->wait_buf_lock, flags);
+		return;
+	}
 
 	if (((hevc->dec_result == DEC_RESULT_GET_DATA) ||
 		(hevc->dec_result == DEC_RESULT_GET_DATA_RETRY)) &&
@@ -12874,6 +12955,9 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		del_timer_sync(&hevc->timer);
 		hevc->stat &= ~STAT_TIMER_ARM;
 	}
+
+	if (hevc->dec_result != DEC_RESULT_NEED_MORE_BUFFER)
+		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_END);
 
 	ATRACE_COUNTER(hevc->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_START);
 	wait_hevc_search_done(hevc);
@@ -13807,6 +13891,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	hevc->uninit_list = 0;
 	hevc->fatal_error = 0;
 	hevc->show_frame_num = 0;
+	hevc->wait_more_buf = false;
 
 	/*
 	 *hevc->mc_buf_spec.buf_end = pdata->mem_end + 1;
