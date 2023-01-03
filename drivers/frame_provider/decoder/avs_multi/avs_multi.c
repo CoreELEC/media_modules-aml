@@ -3578,7 +3578,7 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 		reg = READ_VREG(DECODE_STATUS); // need find a null register pyx
 		if (reg == DECODE_STATUS_INFO) {
 			WRITE_VREG(DECODE_STATUS, 0);
-			pr_err("READ_VREG(AVS_PIC_INFO) = 0x%x\n", READ_VREG(AVS_PIC_INFO));
+			debug_print(hw, PRINT_FLAG_DECODING, "READ_VREG(AVS_PIC_INFO) = 0x%x\n", READ_VREG(AVS_PIC_INFO));
 			return IRQ_HANDLED;
 		}
 

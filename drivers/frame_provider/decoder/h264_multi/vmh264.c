@@ -10631,8 +10631,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			READ_VREG(HEVC_ASSIST_FB_CTL) & (~(1 << 8)));
 	}
 
-	if (udebug_flag)
-		WRITE_VREG(AV_SCRATCH_K, udebug_flag);
+	WRITE_VREG(AV_SCRATCH_K, udebug_flag);
 	hw->stat |= STAT_TIMER_ARM;
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 
