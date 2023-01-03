@@ -4016,7 +4016,22 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 	unsigned int colocate_rd_adr;
 	unsigned char use_direct_8x8;
 	int canvas_pos;
+
+	if (pic->buf_spec_num < 0 || pic->buf_spec_num >= BUFSPEC_POOL_SIZE) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
+				"%s: error pic->buf_spec_num %d \n",
+				__func__, pic->buf_spec_num);
+		return -1;
+	}
+
 	canvas_pos = hw->buffer_spec[pic->buf_spec_num].canvas_pos;
+	if (canvas_pos < 0) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
+				"%s: error canvas_pos %d \n",
+				__func__, canvas_pos);
+		return -1;
+	}
+
 	WRITE_VREG(H264_CURRENT_POC_IDX_RESET, 0);
 	WRITE_VREG(H264_CURRENT_POC, pic->frame_poc);
 	WRITE_VREG(H264_CURRENT_POC, pic->top_poc);
@@ -4174,6 +4189,13 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 					return -1;
 				}
 			}
+		}
+
+		if (ref->buf_spec_num < 0 || ref->buf_spec_num >= BUFSPEC_POOL_SIZE) {
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
+					"%s: error ref->buf_spec_num %d \n",
+					__func__, ref->buf_spec_num);
+			return -1;
 		}
 
 		if (ref->data_flag & NULL_FLAG)
@@ -10736,6 +10758,15 @@ static void h264_reconfig(struct vdec_h264_hw_s *hw)
 	if (dpb_is_debug(DECODE_ID(hw),
 		PRINT_FLAG_DUMP_BUFSPEC))
 		dump_bufspec(hw, "pre h264_reconfig");
+
+	if (p_H264_Dpb->mVideo.dec_picture) {
+		if (p_H264_Dpb->mVideo.dec_picture->colocated_buf_index >= 0) {
+			release_colocate_buf(p_H264_Dpb,
+			p_H264_Dpb->mVideo.dec_picture->colocated_buf_index);
+			p_H264_Dpb->mVideo.dec_picture->colocated_buf_index = -1;
+		}
+		release_cur_decoding_buf(hw);
+	}
 
 	flush_dpb(p_H264_Dpb);
 	bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
