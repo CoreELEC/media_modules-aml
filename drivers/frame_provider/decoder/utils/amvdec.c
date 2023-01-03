@@ -1100,7 +1100,7 @@ EXPORT_SYMBOL(amhevc_start_b);
 void amhevc_stop_f(void)
 {
 	uint32_t temp;
-	ulong timeout = jiffies + HZ/10;
+	ulong timeout = jiffies + (HZ >> 4);
 
 	WRITE_VREG(HEVC_MPSR, 0);
 	WRITE_VREG(HEVC_CPSR, 0);

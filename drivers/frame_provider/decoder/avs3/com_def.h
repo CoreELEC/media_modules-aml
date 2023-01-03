@@ -443,7 +443,9 @@ extern int fp_trace_counter;
 
 #define NUM_NEIB                           1  //since SUCO is not implemented
 
-#define MINI_SIZE                          8
+#define MINI_SIZE_LOG2                     3
+#define MINI_SIZE                          (1 << MINI_SIZE_LOG2)
+
 #define MAX_CU_LOG2                        7
 #define MIN_CU_LOG2                        2
 #define MAX_CU_SIZE                       (1 << MAX_CU_LOG2)

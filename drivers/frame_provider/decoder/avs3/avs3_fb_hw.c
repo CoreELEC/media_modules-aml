@@ -598,8 +598,13 @@ static int32_t config_mc_buffer_fb(struct AVS3Decoder_s *dec)
 		///    (pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
 		WRITE_BACK_32(avs3_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 			(pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
-		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-			"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
+		}
+		if (debug) {
+			for (i = 0; i < avs3_dec->ctx.dpm.num_refp[REFP_0]; i++) {
+				pic = &avs3_dec->ctx.refp[i][REFP_0].pic->buf_cfg;
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+					"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
+			}
 		}
 	}
 	if (avs3_dec->slice_type == SLICE_B) {
@@ -614,8 +619,13 @@ static int32_t config_mc_buffer_fb(struct AVS3Decoder_s *dec)
 		///    (pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
 		WRITE_BACK_32(avs3_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 			(pic->mc_canvas_u_v<<16)|(pic->mc_canvas_u_v<<8)|pic->mc_canvas_y);
-		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-			"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
+		}
+		if (debug) {
+			for (i = 0; i < avs3_dec->ctx.dpm.num_refp[REFP_1]; i++) {
+				pic = &avs3_dec->ctx.refp[i][REFP_1].pic->buf_cfg;
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+					"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
+			}
 		}
 	}
 	return 0;
@@ -1101,65 +1111,65 @@ static void config_bufstate_front_hw(struct avs3_decoder *avs3_dec)
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs3_dec->fb_buf_parser_sao0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs3_dec->fb_buf_parser_sao0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs3_dec->fr.parser_sao0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.parser_sao0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.parser_sao0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 1);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs3_dec->fb_buf_parser_sao1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs3_dec->fb_buf_parser_sao1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs3_dec->fr.parser_sao1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.parser_sao1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.parser_sao1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 //    config mpred_imp_if data write buffer start address
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 2);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs3_dec->fb_buf_mpred_imp0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs3_dec->fb_buf_mpred_imp0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs3_dec->fr.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.mpred_imp0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 3);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs3_dec->fb_buf_mpred_imp1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs3_dec->fb_buf_mpred_imp1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs3_dec->fr.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.mpred_imp1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 // config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 4);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs3_dec->fb_buf_scalelut.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs3_dec->fb_buf_scalelut.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs3_dec->fr.scalelut_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.scalelut_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, avs3_dec->fr.scalelut_ptr_pre);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.scalelut_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, avs3_dec->fr.scalelut_ptr_pre);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 7);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs3_dec->fb_buf_vcpu_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs3_dec->fb_buf_vcpu_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs3_dec->fr.vcpu_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.vcpu_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.vcpu_imem_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs3_dec->fb_buf_sys_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs3_dec->fb_buf_sys_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs3_dec->fr.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.sys_imem_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 //config lmem buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 5);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs3_dec->fb_buf_lmem0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs3_dec->fb_buf_lmem0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs3_dec->fr.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM0_BLOCK_SIZE);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.lmem0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM0_BLOCK_SIZE);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 6);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs3_dec->fb_buf_lmem1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs3_dec->fb_buf_lmem1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs3_dec->fr.lmem1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.lmem1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM1_BLOCK_SIZE);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs3_dec->bk.lmem1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM1_BLOCK_SIZE);
 }
 
 static void config_bufstate_back_hw(struct avs3_decoder *avs3_dec)
@@ -1236,12 +1246,14 @@ static void read_bufstate_front(struct avs3_decoder *avs3_dec)
 	avs3_dec->fr.mmu1_ptr = READ_VREG(HEVC_ASSIST_FB_MMU_MAP_ADDR1);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 4);
 	avs3_dec->fr.scalelut_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
-	avs3_dec->fr.scalelut_ptr_pre = READ_VREG(HEVC_ASSIST_RING_F_THRESHOLD);
+	//avs3_dec->fr.scalelut_ptr_pre = READ_VREG(HEVC_ASSIST_RING_F_THRESHOLD);
 	//printk("pic_end_ptr = %x; pic_start_ptr = %x\n", avs3_dec->fr.scalelut_ptr, avs3_dec->fr.scalelut_ptr_pre);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 7);
 	avs3_dec->fr.vcpu_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
-	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
-	avs3_dec->fr.sys_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
+	if (!efficiency_mode) {
+		WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
+		avs3_dec->fr.sys_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
+	}
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 5);
 	avs3_dec->fr.lmem0_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 6);
@@ -1455,12 +1467,13 @@ static void config_work_space_hw(struct AVS3Decoder_s *dec, uint8_t front_flag, 
 		WRITE_VREG(HEVC_MPRED_ABV_START_ADDR, buf_spec->mpred_above.buf_start);
 	#ifdef CO_MV_COMPRESS
 		data32 = READ_VREG(HEVC_MPRED_CTRL4);
-		data32 |=  (1<<1);
+		data32 |=  (1<<1 | 1<<26);
 		WRITE_VREG(HEVC_MPRED_CTRL4, data32);
-	#endif
+	#else
 		data32 = READ_VREG(HEVC_MPRED_CTRL4);
 		data32 |=  (1<<26); //enable AVS3 mode
 		WRITE_VREG(HEVC_MPRED_CTRL4, data32);
+	#endif
 	}
 }
 
@@ -1556,7 +1569,7 @@ int32_t g_WqMDefault8x8[64] = {
 //#endif
 
 #endif
-	if (front_flag) {
+	if (!efficiency_mode && front_flag) {
 		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
 		"[test.c] Enable HEVC Parser Interrupt\n");
 		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
@@ -1615,6 +1628,13 @@ int32_t g_WqMDefault8x8[64] = {
 		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 	}
 
+	if (front_flag) {
+		if (efficiency_mode)
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1);
+		else
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0);
+	}
+
 	if (back_flag) {
 #if 0 // Dual Core : back Microcode will always initial SCALELUT
 	// Initial IQIT_SCALELUT memory -- just to avoid X in simulation
@@ -1643,12 +1663,13 @@ int32_t g_WqMDefault8x8[64] = {
 	}
 
 	if (front_flag) {
+#if 0
 	#ifdef ENABLE_SWAP_TEST
 		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 100);
 	#else
 		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
 	#endif
-
+#endif
 		//WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
 		//WRITE_VREG(HEVC_DECODE_PIC_NUM_REG, decode_pic_num);
 #if 0
@@ -1665,6 +1686,7 @@ int32_t g_WqMDefault8x8[64] = {
 		WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 #endif
 
+		if (!efficiency_mode) {
 		WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 			(1 << 12) | // alf_on_sao
 			//  (1 << 9) | // parser_alf_if_en
@@ -1673,6 +1695,8 @@ int32_t g_WqMDefault8x8[64] = {
 			(1 << 2) | // parser_mpred_if_en
 			(1 << 0) // parser_scaler_if_en
 			);
+		}
+
 	}
 #if 0
 //def MULTI_INSTANCE_SUPPORT
@@ -1818,12 +1842,12 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 
 	config_work_space_hw(dec, front_flag, back_flag);
 
-	if (dec->pic_list_init_flag && front_flag)
+	if (!efficiency_mode && dec->pic_list_init_flag && front_flag)
 	init_pic_list_hw_fb(dec);
 
 	hevc_init_decoder_hw(dec, front_flag, back_flag);
 //Start JT
-#if 1
+	if (!efficiency_mode) {
 	if (front_flag) {
 		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
 		"[test.c] Enable BitStream Fetch\n");
@@ -1849,7 +1873,7 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 		WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x00000100);
 		WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000000); // 0x000000 - 0x000003 emulate code for AVS3
 	}
-#endif
+	}
 // End JT
 
 	if (back_flag) {
@@ -1895,7 +1919,7 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 		WRITE_VREG(HEVC_PSCALE_CTRL, 0);
 	#endif
 
-		WRITE_VREG(DEBUG_REG1, 0x0);  //no debug
+		//WRITE_VREG(DEBUG_REG1, 0x0);  //no debug
 		WRITE_VREG(NAL_SEARCH_CTL, 0x8); //check SEQUENCE/I_PICTURE_START in ucode
 		WRITE_VREG(DECODE_STOP_POS, udebug_flag);
 #if (defined DEBUG_UCODE_LOG) || (defined DEBUG_CMD)
@@ -1916,8 +1940,8 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 		avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 		"%s set decode_mode 0x%x\n", __func__, decode_mode);
 		WRITE_VREG(DECODE_MODE, decode_mode); //DECODE_MODE_MULTI_STREAMBASE
-		WRITE_VREG(HEVC_DECODE_SIZE, 0xffffffff);
 		config_cuva_buf(dec);
+
 	#endif
 
 		//WRITE_VREG(XIF_DOS_SCRATCH31, 0x0);
@@ -2383,8 +2407,8 @@ static void config_mpred_hw_fb(struct AVS3Decoder_s *dec)
 	//int32_t     buffer_linear =1;
 	//int32_t     cu_size_log2 =3;
 	int32_t     mpred_mv_rd_start_addr ;
-	int32_t     mpred_curr_lcu_x;
-	int32_t     mpred_curr_lcu_y;
+	//int32_t     mpred_curr_lcu_x;
+	//int32_t     mpred_curr_lcu_y;
 	//int32_t     mpred_above_buf_start ;
 	//int32_t     mpred_mv_rd_ptr ;
 	//int32_t     mpred_mv_rd_ptr_p1 ;
@@ -2428,9 +2452,9 @@ static void config_mpred_hw_fb(struct AVS3Decoder_s *dec)
 	}
 
 	mpred_mv_rd_start_addr=col_pic->mpred_mv_wr_start_addr;
-	data32 = READ_VREG(HEVC_MPRED_CURR_LCU);
+	/*data32 = READ_VREG(HEVC_MPRED_CURR_LCU);
 	mpred_curr_lcu_x   =data32 & 0xffff;
-	mpred_curr_lcu_y   =(data32>>16) & 0xffff;
+	mpred_curr_lcu_y   =(data32>>16) & 0xffff;*/
 
 	MV_MEM_UNIT_l=get_mv_mem_unit(avs3_dec->lcu_size_log2);
 
@@ -2566,26 +2590,38 @@ static void config_mpred_hw_fb(struct AVS3Decoder_s *dec)
 		if (i < cur_pic->list0_num_refp || i < col_pic->list0_num_refp) {
 		if (i < cur_pic->list0_num_refp) {
 			data32 |= cur_pic->list0_ptr[i] & 0xffff;
-			avs3_print_cont(dec, AVS3_DBG_BUFMGR_DETAIL,
-			"[%d] ", cur_pic->list0_ptr[i]);
 		}
 		if (i < col_pic->list0_num_refp) {
 			data32 |= ((col_pic->list0_ptr[i] & 0xffff) << 16);
-			avs3_print_cont(dec, AVS3_DBG_BUFMGR_DETAIL,
-			"<%d> ", col_pic->list0_ptr[i]);
 		}
 		}
 		WRITE_VREG(HEVC_MPRED_L0_REF_POC_ADR[i], data32);
-		if (i < cur_pic->list0_num_refp || i < col_pic->list0_num_refp) {
-		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-			"HEVC_MPRED_L0_REF=0x%x (readback 0x%x)\n", i,
-			data32, READ_VREG(HEVC_MPRED_L0_REF_POC_ADR[i]));
+	}
+	if (debug & AVS3_DBG_BUFMGR_DETAIL) {
+		for (i = 0; i < MAX_NUM_REF_PICS; i++) {
+			if (i < cur_pic->list0_num_refp || i < col_pic->list0_num_refp) {
+				if (i < cur_pic->list0_num_refp) {
+					avs3_print_cont(dec, AVS3_DBG_BUFMGR_DETAIL,
+					"[%d] ", cur_pic->list0_ptr[i]);
+				}
+				if (i < col_pic->list0_num_refp) {
+					avs3_print_cont(dec, AVS3_DBG_BUFMGR_DETAIL,
+					"<%d> ", col_pic->list0_ptr[i]);
+				}
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+					"HEVC_MPRED_L0_REF=0x%x (readback 0x%x)\n", i,
+					data32, READ_VREG(HEVC_MPRED_L0_REF_POC_ADR[i]));
+			}
 		}
 	}
 	for (i = 0; i < avs3_dec->ctx.dpm.num_refp[REFP_1]; i++) {
 		WRITE_VREG(HEVC_MPRED_L1_REF_POC_ADR[i], avs3_dec->ctx.refp[i][REFP_1].ptr & 0xffff);
-		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-		"HEVC_MPRED_L1_REF%02d_POC=0x%x (readback 0x%x)\n", i, avs3_dec->ctx.refp[i][REFP_1].ptr & 0xffff, READ_VREG(HEVC_MPRED_L1_REF_POC_ADR[i]));
+	}
+	if (debug) {
+		for (i = 0; i < avs3_dec->ctx.dpm.num_refp[REFP_1]; i++) {
+			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+			"HEVC_MPRED_L1_REF%02d_POC=0x%x (readback 0x%x)\n", i, avs3_dec->ctx.refp[i][REFP_1].ptr & 0xffff, READ_VREG(HEVC_MPRED_L1_REF_POC_ADR[i]));
+		}
 	}
 
 #if 0

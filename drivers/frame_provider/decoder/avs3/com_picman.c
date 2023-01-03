@@ -860,12 +860,16 @@ int com_construct_ref_list_doi( COM_PIC_HEADER *pic_header)
 	for ( i = 0; i < pic_header->rpl_l0.ref_pic_num; i++ )
 	{
 		pic_header->rpl_l0.ref_pics_doi[i] = pic_header->decode_order_index%DOI_CYCLE_LENGTH - pic_header->rpl_l0.ref_pics_ddoi[i];
+	}
+	if (is_avs3_print_bufmgr_detail()) {
 		printf("rpl_l0.ref_pics_doi[%d]=%d, pic_header->rpl_l0.ref_pics_ddoi[%d]=%d\n",
 		i, pic_header->rpl_l0.ref_pics_doi[i], i, pic_header->rpl_l0.ref_pics_ddoi[i]);
 	}
 	for ( i = 0; i < pic_header->rpl_l1.ref_pic_num; i++ )
 	{
 		pic_header->rpl_l1.ref_pics_doi[i] = pic_header->decode_order_index%DOI_CYCLE_LENGTH - pic_header->rpl_l1.ref_pics_ddoi[i];
+	}
+	if (is_avs3_print_bufmgr_detail()) {
 		printf("rpl_l1.ref_pics_doi[%d]=%d, pic_header->rpl_l1.ref_pics_ddoi[%d]=%d\n",
 		i, pic_header->rpl_l1.ref_pics_doi[i], i, pic_header->rpl_l1.ref_pics_ddoi[i]);
 	}

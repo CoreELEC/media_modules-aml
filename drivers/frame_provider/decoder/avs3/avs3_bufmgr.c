@@ -477,7 +477,8 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		/* get available frame buffer for decoded image */
 
 #if 1
-		com_picman_print_state(&ctx->dpm);
+		if (is_avs3_print_bufmgr_detail())
+			com_picman_print_state(&ctx->dpm);
 		if (pic_header->rpl_l0.ref_pic_active_num > 0) {
 		char tmpbuf[128];
 		int pos = 0;

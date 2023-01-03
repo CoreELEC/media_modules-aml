@@ -267,7 +267,7 @@ static int32_t g_WqMDefault8x8[64] = {
 #define unlock_front_back(dec, flags) \
 		spin_unlock_irqrestore(&dec->front_back_lock, flags)
 
-static u32 debug_mask = 0xffffffff;
+u32 debug_mask = 0xffffffff;
 #define get_dbg_flag(dec) ((debug_mask & (1 << dec->index)) ? debug : 0)
 
 static unsigned int max_decode_instance_num
@@ -286,6 +286,8 @@ static unsigned int not_run_ready[MAX_DECODE_INSTANCE_NUM];
 static u32 decode_timeout_val = 200;
 #ifdef NEW_FB_CODE
 static unsigned int decode_timeout_val_back = 200;
+
+static unsigned int efficiency_mode = 1;
 
 static void avs3_work_back(struct work_struct *work);
 static void avs3_timeout_work_back(struct work_struct *work);
@@ -315,6 +317,9 @@ static u32 again_threshold;
  */
 static u32 double_write_mode;
 static u32 without_display_mode;
+
+static u32 trace_debug_mode = 7;
+static u32 paral_alloc_buffer_mode = 1;
 
 static u32 mv_buf_dynamic_alloc;
 
@@ -409,6 +414,18 @@ enum vpx_bit_depth_t {
 	AVS3_BITS_12 = 12,  /**< 12 bits */
 };
 
+enum trace_debug_t {
+	TRACE_BASIC  =  1,
+	TRACE_BUFFER = 2,
+	TRACE_PERFORMANCE_DETAIL = 4,
+};
+
+enum alloc_buffer_status_t {
+	BUFFER_INIT  =  0,
+	BUFFER_ALLOCATING = 1,
+	BUFFER_ALLOCATE_DONE = 2,
+};
+
 /*USE_BUF_BLOCK*/
 struct BUF_s {
 	int index;
@@ -499,7 +516,7 @@ bool is_avs3_print_param(void)
 	return ret;
 }
 
-bool is_avs3_print_bufmgr_detail(void)
+inline bool is_avs3_print_bufmgr_detail(void)
 {
 	bool ret = false;
 	if (debug & AVS3_DBG_BUFMGR_DETAIL)
@@ -675,6 +692,7 @@ struct BuffInfo_s {
 #define DEC_RESULT_GET_DATA_RETRY   8
 #define DEC_RESULT_EOS              9
 #define DEC_RESULT_FORCE_EXIT       10
+#define DEC_RESULT_WAIT_BUFFER      11
 #ifdef NEW_FB_CODE
 #define DEC_BACK_RESULT_NONE             0
 #define DEC_BACK_RESULT_DONE             1
@@ -689,6 +707,7 @@ struct segmentation;
 
 struct AVS3Decoder_s {
 	int pic_list_init_flag;
+	int pic_list_wait_alloc_done_flag;
 	unsigned char index;
 	spinlock_t front_back_lock;
 	spinlock_t buffer_lock;
@@ -927,6 +946,7 @@ struct AVS3Decoder_s {
 	int print_buf_len;
 	struct trace_decoder_name trace;
 	int has_i_frame;
+	struct mutex slice_header_lock;
 };
 
 static int  compute_losless_comp_body_size(
@@ -936,9 +956,12 @@ static int  compute_losless_comp_body_size(
 static int avs3_mmu_page_num(struct AVS3Decoder_s *dec,
 	int pic_width, int pic_height, int is_bit_depth_10);
 
+static void avs3_work_implement(struct AVS3Decoder_s *dec);
+
+
 #undef pr_info
 #define pr_info printk
-int avs3_print(struct AVS3Decoder_s *dec,
+int avs3_debug(struct AVS3Decoder_s *dec,
 	int flag, const char *fmt, ...)
 {
 #define HEVC_PRINT_BUF		512
@@ -1043,11 +1066,11 @@ static int get_compress_header_size(struct AVS3Decoder_s *dec)
 static void reset_process_time(struct AVS3Decoder_s *dec)
 {
 	if (dec->start_process_time) {
-		unsigned process_time =
-			1000 * (jiffies - dec->start_process_time) / HZ;
+		//unsigned process_time =
+		//	1000 * (jiffies - dec->start_process_time) / HZ;
 		dec->start_process_time = 0;
-		if (process_time > max_process_time[dec->index])
-			max_process_time[dec->index] = process_time;
+		//if (process_time > max_process_time[dec->index])
+		//	max_process_time[dec->index] = process_time;
 	}
 }
 
@@ -1194,6 +1217,12 @@ static int get_double_write_mode(struct AVS3Decoder_s *dec)
 	return dw;
 }
 
+static inline void decoder_trace(char *name, int value, int flag)
+{
+	if (trace_debug_mode & flag)
+		ATRACE_COUNTER(name, value);
+}
+
 /* for double write buf alloc */
 static int get_double_write_mode_init(struct AVS3Decoder_s *dec)
 {
@@ -1248,13 +1277,13 @@ int avs3_alloc_mmu(
 		"%s decoder_mmu_box_alloc_idx index=%d mmu_4k_number %d\n",
 		__func__, cur_buf_idx, cur_mmu_4k_number);
 
-	ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
+	decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START, TRACE_BASIC);
 	ret = decoder_mmu_box_alloc_idx(
 		dec->mmu_box,
 		cur_buf_idx,
 		cur_mmu_4k_number,
 		mmu_index_adr);
-	ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
+	decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END, TRACE_BASIC);
 
 	return ret;
 }
@@ -1282,13 +1311,13 @@ int avs3_alloc_dw_mmu(
 		"%s decoder_mmu_box_alloc_idx index=%d mmu_4k_number %d\n",
 		__func__, cur_buf_idx, cur_mmu_4k_number);
 
-	ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
+	decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START, TRACE_BASIC);
 	ret = decoder_mmu_box_alloc_idx(
 		dec->dw_mmu_box,
 		cur_buf_idx,
 		cur_mmu_4k_number,
 		mmu_index_adr);
-	ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
+	decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END, TRACE_BASIC);
 
 	return ret;
 }
@@ -1536,6 +1565,7 @@ static DEFINE_MUTEX(vavs3_mutex);
 
 #define LMEM_DUMP_ADR             HEVC_ASSIST_SCRATCH_9
 #define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
+#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_L
 /*!!!*/
 #define AVS3_CUVA_ADR       HEVC_ASSIST_SCRATCH_M
 #define AVS3_CUVA_DATA_SIZE		HEVC_ASSIST_SCRATCH_N
@@ -2216,7 +2246,7 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 
 		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
 
-		WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_DEC_IDLE);
+		//WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_DEC_IDLE);
 		avs3_dec->frontend_decoded_count++;
 		avs3_dec->next_be_decode_pic[avs3_dec->fb_wr_pos] = avs3_dec->cur_pic;
 		avs3_print(dec, PRINT_FLAG_VDEC_DETAIL, "set pic index %d to fb_wr_pos %d\n",
@@ -2235,7 +2265,7 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 					"set next fb_wr_pos %d, fb_rd_pos %d, wait_working_buf %d\n", avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, avs3_dec->wait_working_buf);
 			}
 		mutex_unlock(&dec->fb_mutex);
-	#if 1 //def RESET_FRONT_PER_PICTURE
+	#if 0 //def RESET_FRONT_PER_PICTURE
 		if (reset_flag) {
 			/*not multi pictures in one packe*/
 			amhevc_stop_f();
@@ -2727,7 +2757,7 @@ static void init_pic_list(struct AVS3Decoder_s *dec,
 	avs3_print(dec, AVS3_DBG_BUFMGR,
 		"%s ok, max_pb_size = %d\n",
 		__func__, avs3_dec->max_pb_size);
-	dec->pic_list_init_flag = 1;
+	dec->pic_list_wait_alloc_done_flag = BUFFER_ALLOCATE_DONE;
 }
 
 static void init_pic_list_hw(struct AVS3Decoder_s *dec)
@@ -3177,8 +3207,8 @@ static void config_mpred_hw(struct AVS3Decoder_s *dec)
 	//int32_t     buffer_linear =1;
 	//int32_t     cu_size_log2 =3;
 	int32_t     mpred_mv_rd_start_addr ;
-	int32_t     mpred_curr_lcu_x;
-	int32_t     mpred_curr_lcu_y;
+	//int32_t     mpred_curr_lcu_x;
+	//int32_t     mpred_curr_lcu_y;
 	//int32_t     mpred_above_buf_start ;
 	//int32_t     mpred_mv_rd_ptr ;
 	//int32_t     mpred_mv_rd_ptr_p1 ;
@@ -3222,9 +3252,9 @@ static void config_mpred_hw(struct AVS3Decoder_s *dec)
 	}
 
 	mpred_mv_rd_start_addr=col_pic->mpred_mv_wr_start_addr;
-	data32 = READ_VREG(HEVC_MPRED_CURR_LCU);
+	/*data32 = READ_VREG(HEVC_MPRED_CURR_LCU);
 	mpred_curr_lcu_x   =data32 & 0xffff;
-	mpred_curr_lcu_y   =(data32>>16) & 0xffff;
+	mpred_curr_lcu_y   =(data32>>16) & 0xffff;*/
 
 	MV_MEM_UNIT_l=get_mv_mem_unit(avs3_dec->lcu_size_log2);
 
@@ -3359,26 +3389,40 @@ static void config_mpred_hw(struct AVS3Decoder_s *dec)
 		if (i < cur_pic->list0_num_refp || i < col_pic->list0_num_refp) {
 		if (i < cur_pic->list0_num_refp) {
 			data32 |= cur_pic->list0_ptr[i] & 0xffff;
-			avs3_print_cont(dec, AVS3_DBG_BUFMGR_DETAIL,
-				"[%d] ", cur_pic->list0_ptr[i]);
 		}
 		if (i < col_pic->list0_num_refp) {
 			data32 |= ((col_pic->list0_ptr[i] & 0xffff) << 16);
-			avs3_print_cont(dec, AVS3_DBG_BUFMGR_DETAIL,
-				"<%d> ", col_pic->list0_ptr[i]);
 		}
 		}
 		WRITE_VREG(HEVC_MPRED_L0_REF_POC_ADR[i], data32);
-		if (i < cur_pic->list0_num_refp || i < col_pic->list0_num_refp) {
-		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-			"P_HEVC_MPRED_L0_REF=0x%x (readback 0x%x)\n", i,
-			data32, READ_VREG(HEVC_MPRED_L0_REF_POC_ADR[i]));
+	}
+	if (debug & AVS3_DBG_BUFMGR_DETAIL) {
+		for (i = 0; i < MAX_NUM_REF_PICS; i++) {
+			if (i < cur_pic->list0_num_refp || i < col_pic->list0_num_refp) {
+				if (i < cur_pic->list0_num_refp) {
+					avs3_print_cont(dec, AVS3_DBG_BUFMGR_DETAIL,
+						"[%d] ", cur_pic->list0_ptr[i]);
+				}
+				if (i < col_pic->list0_num_refp) {
+					avs3_print_cont(dec, AVS3_DBG_BUFMGR_DETAIL,
+						"<%d> ", col_pic->list0_ptr[i]);
+				}
+			}
+			if (i < cur_pic->list0_num_refp || i < col_pic->list0_num_refp) {
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+					"P_HEVC_MPRED_L0_REF=0x%x (readback 0x%x)\n", i,
+					data32, READ_VREG(HEVC_MPRED_L0_REF_POC_ADR[i]));
+			}
 		}
 	}
 	for (i = 0; i < avs3_dec->ctx.dpm.num_refp[REFP_1]; i++) {
 		WRITE_VREG(HEVC_MPRED_L1_REF_POC_ADR[i], avs3_dec->ctx.refp[i][REFP_1].ptr & 0xffff);
-		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-			"P_HEVC_MPRED_L1_REF%02d_POC=0x%x (readback 0x%x)\n", i, avs3_dec->ctx.refp[i][REFP_1].ptr & 0xffff, READ_VREG(HEVC_MPRED_L1_REF_POC_ADR[i]));
+	}
+	if (debug & AVS3_DBG_BUFMGR_DETAIL) {
+		for (i = 0; i < avs3_dec->ctx.dpm.num_refp[REFP_1]; i++) {
+			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+				"P_HEVC_MPRED_L1_REF%02d_POC=0x%x (readback 0x%x)\n", i, avs3_dec->ctx.refp[i][REFP_1].ptr & 0xffff, READ_VREG(HEVC_MPRED_L1_REF_POC_ADR[i]));
+		}
 	}
 
 #if 0
@@ -3810,11 +3854,9 @@ static void config_alf_hw(struct AVS3Decoder_s *dec)
 
 static u32 init_cuva_size;
 
-static int cuva_data_is_available(struct AVS3Decoder_s *dec)
+static int cuva_data_is_available(struct AVS3Decoder_s *dec, u32 reg_val)
 {
-	u32 reg_val;
 
-	reg_val = READ_VREG(AVS3_CUVA_DATA_SIZE);
 	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
 		"%s:reg_val: %u \n",
 		__func__, reg_val);
@@ -3840,7 +3882,7 @@ static void set_cuva_data(struct AVS3Decoder_s *dec)
 	unsigned int cuva_count = 0;
 	int cuva_size = 0;
 	struct avs3_frame_s *pic = dec->avs3_dec.cur_pic;
-	if (pic == NULL || 0 == cuva_data_is_available(dec)) {
+	if (pic == NULL || 0 == cuva_data_is_available(dec, size_reg_val)) {
 		avs3_print(dec, AVS3_DBG_HDR_INFO,
 		"%s:pic 0x%p or data not available\n",
 		__func__, pic);
@@ -4827,7 +4869,7 @@ static void set_canvas(struct AVS3Decoder_s *dec,
 		pic->canvas_config[1].block_mode = blkmode;
 		pic->canvas_config[1].endian = 7;
 
-		ATRACE_COUNTER(dec->trace.set_canvas0_addr, pic->canvas_config[0].phy_addr);
+		decoder_trace(dec->trace.set_canvas0_addr, pic->canvas_config[0].phy_addr, TRACE_BUFFER);
 #endif
 	} else {
 	#ifndef AVS3_10B_MMU
@@ -4848,7 +4890,7 @@ static void set_canvas(struct AVS3Decoder_s *dec,
 			pic->mc_u_v_adr,canvas_w, canvas_h,
 			CANVAS_ADDR_NOWRAP, blkmode, 0x7, VDEC_HEVC);
 
-		ATRACE_COUNTER(dec->trace.set_canvas0_addr, spec2canvas(pic));
+		decoder_trace(dec->trace.set_canvas0_addr, spec2canvas(pic), TRACE_BUFFER);
 	#endif
 	}
 }
@@ -5082,12 +5124,12 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 		uint8_t index = vf->index & 0xff;
 		struct vdec_s *vdec = hw_to_vdec(dec);
 
-		ATRACE_COUNTER(dec->trace.vf_get_name, (long)vf);
-		ATRACE_COUNTER(dec->trace.disp_q_name, kfifo_len(&dec->display_q));
+		decoder_trace(dec->trace.vf_get_name, (long)vf, TRACE_BUFFER);
+		decoder_trace(dec->trace.disp_q_name, kfifo_len(&dec->display_q), TRACE_BUFFER);
 #ifdef MULTI_INSTANCE_SUPPORT
-		ATRACE_COUNTER(dec->trace.set_canvas0_addr, vf->canvas0_config[0].phy_addr);
+		decoder_trace(dec->trace.set_canvas0_addr, vf->canvas0_config[0].phy_addr, TRACE_BUFFER);
 #else
-		ATRACE_COUNTER(dec->trace.get_canvas0_addr, vf->canvas0Addr);
+		decoder_trace(dec->trace.get_canvas0_addr, vf->canvas0Addr, TRACE_BUFFER);
 #endif
 
 		if (index < dec->avs3_dec.max_pb_size) {
@@ -5162,15 +5204,15 @@ static void vavs3_vf_put(struct vframe_s *vf, void *op_arg)
 
 	index = vf->index & 0xff;
 
-	ATRACE_COUNTER(dec->trace.vf_put_name, (long)vf);
+	decoder_trace(dec->trace.vf_put_name, (long)vf, TRACE_BUFFER);
 #ifdef MULTI_INSTANCE_SUPPORT
-	ATRACE_COUNTER(dec->trace.put_canvas0_addr, vf->canvas0_config[0].phy_addr);
+	decoder_trace(dec->trace.put_canvas0_addr, vf->canvas0_config[0].phy_addr, TRACE_BUFFER);
 #else
-	ATRACE_COUNTER(dec->trace.put_canvas0_addr, vf->canvas0Addr);
+	decoder_trace(dec->trace.put_canvas0_addr, vf->canvas0Addr, TRACE_BUFFER);
 #endif
 
 	kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
-	ATRACE_COUNTER(dec->trace.new_q_name, kfifo_len(&dec->newframe_q));
+	decoder_trace(dec->trace.new_q_name, kfifo_len(&dec->newframe_q), TRACE_BUFFER);
 	dec->vf_put_count++;
 	avs3_print(dec, AVS3_DBG_BUFMGR,
 		"%s index putcount 0x%x %d\n",
@@ -5333,7 +5375,6 @@ static void fill_frame_info(struct AVS3Decoder_s *dec,
 static void set_vframe(struct AVS3Decoder_s *dec,
 	struct vframe_s *vf, struct avs3_frame_s *pic, u8 dummy)
 {
-	unsigned long flags;
 	int stream_offset;
 	unsigned int frame_size = 0;
 	int pts_discontinue;
@@ -5565,9 +5606,7 @@ static void set_vframe(struct AVS3Decoder_s *dec,
 		vf->pts = 0;
 	}
 	if (!dummy) {
-		lock_buffer(dec, flags);
 		pic->vf_ref = 1;
-		unlock_buffer(dec, flags);
 	}
 	dec->vf_pre_count++;
 }
@@ -5578,14 +5617,14 @@ static inline void dec_update_gvs(struct AVS3Decoder_s *dec)
 		dec->gvs->frame_width = dec->frame_width;
 		dec->gvs->frame_height = dec->frame_height;
 	}
-	if (dec->gvs->frame_dur != dec->frame_dur) {
+	/*if (dec->gvs->frame_dur != dec->frame_dur) {
 		dec->gvs->frame_dur = dec->frame_dur;
 		if (dec->frame_dur != 0)
 			dec->gvs->frame_rate = ((96000 * 10 / dec->frame_dur) % 10) < 5 ?
 					96000 / dec->frame_dur : (96000 / dec->frame_dur +1);
 		else
 			dec->gvs->frame_rate = -1;
-	}
+	}*/
 	dec->gvs->status = dec->stat | dec->fatal_error;
 }
 
@@ -5639,9 +5678,9 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 				decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(dec->trace.pts_name, vf->pts);
-			ATRACE_COUNTER(dec->trace.new_q_name, kfifo_len(&dec->newframe_q));
-			ATRACE_COUNTER(dec->trace.disp_q_name, kfifo_len(&dec->display_q));
+			decoder_trace(dec->trace.pts_name, vf->pts, TRACE_BUFFER);
+			decoder_trace(dec->trace.new_q_name, kfifo_len(&dec->newframe_q), TRACE_BUFFER);
+			decoder_trace(dec->trace.disp_q_name, kfifo_len(&dec->display_q), TRACE_BUFFER);
 
 			dec_update_gvs(dec);
 			/*count info*/
@@ -5662,8 +5701,9 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
 			if (without_display_mode == 0) {
-				vf_notify_receiver(dec->provider_name,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+				if (dec->front_back_mode != 1)
+					vf_notify_receiver(dec->provider_name,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 			} else
 				vavs3_vf_put(vavs3_vf_get(dec), dec);
 		}
@@ -6708,7 +6748,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		__func__, dec_status, dec->process_state,
 		READ_VREG(HEVC_PARSER_LCU_START));
 #else
-	uint debug_tag = READ_HREG(DEBUG_REG1);
 	if (debug & AVS3_DBG_IRQ_EVENT) {
 		if (dec->front_back_mode != 1)
 			avs3_print(dec, 0,
@@ -6736,19 +6775,24 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			READ_VREG(HEVC_DEC_STATUS_DBE)
 			);
 	}
-	if (debug_tag != 0) {
-		handle_ucode_dbg(dec, debug_tag);
-		//dec->process_busy = 0;
-		//return IRQ_HANDLED;
+
+	if (udebug_flag) {
+		uint debug_tag = READ_HREG(DEBUG_REG1);
+
+		if (debug_tag != 0) {
+			handle_ucode_dbg(dec, debug_tag);
+			//dec->process_busy = 0;
+			//return IRQ_HANDLED;
+		}
 	}
 
 #endif
 
 	if ((dec_status == AVS3_HEAD_PIC_I_READY) ||
 		(dec_status == AVS3_HEAD_PIC_PB_READY)) {
-		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_START);
+		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_START, TRACE_BASIC);
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
-		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
+		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START, TRACE_BASIC);
 	}
 
 #ifndef G12A_BRINGUP_DEBUG
@@ -6778,6 +6822,8 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		}
 		goto irq_handled_exit;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		mutex_lock(&dec->slice_header_lock);
+		mutex_unlock(&dec->slice_header_lock);
 		PRINT_LINE();
 		vdec->front_pic_done = true;
 		if (dec->front_back_mode == 0) {
@@ -6834,9 +6880,10 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			} else
 #endif
 			amhevc_stop();
-			ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_END);
-			vdec_schedule_work(&dec->work);
+			decoder_trace(dec->trace.decode_time_name, DECODER_ISR_THREAD_END, TRACE_BASIC);
+			avs3_work_implement(dec);
 		}
+
 		goto irq_handled_exit;
 	}
 	PRINT_LINE();
@@ -6915,7 +6962,12 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			avs3_print(dec, AVS3_DBG_BUFMGR,
 				"PROC_STATE_DECODE_AGAIN=> decode_slice, start_code 0x%x\r\n",
 				start_code);
-			goto decode_slice;
+			if ((dec->front_back_mode == 1) && (dec->pic_list_init_flag == 0) && (dec->pic_list_wait_alloc_done_flag == BUFFER_ALLOCATE_DONE)) {
+				dec->pic_list_init_flag = 1;
+				goto alloc_buffer_done;
+			}
+			else
+				goto decode_slice;
 		} else {
 			avs3_print(dec, 0,
 				"PROC_STATE_DECODE_AGAIN, start_code 0x%x!!!\r\n",
@@ -6943,10 +6995,11 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			if (debug & AVS3_DBG_PRINT_PIC_LIST)
 				print_pic_pool(&dec->avs3_dec, "after post_process");
 
-			avs3_prepare_display_buf(dec);
+			if ((dec->front_back_mode != 1) || !efficiency_mode)
+				avs3_prepare_display_buf(dec);
 			dec->avs3_dec.cur_pic = NULL;
 #ifdef NEW_FB_CODE
-			release_free_mmu_buffers(dec);
+			//release_free_mmu_buffers(dec);
 #else
 #endif
 		}
@@ -6960,14 +7013,14 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			get_rpm_param(
 				&dec->avs3_dec.param);
 		} else {
-			ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_START);
-			for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
+			decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_START, TRACE_BASIC);
+			for (i = 0; i < (RPM_VALID_END - RPM_BEGIN); i += 4) {
 				int ii;
 				for (ii = 0; ii < 4; ii++)
 					dec->avs3_dec.param.l.data[i + ii] =
 						dec->rpm_ptr[i + 3 - ii];
 			}
-			ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_END);
+			decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_END, TRACE_BASIC);
 		}
 #if 0 //def SANITY_CHECK
 		if (dec->avs3_dec.param.p.num_of_ref_cur >
@@ -7165,6 +7218,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		goto irq_handled_exit;
 	}
 
+	mutex_lock(&dec->slice_header_lock);
 	if (start_code == SEQUENCE_END_CODE) {
 		avs3_bufmgr_process(&dec->avs3_dec, SEQUENCE_END_CODE);
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_ACTION_DONE);
@@ -7186,8 +7240,8 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			u8 bit_depth = (u8)avs3_dec->param.p.sqh_encoding_precision;
 			int cur_mmu_fb_4k_number = 0;
 
-			width = ((width + MINI_SIZE - 1) / MINI_SIZE) * MINI_SIZE;
-			height = ((height   + MINI_SIZE - 1) / MINI_SIZE) * MINI_SIZE;
+			width = ((width + MINI_SIZE - 1) >> MINI_SIZE_LOG2) << MINI_SIZE_LOG2;
+			height = ((height   + MINI_SIZE - 1) >> MINI_SIZE_LOG2) << MINI_SIZE_LOG2;
 			bit_depth = (bit_depth == 2) ? 10 : 8;
 			cur_mmu_fb_4k_number = dec->fb_ifbuf_num * avs3_mmu_page_num(dec,
 				width, height, (bit_depth == 10));
@@ -7201,6 +7255,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 				uninit_mmu_fb_bufstate(dec);
 				init_mmu_fb_bufstate(dec, cur_mmu_fb_4k_number);
 				dec_again_process(dec);
+				mutex_unlock(&dec->slice_header_lock);
 				goto irq_handled_exit;
 			}
 		}
@@ -7215,6 +7270,8 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			print_alf_param(&avs3_dec->param);
 		}
 
+		decoder_trace(dec->trace.decode_header_memory_time_name, 9, TRACE_BASIC);
+
 		if (avs3_dec->seq_change_flag) {
 		avs3_bufmgr_process(avs3_dec, SEQUENCE_HEADER_CODE);
 		avs3_dec->seq_change_flag = 0;
@@ -7222,30 +7279,8 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		ret = avs3_bufmgr_process(avs3_dec, start_code);
 		if (debug & AVS3_DBG_PRINT_PIC_LIST)
 			print_pic_pool(avs3_dec, "after bufmgr process");
-#if 0
-		if (avs3_dec->init_hw_flag == 0) {
-			//from simulation
-		init_pic_list_hw(avs3_dec, buf_spec, mc_buf_spec);
-		avs3_dec->init_hw_flag = 1;
-		}
-#else
-		if (dec->pic_list_init_flag == 0) {
-			int32_t lcu_size_log2 = avs3_dec->lcu_size_log2;
-				//dec->avs3_dec.param.p.sqh_log2_max_cu_width_height;
 
-			//avs3_init_global_buffers(&dec->avs3_dec);
-				/*avs3_dec->m_bg->index is
-				set to dec->used_buf_num - 1*/
-			init_pic_list(dec, lcu_size_log2);
-#ifdef NEW_FB_CODE
-			if ((dec->front_back_mode == 1) ||
-				(dec->front_back_mode == 3))
-				init_pic_list_hw_fb(dec);
-			else
-#endif
-			init_pic_list_hw(dec);
-		}
-#endif
+
 		if ((ret == 0) && (avs3_dec->cur_pic != NULL)) {
 			cur_pic = avs3_dec->cur_pic;
 #ifdef NEW_FRONT_BACK_CODE
@@ -7260,7 +7295,41 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 				release_cuva_data(cur_pic);
 		}
 
-		PRINT_LINE();
+#if 0
+				if (avs3_dec->init_hw_flag == 0) {
+					//from simulation
+				init_pic_list_hw(avs3_dec, buf_spec, mc_buf_spec);
+				avs3_dec->init_hw_flag = 1;
+				}
+#else
+		if (dec->pic_list_init_flag == 0) {
+			int32_t lcu_size_log2 = avs3_dec->lcu_size_log2;
+
+			if ((dec->front_back_mode == 1) && (paral_alloc_buffer_mode & 1)) {
+				if ((dec->pic_list_wait_alloc_done_flag == BUFFER_INIT)) {
+					dec->dec_result = DEC_RESULT_WAIT_BUFFER;
+					avs3_print(dec, AVS3_DBG_BUFMGR, "alloc buffer\n");
+					vdec_schedule_work(&dec->work);
+					mutex_unlock(&dec->slice_header_lock);
+					goto irq_handled_exit;
+				}
+			} else
+				init_pic_list(dec, lcu_size_log2);
+
+#ifdef NEW_FB_CODE
+			if ((dec->front_back_mode == 1) ||
+				(dec->front_back_mode == 3))
+				init_pic_list_hw_fb(dec);
+			else
+#endif
+				init_pic_list_hw(dec);
+#endif
+			dec->pic_list_init_flag = 1;
+		}
+
+		decoder_trace(dec->trace.decode_header_memory_time_name, 10, TRACE_BASIC);
+alloc_buffer_done:
+
 #ifdef I_ONLY_SUPPORT
 		if ((start_code == PB_PICTURE_START_CODE) &&
 			(dec->i_only & 0x2))
@@ -7322,7 +7391,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		}
 
 #ifndef MV_USE_FIXED_BUF
-		ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
+		decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START, TRACE_BASIC);
 
 		if (ret == 0 && cur_pic->
 			mpred_mv_wr_start_addr == 0
@@ -7355,7 +7424,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			}
 		}
 
-		ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
+		decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END, TRACE_BASIC);
 #endif
 		if (ret) {
 			avs3_print(dec, AVS3_DBG_BUFMGR,
@@ -7372,15 +7441,10 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 	#endif
 			if (dec->m_ins_flag) {
 				dec->dec_result = DEC_RESULT_DONE;
-#ifdef NEW_FB_CODE
-				if (dec->front_back_mode == 1)
-					amhevc_stop_f();
-				else
-#endif
-				amhevc_stop();
+
 				vdec_schedule_work(&dec->work);
 			}
-
+			mutex_unlock(&dec->slice_header_lock);
 			goto irq_handled_exit;
 		} else {
 			PRINT_LINE();
@@ -7411,15 +7475,21 @@ decode_slice:
 
 			PRINT_LINE();
 
-			ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_START);
+			decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_START, TRACE_BASIC);
 #ifdef NEW_FB_CODE
 			if (dec->front_back_mode == 1 || dec->front_back_mode == 3) {
-				config_mc_buffer_fb(dec);
-			config_mcrcc_axi_hw_fb(dec);
+				if (!efficiency_mode) {
+					config_mc_buffer_fb(dec);
+					config_mcrcc_axi_hw_fb(dec);
+				}
+
 				config_mpred_hw_fb(dec);
-				config_dblk_hw_fb(dec);
-				config_sao_hw_fb(dec);
-				config_alf_hw_fb(dec);
+
+				if (!efficiency_mode) {
+					config_dblk_hw_fb(dec);
+					config_sao_hw_fb(dec);
+					config_alf_hw_fb(dec);
+				}
 			} else {
 #endif
 			config_mc_buffer(dec);
@@ -7434,7 +7504,7 @@ decode_slice:
 #ifdef NEW_FB_CODE
 			}
 #endif
-			ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_END);
+			decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_END, TRACE_BASIC);
 
 			// HEVC_PARSER_HEADER_INFO :
 			// bit[30]    --  avs3_bi_mid_ptr  // (ctx->ptr - ctx->refp[0][REFP_0].ptr == ctx->refp[0][REFP_1].ptr - ctx->ptr)
@@ -7450,8 +7520,8 @@ decode_slice:
 #endif
 
 #ifdef NEW_FRONT_BACK_CODE
-			if (dec->front_back_mode == 1 ||
-				dec->front_back_mode == 3) {
+			if ((!efficiency_mode) && (dec->front_back_mode == 1 ||
+				dec->front_back_mode == 3)) {
 				void *cur_imem_ptr_v;
 				uint32_t sys_imem_ptr;
 			WRITE_BACK_RET(avs3_dec);
@@ -7517,6 +7587,7 @@ decode_slice:
 				PROC_STATE_INIT) {
 				dec->process_state = PROC_STATE_DECODING;
 				dec_again_process(dec);
+				mutex_unlock(&dec->slice_header_lock);
 				goto irq_handled_exit;
 			}
 
@@ -7529,13 +7600,96 @@ decode_slice:
 			start_process_time(dec);
 	}
 	vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
-irq_handled_exit:
+
 	if ((dec_status == AVS3_HEAD_PIC_I_READY) ||
 		(dec_status == AVS3_HEAD_PIC_PB_READY)) {
-		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
+		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END, TRACE_PERFORMANCE_DETAIL);
 	}
+	if (efficiency_mode && (dec->front_back_mode == 1)) {
+		if (dec->pic_list_init_flag) {
+#ifdef NEW_FB_CODE
+			if ((dec->front_back_mode == 1) ||
+				(dec->front_back_mode == 3))
+				init_pic_list_hw_fb(dec);
+			else
+#endif
+				init_pic_list_hw(dec);
+		}
 
+		if ((dec->front_back_mode == 1 || dec->front_back_mode == 3) &&
+			(start_code == I_PICTURE_START_CODE ||
+		start_code == PB_PICTURE_START_CODE)) {
+
+			void *cur_imem_ptr_v;
+			uint32_t sys_imem_ptr;
+
+			config_mc_buffer_fb(dec);
+			config_mcrcc_axi_hw_fb(dec);
+			config_dblk_hw_fb(dec);
+			config_sao_hw_fb(dec);
+			config_alf_hw_fb(dec);
+
+			WRITE_BACK_RET(avs3_dec);
+			cur_imem_ptr_v = avs3_dec->fr.sys_imem_ptr_v;
+			avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
+				"write system instruction, ins_offset = %d, addr = 0x%x\n",
+				avs3_dec->ins_offset, avs3_dec->fr.sys_imem_ptr);
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+			if (avs3_dec->ins_offset > 512) {
+				avs3_print(dec, 0,
+					"!!!!!Error!!!!!!!!, ins_offset %d is too big (>512)\n", avs3_dec->ins_offset);
+				avs3_dec->ins_offset = 512;
+			} else if (avs3_dec->ins_offset < 256) {
+				avs3_dec->ins_offset = 256;
+				WRITE_BACK_RET(avs3_dec);
+			}
+			sys_imem_ptr = avs3_dec->fr.sys_imem_ptr + 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+			avs3_dec->sys_imem_ptr_v =  avs3_dec->fr.sys_imem_ptr_v + 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+
+#else
+			if (avs3_dec->ins_offset > 256) {
+				avs3_print(dec, 0,
+					"!!!!!Error!!!!!!!!, ins_offset %d is too big (>256)\n", avs3_dec->ins_offset);
+				avs3_dec->ins_offset = 256;
+			}
+			sys_imem_ptr = avs3_dec->fr.sys_imem_ptr + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+			avs3_dec->sys_imem_ptr_v =  avs3_dec->fr.sys_imem_ptr_v + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+#endif
+			if (sys_imem_ptr >= avs3_dec->fb_buf_sys_imem.buf_end) {
+				if (debug & PRINT_FLAG_VDEC_DETAIL || debug & AVS3_DBG_BUFMGR)
+					avs3_print(dec, 0,
+						"sys_imem_ptr is 0x%x, wrap around\n", sys_imem_ptr);
+				sys_imem_ptr = avs3_dec->fb_buf_sys_imem.buf_start;
+				avs3_dec->sys_imem_ptr_v = dec->fb_buf_sys_imem_addr;
+			}
+			if (dec->front_back_mode == 1) {
+				//WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
+				//WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, sys_imem_ptr);
+				avs3_dec->fr.sys_imem_ptr = sys_imem_ptr;
+				//imem_count++;
+				WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
+			}
+
+			memcpy(cur_imem_ptr_v, (void*)(&avs3_dec->instruction[0]), avs3_dec->ins_offset*4);
+			//copyToDDR_32bits(dec->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
+			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+				"cur_imem_ptr_v 0x%x: %02x %02x %02x %02x\n",
+				cur_imem_ptr_v,
+				((u8 *)cur_imem_ptr_v)[0], ((u8 *)cur_imem_ptr_v)[1],
+				((u8 *)cur_imem_ptr_v)[2], ((u8 *)cur_imem_ptr_v)[3]);
+		}
+
+		if ((start_code == I_PICTURE_START_CODE)
+			|| (start_code == PB_PICTURE_START_CODE)
+			|| (start_code == SEQUENCE_END_CODE)
+			|| (start_code == VIDEO_EDIT_CODE)) {
+			avs3_prepare_display_buf(dec);
+		}
+	}
 	PRINT_LINE();
+	mutex_unlock(&dec->slice_header_lock);
+irq_handled_exit:
+
 	dec->process_busy = 0;
 	return IRQ_HANDLED;
 }
@@ -7545,7 +7699,7 @@ static irqreturn_t vavs3_isr(int irq, void *data)
 	//int i;
 	unsigned int dec_status;
 	struct AVS3Decoder_s *dec = (struct AVS3Decoder_s *)data;
-	uint debug_tag;
+	uint debug_tag = 0;
 #if 0
 	if ((debug & AVS3_DBG_BE_SIMULATE_IRQ)
 		&&(READ_VREG(DEBUG_REG1_DBE) ||
@@ -7564,10 +7718,11 @@ static irqreturn_t vavs3_isr(int irq, void *data)
 
 	if ((dec_status == AVS3_HEAD_PIC_I_READY) ||
 		(dec_status == AVS3_HEAD_PIC_PB_READY)) {
-		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
+		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_HEAD_DONE, TRACE_PERFORMANCE_DETAIL);
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
-		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_PIC_DONE);
+		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_PIC_DONE, TRACE_PERFORMANCE_DETAIL);
 	}
+
 
 	if (!dec)
 		return IRQ_HANDLED;
@@ -7608,14 +7763,16 @@ static irqreturn_t vavs3_isr(int irq, void *data)
 			);
 	}
 #endif
-	debug_tag = READ_HREG(DEBUG_REG1);
+
+	if (udebug_flag)
+		debug_tag = READ_HREG(DEBUG_REG1);
 	if (debug_tag != 0) {
 #if 0
 		handle_ucode_dbg(dec, debug_tag);
 		dec->process_busy = 0;
 		return IRQ_HANDLED;
 #else
-		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_END);
+		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_END, TRACE_BASIC);
 		return IRQ_WAKE_THREAD;
 #endif
 	}
@@ -7646,7 +7803,7 @@ static irqreturn_t vavs3_isr(int irq, void *data)
 			return IRQ_HANDLED;
 		}
 	}
-	ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_ISR_END);
+	decoder_trace(dec->trace.decode_time_name, DECODER_ISR_END, TRACE_BASIC);
 	return IRQ_WAKE_THREAD;
 }
 
@@ -8681,16 +8838,26 @@ void wait_hevc_search_done(struct AVS3Decoder_s *dec)
 	}
 }
 
-static void avs3_work(struct work_struct *work)
+static int avs3_wait_alloc_buf(void *args)
 {
-	struct AVS3Decoder_s *dec = container_of(work,
-		struct AVS3Decoder_s, work);
+	struct AVS3Decoder_s *dec = (struct AVS3Decoder_s *)args;
 	struct vdec_s *vdec = hw_to_vdec(dec);
 
-	if (dec->dec_result == DEC_RESULT_DONE)
-		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_WORKER_START);
+	init_pic_list(dec, dec->avs3_dec.lcu_size_log2);
+
+	vdec_up(vdec);
+
+	return 0;
+}
+
+static void avs3_work_implement(struct AVS3Decoder_s *dec)
+{
+	struct vdec_s *vdec = hw_to_vdec(dec);
+
+	/*if (dec->dec_result == DEC_RESULT_DONE)
+		decoder_trace(dec->trace.decode_time_name, DECODER_WORKER_START, TRACE_BASIC);
 	else if (dec->dec_result == DEC_RESULT_AGAIN)
-		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_WORKER_AGAIN);
+		decoder_trace(dec->trace.decode_time_name, DECODER_WORKER_AGAIN, TRACE_BASIC);*/
 
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
@@ -8828,11 +8995,15 @@ static void avs3_work(struct work_struct *work)
 			vdec_free_irq(VDEC_IRQ_0, (void *)dec);
 			dec->stat &= ~STAT_ISR_REG;
 		}
+	} else if (dec->dec_result == DEC_RESULT_WAIT_BUFFER) {
+		pr_err("DEC_RESULT_WAIT_BUFFER in\n");
+		vdec_post_task(avs3_wait_alloc_buf, dec);
+		dec->pic_list_wait_alloc_done_flag = BUFFER_ALLOCATING;
+		dec->process_state =
+			PROC_STATE_DECODE_AGAIN;
 	}
 
 	wait_hevc_search_done(dec);
-
-	//wait_shift_byte_search_done(dec);
 
 #ifdef NEW_FRONT_BACK_CODE
 	if (!vdec->front_pic_done && (dec->front_back_mode == 1)) {
@@ -8852,7 +9023,7 @@ static void avs3_work(struct work_struct *work)
 	}
 
 	if (dec->dec_result == DEC_RESULT_DONE)
-		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_WORKER_END);
+		decoder_trace(dec->trace.decode_time_name, DECODER_WORKER_END, TRACE_PERFORMANCE_DETAIL);
 
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec ==1)
@@ -8862,6 +9033,14 @@ static void avs3_work(struct work_struct *work)
 
 	if (dec->vdec_cb)
 		dec->vdec_cb(hw_to_vdec(dec), dec->vdec_cb_arg, CORE_MASK_HEVC);
+}
+
+static void avs3_work(struct work_struct *work)
+{
+	struct AVS3Decoder_s *dec = container_of(work,
+		struct AVS3Decoder_s, work);
+
+	avs3_work_implement(dec);
 }
 
 #ifdef NEW_FB_CODE
@@ -9013,6 +9192,9 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);
 	}
 #endif
+	if (dec->pic_list_wait_alloc_done_flag == BUFFER_ALLOCATING)
+		return 0;
+
 	if ((fbdebug_flag & 0x2) &&
 		dec->front_back_mode &&
 		(dec->avs3_dec.cur_pic != NULL) &&
@@ -9225,13 +9407,14 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (dec->front_back_mode == 0 || (mask & CORE_MASK_HEVC)) {
 #endif
 	PRINT_LINE();
-	WRITE_VREG(HEVC_STREAM_CRC, 0);
+	if (debug & PRINT_FLAG_VDEC_STATUS)
+		WRITE_VREG(HEVC_STREAM_CRC, 0);
 	run_count[dec->index]++;
 	dec->vdec_cb_arg = arg;
 	dec->vdec_cb = callback;
 	vdec->front_pic_done = false;
 
-	ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_RUN_START);
+	decoder_trace(dec->trace.decode_time_name, DECODER_RUN_START, TRACE_PERFORMANCE_DETAIL);
 	/* dec->chunk = vdec_prepare_input(vdec); */
 #ifdef NEW_FRONT_BACK_CODE
 	/*simulation code: if (dec_status == HEVC_DECPIC_DATA_DONE) {*/
@@ -9278,7 +9461,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	PRINT_LINE();
 	input_empty[dec->index] = 0;
 	dec->dec_result = DEC_RESULT_NONE;
-	dec->start_shift_bytes = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+
+	if (debug)
+		dec->start_shift_bytes = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 
 	PRINT_LINE();
 	if (debug & PRINT_FLAG_VDEC_STATUS) {
@@ -9318,7 +9503,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		avs3_print_cont(dec, 0, "\r\n");
 	}
 
-	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
+	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START, TRACE_BASIC);
 	if (vdec->mc_loaded) {
 		/*firmware have load before,
 			and not changes to another.
@@ -9344,9 +9529,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		//vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_AVS3;
 	}
-	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
+	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END, TRACE_BASIC);
 
-	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
+	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START, TRACE_BASIC);
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode) {
 		avs3_hw_init(dec, 1, 0);
@@ -9363,7 +9548,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec_schedule_work(&dec->work);
 		return;
 	}
-	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
+	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END, TRACE_BASIC);
 
 	if (vdec_frame_based(vdec))
 		WRITE_VREG(HEVC_SHIFT_BYTE_COUNT, 0);
@@ -9407,7 +9592,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 #endif
 	amhevc_start();
 	dec->stat |= STAT_VDEC_RUN;
-	ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_RUN_END);
+	decoder_trace(dec->trace.decode_time_name, DECODER_RUN_END, TRACE_PERFORMANCE_DETAIL);
 #ifdef NEW_FB_CODE
 	}
 	if (dec->front_back_mode &&
@@ -10025,7 +10210,9 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 			dec->avs3_dec.pic_pool[i].buf_cfg.uv_canvas_index = -1;
 		}
 	}
-
+	spin_lock_init(&dec->buffer_lock);
+	spin_lock_init(&dec->front_back_lock);
+	mutex_init(&dec->slice_header_lock);
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 	hevc_source_changed(VFORMAT_AVS3,
 			4096, 2048, 60);
@@ -10438,6 +10625,19 @@ MODULE_PARM_DESC(decode_timeout_val_back,
 
 module_param_array(max_process_time_back, uint,
 	&max_decode_instance_num, 0664);
+#endif
+
+module_param(trace_debug_mode, uint, 0664);
+MODULE_PARM_DESC(trace_debug_mode, "\n  trace_debug_mode\n");
+
+module_param(paral_alloc_buffer_mode, uint, 0664);
+MODULE_PARM_DESC(paral_alloc_buffer_mode, "\n  paral_alloc_buffer_mode\n");
+
+#ifdef NEW_FB_CODE
+
+module_param(efficiency_mode, uint, 0664);
+MODULE_PARM_DESC(efficiency_mode, "\n  efficiency_mode\n");
+
 #endif
 
 module_init(amvdec_avs3_driver_init_module);

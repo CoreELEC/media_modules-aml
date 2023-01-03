@@ -3,6 +3,8 @@
 
 #define DEBUG_AMRISC
 
+//#define DEBUG_RELEASE_MODE
+
 #define LINUX
 #define NEW_FB_CODE
 #define NEW_FRONT_BACK_CODE
@@ -25,6 +27,7 @@
 #define RPM_BEGIN                                              0x080  //0x100
 #define ALF_BEGIN                                              0x100  //0x180
 #define RPM_END                                                0x200  //0x280
+#define RPM_VALID_END                                          0x1b8
 
 typedef union param_u {
 	struct {
@@ -460,21 +463,49 @@ bool is_avs3_print_bufmgr_detail(void);
 
 struct AVS3Decoder_s;
 
-int avs3_print(struct AVS3Decoder_s *dec,
-	int flag, const char *fmt, ...);
+extern u32 debug_mask;
+extern	int avs3_debug(struct AVS3Decoder_s *dec,
+		int flag, const char *fmt, ...);
+
+
+#define avs3_print(dec, flag, fmt, args...)					\
+	do {									\
+		if (dec == NULL ||    \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << dec->index)) \
+		&& (debug & flag))) { \
+			avs3_debug(dec, flag, fmt, ##args);	\
+			} \
+	} while (0)
+
+//int avs3_print(struct AVS3Decoder_s *dec,
+//	int flag, const char *fmt, ...);
+
 
 #define assert(x)
 #ifdef DEBUG_AMRISC
+#ifndef DEBUG_RELEASE_MODE
 #define printf(...) do {\
 	if (is_avs3_print_bufmgr_detail()) \
-		avs3_print(NULL, 0, __VA_ARGS__); \
-} while(0)
+	avs3_debug(NULL, 0, __VA_ARGS__); \
+} while (0)
 
 #define PRINT_LINE() \
-do { \
+	do { \
 	if (avs3_get_debug_flag() & AVS3_DBG_PRINT_SOURCE_LINE)\
-		avs3_print(NULL, 0, "%s line %d\n", __func__, __LINE__);\
-} while (0)
+	avs3_debug(NULL, 0, "%s line %d\n", __func__, __LINE__);\
+	} while (0)
+#else
+#define printf(...) do {\
+		; \
+	} while (0)
+
+#define PRINT_LINE() \
+		do { \
+		; \
+		} while (0)
+#endif
 
 #else
 
