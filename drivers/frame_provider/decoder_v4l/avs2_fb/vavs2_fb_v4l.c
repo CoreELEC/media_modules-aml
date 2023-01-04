@@ -328,10 +328,6 @@ static struct avs2_frame_s *get_pic_by_index(
 	struct AVS2Decoder_s *dec, int index);
 static int avs2_hw_ctx_restore(struct AVS2Decoder_s *dec);
 
-#ifdef NEW_FRONT_BACK_CODE
-static void fb_hw_status_clear(struct AVS2Decoder_s *dec, bool is_front);
-#endif
-
 static const char vavs2_dec_id[] = "vavs2-dev";
 
 #define PROVIDER_NAME   "decoder.avs2"
@@ -996,7 +992,6 @@ static void timeout_process(struct AVS2Decoder_s *dec)
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode == 1) {
 		amhevc_stop_f();
-		fb_hw_status_clear(dec, 1);
 	} else
 #endif
 		amhevc_stop();
@@ -5396,18 +5391,6 @@ static void dec_again_process(struct AVS2Decoder_s *dec)
 	dec->next_again_flag = 1;
 	reset_process_time(dec);
 
-	if (dec->front_back_mode == 1) {
-		u32 data32;
-		data32 = READ_VREG(HEVC_ASSIST_FB_W_CTL);
-		data32 &= (~0x3);
-		data32 |= 0x0;
-		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, data32);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
-			"again, WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1)");
-	}
-
 	vdec_schedule_work(&dec->work);
 }
 
@@ -6214,6 +6197,7 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE || dec->front_back_mode == 2) {
 		struct avs2_frame_s *pic = avs2_dec->next_be_decode_pic[avs2_dec->fb_rd_pos];
 		reset_process_time_back(dec);
+		vdec->back_pic_done = true;
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
 			"BackEnd data done %d, fb_rd_pos %d, HEVC_SAO_CRC %x HEVC_SAO_CRC_DBE1 %x\n",
 			avs2_dec->backend_decoded_count, avs2_dec->fb_rd_pos,
@@ -6328,6 +6312,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 #ifdef NEW_FB_CODE
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 #endif
+	struct vdec_s *vdec = hw_to_vdec(dec);
 
 	if ((dec_status == AVS2_HEAD_PIC_I_READY) ||
 		(dec_status == AVS2_HEAD_PIC_PB_READY)) {
@@ -6369,6 +6354,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		goto irq_handled_exit;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		PRINT_LINE();
+		vdec->front_pic_done = true;
 		if ((dec->front_back_mode == 0) &&
 			get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
 			avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
@@ -7970,6 +7956,15 @@ static void avs2_work(struct work_struct *work)
 		dec->stat &= ~STAT_TIMER_ARM;
 	}
 
+#ifdef NEW_FRONT_BACK_CODE
+	if (!vdec->front_pic_done && (dec->front_back_mode == 1)) {
+		fb_hw_status_clear(true);
+		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear front, status 0x%x, status_back 0x%x\n",
+			__func__, dec->dec_status, dec->dec_status_back);
+	}
+#endif
+
 	if (dec->dec_result == DEC_RESULT_DONE)
 		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_WORKER_END);
 
@@ -8001,7 +7996,6 @@ static void avs2_work_back_implement(struct AVS2Decoder_s *dec,
 		struct avs2_frame_s *pic = avs2_dec->next_be_decode_pic[avs2_dec->fb_rd_pos];
 
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, AVS2_DEC_IDLE);
-		fb_hw_status_clear(dec, 0);
 		amhevc_stop_b();
 
 		avs2_dec->backend_decoded_count++;
@@ -8028,6 +8022,13 @@ static void avs2_work_back_implement(struct AVS2Decoder_s *dec,
 		if (dec->front_back_mode == 1 ||
 			dec->front_back_mode == 3)
 			release_free_mmu_buffers(dec);
+	}
+
+	if (!vdec->back_pic_done && (dec->front_back_mode == 1)) {
+		fb_hw_status_clear(false);
+		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear back, status 0x%x, status_back 0x%x\n",
+			__func__, dec->dec_status, dec->dec_status_back);
 	}
 
 	if (dec->stat & STAT_TIMER_BACK_ARM) {
@@ -8297,6 +8298,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 	run_count_back[dec->index]++;
 	dec->vdec_back_cb_arg = arg;
 	dec->vdec_back_cb = callback;
+	vdec->back_pic_done = false;
 	BackEnd_StartDecoding(dec);
 
 	start_process_time_back(dec);
@@ -8334,6 +8336,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	run_count[dec->index]++;
 	dec->vdec_cb_arg = arg;
 	dec->vdec_cb = callback;
+	vdec->front_pic_done = false;
 
 	ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_RUN_START);
 #ifdef NEW_FRONT_BACK_CODE

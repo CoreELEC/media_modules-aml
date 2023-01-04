@@ -929,39 +929,6 @@ static struct internal_comp_buf* index_to_icomp_buf(
 	return &v4l2_ctx->comp_bufs[aml_fb->internal_index];
 }
 
-/* clear unfinished hw status */
-static void fb_hw_status_clear(struct hevc_state_s* hevc, bool is_front)
-{
-	u32 reg_val;
-
-	if (hevc->front_back_mode != 1)
-		return;
-
-	if (is_front) {
-		/* front end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_W_CTL);
-		reg_val &= (~0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-	} else {
-		/* back end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL, reg_val);
-
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL1);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL1, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 2);
-	}
-
-	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-		"%s, clear %d, status 0x%x, status_back 0x%x\n",
-		__func__, is_front, hevc->dec_status, hevc->dec_status_back);
-}
-
 void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 {
 	PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];

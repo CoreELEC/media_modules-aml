@@ -3012,41 +3012,6 @@ else{
 
 }
 
-/* clear unfinished hw status */
-static void fb_hw_status_clear(struct AV1HW_s *hw, bool is_front)
-{
-	u32 reg_val;
-
-	if (hw->front_back_mode != 1)
-		return;
-
-	if (is_front) {
-		/* front end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_W_CTL);
-		reg_val &= (~0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-	} else {
-		/* back end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL, reg_val);
-
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL1);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL1, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 2);
-	}
-
-	av1_print(hw, PRINT_FLAG_VDEC_STATUS,
-		"%s, clear %d, status f: 0x%x, b: 0x%x, result f: %x, result b: %x\n",
-		__func__, is_front,
-		hw->dec_status, hw->dec_status_back,
-		hw->dec_result, hw->dec_back_result);
-}
-
 void BackEnd_StartDecoding(struct AV1HW_s *hw)
 {
 	int ret = 0;

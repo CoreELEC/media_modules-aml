@@ -645,6 +645,7 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 		pic->buf_cfg.used = 1;
 		pic->buf_cfg.slice_type = hw->ctx.info.pic_header.slice_type;
 #ifdef AML
+		pic->buf_cfg.error_mark = 0;
 		pic->buf_cfg.vf_ref = 0;
 		pic->buf_cfg.backend_ref = 0;
 #endif

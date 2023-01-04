@@ -436,10 +436,6 @@ static int av1_alloc_mmu(
 		unsigned short bit_depth,
 		unsigned int *mmu_index_adr);
 
-#ifdef NEW_FRONT_BACK_CODE
-static void fb_hw_status_clear(struct AV1HW_s *hw, bool is_front);
-#endif
-
 static const char vav1_dec_id[] = "vav1-dev";
 
 #define PROVIDER_NAME   "decoder.av1"
@@ -1260,7 +1256,6 @@ static void timeout_process(struct AV1HW_s *hw)
 #ifdef NEW_FB_CODE
 	if (hw->front_back_mode == 1) {
 		amhevc_stop_f();
-		fb_hw_status_clear(hw, 1);
 	} else
 #endif
 	amhevc_stop();
@@ -9090,6 +9085,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		struct PIC_BUFFER_CONFIG_s *frame = &cm->cur_frame->buf;
 		struct vdec_s *vdec = hw_to_vdec(hw);
 
+		vdec->front_pic_done = true;
 		vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 		if (hw->front_back_mode != 1) {
 			u32 fg_reg0, fg_reg1, num_y_points, num_cb_points, num_cr_points;
@@ -10192,7 +10188,6 @@ static void vav1_work_back_implement(struct AV1HW_s *hw,
 		mutex_unlock(&hw->fb_mutex);
 
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_DEC_IDLE);
-		fb_hw_status_clear(hw, 0);
 		amhevc_stop_b();
 
 		if (pic) {
@@ -10224,6 +10219,13 @@ static void vav1_work_back_implement(struct AV1HW_s *hw,
 		mutex_unlock(&hw->fb_mutex);
 
 		av1_release_bufs(hw);
+	}
+
+	if (!vdec->back_pic_done && (hw->front_back_mode == 1)) {
+		fb_hw_status_clear(false);
+		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear back, status 0x%x, status_back 0x%x\n",
+			__func__, hw->dec_status, hw->dec_status_back);
 	}
 
 	if (hw->stat & STAT_TIMER_BACK_ARM) {
@@ -11227,6 +11229,16 @@ static void av1_work(struct work_struct *work)
 #endif
 			amhevc_stop();
 	}
+
+#ifdef NEW_FB_CODE
+	if (!vdec->front_pic_done && (hw->front_back_mode == 1)) {
+		fb_hw_status_clear(true);
+		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear front, status 0x%x, status_back 0x%x\n",
+			__func__, hw->dec_status, hw->dec_status_back);
+	}
+#endif
+
 	if (hw->stat & STAT_VDEC_RUN) {
 #ifdef NEW_FB_CODE
 			if (hw->front_back_mode == 1)
@@ -11670,6 +11682,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 	run_count_back[hw->index]++;
 	hw->vdec_back_cb_arg = arg;
 	hw->vdec_back_cb = callback;
+	vdec->back_pic_done = false;
 	ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(hw->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_START);
@@ -11715,6 +11728,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			vdec->mvfrm->hw_decode_start = local_clock();
 		hw->vdec_cb_arg = arg;
 		hw->vdec_cb = callback;
+		vdec->front_pic_done = false;
 		hw->one_package_frame_cnt = 0;
 		run_front(vdec);
 #ifdef NEW_FB_CODE
@@ -12049,6 +12063,8 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE) {
 		PIC_BUFFER_CONFIG* pic;
+
+		vdec->back_pic_done = true;
 		mutex_lock(&hw->fb_mutex);
 		pic = pbi->next_be_decode_pic[pbi->fb_rd_pos];
 		mutex_unlock(&hw->fb_mutex);

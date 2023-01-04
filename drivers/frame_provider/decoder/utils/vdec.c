@@ -852,6 +852,35 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 	}
 }
 
+#ifdef NEW_FB_CODE
+/* clear unfinished hw status */
+void fb_hw_status_clear(bool is_front)
+{
+	u32 reg_val;
+
+	if (is_front) {
+		/* front end clr */
+		reg_val = READ_VREG(HEVC_ASSIST_FB_W_CTL);
+		reg_val &= (~0x3);
+		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, reg_val);
+
+		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
+	} else {
+		/* back end clr */
+		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL);
+		reg_val &= ~(0x3);
+		WRITE_VREG(HEVC_ASSIST_FB_R_CTL, reg_val);
+
+		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL1);
+		reg_val &= ~(0x3);
+		WRITE_VREG(HEVC_ASSIST_FB_R_CTL1, reg_val);
+
+		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 2);
+	}
+}
+EXPORT_SYMBOL(fb_hw_status_clear);
+#endif
+
 static void hevc_wait_ddr(void)
 {
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||

@@ -484,8 +484,10 @@ struct vdec_s {
 	struct vdec_data_info_s *vdata;
 	spinlock_t power_lock;
 	bool suspend;
+#ifdef NEW_FB_CODE
 	u64 back_irq_thread_cnt;
 	u64 back_irq_cnt;
+#endif
 #ifdef VDEC_DEBUG_SUPPORT
 	u32 ready_to_run_count[VDEC_MAX];
 #endif
@@ -495,7 +497,10 @@ struct vdec_s {
 	char decode_per_back_time_name[32];
 	char dec_front_spend_time_avg[32];
 	char dec_back_spend_time_avg[32];
-
+#ifdef NEW_FB_CODE
+	bool front_pic_done;
+	bool back_pic_done;
+#endif
 };
 
 #define CODEC_MODE(a, b, c, d)\
@@ -747,6 +752,10 @@ extern void vdec_set_step_mode(void);
 #endif
 
 extern void hevc_mmu_dma_check(struct vdec_s *vdec);
+
+#ifdef NEW_FB_CODE
+extern void fb_hw_status_clear(bool is_front);
+#endif
 
 int vdec_read_user_data(struct vdec_s *vdec,
 				struct userdata_param_t *p_userdata_param);

@@ -843,7 +843,7 @@ void get_reference_list_info(struct avs2_decoder *avs2_dec, int8_t *str)
 	}
 }
 
-void prepare_RefInfo(struct avs2_decoder *avs2_dec)
+int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 {
 	struct ImageParameters_s    *img = &avs2_dec->img;
 	struct Video_Com_data_s *hc = &avs2_dec->hc;
@@ -952,7 +952,7 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 			img->tr);
 		hc->f_rec->error_mark = 1;
 		avs2_dec->bufmgr_error_flag = 1;
-		return; /* exit(-1);*/
+		return -1; /* exit(-1);*/
 		/*******************************************/
 	}
 
@@ -1087,6 +1087,7 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 			avs2_dec->fref[ii]->ref_poc[6]);
 		}
 	}
+	return 0;
 }
 
 int32_t init_frame(struct avs2_decoder *avs2_dec)
@@ -1112,7 +1113,8 @@ int32_t init_frame(struct avs2_decoder *avs2_dec)
 		hc->cur_pic = avs2_dec->m_bg;
 #endif
 	} else {
-		prepare_RefInfo(avs2_dec);
+		if (prepare_RefInfo(avs2_dec) < 0)
+			return -1;
 #ifdef AML
 		hc->cur_pic = hc->f_rec;
 #endif
@@ -1643,7 +1645,10 @@ int32_t avs2_process_header(struct avs2_decoder *avs2_dec)
 
 	img->current_mb_nr = 0;
 
-	init_frame(avs2_dec);
+	if (init_frame(avs2_dec) < 0) {
+		pr_info("%s, warning, init_frame error!\n", __func__);
+		return -1;
+	}
 
 	img->types = img->type;   /* jlzheng 7.15*/
 

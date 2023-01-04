@@ -190,10 +190,6 @@ static void timeout_process_back(struct hevc_state_s *hevc);
 #endif
 static int vh265_hw_ctx_restore(struct hevc_state_s *hevc);
 
-#ifdef NEW_FRONT_BACK_CODE
-static void fb_hw_status_clear(struct hevc_state_s *hevc, bool is_front);
-#endif
-
 static const char vh265_dec_id[] = "vh265-dev";
 
 #define PROVIDER_NAME   "decoder.h265"
@@ -2480,11 +2476,7 @@ static int front_decpic_done_update(struct hevc_state_s *hevc, uint8_t reset_fla
 		read_bufstate_front(hevc);
 		print_loopbufs_ptr(hevc, "fr", &hevc->fr);
 
-		if (hevc->cur_pic->error_mark || hevc->empty_flag) {
-			fb_hw_status_clear(hevc, 1);
-		} else {
-			WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-		}
+		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
 		WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_DEC_IDLE);
 		hevc->frontend_decoded_count++;
 		hevc->next_be_decode_pic[hevc->fb_wr_pos] = hevc->cur_pic;
@@ -2856,10 +2848,6 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 			READ_VREG(HEVC_PARSER_LCU_START)
 			& 0xffffff;
 		return;
-	}
-
-	if (hevc->front_back_mode == 1) {
-		fb_hw_status_clear(hevc, 1);
 	}
 
 	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
@@ -11010,6 +10998,8 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		|| hevc->front_back_mode == 3) {
 		PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
 		PIC_t* ref_pic;
+
+		vdec->back_pic_done = true;
 		reset_process_time_back(hevc);
 		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 			"BackEnd data done %d, fb_rd_pos %d POC %d, HEVC_SAO_CRC %x HEVC_SAO_CRC_DBE1 %x\n",
@@ -11318,6 +11308,8 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 			struct PIC_s *pic;
 			struct PIC_s *pic_display;
 			int decoded_poc;
+
+			vdec->front_pic_done = true;
 			if ((hevc->front_back_mode == 0) &&
 				get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
 				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
@@ -13394,7 +13386,6 @@ static void timeout_process(struct hevc_state_s *hevc)
 #ifdef NEW_FB_CODE
 	if (hevc->front_back_mode == 1) {
 		amhevc_stop_f();
-		fb_hw_status_clear(hevc, 1);
 	} else
 #endif
 		amhevc_stop();
@@ -14119,6 +14110,15 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		hevc_print(hevc, 0, "%s: force exit end\n", __func__);
 	}
 
+#ifdef NEW_FB_CODE
+	if (!vdec->front_pic_done && (hevc->front_back_mode == 1)) {
+		fb_hw_status_clear(true);
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear front, status 0x%x, status_back 0x%x\n",
+			__func__, hevc->dec_status, hevc->dec_status_back);
+	}
+#endif
+
 	if (hevc->stat & STAT_VDEC_RUN) {
 #ifdef NEW_FB_CODE
 		if (hevc->front_back_mode == 1)
@@ -14219,7 +14219,6 @@ static void vh265_work_back_implement(struct hevc_state_s *hevc,
 		PIC_t* ref_pic;
 
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_DEC_IDLE);
-		fb_hw_status_clear(hevc, 0);
 		amhevc_stop_b();
 
 		mutex_lock(&hevc->fb_mutex);
@@ -14255,6 +14254,13 @@ static void vh265_work_back_implement(struct hevc_state_s *hevc,
 				v4l_submit_vframe(vdec);
 			}
 		}
+	}
+
+	if (!vdec->back_pic_done && (hevc->front_back_mode == 1)) {
+		fb_hw_status_clear(false);
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear back, status 0x%x, status_back 0x%x\n",
+			__func__, hevc->dec_status, hevc->dec_status_back);
 	}
 
 	if (hevc->stat & STAT_TIMER_BACK_ARM) {
@@ -14549,6 +14555,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 	run_count_back[hevc->index]++;
 	hevc->vdec_back_cb_arg = arg;
 	hevc->vdec_back_cb = callback;
+	vdec->back_pic_done = false;
 	//pr_err("run h265_HEVC_back_test\n");
 	//vdec_post_task(h265_HEVC_back_test, hevc);
 
@@ -14586,6 +14593,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	run_count[hevc->index]++;
 	hevc->vdec_cb_arg = arg;
 	hevc->vdec_cb = callback;
+	vdec->front_pic_done = false;
 	hevc->aux_data_dirty = 1;
 
 	ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_RUN_START);
