@@ -109,7 +109,8 @@
 #include <linux/ioport.h>
 #include <linux/dma-buf.h>
 #include <linux/compat.h>
-
+#include <linux/amlogic/media/canvas/canvas.h>
+#include <linux/amlogic/media/canvas/canvas_mgr.h>
 
 //#define VCMD_DEBUG_INTERNAL
 /*these size need to be modified according to hw config.*/
@@ -462,6 +463,7 @@ struct versdrv_dma_buf_pool_t {
 
 struct versdrv_dma_buf_info_t {
 	u32 num_planes;
+	u32 canvas_index;
 	s32 fd[3];
 	u32 phys_addr[3]; /* phys address for DMA buffer */
 };
@@ -1852,8 +1854,7 @@ static long hantrovcmd_ioctl(struct file *filp, unsigned int cmd,
 	case HANTRO_IOCTL_UNMAP_DMA: {
 		struct versdrv_dma_buf_info_t dma_info;
 
-		enc_pr(LOG_ALL,
-			"[+]HANTRO_IOCTL_UNMAP_DMA\n");
+		enc_pr(LOG_ALL, "[+]HANTRO_IOCTL_UNMAP_DMA\n");
 
 		if (copy_from_user(&dma_info,
 			(struct versdrv_dma_buf_info_t *)arg,
@@ -1864,16 +1865,70 @@ static long hantrovcmd_ioctl(struct file *filp, unsigned int cmd,
 			break;
 		if (vers_src_addr_unmap(&dma_info, filp)) {
 			up(&s_vers_sem);
-			enc_pr(LOG_ERROR,
-				"dma addr unmap config error\n");
+			enc_pr(LOG_ERROR, "dma addr unmap config error\n");
 			ret = -EFAULT;
 			break;
 		}
 		up(&s_vers_sem);
-		enc_pr(LOG_ALL,
-			"[-]HANTRO_IOCTL_UNMAP_DMA\n");
+		enc_pr(LOG_ALL, "[-]HANTRO_IOCTL_UNMAP_DMA\n");
 	}
 		break;
+
+	case HANTRO_IOCTL_READ_CANVAS:
+	{
+	    u32 canvas = 0;
+		struct versdrv_dma_buf_info_t dma_info;
+		struct canvas_s dst;
+
+		if (copy_from_user(&dma_info,
+			(struct versdrv_dma_buf_info_t *)arg,
+			sizeof(struct versdrv_dma_buf_info_t)))
+			return -EFAULT;
+
+		ret = down_interruptible(&s_vers_sem);
+		if (ret != 0) {
+			break;
+		}
+
+		canvas = dma_info.canvas_index;
+		enc_pr(LOG_ALL,"[+]HANTRO_IOCTL_READ_CANVAS,canvas = 0x%x\n",canvas);
+		if (canvas & 0xff) {
+			canvas_read(canvas & 0xff, &dst);
+			dma_info.phys_addr[0] = dst.addr;
+
+			if ((canvas & 0xff00) >> 8) {
+				canvas_read((canvas & 0xff00) >> 8, &dst);
+				dma_info.phys_addr[1] = dst.addr;
+			}
+
+			if ((canvas & 0xff0000) >> 16) {
+				canvas_read((canvas & 0xff0000) >> 16, &dst);
+				dma_info.phys_addr[2] = dst.addr;
+			}
+
+			enc_pr(LOG_ALL,"[+]HANTRO_IOCTL_READ_CANVAS: 0x%lx 0x%lx 0x%lx\n",
+			dma_info.phys_addr[0],
+			dma_info.phys_addr[1],
+			dma_info.phys_addr[2]);
+		}
+		else {
+			dma_info.phys_addr[0] = 0;
+			dma_info.phys_addr[1] = 0;
+			dma_info.phys_addr[2] = 0;
+		}
+		up(&s_vers_sem);
+
+		ret = copy_to_user((void __user *)arg,
+			&dma_info,
+			sizeof(struct versdrv_dma_buf_info_t));
+
+		enc_pr(LOG_ALL,"[-]HANTRO_IOCTL_READ_CANVAS,copy_to_user End\n");
+		if (ret) {
+			ret = -EFAULT;
+			break;
+		}
+		break;
+	}
 
 	case HANTRO_IOCH_GET_VCMD_ENABLE: {
 		__put_user(1, (unsigned long __user *)arg);

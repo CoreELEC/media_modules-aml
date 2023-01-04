@@ -151,6 +151,7 @@ typedef size_t ptr_t;
 
 #define HANTRO_IOCTL_CONFIG_DMA _IOWR(HANTRO_IOC_MAGIC, 52, struct versdrv_dma_buf_info_t)
 #define HANTRO_IOCTL_UNMAP_DMA _IOWR(HANTRO_IOC_MAGIC, 53, struct versdrv_dma_buf_info_t)
+#define HANTRO_IOCTL_READ_CANVAS _IOWR(HANTRO_IOC_MAGIC, 54, struct versdrv_dma_buf_info_t)
 
 #define GET_ENCODER_IDX(type_info) (CORE_VC8000E)
 #define CORETYPE(core) (1 << (core))
