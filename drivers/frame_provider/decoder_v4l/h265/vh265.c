@@ -700,6 +700,8 @@ enum NalUnitType {
 #define HEVC_SEARCH_BUFEMPTY        0x22
 #define HEVC_DECODE_OVER_SIZE       0x23
 #define HEVC_DECODE_BUFEMPTY2       0x24
+#define HEVC_DECODE_PARAMS_ERR		0x25
+
 #define HEVC_FIND_NEXT_PIC_NAL				0x50
 #define HEVC_FIND_NEXT_DVEL_NAL				0x51
 
@@ -10423,6 +10425,15 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 			vdec_schedule_work(&hevc->work);
 		}
 
+		return IRQ_HANDLED;
+	} else if (dec_status == HEVC_DECODE_PARAMS_ERR) {
+		hevc_print(hevc, 0, "hevc decode params err !!\n");
+		if (hevc->m_ins_flag) {
+			hevc->dec_result = DEC_RESULT_ERROR_DATA;
+			amhevc_stop();
+			reset_process_time(hevc);
+			vdec_schedule_work(&hevc->work);
+		}
 		return IRQ_HANDLED;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		if (hevc->m_ins_flag) {

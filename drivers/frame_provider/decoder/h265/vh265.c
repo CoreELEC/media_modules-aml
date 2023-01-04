@@ -727,6 +727,8 @@ enum NalUnitType {
 #define HEVC_SEARCH_BUFEMPTY        0x22
 #define HEVC_DECODE_OVER_SIZE       0x23
 #define HEVC_DECODE_BUFEMPTY2       0x24
+#define HEVC_DECODE_PARAMS_ERR		0x25
+
 #define HEVC_FIND_NEXT_PIC_NAL				0x50
 #define HEVC_FIND_NEXT_DVEL_NAL				0x51
 
@@ -1788,6 +1790,7 @@ struct tile_s {
 #define DEC_RESULT_EOS              9
 #define DEC_RESULT_FORCE_EXIT       10
 #define DEC_RESULT_FREE_CANVAS      11
+#define DEC_RESULT_ERROR_DATA      	12
 
 
 static void vh265_work(struct work_struct *work);
@@ -10318,6 +10321,15 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		}
 
 		return IRQ_HANDLED;
+	} else if (dec_status == HEVC_DECODE_PARAMS_ERR) {
+		hevc_print(hevc, 0, "hevc decode params err !!\n");
+		if (hevc->m_ins_flag) {
+			hevc->dec_result = DEC_RESULT_ERROR_DATA;
+			amhevc_stop();
+			reset_process_time(hevc);
+			vdec_schedule_work(&hevc->work);
+		}
+		return IRQ_HANDLED;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		if (hevc->m_ins_flag) {
 			struct PIC_s *pic;
@@ -13023,6 +13035,23 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		}
 		hevc_print(hevc, 0, "%s: force exit end\n",
 			__func__);
+	} else if (hevc->dec_result == DEC_RESULT_ERROR_DATA) {
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+			"%s dec_result %d (%x %x %x) lcu %d used_mmu %d shiftbyte 0x%x decbytes 0x%x\n",
+			__func__,
+			hevc->dec_result,
+			READ_VREG(HEVC_STREAM_LEVEL),
+			READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR),
+			hevc->pic_decoded_lcu_idx,
+			hevc->used_4k_num,
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT) -
+			hevc->start_shift_bytes);
+		mutex_lock(&hevc->chunks_mutex);
+		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
+		hevc->chunk = NULL;
+		mutex_unlock(&hevc->chunks_mutex);
 	}
 
 	if (hevc->stat & STAT_VDEC_RUN) {
