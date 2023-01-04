@@ -116,6 +116,8 @@ static unsigned int clk_config;
 */
 static int rdma_mode = 0x1;
 
+static int one_pack_multi_f_set_align_size = 0;
+
 /*
  * 0x1  : sched_priority to MAX_RT_PRIO -1.
  * 0x2  : always reload firmware.
@@ -2060,7 +2062,68 @@ u32 vdec_offset_prepare_input(struct vdec_s *vdec, u32 consume_byte, u32 data_of
 	data_size = res_byte;
 
 	if (input->target == VDEC_INPUT_TARGET_VLD) {
-		//to do
+		pr_debug("%s one_pack_multi_f_set_align_size:0x%x\n",
+			__func__, one_pack_multi_f_set_align_size);
+
+		data_invalid = data_offset - round_down(data_offset, 0x40) + one_pack_multi_f_set_align_size;
+		data_offset = data_offset - data_invalid;
+		data_size = data_size + data_invalid;
+
+		if (data_offset < header_offset) {
+			data_invalid = consume_byte;
+			data_offset = header_offset;
+			data_size = header_data_size;
+		}
+
+		/* full reset to HW input */
+		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+		/* reset VLD fifo for all vdec */
+		WRITE_VREG(DOS_SW_RESET0, (1<<5) | (1<<4) | (1<<3));
+		WRITE_VREG(DOS_SW_RESET0, 0);
+		WRITE_VREG(POWER_CTL_VLD, 1 << 4);
+
+		/*
+		 *setup HW decoder input buffer (VLD context)
+		 * based on input->type and input->target
+		 */
+		if (input_frame_based(input)) {
+			struct vframe_chunk_s *chunk = vdec_input_next_chunk(&vdec->input);
+			struct vframe_block_list_s *block = NULL;
+			int dummy;
+
+			block = chunk->block;
+
+			WRITE_VREG(VLD_MEM_VIFIFO_START_PTR, block->start);
+			WRITE_VREG(VLD_MEM_VIFIFO_END_PTR, block->start +
+					block->size - 8);
+			WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
+					round_down(block->start + data_offset,
+						VDEC_FIFO_ALIGN));
+
+			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+			/* set to manual mode */
+			WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+			WRITE_VREG(VLD_MEM_VIFIFO_RP,
+					round_down(block->start + data_offset,
+						VDEC_FIFO_ALIGN));
+			dummy = data_offset + data_size +
+				VLD_PADDING_SIZE;
+			if (dummy >= block->size)
+				dummy -= block->size;
+			WRITE_VREG(VLD_MEM_VIFIFO_WP,
+				round_down(block->start + dummy,
+					VDEC_FIFO_ALIGN));
+
+			WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 3);
+			WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+
+			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
+				(0x11 << 16) | (1<<10) | (7<<3));
+
+		}
 	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
 		data_invalid = data_offset - round_down(data_offset, 0x40);
 		data_offset -= data_invalid;
@@ -7107,6 +7170,9 @@ MODULE_PARM_DESC(enable_stream_mode_multi_dec,
 
 module_param(rdma_mode, int, 0664);
 MODULE_PARM_DESC(rdma_mode, "\n rdma_enable\n");
+
+module_param(one_pack_multi_f_set_align_size, uint, 0664);
+MODULE_PARM_DESC(one_pack_multi_f_set_align_size, "\n ammvdec_mpeg12 one_pack_multi_f_set_align_size\n");
 
 /*
 *module_init(vdec_module_init);
