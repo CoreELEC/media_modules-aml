@@ -2624,7 +2624,7 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 			(0 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
-			if (pic->referred_by_others != 0)
+			if (pic->referred_by_others != 1)
 				continue;
 			valid_ref_cnt++;
 			WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
