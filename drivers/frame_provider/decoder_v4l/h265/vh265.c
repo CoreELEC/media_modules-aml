@@ -12573,7 +12573,6 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 	if (hevc->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
 		ulong flags;
 		reset_process_time(hevc);
-		spin_lock_irqsave(&hevc->wait_buf_lock, flags);
 		if (get_free_buf_count(hevc)) {
 			read_decode_info(hevc);
 			get_picture_qos_info(hevc);
@@ -12589,14 +12588,15 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
 			reset_process_time(hevc);
 		} else {
+			spin_lock_irqsave(&hevc->wait_buf_lock, flags);
 			if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
 				hevc->dec_result = DEC_RESULT_AGAIN;
 				vdec_schedule_work(&hevc->work);
 			} else {
 				hevc->wait_more_buf = true;
 			}
+			spin_unlock_irqrestore(&hevc->wait_buf_lock, flags);
 		}
-		spin_unlock_irqrestore(&hevc->wait_buf_lock, flags);
 		return;
 	}
 
