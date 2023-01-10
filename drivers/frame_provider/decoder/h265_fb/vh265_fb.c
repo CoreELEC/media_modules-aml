@@ -7766,6 +7766,12 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			hevc->m_tile[hevc->tile_y][hevc->tile_x].height;
 	}
 
+	if (hevc->cur_pic->slice_idx >= MAX_SLICE_NUM) {
+		hevc_print(hevc, H265_DEBUG_DETAIL,
+			"slice_idx %d invalid\n", hevc->cur_pic->slice_idx);
+		return 3;
+	}
+
 	set_ref_pic_list(hevc, rpm_param);
 
 	Col_ref = rpm_param->p.collocated_ref_idx;
