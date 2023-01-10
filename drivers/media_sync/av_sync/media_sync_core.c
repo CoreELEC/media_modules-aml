@@ -39,8 +39,6 @@
 #define mediasync_pr_info(number,fmt,args...) pr_info("MediaSync:[%d] " fmt, number,##args)
 
 
-static u32 media_sync_debug_level = 0;
-
 /*
     bit_0: 1:VideoFreeRunBytime 0:disenable VideoFreeRunBytime
     bit_1: 1:AudioFreeRun       0:disenable AudioFreeRun
@@ -49,6 +47,7 @@ static u32 media_sync_debug_level = 0;
 */
 static u32 media_sync_user_debug_level = 0;
 
+static u32 media_sync_debug_level = 0;
 
 MediaSyncManage vMediaSyncInsList[MAX_INSTANCE_NUM];
 u64 last_system;
@@ -217,6 +216,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			pInstance->mSyncInfo.state = MEDIASYNC_INIT;
 			pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
 			pInstance->mute_flag = false;
+			pInstance->mVideoSmoothTag = false;
 			pInstance->mSourceType = TS_DEMOD;
 			pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
 			pInstance->mRef++;
@@ -224,6 +224,9 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			pInstance->mAudioCacheUpdateCount = 0;
 			pInstance->mVideoCacheUpdateCount = 0;
 			pInstance->isVideoFrameAdvance = 0;
+			pInstance->mLastCheckSlopeSystemtime = 0;
+			pInstance->mLastCheckSlopeDemuxPts = 0;
+			pInstance->mLastCheckPcrSlope = 0;
 			snprintf(pInstance->atrace_video,
 				sizeof(pInstance->atrace_video), "msync_v_%d", *sSyncInsId);
 			snprintf(pInstance->atrace_audio,
@@ -451,10 +454,10 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	pInstance->mVideoInfo.cacheSize = -1;
 	pInstance->mVideoInfo.cacheDuration = -1;
 	pInstance->mPauseResumeFlag = 0;
-	pInstance->mSpeed.mNumerator = 1;
-	pInstance->mSpeed.mDenominator = 1;
-	pInstance->mPcrSlope.mNumerator = 1;
-	pInstance->mPcrSlope.mDenominator = 1;
+	pInstance->mSpeed.mNumerator = 100;
+	pInstance->mSpeed.mDenominator = 100;
+	pInstance->mPcrSlope.mNumerator = 100;
+	pInstance->mPcrSlope.mDenominator = 100;
 	pInstance->mAVRef = 0;
 	pInstance->mPlayerInstanceId = -1;
 
@@ -847,6 +850,7 @@ long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type) {
 	}
 
 	pInstance->mSourceClockType = type;
+	pInstance->mStcParmUpdateCount++;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1815,6 +1819,22 @@ long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag) {
 	return 0;
 }
 
+long mediasync_ins_set_pcrslope_implementation(mediasync_ins* pInstance, mediasync_speed pcrslope) {
+
+	if (pInstance->mPcrSlope.mNumerator == pcrslope.mNumerator &&
+		pInstance->mPcrSlope.mDenominator == pcrslope.mDenominator) {
+		return 0;
+	}
+
+	pInstance->mPcrSlope.mNumerator = pcrslope.mNumerator;
+	pInstance->mPcrSlope.mDenominator = pcrslope.mDenominator;
+	pInstance->mStcParmUpdateCount++;
+
+
+	return 0;
+}
+
+
 long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = get_index_from_sync_id(sSyncInsId);
@@ -1827,15 +1847,8 @@ long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope) {
 		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 		return -1;
 	}
-	if (pInstance->mPcrSlope.mNumerator == pcrslope.mNumerator &&
-		pInstance->mPcrSlope.mDenominator == pcrslope.mDenominator) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-		return 0;
-	}
+	mediasync_ins_set_pcrslope_implementation(pInstance,pcrslope);
 
-	pInstance->mPcrSlope.mNumerator = pcrslope.mNumerator;
-	pInstance->mPcrSlope.mDenominator = pcrslope.mDenominator;
-	pInstance->mStcParmUpdateCount++;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -2216,7 +2229,7 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 
 				// sometimes stream not descramble, lead pts jump, cache_duration will have error
 				if (pInstance->mVideoDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90)) {
-					pr_info("get_video_cache, cache=%dms, maybe cache cal have problem, need check more\n", info->cacheDuration/90);
+					//pr_info("get_video_cache, cache=%dms, maybe cache cal have problem, need check more\n", info->cacheDuration/90);
 					info->cacheDuration = 0;
 				}
 			} else {
@@ -2484,9 +2497,123 @@ long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* inf
 	return 0;
 }
 
+s64 mediasync_ins_get_stc_time(mediasync_ins* pInstance,s64 CurTimeUs) {
+
+	u64 mCurPcr = 0;
+	u32 k = pInstance->mSpeed.mNumerator * pInstance->mPcrSlope.mNumerator ;
+	k = div_u64(k, pInstance->mSpeed.mNumerator);
+	mCurPcr = (CurTimeUs - pInstance->mSyncInfo.refClockInfo.frameSystemTime) * k;
+	mCurPcr = div_u64(mCurPcr * 9, 100*pInstance->mSpeed.mNumerator) + pInstance->mSyncInfo.refClockInfo.framePts;
+	mCurPcr = mCurPcr - pInstance->mPtsAdjust - pInstance->mStartThreshold;
+	return mCurPcr;
+}
+void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_info* info) {
+
+	s64 CurTimeUs = 0;
+	s64 pcr = -1;
+	s64 pcr_ns = -1;
+	s64 pcr_diff = 0;
+	s64 time_diff = 0;
+	u32 slope = 100;
+	int mincache = 0;
+	u64 mCurPcr = 0;
+	mediasync_speed pcrslope;
+	if (pInstance->mSourceClockType != PCR_CLOCK ||
+		pInstance->mDemuxId < 0 ||
+		pInstance->mSyncInfo.state != MEDIASYNC_RUNNING) {
+		return;
+	}
+	if (pInstance->mSourceClockState == CLOCK_PROVIDER_DISCONTINUE) {
+		pInstance->mLastCheckPcrSlope = 1000;
+		pcrslope.mNumerator = 100;
+		pcrslope.mDenominator = 100;
+		mediasync_ins_set_pcrslope_implementation(pInstance,pcrslope);
+		pInstance->mLastCheckSlopeSystemtime = 0;
+		pInstance->mLastCheckSlopeDemuxPts = 0;
+		return ;
+	}
+	if (pInstance->mLastCheckSlopeSystemtime == 0) {
+		CurTimeUs = get_system_time_us();
+		//CurTimeUs  = div_u64(CurTimeUs*90,1000);
+		pInstance->mLastCheckSlopeSystemtime = CurTimeUs;
+		if (pInstance->mDemuxId >= 0) {
+			demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
+			pcr_ns = div_u64(pcr * 100000 , 9);
+		}
+		//pcr = div_u64(pcr * 100 , 9);
+		pInstance->mLastCheckSlopeDemuxPts = pcr_ns;
+		pInstance->mLastCheckPcrSlope = 1000;
+		return ;
+	}
+	CurTimeUs = get_system_time_us();
+	//CurTimeUs  = div_u64(CurTimeUs*90,1000);
+	time_diff = CurTimeUs - pInstance->mLastCheckSlopeSystemtime;
+	//time_diff = div_u64(time_diff*90,1000);
+
+
+	if (time_diff >= 500000) {
+		if (pInstance->mDemuxId >= 0) {
+			demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
+		}
+		pcr_ns = div_u64(pcr * 100000 , 9);
+		//pcr = div_u64(pcr , 10);
+		pcr_diff = pcr_ns - pInstance->mLastCheckSlopeDemuxPts;
+		if (pcr_diff > 0) {
+			slope = div_u64(pcr_diff, time_diff);
+			slope = div_u64(slope+50, 100)*10;
+		}
+
+		if (media_sync_debug_level >= 1) {
+			mCurPcr = mediasync_ins_get_stc_time(pInstance,CurTimeUs);
+			mediasync_pr_info(pInstance->mSyncInsId,
+				"time_diff:%lld pcr_diff:%lld (%lld) slope:%d LastSlope:%d diff: %lld",
+					time_diff,pcr_diff,time_diff*1000 - pcr_diff,
+					slope,
+					pInstance->mLastCheckPcrSlope,
+					pcr - mCurPcr);
+		}
+		if (slope > 80 && slope < 120 &&
+			pInstance->mLastCheckPcrSlope > 80 && pInstance->mLastCheckPcrSlope < 120) {
+			if (info->mAudioInfo.cacheDuration > info->mVideoInfo.cacheDuration) {
+				mincache = info->mVideoInfo.cacheDuration;
+			} else {
+				mincache = info->mAudioInfo.cacheDuration;
+			}
+			//300ms * 90
+			if (pInstance->mPcrSlope.mNumerator != slope &&
+				((slope > pInstance->mLastCheckPcrSlope && mincache > 27000) ||
+				(slope < pInstance->mLastCheckPcrSlope))) {
+
+				pcrslope.mNumerator = slope;
+				pcrslope.mDenominator = 100;
+
+				mCurPcr = mediasync_ins_get_stc_time(pInstance,CurTimeUs);
+				pInstance->mSyncInfo.refClockInfo.framePts = pcr;
+				pInstance->mSyncInfo.refClockInfo.frameSystemTime = CurTimeUs;
+				pInstance->mPtsAdjust = 0;
+				pInstance->mStartThreshold = pcr - mCurPcr;
+				mediasync_pr_info(pInstance->mSyncInsId,
+					"update time_diff:%lld pcr_diff:%lld (%lld) nowSlope:%d Slope:%d LastCheckSlope : %d offset:%lld ms",
+						time_diff,pcr_diff,time_diff * 1000 - pcr_diff,
+						slope,
+						pInstance->mPcrSlope.mNumerator ,
+						pInstance->mLastCheckPcrSlope,
+						div_u64(pcr - mCurPcr,90));
+				mediasync_ins_set_pcrslope_implementation(pInstance,pcrslope);
+
+			}
+		}
+
+		pInstance->mLastCheckSlopeSystemtime = CurTimeUs;
+		pInstance->mLastCheckSlopeDemuxPts = pcr_ns;
+
+		pInstance->mLastCheckPcrSlope = slope;
+	}
+
+	return ;
+}
 long mediasync_ins_get_update_info(mediasync_ins* pInstance, mediasync_update_info* info) {
 
-	info->mStcParmUpdateCount = pInstance->mStcParmUpdateCount;
 	info->debugLevel = media_sync_user_debug_level;
 
 	info->mCurrentSystemtime = get_system_time_us();
@@ -2497,6 +2624,8 @@ long mediasync_ins_get_update_info(mediasync_ins* pInstance, mediasync_update_in
 	mediasync_ins_get_audio_cache_info_implementation(pInstance,&(info->mAudioInfo));
 	mediasync_ins_get_video_cache_info_implementation(pInstance,&(info->mVideoInfo));
 	info->isVideoFrameAdvance = pInstance->isVideoFrameAdvance;
+	mediasync_ins_check_pcr_slope(pInstance,info);
+	info->mStcParmUpdateCount = pInstance->mStcParmUpdateCount;
 	return 0;
 }
 
@@ -2571,6 +2700,43 @@ long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_p
 	return ret;
 }
 
+long mediasync_ins_set_video_smooth_tag(s32 sSyncInsId, s32 sSmooth_tag) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	pInstance->mVideoSmoothTag = sSmooth_tag;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_get_video_smooth_tag(s32 sSyncInsId, s32* spSmooth_tag) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	*spSmooth_tag = pInstance->mVideoSmoothTag;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
 
 long mediasync_ins_get_status(s32 sSyncInsId, char *buf) {
 	mediasync_ins* pInstance = NULL;

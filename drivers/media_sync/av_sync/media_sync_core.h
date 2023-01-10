@@ -196,6 +196,7 @@ typedef struct instance{
 	s32 mSyncModeChange;
 	s64 mUpdateTimeThreshold;
 	s32 mPlayerInstanceId;
+	s32 mVideoSmoothTag;
 	int mHasAudio;
 	int mHasVideo;
 	int mute_flag;
@@ -211,6 +212,9 @@ typedef struct instance{
 	u32 mGetAudioCacheUpdateCount;
 	u32 mGetVideoCacheUpdateCount;
 	u32 isVideoFrameAdvance;
+	s64 mLastCheckSlopeSystemtime;
+	s64 mLastCheckSlopeDemuxPts;
+	u32 mLastCheckPcrSlope;
 	mediasync_clocktype mSourceClockType;
 	mediasync_clockprovider_state mSourceClockState;
 	mediasync_audioinfo mAudioInfo;
@@ -335,6 +339,11 @@ long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* inf
 long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_ptr);
+s64 mediasync_ins_get_stc_time(mediasync_ins* pInstance,s64 CurTimeUs);
+void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_info* info);
+long mediasync_ins_set_pcrslope_implementation(mediasync_ins* pInstance, mediasync_speed pcrslope);
+long mediasync_ins_set_video_smooth_tag(s32 sSyncInsId, s32 sSmooth_tag);
+long mediasync_ins_get_video_smooth_tag(s32 sSyncInsId, s32* spSmooth_tag);
 long mediasync_ins_get_status(s32 sSyncInsId, char *buf);
 long mediasync_ins_get_all_status(char *buf, int *size);
 long mediasync_ins_get_status_by_tag(const char *buf, int size);

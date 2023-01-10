@@ -110,6 +110,7 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 	s32 SyncState = 0;
 	s64 NextVsyncSystemTime = 0;
 	s64 TrackMediaTime = 0;
+	s32 VideoSmoothTag = 0;
 	int HasAudio = -1;
 	int HasVideo = -1;
 	s32 StartThreshold = 0;
@@ -1315,6 +1316,33 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 
 		break;
 
+		case MEDIASYNC_IOC_SET_VIDEO_SMOOTH_FLAG:
+			if (copy_from_user((void *)&VideoSmoothTag,
+						(void *)arg,
+						sizeof(VideoSmoothTag)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_video_smooth_tag(priv->mSyncInsId,
+							VideoSmoothTag);
+		break;
+
+		case MEDIASYNC_IOC_GET_VIDEO_SMOOTH_FLAG:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_video_smooth_tag(priv->mSyncInsId,
+							&VideoSmoothTag);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&VideoSmoothTag,
+						sizeof(VideoSmoothTag)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -1420,6 +1448,8 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_SET_PAUSE_AUDIO_INFO:
 		case MEDIASYNC_IOC_GET_PAUSE_AUDIO_INFO:
 		case MEDIASYNC_IOC_EXT_CTRLS:
+		case MEDIASYNC_IOC_SET_VIDEO_SMOOTH_FLAG:
+		case MEDIASYNC_IOC_GET_VIDEO_SMOOTH_FLAG:
 			return mediasync_ioctl_inner(file, cmd,(ulong)compat_ptr(arg),1);
 		default:
 			return -EINVAL;
