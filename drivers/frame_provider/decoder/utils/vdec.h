@@ -321,6 +321,11 @@ struct vdec_data_s {
 	atomic_t  use_count;
 	char *user_data_buf;
 	char *hdr10p_data_buf;
+	/* alloc_flag:
+	 * 0, none allocated
+	 * 1, allocated, used
+	 * 2, allocated, free
+	 */
 	u32 alloc_flag;
 };
 

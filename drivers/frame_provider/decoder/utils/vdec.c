@@ -430,6 +430,12 @@ int vdec_data_get_index(ulong data)
 
 			return i;
 		}
+
+		if ((atomic_read(&vdata->data[i].use_count) == 0) &&
+			(vdata->data[i].alloc_flag == 2)) {
+			vdata->data[i].alloc_flag = 1;
+			return i;
+		}
 	}
 
 	return -1;
@@ -481,6 +487,7 @@ void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb)
 	atomic_dec(&data->use_count);
 	if (atomic_read(&data->use_count) == 0) {
 		atomic_dec(&vdata->buffer_count);
+		data->alloc_flag = 2;
 	}
 
 	if (atomic_read(&vdata->buffer_count) == 0) {
