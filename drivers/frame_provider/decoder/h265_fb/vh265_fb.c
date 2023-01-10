@@ -339,6 +339,7 @@ static u32 pts_unstable;
 #define	BMMU_IFBUFF_MPRED_IMP0_ID	(BMMU_IFBUF_PARSER_SAO1_ID + 1)
 #define	BMMU_IFBUFF_MPRED_IMP1_ID	(BMMU_IFBUFF_MPRED_IMP0_ID + 1)
 #define FB_LOOP_BUF_COUNT	(BMMU_IFBUFF_MPRED_IMP1_ID + 1)
+
 #else
 #define FB_LOOP_BUF_COUNT	0
 #endif
@@ -2456,6 +2457,7 @@ struct hevc_state_s {
 	uint32_t backend_ASSIST_MBOX0_MASK;
 	unsigned char print_buf[1024*16+16];
 	int print_buf_len;
+	unsigned char realloc_buff;
 } /*hevc_stru_t */;
 
 #ifdef NEW_FB_CODE
@@ -11948,6 +11950,7 @@ force_output:
 						__func__, cur_mmu_4k_number, hevc->mmu_fb_4k_number);
 					hevc->wait_buf = 0;
 					hevc->dec_result = DEC_RESULT_AGAIN;
+					hevc->realloc_buff = 1;
 					amhevc_stop_f();
 					uninit_mmu_fb_bufstate(hevc);
 					init_mmu_fb_bufstate(hevc, cur_mmu_4k_number);
@@ -14359,11 +14362,13 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 				hevc->dec_result = DEC_RESULT_DONE;
 				vdec_schedule_work(&hevc->work);
 				return;
-			} else if ((((error_handle_policy & 0x200) == 0) &&
-						(hevc->pic_list_init_flag == 0))) {
+			} else if (((error_handle_policy & 0x200) == 0) &&
+						(hevc->pic_list_init_flag == 0) &&
+						hevc->realloc_buff == 0) {
 				check_dirty_data(vdec);
 			}
 		}
+		hevc->realloc_buff = 0;
 	} else if (hevc->dec_result == DEC_RESULT_EOS) {
 		struct PIC_s *pic;
 		hevc->eos = 1;
