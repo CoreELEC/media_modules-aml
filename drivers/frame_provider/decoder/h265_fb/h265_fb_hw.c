@@ -596,11 +596,10 @@ static int init_mmu_fb_bufstate(struct hevc_state_s* hevc, int mmu_4k_number)
 	return 0;
 }
 
-static void init_fb_bufstate(struct hevc_state_s* hevc)
+static int init_fb_bufstate(struct hevc_state_s* hevc)
 {
 /*simulation code: change to use linux APIs; also need write uninit_fb_bufstate()*/
 	int ret;
-	dma_addr_t tmp_phy_adr;
 	unsigned long tmp_adr;
 	int pic_w = hevc->max_pic_w ? hevc->max_pic_w : hevc->frame_width;
 	int pic_h = hevc->max_pic_h ? hevc->max_pic_h : hevc->frame_height;
@@ -610,13 +609,17 @@ static void init_fb_bufstate(struct hevc_state_s* hevc)
 	ret = init_mmu_fb_bufstate(hevc, mmu_4k_number);
 	if (ret) {
 		hevc_print(hevc, 0, "%s: failed to alloc mmu fb buffer\n", __func__);
-		return;
+		return -1;
 	}
 
 	hevc->fb_buf_scalelut.buf_size = IFBUF_SCALELUT_SIZE * hevc->fb_ifbuf_num;
 	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
 			BMMU_IFBUF_SCALELUT_ID, hevc->fb_buf_scalelut.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		return -1;
+	}
 	hevc->fb_buf_scalelut.buf_start = tmp_adr;
 	hevc->fb_buf_scalelut.buf_end = hevc->fb_buf_scalelut.buf_start + hevc->fb_buf_scalelut.buf_size;
 
@@ -624,25 +627,37 @@ static void init_fb_bufstate(struct hevc_state_s* hevc)
 	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
 			BMMU_IFBUF_VCPU_IMEM_ID, hevc->fb_buf_vcpu_imem.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		return -1;
+	}
 	hevc->fb_buf_vcpu_imem.buf_start = tmp_adr;
 	hevc->fb_buf_vcpu_imem.buf_end = hevc->fb_buf_vcpu_imem.buf_start + hevc->fb_buf_vcpu_imem.buf_size;
 
 	hevc->fb_buf_sys_imem.buf_size = IFBUF_SYS_IMEM_SIZE * hevc->fb_ifbuf_num;
-	hevc->fb_buf_sys_imem_addr =
+	/*hevc->fb_buf_sys_imem_addr =
 			dma_alloc_coherent(amports_get_dma_device(),
 			hevc->fb_buf_sys_imem.buf_size,
-			&tmp_phy_adr, GFP_KERNEL);
-	hevc->fb_buf_sys_imem.buf_start = tmp_phy_adr;
-	if (hevc->fb_buf_sys_imem_addr == NULL) {
-		pr_err("%s: failed to alloc fb_buf_sys_imem\n", __func__);
-		return;
+			&tmp_phy_adr, GFP_KERNEL);*/
+	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
+			BMMU_IMEM_ID, hevc->fb_buf_vcpu_imem.buf_size,
+			DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		return -1;
 	}
+	hevc->fb_buf_sys_imem.buf_start = tmp_adr;
+	hevc->fb_buf_sys_imem_addr = codec_mm_phys_to_virt(tmp_adr);
 	hevc->fb_buf_sys_imem.buf_end = hevc->fb_buf_sys_imem.buf_start + hevc->fb_buf_sys_imem.buf_size;
 
 	hevc->fb_buf_lmem0.buf_size = IFBUF_LMEM0_SIZE * hevc->fb_ifbuf_num;
 	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
 			BMMU_IFBUF_LMEM0_ID, hevc->fb_buf_lmem0.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		return -1;
+	}
 	hevc->fb_buf_lmem0.buf_start = tmp_adr;
 	hevc->fb_buf_lmem0.buf_end = hevc->fb_buf_lmem0.buf_start + hevc->fb_buf_lmem0.buf_size;
 
@@ -650,6 +665,10 @@ static void init_fb_bufstate(struct hevc_state_s* hevc)
 	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
 			BMMU_IFBUF_LMEM1_ID, hevc->fb_buf_lmem1.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		return -1;
+	}
 	hevc->fb_buf_lmem1.buf_start = tmp_adr;
 	hevc->fb_buf_lmem1.buf_end = hevc->fb_buf_lmem1.buf_start + hevc->fb_buf_lmem1.buf_size;
 
@@ -657,6 +676,10 @@ static void init_fb_bufstate(struct hevc_state_s* hevc)
 	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
 			BMMU_IFBUF_PARSER_SAO0_ID, hevc->fb_buf_parser_sao0.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		return -1;
+	}
 	hevc->fb_buf_parser_sao0.buf_start = tmp_adr;
 	hevc->fb_buf_parser_sao0.buf_end = hevc->fb_buf_parser_sao0.buf_start + hevc->fb_buf_parser_sao0.buf_size;
 
@@ -664,6 +687,10 @@ static void init_fb_bufstate(struct hevc_state_s* hevc)
 	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
 			BMMU_IFBUF_PARSER_SAO1_ID, hevc->fb_buf_parser_sao1.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		return -1;
+	}
 	hevc->fb_buf_parser_sao1.buf_start = tmp_adr;
 	hevc->fb_buf_parser_sao1.buf_end = hevc->fb_buf_parser_sao1.buf_start + hevc->fb_buf_parser_sao1.buf_size;
 
@@ -671,6 +698,10 @@ static void init_fb_bufstate(struct hevc_state_s* hevc)
 	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
 			BMMU_IFBUFF_MPRED_IMP0_ID, hevc->fb_buf_mpred_imp0.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		return -1;
+	}
 	hevc->fb_buf_mpred_imp0.buf_start = tmp_adr;
 	hevc->fb_buf_mpred_imp0.buf_end = hevc->fb_buf_mpred_imp0.buf_start + hevc->fb_buf_mpred_imp0.buf_size;
 
@@ -678,6 +709,10 @@ static void init_fb_bufstate(struct hevc_state_s* hevc)
 	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
 			BMMU_IFBUFF_MPRED_IMP1_ID, hevc->fb_buf_mpred_imp1.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		return -1;
+	}
 	hevc->fb_buf_mpred_imp1.buf_start = tmp_adr;
 	hevc->fb_buf_mpred_imp1.buf_end = hevc->fb_buf_mpred_imp1.buf_start + hevc->fb_buf_mpred_imp1.buf_size;
 
@@ -704,6 +739,8 @@ static void init_fb_bufstate(struct hevc_state_s* hevc)
 
 	hevc->fr.sys_imem_ptr_v = hevc->fb_buf_sys_imem_addr; //for linux
 	print_loopbufs_ptr(hevc, "init", &hevc->fr);
+
+	return 0;
 }
 
 static void uninit_mmu_fb_bufstate(struct hevc_state_s* hevc)
@@ -734,13 +771,6 @@ static void uninit_fb_bufstate(struct hevc_state_s* hevc)
 	for (i = 0; i < FB_LOOP_BUF_COUNT; i++) {
 		if (i != BMMU_IFBUF_SYS_IMEM_ID)
 			decoder_bmmu_box_free_idx(hevc->bmmu_box, i);
-	}
-
-	if (hevc->fb_buf_sys_imem_addr) {
-		dma_free_coherent(amports_get_dma_device(),
-				hevc->fb_buf_sys_imem.buf_size, hevc->fb_buf_sys_imem_addr,
-					hevc->fb_buf_sys_imem.buf_start);
-		hevc->fb_buf_sys_imem_addr = NULL;
 	}
 
 	uninit_mmu_fb_bufstate(hevc);
