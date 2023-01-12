@@ -2337,6 +2337,9 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	ctx->quantization = V4L2_QUANTIZATION_DEFAULT;
 	ctx->xfer_func = V4L2_XFER_FUNC_DEFAULT;
 	ctx->dev->dec_capability = 0;//VCODEC_CAPABILITY_4K_DISABLED;//disable 4k
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+		ctx->dev->dec_capability = VCODEC_CAPABILITY_4K_DISABLED;
+	}
 
 	q_data = &ctx->q_data[AML_Q_DATA_SRC];
 	memset(q_data, 0, sizeof(struct aml_q_data));
