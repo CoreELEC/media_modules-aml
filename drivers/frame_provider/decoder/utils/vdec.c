@@ -729,6 +729,62 @@ static void vdec_dbus_ctrl(bool enable)
 	}
 }
 
+void hevc_arb_ctrl_front_or_back(bool enable, bool front_flag)
+{
+	u32 axi_ctrl, axi_status, axi_status2, nop_cnt = 200;
+
+	if (enable) {
+		axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
+		if (front_flag)
+			axi_ctrl &= (~(1 << 6));
+		else
+			axi_ctrl &= (~(1 << 14));
+		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	//enable front/back arbiter
+	} else {
+		u32 idle_mask = ((1 << 15) | (1 << 11));
+		ulong timeout;
+
+		if (front_flag) {
+			/* front disable */
+			axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
+			axi_ctrl |= (1 << 6);
+			WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable front arbiter
+
+			timeout = jiffies + HZ/10;
+			do {
+				axi_status = READ_VREG(HEVC_ASSIST_AXI_STATUS_DFE_LO);
+				if (axi_status & idle_mask)		//read/write disable
+					break;
+				if (time_after(jiffies, timeout)) {
+					pr_err("%s front timeout\n", __func__);
+					break;
+				}
+			} while (1);
+		} else {
+			/* back disable */
+			axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
+			axi_ctrl |= (1 << 14);
+			WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable back arbiter
+
+			timeout = jiffies + HZ/10;
+			do {
+				axi_status = READ_VREG(HEVC_ASSIST_AXI_STATUS_DBE0_LO);
+				axi_status2 = READ_VREG(HEVC_ASSIST_AXI_STATUS_DBE1_LO);
+
+				if ((axi_status & idle_mask) && (axi_status2 & idle_mask))	//read/write disable
+					break;
+				if (time_after(jiffies, timeout)) {
+					pr_err("%s back timeout %x, %x\n", __func__, axi_status, axi_status2);
+					break;
+				}
+			} while (1);
+		}
+
+		while (nop_cnt--);
+	}
+}
+EXPORT_SYMBOL(hevc_arb_ctrl_front_or_back);
+
 static void hevc_arb_ctrl(bool enable, bool dbe1_flag)
 {
 	u32 axi_ctrl, axi_status, axi_status2, nop_cnt = 200;

@@ -1137,6 +1137,7 @@ EXPORT_SYMBOL(amhevc_stop_b);
 
 void amhevc_reset_f(void)
 {
+	hevc_arb_ctrl_front_or_back(0, 1);
 	WRITE_VREG(HEVC_STREAM_CONTROL, 0);
 
 	/*
@@ -1171,11 +1172,13 @@ void amhevc_reset_f(void)
 		);
 
 	WRITE_VREG(DOS_SW_RESET3, 0);
+	hevc_arb_ctrl_front_or_back(1, 1);
 }
 EXPORT_SYMBOL(amhevc_reset_f);
 
 void amhevc_reset_b(void)
 {
+	hevc_arb_ctrl_front_or_back(0, 0);
 	/*
 	* 2: assist
 	* 3: parser
@@ -1208,6 +1211,7 @@ void amhevc_reset_b(void)
 		);
 
 	WRITE_VREG(DOS_SW_RESET3, 0);
+	hevc_arb_ctrl_front_or_back(1, 0);
 }
 EXPORT_SYMBOL(amhevc_reset_b);
 

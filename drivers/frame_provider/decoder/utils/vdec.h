@@ -738,6 +738,8 @@ extern void vdec_reset_core(struct vdec_s *vdec);
 
 extern void hevc_reset_core(struct vdec_s *vdec);
 
+extern void hevc_arb_ctrl_front_or_back(bool enable, bool front_flag);
+
 extern void vdec_set_suspend_clk(int mode, int hevc);
 
 extern unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask);
