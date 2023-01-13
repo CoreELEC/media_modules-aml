@@ -14178,6 +14178,9 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 
 	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
 
+	if (from == 1)
+		hevc->timeout_processing = 0;
+
 	if (hevc->vdec_cb)
 		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg, CORE_MASK_HEVC);
 }
