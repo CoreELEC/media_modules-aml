@@ -5050,8 +5050,10 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 			vf->omx_index = dec->vf_get_count;
 			dec->vf_get_count++;
 			if (pic) {
-				if (dec->front_back_mode == 1)
+				if (dec->front_back_mode == 1) {
 					update_vf_memhandle(dec, vf, pic);
+					decoder_do_frame_check(hw_to_vdec(dec), vf);
+				}
 				avs2_print(dec, AVS2_DBG_BUFMGR,
 					"%s index 0x%x pos %d getcount %d type 0x%x w/h %d/%d, pts %d, %lld\n",
 					__func__, index,
@@ -5535,7 +5537,8 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			struct vdec_info tmp4x;
 			int stream_offset = pic->stream_offset;
 			set_vframe(dec, vf, pic, 0);
-			decoder_do_frame_check(pvdec, vf);
+			if (dec->front_back_mode != 1)
+				decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(dec->trace.pts_name, vf->pts);

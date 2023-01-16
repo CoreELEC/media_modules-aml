@@ -4688,6 +4688,8 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 				vf->width, vf->height,
 				vf->pts,
 				vf->pts_us64);
+		if (dec->front_back_mode == 1)
+			decoder_do_frame_check(hw_to_vdec(dec), vf);
 		return vf;
 		}
 	}
@@ -5207,7 +5209,8 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
 
 			set_vframe(dec, vf, pic, 0);
-			decoder_do_frame_check(pvdec, vf);
+			if (dec->front_back_mode != 1)
+				decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(dec->trace.pts_name, vf->timestamp);
