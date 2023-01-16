@@ -800,7 +800,8 @@ static bool is_fb_mapped(struct aml_vcodec_ctx *ctx, ulong addr)
 	struct vb2_v4l2_buffer *vb2_v4l2 = NULL;
 
 	vf->index_disp = ctx->index_disp;
-	ctx->index_disp++;
+	if ((vf->type & VIDTYPE_V4L_EOS) == 0)
+		ctx->index_disp++;
 	ctx->post_to_upper_done = false;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
