@@ -2631,7 +2631,7 @@ typedef struct _COM_INFO
 typedef enum _MSL_IDX
 {
 	MSL_SKIP,  //skip
-	MSL_MERG,  //merge or direct
+	MSL_MERGE, //merge or direct
 	MSL_LIS0,  //list 0
 	MSL_LIS1,  //list 1
 	MSL_BI,    //bi pred
@@ -2700,7 +2700,7 @@ typedef struct _COM_CNTMPM
 #endif
 
 #if IIP
-#define MAX_IIP_BLK                       4096 //the number is inlcuded
+#define MAX_IIP_BLK                       4096 //the number is included
 #define MIN_IIP_BLK                       64 //the number is included
 #define STNUM                             5 // anchor is 3
 #else

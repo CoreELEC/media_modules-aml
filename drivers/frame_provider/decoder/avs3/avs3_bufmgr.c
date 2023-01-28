@@ -420,7 +420,7 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 #if EXTENSION_USER_DATA && WRITE_MD5_IN_USER_DATA
 		//extension_and_user_data(ctx, param, 1, sqh, pic_header);
 #endif
-		com_constrcut_ref_list_doi(pic_header);
+		com_construct_ref_list_doi(pic_header);
 
 		//add by Yuqun Fan, init rpl list at ph instead of sh
 #if HLS_RPL

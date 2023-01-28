@@ -10843,7 +10843,7 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 	else
 		ps->dpb_frames	= 8;	/* < level 4.1 */
 	/*
-	1. curruent decoding frame is not include in dpb;
+	1. current decoding frame is not include in dpb;
 	2. for frame push out, one more buffer necessary.
 	3. Two consecutive frames cannot use the same buffer.
 	*/

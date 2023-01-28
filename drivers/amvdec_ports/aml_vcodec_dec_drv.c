@@ -244,7 +244,7 @@ int v4l2_alloc_fd(int *fd)
 		kzalloc(sizeof(struct file_private_data), GFP_KERNEL);
 	if (!file->private_data) {
 		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
-			"alloc priv data faild.\n");
+			"alloc priv data failed.\n");
 		return -ENOMEM;
 	}
 

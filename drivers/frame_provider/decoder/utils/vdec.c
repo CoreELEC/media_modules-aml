@@ -6259,7 +6259,7 @@ static int vdec_post_task_init(void)
 	post->task = kthread_run(vdec_post_task_recycle,
 		post, "task-post-daemon-thread");
 	if (IS_ERR(post->task)) {
-		pr_err("%s, creat task post daemon thread faild %ld\n",
+		pr_err("%s, creat task post daemon thread failed %ld\n",
 			__func__, PTR_ERR(post->task));
 		return PTR_ERR(post->task);
 	}
@@ -6304,7 +6304,7 @@ int vdec_post_task(post_task_handler func, void *args)
 	parms->task	= kthread_run(vdec_post_handler,
 				parms, "task-post-thread");
 	if (IS_ERR(parms->task)) {
-		pr_err("%s, creat task post thread faild %ld\n",
+		pr_err("%s, creat task post thread failed %ld\n",
 			__func__, PTR_ERR(parms->task));
 		kfree(parms);
 		return PTR_ERR(parms->task);

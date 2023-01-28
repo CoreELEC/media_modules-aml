@@ -4694,7 +4694,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 				pic_display->recon_mark = 0;
 				pic_display->output_ready = 1;
 				hevc_print(hevc, 0,
-					"Warning, num_reorder_pic %d is byeond buf num\n",
+					"Warning, num_reorder_pic %d is beyond buf num\n",
 					pic_display->num_reorder_pic);
 			} else
 				pic_display = NULL;
@@ -11828,7 +11828,7 @@ force_output:
 			hevc->error_flag == 0) {
 			if ((get_dbg_flag(hevc) &
 				H265_DEBUG_MAN_SEARCH_NAL) == 0) {
-				/* auot parser NAL; do not check
+				/* auto parser NAL; do not check
 				 *vps/sps/pps/idr
 				 */
 				WRITE_VREG(NAL_SEARCH_CTL, 0x2);

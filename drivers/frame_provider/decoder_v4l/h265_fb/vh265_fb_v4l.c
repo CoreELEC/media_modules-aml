@@ -4316,7 +4316,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 				pic_display->recon_mark = 0;
 				pic_display->output_ready = 1;
 				hevc_print(hevc, 0,
-					"Warning, num_reorder_pic %d is byeond buf num\n",
+					"Warning, num_reorder_pic %d is beyond buf num\n",
 					pic_display->num_reorder_pic);
 			} else
 				pic_display = NULL;

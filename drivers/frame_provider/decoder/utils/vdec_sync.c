@@ -364,7 +364,7 @@ void vdec_timeline_create(struct vdec_sync *sync, u8 *name)
 		pr_info("[VDEC-FENCE]: create timeline %lx, name: %s\n",
 			(ulong) sync->timeline, sync->name);
 	else
-		pr_err("[VDEC-FENCE]: create timeline faild.\n");
+		pr_err("[VDEC-FENCE]: create timeline failed.\n");
 }
 EXPORT_SYMBOL(vdec_timeline_create);
 

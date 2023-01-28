@@ -391,7 +391,7 @@ int com_picman_deinit(COM_PM * pm);
 int com_picman_init(COM_PM * pm, int max_pb_size, int max_num_ref_pics, PICBUF_ALLOCATOR * pa);
 int com_picman_dpbpic_doi_minus_cycle_length( COM_PM *pm );
 int com_picman_check_repeat_doi(COM_PM * pm, COM_PIC_HEADER * pic_header);
-int com_constrcut_ref_list_doi( COM_PIC_HEADER *pic_header );
+int com_construct_ref_list_doi( COM_PIC_HEADER *pic_header );
 int com_picman_refpic_marking_decoder(COM_PM *pm, COM_PIC_HEADER *pic_header);
 int com_cleanup_useless_pic_buffer_in_pm( COM_PM *pm );
 int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_REFP(*refp)[REFP_NUM]);

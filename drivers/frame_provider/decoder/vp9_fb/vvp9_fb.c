@@ -6226,7 +6226,6 @@ static void init_fb_bufstate(struct VP9Decoder_s *pbi)
 	int ret;
 	dma_addr_t tmp_phy_adr;
 	unsigned long tmp_adr;
-	//pyx need duuble size?     and need  multi pbi->fb_ifbuf_num?  checked it, need multi
 	int mmu_4k_number = pbi->fb_ifbuf_num * vp9_mmu_page_num(pbi, pbi->max_pic_w,
 			pbi->max_pic_h, buf_alloc_depth == 10); //hevc->bit_depth_luma == 8);
 	int mmu_map_size = ((mmu_4k_number * 4) >> 6) << 6;

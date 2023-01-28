@@ -846,7 +846,7 @@ int com_picman_refpic_marking(COM_PM *pm, COM_PIC_HEADER *pic_header)
 	return COM_OK;
 }
 
-int com_constrcut_ref_list_doi( COM_PIC_HEADER *pic_header)
+int com_construct_ref_list_doi( COM_PIC_HEADER *pic_header)
 {
 	int i;
 

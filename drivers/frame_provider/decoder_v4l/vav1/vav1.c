@@ -1168,7 +1168,7 @@ static int film_grain_task_create(struct AV1HW_s *hw)
 
 	assist->task = kthread_run(film_grain_task, hw, "fgs_task");
 	if (IS_ERR(assist->task)) {
-		pr_err("%s, creat film grain task thread faild %ld\n",
+		pr_err("%s, creat film grain task thread failed %ld\n",
 			__func__, PTR_ERR(assist->task));
 		return PTR_ERR(assist->task);
 	}

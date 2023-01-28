@@ -307,7 +307,7 @@
 // bit[11]  -- mv_use_abs (only calculate abs)
 // bit[10]  -- mv_use_simple_mode (every size count has same weight)
 // bit[9]   -- use_simple_mode (every size count has same weight)
-// bit[8]   -- reseet_all_count // write only
+// bit[8]   -- reset_all_count // write only
 // bit[7:5] Reserved
 // bit[4:0] pic_quality_rd_idx
 #define VDEC_PIC_QUALITY_CTRL        0x0c57
