@@ -5357,7 +5357,6 @@ static void hevc_config_work_space_hw(struct hevc_state_s *hevc)
 			WRITE_VREG(H265_MMU_MAP_BUFFER, hevc->frame_mmu_map_phy_addr);
 	}
 	WRITE_VREG(HEVC_SCALELUT, buf_spec->scalelut.buf_start);
-#ifndef FOR_S5
 #ifdef HEVC_8K_LFTOFFSET_FIX
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 		if (buf_spec->max_width <= 4096 && buf_spec->max_height <= 2304)
@@ -5367,7 +5366,6 @@ static void hevc_config_work_space_hw(struct hevc_state_s *hevc)
 		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
 			"write HEVC_DBLK_CFG3 to %x\n", READ_VREG(HEVC_DBLK_CFG3));
 	}
-#endif
 #endif
 #ifdef H265_10B_MMU_DW
 	if (hevc->dw_mmu_enable) {

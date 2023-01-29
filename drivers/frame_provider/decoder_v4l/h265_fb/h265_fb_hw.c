@@ -1072,10 +1072,8 @@ static void hevc_config_work_space_hw_fb(hevc_stru_t* hevc, uint8_t bit_depth, u
 		WRITE_VREG(HEVC_DBLK_CFG3, 0x4010); // adp offset(cfg3[23:16]) should be 0
 		WRITE_VREG(HEVC_DBLK_CFG3_DBE1, 0x4010); // adp offset(cfg3[23:16]) should be 0
 	#ifdef HEVC_8K_LFTOFFSET_FIX
-	#ifdef H265_8K
 		WRITE_VREG(HEVC_DBLK_CFG3, 0x8020); // offset should x2 if 8k
 		WRITE_VREG(HEVC_DBLK_CFG3_DBE1, 0x8020); // offset should x2 if 8k
-	#endif
 	#endif
 	#ifdef H265_10B_MMU_DW
 		//WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR2, FRAME_MMU_MAP_ADDR_DW);
