@@ -3764,8 +3764,13 @@ int aml_canvas_cache_init(struct aml_vcodec_dev *dev)
 
 void aml_v4l_vpp_release_early(struct aml_vcodec_ctx * ctx)
 {
-	if (ctx->vpp && !(ctx->vpp_cfg.enable_nr &&
-		atomic_read(&ctx->vpp->local_buf_out))) {
+	struct aml_vpp_cfg_infos *vpp_cfg = &ctx->vpp_cfg;
+
+	if (ctx->vpp == NULL)
+		return;
+
+	if (vpp_cfg->early_release_flag ||
+		!(vpp_cfg->enable_nr && atomic_read(&ctx->vpp->local_buf_out))) {
 		aml_v4l2_vpp_destroy(ctx->vpp);
 		atomic_dec(&ctx->dev->vpp_count);
 		ctx->vpp = NULL;
@@ -5039,6 +5044,8 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 			ctx->vpp_cfg.enable_local_buf = true;
 		ctx->vpp_cfg.dynamic_bypass_vpp =
 			dec->cfg.metadata_config_flag & (1 << 10);
+
+		ctx->vpp_cfg.early_release_flag = dec->cfg.metadata_config_flag & (1 << 18);
 
 		ctx->ge2d_cfg.bypass =
 			(dec->cfg.metadata_config_flag & (1 << 9));

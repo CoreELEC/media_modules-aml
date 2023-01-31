@@ -301,6 +301,7 @@ struct aml_vdec_cfg_infos {
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
 	/*
+	 * bit 18	: release vpp early. 0:false, 1:true
 	 * bit 17	: force di permission.
 	 * bit 16	: force progressive output flag.
 	 * bit 15	: enable nr.
@@ -594,6 +595,7 @@ struct aml_vpp_cfg_infos {
 	bool	res_chg;
 	bool	is_vpp_reset;
 	bool	dynamic_bypass_vpp;
+	bool	early_release_flag;
 };
 
 struct aml_ge2d_cfg_infos {
