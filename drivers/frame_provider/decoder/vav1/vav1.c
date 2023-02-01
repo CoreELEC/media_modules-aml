@@ -6849,6 +6849,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			vf->compWidth = pic_config->y_crop_width;
 			vf->compHeight = pic_config->y_crop_height;
 		}
+		vf->type_original = vf->type;
 		set_frame_info(hw, vf, pic_config);
 
 		if (hw->high_bandwidth_flag) {

@@ -3179,6 +3179,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 #endif
 
 		}
+		vf->type_original = vf->type;
 		set_frame_info(hw, vf, buffer_index);
 
 		if (hw->mmu_enable && hw->double_write_mode) {

@@ -2901,7 +2901,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 
 		vf->src_fmt.play_id = vdec->inst_cnt;
-
+		vf->type_original = vf->type;
 		if (i == 0) {
 			struct vdec_s *pvdec;
 			struct vdec_info vs;

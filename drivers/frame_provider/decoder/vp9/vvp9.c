@@ -8557,6 +8557,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vf->compWidth = pic_config->y_crop_width;
 			vf->compHeight = pic_config->y_crop_height;
 		}
+		vf->type_original = vf->type;
 		set_frame_info(pbi, vf, pic_config);
 		if (force_fps & 0x100) {
 			u32 rate = force_fps & 0xff;
