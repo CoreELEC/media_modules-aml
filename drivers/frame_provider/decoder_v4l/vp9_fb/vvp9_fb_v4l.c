@@ -11394,8 +11394,6 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
 			ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
-			dec_again_process(pbi);
-
 #ifdef NEW_FB_CODE
 			if (pbi->front_back_mode == 1) {
 				u32 bit_depth = pbi->vp9_param.p.bit_depth;
@@ -11411,6 +11409,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				}
 			}
 #endif
+			dec_again_process(pbi);
 
 			return IRQ_HANDLED;
 		} else {
