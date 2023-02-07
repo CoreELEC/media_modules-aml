@@ -12522,6 +12522,39 @@ static unsigned char get_data_check_sum
 	return sum;
 }
 
+static int vh265_wait_cap_buf(void *args)
+{
+	struct hevc_state_s *hevc =
+		(struct hevc_state_s *) args;
+	struct aml_vcodec_ctx * ctx =
+		(struct aml_vcodec_ctx *)hevc->v4l2_ctx;
+	ulong flags;
+	int ret = 0;
+
+	ret = wait_event_interruptible_timeout(ctx->cap_wq,
+		(ctx->is_stream_off || (get_free_buf_count(hevc) > 0)),
+		msecs_to_jiffies(300));
+	if (ret <= 0) {
+		pr_err("%s, wait cap buf timeout or err %d\n",
+			__func__, ret);
+	}
+
+	spin_lock_irqsave(&hevc->wait_buf_lock, flags);
+	if (hevc->wait_more_buf) {
+		hevc->wait_more_buf = false;
+		hevc->dec_result = ctx->is_stream_off ?
+		DEC_RESULT_FORCE_EXIT :
+		DEC_RESULT_NEED_MORE_BUFFER;
+		vdec_schedule_work(&hevc->work);
+	}
+	spin_unlock_irqrestore(&hevc->wait_buf_lock, flags);
+
+	hevc_print(hevc, PRINT_FLAG_V4L_DETAIL,
+		"%s wait capture buffer end, ret:%d\n",
+		__func__, ret);
+	return 0;
+}
+
 static void vh265_work_implement(struct hevc_state_s *hevc,
 	struct vdec_s *vdec,int from)
 {
@@ -12596,6 +12629,10 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 				hevc->wait_more_buf = true;
 			}
 			spin_unlock_irqrestore(&hevc->wait_buf_lock, flags);
+
+			if (hevc->wait_more_buf) {
+				vdec_post_task(vh265_wait_cap_buf, hevc);
+			}
 		}
 		return;
 	}
