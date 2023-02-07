@@ -892,6 +892,8 @@ struct AVS2Decoder_s {
 	int print_buf_len;
 	struct trace_decoder_name trace;
 	int decoder_size;
+	u32 last_stbuf_level;
+	u32 again_count;
 };
 
 static int  compute_losless_comp_body_size(
@@ -8240,6 +8242,30 @@ static void dump_data(struct AVS2Decoder_s *dec, int size)
 		codec_mm_unmap_phyaddr(data);
 }
 
+static bool is_stbuf_stagnant_full(struct AVS2Decoder_s *dec)
+{
+	struct vdec_s *vdec = hw_to_vdec(dec);
+	u32 cur_level, last_level, reset_level;
+
+	ulong wp = STBUF_READ(&vdec->vbuf, get_wp);
+	ulong rp = STBUF_READ(&vdec->vbuf, get_rp);
+
+	if (wp >= rp)
+		cur_level = wp - rp;
+	else
+		cur_level = rp + vdec->vbuf.buf_size - wp;
+
+	last_level = dec->last_stbuf_level;
+	dec->last_stbuf_level = cur_level;
+	reset_level = (vdec->vbuf.buf_size > (SZ_1M * 10)) ? (SZ_1M * 10) : (vdec->vbuf.buf_size >> 1);
+
+	pr_info("cur level %x, last level %x, reset lvl %x\n", cur_level, last_level, reset_level);
+	if ((cur_level == last_level) && (cur_level >= reset_level))
+		return true;
+
+	return false;
+}
+
 static void avs2_work(struct work_struct *work)
 {
 	struct AVS2Decoder_s *dec = container_of(work,
@@ -8353,6 +8379,17 @@ static void avs2_work(struct work_struct *work)
 			dec->dec_result = DEC_RESULT_EOS;
 			vdec_schedule_work(&dec->work);
 			return;
+		}
+
+		if (vdec_stream_based(vdec) && !dec->start_decoding_flag) {
+			if (is_stbuf_stagnant_full(dec)) {
+				if (++dec->again_count > 0x100) {
+					vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+					dec->again_count = 0;
+					dec->last_stbuf_level = 0;
+					pr_info("avs2 have not found pic to start\n");
+				}
+			}
 		}
 	} else if (dec->dec_result == DEC_RESULT_EOS) {
 		avs2_print(dec, 0, "%s: end of stream\n", __func__);
