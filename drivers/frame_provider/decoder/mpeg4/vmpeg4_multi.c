@@ -1599,7 +1599,8 @@ static void flush_output(struct vdec_mpeg4_hw_s * hw)
 {
 	struct pic_info_t *pic;
 
-	if (hw->vfbuf_use[hw->refs[1]] > 0) {
+	if (hw->refs[1] != -1 &&
+		hw->vfbuf_use[hw->refs[1]] > 0) {
 		pic = &hw->pic[hw->refs[1]];
 		prepare_display_buf(hw, pic);
 	}
