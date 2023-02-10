@@ -2537,8 +2537,20 @@ void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_in
 		//CurTimeUs  = div_u64(CurTimeUs*90,1000);
 		pInstance->mLastCheckSlopeSystemtime = CurTimeUs;
 		if (pInstance->mDemuxId >= 0) {
-			demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
+			if (!amldemux_pcrscr_get) {
+				amldemux_pcrscr_get = symbol_request(demux_get_pcr);
+				if (!amldemux_pcrscr_get) {
+					if (media_sync_debug_level) {
+						pr_info("symbol_request demux_get_pcr failed.\n");
+					}
+				} else {
+					amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
+				}
+			} else {
+				amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
+			}
 			pcr_ns = div_u64(pcr * 100000 , 9);
+
 		}
 		//pcr = div_u64(pcr * 100 , 9);
 		pInstance->mLastCheckSlopeDemuxPts = pcr_ns;
@@ -2553,7 +2565,18 @@ void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_in
 
 	if (time_diff >= 500000) {
 		if (pInstance->mDemuxId >= 0) {
-			demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
+			if (!amldemux_pcrscr_get) {
+				amldemux_pcrscr_get = symbol_request(demux_get_pcr);
+				if (!amldemux_pcrscr_get) {
+					if (media_sync_debug_level) {
+						pr_info("symbol_request demux_get_pcr failed.\n");
+					}
+				} else {
+					amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
+				}
+			} else {
+				amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
+			}
 		}
 		pcr_ns = div_u64(pcr * 100000 , 9);
 		//pcr = div_u64(pcr , 10);
