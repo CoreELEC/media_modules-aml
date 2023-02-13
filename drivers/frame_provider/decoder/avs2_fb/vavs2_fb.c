@@ -4076,7 +4076,7 @@ static void avs2_config_work_space_hw(struct AVS2Decoder_s *dec)
 	}
 #endif
 	WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, buf_spec->swap_buf2.buf_start);
-#ifndef FOR_S5
+
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 		if (buf_spec->max_width <= 4096 && buf_spec->max_height <= 2304)
 			WRITE_VREG(HEVC_DBLK_CFG3, 0x404010); //default value
@@ -4085,7 +4085,7 @@ static void avs2_config_work_space_hw(struct AVS2Decoder_s *dec)
 		avs2_print(dec, AVS2_DBG_BUFMGR,
 			"HEVC_DBLK_CFG3 = %x\n", READ_VREG(HEVC_DBLK_CFG3));
 	}
-#endif
+
 	/* cfg_p_addr */
 	WRITE_VREG(HEVC_DBLK_CFG4, buf_spec->dblk_para.buf_start);
 	/* cfg_d_addr */
@@ -7637,10 +7637,8 @@ static void vavs2_prot_init(struct AVS2Decoder_s *dec)
 	/* enable mailbox interrupt */
 	WRITE_VREG(dec->ASSIST_MBOX0_MASK, 1);
 
-#ifndef FOR_S5
 	/* disable PSCALE for hardware sharing */
 	WRITE_VREG(HEVC_PSCALE_CTRL, 0);
-#endif
 	WRITE_VREG(DEBUG_REG1, 0x0);
 	/*check vps/sps/pps/i-slice in ucode*/
 	WRITE_VREG(NAL_SEARCH_CTL, 0x8);
@@ -8954,9 +8952,8 @@ static void avs2_dump_state(struct vdec_s *vdec)
 {
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
-#ifndef FOR_S5
 	int i;
-#endif
+
 	if (radr != 0) {
 		if (rval != 0) {
 			WRITE_VREG(radr, rval);
@@ -8971,10 +8968,11 @@ static void avs2_dump_state(struct vdec_s *vdec)
 	avs2_print(dec, 0, "====== %s\n", __func__);
 
 	avs2_print(dec, 0,
-		"width/height (%d/%d), used_buf_num %d\n",
+		"width/height (%d/%d), used_buf_num %d, ref_maxbuffer %d\n",
 		dec->avs2_dec.img.width,
 		dec->avs2_dec.img.height,
-		dec->used_buf_num);
+		dec->used_buf_num,
+		dec->avs2_dec.ref_maxbuffer);
 
 	avs2_print(dec, 0,
 		"front_back_mode (%d), is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d\n",
@@ -9000,7 +8998,7 @@ static void avs2_dump_state(struct vdec_s *vdec)
 	}
 
 	avs2_print(dec, 0,
-		"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), free_buf_count %d (min %d for run_ready)\n",
+		"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), free_buf_count %d (min %d for run_ready), used_cont %d\n",
 		__func__,
 		kfifo_len(&dec->newframe_q),
 		VF_POOL_SIZE,
@@ -9009,14 +9007,10 @@ static void avs2_dump_state(struct vdec_s *vdec)
 		dec->vf_pre_count,
 		dec->vf_get_count,
 		dec->vf_put_count,
-#ifdef FOR_S5
-		0,
-#else
 		get_free_buf_count(dec),
-#endif
-		run_ready_min_buf_num);
+		run_ready_min_buf_num,
+		get_used_buf_count(dec));
 
-#ifndef FOR_S5
 	dump_pic_list(dec);
 
 	for (i = 0; i < MAX_BUF_NUM; i++) {
@@ -9027,7 +9021,7 @@ static void avs2_dump_state(struct vdec_s *vdec)
 			dec->m_mv_BUF[i].size,
 			dec->m_mv_BUF[i].used_flag);
 	}
-#endif
+
 	avs2_print(dec, 0,
 		"HEVC_DEC_STATUS_REG=0x%x\n",
 		READ_VREG(HEVC_DEC_STATUS_REG));

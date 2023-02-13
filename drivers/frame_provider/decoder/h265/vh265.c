@@ -12449,7 +12449,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 				flush_output(hevc, NULL);
 				hevc_print(hevc, H265_DEBUG_BUFMGR, "flush dpb, ref_error_count %d, sps_max_dec_pic_buffering_minus1_0 %d\n",
 						decode_count, hevc->param.p.sps_max_dec_pic_buffering_minus1_0);
-				return 0;
+				return 1;
 			}
 		}
 	}
@@ -12457,6 +12457,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	return (new_pic != NULL) ? 1 : 0;
 }
 
+#if 0
 static void check_buffer_status(struct hevc_state_s *hevc)
 {
 	int i;
@@ -12518,7 +12519,7 @@ static void check_buffer_status(struct hevc_state_s *hevc)
 		}
 	}
 }
-
+#endif
 
 static int vmh265_stop(struct hevc_state_s *hevc)
 {
@@ -13275,7 +13276,6 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		if (run_ready_max_buf_num == 0xff &&
 			get_used_buf_count(hevc) >=
 			get_work_pic_num(hevc)) {
-			check_buffer_status(hevc);
 			ret = 0;
 		}
 		else if (run_ready_max_buf_num &&
@@ -13845,7 +13845,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 	}
 
 	hevc_print(hevc, 0,
-	"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), pic_list_init_flag(%d), is_new_pic_available(%d)\n",
+	"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), pic_list_init_flag(%d), is_new_pic_available(%d), use count(%d) pic_num(%d)\n",
 	__func__,
 	kfifo_len(&hevc->newframe_q),
 	VF_POOL_SIZE,
@@ -13855,8 +13855,9 @@ static void vh265_dump_state(struct vdec_s *vdec)
 	hevc->vf_get_count,
 	hevc->vf_put_count,
 	hevc->pic_list_init_flag,
-	is_new_pic_available(hevc)
-	);
+	is_new_pic_available(hevc),
+	get_used_buf_count(hevc),
+	get_work_pic_num(hevc));
 
 	dump_pic_list(hevc);
 
