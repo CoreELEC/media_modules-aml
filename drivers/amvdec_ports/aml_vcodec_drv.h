@@ -804,6 +804,7 @@ struct aml_vcodec_ctx {
 	bool			v4l_reqbuff_flag;
 	atomic_t local_buf_out;
 	int dv_id;
+	struct mutex		v4l_intf_lock;
 };
 
 /**

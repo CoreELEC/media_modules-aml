@@ -107,6 +107,7 @@ static int fops_vcodec_open(struct file *file)
 	INIT_KFIFO(ctx->dmabuff_recycle);
 	INIT_KFIFO(ctx->capture_buffer);
 	atomic_set(&ctx->local_buf_out, 0);
+	mutex_init(&ctx->v4l_intf_lock);
 
 	ctx->post_to_upper_done = true;
 	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
