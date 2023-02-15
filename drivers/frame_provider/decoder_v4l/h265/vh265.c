@@ -4165,6 +4165,10 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 #else
 	total_num = num_neg + num_pos;
 #endif
+
+	if (total_num > params->p.sps_max_dec_pic_buffering_minus1_0)
+		params->p.sps_max_dec_pic_buffering_minus1_0 = total_num;
+
 	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s: curpoc %d slice_type %d, total %d ",
