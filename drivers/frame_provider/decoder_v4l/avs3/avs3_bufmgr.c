@@ -509,12 +509,14 @@ void avs3_bufmgr_init(struct avs3_decoder *hw)
 {
 	int i;
 	hw->ctx.dpm.hw = hw;
+	hw->ctx.init_flag = 0;
+	hw->cur_pic = NULL;
 	for (i = 0; i < NUM_ALF_COMPONENT; i++)
 	hw->p_alfPictureParam[i] = &hw->m_alfPictureParam[i];
 	hw->ctx.info.pic_header.alf_picture_param = &hw->p_alfPictureParam[0];
 
 	init_pic_pool(hw);
-
+	com_picman_init(&hw->ctx.dpm, hw->max_pb_size, MAX_NUM_REF_PICS, &hw->ctx.pa);
 	init_libvcdata(&hw->libvc_data);
 	set_livcdata_dec(&hw->ctx, &hw->libvc_data);
 }
@@ -629,11 +631,7 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 {
 	COM_PIC * pic = NULL;
 	int i;
-	for (i = 0; i < hw->max_pb_size; i++) {
-		if (hw->pic_pool[i].buf_cfg.used == 0) {
-			break;
-		}
-	}
+	i = get_free_frame_buffer(hw);
 	if (i < hw->max_pb_size) {
 		avs3_frame_t pic_cfg;
 		pic = &hw->pic_pool[i];
@@ -786,7 +784,7 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 #else
 			tmpbuf[0] = 0;
 #endif
-			printk("%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d ref index:%s\n",
+			printk("%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d ref index:%s, backend_ref %d\n",
 				i, pic, pic->buf_cfg.index, pic->buf_cfg.depth,
 				pic->dtr, pic->ptr, pic->is_ref,
 				pic->need_for_out,
@@ -794,7 +792,8 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 				pic->picture_output_delay,
 				pic->width_luma, pic->height_luma, pic->temporal_id,
 				pic->buf_cfg.slice_type,
-				tmpbuf);
+				tmpbuf,
+				pic->buf_cfg.backend_ref);
 		}
 	}
 }

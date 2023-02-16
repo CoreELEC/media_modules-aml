@@ -89,6 +89,7 @@ void com_picman_unlock(COM_PM * pm, unsigned long flags)
 	spin_unlock_irqrestore(&pm->pm_lock, flags);
 }
 
+#if 0 //for v4l
 static int picman_get_num_allocated_pics(COM_PM * pm)
 {
 	int i, cnt = 0;
@@ -98,7 +99,7 @@ static int picman_get_num_allocated_pics(COM_PM * pm)
 	}
 	return cnt;
 }
-
+#endif
 static int picman_move_pic(COM_PM *pm, int from, int to)
 {
 	int i;
@@ -172,6 +173,7 @@ static void picman_update_pic_ref(COM_PM * pm)
 	com_picman_unlock(pm, flags);
 }
 
+#if 0 //for v4l
 static COM_PIC * picman_remove_pic_from_pb(COM_PM * pm, int pos)
 {
 	int i;
@@ -191,6 +193,7 @@ static COM_PIC * picman_remove_pic_from_pb(COM_PM * pm, int pos)
 	com_picman_unlock(pm, flags);
 	return pic_rem;
 }
+#endif
 
 static void picman_set_pic_to_pb(COM_PM * pm, COM_PIC * pic,
 	COM_REFP(*refp)[REFP_NUM], int pos)
@@ -228,8 +231,10 @@ static void picman_set_pic_to_pb(COM_PM * pm, COM_PIC * pic,
 	pm->cur_pb_size++;
 }
 
+#if 0 // for v4l
 static int picman_get_empty_pic_from_list(COM_PM * pm)
 {
+	//COM_IMGB * imgb;
 	COM_PIC  * pic;
 	int i;
 	for (i = 0; i < pm->max_pb_size; i++) {
@@ -255,6 +260,7 @@ static int picman_get_empty_pic_from_list(COM_PM * pm)
 	}
 	return -1;
 }
+#endif
 
 void set_refp(COM_REFP * refp, COM_PIC  * pic_ref)
 {
@@ -603,6 +609,7 @@ COM_PIC * com_picman_get_empty_pic(COM_PM * pm, int * err)
 {
 	int ret;
 	COM_PIC * pic = NULL;
+#if 0 //for v4l
 #if LIBVC_ON
 	if (pm->libvc_data->is_libpic_processing) {
 		/* no need to find empty picture buffer in list */
@@ -637,6 +644,14 @@ END:
 	pm->pic_lease = pic;
 	if (err) *err = COM_OK;
 	return pic;
+#else
+	pic = com_pic_alloc(pm->hw, &pm->pa, &ret);
+	com_assert_gv(pic != NULL, ret, COM_ERR_OUT_OF_MEMORY, ERR);
+	pm->pic_lease = pic;
+	if (err) *err = COM_OK;
+	return pic;
+#endif
+
 ERR:
 	if (err) *err = ret;
 	if (pic) com_pic_free(pm->hw, &pm->pa, pic);
@@ -1088,6 +1103,7 @@ int com_picman_init(COM_PM * pm, int max_pb_size, int max_num_ref_pics, PICBUF_A
 	pm->max_pb_size = max_pb_size;
 	pm->ptr_increase = 1;
 	pm->pic_lease = NULL;
+	pm->cur_num_ref_pics = 0;
 	com_mcpy(&pm->pa, pa, sizeof(PICBUF_ALLOCATOR));
 #if LIBVC_ON
 	pm->pb_libpic = NULL;

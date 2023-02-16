@@ -449,6 +449,7 @@ int dec_eco_alf_param(union param_u *rpm_param, COM_PIC_HEADER *sh
 #define IGNORE_PARAM_FROM_CONFIG         0x8000000
 /*MULTI_INSTANCE_SUPPORT*/
 #define PRINT_FLAG_ERROR        0
+#define	PRINT_FLAG_V4L_DETAIL			0x10000000
 #define PRINT_FLAG_VDEC_STATUS             0x20000000
 #define PRINT_FLAG_VDEC_DETAIL             0x40000000
 #define PRINT_FLAG_VDEC_DATA             0x80000000
@@ -500,6 +501,7 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw);
 void avs3_cleanup_useless_pic_buffer_in_pm(struct avs3_decoder *hw);
 void print_alf_param(union param_u * param);
 void print_param(union param_u * param);
+int get_free_frame_buffer(struct avs3_decoder * avs3_dec);
 
 #endif
 

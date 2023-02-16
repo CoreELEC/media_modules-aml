@@ -51,8 +51,8 @@
 
 
 #define OUT_FMT_IDX		(0) //default h264
-#define CAP_FMT_IDX		(11) //capture nv21m
-#define CAP_FMT_I420_IDX	(15) //use for mjpeg
+#define CAP_FMT_IDX		(12) //capture nv21m
+#define CAP_FMT_I420_IDX	(16) //use for mjpeg
 
 #define AML_VDEC_MIN_W	64U
 #define AML_VDEC_MIN_H	64U
@@ -146,6 +146,12 @@ static struct aml_video_fmt aml_video_formats[] = {
 		.num_planes = 1,
 	},
 	{
+		.name = "AVS3",
+		.fourcc = V4L2_PIX_FMT_AVS3,
+		.type = AML_FMT_DEC,
+		.num_planes = 1,
+	},
+	{
 		.name = "NV21",
 		.fourcc = V4L2_PIX_FMT_NV21,
 		.type = AML_FMT_FRAME,
@@ -231,6 +237,11 @@ static const struct aml_codec_framesizes aml_vdec_framesizes[] = {
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_AVS2,
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_AVS3,
 		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
 				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},

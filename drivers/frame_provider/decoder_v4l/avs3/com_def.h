@@ -1547,6 +1547,9 @@ typedef struct avs3_frame_s {
 	u32 frame_size; // For frame base mode
 	char *cuva_data_buf;
 	int  cuva_data_size;
+	u64 timestamp;
+	uint32_t luma_size;
+	uint32_t chroma_size;
 #endif
 } avs3_frame_t;
 #endif
