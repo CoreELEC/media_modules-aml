@@ -1914,10 +1914,17 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				hw->mm_blk_handle, index);
 			if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 				/* offset for tsplayer pts lookup */
+				u64 frame_type = 0;
+				if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I)
+					frame_type = KEYFRAME_FLAG;
+				else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)
+					frame_type = PFRAME_FLAG;
+				else
+					frame_type = BFRAME_FLAG;
+
 				if (i == 0) {
-					vf->pts_us64 =
-						(((u64)vf->duration << 32) &
-						0xffffffff00000000) | pic->offset;
+					vf->pts_us64 = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
+						| pic->offset;
 					vf->pts = 0;
 				} else {
 					vf->pts_us64 = (u64)-1;
@@ -1941,10 +1948,9 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 					__func__);
 			}
 			debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-				"[%s] pts: %llx video_id %d\n",
-				__func__,
-				vf->pts_us64,
-				vdec->video_id);
+				"[%s] pts:%d, pts64:%lld(0x%llx) dur:%d video_id %d\n",
+				__func__, vf->pts, vf->pts_us64, vf->pts_us64,
+				vf->duration, vdec->video_id);
 			if (without_display_mode == 0) {
 				if (hw->is_used_v4l) {
 					if (v4l2_ctx->is_stream_off) {

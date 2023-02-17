@@ -3300,10 +3300,16 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		vf->sar_height = hw->height_aspect_ratio;
 		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 			/* offset for tsplayer pts lookup */
+			u64 frame_type = 0;
+			if (frame->slice_type == I_SLICE)
+				frame_type = KEYFRAME_FLAG;
+			else if (frame->slice_type == P_SLICE)
+				frame_type = PFRAME_FLAG;
+			else
+				frame_type = BFRAME_FLAG;
 			if (i == 0) {
-				vf->pts_us64 =
-					(((u64)vf->duration << 32) &
-					0xffffffff00000000) | frame->offset_delimiter;
+				vf->pts_us64 = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
+					| frame->offset_delimiter;
 				vf->pts = 0;
 			} else {
 				vf->pts_us64 = (u64)-1;

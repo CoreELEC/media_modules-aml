@@ -5353,9 +5353,6 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 		}
 
 		dec->last_pts_us64 = vf->pts_us64;
-		avs2_print(dec, AVS2_DBG_OUT_PTS,
-			"avs2 dec out pts: vf->pts=%d, vf->pts_us64 = %lld\n",
-			vf->pts, vf->pts_us64);
 	}
 
 	vf->index = 0xff00 | pic->index;
@@ -5473,10 +5470,23 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 	}
 	if (dec->front_back_mode != 1)
 		update_vf_memhandle(dec, vf, pic);
+
 	if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
-		vf->pts_us64 = stream_offset;
+		/* offset for tsplayer pts lookup */
+		u64 frame_type = 0;
+		if (pic->slice_type == I_IMG)
+			frame_type = KEYFRAME_FLAG;
+		else if (pic->slice_type == P_IMG)
+			frame_type = PFRAME_FLAG;
+		else
+			frame_type = BFRAME_FLAG;
+		vf->pts_us64 = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
+			| pic->stream_offset;
 		vf->pts = 0;
 	}
+	avs2_print(dec, AVS2_DBG_OUT_PTS,
+		"avs2 dec out pts: vf->pts=%d, vf->pts_us64 = %lld(0x%llx) slice_type %d, duration %d\n",
+		vf->pts, vf->pts_us64, vf->pts_us64, pic->slice_type, vf->duration);
 
 	if (!dummy) {
 		lock_buffer(dec, flags);

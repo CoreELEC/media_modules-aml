@@ -284,7 +284,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 	pts_node* ptn_tmp = NULL;
 
 	u32 cur_offset = 0xFFFFFFFF & mCheckoutPtsOffset->offset;
-	s32 cur_duration = (mCheckoutPtsOffset->offset >>= 32) & 0xFFFFFFFF;
+	s32 cur_duration = (mCheckoutPtsOffset->offset >> 32) & 0x3FFFFFFF;
 
 	u32 offsetDiff = 2500;
 	s32 find_framenum = 0;

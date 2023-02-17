@@ -357,7 +357,9 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 			}
 		}
 		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
-			vf->pts_us64 = offset;
+			u64 frame_type = KEYFRAME_FLAG;
+			vf->pts_us64 = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
+				| offset;
 			vf->pts = 0;
 		}
 	}
@@ -374,9 +376,9 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 	hw->frame_num++;
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,
-		"%s:frame num:%d,pts=%d,pts64=%lld. dur=%d\n",
+		"%s:frame num:%d,pts=%d,pts64=%lld(0x%llx). dur=%d\n",
 		__func__, hw->frame_num,
-		vf->pts, vf->pts_us64, vf->duration);
+		vf->pts, vf->pts_us64, vf->pts_us64, vf->duration);
 	vdec->vdec_fps_detec(vdec->id);
 	if (without_display_mode == 0) {
 		vf_notify_receiver(vdec->vf_provider_name,

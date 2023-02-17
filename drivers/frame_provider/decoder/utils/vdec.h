@@ -239,6 +239,13 @@ enum vdec_fr_hint_state {
 	VDEC_NEED_HINT,
 	VDEC_HINTED,
 };
+
+enum frame_type_flag {
+	KEYFRAME_FLAG = 1,	/* Frame is a keyframe (I-frame) */
+	PFRAME_FLAG,		/* Frame is a P-frame */
+	BFRAME_FLAG,		/* Frame is a B-frame */
+};
+
 extern s32 vdec_request_threaded_irq(enum vdec_irq_num num,
 			irq_handler_t handler,
 			irq_handler_t thread_fn,
