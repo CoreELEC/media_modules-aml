@@ -689,6 +689,10 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw)
 	//COM_IMGB *imgb;
 	int        ret = COM_OK;
 
+	if ((ctx->pic != NULL) && (ctx->pic->buf_cfg.error_mark)
+		&& (ctx->pic->picture_output_delay))
+		return ret;
+
 	if (stat)
 	{
 		com_mset(stat, 0, sizeof(DEC_STAT));
@@ -1011,7 +1015,8 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 		if (pic->buf_cfg.used)
 		used_count++;
 	}
-	printk("%s----pic_pool (used %d, total %d):\n", mark, used_count, hw->max_pb_size);
+	printk("%s----pic_pool (used %d, total %d) cur_num_ref_pics %d\n", mark, used_count, hw->max_pb_size,
+		hw->ctx.dpm.cur_num_ref_pics);
 	for (i = 0; i < hw->max_pb_size; i++) {
 		pic = &hw->pic_pool[i];
 		if (pic->buf_cfg.used) {
@@ -1028,7 +1033,7 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 #else
 		tmpbuf[0] = 0;
 #endif
-		printk("%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d ref index:%s\n",
+		printk("%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d error_mark %d ref index:%s backend_ref %d\n",
 			i, pic, pic->buf_cfg.index, pic->buf_cfg.depth,
 			pic->dtr, pic->ptr, pic->is_ref,
 			pic->need_for_out,
@@ -1036,7 +1041,9 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 			pic->picture_output_delay,
 			pic->width_luma, pic->height_luma, pic->temporal_id,
 			pic->buf_cfg.slice_type,
-			tmpbuf
+			pic->buf_cfg.error_mark,
+			tmpbuf,
+			pic->buf_cfg.backend_ref
 			);
 		}
 	}
