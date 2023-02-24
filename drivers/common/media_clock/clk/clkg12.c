@@ -764,6 +764,20 @@ static int vdec_clock_set(int clk)
 	return clk;
 }
 
+void vdec_clock_set_ex(int clk)
+{
+	int set_clk = clk;
+
+	if (set_frq_enable && vdec_frq) {
+		set_clk = vdec_frq;
+	}
+
+	vdec_set_clk(VDEC_1, set_clk * MHz);
+
+	clock_real_clk[VDEC_1] = set_clk;
+}
+EXPORT_SYMBOL(vdec_clock_set_ex);
+
 static int hevc_clock_init(void)
 {
 	return 0;

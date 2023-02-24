@@ -30,6 +30,15 @@ struct clk_set_setting {
 	struct clk_set set[MAX_CLK_SET];
 };
 
+enum clk_freq {
+	DEC_MODE_CLK_167M = 167,
+	DEC_MODE_CLK_333M = 333,
+	DEC_MODE_CLK_500M = 500,
+	DEC_MODE_CLK_667M = 667,
+	DEC_MODE_CLK_800M = 800,
+	DEC_MODE_CLK_ENVALUE = 1000
+};
+
 struct chip_vdec_clk_s {
 	int (*clock_get)(enum vdec_type_e core);
 	int (*clock_init)(void);
@@ -38,4 +47,5 @@ struct chip_vdec_clk_s {
 	void (*clock_off)(void);
 	void (*clock_prepare_switch)(void);
 };
+void vdec_clock_set_ex(int clk);
 #endif
