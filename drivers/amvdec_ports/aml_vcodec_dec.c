@@ -2142,7 +2142,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 
 			if ((atomic_read(&ctx->dev->vpp_count) < max_di_instance) ||
 				(ctx->vpp != NULL)) {
-				if (ctx->vpp && ctx->vpp_cfg.is_vpp_reset &&
+				if (ctx->vpp &&
 					(ctx->vpp->is_prog == ctx->vpp_cfg.is_prog) &&
 					(ctx->vpp->is_bypass_p == ctx->vpp_cfg.is_bypass_p) &&
 					(ctx->vpp->work_mode == ctx->vpp_cfg.mode)) {
@@ -3781,7 +3781,7 @@ void aml_v4l_vpp_release_early(struct aml_vcodec_ctx * ctx)
 		return;
 
 	if (vpp_cfg->early_release_flag ||
-		!(vpp_cfg->enable_nr && atomic_read(&ctx->vpp->local_buf_out))) {
+		!(vpp_cfg->enable_nr && atomic_read(&ctx->local_buf_out))) {
 		aml_v4l2_vpp_destroy(ctx->vpp);
 		atomic_dec(&ctx->dev->vpp_count);
 		ctx->vpp = NULL;

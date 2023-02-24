@@ -89,7 +89,6 @@ struct aml_v4l2_vpp {
 	int di_ibuf_num;
 	int di_obuf_num;
 	bool get_eos;
-	atomic_t local_buf_out;
 };
 
 struct task_ops_s *get_vpp_ops(void);

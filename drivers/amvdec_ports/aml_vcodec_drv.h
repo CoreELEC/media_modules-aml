@@ -802,6 +802,7 @@ struct aml_vcodec_ctx {
 	void			*mmu_box_dw_1;
 #endif
 	bool			v4l_reqbuff_flag;
+	atomic_t local_buf_out;
 };
 
 /**

@@ -215,7 +215,7 @@ static enum DI_ERRORTYPE
 		vpp_buf->di_local_buf = buf;
 		vpp_buf->di_buf.vf->vf_ext = buf->vf;
 		vpp_buf->di_buf.vf->flag |= VFRAME_FLAG_CONTAIN_POST_FRAME;
-		atomic_set(&vpp->local_buf_out, 1);
+		atomic_set(&vpp->ctx->local_buf_out, 1);
 	}
 
 	kfifo_put(&vpp->out_done_q, vpp_buf);
@@ -1059,7 +1059,6 @@ int aml_v4l2_vpp_init(
 	mutex_init(&vpp->output_lock);
 	sema_init(&vpp->sem_in, 0);
 	sema_init(&vpp->sem_out, 0);
-	atomic_set(&vpp->local_buf_out, 0);
 
 	vpp->running = true;
 	vpp->task = kthread_run(aml_v4l2_vpp_thread, vpp,
@@ -1117,7 +1116,6 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 {
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
 		"vpp destroy begin\n");
-	atomic_set(&vpp->local_buf_out, 0);
 
 	if (vpp->running) {
 		vpp->running = false;
