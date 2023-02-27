@@ -11433,7 +11433,10 @@ pic_done:
 				hevc->pic_wr_count++;
 			}
 #endif
-			hevc->decoding_pic = NULL;
+			if ((input_frame_based(hw_to_vdec(hevc)) && hevc->discard_dv_data) ||
+				(input_stream_based(hw_to_vdec(hevc)) && !vdec_dual(vdec)) ||
+				aux_data_is_available(hevc))
+				hevc->decoding_pic = NULL;
 #ifdef H265_USERDATA_ENABLE
 			userdata_prepare(hevc);
 #endif
@@ -11747,7 +11750,9 @@ force_output:
 
 			hevc_print(hevc, 0, "get NAL_UNIT_EOS, flush output\n");
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-			if ((vdec_dual(vdec)) && aux_data_is_available(hevc)) {
+			if (((input_frame_based(hw_to_vdec(hevc)) && !hevc->discard_dv_data) ||
+				(input_stream_based(hw_to_vdec(hevc)) && vdec_dual(vdec)))
+				&& aux_data_is_available(hevc)) {
 				if (hevc->decoding_pic)
 					dolby_get_meta(hevc);
 			}

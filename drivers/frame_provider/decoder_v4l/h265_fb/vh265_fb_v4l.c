@@ -11440,7 +11440,8 @@ pic_done:
 				hevc->pic_wr_count++;
 			}
 #endif
-			hevc->decoding_pic = NULL;
+			if (hevc->discard_dv_data || (!aux_data_is_available(hevc)))
+				hevc->decoding_pic = NULL;
 #ifdef H265_USERDATA_ENABLE
 			userdata_prepare(hevc);
 #endif

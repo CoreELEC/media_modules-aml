@@ -12625,7 +12625,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			hevc->switch_dvlayer_flag = 0;
 #endif
 			hevc->decoded_poc = hevc->curr_POC;
-			hevc->decoding_pic = NULL;
+			//hevc->decoding_pic = NULL;
 #ifdef H265_USERDATA_ENABLE
 			userdata_prepare(hevc);
 #endif
