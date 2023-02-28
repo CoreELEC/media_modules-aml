@@ -307,6 +307,8 @@ void vdec_input_init(struct vdec_input_s *input, struct vdec_s *vdec)
 	input->block_id_seq = 0;
 	input->size = 0;
 	input->default_block_size = VFRAME_BLOCK_SIZE;
+	input->total_wr_count = 0;
+	input->total_rd_count = 0;
 	snprintf(input->vdec_input_name, sizeof(input->vdec_input_name),
 		 "vdec-input-%d", vdec->id);
 }
@@ -580,14 +582,14 @@ int vdec_input_get_status(struct vdec_input_s *input,
 	flags = vdec_input_lock(input);
 
 	if (list_empty(&input->vframe_block_list)) {
-		status->size = VFRAME_BLOCK_SIZE;
+		status->size = (input->default_block_size - VFRAME_BLOCK_HOLE) * 3;
 		status->data_len = 0;
-		status->free_len = VFRAME_BLOCK_SIZE;
+		status->free_len = status->size;
 		status->read_pointer = 0;
 	} else {
-		int r = VFRAME_BLOCK_MAX_LEVEL - vdec_input_level(input)
-			- VFRAME_BLOCK_HOLE;
-		status->size = input->size;
+		int r = (input->default_block_size - VFRAME_BLOCK_HOLE) * 3
+			- vdec_input_level(input);
+		status->size = (input->default_block_size - VFRAME_BLOCK_HOLE) * 3;
 		status->data_len = vdec_input_level(input);
 		status->free_len = (r > 0) ? r : 0;
 		status->read_pointer = input->total_rd_count;
@@ -976,7 +978,11 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	}
 	if (chunk->size > input->frame_max_size)
 		input->frame_max_size = chunk->size;
-	input->total_wr_count += count;
+	if (input->total_wr_count + (count + need_pading_size) < 0) {
+		input->total_wr_count -= input->total_rd_count;
+		input->total_rd_count = 0;
+	}
+	input->total_wr_count += count + need_pading_size;
 	vdec_input_unlock(input, flags);
 #if 0
 	if (add_count == 2)
@@ -1098,13 +1104,13 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 		input->last_comsumed_pts_u64 = chunk->pts64;
 	} else
 		input->last_comsumed_no_pts_cnt++;
-	block->rp += chunk->size;
+	block->rp += chunk->size + chunk->pading_size;
 	if (block->rp >= block->size)
 		block->rp -= block->size;
 	block->data_size -= chunk->size;
 	block->chunk_count--;
 	input->data_size -= chunk->size;
-	input->total_rd_count += chunk->size;
+	input->total_rd_count += chunk->size + chunk->pading_size;
 	if (block->is_out_buf) {
 		list_move_tail(&block->list,
 			&input->vframe_block_free_list);
