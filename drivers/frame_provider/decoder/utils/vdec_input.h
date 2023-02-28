@@ -92,8 +92,8 @@ struct vdec_input_s {
 	ulong mem_handle;
 	void *swap_page;
 	dma_addr_t swap_page_phys;
-	u64 total_wr_count;
-	u64 total_rd_count;
+	int total_wr_count;
+	int total_rd_count;
 	u64 streaming_rp;
 	u32 swap_rp;
 	bool last_swap_slave;
