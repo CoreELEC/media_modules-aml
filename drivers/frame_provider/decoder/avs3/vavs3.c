@@ -8828,6 +8828,7 @@ void wait_shift_byte_search_done(struct AVS3Decoder_s *dec)
 void wait_hevc_search_done(struct AVS3Decoder_s *dec)
 {
 	int count = 0;
+	WRITE_VREG(HEVC_SHIFT_STATUS, 0);
 	while (READ_VREG(HEVC_STREAM_CONTROL) & 0x2) {
 		usleep_range(100, 101);
 		count++;
@@ -9003,8 +9004,6 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 			PROC_STATE_DECODE_AGAIN;
 	}
 
-	wait_hevc_search_done(dec);
-
 #ifdef NEW_FRONT_BACK_CODE
 	if (!vdec->front_pic_done && (dec->front_back_mode == 1)) {
 		fb_hw_status_clear(true);
@@ -9021,6 +9020,8 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 		del_timer_sync(&dec->timer);
 		dec->stat &= ~STAT_TIMER_ARM;
 	}
+
+	wait_hevc_search_done(dec);
 
 	if (dec->dec_result == DEC_RESULT_DONE)
 		decoder_trace(dec->trace.decode_time_name, DECODER_WORKER_END, TRACE_PERFORMANCE_DETAIL);
