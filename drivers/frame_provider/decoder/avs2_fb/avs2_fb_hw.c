@@ -2247,11 +2247,11 @@ static void config_dw_fb(struct AVS2Decoder_s *dec, struct avs2_frame_s *pic,
 		//data32 &= (~0xff0);
 #ifdef AVS2_10B_MMU_DW
 		if (dec->dw_mmu_enable == 0)
-		data = ((dec->endian >> 8) & 0xfff) >> 4; //data32 |= ((dec->endian >> 8) & 0xfff); //endian: ((0x880 << 8) | 0x8) or ((0xff0 << 8) | 0xf)
+		data = ((dec->endian >> 8) & 0xfff); //endian: ((0x880 << 8) | 0x8) or ((0xff0 << 8) | 0xf)
 #else
-		data = ((dec->endian >> 8) & 0xfff) >> 4; //data32 |= ((dec->endian >> 8) & 0xfff);    /* data32 |= 0x670; Big-Endian per 64-bit */
+		data = ((dec->endian >> 8) & 0xfff);    /* data32 |= 0x670; Big-Endian per 64-bit */
 #endif
-		READ_WRITE_DATA16(avs2_dec, HEVC_SAO_CTRL1, data, 4, 8);
+		READ_WRITE_DATA16(avs2_dec, HEVC_SAO_CTRL1, data, 0, 12);
 
 		//data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
 		if (dw_mode == 0)
