@@ -40,7 +40,7 @@
 #include <linux/fs.h>
 #include "vdec.h"
 #include "frame_check.h"
-#include "amlogic_fbc_hook.h"
+#include <linux/amlogic/media/vfm/amlogic_fbc_hook_v1.h>
 #include <linux/highmem.h>
 #include <linux/page-flags.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
@@ -1194,7 +1194,7 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 		planes[1] = check->fbc_planes[1];
 		planes[2] = check->fbc_planes[2];
 		planes[3] = check->fbc_planes[3];
-		ret = AMLOGIC_FBC_vframe_decoder(planes, vf, 0, 0);
+		ret = AMLOGIC_FBC_vframe_decoder_v1(planes, vf, 0, 0);
 		if (ret < 0) {
 			dbg_print(0, "amlogic_fbc_lib.ko error %d\n", ret);
 		} else {
