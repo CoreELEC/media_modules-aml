@@ -1551,6 +1551,8 @@ typedef struct avs3_frame_s {
 	u64 timestamp;
 	uint32_t luma_size;
 	uint32_t chroma_size;
+	bool in_dpb;
+	u64 time;
 #endif
 } avs3_frame_t;
 #endif

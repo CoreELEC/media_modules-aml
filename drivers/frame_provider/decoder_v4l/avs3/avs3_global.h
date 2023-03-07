@@ -383,6 +383,7 @@ typedef struct avs3_decoder {
 #ifdef AML
 	int max_pb_size;
 	int8_t bufmgr_error_flag;
+	u64 start_time;
 #endif
 } avs3_decoder_t;
 

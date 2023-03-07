@@ -536,13 +536,12 @@ static int32_t config_mc_buffer_fb(struct AVS3Decoder_s *dec)
 			pic = &avs3_dec->ctx.refp[i][REFP_0].pic->buf_cfg;
 			WRITE_BACK_32(avs3_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 				(pic->mc_canvas_u_v << 16)|(pic->mc_canvas_u_v << 8) | pic->mc_canvas_y);
-		}
-		if (debug) {
-			for (i = 0; i < avs3_dec->ctx.dpm.num_refp[REFP_0]; i++) {
-				pic = &avs3_dec->ctx.refp[i][REFP_0].pic->buf_cfg;
-				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-					"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
+			if (pic->error_mark) {
+				avs3_dec->ctx.pic->buf_cfg.error_mark = 1;
+				avs3_print(dec, AVS3_DBG_BUFMGR, "%s:L0 refid %d pic error\n", __func__, i);
 			}
+			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+				"L0 refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 		}
 	}
 	if (avs3_dec->slice_type == SLICE_B) {
@@ -554,13 +553,12 @@ static int32_t config_mc_buffer_fb(struct AVS3Decoder_s *dec)
 			pic = &avs3_dec->ctx.refp[i][REFP_1].pic->buf_cfg;
 			WRITE_BACK_32(avs3_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 				(pic->mc_canvas_u_v << 16) | (pic->mc_canvas_u_v << 8) | pic->mc_canvas_y);
-		}
-		if (debug) {
-			for (i = 0; i < avs3_dec->ctx.dpm.num_refp[REFP_1]; i++) {
-				pic = &avs3_dec->ctx.refp[i][REFP_1].pic->buf_cfg;
-				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-					"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
+			if (pic->error_mark) {
+				avs3_dec->ctx.pic->buf_cfg.error_mark = 1;
+				avs3_print(dec, AVS3_DBG_BUFMGR, "%s:L1 refid %d pic error\n", __func__, i);
 			}
+			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+				"L1 refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 		}
 	}
 	return 0;
@@ -1693,7 +1691,6 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 
 		/* enable mailbox interrupt */
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_MASK, 1);
-		PRINT_LINE();
 	}
 
 	return 0;
@@ -1890,9 +1887,7 @@ static void BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 	}
 	pic->mmu_alloc_flag = 1;
 
-	PRINT_LINE();
 	copy_loopbufs_ptr(&avs3_dec->bk, &avs3_dec->next_bk[avs3_dec->fb_rd_pos]);
-	PRINT_LINE();
 	avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
 		"update loopbuf bk from next_bk[fb_rd_pos=%d]\n", avs3_dec->fb_rd_pos);
 	print_loopbufs_ptr(dec, "bk", &avs3_dec->bk);
@@ -1900,7 +1895,6 @@ static void BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 #ifdef PRINT_HEVC_DATA_PATH_MONITOR
 	if (dec->front_back_mode == 1) {
 		if (avs3_dec->backend_decoded_count > 0 && (debug & AVS3_DBG_CACHE)) {
-			PRINT_LINE();
 			print_hevc_b_data_path_monitor(avs3_dec->backend_decoded_count-1);
 			print_mcrcc_hit_info(avs3_dec->backend_decoded_count-1);
 		}
@@ -1909,18 +1903,15 @@ static void BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 #endif
 	if (dec->front_back_mode == 1)
 		amhevc_reset_b();
-	PRINT_LINE();
 	avs3_hw_init(dec, 0, 1);
 	if (dec->front_back_mode == 3) {
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);
 	} else {
-		PRINT_LINE();
 		config_bufstate_back_hw(avs3_dec);
 		WRITE_VREG(PIC_DECODE_COUNT_DBE, avs3_dec->backend_decoded_count);
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_BE_DECODE_DATA);
 		WRITE_VREG(HEVC_SAO_CRC, 0);
 		amhevc_start_b();
-		PRINT_LINE();
 	}
 }
 
@@ -1970,7 +1961,6 @@ static void init_pic_list_hw_fb(struct AVS3Decoder_s *dec)
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 	struct avs3_frame_s *pic;
 	/*WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x0);*/
-	PRINT_LINE();
 	avs3_dec->ins_offset = 0;
 #if 1
 	WRITE_BACK_8(avs3_dec, HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, (0x1 << 1) | (0x1 << 2));

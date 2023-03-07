@@ -110,18 +110,24 @@ static int picman_move_pic(COM_PM *pm, int from, int to)
 
 	for (i = from; i < temp_cur_num_ref_pics - 1; i++)
 	{
-	pm->pic[i] = pm->pic[i + 1];// move the remaining ref pic to the front
+		pm->pic[i] = pm->pic[i + 1];// move the remaining ref pic to the front
 	}
+
 	pm->pic[temp_cur_num_ref_pics - 1] = NULL; // the new end fill with NULL.
 	temp_cur_num_ref_pics--;// update, since the ref-pic number decrease
+
 	for (i = to; i > temp_cur_num_ref_pics; i--)
 	{
-	if (pm->pic[i] == NULL)
-	{
-		pm->pic[i] = pic;// find the first NULL pos from end to front, and fill with the un-ref pic
-		found_empty_pos = 1;
-		break;
+		if (pm->pic[i] == NULL)
+		{
+			pm->pic[i] = pic;// find the first NULL pos from end to front, and fill with the un-ref pic
+			found_empty_pos = 1;
+			break;
+		}
 	}
+
+	if (found_empty_pos != 1) {
+		pr_info("%s pic %p will be discarded\n", __func__, pic);
 	}
 	assert(found_empty_pos == 1);
 	return 0;
@@ -202,6 +208,7 @@ static COM_PIC * picman_remove_pic_from_pb(COM_PM * pm, int pos)
 	flags = com_picman_lock(pm);
 
 	pic_rem = pm->pic[pos];
+	printf("%s: pic %p pos %d\n", __func__, pic_rem, pos);
 	pm->pic[pos] = NULL;
 	/* fill empty pic buffer */
 	for (i = pos; i < pm->max_pb_size - 1; i++)
@@ -220,6 +227,7 @@ static void picman_set_pic_to_pb(COM_PM * pm, COM_PIC * pic,
 				     COM_REFP(*refp)[REFP_NUM], int pos)
 {
 	int i;
+	printf("%s: pic %p pos %d\n", __func__, pic, pos);
 	for (i = 0; i < pm->num_refp[REFP_0]; i++)
 	{
 #if ETMVP || SUB_TMVP || AWP
@@ -237,6 +245,25 @@ static void picman_set_pic_to_pb(COM_PM * pm, COM_PIC * pic,
 	if (pos >= 0)
 	{
 		com_assert(pm->pic[pos] == NULL);
+		if (pm->pic[pos] != NULL) {
+			COM_PIC * pos_pic;
+			pos_pic = pm->pic[pos];
+
+			/* search empty pic buffer position */
+			for (i = (pm->max_pb_size - 1); i >= 0; i--)
+			{
+				if (pm->pic[i] == NULL)
+				{
+					pm->pic[i] = pos_pic;
+					break;
+				}
+			}
+
+			if (i < 0)
+			{
+				printf("pos pic will be discarded\n");
+			}
+		}
 		pm->pic[pos] = pic;
 	}
 	else /* pos < 0 */
@@ -271,6 +298,7 @@ static int picman_get_empty_pic_from_list(COM_PM * pm)
 #ifdef AML
 		&& pic->buf_cfg.vf_ref == 0
 		&& pic->buf_cfg.backend_ref == 0
+		&& pic->buf_cfg.in_dpb == 0
 #endif
 		)
 		{
@@ -508,6 +536,8 @@ int com_cleanup_useless_pic_buffer_in_pm( COM_PM *pm )
 	printf("%s\n", __func__);
 	for (i = 0; i < pm->max_pb_size; i++)
 	{
+		if (pm->pic[i] != NULL)
+			printf("pm pic %p index %d\n", pm->pic[i], i);
 		if ( (pm->pic[i] != NULL) && (pm->pic[i]->need_for_out == 0)
 		&& (pm->pic[i]->is_ref == 0)
 #ifdef AML
@@ -1274,8 +1304,8 @@ void com_picman_print_state(COM_PM * pm)
 			pos += sprintf(&tmpbuf[pos], ")");
 		}
 
-		printf("%d: index %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d, list_ptr %s\n",
-			i, pic->buf_cfg.index, pic->dtr, pic->ptr, pic->is_ref,
+		printf("%d: pic %p index %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d, list_ptr %s\n",
+			i, pic, pic->buf_cfg.index, pic->dtr, pic->ptr, pic->is_ref,
 			pic->need_for_out, pic->buf_cfg.backend_ref, pic->buf_cfg.vf_ref,
 			pic->picture_output_delay,
 			pic->width_luma, pic->height_luma, pic->temporal_id,

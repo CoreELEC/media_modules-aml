@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/sched/clock.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #endif
 #include "avs3_global.h"
@@ -596,10 +597,11 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw)
 	COM_CNKH *cnkh = &ctx->info.cnkh;
 	int        ret = COM_OK;
 
-	if ((ctx->pic != NULL) && (ctx->pic->buf_cfg.error_mark)
-		&& (ctx->pic->picture_output_delay))
+	if ((ctx->pic != NULL) && !((ctx->pic->buf_cfg.in_dpb == 0)
+		&& (ctx->pic->buf_cfg.used == 1)))
 		return ret;
 
+	ctx->pic->buf_cfg.in_dpb = true;
 	if (stat) {
 		com_mset(stat, 0, sizeof(DEC_STAT));
 	}
@@ -651,6 +653,8 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 		pic->buf_cfg.error_mark = 0;
 		pic->buf_cfg.vf_ref = 0;
 		pic->buf_cfg.backend_ref = 0;
+		pic->buf_cfg.in_dpb = false;
+		pic->buf_cfg.time = div64_u64(local_clock(), 1000) - hw->start_time;
 #endif
 
 	}
@@ -664,6 +668,7 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 void com_pic_free(struct avs3_decoder *hw, PICBUF_ALLOCATOR *pa, COM_PIC *pic)
 {
 	pic->buf_cfg.used = 0;
+	pic->buf_cfg.in_dpb = 0;
 	printf("%s: pic index %d\n", __func__, pic->buf_cfg.index);
 }
 
@@ -767,13 +772,33 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 	int i;
 	int used_count = 0;
 	char tmpbuf[128];
+	COM_PM *pm = &hw->ctx.dpm;
+	int pm_count = 0, pm_ref_count = 0;
 	for (i = 0; i < hw->max_pb_size; i++) {
 		pic = &hw->pic_pool[i];
 		if (pic->buf_cfg.used)
 			used_count++;
 	}
-	printk("%s----pic_pool (used %d, total %d) cur_num_ref_pics %d\n", mark, used_count, hw->max_pb_size,
-		hw->ctx.dpm.cur_num_ref_pics);
+
+	for (i = 0; i < pm->max_pb_size; i++)
+	{
+		if (pm->pic[i] != NULL) {
+			pm_ref_count++;
+		} else {
+			break;
+		}
+	}
+
+	for (i = 0; i < pm->max_pb_size; i++)
+	{
+		if (pm->pic[i] != NULL) {
+			pm_count++;
+		}
+	}
+
+	printk("%s----pic_pool (used %d, total %d) cur_num_ref_pics %d pm count %d, pm_ref_count %d diff %d\n", mark, used_count, hw->max_pb_size,
+		hw->ctx.dpm.cur_num_ref_pics, pm_count, pm_ref_count,  used_count - pm_count);
+
 	for (i = 0; i < hw->max_pb_size; i++) {
 		pic = &hw->pic_pool[i];
 		if (pic->buf_cfg.used) {
@@ -790,17 +815,26 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 #else
 			tmpbuf[0] = 0;
 #endif
-			printk("%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d error_mark %d ref index:%s backend_ref %d\n",
-				i, pic, pic->buf_cfg.index, pic->buf_cfg.depth,
-				pic->dtr, pic->ptr, pic->is_ref,
-				pic->need_for_out,
-				pic->buf_cfg.backend_ref, pic->buf_cfg.vf_ref,
-				pic->picture_output_delay,
-				pic->width_luma, pic->height_luma, pic->temporal_id,
-				pic->buf_cfg.slice_type,
-				pic->buf_cfg.error_mark,
-				tmpbuf,
-				pic->buf_cfg.backend_ref);
+		printk("%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d error_mark %d ref index:%s in_dpb %d time %lld\n",
+			i, pic, pic->buf_cfg.index, pic->buf_cfg.depth,
+			pic->dtr, pic->ptr, pic->is_ref,
+			pic->need_for_out,
+			pic->buf_cfg.backend_ref, pic->buf_cfg.vf_ref,
+			pic->picture_output_delay,
+			pic->width_luma, pic->height_luma, pic->temporal_id,
+			pic->buf_cfg.slice_type,
+			pic->buf_cfg.error_mark,
+			tmpbuf,
+			pic->buf_cfg.in_dpb,
+			pic->buf_cfg.time
+			);
+		}
+	}
+
+	for (i = 0; i < pm->max_pb_size; i++)
+	{
+		if (pm->pic[i] != NULL) {
+			printk("pm pic %p index %d\n", pm->pic[i], i);
 		}
 	}
 }

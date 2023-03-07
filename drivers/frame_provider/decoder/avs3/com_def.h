@@ -1548,6 +1548,8 @@ typedef struct avs3_frame_s{
 	u32 frame_size; // For frame base mode
 	char *cuva_data_buf;
 	int  cuva_data_size;
+	bool in_dpb;
+	u64 time;
 #endif
 } avs3_frame_t;
 #endif
