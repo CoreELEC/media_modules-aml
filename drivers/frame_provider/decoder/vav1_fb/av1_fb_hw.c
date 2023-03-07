@@ -1198,11 +1198,13 @@ static void aom_init_decoder_hw_fb(struct AV1HW_s *hw, int32_t decode_pic_begin,
 	}
 
 	if (front_flag) {
+/*
 #ifdef ENABLE_SWAP_TEST
 		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 100);
 #else
 		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
 #endif
+*/
 #ifdef NEW_FRONT_BACK_CODE
 		if (first_flag)
 			WRITE_VREG(HEVC_DECODE_COUNT, 0);

@@ -6310,10 +6310,16 @@ static void set_canvas(struct AV1HW_s *hw,
 	}
 }
 
+#define OBU_METADATA_TYPE_HDR_CLL 1
+#define OBU_METADATA_TYPE_HDR_MDCV 2
 #define OBU_METADATA_TYPE_ITUT_T35 4
 
 void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
+	int i,j;
+	char *p_sei;
+	struct vframe_master_display_colour_s *vf_dp = &hw->vf_dp;
+
 	if (pic->aux_data_buf && pic->aux_data_size) {
 		u32 size = 0, type = 0;
 		char *p = pic->aux_data_buf;
@@ -6330,6 +6336,8 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 			type = (type << 8) | *p++;
 			if (p + size <= pic->aux_data_buf + pic->aux_data_size) {
 				char metadata_type = ((type >> 24) & 0xff) - 0x10;
+				av1_print(hw, AV1_DEBUG_SEI_DETAIL, "metadata_type:%d, size:%d\n",
+					metadata_type, size);
 
 				switch (metadata_type) {
 				case OBU_METADATA_TYPE_ITUT_T35:
@@ -6343,6 +6351,57 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 						hw->video_signal_type = data;
 						vf->discard_dv_data = true;
 					}
+					break;
+				case OBU_METADATA_TYPE_HDR_CLL:
+					p_sei = p;
+					/* content_light_level */
+					vf_dp->content_light_level.max_content
+						= (*p_sei << 8) | *(p_sei + 1);
+					p_sei += 2;
+					vf_dp->content_light_level.max_pic_average
+						= (*p_sei << 8) | *(p_sei + 1);
+					p_sei += 2;
+					vf_dp->content_light_level.present_flag = 1;
+
+					av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+						"\tmax cll = %04x, max_pa_cll = %04x\n",
+						vf_dp->content_light_level.max_content,
+						vf_dp->content_light_level.max_pic_average);
+					break;
+				case OBU_METADATA_TYPE_HDR_MDCV:
+					p_sei = p;
+					/* master_display_colour */
+					for (i = 0; i < 3; i++) {
+						for (j = 0; j < 2; j++) {
+							vf_dp->primaries[i][j]
+								= (*p_sei << 8)
+								| *(p_sei + 1);
+							p_sei += 2;
+						}
+					}
+					av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+						"\tprimaries0 = (%04x, %04x), primaries1 = (%04x, %04x) primaries2 = (%04x, %04x)\n",
+						vf_dp->primaries[0][0], vf_dp->primaries[0][1], vf_dp->primaries[1][0], vf_dp->primaries[1][1],
+						vf_dp->primaries[2][0], vf_dp->primaries[2][1]);
+
+					for (i = 0; i < 2; i++) {
+						vf_dp->white_point[i]
+							= (*p_sei << 8)
+							| *(p_sei + 1);
+						p_sei += 2;
+					}
+					for (i = 0; i < 2; i++) {
+						vf_dp->luminance[i]
+							= (*p_sei << 24)
+							| (*(p_sei + 1) << 16)
+							| (*(p_sei + 2) << 8)
+							| *(p_sei + 3);
+						p_sei += 4;
+					}
+					vf_dp->present_flag = 1;
+					av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+						"\twhite_point = (%04x, %04x), luminance_max = %04x luminance_min = %04x\n",
+						vf_dp->white_point[0], vf_dp->white_point[1], vf_dp->luminance[0], vf_dp->luminance[1]);
 					break;
 				default:
 					break;
@@ -7979,6 +8038,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		if (debug &
 			AV1_DEBUG_BUFMGR_MORE)
 			dump_aux_buf(hw);
+		set_pic_aux_data(hw, cur_pic_config, 0, 0);
 		set_dv_data(hw);
 		if (cm->show_frame &&
 			hw->dv_data_buf != NULL)
