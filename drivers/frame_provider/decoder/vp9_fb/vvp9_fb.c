@@ -13402,6 +13402,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 #ifdef NEW_FB_CODE
 	timer_setup(&pbi->timer_back, vvp9_put_timer_func_back, 0);
 	pbi->stat |= STAT_TIMER_BACK_INIT;
+	mutex_init(&pbi->fb_mutex);
 #endif
 	if (vvp9_local_init(pbi) < 0)
 		return -EBUSY;
