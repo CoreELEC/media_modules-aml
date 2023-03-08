@@ -301,6 +301,11 @@ static u32 double_write_mode = 0x80000003;
 static u32 without_display_mode;
 static u32 dump_yuv_frame = 0;
 
+/*
+bit0: if dpb abnormal, check dpb buffer status and flush dpb.
+*/
+static unsigned int error_proc_policy = 0x1;
+
 static u32 mv_buf_dynamic_alloc;
 
 #define DRIVER_NAME "amvdec_avs2_fb"
@@ -2534,7 +2539,7 @@ static void init_buf_list(struct AVS2Decoder_s *dec)
 	if (IS_8K_SIZE(dec->vavs2_amstream_dec_info.width, dec->vavs2_amstream_dec_info.height))
 		dec->used_buf_num = max_buf_num + dec->dynamic_buf_margin;
 	else
-		dec->used_buf_num = max_buf_num + dec->dynamic_buf_margin - 4;
+		dec->used_buf_num = max_buf_num + dec->dynamic_buf_margin - 3; //reduce memory for 4*4k playback
 
 	if (dec->used_buf_num > MAX_BUF_NUM)
 		dec->used_buf_num = MAX_BUF_NUM;
@@ -8255,7 +8260,8 @@ static bool is_stbuf_stagnant_full(struct AVS2Decoder_s *dec)
 	dec->last_stbuf_level = cur_level;
 	reset_level = (vdec->vbuf.buf_size > (SZ_1M * 10)) ? (SZ_1M * 10) : (vdec->vbuf.buf_size >> 1);
 
-	pr_info("cur level %x, last level %x, reset lvl %x\n", cur_level, last_level, reset_level);
+	avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
+		"cur level %x, last level %x, reset lvl %x\n", cur_level, last_level, reset_level);
 	if ((cur_level == last_level) && (cur_level >= reset_level))
 		return true;
 
@@ -8527,6 +8533,46 @@ static int avs2_hw_ctx_restore(struct AVS2Decoder_s *dec)
 	return 0;
 }
 
+static int avs2_buffer_recovery(struct AVS2Decoder_s *dec)
+{
+	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
+	int i = 0, ret = 0;
+	unsigned long flags;
+	int decode_count = 0;
+
+	if (error_proc_policy & 0x01) {
+		if ((kfifo_len(&dec->display_q) <= 0) &&
+			dec->pic_list_init_flag) {
+			lock_buffer(dec, flags);
+			for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
+				if (avs2_dec->fref[i]->vf_ref == 0) {
+					decode_count ++;
+				}
+			}
+			if (decode_count >= avs2_dec->ref_maxbuffer - 4) {
+				for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
+					if (avs2_dec->fref[i]->vf_ref == 0) {
+						avs2_dec->fref[i]->imgcoi_ref		   = -257;
+						avs2_dec->fref[i]->is_output		   = -1;
+						avs2_dec->fref[i]->refered_by_others   = -1;
+						avs2_dec->fref[i]->imgtr_fwRefDistance = -256;
+#ifdef NEW_FRONT_BACK_CODE
+						avs2_dec->fref[i]->backend_ref = 0;
+#endif
+						avs2_dec->fref[i]->error_mark = 0;
+						memset(avs2_dec->fref[i]->ref_poc, 0, sizeof(avs2_dec->fref[i]->ref_poc));
+					}
+				}
+				ret = 1;
+				avs2_print(dec, 0, "dpb buff err, clean dpb buff\n");
+			}
+			unlock_buffer(dec, flags);
+		}
+	}
+
+	return ret;
+}
+
 #ifdef NEW_FB_CODE
 	/*run_ready_back*/
 static unsigned long check_input_data(struct vdec_s *vdec, unsigned long mask)
@@ -8626,6 +8672,12 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		get_free_buf_count(dec) >=
 		run_ready_min_buf_num)
 		ret = 1;
+
+	if (dec->pic_list_init_flag && (ret == 0))
+		ret = avs2_buffer_recovery(dec);
+
+	avs2_print(dec, PRINT_FLAG_VDEC_DETAIL, "%s ret = %d\n", __func__, ret);
+
 #ifdef CONSTRAIN_MAX_BUF_NUM
 	if (dec->pic_list_init_flag) {
 		if (run_ready_max_vf_only_num > 0 &&
@@ -9606,6 +9658,9 @@ static void __exit amvdec_avs2_driver_remove_module(void)
 /****************************************/
 module_param(bit_depth_luma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_luma, "\n amvdec_avs2 bit_depth_luma\n");
+
+module_param(error_proc_policy, uint, 0664);
+MODULE_PARM_DESC(error_proc_policy, "\n amvdec_avs2 error_proc_policy\n");
 
 module_param(bit_depth_chroma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_chroma, "\n amvdec_avs2 bit_depth_chroma\n");

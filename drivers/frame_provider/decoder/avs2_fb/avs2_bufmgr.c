@@ -808,6 +808,8 @@ void init_frame_t(struct avs2_frame_s *currfref)
 	currfref->is_output           = -1;
 	currfref->refered_by_others   = -1;
 	currfref->imgtr_fwRefDistance = -256;
+	currfref->y_canvas_index = -1;
+	currfref->uv_canvas_index = -1;
 	memset(currfref->ref_poc, 0, sizeof(currfref->ref_poc));
 }
 
