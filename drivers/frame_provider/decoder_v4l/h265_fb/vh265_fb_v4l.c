@@ -10284,6 +10284,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf->index		= pic->index;
 #ifdef	NEW_FB_CODE
 		pic->back_done_mark = 1;
+		set_pic_done_mark(pic, 1);
 #endif
 
 		vdec_vframe_ready(vdec, vf);
