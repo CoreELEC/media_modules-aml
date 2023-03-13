@@ -323,8 +323,7 @@ static u32 pts_unstable;
 #define	BMMU_IFBUF_PARSER_SAO1_ID	(BMMU_IFBUF_PARSER_SAO0_ID + 1)
 #define	BMMU_IFBUFF_MPRED_IMP0_ID	(BMMU_IFBUF_PARSER_SAO1_ID + 1)
 #define	BMMU_IFBUFF_MPRED_IMP1_ID	(BMMU_IFBUFF_MPRED_IMP0_ID + 1)
-#define	BMMU_IMEM_ID	(BMMU_IFBUFF_MPRED_IMP1_ID + 1)
-#define FB_LOOP_BUF_COUNT	(BMMU_IMEM_ID + 1)
+#define FB_LOOP_BUF_COUNT	(BMMU_IFBUFF_MPRED_IMP1_ID + 1)
 #else
 #define FB_LOOP_BUF_COUNT	0
 #endif
@@ -2225,6 +2224,7 @@ struct hevc_state_s {
 	void *fb_buf_mmu0_addr;
 	void *fb_buf_mmu1_addr;
 	void *fb_buf_sys_imem_addr;
+	ulong imem_mem_handle;
 	/**/
 	void (*vdec_back_cb)(struct vdec_s *, void *, int);
 	void *vdec_back_cb_arg;
@@ -12380,9 +12380,6 @@ force_output:
 						hevc->sys_imem_ptr = hevc->fb_buf_sys_imem.buf_start;
 						hevc->sys_imem_ptr_v = hevc->fb_buf_sys_imem_addr;
 					}
-					codec_mm_dma_flush(hevc->fb_buf_sys_imem_addr,
-										hevc->fb_buf_vcpu_imem.buf_size,
-										DMA_TO_DEVICE);
 					if (hevc->front_back_mode == 1) {
 						//WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
 						//WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->sys_imem_ptr);
@@ -12604,9 +12601,7 @@ force_output:
 						hevc->sys_imem_ptr = hevc->fb_buf_sys_imem.buf_start;
 						hevc->sys_imem_ptr_v = hevc->fb_buf_sys_imem_addr;
 					}
-					codec_mm_dma_flush(hevc->fb_buf_sys_imem_addr,
-														hevc->fb_buf_vcpu_imem.buf_size,
-														DMA_TO_DEVICE);
+
 					if (hevc->front_back_mode == 1) {
 						//WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
 						//WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->sys_imem_ptr);

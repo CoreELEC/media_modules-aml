@@ -600,6 +600,7 @@ static int init_fb_bufstate(struct hevc_state_s* hevc)
 {
 /*simulation code: change to use linux APIs; also need write uninit_fb_bufstate()*/
 	int ret;
+	ulong tmp_phy_adr;
 	unsigned long tmp_adr;
 	int pic_w = hevc->max_pic_w ? hevc->max_pic_w : hevc->frame_width;
 	int pic_h = hevc->max_pic_h ? hevc->max_pic_h : hevc->frame_height;
@@ -635,19 +636,16 @@ static int init_fb_bufstate(struct hevc_state_s* hevc)
 	hevc->fb_buf_vcpu_imem.buf_end = hevc->fb_buf_vcpu_imem.buf_start + hevc->fb_buf_vcpu_imem.buf_size;
 
 	hevc->fb_buf_sys_imem.buf_size = IFBUF_SYS_IMEM_SIZE * hevc->fb_ifbuf_num;
-	/*hevc->fb_buf_sys_imem_addr =
-			dma_alloc_coherent(amports_get_dma_device(),
+	hevc->fb_buf_sys_imem_addr =
+			codec_mm_dma_alloc_coherent(&hevc->imem_mem_handle,
+			&tmp_phy_adr,
 			hevc->fb_buf_sys_imem.buf_size,
-			&tmp_phy_adr, GFP_KERNEL);*/
-	ret = decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
-			BMMU_IMEM_ID, hevc->fb_buf_vcpu_imem.buf_size,
-			DRIVER_NAME, &tmp_adr);
-	if (ret) {
-		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+			 "H265_IMEM");
+	hevc->fb_buf_sys_imem.buf_start = tmp_phy_adr;
+	if (hevc->fb_buf_sys_imem_addr == NULL) {
+		pr_err("%s: failed to alloc fb_buf_sys_imem\n", __func__);
 		return -1;
 	}
-	hevc->fb_buf_sys_imem.buf_start = tmp_adr;
-	hevc->fb_buf_sys_imem_addr = codec_mm_phys_to_virt(tmp_adr);
 	hevc->fb_buf_sys_imem.buf_end = hevc->fb_buf_sys_imem.buf_start + hevc->fb_buf_sys_imem.buf_size;
 
 	hevc->fb_buf_lmem0.buf_size = IFBUF_LMEM0_SIZE * hevc->fb_ifbuf_num;
@@ -771,6 +769,11 @@ static void uninit_fb_bufstate(struct hevc_state_s* hevc)
 	for (i = 0; i < FB_LOOP_BUF_COUNT; i++) {
 		if (i != BMMU_IFBUF_SYS_IMEM_ID)
 			decoder_bmmu_box_free_idx(hevc->bmmu_box, i);
+	}
+
+	if (hevc->fb_buf_sys_imem_addr) {
+		codec_mm_dma_free_coherent(hevc->imem_mem_handle);
+		hevc->fb_buf_sys_imem_addr = NULL;
 	}
 
 	uninit_mmu_fb_bufstate(hevc);
