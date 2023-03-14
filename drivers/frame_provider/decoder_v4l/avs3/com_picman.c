@@ -95,7 +95,8 @@ static int picman_get_num_allocated_pics(COM_PM * pm)
 	int i, cnt = 0;
 	for (i = 0; i < pm->max_pb_size; i++) /* this is coding order */
 	{
-		if (pm->pic[i]) cnt++;
+		if (pm->pic[i])
+			cnt++;
 	}
 	return cnt;
 }
@@ -121,6 +122,7 @@ static int picman_move_pic(COM_PM *pm, int from, int to)
 			break;
 		}
 	}
+
 	if (found_empty_pos != 1) {
 		pr_info("%s pic %p will be discarded\n", __func__, pic);
 	}
@@ -147,7 +149,8 @@ static void picman_update_pic_ref(COM_PM * pm)
 				pic_ref[j++] = pic[i];
 			else {
 				if (avs3_get_debug_flag())
-					pr_info("%s error1\n", __func__);
+					pr_info("%s ref pic num(%d) is more than the MAX_NUM_REF_PICS\n",
+						__func__, j);
 			}
 #else
 			pic_ref[j++] = pic[i];
@@ -155,14 +158,16 @@ static void picman_update_pic_ref(COM_PM * pm)
 		}
 	}
 	cnt = j;
-	while (j < MAX_NUM_REF_PICS) pic_ref[j++] = NULL;
+	while (j < MAX_NUM_REF_PICS)
+		pic_ref[j++] = NULL;
 	/* descending order sort based on PTR */
 	for (i = 0; i < cnt - 1; i++) {
 		for (j = i + 1; j < cnt; j++) {
 #ifdef BUFMGR_SANITY_CHECK
 			if (i >= MAX_NUM_REF_PICS || j >= MAX_NUM_REF_PICS) {
 				if (avs3_get_debug_flag())
-					pr_info("%s error2\n", __func__);
+					pr_info("%s pm pic num(%d,%d) is more than the MAX_NUM_REF_PICS\n",
+						__func__, i, j);
 				return;
 			}
 #endif
@@ -278,7 +283,8 @@ static int picman_get_empty_pic_from_list(COM_PM * pm)
 				return i; /* this is empty buffer */
 			}
 #else
-			printf("%s: pm index %d pic index %d\n", __func__, i, pic->buf_cfg.index);
+			printf("%s: pm index %d pic index %d\n",
+				__func__, i, pic->buf_cfg.index);
 			return i;
 #endif
 		}
@@ -372,7 +378,8 @@ int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_R
 			//Find the ref pic in the DPB
 			int j = 0;
 			int diff;
-			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr != refPicPoc) j++;
+			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr != refPicPoc)
+				j++;
 
 			//If the ref pic is found, set it to RPL0
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr == refPicPoc) {
@@ -385,22 +392,27 @@ int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_R
 					pic_header->ref_pic_list_sps_flag[0] = 0;
 					pic_header->rpl_l0.ref_pics_ddoi[i] = diff;
 				}
-			} else
+			} else {
+				printf("%s: The L0 Reference Picture(%d) is not find in dpb",
+					__func__, refPicPoc);
 				return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+			}
 		}
 	}
 
 	//update inactive ref ddoi in L0,in case of last incomplete GOP
 	for (i = 0; i < MAX_NUM_REF_PICS; i++) {
 #if LIBVC_ON
-		if (!pic_header->rpl_l0.library_index_flag[i] && pic_header->rpl_l0.ref_pics[i] > 0) {
+		if (!pic_header->rpl_l0.library_index_flag[i] && pic_header->rpl_l0.ref_pics[i] > 0)
 #else
-		if (pic_header->rpl_l0.ref_pics[i] > 0) {
+		if (pic_header->rpl_l0.ref_pics[i] > 0)
 #endif
+		{
 			int refPicPoc = pic_header->poc - pic_header->rpl_l0.ref_pics[i];
 			//Find the ref pic in the DPB
 			int j = 0;
-			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr != refPicPoc) j++;
+			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr != refPicPoc)
+				j++;
 
 			//If the ref pic is found, set it to RPL0
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr == refPicPoc) {
@@ -432,7 +444,8 @@ int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_R
 			//Find the ref pic in the DPB
 			int j = 0;
 			int diff;
-			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr != refPicPoc) j++;
+			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr != refPicPoc)
+				j++;
 
 			//If the ref pic is found, set it to RPL1
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr == refPicPoc) {
@@ -444,21 +457,26 @@ int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_R
 					pic_header->ref_pic_list_sps_flag[1] = 0;
 					pic_header->rpl_l1.ref_pics_ddoi[i] = diff;
 				}
-			} else
+			} else {
+				printf("%s: The L1 Reference Picture(%d) is not find in dpb",
+					__func__, refPicPoc);
 				return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+			}
 		}
 	}
 	//update inactive ref ddoi in L1
 	for (i = 0; i < MAX_NUM_REF_PICS; i++) {
 #if LIBVC_ON
-		if (!pic_header->rpl_l1.library_index_flag[i] && pic_header->rpl_l1.ref_pics[i] > 0) {
+		if (!pic_header->rpl_l1.library_index_flag[i] && pic_header->rpl_l1.ref_pics[i] > 0)
 #else
-		if (pic_header->rpl_l1.ref_pics[i] > 0) {
+		if (pic_header->rpl_l1.ref_pics[i] > 0)
 #endif
+		{
 			int refPicPoc = pic_header->poc - pic_header->rpl_l1.ref_pics[i];
 			//Find the ref pic in the DPB
 			int j = 0;
-			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr != refPicPoc) j++;
+			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr != refPicPoc)
+				j++;
 
 			//If the ref pic is found, set it to RPL0
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr == refPicPoc) {
@@ -565,15 +583,17 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 			ulong flags;
 
 			flags = com_picman_lock(pm);
-			while (j < pm->cur_num_ref_pics && pm->pic_ref[j] && pm->pic_ref[j]->dtr != refPicDoi) j++;
+			while (j < pm->cur_num_ref_pics && pm->pic_ref[j] && pm->pic_ref[j]->dtr != refPicDoi)
+				j++;
 
 			//If the ref pic is found, set it to RPL0
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j] && pm->pic_ref[j]->dtr == refPicDoi) {
 				set_refp(&refp[i][REFP_0], pm->pic_ref[j]);
 				pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
-			}
-			else {
+			} else {
 				com_picman_unlock(pm, flags);
+				printf("%s: The L0 Reference Picture(%d) is not find in dpb",
+					__func__, refPicDoi);
 				return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
 			}
 
@@ -581,7 +601,8 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 		}
 	}
 
-	if (pic_header->slice_type == SLICE_P) return COM_OK;
+	if (pic_header->slice_type == SLICE_P)
+		return COM_OK;
 
 	//Do the L1 first
 	for (i = 0; i < pic_header->rpl_l1.ref_pic_active_num; i++) {
@@ -607,10 +628,11 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 			//Find the ref pic in the DPB
 			int j = 0;
 #ifdef BUFMGR_SANITY_CHECK
-			while (j < pm->cur_num_ref_pics && pm->pic_ref[j] && pm->pic_ref[j]->dtr != refPicDoi) {
+			while (j < pm->cur_num_ref_pics && pm->pic_ref[j] && pm->pic_ref[j]->dtr != refPicDoi)
 #else
-			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->dtr != refPicDoi) {
+			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->dtr != refPicDoi)
 #endif
+			{
 				j++;
 			}
 
@@ -623,8 +645,11 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 			{
 				set_refp(&refp[i][REFP_1], pm->pic_ref[j]);
 				pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
-			} else
+			} else {
+				printf("%s: The L1 Reference Picture(%d) is not find in dpb",
+					__func__, refPicDoi);
 				return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+			}
 		}
 	}
 

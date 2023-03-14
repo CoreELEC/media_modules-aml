@@ -663,18 +663,23 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 		hw->img.height = hw->ctx.pa.height;
 		hw->slice_type = hw->ctx.info.pic_header.slice_type;
 		pic = ctx->pic;
-		if (pic) {
-		hw->cur_pic = &pic->buf_cfg;
-		hw->cur_pic->list0_num_refp = hw->ctx.dpm.num_refp[REFP_0];
-		for (i = 0; i < hw->ctx.dpm.num_refp[REFP_0]; i++)
-			hw->cur_pic->list0_ptr[i] = hw->ctx.refp[i][REFP_0].ptr;
+		if (pic && (!ret)) {
+			hw->cur_pic = &pic->buf_cfg;
+			printf("set refpic before cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
+				hw->cur_pic, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
+			hw->cur_pic->list0_num_refp = hw->ctx.dpm.num_refp[REFP_0];
+			for (i = 0; i < hw->ctx.dpm.num_refp[REFP_0]; i++)
+				hw->cur_pic->list0_ptr[i] = hw->ctx.refp[i][REFP_0].ptr;
 #ifdef NEW_FRONT_BACK_CODE
-		for (i = 0; i < hw->cur_pic->list0_num_refp; i++)
-			hw->cur_pic->list0_index[i] = hw->ctx.refp[i][REFP_0].pic->buf_cfg.index;
-		hw->cur_pic->list1_num_refp = hw->ctx.dpm.num_refp[REFP_1];
-		for (i = 0; i < hw->cur_pic->list1_num_refp; i++)
-			hw->cur_pic->list1_index[i] = hw->ctx.refp[i][REFP_1].pic->buf_cfg.index;
+			for (i = 0; i < hw->cur_pic->list0_num_refp; i++)
+				hw->cur_pic->list0_index[i] = hw->ctx.refp[i][REFP_0].pic->buf_cfg.index;
+
+			hw->cur_pic->list1_num_refp = hw->ctx.dpm.num_refp[REFP_1];
+			for (i = 0; i < hw->cur_pic->list1_num_refp; i++)
+				hw->cur_pic->list1_index[i] = hw->ctx.refp[i][REFP_1].pic->buf_cfg.index;
 #endif
+			printf("set refpic after cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
+				hw->cur_pic, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
 		}
 		//Read_ALF_param(hw);
 	}
