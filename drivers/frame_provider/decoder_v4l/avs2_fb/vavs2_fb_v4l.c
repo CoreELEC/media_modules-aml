@@ -293,6 +293,12 @@ static u32 double_write_mode;
 static u32 without_display_mode;
 static u32 dump_yuv_frame = 0;
 
+/*
+bit0: if dpb abnormal, check dpb buffer status and flush dpb.(not enabled)
+bit1: 0:show error frame.
+*/
+static unsigned int error_proc_policy = 0x3;
+
 static u32 mv_buf_dynamic_alloc;
 #define DRIVER_NAME "amvdec_avs2_fb_v4l"
 #define DRIVER_HEADER_NAME "amvdec_avs2_fb_header"
@@ -881,6 +887,7 @@ struct AVS2Decoder_s {
 	int print_buf_len;
 	struct trace_decoder_name trace;
 	int decoder_size;
+	u32 error_proc_policy;
 };
 
 static int  compute_losless_comp_body_size(
@@ -5141,6 +5148,12 @@ static void v4l_submit_vframe(struct AVS2Decoder_s *dec)
 		if (((dec->front_back_mode) && (pic->back_done_mark)) ||
 			(!dec->front_back_mode)) {
 #endif
+			if ((dec->error_proc_policy & 0x2) &&
+				pic && pic->error_mark) {
+				vavs2_vf_put(vavs2_vf_get(dec), dec);
+				avs2_print(dec, AVS2_DBG_BUFMGR, "%s pic has error_mark, get err\n", __func__);
+				break;
+			}
 			ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 			fb->task->submit(fb->task, TASK_TYPE_DEC);
 			if (vf->type & VIDTYPE_V4L_EOS) {
@@ -5177,7 +5190,8 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			continue;
 		}
 
-		if (pic->error_mark) {
+		if ((dec->error_proc_policy & 0x2) &&
+			pic->error_mark) {
 			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 				"!!!error pic, skip\n",
 				0);
@@ -6219,15 +6233,16 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			WRITE_VREG(HEVC_DEC_STATUS_DBE, AVS2_DEC_IDLE);
 			WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 2);
 		}
-		avs2_dec->backend_decoded_count++;
-#ifdef NEW_FB_CODE
-		pic->back_done_mark = 1;
-#endif
+
 		mutex_lock(&dec->fb_mutex);
 		pic->backend_ref--;
 		for (i = 0; i < MAXREF; i++) {
-			if (pic->ref_pic[i])
+			if (pic->ref_pic[i]) {
+				if (pic->ref_pic[i]->error_mark) {
+					pic->error_mark = 1;
+				}
 				pic->ref_pic[i]->backend_ref--;
+			}
 		}
 
 		avs2_dec->fb_rd_pos++;
@@ -6235,6 +6250,11 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			avs2_dec->fb_rd_pos = 0;
 		avs2_dec->wait_working_buf = 0;
 		mutex_unlock(&dec->fb_mutex);
+
+		avs2_dec->backend_decoded_count++;
+#ifdef NEW_FB_CODE
+		pic->back_done_mark = 1;
+#endif
 
 		if (without_display_mode == 0) {
 			if (ctx->is_stream_off) {
@@ -8831,7 +8851,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 
 	dec->index = pdev->id;
 	dec->m_ins_flag = 1;
-
+	dec->error_proc_policy = error_proc_policy;
 	config_hevc_irq_num(dec);
 
 	if (is_rdma_enable()) {
