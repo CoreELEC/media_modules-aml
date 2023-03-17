@@ -915,7 +915,6 @@ struct AVS3Decoder_s {
 	void *mmu_box_fb;
 	void *fb_buf_mmu0_addr;
 	void *fb_buf_mmu1_addr;
-	void *fb_buf_sys_imem_addr;
 	/**/
 	void (*vdec_back_cb)(struct vdec_s *, void *, int);
 	void *vdec_back_cb_arg;
@@ -7243,13 +7242,15 @@ decode_slice:
 #ifdef NEW_FRONT_BACK_CODE
 			if ((!efficiency_mode) && (dec->front_back_mode == 1 ||
 				dec->front_back_mode == 3)) {
-				void *cur_imem_ptr_v;
-				uint32_t sys_imem_ptr;
+
 				WRITE_BACK_RET(avs3_dec);
-				cur_imem_ptr_v = avs3_dec->fr.sys_imem_ptr_v;
 				avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 					"write system instruction, ins_offset = %d, addr = 0x%x\n",
 					avs3_dec->ins_offset, avs3_dec->fr.sys_imem_ptr);
+
+				avs3_dec->sys_imem_ptr = avs3_dec->fr.sys_imem_ptr;
+				avs3_dec->sys_imem_ptr_v = avs3_dec->fr.sys_imem_ptr_v;
+
 #ifdef LARGE_INSTRUCTION_SPACE_SUPPORT
 				if (avs3_dec->ins_offset > 512) {
 					avs3_print(dec, 0,
@@ -7259,42 +7260,47 @@ decode_slice:
 					avs3_dec->ins_offset = 256;
 					WRITE_BACK_RET(avs3_dec);
 				}
-				sys_imem_ptr = avs3_dec->fr.sys_imem_ptr + 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
-				avs3_dec->sys_imem_ptr_v =  avs3_dec->fr.sys_imem_ptr_v + 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
 
+				memcpy(avs3_dec->sys_imem_ptr_v, (void*)(&avs3_dec->instruction[0]), avs3_dec->ins_offset*4);
+				//copyToDDR_32bits(dec->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+					"cur_imem_ptr_v 0x%x: %02x %02x %02x %02x\n",
+					avs3_dec->sys_imem_ptr_v,
+					((u8 *)avs3_dec->sys_imem_ptr_v)[0], ((u8 *)avs3_dec->sys_imem_ptr_v)[1],
+					((u8 *)avs3_dec->sys_imem_ptr_v)[2], ((u8 *)avs3_dec->sys_imem_ptr_v)[3]);
+				avs3_dec->sys_imem_ptr += 2 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+				avs3_dec->sys_imem_ptr_v += 2 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
 #else
 				if (avs3_dec->ins_offset > 256) {
 					avs3_print(dec, 0,
 						"!!!!!Error!!!!!!!!, ins_offset %d is too big (>256)\n", avs3_dec->ins_offset);
 					avs3_dec->ins_offset = 256;
 				}
-				sys_imem_ptr = avs3_dec->fr.sys_imem_ptr + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
-				avs3_dec->sys_imem_ptr_v =  avs3_dec->fr.sys_imem_ptr_v + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+
+				memcpy(avs3_dec->sys_imem_ptr_v, (void*)(&avs3_dec->instruction[0]), avs3_dec->ins_offset*4);
+				//copyToDDR_32bits(dec->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+					"cur_imem_ptr_v 0x%x: %02x %02x %02x %02x\n",
+					avs3_dec->sys_imem_ptr_v,
+					((u8 *)avs3_dec->sys_imem_ptr_v)[0], ((u8 *)avs3_dec->sys_imem_ptr_v)[1],
+					((u8 *)avs3_dec->sys_imem_ptr_v)[2], ((u8 *)avs3_dec->sys_imem_ptr_v)[3]);
+				avs3_dec->sys_imem_ptr += FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+				avs3_dec->sys_imem_ptr_v +=FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
 #endif
-				if (sys_imem_ptr >= avs3_dec->fb_buf_sys_imem.buf_end) {
-					if (debug & PRINT_FLAG_VDEC_DETAIL || debug & AVS3_DBG_BUFMGR)
-						avs3_print(dec, 0,
-							"sys_imem_ptr is 0x%x, wrap around\n", sys_imem_ptr);
-					sys_imem_ptr = avs3_dec->fb_buf_sys_imem.buf_start;
-					avs3_dec->sys_imem_ptr_v = dec->fb_buf_sys_imem_addr;
+				if (avs3_dec->sys_imem_ptr >= avs3_dec->fb_buf_sys_imem.buf_end) {
+					avs3_print(dec, AVS3_DBG_BUFMGR,
+						"sys_imem_ptr is 0x%x, wrap around\n", avs3_dec->sys_imem_ptr);
+					avs3_dec->sys_imem_ptr = avs3_dec->fb_buf_sys_imem.buf_start;
+					avs3_dec->sys_imem_ptr_v = avs3_dec->fb_buf_sys_imem_addr;
 				}
 				if (dec->front_back_mode == 1) {
-					WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
-					WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, sys_imem_ptr);
+					//WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
+					//WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, sys_imem_ptr);
 					//imem_count++;
 					WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
 				}
 
 				WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_ACTION_DONE);
-
-				memcpy(cur_imem_ptr_v, (void*)(&avs3_dec->instruction[0]), avs3_dec->ins_offset*4);
-				//copyToDDR_32bits(dec->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
-				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-					"cur_imem_ptr_v 0x%x: %02x %02x %02x %02x\n",
-					cur_imem_ptr_v,
-					((u8 *)cur_imem_ptr_v)[0], ((u8 *)cur_imem_ptr_v)[1],
-					((u8 *)cur_imem_ptr_v)[2], ((u8 *)cur_imem_ptr_v)[3]);
-
 			} else {
 				WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_ACTION_DONE);
 			}
@@ -7328,11 +7334,7 @@ decode_slice:
 		}
 		if ((dec->front_back_mode == 1 || dec->front_back_mode == 3) &&
 			(start_code == I_PICTURE_START_CODE ||
-		start_code == PB_PICTURE_START_CODE)) {
-
-			void *cur_imem_ptr_v;
-			uint32_t sys_imem_ptr;
-
+			start_code == PB_PICTURE_START_CODE)) {
 			config_mc_buffer_fb(dec);
 			config_mcrcc_axi_hw_fb(dec);
 			config_dblk_hw_fb(dec);
@@ -7340,10 +7342,12 @@ decode_slice:
 			config_alf_hw_fb(dec);
 
 			WRITE_BACK_RET(avs3_dec);
-			cur_imem_ptr_v = avs3_dec->fr.sys_imem_ptr_v;
 			avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 				"write system instruction, ins_offset = %d, addr = 0x%x\n",
 				avs3_dec->ins_offset, avs3_dec->fr.sys_imem_ptr);
+
+			avs3_dec->sys_imem_ptr = avs3_dec->fr.sys_imem_ptr;
+			avs3_dec->sys_imem_ptr_v = avs3_dec->fr.sys_imem_ptr_v;
 #ifdef LARGE_INSTRUCTION_SPACE_SUPPORT
 			if (avs3_dec->ins_offset > 512) {
 				avs3_print(dec, 0,
@@ -7353,40 +7357,44 @@ decode_slice:
 				avs3_dec->ins_offset = 256;
 				WRITE_BACK_RET(avs3_dec);
 			}
-			sys_imem_ptr = avs3_dec->fr.sys_imem_ptr + 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
-			avs3_dec->sys_imem_ptr_v =  avs3_dec->fr.sys_imem_ptr_v + 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+			memcpy(avs3_dec->sys_imem_ptr_v, (void*)(&avs3_dec->instruction[0]), avs3_dec->ins_offset*4);
+			//copyToDDR_32bits(dec->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
+			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+				"cur_imem_ptr_v 0x%x: %02x %02x %02x %02x\n",
+				avs3_dec->sys_imem_ptr_v,
+				((u8 *)avs3_dec->sys_imem_ptr_v)[0], ((u8 *)avs3_dec->sys_imem_ptr_v)[1],
+				((u8 *)avs3_dec->sys_imem_ptr_v)[2], ((u8 *)avs3_dec->sys_imem_ptr_v)[3]);
 
+			avs3_dec->sys_imem_ptr += 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+			avs3_dec->sys_imem_ptr_v += 2*FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
 #else
 			if (avs3_dec->ins_offset > 256) {
 				avs3_print(dec, 0,
 					"!!!!!Error!!!!!!!!, ins_offset %d is too big (>256)\n", avs3_dec->ins_offset);
 				avs3_dec->ins_offset = 256;
 			}
-			sys_imem_ptr = avs3_dec->fr.sys_imem_ptr + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
-			avs3_dec->sys_imem_ptr_v =  avs3_dec->fr.sys_imem_ptr_v + FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+			memcpy(avs3_dec->sys_imem_ptr_v, (void*)(&avs3_dec->instruction[0]), avs3_dec->ins_offset*4);
+			//copyToDDR_32bits(dec->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
+			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+				"cur_imem_ptr_v 0x%x: %02x %02x %02x %02x\n",
+				avs3_dec->sys_imem_ptr_v,
+				((u8 *)avs3_dec->sys_imem_ptr_v)[0], ((u8 *)avs3_dec->sys_imem_ptr_v)[1],
+				((u8 *)avs3_dec->sys_imem_ptr_v)[2], ((u8 *)avs3_dec->sys_imem_ptr_v)[3]);
+			avs3_dec->sys_imem_ptr += FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+			avs3_dec->sys_imem_ptr_v += FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
 #endif
-			if (sys_imem_ptr >= avs3_dec->fb_buf_sys_imem.buf_end) {
-				if (debug & PRINT_FLAG_VDEC_DETAIL || debug & AVS3_DBG_BUFMGR)
-					avs3_print(dec, 0,
-						"sys_imem_ptr is 0x%x, wrap around\n", sys_imem_ptr);
-				sys_imem_ptr = avs3_dec->fb_buf_sys_imem.buf_start;
-				avs3_dec->sys_imem_ptr_v = dec->fb_buf_sys_imem_addr;
+			if (avs3_dec->sys_imem_ptr >= avs3_dec->fb_buf_sys_imem.buf_end) {
+				avs3_print(dec, AVS3_DBG_BUFMGR,
+					"sys_imem_ptr is 0x%x, wrap around\n", avs3_dec->sys_imem_ptr);
+				avs3_dec->sys_imem_ptr = avs3_dec->fb_buf_sys_imem.buf_start;
+				avs3_dec->sys_imem_ptr_v = avs3_dec->fb_buf_sys_imem_addr;
 			}
 			if (dec->front_back_mode == 1) {
 				//WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
 				//WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, sys_imem_ptr);
-				avs3_dec->fr.sys_imem_ptr = sys_imem_ptr;
 				//imem_count++;
 				WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
 			}
-
-			memcpy(cur_imem_ptr_v, (void*)(&avs3_dec->instruction[0]), avs3_dec->ins_offset*4);
-			//copyToDDR_32bits(dec->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
-			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-				"cur_imem_ptr_v 0x%x: %02x %02x %02x %02x\n",
-				cur_imem_ptr_v,
-				((u8 *)cur_imem_ptr_v)[0], ((u8 *)cur_imem_ptr_v)[1],
-				((u8 *)cur_imem_ptr_v)[2], ((u8 *)cur_imem_ptr_v)[3]);
 		}
 
 		if ((start_code == I_PICTURE_START_CODE)

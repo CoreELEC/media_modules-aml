@@ -970,12 +970,10 @@ static void init_fb_bufstate(struct AVS3Decoder_s *dec)
 	avs3_dec->fb_buf_vcpu_imem.buf_end = avs3_dec->fb_buf_vcpu_imem.buf_start + avs3_dec->fb_buf_vcpu_imem.buf_size;
 
 	avs3_dec->fb_buf_sys_imem.buf_size = IFBUF_SYS_IMEM_SIZE * dec->fb_ifbuf_num;
-	dec->fb_buf_sys_imem_addr =
-		dma_alloc_coherent(amports_get_dma_device(),
-		avs3_dec->fb_buf_sys_imem.buf_size,
-		&tmp_phy_adr, GFP_KERNEL);
+	avs3_dec->fb_buf_sys_imem_addr = dma_alloc_coherent(amports_get_dma_device(),
+		avs3_dec->fb_buf_sys_imem.buf_size, &tmp_phy_adr, GFP_KERNEL);
 	avs3_dec->fb_buf_sys_imem.buf_start = tmp_phy_adr;
-	if (dec->fb_buf_sys_imem_addr == NULL) {
+	if (avs3_dec->fb_buf_sys_imem_addr == NULL) {
 		pr_err("%s: failed to alloc fb_buf_sys_imem\n", __func__);
 		return;
 	}
@@ -1049,7 +1047,7 @@ static void init_fb_bufstate(struct AVS3Decoder_s *dec)
 		avs3_dec->bk.scalelut_ptr_pre = 0;
 	}
 
-	avs3_dec->fr.sys_imem_ptr_v = dec->fb_buf_sys_imem_addr; //for linux
+	avs3_dec->fr.sys_imem_ptr_v = avs3_dec->fb_buf_sys_imem_addr; //for linux
 
 	print_loopbufs_ptr(dec, "init", &avs3_dec->fr);
 }
@@ -1086,11 +1084,11 @@ static void uninit_fb_bufstate(struct AVS3Decoder_s *dec)
 		decoder_bmmu_box_free_idx(dec->bmmu_box, i);
 	}
 
-	if (dec->fb_buf_sys_imem_addr) {
+	if (avs3_dec->fb_buf_sys_imem_addr) {
 		dma_free_coherent(amports_get_dma_device(),
-			avs3_dec->fb_buf_sys_imem.buf_size, dec->fb_buf_sys_imem_addr,
+			avs3_dec->fb_buf_sys_imem.buf_size, avs3_dec->fb_buf_sys_imem_addr,
 			avs3_dec->fb_buf_sys_imem.buf_start);
-		dec->fb_buf_sys_imem_addr = NULL;
+		avs3_dec->fb_buf_sys_imem_addr = NULL;
 	}
 	uninit_mmu_fb_bufstate(dec);
 }
@@ -1248,10 +1246,6 @@ static void read_bufstate_front(struct avs3_decoder *avs3_dec)
 	//printk("pic_end_ptr = %x; pic_start_ptr = %x\n", avs3_dec->fr.scalelut_ptr, avs3_dec->fr.scalelut_ptr_pre);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 7);
 	avs3_dec->fr.vcpu_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
-	if (!efficiency_mode) {
-		WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
-		avs3_dec->fr.sys_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
-	}
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 5);
 	avs3_dec->fr.lmem0_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 6);
@@ -1265,6 +1259,7 @@ static void read_bufstate_front(struct avs3_decoder *avs3_dec)
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 3);
 	avs3_dec->fr.mpred_imp1_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
 
+	avs3_dec->fr.sys_imem_ptr = avs3_dec->sys_imem_ptr;
 	avs3_dec->fr.sys_imem_ptr_v = avs3_dec->sys_imem_ptr_v;
 }
 

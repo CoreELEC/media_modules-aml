@@ -376,7 +376,9 @@ typedef struct avs3_decoder {
 	buff_ptr_t next_bk[MAX_FB_IFBUF_NUM];
 	avs3_frame_t* next_be_decode_pic[MAX_FB_IFBUF_NUM];
 	/*for WRITE_BACK_RET*/
+	uint32_t sys_imem_ptr;
 	void *sys_imem_ptr_v;
+	void *fb_buf_sys_imem_addr;
 	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
 	uint32_t  ins_offset;
 #endif
