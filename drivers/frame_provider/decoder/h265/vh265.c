@@ -13353,6 +13353,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hevc->vdec_cb = callback;
 	hevc->aux_data_dirty = 1;
 
+	if (i_only_flag)
+		hevc->i_only = i_only_flag & 0xff;
+
 	ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_RUN_START);
 	hevc_reset_core(vdec);
 
