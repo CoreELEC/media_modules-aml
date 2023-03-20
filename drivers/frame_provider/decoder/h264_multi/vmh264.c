@@ -7333,6 +7333,13 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					hw->dpb.mSlice.idr_flag);
 		vui_config(hw);
 
+		if (slice_header_process_status == -1) {
+			amvdec_stop();
+			hw->dec_result = DEC_RESULT_DONE;
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
+		}
+
 		vh264_cal_frame_size(vdec);
 
 		if (p_H264_Dpb->mVideo.dec_picture) {

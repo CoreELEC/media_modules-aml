@@ -5928,7 +5928,8 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 		}
 	}
 
-
+	if (p_H264_Dpb->buf_alloc_fail)
+		return -1;
 
 	if (p_H264_Dpb->mSlice.slice_type == P_SLICE)
 		init_lists_p_slice(&p_H264_Dpb->mSlice);
