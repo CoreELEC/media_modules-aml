@@ -9908,7 +9908,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		fb = (struct vdec_v4l2_buffer *)
 			hw->m_BUF[index].v4l_ref_buf_addr;
 
-		pic = &pbi->common.buffer_pool->frame_bufs[vf->index & 0xff].buf;
+		pic = &pbi->common.buffer_pool->frame_bufs[index].buf;
 
 		vf->type		|= VIDTYPE_V4L_EOS;
 		vf->timestamp		= ULONG_MAX;

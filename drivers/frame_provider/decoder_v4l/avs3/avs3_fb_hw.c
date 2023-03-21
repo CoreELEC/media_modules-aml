@@ -536,10 +536,6 @@ static int32_t config_mc_buffer_fb(struct AVS3Decoder_s *dec)
 			pic = &avs3_dec->ctx.refp[i][REFP_0].pic->buf_cfg;
 			WRITE_BACK_32(avs3_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 				(pic->mc_canvas_u_v << 16)|(pic->mc_canvas_u_v << 8) | pic->mc_canvas_y);
-			if (pic->error_mark) {
-				avs3_dec->ctx.pic->buf_cfg.error_mark = 1;
-				avs3_print(dec, AVS3_DBG_BUFMGR, "%s:L0 refid %d pic error\n", __func__, i);
-			}
 			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
 				"L0 refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 		}
@@ -553,10 +549,6 @@ static int32_t config_mc_buffer_fb(struct AVS3Decoder_s *dec)
 			pic = &avs3_dec->ctx.refp[i][REFP_1].pic->buf_cfg;
 			WRITE_BACK_32(avs3_dec, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 				(pic->mc_canvas_u_v << 16) | (pic->mc_canvas_u_v << 8) | pic->mc_canvas_y);
-			if (pic->error_mark) {
-				avs3_dec->ctx.pic->buf_cfg.error_mark = 1;
-				avs3_print(dec, AVS3_DBG_BUFMGR, "%s:L1 refid %d pic error\n", __func__, i);
-			}
 			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
 				"L1 refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 		}

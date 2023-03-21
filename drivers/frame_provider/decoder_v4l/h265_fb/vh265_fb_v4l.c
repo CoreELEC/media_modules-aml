@@ -15373,7 +15373,7 @@ static void reset(struct vdec_s *vdec)
 	atomic_set(&hevc->vf_put_count, 0);
 	hevc->eos = 0;
 	hevc->resolution_change = false;
-	hevc->reset_flag = 1;
+	hevc->reset_flag = 0;
 	hevc->dec_result = DEC_RESULT_NONE;
 
 	hevc_print(hevc, 0, "%s\r\n", __func__);
