@@ -2911,17 +2911,17 @@ static void vmpeg12_get_aspect_ratio_info(struct vdec_mpeg12_hw_s *hw, struct vd
 	struct aspect_ratio_info *aspect_ratio_info = &vstatus->aspect_ratio;
 
 	if (hw->pixel_ratio == 0) {
-		aspect_ratio_info->dar_width = -1;
-		aspect_ratio_info->dar_height = -1;
-		aspect_ratio_info->sar_width = 1;
-		aspect_ratio_info->sar_height = 1;
+		vstatus->ext_info_valid = 0;
 	} else {
+		vstatus->ext_info_valid = 1;
 		aspect_ratio_info->sar_width = -1;
 		aspect_ratio_info->sar_height = -1;
 		switch (hw->pixel_ratio) {
 			case 1:
-				aspect_ratio_info->dar_width = 1;
-				aspect_ratio_info->dar_height = 1;
+				aspect_ratio_info->dar_width = -1;
+				aspect_ratio_info->dar_height = -1;
+				aspect_ratio_info->sar_width = 1;
+				aspect_ratio_info->sar_height = 1;
 				break;
 			case 2:
 				aspect_ratio_info->dar_width = 4;
@@ -2936,12 +2936,10 @@ static void vmpeg12_get_aspect_ratio_info(struct vdec_mpeg12_hw_s *hw, struct vd
 				aspect_ratio_info->dar_height = 100;
 				break;
 			default:
-				aspect_ratio_info->dar_width = 1;
-				aspect_ratio_info->dar_width = 1;
+				vstatus->ext_info_valid = 0;
 				break;
 		}
 	}
-	vstatus->ext_info_valid = 1;
 }
 
 static int vmmpeg12_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)

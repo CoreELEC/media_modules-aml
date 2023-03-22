@@ -914,6 +914,7 @@ struct vdec_h264_hw_s {
 	struct vframe_qos_s vframe_qos;
 	int frameinfo_enable;
 	bool first_head_check_flag;
+	int aspect_ratio_info_present_flag;
 	unsigned int height_aspect_ratio;
 	unsigned int width_aspect_ratio;
 	unsigned int first_i_policy;
@@ -6067,6 +6068,7 @@ static void vui_config(struct vdec_h264_hw_s *hw)
 		p_H264_Dpb->vui_status & 0x1;
 	aspect_ratio_idc = p_H264_Dpb->aspect_ratio_idc;
 
+	hw->aspect_ratio_info_present_flag = aspect_ratio_info_present_flag;
 	if (aspect_ratio_info_present_flag) {
 		if (aspect_ratio_idc == EXTEND_SAR) {
 			hw->h264_ar = 0x3ff;
@@ -8316,7 +8318,7 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatistic->aspect_ratio.sar_width = hw->width_aspect_ratio;
 	vstatistic->aspect_ratio.dar_height = -1;
 	vstatistic->aspect_ratio.dar_width = -1;
-	vstatistic->ext_info_valid = 1;
+	vstatistic->ext_info_valid = hw->aspect_ratio_info_present_flag;
 
 	snprintf(vstatus->vdec_name, sizeof(vstatus->vdec_name),
 		"%s-%02d", DRIVER_NAME, hw->id);
