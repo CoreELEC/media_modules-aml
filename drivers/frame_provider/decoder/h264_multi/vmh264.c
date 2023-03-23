@@ -1051,7 +1051,7 @@ static int is_oversize(int w, int h)
 	return false;
 }
 
-static int is_crop_valid(struct vdec_h264_hw_s *hw, int mb_width, int mb_height)
+static int is_crop_valid(struct vdec_h264_hw_s *hw, int mb_width, int mb_height, u32 param2)
 {
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int sub_width_c = 0, sub_height_c = 0;
@@ -1059,6 +1059,7 @@ static int is_crop_valid(struct vdec_h264_hw_s *hw, int mb_width, int mb_height)
 	unsigned int frame_mbs_only_flag;
 	unsigned int chroma_format_idc;
 	unsigned int crop_bottom, crop_right;
+	hw->seq_info = param2;
 
 	/*crop*/
 	/* AV_SCRATCH_2
@@ -5654,7 +5655,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	hw->error_frame_width = 0;
 	hw->error_frame_height = 0;
 
-	if (!is_crop_valid(hw, mb_width, mb_height))
+	if (!is_crop_valid(hw, mb_width, mb_height, param2))
 		return -1;
 
 	dec_dpb_size_change = hw->dpb.dec_dpb_size != get_dec_dpb_size_active(hw, param1, param4);
@@ -5710,6 +5711,9 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		p_H264_Dpb->mSPS.profile_idc =
 					 (p_H264_Dpb->dpb_param.l.data[PROFILE_IDC_MMCO] >> 8) & 0xff;
+
+		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
+			"%s profile_idc %d\n", __func__, p_H264_Dpb->mSPS.profile_idc);
 
 		/*crop*/
 		/* AV_SCRATCH_2
@@ -7016,6 +7020,10 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			p_H264_Dpb->num_reorder_frames;
 		hw->max_dec_frame_buffering =
 			p_H264_Dpb->max_dec_frame_buffering;
+
+		p_H264_Dpb->mSPS.profile_idc = (p_H264_Dpb->dpb_param.l.data[PROFILE_IDC_MMCO] >> 8) & 0xff;
+		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
+			"%s profile_idc %d\n", __func__, p_H264_Dpb->mSPS.profile_idc);
 
 		/*crop*/
 		p_H264_Dpb->chroma_format_idc = (p_H264_Dpb->dpb_param.l.data[MAX_REFERENCE_FRAME_NUM_IN_MEM]>>8 & 0x3);
@@ -9642,6 +9650,9 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	if (hw->no_poc_reorder_flag)
 		dec_dpb_size = 1;
 
+	dpb_print(hw->dpb.decoder_index, PRINT_FLAG_DPB_DETAIL,
+		"%s profile_idc %d, chroma_format_idc %d\n", __func__, hw->dpb.mSPS.profile_idc, hw->dpb.chroma_format_idc);
+
 	/*
 	 * crop
 	 * AV_SCRATCH_2
@@ -9845,7 +9856,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				vdec_schedule_work(&hw->work);
 				return;
 			}
-			if (!is_crop_valid(hw, mb_width, mb_height)) {
+			if (!is_crop_valid(hw, mb_width, mb_height, param2)) {
 				dpb_print(DECODE_ID(hw), 0, "crop invalid\n");
 				hw->dec_result = DEC_RESULT_ERROR_DATA;
 				vdec_schedule_work(&hw->work);
