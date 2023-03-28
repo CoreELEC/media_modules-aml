@@ -4072,6 +4072,9 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		hw->error_frame_skip_level  = error_frame_skip_level;
 	}
 
+	if (error_frame_skip_level & 0x80000000)
+		hw->error_frame_skip_level  = error_frame_skip_level & 0x7fffffff;
+
 	hw->buf_num = vmpeg12_get_buf_num(hw);
 	hw->platform_dev = pdev;
 

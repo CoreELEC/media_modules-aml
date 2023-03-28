@@ -287,6 +287,7 @@ static unsigned int i_only_flag;
 	bit[22] 1: In streaming mode, support for discarding data.
 	bit[23] 0: set error flag on frame number gap error and drop it, 1: ignore error.
 	bit[24] 0: not output no_display frame, 1: output no_display frame.
+	bit[30] 1: Use driver error policy configuration and ignore the user space configuration
 */
 static unsigned int error_proc_policy = 0x3fCfb6; /*0x1f14*/
 
@@ -10335,6 +10336,9 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		hw->double_write_mode = double_write_mode;
 		hw->error_proc_policy = error_proc_policy;
 	}
+
+	if (error_proc_policy & 0x40000000)
+		hw->error_proc_policy = error_proc_policy;
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5)
 		hw->double_write_mode = 3;

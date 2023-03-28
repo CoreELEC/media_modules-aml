@@ -15871,6 +15871,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		hevc->double_write_mode = double_write_mode;
 	}
 
+	if (nal_skip_policy & 0x80000000)
+		hevc->nal_skip_policy = nal_skip_policy & 0x7fffffff;
+
 	if (force_config_fence) {
 		hevc->enable_fence = true;
 		hevc->fence_usage = (force_config_fence >> 4) & 0xf;

@@ -16471,6 +16471,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		hevc->nal_skip_policy = nal_skip_policy;
 	}
 
+	if (nal_skip_policy & 0x80000000)
+		hevc->nal_skip_policy = nal_skip_policy & 0x7fffffff;
+
 	memcpy(&vf_tmp_ops, &vh265_vf_provider, sizeof(struct vframe_operations_s));
 	if (without_display_mode == 1) {
 		vf_tmp_ops.get = NULL;
