@@ -4119,12 +4119,16 @@ static int alloc_buf(struct hevc_state_s *hevc)
 
 				if (vdec->vdata != NULL) {
 					int index = 0;
-					index = vdec_data_get_index((ulong)vdec->vdata);
+					struct vdec_data_buf_s data_buf;
+					data_buf.alloc_policy = ALLOC_AUX_BUF;
+					data_buf.aux_buf_size = AUX_DATA_SIZE1;
+
+					index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
 					if (index >= 0) {
-						hevc->aux_data_buf[i] = vdec->vdata->data[index].aux_data_buff;
+						hevc->aux_data_buf[i] = vdec->vdata->data[index].aux_data_buf;
 						vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
 						INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
-						decoder_bmmu_box_add_callback_func(hevc->bmmu_box, i, (void *)&vdec->vdata->release_callback[i]);
+						decoder_bmmu_box_add_callback_func(hevc->bmmu_box, VF_BUFFER_IDX(i), (void *)&vdec->vdata->release_callback[i]);
 					} else {
 						hevc_print(hevc, 0, "vdec data is full\n");
 					}

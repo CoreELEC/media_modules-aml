@@ -1300,13 +1300,16 @@ static void hevc_mcr_config_canv2axitbl(struct vdec_h264_hw_s *hw, int restore)
 			if (vdec->vdata != NULL) {
 				struct buffer_spec_s *pic = &hw->buffer_spec[i];
 				int index = 0;
+				struct vdec_data_buf_s data_buf;
+				data_buf.alloc_policy = ALLOC_USER_BUF;
+				data_buf.user_buf_size = SEI_ITU_DATA_SIZE;
 
-				index = vdec_data_get_index((ulong)vdec->vdata);
+				index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
 				if (index >= 0) {
 					pic->user_data_buf = vdec->vdata->data[index].user_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
 					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
-					decoder_bmmu_box_add_callback_func(hw->bmmu_box, i, (void *)&vdec->vdata->release_callback[i]);
+					decoder_bmmu_box_add_callback_func(hw->bmmu_box, HEADER_BUFFER_IDX(i), (void *)&vdec->vdata->release_callback[i]);
 				} else {
 					dpb_print(DECODE_ID(hw), 0, "vdec data is full\n");
 				}
@@ -1957,8 +1960,11 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i)
 			if (vdec->vdata != NULL) {
 				struct buffer_spec_s *pic = &hw->buffer_spec[i];
 				int index = 0;
+				struct vdec_data_buf_s data_buf;
+				data_buf.alloc_policy = ALLOC_USER_BUF;
+				data_buf.user_buf_size = SEI_ITU_DATA_SIZE;
 
-				index = vdec_data_get_index((ulong)vdec->vdata);
+				index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
 				if (index >= 0) {
 					pic->user_data_buf = vdec->vdata->data[index].user_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);

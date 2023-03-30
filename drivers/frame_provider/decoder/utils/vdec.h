@@ -324,9 +324,21 @@ enum vformat_t;
 #define VDEC_DATA_MAX_INSTANCE_NUM (MAX_INSTANCE_MUN * 2)
 #define VDEC_DATA_NUM 64
 
+#define ALLOC_AUX_BUF         0x1
+#define ALLOC_USER_BUF        0x2
+#define ALLOC_HDR10P_BUF      0x4
+
+struct vdec_data_buf_s {
+	int alloc_policy; /*bit0:aux buf, bit1:user buf, bit2:hdr10p buf */
+	u32 aux_buf_size;
+	u32 user_buf_size;
+	u32 hdr10p_buf_size;
+};
+
 struct vdec_data_s {
 	void *private_data;
 	atomic_t  use_count;
+	char *aux_data_buf;
 	char *user_data_buf;
 	char *hdr10p_data_buf;
 	/* alloc_flag:
@@ -335,7 +347,6 @@ struct vdec_data_s {
 	 * 2, allocated, free
 	 */
 	u32 alloc_flag;
-	char *aux_data_buff;
 };
 
 struct vdec_data_info_s {
@@ -849,7 +860,7 @@ void vdec_data_buffer_count_increase(ulong data, int index, int cb_index);
 
 struct vdec_data_info_s *vdec_data_get(void);
 
-int vdec_data_get_index(ulong data);
+int vdec_data_get_index(ulong data, struct vdec_data_buf_s *vdata_buf);
 
 void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb);
 

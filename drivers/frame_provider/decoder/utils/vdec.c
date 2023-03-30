@@ -410,7 +410,7 @@ static void vdec_data_core_init(void)
 	spin_lock_init(&vdec_data_core.vdec_data_lock);
 }
 
-int vdec_data_get_index(ulong data)
+int vdec_data_get_index(ulong data, struct vdec_data_buf_s *vdata_buf)
 {
 	struct vdec_data_info_s *vdata = (struct vdec_data_info_s *)data;
 	int i = 0;
@@ -418,20 +418,26 @@ int vdec_data_get_index(ulong data)
 	for (i = 0; i < VDEC_DATA_NUM; i++) {
 		if ((atomic_read(&vdata->data[i].use_count) == 0) &&
 			(vdata->data[i].alloc_flag == 0)) {
-			vdata->data[i].user_data_buf = vzalloc(SEI_ITU_DATA_SIZE);
-			if (vdata->data[i].user_data_buf == NULL) {
-				pr_debug("alloc %dth userdata failed\n", i);
-				return -1;
+			if (vdata_buf->alloc_policy & ALLOC_USER_BUF) {
+				vdata->data[i].user_data_buf = vzalloc(vdata_buf->user_buf_size);
+				if (vdata->data[i].user_data_buf == NULL) {
+					pr_debug("alloc %dth userdata failed\n", i);
+					return -1;
+				}
 			}
-			vdata->data[i].hdr10p_data_buf = vzalloc(HDR10P_BUF_SIZE);
-			if (vdata->data[i].hdr10p_data_buf == NULL) {
-				pr_debug("alloc %dth hdr10p failed\n", i);
-				return -1;
+			if (vdata_buf->alloc_policy & ALLOC_HDR10P_BUF) {
+				vdata->data[i].hdr10p_data_buf = vzalloc(vdata_buf->hdr10p_buf_size);
+				if (vdata->data[i].hdr10p_data_buf == NULL) {
+					pr_debug("alloc %dth hdr10p failed\n", i);
+					return -1;
+				}
 			}
-			vdata->data[i].aux_data_buff = vzalloc(AUX_DATA_SIZE1);
-			if (vdata->data[i].aux_data_buff == NULL) {
-				pr_debug("alloc %dth aux failed\n", i);
-				return -1;
+			if (vdata_buf->alloc_policy & ALLOC_AUX_BUF) {
+				vdata->data[i].aux_data_buf = vzalloc(vdata_buf->aux_buf_size);
+				if (vdata->data[i].aux_data_buf == NULL) {
+					pr_debug("alloc %dth aux failed\n", i);
+					return -1;
+				}
 			}
 			vdata->data[i].alloc_flag = 1;
 
@@ -509,9 +515,9 @@ void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb)
 				vfree(rel_data->hdr10p_data_buf);
 				rel_data->hdr10p_data_buf = NULL;
 			}
-			if (rel_data->aux_data_buff != NULL) {
-				vfree(rel_data->aux_data_buff);
-				rel_data->aux_data_buff = NULL;
+			if (rel_data->aux_data_buf != NULL) {
+				vfree(rel_data->aux_data_buf);
+				rel_data->aux_data_buf = NULL;
 			}
 			rel_data->alloc_flag = 0;
 		}

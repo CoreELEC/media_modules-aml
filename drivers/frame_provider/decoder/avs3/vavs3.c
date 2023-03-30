@@ -2547,6 +2547,7 @@ static void uninit_mmu_buffers(struct AVS3Decoder_s *dec)
 static int config_pic(struct AVS3Decoder_s *dec,
 				struct avs3_frame_s *pic, int32_t lcu_size_log2)
 {
+	struct vdec_s *vdec = hw_to_vdec(dec);
 	int ret = -1;
 	int i;
 	/* to do: init_pic_w, init_pic_h*/
@@ -2631,8 +2632,29 @@ static int config_pic(struct AVS3Decoder_s *dec,
 
 		if (pic->cma_alloc_addr) {
 			y_adr = pic->cma_alloc_addr;
-			if (!vdec_secure(hw_to_vdec(dec)))
+			if (!vdec_secure(vdec))
 				codec_mm_memset(y_adr, 0, buf_size);
+
+			if (vdec->vdata == NULL) {
+				vdec->vdata = vdec_data_get();
+			}
+
+			if (vdec->vdata != NULL) {
+				int index = 0;
+				struct vdec_data_buf_s data_buf;
+				data_buf.alloc_policy = ALLOC_AUX_BUF;
+				data_buf.aux_buf_size = dec->cuva_size;
+
+				index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
+				if (index >= 0) {
+					pic->cuva_data_buf = vdec->vdata->data[index].aux_data_buf;
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
+					decoder_bmmu_box_add_callback_func(dec->bmmu_box, VF_BUFFER_IDX(i), (void *)&vdec->vdata->release_callback[i]);
+				} else {
+					avs3_print(dec, 0, "vdec data is full\n");
+				}
+			}
 		} else {
 			avs3_print(dec, 0,
 				"decoder_bmmu_box_alloc_buf_phy idx %d size %d return null\n",
@@ -3903,15 +3925,9 @@ static void set_cuva_data(struct AVS3Decoder_s *dec)
 			"%s:pic 0x%p cuva_count(%d) cuva_size(%d) hdr_flag 0x%x\n",
 			__func__, pic, cuva_count, cuva_size, dec->hdr_flag);
 	if (cuva_size > 0 && cuva_count > 0) {
-		int new_size;
-		char *new_buf;
-
-		new_size = cuva_size;
-		new_buf = vzalloc(new_size);
-		if (new_buf) {
-			unsigned char *p = new_buf;
+		if (pic->cuva_data_buf) {
+			unsigned char *p = pic->cuva_data_buf;
 			int len = 0;
-			pic->cuva_data_buf = new_buf;
 
 			for (i = 0; i < cuva_count; i += 4) {
 				int j;
@@ -3950,23 +3966,13 @@ static void set_cuva_data(struct AVS3Decoder_s *dec)
 			}
 
 		} else {
-			avs3_print(dec, 0, "new buf alloc failed\n");
-			if (pic->cuva_data_buf)
-				vfree(pic->cuva_data_buf);
-			pic->cuva_data_buf = NULL;
-			pic->cuva_data_size = 0;
+			avs3_print(dec, 0, "cuva_data_buf NULL\n");
 		}
 	}
 }
 
 static void release_cuva_data(struct avs3_frame_s *pic)
 {
-	if (pic == NULL)
-		return;
-	if (pic->cuva_data_buf) {
-		vfree(pic->cuva_data_buf);
-	}
-	pic->cuva_data_buf = NULL;
 	pic->cuva_data_size = 0;
 }
 

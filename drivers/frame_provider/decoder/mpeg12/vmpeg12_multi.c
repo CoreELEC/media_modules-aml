@@ -3096,10 +3096,13 @@ static int vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 			if (vdec->vdata != NULL) {
 				struct pic_info_t *pic = NULL;
 				int index = 0;
+				struct vdec_data_buf_s data_buf;
+				data_buf.alloc_policy = ALLOC_USER_BUF;
+				data_buf.user_buf_size = SEI_ITU_DATA_SIZE;
 
 				pic = &hw->pics[i];
 
-				index = vdec_data_get_index((ulong)vdec->vdata);
+				index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
 				if (index >= 0) {
 					pic->user_data_buf = vdec->vdata->data[index].user_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
