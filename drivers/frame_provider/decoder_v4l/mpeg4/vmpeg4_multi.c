@@ -159,6 +159,15 @@ static unsigned int max_decode_instance_num = VMPEG4_DEV_NUM;
 static unsigned int max_process_time[VMPEG4_DEV_NUM];
 static unsigned int decode_timeout_val = 200;
 
+static u32 error_frame_skip_level = 1;
+static int dirty_again_threshold = 100;
+
+/*
+error_proc_policy:
+	bit[0] check dirty flag;
+*/
+static int error_proc_policy = 0x1;
+
 static u32 without_display_mode;
 
 #undef pr_info
@@ -222,6 +231,7 @@ struct pic_info_t {
 	u32 offset;
 	u32 height;
 	u32 width;
+	bool error_mark;
 };
 
 struct vdec_mpeg4_hw_s {
@@ -345,6 +355,7 @@ struct vdec_mpeg4_hw_s {
 	char new_q_name[32];
 	char disp_q_name[32];
 	bool process_busy;
+	int dec_again_cnt;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -749,8 +760,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				0xffffffff00000000) | pic->offset;
 			vf->pts = 0;
 		}
-		if (((hw->first_i_frame_ready == 0) || pb_skip)
-			 && (pic->pic_type != I_PICTURE)) {
+		if (((error_frame_skip_level & 0x1) && (pic->error_mark)) ||
+			(((hw->first_i_frame_ready == 0) || pb_skip)
+			&& (pic->pic_type != I_PICTURE))) {
 			hw->drop_frame_count++;
 			v4l2_ctx->decoder_status_info.decoder_error_count++;
 			vdec_v4l_post_error_event(v4l2_ctx, DECODER_WARNING_DATA_ERROR);
@@ -761,6 +773,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			} else if (pic->pic_type == B_PICTURE) {
 				hw->b_lost_frames++;
 			}
+			hw->drop_frame_count++;
+			v4l2_ctx->decoder_status_info.decoder_error_count++;
+			vdec_v4l_post_error_event(v4l2_ctx, DECODER_WARNING_DATA_ERROR);
 			hw->vfbuf_use[index]--;
 			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
@@ -838,8 +853,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->pts_us64 = (u64)-1;
 			vf->pts = 0;
 		}
-		if (((hw->first_i_frame_ready == 0) || pb_skip)
-			&& (pic->pic_type != I_PICTURE)) {
+		if (((error_frame_skip_level & 0x1) && (pic->error_mark)) ||
+			(((hw->first_i_frame_ready == 0) || pb_skip)
+			&& (pic->pic_type != I_PICTURE))) {
 			hw->drop_frame_count++;
 			if (pic->pic_type == I_PICTURE) {
 				hw->i_lost_frames++;
@@ -848,6 +864,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			} else if (pic->pic_type == B_PICTURE) {
 				hw->b_lost_frames++;
 			}
+			hw->drop_frame_count++;
+			v4l2_ctx->decoder_status_info.decoder_error_count++;
+			vdec_v4l_post_error_event(v4l2_ctx, DECODER_WARNING_DATA_ERROR);
 			hw->vfbuf_use[index]--;
 			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
@@ -930,8 +949,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				0xffffffff00000000) | pic->offset;
 			vf->pts = 0;
 		}
-		if (((hw->first_i_frame_ready == 0) || pb_skip)
-			&& (pic->pic_type != I_PICTURE)) {
+		if (((error_frame_skip_level & 0x1) && (pic->error_mark)) ||
+			(((hw->first_i_frame_ready == 0) || pb_skip)
+			&& (pic->pic_type != I_PICTURE))) {
 			hw->drop_frame_count++;
 			v4l2_ctx->decoder_status_info.decoder_error_count++;
 			vdec_v4l_post_error_event(v4l2_ctx, DECODER_WARNING_DATA_ERROR);
@@ -1097,6 +1117,49 @@ static int v4l_res_change(struct vdec_mpeg4_hw_s *hw, int width, int height, int
 	return ret;
 }
 
+static void check_ref_error(struct vdec_mpeg4_hw_s *hw, int index)
+{
+	struct pic_info_t *pic = NULL;
+	int i = 0;
+
+	pic = &hw->pic[index];
+
+	if (pic->pic_type == B_PICTURE) {
+		if ((hw->refs[0] < 0) || (hw->refs[0] >= hw->buf_num) ||
+			(hw->refs[1] < 0) || (hw->refs[1] >= hw->buf_num)) {
+			pic->error_mark = true;
+			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg4: ref pic not exist, set cur pic error\n");
+			return ;
+		}
+
+		for (i = 0; i < 2; i++) {
+			if (hw->pic[hw->refs[i]].error_mark) {
+				pic->error_mark = true;
+				mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+					"mmpeg4: L%d ref error, set index %d error_mark\n", i, index);
+				return ;
+			}
+		}
+	}
+
+	if (pic->pic_type == P_PICTURE) {
+		if ((hw->refs[1] < 0) || (hw->refs[1] >= hw->buf_num)) {
+			pic->error_mark = true;
+			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg4: ref pic not exist, set cur pic error\n");
+			return ;
+		}
+
+		if (hw->pic[hw->refs[1]].error_mark) {
+			pic->error_mark = true;
+			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg4: L0 ref error, set index %d error_mark\n", index);
+		}
+	}
+	return ;
+}
+
 static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 	u32 reg;
@@ -1181,7 +1244,7 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 	if (READ_VREG(AV_SCRATCH_M) != 0 &&
 		(debug_enable & PRINT_FLAG_UCODE_DETAIL)) {
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_UCODE_DETAIL,
-		"dbg %x: %x, level %x, wp %x, rp %x, cnt %x\n",
+			"dbg %x: %x, level %x, wp %x, rp %x, cnt %x\n",
 			READ_VREG(AV_SCRATCH_M), READ_VREG(AV_SCRATCH_N),
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(VLD_MEM_VIFIFO_WP),
@@ -1211,9 +1274,9 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 			time_increment_resolution = hw->sys_mp4_rate;
 	}
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
-		"time_inc_res = %d, fixed_vop_rate = %d, rate = %d\n",
+		"time_inc_res = %d, fixed_vop_rate = %d, rate = %d reg %d\n",
 		time_increment_resolution, fixed_vop_rate,
-		hw->vmpeg4_amstream_dec_info.rate);
+		hw->vmpeg4_amstream_dec_info.rate, reg);
 
 	if (reg == 2) {
 		/* timeout when decoding next frame */
@@ -1222,13 +1285,14 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 		 * at the beginning when only VOL head is available save
 		 * HW context also, such as for the QTable from VCOP register
 		 */
-		mmpeg4_debug_print(DECODE_ID(hw),
-			PRINT_FLAG_VLD_DETAIL,
-			"%s, level = %x, vfifo_ctrl = %x, bitcnt = %d\n",
+		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
+			"%s, level %x, wp %x, rp %x, cnt %x vfifo_ctrl %x\n",
 			__func__,
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-			READ_VREG(VLD_MEM_VIFIFO_CONTROL),
-			READ_VREG(VIFF_BIT_CNT));
+			READ_VREG(VLD_MEM_VIFIFO_WP),
+			READ_VREG(VLD_MEM_VIFIFO_RP),
+			READ_VREG(VIFF_BIT_CNT),
+			READ_VREG(VLD_MEM_VIFIFO_CONTROL));
 
 		if (vdec_frame_based(vdec)) {
 			vmpeg4_save_hw_context(hw);
@@ -1277,6 +1341,7 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 		dec_pic->pts = 0;
 		dec_pic->pts64 = 0;
 		dec_pic->timestamp = 0;
+		dec_pic->error_mark = 0;
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 			"new pic: index=%d, used=%d, repeat=%d, time_inc=%d\n",
 			index, hw->vfbuf_use[index], repeat_cnt, vop_time_inc);
@@ -1291,6 +1356,13 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 			hw->frame_height = dec_h;
 			dec_pic->height = dec_h;
 		}
+
+		if ((dec_w == 0) || (dec_h == 0)) {
+			dec_pic->error_mark = true;
+			mmpeg4_debug_print(DECODE_ID(hw), 0,
+				"warn:dec w(%d) or h(%d) is zero\n", dec_w, dec_h);
+		}
+
 		hw->res_ch_flag = 0;
 
 		if (hw->vmpeg4_amstream_dec_info.rate == 0) {
@@ -1383,6 +1455,8 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 			hw->frame_num, index,
 			GET_PIC_TYPE(picture_type),
 			dec_pic->pts);
+
+		check_ref_error(hw, index);
 
 		/* buffer management */
 		if ((picture_type == I_PICTURE) ||
@@ -1656,6 +1730,31 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	return 0;
 }
 
+static int check_dirty_data(struct vdec_s *vdec)
+{
+	struct vdec_mpeg4_hw_s *hw =
+		(struct vdec_mpeg4_hw_s *)(vdec->private);
+	u32 wp, rp, level;
+
+	rp = STBUF_READ(&vdec->vbuf, get_rp);
+	wp = STBUF_READ(&vdec->vbuf, get_wp);
+
+	if (wp > rp)
+		level = wp - rp;
+	else
+		level = wp + vdec->input.size - rp ;
+
+	if (level > (vdec->input.size / 2))
+		hw->dec_again_cnt++;
+
+	if (hw->dec_again_cnt > dirty_again_threshold) {
+		mmpeg4_debug_print(DECODE_ID(hw), 0, "mpeg4 rp skip to 0x%x\n", rp);
+		hw->dec_again_cnt = 0;
+		return 1;
+	}
+	return 0;
+}
+
 static void vmpeg4_work(struct work_struct *work)
 {
 	struct vdec_mpeg4_hw_s *hw =
@@ -1666,10 +1765,9 @@ static void vmpeg4_work(struct work_struct *work)
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
-	if (hw->dec_result != DEC_RESULT_DONE)
-		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"vmpeg4_work: result=%d,status=%d\n",
-			hw->dec_result, hw_to_vdec(hw)->next_status);
+	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+		"vmpeg4_work: result=%d,status=%d\n",
+		hw->dec_result, hw_to_vdec(hw)->next_status);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hw->dec_result);
 
@@ -1680,6 +1778,10 @@ static void vmpeg4_work(struct work_struct *work)
 	} else if (hw->dec_result == DEC_RESULT_DONE) {
 		if (!hw->ctx_valid)
 			hw->ctx_valid = 1;
+
+		if (vdec->input.swap_valid)
+			hw->dec_again_cnt = 0;
+
 		ctx->decoder_status_info.decoder_count++;
 		vdec_vframe_dirty(vdec, hw->chunk);
 		hw->chunk = NULL;
@@ -1691,6 +1793,14 @@ static void vmpeg4_work(struct work_struct *work)
 		*/
 		if (!vdec_has_more_input(vdec)) {
 			hw->dec_result = DEC_RESULT_EOS;
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+
+		if ((vdec_stream_based(vdec)) &&
+			(error_proc_policy & 0x1) &&
+			check_dirty_data(vdec)) {
+			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
 			return;
 		}
@@ -1785,6 +1895,12 @@ static struct vframe_s *vmpeg_vf_get(void *op_arg)
 		vf->index_disp = atomic_read(&hw->get_num);
 		atomic_add(1, &hw->get_num);
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
+
+		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"%s:vf %p(%px) index %d pts %d, pts64 %lld(0x%llx) w %d h %d, dur %d\n",
+			__func__, vf, vf, vf->index, vf->pts, vf->pts_us64,
+			vf->pts_us64, vf->width, vf->height, vf->duration);
+
 		return vf;
 	}
 	return NULL;
@@ -2319,6 +2435,7 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->timeout_cnt = 0;
 	hw->process_busy = false;
+	hw->dec_again_cnt = 0;
 
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++)
 		hw->vfbuf_use[i] = 0;
@@ -2972,6 +3089,15 @@ MODULE_PARM_DESC(radr, "\nradr\n");
 
 module_param(rval, uint, 0664);
 MODULE_PARM_DESC(rval, "\nrval\n");
+
+module_param(dirty_again_threshold, int, 0664);
+MODULE_PARM_DESC(dirty_again_threshold, "\n ammvdec_mpeg4 dirty_again_threshold\n");
+
+module_param(error_proc_policy, uint, 0664);
+MODULE_PARM_DESC(error_proc_policy, "\n ammvdec_mpeg4 error_proc_policy\n");
+
+module_param(error_frame_skip_level, uint, 0664);
+MODULE_PARM_DESC(error_frame_skip_level, "\n ammvdec_mpeg4 error_frame_skip_level\n");
 
 module_param(decode_timeout_val, uint, 0664);
 MODULE_PARM_DESC(decode_timeout_val, "\n ammvdec_mpeg4 decode_timeout_val\n");
