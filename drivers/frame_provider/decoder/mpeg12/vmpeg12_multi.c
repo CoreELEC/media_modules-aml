@@ -61,6 +61,10 @@
 #define CHECK_INTERVAL        (HZ/100)
 
 #define DRIVER_NAME "ammvdec_mpeg12"
+
+/*AV_SCRATCH_1
+	bit [0-9]: temporal_reference(poc)
+*/
 #define MREG_REF0        AV_SCRATCH_2
 #define MREG_REF1        AV_SCRATCH_3
 /* protocol registers */
@@ -231,6 +235,7 @@ struct pic_info_t {
 	u64 timestamp;
 	char *user_data_buf;
 	struct userdata_param_t ud_param;
+	u32 poc;
 };
 
 struct vdec_mpeg12_hw_s {
@@ -1760,8 +1765,8 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	}
 
 	debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
-			"%s: id = %x, offset: %x, vpts: %d, vpts_valid %d, type %c\n",
-			__func__, vdec->pts_server_id, pts_info.offset, vpts, vpts_valid, GET_SLICE_TYPE(info));
+		"%s: id = %x, offset: %x, vpts: %d, vpts_valid %d, info 0x%x type %c\n",
+		__func__, vdec->pts_server_id, pts_info.offset, vpts, vpts_valid, info, GET_SLICE_TYPE(info));
 	user_data_ready_notify(hw, vpts, vpts_valid);
 	pic->ud_param.meta_info.vpts = vpts;
 	pic->ud_param.meta_info.vpts_valid = vpts_valid;
@@ -1867,16 +1872,16 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			 * Because we've counted the error frame in vdec_count_info
 			 * function, avoid count it twice.
 			 */
-		if (!(info & PICINFO_ERROR)) {
-			hw->gvs.error_frame_count++;
-			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
-				hw->gvs.i_concealed_frames++;
-			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
-				hw->gvs.p_concealed_frames++;
-			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
-				hw->gvs.b_concealed_frames++;
+			if (!(info & PICINFO_ERROR)) {
+				hw->gvs.error_frame_count++;
+				if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
+					hw->gvs.i_concealed_frames++;
+				} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+					hw->gvs.p_concealed_frames++;
+				} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+					hw->gvs.b_concealed_frames++;
+				}
 			}
-		}
 			hw->vfbuf_use[index]--;
 			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
@@ -1971,8 +1976,6 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				}
 			} else
 				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
-
-
 		}
 	}
 	return 0;
@@ -2041,12 +2044,49 @@ static int update_reference(struct vdec_mpeg12_hw_s *hw,
 	return index;
 }
 
-static bool is_ref_error(struct vdec_mpeg12_hw_s *hw)
+static void check_ref_error(struct vdec_mpeg12_hw_s *hw, int index)
 {
-	if ((hw->pics[hw->refs[0]].buffer_info & PICINFO_ERROR) ||
-		(hw->pics[hw->refs[1]].buffer_info & PICINFO_ERROR))
-		return 1;
-	return 0;
+	struct pic_info_t *pic = NULL;
+
+	pic = &hw->pics[index];
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) != PICINFO_TYPE_I) {
+		if (hw->pics[hw->refs[0]].buffer_info & PICINFO_ERROR) {
+			pic->buffer_info |= PICINFO_ERROR;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg12: L0 ref error, set index %d error_mark\n", index);
+			return ;
+		}
+	}
+
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+		if (hw->pics[hw->refs[1]].buffer_info & PICINFO_ERROR) {
+			pic->buffer_info |= PICINFO_ERROR;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg12: L1 ref error, set index %d error_mark\n", index);
+		}
+	}
+}
+
+static bool check_ref_poc(struct vdec_mpeg12_hw_s *hw, int index)
+{
+	struct pic_info_t *pic = NULL;
+
+	pic = &hw->pics[index];
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+		if ((hw->pics[hw->refs[0]].poc < pic->poc) &&
+			(hw->pics[hw->refs[1]].poc > pic->poc))
+			return 0;
+		if ((hw->pics[hw->refs[1]].poc > pic->poc) &&
+			((hw->pics[hw->refs[1]].buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I))
+			return 0;
+	} else if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+		if (hw->pics[hw->refs[0]].poc < pic->poc) {
+			return 0;
+		}
+	} else {
+		return 0;
+	}
+	return 1;
 }
 
 static int vmpeg2_get_ps_info(struct vdec_mpeg12_hw_s *hw, int width, int height, struct aml_vdec_ps_infos *ps)
@@ -2326,6 +2366,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		new_pic->buffer_info = info;
 		new_pic->offset = offset;
 		new_pic->index = index;
+		new_pic->poc = READ_VREG(AV_SCRATCH_1) & 0x3ff;
 		if (((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) ||
 			((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)) {
 			if (hw->chunk) {
@@ -2361,8 +2402,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		}
 
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"mmpeg12: new_pic=%d, ind=%d, info=%x, seq=%x, offset=%d\n",
-			hw->dec_num, index, info, seqinfo, offset);
+			"mmpeg12: new_pic=%d, ind=%d, info=%x, seq=%x, offset=%d, poc %d\n",
+			hw->dec_num, index, info, seqinfo, offset, new_pic->poc);
 
 		hw->frame_prog = info & PICINFO_PROG;
 		if ((seqinfo & SEQINFO_EXT_AVAILABLE) &&
@@ -2370,9 +2411,25 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			hw->frame_prog = 0;
 		force_interlace_check(hw);
 
-		if (is_ref_error(hw)) {
-			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B)
-				new_pic->buffer_info |= PICINFO_ERROR;
+		if (debug_enable & PRINT_FLAG_BUFFER_DETAIL) {
+			if ((hw->refs[0] >= 0) && (hw->refs[0] < hw->buf_num)) {
+				debug_print(DECODE_ID(hw), 0,
+					"L0 ref pic: index %d, buffer_info 0x%x, poc %d\n",
+					hw->refs[0], hw->pics[hw->refs[0]].buffer_info, hw->pics[hw->refs[0]].poc);
+			}
+			if ((hw->refs[1] >= 0) && (hw->refs[1] < hw->buf_num)) {
+				debug_print(DECODE_ID(hw), 0,
+					"L1 ref pic: index %d, buffer_info 0x%x, poc %d\n",
+					hw->refs[1], hw->pics[hw->refs[1]].buffer_info, hw->pics[hw->refs[1]].poc);
+			}
+		}
+
+		check_ref_error(hw, index);
+
+		if (check_ref_poc(hw, index)) {
+			new_pic->buffer_info |= PICINFO_ERROR;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg12: ref poc error,set index %d pic error\n", index);
 		}
 
 		if (((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) ||
@@ -3125,12 +3182,13 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 	debug_print(DECODE_ID(hw), 0,
 		"====== %s\n", __func__);
 	debug_print(DECODE_ID(hw), 0,
-		"width/height (%d/%d),i_first %d, buf_num %d, run_flag %d\n",
+		"width/height (%d/%d),i_first %d, buf_num %d, run_flag %d, error_frame_skip_level %d\n",
 		hw->frame_width,
 		hw->frame_height,
 		hw->first_i_frame_ready,
 		hw->buf_num,
-		hw->run_flag
+		hw->run_flag,
+		hw->error_frame_skip_level
 		);
 	debug_print(DECODE_ID(hw), 0,
 		"is_framebase(%d), eos %d, state 0x%x, dec_result 0x%x dec_frm %d put_frm %d run %d not_run_ready %d,input_empty %d\n",
@@ -4032,7 +4090,10 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 
 	hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 	hw->canvas_mode = pdata->canvas_mode;
-	if (pdata->config_len) {
+	hw->platform_dev = pdev;
+
+	if (((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0) && pdata->config_len) {
+		debug_print(DECODE_ID(hw), 0, "pdata->config: %s\n", pdata->config);
 		if (get_config_int(pdata->config,
 			"parm_v4l_codec_enable",
 			&config_val) == 0)
@@ -4043,11 +4104,11 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 			&config_val) == 0)
 			hw->canvas_mode = config_val;
 
-		if ((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0 &&
-			get_config_int(pdata->config,
+		if (get_config_int(pdata->config,
 			"parm_v4l_buffer_margin",
 			&config_val) == 0)
 			hw->dynamic_buf_num_margin= config_val;
+
 		if (get_config_int(pdata->config, "sidebind_type",
 				&config_val) == 0)
 			hw->sidebind_type = config_val;
@@ -4068,7 +4129,7 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		} else {
 			hw->error_frame_skip_level = error_frame_skip_level;
 		}
-	}else {
+	} else {
 		hw->error_frame_skip_level  = error_frame_skip_level;
 	}
 
@@ -4076,7 +4137,6 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		hw->error_frame_skip_level  = error_frame_skip_level & 0x7fffffff;
 
 	hw->buf_num = vmpeg12_get_buf_num(hw);
-	hw->platform_dev = pdev;
 
 	hw->tvp_flag = vdec_secure(pdata) ? CODEC_MM_FLAGS_TVP : 0;
 	if (pdata->sys_info)
