@@ -49,7 +49,6 @@
 #include "../../decoder/utils/vdec_v4l2_buffer_ops.h"
 #include "../../decoder/utils/config_parser.h"
 #include "../../decoder/utils/vdec_feature.h"
-#include "../../../common/media_clock/clk/clk.h"
 
 #define MEM_NAME "codec_mmjpeg"
 
@@ -187,7 +186,7 @@ struct buffer_spec_s {
 #define spec2canvas(x)  \
 	(((x)->v_canvas_index << 16) | \
 	 ((x)->u_canvas_index << 8)  | \
-	 ((x)->y_canvas_index << 0))\
+	 ((x)->y_canvas_index << 0))
 
 struct vdec_mjpeg_hw_s {
 	spinlock_t lock;
@@ -1317,8 +1316,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->vdec_cb = callback;
 
 	hw->run_count++;
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
-		vdec_clock_set_ex(DEC_MODE_CLK_667M);
 
 	vdec_reset_core(vdec);
 
@@ -1534,11 +1531,8 @@ static void vmjpeg_work(struct work_struct *work)
 	del_timer_sync(&hw->check_timer);
 	hw->stat &= ~STAT_TIMER_ARM;
 
-	if (hw->vdec_cb) {
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
-			vdec_clock_set_ex(DEC_MODE_CLK_800M);
+	if (hw->vdec_cb)
 		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_VDEC_1);
-	}
 }
 
 static int vmjpeg_stop(struct vdec_mjpeg_hw_s *hw)

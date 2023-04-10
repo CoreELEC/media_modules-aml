@@ -48,7 +48,6 @@
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include "../utils/config_parser.h"
 #include "../utils/vdec_feature.h"
-#include "../../../common/media_clock/clk/clk.h"
 
 #define MEM_NAME "codec_mmjpeg"
 
@@ -566,6 +565,8 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 				decbuf_size, i);
 			return;
 		}
+		if (!vdec_secure(vdec))
+			codec_mm_memset(buf_start, 0, decbuf_size);
 
 		hw->buffer_spec[i].buf_adr = buf_start;
 		addr = hw->buffer_spec[i].buf_adr;
@@ -1134,8 +1135,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->vdec_cb = callback;
 
 	hw->run_count++;
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
-		vdec_clock_set_ex(DEC_MODE_CLK_667M);
 
 	vdec_reset_core(vdec);
 	for (i = 0; i < hw->buf_num; i++) {
@@ -1337,11 +1336,9 @@ static void vmjpeg_work(struct work_struct *work)
 	del_timer_sync(&hw->check_timer);
 	hw->stat &= ~STAT_TIMER_ARM;
 
-	if (hw->vdec_cb) {
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
-			vdec_clock_set_ex(DEC_MODE_CLK_800M);
+	if (hw->vdec_cb)
 		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_VDEC_1);
-	}
+
 }
 
 static int vmjpeg_stop(struct vdec_mjpeg_hw_s *hw)
