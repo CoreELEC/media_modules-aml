@@ -287,7 +287,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 	s32 cur_duration = (mCheckoutPtsOffset->offset >> 32) & 0x3FFFFFFF;
 
 	u32 offsetDiff = 2500;
-	s32 find_framenum = 0;
+	s32 find_frame_num = 0;
 	s32 find = 0;
 	s32 offsetAbs = 0;
 	u32 FrameDur = 0;
@@ -332,7 +332,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 */
 	if (cur_offset != 0xFFFFFFFF &&
 		!list_empty(&pInstance->pts_list)) {
-		find_framenum = 0;
+		find_frame_num = 0;
 		find = 0;
 		list_for_each_entry_safe(ptn,ptn_tmp,&pInstance->pts_list, node) {
 
@@ -361,14 +361,36 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 					list_del(&ptn->node);
 					list_add_tail(&ptn->node, &pInstance ->pts_free_list);
 					pInstance->mListSize--;
-				} else if (find_framenum > 5) {
+				} else if (find_frame_num > 5) {
 					break;
 				}
 				if (find) {
-					find_framenum++;
+					find_frame_num++;
 				}
 			}
 			i++;
+		}
+		if (!find && pInstance->mTrickMode == 1) {//i_only, not found pts, need retry!
+			i = 0;
+			find_frame_num = 0;
+			offsetDiff = 10000;
+			list_for_each_entry_safe(ptn,ptn_tmp,&pInstance->pts_list, node) {
+				if (ptn != NULL) {
+					offsetAbs = abs(cur_offset - ptn->offset);
+				}
+				if (offsetAbs <= offsetDiff && cur_offset > ptn->offset) {
+					offsetDiff = offsetAbs;
+					find = 1;
+					number = i;
+					find_ptn = ptn;
+				} else if (find_frame_num > 5) {
+					break;
+				}
+				if (find) {
+					find_frame_num++;
+				}
+				i++;
+			}
 		}
 		if (find) {
 			mCheckoutPtsOffset->pts = find_ptn->pts;
@@ -680,6 +702,24 @@ long ptsserver_ins_release(s32 pServerInsId) {
 	return 0;
 }
 
+long ptsserver_set_trick_mode(s32 pServerInsId, s32 mode) {
+	PtsServerManage* vPtsServerIns = NULL;
+	ptsserver_ins* pInstance = NULL;
+	s32 index = pServerInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+	pts_pr_info(pServerInsId,"ptsserver_set_trick_mode:%d \n", mode);
+	vPtsServerIns = &(vPtsServerInsList[index]);
+	mutex_lock(&vPtsServerIns->mListLock);
+	pInstance = vPtsServerIns->pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&vPtsServerIns->mListLock);
+		return -1;
+	}
+	pInstance->mTrickMode = mode;
+	mutex_unlock(&vPtsServerIns->mListLock);
+	return 0;
+}
 
 module_param(ptsserver_debuglevel, uint, 0664);
 MODULE_PARM_DESC(ptsserver_debuglevel, "\n pts server debug level\n");

@@ -67,6 +67,7 @@ typedef struct psinstance {
 	u32 mListSize;
 	u32 mLastCheckoutCurOffset;
 	pts_node* all_free_ptn;
+	s32 mTrickMode;
 } ptsserver_ins;
 
 
@@ -117,5 +118,6 @@ long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPt
 long ptsserver_get_last_checkin_pts(s32 pServerInsId,last_checkin_pts* mLastCheckinPts);
 long ptsserver_get_last_checkout_pts(s32 pServerInsId,last_checkout_pts* mLastCheckOutPts);
 long ptsserver_ins_release(s32 pServerInsId);
+long ptsserver_set_trick_mode(s32 pServerInsId,s32 mode);
 
 #endif
