@@ -9109,10 +9109,9 @@ static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, AVS3_DEC_IDLE);
 		amhevc_stop_b();
 
-		mutex_lock(&dec->fb_mutex);
 		avs3_dec->backend_decoded_count++;
-		pic->back_done_mark = 1;
-		pic->error_mark = 1;  /* set error mark for timeout pic */
+
+		mutex_lock(&dec->fb_mutex);
 		pic->backend_ref--;
 		for (j = 0; j < pic->list0_num_refp; j++) {
 			ref_pic = &avs3_dec->pic_pool[pic->list0_index[j]].buf_cfg;
@@ -9131,22 +9130,37 @@ static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
 			}
 		}
 
-		if (debug & AVS3_DBG_PRINT_PIC_LIST)
-			print_pic_pool(avs3_dec, "after dec backend_ref");
+		pic->error_mark = 1;  /* set error mark for timeout pic */
+		pic->back_done_mark = 1;
 
 		avs3_dec->fb_rd_pos++;
 		if (avs3_dec->fb_rd_pos >= dec->fb_ifbuf_num)
 			avs3_dec->fb_rd_pos = 0;
 
 		avs3_dec->wait_working_buf = 0;
+		mutex_unlock(&dec->fb_mutex);
+
 		avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
 			"%s timeout fb_wr_pos %d, set next fb_rd_pos %d, set wait_working_buf %d\n",
 			__func__, avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, avs3_dec->wait_working_buf);
 
-		mutex_unlock(&dec->fb_mutex);
+		if (debug & AVS3_DBG_PRINT_PIC_LIST)
+			print_pic_pool(avs3_dec, "after dec backend_ref");
+
+		if (without_display_mode == 0) {
+			struct vframe_s *vf = NULL;
+			if (kfifo_peek(&dec->display_q, &vf) && vf) {
+				uint8_t index = vf->index & 0xff;
+				struct avs3_frame_s *peek_pic = get_pic_by_index(dec, index);
+				if (peek_pic == pic)
+					vf_notify_receiver(dec->provider_name,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
+			}
+		} else
+			vavs3_vf_put(vavs3_vf_get(dec), dec);
 
 		if (dec->front_back_mode == 1 ||
-		dec->front_back_mode == 3)
+			dec->front_back_mode == 3)
 			release_free_mmu_buffers(dec);
 	}
 
