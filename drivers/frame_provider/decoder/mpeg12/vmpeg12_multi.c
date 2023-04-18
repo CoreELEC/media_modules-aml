@@ -2047,22 +2047,37 @@ static int update_reference(struct vdec_mpeg12_hw_s *hw,
 static void check_ref_error(struct vdec_mpeg12_hw_s *hw, int index)
 {
 	struct pic_info_t *pic = NULL;
+	int i = 0;
 
 	pic = &hw->pics[index];
-	if ((pic->buffer_info & PICINFO_TYPE_MASK) != PICINFO_TYPE_I) {
-		if (hw->pics[hw->refs[0]].buffer_info & PICINFO_ERROR) {
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+		if ((hw->refs[0] < 0) || (hw->refs[0] >= hw->buf_num) ||
+			(hw->refs[1] < 0) || (hw->refs[1] >= hw->buf_num)) {
 			pic->buffer_info |= PICINFO_ERROR;
 			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-				"mmpeg12: L0 ref error, set index %d error_mark\n", index);
+				"mmpeg12: ref pic not exist, set cur pic error\n");
 			return ;
+		}
+		for (i = 0; i < 2; i++) {
+			if (hw->pics[hw->refs[i]].buffer_info & PICINFO_ERROR) {
+				pic->buffer_info |= PICINFO_ERROR;
+				debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+					"mmpeg12: L%d ref error, set index %d error_mark\n", i, index);
+				return ;
+			}
 		}
 	}
 
-	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
-		if (hw->pics[hw->refs[1]].buffer_info & PICINFO_ERROR) {
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+		if ((hw->refs[1] < 0) || (hw->refs[1] >= hw->buf_num)) {
 			pic->buffer_info |= PICINFO_ERROR;
 			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-				"mmpeg12: L1 ref error, set index %d error_mark\n", index);
+				"mmpeg12: ref pic not exist, set cur pic error\n");
+			return ;
+		} else if (hw->pics[hw->refs[1]].buffer_info & PICINFO_ERROR) {
+			pic->buffer_info |= PICINFO_ERROR;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg12: L0 ref error, set index %d error_mark\n", index);
 		}
 	}
 }
@@ -2073,14 +2088,18 @@ static bool check_ref_poc(struct vdec_mpeg12_hw_s *hw, int index)
 
 	pic = &hw->pics[index];
 	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
-		if ((hw->pics[hw->refs[0]].poc < pic->poc) &&
-			(hw->pics[hw->refs[1]].poc > pic->poc))
-			return 0;
-		if ((hw->pics[hw->refs[1]].poc > pic->poc) &&
-			((hw->pics[hw->refs[1]].buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I))
-			return 0;
+		if ((hw->refs[0] >= 0) && (hw->refs[0] < hw->buf_num) &&
+			(hw->refs[1] >= 0) && (hw->refs[1] < hw->buf_num)) {
+			if ((hw->pics[hw->refs[0]].poc < pic->poc) &&
+				(hw->pics[hw->refs[1]].poc > pic->poc))
+				return 0;
+			if ((hw->pics[hw->refs[1]].poc > pic->poc) &&
+				((hw->pics[hw->refs[1]].buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I))
+				return 0;
+		}
 	} else if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
-		if (hw->pics[hw->refs[0]].poc < pic->poc) {
+		if ((hw->refs[1] >= 0) && (hw->refs[1] < hw->buf_num) &&
+			(hw->pics[hw->refs[1]].poc < pic->poc)) {
 			return 0;
 		}
 	} else {
