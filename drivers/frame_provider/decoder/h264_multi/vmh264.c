@@ -1080,7 +1080,7 @@ static int is_crop_valid(struct vdec_h264_hw_s *hw, int mb_width, int mb_height)
 	switch (chroma_format_idc) {
 		case 1:
 			sub_width_c = 2;
-			sub_height_c = 2;
+			sub_height_c = 1;
 			break;
 
 		case 2:
@@ -1101,6 +1101,9 @@ static int is_crop_valid(struct vdec_h264_hw_s *hw, int mb_width, int mb_height)
 		crop_right = p_H264_Dpb->frame_crop_right_offset;
 		crop_bottom = p_H264_Dpb->frame_crop_bottom_offset *
 			(2 - frame_mbs_only_flag);
+	} else if (chroma_format_idc == 1) {
+		crop_right = sub_width_c * p_H264_Dpb->frame_crop_right_offset;
+		crop_bottom = sub_height_c * p_H264_Dpb->frame_crop_bottom_offset;
 	} else {
 		crop_right = sub_width_c * p_H264_Dpb->frame_crop_right_offset;
 		crop_bottom = sub_height_c * p_H264_Dpb->frame_crop_bottom_offset *
@@ -5723,7 +5726,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		switch (chroma_format_idc) {
 			case 1:
 				sub_width_c = 2;
-				sub_height_c = 2;
+				sub_height_c = 1;
 				break;
 
 			case 2:
@@ -5744,6 +5747,9 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			crop_right = p_H264_Dpb->frame_crop_right_offset;
 			crop_bottom = p_H264_Dpb->frame_crop_bottom_offset *
 				(2 - frame_mbs_only_flag);
+		} else if (chroma_format_idc == 1) {
+			crop_right = sub_width_c * p_H264_Dpb->frame_crop_right_offset;
+			crop_bottom = sub_height_c * p_H264_Dpb->frame_crop_bottom_offset;
 		} else {
 			crop_right = sub_width_c * p_H264_Dpb->frame_crop_right_offset;
 			crop_bottom = sub_height_c * p_H264_Dpb->frame_crop_bottom_offset *
@@ -6884,7 +6890,7 @@ static void vh264_cal_frame_size(struct vdec_s *vdec)
 	switch (chroma_format_idc) {
 		case 1:
 			sub_width_c = 2;
-			sub_height_c = 2;
+			sub_height_c = 1;
 			break;
 
 		case 2:
@@ -6905,6 +6911,9 @@ static void vh264_cal_frame_size(struct vdec_s *vdec)
 		crop_right = frame_crop_right_offset;
 		crop_bottom = frame_crop_bottom_offset *
 			(2 - frame_mbs_only_flag);
+	} else if (chroma_format_idc == 1) {
+		crop_right = sub_width_c * frame_crop_right_offset;
+		crop_bottom = sub_height_c * frame_crop_bottom_offset;
 	} else {
 		crop_right = sub_width_c * frame_crop_right_offset;
 		crop_bottom = sub_height_c * frame_crop_bottom_offset *
@@ -7006,9 +7015,9 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		/*crop*/
 		p_H264_Dpb->chroma_format_idc = (p_H264_Dpb->dpb_param.l.data[MAX_REFERENCE_FRAME_NUM_IN_MEM]>>8 & 0x3);
 		p_H264_Dpb->frame_crop_left_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_LEFT_OFFSET];
-		p_H264_Dpb->frame_crop_right_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_RIGHT_OFFSET];
+		p_H264_Dpb->frame_crop_right_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_BOTTOM_OFFSET];
 		p_H264_Dpb->frame_crop_top_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_TOP_OFFSET];
-		p_H264_Dpb->frame_crop_bottom_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_BOTTOM_OFFSET];
+		p_H264_Dpb->frame_crop_bottom_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_RIGHT_OFFSET];
 
 		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 		"%s chroma_format_idc %d crop offset: left %d right %d top %d bottom %d\n",
@@ -9652,7 +9661,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	switch (chroma_format_idc) {
 		case 1:
 			sub_width_c = 2;
-			sub_height_c = 2;
+			sub_height_c = 1;
 			break;
 
 		case 2:
@@ -9673,6 +9682,9 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		crop_right = hw->dpb.frame_crop_right_offset;
 		crop_bottom = hw->dpb.frame_crop_bottom_offset *
 			(2 - frame_mbs_only_flag);
+	} else if (chroma_format_idc == 1) {
+		crop_right = sub_width_c * hw->dpb.frame_crop_right_offset;
+		crop_bottom = sub_height_c * hw->dpb.frame_crop_bottom_offset;
 	} else {
 		crop_right = sub_width_c * hw->dpb.frame_crop_right_offset;
 		crop_bottom = sub_height_c * hw->dpb.frame_crop_bottom_offset *
