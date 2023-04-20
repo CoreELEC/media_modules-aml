@@ -1385,6 +1385,7 @@ typedef struct PIC_BUFFER_CONFIG_s {
 #ifdef NEW_FB_CODE
 	unsigned char back_done_mark;
 	unsigned char flush_mark;
+	int fgs_valid;
 #endif
 #ifdef AML
 //NEW_FRONT_BACK_CODE

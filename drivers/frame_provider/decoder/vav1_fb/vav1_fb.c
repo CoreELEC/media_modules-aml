@@ -6524,6 +6524,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 				pic = &hw->common.buffer_pool->frame_bufs[index].buf;
 				if (!pic->back_done_mark)
 					return NULL;
+				vf->fgs_valid = pic->fgs_valid;
 			}
 		} else
 			return NULL;
@@ -6972,7 +6973,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				vf->compBodyAddr = 0;
 				vf->compHeadAddr = pic_config->header_adr;
 				vf->fgs_table_adr = pic_config->fgs_table_adr;
-				vf->fgs_valid = hw->fgs_valid;
+				if (hw->front_back_mode == 0)
+					vf->fgs_valid = hw->fgs_valid;
 #ifdef AOM_AV1_MMU_DW
 				vf->dwBodyAddr = 0;
 				vf->dwHeadAddr = 0;
@@ -12123,11 +12125,28 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE) {
 		PIC_BUFFER_CONFIG* pic;
+		u32 fg_reg0, fg_reg1, num_y_points, num_cb_points, num_cr_points;
 
 		vdec->back_pic_done = true;
 		mutex_lock(&hw->fb_mutex);
 		pic = pbi->next_be_decode_pic[pbi->fb_rd_pos];
 		mutex_unlock(&hw->fb_mutex);
+
+		WRITE_VREG(HEVC_FGS_IDX, 0);
+		fg_reg0 = READ_VREG(HEVC_FGS_DATA);
+		fg_reg1 = READ_VREG(HEVC_FGS_DATA);
+		num_y_points = fg_reg1 & 0xf;
+		num_cr_points = (fg_reg1 >> 8) & 0xf;
+		num_cb_points = (fg_reg1 >> 4) & 0xf;
+		if ((num_y_points > 0) ||
+		((num_cb_points > 0) | ((fg_reg0 >> 17) & 0x1)) ||
+		((num_cr_points > 0) | ((fg_reg0 >> 17) & 0x1)))
+			pic->fgs_valid = 1;
+		else
+			pic->fgs_valid = 0;
+		av1_print(hw, AOM_DEBUG_HW_MORE,
+			"fg_data0 0x%x fg_data1 0x%x fg_valid %d\n",
+			fg_reg0, fg_reg1, hw->fgs_valid);
 
 		reset_process_time_back(hw);
 		if (hw->front_back_mode == 1) {
