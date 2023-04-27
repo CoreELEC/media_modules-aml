@@ -574,6 +574,15 @@ static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 		return false;
 
 	if (is_cpu_t7()) {
+		int dw_mode = DM_YUV_ONLY;
+
+		if (ctx->output_pix_fmt == V4L2_PIX_FMT_H264 && !vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
+			if (dw_mode != DM_YUV_ONLY) {
+				pr_info("h264 mmu already exist,no need to use ge2d\n");
+				return false;
+			}
+		}
+
 		if ((ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG2) &&

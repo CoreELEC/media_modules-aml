@@ -10028,7 +10028,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 
 	/* open mmu if progressive and double_write is 0x10*/
 	if ((hw->double_write_mode != DM_YUV_ONLY) && (!hw->dw_para_set_flag)) {
-		if (ps->field == V4L2_FIELD_NONE && !is_cpu_t7()) {
+		if (ps->field == V4L2_FIELD_NONE) {
 			if (set_mmu_config(hw, vdec)) {
 				dpb_print(DECODE_ID(hw), 0, "h264 set mmu config fail\n");
 				return -1;
@@ -10067,9 +10067,8 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	 * upper layer use V4L2_FIELD_INTERLACED
 	 */
 	ctx->force_report_interlace = false;
-	if (is_cpu_t7() && (((ps->field == V4L2_FIELD_INTERLACED) &&
-		is_over_interlace_size(ps->coded_width, ps->coded_height, interlace_size)) ||
-		ps->field != V4L2_FIELD_INTERLACED)) {
+	if (is_cpu_t7() && ((ps->field == V4L2_FIELD_INTERLACED) &&
+		is_over_interlace_size(ps->coded_width, ps->coded_height, interlace_size))) {
 		ps->field = V4L2_FIELD_NONE;
 		ctx->force_report_interlace = true;
 		dpb_print(DECODE_ID(hw), 0,"%s force_report_interlace %d\n",
