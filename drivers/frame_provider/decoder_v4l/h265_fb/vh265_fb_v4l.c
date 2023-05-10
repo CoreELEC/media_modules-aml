@@ -192,8 +192,6 @@ static int vh265_hw_ctx_restore(struct hevc_state_s *hevc);
 
 static void vh265_work_implement(struct hevc_state_s *hevc,
 	struct vdec_s *vdec,int from);
-static int v4l_parser_work_pic_num(struct hevc_state_s *hevc);
-
 
 static const char vh265_dec_id[] = "vh265-dev";
 
@@ -738,12 +736,6 @@ enum NalUnitType {
 	NAL_UNIT_UNSPECIFIED_62,
 	NAL_UNIT_UNSPECIFIED_63,
 	NAL_UNIT_INVALID,
-};
-
-enum alloc_buffer_status_t {
-	BUFFER_INIT  =  0,
-	BUFFER_ALLOCATING = 1,
-	BUFFER_ALLOCATE_DONE = 2,
 };
 
 /* --------------------------------------------------- */
@@ -1768,7 +1760,6 @@ struct tile_s {
 #define DEC_RESULT_FORCE_EXIT       10
 #define DEC_RESULT_FREE_CANVAS      11
 #define DEC_RESULT_UNFINISH	        12
-#define DEC_RESULT_WAIT_BUFFER      13
 
 #ifdef NEW_FB_CODE
 #define DEC_BACK_RESULT_NONE             0
@@ -2296,7 +2287,6 @@ struct hevc_state_s {
 	u32 consume_byte;
 	u32 muti_frame_flag;
 	struct mutex slice_header_lock;
-	int pic_mv_buf_wait_alloc_done_flag;
 } /*hevc_stru_t */;
 
 static void init_buff_spec(struct hevc_state_s *hevc,
@@ -2971,7 +2961,6 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 	hevc->curr_POC = INVALID_POC;
 
 	hevc->pic_list_init_flag = 0;
-	hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_INIT;
 	hevc->use_cma_flag = 0;
 	hevc->decode_idx = 0;
 	hevc->slice_idx = 0;
@@ -3695,35 +3684,6 @@ static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
 }
 #endif
 
-static void init_mv_buf_list(struct hevc_state_s *hevc)
-{
-	int i;
-	int new_size;
-	int ref_pic_num = v4l_parser_work_pic_num(hevc) + get_dynamic_buf_num_margin(hevc);
-
-	if (mv_buf_dynamic_alloc)
-		return;
-
-	if (IS_8K_SIZE(hevc->pic_w, hevc->pic_h))
-		new_size = MPRED_8K_MV_BUF_SIZE;
-	else if (IS_4K_SIZE(hevc->pic_w, hevc->pic_h))
-		new_size = MPRED_4K_MV_BUF_SIZE; /*0x120000*/
-	else
-		new_size = MPRED_MV_BUF_SIZE;
-
-	if (new_size != hevc->mv_buf_size) {
-		dealloc_mv_bufs(hevc);
-		hevc->mv_buf_size = new_size;
-	}
-
-	for (i = 0; i < ref_pic_num; i++) {
-		if (alloc_mv_buf(hevc, i) < 0) {
-			break;
-		}
-	}
-	hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_ALLOCATE_DONE;
-}
-
 static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
 #ifdef MV_USE_FIXED_BUF
@@ -3758,37 +3718,18 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		int lcu_y_num = extended_pic_height / hevc->lcu_size;
 		new_size =  lcu_x_num * lcu_y_num * MV_MEM_UNIT;
 		hevc->mv_buf_size = (new_size + 0xffff) & (~0xffff);
-		if (ret < 0) {
-			for (i = 0; i < MAX_REF_PIC_NUM; i++) {
-				if (hevc->m_mv_BUF[i].start_adr == 0) {
-					if (alloc_mv_buf(hevc, i) >= 0) {
-						hevc->m_mv_BUF[i].used_flag = 1;
-						ret = i;
-					}
-					break;
-				}
-			}
+	} else {
+		if (IS_8K_SIZE(pic->width, pic->height))
+			new_size = MPRED_8K_MV_BUF_SIZE;
+		else if (IS_4K_SIZE(pic->width, pic->height))
+			new_size = MPRED_4K_MV_BUF_SIZE; /*0x120000*/
+		else
+			new_size = MPRED_MV_BUF_SIZE;
+
+		if (new_size != hevc->mv_buf_size) {
+			dealloc_mv_bufs(hevc);
+			hevc->mv_buf_size = new_size;
 		}
-
-		if (ret >= 0) {
-			pic->mv_buf_index = ret;
-			pic->mv_size = hevc->m_mv_BUF[ret].size;
-			pic->mpred_mv_wr_start_addr =
-				(hevc->m_mv_BUF[ret].start_adr + 0xffff) &
-				(~0xffff);
-			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
-				"%s => %d (0x%x) size 0x%x\n",
-				__func__, ret,
-				pic->mpred_mv_wr_start_addr,
-				pic->mv_size);
-
-		} else {
-			hevc_print(hevc, 0,
-			"%s: Error, mv buf is not enough\n",
-			__func__);
-		}
-	} else if (hevc->pic_mv_buf_wait_alloc_done_flag == BUFFER_ALLOCATE_DONE) {
-
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			if (hevc->m_mv_BUF[i].start_adr &&
 				hevc->m_mv_BUF[i].used_flag == 0) {
@@ -3797,24 +3738,35 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 				break;
 			}
 		}
-
-		if (ret >= 0) {
-			pic->mv_buf_index = ret;
-			pic->mv_size = hevc->m_mv_BUF[ret].size;
-			pic->mpred_mv_wr_start_addr =
-				(hevc->m_mv_BUF[ret].start_adr + 0xffff) &
-				(~0xffff);
-			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
-				"%s => %d (0x%x) size 0x%x\n",
-				__func__, ret,
-				pic->mpred_mv_wr_start_addr,
-				pic->mv_size);
-
-		} else {
-			hevc_print(hevc, 0,
-			"%s: Error, mv buf is not enough\n",
-			__func__);
+	}
+	if (ret < 0) {
+		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+			if (hevc->m_mv_BUF[i].start_adr == 0) {
+				if (alloc_mv_buf(hevc, i) >= 0) {
+					hevc->m_mv_BUF[i].used_flag = 1;
+					ret = i;
+				}
+				break;
+			}
 		}
+	}
+
+	if (ret >= 0) {
+		pic->mv_buf_index = ret;
+		pic->mv_size = hevc->m_mv_BUF[ret].size;
+		pic->mpred_mv_wr_start_addr =
+			(hevc->m_mv_BUF[ret].start_adr + 0xffff) &
+			(~0xffff);
+		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+			"%s => %d (0x%x) size 0x%x\n",
+			__func__, ret,
+			pic->mpred_mv_wr_start_addr,
+			pic->mv_size);
+
+	} else {
+		hevc_print(hevc, 0,
+		"%s: Error, mv buf is not enough\n",
+		__func__);
 	}
 	return ret;
 #endif
@@ -12059,14 +12011,6 @@ force_output:
 				pr_debug("[vdec_kpi][%s] First I frame coming.\n",
 					__func__);
 			}
-
-			if (!mv_buf_dynamic_alloc && hevc->pic_mv_buf_wait_alloc_done_flag == BUFFER_INIT) {
-				hevc->dec_result = DEC_RESULT_WAIT_BUFFER;
-				hevc_print(hevc, 0, "[%d]alloc mv buffer\n",vdec->id);
-				vdec_schedule_work(&hevc->work);
-				return IRQ_HANDLED;
-			}
-
 		} else if (hevc->wait_buf == 0) {
 			u32 vui_time_scale;
 			u32 vui_num_units_in_tick;
@@ -14057,17 +14001,6 @@ static unsigned char get_data_check_sum
 	return sum;
 }
 
-static int h265_wait_alloc_buf(void *args)
-{
-	struct hevc_state_s *hevc = (struct hevc_state_s *) args;
-	struct vdec_s *vdec = hw_to_vdec(hevc);
-
-	init_mv_buf_list(hevc);
-
-	vdec_up(vdec);
-	return 0;
-}
-
 static void vh265_work_implement(struct hevc_state_s *hevc,
 	struct vdec_s *vdec,int from)
 {
@@ -14611,11 +14544,7 @@ done_end:
 				hevc->shift_byte_count_lo;
 		}
 #endif
-	} else if (hevc->dec_result == DEC_RESULT_WAIT_BUFFER) {
-		vdec_post_task(h265_wait_alloc_buf, hevc);
-		hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_ALLOCATING;
 	}
-
 #ifdef NEW_FB_CODE
 	if (!vdec->front_pic_done && (hevc->front_back_mode == 1)) {
 		fb_hw_status_clear(true);
@@ -14865,9 +14794,6 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	if (hevc->front_back_mode && hevc->wait_working_buf)
 		return 0xffffffff;
 #endif
-
-	if (hevc->pic_mv_buf_wait_alloc_done_flag == BUFFER_ALLOCATING)
-		return 0;
 
 	if ((debug & HEVC_BE_SIMULATE_IRQ)
 		&&(READ_VREG(DEBUG_REG1_DBE) ||
