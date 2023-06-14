@@ -88,7 +88,7 @@
 
 #define DECODE_STATUS_SEQ_HEADER_DONE 0x1
 #define DECODE_STATUS_PIC_HEADER_DONE 0x2
-#define DECODE_STATUS_WAIT_FOR_BUF    0x3
+#define DECODE_STATUS_PIC_SKIPPED     0x3
 
 #define VF_POOL_SIZE		16
 #define DECODE_BUFFER_NUM_MAX	4
@@ -876,6 +876,10 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 		hw->interlace_flag = (READ_VREG(VC1_PIC_INFO) >> 28) & 0x1;
 		vc1_print(0, 0, "%s: SEQ_HEADER_DONE frame_width %d/%d, interlace_flag %d\n", __func__,
 			hw->frame_width, hw->frame_height, hw->interlace_flag);
+		WRITE_VREG(DECODE_STATUS, 0);
+		return IRQ_HANDLED;
+	} else if (status_reg == DECODE_STATUS_PIC_SKIPPED) {//PIC Skipped
+		vc1_print(0, VC1_DEBUG_DETAIL, "%s: PIC_SKIPPED picture_type invalid\n", __func__);
 		WRITE_VREG(DECODE_STATUS, 0);
 		return IRQ_HANDLED;
 	} else if (status_reg == DECODE_STATUS_PIC_HEADER_DONE) {//PIC header done
