@@ -5715,6 +5715,7 @@ static void interlace_clear_no_pair_pic(struct hevc_state_s *hevc)
 		if (pic->vf_ref == 1) {
 			pic->vf_ref = 0;
 			pic->output_ready = 0;
+			pic->error_mark = 1;
 			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
 				"%s, pic decode index %d\n", __func__, pic->decode_idx);
 		}
