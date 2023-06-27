@@ -681,7 +681,7 @@ static const struct of_device_id aml_vcodec_match[] = {
 	{},
 };
 
-MODULE_DEVICE_TABLE(of, aml_vcodec_match);
+//MODULE_DEVICE_TABLE(of, aml_vcodec_match);
 
 static struct platform_driver aml_vcodec_dec_driver = {
 	.probe	= aml_vcodec_probe,
