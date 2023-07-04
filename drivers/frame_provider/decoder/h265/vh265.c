@@ -15416,6 +15416,9 @@ static int __init amvdec_h265_driver_init_module(void)
 				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, fence";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_MG9TV)
 			amvdec_h265_profile.profile = "4k";
+	} else {
+		amvdec_h265_profile.profile =
+			"8bit, 10bit, dwrite, compressed, v4l";
 	}
 #endif
 	if (codec_mm_get_total_size() < 80 * SZ_1M) {
