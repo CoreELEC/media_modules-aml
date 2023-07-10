@@ -9357,6 +9357,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 							aml_buf_set_vframe(aml_buf, vf);
 							vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 							ret = aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
+
+							clear_pair_fb(hevc);
 						}
 						if (ret) {
 							hevc_print(hevc, 0,"%s, disp_q len %d, buf done fail\n",
