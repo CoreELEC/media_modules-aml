@@ -466,7 +466,6 @@ static u32 max_decoding_time;
  *       1, NOT use interlace policy
  *bit 9: 0, discard dirty data on playback start
  *       1, do not discard dirty data on playback start
- *
  */
 static u32 error_handle_policy;
 static u32 error_skip_nal_count = 6;
@@ -10286,7 +10285,6 @@ static int get_free_buf_count( struct hevc_state_s *hevc)
 	}
 
 	if (!free_slot) {
-		ctx->force_recycle = true;
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s not enough free_slot %d!\n",
 		__func__, free_slot);
@@ -12497,7 +12495,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			(pic->vf_ref || pic->error_mark) &&
 			pic->cma_alloc_addr) {
 
-			if (!ctx->force_recycle && (ctx->vpp_is_need || ctx->enable_di_post)&&
+			if ((ctx->vpp_is_need || ctx->enable_di_post) &&
 				!(pic->error_mark && (hevc->nal_skip_policy & 0x2))) {
 				if (pic->pic_struct == 3 || pic->pic_struct == 4 ||
 					pic->pic_struct == 9 || pic->pic_struct == 10 ||
@@ -12509,7 +12507,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 						continue;
 				}
 			}
-			ctx->force_recycle = false;
+
 			aml_buf = (struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
 			hevc_print(hevc, H265_DEBUG_BUFMGR,
@@ -12623,7 +12621,6 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 	}
 
 	if (!free_slot) {
-		ctx->force_recycle = true;
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s not enough free_slot %d!\n",
 		__func__, free_slot);
@@ -12718,19 +12715,20 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 		(hevc->v4l_params_parsed) &&
 		!has_free_buf)) {
 		int decode_count = 0;
+		struct vdec_pic_info v4l_pic = {0};
 
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			pic = hevc->m_PIC[i];
 			if (pic == NULL || pic->index == -1 || pic->BUF_index == -1)
 				continue;
-			if ((pic->output_ready == 0) && (pic->output_mark != 0 ||
+			if (pic->output_mark != 0 ||
 				pic->referenced != 0 ||
-				pic->vf_ref != 0))
+				(pic->referenced == 0 && pic->output_mark == 0 && pic->vf_ref != 0)) /* for interlace */
 				decode_count++;
 		}
 
-		if (decode_count >=
-				hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + detect_stuck_buffer_margin) {
+		vdec_v4l_get_pic_info(ctx, &v4l_pic);
+		if (decode_count >= (v4l_pic.dpb_frames + v4l_pic.dpb_margin)) {
 			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 				dump_pic_list(hevc);
 			if (!(error_handle_policy & 0x400)) {

@@ -1900,7 +1900,6 @@ struct hevc_state_s {
 	u32 error_watchdog_count;
 	u32 error_skip_nal_wt_cnt;
 	u32 error_system_watchdog_count;
-
 #ifdef DEBUG_PTS
 	unsigned long pts_missed;
 	unsigned long pts_hit;
@@ -12504,6 +12503,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 #endif
 	if (new_pic == NULL) {
 		int decode_count = 0;
+		int nb_flush = 0;
 
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			pic = hevc->m_PIC[i];
@@ -12512,8 +12512,10 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 			if (pic->output_ready == 0)
 				decode_count++;
 		}
-		if (decode_count >=
-				hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + detect_stuck_buffer_margin) {
+		nb_flush = hevc->param.p.sps_max_dec_pic_buffering_minus1_0 +
+			(save_buffer ? (detect_stuck_buffer_margin - 1) : detect_stuck_buffer_margin);
+
+		if (decode_count >= nb_flush) {
 			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 				dump_pic_list(hevc);
 			if (!(error_handle_policy & 0x400)) {
