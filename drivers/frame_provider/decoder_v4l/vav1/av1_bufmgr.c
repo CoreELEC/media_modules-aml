@@ -3264,6 +3264,11 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
   }
   av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
 
+  cm->bit_depth = params->p.bit_depth;
+
+  if (post_video_frame_early(pbi, cm) < 0)
+    return -1;
+
   return frame_decoded;
 
 }

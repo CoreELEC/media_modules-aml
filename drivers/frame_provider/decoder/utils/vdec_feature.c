@@ -196,6 +196,7 @@ static int vcodec_feature_vdec_fence(u8 *buf, int size, int vformat)
 		case VFORMAT_H264:
 		case VFORMAT_HEVC:
 		case VFORMAT_VP9:
+		case VFORMAT_AV1:
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM)
 				pbuf += snprintf(pbuf, size, "        \"GameMode\" : true,\n");
 			break;

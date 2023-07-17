@@ -1388,6 +1388,10 @@ typedef struct PIC_BUFFER_CONFIG_s {
 	u64 timestamp;
 	u32 hw_decode_time;
 	u32 frame_size2; // For frame base mode
+
+	/* vdec sync. */
+	struct dma_fence *fence;
+
 #ifdef NEW_FB_CODE
 	unsigned char back_done_mark;
 	unsigned char flush_mark;
@@ -2086,6 +2090,7 @@ typedef struct AV1_Common_s {
 	int use_prev_frame_mvs;
 	int frame_type;
 	int intra_only;
+	unsigned short bit_depth;
 	struct RefCntBuffer_s frame_refs[INTER_REFS_PER_FRAME];
 #endif
 } AV1_COMMON;
@@ -2394,6 +2399,8 @@ RefCntBuffer *av1_get_primary_ref_frame_buf(
 	const AV1_COMMON *const cm);
 
 void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd);
+
+int post_video_frame_early(AV1Decoder *pbi, struct AV1_Common_s *cm);
 
 int get_free_frame_buffer(struct AV1_Common_s *cm);
 
