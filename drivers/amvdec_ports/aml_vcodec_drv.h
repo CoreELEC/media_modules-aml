@@ -332,7 +332,8 @@ struct aml_vdec_cfg_infos {
 	u32 metadata_config_flag; // for metadata config flag
 	u32 duration;
 	u32 triple_write_mode;
-	u32 data[3];
+	u32 dv_profile;
+	u32 data[2];
 };
 
 struct aml_vdec_hdr_infos {

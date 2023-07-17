@@ -2199,6 +2199,7 @@ struct hevc_state_s {
 	u32 muti_frame_flag;
 	int slice_count;
 	int start_decoder_flag;
+	u32 dv_profile;
 } /*hevc_stru_t */;
 
 static void init_buff_spec(struct hevc_state_s *hevc,
@@ -9175,6 +9176,11 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	vf->hdr10p_data_buf = pic->hdr10p_data_buf;
 	if (vf->hdr10p_data_buf)
 		set_meta_data_to_vf(vf, UVM_META_DATA_HDR10P_DATA, hevc->v4l2_ctx);
+
+	if (hevc->dv_profile == 4)
+		vf->ext_signal_type |= (1 << 1);
+	else if (hevc->dv_profile == 7)
+		vf->ext_signal_type |= (1 << 2);
 
 	vf->sidebind_type = hevc->sidebind_type;
 	vf->sidebind_channel_id = hevc->sidebind_channel_id;
@@ -16613,6 +16619,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 				hevc_print(hevc, 0, "dv_duallayer\n");
 			if (hevc->high_bandwidth_flag)
 				hevc_print(hevc, 0, "high bandwidth\n");
+		}
+
+		if (get_config_int(pdata->config,
+			"dv_profile", &config_val) == 0) {
+			hevc->dv_profile = config_val;
+			hevc_print(hevc, 0, "dv_profile: %d\n", config_val);
 		}
 #endif
 	} else {

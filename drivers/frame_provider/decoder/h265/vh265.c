@@ -2063,6 +2063,7 @@ struct hevc_state_s {
 	char *aux_data_buf[BUF_POOL_SIZE];
 	u8 head_pre_parsed;
 	u8 try_parsing;
+	u32 dv_profile;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -8307,6 +8308,11 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	vf->hdr10p_data_size = pic->hdr10p_data_size;
 	vf->hdr10p_data_buf = pic->hdr10p_data_buf;
 
+	if (hevc->dv_profile == 4)
+		vf->ext_signal_type |= (1 << 1);
+	else if (hevc->dv_profile == 7)
+		vf->ext_signal_type |= (1 << 2);
+
 	vf->sidebind_type = hevc->sidebind_type;
 	vf->sidebind_channel_id = hevc->sidebind_channel_id;
 	vf->codec_vfmt = VFORMAT_HEVC;
@@ -14343,6 +14349,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
 			if (hevc->high_bandwidth_flag)
 				hevc_print(hevc, 0, "high bandwidth\n");
+		}
+
+		if (get_config_int(pdata->config,
+			"dv_profile", &config_val) == 0) {
+			hevc->dv_profile = config_val;
+			hevc_print(hevc, 0, "dv_profile: %d\n", config_val);
 		}
 
 		if (get_config_int(pdata->config,

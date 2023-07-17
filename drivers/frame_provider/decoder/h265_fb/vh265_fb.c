@@ -2233,6 +2233,7 @@ struct hevc_state_s {
 	u32 stream_multi_frame_offset;
 	u32 stream_multi_frame_flag;
 	int start_decoder_flag;
+	u32 dv_profile;
 } /*hevc_stru_t */;
 
 static void init_buff_spec(struct hevc_state_s *hevc,
@@ -9422,6 +9423,11 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 
 	vf->hdr10p_data_size = pic->hdr10p_data_size;
 	vf->hdr10p_data_buf = pic->hdr10p_data_buf;
+
+	if (hevc->dv_profile == 4)
+		vf->ext_signal_type |= (1 << 1);
+	else if (hevc->dv_profile == 7)
+		vf->ext_signal_type |= (1 << 2);
 
 	vf->sidebind_type = hevc->sidebind_type;
 	vf->sidebind_channel_id = hevc->sidebind_channel_id;
@@ -16842,6 +16848,13 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			if (hevc->dv_duallayer)
 				hevc_print(hevc, 0, "dv_duallayer\n");
 		}
+
+		if (get_config_int(pdata->config,
+			"dv_profile", &config_val) == 0) {
+			hevc->dv_profile = config_val;
+			hevc_print(hevc, 0, "dv_profile: %d\n", config_val);
+		}
+
 		if (get_config_int(pdata->config,
 			"api_error_policy", &config_val) == 0) {
 			if (config_val == 0) {
