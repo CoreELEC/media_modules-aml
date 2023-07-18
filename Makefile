@@ -76,6 +76,9 @@ modules_install:
 	else \
 		find $(INSTALL_MOD_PATH)/lib/modules/*/$(INSTALL_MOD_DIR) -name "*.ko" -exec cp {} ${out_dir}/../vendor_lib/modules \; ; \
 	fi;
+	if [ -e ${out_dir}/$(M)/drivers/Module.symvers ]; then \
+		ln -sf ${out_dir}/$(M)/drivers/Module.symvers ${out_dir}/$(M)/Module.symvers;\
+	fi;
 
 clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M)  clean
