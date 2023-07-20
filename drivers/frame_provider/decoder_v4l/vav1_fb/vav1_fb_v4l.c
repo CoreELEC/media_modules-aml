@@ -1712,34 +1712,23 @@ static int init_mv_buf_list(struct AV1HW_s *hw)
 	int i;
 	int ret = 0;
 	int count = MV_BUFFER_NUM;
-	int pic_width = hw->init_pic_w;
-	int pic_height = hw->init_pic_h;
+	int pic_width = hw->frame_width;
+	int pic_height = hw->frame_height;
 	int size = cal_mv_buf_size(hw, pic_width, pic_height);
 
 	if (mv_buf_dynamic_alloc)
 		return 0;
 
-	if (debug)
-		pr_info("%s, calculated mv size 0x%x\n",
-			__func__, size);
-
-	if (!IS_8K_SIZE(pic_width, pic_height)) {
-		if (vdec_is_support_4k())
-			size = 0xb0000;
-		else
-			size = 0x30000;
-	}
-
-	if (hw->init_pic_w > 4096 && hw->init_pic_h > 2048)
+	if (pic_width > 4096 && pic_height > 2048)
 		count = REF_FRAMES_4K + hw->fb_ifbuf_num + hw->mv_buf_margin;
-	else if (hw->init_pic_w > 2048 && hw->init_pic_h > 1088)
+	else if (pic_width > 2048 && pic_height > 1088)
 		count = REF_FRAMES_4K + hw->fb_ifbuf_num + hw->mv_buf_margin;
 	else
 		count = REF_FRAMES + hw->fb_ifbuf_num + hw->mv_buf_margin;
 
 	if (debug) {
 		pr_info("%s w:%d, h:%d, count: %d, size 0x%x\n",
-		__func__, hw->init_pic_w, hw->init_pic_h,
+		__func__, pic_width, pic_height,
 		count, size);
 	}
 
@@ -8781,6 +8770,8 @@ static int v4l_res_change(struct AV1HW_s *hw)
 
 			vav1_get_ps_info(hw, &ps);
 			vdec_v4l_set_ps_infos(ctx, &ps);
+			if (init_mv_buf_list(hw) < 0)
+				pr_err("%s: !!!!Error, reinit_mv_buf_list fail\n", __func__);
 			vdec_v4l_res_ch_event(ctx);
 			hw->v4l_params_parsed = false;
 			hw->res_ch_flag = 1;
@@ -9428,14 +9419,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					WRITE_VREG(HEVC_SAO_C_START_ADDR, 0);
 				}
 #endif
-			}
-			/*v4l2 alloc new mv when max size changed */
-			if (IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h)) {
-				/* now less than 8k use fix mv buf size */
-				if (hw->pic_list_init_done) {
-					if (init_mv_buf_list(hw) < 0)
-						pr_err("%s: !!!!Error, reinit_mv_buf_list fail\n", __func__);
-				}
 			}
 		}
 
