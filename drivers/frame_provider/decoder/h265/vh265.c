@@ -13987,6 +13987,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	if (hevc->switch_dvlayer_flag) {
+		hevc->switch_dvlayer_flag = 0;
 		if (vdec->slave)
 			vdec_set_next_sched(vdec, vdec->slave);
 		else if (vdec->master)
