@@ -2226,8 +2226,9 @@ u32 vdec_offset_prepare_input(struct vdec_s *vdec, u32 consume_byte, u32 data_of
 	data_size = res_byte;
 
 	if (input->target == VDEC_INPUT_TARGET_VLD) {
-		pr_debug("%s one_pack_multi_f_set_align_size:0x%x\n",
-			__func__, one_pack_multi_f_set_align_size);
+		if (vdec_get_debug_flags() & 0x10000000)
+			pr_info("%s one_pack_multi_f_set_align_size:0x%x\n",
+				__func__, one_pack_multi_f_set_align_size);
 
 		data_invalid = data_offset - round_down(data_offset, 0x40) + one_pack_multi_f_set_align_size;
 		if (data_invalid < 2) //fix dv cosunme more 1~2 byte, ensure contain start code
