@@ -754,10 +754,7 @@ static void init_scaler(u32 endian)
 	WRITE_VREG(DOS_SW_RESET0, (1 << 10));
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
-	if (is_cpu_t7c() ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
+	if (is_mjpeg_endian_rematch()) {
 		if (endian == 7)
 			WRITE_VREG(PSCALE_CTRL2, (0x1ff << 16) | READ_VREG(PSCALE_CTRL2));
 		else

@@ -242,7 +242,7 @@ static int get_configs(const char *configs, const char *need, int *val)
 {
 	const char *str;
 	const char *str_2;
-	int ret;
+	int ret = 0;
 	int lval = 0;
 	*val = 0;
 
@@ -330,9 +330,9 @@ exit:
 
 static int cur_configs(const char *configs, const char *title, char *cur_str)
 {
-	const char *str;
-	const char *cur;
-	int ret;
+	const char *str = NULL;
+	const char *cur = NULL;
+	int ret = 0;
 	char *tmpbuf = kzalloc(sizeof(char) * 1024, GFP_KERNEL);
 	char *tmpptr = tmpbuf;
 

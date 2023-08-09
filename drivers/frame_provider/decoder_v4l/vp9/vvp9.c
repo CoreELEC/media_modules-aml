@@ -1288,7 +1288,8 @@ static int is_oversize(int w, int h)
 	int max = MAX_SIZE_8K;
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7))
 		max = MAX_SIZE_4K;
 	else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
@@ -3174,7 +3175,7 @@ static struct device *cma_dev;
 #else
 #define RPM_BUF_SIZE (0x80*2)
 #endif
-#define LMEM_BUF_SIZE (0x400 * 2)
+#define LMEM_BUF_SIZE (0x600 * 2)
 
 /*mmu_vbh buf is used by HEVC_SAO_MMU_VH0_ADDR, HEVC_SAO_MMU_VH1_ADDR*/
 #define VBH_BUF_SIZE_1080P 0x3000

@@ -67,6 +67,7 @@ typedef void (*reg_compat_func)(struct bus_reg_desc *, MM_BUS_ENUM bus);
 
 void t3_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
 void s5_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
+void s7_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
 
 
 ulong dos_reg_compat_convert(ulong addr);

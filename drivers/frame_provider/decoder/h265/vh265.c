@@ -786,12 +786,13 @@ enum NalUnitType {
 #define HEVC_SCALELUT             HEVC_ASSIST_SCRATCH_D
 #define HEVC_WAIT_FLAG            HEVC_ASSIST_SCRATCH_E
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
-#define LMEM_DUMP_ADR                 HEVC_ASSIST_SCRATCH_F
+#define LMEM_DUMP_ADR             HEVC_ASSIST_SCRATCH_F
 #ifdef ENABLE_SWAP_TEST
 #define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
 #endif
 
-#define HEVC_DECODE_SIZE		HEVC_ASSIST_SCRATCH_N
+#define HEVC_DECODE_SIZE        HEVC_ASSIST_SCRATCH_N
+#define HEVC_DECODE_COUNT       HEVC_ASSIST_SCRATCH_G
 	/*do not define ENABLE_SWAP_TEST*/
 #define HEVC_AUX_ADR			HEVC_ASSIST_SCRATCH_L
 #define HEVC_AUX_DATA_SIZE		HEVC_ASSIST_SCRATCH_M
@@ -940,7 +941,7 @@ union param_u {
 
 #define RPM_BUF_SIZE (0x80*2)
 /* non mmu mode lmem size : 0x400, mmu mode : 0x500*/
-#define LMEM_BUF_SIZE (0x500 * 2)
+#define LMEM_BUF_SIZE (0x600 * 2)
 
 struct buff_s {
 	u32 buf_start;
@@ -2114,7 +2115,8 @@ static int is_oversize(int w, int h)
 	int max = MAX_SIZE_8K;
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7))
 		max = MAX_SIZE_4K;
 	else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
 			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) ||
@@ -4930,6 +4932,8 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 #endif
 
 	WRITE_VREG(HEVC_DECODE_SIZE, 0);
+	if (is_vcpu_clk_set())
+		WRITE_VREG(HEVC_DECODE_COUNT, 0);
 
 	/* Send parser_cmd */
 	WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
@@ -7460,7 +7464,7 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 	}
 	if (hevc->lmem_addr) {
 		decoder_dma_free_coherent(hevc->lmem_phy_handle,
-				RPM_BUF_SIZE, hevc->lmem_addr,
+				LMEM_BUF_SIZE, hevc->lmem_addr,
 					hevc->lmem_phy_addr);
 		hevc->lmem_addr = NULL;
 	}
@@ -13966,7 +13970,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 #endif
 	WRITE_VREG(HEVC_DECODE_SIZE, r);
-	/*WRITE_VREG(HEVC_DECODE_COUNT, hevc->decode_idx);*/
+	if (is_vcpu_clk_set())
+		WRITE_VREG(HEVC_DECODE_COUNT, hevc->decode_idx);
 	hevc->init_flag = 1;
 
 	if (hevc->pic_list_init_flag == 3)

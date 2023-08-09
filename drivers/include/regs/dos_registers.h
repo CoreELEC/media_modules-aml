@@ -841,9 +841,9 @@
 #define VP9_CONTROL                         (0x3140 | MASK_S5_NEW_REGS)
 #define VP9_QUANT_WR                        (0x3146 | MASK_S5_NEW_REGS)
 
-#define HEVC_SLICE_DATA_CTL                 (0x3172 | MASK_S5_NEW_REGS)
-#define HEVC_STREAM_CRC                     (0x3175 | MASK_S5_NEW_REGS)
-#define VP9_ACP_CTRL                        (0x3176 | MASK_S5_NEW_REGS)
+#define HEVC_SLICE_DATA_CTL                 0x3172
+#define HEVC_STREAM_CRC                     0x3175
+#define VP9_ACP_CTRL                        0x3176
 
 #define HEVC_MPRED_VERSION                  0x3200
 #define HEVC_MPRED_CTRL0                    0x3201

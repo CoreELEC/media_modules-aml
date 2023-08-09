@@ -498,16 +498,10 @@ retry:
 		src_fmt = get_input_format(in_buf->vf);
 
 		if (in_buf->vf->canvas0_config[0].endian == 7)
-			src_fmt |= (is_cpu_t7c() ||
-						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) ?
+			src_fmt |= is_mjpeg_endian_rematch() ?
 						GE2D_LITTLE_ENDIAN : GE2D_BIG_ENDIAN;
 		else
-			src_fmt |= (is_cpu_t7c() ||
-						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) ?
+			src_fmt |= is_mjpeg_endian_rematch() ?
 						GE2D_BIG_ENDIAN : GE2D_LITTLE_ENDIAN;
 
 		/* negotiate format of destination */

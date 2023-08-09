@@ -394,12 +394,12 @@ static s32 aml_loadmc_vdec(const u32 *p, int id)
 	{
 #endif
 		addr_mc[id] = kmalloc(MC_SIZE, GFP_KERNEL);
-		memcpy(addr_mc[id], p, MC_SIZE);
-
 	}
 
 	if (!addr_mc[id])
 		return -ENOMEM;
+
+	memcpy(addr_mc[id], p, MC_SIZE);
 
 	mc_addr_map = dma_map_single(get_vdec_device(),
 		addr_mc[id], MC_SIZE, DMA_TO_DEVICE);

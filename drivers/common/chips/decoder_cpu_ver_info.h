@@ -77,6 +77,7 @@ enum AM_MESON_CPU_MAJOR_ID {
 	AM_MESON_CPU_MAJOR_ID_RES_0x43,
 	AM_MESON_CPU_MAJOR_ID_TXHD2	= 0x44,
 	AM_MESON_CPU_MAJOR_ID_S1A	= 0x45,
+	AM_MESON_CPU_MAJOR_ID_S7	= 0x46,
 	AM_MESON_CPU_MAJOR_ID_MAX,
 };
 
@@ -154,6 +155,7 @@ struct dos_of_dev_s {
 	/* vdec */
 	bool is_vdec_canvas_support;
 	bool is_support_h264_mmu;
+	bool is_mjpeg_endian_rematch;
 
 	/* hevc */
 	bool is_support_dual_core;
@@ -162,6 +164,7 @@ struct dos_of_dev_s {
 	bool is_support_rdma;
 	bool is_support_mmu_copy;
 	int hevc_stream_extra_shift;
+	bool is_vcpu_clk_set;
 
 	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
 
@@ -231,6 +234,10 @@ inline bool is_support_axi_ctrl(void);
 inline bool is_support_format(int format);
 
 inline int get_hevc_stream_extra_shift_bytes(void);
+
+inline bool is_mjpeg_endian_rematch(void);
+
+inline bool is_vcpu_clk_set(void);
 
 void pr_dos_infos(void);
 

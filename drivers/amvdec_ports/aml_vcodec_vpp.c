@@ -102,7 +102,7 @@ static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 	struct aml_v4l2_buf *aml_vb = NULL;
 	struct uvm_hook_mod_info u_info;
 	struct di_buffer_wrap *buf_wrap = NULL;
-	int ret;
+	int ret = 0;
 
 	aml_vb = vpp_buf->aml_vb;
 	if (!aml_vb)

@@ -952,15 +952,23 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 	unsigned int cpu_type = get_cpu_major_id();
 
 	if (target == VDEC_INPUT_TARGET_VLD) {
-		mask = (1 << 13);	/*bit13: DOS VDEC interface*/
-		if (cpu_type >= AM_MESON_CPU_MAJOR_ID_G12A)
-			mask = (1 << 21);
+		if (cpu_type == AM_MESON_CPU_MAJOR_ID_S7) {
+			mask = (1 << 8);
+		} else {
+			mask = (1 << 13);	/*bit13: DOS VDEC interface*/
+			if (cpu_type >= AM_MESON_CPU_MAJOR_ID_G12A)
+				mask = (1 << 21);
+		}
 	} else if (target == VDEC_INPUT_TARGET_HEVC) {
-		mask = (1 << 4); /*hevc*/
-		if ((cpu_type >= AM_MESON_CPU_MAJOR_ID_G12A) &&
-			(cpu_type != AM_MESON_CPU_MAJOR_ID_T5W) &&
-			(cpu_type != AM_MESON_CPU_MAJOR_ID_TXHD2))
-			mask |= (1 << 8); /*hevcb */
+		if (cpu_type == AM_MESON_CPU_MAJOR_ID_S7) {
+			mask = (1 << 7);
+		} else {
+			mask = (1 << 4); /*hevc*/
+			if ((cpu_type >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+				(cpu_type != AM_MESON_CPU_MAJOR_ID_T5W) &&
+				(cpu_type != AM_MESON_CPU_MAJOR_ID_TXHD2))
+				mask |= (1 << 8); /*hevcb */
+		}
 	}
 
 	if (!mask) {
@@ -1007,6 +1015,9 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 			break;
 		case AM_MESON_CPU_MAJOR_ID_S1A:
 			sts_reg_addr = 0xb7;
+			break;
+		case AM_MESON_CPU_MAJOR_ID_S7:
+			sts_reg_addr = 0xcc;
 			break;
 		default:
 			sts_reg_addr = DMC_CHAN_STS;
@@ -5049,6 +5060,10 @@ void hevc_reset_core(struct vdec_s *vdec)
 {
 	int cpu_type = get_cpu_major_id();
 
+	if (is_vcpu_clk_set()) {
+		SET_VREG_MASK(DOS_GCLK_EN3, (1 << 2)); //turn on vcpu clock
+	}
+
 	if (is_support_axi_ctrl()) {
 		/* t7 no dmc req for hevc only */
 		hevc_arb_ctrl(0, 0);
@@ -5129,6 +5144,12 @@ void hevc_reset_core(struct vdec_s *vdec)
 				READ_RESET_REG(P_RESETCTRL_RESET6_LEVEL) & (~((1<<1))));
 		WRITE_RESET_REG((P_RESETCTRL_RESET6_LEVEL),
 				READ_RESET_REG((P_RESETCTRL_RESET6_LEVEL)) | ((1<<1)));
+		break;
+	case AM_MESON_CPU_MAJOR_ID_S7:
+		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,
+				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) & (~(1<<12)));
+		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,
+				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) | (1<<12));
 		break;
 	default:
 		break;

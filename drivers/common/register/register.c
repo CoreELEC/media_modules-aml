@@ -82,6 +82,14 @@ void t3_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
 	registers_offset_config(&desc[AV1D_IPP_DIR_CFG], -(0x0490 - 0x0419), 1);
 }
 
+void s7_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
+{
+	registers_offset_config(&desc[HEVC_SLICE_DATA_CTL], -(0x0172 - 0x0175), 1);
+
+	registers_offset_config(&desc[HEVC_STREAM_CRC],
+		-(0x0175 - 0x0173),
+		(VP9_ACP_CTRL - HEVC_STREAM_CRC + 1));
+}
 
 //###############################################################################
 ulong dos_reg_compat_convert(ulong addr)

@@ -345,6 +345,9 @@ static int alloc_task_buffers_inlock(struct threadrw_write_task *task,
 						block_size * i;
 			rwbuf->vbuffer = codec_mm_phys_to_virt(
 						rwbuf->dma_handle);
+			if (!rwbuf->vbuffer)
+				rwbuf->vbuffer = codec_mm_vmap(rwbuf->dma_handle,
+						rwbuf->buffer_size);
 			rwbuf->from_cma = 1;
 
 		} else {
