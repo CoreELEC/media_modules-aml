@@ -766,6 +766,8 @@ struct vdec_h264_hw_s {
 	u32 curr_pic_offset;
 	u32 frame_width;
 	u32 frame_height;
+	u32 src_w;
+	u32 src_h;
 	u32 frame_dur;
 	u32 frame_prog;
 	u32 frame_packing_type;
@@ -3404,8 +3406,17 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->bitdepth =
 				BITDEPTH_Y8 | BITDEPTH_U8 | BITDEPTH_V8;
 
-			vf->compWidth = hw->frame_width;
-			vf->compHeight = hw->frame_height;
+			if (hw->frame_width != hw->src_w ||
+				hw->frame_height != hw->src_h ) {
+				vf->src_crop.magic_code = SRC_CROP_MAGIC_CODE;
+				vf->src_crop.bottom = hw->src_h - hw->frame_height;
+				vf->src_crop.right = hw->src_w - hw->frame_width;
+				vf->src_crop.top = 0;
+				vf->src_crop.left = 0;
+			}
+
+			vf->compWidth = hw->src_w;
+			vf->compHeight = hw->src_h;
 		} else {
 			vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD |
 				nv_order;
@@ -6069,6 +6080,9 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		p_H264_Dpb->mSPS.frame_mbs_only_flag = frame_mbs_only_flag;
 		hw->frame_width = mb_width << 4;
 		hw->frame_height = mb_height << 4;
+
+		hw->src_w = hw->frame_width;
+		hw->src_h = hw->frame_height;
 
 		hw->frame_width = hw->frame_width - crop_right;
 		hw->frame_height = hw->frame_height - crop_bottom;

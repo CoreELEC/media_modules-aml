@@ -10301,8 +10301,18 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			if (hevc->mmu_enable)
 				vf->type |= VIDTYPE_SCATTER;
 		}
-		vf->compWidth = pic->crop_w;
-		vf->compHeight = pic->crop_h;
+
+		if (hevc->mmu_enable &&
+			(pic->width != pic->crop_w || pic->height != pic->crop_h)) {
+			vf->src_crop.magic_code = SRC_CROP_MAGIC_CODE;
+			vf->src_crop.bottom = pic->height - pic->crop_h;
+			vf->src_crop.right = pic->width - pic->crop_w;
+			vf->src_crop.top = 0;
+			vf->src_crop.left = 0;
+		}
+
+		vf->compWidth = pic->width;
+		vf->compHeight = pic->height;
 		if (hevc->front_back_mode != 1)
 			update_vf_memhandle(hevc, vf, pic);
 		switch (pic->bit_depth_luma) {
