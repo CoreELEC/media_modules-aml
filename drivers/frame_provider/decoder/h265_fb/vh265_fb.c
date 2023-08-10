@@ -9771,7 +9771,9 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 			return 0;
 		}
 
-		if (req->vf->discard_dv_data) {
+		if (((req->vf->signal_type & 0x80000000) == 0) &&
+			(((req->vf->signal_type >> 8)  & 0xff) != 0x30) &&
+			req->vf->discard_dv_data) {
 			req->aux_size = atomic_read(&hevc->vf_put_count);
 			return 0;
 		}
