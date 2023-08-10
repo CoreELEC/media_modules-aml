@@ -1846,14 +1846,46 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 	printk("\n");
 }
 
-static void BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
+static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 {
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 	struct avs3_frame_s *pic = avs3_dec->next_be_decode_pic[avs3_dec->fb_rd_pos];
 	struct aml_buf *aml_buf = index_to_aml_buf(dec, pic->index);
+	int i = 0;
+	struct avs3_frame_s *ref_pic = NULL;
+
+
 	avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
 		"Start BackEnd Decoding %d (wr pos %d, rd pos %d) pic index %d\n",
 		avs3_dec->backend_decoded_count, avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, pic->index);
+
+	for (i = 0; (i < pic->list0_num_refp) && (pic->error_mark == 0); i++) {
+		ref_pic = &avs3_dec->pic_pool[pic->list0_index[i]].buf_cfg;
+		if (ref_pic->error_mark) {
+			pic->error_mark = 1;
+			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L0 ref_pic %d pic error\n",
+				__func__, pic->list0_index[i]);
+		}
+	}
+
+	for (i = 0; (i < pic->list1_num_refp) && (pic->error_mark == 0); i++) {
+		ref_pic = &avs3_dec->pic_pool[pic->list1_index[i]].buf_cfg;
+		if (ref_pic->error_mark) {
+			pic->error_mark = 1;
+			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L1 ref_pic %d pic error\n",
+				__func__, pic->list1_index[i]);
+		}
+	}
+
+	if (pic->error_mark && (error_handle_policy & 0x4)) {
+		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+			"%s: error pic, skip\n", __func__);
+
+		pic_backend_ref_operation(dec, pic, 0);
+		pic->back_done_mark = 1;
+
+		return 1;
+	}
 
 	decoder_mmu_box_alloc_idx(aml_buf->fbc->mmu, aml_buf->fbc->index, aml_buf->fbc->frame_size, dec->frame_mmu_map_addr);
 	decoder_mmu_box_alloc_idx(aml_buf->fbc->mmu_1, aml_buf->fbc->index, aml_buf->fbc->frame_size, dec->frame_mmu_map_addr_1);
@@ -1899,6 +1931,8 @@ static void BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 		amhevc_start_b();
 		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
 	}
+
+	return 0;
 }
 
 static unsigned HEVC_MPRED_L0_REF_POC_ADR[] = {
@@ -1998,9 +2032,15 @@ static void config_mpred_hw_fb(struct AVS3Decoder_s *dec)
 	int32_t     col_ptr;
 
 	if (avs3_dec->slice_type == SLICE_P) {
-		col_pic = &avs3_dec->ctx.refp[0][REFP_0].pic->buf_cfg;
+		if (avs3_dec->ctx.refp[0][REFP_0].pic != NULL)
+			col_pic = &avs3_dec->ctx.refp[0][REFP_0].pic->buf_cfg;
+		else
+			col_pic = cur_pic;
 	} else if (avs3_dec->slice_type == SLICE_B) {
-		col_pic = &avs3_dec->ctx.refp[0][REFP_1].pic->buf_cfg;
+		if (avs3_dec->ctx.refp[0][REFP_1].pic != NULL)
+			col_pic = &avs3_dec->ctx.refp[0][REFP_1].pic->buf_cfg;
+		else
+			col_pic = cur_pic;
 	} else {
 		col_pic = cur_pic;
 	}

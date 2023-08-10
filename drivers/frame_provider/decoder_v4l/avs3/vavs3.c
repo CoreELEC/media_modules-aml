@@ -288,6 +288,7 @@ static unsigned int not_run_ready[MAX_DECODE_INSTANCE_NUM];
 static u32 decode_timeout_val = 200;
 #ifdef NEW_FB_CODE
 static unsigned int decode_timeout_val_back = 200;
+static unsigned int fast_timer_check_count = 3;
 
 static unsigned int efficiency_mode = 1;
 
@@ -370,6 +371,7 @@ static unsigned char get_data_check_sum
 	(struct AVS3Decoder_s *dec, int size);
 static struct avs3_frame_s *get_pic_by_index(
 	struct AVS3Decoder_s *dec, int index);
+void pic_backend_ref_operation(struct AVS3Decoder_s *dec, avs3_frame_t *pic, bool add_flag);
 static int avs3_hw_ctx_restore(struct AVS3Decoder_s *dec);
 static void dump_or_fill_phy_buffer(struct AVS3Decoder_s *dec, u32 phy_adr, u32 size, char *file, u8 flag, char *mark);
 static void d_dump(struct AVS3Decoder_s *dec, unsigned int phy_adr, int size,
@@ -719,6 +721,8 @@ struct BuffInfo_s {
 #define DEC_RESULT_GET_DATA_RETRY   8
 #define DEC_RESULT_EOS              9
 #define DEC_RESULT_FORCE_EXIT       10
+#define DEC_RESULT_TIMEOUT          12
+
 #ifdef NEW_FB_CODE
 #define DEC_BACK_RESULT_NONE             0
 #define DEC_BACK_RESULT_DONE             1
@@ -936,7 +940,6 @@ struct AVS3Decoder_s {
 	/*init_fb_bufstate() for linux APIs*/
 	struct work_struct work_back;
 	struct work_struct timeout_work_back;
-	u32 timeout_processing_back;
 
 	void *frame_mmu_map_addr_1;
 	dma_addr_t frame_mmu_map_phy_addr_1;
@@ -990,6 +993,7 @@ struct AVS3Decoder_s {
 	s32 cur_idx;
 	bool timeout;
 	int triple_write_mode;
+	u32 last_monitor_data;
 };
 
 static int  compute_losless_comp_body_size(
@@ -1087,6 +1091,26 @@ static int avs3_print_cont(struct AVS3Decoder_s *dec,
 #define IS_8K_SIZE(w, h)	(((w) * (h)) > MAX_SIZE_4K)
 #define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
 
+/*
+error handling
+*/
+/*error_handle_policy:
+bit 0: search seq again if buffer mgr error occur
+	(buffer mgr error count need big than
+	re_search_seq_threshold)
+bit 1:  1: display from I picture; 0: display from any correct pic;
+bit 2:  1: not output error frame; 0: output error frame;
+bit 3:  1: same poc insert dpb;    0: same poc don't insert dpb;
+
+*/
+
+static u32 error_handle_policy = 5;
+
+int avs3_get_error_policy(void)
+{
+	return error_handle_policy;
+}
+
 static int is_oversize(int w, int h)
 {
 	int max = MAX_SIZE_8K;
@@ -1133,7 +1157,12 @@ static void reset_process_time(struct AVS3Decoder_s *dec)
 static void start_process_time(struct AVS3Decoder_s *dec)
 {
 	dec->start_process_time = jiffies;
-	dec->decode_timeout_count = 0;
+	if ((dec->start_process_time != 0) &&
+		!(error_handle_policy & 0x4) &&
+		(decode_timeout_val > 0)) {
+		dec->decode_timeout_count = fast_timer_check_count;
+	} else
+		dec->decode_timeout_count = 0;
 	dec->last_lcu_idx = 0;
 }
 
@@ -1176,7 +1205,7 @@ static void reset_process_time_back(struct AVS3Decoder_s *dec)
 static void start_process_time_back(struct AVS3Decoder_s *dec)
 {
 	dec->start_process_time_back = jiffies;
-	dec->decode_timeout_count_back = 2;
+	dec->decode_timeout_count_back = fast_timer_check_count;
 }
 
 /*
@@ -1628,6 +1657,7 @@ int avs3_dec_init(struct AVS3Decoder_s *dec, struct BuffInfo_s *buf_spec_i,
 	dec->start_process_time_back = 0;
 	dec->decode_timeout_count_back = 0;
 	dec->timeout_num_back = 0;
+	dec->decode_timeout_count_back = 0;
 #endif
 	return 0;
 }
@@ -1724,18 +1754,7 @@ bit 1, 1: only decode I picture;
 static u32 i_only_flag;
 
 static u32 max_decoding_time;
-/*
-error handling
-*/
-/*error_handle_policy:
-bit 0: search seq again if buffer mgr error occur
-	(buffer mgr error count need big than
-	re_search_seq_threshold)
-bit 1:  1, display from I picture;
-		0, display from any correct pic
-*/
 
-static u32 error_handle_policy = 5;
 /*
 re_search_seq_threshold:
 	bit 7~0: buffer mgr error research seq count
@@ -2408,6 +2427,58 @@ static void config_hevc_irq_num(struct AVS3Decoder_s *dec)
 #ifdef NEW_FB_CODE
 #include "avs3_fb_hw.c"
 
+void pic_backend_ref_operation(struct AVS3Decoder_s *dec, avs3_frame_t *pic, bool add_flag)
+{
+	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
+	avs3_frame_t *ref_pic = NULL;
+	int i = 0;
+
+	mutex_lock(&dec->fb_mutex);
+
+	if (add_flag) {
+		pic->backend_ref = 1;
+		pic->back_done_mark = 0;
+	} else {
+		pic->backend_ref--;
+		if (pic->backend_ref < 0) {
+			pic->backend_ref = 0;
+			avs3_print(dec, PRINT_FLAG_VDEC_DETAIL, "%s:pic(%px) backend_ref error\n",
+				__func__, pic);
+		}
+		pic->back_done_mark = 1;
+	}
+
+	for (i = 0; i < pic->list0_num_refp; i++) {
+		ref_pic = &avs3_dec->pic_pool[pic->list0_index[i]].buf_cfg;
+		if (add_flag) {
+			ref_pic->backend_ref++;
+		} else {
+			ref_pic->backend_ref--;
+			if (ref_pic->backend_ref < 0) {
+				ref_pic->backend_ref = 0;
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L0 ref_pic %d backend_ref error\n",
+					__func__, pic->list0_index[i]);
+			}
+		}
+	}
+
+	for (i = 0; i < pic->list1_num_refp; i++) {
+		ref_pic = &avs3_dec->pic_pool[pic->list1_index[i]].buf_cfg;
+		if (add_flag) {
+			ref_pic->backend_ref++;
+		} else {
+			ref_pic->backend_ref--;
+			if (ref_pic->backend_ref < 0) {
+				ref_pic->backend_ref = 0;
+				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L1 ref_pic %d backend_ref error\n",
+				__func__, pic->list1_index[i]);
+			}
+		}
+	}
+
+	mutex_unlock(&dec->fb_mutex);
+}
+
 /*simulation code: if (dec_status == HEVC_DECPIC_DATA_DONE) {*/
 static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_flag)
 {
@@ -2423,18 +2494,13 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 		avs3_print_cont(dec, 0, "list1 index ");
 		for (j = 0; j < cur_pic->list1_num_refp; j++)
 			avs3_print_cont(dec, 0, "%d ", cur_pic->list1_index[j]);
-		avs3_print(dec, 0, "\n");
+		avs3_print_cont(dec, 0, "\n");
 	}
-	cur_pic->backend_ref = 1;
-	for (j = 0; j < cur_pic->list0_num_refp; j++)
-		avs3_dec->pic_pool[cur_pic->list0_index[j]].buf_cfg.backend_ref++;
-	for (j = 0; j < cur_pic->list1_num_refp; j++)
-		avs3_dec->pic_pool[cur_pic->list1_index[j]].buf_cfg.backend_ref++;
+
+	pic_backend_ref_operation(dec, cur_pic, 1);
 
 	if (debug & AVS3_DBG_PRINT_PIC_LIST)
 		print_pic_pool(avs3_dec, "after inc backend_ref");
-
-	dec->avs3_dec.cur_pic->back_done_mark = 0;
 
 	if (dec->front_back_mode == 1) {
 		if (fbdebug_flag & 0x70000000) {
@@ -2449,8 +2515,7 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 		if (fbdebug_flag & 0x4) {
 			copy_loopbufs_ptr(&avs3_dec->fr, &avs3_dec->init_fr);
 			print_loopbufs_ptr(dec, "fr", &avs3_dec->fr);
-		}
-		else {
+		} else {
 			copy_loopbufs_ptr(&avs3_dec->p_fr, &avs3_dec->fr);
 			read_bufstate_front(avs3_dec);
 			avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
@@ -2462,24 +2527,6 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
 
 		//WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_DEC_IDLE);
-		avs3_dec->frontend_decoded_count++;
-		avs3_dec->next_be_decode_pic[avs3_dec->fb_wr_pos] = avs3_dec->cur_pic;
-		avs3_print(dec, PRINT_FLAG_VDEC_DETAIL, "set pic index %d to fb_wr_pos %d\n",
-			avs3_dec->cur_pic->index, avs3_dec->fb_wr_pos);
-		mutex_lock(&dec->fb_mutex);
-		avs3_dec->fb_wr_pos++;
-		if (avs3_dec->fb_wr_pos >= dec->fb_ifbuf_num)
-			avs3_dec->fb_wr_pos = 0;
-
-		if (avs3_dec->fb_wr_pos == avs3_dec->fb_rd_pos) {
-			avs3_dec->wait_working_buf = 1;
-			avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
-				"set next fb_wr_pos %d, fb_rd_pos %d, set wait_working_buf %d\n", avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, avs3_dec->wait_working_buf);
-		} else {
-			avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
-				"set next fb_wr_pos %d, fb_rd_pos %d, wait_working_buf %d\n", avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, avs3_dec->wait_working_buf);
-		}
-		mutex_unlock(&dec->fb_mutex);
 #if 0 //def RESET_FRONT_PER_PICTURE
 		if (reset_flag) {
 			/*not multi pictures in one packe*/
@@ -2488,25 +2535,26 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 		}
 #endif
 	} else {
-		avs3_dec->frontend_decoded_count++;
-		avs3_dec->next_be_decode_pic[avs3_dec->fb_wr_pos] = avs3_dec->cur_pic;
-		mutex_lock(&dec->fb_mutex);
-		avs3_dec->fb_wr_pos++;
-		if (avs3_dec->fb_wr_pos >= dec->fb_ifbuf_num)
-			avs3_dec->fb_wr_pos = 0;
-
-		if (avs3_dec->fb_wr_pos == avs3_dec->fb_rd_pos) {
-			avs3_dec->wait_working_buf = 1;
-			avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
-				"fb_wr_pos %d fb_rd_pos %d, set wait_working_buf = 1\n", avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos);
-		} else {
-			avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
-				"fb_wr_pos %d fb_rd_pos %d\n", avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos);
-		}
-		mutex_unlock(&dec->fb_mutex);
 		if (reset_flag) /*not multi pictures in one packe*/
 			amhevc_stop();
 	}
+
+	avs3_dec->frontend_decoded_count++;
+	avs3_dec->next_be_decode_pic[avs3_dec->fb_wr_pos] = avs3_dec->cur_pic;
+
+	mutex_lock(&dec->fb_mutex);
+	avs3_dec->fb_wr_pos++;
+	if (avs3_dec->fb_wr_pos >= dec->fb_ifbuf_num)
+		avs3_dec->fb_wr_pos = 0;
+
+	if (avs3_dec->fb_wr_pos == avs3_dec->fb_rd_pos) {
+		avs3_dec->wait_working_buf = 1;
+	}
+	mutex_unlock(&dec->fb_mutex);
+
+	avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
+		"fb_wr_pos %d, fb_rd_pos %d, wait_working_buf %d\n", avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, avs3_dec->wait_working_buf);
+
 	return 0;
 }
 
@@ -6335,14 +6383,14 @@ irqreturn_t vavs3_back_isr_thread_fn(struct AVS3Decoder_s *dec)
 	if (debug & AVS3_DBG_IRQ_EVENT)
 		avs3_print(dec, 0, "[BE] avs3 back isr dec_status_back  = 0x%x\n", dec->dec_status_back);
 	if (READ_VREG(DEBUG_REG1_DBE)) {
-		pr_info("[BE] dbg%x: %x\n", READ_VREG(DEBUG_REG1_DBE), READ_VREG(DEBUG_REG2_DBE));
+		avs3_print(dec, 0, "[BE] dbg%x: %x\n",
+			READ_VREG(DEBUG_REG1_DBE), READ_VREG(DEBUG_REG2_DBE));
 		WRITE_VREG(DEBUG_REG1_DBE, 0);
 	}
 #endif
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE || dec->front_back_mode == 2) {
 		struct avs3_frame_s *pic = avs3_dec->next_be_decode_pic[avs3_dec->fb_rd_pos];
-		struct avs3_frame_s *ref_pic = NULL;
 
 		get_picture_qos_info(dec, true);
 
@@ -6371,35 +6419,35 @@ irqreturn_t vavs3_back_isr_thread_fn(struct AVS3Decoder_s *dec)
 			READ_VREG(HEVC_SAO_CRC), READ_VREG(HEVC_SAO_CRC_DBE1));
 
 		if (debug & AVS3_DBG_BUFMGR_DETAIL) {
-			avs3_print(dec, 0, "[BE] HEVC_CM_BODY_START_ADDR = %x\n", READ_VREG(HEVC_CM_BODY_START_ADDR));
-			avs3_print(dec, 0, "[BE] HEVC_CM_HEADER_START_ADDR = %x\n", READ_VREG(HEVC_CM_HEADER_START_ADDR));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_Y_START_ADDR = %x\n", READ_VREG(HEVC_SAO_Y_START_ADDR));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_Y_LENGTH = %x\n", READ_VREG(HEVC_SAO_Y_LENGTH));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_C_START_ADDR = %x\n", READ_VREG(HEVC_SAO_C_START_ADDR));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_C_LENGTH = %x\n", READ_VREG(HEVC_SAO_C_LENGTH));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_Y_WPTR = %x\n", READ_VREG(HEVC_SAO_Y_WPTR));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_C_WPTR = %x\n", READ_VREG(HEVC_SAO_C_WPTR));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL0 = %x\n", READ_VREG(HEVC_SAO_CTRL0));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL1 = %x\n", READ_VREG(HEVC_SAO_CTRL1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL2 = %x\n", READ_VREG(HEVC_SAO_CTRL2));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL3 = %x\n", READ_VREG(HEVC_SAO_CTRL3));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL4 = %x\n", READ_VREG(HEVC_SAO_CTRL4));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL5 = %x\n", READ_VREG(HEVC_SAO_CTRL5));
+			avs3_print(dec, 0,
+				"CM_BODY_START_ADDR 0x%x CM_HEADER_START_ADDR 0x%x SAO_Y_START_ADDR 0x%x SAO_Y_LENGTH 0x%x\n",
+				READ_VREG(HEVC_CM_BODY_START_ADDR), READ_VREG(HEVC_CM_HEADER_START_ADDR),
+				READ_VREG(HEVC_SAO_Y_START_ADDR), READ_VREG(HEVC_SAO_Y_LENGTH));
 
-			avs3_print(dec, 0, "[BE] HEVC_CM_BODY_START_ADDR_DBE1 = %x\n", READ_VREG(HEVC_CM_BODY_START_ADDR_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_CM_HEADER_START_ADDR_DBE1 = %x\n", READ_VREG(HEVC_CM_HEADER_START_ADDR_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_Y_START_ADDR_DBE1 = %x\n", READ_VREG(HEVC_SAO_Y_START_ADDR_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_Y_LENGTH_DBE1 = %x\n", READ_VREG(HEVC_SAO_Y_LENGTH_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_C_START_ADDR_DBE1 = %x\n", READ_VREG(HEVC_SAO_C_START_ADDR_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_C_LENGTH_DBE1 = %x\n", READ_VREG(HEVC_SAO_C_LENGTH_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_Y_WPTR_DBE1 = %x\n", READ_VREG(HEVC_SAO_Y_WPTR_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_C_WPTR_DBE1 = %x\n", READ_VREG(HEVC_SAO_C_WPTR_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL0_DBE1 = %x\n", READ_VREG(HEVC_SAO_CTRL0_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL1_DBE1 = %x\n", READ_VREG(HEVC_SAO_CTRL1_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL2_DBE1 = %x\n", READ_VREG(HEVC_SAO_CTRL2_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL3_DBE1 = %x\n", READ_VREG(HEVC_SAO_CTRL3_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL4_DBE1 = %x\n", READ_VREG(HEVC_SAO_CTRL4_DBE1));
-			avs3_print(dec, 0, "[BE] HEVC_SAO_CTRL5_DBE1 = %x\n", READ_VREG(HEVC_SAO_CTRL5_DBE1));
+			avs3_print(dec, 0,
+				"SAO_C_START_ADDR 0x%x SAO_C_LENGTH 0x%x SAO_Y_WPTR 0x%x SAO_C_WPTR 0x%x\n",
+				READ_VREG(HEVC_SAO_C_START_ADDR), READ_VREG(HEVC_SAO_C_LENGTH),
+				READ_VREG(HEVC_SAO_Y_WPTR), READ_VREG(HEVC_SAO_C_WPTR));
+
+			avs3_print(dec, 0,
+				"SAO_CTRL0 0x%x SAO_CTRL1 0x%x SAO_CTRL2 0x%x SAO_CTRL3 0x%x SAO_CTRL4 0x%x SAO_CTRL5 0x%x\n",
+				READ_VREG(HEVC_SAO_CTRL0), READ_VREG(HEVC_SAO_CTRL1), READ_VREG(HEVC_SAO_CTRL2),
+				READ_VREG(HEVC_SAO_CTRL3), READ_VREG(HEVC_SAO_CTRL4), READ_VREG(HEVC_SAO_CTRL5));
+
+			avs3_print(dec, 0,
+				"CM_BODY_START_ADDR_DBE1 0x%x CM_HEADER_START_ADDR_DBE1 0x%x SAO_Y_START_ADDR_DBE1 0x%x SAO_Y_LENGTH_DBE1 0x%x\n",
+				READ_VREG(HEVC_CM_BODY_START_ADDR_DBE1), READ_VREG(HEVC_CM_HEADER_START_ADDR_DBE1),
+				READ_VREG(HEVC_SAO_Y_START_ADDR_DBE1), READ_VREG(HEVC_SAO_Y_LENGTH_DBE1));
+
+			avs3_print(dec, 0,
+				"SAO_C_START_ADDR_DBE1 0x%x SAO_C_LENGTH_DBE1 0x%x SAO_Y_WPTR_DBE1 0x%x SAO_C_WPTR_DBE1 0x%x\n",
+				READ_VREG(HEVC_SAO_C_START_ADDR_DBE1), READ_VREG(HEVC_SAO_C_LENGTH_DBE1),
+				READ_VREG(HEVC_SAO_Y_WPTR_DBE1), READ_VREG(HEVC_SAO_C_WPTR_DBE1));
+
+			avs3_print(dec, 0,
+				"SAO_CTRL0_DBE1 0x%x SAO_CTRL1_DBE1 0x%x SAO_CTRL2_DBE1 0x%x SAO_CTRL3_DBE1 0x%x SAO_CTRL4_DBE1 0x%x SAO_CTRL5_DBE1 0x%x\n",
+				READ_VREG(HEVC_SAO_CTRL0_DBE1), READ_VREG(HEVC_SAO_CTRL1_DBE1), READ_VREG(HEVC_SAO_CTRL2_DBE1),
+				READ_VREG(HEVC_SAO_CTRL3_DBE1), READ_VREG(HEVC_SAO_CTRL4_DBE1), READ_VREG(HEVC_SAO_CTRL5_DBE1));
 		}
 
 		if (fbdebug_flag & 0x70000000) {
@@ -6430,40 +6478,8 @@ irqreturn_t vavs3_back_isr_thread_fn(struct AVS3Decoder_s *dec)
 				avs3_print_cont(dec, 0, "%d ", pic->list1_index[j]);
 			avs3_print(dec, 0, "\n");
 		}
-		avs3_dec->backend_decoded_count++;
-		mutex_lock(&dec->fb_mutex);
-		pic->backend_ref--;
-		for (j = 0; j < pic->list0_num_refp; j++) {
-			ref_pic = &avs3_dec->pic_pool[pic->list0_index[j]].buf_cfg;
-			ref_pic->backend_ref--;
-			if (ref_pic->backend_ref < 0) {
-				ref_pic->backend_ref = 0;
-				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L0 ref_pic %d backend_ref error\n", __func__, j);
-			}
-			if (ref_pic->error_mark) {
-				pic->error_mark = 1;
-				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L0 refid %d pic error\n", __func__, j);
-			}
-		}
-		for (j = 0; j < pic->list1_num_refp; j++) {
-			ref_pic = &avs3_dec->pic_pool[pic->list1_index[j]].buf_cfg;
-			ref_pic->backend_ref--;
-			if (ref_pic->backend_ref < 0) {
-				ref_pic->backend_ref = 0;
-				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L1 ref_pic %d backend_ref error\n", __func__, j);
-			}
-			if (ref_pic->error_mark) {
-				pic->error_mark = 1;
-				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L1 refid %d pic error\n", __func__, j);
-			}
-		}
 
-		pic->back_done_mark = 1;
-		avs3_dec->fb_rd_pos++;
-		if (avs3_dec->fb_rd_pos >= dec->fb_ifbuf_num)
-			avs3_dec->fb_rd_pos = 0;
-		avs3_dec->wait_working_buf = 0;
-		mutex_unlock(&dec->fb_mutex);
+		pic_backend_ref_operation(dec, pic, 0);
 
 		if ((dec->front_back_mode == 1 ||
 			dec->front_back_mode == 3
@@ -6521,14 +6537,8 @@ irqreturn_t vavs3_back_isr_thread_fn(struct AVS3Decoder_s *dec)
 		if (debug & AVS3_DBG_PRINT_PIC_LIST)
 			print_pic_pool(avs3_dec, "after dec backend_ref");
 
-		avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
-			"fb_wr_pos %d, set next fb_rd_pos %d, set wait_working_buf %d\n",
-			avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, avs3_dec->wait_working_buf);
-
-#if 1 //def RESET_BACK_PER_PICTURE
 		if (dec->front_back_mode == 1)
 			amhevc_stop_b();
-#endif
 
 		dec->dec_back_result = DEC_BACK_RESULT_DONE;
 		vdec_schedule_work(&dec->work_back);
@@ -6878,9 +6888,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START, TRACE_BASIC);
 	}
 
-	if (dec->m_ins_flag)
-		reset_process_time(dec);
-
 #ifndef G12A_BRINGUP_DEBUG
 	if (dec->eos) {
 		goto irq_handled_exit;
@@ -6907,17 +6914,20 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			}
 		}
 		goto irq_handled_exit;
-	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
+	} else if ((dec_status == HEVC_DECPIC_DATA_DONE) ||
+		(dec_status == HEVC_DECPIC_DATA_ERROR)) {
 		struct avs3_frame_s *pic = dec->avs3_dec.cur_pic;
 
-		pic->poc = ctx->info.pic_header.dtr;
-		vdec->front_pic_done = true;
+		if (pic != NULL)
+			pic->poc = ctx->info.pic_header.dtr;
+		if (dec_status == HEVC_DECPIC_DATA_DONE)
+			vdec->front_pic_done = true;
 		mutex_lock(&dec->slice_header_lock);
 		mutex_unlock(&dec->slice_header_lock);
 
-		if (dec->avs3_dec.cur_pic && (vdec_stream_based(hw_to_vdec(dec)))
+		if (pic && (vdec_stream_based(hw_to_vdec(dec)))
 			&& (dec_status == HEVC_DECPIC_DATA_DONE))
-			dec->avs3_dec.cur_pic->stream_size = vdec_get_stream_size(hw_to_vdec(dec));
+			pic->stream_size = vdec_get_stream_size(hw_to_vdec(dec));
 
 		if (dec->front_back_mode == 0) {
 			avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
@@ -6948,14 +6958,23 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			if ((debug & AVS3_DBG_NOT_RECYCLE_MMU_TAIL) == 0)
 				avs3_recycle_mmu_buf_tail(dec);
 		} else {
-			avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
-				"FrontEnd data done %d, fb_rd_pos %d, pic index %d, poc %d stream crc %x shiftbyte %x\n",
-				avs3_dec->frontend_decoded_count, avs3_dec->fb_rd_pos, pic->index, pic->poc,
-				READ_VREG(HEVC_STREAM_CRC), READ_VREG(HEVC_SHIFT_BYTE_COUNT));
+			if (pic != NULL)
+				avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
+					"FrontEnd data done %d, fb_rd_pos %d, pic index %d, poc %d stream crc %x shiftbyte %x\n",
+					avs3_dec->frontend_decoded_count, avs3_dec->fb_rd_pos, pic->index, pic->poc,
+					READ_VREG(HEVC_STREAM_CRC), READ_VREG(HEVC_SHIFT_BYTE_COUNT));
+			else
+				avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
+					"FrontEnd data done %d, fb_rd_pos %d, stream crc %x shiftbyte %x\n",
+					avs3_dec->frontend_decoded_count, avs3_dec->fb_rd_pos,
+					READ_VREG(HEVC_STREAM_CRC), READ_VREG(HEVC_SHIFT_BYTE_COUNT));
 		}
 
 		dec->start_decoding_flag |= 0x3;
 		if (dec->m_ins_flag) {
+			if (dec_status == HEVC_DECPIC_DATA_ERROR &&
+				(pic != NULL))
+				pic->error_mark = 1;
 			set_cuva_data(dec);
 			update_decoded_pic(dec);
 			get_picture_qos_info(dec, false);
@@ -6963,7 +6982,8 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 #ifdef NEW_FB_CODE
 			if (dec->front_back_mode) {
 				/*simulation code: if (dec_status == HEVC_DECPIC_DATA_DONE) {*/
-				front_decpic_done_update(dec, 1); /*not multi pictures in one packe*/
+				if (pic != NULL)
+					front_decpic_done_update(dec, 1); /*not multi pictures in one packe*/
 			} else
 #endif
 			amhevc_stop();
@@ -7064,7 +7084,12 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			check_pic_error(dec, dec->avs3_dec.cur_pic);
 			if (debug & AVS3_DBG_PRINT_PIC_LIST)
 				print_pic_pool(avs3_dec, "before post process");
-			avs3_bufmgr_post_process(avs3_dec);
+			ret = avs3_bufmgr_post_process(avs3_dec);
+			if (ret == 2) {
+				avs3_print(dec, AVS3_DBG_BUFMGR, "avs3 same poc %d\n",
+					avs3_dec->ctx.ptr);
+				pic_backend_ref_operation(dec, dec->avs3_dec.cur_pic, 0);
+			}
 
 			if (debug & AVS3_DBG_PRINT_PIC_LIST)
 				print_pic_pool(&dec->avs3_dec, "after post_process");
@@ -7843,6 +7868,10 @@ static irqreturn_t vavs3_isr(int irq, void *data)
 			return IRQ_HANDLED;
 		}
 	}
+
+	if (dec->m_ins_flag)
+		reset_process_time(dec);
+
 	decoder_trace(dec->trace.decode_time_name, DECODER_ISR_END, TRACE_BASIC);
 	return IRQ_WAKE_THREAD;
 }
@@ -7881,8 +7910,27 @@ static void avs3_check_timer_back_func(struct timer_list *timer)
 		//	avs3_back_threaded_irq_cb(vdec, 0);
 	}
 #endif
-	mod_timer(timer, jiffies + PUT_INTERVAL);
+	if ((dec->start_process_time_back > 0) &&
+		(dec->decode_timeout_count_back != 0) &&
+		!(error_handle_policy & 0x4) &&
+		(decode_timeout_val_back > 0)) {
+		int current_monitor_data = 0;
 
+		WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (READ_VREG(HEVC_PATH_MONITOR_CTRL) & 0xfffffe0f) | 0x91);
+		current_monitor_data = READ_VREG(HEVC_PATH_MONITOR_DATA);
+		if (dec->last_monitor_data == current_monitor_data) {
+			if (dec->decode_timeout_count_back > 0)
+				dec->decode_timeout_count_back--;
+			if (dec->decode_timeout_count_back == 0) {
+				timeout_process_back(dec);
+			}
+		} else {
+			dec->decode_timeout_count_back = fast_timer_check_count;
+		}
+		dec->last_monitor_data = current_monitor_data;
+		mod_timer(timer, jiffies + 1);
+	} else
+		mod_timer(timer, jiffies + PUT_INTERVAL);
 }
 #endif
 
@@ -8084,8 +8132,24 @@ static void vavs3_put_timer_func(struct timer_list *timer)
 			frame_height * fps;
 	}
 
-	timer->expires = jiffies + PUT_INTERVAL;
-	add_timer(timer);
+	if ((dec->start_process_time != 0) &&
+		!(error_handle_policy & 0x4) &&
+		(decode_timeout_val > 0)) {
+		int current_lcu_idx =
+			READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff;
+		if (dec->last_lcu_idx == current_lcu_idx) {
+			if (dec->decode_timeout_count > 0)
+				dec->decode_timeout_count--;
+			if (dec->decode_timeout_count == 0) {
+				timeout_process(dec);
+			}
+		} else {
+			dec->decode_timeout_count = fast_timer_check_count;
+			dec->last_lcu_idx = current_lcu_idx;
+		}
+		mod_timer(timer, jiffies + 1);
+	} else
+		mod_timer(timer, jiffies + PUT_INTERVAL);
 }
 
 int vavs3_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
@@ -8943,18 +9007,14 @@ static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
 	struct vdec_s *vdec,int from)
 {
 	struct aml_vcodec_ctx *ctx = dec->v4l2_ctx;
+	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 
 	avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
 		"[BE] %s result %x\n", __func__, dec->dec_back_result);
 
 	if (dec->dec_back_result == DEC_BACK_RESULT_TIMEOUT) {
 		int j;
-		struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 		struct avs3_frame_s *pic = avs3_dec->next_be_decode_pic[avs3_dec->fb_rd_pos];
-		struct avs3_frame_s *ref_pic = NULL;
-
-		WRITE_VREG(HEVC_DEC_STATUS_DBE, AVS3_DEC_IDLE);
-		amhevc_stop_b();
 
 		if (debug & AVS3_DBG_PRINT_PIC_LIST) {
 			print_pic_pool(avs3_dec, "before dec backend_ref");
@@ -8966,42 +9026,9 @@ static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
 				avs3_print_cont(dec, 0, "%d ", pic->list1_index[j]);
 			avs3_print(dec, 0, "\n");
 		}
-		avs3_dec->backend_decoded_count++;
 
-		mutex_lock(&dec->fb_mutex);
-		pic->backend_ref--;
-		for (j = 0; j < pic->list0_num_refp; j++) {
-			ref_pic = &avs3_dec->pic_pool[pic->list0_index[j]].buf_cfg;
-			ref_pic->backend_ref--;
-			if (ref_pic->backend_ref < 0) {
-				ref_pic->backend_ref = 0;
-				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L0 ref_pic %d backend_ref error\n", __func__, j);
-			}
-		}
-		for (j = 0; j < pic->list1_num_refp; j++) {
-			ref_pic = &avs3_dec->pic_pool[pic->list1_index[j]].buf_cfg;
-			ref_pic->backend_ref--;
-			if (ref_pic->backend_ref < 0) {
-				ref_pic->backend_ref = 0;
-				avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L1 ref_pic %d backend_ref error\n", __func__, j);
-			}
-		}
 		pic->error_mark = 1;
-		pic->back_done_mark = 1;
-
-		avs3_dec->fb_rd_pos++;
-		if (avs3_dec->fb_rd_pos >= dec->fb_ifbuf_num)
-			avs3_dec->fb_rd_pos = 0;
-
-		avs3_dec->wait_working_buf = 0;
-		mutex_unlock(&dec->fb_mutex);
-
-		avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
-			"fb_wr_pos %d, set next fb_rd_pos %d, set wait_working_buf %d\n",
-			avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, avs3_dec->wait_working_buf);
-
-		if (debug & AVS3_DBG_PRINT_PIC_LIST)
-			print_pic_pool(avs3_dec, "after dec backend_ref");
+		pic_backend_ref_operation(dec, pic, 0);
 
 		if (without_display_mode == 0) {
 			if (ctx->is_stream_off) {
@@ -9012,10 +9039,31 @@ static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
 		} else
 			vavs3_vf_put(vavs3_vf_get(dec), dec);
 
-		if (dec->front_back_mode == 1 ||
-			dec->front_back_mode == 3)
+		if (debug & AVS3_DBG_PRINT_PIC_LIST)
+			print_pic_pool(avs3_dec, "after dec backend_ref");
+
+		if ((dec->front_back_mode == 1 ||
+			dec->front_back_mode == 3)  && (error_handle_policy & 0x4))
 			release_free_mmu_buffers(dec);
 	}
+
+	avs3_dec->backend_decoded_count++;
+
+	mutex_lock(&dec->fb_mutex);
+	avs3_dec->fb_rd_pos++;
+	if (avs3_dec->fb_rd_pos >= dec->fb_ifbuf_num)
+		avs3_dec->fb_rd_pos = 0;
+
+	avs3_dec->wait_working_buf = 0;
+	mutex_unlock(&dec->fb_mutex);
+
+	WRITE_VREG(HEVC_DEC_STATUS_DBE, AVS3_DEC_IDLE);
+	if (dec->front_back_mode == 1)
+		amhevc_stop_b();
+
+	avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
+		"fb_wr_pos %d, set next fb_rd_pos %d, set wait_working_buf %d\n",
+		avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, avs3_dec->wait_working_buf);
 
 	if (!vdec->back_pic_done && (dec->front_back_mode == 1)) {
 		fb_hw_status_clear(false);
@@ -9051,7 +9099,7 @@ static void avs3_timeout_work_back(struct work_struct *work)
 
 	if (work_pending(&dec->work_back))
 		return;
-	dec->timeout_processing_back = 1;
+
 	avs3_work_back_implement(dec, vdec, 1);
 }
 #endif
@@ -9074,29 +9122,11 @@ static unsigned long check_input_data(struct vdec_s *vdec, unsigned long mask)
 	if (fbdebug_flag & 0x1)
 		return 0;
 
-	if (dec->timeout_processing_back &&
-		(work_pending(&dec->work_back) ||
-		work_busy(&dec->work_back) ||
-		work_busy(&dec->timeout_work_back) ||
-		work_pending(&dec->timeout_work_back))) {
-		avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
-			"avs3 work back pending,not ready for run.\n");
+	if (((avs3_dec->fb_wr_pos != avs3_dec->fb_rd_pos) || avs3_dec->wait_working_buf) &&
+		(dec->front_back_mode))
+		return mask;
+	else
 		return 0;
-	}
-	dec->timeout_processing_back = 0;
-	if (dec->front_back_mode == 1) {
-		if ((READ_VREG(HEVC_DEC_STATUS_DBE) == AVS3_DEC_IDLE) &&
-			((avs3_dec->fb_wr_pos != avs3_dec->fb_rd_pos) || avs3_dec->wait_working_buf))
-			return mask;
-		else
-			return 0;
-	} else if (dec->front_back_mode) {
-		if ((avs3_dec->fb_wr_pos != avs3_dec->fb_rd_pos) || avs3_dec->wait_working_buf)
-			return mask;
-		else
-			return 0;
-	}
-	return 0;
 }
 #endif
 
@@ -9365,6 +9395,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 {
 	struct AVS3Decoder_s *dec = (struct AVS3Decoder_s *)vdec->private;
 	int loadr = 0;
+	int ret = 0;
 
 	if (vdec->mc_back_loaded || dec->front_back_mode != 1) {
 		/*firmware have load before,
@@ -9387,19 +9418,23 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 		vdec->mc_back_type = VFORMAT_AVS3;
 	}
 
-	mod_timer(&dec->timer_back, jiffies);
-	dec->stat |= STAT_TIMER_BACK_ARM;
-
 	run_count_back[dec->index]++;
 	dec->vdec_back_cb_arg = arg;
 	dec->vdec_back_cb = callback;
 	vdec->back_pic_done = false;
 	//pr_err("run h265_HEVC_back_test\n");
 	//vdec_post_task(h265_HEVC_back_test, hevc);
-	BackEnd_StartDecoding(dec);
-	vdec->hw_back_decode_start = local_clock();
 
-	start_process_time_back(dec);
+	ret = BackEnd_StartDecoding(dec);
+
+	if (ret == 1) {
+		dec->dec_back_result = DEC_BACK_RESULT_DONE;
+		vdec_schedule_work(&dec->timeout_work_back);
+	} else {
+		vdec->hw_back_decode_start = local_clock();
+		dec->stat |= STAT_TIMER_BACK_ARM;
+		start_process_time_back(dec);
+	}
 }
 #endif
 
@@ -10654,7 +10689,11 @@ MODULE_PARM_DESC(fb_ifbuf_num, "\n amvdec_avs3 fb_ifbuf_num\n");
 
 module_param(decode_timeout_val_back, uint, 0664);
 MODULE_PARM_DESC(decode_timeout_val_back,
-	"\n h265 decode_timeout_val_back\n");
+	"\n amvdec_avs3 decode_timeout_val_back\n");
+
+module_param(fast_timer_check_count, uint, 0664);
+MODULE_PARM_DESC(fast_timer_check_count,
+	"\n amvdec_avs3 fast_timer_check_count\n");
 
 module_param_array(max_process_time_back, uint,
 	&max_decode_instance_num, 0664);

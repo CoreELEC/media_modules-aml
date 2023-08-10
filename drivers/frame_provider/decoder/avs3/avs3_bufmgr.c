@@ -405,6 +405,8 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		int need_minus_256 = 0;
 		PRINT_LINE();
 		cnkh->ctype = COM_CT_PICTURE;
+		if (ctx->init_flag != 1)
+			return COM_ERR_MALFORMED_BITSTREAM;
 		/* decode slice header */
 		pic_header->low_delay = sqh->low_delay;
 		ret = dec_eco_pic_header(param, pic_header, sqh, &need_minus_256, start_code);
@@ -433,7 +435,8 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 #endif
 		{
 		ret = com_picman_refpic_marking_decoder(&ctx->dpm, pic_header);
-		com_assert_rv(ret == COM_OK, ret);
+		if (avs3_get_error_policy() & 0x4)
+			com_assert_rv(ret == COM_OK, ret);
 		}
 		com_cleanup_useless_pic_buffer_in_pm(&ctx->dpm);
 
@@ -461,7 +464,12 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		/* initialize reference pictures */
 		//ret = com_picman_refp_init(&ctx->dpm, ctx->info.sqh.num_ref_pics_act, sh->slice_type, ctx->ptr, ctx->info.sh.temporal_id, ctx->last_intra_ptr, ctx->refp);
 #endif
-		com_assert_rv(COM_SUCCEEDED(ret), ret);
+		if (avs3_get_error_policy() & 0x4) {
+			com_assert_rv(COM_SUCCEEDED(ret), ret);
+		} else if (ret != 0) {
+			ret = 0;
+			goto NEW_PICTURE;
+		}
 #ifdef ORI_CODE
 	}
 	else if (start_code >= 0x00 && start_code <= 0x8E)
@@ -478,8 +486,6 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		ctx->ptr = pic_header->dtr; /* PTR */
 #endif
 		com_assert_rv(COM_SUCCEEDED(ret), ret);
-		/* get available frame buffer for decoded image */
-
 #if 1
 		if (is_avs3_print_bufmgr_detail())
 			com_picman_print_state(&ctx->dpm);
@@ -498,7 +504,8 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		printf("rpl_l1 num %d: %s\n", pic_header->rpl_l1.ref_pic_active_num, tmpbuf);
 		}
 #endif
-
+NEW_PICTURE:
+		/* get available frame buffer for decoded image */
 		ctx->pic = com_picman_get_empty_pic(&ctx->dpm, &ret);
 		com_assert_rv(ctx->pic, ret);
 		/* get available frame buffer for decoded image */
@@ -669,7 +676,7 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 		if (pic && (!ret)) {
 		hw->cur_pic = &pic->buf_cfg;
 			printf("set refpic before cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
-				hw->cur_pic, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
+				hw->cur_pic->index, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
 		hw->cur_pic->list0_num_refp = hw->ctx.dpm.num_refp[REFP_0];
 		for (i = 0; i < hw->ctx.dpm.num_refp[REFP_0]; i++)
 			hw->cur_pic->list0_ptr[i] = hw->ctx.refp[i][REFP_0].ptr;
@@ -682,11 +689,27 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 			hw->cur_pic->list1_index[i] = hw->ctx.refp[i][REFP_1].pic->buf_cfg.index;
 #endif
 			printf("set refpic after cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
-				hw->cur_pic, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
+				hw->cur_pic->index, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
 		}
 		//Read_ALF_param(hw);
 	}
 	return ret;
+}
+
+int check_poc_in_dpb(struct avs3_decoder *hw, int poc)
+{
+	COM_PIC * pic;
+	int i = 0;
+
+	for (i = 0; i < hw->max_pb_size; i++) {
+		pic = &hw->pic_pool[i];
+		if ((pic != NULL) && (pic->buf_cfg.used) &&
+			(poc == pic->ptr) && (!(avs3_get_error_policy() & 0x8))) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 int avs3_bufmgr_post_process(struct avs3_decoder *hw)
@@ -702,6 +725,11 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw)
 	if ((ctx->pic != NULL) && !((ctx->pic->buf_cfg.in_dpb == 0)
 		&& (ctx->pic->buf_cfg.used == 1)))
 		return ret;
+
+	if (check_poc_in_dpb(hw, ctx->ptr)) {
+		ctx->pic->buf_cfg.used = 0;
+		return 2;
+	}
 
 	ctx->pic->buf_cfg.in_dpb = true;
 	if (stat)
@@ -803,6 +831,10 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 		pic->buf_cfg.backend_ref = 0;
 		pic->buf_cfg.in_dpb = false;
 		pic->buf_cfg.time = div64_u64(local_clock(), 1000) - hw->start_time;
+		pic->buf_cfg.decoded_lcu = 0;
+#ifdef NEW_FB_CODE
+		pic->buf_cfg.back_done_mark = 1;
+#endif
 #endif
 
 	}

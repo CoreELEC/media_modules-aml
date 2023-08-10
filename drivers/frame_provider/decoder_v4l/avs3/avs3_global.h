@@ -1,7 +1,7 @@
 #ifndef AVS3_GLOBAL_H_
 #define AVS3_GLOBAL_H_
 
-#define DEBUG_AMRISC
+//#define DEBUG_AMRISC
 
 #define LINUX
 #define NEW_FB_CODE
@@ -424,8 +424,8 @@ int dec_eco_alf_param(union param_u *rpm_param, COM_PIC_HEADER *sh
 
 
 #define AVS3_DBG_BUFMGR                   0x01
-#define AVS3_DBG_IRQ_EVENT                0x01
-#define AVS3_DBG_BUFMGR_MORE              0x02
+#define AVS3_DBG_IRQ_EVENT                0x02
+#define AVS3_DBG_BUFMGR_MORE              0x04
 #define AVS3_DBG_BUFMGR_DETAIL            0x08
 #define AVS3_DBG_PRINT_PARAM              0x10
 #define AVS3_DBG_PRINT_PIC_LIST           0x20
@@ -535,6 +535,7 @@ void avs3_cleanup_useless_pic_buffer_in_pm(struct avs3_decoder *hw);
 void print_alf_param(union param_u * param);
 void print_param(union param_u * param);
 int get_free_frame_buffer(struct avs3_decoder * avs3_dec);
+int avs3_get_error_policy(void);
 
 #endif
 
