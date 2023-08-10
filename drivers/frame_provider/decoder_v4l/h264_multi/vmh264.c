@@ -2911,6 +2911,7 @@ static int is_iframe(struct FrameStore *frame) {
 static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	int buffer_index = frame->buf_spec_num;
 
 	if (buffer_index < 0 || buffer_index >= BUFSPEC_POOL_SIZE) {
@@ -2968,7 +2969,9 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 
 	/* SWPL-18973 96000/15=6400, less than 15fps check */
 	if ((!hw->duration_from_pts_done) && (hw->frame_dur > 6400ULL)) {
-		if ((check_force_interlace(hw, hw->frame_width, hw->frame_height)) &&
+		if ((check_force_interlace(hw, hw->frame_width, hw->frame_height) ||
+			((ctx->vpp_is_need || ctx->enable_di_post) &&
+			(ctx->picinfo.field == V4L2_FIELD_INTERLACED))) &&
 			(frame->slice_type == I_SLICE) &&
 			(hw->pts_outside)) {
 			if ((!hw->h264_pts_count) || (!hw->h264pts1)) {
@@ -3075,6 +3078,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		vf_count = 2;
 
 	bForceInterlace = check_force_interlace(hw, hw->frame_width, hw->frame_height);
+	if ((v4l2_ctx->vpp_is_need || v4l2_ctx->enable_di_post) && (picinfo->field == V4L2_FIELD_INTERLACED)) {
+		bForceInterlace = 1;
+	}
 	if (bForceInterlace)
 		vf_count = 2;
 
