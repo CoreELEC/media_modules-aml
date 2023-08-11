@@ -551,20 +551,21 @@ int vdec_input_set_buffer(struct vdec_input_s *input, u32 start, u32 size)
 	input->swap_rp = start;
 	input->last_wp = start;
 
-	if (vdec_secure(input->vdec))
-		input->swap_page_phys = codec_mm_alloc_for_dma("SWAP",
-			1, 0, CODEC_MM_FLAGS_TVP);
-	else {
-		input->swap_page = codec_mm_dma_alloc_coherent(&input->mem_handle,
-				(ulong *)&input->swap_page_phys,
-				PAGE_SIZE, MEM_NAME);
-		if (input->swap_page == NULL)
+	if (input_stream_based(input)) {
+		if (vdec_secure(input->vdec))
+			input->swap_page_phys = codec_mm_alloc_for_dma("SWAP",
+				1, 0, CODEC_MM_FLAGS_TVP);
+		else {
+			input->swap_page = codec_mm_dma_alloc_coherent(&input->mem_handle,
+					(ulong *)&input->swap_page_phys,
+					PAGE_SIZE, MEM_NAME);
+			if (input->swap_page == NULL)
+				return -ENOMEM;
+		}
+
+		if (input->swap_page_phys == 0)
 			return -ENOMEM;
 	}
-
-	if (input->swap_page_phys == 0)
-		return -ENOMEM;
-
 	return 0;
 }
 EXPORT_SYMBOL(vdec_input_set_buffer);
@@ -1183,7 +1184,7 @@ void vdec_input_unlock(struct vdec_input_s *input, unsigned long flags)
 }
 EXPORT_SYMBOL(vdec_input_unlock);
 
-void vdec_input_release(struct vdec_input_s *input)
+void vdec_input_release(struct vdec_input_s *input, bool release_swap_page)
 {
 	struct list_head *p, *tmp;
 
@@ -1205,17 +1206,21 @@ void vdec_input_release(struct vdec_input_s *input)
 		vframe_block_free_block(block);
 	}
 
-	/* release swap pages */
-	if (vdec_secure(input->vdec)) {
-		if (input->swap_page_phys)
-			codec_mm_free_for_dma("SWAP", input->swap_page_phys);
-	} else {
-		if (input->swap_page)
-			codec_mm_dma_free_coherent(input->mem_handle);
+	if (input_stream_based(input)) {
+		/* release swap pages */
+		if (release_swap_page) {
+			if (vdec_secure(input->vdec)) {
+				if (input->swap_page_phys)
+					codec_mm_free_for_dma("SWAP", input->swap_page_phys);
+			} else {
+				if (input->swap_page)
+					codec_mm_dma_free_coherent(input->mem_handle);
+			}
+			input->swap_page = NULL;
+			input->swap_page_phys = 0;
+			input->swap_valid = false;
+		}
 	}
-	input->swap_page = NULL;
-	input->swap_page_phys = 0;
-	input->swap_valid = false;
 }
 EXPORT_SYMBOL(vdec_input_release);
 

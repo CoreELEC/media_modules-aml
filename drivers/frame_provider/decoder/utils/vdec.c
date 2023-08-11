@@ -2880,7 +2880,7 @@ int vdec_destroy(struct vdec_s *vdec)
 {
 	//trace_vdec_destroy(vdec);/*DEBUG_TMP*/
 
-	vdec_input_release(&vdec->input);
+	vdec_input_release(&vdec->input, true);
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	vdec_profile_flush(vdec);
@@ -3789,7 +3789,7 @@ int vdec_reset(struct vdec_s *vdec)
 			vdec->slave->reset(vdec->slave);
 	}
 	vdec->mc_loaded = 0;/*clear for reload firmware*/
-	vdec_input_release(&vdec->input);
+	vdec_input_release(&vdec->input, false);
 
 	vdec_input_init(&vdec->input, vdec);
 
@@ -3840,7 +3840,7 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 			return 0;
 		}
 
-		vdec_input_release(&vdec->input);
+		vdec_input_release(&vdec->input, false);
 
 		vdec_input_init(&vdec->input, vdec);
 
