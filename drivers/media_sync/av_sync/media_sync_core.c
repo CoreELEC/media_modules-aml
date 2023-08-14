@@ -774,6 +774,7 @@ static void mediasync_ins_reset_l(mediasync_ins* pInstance) {
 		pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
 		pInstance->mStcParmUpdateCount = 0;
 		pInstance->isVideoFrameAdvance = 0;
+		pInstance->mFreeRunType = 0;
 		if (media_sync_calculate_cache_enable) {
 			pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
 			clear_frame_list(pInstance, pTable);
@@ -837,6 +838,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			pInstance->mVideoCacheUpdateCount = 0;
 			pInstance->isVideoFrameAdvance = 0;
 			pInstance->mVideoTrickMode = 0;
+			pInstance->mFreeRunType = 0;
 			snprintf(pInstance->atrace_video,
 				sizeof(pInstance->atrace_video), "msync_v_%d", *sSyncInsId);
 			snprintf(pInstance->atrace_audio,
@@ -3555,6 +3557,7 @@ long mediasync_ins_get_update_info(mediasync_ins* pInstance, mediasync_update_in
 	mediasync_ins_get_audio_cache_info_implementation(pInstance,&(info->mAudioInfo));
 	mediasync_ins_get_video_cache_info_implementation(pInstance,&(info->mVideoInfo));
 	info->isVideoFrameAdvance = pInstance->isVideoFrameAdvance;
+	info->mFreeRunType = pInstance->mFreeRunType;
 	mediasync_ins_check_pcr_slope(pInstance,info);
 	info->mStcParmUpdateCount = pInstance->mStcParmUpdateCount;
 	return 0;
@@ -3629,6 +3632,7 @@ long mediasync_ins_ext_ctrls_ioctrl(MediaSyncManager* pSyncManage, ulong arg, un
 		case SET_VIDEO_FRAME_ADVANCE:
 		case SET_SLOW_SYNC_ENABLE:
 		case SET_TRICK_MODE:
+		case SET_FREE_RUN_TYPE:
 		{
 			mediasync_ins_ext_ctrls(pSyncManage,&mediasyncUserControl);
 			break;
@@ -3705,6 +3709,12 @@ long mediasync_ins_ext_ctrls(MediaSyncManager* pSyncManage,mediasync_control* me
 			mediasyncControl->value = pInstance->mVideoTrickMode;
 			ret = 0;
 			//mediasync_pr_info(0,pInstance," get mVideoTrickMode : %d \n",pInstance->mVideoTrickMode);
+			break;
+		}
+		case SET_FREE_RUN_TYPE:
+		{
+			pInstance->mFreeRunType = mediasyncControl->value;
+			ret = 0;
 			break;
 		}
 		default:
