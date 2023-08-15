@@ -34,7 +34,8 @@
 
 #define MEDIASYNC_DEVICE_NAME   "mediasync"
 static struct device *mediasync_dev;
-static spinlock_t m_alloc_lock;
+static struct mutex m_alloc_lock;
+
 typedef struct alloc_para {
 	s32 mDemuxId;
 	s32 mPcrPid;
@@ -134,19 +135,19 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 	s64 UpdateTimeThreshold = 0;
 	s64 StartMediaTime = -1;
 	s32 PlayerInstanceId = -1;
-	unsigned long flags = 0;
+
 	switch (cmd) {
 		case MEDIASYNC_IOC_INSTANCE_ALLOC:
 			if (copy_from_user ((void *)&parm,
 						(void *)arg,
 						sizeof(parm)))
 				return -EFAULT;
-			spin_lock_irqsave(&m_alloc_lock, flags);
+			mutex_lock(&m_alloc_lock);
 			ret = mediasync_ins_alloc(parm.mDemuxId,
 						parm.mPcrPid,
 						&SyncInsId,
 						&SyncIns);
-			spin_unlock_irqrestore(&m_alloc_lock, flags);
+			mutex_unlock(&m_alloc_lock);
 
 			if (ret < 0 || SyncIns == NULL) {
 				return -EFAULT;
@@ -177,9 +178,9 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 						sizeof(SyncInsId))) {
 				return -EFAULT;
 			}
-			spin_lock_irqsave(&m_alloc_lock, flags);
+			mutex_lock(&m_alloc_lock);
 			ret = mediasync_ins_binder(SyncInsId, &SyncIns);
-			spin_unlock_irqrestore(&m_alloc_lock, flags);
+			mutex_unlock(&m_alloc_lock);
 			if (SyncIns == NULL) {
 				return -EFAULT;
 			}
@@ -193,9 +194,9 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 						sizeof(SyncInsId))) {
 				return -EFAULT;
 			}
-			spin_lock_irqsave(&m_alloc_lock, flags);
+			mutex_lock(&m_alloc_lock);
 			ret = mediasync_static_ins_binder(SyncInsId, &SyncIns);
-			spin_unlock_irqrestore(&m_alloc_lock, flags);
+			mutex_unlock(&m_alloc_lock);
 			if (SyncIns == NULL) {
 				return -EFAULT;
 			}
@@ -1579,7 +1580,7 @@ static int __init mediasync_module_init(void)
 	}
 	mediasync_init();
 	mediasync_vf_init();
-	spin_lock_init(&m_alloc_lock);
+	mutex_init(&m_alloc_lock);
 	return 0;
 
 err1:
