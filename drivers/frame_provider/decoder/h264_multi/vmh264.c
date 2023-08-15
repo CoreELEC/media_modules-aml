@@ -187,6 +187,7 @@ static u32 run_ready_max_buf_num = 0xff;
 
 static u32 run_ready_min_buf_num = 2;
 static u32 save_buffer = 1;
+static u32 save_buffer_in_res_change = 1;
 
 #define VDEC_ASSIST_CANVAS_BLK32		0x5
 
@@ -10750,7 +10751,7 @@ static void vh264_timeout_work(struct work_struct *work)
 
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 {
-	bool ret = 0;
+	bool ret = 1;
 	struct vdec_h264_hw_s *hw =
 		(struct vdec_h264_hw_s *)vdec->private;
 	int tvp = vdec_secure(hw_to_vdec(hw)) ?
@@ -10823,11 +10824,10 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	if (h264_debug_flag & 0x20000000) {
 		/* pr_info("%s, a\n", __func__); */
 		ret = 1;
-	} else
-		ret = is_buffer_available(vdec);
+	}
 
 #ifdef CONSTRAIN_MAX_BUF_NUM
-	if (ret && (hw->dpb.mDPB.size > 0)) { /*make sure initialized*/
+	if (hw->dpb.mDPB.size > 0) { /*make sure initialized*/
 		if (run_ready_max_vf_only_num > 0 &&
 			get_vf_ref_only_buf_count(hw) >=
 			run_ready_max_vf_only_num
@@ -10840,8 +10840,10 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		/*avoid more buffers consumed when
 		switching resolution*/
 		if (run_ready_max_buf_num == 0xff &&
-			get_used_buf_count(hw) >
-			hw->dpb.mDPB.size)
+			((save_buffer_in_res_change && get_used_buf_count(hw) >=
+			hw->dpb.mDPB.size) ||
+			(!save_buffer_in_res_change && get_used_buf_count(hw) >
+			hw->dpb.mDPB.size)))
 			ret = 0;
 		else if (run_ready_max_buf_num &&
 			get_used_buf_count(hw) >=
@@ -10850,6 +10852,8 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		if (ret == 0)
 			bufmgr_h264_remove_unused_frame(&hw->dpb, 0);
 	}
+	if (ret)
+		ret = is_buffer_available(vdec);
 #endif
 	if (hw->is_used_v4l) {
 		struct aml_vcodec_ctx *ctx =
@@ -11372,6 +11376,10 @@ static void h264_reconfig(struct vdec_h264_hw_s *hw)
 	if (hw->is_used_v4l) {
 		mutex_lock(&vmh264_mutex);
 		dealloc_buf_specs(hw, 1);
+		mutex_unlock(&vmh264_mutex);
+	} else {
+		mutex_lock(&vmh264_mutex);
+		dealloc_buf_specs(hw, 0);
 		mutex_unlock(&vmh264_mutex);
 	}
 
@@ -12381,6 +12389,9 @@ MODULE_PARM_DESC(one_packet_multi_frames_multi_run, "\n one_packet_multi_frames_
 
 module_param(save_buffer, uint, 0664);
 MODULE_PARM_DESC(save_buffer, "\n save_buffer\n");
+
+module_param(save_buffer_in_res_change, uint, 0664);
+MODULE_PARM_DESC(save_buffer_in_res_change, "\n save_buffer_in_res_change\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);
