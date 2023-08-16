@@ -1185,13 +1185,22 @@ static struct aml_buf *index_to_afbc_aml_buf(struct vdec_h264_hw_s *hw, int inde
 	return (struct aml_buf *)hw->buffer_spec[index].cma_alloc_addr;
 }
 
+static int get_double_write_mode(struct vdec_h264_hw_s *hw)
+{
+	u32 dw;
+
+	vdec_v4l_get_dw_mode(hw->v4l2_ctx, &dw);
+
+	return dw;
+}
+
 static int hevc_alloc_mmu(struct vdec_h264_hw_s *hw,
 			 int pic_idx,
 			 u32 *mmu_index_adr)
 {
 	struct aml_buf *aml_buf = index_to_afbc_aml_buf(hw, pic_idx);
 
-	if (hw->double_write_mode == 0x10)
+	if (get_double_write_mode(hw) == 0x10)
 		return 0;
 
 	return decoder_mmu_box_alloc_idx(
@@ -1254,16 +1263,16 @@ static int get_dw_size(struct vdec_h264_hw_s *hw, u32 *pdw_buffer_size_u_v_h)
 	int dw_buf_size;
 	u32 dw_buffer_size_u_v;
 	u32 dw_buffer_size_u_v_h;
-	int dw_mode =  hw->double_write_mode;
+	int dw_mode = get_double_write_mode(hw);
 
 	pic_width = hw->frame_width;
 	pic_height = hw->frame_height;
 
 	if (dw_mode) {
 		int pic_width_dw = pic_width /
-			get_double_write_ratio(hw->double_write_mode);
+			get_double_write_ratio(dw_mode);
 		int pic_height_dw = pic_height /
-			get_double_write_ratio(hw->double_write_mode);
+			get_double_write_ratio(dw_mode);
 
 		int pic_width_lcu_dw = (pic_width_dw % lcu_size) ?
 			(pic_width_dw >> lcu_size_log) + 1 :
@@ -1296,7 +1305,7 @@ static void hevc_mcr_config_canv2axitbl(struct vdec_h264_hw_s *hw, int restore)
 	int     num_buff = hw->dpb.mDPB.size;
 	int dw_size = 0;
 	u32 dw_buffer_size_u_v_h;
-	int dw_mode =  hw->double_write_mode;
+	int dw_mode =  get_double_write_mode(hw);
 
 	canvas_addr = ANC0_CANVAS_ADDR;
 	for (i = 0; i < num_buff; i++)
@@ -1448,7 +1457,7 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	u32 lcu_total;
 	u32 mc_buffer_size_u_v;
 	u32 mc_buffer_size_u_v_h;
-	int  dw_mode = hw->double_write_mode;
+	int  dw_mode = get_double_write_mode(hw);
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 
 	// width need to be round to 64 pixel -- case0260 1/10/2020
@@ -1781,7 +1790,7 @@ static void  hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 	u32 dw_u_v_adr;
 	u32 canvas_addr;
 	int ret;
-	int  dw_mode = hw->double_write_mode;
+	int  dw_mode = get_double_write_mode(hw);
 	if (hw->is_new_pic != 1)
 		return;
 
@@ -2064,7 +2073,7 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 	struct canvas_config_s *y_canvas_cfg = NULL;
 	struct canvas_config_s *c_canvas_cfg = NULL;
 	unsigned int y_addr = 0, c_addr = 0;
-	int dw_ratio = get_double_write_ratio(hw->double_write_mode);
+	int dw_ratio = get_double_write_ratio(get_double_write_mode(hw));
 
 	if (!hw->aml_buf) {
 		dpb_print(DECODE_ID(hw), 0,
@@ -2262,11 +2271,12 @@ static void config_decode_canvas_ex(struct vdec_h264_hw_s *hw, int i)
 	u32 blkmode = hw->canvas_mode;
 	int canvas_w;
 	int canvas_h;
+	int dw_mode = get_double_write_mode(hw);
 
 	canvas_w = hw->frame_width /
-		get_double_write_ratio(hw->double_write_mode);
+		get_double_write_ratio(dw_mode);
 	canvas_h = hw->frame_height /
-		get_double_write_ratio(hw->double_write_mode);
+		get_double_write_ratio(dw_mode);
 
 	if (hw->canvas_mode == 0)
 		canvas_w = ALIGN(canvas_w, 32);
@@ -3066,6 +3076,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	int i;
 	u32 slice_type = 0;
 	u32 offset = 0;
+	int dw_mode = get_double_write_mode(hw);
 
 	/* swap uv */
 	if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
@@ -3169,7 +3180,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 
 		if (hw->mmu_enable) {
-			if (hw->double_write_mode & 0x10) {
+			if (dw_mode & 0x10) {
 				/* double write only */
 				vf->compBodyAddr = 0;
 				vf->compHeadAddr = 0;
@@ -3184,7 +3195,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 			vf->type = VIDTYPE_SCATTER;
 
-			if (hw->double_write_mode) {
+			if (dw_mode) {
 				vf->type |= VIDTYPE_PROGRESSIVE
 					| VIDTYPE_VIU_FIELD;
 				vf->type |= nv_order;
@@ -3255,11 +3266,11 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->discard_dv_data = true;
 		}
 
-		if (hw->mmu_enable && hw->double_write_mode) {
+		if (hw->mmu_enable && dw_mode) {
 			vf->width = hw->frame_width /
-				get_double_write_ratio(hw->double_write_mode);
+				get_double_write_ratio(dw_mode);
 			vf->height = hw->frame_height /
-				get_double_write_ratio(hw->double_write_mode);
+				get_double_write_ratio(dw_mode);
 		}
 
 		vf->flag = 0;
@@ -4667,6 +4678,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	ulong nv_order = VIDTYPE_VIU_NV21;
+	int dw_mode = get_double_write_mode(hw);
 
 	if (!hw)
 		return NULL;
@@ -4688,7 +4700,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 		set_frame_info(hw, vf, buffer_index);
 		vf->flag = 0;
 		if (hw->mmu_enable) {
-			if (hw->double_write_mode & 0x10) {
+			if (dw_mode & 0x10) {
 				/* double write only */
 				vf->compBodyAddr = 0;
 				vf->compHeadAddr = 0;
@@ -4703,11 +4715,11 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 
 			vf->type = VIDTYPE_SCATTER;
 
-			if (hw->double_write_mode) {
+			if (dw_mode) {
 				vf->type |= VIDTYPE_PROGRESSIVE
 					| VIDTYPE_VIU_FIELD;
 				vf->type |= nv_order;
-				if (hw->double_write_mode == 3)
+				if (dw_mode == 3)
 					vf->type |= VIDTYPE_COMPRESS;
 
 				vf->canvas0Addr = vf->canvas1Addr = -1;
@@ -4736,11 +4748,11 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 			vf->compWidth = hw->frame_width;
 			vf->compHeight = hw->frame_height;
 
-			if (hw->double_write_mode) {
+			if (dw_mode) {
 				vf->width = hw->frame_width /
-					get_double_write_ratio(hw->double_write_mode);
+					get_double_write_ratio(dw_mode);
 				vf->height = hw->frame_height /
-					get_double_write_ratio(hw->double_write_mode);
+					get_double_write_ratio(dw_mode);
 			}
 		} else {
 			vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD |
@@ -5541,7 +5553,7 @@ static void vh264_config_canvs_for_mmu(struct vdec_h264_hw_s *hw)
 {
 	int i, j;
 
-	if (hw->double_write_mode) {
+	if (get_double_write_mode(hw)) {
 		mutex_lock(&vmh264_mutex);
 		if (hw->decode_pic_count == 0) {
 			for (j = 0; j < hw->dpb.mDPB.size; j++) {
@@ -5851,7 +5863,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 					"v4l: delay alloc the buffer.\n");
 			}
 		} else {
-			if (hw->double_write_mode) {
+			if (get_double_write_mode(hw)) {
 				config_buf_specs_ex(vdec);
 			} else {
 				spin_lock_irqsave(&hw->bufspec_lock, flags);
@@ -8449,7 +8461,7 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 			if (!hw->mmu_enable &&
 				hw->buffer_spec[i].cma_alloc_addr)
 				config_decode_canvas(hw, i);
-			if (hw->mmu_enable && hw->double_write_mode)
+			if (hw->mmu_enable && get_double_write_mode(hw))
 				config_decode_canvas_ex(hw, i);
 		}
 	} else {
@@ -9872,7 +9884,7 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 			}
 			hw->v4l_params_parsed = false;
 			vdec_v4l_set_ps_infos(ctx, &ps);
-			if (hw->double_write_mode != 0x10) {
+			if (get_double_write_mode(hw) != 0x10) {
 				h264_set_comp_info(ctx, &ps);
 			}
 			vdec_v4l_res_ch_event(ctx);
@@ -9998,7 +10010,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 					hw->v4l_params_parsed = true;
 					ctx->decoder_status_info.frame_height = ps.visible_height;
 					ctx->decoder_status_info.frame_width = ps.visible_width;
-					if (hw->double_write_mode != 0x10) {
+					if (get_double_write_mode(hw) != 0x10) {
 						h264_set_comp_info(ctx, &ps);
 					}
 					vdec_v4l_set_ps_infos(ctx, &ps);
@@ -10646,7 +10658,7 @@ static int res_change_has_been_responded(struct vdec_h264_hw_s *hw)
 			pr_info("dpb_frames:%d dpb_margin:%d reorder_output:%d\n", ps.dpb_frames, ps.dpb_margin,
 				hw->dpb.reorder_output);
 			vdec_v4l_set_ps_infos(ctx, &ps);
-			if (hw->double_write_mode != 0x10) {
+			if (get_double_write_mode(hw) != 0x10) {
 				h264_set_comp_info(ctx, &ps);
 			}
 			ret = 0;

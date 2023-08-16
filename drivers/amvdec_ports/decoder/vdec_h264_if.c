@@ -455,32 +455,6 @@ static void vdec_config_dw_mode(struct vdec_pic_info *pic, int dw_mode)
 		break;
 	}
 }
-static int vdec_h264_pic_scale(int length, int dw_mode)
-{
-	int ret = 64;
-
-	switch (dw_mode) {
-	case 0x0: /* only afbc, output afbc */
-		ret = 64;
-		break;
-	case 0x1: /* afbc and (w x h), output YUV420 */
-		ret = length;
-		break;
-	case 0x2: /* afbc and (w/4 x h/4), output YUV420 */
-	case 0x3: /* afbc and (w/4 x h/4), output afbc and YUV420 */
-		ret = length >> 2;
-		break;
-	case 0x4: /* afbc and (w/2 x h/2), output YUV420 */
-		ret = length >> 1;
-		break;
-	case 0x10: /* (w x h), output YUV420-8bit)*/
-	default:
-		ret = length;
-		break;
-	}
-
-	return ret;
-}
 
 static void fill_vdec_params(struct vdec_h264_inst *inst, struct h264_SPS_t *sps)
 {
@@ -1003,13 +977,6 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 		get_param_config_info(inst, out);
 		break;
 
-	case GET_PARAM_DW_MODE:
-	{
-		unsigned int* mode = out;
-		*mode = inst->parms.cfg.double_write_mode;
-		break;
-	}
-
 	case GET_PARAM_COMP_BUF_INFO:
 		get_param_comp_buf_info(inst, out);
 		break;
@@ -1018,10 +985,17 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 		get_cfg_info(inst, out);
 		break;
 
+	case GET_PARAM_DW_MODE:
 	case GET_PARAM_TW_MODE:
 	{
 		unsigned int* mode = out;
-		*mode = DM_INVALID;
+		u32 m = (type == GET_PARAM_DW_MODE) ?
+			inst->parms.cfg.double_write_mode :
+			DM_INVALID;
+		int w = inst->vsi->pic.coded_width;
+		int h = inst->vsi->pic.coded_height;
+
+		*mode = vdec_get_dec_mode(w, h, m);
 		break;
 	}
 
@@ -1040,12 +1014,27 @@ static void set_param_write_sync(struct vdec_h264_inst *inst)
 }
 
 static void set_cfg_info(struct vdec_h264_inst *inst,
-	struct aml_vdec_cfg_infos *cfg)
+	struct aml_vdec_cfg_infos *new_cfg)
 {
-	memcpy(&inst->ctx->config.parm.dec.cfg,
-		cfg, sizeof(struct aml_vdec_cfg_infos));
-	memcpy(&inst->parms.cfg,
-		cfg, sizeof(struct aml_vdec_cfg_infos));
+	struct vdec_pic_info *pic = &inst->vsi->pic;
+	struct aml_vdec_cfg_infos *old_cfg = &inst->parms.cfg;
+	u32 dw_new = new_cfg->double_write_mode;
+
+	if (!memcmp(old_cfg, new_cfg, sizeof(*old_cfg)))
+		return;
+
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, DW:(%x -> %x)\n",
+		__func__,
+		old_cfg->double_write_mode,
+		new_cfg->double_write_mode);
+
+	if (old_cfg->double_write_mode != dw_new) {
+		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw_new, 64);
+		pic->c_len_sz		= pic->y_len_sz >> 1;
+	}
+
+	*old_cfg = *new_cfg;
 }
 
 static void set_param_ps_info(struct vdec_h264_inst *inst,
@@ -1070,8 +1059,7 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	pic->coded_width 	= ps->coded_width;
 	pic->coded_height 	= ps->coded_height;
 
-	pic->y_len_sz		= ALIGN(vdec_h264_pic_scale(ps->coded_width, dw), 64) *
-		ALIGN(vdec_h264_pic_scale(ps->coded_height, dw),64);
+	pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw, 64);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 	pic->profile_idc	= ps->profile;
 	pic->field		= ps->field;
@@ -1079,6 +1067,7 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	pic->dpb_margin		= ps->dpb_margin;
 	pic->vpp_margin		= ps->dpb_margin;
 	dec->dpb_sz		= ps->dpb_size;
+	pic->bitdepth		= ps->bitdepth;
 
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=
@@ -1088,10 +1077,12 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, visible(%d x %d), coded(%d x %d), scan:%s\n",
+		"Parse from ucode, visible(%d x %d), coded(%d x %d), "
+		"scan:%s, bitdepth(%d), dw(%x)\n",
 		ps->visible_width, ps->visible_height,
 		ps->coded_width, ps->coded_height,
-		ps->field == V4L2_FIELD_NONE ? "P" : "I");
+		ps->field == V4L2_FIELD_NONE ? "P" : "I",
+		ps->bitdepth, dw);
 }
 
 static void set_param_hdr_info(struct vdec_h264_inst *inst,
