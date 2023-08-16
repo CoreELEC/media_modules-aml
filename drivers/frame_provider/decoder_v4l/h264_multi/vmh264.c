@@ -2755,11 +2755,14 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 	int free_slot = 0;
 	int found = 0;
 
+	u32 run_ready_min_buf_num_active = run_ready_min_buf_num;
+
 	/* trigger to parse head data. */
 	if (!hw->v4l_params_parsed)
 		return 1;
 
-	if (dpb->mDPB.used_size >= dpb->mDPB.size - 1)
+	if ((!one_packet_multi_frames_multi_run && (dpb->mDPB.used_size >= dpb->mDPB.size - 1)) ||
+		(one_packet_multi_frames_multi_run && (dpb->mDPB.used_size >= dpb->mDPB.size)))
 		return 0;
 
 	for (i = 0; i < hw->dpb.mDPB.size; i++) {
@@ -2828,7 +2831,10 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
-	return found && free_count >= run_ready_min_buf_num ? 1 : 0;
+	if (one_packet_multi_frames_multi_run)
+		run_ready_min_buf_num_active = 1;
+
+	return found && free_count >= run_ready_min_buf_num_active ? 1 : 0;
 }
 
 static int get_buf_spec_by_canvas_pos(struct vdec_h264_hw_s *hw,
@@ -6265,7 +6271,10 @@ static bool is_buffer_available(struct vdec_s *vdec)
 	if ((kfifo_len(&hw->newframe_q) <= 0) ||
 	    ((hw->config_bufmgr_done) && (!is_there_free_buffer(vdec))) ||
 	    ((p_H264_Dpb->mDPB.init_done) &&
-	     (p_H264_Dpb->mDPB.used_size >= (p_H264_Dpb->mDPB.size - 1)) &&
+	     ((!one_packet_multi_frames_multi_run &&
+	     (p_H264_Dpb->mDPB.used_size >= (p_H264_Dpb->mDPB.size - 1))) ||
+	     (one_packet_multi_frames_multi_run &&
+	     (p_H264_Dpb->mDPB.used_size >= p_H264_Dpb->mDPB.size))) &&
 	     (is_there_unused_frame_from_dpb(&p_H264_Dpb->mDPB) == 0))) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
 		"%s, empty, newq(%d), free_spec(%d), initdon(%d), used_size(%d/%d), unused_fr_dpb(%d)\n",
@@ -6284,8 +6293,12 @@ static bool is_buffer_available(struct vdec_s *vdec)
 		if ((hw->error_proc_policy & 0x4) &&
 			(hw->error_proc_policy & 0x8)) {
 			if ((kfifo_len(&hw->display_q) <= 0) &&
+			((!one_packet_multi_frames_multi_run &&
 			(p_H264_Dpb->mDPB.used_size >=
-				(p_H264_Dpb->mDPB.size - 1)) &&
+				(p_H264_Dpb->mDPB.size - 1))) ||
+			(one_packet_multi_frames_multi_run &&
+			(p_H264_Dpb->mDPB.used_size >=
+				p_H264_Dpb->mDPB.size))) &&
 				(p_Dpb->ref_frames_in_buffer >
 				(imax(
 				1, p_Dpb->num_ref_frames)
@@ -6297,8 +6310,12 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			}
 		} else if ((hw->error_proc_policy & 0x4) &&
 			(kfifo_len(&hw->display_q) <= 0) &&
-			((p_H264_Dpb->mDPB.used_size >=
-				(p_H264_Dpb->mDPB.size - 1)) ||
+			(((!one_packet_multi_frames_multi_run &&
+			(p_H264_Dpb->mDPB.used_size >=
+				(p_H264_Dpb->mDPB.size - 1))) ||
+			(one_packet_multi_frames_multi_run &&
+			(p_H264_Dpb->mDPB.used_size >=
+				p_H264_Dpb->mDPB.size))) ||
 			(!is_there_free_buffer(vdec))) &&
 			(hw->discard_dv_data)) {
 			unsigned long flags;
