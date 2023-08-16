@@ -69,6 +69,23 @@
 struct stream_buf_s;
 struct vdec_s;
 
+typedef enum {
+	PTS_SERVER_TYPE_VIDEO = 0,
+	PTS_SERVER_TYPE_AUDIO,
+	PTS_SERVER_TYPE_MAX,
+} pts_server_type;
+
+typedef enum {
+	PTS_SERVER_INIT = 0,
+	PTS_SERVER_LOADING = 1,
+} pts_server_status;
+
+struct ptsserver_table_s {
+	u32 status;
+	unsigned long buf_start;
+	u32 buf_size;
+}/*ptsserver_table_t */;
+
 extern s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 	struct vdec_s *vdec);
 
@@ -102,5 +119,7 @@ void tsdemux_set_skipbyte(int skipbyte);
 void tsdemux_set_demux(int dev);
 void tsdemux_tsync_func_init(void);
 
+extern int register_mediasync_vpts_set_cb(void* pfunc);
+extern int register_mediasync_apts_set_cb(void* pfunc);
 
 #endif /* TSDEMUX_H */

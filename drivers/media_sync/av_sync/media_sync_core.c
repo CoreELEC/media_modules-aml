@@ -79,6 +79,9 @@ extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
 int demux_get_pcr(int demux_device_index, int index, u64 *pcr) {return -1;}
 #endif
 
+extern int register_mediasync_vpts_set_cb(void* pfunc);
+extern int register_mediasync_apts_set_cb(void* pfunc);
+
 static u64 get_llabs(s64 value){
 	u64 llvalue;
 	if (value > 0) {
@@ -795,6 +798,8 @@ long mediasync_init(void) {
 		vMediaSyncInsList[index].pInstance = NULL;
 		spin_lock_init(&(vMediaSyncInsList[index].m_lock));
 	}
+	register_mediasync_vpts_set_cb(mediasync_ins_set_video_packets_info);
+	register_mediasync_apts_set_cb(mediasync_ins_set_audio_packets_info);
 	return 0;
 }
 
@@ -3796,7 +3801,6 @@ long mediasync_ins_check_apts_valid(MediaSyncManager* pSyncManage, s64 apts) {
 			ret = 0;
 		}
 	}
-
 	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return ret;
@@ -3844,6 +3848,27 @@ long mediasync_ins_set_cache_frames(MediaSyncManager* pSyncManage, s64 cache) {
 
 	mediasync_pr_info(0,pInstance,"mCacheFrames=%lld",cache);
 	pInstance->mCacheFrames = cache;
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+	return 0;
+}
+
+long mediasync_ins_set_pcr_and_dmx_id(MediaSyncManager* pSyncManage, s32 sDemuxId, s32 sPcrPid) {
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL) {
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+		return -1;
+	}
+
+	mediasync_pr_info(1, pInstance, "mDemuxId=%d mPcrPid:%d\n", sDemuxId, sPcrPid);
+	pInstance->mDemuxId = sDemuxId;
+	pInstance->mPcrPid = sPcrPid;
 	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 }

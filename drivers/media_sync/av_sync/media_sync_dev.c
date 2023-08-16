@@ -1413,6 +1413,20 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 		}
 		break;
 
+		case MEDIASYNC_IOC_SET_PCR_AND_DMX_ID:
+			if (copy_from_user ((void *)&parm,
+						(void *)arg,
+						sizeof(parm)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_pcr_and_dmx_id(priv->mSyncIns,
+								parm.mDemuxId,
+								parm.mPcrPid);
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -1524,6 +1538,7 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_CHECK_VPTS_VALID:
 		case MEDIASYNC_IOC_SET_CACHE_FRAMES:
 		case MEDIASYNC_IOC_SET_VF_SYNC_ID:
+		case MEDIASYNC_IOC_SET_PCR_AND_DMX_ID:
 			return mediasync_ioctl_inner(file, cmd,(ulong)compat_ptr(arg),1);
 		default:
 			return -EINVAL;

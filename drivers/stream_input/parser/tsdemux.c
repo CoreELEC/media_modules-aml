@@ -35,6 +35,7 @@
 
 #include <linux/uaccess.h>
 #include <linux/clk.h>
+#include <linux/irqflags.h>
 
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "../amports/streambuf_reg.h"
@@ -43,7 +44,7 @@
 #include <linux/amlogic/media/frame_sync/tsync_pcr.h>
 #include "../../media_sync/av_sync/media_sync_core.h"
 #include "../../common/media_utils/media_utils.h"
-
+#include "../../media_sync/pts_server/pts_server_core.h"
 
 #include "tsdemux.h"
 #include <linux/reset.h>
@@ -56,6 +57,12 @@ static pfun_mediasync_vpts_set mediasync_vpts_set = NULL;
 
 typedef long (*pfun_mediasync_apts_set)(s32 sSyncInsId, mediasync_audio_packets_info info);
 static pfun_mediasync_apts_set mediasync_apts_set = NULL;
+
+static s32 pAServerInsId = 12;
+static s32 pVServerInsId = -1;
+static bool singleDmxNewPtsserv = false;
+static ptsserver_ins* PServerIns = NULL;
+
 static int pts_checkin_debug = 0;
 module_param(pts_checkin_debug, int, 0644);
 MODULE_PARM_DESC(pts_checkin_debug, "\n\t\t demux pts check in debug");
@@ -83,6 +90,14 @@ static u8 pcrvideo_valid;
 static u8 pcr_init_flag;
 
 static int demux_skipbyte;
+static struct ptsserver_table_s pts_table[PTS_SERVER_TYPE_MAX] = {
+	{
+		.status = PTS_SERVER_INIT,
+	},
+	{
+		.status = PTS_SERVER_INIT,
+	},
+};
 
 static struct tsdemux_ops *demux_ops;
 static DEFINE_SPINLOCK(demux_ops_lock);
@@ -267,6 +282,178 @@ static void queue_audio_info( u64 pts, int size) {
 	return ;
 }
 
+int register_mediasync_vpts_set_cb(void* pfunc) {
+	if (pfunc == NULL) {
+		return -1;
+	}
+	mediasync_vpts_set = (pfun_mediasync_vpts_set)(long (*)(s32, mediasync_video_packets_info))(pfunc);
+	return 0;
+}
+EXPORT_SYMBOL(register_mediasync_vpts_set_cb);
+
+int register_mediasync_apts_set_cb(void* pfunc) {
+	if (pfunc == NULL) {
+		return -1;
+	}
+	mediasync_apts_set = (pfun_mediasync_apts_set)(long (*)(s32, mediasync_audio_packets_info))(pfunc);
+	return 0;
+}
+EXPORT_SYMBOL(register_mediasync_apts_set_cb);
+
+static int ptsserver_start(u8 type) {
+	struct ptsserver_table_s *ptable;
+	ptable = &pts_table[type];
+
+	pr_info("%s, type=%d\n", __func__, type);
+	if (ptable->status == PTS_SERVER_INIT) {
+		ptable->status = PTS_SERVER_LOADING;
+		ptable->buf_start = 0;
+		ptable->buf_size = 0;
+	}
+
+	if (type == PTS_SERVER_TYPE_VIDEO) {
+#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+		if (!tsync_get_new_arch()) {
+			ptable->buf_start =
+				READ_PARSER_REG(PARSER_VIDEO_START_PTR);
+			ptable->buf_size =
+				READ_PARSER_REG(PARSER_VIDEO_END_PTR)
+				- ptable->buf_start + 8;
+		}
+#else
+		if (!tsync_get_new_arch()) {
+			ptable->buf_start =
+				READ_VREG(VLD_MEM_VIFIFO_START_PTR);
+			ptable->buf_size =
+				READ_VREG(VLD_MEM_VIFIFO_END_PTR)
+				- ptable->buf_start + 8;
+		}
+#endif
+	} else if (type == PTS_SERVER_TYPE_AUDIO) {
+		if (!tsync_get_new_arch()) {
+			ptable->buf_start =
+			READ_AIU_REG(AIU_MEM_AIFIFO_START_PTR);
+			ptable->buf_size =
+			READ_AIU_REG(AIU_MEM_AIFIFO_END_PTR)
+			- ptable->buf_start + 8;
+		}
+	}
+
+	return 0;
+}
+
+static int ptsserver_stop(u8 type) {
+	struct ptsserver_table_s *ptable;
+	ptable = &pts_table[type];
+
+	pr_info("%s, type=%d\n", __func__, type);
+	if (ptable->status == PTS_SERVER_LOADING) {
+		ptable->status = PTS_SERVER_INIT;
+	}
+
+	return 0;
+}
+
+static inline void get_swrpage_offset(u8 type, u32 *page, u32 *page_offset)
+{
+	ulong flags;
+	u32 page1, page2, offset;
+
+	if (!tsync_get_new_arch()) {
+		if (type == PTS_SERVER_TYPE_VIDEO) {
+			do {
+				local_irq_save(flags);
+
+				page1 = READ_PARSER_REG(PARSER_AV_WRAP_COUNT) &
+							0xffff;
+				offset = READ_PARSER_REG(PARSER_VIDEO_WP);
+				page2 = READ_PARSER_REG(PARSER_AV_WRAP_COUNT) &
+							0xffff;
+
+				local_irq_restore(flags);
+			} while (page1 != page2);
+
+			*page = page1;
+			*page_offset = offset -
+				       pts_table[PTS_SERVER_TYPE_VIDEO].buf_start;
+		} else if (type == PTS_SERVER_TYPE_AUDIO) {
+			do {
+				local_irq_save(flags);
+
+				page1 = READ_PARSER_REG(PARSER_AV_WRAP_COUNT)
+							>> 16;
+				offset = READ_PARSER_REG(PARSER_AUDIO_WP);
+				page2 = READ_PARSER_REG(PARSER_AV_WRAP_COUNT)
+							>> 16;
+
+				local_irq_restore(flags);
+			} while (page1 != page2);
+
+			*page = page1;
+			*page_offset = offset -
+				       pts_table[PTS_SERVER_TYPE_AUDIO].buf_start;
+		}
+	}
+}
+
+static int pts_checkin_apts_size(u32 ptr, u64 pts_val, int size) {
+	u32 offset, cur_offset = 0, page = 0, page_no;
+	checkin_apts_size checkinPtsSize;
+	memset(&checkinPtsSize, 0, sizeof(checkinPtsSize));
+
+	if (tsync_get_new_arch())
+		return -EINVAL;
+
+	if (pAServerInsId < 0) {
+		return -EAGAIN;
+	}
+
+	offset = ptr - pts_table[PTS_SERVER_TYPE_AUDIO].buf_start;
+	get_swrpage_offset(PTS_SERVER_TYPE_AUDIO, &page, &cur_offset);
+
+	page_no = (offset > cur_offset) ? (page - 1) : page;
+
+	checkinPtsSize.offset = pts_table[PTS_SERVER_TYPE_AUDIO].buf_size * page_no + offset,
+	checkinPtsSize.size = size;
+	checkinPtsSize.pts_90k = pts_val;
+	checkinPtsSize.pts_64 = div64_u64(pts_val * 100, 9);
+
+	ptsserver_checkin_apts_size(pAServerInsId, &checkinPtsSize);
+	if (pts_checkin_debug) {
+		pr_info("%s pts:%lld page_no:%d rel_offset:%d\n",
+				__func__, pts_val, page_no, checkinPtsSize.offset);
+	}
+	return 0;
+}
+
+static int pts_checkin_vpts_size(u32 ptr, u64 pts_val) {
+	u32 offset, cur_offset = 0, page = 0, page_no;
+	checkin_pts_offset checkinPtsOffset;
+	memset(&checkinPtsOffset, 0, sizeof(checkinPtsOffset));
+
+	if (tsync_get_new_arch())
+		return -EINVAL;
+
+	if (pVServerInsId < 0) {
+		return -EAGAIN;
+	}
+
+	offset = ptr - pts_table[PTS_SERVER_TYPE_VIDEO].buf_start;
+	get_swrpage_offset(PTS_SERVER_TYPE_VIDEO, &page, &cur_offset);
+
+	page_no = (offset > cur_offset) ? (page - 1) : page;
+	checkinPtsOffset.offset = pts_table[PTS_SERVER_TYPE_VIDEO].buf_size * page_no + offset;
+
+	checkinPtsOffset.pts = (u32)pts_val;
+	checkinPtsOffset.pts_64 = div64_u64(pts_val * 100, 9);
+	ptsserver_checkin_pts_offset((pVServerInsId & 0xff), &checkinPtsOffset);
+	if (pts_checkin_debug) {
+		pr_info("%s pts:%lld page_no:%d rel_offset:%d\n",
+				__func__, pts_val, page_no, checkinPtsOffset.offset);
+	}
+	return 0;
+}
+
 extern int pts_lookup(u8 type, u32 *val, u32 *frame_size, u32 pts_margin);
 extern int pts_getaudiocheckinsize(void);
 
@@ -309,10 +496,15 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 				if (pts_checkin_debug) {
 					pr_info("%s check_in_vpts:%lld \n",__func__,vpts);
 				}
-				pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
-					READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
-					vpts);
-				queue_video_info(vpts,PTS_PACKET_SIZE);
+				if (!singleDmxNewPtsserv) {
+					pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
+						READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
+						vpts);
+				} else {
+					pts_checkin_vpts_size(READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
+						vpts);
+					queue_video_info(vpts,PTS_PACKET_SIZE);
+				}
 			}
 
 			if (pdts_status & (1 << AUDIO_PTS_READY)) {
@@ -324,10 +516,15 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 				if (pts_checkin_debug) {
 					pr_info("%s check_in_apts:%lld \n",__func__,apts);
 				}
-				pts_checkin_wrptr_pts33(PTS_TYPE_AUDIO,
-					READ_DEMUX_REG(AUDIO_PDTS_WR_PTR),
-					apts);
-				queue_audio_info(apts,pts_getaudiocheckinsize());
+				if (!singleDmxNewPtsserv) {
+					pts_checkin_wrptr_pts33(PTS_TYPE_AUDIO,
+						READ_DEMUX_REG(AUDIO_PDTS_WR_PTR),
+						apts);
+				} else {
+					pts_checkin_apts_size(READ_DEMUX_REG(AUDIO_PDTS_WR_PTR),
+						apts, pts_getaudiocheckinsize());
+					queue_audio_info(apts,pts_getaudiocheckinsize());
+				}
 			}
 
 			WRITE_DEMUX_REG(STB_PTS_DTS_STATUS, pdts_status);
@@ -350,10 +547,15 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 				if (pts_checkin_debug) {
 					pr_info("%s check_in_vpts:%lld \n",__func__,vpts);
 				}
-				pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
-					DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
-					vpts);
-				queue_video_info(vpts,PTS_PACKET_SIZE);
+				if (!singleDmxNewPtsserv) {
+					pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
+						DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
+						vpts);
+				} else {
+					pts_checkin_vpts_size(DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
+						vpts);
+					queue_video_info(vpts,PTS_PACKET_SIZE);
+				}
 			}
 
 			if (pdts_status & (1 << AUDIO_PTS_READY)) {
@@ -365,16 +567,21 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 				if (pts_checkin_debug) {
 					pr_info("%s check_in_apts:%lld \n",__func__,apts);
 				}
-			#if 0	//32bit
-				pts_checkin_wrptr(PTS_TYPE_AUDIO,
-					DMX_READ_REG(id, AUDIO_PDTS_WR_PTR),
-					(u32)apts);
-			#else	//33bit
-				pts_checkin_wrptr_pts33(PTS_TYPE_AUDIO,
-					DMX_READ_REG(id, AUDIO_PDTS_WR_PTR),
-					apts);
-			#endif
-				queue_audio_info(apts,pts_getaudiocheckinsize());
+				if (!singleDmxNewPtsserv) {
+				#if 0	//32bit
+					pts_checkin_wrptr(PTS_TYPE_AUDIO,
+						DMX_READ_REG(id, AUDIO_PDTS_WR_PTR),
+						(u32)apts);
+				#else	//33bit
+					pts_checkin_wrptr_pts33(PTS_TYPE_AUDIO,
+						DMX_READ_REG(id, AUDIO_PDTS_WR_PTR),
+						apts);
+				#endif
+				} else {
+					pts_checkin_apts_size(DMX_READ_REG(id, AUDIO_PDTS_WR_PTR),
+						apts, pts_getaudiocheckinsize());
+					queue_audio_info(apts,pts_getaudiocheckinsize());
+				}
 			}
 
 			if (id == 1)
@@ -419,7 +626,7 @@ static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
 			//	mediasync_vpts_set = symbol_request(mediasync_ins_set_video_packets_info);
 			//}
 			if (mediasync_vpts_set) {
-				sSyncInsId = 0;
+				sSyncInsId = 12;
 				mediasync_vpts_set(sSyncInsId, dmx_video_frameinfo);
 				if (pts_checkin_debug) {
 					pr_info("%s video sSyncInsId:%d packetsPts:%lld packetsSize:%d\n",
@@ -440,7 +647,7 @@ static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
 			//	mediasync_apts_set = symbol_request(mediasync_ins_set_audio_packets_info);
 			//}
 			if (mediasync_apts_set) {
-				sSyncInsId = 0;
+				sSyncInsId = 12;
 				mediasync_apts_set(sSyncInsId, dmx_audio_frameinfo);
 				if (pts_checkin_debug) {
 					pr_info("%s audio sSyncInsId:%d packetsPts:%lld packetsSize:%d\n",
@@ -652,6 +859,11 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 		("sub_pid = 0x%x, pcrid = 0x%x\n",
 		 sid, pcrid);
 
+	if (vdec->frame_base_video_path == FRAME_BASE_PATH_DI_V4LVIDEO) {
+		singleDmxNewPtsserv = true;
+		pr_info("single demux use new ptsserver.\n");
+	}
+
 	if (!enable_demux_driver()) {
 		WRITE_DEMUX_REG(FM_WR_DATA,
 				(((vid < 0x1fff)
@@ -775,21 +987,41 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 			(7 << ES_SUB_WR_ENDIAN_BIT) | ES_SUB_MAN_RD_PTR);
 
 	if (vid != 0xffff) {
-		if (has_hevc_vdec())
-			r = pts_start((is_hevc) ? PTS_TYPE_HEVC : PTS_TYPE_VIDEO);
-		else
-			r = pts_start(PTS_TYPE_VIDEO);
-		if ((r < 0) && (r != -EBUSY)) {
-			pr_info("Video pts start failed.(%d)\n", r);
-			goto err1;
+		if (singleDmxNewPtsserv) {
+			r = ptsserver_start(PTS_SERVER_TYPE_VIDEO);
+			pVServerInsId = vdec->pts_server_id;
+			pr_info("pVServerInsId:%d\n", pVServerInsId);
+		} else {
+			if (has_hevc_vdec())
+				r = pts_start((is_hevc) ? PTS_TYPE_HEVC : PTS_TYPE_VIDEO);
+			else
+				r = pts_start(PTS_TYPE_VIDEO);
+			if ((r < 0) && (r != -EBUSY)) {
+				pr_info("Video pts start failed.(%d)\n", r);
+				goto err1;
+			}
 		}
 	}
 
 	if (aid != 0xffff) {
-		r = pts_start(PTS_TYPE_AUDIO);
-		if ((r < 0) && (r != -EBUSY)) {
-			pr_info("Audio pts start failed.(%d)\n", r);
-			goto err2;
+		if (singleDmxNewPtsserv) {
+			ptsserver_alloc_para allocPara;
+			allocPara.mMaxCount = 500;
+			allocPara.mLookupThreshold = 1024;
+			allocPara.kDoubleCheckThreshold = 5;
+			r = ptsserver_start(PTS_SERVER_TYPE_AUDIO);
+			if ((r < 0) && (r != -EBUSY)) {
+				goto err2;
+				pr_info("audio ptsserver start failed.(%d)\n", r);
+			}
+			r = ptsserver_static_ins_binder(pAServerInsId, &PServerIns, allocPara);
+			pr_info("pAServerInsId:%d index:%d\n", pAServerInsId, PServerIns->mPtsServerInsId);
+		} else {
+			r = pts_start(PTS_TYPE_AUDIO);
+			if ((r < 0) && (r != -EBUSY)) {
+				pr_info("Audio pts start failed.(%d)\n", r);
+				goto err2;
+			}
 		}
 	}
 	/*TODO irq */
@@ -858,11 +1090,13 @@ err4:
 
 err3:
 	pts_stop(PTS_TYPE_AUDIO);
+	ptsserver_stop(PTS_SERVER_TYPE_AUDIO);
 err2:
 	if (has_hevc_vdec())
 		pts_stop((is_hevc) ? PTS_TYPE_HEVC : PTS_TYPE_VIDEO);
 	else
 		pts_stop(PTS_TYPE_VIDEO);
+	ptsserver_stop(PTS_SERVER_TYPE_VIDEO);
 err1:
 	pr_info("TS Demux init failed.\n");
 	return -ENOENT;
@@ -902,9 +1136,17 @@ void tsdemux_release(void)
 		curr_pcr_id = 0xffff;
 		curr_pcr_num = 0xffff;
 	}
-
-	pts_stop(PTS_TYPE_VIDEO);
-	pts_stop(PTS_TYPE_AUDIO);
+	if (singleDmxNewPtsserv) {
+		ptsserver_stop(PTS_SERVER_TYPE_AUDIO);
+		ptsserver_stop(PTS_SERVER_TYPE_VIDEO);
+		ptsserver_ins_release(pAServerInsId);
+		pVServerInsId = -1;
+		PServerIns = NULL;
+		singleDmxNewPtsserv = false;
+	} else {
+		pts_stop(PTS_TYPE_VIDEO);
+		pts_stop(PTS_TYPE_AUDIO);
+	}
 
 	WRITE_RESET_REG(RESET1_REGISTER, RESET_PARSER);
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
@@ -1235,6 +1477,7 @@ void tsdemux_audio_reset(void)
 {
 	ulong flags;
 	unsigned long xflags = 0;
+	ptsserver_alloc_para allocPara;
 
 	spin_lock_irqsave(&demux_ops_lock, flags);
 	if (demux_ops && demux_ops->hw_dmx_lock)
@@ -1256,6 +1499,20 @@ void tsdemux_audio_reset(void)
 
 	if (demux_ops && demux_ops->hw_dmx_unlock)
 		demux_ops->hw_dmx_unlock(xflags);
+
+	if (singleDmxNewPtsserv) {
+		ptsserver_stop(PTS_SERVER_TYPE_AUDIO);
+		if (PServerIns == NULL) {
+			allocPara.mMaxCount = 500;
+			allocPara.mLookupThreshold = 1024;
+			allocPara.kDoubleCheckThreshold = 5;
+			ptsserver_static_ins_binder(pAServerInsId, &PServerIns, allocPara);
+		} else {
+			ptsserver_ins_reset(pAServerInsId);
+		}
+		ptsserver_start(PTS_SERVER_TYPE_AUDIO);
+	}
+
 	spin_unlock_irqrestore(&demux_ops_lock, flags);
 	if (reset_demux_enable == 1)
 		tsdemux_reset();

@@ -38,13 +38,31 @@
 
 static u32 ptsserver_debuglevel = 0;
 
-#define MAX_INSTANCE_NUM (10)
+#define MAX_INSTANCE_NUM (40)
 #define MAX_EXPIRED_COUNT (500)
 #define MAX_CHECKOUT_RETRY_COUNT (5)
 #define MAX_CHECKOUT_MIN_PTS_THRESHOLD (5)
 #define MAX_CHECKOUT_BOUND_VALUE (5)
+#define MAX_DYNAMIC_INSTANCE_NUM (10)
 
 PtsServerManage vPtsServerInsList[MAX_INSTANCE_NUM];
+
+static long get_index_from_ptsserver_id(s32 pServerInsId)
+{
+	long index = -1;
+	long temp = -1;
+
+	for (temp = 0; temp < MAX_INSTANCE_NUM; temp++) {
+		if (vPtsServerInsList[temp].pInstance != NULL) {
+			if (pServerInsId == vPtsServerInsList[temp].pInstance->mPtsServerInsId) {
+				index = temp;
+				break;
+			}
+		}
+	}
+
+	return index;
+}
 
 long ptsserver_ins_init_syncinfo(ptsserver_ins* pInstance,ptsserver_alloc_para* allocParm) {
 
@@ -105,7 +123,13 @@ long ptsserver_ins_init_syncinfo(ptsserver_ins* pInstance,ptsserver_alloc_para* 
 	pInstance->mStickyWrapFlag = false;
 	pInstance->mLastDropIndex = 0;
 	pInstance->mLastIndex = 0;
+	pInstance->mLastCheckoutPts90k = 0;
+	pInstance->mFirstCheckinPts90k = 0;
+	pInstance->mLastCheckinPts90k = 0;
+
 	mutex_init(&pInstance->mPtsListLock);
+	spin_lock_init(&pInstance->mPtsListSlock);
+
 	INIT_LIST_HEAD(&pInstance->pts_list);
 	INIT_LIST_HEAD(&pInstance->pts_free_list);
 
@@ -122,6 +146,7 @@ long ptsserver_ins_init_syncinfo(ptsserver_ins* pInstance,ptsserver_alloc_para* 
 		}
 		list_add_tail(&ptn->node, &pInstance ->pts_free_list);
 	}
+
 	return 0;
 }
 
@@ -131,6 +156,7 @@ long ptsserver_init(void) {
 	for (i = 0;i < MAX_INSTANCE_NUM;i++) {
 		vPtsServerInsList[i].pInstance = NULL;
 		mutex_init(&(vPtsServerInsList[i].mListLock));
+		spin_lock_init(&(vPtsServerInsList[i].mListSlock));
 	}
 	return 0;
 }
@@ -147,11 +173,12 @@ long ptsserver_ins_alloc(s32 *pServerInsId,
 		return -1;
 	}
 	pr_info("multi_ptsserv: ptsserver_ins_alloc in\n");
-	for (index = 0; index < MAX_INSTANCE_NUM - 1; index++) {
+	for (index = 0; index < MAX_DYNAMIC_INSTANCE_NUM - 1; index++) {
 		mutex_lock(&vPtsServerInsList[index].mListLock);
 		if (vPtsServerInsList[index].pInstance == NULL) {
 			vPtsServerInsList[index].pInstance = pInstance;
 			pInstance->mPtsServerInsId = index;
+			pInstance->mRef++;
 			*pServerInsId = index;
 			ptsserver_ins_init_syncinfo(pInstance,allocParm);
 			pts_pr_info(index,"ptsserver_ins_alloc --> index:%d\n", index);
@@ -161,12 +188,11 @@ long ptsserver_ins_alloc(s32 *pServerInsId,
 		mutex_unlock(&vPtsServerInsList[index].mListLock);
 	}
 
-	if (index == MAX_INSTANCE_NUM) {
+	if (index == MAX_DYNAMIC_INSTANCE_NUM) {
 		memset(pInstance, 0, sizeof(ptsserver_ins));
 		kfree(pInstance);;
 		return -1;
 	}
-
 	*pIns = pInstance;
 	pts_pr_info(index,"ptsserver_ins_alloc ok\n");
 	return 0;
@@ -427,6 +453,197 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 	return 0;
 }
 EXPORT_SYMBOL(ptsserver_checkin_pts_size);
+
+long ptsserver_checkin_pts_offset(s32 pServerInsId, checkin_pts_offset* mCheckinPtsOffset) {
+	PtsServerManage* vPtsServerIns = NULL;
+	ptsserver_ins* pInstance = NULL;
+	pts_node* ptn = NULL;
+	pts_node* ptn_cur = NULL;
+	pts_node* ptn_tmp = NULL;
+	pts_node* del_ptn = NULL;
+	s32 index = pServerInsId;
+	s32 level = 0;
+	bool checkinHeadNode = false;
+	bool checkinSpliceNode = false;
+	ulong flags = 0;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	vPtsServerIns = &(vPtsServerInsList[index]);
+	// mutex_lock(&vPtsServerIns->mListLock);
+	spin_lock_irqsave(&vPtsServerIns->mListSlock, flags);
+	pInstance = vPtsServerIns->pInstance;
+	if (pInstance == NULL) {
+		// mutex_unlock(&vPtsServerIns->mListLock);
+		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		return -1;
+	}
+	if (pInstance->mListSize >= pInstance->mMaxCount) {
+		del_ptn = list_first_entry(&pInstance->pts_list, struct ptsnode, node);
+		list_del(&del_ptn->node);
+		list_add_tail(&del_ptn->node, &pInstance ->pts_free_list);	//queue empty buffer
+		if (ptsserver_debuglevel >= 1) {
+			pts_pr_info(index,"Checkin delete node del_ptn:%px size:%d pts:0x%x pts_64:%lld\n",
+								del_ptn,del_ptn->offset,
+								del_ptn->pts,
+								del_ptn->pts_64);
+		}
+		pInstance->mListSize--;
+	}
+
+	//record every checkin offset in mLastCheckinPieceOffset
+	pInstance->mLastCheckinPieceOffset = pInstance->mLastCheckinPieceOffset + pInstance->mLastCheckinPieceSize;
+
+	if (mCheckinPtsOffset->pts == 0) {//checkin piece node in splice mode
+		if (pInstance->mListSize != 0) {
+			ptn = list_last_entry(&pInstance->pts_list, struct ptsnode, node);
+
+			if (ptn == NULL) {
+				if (ptsserver_debuglevel >= 1) {
+					pts_pr_info(index,"ptn is null return \n");
+				}
+				// mutex_unlock(&vPtsServerIns->mListLock);
+				spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+				return -1;
+			}
+		} else {
+			if (ptsserver_debuglevel >= 1) {
+				pts_pr_info(index,"list is empty and head node not exist,just record info\n");
+			}
+			//for piece checkin record
+			pInstance->mLastCheckinPieceOffset = mCheckinPtsOffset->offset;
+			pInstance->mLastCheckinPiecePts = mCheckinPtsOffset->pts;
+			pInstance->mLastCheckinPiecePts64 = mCheckinPtsOffset->pts_64;
+
+			if (ptsserver_debuglevel >= 1) {
+				pts_pr_info(index,"[SpliceNode] [hasNoHead] Checkin offset:0x%x pts(32:0x%x 64:%lld)\n",
+									pInstance->mLastCheckinPieceOffset,
+									pInstance->mLastCheckinPiecePts,
+									pInstance->mLastCheckinPiecePts64);
+			}
+
+			// mutex_unlock(&vPtsServerIns->mListLock);
+			spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+			return 0;
+		}
+		checkinSpliceNode = true;
+	}  else {//checkin head node
+		checkinHeadNode = true;
+		if (!list_empty(&pInstance->pts_free_list)) {	//dequeue empty buffer
+			ptn = list_first_entry(&pInstance->pts_free_list, struct ptsnode, node);
+			list_del(&ptn->node);
+		}
+
+		if (ptn != NULL) {
+			pInstance->mLastCheckinSize = pInstance->mLastCheckinPieceOffset - pInstance->mLastCheckinOffset;
+			ptn->offset = mCheckinPtsOffset->offset;
+			ptn->pts = mCheckinPtsOffset->pts;
+			ptn->pts_64 = mCheckinPtsOffset->pts_64;
+			pInstance->mLastCheckinPts = ptn->pts;
+			pInstance->mLastCheckinPts64 = ptn->pts_64;
+			ptn->expired_count = MAX_EXPIRED_COUNT;
+			if (ptsserver_debuglevel >= 1) {
+					pts_pr_info(index,"-->dequeue empty ptn:%px offset:0x%x pts(32:0x%x 64:%lld)\n",
+										ptn,ptn->offset,ptn->pts,
+										ptn->pts_64);
+				}
+		} else {
+			if (ptsserver_debuglevel >= 1) {
+				pts_pr_info(index,"ptn is null return \n");
+			}
+			// mutex_unlock(&vPtsServerIns->mListLock);
+			spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+			return -1;
+		}
+
+		if (pInstance->setC2Mode) {
+			list_for_each_entry_safe(ptn_cur,ptn_tmp,&pInstance->pts_list, node) {
+				if (ptn_cur != NULL) {
+					if (ptn_cur->pts_64 >= ptn->pts_64)
+						break;
+				}
+			}
+			list_add_tail(&ptn->node, &ptn_cur->node);
+		} else {
+			// sort pts_list by pts if pts invalid sort by offset,
+			// so pts_list is amlost list by order
+			list_for_each_entry_safe(ptn_cur, ptn_tmp, &pInstance->pts_list, node) {
+				if (ptn_cur != NULL) {
+					if (ptn->pts_64 != -1) {
+						if (ptn->pts_64 <= ptn_cur->pts_64)
+							break;
+					} else {
+						if (ptn->offset >= ptn_cur->offset)
+							break;
+					}
+				}
+			}
+			list_add_tail(&ptn->node, &ptn_cur->node);
+		}
+
+		if (ptn == list_first_entry(&pInstance->pts_list, struct ptsnode, node)) {
+			ptn->duration_count = pInstance->mLastCheckinDurationCount++;
+		} else {
+			ptn->duration_count = pInstance->mLastCheckinDurationCount;
+		}
+
+		pInstance->mListSize++;
+	}
+
+	if (!pInstance->mPtsCheckinStarted) {
+		pts_pr_info(index,"-->Checkin(First) ListSize:%d offset:0x%x pts(32:0x%x 64:%llu)\n",
+							pInstance->mListSize,
+							ptn->offset,ptn->pts,
+							ptn->pts_64);
+		pInstance->mFirstCheckinOffset = mCheckinPtsOffset->offset;
+		pInstance->mFirstCheckinPts = mCheckinPtsOffset->pts;
+		pInstance->mFirstCheckinPts64 = mCheckinPtsOffset->pts_64;
+		pInstance->mPtsCheckinStarted = 1;
+	}
+
+	if (pInstance->mAlignmentOffset != 0) {
+		pInstance->mLastCheckinOffset = pInstance->mAlignmentOffset;
+		pInstance->mLastCheckinPieceOffset = pInstance->mAlignmentOffset;
+		pInstance->mAlignmentOffset = 0;
+	} else {
+		pInstance->mLastCheckinOffset = ptn->offset;
+	}
+
+	if (ptsserver_debuglevel >= 1 && checkinHeadNode == true) {
+		level = ptn->offset - pInstance->mLastCheckoutCurOffset;
+		pts_pr_info(index,"[HeadNode] Checkin ListCount:%d LastCheckinOffset:0x%x LastCheckinSize:0x%x\n",
+								pInstance->mListSize,
+								pInstance->mLastCheckinOffset,
+								pInstance->mLastCheckinSize);
+		pts_pr_info(index,"[HeadNode] Checkin %s:0x%x (%s:%d) pts(32:0x%x 64:%lld) duration_count:%lld\n",
+							ptn->offset < pInstance->mLastCheckinOffset?"rest offset":"offset",
+							ptn->offset,
+							level >= 5242880 ? ">5M level": "level",
+							level,
+							ptn->pts,
+							ptn->pts_64,
+							ptn->duration_count);
+	}
+
+	//for piece checkin record
+	pInstance->mLastCheckinPieceOffset = mCheckinPtsOffset->offset;
+	pInstance->mLastCheckinPiecePts = mCheckinPtsOffset->pts;
+	pInstance->mLastCheckinPiecePts64 = mCheckinPtsOffset->pts_64;
+
+	if (ptsserver_debuglevel >= 1 && checkinSpliceNode == true) {
+	pts_pr_info(index,"[SpliceNode] Checkin %s 0x%x pts(32:0x%x 64:%lld) ptn:%px\n",
+							ptn->offset < pInstance->mLastCheckinOffset?"rest offset":"offset",
+							pInstance->mLastCheckinPieceOffset,
+							pInstance->mLastCheckinPiecePts,
+							pInstance->mLastCheckinPiecePts64,
+							ptn);
+	}
+
+	// mutex_unlock(&vPtsServerIns->mListLock);
+	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+	return 0;
+}
+EXPORT_SYMBOL(ptsserver_checkin_pts_offset);
 
 long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheckoutPtsOffset) {
 	PtsServerManage* vPtsServerIns = NULL;
@@ -1041,10 +1258,9 @@ long ptsserver_get_last_checkout_pts(s32 pServerInsId,last_checkout_pts* mLastCh
 }
 
 long ptsserver_ins_release(s32 pServerInsId) {
-
 	PtsServerManage* vPtsServerIns = NULL;
 	ptsserver_ins* pInstance = NULL;
-	s32 index = pServerInsId;
+	s32 index = get_index_from_ptsserver_id(pServerInsId);
 	pts_node *ptn = NULL;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
@@ -1056,6 +1272,14 @@ long ptsserver_ins_release(s32 pServerInsId) {
 	if (pInstance == NULL) {
 		mutex_unlock(&vPtsServerIns->mListLock);
 		return -1;
+	}
+
+	pInstance->mRef--;
+	pts_pr_info(index,"mRef:%d",pInstance->mRef);
+	if (pInstance->mRef > 0) {
+		mutex_unlock(&vPtsServerIns->mListLock);
+		ptsserver_ins_reset(pServerInsId);
+		return 0;
 	}
 
 	pts_pr_info(index,"ptsserver_ins_release ListSize:%d\n",pInstance->mListSize);
@@ -1109,6 +1333,504 @@ long ptsserver_set_trick_mode(s32 pServerInsId, s32 mode) {
 	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
 }
+
+long ptsserver_checkin_apts_size(s32 pServerInsId,checkin_apts_size* mCheckinPtsSize) {
+	PtsServerManage* vPtsServerIns = NULL;
+	ptsserver_ins* pInstance = NULL;
+	pts_node* ptn = NULL;
+	pts_node* del_ptn = NULL;
+	s32 index = get_index_from_ptsserver_id(pServerInsId);
+	s32 level = 0;
+	ulong flags = 0;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	vPtsServerIns = &(vPtsServerInsList[index]);
+	// mutex_lock(&vPtsServerIns->mListLock);
+	spin_lock_irqsave(&vPtsServerIns->mListSlock, flags);
+	pInstance = vPtsServerIns->pInstance;
+	if (pInstance == NULL) {
+		// mutex_unlock(&vPtsServerIns->mListLock);
+		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		return -1;
+	}
+
+	if (pInstance->mListSize >= pInstance->mMaxCount) {
+		del_ptn = list_first_entry(&pInstance->pts_list, pts_node, node);
+		list_del(&del_ptn->node);
+		list_add_tail(&del_ptn->node, &pInstance->pts_free_list);	//queue empty buffer
+		if (ptsserver_debuglevel >= 1) {
+		pts_pr_info(index,"Checkin delete node size:%d pts:0x%llx pts_64:%lld\n",
+							del_ptn->offset,
+							del_ptn->pts_90k,
+							del_ptn->pts_64);
+		}
+		pInstance->mListSize--;
+	}
+
+	if (!list_empty(&pInstance->pts_free_list)) {	//dequeue empty buffer
+		ptn = list_first_entry(&pInstance->pts_free_list, struct ptsnode, node);
+		list_del(&ptn->node);
+		if (ptn != NULL) {
+			ptn->offset = mCheckinPtsSize->offset;
+			ptn->pts_90k = mCheckinPtsSize->pts_90k;
+			ptn->pts_64 = mCheckinPtsSize->pts_64;
+			if (ptsserver_debuglevel >= 1) {
+				pts_pr_info(index,"-->dequeue empty ptn:%px offset:0x%x pts(32:0x%llx 64:%lld)\n",
+									ptn,ptn->offset,ptn->pts_90k,
+									ptn->pts_64);
+			}
+		}
+	}
+
+	if (ptn == NULL) {
+		if (ptsserver_debuglevel >= 1) {
+			pts_pr_info(index,"ptn is null return \n");
+		}
+		// mutex_unlock(&vPtsServerIns->mListLock);
+		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		return -1;
+	}
+
+	list_add_tail(&ptn->node, &pInstance->pts_list);
+
+	pInstance->mListSize++;
+	if (!pInstance->mPtsCheckinStarted) {
+		pts_pr_info(index,"-->Checkin(First) ListSize:%d CheckinPtsSize(%d)-> offset:0x%x pts(32:0x%llx 64:%lld)\n",
+							pInstance->mListSize,
+							mCheckinPtsSize->size,
+							ptn->offset,ptn->pts_90k,
+							ptn->pts_64);
+		pInstance->mFirstCheckinOffset = mCheckinPtsSize->offset;
+		pInstance->mFirstCheckinSize = mCheckinPtsSize->size;
+		pInstance->mFirstCheckinPts90k = mCheckinPtsSize->pts_90k;
+		pInstance->mFirstCheckinPts64 = mCheckinPtsSize->pts_64;
+		pInstance->mPtsCheckinStarted = 1;
+	}
+
+	if (ptsserver_debuglevel >= 1) {
+		level = ptn->offset - pInstance->mLastCheckoutCurOffset;
+		pts_pr_info(index,"Checkin ListCount:%d LastCheckinOffset:0x%x LastCheckinSize:0x%x\n",
+								pInstance->mListSize,
+								pInstance->mLastCheckinOffset,
+								pInstance->mLastCheckinSize);
+		pts_pr_info(index,"Checkin Size(%d) %s:0x%x (%s:%d) pts(32:0x%llx 64:%lld)\n",
+							mCheckinPtsSize->size,
+							ptn->offset < pInstance->mLastCheckinOffset?"rest offset":"offset",
+							ptn->offset,
+							level >= 5242880 ? ">5M level": "level",
+							level,
+							ptn->pts_90k,
+							ptn->pts_64);
+	}
+
+	if (pInstance->mAlignmentOffset != 0) {
+		pInstance->mLastCheckinOffset = pInstance->mAlignmentOffset;
+		pInstance->mAlignmentOffset = 0;
+	} else {
+		pInstance->mLastCheckinOffset = ptn->offset;
+	}
+
+	pInstance->mLastCheckinSize = mCheckinPtsSize->size;
+	pInstance->mLastCheckinPts90k = mCheckinPtsSize->pts_90k;
+	pInstance->mLastCheckinPts64 = mCheckinPtsSize->pts_64;
+
+	// mutex_unlock(&vPtsServerIns->mListLock);
+	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL(ptsserver_checkin_apts_size);
+
+long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mCheckoutPtsOffset) {
+	PtsServerManage* vPtsServerIns = NULL;
+	ptsserver_ins* pInstance = NULL;
+	s32 index = get_index_from_ptsserver_id(pServerInsId);
+	pts_node* ptn = NULL;
+	pts_node* find_ptn = NULL;
+	pts_node* ptn_tmp = NULL;
+
+	u32 cur_offset = 0xFFFFFFFF & mCheckoutPtsOffset->offset;
+
+	u32 offsetDiff = 1024;
+	s32 find_frame_num = 0;
+	s32 find = 0;
+	s32 offsetAbs = 0;
+	u32 FrameDur = 0;
+	u64 FrameDur64 = 0;
+	s32 number = -1;
+	s32 i = 0;
+	ulong flags = 0;
+
+	if (index < 0 || index >= MAX_INSTANCE_NUM) {
+		return -1;
+	}
+	vPtsServerIns = &(vPtsServerInsList[index]);
+	// mutex_lock(&vPtsServerIns->mListLock);
+	spin_lock_irqsave(&vPtsServerIns->mListSlock, flags);
+	pInstance = vPtsServerIns->pInstance;
+
+	if (pInstance == NULL) {
+		// mutex_unlock(&vPtsServerIns->mListLock);
+		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		return -1;
+	}
+
+	offsetDiff = pInstance->mLookupThreshold;
+
+	if (!pInstance->mPtsCheckoutStarted) {
+		pts_pr_info(index,"Checkout(First) ListSize:%d offset:0x%x\n",
+							pInstance->mListSize,
+							cur_offset);
+	}
+
+	if (ptsserver_debuglevel >= 1) {
+		pts_pr_info(index,"checkout ListCount:%d offset:%llx cur_offset:0x%x\n",
+							pInstance->mListSize,
+							mCheckoutPtsOffset->offset,
+							cur_offset);
+	}
+
+	if (cur_offset != 0xFFFFFFFF &&
+		!list_empty(&pInstance->pts_list)) {
+		find_frame_num = 0;
+		find = 0;
+		list_for_each_entry_safe(ptn,ptn_tmp,&pInstance->pts_list, node) {
+			if (ptn != NULL) {
+				offsetAbs = abs(cur_offset - ptn->offset);
+				if (ptsserver_debuglevel > 1) {
+					pts_pr_info(index,"Checkout i:%d offset(diff:%d L:0x%x C:0x%x)\n",i,offsetAbs,ptn->offset,cur_offset);
+				}
+				if (offsetAbs <=  pInstance->mLookupThreshold) {
+					if (offsetAbs <= offsetDiff && cur_offset >= ptn->offset) {
+						offsetDiff = offsetAbs;
+						find = 1;
+						number = i;
+						find_ptn = ptn;
+					}
+				} else if (offsetAbs > 251658240) {
+					// > 240M (15M*16)
+					if (ptsserver_debuglevel >= 1) {
+						pts_pr_info(index,"Checkout delete(%d) diff:%d offset:0x%x pts:0x%llx pts_64:%lld\n",
+											i,
+											offsetAbs,
+											ptn->offset,
+											ptn->pts_90k,
+											ptn->pts_64);
+					}
+					list_del(&ptn->node);
+					list_add_tail(&ptn->node, &pInstance->pts_free_list);
+					pInstance->mListSize--;
+
+				} else if (find_frame_num > 5) {
+					break;
+				}
+				if (find) {
+					find_frame_num++;
+				}
+			}
+			i++;
+		}
+
+		if (find) {
+			mCheckoutPtsOffset->pts_90k = find_ptn->pts_90k;
+			mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
+			if (ptsserver_debuglevel >= 1 ||
+				!pInstance->mPtsCheckoutStarted) {
+				pts_pr_info(index,"Checkout ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%llx 64:%lld)\n",
+									pInstance->mListSize,number,offsetDiff,
+									find_ptn->offset,find_ptn->pts_90k,find_ptn->pts_64);
+			}
+			list_del(&find_ptn->node);
+			list_add_tail(&find_ptn->node, &pInstance->pts_free_list);
+			pInstance->mListSize--;
+		}
+	}
+	if (find == 1 && (s64)mCheckoutPtsOffset->pts_64 == -1) {
+		find = 0; //invalid pts
+	}
+	if (!find) {
+		pInstance->mPtsCheckoutFailCount++;
+		if (ptsserver_debuglevel >= 1 || pInstance->mPtsCheckoutFailCount % 30 == 0) {
+			pts_pr_info(index,"Checkout fail mPtsCheckoutFailCount:%d level:%d \n",
+				pInstance->mPtsCheckoutFailCount,pInstance->mLastCheckinOffset - cur_offset);
+		}
+
+		if (pInstance->mFrameDuration != 0) {
+			pInstance->mLastCheckoutPts90k = pInstance->mLastCheckoutPts90k + pInstance->mFrameDuration;
+		}
+		if (pInstance->mFrameDuration64 != 0) {
+			pInstance->mLastCheckoutPts64 = pInstance->mLastCheckoutPts64 + pInstance->mFrameDuration64;
+		}
+		if (pInstance->mPtsCheckoutStarted == 0) {
+			pts_pr_info(index,"first Checkout fail cur_offset:0x%x firstCheckinPts90k:%llx \n",cur_offset, pInstance->mFirstCheckinPts90k);
+			if (!cur_offset && pInstance->mFirstCheckinPts90k != 0) {
+				pInstance->mLastCheckoutPts64 = pInstance->mFirstCheckinPts64;
+				pInstance->mLastCheckoutPts90k = pInstance->mFirstCheckinPts90k;
+				pInstance->mPtsCheckoutStarted = 1;
+			} else {
+				pInstance->mLastCheckoutPts64 = -1;
+				pInstance->mLastCheckoutPts90k = -1;
+			}
+		}
+		if (ptsserver_debuglevel >= 1) {
+			pts_pr_info(index,"Checkout fail Calculate by FrameDuration(32:%d 64:%lld) pts(32:%llx 64:%lld)\n",
+								pInstance->mFrameDuration,
+								pInstance->mFrameDuration64,
+								pInstance->mLastCheckoutPts90k,
+								pInstance->mLastCheckoutPts64);
+		}
+
+		mCheckoutPtsOffset->pts_90k = pInstance->mLastCheckoutPts90k;
+		mCheckoutPtsOffset->pts_64 = pInstance->mLastCheckoutPts64;
+		pInstance->mLastCheckoutCurOffset = cur_offset;
+		// mutex_unlock(&vPtsServerIns->mListLock);
+		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		return 0;
+	}
+
+	if (pInstance->mPtsCheckoutStarted) {
+		if (pInstance->mFrameDuration == 0 && pInstance->mFrameDuration64 == 0) {
+
+			pInstance->mFrameDuration = div_u64(mCheckoutPtsOffset->pts_90k - pInstance->mLastCheckoutPts90k,
+													pInstance->mPtsCheckoutFailCount + 1);
+
+			pInstance->mFrameDuration64 = div_u64(mCheckoutPtsOffset->pts_64 - pInstance->mLastCheckoutPts64,
+													pInstance->mPtsCheckoutFailCount + 1);
+
+			if (pInstance->mFrameDuration < 0 ||
+				pInstance->mFrameDuration > 9000) {
+				pInstance->mFrameDuration = 0;
+			}
+			if (pInstance->mFrameDuration64 < 0 ||
+				pInstance->mFrameDuration64 > 100000) {
+				pInstance->mFrameDuration64 = 0;
+			}
+		} else {
+
+			FrameDur = div_u64(mCheckoutPtsOffset->pts_90k - pInstance->mLastCheckoutPts90k,
+								pInstance->mPtsCheckoutFailCount + 1);
+
+			FrameDur64 = div_u64(mCheckoutPtsOffset->pts_64 - pInstance->mLastDoubleCheckoutPts64,
+									pInstance->mPtsCheckoutFailCount + 1);
+
+			if (ptsserver_debuglevel > 1) {
+				pts_pr_info(index,"checkout FrameDur(32:%d 64:%lld) DoubleCheckFrameDuration(32:%d 64:%lld)\n",
+									FrameDur,
+									FrameDur64,
+									pInstance->mDoubleCheckFrameDuration,
+									pInstance->mDoubleCheckFrameDuration64);
+				pts_pr_info(index,"checkout LastDoubleCheckoutPts(64:%lld) pts(32:%llx 64:%lld) PtsCheckoutFailCount:%d\n",
+									pInstance->mLastDoubleCheckoutPts64,
+									mCheckoutPtsOffset->pts_90k,
+									mCheckoutPtsOffset->pts_64,
+									pInstance->mPtsCheckoutFailCount);
+			}
+
+			if ((FrameDur == pInstance->mDoubleCheckFrameDuration) ||
+				(FrameDur64 == pInstance->mDoubleCheckFrameDuration64)) {
+				pInstance->mDoubleCheckFrameDurationCount ++;
+			} else {
+				pInstance->mDoubleCheckFrameDuration = FrameDur;
+				pInstance->mDoubleCheckFrameDuration64 = FrameDur64;
+				pInstance->mDoubleCheckFrameDurationCount = 0;
+			}
+			if (pInstance->mDoubleCheckFrameDurationCount > pInstance->kDoubleCheckThreshold) {
+				if (ptsserver_debuglevel > 1) {
+					pts_pr_info(index,"checkout DoubleCheckFrameDurationCount(%d) DoubleCheckFrameDuration(32:%d 64:%lld)\n",
+										pInstance->mDoubleCheckFrameDurationCount,
+										pInstance->mDoubleCheckFrameDuration,
+										pInstance->mDoubleCheckFrameDuration64);
+				}
+				pInstance->mFrameDuration = pInstance->mDoubleCheckFrameDuration;
+				pInstance->mFrameDuration64 = pInstance->mDoubleCheckFrameDuration64;
+				pInstance->mDoubleCheckFrameDurationCount = 0;
+			}
+		}
+	} else {
+		pInstance->mPtsCheckoutStarted = 1;
+	}
+
+	pInstance->mPtsCheckoutFailCount = 0;
+	pInstance->mLastCheckoutOffset = mCheckoutPtsOffset->offset;
+	pInstance->mLastCheckoutPts64 = mCheckoutPtsOffset->pts_64;
+	pInstance->mLastDoubleCheckoutPts64 = mCheckoutPtsOffset->pts_64;
+	pInstance->mLastCheckoutPts90k = mCheckoutPtsOffset->pts_90k;
+	pInstance->mLastCheckoutCurOffset = cur_offset;
+	// mutex_unlock(&vPtsServerIns->mListLock);
+	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+	return 0;
+}
+EXPORT_SYMBOL(ptsserver_checkout_apts_offset);
+
+
+long ptsserver_static_ins_binder(s32 pServerInsId, ptsserver_ins** pIns, ptsserver_alloc_para allocParm) {
+	ptsserver_ins* pInstance = NULL;
+	s32 index = -1;
+	s32 temp_ins;
+	index = get_index_from_ptsserver_id(pServerInsId);
+
+	if (index >= 0 && index < MAX_INSTANCE_NUM) {
+		mutex_lock(&(vPtsServerInsList[index].mListLock));
+		pInstance = vPtsServerInsList[index].pInstance;
+		if (pInstance == NULL) {
+			mutex_unlock(&(vPtsServerInsList[index].mListLock));
+			return -1;
+		}
+		pInstance->mRef++;
+		*pIns = pInstance;
+		pts_pr_info(index,"ptsserver_static_instance has exist! mRef:%d\n", pInstance->mRef);
+		mutex_unlock(&(vPtsServerInsList[index].mListLock));
+	} else if (index < 0) {
+		pInstance = kzalloc(sizeof(ptsserver_ins), GFP_KERNEL);
+		if (pInstance == NULL) {
+			pr_info("[%s]%d pInstance == NULL\n", __func__, __LINE__);
+			return -1;
+		}
+
+		for (temp_ins = MAX_DYNAMIC_INSTANCE_NUM; temp_ins < MAX_INSTANCE_NUM; temp_ins++) {
+			mutex_lock(&(vPtsServerInsList[temp_ins].mListLock));
+			if (vPtsServerInsList[temp_ins].pInstance == NULL) {
+				vPtsServerInsList[temp_ins].pInstance = pInstance;
+				pInstance->mPtsServerInsId = pServerInsId;
+				// *pServerInsId = temp_ins;
+				pInstance->mRef++;
+				ptsserver_ins_init_syncinfo(pInstance, &allocParm);
+				pr_info("ptsserver_static_ins_binder --> pServerInsId:%d index:%d mRef:%d\n", pServerInsId, temp_ins, pInstance->mRef);
+				mutex_unlock(&(vPtsServerInsList[temp_ins].mListLock));
+				break;
+			}
+			mutex_unlock(&(vPtsServerInsList[temp_ins].mListLock));
+		}
+		*pIns = pInstance;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(ptsserver_static_ins_binder);
+
+long ptsserver_get_list_size(s32 pServerInsId, u32* ListSize) {
+	PtsServerManage* vPtsServerIns = NULL;
+	ptsserver_ins* pInstance = NULL;
+	s32 index = get_index_from_ptsserver_id(pServerInsId);
+
+	if (index < 0 || index >= MAX_INSTANCE_NUM) {
+		return -1;
+	}
+	vPtsServerIns = &(vPtsServerInsList[index]);
+	mutex_lock(&vPtsServerIns->mListLock);
+	pInstance = vPtsServerIns->pInstance;
+
+	if (pInstance == NULL) {
+		mutex_unlock(&vPtsServerIns->mListLock);
+		return -1;
+	}
+
+	*ListSize = pInstance->mListSize;
+	mutex_unlock(&vPtsServerIns->mListLock);
+
+	return 0;
+}
+
+long ptsserver_ins_reset(s32 pServerInsId) {
+	PtsServerManage* vPtsServerIns = NULL;
+	ptsserver_ins* pInstance = NULL;
+	s32 index = get_index_from_ptsserver_id(pServerInsId);
+	pts_node *ptn = NULL;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	vPtsServerIns = &(vPtsServerInsList[index]);
+	mutex_lock(&vPtsServerIns->mListLock);
+	pInstance = vPtsServerIns->pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&vPtsServerIns->mListLock);
+		return -1;
+	}
+
+	pts_pr_info(index,"ptsserver_ins_reset ListSize:%d\n",pInstance->mListSize);
+	while (!list_empty(&pInstance->pts_free_list)) {
+		ptn = list_entry(pInstance->pts_free_list.next,
+						struct ptsnode, node);
+		if (ptn != NULL) {
+			list_del(&ptn->node);
+			ptn = NULL;
+		}
+	}
+	while (!list_empty(&pInstance->pts_list)) {
+		ptn = list_entry(pInstance->pts_list.next,
+						struct ptsnode, node);
+		if (ptn != NULL) {
+			list_del(&ptn->node);
+			ptn = NULL;
+		}
+	}
+	if (pInstance->all_free_ptn) {
+		vfree(pInstance->all_free_ptn);
+		pInstance->all_free_ptn = NULL;
+	}
+
+	pInstance->mPtsCheckinStarted = 0;
+	pInstance->mPtsCheckoutStarted = 0;
+	pInstance->mPtsCheckoutFailCount = 0;
+	pInstance->mFrameDuration = 0;
+	pInstance->mFrameDuration64 = 0;
+	pInstance->mFirstCheckinPts = 0;
+	pInstance->mFirstCheckinOffset = 0;
+	pInstance->mFirstCheckinSize = 0;
+	pInstance->mLastCheckinPts = 0;
+	pInstance->mLastCheckinOffset = 0;
+	pInstance->mLastCheckinSize = 0;
+	pInstance->mAlignmentOffset = 0;
+	pInstance->mLastCheckoutPts = 0;
+	pInstance->mLastCheckoutOffset = 0;
+	pInstance->mFirstCheckinPts64 = 0;
+	pInstance->mLastCheckinPts64 = 0;
+	pInstance->mLastCheckoutPts64 = 0;
+	pInstance->mDoubleCheckFrameDuration = 0;
+	pInstance->mDoubleCheckFrameDuration64 = 0;
+	pInstance->mDoubleCheckFrameDurationCount = 0;
+	pInstance->mLastDoubleCheckoutPts = 0;
+	pInstance->mLastDoubleCheckoutPts64 = 0;
+	pInstance->mDecoderDuration = 0;
+	pInstance->mListSize = 0;
+	pInstance->mLastCheckoutCurOffset = 0;
+	pInstance->mLastCheckinPiecePts = 0;
+	pInstance->mLastCheckinPiecePts64 = 0;
+	pInstance->mLastCheckinPieceOffset = 0;
+	pInstance->mLastCheckinPieceSize = 0;
+	pInstance->mLastCheckoutIndex = 0;
+	pInstance->mLastCheckinDurationCount = 0;
+	pInstance->mLastCheckoutDurationCount = 0;
+	pInstance->mLastShotBound = 0;
+	pInstance->mTrickMode = 0;
+	pInstance->setC2Mode = false;
+	pInstance->mOffsetMode = 0;
+	pInstance->mStickyWrapFlag = false;
+	pInstance->mLastCheckoutPts90k = 0;
+	pInstance->mFirstCheckinPts90k = 0;
+	pInstance->mLastCheckinPts90k = 0;
+
+	INIT_LIST_HEAD(&pInstance->pts_list);
+	INIT_LIST_HEAD(&pInstance->pts_free_list);
+
+	pInstance->all_free_ptn = vmalloc(500 * sizeof(struct ptsnode));
+	if (pInstance->all_free_ptn == NULL) {
+		pr_info("vmalloc all_free_ptn fail \n");
+		return -1;
+	}
+	for (index = 0; index < pInstance->mMaxCount; index++) {
+		ptn = &pInstance->all_free_ptn[index];
+		if (ptsserver_debuglevel >= 1) {
+			pts_pr_info(pServerInsId,"ptn[%d]:%px\n", index,ptn);
+		}
+		list_add_tail(&ptn->node, &pInstance ->pts_free_list);
+	}
+	mutex_unlock(&vPtsServerIns->mListLock);
+	pts_pr_info(pServerInsId,"ptsserver_ins_reset ok \n");
+	return 0;
+}
+EXPORT_SYMBOL(ptsserver_ins_reset);
 
 module_param(ptsserver_debuglevel, uint, 0664);
 MODULE_PARM_DESC(ptsserver_debuglevel, "\n pts server debug level\n");

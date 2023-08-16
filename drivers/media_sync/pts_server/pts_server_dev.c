@@ -33,7 +33,7 @@
 
 #define PTSSERVER_DEVICE_NAME   "ptsserver"
 static struct device *ptsserver_dev;
-
+static struct mutex m_alloc_lock;
 static u32 ptsserver_support_es_splice_mode = 1;
 typedef struct pspriv_s {
 	s32 mPtsServerInsId;
@@ -82,8 +82,10 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	start_offset mStartOffset = {0};
 	last_checkin_pts mLastCheckinPts = {0};
 	last_checkout_pts mLastCheckOutPts = {0};
+	checkout_apts_offset mCheckoutAptsOffset = {0};
 	s32 mTrickMode = 0;
 	s32 mEsSpliceMode = 0;
+	u32 mListSize = 0;
 	switch (cmd) {
 		case PTSSERVER_IOC_INSTANCE_ALLOC:
 			if (copy_from_user ((void *)&allocparm,
@@ -91,14 +93,14 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 							sizeof(allocparm))) {
 				return -EFAULT;
 			}
-
+			mutex_lock(&m_alloc_lock);
 			if (ptsserver_ins_alloc(
 						&PServerInsId,
 						&PServerIns,
 						&allocparm) < 0) {
 				return -EFAULT;
 			}
-
+			mutex_unlock(&m_alloc_lock);
 			if (PServerIns == NULL) {
 				return -EFAULT;
 			}
@@ -234,6 +236,62 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 						sizeof(mEsSpliceMode)))
 			return -EFAULT;
 		break;
+		case PTSSERVER_IOC_CHECKOUT_APTS:
+			if (copy_from_user ((void *)&mCheckoutAptsOffset,
+							(void *)arg,
+							sizeof(checkout_pts_offset))) {
+				pr_info("[%s]%d cmd:%d", __func__, __LINE__, cmd);
+				return -EFAULT;
+			}
+			ret = ptsserver_checkout_apts_offset(priv->mPtsServerInsId, &mCheckoutAptsOffset);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&mCheckoutAptsOffset,
+						sizeof(checkout_pts_offset)))
+					return -EFAULT;
+			}
+		break;
+		case PTSSERVER_IOC_INSTANCE_STATIC_BINDER:
+			if (copy_from_user((void *)&PServerInsId,
+						(void *)arg,
+						sizeof(PServerInsId))) {
+				pr_info("[%s]:%d\n", __func__, __LINE__);
+				return -EFAULT;
+			}
+			mutex_lock(&m_alloc_lock);
+			ret = ptsserver_static_ins_binder(PServerInsId, &PServerIns, allocparm);
+			mutex_unlock(&m_alloc_lock);
+			if (PServerIns == NULL) {
+				pr_info("[%s]:%d\n", __func__, __LINE__);
+				return -EFAULT;
+			}
+			if (priv != NULL) {
+				priv->mPtsServerInsId = PServerInsId;
+				priv->pServerIns = PServerIns;
+			}
+		break;
+		case PTSSERVER_IOC_GET_LIST_SIZE:
+			mutex_lock(&m_alloc_lock);
+			ret = ptsserver_get_list_size(priv->mPtsServerInsId, &mListSize);
+			mutex_unlock(&m_alloc_lock);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&mListSize,
+						sizeof(mListSize)))
+					return -EFAULT;
+			}
+		break;
+		case PTSSERVER_IOC_INSTANCE_SET_ID:
+			if (copy_from_user((void *)&PServerInsId,
+						(void *)arg,
+						sizeof(PServerInsId))) {
+				pr_info("[%s]:%d\n", __func__, __LINE__);
+				return -EFAULT;
+			}
+			if (priv != NULL) {
+				priv->mPtsServerInsId = PServerInsId;
+			}
+		break;
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -257,6 +315,10 @@ static long ptsserver_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case PTSSERVER_IOC_RELEASE:
 		case PTSSERVER_IOC_SET_TRICK_MODE:
 		case PTSSERVER_IOC_GET_ES_SPLICE_MODE:
+		case PTSSERVER_IOC_CHECKOUT_APTS:
+		case PTSSERVER_IOC_INSTANCE_STATIC_BINDER:
+		case PTSSERVER_IOC_GET_LIST_SIZE:
+		case PTSSERVER_IOC_INSTANCE_SET_ID:
 			return ptsserver_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;
@@ -313,6 +375,7 @@ static int __init ptsserver_module_init(void)
 		goto err1;
 	}
 	ptsserver_init();
+	mutex_init(&m_alloc_lock);
 	return 0;
 
 err1:

@@ -3120,6 +3120,12 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			vdec_stream_based(vdec);
 	}
 
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D ||
+		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) &&
+		(vdec->frame_base_video_path == FRAME_BASE_PATH_DI_V4LVIDEO)) {
+		p->use_vfm_path = 0;
+	}
+
 	if (debugflags & (1 << 29))
 		p->is_stream_mode_dv_multi = true;
 	else
@@ -3188,7 +3194,10 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 		/* create IONVIDEO instance and connect decoder's
 		 * vf_provider interface to it
 		 */
-		if (!is_support_no_parser()) {
+		if (!is_support_no_parser() &&
+			!((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D ||
+			get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) &&
+			(vdec->frame_base_video_path == FRAME_BASE_PATH_DI_V4LVIDEO))) {
 			if (p->type != VDEC_TYPE_FRAME_BLOCK) {
 				r = -ENODEV;
 				pr_err("vdec: Incorrect decoder type\n");

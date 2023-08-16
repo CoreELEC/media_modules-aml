@@ -955,7 +955,9 @@ static int amstream_port_init(struct port_priv_s *priv)
 			pr_err("tsdemux_init  failed\n");
 			goto error3;
 		}
-		tsync_pcr_start();
+		if (port->flag & PORT_FLAG_TSYNC) {
+			tsync_pcr_start();
+		}
 	}
 
 	if ((port->type & PORT_TYPE_SUB) && (port->flag & PORT_FLAG_SID)) {
@@ -1014,7 +1016,9 @@ static int amstream_port_release(struct port_priv_s *priv)
 
 	if ((port->type & PORT_TYPE_MPTS) &&
 		!(port->flag & PORT_FLAG_VFORMAT)) {
-		tsync_pcr_stop();
+		if (port->flag & PORT_FLAG_TSYNC) {
+			tsync_pcr_stop();
+		}
 		tsdemux_release();
 	}
 
@@ -1541,6 +1545,7 @@ static int amstream_open(struct inode *inode, struct file *file)
 	file->private_data = priv;
 
 	port->flag = PORT_FLAG_IN_USE;
+	port->flag |= PORT_FLAG_TSYNC;
 	port->pcr_inited = 0;
 #ifdef DATA_DEBUG
 	debug_filp = media_open(DEBUG_FILE_NAME, O_WRONLY, 0);
@@ -2101,15 +2106,20 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		unsigned int pts;
 
 		pts = parm.data_32;
-		if (tsync_get_mode() == TSYNC_MODE_PCRMASTER)
-			tsync_pcr_set_apts(pts);
-		else
-			tsync_set_apts(pts);
+		if (this->flag & PORT_FLAG_TSYNC) {
+			if (tsync_get_mode() == TSYNC_MODE_PCRMASTER)
+				tsync_pcr_set_apts(pts);
+			else
+				tsync_set_apts(pts);
+		}
 		break;
 	}
 	case AMSTREAM_SET_FRAME_BASE_PATH:
 		if (is_mult_inc(this->type) &&
 			(parm.frame_base_video_path < FRAME_BASE_PATH_MAX)) {
+			if (parm.frame_base_video_path == FRAME_BASE_PATH_DI_V4LVIDEO) {
+				this->flag &= (~PORT_FLAG_TSYNC);
+			}
 			vdec_set_video_path(priv->vdec, parm.data_32);
 		} else
 			r = -EINVAL;
@@ -3318,10 +3328,12 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			("Get audio pts from user space fault!\n");
 			return -EFAULT;
 		}
-		if (tsync_get_mode() == TSYNC_MODE_PCRMASTER)
-			tsync_pcr_set_apts(pts);
-		else
-			tsync_set_apts(pts);
+		if (this->flag & PORT_FLAG_TSYNC) {
+			if (tsync_get_mode() == TSYNC_MODE_PCRMASTER)
+				tsync_pcr_set_apts(pts);
+			else
+				tsync_set_apts(pts);
+		}
 		break;
 	}
 	case AMSTREAM_IOC_SET_CRC: {
