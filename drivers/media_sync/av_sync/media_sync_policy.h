@@ -77,6 +77,7 @@ typedef struct policy_instance {
 	struct mediasync_start_slow_sync_info mStartSlowSyncInfo;
 	/***************************/
 	s64 mVideoSyncIntervalUs;
+	s32 invalidVptsCount;
 	video_policy videoLastPolicy;
 	mediasync_speed mSpeed;
 	mediasync_speed mPcrSlope;

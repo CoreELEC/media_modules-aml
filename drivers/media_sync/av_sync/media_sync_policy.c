@@ -1479,6 +1479,7 @@ int mediasync_video_process(ulong handle,s64 vpts,struct mediasync_video_policy*
 	//mediasync_policy_instance *inst = handle;
 	int ret = 0;
 	bool isVideoFreeRun = false;
+	int64_t RecordVpts = vpts;
 	mediasync_policy_instance *policyInst =
 		(mediasync_policy_instance *) handle;
 
@@ -1542,21 +1543,32 @@ int mediasync_video_process(ulong handle,s64 vpts,struct mediasync_video_policy*
 	}
 	if (policyInst->firstVFrameInfo.framePts == -1 &&
 		policyInst->firstVFrameInfo.frameSystemTime == -1) {
+		if (RecordVpts != -1) {
+			policyInst->firstVFrameInfo.framePts = vpts;
+			policyInst->firstVFrameInfo.frameSystemTime= mediasync_get_system_time_us();
+			mediasync_ins_set_firstvideoframeinfo(policyInst->mMediasyncIns,
+							policyInst->firstVFrameInfo);
 
-		policyInst->firstVFrameInfo.framePts = vpts;
-		policyInst->firstVFrameInfo.frameSystemTime= mediasync_get_system_time_us();
-		mediasync_ins_set_firstvideoframeinfo(policyInst->mMediasyncIns,
-						policyInst->firstVFrameInfo);
+			policyInst->mCurVideoFrameInfo.framePts = vpts;
+			policyInst->mCurVideoFrameInfo.frameSystemTime = policyInst->firstVFrameInfo.frameSystemTime;
+			mediasync_ins_set_curvideoframeinfo(policyInst->mMediasyncIns,
+							policyInst->mCurVideoFrameInfo);
 
-		policyInst->mCurVideoFrameInfo.framePts = vpts;
-		policyInst->mCurVideoFrameInfo.frameSystemTime = policyInst->firstVFrameInfo.frameSystemTime;
-		mediasync_ins_set_curvideoframeinfo(policyInst->mMediasyncIns,
-						policyInst->mCurVideoFrameInfo);
-
-		if (policyInst->mShowFirstFrameNosync) {
-			vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_NORMAL_OUTPUT;
-			mediasync_video_state_process(policyInst,&syncState);
-			mediasync_pr_info(0,policyInst,"no sync display first.");
+			if (policyInst->mShowFirstFrameNosync && policyInst->invalidVptsCount == 0) {
+				vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_NORMAL_OUTPUT;
+				mediasync_video_state_process(policyInst,&syncState);
+				mediasync_pr_info(0,policyInst,"no sync display first vpts:0x%llx.",vpts);
+				return ret;
+			}
+		} else {
+			if (policyInst->invalidVptsCount == 0) {
+				vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_NORMAL_OUTPUT;
+				mediasync_pr_info(0,policyInst,"first vpts:0x%llx invalid ,render",vpts);
+			} else {	//todo add drop function
+				vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_NORMAL_OUTPUT;
+				mediasync_pr_info(0,policyInst,"first vpts:0x%llx invalid ,drop",vpts);
+			}
+			policyInst->invalidVptsCount++;
 			return ret;
 		}
 	}
@@ -1705,7 +1717,6 @@ int mediasync_policy_parameter_init(mediasync_policy_instance *policyInst) {
 	policyInst->mHoldVideoTime = -1;
 	policyInst->mHoldVideoPts = -1;
 	policyInst->mStartHoldVideoTime = -1;
-
 	/**start slow sync Parameter**/
 
 	policyInst->mStartSlowSyncInfo.mSlowSyncEnable = true;               // slowsync enable flag, default is false
@@ -1720,6 +1731,7 @@ int mediasync_policy_parameter_init(mediasync_policy_instance *policyInst) {
 	/***************************/
 	policyInst->mVideoSyncIntervalUs = 16666;
 
+	policyInst->invalidVptsCount = 0;
 	return 0;
 }
 

@@ -157,7 +157,8 @@ static struct vframe_s *mediasync_vf_peek(void *op_arg)
 		vPts = vf->pts_us64;
 	}
 
-	mediasync_pr_info(2,dev->dev_id,"pts:%lld lastpts:%lld diff:%lld vfPts:%lld",
+	mediasync_pr_info(2,dev->dev_id,"vf->pts:%d pts:%lld lastpts:%lld diff:%lld vfPts:%lld",
+														vf->pts,
 														vPts,
 														dev->lastVpts,
 														vPts - dev->lastVpts,
