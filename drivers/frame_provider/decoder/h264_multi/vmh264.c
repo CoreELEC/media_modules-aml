@@ -9612,7 +9612,7 @@ static void show_user_data_buf(void)
 
 static int vmh264_init_userdata_dump(void)
 {
-	user_data_buf = kmalloc(MAX_USER_DATA_SIZE, GFP_KERNEL);
+	user_data_buf = vmalloc(MAX_USER_DATA_SIZE);
 	if (user_data_buf)
 		return 1;
 	else
@@ -9623,7 +9623,7 @@ static void vmh264_dump_userdata(void)
 {
 	if (user_data_buf) {
 		show_user_data_buf();
-		kfree(user_data_buf);
+		vfree(user_data_buf);
 		user_data_buf = NULL;
 	}
 }

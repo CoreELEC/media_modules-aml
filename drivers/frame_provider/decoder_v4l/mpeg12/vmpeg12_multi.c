@@ -1064,7 +1064,7 @@ static void show_user_data_buf(struct vdec_mpeg12_hw_s *hw)
 
 static int amvdec_mmpeg12_init_userdata_dump(struct vdec_mpeg12_hw_s *hw)
 {
-	hw->user_data_dump_buf = kmalloc(MAX_USER_DATA_SIZE, GFP_KERNEL);
+	hw->user_data_dump_buf = vmalloc(MAX_USER_DATA_SIZE);
 	if (hw->user_data_dump_buf)
 		return 1;
 	else
@@ -1075,7 +1075,7 @@ static void amvdec_mmpeg12_uninit_userdata_dump(struct vdec_mpeg12_hw_s *hw)
 {
 	if (hw->user_data_dump_buf) {
 		show_user_data_buf(hw);
-		kfree(hw->user_data_dump_buf);
+		vfree(hw->user_data_dump_buf);
 		hw->user_data_dump_buf = NULL;
 	}
 }

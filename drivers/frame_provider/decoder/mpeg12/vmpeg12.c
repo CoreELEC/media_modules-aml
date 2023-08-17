@@ -2029,7 +2029,7 @@ static s32 vmpeg12_init(void)
 #ifdef DUMP_USER_DATA
 static int amvdec_mpeg12_init_userdata_dump(void)
 {
-	user_data_buf = kmalloc(MAX_USER_DATA_SIZE, GFP_KERNEL);
+	user_data_buf = vmalloc(MAX_USER_DATA_SIZE);
 	if (user_data_buf)
 		return 1;
 	else
@@ -2147,7 +2147,7 @@ static int amvdec_mpeg12_remove(struct platform_device *pdev)
 #ifdef DUMP_USER_DATA
 	if (user_data_buf) {
 		show_user_data_buf();
-		kfree(user_data_buf);
+		vfree(user_data_buf);
 		user_data_buf = NULL;
 	}
 #endif
