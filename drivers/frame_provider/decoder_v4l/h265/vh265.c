@@ -1589,6 +1589,7 @@ struct tile_s {
 #define DEC_RESULT_ERROR_DATA      	12
 #define DEC_RESULT_NEED_MORE_BUFFER 13
 #define DEC_RESULT_UNFINISH			14
+#define DEC_RESULT_DV_DONE          15
 
 static void vh265_work(struct work_struct *work);
 static void vh265_timeout_work(struct work_struct *work);
@@ -10883,7 +10884,7 @@ force_output:
 			}
 			hevc->decoded_poc = hevc->curr_POC;
 			hevc->decoding_pic = NULL;
-			hevc->dec_result = DEC_RESULT_DONE;
+			hevc->dec_result = DEC_RESULT_DV_DONE;
 			if (vdec_frame_based(hw_to_vdec(hevc)) &&
 				hevc->last_dec_result != DEC_RESULT_UNFINISH)
 				vdec_v4l_post_error_frame_event(ctx);
@@ -12868,6 +12869,14 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_START);
 	if (hevc->dec_result != DEC_RESULT_NONE)
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_START);
+
+	if (input_stream_based(hw_to_vdec(hevc))
+			&& (vdec->slave || vdec->master)
+			&& (hevc->dec_result != DEC_RESULT_DV_DONE)
+			&& (hevc->dec_result != DEC_RESULT_AGAIN)) {
+		hevc->start_parser_type = 0;
+	}
+
 	if (hevc->dec_result == DEC_RESULT_FREE_CANVAS) {
 		/*USE_BUF_BLOCK*/
 		uninit_pic_list(hevc);
@@ -13052,7 +13061,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		}
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_END);
 		return;
-	} else if (hevc->dec_result == DEC_RESULT_DONE) {
+	} else if (hevc->dec_result == DEC_RESULT_DONE
+		|| (hevc->dec_result == DEC_RESULT_DV_DONE)) {
 		int i;
 		struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 
