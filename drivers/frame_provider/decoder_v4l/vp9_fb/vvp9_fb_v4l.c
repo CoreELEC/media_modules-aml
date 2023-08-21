@@ -283,6 +283,7 @@ static int vp9_hw_ctx_restore(struct VP9Decoder_s *pbi);
 static int compute_losless_comp_header_size(int width, int height);
 static void mcrcc_perfcount_reset(void);
 static void decomp_perfcount_reset(void);
+static void vp9_recycle_dec_resource(void *priv, struct aml_buf *aml_buf);
 
 static const char vvp9_dec_id[] = "vvp9-dev";
 
@@ -3351,6 +3352,7 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 			int i, j, used_size, ret;
 			int signed_count = 0;
 			struct vframe_s *signed_fence[VF_POOL_SIZE];
+			struct aml_buf *buf;
 			/* notify signal to wake up wq of fence. */
 			vdec_timeline_increase(vdec->sync, 1);
 			mutex_lock(&pbi->fence_mutex);
@@ -3371,8 +3373,12 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 			}
 			mutex_unlock(&pbi->fence_mutex);
 			if (signed_count != 0) {
-				for (i = 0; i < signed_count; i++)
-					vvp9_vf_put(signed_fence[i], vdec);
+				for (i = 0; i < signed_count; i++) {
+					if (!signed_fence[i])
+						continue;
+					buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
+					vp9_recycle_dec_resource(pbi, buf);
+				}
 			}
 		} else {
 			prepare_display_buf(pbi, &sd);

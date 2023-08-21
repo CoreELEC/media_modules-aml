@@ -10480,6 +10480,7 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 		int i, j, used_size, ret;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
+		struct aml_buf *buf;
 
 		post_prepare_process(vdec, frame);
 
@@ -10508,8 +10509,12 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 		}
 		mutex_unlock(&hevc->fence_mutex);
 		if (signed_count != 0) {
-			for (i = 0; i < signed_count; i++)
-				vh265_vf_put(signed_fence[i], vdec);
+			for (i = 0; i < signed_count; i++) {
+				if (!signed_fence[i])
+					continue;
+				buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
+				h265_recycle_dec_resource(hevc, buf);
+			}
 		}
 		return 0;
 	}
