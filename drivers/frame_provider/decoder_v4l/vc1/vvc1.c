@@ -138,7 +138,6 @@ static const struct vframe_operations_s vvc1_vf_provider = {
 	.vf_states = vvc1_vf_states,
 };
 static void *mm_blk_handle;
-static struct vframe_provider_s vvc1_vf_prov;
 
 static DECLARE_KFIFO(newframe_q, struct vframe_s *, VF_POOL_SIZE);
 static DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
@@ -1797,16 +1796,12 @@ static int vvc1_event_cb(int type, void *data, void *private_data)
 		unsigned long flags;
 
 		amvdec_stop();
-#ifndef CONFIG_AMLOGIC_POST_PROCESS_MANAGER
-		vf_light_unreg_provider(&vvc1_vf_prov);
-#endif
+
 		spin_lock_irqsave(&lock, flags);
 		vvc1_local_init(true);
 		vvc1_prot_init();
 		spin_unlock_irqrestore(&lock, flags);
-#ifndef CONFIG_AMLOGIC_POST_PROCESS_MANAGER
-		vf_reg_provider(&vvc1_vf_prov);
-#endif
+
 		amvdec_start();
 	}
 
@@ -2058,8 +2053,6 @@ static void vvc1_ppmgr_reset(void)
 {
 	vc1_print(0, VC1_DEBUG_DETAIL,"%s: ", __func__);
 
-	vf_notify_receiver(PROVIDER_NAME, VFRAME_EVENT_PROVIDER_RESET, NULL);
-
 	vvc1_local_init(true);
 
 	/* vf_notify_receiver(PROVIDER_NAME,
@@ -2089,9 +2082,7 @@ static void error_do_work(struct work_struct *work)
 #ifdef CONFIG_AMLOGIC_POST_PROCESS_MANAGER
 		vvc1_ppmgr_reset();
 #else
-		vf_light_unreg_provider(&vvc1_vf_prov);
 		vvc1_local_init(true);
-		vf_reg_provider(&vvc1_vf_prov);
 #endif
 		vvc1_prot_init();
 		amvdec_start();
@@ -2231,25 +2222,6 @@ static s32 vvc1_init(void)
 	}
 
 	stat |= STAT_ISR_REG;
-#ifdef CONFIG_AMLOGIC_POST_PROCESS_MANAGER
-	vf_provider_init(&vvc1_vf_prov,
-		PROVIDER_NAME, &vvc1_vf_provider, NULL);
-	vf_reg_provider(&vvc1_vf_prov);
-	vf_notify_receiver(PROVIDER_NAME,
-		VFRAME_EVENT_PROVIDER_START, NULL);
-#else
-	vf_provider_init(&vvc1_vf_prov,
-		PROVIDER_NAME, &vvc1_vf_provider, NULL);
-	vf_reg_provider(&vvc1_vf_prov);
-#endif
-
-	if (!is_reset)
-		vf_notify_receiver(PROVIDER_NAME,
-				VFRAME_EVENT_PROVIDER_FR_HINT,
-				(void *)
-				((unsigned long)vvc1_amstream_dec_info.rate));
-
-	stat |= STAT_VF_HOOK;
 
 	recycle_timer.expires = jiffies + PUT_INTERVAL;
 	add_timer(&recycle_timer);
@@ -2355,15 +2327,6 @@ static int amvdec_vc1_remove(struct platform_device *pdev)
 	}
 
 	cancel_work_sync(&set_clk_work);
-	if (stat & STAT_VF_HOOK) {
-		if (!is_reset)
-			vf_notify_receiver(PROVIDER_NAME,
-					VFRAME_EVENT_PROVIDER_FR_END_HINT,
-					NULL);
-
-		vf_unreg_provider(&vvc1_vf_prov);
-		stat &= ~STAT_VF_HOOK;
-	}
 
 	amvdec_disable();
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TM2)
