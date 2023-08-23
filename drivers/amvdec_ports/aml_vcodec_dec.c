@@ -70,8 +70,8 @@
 
 
 #define OUT_FMT_IDX		(0) //default h264
-#define CAP_FMT_IDX		(12) //capture nv21m
-#define CAP_FMT_I420_IDX	(16) //use for mjpeg
+#define CAP_FMT_IDX		(14) //capture nv21m
+#define CAP_FMT_I420_IDX	(18) //use for mjpeg
 
 #define AML_VDEC_MIN_W	64U
 #define AML_VDEC_MIN_H	64U
@@ -180,6 +180,18 @@ static struct aml_video_fmt aml_video_formats[] = {
 		.num_planes = 1,
 	},
 	{
+		.name = "VC1L",
+		.fourcc = V4L2_PIX_FMT_VC1_ANNEX_L,
+		.type = AML_FMT_DEC,
+		.num_planes = 1,
+	},
+	{
+		.name = "VC1G",
+		.fourcc = V4L2_PIX_FMT_VC1_ANNEX_G,
+		.type = AML_FMT_DEC,
+		.num_planes = 1,
+	},
+	{
 		.name = "NV21",
 		.fourcc = V4L2_PIX_FMT_NV21,
 		.type = AML_FMT_FRAME,
@@ -270,6 +282,16 @@ static const struct aml_codec_framesizes aml_vdec_framesizes[] = {
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_AVS3,
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_VC1_ANNEX_L,
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_VC1_ANNEX_G,
 		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
 				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
@@ -1508,7 +1530,9 @@ static void aml_vdec_worker(struct work_struct *work)
 		goto out;
 	}
 
-	if (ctx->stream_mode) {
+	if (ctx->stream_mode &&
+		!(ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_G ||
+		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_L)) {
 		struct dmabuf_dmx_sec_es_data *es_data = (struct dmabuf_dmx_sec_es_data *)aml_vb->dma_buf;
 		int offset = vb->planes[0].data_offset;
 		buf.addr = es_data->data_start + offset;
@@ -3329,6 +3353,12 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 		q_data->coded_width = pix->width;
 		q_data->coded_height = pix->height;
 
+		if (!vdec_check_is_available(pix->pixelformat)) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+				"VC-1 only support single mode. \n");
+			return -EINVAL;
+		}
+
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 			"w: %d, h: %d, size: %d\n",
 			pix->width, pix->height,
@@ -4263,7 +4293,9 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 					"dbuf %px dev %px\n", dbuf, dev);
 	}
 
-	if (ctx->stream_mode) {
+	if (ctx->stream_mode &&
+		!(ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_G ||
+		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_L)) {
 		struct dmabuf_dmx_sec_es_data *es_data;
 
 		if (dmabuf_manage_get_type(vb->planes[0].dbuf) != DMA_BUF_TYPE_DMX_ES) {
@@ -4290,7 +4322,9 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		return;
 	}
 
-	if (ctx->stream_mode) {
+	if (ctx->stream_mode &&
+		!(ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_G ||
+		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_L)) {
 		struct dmabuf_dmx_sec_es_data *es_data = (struct dmabuf_dmx_sec_es_data *)buf->dma_buf;
 		int offset = vb->planes[0].data_offset;
 		if (ctx->set_ext_buf_flg == false) {

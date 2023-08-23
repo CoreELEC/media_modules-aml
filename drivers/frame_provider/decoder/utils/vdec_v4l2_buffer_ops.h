@@ -28,6 +28,10 @@ int vdec_v4l_get_pic_info(
 	struct aml_vcodec_ctx *ctx,
 	struct vdec_pic_info *pic);
 
+int vdec_v4l_get_pts_info(
+	struct aml_vcodec_ctx *ctx,
+	u64 *pts);
+
 int vdec_v4l_set_cfg_infos(
 	struct aml_vcodec_ctx *ctx,
 	struct aml_vdec_cfg_infos *cfg);
@@ -60,6 +64,9 @@ int vdec_v4l_post_error_frame_event(
 int vdec_v4l_post_evet(
 	struct aml_vcodec_ctx *ctx,
 	u32 event);
+
+int vdec_v4l_inst_reset(
+	struct aml_vcodec_ctx *ctx);
 
 int vdec_v4l_res_ch_event(
 	struct aml_vcodec_ctx *ctx);

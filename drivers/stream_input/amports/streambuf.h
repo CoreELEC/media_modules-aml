@@ -68,6 +68,7 @@ struct stream_buf_ops {
 	void (*set_wp) (struct stream_buf_s *, u32);
 	u32 (*get_rp) (struct stream_buf_s *);
 	void (*set_rp) (struct stream_buf_s *, u32);
+	void (*reset) (struct stream_buf_s *);
 };
 
 struct stream_buf_s {

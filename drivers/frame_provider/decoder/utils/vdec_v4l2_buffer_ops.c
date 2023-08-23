@@ -39,6 +39,21 @@ int vdec_v4l_get_pic_info(struct aml_vcodec_ctx *ctx,
 }
 EXPORT_SYMBOL(vdec_v4l_get_pic_info);
 
+int vdec_v4l_get_pts_info(struct aml_vcodec_ctx *ctx,
+	u64 *pts)
+{
+	int ret = 0;
+
+	if (ctx->drv_handle == 0)
+		return -EIO;
+
+	ret = ctx->dec_if->get_param(ctx->drv_handle,
+		GET_PARAM_TIME_STAMP, pts);
+
+	return ret;
+}
+EXPORT_SYMBOL(vdec_v4l_get_pts_info);
+
 int vdec_v4l_set_cfg_infos(struct aml_vcodec_ctx *ctx,
 	struct aml_vdec_cfg_infos *cfg)
 {
@@ -167,6 +182,20 @@ int vdec_v4l_post_evet(struct aml_vcodec_ctx *ctx, u32 event)
 	return ret;
 }
 EXPORT_SYMBOL(vdec_v4l_post_evet);
+
+int vdec_v4l_inst_reset(struct aml_vcodec_ctx *ctx)
+{
+	int ret = 0;
+
+	if (ctx->drv_handle == 0)
+		return -EIO;
+
+	ret = ctx->dec_if->set_param(ctx->drv_handle,
+		SET_PARAM_INST_RESET, NULL);
+
+	return ret;
+}
+EXPORT_SYMBOL(vdec_v4l_inst_reset);
 
 int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 {

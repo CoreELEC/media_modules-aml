@@ -21,6 +21,7 @@ ${MODULE_NAME}-objs += decoder/vdec_avs_if.o
 ${MODULE_NAME}-objs += decoder/vdec_av1_if.o
 ${MODULE_NAME}-objs += decoder/vdec_avs2_if.o
 ${MODULE_NAME}-objs += decoder/vdec_avs3_if.o
+${MODULE_NAME}-objs += decoder/vdec_vc1_if.o
 ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 ${MODULE_NAME}-objs += decoder/aml_h264_parser.o
 ${MODULE_NAME}-objs += decoder/aml_hevc_parser.o

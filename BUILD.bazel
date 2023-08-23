@@ -46,6 +46,7 @@ kernel_module(
         "frame_provider/decoder/vav1/amvdec_av1.ko",
         "frame_provider/decoder/vav1_fb/amvdec_av1_fb.ko",
         "frame_provider/decoder/vc1/amvdec_vc1.ko",
+	"frame_provider/decoder_v4l/vc1/amvdec_vc1_v4l.ko",
         "frame_provider/decoder/vp9/amvdec_vp9.ko",
         "frame_provider/decoder/vp9_fb/amvdec_vp9_fb.ko",
         "framerate_adapter/video_framerate_adapter.ko",

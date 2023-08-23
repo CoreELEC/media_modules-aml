@@ -170,6 +170,38 @@ static void stream_buffer_release(struct stream_buf_s *stbuf)
 	stbuf->flag &= ~BUF_FLAG_IN_USE;
 }
 
+static void stream_buffer_reset(struct stream_buf_s *stbuf)
+{
+	if (stbuf->write_thread)
+		threadrw_release(stbuf);
+	if (vdec_single(container_of(stbuf, struct vdec_s, vbuf)))
+		pts_stop(stbuf->type);
+
+	if (stbuf->flag & BUF_FLAG_ALLOC && stbuf->buf_start) {
+		if (!stbuf->ext_buf_addr) {
+			void *stbuf_virt;
+
+			stbuf->flag &= ~BUF_FLAG_IN_USE;
+			stbuf_virt = codec_mm_phys_to_virt(stbuf->buf_start);
+			if (stbuf_virt) {
+				memset(stbuf_virt, 0, stbuf->buf_size);
+				codec_mm_dma_flush(stbuf_virt,
+					stbuf->buf_size,
+					DMA_TO_DEVICE);
+			}
+
+			stbuf->buf_wp		= stbuf->buf_start;
+			stbuf->buf_rp		= stbuf->buf_start;;
+			stbuf->stream_offset	= 0;
+			atomic_set(&stbuf->payload, 0);
+			stbuf->flag 		|= BUF_FLAG_IN_USE;
+
+			vdec_reset_vld_stbuf(container_of(stbuf, struct vdec_s, vbuf));
+		}
+	}
+
+}
+
 static int get_free_space(struct stream_buf_s *stbuf)
 {
 	u32 len = stbuf->buf_size;
@@ -184,7 +216,7 @@ static int get_free_space(struct stream_buf_s *stbuf)
 
 	/*pr_info("[%d]: wp: %x, rp: %x, payload: %d, free space: %d\n",
 		stbuf->id, stbuf->buf_wp, stbuf->buf_rp,
-		atomic_read(&stbuf->payload), idle);*/
+		atomic_read(&stbuf->payload), idle); */
 
 	return idle;
 }
@@ -319,6 +351,7 @@ static struct stream_buf_ops stream_buffer_ops = {
 	.set_wp	= stream_buffer_set_wp,
 	.get_rp	= stream_buffer_get_rp,
 	.set_rp	= stream_buffer_set_rp,
+	.reset	= stream_buffer_reset,
 };
 
 struct stream_buf_ops *get_stbuf_ops(void)

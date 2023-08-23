@@ -252,3 +252,11 @@ int stream_buffer_write(struct file *file,
 }
 EXPORT_SYMBOL(stream_buffer_write);
 
+int stream_buffer_write_vc1(struct file *file,
+		       struct stream_buf_s *stbuf,
+		       const char *buf,
+		       size_t count)
+{
+	return stream_buffer_write_ex(file, stbuf, buf, count, 1);
+}
+EXPORT_SYMBOL(stream_buffer_write_vc1);

@@ -275,6 +275,9 @@ static void set_vdec_property(struct vdec_s *vdec,
 		vdec->port->type |= PORT_TYPE_FRAME;
 	}
 
+	if (vdec->format == VFORMAT_VC1)
+		vdec->type = VDEC_TYPE_SINGLE;
+
 	if (aml_set_vfm_enable)
 		vdec->frame_base_video_path = aml_set_vfm_path;
 
@@ -634,6 +637,19 @@ int vdec_get_instance_num(void)
 	return vdec_get_core_nr();
 }
 
+bool vdec_check_is_available(u32 fmt)
+{
+	if ((fmt == V4L2_PIX_FMT_VC1_ANNEX_G) || (fmt == V4L2_PIX_FMT_VC1_ANNEX_L)) {
+		if (vdec_get_instance_num() != 0)
+			return false;
+	} else {
+		if (vdec_has_single_mode())
+			return false;
+	}
+
+	return true;
+}
+
 int vdec_get_vdec_id(struct aml_vdec_adapt *ada_ctx)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
@@ -713,6 +729,37 @@ void vdec_write_stream_data(struct aml_vdec_adapt *ada_ctx, u32 addr, u32 size)
 		vdec_dump_strea_data(ada_ctx, addr, size);
 	}
 }
+
+void vdec_write_stream_data_inner(struct aml_vdec_adapt *ada_ctx, char *addr,
+	u32 size)
+{
+	bool stbuf_around = false;
+	u32 around_size;
+
+	// calculate whether the remaining space is enougth
+	if ((ada_ctx->vdec->vbuf.buf_wp + size) >
+		(ada_ctx->vdec->vbuf.buf_start + ada_ctx->vdec->vbuf.buf_size)) {
+		stbuf_around = true;
+		around_size = (ada_ctx->vdec->vbuf.buf_wp + size) -
+			(ada_ctx->vdec->vbuf.buf_start + ada_ctx->vdec->vbuf.buf_size);
+	}
+
+	// if not enougth, write two times
+	if (!stbuf_around)
+		stream_buffer_write_vc1(ada_ctx->filp, &ada_ctx->vdec->vbuf,
+			addr, size);
+	else {
+		stream_buffer_write_vc1(ada_ctx->filp, &ada_ctx->vdec->vbuf,
+			addr, size - around_size);
+
+		stream_buffer_write_vc1(ada_ctx->filp, &ada_ctx->vdec->vbuf,
+			addr + size - around_size, around_size);
+	}
+
+	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
+		"VC1 input: es size %d \n", size);
+}
+
 #if 0
 void v4l2_set_rp_addr(struct aml_vdec_adapt *ada_ctx, struct dma_buf *dbuf)
 {

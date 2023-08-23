@@ -36,7 +36,7 @@ const struct vdec_common_if *get_av1_dec_comm_if(void);
 const struct vdec_common_if *get_avs_dec_comm_if(void);
 const struct vdec_common_if *get_avs2_dec_comm_if(void);
 const struct vdec_common_if *get_avs3_dec_comm_if(void);
-
+const struct vdec_common_if *get_vc1_dec_comm_if(void);
 
 int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
 {
@@ -74,6 +74,10 @@ int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
 		break;
 	case V4L2_PIX_FMT_AVS3:
 		ctx->dec_if = get_avs3_dec_comm_if();
+		break;
+	case V4L2_PIX_FMT_VC1_ANNEX_L:
+	case V4L2_PIX_FMT_VC1_ANNEX_G:
+		ctx->dec_if = get_vc1_dec_comm_if();
 		break;
 	default:
 		return -EINVAL;

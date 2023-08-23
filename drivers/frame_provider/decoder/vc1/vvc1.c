@@ -33,20 +33,20 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-#include "../utils/amvdec.h"
-#include "../utils/vdec.h"
 #include <linux/amlogic/media/registers/register.h>
-#include "../../../stream_input/amports/amports_priv.h"
-#include "../utils/decoder_mmu_box.h"
-#include "../utils/decoder_bmmu_box.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include "../utils/firmware.h"
-//#include <linux/amlogic/tee.h>
-#include <uapi/linux/tee.h>
 #include <linux/delay.h>
-#include "../../../common/chips/decoder_cpu_ver_info.h"
+#include <uapi/linux/tee.h>
+
+#include "../utils/amvdec.h"
+#include "../utils/vdec.h"
+#include "../utils/decoder_mmu_box.h"
+#include "../utils/decoder_bmmu_box.h"
 #include "../utils/vdec_feature.h"
+#include "../utils/firmware.h"
+#include "../../../common/chips/decoder_cpu_ver_info.h"
+#include "../../../stream_input/amports/amports_priv.h"
 
 #define DRIVER_NAME "amvdec_vc1"
 #define MODULE_NAME "amvdec_vc1"

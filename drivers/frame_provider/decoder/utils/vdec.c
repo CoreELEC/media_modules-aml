@@ -1321,6 +1321,20 @@ int vdec_get_core_nr(void)
 }
 EXPORT_SYMBOL(vdec_get_core_nr);
 
+bool vdec_has_single_mode(void)
+{
+	struct vdec_s *vdec;
+	struct vdec_core_s *core = vdec_core;
+
+	list_for_each_entry(vdec, &core->connected_vdec_list, list) {
+		if (vdec_single(vdec))
+			return true;
+	}
+
+	return false;
+}
+EXPORT_SYMBOL(vdec_has_single_mode);
+
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static const char * const vdec_device_name[] = {
 	"amvdec_mpeg12",     "ammvdec_mpeg12",
@@ -3120,7 +3134,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 #endif
 
 	/* stream buffer init. */
-	if (!is_v4l && vdec->vbuf.ops && !vdec->master) {
+	if ((!is_v4l && vdec->vbuf.ops && !vdec->master) ||
+		(is_v4l && (vdec->format == VFORMAT_VC1))) {
 		if (vdec_init_stbuf_info(vdec) != 0)
 			goto error;
 	}
@@ -3788,6 +3803,13 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 				vdec->slave->reset(vdec->slave);
 		}
 		vdec->mc_loaded = 0;/*clear for reload firmware*/
+
+		if (vdec->format == VFORMAT_VC1) {
+			if (vdec->vbuf.ops)
+				vdec->vbuf.ops->reset(&vdec->vbuf);
+
+			return 0;
+		}
 
 		vdec_input_release(&vdec->input);
 
@@ -7263,6 +7285,44 @@ void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size)
 	}
 }
 EXPORT_SYMBOL(vdec_config_vld_reg);
+
+void vdec_reset_vld_stbuf(struct vdec_s *vdec)
+{
+	WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+	/* reset VLD before setting all pointers */
+	WRITE_VREG(VLD_MEM_VIFIFO_WRAP_COUNT, 0);
+	/*TODO: only > m6*/
+	WRITE_VREG(DOS_SW_RESET0, (1 << 4));
+	WRITE_VREG(DOS_SW_RESET0, 0);
+
+
+	WRITE_VREG(POWER_CTL_VLD, 1 << 4);
+
+	WRITE_VREG(VLD_MEM_VIFIFO_START_PTR,
+		vdec->vbuf.buf_start);
+	WRITE_VREG(VLD_MEM_VIFIFO_END_PTR,
+		vdec->vbuf.buf_start +
+		vdec->vbuf.buf_size - 8);
+	WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
+		vdec->vbuf.buf_start);
+
+	WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+	WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+	/* set to manual mode */
+	WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+	WRITE_VREG(VLD_MEM_VIFIFO_WP, vdec->vbuf.buf_start);
+
+	WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 3);
+	WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+
+	/* enable */
+	WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
+		(0x11 << 16) | (1<<10) | (1 << 1) | (1 << 2));
+	SET_VREG_MASK(VLD_MEM_VIFIFO_CONTROL,
+		7 << 3);
+}
+EXPORT_SYMBOL(vdec_reset_vld_stbuf);
 
 static void check_rdma_result(int num)
 {
