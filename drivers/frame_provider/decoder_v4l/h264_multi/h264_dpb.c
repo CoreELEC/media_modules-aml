@@ -2068,7 +2068,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 
 				/*check poc even/odd*/
 				if (p_H264_Dpb->poc_even_odd_flag == 0 &&
-					p_H264_Dpb->decode_pic_count >= 3)
+					p_H264_Dpb->poc_check_count >= 5)
 					p_H264_Dpb->poc_even_odd_flag = 2;
 				if (p_Dpb->fs[i]->poc & 0x1)
 					p_H264_Dpb->poc_even_odd_flag = 1;

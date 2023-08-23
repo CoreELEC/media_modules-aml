@@ -5705,6 +5705,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		dpb_init_global(&hw->dpb,
 			DECODE_ID(hw), 0, 0);
 
+		p_H264_Dpb->poc_even_odd_flag = 0;
+		p_H264_Dpb->poc_check_count = 0;
 		p_H264_Dpb->fast_output_enable = fast_output_enable;
 		/*mb_mv_byte = (seq_info2 & 0x80000000) ? 24 : 96;*/
 
@@ -6874,6 +6876,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 			if (hw->mmu_enable)
 				hevc_set_frame_done(hw);
 			hw->decode_pic_count++;
+			p_H264_Dpb->poc_check_count++;
 			p_H264_Dpb->decode_pic_count = hw->decode_pic_count;
 			if (hw->skip_frame_count > 0) {
 				/*skip n frame after first I */
@@ -11220,7 +11223,8 @@ static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag, bool rese
 		hw->first_i_policy = (3 << 8) | first_i_policy;
 
 	p_H264_Dpb->first_insert_frame = FirstInsertFrm_RESET;
-
+	p_H264_Dpb->poc_even_odd_flag  = 0;
+	p_H264_Dpb->poc_check_count = 0;
 	if (hw->stat & DECODER_FATAL_ERROR_SIZE_OVERFLOW)
 		hw->init_flag = 0;
 	else
