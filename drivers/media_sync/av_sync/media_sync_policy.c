@@ -16,8 +16,15 @@
 #include "media_sync_policy.h"
 
 static u32 media_sync_policy_debug_level = 0;
-#define mediasync_pr_info(dbg_level,inst,fmt,args...) if (dbg_level <= media_sync_policy_debug_level) {pr_info("[MS_Policy:%d][%d] " fmt,__LINE__, inst->sSyncInsId,##args);}
 
+static u32 first_frame_no_sync = 0;
+
+static u32 slow_sync_avdiff_min_threshold = 800;
+static u32 slow_sync_avdiff_max_threshold = 4000;
+static u32 slow_sync_expect_av_sync_done = 5000;
+
+
+#define mediasync_pr_info(dbg_level,inst,fmt,args...) if (dbg_level <= media_sync_policy_debug_level) {pr_info("[MS_Policy:%d][%d] " fmt,__LINE__, inst->sSyncInsId,##args);}
 
 
 #define MEDIASYNC_NO_AUDIO               0x0001
@@ -36,6 +43,8 @@ struct mediasync_policy_manager *m_mgr;
 
 ulong mediasync_policy_inst_create(void);
 int mediasync_policy_inst_release(ulong handle);
+
+int mediasync_get_start_slow_sync_enable(mediasync_policy_instance *policyInst);
 
 
 
@@ -84,6 +93,10 @@ int mediasync_policy_bind_instance(ulong handle,s32 SyncInsId,sync_stream_type s
 
 	mediasync_pr_info(0,policyInst,"bind_instance(%px) \n", policyInst->mMediasyncIns);
 
+	mediasync_get_start_slow_sync_enable(policyInst);
+	if (policyInst->mStartSlowSyncInfo.mSlowSyncEnable == false) {
+		policyInst->mShowFirstFrameNosync = false;
+	}
 	return ret;
 }
 
@@ -1333,6 +1346,134 @@ int mediasync_get_update_info(mediasync_policy_instance *policyInst)
 	return 0;
 }
 
+int mediasync_get_start_slow_sync_enable(mediasync_policy_instance *policyInst)
+{
+	mediasync_control mediasyncControl;
+	u32 StcParmUpdateCount = 0;
+	mediasyncControl.cmd = GET_SLOW_SYNC_ENABLE;
+	mediasyncControl.size = sizeof(mediasync_update_info);
+	mediasyncControl.ptr = (unsigned long)(&policyInst->updatInfo);
+	StcParmUpdateCount = policyInst->updatInfo.mStcParmUpdateCount;
+	mediasync_ins_ext_ctrls(policyInst->mMediasyncIns,&mediasyncControl);
+	policyInst->mStartSlowSyncInfo.mSlowSyncEnable = mediasyncControl.value;
+	mediasync_pr_info(0,policyInst,"mSlowSyncEnable:%d",policyInst->mStartSlowSyncInfo.mSlowSyncEnable);
+	return 0;
+}
+int mediasync_get_start_slow_sync_init(mediasync_policy_instance *policyInst) {
+	s64 mSlowSyncRealPVdiffUs = 0;
+	s64 ExpectAvSyncDoneTimeUS = 0;
+	s64 AvSyncDurationUs = 0;
+
+	mediasync_get_start_slow_sync_enable(policyInst);
+	if (policyInst->mStartSlowSyncInfo.mSlowSyncEnable) {
+		if (policyInst->firstVFrameInfo.framePts > policyInst->mCurPcr) {
+			policyInst->mStartSlowSyncInfo.mSlowSyncRealPVdiff =
+				policyInst->firstVFrameInfo.framePts - policyInst->mCurPcr;
+		} else {
+			policyInst->mStartSlowSyncInfo.mSlowSyncRealPVdiff =
+				policyInst->firstVFrameInfo.framePts - policyInst->anchorFrameInfo.framePts;
+		}
+		if ((policyInst->mStartSlowSyncInfo.mSlowSyncRealPVdiff >
+			policyInst->mStartSlowSyncInfo.mSlowSyncPVdiffThreshold) &&
+			(policyInst->mStartSlowSyncInfo.mSlowSyncRealPVdiff <
+			policyInst->mStartSlowSyncInfo.mSlowSyncMaxPVdiffThreshold)) {
+			policyInst->mStartSlowSyncInfo.mSlowSyncFrameShowTime = mediasync_get_system_time_us();
+			policyInst->mStartSlowSyncInfo.mSlowSyncStartSystemTime =
+				policyInst->mStartSlowSyncInfo.mSlowSyncFrameShowTime;
+
+			mSlowSyncRealPVdiffUs = div_u64(policyInst->mStartSlowSyncInfo.mSlowSyncRealPVdiff * 100 , 9);
+
+			ExpectAvSyncDoneTimeUS = policyInst->mStartSlowSyncInfo.mSlowSyncExpectAvSyncDoneTime * 1000;
+
+			AvSyncDurationUs = ExpectAvSyncDoneTimeUS - mSlowSyncRealPVdiffUs;
+
+			policyInst->mStartSlowSyncInfo.mSlowSyncSpeed =
+				div_u64(AvSyncDurationUs * 100 , ExpectAvSyncDoneTimeUS);
+
+			mediasync_pr_info(0,policyInst,
+			"SlowSyncThreshold:%lld ms Expect:%lld us AvSyncDurationUs:%lld us RealPVdiffUs:%lld us Speed:%lld",
+						div_u64(policyInst->mStartSlowSyncInfo.mSlowSyncPVdiffThreshold,90),
+						ExpectAvSyncDoneTimeUS,
+						AvSyncDurationUs,
+						mSlowSyncRealPVdiffUs,
+						policyInst->mStartSlowSyncInfo.mSlowSyncSpeed);
+			return 1;
+		} else {
+			policyInst->mStartSlowSyncInfo.mSlowSyncEnable = false;
+		}
+	}
+	return 0;
+
+}
+
+s32 VideoStartPlaybackSlowSync(mediasync_policy_instance *policyInst,s64 vpts,s64 frameDuration,struct mediasync_video_policy* vsyncPolicy) {
+
+	s32 ret = 0;
+
+	s64 duration = div_u64(frameDuration * 100 , policyInst->mStartSlowSyncInfo.mSlowSyncSpeed);
+
+
+	s64 curSystime = mediasync_get_system_time_us();
+
+	//int64_t duration = 100000000 / (mVideoFrameRate * mStartSlowSyncInfo.mSlowSyncSpeed);
+	s64 outDuration = curSystime - policyInst->mStartSlowSyncInfo.mSlowSyncFrameShowTime;
+	mediasync_pr_info(1,policyInst,
+	"[vpts:%lld, curPcr:%lld, curSystime:%lld, mSlowSyncFrameShowTime:%lld, [pv_diff:%lld, time_diff:%lld us, SlowSpeed=%lld, frameDuration:%lld us duration=%lld us]",
+		vpts, policyInst->mCurPcr, curSystime,
+		policyInst->mStartSlowSyncInfo.mSlowSyncFrameShowTime,
+		policyInst->mCurPcr - vpts,
+		outDuration,
+		policyInst->mStartSlowSyncInfo.mSlowSyncSpeed,
+		frameDuration,
+		duration);
+
+
+	if (vpts - policyInst->mCurPcr > 1499) {
+		if (outDuration < duration) {
+			vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_HOLD;
+			vsyncPolicy->param2 = duration - outDuration;
+		} else {
+			vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_NORMAL_OUTPUT;
+
+			policyInst->mStartSlowSyncInfo.mSlowSyncFrameShowTime = curSystime;
+
+			policyInst->mCurVideoFrameInfo.framePts = vpts;
+			policyInst->mCurVideoFrameInfo.frameSystemTime = curSystime;
+
+			mediasync_ins_set_curvideoframeinfo(policyInst->mMediasyncIns,
+							policyInst->mCurVideoFrameInfo);
+			ret = 1;
+		}
+	} else {
+		vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_HOLD;
+		vsyncPolicy->param2 = 8000;
+
+		policyInst->mStartSlowSyncInfo.mSlowSyncFrameShowTime  = -1;
+		policyInst->mStartSlowSyncInfo.mSlowSyncFinished = true;
+		mediasync_pr_info(0,policyInst,
+		"Done [vpts:%lld, curPcr:%lld Systime:%lld [pvDiff:%lld,totalTime:%lld us, Speed=%lld, duration=%lld us]",
+					vpts, policyInst->mCurPcr, curSystime,
+					policyInst->mCurPcr - vpts,
+					(curSystime -policyInst->mStartSlowSyncInfo.mSlowSyncStartSystemTime),
+					policyInst->mStartSlowSyncInfo.mSlowSyncSpeed,
+					duration);
+		//mediasync_pr_info(0,policyInst,
+		//"[pv_diff:%lld ms, time_diff:%lld us, Speed=%lld, duration=%lld us]",
+		//		div_u64((policyInst->mCurPcr - vpts),90),
+		//		(curSystime -policyInst->mStartSlowSyncInfo.mSlowSyncStartSystemTime),
+		//		policyInst->mStartSlowSyncInfo.mSlowSyncSpeed, duration);
+	}
+
+
+	mediasync_pr_info(1,policyInst,
+	"mSlowSyncFrameShowTime:%lld , mSlowSyncFinished:%d, policy:%s",
+		policyInst->mStartSlowSyncInfo.mSlowSyncFrameShowTime,
+		policyInst->mStartSlowSyncInfo.mSlowSyncFinished,
+		videoPolicy2Str(vsyncPolicy->videopolicy));
+	return ret;
+}
+
+
 int mediasync_video_process(ulong handle,s64 vpts,struct mediasync_video_policy* vsyncPolicy)
 {
 	//mediasync_policy_instance *inst = handle;
@@ -1348,6 +1489,7 @@ int mediasync_video_process(ulong handle,s64 vpts,struct mediasync_video_policy*
 	s64 pvdiff = 0;
 	s64 lastSystemTime = 0;
 	s64 lastVpts = 0;
+	s64 frame_duration = vsyncPolicy->param1;
 	if (handle == 0 || vsyncPolicy == NULL) {
 		return ret;
 	}
@@ -1463,19 +1605,33 @@ int mediasync_video_process(ulong handle,s64 vpts,struct mediasync_video_policy*
 	checkVideoFreeRun(policyInst,vpts,&isVideoFreeRun);
 	lastVpts = policyInst->mCurVideoFrameInfo.framePts;
 	pvdiff = policyInst->mCurPcr - vpts;
-	if (pvdiff < 0) {
-		vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_HOLD;
-		policyInst->mHoldVideoTime = div_u64((0 - pvdiff) * 100,9);
-		if (policyInst->mHoldVideoTime > 1000000) {
-			policyInst->mHoldVideoTime = 8000;
-		}
-		policyInst->mHoldVideoPts = vpts;
-		vsyncPolicy->param2 = (s32)policyInst->mHoldVideoTime;
-		policyInst->mStartHoldVideoTime = mediasync_get_system_time_us();
-	} else {
-		if (policyInst->mVideoStarted == false) {
+	if (policyInst->mVideoStarted == false) {
+		if (mediasync_get_start_slow_sync_init(policyInst)) {
+			policyInst->mVideoStarted = true;
+		} else if (pvdiff > 0) {
 			policyInst->mVideoStarted = true;
 		}
+	}
+	if (pvdiff < 0) {
+
+		if (policyInst->mStartSlowSyncInfo.mSlowSyncEnable &&
+			!policyInst->mStartSlowSyncInfo.mSlowSyncFinished) {
+			if (!VideoStartPlaybackSlowSync(policyInst,vpts,frame_duration,vsyncPolicy)) {
+				policyInst->mHoldVideoPts = vpts;
+				policyInst->mStartHoldVideoTime = vsyncPolicy->param2;
+			}
+
+		} else {
+			vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_HOLD;
+			policyInst->mHoldVideoTime = div_u64((0 - pvdiff) * 100,9);
+			if (policyInst->mHoldVideoTime > 1000000) {
+				policyInst->mHoldVideoTime = 8000;
+			}
+			policyInst->mHoldVideoPts = vpts;
+			vsyncPolicy->param2 = (s32)policyInst->mHoldVideoTime;
+			policyInst->mStartHoldVideoTime = mediasync_get_system_time_us();
+		}
+	} else {
 		policyInst->mHoldVideoTime = -1;
 		policyInst->mHoldVideoPts = -1;
 		vsyncPolicy->videopolicy = MEDIASYNC_VIDEO_NORMAL_OUTPUT;
@@ -1487,7 +1643,7 @@ int mediasync_video_process(ulong handle,s64 vpts,struct mediasync_video_policy*
 	policyInst->videoLastPolicy = vsyncPolicy->videopolicy;
 #if 1
 	if (media_sync_policy_debug_level >= 1)
-		mediasync_pr_info(1,policyInst,
+		mediasync_pr_info(0,policyInst,
 			"[P:%s] mPcr:0x%llx vpts:0x%llx pvdiff:%lld hold:%d us vcache:%lld ms vdiff:%lld sdiff:%lld us\n",
 									videoPolicy2Str(vsyncPolicy->videopolicy),
 									policyInst->mCurPcr,
@@ -1526,7 +1682,7 @@ int mediasync_policy_parameter_init(mediasync_policy_instance *policyInst) {
 	policyInst->mCurVideoFrameInfo.frameSystemTime= -1;
 	policyInst->freerunFrameInfo.framePts = -1;
 	policyInst->freerunFrameInfo.frameSystemTime = -1;
-	policyInst->mShowFirstFrameNosync = true;
+	policyInst->mShowFirstFrameNosync = first_frame_no_sync;
 	policyInst->mVideoFreeRun = false;
 	policyInst->stream_type = MEDIA_TYPE_MAX;
 	policyInst->mStartFlag = 0;
@@ -1549,6 +1705,21 @@ int mediasync_policy_parameter_init(mediasync_policy_instance *policyInst) {
 	policyInst->mHoldVideoTime = -1;
 	policyInst->mHoldVideoPts = -1;
 	policyInst->mStartHoldVideoTime = -1;
+
+	/**start slow sync Parameter**/
+
+	policyInst->mStartSlowSyncInfo.mSlowSyncEnable = true;               // slowsync enable flag, default is false
+	policyInst->mStartSlowSyncInfo.mSlowSyncFinished = false;            // slowsync finish flag, default is false
+	policyInst->mStartSlowSyncInfo.mSlowSyncSpeed = 30;              // slowsync speed, default is 0.5
+	policyInst->mStartSlowSyncInfo.mSlowSyncPVdiffThreshold = slow_sync_avdiff_min_threshold*90;      // slowsync threshold, default is 800ms
+	policyInst->mStartSlowSyncInfo.mSlowSyncMaxPVdiffThreshold = slow_sync_avdiff_max_threshold*90;   // slowsync max threshold, default is 4000ms
+	policyInst->mStartSlowSyncInfo.mSlowSyncFrameShowTime = -1;    // slowsync video frame show time
+	policyInst->mStartSlowSyncInfo.mSlowSyncRealPVdiff = 0;       // first vpts and ref pts diff
+	policyInst->mStartSlowSyncInfo.mSlowSyncExpectAvSyncDoneTime = slow_sync_expect_av_sync_done; //Expect AvSync Done Time 5000ms
+	policyInst->mStartSlowSyncInfo.mSlowSyncStartSystemTime = -1;
+	/***************************/
+	policyInst->mVideoSyncIntervalUs = 16666;
+
 	return 0;
 }
 
@@ -1629,4 +1800,14 @@ void mediasync_policy_manager_exit(void)
 module_param(media_sync_policy_debug_level, uint, 0664);
 MODULE_PARM_DESC(media_sync_policy_debug_level, "\n media sync policy debug level\n");
 
+module_param(first_frame_no_sync, uint, 0664);
+MODULE_PARM_DESC(first_frame_no_sync, "\n media sync policy first frmae no sync\n");
 
+module_param(slow_sync_avdiff_min_threshold, uint, 0664);
+MODULE_PARM_DESC(slow_sync_avdiff_min_threshold, "\n media sync policy slow sync avdiff min threshold\n");
+
+module_param(slow_sync_avdiff_max_threshold, uint, 0664);
+MODULE_PARM_DESC(slow_sync_avdiff_max_threshold, "\n media sync policy slow sync avdiff max threshold\n");
+
+module_param(slow_sync_expect_av_sync_done, uint, 0664);
+MODULE_PARM_DESC(slow_sync_expect_av_sync_done, "\n media sync policy slow sync expect av sync done\n");

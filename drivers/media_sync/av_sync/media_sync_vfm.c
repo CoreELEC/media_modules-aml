@@ -162,6 +162,7 @@ static struct vframe_s *mediasync_vf_peek(void *op_arg)
 														dev->lastVpts,
 														vPts - dev->lastVpts,
 														vf->pts_us64);
+	vsyncPolicy.param1 = DUR2US(vf->duration);
 	mediasync_video_process(dev->sync_policy_instance,vPts,&vsyncPolicy);
 	if (vsyncPolicy.videopolicy == MEDIASYNC_VIDEO_HOLD) {
 		return NULL;

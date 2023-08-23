@@ -41,6 +41,17 @@ struct mediasync_video_policy {
     int32_t  param2;
 };
 
+struct mediasync_start_slow_sync_info {
+    s32 mSlowSyncEnable;               // slowsync enable flag, default is false
+    bool mSlowSyncFinished;            // slowsync finish flag, default is false
+    s64 mSlowSyncSpeed;              // slowsync speed, default is 0.5
+    s32 mSlowSyncPVdiffThreshold;      // slowsync threshold, default is 200ms
+    s32 mSlowSyncMaxPVdiffThreshold;   // slowsync max threshold, default is 4000ms
+    s64 mSlowSyncFrameShowTime;    // slowsync video frame show time
+    s64 mSlowSyncRealPVdiff;       // first vpts and ref pts diff
+    s32 mSlowSyncExpectAvSyncDoneTime; //Expect AvSync Done Time
+    s64 mSlowSyncStartSystemTime;
+};
 
 typedef struct policy_instance {
 	struct list_head node;
@@ -62,6 +73,10 @@ typedef struct policy_instance {
 	s64 mHoldVideoPts;
 	s64 mHoldVideoTime;
 	s64 mStartHoldVideoTime;
+	/**start slow sync Parameter**/
+	struct mediasync_start_slow_sync_info mStartSlowSyncInfo;
+	/***************************/
+	s64 mVideoSyncIntervalUs;
 	video_policy videoLastPolicy;
 	mediasync_speed mSpeed;
 	mediasync_speed mPcrSlope;

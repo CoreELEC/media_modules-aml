@@ -52,6 +52,8 @@ static u32 media_sync_debug_level = 0;
 
 static u32 media_sync_calculate_cache_enable = 0;
 
+static u32 media_sync_start_slow_sync_enable = 1;
+
 
 #define mediasync_pr_info(dbg_level,inst,fmt,args...) if (dbg_level <= media_sync_debug_level) {pr_info("[MS_Core:%d][%d_%d_%d] " fmt,__LINE__, inst->mSyncId,inst->mSyncIndex,inst->mUId,##args);}
 #define mediasync_pr_error(fmt,args...) {pr_info("[%s:%d] err " fmt,__func__,__LINE__,##args);}
@@ -775,6 +777,7 @@ static void mediasync_ins_reset_l(mediasync_ins* pInstance) {
 		pInstance->mStcParmUpdateCount = 0;
 		pInstance->isVideoFrameAdvance = 0;
 		pInstance->mFreeRunType = 0;
+		pInstance->mSlowSyncEnable = media_sync_start_slow_sync_enable;
 		if (media_sync_calculate_cache_enable) {
 			pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
 			clear_frame_list(pInstance, pTable);
@@ -3855,4 +3858,6 @@ MODULE_PARM_DESC(media_sync_user_debug_level, "\n mediasync user debug level\n")
 module_param(media_sync_calculate_cache_enable, uint, 0664);
 MODULE_PARM_DESC(media_sync_calculate_cache_enable, "\n mediasync calculate cache enable\n");
 
+module_param(media_sync_start_slow_sync_enable, uint, 0664);
+MODULE_PARM_DESC(media_sync_start_slow_sync_enable, "\n media sync policy  slow sync enable\n");
 
