@@ -1926,7 +1926,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 	struct aml_buf *am_buf = buf->aml_buf;
 	struct dma_buf *dbuf = vb->vb2_buf.planes[0].dbuf;
 	struct device *dev = vb->vb2_buf.vb2_queue->alloc_devs[0];
-	struct uvm_handle *handle = dbuf->priv;
+	struct uvm_handle *handle;
 	struct mua_buffer *mbuf = NULL;
 	struct dma_buf *idbuf = NULL;
 	struct uvm_alloc *ua = NULL;
@@ -1946,6 +1946,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 		return 0;
 
 	if ((vb->vb2_buf.memory != VB2_MEMORY_DMABUF) ||
+		!dbuf ||
 		!dmabuf_is_uvm(dbuf) ||
 		am_buf->is_delay_allocated)
 		return 0;
@@ -1966,6 +1967,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 
 	mbuf->size =  ctx->picinfo.y_len_sz + ctx->picinfo.c_len_sz;
 
+	handle = dbuf->priv;
 	if (handle->ua->obj->arg)
 		kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
 
@@ -4492,7 +4494,13 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 	}
 
 	if (!V4L2_TYPE_IS_OUTPUT(vb->type)) {
-		ret = aml_buf_attach(&ctx->bm, (ulong)vb->planes[0].dbuf,
+		ulong key;
+		if (vb->memory == VB2_MEMORY_DMABUF)
+			key = (ulong)vb->planes[0].dbuf;
+		if (vb->memory == VB2_MEMORY_MMAP)
+			key = vb2_dma_contig_plane_dma_addr(vb, 0);
+
+		ret = aml_buf_attach(&ctx->bm, key,
 			vb2_dma_contig_plane_dma_addr(vb, 0), vb);
 		if (ret) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
