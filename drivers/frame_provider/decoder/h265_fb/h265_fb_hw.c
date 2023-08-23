@@ -952,10 +952,19 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		hevc->backend_decoded_count, hevc->fb_wr_pos, hevc->fb_rd_pos);
 
 	mutex_lock(&hevc->fb_mutex);
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+	for (i = 0; (i < MAX_REF_PIC_NUM) && (pic->error_mark == 0); i++) {
 		if (pic->ref_pic[i]) {
 			if (pic->ref_pic[i]->error_mark) {
+				hevc->gvs->error_frame_count++;
+				if (pic->slice_type == I_SLICE) {
+					hevc->gvs->i_concealed_frames++;
+				} else if (pic->slice_type == P_SLICE) {
+					hevc->gvs->p_concealed_frames++;
+				} else if (pic->slice_type == B_SLICE) {
+					hevc->gvs->b_concealed_frames++;
+				}
 				pic->error_mark = 1;
+				break;
 			}
 		}
 	}
@@ -963,6 +972,18 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 
 	if ((pic->error_mark && (hevc->nal_skip_policy != 0)) ||
 		(hevc->front_back_mode != 1 && hevc->front_back_mode != 3)) {
+
+		mutex_lock(&hevc->fb_mutex);
+		hevc->gvs->drop_frame_count++;
+		if (pic->slice_type == I_SLICE) {
+			hevc->gvs->i_lost_frames++;
+		} else if (pic->slice_type == P_SLICE) {
+			hevc->gvs->p_lost_frames++;
+		} else if (pic->slice_type == B_SLICE) {
+			hevc->gvs->b_lost_frames++;
+		}
+		mutex_unlock(&hevc->fb_mutex);
+
 		copy_loopbufs_ptr(&hevc->bk, &hevc->next_bk[hevc->fb_rd_pos]);
 		print_loopbufs_ptr(hevc, "bk", &hevc->bk);
 		hevc_hw_init(hevc, pic->depth, 0, 1);

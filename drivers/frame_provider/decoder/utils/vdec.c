@@ -1259,14 +1259,20 @@ void vdec_set_no_powerdown(int flag)
 }
 EXPORT_SYMBOL(vdec_set_no_powerdown);
 
+/*
+error == 0, frame_count++
+error == 1, error frame++
+other, not statistic count info
+*/
 void  vdec_count_info(struct vdec_info *vs, unsigned int err,
 	unsigned int offset)
 {
 	if (!vs)
 		return;
 
-	if (err)
+	if (err == 1)
 		vs->error_frame_count++;
+
 	if (offset) {
 		if (0 == vs->frame_count) {
 			vs->offset = 0;
@@ -1285,7 +1291,9 @@ void  vdec_count_info(struct vdec_info *vs, unsigned int err,
 			vs->samp_cnt = 0;
 		}
 	}
+	if (err == 0)
 		vs->frame_count++;
+
 	/* pr_info("size : %u, offset : %u, dur : %u, cnt : %u\n",
 		vs->offset,offset,vs->frame_dur,vs->samp_cnt); */
 	return;
