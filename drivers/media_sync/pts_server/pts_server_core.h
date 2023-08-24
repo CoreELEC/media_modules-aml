@@ -56,10 +56,12 @@ typedef struct psinstance {
 	u32 mLastCheckinSize;
 	u32 mAlignmentOffset;
 	u32 mLastCheckoutPts;
+	u32 mLastPeekPts;
 	u32 mLastCheckoutOffset;
 	u32 mFirstCheckinPts64;
 	u32 mLastCheckinPts64;
 	u64 mLastCheckoutPts64;
+	u64 mLastPeekPts64;
 	u32 mDoubleCheckFrameDuration;
 	u64 mDoubleCheckFrameDuration64;
 	u32 mDoubleCheckFrameDurationCount;
