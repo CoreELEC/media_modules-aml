@@ -49,6 +49,7 @@
 #include "../utils/amvdec.h"
 #include "avs_multi.h"
 #include "../utils/decoder_dma_alloc.h"
+#include "../../../media_sync/pts_server/pts_server_core.h"
 
 #define DEBUG_MULTI_FLAG  0
 
@@ -3275,10 +3276,20 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
 				set_vframe_pts(hw, decode_pic_count, vf);
 
-			if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+			if (vdec_stream_based(vdec) && (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP)) {
 				vf->pts_us64 =
 					(((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
 				vf->pts = 0;
+			} else if (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_DECODER_LOOKUP) {
+				checkout_pts_offset pts_info;
+				pts_info.offset = (((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
+				if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+					vf->pts = pts_info.pts;
+					vf->pts_us64 = pts_info.pts_64;
+				} else {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+				}
 			}
 
 			debug_print(hw, PRINT_FLAG_PTS,
@@ -3359,9 +3370,19 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
 				set_vframe_pts(hw, decode_pic_count, vf);
 
-			if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+			if (vdec_stream_based(vdec) && (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP)) {
 				vf->pts_us64 = (u64)-1;
 				vf->pts = 0;
+			} else if (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_DECODER_LOOKUP) {
+				checkout_pts_offset pts_info;
+				pts_info.offset = -1;
+				if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+					vf->pts = pts_info.pts;
+					vf->pts_us64 = pts_info.pts_64;
+				} else {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+				}
 			}
 			debug_print(hw, PRINT_FLAG_PTS,
 				"interlace2 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
@@ -3460,10 +3481,20 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
 				set_vframe_pts(hw, decode_pic_count, vf);
 
-			if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+			if (vdec_stream_based(vdec) && (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP)) {
 				vf->pts_us64 =
 					(((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
 				vf->pts = 0;
+			} else if (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_DECODER_LOOKUP) {
+				checkout_pts_offset pts_info;
+				pts_info.offset = (((u64)vf->duration << 32) & 0xffffffff00000000) | offset;
+				if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+					vf->pts = pts_info.pts;
+					vf->pts_us64 = pts_info.pts_64;
+				} else {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+				}
 			}
 			decoder_do_frame_check(hw_to_vdec(hw), vf);
 			vdec_vframe_ready(vdec, vf);
@@ -3599,7 +3630,7 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if (pts_by_offset) {
 				offset = READ_VREG(AVS_OFFSET_REG);
 				debug_print(hw, PRINT_FLAG_DECODING, "AVS OFFSET=%x\n", offset);
-				if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+				if (vdec->vbuf.use_ptsserv == SINGLE_PTS_SERVER_DECODER_LOOKUP) {
 					if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset, &pts,
 						&frame_size, 0, &pts_us64) == 0) {
 						hw->pics[hw->decoding_index].pts_valid = 1;

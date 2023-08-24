@@ -55,6 +55,7 @@
 #include <media/v4l2-mem2mem.h>
 #include "../utils/vdec_feature.h"
 #include "../utils/decoder_dma_alloc.h"
+#include "../../../media_sync/pts_server/pts_server_core.h"
 
 #define MEM_NAME "codec_mmpeg12"
 #define CHECK_INTERVAL        (HZ/100)
@@ -1836,15 +1837,50 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		vf->type = type;
 		vf->signal_type = hw->reg_signal_type;
 		vf->orientation = 0;
-		if (i > 0) {
-			vf->pts = 0;
-			vf->pts_us64 = 0;
-			vf->timestamp = 0;
+
+		if (vdec->vbuf.use_ptsserv != MULTI_PTS_SERVER_DECODER_LOOKUP) {
+			if (i > 0) {
+				vf->pts = 0;
+				vf->pts_us64 = 0;
+				vf->timestamp = 0;
+			} else {
+				vf->pts = (pic->pts_valid) ? pic->pts : 0;
+				vf->pts_us64 = (pic->pts_valid) ? pic->pts64 : 0;
+				vf->timestamp = pic->timestamp;
+			}
 		} else {
-			vf->pts = (pic->pts_valid) ? pic->pts : 0;
-			vf->pts_us64 = (pic->pts_valid) ? pic->pts64 : 0;
-			vf->timestamp = pic->timestamp;
+			if (i == 0) {
+				u64 frametype = 0;
+				if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I)
+					frametype = KEYFRAME_FLAG;
+				else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)
+					frametype = PFRAME_FLAG;
+				else
+					frametype = BFRAME_FLAG;
+				pts_info.offset = (((u64)vf->duration << 32 | (frametype << 62)) & 0xffffffff00000000) | pic->offset;
+				if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+					vf->pts = pts_info.pts;
+					vf->pts_us64 = pts_info.pts_64;
+					vf->timestamp = pic->timestamp;
+				} else {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+					vf->timestamp = pic->timestamp;
+				}
+			} else if (i > 0) {
+				pts_info.offset = -1;
+				if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+					vf->pts = pts_info.pts;
+					vf->pts_us64 = pts_info.pts_64;
+					vf->timestamp = pic->timestamp;
+				} else {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+					vf->timestamp = pic->timestamp;
+				}
+			}
 		}
+
 		vf->type_original = vf->type;
 
 		if ((error_skip(hw, pic->buffer_info, vf)) ||
@@ -1915,7 +1951,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
 				hw->mm_blk_handle, index);
-			if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+			if ((vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP) && vdec_stream_based(vdec)) {
 				/* offset for tsplayer pts lookup */
 				u64 frame_type = 0;
 				if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I)
@@ -2411,16 +2447,14 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 					debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
 						"pts invalid\n");
 				}
-			} else {
-				if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
-					if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset,
-						&pts, &frame_size, 0, &pts_us64) == 0) {
-						new_pic->pts_valid = true;
-						new_pic->pts = pts;
-						new_pic->pts64 = pts_us64;
-					} else
-						new_pic->pts_valid = false;
-				}
+			} else if (vdec->vbuf.use_ptsserv == SINGLE_PTS_SERVER_DECODER_LOOKUP) {
+				if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset,
+					&pts, &frame_size, 0, &pts_us64) == 0) {
+					new_pic->pts_valid = true;
+					new_pic->pts = pts;
+					new_pic->pts64 = pts_us64;
+				} else
+					new_pic->pts_valid = false;
 			}
 		} else {
 			if (hw->chunk) {

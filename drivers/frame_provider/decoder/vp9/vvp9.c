@@ -8180,7 +8180,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		/* if (pts_lookup_offset(PTS_TYPE_VIDEO,
 		 *   stream_offset, &vf->pts, 0) != 0) {
 		 */
-		if ((pvdec->vbuf.no_parser == 0) || (pvdec->vbuf.use_ptsserv)) {
+		if (pvdec->vbuf.use_ptsserv == SINGLE_PTS_SERVER_DECODER_LOOKUP) {
 			if (pts_lookup_offset_us64
 				(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
 				&frame_size, 0,
@@ -8404,9 +8404,20 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		}
 
 		update_vf_memhandle(pbi, vf, pic_config);
-		if (vdec_stream_based(pvdec) && (!pvdec->vbuf.use_ptsserv)) {
+		if (vdec_stream_based(pvdec) && (pvdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP)) {
 			vf->pts_us64 = stream_offset;
 			vf->pts = 0;
+		} else if (pvdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_DECODER_LOOKUP) {
+			/* lookup by decoder */
+			checkout_pts_offset pts_info;
+			pts_info.offset = stream_offset;
+			if (!ptsserver_checkout_pts_offset((pvdec->pts_server_id & 0xff), &pts_info)) {
+				vf->pts = pts_info.pts;
+				vf->pts_us64 = pts_info.pts_64;
+			} else {
+				vf->pts = 0;
+				vf->pts_us64 = 0;
+			}
 		}
 		if ((debug & VP9_DEBUG_OUT_PTS) != 0) {
 			pr_info

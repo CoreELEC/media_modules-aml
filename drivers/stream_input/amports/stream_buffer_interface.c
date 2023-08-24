@@ -98,7 +98,7 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 			ret = -ENOMEM;
 			goto err;
 		}
-		stbuf->use_ptsserv = 1;
+		stbuf->use_ptsserv = SINGLE_PTS_SERVER_DECODER_LOOKUP;
 	}
 	vdec_config_vld_reg(vdec, addr, size);
 

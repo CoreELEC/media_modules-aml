@@ -123,11 +123,20 @@ void stream_buffer_set_ext_buf(struct stream_buf_s *stbuf,
 	stbuf->ext_buf_addr	= addr;
 	stbuf->buf_size 	= size;
 	stbuf->is_secure	= ((flag & STBUF_META_FLAG_SECURE) != 0);
-	stbuf->use_ptsserv	= ((flag & STBUF_META_FLAG_PTS_SERV) != 0);
-	/*
-	pr_debug("%s, addr %lx, size 0x%x, secure %d\n", __func__,
-		stbuf->ext_buf_addr, stbuf->buf_size, stbuf->is_secure);
-	*/
+
+	switch (flag & 0xff) {
+		case STBUF_META_FLAG_PTS_SERV:
+			stbuf->use_ptsserv = SINGLE_PTS_SERVER_DECODER_LOOKUP;
+			break;
+		case STBUF_META_FLAG_NEW_PTS_SERV:
+			stbuf->use_ptsserv = MULTI_PTS_SERVER_DECODER_LOOKUP;
+			break;
+		default:
+			stbuf->use_ptsserv = MULTI_PTS_SERVER_UPPER_LOOKUP;
+			break;
+	}
+	pr_debug("%s, addr %lx, size 0x%x, secure %d use_ptsserv:%d\n", __func__,
+		stbuf->ext_buf_addr, stbuf->buf_size, stbuf->is_secure,stbuf->use_ptsserv);
 }
 EXPORT_SYMBOL(stream_buffer_set_ext_buf);
 

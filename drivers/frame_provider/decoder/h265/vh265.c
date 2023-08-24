@@ -66,6 +66,7 @@
 #include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/vdec_feature.h"
+#include "../../../media_sync/pts_server/pts_server_core.h"
 
 /*
 to enable DV of frame mode
@@ -8952,7 +8953,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			hevc_print(hevc, H265_DEBUG_OUT_PTS,
 				"call pts_lookup_offset_us64(0x%x)\n",
 				stream_offset);
-			if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+			if (vdec->vbuf.use_ptsserv == SINGLE_PTS_SERVER_DECODER_LOOKUP) {
 				if (pts_lookup_offset_us64
 					(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
 					&frame_size, 0,
@@ -9153,7 +9154,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->pts_us64 = 0;
 		}
 
-		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+		if ((vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP) && vdec_stream_based(vdec)) {
 			u64 frame_type = 0;
 			if (pic->slice_type == I_SLICE)
 				frame_type = KEYFRAME_FLAG;
@@ -9165,6 +9166,25 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->pts_us64 = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
 				| stream_offset;
 			vf->pts = 0;
+		} else if (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_DECODER_LOOKUP) {
+			u64 frame_type = 0;
+			checkout_pts_offset pts_info;
+			if (pic->slice_type == I_SLICE)
+				frame_type = KEYFRAME_FLAG;
+			else if (pic->slice_type == P_SLICE)
+				frame_type = PFRAME_FLAG;
+			else
+				frame_type = BFRAME_FLAG;
+
+			pts_info.offset = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
+				| stream_offset;
+			if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+				vf->pts = pts_info.pts;
+				vf->pts_us64 = pts_info.pts_64;
+			} else {
+				vf->pts = 0;
+				vf->pts_us64 = 0;
+			}
 		}
 
 		if (hevc->cur_pic != NULL) {

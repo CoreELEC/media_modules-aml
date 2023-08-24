@@ -70,6 +70,7 @@
 #include "../utils/vdec_feature.h"
 #include "../utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
+#include "../../../media_sync/pts_server/pts_server_core.h"
 
 #define DETECT_WRONG_MULTI_SLICE
 #define MCRCC_ENABLE
@@ -3175,7 +3176,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 			}
 	}
 	if (vdec_stream_based(vdec) && !(frame->data_flag & NODISP_FLAG)) {
-		if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+		if (vdec->vbuf.use_ptsserv == SINGLE_PTS_SERVER_DECODER_LOOKUP) {
 			if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
 				frame->offset_delimiter, &frame->pts, &frame->frame_size,
 				0, &frame->pts64) == 0)) {
@@ -3586,7 +3587,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
-		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+		if ((vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP) && vdec_stream_based(vdec)) {
 			/* offset for tsplayer pts lookup */
 			u64 frame_type = 0;
 
@@ -3603,6 +3604,36 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			} else {
 				vf->pts_us64 = (u64)-1;
 				vf->pts = 0;
+			}
+		} else if (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_DECODER_LOOKUP) {
+			/* lookup by decoder */
+			u64 frame_type = 0;
+			checkout_pts_offset pts_info;
+
+			if (slice_type == I_SLICE)
+				frame_type = KEYFRAME_FLAG;
+			else if (slice_type == P_SLICE)
+				frame_type = PFRAME_FLAG;
+			else
+				frame_type = BFRAME_FLAG;
+			if (i == 0) {
+				pts_info.offset = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000) | offset;
+				if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+					vf->pts = pts_info.pts;
+					vf->pts_us64 = pts_info.pts_64;
+				} else {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+				}
+			} else {
+				pts_info.offset = -1;
+				if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+					vf->pts = pts_info.pts;
+					vf->pts_us64 = pts_info.pts_64;
+				} else {
+					vf->pts = 0;
+					vf->pts_us64 = 0;
+				}
 			}
 		}
 

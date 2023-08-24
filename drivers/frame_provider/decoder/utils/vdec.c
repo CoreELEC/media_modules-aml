@@ -4092,7 +4092,7 @@ thread_isr_done:
 
 int vdec_check_rec_num_enough(struct vdec_s *vdec) {
 
-	if (vdec->vbuf.use_ptsserv) {
+	if (vdec->vbuf.use_ptsserv == SINGLE_PTS_SERVER_DECODER_LOOKUP) {
 		return (pts_get_rec_num(PTS_TYPE_VIDEO,
 					vdec->input.total_rd_count) >= 2);
 	} else {

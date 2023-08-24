@@ -46,9 +46,16 @@
 #define USER_DATA_SIZE  (8*1024)
 
 /* stream_buffer_metainfo stbuf_flag */
-#define STBUF_META_FLAG_SECURE		(1 << 0)
-#define STBUF_META_FLAG_PTS_SERV	(1 << 1)	/* use pts server flag */
-#define STBUF_META_FLAG_XXX1		(1 << 2)
+#define STBUF_META_FLAG_SECURE		    (1 << 0)
+#define STBUF_META_FLAG_PTS_SERV	    (1 << 1)	/* use pts server flag ,this means use old pts_server*/
+#define STBUF_META_FLAG_XXX1		    (1 << 2)
+#define STBUF_META_FLAG_NEW_PTS_SERV	(1 << 3) /* use new pts_server,and lookup by decoder flag */
+
+enum use_pts_serv_type_e {
+	MULTI_PTS_SERVER_UPPER_LOOKUP = 0,		//multi or single demux, multi ptsserver, user space or tsdemux check in, user space look up
+	SINGLE_PTS_SERVER_DECODER_LOOKUP = 1,	//single demux, single ptsserver, tsdemux check in, decoder look up
+	MULTI_PTS_SERVER_DECODER_LOOKUP = 2,	//multi demux, multi ptsserver, user space check in, decoder look up
+};
 
 struct vdec_s;
 struct stream_buf_s;
@@ -98,7 +105,7 @@ struct stream_buf_s {
 	bool no_parser;
 	bool is_phybuf;
 	bool is_hevc;
-	bool use_ptsserv;
+	char use_ptsserv;
 	u32 drm_flag;
 	ulong ext_buf_addr;
 	atomic_t payload;

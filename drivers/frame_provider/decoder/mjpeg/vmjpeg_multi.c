@@ -48,6 +48,7 @@
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include "../utils/config_parser.h"
 #include "../utils/vdec_feature.h"
+#include "../../../media_sync/pts_server/pts_server_core.h"
 
 #define MEM_NAME "codec_mmjpeg"
 
@@ -345,7 +346,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 		vf->timestamp = hw->chunk->timestamp;
 	} else {
 		offset = READ_VREG(MREG_FRAME_OFFSET);
-		if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+		if (vdec->vbuf.use_ptsserv == SINGLE_PTS_SERVER_DECODER_LOOKUP) {
 			if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset, &pts,
 				&frame_size, 3000, &pts_us64) == 0) {
 				vf->pts = pts;
@@ -355,11 +356,24 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 				vf->pts_us64 = 0;
 			}
 		}
-		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+		if ((vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP) && vdec_stream_based(vdec)) {
 			u64 frame_type = KEYFRAME_FLAG;
 			vf->pts_us64 = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
 				| offset;
 			vf->pts = 0;
+		}
+		if (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_DECODER_LOOKUP) {
+			u64 frame_type = KEYFRAME_FLAG;
+			checkout_pts_offset pts_info;
+			pts_info.offset = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
+				| offset;
+			if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+				vf->pts = pts_info.pts;
+				vf->pts_us64 = pts_info.pts_64;
+			} else {
+				vf->pts = 0;
+				vf->pts_us64 = 0;
+			}
 		}
 	}
 	vf->orientation = 0;

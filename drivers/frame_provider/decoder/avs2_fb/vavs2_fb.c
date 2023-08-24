@@ -65,6 +65,7 @@
 #include "avs2_global.h"
 #include "../../../common/media_utils/media_utils.h"
 #include "../../decoder/utils/vdec_profile.h"
+#include "../../../media_sync/pts_server/pts_server_core.h"
 
 #define MEM_NAME "codec_avs2"
 
@@ -5387,7 +5388,7 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 			vf->pts_us64 = pic->pts64;
 		} else {
 #endif
-			if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+			if (vdec->vbuf.use_ptsserv == SINGLE_PTS_SERVER_DECODER_LOOKUP) {
 				if (pts_lookup_offset_us64
 					(PTS_TYPE_VIDEO, stream_offset,
 					&vf->pts, &frame_size, 0,
@@ -5593,7 +5594,7 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 	if (dec->front_back_mode != 1)
 		update_vf_memhandle(dec, vf, pic);
 
-	if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+	if ((vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP) && vdec_stream_based(vdec)) {
 		/* offset for tsplayer pts lookup */
 		u64 frame_type = 0;
 		if (pic->slice_type == I_IMG)
@@ -5605,6 +5606,25 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 		vf->pts_us64 = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
 			| pic->stream_offset;
 		vf->pts = 0;
+	} else if (vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_DECODER_LOOKUP) {
+		/* lookup by decoder */
+		checkout_pts_offset pts_info;
+		u64 frame_type = 0;
+		if (pic->slice_type == I_IMG)
+			frame_type = KEYFRAME_FLAG;
+		else if (pic->slice_type == P_IMG)
+			frame_type = PFRAME_FLAG;
+		else
+			frame_type = BFRAME_FLAG;
+		pts_info.offset = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
+			| pic->stream_offset;
+		if (!ptsserver_checkout_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+			vf->pts = pts_info.pts;
+			vf->pts_us64 = pts_info.pts_64;
+		} else {
+			vf->pts = 0;
+			vf->pts_us64 = 0;
+		}
 	}
 	avs2_print(dec, AVS2_DBG_OUT_PTS,
 		"avs2 dec out pts: vf->pts=%d, vf->pts_us64 = %lld(0x%llx) slice_type %d, duration %d\n",
