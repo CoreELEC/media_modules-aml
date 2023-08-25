@@ -33,6 +33,7 @@ typedef struct ptsnode {
 	u64 pts_64;
 	u32 expired_count;
 	u64 duration_count;
+	u64 index;
 } pts_node;
 
 typedef struct psinstance {
@@ -65,6 +66,8 @@ typedef struct psinstance {
 	u64 mLastDoubleCheckoutPts64;
 	u32 mDecoderDuration;
 	u32 kDoubleCheckThreshold;
+	u32 mLastDropIndex;
+	u32 mLastIndex;
 	struct mutex mPtsListLock;
 	u32 mListSize;
 	u32 mLastCheckoutCurOffset;
