@@ -61,6 +61,7 @@ enum vdec_trace_type_list {
 	VTRACE_V4L_PIC_7,	/* deque.                */
 	VTRACE_V4L_PIC_8,	/* deque_again.          */
 	VTRACE_V4L_PIC_9,	/* out PTS.		 */
+	VTRACE_V4L_PIC_10,	/* vsink_cache_num.		 */
 
 	VTRACE_V4L_ST_0,	/* state.                */
 	VTRACE_V4L_ST_1,	/* input_buffering.      */
@@ -72,6 +73,7 @@ enum vdec_trace_type_list {
 	VTRACE_GE2D_PIC_3,	/* handle_start.         */
 	VTRACE_GE2D_PIC_4,	/* submit.               */
 	VTRACE_GE2D_PIC_5,	/* vf_get.               */
+	VTRACE_GE2D_PIC_6,	/* ge2d_cache_num.              */
 
 	VTRACE_GE2D_ST_0,	/* reserver.             */
 
@@ -91,6 +93,7 @@ enum vdec_trace_type_list {
 	VTRACE_VPP_PIC_12,	/* lc_attach.            */
 	VTRACE_VPP_PIC_13,	/* lc_detach.            */
 	VTRACE_VPP_PIC_14,	/* lc_release.           */
+	VTRACE_VPP_PIC_15,	/* vpp_cache_num.           */
 
 	VTRACE_VPP_ST_0,	/* reserver.		 */
 

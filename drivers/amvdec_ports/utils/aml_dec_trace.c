@@ -48,6 +48,7 @@ static const struct vdec_trace_map trace_map[] = {
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_7,  "V4L", "PIC-deque" },
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_8,  "V4L", "PIC-deque_again" },
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_9,  "V4L", "PIC-out_pts" },
+	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_PIC_10,  "V4L", "PIC-cache" },
 
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_ST_0,   "V4L", "ST-state" },
 	{ VTRACE_GROUP_V4L_DEC,  VTRACE_V4L_ST_1,   "V4L", "ST-input_buffering" },
@@ -59,6 +60,7 @@ static const struct vdec_trace_map trace_map[] = {
 	{ VTRACE_GROUP_V4L_GE2D, VTRACE_GE2D_PIC_3, "GE2D", "PIC-handle_start" },
 	{ VTRACE_GROUP_V4L_GE2D, VTRACE_GE2D_PIC_4, "GE2D", "PIC-submit" },
 	{ VTRACE_GROUP_V4L_GE2D, VTRACE_GE2D_PIC_5, "GE2D", "PIC-vf_get" },
+	{ VTRACE_GROUP_V4L_GE2D, VTRACE_GE2D_PIC_6, "GE2D", "PIC-cache" },
 
 	{ VTRACE_GROUP_V4L_GE2D, VTRACE_GE2D_ST_0,  "GE2D", "reserver" },
 
@@ -78,6 +80,7 @@ static const struct vdec_trace_map trace_map[] = {
 	{ VTRACE_GROUP_V4L_VPP,  VTRACE_VPP_PIC_12, "VPP", "PIC-lc_attach" },
 	{ VTRACE_GROUP_V4L_VPP,  VTRACE_VPP_PIC_13, "VPP", "PIC-lc_detach" },
 	{ VTRACE_GROUP_V4L_VPP,  VTRACE_VPP_PIC_14, "VPP", "PIC-lc_release" },
+	{ VTRACE_GROUP_V4L_VPP,  VTRACE_VPP_PIC_15, "VPP", "PIC-cache" },
 
 	{ VTRACE_GROUP_V4L_VPP,  VTRACE_VPP_ST_0,   "VPP", "reserver" },
 

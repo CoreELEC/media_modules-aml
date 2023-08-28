@@ -284,6 +284,7 @@ static enum DI_ERRORTYPE
 	if (vpp->is_prog) {
 		kfifo_put(&vpp->input, vpp_buf->inbuf);
 		update_vpp_num_cache(vpp);
+		vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_15, atomic_read(&vpp->ctx->vpp_cache_num));
 	}
 
 	if (aml_buf->vpp_buf == NULL) {
@@ -376,11 +377,13 @@ static enum DI_ERRORTYPE
 
 		kfifo_put(&vpp->input, vpp_buf);
 		update_vpp_num_cache(vpp);
+		vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_15, atomic_read(&vpp->ctx->vpp_cache_num));
 	}
 
 	if (vpp->work_mode == VPP_MODE_S4_DW_MMU) {
 		kfifo_put(&vpp->input, vpp_buf);
 		update_vpp_num_cache(vpp);
+		vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_15, atomic_read(&vpp->ctx->vpp_cache_num));
 	}
 
 	if (vpp->buffer_mode != BUFFER_MODE_ALLOC_BUF)
@@ -1402,6 +1405,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 	up(&vpp->sem_in);
 
 	update_vpp_num_cache(vpp);
+	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_15, atomic_read(&vpp->ctx->vpp_cache_num));
 
 	aml_buf_update_holder(&vpp->ctx->bm, aml_buf, BUF_USER_VPP, BUF_GET);
 

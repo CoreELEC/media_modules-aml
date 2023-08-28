@@ -240,6 +240,7 @@ static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 	kfifo_put(&ge2d->input, buf);
 	update_ge2d_num_cache(ge2d);
 
+	vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_6, atomic_read(&ge2d->ctx->ge2d_cache_num));
 	vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_1, aml_buf->index);
 
 	return 0;
@@ -992,6 +993,7 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 
 	kfifo_put(&ge2d->in_done_q, in_buf);
 	update_ge2d_num_cache(ge2d);
+	vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_6, atomic_read(&ge2d->ctx->ge2d_cache_num));
 	aml_buf_update_holder(&ge2d->ctx->bm, aml_buf, BUF_USER_GE2D, BUF_GET);
 	up(&ge2d->sem_in);
 

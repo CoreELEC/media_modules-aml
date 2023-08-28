@@ -1013,6 +1013,8 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 
 	vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_6, vb2_buf->index);
 	vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_1, vdec_frame_number(ctx->ada_ctx));
+	vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_10,
+			CTX_BUF_TOTAL(ctx) + ctx->out_buff_cnt - ctx->in_buff_cnt);
 
 	if (vf->flag & VFRAME_FLAG_EMPTY_FRAME_V4L) {
 		dstbuf->vb.flags = V4L2_BUF_FLAG_LAST;
@@ -4254,6 +4256,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		ctx->in_buff_cnt++;
 
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_10,
+			CTX_BUF_TOTAL(ctx) + ctx->out_buff_cnt - ctx->in_buff_cnt);
 		vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_4, vb->index);
 
 		aml_buf_fill(&ctx->bm, aml_buf, BUF_USER_VSINK);
