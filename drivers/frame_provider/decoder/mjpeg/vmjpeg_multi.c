@@ -251,12 +251,12 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 	width = READ_VREG(MREG_PIC_WIDTH);
 	height = READ_VREG(MREG_PIC_HEIGHT);
 
-	vf->width = hw->frame_width = ((width > 1920) ? 1920 : width);
-	vf->height = hw->frame_height = ((height > 1088) ? 1088 : height);
+	vf->width = hw->frame_width = ((width > 4096) ? 4096 : width);
+	vf->height = hw->frame_height = ((height > 2304) ? 2304 : height);
 
 	if (hw->vmjpeg_amstream_dec_info.width < hw->vmjpeg_amstream_dec_info.height) {
-		vf->width = hw->frame_width = ((width > 1088) ? 1088 : width);
-		vf->height = hw->frame_height = ((height > 1920) ? 1920 : height);
+		vf->width = hw->frame_width = ((width > 2304) ? 2304 : width);
+		vf->height = hw->frame_height = ((height > 4096) ? 4096 : height);
 	}
 	vf->duration = hw->frame_dur;
 	vf->ratio_control = DISP_RATIO_ASPECT_RATIO_MAX << DISP_RATIO_ASPECT_RATIO_BIT;
@@ -543,17 +543,17 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	endian = (vdec->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
-	canvas_width = 1920;
-	canvas_height = 1088;
+	canvas_width = 4096;
+	canvas_height = 2304;
 	if (hw->vmjpeg_amstream_dec_info.width > 0
 		&& hw->vmjpeg_amstream_dec_info.height > 0
 		&& (hw->vmjpeg_amstream_dec_info.width < hw->vmjpeg_amstream_dec_info.height)) {
-		canvas_width = 1088;
-		canvas_height = 1920;
+		canvas_width = 2304;
+		canvas_height = 4096;
 	}
-	decbuf_y_size = 0x200000;
-	decbuf_uv_size = 0x80000;
-	decbuf_size = 0x300000;
+	decbuf_y_size  = ALIGN(canvas_width * canvas_height, SZ_64K);        //0x900000
+	decbuf_uv_size = ALIGN(canvas_width * canvas_height * 1/4, SZ_64K);  //0x240000
+	decbuf_size    = ALIGN(canvas_width * canvas_height * 3/2, SZ_64K);  //0xd80000
 
 	for (i = 0; i < hw->buf_num; i++) {
 		int canvas;
@@ -1485,7 +1485,7 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 
 	hw->platform_dev = pdev;
 
-	vdec_source_changed(VFORMAT_MJPEG, 1920, 1080, 60);
+	vdec_source_changed(VFORMAT_MJPEG, 3840, 2160, 30);
 	if (vmjpeg_init(pdata) < 0) {
 		pr_info("ammvdec_mjpeg init failed.\n");
 		if (hw) {

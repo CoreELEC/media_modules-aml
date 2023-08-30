@@ -284,12 +284,12 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 
 	width = READ_VREG(MREG_PIC_WIDTH);
 	height = READ_VREG(MREG_PIC_HEIGHT);
-	vf->width = hw->frame_width = ((width > 1920) ? 1920 : width);
-	vf->height = hw->frame_height = ((height > 1088) ? 1088 : height);
+	vf->width = hw->frame_width = ((width > 4096) ? 4096 : width);
+	vf->height = hw->frame_height = ((height > 2304) ? 2304 : height);
 
 	if (width < height) {
-		vf->width = hw->frame_width = ((width > 1088) ? 1088 : width);
-		vf->height = hw->frame_height = ((height > 1920) ? 1920 : height);
+		vf->width = hw->frame_width = ((width > 2304) ? 2304 : width);
+		vf->height = hw->frame_height = ((height > 4096) ? 4096 : height);
 	}
 	vf->duration = hw->frame_dur;
 	vf->ratio_control = DISP_RATIO_ASPECT_RATIO_MAX << DISP_RATIO_ASPECT_RATIO_BIT;
@@ -1864,8 +1864,7 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 
 	hw->platform_dev = pdev;
 
-	vdec_source_changed(VFORMAT_MJPEG,
-			1920, 1080, 60);
+	vdec_source_changed(VFORMAT_MJPEG, 3840, 2160, 30);
 	if (vmjpeg_init(pdata) < 0) {
 		pr_info("ammvdec_mjpeg init failed.\n");
 		if (hw) {
