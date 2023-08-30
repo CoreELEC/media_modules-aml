@@ -11769,8 +11769,9 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				hevc->empty_flag = 1;
 				/*suffix sei or dv meta*/
 				set_aux_data(hevc, hevc->cur_pic, 1, 0);
-				if (!hevc->first_pic_flag &&
-					hevc->cur_pic == NULL)
+				if ((!hevc->first_pic_flag &&
+					hevc->cur_pic == NULL) ||
+					!hevc->slice_count)
 					vdec_v4l_post_error_frame_event(ctx);
 
 				if (frmbase_muti_slice == 1)
