@@ -1859,9 +1859,18 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 		"Start BackEnd Decoding %d (wr pos %d, rd pos %d) pic index %d\n",
 		avs3_dec->backend_decoded_count, avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, pic->index);
 
+	mutex_lock(&dec->fb_mutex);
 	for (i = 0; (i < pic->list0_num_refp) && (pic->error_mark == 0); i++) {
 		ref_pic = &avs3_dec->pic_pool[pic->list0_index[i]].buf_cfg;
 		if (ref_pic->error_mark) {
+			dec->gvs->error_frame_count++;
+			if (pic->slice_type == SLICE_I) {
+				dec->gvs->i_concealed_frames++;
+			} else if (pic->slice_type == SLICE_P) {
+				dec->gvs->p_concealed_frames++;
+			} else if (pic->slice_type == SLICE_B) {
+				dec->gvs->b_concealed_frames++;
+			}
 			pic->error_mark = 1;
 			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L0 ref_pic %d pic error\n",
 				__func__, pic->list0_index[i]);
@@ -1871,18 +1880,37 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 	for (i = 0; (i < pic->list1_num_refp) && (pic->error_mark == 0); i++) {
 		ref_pic = &avs3_dec->pic_pool[pic->list1_index[i]].buf_cfg;
 		if (ref_pic->error_mark) {
+			dec->gvs->error_frame_count++;
+			if (pic->slice_type == SLICE_I) {
+				dec->gvs->i_concealed_frames++;
+			} else if (pic->slice_type == SLICE_P) {
+				dec->gvs->p_concealed_frames++;
+			} else if (pic->slice_type == SLICE_B) {
+				dec->gvs->b_concealed_frames++;
+			}
 			pic->error_mark = 1;
 			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L1 ref_pic %d pic error\n",
 				__func__, pic->list1_index[i]);
 		}
 	}
+	mutex_unlock(&dec->fb_mutex);
 
 	if (pic->error_mark && (error_handle_policy & 0x4)) {
 		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
 			"%s: error pic, skip\n", __func__);
 
+		mutex_lock(&dec->fb_mutex);
+		dec->gvs->drop_frame_count++;
+		if (pic->slice_type == SLICE_I) {
+			dec->gvs->i_lost_frames++;
+		} else if (pic->slice_type == SLICE_P) {
+			dec->gvs->p_lost_frames++;
+		} else if (pic->slice_type == SLICE_B) {
+			dec->gvs->b_lost_frames++;
+		}
+		mutex_unlock(&dec->fb_mutex);
+
 		pic_backend_ref_operation(dec, pic, 0);
-		pic->back_done_mark = 1;
 
 		return 1;
 	}
