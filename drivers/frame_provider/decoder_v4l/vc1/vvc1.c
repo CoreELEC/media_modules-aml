@@ -96,6 +96,7 @@
 #define DECODE_STATUS_SEQ_HEADER_DONE 0x1
 #define DECODE_STATUS_PIC_HEADER_DONE 0x2
 #define DECODE_STATUS_PIC_SKIPPED     0x3
+#define DECODE_STATUS_BUF_INVALID     0x4
 
 #define VF_POOL_SIZE		16
 #define DECODE_BUFFER_NUM_MAX	4
@@ -1402,6 +1403,10 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 			__func__, ctx->current_timestamp);
 		WRITE_VREG(DECODE_STATUS, 0);
 		return IRQ_HANDLED;
+	} else if (status_reg == DECODE_STATUS_BUF_INVALID) {
+		vc1_print(0, VC1_DEBUG_DETAIL, "%s: BUF_INVALID \n", __func__);
+		WRITE_VREG(DECODE_STATUS, 0);
+		return IRQ_HANDLED;
 	} else if (status_reg == DECODE_STATUS_PIC_HEADER_DONE) {//PIC header done
 		hw->new_type = READ_VREG(AV_SCRATCH_K);
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: PIC_HEADER_DONE picture_type %d(%s)\n", __func__, hw->new_type,
@@ -1878,7 +1883,8 @@ static int vvc1_prot_init(void)
 
 	WRITE_VREG(VC1_SOS_COUNT, 0);
 	WRITE_VREG(VC1_BUFFERIN, 0);
-	WRITE_VREG(VC1_BUFFEROUT, 0);
+	WRITE_VREG(VC1_BUFFEROUT, 1);//identify new driver version
+	vc1_print(0, VC1_DEBUG_DETAIL,"%s VC1_BUFFEROUT 1\n", __func__);
 
 	/* clear mailbox interrupt */
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
