@@ -3661,7 +3661,7 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
 			pic->ext_y_adr = pic->dw_u_v_adr + (buf_stru.mc_buffer_size_u_v_h << 16);
-			pic->ext_uv_adr = pic->ext_y_adr + (buf_stru.mc_buffer_size_u_v_h << 15);
+			pic->ext_uv_adr = pic->ext_y_adr + (buf_stru.mc_buffer_size_u_v_h << 16);
 		}
 	} else if (dw_mode && (dw_mode & 0x20) == 0) {
 		pic->dw_y_adr = y_adr;
@@ -7601,10 +7601,14 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 	int canvas_w = ALIGN(pic->width, 64)/4;
 	int canvas_h = ALIGN(pic->height, 32)/4;
 	int blkmode = hevc->mem_map_mode;
+	u32 canvas_endian = 7;
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)
+		canvas_endian = 8;
 
 	/*CANVAS_BLKMODE_64X32*/
 #ifdef SUPPORT_10BIT
-	if	(pic->double_write_mode &&
+	if (pic->double_write_mode &&
 		((pic->double_write_mode & 0x20) == 0)) {
 		canvas_w = pic->width /
 			get_double_write_ratio(pic->double_write_mode & 0xf);
@@ -7630,10 +7634,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 		config_cav_lut_ex(pic->y_canvas_index,
 			pic->dw_y_adr, canvas_w, canvas_h,
-			CANVAS_ADDR_NOWRAP, blkmode, 7, VDEC_HEVC);
+			CANVAS_ADDR_NOWRAP, blkmode, canvas_endian, VDEC_HEVC);
 		config_cav_lut_ex(pic->uv_canvas_index, pic->dw_u_v_adr,
 			canvas_w, canvas_h,
-			CANVAS_ADDR_NOWRAP, blkmode, 7, VDEC_HEVC);
+			CANVAS_ADDR_NOWRAP, blkmode, canvas_endian, VDEC_HEVC);
 #ifdef MULTI_INSTANCE_SUPPORT
 		pic->canvas_config[0].phy_addr =
 				pic->dw_y_adr;
@@ -7643,7 +7647,8 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 				canvas_h;
 		pic->canvas_config[0].block_mode =
 				blkmode;
-		pic->canvas_config[0].endian = 7;
+		pic->canvas_config[0].endian =
+				canvas_endian;
 
 		pic->canvas_config[1].phy_addr =
 				pic->dw_u_v_adr;
@@ -7653,7 +7658,8 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 				canvas_h;
 		pic->canvas_config[1].block_mode =
 				blkmode;
-		pic->canvas_config[1].endian = 7;
+		pic->canvas_config[1].endian =
+				canvas_endian;
 
 		ATRACE_COUNTER(hevc->trace.set_canvas0_addr, pic->canvas_config[0].phy_addr);
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
@@ -7677,10 +7683,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 			config_cav_lut_ex(pic->y_canvas_index,
 				pic->mc_y_adr, canvas_w, canvas_h,
-				CANVAS_ADDR_NOWRAP, blkmode, 7, VDEC_HEVC);
+				CANVAS_ADDR_NOWRAP, blkmode, canvas_endian, VDEC_HEVC);
 			config_cav_lut_ex(pic->uv_canvas_index, pic->mc_u_v_adr,
 				canvas_w, canvas_h,
-				CANVAS_ADDR_NOWRAP, blkmode, 7, VDEC_HEVC);
+				CANVAS_ADDR_NOWRAP, blkmode, canvas_endian, VDEC_HEVC);
 		}
 		ATRACE_COUNTER(hevc->trace.set_canvas0_addr, spec2canvas(pic));
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
@@ -7699,10 +7705,10 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 
 	config_cav_lut_ex(pic->y_canvas_index, pic->mc_y_adr, canvas_w, canvas_h,
-		CANVAS_ADDR_NOWRAP, blkmode, 7, VDEC_HEVC);
+		CANVAS_ADDR_NOWRAP, blkmode, canvas_endian, VDEC_HEVC);
 	config_cav_lut_ex(pic->uv_canvas_index, pic->mc_u_v_adr,
 		canvas_w, canvas_h,
-		CANVAS_ADDR_NOWRAP, blkmode, 7, VDEC_HEVC);
+		CANVAS_ADDR_NOWRAP, blkmode, canvas_endian, VDEC_HEVC);
 
 	ATRACE_COUNTER(hevc->trace.set_canvas0_addr, spec2canvas(pic));
 	hevc_print(hevc, H265_DEBUG_PIC_STRUCT,"%s(canvas0 addr:0x%x)\n",
@@ -11854,14 +11860,10 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 			hevc->enable_ucode_swap = true;
 		}
 	} else {
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
+		if (enable_swap)
+			hevc->enable_ucode_swap = true;
+		else
 			hevc->enable_ucode_swap = false;
-		} else {
-			if (enable_swap)
-				hevc->enable_ucode_swap = true;
-			else
-				hevc->enable_ucode_swap = false;
-		}
 	}
 
 	pr_debug("ucode version %d.%d, swap enable %d\n",
@@ -14438,6 +14440,8 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	hevc->endian = HEVC_CONFIG_LITTLE_ENDIAN;
 	if (is_support_vdec_canvas())
 		hevc->endian = HEVC_CONFIG_BIG_ENDIAN;
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)
+		hevc->endian = 0;
 	if (endian)
 		hevc->endian = endian;
 
