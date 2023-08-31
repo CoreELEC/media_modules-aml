@@ -1747,17 +1747,20 @@ static int setup_frame_size(
 			}
 		}
 
-		if (i >= BUF_FBC_NUM_MAX)
+		if (i >= BUF_FBC_NUM_MAX) {
 			vp9_print(pbi, 0,
 					"[ERR]can't find fb(0x%lx) in afbc table\n",
 					pbi->m_BUF[cm->new_fb_idx].v4l_ref_buf_addr);
+			ret = -1;
+		} else {
+			ret = vp9_alloc_mmu(pbi,
+				cm->cur_fb_idx_mmu,
+				params->p.width,
+				params->p.height,
+				params->p.bit_depth,
+				mmu_index_adr);
+		}
 
-		ret = vp9_alloc_mmu(pbi,
-			cm->cur_fb_idx_mmu,
-			params->p.width,
-			params->p.height,
-			params->p.bit_depth,
-			mmu_index_adr);
 		if (ret != 0) {
 			pr_err("can't alloc need mmu1,idx %d ret =%d\n",
 				cm->new_fb_idx,
@@ -1853,13 +1856,16 @@ static int setup_frame_size_with_refs(
 			}
 		}
 
-		if (i >= BUF_FBC_NUM_MAX)
-			vp9_print(pbi, 0,
-			"[ERR]can't find fb(0x%lx) in afbc table\n",
-			pbi->m_BUF[cm->new_fb_idx].v4l_ref_buf_addr);
-		ret = vp9_alloc_mmu(pbi, cm->cur_fb_idx_mmu,
+		if (i >= BUF_FBC_NUM_MAX) {
+			vp9_print(pbi, 0, "[ERR]can't find fb(0x%lx) in afbc table\n",
+				pbi->m_BUF[cm->new_fb_idx].v4l_ref_buf_addr);
+			ret = -1;
+		} else {
+			ret = vp9_alloc_mmu(pbi, cm->cur_fb_idx_mmu,
 				params->p.width, params->p.height,
-		params->p.bit_depth, mmu_index_adr);
+				params->p.bit_depth, mmu_index_adr);
+		}
+
 		if (ret != 0) {
 			pr_err("can't alloc need mmu,idx %d\r\n",
 				cm->new_fb_idx);
@@ -10563,16 +10569,18 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 				}
 			}
 
-			if (i >= BUF_FBC_NUM_MAX)
-				vp9_print(pbi, 0,
-				"[ERR]can't find fb(0x%lx) in afbc table\n",
-				pbi->m_BUF[cm->new_fb_idx].v4l_ref_buf_addr);
-			ret = vp9_alloc_mmu(pbi,
-				cm->cur_fb_idx_mmu,
-				params->p.width,
-				params->p.height,
-				params->p.bit_depth,
-				pbi->frame_mmu_map_addr);
+			if (i >= BUF_FBC_NUM_MAX) {
+				vp9_print(pbi, 0, "[ERR]can't find fb(0x%lx) in afbc table\n",
+					pbi->m_BUF[cm->new_fb_idx].v4l_ref_buf_addr);
+				ret = -1;
+			} else {
+				ret = vp9_alloc_mmu(pbi,
+					cm->cur_fb_idx_mmu,
+					params->p.width,
+					params->p.height,
+					params->p.bit_depth,
+					pbi->frame_mmu_map_addr);
+			}
 
 			if (ret < 0) {
 				pr_err("can't alloc need mmu1,idx %d ret =%d\n",
