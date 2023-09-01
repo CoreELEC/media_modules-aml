@@ -3951,7 +3951,7 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 	}
 }
 
-static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
+static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 {
 	struct PIC_s *pic = hevc->cur_pic;
 	int i, rIdx;
@@ -4064,8 +4064,22 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 		if (params->p.modification_flag & 0x1) {
 			hevc_print(hevc, H265_DEBUG_BUFMGR, "ref0 POC (modification):");
 			for (rIdx = 0; rIdx < num_ref_idx_l0_active; rIdx++) {
-				int cIdx = params->p.modification_list[rIdx];
+				u32 cIdx = params->p.modification_list[rIdx];
 
+				/* max array size 16 */
+				if (cIdx >= (num_neg + num_pos)) {
+					if (cIdx - num_neg - num_pos > 15) {
+						goto set_ref_err;
+					}
+				} else {
+					if (cIdx >= num_neg) {
+						if (cIdx - num_neg > 15) {
+							goto set_ref_err;
+						}
+					} else if (cIdx > 15) {
+						goto set_ref_err;
+					}
+				}
 				pic->m_aiRefPOCList0[pic->slice_idx][rIdx] =
 #ifdef SUPPORT_LONG_TERM_RPS
 					cIdx >= (num_neg + num_pos) ?
@@ -4106,13 +4120,27 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 			if (params->p.modification_flag & 0x2) {
 				hevc_print(hevc, H265_DEBUG_BUFMGR, "ref1 POC (modification):");
 				for (rIdx = 0; rIdx < num_ref_idx_l1_active; rIdx++) {
-					int cIdx;
+					u32 cIdx;
 
 					if (params->p.modification_flag & 0x1) {
 						cIdx = params->p.modification_list[num_ref_idx_l0_active + rIdx];
 					} else {
 						cIdx =
 							params->p.modification_list[rIdx];
+					}
+					/* max array size 16 */
+					if (cIdx >= (num_neg + num_pos)) {
+						if (cIdx - num_neg - num_pos > 15) {
+							goto set_ref_err;
+						}
+					} else {
+						if (cIdx >= num_neg) {
+							if (cIdx - num_neg > 15) {
+								goto set_ref_err;
+							}
+						} else if (cIdx > 15) {
+							goto set_ref_err;
+						}
 					}
 					pic->m_aiRefPOCList1[pic->slice_idx][rIdx] =
 #ifdef SUPPORT_LONG_TERM_RPS
@@ -4151,6 +4179,12 @@ static void set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 		(params->p.slice_type == B_SLICE) ? 0 : 3;
 	pic->RefNum_L0 = num_ref_idx_l0_active;
 	pic->RefNum_L1 = num_ref_idx_l1_active;
+
+	return 0;
+set_ref_err:
+	pic->error_mark = 1;
+	return -1;
+
 }
 
 static void update_tile_info(struct hevc_state_s *hevc, int pic_width_cu,
@@ -5865,6 +5899,11 @@ static void set_aux_data(struct hevc_state_s *hevc,
 					else
 						valid_tag = 0;
 					if (valid_tag && len > 0) {
+						if ((char *)p > (pic->aux_data_buf + AUX_DATA_SIZE1 - 11)) {
+							pr_err("%s, buf oversize risk %px %px\n",
+								__func__, p, pic->aux_data_buf);
+							break;
+						}
 						pic->aux_data_size += (len + 8);
 						h[0] = (len >> 24) & 0xff;
 						h[1] = (len >> 16) & 0xff;
@@ -6465,6 +6504,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	int Col_ref;
 	int dbg_skip_flag = 0;
 	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
+	int ret;
 
 	if (hevc->wait_buf == 0) {
 		hevc->sps_num_reorder_pics_0 =
@@ -6951,7 +6991,11 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		return 3;
 	}
 
-	set_ref_pic_list(hevc, rpm_param);
+	ret = set_ref_pic_list(hevc, rpm_param);
+	if (ret < 0) {
+		hevc_print(hevc, 0, "set_ref_pic_list error %d\n", ret);
+		return 3;
+	}
 
 	Col_ref = rpm_param->p.collocated_ref_idx;
 
