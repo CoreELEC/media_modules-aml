@@ -943,10 +943,6 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 
 	ctx->post_to_upper_done = false;
 
-	if (ctx->stream_mode) {
-		vf->timestamp = vf->pts_us64;
-	}
-
 	if ((cfg->double_write_mode == DM_AVBC_ONLY) ||
 		(ctx->force_tw_output && cfg->triple_write_mode)) {
 		if (aml_buf->planes_tw[0].bytes_used)
