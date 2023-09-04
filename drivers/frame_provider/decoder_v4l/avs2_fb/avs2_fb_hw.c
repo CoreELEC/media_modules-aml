@@ -1739,8 +1739,8 @@ static int BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 	int i = 0;
 
 	avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
-		"Start BackEnd Decoding %d (wr pos %d, rd pos %d)\n",
-		avs2_dec->backend_decoded_count, avs2_dec->fb_wr_pos, avs2_dec->fb_rd_pos);
+		"Start BackEnd Decoding %d (wr pos %d, rd pos %d) poc %d\n",
+		avs2_dec->backend_decoded_count, avs2_dec->fb_wr_pos, avs2_dec->fb_rd_pos, pic->poc);
 	if (dec->front_back_mode != 1 &&
 		dec->front_back_mode != 3) {
 		copy_loopbufs_ptr(&avs2_dec->bk, &avs2_dec->next_bk[avs2_dec->fb_rd_pos]);
@@ -1761,16 +1761,39 @@ static int BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 #endif
 #else
 
-	for (i = 0; i < MAXREF; i++) {
+	mutex_lock(&dec->fb_mutex);
+	for (i = 0; (i < MAXREF) && (pic->error_mark == 0); i++) {
 		if ((pic->ref_pic[i]) && (pic->ref_pic[i]->error_mark)) {
 			avs2_print(dec, AVS2_DBG_BUFMGR,
 				"%s ref pic(%d) has error_mark, skip\n", __func__, i);
+			dec->gvs->error_frame_count++;
+			if (pic->slice_type == I_IMG) {
+				dec->gvs->i_concealed_frames++;
+			} else if ((pic->slice_type == P_IMG) ||
+				(pic->slice_type == F_IMG)) {
+				dec->gvs->p_concealed_frames++;
+			} else if (pic->slice_type == B_IMG) {
+				dec->gvs->b_concealed_frames++;
+			}
 			pic->error_mark = 1;
 			break;
 		}
 	}
+	mutex_unlock(&dec->fb_mutex);
 
 	if ((dec->error_proc_policy & 0x2) && pic->error_mark) {
+		mutex_lock(&dec->fb_mutex);
+		dec->gvs->drop_frame_count++;
+		if (pic->slice_type == I_IMG) {
+			dec->gvs->i_lost_frames++;
+		} else if ((pic->slice_type == P_IMG) ||
+			(pic->slice_type == F_IMG)) {
+			dec->gvs->p_lost_frames++;
+		} else if (pic->slice_type == B_IMG) {
+			dec->gvs->b_lost_frames++;
+		}
+		mutex_unlock(&dec->fb_mutex);
+
 		avs2_print(dec, AVS2_DBG_BUFMGR, "%s pic has error_mark, skip\n", __func__);
 		pic_backend_ref_operation(dec, 0);
 		return 1;

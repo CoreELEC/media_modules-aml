@@ -820,7 +820,6 @@ struct avs2_frame_s {
 	u64 time;
 	s32 poc;
 	u32 hw_front_decode_time;
-	struct vdec_info vinfo;
 	u32 stream_size; // For stream base mode
 #endif
 };

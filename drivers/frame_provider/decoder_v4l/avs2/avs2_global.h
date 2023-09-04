@@ -1667,5 +1667,6 @@ extern int32_t avs2_init_global_buffers(struct avs2_decoder *avs2_dec);
 extern bool is_avs2_print_param(void);
 extern bool is_avs2_print_bufmgr_detail(void);
 extern int get_free_frame_buffer(struct avs2_decoder *avs2_dec);
+extern int get_error_policy(struct avs2_decoder *avs2_dec);
 #endif
 

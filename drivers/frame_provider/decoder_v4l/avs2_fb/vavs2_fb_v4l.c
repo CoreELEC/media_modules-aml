@@ -683,7 +683,6 @@ struct BuffInfo_s {
 #define DEC_RESULT_GET_DATA_RETRY   8
 #define DEC_RESULT_EOS              9
 #define DEC_RESULT_FORCE_EXIT       10
-#define DEC_RESULT_TIMEOUT          12
 
 #ifdef NEW_FB_CODE
 #define DEC_BACK_RESULT_NONE             0
@@ -1061,14 +1060,26 @@ static void update_decoded_pic(struct AVS2Decoder_s *dec);
 
 static void timeout_process(struct AVS2Decoder_s *dec)
 {
+	struct aml_vcodec_ctx *ctx = dec->v4l2_ctx;
+	struct avs2_frame_s *pic = dec->avs2_dec.hc.cur_pic;
+
 	dec->timeout_num++;
-	dec->timeout = true;
+	avs2_print(dec, 0, "%s decoder timeout\n", __func__);
+#ifdef NEW_FB_CODE
+	if (dec->front_back_mode == 1) {
+		amhevc_stop_f();
+	} else
+#endif
+	amhevc_stop();
 
-	avs2_print(dec,
-		0, "%s decoder timeout\n", __func__);
+	if (pic && (pic->error_mark == 0) &&
+		(pic->decoded_lcu == 0)) {
+		update_decoded_pic(dec);
+		pic->error_mark = 1;
+	}
 
-	dec->dec_result = DEC_RESULT_TIMEOUT;
-	update_decoded_pic(dec);
+	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
+	dec->dec_result = DEC_RESULT_DONE;
 	reset_process_time(dec);
 	vdec_schedule_work(&dec->work);
 }
@@ -4718,7 +4729,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 					decoder_do_frame_check(hw_to_vdec(dec), vf);
 #ifdef NEW_FB_CODE
 					fill_frame_info(dec, pic, pic->stream_size, vf->pts);
-					vdec_fill_vdec_frame(vdec, &pic->vqos, &pic->vinfo, vf, pic->hw_decode_time);
+					vdec_fill_vdec_frame(vdec, &pic->vqos, dec->gvs, vf, pic->hw_decode_time);
 #endif
 				}
 
@@ -4837,7 +4848,8 @@ static void fill_frame_info(struct AVS2Decoder_s *dec,
 
 	if (pic->slice_type == I_IMG)
 		pic->vqos.type = 1;
-	else if (pic->slice_type == P_IMG)
+	else if ((pic->slice_type == P_IMG) ||
+		(pic->slice_type == F_IMG))
 		pic->vqos.type = 2;
 	else if (pic->slice_type == B_IMG)
 		pic->vqos.type = 3;
@@ -5244,16 +5256,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 #endif
 			dec_update_gvs(dec);
 			/*count info*/
-			vdec_count_info(dec->gvs, 0, pic->stream_offset);
-			if (pic->stream_offset) {
-				if (pic->slice_type == I_IMG) {
-					dec->gvs->i_decoded_frames++;
-				} else if (pic->slice_type == P_IMG) {
-					dec->gvs->p_decoded_frames++;
-				} else if (pic->slice_type == B_IMG) {
-					dec->gvs->b_decoded_frames++;
-				}
-			}
+			vdec_count_info(dec->gvs, 2, pic->stream_offset);
 
 			dec->gvs->bit_depth_luma = pic->depth;
 			dec->gvs->bit_depth_chroma = pic->depth;
@@ -5429,9 +5432,9 @@ static uint32_t log2i(uint32_t val)
 static void check_pic_error(struct AVS2Decoder_s *dec,
 	struct avs2_frame_s *pic)
 {
-	if (pic->decoded_lcu == 0) {
-		pic->decoded_lcu = (READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff) + 1;
-	}
+	if (pic == NULL)
+		return ;
+
 	if (pic->decoded_lcu != dec->avs2_dec.lcu_total) {
 		avs2_print(dec, AVS2_DBG_BUFMGR,
 			"%s error pic(index %d imgtr_fwRefDistance %d) decoded lcu %d (total %d)\n",
@@ -6259,20 +6262,11 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 		dec_update_gvs(dec);
 		/*count info*/
-		vdec_count_info(dec->gvs, 0, pic->stream_offset);
-		if (pic->stream_offset) {
-			if (pic->slice_type == I_IMG) {
-				dec->gvs->i_decoded_frames++;
-			} else if (pic->slice_type == P_IMG) {
-				dec->gvs->p_decoded_frames++;
-			} else if (pic->slice_type == B_IMG) {
-				dec->gvs->b_decoded_frames++;
-			}
-		}
+		vdec_count_info(dec->gvs, 2, pic->stream_offset);
+
 		dec->gvs->bit_depth_luma = pic->depth;
 		dec->gvs->bit_depth_chroma = pic->depth;
 		dec->gvs->double_write_mode = pic->double_write_mode;
-		memcpy(&pic->vinfo, dec->gvs, sizeof(struct vdec_info));
 
 		reset_process_time_back(dec);
 		vdec->back_pic_done = true;
@@ -6534,6 +6528,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 				pic->error_mark = 1;
 			set_cuva_data(dec);
 			update_decoded_pic(dec);
+			check_pic_error(dec, pic);
 			get_picture_qos_info(dec, 0);
 			reset_process_time(dec);
 			dec->dec_result = DEC_RESULT_DONE;
@@ -6631,8 +6626,6 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 #ifndef NEW_FB_CODE
 			int32_t ii;
 #else
-
-			check_pic_error(dec, dec->avs2_dec.hc.cur_pic);
 			avs2_post_process(&dec->avs2_dec);
 
 			if (debug & AVS2_DBG_PRINT_PIC_LIST)
@@ -6988,7 +6981,42 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			}
 
 			if (dec->m_ins_flag) {
-				dec->dec_result = DEC_RESULT_DONE;
+				int slice_type = 0;
+				struct avs2_frame_s *cur_pic = avs2_dec->hc.cur_pic;
+
+#ifdef NEW_FB_CODE
+				mutex_lock(&dec->fb_mutex);
+#endif
+				if (cur_pic != NULL) {
+					slice_type = cur_pic->slice_type;
+				} else {
+					slice_type = dec->avs2_dec.img.type;
+				}
+
+				dec->gvs->frame_count++;
+				dec->gvs->drop_frame_count++;
+				dec->gvs->error_frame_count++;
+
+				if (slice_type == I_IMG) {
+					dec->gvs->i_lost_frames++;
+					dec->gvs->i_concealed_frames++;
+					dec->gvs->i_decoded_frames++;
+				} else if ((slice_type == P_IMG) ||
+					(slice_type == F_IMG)) {
+					dec->gvs->p_lost_frames++;
+					dec->gvs->p_concealed_frames++;
+					dec->gvs->p_decoded_frames++;
+				} else if (slice_type == B_IMG) {
+					dec->gvs->b_lost_frames++;
+					dec->gvs->b_concealed_frames++;
+					dec->gvs->b_decoded_frames++;
+				}
+#ifdef NEW_FB_CODE
+				mutex_unlock(&dec->fb_mutex);
+#endif
+
+				dec->dec_result = DEC_RESULT_ERROR;
+
 #ifdef NEW_FB_CODE
 				if (dec->front_back_mode == 1)
 					amhevc_stop_f();
@@ -7000,17 +7028,30 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			mutex_unlock(&dec->slice_header_lock);
 			goto irq_handled_exit;
 		} else {
-			PRINT_LINE();
+			struct avs2_frame_s *cur_pic = avs2_dec->hc.cur_pic;
+
 #ifdef NEW_FRONT_BACK_CODE
 			if (dec->front_back_mode) {
-				struct avs2_frame_s *cur_pic = avs2_dec->hc.cur_pic;
-				avs2_dec->hc.cur_pic->width = avs2_dec->img.width;
-				avs2_dec->hc.cur_pic->height = avs2_dec->img.height;
-				avs2_dec->hc.cur_pic->depth = avs2_dec->input.sample_bit_depth;
+				cur_pic->width = avs2_dec->img.width;
+				cur_pic->height = avs2_dec->img.height;
+				cur_pic->depth = avs2_dec->input.sample_bit_depth;
 				for (i = 0; i < MAXREF; i++)
 					cur_pic->ref_pic[i] = NULL;
 			}
 #endif
+
+			if (cur_pic != NULL) {
+				dec->gvs->frame_count++;
+				if (cur_pic->slice_type == I_IMG) {
+					dec->gvs->i_decoded_frames++;
+				} else if ((cur_pic->slice_type == P_IMG) ||
+					(cur_pic->slice_type == F_IMG)) {
+					dec->gvs->p_decoded_frames++;
+				} else if (cur_pic->slice_type == B_IMG) {
+					dec->gvs->b_decoded_frames++;
+				}
+			}
+
 			dec->avs2_dec.hc.cur_pic->stream_offset =
 				READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 
@@ -7021,17 +7062,16 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			}
 			/*MULTI_INSTANCE_SUPPORT*/
 			if (dec->chunk) {
-				dec->avs2_dec.hc.cur_pic->pts =
-				dec->chunk->pts;
-				dec->avs2_dec.hc.cur_pic->pts64 =
-				dec->chunk->pts64;
+				cur_pic->pts = dec->chunk->pts;
+				cur_pic->pts64 = dec->chunk->pts64;
 				if (!v4l_bitstream_id_enable)
-					dec->avs2_dec.hc.cur_pic->pts64 = dec->chunk->timestamp;
+					cur_pic->pts64 = dec->chunk->timestamp;
 			}
 
-			dec->avs2_dec.hc.cur_pic->bit_depth = dec->avs2_dec.input.sample_bit_depth;
-			dec->avs2_dec.hc.cur_pic->double_write_mode = get_double_write_mode(dec);
-			dec->avs2_dec.hc.cur_pic->triple_write_mode = get_triple_write_mode(dec);
+			cur_pic->bit_depth = dec->avs2_dec.input.sample_bit_depth;
+			cur_pic->double_write_mode = get_double_write_mode(dec);
+			cur_pic->triple_write_mode = get_triple_write_mode(dec);
+
 decode_slice:
 			PRINT_LINE();
 #ifdef NEW_FB_CODE
@@ -8036,37 +8076,43 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 		}
 		return;
 	} else if ((dec->dec_result == DEC_RESULT_DONE) ||
-		(dec->dec_result == DEC_RESULT_TIMEOUT)) {
+		(dec->dec_result == DEC_RESULT_ERROR)) {
+		struct avs2_frame_s *pic = dec->avs2_dec.hc.cur_pic;
+
 		dec->slice_idx++;
 		dec->frame_count++;
 		dec->process_state = PROC_STATE_INIT;
 		decode_frame_count[dec->index] = dec->frame_count;
 
-		if (dec->dec_result == DEC_RESULT_TIMEOUT) {
-			struct avs2_decoder *avs2_dec = &dec->avs2_dec;
-			struct avs2_frame_s *cur_pic = avs2_dec->hc.cur_pic;
-
+		if ((pic != NULL) && (pic->error_mark) &&
+			(dec->dec_result == DEC_RESULT_DONE)) {
 #ifdef NEW_FB_CODE
-			if (dec->front_back_mode == 1) {
-				amhevc_stop_f();
-			} else
+			mutex_lock(&dec->fb_mutex);
 #endif
-			amhevc_stop();
-
-			if (cur_pic && (cur_pic->error_mark != 1) &&
-				(cur_pic->decoded_lcu == 0)) {
-				update_decoded_pic(dec);
-				cur_pic->error_mark = 1;
-				avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
-					"%s cur_pic index %d set error mark\n",
-					__func__, cur_pic->index);
-#ifdef NEW_FB_CODE
-				if ((dec->front_back_mode == 1) &&
-					!(dec->error_proc_policy & 0x2)) {
-					front_decpic_done_update(dec, 1);
-				}
-#endif
+			dec->gvs->error_frame_count++;
+			if (pic->slice_type == I_IMG) {
+				dec->gvs->i_concealed_frames++;
+			} else if ((pic->slice_type == P_IMG) ||
+				(pic->slice_type == F_IMG)) {
+				dec->gvs->p_concealed_frames++;
+			} else if (pic->slice_type == B_IMG) {
+				dec->gvs->b_concealed_frames++;
 			}
+
+			if (pic->backend_ref == 0) {
+				dec->gvs->drop_frame_count++;
+				if (pic->slice_type == I_IMG) {
+					dec->gvs->i_lost_frames++;
+				} else if ((pic->slice_type == P_IMG) ||
+					(pic->slice_type == F_IMG)) {
+					dec->gvs->p_lost_frames++;
+				} else if (pic->slice_type == B_IMG) {
+					dec->gvs->b_lost_frames++;
+				}
+			}
+#ifdef NEW_FB_CODE
+			mutex_unlock(&dec->fb_mutex);
+#endif
 		}
 
 		if (dec->timeout && vdec_frame_based(vdec) && (dec->error_proc_policy & 0x2)) {
@@ -8099,7 +8145,6 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 	} else if (dec->dec_result == DEC_RESULT_EOS) {
 		avs2_print(dec, 0, "%s: end of stream\n", __func__);
 		if ( dec->avs2_dec.hc.cur_pic != NULL) {
-			check_pic_error(dec, dec->avs2_dec.hc.cur_pic);
 			avs2_post_process(&dec->avs2_dec);
 			avs2_prepare_display_buf(dec);
 		}
@@ -8136,6 +8181,17 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 	}
 #endif
 	wait_hevc_search_done(dec);
+
+	if (get_dbg_flag(dec) & AVS2_DBG_QOS_INFO) {
+		avs2_print(dec, 0, "%s:frame_count %d, drop_frame_count %d, error_frame_count %d\n",
+			__func__, dec->gvs->frame_count, dec->gvs->drop_frame_count, dec->gvs->error_frame_count);
+		avs2_print(dec, 0, "i decoded_frames %d, lost_frames %d, concealed_frames %d\n",
+			dec->gvs->i_decoded_frames, dec->gvs->i_lost_frames, dec->gvs->i_concealed_frames);
+		avs2_print(dec, 0, "p decoded_frames %d, lost_frames %d, concealed_frames %d\n",
+			dec->gvs->p_decoded_frames, dec->gvs->p_lost_frames, dec->gvs->p_concealed_frames);
+		avs2_print(dec, 0, "b decoded_frames %d, lost_frames %d, concealed_frames %d\n",
+			dec->gvs->b_decoded_frames, dec->gvs->b_lost_frames, dec->gvs->b_concealed_frames);
+	}
 
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec ==1)
@@ -8179,6 +8235,19 @@ static void avs2_work_back_implement(struct AVS2Decoder_s *dec,
 	if (dec->dec_back_result == DEC_BACK_RESULT_TIMEOUT) {
 		struct avs2_frame_s *pic = avs2_dec->next_be_decode_pic[avs2_dec->fb_rd_pos];
 
+		mutex_lock(&dec->fb_mutex);
+		if (pic->error_mark == 0) {
+			dec->gvs->error_frame_count++;
+			if (pic->slice_type == I_IMG) {
+				dec->gvs->i_concealed_frames++;
+			} else if ((pic->slice_type == P_IMG) ||
+				(pic->slice_type == F_IMG)) {
+				dec->gvs->p_concealed_frames++;
+			} else if (pic->slice_type == B_IMG) {
+				dec->gvs->b_concealed_frames++;
+			}
+		}
+		mutex_unlock(&dec->fb_mutex);
 		pic->error_mark = 1;
 		pic_backend_ref_operation(dec, 0);
 		v4l_submit_vframe(dec);

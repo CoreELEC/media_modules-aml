@@ -826,6 +826,7 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	int32_t ii;
 	int32_t tmp_ref;
 	struct avs2_frame_s *tmp_fref;
+	int32_t error_mark = 0;
 
 	/*update IDR frame*/
 	if (img->tr > hd->next_IDRtr && hd->curr_IDRtr != hd->next_IDRtr) {
@@ -912,32 +913,38 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 			}
 		}
 	}
-	if (img->type == B_IMG &&
-		(avs2_dec->fref[0]->imgtr_fwRefDistance <= img->tr ||
-		avs2_dec->fref[1]->imgtr_fwRefDistance >= img->tr ||
-		avs2_dec->fref[1]->imgtr_fwRefDistance == -256)) {
-
-		pr_info("wrong reference configuration for B frame\n");
-		pr_info("fref0 imgtr_fwRefDistance %d, fref1 imgtr_fwRefDistance %d, img->tr %d\n",
-			avs2_dec->fref[0]->imgtr_fwRefDistance,
-			avs2_dec->fref[1]->imgtr_fwRefDistance,
-			img->tr);
-		if (avs2_dec->fref[1]->imgtr_fwRefDistance != -256) {
-			avs2_dec->bufmgr_error_flag = 1;
+	if ((img->type == B_IMG &&
+		(avs2_dec->fref[0]->imgtr_fwRefDistance <= img->tr
+		|| avs2_dec->fref[1]->imgtr_fwRefDistance >= img->tr
+		|| avs2_dec->fref[1]->imgtr_fwRefDistance == -256))) {
+		if (get_error_policy(avs2_dec) & 0x2) {
+			pr_info("wrong reference configuration for B frame\n");
+			pr_info("fref0 imgtr_fwRefDistance %d, fref1 imgtr_fwRefDistance %d, img->tr %d\n",
+				avs2_dec->fref[0]->imgtr_fwRefDistance,
+				avs2_dec->fref[1]->imgtr_fwRefDistance,
+				img->tr);
+			if (avs2_dec->fref[1]->imgtr_fwRefDistance != -256) {
+				avs2_dec->bufmgr_error_flag = 1;
+			}
+			return -1;
+		} else {
+			error_mark = 1;
 		}
-		return -1; /* exit(-1);*/
-		/*******************************************/
 	}
 	if (img->type == P_IMG) {
 		for (ii = 0; ii < img->num_of_references;ii++) {
 			tmp_ref = img->coding_order - hd->curr_RPS.ref_pic[ii];
-			if(avs2_dec->fref[ii]->imgcoi_ref != tmp_ref &&
-			 avs2_dec->fref[ii]->imgcoi_ref != (tmp_ref - 256)) {
-				pr_info("wrong reference configuration for P frame\n");
-				pr_info("fref[%d] imgcoi_ref %d, ref_pic[%d] %d\n",
-					ii,avs2_dec->fref[ii]->imgcoi_ref,
-					ii,hd->curr_RPS.ref_pic[ii]);
-				return -1;
+			if ((avs2_dec->fref[ii]->imgcoi_ref != tmp_ref) &&
+				(avs2_dec->fref[ii]->imgcoi_ref != (tmp_ref - 256))) {
+				if (get_error_policy(avs2_dec) & 0x2) {
+					pr_info("wrong reference configuration for P frame\n");
+					pr_info("fref[%d] imgcoi_ref %d, ref_pic[%d] %d\n",
+						ii,avs2_dec->fref[ii]->imgcoi_ref,
+						ii,hd->curr_RPS.ref_pic[ii]);
+					return -1;
+				} else {
+					error_mark = 1;
+				}
 			}
 		}
 	}
@@ -981,7 +988,7 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 #endif
 	hc->f_rec->is_output = 1;
 #ifdef AML
-	hc->f_rec->error_mark = 0;
+	hc->f_rec->error_mark = error_mark;
 	hc->f_rec->decoded_lcu = 0;
 	hc->f_rec->slice_type = img->type;
 	hc->f_rec->time = div64_u64(local_clock(), 1000) - avs2_dec->start_time;
