@@ -167,6 +167,18 @@ struct Jpegenc_BuffInfo_s {
 	struct Jpegenc_Buff_s bitstream;
 };
 
+struct enc_dma_cfg {
+	int fd;
+	size_t size;
+	void *dev;
+	void *vaddr;
+	void *paddr;
+	struct dma_buf *dbuf;
+	struct dma_buf_attachment *attach;
+	struct sg_table *sg;
+	enum dma_data_direction dir;
+};
+
 struct jpegenc_request_s {
 	u32 src;
 	u32 encoder_width;
@@ -189,6 +201,8 @@ struct jpegenc_request_s {
 	u32 v_stride;
 
 	u32 h_stride;
+	struct enc_dma_cfg dma_cfg[3];
+	u32 plane_num;
 };
 
 struct jpegenc_meminfo_s {
@@ -257,18 +271,6 @@ struct encdrv_dma_buf_info_t {
 	int fd;
 	ulong phys_addr; /* phys address for DMA buffer */
 	size_t size;
-};
-
-struct enc_dma_cfg {
-	int fd;
-	size_t size;
-	void *dev;
-	void *vaddr;
-	void *paddr;
-	struct dma_buf *dbuf;
-	struct dma_buf_attachment *attach;
-	struct sg_table *sg;
-	enum dma_data_direction dir;
 };
 
 /* To track the occupied dma_buf  */
