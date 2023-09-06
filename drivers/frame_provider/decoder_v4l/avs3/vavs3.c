@@ -6031,6 +6031,10 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 			/*count info*/
 			vdec_count_info(dec->gvs, 2, pic->stream_offset);
 
+			if (v4l2_ctx->enable_di_post)
+				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+					aml_buf, vf);
+
 			dec->gvs->bit_depth_luma = pic->depth;
 			dec->gvs->bit_depth_chroma = pic->depth;
 			dec->gvs->double_write_mode = pic->double_write_mode;

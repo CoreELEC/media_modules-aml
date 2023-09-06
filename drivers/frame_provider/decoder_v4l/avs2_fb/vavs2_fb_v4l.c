@@ -5565,6 +5565,9 @@ static void v4l_submit_vframe(struct AVS2Decoder_s *dec)
 			}
 		}
 
+		if (ctx->enable_di_post)
+			ctx->fbc_transcode_and_set_vf(ctx,
+				aml_buf, vf);
 #ifdef NEW_FB_CODE
 		if (((dec->front_back_mode) && (pic->back_done_mark)) ||
 			(!dec->front_back_mode)) {
@@ -5769,6 +5772,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 #endif
 
 	vdec_vframe_ready(vdec, vf);
+	aml_buf_set_vframe(aml_buf, vf);
 	kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 	atomic_add(1, &dec->vf_pre_count);
 
