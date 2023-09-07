@@ -1665,6 +1665,7 @@ struct hevc_state_s {
 	void *vdec_cb_arg;
 	struct vframe_chunk_s *chunk;
 	int dec_result;
+	int last_dec_result;
 	u32 timeout_processing;
 	struct work_struct work;
 	struct work_struct timeout_work;
@@ -10541,7 +10542,8 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				set_aux_data(hevc, hevc->cur_pic, 1, 0);
 				if ((!hevc->first_pic_flag &&
 					hevc->cur_pic == NULL) ||
-					!hevc->slice_count)
+					(!hevc->slice_count &&
+					hevc->last_dec_result != DEC_RESULT_UNFINISH))
 					vdec_v4l_post_error_frame_event(ctx);
 				goto pic_done;
 			} else {
@@ -10558,8 +10560,10 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 	} else if (dec_status == HEVC_DECODE_PARAMS_ERR) {
 		hevc_print(hevc, 0, "hevc decode params err !!\n");
 		if (hevc->m_ins_flag) {
-			if (!hevc->first_pic_flag &&
-				hevc->cur_pic == NULL)
+			if ((!hevc->first_pic_flag &&
+				hevc->cur_pic == NULL) ||
+				(!hevc->slice_count &&
+				hevc->last_dec_result != DEC_RESULT_UNFINISH))
 				vdec_v4l_post_error_frame_event(ctx);
 			hevc->dec_result = DEC_RESULT_ERROR_DATA;
 			amhevc_stop();
@@ -10836,7 +10840,8 @@ force_output:
 			hevc->decoded_poc = hevc->curr_POC;
 			hevc->decoding_pic = NULL;
 			hevc->dec_result = DEC_RESULT_DONE;
-			if (vdec_frame_based(hw_to_vdec(hevc)))
+			if (vdec_frame_based(hw_to_vdec(hevc)) &&
+				hevc->last_dec_result != DEC_RESULT_UNFINISH)
 				vdec_v4l_post_error_frame_event(ctx);
 			amhevc_stop();
 			if (aux_data_is_available(hevc))
@@ -11407,7 +11412,8 @@ force_output:
 				hevc->slice_count++;
 			}
 			amhevc_stop();
-			if (vdec_frame_based(hw_to_vdec(hevc)))
+			if (vdec_frame_based(hw_to_vdec(hevc)) &&
+				hevc->last_dec_result != DEC_RESULT_UNFINISH)
 				vdec_v4l_post_error_frame_event(ctx);
 			vdec_schedule_work(&hevc->work);
 #endif
@@ -11444,7 +11450,8 @@ force_output:
 		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		vh265_buf_ref_process_for_exception(hevc);
-		if (vdec_frame_based(hw_to_vdec(hevc)))
+		if (vdec_frame_based(hw_to_vdec(hevc)) &&
+			hevc->last_dec_result != DEC_RESULT_UNFINISH)
 			vdec_v4l_post_error_frame_event(ctx);
 	}
 	return IRQ_HANDLED;
@@ -12809,6 +12816,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hevc->dec_result);
 
+	hevc->last_dec_result = hevc->dec_result;
+
 	if (hevc->dec_result == DEC_RESULT_AGAIN)
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_AGAIN);
 	if (hevc->dec_result != DEC_RESULT_NEED_MORE_BUFFER)
@@ -13460,7 +13469,8 @@ static void vh265_timeout_work(struct work_struct *work)
 	hevc->timeout_processing = 1;
 	if (vdec_frame_based(vdec)) {
 		vh265_buf_ref_process_for_exception(hevc);
-		vdec_v4l_post_error_frame_event(ctx);
+		if (hevc->last_dec_result != DEC_RESULT_UNFINISH)
+			vdec_v4l_post_error_frame_event(ctx);
 	}
 
 	hevc->decoding_pic = NULL;
