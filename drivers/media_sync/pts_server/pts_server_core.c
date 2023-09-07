@@ -39,7 +39,7 @@
 static u32 ptsserver_debuglevel = 0;
 
 #define MAX_INSTANCE_NUM (10)
-#define MAX_EXPIRED_COUNT (300)
+#define MAX_EXPIRED_COUNT (500)
 #define MAX_CHECKOUT_RETRY_COUNT (5)
 #define MAX_CHECKOUT_MIN_PTS_THRESHOLD (5)
 #define MAX_CHECKOUT_BOUND_VALUE (5)
@@ -243,12 +243,6 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 	}
 	if (pInstance->mListSize >= pInstance->mMaxCount) {
 		list_for_each_entry_safe(ptn_cur, ptn_tmp, &pInstance->pts_list, node) {
-			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"Checkin delete node loop del_ptn:%px index:%lld, size:%d pts:0x%x pts_64:%lld\n",
-									ptn_cur,del_ptn->index,ptn_cur->offset,
-									ptn_cur->pts,
-									ptn_cur->pts_64);
-			}
 			if (ptn_cur->index <= pInstance->mLastDropIndex) {
 				del_ptn = ptn_cur;
 				list_del(&del_ptn->node);
@@ -579,7 +573,8 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 				// Drop Node Strategy
 				// <Out of Buffer Size>
 				// <expired count == 0>
-				if (/*cur_offset > ptn->offset && */offsetAbs > 251658240 || ptn->expired_count <= 0) {
+				if ((/*cur_offset > ptn->offset && */offsetAbs > 251658240 || ptn->expired_count <= 0) &&
+				    (find_ptn != ptn) && (ptn != fit_offset_ptn) && (fit_pts_ptn != ptn)) {
 					// > 240M (15M*16)
 					if (ptsserver_debuglevel >= 1) {
 						pts_pr_info(index,"Checkout delete(%d) diff:%d offset:0x%x pts:0x%x pts_64:%llu,drop reason map:<%d %d>\n",
