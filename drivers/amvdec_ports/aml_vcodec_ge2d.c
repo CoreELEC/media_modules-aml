@@ -695,6 +695,19 @@ int aml_v4l2_ge2d_get_buf_num(u32 mode)
 	return 4;
 }
 
+void static inline aml_v4l2_ge2d_set_workmode(struct aml_vcodec_ctx *ctx,
+		struct aml_ge2d_cfg_infos *cfg)
+{
+	if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
+		(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
+		cfg->mode |= GE2D_MODE_CONVERT_NV12;
+	else if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+		(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
+		cfg->mode |= GE2D_MODE_CONVERT_NV21;
+	else
+		cfg->mode |= GE2D_MODE_CONVERT_NV21;
+}
+
 int aml_v4l2_ge2d_init(
 		struct aml_vcodec_ctx *ctx,
 		struct aml_ge2d_cfg_infos *cfg,
@@ -702,7 +715,6 @@ int aml_v4l2_ge2d_init(
 {
 	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
 	struct aml_v4l2_ge2d *ge2d;
-	u32 work_mode = cfg->mode;
 	u32 buf_size;
 	int i, ret;
 
@@ -713,7 +725,8 @@ int aml_v4l2_ge2d_init(
 	if (!ge2d)
 		return -ENOMEM;
 
-	ge2d->work_mode = work_mode;
+	aml_v4l2_ge2d_set_workmode(ctx, cfg);
+	ge2d->work_mode = cfg->mode;
 
 	/* default convert little endian. */
 	if (!ge2d->work_mode) {

@@ -575,16 +575,7 @@ static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 		return false;
 	}
 
-	if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
-		(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
-		*mode = GE2D_MODE_CONVERT_NV12;
-	else if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
-		(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
-		*mode = GE2D_MODE_CONVERT_NV21;
-	else
-		*mode = GE2D_MODE_CONVERT_NV21;
-
-	*mode |= GE2D_MODE_CONVERT_LE;
+	*mode = GE2D_MODE_CONVERT_LE;
 
 	return true;
 }
