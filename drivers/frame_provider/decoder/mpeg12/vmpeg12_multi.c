@@ -373,6 +373,7 @@ struct vdec_mpeg12_hw_s {
 	u64 last_pts;
 	u8  parse_user_data_buf[CCBUF_SIZE];
 	u32  parse_user_data_size;
+	u32 last_parse_user_data_size;
 	struct userdata_meta_info_t meta_info;
 	u32 vf_ucode_cc_last_wp;
 	bool process_busy;
@@ -1492,8 +1493,8 @@ static void userdata_push_do_work(struct work_struct *work)
 
 	cur_wp = reg & 0x7fff;
 	if (cur_wp == hw->ucode_cc_last_wp || (cur_wp >= AUX_BUF_ALIGN(CCBUF_SIZE))) {
-		debug_print(DECODE_ID(hw), 0,
-			"Null or Over size user data package: wp = %d\n", cur_wp);
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"Null or Over size user data package: wp = %d/%d\n", cur_wp, hw->ucode_cc_last_wp);
 		WRITE_VREG(AV_SCRATCH_J, 0);
 		return;
 	}
@@ -1674,6 +1675,13 @@ void userdata_pushed_drop(struct vdec_mpeg12_hw_s *hw)
 	memset(hw->parse_user_data_buf, 0, CCBUF_SIZE);
 }
 
+void userdata_pushed_drop_stream(struct vdec_mpeg12_hw_s *hw)
+{
+	hw->cur_ud_idx = 0;
+	if (hw->parse_user_data_size)
+		hw->last_parse_user_data_size = hw->parse_user_data_size;
+	hw->parse_user_data_size = 0;
+}
 
 static inline void hw_update_gvs(struct vdec_mpeg12_hw_s *hw)
 {
@@ -2339,7 +2347,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		} else {
 			hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
-			userdata_pushed_drop(hw);
+			userdata_pushed_drop_stream(hw);
 			reset_process_time(hw);
 		}
 		return IRQ_HANDLED;
@@ -2411,6 +2419,14 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			new_pic->hw_decode_time =
 			local_clock() - vdec->mvfrm->hw_decode_start;
 		}
+
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"%s: mmpeg12: wait_for_udr_send %d, parse_user_data_size %d/%d\n", __func__,
+			hw->wait_for_udr_send, hw->parse_user_data_size, hw->last_parse_user_data_size);
+
+		if (input_stream_based(vdec) && hw->wait_for_udr_send && (hw->parse_user_data_size == 0))
+			hw->parse_user_data_size = hw->last_parse_user_data_size;
+
 		copy_user_data_to_pic(hw, new_pic);
 
 		tmp = READ_VREG(MREG_PIC_WIDTH);
