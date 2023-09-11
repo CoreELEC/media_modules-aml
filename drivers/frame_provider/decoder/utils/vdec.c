@@ -3097,9 +3097,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				VDEC_INPUT_TARGET_VLD);
 	if (vdec_single(vdec) ||
 		(vdec_get_debug_flags() & 0x2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12B) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12B))
 		vdec_enable_DMC(vdec);
 	p->cma_dev = vdec_core->cma_dev;
 
