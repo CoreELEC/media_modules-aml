@@ -285,6 +285,8 @@ static unsigned int run_count_back[MAX_DECODE_INSTANCE_NUM];
 static unsigned int input_empty[MAX_DECODE_INSTANCE_NUM];
 static unsigned int not_run_ready[MAX_DECODE_INSTANCE_NUM];
 
+static u32 over_decoder_shiftbytes = 0x80;
+
 static u32 decode_timeout_val = 200;
 #ifdef NEW_FB_CODE
 static unsigned int decode_timeout_val_back = 200;
@@ -6894,6 +6896,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 	} else if ((dec_status == HEVC_DECPIC_DATA_DONE) ||
 		(dec_status == HEVC_DECPIC_DATA_ERROR)) {
 		struct avs3_frame_s *pic = dec->avs3_dec.cur_pic;
+		u32 shiftbytes = 0;
 
 		if (pic != NULL)
 			pic->poc = ctx->info.pic_header.dtr;
@@ -6905,6 +6908,14 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		if (pic && (vdec_stream_based(hw_to_vdec(dec)))
 			&& (dec_status == HEVC_DECPIC_DATA_DONE))
 			pic->stream_size = vdec_get_stream_size(hw_to_vdec(dec));
+
+		WRITE_VREG(HEVC_PARSER_DEBUG_IDX, 0xb);
+		shiftbytes = READ_VREG(HEVC_PARSER_DEBUG_DAT) & 0xffff;
+		if ((shiftbytes > over_decoder_shiftbytes) && (pic != NULL)) {
+			pic->error_mark = 1;
+			avs3_print(dec, PRINT_FLAG_VDEC_STATUS, "%s: over decoder(0x%x),set pic error\n",
+				__func__, shiftbytes);
+		}
 
 		if (dec->front_back_mode == 0) {
 			avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
@@ -10618,6 +10629,9 @@ MODULE_PARM_DESC(buf_alloc_size, "\n buf_alloc_size\n");
 
 module_param(buffer_mode, uint, 0664);
 MODULE_PARM_DESC(buffer_mode, "\n buffer_mode\n");
+
+module_param(over_decoder_shiftbytes, uint, 0664);
+MODULE_PARM_DESC(over_decoder_shiftbytes, "\n over_decoder_shiftbytes\n");
 
 module_param(buffer_mode_dbg, uint, 0664);
 MODULE_PARM_DESC(buffer_mode_dbg, "\n buffer_mode_dbg\n");
