@@ -2709,21 +2709,25 @@ unsigned char is_there_free_buffer(struct vdec_s *vdec)
 	int i;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
 	struct aml_vcodec_ctx * ctx = hw->v4l2_ctx;
-
 	int free_count = 0;
 	int free_slot = 0;
+	u32 run_ready_min_buf_num_active = run_ready_min_buf_num;
+
+	if (one_packet_multi_frames_multi_run)
+		run_ready_min_buf_num_active = 1;
+
 
 	for (i = 0; i < hw->dpb.mDPB.size; i++) {
 		if ((hw->buffer_spec[i].used == 0 || hw->buffer_spec[i].used == -1) &&
 			hw->buffer_spec[i].vf_ref == 0 &&
 			!hw->buffer_spec[i].cma_alloc_addr) {
 			free_slot++;
-			if (free_slot >= run_ready_min_buf_num)
+			if (free_slot >= run_ready_min_buf_num_active)
 				break;
 		}
 	}
 
-	if (free_slot < run_ready_min_buf_num) {
+	if (free_slot < run_ready_min_buf_num_active) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"%s no free_slot %d\n",
 		__func__, free_slot);
@@ -2732,7 +2736,7 @@ unsigned char is_there_free_buffer(struct vdec_s *vdec)
 
 	free_count = aml_buf_ready_num(&ctx->bm);
 
-	if (free_count < run_ready_min_buf_num) {
+	if (free_count < run_ready_min_buf_num_active) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"%s no buffer! free_count %d\n",
 		__func__, free_count);
@@ -2740,7 +2744,7 @@ unsigned char is_there_free_buffer(struct vdec_s *vdec)
 	}
 
 
-	return free_count >= run_ready_min_buf_num ? 1 : 0;
+	return free_count >= run_ready_min_buf_num_active ? 1 : 0;
 }
 
 unsigned char have_free_buf_spec(struct vdec_s *vdec)
@@ -2757,6 +2761,9 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 
 	u32 run_ready_min_buf_num_active = run_ready_min_buf_num;
 
+	if (one_packet_multi_frames_multi_run)
+		run_ready_min_buf_num_active = 1;
+
 	/* trigger to parse head data. */
 	if (!hw->v4l_params_parsed)
 		return 1;
@@ -2770,12 +2777,12 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 			hw->buffer_spec[i].vf_ref == 0 &&
 			!hw->buffer_spec[i].cma_alloc_addr) {
 			free_slot++;
-			if (free_slot >= run_ready_min_buf_num)
+			if (free_slot >= run_ready_min_buf_num_active)
 				break;
 		}
 	}
 
-	if (free_slot < run_ready_min_buf_num) {
+	if (free_slot < run_ready_min_buf_num_active) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"%s no free_slot %d\n",
 		__func__, free_slot);
@@ -2794,7 +2801,7 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 	}
 
 	if (!hw->aml_buf && !aml_buf_empty(&ctx->bm) &&
-		aml_buf_ready_num(&ctx->bm) >= run_ready_min_buf_num) {
+		aml_buf_ready_num(&ctx->bm) >= run_ready_min_buf_num_active) {
 		hw->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
 		if (!hw->aml_buf) {
 			return 0;
@@ -2819,7 +2826,7 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 		found = 1;
 	}
 
-	if (free_count < run_ready_min_buf_num) {
+	if (free_count < run_ready_min_buf_num_active) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"%s no buffer! free_count %d\n",
 		__func__, free_count);
@@ -2830,9 +2837,6 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 	}
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
-
-	if (one_packet_multi_frames_multi_run)
-		run_ready_min_buf_num_active = 1;
 
 	return found && free_count >= run_ready_min_buf_num_active ? 1 : 0;
 }
@@ -6272,7 +6276,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
-	int i, frame_outside_count = 0, inner_size = 0;
+	int i;
 	if ((kfifo_len(&hw->newframe_q) <= 0) ||
 	    ((hw->config_bufmgr_done) && (!is_there_free_buffer(vdec))) ||
 	    ((p_H264_Dpb->mDPB.init_done) &&
@@ -6327,18 +6331,18 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			spin_lock_irqsave(&hw->bufspec_lock, flags);
 
 			for (i = 0; i < p_Dpb->used_size; i++) {
-				if (p_Dpb->fs[i]->pre_output)
-					frame_outside_count++;
-				else if (p_Dpb->fs[i]->is_output && !is_used_for_reference(p_Dpb->fs[i])) {
+				if (p_Dpb->fs[i]->is_output && !is_used_for_reference(p_Dpb->fs[i])) {
 					spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 					bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
 					return 0;
 				}
 			}
 			spin_unlock_irqrestore(&hw->bufspec_lock, flags);
-			inner_size = p_Dpb->used_size - frame_outside_count;
 
-			if (inner_size >= p_H264_Dpb->dec_dpb_size ||
+			if ((!one_packet_multi_frames_multi_run &&
+					(p_H264_Dpb->mDPB.used_size >= (p_H264_Dpb->mDPB.size - 1))) ||
+				(one_packet_multi_frames_multi_run &&
+					(p_H264_Dpb->mDPB.used_size >= p_H264_Dpb->mDPB.size)) ||
 				!check_num_ref(&p_H264_Dpb->mDPB)) {
 				bufmgr_recover(hw);
 			}
