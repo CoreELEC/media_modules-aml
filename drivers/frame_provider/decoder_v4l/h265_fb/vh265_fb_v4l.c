@@ -158,6 +158,7 @@
 #define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
 
 #define SEI_UserDataITU_T_T35	4
+#define SEI_AlternativeTransferCharacteristics 147
 #define INVALID_IDX -1  /* Invalid buffer index.*/
 
 static struct semaphore h265_sema;
@@ -2002,6 +2003,8 @@ struct hevc_state_s {
 	unsigned int luminance[2];
 	/* data for SEI_CONTENT_LIGHT_LEVEL */
 	unsigned int content_light_level[2];
+	/* data for Alternative_Transfer_Characteristics*/
+	unsigned int preferred_transfer_characteristics;
 
 	struct PIC_s *pre_top_pic;
 	struct PIC_s *pre_bot_pic;
@@ -6378,8 +6381,11 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 		hevc->bit_depth_luma;
 	new_pic->bit_depth_chroma =
 		hevc->bit_depth_chroma;
-	new_pic->video_signal_type =
-		hevc->video_signal_type;
+	if (hevc->preferred_transfer_characteristics)
+		new_pic->video_signal_type = (hevc->video_signal_type & 0xffff00ff) |
+								(hevc->preferred_transfer_characteristics << 8);
+	else
+		new_pic->video_signal_type = hevc->video_signal_type;
 
 	new_pic->conformance_window_flag =
 		hevc->param.p.conformance_window_flag;
@@ -8705,7 +8711,7 @@ static int check_hevc_cc_type(char *p_sei)
 }
 #endif
 static int parse_sei(struct hevc_state_s *hevc,
-	struct PIC_s *pic, char *sei_buf, uint32_t size, bool parse_hdr10p)
+	struct PIC_s *pic, char *sei_buf, uint32_t size, bool parse_hdr10p, bool parse_cc)
 {
 	char *p = sei_buf;
 	char *p_sei;
@@ -8824,7 +8830,7 @@ static int parse_sei(struct hevc_state_s *hevc,
 #ifndef H265_USERDATA_ENABLE
 				}
 #else
-				} else if (check_hevc_cc_type(p_sei)) {
+				} else if (parse_cc && check_hevc_cc_type(p_sei)) {
 					user_data_buf = hevc->sei_itu_data_buf
 						+ hevc->sei_itu_data_len;
 					/* user data length should be align with 8 bytes,
@@ -8906,6 +8912,14 @@ static int parse_sei(struct hevc_state_s *hevc,
 						"max cll = %d, max_pa_cll = %d\n",
 					hevc->content_light_level[0],
 					hevc->content_light_level[1]);
+				break;
+			case SEI_AlternativeTransferCharacteristics:
+				/* preferred_transfer_characteristics */
+				p_sei = p;
+				hevc->preferred_transfer_characteristics = *p_sei & 0xff;
+				if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI)
+					hevc_print(hevc, 0, "preferred_transfer_characteristics %d\n",
+								hevc->preferred_transfer_characteristics);
 				break;
 			default:
 				break;
@@ -9037,7 +9051,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 			type = (type << 8) | *p++;
 			type = (type << 8) | *p++;
 			if (type == 0x02000000) {
-				parse_sei(hevc, pic, p, size, true);
+				parse_sei(hevc, pic, p, size, true, false);
 			}
 			p += size;
 		}
@@ -11048,7 +11062,7 @@ static int userdata_prepare(struct hevc_state_s *hevc)
 			if (type == 0x02000000) {
 				/* hevc_print(hevc, 0,
 				"sei(%d)\n", size); */
-				parse_sei(hevc, pic, p, size, true);
+				parse_sei(hevc, pic, p, size, true, true);
 			}
 			p += size;
 		}
@@ -12405,6 +12419,11 @@ force_output:
 					hevc->param.p.vui_time_scale_lo);
 			}
 
+			if (hevc->param.p.m_nalUnitType == NAL_UNIT_CODED_SLICE_IDR
+				|| hevc->param.p.m_nalUnitType == NAL_UNIT_CODED_SLICE_IDR_N_LP
+				|| hevc->param.p.m_nalUnitType == NAL_UNIT_CODED_SLICE_CRA)
+				hevc->preferred_transfer_characteristics = 0;
+
 			if (aux_data_is_available(hevc)) {
 				static struct PIC_s pic;
 				u32 size = 0, type = 0;
@@ -12434,7 +12453,7 @@ force_output:
 						type = (type << 8) | *p++;
 						type = (type << 8) | *p++;
 						if (type == 0x02000000) {
-							parse_sei(hevc, &pic, p, size, false);
+							parse_sei(hevc, &pic, p, size, false, false);
 						}
 						p += size;
 					}
