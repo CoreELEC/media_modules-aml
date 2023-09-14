@@ -248,6 +248,7 @@ Bit[10:8] - film_grain_params_ref_idx, For Write request
 #endif
 #define DECODE_STOP_POS           HEVC_ASSIST_SCRATCH_K
 #define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
+#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_G
 #ifdef NEW_FRONT_BACK_CODE
 #define HEVC_DECODE_COUNT        HEVC_ASSIST_SCRATCH_M
 #else
@@ -261,6 +262,7 @@ Bit[10:8] - film_grain_params_ref_idx, For Write request
 #define LMEM_PARAM_ADR_DBE        HEVC_ASSIST_SCRATCH_U
 //#define HEVC_FGS_UCODE_ADR        HEVC_ASSIST_SCRATCH_V
 //#define HEVC_FGS_UCODE_ADR_DBE    HEVC_ASSIST_SCRATCH_W
+#define HEVC_EFFICIENCY_MODE_BACK        HEVC_ASSIST_SCRATCH_V
 #define HEVC_DEC_STATUS_DBE       HEVC_ASSIST_SCRATCH_X
 #define DEBUG_REG1_DBE            HEVC_ASSIST_SCRATCH_Y
 #define DEBUG_REG2_DBE            HEVC_ASSIST_SCRATCH_Z
@@ -373,6 +375,7 @@ static u32 enable_single_slice = 1;
 
 #ifdef NEW_FB_CODE
 static unsigned int decode_timeout_val_back = 600;
+static u32 efficiency_mode = 1;
 #endif
 
 static int start_decode_buf_level = 0x8000;
@@ -380,6 +383,7 @@ static u32 force_pts_unstable;
 static u32 mv_buf_margin = REF_FRAMES;
 static u32 mv_buf_dynamic_alloc;
 static u32 force_max_one_mv_buffer_size;
+static u32 debug_mask = 0xffffffff;
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
 /* double_write_mode:
@@ -736,6 +740,7 @@ void clear_frame_buf_ref_count(AV1Decoder *pbi);
 #endif
 
 static void av1_work(struct work_struct *work);
+static void av1_work_implement(struct AV1HW_s *hw);
 #endif
 
 #ifdef DUMP_FILMGRAIN
@@ -1057,6 +1062,7 @@ struct AV1HW_s {
 	int triple_write_mode;
 #endif
 	u32 aux_data_size;
+	struct mutex slice_header_lock;
 };
 
 #ifdef NEW_FB_CODE
@@ -1082,7 +1088,7 @@ module_param(fb_ucode_debug, uint, 0664);
 
 static void av1_dump_state(struct vdec_s *vdec);
 
-int av1_print(struct AV1HW_s *hw,
+int av1_debug(struct AV1HW_s *hw,
 	int flag, const char *fmt, ...)
 {
 #define HEVC_PRINT_BUF		512
@@ -1103,6 +1109,17 @@ int av1_print(struct AV1HW_s *hw,
 	}
 	return 0;
 }
+
+#define av1_print(hw, flag, fmt, args...)					\
+	do {									\
+		if (hw == NULL ||    \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << hw->index)) \
+		&& (debug & flag))) { \
+			av1_debug(hw, flag, fmt, ##args);	\
+			} \
+	} while (0)
 
 unsigned char av1_is_debug(int flag)
 {
@@ -1256,11 +1273,11 @@ static void timeout_process_back(struct AV1HW_s *hw)
 static void reset_process_time(struct AV1HW_s *hw)
 {
 	if (hw->start_process_time) {
-		unsigned process_time =
-			1000 * (jiffies - hw->start_process_time) / HZ;
+		//unsigned process_time =
+		//	1000 * (jiffies - hw->start_process_time) / HZ;
 		hw->start_process_time = 0;
-		if (process_time > max_process_time[hw->index])
-			max_process_time[hw->index] = process_time;
+		//if (process_time > max_process_time[hw->index])
+		//	max_process_time[hw->index] = process_time;
 	}
 }
 
@@ -8614,7 +8631,8 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		}
 
 #ifdef NEW_FRONT_BACK_CODE
-		if (hw->front_back_mode == 1 || hw->front_back_mode == 3) {
+
+		if (!efficiency_mode && (hw->front_back_mode == 1 || hw->front_back_mode == 3)) {
 			config_pic_size_fb(hw);
 			config_mc_buffer_fb(hw);
 #ifdef MCRCC_ENABLE
@@ -8628,9 +8646,6 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 #ifdef AOM_AV1_UPSCALE_INIT
 			av1_upscale_frame_init_be(hw);
 #endif // #ifdef AOM_AV1_UPSCALE_INIT
-		}
-
-		if (hw->front_back_mode == 1 || hw->front_back_mode == 3) {
 
 			WRITE_BACK_RET(hw);
 			av1_print(hw, AOM_DEBUG_HW_MORE,
@@ -9277,7 +9292,7 @@ static int load_param(struct AV1HW_s *hw, union param_u *params, uint32_t dec_st
 		get_rpm_param(params);
 	}
 	else {
-		for (i = 0; i < (RPM_END-RPM_BEGIN); i += 4) {
+		for (i = 0; i < (RPM_VALID_E-RPM_BEGIN); i += 4) {
 			int32_t ii;
 			for (ii = 0; ii < 4; ii++) {
 				params->l.data[i+ii]=hw->rpm_ptr[i+3-ii];
@@ -9522,6 +9537,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		struct AV1_Common_s *const cm = &hw->common;
 		struct PIC_BUFFER_CONFIG_s *frame = &cm->cur_frame->buf;
 		struct vdec_s *vdec = hw_to_vdec(hw);
+		mutex_lock(&hw->slice_header_lock);
+		mutex_unlock(&hw->slice_header_lock);
 
 		vdec->front_pic_done = true;
 		vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
@@ -9645,7 +9662,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 						dump_hit_rate(hw);
 #endif
 					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
-					vdec_schedule_work(&hw->work);
+					av1_work_implement(hw);
 
 				} else {
 #ifdef NEW_FB_CODE
@@ -9695,7 +9712,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					dump_hit_rate(hw);
 #endif
 				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
-				vdec_schedule_work(&hw->work);
+				av1_work_implement(hw);
 			}
 		} else {
 		av1_print(hw, AOM_DEBUG_HW_MORE,
@@ -9977,6 +9994,62 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	}
 	vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
+
+#ifdef NEW_FRONT_BACK_CODE
+	if (efficiency_mode &&
+		hw->new_compressed_data &&
+		(hw->front_back_mode == 1 || hw->front_back_mode == 3)) {
+		init_pic_list_hw_fb(hw);
+		config_pic_size_fb(hw);
+		config_mc_buffer_fb(hw);
+#ifdef MCRCC_ENABLE
+		config_mcrcc_axi_hw_nearest_ref_fb(hw);
+#endif
+		config_sao_hw_fb(hw, &hw->aom_param);
+#ifdef AOM_AV1_DBLK_INIT
+		config_loop_filter_hw_fb(hw, &hw->aom_param);
+#endif
+
+#ifdef AOM_AV1_UPSCALE_INIT
+		av1_upscale_frame_init_be(hw);
+#endif // #ifdef AOM_AV1_UPSCALE_INIT
+
+		WRITE_BACK_RET(hw);
+		av1_print(hw, AOM_DEBUG_HW_MORE,
+			"write system instruction, ins_offset = %d, addr = 0x%x\n",
+			hw->pbi->ins_offset, hw->pbi->fr.sys_imem_ptr);
+		hw->pbi->sys_imem_ptr = hw->pbi->fr.sys_imem_ptr;
+		hw->pbi->sys_imem_ptr_v = hw->pbi->fr.sys_imem_ptr_v;
+		if (hw->pbi->ins_offset > 1024) {
+			av1_print(hw, 0,
+				"!!!!!Error!!!!!!!!, ins_offset %d is too big (>1280)\n", hw->pbi->ins_offset);
+			hw->pbi->ins_offset = 1024;
+		} else if (hw->pbi->ins_offset < 512) {
+			hw->pbi->ins_offset = 512;
+			WRITE_BACK_RET(hw);
+		}
+		memcpy(hw->pbi->sys_imem_ptr_v, (void*)(&hw->pbi->instruction[0]), hw->pbi->ins_offset*4);
+		//pbi->ins_offset = 0; //for next slice
+		//copyToDDR_32bits(hevc->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
+		hw->pbi->sys_imem_ptr += 4 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+		hw->pbi->sys_imem_ptr_v += 4 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+
+		if (hw->pbi->sys_imem_ptr >= hw->pbi->fb_buf_sys_imem.buf_end) {
+			av1_print(hw, AOM_DEBUG_HW_MORE,
+				"sys_imem_ptr is 0x%x, wrap around\n", hw->pbi->sys_imem_ptr);
+			hw->pbi->sys_imem_ptr = hw->pbi->fb_buf_sys_imem.buf_start;
+			hw->pbi->sys_imem_ptr_v = hw->pbi->fb_buf_sys_imem_addr;
+		}
+
+		if (hw->front_back_mode == 1) {
+			//WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
+			//WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->sys_imem_ptr);
+			//imem_count++;
+			WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
+		}
+	}
+#endif
+
 	return IRQ_HANDLED;
 }
 
@@ -9989,8 +10062,7 @@ static irqreturn_t vav1_isr(int irq, void *data)
 	uint debug_tag;
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
-	if (dec_status == AOM_AV1_DEC_PIC_END ||
-		dec_status == AOM_NAL_DECODE_DONE) {
+	if (dec_status == AOM_AV1_DEC_PIC_END) {
 		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
 	}
 
@@ -10794,6 +10866,9 @@ static s32 vav1_init(struct AV1HW_s *hw)
 
 	if (vav1_local_init(hw) < 0)
 		return -EBUSY;
+#ifdef NEW_FB_CODE
+	mutex_init(&hw->slice_header_lock);
+#endif
 
 	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
 	if (IS_ERR_OR_NULL(fw))
@@ -11467,10 +11542,8 @@ static void dump_data(struct AV1HW_s *hw, int size)
 		codec_mm_unmap_phyaddr(data);
 }
 
-static void av1_work(struct work_struct *work)
+static void av1_work_implement(struct AV1HW_s *hw)
 {
-	struct AV1HW_s *hw = container_of(work,
-		struct AV1HW_s, work);
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	/* finished decoding one frame or error,
 		* notify vdec core to switch context
@@ -11697,6 +11770,13 @@ static void av1_work(struct work_struct *work)
 				div64_u64(local_clock() - hw->front_irq_time, 1000));
 	}
 	trigger_schedule(hw);
+}
+
+static void av1_work(struct work_struct *work)
+{
+	struct AV1HW_s *hw = container_of(work,
+		struct AV1HW_s, work);
+	av1_work_implement(hw);
 }
 
 static int av1_hw_ctx_restore(struct AV1HW_s *hw)
@@ -12025,7 +12105,10 @@ static void run_front(struct vdec_s *vdec)
 				WRITE_VREG(AOM_AV1_SEGMENT_FEATURE, hw->common.cur_frame->segment_feature[i]);
 			}
 		}
-
+		if (efficiency_mode)
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1);
+		else
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0);
 		av1_hw_init(hw, (hw->pbi->frontend_decoded_count == 0), 1, 0);   //called-->config_bufstate_front_hw
 		config_decode_mode(hw);
 		config_bufstate_front_hw(hw->pbi);
@@ -12154,6 +12237,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec->front_pic_done = false;
 		hw->one_package_frame_cnt = 0;
 		run_front(vdec);
+		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_RUN_END);
 #ifdef NEW_FB_CODE
 	}
 
@@ -12161,7 +12245,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		run_back(vdec, callback, arg);
 	}
 #endif
-	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_RUN_END);
 }
 
 static void av1_decode_ctx_reset(struct AV1HW_s *hw)
@@ -12603,7 +12686,7 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 		hw->back_irq_time = local_clock();
 		hw->dec_back_result = DEC_BACK_RESULT_DONE;
-		vdec_schedule_work(&hw->work_back);
+		vav1_work_back_implement(hw, vdec, 0);
 	}
 
 	return IRQ_HANDLED;
@@ -13714,6 +13797,10 @@ MODULE_PARM_DESC(decode_timeout_val_back,
 
 module_param_array(max_process_time_back, uint,
 	&max_decode_instance_num, 0664);
+
+module_param(efficiency_mode, uint, 0664);
+MODULE_PARM_DESC(efficiency_mode, "\n  efficiency_mode\n");
+
 #endif
 
 module_init(amvdec_av1_driver_init_module);

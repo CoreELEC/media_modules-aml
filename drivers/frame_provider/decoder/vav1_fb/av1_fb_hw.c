@@ -789,93 +789,93 @@ static void config_bufstate_front_hw(AV1Decoder* pbi)
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_lcu_info_data0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_lcu_info_data0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.lcu_info_data0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.lcu_info_data0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.lcu_info_data0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 1);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_lcu_info_data1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_lcu_info_data1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.lcu_info_data1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.lcu_info_data1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.lcu_info_data1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	// config mpred_imp_if data write buffer start address
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 2);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_mpred_imp0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_mpred_imp0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.mpred_imp0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 3);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_mpred_imp1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_mpred_imp1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.mpred_imp1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	// config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 4);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_cu_info_data0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_cu_info_data0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.cu_info_data0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.cu_info_data0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.cu_info_data0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 5);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_cu_info_data1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_cu_info_data1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.cu_info_data1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.cu_info_data1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.cu_info_data1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 6);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_gmwm_data.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_gmwm_data.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.gmwm_data_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.gmwm_data_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.gmwm_data_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 7);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_lrf_data.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_lrf_data.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.lrf_data_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.lrf_data_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.lrf_data_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_tldat_data0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_tldat_data0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.tldat_data0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.tldat_data0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.tldat_data0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 9);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_tldat_data1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_tldat_data1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.tldat_data1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.tldat_data1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.tldat_data1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 10);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_tile_header_param.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_tile_header_param.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.tile_header_param_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.tile_header_param_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.tile_header_param_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 11);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_fgs_ucode.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_fgs_ucode.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.fgs_ucode_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.fgs_ucode_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.fgs_ucode_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 //config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 12);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_sys_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_sys_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.sys_imem_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 }
 
@@ -893,79 +893,79 @@ static void config_bufstate_back_hw(AV1Decoder* pbi)
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_lcu_info_data0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_lcu_info_data0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.lcu_info_data0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 1);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_lcu_info_data1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_lcu_info_data1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.lcu_info_data1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	//config mpred_imp_if data write buffer start address
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 2);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_mpred_imp0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_mpred_imp0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 3);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_mpred_imp1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_mpred_imp1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 4);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_cu_info_data0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_cu_info_data0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.cu_info_data0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 5);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_cu_info_data1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_cu_info_data1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.cu_info_data1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 6);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_gmwm_data.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_gmwm_data.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.gmwm_data_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 7);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_lrf_data.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_lrf_data.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.lrf_data_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 8);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_tldat_data0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_tldat_data0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.tldat_data0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 9);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_tldat_data1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_tldat_data1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.tldat_data1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 10);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_tile_header_param.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_tile_header_param.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.tile_header_param_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 11);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_fgs_ucode.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_fgs_ucode.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.fgs_ucode_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 //config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 12);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_sys_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_sys_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 }
 
@@ -1332,10 +1332,10 @@ static void decomp_perfcount_reset_dual(struct AV1HW_s *hw)
 static void aom_init_decoder_hw_fb(struct AV1HW_s *hw, int32_t decode_pic_begin, int32_t decode_pic_num, int first_flag, int front_flag, int back_flag)
 {
 	uint32_t data32;
-
+	int dw_mode = get_double_write_mode(hw);
 	av1_print(hw, AOM_DEBUG_HW_MORE, "[test.c] Entering aom_init_decoder_hw\n");
 
-	if (front_flag) {
+	if (!efficiency_mode && front_flag) {
 	//if (debug&AOM_AV1_DEBUG_BUFMGR)
 		//printk("[test.c] Enable HEVC Parser Interrupt\n");
 	data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
@@ -1427,6 +1427,7 @@ static void aom_init_decoder_hw_fb(struct AV1HW_s *hw, int32_t decode_pic_begin,
 		WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
 		WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 #endif
+	if (!efficiency_mode)
 		WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 			//  (1 << 8) | // sao_sw_pred_enable
 			(1 << 5) | // parser_sao_if_en
@@ -1443,7 +1444,7 @@ static void aom_init_decoder_hw_fb(struct AV1HW_s *hw, int32_t decode_pic_begin,
 		*/
 	}
 
-	if (back_flag) {
+	if (!efficiency_mode && back_flag) {
 		//if (debug) //printk("[test.c] Reset IPP\n");
 		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
 			(0 << 1) | // enable ipp
@@ -1466,10 +1467,6 @@ static void aom_init_decoder_hw_fb(struct AV1HW_s *hw, int32_t decode_pic_begin,
 			(0 << 0)   // software reset ipp and mpp
 			);
 
-		if (get_double_write_mode(hw) & 0x10) {
-			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31); // Enable NV21 reference read mode for MC
-			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31); // Enable NV21 reference read mode for MC
-		}
 #ifdef AOM_AV1_NV21
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31); // Enable NV21 reference read mode for MC
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31); // Enable NV21 reference read mode for MC
@@ -1490,6 +1487,11 @@ static void aom_init_decoder_hw_fb(struct AV1HW_s *hw, int32_t decode_pic_begin,
 		// Initialize mcrcc and decomp perf counters
 		mcrcc_perfcount_reset_dual(hw);
 		decomp_perfcount_reset_dual(hw);
+	}
+	if (back_flag &&
+		(dw_mode & 0x10)) {
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31); // Enable NV21 reference read mode for MC
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31); // Enable NV21 reference read mode for MC
 	}
 	av1_print(hw, AOM_DEBUG_HW_MORE, "[test.c] Leaving aom_init_decoder_hw\n");
 
@@ -1641,11 +1643,21 @@ void av1_hw_init(struct AV1HW_s *hw, int first_flag, int front_flag, int back_fl
 			"[test.c] av1_loop_filter_init (run once before decoding start)\n");
 		av1_loop_filter_init_fb(hw);
 #endif
+		if (!efficiency_mode) {
+#ifdef AOM_AV1_DBLK_INIT
+			// video format is AOM_AV1
+			data32 = (0x57 << 8) |  // 1st/2nd write both enable
+					 (0x4  << 0);   // aom_av1 video format
+			WRITE_VREG(HEVC_DBLK_CFGB, data32);
+			WRITE_VREG(HEVC_DBLK_CFGB_DBE1, data32);
+			av1_print(hw, AOM_DEBUG_HW_MORE," [DBLK DEBUG] CFGB : 0x%x\n", data32);
+#endif
 
-	// Set MCR fetch priorities
-		data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
-		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
-		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1, data32);
+			// Set MCR fetch priorities
+			data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
+			WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
+			WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1, data32);
+		}
 	}
 
 	if (front_flag) {
@@ -1685,8 +1697,10 @@ void av1_hw_init(struct AV1HW_s *hw, int first_flag, int front_flag, int back_fl
 		}
 		WRITE_VREG(HEVC_STREAM_PACKET_LENGTH, 0);
 #endif
-		WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x00000001); // AOM_AV1 use 4 Bytes Startcode
-		WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
+		if (!efficiency_mode) {
+			WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x00000001); // AOM_AV1 use 4 Bytes Startcode
+			WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
+		}
 #endif
 	// End JT
 #if 1 // JT
@@ -1704,7 +1718,7 @@ void av1_hw_init(struct AV1HW_s *hw, int first_flag, int front_flag, int back_fl
 #else
 		WRITE_VREG(HEVC_PSCALE_CTRL, 0);
 #endif
-		WRITE_VREG(DEBUG_REG1, 0x0);
+		//WRITE_VREG(DEBUG_REG1, 0x0);
 #ifdef PXP_CODE
 		WRITE_VREG(NAL_SEARCH_CTL, 0x8);
 		WRITE_VREG(DECODE_STOP_POS, udebug_flag);
@@ -1719,7 +1733,7 @@ void av1_hw_init(struct AV1HW_s *hw, int first_flag, int front_flag, int back_fl
 #endif
 #endif
 		}
-	if (front_flag)
+	if (!efficiency_mode && front_flag)
 		init_pic_list_hw_fb(hw);
 }
 
@@ -2606,7 +2620,6 @@ static void config_sao_hw_fb(struct AV1HW_s *hw, param_t* params)
 void av1_loop_filter_init_fb(struct AV1HW_s *hw)
 {
 	int32_t i;
-	uint32_t data32;
 	loop_filter_info_n *lfi = hw->lfi;
 	struct loopfilter *lf = hw->lf;
 
@@ -2621,13 +2634,6 @@ void av1_loop_filter_init_fb(struct AV1HW_s *hw)
 	WRITE_VREG(HEVC_DBLK_CFG9, thr);
 	WRITE_VREG(HEVC_DBLK_CFG9_DBE1, thr);
 	}
-
-	// video format is AOM_AV1
-	data32 = (0x57 << 8) |  // 1st/2nd write both enable
-		(0x4  << 0);   // aom_av1 video format
-	WRITE_VREG(HEVC_DBLK_CFGB, data32);
-	WRITE_VREG(HEVC_DBLK_CFGB_DBE1, data32);
-	av1_print(hw, AOM_DEBUG_HW_MORE," [DBLK DEBUG] CFGB : 0x%x\n", data32);
 
 }
 
@@ -3042,18 +3048,25 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 
 	hw->back_start_time = local_clock();
 	copy_loopbufs_ptr(&pbi->bk, &pbi->next_bk[pbi->fb_rd_pos]);
-	print_loopbufs_ptr("bk", &pbi->bk);
+	if (debug & AOM_DEBUG_HW_MORE)
+		print_loopbufs_ptr("bk", &pbi->bk);
 
 #ifdef RESET_BACK_PER_PICTURE
 	if (hw->front_back_mode == 1) {
 #ifdef PRINT_HEVC_DATA_PATH_MONITOR
 		if (pbi->backend_decoded_count > 0) {
-			print_hevc_b_data_path_monitor(pbi, pbi->backend_decoded_count - 1);
-			print_mcrcc_hit_info(pbi->backend_decoded_count - 1);
+			if (debug & AOM_DEBUG_HW_MORE) {
+				print_hevc_b_data_path_monitor(pbi, pbi->backend_decoded_count - 1);
+				print_mcrcc_hit_info(pbi->backend_decoded_count - 1);
+			}
 		}
 #endif
 		amhevc_reset_b();
 	}
+	if (efficiency_mode)
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 1);
+	else
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 0);
 	av1_hw_init(hw, pbi->backend_decoded_count == 0, 0, 1);
 #else
 	if (pbi->backend_decoded_count == 0) {
