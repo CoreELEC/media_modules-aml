@@ -6931,8 +6931,8 @@ void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
 		}
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
-			"process_for_exception: dma addr(0x%lx)\n",
-			hw->buffer_spec[buf_spec_num].buf_adr);
+			"process_for_exception: cma_alloc_addr 0x%lx, dma addr(0x%lx)\n",
+			hw->buffer_spec[buf_spec_num].cma_alloc_addr, hw->buffer_spec[buf_spec_num].buf_adr);
 
 		aml_buf_put_ref(&ctx->bm, aml_buf);
 		aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -7188,6 +7188,16 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 				mutex_unlock(&hw->pic_mutex);
 				release_cur_decoding_buf(hw);
+			}
+
+			if (input_stream_based(vdec) && !have_free_buf_spec(vdec)) {
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "next slice no free buf\n");
+				p_H264_Dpb->mVideo.pre_frame_num = hw->first_pre_frame_num;
+				hw->last_picture_slice_count = hw->cur_picture_slice_count;
+				hw->no_decoder_buffer_flag = 1;
+				hw->dec_result = DEC_RESULT_AGAIN;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
 			}
 		}
 #endif
