@@ -4575,6 +4575,7 @@ static void vb2ops_vdec_buf_cleanup(struct vb2_buffer *vb)
 				v4l_freebufs_back_to_codec_mm(buf->mem_owner, buf->mem[i]);
 				buf->mem[i] = NULL;
 			}
+			aml_buf_detach(&ctx->bm, vb2_dma_contig_plane_dma_addr(vb, 0));
 		}
 	}
 }
