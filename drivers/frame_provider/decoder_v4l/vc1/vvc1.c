@@ -1100,6 +1100,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		vf->v4l_mem_handle = hw->pics[buffer_index].v4l_ref_buf_addr;
 		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 		vf->pts_us64 = pts_us64;
+		vf->timestamp = pts_us64;
 
 		vf->canvas0Addr = vf->canvas1Addr = -1;
 		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
@@ -1182,6 +1183,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		vf->v4l_mem_handle = hw->pics[buffer_index].v4l_ref_buf_addr;
 		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 		vf->pts_us64 = pts_us64;
+		vf->timestamp = pts_us64;
 
 		vf->canvas0Addr = vf->canvas1Addr = -1;
 		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
@@ -1301,6 +1303,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		vf->v4l_mem_handle = hw->pics[buffer_index].v4l_ref_buf_addr;
 		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 		vf->pts_us64 = pts_us64;
+		vf->timestamp = pts_us64;
 
 		vc1_print(0, VC1_DEBUG_DETAIL,
 			"[%d] %s(), v4l mem handle: 0x%lx\n",

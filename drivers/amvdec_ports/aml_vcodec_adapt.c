@@ -757,7 +757,8 @@ void vdec_write_stream_data_inner(struct aml_vdec_adapt *ada_ctx, char *addr,
 	}
 
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
-		"VC1 input: es size %d \n", size);
+		"VC1 input: es(add data size %d) -> stbuf(addr 0x%lx wp 0x%x)\n",
+		size, ada_ctx->vdec->vbuf.buf_start, ada_ctx->vdec->vbuf.buf_wp);
 }
 
 #if 0
