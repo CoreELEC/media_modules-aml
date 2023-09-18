@@ -2509,13 +2509,13 @@ static int is_interlace(struct hevc_state_s *hevc)
 	int frame_field_info_present_flag =
 			(hevc->param.p.sei_frame_field_info >> 8) & 0x1;
 
-	if ((hevc->param.p.profile_etc & 0xc) == 0x4
+	if ((hevc->param.p.profile_etc &  0x4)
 		&& (frame_field_info_present_flag
 		&& (pic_struct == 0
 		|| pic_struct == 7
 		|| pic_struct == 8)))
 		return 0;
-	else if ((hevc->param.p.profile_etc & 0xc) == 0x4)
+	else if (hevc->param.p.profile_etc & 0x4)
 		return 1;
 
 	return 0;

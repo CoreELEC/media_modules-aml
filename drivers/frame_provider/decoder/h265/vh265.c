@@ -10928,7 +10928,7 @@ force_output:
 							!disable_ip_mode) ? true : false;
 					hevc->pic_list_init_flag = 1;
 					if ((!IS_4K_SIZE(hevc->pic_w, hevc->pic_h)) &&
-						((hevc->param.p.profile_etc & 0xc) == 0x4)
+						(hevc->param.p.profile_etc & 0x4)
 						&& (interlace_enable != 0)) {
 						if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S1A) {
 							hevc->double_write_mode = 1;
