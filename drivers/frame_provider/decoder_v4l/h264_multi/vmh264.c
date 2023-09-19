@@ -4514,7 +4514,10 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 				//calculate_co_mv_offset_frame_ref_field:
 				// frame_ref_from_field co_mv_rd_addr :
 				// (mby/2*mb_width+mbx)*2
-				colocate_rd_adr_offset = ((mby >> 1) * mb_width + mbx) << 1;
+				if (cur_structure == 3)
+					colocate_rd_adr_offset = (mby * mb_width + mbx) << 1;
+				else
+					colocate_rd_adr_offset = ((mby >> 1) * mb_width + mbx) << 1;
 			} else if (cur_structure == 2) {
 				colocate_rd_adr_offset = pSlice->first_mb_in_slice;
 			} else {
