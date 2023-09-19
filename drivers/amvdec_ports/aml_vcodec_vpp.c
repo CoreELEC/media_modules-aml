@@ -1324,9 +1324,9 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		if (vdec_if_get_param(vpp->ctx, GET_PARAM_DW_MODE, &dw_mode))
 			return -1;
 
-		vf->type |= vpp->ctx->vpp_cfg.is_prog ?
-			VIDTYPE_PROGRESSIVE :
-			VIDTYPE_INTERLACE;
+		vf->type |= vpp->ctx->last_decoded_picinfo.field == V4L2_FIELD_INTERLACED ?
+						VIDTYPE_INTERLACE :
+						VIDTYPE_PROGRESSIVE;
 
 		if (dw_mode != DM_YUV_ONLY)
 			vf->type |= VIDTYPE_COMPRESS;

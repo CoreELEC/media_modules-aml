@@ -9761,7 +9761,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		hw->dw_para_set_flag = true;
 	}
 
-	if ((ps->field == V4L2_FIELD_INTERLACED) &&
+	if (!ctx->v4l_resolution_change && (ps->field == V4L2_FIELD_INTERLACED) &&
 		hw->dw_para_set_flag &&
 		hw->set_mmu_flag) {
 		struct aml_vdec_cfg_infos cfg_info = { 0 };
@@ -9910,6 +9910,7 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 			struct aml_vdec_ps_infos ps;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 				"h264 res_change\n");
+			ctx->v4l_resolution_change = 1;
 			if (vmh264_get_ps_info(hw, param1,
 				param2, param3, param4, &ps) < 0) {
 				dpb_print(DECODE_ID(hw), 0,
@@ -9922,7 +9923,6 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 			}
 			vdec_v4l_res_ch_event(ctx);
 			hw->res_ch_flag = 1;
-			ctx->v4l_resolution_change = 1;
 			ctx->v4l_reqbuff_flag = false;
 			amvdec_stop();
 			if (hw->mmu_enable)

@@ -702,7 +702,7 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	u32 dw = DM_YUV_ONLY;
 	u32 tw = DM_INVALID;
 
-	if (vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->last_decoded_picinfo)) {
+	if (vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->picinfo)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"Cannot get param : GET_PARAM_PICTURE_INFO ERR\n");
 		return;
@@ -720,10 +720,10 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 
 	}
 
-	if (ctx->last_decoded_picinfo.visible_width == 0 ||
-		ctx->last_decoded_picinfo.visible_height == 0 ||
-		ctx->last_decoded_picinfo.coded_width == 0 ||
-		ctx->last_decoded_picinfo.coded_height == 0) {
+	if (ctx->picinfo.visible_width == 0 ||
+		ctx->picinfo.visible_height == 0 ||
+		ctx->picinfo.coded_width == 0 ||
+		ctx->picinfo.coded_height == 0) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"Cannot get correct pic info\n");
 		return;
@@ -735,13 +735,12 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 		"new(%d,%d), old(%d,%d), real(%d,%d)\n",
+			ctx->picinfo.visible_width,
+			ctx->picinfo.visible_height,
 			ctx->last_decoded_picinfo.visible_width,
 			ctx->last_decoded_picinfo.visible_height,
-			ctx->picinfo.visible_width, ctx->picinfo.visible_height,
-			ctx->last_decoded_picinfo.coded_width,
-			ctx->last_decoded_picinfo.coded_width);
-
-	ctx->picinfo = ctx->last_decoded_picinfo;
+			ctx->picinfo.coded_width,
+			ctx->picinfo.coded_width);
 
 	if (ctx->vpp_is_need)
 		ctx->vpp_cfg.is_vpp_reset = true;
@@ -1039,7 +1038,7 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 			/* make the run to stanby until new buffs to enqueue. */
 			ctx->reset_flag = V4L_RESET_MODE_LIGHT;
 			ctx->vpp_cfg.res_chg = true;
-
+			ctx->last_decoded_picinfo = ctx->picinfo;
 			/*
 			 * After all buffers containing decoded frames from
 			 * before the resolution change point ready to be
