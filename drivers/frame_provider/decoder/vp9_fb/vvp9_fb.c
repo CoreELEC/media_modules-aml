@@ -11692,6 +11692,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		pr_err("fatal err, bit_depth %d, unsupport dw 0x10\n",
 			pbi->vp9_param.p.bit_depth);
+		start_process_time(pbi);
 		return -1;
 	}
 
@@ -11752,6 +11753,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		}
 #ifdef MULTI_INSTANCE_SUPPORT
 		if (pbi->m_ins_flag) {
+			reset_process_time(pbi);
 			pbi->dec_result = DEC_RESULT_DONE;
 #ifdef SUPPORT_FB_DECODING
 			if (pbi->used_stage_buf_num == 0)
@@ -12011,6 +12013,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		}
 	}
 	ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_END);
+	start_process_time(pbi);
 	return ret;
 }
 
@@ -13080,13 +13083,6 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		if (!efficiency_mode)
 			pbi->postproc_done = 0;
 
-#ifdef MULTI_INSTANCE_SUPPORT
-		if (pbi->m_ins_flag)
-			start_process_time(pbi);
-#endif
-		/*if (pbi->front_back_mode == 3) {
-			goto pic_done;
-		}*/
 		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	}
@@ -14672,8 +14668,6 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 			continue_decoding(pbi);
 			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
-
-			start_process_time(pbi);
 		}
 		return;
 	}
