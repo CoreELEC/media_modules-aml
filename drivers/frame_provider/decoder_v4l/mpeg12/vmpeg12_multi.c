@@ -1501,6 +1501,27 @@ static void userdata_push_do_work(struct work_struct *work)
 	WRITE_VREG(AV_SCRATCH_J, 0);
 }
 
+void vmpeg12_report_pts(struct vdec_mpeg12_hw_s *hw)
+{
+	struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	u32 offset = READ_VREG(MREG_FRAME_OFFSET);
+	struct checkoutptsoffset pts_st;
+	u64 dur_offset = hw->frame_dur;
+
+	dur_offset = (dur_offset << 32 ) | offset;
+	if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
+		ctx->current_timestamp = pts_st.pts_64;
+		debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+		"%s pts cal_offset current pts:0x%x pts_64:%llx  dur_offset:0x%llx \n",
+		__func__, pts_st.pts, pts_st.pts_64, dur_offset);
+	} else {
+		debug_print(DECODE_ID(hw), 0, "pts cal_offset fail  dur_offset:0x%llx\n",dur_offset);
+		ctx->current_timestamp = 0;
+	}
+
+	vdec_v4l_post_error_frame_event(ctx);
+}
 
 void userdata_pushed_drop(struct vdec_mpeg12_hw_s *hw)
 {
@@ -1667,11 +1688,8 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 
 		if (!v4l2_ctx->vpp_is_need && field_num == 1 &&
 			pic->last_timestamp != pic->timestamp) {
-			if (input_frame_based(vdec)) {
-				v4l2_ctx->current_timestamp =
-					pic->last_timestamp;
-				vdec_v4l_post_error_frame_event(v4l2_ctx);
-			}
+			v4l2_ctx->current_timestamp = pic->last_timestamp;
+			vdec_v4l_post_error_frame_event(v4l2_ctx);
 		}
 		vf->type_original = vf->type;
 
@@ -2216,6 +2234,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			mpeg2_buf_ref_process_for_exception(hw);
 			if (vdec_frame_based(vdec))
 				vdec_v4l_post_error_frame_event(ctx);
+			else
+				vmpeg12_report_pts(hw);
 			hw->dec_result = DEC_RESULT_ERROR;
 			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
@@ -2394,6 +2414,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				mpeg2_buf_ref_process_for_exception(hw);
 				if (vdec_frame_based(vdec))
 					vdec_v4l_post_error_frame_event(ctx);
+				else
+					vmpeg12_report_pts(hw);
 			}
 
 			vdec_schedule_work(&hw->work);
@@ -2599,6 +2621,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			mpeg2_buf_ref_process_for_exception(hw);
 			if (vdec_frame_based(vdec))
 				vdec_v4l_post_error_frame_event(ctx);
+			else
+				vmpeg12_report_pts(hw);
 			hw->timeout = false;
 		}
 		vdec_vframe_dirty(vdec, hw->chunk);
@@ -2868,10 +2892,8 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		vf->meta_data_buf = NULL;
 		vf->meta_data_size = 0;
 	}
-	if (vdec_frame_based(vdec)) {
-		ctx->current_timestamp = vf->timestamp;
-		vdec_v4l_post_error_frame_event(ctx);
-	}
+	ctx->current_timestamp = vf->timestamp;
+	vdec_v4l_post_error_frame_event(ctx);
 
 	debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 		"%s: vf: %lx, index: %d, use: %d\n", __func__, (ulong)vf,
