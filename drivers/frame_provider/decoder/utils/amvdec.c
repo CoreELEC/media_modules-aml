@@ -644,7 +644,10 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 		break;
 
 	case VFORMAT_H264_ENC:
-		format = VIDEO_ENC_H264;
+		if (!strcmp(name, "gxl_h264_enc"))
+			format = VIDEO_ENC_H264;
+		else
+			format = VIDEO_ENC_H264_CABAC;
 		vdec = OPTEE_VDEC_HCDEC;
 		break;
 

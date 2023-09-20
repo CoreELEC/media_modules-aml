@@ -664,6 +664,7 @@ static const char *select_ucode(u32 ucode_index)
 {
 	enum ucode_type_e ucode = UCODE_GXL;
 
+	#if 0
 	switch (ucode_index) {
 	case UCODE_MODE_FULL:
 		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_G12A)
@@ -677,6 +678,12 @@ static const char *select_ucode(u32 ucode_index)
 	default:
 		break;
 	}
+	#else
+	if (ucode_index == UCODE_MODE_FULL)
+		ucode = UCODE_G12A;
+	else
+		ucode = UCODE_GXL;
+	#endif
 	return (const char *)ucode_name[ucode];
 }
 
@@ -2823,7 +2830,7 @@ s32 amvenc_loadmc(const char *p, struct encode_wq_s *wq)
 
         WRITE_HREG(HCODEC_MPSR, 0);
         WRITE_HREG(HCODEC_CPSR, 0);
-        ret = amvdec_loadmc_ex(VFORMAT_H264_ENC, NULL, buf);
+        ret = amvdec_loadmc_ex(VFORMAT_H264_ENC, p, buf);
 
         if (ret < 0) {
             //amvdec_disable();
@@ -3624,7 +3631,8 @@ static s32 amvenc_avc_light_reset(struct encode_wq_s *wq, u32 value)
 
 	mdelay(value);
 
-	encode_manager.ucode_index = UCODE_MODE_FULL;
+	//encode_manager.ucode_index = UCODE_MODE_FULL;
+	encode_manager.ucode_index = wq->ucode_index;
 	r = amvenc_avc_start(wq, clock_level);
 
 	enc_pr(LOG_DEBUG,
@@ -3796,7 +3804,8 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 				"avc config init error, wq:%p.\n", (void *)wq);
 			return -1;
 		}
-		wq->ucode_index = UCODE_MODE_FULL;
+		//wq->ucode_index = UCODE_MODE_FULL;
+		wq->ucode_index = addr_info[0];
 #ifdef MULTI_SLICE_MC
 		wq->pic.rows_per_slice = addr_info[1];
 		enc_pr(LOG_DEBUG,
