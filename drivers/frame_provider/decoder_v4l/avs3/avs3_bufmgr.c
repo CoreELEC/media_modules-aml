@@ -25,8 +25,8 @@ void set_livcdata_dec(DEC id_lib, LibVCData *libvc_data)
 void init_libvcdata(LibVCData *libvc_data)
 	{
 	int i, j;
-	libvc_data->bits_dependencyFile = 0;
-	libvc_data->bits_libpic = 0;
+	memset(&libvc_data->bits_dependencyFile, 0, sizeof(libvc_data->bits_dependencyFile));
+	memset(&libvc_data->bits_libpic, 0, sizeof(libvc_data->bits_libpic));
 
 	libvc_data->library_picture_enable_flag = 0;
 #if IPPPCRR

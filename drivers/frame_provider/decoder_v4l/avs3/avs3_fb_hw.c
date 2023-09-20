@@ -35,10 +35,10 @@ ulong dos_reg_compat_convert(ulong adr);
 //typedef union param_u param_t;
 
 #define PRINT_HEVC_DATA_PATH_MONITOR
-static   unsigned   mcrcc_hit_rate;
+//static   unsigned   mcrcc_hit_rate;
 static   unsigned   mcrcc_hit_rate_0;
 static   unsigned   mcrcc_hit_rate_1;
-static   unsigned   mcrcc_bypass_rate;
+//static   unsigned   mcrcc_bypass_rate;
 static   unsigned   mcrcc_bypass_rate_0;
 static   unsigned   mcrcc_bypass_rate_1;
 
