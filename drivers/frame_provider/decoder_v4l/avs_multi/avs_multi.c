@@ -366,6 +366,7 @@ struct pic_info_t {
 	u32 picture_type;
 	unsigned short decode_pic_count;
 	u32 repeat_cnt;
+	u32 error_flag;
 };
 
 struct vdec_avs_hw_s {
@@ -1361,6 +1362,8 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 			"[ERR]invalid fb, vf: %lx\n", (ulong)vf);
 		return;
 	}
+	ctx->current_timestamp = vf->timestamp;
+	vdec_v4l_post_error_frame_event(ctx);
 
 	if (hw->recover_flag)
 		return;
@@ -3582,11 +3585,14 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 
 		debug_print(hw, PRINT_FLAG_PTS,
 			"interlace1 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
+
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (v4l2_ctx->is_stream_off) {
+			vavs_vf_put(vavs_vf_get(vdec), vdec);
+		} else if (hw->pics[buffer_index].error_flag) {
 			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
 			if (v4l2_ctx->enable_di_post)
@@ -3684,11 +3690,14 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		}
 		debug_print(hw, PRINT_FLAG_PTS,
 			"interlace2 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
+
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (v4l2_ctx->is_stream_off) {
+			vavs_vf_put(vavs_vf_get(vdec), vdec);
+		} else if (hw->pics[buffer_index].error_flag) {
 			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
 			if (aml_buf->sub_buf[0])
@@ -3812,6 +3821,8 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 
 		if (v4l2_ctx->is_stream_off) {
+			vavs_vf_put(vavs_vf_get(vdec), vdec);
+		}  else if (hw->pics[buffer_index].error_flag) {
 			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
 			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
@@ -3945,6 +3956,7 @@ static int v4l_res_change(struct vdec_avs_hw_s *hw)
 	return ret;
 }
 
+
 void avs_buf_ref_process_for_exception(struct vdec_avs_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -3979,6 +3991,45 @@ void avs_buf_ref_process_for_exception(struct vdec_avs_hw_s *hw)
 	hw->pics[index].v4l_ref_buf_addr = 0;
 	hw->pics[index].cma_alloc_addr = 0;
 }
+
+static void check_ref_error(struct vdec_avs_hw_s *hw, int index)
+{
+	struct pic_info_t *pic = NULL;
+	int i = 0;
+
+	pic = &hw->pics[index];
+	if ((pic->picture_type) == B_PICTURE) {
+		if ((hw->refs[0] < 0) || (hw->refs[0] >= hw->vf_buf_num_used) ||
+			(hw->refs[1] < 0) || (hw->refs[1] >= hw->vf_buf_num_used)) {
+			pic->error_flag = 1;
+			debug_print(hw, 0,
+				"avs: ref pic not exist, set cur pic error\n");
+			return ;
+		}
+		for (i = 0; i < 2; i++) {
+			if (hw->pics[hw->refs[i]].error_flag) {
+				pic->error_flag = 1;
+				debug_print(hw, 0,
+					"avs: L%d ref error, set index %d error_mark\n", i, index);
+				return ;
+			}
+		}
+	}
+
+	if ((pic->picture_type) == P_PICTURE) {
+		if ((hw->refs[1] < 0) || (hw->refs[1] >= hw->vf_buf_num_used)) {
+			pic->error_flag = 1;
+			debug_print(hw, 0,
+				"avs: ref pic not exist, set cur pic error\n");
+			return ;
+		} else if (hw->pics[hw->refs[1]].error_flag) {
+			pic->error_flag = 1;
+			debug_print(hw, 0,
+				"avs: L0 ref error, set index %d error_mark\n", index);
+		}
+	}
+}
+
 
 static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
@@ -4132,6 +4183,7 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 			hw->pics[hw->decoding_index].buffer_info = reg;
 			hw->pics[hw->decoding_index].index = hw->decoding_index;
 			hw->pics[hw->decoding_index].decode_pic_count = decode_pic_count;
+			hw->pics[hw->decoding_index].error_flag = 0;
 			if (pts_by_offset) {
 				offset = READ_VREG(AVS_OFFSET_REG);
 				debug_print(hw, PRINT_FLAG_DECODING, "AVS OFFSET=%x\n", offset);
@@ -4183,7 +4235,16 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 				WRITE_VREG(AVS_BUFFERIN, ~(1 << hw->decoding_index));
 				hw->buf_use[hw->decoding_index]--;
 			} else {
+				u32 decode_status = READ_VREG(DECODE_STATUS) & 0xff;
 				hw->pic_put_dpb = true;
+
+				if (vdec_frame_based(vdec) && (decode_status == DECODE_STATUS_DECODE_BUF_EMPTY ||
+						decode_status == DECODE_STATUS_SEARCH_BUF_EMPTY)) {
+					hw->pics[hw->decoding_index].error_flag = 1;
+				}
+
+				check_ref_error(hw, hw->decoding_index);
+
 				if ((picture_type == I_PICTURE) ||
 					(picture_type == P_PICTURE)) {
 					buffer_index = update_reference(hw, hw->decoding_index);

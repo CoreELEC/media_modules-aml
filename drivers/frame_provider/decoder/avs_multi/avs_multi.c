@@ -358,6 +358,7 @@ struct pic_info_t {
 	u32 picture_type;
 	unsigned short decode_pic_count;
 	u32 repeat_cnt;
+	u32 error_flag;
 };
 
 struct vdec_avs_hw_s {
@@ -1071,6 +1072,7 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)op_arg;
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	unsigned long flags;
 
 	if (vf) {
 		hw->put_num++;
@@ -1086,6 +1088,7 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 	if (hw->recover_flag)
 		return;
 
+	spin_lock_irqsave(&lock, flags);
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		if (vf == &hw->vfpool[i].vf)
 			break;
@@ -1093,6 +1096,7 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 	if (i < VF_POOL_SIZE)
 
 		kfifo_put(&hw->recycle_q, (const struct vframe_s *)vf);
+	spin_unlock_irqrestore(&lock, flags);
 
 	vdec_up(vdec);
 }
@@ -3294,12 +3298,16 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 
 			debug_print(hw, PRINT_FLAG_PTS,
 				"interlace1 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
-			vdec_vframe_ready(vdec, vf);
-			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(hw->pts_name, vf->pts);
-			avs_vf_notify_receiver(hw, PROVIDER_NAME,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY,
-					NULL);
+			if (hw->pics[buffer_index].error_flag) {
+				vavs_vf_put(vf, hw);
+			} else {
+				vdec_vframe_ready(vdec, vf);
+				kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+				ATRACE_COUNTER(hw->pts_name, vf->pts);
+				avs_vf_notify_receiver(hw, PROVIDER_NAME,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY,
+						NULL);
+			}
 
 			if (kfifo_get(&hw->newframe_q, &vf) == 0) {
 				pr_info("fatal error, no available buffer slot.");
@@ -3386,12 +3394,17 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			}
 			debug_print(hw, PRINT_FLAG_PTS,
 				"interlace2 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
-			vdec_vframe_ready(vdec, vf);
-			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(hw->pts_name, vf->pts);
-			avs_vf_notify_receiver(hw, PROVIDER_NAME,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY,
-					NULL);
+
+			if (hw->pics[buffer_index].error_flag) {
+				vavs_vf_put(vf, hw);
+			} else {
+				vdec_vframe_ready(vdec, vf);
+				kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+				ATRACE_COUNTER(hw->pts_name, vf->pts);
+				avs_vf_notify_receiver(hw, PROVIDER_NAME,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY,
+						NULL);
+			}
 			hw->total_frame++;
 		} else {	/* progressive */
 			hw->throw_pb_flag = 0;
@@ -3496,15 +3509,21 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 					vf->pts_us64 = 0;
 				}
 			}
-			decoder_do_frame_check(hw_to_vdec(hw), vf);
-			vdec_vframe_ready(vdec, vf);
-			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-			ATRACE_COUNTER(hw->pts_name, vf->pts);
-			ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
-			ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
-			avs_vf_notify_receiver(hw, PROVIDER_NAME,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY,
-					NULL);
+
+			if (hw->pics[buffer_index].error_flag) {
+				vavs_vf_put(vf, hw);
+			} else {
+				decoder_do_frame_check(hw_to_vdec(hw), vf);
+				vdec_vframe_ready(vdec, vf);
+				kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+				ATRACE_COUNTER(hw->pts_name, vf->pts);
+				ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+				ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
+				avs_vf_notify_receiver(hw, PROVIDER_NAME,
+						VFRAME_EVENT_PROVIDER_VFRAME_READY,
+						NULL);
+			}
+
 			hw->total_frame++;
 		}
 
@@ -3522,6 +3541,44 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		avs_update_gvs(hw);
 		vdec_fill_vdec_frame(hw_to_vdec(hw), NULL, hw->gvs, vf, 0);
 		return 0;
+}
+
+static void check_ref_error(struct vdec_avs_hw_s *hw, int index)
+{
+	struct pic_info_t *pic = NULL;
+	int i = 0;
+
+	pic = &hw->pics[index];
+	if ((pic->picture_type) == B_PICTURE) {
+		if ((hw->refs[0] < 0) || (hw->refs[0] >= hw->vf_buf_num_used) ||
+			(hw->refs[1] < 0) || (hw->refs[1] >= hw->vf_buf_num_used)) {
+			pic->error_flag = 1;
+			debug_print(hw, 0,
+				"avs: ref pic not exist, set cur pic error\n");
+			return ;
+		}
+		for (i = 0; i < 2; i++) {
+			if (hw->pics[hw->refs[i]].error_flag) {
+				pic->error_flag = 1;
+				debug_print(hw, 0,
+					"avs: L%d ref error, set index %d error_mark\n", i, index);
+				return ;
+			}
+		}
+	}
+
+	if ((pic->picture_type) == P_PICTURE) {
+		if ((hw->refs[1] < 0) || (hw->refs[1] >= hw->vf_buf_num_used)) {
+			pic->error_flag = 1;
+			debug_print(hw, 0,
+				"avs: ref pic not exist, set cur pic error\n");
+			return ;
+		} else if (hw->pics[hw->refs[1]].error_flag) {
+			pic->error_flag = 1;
+			debug_print(hw, 0,
+				"avs: L0 ref error, set index %d error_mark\n", index);
+		}
+	}
 }
 
 
@@ -3627,6 +3684,7 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 			hw->pics[hw->decoding_index].buffer_info = reg;
 			hw->pics[hw->decoding_index].index = hw->decoding_index;
 			hw->pics[hw->decoding_index].decode_pic_count = decode_pic_count;
+			hw->pics[hw->decoding_index].error_flag = 0;
 			if (pts_by_offset) {
 				offset = READ_VREG(AVS_OFFSET_REG);
 				debug_print(hw, PRINT_FLAG_DECODING, "AVS OFFSET=%x\n", offset);
@@ -3679,6 +3737,13 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 				WRITE_VREG(AVS_BUFFERIN, ~(1 << hw->decoding_index));
 				hw->buf_use[hw->decoding_index]--;
 			} else {
+				u32 decode_status = READ_VREG(DECODE_STATUS) & 0xff;
+				if (vdec_frame_based(vdec) && (decode_status == DECODE_STATUS_DECODE_BUF_EMPTY ||
+						decode_status == DECODE_STATUS_SEARCH_BUF_EMPTY)) {
+					hw->pics[hw->decoding_index].error_flag = 1;
+				}
+				check_ref_error(hw, hw->decoding_index);
+
 				if ((picture_type == I_PICTURE) ||
 					(picture_type == P_PICTURE)) {
 					buffer_index = update_reference(hw, hw->decoding_index);
