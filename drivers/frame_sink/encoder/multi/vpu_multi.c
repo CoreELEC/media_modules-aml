@@ -1464,6 +1464,11 @@ INTERRUPT_REMAIN_IN_QUEUE:
 					(struct vpudrv_buffer_t *)arg,
 					sizeof(struct vpudrv_buffer_t));
 				if (ret == 0) {
+					if (s_instance_pool.size <= 0) {
+						ret = -EFAULT;
+						up(&s_vpu_sem);
+						break;
+					}
 					s_instance_pool.size =
 						PAGE_ALIGN(
 						s_instance_pool.size);
@@ -1525,6 +1530,11 @@ INTERRUPT_REMAIN_IN_QUEUE:
 					compat_vpudrv_buffer_t));
 				if (ret == 0) {
 					s_instance_pool.size = buf32.size;
+					if (s_instance_pool.size <= 0) {
+						ret = -EFAULT;
+						up(&s_vpu_sem);
+						break;
+					}
 					s_instance_pool.size =
 						PAGE_ALIGN(
 						s_instance_pool.size);
@@ -2572,12 +2582,24 @@ static s32 vpu_map_to_register(struct file *fp, struct vm_area_struct *vm)
 static s32 vpu_map_to_physical_memory(
 	struct file *fp, struct vm_area_struct *vm)
 {
+	ulong off = vm->vm_pgoff << PAGE_SHIFT;
+	ulong vm_size = vm->vm_end - vm->vm_start;
 	vm->vm_flags |= VM_IO | VM_RESERVED;
 	if (vm->vm_pgoff ==
 		(s_common_memory.phys_addr >> PAGE_SHIFT)) {
 		vm->vm_page_prot =
 			pgprot_noncached(vm->vm_page_prot);
+	} else if (vm->vm_pgoff ==
+		(s_vpu_register.phys_addr >> PAGE_SHIFT)) {
+		if (vpu_is_buffer_cached(fp, vm->vm_pgoff) == 0)
+			vm->vm_page_prot =
+				pgprot_noncached(vm->vm_page_prot);
 	} else {
+		if ((off > (s_video_memory.phys_addr + s_video_memory.size))
+			|| ((off + vm_size) > (s_video_memory.phys_addr + s_video_memory.size))) {
+			/*enc_pr(LOG_ERROR, "vm_size is 0x%lx, off is 0x%lx\n", vm_size, off);*/
+			return -EAGAIN;
+		}
 		if (vpu_is_buffer_cached(fp, vm->vm_pgoff) == 0)
 			vm->vm_page_prot =
 				pgprot_noncached(vm->vm_page_prot);
@@ -2597,6 +2619,10 @@ static s32 vpu_map_to_instance_pool_memory(
 	ulong pfn;
 
 	vm->vm_flags |= VM_RESERVED;
+
+	if (0 == s_instance_pool.base) {
+		return -EAGAIN;
+	}
 
 	/* loop over all pages, map it page individually */
 	while (length > 0) {
