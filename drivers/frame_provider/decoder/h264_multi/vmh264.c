@@ -3664,12 +3664,13 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			decoder_do_frame_check(pvdec, vf);
 		}
 		ud_index = i;
-		if(frame->frame->pic_struct == PIC_TOP_BOT ||
+		if(frame->frame != NULL &&
+			(frame->frame->pic_struct == PIC_TOP_BOT ||
 			frame->frame->pic_struct == PIC_BOT_TOP||
 			frame->frame->pic_struct == PIC_TOP_BOT_TOP ||
 			frame->frame->pic_struct == PIC_BOT_TOP_BOT ||
 			frame->frame->pic_struct == PIC_DOUBLE_FRAME ||
-			frame->frame->pic_struct ==  PIC_TRIPLE_FRAME)
+			frame->frame->pic_struct ==  PIC_TRIPLE_FRAME))
 			ud_index = 0;
 
 		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
