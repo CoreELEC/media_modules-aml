@@ -2089,17 +2089,17 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				__func__);
 		}
 
-		if (input_frame_based(vdec)) {
-			if (is_oversize(frame_width, frame_height)) {
-				pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);
-				mpeg2_buf_ref_process_for_exception(hw);
-				if (vdec_frame_based(vdec)) {
-					vdec_v4l_post_error_frame_event(ctx);
-				}
-				hw->dec_result = DEC_RESULT_ERROR_DATA;
-				vdec_schedule_work(&hw->work);
-				return IRQ_HANDLED;
+		if (is_oversize(frame_width, frame_height)) {
+			debug_print(DECODE_ID(hw), 0, "is_oversize w:%d h:%d\n", frame_width, frame_height);
+			mpeg2_buf_ref_process_for_exception(hw);
+			if (vdec_frame_based(vdec)) {
+				vdec_v4l_post_error_frame_event(ctx);
+			} else {
+				vmpeg12_report_pts(hw);
 			}
+			hw->dec_result = DEC_RESULT_ERROR_DATA;
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
 		}
 
 		if (!v4l_res_change(hw, frame_width, frame_height, frame_prog)) {
