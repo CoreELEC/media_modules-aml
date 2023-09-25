@@ -999,7 +999,7 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 #ifdef ERROR_HANDLE_TEST
 static void h264_clear_dpb(struct vdec_h264_hw_s *hw);
 #endif
-static int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw);
+static int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw, bool reset_flags);
 static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	struct vdec_s *vdec, int from);
 
@@ -2453,14 +2453,14 @@ void h264_mmu_box_free_idx_tail(struct vdec_h264_hw_s *hw)
 	}
 }
 
-int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw)
+int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw, bool reset_flags)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct buffer_spec_s *pic = NULL;
 	struct aml_buf *aml_buf;
 	int i;
 
-	if (hw->aml_buf != NULL) {
+	if (reset_flags && hw->aml_buf != NULL) {
 		aml_buf_put_ref(&ctx->bm, hw->aml_buf);
 		hw->aml_buf = NULL;
 	}
@@ -2470,6 +2470,8 @@ int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw)
 
 		if (pic->cma_alloc_addr) {
 			aml_buf = (struct aml_buf *)pic->cma_alloc_addr;
+			if ((hw->aml_buf != NULL) && (hw->aml_buf == aml_buf))
+				continue;
 
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 				"%s buf idx: %d dma addr: 0x%lx vb idx: %d vf_ref %d\n",
@@ -7118,6 +7120,11 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		hw->multi_slice_pic_check_count = 0;
 		hw->multi_slice_pic_flag = 0;
 		hw->picture_slice_count = 0;
+		if (hw->aml_buf == NULL) {
+			release_cur_decoding_buf(hw);
+			have_free_buf_spec(vdec);
+			dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_VDEC_STATUS, "%s aml_buf 0x%lx\n", __func__, hw->aml_buf);
+		}
 #endif
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 		vdec_schedule_work(&hw->work);
@@ -11231,7 +11238,7 @@ static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag, bool rese
 	if (flush_flag)
 		flush_dpb(&hw->dpb);
 
-	h264_reset_frame_buffer(hw);
+	h264_reset_frame_buffer(hw, reset_flags);
 
 	buf_spec_init(hw, true);
 
