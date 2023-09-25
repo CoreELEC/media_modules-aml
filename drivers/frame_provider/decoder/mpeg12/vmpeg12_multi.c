@@ -3174,7 +3174,8 @@ static int vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 			if (!vdec_secure(hw_to_vdec(hw)))
 				codec_mm_memset(decbuf_start, 0, decbuf_size);
 
-			if (vdec->vdata == NULL) {
+			if (vdec->vdata == NULL ||
+				atomic_read(&vdec->vdata->use_flag) == 0) {
 				vdec->vdata = vdec_data_get();
 			}
 

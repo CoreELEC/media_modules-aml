@@ -2744,7 +2744,8 @@ static int config_pic(struct AVS3Decoder_s *dec,
 			if (!vdec_secure(vdec))
 				codec_mm_memset(y_adr, 0, buf_size);
 
-			if (vdec->vdata == NULL) {
+			if (vdec->vdata == NULL ||
+				atomic_read(&vdec->vdata->use_flag) == 0) {
 				vdec->vdata = vdec_data_get();
 			}
 

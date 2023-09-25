@@ -3425,7 +3425,8 @@ static int config_pic(struct AV1HW_s *hw,
 				return ret;
 			}
 
-			if (vdec->vdata == NULL) {
+			if (vdec->vdata == NULL ||
+				atomic_read(&vdec->vdata->use_flag) == 0) {
 				vdec->vdata = vdec_data_get();
 			}
 
@@ -3623,7 +3624,8 @@ static void init_pic_list(struct AV1HW_s *hw)
 			if (!vdec_secure(hw_to_vdec(hw)))
 				codec_mm_memset(buf_addr, 0, header_size);
 
-			if (vdec->vdata == NULL) {
+			if (vdec->vdata == NULL ||
+				atomic_read(&vdec->vdata->use_flag) == 0) {
 				vdec->vdata = vdec_data_get();
 			}
 

@@ -4081,7 +4081,8 @@ static int alloc_buf(struct hevc_state_s *hevc)
 				hevc->m_BUF[i].size = buf_size;
 				hevc->m_BUF[i].used_flag = 0;
 				ret = 0;
-				if (vdec->vdata == NULL) {
+				if (vdec->vdata == NULL ||
+					atomic_read(&vdec->vdata->use_flag) == 0) {
 					vdec->vdata = vdec_data_get();
 				}
 

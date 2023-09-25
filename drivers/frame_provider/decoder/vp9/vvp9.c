@@ -5631,7 +5631,8 @@ static int config_pic(struct VP9Decoder_s *pbi,
 				return ret;
 			}
 
-			if (vdec->vdata == NULL) {
+			if (vdec->vdata == NULL ||
+				atomic_read(&vdec->vdata->use_flag) == 0) {
 				vdec->vdata = vdec_data_get();
 			}
 
@@ -5773,7 +5774,8 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 			if (!vdec_secure(hw_to_vdec(pbi)))
 				codec_mm_memset(buf_addr, 0, header_size);
 
-			if (vdec->vdata == NULL) {
+			if (vdec->vdata == NULL ||
+				atomic_read(&vdec->vdata->use_flag) == 0) {
 				vdec->vdata = vdec_data_get();
 			}
 
