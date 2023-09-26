@@ -55,6 +55,7 @@
 #include "../utils/decoder_dma_alloc.h"
 #include "../../../media_sync/pts_server/pts_server_core.h"
 #include "../../decoder/utils/vdec_profile.h"
+#include "../../../common/chips/decoder_cpu_ver_info.h"
 
 #define MEM_NAME "codec_mmpeg12"
 #define CHECK_INTERVAL        (HZ/100)
@@ -2146,6 +2147,10 @@ static bool check_ref_poc(struct vdec_mpeg12_hw_s *hw, int index)
 	struct pic_info_t *pic = NULL;
 
 	pic = &hw->pics[index];
+
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_S5 && pic->poc == 0)
+		return 0;
+
 	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
 		if ((hw->refs[0] >= 0) && (hw->refs[0] < hw->buf_num) &&
 			(hw->refs[1] >= 0) && (hw->refs[1] < hw->buf_num)) {
