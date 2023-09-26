@@ -1800,8 +1800,8 @@ struct class_attribute *attr, const char *buf, size_t size)
 			kfree(buf_orig);
 			return size;
 		}
-	if (kstrtol(parm[1], 0, &value) == 0)
-		addr = (int)value;
+		if (kstrtol(parm[1], 0, &value) == 0)
+			addr = (int)value;
 		pr_err("%s 0x%x\n", parm[0], addr);
 		switch ((char)parm[0][1]) {
 			case 'i':
