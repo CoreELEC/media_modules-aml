@@ -6307,6 +6307,8 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 			init_pic_list_hw(hevc);
 	}
 
+	new_pic->error_mark = 0;
+
 	/* for notify eos. */
 	if (!rpm_param)
 		return new_pic;
@@ -6343,7 +6345,6 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	new_pic->referenced = 1;
 	new_pic->output_mark = 0;
 	new_pic->recon_mark = 0;
-	new_pic->error_mark = 0;
 	new_pic->dis_mark = 0;
 	new_pic->sei_present_flag = 0;
 #ifdef NEW_FRONT_BACK_CODE
@@ -10378,11 +10379,10 @@ static void v4l_submit_vframe(struct vdec_s *vdec)
 			if (pic && pic->error_mark && (hevc->nal_skip_policy != 0)) {
 				vh265_vf_put(vh265_vf_get(vdec), vdec);
 				hevc_print(hevc, 0, "%s pic has error_mark, get err\n", __func__);
-				break;
+			} else {
+				//ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
+				aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 			}
-			//ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
-			aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
-			//fb->task->submit(fb->task, TASK_TYPE_DEC);
 
 			if (vf->type & VIDTYPE_V4L_EOS) {
 				pr_info("[%d] H265 EOS notify.\n", ctx->id);
@@ -10525,6 +10525,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	vdec_vframe_ready(vdec, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+	atomic_add(1, &hw->vf_pre_count);
 
 	if (without_display_mode == 0) {
 		if (ctx->is_stream_off) {

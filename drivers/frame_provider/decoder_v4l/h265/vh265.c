@@ -9500,6 +9500,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vdec_vframe_ready(vdec, vf);
 	aml_buf_set_vframe(aml_buf, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+	atomic_add(1, &hw->vf_pre_count);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);

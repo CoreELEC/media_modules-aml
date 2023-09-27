@@ -1596,6 +1596,7 @@ static int v4l_get_free_fb(struct AVS3Decoder_s *dec)
 
 		aml_buf_get_ref(&ctx->bm, dec->aml_buf);
 		dec->aml_buf = NULL;
+		free_pic->error_mark = 0;
 	}
 
 	if (free_pic) {
@@ -5536,9 +5537,10 @@ static void v4l_submit_vframe(struct AVS3Decoder_s *dec)
 #endif
 			ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
 			pic->is_display = 1;
-			if (pic->error_mark && (error_handle_policy & 0x4))
+			if (pic->error_mark && (error_handle_policy & 0x4)) {
 				vavs3_vf_put(vavs3_vf_get(pvdec), pvdec);
-			else {
+				avs3_print(dec, 0, "%s pic has error_mark, get err\n", __func__);
+			} else {
 				aml_buf_set_vframe(aml_buf, vf);
 				aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 			}
@@ -5687,6 +5689,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vdec_vframe_ready(vdec, vf);
 
 	kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
+	atomic_add(1, &dec->vf_pre_count);
 	dec->eos = 1;
 
 	if (without_display_mode == 0) {

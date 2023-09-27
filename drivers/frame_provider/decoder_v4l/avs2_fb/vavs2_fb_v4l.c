@@ -1291,6 +1291,7 @@ static int v4l_get_free_fb(struct AVS2Decoder_s *dec)
 	pic->BUF_index	= pic->index;
 	pic->pic_w	= dec->frame_width;
 	pic->pic_h	= dec->frame_height;
+	pic->error_mark = 0;
 	free_pic	= pic;
 	free_ref_idx	= pos;
 	dec->cur_idx    = free_ref_idx;
@@ -5179,9 +5180,10 @@ static void v4l_submit_vframe(struct AVS2Decoder_s *dec)
 				vavs2_vf_put(vavs2_vf_get(vdec), vdec);
 				avs2_print(dec, AVS2_DBG_BUFMGR, "%s pic has error_mark, get err\n", __func__);
 				break;
+			} else {
+				ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
+				aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 			}
-			ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
-			aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 			if (vf->type & VIDTYPE_V4L_EOS) {
 				pr_info("[%d] AVS2 EOS notify.\n", ctx->id);
 				break;
@@ -5321,18 +5323,21 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	vdec_vframe_ready(vdec, vf);
 	kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
+	atomic_add(1, &dec->vf_pre_count);
 
-#ifdef	NEW_FB_CODE
-	if ((!dec->front_back_mode) || (kfifo_len(&dec->display_q) == 1)) {
-#endif
-		aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
-#ifdef	NEW_FB_CODE
+	if (without_display_mode == 0) {
+		if (ctx->is_stream_off) {
+			vavs2_vf_put(vavs2_vf_get(dec), dec);
+			pr_info("[%d] AVS2 EOS notify.\n", ctx->id);
+		} else {
+			v4l_submit_vframe(dec);
+		}
+	} else {
+		vavs2_vf_put(vavs2_vf_get(dec), dec);
+		pr_info("[%d] AVS2 EOS notify.\n", ctx->id);
 	}
-#endif
 
 	dec->eos = true;
-
-	pr_info("[%d] AVS2 EOS notify.\n", ctx->id);
 
 	return 0;
 }
