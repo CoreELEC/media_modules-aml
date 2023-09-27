@@ -3295,7 +3295,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 		if (!hw->enable_fence) {
 			hw->buffer_spec[buffer_index].used = 2;
-			hw->buffer_spec[buffer_index].vf_ref++;
+			if (i == 0)
+				hw->buffer_spec[buffer_index].vf_ref = vf_count;
 		}
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
