@@ -722,6 +722,8 @@ static long mediasync_ins_init_syncinfo(mediasync_ins* pInstance) {
 	pInstance->mSyncInfo.videoPacketsInfo.packetsSize = -1;
 	pInstance->mVideoDiscontinueInfo.discontinuePtsBefore = -1;
 	pInstance->mVideoDiscontinueInfo.discontinuePtsAfter = -1;
+	pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsBefore = -1;
+	pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsAfter  = -1;
 	pInstance->mVideoDiscontinueInfo.isDiscontinue = 0;
 	pInstance->mSyncInfo.firstVideoPacketsInfo.framePts = -1;
 	pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime = -1;
@@ -735,6 +737,8 @@ static long mediasync_ins_init_syncinfo(mediasync_ins* pInstance) {
 	pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime = -1;
 	pInstance->mAudioDiscontinueInfo.discontinuePtsBefore = -1;
 	pInstance->mAudioDiscontinueInfo.discontinuePtsAfter = -1;
+	pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore = -1;
+	pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsAfter  = -1;
 	pInstance->mAudioDiscontinueInfo.isDiscontinue = 0;
 
 	pInstance->mAudioInfo.cacheSize = -1;
@@ -2765,6 +2769,8 @@ long mediasync_ins_set_audio_packets_info_implementation(MediaSyncManager* pSync
 	if (pInstance->mSyncInfo.audioPacketsInfo.packetsPts != -1) {
 		int64_t PtsDiff = info.packetsPts - pInstance->mSyncInfo.audioPacketsInfo.packetsPts;
 		if (get_llabs(PtsDiff) >= 45000 /*500000 us*/) {
+			pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore;
+			pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsAfter  = pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
 			pInstance->mAudioDiscontinueInfo.discontinuePtsBefore =
 				pInstance->mSyncInfo.audioPacketsInfo.packetsPts;
 			pInstance->mAudioDiscontinueInfo.discontinuePtsAfter = info.packetsPts;
@@ -2812,6 +2818,9 @@ EXPORT_SYMBOL(mediasync_ins_set_audio_packets_info);
 void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance, mediasync_audioinfo* info) {
 	int64_t Before_diff = 0;
 	int64_t After_diff = 0;
+	int64_t lastBefore_diff = 0;
+	int64_t lastAfter_diff = 0;
+
 	if (pInstance->mCacheFrames) {
 		info->cacheDuration = pInstance->frame_table[PTS_TYPE_AUDIO].mCacheInfo.cacheDuration;
 		info->cacheSize = pInstance->frame_table[PTS_TYPE_AUDIO].mCacheInfo.cacheSize;
@@ -2831,6 +2840,8 @@ void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance,
 				info->cacheDuration = pInstance->mSyncInfo.audioPacketsInfo.packetsPts -
 										pInstance->mSyncInfo.curAudioInfo.framePts;
 				if (pInstance->mAudioDiscontinueInfo.isDiscontinue == 1) {
+					pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore;
+					pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsAfter  = pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
 					pInstance->mAudioDiscontinueInfo.discontinuePtsAfter = -1;
 					pInstance->mAudioDiscontinueInfo.discontinuePtsBefore = -1;
 					pInstance->mAudioDiscontinueInfo.isDiscontinue = 0;
@@ -2838,8 +2849,20 @@ void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance,
 			} else {
 				if (pInstance->mAudioDiscontinueInfo.discontinuePtsAfter != -1 &&
 					pInstance->mAudioDiscontinueInfo.discontinuePtsBefore != -1) {
-
 					Before_diff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curAudioInfo.framePts;
+					if (Before_diff < 0 && pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore != -1 && pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsAfter != -1) {
+						//curframe is at the end of stream, but discontinuePtsBefore at the begin and pts jump
+						mediasync_pr_info(2,pInstance,"discontinuePtsBefore:%lld, discontinuePtsAfter:%lld, lastDiscontinuePtsBefore:%lld, lastDiscontinuePtsAfter:%lld, framePts:%lld, packetsPts:%lld",
+														pInstance->mAudioDiscontinueInfo.discontinuePtsBefore,
+														pInstance->mAudioDiscontinueInfo.discontinuePtsAfter,
+														pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore,
+														pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsAfter,
+														pInstance->mSyncInfo.curAudioInfo.framePts,
+														pInstance->mSyncInfo.audioPacketsInfo.packetsPts);
+						lastBefore_diff = pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore - pInstance->mSyncInfo.curAudioInfo.framePts;
+						lastAfter_diff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsAfter;
+						Before_diff = lastBefore_diff + lastAfter_diff;
+					}
 					After_diff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
 					info->cacheDuration = Before_diff + After_diff;
 					// sometimes stream not descramble, lead pts jump, cache_duration will have error
@@ -2857,6 +2880,8 @@ void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance,
 				info->cacheDuration = pInstance->mSyncInfo.audioPacketsInfo.packetsPts -
 										pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
 				if (pInstance->mAudioDiscontinueInfo.isDiscontinue == 1) {
+					pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore;
+					pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsAfter  = pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
 					pInstance->mAudioDiscontinueInfo.discontinuePtsAfter = -1;
 					pInstance->mAudioDiscontinueInfo.discontinuePtsBefore = -1;
 					pInstance->mAudioDiscontinueInfo.isDiscontinue = 0;
@@ -2935,6 +2960,8 @@ long mediasync_ins_set_video_packets_info_implementation(MediaSyncManager* pSync
 	if (pInstance->mSyncInfo.videoPacketsInfo.packetsPts != -1) {
 		int64_t PtsDiff = info.packetsPts - pInstance->mSyncInfo.videoPacketsInfo.packetsPts;
 		if (get_llabs(PtsDiff) >= 45000 /*500000 us*/) {
+			pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsBefore = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore;
+			pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsAfter  = pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
 			pInstance->mVideoDiscontinueInfo.discontinuePtsBefore =
 				pInstance->mSyncInfo.videoPacketsInfo.packetsPts;
 			pInstance->mVideoDiscontinueInfo.discontinuePtsAfter = info.packetsPts;
@@ -2982,6 +3009,9 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 	//pr_info("mediasync_ins_get_videoinfo_2 curVideoInfo.framePts :%lld \n",pInstance->mSyncInfo.curVideoInfo.framePts);
 	int64_t Before_diff = 0;
 	int64_t After_diff = 0;
+	int64_t lastBefore_diff = 0;
+	int64_t lastAfter_diff = 0;
+
 	if (pInstance->mCacheFrames) {
 		info->cacheDuration = pInstance->frame_table[PTS_TYPE_VIDEO].mCacheInfo.cacheDuration;
 		info->cacheSize = pInstance->frame_table[PTS_TYPE_VIDEO].mCacheInfo.cacheSize;
@@ -3002,6 +3032,8 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 				info->cacheDuration = pInstance->mSyncInfo.videoPacketsInfo.packetsPts -
 										pInstance->mSyncInfo.curVideoInfo.framePts;
 				if (pInstance->mVideoDiscontinueInfo.isDiscontinue == 1) {
+					pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsBefore = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore;
+					pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsAfter  = pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
 					pInstance->mVideoDiscontinueInfo.discontinuePtsAfter = -1;
 					pInstance->mVideoDiscontinueInfo.discontinuePtsBefore = -1;
 					pInstance->mVideoDiscontinueInfo.isDiscontinue = 0;
@@ -3009,10 +3041,15 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 			} else {
 				if (pInstance->mVideoDiscontinueInfo.discontinuePtsAfter != -1 &&
 					pInstance->mVideoDiscontinueInfo.discontinuePtsBefore != -1) {
-
-					Before_diff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curVideoInfo.framePts;
-					After_diff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
-					info->cacheDuration = Before_diff + After_diff;
+						Before_diff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curVideoInfo.framePts;
+						if (Before_diff < 0 && pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsBefore != -1 && pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsAfter != -1) {
+							//curframe is at the end of stream, but discontinuePtsBefore at the begin and pts jump
+							lastBefore_diff = pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsBefore - pInstance->mSyncInfo.curVideoInfo.framePts;
+							lastAfter_diff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsAfter;
+							Before_diff = lastBefore_diff + lastAfter_diff;
+						}
+						After_diff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
+						info->cacheDuration = Before_diff + After_diff;
 
 					// sometimes stream not descramble, lead pts jump, cache_duration will have error
 					if (pInstance->mVideoDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90)) {
@@ -3029,6 +3066,8 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 				info->cacheDuration = pInstance->mSyncInfo.videoPacketsInfo.packetsPts -
 										pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
 				if (pInstance->mVideoDiscontinueInfo.isDiscontinue == 1) {
+					pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsBefore = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore;
+					pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsAfter  = pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
 					pInstance->mVideoDiscontinueInfo.discontinuePtsAfter = -1;
 					pInstance->mVideoDiscontinueInfo.discontinuePtsBefore = -1;
 					pInstance->mVideoDiscontinueInfo.isDiscontinue = 0;

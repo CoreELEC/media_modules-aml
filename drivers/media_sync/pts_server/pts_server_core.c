@@ -40,10 +40,14 @@ static u32 ptsserver_debuglevel = 0;
 
 #define MAX_INSTANCE_NUM (40)
 #define MAX_EXPIRED_COUNT (500)
-#define MAX_CHECKOUT_RETRY_COUNT (5)
+#define MAX_CHECKOUT_RETRY_COUNT (8)
 #define MAX_CHECKOUT_MIN_PTS_THRESHOLD (5)
 #define MAX_CHECKOUT_BOUND_VALUE (5)
 #define MAX_DYNAMIC_INSTANCE_NUM (10)
+
+#define DEFAULT_FREE_LIST_COUNT (500)
+#define DEFAULT_LOOKUP_THRESHOLD (2500)
+#define DEFAULT_DOULBCHECK_THRESHOLD (5)
 
 PtsServerManage vPtsServerInsList[MAX_INSTANCE_NUM];
 
@@ -79,9 +83,9 @@ long ptsserver_ins_init_syncinfo(ptsserver_ins* pInstance,ptsserver_alloc_para* 
 		pInstance->mLookupThreshold = allocParm->mLookupThreshold; //2500
 		pInstance->kDoubleCheckThreshold = allocParm->kDoubleCheckThreshold; //5
 	} else {
-		pInstance->mMaxCount = 500;
-		pInstance->mLookupThreshold = 2500;
-		pInstance->kDoubleCheckThreshold = 5;
+		pInstance->mMaxCount = DEFAULT_FREE_LIST_COUNT;
+		pInstance->mLookupThreshold = DEFAULT_LOOKUP_THRESHOLD;
+		pInstance->kDoubleCheckThreshold = DEFAULT_DOULBCHECK_THRESHOLD;
 	}
 
 	pInstance->mPtsCheckinStarted = 0;
@@ -135,7 +139,7 @@ long ptsserver_ins_init_syncinfo(ptsserver_ins* pInstance,ptsserver_alloc_para* 
 	INIT_LIST_HEAD(&pInstance->pts_list);
 	INIT_LIST_HEAD(&pInstance->pts_free_list);
 
-	pInstance->all_free_ptn = vmalloc(500 * sizeof(struct ptsnode));
+	pInstance->all_free_ptn = vmalloc(pInstance->mMaxCount * sizeof(struct ptsnode));
 	if (pInstance->all_free_ptn == NULL) {
 		pr_info("vmalloc all_free_ptn fail \n");
 		return -1;
@@ -727,7 +731,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 				}
 
 				// Print all ptn base info
-				if (ptsserver_debuglevel > 1) {
+				if (ptsserver_debuglevel > 2) {
 					pts_pr_info(index,"Checkout i:%d offset(diff:%d L:0x%x C:0x%x pts:0x%x pts_64:%llu expired_count:%d dur_count:%lld) expected_pts:0x%x\n",
 									i, offsetAbs, ptn->offset, cur_offset, ptn->pts, ptn->pts_64, ptn->expired_count, ptn->duration_count, expected_pts);
 				}
@@ -1897,7 +1901,7 @@ long ptsserver_ins_reset(s32 pServerInsId) {
 	INIT_LIST_HEAD(&pInstance->pts_list);
 	INIT_LIST_HEAD(&pInstance->pts_free_list);
 
-	pInstance->all_free_ptn = vmalloc(500 * sizeof(struct ptsnode));
+	pInstance->all_free_ptn = vmalloc(pInstance->mMaxCount * sizeof(struct ptsnode));
 	if (pInstance->all_free_ptn == NULL) {
 		pr_info("vmalloc all_free_ptn fail \n");
 		return -1;

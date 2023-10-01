@@ -141,6 +141,8 @@ typedef struct discontinue_frame_info{
 	int64_t discontinuePtsBefore;
 	int64_t discontinuePtsAfter;
 	int isDiscontinue;
+	int64_t lastDiscontinuePtsBefore;
+	int64_t lastDiscontinuePtsAfter;
 } mediasync_discontinue_frame_info;
 
 typedef struct avsync_state_cur_time_us{
