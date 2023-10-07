@@ -214,7 +214,7 @@ struct vdec_mjpeg_hw_s {
 	struct firmware_s *fw;
 	struct timer_list check_timer;
 	u32 decode_timeout_count;
-	u32 start_process_time;
+	ulong start_process_time;
 	u32 last_vld_level;
 	u8 eos;
 	u32 frame_num;
