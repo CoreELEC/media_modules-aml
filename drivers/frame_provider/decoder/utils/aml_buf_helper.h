@@ -244,6 +244,17 @@ static inline void aml_buf_replace(struct aml_buf_mgr_s *bm,
 {
 	bm->bc.replace(&bm->bc, &buf->entry, priv);
 }
+				/*
+ * aml_buf_put_dma() - put dma buf.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ *
+ * put dma buf.
+ */
+static inline void aml_buf_put_dma(struct aml_buf_mgr_s *bm)
+{
+	bm->bc.put_dma(&bm->bc);
+}
 
 #endif //_AML_BUF_HELPER_H_
 

@@ -165,6 +165,7 @@ struct buf_core_entry {
 	ulong			phy_addr;
 	atomic_t		ref;
 	atomic_t		*master_ref;
+	u32			dma_ref;
 	struct list_head	node;
 	struct hlist_node	h_node;
 	enum buf_core_state	state;
@@ -272,6 +273,7 @@ struct buf_core_mgr_s {
 	int	(*get_next_user) (struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	void	(*update)(struct buf_core_mgr_s *, struct buf_core_entry *, ulong, enum buf_pair);
 	void	(*replace)(struct buf_core_mgr_s *, struct buf_core_entry *, void *);
+	void	(*put_dma)(struct buf_core_mgr_s *);
 
 	struct buf_core_mem_ops	mem_ops;
 	struct buf_core_ops	buf_ops;

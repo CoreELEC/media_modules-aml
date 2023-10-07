@@ -19,6 +19,7 @@
 */
 
 #include <linux/atomic.h>
+#include <linux/dma-buf.h>
 
 #include "aml_buf_core.h"
 #include "aml_vcodec_util.h"
@@ -26,6 +27,12 @@
 static bool bc_sanity_check(struct buf_core_mgr_s *bc)
 {
 	return (bc->state == BM_STATE_ACTIVE) ? true : false;
+}
+
+/* In mmap mode, key is phy_addr; And in dma mode, key is dma buf handle */
+static bool is_dma_mode(ulong key, ulong phy_addr)
+{
+	return (key != phy_addr) ? true : false;
 }
 
 static void buf_core_destroy(struct kref *kref);
@@ -560,15 +567,20 @@ static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key,
 
 	hash_for_each_possible_safe(bc->buf_table, entry, tmp, h_node, key) {
 		if (key == entry->key) {
+			if (is_dma_mode(key, phy_addr) && !entry->dma_ref) {
+				get_dma_buf((struct dma_buf *)key);
+				entry->dma_ref++;
+			}
 			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 				"reuse buffer, user:%d, key:%lx, phy:%lx idx:%d, "
-				"st:(%d, %d), ref:(%d, %d), free:%d\n",
+				"st:(%d, %d), ref:(%d, %d, %d), free:%d\n",
 				entry->user,
 				entry->key,
 				entry->phy_addr,
 				entry->index,
 				entry->state,
 				bc->state,
+				entry->dma_ref,
 				atomic_read(&entry->ref),
 				kref_read(&bc->core_ref),
 				bc->free_num);
@@ -601,9 +613,13 @@ static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key,
 	bc->state	= BM_STATE_ACTIVE;
 	bc->buf_num++;
 	kref_get(&bc->core_ref);
+	if (is_dma_mode(key, phy_addr)) {
+		get_dma_buf((struct dma_buf *)key);
+		entry->dma_ref++;
+	}
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d, %d), free:%d\n",
 		__func__,
 		entry->user,
 		entry->key,
@@ -611,6 +627,7 @@ static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key,
 		entry->index,
 		entry->state,
 		bc->state,
+		entry->dma_ref,
 		atomic_read(&entry->ref),
 		kref_read(&bc->core_ref),
 		bc->free_num);
@@ -653,6 +670,39 @@ static void buf_core_detach(struct buf_core_mgr_s *bc, ulong key)
 
 	mutex_unlock(&bc->mutex);
 }
+
+static void buf_core_put_dma(struct buf_core_mgr_s *bc)
+{
+	struct buf_core_entry *entry;
+	struct hlist_node *h_tmp;
+	ulong bucket;
+
+	mutex_lock(&bc->mutex);
+
+	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
+		if (is_dma_mode(entry->key, entry->phy_addr) &&
+			entry->dma_ref) {
+			entry->dma_ref--;
+			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+				"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d, %d), free:%d\n",
+				__func__,
+				entry->user,
+				entry->key,
+				entry->phy_addr,
+				entry->index,
+				entry->state,
+				bc->state,
+				entry->dma_ref,
+				atomic_read(&entry->ref),
+				kref_read(&bc->core_ref),
+				bc->free_num);
+			dma_buf_put((struct dma_buf *)entry->key);
+		}
+	}
+
+	mutex_unlock(&bc->mutex);
+}
+
 
 static void buf_core_update(struct buf_core_mgr_s *bc, struct buf_core_entry *entry,
 					ulong phy_addr, enum buf_pair pair)
@@ -792,6 +842,7 @@ int buf_core_mgr_init(struct buf_core_mgr_s *bc)
 	bc->reset		= buf_core_reset;
 	bc->update		= buf_core_update;
 	bc->replace		= buf_core_replace;
+	bc->put_dma		= buf_core_put_dma;
 
 	/* The interface set of the buffer core operation. */
 	bc->buf_ops.get		= buf_core_get;

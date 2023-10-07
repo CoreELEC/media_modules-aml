@@ -761,6 +761,8 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 
 	aml_buf_configure(&ctx->bm, &config);
 
+	aml_buf_put_dma(&ctx->bm);
+
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"Update picture buffer count: dec:%u, vpp:%u, ge2d:%u, margin:%u, total:%u\n",
 		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
@@ -2641,6 +2643,7 @@ void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx)
 	}
 
 	flags = aml_vcodec_ctx_lock(ctx);
+	aml_buf_put_dma(&ctx->bm);
 	ctx->state = AML_STATE_ABORT;
 	vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
