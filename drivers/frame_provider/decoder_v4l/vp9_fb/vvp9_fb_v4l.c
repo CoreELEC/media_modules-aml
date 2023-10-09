@@ -7861,7 +7861,6 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 			else
 				data32 |= (1 << 4); /* NV12 */
 
-			data32 |= is_tw_p010(pbi) ? (1 << 4) : 1;
 			/* Linear_LineAlignment 00:16byte 01:32byte 10:64byte */
 			data32 |= (2 << 10);
 			/*
@@ -7930,8 +7929,6 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	else
 		data32 |= (1 << 8); /* NV12 */
 
-	data32 |= is_dw_p010(pbi) ? (1 << 8) : 0;
-
 	/*
 	*  [31:24] ar_fifo1_axi_thread
 	*  [23:16] ar_fifo0_axi_thread
@@ -7985,16 +7982,6 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 		data32 |= (1 << 12); /* NV21 */
 	else
 		data32 &= ~(1 << 12); /* NV12 */
-
-	if (dw_mode && tw_mode) {
-		if (v4l2_ctx->force_tw_output)
-			data32 &= is_tw_p010(pbi) ? ~(1 << 12) : data32;
-		else
-			data32 &= is_dw_p010(pbi) ? ~(1 << 12) : data32;
-	} else {
-		/* Only one valid value of DW/TW */
-		data32 &= is_p010_mode(pbi) ? ~(1 << 12) : data32;
-	}
 
 	data32 &= (~(3 << 8));
 	data32 |= (2 << 8);		/* line align with 64 for dw only */
@@ -10018,11 +10005,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					vf->type |= VIDTYPE_SCATTER;
 			}
 
-			if (is_dw_p010(pbi)) {
-				vf->type &= ~VIDTYPE_VIU_NV21;
-				vf->type |= VIDTYPE_VIU_NV12;
-			}
-
 			if (dw_mode != 16 &&
 				((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 				!IS_8K_SIZE(pic_config->y_crop_width, pic_config->y_crop_height)))
@@ -10065,10 +10047,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				VIDTYPE_VIU_FIELD |
 				VIDTYPE_COMPRESS |
 				VIDTYPE_SCATTER;
-			if (is_tw_p010(pbi)) {
-				vf->type &= ~VIDTYPE_VIU_NV21;
-				vf->type |= VIDTYPE_VIU_NV12;
-			}
 
 			vf->plane_num = 2;
 			vf->canvas0Addr = vf->canvas1Addr = -1;

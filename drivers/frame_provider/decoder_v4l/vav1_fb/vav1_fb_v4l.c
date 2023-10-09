@@ -4192,7 +4192,6 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 			else
 				data32 |= (1 << 4); /* NV12 */
 
-			data32 |= is_tw_p010(hw) ? (1 << 4) : 0;
 			/* Linear_LineAlignment 00:16byte 01:32byte 10:64byte */
 			data32 |= (2 << 10);
 			/*
@@ -4259,7 +4258,6 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	else
 		data32 |= (1 << 8); /* NV12 */
 
-	data32 |= is_dw_p010(hw) ? (1 << 8) : 0;
 	data32 &= (~(3 << 14));
 	data32 |= (2 << 14);
 	/*
@@ -4314,16 +4312,6 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 		data32 |= (1 << 12); /* NV21 */
 	else
 		data32 &= ~(1 << 12); /* NV12 */
-
-	if (dw_mode && tw_mode) {
-		if (v4l2_ctx->force_tw_output)
-			data32 &= is_tw_p010(hw) ? ~(1 << 12) : data32;
-		else
-			data32 &= is_dw_p010(hw) ? ~(1 << 12) : data32;
-	} else {
-		/* Only one valid value of DW/TW */
-		data32 &= is_p010_mode(hw) ? ~(1 << 12) : data32;
-	}
 
 	data32 &= (~(3 << 8));
 	data32 |= (2 << 8);
@@ -6658,10 +6646,6 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			vf->type = VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD;
 			vf->type |= nv_order;
-			if (is_dw_p010((hw))) {
-				vf->type &= ~VIDTYPE_VIU_NV21;
-				vf->type |= VIDTYPE_VIU_NV12;
-			}
 
 			if ((pic_config->double_write_mode != 16) &&
 				((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
@@ -6773,10 +6757,6 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				VIDTYPE_VIU_FIELD |
 				VIDTYPE_COMPRESS |
 				VIDTYPE_SCATTER;
-			if (is_tw_p010(hw)) {
-				vf->type &= ~VIDTYPE_VIU_NV21;
-				vf->type |= VIDTYPE_VIU_NV12;
-			}
 
 			vf->plane_num = 2;
 			vf->canvas0Addr = vf->canvas1Addr = -1;
