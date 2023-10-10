@@ -8216,7 +8216,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if (vdec_secure(hw_to_vdec(hw)) &&
 		vdec_frame_based(hw_to_vdec(hw)) &&
 		(dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE)) {
-		if (READ_VREG(HEVC_SHIFT_BYTE_COUNT) >= hw->chunk->size) {
+		if (READ_VREG(HEVC_SHIFT_BYTE_COUNT) > hw->chunk->size) {
 			av1_print(hw, 0,
 			"chunk size: %x, shift_byte: %x, now is padding!\n",
 			hw->chunk->size, READ_VREG(HEVC_SHIFT_BYTE_COUNT));
