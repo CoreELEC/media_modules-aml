@@ -167,6 +167,9 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DEC_RESULT_EOS              5
 #define DEC_DECODE_TIMEOUT         0x21
 
+/*Send by DEC_STATUS_REG*/
+#define MJPEG_CONFIG_REQUEST   1
+#define MJPEG_DATA_EMPTY      2
 
 struct buffer_spec_s {
 	unsigned int y_addr;
@@ -398,6 +401,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	u32 index, offset = 0, pts;
 	u64 pts_us64;
 	u32 frame_size;
+	unsigned int dec_status = READ_VREG(DEC_STATUS_REG);
 
 	if (READ_VREG(AV_SCRATCH_D) != 0 &&
 		(debug_enable & PRINT_FLAG_UCODE_DETAIL)) {
@@ -407,7 +411,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 		return IRQ_HANDLED;
 	}
 
-	if (READ_VREG(DEC_STATUS_REG) == 1) {
+	if (dec_status == MJPEG_CONFIG_REQUEST) {
 		int frame_width = READ_VREG(MREG_PIC_WIDTH);
 		int frame_height = READ_VREG(MREG_PIC_HEIGHT);
 
@@ -444,6 +448,24 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 			reset_process_time(hw);
 			hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
+		}
+		return IRQ_HANDLED;
+	} else if (dec_status == MJPEG_DATA_EMPTY) {
+		/*timeout when decoding next frame*/
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,
+			"%s: Insufficient data, lvl=%x ctrl=%x bcnt=%x\n",
+			__func__,
+			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+			READ_VREG(VLD_MEM_VIFIFO_CONTROL),
+			READ_VREG(VIFF_BIT_CNT));
+
+		if (vdec_frame_based(vdec)) {
+			hw->dec_result = DEC_RESULT_DONE;
+			vdec_schedule_work(&hw->work);
+		} else {
+			hw->dec_result = DEC_RESULT_AGAIN;
+			vdec_schedule_work(&hw->work);
+			reset_process_time(hw);
 		}
 		return IRQ_HANDLED;
 	}
