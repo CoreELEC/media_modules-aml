@@ -981,6 +981,7 @@ struct vdec_h264_hw_s {
 	u32 reserved_byte;
 	u32 sei_present_flag;
 	int set_mmu_flag;
+	int v4l_duration;
 };
 
 static u32 again_threshold;
@@ -5012,8 +5013,11 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 			vf->duration = 0;
 		else
 			vf->duration = 96000/force_rate;
-	} else
-		vf->duration = hw->frame_dur;
+	} else {
+		int uevent_dur = vdec_get_uevent_dur();
+
+		vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
+	}
 	vf->ratio_control =
 		(min(hw->h264_ar, (u32) DISP_RATIO_ASPECT_RATIO_MAX)) <<
 		DISP_RATIO_ASPECT_RATIO_BIT;
@@ -8591,7 +8595,8 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset)
 	hw->frame_prog = 0;
 	hw->frame_width = hw->vh264_amstream_dec_info.width;
 	hw->frame_height = hw->vh264_amstream_dec_info.height;
-	hw->frame_dur = hw->vh264_amstream_dec_info.rate;
+	hw->frame_dur = hw->v4l_duration ? hw->v4l_duration :
+		hw->vh264_amstream_dec_info.rate;
 	hw->pts_outside = ((unsigned long)
 			hw->vh264_amstream_dec_info.param) & 0x01;
 	hw->sync_outside = ((unsigned long)
@@ -11383,6 +11388,11 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			"parm_fence_usage",
 			&config_val) == 0)
 			hw->fence_usage = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			hw->v4l_duration = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_metadata_config_flag",

@@ -254,6 +254,7 @@ struct vdec_mjpeg_hw_s {
 	int force_recycle;
 	bool run_flag;
 	s32 cur_idx;
+	int v4l_duration;
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
@@ -284,6 +285,7 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 {
 	u32 width, height;
 	u32 temp_endian;
+	int uevent_dur = vdec_get_uevent_dur();
 
 	width = READ_VREG(MREG_PIC_WIDTH);
 	height = READ_VREG(MREG_PIC_HEIGHT);
@@ -294,7 +296,8 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 		vf->width = hw->frame_width = ((width > 2304) ? 2304 : width);
 		vf->height = hw->frame_height = ((height > 4096) ? 4096 : height);
 	}
-	vf->duration = hw->frame_dur;
+
+	vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
 	vf->ratio_control = DISP_RATIO_ASPECT_RATIO_MAX << DISP_RATIO_ASPECT_RATIO_BIT;
 	vf->sar_width = 1;
 	vf->sar_height = 1;
@@ -1209,7 +1212,8 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 	hw->frame_width = 0;
 	hw->frame_height = 0;
 
-	hw->frame_dur = ((hw->vmjpeg_amstream_dec_info.rate) ?
+	hw->frame_dur = hw->v4l_duration ? hw->v4l_duration :
+		((hw->vmjpeg_amstream_dec_info.rate) ?
 	hw->vmjpeg_amstream_dec_info.rate : 3840);
 	hw->saved_resolution = 0;
 	hw->eos = 0;
@@ -1873,6 +1877,11 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 			"parm_v4l_codec_enable",
 			&config_val) == 0)
 			hw->is_used_v4l = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			hw->v4l_duration = config_val;
 
 		/*if (get_config_int(pdata->config,
 			"parm_v4l_duration",

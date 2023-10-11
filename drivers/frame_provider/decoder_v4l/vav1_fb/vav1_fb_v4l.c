@@ -1079,6 +1079,7 @@ struct AV1HW_s {
 	int fence_usage;
 	struct av1_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
+	int v4l_duration;
 };
 
 #ifdef NEW_FB_CODE
@@ -6152,10 +6153,11 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	unsigned int ar;
+	int uevent_dur = vdec_get_uevent_dur();
 
 	parse_metadata(hw, vf, pic);
 
-	vf->duration = hw->frame_dur;
+	vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 	vf->prop.master_display_colour = hw->vf_dp;
@@ -10128,9 +10130,9 @@ static int vav1_local_init(struct AV1HW_s *hw, bool reset_flag)
 	hw->front_pause_flag = 0;
 	width = hw->vav1_amstream_dec_info.width;
 	height = hw->vav1_amstream_dec_info.height;
-	hw->frame_dur =
-		(hw->vav1_amstream_dec_info.rate ==
-			0) ? 3200 : hw->vav1_amstream_dec_info.rate;
+	hw->frame_dur = hw->v4l_duration ? hw->v4l_duration :
+		((hw->vav1_amstream_dec_info.rate ==
+			0) ? 3200 : hw->vav1_amstream_dec_info.rate);
 	if (width && height)
 		hw->frame_ar = height * 0x100 / width;
 /*
@@ -12609,6 +12611,11 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			"parm_fence_usage",
 			&config_val) == 0)
 			hw->fence_usage = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			hw->v4l_duration = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_metadata_config_flag",

@@ -996,6 +996,7 @@ struct AVS3Decoder_s {
 	bool timeout;
 	int triple_write_mode;
 	u32 last_monitor_data;
+	int v4l_duration;
 };
 
 static int  compute_losless_comp_body_size(
@@ -4816,10 +4817,11 @@ static void set_canvas(struct AVS3Decoder_s *dec,
 
 static void set_frame_info(struct AVS3Decoder_s *dec, struct vframe_s *vf)
 {
+	int uevent_dur = vdec_get_uevent_dur();
 	unsigned int ar = 0;
-	unsigned int pixel_ratio = 0;;
+	unsigned int pixel_ratio = 0;
 
-	vf->duration = dec->frame_dur;
+	vf->duration = uevent_dur ? uevent_dur : dec->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 	vf->prop.master_display_colour = dec->vf_dp;
@@ -8360,8 +8362,8 @@ static int vavs3_local_init(struct AVS3Decoder_s *dec)
 	on_no_keyframe_skiped = 0;
 	width = dec->vavs3_amstream_dec_info.width;
 	height = dec->vavs3_amstream_dec_info.height;
-	dec->frame_dur = (dec->vavs3_amstream_dec_info.rate ==
-			0) ? 3600 : dec->vavs3_amstream_dec_info.rate;
+	dec->frame_dur = dec->v4l_duration ? dec->v4l_duration : ((dec->vavs3_amstream_dec_info.rate ==
+			0) ? 3600 : dec->vavs3_amstream_dec_info.rate);
 	if (width && height)
 		dec->frame_ar = height * 0x100 / width;
 /*
@@ -10225,6 +10227,10 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "sidebind_channel_id",
 				&config_val) == 0)
 			dec->sidebind_channel_id = config_val;
+
+		if (get_config_int(pdata->config, "parm_v4l_duration",
+			&config_val) == 0)
+			dec->v4l_duration = config_val;
 
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0

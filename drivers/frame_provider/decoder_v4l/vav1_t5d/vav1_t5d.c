@@ -914,6 +914,7 @@ struct AV1HW_s {
 	struct BufferPool_s av1_buffer_pool_bak;
 	struct PIC_BUFFER_CONFIG_s *run_rotate_pic;
 	/*******************************************/
+	int v4l_duration;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -5663,10 +5664,11 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	unsigned int ar;
+	int uevent_dur = vdec_get_uevent_dur();
 
 	parse_metadata(hw, vf, pic);
 
-	vf->duration = hw->frame_dur;
+	vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 	vf->prop.master_display_colour = hw->vf_dp;
@@ -9211,7 +9213,7 @@ static int vav1_local_init(struct AV1HW_s *hw, bool reset_flag)
 	hw->av1_first_pts_ready = false;
 	width = hw->vav1_amstream_dec_info.width;
 	height = hw->vav1_amstream_dec_info.height;
-	hw->frame_dur =
+	hw->frame_dur = hw->v4l_duration ? hw->v4l_duration :
 		(hw->vav1_amstream_dec_info.rate ==
 		 0) ? 3200 : hw->vav1_amstream_dec_info.rate;
 	if (width && height)
@@ -10811,6 +10813,11 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			"parm_v4l_low_latency_mode",
 			&config_val) == 0)
 			hw->low_latency_flag = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			hw->v4l_duration = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_metadata_config_flag",

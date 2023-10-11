@@ -709,6 +709,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 	int index = pic->index;
 	bool pb_skip = false;
 	unsigned long flags;
+	int uevent_dur = vdec_get_uevent_dur();
 
 	/* swap uv */
 	if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
@@ -744,7 +745,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->pts = pic->pts;
 		vf->pts_us64 = pic->pts64;
 		vf->timestamp = pic->timestamp;
-		vf->duration = pic->duration >> 1;
+		vf->duration = (uevent_dur ? uevent_dur : pic->duration) >> 1;
 		vf->duration_pulldown = 0;
 		vf->type = (pic->pic_info & TOP_FIELD_FIRST_FLAG) ?
 			VIDTYPE_INTERLACE_TOP : VIDTYPE_INTERLACE_BOTTOM;
@@ -846,7 +847,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->timestamp = 0;
 		}
 
-		vf->duration = pic->duration >> 1;
+		vf->duration = (uevent_dur ? uevent_dur : pic->duration) >> 1;
 		vf->duration_pulldown = 0;
 		vf->type = (pic->pic_info & TOP_FIELD_FIRST_FLAG) ?
 			VIDTYPE_INTERLACE_BOTTOM : VIDTYPE_INTERLACE_TOP;
@@ -942,7 +943,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->pts = pic->pts;
 		vf->pts_us64 = pic->pts64;
 		vf->timestamp = pic->timestamp;
-		vf->duration = pic->duration;
+		vf->duration = uevent_dur ? uevent_dur : pic->duration;
 		vf->duration_pulldown = pic->repeat_cnt *
 			pic->duration;
 #ifdef NV21

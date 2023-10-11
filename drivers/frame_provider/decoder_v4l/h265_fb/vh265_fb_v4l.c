@@ -2204,6 +2204,7 @@ struct hevc_state_s {
 	int slice_count;
 	int start_decoder_flag;
 	u32 dv_profile;
+	int v4l_duration;
 } /*hevc_stru_t */;
 
 static void init_buff_spec(struct hevc_state_s *hevc,
@@ -9005,6 +9006,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	char *p;
 	unsigned size = 0;
 	unsigned type = 0;
+	int uevent_dur = vdec_get_uevent_dur();
 	struct vframe_master_display_colour_s *vf_dp
 		= &vf->prop.master_display_colour;
 
@@ -9013,7 +9015,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	vf->height = pic->height /
 		get_double_write_ratio(pic->double_write_mode);
 
-	vf->duration = hevc->frame_dur;
+	vf->duration = uevent_dur ? uevent_dur : hevc->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 
@@ -13664,9 +13666,9 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 			1920 * 1088) ? true : false;
 	}
 
-	hevc->frame_dur =
-		(hevc->vh265_amstream_dec_info.rate ==
-			0) ? 3600 : hevc->vh265_amstream_dec_info.rate;
+	hevc->frame_dur = hevc->v4l_duration ? hevc->v4l_duration :
+		((hevc->vh265_amstream_dec_info.rate ==
+			0) ? 3600 : hevc->vh265_amstream_dec_info.rate);
 	if (hevc->frame_width && hevc->frame_height)
 		hevc->frame_ar = hevc->frame_height * 0x100 / hevc->frame_width;
 
@@ -16668,6 +16670,11 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->low_latency_flag = (config_val & 1) ? 1 : 0;
 			hevc->enable_fence = (config_val & 2) ? 1 : 0;
 		}
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			hevc->v4l_duration = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_metadata_config_flag",

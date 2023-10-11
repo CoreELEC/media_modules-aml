@@ -866,6 +866,8 @@ st_userdata *get_vdec_userdata_ctx(void);
 
 void vdec_frame_rate_uevent(int dur);
 
+int vdec_get_uevent_dur(void);
+
 void vdec_sync_irq(enum vdec_irq_num num);
 
 void vdec_data_buffer_count_increase(ulong data, int index, int cb_index);

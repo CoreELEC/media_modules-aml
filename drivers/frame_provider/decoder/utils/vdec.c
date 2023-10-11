@@ -201,30 +201,6 @@ u32 debug_meta;
 
 st_userdata userdata;
 
-vdec_frame_rate_event_func frame_rate_notify = NULL;
-
-void vdec_frame_rate_uevent(int dur)
-{
-	if (frame_rate_notify == NULL)
-		return;
-
-	if (unlikely(in_interrupt()))
-		return;
-
-	if (debug & VDEC_DBG_DETAIL_INFO)
-		pr_info("vdec_frame_rate_uevent %d\n", dur);
-
-	frame_rate_notify(dur);
-}
-EXPORT_SYMBOL(vdec_frame_rate_uevent);
-
-
-void register_frame_rate_uevent_func(vdec_frame_rate_event_func func)
-{
-	frame_rate_notify = func;
-}
-EXPORT_SYMBOL(register_frame_rate_uevent_func);
-
 struct am_reg {
 	char *name;
 	int offset;
@@ -282,9 +258,45 @@ struct vdec_core_s {
 	struct post_task_mgr_s post;
 	u32 inst_cnt;
 	unsigned long run_flag;
+	int uevent_duration;
 };
 
 static struct vdec_core_s *vdec_core;
+
+vdec_frame_rate_event_func frame_rate_notify = NULL;
+
+void vdec_frame_rate_uevent(int dur)
+{
+	if (frame_rate_notify == NULL)
+		return;
+
+	if (unlikely(in_interrupt()))
+		return;
+
+	if (debug & VDEC_DBG_DETAIL_INFO)
+		pr_info("vdec_frame_rate_uevent %d\n", dur);
+
+	frame_rate_notify(dur);
+
+	if (vdec_core)
+		vdec_core->uevent_duration = dur;
+}
+EXPORT_SYMBOL(vdec_frame_rate_uevent);
+
+int vdec_get_uevent_dur(void)
+{
+	if (vdec_core)
+		return vdec_core->uevent_duration;
+
+	return 0;
+}
+EXPORT_SYMBOL(vdec_get_uevent_dur);
+
+void register_frame_rate_uevent_func(vdec_frame_rate_event_func func)
+{
+	frame_rate_notify = func;
+}
+EXPORT_SYMBOL(register_frame_rate_uevent_func);
 
 static const char * const vdec_status_string[] = {
 	"VDEC_STATUS_UNINITIALIZED",

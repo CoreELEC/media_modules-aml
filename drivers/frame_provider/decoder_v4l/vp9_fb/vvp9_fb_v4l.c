@@ -1588,6 +1588,7 @@ struct VP9Decoder_s {
 	int reset_flag;
 	int triple_write_mode;
 	int start_decoder_flag;
+	int v4l_duration;
 };
 
 #ifdef NEW_FRONT_BACK_CODE
@@ -9485,8 +9486,9 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 {
 	unsigned int ar;
 	struct aml_vcodec_ctx * ctx = pbi->v4l2_ctx;
+	int uevent_dur = vdec_get_uevent_dur();
 
-	vf->duration = pbi->frame_dur;
+	vf->duration = uevent_dur ? uevent_dur : pbi->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 	vf->prop.master_display_colour = pbi->vf_dp;
@@ -12612,9 +12614,9 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 	pbi->frame_cnt_window = 0;
 	width = pbi->vvp9_amstream_dec_info.width;
 	height = pbi->vvp9_amstream_dec_info.height;
-	pbi->frame_dur =
-		(pbi->vvp9_amstream_dec_info.rate ==
-			0) ? 3200 : pbi->vvp9_amstream_dec_info.rate;
+	pbi->frame_dur = pbi->v4l_duration ? pbi->v4l_duration :
+		((pbi->vvp9_amstream_dec_info.rate ==
+			0) ? 3200 : pbi->vvp9_amstream_dec_info.rate);
 	if (width && height)
 		pbi->frame_ar = height * 0x100 / width;
 /*
@@ -14809,6 +14811,11 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			pbi->low_latency_flag = (config_val & 1) ? 1 : 0;
 			pbi->enable_fence = (config_val & 2) ? 1 : 0;
 		}
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_duration",
+			&config_val) == 0)
+			pbi->v4l_duration = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_metadata_config_flag",
