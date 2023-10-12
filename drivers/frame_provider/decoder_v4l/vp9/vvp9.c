@@ -6714,6 +6714,54 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 	}
 }
 
+static void v4l_vp9_report_hdr10p_data(struct VP9Decoder_s *pbi, struct PIC_BUFFER_CONFIG_s *pic,
+	u8 *hdr10p_data_buf, u32 data_size)
+{
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
+	struct sei_usd_param_s usd_rep;
+	void *tmp_buf = NULL;
+
+	memset(&usd_rep, 0, sizeof(struct sei_usd_param_s));
+
+	if (kfifo_is_full(&ctx->dec_intf.aux_done)) {
+		vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
+			"%s, aux data fifo is full\n", __func__);
+		return;
+	}
+
+	tmp_buf = vzalloc(HDR10P_BUF_SIZE);
+	if (tmp_buf == NULL) {
+		vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
+			"%s, Alloc buf for aux_data out fail\n", __func__);
+		return;
+	}
+
+	memcpy(tmp_buf, hdr10p_data_buf, data_size);
+	usd_rep.data_size = data_size;
+	usd_rep.v_addr = tmp_buf;
+	if (debug & VP9_DEBUG_BUFMGR_MORE) {
+		int i;
+		vp9_print(pbi, 0,
+			"%s AUX data: (size %d)\n", __func__, data_size);
+		for (i = 0; i < data_size; i++) {
+			vp9_print(pbi, 0, "%02x ", ((u8 *)usd_rep.v_addr)[i]);
+			if (((i + 1) & 0xf) == 0)
+				vp9_print(pbi, 0, "\n");
+		}
+		vp9_print(pbi, 0, "\n");
+	}
+
+	usd_rep.meta_data.timestamp = pic->timestamp;
+	usd_rep.meta_data.vpts_valid = 1;
+	usd_rep.meta_data.video_format = VFORMAT_VP9;
+	usd_rep.meta_data.records_in_que =
+		kfifo_len(&ctx->dec_intf.aux_done) + 1; /* +1 : current one's */
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_HDR10P, &usd_rep);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
+			"%s, HDR10p ready event report\n", __func__);
+}
+
 static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	unsigned int ar;
@@ -6764,6 +6812,7 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 			}
 			vf->hdr10p_data_buf = pic->hdr10p_data_buf;
 			vf->hdr10p_data_size = pic->hdr10p_data_size;
+			v4l_vp9_report_hdr10p_data(pbi, pic, pic->hdr10p_data_buf, pic->hdr10p_data_size);
 			set_meta_data_to_vf(vf, UVM_META_DATA_HDR10P_DATA, pbi->v4l2_ctx);
 		} else {
 			vp9_print(pbi, 0, "bind_hdr10p_buffer fail\n");
@@ -7007,6 +7056,38 @@ static int frame_duration_adapt(struct VP9Decoder_s *pbi, struct vframe_s *vf, u
 		}
 	}
 	return true;
+}
+
+static void v4l_vp9_update_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf,
+	struct PIC_BUFFER_CONFIG_s *pic_config)
+{
+	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
+	struct dec_frame_info_s frm_info = {0};
+
+	memcpy(&(frm_info.qos), &(pbi->vframe_qos), sizeof(struct vframe_qos_s));
+	if (input_frame_based(hw_to_vdec(pbi)))
+		frm_info.frame_size = pic_config->frame_size2;
+
+	frm_info.offset = pic_config->stream_offset;
+	frm_info.num = pic_config->decode_idx;
+	frm_info.type = pic_config->slice_type;
+	frm_info.error_flag = pic_config->error_mark;
+	frm_info.decode_time_cost = pic_config->hw_decode_time;
+	frm_info.pic_height = pbi->frame_width;
+	frm_info.pic_width = pbi->frame_width;
+	frm_info.signal_type = pbi->video_signal_type;
+	frm_info.bitrate = pbi->gvs->bit_rate;
+	frm_info.status = pbi->gvs->status;
+	frm_info.ratio_control = pbi->gvs->ratio_control;
+
+	if (vf) {
+		frm_info.ext_signal_type = vf->ext_signal_type;
+		frm_info.vf_type = vf->type;
+		frm_info.timestamp = vf->timestamp;
+		frm_info.pts = vf->pts;
+		frm_info.pts_us64 = vf->pts_us64;
+	}
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_FRAME, &frm_info);
 }
 
 static inline void pbi_update_gvs(struct VP9Decoder_s *pbi)
@@ -7410,6 +7491,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vdec_fill_vdec_frame(pvdec, &pbi->vframe_qos, &tmp4x,
 				vf, pic_config->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
+			v4l_vp9_update_frame_info(pbi, vf, pic_config);
 
 			if ((v4l2_ctx->no_fbc_output &&
 				(v4l2_ctx->picinfo.bitdepth != 0 &&
@@ -7890,6 +7972,48 @@ static void fill_frame_info(struct VP9Decoder_s *pbi,
 			vframe_qos->min_skip);
 #endif
 	vframe_qos->num++;
+}
+
+static void v4l_vp9_collect_stream_info(struct vdec_s *vdec,
+	struct VP9Decoder_s *pbi)
+{
+	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
+	struct dec_stream_info_s *str_info = NULL;
+
+	if (ctx == NULL) {
+		pr_info("param invalid\n");
+		return;
+	}
+	str_info = &ctx->dec_intf.dec_stream;
+
+	snprintf(str_info->vdec_name, sizeof(str_info->vdec_name),
+		"%s", DRIVER_NAME);
+
+	str_info->vdec_type = input_frame_based(vdec);
+	str_info->dual_core_flag = vdec_dual(vdec);
+	str_info->is_secure = vdec_secure(vdec);
+	str_info->profile_idc = pbi->param.p.profile;
+	str_info->filed_flag = 0;
+	str_info->frame_height = pbi->frame_height;
+	str_info->frame_width = pbi->frame_width;
+	str_info->crop_top = 0;
+	str_info->crop_bottom = 0;
+	str_info->crop_left= 0;
+	str_info->crop_right = 0;
+	str_info->double_write_mode = pbi->double_write_mode;
+	str_info->error_handle_policy = error_handle_policy;
+	str_info->bit_depth = pbi->param.p.bit_depth;
+	str_info->fence_enable = pbi->enable_fence;
+	str_info->ratio_size.sar_width = -1;
+	str_info->ratio_size.sar_height = -1;
+	str_info->ratio_size.dar_width = -1;
+	str_info->ratio_size.dar_height = -1;
+	if (pbi->frame_dur != 0)
+		str_info->frame_rate = ((96000 * 10 / pbi->frame_dur) % 10) < 5 ?
+				96000 / pbi->frame_dur : (96000 / pbi->frame_dur +1);
+	else
+		str_info->frame_rate = -1;
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);
 }
 
 /* only when we decoded one field or one frame,
@@ -8786,7 +8910,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		if (ctx->param_sets_from_ucode && !pbi->v4l_params_parsed) {
 			struct aml_vdec_ps_infos ps;
 			struct vdec_comp_buf_info comp;
-
+			struct vdec_s * vdec = hw_to_vdec(pbi);
 			pr_debug("set ucode parse\n");
 			if (get_valid_double_write_mode(pbi) != 16) {
 				vvp9_get_comp_buf_info(pbi, &comp);
@@ -8805,7 +8929,8 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 
 			ctx->decoder_status_info.frame_height = ps.visible_height;
 			ctx->decoder_status_info.frame_width = ps.visible_width;
-
+			v4l_vp9_collect_stream_info(vdec, pbi);
+			ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STATISTIC, NULL);
 			pbi->v4l_params_parsed	= true;
 			pbi->postproc_done = 0;
 			pbi->process_busy = 0;

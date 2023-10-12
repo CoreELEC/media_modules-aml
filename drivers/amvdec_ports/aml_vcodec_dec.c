@@ -46,6 +46,7 @@
 #include "aml_vcodec_adapt.h"
 #include "aml_vcodec_vpp.h"
 #include "aml_vcodec_ge2d.h"
+#include "aml_vcodec_dec_infoserver.h"
 
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
@@ -93,12 +94,14 @@
 #define AML_V4L2_SET_STREAM_MODE (V4L2_CID_USER_AMLOGIC_BASE + 9)
 #define AML_V4L2_SET_ES_DMABUF_TYPE (V4L2_CID_USER_AMLOGIC_BASE + 10)
 #define AML_V4L2_GET_WIDTH_ALIGN (V4L2_CID_USER_AMLOGIC_BASE + 12)
+#define AML_V4L2_GET_DECINFO_SET (V4L2_CID_USER_AMLOGIC_BASE + 13)
 
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
 #define V4L2_EVENT_PRIVATE_EXT_SEND_ERROR (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 2)
 #define V4L2_EVENT_PRIVATE_EXT_REPORT_ERROR_FRAME (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 3)
+#define V4L2_EVENT_PRIVATE_EXT_REPORT_DECINFO (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 4)
 
 #define WORK_ITEMS_MAX (32)
 #define MAX_DI_INSTANCE (2)
@@ -438,6 +441,14 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "report error frame timestamp: %llu\n",
 			ctx->current_timestamp);
 		break;
+	case V4L2_EVENT_REPORT_DEC_INFO:
+		event.type = V4L2_EVENT_PRIVATE_EXT_REPORT_DECINFO;
+		event.id = ctx->dec_intf.dec_info_args.sub_cmd;
+		memcpy(&event.u.data[0], &ctx->dec_intf.dec_info_args.version_magic, sizeof(int));
+		memcpy(&event.u.data[4], &ctx->dec_intf.dec_info_args.event_cnt, sizeof(int));
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "report dec_info type: 0x%x\n",
+			ctx->dec_intf.dec_info_args.sub_cmd);
+		break;
 	default:
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"unsupport dispatch event %x\n", changes);
@@ -446,9 +457,9 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 
 	v4l2_event_queue_fh(&ctx->fh, &event);
 	if (changes != V4L2_EVENT_SRC_CH_HDRINFO)
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "changes: %x\n", changes);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "changes: %x type : %x\n", changes, event.type);
 	else
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "changes: %x\n", changes);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "changes: %x type : %x\n", changes, event.type);
 }
 
 static void aml_vdec_flush_decoder(struct aml_vcodec_ctx *ctx)
@@ -2849,6 +2860,8 @@ static int vidioc_vdec_subscribe_evt(struct v4l2_fh *fh,
 		return v4l2_event_subscribe(fh, sub, 10, NULL);
 	case V4L2_EVENT_PRIVATE_EXT_SEND_ERROR:
 		return v4l2_event_subscribe(fh, sub, 5, NULL);
+	case V4L2_EVENT_PRIVATE_EXT_REPORT_DECINFO:
+		return v4l2_event_subscribe(fh, sub, 60, NULL);
 	default:
 		return v4l2_ctrl_subscribe_event(fh, sub);
 	}
@@ -4837,6 +4850,10 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"width_align: %d\n", ctrl->val);
 		break;
+	case AML_V4L2_GET_DECINFO_SET:
+		if (aml_vcodec_decinfo_get(ctrl, ctx) < 0)
+			ret = -EINVAL;
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -4885,6 +4902,9 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 		ctx->output_dma_mode = ctrl->val;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 			"set dma buf mode: %x\n", ctrl->val);
+	} else if (ctrl->id == AML_V4L2_GET_DECINFO_SET) {
+		memcpy(&ctx->dec_intf.dec_comm, ctrl->p_new.p, sizeof(struct vdec_common_s));
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "set dec info");
 	}
 	return 0;
 }
@@ -5039,6 +5059,19 @@ static const struct v4l2_ctrl_config ctrl_get_width_align = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_gt_decinfo_set = {
+	.name		= "decoder info_reporter",
+	.id		= AML_V4L2_GET_DECINFO_SET,
+	.ops		= &aml_vcodec_dec_ctrl_ops,
+	.type		= V4L2_CTRL_COMPOUND_TYPES,
+	.flags		= V4L2_CTRL_FLAG_VOLATILE,
+	.min		= 0,
+	.max		= 0xff,
+	.step		= 1,
+	.def		= 0,
+	.dims		= { sizeof(struct vdec_common_s) },
+};
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -5132,6 +5165,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_get_width_align, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_decinfo_set, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;

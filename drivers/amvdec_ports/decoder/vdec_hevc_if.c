@@ -716,6 +716,7 @@ static void set_param_hdr_info(struct vdec_hevc_inst *inst,
 			V4L2_CONFIG_PARM_DECODE_HDRINFO;
 		aml_vdec_dispatch_event(inst->ctx,
 			V4L2_EVENT_SRC_CH_HDRINFO);
+		inst->ctx->dec_intf.decinfo_event_report(inst->ctx, AML_DECINFO_EVENT_HDR10, hdr);
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 			"H265 set HDR infos\n");
 	}

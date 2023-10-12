@@ -4601,6 +4601,37 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 	atomic_add(1, &dec->vf_pre_count);
 }
 
+static void v4l_avs2_update_frame_info(struct AVS2Decoder_s *dec, struct vframe_s *vf,
+	struct avs2_frame_s *pic_config)
+{
+	struct aml_vcodec_ctx *ctx = dec->v4l2_ctx;
+	struct dec_frame_info_s frm_info = {0};
+
+	memcpy(&(frm_info.qos), &(dec->vframe_qos), sizeof(struct vframe_qos_s));
+
+	frm_info.num = pic_config->decode_idx;
+	frm_info.frame_size = pic_config->frame_size;
+	frm_info.offset = pic_config->stream_offset;
+	frm_info.type = pic_config->slice_type;
+	frm_info.error_flag = pic_config->error_mark;
+	frm_info.decode_time_cost = pic_config->hw_decode_time;
+	frm_info.pic_height = dec->frame_width;
+	frm_info.pic_width = dec->frame_width;
+	frm_info.signal_type = dec->video_signal_type;
+	frm_info.bitrate = dec->gvs->bit_rate;
+	frm_info.status = dec->gvs->status;
+	frm_info.ratio_control = dec->gvs->ratio_control;
+
+	if (vf) {
+		frm_info.ext_signal_type = vf->ext_signal_type;
+		frm_info.vf_type = vf->type;
+		frm_info.timestamp = vf->timestamp;
+		frm_info.pts = vf->pts;
+		frm_info.pts_us64 = vf->pts_us64;
+	}
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_FRAME, &frm_info);
+}
+
 static inline void dec_update_gvs(struct AVS2Decoder_s *dec)
 {
 	if (dec->gvs->frame_height != dec->frame_height) {
@@ -4693,6 +4724,8 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			tmp4x.double_write_mode = pic->double_write_mode;
 			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
+			v4l_avs2_update_frame_info(dec, vf, pic);
+
 			if (without_display_mode == 0) {
 				if (v4l2_ctx->is_stream_off) {
 					vavs2_vf_put(vavs2_vf_get(pvdec), pvdec);
@@ -5359,6 +5392,50 @@ static int avs2_mmu_page_num(struct AVS2Decoder_s *dec,
 	return cur_mmu_4k_number;
 }
 
+static void v4l_avs2_collect_stream_info(struct vdec_s * vdec,
+	struct AVS2Decoder_s *dec)
+{
+	struct aml_vcodec_ctx *ctx = dec->v4l2_ctx;
+	struct dec_stream_info_s *str_info = NULL;
+
+	if (ctx == NULL) {
+		pr_info("param invalid\n");
+		return;
+	}
+	str_info = &ctx->dec_intf.dec_stream;
+
+	snprintf(str_info->vdec_name, sizeof(str_info->vdec_name),
+		"%s", DRIVER_NAME);
+
+	str_info->vdec_type = input_frame_based(vdec);
+	str_info->dual_core_flag = vdec_dual(vdec);
+	str_info->is_secure = vdec_secure(vdec);
+	str_info->profile_idc = dec->avs2_dec.param.p.profile_id;
+	str_info->level_idc = dec->avs2_dec.param.p.level_id;
+	str_info->filed_flag = 0;
+	str_info->frame_height = dec->frame_height;
+	str_info->frame_width = dec->frame_width;
+	str_info->crop_top = 0;
+	str_info->crop_bottom = 0;
+	str_info->crop_left= 0;
+	str_info->crop_right = 0;
+	str_info->double_write_mode = dec->double_write_mode;
+	str_info->error_handle_policy = error_handle_policy;
+	str_info->bit_depth = 8;
+	str_info->fence_enable = 0;
+	str_info->ratio_size.sar_width = -1;
+	str_info->ratio_size.sar_height = -1;
+	str_info->ratio_size.dar_width = -1;
+	str_info->ratio_size.dar_height = -1;
+	str_info->trick_mode = dec->i_only;
+	if (dec->frame_dur != 0)
+		str_info->frame_rate = ((96000 * 10 / dec->frame_dur) % 10) < 5 ?
+				96000 / dec->frame_dur : (96000 / dec->frame_dur +1);
+	else
+		str_info->frame_rate = -1;
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);
+}
+
 static int avs2_get_header_size(int w, int h)
 {
 	w = ALIGN(w, 64);
@@ -5880,6 +5957,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			if (ctx->param_sets_from_ucode && !dec->v4l_params_parsed) {
 				struct aml_vdec_ps_infos ps;
 				struct vdec_comp_buf_info comp;
+				struct vdec_s *vdec = hw_to_vdec(dec);
 
 				pr_debug("set ucode parse\n");
 				if (get_valid_double_write_mode(dec) != 16) {
@@ -5898,6 +5976,8 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 				ctx->decoder_status_info.frame_width = ps.visible_width;
 				dec->v4l_params_parsed = true;
 				dec->process_busy = 0;
+				v4l_avs2_collect_stream_info(vdec, dec);
+				ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STATISTIC, NULL);
 				dec_again_process(dec);
 				return IRQ_HANDLED;
 			} else {
@@ -6814,7 +6894,6 @@ static void avs2_work(struct work_struct *work)
 		dec->process_state = PROC_STATE_INIT;
 		decode_frame_count[dec->index] = dec->frame_count;
 		ctx->decoder_status_info.decoder_count++;
-
 
 		if (dec->timeout && vdec_frame_based(vdec)) {
 			avs2_buf_ref_process_for_exception(dec);

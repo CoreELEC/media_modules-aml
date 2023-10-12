@@ -73,6 +73,9 @@
 /* eos event */
 #define V4L2_EVENT_SEND_EOS		(1 << 16)
 
+/* dec info report */
+#define V4L2_EVENT_REPORT_DEC_INFO		(1 << 24)
+
 /* v4l buffer pool */
 #define V4L_CAP_BUFF_MAX		(32)
 #define V4L_CAP_BUFF_INVALID		(0)
@@ -98,6 +101,245 @@
 #define MAX_AVBC_BUFFER_SIZE	16
 
 #define MAX_VPP_BUFFER_CACHE_NUM 16
+
+#define USER_DATA_BUFF_NUM 128
+#define FRM_INFO_BUFF_NUM 128
+#define AML_USERDATA_SIZE (4 * 1024)
+
+enum E_DECINFO_TYPE {
+	AML_STREAM_TYPE = 0,
+	AML_STATISTIC_TYPE,
+	AML_AFD_TYPE,
+	AML_CC_TYPE,
+	AML_AUX_DATA_TYPE,
+	AML_FRAME_TYPE,
+};
+
+enum E_DECINFO_EVENT {
+	AML_DECINFO_EVENT_STREAM = 0,
+	AML_DECINFO_EVENT_STATISTIC,
+	AML_DECINFO_EVENT_AFD,
+	AML_DECINFO_EVENT_CC,
+	AML_DECINFO_EVENT_HDR10,
+	AML_DECINFO_EVENT_HDR10P,
+	AML_DECINFO_EVENT_CUVA,
+	AML_DECINFO_EVENT_DV,
+	AML_DECINFO_EVENT_FRAME,
+	AML_DECINFO_EVENT_COMPOSITE = 30,
+	AML_DECINFO_EVENT_BOTTOM = 31,
+};
+
+enum E_DECINFO_CMD_GET {
+	AML_DECINFO_GET_STREAM_TYPE = 0,
+	AML_DECINFO_GET_STATISTIC_TYPE,
+	AML_DECINFO_GET_AFD_TYPE,
+	AML_DECINFO_GET_CC_TYPE,
+	AML_DECINFO_GET_HDR10_TYPE,
+	AML_DECINFO_GET_HDR10P_TYPE,
+	AML_DECINFO_GET_CUVA_TYPE,
+	AML_DECINFO_GET_DV_TYPE,
+	AML_DECINFO_GET_FRAME_TYPE,
+	AML_DECINFO_GET_COMPOSITE_TYPE = 30,
+	AML_DECINFO_GET_CMD_BOTTOM = 31,
+};
+
+struct dec_info_event_args {
+	int sub_cmd;
+	int event_cnt;
+	int version_magic;
+};
+
+struct aspect_ratio_size {
+	__s32 sar_width; /* -1 :invalid value */
+	__s32 sar_height; /* -1 :invalid value */
+	__s32 dar_width; /* -1 :invalid value */
+	__s32 dar_height; /* -1 :invalid value */
+};
+
+struct dec_stream_info_s {
+	__u32 info_type;
+	char vdec_name[32];    /* vdec driver name */
+	__u32 vdec_type;             /* 1: frame 0: stream mode */
+	__u32 dual_core_flag;      /* single or dual core */
+	__u32 is_secure;
+	__u32 profile_idc;
+	__u32 level_idc;
+	__u32 filed_flag;
+	__u32 frame_width;
+	__u32 frame_height;
+	__u32 crop_top;
+	__u32 crop_bottom;
+	__u32 crop_left;
+	__u32 crop_right;
+	__u32 frame_rate;
+	__u32 fence_enable;
+	__u32 fast_output_enable;
+	__u32 trick_mode;
+	__u32 bit_depth;
+	__u32 double_write_mode;
+	__u32 error_handle_policy;
+	enum E_ASPECT_RATIO eu_aspect_ratio;  /* aspect ratio (4:3 or 16:9) */
+	struct aspect_ratio_size ratio_size;   /* sar width/height, dar width/height */
+	char reserved[64];
+};
+
+struct dec_frame_info_s {
+	__u32 info_type;
+	struct vframe_qos_s qos;     /* qos */
+	__u32 num;
+	__u32 type;
+	__s32 frame_poc;
+	__u32 decode_time_cost;
+	__u32 pic_width;
+	__u32 pic_height;
+	__u32 error_flag;
+	__u32 status;
+	__u32 bitrate;
+	__u32 field_output_order;
+	__u32 offset;
+	__u32 ratio_control;
+	__u32 vf_type;
+	__u32 signal_type;
+	__u32 ext_signal_type;
+	__u32 pts;
+	__u64 pts_us64;
+	__u64 timestamp;
+	__u32 frame_size;
+	char reserved[64];
+};
+
+struct dec_statistics_info_s {
+	__u32 info_ype;
+	__u32 total_decoded_frames;
+	__u32 error_frames;
+	__u32 drop_frames;
+	__u32 i_decoded_frames;
+	__u32 i_drop_frames;
+	__u32 i_error_frames;
+	__u32 p_decoded_frames;
+	__u32 p_drop_frames;
+	__u32 p_error_frames;
+	__u32 b_decoded_frames;
+	__u32 b_drop_frames;
+	__u32 b_error_frames;
+	__u32 av_resynch_counter;
+	__u64 total_decoded_datasize;
+	char reserved[64];
+};
+
+struct v4l_userdata_meta_data_t {
+    __u32 poc_number;
+    /************ flags bit definition ***********/
+     /* bit 0: 0: top_field_first_flag is not valid
+     *  1: top_field_first_flag is valid
+     * bit 1: //top_field_first bit val
+     */
+    __u16 flags;
+    /*  0,  VFORMAT_MPEG12
+     *  1,  VFORMAT_MPEG4
+     *  2,  VFORMAT_H264
+     *  3,  VFORMAT_MJPEG
+     *  4,  VFORMAT_REAL
+     *  5,  VFORMAT_JPEG
+     *  6,  VFORMAT_VC1
+     *  7,  VFORMAT_AVS
+     *  8,  VFORMAT_SW
+     *  9,  VFORMAT_H264MVC
+     *  10, VFORMAT_H264_4K2K
+     *  11, VFORMAT_HEVC
+     *  12, VFORMAT_H264_ENC
+     *  13, VFORMAT_JPEG_ENC
+     *  14, VFORMAT_VP9
+     */
+    __u16 video_format;
+    /*        bit 0:     //used for mpeg2
+     *  1, group start
+     *  0, not group start
+     *          bit 1-2:    //used for mpeg2
+     *  0, extension_and_user_data( 0 )
+     *  1, extension_and_user_data( 1 )
+     *  2, extension_and_user_data( 2 )
+     */
+    __u16 extension_data;
+     /*        0, Unknown Frame Type
+      * 1, I Frame
+      * 2, B Frame
+      * 3, P Frame
+      * 4, D_Type_MPEG2
+      */
+    __u16  frame_type;
+    __u32 vpts;  /*video frame pts*/
+    /*
+     * 0: pts is invalid, please use duration to calculate
+     * 1: pts is valid
+     */
+    __u32 vpts_valid;
+    /*used for sync*/
+    __u64 timestamp;
+    /* how many records left in queue waiting to be read*/
+    __u32 records_in_que;
+    unsigned long long priv_data;
+    __u32 padding_data[64];
+};
+
+struct sei_usd_param_s {
+	__u32 info_type;  /* CC or AFD or aux data*/
+	__u32 data_size;    /* size of the data domain */
+	void __user *data;     /*  pointer to data domain */
+	void *v_addr;  /* used for kernelspace data */
+	struct v4l_userdata_meta_data_t meta_data;       /* meta_data */
+};
+
+struct aml_vdec_hdr_infos {
+	/*
+	 * bit 29   : present_flag
+	 * bit 28-26: video_format "component", "PAL", "NTSC", "SECAM", "MAC", "unspecified"
+	 * bit 25   : range "limited", "full_range"
+	 * bit 24   : color_description_present_flag
+	 * bit 23-16: color_primaries "unknown", "bt709", "undef", "bt601",
+	 *            "bt470m", "bt470bg", "smpte170m", "smpte240m", "film", "bt2020"
+	 * bit 15-8 : transfer_characteristic unknown", "bt709", "undef", "bt601",
+	 *            "bt470m", "bt470bg", "smpte170m", "smpte240m",
+	 *            "linear", "log100", "log316", "iec61966-2-4",
+	 *            "bt1361e", "iec61966-2-1", "bt2020-10", "bt2020-12",
+	 *            "smpte-st-2084", "smpte-st-428"
+	 * bit 7-0  : matrix_coefficient "GBR", "bt709", "undef", "bt601",
+	 *            "fcc", "bt470bg", "smpte170m", "smpte240m",
+	 *            "YCgCo", "bt2020nc", "bt2020c"
+	 */
+	u32 signal_type;
+	struct vframe_master_display_colour_s color_parms;
+};
+
+struct aux_data_static_t {
+	__u32 info_type;   /* HDR10 HLG FMM or IMAX */
+	struct aml_vdec_hdr_infos hdr_info;
+};
+
+struct v4l_dec_data_extension {
+	ulong ptr;  /* for future extension */
+	__u32 data_size;
+};
+
+/**
+ * struct vdec_common_s - Structure used to post decoder infos to upper
+ */
+struct vdec_common_s {
+	__u32 version_magic;    /* version number of the interface */
+	__u32 vdec_id;   /* id of current instance */
+	__u32 type;   /* type of the current info packet */
+	union {
+		struct dec_stream_info_s stream_info;
+		struct dec_frame_info_s frame_info;
+		struct dec_statistics_info_s decoder_statistics;
+		struct sei_usd_param_s usd_param;
+		struct aux_data_static_t aux_data;
+		struct v4l_dec_data_extension data_ext;
+		char  raw_data[512];    /* for  future extension */
+	} u;  /* data domain */
+	__u32 size;    /* size of this struct  */
+};
+
 /**
  * enum aml_hw_reg_idx - AML hw register base index
  */
@@ -334,27 +576,6 @@ struct aml_vdec_cfg_infos {
 	u32 triple_write_mode;
 	u32 dv_profile;
 	u32 data[2];
-};
-
-struct aml_vdec_hdr_infos {
-	/*
-	 * bit 29   : present_flag
-	 * bit 28-26: video_format "component", "PAL", "NTSC", "SECAM", "MAC", "unspecified"
-	 * bit 25   : range "limited", "full_range"
-	 * bit 24   : color_description_present_flag
-	 * bit 23-16: color_primaries "unknown", "bt709", "undef", "bt601",
-	 *            "bt470m", "bt470bg", "smpte170m", "smpte240m", "film", "bt2020"
-	 * bit 15-8 : transfer_characteristic unknown", "bt709", "undef", "bt601",
-	 *            "bt470m", "bt470bg", "smpte170m", "smpte240m",
-	 *            "linear", "log100", "log316", "iec61966-2-4",
-	 *            "bt1361e", "iec61966-2-1", "bt2020-10", "bt2020-12",
-	 *            "smpte-st-2084", "smpte-st-428"
-	 * bit 7-0  : matrix_coefficient "GBR", "bt709", "undef", "bt601",
-	 *            "fcc", "bt470bg", "smpte170m", "smpte240m",
-	 *            "YCgCo", "bt2020nc", "bt2020c"
-	 */
-	u32 signal_type;
-	struct vframe_master_display_colour_s color_parms;
 };
 
 struct aml_vdec_ps_infos {
@@ -648,6 +869,30 @@ struct cma_sys_size_info {
 	int cur_sys_size;
 };
 
+struct aml_v4l2_decinfo_interface {
+	struct vdec_common_s dec_comm;
+	struct aux_data_static_t aux_static;
+	struct dec_statistics_info_s dec_statictic;
+	struct dec_stream_info_s dec_stream;
+	struct dec_info_event_args dec_info_args;
+	struct sei_usd_param_s	cc_pool[USER_DATA_BUFF_NUM];
+	DECLARE_KFIFO(cc_free, struct sei_usd_param_s *, USER_DATA_BUFF_NUM);
+	DECLARE_KFIFO(cc_done, struct sei_usd_param_s *, USER_DATA_BUFF_NUM);
+
+	struct sei_usd_param_s	afd_pool[USER_DATA_BUFF_NUM];
+	DECLARE_KFIFO(afd_free, struct sei_usd_param_s *, USER_DATA_BUFF_NUM);
+	DECLARE_KFIFO(afd_done, struct sei_usd_param_s *, USER_DATA_BUFF_NUM);
+
+	struct sei_usd_param_s	auxdata_pool[USER_DATA_BUFF_NUM];
+	DECLARE_KFIFO(aux_free, struct sei_usd_param_s *, USER_DATA_BUFF_NUM);
+	DECLARE_KFIFO(aux_done, struct sei_usd_param_s *, USER_DATA_BUFF_NUM);
+
+	struct dec_frame_info_s	frminfo_pool[FRM_INFO_BUFF_NUM];
+	DECLARE_KFIFO(frm_free, struct dec_frame_info_s *, FRM_INFO_BUFF_NUM);
+	DECLARE_KFIFO(frm_done, struct dec_frame_info_s *, FRM_INFO_BUFF_NUM);
+	void (*decinfo_event_report)(struct aml_vcodec_ctx *, int, void *);
+};
+
 /*
  * struct aml_vcodec_ctx - Context (instance) private data.
  * @id: index of the context that this structure describes.
@@ -784,6 +1029,7 @@ struct aml_vcodec_ctx {
 	spinlock_t			es_wkr_slock;
 	bool				es_wkr_stop;
 
+	struct aml_v4l2_decinfo_interface dec_intf;
 	DECLARE_KFIFO(dmabuff_recycle, struct vb2_v4l2_buffer *, 32);
 	DECLARE_KFIFO(capture_buffer, struct vb2_v4l2_buffer *, 32);
 
@@ -798,7 +1044,6 @@ struct aml_vcodec_ctx {
 
 	struct aml_fb_ops		fb_ops;
 	ulong				token_table[32];
-
 	struct aml_fb_map_table		fb_map[32];
 	struct aml_vpp_cfg_infos 	vpp_cfg;
 	void (*vdec_pic_info_update)(struct aml_vcodec_ctx *ctx);
@@ -828,7 +1073,6 @@ struct aml_vcodec_ctx {
 	void (*cal_compress_buff_info)(ulong, struct aml_vcodec_ctx *ctx);
 	struct mutex			compressed_buf_info_lock;
 	struct v4l_compressed_buffer_info	compressed_buf_info;
-
 	u32				stream_mode;
 	bool				set_ext_buf_flg;
 	s32				ptsserver_id;

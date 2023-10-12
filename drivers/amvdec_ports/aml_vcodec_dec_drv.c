@@ -36,6 +36,7 @@
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_vpp.h"
+#include "aml_vcodec_dec_infoserver.h"
 #include "../frame_provider/decoder/utils/decoder_report.h"
 
 #include <linux/file.h>
@@ -154,6 +155,10 @@ static int fops_vcodec_open(struct file *file)
 	aml_vcodec_dec_set_default_params(ctx);
 	ctx->is_stream_off = true;
 	ctx->set_ext_buf_flg = false;
+
+	aml_vcodec_dec_info_init(ctx);
+	ctx->dec_intf.decinfo_event_report = aml_vcodec_decinfo_event_handler;
+
 	ctx->aux_infos.dv_index = 0;
 	ctx->aux_infos.sei_index = 0;
 	ctx->aux_infos.alloc_buffer = aml_alloc_buffer;
@@ -217,6 +222,7 @@ static int fops_vcodec_release(struct file *file)
 	vb2_queue_release(&ctx->m2m_ctx->cap_q_ctx.q);
 	vb2_queue_release(&ctx->m2m_ctx->out_q_ctx.q);
 
+	aml_vcodec_dec_info_deinit(ctx);
 	aml_vcodec_dec_release(ctx);
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);

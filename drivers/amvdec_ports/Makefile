@@ -7,6 +7,7 @@ ${MODULE_NAME}-objs += aml_vcodec_adapt.o
 ${MODULE_NAME}-objs += aml_vcodec_vpp.o
 ${MODULE_NAME}-objs += aml_vcodec_ge2d.o
 ${MODULE_NAME}-objs += aml_vcodec_ts.o
+${MODULE_NAME}-objs += aml_vcodec_dec_infoserver.o
 ${MODULE_NAME}-objs += vdec_drv_if.o
 ${MODULE_NAME}-objs += aml_task_chain.o
 ${MODULE_NAME}-objs += aml_buf_mgr.o

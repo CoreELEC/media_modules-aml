@@ -1090,6 +1090,18 @@ static void reset_user_data_buf(struct vdec_mpeg12_hw_s *hw)
 }
 #endif
 
+static inline bool is_afd_data(char *p)
+{
+	/* DTG1 */
+	return ((p[0] == 0x44) && (p[1] == 0x54) && (p[2] == 0x47) && (p[3] == 0x31));
+}
+
+static inline bool is_cc_data(char *p)
+{
+	/* GA94 */
+	return ((p[0] == 0x47) && (p[1] == 0x41) && (p[2] == 0x39) && (p[3] == 0x34));
+}
+
 static void user_data_ready_notify(struct vdec_mpeg12_hw_s *hw,
 	u32 pts, u32 pts_valid)
 {
@@ -1335,6 +1347,127 @@ static void vmmpeg2_wakeup_userdata_poll(struct vdec_s *vdec)
 	amstream_wakeup_userdata_poll(vdec);
 }
 
+static void v4l_vmpeg2_fill_userdata(struct vdec_mpeg12_hw_s *hw,
+	u8 *sei_data_buf, u32 data_len, u32 data_flag)
+{
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct sei_usd_param_s usd_rep;
+	int i, j;
+	u8 *tmp_buf = NULL;
+
+	memset(&usd_rep, 0, sizeof(struct sei_usd_param_s));
+	sei_data_buf += 8;  /* +8 : get rid of the data header */
+	data_len -= 8;  /* -8 : get rid of the data header */
+
+	if (data_len <= 0 || data_len > SEI_ITU_DATA_SIZE) {
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"%s, size(%d) of SEI packet not support\n", __func__, data_len);
+
+	}
+
+	tmp_buf = (u8 *)vzalloc(SEI_ITU_DATA_SIZE);
+	if (tmp_buf == NULL ) {
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"%s, Alloc buf for SEI out fail\n", __func__);
+		return;
+	}
+
+	for (i = 0; i < data_len; i += 8) {
+		for (j = 0; j < 8; j++) {
+			int index = i + 7 - j;
+
+			if (index >= data_len)
+				tmp_buf[i + j] = 0;
+			else
+				tmp_buf[i + j] = sei_data_buf[i + 7 - j];
+		}
+	}
+
+	if (debug_enable & PRINT_FLAG_USERDATA_DETAIL) {
+		debug_print(DECODE_ID(hw), 0,
+			"%s SEI data: (size %d)\n", __func__,
+			data_len);
+		for (i = 0; i < data_len; i++) {
+			debug_print(DECODE_ID(hw), 0, "%02x ", tmp_buf[i]);
+			if (((i + 1) & 0xf) == 0)
+				debug_print(DECODE_ID(hw), 0, "\n");
+		}
+		debug_print(DECODE_ID(hw), 0, "\n");
+	}
+
+	if (is_afd_data(tmp_buf)) {
+		if (kfifo_is_full(&ctx->dec_intf.afd_done)) {
+			debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+				"%s, AFD fifo is full\n", __func__);
+			vfree(tmp_buf);
+			return;
+		}
+
+		usd_rep.data_size = data_len;
+		usd_rep.v_addr = tmp_buf;
+		if (debug_enable & PRINT_FLAG_USERDATA_DETAIL) {
+			debug_print(DECODE_ID(hw), 0,
+				"%s AFD data: (size %d)\n", __func__,
+				data_len);
+			for (i = 0; i < data_len; i++) {
+				debug_print(DECODE_ID(hw), 0, "%02x ", ((u8 *)usd_rep.v_addr)[i]);
+				if (((i + 1) & 0xf) == 0)
+					debug_print(DECODE_ID(hw), 0, "\n");
+			}
+			debug_print(DECODE_ID(hw), 0, "\n");
+		}
+
+		if (hw->chunk)
+			usd_rep.meta_data.timestamp = hw->chunk->timestamp;
+		usd_rep.meta_data.vpts_valid = 1;
+		usd_rep.meta_data.video_format = VFORMAT_MPEG12;
+		usd_rep.meta_data.frame_type = (data_flag >> 7) & 0x7;
+		usd_rep.meta_data.flags = (data_flag >> 10) & 0x3;
+		usd_rep.meta_data.extension_data = data_flag & 0x7;
+		usd_rep.meta_data.records_in_que =
+			kfifo_len(&ctx->dec_intf.afd_done) + 1; /* +1 : current one's */
+		ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_AFD, &usd_rep);
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+				"%s, AFD ready event report\n", __func__);
+	} else if (is_cc_data(tmp_buf)) {
+		if (kfifo_is_full(&ctx->dec_intf.cc_done)) {
+			debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+				"%s, CC fifo is full\n", __func__);
+			vfree(tmp_buf);
+			return;
+		}
+		usd_rep.data_size = data_len;
+		usd_rep.v_addr = tmp_buf;
+		if (debug_enable & PRINT_FLAG_USERDATA_DETAIL) {
+			debug_print(DECODE_ID(hw), 0,
+				"%s CC data: (size %d)\n", __func__,
+				data_len);
+			for (i = 0; i < data_len; i++) {
+				debug_print(DECODE_ID(hw), 0, "%02x ", ((u8 *)usd_rep.v_addr)[i]);
+				if (((i + 1) & 0xf) == 0)
+					debug_print(DECODE_ID(hw), 0, "\n");
+			}
+			debug_print(DECODE_ID(hw), 0, "\n");
+		}
+
+		if (hw->chunk)
+			usd_rep.meta_data.timestamp = hw->chunk->timestamp;
+		usd_rep.meta_data.vpts_valid = 1;
+		usd_rep.meta_data.video_format = VFORMAT_MPEG12;
+		usd_rep.meta_data.records_in_que =
+			kfifo_len(&ctx->dec_intf.cc_done) + 1; /* +1 : current one's */
+		ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_CC, &usd_rep);
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+				"%s, CC ready event report\n", __func__);
+	} else {
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"%s, data type not support\n", __func__);
+		vfree(tmp_buf);
+		return;
+	}
+}
+
 static void userdata_push_do_work(struct work_struct *work)
 {
 	u32 reg;
@@ -1467,6 +1600,9 @@ static void userdata_push_do_work(struct work_struct *work)
 	data_start = reg & 0xffff;
 	psrc_data = (u8 *)hw->ccbuf_phyAddress_virt + hw->ucode_cc_last_wp;
 
+	if (psrc_data)
+		v4l_vmpeg2_fill_userdata(hw, psrc_data, data_length, meta_info.flags);
+
 	pdata = hw->userdata_info.data_buf + hw->userdata_info.last_wp;
 	for (i = 0; i < data_length && hw->ccbuf_phyAddress_virt != NULL && psrc_data; i++) {
 		*pdata++ = *psrc_data++;
@@ -1530,6 +1666,110 @@ void userdata_pushed_drop(struct vdec_mpeg12_hw_s *hw)
 	hw->ucode_cc_last_wp = hw->notify_ucode_cc_last_wp;
 	hw->cur_ud_idx = 0;
 	hw->wait_for_udr_send = 0;
+}
+
+static void v4l_mpeg12_collect_stream_info(struct vdec_s *vdec,
+	struct vdec_mpeg12_hw_s *hw)
+{
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+	struct dec_stream_info_s *str_info = NULL;
+	u32 pixel_ratio;
+
+	if (ctx == NULL) {
+		pr_info("param invalid\n");
+		return;
+	}
+	str_info = &ctx->dec_intf.dec_stream;
+
+	snprintf(str_info->vdec_name, sizeof(str_info->vdec_name),
+		"%s", DRIVER_NAME);
+
+	str_info->vdec_type = input_frame_based(vdec);
+	str_info->dual_core_flag = vdec_dual(vdec);
+	str_info->is_secure = vdec_secure(vdec);
+	str_info->profile_idc = hw->profile_idc;
+	str_info->level_idc = hw->level_idc;
+	str_info->filed_flag = hw->report_field;
+	str_info->frame_height = hw->frame_height;
+	str_info->frame_width = hw->frame_width;
+	str_info->crop_top = 0;
+	str_info->crop_bottom = 0;
+	str_info->crop_left= 0;
+	str_info->crop_right = 0;
+	str_info->double_write_mode = 0;
+	str_info->error_handle_policy = error_proc_policy;
+	str_info->bit_depth = 8;
+	pixel_ratio = READ_VREG(MREG_SEQ_INFO) & 0xf;;
+
+	if (pixel_ratio == 0) {
+		str_info->ratio_size.dar_width = -1;
+		str_info->ratio_size.dar_height = -1;
+		str_info->ratio_size.sar_width = -1;
+		str_info->ratio_size.sar_height = -1;
+	} else {
+		str_info->ratio_size.sar_width = -1;
+		str_info->ratio_size.sar_height = -1;
+		switch (pixel_ratio) {
+		case 1:
+			str_info->ratio_size.dar_width = -1;
+			str_info->ratio_size.dar_height = -1;
+			str_info->ratio_size.sar_width = 1;
+				str_info->ratio_size.sar_height = 1;
+			break;
+		case 2:
+			str_info->ratio_size.dar_width = 4;
+			str_info->ratio_size.dar_height = 3;
+			break;
+		case 3:
+			str_info->ratio_size.dar_width = 16;
+			str_info->ratio_size.dar_height = 9;
+			break;
+		case 4:
+			str_info->ratio_size.dar_width = 221;
+			str_info->ratio_size.dar_height = 100;
+			break;
+		default:
+			break;
+		}
+	}
+	str_info->trick_mode = hw->i_only;
+	if (hw->frame_dur != 0)
+		str_info->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
+				96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
+	else
+		str_info->frame_rate = -1;
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);
+}
+
+static void v4l_mpeg12_update_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf,
+	struct pic_info_t *pic)
+{
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+	struct dec_frame_info_s frm_info = {0};
+
+	memcpy(&(frm_info.qos), &(hw->vframe_qos), sizeof(struct vframe_qos_s));
+
+	frm_info.frame_size = pic->frame_size;
+	frm_info.offset = pic->offset;
+	frm_info.frame_poc = pic->poc;
+	frm_info.type = GET_SLICE_TYPE(pic->buffer_info);
+	frm_info.error_flag = (pic->buffer_info & PICINFO_ERROR);
+	frm_info.decode_time_cost = pic->hw_decode_time;
+	frm_info.pic_height = hw->frame_height;
+	frm_info.pic_width = hw->frame_width;
+	frm_info.signal_type = hw->reg_signal_type;
+	frm_info.bitrate = hw->gvs.bit_rate;
+	frm_info.status = hw->gvs.status;
+	frm_info.ratio_control = hw->gvs.ratio_control;
+
+	if (vf) {
+		frm_info.ext_signal_type = vf->ext_signal_type;
+		frm_info.vf_type = vf->type;
+		frm_info.timestamp = vf->timestamp;
+		frm_info.pts = vf->pts;
+		frm_info.pts_us64 = vf->pts_us64;
+	}
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_FRAME, &frm_info);
 }
 
 static inline void hw_update_gvs(struct vdec_mpeg12_hw_s *hw)
@@ -1738,6 +1978,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				hw_update_gvs(hw);
 				vdec_fill_vdec_frame(vdec, &hw->vframe_qos,
 					&hw->gvs, vf, pic->hw_decode_time);
+				v4l_mpeg12_update_frame_info(hw, vf, pic);
 			}
 			vdec->vdec_fps_detec(vdec->id);
 			vf->mem_handle =
@@ -2116,6 +2357,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				if (vdec_frame_based(vdec)) {
 					cal_chunk_offset_and_size(hw);
 				}
+				v4l_mpeg12_collect_stream_info(vdec, hw);
+				ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STATISTIC, NULL);
 				userdata_pushed_drop(hw);
 				reset_process_time(hw);
 				hw->dec_result = DEC_RESULT_AGAIN;
@@ -2618,6 +2861,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		if (vdec->input.swap_valid)
 			hw->dec_again_cnt = 0;
 		ctx->decoder_status_info.decoder_count++;
+
 		if (hw->timeout) {
 			mpeg2_buf_ref_process_for_exception(hw);
 			if (vdec_frame_based(vdec))

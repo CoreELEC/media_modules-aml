@@ -5639,6 +5639,54 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 	}
 }
 
+static void v4l_av1_report_hdr10p_data(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic,
+	u8 *hdr10p_data_buf, u32 data_size)
+{
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct sei_usd_param_s usd_rep;
+	void *tmp_buf = NULL;
+
+	memset(&usd_rep, 0, sizeof(struct sei_usd_param_s));
+
+	if (kfifo_is_full(&ctx->dec_intf.aux_done)) {
+		av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+			"%s, aux data fifo is full\n", __func__);
+		return;
+	}
+
+	tmp_buf = vzalloc(HDR10P_BUF_SIZE);
+	if (tmp_buf == NULL) {
+		av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+			"%s, Alloc buf for aux_data out fail\n", __func__);
+		return;
+	}
+
+	memcpy(tmp_buf, hdr10p_data_buf, data_size);
+	usd_rep.data_size = data_size;
+	usd_rep.v_addr = tmp_buf;
+	if (debug & AV1_DEBUG_SEI_DETAIL) {
+		int i;
+		av1_print(hw, 0,
+			"%s AUX data: (size %d)\n", __func__, data_size);
+		for (i = 0; i < data_size; i++) {
+			av1_print(hw, 0, "%02x ", ((u8 *)usd_rep.v_addr)[i]);
+			if (((i + 1) & 0xf) == 0)
+				av1_print(hw, 0, "\n");
+		}
+		av1_print(hw, 0, "\n");
+	}
+
+	usd_rep.meta_data.timestamp = pic->timestamp;
+	usd_rep.meta_data.vpts_valid = 1;
+	usd_rep.meta_data.video_format = VFORMAT_AV1;
+	usd_rep.meta_data.records_in_que =
+		kfifo_len(&ctx->dec_intf.aux_done) + 1; /* +1 : current one's */
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_HDR10P, &usd_rep);
+	av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+			"%s, HDR10p ready event report\n", __func__);
+}
+
 static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	unsigned int ar;
@@ -5670,6 +5718,9 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_B
 			"%s present_flag: %d\n", __func__,
 			hdr.color_parms.content_light_level.present_flag);
 	}
+
+	if (pic->hdr10p_data_size > 0 && pic->hdr10p_data_buf)
+		v4l_av1_report_hdr10p_data(hw, pic, pic->hdr10p_data_buf, pic->hdr10p_data_size);
 
 	vf->hdr10p_data_size = pic->hdr10p_data_size;
 	vf->hdr10p_data_buf = pic->hdr10p_data_buf;
@@ -5901,6 +5952,37 @@ void av1_inc_vf_ref(struct AV1HW_s *hw, int index)
 			__func__, index,
 			cm->buffer_pool->frame_bufs[index].buf.vf_ref);
 	}
+}
+
+static void v4l_av1_update_frame_info(struct AV1HW_s *hw, struct vframe_s *vf,
+		struct PIC_BUFFER_CONFIG_s *pic_config)
+{
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+	struct dec_frame_info_s frm_info = {0};
+
+	memcpy(&(frm_info.qos), &(hw->vframe_qos), sizeof(struct vframe_qos_s));
+
+	frm_info.frame_size = pic_config->frame_size2;
+	frm_info.num = pic_config->decode_idx;
+	frm_info.offset = pic_config->stream_offset;
+	frm_info.type = pic_config->slice_type;
+	frm_info.error_flag = pic_config->error_mark;
+	frm_info.decode_time_cost = pic_config->hw_decode_time;
+	frm_info.pic_height = hw->frame_width;
+	frm_info.pic_width = hw->frame_width;
+	frm_info.signal_type = hw->video_signal_type;
+	frm_info.bitrate = hw->gvs->bit_rate;
+	frm_info.status = hw->gvs->status;
+	frm_info.ratio_control = hw->gvs->ratio_control;
+
+	if (vf) {
+		frm_info.ext_signal_type = vf->ext_signal_type;
+		frm_info.vf_type = vf->type;
+		frm_info.timestamp = vf->timestamp;
+		frm_info.pts = vf->pts;
+		frm_info.pts_us64 = vf->pts_us64;
+	}
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_FRAME, &frm_info);
 }
 
 static inline void av1_update_gvs(struct AV1HW_s *hw, struct vframe_s *vf,
@@ -6379,6 +6461,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		tmp4x.bit_depth_chroma = bit_depth_chroma;
 		tmp4x.double_write_mode = pic_config->double_write_mode;
 		vdec_fill_vdec_frame(hw_to_vdec(hw), &hw->vframe_qos, &tmp4x, vf, pic_config->hw_decode_time);
+		v4l_av1_update_frame_info(hw, vf, pic_config);
+
 		if (without_display_mode == 0) {
 			if (v4l2_ctx->is_stream_off) {
 				vav1_vf_put(vav1_vf_get(vdec), vdec);
@@ -7469,6 +7553,48 @@ static void fill_frame_info(struct AV1HW_s *hw,
 			vframe_qos->min_skip);
 #endif
 	vframe_qos->num++;
+}
+
+static void v4l_av1_collect_stream_info(struct vdec_s *vdec,
+	struct AV1HW_s *hw)
+{
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+	struct dec_stream_info_s *str_info = NULL;
+
+	if (ctx == NULL) {
+		pr_info("param invalid\n");
+		return;
+	}
+	str_info = &ctx->dec_intf.dec_stream;
+
+	snprintf(str_info->vdec_name, sizeof(str_info->vdec_name),
+		"%s", DRIVER_NAME);
+
+	str_info->vdec_type = input_frame_based(vdec);
+	str_info->dual_core_flag = vdec_dual(vdec);
+	str_info->is_secure = vdec_secure(vdec);
+	str_info->filed_flag = 0;
+	str_info->frame_height = hw->frame_height;
+	str_info->frame_width = hw->frame_width;
+	str_info->crop_top = 0;
+	str_info->crop_bottom = 0;
+	str_info->crop_left= 0;
+	str_info->crop_right = 0;
+	str_info->double_write_mode = hw->double_write_mode;
+	str_info->error_handle_policy = error_handle_policy;
+	str_info->bit_depth = hw->aom_param.p.bit_depth;
+	str_info->fence_enable = hw->enable_fence;
+	str_info->ratio_size.sar_width = ctx->width_aspect_ratio;
+	str_info->ratio_size.sar_height = ctx->height_aspect_ratio;
+	str_info->ratio_size.dar_width = -1;
+	str_info->ratio_size.dar_height = -1;
+	str_info->trick_mode = 0;
+	if (hw->frame_dur != 0)
+		str_info->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
+				96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
+	else
+		str_info->frame_rate = -1;
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);
 }
 
 /* only when we decoded one field or one frame,
@@ -8600,7 +8726,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 			struct aml_vdec_ps_infos ps;
 			struct vdec_comp_buf_info comp;
-
+			struct vdec_s *vdec = hw_to_vdec(hw);
 				pr_info("set ucode parse\n");
 
 				if (use_dw_mmu ||
@@ -8642,6 +8768,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			ctx->decoder_status_info.frame_height = ps.visible_height;
 			ctx->decoder_status_info.frame_width = ps.visible_width;
 			hw->v4l_params_parsed = true;
+			v4l_av1_collect_stream_info(vdec, hw);
+			ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STATISTIC, NULL);
+
 			work_space_size_update(hw);
 			hw->postproc_done = 0;
 			hw->process_busy = 0;

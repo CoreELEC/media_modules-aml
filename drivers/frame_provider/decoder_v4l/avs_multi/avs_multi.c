@@ -1061,6 +1061,76 @@ static int set_vframe_pts(struct vdec_avs_hw_s *hw,
 	return ret;
 }
 
+static void v4l_avs_collect_stream_info(struct vdec_s *vdec,
+	struct vdec_avs_hw_s *hw)
+{
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+	struct dec_stream_info_s *str_info = NULL;
+
+	if (ctx == NULL) {
+		pr_info("param invalid\n");
+		return;
+	}
+	str_info = &ctx->dec_intf.dec_stream;
+
+	snprintf(str_info->vdec_name, sizeof(str_info->vdec_name),
+		"%s", DRIVER_NAME);
+
+	str_info->vdec_type = input_frame_based(vdec);
+	str_info->dual_core_flag = vdec_dual(vdec);
+	str_info->is_secure = vdec_secure(vdec);
+	str_info->filed_flag = hw->interlace_flag;
+	str_info->frame_height = hw->frame_height;
+	str_info->frame_width = hw->frame_width;
+	str_info->crop_top = 0;
+	str_info->crop_bottom = 0;
+	str_info->crop_left= 0;
+	str_info->crop_right = 0;
+	str_info->double_write_mode = 0;
+	str_info->ratio_size.dar_height = 0;
+	str_info->ratio_size.dar_width = 0;
+	str_info->ratio_size.sar_height = 0;
+	str_info->ratio_size.sar_width = 0;
+	str_info->error_handle_policy = error_handle_policy;
+	str_info->bit_depth = 8;
+
+	str_info->trick_mode = 0;
+	if (hw->frame_dur != 0)
+		str_info->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
+				96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
+	else
+		str_info->frame_rate = -1;
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);
+}
+
+static void v4l_avs_update_frame_info(struct vdec_avs_hw_s *hw, struct vframe_s *vf,
+	struct pic_info_t *pic)
+{
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+	struct dec_frame_info_s frm_info = {0};
+
+	frm_info.frame_size = pic->frame_size;
+	frm_info.offset = pic->offset;
+	frm_info.type = pic->picture_type;
+	frm_info.error_flag = pic->error_flag;
+	frm_info.decode_time_cost = pic->hw_decode_time;
+	frm_info.pic_height = hw->frame_height;
+	frm_info.pic_width = hw->frame_width;
+	frm_info.bitrate = hw->gvs->bit_rate;
+	frm_info.status = hw->gvs->status;
+	frm_info.ratio_control = hw->gvs->ratio_control;
+
+	if (vf) {
+		frm_info.signal_type = vf->signal_type;
+		frm_info.ext_signal_type = vf->ext_signal_type;
+		frm_info.vf_type = vf->type;
+		frm_info.timestamp = vf->timestamp;
+		frm_info.pts = vf->pts;
+		frm_info.pts_us64 = vf->pts_us64;
+	}
+	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_FRAME, &frm_info);
+}
+
 static void set_frame_info(struct vdec_avs_hw_s *hw, struct vframe_s *vf,
 	unsigned int *duration)
 {
@@ -3845,6 +3915,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 	}
 	avs_update_gvs(hw);
 	vdec_fill_vdec_frame(hw_to_vdec(hw), NULL, hw->gvs, vf, 0);
+	v4l_avs_update_frame_info(hw, vf, pic);
 	return 0;
 }
 
@@ -4130,12 +4201,13 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					struct aml_vdec_ps_infos ps;
 					pr_info("set ucode parse\n");
 					vavs_get_ps_info(hw, &ps);
-
 					vdec_v4l_set_ps_infos(ctx, &ps);
 					hw->last_width = hw->frame_width;
 					hw->last_height = hw->frame_height;
 					hw->v4l_params_parsed = true;
 					reset_process_time(hw);
+					v4l_avs_collect_stream_info(vdec, hw);
+					ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STATISTIC, NULL);
 					hw->dec_result = DEC_RESULT_AGAIN;
 					vdec_schedule_work(&hw->work);
 				} else {
