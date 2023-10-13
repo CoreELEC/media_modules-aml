@@ -7533,6 +7533,10 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 				"avs3_bufmgr_process=> %d, AVS3_10B_DISCARD_NAL\r\n",
 				ret);
 			WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_10B_DISCARD_NAL);
+			if (vdec_frame_based(hw_to_vdec(dec))) {
+				avs3_buf_ref_process_for_exception(dec);
+				vdec_v4l_post_error_frame_event(v4l_ctx);
+			}
 
 			if (dec->m_ins_flag) {
 				int slice_type = 0;
