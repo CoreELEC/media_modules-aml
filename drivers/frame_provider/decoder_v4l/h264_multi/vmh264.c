@@ -9742,7 +9742,8 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	ps->visible_height	= frame_height;
 	ps->coded_width		= ALIGN(mb_width << 4, 64);
 	ps->coded_height	= ALIGN(mb_height << 4, 64);
-	ps->dpb_frames		= dec_dpb_size + 1; /* +1 for two frames in one packet */
+	/* +1 for two frames in one packet */
+	ps->dpb_frames		= one_packet_multi_frames_multi_run ? dec_dpb_size : dec_dpb_size + 1;
 	ps->dpb_margin		= used_reorder_dpb_size_margin;
 	ps->dpb_size		= active_buffer_spec_num;
 	ps->field = (!hw->is_interlace) && frame_mbs_only_flag ?
