@@ -48,8 +48,20 @@ static u32 ptsserver_debuglevel = 0;
 #define DEFAULT_FREE_LIST_COUNT (500)
 #define DEFAULT_LOOKUP_THRESHOLD (2500)
 #define DEFAULT_DOULBCHECK_THRESHOLD (5)
+#define DEFAULT_REWIND_PTS_THRESHOLD (5000000)
+#define DEFAULT_REWIND_INDEX_THRESHOLD (120)
 
 PtsServerManage vPtsServerInsList[MAX_INSTANCE_NUM];
+
+static u64 get_llabs(s64 value){
+	u64 llvalue;
+	if (value > 0) {
+		return value;
+	} else {
+		llvalue = (u64)(0-value);
+		return llvalue;
+	}
+}
 
 static long get_index_from_ptsserver_id(s32 pServerInsId)
 {
@@ -382,10 +394,12 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 			list_for_each_entry_safe(ptn_cur, ptn_tmp, &pInstance->pts_list, node) {
 				if (ptn_cur != NULL) {
 					if (ptn->pts_64 != -1) {
-						if (ptn->pts_64 <= ptn_cur->pts_64)
+						if (ptn->pts_64 <= ptn_cur->pts_64 &&
+							get_llabs((s64)(ptn->pts_64 - ptn_cur->pts_64)) < DEFAULT_REWIND_PTS_THRESHOLD &&
+							abs(ptn->index - ptn_cur->index) < DEFAULT_REWIND_INDEX_THRESHOLD)
 							break;
 					} else {
-						if (ptn->offset >= ptn_cur->offset)
+						if (ptn->offset <= ptn_cur->offset)
 							break;
 					}
 				}
@@ -731,7 +745,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 				}
 
 				// Print all ptn base info
-				if (ptsserver_debuglevel > 2) {
+				if (ptsserver_debuglevel > 3) {
 					pts_pr_info(index,"Checkout i:%d offset(diff:%d L:0x%x C:0x%x pts:0x%x pts_64:%llu expired_count:%d dur_count:%lld) expected_pts:0x%x\n",
 									i, offsetAbs, ptn->offset, cur_offset, ptn->pts, ptn->pts_64, ptn->expired_count, ptn->duration_count, expected_pts);
 				}
@@ -1267,8 +1281,7 @@ long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPt
 		if (find && find_ptn && !invalid_mode) {
 			mCheckoutPtsOffset->pts = find_ptn->pts;
 			mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
-			if (ptsserver_debuglevel >= 1 ||
-				!pInstance->mPtsCheckoutStarted) {
+			if (ptsserver_debuglevel >= 1) {
 				pts_pr_info(index,"Peek ok ListCount:%d find:%d offset(diff:%d L:0x%x C:%x) pts(32:0x%x 64:%lld) l_Checkoutpts:%x, dur_count:%lld, shot_bound:%d\n",
 									pInstance->mListSize,find_index,abs(cur_offset - find_ptn->offset),
 									find_ptn->offset,cur_offset,find_ptn->pts,find_ptn->pts_64, pInstance->mLastPeekPts, pInstance->mLastCheckoutDurationCount, shot_bound);
