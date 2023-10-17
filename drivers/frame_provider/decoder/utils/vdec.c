@@ -7337,6 +7337,8 @@ void vdec_reset_vld_stbuf(struct vdec_s *vdec)
 		(0x11 << 16) | (1<<10) | (1 << 1) | (1 << 2));
 	SET_VREG_MASK(VLD_MEM_VIFIFO_CONTROL,
 		7 << 3);
+
+	pr_info("%s: reset stbuf finish.\n", __func__);
 }
 EXPORT_SYMBOL(vdec_reset_vld_stbuf);
 

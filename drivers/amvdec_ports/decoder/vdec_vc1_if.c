@@ -30,6 +30,7 @@
 #include "../vdec_drv_base.h"
 #include "../utils/common.h"
 #include "../../frame_provider/decoder/utils/decoder_dma_alloc.h"
+#include "../../frame_provider/decoder/utils/vdec.h"
 
 #define NAL_TYPE(value)				((value) & 0x1F)
 #define HEADER_BUFFER_SIZE			(32 * 1024)
@@ -359,15 +360,40 @@ static int vdec_vc1_decode(unsigned long h_vdec,
 	struct vdec_vc1_inst *inst = (struct vdec_vc1_inst *)h_vdec;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 	struct aml_vcodec_ctx *ctx = inst->ctx;
+	struct stream_buf_s *stbuf;
 	u8 *buf = (u8 *) bs->vaddr;
 	u32 size = bs->size;
 	int ret = -1;
+	u32 free_space = 0;
 
 	if (ctx->stream_mode) {
 		if (kfifo_is_full(&inst->vc1_ts_q))
 			return -EAGAIN;
 
 		kfifo_put(&inst->vc1_ts_q, bs->timestamp);
+		stbuf = &vdec->vdec->vbuf;
+		/* calculate the free size of stbuf */
+		free_space = (stbuf->buf_wp >= stbuf->buf_rp) ?
+			(stbuf->buf_size - (stbuf->buf_wp - stbuf->buf_rp)) :
+			(stbuf->buf_rp - stbuf->buf_wp);
+		while (free_space < size) {
+			if (ret >= 20) {
+				v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+					"%s require %d but stbuf free space(%d) is not enough.\n",
+					__func__, size, free_space);
+				break;
+			} else {
+				ret += 1;
+				v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
+					"%s require %d is big than stbuf free space(%d), waiting for memory enough.\n",
+					__func__, size, free_space);
+				usleep_range(5000, 10000);
+				free_space = (stbuf->buf_wp >= stbuf->buf_rp) ?
+					(stbuf->buf_size - (stbuf->buf_wp - stbuf->buf_rp)) :
+					(stbuf->buf_rp - stbuf->buf_wp);
+			}
+		}
+
 		vdec_write_stream_data_inner(vdec, (char *)bs->addr, size);
 
 		return size;

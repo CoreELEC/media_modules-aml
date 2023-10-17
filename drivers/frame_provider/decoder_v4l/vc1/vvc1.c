@@ -282,6 +282,8 @@ struct vdec_vc1_hw_s {
 	u32 cur_duration;
 	u32 canvas_mode;
 	u8 is_decoder_working;
+	u32 last_wp;
+	u32 last_rp;
 };
 
 struct vdec_vc1_hw_s vc1_hw;
@@ -289,6 +291,7 @@ static struct task_ops_s task_dec_ops;
 static u32 run_ready_min_buf_num = 1;
 static u32 default_vc1_margin = 2;
 static unsigned int start_decode_buf_level = 0x50;
+static unsigned int timeout_times = 0;
 
 #undef pr_info
 #define pr_info pr_cont
@@ -1342,6 +1345,45 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 	return 0;
 }
 
+void vc1_buf_ref_process_for_exception(struct vdec_vc1_hw_s *hw)
+{
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct aml_buf *aml_buf;
+	s32 index = hw->decoding_index;
+
+	if (index < 0) {
+		vc1_print(0, 0,
+			"[ERR]cur_idx is invalid!\n");
+		return;
+	}
+
+	aml_buf = (struct aml_buf *)hw->pics[index].v4l_ref_buf_addr;
+	if (aml_buf == NULL) {
+		vc1_print(0, 0,
+			"[ERR]fb is NULL!\n");
+		return;
+	}
+
+	vc1_print(0, 0,
+		"process_for_exception: dma addr(0x%lx) buf_ref %d vfbuf_use %d ref_use %d buf_use %d\n",
+		hw->pics[index].cma_alloc_addr,
+		atomic_read(&aml_buf->entry.ref),
+		hw->vfbuf_use[index],
+		hw->ref_use[index],
+		hw->buf_use[index]);
+
+	aml_buf_put_ref(&ctx->bm, aml_buf);
+	aml_buf_put_ref(&ctx->bm, aml_buf);
+	if ((ctx->vpp_is_need || ctx->enable_di_post) && hw->interlace_flag) {
+		aml_buf_put_ref(&ctx->bm, aml_buf);
+	}
+
+	hw->vfbuf_use[index] = 0;
+	hw->ref_use[index] = 0;
+	hw->pics[index].v4l_ref_buf_addr = 0;
+	hw->pics[index].cma_alloc_addr = 0;
+}
+
 static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 {
 	struct vdec_vc1_hw_s *hw = &vc1_hw;
@@ -1574,6 +1616,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 			WRITE_VREG(VC1_BUFFERIN, ~(1 << hw->decoding_index));
 			hw->buf_use[hw->decoding_index]--;
 			ctx->current_timestamp = hw->pics[hw->decoding_index].pts64;
+			vc1_buf_ref_process_for_exception(hw);
 			vdec_v4l_post_error_frame_event(ctx);
 			vc1_print(0, VC1_DEBUG_DETAIL,"%s: index %d, buf_use %d, buffer_index %d\n",
 				__func__, hw->decoding_index, hw->buf_use[hw->decoding_index], buffer_index);
@@ -1588,6 +1631,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 					WRITE_VREG(VC1_BUFFERIN, ~(1 << hw->decoding_index));
 					hw->buf_use[hw->decoding_index]--;
 					ctx->current_timestamp = hw->pics[hw->decoding_index].pts64;
+					vc1_buf_ref_process_for_exception(hw);
 					vdec_v4l_post_error_frame_event(ctx);
 					vc1_print(0, VC1_DEBUG_DETAIL,"%s: index %d, buf_use %d\n",
 						__func__, hw->decoding_index, hw->buf_use[hw->decoding_index]);
@@ -2073,8 +2117,20 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 	}
 
 	/* notify eos after setting EOS */
+	if (vdec->input.eos) {
+		if ((!hw->last_rp && !hw->last_wp) ||
+			((hw->last_rp != rp) || (hw->last_wp != wp))){
+			hw->last_wp = wp;
+			hw->last_rp = rp;
+			timeout_times = 0;
+		} else {
+			timeout_times += 1;
+		}
+	}
+
 	if (wp >= rp) {
-		if ((wp - rp < start_decode_buf_level) &&
+		if (((wp - rp < start_decode_buf_level) ||
+			(timeout_times >= 20)) &&
 			!vdec_has_more_input(vdec)) {
 			vc1_print(0, VC1_DEBUG_DETAIL,
 				"%s wp 0x%x rp 0x%x level %d eos %d\n",
@@ -2084,8 +2140,8 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 			notify_v4l_eos();
 		}
 	} else {
-		if ((wp + vdec->vbuf.buf_size - rp <
-			start_decode_buf_level) &&
+		if (((wp + vdec->vbuf.buf_size - rp < start_decode_buf_level) ||
+			(timeout_times >= 20)) &&
 			!vdec_has_more_input(vdec)) {
 			vc1_print(0, VC1_DEBUG_DETAIL,
 				"%s wp 0x%x rp 0x%x level %d eos %d\n",
@@ -2099,7 +2155,7 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 	vc1_print(0, VC1_DEBUG_DETAIL,
 		"%s wp 0x%x rp 0x%x level %d \n",
 		__func__, wp, rp,
-		wp - rp);
+		(wp >= rp) ? (wp - rp) : (wp + vdec->vbuf.buf_size - rp));
 
 	if (frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur))
