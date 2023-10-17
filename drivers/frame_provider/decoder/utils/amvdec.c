@@ -1201,7 +1201,9 @@ EXPORT_SYMBOL(amhevc_start_b);
 void amhevc_stop_f(void)
 {
 	uint32_t temp;
-	ulong timeout = jiffies + HZ/10;
+	ulong timeout = jiffies + (HZ >> 4);
+	u32 nop_cnt = 200;
+
 
 	WRITE_VREG(HEVC_MPSR, 0);
 	WRITE_VREG(HEVC_CPSR, 0);
@@ -1210,17 +1212,31 @@ void amhevc_stop_f(void)
 	do {
 		temp = (uint32_t)READ_VREG(HEVC_IMEM_DMA_CTRL);
 		if (time_after(jiffies, timeout)) {
-			pr_err("%s timeout\n", __func__);
+			pr_err("%s wait HEVC_IMEM_DMA_CTRL(0x%x) timeout\n",
+				__func__, temp);
 			break;
 		}
 	} while(temp & 0x8000);
+
+	timeout = jiffies + (HZ >> 4);
+	do {
+		temp = (uint32_t)READ_VREG(HEVC_LMEM_DMA_CTRL);
+		if (time_after(jiffies, timeout)) {
+			pr_err("%s wait HEVC_LMEM_DMA_CTRL(0x%x) timeout\n",
+				__func__, temp);
+			break;
+		}
+	} while(temp & 0x8000);
+
+	while (nop_cnt--);
 }
 EXPORT_SYMBOL(amhevc_stop_f);
 
 void amhevc_stop_b(void)
 {
 	uint32_t temp;
-	ulong timeout = jiffies + HZ/10;
+	ulong timeout = jiffies + (HZ >> 4);
+	u32 nop_cnt = 200;
 
 	WRITE_VREG(HEVC_MPSR_DBE, 0);
 	WRITE_VREG(HEVC_CPSR_DBE, 0);
@@ -1229,10 +1245,23 @@ void amhevc_stop_b(void)
 	do {
 		temp = (uint32_t)READ_VREG(HEVC_IMEM_DMA_CTRL_DBE);
 		if (time_after(jiffies, timeout)) {
-			pr_err("%s timeout\n", __func__);
+			pr_err("%s wait HEVC_IMEM_DMA_CTRL_DBE(0x%x) timeout\n",
+				__func__, temp);
 			break;
 		}
 	} while(temp & 0x8000);
+
+	timeout = jiffies + (HZ >> 4);
+	do {
+		temp = (uint32_t)READ_VREG(HEVC_LMEM_DMA_CTRL_DBE);
+		if (time_after(jiffies, timeout)) {
+			pr_err("%s wait HEVC_LMEM_DMA_CTRL_DBE(0x%x) timeout\n",
+				__func__, temp);
+			break;
+		}
+	} while(temp & 0x8000);
+
+	while (nop_cnt--);
 }
 EXPORT_SYMBOL(amhevc_stop_b);
 
@@ -1273,6 +1302,12 @@ void amhevc_reset_f(void)
 		);
 
 	WRITE_VREG(DOS_SW_RESET3, 0);
+
+	while (READ_VREG(HEVC_WRRSP_LMEM) & 0xfff)
+		;
+	while (READ_VREG(HEVC_WRRSP_IMEM) & 0xfff)
+		;
+
 	hevc_arb_ctrl_front_or_back(1, 1);
 }
 EXPORT_SYMBOL(amhevc_reset_f);
@@ -1313,6 +1348,12 @@ void amhevc_reset_b(void)
 		);
 
 	WRITE_VREG(DOS_SW_RESET3, 0);
+
+	while (READ_VREG(HEVC_WRRSP_LMEM_DBE) & 0xfff)
+		;
+	while (READ_VREG(HEVC_WRRSP_IMEM_DBE) & 0xfff)
+		;
+
 	hevc_arb_ctrl_front_or_back(1, 0);
 }
 EXPORT_SYMBOL(amhevc_reset_b);

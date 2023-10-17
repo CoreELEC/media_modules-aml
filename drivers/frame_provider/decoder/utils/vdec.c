@@ -2063,8 +2063,8 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 					swap_page_phys);
 				WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 1);
 
-				while (READ_VREG(HEVC_STREAM_SWAP_CTRL)
-					& (1<<7))
+				/* swap busy ands wap wrrsp*/
+				while (READ_VREG(HEVC_STREAM_SWAP_CTRL) & ((1<<7) | (0xff << 24)))
 					;
 				WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
 
@@ -2563,7 +2563,8 @@ void vdec_save_input_context(struct vdec_s *vdec)
 				input->swap_page_phys);
 			WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 3);
 
-			while (READ_VREG(HEVC_STREAM_SWAP_CTRL) & (1<<7))
+			/* swap busy ands wap wrrsp*/
+			while (READ_VREG(HEVC_STREAM_SWAP_CTRL) & ((1<<7) | (0xff << 24)))
 				;
 			WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
 
@@ -2668,9 +2669,10 @@ static int vdec_input_read_restore(struct vdec_s *vdec)
 			input->swap_page_phys);
 		WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 1);
 
-		while (READ_VREG(HEVC_STREAM_SWAP_CTRL)
-			& (1<<7))
+		/* swap busy ands wap wrrsp*/
+		while (READ_VREG(HEVC_STREAM_SWAP_CTRL) & ((1<<7) | (0xff << 24)))
 			;
+
 		WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
 	}
 

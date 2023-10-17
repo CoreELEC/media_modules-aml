@@ -944,6 +944,11 @@ enum alloc_buffer_status_t {
 #define HEVC_SAO_VB               HEVC_ASSIST_SCRATCH_S
 
 #ifdef NEW_FRONT_BACK_CODE
+/*
+	[15 : 8] tile_cnt
+	[ 7 : 0] slice_cnt
+*/
+#define PIC_INFO_DBE                    HEVC_ASSIST_SCRATCH_U
 #define HEVC_DEC_STATUS_DBE             HEVC_ASSIST_SCRATCH_W
 #define PIC_DECODE_COUNT_DBE            HEVC_ASSIST_SCRATCH_X
 #define DEBUG_REG1_DBE                  HEVC_ASSIST_SCRATCH_Y
@@ -1657,6 +1662,7 @@ struct PIC_s {
 	u32 hw_front_decode_time;
 #endif
 	u32 stream_size; // For stream base mode
+	u32 tile_cnt;
 } /*PIC_t */;
 
 #define MAX_TILE_COL_NUM    10
@@ -11270,6 +11276,7 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 	PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
 
 	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_PIC_DONE);
+	reset_process_time_back(hevc);
 	hevc->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 	if (hevc->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
 		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
@@ -11284,6 +11291,19 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 	}
 	if (pic && pic->error_mark)
 		hevc->dec_status_back = HEVC_BE_DECODE_DATA_DONE;
+
+	if (READ_VREG(DEBUG_REG1_DBE)) {
+		hevc_print(hevc, 0, "[BE] dbg%x: %x, HEVC_SAO_CRC %x HEVC_SAO_CRC_DBE1 %x\n",
+		READ_VREG(DEBUG_REG1_DBE),
+		READ_VREG(DEBUG_REG2_DBE),
+			(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) ?
+					READ_VREG(HEVC_SAO_CRC) : 0,
+			(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) ?
+					READ_VREG(HEVC_SAO_CRC_DBE1) : 0);
+		WRITE_VREG(DEBUG_REG1_DBE, 0);
+		start_process_time_back(hevc);
+		return IRQ_HANDLED;
+	}
 
 	if (debug & H265_DEBUG_BUFMGR)
 		hevc_print(hevc, 0,
@@ -11322,22 +11342,10 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 		pr_info("[BE] HEVC_SAO_CTRL5_DBE1 done= %x\n", READ_VREG(HEVC_SAO_CTRL5_DBE1));
 	}
 
-	if (READ_VREG(DEBUG_REG1_DBE)) {
-		hevc_print(hevc, 0, "[BE] dbg%x: %x, HEVC_SAO_CRC %x HEVC_SAO_CRC_DBE1 %x\n",
-		READ_VREG(DEBUG_REG1_DBE),
-		READ_VREG(DEBUG_REG2_DBE),
-			(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) ?
-					READ_VREG(HEVC_SAO_CRC) : 0,
-			(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) ?
-					READ_VREG(HEVC_SAO_CRC_DBE1) : 0);
-		WRITE_VREG(DEBUG_REG1_DBE, 0);
-	}
 	ATRACE_COUNTER(hevc->trace.decode_back_time_name, DECODER_ISR_END);
 	if (hevc->dec_status_back == HEVC_DEC_IDLE) {
 		return IRQ_HANDLED;
 	}
-	/**/
-	reset_process_time_back(hevc);
 
 	return IRQ_WAKE_THREAD;
 }
@@ -12701,6 +12709,7 @@ force_output:
 					hevc->param.p.aspect_ratio_idc;
 				hevc->cur_pic->sar_width = hevc->param.p.sar_width;
 				hevc->cur_pic->sar_height = hevc->param.p.sar_height;
+				hevc->cur_pic->tile_cnt = hevc->num_tile_col * hevc->num_tile_row;
 			}
 
 			aspect_ratio_set(hevc);

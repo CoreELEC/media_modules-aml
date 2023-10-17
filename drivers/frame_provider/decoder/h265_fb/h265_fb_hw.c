@@ -1041,6 +1041,11 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		WRITE_VREG(hevc->backend_ASSIST_MBOX0_IRQ_REG, 1);
 		ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_END);
 	} else {
+		u32 data32 = (((pic->slice_idx + 1) & 0xff) | ((pic->tile_cnt << 8) & 0xff00));
+
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS, "%s:data32 = 0x%x, pic->slice_idx %d pic->tile_cnt %d\n",
+			__func__, data32, pic->slice_idx, pic->tile_cnt);
+		WRITE_VREG(PIC_INFO_DBE, data32);
 		WRITE_VREG(PIC_DECODE_COUNT_DBE, hevc->backend_decoded_count);
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_BE_DECODE_DATA);
 		WRITE_VREG(HEVC_SAO_CRC, 0);
