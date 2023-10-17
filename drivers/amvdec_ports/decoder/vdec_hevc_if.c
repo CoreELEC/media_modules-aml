@@ -615,6 +615,7 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	struct v4l2_rect *rect = &inst->vsi->crop;
 	int dw = inst->parms.cfg.double_write_mode;
 	int tw = inst->parms.cfg.triple_write_mode;
+	int coded_height;
 
 	/* fill visible area size that be used for EGL. */
 	pic->visible_width	= ps->visible_width;
@@ -630,8 +631,9 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 
 	pic->coded_width 	= ps->coded_width;
 	pic->coded_height 	= ps->coded_height;
+	coded_height 		= (ps->field == V4L2_FIELD_NONE) ? ps->coded_height : ps->coded_height >> 1;
 
-	pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw, 64,
+	pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, coded_height, dw, 64,
 		is_hevc_align32(0) ? 32 : 64);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
@@ -643,7 +645,7 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	pic->bitdepth		= ps->bitdepth;
 
 	if (tw) {
-		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, pic->coded_height, tw, 64, 64);
+		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, coded_height, tw, 64, 64);
 		pic->c_len_sz_tw	= pic->y_len_sz_tw >> 1;
 	}
 
@@ -670,6 +672,7 @@ static void set_cfg_info(struct vdec_hevc_inst *inst,
 	struct aml_vdec_cfg_infos *old_cfg = &inst->parms.cfg;
 	u32 dw_new = new_cfg->double_write_mode;
 	u32 tw_new = new_cfg->triple_write_mode;
+	int coded_height;
 
 	if (!memcmp(old_cfg, new_cfg, sizeof(*old_cfg)))
 		return;
@@ -682,14 +685,15 @@ static void set_cfg_info(struct vdec_hevc_inst *inst,
 		old_cfg->triple_write_mode,
 		new_cfg->triple_write_mode);
 
+	coded_height = (pic->field == V4L2_FIELD_NONE) ? pic->coded_height : pic->coded_height >> 1;
 	if (old_cfg->double_write_mode != dw_new) {
-		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw_new, 64,
+		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, coded_height, dw_new, 64,
 			is_hevc_align32(0) ? 32 : 64);
 		pic->c_len_sz		= pic->y_len_sz >> 1;
 	}
 
 	if (old_cfg->triple_write_mode != tw_new) {
-		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, pic->coded_height, tw_new, 64, 64);
+		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, coded_height, tw_new, 64, 64);
 		pic->c_len_sz_tw	= pic->y_len_sz_tw >> 1;
 	}
 
