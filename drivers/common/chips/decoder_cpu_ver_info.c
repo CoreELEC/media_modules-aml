@@ -320,6 +320,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_h264_mmu   = true,
 		.is_support_dual_core  = true,
 		.is_support_axi_ctrl = true,
+		.hevc_stream_extra_shift = 8,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1_AVS3,
@@ -355,6 +356,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_dual_core = false,
 		.is_support_rdma     = true,
 		.is_support_axi_ctrl = true,
+		.hevc_stream_extra_shift = 8,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1_AVS3,
@@ -921,6 +923,12 @@ inline bool is_support_format(int format)
 }
 EXPORT_SYMBOL(is_support_format);
 
+inline int get_hevc_stream_extra_shift_bytes(void)
+{
+	return platform_dos_dev->hevc_stream_extra_shift;
+}
+EXPORT_SYMBOL(get_hevc_stream_extra_shift_bytes);
+
 void pr_dos_infos(void)
 {
 	pr_info("dos device info:\n");
@@ -947,6 +955,7 @@ void pr_dos_infos(void)
 	pr_info("support mmu copy    : %d\n", is_support_mmu_copy());
 	pr_info("support dos axi ctrl: %d\n", is_support_axi_ctrl());
 	pr_info("support format      : 0x%x\n", platform_dos_dev->fmt_support_flags);
+	pr_info("hevc_stream_extra_shift_bytes: %d\n", get_hevc_stream_extra_shift_bytes());
 }
 EXPORT_SYMBOL(pr_dos_infos);
 

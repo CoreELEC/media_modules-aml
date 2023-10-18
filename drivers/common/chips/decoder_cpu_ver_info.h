@@ -161,6 +161,7 @@ struct dos_of_dev_s {
 	bool is_support_triple_write;
 	bool is_support_rdma;
 	bool is_support_mmu_copy;
+	int hevc_stream_extra_shift;
 
 	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
 
@@ -228,6 +229,8 @@ inline bool is_support_mmu_copy(void);
 inline bool is_support_axi_ctrl(void);
 
 inline bool is_support_format(int format);
+
+inline int get_hevc_stream_extra_shift_bytes(void);
 
 void pr_dos_infos(void);
 

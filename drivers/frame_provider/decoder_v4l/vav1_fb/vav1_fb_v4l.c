@@ -9095,9 +9095,11 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if (vdec_secure(hw_to_vdec(hw)) &&
 		vdec_frame_based(hw_to_vdec(hw)) &&
 		(dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE)) {
-		if (READ_VREG(HEVC_SHIFT_BYTE_COUNT) > hw->chunk->size) {
+		/* The s5/t3x shift byte register value is 8 bytes more than the actual consumption */
+		if (READ_VREG(HEVC_SHIFT_BYTE_COUNT) >
+			(hw->chunk->size + get_hevc_stream_extra_shift_bytes())) {
 			av1_print(hw, 0,
-			"chunk size: %x, shift_byte: %x, now is padding!\n",
+			"chunk size: 0x%x, shift_byte: 0x%x, it is padding now!\n",
 			hw->chunk->size, READ_VREG(HEVC_SHIFT_BYTE_COUNT));
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
