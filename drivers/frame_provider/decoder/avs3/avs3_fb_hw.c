@@ -1169,24 +1169,24 @@ static void config_bufstate_back_hw(struct avs3_decoder *avs3_dec)
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs3_dec->fb_buf_parser_sao0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs3_dec->fb_buf_parser_sao0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs3_dec->bk.parser_sao0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 1);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs3_dec->fb_buf_parser_sao1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs3_dec->fb_buf_parser_sao1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs3_dec->bk.parser_sao1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 //    config mpred_imp_if data write buffer start address
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 2);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs3_dec->fb_buf_mpred_imp0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs3_dec->fb_buf_mpred_imp0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs3_dec->bk.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 3);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs3_dec->fb_buf_mpred_imp1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs3_dec->fb_buf_mpred_imp1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs3_dec->bk.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 // config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 4);
@@ -1199,26 +1199,26 @@ static void config_bufstate_back_hw(struct avs3_decoder *avs3_dec)
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs3_dec->fb_buf_vcpu_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs3_dec->fb_buf_vcpu_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs3_dec->bk.vcpu_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 8);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs3_dec->fb_buf_sys_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs3_dec->fb_buf_sys_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs3_dec->bk.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 // config lmem buffers
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 5);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs3_dec->fb_buf_lmem0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs3_dec->fb_buf_lmem0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs3_dec->bk.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 6);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs3_dec->fb_buf_lmem1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs3_dec->fb_buf_lmem1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs3_dec->bk.lmem1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 }
 
@@ -1608,14 +1608,7 @@ int32_t g_WqMDefault8x8[64] = {
 		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 	}
 
-	if (front_flag) {
-		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1);
-		else
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0);
-	}
-
-	if (back_flag) {
+	if (!efficiency_mode && back_flag) {
 #if 0 // Dual Core : back Microcode will always initial SCALELUT
 	// Initial IQIT_SCALELUT memory -- just to avoid X in simulation
 	printk("[test.c] Initial IQIT_SCALELUT memory -- just to avoid X in simulation...\n");
@@ -1700,80 +1693,79 @@ int32_t g_WqMDefault8x8[64] = {
 	*/
 
 	// AVS3 default seq_wq_matrix config
-	if (back_flag) {
-	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-		"[test.c] Config AVS3 default seq_wq_matrix ...\n");
-	// 4x4
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 64); // default seq_wq_matrix_4x4 begin address
-	for (i=0; i<16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault4x4[i]);
+	if (!efficiency_mode && back_flag) {
+		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "[test.c] Config AVS3 default seq_wq_matrix ...\n");
+		// 4x4
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 64); // default seq_wq_matrix_4x4 begin address
+		for (i = 0; i < 16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault4x4[i]);
 
-	// 8x8
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0); // default seq_wq_matrix_8x8 begin address
-	for (i=0; i<64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault8x8[i]);
+		// 8x8
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0); // default seq_wq_matrix_8x8 begin address
+		for (i = 0; i < 64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault8x8[i]);
 
-	// 4x4
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 64); // default seq_wq_matrix_4x4 begin address
-	for (i=0; i<16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault4x4[i]);
+		// 4x4
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 64); // default seq_wq_matrix_4x4 begin address
+		for (i = 0; i < 16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault4x4[i]);
 
-	// 8x8
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 0); // default seq_wq_matrix_8x8 begin address
-	for (i=0; i<64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault8x8[i]);
+		// 8x8
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 0); // default seq_wq_matrix_8x8 begin address
+		for (i = 0; i < 64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault8x8[i]);
 
-	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-		"[test.c] Reset IPP\n");
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-		(0 << 1) | // enable ipp
-		(1 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
-		(1 << 0)   // software reset ipp and mpp
-		);
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-		(1 << 1) | // enable ipp
-		(1 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
-		(0 << 0)   // software reset ipp and mpp
-		);
+		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+			"[test.c] Reset IPP\n");
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+			(0 << 1) | // enable ipp
+			(1 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
+			(1 << 0)   // software reset ipp and mpp
+			);
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+			(1 << 1) | // enable ipp
+			(1 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
+			(0 << 0)   // software reset ipp and mpp
+			);
 
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
-		(0 << 1) | // enable ipp
-		(1 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
-		(1 << 0)   // software reset ipp and mpp
-		);
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
-		(1 << 1) | // enable ipp
-		(1 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
-		(0 << 0)   // software reset ipp and mpp
-		);
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
+			(0 << 1) | // enable ipp
+			(1 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
+			(1 << 0)   // software reset ipp and mpp
+			);
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
+			(1 << 1) | // enable ipp
+			(1 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
+			(0 << 0)   // software reset ipp and mpp
+			);
 
-	// Init dblk
-	data32 = READ_VREG(HEVC_DBLK_CFGB);
-	data32 |= (5 << 0);
-	WRITE_VREG(HEVC_DBLK_CFGB, data32); // [3:0] cfg_video_type -> AVS3
+		// Init dblk
+		data32 = READ_VREG(HEVC_DBLK_CFGB);
+		data32 |= (5 << 0);
+		WRITE_VREG(HEVC_DBLK_CFGB, data32); // [3:0] cfg_video_type -> AVS3
 #define LPF_LINEBUF_MODE_CTU_BASED
-//must be defined for DUAL_CORE
+	//must be defined for DUAL_CORE
 #ifdef LPF_LINEBUF_MODE_CTU_BASED
-	WRITE_VREG(HEVC_DBLK_CFG0, (0<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
+		WRITE_VREG(HEVC_DBLK_CFG0, (0<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
 #else
-	WRITE_VREG(HEVC_DBLK_CFG0, (1<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
+		WRITE_VREG(HEVC_DBLK_CFG0, (1<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
 #endif
-	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-		"[test.c] Bitstream level Init for DBLK .Done.\n");
+		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+			"[test.c] Bitstream level Init for DBLK .Done.\n");
 
-	data32 = READ_VREG(HEVC_DBLK_CFGB_DBE1);
-	data32 |= (5 << 0);
-	WRITE_VREG(HEVC_DBLK_CFGB_DBE1, data32); // [3:0] cfg_video_type -> AVS3
+		data32 = READ_VREG(HEVC_DBLK_CFGB_DBE1);
+		data32 |= (5 << 0);
+		WRITE_VREG(HEVC_DBLK_CFGB_DBE1, data32); // [3:0] cfg_video_type -> AVS3
 #ifdef LPF_LINEBUF_MODE_CTU_BASED
-	WRITE_VREG(HEVC_DBLK_CFG0_DBE1, (0<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
+		WRITE_VREG(HEVC_DBLK_CFG0_DBE1, (0<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
 #else
-	WRITE_VREG(HEVC_DBLK_CFG0_DBE1, (1<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
+		WRITE_VREG(HEVC_DBLK_CFG0_DBE1, (1<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
 #endif
-	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-		"[test.c] Bitstream level Init for DBLK_DBE1 .Done.\n");
+		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
+			"[test.c] Bitstream level Init for DBLK_DBE1 .Done.\n");
 
-	// Initialize mcrcc and decomp perf counters
+		// Initialize mcrcc and decomp perf counters
 #if 1
-	if (dec->front_back_mode == 1) {
-		mcrcc_perfcount_reset_dual(dec);
-		decomp_perfcount_reset_dual(dec);
-	}
+		if (dec->front_back_mode == 1) {
+			mcrcc_perfcount_reset_dual(dec);
+			decomp_perfcount_reset_dual(dec);
+		}
 #endif
 	}//back_flag end
 	//printk("[test.c] Leaving hevc_init_decoder_hw\n");
@@ -1854,7 +1846,7 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 	}
 // End JT
 
-	if (back_flag) {
+	if (!efficiency_mode && back_flag) {
 	// Set MCR fetch priorities
 		data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
 		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
@@ -2300,16 +2292,20 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 #ifdef NEW_FRONT_BACK_CODE
 #ifdef PRINT_HEVC_DATA_PATH_MONITOR
 	if (dec->front_back_mode == 1) {
-	if (avs3_dec->backend_decoded_count > 0 &&
-		(debug & AVS3_DBG_CACHE)) {
-		print_hevc_b_data_path_monitor(avs3_dec->backend_decoded_count-1);
-		print_mcrcc_hit_info(avs3_dec->backend_decoded_count-1);
-	}
+		if (avs3_dec->backend_decoded_count > 0 &&
+			(debug & AVS3_DBG_CACHE)) {
+			print_hevc_b_data_path_monitor(avs3_dec->backend_decoded_count-1);
+			print_mcrcc_hit_info(avs3_dec->backend_decoded_count-1);
+		}
 	}
 #endif
 #endif
 	if (dec->front_back_mode == 1)
 		amhevc_reset_b();
+	if (efficiency_mode)
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 1 << 1);
+	else
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 0 << 1);
 	avs3_hw_init(dec, 0, 1);
 	if (dec->front_back_mode == 3) {
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);

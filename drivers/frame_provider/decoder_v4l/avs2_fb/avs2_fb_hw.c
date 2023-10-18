@@ -812,24 +812,24 @@ static void config_bufstate_back_hw(struct avs2_decoder *avs2_dec)
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs2_dec->fb_buf_parser_sao0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs2_dec->fb_buf_parser_sao0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs2_dec->bk.parser_sao0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 1);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs2_dec->fb_buf_parser_sao1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs2_dec->fb_buf_parser_sao1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs2_dec->bk.parser_sao1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	//    config mpred_imp_if data write buffer start address
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 2);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs2_dec->fb_buf_mpred_imp0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs2_dec->fb_buf_mpred_imp0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs2_dec->bk.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 3);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs2_dec->fb_buf_mpred_imp1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs2_dec->fb_buf_mpred_imp1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs2_dec->bk.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	// config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 4);
@@ -837,32 +837,32 @@ static void config_bufstate_back_hw(struct avs2_decoder *avs2_dec)
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs2_dec->fb_buf_scalelut.buf_end);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs2_dec->bk.scalelut_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 7);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs2_dec->fb_buf_vcpu_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs2_dec->fb_buf_vcpu_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs2_dec->bk.vcpu_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 8);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs2_dec->fb_buf_sys_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs2_dec->fb_buf_sys_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs2_dec->bk.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	// config lmem buffers
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 5);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs2_dec->fb_buf_lmem0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs2_dec->fb_buf_lmem0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs2_dec->bk.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 6);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, avs2_dec->fb_buf_lmem1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, avs2_dec->fb_buf_lmem1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, avs2_dec->bk.lmem1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 }
 
 static void read_bufstate_front(struct avs2_decoder *avs2_dec)
@@ -1218,7 +1218,7 @@ int32_t g_WqMDefault8x8[64] = {
 	}
 #endif
 
-	if (back_flag) {
+	if (!efficiency_mode && back_flag) {
 #if 0 // Dual Core : back Microcode will always initial SCALELUT
 		// Initial IQIT_SCALELUT memory -- just to avoid X in simulation
 		printk("[test.c] Initial IQIT_SCALELUT memory -- just to avoid X in simulation...\n");
@@ -1276,77 +1276,77 @@ int32_t g_WqMDefault8x8[64] = {
 #endif
 	}
 
-	if (back_flag) {
-	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
-		"[test.c] Config AVS2 default seq_wq_matrix ...\n");
-	// 4x4
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 64); // default seq_wq_matrix_4x4 begin address
-	for (i = 0; i < 16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault4x4[i]);
+	if (!efficiency_mode && back_flag) {
+		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
+			"[test.c] Config AVS2 default seq_wq_matrix ...\n");
+		// 4x4
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 64); // default seq_wq_matrix_4x4 begin address
+		for (i = 0; i < 16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault4x4[i]);
 
-	// 8x8
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0); // default seq_wq_matrix_8x8 begin address
-	for (i = 0; i < 64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault8x8[i]);
+		// 8x8
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0); // default seq_wq_matrix_8x8 begin address
+		for (i = 0; i < 64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault8x8[i]);
 
-	// 4x4
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 64); // default seq_wq_matrix_4x4 begin address
-	for (i = 0; i < 16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault4x4[i]);
+		// 4x4
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 64); // default seq_wq_matrix_4x4 begin address
+		for (i = 0; i < 16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault4x4[i]);
 
-	// 8x8
-	WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 0); // default seq_wq_matrix_8x8 begin address
-	for (i = 0; i < 64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault8x8[i]);
+		// 8x8
+		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 0); // default seq_wq_matrix_8x8 begin address
+		for (i = 0; i < 64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault8x8[i]);
 
-	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
-		"[test.c] Reset IPP\n");
+		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
+			"[test.c] Reset IPP\n");
+			WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+			(0 << 1) | // enable ipp
+			(4 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
+			(1 << 0)   // software reset ipp and mpp
+			);
 		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-		(0 << 1) | // enable ipp
-		(4 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
-		(1 << 0)   // software reset ipp and mpp
-		);
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-		(1 << 1) | // enable ipp
-		(4 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
-		(0 << 0)   // software reset ipp and mpp
-		);
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
-		(0 << 1) | // enable ipp
-		(4 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
-		(1 << 0)   // software reset ipp and mpp
-		);
-	WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
-		(1 << 1) | // enable ipp
-		(4 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
-		(0 << 0)   // software reset ipp and mpp
-		);
+			(1 << 1) | // enable ipp
+			(4 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
+			(0 << 0)   // software reset ipp and mpp
+			);
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
+			(0 << 1) | // enable ipp
+			(4 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
+			(1 << 0)   // software reset ipp and mpp
+			);
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL_DBE1,
+			(1 << 1) | // enable ipp
+			(4 << 3) | // bit[5:3] 000:HEVC, 010:VP9 , 100:avs2, 110:av1 001:avs3
+			(0 << 0)   // software reset ipp and mpp
+			);
 
-	// Init dblk
+		// Init dblk
 #define LPF_LINEBUF_MODE_CTU_BASED
-	//must be defined for DUAL_CORE
+		//must be defined for DUAL_CORE
 
-	data32 = READ_VREG(HEVC_DBLK_CFGB);
-	data32 |= (2 << 0);
-	WRITE_VREG(HEVC_DBLK_CFGB, data32); // [3:0] cfg_video_type -> AVS2
+		data32 = READ_VREG(HEVC_DBLK_CFGB);
+		data32 |= (2 << 0);
+		WRITE_VREG(HEVC_DBLK_CFGB, data32); // [3:0] cfg_video_type -> AVS2
 #ifdef LPF_LINEBUF_MODE_CTU_BASED
-	WRITE_VREG(HEVC_DBLK_CFG0, (0<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
+		WRITE_VREG(HEVC_DBLK_CFG0, (0<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
 #else
-	WRITE_VREG(HEVC_DBLK_CFG0, (1<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
+		WRITE_VREG(HEVC_DBLK_CFG0, (1<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
 #endif
 
-	data32 = READ_VREG(HEVC_DBLK_CFGB_DBE1);
-	data32 |= (2 << 0);
-	WRITE_VREG(HEVC_DBLK_CFGB_DBE1, data32); // [3:0] cfg_video_type -> AVS2
+		data32 = READ_VREG(HEVC_DBLK_CFGB_DBE1);
+		data32 |= (2 << 0);
+		WRITE_VREG(HEVC_DBLK_CFGB_DBE1, data32); // [3:0] cfg_video_type -> AVS2
 #ifdef LPF_LINEBUF_MODE_CTU_BASED
-	WRITE_VREG(HEVC_DBLK_CFG0_DBE1, (0<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
+		WRITE_VREG(HEVC_DBLK_CFG0_DBE1, (0<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
 #else
-	WRITE_VREG(HEVC_DBLK_CFG0_DBE1, (1<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
+		WRITE_VREG(HEVC_DBLK_CFG0_DBE1, (1<<18) | (1 << 0)); // [18]tile based line buffer storage mode [0] rst_sync(will be self cleared)
 #endif
 
-	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
-		"[test.c] Bitstream level Init for DBLK .Done.\n");
+		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
+			"[test.c] Bitstream level Init for DBLK .Done.\n");
 
-	// Initialize mcrcc and decomp perf counters
+		// Initialize mcrcc and decomp perf counters
 #if 0
-	mcrcc_perfcount_reset();
-	decomp_perfcount_reset();
+		mcrcc_perfcount_reset();
+		decomp_perfcount_reset();
 #endif
 	}//back_flag end
 	if (back_flag) {
@@ -1513,7 +1513,7 @@ static int32_t avs2_hw_init(struct AVS2Decoder_s *dec, uint8_t front_flag, uint8
 #endif
 	// End JT
 
-	if (back_flag) {
+	if (!efficiency_mode && back_flag) {
 		// Set MCR fetch priorities
 		data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
 		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
@@ -1837,6 +1837,11 @@ static int BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 
 	if (dec->front_back_mode == 1)
 		amhevc_reset_b();
+
+	if (efficiency_mode)
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 1);
+	else
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 0);
 	avs2_hw_init(dec, 0, 1);
 	if (dec->front_back_mode == 3) {
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);

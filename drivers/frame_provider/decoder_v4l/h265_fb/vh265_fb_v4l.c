@@ -197,6 +197,8 @@ static void reset_process_time_back(struct hevc_state_s *hevc);
 static void start_process_time_back(struct hevc_state_s *hevc);
 //static void restart_process_time_back(struct hevc_state_s *hevc);
 static void timeout_process_back(struct hevc_state_s *hevc);
+static void vh265_work_back_implement(struct hevc_state_s *hevc,
+	struct vdec_s *vdec,int from);
 #endif
 static int vh265_hw_ctx_restore(struct hevc_state_s *hevc);
 
@@ -863,6 +865,8 @@ enum alloc_buffer_status_t {
 
 #define DEBUG_REG1              HEVC_ASSIST_SCRATCH_G
 #define DEBUG_REG2              HEVC_ASSIST_SCRATCH_H
+#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_C
+
 /*
  *ucode parser/search control
  *bit 0:  0, header auto parse; 1, header manual parse
@@ -913,6 +917,7 @@ enum alloc_buffer_status_t {
 #define HEVC_SAO_ABV              HEVC_ASSIST_SCRATCH_Q
 #define HEVC_sao_vb_size          HEVC_ASSIST_SCRATCH_R
 #define HEVC_SAO_VB               HEVC_ASSIST_SCRATCH_S
+#define HEVC_EFFICIENCY_MODE_BACK HEVC_ASSIST_SCRATCH_T
 
 #ifdef NEW_FRONT_BACK_CODE
 /*
@@ -11455,15 +11460,15 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		if (hevc->front_back_mode == 1)
 			amhevc_stop_b();
 
-#ifdef NEW_FB_CODE
-		hevc->dec_back_result = DEC_BACK_RESULT_DONE;
-		vdec_schedule_work(&hevc->work_back);
-#endif
 		if (hevc->front_pause_flag) {
 			/*multi pictures in one packe*/
 			WRITE_VREG(hevc->ASSIST_MBOX0_IRQ_REG, 0x1);
 			start_process_time(hevc);
 		}
+#ifdef NEW_FB_CODE
+		hevc->dec_back_result = DEC_BACK_RESULT_DONE;
+		vh265_work_back_implement(hevc, vdec, 0);
+#endif
 	}
 
 	return IRQ_HANDLED;
@@ -16045,12 +16050,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 #ifdef NEW_FB_CODE
 	if (hevc->front_back_mode) {
-#if 0
-		if (efficiency_mode == 0)
-			WRITE_VREG(HEVC_ASSIST_SCRATCH_T, 0);
+		if (efficiency_mode)
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1);
 		else
-			WRITE_VREG(HEVC_ASSIST_SCRATCH_T, 1);
-#endif
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0);
 
 		hevc_hw_init(hevc, 0, 1, 0);
 		config_decode_mode(hevc);

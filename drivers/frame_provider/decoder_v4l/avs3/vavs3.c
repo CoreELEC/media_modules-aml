@@ -288,15 +288,6 @@ static unsigned int not_run_ready[MAX_DECODE_INSTANCE_NUM];
 static u32 over_decoder_shiftbytes = 0x80;
 
 static u32 decode_timeout_val = 200;
-#ifdef NEW_FB_CODE
-static unsigned int decode_timeout_val_back = 200;
-static unsigned int fast_timer_check_count = 3;
-
-static unsigned int efficiency_mode = 1;
-
-static void avs3_work_back(struct work_struct *work);
-static void avs3_timeout_work_back(struct work_struct *work);
-#endif
 #endif
 static int start_decode_buf_level = 0x8000;
 
@@ -379,6 +370,18 @@ static void dump_or_fill_phy_buffer(struct AVS3Decoder_s *dec, u32 phy_adr, u32 
 static void d_dump(struct AVS3Decoder_s *dec, unsigned int phy_adr, int size,
 	struct file *fp, loff_t *wr_off, u32 * total_check_sum, u8 print_flag);
 static int avs3_recycle_frame_buffer(struct AVS3Decoder_s *dec);
+
+#ifdef NEW_FB_CODE
+static unsigned int decode_timeout_val_back = 200;
+static unsigned int fast_timer_check_count = 3;
+
+static unsigned int efficiency_mode = 1;
+
+static void avs3_work_back(struct work_struct *work);
+static void avs3_timeout_work_back(struct work_struct *work);
+static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
+	struct vdec_s *vdec,int from);
+#endif
 
 static const char vavs3_dec_id[] = "vavs3-dev";
 
@@ -1826,6 +1829,7 @@ static DEFINE_MUTEX(vavs3_mutex);
 #define PIC_DECODE_COUNT_DBE            HEVC_ASSIST_SCRATCH_X
 #define DEBUG_REG1_DBE                  HEVC_ASSIST_SCRATCH_Y
 #define DEBUG_REG2_DBE                  HEVC_ASSIST_SCRATCH_Z
+#define HEVC_EFFICIENCY_MODE_BACK       HEVC_ASSIST_SCRATCH_10
 #endif
 /*
 ucode parser/search control
@@ -6525,13 +6529,13 @@ irqreturn_t vavs3_back_isr_thread_fn(struct AVS3Decoder_s *dec)
 			amhevc_stop_b();
 
 		dec->dec_back_result = DEC_BACK_RESULT_DONE;
-		vdec_schedule_work(&dec->work_back);
 
 		if (avs3_dec->front_pause_flag) {
 			/*multi pictures in one packe*/
 			WRITE_VREG(dec->ASSIST_MBOX0_IRQ_REG,
 						0x1);
 		}
+		avs3_work_back_implement(dec, vdec, 0);
 	}
 	//unlock_front_back(dec, flags);
 	return IRQ_HANDLED;
@@ -7750,11 +7754,44 @@ decode_slice:
 		if ((dec->front_back_mode == 1 || dec->front_back_mode == 3) &&
 			(start_code == I_PICTURE_START_CODE ||
 			start_code == PB_PICTURE_START_CODE)) {
+			int32_t g_WqMDefault4x4[16] = {
+				64,     64,     64,     68,
+				64,     64,     68,     72,
+				64,     68,     76,     80,
+				72,     76,     84,     96
+			};
+
+			int32_t g_WqMDefault8x8[64] = {
+				64,     64,     64,     64,     68,     68,     72,     76,
+				64,     64,     64,     68,     72,     76,     84,     92,
+				64,     64,     68,     72,     76,     80,     88,     100,
+				64,     68,     72,     80,     84,     92,     100,    112,
+				68,     72,     80,     84,     92,     104,    112,    128,
+				76,     80,     84,     92,     104,    116,    132,    152,
+				96,     100,    104,    116,    124,    140,    164,    188,
+				104,    108,    116,    128,    152,    172,    192,    216
+			};
 			config_mc_buffer_fb(dec);
 			config_mcrcc_axi_hw_fb(dec);
 			config_dblk_hw_fb(dec);
 			config_sao_hw_fb(dec);
 			config_alf_hw_fb(dec);
+
+			// 4x4
+			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 64); // default seq_wq_matrix_4x4 begin address
+			for (i = 0; i < 16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault4x4[i]);
+
+			// 8x8
+			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0); // default seq_wq_matrix_8x8 begin address
+			for (i = 0; i < 64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, g_WqMDefault8x8[i]);
+
+			// 4x4
+			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 64); // default seq_wq_matrix_4x4 begin address
+			for (i = 0; i < 16; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault4x4[i]);
+
+			// 8x8
+			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 0); // default seq_wq_matrix_8x8 begin address
+			for (i = 0; i < 64; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, g_WqMDefault8x8[i]);
 
 			WRITE_BACK_RET(avs3_dec);
 			avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
@@ -9660,6 +9697,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START, TRACE_BASIC);
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode) {
+		if (efficiency_mode)
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1 << 1);
+		else
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0 << 1);
 		avs3_hw_init(dec, 1, 0);
 		//config_decode_mode(dec);
 		if (dec->front_back_mode == 1) {

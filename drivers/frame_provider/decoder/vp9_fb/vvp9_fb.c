@@ -374,6 +374,7 @@ static u32 on_no_keyframe_skiped;
 #define HEVC_ASSIST_MMU_MAP_ADDR2                  0x300e
 
 #ifdef NEW_FRONT_BACK_CODE
+#define HEVC_EFFICIENCY_MODE_BACK        HEVC_ASSIST_SCRATCH_V
 #define HEVC_DEC_STATUS_DBE       HEVC_ASSIST_SCRATCH_W
 #ifdef NEW_FRONT_BACK_CODE
 #define PIC_DECODE_COUNT_DBE      HEVC_ASSIST_SCRATCH_X
@@ -1287,6 +1288,8 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi);
 
 #ifdef NEW_FB_CODE
 static void vp9_work_back(struct work_struct *work);
+static void vp9_work_back_implement(struct VP9Decoder_s *pbi,
+	struct vdec_s *vdec);
 #endif
 
 #endif
@@ -4714,12 +4717,12 @@ static void config_bufstate_back_hw(struct VP9Decoder_s *pbi)
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_mpred_imp0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_mpred_imp0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 3);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_mpred_imp1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_mpred_imp1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 // config lmem buffers
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 4);
@@ -4727,14 +4730,14 @@ static void config_bufstate_back_hw(struct VP9Decoder_s *pbi)
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_lmem0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.lmem0_ptr);
 	vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "pbi->bk.lmem0_ptr 0x%x\n", pbi->bk.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 //config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_B_INDEX, 8);
 	WRITE_VREG(HEVC_ASSIST_RING_B_START, pbi->fb_buf_sys_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_B_END, pbi->fb_buf_sys_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_B_RPTR, pbi->bk.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_B_THRESHOLD, 0);
 
 }
 
@@ -5269,6 +5272,10 @@ void BackEnd_StartDecoding(struct VP9Decoder_s *pbi)
 #endif
 	if (pbi->front_back_mode == 1)
 		amhevc_reset_b();
+	if (efficiency_mode)
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (1 << 1));
+	else
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (0 << 1));
 	vp9_hw_init(pbi, pbi->backend_decoded_count == 0, 0, 1);
 	if (pbi->front_back_mode == 1) {
 		config_bufstate_back_hw(pbi);
@@ -5433,7 +5440,7 @@ static void vp9_init_decoder_hw_fb(struct VP9Decoder_s *pbi, int32_t decode_pic_
 
 	}
 
-	if (back_flag && first_flag) {
+	if (!efficiency_mode && back_flag && first_flag) {
 		// Initial IQIT_SCALELUT memory -- just to avoid X in simulation
 		//if (debug&VP9_DEBUG_BUFMGR)
 			//printk("[test.c] Initial IQIT_SCALELUT memory -- just to avoid X in simulation...\n");
@@ -5474,7 +5481,7 @@ static void vp9_init_decoder_hw_fb(struct VP9Decoder_s *pbi, int32_t decode_pic_
 			);
 		*/
 	}
-	if (back_flag) {
+	if (!efficiency_mode && back_flag) {
 		//if (debug) //printk("[test.c] Reset IPP\n");
 		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
 			(0 << 1) | // enable ipp
@@ -5494,11 +5501,6 @@ static void vp9_init_decoder_hw_fb(struct VP9Decoder_s *pbi, int32_t decode_pic_
 			(0 << 0)   // software reset ipp and mpp
 			);
 
-		if (get_double_write_mode(pbi) & 0x10) {
-			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31); // Enable NV21 reference read mode for MC
-			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31); // Enable NV21 reference read mode for MC
-		}
-
 		WRITE_VREG(HEVCD_IPP_MULTICORE_CFG, 0x1);// muti core enable
 		WRITE_VREG(HEVCD_IPP_MULTICORE_CFG_DBE1, 0x1);// muti core enable
 
@@ -5510,6 +5512,10 @@ static void vp9_init_decoder_hw_fb(struct VP9Decoder_s *pbi, int32_t decode_pic_
 		decomp_perfcount_reset();
 	}
 
+	if (back_flag && (get_double_write_mode(pbi) & 0x10)) {
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31); // Enable NV21 reference read mode for MC
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31); // Enable NV21 reference read mode for MC
+	}
 	return;
 }
 
@@ -5978,23 +5984,24 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 //  if (back_flag && first_flag) {
 	if (back_flag) {
 #ifdef VP9_LPF_LVL_UPDATE
-	vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "[test.c] vp9_loop_filter_init (run once before decoding start)\n");
-	lf->sharpness_level = 0; // init to 0
-	vp9_loop_filter_init(pbi);
+		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "[test.c] vp9_loop_filter_init (run once before decoding start)\n");
+		lf->sharpness_level = 0; // init to 0
+		vp9_loop_filter_init(pbi);
 #endif
-	}
 
-	if (back_flag) {
 		/* clear mailbox interrupt */
 		WRITE_VREG(pbi->backend_ASSIST_MBOX0_CLR_REG, 1);
 
 		/* enable mailbox interrupt */
 		WRITE_VREG(pbi->backend_ASSIST_MBOX0_MASK, 1);
 		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "back irq enabled\n");
+	}
+
+	if (!efficiency_mode && back_flag) {
 // Set MCR fetch priorities
-	data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
-	WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
-	WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1, data32);
+		data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
+		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
+		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1, data32);
 
 #ifdef DYN_CACHE
 		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "HEVC DYN MCRCC\n");
@@ -12709,7 +12716,7 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		//pyx checked no need
 		//release_free_mmu_buffers(pbi);
 		pbi->dec_back_result = DEC_BACK_RESULT_DONE;
-		vdec_schedule_work(&pbi->work_back);
+		vp9_work_back_implement(pbi, vdec);
 	}
 
 	return IRQ_HANDLED;
@@ -14564,6 +14571,11 @@ static void vp9_work_back(struct work_struct *work)
 		struct VP9Decoder_s, work_back);
 	struct vdec_s *vdec = hw_to_vdec(pbi);
 
+	vp9_work_back_implement(pbi, vdec);
+}
+static void vp9_work_back_implement(struct VP9Decoder_s *pbi,
+	struct vdec_s *vdec)
+{
 	vp9_print(pbi, PRINT_FLAG_VDEC_STATUS, "%s result %x\n",
 		__func__, pbi->dec_back_result);
 
