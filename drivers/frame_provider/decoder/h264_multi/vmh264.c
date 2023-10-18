@@ -2708,12 +2708,6 @@ int release_buf_spec_num(struct vdec_s *vdec, int buf_spec_num)
 		spin_lock_irqsave(&hw->bufspec_lock, flags);
 		hw->buffer_spec[buf_spec_num].used = 0;
 		spin_unlock_irqrestore(&hw->bufspec_lock, flags);
-		if (hw->mmu_enable) {
-			/*WRITE_VREG(CURR_CANVAS_CTRL, buf_spec_num<<24);
-			cur_buf_idx = READ_VREG(CURR_CANVAS_CTRL);
-			cur_buf_idx = cur_buf_idx&0xff;*/
-			decoder_mmu_box_free_idx(hw->mmu_box, buf_spec_num);
-		}
 		release_aux_data(hw, buf_spec_num);
 	}
 	if (dpb_is_debug(DECODE_ID(hw),
