@@ -1903,8 +1903,6 @@ static void aml_uvm_buf_delay_free(struct uvm_buf_obj *obj)
 		dma_buf_put(mbuf->idmabuf[1]);
 	}
 
-	kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
-
 	kfree(mbuf);
 }
 
@@ -1969,8 +1967,6 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 	/* free fake dma buffer. */
 	if (mbuf->idmabuf[0])
 		dma_buf_put(mbuf->idmabuf[0]);
-	if (mbuf->idmabuf[1])
-		dma_buf_put(mbuf->idmabuf[1]);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 				"dma buffer size(fake: %zu, real: %d)\n",
@@ -1980,8 +1976,6 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 	mbuf->size =  ctx->picinfo.y_len_sz + ctx->picinfo.c_len_sz;
 
 	handle = dbuf->priv;
-	if (handle->ua->obj->arg)
-		kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
 
 	if (ctx->master_buf) {
 		struct aml_buf *master_buf = ctx->master_buf;
@@ -2129,8 +2123,6 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 			dma_buf_detach(mbuf->idmabuf[0], dba);
 		}
 	}
-
-	kref_get(&ctx->ctx_ref);
 
 	aml_buf_update(&ctx->bm, get_addr(&vb->vb2_buf, 0), am_buf);
 
