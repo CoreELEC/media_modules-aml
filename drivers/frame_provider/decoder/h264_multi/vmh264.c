@@ -6650,6 +6650,22 @@ static int get_used_buf_count(struct vdec_h264_hw_s *hw)
 }
 #endif
 
+static bool is_last_buffer_with_one_field(struct vdec_h264_hw_s *hw)
+{
+	int i = 0;
+	int last = 0;
+	if (hw->dpb.mDPB.used_size > 0 && get_used_buf_count(hw) >= hw->dpb.mDPB.size) {
+		last = hw->dpb.mDPB.used_size-1;
+		for (i = 0; i < hw->dpb.mDPB.used_size; i++) {
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+				"%s hw->dpb.mDPB.fs[%d]->is_used:%d\n",  __func__, i, hw->dpb.mDPB.fs[i]->is_used);
+		}
+		if (hw->dpb.mDPB.fs[last]->is_used == 1 || hw->dpb.mDPB.fs[last]->is_used == 2) {
+			return true;
+		}
+	}
+	return false;
+}
 
 static bool is_buffer_available(struct vdec_s *vdec)
 {
@@ -10958,34 +10974,41 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		ret = 1;
 	}
 
+	if (is_last_buffer_with_one_field(hw)) {
+		ret = 1;
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+			"%s, %d, is_last_buffer_with_one_field, ret:%d\n",  __func__, __LINE__, ret);
+	} else {
 #ifdef CONSTRAIN_MAX_BUF_NUM
-	if (hw->dpb.mDPB.size > 0) { /*make sure initialized*/
-		if (run_ready_max_vf_only_num > 0 &&
-			get_vf_ref_only_buf_count(hw) >=
-			run_ready_max_vf_only_num
-			)
-			ret = 0;
-		if (run_ready_display_q_num > 0 &&
-			kfifo_len(&hw->display_q) >=
-			run_ready_display_q_num)
-			ret = 0;
-		/*avoid more buffers consumed when
-		switching resolution*/
-		if (run_ready_max_buf_num == 0xff &&
-			((save_buffer_in_res_change && get_used_buf_count(hw) >=
-			hw->dpb.mDPB.size) ||
-			(!save_buffer_in_res_change && get_used_buf_count(hw) >
-			hw->dpb.mDPB.size)))
-			ret = 0;
-		else if (run_ready_max_buf_num &&
-			get_used_buf_count(hw) >=
-			run_ready_max_buf_num)
-			ret = 0;
-		if (ret == 0)
-			bufmgr_h264_remove_unused_frame(&hw->dpb, 0);
+		if (hw->dpb.mDPB.size > 0) { /*make sure initialized*/
+			if (run_ready_max_vf_only_num > 0 &&
+				get_vf_ref_only_buf_count(hw) >=
+				run_ready_max_vf_only_num
+				)
+				ret = 0;
+			if (run_ready_display_q_num > 0 &&
+				kfifo_len(&hw->display_q) >=
+				run_ready_display_q_num)
+				ret = 0;
+			/*avoid more buffers consumed when
+			switching resolution*/
+			if (run_ready_max_buf_num == 0xff &&
+				((save_buffer_in_res_change && get_used_buf_count(hw) >=
+				hw->dpb.mDPB.size && get_used_buf_count(hw) != hw->dpb.mDPB.used_size) ||
+				(!save_buffer_in_res_change && ((get_used_buf_count(hw) >
+				hw->dpb.mDPB.size) || (get_used_buf_count(hw) == hw->dpb.mDPB.size &&
+				get_used_buf_count(hw) != hw->dpb.mDPB.used_size)))))
+				ret = 0;
+			else if (run_ready_max_buf_num &&
+				get_used_buf_count(hw) >=
+				run_ready_max_buf_num)
+				ret = 0;
+			if (ret == 0)
+				bufmgr_h264_remove_unused_frame(&hw->dpb, 0);
+		}
+		if (ret)
+			ret = is_buffer_available(vdec);
 	}
-	if (ret)
-		ret = is_buffer_available(vdec);
 #endif
 	if (hw->is_used_v4l) {
 		struct aml_vcodec_ctx *ctx =
@@ -11100,6 +11123,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		h264_reset_bufmgr(vdec, false);
 		//flag must clear after reset for v4l buf_spec_init use
 		hw->reset_bufmgr_flag = 0;
+		//flag must clear after reset especially for no isr 0x1 after run
+		p_H264_Dpb->buf_alloc_fail = 0;
 	}
 
 	if (h264_debug_cmd & 0xf000) {

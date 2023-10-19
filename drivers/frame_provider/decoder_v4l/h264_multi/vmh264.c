@@ -6357,6 +6357,23 @@ static int get_used_buf_count(struct vdec_h264_hw_s *hw)
 }
 #endif
 
+static bool is_last_buffer_with_one_field(struct vdec_h264_hw_s *hw)
+{
+	int i = 0;
+	int last = 0;
+	if (hw->dpb.mDPB.used_size > 0 && get_used_buf_count(hw) >= hw->dpb.mDPB.size) {
+		last = hw->dpb.mDPB.used_size-1;
+		for (i = 0; i < hw->dpb.mDPB.used_size; i++) {
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+				"%s hw->dpb.mDPB.fs[%d]->is_used:%d\n",  __func__, i, hw->dpb.mDPB.fs[i]->is_used);
+		}
+		if (hw->dpb.mDPB.fs[last]->is_used == 1 || hw->dpb.mDPB.fs[last]->is_used == 2) {
+			return true;
+		}
+	}
+	return false;
+}
+
 static bool is_buffer_available(struct vdec_s *vdec)
 {
 	bool buffer_available = 1;
@@ -10936,8 +10953,14 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 	if (h264_debug_flag & 0x20000000) {
 		ret = 1;
-	} else
-		ret = is_buffer_available(vdec);
+	} else {
+		if (is_last_buffer_with_one_field(hw)) {
+			ret = 1;
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+				"%s, %d, is_last_buffer_with_one_field, ret:%d\n",  __func__, __LINE__, ret);
+		} else
+			ret = is_buffer_available(vdec);
+	}
 
 #ifdef CONSTRAIN_MAX_BUF_NUM
 	if (ret && (hw->dpb.mDPB.size > 0)) { /*make sure initialized*/
@@ -10962,7 +10985,12 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			ret = 0;
 		if (ret == 0) {
 			bufmgr_h264_remove_unused_frame(&hw->dpb, 0);
-			ret = is_buffer_available(vdec);
+			if (is_last_buffer_with_one_field(hw)) {
+				ret = 1;
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+					"%s, %d, is_last_buffer_with_one_field, ret:%d\n",	__func__, __LINE__, ret);
+			} else
+				ret = is_buffer_available(vdec);
 		}
 	}
 #endif
@@ -11062,6 +11090,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		h264_reset_bufmgr_v4l(vdec, 1, false);
 		//flag must clear after reset for v4l buf_spec_init use
 		hw->reset_bufmgr_flag = 0;
+		//flag must clear after reset especially for no isr 0x1 after run
+		p_H264_Dpb->buf_alloc_fail = 0;
 
 		if (hw->bufmgr_err_flag) {
 			hw->bufmgr_err_flag = 0;
