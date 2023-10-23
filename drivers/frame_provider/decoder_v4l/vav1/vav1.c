@@ -7977,26 +7977,32 @@ static int v4l_res_change(struct AV1HW_s *hw)
 				vdec_v4l_set_comp_buf_info(ctx, &comp);
 			}
 
-			ctx->film_grain_present = hw->film_grain_present;
 			if (use_dw_mmu ||
-				(ctx->film_grain_present &&
+				(hw->film_grain_present &&
 				!disable_fg &&
 				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
 				get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D))) {
 #ifdef AOM_AV1_MMU_DW
-				hw->double_write_mode_original = get_double_write_mode(hw);
-				ctx->config.parm.dec.cfg.double_write_mode = 0x21;
-				pr_info("AV1 has fg change, no fg to fg, use dw 0x21!\n");
-				if (hw->dw_frame_mmu_map_addr == NULL) {
-					u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
-					hw->dw_frame_mmu_map_addr =
-						decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
-							mmu_map_size, &hw->dw_frame_mmu_map_phy_addr, "AV1_DWMMU_MAP");
+				struct aml_vdec_cfg_infos cfg;
+				ctx->film_grain_present = hw->film_grain_present;
+				vdec_v4l_get_cfg_infos(ctx, &cfg);
+
+				if (cfg.double_write_mode != 0x21) {
+					cfg.double_write_mode = 0x21;
+					av1_print(hw, 0, "AV1 has fg change, no fg to fg, use dw 0x21!\n");
+					vdec_v4l_set_cfg_infos(ctx, &cfg);
+
 					if (hw->dw_frame_mmu_map_addr == NULL) {
-						pr_err("%s: failed to alloc count_buffer\n", __func__);
-						return -1;
+						u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
+						hw->dw_frame_mmu_map_addr =
+							decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
+								mmu_map_size, &hw->dw_frame_mmu_map_phy_addr, "AV1_DWMMU_MAP");
+						if (hw->dw_frame_mmu_map_addr == NULL) {
+							pr_err("%s: failed to alloc count_buffer\n", __func__);
+							return -1;
+						}
+						memset(hw->dw_frame_mmu_map_addr, 0, mmu_map_size);
 					}
-					memset(hw->dw_frame_mmu_map_addr, 0, mmu_map_size);
 				}
 #endif
 			}
@@ -8561,17 +8567,21 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 				pr_info("set ucode parse\n");
 
-				ctx->film_grain_present = hw->film_grain_present;
 				if (use_dw_mmu ||
-					(ctx->film_grain_present &&
+					(hw->film_grain_present &&
 					!disable_fg &&
 					(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
 					get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D))) {
 #ifdef AOM_AV1_MMU_DW
+					struct aml_vdec_cfg_infos cfg;
+					ctx->film_grain_present = hw->film_grain_present;
 					hw->double_write_mode_original = get_double_write_mode(hw);
-					ctx->config.parm.dec.cfg.double_write_mode = 0x21;
-					pr_info("AV1 has fg, original dw:0x%x use dw 0x21!\n",
-						hw->double_write_mode_original);
+					vdec_v4l_get_cfg_infos(ctx, &cfg);
+					cfg.double_write_mode = 0x21;
+					av1_print(hw, 0, "AV1 has fg, original dw:0x%x use dw 0x21!\n",
+							hw->double_write_mode_original);
+					vdec_v4l_set_cfg_infos(ctx, &cfg);
+
 					if (hw->dw_frame_mmu_map_addr == NULL) {
 						u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
 						hw->dw_frame_mmu_map_addr =

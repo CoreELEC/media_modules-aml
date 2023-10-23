@@ -1101,9 +1101,6 @@ static int vdec_av1_decode(unsigned long h_vdec,
 	struct aml_dec_params *parms)
  {
 	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_CFGINFO) {
-		/* dw use v4l cfg */
-		inst->parms.cfg.double_write_mode =
-			inst->ctx->config.parm.dec.cfg.double_write_mode;
 		parms->cfg = inst->parms.cfg;
 	 }
 	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_PSINFO)
@@ -1118,6 +1115,11 @@ static int vdec_av1_decode(unsigned long h_vdec,
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
 		"parms status: %u\n", parms->parms_status);
  }
+
+static void get_cfg_info(struct vdec_av1_inst *inst, struct aml_vdec_cfg_infos *cfg)
+{
+	memcpy(cfg, &inst->ctx->config.parm.dec.cfg, sizeof(struct aml_vdec_cfg_infos));
+}
 
 static void get_param_comp_buf_info(struct vdec_av1_inst *inst,
 		struct vdec_comp_buf_info *params)
@@ -1152,6 +1154,10 @@ static int vdec_av1_get_param(unsigned long h_vdec,
 
 	case GET_PARAM_CONFIG_INFO:
 		get_param_config_info(inst, out);
+		break;
+
+	case GET_PARAM_CFG_INFO:
+		get_cfg_info(inst, out);
 		break;
 
 	case GET_PARAM_DW_MODE:

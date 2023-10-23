@@ -7898,8 +7898,7 @@ static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 
 static int check_fg_change(struct AV1HW_s *hw)
 {
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	int dw = get_double_write_mode(hw);
 	int ret = 0;
 
 	if (use_dw_mmu) {
@@ -7915,7 +7914,7 @@ static int check_fg_change(struct AV1HW_s *hw)
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
 		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D) &&
-		ctx->config.parm.dec.cfg.double_write_mode != 0x21) {
+		dw != 0x21) {
 		ret = 1;
 	}
 
@@ -7953,11 +7952,19 @@ static int v4l_res_change(struct AV1HW_s *hw)
 				vdec_v4l_set_comp_buf_info(ctx, &comp);
 			}
 
-			ctx->film_grain_present = hw->film_grain_present;
 			if (check_fg_change(hw)) {
 #ifdef AOM_AV1_MMU_DW
-				ctx->config.parm.dec.cfg.double_write_mode = 0x21;
-				pr_info("AV1 has fg change, no fg to fg, use dw 0x21!\n");
+				struct aml_vdec_cfg_infos cfg;
+				ctx->film_grain_present = hw->film_grain_present;
+				vdec_v4l_get_cfg_infos(ctx, &cfg);
+				cfg.double_write_mode = 0x21;
+				av1_print(hw, 0, "AV1 has fg change, no fg to fg, use dw 0x21!\n");
+				vdec_v4l_set_cfg_infos(ctx, &cfg);
+
+				hw->t5d_fg_run_rotate = T5D_ROTATE_DW21;
+				hw->t5d_fg_flags = 1;
+				hw->double_write_mode = 0x21;
+
 				if (hw->dw_frame_mmu_map_addr == NULL) {
 					u32 mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
 					hw->dw_frame_mmu_map_addr =
@@ -8646,18 +8653,22 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 				pr_info("set ucode parse\n");
 
-				ctx->film_grain_present = hw->film_grain_present;
 				if (use_dw_mmu ||
-					(ctx->film_grain_present &&
+					(hw->film_grain_present &&
 					!disable_fg &&
 					(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
 					get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D ||
 					get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D))) {
 #ifdef AOM_AV1_MMU_DW
+					struct aml_vdec_cfg_infos cfg;
+					ctx->film_grain_present = hw->film_grain_present;
 					hw->double_write_mode_original = get_double_write_mode(hw);
-					ctx->config.parm.dec.cfg.double_write_mode = 0x21;
-					pr_info("AV1 has fg, original dw:0x%x use dw 0x21!\n",
+					vdec_v4l_get_cfg_infos(ctx, &cfg);
+					cfg.double_write_mode = 0x21;
+					av1_print(hw, 0, "AV1 has fg, original dw:0x%x use dw 0x21!\n",
 						hw->double_write_mode_original);
+					vdec_v4l_set_cfg_infos(ctx, &cfg);
+
 					if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
 						hw->t5d_fg_run_rotate = T5D_ROTATE_DW21;
 						hw->t5d_fg_flags = 1;
