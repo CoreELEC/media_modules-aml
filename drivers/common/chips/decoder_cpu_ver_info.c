@@ -837,6 +837,7 @@ inline int hevc_is_support_8k(void)
 
 	return false;
 }
+EXPORT_SYMBOL(hevc_is_support_8k);
 
 inline bool is_oversize_vdec(int w, int h)
 {

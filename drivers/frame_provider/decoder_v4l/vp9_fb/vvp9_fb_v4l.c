@@ -14705,16 +14705,18 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->platform_dev = pdev;
 	pbi->video_signal_type = 0;
 	pbi->m_ins_flag = 1;
-	if (!vdec_is_support_4k()) {
-		pbi->max_pic_w = 1920;
-		pbi->max_pic_h = 1088;
-	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
+	if (hevc_is_support_4k()) {
 		pbi->max_pic_w = 4096;
 		pbi->max_pic_h = 2304;
+		if (hevc_is_support_8k()) {
+			pbi->max_pic_w = 8192;
+			pbi->max_pic_h = 4608;
+		}
 	} else {
-		pbi->max_pic_w = 8192;
-		pbi->max_pic_h = 4608;
+		pbi->max_pic_w = 1920;
+		pbi->max_pic_h = 1088;
 	}
+
 
 	if ((debug & IGNORE_PARAM_FROM_CONFIG) == 0 &&
 			pdata->config_len) {
