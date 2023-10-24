@@ -1521,6 +1521,7 @@ long mediasync_ins_set_hasaudio(MediaSyncManager* pSyncManage, int hasaudio) {
 	}
 
 	pInstance->mHasAudio = hasaudio;
+	pInstance->mStcParmUpdateCount++;
 	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
