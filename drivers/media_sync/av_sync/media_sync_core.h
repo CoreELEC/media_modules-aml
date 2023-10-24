@@ -87,6 +87,8 @@ typedef enum {
 	SET_SLOW_SYNC_ENABLE,
 	SET_TRICK_MODE,
 	SET_FREE_RUN_TYPE,
+	GET_AUDIO_WORK_MODE,
+
 } mediasync_control_cmd;
 
 typedef struct m_control {
