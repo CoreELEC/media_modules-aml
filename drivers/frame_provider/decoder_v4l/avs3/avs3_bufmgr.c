@@ -609,7 +609,7 @@ int check_poc_in_dpb(struct avs3_decoder *hw, int poc)
 
 	for (i = 0; i < hw->max_pb_size; i++) {
 		pic = &hw->pic_pool[i];
-		if ((pic != NULL) && (pic->buf_cfg.used) &&
+		if ((pic != NULL) && (pic->buf_cfg.in_dpb) &&
 			(poc == pic->ptr) && (!(avs3_get_error_policy() & 0x8))) {
 			return true;
 		}
