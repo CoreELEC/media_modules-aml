@@ -680,7 +680,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 
 	u32 expected_offset_diff = 2500;
 	u32 expected_pts = 0;
-	s32 find_frame_num = 0;
+	s32 find_frame_num = -1;
 	s32 find = 0;
 	s32 invalid_mode = 0;
 	u32 offsetAbs = 0;
@@ -730,7 +730,6 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 	// 2.v4l2 pileline es mode, pts must checkout from checkin node
 	if (cur_offset != 0xFFFFFFFF &&
 		!list_empty(&pInstance->pts_list)) {
-		find_frame_num = 0;
 		find = 0;
 		list_for_each_entry_safe(ptn,ptn_tmp,&pInstance->pts_list, node) {
 
@@ -803,8 +802,11 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 							expected_pts = ptn->pts;
 						}
 					}
-
-
+					if (cur_offset > ptn->offset || (find_frame_num >= 0)) {
+						find_frame_num = 0;
+					}
+				}else if (find_frame_num >= 0) {
+					find_frame_num ++;
 				}
 
 				// Drop Node Strategy
@@ -836,7 +838,6 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 					if (find_index == 0 && pInstance->mLastCheckoutIndex > 0) {
 						retryCount = pInstance->mListSize;
 					}
-					find_frame_num++;
 				}
 
 				if (find_frame_num >= retryCount) {
