@@ -2820,7 +2820,8 @@ void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance,
 	int64_t After_diff = 0;
 	int64_t lastBefore_diff = 0;
 	int64_t lastAfter_diff = 0;
-
+	int isDiscontinueDone = 1;
+	int64_t cacheDuration = 0;
 	if (pInstance->mCacheFrames) {
 		info->cacheDuration = pInstance->frame_table[PTS_TYPE_AUDIO].mCacheInfo.cacheDuration;
 		info->cacheSize = pInstance->frame_table[PTS_TYPE_AUDIO].mCacheInfo.cacheSize;
@@ -2835,10 +2836,33 @@ void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance,
 		pInstance->mGetAudioCacheUpdateCount = pInstance->mAudioCacheUpdateCount;
 		if (pInstance->mSyncInfo.curAudioInfo.framePts != -1) {
 
-			if (pInstance->mSyncInfo.audioPacketsInfo.packetsPts > pInstance->mSyncInfo.curAudioInfo.framePts &&
-				pInstance->mSyncInfo.curAudioInfo.framePts > pInstance->mAudioDiscontinueInfo.discontinuePtsAfter) {
-				info->cacheDuration = pInstance->mSyncInfo.audioPacketsInfo.packetsPts -
-										pInstance->mSyncInfo.curAudioInfo.framePts;
+
+			cacheDuration = pInstance->mSyncInfo.audioPacketsInfo.packetsPts - pInstance->mSyncInfo.curAudioInfo.framePts;
+/*
+			mediasync_pr_info(0,pInstance,"isDiscontinue:%d cacheDuration:%lld ms pts:0x%llx curpts:0x%llx PtsBefore:0x%llx PtsAfter:0x%llx \n",
+				pInstance->mAudioDiscontinueInfo.isDiscontinue,
+				cacheDuration / 90,
+				pInstance->mSyncInfo.audioPacketsInfo.packetsPts,
+				pInstance->mSyncInfo.curAudioInfo.framePts,
+				pInstance->mAudioDiscontinueInfo.discontinuePtsBefore,
+				pInstance->mAudioDiscontinueInfo.discontinuePtsAfter);
+*/
+			if (pInstance->mAudioDiscontinueInfo.discontinuePtsAfter != -1) {
+				int64_t diff = pInstance->mSyncInfo.curAudioInfo.framePts - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
+				if (diff < 0) {
+					if (get_llabs(diff) > 45000) {
+						isDiscontinueDone = 0;
+					}
+				}
+			}
+
+			if (cacheDuration > -27000 && isDiscontinueDone == 1) {
+				if (cacheDuration > 0)
+					info->cacheDuration = cacheDuration;
+				else {
+					info->cacheDuration = 0;
+				}
+
 				if (pInstance->mAudioDiscontinueInfo.isDiscontinue == 1) {
 					pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore;
 					pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsAfter  = pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
@@ -2852,7 +2876,8 @@ void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance,
 					Before_diff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curAudioInfo.framePts;
 					if (Before_diff < 0 && pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore != -1 && pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsAfter != -1) {
 						//curframe is at the end of stream, but discontinuePtsBefore at the begin and pts jump
-						mediasync_pr_info(2,pInstance,"discontinuePtsBefore:%lld, discontinuePtsAfter:%lld, lastDiscontinuePtsBefore:%lld, lastDiscontinuePtsAfter:%lld, framePts:%lld, packetsPts:%lld",
+						mediasync_pr_info(2,pInstance,
+							"discontinuePtsBefore:%lld, discontinuePtsAfter:%lld, lastDiscontinuePtsBefore:%lld, lastDiscontinuePtsAfter:%lld, framePts:%lld, packetsPts:%lld",
 														pInstance->mAudioDiscontinueInfo.discontinuePtsBefore,
 														pInstance->mAudioDiscontinueInfo.discontinuePtsAfter,
 														pInstance->mAudioDiscontinueInfo.lastDiscontinuePtsBefore,
@@ -3011,7 +3036,8 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 	int64_t After_diff = 0;
 	int64_t lastBefore_diff = 0;
 	int64_t lastAfter_diff = 0;
-
+	int isDiscontinueDone = 1;
+	int64_t cacheDuration = 0;
 	if (pInstance->mCacheFrames) {
 		info->cacheDuration = pInstance->frame_table[PTS_TYPE_VIDEO].mCacheInfo.cacheDuration;
 		info->cacheSize = pInstance->frame_table[PTS_TYPE_VIDEO].mCacheInfo.cacheSize;
@@ -3027,10 +3053,32 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 		pInstance->mGetVideoCacheUpdateCount = pInstance->mVideoCacheUpdateCount;
 		if (pInstance->mSyncInfo.curVideoInfo.framePts != -1) {
 
-			if (pInstance->mSyncInfo.videoPacketsInfo.packetsPts > pInstance->mSyncInfo.curVideoInfo.framePts &&
-				pInstance->mSyncInfo.curVideoInfo.framePts > pInstance->mVideoDiscontinueInfo.discontinuePtsAfter) {
-				info->cacheDuration = pInstance->mSyncInfo.videoPacketsInfo.packetsPts -
-										pInstance->mSyncInfo.curVideoInfo.framePts;
+			cacheDuration = pInstance->mSyncInfo.videoPacketsInfo.packetsPts - pInstance->mSyncInfo.curVideoInfo.framePts;
+/*
+			mediasync_pr_info(0,pInstance,
+				"isDiscontinue:%d cacheDuration:%lld ms pts:0x%llx curpts:0x%llx PtsBefore:0x%llx PtsAfter:0x%llx \n",
+							pInstance->mVideoDiscontinueInfo.isDiscontinue,
+							cacheDuration / 90,
+							pInstance->mSyncInfo.videoPacketsInfo.packetsPts,
+							pInstance->mSyncInfo.curVideoInfo.framePts,
+							pInstance->mVideoDiscontinueInfo.discontinuePtsBefore,
+							pInstance->mVideoDiscontinueInfo.discontinuePtsAfter);
+*/
+			if (pInstance->mVideoDiscontinueInfo.discontinuePtsAfter != -1) {
+				int64_t diff = pInstance->mSyncInfo.curVideoInfo.framePts - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
+				if (diff < 0) {
+					if (get_llabs(diff) > 45000) {
+						isDiscontinueDone = 0;
+					}
+				}
+			}
+
+			if (cacheDuration > -45000 && isDiscontinueDone == 1) {
+				if (cacheDuration > 0) {
+					info->cacheDuration = cacheDuration;
+				} else {
+					cacheDuration = 0;
+				}
 				if (pInstance->mVideoDiscontinueInfo.isDiscontinue == 1) {
 					pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsBefore = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore;
 					pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsAfter  = pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
@@ -3056,6 +3104,7 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 						//mediasync_pr_info(0,pInstance,"get_video_cache, cache=%lldms, maybe cache cal have problem, need check more\n", div_u64(info->cacheDuration, 90));
 						info->cacheDuration = 0;
 					}
+
 				} else {
 					info->cacheDuration = 0;
 				}
