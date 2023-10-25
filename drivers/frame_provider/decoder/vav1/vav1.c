@@ -6858,8 +6858,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 #endif
 
 		av1_print(hw, AV1_DEBUG_SEI_DETAIL,
-			"%s aux_data_size:%d inst_cnt:%d vf:%p\n",
-			__func__, pic_config->aux_data_size, vdec->inst_cnt, vf);
+			"%s aux_data_size:%d inst_cnt:%d signal_type:0x%x vf:%p\n",
+			__func__, pic_config->aux_data_size, vdec->inst_cnt, vf->signal_type, vf);
 
 		if (debug & AV1_DEBUG_SEI_DETAIL) {
 			int i = 0;
@@ -7801,11 +7801,14 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		if (debug &
 			AV1_DEBUG_BUFMGR_MORE)
 			dump_aux_buf(hw);
-		set_pic_aux_data(hw, cur_pic_config, 0, 0);
+
 		set_dv_data(hw);
-		if (cm->show_frame &&
-			hw->dv_data_buf != NULL)
-			copy_dv_data(hw, cur_pic_config);
+		if (cm->show_frame) {
+			if ((hw->dv_data_buf != NULL) && (hw->dv_data_size > 0))
+				copy_dv_data(hw, cur_pic_config);
+			else
+				set_pic_aux_data(hw, cur_pic_config, 0, 0);
+		}
 		/* to do:..
 		set_pic_aux_data(hw,
 			cur_pic_config, 0, 2);*/
