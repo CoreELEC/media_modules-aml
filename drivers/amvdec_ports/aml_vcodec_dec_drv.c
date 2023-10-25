@@ -154,9 +154,6 @@ static int fops_vcodec_open(struct file *file)
 	aml_vcodec_dec_set_default_params(ctx);
 	ctx->is_stream_off = true;
 	ctx->set_ext_buf_flg = false;
-	ctx->has_start_resolution_event = false;
-
-
 	ctx->aux_infos.dv_index = 0;
 	ctx->aux_infos.sei_index = 0;
 	ctx->aux_infos.alloc_buffer = aml_alloc_buffer;

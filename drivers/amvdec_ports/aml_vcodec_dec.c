@@ -4447,13 +4447,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
 		ctx->picinfo.dpb_margin,
 		CTX_BUF_TOTAL(ctx));
-	if (!ctx->has_start_resolution_event) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "report the first resolution chang event\n");
-		aml_vdec_dispatch_event(ctx, V4L2_EVENT_SRC_CH_RESOLUTION);
-		ctx->has_start_resolution_event = true;
-	}
 
-
+	aml_vdec_dispatch_event(ctx, V4L2_EVENT_SRC_CH_RESOLUTION);
 
 	mutex_lock(&ctx->state_lock);
 	if (ctx->state == AML_STATE_INIT) {
@@ -4686,7 +4681,6 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		if (!que->streaming &&
 			(vdec_frame_number(ctx->ada_ctx) > 0) &&
 			(ctx->state < AML_STATE_ACTIVE)) {
-			ctx->state = AML_STATE_INIT;
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			ctx->v4l_resolution_change = false;
 			ctx->reset_flag = V4L_RESET_MODE_NORMAL;

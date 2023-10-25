@@ -866,7 +866,6 @@ struct aml_vcodec_ctx {
 	struct aml_buf		*master_buf;
 	bool			enable_di_post;
 	u32			alloc_type;
-	bool			has_start_resolution_event;
 	bool			force_tw_output;
 };
 
