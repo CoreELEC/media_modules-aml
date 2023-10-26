@@ -98,6 +98,8 @@
 #define DECODE_STATUS_PIC_SKIPPED     0x3
 #define DECODE_STATUS_BUF_INVALID     0x4
 
+#define NEW_DRV_VER         1
+
 #define VF_POOL_SIZE		16
 #define DECODE_BUFFER_NUM_MAX	4
 #define WORKSPACE_SIZE		(2 * SZ_1M)
@@ -944,6 +946,7 @@ static void reset(struct vdec_s *vdec)
 
 	atomic_set(&hw->get_num, 0);
 	atomic_set(&hw->put_num, 0);
+	WRITE_VREG(VC1_BUFFEROUT, NEW_DRV_VER); //reuse the register VC1_BUFFEROUT to support new ucode version
 
 	pr_info("vc1: reset.\n");
 }
@@ -1930,8 +1933,8 @@ static int vvc1_prot_init(void)
 
 	WRITE_VREG(VC1_SOS_COUNT, 0);
 	WRITE_VREG(VC1_BUFFERIN, 0);
-	WRITE_VREG(VC1_BUFFEROUT, 1);//identify new driver version
-	vc1_print(0, VC1_DEBUG_DETAIL,"%s VC1_BUFFEROUT 1\n", __func__);
+	WRITE_VREG(VC1_BUFFEROUT, NEW_DRV_VER); //reuse the register VC1_BUFFEROUT to support new ucode version
+	vc1_print(0, VC1_DEBUG_DETAIL,"%s VC1_BUFFEROUT %d\n", __func__, NEW_DRV_VER);
 
 	/* clear mailbox interrupt */
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
