@@ -1,0 +1,1 @@
+obj-m	+=	 media_proxy.o
