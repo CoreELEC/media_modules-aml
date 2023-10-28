@@ -282,7 +282,7 @@ static int vdec_vc1_probe(unsigned long h_vdec,
 
 	if (ctx->stream_mode) {
 		kfifo_put(&inst->vc1_ts_q, bs->timestamp);
-		vdec_write_stream_data_inner(adapt_vdec, (char *)bs->addr, size);
+		vdec_write_stream_data_inner(adapt_vdec, (char *)bs->addr, size, bs->timestamp);
 
 		return 0;
 	}
@@ -370,33 +370,21 @@ static int vdec_vc1_decode(unsigned long h_vdec,
 		if (kfifo_is_full(&inst->vc1_ts_q))
 			return -EAGAIN;
 
-		kfifo_put(&inst->vc1_ts_q, bs->timestamp);
 		stbuf = &vdec->vdec->vbuf;
 		/* calculate the free size of stbuf */
 		free_space = (stbuf->buf_wp >= stbuf->buf_rp) ?
 			(stbuf->buf_size - (stbuf->buf_wp - stbuf->buf_rp)) :
 			(stbuf->buf_rp - stbuf->buf_wp);
-		while (free_space < size) {
-			if (ret >= 20) {
-				v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
-					"%s require %d but stbuf free space(%d) is not enough.\n",
-					__func__, size, free_space);
-				break;
-			} else {
-				ret += 1;
-				v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
-					"%s require %d is big than stbuf free space(%d), waiting for memory enough.\n",
-					__func__, size, free_space);
-				usleep_range(5000, 10000);
-				free_space = (stbuf->buf_wp >= stbuf->buf_rp) ?
-					(stbuf->buf_size - (stbuf->buf_wp - stbuf->buf_rp)) :
-					(stbuf->buf_rp - stbuf->buf_wp);
-			}
+		if (free_space < size) {
+			v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_INPUT,
+				"%s require %d but stbuf free space(%d) is not enough. \n",
+				__func__, size, free_space);
+			return -EAGAIN;
+		} else {
+			kfifo_put(&inst->vc1_ts_q, bs->timestamp);
+			vdec_write_stream_data_inner(vdec, (char *)bs->addr, size, bs->timestamp);
+			return size;
 		}
-
-		vdec_write_stream_data_inner(vdec, (char *)bs->addr, size);
-
-		return size;
 	}
 
 	/*
@@ -449,34 +437,6 @@ static void get_pic_info(struct vdec_vc1_inst *inst,
 		pic->c_bs_sz, pic->c_len_sz);
 }
 
-static int vdec_get_dw_mode(struct vdec_vc1_inst *inst, int dw_mode)
-{
-	u32 valid_dw_mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
-	int w = inst->vsi->pic.coded_width;
-	int h = inst->vsi->pic.coded_height;
-	u32 dw = 0x1; /*1:1*/
-
-	switch (valid_dw_mode) {
-	case 0x100:
-		if (is_over_size(w, h, 1920 * 1088))
-			dw = 0x4; /*1:2*/
-		break;
-	case 0x200:
-		if (is_over_size(w, h, 1920 * 1088))
-			dw = 0x2; /*1:4*/
-		break;
-	case 0x300:
-		if (is_over_size(w, h, 1280 * 768))
-			dw = 0x4; /*1:2*/
-		break;
-	default:
-		dw = valid_dw_mode;
-		break;
-	}
-
-	return dw;
-}
-
 static void vdec_vc1_get_pts(struct vdec_vc1_inst *inst,
 	u64 *pts)
 {
@@ -510,18 +470,14 @@ static int vdec_vc1_get_param(unsigned long h_vdec,
 	case GET_PARAM_DW_MODE:
 	{
 		u32 *mode = out;
-		u32 m = inst->ctx->config.parm.dec.cfg.double_write_mode;
-		if (m <= 16)
-			*mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
-		else
-			*mode = vdec_get_dw_mode(inst, 0);
+		*mode = DM_YUV_ONLY;
 		break;
 	}
 
 	case GET_PARAM_TW_MODE:
 	{
-		u32 *mode = out;
-		*mode = inst->ctx->config.parm.dec.cfg.triple_write_mode;
+		unsigned int* mode = out;
+		*mode = DM_INVALID;
 		break;
 	}
 

@@ -3112,7 +3112,9 @@ static int is_vdec_core_fmt(struct aml_vcodec_ctx *ctx)
 		ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG2 ||
 		ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG4 ||
 		ctx->output_pix_fmt == V4L2_PIX_FMT_AVS ||
-		ctx->output_pix_fmt == V4L2_PIX_FMT_MJPEG)
+		ctx->output_pix_fmt == V4L2_PIX_FMT_MJPEG ||
+		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_G ||
+		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_L)
 		return true;
 
 	return false;

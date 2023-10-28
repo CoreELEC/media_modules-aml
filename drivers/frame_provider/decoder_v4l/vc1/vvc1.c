@@ -269,6 +269,7 @@ struct vdec_vc1_hw_s {
 	atomic_t get_num;
 	s32 ref_use[DECODE_BUFFER_NUM_MAX];
 	s32 buf_use[DECODE_BUFFER_NUM_MAX];
+	s32 vf_ref[DECODE_BUFFER_NUM_MAX];
 	u32 decoding_index;
 	struct pic_info_t pics[DECODE_BUFFER_NUM_MAX];
 	u32 interlace_flag;
@@ -494,24 +495,29 @@ static int vc1_recycle_frame_buffer(struct vdec_vc1_hw_s *hw)
 	int i;
 
 	for (i = 0; i < hw->vf_buf_num_used; ++i) {
-		if (!(hw->ref_use[i]) && !(hw->vfbuf_use[i]) &&
+		if ((hw->vf_ref[i]) &&
+			!(hw->ref_use[i]) &&
 			hw->pics[i].v4l_ref_buf_addr){
 			aml_buf = (struct aml_buf *)hw->pics[i].v4l_ref_buf_addr;
 
 			vc1_print(0, VC1_DEBUG_DETAIL,
-				"%s buf idx: %d dma addr: 0x%lx fb idx: %d \n",
+				"%s buf idx: %d dma addr: 0x%lx fb idx: %d vf_ref %d\n",
 				__func__, i, hw->pics[i].cma_alloc_addr,
-				aml_buf->index);
+				aml_buf->index,
+				hw->vf_ref[i]);
 			if ((ctx->vpp_is_need || ctx->enable_di_post) &&
-				hw->interlace_flag)
+				hw->interlace_flag &&
+				hw->vf_ref[i] < 2)
 				continue;
-
 			aml_buf_put_ref(&ctx->bm, aml_buf);
-
 			spin_lock_irqsave(&hw->lock, flags);
+
 			hw->pics[i].v4l_ref_buf_addr = 0;
 			hw->pics[i].cma_alloc_addr = 0;
-			atomic_add(1, &hw->put_num);
+			while (hw->vf_ref[i]) {
+				atomic_add(1, &hw->put_num);
+				hw->vf_ref[i]--;
+			}
 			spin_unlock_irqrestore(&hw->lock, flags);
 
 			break;
@@ -552,7 +558,8 @@ static bool is_available_buffer(struct vdec_vc1_hw_s *hw)
 
 	/* Wait for the buffer number negotiation to complete. */
 	for (i = 0; i < hw->vf_buf_num_used; ++i) {
-		if ((hw->vfbuf_use[i] == 0) &&
+		if ((hw->vf_ref[i] == 0) &&
+			(hw->vfbuf_use[i] == 0) &&
 			(hw->ref_use[i] == 0) &&
 			!hw->pics[i].v4l_ref_buf_addr) {
 			free_slot++;
@@ -576,38 +583,39 @@ static bool is_available_buffer(struct vdec_vc1_hw_s *hw)
 		return false;
 	}
 
-	for (i = 0; i < hw->vf_buf_num_used; ++i) {
-		if (((hw->interlace_flag) &&
-			atomic_read(&ctx->vpp_cache_num) > 1) ||
-			atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
-			vc1_print(0, VC1_DEBUG_DETAIL,
-				"%s vpp cache: %d full!\n",
-				__func__, atomic_read(&ctx->vpp_cache_num));
+	if (((hw->interlace_flag) &&
+		atomic_read(&ctx->vpp_cache_num) > 1) ||
+		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM ||
+		atomic_read(&ctx->ge2d_cache_num) > 1) {
+		vc1_print(0, 0,
+			"%s vpp or ge2d cache: %d/%d full!\n",
+		__func__, atomic_read(&ctx->vpp_cache_num), atomic_read(&ctx->ge2d_cache_num));
 
+		return false;
+	}
+
+	if (!hw->aml_buf && !aml_buf_empty(&ctx->bm)) {
+		hw->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
+		if (!hw->aml_buf) {
 			return false;
 		}
-		if (!hw->aml_buf && !aml_buf_empty(&ctx->bm)) {
-			hw->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
-			if (!hw->aml_buf) {
-				return false;
-			}
-			hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, vdec);
-			hw->aml_buf->state = FB_ST_DECODER;
-			if (hw->aml_buf->sub_buf[0]) {
-				sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[0];
-				sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
-				sub_buf->state = FB_ST_DECODER;
-			}
-			if (hw->aml_buf->sub_buf[1]) {
-				sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[1];
-				sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
-				sub_buf->state = FB_ST_DECODER;
-			}
+		hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, &vc1_hw);
+		hw->aml_buf->state = FB_ST_DECODER;
+		if (hw->aml_buf->sub_buf[0]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[0];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, &vc1_hw);
+			sub_buf->state = FB_ST_DECODER;
+		}
+		if (hw->aml_buf->sub_buf[1]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[1];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, &vc1_hw);
+			sub_buf->state = FB_ST_DECODER;
 		}
 	}
 
 	if (hw->aml_buf) {
 		free_count++;
+		free_count += aml_buf_ready_num(&ctx->bm);
 		vc1_print(0, VC1_DEBUG_DETAIL,
 			"%s get fb: 0x%lx fb idx: %d\n",
 			__func__, hw->aml_buf, hw->aml_buf->index);
@@ -806,8 +814,10 @@ static int v4l_alloc_buff_config_canvas(struct vdec_vc1_hw_s *hw, int i)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-	if (!aml_buf)
+	if (!aml_buf) {
+		vc1_print(0, 0, "%s not get aml_buf \n", __func__);
 		return -1;
+	}
 
 	if (!hw->frame_width || !hw->frame_height) {
 		struct vdec_pic_info pic;
@@ -937,6 +947,7 @@ static void reset(struct vdec_s *vdec)
 		hw->vfbuf_use[i] = 0;
 		hw->ref_use[i] = 0;
 		hw->buf_use[i] = 0;
+		hw->vf_ref[i] = 0;
 	}
 
 	hw->refs[0]		= -1;
@@ -958,9 +969,11 @@ static int find_free_buffer(struct vdec_vc1_hw_s *hw)
 	for (i = 0; i < hw->vf_buf_num_used; i++) {
 		vc1_print(0, VC1_DEBUG_DETAIL,"%s: i %d, vfbuf_use %d, ref_use %d, buf_use %d\n", __func__,
 			i, hw->vfbuf_use[i], hw->ref_use[i], hw->buf_use[i]);
-		if ((hw->vfbuf_use[i] == 0) &&
+		if ((hw->vf_ref[i] == 0) &&
+			(hw->vfbuf_use[i] == 0) &&
 			(hw->ref_use[i] == 0) &&
-			(hw->buf_use[i] == 0)) {
+			(hw->buf_use[i] == 0) &&
+			!hw->pics[i].v4l_ref_buf_addr) {
 			break;
 		}
 	}
@@ -1103,6 +1116,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		set_aspect_ratio(vf, READ_VREG(VC1_PIC_RATIO));
 
 		hw->vfbuf_use[buffer_index]++;
+		hw->vf_ref[buffer_index]++;
 		vf->v4l_mem_handle = hw->pics[buffer_index].v4l_ref_buf_addr;
 		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 		vf->pts_us64 = pts_us64;
@@ -1186,6 +1200,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		set_aspect_ratio(vf, READ_VREG(VC1_PIC_RATIO));
 
 		hw->vfbuf_use[buffer_index]++;
+		hw->vf_ref[buffer_index]++;
 		vf->v4l_mem_handle = hw->pics[buffer_index].v4l_ref_buf_addr;
 		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 		vf->pts_us64 = pts_us64;
@@ -1303,6 +1318,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		set_aspect_ratio(vf, READ_VREG(VC1_PIC_RATIO));
 
 		hw->vfbuf_use[buffer_index]++;
+		hw->vf_ref[buffer_index]++;
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s:  progressive vfbuf_use[%d] %d\n",
 			__func__, buffer_index, hw->vfbuf_use[buffer_index]);
 
@@ -1424,7 +1440,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 		hw->frame_width = READ_VREG(VC1_PIC_INFO) & 0x3fff;
 		hw->frame_height = (READ_VREG(VC1_PIC_INFO) >> 14) & 0x3fff;
 		hw->interlace_flag = (READ_VREG(VC1_PIC_INFO) >> 28) & 0x1;
-		vc1_print(0, 0, "%s: SEQ_HEADER_DONE frame_width %d/%d, interlace_flag %d\n", __func__,
+		vc1_print(0, VC1_DEBUG_DETAIL, "%s: SEQ_HEADER_DONE frame_width %d/%d, interlace_flag %d\n", __func__,
 			hw->frame_width, hw->frame_height, hw->interlace_flag);
 		if (!v4l_res_change(hw)) {
 			if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
@@ -1990,18 +2006,19 @@ static void vvc1_local_init(bool is_reset)
 	memset(&frm, 0, sizeof(frm));
 
 	if (!is_reset) {
-	hw->refs[0] = -1;
-	hw->refs[1] = -1;
-	hw->throw_pb_flag = 1;
-	hw->vf_buf_num_used = DECODE_BUFFER_NUM_MAX;
-	if (hw->vf_buf_num_used > DECODE_BUFFER_NUM_MAX)
+		hw->refs[0] = -1;
+		hw->refs[1] = -1;
+		hw->throw_pb_flag = 1;
 		hw->vf_buf_num_used = DECODE_BUFFER_NUM_MAX;
+		if (hw->vf_buf_num_used > DECODE_BUFFER_NUM_MAX)
+			hw->vf_buf_num_used = DECODE_BUFFER_NUM_MAX;
 
-	for (i = 0; i < hw->vf_buf_num_used; i++) {
-		hw->vfbuf_use[i] = 0;
-		hw->buf_use[i] = 0;
-		hw->ref_use[i] = 0;
-	}
+		for (i = 0; i < hw->vf_buf_num_used; i++) {
+			hw->vfbuf_use[i] = 0;
+			hw->buf_use[i] = 0;
+			hw->ref_use[i] = 0;
+			hw->vf_ref[i] = 0;
+		}
 
 		INIT_KFIFO(display_q);
 		INIT_KFIFO(recycle_q);
@@ -2089,25 +2106,6 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 		schedule_work(&error_wd_work);
 
 	vc1_set_rp();
-
-	while (!kfifo_is_empty(&recycle_q)/* && (READ_VREG(VC1_BUFFERIN) == 0)*/) {
-		struct vframe_s *vf;
-
-		if (kfifo_get(&recycle_q, &vf)) {
-			if ((vf->index < hw->vf_buf_num_used) &&
-			 (--hw->vfbuf_use[vf->index] == 0)) {
-				hw->buf_use[vf->index]--;
-				vc1_print(0, VC1_DEBUG_DETAIL,	"%s WRITE_VREG(VC1_BUFFERIN, 0x%x) for vf index of %d,  buf_use %d\n",
-					__func__, ~(1 << vf->index), vf->index, hw->buf_use[vf->index]);
-				WRITE_VREG(VC1_BUFFERIN, ~(1 << vf->index));
-				vf->index = hw->vf_buf_num_used;
-			}
-			if (pool_index(vf) == cur_pool_idx)
-				kfifo_put(&newframe_q, (const struct vframe_s *)vf);
-		}
-
-	}
-
 	wp = READ_VREG(VLD_MEM_VIFIFO_WP);
 	rp = READ_VREG(VLD_MEM_VIFIFO_RP);
 
