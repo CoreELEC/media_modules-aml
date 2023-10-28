@@ -314,6 +314,12 @@ int vdec_get_dec_mode(u32 w, u32 h, int dec_mode)
 		if (is_over_size(w, h, 1280 * 768))
 			dm = 0x4; /*1:2*/
 		break;
+	case DM_YUV_AUTO_14_12_AVBC:
+		if (is_over_size(w, h, 1920 * 1088))
+			dm = 0x3; /*1:4*/
+		else if (is_over_size(w, h, 960 * 576))
+			dm = 0x4; /*1:2*/
+		break;
 	default:
 		break;
 	}

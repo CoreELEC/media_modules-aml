@@ -5188,6 +5188,7 @@ static int check_dec_cfginfo(struct aml_vcodec_ctx *ctx, struct aml_vdec_cfg_inf
 		cfg->double_write_mode != DM_AVBC_1_1 &&
 		cfg->double_write_mode != DM_YUV_AUTO_1_2_AVBC &&
 		cfg->double_write_mode != DM_YUV_AUTO_1_4_AVBC &&
+		cfg->double_write_mode != DM_YUV_AUTO_14_12_AVBC &&
 		cfg->double_write_mode != DM_YUV_1_1_10BIT_AVBC &&
 		cfg->double_write_mode != DM_YUV_1_4_10BIT_AVBC &&
 		cfg->double_write_mode != DM_YUV_1_2_10BIT_AVBC &&
