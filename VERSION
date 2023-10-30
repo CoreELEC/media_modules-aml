@@ -5,6 +5,17 @@ DevelopingChangeId=Ibfd8ecfe687b2d9ea907f3a4dfc202501de41502
 
 
 #history version
+#V6.7 Release Notes
+#Release_ChangeId_V6_7=Iabfa01c63da558d842d3252c7612559fa830ec7d
+#New feature detail information:
+#H265 dual-core mosaic mode development
+#H264\H265 save one output buffer optimization
+#Add T5D  AV1 fg support
+#Encoder bringup of C1
+#Optimization H264 software decoding time
+#V4ldec supports p010 decoding output
+#Optimized for redundant decoding memory usage
+#Decoder bringup of txhd2
 #V6.6 Release Notes
 #Release_ChangeId_V6_6=I7906e7fb1fc9cd2ae2f5e3b35a85146077f647ed
 #V6.5 Release Notes
