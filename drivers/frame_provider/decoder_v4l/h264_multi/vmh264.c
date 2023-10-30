@@ -6737,16 +6737,19 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 			get_picture_qos_info(p_H264_Dpb->mVideo.dec_picture);
 			hw->gvs.frame_dur = hw->frame_dur;
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
-			DEL_EXIST(hw,
-				p_H264_Dpb->mVideo.dec_picture) = 0;
-			if (vdec->master) {
-				struct vdec_h264_hw_s *hw_ba =
-				(struct vdec_h264_hw_s *)
-					vdec->master->private;
-				if (hw_ba->last_dec_picture)
-					DEL_EXIST(hw_ba,
-						hw_ba->last_dec_picture)
-						= 1;
+			if (p_H264_Dpb->mVideo.dec_picture->buf_spec_num >= 0 &&
+				p_H264_Dpb->mVideo.dec_picture->buf_spec_num < BUFSPEC_POOL_SIZE) {
+				DEL_EXIST(hw,
+					p_H264_Dpb->mVideo.dec_picture) = 0;
+				if (vdec->master) {
+					struct vdec_h264_hw_s *hw_ba =
+					(struct vdec_h264_hw_s *)
+						vdec->master->private;
+					if (hw_ba->last_dec_picture)
+						DEL_EXIST(hw_ba,
+							hw_ba->last_dec_picture)
+							= 1;
+				}
 			}
 #endif
 			mutex_lock(&hw->chunks_mutex);
