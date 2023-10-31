@@ -7503,7 +7503,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			(hw->cur_picture_slice_count > 1) &&
 			((hw->multi_slice_pic_flag == 1) ||
 			((hw->multi_slice_pic_flag == 0) && (first_mb_in_slice == 0)))) {
-			dpb_print(DECODE_ID(hw), 0,
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s MULTI_SLICE_DETECT (check_count %d slice_count %d cur_slice_count %d flag %d), WRONG_MULTI_SLICE detected, insert picture\n",
 			__func__,
 			hw->multi_slice_pic_check_count,
