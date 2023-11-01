@@ -2165,6 +2165,12 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 
 		pr_info("AMSTREAM_SET_VIDEO_ID vdec %p video_id: %d\n", priv->vdec, parm.data_32);
 		break;
+	case AMSTREAM_SET_FCC_MODE:
+		if (priv->vdec) {
+			vf_notify_receiver(priv->vdec->vf_provider_name, VFRAME_EVENT_PROVIDER_FCC, NULL);
+			pr_info("AMSTREAM_SET_FCC_MODE vdec %p set fcc flag\n", priv->vdec);
+		}
+		break;
 	default:
 		r = -ENOIOCTLCMD;
 		break;
