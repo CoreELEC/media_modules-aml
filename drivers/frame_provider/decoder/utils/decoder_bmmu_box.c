@@ -233,10 +233,10 @@ int decoder_bmmu_box_alloc_idx(void *handle, int idx, int size, int aligned_2n,
 	mm = decoder_bmmu_box_get_mm_from_idx(box, idx);
 	if (mm) {
 		int invalid = 0;
-		int keeped = 0;
+		int kept = 0;
 
-		keeped = is_codec_mm_keeped(mm);
-		if (!keeped) {
+		kept = is_codec_mm_kept(mm);
+		if (!kept) {
 			if (mm->page_count * PAGE_SIZE < size) {
 				/*size is small. */
 				invalid = 1;
@@ -446,17 +446,17 @@ int decoder_bmmu_box_alloc_idx_wait(
 {
 	int have_space;
 	int ret = -1;
-	int keeped = 0;
+	int kept = 0;
 
 	if (decoder_bmmu_box_get_mem_size(handle, idx) >= size) {
 		struct decoder_bmmu_box *box = handle;
 		struct codec_mm_s *mm;
 		mutex_lock(&box->mutex);
 		mm = decoder_bmmu_box_get_mm_from_idx(box, idx);
-		keeped = is_codec_mm_keeped(mm);
+		kept = is_codec_mm_kept(mm);
 		mutex_unlock(&box->mutex);
 
-		if (!keeped)
+		if (!kept)
 			return 0;/*have alloced memory before.*/
 	}
 	have_space = decoder_bmmu_box_check_and_wait_size(
