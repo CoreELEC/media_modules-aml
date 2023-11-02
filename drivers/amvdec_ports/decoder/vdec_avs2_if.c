@@ -120,7 +120,6 @@ struct vdec_avs2_inst {
 	struct vdec_comp_buf_info comp_info;
 };
 
-
 static int vdec_write_nalu(struct vdec_avs2_inst *inst,
 	u8 *buf, u32 size, u64 ts, chunk_free free);
 
@@ -634,7 +633,8 @@ static void set_param_ps_info(struct vdec_avs2_inst *inst,
 	pic->coded_width	= ps->coded_width;
 	pic->coded_height	= ps->coded_height;
 
-	pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw, 64);
+	pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw, 64,
+		is_hevc_align32(0) ? 32 : 64);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	/* calc DPB size */
@@ -646,7 +646,7 @@ static void set_param_ps_info(struct vdec_avs2_inst *inst,
 	pic->bitdepth		= ps->bitdepth;
 
 	if (tw) {
-		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, pic->coded_height, tw, 64);
+		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, pic->coded_height, tw, 64, 64);
 		pic->c_len_sz_tw	= pic->y_len_sz_tw >> 1;
 	}
 
@@ -717,12 +717,13 @@ static void set_cfg_info(struct vdec_avs2_inst *inst,
 		new_cfg->triple_write_mode);
 
 	if (old_cfg->double_write_mode != dw_new) {
-		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw_new, 64);
+		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw_new, 64,
+			is_hevc_align32(0) ? 32 : 64);
 		pic->c_len_sz		= pic->y_len_sz >> 1;
 	}
 
 	if (old_cfg->triple_write_mode != tw_new) {
-		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, pic->coded_height, tw_new, 64);
+		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, pic->coded_height, tw_new, 64, 64);
 		pic->c_len_sz_tw	= pic->y_len_sz_tw >> 1;
 	}
 

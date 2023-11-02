@@ -92,6 +92,8 @@
 #define AML_V4L2_GET_INST_ID (V4L2_CID_USER_AMLOGIC_BASE + 8)
 #define AML_V4L2_SET_STREAM_MODE (V4L2_CID_USER_AMLOGIC_BASE + 9)
 #define AML_V4L2_SET_ES_DMABUF_TYPE (V4L2_CID_USER_AMLOGIC_BASE + 10)
+#define AML_V4L2_GET_WIDTH_ALIGN (V4L2_CID_USER_AMLOGIC_BASE + 11)
+
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
@@ -4772,6 +4774,21 @@ static void m2mops_vdec_job_abort(void *priv)
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "%s\n", __func__);
 }
 
+static int get_width_align(struct aml_vcodec_ctx *ctx)
+{
+	int align = 64;
+	u32 dw;
+
+	vdec_v4l_get_dw_mode(ctx, &dw);
+
+	if (is_hevc_align32(0) && (!is_vdec_core_fmt(ctx) ||
+		(ctx->output_pix_fmt == V4L2_PIX_FMT_H264 &&
+		dw != DM_YUV_ONLY)))
+		align = 32;
+
+	return align;
+}
+
 static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct aml_vcodec_ctx *ctx = ctrl_to_ctx(ctrl);
@@ -4815,6 +4832,11 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case AML_V4L2_GET_INST_ID:
 		ctrl->val = ctx->id;
+		break;
+	case AML_V4L2_GET_WIDTH_ALIGN:
+		ctrl->val = get_width_align(ctx);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+			"width_align: %d\n", ctrl->val);
 		break;
 	default:
 		ret = -EINVAL;
@@ -5006,6 +5028,18 @@ static const struct v4l2_ctrl_config ctrl_gt_decoder_info = {
 	.dims		= { sizeof(struct aml_decoder_status_info) },
 };
 
+static const struct v4l2_ctrl_config ctrl_get_width_align = {
+	.name	= "width align",
+	.id	= AML_V4L2_GET_WIDTH_ALIGN,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+	.min	= 0,
+	.max	= 256,
+	.step	= 1,
+	.def	= 0,
+};
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -5093,6 +5127,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_get_inst_id, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_get_width_align, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;

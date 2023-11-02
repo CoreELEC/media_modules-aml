@@ -358,11 +358,11 @@ static int vdec_size_scale(int length, int dec_mode)
 	return ret;
 }
 
-u32 vdec_get_plane_size(u32 w, u32 h, int dec_mode, int align)
+u32 vdec_get_plane_size(u32 w, u32 h, int dec_mode, int align_h, int align_w)
 {
 	u32 dm = vdec_get_dec_mode(w, h, dec_mode);
-	u32 len = ALIGN(vdec_size_scale(w, dm), align) *
-		ALIGN(vdec_size_scale(h, dm), align);
+	u32 len = ALIGN(vdec_size_scale(w, dm), align_w) *
+		ALIGN(vdec_size_scale(h, dm), align_h);
 
 	return len << is_output_p010(dec_mode);
 }

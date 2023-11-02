@@ -1030,7 +1030,8 @@ static void set_cfg_info(struct vdec_h264_inst *inst,
 		new_cfg->double_write_mode);
 
 	if (old_cfg->double_write_mode != dw_new) {
-		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw_new, 64);
+		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw_new, 64,
+			(is_hevc_align32(0) && dw_new != DM_YUV_ONLY) ? 32 : 64);
 		pic->c_len_sz		= pic->y_len_sz >> 1;
 	}
 
@@ -1059,7 +1060,8 @@ static void set_param_ps_info(struct vdec_h264_inst *inst,
 	pic->coded_width 	= ps->coded_width;
 	pic->coded_height 	= ps->coded_height;
 
-	pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw, 64);
+	pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw, 64,
+		(is_hevc_align32(0) && dw != DM_YUV_ONLY) ? 32 : 64);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 	pic->profile_idc	= ps->profile;
 	pic->field		= ps->field;

@@ -24,6 +24,7 @@
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
 #include "../stream_input/amports/streambuf.h"
+#include "../common/chips/decoder_cpu_ver_info.h"
 
 #define AML_VIDEO_MAGIC CODEC_MODE('A', 'M', 'L', 'V')
 

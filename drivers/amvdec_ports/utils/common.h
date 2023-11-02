@@ -208,5 +208,5 @@ int vdec_get_size_ratio(int dec_mode);
 
 int vdec_get_dec_mode(u32 w, u32 h, int dec_mode);
 
-u32 vdec_get_plane_size(u32 w, u32 h, int dec_mode, int align);
+u32 vdec_get_plane_size(u32 w, u32 h, int dec_mode, int align_h, int align_w);
 #endif
