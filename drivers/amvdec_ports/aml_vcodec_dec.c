@@ -5191,7 +5191,8 @@ static int check_dec_cfginfo(struct aml_vcodec_ctx *ctx, struct aml_vdec_cfg_inf
 		cfg->double_write_mode != DM_YUV_1_1_10BIT_AVBC &&
 		cfg->double_write_mode != DM_YUV_1_4_10BIT_AVBC &&
 		cfg->double_write_mode != DM_YUV_1_2_10BIT_AVBC &&
-		cfg->double_write_mode != DM_YUV_1_8_10BIT_AVBC) {
+		cfg->double_write_mode != DM_YUV_1_8_10BIT_AVBC &&
+		cfg->double_write_mode != DM_YUV_14_11_10BIT_AVBC) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "Invalid DW:0x%x\n", cfg->double_write_mode);
 		return -1;
 	}
@@ -5204,8 +5205,9 @@ static int check_dec_cfginfo(struct aml_vcodec_ctx *ctx, struct aml_vdec_cfg_inf
 		cfg->triple_write_mode != DM_YUV_1_1_10BIT_AVBC &&
 		cfg->triple_write_mode != DM_YUV_1_4_10BIT_AVBC &&
 		cfg->triple_write_mode != DM_YUV_1_2_10BIT_AVBC &&
-		cfg->triple_write_mode != DM_YUV_1_8_10BIT_AVBC) {
-		pr_err("Invalid TW:0x%x\n", cfg->triple_write_mode);
+		cfg->triple_write_mode != DM_YUV_1_8_10BIT_AVBC &&
+		cfg->triple_write_mode != DM_YUV_14_11_10BIT_AVBC) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "Invalid TW:0x%x\n", cfg->triple_write_mode);
 		return -1;
 	}
 

@@ -176,6 +176,8 @@ enum vdec_dec_mode {
 	DM_YUV_1_4_10BIT_AVBC	= 0x10003,
 	DM_YUV_1_2_10BIT_AVBC	= 0x10004,
 	DM_YUV_1_8_10BIT_AVBC	= 0x10008,
+	/* (0~1080] 1/1, (1080~4K] 1/16 */
+	DM_YUV_14_11_10BIT_AVBC	= 0x10200,
 };
 
 //fmt
