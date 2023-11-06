@@ -744,7 +744,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 				offsetAbs = abs(cur_offset - ptn->offset);
 
 				// Only if ptn node is deadly expired, we increase the drop count.
-				if (ptn->offset == 0xFFFFFFFF || ptn->offset <= pInstance->mLastCheckoutCurOffset) {
+				if (ptn->offset == 0xFFFFFFFF || ptn->offset < cur_offset) {
 					if ((ptn->pts_64 < pInstance->mLastCheckoutPts64) || (ptn->pts == -1)) {
 						ptn->expired_count --;
 					}
@@ -917,7 +917,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 			}
 		}
 
-		if (!find && pInstance->mTrickMode == 1) {//i_only, not found pts, need retry!
+		if (!find && (pInstance->mTrickMode == 1 || !pInstance->mPtsCheckoutStarted)) {//i_only, not found pts, need retry!
 			i = 0;
 			find_frame_num = 0;
 			expected_offset_diff = 10000;
