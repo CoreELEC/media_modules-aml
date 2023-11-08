@@ -999,6 +999,9 @@ struct vdec_h264_hw_s {
 	u32 consume_byte;
 	u32 reserved_byte;
 	u32 sei_present_flag;
+	u32 latest_head_done_rp;
+	u32 latest_dec_status;
+	u32 no_picdone_again_flag;
 };
 
 static u32 again_threshold;
@@ -7053,6 +7056,8 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 	u32 index;
 	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
 
+	hw->no_picdone_again_flag = DEC_RESULT_DONE;
+
 	if (vdec->mvfrm)
 		vdec->mvfrm->hw_decode_time =
 		local_clock() - vdec->mvfrm->hw_decode_start;
@@ -7377,6 +7382,24 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 	else if (dec_dpb_status == H264_AUX_DATA_READY)
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_AUX_START);
 
+	if (hw->latest_dec_status == H264_SLICE_HEAD_DONE) {
+		if (dec_dpb_status == H264_CONFIG_REQUEST) {
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+				"%s, cur status 0x%x, latest 0x%x\n",
+				__func__, dec_dpb_status, hw->latest_dec_status);
+			amvdec_stop();
+			if (hw->mmu_enable)
+				amhevc_stop();
+			hw->latest_dec_status = dec_dpb_status;
+			hw->dec_result = DEC_RESULT_AGAIN;
+			hw->no_picdone_again_flag = DEC_RESULT_AGAIN;
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
+		}
+	}
+	if (dec_dpb_status != H264_SEI_DATA_READY)
+		hw->latest_dec_status = dec_dpb_status;
+
 	if (dec_dpb_status == H264_CONFIG_REQUEST) {
 #if 1
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
@@ -7483,8 +7506,20 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		unsigned short first_mb_in_slice;
 		unsigned int decode_mb_count, mby_mbx;
 		struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
+		u32 cur_rp = READ_VREG(VLD_MEM_VIFIFO_RP);
+
 		reset_process_time(hw);
 		hw->frmbase_cont_flag = 0;
+
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"head done cur rp %x, latest rp %x, again %d\n", cur_rp, hw->latest_head_done_rp, hw->no_picdone_again_flag);
+		if ((hw->no_picdone_again_flag == DEC_RESULT_AGAIN) && (cur_rp <= hw->latest_head_done_rp)) {
+			vh264_pic_done_proc(vdec);
+			hw->dec_result = DEC_RESULT_DONE;
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
+		}
+		hw->latest_head_done_rp = cur_rp;
 
 		if ((pic != NULL) && (pic->mb_aff_frame_flag == 1))
 			first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3] * 2;
@@ -7493,7 +7528,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 #ifdef DETECT_WRONG_MULTI_SLICE
 		hw->cur_picture_slice_count++;
-
 
 		if ((hw->error_proc_policy & 0x10000) &&
 			(hw->cur_picture_slice_count > 1) &&
@@ -7528,7 +7562,26 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			} else if (hw->cur_picture_slice_count > hw->last_picture_slice_count) {
 				vh264_pic_done_proc(vdec);
 				//if (p_H264_Dpb->mDPB.used_size == p_H264_Dpb->mDPB.size) {
-				if (!have_free_buf_spec(vdec)) {
+				if (have_free_buf_spec(vdec)) {
+					int j;
+					for (j = 0; j < hw->dpb.mDPB.size; j++) {
+						i = get_buf_spec_by_canvas_pos(hw, j);
+						if (i < 0)
+							break;
+
+						if (!hw->mmu_enable &&
+							hw->buffer_spec[i].cma_alloc_addr)
+							config_decode_canvas(hw, i);
+						if (hw->mmu_enable && hw->double_write_mode)
+							config_decode_canvas_ex(hw, i);
+					}
+					if (h264_debug_flag & PRINT_FLAG_DPB_DETAIL) {
+						dpb_print(DECODE_ID(hw), 0,
+							"%s, configed canvas for buf num %d\n",
+							__func__, j);
+						dump_bufspec(hw, __func__);
+					}
+				} else {
 					dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "dpb full, wait buffer\n");
 					p_H264_Dpb->mVideo.pre_frame_num = hw->first_pre_frame_num;
 					hw->last_picture_slice_count = hw->cur_picture_slice_count;
@@ -11140,6 +11193,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			size);
 
 	hw->dec_result = DEC_RESULT_NONE;
+	hw->latest_dec_status = 0;
 	start_process_time(hw);
 	if (vdec->mc_loaded) {
 			/*firmware have load before,
