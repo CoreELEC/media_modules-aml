@@ -236,7 +236,7 @@ static int vdec_mpeg4_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"mpeg4 Instance >> %lx\n", (ulong) inst);
 
 	return 0;
@@ -513,7 +513,7 @@ static int vdec_mpeg4_get_param(unsigned long h_vdec,
 	}
 
 	default:
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);
 		ret = -EINVAL;
 	}
@@ -528,7 +528,7 @@ static void set_param_ps_info(struct vdec_mpeg4_inst *inst,
 	struct vdec_mpeg4_dec_info *dec = &inst->vsi->dec;
 	struct v4l2_rect *rect = &inst->vsi->crop;
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "%s in\n", __func__);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT, "%s in\n", __func__);
 	/* fill visible area size that be used for EGL. */
 	pic->visible_width	= ps->visible_width;
 	pic->visible_height	= ps->visible_height;
@@ -579,7 +579,7 @@ static void set_pic_info(struct vdec_mpeg4_inst *inst,
 static void set_param_post_event(struct vdec_mpeg4_inst *inst, u32 *event)
 {
 	aml_vdec_dispatch_event(inst->ctx, *event);
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"mpeg4 post event: %d\n", *event);
 }
 

@@ -88,8 +88,8 @@ int decoder_mmu_box_sc_check(void *handle, int is_tvp)
 {
 	struct decoder_mmu_box *box = handle;
 	if (!box) {
-			pr_err("mmu box NULL !!!\n");
-			return 0;
+		pr_debug("mmu box NULL !!!\n");
+		return 0;
 	}
 	return codec_mm_scatter_size(is_tvp);
 }

@@ -1009,7 +1009,7 @@ int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp)
 
 	sched_setscheduler_nocheck(vpp->task, SCHED_FIFO, &param);
 
-	v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_PRINFO, "vpp wrapper reset.\n");
+	v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_PROT, "vpp wrapper reset.\n");
 
 	return 0;
 
@@ -1200,7 +1200,7 @@ int aml_v4l2_vpp_init(
 
 	*vpp_handle = vpp;
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"vpp_wrapper init bsize:%d, di(i:%d, o:%d), wkm:%x, bm:%x, fmt:%x, drm:%d, prog:%d, byp:%d, local:%d, NR:%d\n",
 		vpp->buf_size,
 		vpp->di_ibuf_num,

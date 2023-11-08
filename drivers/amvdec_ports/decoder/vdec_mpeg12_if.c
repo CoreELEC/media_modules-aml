@@ -238,7 +238,7 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"mpeg12 Instance >> %lx\n", (ulong) inst);
 
 	return 0;
@@ -493,7 +493,7 @@ static void get_param_config_info(struct vdec_mpeg12_inst *inst,
 
 	parms->parms_status |= inst->parms.parms_status;
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"parms status: %u\n", parms->parms_status);
 }
 
@@ -614,7 +614,7 @@ static void set_param_hdr_info(struct vdec_mpeg12_inst *inst,
 			V4L2_CONFIG_PARM_DECODE_HDRINFO;
 		aml_vdec_dispatch_event(inst->ctx,
 			V4L2_EVENT_SRC_CH_HDRINFO);
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 			"mpeg12 set HDR infos\n");
 	}
 }
@@ -622,7 +622,7 @@ static void set_param_hdr_info(struct vdec_mpeg12_inst *inst,
 static void set_param_post_event(struct vdec_mpeg12_inst *inst, u32 *event)
 {
 	aml_vdec_dispatch_event(inst->ctx, *event);
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"mpeg2 post event: %d\n", *event);
 }
 

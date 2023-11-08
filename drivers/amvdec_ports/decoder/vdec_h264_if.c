@@ -351,7 +351,7 @@ static int vdec_h264_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_BUFMGR,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"H264 Instance >> %lx", (ulong) inst);
 
 	return 0;
@@ -747,7 +747,7 @@ static int vdec_write_nalu(struct vdec_h264_inst *inst,
 		goto err;
 
 	nal_type = AVC_NAL_TYPE(buf[nalu_pos]);
-	//v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "NALU type: %d, size: %u\n", nal_type, size);
+	//v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT, "NALU type: %d, size: %u\n", nal_type, size);
 
 	if (nal_type == NAL_H264_SPS && !is_combine) {
 		if (inst->vsi->head_offset + size > HEADER_BUFFER_SIZE) {
@@ -839,7 +839,7 @@ static bool monitor_res_change(struct vdec_h264_inst *inst, u8 *buf, u32 size)
 		inst->vsi->pic.coded_height) ||
 		(inst->vsi->pic.profile_idc !=
 		inst->vsi->cur_pic.profile_idc))) {
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO, "res change\n");
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT, "res change\n");
 		inst->vsi->cur_pic = inst->vsi->pic;
 		return true;
 	}
@@ -1110,7 +1110,7 @@ static void set_pic_info(struct vdec_h264_inst *inst,
 static void set_param_post_event(struct vdec_h264_inst *inst, u32 *event)
 {
 	aml_vdec_dispatch_event(inst->ctx, *event);
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"H264 post event: %d\n", *event);
 }
 static void set_param_comp_buf_info(struct vdec_h264_inst *inst,

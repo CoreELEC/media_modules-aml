@@ -838,7 +838,7 @@ int aml_v4l2_ge2d_init(
 
 	*ge2d_handle = ge2d;
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"GE2D_CFG bsize:%d, wkm:%x, bm:%x, drm:%d\n",
 		ge2d->buf_size,
 		ge2d->work_mode,

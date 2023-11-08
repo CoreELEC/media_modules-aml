@@ -201,7 +201,7 @@ static int vdec_vc1_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"vc1 Instance >> %lx\n", (ulong) inst);
 
 	return 0;
@@ -511,7 +511,7 @@ static void set_pic_info(struct vdec_vc1_inst *inst,
 static void set_param_post_event(struct vdec_vc1_inst *inst, u32 *event)
 {
 	aml_vdec_dispatch_event(inst->ctx, *event);
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"vc1 post event: %d\n", *event);
 }
 
@@ -563,7 +563,7 @@ static void set_param_reset_event(struct vdec_vc1_inst *inst)
 	/* reset fifo */
 	kfifo_reset(&inst->vc1_ts_q);
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"vc1 instance reset. \n");
 }
 

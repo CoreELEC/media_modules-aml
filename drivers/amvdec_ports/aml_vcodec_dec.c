@@ -1619,12 +1619,12 @@ void stop_pipeline(struct aml_vcodec_ctx *ctx)
 {
 	if (ctx->ge2d) {
 		aml_v4l2_ge2d_thread_stop(ctx->ge2d);
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "ge2d stop.\n");
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "ge2d stop.\n");
 	}
 
 	if (ctx->vpp) {
 		aml_v4l2_vpp_thread_stop(ctx->vpp);
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "vpp stop\n");
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "vpp stop\n");
 	}
 }
 
@@ -2240,7 +2240,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 						return ret;
 					}
 
-					v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+					v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 						"vpp_wrapper instance count: %d\n",
 						atomic_read(&ctx->dev->vpp_count));
 				}
@@ -2858,7 +2858,8 @@ static int vidioc_vdec_event_unsubscribe(struct v4l2_fh *fh,
 	return v4l2_event_unsubscribe(fh, sub);
 }
 
-static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
+static int vidioc_try_fmt(struct aml_vcodec_ctx *ctx, struct v4l2_format *f,
+	struct aml_video_fmt *fmt)
 {
 	int i;
 	struct v4l2_pix_format_mplane *pix_mp = &f->fmt.pix_mp;
@@ -2877,7 +2878,7 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
 				if (pix_mp->field == V4L2_FIELD_ANY)
 					pix_mp->field = V4L2_FIELD_NONE;
 
-				pr_info("%s, field: %u, fmt: %x\n",
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, field: %u, fmt: %x\n",
 					__func__, pix_mp->field,
 					pix_mp->pixelformat);
 			}
@@ -2920,7 +2921,7 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct aml_video_fmt *fmt)
 				if (pix->field == V4L2_FIELD_ANY)
 					pix->field = V4L2_FIELD_NONE;
 
-				pr_info("%s, field: %u, fmt: %x\n",
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, field: %u, fmt: %x\n",
 					__func__, pix->field,
 					pix->pixelformat);
 			}
@@ -2980,7 +2981,7 @@ static int vidioc_try_fmt_vid_cap_out(struct file *file, void *priv,
 		fmt = aml_vdec_find_format(f);
 	}
 
-	vidioc_try_fmt(f, fmt);
+	vidioc_try_fmt(ctx, f, fmt);
 
 	q_data = aml_vdec_get_q_data(ctx, f->type);
 	if (!q_data)
@@ -3318,7 +3319,7 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 	}
 
 	q_data->fmt = fmt;
-	vidioc_try_fmt(f, q_data->fmt);
+	vidioc_try_fmt(ctx, f, q_data->fmt);
 
 	if (V4L2_TYPE_IS_OUTPUT(f->type) && ctx->drv_handle && ctx->receive_cmd_stop) {
 		ctx->state = AML_STATE_IDLE;
@@ -4052,7 +4053,7 @@ void aml_v4l_vpp_release_early(struct aml_vcodec_ctx * ctx)
 		atomic_dec(&ctx->dev->vpp_count);
 		ctx->vpp = NULL;
 
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 			"vpp destroy inst count:%d.\n",
 			atomic_read(&ctx->dev->vpp_count));
 	}
@@ -4069,7 +4070,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 		atomic_dec(&ctx->dev->vpp_count);
 		ctx->vpp = NULL;
 
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 			"vpp destroy inst count:%d.\n",
 			atomic_read(&ctx->dev->vpp_count));
 	}
@@ -4077,7 +4078,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 	if (ctx->ge2d) {
 		aml_v4l2_ge2d_destroy(ctx->ge2d);
 
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 			"ge2d destroy.\n");
 	}
 
@@ -4539,7 +4540,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 				dma = vb->planes[i].dbuf;
 
 				if (!dmabuf_is_uvm(dma))
-					v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "non-uvm dmabuf\n");
+					v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "non-uvm dmabuf\n");
 			}
 		}
 	}
@@ -4682,7 +4683,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			ctx->v4l_resolution_change = false;
 			ctx->reset_flag = V4L_RESET_MODE_NORMAL;
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 				"force reset to drop es frames.\n");
 			wake_up_interruptible(&ctx->cap_wq);
 			aml_vdec_reset(ctx);
@@ -4726,7 +4727,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 	if (ctx->is_out_stream_off && ctx->is_stream_off) {
 		ctx->v4l_resolution_change = false;
 		ctx->reset_flag = V4L_RESET_MODE_NORMAL;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 			"seek force reset to drop es frames.\n");
 		aml_vdec_reset(ctx);
 	}
@@ -4831,10 +4832,10 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 		ctx->is_drm_mode = ctrl->val;
 		ctx->param_sets_from_ucode = true;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"set stream mode: %x\n", ctrl->val);
+			"set DRM mode: %x\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_SET_DURATION) {
 		vdec_set_duration(ctrl->val);
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 			"set duration: %x\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_SET_INPUT_BUFFER_NUM_CACHE) {
 		ctx->cache_input_buffer_num = ctrl->val;
@@ -4845,7 +4846,7 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 	} else if (ctrl->id == AML_V4L2_SET_STREAM_MODE) {
 		u32 ret;
 		ctx->stream_mode = ctrl->val;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "set streambase: %x\n", ctrl->val);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "set streambase: %x\n", ctrl->val);
 
 		if (ctx->stream_mode == true) {
 			ptsserver_ins *pIns = NULL;
@@ -4861,7 +4862,7 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 		}
 	} else if (ctrl->id == AML_V4L2_SET_ES_DMABUF_TYPE) {
 		ctx->output_dma_mode = ctrl->val;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 			"set dma buf mode: %x\n", ctrl->val);
 	}
 	return 0;
@@ -5176,7 +5177,7 @@ static int vidioc_vdec_g_pixelaspect(struct file *file, void *fh,
 	return 0;
 }
 
-static int check_dec_cfginfo(struct aml_vdec_cfg_infos *cfg)
+static int check_dec_cfginfo(struct aml_vcodec_ctx *ctx, struct aml_vdec_cfg_infos *cfg)
 {
 	if (cfg->double_write_mode != DM_AVBC_ONLY &&
 		cfg->double_write_mode != DM_YUV_1_1_AVBC &&
@@ -5191,7 +5192,7 @@ static int check_dec_cfginfo(struct aml_vdec_cfg_infos *cfg)
 		cfg->double_write_mode != DM_YUV_1_4_10BIT_AVBC &&
 		cfg->double_write_mode != DM_YUV_1_2_10BIT_AVBC &&
 		cfg->double_write_mode != DM_YUV_1_8_10BIT_AVBC) {
-		pr_err("Invalid DW:0x%x\n", cfg->double_write_mode);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "Invalid DW:0x%x\n", cfg->double_write_mode);
 		return -1;
 	}
 
@@ -5209,11 +5210,11 @@ static int check_dec_cfginfo(struct aml_vdec_cfg_infos *cfg)
 	}
 
 	if (cfg->ref_buf_margin > 20) {
-		pr_err("Invalid margin %d\n", cfg->ref_buf_margin);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "Invalid margin %d\n", cfg->ref_buf_margin);
 		return -1;
 	}
 
-	pr_info("DW:%x, TW:%x, Margin:%d\n",
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "DW:%x, TW:%x, Margin:%d\n",
 		cfg->double_write_mode,
 		cfg->triple_write_mode,
 		cfg->ref_buf_margin);
@@ -5248,7 +5249,7 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		ctx->config.type = V4L2_CONFIG_PARM_DECODE;
 
 		if (in->parms_status & V4L2_CONFIG_PARM_DECODE_CFGINFO) {
-			if (check_dec_cfginfo(&in->cfg))
+			if (check_dec_cfginfo(ctx, &in->cfg))
 				return -EINVAL;
 			dec->cfg = in->cfg;
 		}

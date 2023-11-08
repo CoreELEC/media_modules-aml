@@ -311,7 +311,7 @@ static int vdec_avs3_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 		"avs3 Instance >> %lx\n", (ulong) inst);
 
 	return 0;
@@ -687,7 +687,7 @@ static void set_param_hdr_info(struct vdec_avs3_inst *inst,
 static void set_param_post_event(struct vdec_avs3_inst *inst, u32 *event)
 {
 		aml_vdec_dispatch_event(inst->ctx, *event);
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
 			"avs3 post event: %d\n", *event);
 }
 
