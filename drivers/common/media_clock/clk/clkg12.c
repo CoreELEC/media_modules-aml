@@ -443,19 +443,19 @@ void set_clock_gate(struct gate_switch_node *nodes, int num)
 			continue;
 		if (!strcmp(node->name, "clk_vdec_mux")) {
 			gclk.vdec_mux_node = node;
-			pr_info("%s get vdec mux\n", __func__);
+			pr_debug("%s get vdec mux\n", __func__);
 		}
 		else if (!strcmp(node->name, "clk_hcodec_mux")) {
 			gclk.hcodec_mux_node = node;
-			pr_info("%s get hcodec mux\n", __func__);
+			pr_debug("%s get hcodec mux\n", __func__);
 		}
 		else if (!strcmp(node->name, hevc_mux_str)) {
 			gclk.hevc_mux_node = node;
-			pr_info("%s get hevc_mux_str\n", __func__);
+			pr_debug("%s get hevc_mux_str\n", __func__);
 		}
 		else if (!strcmp(node->name, "clk_hevcb_mux")) {
 			gclk.hevc_back_mux_node = node;
-			pr_info("%s get hevcb mux\n", __func__);
+			pr_debug("%s get hevcb mux\n", __func__);
 		}
 	} while(--num);
 }
