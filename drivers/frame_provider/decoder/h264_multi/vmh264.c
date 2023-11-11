@@ -7078,6 +7078,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 		} else
 			hw->frmbase_cont_flag = 0;
 
+		mutex_lock(&hw->pic_mutex);
 		if (p_H264_Dpb->mVideo.dec_picture) {
 			get_picture_qos_info(p_H264_Dpb->mVideo.dec_picture);
 			hw->gvs.frame_dur = hw->frame_dur;
@@ -7097,26 +7098,30 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				}
 			}
 #endif
-			mutex_lock(&hw->chunks_mutex);
+
 			if ((get_cur_slice_picture_struct(p_H264_Dpb) == FRAME)
 				|| (get_cur_slice_picture_struct(p_H264_Dpb) == TOP_FIELD))
 				index = 0;
 			else
 				index = 1;
 
-			if (hw->chunk) {
-				p_H264_Dpb->mVideo.dec_picture->pts =
-					hw->chunk->pts;
-				p_H264_Dpb->mVideo.dec_picture->pts64 =
-					hw->chunk->pts64;
-				p_H264_Dpb->mVideo.dec_picture->timestamp =
-					hw->chunk->timestamp;
+			if (vdec_frame_based(vdec)) {
+				mutex_lock(&hw->chunks_mutex);
+				if (hw->chunk) {
+					p_H264_Dpb->mVideo.dec_picture->pts =
+						hw->chunk->pts;
+					p_H264_Dpb->mVideo.dec_picture->pts64 =
+						hw->chunk->pts64;
+					p_H264_Dpb->mVideo.dec_picture->timestamp =
+						hw->chunk->timestamp;
 #ifdef MH264_USERDATA_ENABLE
-				vmh264_udc_fill_vpts(hw,
-					p_H264_Dpb->mSlice.slice_type,
-					hw->chunk->pts, 1, index);
+					vmh264_udc_fill_vpts(hw,
+						p_H264_Dpb->mSlice.slice_type,
+						hw->chunk->pts, 1, index);
 #endif
-				hw->curr_pic_offset += hw->chunk->size;
+					hw->curr_pic_offset += hw->chunk->size;
+				}
+				mutex_unlock(&hw->chunks_mutex);
 				vdec_count_info(&hw->gvs, 0,hw->curr_pic_offset);
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			} else if (vdec->master) {
@@ -7127,7 +7132,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				pic->pts = 0;
 				pic->pts64 = 0;
 #endif
-		} else {
+			} else {
 				struct StorablePicture *pic =
 					p_H264_Dpb->mVideo.dec_picture;
 				u32 offset = pic->offset_delimiter;
@@ -7162,8 +7167,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 					p_H264_Dpb->mSlice.slice_type,
 					vpts, vpts_valid, index);
 #endif
-	}
-			mutex_unlock(&hw->chunks_mutex);
+			}
 
 			check_decoded_pic_error(hw);
 #ifdef ERROR_HANDLE_TEST
@@ -7216,10 +7220,14 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 
 
 			if (ret == -1) {
+				mutex_unlock(&hw->pic_mutex);
 				release_cur_decoding_buf(hw);
 				bufmgr_force_recover(p_H264_Dpb);
+				return -1;
 			} else if (ret == -2) {
+				mutex_unlock(&hw->pic_mutex);
 				release_cur_decoding_buf(hw);
+				return -2;
 			} else {
 			if (hw->data_flag & ERROR_FLAG) {
 				hw->no_error_count = 0;
@@ -7236,9 +7244,9 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 			bufmgr_post(p_H264_Dpb);
 				hw->last_dec_picture =
 					p_H264_Dpb->mVideo.dec_picture;
-			mutex_lock(&hw->pic_mutex);
+
 			p_H264_Dpb->mVideo.dec_picture = NULL;
-			mutex_unlock(&hw->pic_mutex);
+
 			/* dump_dpb(&p_H264_Dpb->mDPB); */
 			hw->has_i_frame = 1;
 			if (hw->mmu_enable)
@@ -7259,6 +7267,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				}
 			}
 		}
+		mutex_unlock(&hw->pic_mutex);
 		return 0;
 }
 
