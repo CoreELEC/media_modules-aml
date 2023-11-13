@@ -7264,6 +7264,15 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	hevc->plevel =
 		rpm_param->p.log2_parallel_merge_level;
 	hevc->MaxNumMergeCand = 5 - rpm_param->p.five_minus_max_num_merge_cand;
+	if ((hevc->MaxNumMergeCand > 5) || (hevc->MaxNumMergeCand < 1)) {
+		hevc_print(hevc, H265_DEBUG_BUFMGR, "five_minus_max_num_merge_cand(%d) is Error\n",
+			rpm_param->p.five_minus_max_num_merge_cand);
+		if (hevc->nal_skip_policy == 0) {
+			hevc->MaxNumMergeCand = 5;
+		} else {
+			return 5;
+		}
+	}
 
 	hevc->LongTerm_Curr = 0;	/* to do ... */
 	hevc->LongTerm_Col = 0;	/* to do ... */

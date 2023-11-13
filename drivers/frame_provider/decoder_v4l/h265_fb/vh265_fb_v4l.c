@@ -831,6 +831,8 @@ enum alloc_buffer_status_t {
 #define HEVC_SEARCH_BUFEMPTY        0x22
 #define HEVC_DECODE_OVER_SIZE       0x23
 #define HEVC_DECODE_BUFEMPTY2       0x24
+#define HEVC_DECODE_PARAMS_ERR      0x25
+
 #define HEVC_FIND_NEXT_PIC_NAL				0x50
 #define HEVC_FIND_NEXT_DVEL_NAL				0x51
 
@@ -1702,7 +1704,7 @@ struct tile_s {
 #define DEC_RESULT_FREE_CANVAS      11
 #define DEC_RESULT_ERROR_DATA       12
 #define DEC_RESULT_WAIT_BUFFER      13
-#define DEC_RESULT_UNFINISH	        14
+#define DEC_RESULT_UNFINISH         14
 #define DEC_RESULT_DV_DONE          15
 
 #ifdef NEW_FB_CODE
@@ -8638,6 +8640,15 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	hevc->plevel =
 		rpm_param->p.log2_parallel_merge_level;
 	hevc->MaxNumMergeCand = 5 - rpm_param->p.five_minus_max_num_merge_cand;
+	if ((hevc->MaxNumMergeCand > 5) || (hevc->MaxNumMergeCand < 1)) {
+		hevc_print(hevc, H265_DEBUG_BUFMGR, "five_minus_max_num_merge_cand(%d) is Error\n",
+			rpm_param->p.five_minus_max_num_merge_cand);
+		if (hevc->nal_skip_policy == 0) {
+			hevc->MaxNumMergeCand = 5;
+		} else {
+			return 5;
+		}
+	}
 
 	hevc->LongTerm_Curr = 0;	/* to do ... */
 	hevc->LongTerm_Col = 0;	/* to do ... */
@@ -13283,6 +13294,15 @@ force_output:
 		hevc->dec_result = DEC_RESULT_DONE;
 		vdec_schedule_work(&hevc->work);
 		return IRQ_HANDLED;
+	} else if (dec_status == HEVC_DECODE_PARAMS_ERR) {
+		hevc_print(hevc, 0, "hevc decode params err !!\n");
+		if (hevc->m_ins_flag) {
+			hevc->dec_result = DEC_RESULT_ERROR_DATA;
+			amhevc_stop();
+			reset_process_time(hevc);
+			vdec_schedule_work(&hevc->work);
+		}
+		return IRQ_HANDLED;
 	}
 
 #endif
@@ -16547,7 +16567,6 @@ done_end:
 		}
 #endif
 	}
-
 
 	if (hevc->stat & STAT_VDEC_RUN) {
 #ifdef NEW_FB_CODE
