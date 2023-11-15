@@ -531,7 +531,7 @@ static void port_set_inited(struct port_priv_s *priv)
 
 		vdec->port_flag |= PORT_FLAG_INITED;
 		port->flag |= PORT_FLAG_INITED;
-		pr_info("vdec->port_flag=0x%x, port_flag=0x%x\n",
+		pr_debug("vdec->port_flag=0x%x, port_flag=0x%x\n",
 			vdec->port_flag, port->flag);
 	} else
 		port->flag |= PORT_FLAG_INITED;

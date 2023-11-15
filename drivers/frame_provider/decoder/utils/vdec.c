@@ -1248,7 +1248,7 @@ EXPORT_SYMBOL(vdec_set_trickmode);
 int vdec_set_isreset(struct vdec_s *vdec, int isreset)
 {
 	vdec->is_reset = isreset;
-	pr_info("is_reset=%d\n", isreset);
+	pr_debug("is_reset=%d\n", isreset);
 	if (vdec->set_isreset)
 		return vdec->set_isreset(vdec, isreset);
 	return 0;

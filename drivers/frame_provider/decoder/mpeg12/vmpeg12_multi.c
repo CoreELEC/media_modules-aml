@@ -4111,7 +4111,7 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 	int config_val = 0;
 	static struct vframe_operations_s vf_tmp_ops;
 
-	pr_info("ammvdec_mpeg12 probe start.\n");
+	pr_debug("ammvdec_mpeg12 probe start.\n");
 
 	if (pdata == NULL) {
 		pr_info("ammvdec_mpeg12 platform data undefined.\n");
@@ -4232,7 +4232,7 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 	if (pdata->sys_info)
 		hw->vmpeg12_amstream_dec_info = *pdata->sys_info;
 
-	debug_print(DECODE_ID(hw), 0,
+	pr_debug(
 		"%s, sysinfo: %dx%d, tvp_flag = 0x%x\n",
 		__func__,
 		hw->vmpeg12_amstream_dec_info.width,

@@ -7380,7 +7380,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	struct AVS2Decoder_s *dec = NULL;
 	static struct vframe_operations_s vf_tmp_ops;
 
-	pr_info("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		pr_info("%s, chip id %d is not support avs2\n",

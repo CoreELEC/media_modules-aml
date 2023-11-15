@@ -46,7 +46,7 @@ struct frame_rate_dev_s* frame_rate_dev;
 	kobject_uevent_env(&frame_rate_dev->dev->kobj,
 		KOBJ_CHANGE, configured);
 
-	pr_info("%s: sent uevent %s\n", __func__, configured[0]);
+	pr_debug("%s: sent uevent %s\n", __func__, configured[0]);
 }
 
 EXPORT_SYMBOL(vframe_rate_uevent);

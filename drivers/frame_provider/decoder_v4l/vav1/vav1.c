@@ -5357,7 +5357,7 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 	if (hw->ucode_log_addr == NULL) {
 		hw->ucode_log_phy_addr = 0;
 	}
-	pr_info("%s: alloc ucode log buffer %p\n",
+	pr_debug("%s: alloc ucode log buffer %p\n",
 		__func__, hw->ucode_log_addr);
 #endif
 
@@ -5376,7 +5376,7 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 			pr_err("%s: failed to alloc fg buffer\n", __func__);
 		}
 		hw->fg_ptr = hw->fg_addr;
-		pr_info("%s, alloc fg table addr %lx, size 0x%x\n", __func__,
+		pr_debug("%s, alloc fg table addr %lx, size 0x%x\n", __func__,
 			(ulong)hw->fg_phy_addr, FGS_TABLE_SIZE * alloc_num);
 	}
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
@@ -9169,7 +9169,7 @@ static int vav1_local_init(struct AV1HW_s *hw, bool reset_flag)
 		if (!hw->pts_unstable) {
 			hw->pts_unstable =
 			(hw->vav1_amstream_dec_info.rate == 0)?1:0;
-			pr_info("set pts unstable\n");
+			pr_debug("set pts unstable\n");
 		}
 	}
 
@@ -10875,7 +10875,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		hw->max_pic_w = 4096;
 		hw->max_pic_h = 2304;
 	}
-	av1_print(hw, 0,
+	av1_print(hw, AV1_DEBUG_BUFMGR,
 		"vdec_is_support_4k() %d  max_pic_w %d max_pic_h %d buffer_spec_index %d work_buf_size 0x%x\n",
 			vdec_is_support_4k(), hw->max_pic_w, hw->max_pic_h,
 			hw->buffer_spec_index, work_buf_size);
@@ -10903,7 +10903,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		get_double_write_mode_init(hw) & 0x20 ? 1 : 0;
 
 #endif
-	av1_print(hw, 0,
+	av1_print(hw, AV1_DEBUG_BUFMGR,
 			"no_head %d  low_latency %d video_signal_type 0x%x\n",
 			hw->no_head, hw->low_latency_flag, hw->video_signal_type);
 

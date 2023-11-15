@@ -10397,7 +10397,7 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 	struct AVS3Decoder_s *dec = NULL;
 	static struct vframe_operations_s vf_tmp_ops;
 
-	pr_info("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
 		pr_info("%s, chip id %d is not support avs3\n",

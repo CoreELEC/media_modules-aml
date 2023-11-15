@@ -9008,7 +9008,7 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset)
 
 	hw->first_i_policy = first_i_policy;
 
-	pr_info("H264 sysinfo: %dx%d duration=%d, pts_outside=%d\n",
+	pr_debug("H264 sysinfo: %dx%d duration=%d, pts_outside=%d\n",
 		hw->frame_width, hw->frame_height, hw->frame_dur, hw->pts_outside);
 	pr_debug("sync_outside=%d, use_idr_framerate=%d, is_used_v4l: %d\n",
 		hw->sync_outside, hw->use_idr_framerate, hw->is_used_v4l);

@@ -5855,7 +5855,7 @@ static int av1_local_init(struct AV1HW_s *hw)
 		if (hw->ucode_log_addr == NULL) {
 			hw->ucode_log_phy_addr = 0;
 		}
-		pr_info("%s: alloc ucode log buffer %p\n",
+		pr_debug("%s: alloc ucode log buffer %p\n",
 			__func__, hw->ucode_log_addr);
 	//}
 #endif
@@ -9690,7 +9690,7 @@ static int vav1_local_init(struct AV1HW_s *hw)
 		if (!hw->pts_unstable) {
 			hw->pts_unstable =
 			(hw->vav1_amstream_dec_info.rate == 0)?1:0;
-			pr_info("set pts unstable\n");
+			pr_debug("set pts unstable\n");
 		}
 	}
 
@@ -11441,7 +11441,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	work_buf_size = (p_buf_info->end_adr - p_buf_info->start_adr
 		 + 0xffff) & (~0xffff);
 
-	av1_print(hw, 0,
+	av1_print(hw, AV1_DEBUG_BUFMGR,
 			"vdec_is_support_4k() %d  max_pic_w %d max_pic_h %d buffer_spec_index %d work_buf_size 0x%x\n",
 			vdec_is_support_4k(), hw->max_pic_w, hw->max_pic_h,
 			hw->buffer_spec_index, work_buf_size);
@@ -11469,7 +11469,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		get_double_write_mode_init(hw) & 0x20 ? 1 : 0;
 
 #endif
-	av1_print(hw, 0,
+	av1_print(hw, AV1_DEBUG_BUFMGR,
 			"no_head %d  low_latency %d, signal_type 0x%x\n",
 			hw->no_head, hw->low_latency_flag, hw->video_signal_type);
 #if 0

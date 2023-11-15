@@ -1407,7 +1407,7 @@ static void resize_context_buffers(struct VP9Decoder_s *pbi,
 			pbi->vp9_first_pts_ready = 0;
 			pbi->duration_from_pts_done = 0;
 		}
-		pr_info("%s (%d,%d)=>(%d,%d)\r\n", __func__,
+		pr_debug("%s (%d,%d)=>(%d,%d)\r\n", __func__,
 			cm->width, cm->height,
 			width, height);
 		cm->width = width;
@@ -5847,7 +5847,7 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 			pic_config->uv_canvas_index = -1;
 		}
 	}
-	pr_info("%s ok, used_buf_num = %d\n",
+	pr_debug("%s ok, used_buf_num = %d\n",
 		__func__, pbi->used_buf_num);
 }
 
@@ -10449,7 +10449,7 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 	if (!pbi->pts_unstable) {
 		pbi->pts_unstable =
 		(pbi->vvp9_amstream_dec_info.rate == 0)?1:0;
-		pr_info("set pts unstable\n");
+		pr_debug("set pts unstable\n");
 	}
 
 	return ret;
