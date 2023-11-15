@@ -866,8 +866,8 @@ void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
 				/* only Y will contain vframe */
 				comp_buf_set_vframe(ctx, vb2_buf, vf);
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-					"set vf(%px) into %dth buf\n",
-					vf, vb2_buf->index);
+					"set vf(%px, %d) omx_index %d , into %dth buf, dbuf %px vf_ext %px\n",
+					vf, vf->index, vf->omx_index, vb2_buf->index, dma, vf->vf_ext);
 			}
 		}
 	}

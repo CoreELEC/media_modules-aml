@@ -37,6 +37,76 @@ static bool is_dma_mode(ulong key, ulong phy_addr)
 
 static void buf_core_destroy(struct kref *kref);
 
+
+static bool list_add_valid(struct buf_core_mgr_s *bc, struct buf_core_entry *entry)
+{
+	struct list_head *node = &entry->node;
+	struct list_head *prev = bc->free_que.prev;
+	struct list_head *next = &bc->free_que;
+
+	if (prev == NULL || next == NULL) {
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+		"%s, prev is NULL. or next is NULL. entry(key:%lx) \n",
+		__func__, entry->key);
+		return false;
+	}
+
+	if (next->prev != prev) {
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+		"%s, entry(key:%lx) next->prev should be prev (%px), but was %px. (next=%px).\n",
+		__func__, entry->key, prev, next->prev, next);
+		return false;
+	}
+
+	if (prev->next != next) {
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+		"%s, entry(key:%lx) prev->next should be next (%px), but was %px. (prev=%px).\n",
+		__func__, entry->key, next, prev->next, prev);
+		return false;
+	}
+
+	if (node == prev || node == next) {
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+		"%s, entry(key:%lx) list_add double add: new=%px, prev=%px, next=%px.\n",
+		__func__, entry->key, node, prev, next);
+		return false;
+	}
+
+	return true;
+}
+
+static bool list_del_entry_valid(struct buf_core_mgr_s *bc, struct buf_core_entry *entry)
+{
+	struct list_head *prev, *next;
+	struct list_head *node = &entry->node;
+
+	prev = node->prev;
+	next = node->next;
+
+	if (prev == NULL || next == NULL) {
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+		"%s, prev is NULL. or next is NULL. entry(key:%lx)\n",
+		__func__, entry->key);
+		return false;
+	}
+
+	if (prev->next != node) {
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+		"%s, entry(key:%lx) prev->next should be %px, but was %px. \n",
+		__func__, entry->key, node, prev->next);
+		return false;
+	}
+
+	if (next->prev != node) {
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+		"%s, entry(key:%lx) next->prev should be %px, but was %px. \n",
+		__func__, entry->key, node, next->prev);
+		return false;
+	}
+
+	return true;
+}
+
 static void direction_buf_get(struct buf_core_mgr_s *bc,
 			  struct buf_core_entry *entry,
 			  enum buf_core_user user)
@@ -168,14 +238,6 @@ static void buf_core_update_holder(struct buf_core_mgr_s *bc,
 static void buf_core_free_que(struct buf_core_mgr_s *bc,
 			     struct buf_core_entry *entry)
 {
-	entry->state = BUF_STATE_FREE;
-	entry->holder = BUF_HOLDER_FREE;
-	entry->ref_bit_map = 0;
-	list_add_tail(&entry->node, &bc->free_que);
-	bc->free_num++;
-	entry->inited = true;
-	entry->queued_mask = 0;
-
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__,
@@ -188,6 +250,16 @@ static void buf_core_free_que(struct buf_core_mgr_s *bc,
 		atomic_read(&entry->ref),
 		kref_read(&bc->core_ref),
 		bc->free_num);
+
+	entry->state = BUF_STATE_FREE;
+	entry->holder = BUF_HOLDER_FREE;
+	entry->ref_bit_map = 0;
+	entry->inited = true;
+	entry->queued_mask = 0;
+	if (!list_add_valid(bc, entry))
+		return;
+	list_add_tail(&entry->node, &bc->free_que);
+	bc->free_num++;
 }
 
 static void buf_core_get(struct buf_core_mgr_s *bc,
@@ -209,6 +281,10 @@ static void buf_core_get(struct buf_core_mgr_s *bc,
 	}
 
 	entry = list_first_entry(&bc->free_que, struct buf_core_entry, node);
+	if (!list_del_entry_valid(bc, entry)) {
+		entry = NULL;
+		goto out;
+	}
 	list_del(&entry->node);
 	bc->free_num--;
 
@@ -517,6 +593,8 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 		bc->free_num);
 
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
+		if (!list_del_entry_valid(bc, entry))
+			continue;
 		list_del(&entry->node);
 	}
 
@@ -547,6 +625,8 @@ static void buf_core_destroy(struct kref *kref)
 	struct buf_core_entry *entry, *tmp;
 
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
+		if (!list_del_entry_valid(bc, entry))
+			continue;
 		list_del(&entry->node);
 	}
 

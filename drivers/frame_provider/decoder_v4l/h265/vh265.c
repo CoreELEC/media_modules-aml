@@ -5746,6 +5746,15 @@ static int get_display_pic_num(struct hevc_state_s *hevc)
 	return num;
 }
 
+static bool is_pair_pic(struct PIC_s *pic)
+{
+	if (pic->pic_struct == 9 || pic->pic_struct == 10 ||
+		pic->pic_struct == 11 || pic->pic_struct == 12)
+		return true;
+
+	return false;
+}
+
 /* clear no pair pic for interlace streams after flush */
 static void interlace_clear_no_pair_pic(struct hevc_state_s *hevc)
 {
@@ -5759,7 +5768,7 @@ static void interlace_clear_no_pair_pic(struct hevc_state_s *hevc)
 		pic = hevc->m_PIC[i];
 		if (pic == NULL || pic->index == -1)
 			continue;
-		if (pic->vf_ref == 1) {
+		if (pic->vf_ref == 1 && is_pair_pic(pic)) {
 			pic->vf_ref = 0;
 			pic->output_ready = 0;
 			pic->error_mark = 1;
@@ -5839,7 +5848,6 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 		}
 	} while (pic_display);
 	clear_referenced_flag(hevc);
-
 	interlace_clear_no_pair_pic(hevc);
 }
 
@@ -10268,6 +10276,8 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 		pic->cma_alloc_addr = 0;
 		hevc->m_BUF[pic->index].v4l_ref_buf_addr =0;
 		pic->referenced = 0;
+		pic->BUF_index = -1;
+		pic->POC = INVALID_POC;
 	}
 }
 
@@ -12521,12 +12531,12 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			aml_buf = (struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
 			hevc_print(hevc, H265_DEBUG_BUFMGR,
-				"%s buf idx: %d pic index: %d dma addr: 0x%lx vb idx: %d vf_ref %d\n",
+				"%s buf idx: %d pic index: %d dma addr: 0x%lx vb idx: %d vf_ref %d error_mark %d\n",
 				__func__, i, pic->index, pic->cma_alloc_addr,
-				aml_buf->index,
-				pic->vf_ref);
+				aml_buf->index, pic->vf_ref, pic->error_mark);
 			aml_buf_put_ref(&ctx->bm, aml_buf);
-			if ((hevc->nal_skip_policy & 0x2) && pic->error_mark) {
+			if ((hevc->nal_skip_policy & 0x2) && pic->error_mark &&
+				!pic->vf_ref) {
 				aml_buf_put_ref(&ctx->bm, aml_buf);
 				if (ctx->vpp_is_need || ctx->enable_di_post) {
 					if (pic->pic_struct == 3 || pic->pic_struct == 4)
@@ -12536,7 +12546,9 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 						aml_buf_put_ref(&ctx->bm, aml_buf);
 					}
 				}
-			}
+			} else if (pic->error_mark && pic->vf_ref)
+				hevc_print(hevc, H265_DEBUG_BUFMGR,
+					"%s error pic conflict!\n", __func__);
 
 			if (ctx->no_fbc_output && pic->vf_ref) {
 				if (aml_buf->fbc->used[aml_buf->fbc->index] & 1) {
@@ -12563,6 +12575,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			pic->cma_alloc_addr = 0;
 			pic->vf_ref = 0;
 			hevc->m_BUF[pic->index].v4l_ref_buf_addr =0;
+			pic->output_mark = 0;
 
 			spin_unlock_irqrestore(&h265_lock, flags);
 
