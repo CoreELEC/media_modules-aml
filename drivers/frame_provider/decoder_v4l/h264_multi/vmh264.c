@@ -2748,7 +2748,7 @@ unsigned char is_there_free_buffer(struct vdec_s *vdec)
 	return free_count >= run_ready_min_buf_num_active ? 1 : 0;
 }
 
-unsigned char have_free_buf_spec(struct vdec_s *vdec)
+unsigned char have_free_buf_spec(struct vdec_s *vdec, bool buf_for_eos)
 {
 	int i;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
@@ -2766,7 +2766,7 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 		run_ready_min_buf_num_active = 1;
 
 	/* trigger to parse head data. */
-	if (!hw->v4l_params_parsed)
+	if (!hw->v4l_params_parsed && !buf_for_eos)
 		return 1;
 
 	if ((!one_packet_multi_frames_multi_run && (dpb->mDPB.used_size >= dpb->mDPB.size - 1)) ||
@@ -3664,7 +3664,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 
 	if (hw->eos) {
 		expires = jiffies + msecs_to_jiffies(2000);
-		while (!have_free_buf_spec(vdec)) {
+		while (!have_free_buf_spec(vdec, true)) {
 			if (time_after(jiffies, expires)) {
 				pr_err("[%d] H264 isn't enough buff for notify eos.\n", ctx->id);
 				return 0;
@@ -6370,7 +6370,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 	if (hw->bufmgr_err_flag)
 		return 1;
 	else
-		buffer_available = have_free_buf_spec(vdec);
+		buffer_available = have_free_buf_spec(vdec, false);
 
 	return buffer_available;
 }
@@ -7200,7 +7200,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				release_cur_decoding_buf(hw);
 			}
 
-			if (input_stream_based(vdec) && !have_free_buf_spec(vdec)) {
+			if (input_stream_based(vdec) && !have_free_buf_spec(vdec, false)) {
 				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "next slice no free buf\n");
 				p_H264_Dpb->mVideo.pre_frame_num = hw->first_pre_frame_num;
 				hw->last_picture_slice_count = hw->cur_picture_slice_count;
@@ -7655,7 +7655,7 @@ pic_done_proc:
 					"%s, size 0x%x, consume_byte 0x%x, reserved_byte 0x%x\n", __func__,
 					hw->chunk_size, hw->consume_byte, hw->reserved_byte);
 			} else {
-				if (!have_free_buf_spec(vdec)) {
+				if (!have_free_buf_spec(vdec, false)) {
 					hw->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
 					vdec_schedule_work(&hw->work);
 					return IRQ_HANDLED;
