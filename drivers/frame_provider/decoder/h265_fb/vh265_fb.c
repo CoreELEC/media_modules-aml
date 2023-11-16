@@ -9189,8 +9189,8 @@ static int parse_sei(struct hevc_state_s *hevc,
 					&& p_sei[4] == 0x05) {
 					pic->sei_present_flag |= SEI_HDR_CUVA_MASK;
 
-					hevc_print(hevc, 0, "%s: hdr cuva data: (size %d)\n", __func__, payload_size);
 					if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
+						hevc_print(hevc, 0, "%s: hdr cuva data: (size %d)\n", __func__, payload_size);
 						for (i = 0; i < payload_size; i++) {
 							pr_info("%02x ", p_sei[i]);
 							if (((i + 1) & 0xf) == 0)
