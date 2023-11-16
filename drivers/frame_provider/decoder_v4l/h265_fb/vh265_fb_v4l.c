@@ -13508,6 +13508,8 @@ force_output:
 						hevc->skip_nal_count++;
 					hevc->skip_flag = 1;
 					hevc->start_decoder_flag = 1;
+					if (is_oversize(hevc->pic_w, hevc->pic_h))
+						hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 					WRITE_VREG(HEVC_DEC_STATUS_REG,	HEVC_ACTION_DONE);
 					/* Interrupt Amrisc to execute */
 					WRITE_VREG(HEVC_MCPU_INTR_REQ,	AMRISC_MAIN_REQ);

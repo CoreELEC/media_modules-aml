@@ -1245,6 +1245,9 @@ int vdec_status(struct vdec_s *vdec, struct vdec_info_statistic_s *vstat)
 		((vdec->status == VDEC_STATUS_CONNECTED ||
 		vdec->status == VDEC_STATUS_ACTIVE)))
 		return vdec->dec_status(vdec, &vstat->vstatus);
+	else if (vdec)
+		vstat->vstatus.status = (is_support_format(vdec->format) ? 0 :
+						DECODER_FATAL_ERROR_UNSUPPORT_FORMAT);
 
 	return 0;
 }
