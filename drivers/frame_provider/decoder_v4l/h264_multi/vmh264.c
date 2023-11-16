@@ -7120,11 +7120,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		hw->multi_slice_pic_check_count = 0;
 		hw->multi_slice_pic_flag = 0;
 		hw->picture_slice_count = 0;
-		if (hw->aml_buf == NULL) {
-			release_cur_decoding_buf(hw);
-			have_free_buf_spec(vdec);
-			dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_VDEC_STATUS, "%s aml_buf 0x%lx\n", __func__, hw->aml_buf);
-		}
 #endif
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 		vdec_schedule_work(&hw->work);
