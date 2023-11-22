@@ -10032,7 +10032,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			}
 
 			pic->vf_ref = 2;
-			vf->duration = vf->duration>>1;
+			if (vf->duration >= 1600 * 2)
+				vf->duration = vf->duration>>1;
 			memcpy(vf2, vf, sizeof(struct vframe_s));
 
 			if (v4l2_ctx->second_field_pts_mode) {
@@ -10084,7 +10085,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				return -1;
 			}
 			pic->vf_ref = 3;
-			vf->duration = vf->duration/3;
+			if (vf->duration >= 1600 * 3)
+				vf->duration = vf->duration/3;
 			memcpy(vf2, vf, sizeof(struct vframe_s));
 			memcpy(vf3, vf, sizeof(struct vframe_s));
 
@@ -10224,7 +10226,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vf->duration <<= 1;
 				break;
 			case 8:
-				vf->duration = vf->duration * 3;
+				if (vf->duration >= 1600 * 3)
+					vf->duration = vf->duration * 3;
 				break;
 			case 1:
 				vf->type |= VIDTYPE_INTERLACE_TOP |

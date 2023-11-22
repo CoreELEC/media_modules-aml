@@ -745,7 +745,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->pts = pic->pts;
 		vf->pts_us64 = pic->pts64;
 		vf->timestamp = pic->timestamp;
-		vf->duration = (uevent_dur ? uevent_dur : pic->duration) >> 1;
+		vf->duration = uevent_dur ? uevent_dur : pic->duration;
+		if (vf->duration >= 1600 * 2)
+			vf->duration = vf->duration >> 1;
 		vf->duration_pulldown = 0;
 		vf->type = (pic->pic_info & TOP_FIELD_FIRST_FLAG) ?
 			VIDTYPE_INTERLACE_TOP : VIDTYPE_INTERLACE_BOTTOM;
@@ -847,7 +849,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->timestamp = 0;
 		}
 
-		vf->duration = (uevent_dur ? uevent_dur : pic->duration) >> 1;
+		vf->duration = uevent_dur ? uevent_dur : pic->duration;
+		if (vf->duration >= 1600 * 2)
+			vf->duration = vf->duration >> 1;
 		vf->duration_pulldown = 0;
 		vf->type = (pic->pic_info & TOP_FIELD_FIRST_FLAG) ?
 			VIDTYPE_INTERLACE_BOTTOM : VIDTYPE_INTERLACE_TOP;

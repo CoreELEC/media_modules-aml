@@ -3359,7 +3359,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 					VIDTYPE_INTERLACE_TOP :
 					VIDTYPE_INTERLACE_BOTTOM);
 			}
-			vf->duration = vf->duration / vf_count;
+			if (vf->duration >= 1600 * vf_count)
+				vf->duration = vf->duration / vf_count;
 			if (i >= 1) {
 				vf->pts = 0;
 				vf->pts_us64 = 0;
@@ -3385,7 +3386,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 					VIDTYPE_INTERLACE_FIRST |
 					nv_order;
 				vf->type |= VIDTYPE_INTERLACE_TOP;
-				vf->duration = vf->duration/2;
+				if (vf->duration >= 3200)
+					vf->duration = vf->duration/2;
 			}
 
 			if (vf_count == 1 && frame->is_used == 2 && frame->bottom_field
@@ -3394,7 +3396,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 					VIDTYPE_INTERLACE_FIRST |
 					nv_order;
 				vf->type |= VIDTYPE_INTERLACE_BOTTOM;
-				vf->duration = vf->duration/2;
+				if (vf->duration >= 3200)
+					vf->duration = vf->duration/2;
 			}
 		}
 
