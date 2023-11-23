@@ -417,6 +417,26 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_NO_AVS | FMT_HEVC_VP9_AV1,
 	},
+
+	[AM_MESON_CPU_MAJOR_ID_S7D - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_S7D,
+		.reg_compat = s7_mm_registers_compat,
+		.max_vdec_clock  = 800,
+		.max_hevcf_clock = 800,
+		.max_hevcb_clock = 800,
+		.hevc_clk_combine_flag  = true,
+		.is_hw_parser_support   = false,
+		.is_vdec_canvas_support = true,
+		.is_support_h264_mmu    = true,
+		.is_support_dual_core = false,
+		.is_mjpeg_endian_rematch = true,
+		.is_vcpu_clk_set = true,
+		.is_vp9_adapt_prob_hw_mode = true,
+		.vdec_max_resolution = RESOLUTION_4K,
+		.hevc_max_resolution = RESOLUTION_4K,
+		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
+		.support_h265_level_idc = IDC_5_1,
+	},
 };
 
 /* sub id features */
@@ -615,6 +635,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-s7",
 		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_S7 - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-s7d",
+		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_S7D - MAJOR_ID_START],
 	},
 	{},
 };

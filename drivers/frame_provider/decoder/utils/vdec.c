@@ -968,7 +968,8 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 	unsigned int cpu_type = get_cpu_major_id();
 
 	if (target == VDEC_INPUT_TARGET_VLD) {
-		if (cpu_type == AM_MESON_CPU_MAJOR_ID_S7) {
+		if ((cpu_type == AM_MESON_CPU_MAJOR_ID_S7) ||
+			(cpu_type == AM_MESON_CPU_MAJOR_ID_S7D)) {
 			mask = (1 << 8);
 		} else {
 			mask = (1 << 13);	/*bit13: DOS VDEC interface*/
@@ -976,7 +977,8 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 				mask = (1 << 21);
 		}
 	} else if (target == VDEC_INPUT_TARGET_HEVC) {
-		if (cpu_type == AM_MESON_CPU_MAJOR_ID_S7) {
+		if ((cpu_type == AM_MESON_CPU_MAJOR_ID_S7) ||
+			(cpu_type == AM_MESON_CPU_MAJOR_ID_S7D)) {
 			mask = (1 << 7);
 		} else {
 			mask = (1 << 4); /*hevc*/
@@ -1034,6 +1036,9 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 			break;
 		case AM_MESON_CPU_MAJOR_ID_S7:
 			sts_reg_addr = 0xcc;
+			break;
+		case AM_MESON_CPU_MAJOR_ID_S7D:
+			sts_reg_addr = 0xcf;
 			break;
 		default:
 			sts_reg_addr = DMC_CHAN_STS;
@@ -5240,6 +5245,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 				READ_RESET_REG((P_RESETCTRL_RESET6_LEVEL)) | ((1<<1)));
 		break;
 	case AM_MESON_CPU_MAJOR_ID_S7:
+	case AM_MESON_CPU_MAJOR_ID_S7D:
 		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,
 				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) & (~(1<<12)));
 		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,
