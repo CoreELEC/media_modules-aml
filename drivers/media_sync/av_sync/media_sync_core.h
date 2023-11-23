@@ -83,12 +83,11 @@ typedef enum {
 	GET_UPDATE_INFO = 0,
 	GET_SLOW_SYNC_ENABLE,
 	GET_TRICK_MODE,
+	GET_AUDIO_WORK_MODE,
 	SET_VIDEO_FRAME_ADVANCE = 500,
 	SET_SLOW_SYNC_ENABLE,
 	SET_TRICK_MODE,
 	SET_FREE_RUN_TYPE,
-	GET_AUDIO_WORK_MODE,
-
 } mediasync_control_cmd;
 
 typedef struct m_control {
