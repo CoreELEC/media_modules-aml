@@ -2118,16 +2118,16 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 		sgt		= ibuf->sg_table;
 	} else {
 		mbuf->paddr	= sg_dma_address(sgt->sgl);
-		mbuf->sg_table	= ua->sgt;
+		mbuf->sg_table	= ua->sgt[0];
 		mbuf->ibuffer[0] = (void *)idbuf->priv;
 		mbuf->idmabuf[0] = idbuf;
 	}
 	am_buf->idmabuf[0] = idbuf;
 	/* update sg table. */
-	aml_uvm_copy_sgt(ua->sgt, sgt);
+	aml_uvm_copy_sgt(ua->sgt[0], sgt);
 
 	/* fill aml buffer information. */
-	am_buf->cap_sgt	= ua->sgt;
+	am_buf->cap_sgt	= ua->sgt[0];
 	cap_sgt         = vb2_dma_sg_plane_desc(&vb->vb2_buf, 0);
 	memcpy(cap_sgt, am_buf->cap_sgt, sizeof(struct sg_table));
 	am_buf->is_delay_allocated = true;
