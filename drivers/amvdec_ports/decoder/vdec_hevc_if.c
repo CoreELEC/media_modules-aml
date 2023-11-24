@@ -546,6 +546,11 @@ static void get_param_comp_buf_info(struct vdec_hevc_inst *inst,
 	memcpy(params, &inst->comp_info, sizeof(*params));
 }
 
+static void get_cfg_info(struct vdec_hevc_inst *inst, struct aml_vdec_cfg_infos *cfg)
+{
+	memcpy(cfg, &inst->ctx->config.parm.dec.cfg, sizeof(struct aml_vdec_cfg_infos));
+}
+
 static int vdec_hevc_get_param(unsigned long h_vdec,
 			       enum vdec_get_param_type type, void *out)
 {
@@ -591,6 +596,10 @@ static int vdec_hevc_get_param(unsigned long h_vdec,
 
 	case GET_PARAM_COMP_BUF_INFO:
 		get_param_comp_buf_info(inst, out);
+		break;
+
+	case GET_PARAM_CFG_INFO:
+		get_cfg_info(inst, out);
 		break;
 
 	default:

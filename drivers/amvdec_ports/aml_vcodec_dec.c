@@ -3301,6 +3301,7 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 		f->fmt.pix_mp.num_planes : 1,
 		f->fmt.pix_mp.pixelformat);
 
+	ctx->is_multiplanar = V4L2_TYPE_IS_MULTIPLANAR(f->type) ? true: false;
 	dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 	if (!dst_vq) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,

@@ -1111,6 +1111,7 @@ struct aml_vcodec_ctx {
 	bool			enable_di_post;
 	u32			alloc_type;
 	bool			force_tw_output;
+	bool			is_multiplanar;
 };
 
 /**
