@@ -5138,9 +5138,15 @@ int release_picture(struct h264_dpb_stru *p_H264_Dpb,
 		}
 		release_buf_spec_num(p_H264_Dpb->vdec, pic->buf_spec_num);
 	} else {
-		if (pic->buf_spec_is_alloced == 1)
+		if (pic->buf_spec_is_alloced == 1) {
+			if (pic->colocated_buf_index >= 0) {
+				release_colocate_buf(p_H264_Dpb,
+					pic->colocated_buf_index);
+				pic->colocated_buf_index = -1;
+			}
 			release_buf_spec_num(p_H264_Dpb->vdec,
 				pic->buf_spec_num);
+		}
 	}
 
 	free_picture(p_H264_Dpb, pic);

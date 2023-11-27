@@ -6345,7 +6345,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 				if (p_Dpb->fs[i]->is_output && !is_used_for_reference(p_Dpb->fs[i])) {
 					spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 					bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
-					return 0;
+					return have_free_buf_spec(vdec, false);
 				}
 			}
 			spin_unlock_irqrestore(&hw->bufspec_lock, flags);
@@ -10631,8 +10631,10 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			get_used_buf_count(hw) >=
 			run_ready_max_buf_num)
 			ret = 0;
-		if (ret == 0)
+		if (ret == 0) {
 			bufmgr_h264_remove_unused_frame(&hw->dpb, 0);
+			ret = is_buffer_available(vdec);
+		}
 	}
 #endif
 
