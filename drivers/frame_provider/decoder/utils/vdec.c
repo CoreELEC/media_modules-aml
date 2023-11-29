@@ -4933,6 +4933,13 @@ void vdec_reset_core(struct vdec_s *vdec)
 	WRITE_VREG(DOS_SW_RESET0, (1<<3)|(1<<4)|(1<<5)|(1<<7)|(1<<8)|(1<<9));
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
+	// clear mmu config
+	if (vdec && (vdec->core_mask & CORE_MASK_HEVC) == 0) {
+		CLEAR_VREG_MASK(VDEC_ASSIST_MMC_CTRL1, 1 << 3);
+		CLEAR_VREG_MASK(MDEC_PIC_DC_MUX_CTRL, 1 << 31);
+		WRITE_VREG(MDEC_EXTIF_CFG1, 0);
+	}
+
 	if (is_support_axi_ctrl())
 		vdec_dbus_ctrl(1);
 	else

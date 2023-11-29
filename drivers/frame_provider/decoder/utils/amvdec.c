@@ -1173,6 +1173,18 @@ void amhevc_stop(void)
 				break;
 		}
 
+		timeout = jiffies + HZ/20;
+		while (READ_VREG(HEVC_WRRSP_LMEM) & 0xfff) {
+			if (time_after(jiffies, timeout)) {
+				pr_err("%s, ctrl %x, rsp %x, pc %x status %x\n", __func__,
+					READ_VREG(HEVC_LMEM_DMA_CTRL),
+					READ_VREG(HEVC_WRRSP_LMEM),
+					READ_VREG(0x3308),
+					READ_VREG(HEVC_ASSIST_SCRATCH_0));
+				break;
+			}
+		}
+
 		READ_VREG(DOS_SW_RESET3);
 		READ_VREG(DOS_SW_RESET3);
 		READ_VREG(DOS_SW_RESET3);
