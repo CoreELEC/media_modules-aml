@@ -378,7 +378,7 @@ static u32 lookup_check_count = 30;
  */
 static u32 force_config_fence;
 
-static u32 one_packet_multi_frames_multi_run = 1;
+static u32 one_packet_multi_frames_multi_run = 0;
 
 #define IS_VDEC_DW(hw)  (hw->double_write_mode >> 16 & 0xf)
 
