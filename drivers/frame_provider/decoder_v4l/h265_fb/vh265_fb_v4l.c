@@ -6458,7 +6458,7 @@ static void interlace_clear_no_pair_pic(struct hevc_state_s *hevc)
 	int i;
 	struct PIC_s *pic;
 
-	if (!is_interlace(hevc))
+	if (!hevc->interlace_flag)
 		return;
 
 	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
@@ -7309,6 +7309,9 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				|| hevc->curr_pic_struct == 8)
 				hevc->interlace_flag = 0;
 		}
+
+		if (IS_4K_SIZE(rpm_param->p.pic_width_in_luma_samples, rpm_param->p.pic_height_in_luma_samples * 2))
+			hevc->interlace_flag = 0;
 
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
 			"frame_field_info_present_flag = %d curr_pic_struct = %d interlace_flag = %d\n",
@@ -10018,7 +10021,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		vf->canvas0_config[1].height <<= hevc->interlace_flag;
 
 #ifdef HEVC_PIC_STRUCT_SUPPORT
-		if (pic->pic_struct == 3 || pic->pic_struct == 4) {
+		if ((pic->pic_struct == 3 || pic->pic_struct == 4) && hevc->interlace_flag) {
 			struct vframe_s *vf2;
 
 			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
@@ -10066,8 +10069,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				ATRACE_COUNTER(hevc->trace.new_q_name, kfifo_len(&hevc->newframe_q));
 				return 0;
 			}
-		} else if (pic->pic_struct == 5
-			|| pic->pic_struct == 6) {
+		} else if ((pic->pic_struct == 5
+			|| pic->pic_struct == 6) && hevc->interlace_flag) {
 			struct vframe_s *vf2, *vf3;
 
 			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
@@ -10132,8 +10135,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				ATRACE_COUNTER(hevc->trace.new_q_name, kfifo_len(&hevc->newframe_q));
 				return 0;
 			}
-		} else if (pic->pic_struct == 9
-			|| pic->pic_struct == 10) {
+		} else if ((pic->pic_struct == 9
+			|| pic->pic_struct == 10) && hevc->interlace_flag) {
 			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
 				"pic_struct = %d index 0x%x\n",
 				pic->pic_struct, pic->index);
@@ -10173,8 +10176,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				ATRACE_COUNTER(hevc->trace.new_q_name, kfifo_len(&hevc->newframe_q));
 				return 0;
 			}
-		} else if (pic->pic_struct == 11
-			|| pic->pic_struct == 12) {
+		} else if ((pic->pic_struct == 11
+			|| pic->pic_struct == 12) && hevc->interlace_flag) {
 
 			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
 				"pic_struct = %d index 0x%x\n",
@@ -10230,16 +10233,20 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					vf->duration = vf->duration * 3;
 				break;
 			case 1:
-				vf->type |= VIDTYPE_INTERLACE_TOP |
-					nv_order | VIDTYPE_VIU_FIELD;
-				process_pending_vframe(hevc, pic, 1);
-				hevc->pre_top_pic = pic;
+				if (hevc->interlace_flag) {
+					vf->type |= VIDTYPE_INTERLACE_TOP |
+						nv_order | VIDTYPE_VIU_FIELD;
+					process_pending_vframe(hevc, pic, 1);
+					hevc->pre_top_pic = pic;
+				}
 				break;
 			case 2:
-				vf->type |= VIDTYPE_INTERLACE_BOTTOM
-					| nv_order | VIDTYPE_VIU_FIELD;
-				process_pending_vframe(hevc, pic, 0);
-				hevc->pre_bot_pic = pic;
+				if (hevc->interlace_flag) {
+					vf->type |= VIDTYPE_INTERLACE_BOTTOM
+						| nv_order | VIDTYPE_VIU_FIELD;
+					process_pending_vframe(hevc, pic, 0);
+					hevc->pre_bot_pic = pic;
+				}
 				break;
 			}
 
@@ -10950,7 +10957,7 @@ static void hevc_interlace_check(struct hevc_state_s *hevc,
 	h = hevc->param.p.pic_height_in_luma_samples;
 	/* interlace check, 4k force no interlace */
 	if ((interlace_enable != 0) &&
-		(!IS_4K_SIZE(w, h)) &&
+		(!IS_4K_SIZE(w, h * 2)) &&
 		(is_interlace(hevc))) {
 		hevc->interlace_flag = 1;
 		hevc->frame_ar = (hevc->pic_h * 0x100 / hevc->pic_w) * 2;
@@ -14378,7 +14385,7 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 		return false;
 	}
 
-	if ((is_interlace(hevc) &&
+	if ((hevc->interlace_flag &&
 		atomic_read(&ctx->vpp_cache_num) > 1) ||
 		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM){
 		hevc_print(hevc, H265_DEBUG_DETAIL,

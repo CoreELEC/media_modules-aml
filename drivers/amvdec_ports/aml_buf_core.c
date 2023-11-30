@@ -378,6 +378,7 @@ static int buf_core_done(struct buf_core_mgr_s *bc,
 		buf_core_update_holder(bc, entry, BUF_USER_DI, BUF_GET);
 	}
 
+out:
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__, user,
@@ -389,7 +390,7 @@ static int buf_core_done(struct buf_core_mgr_s *bc,
 		atomic_read(&master->ref),
 		kref_read(&bc->core_ref),
 		bc->free_num);
-out:
+
 	mutex_unlock(&bc->mutex);
 
 	return ret;
