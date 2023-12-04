@@ -306,7 +306,7 @@ static unsigned int i_only_flag;
 	bit[23] 0: set error flag on frame number gap error and drop it, 1: ignore error.
 	bit[30] 1: Use driver error policy configuration and ignore the user space configuration
 */
-static unsigned int error_proc_policy = 0x7fCfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0x7fCff6; /*0x1f14*/
 
 
 /*

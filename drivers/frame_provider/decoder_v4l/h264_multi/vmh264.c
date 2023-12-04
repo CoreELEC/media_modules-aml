@@ -305,9 +305,9 @@ static unsigned int i_only_flag;
 	bit[24] 0: not output no_display frame, 1: output no_display frame.
 	bit[30] 1: Use driver error policy configuration and ignore the user space configuration
 */
-static unsigned int error_proc_policy = 0x3fCfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0x3fCff6; /*0x1f14*/
 
-static unsigned int v4l_error_policy = 0x813fCfB7; //default
+static unsigned int v4l_error_policy = 0x813fCff7; //default
 
 /*
 	error_skip_count:
