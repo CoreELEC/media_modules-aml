@@ -191,7 +191,7 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	struct vdec_mpeg12_inst *inst = NULL;
 	int ret = -1;
 
-	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
+	inst = aml_media_mem_alloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst)
 		return -ENOMEM;
 
@@ -214,7 +214,7 @@ static int vdec_mpeg12_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	inst->vdec.port.type = PORT_TYPE_VIDEO;
 
 	/* probe info from the stream */
-	inst->vsi = kzalloc(sizeof(struct vdec_mpeg12_vsi), GFP_KERNEL);
+	inst->vsi = aml_media_mem_alloc(sizeof(struct vdec_mpeg12_vsi), GFP_KERNEL);
 	if (!inst->vsi) {
 		ret = -ENOMEM;
 		goto err;
@@ -247,9 +247,9 @@ err:
 	if (inst && inst->vsi && inst->vsi->header_buf)
 		vfree(inst->vsi->header_buf);
 	if (inst && inst->vsi)
-		kfree(inst->vsi);
+		aml_media_mem_free(inst->vsi);
 	if (inst)
-		kfree(inst);
+		aml_media_mem_free(inst);
 	*h_vdec = 0;
 
 	return ret;
@@ -335,7 +335,7 @@ static int parse_stream_cpu(struct vdec_mpeg12_inst *inst, u8 *buf, u32 size)
 	int ret = 0;
 	struct mpeg12_param_sets *ps = NULL;
 
-	ps = kzalloc(sizeof(struct mpeg12_param_sets), GFP_KERNEL);
+	ps = aml_media_mem_alloc(sizeof(struct mpeg12_param_sets), GFP_KERNEL);
 	if (ps == NULL)
 		return -ENOMEM;
 
@@ -351,7 +351,7 @@ static int parse_stream_cpu(struct vdec_mpeg12_inst *inst, u8 *buf, u32 size)
 
 	ret = ps->head_parsed ? 0 : -1;
 out:
-	kfree(ps);
+	aml_media_mem_free(ps);
 
 	return ret;
 }
@@ -420,9 +420,9 @@ static void vdec_mpeg12_deinit(unsigned long h_vdec)
 		vfree(inst->vsi->header_buf);
 
 	if (inst->vsi)
-		kfree(inst->vsi);
+		aml_media_mem_free(inst->vsi);
 
-	kfree(inst);
+	aml_media_mem_free(inst);
 }
 
 static int vdec_write_nalu(struct vdec_mpeg12_inst *inst,

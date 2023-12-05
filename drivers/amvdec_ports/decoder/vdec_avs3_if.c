@@ -263,7 +263,7 @@ static int vdec_avs3_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	struct vdec_avs3_inst *inst = NULL;
 	int ret = -1;
 
-	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
+	inst = aml_media_mem_alloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst)
 		return -ENOMEM;
 
@@ -285,7 +285,7 @@ static int vdec_avs3_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	inst->vdec.port.type	= PORT_TYPE_HEVC;
 
 	/* probe info from the stream */
-	inst->vsi = kzalloc(sizeof(struct vdec_avs3_vsi), GFP_KERNEL);
+	inst->vsi = aml_media_mem_alloc(sizeof(struct vdec_avs3_vsi), GFP_KERNEL);
 	if (!inst->vsi) {
 		ret = -ENOMEM;
 		goto err;
@@ -319,9 +319,9 @@ err:
 	if (inst && inst->vsi && inst->vsi->header_buf)
 		vfree(inst->vsi->header_buf);
 	if (inst && inst->vsi)
-		kfree(inst->vsi);
+		aml_media_mem_free(inst->vsi);
 	if (inst)
-		kfree(inst);
+		aml_media_mem_free(inst);
 	*h_vdec = 0;
 
 	return ret;
@@ -429,9 +429,9 @@ static void vdec_avs3_deinit(unsigned long h_vdec)
 		vfree(inst->vsi->header_buf);
 
 	if (inst->vsi)
-		kfree(inst->vsi);
+		aml_media_mem_free(inst->vsi);
 
-	kfree(inst);
+	aml_media_mem_free(inst);
 
 	ctx->drv_handle = 0;
 }

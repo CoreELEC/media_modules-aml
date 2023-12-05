@@ -1034,7 +1034,7 @@ int aml_v4l2_vpp_init(
 		cfg->fmt != V4L2_PIX_FMT_NV21 && cfg->fmt != V4L2_PIX_FMT_NV21M)
 		return -EINVAL;
 
-	vpp = kzalloc(sizeof(*vpp), GFP_KERNEL);
+	vpp = aml_media_mem_alloc(sizeof(*vpp), GFP_KERNEL);
 	if (!vpp)
 		return -ENOMEM;
 
@@ -1235,7 +1235,7 @@ error2:
 error1:
 	di_destroy_instance(vpp->di_handle);
 error:
-	kfree(vpp);
+	aml_media_mem_free(vpp);
 	return ret;
 }
 EXPORT_SYMBOL(aml_v4l2_vpp_init);
@@ -1269,7 +1269,7 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 	mutex_destroy(&vpp->output_lock);
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
 		"vpp_wrapper destroy done\n");
-	kfree(vpp);
+	aml_media_mem_free(vpp);
 
 	return 0;
 }

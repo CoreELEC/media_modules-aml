@@ -722,7 +722,7 @@ int aml_v4l2_ge2d_init(
 	if (!cfg || !ge2d_handle)
 		return -EINVAL;
 
-	ge2d = kzalloc(sizeof(*ge2d), GFP_KERNEL);
+	ge2d = aml_media_mem_alloc(sizeof(*ge2d), GFP_KERNEL);
 	if (!ge2d)
 		return -ENOMEM;
 
@@ -864,7 +864,7 @@ error3:
 error2:
 	destroy_ge2d_work_queue(ge2d->ge2d_context);
 error:
-	kfree(ge2d);
+	aml_media_mem_free(ge2d);
 
 	return ret;
 }
@@ -897,7 +897,7 @@ int aml_v4l2_ge2d_destroy(struct aml_v4l2_ge2d* ge2d)
 	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_DETAIL,
 		"ge2d destroy done\n");
 
-	kfree(ge2d);
+	aml_media_mem_free(ge2d);
 
 	return 0;
 }

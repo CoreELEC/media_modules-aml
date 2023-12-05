@@ -323,12 +323,12 @@ static void task_chain_destroy(struct kref *kref)
 
 	task->cur_type = TASK_TYPE_MAX;
 	memset(task->map, 0, sizeof(task->map));
-	kfree(task->vf_tmp);
+	aml_media_mem_free(task->vf_tmp);
 
 	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
 		"TSK(%px):%d task chain destroyed.\n", task, task->id);
 
-	kfree(task);
+	aml_media_mem_free(task);
 }
 
 static void task_item_release(struct kref *kref)
@@ -344,7 +344,7 @@ static void task_item_release(struct kref *kref)
 
 	kref_put(&item->task->ref, task_chain_destroy);
 
-	kfree(item);
+	aml_media_mem_free(item);
 }
 
 bool task_chain_empty(struct task_chain_s *task)
@@ -383,7 +383,7 @@ void task_order_attach(struct task_chain_s *task,
 	struct task_item_s *item;
 	int i;
 
-	item = kzalloc(sizeof(struct task_item_s), GFP_KERNEL);
+	item = aml_media_mem_alloc(sizeof(struct task_item_s), GFP_KERNEL);
 	if (!item) {
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
 			"TSK(%px):%d alloc item fail.\n", task, task->id);
@@ -433,7 +433,7 @@ int task_chain_init(struct task_chain_s **task_out,
 {
 	struct task_chain_s *task;
 
-	task = kzalloc(sizeof(struct task_chain_s), GFP_KERNEL);
+	task = aml_media_mem_alloc(sizeof(struct task_chain_s), GFP_KERNEL);
 	if (!task) {
 		v4l_dbg(v4l_ctx, V4L_DEBUG_CODEC_ERROR,
 			"%s alloc task %d fail.\n", __func__, vb_idx);
@@ -445,11 +445,11 @@ int task_chain_init(struct task_chain_s **task_out,
 	task->ctx	= v4l_ctx;
 	task->cur_type	= TASK_TYPE_MAX;
 
-	task->vf_tmp = kzalloc(sizeof(struct vframe_s), GFP_KERNEL);
+	task->vf_tmp = aml_media_mem_alloc(sizeof(struct vframe_s), GFP_KERNEL);
 	if (!task->vf_tmp) {
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
 			"%s alloc failed!\n", __func__);
-		kfree(task);
+		aml_media_mem_free(task);
 		return -ENOMEM;
 	}
 	kref_init(&task->ref);

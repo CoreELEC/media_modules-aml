@@ -67,21 +67,21 @@ static int fops_vcodec_open(struct file *file)
 	struct vb2_queue *src_vq;
 	int ret = 0;
 
-	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	ctx = aml_media_mem_alloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 	kref_init(&ctx->ctx_ref);
 
-	aml_vb = kzalloc(sizeof(*aml_vb), GFP_KERNEL);
+	aml_vb = aml_media_mem_alloc(sizeof(*aml_vb), GFP_KERNEL);
 	if (!aml_vb) {
-		kfree(ctx);
+		aml_media_mem_free(ctx);
 		return -ENOMEM;
 	}
 
 	ctx->meta_infos.meta_bufs = vzalloc(sizeof(struct meta_data) * V4L_CAP_BUFF_MAX);
 	if (ctx->meta_infos.meta_bufs == NULL) {
-		kfree(aml_vb);
-		kfree(ctx);
+		aml_media_mem_free(aml_vb);
+		aml_media_mem_free(ctx);
 		return -ENOMEM;
 	}
 
@@ -198,8 +198,8 @@ err_ctrls_setup:
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
 	vfree(ctx->meta_infos.meta_bufs);
-	kfree(ctx->empty_flush_buf);
-	kfree(ctx);
+	aml_media_mem_free(ctx->empty_flush_buf);
+	aml_media_mem_free(ctx);
 	mutex_unlock(&dev->dev_mutex);
 
 	return ret;
@@ -224,7 +224,7 @@ static int fops_vcodec_release(struct file *file)
 
 	list_del_init(&ctx->list);
 
-	kfree(ctx->empty_flush_buf);
+	aml_media_mem_free(ctx->empty_flush_buf);
 	aml_buf_mgr_release(&ctx->bm);
 	aml_v4l_vpp_release_early(ctx);
 	kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
@@ -267,7 +267,7 @@ int v4l2_alloc_fd(int *fd)
 	}
 
 	file->private_data =
-		kzalloc(sizeof(struct file_private_data), GFP_KERNEL);
+		aml_media_mem_alloc(sizeof(struct file_private_data), GFP_KERNEL);
 	if (!file->private_data) {
 		v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 			"alloc priv data failed.\n");

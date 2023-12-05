@@ -788,7 +788,7 @@ void vdec_frame_buffer_release(void *data)
 	}
 
 	memset(data, 0, sizeof(struct file_private_data));
-	kfree(data);
+	aml_media_mem_free(data);
 }
 
 void aml_clean_proxy_uvm(struct aml_vcodec_ctx *ctx)
@@ -1730,7 +1730,7 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
 	int ret = 0;
 
-	thread = kzalloc(sizeof(*thread), GFP_KERNEL);
+	thread = aml_media_mem_alloc(sizeof(*thread), GFP_KERNEL);
 	if (thread == NULL)
 		return -ENOMEM;
 
@@ -1756,7 +1756,7 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 	return 0;
 
 err:
-	kfree(thread);
+	aml_media_mem_free(thread);
 
 	return ret;
 }
@@ -1778,7 +1778,7 @@ void aml_thread_stop(struct aml_vcodec_ctx *ctx)
 		up(&thread->sem);
 		kthread_stop(thread->task);
 		thread->task = NULL;
-		kfree(thread);
+		aml_media_mem_free(thread);
 	}
 }
 EXPORT_SYMBOL_GPL(aml_thread_stop);
@@ -1912,7 +1912,7 @@ static void aml_uvm_buf_delay_free(struct uvm_buf_obj *obj)
 		dma_buf_put(mbuf->idmabuf[1]);
 	}
 
-	kfree(mbuf);
+	aml_media_mem_free(mbuf);
 }
 
 static void aml_uvm_copy_sgt(struct sg_table *dst_table,
@@ -4118,7 +4118,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 
 	aml_es_mgr_release(ctx);
 
-	kfree(ctx);
+	aml_media_mem_free(ctx);
 }
 
 static void aml_uvm_buf_free(void *arg)
