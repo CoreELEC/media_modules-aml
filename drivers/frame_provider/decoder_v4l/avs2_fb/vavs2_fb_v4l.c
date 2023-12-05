@@ -6300,14 +6300,6 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 		pic_backend_ref_operation(dec, 0);
 
-		if (without_display_mode == 0) {
-			if (ctx->is_stream_off) {
-				vavs2_vf_put(vavs2_vf_get(vdec), vdec);
-			} else {
-				v4l_submit_vframe(dec);
-			}
-		} else
-			vavs2_vf_put(vavs2_vf_get(vdec), vdec);
 #if 0
 #ifdef AVS2_10B_MMU
 		release_unused_4k(&avs2_mmumgr_0, pic->index);
@@ -6346,6 +6338,15 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			pic->scatter_alloc = 2;*/
 		}
 #endif
+
+		if (without_display_mode == 0) {
+			if (ctx->is_stream_off) {
+				vavs2_vf_put(vavs2_vf_get(vdec), vdec);
+			} else {
+				v4l_submit_vframe(dec);
+			}
+		} else
+			vavs2_vf_put(vavs2_vf_get(vdec), vdec);
 
 #if 1 //def RESET_BACK_PER_PICTURE
 		if (dec->front_back_mode == 1)
