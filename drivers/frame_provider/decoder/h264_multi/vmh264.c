@@ -10542,6 +10542,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec_schedule_work(&hw->work);
 		return;
 	}
+	WRITE_VREG(AV_SCRATCH_1, 0); // reuse the register AV_SCRATCH_1 to store the reserved bit_cnt for one packet multi-frame
 	input_empty[DECODE_ID(hw)] = 0;
 
 	hw->dec_result = DEC_RESULT_NONE;
