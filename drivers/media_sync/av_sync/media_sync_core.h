@@ -88,6 +88,7 @@ typedef enum {
 	SET_SLOW_SYNC_ENABLE,
 	SET_TRICK_MODE,
 	SET_FREE_RUN_TYPE,
+	SET_VIDEO_HOLD,
 } mediasync_control_cmd;
 
 typedef struct m_control {
@@ -247,6 +248,10 @@ typedef struct frame_table_s {
 	struct list_head free_list;
 } frame_table_t;
 
+typedef struct holdvideoinfo {
+	int vfm_id;
+	bool flag;
+}mediasync_holdvideoinfo;
 typedef struct instance{
 	s32 mSyncIndex;
 	s32 mSyncId;
@@ -304,6 +309,7 @@ typedef struct instance{
 	u32 mRcordSlopeCount;
 	s32 mlastCheckVideocacheDuration;
 	uint32_t mFreeRunType;
+	mediasync_holdvideoinfo mHoldVideoInfo;
 }mediasync_ins;
 
 typedef struct Media_Sync_Manage {
@@ -429,4 +435,5 @@ long mediasync_ins_set_pcrslope_implementation(mediasync_ins* pInstance, mediasy
 long mediasync_ins_set_video_smooth_tag(MediaSyncManager* pSyncManage, s32 sSmooth_tag);
 long mediasync_ins_get_video_smooth_tag(MediaSyncManager* pSyncManage, s32* spSmooth_tag);
 long mediasync_ins_set_pcr_and_dmx_id(MediaSyncManager* pSyncManage, s32 sDemuxId, s32 sPcrPid);
+extern int register_mediasync_video_hold_set_cb(void* pfunc);
 #endif

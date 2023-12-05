@@ -58,8 +58,8 @@ typedef struct mediasync_video_frame {
 	char vf_provider_name[MEDIASYNC_VF_NAME_SIZE];
 	struct vframe_provider_s mediasync_vf_prov;
 	struct vframe_receiver_s mediasync_vf_recv;
+	bool isVideoHold;
 }mediasync_vf_dev;
-
 
 int mediasync_vf_set_mediasync_id(int dev_id,s32 SyncInsId);
 int mediasync_vf_release(void);

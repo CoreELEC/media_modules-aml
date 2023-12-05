@@ -82,6 +82,8 @@ int demux_get_pcr(int demux_device_index, int index, u64 *pcr) {return -1;}
 extern int register_mediasync_vpts_set_cb(void* pfunc);
 extern int register_mediasync_apts_set_cb(void* pfunc);
 
+typedef int (*pfun_mediasync_video_hold_set)(int dev_id,s32 flag);
+static pfun_mediasync_video_hold_set mediasync_video_hold_set = NULL;
 static u64 get_llabs(s64 value){
 	u64 llvalue;
 	if (value > 0) {
@@ -3672,6 +3674,7 @@ long mediasync_ins_ext_ctrls_ioctrl(MediaSyncManager* pSyncManage, ulong arg, un
 	if (pSyncManage == NULL) {
 		return -1;
 	}
+	pInstance = pSyncManage->pInstance;
 
 	if (copy_from_user((void *)&mediasyncUserControl,
 				(void *)arg,
@@ -3737,7 +3740,27 @@ long mediasync_ins_ext_ctrls_ioctrl(MediaSyncManager* pSyncManage, ulong arg, un
 			mediasync_ins_ext_ctrls(pSyncManage,&mediasyncUserControl);
 			break;
 		}
-
+		case SET_VIDEO_HOLD:
+		{
+			if (is_compat_ptr == 1) {
+		#ifdef CONFIG_COMPAT
+				mediasyncUserControl.ptr = (ulong)compat_ptr(mediasyncUserControl.ptr);
+		#endif
+			}
+			if (copy_from_user((void *)&pInstance->mHoldVideoInfo,
+						(void *)mediasyncUserControl.ptr,
+						sizeof(pInstance->mHoldVideoInfo))) {
+				pr_info("copy_from_user -EFAULT \n");
+				ret = -EFAULT;
+			} else {
+				mediasync_pr_info(0,pInstance,"set video hold vfm_id:%d value:%d \n",
+					pInstance->mHoldVideoInfo.vfm_id,pInstance->mHoldVideoInfo.flag);
+				if (mediasync_video_hold_set) {
+					mediasync_video_hold_set(pInstance->mHoldVideoInfo.vfm_id,pInstance->mHoldVideoInfo.flag);
+				}
+			}
+			break;
+		}
 		default:
 			break;
 	}
@@ -3969,6 +3992,14 @@ long mediasync_ins_set_pcr_and_dmx_id(MediaSyncManager* pSyncManage, s32 sDemuxI
 	return 0;
 }
 
+int register_mediasync_video_hold_set_cb(void* pfunc) {
+	if (pfunc == NULL) {
+		return -1;
+	}
+	mediasync_video_hold_set = (pfun_mediasync_video_hold_set)(int (*)(int, s32))(pfunc);
+	return 0;
+}
+EXPORT_SYMBOL(register_mediasync_video_hold_set_cb);
 module_param(media_sync_debug_level, uint, 0664);
 MODULE_PARM_DESC(media_sync_debug_level, "\n mediasync debug level\n");
 

@@ -25,6 +25,7 @@
 static u32 media_sync_vf_debug_level = 0;
 #define mediasync_pr_info(dbg_level,inst,fmt,args...) if (dbg_level <= media_sync_vf_debug_level) {pr_info("[MS_Vfm:%d][%d] " fmt,__LINE__, inst,##args);}
 
+extern int register_mediasync_video_hold_set_cb(void* pfunc);
 #if 0
 static int mediasync_core_thread(void* param)
 {
@@ -126,6 +127,48 @@ static int mediasync_core_thread(void* param)
 
 #endif
 
+static void mediasync_drop_frame_func(void *op_arg, struct vframe_s *vf_drop) {
+	//drop frame, get from di,put to di
+	struct vframe_s *vf = NULL;
+	mediasync_vf_dev *dev = (mediasync_vf_dev *)op_arg;
+	bool is_di_pw = false;
+	int ret = 0;
+	vf = vf_get(dev->vf_receiver_name);
+	if (vf == NULL) {
+		mediasync_pr_info(1,dev->dev_id,"vf is null");
+		return ;
+	}
+
+	if (vf->type & VIDTYPE_DI_PW) {
+		is_di_pw = true; //is di buffer
+	}
+	mediasync_pr_info(2,dev->dev_id,"in vf->pts_us64:%lld vf_drop->pts_us64:%lld diff:%lld",
+														vf->pts_us64,
+														vf_drop->pts_us64,
+														(vf->pts_us64-vf_drop->pts_us64));
+
+	if (vf->pts_us64 != vf_drop->pts_us64) {
+		mediasync_pr_info(2,dev->dev_id,"drop null,not the same vf \n");
+		//return ;
+	}
+	ret = vf_put(vf, dev->vf_receiver_name);
+	if (ret < 0) {
+		if (is_di_pw) {
+			dim_post_keep_cmd_release2(vf);
+			mediasync_pr_info(0,dev->dev_id,"mediasync_vf_put dim release \n");
+		}
+		mediasync_pr_info(0,dev->dev_id,"vf_put:0x%lx error\n",(ulong)vf);
+		return ;
+	}
+	ret = vf_notify_provider(dev->vf_receiver_name, VFRAME_EVENT_RECEIVER_PUT,
+				NULL);
+	if (ret < 0) {
+		mediasync_pr_info(0,dev->dev_id,"vf_notify_provider error\n");
+	}
+	mediasync_pr_info(2,dev->dev_id,"out drop frame success\n");
+	return ;
+}
+
 
 /* -----------------------------------------------------------------
  *           provider operations
@@ -140,14 +183,18 @@ static struct vframe_s *mediasync_vf_peek(void *op_arg)
 	if (dev == NULL) {
 		return NULL;
 	}
-	mediasync_pr_info(3,dev->dev_id,"peek in (Status:%d) \n",dev->frameStatus);
+	mediasync_pr_info(3,dev->dev_id,"peek in (Status:%d) isVideoHold:%d \n",dev->frameStatus,dev->isVideoHold);
 	vf = vf_peek(dev->vf_receiver_name);
 	if (vf == NULL) {
 		return NULL;
 	}
 
-
 	if (dev->frameStatus == 1) {
+		if (dev->isVideoHold == true) {
+			mediasync_drop_frame_func(dev, vf);
+			mediasync_pr_info(2,dev->dev_id,"frameStatus:%d isVideoHold:%d \n",dev->frameStatus,dev->isVideoHold);
+			return NULL;
+		}
 		return vf;
 	}
 
@@ -157,15 +204,20 @@ static struct vframe_s *mediasync_vf_peek(void *op_arg)
 		vPts = vf->pts_us64;
 	}
 
-	mediasync_pr_info(2,dev->dev_id,"vf->pts:%d pts:%lld lastpts:%lld diff:%lld vfPts:%lld",
+	mediasync_pr_info(2,dev->dev_id,"vf->pts:%d pts:%lld lastpts:%lld diff:%lld vfPts:%lld isVideoHold:%d",
 														vf->pts,
 														vPts,
 														dev->lastVpts,
 														vPts - dev->lastVpts,
-														vf->pts_us64);
+														vf->pts_us64,
+														dev->isVideoHold);
 	vsyncPolicy.param1 = DUR2US(vf->duration);
 	mediasync_video_process(dev->sync_policy_instance,vPts,&vsyncPolicy);
 	if (vsyncPolicy.videopolicy == MEDIASYNC_VIDEO_HOLD) {
+		return NULL;
+	}
+	if (dev->isVideoHold == true) {
+		mediasync_drop_frame_func(dev, vf);
 		return NULL;
 	}
 
@@ -444,6 +496,23 @@ int mediasync_vf_set_mediasync_id(int dev_id,s32 SyncInsId) {
 	return 0;
 }
 
+int mediasync_vf_set_video_hold(int dev_id,s32 flag) {
+	struct mediasync_video_frame *dev = NULL;
+
+	bool isFind = false;
+
+	list_for_each_entry(dev, &mediasync_vf_devlist, mediasync_vf_devlist) {
+		if (dev->dev_id == dev_id) {
+			isFind = true;
+			break;
+		}
+	}
+	if (isFind) {
+		dev->isVideoHold = flag;
+		mediasync_pr_info(0,dev->dev_id,"set dev_id:%d isVideoHold:%d \n",dev_id,dev->isVideoHold);
+	}
+	return 0;
+}
 
 
 static int mediasync_create_vf_instance(int dev_id)
@@ -509,6 +578,7 @@ int mediasync_vf_release(void)
 int mediasync_vf_init(void)
 {
 	int dev_id = 0;
+	register_mediasync_video_hold_set_cb(mediasync_vf_set_video_hold);
 	mediasync_create_vf_instance(dev_id);
 	mediasync_policy_manager_init();
 	return 0;
