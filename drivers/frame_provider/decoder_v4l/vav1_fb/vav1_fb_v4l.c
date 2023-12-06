@@ -524,6 +524,7 @@ struct MVBUF_s {
 	unsigned long start_adr;
 	unsigned int size;
 	int used_flag;
+	int used_pic_index;
 } /*MVBUF_t */;
 
 #define WR_PTR_INC_NUM 1
@@ -1638,6 +1639,7 @@ static void dealloc_mv_bufs(struct AV1HW_s *hw)
 			hw->m_mv_BUF[i].start_adr = 0;
 			hw->m_mv_BUF[i].size = 0;
 			hw->m_mv_BUF[i].used_flag = 0;
+			hw->m_mv_BUF[i].used_pic_index = -1;
 		}
 	}
 }
@@ -1648,7 +1650,7 @@ static int alloc_mv_buf(struct AV1HW_s *hw,
 	int ret = 0;
 
 	if (hw->m_mv_BUF[i].start_adr &&
-		size > hw->m_mv_BUF[i].size) {
+		size != hw->m_mv_BUF[i].size) {
 		dealloc_mv_bufs(hw);
 	} else if (hw->m_mv_BUF[i].start_adr)
 		return 0;
@@ -1664,8 +1666,9 @@ static int alloc_mv_buf(struct AV1HW_s *hw,
 		if (!vdec_secure(hw_to_vdec(hw)))
 			vdec_mm_dma_flush(hw->m_mv_BUF[i].start_adr, size);
 		hw->m_mv_BUF[i].size = size;
-		hw->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
+		if (!vdec_secure(hw_to_vdec(hw)))
+			codec_mm_memset(hw->m_mv_BUF[i].start_adr, 0, hw->m_mv_BUF[i].size);
 		if (debug) {
 			pr_info(
 			"MV Buffer %d: start_adr %p size %x\n",
@@ -1673,6 +1676,8 @@ static int alloc_mv_buf(struct AV1HW_s *hw,
 			(void *)hw->m_mv_BUF[i].start_adr,
 			hw->m_mv_BUF[i].size);
 		}
+		hw->m_mv_BUF[i].used_flag = 0;
+		hw->m_mv_BUF[i].used_pic_index = -1;
 	}
 	return ret;
 }
@@ -1708,6 +1713,7 @@ static int cal_mv_buf_size(struct AV1HW_s *hw, int pic_width, int pic_height)
 	return size;
 }
 
+/*
 static int init_mv_buf_list(struct AV1HW_s *hw)
 {
 	int i;
@@ -1743,72 +1749,8 @@ static int init_mv_buf_list(struct AV1HW_s *hw)
 
 	return ret;
 }
+*/
 
-static int get_mv_buf(struct AV1HW_s *hw,
-		struct PIC_BUFFER_CONFIG_s *pic_config)
-{
-	int i;
-	int ret = -1;
-	if (mv_buf_dynamic_alloc) {
-		int size = cal_mv_buf_size(hw,
-			pic_config->y_crop_width, pic_config->y_crop_height);
-		for (i = 0; i < MV_BUFFER_NUM; i++) {
-			if (hw->m_mv_BUF[i].start_adr == 0) {
-				ret = i;
-				break;
-			}
-		}
-		if (i == MV_BUFFER_NUM) {
-			pr_info(
-			"%s: Error, mv buf MV_BUFFER_NUM is not enough\n",
-			__func__);
-			return ret;
-		}
-
-		if (alloc_mv_buf(hw, ret, size) >= 0) {
-			pic_config->mv_buf_index = ret;
-			pic_config->mpred_mv_wr_start_addr =
-				(hw->m_mv_BUF[ret].start_adr + 0xffff) &
-				(~0xffff);
-		} else {
-			pr_info("%s: Error, mv buf alloc fail\n", __func__);
-		}
-		return ret;
-	}
-
-	for (i = 0; i < MV_BUFFER_NUM; i++) {
-		if (hw->m_mv_BUF[i].start_adr &&
-			hw->m_mv_BUF[i].used_flag == 0) {
-			hw->m_mv_BUF[i].used_flag = 1;
-			ret = i;
-			break;
-		}
-	}
-
-	if (ret >= 0) {
-		pic_config->mv_buf_index = ret;
-		pic_config->mpred_mv_wr_start_addr =
-			(hw->m_mv_BUF[ret].start_adr + 0xffff) &
-			(~0xffff);
-		if (debug & AV1_DEBUG_BUFMGR)
-			pr_info("%s => %d (%ld) size 0x%x\n", __func__, ret,
-				pic_config->mpred_mv_wr_start_addr, hw->m_mv_BUF[ret].size);
-	} else {
-		pr_info("%s: Error, mv buf is not enough\n", __func__);
-		if (debug & AV1_DEBUG_BUFMGR) {
-			dump_pic_list(hw);
-			for (i = 0; i < MAX_BUF_NUM; i++) {
-				av1_print(hw, 0,
-					"mv_Buf(%d) start_adr 0x%x size 0x%x used %d\n",
-					i,
-					hw->m_mv_BUF[i].start_adr,
-					hw->m_mv_BUF[i].size,
-					hw->m_mv_BUF[i].used_flag);
-			}
-		}
-	}
-	return ret;
-}
 static void put_mv_buf(struct AV1HW_s *hw,
 				int *mv_buf_index)
 {
@@ -1839,9 +1781,97 @@ static void put_mv_buf(struct AV1HW_s *hw,
 
 	*mv_buf_index = -1;
 	if (hw->m_mv_BUF[i].start_adr &&
-		hw->m_mv_BUF[i].used_flag)
+		hw->m_mv_BUF[i].used_flag) {
 		hw->m_mv_BUF[i].used_flag = 0;
+		hw->m_mv_BUF[i].used_pic_index = -1;
+	}
 }
+
+static int get_mv_buf(struct AV1HW_s *hw,
+		struct PIC_BUFFER_CONFIG_s *pic_config)
+{
+	int i;
+	int ret = -1;
+	int size = cal_mv_buf_size(hw, pic_config->y_crop_width, pic_config->y_crop_height);
+	if (mv_buf_dynamic_alloc) {
+		for (i = 0; i < MV_BUFFER_NUM; i++) {
+			if (hw->m_mv_BUF[i].start_adr == 0) {
+				ret = i;
+				break;
+			}
+		}
+		if (i == MV_BUFFER_NUM) {
+			pr_info(
+			"%s: Error, mv buf MV_BUFFER_NUM is not enough\n",
+			__func__);
+			return ret;
+		}
+
+		if (alloc_mv_buf(hw, ret, size) >= 0) {
+			pic_config->mv_buf_index = ret;
+			pic_config->mpred_mv_wr_start_addr =
+				(hw->m_mv_BUF[ret].start_adr + 0xffff) &
+				(~0xffff);
+		} else {
+			pr_info("%s: Error, mv buf alloc fail\n", __func__);
+		}
+		return ret;
+	}
+
+	if (pic_config->mv_buf_index != -1) {
+		av1_print(hw, AV1_DEBUG_BUFMGR, "%s : warning, mv buff:%d hasn't been released\n",
+			__func__, pic_config->mv_buf_index);
+		put_mv_buf(hw, &pic_config->mv_buf_index);
+	}
+
+	for (i = 0; i < MV_BUFFER_NUM; i++) {
+		if (hw->m_mv_BUF[i].start_adr &&
+			hw->m_mv_BUF[i].used_flag == 0) {
+			hw->m_mv_BUF[i].used_flag = 1;
+			ret = i;
+			break;
+		}
+	}
+
+	if (ret < 0) {
+		for (i = 0; i < MV_BUFFER_NUM; i++) {
+			if (hw->m_mv_BUF[i].start_adr == 0) {
+				if (alloc_mv_buf(hw, i, size) >= 0) {
+					hw->m_mv_BUF[i].used_flag = 1;
+					ret = i;
+				}
+				break;
+			}
+		}
+	}
+
+	if (ret >= 0) {
+		pic_config->mv_buf_index = ret;
+		hw->m_mv_BUF[ret].used_pic_index = pic_config->index;
+		pic_config->mpred_mv_wr_start_addr =
+			(hw->m_mv_BUF[ret].start_adr + 0xffff) &
+			(~0xffff);
+		if (debug & AV1_DEBUG_BUFMGR)
+			pr_info("%s => %d (%d) size 0x%x\n", __func__, ret,
+				pic_config->mpred_mv_wr_start_addr, hw->m_mv_BUF[ret].size);
+	} else {
+		pr_info("%s: Error, mv buf is not enough\n", __func__);
+		if (debug & AV1_DEBUG_BUFMGR) {
+			dump_pic_list(hw);
+			for (i = 0; i < MAX_BUF_NUM; i++) {
+				av1_print(hw, 0,
+					"mv_Buf(%d) start_adr 0x%x size 0x%x used %d used_pic_index %d\n",
+					i,
+					hw->m_mv_BUF[i].start_adr,
+					hw->m_mv_BUF[i].size,
+					hw->m_mv_BUF[i].used_flag,
+					hw->m_mv_BUF[i].used_pic_index);
+			}
+		}
+	}
+	return ret;
+}
+
 static void	put_un_used_mv_bufs(struct AV1HW_s *hw)
 {
 	struct AV1_Common_s *const cm = &hw->common;
@@ -8752,8 +8782,10 @@ static int v4l_res_change(struct AV1HW_s *hw)
 
 			vav1_get_ps_info(hw, &ps);
 			vdec_v4l_set_ps_infos(ctx, &ps);
+			/*
 			if (init_mv_buf_list(hw) < 0)
 				pr_err("%s: !!!!Error, reinit_mv_buf_list fail\n", __func__);
+			*/
 			vdec_v4l_res_ch_event(ctx);
 			hw->v4l_params_parsed = false;
 			hw->res_ch_flag = 1;
@@ -9519,9 +9551,11 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				if ((hw->front_back_mode != 1) && (hw->front_back_mode != 3))
 					init_pic_list_hw(hw);
 #ifndef MV_USE_FIXED_BUF
+				/*
 				if (init_mv_buf_list(hw) < 0) {
 					pr_err("%s: !!!!Error, init_mv_buf_list fail\n", __func__);
 				}
+				*/
 #endif
 				vdec_parms_setup_and_sanity_check(hw);
 
@@ -11692,6 +11726,7 @@ static void  av1_decode_ctx_reset(struct AV1HW_s *hw)
 				hw->m_mv_BUF[i].size = 0;
 			}
 			hw->m_mv_BUF[i].used_flag = 0;
+			hw->m_mv_BUF[i].used_pic_index = -1;
 		}
 	}
 
@@ -12233,11 +12268,12 @@ static void av1_dump_state(struct vdec_s *vdec)
 
 	for (i = 0; i < MAX_BUF_NUM; i++) {
 		av1_print(hw, 0,
-			"mv_Buf(%d) start_adr 0x%x size 0x%x used %d\n",
+			"mv_Buf(%d) start_adr 0x%x size 0x%x used %d used_pic_index %d\n",
 			i,
 			hw->m_mv_BUF[i].start_adr,
 			hw->m_mv_BUF[i].size,
-			hw->m_mv_BUF[i].used_flag);
+			hw->m_mv_BUF[i].used_flag,
+			hw->m_mv_BUF[i].used_pic_index);
 	}
 
 	av1_print(hw, 0,

@@ -2095,7 +2095,7 @@ static int init_mv_buf_list(struct VP9Decoder_s *pbi)
 {
 	int i;
 	int ret = 0;
-	int count = MV_BUFFER_NUM;
+	int count = 2;
 	int pic_width = pbi->init_pic_w;
 	int pic_height = pbi->init_pic_h;
 	int size = cal_mv_buf_size(pbi, pic_width, pic_height);
@@ -2103,19 +2103,13 @@ static int init_mv_buf_list(struct VP9Decoder_s *pbi)
 	if (mv_buf_dynamic_alloc)
 		return 0;
 
-	if (mv_buf_margin > 0)
-		count = REF_FRAMES + mv_buf_margin;
-
-	if (pbi->init_pic_w > 2048 && pbi->init_pic_h > 1088)
-		count = REF_FRAMES_4K + mv_buf_margin;
-
 	if (debug) {
 		pr_info("%s w:%d, h:%d, count: %d\n",
 		__func__, pbi->init_pic_w, pbi->init_pic_h, count);
 	}
 
 	for (i = 0;
-		i < count && i < MV_BUFFER_NUM; i++) {
+		i < count; i++) {
 		if (alloc_mv_buf(pbi, i, size) < 0) {
 			ret = -1;
 			break;

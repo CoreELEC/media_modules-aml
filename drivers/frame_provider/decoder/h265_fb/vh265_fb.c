@@ -1533,6 +1533,7 @@ struct BUF_s {
 	ulong	v4l_ref_buf_addr;
 	ulong	chroma_addr;
 	u32	chroma_size;
+	int	used_pic_index;
 } /*BUF_t */;
 
 /* level 6, 6.1 maximum slice number is 800; other is 200 */
@@ -3717,6 +3718,7 @@ static void dealloc_mv_bufs(struct hevc_state_s *hevc)
 			hevc->m_mv_BUF[i].start_adr = 0;
 			hevc->m_mv_BUF[i].size = 0;
 			hevc->m_mv_BUF[i].used_flag = 0;
+			hevc->m_mv_BUF[i].used_pic_index = -1;
 		}
 	}
 	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
@@ -3738,7 +3740,6 @@ static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
 		ret = -1;
 	} else {
 		hevc->m_mv_BUF[i].size = hevc->mv_buf_size;
-		hevc->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 			hevc_print(hevc, 0,
@@ -3770,6 +3771,8 @@ static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
 					}
 			}
 		}
+		hevc->m_mv_BUF[i].used_flag = 0;
+		hevc->m_mv_BUF[i].used_pic_index = -1;
 	}
 	return ret;
 }
@@ -3802,6 +3805,44 @@ static void init_mv_buf_list(struct hevc_state_s *hevc)
 		}
 	}
 	hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_ALLOCATE_DONE;
+}
+
+static void put_mv_buf(struct hevc_state_s *hevc,
+	struct PIC_s *pic)
+{
+#ifndef MV_USE_FIXED_BUF
+	int i = pic->mv_buf_index;
+	if (i < 0 || i >= MAX_REF_PIC_NUM) {
+		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+			"%s: index %d beyond range\n", __func__, i);
+		return;
+	}
+	if (mv_buf_dynamic_alloc) {
+		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+			"%s(%d)\n", __func__, i);
+
+		decoder_bmmu_box_free_idx(
+			hevc->bmmu_box,
+			MV_BUFFER_IDX(i));
+		hevc->m_mv_BUF[i].start_adr = 0;
+		hevc->m_mv_BUF[i].size = 0;
+		hevc->m_mv_BUF[i].used_flag = 0;
+		pic->mv_buf_index = -1;
+		return;
+	}
+
+	hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+		"%s(%d): used_flag(%d)\n",
+		__func__, i,
+		hevc->m_mv_BUF[i].used_flag);
+
+	if (hevc->m_mv_BUF[i].start_adr &&
+		hevc->m_mv_BUF[i].used_flag) {
+		hevc->m_mv_BUF[i].used_flag = 0;
+		hevc->m_mv_BUF[i].used_pic_index = -1;
+	}
+	pic->mv_buf_index = -1;
+#endif
 }
 
 static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
@@ -3893,44 +3934,66 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			hevc_print(hevc, 0,
 				"%s: Error, mv buf is not enough\n", __func__);
 		}
+	} else {
+		if (IS_8K_SIZE(hevc->pic_w, hevc->pic_h))
+			new_size = MPRED_8K_MV_BUF_SIZE;
+		else if (IS_4K_SIZE(hevc->pic_w, hevc->pic_h))
+			new_size = MPRED_4K_MV_BUF_SIZE; /*0x120000*/
+		else
+			new_size = MPRED_MV_BUF_SIZE;
+
+		if (new_size != hevc->mv_buf_size) {
+			dealloc_mv_bufs(hevc);
+			hevc->mv_buf_size = new_size;
+		}
+
+		if (pic->mv_buf_index != -1) {
+			hevc_print(hevc, H265_DEBUG_BUFMGR, "%s : warning, mv buff:%d hasn't been released\n",
+				__func__, pic->mv_buf_index);
+			put_mv_buf(hevc, pic);
+		}
+
+		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+			if (hevc->m_mv_BUF[i].start_adr &&
+				hevc->m_mv_BUF[i].used_flag == 0) {
+				hevc->m_mv_BUF[i].used_flag = 1;
+				ret = i;
+				break;
+			}
+		}
+
+		if (ret < 0) {
+			for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+				if (hevc->m_mv_BUF[i].start_adr == 0) {
+					if (alloc_mv_buf(hevc, i) >= 0) {
+						hevc->m_mv_BUF[i].used_flag = 1;
+						ret = i;
+					}
+					break;
+				}
+			}
+		}
+
+		if (ret >= 0) {
+			pic->mv_buf_index = ret;
+			pic->mv_size = hevc->m_mv_BUF[ret].size;
+			hevc->m_mv_BUF[ret].used_pic_index = pic->index;
+			pic->mpred_mv_wr_start_addr =
+				(hevc->m_mv_BUF[ret].start_adr + 0xffff) &
+				(~0xffff);
+			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+				"%s => %d (0x%x) size 0x%x\n",
+				__func__, ret,
+				pic->mpred_mv_wr_start_addr,
+				pic->mv_size);
+
+		} else {
+			hevc_print(hevc, 0,
+			"%s: Error, mv buf is not enough\n",
+			__func__);
+		}
 	}
 	return ret;
-#endif
-}
-
-static void put_mv_buf(struct hevc_state_s *hevc,
-	struct PIC_s *pic)
-{
-#ifndef MV_USE_FIXED_BUF
-	int i = pic->mv_buf_index;
-	if (i < 0 || i >= MAX_REF_PIC_NUM) {
-		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
-			"%s: index %d beyond range\n", __func__, i);
-		return;
-	}
-	if (mv_buf_dynamic_alloc) {
-		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
-			"%s(%d)\n", __func__, i);
-
-		decoder_bmmu_box_free_idx(
-			hevc->bmmu_box,
-			MV_BUFFER_IDX(i));
-		hevc->m_mv_BUF[i].start_adr = 0;
-		hevc->m_mv_BUF[i].size = 0;
-		hevc->m_mv_BUF[i].used_flag = 0;
-		pic->mv_buf_index = -1;
-		return;
-	}
-
-	hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
-		"%s(%d): used_flag(%d)\n",
-		__func__, i,
-		hevc->m_mv_BUF[i].used_flag);
-
-	if (hevc->m_mv_BUF[i].start_adr &&
-		hevc->m_mv_BUF[i].used_flag)
-		hevc->m_mv_BUF[i].used_flag = 0;
-	pic->mv_buf_index = -1;
 #endif
 }
 
@@ -12364,12 +12427,14 @@ force_output:
 				hevc->kpi_first_i_coming = 1;
 				pr_debug("[vdec_kpi][%s] First I frame coming.\n", __func__);
 			}
+			/*
 			if (!mv_buf_dynamic_alloc && hevc->pic_mv_buf_wait_alloc_done_flag == BUFFER_INIT) {
 				hevc->dec_result = DEC_RESULT_WAIT_BUFFER;
 				hevc_print(hevc, 0, "[%d]alloc mv buffer\n",vdec->id);
 				vdec_schedule_work(&hevc->work);
 				return IRQ_HANDLED;
 			}
+			*/
 		} else if (hevc->wait_buf == 0) {
 			u32 vui_time_scale;
 			u32 vui_num_units_in_tick;
@@ -16278,7 +16343,7 @@ static void reset(struct vdec_s *vdec)
 	hevc->dec_result = DEC_RESULT_NONE;
 	reset_process_time(hevc);
 	hevc->pic_list_init_flag = 0;
-	dealloc_mv_bufs(hevc);
+	//dealloc_mv_bufs(hevc);
 	hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_INIT;
 	aml_free_canvas(vdec);
 	hevc_local_uninit(hevc);
@@ -16288,6 +16353,10 @@ static void reset(struct vdec_s *vdec)
 		hevc->m_BUF[i].start_adr = 0;
 	}
 
+	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+		hevc->m_mv_BUF[i].used_flag = 0;
+		hevc->m_mv_BUF[i].used_pic_index = -1;
+	}
 	hevc->dec_result = DEC_RESULT_NONE;
 
 	hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);
@@ -16629,11 +16698,12 @@ static void vh265_dump_state(struct vdec_s *vdec)
 
 	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 		hevc_print(hevc, 0,
-			"mv_Buf(%d) start_adr 0x%x size 0x%x used %d\n",
+			"mv_Buf(%d) start_adr 0x%x size 0x%x used %d used_pic_index %d\n",
 			i,
 			hevc->m_mv_BUF[i].start_adr,
 			hevc->m_mv_BUF[i].size,
-			hevc->m_mv_BUF[i].used_flag);
+			hevc->m_mv_BUF[i].used_flag,
+			hevc->m_mv_BUF[i].used_pic_index);
 	}
 
 	hevc_print(hevc, 0,
