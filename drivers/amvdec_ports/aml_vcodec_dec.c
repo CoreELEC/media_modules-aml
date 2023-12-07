@@ -1957,12 +1957,32 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 
 	if ((vb->vb2_buf.memory != VB2_MEMORY_DMABUF) ||
 		!dbuf ||
-		!dmabuf_is_uvm(dbuf) ||
-		am_buf->is_delay_allocated)
+		!dmabuf_is_uvm(dbuf))
 		return 0;
 
 	obj = dmabuf_get_uvm_buf_obj(dbuf);
 	mbuf = container_of(obj, struct mua_buffer, base);
+
+	if (am_buf->is_delay_allocated) {
+		struct aml_buf *master_buf = am_buf->pair == BUF_MASTER ?
+					am_buf : am_buf->master_buf;
+
+		if (master_buf->pair_state == PAIR_DONE &&
+			am_buf->pair_state == PAIR_DONE)
+			return 0;
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+			"Buffers pairing hasn't been completed! Repair!\n");
+		if (ctx->master_buf == NULL &&
+			am_buf->pair_state != PAIR_DONE) {
+			ctx->master_buf = am_buf;
+			am_buf->pair_state = MASTER_DONE;
+			am_buf->pair = BUF_MASTER;
+			aml_buf_get_ref(&ctx->bm, am_buf);
+
+			goto update;
+		}
+	}
 
 	/* free fake dma buffer. */
 	if (mbuf->idmabuf[0])
@@ -1979,6 +1999,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 
 	if (ctx->master_buf) {
 		struct aml_buf *master_buf = ctx->master_buf;
+		struct aml_buf *sub_buf = NULL;
 
 		if (master_buf->pair_state == MASTER_DONE) {
 			master_buf->sub_buf[0] = (void *)am_buf;
@@ -1996,6 +2017,14 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 
 		am_buf->is_delay_allocated = true;
 		master_buf->pair_state++;
+		if (master_buf->sub_buf[0]) {
+			sub_buf = master_buf->sub_buf[0];
+			sub_buf->pair_state = master_buf->pair_state;
+		}
+		if (master_buf->sub_buf[1]) {
+			sub_buf = master_buf->sub_buf[1];
+			sub_buf->pair_state = master_buf->pair_state;
+		}
 		if (master_buf->pair_state == PAIR_DONE)
 			ctx->master_buf = NULL;
 		else
@@ -2124,6 +2153,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 		}
 	}
 
+update:
 	aml_buf_update(&ctx->bm, get_addr(&vb->vb2_buf, 0), am_buf);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
