@@ -4622,6 +4622,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		ctx->out_buff_cnt = 0;
 		ctx->in_buff_cnt = 0;
 		ctx->write_frames = 0;
+		ctx->master_buf = NULL;
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
