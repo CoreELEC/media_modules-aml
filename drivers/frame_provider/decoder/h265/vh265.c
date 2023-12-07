@@ -1488,6 +1488,12 @@ enum SliceType {
 	I_SLICE
 };
 
+enum ResResult {
+	RES_RET_NORMAL = 0,
+	RES_RET_ABNORMAL = 1,
+	RES_RET_OVERSIZE = 2
+};
+
 /*USE_BUF_BLOCK*/
 struct BUF_s {
 	ulong	start_adr;
@@ -1701,6 +1707,13 @@ struct h265_userdata_info_t {
 struct mh265_fence_vf_t {
 	u32 used_size;
 	struct vframe_s *fence_vf[VF_POOL_SIZE];
+};
+
+struct mh265_csd_main_info_t {
+	u32 frame_width;
+	u32 frame_height;
+	u32 crop_right;
+	u32 crop_bottom;
 };
 
 struct hevc_state_s {
@@ -2075,6 +2088,8 @@ struct hevc_state_s {
 	u32 dv_profile;
 	spinlock_t tlock;
 	bool mmu_clear_flag;
+	struct mh265_csd_main_info_t old_csd_info;
+	u32 old_csd_info_check_count;
 } /*hevc_stru_t */;
 
 #define TIMEOUT_INIT 0
@@ -2112,27 +2127,131 @@ static int get_frame_mmu_map_size(void)
 	return (MAX_FRAME_4K_NUM * 4);
 }
 
-static int is_oversize(int w, int h)
+static enum ResResult is_oversize(int w, int h)
 {
 	int max = MAX_SIZE_8K;
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		is_cpu_s7())
+		is_cpu_s7()) {
 		max = MAX_SIZE_4K;
-	else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
+		if (w > h) {
+			if (w > 4096 && w <= 8192
+				&& h > 2304 && h <= 4608)
+					return RES_RET_OVERSIZE;
+		} else if (w < h) {
+			if (h > 4096 && h <= 8192
+				&& w > 2304 && w <= 4608)
+					return RES_RET_OVERSIZE;
+		} else {
+			if (w*h > MAX_SIZE_4K
+				&& w*h <= MAX_SIZE_8K)
+				return RES_RET_OVERSIZE;
+		}
+	} else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
 			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) ||
 			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-			is_cpu_s7_s805x3())
+			is_cpu_s7_s805x3()) {
 		max = MAX_SIZE_2K;
+		if (w > h) {
+			if (w > 1920 && w <= 4096
+				&& h > 1088 && h <= 2304)
+					return RES_RET_OVERSIZE;
+		} else if (w < h) {
+			if (h > 1920 && h <= 4096
+				&& w > 1088 && w <= 2304)
+					return RES_RET_OVERSIZE;
+		} else {
+			if (w*h > MAX_SIZE_2K
+				&& w*h <= MAX_SIZE_4K)
+				return RES_RET_OVERSIZE;
+		}
+	}
 
-	if (w < 0 || h < 0)
-		return true;
+	if (w < 64 || h < 64)
+		return RES_RET_ABNORMAL;
 
 	if (h != 0 && (w > max / h))
-		return true;
+		return RES_RET_ABNORMAL;
 
-	return false;
+	return RES_RET_NORMAL;
+}
+
+static int is_crop_valid(struct hevc_state_s *hevc, int w, int h, u32 *p_crop_right, u32 *p_crop_bottom)
+{
+	int crop_w, crop_h;
+
+	if (hevc->param.p.conformance_window_flag &&
+		(get_dbg_flag(hevc) &
+			H265_DEBUG_IGNORE_CONFORMANCE_WINDOW) == 0) {
+		unsigned int SubWidthC, SubHeightC;
+
+		switch (hevc->param.p.chroma_format_idc) {
+		case 1:
+			SubWidthC = 2;
+			SubHeightC = 2;
+			break;
+		case 2:
+			SubWidthC = 2;
+			SubHeightC = 1;
+			break;
+		default:
+			SubWidthC = 1;
+			SubHeightC = 1;
+			break;
+		}
+
+		*p_crop_right = crop_w = SubWidthC * (hevc->param.p.conf_win_left_offset + hevc->param.p.conf_win_right_offset);
+		*p_crop_bottom = crop_h = SubHeightC * (hevc->param.p.conf_win_top_offset + hevc->param.p.conf_win_bottom_offset);
+
+		if (crop_w < 0 || crop_h < 0 || w <= crop_w || h <= crop_h) {
+			hevc_print(hevc, 0,
+				"%s, invalid crop, crop_w:%d, crop_h:%d, w:%d, h:%d\n", __func__, crop_w, crop_h, w, h);
+			return false;
+		}
+	}
+	return true;
+}
+
+static enum ResResult is_csd_valid(struct hevc_state_s *hevc, int w, int h, int is_from_csd_parer) {
+	int over_size = RES_RET_NORMAL;
+	int crop_valid = 0;
+	struct mh265_csd_main_info_t curr_info;
+	curr_info.frame_width = w;
+	curr_info.frame_height = h;
+	over_size = is_oversize(curr_info.frame_width, curr_info.frame_height);
+
+	if (is_from_csd_parer) {
+		crop_valid = is_crop_valid(hevc, w, h, &curr_info.crop_right, &curr_info.crop_bottom);
+		if (!crop_valid)
+			return RES_RET_ABNORMAL;
+	}
+
+	if (over_size == RES_RET_NORMAL)
+		return RES_RET_NORMAL;
+
+	if (over_size == RES_RET_OVERSIZE) {
+		if (is_from_csd_parer) {
+			if (hevc->old_csd_info_check_count == 0) {
+				hevc->old_csd_info_check_count++;
+				memcpy(&hevc->old_csd_info, &curr_info, sizeof(struct mh265_csd_main_info_t));
+			} else {
+				if (!memcmp(&hevc->old_csd_info, &curr_info, sizeof(struct mh265_csd_main_info_t)))
+					hevc->old_csd_info_check_count++;
+				else {
+					hevc->old_csd_info_check_count = 1; // reset to 0+1
+					memcpy(&hevc->old_csd_info, &curr_info, sizeof(struct mh265_csd_main_info_t));
+				}
+			}
+		}
+
+		if (hevc->old_csd_info_check_count >= 3)
+			return RES_RET_OVERSIZE;
+
+		return RES_RET_ABNORMAL;
+	}
+
+	return RES_RET_ABNORMAL;
 }
 
 void check_head_error(struct hevc_state_s *hevc)
@@ -5779,6 +5898,7 @@ static void pic_list_process(struct hevc_state_s *hevc)
 
 static void crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
+	int crop_w, crop_h;
 	hevc->crop_w = pic->width;
 	hevc->crop_h = pic->height;
 
@@ -5801,12 +5921,20 @@ static void crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 			SubHeightC = 1;
 			break;
 		}
-		hevc->crop_w -= (SubWidthC *
-			(pic->conf_win_left_offset +
-			pic->conf_win_right_offset));
-		hevc->crop_h -= (SubHeightC *
-			(pic->conf_win_top_offset +
-			pic->conf_win_bottom_offset));
+
+		crop_w = SubWidthC * (pic->conf_win_left_offset + pic->conf_win_right_offset);
+		crop_h = SubHeightC * (pic->conf_win_top_offset + pic->conf_win_bottom_offset);
+
+		if (crop_w < 0 || crop_h < 0 || pic->width <= crop_w || pic->height <= crop_h) {
+			hevc_print(hevc, H265_DEBUG_BUFMGR,
+				"%s invalid crop, crop_w:%d, crop_h:%d\n", __func__,crop_w, crop_h);
+			pic->crop_w = pic->width;
+			pic->crop_h = pic->height;
+			return;
+		}
+
+		hevc->crop_w -= crop_w;
+		hevc->crop_h -= crop_h;
 
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
 			hevc_print(hevc, 0,
@@ -6727,6 +6855,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	int lcu_y_num_div;
 	int Col_ref;
 	int dbg_skip_flag = 0;
+	int ret_is_csd_valid = 0;
 	int ret;
 
 	if (hevc->wait_buf == 0) {
@@ -6783,10 +6912,12 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 
 		hevc->TMVPFlag = rpm_param->p.slice_temporal_mvp_enable_flag;
 		hevc->isNextSliceSegment = rpm_param->p.dependent_slice_segment_flag ? 1 : 0;
-		if (is_oversize(rpm_param->p.pic_width_in_luma_samples,
-				rpm_param->p.pic_height_in_luma_samples)) {
-			hevc_print(hevc, 0, "over size : %u x %u.\n",
-				rpm_param->p.pic_width_in_luma_samples, rpm_param->p.pic_height_in_luma_samples);
+		ret_is_csd_valid = is_csd_valid(hevc, rpm_param->p.pic_width_in_luma_samples, rpm_param->p.pic_height_in_luma_samples, 0);
+		if (ret_is_csd_valid != RES_RET_NORMAL) {
+			hevc_print(hevc, 0, "%s, unsupported size : %u x %u. ret:%d\n",
+				__func__, rpm_param->p.pic_width_in_luma_samples, rpm_param->p.pic_height_in_luma_samples, ret_is_csd_valid);
+			if (ret_is_csd_valid == RES_RET_OVERSIZE)
+				hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 			if ((!hevc->m_ins_flag) &&
 				((debug &
 				H265_NO_CHANG_DEBUG_FLAG_IN_CODE) == 0))
@@ -11222,6 +11353,7 @@ force_output:
 				&& (hevc->pic_list_init_flag == 0)) {
 				int log = hevc->param.p.log2_min_coding_block_size_minus3;
 				int log_s = hevc->param.p.log2_diff_max_min_coding_block_size;
+				int ret_is_csd_valid = 0;
 
 				hevc->pic_w = hevc->param.p.pic_width_in_luma_samples;
 				hevc->pic_h = hevc->param.p.pic_height_in_luma_samples;
@@ -11230,7 +11362,8 @@ force_output:
 				hevc->crop_w = hevc->pic_w;
 				hevc->crop_h = hevc->pic_h;
 
-				if (performance_profile &&((!is_oversize(hevc->pic_w, hevc->pic_h))
+				ret_is_csd_valid = is_csd_valid(hevc, hevc->pic_w, hevc->pic_h, 1);
+				if (performance_profile &&((ret_is_csd_valid == RES_RET_NORMAL)
 					&& IS_8K_SIZE(hevc->pic_w,hevc->pic_h)))
 					hevc->performance_profile = 1;
 				else
@@ -11238,15 +11371,18 @@ force_output:
 				hevc_print(hevc, 0, "hevc->performance_profile %d\n", hevc->performance_profile);
 				if (hevc->pic_w == 0 || hevc->pic_h == 0
 					|| hevc->lcu_size == 0
-					|| is_oversize(hevc->pic_w, hevc->pic_h)
+					|| ret_is_csd_valid != RES_RET_NORMAL
 					||  hevc_skip_nal(hevc)) {
+					if (ret_is_csd_valid != RES_RET_NORMAL)
+						hevc_print(hevc, 0, "%s, unsupported size : %u x %u. ret:%d\n",
+							__func__, hevc->pic_w, hevc->pic_h, ret_is_csd_valid);
+					if (ret_is_csd_valid == RES_RET_OVERSIZE)
+						hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 					/* skip search next start code */
 					WRITE_VREG(HEVC_WAIT_FLAG, READ_VREG(HEVC_WAIT_FLAG) & (~0x2));
 					if  ((hevc->pic_h == 96) && (hevc->pic_w  == 160))
 						hevc->skip_nal_count++;
 					hevc->skip_flag = 1;
-					if (is_oversize(hevc->pic_w, hevc->pic_h))
-						hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 					WRITE_VREG(HEVC_DEC_STATUS_REG,	HEVC_ACTION_DONE);
 					/* Interrupt Amrisc to execute */
 					WRITE_VREG(HEVC_MCPU_INTR_REQ,	AMRISC_MAIN_REQ);
@@ -11896,7 +12032,9 @@ int vh265_dec_status(struct vdec_info *vstatus)
 	vstatus->status = hevc->stat | hevc->fatal_error;
 	if (!hevc_is_support_4k() &&
 		(IS_4K_SIZE(vstatus->frame_width, vstatus->frame_height)) &&
-		(vstatus->frame_width <= 4096 && vstatus->frame_height <= 2304)) {
+		((vstatus->frame_width <= 4096 && vstatus->frame_height <= 2304) ||
+		(vstatus->frame_width <= 2304 && vstatus->frame_height <= 4096))) {
+		pr_info("%s, unsupported size : %u x %u.\n", __func__, vstatus->frame_width, vstatus->frame_height);
 		vstatus->status |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 	}
 
@@ -12118,13 +12256,6 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 	hevc->frame_width = hevc->vh265_amstream_dec_info.width;
 	hevc->frame_height = hevc->vh265_amstream_dec_info.height;
 	hevc->dec_again_cnt = 0;
-
-	if (is_oversize(hevc->frame_width, hevc->frame_height)) {
-		pr_info("over size : %u x %u.\n",
-			hevc->frame_width, hevc->frame_height);
-		hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		return ret;
-	}
 
 	if (hevc->max_pic_w && hevc->max_pic_h) {
 		hevc->is_4k = !(hevc->max_pic_w && hevc->max_pic_h) ||
