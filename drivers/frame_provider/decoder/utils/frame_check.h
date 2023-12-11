@@ -110,6 +110,7 @@ struct pic_check_mgr_t{
 	int yuvsum;
 	u32 width;
 	u32 height;
+	unsigned char interlace_flag;
 };
 
 struct aux_data_check_mgr_t{

@@ -192,19 +192,21 @@ static int fc_frame_size_get(struct pic_check_mgr_t *pic,
 	struct vframe_s *vf)
 {
 
-	if (is_oversize(vf->width, vf->height)) {
+	if (is_oversize(vf->width, vf->height >> pic->interlace_flag)) {
 		dbg_print(FC_ERROR, "vf pic over size %d x %d\n",
 			vf->width, vf->height);
 		return -1;
 	}
-	pic->height   = vf->height;
+	pic->height   = vf->height >> pic->interlace_flag;
 	pic->width    = vf->width;
-	pic->size_y   = (vf->width * vf->height);
+	pic->size_y   = (vf->width * (vf->height >> pic->interlace_flag));
 	pic->size_uv  = pic->size_y >> (1 + pic->mjpeg_flag);
 	pic->size_pic = pic->size_y + (pic->size_y >> 1);
 
 	/* return mmu without yuv */
-	if (((vf->type & VIDTYPE_VIU_NV21) == 0) && (!pic->mjpeg_flag))
+	if ((!(vf->type & VIDTYPE_VIU_NV21)) &&
+		(!(vf->type & VIDTYPE_VIU_NV12)) &&
+		(!pic->mjpeg_flag))
 		return 0;
 
 	if ((vf->canvas0Addr == vf->canvas1Addr) &&
@@ -214,7 +216,7 @@ static int fc_frame_size_get(struct pic_check_mgr_t *pic,
 		pic->canvas_h = vdec_cav_get_height(canvasY(vf->canvas0Addr));
 	} else {
 		pic->canvas_w = vf->canvas0_config[0].width;
-		pic->canvas_h = vf->canvas0_config[0].height;
+		pic->canvas_h = vf->canvas0_config[0].height >> pic->interlace_flag;
 	}
 
 	/* for p010 */
@@ -226,7 +228,7 @@ static int fc_frame_size_get(struct pic_check_mgr_t *pic,
 
 	if ((pic->canvas_h < 1) || (pic->canvas_w < 1)) {
 		dbg_print(FC_ERROR, "(canvas,pic) w(%d,%d), h(%d,%d)\n",
-			pic->canvas_w, vf->width, pic->canvas_h, vf->height);
+			pic->canvas_w, vf->width, pic->canvas_h, vf->height >> pic->interlace_flag);
 		return -1;
 	}
 
@@ -670,13 +672,13 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 			u32 is_p010 = vf->canvas0_config[0].bit_depth ? 1 : 0;
 
 			ret |= do_yuv_unit_cp(&tmp_addr, mgr->y_phyaddr, mgr->y_vaddr,
-				vf->height, (vf->width << is_p010), mgr->canvas_w << is_p010);
+				vf->height >> mgr->interlace_flag, (vf->width << is_p010), mgr->canvas_w << is_p010);
 
 			uv_stride = (mgr->mjpeg_flag) ? (mgr->canvas_w >> 1) : (mgr->canvas_w << is_p010);
 			uv_cpsize = (mgr->mjpeg_flag) ? (vf->width >> 1) : (vf->width << is_p010);
 
 			ret |= do_yuv_unit_cp(&tmp_addr, mgr->uv_phyaddr, mgr->uv_vaddr,
-					vf->height >> 1, uv_cpsize, uv_stride);
+					(vf->height >> mgr->interlace_flag) >> 1, uv_cpsize, uv_stride);
 
 			if (mgr->mjpeg_flag) {
 				ret |= do_yuv_unit_cp(&tmp_addr, mgr->extra_v_phyaddr, mgr->extra_v_vaddr,
@@ -686,7 +688,7 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 
 	dump->dump_cnt++;
 	dbg_print(0, "----->dump %dst, size %x (%d x %d), dec total %d\n",
-		dump->dump_cnt, mgr->size_pic, vf->width, vf->height, mgr->frame_cnt);
+		dump->dump_cnt, mgr->size_pic, vf->width, vf->height >> mgr->interlace_flag, mgr->frame_cnt);
 
 	if (single_mode_vdec != NULL) {
 		/* single mode need schedule work to write*/
@@ -1118,6 +1120,11 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 	mgr = &vdec->vfc;
 	if (!mgr->enable)
 		return 0;
+
+	if ((vf->type & VIDTYPE_VIU_FIELD) &&
+		((vf->type & VIDTYPE_INTERLACE_TOP) ||
+		(vf->type & VIDTYPE_INTERLACE_BOTTOM)))
+		mgr->interlace_flag = 1;
 
 	mgr->mjpeg_flag = (vdec->format == VFORMAT_MJPEG);
 
