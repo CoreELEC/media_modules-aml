@@ -784,6 +784,7 @@ static void mediasync_ins_reset_l(mediasync_ins* pInstance) {
 		pInstance->mStcParmUpdateCount = 0;
 		pInstance->isVideoFrameAdvance = 0;
 		pInstance->mFreeRunType = 0;
+		pInstance->mVideoTrickMode = 0;
 		pInstance->mSlowSyncEnable = media_sync_start_slow_sync_enable;
 		if (media_sync_calculate_cache_enable) {
 			pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
