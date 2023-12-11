@@ -4456,6 +4456,7 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.scalelut		= {.buf_size = 0x8000 * 2}, // support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
 		.dblk_para		= {.buf_size = 0x80800 * 2}, //addr_offset_lft(64)*4096 + (ctu_numb_y+1)*2048 => 64*4096+(8192/64+1)*2048 = 0x80800
 		.dblk_data		= {.buf_size = 0x80800 * 2}, //addr_offset_lft(64)*4096 + (ctu_numb_y+1)*2048 => 64*4096+(8192/64+1)*2048 = 0x80800
+		.seg_map		= {.buf_size = 0x36000}, //8192*4608/64/64*24 = 0x36000 Bytes
 		.mmu_vbh		= {.buf_size = 0x5000 * 2}, //2*16*(more than 2304)/4, 4K
 		.cm_header		= {.buf_size = MMU_COMPRESS_8K_HEADER_SIZE * 16}, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
 #ifdef VP9_10B_MMU_DW
