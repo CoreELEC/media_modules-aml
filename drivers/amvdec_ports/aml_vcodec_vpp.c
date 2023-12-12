@@ -1374,19 +1374,22 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		fp = media_open(file_name, O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
 		if (!IS_ERR(fp)) {
 			struct vb2_buffer *vb = &in_buf->aml_vb->vb.vb2_buf;
+			void *y_vaddr = codec_mm_vmap(aml_buf->planes[0].addr, aml_buf->planes[0].length);
 
 			// dump y data
-			u8 *yuv_data_addr = aml_yuv_dump(fp, (u8 *)vb2_plane_vaddr(vb, 0),
+			u8 *uv_vaddr = aml_yuv_dump(fp, (u8 *)y_vaddr,
 				vf->width, vf->height, 64);
-
 			// dump uv data
 			if (vb->num_planes == 1) {
-				aml_yuv_dump(fp, yuv_data_addr, vf->width,
+				aml_yuv_dump(fp, uv_vaddr, vf->width,
 					vf->height / 2, 64);
 			} else {
-				aml_yuv_dump(fp, (u8 *)vb2_plane_vaddr(vb, 1),
+				uv_vaddr = (u8 *)codec_mm_vmap(aml_buf->planes[1].addr, aml_buf->planes[1].length);
+				aml_yuv_dump(fp, uv_vaddr,
 					vf->width, vf->height / 2, 64);
+				codec_mm_unmap_phyaddr(uv_vaddr);
 			}
+			codec_mm_unmap_phyaddr(y_vaddr);
 
 			pr_info("dump idx: %d %dx%d num_planes %d\n",
 				dump_vpp_input,
