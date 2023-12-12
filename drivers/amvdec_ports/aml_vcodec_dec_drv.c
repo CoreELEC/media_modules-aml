@@ -57,6 +57,8 @@ bool enable_drm_mode;
 extern void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx);
 char dump_path[32] = "/data";
 
+u32 debug_mode;
+
 static int fops_vcodec_open(struct file *file)
 {
 	struct aml_vcodec_dev *dev = video_drvdata(file);
@@ -506,8 +508,9 @@ out:
 	return pbuf - buf;
 }
 
-ssize_t show_v4ldec_state(struct aml_vcodec_dev *dev, char *buf) {
-	return status_show(&dev->v4ldec_class, NULL, buf);
+ssize_t show_v4ldec_state(void *dev, char *buf) {
+	struct aml_vcodec_dev *devptr = (struct aml_vcodec_dev *)dev;
+	return status_show(&devptr->v4ldec_class, NULL, buf);
 }
 EXPORT_SYMBOL(show_v4ldec_state);
 
@@ -725,6 +728,11 @@ static struct platform_driver aml_vcodec_dec_driver = {
 	},
 };
 
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug_mode = debug_flags;
+}
+
 static int __init amvdec_ports_init(void)
 {
 	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
@@ -735,6 +743,7 @@ static int __init amvdec_ports_init(void)
 		return -ENODEV;
 	}
 
+	register_set_debug_flag_func(DEBUG_AMVDEC_PORTS, set_debug_flag);
 	return 0;
 }
 
@@ -748,7 +757,6 @@ static void __exit amvdec_ports_exit(void)
 module_init(amvdec_ports_init);
 module_exit(amvdec_ports_exit);
 
-u32 debug_mode;
 EXPORT_SYMBOL(debug_mode);
 module_param(debug_mode, uint, 0644);
 

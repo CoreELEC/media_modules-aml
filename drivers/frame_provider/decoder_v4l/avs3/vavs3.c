@@ -10537,6 +10537,12 @@ static struct mconfig avs3_configs[] = {
 };
 static struct mconfig_node avs3_node;
 //#endif
+
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug = debug_flags;
+}
+
 static int __init amvdec_avs3_driver_init_module(void)
 {
 #ifdef AVS3_10B_MMU
@@ -10558,6 +10564,7 @@ static int __init amvdec_avs3_driver_init_module(void)
 		(p_buf_info->end_adr - p_buf_info->start_adr
 			+ 0xffff) & (~0xffff);
 
+	register_set_debug_flag_func(DEBUG_AMVDEC_AVS3_V4L, set_debug_flag);
 #endif
 	pr_debug("amvdec_avs3 module init\n");
 

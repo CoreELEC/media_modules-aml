@@ -43,6 +43,7 @@
 #include "frame_check.h"
 #include "vdec_sync.h"
 #include "vdec_canvas_utils.h"
+#include "decoder_report.h"
 #include "../../../media_sync/pts_server/pts_server_core.h"
 #include "../../../amvdec_ports/utils/common.h"
 

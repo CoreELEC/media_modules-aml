@@ -7722,6 +7722,11 @@ static struct mconfig avs2_configs[] = {
 };
 static struct mconfig_node avs2_node;
 
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug = debug_flags;
+}
+
 static int __init amvdec_avs2_driver_init_module(void)
 {
 #ifdef AVS2_10B_MMU
@@ -7742,6 +7747,7 @@ static int __init amvdec_avs2_driver_init_module(void)
 			p_buf_info = &amvavs2_workbuff_spec[3];
 	}
 
+	register_set_debug_flag_func(DEBUG_AMVDEC_AVS2, set_debug_flag);
 	init_buff_spec(NULL, p_buf_info);
 	work_buf_size =
 		(p_buf_info->end_adr - p_buf_info->start_adr

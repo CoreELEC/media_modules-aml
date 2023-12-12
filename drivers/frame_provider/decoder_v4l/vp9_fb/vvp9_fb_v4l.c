@@ -15177,6 +15177,11 @@ static struct mconfig vp9_configs[] = {
 };
 static struct mconfig_node vp9_node;
 
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug = debug_flags;
+}
+
 static int __init amvdec_vp9_driver_init_module(void)
 {
 
@@ -15197,6 +15202,7 @@ static int __init amvdec_vp9_driver_init_module(void)
 			p_buf_info = &amvvp9_workbuff_spec[4];
 	}
 
+	register_set_debug_flag_func(DEBUG_AMVDEC_VP9_FB_V4L, set_debug_flag);
 	init_buff_spec(NULL, p_buf_info);
 	work_buf_size =
 		(p_buf_info->end_adr - p_buf_info->start_adr

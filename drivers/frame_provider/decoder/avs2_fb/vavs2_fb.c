@@ -10001,6 +10001,12 @@ static struct mconfig avs2_configs[] = {
 	MC_PU32("decode_timeout_val", &decode_timeout_val),
 };
 static struct mconfig_node avs2_node;
+
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug = debug_flags;
+}
+
 static int __init amvdec_avs2_driver_init_module(void)
 {
 #ifdef AVS2_10B_MMU
@@ -10026,6 +10032,7 @@ static int __init amvdec_avs2_driver_init_module(void)
 		(p_buf_info->end_adr - p_buf_info->start_adr
 			+ 0xffff) & (~0xffff);
 
+	register_set_debug_flag_func(DEBUG_AMVDEC_AVS2_FB, set_debug_flag);
 #endif
 	pr_debug("amvdec_avs2 module init\n");
 

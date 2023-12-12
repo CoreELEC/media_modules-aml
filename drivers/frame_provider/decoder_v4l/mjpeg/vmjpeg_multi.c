@@ -1969,6 +1969,11 @@ static struct codec_profile_t ammvdec_mjpeg_profile = {
 	.profile = ""
 };
 
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug_enable = debug_flags;
+}
+
 static int __init ammvdec_mjpeg_driver_init_module(void)
 {
 	if (platform_driver_register(&ammvdec_mjpeg_driver)) {
@@ -1977,6 +1982,7 @@ static int __init ammvdec_mjpeg_driver_init_module(void)
 	}
 	vcodec_profile_register(&ammvdec_mjpeg_profile);
 	vcodec_feature_register(VFORMAT_MJPEG, 1);
+	register_set_debug_flag_func(DEBUG_AMVDEC_MJPEG_V4L, set_debug_flag);
 	return 0;
 }
 

@@ -4327,6 +4327,11 @@ static struct mconfig mmpeg12_configs[] = {
 };
 static struct mconfig_node mmpeg12_node;
 
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug_enable = debug_flags;
+}
+
 static int __init ammvdec_mpeg12_driver_init_module(void)
 {
 	debug_print(0, PRINT_FLAG_DEC_DETAIL,
@@ -4340,6 +4345,7 @@ static int __init ammvdec_mpeg12_driver_init_module(void)
 	INIT_REG_NODE_CONFIGS("media.decoder", &mmpeg12_node,
 		"mmpeg12-v4l", mmpeg12_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_MPEG12, 1);
+	register_set_debug_flag_func(DEBUG_AMVDEC_MPEG12_V4L, set_debug_flag);
 	return 0;
 }
 

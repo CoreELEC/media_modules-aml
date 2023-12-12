@@ -3177,6 +3177,11 @@ static struct codec_profile_t amvdec_mpeg4_profile = {
 	.profile = "v4l, no_single"
 };
 
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug_enable = debug_flags;
+}
+
 static int __init ammvdec_mpeg4_driver_init_module(void)
 {
 	mmpeg4_debug_print(0, PRINT_FLAG_DEC_DETAIL,
@@ -3188,6 +3193,7 @@ static int __init ammvdec_mpeg4_driver_init_module(void)
 	}
 	vcodec_profile_register(&amvdec_mpeg4_profile);
 	vcodec_feature_register(VFORMAT_MPEG4, 0);
+	register_set_debug_flag_func(DEBUG_AMVDEC_MPEG4, set_debug_flag);
 	return 0;
 }
 

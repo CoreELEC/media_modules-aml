@@ -12224,6 +12224,10 @@ static struct mconfig hm264_configs[] = {
 };
 static struct mconfig_node hm264_node;
 
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	h264_debug_flag = debug_flags;
+}
 
 static int __init ammvdec_h264_driver_init_module(void)
 {
@@ -12253,7 +12257,7 @@ static int __init ammvdec_h264_driver_init_module(void)
 				        "dwrite, compressed, v4l";
 		}
 	}
-
+	register_set_debug_flag_func(DEBUG_AMVDEC_H264, set_debug_flag);
 	vcodec_profile_register(&ammvdec_h264_profile);
 	INIT_REG_NODE_CONFIGS("media.decoder", &hm264_node,
 	"mh264", hm264_configs, CONFIG_FOR_RW);

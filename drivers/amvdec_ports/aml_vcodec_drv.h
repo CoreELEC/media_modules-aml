@@ -926,8 +926,6 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 void aml_thread_stop(struct aml_vcodec_ctx *ctx);
 void aml_vdec_recycle_dec_resource(struct aml_vcodec_ctx * ctx,
 					struct aml_buf *aml_buf);
-typedef ssize_t (*dump_v4ldec_state_func)(struct aml_vcodec_dev *dev, char *);
-
 /*
  * v4l2_m2m_job_pause() - paused the schedule of data which from the job queue.
  *

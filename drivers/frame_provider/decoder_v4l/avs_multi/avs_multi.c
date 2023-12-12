@@ -5388,6 +5388,10 @@ static struct mconfig mavs_configs[] = {
 };
 static struct mconfig_node mavs_node;
 
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug = debug_flags;
+}
 
 static int __init ammvdec_avs_driver_init_module(void)
 {
@@ -5401,6 +5405,7 @@ static int __init ammvdec_avs_driver_init_module(void)
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB)
 		ammvdec_avs_profile.profile = "mavs+";
 
+	register_set_debug_flag_func(DEBUG_AMVDEC_AVS_V4L, set_debug_flag);
 	vcodec_profile_register(&ammvdec_avs_profile);
 	INIT_REG_NODE_CONFIGS("media.decoder", &mavs_node,
 		"mavs-v4l", mavs_configs, CONFIG_FOR_RW);

@@ -11705,6 +11705,11 @@ static struct mconfig av1_configs[] = {
 };
 static struct mconfig_node av1_node;
 
+static void set_debug_flag(const char *module, int debug_flags)
+{
+	debug = debug_flags;
+}
+
 static int __init amvdec_av1_driver_init_module(void)
 {
 	//struct BuffInfo_s *p_buf_info;
@@ -11734,6 +11739,7 @@ static int __init amvdec_av1_driver_init_module(void)
 
 	error_handle_policy = 0;
 
+	register_set_debug_flag_func(DEBUG_AMVDEC_AV1, set_debug_flag);
 #ifdef ERROR_HANDLE_DEBUG
 	dbg_nal_skip_flag = 0;
 	dbg_nal_skip_count = 0;
