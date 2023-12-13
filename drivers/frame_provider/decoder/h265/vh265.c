@@ -1518,6 +1518,7 @@ struct PIC_s {
 	unsigned char output_mark;
 	unsigned char recon_mark;
 	unsigned char output_ready;
+	unsigned char nodisp_mark;
 	unsigned char error_mark;
 	unsigned char dis_mark;
 	int slice_idx;
@@ -1806,6 +1807,7 @@ struct hevc_state_s {
 	int plevel;
 	int MaxNumMergeCand;
 
+	int first_output_poc;
 	int new_pic;
 	int new_tile;
 	int curr_POC;
@@ -4080,7 +4082,8 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 				if (vdec->master || vdec->slave)
 					pic_display = pic;
 				first_pic_flag = 1;
-				hevc_print(hevc, 0, "VH265: output first frame\n");
+				hevc->first_output_poc = pic->POC;
+				hevc_print(hevc, 0, "VH265: output first frame poc %d \n",hevc->first_output_poc);
 			}
 		}
 
@@ -4136,8 +4139,12 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 
 	if (pic_display && hevc->sps_num_reorder_pics_0 &&
 		(hevc->vf_pre_count == 1) && (hevc->first_pic_flag == 1)) {
-		pic_display = NULL;
-		hevc->first_pic_flag = 2;
+		if (pic_display->POC == hevc->first_output_poc)
+			pic_display = NULL;
+		else if (pic_display->POC < hevc->first_output_poc)
+			pic_display->nodisp_mark = 1;
+		else
+			hevc->first_pic_flag = 2;
 	}
 	return pic_display;
 }
@@ -5895,6 +5902,7 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 		new_pic->recon_mark = 0;
 		new_pic->error_mark = 0;
 		new_pic->dis_mark = 0;
+		new_pic->nodisp_mark = 0;
 		new_pic->sei_present_flag = 0;
 		/* new_pic->output_ready = 0; */
 		new_pic->num_reorder_pic = rpm_param->p.sps_num_reorder_pics_0;
@@ -6013,6 +6021,7 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 			put_mv_buf(hevc, pic_display);
 			if ((pic_display->error_mark
 				 && ((hevc->ignore_bufmgr_error & 0x2) == 0))
+				|| pic_display->nodisp_mark
 				|| (get_dbg_flag(hevc) &
 					H265_DEBUG_DISPLAY_CUR_FRAME)
 				|| (get_dbg_flag(hevc) &
@@ -6285,6 +6294,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 			if (pic_display) {
 				if ((pic_display->error_mark &&
 					((hevc->ignore_bufmgr_error & 0x2) == 0))
+					|| pic_display->nodisp_mark
 					|| (get_dbg_flag(hevc) &
 						H265_DEBUG_DISPLAY_CUR_FRAME)
 					|| (get_dbg_flag(hevc) &
