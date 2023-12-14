@@ -145,6 +145,7 @@ struct dos_of_dev_s {
 	u32 max_vdec_clock;
 	u32 max_hevcf_clock;
 	u32 max_hevcb_clock;
+	u32 max_hcodec_clock;
 	bool hevc_clk_combine_flag;
 
 	/* resolution. necessary!! */
@@ -206,6 +207,8 @@ inline u32 vdec_max_clk_get(void);
 inline u32 hevcf_max_clk_get(void);
 
 inline u32 hevcb_max_clk_get(void);
+
+inline u32 hcodec_max_clk_get(void);
 
 inline bool is_hevc_clk_combined(void);
 

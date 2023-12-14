@@ -424,6 +424,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.max_vdec_clock  = 800,
 		.max_hevcf_clock = 800,
 		.max_hevcb_clock = 800,
+		.max_hcodec_clock = 800,
 		.hevc_clk_combine_flag  = true,
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = true,
@@ -894,6 +895,11 @@ inline u32 hevcb_max_clk_get(void)
 	return platform_dos_dev->max_hevcb_clock;
 }
 EXPORT_SYMBOL(hevcb_max_clk_get);
+inline u32 hcodec_max_clk_get(void)
+{
+	return platform_dos_dev->max_hcodec_clock;
+}
+EXPORT_SYMBOL(hcodec_max_clk_get);
 
 inline bool is_hevc_clk_combined(void)
 {

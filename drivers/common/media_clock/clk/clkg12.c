@@ -891,6 +891,9 @@ static int hcodec_clock_set(int clk)
 		clk = 667;
 	}
 
+	if (0 != hcodec_max_clk_get())
+		clk = hcodec_max_clk_get();
+
 	vdec_set_clk(VDEC_HCODEC, clk * MHz);
 
 	clock_real_clk[VDEC_HCODEC] = clk;

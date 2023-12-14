@@ -156,6 +156,7 @@ static void pm_vdec_clock_on(int id)
 		amports_switch_gate("clk_vdec_mux", 1);
 		vdec_clock_hi_enable();
 	} else if (id == VDEC_HCODEC) {
+		amports_switch_gate("clk_hcodec_mux", 1);
 		hcodec_clock_enable();
 	} else if (id == VDEC_HEVC) {
 		/* enable hevc clock */
