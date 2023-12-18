@@ -417,9 +417,10 @@ static struct aml_q_data *aml_vdec_get_q_data(struct aml_vcodec_ctx *ctx,
 	return &ctx->q_data[AML_Q_DATA_DST];
 }
 
-void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
+void __aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes, struct set_param_info *param)
 {
 	struct v4l2_event event = {0};
+	const char *event_str = event_to_string(changes);
 
 	switch (changes) {
 	case V4L2_EVENT_SRC_CH_RESOLUTION:
@@ -456,10 +457,11 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 	}
 
 	v4l2_event_queue_fh(&ctx->fh, &event);
-	if (changes != V4L2_EVENT_SRC_CH_HDRINFO)
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "changes: %x type : %x\n", changes, event.type);
-	else
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "changes: %x type : %x\n", changes, event.type);
+	if ((changes != V4L2_EVENT_SRC_CH_HDRINFO) && (changes != V4L2_EVENT_REPORT_DEC_INFO))
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,"Post event: %s\n", event_str);
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,"Post event: %s, type: %x, fun: %s, %d\n",
+		event_str, event.type, param->function, param->line);
 }
 
 static void aml_vdec_flush_decoder(struct aml_vcodec_ctx *ctx)

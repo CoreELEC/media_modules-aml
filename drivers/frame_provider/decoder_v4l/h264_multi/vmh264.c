@@ -5585,7 +5585,8 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 	}
 
 	if (hw->dpb.dec_dpb_size != size)
-		PR_INFO(DECODE_ID(hw));
+		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS))
+			PR_INFO(DECODE_ID(hw));
 
 	return size;
 }

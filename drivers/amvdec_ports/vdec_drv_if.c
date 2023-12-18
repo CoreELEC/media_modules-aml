@@ -142,7 +142,7 @@ int vdec_if_set_param(struct aml_vcodec_ctx *ctx,
 	if (ctx->drv_handle == 0)
 		return -EIO;
 
-	ret = ctx->dec_if->set_param(ctx->drv_handle, type, in);
+	ret = ctx->dec_if->set_param(ctx->drv_handle, type, in, NULL);
 
 	return ret;
 }

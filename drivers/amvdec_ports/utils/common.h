@@ -74,6 +74,11 @@ struct AVRational{
 	int den; ///< denominator
 };
 
+struct event_info {
+	u32 idx;
+	char *event_str;
+};
+
 #ifndef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
 /**
  * YUV colorspace type.
@@ -189,6 +194,9 @@ const char *av_color_transfer_name(enum AVColorTransferCharacteristic transfer);
 
 //math
 int av_log2(u32 v);
+
+//event
+const char *event_to_string(int event_Id);
 
 //bitstream
 int find_start_code(u8 *data, int data_sz);

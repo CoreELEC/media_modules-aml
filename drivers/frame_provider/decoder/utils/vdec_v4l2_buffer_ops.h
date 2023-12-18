@@ -55,11 +55,11 @@ int vdec_v4l_set_hdr_infos(
 int vdec_v4l_write_frame_sync(
 	struct aml_vcodec_ctx *ctx);
 
-int vdec_v4l_post_error_event(
-	struct aml_vcodec_ctx *ctx, u32 type);
+int __vdec_v4l_post_error_event(
+	struct aml_vcodec_ctx *ctx, u32 type, struct set_param_info *param);
 
-int vdec_v4l_post_error_frame_event(
-	struct aml_vcodec_ctx *ctx);
+int __vdec_v4l_post_error_frame_event(
+	struct aml_vcodec_ctx *ctx, u32 type, struct set_param_info *param);
 
 int vdec_v4l_post_evet(
 	struct aml_vcodec_ctx *ctx,

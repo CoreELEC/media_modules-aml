@@ -63,7 +63,7 @@ int vdec_v4l_set_cfg_infos(struct aml_vcodec_ctx *ctx,
 		return -EIO;
 
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_CFG_INFO, cfg);
+		SET_PARAM_CFG_INFO, cfg, NULL);
 
 	return ret;
 }
@@ -93,7 +93,7 @@ int vdec_v4l_set_ps_infos(struct aml_vcodec_ctx *ctx,
 		return -EIO;
 
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_PS_INFO, ps);
+		SET_PARAM_PS_INFO, ps, NULL);
 
 	return ret;
 }
@@ -108,7 +108,7 @@ int vdec_v4l_set_comp_buf_info(struct aml_vcodec_ctx *ctx,
 		return -EIO;
 
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_COMP_BUF_INFO, info);
+		SET_PARAM_COMP_BUF_INFO, info, NULL);
 
 	return ret;
 
@@ -124,7 +124,7 @@ int vdec_v4l_set_hdr_infos(struct aml_vcodec_ctx *ctx,
 		return -EIO;
 
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_HDR_INFO, hdr);
+		SET_PARAM_HDR_INFO, hdr, NULL);
 
 	return ret;
 }
@@ -136,7 +136,7 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 		ctx->vdec_pic_info_update(ctx);
 }
 
-int vdec_v4l_post_error_event(struct aml_vcodec_ctx *ctx, u32 type)
+int __vdec_v4l_post_error_event(struct aml_vcodec_ctx *ctx, u32 type, struct set_param_info *param)
 {
 	int ret = 0;
 	u32 event = V4L2_EVENT_SEND_ERROR;
@@ -147,13 +147,13 @@ int vdec_v4l_post_error_event(struct aml_vcodec_ctx *ctx, u32 type)
 	ctx->decoder_status_info.error_type |= type;
 
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_POST_EVENT, &event);
+		SET_PARAM_POST_EVENT, &event, param);
 
 	return ret;
 }
-EXPORT_SYMBOL(vdec_v4l_post_error_event);
+EXPORT_SYMBOL(__vdec_v4l_post_error_event);
 
-int vdec_v4l_post_error_frame_event(struct aml_vcodec_ctx *ctx)
+int __vdec_v4l_post_error_frame_event(struct aml_vcodec_ctx *ctx, u32 type, struct set_param_info *param)
 {
 	int ret = 0;
 	u32 event = V4L2_EVENT_REPORT_ERROR_FRAME;
@@ -162,11 +162,11 @@ int vdec_v4l_post_error_frame_event(struct aml_vcodec_ctx *ctx)
 		return -EIO;
 
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_POST_EVENT, &event);
+		SET_PARAM_POST_EVENT, &event, param);
 
 	return ret;
 }
-EXPORT_SYMBOL(vdec_v4l_post_error_frame_event);
+EXPORT_SYMBOL(__vdec_v4l_post_error_frame_event);
 
 int vdec_v4l_post_evet(struct aml_vcodec_ctx *ctx, u32 event)
 {
@@ -177,7 +177,7 @@ int vdec_v4l_post_evet(struct aml_vcodec_ctx *ctx, u32 event)
 	if (event == 1)
 		ctx->reset_flag = 2;
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_POST_EVENT, &event);
+		SET_PARAM_POST_EVENT, &event, NULL);
 
 	return ret;
 }
@@ -191,7 +191,7 @@ int vdec_v4l_inst_reset(struct aml_vcodec_ctx *ctx)
 		return -EIO;
 
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_INST_RESET, NULL);
+		SET_PARAM_INST_RESET, NULL, NULL);
 
 	return ret;
 }
@@ -232,7 +232,7 @@ int vdec_v4l_write_frame_sync(struct aml_vcodec_ctx *ctx)
 		return -EIO;
 
 	ret = ctx->dec_if->set_param(ctx->drv_handle,
-		SET_PARAM_WRITE_FRAME_SYNC, NULL);
+		SET_PARAM_WRITE_FRAME_SYNC, NULL, NULL);
 
 	return ret;
 }

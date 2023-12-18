@@ -581,15 +581,16 @@ static void set_pic_info(struct vdec_mjpeg_inst *inst,
 	inst->vsi->pic = *pic;
 }
 
-static void set_param_post_event(struct vdec_mjpeg_inst *inst, u32 *event)
+static void set_param_post_event(struct vdec_mjpeg_inst *inst, u32 *event, struct set_param_info *param)
 {
 	aml_vdec_dispatch_event(inst->ctx, *event);
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
-		"mjpeg post event: %d\n", *event);
+		"mjpeg post event: %d, fun: %s, %d\n",
+		param->event, param->function, param->line);
 }
 
 static int vdec_mjpeg_set_param(unsigned long h_vdec,
-	enum vdec_set_param_type type, void *in)
+	enum vdec_set_param_type type, void *in, struct set_param_info *param)
 {
 	int ret = 0;
 	struct vdec_mjpeg_inst *inst = (struct vdec_mjpeg_inst *)h_vdec;
@@ -614,7 +615,7 @@ static int vdec_mjpeg_set_param(unsigned long h_vdec,
 		break;
 
 	case SET_PARAM_POST_EVENT:
-		set_param_post_event(inst, in);
+		set_param_post_event(inst, in, param);
 		break;
 
 	default:

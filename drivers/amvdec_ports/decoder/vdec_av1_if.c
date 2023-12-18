@@ -1271,11 +1271,12 @@ static void set_param_hdr_info(struct vdec_av1_inst *inst,
 	}
 }
 
-static void set_param_post_event(struct vdec_av1_inst *inst, u32 *event)
+static void set_param_post_event(struct vdec_av1_inst *inst, u32 *event, struct set_param_info *param)
 {
-		aml_vdec_dispatch_event(inst->ctx, *event);
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
-			"av1 post event: %d\n", *event);
+	aml_vdec_dispatch_event(inst->ctx, *event);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PROT,
+		"av1 post event: %d, fun: %s, %d\n",
+		param->event, param->function, param->line);
 }
 
 static void set_pic_info(struct vdec_av1_inst *inst,
@@ -1321,7 +1322,7 @@ static void set_cfg_info(struct vdec_av1_inst *inst,
 }
 
 static int vdec_av1_set_param(unsigned long h_vdec,
-	enum vdec_set_param_type type, void *in)
+	enum vdec_set_param_type type, void *in, struct set_param_info *param)
 {
 	int ret = 0;
 	struct vdec_av1_inst *inst = (struct vdec_av1_inst *)h_vdec;
@@ -1350,7 +1351,7 @@ static int vdec_av1_set_param(unsigned long h_vdec,
 		break;
 
 	case SET_PARAM_POST_EVENT:
-		set_param_post_event(inst, in);
+		set_param_post_event(inst, in, param);
 		break;
 
 	case SET_PARAM_PIC_INFO:

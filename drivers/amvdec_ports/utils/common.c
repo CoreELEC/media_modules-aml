@@ -22,6 +22,7 @@
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/string.h>
+#include "../aml_vcodec_drv.h"
 #include "../../common/media_utils/media_utils.h"
 
 #include "common.h"
@@ -149,6 +150,30 @@ int av_log2(u32 v)
 		n += ff_log2_tab[v];
 
 	return n;
+}
+
+//event
+static const struct event_info event_strings[] = {
+	{V4L2_EVENT_SRC_CH_RESOLUTION,	"res chg"},
+	{V4L2_EVENT_SRC_CH_HDRINFO,	"hdr"},
+	{V4L2_EVENT_REQUEST_RESET, 	"reset"},
+	{V4L2_EVENT_REQUEST_EXIT, 	"exit"},
+	{V4L2_EVENT_SEND_EOS, 		"eos"},
+	{V4L2_EVENT_SEND_ERROR, 	"dec err"},
+	{V4L2_EVENT_REPORT_DEC_INFO, 	"dec info"},
+	{V4L2_EVENT_REPORT_ERROR_FRAME,	"frame err",}
+};
+
+const char *event_to_string(int event_Id)
+{
+	int i;
+	int size = sizeof(event_strings) / sizeof(event_strings[0]);
+
+	for (i = 0; i < size; i++) {
+		if (event_strings[i].idx == event_Id)
+			return event_strings[i].event_str;
+	}
+	return NULL;
 }
 
 //bitstream
