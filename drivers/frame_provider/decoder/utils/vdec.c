@@ -203,6 +203,8 @@ static int enable_mvdec_info = 1;
 int decode_underflow = 0;
 u32 debug_meta;
 
+static int mmu_copy_enable;
+
 st_userdata userdata;
 
 struct am_reg {
@@ -7425,6 +7427,45 @@ void vdec_reset_vld_stbuf(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(vdec_reset_vld_stbuf);
 
+int is_mmu_copy_enable(void)
+{
+	if (mmu_copy_enable && ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)
+		|| (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)))
+		return 1;
+	else
+		return 0;
+}
+EXPORT_SYMBOL(is_mmu_copy_enable);
+
+void mmu_copy_work(struct mmu_copy_params params)
+{
+	uint32_t rdata_copy = 0x00000000;
+	u32 start_time, end_time, cost_time;
+
+	start_time = vdec_get_us_time_system();
+	WRITE_VREG(COPY_SEL, 0x00000001);
+	WRITE_VREG(HEVC_SAO_MMU_RESET_CTRL, 0x00000001);
+	WRITE_VREG(HEVC_SAO_MMU_RESET_CTRL, 0x00000000);
+	WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL, params.mmu_copy_map_phy_addr | 1);
+
+	WRITE_VREG(COPY_REG_R0, params.mmu_copy_pre_header_adr);
+	WRITE_VREG(COPY_REG_R1, params.mmu_copy_err_header_adr);
+	WRITE_VREG(COPY_REG_R3, (params.pic_w << 16) | params.pic_h);
+	WRITE_VREG(COPY_REG_R4, params.x_location << 16 | params.y_location);
+
+	WRITE_VREG(COPY_REG_R5, (1 << 30) | (params.err_width << 15) | params.err_height);
+	while ((rdata_copy & (0x80000000)) != 0x80000000) {
+		rdata_copy = READ_VREG(COPY_REG_R5);
+	}
+	WRITE_VREG(COPY_REG_R5, 0x00000000);
+	end_time = vdec_get_us_time_system();
+	cost_time = end_time - start_time;
+
+	pr_debug("Copy Complete, pic = %d * %d, err = %d * %d,  cost time = %d!\n",
+		params.pic_w, params.pic_h, params.err_width, params.err_height, cost_time);
+}
+EXPORT_SYMBOL(mmu_copy_work);
+
 static void check_rdma_result(int num)
 {
 	int i, wr,rd,data;
@@ -7578,6 +7619,9 @@ MODULE_PARM_DESC(debug_vdetect, "\n debug_vdetect\n");
 
 module_param(rdma_mode, int, 0664);
 MODULE_PARM_DESC(rdma_mode, "\n rdma_enable\n");
+
+module_param(mmu_copy_enable, uint, 0664);
+MODULE_PARM_DESC(mmu_copy_enable, "\n mmu_copy_enable\n");
 
 module_param(one_pack_multi_f_set_align_size, uint, 0664);
 MODULE_PARM_DESC(one_pack_multi_f_set_align_size, "\n ammvdec_mpeg12 one_pack_multi_f_set_align_size\n");

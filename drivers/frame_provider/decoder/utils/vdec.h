@@ -369,6 +369,19 @@ struct vdec_data_core_s {
 	spinlock_t vdec_data_lock;
 };
 
+struct mmu_copy_params {
+	dma_addr_t mmu_copy_map_phy_addr;
+	unsigned long mmu_copy_pre_header_adr;
+	unsigned long mmu_copy_err_header_adr;
+	int pic_w;
+	int pic_h;
+	int err_width;
+	int err_height;
+	u32 x_location;
+	u32 y_location;
+	int count;
+};
+
 struct vdec_info_statistic_s {
 	struct vdec_info vstatus;
 	struct aspect_ratio_info aspect_ratio;
@@ -916,5 +929,9 @@ u64 vdec_get_stream_size(struct vdec_s *vdec);
 void use_t5d_driver_set(bool value);
 
 int vcodec_profile_register_v2(char *name, enum vformat_e vformat, int is_v4l);
+
+int is_mmu_copy_enable(void);
+
+void mmu_copy_work(struct mmu_copy_params params);
 
 #endif				/* VDEC_H */
