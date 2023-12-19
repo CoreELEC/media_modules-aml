@@ -2070,6 +2070,7 @@ struct hevc_state_s {
 	unsigned int content_light_level[2];
 	/* data for Alternative_Transfer_Characteristics*/
 	unsigned int preferred_transfer_characteristics;
+	struct PIC_s *pic_transfer;
 
 	struct PIC_s *pre_top_pic;
 	struct PIC_s *pre_bot_pic;
@@ -9046,6 +9047,10 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 #endif
 	}
 #endif
+	vfree(hevc->pic_transfer->aux_data_buf);
+	hevc->pic_transfer->aux_data_buf = NULL;
+	vfree(hevc->pic_transfer);
+	hevc->pic_transfer = NULL;
 }
 
 static int hevc_local_init(struct hevc_state_s *hevc)
@@ -9122,6 +9127,19 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		if (hevc->aux_addr == NULL) {
 			pr_err("%s: failed to alloc aux buffer\n", __func__);
 			return -1;
+		}
+		if (!hevc->pic_transfer) {
+			hevc->pic_transfer = vzalloc(sizeof(struct PIC_s));
+			if (!hevc->pic_transfer) {
+				pr_err("%s: failed to alloc for aux\n", __func__);
+				return -1;
+			}
+			hevc->pic_transfer->aux_data_buf = vzalloc(hevc->prefix_aux_size);
+			if (!hevc->pic_transfer->aux_data_buf) {
+				pr_err("%s: failed to alloc for aux\n", __func__);
+				vfree(hevc->pic_transfer);
+				return -1;
+			}
 		}
 	}
 	PRINT_LINE();
@@ -13148,47 +13166,48 @@ force_output:
 				hevc->preferred_transfer_characteristics = 0;
 
 			if (aux_data_is_available(hevc)) {
-				static struct PIC_s pic;
+				struct PIC_s *pic = hevc->pic_transfer;
+				char *aux_data = pic->aux_data_buf;
 				u32 size = 0, type = 0;
 				char *p;
 
-				memset(&pic, 0, sizeof(pic));
+				if (!hevc->pic_transfer ||
+					!hevc->pic_transfer->aux_data_buf) {
+					pr_err("[%s] hevc->pic_transfer NULL\n", __func__);
+				} else {
+					memset(pic, 0, sizeof(*pic));
+					pic->aux_data_buf = aux_data;
+					set_aux_data(hevc, pic, 0, 0);
 
-				pic.aux_data_buf = vzalloc(hevc->prefix_aux_size);
+					if (pic->aux_data_buf
+						&& pic->aux_data_size) {
+						hevc->frame_field_info_present_flag =
+							(hevc->param.p.sei_frame_field_info >> 8) & 0x1;
 
-				set_aux_data(hevc, &pic, 0, 0);
-
-				if (pic.aux_data_buf
-					&& pic.aux_data_size) {
-					hevc->frame_field_info_present_flag =
-						(hevc->param.p.sei_frame_field_info >> 8) & 0x1;
-
-					/* parser sei */
-					p = pic.aux_data_buf;
-					while (p < pic.aux_data_buf
-						+ pic.aux_data_size - 8) {
-						size = *p++;
-						size = (size << 8) | *p++;
-						size = (size << 8) | *p++;
-						size = (size << 8) | *p++;
-						type = *p++;
-						type = (type << 8) | *p++;
-						type = (type << 8) | *p++;
-						type = (type << 8) | *p++;
-						if (type == 0x02000000) {
-							parse_sei(hevc, &pic, p, size, false);
+						/* parser sei */
+						p = pic->aux_data_buf;
+						while (p < pic->aux_data_buf
+							+ pic->aux_data_size - 8) {
+							size = *p++;
+							size = (size << 8) | *p++;
+							size = (size << 8) | *p++;
+							size = (size << 8) | *p++;
+							type = *p++;
+							type = (type << 8) | *p++;
+							type = (type << 8) | *p++;
+							type = (type << 8) | *p++;
+							if (type == 0x02000000) {
+								parse_sei(hevc, pic, p, size, false);
+							}
+							p += size;
 						}
-						p += size;
+
+						hevc->param.p.sei_frame_field_info &=
+							~(0xf << 3);
+						hevc->param.p.sei_frame_field_info |=
+							(pic->pic_struct << 3);
 					}
-
-					hevc->param.p.sei_frame_field_info &=
-						~(0xf << 3);
-					hevc->param.p.sei_frame_field_info |=
-						(pic.pic_struct << 3);
 				}
-
-				if (pic.aux_data_buf)
-					vfree(pic.aux_data_buf);
 			}
 
 #ifdef NEW_FB_CODE
