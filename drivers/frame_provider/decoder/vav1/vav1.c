@@ -1553,7 +1553,7 @@ static int get_mv_buf(struct AV1HW_s *hw,
 			(~0xffff);
 		if (debug & AV1_DEBUG_BUFMGR)
 			pr_info(
-			"%s => %d (%d) size 0x%x\n",
+			"%s => %d (0x%x) size 0x%x\n",
 			__func__, ret,
 			pic_config->mpred_mv_wr_start_addr,
 			hw->m_mv_BUF[ret].size);

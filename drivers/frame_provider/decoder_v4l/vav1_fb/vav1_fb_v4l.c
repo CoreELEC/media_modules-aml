@@ -1853,7 +1853,7 @@ static int get_mv_buf(struct AV1HW_s *hw,
 			(hw->m_mv_BUF[ret].start_adr + 0xffff) &
 			(~0xffff);
 		if (debug & AV1_DEBUG_BUFMGR)
-			pr_info("%s => %d (%d) size 0x%x\n", __func__, ret,
+			pr_info("%s => %d (0x%lx) size 0x%x\n", __func__, ret,
 				pic_config->mpred_mv_wr_start_addr, hw->m_mv_BUF[ret].size);
 	} else {
 		pr_info("%s: Error, mv buf is not enough\n", __func__);
