@@ -8900,7 +8900,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vdec_v4l_post_error_frame_event(ctx);
 
 		} else if ((!pair_frame_top_flag) && (((vf->index >> 8) & 0xff) == 0xff)) {
-			if (v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode)) {
+			if (!ctx->no_fbc_output &&
+				v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode)) {
 				vf->type |= VIDTYPE_COMPRESS;
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
@@ -8921,7 +8922,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				"%s vf => display_q: (index 0x%x), w %d, h %d, type 0x%x\n",
 				__func__, vf->index, vf->width, vf->height, vf->type);
 		} else if (pair_frame_top_flag && ((vf->index & 0xff) == 0xff)) {
-			if (v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode)) {
+			if (!ctx->no_fbc_output &&
+				v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode)) {
 				vf->type |= VIDTYPE_COMPRESS;
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
@@ -9232,10 +9234,12 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
 			vf->type |= nv_order;
 
-			if (v4l_output_dw_with_compress(hevc, pic->double_write_mode)) {
-				vf->type |= VIDTYPE_COMPRESS;
-				if (hevc->mmu_enable)
-					vf->type |= VIDTYPE_SCATTER;
+			if (!v4l2_ctx->no_fbc_output) {
+				if (v4l_output_dw_with_compress(hevc, pic->double_write_mode)) {
+					vf->type |= VIDTYPE_COMPRESS;
+					if (hevc->mmu_enable)
+						vf->type |= VIDTYPE_SCATTER;
+				}
 			}
 
 #ifdef MULTI_INSTANCE_SUPPORT

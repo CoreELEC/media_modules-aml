@@ -10079,7 +10079,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vf->type = VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD;
 			vf->type |= nv_order;
-			if ((dw_mode == 3) &&
+			if (!v4l2_ctx->no_fbc_output && (dw_mode == 3) &&
 				(!IS_8K_SIZE(pic_config->y_crop_width,
 				pic_config->y_crop_height))) {
 				vf->type |= VIDTYPE_COMPRESS;
@@ -10087,7 +10087,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					vf->type |= VIDTYPE_SCATTER;
 			}
 
-			if (dw_mode != 16 &&
+			if (!v4l2_ctx->no_fbc_output && dw_mode != 16 &&
 				((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 				!IS_8K_SIZE(pic_config->y_crop_width, pic_config->y_crop_height)))
 				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
@@ -10123,7 +10123,9 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vf->height = pic_config->y_crop_height;
 		}
 
-		if ((!dw_mode && tw_mode) || (v4l2_ctx->force_tw_output && tw_mode)) {
+		if (!v4l2_ctx->no_fbc_output &&
+			((!dw_mode && tw_mode) ||
+			(v4l2_ctx->force_tw_output && tw_mode))) {
 			vf->type |= nv_order;
 			vf->type |= VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD |

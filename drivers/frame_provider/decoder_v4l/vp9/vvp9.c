@@ -7310,14 +7310,16 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vf->type = VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD;
 			vf->type |= nv_order;
-			if ((pic_config->double_write_mode == 3) &&
+			if (!v4l2_ctx->no_fbc_output &&
+				(pic_config->double_write_mode == 3) &&
 				(!IS_8K_SIZE(pic_config->y_crop_width,
 				pic_config->y_crop_height))) {
 				vf->type |= VIDTYPE_COMPRESS;
 				if (pbi->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
-			if (pic_config->double_write_mode != 16 &&
+			if (!v4l2_ctx->no_fbc_output &&
+				pic_config->double_write_mode != 16 &&
 				(!IS_8K_SIZE(pic_config->y_crop_width,
 				pic_config->y_crop_height)))
 				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;

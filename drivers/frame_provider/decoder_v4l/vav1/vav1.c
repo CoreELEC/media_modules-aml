@@ -6225,7 +6225,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			vf->type = VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD;
 			vf->type |= nv_order;
-			if ((pic_config->double_write_mode == 3 ||
+			if (!v4l2_ctx->no_fbc_output &&
+				(pic_config->double_write_mode == 3 ||
 				pic_config->double_write_mode == 5) &&
 				(!IS_8K_SIZE(pic_config->y_crop_width,
 				pic_config->y_crop_height))) {
@@ -6235,7 +6236,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 					vf->type |= VIDTYPE_SCATTER;
 				}
 			}
-			if (pic_config->double_write_mode != 16 &&
+			if (!v4l2_ctx->no_fbc_output &&
+				pic_config->double_write_mode != 16 &&
 				(!IS_8K_SIZE(pic_config->y_crop_width,
 				pic_config->y_crop_height))) {
 				if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4 &&

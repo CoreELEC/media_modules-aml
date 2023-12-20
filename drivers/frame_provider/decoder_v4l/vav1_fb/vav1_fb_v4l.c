@@ -6759,14 +6759,16 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				VIDTYPE_VIU_FIELD;
 			vf->type |= nv_order;
 
-			if ((pic_config->double_write_mode != 16) &&
+			if (!v4l2_ctx->no_fbc_output &&
+				(pic_config->double_write_mode != 16) &&
 				((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 				!IS_8K_SIZE(pic_config->y_crop_width, pic_config->y_crop_height))) {
 				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
 			}
 
 			/* s4 s4d dw 1 film grain must remove compress data */
-			if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
+			if (!v4l2_ctx->no_fbc_output &&
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4 ||
 				get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S4D) &&
 				hw->film_grain_present && (get_double_write_mode(hw) == 1)) {
 				vf->type &= ~(VIDTYPE_COMPRESS | VIDTYPE_SCATTER);
@@ -6862,8 +6864,9 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 		vf->type_original = vf->type;
 
-		if ((!pic_config->double_write_mode && pic_config->triple_write_mode) ||
-			(v4l2_ctx->force_tw_output && pic_config->triple_write_mode)) {
+		if (!v4l2_ctx->no_fbc_output &&
+			((!pic_config->double_write_mode && pic_config->triple_write_mode) ||
+			(v4l2_ctx->force_tw_output && pic_config->triple_write_mode))) {
 			vf->type |= nv_order;
 			vf->type |= VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD |
