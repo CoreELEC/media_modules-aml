@@ -8228,6 +8228,73 @@ static int parse_sei(struct hevc_state_s *hevc,
 	return 0;
 }
 
+static unsigned calc_ar(unsigned idc, unsigned sar_w, unsigned sar_h,
+			unsigned w, unsigned h)
+{
+	unsigned ar;
+
+	if (idc	== 255) {
+		ar = div_u64(256ULL * sar_h * h,
+				sar_w * w);
+	} else {
+		switch (idc) {
+		case 1:
+			ar = 0x100 * h / w;
+			break;
+		case 2:
+			ar = 0x100 * h * 11 / (w * 12);
+			break;
+		case 3:
+			ar = 0x100 * h * 11 / (w * 10);
+			break;
+		case 4:
+			ar = 0x100 * h * 11 / (w * 16);
+			break;
+		case 5:
+			ar = 0x100 * h * 33 / (w * 40);
+			break;
+		case 6:
+			ar = 0x100 * h * 11 / (w * 24);
+			break;
+		case 7:
+			ar = 0x100 * h * 11 / (w * 20);
+			break;
+		case 8:
+			ar = 0x100 * h * 11 / (w * 32);
+			break;
+		case 9:
+			ar = 0x100 * h * 33 / (w * 80);
+			break;
+		case 10:
+			ar = 0x100 * h * 11 / (w * 18);
+			break;
+		case 11:
+			ar = 0x100 * h * 11 / (w * 15);
+			break;
+		case 12:
+			ar = 0x100 * h * 33 / (w * 64);
+			break;
+		case 13:
+			ar = 0x100 * h * 99 / (w * 160);
+			break;
+		case 14:
+			ar = 0x100 * h * 3 / (w * 4);
+			break;
+		case 15:
+			ar = 0x100 * h * 2 / (w * 3);
+			break;
+		case 16:
+			ar = 0x100 * h * 1 / (w * 2);
+			break;
+		default:
+			ar = h * 0x100 / w;
+			break;
+		}
+	}
+
+	return ar;
+}
+
 static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 			struct PIC_s *pic)
 {
@@ -8251,6 +8318,21 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	ar = min_t(u32, hevc->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 
+	if (((pic->aspect_ratio_idc == 255) &&
+		pic->sar_width &&
+		pic->sar_height) ||
+		((pic->aspect_ratio_idc != 255) &&
+		(pic->width))) {
+		ar = min_t(u32,
+			calc_ar(pic->aspect_ratio_idc,
+			pic->sar_width,
+			pic->sar_height,
+			hevc->crop_w,
+			hevc->crop_h),
+			DISP_RATIO_ASPECT_RATIO_MAX);
+		vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
+		vf->ratio_control <<= hevc->interlace_flag;
+	}
 	hevc->ratio_control = vf->ratio_control;
 	if (pic->aux_data_buf
 		&& pic->aux_data_size) {

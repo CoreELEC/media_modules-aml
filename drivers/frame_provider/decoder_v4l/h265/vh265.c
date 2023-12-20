@@ -8119,8 +8119,8 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 			calc_ar(pic->aspect_ratio_idc,
 			pic->sar_width,
 			pic->sar_height,
-			pic->width,
-			pic->height),
+			hevc->crop_w,
+			hevc->crop_h),
 			DISP_RATIO_ASPECT_RATIO_MAX);
 		vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 		vf->ratio_control <<= hevc->interlace_flag;

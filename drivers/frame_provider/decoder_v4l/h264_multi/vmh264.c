@@ -4982,6 +4982,7 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 {
 	int endian_tmp;
 	struct canvas_config_s *p_canvas_config;
+	u32 ar_tmp;
 	int force_rate = input_frame_based(hw_to_vdec(hw)) ?
 		force_rate_framebase : force_rate_streambase;
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
@@ -5024,8 +5025,17 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 
 		vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
 	}
+	if (hw->h264_ar == 0x3ff)
+		ar_tmp = (0x100 *
+			hw->frame_height * hw->height_aspect_ratio) /
+			(hw->frame_width * hw->width_aspect_ratio);
+	else
+		ar_tmp = hw->h264_ar;
+
 	vf->ratio_control =
-		(min(hw->h264_ar, (u32) DISP_RATIO_ASPECT_RATIO_MAX)) <<
+		(min_t(u32,
+			ar_tmp,
+			DISP_RATIO_ASPECT_RATIO_MAX)) <<
 		DISP_RATIO_ASPECT_RATIO_BIT;
 	vf->orientation = hw->vh264_rotation;
 
