@@ -1094,6 +1094,19 @@ void amvdec_stop(void)
 			break;
 	}
 
+	timeout = jiffies + HZ/80;
+	while (READ_VREG(WRRSP_LMEM) & 0xfff) {
+		if (time_after(jiffies, timeout)) {
+			pr_err("%s, ctrl %x, rsp %x, pc %x status %x,%x\n", __func__,
+				READ_VREG(LMEM_DMA_CTRL),
+				READ_VREG(WRRSP_LMEM),
+				READ_VREG(0x308),
+				READ_VREG(AV_SCRATCH_J),
+				READ_VREG(AV_SCRATCH_9));
+			break;
+		}
+	}
+
 	/* #if MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_M6) {
 		READ_VREG(DOS_SW_RESET0);
