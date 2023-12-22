@@ -5562,6 +5562,8 @@ static int get_idle_pos(struct hevc_state_s *hevc)
 
 static void v4l_crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
+	int crop_w, crop_h;
+
 	hevc->crop_w = pic->width;
 	hevc->crop_h = pic->height;
 
@@ -5584,12 +5586,20 @@ static void v4l_crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 			SubHeightC = 1;
 			break;
 		}
-		hevc->crop_w -= (SubWidthC *
-			(pic->conf_win_left_offset +
-			pic->conf_win_right_offset));
-		hevc->crop_h -= (SubHeightC *
-			(pic->conf_win_top_offset +
-			pic->conf_win_bottom_offset));
+
+		crop_w = SubWidthC * (pic->conf_win_left_offset + pic->conf_win_right_offset);
+		crop_h = SubHeightC * (pic->conf_win_top_offset + pic->conf_win_bottom_offset);
+
+		if (crop_w < 0 || crop_h < 0 || pic->width <= crop_w || pic->height <= crop_h) {
+			hevc_print(hevc, H265_DEBUG_BUFMGR,
+				"%s invalid crop, crop_w:%d, crop_h:%d\n", __func__,crop_w, crop_h);
+			pic->crop_w = pic->width;
+			pic->crop_h = pic->height;
+			return;
+		}
+
+		hevc->crop_w -= crop_w;
+		hevc->crop_h -= crop_h;
 
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
 			hevc_print(hevc, 0,
@@ -5601,6 +5611,7 @@ static void v4l_crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 				pic->conf_win_bottom_offset,
 				hevc->crop_w, hevc->crop_h, pic->width, pic->height);
 	}
+
 	pic->crop_w = hevc->crop_w;
 	pic->crop_h = hevc->crop_h;
 }
