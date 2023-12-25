@@ -56,6 +56,7 @@ int mediaproxy_open(struct inode *inode, struct file *filp)
         return PTR_ERR(session);
     session->session_id = -1;
     session->role = MP_ROLE_INVALID;
+    session->subscribe_msg_type = 0xFF;
     session->lock = NULL;
     session->session_entry = NULL;
     filp->private_data = session;
@@ -150,6 +151,7 @@ static int mediaproxy_disconnect(mp_session * session){
     pr_info("Session %s-%d is disconnected\n", MP_ROLE_STRING(session->role), session->session_id);
     session->session_id = -1;
     session->role = MP_ROLE_INVALID;
+    session->subscribe_msg_type = 0xFF;
     session->lock = NULL;
     session->session_entry = NULL;
     return 0;
@@ -209,7 +211,7 @@ ssize_t mediaproxy_write(struct file *filp, const char __user *buf, size_t count
 
 static long mediaproxy_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-    int result;
+    int result = 0;
     union mediaproxy_ioctl_args args;
     mp_session* session = filp->private_data;
 
@@ -234,6 +236,9 @@ static long mediaproxy_ioctl(struct file *filp, unsigned int cmd, unsigned long 
     case MEDIAPROXY_GET_CONSUMER_COUNT:
         result = mediaproxy_get_consumer_count();
         break;
+    case MEDIAPROXY_MSG_TYPE__SUBSCRIBE:
+        session->subscribe_msg_type = args.subscribe_msg_type;
+        break;
     default:
         pr_err("Unknown ioctl cmd\n");
         result = -EINVAL;
@@ -243,35 +248,34 @@ static long mediaproxy_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 }
 
 static int mediaproxy_thread_fn(void* data) {
-    unsigned char msg[KFIFO_MAX_SIZE] = {0};
+    struct AmlVideoUserdata msg;
     while (!kthread_should_stop()) {
         if (wait_event_interruptible(mediaproxy->transfer_queue, ((mediaproxy->has_consumer > 0) && !mediaproxy->all_producer_fifo_empty) || kthread_should_stop())) {
             return -ERESTARTSYS;
         }
-        if (copy_data_between_kfifo(mediaproxy->producers, mediaproxy->consumers, msg) < 0) {
+        if (copy_data_between_kfifo(mediaproxy->producers, mediaproxy->consumers, &msg) < 0) {
             return -ERESTARTSYS;
         }
     }
     return 0;
 }
 
-static int copy_data_between_kfifo(mp_session **producer, mp_session **consumer, unsigned char *msg) {
+static int copy_data_between_kfifo(mp_session **producer, mp_session **consumer, struct AmlVideoUserdata *msg) {
     int i,j,data_copied;
     for (i = 0; i < MAX_SESSION; i++) {
         mutex_lock(&mediaproxy->p_lock);
         if (producer[i] && !kfifo_is_empty(&producer[i]->msg_kfifo)) {
-            data_copied = kfifo_out(&producer[i]->msg_kfifo, msg, kfifo_len(&producer[i]->msg_kfifo));
+            data_copied = kfifo_out(&producer[i]->msg_kfifo, msg, 1);
             mediaproxy->all_producer_fifo_empty = kfifo_is_empty(&producer[i]->msg_kfifo);
-            pr_info("data_copied = %d\n", data_copied);
             for (j = 0; j < MAX_SESSION; j++) {
                 mutex_lock(&mediaproxy->c_lock);
-                if (consumer[j]) {
+                if (consumer[j] && (msg->messageType & consumer[j]->subscribe_msg_type)) {
                     kfifo_in(&consumer[j]->msg_kfifo, msg, data_copied);
                 }
                 mutex_unlock(&mediaproxy->c_lock);
             }
             wake_up_interruptible(&mediaproxy->read_queue);
-            memset(msg, 0, data_copied);
+            memset(msg, 0, sizeof(struct AmlVideoUserdata));
         }
         mutex_unlock(&mediaproxy->p_lock);
     }

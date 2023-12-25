@@ -1,6 +1,6 @@
 # mediaproxy driver
 
-Media Proxy 驱动主要的功能就是做消息的中转站。使用KFIFO数据结构用来存放和转发消息数据。 目前支持 MPMC （多生产者多消费之模式）， 内部实现了一个名为 mediaproxy_thread 的内核线程， 负责将所有producer KFIFO 里的消息数据整合起来， 并转发到每一个consumer 的KFIFO 中。
+Media Proxy 驱动主要的功能就是做消息的中转站。使用KFIFO数据结构用来存放和转发消息数据。 目前支持 MPMC （多生产者多消费之模式）， 内部实现了一个名为 mediaproxy_thread 的内核线程， 负责将所有producer KFIFO 里的消息数据做整合&筛选， 并转发到每一个consumer 的KFIFO 中。
 
 ## 时序图
 
@@ -79,6 +79,7 @@ struct mediaproxy_dev {
 * struct mediaproxy_session - the session for connect
 * @session_id       index of the mp_session array
 * @role             producer or consumer
+* @subscribe_msg_type          Type mask for subscription messages, currently available only to consumers
 * @lock             a pointer to the p_lock/c_lock within the dev structure
 * @session_entry    a pointer to the producers/consumers session array within the dev
 * @msg_kfifo        the FIFO in the session is used to store message data
@@ -86,6 +87,7 @@ struct mediaproxy_dev {
 typedef struct mediaproxy_session {
     int session_id;
     mp_role_e role;
+    uint32_t subscribe_msg_type;
     struct mutex *lock;
     struct mediaproxy_session **session_entry;
     DECLARE_KFIFO_PTR(msg_kfifo, unsigned char);
@@ -174,6 +176,7 @@ errno：
 #define MEDIAPROXY_MAGIC 'm'
 #define MEDIAPROXY_CONNECT _IOW(MEDIAPROXY_MAGIC, 0, int)
 #define MEDIAPROXY_DISCONNECT _IOW(MEDIAPROXY_MAGIC, 1, int)
+#define MEDIAPROXY_MSG_TYPE__SUBSCRIBE _IOW(MEDIAPROXY_MAGIC, 3, int)
 
 // ioctl args
 typedef enum {
@@ -185,6 +188,7 @@ typedef enum {
 union mediaproxy_ioctl_args
 {
     mp_role_e role;
+    uint32_t subscribe_msg_type;
 };
 ```
 
@@ -224,6 +228,7 @@ void* producer_thread(void*) {
     /*
         判断是否有 consumer 连接，如果没有（ret=0）， 就可以不写数据，以此来节省资源。
         由于不知道consumer connect和disconnect 的时间点， 所以MEDIAPROXY_GET_CONSUMER_COUNT ioctl 可能需要在每次写数据前调用
+        注意： 这个ioctl 命令是选用的。
     */
     int ret = ioctl(fd,MEDIAPROXY_GET_CONSUMER_COUNT, NULL);
     if ( ret > 0) {
