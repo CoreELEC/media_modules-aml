@@ -7041,6 +7041,7 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					H265_DEBUG_DISPLAY_CUR_FRAME)
 				|| (get_dbg_flag(hevc) &
 					H265_DEBUG_NO_DISPLAY)) {
+				struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 				pic_display->output_ready = 0;
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 					hevc_print(hevc, H265_DEBUG_BUFMGR,
@@ -7052,6 +7053,8 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					hevc_print_cont(hevc, 0,
 					"Debug mode or error, recycle it\n");
 				}
+				ctx->current_timestamp = pic_display->timestamp;
+				vdec_v4l_post_error_frame_event(ctx);
 			} else {
 				if (hevc->i_only & 0x1
 					&& pic_display->slice_type != 2) {
@@ -12832,6 +12835,8 @@ force_output:
 							hevc_print_cont(hevc, 0,
 							"Debug or err,recycle it\n");
 						}
+						ctx->current_timestamp = pic_display->timestamp;
+						vdec_v4l_post_error_frame_event(ctx);
 					} else {
 						if ((pic_display->
 						slice_type != 2) && !pic_display->ip_mode) {

@@ -4144,13 +4144,15 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 	}
 
 	if (pic_display && hevc->sps_num_reorder_pics_0 &&
-		(hevc->vf_pre_count == 1) && (hevc->first_pic_flag == 1)) {
+		(hevc->vf_pre_count == 1) &&
+		(hevc->first_pic_flag == 1 || hevc->first_pic_flag == 2)) {
+		hevc->first_pic_flag = 2;
 		if (pic_display->POC == hevc->first_output_poc)
 			pic_display = NULL;
 		else if (pic_display->POC < hevc->first_output_poc)
 			pic_display->nodisp_mark = 1;
 		else
-			hevc->first_pic_flag = 2;
+			hevc->first_pic_flag = 3;
 	}
 	return pic_display;
 }

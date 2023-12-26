@@ -3799,13 +3799,16 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 	}
 
 	if (pic_display && hevc->sps_num_reorder_pics_0 &&
-		(atomic_read(&hevc->vf_pre_count) == 1) && (hevc->first_pic_flag == 1)) {
+		(atomic_read(&hevc->vf_pre_count) == 1) &&
+		(hevc->first_pic_flag == 1 || hevc->first_pic_flag == 2)) {
+		hevc->first_pic_flag = 2;
 		if (pic_display->POC == hevc->first_output_poc)
 			pic_display = NULL;
-		else if (pic_display->POC < hevc->first_output_poc)
+		else if (pic_display->POC < hevc->first_output_poc) {
 			pic_display->nodisp_mark = 1;
-		else
-			hevc->first_pic_flag = 2;
+			pic_display->error_mark = 1;
+		} else
+			hevc->first_pic_flag = 3;
 	}
 	return pic_display;
 }
@@ -5830,6 +5833,9 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					hevc_print_cont(hevc, 0,
 					"Debug mode or error, recycle it\n");
 				}
+
+				ctx->current_timestamp = pic_display->timestamp;
+				vdec_v4l_post_error_frame_event(ctx);
 
 				ctx->decoder_status_info.decoder_error_count++;
 				vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
@@ -11154,6 +11160,8 @@ force_output:
 							hevc_print_cont(hevc, 0,
 							"Debug or err,recycle it\n");
 						}
+						ctx->current_timestamp = pic_display->timestamp;
+						vdec_v4l_post_error_frame_event(ctx);
 					} else {
 						if ((pic_display->
 						slice_type != 2) && !pic_display->ip_mode) {
