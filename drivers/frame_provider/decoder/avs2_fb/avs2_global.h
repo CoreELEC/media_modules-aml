@@ -799,6 +799,7 @@ struct avs2_frame_s {
 	s32 poc;
 	u32 hw_front_decode_time;
 	u32 stream_size; // For stream base mode
+	int mv_size;
 #endif
 };
 
@@ -1708,6 +1709,8 @@ extern void avs2_prepare_header(struct avs2_decoder *avs2_dec,
 extern int32_t avs2_process_header(struct avs2_decoder *avs2_dec);
 
 extern void init_avs2_decoder(struct avs2_decoder *avs2_dec);
+
+void avs2_put_un_used_mv_bufs(struct avs2_decoder *avs2_dec);
 
 extern int32_t avs2_init_global_buffers(struct avs2_decoder *avs2_dec);
 

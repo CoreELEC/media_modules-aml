@@ -2926,6 +2926,11 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 		}
 	}
 
+	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+		hevc->m_mv_BUF[i].used_flag = 0;
+		hevc->m_mv_BUF[i].used_pic_index = -1;
+	}
+
 	hevc->pic_num = 0;
 	hevc->lcu_x_num_pre = 0;
 	hevc->lcu_y_num_pre = 0;
@@ -11045,26 +11050,12 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 			hevc->last_height != 0) &&
 			(hevc->last_width != width ||
 			hevc->last_height != height)) {
-			int new_size;
-
 			hevc_print(hevc, 0,
 				"v4l_res_change Pic Width/Height Change (%d,%d)=>(%d,%d), interlace %d\n",
 				hevc->last_width, hevc->last_height,
 				width,
 				height,
 				hevc->interlace_flag);
-
-			if (IS_8K_SIZE(hevc->pic_w, hevc->pic_h))
-				new_size = MPRED_8K_MV_BUF_SIZE;
-			else if (IS_4K_SIZE(hevc->pic_w, hevc->pic_h))
-				new_size = MPRED_4K_MV_BUF_SIZE; /*0x120000*/
-			else
-				new_size = MPRED_MV_BUF_SIZE;
-
-			if (new_size != hevc->mv_buf_size) {
-				dealloc_mv_bufs(hevc);
-				hevc->mv_buf_size = new_size;
-			}
 
 			if (get_double_write_mode(hevc) != 16) {
 				struct vdec_comp_buf_info info;
@@ -16261,11 +16252,6 @@ static void reset(struct vdec_s *vdec)
 		hevc->m_BUF[i].start_adr = 0;
 	}
 	hevc->aml_buf = NULL;
-
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
-		hevc->m_mv_BUF[i].used_flag = 0;
-		hevc->m_mv_BUF[i].used_pic_index = -1;
-	}
 
 	atomic_set(&hevc->vf_pre_count, 0);
 	atomic_set(&hevc->vf_get_count, 0);

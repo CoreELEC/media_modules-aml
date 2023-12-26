@@ -1014,6 +1014,8 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 		}
 	}
 
+	avs2_put_un_used_mv_bufs(avs2_dec);
+
 	if (i == avs2_dec->ref_maxbuffer) {
 		pr_info("%s, warning, no enough buf\n", __func__);
 		return -2;

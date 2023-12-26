@@ -2463,6 +2463,11 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 		}
 	}
 
+	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+		hevc->m_mv_BUF[i].used_flag = 0;
+		hevc->m_mv_BUF[i].used_pic_index = -1;
+	}
+
 	hevc->pic_num = 0;
 	hevc->lcu_x_num_pre = 0;
 	hevc->lcu_y_num_pre = 0;

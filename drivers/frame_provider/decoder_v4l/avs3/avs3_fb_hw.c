@@ -1700,10 +1700,6 @@ static void release_free_mmu_buffers(struct AVS3Decoder_s *dec)
 					decoder_mmu_box_free_idx(aml_buf->fbc->mmu_dw_1, aml_buf->fbc->index);
 			}
 #endif
-#ifndef MV_USE_FIXED_BUF
-			decoder_bmmu_box_free_idx(dec->bmmu_box, MV_BUFFER_IDX(pic->index));
-			pic->mpred_mv_wr_start_addr = 0;
-#endif
 		}
 	}
 }
@@ -2092,7 +2088,12 @@ static void config_mpred_hw_fb(struct AVS3Decoder_s *dec)
 	mpred_curr_lcu_y = (data32 >> 16) & 0xffff;*/
 
 	MV_MEM_UNIT_l = get_mv_mem_unit(avs3_dec->lcu_size_log2);
-	mpred_mv_rd_end_addr = mpred_mv_rd_start_addr + ((avs3_dec->lcu_x_num * avs3_dec->lcu_y_num) * MV_MEM_UNIT_l);
+#ifndef MV_USE_FIXED_BUF
+	mpred_mv_rd_end_addr = mpred_mv_rd_start_addr + col_pic->mv_size;
+#else
+	mpred_mv_rd_end_addr = mpred_mv_rd_start_addr +
+		((avs3_dec->lcu_x_num * avs3_dec->lcu_y_num) * MV_MEM_UNIT_l);
+#endif
 
 	avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 		"cur pic index %d  slicetype %d col pic index %d slicetype %d\n",

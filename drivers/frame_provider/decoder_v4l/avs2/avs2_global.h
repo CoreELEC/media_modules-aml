@@ -796,6 +796,7 @@ struct avs2_frame_s {
 #ifdef AML
 	u64 time;
 #endif
+	int mv_size;
 };
 
 

@@ -1798,12 +1798,6 @@ static void release_free_mmu_buffers(struct AVS2Decoder_s *dec)
 			}
 
 #endif
-#ifndef MV_USE_FIXED_BUF
-			decoder_bmmu_box_free_idx(
-			dec->bmmu_box,
-			MV_BUFFER_IDX(pic->index));
-			pic->mpred_mv_wr_start_addr = 0;
-#endif
 		}
 		}
 	}
@@ -2124,7 +2118,12 @@ static void config_mpred_hw_fb(struct AVS2Decoder_s *dec)
 
 	MV_MEM_UNIT_l=avs2_dec->lcu_size_log2 == 6 ? 0x200 : avs2_dec->lcu_size_log2 == 5 ? 0x80 : 0x20;
 
-	mpred_mv_rd_end_addr=mpred_mv_rd_start_addr + ((avs2_dec->lcu_x_num*avs2_dec->lcu_y_num)*MV_MEM_UNIT_l);
+#ifndef MV_USE_FIXED_BUF
+	mpred_mv_rd_end_addr = mpred_mv_rd_start_addr + col_pic->mv_size;
+#else
+	mpred_mv_rd_end_addr = mpred_mv_rd_start_addr +
+		((avs2_dec->lcu_x_num * avs2_dec->lcu_y_num) * MV_MEM_UNIT_l);
+#endif
 
 	//mpred_above_buf_start = buf_spec->mpred_above.buf_start;
 

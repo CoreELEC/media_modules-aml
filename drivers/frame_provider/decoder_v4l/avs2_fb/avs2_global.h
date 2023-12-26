@@ -821,6 +821,7 @@ struct avs2_frame_s {
 	s32 poc;
 	u32 hw_front_decode_time;
 	u32 stream_size; // For stream base mode
+	int mv_size;
 #endif
 };
 

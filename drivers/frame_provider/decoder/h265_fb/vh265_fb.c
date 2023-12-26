@@ -2979,6 +2979,7 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 static void hevc_init_stru(struct hevc_state_s *hevc,
 		struct BuffInfo_s *buf_spec_i)
 {
+	int i;
 	INIT_LIST_HEAD(&hevc->log_list);
 	hevc->work_space_buf = buf_spec_i;
 	hevc->prefix_aux_size = 0;
@@ -3034,6 +3035,11 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 		hevc->ignore_bufmgr_error = 0x1;
 	else
 		hevc->ignore_bufmgr_error = 0x0;
+
+	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+		hevc->m_mv_BUF[i].used_flag = 0;
+		hevc->m_mv_BUF[i].used_pic_index = -1;
+	}
 
 	hevc->pic_num = 0;
 	hevc->lcu_x_num_pre = 0;
@@ -16435,10 +16441,6 @@ static void reset(struct vdec_s *vdec)
 		hevc->m_BUF[i].start_adr = 0;
 	}
 
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
-		hevc->m_mv_BUF[i].used_flag = 0;
-		hevc->m_mv_BUF[i].used_pic_index = -1;
-	}
 	hevc->dec_result = DEC_RESULT_NONE;
 
 	hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);
