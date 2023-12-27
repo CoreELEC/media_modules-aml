@@ -67,6 +67,7 @@
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../../amvdec_ports/aml_vcodec_ts.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define HEVC_8K_LFTOFFSET_FIX
 #define SUPPORT_LONG_TERM_RPS
@@ -11038,6 +11039,7 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 #endif
 			hevc->empty_flag = 0;
 pic_done:
+			vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 			if (vdec->master == NULL && vdec->slave == NULL &&
 				hevc->empty_flag == 0) {
 				hevc->over_decode =
@@ -11914,6 +11916,7 @@ force_output:
 		hevc->try_parsing = 0;
 	}
 
+	vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	} else if (dec_status == HEVC_DECODE_OVER_SIZE) {
 		hevc_print(hevc, 0 , "hevc  decode oversize !!\n");
@@ -11975,6 +11978,7 @@ static irqreturn_t vh265_isr(int irq, void *data)
 	}
 	else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_PIC_DONE);
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
 	}
 
 	if (hevc->init_flag == 0)
@@ -13658,6 +13662,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 done_end:
 		mutex_lock(&hevc->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
+		if (hevc->dec_status == HEVC_DECPIC_DATA_DONE)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hevc->start_shift_bytes);
 		hevc->chunk = NULL;
 		mutex_unlock(&hevc->chunks_mutex);
 		if (ctx->es_free)
@@ -13750,6 +13756,7 @@ done_end:
 #endif
 		mutex_lock(&hevc->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hevc->start_shift_bytes);
 		hevc->chunk = NULL;
 		mutex_unlock(&hevc->chunks_mutex);
 		if (ctx->es_free)
@@ -13789,6 +13796,8 @@ done_end:
 			int i;
 
 		decode_frame_count[hevc->index]++;
+
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hevc->start_shift_bytes);
 #ifdef DETREFILL_ENABLE
 	if (hevc->is_swap &&
 		get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) {

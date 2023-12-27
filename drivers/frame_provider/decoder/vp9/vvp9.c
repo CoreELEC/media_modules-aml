@@ -9555,6 +9555,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		pbi->process_busy = 0;
 		return IRQ_HANDLED;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 		if (pbi->m_ins_flag) {
 			get_picture_qos_info(pbi);
 #ifdef SUPPORT_FB_DECODING
@@ -9799,6 +9800,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	continue_decoding(pbi);
 	pbi->postproc_done = 0;
 	pbi->process_busy = 0;
+	vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
@@ -9819,6 +9821,7 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	}
 	else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_PIC_DONE);
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
 	}
 
 	adapt_prob_status = READ_VREG(VP9_ADAPT_PROB_REG);
@@ -11192,6 +11195,8 @@ static void vp9_work(struct work_struct *work)
 			pbi->start_shift_bytes
 			);
 		vdec_vframe_dirty(hw_to_vdec(pbi), pbi->chunk);
+		if (pbi->dec_status == HEVC_DECPIC_DATA_DONE)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - pbi->start_shift_bytes);
 	} else if (pbi->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -11212,6 +11217,7 @@ static void vp9_work(struct work_struct *work)
 		notify_v4l_eos(hw_to_vdec(pbi));
 
 		vdec_vframe_dirty(hw_to_vdec(pbi), pbi->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - pbi->start_shift_bytes);
 	} else if (pbi->dec_result == DEC_RESULT_FORCE_EXIT) {
 		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
 			"%s: force exit\n",
@@ -11234,6 +11240,7 @@ static void vp9_work(struct work_struct *work)
 		pbi->frame_count++;
 		pbi->process_state = PROC_STATE_INIT;
 
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - pbi->start_shift_bytes);
 		if (pbi->mmu_enable)
 			pbi->used_4k_num =
 				(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);

@@ -6745,6 +6745,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			pic->stream_size = vdec_get_stream_size(hw_to_vdec(dec));
 
 		vdec->front_pic_done = true;
+		vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 		if ((dec->front_back_mode == 0) &&
 			get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
 			avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
@@ -8400,6 +8401,8 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		if (dec->dec_status == HEVC_DECPIC_DATA_DONE)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -8420,6 +8423,7 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 		notify_v4l_eos(hw_to_vdec(dec));
 		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_FORCE_EXIT) {
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS, "%s: force exit\n", __func__);
 		if (dec->stat & STAT_VDEC_RUN) {

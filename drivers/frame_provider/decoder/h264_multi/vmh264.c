@@ -8023,6 +8023,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 pic_done_proc:
 		reset_process_time(hw);
+		if (dec_dpb_status == H264_PIC_DATA_DONE)
+			vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 		if ((dec_dpb_status == H264_SEARCH_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_TIMEOUT) ||
@@ -11102,6 +11104,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			hw->reserved_byte,
 			hw->reserved_byte*8);
 
+		vdec_code_rate(vdec, hw->consume_byte);
 		data_invalid = vdec_offset_prepare_input(vdec, hw->consume_byte, hw->chunk_offset, hw->chunk_size);
 		hw->chunk_offset = (hw->chunk_offset + hw->consume_byte) - data_invalid;
 		hw->chunk_size = (hw->chunk_size - hw->consume_byte) + data_invalid;
@@ -11132,7 +11135,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			(hw->chunk != NULL)) {
 			hw->chunk_offset = hw->chunk->offset;
 			hw->chunk_size = hw->chunk->size;
+			vdec_code_rate(vdec, hw->chunk_size);
 		}
+		if (vdec_stream_based(vdec))
+			vdec_code_rate(vdec, size);
 		WRITE_VREG(AV_SCRATCH_1, 0); // reuse the register AV_SCRATCH_1 to store the reserved bit_cnt for one packet multi-frame
 	}
 	input_empty[DECODE_ID(hw)] = 0;

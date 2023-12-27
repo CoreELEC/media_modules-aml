@@ -49,6 +49,7 @@
 #include "../utils/config_parser.h"
 #include "../utils/vdec_feature.h"
 #include "../../../media_sync/pts_server/pts_server_core.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define MEM_NAME "codec_mmjpeg"
 
@@ -357,7 +358,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 		pr_info("fatal error, no available buffer slot.");
 		return IRQ_HANDLED;
 	}
-
+	vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 	vf->index = index;
 	set_frame_info(hw, vf);
 

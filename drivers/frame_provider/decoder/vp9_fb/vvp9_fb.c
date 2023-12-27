@@ -14778,6 +14778,8 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 			pbi->start_shift_bytes
 			);
 		vdec_vframe_dirty(hw_to_vdec(pbi), pbi->chunk);
+		if (pbi->dec_status == HEVC_DECPIC_DATA_DONE)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - pbi->start_shift_bytes);
 	} else if (pbi->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -14796,6 +14798,7 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 		vp9_bufmgr_postproc(pbi);
 
 		vdec_vframe_dirty(hw_to_vdec(pbi), pbi->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - pbi->start_shift_bytes);
 	} else if (pbi->dec_result == DEC_RESULT_FORCE_EXIT) {
 		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
 			"%s: force exit\n",
@@ -14827,6 +14830,7 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 		if (pbi->mmu_enable)
 			pbi->used_4k_num =
 				(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - pbi->start_shift_bytes);
 		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
 			"%s (===> %d) dec_result %d %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
 			__func__,

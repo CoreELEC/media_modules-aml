@@ -8733,6 +8733,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		av1_print(hw, AOM_DEBUG_HW_MORE,
 			"fg_data0 0x%x fg_data1 0x%x fg_valid %d\n",
 			fg_reg0, fg_reg1, hw->fgs_valid);
+		vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 #else
 		if (READ_VREG(HEVC_FGS_CTRL) &
 				((1 << 4) | (1 << 5) | (1 << 6)))
@@ -9145,6 +9146,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			vdec_schedule_work(&hw->work);
 		}
 	}
+	if (!hw->frame_decoded)
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
@@ -9160,6 +9163,9 @@ static irqreturn_t vav1_isr(int irq, void *data)
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
+	if (dec_status == AOM_AV1_DEC_PIC_END) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
 
 	if (dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE ||
 		dec_status == AOM_AV1_SEQ_HEAD_PARSER_DONE ||
@@ -10485,6 +10491,8 @@ static void av1_work(struct work_struct *work)
 			hw->start_shift_bytes
 			);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		if (hw->dec_status == AOM_AV1_DEC_PIC_END)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hw->start_shift_bytes);
 	} else if (hw->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -10505,6 +10513,7 @@ static void av1_work(struct work_struct *work)
 		notify_v4l_eos(hw_to_vdec(hw));
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hw->start_shift_bytes);
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
 		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
 			"%s: force exit\n",
@@ -10526,6 +10535,7 @@ static void av1_work(struct work_struct *work)
 		hw->result_done_count++;
 		hw->process_state = PROC_STATE_INIT;
 
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hw->start_shift_bytes);
 		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
 			"%s (===> %d) dec_result %d (%d) %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
 			__func__,

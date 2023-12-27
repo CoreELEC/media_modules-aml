@@ -50,6 +50,7 @@
 #include "../../decoder/utils/config_parser.h"
 #include "../../decoder/utils/vdec_feature.h"
 #include "../../decoder/utils/aml_buf_helper.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define MEM_NAME "codec_mmjpeg"
 
@@ -486,6 +487,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 		return IRQ_HANDLED;
 	}
 
+	vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 	vf->v4l_mem_handle
 		= hw->buffer_spec[index].v4l_ref_buf_addr;
 	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;

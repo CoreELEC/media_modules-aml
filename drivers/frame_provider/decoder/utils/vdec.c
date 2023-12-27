@@ -141,6 +141,8 @@ static int one_pack_multi_f_set_align_size = 0;
 #define VDEC_DBG_CANVAS_STATUS	(0x4)
 #define VDEC_DBG_ENABLE_FENCE	(0x100)
 #define VDEC_DBG_DUAL_CORE_DEBUG	(0x200)
+#define VDEC_DBG_STUCK_STATE_DEBUG (0x800)
+#define VDEC_DBG_ENABLE_CODE_RATE_DEBUG (0x1000)
 
 #define FRAME_BASE_PATH_DI_V4LVIDEO_0 (29)
 #define FRAME_BASE_PATH_DI_V4LVIDEO_1 (30)
@@ -202,6 +204,11 @@ static int enable_mvdec_info = 1;
 
 int decode_underflow = 0;
 u32 debug_meta;
+int rate_time_avg_cnt = 16;
+int frame_fps = 60;
+int code_rate_avg_threshold_hi = 130;
+int rate_time_avg_threshold_hi = 16700;
+int rate_time_avg_threshold_lo = 16700;
 
 static int mmu_copy_enable;
 
@@ -2469,7 +2476,6 @@ void vdec_vframe_dirty(struct vdec_s *vdec, struct vframe_chunk_s *chunk)
 {
 	if (chunk) {
 		chunk->flag |= VFRAME_CHUNK_FLAG_CONSUMED;
-		ATRACE_COUNTER(vdec->frame_mode_size, chunk->size);
 	}
 	if (vdec_stream_based(vdec)) {
 		vdec->input.swap_needed = true;
@@ -2495,6 +2501,23 @@ void vdec_vframe_dirty(struct vdec_s *vdec, struct vframe_chunk_s *chunk)
 	}
 }
 EXPORT_SYMBOL(vdec_vframe_dirty);
+
+void vdec_code_rate(struct vdec_s *vdec, uint32_t size)
+{
+	int i = 0;
+
+	i = vdec->decoded_count % rate_time_avg_cnt;
+	vdec->code_rate[i] = size*8*frame_fps >> 20;
+	if (vdec_get_debug() & VDEC_DBG_ENABLE_CODE_RATE_DEBUG) {
+		if (vdec->code_rate[i] > code_rate_avg_threshold_hi)
+			pr_info("%s frame cnt %d ,size %d, code_rate %llu Mbps", __func__, vdec->decoded_count, size, vdec->code_rate[i]);
+	}
+	ATRACE_COUNTER(vdec->frame_size, size);
+	ATRACE_COUNTER(vdec->frame_code_rate_name, vdec->code_rate[i]);
+
+	vdec->decoded_count++;
+}
+EXPORT_SYMBOL(vdec_code_rate);
 
 bool vdec_need_more_data(struct vdec_s *vdec)
 {
@@ -2547,7 +2570,6 @@ void vdec_save_input_context(struct vdec_s *vdec)
 {
 	struct vdec_input_s *input = &vdec->input;
 	u64 total_rd_count_last = 0;
-	u64 stream_size = 0;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	vdec_profile(vdec, VDEC_PROFILE_EVENT_SAVE_INPUT, 0);
@@ -2596,9 +2618,6 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			if ((vdec->core_mask & CORE_MASK_HEVC_BACK) == 0)
 				hevc_wait_ddr();
 		}
-
-		stream_size = vdec->input.total_rd_count - total_rd_count_last;
-		ATRACE_COUNTER(vdec->stream_mode_size, stream_size);
 
 		input->swap_valid = true;
 		input->swap_needed = false;
@@ -3028,6 +3047,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	if (vdec_stream_based(vdec))
 		max_di_count = max_supported_di_instance;
 	vdec->is_v4l = is_v4l ? 1 : 0;
+	dec_time_stat_reset = 1;
 	if (is_res_locked(vdec_core->vdec_resource_status,
 		BIT(vdec->frame_base_video_path),
 		vdec->vf_receiver_inst))
@@ -3069,14 +3089,14 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	snprintf(vdec->name, sizeof(vdec->name),
 		 "vdec-%d", vdec->id);
 	snprintf(vdec->dec_spend_time, sizeof(vdec->dec_spend_time),
-		 "%s-dec_spend_time", vdec->name);
+		 "dec_spend_time-%d", vdec->id);
 	snprintf(vdec->dec_spend_time_ave, sizeof(vdec->dec_spend_time_ave),
-		 "%s-dec_spend_time_ave", vdec->name);
+		 "dec_spend_time_ave-%d", vdec->id);
 
 	snprintf(vdec->dec_back_spend_time, sizeof(vdec->dec_back_spend_time),
-		 "%s-dec_back_spend_time", vdec->name);
+		 "dec_back_spend_time-%d", vdec->id);
 	snprintf(vdec->dec_back_spend_time_ave, sizeof(vdec->dec_back_spend_time_ave),
-		 "%s-dec_back_spend_time_ave", vdec->name);
+		 "dec_back_spend_time_ave-%d", vdec->id);
 
 	snprintf(vdec->dec_event, sizeof(vdec->dec_event),
 		 "0.vdec_event-%d", vdec->id);
@@ -3087,10 +3107,10 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	snprintf(vdec->stream_buffer_level, sizeof(vdec->stream_buffer_level),
 		 "0.stream_buffer_level-%d", vdec->id);
 
-	snprintf(vdec->frame_mode_size, sizeof(vdec->frame_mode_size),
-			 "0.frame_mode_size-%d", vdec->id);
-	snprintf(vdec->stream_mode_size, sizeof(vdec->stream_mode_size),
-		 "0.stream_mode_size-%d", vdec->id);
+	snprintf(vdec->frame_size, sizeof(vdec->frame_size),
+			 "frame_size-%d", vdec->id);
+	snprintf(vdec->frame_code_rate_name, sizeof(vdec->frame_code_rate_name),
+			 "frame_code_rate-%d", vdec->id);
 
 	snprintf(vdec->decode_hw_front_time_name, sizeof(vdec->decode_hw_front_time_name),
 		"decode_%s_time-%d", is_support_dual_core()?"hw_front":"hw", vdec->id);
@@ -3101,7 +3121,6 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			"decode_%s_spend_time_avg-%d", is_support_dual_core()?"hw_front":"hw", vdec->id);
 	snprintf(vdec->decode_hw_back_spend_time_avg, sizeof(vdec->decode_hw_back_spend_time_avg),
 		"decode_hw_back_spend_time_avg-%d", vdec->id);
-
 	/*
 	 *todo: VFM patch control should be configurable,
 	 * for now all stream based input uses default VFM path.
@@ -3863,6 +3882,7 @@ int vdec_reset(struct vdec_s *vdec)
 		if (vdec->slave)
 			vdec->slave->reset(vdec->slave);
 	}
+	dec_time_stat_reset = 1;
 	vdec->mc_loaded = 0;/*clear for reload firmware*/
 	vdec_input_release(&vdec->input, false);
 
@@ -3906,6 +3926,7 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 			if (vdec->slave)
 				vdec->slave->reset(vdec->slave);
 		}
+		dec_time_stat_reset = 1;
 		vdec->mc_loaded = 0;/*clear for reload firmware*/
 
 		if (vdec->format == VFORMAT_VC1) {
@@ -4341,6 +4362,32 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 		pr_info("%s:%d ready_mask = 0x%lx, mask = 0x%lx, check_run_ready %d\n",
 			__func__, vdec->id, ready_mask, mask, check_run_ready);
 
+	if (vdec_frame_based(vdec)) {
+		int vdec_stuck_state = VDEC_NORMAL;
+		char * vdec_stuck_state_name[] = {
+			"VDEC_NORMAL",      "VDEC_FRONT_SLOW",
+			"VDEC_BACK_SLOW",   "VDEC_NO_INPUT"
+		};
+		if ((mask == CORE_MASK_HEVC || mask == CORE_MASK_VDEC_1) &&
+			!(check_run_ready && vdec->input.have_frame_num == 0)) {
+			if (vdec->front_run2cb_time > rate_time_avg_threshold_hi && vdec->back_irq_cnt != 0) {
+				vdec_stuck_state = VDEC_FRONT_SLOW;
+			}
+			if (vdec->front_run2cb_time > rate_time_avg_threshold_hi && vdec->back_irq_cnt == 0)
+				vdec_stuck_state = VDEC_FRONT_SLOW;
+		} else if (mask == CORE_MASK_HEVC_BACK &&
+			vdec->back_run2cb_time > rate_time_avg_threshold_hi) {
+			vdec_stuck_state = VDEC_BACK_SLOW;
+		} else if (check_run_ready &&
+			vdec->input.have_frame_num == 0) {
+			vdec_stuck_state = VDEC_NO_INPUT;
+		}
+		if (vdec_get_debug() & VDEC_DBG_STUCK_STATE_DEBUG) {
+			if (vdec_stuck_state != VDEC_NORMAL)
+				pr_info("The reason for the lag is %s", vdec_stuck_state_name[vdec_stuck_state]);
+		}
+		ATRACE_COUNTER(vdec->vdec_stuck_state_name, vdec_stuck_state);
+	}
 	/*step_mode &= ~0xff; not work for id of 0, removed*/
 
 	//if (mask & ~CORE_MASK_HEVC_BACK)
@@ -7646,6 +7693,21 @@ MODULE_PARM_DESC(mmu_copy_enable, "\n mmu_copy_enable\n");
 
 module_param(one_pack_multi_f_set_align_size, uint, 0664);
 MODULE_PARM_DESC(one_pack_multi_f_set_align_size, "\n ammvdec_mpeg12 one_pack_multi_f_set_align_size\n");
+
+module_param(rate_time_avg_cnt, uint, 0664);
+MODULE_PARM_DESC(rate_time_avg_cnt, "\n rate_time_avg_cnt\n");
+
+module_param(frame_fps, uint, 0664);
+MODULE_PARM_DESC(frame_fps, "\n frame_fps\n");
+
+module_param(code_rate_avg_threshold_hi, uint, 0664);
+MODULE_PARM_DESC(code_rate_avg_threshold_hi, "\n code_rate_avg_threshold_hi\n");
+
+module_param(rate_time_avg_threshold_hi, uint, 0664);
+MODULE_PARM_DESC(rate_time_avg_threshold_hi, "\n rate_time_avg_threshold_hi\n");
+
+module_param(rate_time_avg_threshold_lo, uint, 0664);
+MODULE_PARM_DESC(rate_time_avg_threshold_lo, "\n rate_time_avg_threshold_lo\n");
 
 /*
 *module_init(vdec_module_init);

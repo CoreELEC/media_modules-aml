@@ -68,6 +68,7 @@
 #include "vavs2.h"
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define MEM_NAME "codec_avs2"
 #define I_ONLY_SUPPORT
@@ -5674,7 +5675,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		goto irq_handled_exit;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		PRINT_LINE();
-
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 #ifdef AVS2_10B_MMU
 		avs2_recycle_mmu_buf_tail(dec);
 #endif
@@ -6190,6 +6191,7 @@ decode_slice:
 
 		if (dec->m_ins_flag)
 			start_process_time(dec);
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	}
 irq_handled_exit:
 	PRINT_LINE();
@@ -6205,6 +6207,9 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
 
 	if (!dec)
 		return IRQ_HANDLED;
@@ -6919,6 +6924,8 @@ static void avs2_work(struct work_struct *work)
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		if (dec->dec_status == HEVC_DECPIC_DATA_DONE)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -6939,6 +6946,7 @@ static void avs2_work(struct work_struct *work)
 		notify_v4l_eos(hw_to_vdec(dec));
 		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_FORCE_EXIT) {
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS, "%s: force exit\n", __func__);
 		if (dec->stat & STAT_VDEC_RUN) {

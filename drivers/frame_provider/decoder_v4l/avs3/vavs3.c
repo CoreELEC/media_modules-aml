@@ -7140,6 +7140,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			pic->poc = ctx->info.pic_header.dtr;
 		if (dec_status == HEVC_DECPIC_DATA_DONE)
 			vdec->front_pic_done = true;
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 		mutex_lock(&dec->slice_header_lock);
 		mutex_unlock(&dec->slice_header_lock);
 
@@ -9222,6 +9223,8 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		if (dec->dec_status == HEVC_DECPIC_DATA_DONE)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -9245,6 +9248,7 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 		avs3_prepare_display_buf(dec);
 		notify_v4l_eos(hw_to_vdec(dec));
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_FORCE_EXIT) {
 		avs3_print(dec, PRINT_FLAG_VDEC_STATUS, "%s: force exit\n", __func__);
 		if (dec->stat & STAT_VDEC_RUN) {

@@ -53,6 +53,7 @@
 #include <media/v4l2-mem2mem.h>
 #include "../utils/vdec_feature.h"
 #include "../../../media_sync/pts_server/pts_server_core.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define DRIVER_NAME "ammvdec_mpeg4"
 
@@ -1364,6 +1365,7 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 		return IRQ_HANDLED;
 	} else {
 		reset_process_time(hw);
+		vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 		picture_type = (reg >> 3) & 7;
 		repeat_cnt = READ_VREG(MP4_NOT_CODED_CNT);
 		vop_time_inc = READ_VREG(MP4_VOP_TIME_INC);

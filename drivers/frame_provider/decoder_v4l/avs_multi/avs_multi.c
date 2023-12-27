@@ -54,6 +54,7 @@
 #include "avs_multi.h"
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define DEBUG_MULTI_FLAG  0
 
@@ -4364,6 +4365,7 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 				} else
 					hw->decode_status_skip_pic_done_flag = 0;
 				hw->decode_pic_count++;
+				vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 				if ((hw->decode_pic_count & 0xffff) == 0) {
 					/*make ucode do not handle it as first picture*/
 					hw->decode_pic_count++;

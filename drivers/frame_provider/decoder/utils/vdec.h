@@ -70,6 +70,8 @@ void vdec_module_exit(void);
 #define DEC_FLAG_HEVC_WORKAROUND 0x01
 
 #define VDEC_FIFO_ALIGN 8
+#define VDEC_DBG_ENABLE_TIME_DEBUG (0x400)
+#define VDEC_DBG_ENABLE_HW_TIME_DEBUG (0x2000)
 
 enum vdec_type_e {
 	VDEC_1 = 0,
@@ -209,6 +211,10 @@ extern void vdec_poweroff(enum vdec_type_e core);
 extern bool vdec_on(enum vdec_type_e core);
 extern void vdec_power_reset(void);
 
+extern int rate_time_avg_cnt;
+extern int rate_time_avg_threshold_hi;
+extern int rate_time_avg_threshold_lo;
+
 /*irq num as same as .dts*/
 
 /*
@@ -250,6 +256,14 @@ enum frame_type_flag {
 	KEYFRAME_FLAG = 1,	/* Frame is a keyframe (I-frame) */
 	PFRAME_FLAG,		/* Frame is a P-frame */
 	BFRAME_FLAG,		/* Frame is a B-frame */
+};
+
+enum vdec_stuck_state {
+	VDEC_NORMAL = 0,
+	VDEC_FRONT_SLOW,
+	VDEC_BACK_SLOW,
+	VDEC_NO_INPUT,
+	VDEC_NO_YUV_BUF,
 };
 
 extern s32 vdec_request_threaded_irq(enum vdec_irq_num num,
@@ -527,8 +541,7 @@ struct vdec_s {
 	u32 inst_cnt;
 	wait_queue_head_t idle_wait;
 	struct vdec_data_info_s *vdata;
-	char frame_mode_size[32];
-	char stream_rp[32];
+	char frame_size[32];
 	spinlock_t power_lock;
 	bool suspend;
 #ifdef NEW_FB_CODE
@@ -544,11 +557,17 @@ struct vdec_s {
 	u64 hw_front_decode_start;
 	u64 hw_back_decode_start;
 #endif
-	char stream_mode_size[32];
+	char frame_code_rate_name[32];
 	char decode_hw_front_time_name[32];
 	char decode_hw_back_time_name[32];
 	char decode_hw_front_spend_time_avg[32];
 	char decode_hw_back_spend_time_avg[32];
+	u64 code_rate[16];
+	uint32_t decoded_count;
+	int have_frame_num;
+	u64 back_run2cb_time;
+	u64 front_run2cb_time;
+	char vdec_stuck_state_name[32];
 };
 
 #define CODEC_MODE(a, b, c, d)\
@@ -824,6 +843,8 @@ extern void vdec_set_step_mode(void);
 ssize_t dump_vdec_debug(char *buf);
 #endif
 int vdec_get_debug_flags(void);
+u32 vdec_get_debug(void);
+void vdec_code_rate(struct vdec_s *vdec, uint32_t size);
 
 void VDEC_PRINT_FUN_LINENO(const char *fun, int line);
 

@@ -65,7 +65,7 @@
 #include "../utils/decoder_dma_alloc.h"
 #include "avs2_global.h"
 #include "../../../media_sync/pts_server/pts_server_core.h"
-
+#include "../../decoder/utils/vdec_profile.h"
 
 #define MEM_NAME "codec_avs2"
 
@@ -5605,6 +5605,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		PRINT_LINE();
 		dec->start_decoding_flag |= 0x3;
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 		if (dec->m_ins_flag) {
 			set_cuva_data(dec);
 			update_decoded_pic(dec);
@@ -6075,6 +6076,7 @@ decode_slice:
 
 		if (dec->m_ins_flag)
 			start_process_time(dec);
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	}
 irq_handled_exit:
 	PRINT_LINE();
@@ -6092,6 +6094,9 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
 
 	if (!dec)
 		return IRQ_HANDLED;
@@ -7090,6 +7095,8 @@ static void avs2_work(struct work_struct *work)
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		if (dec->dec_status == HEVC_DECPIC_DATA_DONE)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -7108,6 +7115,7 @@ static void avs2_work(struct work_struct *work)
 			avs2_prepare_display_buf(dec);
 		}
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_FORCE_EXIT) {
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS, "%s: force exit\n", __func__);
 		if (dec->stat & STAT_VDEC_RUN) {

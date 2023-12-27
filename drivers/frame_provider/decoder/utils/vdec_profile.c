@@ -39,7 +39,7 @@ static DEFINE_SPINLOCK(vdec_profile_spinlock);
 static int rec_wp;
 static bool rec_wrapped;
 static uint dec_time_stat_flag;
-static uint dec_time_stat_reset;
+uint dec_time_stat_reset;
 
 
 struct dentry *root, *event;
@@ -72,6 +72,16 @@ struct vdec_profile_statistics_s {
 	int hw_cnt;
 	u64 multi_us_sum;
 	int multi_slice_cnt;
+	u64 hidden_frame_us_sum;
+	int unhidden_frame;
+	u64 hw_time[16];
+	u64 run2cb_time[16];
+	int run2cb_print_flag;
+	int hw_print_flag;
+	u64 freeze_time_sum;
+	int freeze_time_cnt;
+	u64 freeze_hw_time_sum;
+	int freeze_hw_time_cnt;
 	struct vdec_profile_time_stat_s run2cb_time_stat;
 	struct vdec_profile_time_stat_s decode_time_stat;
 	struct vdec_profile_time_stat_s again_time_stat;
@@ -160,6 +170,82 @@ static void vdec_profile_update_alloc_time(
 	time_stat->time_total_us += spend_time_us;
 }
 
+static void vdec_profile_time_summary(struct vdec_s *vdec, int event, struct vdec_profile_statistics_s *statistics_s, int back_core_flag, u64 time)
+{
+	struct vdec_profile_statistics_s *time_stat = statistics_s;
+	int i = 0,j = 0, frame_cnt = 0;
+	u64 time_sum = 0, time_avg = 0, freeze_avg = 0;
+	u64 *time_summary = NULL;
+	u64 *freeze_time_sum = NULL;
+	int *freeze_time_cnt = NULL;
+	int *print_flag = NULL;
+
+
+	if (!back_core_flag) {
+		frame_cnt = (event == VDEC_PROFILE_DECODER_END) ? time_stat->hw_cnt : time_stat->cb_cnt;
+		i = frame_cnt % rate_time_avg_cnt;
+		if (event == VDEC_PROFILE_DECODER_END)
+			time_stat->hw_time[i] = time;
+		else
+			time_stat->run2cb_time[i] = time;
+		time_summary = (event == VDEC_PROFILE_DECODER_END) ? time_stat->hw_time : time_stat->run2cb_time;
+		freeze_time_sum = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->freeze_hw_time_sum : &time_stat->freeze_time_sum;
+		freeze_time_cnt = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->freeze_hw_time_cnt : &time_stat->freeze_time_cnt;
+		print_flag = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->hw_print_flag : &time_stat->run2cb_print_flag;
+	} else {
+		frame_cnt = (event == VDEC_PROFILE_DECODER_END) ? time_stat->hw_cnt : time_stat->cb_cnt;
+		i = frame_cnt % rate_time_avg_cnt;
+		if (event == VDEC_PROFILE_DECODER_END)
+			time_stat->hw_time[i] = time;
+		else
+			time_stat->run2cb_time[i] = time;
+		time_summary = (event == VDEC_PROFILE_DECODER_END) ? time_stat->hw_time : time_stat->run2cb_time;
+		freeze_time_sum = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->freeze_hw_time_sum : &time_stat->freeze_time_sum;
+		freeze_time_cnt = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->freeze_hw_time_cnt : &time_stat->freeze_time_cnt;
+		print_flag = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->hw_print_flag : &time_stat->run2cb_print_flag;
+	}
+
+	if (event == VDEC_PROFILE_DECODER_END || event == VDEC_PROFILE_EVENT_CB) {
+
+		if (frame_cnt >= rate_time_avg_cnt) {
+			for (j = 0; j < rate_time_avg_cnt; j++)
+				time_sum += time_summary[j];
+			time_avg = div_u64(time_sum, rate_time_avg_cnt);
+
+			if (time_avg >= rate_time_avg_threshold_hi && *print_flag == 0) {
+				*print_flag = 0x1;
+			}
+			if (*print_flag == 0x2) {
+				*freeze_time_sum += time;
+				(*freeze_time_cnt)++;
+				freeze_avg = div_u64(*freeze_time_sum, *freeze_time_cnt);
+			}
+			if (freeze_avg < rate_time_avg_threshold_lo && (*print_flag == 0x2))
+				*print_flag = 0x4;
+
+			if (*print_flag == 0x1) {
+				pr_info("------------------------%s_start------------------------\n",
+					(event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb");
+				pr_info("%s frame cnt %d %s overtime start \n", back_core_flag ? "back_core" : "front_core", frame_cnt - (rate_time_avg_cnt-1),
+					(event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb");
+				*print_flag = 0x2;
+			} else if (*print_flag == 0x2) {
+				pr_info("%s %s_time_avg_16 is %llu us \n", back_core_flag ? "back_core" : "front_core",
+					(event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb", time_avg);
+			} else if (*print_flag == 0x4) {
+				pr_info("%s frame cnt %d overtime end, freeze avg %s time is %llu us freeze cnt %d\n",
+						back_core_flag ? "back_core" : "front_core", frame_cnt, (event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb", freeze_avg,
+						*freeze_time_cnt + (rate_time_avg_cnt - 1));
+				pr_info("----------------------------%s_end---------------------------\n",
+						(event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb");
+				*print_flag = 0;
+				*freeze_time_sum = 0;
+				*freeze_time_cnt = 0;
+			}
+		}
+	}
+}
+
 static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile_statistics_s *statistics_s, int back_core_flag)
 {
 	struct vdec_profile_statistics_s *time_stat = NULL;
@@ -194,17 +280,23 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 				time_stat->hw_time_stat.time_total_us += time_stat->multi_us_sum;
 				ATRACE_COUNTER(vdec->decode_hw_front_time_name, time_stat->multi_us_sum);
 				ATRACE_COUNTER(vdec->decode_hw_front_spend_time_avg, div_u64(time_stat->hw_time_stat.time_total_us, time_stat->hw_cnt));
+				if (vdec_get_debug() & VDEC_DBG_ENABLE_HW_TIME_DEBUG)
+					vdec_profile_time_summary(vdec, event, time_stat, back_core_flag, time_stat->multi_us_sum);
 				time_stat->multi_us_sum = 0;
 			} else {
 				vdec_profile_update_alloc_time(&time_stat->hw_time_stat, time_stat->hw_lasttimestamp, timestamp);
 				ATRACE_COUNTER(vdec->decode_hw_front_time_name, timestamp - time_stat->hw_lasttimestamp);
 				ATRACE_COUNTER(vdec->decode_hw_front_spend_time_avg, div_u64(time_stat->hw_time_stat.time_total_us, time_stat->hw_cnt));
+				if (vdec_get_debug() & VDEC_DBG_ENABLE_HW_TIME_DEBUG)
+					vdec_profile_time_summary(vdec, event, time_stat, back_core_flag, timestamp - time_stat->hw_lasttimestamp);
 			}
 			time_stat->multi_slice_cnt = 0;
 		} else {
 			vdec_profile_update_alloc_time(&time_stat->hw_time_stat, time_stat->hw_lasttimestamp, timestamp);
 			ATRACE_COUNTER(vdec->decode_hw_back_time_name, timestamp - time_stat->hw_lasttimestamp);
 			ATRACE_COUNTER(vdec->decode_hw_back_spend_time_avg, div_u64(time_stat->hw_time_stat.time_total_us, time_stat->hw_cnt));
+			if (vdec_get_debug() & VDEC_DBG_ENABLE_HW_TIME_DEBUG)
+				vdec_profile_time_summary(vdec, event, time_stat, back_core_flag, timestamp - time_stat->hw_lasttimestamp);
 		}
 	}
 
@@ -212,6 +304,7 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 		time_stat->run_lasttimestamp = timestamp;
 		time_stat->run_cnt++;
 	} else if ((event == VDEC_PROFILE_EVENT_CB) && (time_stat->run_lasttimestamp != -1)) {
+		u64 run2cb_time = 0;
 		/*run2cb statistics*/
 		vdec_profile_update_alloc_time(&time_stat->run2cb_time_stat, time_stat->run_lasttimestamp, timestamp);
 
@@ -222,17 +315,35 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 			vdec_profile_update_alloc_time(&time_stat->decode_time_stat, time_stat->cb_lasttimestamp, timestamp);
 
 		time_stat->cb_lasttimestamp = timestamp;
-		time_stat->cb_cnt++;
+		if (!back_core_flag) {
+			if (time_stat->unhidden_frame == 1)
+				time_stat->cb_cnt++;
+		} else
+			time_stat->cb_cnt++;
 
 		if (!back_core_flag) {
-			ATRACE_COUNTER(vdec->dec_spend_time, timestamp - time_stat->run_lasttimestamp);
-			ATRACE_COUNTER(vdec->dec_spend_time_ave, div_u64(time_stat->run2cb_time_stat.time_total_us, time_stat->cb_cnt));
+			if (time_stat->unhidden_frame != 1) {
+
+				time_stat->hidden_frame_us_sum += (timestamp - time_stat->run_lasttimestamp);
+				time_stat->hw_time_stat.time_total_us += time_stat->hidden_frame_us_sum;
+			} else {
+				run2cb_time = (timestamp - time_stat->run_lasttimestamp) + time_stat->hidden_frame_us_sum;
+				ATRACE_COUNTER(vdec->dec_spend_time, run2cb_time);
+				ATRACE_COUNTER(vdec->dec_spend_time_ave, div_u64(time_stat->run2cb_time_stat.time_total_us, time_stat->cb_cnt));
+				if (vdec_get_debug() & VDEC_DBG_ENABLE_TIME_DEBUG)
+					vdec_profile_time_summary(vdec, event, time_stat, back_core_flag, run2cb_time);
+				time_stat->hidden_frame_us_sum = 0;
+			}
+			time_stat->unhidden_frame = 0;
 		} else {
 			ATRACE_COUNTER(vdec->dec_back_spend_time, timestamp - time_stat->run_lasttimestamp);
 			ATRACE_COUNTER(vdec->dec_back_spend_time_ave, div_u64(time_stat->run2cb_time_stat.time_total_us, time_stat->cb_cnt));
+			if (vdec_get_debug() & VDEC_DBG_ENABLE_TIME_DEBUG)
+				vdec_profile_time_summary(vdec, event, time_stat, back_core_flag, timestamp - time_stat->run_lasttimestamp);
 		}
 	} else if (event == VDEC_PROFILE_DECODED_FRAME) {
 		time_stat->decoded_frame_cnt++;
+		time_stat->unhidden_frame = 1;
 	} else if (event == VDEC_PROFILE_EVENT_AGAIN) {
 		time_stat->again_cnt++;
 		time_stat->run_cnt--;

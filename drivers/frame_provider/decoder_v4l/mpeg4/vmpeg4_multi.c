@@ -51,6 +51,7 @@
 #include "../../decoder/utils/config_parser.h"
 #include "../../decoder/utils/vdec_feature.h"
 #include "../../decoder/utils/aml_buf_helper.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define DRIVER_NAME "ammvdec_mpeg4_v4l"
 
@@ -1447,6 +1448,7 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 		return IRQ_HANDLED;
 	} else {
 		reset_process_time(hw);
+		vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 		picture_type = (reg >> 3) & 7;
 		repeat_cnt = READ_VREG(MP4_NOT_CODED_CNT);
 		vop_time_inc = READ_VREG(MP4_VOP_TIME_INC);

@@ -37,6 +37,8 @@ struct vdec_s;
 #define VDEC_PROFILE_DECODER_END       12
 #define VDEC_PROFILE_MAX_EVENT         13
 
+extern uint dec_time_stat_reset;
+
 extern void vdec_profile(struct vdec_s *vdec, int event, int mask);
 extern void vdec_profile_more(struct vdec_s *vdec, int event, int para1, int para2, int mask);
 extern void vdec_profile_flush(struct vdec_s *vdec);

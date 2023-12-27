@@ -55,6 +55,7 @@
 #include "../../decoder/utils/vdec_feature.h"
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define MEM_NAME "codec_mmpeg12"
 #define CHECK_INTERVAL        (HZ/100)
@@ -2448,6 +2449,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			READ_VREG(VLD_MEM_VIFIFO_RP),
 			READ_VREG(VIFF_BIT_CNT));
 
+		vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 		reset_process_time(hw);
 
 		info = READ_VREG(MREG_PIC_INFO);

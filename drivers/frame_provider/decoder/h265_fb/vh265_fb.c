@@ -12314,6 +12314,8 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				hevc->cur_pic->stream_size = vdec_get_stream_size(hw_to_vdec(hevc));
 
 			vdec->front_pic_done = true;
+			if (dec_status != HEVC_ONE_RUN_MULTI_FRAME)
+				vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 			if ((hevc->front_back_mode == 0) &&
 				get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
 				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
@@ -15783,6 +15785,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 done_end:
 		mutex_lock(&hevc->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
+		if (hevc->dec_status == HEVC_DECPIC_DATA_DONE)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hevc->start_shift_bytes);
 		hevc->chunk = NULL;
 		mutex_unlock(&hevc->chunks_mutex);
 	} else if (hevc->dec_result == DEC_RESULT_AGAIN) {
@@ -15849,6 +15853,7 @@ done_end:
 #endif
 		mutex_lock(&hevc->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hevc->start_shift_bytes);
 		hevc->chunk = NULL;
 		mutex_unlock(&hevc->chunks_mutex);
 	} else if (hevc->dec_result == DEC_RESULT_FORCE_EXIT) {
@@ -15879,6 +15884,7 @@ done_end:
 		hevc->dec_again_cnt = 0;
 		decode_frame_count[hevc->index]++;
 
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hevc->start_shift_bytes);
 #ifdef DETREFILL_ENABLE
 	if (hevc->is_swap &&
 		get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) {
