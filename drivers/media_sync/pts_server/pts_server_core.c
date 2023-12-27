@@ -432,8 +432,8 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 	}
 
 	if (pInstance->mAlignmentOffset != 0) {
-		pInstance->mLastCheckinOffset = pInstance->mAlignmentOffset;
-		pInstance->mLastCheckinPieceOffset = pInstance->mAlignmentOffset;
+		pInstance->mLastCheckinOffset += pInstance->mAlignmentOffset;
+		pInstance->mLastCheckinPieceOffset += pInstance->mAlignmentOffset;
 		pInstance->mAlignmentOffset = 0;
 	} else {
 		pInstance->mLastCheckinOffset = ptn->offset;
@@ -1252,9 +1252,9 @@ long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPt
 						if (ptn->pts == -1) {
 							pInstance->mOffsetMode = 1;
 							find = 1;// Here to set find to avoid retryCount count wrong
-							if (ptsserver_debuglevel >= 3) {
+							// if (ptsserver_debuglevel >= 3) {
 								// pts_pr_info(index, "Found invalid pts. in invalid mode\n");
-							}
+							// }
 						}
 					}
 				}
