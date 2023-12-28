@@ -1059,6 +1059,7 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 			ctx->reset_flag = V4L_RESET_MODE_LIGHT;
 			ctx->vpp_cfg.res_chg = true;
 			ctx->last_decoded_picinfo = ctx->picinfo;
+			ctx->resolution_event_done = true;
 			/*
 			 * After all buffers containing decoded frames from
 			 * before the resolution change point ready to be

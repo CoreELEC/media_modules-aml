@@ -1112,6 +1112,7 @@ struct aml_vcodec_ctx {
 	u32			alloc_type;
 	bool			force_tw_output;
 	bool			is_multiplanar;
+	bool			resolution_event_done;
 };
 
 /**

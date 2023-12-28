@@ -930,6 +930,8 @@ struct h264_dpb_stru {
 	u32 without_display_mode;
 	int long_term_reference_flag;
 	u32 poc_check_count;
+	u32 size_for_res_change;
+	u32 param1_for_res_change;
 };
 
 
