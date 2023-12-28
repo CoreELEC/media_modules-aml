@@ -1082,6 +1082,7 @@ struct AV1HW_s {
 	int fence_usage;
 	struct av1_fence_vf_t fence_vf_s;
 	struct mutex fence_mutex;
+	u32 mv_buf_size;
 };
 
 #ifdef NEW_FB_CODE
@@ -1637,12 +1638,6 @@ static int alloc_mv_buf(struct AV1HW_s *hw,
 {
 	int ret = 0;
 
-	if (hw->m_mv_BUF[i].start_adr &&
-		size != hw->m_mv_BUF[i].size) {
-		dealloc_mv_bufs(hw);
-	} else if (hw->m_mv_BUF[i].start_adr)
-		return 0;
-
 	if (decoder_bmmu_box_alloc_buf_phy
 		(hw->bmmu_box,
 		MV_BUFFER_IDX(i), size,
@@ -1825,6 +1820,11 @@ static int get_mv_buf(struct AV1HW_s *hw,
 			__func__);
 		}
 		return ret;
+	}
+
+	if (size != hw->mv_buf_size) {
+		dealloc_mv_bufs(hw);
+		hw->mv_buf_size = size;
 	}
 
 	if (pic_config->mv_buf_index != -1) {
@@ -2148,6 +2148,7 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 
 int aom_bufmgr_init(struct AV1HW_s *hw, struct BuffInfo_s *buf_spec_i,
 		struct buff_s *mc_buf_i) {
+	int i;
 	struct AV1_Common_s *cm = &hw->common;
 	if (debug)
 		pr_info("%s %d %p\n", __func__, __LINE__, hw->pbi);
@@ -2195,6 +2196,10 @@ int aom_bufmgr_init(struct AV1HW_s *hw, struct BuffInfo_s *buf_spec_i,
 	hw->pts_diff_count = 0;
 	hw->pts_diff_sum = 0;
 
+	for (i = 0; i < MV_BUFFER_NUM; i++) {
+		hw->m_mv_BUF[i].used_flag = 0;
+		hw->m_mv_BUF[i].used_pic_index = -1;
+	}
 	return 0;
 }
 
