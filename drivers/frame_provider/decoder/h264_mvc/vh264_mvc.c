@@ -1847,12 +1847,6 @@ static struct platform_driver amvdec_h264mvc_driver = {
 	}
 };
 
-static struct codec_profile_t amvdec_hmvc_profile = {
-	.name = "hmvc",
-	.profile = ""
-};
-static struct codec_profile_t amvdec_hmvc_profile_single;
-
 static struct mconfig h264mvc_configs[] = {
 	MC_PU32("stat", &stat),
 	MC_PU32("dbg_mode", &dbg_mode),
@@ -1872,12 +1866,10 @@ static int __init amvdec_h264mvc_driver_init_module(void)
 		return -ENODEV;
 	}
 
-	vcodec_profile_register(&amvdec_hmvc_profile);
-	amvdec_hmvc_profile_single = amvdec_hmvc_profile;
-	amvdec_hmvc_profile_single.name = "h264mvc";
-	vcodec_profile_register(&amvdec_hmvc_profile_single);
+	vcodec_profile_register_v2("h264mvc", VFORMAT_H264MVC, 0);
 	INIT_REG_NODE_CONFIGS("media.decoder", &h264mvc_node,
 		"h264mvc", h264mvc_configs, CONFIG_FOR_RW);
+
 	return 0;
 }
 

@@ -148,7 +148,12 @@ static int one_pack_multi_f_set_align_size = 0;
 
 static u32 debug = VDEC_DBG_ALWAYS_LOAD_FW;
 
-static int use_t5d_driver = 1;
+static bool use_t5d_driver = false;
+void use_t5d_driver_set(bool value)
+{
+	use_t5d_driver = value;
+}
+EXPORT_SYMBOL(use_t5d_driver_set);
 
 u32 vdec_get_debug(void)
 {
@@ -3027,7 +3032,6 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) &&
 		(vdec->format == VFORMAT_AV1) &&
-		is_support_profile("AV1-T5D-V4L") &&
 		use_t5d_driver) {
 		snprintf(dev_name, sizeof(dev_name),
 			"%s%s", pdev_name, is_v4l ? "_t5d_v4l": "");
@@ -7558,7 +7562,7 @@ module_param(v4lvideo_add_ppmgr, int, 0664);
 MODULE_PARM_DESC(v4lvideo_add_ppmgr,
 				"\n v4lvideo_add_ppmgr\n");
 
-module_param(use_t5d_driver, int, 0664);
+module_param(use_t5d_driver, bool, 0664);
 MODULE_PARM_DESC(use_t5d_driver,
 				"\n use_t5d_driver\n");
 

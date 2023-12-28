@@ -4548,11 +4548,6 @@ static struct platform_driver ammvdec_mpeg12_driver = {
 	}
 };
 
-static struct codec_profile_t ammvdec_mpeg12_profile = {
-	.name = "MPEG12-V4L",
-	.profile = ""
-};
-
 static struct mconfig mmpeg12_configs[] = {
 	MC_PU32("radr", &radr),
 	MC_PU32("rval", &rval),
@@ -4585,11 +4580,13 @@ static int __init ammvdec_mpeg12_driver_init_module(void)
 		pr_info("failed to register ammvdec_mpeg12 driver\n");
 		return -ENODEV;
 	}
-	vcodec_profile_register(&ammvdec_mpeg12_profile);
+
+	vcodec_profile_register_v2("MPEG12-V4L", VFORMAT_MPEG12, 1);
 	INIT_REG_NODE_CONFIGS("media.decoder", &mmpeg12_node,
 		"mmpeg12-v4l", mmpeg12_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_MPEG12, 1);
 	register_set_debug_flag_func(DEBUG_AMVDEC_MPEG12_V4L, set_debug_flag);
+
 	return 0;
 }
 

@@ -3351,11 +3351,6 @@ static struct platform_driver ammvdec_mpeg4_driver = {
 	}
 };
 
-static struct codec_profile_t amvdec_mpeg4_profile = {
-	.name = "MPEG4-V4L",
-	.profile = ""
-};
-
 static void set_debug_flag(const char *module, int debug_flags)
 {
 	debug_enable = debug_flags;
@@ -3370,9 +3365,11 @@ static int __init ammvdec_mpeg4_driver_init_module(void)
 		pr_err("failed to register ammvdec_mpeg4 driver\n");
 		return -ENODEV;
 	}
-	vcodec_profile_register(&amvdec_mpeg4_profile);
+
+	vcodec_profile_register_v2("MPEG4-V4L", VFORMAT_MPEG4, 1);
 	vcodec_feature_register(VFORMAT_MPEG4, 1);
 	register_set_debug_flag_func(DEBUG_AMVDEC_MPEG4_V4L, set_debug_flag);
+
 	return 0;
 }
 

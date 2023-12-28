@@ -4875,11 +4875,6 @@ static struct platform_driver ammvdec_avs_driver = {
 	}
 };
 
-static struct codec_profile_t ammvdec_avs_profile = {
-	.name = "mavs",
-	.profile = ""
-};
-
 static struct mconfig mavs_configs[] = {
 	/*MC_PU32("stat", &stat),
 	MC_PU32("debug_flag", &debug_flag),
@@ -4913,18 +4908,15 @@ static int __init ammvdec_avs_driver_init_module(void)
 #else
 	//amvdec_avs_driver = amvdec_avs_driver;
 #endif
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB)
-		ammvdec_avs_profile.profile = "mavs+";
 
 	register_set_debug_flag_func(DEBUG_AMVDEC_AVS, set_debug_flag);
-	vcodec_profile_register(&ammvdec_avs_profile);
+	vcodec_profile_register_v2("mavs", VFORMAT_AVS, 0);
 	INIT_REG_NODE_CONFIGS("media.decoder", &mavs_node,
 		"mavs", mavs_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_AVS, 0);
+
 	return 0;
 }
-
-
 
 static void __exit ammvdec_avs_driver_remove_module(void)
 {

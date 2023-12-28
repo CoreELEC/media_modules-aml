@@ -8686,11 +8686,7 @@ static struct platform_driver amvdec_avs2_driver = {
 		.name = DRIVER_NAME,
 	}
 };
-static struct codec_profile_t amvdec_avs2_profile = {
-	.name = "avs2_fb",
-	.profile = ""
-};
-static struct codec_profile_t amvdec_avs2_profile_mult;
+
 static unsigned char get_data_check_sum
 	(struct AVS2Decoder_s *dec, int size)
 {
@@ -10203,30 +10199,12 @@ static int __init amvdec_avs2_driver_init_module(void)
 		pr_err("failed to register amvdec_avs2 driver\n");
 		return -ENODEV;
 	}
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)) {
-		amvdec_avs2_profile.name = "avs2_fb_unsupport";
-	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
-		if (vdec_is_support_4k())
-			amvdec_avs2_profile.profile =
-				"4k, 10bit, dwrite, compressed";
-		else
-			amvdec_avs2_profile.profile =
-				"10bit, dwrite, compressed";
-	} else {
-		/* cpu id larger than sm1 support 8k */
-		amvdec_avs2_profile.profile =
-				"8k, 10bit, dwrite, compressed";
-	}
 
-	vcodec_profile_register(&amvdec_avs2_profile);
-	amvdec_avs2_profile_mult = amvdec_avs2_profile;
-	amvdec_avs2_profile_mult.name = "mavs2_fb";
-	vcodec_profile_register(&amvdec_avs2_profile_mult);
-
+	vcodec_profile_register_v2("avs2_fb", VFORMAT_AVS2, 0);
 	INIT_REG_NODE_CONFIGS("media.decoder", &avs2_node,
 		"avs2_fb", avs2_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_AVS2, 0);
+
 	return 0;
 }
 

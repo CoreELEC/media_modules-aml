@@ -1591,11 +1591,6 @@ static struct platform_driver ammvdec_mjpeg_driver = {
 	}
 };
 
-static struct codec_profile_t ammvdec_mjpeg_profile = {
-	.name = "mmjpeg",
-	.profile = "v4l"
-};
-
 static void set_debug_flag(const char *module, int debug_flags)
 {
 	debug_enable = debug_flags;
@@ -1607,9 +1602,11 @@ static int __init ammvdec_mjpeg_driver_init_module(void)
 		pr_err("failed to register ammvdec_mjpeg driver\n");
 		return -ENODEV;
 	}
-	vcodec_profile_register(&ammvdec_mjpeg_profile);
+
+	vcodec_profile_register_v2("mmjpeg", VFORMAT_MJPEG, 0);
 	vcodec_feature_register(VFORMAT_MJPEG, 0);
 	register_set_debug_flag_func(DEBUG_AMVDEC_MJPEG, set_debug_flag);
+
 	return 0;
 }
 

@@ -9336,12 +9336,7 @@ static struct platform_driver amvdec_avs3_driver = {
 		.name = DRIVER_NAME,
 	}
 };
-static struct codec_profile_t amvdec_avs3_profile = {
-	.name = "avs3",
-	.profile = ""
-};
 
-static struct codec_profile_t amvdec_avs3_profile_mult;
 static unsigned char get_data_check_sum
 	(struct AVS3Decoder_s *dec, int size)
 {
@@ -11066,30 +11061,12 @@ static int __init amvdec_avs3_driver_init_module(void)
 		pr_err("failed to register amvdec_avs3 driver\n");
 		return -ENODEV;
 	}
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)) {
-		amvdec_avs3_profile.name = "avs3_unsupport";
-	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
-		if (vdec_is_support_4k())
-			amvdec_avs3_profile.profile =
-				"4k, 10bit, dwrite, compressed";
-		else
-			amvdec_avs3_profile.profile =
-				"10bit, dwrite, compressed";
-	} else {
-		/* cpu id larger than sm1 support 8k */
-		amvdec_avs3_profile.profile =
-				"8k, 10bit, dwrite, compressed";
-	}
 
-	vcodec_profile_register(&amvdec_avs3_profile);
-	amvdec_avs3_profile_mult = amvdec_avs3_profile;
-	amvdec_avs3_profile_mult.name = "mavs3";
-	vcodec_profile_register(&amvdec_avs3_profile_mult);
-
+	vcodec_profile_register_v2("avs3", VFORMAT_AVS3, 0);
 	INIT_REG_NODE_CONFIGS("media.decoder", &avs3_node,
 		"avs3", avs3_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_AVS3, 0);
+
 	return 0;
 }
 

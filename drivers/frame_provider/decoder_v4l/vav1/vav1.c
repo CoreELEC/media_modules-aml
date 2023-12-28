@@ -9574,11 +9574,6 @@ static const struct dev_pm_ops av1_pm_ops = {
 };
 #endif
 
-static struct codec_profile_t amvdec_av1_profile = {
-	.name = "AV1-V4L",
-	.profile = ""
-};
-
 static unsigned int get_data_check_sum
 	(struct AV1HW_s *hw, int size)
 {
@@ -11328,23 +11323,9 @@ static int __init amvdec_av1_driver_init_module(void)
 		pr_err("failed to register ammvdec_av1 driver\n");
 		return -ENODEV;
 	}
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
-		amvdec_av1_profile.profile =
-				"10bit, dwrite, compressed, no_head, uvm, multi_frame_dv, fence";
-	} else if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) {
-		amvdec_av1_profile.profile =
-				"4k, 10bit, dwrite, compressed, no_head, frame_dv, v4l-uvm, multi_frame_dv, fence";
-	} else if (((get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2) || is_cpu_tm2_revb())
-		&& (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5)
-		&& (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
-		amvdec_av1_profile.profile =
-				"8k, 10bit, dwrite, compressed, no_head, frame_dv, uvm, multi_frame_dv, fence";
-	} else {
-		amvdec_av1_profile.name = "av1_unsupport";
-	}
 
-	vcodec_profile_register(&amvdec_av1_profile);
-
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D)
+		vcodec_profile_register_v2("AV1-V4L", VFORMAT_AV1, 1);
 	INIT_REG_NODE_CONFIGS("media.decoder", &av1_node,
 		"av1-v4l", av1_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_AV1, 1);

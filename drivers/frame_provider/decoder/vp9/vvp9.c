@@ -10955,13 +10955,6 @@ static struct platform_driver amvdec_vp9_driver = {
 	}
 };
 
-static struct codec_profile_t amvdec_vp9_profile = {
-	.name = "vp9",
-	.profile = ""
-};
-
-static struct codec_profile_t amvdec_vp9_profile_mult;
-
 static unsigned char get_data_check_sum
 	(struct VP9Decoder_s *pbi, int size)
 {
@@ -12622,32 +12615,10 @@ static int __init amvdec_vp9_driver_init_module(void)
 		return -ENODEV;
 	}
 
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
-		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXL ||
-		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) {
-		amvdec_vp9_profile.name = "vp9_unsupport";
-	} else if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
-		amvdec_vp9_profile.profile =
-			"8k, 10bit, dwrite, compressed, fence, v4l-uvm";
-	} else {
-		if (is_support_4k_vp9())
-			amvdec_vp9_profile.profile =
-				"4k, 10bit, dwrite, compressed, fence, v4l-uvm";
-		else
-			amvdec_vp9_profile.profile =
-				"10bit, dwrite, compressed, fence, v4l-uvm";
-	}
-
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
 		max_buf_num = MAX_BUF_NUM_LESS;
 
-	vcodec_profile_register(&amvdec_vp9_profile);
-	amvdec_vp9_profile_mult = amvdec_vp9_profile;
-	amvdec_vp9_profile_mult.name = "mvp9";
-	vcodec_profile_register(&amvdec_vp9_profile_mult);
+	vcodec_profile_register_v2("vp9", VFORMAT_VP9, 0);
 	INIT_REG_NODE_CONFIGS("media.decoder", &vp9_node,
 		"vp9", vp9_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_VP9, 0);

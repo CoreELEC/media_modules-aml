@@ -913,4 +913,8 @@ ssize_t dump_vdec_core(char *buf);
 
 u64 vdec_get_stream_size(struct vdec_s *vdec);
 
+void use_t5d_driver_set(bool value);
+
+int vcodec_profile_register_v2(char *name, enum vformat_e vformat, int is_v4l);
+
 #endif				/* VDEC_H */

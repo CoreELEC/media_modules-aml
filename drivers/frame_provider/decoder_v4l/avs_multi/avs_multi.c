@@ -5441,11 +5441,6 @@ static struct platform_driver ammvdec_avs_driver = {
 	}
 };
 
-static struct codec_profile_t ammvdec_avs_profile = {
-	.name = "AVS-V4L",
-	.profile = ""
-};
-
 static struct mconfig mavs_configs[] = {
 	/*MC_PU32("stat", &stat),
 	MC_PU32("debug_flag", &debug_flag),
@@ -5474,14 +5469,12 @@ static int __init ammvdec_avs_driver_init_module(void)
 		return -ENODEV;
 	}
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB)
-		ammvdec_avs_profile.profile = "mavs+";
-
 	register_set_debug_flag_func(DEBUG_AMVDEC_AVS_V4L, set_debug_flag);
-	vcodec_profile_register(&ammvdec_avs_profile);
+	vcodec_profile_register_v2("AVS-V4L", VFORMAT_AVS, 1);
 	INIT_REG_NODE_CONFIGS("media.decoder", &mavs_node,
 		"mavs-v4l", mavs_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_AVS, 1);
+
 	return 0;
 }
 

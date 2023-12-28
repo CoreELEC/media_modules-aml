@@ -11994,11 +11994,6 @@ static struct platform_driver ammvdec_h264_driver = {
 	}
 };
 
-static struct codec_profile_t ammvdec_h264_profile = {
-	.name = "H.264-V4L",
-	.profile = ""
-};
-
 static struct mconfig hm264_configs[] = {
 	MC_PU32("h264_debug_flag", &h264_debug_flag),
 	MC_PI32("start_decode_buf_level", &start_decode_buf_level),
@@ -12041,30 +12036,12 @@ static int __init ammvdec_h264_driver_init_module(void)
 		return -ENODEV;
 	}
 
-	if (vdec_is_support_4k()) {
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) {
-			ammvdec_h264_profile.profile =
-					"4k, dwrite, compressed, frame_dv, fence, multi_frame_dv";
-		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) {
-			ammvdec_h264_profile.profile = "4k, frame_dv, fence, multi_frame_dv";
-		}
-	} else {
-		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
-			is_cpu_s4_s805x2() ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
-			ammvdec_h264_profile.profile =
-						"dwrite, compressed, frame_dv, v4l, multi_frame_dv";
-		} else {
-			ammvdec_h264_profile.profile =
-						"dwrite, compressed, v4l";
-		}
-	}
-
-	vcodec_profile_register(&ammvdec_h264_profile);
 	register_set_debug_flag_func(DEBUG_AMVDEC_H264_V4L, set_debug_flag);
+	vcodec_profile_register_v2("H.264-V4L", VFORMAT_H264, 1);
 	INIT_REG_NODE_CONFIGS("media.decoder", &hm264_node,
 		"mh264-v4l", hm264_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_H264, 1);
+
 	return 0;
 }
 

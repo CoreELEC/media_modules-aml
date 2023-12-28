@@ -11647,13 +11647,6 @@ static struct platform_driver amvdec_av1_driver = {
 	}
 };
 
-static struct codec_profile_t amvdec_av1_profile = {
-	.name = "av1_fb",
-	.profile = ""
-};
-
-static struct codec_profile_t amvdec_av1_profile_mult;
-
 static unsigned int get_data_check_sum
 	(struct AV1HW_s *hw, int size)
 {
@@ -13741,21 +13734,7 @@ static int __init amvdec_av1_driver_init_module(void)
 		return -ENODEV;
 	}
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
-		amvdec_av1_profile.profile =
-				"10bit, dwrite, compressed, no_head, v4l-uvm, multi_frame_dv, fence";
-	} else if (((get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2) || is_cpu_tm2_revb())
-		&& (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5)) {
-		amvdec_av1_profile.profile =
-				"8k, 10bit, dwrite, compressed, no_head, frame_dv, v4l-uvm, multi_frame_dv, fence";
-	} else {
-		amvdec_av1_profile.name = "av1_fb_unsupport";
-	}
-
-	vcodec_profile_register(&amvdec_av1_profile);
-	amvdec_av1_profile_mult = amvdec_av1_profile;
-	amvdec_av1_profile_mult.name = "mav1_fb";
-	vcodec_profile_register(&amvdec_av1_profile_mult);
+	vcodec_profile_register_v2("av1_fb", VFORMAT_AV1, 0);
 	INIT_REG_NODE_CONFIGS("media.decoder", &av1_node,
 		"av1_fb", av1_configs, CONFIG_FOR_RW);
 

@@ -13013,11 +13013,6 @@ static void vdec_fence_release(struct VP9Decoder_s *pbi,
 
 /****************************************/
 
-static struct codec_profile_t amvdec_vp9_profile = {
-	.name = "VP9-V4L-FB",
-	.profile = ""
-};
-
 static unsigned char get_data_check_sum
 	(struct VP9Decoder_s *pbi, int size)
 {
@@ -15356,27 +15351,10 @@ static int __init amvdec_vp9_driver_init_module(void)
 		return -ENODEV;
 	}
 
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
-		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXL ||
-		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) {
-		amvdec_vp9_profile.name = "vp9_fb_unsupport";
-	} else if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D)) {
-		amvdec_vp9_profile.profile =
-			"8k, 10bit, dwrite, compressed, fence, uvm";
-	} else {
-		if (vdec_is_support_4k())
-			amvdec_vp9_profile.profile =
-				"4k, 10bit, dwrite, compressed, fence, uvm";
-		else
-			amvdec_vp9_profile.profile =
-				"10bit, dwrite, compressed, fence, uvm";
-	}
-
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
 		max_buf_num = MAX_BUF_NUM_LESS;
 
-	vcodec_profile_register(&amvdec_vp9_profile);
+	vcodec_profile_register_v2("VP9-V4L-FB", VFORMAT_VP9, 1);
 	INIT_REG_NODE_CONFIGS("media.decoder", &vp9_node,
 		"vp9-v4l-fb", vp9_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_VP9, 1);
