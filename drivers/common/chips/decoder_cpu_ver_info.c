@@ -378,6 +378,8 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_axi_ctrl = true,
 		.is_mjpeg_endian_rematch = true,
 		.is_vp9_adapt_prob_hw_mode = true,
+		.is_support_triple_write = true,
+		.is_support_p010 = true,
 		.hevc_stream_extra_shift = 8,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
@@ -458,6 +460,30 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
 		.support_h265_level_idc = IDC_5_1,
+	},
+
+	[AM_MESON_CPU_MAJOR_ID_S6 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_S6,
+		.reg_compat = s6_mm_registers_compat,
+		.max_vdec_clock  = 800,
+		.max_hevcf_clock = 800,
+		.max_hevcb_clock = 800,
+		.hevc_clk_combine_flag  = true,
+		.is_hw_parser_support   = false,
+		.is_vdec_canvas_support = true,
+		.is_support_h264_mmu    = true,
+		.is_support_dual_core = false,
+		.is_support_rdma     = false,
+		.is_support_axi_ctrl = false,
+		.is_mjpeg_endian_rematch = true,
+		.is_vcpu_clk_set = true,
+		.is_vp9_adapt_prob_hw_mode = true,
+		.is_support_p010 = true,
+		.hevc_stream_extra_shift = 8,
+		.vdec_max_resolution = RESOLUTION_4K,
+		.hevc_max_resolution = RESOLUTION_4K,
+		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1_AVS3 | FMT_H266,
+		.support_h265_level_idc = IDC_5_2,
 	},
 };
 
@@ -661,6 +687,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-s7d",
 		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_S7D - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-s6",
+		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_S6 - MAJOR_ID_START],
 	},
 	{},
 };
@@ -873,6 +903,43 @@ bit1: force support all video format;
 #define FORCE_VDEC_NO_PARSER     BIT(0)
 #define FORCE_VDEC_SUPPORT_FMT   BIT(1)
 static u32 force_dos_support;
+
+inline bool is_core_vdec_fmt(int format)
+{
+	switch (format) {
+		case VFORMAT_MPEG12:
+		case VFORMAT_MPEG4:
+		case VFORMAT_H264:
+		case VFORMAT_MJPEG:
+		case VFORMAT_REAL:
+		case VFORMAT_JPEG:
+		case VFORMAT_VC1:
+		case VFORMAT_AVS:
+		case VFORMAT_YUV:
+		case VFORMAT_H264MVC:
+		case VFORMAT_H264_4K2K:
+			return true;
+		default:
+			return false;
+	}
+}
+EXPORT_SYMBOL(is_core_vdec_fmt);
+
+inline bool is_core_hevc_fmt(int format)
+{
+	switch (format) {
+		case VFORMAT_HEVC:
+		case VFORMAT_AVS2:
+		case VFORMAT_AV1:
+		case VFORMAT_VP9:
+		case VFORMAT_AVS3:
+		case VFORMAT_H266:
+			return true;
+		default:
+			return false;
+	}
+}
+EXPORT_SYMBOL(is_core_hevc_fmt);
 
 inline bool is_hevc_align32(int blkmod)
 {

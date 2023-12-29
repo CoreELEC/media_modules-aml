@@ -397,6 +397,7 @@ static u32 force_dv_enable;
 
 #define HEVC_ASSIST_MMU_MAP_ADDR                   0x3009
 
+#define DYN_CACHE
 
 /*USE_BUF_BLOCK*/
 struct BUF_s {
@@ -913,6 +914,9 @@ struct AV1HW_s {
 	struct mutex fence_mutex;
 	int v4l_duration;
 	u32 mv_buf_size;
+
+	u32 av1_segment_data[8];
+	u32 av1_dec_info[3];
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -2167,10 +2171,10 @@ static struct device *cma_dev;
 /* necessary 4K page size align for t7/t3 decoder and after. fix case1440 dec timeout */
 #define WORKBUF_ALIGN(addr) (ALIGN(addr, PAGE_SIZE))
 
-#define WORK_BUF_SPEC_NUM 3
+#define WORK_BUF_SPEC_NUM 5
 
 static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
-	{ //8M bytes
+	{
 		.max_width		= 1920,  //2048
 		.max_height		= 1088,  //1152
 		.ipp			= {.buf_size = 0x1E00},  //- IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
@@ -2315,6 +2319,79 @@ static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 #endif
 		.rpm			= {.buf_size = 0x80 * 2},
 		.lmem			= {.buf_size = 0x400 * 2},
+	},
+	/* T3X S6 WORKSPACE */
+	{
+		.max_width		= 1920, //2048
+		.max_height 	= 1088, //1152
+		.ipp			= {.buf_size = 0x4000,},  // IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
+		//.ipp1 		= {.buf_size = 0x4000,},  // IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
+		.sao_abv		= {.buf_size = 0x30000,},
+		.sao_vb 		= {.buf_size = 0x30000,},
+		.short_term_rps = {.buf_size = 0x800,}, // SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
+		.vps			= {.buf_size = 0x800,}, // VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
+		.seg_map		= {.buf_size = 0xD8000,}, // SEGMENT MAP AREA(roundup 128) - 2048x1152/4/4*3bits=0xD800 Bytes*16=0xD8000
+		.daala_top		= {.buf_size = 0x2000,}, // DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128. Total 4096/128*256 = 0x2000
+		.sao_up 		= {.buf_size = 0x2800,}, // SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
+		.swap_buf		= {.buf_size = 0x800,}, // 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
+		.cdf_buf		= {.buf_size = 0x80000,},  // for context store/load 1024x256 x16 = 512K bytes 16*0x8000
+		.gmc_buf		= {.buf_size = 0x800,}, // for gmc_parameter store/load 128 x 16 = 2K bytes 0x800
+		.scalelut		= {.buf_size = 0x8000,},  // support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
+		.dblk_para		= {.buf_size = 0x80000,}, //(ctu_numb_x+ctu_numb_y+2)*64 => (2048/64+1152/64+2)*64=0xd00
+		.dblk_data		= {.buf_size = 0xa4800,}, //addr_offset_lft(64)*4096+(ctu_numb_y+1)*2048 => 64*4096+(2048/64+1)*2048=0x50800
+		.cdef_data		= {.buf_size = 0x30000,}, //1<<addr_offset_lft(17)+(ctu_numb_y+1)*512 => 1<<17+(2048/64+1)*512=0x24200
+		.ups_data		= {.buf_size = 0x130000,}, //(ctu_numb_y+1) * 12288 => (2048/64 + 1) * 12288 = 0x63000
+		.fgs_table		= {.buf_size = FGS_TABLE_SIZE * 16,}, // 512x128bits
+#ifdef AOM_AV1_MMU
+		.mmu_vbh		= {.buf_size = DW_VBH_BUF_SIZE_1080P,}, //2*16*(more than 2304)/4, 4K
+		.cm_header		= {.buf_size = 0,}, //.buf_size = MMU_COMPRESS_HEADER_SIZE*16, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
+#endif
+#ifdef AOM_AV1_MMU_DW
+		.mmu_vbh_dw 	= {.buf_size = DW_VBH_BUF_SIZE_1080P,}, //2*16*(more than 2304)/4, 4K
+		.cm_header_dw	= {.buf_size = 0,}, // MMU_COMPRESS_HEADER_SIZE_DW*16 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
+#endif
+		.mpred_above	= {.buf_size = 0x10000,}, //(pic_width/64)*21*16 byte=2048/64*21*16=0x2a00
+#ifdef MV_USE_FIXED_BUF
+		.mpred_mv		= {.buf_size = 0x40000*16,}, //1080p, 0x40000 per buffer
+#endif
+		.rpm			= {.buf_size = 0x80*2,},
+		.lmem			= {.buf_size = 0x600*2,},
+	},
+	{
+		.max_width		= (4096*2),
+		.max_height 	= (2304*2),
+		.ipp			= {.buf_size = 0x4000,},
+		//.ipp1 		= {.buf_size = 0x4000,},
+		.sao_abv		= {.buf_size = 0x30000,},
+		.sao_vb 		= {.buf_size = 0x30000,},
+		.short_term_rps = {.buf_size = 0x800,},
+		.vps			= {.buf_size = 0x800,},
+		.seg_map		= {.buf_size = 0xd80000,}, // SEGMENT MAP AREA - 8192x4608/4/4*3bits=0xd8000Bytes*16= 0xd80000
+		.daala_top		= {.buf_size = 0x2000,}, // DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128. Total 4096*(Max)/128*256=0x2000
+		.sao_up 		= {.buf_size = 0x2800,},
+		.swap_buf		= {.buf_size = 0x800,},
+		.cdf_buf		= {.buf_size = 0x80000,},
+		.gmc_buf		= {.buf_size = 0x800,},
+		.scalelut		= {.buf_size = 0x8000,},
+		.dblk_para		= {.buf_size = 0x80000,}, //(ctu_numb_x+ctu_numb_y+2)*64 => (8192/64+4608/64+2)*64=0x3280
+		.dblk_data		= {.buf_size = 0xa4800,}, //addr_offset_lft(64)*4096+(ctu_numb_y+1)*2048 => 64*4096+(8192/64+1)*2048=0x80800
+		.cdef_data		= {.buf_size = 0x80000,}, //1<<addr_offset_lft(17)+(ctu_numb_y+1)*512 => 1<<17+(8192/64+1)*512=0x30200
+		.ups_data		= {.buf_size = 0x183000,}, //(ctu_numb_y+1)*12288 => (8192/64+1)*12288=0x183000
+		.fgs_table		= {.buf_size = FGS_TABLE_SIZE * 16,}, // 512x128bits
+#ifdef AOM_AV1_MMU
+		.mmu_vbh		= {.buf_size = DW_VBH_BUF_SIZE_8K,}, //2*16*(more than 2304)/4, 4K
+		.cm_header		= {.buf_size = 0,}, //MMU_COMPRESS_HEADER_SIZE_8K*16 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
+#endif
+#ifdef AOM_AV1_MMU_DW
+		.mmu_vbh_dw 	= {.buf_size = DW_VBH_BUF_SIZE_8K,}, //2*16*(more than 2304)/4, 4K
+		.cm_header_dw	= {.buf_size = 0,}, //MMU_COMPRESS_HEADER_SIZE_8K*16 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
+#endif
+		.mpred_above	= {.buf_size = 0x10000,}, //(pic_width/64)*21*16 byte=8192/64*21*16=0xa800
+#ifdef MV_USE_FIXED_BUF
+		.mpred_mv		= {.buf_size = MAX_ONE_MV_BUFFER_SIZE * 16,},
+#endif
+		.rpm			= {.buf_size = 0x80*2,},
+		.lmem			= {.buf_size = 0x600*2,},
 	}
 };
 
@@ -4110,6 +4187,16 @@ void av1_loop_filter_init(loop_filter_info_n *lfi, struct loopfilter *lf) {
 	WRITE_VREG(HEVC_DBLK_CFGB, data32);
 	av1_print2(AOM_DEBUG_HW_MORE,
 		"[DBLK DEBUG] CFGB : 0x%x\n", data32);
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)) {
+		// if Single CORE, uses line buffer store mode 1 (tile based)
+		uint32_t lpf_data32 = READ_VREG(HEVC_DBLK_CFG0);
+		lpf_data32 |= (0x1 << 18); // line buffer storage mode, 0:ctu width based, 1:tile width based
+		WRITE_VREG(HEVC_DBLK_CFG0, lpf_data32);
+		av1_print2(AOM_DEBUG_HW_MORE, " [DBLK DEBUG] CFG0 : 0x%x\n", lpf_data32);
+	}
+
 }
 
 // perform this function per frame
@@ -5069,18 +5156,19 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 		WRITE_VREG(HEVC_DECODE_SIZE, 0);
 		WRITE_VREG(HEVC_DECODE_COUNT, 0);
 #else
-	WRITE_VREG(DECODE_MODE, DECODE_MODE_SINGLE);
-	WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
-	WRITE_VREG(HEVC_DECODE_PIC_NUM_REG, 0x7fffffff); /*to remove*/
+		WRITE_VREG(DECODE_MODE, DECODE_MODE_SINGLE);
+		WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
+		WRITE_VREG(HEVC_DECODE_PIC_NUM_REG, 0x7fffffff); /*to remove*/
 #endif
-	/*Send parser_cmd*/
-	WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
-	for (i = 0; i < PARSER_CMD_NUMBER; i++)
-		WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
-
+		if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6) {
+			/*Send parser_cmd*/
+			WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
+			for (i = 0; i < PARSER_CMD_NUMBER; i++)
+				WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
+			WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
+			WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
+			WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
+		}
 
 		WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 			/*  (1 << 8) |*/ /*sao_sw_pred_enable*/
@@ -7202,6 +7290,165 @@ static int av1_get_current_fbc_index(struct AV1HW_s *hw, int index)
 	return i;
 }
 
+#if 0
+static void display_pic_quality(int pic_number)
+{
+	unsigned int blk44_y_count;
+	unsigned int blk88_count;
+	unsigned int blk44_c_count;
+	unsigned int blk44_mv_count;
+	unsigned int rdata32;
+	long int mv_hi;
+	long int mv_lo;
+	long rdata32_l;
+	int mvx_L0_hi;
+	int mvy_L0_hi;
+	int mvx_L1_hi;
+	int mvy_L1_hi;
+	WRITE_VREG(HEVC_PIC_QUALITY_CTRL, 0); // set rd_idx to 0
+	WRITE_VREG(HEVC_QUANT_COUNT_BLK44, 0); // set rd_idx to 0
+
+	blk44_y_count = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	blk88_count = READ_VREG(HEVC_QUANT_COUNT_BLK44);
+	if (blk44_y_count == 0) {
+		printk(" [Picture %d Quality] NO Data yet.\n", pic_number);
+		WRITE_VREG(HEVC_PIC_QUALITY_CTRL, (1<<8)); // reset all counts
+		WRITE_VREG(HEVC_QUANT_COUNT_BLK44, (1<<8)); // reset all counts
+		WRITE_VREG(HEVC_SKIP_COUNT_BLK44, 0); // Clear skip_blk44 count
+		return;
+	}
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	printk(" [Picture %d Quality] blk44_y_count : %d, blk88_count : %d \n", pic_number, blk44_y_count, blk88_count);
+	if (blk88_count == 0) {
+		printk(" [Picture %d Quality] blk88_count == 0 !!!\n", pic_number);
+		blk88_count = 1;
+	}
+	// printk(" [Picture %d Quality] Y QP AVG : %d (%d/%d)\n", pic_number, rdata32/blk44_y_count, rdata32, blk44_y_count);
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	printk(" [Picture %d Quality] Y intra rate : %d%c (%d)\n", pic_number, rdata32*100/blk44_y_count, '%', rdata32);
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	printk(" [Picture %d Quality] Y skipped_CU rate : %d%c (%d)\n", pic_number, rdata32*100/blk44_y_count, '%', rdata32);
+	rdata32 = READ_VREG(HEVC_SKIP_COUNT_BLK44);
+	printk(" [Picture %d Quality]  skip_blk44 rate : %d%c (%d)\n", pic_number, rdata32*100/blk88_count, '%', rdata32);
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	printk(" [Picture %d Quality] Y ZERO_Coeff rate : %d%c (%d)\n", pic_number, rdata32*100/blk44_y_count, '%', rdata32);
+
+	blk44_c_count = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	if (blk44_c_count == 0) {
+		printk(" [Picture %d Quality] NO Data yet.\n", pic_number);
+		WRITE_VREG(HEVC_PIC_QUALITY_CTRL, (1<<8)); // reset all counts
+		WRITE_VREG(HEVC_QUANT_COUNT_BLK44, (1<<8)); // reset all counts
+		WRITE_VREG(HEVC_SKIP_COUNT_BLK44, 0); // Clear skip_blk44 count
+		return;
+	}
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	// printk(" [Picture %d Quality] C QP AVG : %d (%d/%d)\n", pic_number, rdata32/blk44_c_count, rdata32, blk44_c_count);
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	printk(" [Picture %d Quality] C intra rate : %d%c (%d)\n", pic_number, rdata32*100/blk44_c_count, '%', rdata32);
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	printk(" [Picture %d Quality] C skipped_CU rate : %d%c (%d)\n", pic_number, rdata32*100/blk44_c_count, '%', rdata32);
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	printk(" [Picture %d Quality] C ZERO_Coeff rate : %d%c (%d)\n", pic_number, rdata32*100/blk44_c_count, '%', rdata32);
+
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	// printk(" [Picture %d Quality] Y QP min : %d\n", pic_number, (rdata32>>0)&0xff);
+	// printk(" [Picture %d Quality] Y QP max : %d\n", pic_number, (rdata32>>8)&0xff);
+	// printk(" [Picture %d Quality] C QP min : %d\n", pic_number, (rdata32>>16)&0xff);
+	// printk(" [Picture %d Quality] C QP max : %d\n", pic_number, (rdata32>>24)&0xff);
+
+	rdata32 = READ_VREG(HEVC_QUANT_COUNT_BLK44);
+	printk(" [Picture %d Quality]  Y_DC_QP_blk44 AVG : %d (%d/%d)\n", pic_number, rdata32/blk88_count, rdata32, blk88_count);
+	rdata32 = READ_VREG(HEVC_QUANT_COUNT_BLK44);
+	printk(" [Picture %d Quality]  Y_AC_QP_blk44 AVG : %d (%d/%d)\n", pic_number, rdata32/blk88_count, rdata32, blk88_count);
+	rdata32 = READ_VREG(HEVC_QUANT_COUNT_BLK44);
+	printk(" [Picture %d Quality] Y_DC QP min : %d\n", pic_number, (rdata32 >> 0) & 0xff);
+	printk(" [Picture %d Quality] Y_DC QP max : %d\n", pic_number, (rdata32 >> 8) & 0xff);
+	printk(" [Picture %d Quality] Y_AC QP min : %d\n", pic_number, (rdata32 >> 16) & 0xff);
+	printk(" [Picture %d Quality] Y_AC QP max : %d\n", pic_number, (rdata32 >> 24) & 0xff);
+
+	rdata32 = READ_VREG(HEVC_QUANT_COUNT_BLK44);
+	printk(" [Picture %d Quality]  C_DC_QP_blk44 AVG : %d (%d/%d)\n", pic_number, rdata32/blk88_count, rdata32, blk88_count);
+	rdata32 = READ_VREG(HEVC_QUANT_COUNT_BLK44);
+	printk(" [Picture %d Quality]  C_AC_QP_blk44 AVG : %d (%d/%d)\n", pic_number, rdata32/blk88_count, rdata32, blk88_count);
+	rdata32 = READ_VREG(HEVC_QUANT_COUNT_BLK44);
+	printk(" [Picture %d Quality] C_DC QP min : %d\n", pic_number, (rdata32 >> 0) & 0xff);
+	printk(" [Picture %d Quality] C_DC QP max : %d\n", pic_number, (rdata32 >> 8) & 0xff);
+	printk(" [Picture %d Quality] C_AC QP min : %d\n", pic_number, (rdata32 >> 16) & 0xff);
+	printk(" [Picture %d Quality] C_AC QP max : %d\n", pic_number, (rdata32 >> 24) & 0xff);
+
+	blk44_mv_count = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	if (blk44_mv_count == 0) {
+		printk(" [Picture %d Quality] NO MV Data yet.\n", pic_number);
+		WRITE_VREG(HEVC_PIC_QUALITY_CTRL, (1<<8)); // reset all counts
+		WRITE_VREG(HEVC_QUANT_COUNT_BLK44, (1<<8)); // reset all counts
+		WRITE_VREG(HEVC_SKIP_COUNT_BLK44, 0); // Clear skip_blk44 count
+		return;
+	}
+
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	// should all be 0x00 or 0xff
+	printk(" [Picture %d Quality] MV AVG High Bits: 0x%X\n", pic_number, rdata32);
+	mvx_L0_hi = ((rdata32 >> 0) & 0xff);
+	mvy_L0_hi = ((rdata32 >> 8) & 0xff);
+	mvx_L1_hi = ((rdata32 >> 16) & 0xff);
+	mvy_L1_hi = ((rdata32 >> 24) & 0xff);
+
+
+	rdata32_l = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	if (mvx_L0_hi == 0xff) rdata32_l = ((rdata32_l ^ 0xffffffff) + 1) * (-1);
+	printk(" [Picture %d Quality] MVX_L0 AVG : %d (0x%X/%d)\n", pic_number, rdata32_l/blk44_mv_count, rdata32_l, blk44_mv_count);
+	rdata32_l = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	if (mvy_L0_hi == 0xff) rdata32_l = ((rdata32_l ^ 0xffffffff) + 1) * (-1);
+	printk(" [Picture %d Quality] MVY_L0 AVG : %d (0x%X/%d)\n", pic_number, rdata32_l/blk44_mv_count, rdata32_l, blk44_mv_count);
+	rdata32_l = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	if (mvx_L1_hi == 0xff) rdata32_l = ((rdata32_l ^ 0xffffffff) + 1) * (-1);
+	printk(" [Picture %d Quality] MVX_L1 AVG : %d (0x%X/%d)\n", pic_number, rdata32_l/blk44_mv_count, rdata32_l, blk44_mv_count);
+	rdata32_l = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	if (mvy_L1_hi == 0xff) rdata32_l = ((rdata32_l ^ 0xffffffff) + 1) * (-1);
+	printk(" [Picture %d Quality] MVY_L1 AVG : %d (0x%X/%d)\n", pic_number, rdata32_l/blk44_mv_count, rdata32_l, blk44_mv_count);
+
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	mv_hi = (rdata32 >> 16) & 0xffff;
+	if (mv_hi & 0x8000) mv_hi = 0x8000 - mv_hi;
+	printk(" [Picture %d Quality] MVX_L0 MAX : %d\n", pic_number, mv_hi);
+	mv_lo = (rdata32 >> 0) & 0xffff;
+	if (mv_lo & 0x8000) mv_lo = 0x8000 - mv_lo;
+	printk(" [Picture %d Quality] MVX_L0 MIN : %d\n", pic_number, mv_lo);
+
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	mv_hi = (rdata32 >> 16) & 0xffff;
+	if (mv_hi & 0x8000) mv_hi = 0x8000 - mv_hi;
+	printk(" [Picture %d Quality] MVY_L0 MAX : %d\n", pic_number, mv_hi);
+	mv_lo = (rdata32 >> 0) & 0xffff;
+	if (mv_lo & 0x8000) mv_lo = 0x8000 - mv_lo;
+	printk(" [Picture %d Quality] MVY_L0 MIN : %d\n", pic_number, mv_lo);
+
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	mv_hi = (rdata32 >> 16) & 0xffff;
+	if (mv_hi & 0x8000) mv_hi = 0x8000 - mv_hi;
+	printk(" [Picture %d Quality] MVX_L1 MAX : %d\n", pic_number, mv_hi);
+	mv_lo = (rdata32 >> 0) & 0xffff;
+	if (mv_lo & 0x8000) mv_lo = 0x8000 - mv_lo;
+	printk(" [Picture %d Quality] MVX_L1 MIN : %d\n", pic_number, mv_lo);
+
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_DATA);
+	mv_hi = (rdata32 >> 16) & 0xffff;
+	if (mv_hi & 0x8000) mv_hi = 0x8000 - mv_hi;
+	printk(" [Picture %d Quality] MVY_L1 MAX : %d\n", pic_number, mv_hi);
+	mv_lo = (rdata32 >> 0) & 0xffff;
+	if (mv_lo & 0x8000) mv_lo = 0x8000 - mv_lo;
+	printk(" [Picture %d Quality] MVY_L1 MIN : %d\n", pic_number, mv_lo);
+
+	rdata32 = READ_VREG(HEVC_PIC_QUALITY_CTRL);
+	printk(" [Picture %d Quality] After Read : HEVC_PIC_QUALITY_CTRL : 0x%x\n", pic_number, rdata32);
+
+	WRITE_VREG(HEVC_PIC_QUALITY_CTRL, (1 << 8)); // reset all counts
+	WRITE_VREG(HEVC_QUANT_COUNT_BLK44, (1 << 8)); // reset all counts
+	WRITE_VREG(HEVC_SKIP_COUNT_BLK44, 0); // Clear skip_blk44 count
+}
+
+#endif
+
 int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 {
 	int ret = 0;
@@ -7262,10 +7509,10 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 	);
 
 	if ((params->p.frame_width_scaled * params->p.frame_height) > MAX_SIZE_8K ||
-	(params->p.dec_frame_width * params->p.frame_height) > MAX_SIZE_8K ||
-	params->p.frame_width_scaled <= 0 ||
-	params->p.dec_frame_width <= 0 ||
-	params->p.frame_height <= 0) {
+		(params->p.dec_frame_width * params->p.frame_height) > MAX_SIZE_8K ||
+		params->p.frame_width_scaled <= 0 ||
+		params->p.dec_frame_width <= 0 ||
+		params->p.frame_height <= 0) {
 		av1_print(hw, 0, "!!Picture size error, max (%d, %d), width/height (%d, %d), dec_width %d\n",
 			params->p.max_frame_width,
 			params->p.max_frame_height,
@@ -7388,6 +7635,10 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		cm->current_frame.frame_type,
 		pbi->bufmgr_proc_count);
 		pbi->decode_idx++;
+#if 0
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+			display_pic_quality(hw->frame_count-1);
+#endif
 		hw->frame_count++;
 		cur_pic_config->slice_type = cm->cur_frame->frame_type;
 		if (hw->chunk) {
@@ -8533,11 +8784,23 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			if (hw->low_latency_flag)
 				av1_postproc(hw);
 
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+				u32 i;
+				hw->av1_dec_info[0] = READ_VREG(AV1_DEC_INFO);
+				hw->av1_dec_info[1] = READ_VREG(AV1_DEC_INFO_2);
+				hw->av1_dec_info[2] = READ_VREG(AV1_DEC_INFO_3);
+				for (i = 0; i < 8; i++) {
+					hw->av1_segment_data[i] = READ_VREG(AV1_QUANT_WR);
+				}
+			}
+
 			if (multi_frames_in_one_pack &&
 			hw->frame_decoded &&
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
 				if (enable_single_slice == 1) {
-					hw->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT) - 4;
+					//.hevc_stream_extra_shift = 8, t3x, s6
+					hw->consume_byte =
+						READ_VREG(HEVC_SHIFT_BYTE_COUNT) - get_hevc_stream_extra_shift_bytes() - 4;
 					hw->dec_result = DEC_RESULT_UNFINISH;
 					amhevc_stop();
 #ifdef MCRCC_ENABLE
@@ -8546,7 +8809,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 #endif
 					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 					vdec_schedule_work(&hw->work);
-				}else {
+				} else {
 #ifdef DEBUG_CRC_ERROR
 					if ((crc_debug_flag & 0x40) && cm->cur_frame)
 						dump_mv_buffer(hw, &cm->cur_frame->buf);
@@ -9296,6 +9559,14 @@ static void vav1_prot_init(struct AV1HW_s *hw, u32 mask)
 //#if (defined DEBUG_UCODE_LOG) || (defined DEBUG_CMD)
 //	WRITE_VREG(HEVC_DBG_LOG_ADR, hw->ucode_log_phy_addr);
 //#endif
+#ifdef DYN_CACHE
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)) {
+		WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b);//enable new mcrcc
+	}
+#endif
+
 }
 
 static int vav1_local_init(struct AV1HW_s *hw, bool reset_flag)
@@ -9958,7 +10229,19 @@ static void av1_work(struct work_struct *work)
 
 static int av1_hw_ctx_restore(struct AV1HW_s *hw)
 {
+	u32 i;
+
 	vav1_prot_init(hw, HW_MASK_FRONT | HW_MASK_BACK);
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+		WRITE_VREG(VP9_CONTROL, READ_VREG(VP9_CONTROL) | (1 << 16));
+		WRITE_VREG(AV1_DEC_INFO, hw->av1_dec_info[0]);
+		WRITE_VREG(AV1_DEC_INFO_2, hw->av1_dec_info[1]);
+		WRITE_VREG(AV1_DEC_INFO_3, hw->av1_dec_info[2]);
+		for (i = 0; i < 8; i++) {
+			WRITE_VREG(AV1_QUANT_WR, hw->av1_segment_data[i]);
+		}
+	}
 	return 0;
 }
 
@@ -10412,6 +10695,10 @@ static void run_front(struct vdec_s *vdec)
 		return;
 	}
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
+
+	if (vdec_frame_based(vdec))
+		WRITE_VREG(HEVC_SHIFT_BYTE_COUNT, 0);
+
 	vdec_enable_input(vdec);
 
 	WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
@@ -10420,7 +10707,6 @@ static void run_front(struct vdec_s *vdec)
 		if (debug & PRINT_FLAG_VDEC_DATA)
 			dump_data(hw, hw->data_size);
 
-		WRITE_VREG(HEVC_SHIFT_BYTE_COUNT, 0);
 		size = hw->data_size +
 			(hw->data_offset & (VDEC_FIFO_ALIGN - 1));
 		if (vdec->mvfrm)
@@ -11043,7 +11329,14 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		hw->buffer_spec_index = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else if (vdec_is_support_4k()) {
-		hw->buffer_spec_index = 1;
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+			if (IS_4K_SIZE(hw->max_pic_w, hw->max_pic_h))
+				hw->buffer_spec_index = 4;
+			else
+				hw->buffer_spec_index = 3;
+		} else {
+			hw->buffer_spec_index = 1;
+		}
 	} else
 		hw->buffer_spec_index = 0;
 

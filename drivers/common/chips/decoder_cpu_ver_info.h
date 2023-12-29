@@ -79,6 +79,7 @@ enum AM_MESON_CPU_MAJOR_ID {
 	AM_MESON_CPU_MAJOR_ID_S1A	= 0x45,
 	AM_MESON_CPU_MAJOR_ID_S7	= 0x46,
 	AM_MESON_CPU_MAJOR_ID_S7D	= 0x47,
+	AM_MESON_CPU_MAJOR_ID_S6	= 0x48,
 	AM_MESON_CPU_MAJOR_ID_MAX,
 };
 
@@ -121,6 +122,8 @@ enum AM_MESON_CPU_MAJOR_ID {
 #define FMT_AVS2     BIT(VFORMAT_AVS2)
 #define FMT_AV1      BIT(VFORMAT_AV1)
 #define FMT_AVS3     BIT(VFORMAT_AVS3)
+#define FMT_H266     BIT(VFORMAT_H266)
+
 //hcodec
 #define FMT_H264_ENC BIT(VFORMAT_H264_ENC)
 #define FMT_JPEG_ENC BIT(VFORMAT_JPEG_ENC)
@@ -209,6 +212,10 @@ bool is_cpu_s7_s805x3(void);
 inline bool is_support_new_dos_dev(void);
 
 struct dos_of_dev_s *dos_dev_get(void);
+
+inline bool is_core_vdec_fmt(int format);
+
+inline bool is_core_hevc_fmt(int format);
 
 inline bool is_hevc_align32(int blkmod);
 

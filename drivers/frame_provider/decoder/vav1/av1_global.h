@@ -19,6 +19,10 @@
  */
 #ifndef AV1_GLOBAL_H_
 #define AV1_GLOBAL_H_
+
+#define P010_ENABLE
+#define OW_TRIPLE_WRITE
+
 #define AOM_AV1_MMU_DW
 #ifndef HAVE_NEON
 #define HAVE_NEON 0
@@ -1329,6 +1333,16 @@ typedef struct PIC_BUFFER_CONFIG_s {
   u32 hdr10p_data_size;
   char *hdr10p_data_buf;
   int vdec_data_index;
+#ifdef OW_TRIPLE_WRITE
+	unsigned int tw_y_adr;
+	unsigned int tw_u_v_adr;
+
+	//int tw_y_canvas_index;
+	//int tw_uv_canvas_index;
+	struct canvas_config_s tw_canvas_config[2];
+
+	u32 triple_write_mode;
+#endif
 } PIC_BUFFER_CONFIG;
 
 /*

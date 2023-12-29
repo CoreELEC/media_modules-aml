@@ -419,6 +419,11 @@ static struct clk_set_setting clks_for_formats[] = {
 		{1920*1080*60, 166}, {4096*2048*30, 333},
 		{4096*2048*60, 630}, {INT_MAX, 630},}
 	},
+	{/*VFORMAT_H266*/
+		{{1280*720*30, 100}, {1920*1080*30, 100},
+		{1920*1080*60, 166}, {4096*2048*30, 333},
+		{4096*2048*60, 630}, {INT_MAX, 630},}
+	},
 };
 
 void set_clock_gate(struct gate_switch_node *nodes, int num)
@@ -1066,6 +1071,7 @@ static int vdec_clock_get(enum vdec_type_e core)
 	AM_MESON_CPU_MAJOR_ID_S1A,\
 	AM_MESON_CPU_MAJOR_ID_S7,\
 	AM_MESON_CPU_MAJOR_ID_S7D,\
+	AM_MESON_CPU_MAJOR_ID_S6,\
 	0}
 #include "clk.h"
 

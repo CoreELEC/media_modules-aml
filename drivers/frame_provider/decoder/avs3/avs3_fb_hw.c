@@ -2682,7 +2682,7 @@ static void config_dw_fb(struct AVS3Decoder_s *dec, struct avs3_frame_s *pic,
 
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 	int dw_mode = get_double_write_mode(dec);
-	uint32_t data, data32;
+	uint32_t data = 0, data32;
 	if ((dw_mode & 0x10) == 0) {
 		WRITE_BACK_8(avs3_dec, HEVC_SAO_CTRL26, 0);
 

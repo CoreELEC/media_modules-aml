@@ -76,6 +76,9 @@
 #define G12A_BRINGUP_DEBUG
 #define CONSTRAIN_MAX_BUF_NUM
 
+#define DYN_CACHE  //!!!enable it on S5
+#define LPF_SPCC_ENABLE
+
 #define CO_MV_COMPRESS
 
 #define HEVC_SHIFT_LENGTH_PROTECT                  0x313a
@@ -2842,6 +2845,10 @@ static void config_dblk_hw(struct AVS2Decoder_s *dec)
 		(((rpm_param->p.lcu_size == 6)
 		? 0 : (rpm_param->p.lcu_size == 5)
 		? 1 : 2) << 0);/*[ 0 +: 2]: lcu_size*/
+#ifdef LPF_SPCC_ENABLE
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+		data32 |= (0x3 << 20); // SPCC_ENABLE
+#endif
 	WRITE_VREG(HEVC_DBLK_CFG1, data32);
 
 	data32 = (avs2_dec->img.height << 16) |
@@ -3672,14 +3679,23 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 	WRITE_VREG(DECODE_MODE, decode_mode);
 	WRITE_VREG(HEVC_DECODE_SIZE, 0);
 	WRITE_VREG(HEVC_DECODE_COUNT, 0);
-
-	/*Send parser_cmd*/
-	WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
-	for (i = 0; i < PARSER_CMD_NUMBER; i++)
-		WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
+#ifdef DYN_CACHE
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
+		avs2_print(dec, AVS2_DBG_BUFMGR_MORE, "HEVC DYN MCRCC\n");
+		WRITE_VREG(HEVCD_IPP_DYN_CACHE,0x2b);//enable new mcrcc
+	}
+#endif
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6) {
+		/*Send parser_cmd*/
+		WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
+		for (i = 0; i < PARSER_CMD_NUMBER; i++)
+			WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
+	}
 	WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 		(1 << 9) | /* parser_alf_if_en*/
 		/*  (1 << 8) |*/ /*sao_sw_pred_enable*/
@@ -3746,13 +3762,19 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 		"Bitstream level Init for DBLK .Done.\n");
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
+		// if Single CORE, uses line buffer store mode 1 (tile based)
+		data32 = READ_VREG(HEVC_DBLK_CFG0);
+		data32 |= (0x1 << 18); // line buffer storage mode, 0:ctu width based, 1:tile width based
+		WRITE_VREG(HEVC_DBLK_CFG0, data32);
+	}
+
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 	    mcrcc_perfcount_reset();
 	    decomp_perfcount_reset();
 	}
 
 	return;
 }
-
 
 #ifdef CONFIG_HEVC_CLK_FORCED_ON
 static void config_avs2_clk_forced_on(void)

@@ -58,6 +58,8 @@ static const char * const format_name[] = {
 	"ammvdec_vp9",
 	"ammvdec_avs2",
 	"ammvdec_av1",
+	"ammvdec_avs3",
+	"ammvdec_h266",
 };
 
 static int vcodec_feature_CC(u8 *buf, int size, int vformat, int is_v4l)
@@ -137,18 +139,8 @@ static int vcodec_feature_HDR(u8 *buf, int size, int vformat)
 {
 	u8 *pbuf = buf;
 
-	switch (vformat) {
-		case VFORMAT_H264:
-		case VFORMAT_HEVC:
-		case VFORMAT_AV1:
-		case VFORMAT_AVS2:
-		case VFORMAT_VP9:
-		case VFORMAT_AVS3:
-				pbuf += snprintf(pbuf, size, "        \"HDR\" : true,\n");
-			break;
-		default:
-			break;
-	}
+	if (is_core_hevc_fmt(vformat))
+		pbuf += snprintf(pbuf, size, "        \"HDR\" : true,\n");
 
 	return pbuf - buf;
 }
@@ -160,29 +152,21 @@ static int vcodec_feature_doublewrite(u8 *buf, int size, int vformat)
 	int tsize = 0;
 	int s;
 
-	switch (vformat) {
-		case VFORMAT_HEVC:
-		case VFORMAT_VP9:
-		case VFORMAT_AVS2:
-		case VFORMAT_AV1:
-		case VFORMAT_AVS3:
-			s = snprintf(pbuf, size - tsize, "        \"DoubleWrite\" :");
+	if (is_core_hevc_fmt(vformat)) {
+		s = snprintf(pbuf, size - tsize, "        \"DoubleWrite\" :");
+		tsize += s;
+		pbuf += s;
+		if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3)) {
+			s = snprintf(pbuf, size - tsize, "[ \"0\", \"1\", \"2\", \"3\", \"4\", \"0x10\", \"0x10000\", \"0x20000\"],\n");
 			tsize += s;
 			pbuf += s;
-			if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3)) {
-				s = snprintf(pbuf, size - tsize, "[ \"0\", \"1\", \"2\", \"3\", \"4\", \"0x10\", \"0x10000\", \"0x20000\"],\n");
-				tsize += s;
-				pbuf += s;
-			}
-			else {
-				s = snprintf(pbuf, size - tsize, "[ \"0\", \"1\", \"2\", \"3\", \"4\", \"8\", \"0x10\", \"0x10000\", \"0x20000\"],\n");
-				tsize += s;
-				pbuf += s;
-			}
-			break;
-		default:
-			break;
+		}
+		else {
+			s = snprintf(pbuf, size - tsize, "[ \"0\", \"1\", \"2\", \"3\", \"4\", \"8\", \"0x10\", \"0x10000\", \"0x20000\"],\n");
+			tsize += s;
+			pbuf += s;
+		}
 	}
 
 	return pbuf - buf;
@@ -217,6 +201,7 @@ static int vcodec_feature_bitdepth(u8 *buf, int size, int vformat)
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
 		case VFORMAT_AVS3:
+		case VFORMAT_H266:
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB)
 				pbuf += snprintf(pbuf, size, "        \"BitDepth\" : \"10\",\n");
 			else
@@ -240,6 +225,7 @@ static int vcodec_feature_MaxResolution(u8 *buf, int size, int vformat)
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
 		case VFORMAT_AVS3:
+		case VFORMAT_H266:
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
@@ -273,92 +259,12 @@ static int vcodec_feature_clock(u8 *buf, int size, int vformat)
 {
 	u8 *pbuf = buf;
 
-	switch (vformat) {
-		case VFORMAT_HEVC:
-		case VFORMAT_VP9:
-		case VFORMAT_AVS2:
-		case VFORMAT_AV1:
-		case VFORMAT_AVS3:
-			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12B) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX2) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
-				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"800MHZ\",\n");
-			else
-				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"667MHZ\",\n");
-			break;
-		case VFORMAT_H264:
-		case VFORMAT_MPEG12:
-		case VFORMAT_MPEG4:
-		case VFORMAT_MJPEG:
-		case VFORMAT_VC1:
-		case VFORMAT_AVS:
-			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX2) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
-				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"800MHZ\",\n");
-			else
-				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"667MHZ\",\n");
-			break;
-		default:
-			break;
-	}
+	if (is_core_hevc_fmt(vformat)) {
+		pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"%dMHZ\",\n", hevcf_max_clk_get());
+	} else if (is_core_vdec_fmt(vformat))
+		pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"%dMHZ\",\n", vdec_max_clk_get());
 
 	return pbuf - buf;
-}
-
-static int vcodec_feature_support_format(int vformat)
-{
-
-	switch (vformat) {
-		case VFORMAT_VP9:
-			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5))
-				return 1;
-			else
-				return 0;
-		case VFORMAT_AVS2:
-			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
-				return 1;
-			else
-				return 0;
-		case VFORMAT_AV1:
-			if (((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2) &&
-					is_cpu_tm2_revb()) ||
-				((get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)))
-				return 1;
-			else
-				return 0;
-		case VFORMAT_AVS3:
-			if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X))
-				return 1;
-			return 0;
-		case VFORMAT_AVS:
-			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM))
-				return 1;
-			else
-				return 0;
-		case VFORMAT_MJPEG:
-		case VFORMAT_VC1:
-		case VFORMAT_MPEG4:
-		case VFORMAT_MPEG12:
-		case VFORMAT_H264:
-		case VFORMAT_HEVC:
-			return 1;
-		default:
-			break;
-	}
-
-	return 0;
 }
 
 static int vcodec_feature_FCC(u8 *buf, int size, int vformat, int is_v4l)
@@ -567,7 +473,7 @@ EXPORT_SYMBOL(vcodec_feature_read);
 
 int vcodec_feature_register(int vformat, int is_v4l)
 {
-	if ((vcodec_feature_idx < SUPPORT_VDEC_NUM) && vcodec_feature_support_format(vformat)) {
+	if ((vcodec_feature_idx < SUPPORT_VDEC_NUM) && is_support_format(vformat)) {
 		feature[vcodec_feature_idx].format = vformat;
 		feature[vcodec_feature_idx].is_v4l = is_v4l;
 		vcodec_feature_idx++;

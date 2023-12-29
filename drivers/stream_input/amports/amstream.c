@@ -1656,11 +1656,7 @@ static int amstream_release(struct inode *inode, struct file *file)
 					vdec_poweroff(VDEC_HEVC);
 				}
 
-				if (port->vformat == VFORMAT_HEVC
-					|| port->vformat == VFORMAT_AVS2
-					|| port->vformat == VFORMAT_AV1
-					|| port->vformat == VFORMAT_VP9
-					|| port->vformat == VFORMAT_AVS3) {
+				if (is_core_hevc_fmt(port->vformat)) {
 					vdec_poweroff(VDEC_HEVC);
 				} else {
 					vdec_poweroff(VDEC_1);

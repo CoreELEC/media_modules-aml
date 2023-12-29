@@ -56,7 +56,6 @@
 //#define USE_FRONT_ISR_HANDLE_FOR_BACK
 
 #define FOR_S5
-#define PXP_DEBUG
 #define USE_SIM_BUFSPEC
 
 //#define DEBUG_CMD
@@ -2400,7 +2399,8 @@ static void put_un_used_mv_bufs(struct AVS3Decoder_s *dec)
 static void config_hevc_irq_num(struct AVS3Decoder_s *dec)
 {
 #ifdef NEW_FB_CODE
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5 ||
+		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) {
 		dec->ASSIST_MBOX0_IRQ_REG = EE_ASSIST_MBOX0_IRQ_REG;
 		dec->ASSIST_MBOX0_CLR_REG = EE_ASSIST_MBOX0_CLR_REG;
 		dec->ASSIST_MBOX0_MASK    = EE_ASSIST_MBOX0_MASK;
@@ -4009,7 +4009,7 @@ static void config_dw(struct AVS3Decoder_s *dec, struct avs3_frame_s *pic,
 	}
 
 #ifdef P010_ENABLE
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) {
+	if (is_support_p010_mode()) {
 		data32 = READ_VREG(HEVC_SAO_CTRL3);
 		if (is_dw_p010(dec)) {
 			data32 |= (1 << 1);  /* enable double write p010 */
@@ -4556,7 +4556,7 @@ static void avs3_config_work_space_hw(struct AVS3Decoder_s *dec)
 		if (is_dw_p010(dec)) {
 			/* Enable P010 reference read mode for MC */
 			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1,
-				(0x1 << 31) | (1 << 24) | (((dec->endian >> 12) & 0xff) << 16));
+				(0x1 << 31) | (8 << 24) | (((dec->endian >> 12) & 0xff) << 16));
 		} else {
 			/* Enable NV21 reference read mode for MC */
 			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31);
@@ -4639,7 +4639,7 @@ static void mcrcc_perfcount_reset(void)
 	return;
 }
 
-#ifdef TMP_DEBUG
+#if 0//def TMP_DEBUG
 
 static void avs2_init_decoder_hw(struct AVS3Decoder_s *dec)
 {
@@ -4769,20 +4769,20 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 	int i;
 	/*if (debug & AVS3_DBG_BUFMGR_MORE)
 		pr_info("%s\n", __func__);*/
-		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
-#if 1
-		/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
-		data32 &= ~(7 << 29);
-		data32 |= (3 << 29);
-#endif
-		data32 = data32 |
-		(1 << 24) |/*stream_buffer_empty_int_amrisc_enable*/
-		(1 << 22) |/*stream_fifo_empty_int_amrisc_enable*/
-		(1 << 7) |/*dec_done_int_cpu_enable*/
-		(1 << 4) |/*startcode_found_int_cpu_enable*/
-		(0 << 3) |/*startcode_found_int_amrisc_enable*/
-		(1 << 0)    /*parser_int_enable*/
-		;
+	data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+
+	/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
+	data32 &= ~(7 << 29);
+	data32 |= (3 << 29);
+
+	data32 = data32 |
+	(1 << 24) |/*stream_buffer_empty_int_amrisc_enable*/
+	(1 << 22) |/*stream_fifo_empty_int_amrisc_enable*/
+	(1 << 7) |/*dec_done_int_cpu_enable*/
+	(1 << 4) |/*startcode_found_int_cpu_enable*/
+	(0 << 3) |/*startcode_found_int_amrisc_enable*/
+	(1 << 0)    /*parser_int_enable*/
+	;
 	WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
 	data32 = READ_VREG(HEVC_SHIFT_STATUS);
@@ -4875,22 +4875,23 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 		WRITE_VREG(HEVCD_IPP_DYN_CACHE,0x2b);//enable new mcrcc}
 	}
 #endif
-	/*Send parser_cmd*/
-	WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
-	for (i = 0; i < PARSER_CMD_NUMBER; i++)
-		WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6) {
+		/*Send parser_cmd*/
+		WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
+		for (i = 0; i < PARSER_CMD_NUMBER; i++)
+			WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
+	}
 	WRITE_VREG(HEVC_PARSER_IF_CONTROL,
-		(1 << 9) | /* parser_alf_if_en*/
-		/*  (1 << 8) |*/ /*sao_sw_pred_enable*/
-		(1 << 5) | /*parser_sao_if_en*/
-		(1 << 2) | /*parser_mpred_if_en*/
-		(1 << 0) /*parser_scaler_if_en*/
-	);
-
+			(1 << 9) | /* parser_alf_if_en*/
+			/*  (1 << 8) |*/ /*sao_sw_pred_enable*/
+			(1 << 5) | /*parser_sao_if_en*/
+			(1 << 2) | /*parser_mpred_if_en*/
+			(1 << 0) /*parser_scaler_if_en*/
+		);
 #if 0 //def MULTI_INSTANCE_SUPPORT
 	WRITE_VREG(HEVC_MPRED_INT_STATUS, (1<<31));
 
@@ -7919,7 +7920,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			int32_t lcu_size_log2 = avs3_dec->lcu_size_log2;
 
 			if ((dec->front_back_mode == 1) && (paral_alloc_buffer_mode & 1)) {
-				if ((dec->pic_list_wait_alloc_done_flag == BUFFER_INIT)) {
+				if (dec->pic_list_wait_alloc_done_flag == BUFFER_INIT) {
 					dec->dec_result = DEC_RESULT_WAIT_BUFFER;
 					avs3_print(dec, AVS3_DBG_BUFMGR, "alloc buffer\n");
 					vdec_schedule_work(&dec->work);
@@ -8563,7 +8564,7 @@ static void vavs3_put_timer_func(struct timer_list *timer)
 		return;
 	}
 	if (dec->m_ins_flag == 0) {
-#ifndef PXP_DEBUG
+#if 0
 		if (vf_get_receiver(dec->provider_name)) {
 			state =
 				vf_notify_receiver(dec->provider_name,
@@ -8897,6 +8898,9 @@ static void vavs3_prot_init(struct AVS3Decoder_s *dec)
 #ifndef FOR_S5
 	WRITE_VREG(HEVC_PSCALE_CTRL, 0);
 #endif
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+		WRITE_VREG(HEVC_PSCALE_CTRL, 0);
+
 
 	WRITE_VREG(DEBUG_REG1, 0x0);
 	/*check vps/sps/pps/i-slice in ucode*/
@@ -10300,12 +10304,12 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			dec->chunk ? ((vdec_frame_based(vdec) &&
 			(debug & PRINT_FLAG_VDEC_STATUS)) ?
 			get_data_check_sum(dec, r) : 0) : 0,
-		READ_VREG(HEVC_STREAM_START_ADDR),
-		READ_VREG(HEVC_STREAM_END_ADDR),
-		READ_VREG(HEVC_STREAM_LEVEL),
-		READ_VREG(HEVC_STREAM_WR_PTR),
-		READ_VREG(HEVC_STREAM_RD_PTR),
-		dec->start_shift_bytes);
+			READ_VREG(HEVC_STREAM_START_ADDR),
+			READ_VREG(HEVC_STREAM_END_ADDR),
+			READ_VREG(HEVC_STREAM_LEVEL),
+			READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR),
+			dec->start_shift_bytes);
 		if (vdec_frame_based(vdec) && dec->chunk) {
 			u8 *data = NULL;
 			if (!dec->chunk->block->is_mapped)
@@ -11009,16 +11013,20 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 		dec->dw_mmu_enable = 0;
 	}
 #endif
+
+#ifdef P010_ENABLE
+	if (!is_support_p010_mode()) {
+		double_write_mode &= ~(1 << 16);
+		dec->double_write_mode &= ~(1 << 16);
+		pr_err("%s warn: unsupport p010 mode, force disabled\n", __func__);
+	}
+#endif
+
 #ifdef OW_TRIPLE_WRITE
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3X) {
-		if ((dec->triple_write_mode) || (triple_write_mode) ||
-			(dec->double_write_mode & 0x10000) || (double_write_mode & 0x10000)) {
-			double_write_mode &= ~(1 <<16);
-			dec->double_write_mode &= ~(1 <<16);
-			triple_write_mode = 0;
-			dec->triple_write_mode = 0;
-			pr_err("%s warn: unsupport triple write or p010 mode, force disabled\n", __func__);
-		}
+	if (!is_support_triple_write()) {
+		triple_write_mode = 0;
+		dec->triple_write_mode = 0;
+		pr_err("%s warn: unsupport triple write, force disabled\n", __func__);
 	}
 #endif
 
@@ -11185,7 +11193,8 @@ static struct platform_driver ammvdec_avs3_driver = {
 	}
 };
 #endif
-//#ifndef FOR_S5
+
+#ifndef PXP_DEBUG
 static struct mconfig avs3_configs[] = {
 	MC_PU32("bit_depth_luma", &bit_depth_luma),
 	MC_PU32("bit_depth_chroma", &bit_depth_chroma),
@@ -11222,13 +11231,14 @@ static struct mconfig avs3_configs[] = {
 	MC_PU32("start_decode_buf_level", &start_decode_buf_level),
 	MC_PU32("decode_timeout_val", &decode_timeout_val),
 };
+
 static struct mconfig_node avs3_node;
-//#endif
 
 static void set_debug_flag(const char *module, int debug_flags)
 {
 	debug = debug_flags;
 }
+#endif
 
 static int __init amvdec_avs3_driver_init_module(void)
 {
@@ -11251,8 +11261,9 @@ static int __init amvdec_avs3_driver_init_module(void)
 	work_buf_size =
 		(p_buf_info->end_adr - p_buf_info->start_adr
 			+ 0xffff) & (~0xffff);
-
+#ifndef PXP_DEBUG
 	register_set_debug_flag_func(DEBUG_AMVDEC_AVS3, set_debug_flag);
+#endif
 #endif
 	pr_debug("amvdec_avs3 module init\n");
 
@@ -11272,12 +11283,12 @@ static int __init amvdec_avs3_driver_init_module(void)
 		pr_err("failed to register amvdec_avs3 driver\n");
 		return -ENODEV;
 	}
-
+#ifndef PXP_DEBUG
 	vcodec_profile_register_v2("avs3", VFORMAT_AVS3, 0);
 	INIT_REG_NODE_CONFIGS("media.decoder", &avs3_node,
 		"avs3", avs3_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_AVS3, 0);
-
+#endif
 	return 0;
 }
 

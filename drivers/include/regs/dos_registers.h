@@ -5,12 +5,8 @@
 
 #define NEW_REG_CHECK_MASK  (0xffff0000)
 /*new reg mask, bit20~bit27 chipid, bit16~bit19 subid*/
-#define MASK_S5_NEW_REGS   ((0x3e << 20) & 0xffff0000)
-
-#define EE_ASSIST_MBOX0_IRQ_REG          0x3f70
-#define EE_ASSIST_MBOX0_CLR_REG          0x3f71
-#define EE_ASSIST_MBOX0_MASK             0x3f72
-#define EE_ASSIST_MBOX0_FIQ_SEL          0x3f73
+#define MASK_S5_NEW_REGS   ((0x3e << 20) & NEW_REG_CHECK_MASK)
+#define MASK_S6_NEW_REGS   ((AM_MESON_CPU_MAJOR_ID_S6 << 20) & NEW_REG_CHECK_MASK)
 
 #ifndef AMRISC_REGS_HEADER_
 #define AMRISC_REGS_HEADER_
@@ -203,7 +199,8 @@
 #define MDEC_CAV_LUT_ADDR            0x09ec
 #define MDEC_CAV_CFG0                0x09ed
 /*add from s5 */
-#define MDEC_CRCW                    (0x09ee | MASK_S5_NEW_REGS)
+#define MDEC_CRCW                    0x09ee
+
 
 /* 0f73ae529d2c1 rico.yang need add 0x1000 ? */
 #define HCODEC_MDEC_CAV_LUT_DATAL    0x09ea
@@ -457,6 +454,12 @@
 #define DOS_VDEC2_MCRCC_STALL_CTRL   0x3f41
 #define DOS_VDEC2_MCRCC_STALL2_CTRL  0x3f43
 
+#define EE_ASSIST_MBOX0_IRQ_REG      0x3f70
+#define EE_ASSIST_MBOX0_CLR_REG      0x3f71
+#define EE_ASSIST_MBOX0_MASK         0x3f72
+#define EE_ASSIST_MBOX0_FIQ_SEL      0x3f73
+
+#if 0
 /* from s5 */
 #define DOS_VDEC_WR_MAX_SIZE_CTL     (0x3f84 | MASK_S5_NEW_REGS)
 #define DOS_VDEC_DW_MAX_SIZE_CTL     (0x3f85 | MASK_S5_NEW_REGS)
@@ -467,6 +470,7 @@
 #define DOS_HEVC_PATH_CTL            (0x3f8c | MASK_S5_NEW_REGS)
 #define DOS_AXI_ID_MAP_INDEX         (0x3f88 | MASK_S5_NEW_REGS)
 #define DOS_AXI_ID_MAP_DATA          (0x3f89 | MASK_S5_NEW_REGS)
+#endif
 
 #endif
 
@@ -481,13 +485,17 @@
 #define HEVC_ASSIST_AFIFO_CTRL              0x3001
 #define HEVC_ASSIST_AFIFO_CTRL1             0x3002
 #define HEVC_ASSIST_GCLK_EN                 0x3003
+
+/*from s6 */
 #define HEVC_ASSIST_AUTO_CG_DISABLE         0x3003
 #define HEVC_ASSIST_SW_RESET                0x3004
 /* from s5 */
-#define HEVC_ASSIST_AXIADDR_PREFIX          (0x300f | MASK_S5_NEW_REGS)
-#define HEVC_PARSER_IQIT_BUFF_CTL           (0x3010 | MASK_S5_NEW_REGS)
-#define HEVC_PARSER_IQIT_BUFF_STATUS        (0x3011 | MASK_S5_NEW_REGS)
-#define HEVC_ASSIST_MMU_MAP_ADDR_DBE1       (0x3012 | MASK_S5_NEW_REGS)
+#define HEVC_ASSIST_AXIADDR_PREFIX          0x300f
+#define HEVC_PARSER_IQIT_BUFF_CTL           0x3010
+#define HEVC_PARSER_IQIT_BUFF_STATUS        0x3011
+#define HEVC_ASSIST_MMU_MAP_ADDR_DBE1       0x3012
+/* from s6 */
+#define HEVC_ASSIST_GCLK_EN_DISABLE         0x3013
 
 #define HEVC_ASSIST_AMR1_INT0               0x3025
 #define HEVC_ASSIST_AMR1_INT1               0x3026
@@ -617,7 +625,6 @@
 #define HEVC_ASSIST_RING_B_RPTR                    (0x30a9 | MASK_S5_NEW_REGS)
 #define HEVC_ASSIST_RING_B_THRESHOLD               (0x30aa | MASK_S5_NEW_REGS)
 
-
 #define HEVC_ASSIST_SCRATCH_0               0x30c0
 #define HEVC_ASSIST_SCRATCH_1               0x30c1
 #define HEVC_ASSIST_SCRATCH_2               0x30c2
@@ -691,8 +698,8 @@
 #define HEVC_RDMA_B_STATUS0                 0x30fb
 #define HEVC_RDMA_B_STATUS1                 0x30fc
 #define HEVC_RDMA_B_STATUS2                 0x30fd
-/* from s5 */
 
+/* from s5 */
 #define HEVC_MSP_DBE                      (0x3800 | MASK_S5_NEW_REGS)
 #define HEVC_MPSR_DBE                     (0x3801 | MASK_S5_NEW_REGS)
 #define HEVC_MINT_VEC_BASE_DBE            (0x3802 | MASK_S5_NEW_REGS)
@@ -835,16 +842,33 @@
 #define HEVC_PARSER_IF_MONITOR_DATA         (0x3137 | MASK_S5_NEW_REGS)
 #define HEVC_STREAM_PACKET_LENGTH           (0x3139 | MASK_S5_NEW_REGS)
 
-
 #define HEVC_PARSER_DEBUG_IDX               0x313e
 #define HEVC_PARSER_DEBUG_DAT               0x313f
 /* from s5*/
-#define VP9_CONTROL                         (0x3140 | MASK_S5_NEW_REGS)
-#define VP9_QUANT_WR                        (0x3146 | MASK_S5_NEW_REGS)
+#define VP9_CONTROL                         0x3140
+#define VP9_QUANT_WR                        0x3146
+
+#define AV1_DEC_INFO                        0x3158
+#define AV1_DEC_INFO_2                      0x3159
+#define AV1_DEC_INFO_3                      0x315a
 
 #define HEVC_SLICE_DATA_CTL                 0x3172
+
+/* from s6 */
+#define VVC_WP_ENABLE_L0                    0x3173
+// bit[31:16] vvc_wp_enable_l1_chroma
+// bit[15:0]  vvc_wp_enable_l1_luma
+#define VVC_WP_ENABLE_L1                    0x3174
+// bit[31:0] - HEVC input stream CRC calculate length, 8 bytes align
+#define HEVC_STREAM_CRC_CTL                 (0x3175 | MASK_S6_NEW_REGS)
+
+/* from s5 */
 #define HEVC_STREAM_CRC                     0x3175
 #define VP9_ACP_CTRL                        0x3176
+
+/* s6 */
+#define PARSER_TOP_CLK_GATING_CTL           0x3178
+
 
 #define HEVC_MPRED_VERSION                  0x3200
 #define HEVC_MPRED_CTRL0                    0x3201
@@ -947,6 +971,55 @@
 #define HEVC_MPRED_CUR_POC                  0x3260
 #define HEVC_MPRED_COL_POC                  0x3261
 #define HEVC_MPRED_MV_RD_END_ADDR           0x3262
+
+/* from s6 */
+#define HEVC_MPRED_SUBPIC_START                    0x3268
+// [11: 0]  subpic x start in lcu
+// [23:12]  subpic y start in lcu
+// [25]     subpic treated as pic
+#define HEVC_MPRED_SUBPIC_SIZE                     0x3269
+// [11: 0]  subpic x size in lcu m1
+// [23:12]  subpic y size in lcu m1
+#define HEVC_MPRED_COL_REF_CANVAS_00_POC           0x326a
+#define HEVC_MPRED_COL_REF_CANVAS_01_POC           0x326b
+#define HEVC_MPRED_COL_REF_CANVAS_02_POC           0x326c
+#define HEVC_MPRED_COL_REF_CANVAS_03_POC           0x326d
+#define HEVC_MPRED_COL_REF_CANVAS_04_POC           0x326e
+#define HEVC_MPRED_COL_REF_CANVAS_05_POC           0x326f
+#define HEVC_MPRED_COL_REF_CANVAS_06_POC           0x3270
+#define HEVC_MPRED_COL_REF_CANVAS_07_POC           0x3271
+#define HEVC_MPRED_COL_REF_CANVAS_08_POC           0x3272
+#define HEVC_MPRED_COL_REF_CANVAS_09_POC           0x3273
+#define HEVC_MPRED_COL_REF_CANVAS_10_POC           0x3274
+#define HEVC_MPRED_COL_REF_CANVAS_11_POC           0x3275
+#define HEVC_MPRED_COL_REF_CANVAS_12_POC           0x3276
+#define HEVC_MPRED_COL_REF_CANVAS_13_POC           0x3277
+#define HEVC_MPRED_COL_REF_CANVAS_14_POC           0x3278
+#define HEVC_MPRED_COL_REF_CANVAS_15_POC           0x3279
+#define HEVC_MPRED_COL_REF_CANVAS_16_POC           0x327a
+#define HEVC_MPRED_COL_REF_CANVAS_17_POC           0x327b
+#define HEVC_MPRED_COL_REF_CANVAS_18_POC           0x327c
+#define HEVC_MPRED_COL_REF_CANVAS_19_POC           0x327d
+#define HEVC_MPRED_COL_REF_CANVAS_20_POC           0x327e
+#define HEVC_MPRED_COL_REF_CANVAS_21_POC           0x327f
+#define HEVC_MPRED_COL_REF_CANVAS_22_POC           0x3280
+#define HEVC_MPRED_COL_REF_CANVAS_23_POC           0x3281
+#define HEVC_MPRED_COL_REF_CANVAS_24_POC           0x3282
+#define HEVC_MPRED_COL_REF_CANVAS_25_POC           0x3283
+#define HEVC_MPRED_COL_REF_CANVAS_26_POC           0x3284
+#define HEVC_MPRED_COL_REF_CANVAS_27_POC           0x3285
+#define HEVC_MPRED_COL_REF_CANVAS_28_POC           0x3286
+#define HEVC_MPRED_COL_REF_CANVAS_29_POC           0x3287
+#define HEVC_MPRED_COL_REF_CANVAS_30_POC           0x3288
+#define HEVC_MPRED_COL_REF_CANVAS_LT               0x3289
+#define HEVC_MPRED_SLICE_START                     0x328a
+// [11: 0] slice start x in lcu
+// [23:12] slice start y in lcu
+// [31   ] slice in tile
+#define HEVC_MPRED_SLICE_SIZE                      0x328b
+// [11: 0] slice size x m1 in lcu
+// [23:12] slice size y m1 in lcu
+
 #define HEVCD_IPP_TOP_CNTL                  0x3400
 #define HEVCD_IPP_TOP_STATUS                0x3401
 #define HEVCD_IPP_TOP_FRMCONFIG             0x3402
@@ -967,11 +1040,20 @@
 #define HEVCD_IPP_SWMPREDIF_PUINFO1         0x3414
 #define HEVCD_IPP_SWMPREDIF_PUINFO2         0x3415
 #define HEVCD_IPP_SWMPREDIF_PUINFO3         0x3416
+
+/* add from s5 */
+#define HEVCD_IPP_AXIADDR_PREFIX            (0x3418 | MASK_S5_NEW_REGS)
+
 #define HEVCD_IPP_DYNCLKGATE_CONFIG         0x3420
 #define HEVCD_IPP_DYNCLKGATE_STATUS         0x3421
 #define HEVCD_MPP_SUB_DYNCLKGATE_CONFIG     0x3422
 #define HEVCD_IPP_DBG_SEL                   0x3430
 #define HEVCD_IPP_DBG_DATA                  0x3431
+
+#define VP9D_MPP_REF_SCALE_ENBL             (0x3441)
+#define VP9D_MPP_REFINFO_TBL_ACCCONFIG      (0x3442)
+#define VP9D_MPP_REFINFO_DATA               (0x3443)
+
 #define HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR     0x3460
 #define HEVCD_MPP_ANC2AXI_TBL_CMD_ADDR      0x3461
 #define HEVCD_MPP_ANC2AXI_TBL_WDATA_ADDR    0x3462
@@ -983,12 +1065,47 @@
 #define HEVCD_MPP_DELTACLOG2WGHTDENOM_ADDR  0x347f
 #define HEVCD_MPP_WEIGHT_ADDR               0x3480
 #define HEVCD_MPP_WEIGHT_DATA               0x3481
+
+/*from t3 0x3419*/
+#define AV1D_IPP_DIR_CFG                    0x3490
+
+/* s5 */
+#define HEVCD_IPP_MULTICORE_CFG                    (0x34a0 | MASK_S5_NEW_REGS)
+#define HEVCD_IPP_MULTICORE_LINE_CTL               (0x34a1 | MASK_S5_NEW_REGS)
+#define HEVCD_IPP_LINEBUFF_BASE2                   (0x34a2 | MASK_S5_NEW_REGS)
+#define HEVCD_IPP_DYN_CACHE                        (0x34a3 | MASK_S5_NEW_REGS)
+#define HEVCD_IPP_CTRL0                            (0x34a4 | MASK_S5_NEW_REGS)
+#define HEVCD_IPP_CTRL1                            (0x34a5 | MASK_S5_NEW_REGS)
+#define HEVCD_IPP_CTRL2                            (0x34a6 | MASK_S5_NEW_REGS)
+#define HEVCD_IPP_CTRL3                            (0x34a7 | MASK_S5_NEW_REGS)
+
+/* s6 */
+#define VVC_MPP_REF0_POC_CFG                       0x34b0
+#define VVC_MPP_REF1_POC_CFG                       0x34b1
+#define VVC_MPP_REF_IS_LONGTERM                    0x34b2
+#define VVC_MPP_CHROMA_COLLOCATED_CFG              0x34b3
+#define VVC_MPP_REF_WRAPAROUND_CFG                 0x34b4
+#define VVC_MPP_SUBPIC_START                       0x34b5
+#define VVC_MPP_SUBPIC_SIZE                        0x34b6
+#define VVC_MPP_SCALING_WIN_OFFSET                 0x34b7
+#define VVC_MPP_CURR_PROF_ENABLE                   0x34b8
+#define VVC_MPP_CANVAS_ID_L0                       0x34b9
+#define VVC_MPP_CANVAS_ID_L1                       0x34ba
+#define VVC_MPP_MV_WRPTR                           0x34bb
+#define VVC_MPP_SLICE_INFO                         0x34bc
+#define VVC_MPP_AXI_CTL                            0x34bd
+#define VVC_MPP_LCU_INFO                           0x34be
+#define VVC_MPP_RPR_REFINFO                        0x34bf
+
+/* s5 */
 #define HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR 0x34c0
 #define HEVCD_MPP_ANC_CANVAS_DATA_ADDR      0x34c1
 #define HEVCD_MPP_DECOMP_CTL1               0x34c2
 #define HEVCD_MPP_DECOMP_CTL2               0x34c3
 #define HEVCD_MPP_DECOMP_PERFMON_CTL        0x34c5
 #define HEVCD_MPP_DECOMP_PERFMON_DATA       0x34c6
+#define HEVCD_MPP_DECOMP_AXIURG_CTL         0x34c7
+
 #define HEVCD_MCRCC_CTL1                    0x34f0
 #define HEVCD_MCRCC_CTL2                    0x34f1
 #define HEVCD_MCRCC_CTL3                    0x34f2
@@ -1047,8 +1164,6 @@
 //axi_idle_thred=sao_ctrl8[15:0]
 #define HEVC_SAO_CTRL9                      0x362d
 
-
-#define HEVC_SAO_CTRL26                     0x3677
 #define HEVC_SAO_DBG_DATA_0                 0x3630
 #define HEVC_SAO_DBG_DATA_1                 0x3631
 #define HEVC_SAO_DBG_DATA_2                 0x3632
@@ -1063,6 +1178,9 @@
 #define HEVC_CM_CORE_STATUS                 0x3640
 #define HEVC_SAO_MMU_RESET_CTRL             0x3641
 
+#define HEVC_SAO_CTRL26                     0x3677
+
+
 /* T3X triple write */
 #define HEVC_SAO_Y_START_ADDR3              0x3698
 #define HEVC_SAO_Y_LENGTH3                  0x3699
@@ -1074,6 +1192,10 @@
 #define HEVC_SAO_Y2_LENGTH                  0x36a1
 #define HEVC_SAO_C2_START_ADDR              0x36a2
 #define HEVC_SAO_C2_LENGTH                  0x36a3
+/* s6 */
+#define HEVC_SAO_TILE_IDX                   0x36a4
+
+
 #define HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR_EXTRA 0x3495
 #define HEVCD_MPP_ANC2AXI_TBL_DATA_EXTRA    0x3496
 
@@ -1096,29 +1218,29 @@
 #define HEVC_PIC_QUALITY_CTRL               0x3710
 #define HEVC_PIC_QUALITY_DATA               0x3711
 
-/*from t3 0x3419*/
-#define AV1D_IPP_DIR_CFG                    0x3490
-/* add from s5 */
-#define HEVCD_IPP_AXIADDR_PREFIX                   (0x3418 | MASK_S5_NEW_REGS)
-#define VP9D_MPP_REF_SCALE_ENBL                    (0x3441)
-#define VP9D_MPP_REFINFO_TBL_ACCCONFIG             (0x3442)
-#define VP9D_MPP_REFINFO_DATA                      (0x3443)
-
-
-#define HEVCD_IPP_MULTICORE_CFG                    (0x34a0 | MASK_S5_NEW_REGS)
-#define HEVCD_IPP_MULTICORE_LINE_CTL               (0x34a1 | MASK_S5_NEW_REGS)
-#define HEVCD_IPP_LINEBUFF_BASE2                   (0x34a2 | MASK_S5_NEW_REGS)
-#define HEVCD_IPP_DYN_CACHE                        (0x34a3 | MASK_S5_NEW_REGS)
-#define HEVCD_IPP_CTRL0                            (0x34a4 | MASK_S5_NEW_REGS)
-#define HEVCD_IPP_CTRL1                            (0x34a5 | MASK_S5_NEW_REGS)
-#define HEVCD_IPP_CTRL2                            (0x34a6 | MASK_S5_NEW_REGS)
-#define HEVCD_IPP_CTRL3                            (0x34a7 | MASK_S5_NEW_REGS)
-
-#define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
 
 #define HEVC_DBLK_MCP                              (0x3529 | MASK_S5_NEW_REGS)
 #define HEVC_DBLK_SLICNT                           (0x352a | MASK_S5_NEW_REGS)
 #define HEVC_DBLK_INTRPT                           (0x352b | MASK_S5_NEW_REGS)
+
+#define HEVC_DBLK_LMCS_DELTA_CW_INDEX              0x352c
+#define HEVC_DBLK_LMCS_DELTA_CW_DATA               0x352d
+#define HEVC_DBLK_LMCS_DELTA_CTRL                  0x352e
+#define HEVC_DBLK_SAO0                             0x3540
+#define HEVC_DBLK_SAO1                             0x3541
+#define HEVC_DBLK_SAO2                             0x3542
+#define HEVC_DBLK_SAO3                             0x3543
+#define HEVC_DBLK_ALF0                             0x3544
+#define HEVC_DBLK_ALF1                             0x3545
+#define HEVC_DBLK_ALF2                             0x3546
+#define HEVC_DBLK_ALF3                             0x3547
+#define HEVC_DBLK_VBVER                            0x3548
+#define HEVC_DBLK_VBVER1                           0x3549
+#define HEVC_DBLK_VBHOR                            0x354a
+#define HEVC_DBLK_VBHOR1                           0x354b
+#define HEVC_DBLK_SUBPIC                           0x354c
+#define HEVC_DBLK_EOT                              0x354d
+
 #define HEVC_OW_FRAME_CNT                          (0x3668 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_CTRL12                            (0x3669 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_CTRL13                            (0x366a | MASK_S5_NEW_REGS)
@@ -1157,9 +1279,17 @@
 #define COPY_REG_R4                                (0x368c | MASK_S5_NEW_REGS)
 #define COPY_REG_R5                                (0x368d | MASK_S5_NEW_REGS)
 #define HEVC_SAO_SHADOWMODE_CNTL                   (0x368e | MASK_S5_NEW_REGS)
-#define HEVC_SAO_CRC                               (0x3690 | MASK_S5_NEW_REGS)
-#define HEVC_SAO_CRC_Y                             (0x3691 | MASK_S5_NEW_REGS)
-#define HEVC_SAO_CRC_C                             (0x3692 | MASK_S5_NEW_REGS)
+
+#define HEVC_SAO_CRC                               0x3690
+#define HEVC_SAO_CRC_Y                             0x3691
+#define HEVC_SAO_CRC_C                             0x3692
+/*s6*/
+#define HEVC_SAO_CRC_1                             0x3693
+#define HEVC_SAO_CRC_2                             0x3694
+#define HEVC_SAO_CRC_3                             0x3695
+#define HEVC_SAO_CRC_4                             0x3696
+#define HEVC_SAO_CRC_5                             0x3697
+
 #define HEVC_IQIT_STAT_GEN4                        (0x3721 | MASK_S5_NEW_REGS)
 #define HEVC_IQIT_STAT_GEN5                        (0x3722 | MASK_S5_NEW_REGS)
 
@@ -1197,6 +1327,27 @@
 #define HEVCD_MPP_DELTACLOG2WGHTDENOM_ADDR_DBE1    (0x397f | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_WEIGHT_ADDR_DBE1                 (0x3980 | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_WEIGHT_DATA_DBE1                 (0x3981 | MASK_S5_NEW_REGS)
+
+/* s6 */
+#if 0
+#define VVC_MPP_REF0_POC_CFG_DBE1                  0x39b0
+#define VVC_MPP_REF1_POC_CFG_DBE1                  0x39b1
+#define VVC_MPP_REF_IS_LONGTERM_DBE1               0x39b2
+#define VVC_MPP_CHROMA_COLLOCATED_CFG_DBE1         0x39b3
+#define VVC_MPP_REF_WRAPAROUND_CFG_DBE1            0x39b4
+#define VVC_MPP_SUBPIC_START_DBE1                  0x39b5
+#define VVC_MPP_SUBPIC_SIZE_DBE1                   0x39b6
+#define VVC_MPP_SCALING_WIN_OFFSET_DBE1            0x39b7
+#define VVC_MPP_CURR_PROF_ENABLE_DBE1              0x39b8
+#define VVC_MPP_CANVAS_ID_L0_DBE1                  0x39b9
+#define VVC_MPP_CANVAS_ID_L1_DBE1                  0x39ba
+#define VVC_MPP_MV_WRPTR_DBE1                      0x39bb
+#define VVC_MPP_SLICE_INFO_DBE1                    0x39bc
+#define VVC_MPP_AXI_CTL_DBE1                       0x39bd
+#define VVC_MPP_LCU_INFO_DBE1                      0x39be
+#define VVC_MPP_RPR_REFINFO_DBE1                   0x39bf
+#endif
+
 #define HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR_DBE1   (0x39c0 | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_ANC_CANVAS_DATA_ADDR_DBE1        (0x39c1 | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_DECOMP_CTL1_DBE1                 (0x39c2 | MASK_S5_NEW_REGS)
@@ -1272,6 +1423,27 @@
 #define HEVC_DBLK_MCP_DBE1                         (0x3a29 | MASK_S5_NEW_REGS)
 #define HEVC_DBLK_SLICNT_DBE1                      (0x3a2a | MASK_S5_NEW_REGS)
 #define HEVC_DBLK_INTRPT_DBE1                      (0x3a2b | MASK_S5_NEW_REGS)
+
+#if 0
+#define HEVC_DBLK_LMCS_DELTA_CW_INDEX_DBE1         0x3a2c
+#define HEVC_DBLK_LMCS_DELTA_CW_DATA_DBE1          0x3a2d
+#define HEVC_DBLK_LMCS_DELTA_CTRL_DBE1             0x3a2e
+#define HEVC_DBLK_SAO0_DBE1                        0x3a40
+#define HEVC_DBLK_SAO1_DBE1                        0x3a41
+#define HEVC_DBLK_SAO2_DBE1                        0x3a42
+#define HEVC_DBLK_SAO3_DBE1                        0x3a43
+#define HEVC_DBLK_ALF0_DBE1                        0x3a44
+#define HEVC_DBLK_ALF1_DBE1                        0x3a45
+#define HEVC_DBLK_ALF2_DBE1                        0x3a46
+#define HEVC_DBLK_ALF3_DBE1                        0x3a47
+#define HEVC_DBLK_VBVER_DBE1                       0x3a48
+#define HEVC_DBLK_VBVER1_DBE1                      0x3a49
+#define HEVC_DBLK_VBHOR_DBE1                       0x3a4a
+#define HEVC_DBLK_VBHOR1_DBE1                      0x3a4b
+#define HEVC_DBLK_SUBPIC_DBE1                      0x3a4c
+#define HEVC_DBLK_EOT_DBE1                         0x3a4d
+#endif
+
 #define HEVC_SAO_VERSION_DBE1                      (0x3b00 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_CTRL0_DBE1                        (0x3b01 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_CTRL1_DBE1                        (0x3b02 | MASK_S5_NEW_REGS)
@@ -1412,6 +1584,29 @@
 #define HEVC_SAO_CRC_DBE1                          (0x3b90 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_CRC_Y_DBE1                        (0x3b91 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_CRC_C_DBE1                        (0x3b92 | MASK_S5_NEW_REGS)
+
+
+#if 0
+#define HEVC_SAO_CRC_1_DBE1                        0x3b93
+#define HEVC_SAO_CRC_2_DBE1                        0x3b94
+#define HEVC_SAO_CRC_3_DBE1                        0x3b95
+#define HEVC_SAO_CRC_4_DBE1                        0x3b96
+#define HEVC_SAO_CRC_5_DBE1                        0x3b97
+#define HEVC_SAO_Y_START_ADDR3_DBE1                0x3b98
+#define HEVC_SAO_Y_LENGTH3_DBE1                    0x3b99
+#define HEVC_SAO_C_START_ADDR3_DBE1                0x3b9a
+#define HEVC_SAO_C_LENGTH3_DBE1                    0x3b9b
+#define HEVC_FORCE_YUV_2_DBE1                      0x3b9c
+#define HEVC_SAO_AXI_CTRL_DBE1                     0x3b9d
+
+#define HEVC_SAO_Y2_START_ADDR_DBE1                0x3ba0
+#define HEVC_SAO_Y2_LENGTH_DBE1                    0x3ba1
+#define HEVC_SAO_C2_START_ADDR_DBE1                0x3ba2
+#define HEVC_SAO_C2_LENGTH_DBE1                    0x3ba3
+#define HEVC_SAO_TILE_IDX_DBE1                     0x3ba4
+#endif
+
+/*s5*/
 #define HEVC_IQIT_CLK_RST_CTRL_DBE1                (0x3c00 | MASK_S5_NEW_REGS)
 #define HEVC_IQIT_DEQUANT_CTRL_DBE1                (0x3c01 | MASK_S5_NEW_REGS)
 #define HEVC_IQIT_SCALELUT_WR_ADDR_DBE1            (0x3c02 | MASK_S5_NEW_REGS)
@@ -1641,6 +1836,9 @@
 #define HEVC_MDEC_CAV_LUT_ADDR              (0x39ec | MASK_S5_NEW_REGS)
 #define HEVC_MDEC_CAV_CFG0                  (0x39ed | MASK_S5_NEW_REGS)
 #define HEVC_MDEC_CRCW                      (0x39ee | MASK_S5_NEW_REGS)
+/* from s6 */
+#define HEVC_MDEC_PIC_DC_CTRL2              0x39ef
+
 
 /*add from M8M2*/
 #define HEVC_VLD_STATUS_CTRL                0x3c00

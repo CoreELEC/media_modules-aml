@@ -74,6 +74,8 @@
 
 #define CONSTRAIN_MAX_BUF_NUM
 
+#define DYN_CACHE
+
 #define SWAP_HEVC_UCODE
 #define DETREFILL_ENABLE
 
@@ -4755,8 +4757,19 @@ static void parser_cmd_write(void)
 		0xAC00, 0xA000, 0x08C0, 0x08E0, 0xA40E, 0xFC00,
 		0x7C00
 	};
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+		return;
+
+	/* Send parser_cmd */
+	WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
+
 	for (i = 0; i < PARSER_CMD_NUMBER; i++)
 		WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
+
+	WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
+	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
+	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 }
 
 static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
@@ -4844,10 +4857,10 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 
 	WRITE_VREG(HEVC_CABAC_CONTROL, (1 << 0)	/* cabac_enable */
 			  );
-	/* hevc_parser_core_clk_en */
-	WRITE_VREG(HEVC_PARSER_CORE_CONTROL, (1 << 0)
-			  );
-
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6) {
+		/* hevc_parser_core_clk_en */
+		WRITE_VREG(HEVC_PARSER_CORE_CONTROL, (1 << 0));
+	}
 	WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 
 	/* Initial IQIT_SCALELUT memory -- just to avoid X in simulation */
@@ -4863,14 +4876,7 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 	if (is_vcpu_clk_set())
 		WRITE_VREG(HEVC_DECODE_COUNT, 0);
 
-	/* Send parser_cmd */
-	WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
-
 	parser_cmd_write();
-
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 
 	WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 			   /* (1 << 8) | // sao_sw_pred_enable */
@@ -4978,13 +4984,7 @@ static void decoder_hw_reset(void)
 		WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
 
 	/* Send parser_cmd */
-	WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
-
 	parser_cmd_write();
-
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 
 	WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 			   /* (1 << 8) | // sao_sw_pred_enable */
@@ -5066,6 +5066,16 @@ static void config_mcrcc_axi_hw(struct hevc_state_s *hevc, int slice_type)
 		WRITE_VREG(HEVCD_MCRCC_CTL1, 0x0);
 		return;
 	}
+#if 0
+	if (hevc->new_pic) {
+		mcrcc_get_hitrate();
+		decomp_get_hitrate();
+		decomp_get_comprate();
+
+		mcrcc_perfcount_reset();
+		decomp_perfcount_reset();
+	}
+#endif
 
 	if (slice_type == 0) {	/* B-PIC */
 		/* Programme canvas0 */
@@ -5518,15 +5528,19 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 			 ((params->p.pps_cr_qp_offset & 0x1f) << 9));
 		data32 |=
 			(hevc->lcu_size == 64) ? 0 : ((hevc->lcu_size == 32) ? 1 : 2);
-		data32 |= (hevc->pic_w <= 64) ? (1 << 20) : 0;
+
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+			data32 |= (0x3 << 20);
+		else
+			data32 |= (hevc->pic_w <= 64) ? (1 << 20) : 0;
 		WRITE_VREG(HEVC_DBLK_CFG1, data32);
 
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
+		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6)) {
 			data32 = 1 << 28; /* Debug only: sts1 chooses dblk_main*/
 			WRITE_VREG(HEVC_DBLK_STS1 + 4, data32); /* 0x3510 */
 			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
-				"[DBLK DEBUG] HEVC1 STS1 : 0x%x\n",
-				data32);
+				"[DBLK DEBUG] HEVC1 STS1 : 0x%x\n", data32);
 		}
 	}
 	/* m8baby test1902 */
@@ -12779,7 +12793,11 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 	hevc_config_work_space_hw(hevc);
 
 	hevc_init_decoder_hw(hevc, 0, 0xffffffff);
-
+#ifdef DYN_CACHE
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+		WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b);
+	}
+#endif
 	//WRITE_VREG(HEVC_WAIT_FLAG, 1);
 
 	/* clear mailbox interrupt */

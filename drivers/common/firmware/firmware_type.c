@@ -72,6 +72,8 @@ static const struct format_name_s format_name[] = {
 
 	{VIDEO_ENC_H264,		"h264_enc",		BIT_ULL(46)},
 	{VIDEO_ENC_JPEG,		"jpeg_enc",		BIT_ULL(47)},
+
+	{VIDEO_DEC_H266_MMU,	"h266_mmu",		BIT_ULL(48)},
 	{FIRMWARE_MAX,			"unknown"},
 };
 
@@ -109,6 +111,7 @@ static const struct cpu_type_s cpu_type[] = {
 	{AM_MESON_CPU_MAJOR_ID_S1A,	"s1a"},
 	{AM_MESON_CPU_MAJOR_ID_S7,	"s7"},
 	{AM_MESON_CPU_MAJOR_ID_S7D,	"s7d"},
+	{AM_MESON_CPU_MAJOR_ID_S6,	"s6"},
 };
 
 const char *get_fw_format_name(unsigned int format)

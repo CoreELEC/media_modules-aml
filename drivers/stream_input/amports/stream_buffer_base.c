@@ -36,6 +36,7 @@
 #include "amports_priv.h"
 #include "stream_buffer_base.h"
 #include "thread_rw.h"
+#include "../../common/chips/decoder_cpu_ver_info.h"
 
 #define DEFAULT_VIDEO_BUFFER_SIZE		(1024 * 1024 * 3)
 #define DEFAULT_VIDEO_BUFFER_SIZE_4K		(1024 * 1024 * 6)
@@ -62,16 +63,10 @@ static struct stream_buf_s hevc_buf_def = {
 
 static struct stream_buf_s *get_def_parms(int f)
 {
-	switch (f) {
-	case VFORMAT_HEVC:
-	case VFORMAT_AVS2:
-	case VFORMAT_AV1:
-	case VFORMAT_VP9:
-	case VFORMAT_AVS3:
+	if (is_core_hevc_fmt(f))
 		return &hevc_buf_def;
-	default:
-		return &vdec_buf_def;
-	}
+
+	return &vdec_buf_def;
 }
 
 int stream_buffer_base_init(struct stream_buf_s *stbuf,
@@ -98,11 +93,7 @@ int stream_buffer_base_init(struct stream_buf_s *stbuf,
 	}
 
 	stbuf->id	= vdec->id;
-	stbuf->is_hevc	= ((format == VFORMAT_HEVC) ||
-			(format == VFORMAT_AVS2) ||
-			(format == VFORMAT_AV1) ||
-			(format == VFORMAT_VP9) ||
-			(format == VFORMAT_AVS3));
+	stbuf->is_hevc	= is_core_hevc_fmt(format);
 	stbuf->for_4k	= ((width * height) >
 			(1920 * 1088)) ? 1 : 0;
 	stbuf->is_multi_inst = !vdec_single(vdec);

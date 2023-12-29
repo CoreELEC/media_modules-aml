@@ -39,6 +39,9 @@ struct bus_reg_desc *reg_desc[MAX_REG_BUS];
 #define CODEC_REG_WRITE_DEBUG 0x02
 #define CODEC_REG_MAP_DEBUG   0x08
 
+#define REG_OFFSET(new, old)  ((signed int)((new) - (old)))
+#define REG_COMPAT_RANGE(start, end)  ((end) - (start) + 1)
+
 static u32 register_debug;
 module_param(register_debug, uint, 0664);
 
@@ -79,16 +82,49 @@ void s5_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
 
 void t3_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
 {
-	registers_offset_config(&desc[AV1D_IPP_DIR_CFG], -(0x0490 - 0x0419), 1);
+	if (bs == DOS_BUS)
+		registers_offset_config(&desc[AV1D_IPP_DIR_CFG], -(0x0490 - 0x0419), 1);
+}
+
+void s6_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
+{
+	if (bs == DOS_BUS) {
+		printk("s6 dos register compat\n");
+		registers_offset_config(&desc[HEVC_STREAM_CRC],
+			REG_OFFSET(0x3176, 0x3175),
+			REG_COMPAT_RANGE(HEVC_STREAM_CRC, VP9_ACP_CTRL));
+
+		registers_offset_config(&desc[HEVC_ASSIST_AMR1_INT0],
+			REG_OFFSET(0x3015, 0x3025),
+			REG_COMPAT_RANGE(HEVC_ASSIST_AMR1_INT0, HEVC_ASSIST_MBX_SSEL));
+
+		registers_offset_config(&desc[HEVC_ASSIST_TIMER0_LO],
+			REG_OFFSET(0x0036, 0x0060),
+			REG_COMPAT_RANGE(HEVC_ASSIST_TIMER0_LO, HEVC_ASSIST_DMA_INT_MSK2));
+
+		registers_offset_config(&desc[HEVC_ASSIST_MBOX0_IRQ_REG],
+			REG_OFFSET(0x0040, 0x0070),
+			REG_COMPAT_RANGE(HEVC_ASSIST_MBOX0_IRQ_REG, HEVC_ASSIST_AXI_STATUS2_LO));
+
+		registers_offset_config(&desc[HEVC_ASSIST_SCRATCH_0],
+			REG_OFFSET(0x00b0, 0x00c0),
+			REG_COMPAT_RANGE(HEVC_ASSIST_SCRATCH_0, HEVC_ASSIST_SCRATCH_N));
+
+		registers_offset_config(&desc[AV1D_IPP_DIR_CFG],
+			REG_OFFSET(0x0419, 0x0490),
+			REG_COMPAT_RANGE(AV1D_IPP_DIR_CFG, AV1D_IPP_DIR_CFG));
+	}
 }
 
 void s7_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
 {
-	registers_offset_config(&desc[HEVC_SLICE_DATA_CTL], -(0x0172 - 0x0175), 1);
+	if (bs == DOS_BUS) {
+		registers_offset_config(&desc[HEVC_SLICE_DATA_CTL], -(0x0172 - 0x0175), 1);
 
-	registers_offset_config(&desc[HEVC_STREAM_CRC],
-		-(0x0175 - 0x0173),
-		(VP9_ACP_CTRL - HEVC_STREAM_CRC + 1));
+		registers_offset_config(&desc[HEVC_STREAM_CRC],
+			-(0x0175 - 0x0173),
+			(VP9_ACP_CTRL - HEVC_STREAM_CRC + 1));
+	}
 }
 
 //###############################################################################

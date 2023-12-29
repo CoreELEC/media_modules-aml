@@ -3858,7 +3858,7 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	/*set them all 0 for H265_NV21 (no down-scale)*/
 	data32 &= ~(0xff << 16);
 	WRITE_VREG(HEVC_SAO_CTRL5, data32);
-	ata32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
+	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
 	/*[5:4] address_format 00:linear 01:32x32 10:64x32*/
 	data32 |= (MEM_MAP_MODE << 4);
@@ -4306,7 +4306,7 @@ static void config_other_hw(struct AVS2Decoder_s *dec)
 		if (is_dw_p010(dec)) {
 			/* Enable P010 reference read mode for MC */
 			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1,
-				(0x1 << 31) | (1 << 24) | (((dec->endian >> 12) & 0xff) << 16));
+				(0x1 << 31) | (8 << 24) | (((dec->endian >> 12) & 0xff) << 16));
 		} else {
 			/* Enable NV21 reference read mode for MC */
 			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31);
