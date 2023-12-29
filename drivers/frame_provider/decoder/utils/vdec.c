@@ -190,7 +190,6 @@ static int v4lvideo_add_di = 1;
 static int v4lvideo_add_ppmgr = 0;
 static int max_di_instance = 2;
 static int max_supported_di_instance = 4;
-static int enable_schedule = 1;
 
 //static int path_debug = 0;
 
@@ -1167,8 +1166,6 @@ static void vdec_update_buff_status(void)
 				core->buff_flag |= (vdec->core_mask);
 		} else if (input_stream_based(input)) {
 			if (!vdec->vbuf.ext_buf_addr)
-				core->stream_buff_flag |= vdec->core_mask;
-			if (enable_schedule)
 				core->stream_buff_flag |= vdec->core_mask;
 		}
 		/* slave el pre_decode_level wp update */
@@ -4675,7 +4672,7 @@ static int vdec_core_thread(void *data)
 				if ((!worker) &&
 					((core->sched_mask != core->power_ref_mask)) &&
 					(atomic_read(&vdec_core->vdec_nr) > 0) &&
-					(((core->buff_flag && enable_schedule) | core->stream_buff_flag) &
+					(core->stream_buff_flag &
 					(core->sched_mask ^ core->power_ref_mask))) {
 						ATRACE_COUNTER("0.vdec_sleep", 1);
 						usleep_range(1000, 2000);
@@ -7507,9 +7504,6 @@ MODULE_PARM_DESC(use_t5d_driver,
 module_param(max_di_instance, int, 0664);
 MODULE_PARM_DESC(max_di_instance,
 				"\n max_di_instance\n");
-
-module_param(enable_schedule, int, 0664);
-MODULE_PARM_DESC(enable_schedule,"\n enable_schedule\n");
 
 module_param(max_supported_di_instance, int, 0664);
 MODULE_PARM_DESC(max_supported_di_instance,
