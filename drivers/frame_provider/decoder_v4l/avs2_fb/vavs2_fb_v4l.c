@@ -6255,7 +6255,7 @@ static int vavs2_get_ps_info(struct AVS2Decoder_s *dec, struct aml_vdec_ps_infos
 {
 	ps->visible_width 	= dec->frame_width;
 	ps->visible_height 	= dec->frame_height;
-	ps->coded_width 	= ALIGN(dec->frame_width, 64);
+	ps->coded_width 	= ALIGN(dec->frame_width, is_hevc_align32(0) ? 32 : 64);
 	ps->coded_height 	= ALIGN(dec->frame_height, 64);
 	ps->dpb_size 		= dec->used_buf_num;
 	ps->dpb_margin	= dec->dynamic_buf_margin;

@@ -10031,6 +10031,9 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		hw->dw_para_set_flag = false;
 	}
 
+	ps->coded_width = ALIGN(mb_width << 4,
+		(is_hevc_align32(0) && hw->double_write_mode != DM_YUV_ONLY) ? 32 : 64);
+
 	/*
 	 * 4K H264 interlace(MBAFF) streams require conversion field
 	 * VDEC use V4L2_FIELD_NONE

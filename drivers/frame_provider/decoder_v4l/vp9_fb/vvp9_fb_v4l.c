@@ -11433,7 +11433,7 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 {
 	ps->visible_width 	= pbi->frame_width;
 	ps->visible_height 	= pbi->frame_height;
-	ps->coded_width 	= ALIGN(pbi->frame_width, 64);
+	ps->coded_width 	= ALIGN(pbi->frame_width, is_hevc_align32(0) ? 32 : 64);
 	ps->coded_height 	= ALIGN(pbi->frame_height, 64);
 	ps->dpb_size 		= pbi->used_buf_num;
 	ps->dpb_margin	= pbi->dynamic_buf_num_margin;
