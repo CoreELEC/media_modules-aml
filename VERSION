@@ -5,6 +5,14 @@ DevelopingChangeId=Ia7339b3a1afe89afc9eecae3e7a55c39799768ff
 
 
 #history version
+#V6.8 Release Notes
+#Support QOS for v4ldec
+#AMMS(Amlogic Media Memory System)  V2.0
+#    Scatter slot/cache aggregation
+#    MV buffer memory usage decreased
+#Dual-core software decoding time optimize
+#Support DW400 decoder mode to reduce memory usage for TV project
+#
 #V6.7 Release Notes
 #Release_ChangeId_V6_7=Iabfa01c63da558d842d3252c7612559fa830ec7d
 #New feature detail information:
