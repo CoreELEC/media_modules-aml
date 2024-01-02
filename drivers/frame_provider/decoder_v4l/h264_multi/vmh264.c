@@ -2443,14 +2443,19 @@ void h264_mmu_box_free_idx_tail(struct vdec_h264_hw_s *hw)
 			used_4k_num = (READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
 			if (used_4k_num >= 0) {
 				struct aml_buf *aml_buf = index_to_afbc_aml_buf(hw, hw->hevc_cur_buf_idx);
+
 				dpb_print(DECODE_ID(hw), PRINT_FLAG_MMU_DETAIL,
 					"release unused buf , used_4k_num %ld index %d\n",
 					used_4k_num, hw->hevc_cur_buf_idx);
 
 				ctx->cal_compress_buff_info(used_4k_num, ctx);
 				hevc_mmu_dma_check(hw_to_vdec(hw));
-				decoder_mmu_box_free_idx_tail(aml_buf->fbc->mmu,
-					aml_buf->fbc->index, used_4k_num);
+				if (aml_buf) {
+					decoder_mmu_box_free_idx_tail(aml_buf->fbc->mmu,
+						aml_buf->fbc->index, used_4k_num);
+				} else {
+					dpb_print(DECODE_ID(hw), 0, "%s, aml buf null\n", __func__);
+				}
 				hw->hevc_cur_buf_idx = 0xffff;
 			}
 		}
