@@ -15207,6 +15207,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 				pic->vf_ref--;
 			}
 
+			pic->POC = INVALID_POC;
 			pic->show_frame = false;
 			pic->output_ready = 0;
 			pic->cma_alloc_addr = 0;
