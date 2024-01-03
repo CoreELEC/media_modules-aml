@@ -46,7 +46,7 @@ struct module_debug_node {
 };
 
 static struct list_head debug_head;
-spinlock_t	debug_plock;
+struct mutex debug_lock;
 
 static struct aml_dec_report_dev *report_dev;
 
@@ -201,13 +201,12 @@ static struct module_debug_node *get_debug_module(const char *module)
 int register_set_debug_flag_func(const char *module, set_debug_flag_func func)
 {
 	int res = 0;
-	ulong flags;
 	struct module_debug_node *node = NULL;
 
 	if (!module || !func)
 		return -EINVAL;
 
-	spin_lock_irqsave(&debug_plock, flags);
+	mutex_lock(&debug_lock);
 	node = get_debug_module(module);
 	if (!node) {
 		node = kzalloc(sizeof(struct module_debug_node), GFP_KERNEL);
@@ -228,13 +227,13 @@ int register_set_debug_flag_func(const char *module, set_debug_flag_func func)
 		node->set_debug_flag_notify = func;
 		list_add_tail(&node->list, &debug_head);
 	}
-	spin_unlock_irqrestore(&debug_plock, flags);
+	mutex_unlock(&debug_lock);
 
 	return 0;
 error:
 	kfree(node->module);
 	kfree(node);
-	spin_unlock_irqrestore(&debug_plock, flags);
+	mutex_unlock(&debug_lock);
 	return res;
 }
 EXPORT_SYMBOL(register_set_debug_flag_func);
@@ -529,7 +528,7 @@ int report_module_init(void)
 	}
 
 	INIT_LIST_HEAD(&debug_head);
-	spin_lock_init(&debug_plock);
+	mutex_init(&debug_lock);
 	resman_register_debug_callback("VideoDecoder", set_debug_configs);
 	return 0;
 unregister:
@@ -543,7 +542,6 @@ EXPORT_SYMBOL(report_module_init);
 void report_module_exit(void)
 {
 	struct module_debug_node *node = NULL;
-	ulong flags;
 
 	vfree(report_dev);
 	platform_driver_unregister(&report_driver);
@@ -552,13 +550,13 @@ void report_module_exit(void)
 	while (!list_empty(&debug_head)) {
 		node = list_entry(debug_head.next,
 			struct module_debug_node, list);
-		spin_lock_irqsave(&debug_plock, flags);
+		mutex_lock(&debug_lock);
 		if (node) {
 			list_del(&node->list);
 			kfree(node->module);
 			kfree(node);
 		}
-		spin_unlock_irqrestore(&debug_plock, flags);
+		mutex_unlock(&debug_lock);
 	}
 }
 EXPORT_SYMBOL(report_module_exit);
