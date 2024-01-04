@@ -84,11 +84,13 @@ typedef enum {
 	GET_SLOW_SYNC_ENABLE,
 	GET_TRICK_MODE,
 	GET_AUDIO_WORK_MODE,
+	GET_START_STRATEGY,
 	SET_VIDEO_FRAME_ADVANCE = 500,
 	SET_SLOW_SYNC_ENABLE,
 	SET_TRICK_MODE,
 	SET_FREE_RUN_TYPE,
 	SET_VIDEO_HOLD,
+	SET_START_STRATEGY,
 } mediasync_control_cmd;
 
 typedef struct m_control {
@@ -221,7 +223,7 @@ typedef struct update_info{
 	mediasync_audioinfo mAudioInfo;
 	mediasync_videoinfo mVideoInfo;
 	u32 isVideoFrameAdvance;
-	uint32_t mFreeRunType;
+	u32 mFreeRunType;
 } mediasync_update_info;
 
 typedef struct frame_rec_s {
@@ -308,8 +310,10 @@ typedef struct instance{
 	u32 mRcordSlope[RECORD_SLOPE_NUM];
 	u32 mRcordSlopeCount;
 	s32 mlastCheckVideocacheDuration;
-	uint32_t mFreeRunType;
+
+	u32 mFreeRunType;
 	mediasync_holdvideoinfo mHoldVideoInfo;
+	u32 mStartStrategy;
 }mediasync_ins;
 
 typedef struct Media_Sync_Manage {
