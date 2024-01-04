@@ -11593,7 +11593,7 @@ static void h264_reset_bufmgr(struct vdec_s *vdec, bool reset_flags)
 		while (kfifo_len(&hw->display_q) > 0) {
 			if (time_after(jiffies, timeout))
 				break;
-			schedule();
+			usleep_range(1000, 2000);
 		}
 	}
 
