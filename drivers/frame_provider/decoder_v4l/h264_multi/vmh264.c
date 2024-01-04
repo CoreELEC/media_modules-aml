@@ -7001,6 +7001,13 @@ void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
 
 		aml_buf = (struct aml_buf *)hw->buffer_spec[buf_spec_num].cma_alloc_addr;
 
+		if (aml_buf == NULL) {
+			dpb_print(DECODE_ID(hw), 0,
+				"%s aml_buf is NULL! Buffer(%d) has been recycled!\n",
+				__func__, buf_spec_num);
+			return;
+		}
+
 		if (ctx->picinfo.field == V4L2_FIELD_INTERLACED || //frame_mbs_only_flag
 			pic_struct == PIC_DOUBLE_FRAME ||
 			pic_struct == PIC_TRIPLE_FRAME)
@@ -7204,6 +7211,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		unsigned short first_mb_in_slice;
 		unsigned int decode_mb_count, mby_mbx;
 		struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
+		int multi_header_error_frame_flag = 0;
 		reset_process_time(hw);
 		hw->frmbase_cont_flag = 0;
 
@@ -7247,6 +7255,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				hw->multi_slice_pic_flag = 0;
 				hw->multi_slice_pic_check_count = 0;
 			} else if (hw->cur_picture_slice_count > hw->last_picture_slice_count) {
+				multi_header_error_frame_flag = 1;
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "multi_header_error_frame!\n");
 				vh264_pic_done_proc(vdec);
 				if (!is_there_free_buffer(vdec)) {
 					dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "dpb full, wait buffer\n");
@@ -7472,10 +7482,12 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if (p_H264_Dpb->mVideo.dec_picture &&
 				p_H264_Dpb->mVideo.dec_picture->buf_spec_num  != -1)
 				buf_ref_process_for_exception(hw);
-			if (input_frame_based(vdec))
-				vdec_v4l_post_error_frame_event(ctx);
-			else
-				vh264_report_pts(hw);
+			if (!multi_header_error_frame_flag) {
+				if (input_frame_based(vdec))
+					vdec_v4l_post_error_frame_event(ctx);
+				else
+					vh264_report_pts(hw);
+			}
 			amvdec_stop();
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
