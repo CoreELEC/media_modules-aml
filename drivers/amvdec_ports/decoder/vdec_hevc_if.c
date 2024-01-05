@@ -640,7 +640,8 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 
 	pic->coded_width 	= ps->coded_width;
 	pic->coded_height 	= ps->coded_height;
-	coded_height 		= (ps->field == V4L2_FIELD_NONE) ? ps->coded_height : ps->coded_height >> 1;
+	coded_height 		= ((ps->field == V4L2_FIELD_NONE) || !inst->ctx->enable_di_post) ?
+		ps->coded_height : ps->coded_height >> 1;
 
 	pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, coded_height, dw, 64,
 		is_hevc_align32(0) ? 32 : 64);
@@ -694,7 +695,9 @@ static void set_cfg_info(struct vdec_hevc_inst *inst,
 		old_cfg->triple_write_mode,
 		new_cfg->triple_write_mode);
 
-	coded_height = (pic->field == V4L2_FIELD_NONE) ? pic->coded_height : pic->coded_height >> 1;
+	coded_height = ((pic->field == V4L2_FIELD_NONE) || !inst->ctx->enable_di_post) ?
+		pic->coded_height : pic->coded_height >> 1;
+
 	if (old_cfg->double_write_mode != dw_new) {
 		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, coded_height, dw_new, 64,
 			is_hevc_align32(0) ? 32 : 64);
