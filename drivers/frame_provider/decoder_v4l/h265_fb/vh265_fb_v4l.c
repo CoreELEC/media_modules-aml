@@ -11189,7 +11189,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			get_pic_poc(hevc, (vf->index >> 8) & 0xff),
 			vf->pts, vf->pts_us64,
 			vf->duration);
-		if (pic->pic_struct == 10 || pic->pic_struct == 12) {
+		if ((pic->pic_struct == 10 || pic->pic_struct == 12) && hevc->interlace_flag) {
 			index = (vf->index >> 8) & 0xff;
 		} else {
 			index = vf->index & 0xff;
