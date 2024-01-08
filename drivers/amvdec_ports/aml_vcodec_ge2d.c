@@ -194,6 +194,9 @@ static void update_ge2d_num_cache(struct aml_v4l2_ge2d *ge2d)
 {
 	atomic_set(&ge2d->ctx->ge2d_cache_num,
 		GE2D_FRAME_SIZE - kfifo_len(&ge2d->input));
+	if (atomic_read(&ge2d->ctx->ge2d_cache_num) <= 1) {
+		vdec_thread_wakeup(ge2d->ctx->ada_ctx);
+	}
 }
 
 static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
