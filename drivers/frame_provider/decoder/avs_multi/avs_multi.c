@@ -3749,8 +3749,11 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 					buffer_index = update_reference(hw, hw->decoding_index);
 				} else {
 					/* drop b frame before reference pic ready */
-					if (hw->refs[0] == -1)
+					if (hw->refs[0] == -1) {
+						WRITE_VREG(AVS_BUFFERIN, ~(1 << hw->decoding_index));
+						hw->buf_use[hw->decoding_index]--;
 						buffer_index = hw->vf_buf_num_used;
+					}
 				}
 
 				if (buffer_index < hw->vf_buf_num_used) {
