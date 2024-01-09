@@ -1869,7 +1869,7 @@ long mediasync_ins_set_curvideoframeinfo(MediaSyncManager* pSyncManage, mediasyn
 	ATRACE_COUNTER(pInstance->atrace_video, info.framePts);
 	pInstance->mSyncInfo.curVideoInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.curVideoInfo.frameSystemTime = info.frameSystemTime;
-	pInstance->mTrackMediaTime = div_u64(info.framePts * 100 , 9);
+	pInstance->mTrackMediaTime = div_s64(info.framePts * 100 , 9);
 	pInstance->mVideoCacheUpdateCount++;
 	if (media_sync_calculate_cache_enable) {
 		pInstance->frame_table[PTS_TYPE_VIDEO].mLastProcessedPts = info.framePts;
