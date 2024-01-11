@@ -6696,7 +6696,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 				else if (p_Dpb->fs[i]->is_output && !is_used_for_reference(p_Dpb->fs[i])) {
 					spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 					bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
-					return 0;
+					return have_free_buf_spec(vdec);
 				}
 			}
 			spin_unlock_irqrestore(&hw->bufspec_lock, flags);
