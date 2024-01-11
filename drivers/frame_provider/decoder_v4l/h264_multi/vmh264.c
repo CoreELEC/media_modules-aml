@@ -2013,12 +2013,14 @@ static void buf_spec_init(struct vdec_h264_hw_s *hw, bool buffer_reset_flag)
 		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
 			if (hw->buffer_spec[i].used == 1 || hw->buffer_spec[i].used == 2)
 				hw->buffer_spec[i].used = 0;
+			hw->buffer_spec[i].alloc_header_addr = 0;
 		}
 	} else {
 		for (i = 0; i < BUFSPEC_POOL_SIZE; i++) {
 			hw->buffer_spec[i].used = -1;
 			hw->buffer_spec[i].canvas_pos = -1;
 			hw->buffer_wrap[i] = -1;
+			hw->buffer_spec[i].alloc_header_addr = 0;
 		}
 	}
 
@@ -2690,6 +2692,7 @@ static void dealloc_buf_specs(struct vdec_h264_hw_s *hw,
 				"%s buf_spec_num %d\n", __func__, i);
 			spin_lock_irqsave(&hw->bufspec_lock, flags);
 			hw->buffer_spec[i].used = -1;
+			hw->buffer_spec[i].alloc_header_addr = 0;
 			if (release_all)
 				hw->buffer_spec[i].vf_ref = 0;
 			spin_unlock_irqrestore(&hw->bufspec_lock, flags);
@@ -5936,20 +5939,22 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 					"v4l: delay alloc the buffer.\n");
 			}
 		} else {
-			if (get_double_write_mode(hw)) {
-				config_buf_specs_ex(vdec);
-			} else {
-				spin_lock_irqsave(&hw->bufspec_lock, flags);
-				for (i = 0, j = 0; j < active_buffer_spec_num && i < BUFSPEC_POOL_SIZE;
-					i++) {
-					if (hw->buffer_spec[i].used != -1)
-						continue;
-					hw->buffer_spec[i].used = 0;
-					hw->buffer_spec[i].alloc_header_addr = 0;
-					hw->buffer_spec[i].canvas_pos = j;
-					j++;
+			if (!buffer_reset_flag) {
+				if (get_double_write_mode(hw)) {
+					config_buf_specs_ex(vdec);
+				} else {
+					spin_lock_irqsave(&hw->bufspec_lock, flags);
+					for (i = 0, j = 0; j < active_buffer_spec_num && i < BUFSPEC_POOL_SIZE;
+						i++) {
+						if (hw->buffer_spec[i].used != -1)
+							continue;
+						hw->buffer_spec[i].used = 0;
+						hw->buffer_spec[i].alloc_header_addr = 0;
+						hw->buffer_spec[i].canvas_pos = j;
+						j++;
+					}
+					spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 				}
-				spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 			}
 		}
 		mutex_unlock(&vmh264_mutex);
@@ -11313,6 +11318,7 @@ static void clear_refer_bufs(struct vdec_h264_hw_s *hw)
 		hw->buffer_spec[i].used = -1;
 		hw->buffer_spec[i].cma_alloc_addr = 0;
 		hw->buffer_spec[i].buf_adr = 0;
+		hw->buffer_spec[i].alloc_header_addr = 0;
 	}
 	hw->aml_buf = NULL;
 	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
