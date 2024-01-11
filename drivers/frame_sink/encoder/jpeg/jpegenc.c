@@ -244,20 +244,20 @@ const struct Jpegenc_BuffInfo_s jpegenc_buffspec[] = {
         }
     }, {
         .lev_id = JPEGENC_BUFFER_LEVEL_13M,
-        .max_width = 8192,
-        .max_height = 8192,
-        .min_buffsize = 0xc400000,
+        .max_width = 3840,
+        .max_height = 3840,
+        .min_buffsize = 0x6270000,
         .input = {
             .buf_start = 0,
-            .buf_size = 0xc000000,
+            .buf_size = 0x2a30000,
         },
         .assist = {
-            .buf_start = 0xc001000,
+            .buf_start = 0x2a31000,
             .buf_size = 0x2000,
         },
         .bitstream = {
-            .buf_start = 0xc010000,
-            .buf_size = 0x3f0000,
+            .buf_start = 0x2a80000,
+            .buf_size = 0x37f0000,
         }
     }, {
         .lev_id = JPEGENC_BUFFER_LEVEL_HD,
