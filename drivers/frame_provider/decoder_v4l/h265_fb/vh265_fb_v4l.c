@@ -10353,6 +10353,9 @@ static int recycle_pending_vframe(struct hevc_state_s *hevc, struct vframe_s *vf
 	unsigned long flags;
 	int index1;
 	int index2;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+	u64 timestamp_back = ctx->current_timestamp;
+
 	if (v4l_output_dw_with_compress(hevc, hevc->double_write_mode)) {
 		vf->type |= VIDTYPE_COMPRESS;
 		if (hevc->mmu_enable)
@@ -10378,11 +10381,17 @@ static int recycle_pending_vframe(struct hevc_state_s *hevc, struct vframe_s *vf
 	if (index1 < MAX_REF_PIC_NUM) {
 		hevc->m_PIC[index1]->vf_ref = 0;
 		hevc->m_PIC[index1]->output_ready = 0;
+		ctx->current_timestamp = hevc->m_PIC[index1]->timestamp;
+		vdec_v4l_post_error_frame_event(ctx);
 	}
 	if (index2 < MAX_REF_PIC_NUM) {
 		hevc->m_PIC[index2]->vf_ref = 0;
 		hevc->m_PIC[index2]->output_ready = 0;
+		ctx->current_timestamp = hevc->m_PIC[index2]->timestamp;
+		vdec_v4l_post_error_frame_event(ctx);
 	}
+
+	ctx->current_timestamp = timestamp_back;
 	if (hevc->wait_buf != 0)
 		WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
 			0x1);
@@ -10431,8 +10440,6 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 
 			if (recycle_pending_vframe(hevc, vf))
 				return -1;
-			if (vdec_frame_based(hw_to_vdec(hevc)))
-				vdec_v4l_post_error_frame_event(ctx);
 		} else if ((!pair_frame_top_flag) && (((vf->index >> 8) & 0xff) == 0xff)) {
 			if (!ctx->no_fbc_output &&
 				v4l_output_dw_with_compress(hevc, pair_pic->double_write_mode)) {
