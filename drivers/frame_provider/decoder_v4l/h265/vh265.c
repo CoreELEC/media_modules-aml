@@ -520,6 +520,9 @@ static unsigned int ref_frame_mark_flag[MAX_DECODE_INSTANCE_NUM] =
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static unsigned char get_idx(struct hevc_state_s *hevc);
 #endif
+#ifdef HEVC_PIC_STRUCT_SUPPORT
+static int recycle_pending_vframe(struct hevc_state_s *hevc, struct vframe_s *vf);
+#endif
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 static u32 dv_toggle_prov_name;
@@ -1465,6 +1468,7 @@ struct PIC_s {
 	unsigned char error_mark;
 	//dis_mark = 0:discard mark,dis_mark = 1:no discard mark
 	unsigned char dis_mark;
+	unsigned char drop_mark;
 	/**/ int slice_idx;
 	int m_aiRefPOCList0[MAX_SLICE_NUM][16];
 	int m_aiRefPOCList1[MAX_SLICE_NUM][16];
@@ -5805,6 +5809,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	new_pic->output_mark = 0;
 	new_pic->recon_mark = 0;
 	new_pic->error_mark = 0;
+	new_pic->drop_mark = 0;
 	new_pic->dis_mark = 0;
 	new_pic->nodisp_mark = 0;
 	new_pic->sei_present_flag = 0;
@@ -5903,6 +5908,18 @@ static bool is_pair_pic(struct PIC_s *pic)
 	return false;
 }
 
+static void vh265_report_err_timestamp_for_decoded_frames(struct aml_vcodec_ctx *ctx,
+	struct PIC_s *pic)
+{
+	u64 timestamp_bak;
+	timestamp_bak = ctx->current_timestamp;
+	ctx->current_timestamp = pic->timestamp;
+	vdec_v4l_post_error_frame_event(ctx);
+	ctx->decoder_status_info.decoder_error_count++;
+	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
+	ctx->current_timestamp = timestamp_bak;
+}
+
 /* clear no pair pic for interlace streams after flush */
 static void interlace_clear_no_pair_pic(struct hevc_state_s *hevc)
 {
@@ -5920,6 +5937,7 @@ static void interlace_clear_no_pair_pic(struct hevc_state_s *hevc)
 			pic->vf_ref = 0;
 			pic->output_ready = 0;
 			pic->error_mark = 1;
+			pic->drop_mark = 1;
 			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
 				"%s, pic decode index %d\n", __func__, pic->decode_idx);
 		}
@@ -5929,6 +5947,7 @@ static void interlace_clear_no_pair_pic(struct hevc_state_s *hevc)
 static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
 	struct PIC_s *pic_display;
+	struct vframe_s *vf;
 
 	if (pic) {
 		/*PB skip control */
@@ -5974,11 +5993,14 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					"Debug mode or error, recycle it\n");
 				}
 
-				ctx->current_timestamp = pic_display->timestamp;
-				vdec_v4l_post_error_frame_event(ctx);
-
-				ctx->decoder_status_info.decoder_error_count++;
-				vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
+				if (kfifo_peek(&hevc->pending_q, &vf)) {
+					hevc_print_cont(hevc, H265_DEBUG_BUFMGR, "%s: pending_q len %d index 0x%x\n",
+						__func__, kfifo_len(&hevc->pending_q), vf->index);
+					if (kfifo_get(&hevc->pending_q, &vf))
+						recycle_pending_vframe(hevc, vf);
+				}
+				pic_display->drop_mark = 1;
+				vh265_report_err_timestamp_for_decoded_frames(ctx, pic_display);
 			} else {
 				if (hevc->i_only & 0x1
 					&& pic_display->slice_type != 2) {
@@ -6328,9 +6350,8 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 						hevc_print_cont(hevc, 0,
 							"Debug or err,recycle it\n");
 					}
-
-					ctx->decoder_status_info.decoder_error_count++;
-					vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
+					pic_display->drop_mark = 1;
+					vh265_report_err_timestamp_for_decoded_frames(ctx, pic_display);
 				} else {
 					if (hevc->i_only & 0x1
 						&& pic_display->slice_type != 2) {
@@ -6965,7 +6986,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 
 		if (rpm_param->p.slice_segment_address == 0) {
 			struct PIC_s *pic = NULL;
-
 			hevc->new_pic = 1;
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (!hevc->m_ins_flag)
@@ -9039,6 +9059,7 @@ static int recycle_pending_vframe(struct hevc_state_s *hevc, struct vframe_s *vf
 		hevc->m_PIC[index1]->vf_ref = 0;
 		hevc->m_PIC[index1]->output_ready = 0;
 		hevc->m_PIC[index1]->error_mark = 1;
+		hevc->m_PIC[index1]->drop_mark = 1;
 		ctx->current_timestamp = hevc->m_PIC[index1]->timestamp;
 		vdec_v4l_post_error_frame_event(ctx);
 	}
@@ -9046,6 +9067,7 @@ static int recycle_pending_vframe(struct hevc_state_s *hevc, struct vframe_s *vf
 		hevc->m_PIC[index2]->vf_ref = 0;
 		hevc->m_PIC[index2]->output_ready = 0;
 		hevc->m_PIC[index2]->error_mark = 1;
+		hevc->m_PIC[index2]->drop_mark = 1;
 		ctx->current_timestamp = hevc->m_PIC[index2]->timestamp;
 		vdec_v4l_post_error_frame_event(ctx);
 	}
@@ -10807,10 +10829,7 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 
-	if (save_buffer && hevc->head_pre_parsed)
-		return;
-
-	if (hevc->decoding_pic) {
+	if (hevc->decoding_pic && hevc->buf_allocated) {
 		struct PIC_s *pic = hevc->decoding_pic;
 		struct aml_buf *aml_buf =
 		(struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
@@ -11156,9 +11175,12 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				set_aux_data(hevc, hevc->cur_pic, 1, 0);
 				if ((!hevc->first_pic_flag &&
 					hevc->cur_pic == NULL) ||
-					(!hevc->slice_count &&
-					hevc->last_dec_result != DEC_RESULT_UNFINISH))
+					((hevc->last_dec_result != DEC_RESULT_UNFINISH) &&
+					(!hevc->slice_count || (hevc->cur_pic != NULL && hevc->buf_allocated))))
 					vdec_v4l_post_error_frame_event(ctx);
+
+				if ((hevc->cur_pic && hevc->buf_allocated) && (hevc->chunk))
+					hevc->cur_pic->timestamp = hevc->chunk->timestamp;
 				goto pic_done;
 			} else {
 				hevc->dec_result = DEC_RESULT_AGAIN;
@@ -11363,8 +11385,8 @@ force_output:
 							hevc_print_cont(hevc, 0,
 							"Debug or err,recycle it\n");
 						}
-						ctx->current_timestamp = pic_display->timestamp;
-						vdec_v4l_post_error_frame_event(ctx);
+						pic_display->drop_mark = 1;
+						vh265_report_err_timestamp_for_decoded_frames(ctx, pic_display);
 					} else {
 						if ((pic_display->
 						slice_type != 2) && !pic_display->ip_mode) {
@@ -12049,6 +12071,22 @@ force_output:
 			hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 				"%s, bufmgr ret %d skip, DEC_RESULT_DONE\n",
 				__func__, ret);
+
+
+			if (hevc->cur_pic != NULL && hevc->buf_allocated) {
+				hevc->cur_pic->drop_mark = 1;
+				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"%s, set drop_mark decode_idx %d ts: %llu\n",
+					__func__, hevc->cur_pic->decode_idx, ctx->current_timestamp);
+			}
+
+			if (!hevc->buf_allocated && hevc->cur_pic) {
+				hevc->cur_pic->drop_mark = 1;
+				vh265_report_err_timestamp_for_decoded_frames(ctx, hevc->cur_pic);
+				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,"%s prev frame poc %d ts %llu\n",
+					__func__, hevc->cur_pic->POC, hevc->cur_pic->timestamp);
+			}
+
 			hevc->decoded_poc = INVALID_POC;
 			hevc->decoding_pic = NULL;
 			hevc->dec_result = DEC_RESULT_DONE;
@@ -13108,8 +13146,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 		pic = hevc->m_PIC[i];
 		if (pic == NULL)
 			continue;
-		if ((pic->referenced == 0) &&
-			(pic->vf_ref || pic->error_mark) &&
+		if (pic->referenced == 0 && (pic->vf_ref || pic->drop_mark) &&
 			pic->cma_alloc_addr) {
 
 			if ((ctx->vpp_is_need || ctx->enable_di_post) &&
@@ -13132,8 +13169,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 				__func__, i, pic->index, pic->cma_alloc_addr,
 				aml_buf->index, pic->vf_ref, pic->error_mark);
 			aml_buf_put_ref(&ctx->bm, aml_buf);
-			if ((hevc->nal_skip_policy & 0x2) && pic->error_mark &&
-				!pic->vf_ref) {
+			if (pic->drop_mark && !pic->vf_ref) {
 				aml_buf_put_ref(&ctx->bm, aml_buf);
 				if (ctx->vpp_is_need || ctx->enable_di_post) {
 					if (pic->pic_struct == 3 || pic->pic_struct == 4)
@@ -13143,9 +13179,12 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 						aml_buf_put_ref(&ctx->bm, aml_buf);
 					}
 				}
-			} else if (pic->error_mark && pic->vf_ref)
+			} else if (pic->drop_mark && pic->vf_ref)
 				hevc_print(hevc, H265_DEBUG_BUFMGR,
 					"%s error pic conflict!\n", __func__);
+
+			if (pic->drop_mark)
+				pic->drop_mark = 0;
 
 			if (ctx->no_fbc_output && pic->vf_ref) {
 				if (aml_buf->fbc->used[aml_buf->fbc->index] & 1) {
@@ -13291,7 +13330,7 @@ try_parse_head:
 		save_buffer && free_count < run_ready_min_buf_num &&
 		!hevc->head_pre_parsed) {
 		hevc->try_parsing = 1;
-		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
 				"Try pre parse head!\n");
 		return 1;
 	}
@@ -13327,6 +13366,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 				continue;
 			if (pic->output_mark != 0 ||
 				pic->referenced != 0 ||
+				pic->error_mark != 0 ||
 				(pic->referenced == 0 && pic->output_mark == 0 && pic->vf_ref != 0)) /* for interlace */
 				decode_count++;
 		}
@@ -13783,7 +13823,10 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 					if ((hevc->cur_pic->POC + poc_num_margin < pic->POC) && (pic->referenced == 0) &&
 						(pic->output_mark == 1) && (pic->output_ready == 0)) {
 						pic->output_mark = 0;
+						pic->drop_mark = 1;
 						hevc_print(hevc, 0, "DPB poc error, remove error frame\n");
+						ctx->current_timestamp = pic->timestamp;
+						vdec_v4l_post_error_frame_event(ctx);
 					}
 				}
 			}
@@ -14060,7 +14103,10 @@ done_end:
 					if ((hevc->cur_pic->POC + poc_num_margin < pic->POC) && (pic->referenced == 0) &&
 						(pic->output_mark == 1) && (pic->output_ready == 0)) {
 						pic->output_mark = 0;
+						pic->drop_mark = 1;
 						hevc_print(hevc, 0, "DPB poc error, remove error frame\n");
+						ctx->current_timestamp = pic->timestamp;
+						vdec_v4l_post_error_frame_event(ctx);
 					}
 				}
 			}
@@ -14227,6 +14273,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	else if (step == 0x11)
 		step = 0x12;
 
+
 	if (hevc->fatal_error & DECODER_FATAL_ERROR_NO_MEM)
 		return 0;
 
@@ -14241,6 +14288,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			   "h265 work pending,not ready for run.\n");
 		return 0;
 	}
+
 	hevc->timeout_processing = 0;
 	if (!hevc->first_sc_checked && hevc->mmu_enable) {
 		int size;
@@ -14287,7 +14335,6 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		}
 	}
 #endif
-
 	if (disp_vframe_valve_level &&
 		kfifo_len(&hevc->display_q) >=
 		disp_vframe_valve_level) {
@@ -14319,6 +14366,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		not_run_ready[hevc->index] = 0;
 	else
 		not_run_ready[hevc->index]++;
+
 	if (vdec->parallel_dec == 1)
 		return ret ? (CORE_MASK_HEVC) : 0;
 	else
