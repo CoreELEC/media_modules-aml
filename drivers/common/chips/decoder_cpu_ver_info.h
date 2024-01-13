@@ -165,6 +165,7 @@ struct dos_of_dev_s {
 	bool is_support_mmu_copy;
 	int hevc_stream_extra_shift;
 	bool is_vcpu_clk_set;
+	bool is_vp9_adapt_prob_hw_mode;
 
 	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
 
@@ -238,6 +239,8 @@ inline int get_hevc_stream_extra_shift_bytes(void);
 inline bool is_mjpeg_endian_rematch(void);
 
 inline bool is_vcpu_clk_set(void);
+
+inline bool is_vp9_adapt_prob_hw_mode(void);
 
 void pr_dos_infos(void);
 

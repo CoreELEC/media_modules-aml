@@ -321,6 +321,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_dual_core  = true,
 		.is_support_axi_ctrl = true,
 		.is_mjpeg_endian_rematch = true,
+		.is_vp9_adapt_prob_hw_mode = true,
 		.hevc_stream_extra_shift = 8,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
@@ -359,6 +360,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_rdma     = true,
 		.is_support_axi_ctrl = true,
 		.is_mjpeg_endian_rematch = true,
+		.is_vp9_adapt_prob_hw_mode = true,
 		.hevc_stream_extra_shift = 8,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
@@ -410,6 +412,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_dual_core = false,
 		.is_mjpeg_endian_rematch = true,
 		.is_vcpu_clk_set = true,
+		.is_vp9_adapt_prob_hw_mode = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_NO_AVS | FMT_HEVC_VP9_AV1,
@@ -968,6 +971,12 @@ inline bool is_vcpu_clk_set(void)
 }
 EXPORT_SYMBOL(is_vcpu_clk_set);
 
+inline bool is_vp9_adapt_prob_hw_mode(void)
+{
+	return platform_dos_dev->is_vp9_adapt_prob_hw_mode;
+}
+EXPORT_SYMBOL(is_vp9_adapt_prob_hw_mode);
+
 void pr_dos_infos(void)
 {
 	pr_info("dos device info:\n");
@@ -997,6 +1006,7 @@ void pr_dos_infos(void)
 	pr_info("hevc_stream_extra_shift_bytes: %d\n", get_hevc_stream_extra_shift_bytes());
 	pr_info("mjpeg endian rematch: %d\n", is_mjpeg_endian_rematch());
 	pr_info("vcpu clk set        : %d\n", is_vcpu_clk_set());
+	pr_info("vp9 adatp prob hw mode : %d\n", is_vp9_adapt_prob_hw_mode());
 }
 EXPORT_SYMBOL(pr_dos_infos);
 

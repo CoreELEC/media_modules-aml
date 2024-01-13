@@ -1181,6 +1181,8 @@ struct BuffInfo_s {
 	struct buff_s ipp0;
 	struct buff_s ipp1;
 #endif
+	struct buff_s prob_buf;
+	struct buff_s prob_cnt_buf;
 } BuffInfo_t;
 #ifdef MULTI_INSTANCE_SUPPORT
 #define DEC_RESULT_NONE             0
@@ -3704,7 +3706,13 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 		.lmem = {
 			.buf_size = 0x400 * 2,
-		}
+		},
+		.prob_buf = {
+			.buf_size = PROB_BUF_SIZE,
+		},
+		.prob_cnt_buf = {
+			.buf_size = COUNT_BUF_SIZE,
+		},
 	},
 	{
 		.max_width = 4096,
@@ -3800,7 +3808,13 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 		.lmem = {
 			.buf_size = 0x400 * 2,
-		}
+		},
+		.prob_buf = {
+			.buf_size = PROB_BUF_SIZE,
+		},
+		.prob_cnt_buf = {
+			.buf_size = COUNT_BUF_SIZE,
+		},
 	},
 	{
 		.max_width = 4096*2,
@@ -3875,7 +3889,13 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 		.lmem = {
 			.buf_size = 0x400 * 2,
-		}
+		},
+		.prob_buf = {
+			.buf_size = PROB_BUF_SIZE,
+		},
+		.prob_cnt_buf = {
+			.buf_size = COUNT_BUF_SIZE,
+		},
 	},
 	{
 		/* 8M bytes */
@@ -3902,6 +3922,8 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 #endif
 		.rpm			= {.buf_size = RPM_BUF_SIZE},
 		.lmem			= {.buf_size = 0x400 * 2},
+		.prob_buf		= {.buf_size = PROB_BUF_SIZE,},
+		.prob_cnt_buf	= {.buf_size = COUNT_BUF_SIZE,},
 	},
 	{
 		.max_width		= 4096,
@@ -3927,6 +3949,8 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 #endif
 		.rpm			= {.buf_size = RPM_BUF_SIZE},
 		.lmem			= {.buf_size = 0x400 * 2},
+		.prob_buf		= {.buf_size = PROB_BUF_SIZE,},
+		.prob_cnt_buf	= {.buf_size = COUNT_BUF_SIZE,},
 	},
 	{
 		.max_width		= 4096*2,
@@ -3952,6 +3976,8 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 #endif
 		.rpm			= {.buf_size = RPM_BUF_SIZE},
 		.lmem			= {.buf_size = 0x400 * 2},
+		.prob_buf		= {.buf_size = PROB_BUF_SIZE,},
+		.prob_cnt_buf	= {.buf_size = COUNT_BUF_SIZE,},
 	},
 #ifdef NEW_FRONT_BACK_CODE
 	{
@@ -3996,6 +4022,8 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.lmem			= {.buf_size = 0x600 * 2}, //new dual
 		.frame_header_lmem	= {.buf_size = 0x8000}, //x49-5 =68  68+1=69    LMEM_FRAME_HEADER_END 0x049   LMEM_FRAME_HEADER_BEGIN 0x005
 		.rpm			= {.buf_size = 0x80 * 4},
+		.prob_buf		= {.buf_size = PROB_BUF_SIZE,},
+		.prob_cnt_buf	= {.buf_size = COUNT_BUF_SIZE,},
 	}
 #endif
 };
@@ -5908,7 +5936,9 @@ static void init_buff_spec_fb(struct VP9Decoder_s *pbi, struct BuffInfo_s* buf_s
 	buf_spec->frame_header_lmem.buf_start	  = buf_spec->lmem.buf_start + buf_spec->lmem.buf_size;
 
 	buf_spec->rpm.buf_start 		= buf_spec->frame_header_lmem.buf_start + buf_spec->frame_header_lmem.buf_size;
-	buf_spec->end_adr = buf_spec->rpm.buf_start + buf_spec->rpm.buf_size;
+	buf_spec->prob_buf.buf_start = buf_spec->rpm.buf_start + buf_spec->rpm.buf_size;
+	buf_spec->prob_cnt_buf.buf_start = buf_spec->prob_buf.buf_start + buf_spec->prob_buf.buf_size;
+	buf_spec->end_adr = buf_spec->prob_cnt_buf.buf_start + buf_spec->prob_cnt_buf.buf_size;
 
 	if (debug)printk("%s workspace (%x %x) size = %x\n", __func__,buf_spec->start_adr, buf_spec->end_adr, buf_spec->end_adr-buf_spec->start_adr);
 	if (debug) {
@@ -5933,7 +5963,9 @@ static void init_buff_spec_fb(struct VP9Decoder_s *pbi, struct BuffInfo_s* buf_s
 		printk("fb_mpred_imp0.buf_start 	:%x\n"	, buf_spec->fb_mpred_imp0.buf_start    );
 		printk("fb_mpred_imp1.buf_start 	:%x\n"	, buf_spec->fb_mpred_imp1.buf_start    );
 		printk("tile_header_param.buf_start :%x\n"	, buf_spec->tile_header_param.buf_start);
-		printk("rpm.buf_start			  :%x\n"  , buf_spec->rpm.buf_start 		   );
+		printk("rpm.buf_start				:%x\n"  , buf_spec->rpm.buf_start 		   );
+		printk("prob_buf.buf_start			:%x\n"  , buf_spec->prob_buf.buf_start	   );
+		printk("prob_cnt_buf.buf_start		:%x\n"  , buf_spec->prob_cnt_buf.buf_start	   );
 	}
 
 }
@@ -5992,8 +6024,12 @@ static void init_buff_spec(struct VP9Decoder_s *pbi,
 #endif
 	buf_spec->lmem.buf_start =
 		WORKBUF_ALIGN(buf_spec->rpm.buf_start + buf_spec->rpm.buf_size);
-	buf_spec->end_adr =
+	buf_spec->prob_buf.buf_start =
 		WORKBUF_ALIGN(buf_spec->lmem.buf_start + buf_spec->lmem.buf_size);
+	buf_spec->prob_cnt_buf.buf_start =
+		WORKBUF_ALIGN(buf_spec->prob_buf.buf_start + buf_spec->prob_buf.buf_size);
+	buf_spec->end_adr =
+		WORKBUF_ALIGN(buf_spec->prob_cnt_buf.buf_start + buf_spec->prob_cnt_buf.buf_size);
 
 	if (!pbi)
 		return;
@@ -6075,6 +6111,10 @@ static void init_buff_spec(struct VP9Decoder_s *pbi,
 			pr_info("rpm.buf_start             :%x\n",
 				   buf_spec->rpm.buf_start);
 		}
+		pr_info("prob_buf.buf_start        :%x\n",
+				buf_spec->prob_buf.buf_start);
+		pr_info("prob_cnt_buf.buf_start    :%x\n",
+				buf_spec->prob_cnt_buf.buf_start);
 	}
 }
 
@@ -9067,29 +9107,36 @@ static void vp9_local_uninit(struct VP9Decoder_s *pbi)
 				pbi->lmem_phy_addr);
 		pbi->lmem_addr = NULL;
 	}
-	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
-		(vdec_secure(hw_to_vdec(pbi)))) {
-		tee_vp9_prob_free((u32)pbi->prob_buffer_phy_addr);
+	if (is_vp9_adapt_prob_hw_mode()) {
 		pbi->prob_buffer_phy_addr = 0;
 		pbi->count_buffer_phy_addr = 0;
 		pbi->prob_buffer_addr = NULL;
 		pbi->count_buffer_addr = NULL;
 	} else {
-		if (pbi->prob_buffer_addr) {
-			if (pbi->prob_buffer_phy_addr)
-				decoder_dma_free_coherent(pbi->prob_buf_handle,
-					PROB_BUF_SIZE, pbi->prob_buffer_addr,
-					pbi->prob_buffer_phy_addr);
-
+		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+			(vdec_secure(hw_to_vdec(pbi)))) {
+			tee_vp9_prob_free((u32)pbi->prob_buffer_phy_addr);
+			pbi->prob_buffer_phy_addr = 0;
+			pbi->count_buffer_phy_addr = 0;
 			pbi->prob_buffer_addr = NULL;
-		}
-		if (pbi->count_buffer_addr) {
-			if (pbi->count_buffer_phy_addr)
-				decoder_dma_free_coherent(pbi->count_buf_handle,
-					COUNT_BUF_SIZE, pbi->count_buffer_addr,
-					pbi->count_buffer_phy_addr);
-
 			pbi->count_buffer_addr = NULL;
+		} else {
+			if (pbi->prob_buffer_addr) {
+				if (pbi->prob_buffer_phy_addr)
+					decoder_dma_free_coherent(pbi->prob_buf_handle,
+						PROB_BUF_SIZE, pbi->prob_buffer_addr,
+						pbi->prob_buffer_phy_addr);
+
+				pbi->prob_buffer_addr = NULL;
+			}
+			if (pbi->count_buffer_addr) {
+				if (pbi->count_buffer_phy_addr)
+					decoder_dma_free_coherent(pbi->count_buf_handle,
+						COUNT_BUF_SIZE, pbi->count_buffer_addr,
+						pbi->count_buffer_phy_addr);
+
+				pbi->count_buffer_addr = NULL;
+			}
 		}
 	}
 	if (pbi->mmu_enable) {
@@ -9272,33 +9319,40 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 	}
 	pbi->lmem_ptr = pbi->lmem_addr;
 
-	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
-		(vdec_secure(hw_to_vdec(pbi)))) {
-		u32 prob_addr, id;
-		id = tee_vp9_prob_malloc(&prob_addr);
-		if (prob_addr <= 0)
-			pr_err("%s, tee[%d] malloc prob buf failed\n", __func__, id);
-		else {
-			pbi->prob_buffer_phy_addr = prob_addr;
-			pbi->count_buffer_phy_addr = pbi->prob_buffer_phy_addr + PROB_BUF_SIZE;
-		}
+	if (is_vp9_adapt_prob_hw_mode()) {
+		pbi->prob_buffer_phy_addr = cur_buf_info->prob_buf.buf_start;
+		pbi->count_buffer_phy_addr = cur_buf_info->prob_cnt_buf.buf_start;
 		pbi->prob_buffer_addr = NULL;
 		pbi->count_buffer_addr = NULL;
 	} else {
-		pbi->prob_buffer_addr = decoder_dma_alloc_coherent(&pbi->prob_buf_handle,
-					PROB_BUF_SIZE, &pbi->prob_buffer_phy_addr, "VP9_PROB_BUF");
-		if (pbi->prob_buffer_addr == NULL) {
-			pr_err("%s: failed to alloc prob_buffer\n", __func__);
-			return -1;
+		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+			(vdec_secure(hw_to_vdec(pbi)))) {
+			u32 prob_addr, id;
+			id = tee_vp9_prob_malloc(&prob_addr);
+			if (prob_addr <= 0)
+				pr_err("%s, tee[%d] malloc prob buf failed\n", __func__, id);
+			else {
+				pbi->prob_buffer_phy_addr = prob_addr;
+				pbi->count_buffer_phy_addr = pbi->prob_buffer_phy_addr + PROB_BUF_SIZE;
+			}
+			pbi->prob_buffer_addr = NULL;
+			pbi->count_buffer_addr = NULL;
+		} else {
+			pbi->prob_buffer_addr = decoder_dma_alloc_coherent(&pbi->prob_buf_handle,
+						PROB_BUF_SIZE, &pbi->prob_buffer_phy_addr, "VP9_PROB_BUF");
+			if (pbi->prob_buffer_addr == NULL) {
+				pr_err("%s: failed to alloc prob_buffer\n", __func__);
+				return -1;
+			}
+			memset(pbi->prob_buffer_addr, 0, PROB_BUF_SIZE);
+			pbi->count_buffer_addr = decoder_dma_alloc_coherent(&pbi->count_buf_handle,
+						COUNT_BUF_SIZE, &pbi->count_buffer_phy_addr, "VP9_COUNT_BUF");
+			if (pbi->count_buffer_addr == NULL) {
+				pr_err("%s: failed to alloc count_buffer\n", __func__);
+				return -1;
+			}
+			memset(pbi->count_buffer_addr, 0, COUNT_BUF_SIZE);
 		}
-		memset(pbi->prob_buffer_addr, 0, PROB_BUF_SIZE);
-		pbi->count_buffer_addr = decoder_dma_alloc_coherent(&pbi->count_buf_handle,
-					COUNT_BUF_SIZE, &pbi->count_buffer_phy_addr, "VP9_COUNT_BUF");
-		if (pbi->count_buffer_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
-			return -1;
-		}
-		memset(pbi->count_buffer_addr, 0, COUNT_BUF_SIZE);
 	}
 
 	if (pbi->mmu_enable) {
@@ -12268,6 +12322,14 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	if ((adapt_prob_status & 0xff) == 0xfd) {
 		struct VP9_Common_s *const cm = &pbi->common;
 		int pre_fc = 0;
+
+		if (pbi->prob_buffer_phy_addr) {
+			vp9_print(pbi, VP9_DEBUG_BUFMGR_DETAIL,
+				"VP9: use adapt prob soft mode\n");
+		} else {
+			vp9_print(pbi, PRINT_FLAG_ERROR,
+				"Error: the vp9 prob_buffer_phy_addr is NULL\n");
+		}
 
 		if (pbi->m_ins_flag)
 				reset_process_time(pbi);
