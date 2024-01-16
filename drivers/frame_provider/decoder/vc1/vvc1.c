@@ -90,6 +90,11 @@
 #define DECODE_STATUS_PIC_HEADER_DONE 0x2
 #define DECODE_STATUS_PIC_SKIPPED     0x3
 #define DECODE_STATUS_BUF_INVALID     0x4
+#define DECODE_STATUS_PARAM_CHECK     0x5
+
+/*bit0:1 support vc1 new version, 0: old version
+  bit1:1 support DECODE_STATUS_PARAM_CHECK*/
+#define NEW_DRV_VER         3
 
 #define VF_POOL_SIZE		16
 #define DECODE_BUFFER_NUM_MAX	4
@@ -200,6 +205,7 @@ enum {
 #define VC1_DEBUG_DETAIL                   0x01
 
 #define INVALID_IDX -1  /* Invalid buffer index.*/
+#define MAX_SIZE_2K (1920 * 1088)
 
 static u32 udebug_flag;
 static int debug;
@@ -515,7 +521,7 @@ static int vvc1_config_buf(struct vdec_vc1_hw_s *hw)
 	hw->decoding_index = index;
 	hw->buf_use[hw->decoding_index]++;
 	canvas1_info = (index2canvas(index) << 8) | index;
-	vc1_print(0, VC1_DEBUG_DETAIL,"%s: i %d, buf_use %d, canvas1_info 0x%x\n",
+	vc1_print(0, VC1_DEBUG_DETAIL,"%s: decoding_index %d, buf_use %d, canvas1_info 0x%x\n",
 		__func__, index, hw->buf_use[hw->decoding_index], canvas1_info);
 	WRITE_VREG(CANVAS_BUF_REG, canvas1_info);
 
@@ -845,6 +851,29 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 	return 0;
 }
 
+static int is_oversize(int w, int h)
+{
+	int max = MAX_SIZE_2K;
+
+	if (w <= 0 || h <= 0)
+		return true;
+
+	if (h != 0 && (w > max / h))
+		return true;
+
+	if (w > h) {
+		if (w > 1920 || h > 1088)
+			return true;
+	} else if (w < h) {
+		if (w > 1088 || h > 1920)
+			return true;
+	} else {
+		if (w*h > 1920 *1088)
+			return true;
+	}
+
+	return false;
+}
 
 static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 {
@@ -863,7 +892,9 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 
 	debug_tag = READ_VREG(DEBUG_REG1);
 	if (debug_tag != 0) {
-		vc1_print(0, 0, "%s: dbg%x: %x\n", __func__, debug_tag, READ_VREG(DEBUG_REG2));
+		vc1_print(0, 0, "%s: dbg%x: %x, wp 0x%x, rp 0x%x\n", __func__,
+			debug_tag, READ_VREG(DEBUG_REG2),
+			READ_VREG(VLD_MEM_VIFIFO_WP), READ_VREG(VLD_MEM_VIFIFO_RP));
 		WRITE_VREG(DEBUG_REG1, 0);
 		return IRQ_HANDLED;
 	}
@@ -877,6 +908,17 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 		hw->interlace_flag = (READ_VREG(VC1_PIC_INFO) >> 28) & 0x1;
 		vc1_print(0, 0, "%s: SEQ_HEADER_DONE frame_width %d/%d, interlace_flag %d\n", __func__,
 			hw->frame_width, hw->frame_height, hw->interlace_flag);
+		WRITE_VREG(DECODE_STATUS, 0);
+		return IRQ_HANDLED;
+	} else if (status_reg == DECODE_STATUS_PARAM_CHECK) {
+		v_width = READ_VREG(VC1_PIC_INFO) & 0x3fff;
+		v_height = (READ_VREG(VC1_PIC_INFO) >> 14) & 0x3fff;
+
+		if (is_oversize(v_width, v_height)) {
+			WRITE_VREG(VC1_PIC_INFO, 0);
+			vc1_print(0, VC1_DEBUG_DETAIL, "%s: oversize v_width %d, v_height %d\n",
+				__func__, v_width, v_height);
+		}
 		WRITE_VREG(DECODE_STATUS, 0);
 		return IRQ_HANDLED;
 	} else if (status_reg == DECODE_STATUS_PIC_SKIPPED) {//PIC Skipped
@@ -1057,16 +1099,16 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 						buffer_index = hw->vf_buf_num_used;
 						WRITE_VREG(VC1_BUFFERIN, ~(1 << hw->decoding_index));
 						hw->buf_use[hw->decoding_index]--;
-						vc1_print(0, VC1_DEBUG_DETAIL,"%s: index %d, buf_use %d\n",
+						vc1_print(0, VC1_DEBUG_DETAIL,"%s: decoding_index %d, buf_use %d\n",
 							__func__, hw->decoding_index, hw->buf_use[hw->decoding_index]);
 					}
 				}
 
 				if (buffer_index < hw->vf_buf_num_used) {
-					vc1_print(0, VC1_DEBUG_DETAIL, "%s: show index %d\n",	__func__, buffer_index);
+					vc1_print(0, VC1_DEBUG_DETAIL, "%s: show buffer_index %d\n",	__func__, buffer_index);
 					prepare_display_buf(hw, &hw->pics[buffer_index]);
 				} else {
-					vc1_print(0, VC1_DEBUG_DETAIL, "%s: drop pic index %d\n",	__func__, buffer_index);
+					vc1_print(0, VC1_DEBUG_DETAIL, "%s: drop buffer_index %d\n",	__func__, buffer_index);
 				}
 			}
 
@@ -1404,8 +1446,8 @@ static int vvc1_prot_init(void)
 
 	WRITE_VREG(VC1_SOS_COUNT, 0);
 	WRITE_VREG(VC1_BUFFERIN, 0);
-	WRITE_VREG(VC1_BUFFEROUT, 1);//identify new driver version
-	vc1_print(0, VC1_DEBUG_DETAIL,"%s VC1_BUFFEROUT 1\n", __func__);
+	WRITE_VREG(VC1_BUFFEROUT, NEW_DRV_VER);//identify new driver version
+	vc1_print(0, VC1_DEBUG_DETAIL,"%s VC1_BUFFEROUT %d\n", __func__, NEW_DRV_VER);
 
 	/* clear mailbox interrupt */
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
