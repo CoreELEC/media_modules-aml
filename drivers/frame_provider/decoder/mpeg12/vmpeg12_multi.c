@@ -378,7 +378,7 @@ struct vdec_mpeg12_hw_s {
 	struct userdata_meta_info_t meta_info;
 	u32 vf_ucode_cc_last_wp;
 	bool process_busy;
-	u32 chunk_size;
+	u32 chunk_size; // 1.chunk->size: one package data size.  2.chunk_size: the reserved(left) size of chunk->size, mainly for one-package-multi-frame.
 	u32 chunk_offset;
 	u32 consume_byte;
 };
@@ -2790,6 +2790,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		}
 		hw->input_empty = 0;
 		if (vdec_frame_based(vdec) && (hw->chunk != NULL)) {
+			hw->chunk_offset = hw->chunk->offset;
+			hw->chunk_size = hw->chunk->size;
 			r = hw->chunk_size +
 				(hw->chunk_offset & (VDEC_FIFO_ALIGN - 1));
 			WRITE_VREG(VIFF_BIT_CNT, r * 8);
@@ -2803,6 +2805,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			READ_VREG(VLD_MEM_VIFIFO_WP),
 			READ_VREG(VLD_MEM_VIFIFO_RP),
 			r, READ_VREG(VIFF_BIT_CNT));
+		WRITE_VREG(AV_SCRATCH_L, 0);
 		vdec_enable_input(vdec);
 		hw->dec_result = DEC_RESULT_NONE;
 		hw->last_vld_level = 0;
@@ -3348,20 +3351,20 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 		) {
 		int jj;
 		if (hw->chunk && hw->chunk->block &&
-			hw->chunk->size > 0) {
+			hw->chunk_size > 0) {
 			u8 *data = NULL;
 
 			if (!hw->chunk->block->is_mapped)
 				data = codec_mm_vmap(hw->chunk->block->start +
-					hw->chunk->offset, hw->chunk->size);
+					hw->chunk_offset, hw->chunk_size);
 			else
 				data = ((u8 *)hw->chunk->block->start_virt) +
-					hw->chunk->offset;
+					hw->chunk_offset;
 
 			debug_print(DECODE_ID(hw), 0,
 				"frame data size 0x%x\n",
-				hw->chunk->size);
-			for (jj = 0; jj < hw->chunk->size; jj++) {
+				hw->chunk_size);
+			for (jj = 0; jj < hw->chunk_size; jj++) {
 				if ((jj & 0xf) == 0)
 					debug_print(DECODE_ID(hw),
 						PRINT_FRAMEBASE_DATA,
@@ -3603,7 +3606,7 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 	if (hw->chunk) {
 		/*frame based input*/
 		WRITE_VREG(MREG_INPUT,
-		(hw->chunk->offset & 7) | (1<<7) | (hw->ctx_valid<<6));
+		(hw->chunk_offset & 7) | (1<<7) | (hw->ctx_valid<<6));
 	} else {
 		/*stream based input*/
 		WRITE_VREG(MREG_INPUT, (hw->ctx_valid<<6));
@@ -3827,10 +3830,10 @@ static unsigned char get_data_check_sum
 
 	if (!hw->chunk->block->is_mapped)
 		data = codec_mm_vmap(hw->chunk->block->start +
-			hw->chunk->offset, size);
+			hw->chunk_offset, size);
 	else
 		data = ((u8 *)hw->chunk->block->start_virt) +
-			hw->chunk->offset;
+			hw->chunk_offset;
 
 	for (jj = 0; jj < size; jj++)
 		sum += data[jj];

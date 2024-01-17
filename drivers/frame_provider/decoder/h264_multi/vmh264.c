@@ -994,7 +994,7 @@ struct vdec_h264_hw_s {
 	ulong mc_cpu_handle;
 	struct mutex pic_mutex;
 	u32 is_interlace;
-	u32 chunk_size;
+	u32 chunk_size; // 1.chunk->size: one package data size.  2.chunk_size: the reserved(left) size of chunk->size, mainly for one-package-multi-frame.
 	u32 chunk_offset;
 	u32 consume_byte;
 	u32 reserved_byte;
@@ -7131,7 +7131,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 						p_H264_Dpb->mSlice.slice_type,
 						hw->chunk->pts, 1, index);
 #endif
-					hw->curr_pic_offset += hw->chunk->size;
+					hw->curr_pic_offset += hw->chunk_size;
 				}
 				mutex_unlock(&hw->chunks_mutex);
 				vdec_count_info(&hw->gvs, 0,hw->curr_pic_offset);
@@ -8643,20 +8643,20 @@ static void vmh264_dump_state(struct vdec_s *vdec)
 		) {
 		int jj;
 		if (hw->chunk && hw->chunk->block &&
-			hw->chunk->size > 0) {
+			hw->chunk_size > 0) {
 			u8 *data = NULL;
 
 			if (!hw->chunk->block->is_mapped)
 				data = codec_mm_vmap(hw->chunk->block->start +
-					hw->chunk->offset, hw->chunk->size);
+					hw->chunk_offset, hw->chunk_size);
 			else
 				data = ((u8 *)hw->chunk->block->start_virt)
-					+ hw->chunk->offset;
+					+ hw->chunk_offset;
 
 			dpb_print(DECODE_ID(hw), 0,
 				"frame data size 0x%x\n",
-				hw->chunk->size);
-			for (jj = 0; jj < hw->chunk->size; jj++) {
+				hw->chunk_size);
+			for (jj = 0; jj < hw->chunk_size; jj++) {
 				if ((jj & 0xf) == 0)
 					dpb_print(DECODE_ID(hw),
 					PRINT_FRAMEBASE_DATA,
@@ -10478,10 +10478,13 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				vdec_schedule_work(&hw->work);
 				return;
 			}
+			hw->chunk_offset = hw->chunk->offset;
+			hw->chunk_size = hw->chunk->size;
+			WRITE_VREG(AV_SCRATCH_1, 0);
 			hw->dec_result = DEC_RESULT_NONE;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 				"%s: chunk size 0x%x\n",
-				__func__, hw->chunk->size);
+				__func__, hw->chunk_size);
 
 			if (dpb_is_debug(DECODE_ID(hw),
 				PRINT_FRAMEBASE_DATA)) {
@@ -10491,11 +10494,11 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				if (!hw->chunk->block->is_mapped)
 					data = codec_mm_vmap(
 						hw->chunk->block->start +
-						hw->chunk->offset, r);
+						hw->chunk_offset, r);
 				else
 					data = ((u8 *)
 						hw->chunk->block->start_virt)
-						+ hw->chunk->offset;
+						+ hw->chunk_offset;
 
 				for (jj = 0; jj < r; jj++) {
 					if ((jj & 0xf) == 0)
@@ -10518,8 +10521,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				READ_VREG(POWER_CTL_VLD) |
 					(0 << 10) | (1 << 9) | (1 << 6));
 			WRITE_VREG(H264_DECODE_INFO, (1<<13));
-			decode_size = hw->chunk->size +
-				(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+			decode_size = hw->chunk_size +
+				(hw->chunk_offset & (VDEC_FIFO_ALIGN - 1));
 			WRITE_VREG(H264_DECODE_SIZE, decode_size);
 			WRITE_VREG(VIFF_BIT_CNT, decode_size * 8);
 			vdec_enable_input(vdec);
@@ -11017,10 +11020,10 @@ static unsigned char get_data_check_sum
 
 	if (!hw->chunk->block->is_mapped)
 		data = codec_mm_vmap(hw->chunk->block->start +
-			hw->chunk->offset, size);
+			hw->chunk_offset, size);
 	else
 		data = ((u8 *)hw->chunk->block->start_virt)
-			+ hw->chunk->offset;
+			+ hw->chunk_offset;
 
 	for (jj = 0; jj < size; jj++)
 		sum += data[jj];
