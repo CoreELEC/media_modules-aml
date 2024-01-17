@@ -706,7 +706,8 @@ struct vdec_h264_hw_s {
 
 	/* buffer for store all sei data */
 	void *sei_data_buf;
-	u32	sei_data_len;
+	u32 sei_data_len;
+	bool sei_need_parse;
 
 	/* buffer for storing one itu35 recored */
 	void *sei_itu_data_buf;
@@ -7004,6 +7005,7 @@ static void parse_sei_data(struct vdec_h264_hw_s *hw,
 			parsed_size++;
 		}
 	}
+	hw->sei_need_parse = false;
 }
 
 static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
@@ -7779,7 +7781,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				data_low,
 				data_high);*/
 
-		parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len);
+		if (hw->sei_need_parse == true)
+			parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len);
 
 		if (hw->config_bufmgr_done == 0) {
 			hw->dec_result = DEC_RESULT_DONE;
@@ -8333,8 +8336,25 @@ send_again:
 #endif
 			trans_data_buf = (u8 *)hw->aux_addr;
 
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
+				"%s: sei data size: %d, aux_data_len: %d\n",
+				__func__, hw->sei_itu_data_len, aux_data_len);
+
 			if (trans_data_buf[7] == AUX_TAG_SEI) {
 				int left_len;
+				unsigned short *p = (unsigned short *)hw->lmem_addr;
+				unsigned short first_mb_in_slice;
+				struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
+
+				if ((pic != NULL) && (pic->mb_aff_frame_flag == 1))
+					first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3] * 2;
+				else
+					first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3];
+
+				if (first_mb_in_slice == 0) {
+					hw->sei_data_len = 0;
+					hw->sei_itu_data_len = 0;
+				}
 
 				sei_data_buf = (u8 *)hw->sei_data_buf
 							+ hw->sei_data_len;
@@ -8357,11 +8377,21 @@ send_again:
 						sei_data_buf[i+2] = swap_byte;
 					}
 
+					if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
+						for (i = 0; i < aux_data_len; i++) {
+							dpb_print_cont(DECODE_ID(hw), 0, "%02x ", sei_data_buf[i]);
+							if (((i + 1) & 0xf) == 0)
+								dpb_print_cont(DECODE_ID(hw), 0, "\n");
+						}
+						dpb_print_cont(DECODE_ID(hw), 0, "\n");
+					}
+
 					for (i = aux_data_len-1; i >= 0; i--)
 						if (sei_data_buf[i] != 0)
 							break;
 
 					hw->sei_data_len += i+1;
+					hw->sei_need_parse = true;
 				} else
 					dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_ERROR,
@@ -9821,7 +9851,7 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 			} else {
 				ud_param->buf_len = 0;
 				dpb_print(DECODE_ID(hw), PRINT_FLAG_UD_DETAIL,
-					"set sei data len(%s) to 0\n", hw->sei_itu_data_len);
+					"set sei data len(%d) to 0\n", hw->sei_itu_data_len);
 			}
 		} else {
 			pic->ud_param[index].buf_len = 0;
@@ -9844,6 +9874,17 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	pdata = (u8 *)hw->sei_user_data_buffer + hw->sei_user_data_wp;
 	pmax_sei_data_buffer = (u8 *)hw->sei_user_data_buffer + USER_DATA_SIZE;
 	sei_data_buf = (u8 *)hw->sei_itu_data_buf;
+
+	if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
+		dpb_print(DECODE_ID(hw), 0, "%s: sei_itu_data_len %d\n", __func__, hw->sei_itu_data_len);
+		for (i = 0; i < hw->sei_itu_data_len; i++) {
+			dpb_print_cont(DECODE_ID(hw), 0, "%02x ", sei_data_buf[i]);
+			if (((i + 1) & 0xf) == 0)
+				dpb_print_cont(DECODE_ID(hw), 0, "\n");
+		}
+		dpb_print_cont(DECODE_ID(hw), 0, "\n");
+	}
+
 	for (i = 0; i < hw->sei_itu_data_len; i++) {
 		*pdata++ = sei_data_buf[i];
 		if (pdata >= pmax_sei_data_buffer)
@@ -10410,7 +10451,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		}
 		if (trans_data_buf[7] == AUX_TAG_SEI) {
 			int pic_struct;
-			parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len);
+			if (hw->sei_need_parse == true)
+				parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len);
 			pic_struct = p_H264_Dpb->dpb_param.l.data[PICTURE_STRUCT];
 			hw->is_interlace = ((pic_struct == PIC_TOP) || (pic_struct == PIC_BOT) ||
 				(pic_struct == PIC_TOP_BOT) || (pic_struct == PIC_BOT_TOP) ||
@@ -11348,6 +11390,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "set MDEC_EXTIF_CFG2 bit 5\n");
 
 	hw->sei_data_len = 0;
+	hw->sei_itu_data_len = 0;
+	hw->sei_need_parse = false;
 	if (enable_itu_t35)
 		WRITE_VREG(NAL_SEARCH_CTL, READ_VREG(NAL_SEARCH_CTL) | 0x1);
 	if (!hw->init_flag) {
