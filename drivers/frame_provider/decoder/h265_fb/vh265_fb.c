@@ -267,6 +267,7 @@ static int poc_error_limit = 30;
 static u32 dirty_again_threshold = 100;
 static u32 dirty_buffersize_threshold = 0x800000;
 static u32 efficiency_mode = 1;
+static u32 save_buffer = 1;
 
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 
@@ -2276,6 +2277,8 @@ struct hevc_state_s {
 	struct PIC_s ref_pic;
 	unsigned long mmu_copy_header_adr;
 	u32 tile_lcu[MAX_TILE_ROW_NUM * MAX_TILE_COL_NUM];
+	u8 head_pre_parsed;
+	u8 try_parsing;
 } /*hevc_stru_t */;
 
 static void init_buff_spec(struct hevc_state_s *hevc,
@@ -3045,24 +3048,26 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 		return;
 	}
 
-	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-		"%s: discard pic index 0x%x\n",
-		__func__, hevc->decoding_pic ?
-		hevc->decoding_pic->index : 0xff);
-	if (hevc->decoding_pic) {
-		hevc->decoding_pic->error_mark = 0;
-		hevc->decoding_pic->output_ready = 0;
-		hevc->decoding_pic->show_frame = false;
-		hevc->decoding_pic->output_mark = 0;
+	if (!save_buffer || !hevc->head_pre_parsed) {
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+			"%s: discard pic index 0x%x\n",
+			__func__, hevc->decoding_pic ?
+			hevc->decoding_pic->index : 0xff);
+		if (hevc->decoding_pic) {
+			hevc->decoding_pic->error_mark = 0;
+			hevc->decoding_pic->output_ready = 0;
+			hevc->decoding_pic->show_frame = false;
+			hevc->decoding_pic->output_mark = 0;
 #ifdef NEW_FB_CODE
-		hevc->decoding_pic->backend_ref = 0;
-		hevc->decoding_pic->back_done_mark = 0;
+			hevc->decoding_pic->backend_ref = 0;
+			hevc->decoding_pic->back_done_mark = 0;
 #endif
-		hevc->decoding_pic->referenced = 0;
-		hevc->decoding_pic->POC = INVALID_POC;
-		put_mv_buf(hevc, hevc->decoding_pic);
-		release_aux_data(hevc, hevc->decoding_pic);
-		hevc->decoding_pic = NULL;
+			hevc->decoding_pic->referenced = 0;
+			hevc->decoding_pic->POC = INVALID_POC;
+			put_mv_buf(hevc, hevc->decoding_pic);
+			release_aux_data(hevc, hevc->decoding_pic);
+			hevc->decoding_pic = NULL;
+		}
 	}
 
 	/*if (vdec_stream_based(vdec) &&
@@ -4438,7 +4443,9 @@ static int get_work_pic_num(struct hevc_state_s *hevc)
 		such as reference relation, when the next frame is decoded.
 	*/
 
-	used_buf_num += 2;
+	used_buf_num += 1;
+	if (!save_buffer)
+		used_buf_num += 1;
 
 	if (hevc->save_buffer_mode)
 		hevc_print(hevc, 0,
@@ -8450,6 +8457,12 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			if (hevc->cur_pic == NULL) {
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 					dump_pic_list(hevc);
+				if (save_buffer && hevc->try_parsing) {
+					hevc->head_pre_parsed = 1;
+					hevc->try_parsing = 0;
+					hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"Try parsing done!run again!\n");
+				}
 				hevc->wait_buf = 1;
 				return -1;
 			}
@@ -13441,7 +13454,10 @@ force_output:
 		}
 		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
-
+		if (save_buffer) {
+			hevc->head_pre_parsed = 0;
+			hevc->try_parsing = 0;
+		}
 	} else if (dec_status == HEVC_DECODE_OVER_SIZE) {
 		hevc_print(hevc, 0 , "hevc  decode oversize !!\n");
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -15117,6 +15133,14 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 		}
 	}
 	spin_unlock_irqrestore(&h265_lock, flags);
+	if (save_buffer && new_pic == NULL &&
+		!hevc->head_pre_parsed) {
+		hevc->try_parsing = 1;
+		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
+				"Try pre parse head!\n");
+		return 1;
+	}
+
 	return (new_pic != NULL) ? 1 : 0;
 }
 #if 0
@@ -16643,7 +16667,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			run_ready_display_q_num)
 			ret = 0;
 
-		if (run_ready_max_buf_num &&
+		if (!hevc->try_parsing && run_ready_max_buf_num &&
 			get_used_buf_count(hevc) >=
 			run_ready_max_buf_num)
 			ret = 0;
@@ -18413,6 +18437,9 @@ MODULE_PARM_DESC(error_handle_system_threshold,
 module_param(error_skip_nal_count, uint, 0664);
 MODULE_PARM_DESC(error_skip_nal_count,
 				 "\n amvdec_h265 error_skip_nal_count\n");
+
+module_param(save_buffer, uint, 0664);
+MODULE_PARM_DESC(save_buffer, "\n save_buffer\n");
 
 module_param(skip_nal_count, uint, 0664);
 MODULE_PARM_DESC(skip_nal_count, "\n skip_nal_count\n");
