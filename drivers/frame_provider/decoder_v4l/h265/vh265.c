@@ -2032,6 +2032,7 @@ struct hevc_state_s {
 	u32 dv_profile;
 	int v4l_duration;
 	spinlock_t tlock;
+	bool buf_allocated;
 } /*hevc_stru_t */;
 
 #define TIMEOUT_INIT 0
@@ -5741,6 +5742,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 		}
 
 		hevc->aml_buf = NULL;
+		hevc->buf_allocated = true;
 	}
 	v4l_crop_pic(hevc, new_pic);
 
@@ -10688,6 +10690,7 @@ static int get_free_buf_count( struct hevc_state_s *hevc)
 	int i, free_count = 0;
 	int free_slot = 0;
 
+	hevc->buf_allocated = false;
 	for (i = 0; i < hevc->used_buf_num; ++i) {
 		pic = hevc->m_PIC[i];
 		if (pic == NULL)
@@ -12859,7 +12862,7 @@ static void timeout_process(struct hevc_state_s *hevc)
 	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 	/*The current decoded frame is marked
 		error when the decode timeout*/
-	if (hevc->cur_pic != NULL)
+	if (hevc->buf_allocated && hevc->cur_pic != NULL)
 		hevc->cur_pic->error_mark = 1;
 	hevc->decoded_poc = hevc->curr_POC;
 	hevc->dec_result = DEC_RESULT_DONE;
@@ -13012,8 +13015,8 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 	struct PIC_s *pic = NULL;
 	int i, free_count = 0;
 	int free_slot = 0;
-	hevc->cur_pic = NULL;
 
+	hevc->buf_allocated = false;
 	/* Ignore the buffer available check until the head parse done. */
 	if (!hevc->v4l_params_parsed) {
 		/*
