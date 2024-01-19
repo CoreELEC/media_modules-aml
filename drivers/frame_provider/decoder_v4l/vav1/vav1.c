@@ -8751,6 +8751,11 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					cfg.double_write_mode = 0x21;
 					av1_print(hw, 0, "AV1 has fg, original dw:0x%x use dw 0x21!\n",
 							hw->double_write_mode_original);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+					if (hw->film_grain_present && vdec_secure(hw_to_vdec(hw))) {
+						codec_mm_prealloc_tvp_pool();
+					}
+#endif
 					vdec_v4l_set_cfg_infos(ctx, &cfg);
 
 					if (hw->dw_frame_mmu_map_addr == NULL) {
