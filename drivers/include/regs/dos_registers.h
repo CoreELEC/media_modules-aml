@@ -481,6 +481,7 @@
 #define HEVC_ASSIST_AFIFO_CTRL              0x3001
 #define HEVC_ASSIST_AFIFO_CTRL1             0x3002
 #define HEVC_ASSIST_GCLK_EN                 0x3003
+#define HEVC_ASSIST_AUTO_CG_DISABLE         0x3003
 #define HEVC_ASSIST_SW_RESET                0x3004
 /* from s5 */
 #define HEVC_ASSIST_AXIADDR_PREFIX          (0x300f | MASK_S5_NEW_REGS)
@@ -968,6 +969,7 @@
 #define HEVCD_IPP_SWMPREDIF_PUINFO3         0x3416
 #define HEVCD_IPP_DYNCLKGATE_CONFIG         0x3420
 #define HEVCD_IPP_DYNCLKGATE_STATUS         0x3421
+#define HEVCD_MPP_SUB_DYNCLKGATE_CONFIG     0x3422
 #define HEVCD_IPP_DBG_SEL                   0x3430
 #define HEVCD_IPP_DBG_DATA                  0x3431
 #define HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR     0x3460
@@ -1008,6 +1010,7 @@
 /* changes the val to 0x350f on g12a */
 #define HEVC_DBLK_STS1                      0x350c
 /* changes the val to 0x3510 on g12a */
+#define HEVC_DBLK_CFGC                      0x350c
 #define HEVC_SAO_VERSION                    0x3600
 #define HEVC_SAO_CTRL0                      0x3601
 #define HEVC_SAO_CTRL1                      0x3602

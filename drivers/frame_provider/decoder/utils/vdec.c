@@ -143,6 +143,7 @@ static int one_pack_multi_f_set_align_size = 0;
 #define VDEC_DBG_DUAL_CORE_DEBUG	(0x200)
 #define VDEC_DBG_STUCK_STATE_DEBUG (0x800)
 #define VDEC_DBG_ENABLE_CODE_RATE_DEBUG (0x1000)
+#define VDEC_DBG_AUTO_CLK_GATE_DISABLE (0x2000)
 
 #define FRAME_BASE_PATH_DI_V4LVIDEO_0 (29)
 #define FRAME_BASE_PATH_DI_V4LVIDEO_1 (30)
@@ -5116,6 +5117,46 @@ void hevc_mmu_dma_check(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(hevc_mmu_dma_check);
 
+static void hevc_auto_clk_gate_disable(void)
+{
+	/* hevc top auto-cg disable */
+	WRITE_VREG(HEVC_ASSIST_AUTO_CG_DISABLE, 0xffffffff);
+
+	/* hevc parser auto-cg disable */
+	WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
+			READ_VREG(HEVC_PARSER_CORE_CONTROL) | 0xffffc000);
+
+	/* hevc mpred auto-cg disable */
+	WRITE_VREG(HEVC_MPRED_CTRL1,
+			READ_VREG(HEVC_MPRED_CTRL1) | 0x1000000);
+	WRITE_VREG(HEVC_MPRED_CTRL9,
+			READ_VREG(HEVC_MPRED_CTRL9) | 0xfff0000);
+
+	/* hevc iqit auto-cg disable */
+	WRITE_VREG(HEVC_IQIT_CLK_RST_CTRL, (1 << 2));
+
+	/* hevc ipp auto-cg disable */
+	WRITE_VREG(HEVCD_IPP_DYNCLKGATE_CONFIG,
+			READ_VREG(HEVCD_IPP_DYNCLKGATE_CONFIG) | 0x4003ff00);
+
+	/* hevc mpp auto-cg disable */
+	WRITE_VREG(HEVCD_IPP_DYNCLKGATE_CONFIG,
+			READ_VREG(HEVCD_IPP_DYNCLKGATE_CONFIG) | 0xa00000ff);
+	WRITE_VREG(HEVCD_MPP_SUB_DYNCLKGATE_CONFIG, 0xffffffff);
+
+	/* hevc mcr auto-cg disable */
+	WRITE_VREG(HEVCD_IPP_DYNCLKGATE_CONFIG,
+			READ_VREG(HEVCD_IPP_DYNCLKGATE_CONFIG) | 0x17f00000);
+
+	/* hevc lpf auto-cg disable */
+	WRITE_VREG(HEVC_DBLK_CFGC,
+			READ_VREG(HEVC_DBLK_CFGC) | 0xffff0000);
+
+	/* hevc ow auto-cg disable */
+	WRITE_VREG(HEVC_SAO_CTRL1,
+			READ_VREG(HEVC_SAO_CTRL1) | 0x20000000);
+}
+
 void hevc_reset_core(struct vdec_s *vdec)
 {
 	int cpu_type = get_cpu_major_id();
@@ -5219,6 +5260,10 @@ void hevc_reset_core(struct vdec_s *vdec)
 		hevc_arb_ctrl(1, 0);
 	else
 		dec_dmc_port_ctrl(1, VDEC_INPUT_TARGET_HEVC);
+
+	if (vdec_get_debug() & VDEC_DBG_AUTO_CLK_GATE_DISABLE) {
+		hevc_auto_clk_gate_disable();
+	}
 }
 EXPORT_SYMBOL(hevc_reset_core);
 
