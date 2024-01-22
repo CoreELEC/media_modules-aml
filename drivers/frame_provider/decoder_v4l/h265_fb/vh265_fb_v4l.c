@@ -14150,6 +14150,11 @@ force_output:
 		if (vdec_frame_based(hw_to_vdec(hevc)) &&
 			hevc->last_dec_result != DEC_RESULT_UNFINISH)
 			vdec_v4l_post_error_frame_event(ctx);
+	} else {
+		hevc_print(hevc, 0 , "isr: status = 0x%x  0x%x  \n",dec_status);
+		hevc->dec_result = DEC_RESULT_DONE;
+		vdec_schedule_work(&hevc->work);
+		return IRQ_HANDLED;
 	}
 
 	if (efficiency_mode == 1) {

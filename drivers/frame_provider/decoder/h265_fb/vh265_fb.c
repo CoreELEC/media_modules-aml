@@ -13865,6 +13865,11 @@ force_output:
 				H265_DEBUG_DIS_SYS_ERROR_PROC);
 #endif
 		hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+	} else {
+		hevc_print(hevc, 0 , "isr: status = 0x%x\n",dec_status);
+		hevc->dec_result = DEC_RESULT_DONE;
+		vdec_schedule_work(&hevc->work);
+		return IRQ_HANDLED;
 	}
 
 	if (efficiency_mode == 1) {

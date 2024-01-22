@@ -12224,6 +12224,11 @@ force_output:
 			else
 				vmh265_report_pts(hevc);
 		}
+	} else {
+		hevc_print(hevc, 0 , "isr: status = 0x%x\n",dec_status);
+		hevc->dec_result = DEC_RESULT_DONE;
+		vdec_schedule_work(&hevc->work);
+		return IRQ_HANDLED;
 	}
 	return IRQ_HANDLED;
 }
