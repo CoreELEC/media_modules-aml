@@ -749,6 +749,7 @@ struct avs2_frame_s {
 	uint32_t mc_canvas_u_v;
 	uint32_t mpred_mv_wr_start_addr;
 	uint8_t bg_flag;
+	uint8_t drop_flag;
 	/**/
 	unsigned long header_adr;
 	int buf_size;

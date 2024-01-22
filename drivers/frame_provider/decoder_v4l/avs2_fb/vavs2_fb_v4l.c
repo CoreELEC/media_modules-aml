@@ -1086,6 +1086,7 @@ static void timeout_process(struct AVS2Decoder_s *dec)
 		pic->error_mark = 1;
 	}
 
+	vdec_v4l_post_error_frame_event(ctx);
 	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 	dec->dec_result = DEC_RESULT_DONE;
 	reset_process_time(dec);
@@ -5400,6 +5401,15 @@ static void v4l_submit_vframe(struct AVS2Decoder_s *dec)
 #endif
 }
 
+static void avs2_report_err_timestamp_for_decoded_frames(struct aml_vcodec_ctx * v4l2_ctx,
+		struct avs2_frame_s *pic)
+{
+	u64 timestamp_bak = v4l2_ctx->current_timestamp;
+	v4l2_ctx->current_timestamp = pic->timestamp;
+	vdec_v4l_post_error_frame_event(v4l2_ctx);
+	v4l2_ctx->current_timestamp = timestamp_bak;
+}
+
 static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 {
 	struct vframe_s *vf = NULL;
@@ -5416,6 +5426,9 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 
 		if (force_disp_pic_index & 0x100) {
 			/*recycle directly*/
+			avs2_report_err_timestamp_for_decoded_frames(v4l2_ctx, pic);
+			pic->is_display = 1;
+			pic->drop_flag = 1;
 			continue;
 		}
 
@@ -5424,6 +5437,8 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 				"!!!error pic, skip\n",
 				0);
+			avs2_report_err_timestamp_for_decoded_frames(v4l2_ctx, pic);
+			pic->is_display = 1;
 			continue;
 		}
 
@@ -5433,6 +5448,9 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 				avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 					"!!!slice type %d (not I) skip\n",
 					0, pic->slice_type);
+				avs2_report_err_timestamp_for_decoded_frames(v4l2_ctx, pic);
+				pic->is_display = 1;
+				pic->drop_flag = 1;
 				continue;
 			}
 			dec->skip_PB_before_I = 0;
@@ -6711,6 +6729,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 #endif
 	dec->wait_buf = 0;
 	if (dec_status == AVS2_DECODE_BUFEMPTY) {
+		struct avs2_frame_s *pic = dec->avs2_dec.hc.cur_pic;
 		PRINT_LINE();
 		if (dec->m_ins_flag) {
 			reset_process_time(dec);
@@ -6718,6 +6737,10 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 				dec_again_process(dec);
 			else {
 				if (dec->error_proc_policy & 0x2) {
+					if (dec->cur_idx != INVALID_IDX && pic) {
+						pic->error_mark = 1;
+						pic->is_display = 1;
+					}
 					avs2_buf_ref_process_for_exception(dec);
 					vdec_v4l_post_error_frame_event(ctx);
 				}
@@ -8602,7 +8625,7 @@ static int avs2_recycle_frame_buffer(struct AVS2Decoder_s *dec)
 				(pic->backend_ref == 0) &&
 #endif
 #ifndef NO_DISPLAY
-				(pic->vf_ref ||
+				(pic->vf_ref || pic->drop_flag ||
 				((dec->error_proc_policy & 0x2) &&
 				pic->error_mark)) &&
 #endif
@@ -8621,8 +8644,8 @@ static int avs2_recycle_frame_buffer(struct AVS2Decoder_s *dec)
 			pic->cma_alloc_addr);
 
 			aml_buf_put_ref(&ctx->bm, aml_buf);
-			if ((dec->error_proc_policy & 0x2) &&
-				pic->error_mark) {
+			if (((dec->error_proc_policy & 0x2) &&
+				pic->error_mark) || pic->drop_flag) {
 				aml_buf_put_ref(&ctx->bm, aml_buf);
 			}
 
@@ -8631,6 +8654,7 @@ static int avs2_recycle_frame_buffer(struct AVS2Decoder_s *dec)
 			pic->cma_alloc_addr = 0;
 			pic->vf_ref = 0;
 			pic->is_display = 0;
+			pic->drop_flag = 0;
 #ifdef NEW_FRONT_BACK_CODE
 			pic->backend_ref = 0;
 #endif
@@ -8959,6 +8983,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 {
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
+
 	int r;
 
 #ifdef NEW_FB_CODE
@@ -9112,6 +9139,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			(dec->chunk->offset & (VDEC_FIFO_ALIGN - 1));
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = dec->chunk->size;
+		ctx->current_timestamp = dec->chunk->timestamp;
 	}
 
 	WRITE_VREG(HEVC_DECODE_SIZE, r);
