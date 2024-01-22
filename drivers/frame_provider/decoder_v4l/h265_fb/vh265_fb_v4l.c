@@ -9850,7 +9850,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	char *p;
 	unsigned size = 0;
 	unsigned type = 0;
-	int uevent_dur = vdec_get_uevent_dur();
+	int vf_dur = vdec_get_vf_dur();
 	struct vframe_master_display_colour_s *vf_dp
 		= &vf->prop.master_display_colour;
 
@@ -9859,7 +9859,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	vf->height = pic->height /
 		get_double_write_ratio(pic->double_write_mode);
 
-	vf->duration = uevent_dur ? uevent_dur : hevc->frame_dur;
+	vf->duration = vf_dur ? vf_dur : hevc->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 

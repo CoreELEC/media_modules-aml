@@ -703,16 +703,16 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 	u32 buffer_index = vf->index;
 	struct aml_vdec_hdr_infos hdr;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	int uevent_dur = vdec_get_uevent_dur();
+	int vf_dur = vdec_get_vf_dur();
 
 	vf->width = hw->pics[buffer_index].width;
 	vf->height = hw->pics[buffer_index].height;
 
 	if (hw->frame_dur > 0)
-		vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
+		vf->duration = vf_dur ? vf_dur : hw->frame_dur;
 	else {
 		hw->frame_dur = frame_rate_tab[(READ_VREG(MREG_SEQ_INFO) >> 4) & 0xf];
-		vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
+		vf->duration = vf_dur ? vf_dur : hw->frame_dur;
 		vdec_schedule_work(&hw->notify_work);
 	}
 

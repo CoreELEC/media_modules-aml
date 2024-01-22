@@ -6815,9 +6815,9 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 {
 	unsigned int ar;
 	struct aml_vcodec_ctx * ctx = pbi->v4l2_ctx;
-	int uevent_dur = vdec_get_uevent_dur();
+	int vf_dur = vdec_get_vf_dur();
 
-	vf->duration = uevent_dur ? uevent_dur : pbi->frame_dur;
+	vf->duration = vf_dur ? vf_dur : pbi->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 	vf->prop.master_display_colour = pbi->vf_dp;

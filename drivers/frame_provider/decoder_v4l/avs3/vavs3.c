@@ -4975,11 +4975,11 @@ static void set_canvas(struct AVS3Decoder_s *dec,
 
 static void set_frame_info(struct AVS3Decoder_s *dec, struct vframe_s *vf)
 {
-	int uevent_dur = vdec_get_uevent_dur();
+	int vf_dur = vdec_get_vf_dur();
 	unsigned int ar = 0;
 	unsigned int pixel_ratio = 0;
 
-	vf->duration = uevent_dur ? uevent_dur : dec->frame_dur;
+	vf->duration = vf_dur ? vf_dur : dec->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 	vf->prop.master_display_colour = dec->vf_dp;

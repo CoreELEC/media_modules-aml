@@ -3549,7 +3549,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 	u32 buffer_index = pic->index;
 	u32 dur;
 	unsigned short decode_pic_count = pic->decode_pic_count;
-	int uevent_dur = vdec_get_uevent_dur();
+	int vf_dur = vdec_get_vf_dur();
 
 	if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
 			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
@@ -3594,12 +3594,12 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 				vf->pts_us64 = 0;
 			}
 			if ((repeat_count > 1) && hw->avi_flag) {
-				vf->duration = (uevent_dur ? uevent_dur : dur * repeat_count) >> 1;
+				vf->duration = (vf_dur ? vf_dur : dur * repeat_count) >> 1;
 				if (hw->next_pts != 0) {
 					hw->next_pts += ((vf->duration) - ((vf->duration) >> 4));
 				}
 			} else {
-				vf->duration = (uevent_dur ? uevent_dur : dur) >> 1;
+				vf->duration = (vf_dur ? vf_dur : dur) >> 1;
 				hw->next_pts = 0;
 			}
 		}
@@ -3701,14 +3701,14 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		}
 
 		if ((repeat_count > 1) && hw->avi_flag) {
-			vf->duration = (uevent_dur ? uevent_dur : dur * repeat_count) >> 1;
+			vf->duration = (vf_dur ? vf_dur : dur * repeat_count) >> 1;
 			if (hw->next_pts != 0) {
 				hw->next_pts +=
 					((vf->duration) -
 					 ((vf->duration) >> 4));
 			}
 		} else {
-			vf->duration = (uevent_dur ? uevent_dur : dur) >> 1;
+			vf->duration = (vf_dur ? vf_dur : dur) >> 1;
 			hw->next_pts = 0;
 		}
 		vf->signal_type = 0;
@@ -3818,14 +3818,14 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 				vf->pts_us64 = 0;
 			}
 			if ((repeat_count > 1) && hw->avi_flag) {
-				vf->duration = uevent_dur ? uevent_dur : dur * repeat_count;
+				vf->duration = vf_dur ? vf_dur : dur * repeat_count;
 				if (hw->next_pts != 0) {
 					hw->next_pts +=
 						((vf->duration) -
 						 ((vf->duration) >> 4));
 				}
 			} else {
-				vf->duration = uevent_dur ? uevent_dur : dur;
+				vf->duration = vf_dur ? vf_dur : dur;
 				hw->next_pts = 0;
 			}
 		}

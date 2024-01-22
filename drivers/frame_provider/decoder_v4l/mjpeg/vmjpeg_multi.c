@@ -284,7 +284,7 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 {
 	u32 width, height;
 	u32 temp_endian;
-	int uevent_dur = vdec_get_uevent_dur();
+	int vf_dur = vdec_get_vf_dur();
 
 	width = READ_VREG(MREG_PIC_WIDTH);
 	height = READ_VREG(MREG_PIC_HEIGHT);
@@ -296,7 +296,7 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 		vf->height = hw->frame_height = ((height > 4096) ? 4096 : height);
 	}
 
-	vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
+	vf->duration = vf_dur ? vf_dur : hw->frame_dur;
 	vf->ratio_control = DISP_RATIO_ASPECT_RATIO_MAX << DISP_RATIO_ASPECT_RATIO_BIT;
 	vf->sar_width = 1;
 	vf->sar_height = 1;

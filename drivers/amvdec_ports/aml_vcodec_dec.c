@@ -82,7 +82,7 @@
 #define V4L2_CID_USER_AMLOGIC_BASE (V4L2_CID_USER_BASE + 0x1100)
 #define AML_V4L2_SET_DRMMODE (V4L2_CID_USER_AMLOGIC_BASE + 0)
 #define AML_V4L2_GET_INPUT_BUFFER_NUM (V4L2_CID_USER_AMLOGIC_BASE + 1)
-#define AML_V4L2_SET_DURATION (V4L2_CID_USER_AMLOGIC_BASE + 2)
+#define AML_V4L2_SET_UEVENT_DURATION (V4L2_CID_USER_AMLOGIC_BASE + 2)
 #define AML_V4L2_GET_FILMGRAIN_INFO (V4L2_CID_USER_AMLOGIC_BASE + 3)
 #define AML_V4L2_SET_INPUT_BUFFER_NUM_CACHE (V4L2_CID_USER_AMLOGIC_BASE + 4)
 #define AML_V4L2_GET_DECODER_INFO (V4L2_CID_USER_AMLOGIC_BASE + 5)
@@ -93,9 +93,9 @@
 #define AML_V4L2_GET_INST_ID (V4L2_CID_USER_AMLOGIC_BASE + 8)
 #define AML_V4L2_SET_STREAM_MODE (V4L2_CID_USER_AMLOGIC_BASE + 9)
 #define AML_V4L2_SET_ES_DMABUF_TYPE (V4L2_CID_USER_AMLOGIC_BASE + 10)
+#define AML_V4L2_SET_VF_DURATION (V4L2_CID_USER_AMLOGIC_BASE + 11)
 #define AML_V4L2_GET_WIDTH_ALIGN (V4L2_CID_USER_AMLOGIC_BASE + 12)
 #define AML_V4L2_GET_DECINFO_SET (V4L2_CID_USER_AMLOGIC_BASE + 13)
-
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
@@ -4873,10 +4873,14 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 		ctx->param_sets_from_ucode = true;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 			"set DRM mode: %x\n", ctrl->val);
-	} else if (ctrl->id == AML_V4L2_SET_DURATION) {
+	} else if (ctrl->id == AML_V4L2_SET_UEVENT_DURATION) {
 		vdec_set_duration(ctrl->val);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
-			"set duration: %x\n", ctrl->val);
+			"set uevent duration: %x\n", ctrl->val);
+	} else if (ctrl->id == AML_V4L2_SET_VF_DURATION) {
+		vdec_set_vf_duration(ctrl->val);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			"set vf duration: %x\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_SET_INPUT_BUFFER_NUM_CACHE) {
 		ctx->cache_input_buffer_num = ctrl->val;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
@@ -4963,9 +4967,21 @@ static const struct v4l2_ctrl_config ctrl_set_input_buffer_number_cache = {
 	.def	= 0,
 };
 
-static const struct v4l2_ctrl_config ctrl_st_duration = {
-	.name	= "duration",
-	.id	= AML_V4L2_SET_DURATION,
+static const struct v4l2_ctrl_config ctrl_st_uevent_duration = {
+	.name	= "uevent_duration",
+	.id	= AML_V4L2_SET_UEVENT_DURATION,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_WRITE_ONLY,
+	.min	= 0,
+	.max	= 96000,
+	.step	= 1,
+	.def	= 0,
+};
+
+static const struct v4l2_ctrl_config ctrl_st_vf_duration = {
+	.name	= "vf_duration",
+	.id	= AML_V4L2_SET_VF_DURATION,
 	.ops	= &aml_vcodec_dec_ctrl_ops,
 	.type	= V4L2_CTRL_TYPE_INTEGER,
 	.flags	= V4L2_CTRL_FLAG_WRITE_ONLY,
@@ -5124,7 +5140,13 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 		goto err;
 	}
 
-	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_duration, NULL);
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_uevent_duration, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_vf_duration, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;

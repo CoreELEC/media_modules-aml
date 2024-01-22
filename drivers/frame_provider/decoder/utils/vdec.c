@@ -271,7 +271,7 @@ struct vdec_core_s {
 	struct post_task_mgr_s post;
 	u32 inst_cnt;
 	unsigned long run_flag;
-	int uevent_duration;
+	int vf_duration;
 };
 
 static struct vdec_core_s *vdec_core;
@@ -290,20 +290,27 @@ void vdec_frame_rate_uevent(int dur)
 		pr_info("vdec_frame_rate_uevent %d\n", dur);
 
 	frame_rate_notify(dur);
-
-	if (vdec_core)
-		vdec_core->uevent_duration = dur;
 }
 EXPORT_SYMBOL(vdec_frame_rate_uevent);
 
-int vdec_get_uevent_dur(void)
+void vdec_set_vf_dur(int dur)
+{
+	if (debug & VDEC_DBG_DETAIL_INFO)
+		pr_info("vdec_set_vf_dur %d\n", dur);
+
+	if (vdec_core)
+		vdec_core->vf_duration = dur;
+}
+EXPORT_SYMBOL(vdec_set_vf_dur);
+
+int vdec_get_vf_dur(void)
 {
 	if (vdec_core)
-		return vdec_core->uevent_duration;
+		return vdec_core->vf_duration;
 
 	return 0;
 }
-EXPORT_SYMBOL(vdec_get_uevent_dur);
+EXPORT_SYMBOL(vdec_get_vf_dur);
 
 void register_frame_rate_uevent_func(vdec_frame_rate_event_func func)
 {

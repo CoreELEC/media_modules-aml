@@ -82,6 +82,8 @@ bool vdec_check_is_available(u32 fmt);
 
 void vdec_set_duration(s32 duration);
 
+void vdec_set_vf_duration(s32 duration);
+
 void vdec_write_stream_data(struct aml_vdec_adapt *ada_ctx, u32 addr, u32 size);
 
 void vdec_write_stream_data_inner(struct aml_vdec_adapt *ada_ctx, char *addr, u32 size, u64 timestamp);

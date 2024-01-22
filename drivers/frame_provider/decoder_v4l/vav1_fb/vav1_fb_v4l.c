@@ -6224,11 +6224,11 @@ static void v4l_av1_report_hdr10p_data(struct AV1HW_s *hw, struct PIC_BUFFER_CON
 static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	unsigned int ar;
-	int uevent_dur = vdec_get_uevent_dur();
+	int vf_dur = vdec_get_vf_dur();
 
 	parse_metadata(hw, vf, pic);
 
-	vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
+	vf->duration = vf_dur ? vf_dur : hw->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
 	vf->prop.master_display_colour = hw->vf_dp;

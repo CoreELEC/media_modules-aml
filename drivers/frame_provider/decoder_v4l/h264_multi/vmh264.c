@@ -5065,9 +5065,9 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 		else
 			vf->duration = 96000/force_rate;
 	} else {
-		int uevent_dur = vdec_get_uevent_dur();
+		int vf_dur = vdec_get_vf_dur();
 
-		vf->duration = uevent_dur ? uevent_dur : hw->frame_dur;
+		vf->duration = vf_dur ? vf_dur : hw->frame_dur;
 	}
 	if (hw->h264_ar == 0x3ff)
 		ar_tmp = (0x100 *

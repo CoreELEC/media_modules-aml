@@ -670,6 +670,11 @@ void vdec_set_duration(s32 duration)
 	vdec_frame_rate_uevent(duration);
 }
 
+void vdec_set_vf_duration(s32 duration)
+{
+	vdec_set_vf_dur(duration);
+}
+
 void aml_vdec_recycle_dec_resource(struct aml_vcodec_ctx * ctx,
 					struct aml_buf *aml_buf)
 {

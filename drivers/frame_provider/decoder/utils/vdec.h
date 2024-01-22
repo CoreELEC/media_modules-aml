@@ -901,7 +901,9 @@ st_userdata *get_vdec_userdata_ctx(void);
 
 void vdec_frame_rate_uevent(int dur);
 
-int vdec_get_uevent_dur(void);
+void vdec_set_vf_dur(int dur);
+
+int vdec_get_vf_dur(void);
 
 void vdec_sync_irq(enum vdec_irq_num num);
 
