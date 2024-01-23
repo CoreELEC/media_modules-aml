@@ -2266,9 +2266,8 @@ static int get_pic_poc(struct hevc_state_s *hevc,
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static int get_valid_double_write_mode(struct hevc_state_s *hevc)
 {
-	u32 dw = (hevc->m_ins_flag &&
-		((double_write_mode & 0x80000000) == 0)) ?
-		hevc->double_write_mode : (double_write_mode & 0x7fffffff);
+	u32 dw = hevc->double_write_mode & 0x7fffffff;
+
 	if (dw & 0x20) {
 		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3)
 			&& ((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
@@ -11249,10 +11248,11 @@ force_output:
 										hevc_print(hevc, 0,
 											"vh265 mmu clear ERROR! \n");
 									}
-									amhevc_stop();
 									hevc->mmu_clear_flag = true;
 									hevc->pic_list_init_flag = 0;
 									hevc->dec_result = DEC_RESULT_AGAIN;
+									amhevc_stop();
+									restore_decode_state(hevc);
 								} else {
 									hevc_print(hevc, 0,
 										"try to clear mmu again.\n");
@@ -14775,8 +14775,8 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		hevc->double_write_mode = 0x1000;
 
 	/* get valid double write from node */
-	if (double_write_mode)
-		hevc->double_write_mode = get_double_write_mode(hevc);
+	if (double_write_mode & 0x80000000)
+		hevc->double_write_mode = double_write_mode & 0x7fffffff;
 
 	if (mmu_enable_force) {
 		hevc->mmu_enable = 1;
