@@ -367,6 +367,7 @@ struct vdec_mpeg4_hw_s {
 	bool process_busy;
 	bool timeout;
 	int dec_again_cnt;
+	int last_dur;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -374,7 +375,8 @@ static unsigned char
 	get_data_check_sum(struct vdec_mpeg4_hw_s *hw, int size);
 static void flush_output(struct vdec_mpeg4_hw_s * hw);
 static int mpeg4_recycle_frame_buffer(struct vdec_mpeg4_hw_s *hw);
-
+static void v4l_vmpeg4_collect_stream_info(struct vdec_s *vdec,
+	struct vdec_mpeg4_hw_s *hw);
 
 #define PROVIDER_NAME   "vdec.mpeg4"
 
@@ -750,6 +752,13 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 
 	if (hw->i_only)
 		pb_skip = 1;
+
+	if (hw->last_dur != pic->duration) {
+		mmpeg4_debug_print(DECODE_ID(hw), 0,
+			"decoder duration change old: %d new: %d\n", hw->last_dur, pic->duration);
+		hw->last_dur = pic->duration;
+		v4l_vmpeg4_collect_stream_info(hw_to_vdec(hw), hw);
+	}
 
 	if (pic->pic_info & INTERLACE_FLAG) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
@@ -1152,6 +1161,7 @@ static void v4l_vmpeg4_collect_stream_info(struct vdec_s *vdec,
 	str_info->bit_depth = 8;
 
 	str_info->trick_mode = hw->i_only;
+	str_info->frame_dur = hw->frame_dur;
 	if (hw->frame_dur != 0)
 		str_info->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
 				96000 / hw->frame_dur : (96000 / hw->frame_dur +1);

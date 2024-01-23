@@ -2034,6 +2034,7 @@ struct hevc_state_s {
 	int v4l_duration;
 	spinlock_t tlock;
 	bool buf_allocated;
+	int last_dur;
 } /*hevc_stru_t */;
 
 #define TIMEOUT_INIT 0
@@ -6115,6 +6116,7 @@ static void v4l_hevc_collect_stream_info(struct vdec_s *vdec,
 	str_info->ratio_size.dar_width = -1;
 	str_info->ratio_size.dar_height = -1;
 	str_info->trick_mode = hevc->i_only;
+	str_info->frame_dur = hevc->frame_dur;
 	if (hevc->frame_dur != 0)
 		str_info->frame_rate = ((96000 * 10 / hevc->frame_dur) % 10) < 5 ?
 				96000 / hevc->frame_dur : (96000 / hevc->frame_dur +1);
@@ -8379,6 +8381,13 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	vf->duration = vf_dur ? vf_dur : hevc->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
+
+	if (hevc->last_dur != hevc->frame_dur) {
+		hevc_print(hevc, 0,
+			"decoder duration change old: %d new: %d\n", hevc->last_dur, hevc->frame_dur);
+		hevc->last_dur = hevc->frame_dur;
+		v4l_hevc_collect_stream_info(hw_to_vdec(hevc), hevc);
+	}
 
 	ar = min_t(u32, hevc->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);

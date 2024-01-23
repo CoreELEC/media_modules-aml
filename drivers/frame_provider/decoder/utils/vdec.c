@@ -3784,8 +3784,11 @@ void vdec_release(struct vdec_s *vdec)
 	vdec_frame_check_exit(vdec);
 #endif
 	vdec_fps_clear(vdec->id);
-	if (atomic_read(&vdec_core->vdec_nr) == 1)
+	if (atomic_read(&vdec_core->vdec_nr) == 1) {
 		vdec_disable_DMC(vdec);
+		vdec_set_vf_dur(0);
+	}
+
 	platform_device_unregister(vdec->dev);
 	/*Check if the vdec still in connected list, if yes, delete it*/
 	vdec_connect_list_force_clear(vdec_core, vdec);

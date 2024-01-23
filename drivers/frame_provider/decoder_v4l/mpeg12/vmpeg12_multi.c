@@ -369,6 +369,7 @@ struct vdec_mpeg12_hw_s {
 	u32 chunk_size; // 1.chunk->size: one package data size.  2.chunk_size: the reserved(left) size of chunk->size, mainly for one-package-multi-frame.
 	u32 chunk_offset;
 	u32 consume_byte;
+	int last_dur;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -383,6 +384,7 @@ static int vmpeg_event_cb(int type, void *data, void *private_data);
 static int notify_v4l_eos(struct vdec_s *vdec);
 static void start_process_time_set(struct vdec_mpeg12_hw_s *hw);
 static int mpeg2_recycle_frame_buffer(struct vdec_mpeg12_hw_s *hw);
+static void v4l_mpeg12_collect_stream_info(struct vdec_s *vdec, struct vdec_mpeg12_hw_s *hw);
 static int debug_enable;
 
 #undef pr_info
@@ -714,6 +716,13 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 		hw->frame_dur = frame_rate_tab[(READ_VREG(MREG_SEQ_INFO) >> 4) & 0xf];
 		vf->duration = vf_dur ? vf_dur : hw->frame_dur;
 		vdec_schedule_work(&hw->notify_work);
+	}
+
+	if (hw->last_dur != hw->frame_dur) {
+		debug_print(DECODE_ID(hw), 0,
+			"decoder duration change old: %d new: %d\n", hw->last_dur, hw->frame_dur);
+		hw->last_dur = hw->frame_dur;
+		v4l_mpeg12_collect_stream_info(hw_to_vdec(hw), hw);
 	}
 
 	vf->signal_type = hw->reg_signal_type;
@@ -1734,6 +1743,7 @@ static void v4l_mpeg12_collect_stream_info(struct vdec_s *vdec,
 		}
 	}
 	str_info->trick_mode = hw->i_only;
+	str_info->frame_dur = hw->frame_dur;
 	if (hw->frame_dur != 0)
 		str_info->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
 				96000 / hw->frame_dur : (96000 / hw->frame_dur +1);

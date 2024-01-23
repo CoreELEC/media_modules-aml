@@ -180,7 +180,8 @@ struct dec_stream_info_s {
 	__u32 error_handle_policy;
 	enum E_ASPECT_RATIO eu_aspect_ratio;  /* aspect ratio (4:3 or 16:9) */
 	struct aspect_ratio_size ratio_size;   /* sar width/height, dar width/height */
-	char reserved[64];
+	__u32 frame_dur;
+	char reserved[60];
 };
 
 struct dec_frame_info_s {

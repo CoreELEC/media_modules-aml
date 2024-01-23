@@ -986,6 +986,7 @@ struct vdec_h264_hw_s {
 	int set_mmu_flag;
 	int v4l_duration;
 	spinlock_t tlock;
+	int last_dur;
 };
 
 #define TIMEOUT_INIT 0
@@ -1024,7 +1025,8 @@ static void h264_clear_dpb(struct vdec_h264_hw_s *hw);
 static int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw, bool reset_flags);
 static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	struct vdec_s *vdec, int from);
-
+static void v4l_vmh264_collect_stream_info(struct vdec_s *vdec,
+	struct vdec_h264_hw_s *hw);
 
 #define		H265_PUT_SAO_4K_SET			0x03
 #define		H265_ABORT_SAO_4K_SET			0x04
@@ -5088,6 +5090,14 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 
 		vf->duration = vf_dur ? vf_dur : hw->frame_dur;
 	}
+
+	if (hw->last_dur != hw->frame_dur) {
+		dpb_print(DECODE_ID(hw), 0,
+			"decoder duration change old: %d new: %d\n", hw->last_dur, hw->frame_dur);
+		hw->last_dur = hw->frame_dur;
+		v4l_vmh264_collect_stream_info(hw_to_vdec(hw), hw);
+	}
+
 	if (hw->h264_ar == 0x3ff)
 		ar_tmp = (0x100 *
 			hw->frame_height * hw->height_aspect_ratio) /
@@ -9922,6 +9932,7 @@ static void v4l_vmh264_collect_stream_info(struct vdec_s *vdec,
 	str_info->ratio_size.dar_width = -1;
 	str_info->ratio_size.dar_height = -1;
 	str_info->trick_mode = hw->i_only;
+	str_info->frame_dur = hw->frame_dur;
 	if (hw->frame_dur != 0)
 		str_info->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
 				96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
