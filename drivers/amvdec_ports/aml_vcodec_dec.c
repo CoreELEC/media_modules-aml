@@ -4507,7 +4507,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 					struct vb2_v4l2_buffer, vb2_buf);
 	struct aml_v4l2_buf *buf = container_of(vb2_v4l2,
 					struct aml_v4l2_buf, vb);
-	u32 size, phy_addr = 0;
+	u32 size;
 	int i;
 	int ret;
 
@@ -4529,16 +4529,6 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 			strncpy(buf->mem_owner, owner, sizeof(buf->mem_owner));
 			buf->mem_owner[sizeof(buf->mem_owner) - 1] = '\0';
 			__putname(owner);
-
-			for (i = 0; i < vb->num_planes; i++) {
-				size = vb->planes[i].length;
-				phy_addr = vb2_dma_contig_plane_dma_addr(vb, i);
-				buf->mem[i] = v4l_reqbufs_from_codec_mm(buf->mem_owner,
-						phy_addr, size, vb->index);
-				v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-						"OUT %c alloc, addr: %x, size: %u, idx: %u\n",
-						(i == 0? 'Y':'C'), phy_addr, size, vb->index);
-			}
 		} else if (vb->memory == VB2_MEMORY_DMABUF) {
 			unsigned int dw_mode = DM_YUV_ONLY;
 
@@ -4601,27 +4591,23 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 static void vb2ops_vdec_buf_cleanup(struct vb2_buffer *vb)
 {
 	struct aml_vcodec_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
-	struct vb2_v4l2_buffer *vb2_v4l2 = container_of(vb,
-					struct vb2_v4l2_buffer, vb2_buf);
-	struct aml_v4l2_buf *buf = container_of(vb2_v4l2,
-					struct aml_v4l2_buf, vb);
+	struct dma_buf *dbuf = vb->planes[0].dbuf;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d, idx: %d\n",
 		__func__, vb->vb2_queue->type, vb->index);
 
 	if (!V4L2_TYPE_IS_OUTPUT(vb->type)) {
-		if (vb->memory == VB2_MEMORY_MMAP) {
-			int i;
+		if (vb->memory == VB2_MEMORY_MMAP ||
+			((vb->memory == VB2_MEMORY_DMABUF) && !dmabuf_is_uvm(dbuf))) {
+			ulong key;
 
-			for (i = 0; i < vb->num_planes ; i++) {
-				v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-					"OUT %c clean, addr: %lx, size: %u, idx: %u\n",
-					(i == 0)? 'Y':'C',
-					buf->mem[i]->phy_addr, buf->mem[i]->buffer_size, vb->index);
-				v4l_freebufs_back_to_codec_mm(buf->mem_owner, buf->mem[i]);
-				buf->mem[i] = NULL;
-			}
-			aml_buf_detach(&ctx->bm, vb2_dma_contig_plane_dma_addr(vb, 0));
+			if (vb->memory == VB2_MEMORY_DMABUF)
+				key = (ulong)vb->planes[0].dbuf;
+			else
+				key = vb2_dma_contig_plane_dma_addr(vb, 0);
+
+			aml_buf_put_dma(&ctx->bm);
+			aml_buf_detach(&ctx->bm, key);
 		}
 	}
 }
