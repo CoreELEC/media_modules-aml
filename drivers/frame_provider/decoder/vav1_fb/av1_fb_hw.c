@@ -1733,7 +1733,7 @@ void av1_hw_init(struct AV1HW_s *hw, int first_flag, int front_flag, int back_fl
 #endif
 #endif
 		}
-	if (!efficiency_mode && front_flag)
+	if (!efficiency_mode && hw->pic_list_init_done && front_flag)
 		init_pic_list_hw_fb(hw);
 }
 

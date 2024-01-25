@@ -1889,6 +1889,7 @@ static void	put_un_used_mv_bufs(struct AV1HW_s *hw)
 #endif
 
 static void init_pic_list_hw(struct AV1HW_s *pbi);
+static void init_pic_list_hw_fb(struct AV1HW_s *hw);
 
 static void update_hide_frame_timestamp(struct AV1HW_s *hw)
 {
@@ -1954,9 +1955,12 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 
 	set_canvas(hw, pic);
 #ifdef NEW_FB_CODE
-	if ((hw->front_back_mode != 1) && (hw->front_back_mode != 3))
+		if ((hw->front_back_mode == 1) || (hw->front_back_mode == 3))
+			init_pic_list_hw_fb(hw);
+		else
 #endif
-		init_pic_list_hw(hw);
+			init_pic_list_hw(hw);
+
 
 	if (free_pic) {
 		if (frame_bufs[i].buf.use_external_reference_buffers) {
@@ -9687,8 +9691,13 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					hw->used_buf_num = MAX_BUF_NUM;
 
 				init_pic_list(hw);
-				if ((hw->front_back_mode != 1) && (hw->front_back_mode != 3))
+#ifdef NEW_FB_CODE
+				if ((hw->front_back_mode == 1) || (hw->front_back_mode == 3))
+					init_pic_list_hw_fb(hw);
+				else
+#endif
 					init_pic_list_hw(hw);
+
 #ifndef MV_USE_FIXED_BUF
 				/*
 				if (init_mv_buf_list(hw) < 0) {
@@ -9797,7 +9806,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if ((hw->parallel_exe != 0) && efficiency_mode &&
 		hw->new_compressed_data &&
 		(hw->front_back_mode == 1 || hw->front_back_mode == 3)) {
-		init_pic_list_hw_fb(hw);
+		if (hw->pic_list_init_done)
+			init_pic_list_hw_fb(hw);
 
 		config_pic_size_fb(hw);
 		config_mc_buffer_fb(hw);

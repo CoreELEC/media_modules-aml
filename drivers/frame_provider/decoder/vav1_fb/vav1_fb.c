@@ -10019,8 +10019,13 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 		if (!hw->pic_list_init_done) {
 			init_pic_list(hw);
-			if ((hw->front_back_mode != 1) && (hw->front_back_mode != 3))
+#ifdef NEW_FB_CODE
+			if ((hw->front_back_mode == 1) || (hw->front_back_mode == 3))
+				init_pic_list_hw_fb(hw);
+			else
+#endif
 				init_pic_list_hw(hw);
+
 #ifndef MV_USE_FIXED_BUF
 			/*
 			if (init_mv_buf_list(hw) < 0) {
@@ -10164,7 +10169,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if ((hw->parallel_exe != 0) && efficiency_mode &&
 		hw->new_compressed_data &&
 		(hw->front_back_mode == 1 || hw->front_back_mode == 3)) {
-		init_pic_list_hw_fb(hw);
+		if (hw->pic_list_init_done)
+			init_pic_list_hw_fb(hw);
 		config_pic_size_fb(hw);
 		config_mc_buffer_fb(hw);
 #ifdef MCRCC_ENABLE

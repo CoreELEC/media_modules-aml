@@ -2629,6 +2629,7 @@ static void fb_reset_core(struct vdec_s *vdec, u32 mask)
 #endif
 
 static void init_pic_list_hw(struct VP9Decoder_s *pbi);
+static void init_pic_list_hw_fb(struct VP9Decoder_s *pbi);
 
 static void update_hide_frame_timestamp(struct VP9Decoder_s *pbi)
 {
@@ -2694,7 +2695,9 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 
 	set_canvas(pbi, pic);
 #ifdef NEW_FB_CODE
-	if ((pbi->front_back_mode != 1) && (pbi->front_back_mode != 3))
+	if ((pbi->front_back_mode == 1) || (pbi->front_back_mode == 3))
+		init_pic_list_hw_fb(pbi);
+	else
 #endif
 		init_pic_list_hw(pbi);
 
@@ -5471,7 +5474,7 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 			test_debug = 10;
 			return;
 		}
-	if (!efficiency_mode && front_flag)
+	if (!efficiency_mode && pbi->pic_list_init_done && front_flag)
 		init_pic_list_hw_fb(pbi);
 
 	if (front_flag) {
@@ -12159,7 +12162,9 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 
 					init_pic_list(pbi);
 #ifdef NEW_FB_CODE
-					if ((pbi->front_back_mode != 1) && (pbi->front_back_mode != 3))
+					if ((pbi->front_back_mode == 1) || (pbi->front_back_mode == 3))
+						init_pic_list_hw_fb(pbi);
+					else
 #endif
 						init_pic_list_hw(pbi);
 
@@ -12204,7 +12209,8 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #ifdef NEW_FRONT_BACK_CODE
 		if (pbi->start_decoder_flag == 1 &&
 			(pbi->front_back_mode == 1 || pbi->front_back_mode == 3)) {
-			init_pic_list_hw_fb(pbi);
+			if (pbi->pic_list_init_done)
+				init_pic_list_hw_fb(pbi);
 
 			config_pic_size_fb(pbi, pbi->vp9_param.p.bit_depth);
 			if (cur_pic_config->pic_refs[0])
