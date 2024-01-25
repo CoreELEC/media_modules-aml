@@ -3718,6 +3718,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 				pr_err("[%d] H264 isn't enough buff for notify eos.\n", ctx->id);
 				return 0;
 			}
+			usleep_range(500, 1000);
 		}
 
 		index = v4l_get_free_buf_idx(vdec);

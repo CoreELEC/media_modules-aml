@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 #include <linux/timer.h>
 #include <linux/kfifo.h>
+#include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/amlogic/media/utils/amstream.h>
@@ -1864,6 +1865,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			pr_err("[%d] MPEG4 isn't enough buff for notify eos.\n", ctx->id);
 			return 0;
 		}
+		usleep_range(500, 1000);
 	}
 
 	index = find_free_buffer(hw);

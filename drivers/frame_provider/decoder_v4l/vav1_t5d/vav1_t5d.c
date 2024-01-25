@@ -6414,6 +6414,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			pr_err("[%d] AV1 isn't enough buff for notify eos.\n", ctx->id);
 			return 0;
 		}
+		usleep_range(500, 1000);
 	}
 
 	index = v4l_get_free_fb(hw);
