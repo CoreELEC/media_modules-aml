@@ -1832,10 +1832,15 @@ static int BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 	if (dec->front_back_mode == 1)
 		amhevc_reset_b();
 
-	if (efficiency_mode)
-		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 1);
-	else
-		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 0);
+	/*
+		HEVC_EFFICIENCY_MODE_BACK
+		bit[0] 1: open efficiency mode, 0: close efficiency mode
+	*/
+	if (efficiency_mode) {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (READ_VREG(HEVC_EFFICIENCY_MODE_BACK) | (1<<0)));
+	} else {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (READ_VREG(HEVC_EFFICIENCY_MODE_BACK) & (~(1<<0))));
+	}
 	avs2_hw_init(dec, 0, 1);
 	if (dec->front_back_mode == 3) {
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);

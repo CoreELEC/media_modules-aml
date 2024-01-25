@@ -5294,10 +5294,16 @@ void BackEnd_StartDecoding(struct VP9Decoder_s *pbi)
 #endif
 	if (pbi->front_back_mode == 1)
 		amhevc_reset_b();
-	if (efficiency_mode)
-		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (1 << 1));
-	else
-		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (0 << 1));
+
+	/*
+		HEVC_EFFICIENCY_MODE_BACK
+		bit[1] 1: open efficiency mode, 0: close efficiency mode
+	*/
+	if (efficiency_mode) {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (READ_VREG(HEVC_EFFICIENCY_MODE_BACK) | (1<<1)));
+	} else {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (READ_VREG(HEVC_EFFICIENCY_MODE_BACK) & (~(1<<1))));
+	}
 	vp9_hw_init(pbi, pbi->backend_decoded_count == 0, 0, 1);
 	if (pbi->front_back_mode == 1) {
 		config_bufstate_back_hw(pbi);
@@ -15354,10 +15360,16 @@ static void run_front(struct vdec_s *vdec)
 #ifdef NEW_FB_CODE
 	if (pbi->front_back_mode == 1 || pbi->front_back_mode == 3) {
 		u32 decode_mode;
-		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1 << 1);
-		else
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0 << 1);
+
+		/*
+			HEVC_EFFICIENCY_MODE
+			bit[1] 1: open efficiency mode, 0: close efficiency mode
+		*/
+		if (efficiency_mode) {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+		} else {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+		}
 		/*check to do*/
 		vp9_hw_init(pbi, pbi->frontend_decoded_count == 0, 1, 0);
 		if (test_debug == 10) {

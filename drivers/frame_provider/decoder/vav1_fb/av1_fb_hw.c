@@ -3063,10 +3063,16 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 #endif
 		amhevc_reset_b();
 	}
-	if (efficiency_mode)
-		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 1);
-	else
-		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, 0);
+
+	/*
+		HEVC_EFFICIENCY_MODE_BACK
+		bit[0] 1: open efficiency mode, 0: close efficiency mode
+	*/
+	if (efficiency_mode) {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (READ_VREG(HEVC_EFFICIENCY_MODE_BACK) | (1<<0)));
+	} else {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE_BACK, (READ_VREG(HEVC_EFFICIENCY_MODE_BACK) & (~(1<<0))));
+	}
 	av1_hw_init(hw, pbi->backend_decoded_count == 0, 0, 1);
 #else
 	if (pbi->backend_decoded_count == 0) {

@@ -9076,10 +9076,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode) {
-		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1);
-		else
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0);
+
+		/*
+			HEVC_EFFICIENCY_MODE_BACK
+			bit[0] 1: open efficiency mode, 0: close efficiency mode
+		*/
+		if (efficiency_mode) {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
+		} else {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+		}
 		avs2_hw_init(dec, 1, 0);
 		if (dec->front_back_mode == 1)
 			config_bufstate_front_hw(avs2_dec);

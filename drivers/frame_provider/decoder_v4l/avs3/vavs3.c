@@ -9898,10 +9898,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START, TRACE_BASIC);
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode) {
-		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1 << 1);
-		else
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0 << 1);
+
+		/*
+			HEVC_EFFICIENCY_MODE
+			bit[0/1] 1: open efficiency mode, 0: close efficiency mode
+		*/
+		if (efficiency_mode) {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+		} else {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+		}
 		avs3_hw_init(dec, 1, 0);
 		//config_decode_mode(dec);
 		if (dec->front_back_mode == 1) {

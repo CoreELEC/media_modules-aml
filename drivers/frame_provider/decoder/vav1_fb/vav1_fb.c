@@ -1050,6 +1050,7 @@ struct AV1HW_s {
 	int dec_back_result;
 	u32 dec_status_back;
 	bool front_pause_flag;
+	int parallel_exe;
 #endif
 #ifdef SWAP_HEVC_UCODE
 	bool is_swap;
@@ -8527,8 +8528,8 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		av1_print(hw, AOM_DEBUG_HW_MORE,
 		"aom_bufmgr_process=> %d, bufmgr e.r.r.o.r. %d, AOM_AV1_SEARCH_HEAD\r\n",
 		ret, cm->error.error_code);
-		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
-		return 0;
+		//WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
+		return -1;
 	}
 	else if (ret == 0) {
 		PIC_BUFFER_CONFIG* cur_pic_config = &cm->cur_frame->buf;
@@ -8686,10 +8687,11 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 			ret = -1;
 		}
 #ifdef NEW_FB_CODE
-		if (ret >= 0 && (hw->front_back_mode != 1) && hw->mmu_enable && ((hw->double_write_mode & 0x10) == 0)) {
+		if (ret >= 0 && (hw->front_back_mode != 1) && hw->mmu_enable && ((hw->double_write_mode & 0x10) == 0))
 #else
-		if (ret >= 0 && hw->mmu_enable && ((hw->double_write_mode & 0x10) == 0)) {
+		if (ret >= 0 && hw->mmu_enable && ((hw->double_write_mode & 0x10) == 0))
 #endif
+		{
 			ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 			ret = av1_alloc_mmu(hw, hw->mmu_box,
 				cm->cur_frame->buf.index,
@@ -8775,10 +8777,11 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 
 		// Save segment_feature while hardware decoding
 #ifdef NEW_FRONT_BACK_CODE
-		if (hw->aom_param.p.segmentation_enabled & 1) {
+		if (hw->aom_param.p.segmentation_enabled & 1)
 #else
-		if (hw->seg_4lf->enabled) {
+		if (hw->seg_4lf->enabled)
 #endif
+		{
 			for (i = 0; i < 8; i++) {
 				cm->cur_frame->segment_feature[i] = READ_VREG(AOM_AV1_SEGMENT_FEATURE);
 			}
@@ -8838,7 +8841,8 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 				//imem_count++;
 				WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
 			}
-		}
+		} else
+			hw->parallel_exe = 1;
 #endif
 
 		av1_print(hw, AOM_DEBUG_HW_MORE, "HEVC_DEC_STATUS_REG <= AOM_AV1_DECODE_SLICE\n");
@@ -10157,7 +10161,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 
 #ifdef NEW_FRONT_BACK_CODE
-	if (efficiency_mode &&
+	if ((hw->parallel_exe != 0) && efficiency_mode &&
 		hw->new_compressed_data &&
 		(hw->front_back_mode == 1 || hw->front_back_mode == 3)) {
 		init_pic_list_hw_fb(hw);
@@ -10209,6 +10213,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
 		}
 	}
+	hw->parallel_exe = 0;
 #endif
 
 	return IRQ_HANDLED;
@@ -12282,10 +12287,16 @@ static void run_front(struct vdec_s *vdec)
 				WRITE_VREG(AOM_AV1_SEGMENT_FEATURE, hw->common.cur_frame->segment_feature[i]);
 			}
 		}
-		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1);
-		else
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0);
+
+		/*
+			HEVC_EFFICIENCY_MODE
+			bit[0] 1: open efficiency mode, 0: close efficiency mode
+		*/
+		if (efficiency_mode) {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
+		} else {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+		}
 		av1_hw_init(hw, (hw->pbi->frontend_decoded_count == 0), 1, 0);   //called-->config_bufstate_front_hw
 		config_decode_mode(hw);
 		config_bufstate_front_hw(hw->pbi);
