@@ -278,7 +278,7 @@ static int	canvas_num = 2; /*NV21*/
 static int	canvas_num = 3;
 #endif
 
-static u32 buf_size = 32 * 1024 * 1024;
+/*static u32 buf_size = 32 * 1024 * 1024;*/
 
 static u32 pts_by_offset = 1;
 static u32 radr, rval;
@@ -1525,31 +1525,13 @@ static int vavs_vdec_info_init(struct vdec_avs_hw_s *hw)
 static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 {
 	int i, ret;
-	u32 canvas_width, canvas_height;
-	u32 decbuf_size, decbuf_y_size, decbuf_uv_size;
+	u32 decbuf_size;
 	unsigned long buf_start;
-	int need_alloc_buf_num;
 	struct vdec_s *vdec = NULL;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	if (hw->m_ins_flag)
 		vdec = hw_to_vdec(hw);
-
-	if (buf_size <= 0x00400000) {
-		/* SD only */
-		canvas_width = 768;
-		canvas_height = 576;
-		decbuf_y_size = 0x80000;
-		decbuf_uv_size = 0x20000;
-		decbuf_size = 0x100000;
-	} else {
-		/* HD & SD */
-		canvas_width = 1920;
-		canvas_height = 1088;
-		decbuf_y_size = 0x200000;
-		decbuf_uv_size = 0x80000;
-		decbuf_size = 0x300000;
-	}
 
 	for (i = 0; i < hw->vf_buf_num_used; i++) {
 		unsigned canvas;
@@ -1575,42 +1557,40 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 		}
 	}
 
-#ifdef AVSP_LONG_CABAC
-	need_alloc_buf_num = hw->vf_buf_num_used + 2;
-#else
-	need_alloc_buf_num = hw->vf_buf_num_used + 1;
-#endif
-	for (i = 0; i < need_alloc_buf_num; i++) {
+	decbuf_size = WORKSPACE_SIZE;
+	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, 0,
+			decbuf_size, DRIVER_NAME, &buf_start);
+	if (ret < 0)
+		goto WK_SPACE_ALLOC_ERROR;
 
-		if (i == (need_alloc_buf_num - 1))
-			decbuf_size = WORKSPACE_SIZE;
+	if (firmware_sel == 1)
+		hw->buf_offset = buf_start - RV_AI_BUFF_START_ADDR;
+	else
+		hw->buf_offset = buf_start - LONG_CABAC_RV_AI_BUFF_START_ADDR;
+
 #ifdef AVSP_LONG_CABAC
-		else if (i == (need_alloc_buf_num - 2))
-			decbuf_size = WORKSPACE_SIZE_A;
+	decbuf_size = WORKSPACE_SIZE_A;
+	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, 1,
+		decbuf_size, DRIVER_NAME, &buf_start);
+	if (ret < 0)
+		goto AVSP_WK_SPACE_ALLOC_ERROR;
+
+	avsp_heap_adr = codec_mm_phys_to_virt(buf_start);
 #endif
-		ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, i,
-				decbuf_size, DRIVER_NAME, &buf_start);
-		if (ret < 0) {
-			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-			return ret;
-		}
-		if (i == (need_alloc_buf_num - 1)) {
-			if (firmware_sel == 1)
-				hw->buf_offset = buf_start -
-					RV_AI_BUFF_START_ADDR;
-			else
-				hw->buf_offset = buf_start -
-					LONG_CABAC_RV_AI_BUFF_START_ADDR;
-			continue;
-		}
+	goto OUT;
+
 #ifdef AVSP_LONG_CABAC
-		else if (i == (need_alloc_buf_num - 2)) {
-			avsp_heap_adr = codec_mm_phys_to_virt(buf_start);
-			continue;
-		}
-#endif
+AVSP_WK_SPACE_ALLOC_ERROR:
+	if (hw->mm_blk_handle) {
+		decoder_bmmu_box_free(hw->mm_blk_handle);
+		hw->mm_blk_handle = NULL;
 	}
-	return 0;
+#endif
+
+WK_SPACE_ALLOC_ERROR:
+	vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
+OUT:
+	return ret;
 }
 
 static void vavs_recover(struct vdec_avs_hw_s *hw)
