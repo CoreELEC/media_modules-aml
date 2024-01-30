@@ -984,7 +984,26 @@ struct vdec_h264_hw_s {
 	u32 sei_present_flag;
 	int set_mmu_flag;
 	int v4l_duration;
+	spinlock_t tlock;
 };
+
+#define TIMEOUT_INIT 0
+#define TIMEOUT_PROC 1
+#define TIMEOUT_DONE 2
+
+static inline ulong h264_timeout_lock(struct vdec_h264_hw_s *hw)
+{
+	ulong flags;
+
+	spin_lock_irqsave(&hw->tlock, flags);
+
+	return flags;
+}
+
+static inline void h264_timeout_unlock(struct vdec_h264_hw_s *hw, ulong flags)
+{
+	spin_unlock_irqrestore(&hw->tlock, flags);
+}
 
 static u32 again_threshold;
 
@@ -7174,7 +7193,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		p_H264_Dpb->frame_crop_bottom_offset);
 
 		WRITE_VREG(DPB_STATUS_REG, H264_ACTION_CONFIG_DONE);
-		reset_process_time(hw);
 		hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
 		hw->reg_iqidct_control_init_flag = 1;
 		hw->dec_result = DEC_RESULT_CONFIG_PARAM;
@@ -7209,7 +7227,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		unsigned int decode_mb_count, mby_mbx;
 		struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
 		int multi_header_error_frame_flag = 0;
-		reset_process_time(hw);
 		hw->frmbase_cont_flag = 0;
 
 		if ((pic != NULL) && (pic->mb_aff_frame_flag == 1))
@@ -7655,7 +7672,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_DECODE_SLICE);
 		hw->last_mby_mbx = 0;
 		hw->last_vld_level = 0;
-		start_process_time(hw);
 		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_VDEC_1);
 	} else if (dec_dpb_status == H264_PIC_DATA_DONE
 		||((dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
@@ -7687,7 +7703,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 #endif
 
 pic_done_proc:
-		reset_process_time(hw);
 		if (dec_dpb_status == H264_PIC_DATA_DONE)
 			vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 		if ((dec_dpb_status == H264_SEARCH_BUFEMPTY) ||
@@ -7808,7 +7823,6 @@ pic_done_proc:
 		goto pic_done_proc;
 #endif
 	} else if (dec_dpb_status == H264_AUX_DATA_READY) {
-		reset_process_time(hw);
 		if (READ_VREG(H264_AUX_DATA_SIZE) != 0) {
 			if (dpb_is_debug(DECODE_ID(hw),
 				PRINT_FLAG_SEI_DETAIL))
@@ -7850,7 +7864,6 @@ pic_done_proc:
 			(dec_dpb_status == H264_DECODE_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_TIMEOUT)) {
 empty_proc:
-		reset_process_time(hw);
 		if ((hw->error_proc_policy & 0x40000) &&
 			((dec_dpb_status == H264_DECODE_TIMEOUT) ||
 			((dec_dpb_status == H264_DECODE_BUFEMPTY) && input_frame_based(vdec)) ||
@@ -7922,7 +7935,6 @@ send_again:
 			vdec_schedule_work(&hw->work);
 		}
 	} else if (dec_dpb_status == H264_DATA_REQUEST) {
-		reset_process_time(hw);
 		if (input_frame_based(vdec)) {
 			dpb_print(DECODE_ID(hw),
 			PRINT_FLAG_VDEC_STATUS,
@@ -7955,7 +7967,6 @@ send_again:
 		release_cur_decoding_buf(hw);
 		hw->data_flag |= ERROR_FLAG;
 		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		reset_process_time(hw);
 		hw->dec_result = DEC_RESULT_DONE;
 		vdec_schedule_work(&hw->work);
 		return IRQ_HANDLED;
@@ -8053,10 +8064,10 @@ send_again:
 		}
 		else if (debug_tag & 0x20000)
 			hw->ucode_pause_pos = 0xffffffff;
-		if (hw->ucode_pause_pos)
-			reset_process_time(hw);
-		else
+		if (!hw->ucode_pause_pos) {
+			start_process_time(hw);
 			WRITE_VREG(DEBUG_REG1, 0);
+		}
 	} else if (debug_tag != 0) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
 			"dbg%x: %x\n", debug_tag,
@@ -8071,10 +8082,10 @@ send_again:
 			udebug_pause_pos &= 0xffff;
 			hw->ucode_pause_pos = udebug_pause_pos;
 		}
-		if (hw->ucode_pause_pos)
-			reset_process_time(hw);
-		else
+		if (!hw->ucode_pause_pos) {
+			start_process_time(hw);
 			WRITE_VREG(DEBUG_REG1, 0);
+		}
 	}
 	/**/
 	return IRQ_HANDLED;
@@ -8085,15 +8096,29 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	ulong flags;
 
-
+	flags = h264_timeout_lock(hw);
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 
-	if (!hw)
-		return IRQ_HANDLED;
+	reset_process_time(hw);
 
-	if (hw->eos)
+	if (hw->timeout_flag) {
+		h264_timeout_unlock(hw, flags);
 		return IRQ_HANDLED;
+	}
+
+	h264_timeout_unlock(hw, flags);
+
+	if (!hw) {
+		start_process_time(hw);
+		return IRQ_HANDLED;
+	}
+
+	if (hw->eos) {
+		start_process_time(hw);
+		return IRQ_HANDLED;
+	}
 
 	p_H264_Dpb->vdec = vdec;
 	p_H264_Dpb->dec_dpb_status = READ_VREG(DPB_STATUS_REG);
@@ -8119,6 +8144,7 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 		if (hw->mmu_enable)
 			hevc_sao_wait_done(hw);
 		WRITE_VREG(DPB_STATUS_REG, H264_WRRSP_DONE);
+		start_process_time(hw);
 		return IRQ_HANDLED;
 	}
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_END);
@@ -8131,19 +8157,6 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-	/*
-	 * In this very timeout point,the vh264_work arrives,
-	 * or in some cases the system become slow,  then come
-	 * this second timeout. In both cases we return.
-	 */
-	if (work_pending(&hw->work) ||
-	    work_busy(&hw->work) ||
-	    work_busy(&hw->timeout_work) ||
-	    work_pending(&hw->timeout_work)) {
-		pr_err("%s h264[%d] work pending, do nothing.\n",__func__, vdec->id);
-		return;
-	}
 
 	hw->timeout_num++;
 	amvdec_stop();
@@ -8163,8 +8176,6 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 			hw->ip_field_error_count = 0;
 	}
 
-	if (work_pending(&hw->work))
-		return;
 	vdec_schedule_work(&hw->timeout_work);
 }
 
@@ -8337,6 +8348,8 @@ static void check_timer_func(struct timer_list *timer)
 		struct vdec_h264_hw_s, check_timer);
 	int error_skip_frame_count = error_skip_count & 0xfff;
 	unsigned int timeout_val = decode_timeout_val;
+	ulong flags;
+
 	if (timeout_val != 0 &&
 		hw->no_error_count < error_skip_frame_count)
 		timeout_val = errordata_timeout_val;
@@ -8368,6 +8381,7 @@ static void check_timer_func(struct timer_list *timer)
 		radr = 0;
 	}
 
+	flags = h264_timeout_lock(hw);
 	if (((h264_debug_flag & DISABLE_ERROR_HANDLE) == 0) &&
 		(timeout_val > 0) &&
 		(hw->start_process_time > 0) &&
@@ -8391,8 +8405,7 @@ static void check_timer_func(struct timer_list *timer)
 					hw->decode_timeout_count--;
 				if (hw->decode_timeout_count == 0)
 				{
-					reset_process_time(hw);
-					timeout_process(hw);
+					hw->timeout_flag = TIMEOUT_PROC;
 				}
 			} else
 				start_process_time(hw);
@@ -8403,14 +8416,20 @@ static void check_timer_func(struct timer_list *timer)
 					hw->decode_timeout_count--;
 				if (hw->decode_timeout_count == 0)
 				{
-					reset_process_time(hw);
-					timeout_process(hw);
+					hw->timeout_flag = TIMEOUT_PROC;
 				}
 			}
 		}
 		hw->last_vld_level =
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL);
 		hw->last_mby_mbx = mby_mbx;
+	}
+	h264_timeout_unlock(hw, flags);
+
+	if (hw->timeout_flag == TIMEOUT_PROC) {
+		reset_process_time(hw);
+		timeout_process(hw);
+		hw->timeout_flag = TIMEOUT_DONE;
 	}
 
 	if ((hw->ucode_pause_pos != 0) &&
@@ -10782,6 +10801,7 @@ result_done:
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_END);
 	}
 
+	hw->timeout_flag = TIMEOUT_INIT;
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1) {
 		if (hw->mmu_enable == 0)
@@ -10830,9 +10850,6 @@ static void vh264_timeout_work(struct work_struct *work)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-	if (work_pending(&hw->work))
-		return;
 
 	hw->timeout_processing = 1;
 	if (vdec_frame_based(vdec) &&
@@ -11196,6 +11213,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			size);
 
 	hw->dec_result = DEC_RESULT_NONE;
+	hw->timeout_flag = TIMEOUT_INIT;
 	start_process_time(hw);
 	if (vdec->mc_loaded) {
 			/*firmware have load before,
@@ -11375,6 +11393,7 @@ static void reset(struct vdec_s *vdec)
 	hw->decode_pic_count = 0;
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->multi_frame_unfinish = 0;
+	hw->timeout_flag = TIMEOUT_INIT;
 
 	reset_process_time(hw);
 	h264_reset_bufmgr_v4l(vdec, 0, true);
@@ -11884,6 +11903,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	hw->dpb.without_display_mode = without_display_mode;
 	mutex_init(&hw->fence_mutex);
 	mutex_init(&hw->pic_mutex);
+	spin_lock_init(&hw->tlock);
 	if (hw->enable_fence) {
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);

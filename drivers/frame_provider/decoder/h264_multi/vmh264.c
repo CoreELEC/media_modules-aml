@@ -1002,7 +1002,26 @@ struct vdec_h264_hw_s {
 	u32 latest_head_done_rp;
 	u32 latest_dec_status;
 	u32 no_picdone_again_flag;
+	spinlock_t tlock;
 };
+
+#define TIMEOUT_INIT 0
+#define TIMEOUT_PROC 1
+#define TIMEOUT_DONE 2
+
+static inline ulong h264_timeout_lock(struct vdec_h264_hw_s *hw)
+{
+	ulong flags;
+
+	spin_lock_irqsave(&hw->tlock, flags);
+
+	return flags;
+}
+
+static inline void h264_timeout_unlock(struct vdec_h264_hw_s *hw, ulong flags)
+{
+	spin_unlock_irqrestore(&hw->tlock, flags);
+}
 
 static u32 again_threshold;
 
@@ -7493,7 +7512,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 #endif
 
 		WRITE_VREG(DPB_STATUS_REG, H264_ACTION_CONFIG_DONE);
-		reset_process_time(hw);
 		hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
 		hw->reg_iqidct_control_init_flag = 1;
 		hw->dec_result = DEC_RESULT_CONFIG_PARAM;
@@ -7530,7 +7548,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
 		u32 cur_rp = READ_VREG(VLD_MEM_VIFIFO_RP);
 
-		reset_process_time(hw);
 		hw->frmbase_cont_flag = 0;
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -8023,7 +8040,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 #endif
 
 pic_done_proc:
-		reset_process_time(hw);
 		if (dec_dpb_status == H264_PIC_DATA_DONE)
 			vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 		if ((dec_dpb_status == H264_SEARCH_BUFEMPTY) ||
@@ -8136,7 +8152,6 @@ pic_done_proc:
 		goto pic_done_proc;
 #endif
 	} else if (dec_dpb_status == H264_AUX_DATA_READY) {
-		reset_process_time(hw);
 		if (READ_VREG(H264_AUX_DATA_SIZE) != 0) {
 			if (dpb_is_debug(DECODE_ID(hw),
 				PRINT_FLAG_SEI_DETAIL))
@@ -8185,7 +8200,6 @@ pic_done_proc:
 			(dec_dpb_status == H264_DECODE_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_TIMEOUT)) {
 empty_proc:
-		reset_process_time(hw);
 		if ((hw->error_proc_policy & 0x40000) &&
 			((dec_dpb_status == H264_DECODE_TIMEOUT) ||
 			((dec_dpb_status == H264_DECODE_BUFEMPTY) && input_frame_based(vdec)) ||
@@ -8257,7 +8271,6 @@ send_again:
 			vdec_schedule_work(&hw->work);
 		}
 	} else if (dec_dpb_status == H264_DATA_REQUEST) {
-		reset_process_time(hw);
 		if (input_frame_based(vdec)) {
 			dpb_print(DECODE_ID(hw),
 			PRINT_FLAG_VDEC_STATUS,
@@ -8279,7 +8292,6 @@ send_again:
 		release_cur_decoding_buf(hw);
 		hw->data_flag |= ERROR_FLAG;
 		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		reset_process_time(hw);
 		hw->dec_result = DEC_RESULT_DONE;
 		vdec_schedule_work(&hw->work);
 		return IRQ_HANDLED;
@@ -8380,10 +8392,10 @@ send_again:
 		}
 		else if (debug_tag & 0x20000)
 			hw->ucode_pause_pos = 0xffffffff;
-		if (hw->ucode_pause_pos)
-			reset_process_time(hw);
-		else
+		if (!hw->ucode_pause_pos) {
+			start_process_time(hw);
 			WRITE_VREG(DEBUG_REG1, 0);
+		}
 	} else if (debug_tag != 0) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
 			"dbg%x: %x\n", debug_tag,
@@ -8398,10 +8410,10 @@ send_again:
 			udebug_pause_pos &= 0xffff;
 			hw->ucode_pause_pos = udebug_pause_pos;
 		}
-		if (hw->ucode_pause_pos)
-			reset_process_time(hw);
-		else
+		if (!hw->ucode_pause_pos) {
+			start_process_time(hw);
 			WRITE_VREG(DEBUG_REG1, 0);
+		}
 	}
 	/**/
 	return IRQ_HANDLED;
@@ -8411,15 +8423,29 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	ulong flags;
 
-
+	flags = h264_timeout_lock(hw);
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 
-	if (!hw)
-		return IRQ_HANDLED;
+	reset_process_time(hw);
 
-	if (hw->eos)
+	if (hw->timeout_flag) {
+		h264_timeout_unlock(hw, flags);
 		return IRQ_HANDLED;
+	}
+
+	h264_timeout_unlock(hw, flags);
+
+	if (!hw) {
+		start_process_time(hw);
+		return IRQ_HANDLED;
+	}
+
+	if (hw->eos) {
+		start_process_time(hw);
+		return IRQ_HANDLED;
+	}
 
 	p_H264_Dpb->vdec = vdec;
 	p_H264_Dpb->dec_dpb_status = READ_VREG(DPB_STATUS_REG);
@@ -8456,6 +8482,7 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 		if (hw->mmu_enable)
 			hevc_sao_wait_done(hw);
 		WRITE_VREG(DPB_STATUS_REG, H264_WRRSP_DONE);
+		start_process_time(hw);
 		return IRQ_HANDLED;
 	}
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_END);
@@ -8467,18 +8494,6 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
-	/*
-	 * In this very timeout point,the vh264_work arrives,
-	 * or in some cases the system become slow,  then come
-	 * this second timeout. In both cases we return.
-	 */
-	if (work_pending(&hw->work) ||
-	    work_busy(&hw->work) ||
-	    work_busy(&hw->timeout_work) ||
-	    work_pending(&hw->timeout_work)) {
-		pr_err("%s h264[%d] work pending, do nothing.\n",__func__, vdec->id);
-		return;
-	}
 	hw->timeout_num++;
 	amvdec_stop();
 	vdec->mc_loaded = 0;
@@ -8495,8 +8510,6 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 			hw->ip_field_error_count = 0;
 	}
 
-	if (work_pending(&hw->work))
-		return;
 	vdec_schedule_work(&hw->timeout_work);
 }
 
@@ -8685,7 +8698,8 @@ static void check_timer_func(struct timer_list *timer)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	int error_skip_frame_count = error_skip_count & 0xfff;
 	unsigned int timeout_val = decode_timeout_val;
-	unsigned long flags;
+	ulong flags, timeout_flags;
+
 	if (timeout_val != 0 &&
 		hw->no_error_count < error_skip_frame_count)
 		timeout_val = errordata_timeout_val;
@@ -8719,6 +8733,7 @@ static void check_timer_func(struct timer_list *timer)
 		radr = 0;
 	}
 
+	timeout_flags = h264_timeout_lock(hw);
 	if (((h264_debug_flag & DISABLE_ERROR_HANDLE) == 0) &&
 		(timeout_val > 0) &&
 		(hw->start_process_time > 0) &&
@@ -8742,8 +8757,7 @@ static void check_timer_func(struct timer_list *timer)
 					hw->decode_timeout_count--;
 				if (hw->decode_timeout_count == 0)
 				{
-					reset_process_time(hw);
-					timeout_process(hw);
+					hw->timeout_flag = TIMEOUT_PROC;
 				}
 			} else
 				start_process_time(hw);
@@ -8754,8 +8768,7 @@ static void check_timer_func(struct timer_list *timer)
 					hw->decode_timeout_count--;
 				if (hw->decode_timeout_count == 0)
 				{
-					reset_process_time(hw);
-					timeout_process(hw);
+					hw->timeout_flag = TIMEOUT_PROC;
 				}
 			}
 		}
@@ -8763,7 +8776,14 @@ static void check_timer_func(struct timer_list *timer)
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL);
 		hw->last_mby_mbx = mby_mbx;
 	}
+	h264_timeout_unlock(hw, timeout_flags);
 	vdec_power_unlock(vdec, flags);
+
+	if (hw->timeout_flag == TIMEOUT_PROC) {
+		reset_process_time(hw);
+		timeout_process(hw);
+		hw->timeout_flag = TIMEOUT_DONE;
+	}
 
 	if ((hw->ucode_pause_pos != 0) &&
 		(hw->ucode_pause_pos != 0xffffffff) &&
@@ -10808,6 +10828,7 @@ result_done:
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_END);
 	}
 
+	hw->timeout_flag = TIMEOUT_INIT;
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1) {
 		if (hw->mmu_enable == 0)
@@ -10855,9 +10876,6 @@ static void vh264_timeout_work(struct work_struct *work)
 	struct vdec_h264_hw_s *hw = container_of(work,
 		struct vdec_h264_hw_s, timeout_work);
 	struct vdec_s *vdec = hw_to_vdec(hw);
-
-	if (work_pending(&hw->work))
-		return;
 
 	hw->timeout_processing = 1;
 	vh264_work_implement(hw, vdec, 1);
@@ -11225,6 +11243,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->latest_dec_status = 0;
+	hw->timeout_flag = TIMEOUT_INIT;
 	start_process_time(hw);
 	if (vdec->mc_loaded) {
 			/*firmware have load before,
@@ -11406,6 +11425,7 @@ static void reset(struct vdec_s *vdec)
 	hw->decode_pic_count = 0;
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->multi_frame_unfinish = 0;
+	hw->timeout_flag = TIMEOUT_INIT;
 
 	reset_process_time(hw);
 	h264_reset_bufmgr(vdec, true);
@@ -12076,6 +12096,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	hw->dpb.without_display_mode = without_display_mode;
 	mutex_init(&hw->fence_mutex);
 	mutex_init(&hw->pic_mutex);
+	spin_lock_init(&hw->tlock);
 	if (hw->enable_fence) {
 		pdata->sync = vdec_sync_get();
 		if (!pdata->sync) {
