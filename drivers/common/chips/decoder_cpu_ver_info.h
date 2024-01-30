@@ -98,6 +98,7 @@ enum AM_MESON_CPU_MAJOR_ID {
 #define AM_MESON_CPU_MINOR_ID_REVB_TM2   (REVB_MASK | AM_MESON_CPU_MAJOR_ID_TM2)
 #define AM_MESON_CPU_MINOR_ID_S4_S805X2  (REVX_MASK | AM_MESON_CPU_MAJOR_ID_S4)
 #define AM_MESON_CPU_MINOR_ID_T7C        (REVC_MASK | AM_MESON_CPU_MAJOR_ID_T7)
+#define AM_MESON_CPU_MINOR_ID_S7_S805X3  (REVX_MASK | AM_MESON_CPU_MAJOR_ID_S7)
 
 /* for dos_of_dev_s max resolution define */
 #define RESOLUTION_1080P  (1920 * 1088)
@@ -188,6 +189,9 @@ bool is_cpu_s4_s805x2(void);
 
 bool is_cpu_t7(void);
 bool is_cpu_t7c(void);
+
+bool is_cpu_s7(void);
+bool is_cpu_s7_s805x3(void);
 
 inline bool is_support_new_dos_dev(void);
 

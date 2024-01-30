@@ -485,7 +485,26 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,  //fixed endian issue
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
-	}
+	},
+
+	{
+		.chip_id = AM_MESON_CPU_MINOR_ID_S7_S805X3,
+		.reg_compat = s7_mm_registers_compat,
+		.max_vdec_clock  = 800,
+		.max_hevcf_clock = 500,
+		.max_hevcb_clock = 500,
+		.hevc_clk_combine_flag  = true,
+		.is_hw_parser_support   = false,
+		.is_vdec_canvas_support = true,
+		.is_support_h264_mmu    = true,
+		.is_support_dual_core = false,
+		.is_mjpeg_endian_rematch = true,
+		.is_vcpu_clk_set = true,
+		.is_vp9_adapt_prob_hw_mode = true,
+		.vdec_max_resolution = RESOLUTION_1080P,
+		.hevc_max_resolution = RESOLUTION_1080P,
+		.fmt_support_flags = FMT_VDEC_NO_AVS | FMT_HEVC_VP9_AV1,
+	},
 };
 
 /* dos device match table */
@@ -616,6 +635,10 @@ static const struct of_device_id cpu_sub_id_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-t7c",
 		.data = &dos_dev_sub_table[3],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-s7-805x3",
+		.data = &dos_dev_sub_table[4],
 	},
 	{}
 };
@@ -779,6 +802,20 @@ bool is_cpu_t7c(void)
 		&& (get_cpu_sub_id() == CHIP_REVC));
 }
 EXPORT_SYMBOL(is_cpu_t7c);
+
+bool is_cpu_s7(void)
+{
+	return ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7)
+		&& (get_cpu_sub_id() != CHIP_REVX));
+}
+EXPORT_SYMBOL(is_cpu_s7);
+
+bool is_cpu_s7_s805x3(void)
+{
+	return ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7)
+		&& (get_cpu_sub_id() == CHIP_REVX));
+}
+EXPORT_SYMBOL(is_cpu_s7_s805x3);
 
 /*
 	feature from dos dev functions

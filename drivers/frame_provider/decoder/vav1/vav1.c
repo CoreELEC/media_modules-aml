@@ -969,9 +969,10 @@ static int is_oversize(int w, int h)
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7))
+		is_cpu_s7())
 		max = MAX_SIZE_4K;
-	else if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
+	else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
+		is_cpu_s7_s805x3())
 		max = MAX_SIZE_2K;
 
 	if (w <= 0 || h <= 0)
