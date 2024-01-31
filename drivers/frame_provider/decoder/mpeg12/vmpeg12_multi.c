@@ -2219,6 +2219,21 @@ static void copy_user_data_to_pic(struct vdec_mpeg12_hw_s *hw, struct pic_info_t
 	pic->ud_param.pbuf_addr = pic->user_data_buf;
 	pic->ud_param.meta_info = hw->meta_info;
 	pic->ud_param.instance_id = vdec->afd_video_id;
+	pic->ud_param.meta_info.poc_number = pic->poc;
+	pic->ud_param.meta_info.flags &= 0xFFFFFC7F; //bit7~bit9: ud frame type
+
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I)
+		pic->ud_param.meta_info.flags |= (1<<7);
+	else if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)
+		pic->ud_param.meta_info.flags |= (2<<7);
+	else if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B)
+		pic->ud_param.meta_info.flags |= (3<<7);
+	else
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL, "pic type invalid\n");
+
+	debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"%s: poc %d, flags 0x%x\n", __func__,
+			pic->ud_param.meta_info.poc_number, pic->ud_param.meta_info.flags);
 
 	hw->parse_user_data_size = 0;
 	memset(hw->parse_user_data_buf, 0, CCBUF_SIZE);
@@ -2428,15 +2443,6 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			local_clock() - vdec->mvfrm->hw_decode_start;
 		}
 
-		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
-			"%s: mmpeg12: wait_for_udr_send %d, parse_user_data_size %d/%d\n", __func__,
-			hw->wait_for_udr_send, hw->parse_user_data_size, hw->last_parse_user_data_size);
-
-		if (input_stream_based(vdec) && hw->wait_for_udr_send && (hw->parse_user_data_size == 0))
-			hw->parse_user_data_size = hw->last_parse_user_data_size;
-
-		copy_user_data_to_pic(hw, new_pic);
-
 		tmp = READ_VREG(MREG_PIC_WIDTH);
 		if ((tmp > 1920) || (tmp == 0)) {
 			new_pic->width = 1920;
@@ -2459,6 +2465,16 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		new_pic->offset = offset;
 		new_pic->index = index;
 		new_pic->poc = READ_VREG(AV_SCRATCH_1) & 0x3ff;
+
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"%s: mmpeg12: wait_for_udr_send %d, parse_user_data_size %d/%d\n", __func__,
+			hw->wait_for_udr_send, hw->parse_user_data_size, hw->last_parse_user_data_size);
+
+		if (input_stream_based(vdec) && hw->wait_for_udr_send && (hw->parse_user_data_size == 0))
+			hw->parse_user_data_size = hw->last_parse_user_data_size;
+
+		copy_user_data_to_pic(hw, new_pic);
+
 		if (((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) ||
 			((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)) {
 			if (hw->chunk) {
@@ -2492,8 +2508,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		}
 
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"mmpeg12: new_pic=%d, ind=%d, info=%x, seq=%x, offset=%d, poc %d\n",
-			hw->dec_num, index, info, seqinfo, offset, new_pic->poc);
+			"mmpeg12: new_pic=%d(%c), ind=%d, info=%x, seq=%x, offset=%d, poc %d\n",
+			hw->dec_num, GET_SLICE_TYPE(info), index, info, seqinfo, offset, new_pic->poc);
 
 		hw->frame_prog = info & PICINFO_PROG;
 		if ((seqinfo & SEQINFO_EXT_AVAILABLE) &&
