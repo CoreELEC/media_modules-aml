@@ -6914,11 +6914,6 @@ static void avs2_work(struct work_struct *work)
 		decode_frame_count[dec->index] = dec->frame_count;
 		ctx->decoder_status_info.decoder_count++;
 
-		if (dec->timeout && vdec_frame_based(vdec)) {
-			avs2_buf_ref_process_for_exception(dec);
-			vdec_v4l_post_error_frame_event(ctx);
-			dec->timeout = false;
-		}
 		if ((pic != NULL) && (pic->error_mark) &&
 			(dec->dec_result == DEC_RESULT_DONE)) {
 			dec->gvs->error_frame_count++;

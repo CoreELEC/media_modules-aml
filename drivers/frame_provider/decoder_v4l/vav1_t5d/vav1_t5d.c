@@ -9734,7 +9734,6 @@ static void av1_work(struct work_struct *work)
 		hw->process_state = PROC_STATE_INIT;
 
 		if (hw->timeout && vdec_frame_based(vdec)) {
-			av1_buf_ref_process_for_exception(hw);
 			vdec_v4l_post_error_frame_event(ctx);
 			hw->timeout = false;
 		}

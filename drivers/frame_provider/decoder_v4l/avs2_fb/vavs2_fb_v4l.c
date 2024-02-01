@@ -8603,8 +8603,7 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 #endif
 		}
 
-		if (dec->timeout && vdec_frame_based(vdec) && (dec->error_proc_policy & 0x2)) {
-			avs2_buf_ref_process_for_exception(dec);
+		if (dec->timeout && vdec_frame_based(vdec)) {
 			vdec_v4l_post_error_frame_event(ctx);
 			dec->timeout = false;
 		}

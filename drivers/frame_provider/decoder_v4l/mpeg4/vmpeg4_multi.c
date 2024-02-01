@@ -810,12 +810,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			} else if (pic->pic_type == B_PICTURE) {
 				hw->b_lost_frames++;
 			}
-			hw->vfbuf_use[index]--;
-			if (!hw->vfbuf_use[index]) {
-				aml_buf_put_ref(&v4l2_ctx->bm, aml_buf);
-				hw->pic[index].v4l_ref_buf_addr = 0;
-				hw->pic[index].cma_alloc_addr = 0;
-			}
+
+			vmpeg_vf_put(vf, vdec);
 			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
@@ -912,7 +908,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			} else if (pic->pic_type == B_PICTURE) {
 				hw->b_lost_frames++;
 			}
-			hw->vfbuf_use[index]--;
+			vmpeg_vf_put(vf, vdec);
 			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
@@ -1011,7 +1007,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			} else if (pic->pic_type == B_PICTURE) {
 				hw->b_lost_frames++;
 			}
-			hw->vfbuf_use[index]--;
+			vmpeg_vf_put(vf, vdec);
 			spin_lock_irqsave(&hw->lock, flags);
 			kfifo_put(&hw->newframe_q,
 				(const struct vframe_s *)vf);
@@ -1629,8 +1625,12 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 			/* drop B frame or disp immediately.
 			 * depend on if there are two ref frames
 			 */
-			if (hw->refs[1] == -1)
+			if (hw->refs[1] == -1) {
+				mpeg4_buf_ref_process_for_exception(hw);
+				if (vdec_frame_based(hw_to_vdec(hw)))
+					vdec_v4l_post_error_frame_event(ctx);
 				index = -1;
+			}
 		}
 
 		mpeg4_recycle_frame_buffer(hw);
@@ -2113,7 +2113,8 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		"%s: put num:%d\n",__func__, hw->put_num);
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"index=%d, used=%d\n", vf->index, hw->vfbuf_use[vf->index]);
-
+	ctx->current_timestamp = vf->timestamp;
+	vdec_v4l_post_error_frame_event(ctx);
 	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 	aml_buf_put_ref(&ctx->bm, aml_buf);
 	vdec_up(vdec);

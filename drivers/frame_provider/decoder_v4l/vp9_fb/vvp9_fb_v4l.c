@@ -13462,7 +13462,6 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 		}
 #endif
 		if (pbi->timeout && vdec_frame_based(vdec)) {
-			vp9_buf_ref_process_for_exception(pbi);
 			vdec_v4l_post_error_frame_event(ctx);
 			pbi->timeout = false;
 		}

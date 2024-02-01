@@ -9178,7 +9178,6 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 		decode_frame_count[dec->index] = dec->frame_count;
 
 		if (dec->timeout && vdec_frame_based(vdec)) {
-			avs3_buf_ref_process_for_exception(dec);
 			vdec_v4l_post_error_frame_event(ctx);
 			dec->timeout = false;
 		}
