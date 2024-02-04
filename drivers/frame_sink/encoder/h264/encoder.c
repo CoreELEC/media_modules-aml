@@ -67,6 +67,7 @@
 #include <linux/amlogic/media/utils/amlog.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../../../frame_provider/decoder/utils/firmware.h"
+#include "../common/encoder_report.h"
 #include <linux/amlogic/media/registers/register.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/version.h>
@@ -509,6 +510,11 @@ static void cav_lut_info_store(u32 index, ulong addr, u32 width,
 }
 
 */
+
+static void set_log_level(const char *module, int level)
+{
+	encode_print_level = level;
+}
 
 static struct file *file_open(const char *path, int flags, int rights)
 {
@@ -5034,6 +5040,7 @@ static s32 __init amvenc_avc_driver_init_module(void)
 		return -ENODEV;
 	}
 	//vcodec_profile_register(&amvenc_avc_profile);
+	enc_register_set_debug_level_func(DEBUG_AMVENC_264, set_log_level);
 	return 0;
 }
 

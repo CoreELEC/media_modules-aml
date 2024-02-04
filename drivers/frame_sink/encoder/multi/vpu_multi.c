@@ -58,6 +58,8 @@
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../../../frame_provider/decoder/utils/vdec.h"
 #include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
+#include "../common/encoder_report.h"
+
 #include "vpu_multi.h"
 #include "vmm_multi.h"
 
@@ -119,6 +121,11 @@ struct vpu_clks {
 
 static struct vpu_clks s_vpu_clks;
 static struct platform_device *multienc_pdev;
+
+static void set_log_level(const char *module, int level)
+{
+	print_level = level;
+}
 
 #ifdef CONFIG_COMPAT
 static struct file *file_open(const char *path, int flags, int rights)
@@ -3482,6 +3489,9 @@ static s32 __init vpu_init(void)
 	res = platform_driver_register(&vpu_driver);
 	enc_pr(LOG_INFO,
 		"end vpu_init result=0x%x\n", res);
+
+	if (res == 0)
+		enc_register_set_debug_level_func(DEBUG_AMVENC_MULIT, set_log_level);
 	return res;
 }
 

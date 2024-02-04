@@ -57,6 +57,7 @@
 
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../common/media_clock/switch/amports_gate.h"
+#include "../common/encoder_report.h"
 
 #include "vpu.h"
 #include "vmm.h"
@@ -151,6 +152,11 @@ static u32 vpu_multi_src_addr_config(struct vpu_multi_dma_buf_info_t *pinfo,
 		struct file *filp);
 static s32 vpu_multi_src_addr_unmap(struct vpu_multi_dma_buf_info_t *dma_info,
 		struct file *filp);
+
+static void set_log_level(const char *module, int level)
+{
+	print_level = level;
+}
 
 static void dma_flush(u32 buf_start, u32 buf_size)
 {
@@ -2794,6 +2800,9 @@ static s32 __init vpu_init(void)
 	res = platform_driver_register(&vpu_driver);
 	enc_pr(LOG_INFO,
 		"end vpu_init result=0x%x\n", res);
+
+	if (res == 0)
+		enc_register_set_debug_level_func(DEBUG_AMVENC_265, set_log_level);
 	return res;
 }
 

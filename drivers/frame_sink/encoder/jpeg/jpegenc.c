@@ -53,6 +53,8 @@
 #include "../../../frame_provider/decoder/utils/firmware.h"
 #include "../../../frame_provider/decoder/utils/vdec.h"
 #include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
+#include "../common/encoder_report.h"
+
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include "jpegenc.h"
 #include <linux/of_reserved_mem.h>
@@ -554,6 +556,11 @@ static s32 enc_src_addr_config(struct encdrv_dma_buf_info_t *pinfo,
         struct file *filp);
 static s32 enc_free_buffers(struct file *filp);
 static int enc_dma_buf_get_phys(struct enc_dma_cfg *cfg, unsigned long *addr);
+
+static void set_log_level(const char *module, int level)
+{
+    jpegenc_print_level = level;
+}
 
 static void dump_request(struct jpegenc_request_s *request) {
     jenc_pr(LOG_DEBUG, "jpegenc: dump request start\n");
@@ -5182,6 +5189,7 @@ static s32 __init jpegenc_driver_init_module(void)
 #if 0
     vcodec_profile_register(&jpegenc_profile);
 #endif
+    enc_register_set_debug_level_func(DEBUG_AMVENC_JPEG, set_log_level);
     return 0;
 }
 

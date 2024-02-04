@@ -50,6 +50,7 @@ kernel_module(
         "frame_provider/decoder/vp9/amvdec_vp9.ko",
         "frame_provider/decoder/vp9_fb/amvdec_vp9_fb.ko",
         "framerate_adapter/video_framerate_adapter.ko",
+        "frame_sink/encoder/common/encoder_common.ko",
         "frame_sink/encoder/h264/amlogic-encoder.ko",
         "frame_sink/encoder/h265/amlogic-vpu.ko",
         "frame_sink/encoder/jpeg/amlogic-jpegenc.ko",
