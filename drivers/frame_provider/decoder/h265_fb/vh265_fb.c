@@ -15258,6 +15258,14 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 		}
 		if (decode_count >=
 				hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + detect_stuck_buffer_margin) {
+			if (save_buffer && !hevc->head_pre_parsed) {
+				hevc->try_parsing = 1;
+				hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
+						"Try pre parse head!\n");
+				spin_unlock_irqrestore(&h265_lock, flags);
+				return 1;
+			}
+
 			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 				dump_pic_list(hevc);
 			if (!(error_handle_policy & 0x400)) {

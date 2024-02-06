@@ -4907,7 +4907,7 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 			"set dma buf mode: %x\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_GET_DECINFO_SET) {
 		memcpy(&ctx->dec_intf.dec_comm, ctrl->p_new.p, sizeof(struct vdec_common_s));
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "set dec info");
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "set dec info");
 	}
 	return 0;
 }

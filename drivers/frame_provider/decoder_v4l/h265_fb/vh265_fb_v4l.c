@@ -6827,7 +6827,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 
 		pic = hevc->m_PIC[pos];
 		if (pic && v4l_alloc_buf(hevc, pic)) {
-			hevc_print(hevc, 0,
+			hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s pic %px or v4l_alloc_buf fail!\n",
 			__func__, pic);
 			return NULL;
@@ -15352,7 +15352,7 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 				pic->vf_ref, pic->output_ready);
 		}
 
-		return false;
+		goto try_parse_head;
 	}
 
 	if ((hevc->interlace_flag &&
@@ -15380,6 +15380,7 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 		hevc_print(hevc, H265_DEBUG_BUFMGR, "%s get fb: 0x%lx fb idx: %d\n",
 		__func__, hevc->aml_buf, hevc->aml_buf->index);
 	}
+try_parse_head:
 	if (hevc->dec_result != DEC_RESULT_EOS && !hevc->resolution_change &&
 		save_buffer && free_count < run_ready_min_buf_num &&
 		!hevc->head_pre_parsed) {
@@ -15398,9 +15399,9 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
-	struct PIC_s *pic, *new_pic = NULL;
+	struct PIC_s *pic;
 	bool has_free_buf = is_available_buffer(hevc);
-	int i, ref_pic = 0;
+	int i;
 	ulong flags;
 
 	/*return 1 if pic_list is not initialized yet*/
@@ -15408,32 +15409,12 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 		return 1;
 
 	spin_lock_irqsave(&h265_lock, flags);
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
-		pic = hevc->m_PIC[i];
-		if (pic == NULL || pic->index == -1 || pic->BUF_index == -1)
-			continue;
-		if (pic->referenced == 1)
-			ref_pic++;
-		if (pic->output_mark == 0 && pic->referenced == 0
-			&& pic->output_ready == 0
-			&& pic->vf_ref == 0
-#ifdef NEW_FRONT_BACK_CODE
-			&& pic->backend_ref == 0
-#endif
-			) {
-			if (new_pic) {
-				if (pic->POC < new_pic->POC)
-					new_pic = pic;
-			} else
-				new_pic = pic;
-		}
-	}
 
-	if ((new_pic == NULL) ||
-		((ctx->param_sets_from_ucode) &&
+	if ((ctx->param_sets_from_ucode) &&
 		(hevc->v4l_params_parsed) &&
-		!has_free_buf)) {
+		!has_free_buf) {
 		int decode_count = 0;
+		u32 dpb_frames = 0;
 
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			pic = hevc->m_PIC[i];
@@ -15445,8 +15426,9 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 				decode_count++;
 		}
 
-		if (decode_count >=
-				hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + detect_stuck_buffer_margin) {
+		dpb_frames = hevc->param.p.sps_max_dec_pic_buffering_minus1_0 +
+				(save_buffer ? 2 : 3);
+		if (decode_count >= dpb_frames + 1) {
 			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 				dump_pic_list(hevc);
 			if (!(error_handle_policy & 0x400)) {
@@ -15461,7 +15443,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 
 	spin_unlock_irqrestore(&h265_lock, flags);
 
-	return (new_pic != NULL) ? 1 : 0;
+	return has_free_buf;
 }
 
 static int count_free_buffer_slot(struct hevc_state_s *hevc)
