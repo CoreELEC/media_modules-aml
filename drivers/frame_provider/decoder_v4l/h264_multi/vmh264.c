@@ -1026,7 +1026,7 @@ static void timeout_process(struct vdec_h264_hw_s *hw);
 static void dump_bufspec(struct vdec_h264_hw_s *hw, const char *caller);
 static void h264_reconfig(struct vdec_h264_hw_s *hw);
 static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag, bool reset_flags);
-static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset);
+static void vh264_local_init(struct vdec_h264_hw_s *hw, int flush_flag, bool is_reset);
 static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw);
 static int vh264_stop(struct vdec_h264_hw_s *hw);
 static s32 vh264_init(struct vdec_h264_hw_s *hw);
@@ -8837,14 +8837,15 @@ static int vmh264_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
 }
 
 static unsigned char amvdec_enable_flag;
-static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset)
+static void vh264_local_init(struct vdec_h264_hw_s *hw, int flush_flag, bool is_reset)
 {
 	int i;
 	hw->init_flag = 0;
 	hw->first_sc_checked= 0;
 	hw->eos = 0;
 	hw->valve_count = 0;
-	hw->config_bufmgr_done = 0;
+	if (!is_reset || !flush_flag)
+		hw->config_bufmgr_done = 0;
 	hw->start_process_time = 0;
 	hw->has_i_frame = 0;
 	hw->no_error_count = 0xfff;
@@ -8866,8 +8867,10 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset)
 		hw->vh264_amstream_dec_info.param) >> 16) & 0xffff;
 
 	hw->frame_prog = 0;
-	hw->frame_width = hw->vh264_amstream_dec_info.width;
-	hw->frame_height = hw->vh264_amstream_dec_info.height;
+	if (!is_reset || !flush_flag) {
+		hw->frame_width = hw->vh264_amstream_dec_info.width;
+		hw->frame_height = hw->vh264_amstream_dec_info.height;
+	}
 	hw->frame_dur = hw->v4l_duration ? hw->v4l_duration :
 		hw->vh264_amstream_dec_info.rate;
 	hw->pts_outside = ((unsigned long)
@@ -8948,7 +8951,7 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 	hw->stat |= STAT_ISR_REG;
 
 	mutex_init(&hw->chunks_mutex);
-	vh264_local_init(hw, false);
+	vh264_local_init(hw, 0, false);
 	INIT_WORK(&hw->work, vh264_work);
 	INIT_WORK(&hw->notify_work, vh264_notify_work);
 	INIT_WORK(&hw->timeout_work, vh264_timeout_work);
@@ -11734,8 +11737,11 @@ static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag, bool rese
 
 	buf_spec_init(hw, true);
 
-	vh264_local_init(hw, true);
+	vh264_local_init(hw, flush_flag, true);
 
+	dpb_init_global(&hw->dpb,
+		DECODE_ID(hw), p_H264_Dpb->mDPB.size, p_H264_Dpb->max_reference_size);
+#if 0
 	if (vh264_set_params(hw,
 		hw->cfg_param1,
 		hw->cfg_param2,
@@ -11744,7 +11750,7 @@ static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag, bool rese
 		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 	else
 		hw->stat &= (~DECODER_FATAL_ERROR_SIZE_OVERFLOW);
-
+#endif
 	/*drop 3 frames after reset bufmgr if bit0 is set 1 */
 	if (first_i_policy & 0x01)
 		hw->first_i_policy = (3 << 8) | first_i_policy;
