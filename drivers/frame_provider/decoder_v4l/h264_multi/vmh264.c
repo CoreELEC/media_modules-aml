@@ -9903,9 +9903,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	u32 param1, u32 param2, u32 param3, u32 param4,
 	struct aml_vdec_ps_infos *ps)
 {
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	struct vdec_s *vdec = hw_to_vdec(hw);
-#endif
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
