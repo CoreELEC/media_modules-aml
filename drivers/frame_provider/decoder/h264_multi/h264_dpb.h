@@ -381,6 +381,12 @@ union param {
 		unsigned short colocated_mv_addr_start[2];
 		unsigned short colocated_mv_addr_end[2];
 		unsigned short colocated_mv_wr_addr[2];
+
+		unsigned short frame_crop_left_offset;
+		unsigned short frame_crop_right_offset;
+		unsigned short frame_crop_top_offset;
+		unsigned short frame_crop_bottom_offset;
+		unsigned short chroma_format_idc;
 	} dpb;
 	struct {
 		unsigned short dump[MMCO_OFFSET];
