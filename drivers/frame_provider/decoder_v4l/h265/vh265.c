@@ -10270,6 +10270,8 @@ static int vh265_clear_mmu_config(struct hevc_state_s *hevc)
 			hevc->mc_dma_handle);
 	}
 #endif
+	fw->len = size;
+	hevc->fw = fw;
 	if (hevc->frame_mmu_map_addr) {
 		if (hevc->frame_mmu_map_phy_addr)
 			decoder_dma_free_coherent(hevc->frame_mmu_map_handle,
