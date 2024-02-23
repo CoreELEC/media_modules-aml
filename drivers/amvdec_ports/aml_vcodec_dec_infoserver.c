@@ -416,7 +416,7 @@ int aml_vcodec_decinfo_get(struct v4l2_ctrl *ctrl,
 	info = &ctx->dec_intf.dec_comm;
 	sub_cmd = info->type;
 
-	v4l_dbg(ctx, 0,
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 		"%s\n get cmd : %x", __func__, sub_cmd);
 
 	switch (sub_cmd) {
