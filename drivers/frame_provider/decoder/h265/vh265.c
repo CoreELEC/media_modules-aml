@@ -1508,8 +1508,12 @@ struct BUF_s {
 	int	used_pic_index;
 } /*BUF_t */;
 
-/* level 6, 6.1 maximum slice number is 800; other is 200 */
-#define MAX_SLICE_NUM 800
+#define EACH_SLICE_LEN 16
+#define SLICE_NUM_LEVEL_IDC_4_x		75
+#define SLICE_NUM_LEVEL_IDC_5_x		200
+#define SLICE_NUM_LEVEL_IDC_6_x		600
+#define GET_POC_POS(a, b, c) (int*)((a) + (b) * EACH_SLICE_LEN + (c))
+
 struct PIC_s {
 	int index;
 	int scatter_alloc;
@@ -1530,12 +1534,10 @@ struct PIC_s {
 	unsigned char error_mark;
 	unsigned char dis_mark;
 	int slice_idx;
-	int m_aiRefPOCList0[MAX_SLICE_NUM][16];
-	int m_aiRefPOCList1[MAX_SLICE_NUM][16];
+	int *m_aiRefPOCList0;
+	int *m_aiRefPOCList1;
 #ifdef SUPPORT_LONG_TERM_RPS
 	unsigned char long_term_ref;
-	unsigned char m_aiRefLTflgList0[MAX_SLICE_NUM][16];
-	unsigned char m_aiRefLTflgList1[MAX_SLICE_NUM][16];
 #endif
 	/*buffer */
 	unsigned int header_adr;
@@ -3854,6 +3856,65 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 	return ret;
 }
 
+static int get_slice_size(void)
+{
+	int level_idc = get_h265_idc_level();
+
+	if (level_idc < IDC_5)
+		return SLICE_NUM_LEVEL_IDC_4_x;
+	else if (level_idc < IDC_6)
+		return SLICE_NUM_LEVEL_IDC_5_x;
+	else
+		return SLICE_NUM_LEVEL_IDC_6_x;
+}
+
+static void pic_init(struct PIC_s *pic)
+{
+	int slice_size = get_slice_size();
+	int *m_aiRefPOCList0 = pic->m_aiRefPOCList0;
+	int *m_aiRefPOCList1 = pic->m_aiRefPOCList1;
+	char *aux_data = pic->aux_data_buf;
+
+	memset(pic, 0, sizeof(struct PIC_s));
+	memset(m_aiRefPOCList0, 0, slice_size * EACH_SLICE_LEN * sizeof(int));
+	memset(m_aiRefPOCList1, 0, slice_size * EACH_SLICE_LEN * sizeof(int));
+
+	pic->m_aiRefPOCList0 = m_aiRefPOCList0;
+	pic->m_aiRefPOCList1 = m_aiRefPOCList1;
+	pic->aux_data_buf = aux_data;
+}
+
+static void pic_free(struct PIC_s *pic)
+{
+	kfree(pic->m_aiRefPOCList0);
+	kfree(pic->m_aiRefPOCList1);
+	kfree(pic);
+}
+
+static struct PIC_s *pic_alloc(void)
+{
+	struct PIC_s *pic;
+	int slice_size = get_slice_size();
+
+	pic = kzalloc(sizeof(struct PIC_s), GFP_KERNEL);
+	if (pic == NULL)
+		goto error;
+	pic->m_aiRefPOCList0 =
+		kzalloc(slice_size * EACH_SLICE_LEN * sizeof(int), GFP_KERNEL);
+	if (!pic->m_aiRefPOCList0)
+		goto error;
+	pic->m_aiRefPOCList1 =
+		kzalloc(slice_size * EACH_SLICE_LEN * sizeof(int), GFP_KERNEL);
+	if (!pic->m_aiRefPOCList1)
+		goto error;
+
+	return pic;
+
+error:
+	pic_free(pic);
+	return NULL;
+}
+
 static void init_pic_list(struct hevc_state_s *hevc)
 {
 	int i;
@@ -3876,15 +3937,15 @@ static void init_pic_list(struct hevc_state_s *hevc)
 		struct PIC_s *pic = hevc->m_PIC[i];
 
 		if (!pic) {
-			pic = vmalloc(sizeof(struct PIC_s));
-			if (pic == NULL) {
+			pic = pic_alloc();
+			if (!pic) {
 				hevc_print(hevc, 0,
 					"%s: alloc pic %d fail!!!\n", __func__, i);
 				break;
 			}
 			hevc->m_PIC[i] = pic;
 		}
-		memset(pic, 0, sizeof(struct PIC_s));
+		pic_init(pic);
 
 		pic->index = i;
 		pic->BUF_index = -1;
@@ -3929,7 +3990,7 @@ static void uninit_pic_list(struct hevc_state_s *hevc)
 				vdec->free_canvas_ex(pic->uv_canvas_index, vdec->id);
 			}
 			release_aux_data(hevc, pic);
-			vfree(pic);
+			pic_free(pic);
 			hevc->m_PIC[i] = NULL;
 		}
 	}
@@ -4292,7 +4353,7 @@ static int config_mc_buffer(struct hevc_state_s *hevc, struct PIC_s *cur_pic)
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0 << 1) | 1);
 		for (i = 0; i < cur_pic->RefNum_L0; i++) {
 			pic = get_ref_pic_by_POC(hevc,
-				cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][i]);
+				*GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx, i));
 			if (pic) {
 				if ((pic->width != hevc->pic_w) ||
 					(pic->height != hevc->pic_h)) {
@@ -4320,7 +4381,8 @@ static int config_mc_buffer(struct hevc_state_s *hevc, struct PIC_s *cur_pic)
 				hevc_print(hevc, 0,
 					"Error %s, %dth poc (%d) %s",
 					__func__, i,
-					cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][i],
+					*GET_POC_POS(cur_pic->m_aiRefPOCList0,
+					cur_pic->slice_idx, i),
 					pic ? "has error" : "not in list0");
 			}
 		}
@@ -4333,7 +4395,7 @@ static int config_mc_buffer(struct hevc_state_s *hevc, struct PIC_s *cur_pic)
 
 		for (i = 0; i < cur_pic->RefNum_L1; i++) {
 			pic = get_ref_pic_by_POC(hevc,
-				cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][i]);
+				*GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, i));
 			if (pic) {
 				if ((pic->width != hevc->pic_w) ||
 					(pic->height != hevc->pic_h)) {
@@ -4362,7 +4424,7 @@ static int config_mc_buffer(struct hevc_state_s *hevc, struct PIC_s *cur_pic)
 				hevc_print(hevc, 0,
 					"Error %s, %dth poc (%d) %s",
 					__func__, i,
-					cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][i],
+					*GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, i),
 					pic ? "has error" :
 					"not in list1");
 			}
@@ -4479,8 +4541,8 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 	for (i = 0; i < 16; i++) {
 		RefPicSetStCurr0[i] = 0;
 		RefPicSetStCurr1[i] = 0;
-		pic->m_aiRefPOCList0[pic->slice_idx][i] = 0;
-		pic->m_aiRefPOCList1[pic->slice_idx][i] = 0;
+		*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, i) = 0;
+		*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, i) = 0;
 	}
 	for (i = 0; i < 16; i++) {
 #ifdef SUPPORT_LONG_TERM_RPS
@@ -4580,7 +4642,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 					}
 				}
 
-				pic->m_aiRefPOCList0[pic->slice_idx][rIdx] =
+				*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, rIdx) =
 #ifdef SUPPORT_LONG_TERM_RPS
 					cIdx >= (num_neg + num_pos) ?
 						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
@@ -4589,7 +4651,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 					RefPicSetStCurr0[cIdx]);
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 					hevc_print_cont(hevc, 0, "%d ",
-						pic->m_aiRefPOCList0[pic->slice_idx][rIdx]);
+						*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, rIdx));
 				}
 			}
 		} else {
@@ -4597,7 +4659,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 			for (rIdx = 0; rIdx < num_ref_idx_l0_active; rIdx++) {
 				int cIdx = rIdx % total_num;
 
-				pic->m_aiRefPOCList0[pic->slice_idx][rIdx] =
+				*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, rIdx) =
 #ifdef SUPPORT_LONG_TERM_RPS
 					cIdx >= (num_neg + num_pos) ?
 						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
@@ -4606,7 +4668,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 					RefPicSetStCurr0[cIdx]);
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 					hevc_print_cont(hevc, 0, "%d ",
-						pic->m_aiRefPOCList0[pic->slice_idx][rIdx]);
+						*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, rIdx));
 				}
 			}
 		}
@@ -4641,7 +4703,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 							goto set_ref_err;
 						}
 					}
-					pic->m_aiRefPOCList1[pic->slice_idx][rIdx] =
+					*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, rIdx) =
 #ifdef SUPPORT_LONG_TERM_RPS
 					cIdx >= (num_neg + num_pos) ?
 						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
@@ -4651,7 +4713,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
 						hevc_print_cont(hevc, 0, "%d ",
-							pic->m_aiRefPOCList1[pic->slice_idx][rIdx]);
+							*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, rIdx));
 					}
 				}
 			} else {
@@ -4660,7 +4722,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 					 rIdx++) {
 					int cIdx = rIdx % total_num;
 
-					pic->m_aiRefPOCList1[pic->slice_idx][rIdx] =
+					*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, rIdx) =
 #ifdef SUPPORT_LONG_TERM_RPS
 					cIdx >= (num_neg + num_pos) ?
 						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
@@ -4670,7 +4732,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
 						hevc_print_cont(hevc, 0, "%d ",
-							pic->m_aiRefPOCList1[pic->slice_idx][rIdx]);
+							*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, rIdx));
 					}
 				}
 			}
@@ -5432,12 +5494,12 @@ static void config_mpred_hw(struct hevc_state_s *hevc)
 	data32 = 0;
 	for (i = 0; i < hevc->RefNum_L0; i++) {
 		if (is_ref_long_term(hevc,
-			cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][i]))
+			*GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx, i)))
 			data32 = data32 | (1 << i);
 	}
 	for (i = 0; i < hevc->RefNum_L1; i++) {
 		if (is_ref_long_term(hevc,
-			cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][i]))
+			*GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, i)))
 			data32 = data32 | (1 << (i + 16));
 	}
 	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
@@ -5464,8 +5526,8 @@ static void config_mpred_hw(struct hevc_state_s *hevc)
 	/* below MPRED Ref_POC_xx_Lx registers must follow Ref_POC_xx_L0 ->
 	 *   Ref_POC_xx_L1 in pair write order!!!
 	 */
-	ref_poc_L0 = &(cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][0]);
-	ref_poc_L1 = &(cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][0]);
+	ref_poc_L0 = GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx, 0);
+	ref_poc_L1 = GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, 0);
 
 	WRITE_VREG(HEVC_MPRED_L0_REF00_POC, ref_poc_L0[0]);
 	WRITE_VREG(HEVC_MPRED_L1_REF00_POC, ref_poc_L1[0]);
@@ -5861,7 +5923,7 @@ static void pic_list_process(struct hevc_state_s *hevc)
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			pic = hevc->m_PIC[i];
 			if (new_count < work_pic_num && pic == NULL) {
-				pic = vmalloc(sizeof(struct PIC_s));
+				pic = pic_alloc();
 				if (pic == NULL) {
 					hevc_print(hevc, 0,
 						"%s: alloc pic %d fail!!!\n",
@@ -5869,7 +5931,7 @@ static void pic_list_process(struct hevc_state_s *hevc)
 					break;
 				}
 				hevc->m_PIC[i] = pic;
-				memset(pic, 0, sizeof(struct PIC_s));
+				pic_init(pic);
 				pic->index = -1;
 			}
 
@@ -7314,7 +7376,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			hevc->m_tile[hevc->tile_y][hevc->tile_x].height;
 	}
 
-	if (hevc->cur_pic->slice_idx >= MAX_SLICE_NUM) {
+	if (hevc->cur_pic->slice_idx >= get_slice_size()) {
 		hevc_print(hevc, 0,
 			"slice_idx %d invalid\n", hevc->cur_pic->slice_idx);
 		return 3;
@@ -7332,14 +7394,14 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	if (rpm_param->p.slice_type != I_SLICE) {
 		hevc->LDCFlag = 1;
 		for (i = 0; (i < hevc->RefNum_L0) && hevc->LDCFlag; i++) {
-			if (hevc->cur_pic->m_aiRefPOCList0[hevc->cur_pic->slice_idx][i] >
+			if (*GET_POC_POS(hevc->cur_pic->m_aiRefPOCList0, hevc->cur_pic->slice_idx, i) >
 				hevc->curr_POC)
 				hevc->LDCFlag = 0;
 		}
 		if (rpm_param->p.slice_type == B_SLICE) {
 			for (i = 0; (i < hevc->RefNum_L1)
 					&& hevc->LDCFlag; i++) {
-				if (hevc->cur_pic->m_aiRefPOCList1[hevc->cur_pic->slice_idx][i] >
+				if (*GET_POC_POS(hevc->cur_pic->m_aiRefPOCList1, hevc->cur_pic->slice_idx, i) >
 					hevc->curr_POC)
 					hevc->LDCFlag = 0;
 			}
@@ -7369,13 +7431,13 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	if (hevc->list_no == 0) {
 		if (Col_ref < hevc->RefNum_L0) {
 			hevc->Col_POC =
-				hevc->cur_pic->m_aiRefPOCList0[hevc->cur_pic->slice_idx][Col_ref];
+				*GET_POC_POS(hevc->cur_pic->m_aiRefPOCList0, hevc->cur_pic->slice_idx, Col_ref);
 		} else
 			hevc->Col_POC = INVALID_POC;
 	} else {
 		if (Col_ref < hevc->RefNum_L1) {
 			hevc->Col_POC =
-				hevc->cur_pic->m_aiRefPOCList1[hevc->cur_pic->slice_idx][Col_ref];
+				*GET_POC_POS(hevc->cur_pic->m_aiRefPOCList1, hevc->cur_pic->slice_idx, Col_ref);
 		} else
 			hevc->Col_POC = INVALID_POC;
 	}
@@ -7634,10 +7696,12 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 		hevc->frame_dw_mmu_map_addr = NULL;
 	}
 #endif
-	vfree(hevc->pic_transfer->aux_data_buf);
-	hevc->pic_transfer->aux_data_buf = NULL;
-	vfree(hevc->pic_transfer);
-	hevc->pic_transfer = NULL;
+	if (hevc->pic_transfer) {
+		vfree(hevc->pic_transfer->aux_data_buf);
+		hevc->pic_transfer->aux_data_buf = NULL;
+		pic_free(hevc->pic_transfer);
+		hevc->pic_transfer = NULL;
+	}
 }
 
 static int hevc_local_init(struct hevc_state_s *hevc)
@@ -7717,9 +7781,9 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 			return -1;
 		}
 		if (!hevc->pic_transfer) {
-			hevc->pic_transfer = vzalloc(sizeof(struct PIC_s));
+			hevc->pic_transfer = pic_alloc();
 			if (!hevc->pic_transfer) {
-				pr_err("%s: failed to alloc for aux\n", __func__);
+				pr_err("%s: failed to alloc for pic_transfer\n", __func__);
 				return -1;
 			}
 			hevc->pic_transfer->aux_data_buf = vzalloc(hevc->prefix_aux_size);
@@ -11246,7 +11310,6 @@ force_output:
 
 			if (aux_data_is_available(hevc)) {
 				struct PIC_s *pic = hevc->pic_transfer;
-				char *aux_data = pic->aux_data_buf;
 				u32 size = 0, type = 0;
 				char *p;
 
@@ -11254,8 +11317,7 @@ force_output:
 					!hevc->pic_transfer->aux_data_buf) {
 					pr_err("[%s] hevc->pic_transfer NULL\n", __func__);
 				} else {
-					memset(pic, 0, sizeof(*pic));
-					pic->aux_data_buf = aux_data;
+					pic_init(pic);
 					set_aux_data(hevc, pic, 0, 0);
 
 					if (pic->aux_data_buf

@@ -341,9 +341,11 @@ static int32_t config_mc_buffer_fb(hevc_stru_t* hevc, PIC_t* cur_pic)
 		//WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
 		WRITE_BACK_8(hevc,HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
 		for (i = 0; i < cur_pic->RefNum_L0; i++) {
-			pic = get_pic_by_POC(hevc, cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][i]);
+			pic = get_pic_by_POC(hevc,
+					*GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx, i));
 			hevc_print(hevc, H265_DEBUG_BUFMGR,
-				"L0: %d, POC: %d\n", i, cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][i]);
+				"L0: %d, POC: %d\n", i,
+				*GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx, i));
 			if (pic) {
 				if (pic->error_mark) {
 					cur_pic->error_mark = 1;
@@ -369,7 +371,8 @@ static int32_t config_mc_buffer_fb(hevc_stru_t* hevc, PIC_t* cur_pic)
 
 				hevc_print(hevc, H265_DEBUG_BUFMGR,
 					"Error %s, %dth poc (%d) of RPS is not in the pic list0\n",
-					__func__, i, cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][i]);
+					__func__, i,
+					*GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx,i));
 				cur_pic->error_mark = 1;
 				//dump_lmem();
 			}
@@ -381,9 +384,11 @@ static int32_t config_mc_buffer_fb(hevc_stru_t* hevc, PIC_t* cur_pic)
 		//WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (16 << 8) | (0<<1) | 1);
 		WRITE_BACK_16(hevc, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, 0, (16 << 8) | (0<<1) | 1);
 		for (i = 0; i < cur_pic->RefNum_L1; i++) {
-			pic = get_pic_by_POC(hevc, cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][i]);
+			pic = get_pic_by_POC(hevc,
+					*GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, i));
 			hevc_print(hevc, H265_DEBUG_BUFMGR,
-				"L1: %d, POC: %d\n", i, cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][i]);
+				"L1: %d, POC: %d\n", i,
+				*GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, i));
 
 			if (pic) {
 				if (pic->error_mark) {
@@ -410,7 +415,8 @@ static int32_t config_mc_buffer_fb(hevc_stru_t* hevc, PIC_t* cur_pic)
 
 				hevc_print(hevc, H265_DEBUG_BUFMGR,
 					"Error %s, %dth poc (%d) of RPS is not in the pic list1\n",
-					__func__, i, cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][i]);
+					__func__, i,
+					*GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, i));
 				cur_pic->error_mark = 1;
 				//dump_lmem();
 			}
@@ -1888,14 +1894,14 @@ void config_mpred_hw_fb(hevc_stru_t* hevc)
 	data32 = 0;
 	for (i = 0; i < hevc->RefNum_L0; i++) {
 		if (is_ref_long_term(hevc,
-		cur_pic->m_aiRefPOCList0
-			[cur_pic->slice_idx][i]))
+		*GET_POC_POS(cur_pic->m_aiRefPOCList0,
+			cur_pic->slice_idx, i)))
 		data32 = data32 | (1 << i);
 	}
 	for (i = 0; i < hevc->RefNum_L1; i++) {
 		if (is_ref_long_term(hevc,
-		cur_pic->m_aiRefPOCList1
-			[cur_pic->slice_idx][i]))
+		*GET_POC_POS(cur_pic->m_aiRefPOCList1,
+			cur_pic->slice_idx, i)))
 		data32 = data32 | (1 << (i + 16));
 	}
 	hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
@@ -1920,8 +1926,8 @@ void config_mpred_hw_fb(hevc_stru_t* hevc)
 		WRITE_VREG(HEVC_MPRED_COL_POC, hevc->Col_POC);
 
 	//below MPRED Ref_POC_xx_Lx registers must follow Ref_POC_xx_L0 -> Ref_POC_xx_L1 in pair write order!!!
-	ref_poc_L0 = &(cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][0]);
-	ref_poc_L1 = &(cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][0]);
+	ref_poc_L0 = GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx, 0);
+	ref_poc_L1 = GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, 0);
 
 	WRITE_VREG(HEVC_MPRED_L0_REF00_POC,ref_poc_L0[0]);
 	WRITE_VREG(HEVC_MPRED_L1_REF00_POC,ref_poc_L1[0]);

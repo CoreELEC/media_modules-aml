@@ -134,6 +134,16 @@ enum AM_MESON_CPU_MAJOR_ID {
 #define FMT_HEVC_VP9_AVS2_AV1      (FMT_AV1  | FMT_HEVC_VP9_AVS2)
 #define FMT_HEVC_VP9_AVS2_AV1_AVS3 (FMT_AVS3 | FMT_HEVC_VP9_AVS2_AV1)
 
+//level_idc
+#define IDC_4        0x40
+#define IDC_4_1      0x41
+#define IDC_5        0x50
+#define IDC_5_1      0x51
+#define IDC_5_2      0x52
+#define IDC_6        0x60
+#define IDC_6_1      0x61
+#define IDC_6_2      0x62
+
 /* dos hardware feature define. */
 struct dos_of_dev_s {
 	enum AM_MESON_CPU_MAJOR_ID chip_id;
@@ -173,6 +183,7 @@ struct dos_of_dev_s {
 	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
 
 	u32 fmt_support_flags;
+	u32 support_h265_level_idc;
 };
 
 
@@ -241,6 +252,8 @@ inline bool is_support_mmu_copy(void);
 inline bool is_support_axi_ctrl(void);
 
 inline bool is_support_format(int format);
+
+inline int get_h265_idc_level(void);
 
 inline int get_hevc_stream_extra_shift_bytes(void);
 
