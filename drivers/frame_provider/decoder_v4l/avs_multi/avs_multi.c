@@ -278,8 +278,6 @@ static int	canvas_num = 2; /*NV21*/
 static int	canvas_num = 3;
 #endif
 
-/*static u32 buf_size = 32 * 1024 * 1024;*/
-
 static u32 pts_by_offset = 1;
 static u32 radr, rval;
 static u32 dbg_cmd;
@@ -434,7 +432,9 @@ struct vdec_avs_hw_s {
 	u32 seqinfo;
 	u32 ctx_valid;
 	u32 dec_control;
-	void *mm_blk_handle;
+	ulong wk_space_handle;
+	void *wk_space_addr_vir;
+	dma_addr_t wk_space_addr_phy;
 	struct vframe_chunk_s *chunk;
 	u32 stat;
 	u8 init_flag;
@@ -543,7 +543,6 @@ struct vdec_avs_hw_s {
 	u32 canvas_mode;
 	struct aml_buf *aml_buf;
 	bool process_busy;
-	bool run_flag;
 	ulong user_data_handle;
 	ulong lmem_phy_handle;
 	bool force_interlaced_frame;
@@ -1524,9 +1523,7 @@ static int vavs_vdec_info_init(struct vdec_avs_hw_s *hw)
 
 static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 {
-	int i, ret;
-	u32 decbuf_size;
-	unsigned long buf_start;
+	int i;
 	struct vdec_s *vdec = NULL;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
@@ -1557,40 +1554,21 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 		}
 	}
 
-	decbuf_size = WORKSPACE_SIZE;
-	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, 0,
-			decbuf_size, DRIVER_NAME, &buf_start);
-	if (ret < 0)
-		goto WK_SPACE_ALLOC_ERROR;
+	if (hw->wk_space_addr_vir == NULL) {
+		hw->wk_space_addr_vir = decoder_dma_alloc_coherent(&hw->wk_space_handle,
+			WORKSPACE_SIZE, &hw->wk_space_addr_phy, DRIVER_NAME);
+		if (hw->wk_space_addr_vir == NULL) {
+			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
+			return -1;
+		}
+	}
 
 	if (firmware_sel == 1)
-		hw->buf_offset = buf_start - RV_AI_BUFF_START_ADDR;
+		hw->buf_offset = hw->wk_space_addr_phy - RV_AI_BUFF_START_ADDR;
 	else
-		hw->buf_offset = buf_start - LONG_CABAC_RV_AI_BUFF_START_ADDR;
+		hw->buf_offset = hw->wk_space_addr_phy - LONG_CABAC_RV_AI_BUFF_START_ADDR;
 
-#ifdef AVSP_LONG_CABAC
-	decbuf_size = WORKSPACE_SIZE_A;
-	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, 1,
-		decbuf_size, DRIVER_NAME, &buf_start);
-	if (ret < 0)
-		goto AVSP_WK_SPACE_ALLOC_ERROR;
-
-	avsp_heap_adr = codec_mm_phys_to_virt(buf_start);
-#endif
-	goto OUT;
-
-#ifdef AVSP_LONG_CABAC
-AVSP_WK_SPACE_ALLOC_ERROR:
-	if (hw->mm_blk_handle) {
-		decoder_bmmu_box_free(hw->mm_blk_handle);
-		hw->mm_blk_handle = NULL;
-	}
-#endif
-
-WK_SPACE_ALLOC_ERROR:
-	vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-OUT:
-	return ret;
+	return 0;
 }
 
 static void vavs_recover(struct vdec_avs_hw_s *hw)
@@ -2031,7 +2009,6 @@ static unsigned char es_write_addr[MAX_CODED_FRAME_SIZE]  __aligned(64);
 static void vavs_local_init(struct vdec_avs_hw_s *hw)
 {
 	int i;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	hw->vavs_ratio = hw->vavs_amstream_dec_info.ratio;
 
@@ -2072,26 +2049,6 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 
 	if (hw->recover_flag == 1)
 		return;
-
-	if (hw->mm_blk_handle) {
-		pr_info("decoder_bmmu_box_free\n");
-		decoder_bmmu_box_free(hw->mm_blk_handle);
-		hw->mm_blk_handle = NULL;
-	}
-
-	hw->mm_blk_handle = decoder_bmmu_box_alloc_box(
-		DRIVER_NAME,
-		0,
-		MAX_BMMU_BUFFER_NUM,
-		4 + PAGE_SHIFT,
-		CODEC_MM_FLAGS_CMA_CLEAR |
-		CODEC_MM_FLAGS_FOR_VDECODER,
-		BMMU_ALLOC_FLAGS_WAIT);
-	if (hw->mm_blk_handle == NULL) {
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
-		pr_info("Error, decoder_bmmu_box_alloc_box fail\n");
-	}
-
 }
 
 static int vavs_vf_states(struct vframe_states *states, void *op_arg)
@@ -2651,9 +2608,12 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 	}
 
 	hw->pic_type = 0;
-	if (hw->mm_blk_handle) {
-		decoder_bmmu_box_free(hw->mm_blk_handle);
-		hw->mm_blk_handle = NULL;
+	if (hw->wk_space_handle) {
+		decoder_dma_free_coherent(hw->wk_space_handle,
+			WORKSPACE_SIZE, hw->wk_space_addr_vir, hw->wk_space_addr_phy);
+		hw->wk_space_handle = 0;
+		hw->wk_space_addr_vir = NULL;
+		hw->wk_space_addr_phy = 0;
 	}
 #ifdef DEBUG_PTS
 	pr_debug("pts hit %d, pts missed %d, i hit %d, missed %d\n", hw->pts_hit,
@@ -3221,7 +3181,6 @@ void (*callback)(struct vdec_s *, void *, int),
 	int save_reg;
 	int size, ret;
 	int i;
-	hw->run_flag = 1;
 
 	if (!hw->vdec_pg_enable_flag) {
 		hw->vdec_pg_enable_flag = 1;
@@ -3261,7 +3220,6 @@ void (*callback)(struct vdec_s *, void *, int),
 			hw->input_empty++;
 			hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
-			hw->run_flag = 0;
 			return;
 		}
 	} else {
@@ -3269,7 +3227,6 @@ void (*callback)(struct vdec_s *, void *, int),
 			hw->input_empty++;
 			hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
-			hw->run_flag = 0;
 			return;
 		}
 	}
@@ -3350,7 +3307,6 @@ void (*callback)(struct vdec_s *, void *, int),
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			vdec_schedule_work(&hw->work);
-			hw->run_flag = 0;
 			return;
 		}
 		vdec->mc_loaded = 1;
@@ -3377,7 +3333,6 @@ void (*callback)(struct vdec_s *, void *, int),
 		debug_print(hw, PRINT_FLAG_ERROR,
 		"ammvdec_avs: error HW context restore\n");
 		vdec_schedule_work(&hw->work);
-		hw->run_flag = 0;
 		return;
 	}
 
@@ -3436,7 +3391,6 @@ void (*callback)(struct vdec_s *, void *, int),
 
 	atomic_set(&hw->error_handler_run, 0);
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
-	hw->run_flag = 0;
 }
 
 static void reset(struct vdec_s *vdec)
@@ -4469,7 +4423,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		"is_framebase(%d), decode_status 0x%x, buf_status 0x%x,"
 		"buf_recycle_status 0x%x, throw %d, eos %d, state 0x%x,"
 		"dec_result 0x%x dec_frm %d disp_frm %d run %d"
-		"not_run_ready %d input_empty %d run_flag %d\n",
+		"not_run_ready %d input_empty %d \n",
 		vdec_frame_based(vdec),
 		READ_VREG(DECODE_STATUS) & 0xff,
 		hw->buf_status,
@@ -4482,8 +4436,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		hw->display_frame_count,
 		hw->run_count,
 		hw->not_run_ready,
-		hw->input_empty,
-		hw->run_flag
+		hw->input_empty
 		);
 
 	debug_print(hw, 0,
@@ -4788,15 +4741,14 @@ error1:
 		}
 
 		cancel_work_sync(&hw->work);
-
-		if (hw->mm_blk_handle) {
-			void *bmmu_box_tmp = hw->mm_blk_handle;
-			hw->mm_blk_handle = NULL;
-			if (hw->run_flag)
-				usleep_range(1000, 2000);
-			decoder_bmmu_box_free(bmmu_box_tmp);
-			bmmu_box_tmp = NULL;
+		if (hw->wk_space_handle) {
+			decoder_dma_free_coherent(hw->wk_space_handle,
+				WORKSPACE_SIZE, hw->wk_space_addr_vir, hw->wk_space_addr_phy);
+			hw->wk_space_handle = 0;
+			hw->wk_space_addr_vir = NULL;
+			hw->wk_space_addr_phy = 0;
 		}
+
 		if (vdec->parallel_dec == 1)
 			vdec_core_release(hw_to_vdec(hw), CORE_MASK_VDEC_1);
 		else
@@ -5392,10 +5344,14 @@ static int ammvdec_avs_remove2(struct platform_device *pdev)
 	/*vdec_disable_DMC(NULL);*/
 
 	hw->pic_type = 0;
-	if (hw->mm_blk_handle) {
-		decoder_bmmu_box_free(hw->mm_blk_handle);
-		hw->mm_blk_handle = NULL;
+	if (hw->wk_space_handle) {
+		decoder_dma_free_coherent(hw->wk_space_handle,
+			WORKSPACE_SIZE, hw->wk_space_addr_vir, hw->wk_space_addr_phy);
+		hw->wk_space_handle = 0;
+		hw->wk_space_addr_vir = NULL;
+		hw->wk_space_addr_phy = 0;
 	}
+
 #ifdef DEBUG_PTS
 	pr_debug("pts hit %d, pts missed %d, i hit %d, missed %d\n", hw->pts_hit,
 		   hw->pts_missed, hw->pts_i_hit, hw->pts_i_missed);
