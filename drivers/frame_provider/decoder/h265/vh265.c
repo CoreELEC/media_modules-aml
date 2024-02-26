@@ -10439,9 +10439,13 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		dec_status == HEVC_FIND_NEXT_PIC_NAL ||
 		dec_status == HEVC_FIND_NEXT_DVEL_NAL)
 		&& (hevc->chunk)) {
-		hevc->cur_pic->pts = hevc->chunk->pts;
-		hevc->cur_pic->pts64 = hevc->chunk->pts64;
-		hevc->cur_pic->timestamp = hevc->chunk->timestamp;
+		if (hevc->cur_pic) {
+			hevc->cur_pic->pts = hevc->chunk->pts;
+			hevc->cur_pic->pts64 = hevc->chunk->pts64;
+			hevc->cur_pic->timestamp = hevc->chunk->timestamp;
+		} else
+			hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"hevc->cur_pic is NULL!\n");
 	}
 	mutex_unlock(&hevc->chunks_mutex);
 
@@ -10716,11 +10720,12 @@ force_output:
 				hevc->switch_dvlayer_flag = 1;
 				hevc->no_switch_dvlayer_count = 0;
 				hevc_el->start_parser_type = next_parser_type;
-				hevc_print(hevc, H265_DEBUG_DV,
-					"switch (poc %d) to el\n",
-					hevc->cur_pic ?
-					hevc->cur_pic->POC :
-					INVALID_POC);
+				if (hevc->cur_pic)
+					hevc_print(hevc, H265_DEBUG_DV,
+						"switch (poc %d) to el\n",
+						hevc->cur_pic ?
+						hevc->cur_pic->POC :
+						INVALID_POC);
 			} else if (vdec->master &&
 				dec_status == HEVC_FIND_NEXT_PIC_NAL) {
 				/*cur is enhance, found base*/
@@ -10729,11 +10734,12 @@ force_output:
 				hevc->switch_dvlayer_flag = 1;
 				hevc->no_switch_dvlayer_count = 0;
 				hevc_ba->start_parser_type = next_parser_type;
-				hevc_print(hevc, H265_DEBUG_DV,
-					"switch (poc %d) to bl\n",
-					hevc->cur_pic ?
-					hevc->cur_pic->POC :
-					INVALID_POC);
+				if (hevc->cur_pic)
+					hevc_print(hevc, H265_DEBUG_DV,
+						"switch (poc %d) to bl\n",
+						hevc->cur_pic ?
+						hevc->cur_pic->POC :
+						INVALID_POC);
 			} else {
 				hevc->switch_dvlayer_flag = 0;
 				hevc->start_parser_type =
