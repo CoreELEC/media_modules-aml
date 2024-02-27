@@ -405,7 +405,7 @@ s32 esparser_init(struct stream_buf_s *buf, struct vdec_s *vdec)
 	if (atomic_add_return(1, &esparser_use_count) == 1) {
 		first_use = true;
 
-		if (fetchbuf == 0) {
+		if (stbuf_fetch_init()) {
 			pr_info("%s: no fetchbuf\n", __func__);
 			r = -ENOMEM;
 			goto Err_1;
@@ -715,6 +715,7 @@ void esparser_release(struct stream_buf_s *buf)
 
 	buf->flag &= ~BUF_FLAG_PARSER;
 	pts_stop(pts_type);
+	stbuf_fetch_release();
 }
 EXPORT_SYMBOL(esparser_release);
 

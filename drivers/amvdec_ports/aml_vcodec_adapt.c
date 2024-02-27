@@ -311,7 +311,6 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 		return ret;
 	}
 
-	stbuf_fetch_init();
 	user_buffer_init();
 
 	if ((vdec->port->type & PORT_TYPE_VIDEO)

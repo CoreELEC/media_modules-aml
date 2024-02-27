@@ -911,7 +911,7 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 				(1 << KEEP_DUPLICATE_PACKAGE));
 	}
 
-	if (fetchbuf == 0) {
+	if (stbuf_fetch_init()) {
 		pr_info("%s: no fetchbuf\n", __func__);
 		return -ENOMEM;
 	}
@@ -1159,6 +1159,7 @@ void tsdemux_release(void)
 		tsdemux_reset();
 
 	amports_switch_gate("demux", 0);
+	stbuf_fetch_release();
 
 }
 EXPORT_SYMBOL(tsdemux_release);

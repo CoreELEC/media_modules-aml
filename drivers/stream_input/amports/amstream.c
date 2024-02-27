@@ -882,8 +882,6 @@ static int amstream_port_init(struct port_priv_s *priv)
 	if (r)
 		pr_err("the firmware reload fail.\n");
 
-	stbuf_fetch_init();
-
 	amstream_user_buffer_init();
 
 	if (port_get_inited(priv)) {
@@ -4353,8 +4351,6 @@ static int amstream_probe(struct platform_device *pdev)
 	if (!is_support_new_dos_dev())
 		amports_clock_gate_init(&amstream_pdev->dev);
 
-	/*prealloc fetch buf to avoid no continue buffer later...*/
-	stbuf_fetch_init();
 	REG_PATH_CONFIGS("media.amports", amports_configs);
 
 	amstream_userdata_init();

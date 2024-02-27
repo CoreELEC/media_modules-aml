@@ -866,7 +866,7 @@ s32 psparser_init(u32 vid, u32 aid, u32 sid, struct vdec_s *vdec)
 
 	pr_info("video 0x%x, audio 0x%x, sub 0x%x\n", video_id, audio_id,
 			sub_id);
-	if (fetchbuf == 0) {
+	if (stbuf_fetch_init()) {
 		pr_info("%s: no fetchbuf\n", __func__);
 		return -ENOMEM;
 	}
@@ -990,6 +990,7 @@ void psparser_release(void)
 		kfree(sub_info[i]);
 	pr_info("psparser release subtitle info\n");
 #endif
+	stbuf_fetch_release();
 }
 EXPORT_SYMBOL(psparser_release);
 

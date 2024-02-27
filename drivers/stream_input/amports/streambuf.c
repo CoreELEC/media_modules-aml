@@ -50,6 +50,7 @@
 #define MEM_NAME "streambuf"
 
 void *fetchbuf = 0;
+atomic_t fetchbuf_cnt;
 
 static s32 _stbuf_alloc(struct stream_buf_s *buf, bool is_secure)
 {
@@ -176,8 +177,13 @@ int stbuf_change_size(struct stream_buf_s *buf, int size, bool is_secure)
 
 int stbuf_fetch_init(void)
 {
-	if (NULL != fetchbuf)
+	pr_debug("[%s]fetchbuf:%px, fetchbuf_cnt:%d\n",
+			__func__, fetchbuf, atomic_read(&fetchbuf_cnt));
+
+	if (NULL != fetchbuf) {
+		atomic_inc(&fetchbuf_cnt);
 		return 0;
+	}
 
 	fetchbuf = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA32,
 						get_order(FETCHBUF_SIZE));
@@ -187,18 +193,25 @@ int stbuf_fetch_init(void)
 				__func__);
 		return -ENOMEM;
 	}
+	atomic_set(&fetchbuf_cnt, 1);
+
 	return 0;
 }
 EXPORT_SYMBOL(stbuf_fetch_init);
 
 void stbuf_fetch_release(void)
 {
-	if (0 && fetchbuf) {
-		/* always don't free.for safe alloc/free*/
+	atomic_dec(&fetchbuf_cnt);
+	pr_debug("[%s]fetchbuf:%px, fetchbuf_cnt:%d\n",
+			__func__, fetchbuf, atomic_read(&fetchbuf_cnt));
+
+	if (fetchbuf && !atomic_read(&fetchbuf_cnt)) {
 		free_pages((unsigned long)fetchbuf, get_order(FETCHBUF_SIZE));
 		fetchbuf = 0;
+		pr_debug("[%s] fetchbuf free done\n", __func__);
 	}
 }
+EXPORT_SYMBOL(stbuf_fetch_release);
 
 static void _stbuf_timer_func(struct timer_list *arg)
 {

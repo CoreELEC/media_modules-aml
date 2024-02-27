@@ -63,7 +63,7 @@ s32 rmparser_init(struct vdec_s *vdec)
 	s32 r;
 
 	parse_halt = 0;
-	if (fetchbuf == 0) {
+	if (stbuf_fetch_init()) {
 		pr_info("%s: no fetchbuf\n", __func__);
 		return -ENOMEM;
 	}
@@ -151,6 +151,7 @@ void rmparser_release(void)
 	pts_stop(PTS_TYPE_VIDEO);
 	pts_stop(PTS_TYPE_AUDIO);
 #endif
+	stbuf_fetch_release();
 
 }
 EXPORT_SYMBOL(rmparser_release);
