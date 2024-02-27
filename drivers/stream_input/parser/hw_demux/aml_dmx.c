@@ -430,7 +430,6 @@ static void dmxn_op_chan(int dmx, int ch, int(*op)(int, int), int ch_op)
 		dmxn_op_chan(_dmx, _chs, _set, DMX_CH_OP_CHANPROC); \
 	} while (0)
 
-#define NO_SUB
 #define SUB_BUF_DMX
 #define SUB_PARSER
 
@@ -494,6 +493,7 @@ static u32 first_audio_pts = 0;
 static int demux_skipbyte;
 static int tsfile_clkdiv = 5;
 static int asyncfifo_buf_len = ASYNCFIFO_BUFFER_SIZE_DEFAULT;
+static int sub_ttx_enable = 1;
 
 #define SF_DMX_ID 2
 #define SF_AFIFO_ID 1
@@ -1095,7 +1095,6 @@ static void process_section(struct aml_dmx *dmx)
 	}
 }
 
-#ifdef NO_SUB
 static void process_sub(struct aml_dmx *dmx)
 {
 
@@ -1169,7 +1168,6 @@ static void process_sub(struct aml_dmx *dmx)
 	}
 	WRITE_MPEG_REG(PARSER_SUB_RP, rd_ptr);
 }
-#endif
 
 static void process_pes(struct aml_dmx *dmx)
 {
@@ -1287,15 +1285,15 @@ static irqreturn_t dmx_irq_handler(int irq_number, void *para)
 
 	if (status & (1 << SECTION_BUFFER_READY))
 		process_section(dmx);
-#ifdef NO_SUB
-	if (status & (1 << SUB_PES_READY)) {
-		/*If the subtitle is set by tsdemux,
-		 *do not parser in demux driver.
-		 */
-		if (dmx->sub_chan == -1)
-			process_sub(dmx);
+	if (sub_ttx_enable) {
+		if (status & (1 << SUB_PES_READY)) {
+			/*If the subtitle is set by tsdemux,
+			 *do not parser in demux driver.
+			 */
+			if (dmx->sub_chan == -1)
+				process_sub(dmx);
+		}
 	}
-#endif
 	if (status & (1 << OTHER_PES_READY))
 		process_pes(dmx);
 	if (status & (1 << OM_CMD_READ_PENDING))
@@ -2453,7 +2451,6 @@ static int dmx_alloc_sec_buffer(struct aml_dmx *dmx)
 	return 0;
 }
 
-#ifdef NO_SUB
 /*Set subtitle buffer*/
 static int dmx_alloc_sub_buffer(struct aml_dvb *dvb, struct aml_dmx *dmx)
 {
@@ -2520,7 +2517,6 @@ static int dmx_alloc_sub_buffer_shared(struct aml_dvb *dvb)
 	return 0;
 }
 #endif
-#endif /*NO_SUB */
 
 /*Set PES buffer*/
 static int dmx_alloc_pes_buffer(struct aml_dvb *dvb, struct aml_dmx *dmx)
@@ -2881,6 +2877,14 @@ static int dmx_init(struct aml_dmx *dmx)
 		pr_inf("%s: 0x%x\n", buf, value);
 		asyncfifo_buf_len = value;
 	}
+	memset(buf, 0, 32);
+	snprintf(buf, sizeof(buf), "sub_ttx");
+	ret = of_property_read_u32(dvb->pdev->dev.of_node, buf, &value);
+	if (!ret) {
+		pr_inf("%s: 0x%x\n", buf, value);
+		sub_ttx_enable = value;
+	}
+
 	/*Register irq handlers */
 	if (dmx->dmx_irq != -1) {
 		pr_dbg("request irq\n");
@@ -2898,14 +2902,14 @@ static int dmx_init(struct aml_dmx *dmx)
 	/*Allocate buffer */
 	if (dmx_alloc_sec_buffer(dmx) < 0)
 		return -1;
-#ifdef NO_SUB
+	if (sub_ttx_enable) {
 #ifdef SUB_BUF_SHARED
 	if (dmx_alloc_sub_buffer_shared(dvb) < 0)
 		return -1;
 #endif
 	if (dmx_alloc_sub_buffer(dvb, dmx) < 0)
 		return -1;
-#endif
+	}
 #ifdef PES_BUF_SHARED
 	if (dmx_alloc_pes_buffer_shared(dvb) < 0)
 		return -1;
@@ -2959,7 +2963,7 @@ static int dmx_deinit(struct aml_dmx *dmx)
 		dmx->sec_pages = 0;
 		dmx->sec_pages_map = 0;
 	}
-#ifdef NO_SUB
+	if (sub_ttx_enable) {
 #ifdef SUB_BUF_DMX
 #ifdef SUB_BUF_SHARED
 	if (dvb->sub_pages) {
@@ -2978,7 +2982,7 @@ static int dmx_deinit(struct aml_dmx *dmx)
 	}
 #endif
 #endif
-#endif
+}
 #ifdef PES_BUF_SHARED
 	if (dvb->pes_pages) {
 		dma_unmap_single(dvb->dev, dvb->pes_pages_map,
@@ -4094,7 +4098,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 					(SEC_GRP_LEN_2 << 8) |
 					(SEC_GRP_LEN_3 << 12));
 		}
-#ifdef NO_SUB
+		if (sub_ttx_enable) {
 #ifndef SUB_PARSER
 		if (dmx->sub_pages) {
 			addr = virt_to_phys((void *)dmx->sub_pages);
@@ -4103,7 +4107,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 				      (dmx->sub_buf_len >> 3) - 1);
 		}
 #endif
-#endif
+		}
 		if (dmx->pes_pages) {
 			addr = virt_to_phys((void *)dmx->pes_pages);
 			DMX_WRITE_REG(dmx->id, OB_START, addr >> 12);
@@ -4113,7 +4117,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 
 		for (n = 0; n < CHANNEL_COUNT; n++) {
 			{
-#ifdef NO_SUB
+				if (sub_ttx_enable) {
 #ifdef SUB_PARSER
 				/*
 				  check if subtitle channel was running,
@@ -4126,7 +4130,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 						== (SUB_PACKET << PID_TYPE))
 					set_subtitle_pes_buffer(dmx);
 #endif
-#endif
+				}
 				{
 					u32 v = dmx_get_chan_target(dmx, n);
 					if (v != 0xFFFF &&
@@ -4324,7 +4328,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 					(SEC_GRP_LEN_2 << 8) |
 					(SEC_GRP_LEN_3 << 12));
 		}
-#ifdef NO_SUB
+		if (sub_ttx_enable) {
 #ifndef SUB_PARSER
 		if (dmx->sub_pages) {
 			addr = virt_to_phys((void *)dmx->sub_pages);
@@ -4333,7 +4337,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 				      (dmx->sub_buf_len >> 3) - 1);
 		}
 #endif
-#endif
+		}
 		if (dmx->pes_pages) {
 			addr = virt_to_phys((void *)dmx->pes_pages);
 			DMX_WRITE_REG(dmx->id, OB_START, addr >> 12);
@@ -4343,7 +4347,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 
 		for (n = 0; n < CHANNEL_COUNT; n++) {
 			{
-#ifdef NO_SUB
+			if (sub_ttx_enable) {
 #ifdef SUB_PARSER
 				/*
 				  check if subtitle channel was running,
@@ -4356,7 +4360,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 						== (SUB_PACKET << PID_TYPE))
 					set_subtitle_pes_buffer(dmx);
 #endif
-#endif
+				}
 				{
 					u32 v = dmx_get_chan_target(dmx, n);
 					if (v != 0xFFFF &&

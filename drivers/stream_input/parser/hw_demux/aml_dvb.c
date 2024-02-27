@@ -2341,6 +2341,21 @@ static int aml_dvb_probe(struct platform_device *pdev)
 		advb->dmx[i].dvr_irq = -1;
 	}
 
+	/*if async_buf_len too small, close dvr function*/
+	{
+		char buf[32];
+		u32 value;
+
+		memset(buf, 0, 32);
+		snprintf(buf, sizeof(buf), "asyncfifo_buf_len");
+		ret = of_property_read_u32(pdev->dev.of_node, buf, &value);
+		if (!ret) {
+			pr_inf("%s: 0x%x\n", buf, value);
+			if (value < 128)
+				advb->async_fifo_total_count = 0;
+		}
+	}
+
 #ifdef CONFIG_OF
 	if (pdev->dev.of_node) {
 		int s2p_id = 0;
