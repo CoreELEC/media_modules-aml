@@ -6494,6 +6494,13 @@ static void crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 	hevc->crop_w = pic->width;
 	hevc->crop_h = pic->height;
 
+	//European DVB test requirement
+	if (input_stream_based(hw_to_vdec(hevc)) &&
+		(hevc->crop_h == 1088) && (!pic->conformance_window_flag)) {
+		hevc->crop_h = 1080;
+		hevc->crop_bottom = 8;
+	}
+
 	if (pic->conformance_window_flag &&
 		(get_dbg_flag(hevc) &
 			H265_DEBUG_IGNORE_CONFORMANCE_WINDOW) == 0) {

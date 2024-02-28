@@ -6635,8 +6635,13 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			mb_height, crop_right,
 			hw->frame_width, mb_width);
 
-		if (hw->frame_height == 1088 && (crop_right != 0 || crop_bottom != 0))
+		if ((hw->frame_height == 1088) &&
+			((crop_right != 0) || (crop_bottom != 0) ||
+			  (input_stream_based(vdec) &&//European DVB test requirement
+				(!hw->crop_right && !hw->crop_bottom && !hw->crop_left && !hw->crop_top)))) {
 			hw->frame_height = 1080;
+			hw->crop_bottom = 8;
+		}
 
 		reg_val = param4;
 		level_idc = reg_val & 0xff;
