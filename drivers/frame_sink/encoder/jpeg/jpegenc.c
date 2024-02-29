@@ -5179,6 +5179,11 @@ static struct codec_profile_t jpegenc_profile = {
 
 static s32 __init jpegenc_driver_init_module(void)
 {
+    if (get_cpu_type() == MESON_CPU_MAJOR_ID_TXHD2) {
+        jenc_pr(LOG_DEBUG, "The chip is not support jpegenc!!\n");
+        return -1;
+    }
+
     jenc_pr(LOG_DEBUG, "jpegenc module init\n");
 
     if (platform_driver_register(&jpegenc_driver)) {

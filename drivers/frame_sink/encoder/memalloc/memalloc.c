@@ -85,6 +85,7 @@
 #include <linux/kthread.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/compat.h>
+#include <linux/amlogic/media/registers/cpu_version.h>
 
 #ifndef HLINA_START_ADDRESS
 #define HLINA_START_ADDRESS 0x02000000
@@ -454,6 +455,10 @@ static struct platform_driver venc_mem_driver = {.probe = encmem_vce_probe,
 
 int __init enc_memallc_init(void)
 {
+    if (get_cpu_type() != MESON_CPU_MAJOR_ID_S5) {
+        //pr_info("The chip is not support vers memalloc!!\n");
+        return -1;
+    }
     pr_info("enc_mem_init: enc_mem_init\n");
     platform_driver_register(&venc_mem_driver);
     return 0;

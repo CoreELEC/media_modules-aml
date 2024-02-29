@@ -83,6 +83,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/pm_domain.h>
 #include <linux/amlogic/power_domain.h>
+#include <linux/amlogic/media/registers/cpu_version.h>
 
 #define VERSENC_TS_WAIT 5
 #define WRAP_RESET_CTL 0xfe002010
@@ -324,6 +325,10 @@ ERROR_PROBE_DEVICE:
 
 int __init enc_mem_init(void)
 {
+    if (get_cpu_type() != MESON_CPU_MAJOR_ID_S5) {
+        //pr_info("The chip is not support vers!!\n");
+        return -1;
+    }
     pr_info("vc8000_vcmd_driver: enc_mem_init\n");
     return platform_driver_register(&mbd_vce_driver);
 }
