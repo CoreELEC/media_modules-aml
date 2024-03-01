@@ -12236,6 +12236,9 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 
+	if (save_buffer && hevc->head_pre_parsed)
+		return;
+
 	if (hevc->decoding_pic) {
 		struct PIC_s *pic = hevc->decoding_pic;
 		struct aml_buf *aml_buf =
