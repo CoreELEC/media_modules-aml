@@ -3484,7 +3484,7 @@ static s32 __init vpu_init(void)
 {
 	s32 res;
 
-	if (get_cpu_type() == MESON_CPU_MAJOR_ID_TXHD2) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) {
 		enc_pr(LOG_DEBUG, "The chip is not support multi encoder!!\n");
 		return -1;
 	}
