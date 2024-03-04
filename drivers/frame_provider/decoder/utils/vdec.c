@@ -2589,6 +2589,11 @@ void vdec_save_input_context(struct vdec_s *vdec)
 	vdec_profile(vdec, VDEC_PROFILE_EVENT_SAVE_INPUT, 0);
 #endif
 
+	if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
+		pr_debug("%s, disconnecting\n", __func__);
+		return;
+	}
+
 	if (input->target == VDEC_INPUT_TARGET_VLD)
 		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1<<15);
 
@@ -3716,66 +3721,6 @@ static void vdec_userdata_ctx_release(struct vdec_s *vdec)
 	return;
 }
 
-static void vdec_wait_swap_busy(struct vdec_s *vdec)
-{
-	struct vdec_input_s *input;
-	ulong timeout = jiffies + HZ/80;
-
-	if (!vdec || (vdec->type != VDEC_TYPE_STREAM_PARSER))
-		return;
-
-	input = &vdec->input;
-	if (!input->swap_page_phys)
-		return;
-
-	if (input->target == VDEC_INPUT_TARGET_VLD) {
-		while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7)) {  //wait write
-			if (time_after(jiffies, timeout)) {
-				pr_err("%s, timeout0 %x\n",
-					__func__, READ_VREG(VLD_MEM_SWAP_CTL));
-				break;
-			}
-		}
-		WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
-
-		WRITE_VREG(VLD_MEM_SWAP_ADDR, input->swap_page_phys);
-		WRITE_VREG(VLD_MEM_SWAP_CTL, 1);  //read active
-
-		timeout = jiffies + HZ/80;
-		while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7)) {
-			if (time_after(jiffies, timeout)) {
-				pr_err("%s, timeout1 %x\n",
-					__func__, READ_VREG(VLD_MEM_SWAP_CTL));
-				break;
-			}
-		}
-		WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
-	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
-		/* swap busy ands wap wrrsp*/
-		while (READ_VREG(HEVC_STREAM_SWAP_CTRL) & ((1<<7) | (0xff << 24))) {
-			if (time_after(jiffies, timeout)) {
-				pr_err("%s, timeout_0 %x\n",
-					__func__, READ_VREG(HEVC_STREAM_SWAP_CTRL));
-				break;
-			}
-		}
-		WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
-
-		WRITE_VREG(HEVC_STREAM_SWAP_ADDR, input->swap_page_phys);
-		WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 1);  //read active
-		/* swap busy ands wap wrrsp*/
-		timeout = jiffies + HZ/80;
-		while (READ_VREG(HEVC_STREAM_SWAP_CTRL) & ((1<<7) | (0xff << 24))) {
-			if (time_after(jiffies, timeout)) {
-				pr_err("%s, timeout_1 %x\n",
-					__func__, READ_VREG(HEVC_STREAM_SWAP_CTRL));
-				break;
-			}
-		}
-		WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
-	}
-}
-
 /* vdec_create/init/release/destroy are applied to both dual running decoders
  */
 void vdec_release(struct vdec_s *vdec)
@@ -3794,7 +3739,6 @@ void vdec_release(struct vdec_s *vdec)
 	/* When release, userspace systemctl need this duration 0 event */
 	vdec_frame_rate_uevent(0);
 	vdec_disconnect(vdec);
-	vdec_wait_swap_busy(vdec);
 
 	if (!vdec->disable_vfm && vdec->vframe_provider.name) {
 		if (!vdec_single(vdec)) {
