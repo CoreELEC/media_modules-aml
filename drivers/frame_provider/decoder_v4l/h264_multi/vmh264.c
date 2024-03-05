@@ -10215,6 +10215,14 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 			dpb_print(DECODE_ID(hw), 0, "h264 set mmu config ok\n");
 		} else {
 			struct aml_vdec_cfg_infos cfg_info = { 0 };
+			if (hw->double_write_mode != DM_YUV_ONLY) {
+				vdec_core_request(vdec, CORE_MASK_VDEC_1);
+
+				if (is_support_dual_core())
+					vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
+				else
+					vdec_core_finish_run(vdec, CORE_MASK_HEVC);
+			}
 			hw->double_write_mode = DM_YUV_ONLY;
 			dpb_print(DECODE_ID(hw), 0, "h264 interlace video force to change dw as 0x10\n");
 			vdec_v4l_get_cfg_infos(ctx, &cfg_info);
@@ -11163,7 +11171,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	else
 		not_run_ready[DECODE_ID(hw)]++;
 	if (vdec->parallel_dec == 1) {
-		if (hw->mmu_enable == 0)
+		if (hw->mmu_enable == 0 && hw->double_write_mode == DM_YUV_ONLY)
 			return ret ? (CORE_MASK_VDEC_1) : 0;
 		else {
 			if (is_support_dual_core())
@@ -12075,7 +12083,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 	if (pdata->parallel_dec == 1) {
-		if (hw->mmu_enable == 0)
+		if (hw->double_write_mode == DM_YUV_ONLY)
 			vdec_core_request(pdata, CORE_MASK_VDEC_1);
 		else {
 			if (is_support_dual_core())
