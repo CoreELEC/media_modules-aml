@@ -7689,6 +7689,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_DECODE_SLICE);
 		hw->last_mby_mbx = 0;
 		hw->last_vld_level = 0;
+		start_process_time(hw);
 		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_VDEC_1);
 	} else if (dec_dpb_status == H264_PIC_DATA_DONE
 		||((dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
