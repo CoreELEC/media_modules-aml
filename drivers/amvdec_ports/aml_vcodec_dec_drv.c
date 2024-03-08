@@ -533,7 +533,7 @@ static ssize_t mmu_mem_info_show(struct class *cls,
 	}
 
 	list_for_each_entry(ctx, &dev->ctx_list, list) {
-		aml_compressed_info_show(ctx);
+		pbuf += aml_compressed_info_show(ctx, pbuf);
 	}
 out:
 	mutex_unlock(&dev->dev_mutex);

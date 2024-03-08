@@ -223,7 +223,7 @@ void aml_v4l_vpp_release_early(struct aml_vcodec_ctx * ctx);
 void aml_v4l_ctx_release(struct kref *kref);
 void dmabuff_recycle_worker(struct work_struct *work);
 ssize_t aml_buffer_status(struct aml_vcodec_ctx *ctx, char *buf);
-void aml_compressed_info_show(struct aml_vcodec_ctx *ctx);
+ssize_t aml_compressed_info_show(struct aml_vcodec_ctx *ctx, char *buf);
 void cal_compress_buff_info(ulong used_page_num, struct aml_vcodec_ctx *ctx);
 
 ssize_t aml_vdec_basic_information(struct aml_vcodec_ctx *ctx, char *buf);
