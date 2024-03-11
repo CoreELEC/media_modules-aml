@@ -1343,6 +1343,9 @@ EXPORT_SYMBOL(amhevc_reset_f);
 
 void amhevc_reset_b(void)
 {
+	WRITE_VREG(HEVC_ASSIST_FB_CTL,
+		READ_VREG(HEVC_ASSIST_FB_CTL) | ((1 << 8)));
+
 	hevc_arb_ctrl_front_or_back(0, 0);
 	/*
 	* 2: assist

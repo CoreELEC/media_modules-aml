@@ -273,6 +273,7 @@ struct vdec_core_s {
 	u32 inst_cnt;
 	unsigned long run_flag;
 	int vf_duration;
+	struct vdec_s *last_run_vdec;
 };
 
 static struct vdec_core_s *vdec_core;
@@ -4025,8 +4026,13 @@ static unsigned long vdec_schedule_mask(struct vdec_s *vdec,
 			return mask;
 		else
 			return 0;
-	} else
-		return mask & ~vdec->sched_mask & ~active_mask;
+	} else {
+		if ((vdec_core->vdec_combine_flag != 0) && (active_mask != 0)) {
+			return 0;
+		} else {
+			return mask & ~vdec->sched_mask & ~active_mask;
+		}
+	}
 }
 
 /*
@@ -4357,7 +4363,10 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 #endif
 	if ((mask & ~CORE_MASK_HEVC_BACK) && check_run_ready) {
 		unsigned long tmp_mask = 0;
-		tmp_mask = vdec->run_ready(vdec, mask);
+		tmp_mask = vdec->run_ready(vdec, (mask & ~CORE_MASK_HEVC_BACK));
+		if (debug & 0x8)
+			pr_info("%s:%d run_ready tmp_mask = 0x%lx\n",
+				__func__, vdec->id, tmp_mask);
 		if (tmp_mask == 0xffffffff) {
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 			vdec_profile(vdec, VDEC_PROFILE_EVENT_WAIT_BACK_CORE, mask);
@@ -4377,6 +4386,13 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 		if (ready_mask == (CORE_MASK_HEVC_BACK | CORE_MASK_HEVC))
 			ready_mask = CORE_MASK_HEVC_BACK;
 	}
+
+	if (!(vdec->core_mask & CORE_MASK_COMBINE) && (core->vdec_combine_flag != 0)) {
+		if ((ready_mask & CORE_MASK_HEVC_BACK) && (ready_mask & CORE_MASK_HEVC)) {
+			ready_mask &= CORE_MASK_HEVC_BACK;
+		}
+	}
+
 #ifdef VDEC_DEBUG_SUPPORT
 	if (ready_mask != mask)
 		inc_profi_count(ready_mask ^ mask, vdec->not_run_ready_count);
@@ -4460,6 +4476,9 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 
 static struct vdec_s * vdec_get_last_vdec(int format)
 {
+	if (vdec_core->vdec_combine_flag > 0)
+		return vdec_core->last_run_vdec;
+
 	if (format == VDEC_1)
 		return vdec_core->last_vdec;
 	else if (format == VDEC_HEVC)
@@ -4484,17 +4503,19 @@ static void check_core_run_flag(void)
 
 static void vdec_set_last_vdec(struct vdec_s *vdec, int format)
 {
-	if (vdec->core_mask & CORE_MASK_COMBINE) {
+	struct vdec_s *tmp_vdec = vdec_core->last_run_vdec;
+
+	if (format == VDEC_1)
 		vdec_core->last_vdec = vdec;
+	else if (format == VDEC_HEVC)
 		vdec_core->last_hevc = vdec;
+	else if (format == VDEC_HEVCB)
 		vdec_core->last_hevc_back = vdec;
-	} else {
-		if (format == VDEC_1)
-			vdec_core->last_vdec = vdec;
-		else if (format == VDEC_HEVC)
-			vdec_core->last_hevc = vdec;
-		else if (format == VDEC_HEVCB)
-			vdec_core->last_hevc_back = vdec;
+
+	vdec_core->last_run_vdec = vdec;
+	if (!(vdec->core_mask & CORE_MASK_COMBINE) && (vdec_core->vdec_combine_flag != 0)
+		&& (format == VDEC_HEVCB)) {
+		vdec_core->last_run_vdec = tmp_vdec;
 	}
 }
 
@@ -4603,6 +4624,8 @@ static int vdec_core_thread(void *data)
 						vdec_core->active_vdec = NULL;
 					if (vdec_core->active_hevc_back == vdec)
 						vdec_core->active_hevc_back = NULL;
+					if (vdec_core->last_run_vdec == vdec)
+						vdec_core->last_run_vdec = NULL;
 				}
 				if (core->last_vdec == vdec)
 					core->last_vdec = NULL;
@@ -4610,6 +4633,8 @@ static int vdec_core_thread(void *data)
 					core->last_hevc = NULL;
 				if (core->last_hevc_back == vdec)
 					core->last_hevc_back = NULL;
+				if (core->last_run_vdec == vdec)
+					core->last_run_vdec = NULL;
 				list_move(&vdec->list, &disconnecting_list);
 			}
 		}
@@ -4626,14 +4651,23 @@ static int vdec_core_thread(void *data)
 			}
 
 			/* elect next vdec to be scheduled */
-			vdec = vdec_get_last_vdec(i);
+			if (core->vdec_combine_flag != 0)
+				vdec = core->last_run_vdec;
+			else
+				vdec = vdec_get_last_vdec(i);
 			if (vdec) {
 				mutex_lock(&vdec_mutex);
 				vdec = list_entry(vdec->list.next, struct vdec_s, list);
 				list_for_each_entry_from(vdec, &core->connected_vdec_list, list) {
 					sched_mask = vdec_schedule_mask(vdec, core->sched_mask);
-					if (!(vdec->core_mask & CORE_MASK_COMBINE))
+
+					if (core->vdec_combine_flag == 0)
 						sched_mask &= (1 << i);
+
+					if (debug & 0x8)
+						pr_info("%s id:%d vdec sched_mask 0x%lx, sched_mask 0x%lx\n",
+							__func__, vdec->id, vdec->sched_mask, sched_mask);
+
 					if (!(sched_mask))
 						continue;
 
@@ -4653,11 +4687,22 @@ static int vdec_core_thread(void *data)
 				mutex_lock(&vdec_mutex);
 				/* search from beginning */
 				list_for_each_entry(vdec, &core->connected_vdec_list, list) {
+					struct vdec_s *last_vdec;
 					sched_mask = vdec_schedule_mask(vdec, core->sched_mask);
-					if (!(vdec->core_mask & CORE_MASK_COMBINE))
+
+					if (core->vdec_combine_flag == 0)
 						sched_mask &= (1 << i);
 
-					if (vdec == vdec_get_last_vdec(i)) {
+					if (debug & 0x8)
+						pr_info("%s id:%d vdec sched_mask 0x%lx, sched_mask 0x%lx\n",
+							__func__, vdec->id, vdec->sched_mask, sched_mask);
+
+					if (core->vdec_combine_flag != 0)
+						last_vdec = core->last_run_vdec;
+					else
+						last_vdec = vdec_get_last_vdec(i);
+
+					if (vdec == last_vdec) {
 						if (!sched_mask) {
 							vdec = NULL;
 							break;
@@ -4700,12 +4745,12 @@ static int vdec_core_thread(void *data)
 			while (sched_mask) {
 				i = __ffs(sched_mask);
 				set_bit(i, &vdec->active_mask);
+				vdec_set_last_vdec(vdec, i);
 				sched_mask &= ~(1 << i);
 			}
 
 			/* vdec's sched_mask is only set from core thread */
 			vdec->sched_mask |= mask;
-			vdec_set_last_vdec(vdec, i);
 			if (debug & 2) {
 				vdec->mc_loaded = 0;/*alway reload firmware*/
 				vdec->mc_back_loaded = 0;
