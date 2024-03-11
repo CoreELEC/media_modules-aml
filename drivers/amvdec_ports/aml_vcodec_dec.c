@@ -3790,13 +3790,16 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 
 	q_data = aml_vdec_get_q_data(ctx, vb->vb2_queue->type);
 
-	for (i = 0; i < q_data->fmt->num_planes; i++) {
-		if (vb2_plane_size(vb, i) < q_data->sizeimage[i] &&
-			vb2_plane_size(vb, i) != PAGE_SIZE) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-				"data will not fit into plane %d (%lu < %d)\n",
-				i, vb2_plane_size(vb, i),
-				q_data->sizeimage[i]);
+	if (!(ctx->enable_di_post && ctx->picinfo.field != V4L2_FIELD_NONE &&
+		is_vdec_core_fmt(ctx))) {
+		for (i = 0; i < q_data->fmt->num_planes; i++) {
+			if (vb2_plane_size(vb, i) < q_data->sizeimage[i] &&
+				vb2_plane_size(vb, i) != PAGE_SIZE) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"data will not fit into plane %d (%lu < %d)\n",
+					i, vb2_plane_size(vb, i),
+					q_data->sizeimage[i]);
+			}
 		}
 	}
 
