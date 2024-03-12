@@ -94,15 +94,12 @@ void s7_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
 //###############################################################################
 ulong dos_reg_compat_convert(ulong addr)
 {
-		s32 reg_compat_offset;
+		s32 reg_compat_offset = 0;
 		struct bus_reg_desc *dos_desc = reg_desc[DOS_BUS];
 
-		if (addr & NEW_REG_CHECK_MASK) {
-			addr &= (~NEW_REG_CHECK_MASK);
-			reg_compat_offset = 0;
-		} else {
+		if (dos_desc && !(addr & NEW_REG_CHECK_MASK))
 			reg_compat_offset = dos_desc[addr].reg_compat_offset;
-		}
+		addr &= (~NEW_REG_CHECK_MASK);
 
 		return (addr + reg_compat_offset);
 	}
@@ -111,17 +108,14 @@ EXPORT_SYMBOL(dos_reg_compat_convert);
 void write_dos_reg(ulong addr, int val)
 {
 	void __iomem * reg_adr;
-	s32 reg_compat_offset;
+	s32 reg_compat_offset = 0;
 	struct bus_reg_desc *dos_desc = reg_desc[DOS_BUS];
 
-	if (addr & NEW_REG_CHECK_MASK) {
-		addr &= (~NEW_REG_CHECK_MASK);
-		reg_compat_offset = 0;
-	} else {
+	if (dos_desc && !(addr & NEW_REG_CHECK_MASK))
 		reg_compat_offset = dos_desc[addr].reg_compat_offset;
-	}
+	addr &= (~NEW_REG_CHECK_MASK);
 
-	if ((reg_compat_offset + addr) < 0) {
+	if (unlikely((reg_compat_offset + addr) < 0)) {
 		pr_err("write dos reg out of range, name %s, addr %lx, offset %d\n",
 			dos_desc[addr].reg_name, addr, reg_compat_offset);
 		return;
@@ -129,7 +123,7 @@ void write_dos_reg(ulong addr, int val)
 
 	reg_adr = reg_base[DOS_BUS] + ((reg_compat_offset + addr) << 2);
 
-	if (register_debug) {
+	if (unlikely(register_debug)) {
 		if (register_debug & CODEC_REG_WRITE_DEBUG) {
 			pr_info("write_reg(%lx, %x)\n", (reg_compat_offset + addr), val);
 		}
@@ -148,16 +142,13 @@ int read_dos_reg(ulong addr)
 	void __iomem * reg_adr;
 	int value;
 	struct bus_reg_desc *dos_desc = reg_desc[DOS_BUS];
-	s32 reg_compat_offset;
+	s32 reg_compat_offset = 0;
 
-	if (addr & NEW_REG_CHECK_MASK) {
-		addr &= (~NEW_REG_CHECK_MASK);
-		reg_compat_offset = 0;
-	} else {
+	if (dos_desc && !(addr & NEW_REG_CHECK_MASK))
 		reg_compat_offset = dos_desc[addr].reg_compat_offset;
-	}
+	addr &= (~NEW_REG_CHECK_MASK);
 
-	if ((reg_compat_offset + addr) < 0) {
+	if (unlikely((reg_compat_offset + addr) < 0)) {
 		pr_err("read dos reg out of range, name %s, addr %lx, offset %d\n",
 			dos_desc[addr].reg_name, addr, reg_compat_offset);
 		return -ENXIO;
@@ -167,7 +158,7 @@ int read_dos_reg(ulong addr)
 
 	value = readl(reg_adr);
 
-	if (register_debug) {
+	if (unlikely(register_debug)) {
 		if (register_debug & CODEC_REG_READ_DEBUG) {
 			pr_info("read_reg(%lx) = %x\n", (reg_compat_offset + addr), value);
 		}
@@ -234,13 +225,14 @@ int dos_register_probe(struct platform_device *pdev, reg_compat_func reg_compat_
 			__func__, (unsigned long long)res.start,
 			(unsigned long long)res.end, reg_base[i]);
 
-		reg_desc[i] = (struct bus_reg_desc *)kzalloc(res_size *
-			sizeof(struct bus_reg_desc), GFP_KERNEL);
-		if (!reg_desc[i])
-			pr_err("Warn: dos regs offset table alloc failed\n");
-
-		if (reg_compat_fn)
-			reg_compat_fn(reg_desc[i], i);
+		if (reg_compat_fn) {
+			reg_desc[i] = (struct bus_reg_desc *)kzalloc(res_size *
+				sizeof(struct bus_reg_desc), GFP_KERNEL);
+			if (!reg_desc[i])
+				pr_err("Warn: dos regs offset table alloc failed\n");
+			else
+				reg_compat_fn(reg_desc[i], i);
+		}
 	}
 
 	return 0;
