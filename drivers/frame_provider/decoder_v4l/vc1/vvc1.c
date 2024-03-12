@@ -820,6 +820,7 @@ static int v4l_alloc_buff_config_canvas(struct vdec_vc1_hw_s *hw, int i)
 	struct aml_buf *aml_buf = hw->aml_buf;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	int endian = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 
 	if (!aml_buf) {
 		vc1_print(0, 0, "%s not get aml_buf \n", __func__);
@@ -860,8 +861,8 @@ static int v4l_alloc_buff_config_canvas(struct vdec_vc1_hw_s *hw, int i)
 	vc1_canvas_config[i][0].width 		= canvas_width;
 	vc1_canvas_config[i][0].height		= canvas_height;
 	vc1_canvas_config[i][0].phy_addr 	= decbuf_start;
-	vc1_canvas_config[i][0].block_mode 	= CANVAS_BLKMODE_32X32;
-	vc1_canvas_config[i][0].endian 		= 0;
+	vc1_canvas_config[i][0].block_mode 	= hw->canvas_mode;
+	vc1_canvas_config[i][0].endian 		= endian;
 	config_cav_lut_ex(i * 2 + 0,
 		vc1_canvas_config[i][0].phy_addr,
 		vc1_canvas_config[i][0].width,
@@ -874,8 +875,8 @@ static int v4l_alloc_buff_config_canvas(struct vdec_vc1_hw_s *hw, int i)
 	vc1_canvas_config[i][1].width 		= canvas_width;
 	vc1_canvas_config[i][1].height 		= canvas_height >> 1;
 	vc1_canvas_config[i][1].phy_addr 	= decbuf_uv_start;
-	vc1_canvas_config[i][1].block_mode 	= CANVAS_BLKMODE_32X32;
-	vc1_canvas_config[i][1].endian 		= 0;
+	vc1_canvas_config[i][1].block_mode 	= hw->canvas_mode;
+	vc1_canvas_config[i][1].endian 		= endian;
 	config_cav_lut_ex(i * 2 + 1,
 		vc1_canvas_config[i][1].phy_addr,
 		vc1_canvas_config[i][1].width,
@@ -1162,6 +1163,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			vdec_stream_based(vdec)) {
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
+		decoder_do_frame_check(vdec, vf);
 		kfifo_put(&display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -1372,6 +1374,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			vdec_stream_based(vdec)) {
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
+		decoder_do_frame_check(vdec, vf);
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: display_q index %d, pts 0x%x/0x%x\n", __func__, vf->index, vf->pts, vf->pts_us64);
 		if (ctx->enable_di_post)
 			ctx->fbc_transcode_and_set_vf(ctx, aml_buf, vf);
@@ -2343,7 +2346,6 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 	/* the ctx from v4l2 driver. */
 	hw = (struct vdec_vc1_hw_s *)vzalloc(sizeof(struct vdec_vc1_hw_s));
 	hw->v4l2_ctx = pdata->private;
-	hw->canvas_mode = pdata->canvas_mode;
 	hw->is_decoder_working = false;
 	if (pdata->config_len) {
 		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
@@ -2363,6 +2365,8 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 	} else
 		hw->dynamic_buf_num_margin = default_vc1_margin;
 
+	hw->canvas_mode = pdata->canvas_mode;
+	pr_info("canvas_mode %d\n", hw->canvas_mode);
 	vc1_hw = *hw;
 
 	vvc1_vdec_info_init();

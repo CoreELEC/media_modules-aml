@@ -103,8 +103,7 @@
 #define VF_BUFFER_IDX(n)	(1 + n)
 #define DCAC_BUFF_START_ADDR	0x01f00000
 
-
-#define PUT_INTERVAL        (HZ/100)
+ #define PUT_INTERVAL        (HZ/100)
 
 #if 1	/* /MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
 /* TODO: move to register headers */
@@ -266,6 +265,7 @@ struct vdec_vc1_hw_s {
 	struct pic_info_t pics[DECODE_BUFFER_NUM_MAX];
 	u32 interlace_flag;
 	u32 new_type;
+	u32 canvas_mode;
 };
 
 struct vdec_vc1_hw_s vc1_hw;
@@ -632,21 +632,23 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			decoder_bmmu_box_get_mem_handle(
 				mm_blk_handle,
 				buffer_index);
-		if (is_support_vdec_canvas()) {
-			vf->canvas0Addr = vf->canvas1Addr = -1;
-			vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
-			vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+		//if (is_support_vdec_canvas()) {
+		vf->canvas0Addr = vf->canvas1Addr = -1;
+		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+		vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
 #ifdef NV21
-			vf->plane_num = 2;
+		vf->plane_num = 2;
 #else
-			vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
-			vf->plane_num = 3;
+		vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
+		vf->plane_num = 3;
 #endif
-		}
+		//}
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
 			vdec_stream_based(vdec)) {
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
+
+		decoder_do_frame_check(vdec, vf);
 		kfifo_put(&display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -712,17 +714,17 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 				mm_blk_handle,
 				buffer_index);
 
-		if (is_support_vdec_canvas()) {
-			vf->canvas0Addr = vf->canvas1Addr = -1;
-			vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
-			vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+		//if (is_support_vdec_canvas()) {
+		vf->canvas0Addr = vf->canvas1Addr = -1;
+		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+		vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
 #ifdef NV21
-			vf->plane_num = 2;
+		vf->plane_num = 2;
 #else
-			vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
-			vf->plane_num = 3;
+		vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
+		vf->plane_num = 3;
 #endif
-		}
+		//}
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
 			vdec_stream_based(vdec)) {
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
@@ -825,22 +827,23 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			decoder_bmmu_box_get_mem_handle(
 				mm_blk_handle,
 				buffer_index);
-		if (is_support_vdec_canvas()) {
-			vf->canvas0Addr = vf->canvas1Addr = -1;
-			vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
-			vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+		//if (is_support_vdec_canvas()) {
+		vf->canvas0Addr = vf->canvas1Addr = -1;
+		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+		vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
 #ifdef NV21
-			vf->plane_num = 2;
+		vf->plane_num = 2;
 #else
-			vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
-			vf->plane_num = 3;
+		vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
+		vf->plane_num = 3;
 #endif
-		}
+		//}
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
 			vdec_stream_based(vdec)) {
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: display_q index %d, pts 0x%x/0x%x\n", __func__, vf->index, vf->pts, vf->pts_us64);
+		decoder_do_frame_check(vdec, vf);
 		kfifo_put(&display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -1285,6 +1288,8 @@ static int vvc1_canvas_init(void)
 	u32 canvas_width, canvas_height;
 	u32 alloc_size, decbuf_size, decbuf_y_size, decbuf_uv_size;
 	unsigned long buf_start;
+	struct vdec_vc1_hw_s *hw = &vc1_hw;
+	int endian = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 
 	if (buf_size <= 0x00400000) {
 		/* SD only */
@@ -1331,52 +1336,52 @@ static int vvc1_canvas_init(void)
 		config_cav_lut_ex(2 * i + 0,
 			buf_start,
 			canvas_width, canvas_height,
-			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
-		vc1_canvas_config[i][0].endian = 0;
+			CANVAS_ADDR_NOWRAP, hw->canvas_mode, endian, VDEC_1);
+		vc1_canvas_config[i][0].endian = endian;
 		vc1_canvas_config[i][0].width = canvas_width;
 		vc1_canvas_config[i][0].height = canvas_height;
-		vc1_canvas_config[i][0].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][0].block_mode = hw->canvas_mode;
 		vc1_canvas_config[i][0].phy_addr = buf_start;
 
 		config_cav_lut_ex(2 * i + 1,
 			buf_start +
 			decbuf_y_size, canvas_width,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_32X32, 0, VDEC_1);
-		vc1_canvas_config[i][1].endian = 0;
+			hw->canvas_mode, 0, VDEC_1);
+		vc1_canvas_config[i][1].endian = endian;
 		vc1_canvas_config[i][1].width = canvas_width;
 		vc1_canvas_config[i][1].height = canvas_height >> 1;
-		vc1_canvas_config[i][1].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][1].block_mode = hw->canvas_mode;
 		vc1_canvas_config[i][1].phy_addr = buf_start + decbuf_y_size;
 #else
 		config_cav_lut_ex(3 * i + 0,
 			buf_start,
 			canvas_width, canvas_height,
-			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
-		vc1_canvas_config[i][0].endian = 0;
+			CANVAS_ADDR_NOWRAP, hw->canvas_mode, endian, VDEC_1);
+		vc1_canvas_config[i][0].endian = endian;
 		vc1_canvas_config[i][0].width = canvas_width;
 		vc1_canvas_config[i][0].height = canvas_height;
-		vc1_canvas_config[i][0].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][0].block_mode = hw->canvas_mode;
 		vc1_canvas_config[i][0].phy_addr = buf_start;
 		config_cav_lut_ex(3 * i + 1,
 			buf_start +
 			decbuf_y_size, canvas_width / 2,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
-			CANVAS_BLKMODE_32X32, 0, VDEC_1);
-		vc1_canvas_config[i][1].endian = 0;
+			hw->canvas_mode, endian, VDEC_1);
+		vc1_canvas_config[i][1].endian = endian;
 		vc1_canvas_config[i][1].width = canvas_width >> 1;
 		vc1_canvas_config[i][1].height = canvas_height >> 1;
-		vc1_canvas_config[i][1].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][1].block_mode = hw->canvas_mode;
 		vc1_canvas_config[i][1].phy_addr = buf_start + decbuf_y_size;
 		config_cav_lut_ex(3 * i + 2,
 			buf_start +
 			decbuf_y_size + decbuf_uv_size,
 			canvas_width / 2, canvas_height / 2,
-			CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_32X32, 0, VDEC_1);
-		vc1_canvas_config[i][2].endian = 0;
+			CANVAS_ADDR_NOWRAP, hw->canvas_mode, endian, VDEC_1);
+		vc1_canvas_config[i][2].endian = endian;
 		vc1_canvas_config[i][2].width = canvas_width >> 1;
 		vc1_canvas_config[i][2].height = canvas_height >> 1;
-		vc1_canvas_config[i][2].block_mode = CANVAS_BLKMODE_32X32;
+		vc1_canvas_config[i][2].block_mode = hw->canvas_mode;
 		vc1_canvas_config[i][2].phy_addr = buf_start +
 			decbuf_y_size + decbuf_uv_size;
 #endif
@@ -1750,6 +1755,8 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 	pdata->set_isreset = vvc1_set_isreset;
 	is_reset = 0;
 	vdec = pdata;
+
+	vc1_hw.canvas_mode = pdata->canvas_mode;
 
 	vvc1_vdec_info_init();
 

@@ -1503,7 +1503,7 @@ int vdec_frame_check_init(struct vdec_s *vdec)
 #endif
 
 	vdec->vfc.err_crc_block = 0;
-	single_mode_vdec = (vdec_single(vdec))? vdec : NULL;
+	//single_mode_vdec = (vdec_single(vdec))? vdec : NULL;
 
 	if (!check_enable && !yuv_enable)
 		return 0;

@@ -606,6 +606,8 @@ EXPORT_SYMBOL(vdec_data_release);
 
 dbg_data_wr debug_port_func_data_wr;
 dbg_info_up debug_port_func_info_up;
+EXPORT_SYMBOL(debug_port_func_data_wr);
+EXPORT_SYMBOL(debug_port_func_info_up);
 
 void vdec_debug_port_register(dbg_data_wr data_write, dbg_info_up info_update)
 {

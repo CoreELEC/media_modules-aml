@@ -279,6 +279,7 @@ static int rb_push_data(struct stream_buf_s *stbuf, const u8 *in, u32 size)
 	u32 wp = stbuf->buf_wp;
 	u32 sp = (stbuf->buf_wp + size);
 	u32 ep = (stbuf->buf_start + stbuf->buf_size);
+	struct vdec_s *vdec = container_of(stbuf, struct vdec_s, vbuf);
 
 	len = sp > ep ? ep - wp : size;
 
@@ -288,6 +289,21 @@ static int rb_push_data(struct stream_buf_s *stbuf, const u8 *in, u32 size)
 			return ret;
 	}
 
+#ifdef DEBUG_PORT
+	if (vdec->format == VFORMAT_VC1) {
+		if (debug_port_func_data_wr) {
+			if (sp > ep) {
+				debug_port_func_data_wr((void *)(uintptr_t)wp,
+					ep - wp,
+					vdec->id, (1 << 16) | 3);
+			} else {
+				debug_port_func_data_wr((void *)(uintptr_t)wp,
+					size,
+					vdec->id, (1 << 16) | 3);
+			}
+		}
+	}
+#endif
 	stbuf->ops->set_wp(stbuf, (wp + len >= ep) ?
 		stbuf->buf_start : (wp + len));
 
