@@ -1226,7 +1226,7 @@ static int is_base_csd_valid(struct vdec_h264_hw_s *hw, u32 param4)
 			"%s, %d, invalid level_idc, level_idc:%d\n", __FUNCTION__, __LINE__, level_idc);
 		return false;
 	}
-	if (max_reference_size <= 0 || max_reference_size > 16) {
+	if (max_reference_size < 0 || max_reference_size > 16) { // only I-frame in stream, the max_reference_size may be 0.
 		dpb_print(DECODE_ID(hw), 0,
 			"%s, %d, invalid max_reference_size, max_reference_size:%d\n", __FUNCTION__, __LINE__, max_reference_size);
 		return false;
