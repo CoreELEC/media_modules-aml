@@ -120,7 +120,7 @@ struct vdec_fb_node {
 int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc);
 
 int vdec_if_probe(struct aml_vcodec_ctx *ctx,
-	struct aml_vcodec_mem *bs, void *out);
+	struct aml_vcodec_mem *bs);
 
 /**
  * vdec_if_deinit() - deinitialize decode driver

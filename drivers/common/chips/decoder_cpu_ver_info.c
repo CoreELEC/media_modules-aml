@@ -876,9 +876,11 @@ static u32 force_dos_support;
 
 inline bool is_hevc_align32(int blkmod)
 {
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12A))
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
+
+	if ((cpu_major_id == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
+		(cpu_major_id == AM_MESON_CPU_MAJOR_ID_S1A) ||
+		(cpu_major_id == AM_MESON_CPU_MAJOR_ID_G12A))
 		return true;
 
 	return false;

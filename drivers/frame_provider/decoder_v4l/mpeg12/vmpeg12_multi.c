@@ -1390,7 +1390,7 @@ static void v4l_vmpeg2_fill_userdata(struct vdec_mpeg12_hw_s *hw,
 			if (index >= data_len)
 				tmp_buf[i + j] = 0;
 			else
-				tmp_buf[i + j] = sei_data_buf[i + 7 - j];
+				tmp_buf[i + j] = sei_data_buf[index];
 		}
 	}
 

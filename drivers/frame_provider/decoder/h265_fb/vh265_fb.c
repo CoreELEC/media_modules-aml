@@ -365,14 +365,14 @@ static u32 pts_unstable;
 #define	BMMU_IFBUF_SCALELUT_ID		(0)
 #define	BMMU_IFBUF_VCPU_IMEM_ID 	(BMMU_IFBUF_SCALELUT_ID + 1)
 #define	BMMU_IFBUF_SYS_IMEM_ID		(BMMU_IFBUF_VCPU_IMEM_ID + 1)
-#define	BMMU_IFBUF_LMEM0_ID			(BMMU_IFBUF_SYS_IMEM_ID + 1)
-#define	BMMU_IFBUF_LMEM1_ID			(BMMU_IFBUF_LMEM0_ID + 1)
+#define	BMMU_IFBUF_LMEM0_ID		(BMMU_IFBUF_SYS_IMEM_ID + 1)
+#define	BMMU_IFBUF_LMEM1_ID		(BMMU_IFBUF_LMEM0_ID + 1)
 #define	BMMU_IFBUF_PARSER_SAO0_ID	(BMMU_IFBUF_LMEM1_ID + 1)
 #define	BMMU_IFBUF_PARSER_SAO1_ID	(BMMU_IFBUF_PARSER_SAO0_ID + 1)
 #define	BMMU_IFBUFF_MPRED_IMP0_ID	(BMMU_IFBUF_PARSER_SAO1_ID + 1)
 #define	BMMU_IFBUFF_MPRED_IMP1_ID	(BMMU_IFBUFF_MPRED_IMP0_ID + 1)
-#define	DEFAULT_REF_PIC_ID			(BMMU_IFBUFF_MPRED_IMP1_ID + 1)
-#define FB_LOOP_BUF_COUNT			(DEFAULT_REF_PIC_ID + 1)
+#define	DEFAULT_REF_PIC_ID		(BMMU_IFBUFF_MPRED_IMP1_ID + 1)
+#define FB_LOOP_BUF_COUNT		(DEFAULT_REF_PIC_ID + 1)
 
 #else
 #define FB_LOOP_BUF_COUNT	0
@@ -5548,8 +5548,7 @@ static int ref_pic_error_handle(struct hevc_state_s *hevc)
 				f_diff = pic->POC - tmp_pic->POC;
 				f_index = i;
 			}
-
-			if ((pic->POC < tmp_pic->POC)
+			else if ((pic->POC < tmp_pic->POC)
 				&& ((tmp_pic->POC - pic->POC) < b_diff)) {
 				b_diff = tmp_pic->POC - pic->POC;
 				b_index = i;
@@ -8322,7 +8321,7 @@ static int check_ref_pic_drop_flag(struct hevc_state_s *hevc)
 			if (pic == NULL) {
 				cur_pic->drop_flag = true;
 				return 1;
-			} else if ((pic != NULL) && (pic->drop_flag)) {
+			} else if (pic->drop_flag) {
 				cur_pic->drop_flag = true;
 				return 1;
 			}
@@ -8336,7 +8335,7 @@ static int check_ref_pic_drop_flag(struct hevc_state_s *hevc)
 			if (pic == NULL) {
 				cur_pic->drop_flag = true;
 				return 1;
-			} else if ((pic != NULL) && (pic->drop_flag)) {
+			} else if (pic->drop_flag) {
 				cur_pic->drop_flag = true;
 				return 1;
 			}
@@ -13334,14 +13333,6 @@ force_output:
 				hevc->kpi_first_i_coming = 1;
 				pr_debug("[vdec_kpi][%s] First I frame coming.\n", __func__);
 			}
-			/*
-			if (!mv_buf_dynamic_alloc && hevc->pic_mv_buf_wait_alloc_done_flag == BUFFER_INIT) {
-				hevc->dec_result = DEC_RESULT_WAIT_BUFFER;
-				hevc_print(hevc, 0, "[%d]alloc mv buffer\n",vdec->id);
-				vdec_schedule_work(&hevc->work);
-				return IRQ_HANDLED;
-			}
-			*/
 		} else if (hevc->wait_buf == 0) {
 			u32 vui_time_scale;
 			u32 vui_num_units_in_tick;
@@ -15808,16 +15799,15 @@ int find_near_pic_index(struct hevc_state_s *hevc, PIC_t* cur_pic)
 				f_index = i;
 			}
 
-			if ((cur_pic->POC < tmp_pic->POC)
-				&& ((tmp_pic->POC - cur_pic->POC) < b_diff)) {
-				b_diff = tmp_pic->POC - cur_pic->POC;
-				b_index = i;
-			}
-
-			if ((cur_pic->POC < tmp_pic->POC)
-				&& ((tmp_pic->POC - cur_pic->POC) > max_diff)) {
-				max_diff = tmp_pic->POC - cur_pic->POC;
-				max_index = i;
+			if (cur_pic->POC < tmp_pic->POC) {
+				if ((tmp_pic->POC - cur_pic->POC) < b_diff) {
+					b_diff = tmp_pic->POC - cur_pic->POC;
+					b_index = i;
+				}
+				if ((tmp_pic->POC - cur_pic->POC) > max_diff) {
+					max_diff = tmp_pic->POC - cur_pic->POC;
+					max_index = i;
+				}
 			}
 		}
 

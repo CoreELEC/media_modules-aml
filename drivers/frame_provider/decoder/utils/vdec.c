@@ -3524,14 +3524,12 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			FRAME_BASE_PATH_DTV_TUNNEL_MEDIASYNC_MODE) {
 			if (mediasync_add_di)
 				snprintf(vdec->vfm_map_chain,
-					VDEC_MAP_NAME_SIZE, "%s %s",
-					vdec->vf_provider_name,
-					"deinterlace mediasync.0 amvideo");
+					VDEC_MAP_NAME_SIZE, "%s deinterlace mediasync.0 amvideo",
+					vdec->vf_provider_name);
 			else
 				snprintf(vdec->vfm_map_chain,
-					VDEC_MAP_NAME_SIZE, "%s %s",
-					vdec->vf_provider_name,
-					"mediasync.0 amvideo");
+					VDEC_MAP_NAME_SIZE, "%s mediasync.0 amvideo",
+					vdec->vf_provider_name);
 
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 					"vdec-map-%d", vdec->id);

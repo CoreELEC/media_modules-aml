@@ -566,7 +566,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			if ((repeat_count > 1) && avi_flag) {
 				vf->duration =
 					vvc1_amstream_dec_info.rate *
-					repeat_count >> 1;
+					(repeat_count >> 1);
 				next_pts = pts +
 					(vvc1_amstream_dec_info.rate *
 					 repeat_count >> 1) * 15 / 16;
@@ -591,7 +591,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			if ((repeat_count > 1) && avi_flag) {
 				vf->duration =
 					vvc1_amstream_dec_info.rate *
-					repeat_count >> 1;
+					(repeat_count >> 1);
 				if (next_pts != 0) {
 					next_pts += ((vf->duration) -
 					((vf->duration) >> 4));
@@ -672,7 +672,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		if ((repeat_count > 1) && avi_flag) {
 			vf->duration =
 				vvc1_amstream_dec_info.rate *
-				repeat_count >> 1;
+				(repeat_count >> 1);
 			if (next_pts != 0) {
 				next_pts +=
 					((vf->duration) -
@@ -1148,7 +1148,6 @@ static irqreturn_t vvc1_isr_thread_fn(int irq, void *dev_id)
 
 static irqreturn_t vvc1_isr(int irq, void *dev_id)
 {
-
 	if (process_busy)
 		return IRQ_HANDLED;
 
@@ -1325,7 +1324,7 @@ static int vvc1_canvas_init(void)
 			return ret;
 		if (i == (MAX_BMMU_BUFFER_NUM - 1)) {
 			buf_offset = buf_start - DCAC_BUFF_START_ADDR;
-			continue;
+			break;
 		}
 
 #ifdef NV21
@@ -1503,18 +1502,18 @@ static void vvc1_local_init(bool is_reset)
 	memset(&frm, 0, sizeof(frm));
 
 	if (!is_reset) {
-	hw->refs[0] = -1;
-	hw->refs[1] = -1;
-	hw->throw_pb_flag = 1;
-	hw->vf_buf_num_used = DECODE_BUFFER_NUM_MAX;
-	if (hw->vf_buf_num_used > DECODE_BUFFER_NUM_MAX)
+		hw->refs[0] = -1;
+		hw->refs[1] = -1;
+		hw->throw_pb_flag = 1;
 		hw->vf_buf_num_used = DECODE_BUFFER_NUM_MAX;
+		if (hw->vf_buf_num_used > DECODE_BUFFER_NUM_MAX)
+			hw->vf_buf_num_used = DECODE_BUFFER_NUM_MAX;
 
-	for (i = 0; i < hw->vf_buf_num_used; i++) {
-		hw->vfbuf_use[i] = 0;
-		hw->buf_use[i] = 0;
-		hw->ref_use[i] = 0;
-	}
+		for (i = 0; i < hw->vf_buf_num_used; i++) {
+			hw->vfbuf_use[i] = 0;
+			hw->buf_use[i] = 0;
+			hw->ref_use[i] = 0;
+		}
 
 		INIT_KFIFO(display_q);
 		INIT_KFIFO(recycle_q);
@@ -1578,19 +1577,19 @@ static void vvc1_set_clk(struct work_struct *work)
 
 static void error_do_work(struct work_struct *work)
 {
-		vc1_print(0, VC1_DEBUG_DETAIL,"%s \n", __func__);
+	vc1_print(0, VC1_DEBUG_DETAIL,"%s \n", __func__);
 
-		amvdec_stop();
-		msleep(20);
+	amvdec_stop();
+	msleep(20);
 #ifdef CONFIG_AMLOGIC_POST_PROCESS_MANAGER
-		vvc1_ppmgr_reset();
+	vvc1_ppmgr_reset();
 #else
-		vf_light_unreg_provider(&vvc1_vf_prov);
-		vvc1_local_init(true);
-		vf_reg_provider(&vvc1_vf_prov);
+	vf_light_unreg_provider(&vvc1_vf_prov);
+	vvc1_local_init(true);
+	vf_reg_provider(&vvc1_vf_prov);
 #endif
-		vvc1_prot_init();
-		amvdec_start();
+	vvc1_prot_init();
+	amvdec_start();
 }
 
 static void vvc1_put_timer_func(struct timer_list *timer)

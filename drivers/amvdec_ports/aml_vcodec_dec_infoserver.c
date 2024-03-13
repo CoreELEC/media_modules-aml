@@ -199,39 +199,25 @@ void aml_vcodec_decinfo_event_handler(struct aml_vcodec_ctx *ctx,
 	ctx->dec_intf.dec_info_args.event_cnt = 1;
 	switch (sub_cmd) {
 	case AML_DECINFO_EVENT_AFD:
-	{
 		vcodec_afd_put(ctx, data);
 		break;
-	}
 	case AML_DECINFO_EVENT_CC:
-	{
 		vcodec_cc_data_put(ctx, data);
 		break;
-	}
 	case AML_DECINFO_EVENT_HDR10P:
 	case AML_DECINFO_EVENT_CUVA:
-	{
 		vcodec_aux_data_put(ctx, data);
 		break;
-	}
 	case AML_DECINFO_EVENT_FRAME:
-	{
 		vcodec_frame_data_put(ctx, data);
 		break;
-	}
 	case AML_DECINFO_EVENT_STREAM:
-	{
 		break;
-	}
 	case AML_DECINFO_EVENT_STATISTIC:
-	{
 		break;
-	}
 	case AML_DECINFO_EVENT_HDR10:
-	{
 		vcodec_hdr10_data_put(ctx, data);
 		break;
-	}
 	default:
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"unsupport dec info subcmd %x\n", sub_cmd);
@@ -421,42 +407,28 @@ int aml_vcodec_decinfo_get(struct v4l2_ctrl *ctrl,
 
 	switch (sub_cmd) {
 	case AML_DECINFO_GET_AFD_TYPE:
-	{
 		ret = vcodec_get_data_afd(ctx, info);
 		break;
-	}
 	case AML_DECINFO_GET_HDR10P_TYPE:
 	case AML_DECINFO_GET_CUVA_TYPE:
 	case AML_DECINFO_GET_DV_TYPE:
-	{
 		ret = vcodec_get_data_aux_data(ctx, info);
 		break;
-	}
 	case AML_DECINFO_GET_HDR10_TYPE:
-	{
 		ret = vcodec_get_data_aux_data_hdr10(ctx, info);
 		break;
-	}
 	case AML_DECINFO_GET_CC_TYPE:
-	{
 		ret = vcodec_get_data_cc(ctx, info);
 		break;
-	}
 	case AML_DECINFO_GET_STREAM_TYPE:
-	{
 		ret = vcodec_get_data_stream(ctx, info);
 		break;
-	}
 	case AML_DECINFO_GET_STATISTIC_TYPE:
-	{
 		ret = vcodec_get_data_statistic(ctx, info);
 		break;
-	}
 	case AML_DECINFO_GET_FRAME_TYPE:
-	{
 		ret = vcodec_get_data_frame(ctx, info);
 		break;
-	}
 	default:
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"unsupport dec info subcmd %x\n", sub_cmd);

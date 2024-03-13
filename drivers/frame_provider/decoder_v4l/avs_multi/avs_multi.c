@@ -3701,9 +3701,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
-		if (v4l2_ctx->is_stream_off) {
-			vavs_vf_put(vavs_vf_get(vdec), vdec);
-		} else if (hw->pics[buffer_index].error_flag) {
+		if (v4l2_ctx->is_stream_off || hw->pics[buffer_index].error_flag) {
 			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
 			if (aml_buf->sub_buf[0])
@@ -3826,9 +3824,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 
-		if (v4l2_ctx->is_stream_off) {
-			vavs_vf_put(vavs_vf_get(vdec), vdec);
-		}  else if (hw->pics[buffer_index].error_flag) {
+		if (v4l2_ctx->is_stream_off || hw->pics[buffer_index].error_flag) {
 			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
 			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);

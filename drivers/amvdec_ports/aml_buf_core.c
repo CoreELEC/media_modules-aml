@@ -864,11 +864,11 @@ ssize_t buf_core_walk(struct buf_core_mgr_s *bc, char *buf)
 		if (entry->pair == BUF_MASTER) {
 			if (entry->holder == BUF_HOLDER_DEC)
 				dec_holders++;
-			if (entry->holder == BUF_HOLDER_GE2D)
+			else if (entry->holder == BUF_HOLDER_GE2D)
 				ge2d_holders++;
-			if (entry->holder == BUF_HOLDER_VPP)
+			else if (entry->holder == BUF_HOLDER_VPP)
 				vpp_holders++;
-			if (entry->holder == BUF_HOLDER_VSINK)
+			else if (entry->holder == BUF_HOLDER_VSINK)
 				vsink_holders++;
 			if (entry->ref_bit_map & DI_MASK)
 				di_holders++;

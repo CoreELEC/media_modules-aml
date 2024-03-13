@@ -49,7 +49,7 @@
 #define VIDEO_DEC_VP9_MMU		(19)
 #define VIDEO_ENC_H264			(20)
 #define VIDEO_ENC_JPEG			(21)
-#define VIDEO_ENC_H264_CABAC	(22)
+#define VIDEO_ENC_H264_CABAC		(22)
 #define VIDEO_DEC_H264_MULTI_MMU	(23)
 #define VIDEO_DEC_HEVC_G12A		(24)
 #define VIDEO_DEC_VP9_G12A		(25)

@@ -4306,7 +4306,6 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		&& (hevc->PB_skip_mode == 0)
 		&& (dw_mode == 0x10)) {
 		void *mem_start_virt_y = codec_mm_phys_to_virt(pic->dw_y_adr);
-		void *mem_start_virt_u_v = codec_mm_phys_to_virt(pic->dw_y_adr);
 
 		if (aml_buf->num_planes == 1) {
 			if (mem_start_virt_y) {
@@ -4318,6 +4317,8 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 					0x80, pic->luma_size + pic->chroma_size);
 			}
 		} else if (aml_buf->num_planes == 2) {
+			void *mem_start_virt_u_v = codec_mm_phys_to_virt(pic->dw_y_adr);
+
 			if (mem_start_virt_y) {
 				memset(mem_start_virt_y, 0x80, pic->luma_size);
 				codec_mm_dma_flush(mem_start_virt_y,
@@ -8119,7 +8120,7 @@ static int check_ref_pic_drop_flag(struct hevc_state_s *hevc)
 			if (pic == NULL) {
 				cur_pic->drop_flag = true;
 				return 1;
-			} else if ((pic != NULL) && (pic->drop_flag)) {
+			} else if (pic->drop_flag) {
 				cur_pic->drop_flag = true;
 				return 1;
 			}
@@ -8133,7 +8134,7 @@ static int check_ref_pic_drop_flag(struct hevc_state_s *hevc)
 			if (pic == NULL) {
 				cur_pic->drop_flag = true;
 				return 1;
-			} else if ((pic != NULL) && (pic->drop_flag)) {
+			} else if (pic->drop_flag) {
 				cur_pic->drop_flag = true;
 				return 1;
 			}
@@ -9129,6 +9130,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 			if (!hevc->pic_transfer->aux_data_buf) {
 				pr_err("%s: failed to alloc for aux\n", __func__);
 				vfree(hevc->pic_transfer);
+				hevc->pic_transfer = NULL;
 				return -1;
 			}
 		}
@@ -9598,7 +9600,7 @@ static void v4l_vh265_fill_userdata(struct hevc_state_s *hevc,
 			if (index >= data_len)
 				tmp_buf[i + j] = 0;
 			else
-				tmp_buf[i + j] = sei_data_buf[i + 7 - j];
+				tmp_buf[i + j] = sei_data_buf[index];
 		}
 	}
 

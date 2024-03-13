@@ -159,7 +159,7 @@ static int vdec_vc1_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 
 	inst->vdec.frm_name	= "VC1";
 	inst->vdec.video_type	= VFORMAT_VC1;
-	inst->vdec.filp		= ctx->dev->filp;
+	inst->vdec.filp 	= ctx->dev ? ctx->dev->filp : NULL;
 	inst->vdec.ctx		= ctx;
 	inst->ctx		= ctx;
 
@@ -236,6 +236,11 @@ static int parse_stream_ucode(struct vdec_vc1_inst *inst,
 	wait_for_completion_timeout(&inst->comp,
 		msecs_to_jiffies(1000));
 
+	if (!inst->vsi) {
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
+			"inst->vsi is NULL\n");
+		return -1;
+	}
 	return inst->vsi->pic.dpb_frames ? 0 : -1;
 }
 
@@ -269,7 +274,7 @@ static int parse_stream_cpu(struct vdec_vc1_inst *inst, u8 *buf, u32 size)
 }
 
 static int vdec_vc1_probe(unsigned long h_vdec,
-	struct aml_vcodec_mem *bs, void *out)
+	struct aml_vcodec_mem *bs)
 {
 	struct vdec_vc1_inst *inst =
 		(struct vdec_vc1_inst *)h_vdec;
@@ -290,7 +295,7 @@ static int vdec_vc1_probe(unsigned long h_vdec,
 	/*
 	 * Keep it for the frame mode later
 	 */
-	if (inst->ctx->output_dma_mode) {
+	if (ctx->output_dma_mode) {
 		if (bs->model == VB2_MEMORY_MMAP) {
 			struct aml_video_stream *s =
 				(struct aml_video_stream *) buf;
@@ -299,7 +304,7 @@ static int vdec_vc1_probe(unsigned long h_vdec,
 				(s->type != V4L_STREAM_TYPE_MATEDATA))
 				return -1;
 
-			if (inst->ctx->param_sets_from_ucode) {
+			if (ctx->param_sets_from_ucode) {
 				ret = parse_stream_ucode(inst, s->data,
 					s->len, bs->timestamp);
 			} else {
@@ -311,7 +316,7 @@ static int vdec_vc1_probe(unsigned long h_vdec,
 				bs->timestamp, BUFF_IDX(bs, bs->index));
 		}
 	} else {
-		if (inst->ctx->param_sets_from_ucode) {
+		if (ctx->param_sets_from_ucode) {
 			ret = parse_stream_ucode(inst, buf, size, bs->timestamp);
 		} else {
 			ret = parse_stream_cpu(inst, buf, size);
@@ -376,7 +381,7 @@ static int vdec_vc1_decode(unsigned long h_vdec,
 			(stbuf->buf_size - (stbuf->buf_wp - stbuf->buf_rp)) :
 			(stbuf->buf_rp - stbuf->buf_wp);
 		if (free_space < size) {
-			v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_INPUT,
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
 				"%s require %d but stbuf free space(%d) is not enough. \n",
 				__func__, size, free_space);
 			return -EAGAIN;
@@ -393,10 +398,15 @@ static int vdec_vc1_decode(unsigned long h_vdec,
 	if (vdec_input_full(vdec))
 		return -EAGAIN;
 
-	if (inst->ctx->output_dma_mode) {
+	if (ctx->output_dma_mode) {
 		if (bs->model == VB2_MEMORY_MMAP) {
 			struct aml_video_stream *s =
 				(struct aml_video_stream *) buf;
+			if (!s) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"buf vaddr is NULL\n");
+				return -EAGAIN;
+			}
 
 			if (s->magic != AML_VIDEO_MAGIC)
 				return -1;
@@ -412,7 +422,7 @@ static int vdec_vc1_decode(unsigned long h_vdec,
 			ret = vdec_vframe_write_with_dma(vdec,
 				bs->addr, size, bs->timestamp,
 				BUFF_IDX(bs, bs->index),
-				vdec_vframe_input_free, inst->ctx);
+				vdec_vframe_input_free, ctx);
 		}
 	} else {
 		ret = vdec_write_nalu(inst, buf, size, bs->timestamp,

@@ -2974,13 +2974,11 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 				}
 			}
 			mutex_unlock(&pbi->fence_mutex);
-			if (signed_count != 0) {
-				for (i = 0; i < signed_count; i++) {
-					if (!signed_fence[i])
-						continue;
-					buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
-					vp9_recycle_dec_resource(pbi, buf);
-				}
+			for (i = 0; i < signed_count; i++) {
+				if (!signed_fence[i])
+					continue;
+				buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
+				vp9_recycle_dec_resource(pbi, buf);
 			}
 		} else {
 			prepare_display_buf(pbi, &sd);

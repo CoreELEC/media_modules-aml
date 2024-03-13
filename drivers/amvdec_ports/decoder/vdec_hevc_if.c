@@ -344,7 +344,7 @@ out:
 }
 
 static int vdec_hevc_probe(unsigned long h_vdec,
-	struct aml_vcodec_mem *bs, void *out)
+	struct aml_vcodec_mem *bs)
 {
 	struct vdec_hevc_inst *inst =
 		(struct vdec_hevc_inst *)h_vdec;

@@ -6521,13 +6521,11 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 			}
 		}
 		mutex_unlock(&hw->fence_mutex);
-		if (signed_count != 0) {
-			for (i = 0; i < signed_count; i++) {
-				if (!signed_fence[i])
-					continue;
-				buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
-				av1_recycle_dec_resource(hw, buf);
-			}
+		for (i = 0; i < signed_count; i++) {
+			if (!signed_fence[i])
+				continue;
+			buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
+			av1_recycle_dec_resource(hw, buf);
 		}
 	} else {
 		prepare_display_buf((struct AV1HW_s *)(pbi->private_data), sd);

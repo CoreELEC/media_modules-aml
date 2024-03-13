@@ -742,6 +742,10 @@ void vdec_write_stream_data_inner(struct aml_vdec_adapt *ada_ctx, char *addr,
 	u32 around_size;
 
 	// calculate whether the remaining space is enougth
+	if (!ada_ctx->vdec) {
+		pr_err("Err: ada_ctx->vdec is NULL\n");
+		return;
+	}
 	if ((ada_ctx->vdec->vbuf.buf_wp + size) >
 		(ada_ctx->vdec->vbuf.buf_start + ada_ctx->vdec->vbuf.buf_size)) {
 		stbuf_around = true;

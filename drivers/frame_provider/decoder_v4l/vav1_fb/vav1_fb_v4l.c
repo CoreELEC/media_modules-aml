@@ -7036,42 +7036,40 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	sd->stream_offset = pbi->pre_stream_offset;
 	if (!hw->front_back_mode && hw->enable_fence) {
-			int i, j, used_size, ret;
-			int signed_count = 0;
-			struct vframe_s *signed_fence[VF_POOL_SIZE];
-			struct aml_buf *buf;
-			/* notify signal to wake up wq of fence. */
-			vdec_timeline_increase(vdec->sync, 1);
+		int i, j, used_size, ret;
+		int signed_count = 0;
+		struct vframe_s *signed_fence[VF_POOL_SIZE];
+		struct aml_buf *buf;
+		/* notify signal to wake up wq of fence. */
+		vdec_timeline_increase(vdec->sync, 1);
 
-			av1_print(hw, PRINT_FLAG_VDEC_STATUS,
-				"%s, enable_fence:%d, vdec_timeline_increase() done\n",
-				__func__, hw->enable_fence);
+		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
+			"%s, enable_fence:%d, vdec_timeline_increase() done\n",
+			__func__, hw->enable_fence);
 
-			mutex_lock(&hw->fence_mutex);
-			used_size = hw->fence_vf_s.used_size;
-			if (used_size) {
-				for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
-					if (hw->fence_vf_s.fence_vf[i] != NULL) {
-						ret = dma_fence_get_status(hw->fence_vf_s.fence_vf[i]->fence);
-						if (ret == 1) {
-							signed_fence[signed_count] = hw->fence_vf_s.fence_vf[i];
-							hw->fence_vf_s.fence_vf[i] = NULL;
-							hw->fence_vf_s.used_size--;
-							signed_count++;
-						}
-						j++;
+		mutex_lock(&hw->fence_mutex);
+		used_size = hw->fence_vf_s.used_size;
+		if (used_size) {
+			for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
+				if (hw->fence_vf_s.fence_vf[i] != NULL) {
+					ret = dma_fence_get_status(hw->fence_vf_s.fence_vf[i]->fence);
+					if (ret == 1) {
+						signed_fence[signed_count] = hw->fence_vf_s.fence_vf[i];
+						hw->fence_vf_s.fence_vf[i] = NULL;
+						hw->fence_vf_s.used_size--;
+						signed_count++;
 					}
+					j++;
 				}
 			}
-			mutex_unlock(&hw->fence_mutex);
-			if (signed_count != 0) {
-				for (i = 0; i < signed_count; i++) {
-					if (!signed_fence[i])
-						continue;
-					buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
-					av1_recycle_dec_resource(hw, buf);
-				}
-			}
+		}
+		mutex_unlock(&hw->fence_mutex);
+		for (i = 0; i < signed_count; i++) {
+			if (!signed_fence[i])
+				continue;
+			buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
+			av1_recycle_dec_resource(hw, buf);
+		}
 	} else {
 		prepare_display_buf((struct AV1HW_s *)(pbi->private_data), sd);
 	}

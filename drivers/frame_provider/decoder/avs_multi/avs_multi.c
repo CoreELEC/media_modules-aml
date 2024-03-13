@@ -1095,7 +1095,6 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 			break;
 	}
 	if (i < VF_POOL_SIZE)
-
 		kfifo_put(&hw->recycle_q, (const struct vframe_s *)vf);
 	spin_unlock_irqrestore(&lock, flags);
 
@@ -3225,7 +3224,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 					 *	 hw->vavs_amstream_dec_info.rate *
 					 *	 repeat_count >> 1;
 					 */
-					vf->duration = dur * repeat_count >> 1;
+					vf->duration = dur * (repeat_count >> 1);
 					if (hw->next_pts != 0) {
 						hw->next_pts +=
 							((vf->duration) -

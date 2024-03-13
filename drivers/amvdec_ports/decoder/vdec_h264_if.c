@@ -663,7 +663,7 @@ out:
 }
 
 static int vdec_h264_probe(unsigned long h_vdec,
-	struct aml_vcodec_mem *bs, void *out)
+	struct aml_vcodec_mem *bs)
 {
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
 	struct aml_vdec_adapt *adapt_vdec = &inst->vdec;

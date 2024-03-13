@@ -2039,8 +2039,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 			am_buf->pair = BUF_SUB0;
 			aml_buf_put(&ctx->bm, am_buf);
 		}
-
-		if (master_buf->pair_state == SUB0_DONE) {
+		else if (master_buf->pair_state == SUB0_DONE) {
 			master_buf->sub_buf[1] = (void *)am_buf;
 			am_buf->master_buf = (void *)master_buf;
 			am_buf->pair = BUF_SUB1;
@@ -3306,13 +3305,18 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 	struct aml_video_fmt *fmt;
 	struct vb2_queue *dst_vq;
 
+	if (!ctx) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"ctx is NULL\n");
+		return -1;
+	}
+
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %u, planes: %u, fmt: %x\n",
 		__func__, f->type,
 		V4L2_TYPE_IS_MULTIPLANAR(f->type) ?
 		f->fmt.pix_mp.num_planes : 1,
 		f->fmt.pix_mp.pixelformat);
-
 	ctx->is_multiplanar = V4L2_TYPE_IS_MULTIPLANAR(f->type) ? true: false;
 	dst_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 	if (!dst_vq) {
@@ -4407,7 +4411,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	src_mem.timestamp = vb->timestamp;
 	src_mem.meta_ptr = (ulong)buf->meta_data;
 
-	if (vdec_if_probe(ctx, &src_mem, NULL)) {
+	if (vdec_if_probe(ctx, &src_mem)) {
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 		/* frame mode and non-dbuf mode. */
@@ -4570,7 +4574,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 		ulong key;
 		if (vb->memory == VB2_MEMORY_DMABUF)
 			key = (ulong)vb->planes[0].dbuf;
-		if (vb->memory == VB2_MEMORY_MMAP)
+		else if (vb->memory == VB2_MEMORY_MMAP)
 			key = vb2_dma_contig_plane_dma_addr(vb, 0);
 
 		ret = aml_buf_attach(&ctx->bm, key,

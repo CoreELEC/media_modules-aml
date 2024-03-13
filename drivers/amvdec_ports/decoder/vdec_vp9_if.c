@@ -412,7 +412,7 @@ out:
 }
 
 static int vdec_vp9_probe(unsigned long h_vdec,
-	struct aml_vcodec_mem *bs, void *out)
+	struct aml_vcodec_mem *bs)
 {
 	struct vdec_vp9_inst *inst =
 		(struct vdec_vp9_inst *)h_vdec;

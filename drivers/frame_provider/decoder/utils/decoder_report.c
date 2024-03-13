@@ -99,15 +99,17 @@ EXPORT_SYMBOL(register_dump_amstream_bufs_func);
 
 static void buff_show(ssize_t size, char *buf, int buff_size)
 {
-	if (size) {
+	if (size && buf) {
 		char *tmpbuf = kzalloc(sizeof(char) * size, GFP_KERNEL);
-		char *tmpptr = buf;
+		char *tmpptr = tmpbuf;
 		const char *cur;
-		if (!buf) {
-			kfree(tmpbuf);
+
+		if (!tmpptr) {
+			pr_err("failed alloc buf for buff_show\n");
 			return;
 		}
 
+		strcpy(tmpbuf, buf);
 		while (1) {
 			cur = strsep(&tmpptr, "\n");
 			if (!cur)
@@ -124,12 +126,19 @@ static ssize_t status_show(struct class *cls,
 	struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
-	char *tmpbuf = (char *)kzalloc(BUFF_SIZE, GFP_KERNEL);
-	char *ptmpbuf = tmpbuf;
+	char *tmpbuf = NULL;
+	char *ptmpbuf = NULL;
 	ssize_t size = 0;
 
 	if (!report_dev)
 		return 0;
+
+	tmpbuf = (char *)kzalloc(BUFF_SIZE, GFP_KERNEL);
+	if (!tmpbuf) {
+		pr_err("failed alloc buf for status_show\n");
+		return -ENOMEM;
+	}
+	ptmpbuf = tmpbuf;
 
 	pr_info("\n============ cat /sys/class/vdec/dump_decoder_state:\n");
 	buff_show(dump_decoder_state(tmpbuf), tmpbuf, BUFF_SIZE);
@@ -217,7 +226,7 @@ int register_set_debug_flag_func(const char *module, set_debug_flag_func func)
 		}
 
 		node->module = kzalloc(strlen(module) + 1, GFP_KERNEL);
-		if (!node) {
+		if (!node->module) {
 			pr_info("failed allocate module for %s\n", module);
 			res = -ENOMEM;
 			goto error;
@@ -333,14 +342,19 @@ static int cur_configs(const char *configs, const char *title, char *cur_str)
 	const char *str = NULL;
 	const char *cur = NULL;
 	int ret = 0;
-	char *tmpbuf = kzalloc(sizeof(char) * 1024, GFP_KERNEL);
-	char *tmpptr = tmpbuf;
+	char *tmpbuf = NULL;
+	char *tmpptr = NULL;
 
 	if (!configs || !title) {
-		ret = -1;
-		goto configs_done;
+		return -1;
 	}
 
+	tmpbuf = kzalloc(sizeof(char) * 1024, GFP_KERNEL);
+	if (!tmpbuf) {
+		pr_err("failed alloc buf for cur_configs\n");
+		return -ENOMEM;
+	}
+	tmpptr = tmpbuf;
 	/*cur configs*/
 	str = strstr(configs, title);
 	if (str != NULL) {
@@ -497,17 +511,15 @@ void set_debug_configs(const char *module, const char *debug, int len)
 			}
 			vfree(tmpbuf);
 		}
-	} else {
-		if (cur_configs(debug, DEFAULT_TITTLE, default_str) == 0) {
-			pr_info("default:%s\n", default_str);
-			if (get_configs(default_str, "debuglevel", &config_val) == 0) {
-				set_default_mode("debuglevel", config_val);
-			}
+	} else if (cur_configs(debug, DEFAULT_TITTLE, default_str) == 0) {
+		pr_info("default:%s\n", default_str);
+		if (get_configs(default_str, "debuglevel", &config_val) == 0) {
+			set_default_mode("debuglevel", config_val);
 		}
 	}
 
-	kfree(default_str);
 	kfree(dec_str);
+	kfree(default_str);
 }
 EXPORT_SYMBOL(set_debug_configs);
 

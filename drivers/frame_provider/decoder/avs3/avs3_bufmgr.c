@@ -657,7 +657,6 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 		hw->lcu_total = hw->ctx.info.f_lcu;
 		printf("lcu_size %d lcu_size_log2 %d lcu_total %d\n", hw->lcu_size, hw->lcu_size_log2, hw->lcu_total);
 	} else if (start_code == I_PICTURE_START_CODE || start_code == PB_PICTURE_START_CODE) {
-		//hw->input.sample_bit_depth = hw->ctx.info.bit_depth_input;
 		hw->input.sample_bit_depth = hw->ctx.info.bit_depth_internal;
 		hw->input.alf_enable = ctx->info.sqh.adaptive_leveling_filter_enable_flag;
 		for (i = 0; i < NUM_ALF_COMPONENT; i++)
@@ -684,7 +683,6 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 			printf("set refpic after cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
 				hw->cur_pic->index, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
 		}
-		//Read_ALF_param(hw);
 	}
 	return ret;
 }

@@ -460,7 +460,7 @@ static int parse_stream_cpu(struct vdec_av1_inst *inst, u8 *buf, u32 size)
 }
 
 static int vdec_av1_probe(unsigned long h_vdec,
-	struct aml_vcodec_mem *bs, void *out)
+	struct aml_vcodec_mem *bs)
 {
 	struct vdec_av1_inst *inst =
 		(struct vdec_av1_inst *)h_vdec;

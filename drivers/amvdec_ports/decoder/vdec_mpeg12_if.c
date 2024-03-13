@@ -357,7 +357,7 @@ out:
 }
 
 static int vdec_mpeg12_probe(unsigned long h_vdec,
-	struct aml_vcodec_mem *bs, void *out)
+	struct aml_vcodec_mem *bs)
 {
 	struct vdec_mpeg12_inst *inst =
 		(struct vdec_mpeg12_inst *)h_vdec;

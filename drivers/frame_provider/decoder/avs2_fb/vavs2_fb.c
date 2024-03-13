@@ -7814,13 +7814,13 @@ decode_slice:
 			(start_code == I_PICTURE_START_CODE ||
 			start_code == PB_PICTURE_START_CODE)) {
 
-			int32_t g_WqMDefault4x4[16] = {
+			const int32_t g_WqMDefault4x4[16] = {
 				64, 	64, 	64, 	68,
 				64, 	64, 	68, 	72,
 				64, 	68, 	76, 	80,
 				72, 	76, 	84, 	96
 			};
-			int32_t g_WqMDefault8x8[64] = {
+			const int32_t g_WqMDefault8x8[64] = {
 				64, 	64, 	64, 	64, 	68, 	68, 	72, 	76,
 				64, 	64, 	64, 	68, 	72, 	76, 	84, 	92,
 				64, 	64, 	68, 	72, 	76, 	80, 	88, 	100,

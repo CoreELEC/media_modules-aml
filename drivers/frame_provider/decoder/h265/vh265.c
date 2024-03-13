@@ -2122,8 +2122,10 @@ static u32 again_threshold;
 
 static int get_frame_mmu_map_size(void)
 {
-	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
+
+	if ((cpu_major_id >= AM_MESON_CPU_MAJOR_ID_SM1) &&
+		(cpu_major_id != AM_MESON_CPU_MAJOR_ID_TXHD2))
 		return (MAX_FRAME_8K_NUM * 4);
 
 	return (MAX_FRAME_4K_NUM * 4);
@@ -7708,6 +7710,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 {
 	int ret = -1;
 	struct BuffInfo_s *cur_buf_info = NULL;
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
 
 	memset(&hevc->param, 0, sizeof(union param_u));
 
@@ -7718,12 +7721,12 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		sizeof(struct BuffInfo_s));
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
-		if ((get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)) {
+		if ((cpu_major_id <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) ||
+			(cpu_major_id == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
+			(cpu_major_id == AM_MESON_CPU_MAJOR_ID_S1A)) {
 			if (hevc_is_support_4k()) {
-				if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-					(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
+				if ((cpu_major_id >= AM_MESON_CPU_MAJOR_ID_SM1) &&
+					(cpu_major_id != AM_MESON_CPU_MAJOR_ID_TXHD2))
 					memcpy(cur_buf_info, &amvh265_workbuff_spec[2],	/* 4k */
 					sizeof(struct BuffInfo_s));
 				else
@@ -15308,13 +15311,14 @@ static void set_debug_flag(const char *module, int debug_flags)
 static int __init amvdec_h265_driver_init_module(void)
 {
 	struct BuffInfo_s *p_buf_info;
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
 
-	if ((get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)) {
+	if ((cpu_major_id <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) ||
+		(cpu_major_id == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
+		(cpu_major_id == AM_MESON_CPU_MAJOR_ID_S1A)) {
 		if (hevc_is_support_4k()) {
-			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
+			if ((cpu_major_id >= AM_MESON_CPU_MAJOR_ID_SM1) &&
+				(cpu_major_id != AM_MESON_CPU_MAJOR_ID_TXHD2))
 				p_buf_info = &amvh265_workbuff_spec[2];
 			else
 				p_buf_info = &amvh265_workbuff_spec[1];

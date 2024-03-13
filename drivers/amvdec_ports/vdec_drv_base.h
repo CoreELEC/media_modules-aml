@@ -33,7 +33,7 @@ struct vdec_common_if {
 	int (*init)(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec);
 
 	int (*probe)(unsigned long h_vdec,
-		struct aml_vcodec_mem *bs, void *out);
+		struct aml_vcodec_mem *bs);
 
 	/**
 	 * (*decode)() - trigger decode

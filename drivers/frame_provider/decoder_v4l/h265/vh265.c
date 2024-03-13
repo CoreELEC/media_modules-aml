@@ -7679,6 +7679,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 			if (!hevc->pic_transfer->aux_data_buf) {
 				pr_err("%s: failed to alloc for aux\n", __func__);
 				vfree(hevc->pic_transfer);
+				hevc->pic_transfer = NULL;
 				return -1;
 			}
 		}
@@ -8076,7 +8077,7 @@ static void v4l_vh265_fill_userdata(struct hevc_state_s *hevc,
 			if (index >= data_len)
 				tmp_buf[i + j] = 0;
 			else
-				tmp_buf[i + j] = sei_data_buf[i + 7 - j];
+				tmp_buf[i + j] = sei_data_buf[index];
 		}
 	}
 
@@ -9070,7 +9071,8 @@ void vmh265_report_pts(struct hevc_state_s *hevc)
 	u64 dur_offset = hevc->frame_dur;
 
 	dur_offset = (dur_offset << 32 ) | offset;
-	if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
+	if (!ctx || !ctx->pts_serves_ops ||
+		!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
 		ctx->current_timestamp = pts_st.pts_64;
 		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 		"%s pts cal_offset current pts:0x%x pts_64:%llx  dur_offset:0x%llx \n",

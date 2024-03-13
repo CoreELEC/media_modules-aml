@@ -3810,9 +3810,10 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 				}
 			}
 			mutex_unlock(&pbi->fence_mutex);
-			if (signed_count != 0) {
-				for (i = 0; i < signed_count; i++)
-					vvp9_vf_put(signed_fence[i], pbi);
+			for (i = 0; i < signed_count; i++) {
+				if (!signed_fence[i])
+					continue;
+				vvp9_vf_put(signed_fence[i], pbi);
 			}
 		} else {
 			prepare_display_buf(pbi, &sd);
@@ -4383,7 +4384,7 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.rpm			= {.buf_size = RPM_BUF_SIZE},
 		.lmem			= {.buf_size = 0x400 * 2},
 		.prob_buf		= {.buf_size = PROB_BUF_SIZE,},
-		.prob_cnt_buf	= {.buf_size = COUNT_BUF_SIZE,},
+		.prob_cnt_buf		= {.buf_size = COUNT_BUF_SIZE,},
 	},
 	{
 		.max_width		= 4096,

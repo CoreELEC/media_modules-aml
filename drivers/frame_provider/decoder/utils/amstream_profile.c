@@ -95,22 +95,24 @@ static int mpeg4_codec_profile(struct codec_profile_t *vdec_profile)
 
 static int h264_codec_profile(struct codec_profile_t *vdec_profile)
 {
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
+
 	if (is_support_format(VFORMAT_H264)) {
 		if (vdec_is_support_4k()) {
-			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) {
+			if (cpu_major_id >= AM_MESON_CPU_MAJOR_ID_TXLX) {
 				vdec_profile->profile =
 					"4k, dwrite, compressed, frame_dv, fence, multi_frame_dv";
-			} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) {
+			} else if (cpu_major_id >= AM_MESON_CPU_MAJOR_ID_GXTVBB) {
 				vdec_profile->profile = "4k, frame_dv, fence, multi_frame_dv";
 			}
 		} else {
-			if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
+			if ((cpu_major_id == AM_MESON_CPU_MAJOR_ID_T5D) ||
 				is_cpu_s4_s805x2() ||
-				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
+				(cpu_major_id == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
 				is_cpu_s7_s805x3()) {
 				vdec_profile->profile =
 					"dwrite, compressed, frame_dv, multi_frame_dv";
-			} else if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S1A) {
+			} else if (cpu_major_id != AM_MESON_CPU_MAJOR_ID_S1A) {
 				vdec_profile->profile = "dwrite, compressed";
 			}
 		}
