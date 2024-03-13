@@ -3864,13 +3864,13 @@ void aml_alloc_buffer(struct aml_vcodec_ctx *ctx, int flag)
 
 	if (flag & DV_TYPE) {
 		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
-			ctx->aux_infos.bufs[i].md_buf = vzalloc(MD_BUF_SIZE);
+			ctx->aux_infos.bufs[i].md_buf = aml_media_mem_alloc(MD_BUF_SIZE, GFP_KERNEL);
 			if (ctx->aux_infos.bufs[i].md_buf == NULL) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 					"v4l2 alloc %dth dv md buffer fail\n", i);
 			}
 
-			ctx->aux_infos.bufs[i].comp_buf = vzalloc(COMP_BUF_SIZE);
+			ctx->aux_infos.bufs[i].comp_buf = aml_media_mem_alloc(COMP_BUF_SIZE, GFP_KERNEL);
 			if (ctx->aux_infos.bufs[i].comp_buf == NULL) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 					"v4l2 alloc %dth dv comp buffer fail\n", i);
@@ -3880,7 +3880,7 @@ void aml_alloc_buffer(struct aml_vcodec_ctx *ctx, int flag)
 
 	if (flag & SEI_TYPE) {
 		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
-			ctx->aux_infos.bufs[i].sei_buf = vzalloc(SEI_BUF_SIZE);
+			ctx->aux_infos.bufs[i].sei_buf = aml_media_mem_alloc(SEI_BUF_SIZE, GFP_KERNEL);
 			if (ctx->aux_infos.bufs[i].sei_buf) {
 				ctx->aux_infos.bufs[i].sei_size  = 0;
 				ctx->aux_infos.bufs[i].sei_state = 1;
@@ -3900,7 +3900,7 @@ void aml_alloc_buffer(struct aml_vcodec_ctx *ctx, int flag)
 
 	if (flag & HDR10P_TYPE) {
 		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
-			ctx->aux_infos.bufs[i].hdr10p_buf = vzalloc(HDR10P_BUF_SIZE);
+			ctx->aux_infos.bufs[i].hdr10p_buf = aml_media_mem_alloc(HDR10P_BUF_SIZE, GFP_KERNEL);
 			if (ctx->aux_infos.bufs[i].hdr10p_buf) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 					"v4l2 alloc %dth hdr10p buffer:%px\n",
@@ -3921,12 +3921,12 @@ void aml_free_buffer(struct aml_vcodec_ctx *ctx, int flag)
 	if (flag & DV_TYPE) {
 		for (i = 0; i < V4L_CAP_BUFF_MAX; i++) {
 			if (ctx->aux_infos.bufs[i].md_buf != NULL) {
-				vfree(ctx->aux_infos.bufs[i].md_buf);
+				aml_media_mem_free(ctx->aux_infos.bufs[i].md_buf);
 				ctx->aux_infos.bufs[i].md_buf = NULL;
 			}
 
 			if (ctx->aux_infos.bufs[i].comp_buf != NULL) {
-				vfree(ctx->aux_infos.bufs[i].comp_buf);
+				aml_media_mem_free(ctx->aux_infos.bufs[i].comp_buf);
 				ctx->aux_infos.bufs[i].comp_buf = NULL;
 			}
 		}
@@ -3938,7 +3938,7 @@ void aml_free_buffer(struct aml_vcodec_ctx *ctx, int flag)
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 					"v4l2 free %dth aux buffer:%px\n",
 					i, ctx->aux_infos.bufs[i].sei_buf);
-				vfree(ctx->aux_infos.bufs[i].sei_buf);
+				aml_media_mem_free(ctx->aux_infos.bufs[i].sei_buf);
 				ctx->aux_infos.bufs[i].sei_state = 0;
 				ctx->aux_infos.bufs[i].sei_size = 0;
 				ctx->aux_infos.bufs[i].sei_buf = NULL;
@@ -3952,7 +3952,7 @@ void aml_free_buffer(struct aml_vcodec_ctx *ctx, int flag)
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 					"v4l2 free %dth hdr10p buffer:%px\n",
 					i, ctx->aux_infos.bufs[i].hdr10p_buf);
-				vfree(ctx->aux_infos.bufs[i].hdr10p_buf);
+				aml_media_mem_free(ctx->aux_infos.bufs[i].hdr10p_buf);
 				ctx->aux_infos.bufs[i].hdr10p_buf = NULL;
 			}
 		}

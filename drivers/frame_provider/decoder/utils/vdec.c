@@ -474,11 +474,11 @@ int vdec_data_get_index(ulong data, struct vdec_data_buf_s *vdata_buf)
 				(pdata->aux_buf_size < vdata_buf->aux_buf_size)) {
 
 				if (pdata->user_data_buf != NULL) {
-					vfree(pdata->user_data_buf);
+					kfree(pdata->user_data_buf);
 					pdata->user_data_buf = NULL;
 				}
 				if (pdata->hdr10p_data_buf != NULL) {
-					vfree(pdata->hdr10p_data_buf);
+					kfree(pdata->hdr10p_data_buf);
 					pdata->hdr10p_data_buf = NULL;
 				}
 				if (pdata->aux_data_buf != NULL) {
@@ -495,7 +495,7 @@ int vdec_data_get_index(ulong data, struct vdec_data_buf_s *vdata_buf)
 		if ((atomic_read(&pdata->use_count) == 0) &&
 			(pdata->alloc_flag == 0)) {
 			if (vdata_buf->alloc_policy & ALLOC_USER_BUF) {
-				pdata->user_data_buf = vzalloc(vdata_buf->user_buf_size);
+				pdata->user_data_buf = kzalloc(vdata_buf->user_buf_size, GFP_KERNEL);
 				if (pdata->user_data_buf == NULL) {
 					pr_debug("alloc %dth userdata failed\n", i);
 					return -1;
@@ -503,7 +503,7 @@ int vdec_data_get_index(ulong data, struct vdec_data_buf_s *vdata_buf)
 				pdata->user_buf_size = vdata_buf->user_buf_size;
 			}
 			if (vdata_buf->alloc_policy & ALLOC_HDR10P_BUF) {
-				pdata->hdr10p_data_buf = vzalloc(vdata_buf->hdr10p_buf_size);
+				pdata->hdr10p_data_buf = kzalloc(vdata_buf->hdr10p_buf_size, GFP_KERNEL);
 				if (pdata->hdr10p_data_buf == NULL) {
 					pr_debug("alloc %dth hdr10p failed\n", i);
 					return -1;
@@ -581,11 +581,11 @@ void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb)
 			struct vdec_data_s *rel_data = &vdata->data[i];
 
 			if (rel_data->user_data_buf != NULL) {
-				vfree(rel_data->user_data_buf);
+				kfree(rel_data->user_data_buf);
 				rel_data->user_data_buf = NULL;
 			}
 			if (rel_data->hdr10p_data_buf != NULL) {
-				vfree(rel_data->hdr10p_data_buf);
+				kfree(rel_data->hdr10p_data_buf);
 				rel_data->hdr10p_data_buf = NULL;
 			}
 			if (rel_data->aux_data_buf != NULL) {
