@@ -400,12 +400,7 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		/* initialize reference pictures */
 		//ret = com_picman_refp_init(&ctx->dpm, ctx->info.sqh.num_ref_pics_act, sh->slice_type, ctx->ptr, ctx->info.sh.temporal_id, ctx->last_intra_ptr, ctx->refp);
 #endif
-		if (avs3_get_error_policy() & 0x4) {
-			com_assert_rv(COM_SUCCEEDED(ret), ret);
-		} else if (ret != 0) {
-			ret = 0;
-			goto NEW_PICTURE;
-		}
+		com_assert_rv(COM_SUCCEEDED(ret), ret);
 #ifdef ORI_CODE
 	} else if (start_code >= 0x00 && start_code <= 0x8E) {
 #endif
@@ -420,7 +415,7 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		ctx->ptr = pic_header->dtr; /* PTR */
 #endif
 		com_assert_rv(COM_SUCCEEDED(ret), ret);
-#if 1
+
 		if (is_avs3_print_bufmgr_detail())
 			com_picman_print_state(&ctx->dpm);
 		if (pic_header->rpl_l0.ref_pic_active_num > 0) {
@@ -437,8 +432,7 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 				pos += sprintf(&tmpbuf[pos], "%d ", ctx->refp[i][REFP_1].ptr);
 			printf("rpl_l1 num %d: %s\n", pic_header->rpl_l1.ref_pic_active_num, tmpbuf);
 		}
-#endif
-NEW_PICTURE:
+
 		/* get available frame buffer for decoded image */
 		ctx->pic = com_picman_get_empty_pic(&ctx->dpm, &ret);
 		com_assert_rv(ctx->pic, ret);
@@ -602,22 +596,6 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 	return ret;
 }
 
-int check_poc_in_dpb(struct avs3_decoder *hw, int poc)
-{
-	COM_PIC * pic;
-	int i = 0;
-
-	for (i = 0; i < hw->max_pb_size; i++) {
-		pic = &hw->pic_pool[i];
-		if ((pic != NULL) && (pic->buf_cfg.in_dpb) &&
-			(poc == pic->ptr) && (!(avs3_get_error_policy() & 0x8))) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
 int avs3_bufmgr_post_process(struct avs3_decoder *hw)
 {
 	DEC_CTX *ctx = &hw->ctx;
@@ -630,11 +608,6 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw)
 	if ((ctx->pic != NULL) && !((ctx->pic->buf_cfg.in_dpb == 0)
 		&& (ctx->pic->buf_cfg.used == 1)))
 		return ret;
-
-	if (check_poc_in_dpb(hw, ctx->ptr)) {
-		ctx->pic->buf_cfg.used = 0;
-		return 2;
-	}
 
 	ctx->pic->buf_cfg.in_dpb = true;
 	if (stat) {
@@ -693,6 +666,8 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 		pic->buf_cfg.decoded_lcu = 0;
 #ifdef NEW_FB_CODE
 		pic->buf_cfg.back_done_mark = 1;
+		pic->buf_cfg.drop_flag = 0;
+		pic->buf_cfg.need_mmu_copy = 0;
 #endif
 #endif
 
@@ -837,6 +812,7 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 
 	printk("%s----pic_pool (used %d, total %d) cur_num_ref_pics %d pm count %d, pm_ref_count %d diff %d\n", mark, used_count, hw->max_pb_size,
 		hw->ctx.dpm.cur_num_ref_pics, pm_count, pm_ref_count,  used_count - pm_count);
+
 	for (i = 0; i < hw->max_pb_size; i++) {
 		pic = &hw->pic_pool[i];
 		if (pic->buf_cfg.used) {

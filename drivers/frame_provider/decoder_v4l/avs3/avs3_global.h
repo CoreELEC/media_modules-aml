@@ -536,6 +536,7 @@ void print_alf_param(union param_u * param);
 void print_param(union param_u * param);
 int get_free_frame_buffer(struct avs3_decoder * avs3_dec);
 int avs3_get_error_policy(void);
+int avs3_get_error_handle_mode(void);
 
 #endif
 

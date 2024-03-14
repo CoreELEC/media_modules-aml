@@ -109,8 +109,9 @@ static int picman_move_pic(COM_PM *pm, int from, int to)
 	pic = pm->pic[from];
 
 	for (i = from; i < temp_cur_num_ref_pics - 1; i++) {
-	pm->pic[i] = pm->pic[i + 1];// move the remaining ref pic to the front
+		pm->pic[i] = pm->pic[i + 1];// move the remaining ref pic to the front
 	}
+
 	pm->pic[temp_cur_num_ref_pics - 1] = NULL; // the new end fill with NULL.
 	temp_cur_num_ref_pics--;// update, since the ref-pic number decrease
 	for (i = to; i > temp_cur_num_ref_pics; i--) {
@@ -376,16 +377,16 @@ int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_R
 			int ref_lib_index = pic_header->rpl_l0.ref_pics[i];
 			com_assert_rv(ref_lib_index == pm->pb_libpic_library_index, COM_ERR_UNEXPECTED);
 
-		set_refp(&refp[i][REFP_0], pm->pb_libpic);
-		refp[i][REFP_0].ptr = pic_header->poc - 1;
-		refp[i][REFP_0].is_library_picture = 1;
-		pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
+			set_refp(&refp[i][REFP_0], pm->pb_libpic);
+			refp[i][REFP_0].ptr = pic_header->poc - 1;
+			refp[i][REFP_0].is_library_picture = 1;
+			pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
 		}
 		else
 #endif
 		{
-		int refPicPoc = pic_header->poc - pic_header->rpl_l0.ref_pics[i];
-		//Find the ref pic in the DPB
+			int refPicPoc = pic_header->poc - pic_header->rpl_l0.ref_pics[i];
+			//Find the ref pic in the DPB
 			int j = 0;
 			int diff;
 			while (j < pm->cur_num_ref_pics && pm->pic_ref[j]->ptr != refPicPoc)
@@ -539,6 +540,28 @@ int com_picman_dpbpic_doi_minus_cycle_length( COM_PM *pm )
 	return COM_OK;
 }
 
+int find_close_pic(COM_PM *pm, COM_PIC_HEADER *pic_header)
+{
+	COM_PIC * pic;
+	u32 diff = 0xffffffff;
+	int index = -1;
+	int i = 0;
+
+	for (i = 0; i < pm->max_pb_size; i++) {
+		pic = pm->pic[i];
+		if (pic != NULL) {
+			if (pic->buf_cfg.drop_flag == 1)
+				continue;
+			if (abs(pic_header->poc - pic->ptr) < diff) {
+				diff = abs(pic_header->poc - pic->ptr);
+				index = i;
+			}
+		}
+	}
+
+	return index;
+}
+
 //This is implementation of reference picture list construction based on RPL for decoder
 //in decoder, use DOI as pic reference instead of POC
 int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_REFP(*refp)[REFP_NUM])
@@ -559,7 +582,8 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 	if (!pm->libvc_data->library_picture_enable_flag && pic_header->slice_type != SLICE_I)
 #endif
 	{
-		com_assert_rv(pm->cur_num_ref_pics > 0, COM_ERR_UNEXPECTED);
+		if (avs3_get_error_policy() & 0x4)
+			com_assert_rv(pm->cur_num_ref_pics > 0, COM_ERR_UNEXPECTED);
 	}
 
 	for (i = 0; i < MAX_NUM_REF_PICS; i++)
@@ -598,13 +622,45 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 
 			//If the ref pic is found, set it to RPL0
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j] && pm->pic_ref[j]->dtr == refPicDoi) {
-				set_refp(&refp[i][REFP_0], pm->pic_ref[j]);
-				pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
+				if (pm->pic_ref[j]->buf_cfg.drop_flag == 0) {
+					set_refp(&refp[i][REFP_0], pm->pic_ref[j]);
+					pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
+				} else {
+					com_picman_unlock(pm, flags);
+					printf("%s: The L0 Reference Picture(%d) drop_mark is 1",
+						__func__, refPicDoi);
+					return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+				}
 			} else {
-				com_picman_unlock(pm, flags);
-				printf("%s: The L0 Reference Picture(%d) is not find in dpb",
-					__func__, refPicDoi);
-				return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+				if (avs3_get_error_policy() & 0x4) {
+					com_picman_unlock(pm, flags);
+					printf("%s: The L0 Reference Picture(%d) is not find in dpb",
+						__func__, refPicDoi);
+					return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+				} else {
+					if (avs3_get_error_handle_mode() == 1) {
+						int k = 0;
+						u32 diff = 0xffffffff;
+						int index = -1;
+
+						for (k = 0; k < pm->cur_num_ref_pics; k++) {
+							if (pm->pic_ref[k]->buf_cfg.drop_flag == 1)
+								continue;
+							if (abs(pic_header->poc - pm->pic_ref[k]->ptr) < diff) {
+								diff = abs(pic_header->poc - pm->pic_ref[k]->ptr);
+								index = k;
+							}
+						}
+
+						if (index != -1) {
+							set_refp(&refp[i][REFP_0], pm->pic_ref[index]);
+							pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
+
+							printf("%s: The L0 Reference Picture dtr(%d) is not find in dpb, use dtr(%d) instead",
+								__func__, refPicDoi, pm->pic_ref[index]->dtr);
+						}
+					}
+				}
 			}
 
 			com_picman_unlock(pm, flags);
@@ -653,12 +709,71 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j]->dtr == refPicDoi)
 #endif
 			{
-				set_refp(&refp[i][REFP_1], pm->pic_ref[j]);
-				pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
+				if (pm->pic_ref[j]->buf_cfg.drop_flag == 0) {
+					set_refp(&refp[i][REFP_1], pm->pic_ref[j]);
+					pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
+				} else {
+					printf("%s: The L1 Reference Picture(%d) drop_mark is 1",
+						__func__, refPicDoi);
+					return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+				}
 			} else {
-				printf("%s: The L1 Reference Picture(%d) is not find in dpb",
-					__func__, refPicDoi);
-				return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+
+				if (avs3_get_error_policy() & 0x4) {
+					//set_refp(&refp[i][REFP_0], pm->pic_ref[j]);
+					//pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
+					//com_picman_unlock(pm, flags);
+					printf("%s: The L1 Reference Picture(%d) is not find in dpb",
+						__func__, refPicDoi);
+					return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+				} else {
+					if (avs3_get_error_handle_mode() == 1) {
+						int k = 0;
+						u32 diff = 0xffffffff;
+						int index = -1;
+
+						for (k = 0; k < pm->cur_num_ref_pics; k++) {
+							if (pm->pic_ref[k]->buf_cfg.drop_flag == 1)
+								continue;
+							if (abs(pic_header->poc - pm->pic_ref[k]->ptr) < diff) {
+								diff = abs(pic_header->poc - pm->pic_ref[k]->ptr);
+								index = k;
+							}
+						}
+
+						if (index != -1) {
+							set_refp(&refp[i][REFP_1], pm->pic_ref[index]);
+							pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
+
+							printf("%s: The L1 Reference Picture dtr(%d) is not find in dpb, use dtr(%d) instead",
+								__func__, refPicDoi, pm->pic_ref[index]->dtr);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if ((avs3_get_error_policy() & 0x4) == 0) {
+		if ((pic_header->rpl_l0.ref_pic_active_num != 0) &&
+			(pm->num_refp[REFP_0] == 0) &&
+			(pic_header->slice_type != SLICE_I)) {
+			int index = find_close_pic(pm, pic_header);
+
+			if (index != -1) {
+				set_refp(&refp[0][REFP_0], pm->pic[index]);
+				pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
+			}
+		}
+
+		if ((pic_header->rpl_l1.ref_pic_active_num != 0) &&
+			(pm->num_refp[REFP_1] == 0) &&
+			(pic_header->slice_type == SLICE_B)) {
+			int index = find_close_pic(pm, pic_header);
+
+			if (index != -1) {
+				set_refp(&refp[0][REFP_1], pm->pic[index]);
+				pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
 			}
 		}
 	}
@@ -743,9 +858,9 @@ int com_picman_refpic_marking(COM_PM *pm, COM_PIC_HEADER *pic_header)
 #endif
 				{
 					isIncludedInRPL = 1;
+				}
+				j++;
 			}
-			j++;
-		}
 			//Check if the pic is included in RPL1. This while loop will be executed only if the ref pic is not included in RPL0
 			j = 0;
 			while (!isIncludedInRPL && j < pic_header->rpl_l1.ref_pic_num) {
@@ -766,7 +881,7 @@ int com_picman_refpic_marking(COM_PM *pm, COM_PIC_HEADER *pic_header)
 				pm->cur_num_ref_pics--;
 				i--;                                           //We need to decrement i here because it will be increment by i++ at for loop. We want to keep the same i here because after the move, the current ref pic at i position is the i+1 position which we still need to check.
 				numberOfPicsToCheck--;                         //We also need to decrement this variable to avoid checking the moved ref picture twice.
-		}
+			}
 		}
 	}
 #if LIBVC_ON
@@ -811,14 +926,14 @@ int com_picman_refpic_marking(COM_PM *pm, COM_PIC_HEADER *pic_header)
 					libpic_idx = ii;
 					break;
 				}
-		}
-		com_assert_rv(libpic_idx >= 0, COM_ERR_UNEXPECTED);
+			}
+			com_assert_rv(libpic_idx >= 0, COM_ERR_UNEXPECTED);
 
-		// move in lib pic from the buffer outside the decoder
-		pm->pb_libpic = pm->libvc_data->list_libpic_outside[libpic_idx];
-		pm->pb_libpic_library_index = referenced_library_picture_index;
-		pm->cur_libpb_size++;
-		pm->is_library_buffer_empty = 0;
+			// move in lib pic from the buffer outside the decoder
+			pm->pb_libpic = pm->libvc_data->list_libpic_outside[libpic_idx];
+			pm->pb_libpic_library_index = referenced_library_picture_index;
+			pm->cur_libpb_size++;
+			pm->is_library_buffer_empty = 0;
 		}
 	}
 #endif
@@ -837,20 +952,22 @@ int com_construct_ref_list_doi( COM_PIC_HEADER *pic_header)
 		return COM_ERR;
 
 	for (i = 0; i < pic_header->rpl_l0.ref_pic_num; i++) {
-		pic_header->rpl_l0.ref_pics_doi[i] = pic_header->decode_order_index%DOI_CYCLE_LENGTH - pic_header->rpl_l0.ref_pics_ddoi[i];
+		pic_header->rpl_l0.ref_pics_doi[i] = pic_header->decode_order_index % DOI_CYCLE_LENGTH - pic_header->rpl_l0.ref_pics_ddoi[i];
+		if (is_avs3_print_bufmgr_detail()) {
+			printf("rpl_l0.ref_pics_doi[%d]=%d, pic_header->rpl_l0.ref_pics_ddoi[%d]=%d\n",
+				i, pic_header->rpl_l0.ref_pics_doi[i], i, pic_header->rpl_l0.ref_pics_ddoi[i]);
+		}
 	}
-	if (is_avs3_print_bufmgr_detail()) {
-		printf("rpl_l0.ref_pics_doi[%d]=%d, pic_header->rpl_l0.ref_pics_ddoi[%d]=%d\n",
-			i, pic_header->rpl_l0.ref_pics_doi[i], i, pic_header->rpl_l0.ref_pics_ddoi[i]);
-	}
-	for ( i = 0; i < pic_header->rpl_l1.ref_pic_num; i++ )
+
+	for (i = 0; i < pic_header->rpl_l1.ref_pic_num; i++)
 	{
-		pic_header->rpl_l1.ref_pics_doi[i] = pic_header->decode_order_index%DOI_CYCLE_LENGTH - pic_header->rpl_l1.ref_pics_ddoi[i];
+		pic_header->rpl_l1.ref_pics_doi[i] = pic_header->decode_order_index % DOI_CYCLE_LENGTH - pic_header->rpl_l1.ref_pics_ddoi[i];
+		if (is_avs3_print_bufmgr_detail()) {
+			printf("rpl_l1.ref_pics_doi[%d]=%d, pic_header->rpl_l1.ref_pics_ddoi[%d]=%d\n",
+				i, pic_header->rpl_l1.ref_pics_doi[i], i, pic_header->rpl_l1.ref_pics_ddoi[i]);
+		}
 	}
-	if (is_avs3_print_bufmgr_detail()) {
-		printf("rpl_l1.ref_pics_doi[%d]=%d, pic_header->rpl_l1.ref_pics_ddoi[%d]=%d\n",
-			i, pic_header->rpl_l1.ref_pics_doi[i], i, pic_header->rpl_l1.ref_pics_ddoi[i]);
-	}
+
 	return COM_OK;
 }
 

@@ -1559,6 +1559,10 @@ typedef struct avs3_frame_s{
 
 	u32 triple_write_mode;
 #endif
+	struct avs3_frame_s *copy_pic;
+	int need_mmu_copy;
+	int cur_mmu_4k_number;
+	int drop_flag;
 } avs3_frame_t;
 #endif
 /* picture store structure */

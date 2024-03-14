@@ -446,30 +446,25 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 #if AWP
 		if (ctx->info.pic_header.slice_type == SLICE_P || ctx->info.pic_header.slice_type == SLICE_B)
 		{
-		for (i = 0; i < ctx->dpm.num_refp[REFP_0]; i++)
-		{
-			ctx->info.pic_header.ph_poc[REFP_0][i] = ctx->refp[i][REFP_0].ptr;
-		}
+			for (i = 0; i < ctx->dpm.num_refp[REFP_0]; i++)
+			{
+				ctx->info.pic_header.ph_poc[REFP_0][i] = ctx->refp[i][REFP_0].ptr;
+			}
 		}
 
 		if (ctx->info.pic_header.slice_type == SLICE_B)
 		{
-		for (i = 0; i < ctx->dpm.num_refp[REFP_1]; i++)
-		{
-			ctx->info.pic_header.ph_poc[REFP_1][i] = ctx->refp[i][REFP_1].ptr;
-		}
+			for (i = 0; i < ctx->dpm.num_refp[REFP_1]; i++)
+			{
+				ctx->info.pic_header.ph_poc[REFP_1][i] = ctx->refp[i][REFP_1].ptr;
+			}
 		}
 #endif
 #else
 		/* initialize reference pictures */
 		//ret = com_picman_refp_init(&ctx->dpm, ctx->info.sqh.num_ref_pics_act, sh->slice_type, ctx->ptr, ctx->info.sh.temporal_id, ctx->last_intra_ptr, ctx->refp);
 #endif
-		if (avs3_get_error_policy() & 0x4) {
-			com_assert_rv(COM_SUCCEEDED(ret), ret);
-		} else if (ret != 0) {
-			ret = 0;
-			goto NEW_PICTURE;
-		}
+		com_assert_rv(COM_SUCCEEDED(ret), ret);
 #ifdef ORI_CODE
 	}
 	else if (start_code >= 0x00 && start_code <= 0x8E)
@@ -486,25 +481,23 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		ctx->ptr = pic_header->dtr; /* PTR */
 #endif
 		com_assert_rv(COM_SUCCEEDED(ret), ret);
-#if 1
 		if (is_avs3_print_bufmgr_detail())
 			com_picman_print_state(&ctx->dpm);
 		if (pic_header->rpl_l0.ref_pic_active_num > 0) {
-		char tmpbuf[128];
-		int pos = 0;
-		for (i = 0; i < pic_header->rpl_l0.ref_pic_active_num; i++)
-			pos += sprintf(&tmpbuf[pos], "%d ", ctx->refp[i][REFP_0].ptr);
-		printf("rpl_l0 num %d: %s\n", pic_header->rpl_l0.ref_pic_active_num, tmpbuf);
+			char tmpbuf[128];
+			int pos = 0;
+			for (i = 0; i < pic_header->rpl_l0.ref_pic_active_num; i++)
+				pos += sprintf(&tmpbuf[pos], "%d ", ctx->refp[i][REFP_0].ptr);
+			printf("rpl_l0 num %d: %s\n", pic_header->rpl_l0.ref_pic_active_num, tmpbuf);
 		}
 		if (pic_header->rpl_l1.ref_pic_active_num > 0) {
-		char tmpbuf[128];
-		int pos = 0;
-		for (i = 0; i < pic_header->rpl_l1.ref_pic_active_num; i++)
-			pos += sprintf(&tmpbuf[pos], "%d ", ctx->refp[i][REFP_1].ptr);
-		printf("rpl_l1 num %d: %s\n", pic_header->rpl_l1.ref_pic_active_num, tmpbuf);
+			char tmpbuf[128];
+			int pos = 0;
+			for (i = 0; i < pic_header->rpl_l1.ref_pic_active_num; i++)
+				pos += sprintf(&tmpbuf[pos], "%d ", ctx->refp[i][REFP_1].ptr);
+			printf("rpl_l1 num %d: %s\n", pic_header->rpl_l1.ref_pic_active_num, tmpbuf);
 		}
-#endif
-NEW_PICTURE:
+
 		/* get available frame buffer for decoded image */
 		ctx->pic = com_picman_get_empty_pic(&ctx->dpm, &ret);
 		com_assert_rv(ctx->pic, ret);
@@ -538,9 +531,9 @@ NEW_PICTURE:
 		//stop_store_param();
 		return COM_ERR_MALFORMED_BITSTREAM;
 	}
-		PRINT_LINE();
+	PRINT_LINE();
 	make_stat(ctx, cnkh->ctype, stat);
-		PRINT_LINE();
+	PRINT_LINE();
 	//stop_store_param();
 	return ret;
 }
@@ -668,25 +661,25 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 		hw->input.sample_bit_depth = hw->ctx.info.bit_depth_internal;
 		hw->input.alf_enable = ctx->info.sqh.adaptive_leveling_filter_enable_flag;
 		for (i = 0; i < NUM_ALF_COMPONENT; i++)
-		hw->img.pic_alf_on[i] = hw->ctx.pic_alf_on[i];
+			hw->img.pic_alf_on[i] = hw->ctx.pic_alf_on[i];
 		hw->img.width = hw->ctx.pa.width;
 		hw->img.height = hw->ctx.pa.height;
 		hw->slice_type = hw->ctx.info.pic_header.slice_type;
 		pic = ctx->pic;
 		if (pic && (!ret)) {
-		hw->cur_pic = &pic->buf_cfg;
+			hw->cur_pic = &pic->buf_cfg;
 			printf("set refpic before cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
 				hw->cur_pic->index, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
-		hw->cur_pic->list0_num_refp = hw->ctx.dpm.num_refp[REFP_0];
-		for (i = 0; i < hw->ctx.dpm.num_refp[REFP_0]; i++)
-			hw->cur_pic->list0_ptr[i] = hw->ctx.refp[i][REFP_0].ptr;
+			hw->cur_pic->list0_num_refp = hw->ctx.dpm.num_refp[REFP_0];
+			for (i = 0; i < hw->ctx.dpm.num_refp[REFP_0]; i++)
+				hw->cur_pic->list0_ptr[i] = hw->ctx.refp[i][REFP_0].ptr;
 #ifdef NEW_FRONT_BACK_CODE
-		for (i = 0; i < hw->cur_pic->list0_num_refp; i++)
-			hw->cur_pic->list0_index[i] = hw->ctx.refp[i][REFP_0].pic->buf_cfg.index;
+			for (i = 0; i < hw->cur_pic->list0_num_refp; i++)
+				hw->cur_pic->list0_index[i] = hw->ctx.refp[i][REFP_0].pic->buf_cfg.index;
 
-		hw->cur_pic->list1_num_refp = hw->ctx.dpm.num_refp[REFP_1];
-		for (i = 0; i < hw->cur_pic->list1_num_refp; i++)
-			hw->cur_pic->list1_index[i] = hw->ctx.refp[i][REFP_1].pic->buf_cfg.index;
+			hw->cur_pic->list1_num_refp = hw->ctx.dpm.num_refp[REFP_1];
+			for (i = 0; i < hw->cur_pic->list1_num_refp; i++)
+				hw->cur_pic->list1_index[i] = hw->ctx.refp[i][REFP_1].pic->buf_cfg.index;
 #endif
 			printf("set refpic after cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
 				hw->cur_pic->index, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
@@ -694,22 +687,6 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 		//Read_ALF_param(hw);
 	}
 	return ret;
-}
-
-int check_poc_in_dpb(struct avs3_decoder *hw, int poc)
-{
-	COM_PIC * pic;
-	int i = 0;
-
-	for (i = 0; i < hw->max_pb_size; i++) {
-		pic = &hw->pic_pool[i];
-		if ((pic != NULL) && (pic->buf_cfg.in_dpb) &&
-			(poc == pic->ptr) && (!(avs3_get_error_policy() & 0x8))) {
-			return true;
-		}
-	}
-
-	return false;
 }
 
 int avs3_bufmgr_post_process(struct avs3_decoder *hw)
@@ -725,11 +702,6 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw)
 	if ((ctx->pic != NULL) && !((ctx->pic->buf_cfg.in_dpb == 0)
 		&& (ctx->pic->buf_cfg.used == 1)))
 		return ret;
-
-	if (check_poc_in_dpb(hw, ctx->ptr)) {
-		ctx->pic->buf_cfg.used = 0;
-		return 2;
-	}
 
 	ctx->pic->buf_cfg.in_dpb = true;
 	if (stat)
@@ -834,6 +806,8 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 		pic->buf_cfg.decoded_lcu = 0;
 #ifdef NEW_FB_CODE
 		pic->buf_cfg.back_done_mark = 1;
+		pic->buf_cfg.drop_flag = 0;
+		pic->buf_cfg.need_mmu_copy = 0;
 #endif
 #endif
 
