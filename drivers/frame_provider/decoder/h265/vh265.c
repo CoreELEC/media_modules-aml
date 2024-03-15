@@ -2136,6 +2136,10 @@ struct hevc_state_s {
 #ifdef OW_TRIPLE_WRITE
 	int triple_write_mode;
 #endif
+	u32 crop_top;
+	u32 crop_bottom;
+	u32 crop_left;
+	u32 crop_right;
 	u32 data_size;
 	u32 data_offset;
 	u32 data_invalid;
@@ -6492,8 +6496,13 @@ static void crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 			break;
 		}
 
-		crop_w = SubWidthC * (pic->conf_win_left_offset + pic->conf_win_right_offset);
-		crop_h = SubHeightC * (pic->conf_win_top_offset + pic->conf_win_bottom_offset);
+		crop_w = SubWidthC * pic->conf_win_right_offset;
+		crop_h = SubHeightC * pic->conf_win_bottom_offset;
+
+		hevc->crop_right = crop_w;
+		hevc->crop_bottom = crop_h;
+		hevc->crop_left = SubWidthC * pic->conf_win_left_offset;
+		hevc->crop_top = SubHeightC * pic->conf_win_top_offset;
 
 		if (crop_w < 0 || crop_h < 0 || pic->width <= crop_w || pic->height <= crop_h) {
 			hevc_print(hevc, H265_DEBUG_BUFMGR,
@@ -6508,13 +6517,14 @@ static void crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
 			hevc_print(hevc, 0,
-				"conformance_window %d, %d, %d, %d, %d => cropped width %d, height %d, com_w %d com_h %d\n",
+				"conformance_window %d, %d, %d, %d, %d => cropped width %d, height %d, com_w %d com_h %d, crop %d/%d/%d/%d\n",
 				pic->chroma_format_idc,
 				pic->conf_win_left_offset,
 				pic->conf_win_right_offset,
 				pic->conf_win_top_offset,
 				pic->conf_win_bottom_offset,
-				hevc->crop_w, hevc->crop_h, pic->width, pic->height);
+				hevc->crop_w, hevc->crop_h, pic->width, pic->height,
+				hevc->crop_right, hevc->crop_bottom, hevc->crop_left,hevc->crop_top);
 	}
 	pic->crop_w = hevc->crop_w;
 	pic->crop_h = hevc->crop_h;
@@ -10173,17 +10183,18 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vf->type |= VIDTYPE_SCATTER;
 		}
 
-		if (hevc->mmu_enable &&
-			(pic->width != pic->crop_w || pic->height != pic->crop_h)) {
+		if ((hevc->crop_bottom != 0) || (hevc->crop_right != 0) ||
+				(hevc->crop_top != 0) || (hevc->crop_left != 0)) {
 			vf->src_crop.magic_code = SRC_CROP_MAGIC_CODE;
-			vf->src_crop.bottom = pic->height - pic->crop_h;
-			vf->src_crop.right = pic->width - pic->crop_w;
-			vf->src_crop.top = 0;
-			vf->src_crop.left = 0;
+			vf->src_crop.bottom = hevc->crop_bottom;
+			vf->src_crop.right = hevc->crop_right;
+			vf->src_crop.top = hevc->crop_top;
+			vf->src_crop.left = hevc->crop_left;
 		}
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
-			"original(%d, %d), crop(%d, %d)\n",
-			pic->width, pic->height, pic->crop_w, pic->crop_h);
+			"original(%d, %d), crop(%d, %d), vf crop val(%d/%d/%d/%d)\n",
+			pic->width, pic->height, pic->crop_w, pic->crop_h,
+			vf->src_crop.top, vf->src_crop.bottom, vf->src_crop.left, vf->src_crop.right);
 
 		vf->compWidth = pic->width;
 		vf->compHeight = pic->height;

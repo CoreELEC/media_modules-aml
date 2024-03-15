@@ -782,6 +782,10 @@ struct vdec_h264_hw_s {
 	u32 frame_height;
 	u32 src_w;
 	u32 src_h;
+	u32 crop_top;
+	u32 crop_bottom;
+	u32 crop_left;
+	u32 crop_right;
 	u32 frame_dur;
 	u32 frame_prog;
 	u32 frame_packing_type;
@@ -3511,15 +3515,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->bitdepth =
 				BITDEPTH_Y8 | BITDEPTH_U8 | BITDEPTH_V8;
 
-			if (hw->frame_width != hw->src_w ||
-				hw->frame_height != hw->src_h ) {
-				vf->src_crop.magic_code = SRC_CROP_MAGIC_CODE;
-				vf->src_crop.bottom = hw->src_h - hw->frame_height;
-				vf->src_crop.right = hw->src_w - hw->frame_width;
-				vf->src_crop.top = 0;
-				vf->src_crop.left = 0;
-			}
-
 			vf->compWidth = hw->src_w;
 			vf->compHeight = hw->src_h;
 		} else {
@@ -3541,6 +3536,21 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 #endif
 
 		}
+
+		if ((hw->crop_bottom != 0) || (hw->crop_right != 0) ||
+			(hw->crop_top != 0) || (hw->crop_left != 0)) {
+			vf->src_crop.magic_code = SRC_CROP_MAGIC_CODE;
+			vf->src_crop.bottom = hw->crop_bottom;
+			vf->src_crop.right = hw->crop_right;
+			vf->src_crop.top = hw->crop_top;
+			vf->src_crop.left = hw->crop_left;
+		}
+
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
+			"original(%d, %d), crop(%d, %d), vf crop val(%d/%d/%d/%d)\n",
+			hw->frame_width, hw->frame_height, hw->src_w, hw->src_h,
+			vf->src_crop.top, vf->src_crop.bottom, vf->src_crop.left, vf->src_crop.right);
+
 		set_frame_info(hw, vf, buffer_index);
 
 		if (hw->mmu_enable && hw->double_write_mode) {
@@ -6245,9 +6255,19 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			crop_right = p_H264_Dpb->frame_crop_right_offset;
 			crop_bottom = p_H264_Dpb->frame_crop_bottom_offset *
 				(2 - frame_mbs_only_flag);
+			hw->crop_right = crop_right;
+			hw->crop_bottom = crop_bottom;
+			hw->crop_left = p_H264_Dpb->frame_crop_left_offset;
+			hw->crop_top = p_H264_Dpb->frame_crop_top_offset *
+				(2 - frame_mbs_only_flag);
 		} else {
 			crop_right = sub_width_c * p_H264_Dpb->frame_crop_right_offset;
 			crop_bottom = sub_height_c * p_H264_Dpb->frame_crop_bottom_offset *
+				(2 - frame_mbs_only_flag);
+			hw->crop_right = crop_right;
+			hw->crop_bottom = crop_bottom;
+			hw->crop_left = sub_width_c * p_H264_Dpb->frame_crop_left_offset;
+			hw->crop_top = sub_height_c * p_H264_Dpb->frame_crop_top_offset *
 				(2 - frame_mbs_only_flag);
 		}
 
@@ -7495,9 +7515,19 @@ static void vh264_cal_frame_size(struct vdec_s *vdec)
 		crop_right = frame_crop_right_offset;
 		crop_bottom = frame_crop_bottom_offset *
 			(2 - frame_mbs_only_flag);
+		hw->crop_right = crop_right;
+		hw->crop_bottom = crop_bottom;
+		hw->crop_left = p_H264_Dpb->frame_crop_left_offset;
+		hw->crop_top = p_H264_Dpb->frame_crop_top_offset *
+			(2 - frame_mbs_only_flag);
 	} else {
 		crop_right = sub_width_c * frame_crop_right_offset;
 		crop_bottom = sub_height_c * frame_crop_bottom_offset *
+			(2 - frame_mbs_only_flag);
+		hw->crop_right = crop_right;
+		hw->crop_bottom = crop_bottom;
+		hw->crop_left = sub_width_c * p_H264_Dpb->frame_crop_left_offset;
+		hw->crop_top = sub_height_c * p_H264_Dpb->frame_crop_top_offset *
 			(2 - frame_mbs_only_flag);
 	}
 
@@ -7510,8 +7540,9 @@ static void vh264_cal_frame_size(struct vdec_s *vdec)
 	if (((frame_width != hw->frame_width) || (frame_height != hw->frame_height)) &&
 		(!is_oversize(frame_width, frame_height))) {
 		dpb_print(DECODE_ID(hw), 0,
-		"%s frame size from (%d x %d) change to (%d x %d)\n",
-		__func__, hw->frame_width, hw->frame_height, frame_width, frame_height);
+		"%s frame size from (%d x %d) change to (%d x %d), crop %d/%d/%d/%d\\n",
+		__func__, hw->frame_width, hw->frame_height, frame_width, frame_height,
+		hw->crop_left, hw->crop_right, hw->crop_top,hw->crop_bottom);
 		hw->frame_width = frame_width;
 		hw->frame_height = frame_height;
 		dpb_print(p_H264_Dpb->decoder_index, 0,
