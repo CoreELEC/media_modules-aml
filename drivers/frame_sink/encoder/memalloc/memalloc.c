@@ -86,6 +86,7 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/compat.h>
 #include <linux/amlogic/media/registers/cpu_version.h>
+#include "../../../common/chips/decoder_cpu_ver_info.h"
 
 #ifndef HLINA_START_ADDRESS
 #define HLINA_START_ADDRESS 0x02000000
@@ -117,17 +118,18 @@ static struct class vencmem_class = {
 
 static struct device*  device;
 /* memory size in MBs for MEMALLOC_DYNAMIC */
-static unsigned int alloc_size = 96;
-static unsigned long alloc_base = HLINA_START_ADDRESS;
+static u32 alloc_size = 96;
+static ulong alloc_base = HLINA_START_ADDRESS;
 
 /* user space SW will subtract HLINA_TRANSL_OFFSET from the bus address
  * and decoder HW will use the result as the address translated base
  * address. The SW needs the original host memory bus address for memory
  * mapping to virtual address.
  */
-static unsigned long addr_transl = HLINA_TRANSL_OFFSET;
+static ulong addr_transl = HLINA_TRANSL_OFFSET;
 
-static int memalloc_major; /* dynamic */
+static s32 memalloc_major; /* dynamic */
+static s32 s_register_flag;
 
 /* module_param(name, type, perm) */
 module_param(alloc_size, uint, 0);
@@ -137,7 +139,7 @@ module_param(addr_transl, ulong, 0);
 static DEFINE_SPINLOCK(mem_lock);
 
 typedef struct hlinc {
-    unsigned long bus_address;
+    ulong bus_address;
     u16 chunks_reserved;
     const struct file *filp; /* Client that allocated this chunk */
 } hlina_chunk;
@@ -145,11 +147,11 @@ typedef struct hlinc {
 static hlina_chunk *hlina_chunks;
 static size_t chunks;
 
-static int AllocMemory(unsigned int *busaddr, unsigned int size, const struct file *filp);
-static int FreeMemory(unsigned int busaddr, const struct file *filp);
+static s32 AllocMemory(ulong *busaddr, u32 size, const struct file *filp);
+static s32 FreeMemory(ulong busaddr, const struct file *filp);
 static void ResetMems(void);
 
-static int venc_mem_mmap(struct file *filp, struct vm_area_struct *vma)
+static s32 venc_mem_mmap(struct file *filp, struct vm_area_struct *vma)
 {
     int ret = 0;
     unsigned long size = (unsigned long)(vma->vm_end - vma->vm_start);
@@ -160,18 +162,27 @@ static int venc_mem_mmap(struct file *filp, struct vm_area_struct *vma)
     return ret;
 }
 
-static long memalloc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+static long memalloc_ioctl(struct file *filp, u32 cmd, ulong arg)
 {
-    int ret = 0;
+    s32 ret = 0;
     MemallocParams memparams;
-    unsigned long busaddr;
-
+    ulong busaddr;
+#ifdef CONFIG_COMPAT
+    compat_ulong_t addr32;
+    compat_MemallocParams memparams32;
+#endif
     //spin_lock(&mem_lock);
 
     switch (cmd) {
     case MEMALLOC_IOCGMEMBASE:
-        __put_user(alloc_base, (unsigned long __user *)arg);
+        __put_user(alloc_base, (ulong __user *)arg);
         break;
+#ifdef CONFIG_COMPAT
+    case MEMALLOC_IOCGMEMBASE32:
+        addr32 = (compat_ulong_t)alloc_base;
+        __put_user(addr32, (compat_ulong_t __user *)arg);
+        break;
+#endif
     case MEMALLOC_IOCHARDRESET:
         ResetMems();
         break;
@@ -187,9 +198,39 @@ static long memalloc_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
         ret |= copy_to_user((MemallocParams __user *)arg, &memparams, sizeof(MemallocParams));
 
         break;
+
+#ifdef CONFIG_COMPAT
+    case MEMALLOC_IOCXGETBUFFER32:
+        {
+            ret = copy_from_user(&memparams32, (compat_MemallocParams __user *)arg, sizeof(compat_MemallocParams));
+            if (ret)
+                break;
+            memparams.bus_address = (ulong)memparams32.bus_address;
+            memparams.size = memparams32.size;
+            memparams.translation_offset = (ulong)memparams32.translation_offset;
+            memparams.mem_type = memparams32.mem_type;
+
+            ret = AllocMemory(&memparams.bus_address, memparams.size, filp);
+
+            memparams32.bus_address = (compat_ulong_t)memparams.bus_address;
+            memparams32.size = memparams.size;
+            memparams32.translation_offset = addr_transl;
+            memparams32.mem_type = memparams.mem_type;
+
+            ret |= copy_to_user((void __user *)arg, &memparams32, sizeof(compat_MemallocParams));
+        }
+        break;
+#endif
     case MEMALLOC_IOCSFREEBUFFER:
-        __get_user(busaddr, (unsigned long __user *)arg);
+        __get_user(busaddr, (ulong __user *)arg);
         ret = FreeMemory(busaddr, filp);
+        break;
+#ifdef CONFIG_COMPAT
+    case MEMALLOC_IOCSFREEBUFFER32:
+        __get_user(addr32, (compat_ulong_t __user *)arg);
+        busaddr = (ulong)addr32;
+        ret = FreeMemory(busaddr, filp);
+#endif
         break;
     default:
         break;
@@ -207,9 +248,9 @@ static int memalloc_open(struct inode *inode, struct file *filp)
     return 0;
 }
 
-static int memalloc_release(struct inode *inode, struct file *filp)
+static s32 memalloc_release(struct inode *inode, struct file *filp)
 {
-    int i = 0;
+    s32 i = 0;
 
     for (i = 0; i < chunks; i++) {
         spin_lock(&mem_lock);
@@ -227,33 +268,17 @@ static int memalloc_release(struct inode *inode, struct file *filp)
 
 #ifdef CONFIG_COMPAT
 static long memalloc_compat_ioctl(struct file *filp,
-	unsigned int cmd, unsigned long args)
+    u32 cmd, ulong args)
 {
-	unsigned long ret;
+    long ret;
 
-	args = (unsigned long)compat_ptr(args);
-	ret = memalloc_ioctl(filp, cmd, args);
+    args = (ulong)compat_ptr(args);
+    ret = memalloc_ioctl(filp, cmd, args);
 
-	return ret;
+    return ret;
 }
 #endif
 
-static dma_addr_t paddr = 0;
-static void *vaddr = NULL;
-static void memalloc_cleanup(struct platform_device *pf_dev)
-{
-    if (hlina_chunks)
-        vfree(hlina_chunks);
-
-    dma_free_coherent(&pf_dev->dev, alloc_size * SZ_1M, vaddr, paddr);
-    unregister_chrdev(memalloc_major, "memalloc");
-
-    if (device)
-		device_destroy(&vencmem_class, MKDEV(memalloc_major, 0));
-
-	class_destroy(&vencmem_class);
-    PDEBUG("module removed\n");
-}
 /* VFS methods */
 static struct file_operations memalloc_fops = {.owner = THIS_MODULE,
                                                .open = memalloc_open,
@@ -265,10 +290,67 @@ static struct file_operations memalloc_fops = {.owner = THIS_MODULE,
 #endif
 };
 
-static int memalloc_init(struct platform_device *pf_dev)
+static s32 init_memalloc_device(void)
 {
-    int result;
-    int ret = 0;
+    s32  r = 0;
+
+    r = register_chrdev(memalloc_major, DEVICE_NAME, &memalloc_fops);
+    if (r <= 0) {
+        PDEBUG("memalloc: unable to get major <%d>\n", memalloc_major);
+        return r;
+    }
+
+    memalloc_major = r;
+
+    r = class_register(&vencmem_class);
+    if (r < 0) {
+        PDEBUG("hantro: error create venc class!");
+        return r;
+    }
+    s_register_flag = 1;
+
+    device = device_create(&vencmem_class, NULL, MKDEV(memalloc_major, 0), NULL, DEVICE_NAME);
+    if (IS_ERR(device)) {
+        class_unregister(&vencmem_class);
+        return -1;
+    }
+    return r;
+}
+
+static s32 uninit_memalloc_device(void)
+{
+    if (device)
+        device_destroy(&vencmem_class, MKDEV(memalloc_major, 0));
+
+    if (s_register_flag)
+        class_destroy(&vencmem_class);
+    s_register_flag = 0;
+
+    if (memalloc_major)
+        unregister_chrdev(memalloc_major, DEVICE_NAME);
+    memalloc_major = 0;
+    return 0;
+}
+
+static dma_addr_t paddr = 0;
+static void *vaddr = NULL;
+static void memalloc_cleanup(struct platform_device *pf_dev)
+{
+    if (hlina_chunks)
+        vfree(hlina_chunks);
+
+    if (vaddr)
+        dma_free_coherent(&pf_dev->dev, alloc_size * SZ_1M, vaddr, paddr);
+    vaddr = NULL;
+
+    uninit_memalloc_device();
+    PDEBUG("module removed\n");
+}
+
+static s32 memalloc_init(struct platform_device *pf_dev)
+{
+    s32 result;
+    s32 ret = 0;
 
     PDEBUG("module init\n");
 
@@ -276,14 +358,20 @@ static int memalloc_init(struct platform_device *pf_dev)
 
     pr_info("============== memalloc_init this is probe func\n");
 
+    memalloc_major = 0;
+    s_register_flag = 0;
     ret = of_reserved_mem_device_init(&pf_dev->dev);
     if (ret) {
         pr_info("reserve memory init fail:%d\n", ret);
         return ret;
     }
+    ret = dma_set_coherent_mask(&pf_dev->dev, DMA_BIT_MASK(34));
+    if (ret)
+        ret = dma_set_coherent_mask(&pf_dev->dev, DMA_BIT_MASK(32));
+    if (ret)
+        pr_info("memalloc: set dma mask fail\n");
 
     vaddr = dma_alloc_coherent(&pf_dev->dev, alloc_size*SZ_1M, &paddr, GFP_KERNEL);
-    //vaddr = codec_mm_vmap(paddr, 32 * SZ_1M);
     pr_info("------- vaddr: %px, paddr: %llx\n", vaddr, paddr);
 
     alloc_base = paddr;
@@ -302,26 +390,11 @@ static int memalloc_init(struct platform_device *pf_dev)
         goto err;
     }
 
-    result = register_chrdev(memalloc_major, "memalloc", &memalloc_fops);
+    result = init_memalloc_device();
     if (result < 0) {
-        PDEBUG("memalloc: unable to get major %d\n", memalloc_major);
+        PDEBUG("memalloc: could not allocate major number\n");
+        result = -EBUSY;
         goto err;
-    } else if (result != 0) { /* this is for dynamic major */
-        memalloc_major = result;
-    }
-
-    ret = class_register(&vencmem_class);
-	if (ret < 0) {
-        pr_info("hantro: error create venc class!");
-		return ret;
-	}
-
-    device = device_create(&vencmem_class, NULL, MKDEV(memalloc_major, 0), NULL, DEVICE_NAME);
-    if (IS_ERR(device)) {
-        class_destroy(&vencmem_class);
-        unregister_chrdev(memalloc_major, DEVICE_NAME);
-        ret = PTR_ERR(device);
-		goto err;
     }
 
     ResetMems();
@@ -331,19 +404,24 @@ static int memalloc_init(struct platform_device *pf_dev)
 err:
     if (hlina_chunks)
         vfree(hlina_chunks);
+    if (vaddr)
+        dma_free_coherent(&pf_dev->dev, alloc_size * SZ_1M, vaddr, paddr);
+    vaddr = NULL;
+
+    uninit_memalloc_device();
 
     return result;
 }
 
 /* Cycle through the buffers we have, give the first free one */
-static int AllocMemory(unsigned int *busaddr, unsigned int size, const struct file *filp)
+static s32 AllocMemory(ulong *busaddr, u32 size, const struct file *filp)
 {
-    int i = 0;
-    int j = 0;
-    unsigned int skip_chunks = 0;
+    s32 i = 0;
+    s32 j = 0;
+    u32 skip_chunks = 0;
 
     /* calculate how many chunks we need; round up to chunk boundary */
-    unsigned int alloc_chunks = (size + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    u32 alloc_chunks = (size + CHUNK_SIZE - 1) / CHUNK_SIZE;
 
     *busaddr = 0;
 
@@ -390,9 +468,9 @@ static int AllocMemory(unsigned int *busaddr, unsigned int size, const struct fi
 }
 
 /* Free a buffer based on bus address */
-static int FreeMemory(unsigned int busaddr, const struct file *filp)
+static s32 FreeMemory(ulong busaddr, const struct file *filp)
 {
-    int i = 0;
+    s32 i = 0;
 
     for (i = 0; i < chunks; i++) {
         /* user space SW has stored the translated bus address, add addr_transl to
@@ -414,8 +492,8 @@ static int FreeMemory(unsigned int busaddr, const struct file *filp)
 /* Reset "used" status */
 static void ResetMems(void)
 {
-    int i = 0;
-    unsigned long ba = alloc_base;
+    s32 i = 0;
+    ulong ba = alloc_base;
 
     for (i = 0; i < chunks; i++) {
         hlina_chunks[i].bus_address = ba;
@@ -426,14 +504,14 @@ static void ResetMems(void)
     }
 }
 
-static int encmem_vce_probe(struct platform_device *pf_dev)
+static s32 encmem_vce_probe(struct platform_device *pf_dev)
 {
     pr_info("encmem_vce_probe\n");
     memalloc_init(pf_dev);
     return 0;
 }
 
-static int encmem_vce_remove(struct platform_device *pf_dev)
+static s32 encmem_vce_remove(struct platform_device *pf_dev)
 {
     pr_info("encmem_vce_remove:\n");
     memalloc_cleanup(pf_dev);
@@ -455,7 +533,8 @@ static struct platform_driver venc_mem_driver = {.probe = encmem_vce_probe,
 
 int __init enc_memallc_init(void)
 {
-    if (get_cpu_type() != MESON_CPU_MAJOR_ID_S5) {
+    if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5)
+        && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6)) {
         //pr_info("The chip is not support vers memalloc!!\n");
         return -1;
     }

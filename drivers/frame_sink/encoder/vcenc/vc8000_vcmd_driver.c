@@ -94,6 +94,10 @@
 #include <linux/timer.h>
 #include <linux/delay.h>
 
+#include <linux/reset.h>
+#include <linux/clk.h>
+#include <linux/pm_runtime.h>
+
 /* our own stuff */
 #include <linux/platform_device.h>
 #include "vcmdswhwregisters.h"
@@ -111,6 +115,8 @@
 #include <linux/compat.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
+#include <linux/amlogic/media/codec_mm/codec_mm.h>
+
 #include "../common/encoder_report.h"
 
 //#define VCMD_DEBUG_INTERNAL
@@ -174,7 +180,25 @@ extern volatile u8 *mmu_hwregs[HXDEC_MAX_CORES][2];
 static unsigned int mmu_enable;
 #endif
 
-int ret;
+static u32 clock_core, clock_a;
+
+struct vers_clks {
+	struct clk *sys_clk;
+	struct clk *core_clk;
+	struct clk *a_clk;
+};
+
+static struct vers_clks s_vers_clks;
+
+struct vers_rsts {
+	struct reset_control *core_rst;
+	struct reset_control *areset;
+	struct reset_control *apb_reset;
+};
+
+static struct vers_rsts s_vers_rsts;
+static s32 clock_gate_count = 0;
+
 int venc_file_open_cnt;
 static struct device*  device;
 extern int meson_versenc_resume_runtime(struct platform_device *pdev);
@@ -319,6 +343,7 @@ static int hantrovcmd_major;
 static int total_vcmd_core_num;
 /* dynamic allocation*/
 static struct hantrovcmd_dev *hantrovcmd_data;
+static s32 s_register_flag;
 
 static int software_triger_abort;
 
@@ -448,30 +473,19 @@ static struct list_head s_dma_bufp_head = LIST_HEAD_INIT(s_dma_bufp_head);
 static s32 print_level = LOG_DEBUG;
 static struct platform_device *versenc_pdev;
 
-struct vers_dma_cfg {
-	int fd;
-	void *dev;
-	void *vaddr;
-	unsigned long paddr;
-	struct dma_buf *dbuf;
-	struct dma_buf_attachment *attach;
-	struct sg_table *sg;
-	enum dma_data_direction dir;
+enum {
+	VERS_CORE_REG_BASE = 0,
+	VERS_TOP_REG_BASE,
+	VERS_REG_MAX,
 };
+static void __iomem *vers_reg_map[VERS_REG_MAX];
+ulong vers_reg_start[VERS_REG_MAX];
+u32 vers_reg_size[VERS_REG_MAX];
 
-/* To track the occupied dma_buf  */
-struct versdrv_dma_buf_pool_t {
-	struct list_head list;
-	struct vers_dma_cfg dma_cfg;
-	struct file *filp;
-};
+#define VC9000E_TOP_SW_RESET_OFFSET                       0x0000
+#define WriteVersTopReg(addr, val) \
+        writel((u32)val, (void __iomem *)(vers_reg_map[VERS_TOP_REG_BASE] + addr))
 
-struct versdrv_dma_buf_info_t {
-	u32 num_planes;
-	u32 canvas_index;
-	s32 fd[3];
-	u32 phys_addr[3]; /* phys address for DMA buffer */
-};
 
 static s32 vers_dma_buf_release(struct file *filp);
 static s32 vers_dma_buffer_get_phys(struct vers_dma_cfg *cfg,
@@ -482,6 +496,186 @@ static s32 vers_src_addr_config(struct versdrv_dma_buf_info_t *pinfo,
 		struct file *filp);
 static s32 vers_src_addr_unmap(struct versdrv_dma_buf_info_t *pinfo,
 		struct file *filp);
+
+static void vers_hw_reset(void)
+{
+	if (IS_ERR(s_vers_rsts.core_rst) ||
+		IS_ERR(s_vers_rsts.areset) ||
+		IS_ERR(s_vers_rsts.apb_reset)) {
+		return;
+   }
+	reset_control_reset(s_vers_rsts.core_rst);
+	reset_control_reset(s_vers_rsts.areset);
+	reset_control_reset(s_vers_rsts.apb_reset);
+}
+
+static void vers_clk_put(struct device *dev, struct vers_clks *clks)
+{
+	if (!(clks->sys_clk == NULL || IS_ERR(clks->sys_clk)))
+		devm_clk_put(dev, clks->sys_clk);
+	if (!(clks->core_clk == NULL || IS_ERR(clks->core_clk)))
+		devm_clk_put(dev, clks->core_clk);
+	if (!(clks->a_clk == NULL || IS_ERR(clks->a_clk)))
+		devm_clk_put(dev, clks->a_clk);
+}
+
+static int vers_clk_get(struct device *dev, struct vers_clks *clks)
+{
+	int ret = 0;
+
+	clks->sys_clk = devm_clk_get(dev, "vers_sys_clk");
+
+	if (IS_ERR(clks->sys_clk)) {
+		enc_pr(LOG_ERROR, "cannot get vers_sys_clk clock\n");
+		clks->sys_clk = NULL;
+		ret = -ENOENT;
+		goto err;
+	}
+
+	clks->core_clk = devm_clk_get(dev, "vers_core_clk");
+
+	if (IS_ERR(clks->core_clk)) {
+		enc_pr(LOG_ERROR, "cannot get vers_core_clk clock\n");
+		clks->core_clk = NULL;
+		ret = -ENOENT;
+		goto err;
+	}
+
+	clks->a_clk = devm_clk_get(dev, "vers_aclk");
+
+	if (IS_ERR(clks->a_clk)) {
+		enc_pr(LOG_ERROR, "cannot get vers_aclk clock\n");
+		clks->a_clk = NULL;
+		ret = -ENOENT;
+		goto err;
+	}
+	return 0;
+err:
+	vers_clk_put(dev, clks);
+
+	return ret;
+}
+
+static void vers_clk_enable(struct vers_clks *clks)
+{
+	if (clock_core > 0) {
+		enc_pr(LOG_INFO, "vers_rev: desired clock_core freq %u\n", clock_core);
+		clk_set_rate(clks->core_clk, clock_core);
+	} else
+		clk_set_rate(clks->core_clk, 666666666);
+
+	if (clock_a > 0) {
+		enc_pr(LOG_INFO, "vers_rev: desired clock_a freq %u\n", clock_a);
+		clk_set_rate(clks->a_clk, clock_a);
+	} else
+		clk_set_rate(clks->a_clk, 666666666);
+
+	clk_prepare_enable(clks->sys_clk);
+	clk_prepare_enable(clks->core_clk);
+	clk_prepare_enable(clks->a_clk);
+
+	enc_pr(LOG_DEBUG, "core: %ld, a: %ld\n",
+	       clk_get_rate(clks->core_clk), clk_get_rate(clks->a_clk));
+
+	/* the power on */
+	enc_pr(LOG_INFO, "powering on vers\n");
+	pm_runtime_get_sync(&versenc_pdev->dev);
+	mdelay(5);
+	enc_pr(LOG_INFO, "vers power stauts after poweron: %d\n", pm_runtime_active(&versenc_pdev->dev));
+	vers_hw_reset();
+	/* gate the clocks */
+#ifdef VERS_SUPPORT_CLOCK_CONTROL
+	enc_pr(LOG_INFO, "vers_clk_enable, now gate off the clock\n");
+	clk_disable(clks->core_clk);
+	clk_disable(clks->a_clk);
+#endif
+}
+
+static void vers_clk_disable(struct vers_clks *clks)
+{
+#ifdef VERS_SUPPORT_CLOCK_CONTROL
+	if (clock_gate_count > 0)
+#endif
+	{
+		enc_pr(LOG_INFO, "vers unclosed clock %d\n", clock_gate_count);
+		clk_disable(clks->core_clk);
+		clk_disable(clks->a_clk);
+		clock_gate_count = 0;
+	}
+	clk_unprepare(clks->core_clk);
+	clk_unprepare(clks->a_clk);
+	clk_disable_unprepare(clks->sys_clk);
+
+	/* the power off */
+	pm_runtime_put_sync(&versenc_pdev->dev);
+	mdelay(5);
+	enc_pr(LOG_INFO, "vers power stauts after poweroff: %d\n", pm_runtime_active(&versenc_pdev->dev));
+}
+
+/*static void vers_clk_config(int enable)
+{
+	struct vers_clks *clks = &s_vers_clks;
+
+	enc_pr(LOG_INFO, " vers clock config %d\n", enable);
+
+	if (enable == 0) {
+		clock_gate_count --;
+		if (clock_gate_count == 0) {
+			clk_disable(clks->core_clk);
+			clk_disable(clks->a_clk);
+			clk_disable(clks->sys_clk);
+		} else if (clock_gate_count < 0)
+			enc_pr(LOG_ERROR, "vers clock already closed %d\n",
+				clock_gate_count);
+	} else {
+		clock_gate_count ++;
+		if (clock_gate_count == 1) {
+			clk_enable(clks->sys_clk);
+			clk_enable(clks->core_clk);
+			clk_enable(clks->a_clk);
+		}
+	}
+}*/
+
+static int vers_rst_get(struct device *dev, struct vers_rsts *rsts)
+{
+	int ret = 0;
+
+	rsts->core_rst = devm_reset_control_get(dev, "vc9000e_core_rst");
+
+	if (IS_ERR(rsts->core_rst)) {
+		enc_pr(LOG_ERROR, "cannot get core_rst\n");
+		rsts->core_rst = NULL;
+		ret = -ENOENT;
+		goto err;
+	}
+
+	rsts->areset = devm_reset_control_get(dev, "vc9000e_areset");
+
+	if (IS_ERR(rsts->areset)) {
+		enc_pr(LOG_ERROR, "cannot get areset\n");
+		rsts->areset = NULL;
+		ret = -ENOENT;
+		goto err;
+	}
+
+	rsts->apb_reset = devm_reset_control_get(dev, "vc9000e_apb_reset");
+
+	if (IS_ERR(rsts->apb_reset)) {
+		enc_pr(LOG_ERROR, "cannot get apb_reset\n");
+		rsts->apb_reset = NULL;
+		ret = -ENOENT;
+		goto err;
+	}
+	return 0;
+err:
+	return ret;
+}
+
+static void vers_release_internal_reset(void)
+{
+	WriteVersTopReg(VC9000E_TOP_SW_RESET_OFFSET, 0);
+}
 
 static s32 vers_dma_buf_release(struct file *filp)
 {
@@ -658,7 +852,7 @@ static s32 vers_src_addr_unmap(struct versdrv_dma_buf_info_t *pinfo,
 		return -EFAULT;
 
 	enc_pr(LOG_INFO,
-		"dma_unmap planes %d fd: %d-%d-%d, phy_add: 0x%x-%x-%x\n",
+		"dma_unmap planes %d fd: %d-%d-%d, phy_add: 0x%lx-%lx-%lx\n",
 		pinfo->num_planes, pinfo->fd[0],pinfo->fd[1], pinfo->fd[2],
 		pinfo->phys_addr[0], pinfo->phys_addr[1], pinfo->phys_addr[2]);
 
@@ -672,7 +866,7 @@ static s32 vers_src_addr_unmap(struct versdrv_dma_buf_info_t *pinfo,
 				if (phys_addr != pinfo->phys_addr[0]) {
 					enc_pr(LOG_ERROR, "dma_unmap plane 0");
 					enc_pr(LOG_ERROR, " no match ");
-					enc_pr(LOG_ERROR, "0x%lx %x\n",
+					enc_pr(LOG_ERROR, "0x%lx %lx\n",
 						phys_addr, pinfo->phys_addr[0]);
 				}
 				found = 1;
@@ -683,7 +877,7 @@ static s32 vers_src_addr_unmap(struct versdrv_dma_buf_info_t *pinfo,
 				if (phys_addr != pinfo->phys_addr[1]) {
 					enc_pr(LOG_ERROR, "dma_unmap plane 1");
 					enc_pr(LOG_ERROR, " no match ");
-					enc_pr(LOG_ERROR, "0x%lx %x\n",
+					enc_pr(LOG_ERROR, "0x%lx %lx\n",
 						phys_addr, pinfo->phys_addr[1]);
 				}
 				plane_idx++;
@@ -694,7 +888,7 @@ static s32 vers_src_addr_unmap(struct versdrv_dma_buf_info_t *pinfo,
 				if (phys_addr != pinfo->phys_addr[2]) {
 					enc_pr(LOG_ERROR, "dma_unmap plane 2");
 					enc_pr(LOG_ERROR, " no match ");
-					enc_pr(LOG_ERROR, "0x%lx %x\n",
+					enc_pr(LOG_ERROR, "0x%lx %lx\n",
 						phys_addr, pinfo->phys_addr[2]);
 				}
 				plane_idx++;
@@ -1775,10 +1969,11 @@ static unsigned int wait_cmdbuf_ready(struct file *filp, u16 cmdbuf_id,
 	return 0;
 }
 
-static long hantrovcmd_ioctl(struct file *filp, unsigned int cmd,
-			     unsigned long arg)
+static long hantrovcmd_ioctl(struct file *filp, u32 cmd,
+			     ulong arg)
 {
 	int err = 0;
+	s32 ret = 0;
 
 	/*
      * extract the type and number bitfields, and don't encode
@@ -1855,6 +2050,53 @@ static long hantrovcmd_ioctl(struct file *filp, unsigned int cmd,
 			dma_info.fd[2]);
 	}
 		break;
+#ifdef CONFIG_COMPAT
+	case HANTRO_IOCTL_CONFIG_DMA32: {
+		struct versdrv_dma_buf_info_t dma_info;
+		struct compat_versdrv_dma_buf_info_t dma_info32;
+		enc_pr(LOG_INFO,
+			"[+]HANTRO_IOCTL_CONFIG_DMA_BUF\n");
+
+		if (copy_from_user(&dma_info32,
+			(struct compat_versdrv_dma_buf_info_t *)arg,
+			sizeof(struct compat_versdrv_dma_buf_info_t)))
+			return -EFAULT;
+		dma_info.num_planes = dma_info32.num_planes;
+		dma_info.fd[0] = (int) dma_info32.fd[0];
+		dma_info.fd[1] = (int) dma_info32.fd[1];
+		dma_info.fd[2] = (int) dma_info32.fd[2];
+		ret = down_interruptible(&s_vers_sem);
+		if (ret != 0)
+			break;
+		if (vers_src_addr_config(&dma_info, filp)) {
+			up(&s_vers_sem);
+			enc_pr(LOG_ERROR,
+					"src addr config error\n");
+			ret = -EFAULT;
+			break;
+		}
+		up(&s_vers_sem);
+		dma_info32.phys_addr[0] =
+			(compat_ulong_t) dma_info.phys_addr[0];
+		dma_info32.phys_addr[1] =
+			(compat_ulong_t) dma_info.phys_addr[1];
+		dma_info32.phys_addr[2] =
+			(compat_ulong_t) dma_info.phys_addr[2];
+		ret = copy_to_user((void __user *)arg,
+			&dma_info32,
+			sizeof(struct compat_versdrv_dma_buf_info_t));
+		if (ret) {
+			ret = -EFAULT;
+			break;
+		}
+		enc_pr(LOG_INFO,
+			"[-]HANTRO_IOCTL_CONFIG_DMA_BUF %d, %d, %d\n",
+			dma_info.fd[0],
+			dma_info.fd[1],
+			dma_info.fd[2]);
+	}
+		break;
+#endif
 
 	case HANTRO_IOCTL_UNMAP_DMA: {
 		struct versdrv_dma_buf_info_t dma_info;
@@ -1878,6 +2120,41 @@ static long hantrovcmd_ioctl(struct file *filp, unsigned int cmd,
 		enc_pr(LOG_ALL, "[-]HANTRO_IOCTL_UNMAP_DMA\n");
 	}
 		break;
+#ifdef CONFIG_COMPAT
+	case HANTRO_IOCTL_UNMAP_DMA32: {
+		struct versdrv_dma_buf_info_t dma_info;
+		struct compat_versdrv_dma_buf_info_t dma_info32;
+
+		enc_pr(LOG_ALL, "[+]HANTRO_IOCTL_UNMAP_DMA\n");
+
+		if (copy_from_user(&dma_info32,
+			(struct compat_versdrv_dma_buf_info_t *)arg,
+			sizeof(struct compat_versdrv_dma_buf_info_t)))
+			return -EFAULT;
+		dma_info.num_planes = dma_info32.num_planes;
+		dma_info.fd[0] = (int) dma_info32.fd[0];
+		dma_info.fd[1] = (int) dma_info32.fd[1];
+		dma_info.fd[2] = (int) dma_info32.fd[2];
+		dma_info.phys_addr[0] =
+			(ulong) dma_info32.phys_addr[0];
+		dma_info.phys_addr[1] =
+			(ulong) dma_info32.phys_addr[1];
+		dma_info.phys_addr[2] =
+			(ulong) dma_info32.phys_addr[2];
+		ret = down_interruptible(&s_vers_sem);
+		if (ret != 0)
+			break;
+		if (vers_src_addr_unmap(&dma_info, filp)) {
+			up(&s_vers_sem);
+			enc_pr(LOG_ERROR, "dma addr unmap config error\n");
+			ret = -EFAULT;
+			break;
+		}
+		up(&s_vers_sem);
+		enc_pr(LOG_ALL, "[-]HANTRO_IOCTL_UNMAP_DMA\n");
+	}
+		break;
+#endif
 
 	case HANTRO_IOCTL_READ_CANVAS:
 	{
@@ -1911,7 +2188,7 @@ static long hantrovcmd_ioctl(struct file *filp, unsigned int cmd,
 				dma_info.phys_addr[2] = dst.addr;
 			}
 
-			enc_pr(LOG_ALL,"[+]HANTRO_IOCTL_READ_CANVAS: 0x%x 0x%x 0x%x\n",
+			enc_pr(LOG_ALL,"[+]HANTRO_IOCTL_READ_CANVAS: 0x%lx 0x%lx 0x%lx\n",
 			dma_info.phys_addr[0],
 			dma_info.phys_addr[1],
 			dma_info.phys_addr[2]);
@@ -1934,9 +2211,71 @@ static long hantrovcmd_ioctl(struct file *filp, unsigned int cmd,
 		}
 		break;
 	}
+#ifdef CONFIG_COMPAT
+	case HANTRO_IOCTL_READ_CANVAS32:
+	{
+		u32 canvas = 0;
+		struct versdrv_dma_buf_info_t dma_info;
+		struct compat_versdrv_dma_buf_info_t dma_info32;
+		struct canvas_s dst;
+
+		if (copy_from_user(&dma_info32,
+			(struct compat_versdrv_dma_buf_info_t *)arg,
+			sizeof(struct compat_versdrv_dma_buf_info_t)))
+			return -EFAULT;
+
+		dma_info.canvas_index = dma_info32.canvas_index;
+		ret = down_interruptible(&s_vers_sem);
+		if (ret != 0) {
+			break;
+		}
+
+		canvas = dma_info.canvas_index;
+		enc_pr(LOG_ALL,"[+]HANTRO_IOCTL_READ_CANVAS,canvas = 0x%x\n",canvas);
+		if (canvas & 0xff) {
+			canvas_read(canvas & 0xff, &dst);
+			dma_info.phys_addr[0] = dst.addr;
+
+			if ((canvas & 0xff00) >> 8) {
+				canvas_read((canvas & 0xff00) >> 8, &dst);
+				dma_info.phys_addr[1] = dst.addr;
+			}
+
+			if ((canvas & 0xff0000) >> 16) {
+				canvas_read((canvas & 0xff0000) >> 16, &dst);
+				dma_info.phys_addr[2] = dst.addr;
+			}
+
+			enc_pr(LOG_ALL,"[+]HANTRO_IOCTL_READ_CANVAS: 0x%lx 0x%lx 0x%lx\n",
+			dma_info.phys_addr[0],
+			dma_info.phys_addr[1],
+			dma_info.phys_addr[2]);
+		}
+		else {
+			dma_info.phys_addr[0] = 0;
+			dma_info.phys_addr[1] = 0;
+			dma_info.phys_addr[2] = 0;
+		}
+		up(&s_vers_sem);
+		dma_info32.phys_addr[0] =  (compat_ulong_t)dma_info.phys_addr[0];
+		dma_info32.phys_addr[1] =  (compat_ulong_t)dma_info.phys_addr[1];
+		dma_info32.phys_addr[2] =  (compat_ulong_t)dma_info.phys_addr[2];
+
+		ret = copy_to_user((void __user *)arg,
+			&dma_info32,
+			sizeof(struct compat_versdrv_dma_buf_info_t));
+
+		enc_pr(LOG_ALL,"[-]HANTRO_IOCTL_READ_CANVAS,copy_to_user End\n");
+		if (ret) {
+			ret = -EFAULT;
+			break;
+		}
+		break;
+	}
+#endif
 
 	case HANTRO_IOCH_GET_VCMD_ENABLE: {
-		__put_user(1, (unsigned long __user *)arg);
+		__put_user(1, (u32 __user *)arg);
 		break;
 	}
 
@@ -1967,6 +2306,31 @@ static long hantrovcmd_ioctl(struct file *filp, unsigned int cmd,
 			     sizeof(struct cmdbuf_mem_parameter));
 		break;
 	}
+
+#ifdef CONFIG_COMPAT
+	case HANTRO_IOCH_GET_CMDBUF_PARAMETER32: {
+		struct compat_cmdbuf_mem_parameter local_cmdbuf_mem_data32;
+
+		PDEBUG(" VCMD GET_CMDBUF_PARAMETER32\n");
+		local_cmdbuf_mem_data32.cmd_unit_size = CMDBUF_MAX_SIZE;
+		local_cmdbuf_mem_data32.status_unit_size = CMDBUF_MAX_SIZE;
+		local_cmdbuf_mem_data32.cmd_total_size = CMDBUF_POOL_TOTAL_SIZE;
+		local_cmdbuf_mem_data32.status_total_size = CMDBUF_POOL_TOTAL_SIZE;
+		local_cmdbuf_mem_data32.status_phy_addr = (compat_ulong_t)vcmd_status_buf_mem_pool.busAddress;
+		local_cmdbuf_mem_data32.cmd_phy_addr = (compat_ulong_t)vcmd_buf_mem_pool.busAddress;
+		if (mmu_enable) {
+			local_cmdbuf_mem_data32.status_hw_addr = (compat_ulong_t)vcmd_status_buf_mem_pool.mmu_bus_address;
+			local_cmdbuf_mem_data32.cmd_hw_addr = (compat_ulong_t)vcmd_buf_mem_pool.mmu_bus_address;
+		} else {
+			local_cmdbuf_mem_data32.status_hw_addr = (compat_ulong_t)vcmd_status_buf_mem_pool.busAddress - base_ddr_addr;
+			local_cmdbuf_mem_data32.cmd_hw_addr = (compat_ulong_t)vcmd_buf_mem_pool.busAddress - base_ddr_addr;
+		}
+		local_cmdbuf_mem_data32.base_ddr_addr = (compat_ulong_t)base_ddr_addr;
+		ret = copy_to_user((struct compat_cmdbuf_mem_parameter __user *)arg, &local_cmdbuf_mem_data32,
+			     sizeof(struct compat_cmdbuf_mem_parameter));
+		break;
+	}
+#endif
 	case HANTRO_IOCH_GET_VCMD_PARAMETER: {
 		struct config_parameter input_para;
 
@@ -2340,7 +2704,7 @@ static int hantrovcmd_open(struct inode *inode, struct file *filp)
 	venc_file_open_cnt++;
 	spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
 
-	PDEBUG("dev opened\n");
+	//PDEBUG("dev opened\n");
 	return result;
 }
 
@@ -2360,7 +2724,7 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 	unsigned long flags;
 	long retVal = 0;
 
-	PDEBUG("dev closed for process %p\n", (void *)filp);
+	//PDEBUG("dev closed for process %p\n", (void *)filp);
 	if (down_interruptible(
 		    &vcmd_reserve_cmdbuf_sem[dev->vcmd_core_cfg.sub_module_type]))
 		return -ERESTARTSYS;
@@ -2377,8 +2741,8 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 				if (!new_cmdbuf_node)
 					break;
 				cmdbuf_obj_temp = (struct cmdbuf_obj *)new_cmdbuf_node->data;
-				PDEBUG("Process %p is releasing: checking cmdbuf %d of process %p.\n",
-				       filp, cmdbuf_obj_temp->cmdbuf_id, cmdbuf_obj_temp->filp);
+				//PDEBUG("Process %p is releasing: checking cmdbuf %d of process %p.\n",
+				       //filp, cmdbuf_obj_temp->cmdbuf_id, cmdbuf_obj_temp->filp);
 				if (dev[core_id].hwregs &&
 				    cmdbuf_obj_temp->filp == filp) {
 					if (cmdbuf_obj_temp->cmdbuf_run_done) {
@@ -2609,9 +2973,9 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 #ifdef VCMD_DEBUG_INTERNAL
 				printk_vcmd_register_debug((const void *)dev[core_id].hwregs, "after restart");
 #endif
-			} else {
+			} /*else {
 				PDEBUG("No more command buffer to be restarted!\n");
-			}
+			}*/
 			spin_unlock_irqrestore(dev[core_id].spinlock, flags);
 			// VCMD aborted but not restarted, nedd to wake up
 			if (vcmd_aborted && !restart_cmdbuf)
@@ -2715,11 +3079,11 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 
 #ifdef CONFIG_COMPAT
 static long venc_compat_ioctl(struct file *filp,
-	unsigned int cmd, unsigned long args)
+	u32 cmd, ulong args)
 {
-	unsigned long ret;
+	long ret;
 
-	args = (unsigned long)compat_ptr(args);
+	args = (ulong)compat_ptr(args);
 	ret = hantrovcmd_ioctl(filp, cmd, args);
 
 	return ret;
@@ -3013,19 +3377,24 @@ static int vcmd_pcie_init(struct platform_device *pf_dev)
 	int i = 0;
 	int ret = 0;
 
-	versenc_pdev = pf_dev;
 	alloc_size_byte = 1024 * 1024 * 10;
 	pr_info("============== this is probe func !!!\n");
 	ret = of_reserved_mem_device_init(&pf_dev->dev);
 	if (ret)
 	{
-        pr_info("reserve memory init fail:%d\n", ret);
-        return ret;
+		pr_info("reserve memory init fail:%d\n", ret);
+		return ret;
 	}
 
+	ret = dma_set_coherent_mask(&pf_dev->dev, DMA_BIT_MASK(34));
+	if (ret)
+		ret = dma_set_coherent_mask(&pf_dev->dev, DMA_BIT_MASK(32));
+	if (ret)
+		pr_info("vers: set dma mask fail\n");
 	vaddr = dma_alloc_coherent(&pf_dev->dev, alloc_size_byte, &paddr, GFP_KERNEL);
 	pr_info("------- vaddr: %p, paddr: %llx\n", vaddr, paddr);
-	g_vcmd_base_hdwr = 0xfe380000;
+
+	g_vcmd_base_hdwr = vers_reg_start[VERS_CORE_REG_BASE];
 	pr_info("Base hw val 0x%llx\n", (unsigned long long)g_vcmd_base_hdwr);
 
 	g_vcmd_base_len = 0x2000;
@@ -3747,13 +4116,16 @@ void vers_resume_hw(u32 on)
 	struct hantrovcmd_dev *dev = NULL;
 
 	if (!on) {
-	    release_cmdbuf_node_cleanup(&hantrovcmd_data[0].list_manager);
-	    release_process_node_cleanup(&global_process_manager);
-	    dev = &hantrovcmd_data[0];
-	    dev->working_state = WORKING_STATE_IDLE;
-	    dev->sw_cmdbuf_rdy_num = 0;
-	    return;
+		vers_clk_disable(&s_vers_clks);
+		release_cmdbuf_node_cleanup(&hantrovcmd_data[0].list_manager);
+		release_process_node_cleanup(&global_process_manager);
+		dev = &hantrovcmd_data[0];
+		dev->working_state = WORKING_STATE_IDLE;
+		dev->sw_cmdbuf_rdy_num = 0;
+		return;
 	}
+	vers_clk_enable(&s_vers_clks);
+	vers_release_internal_reset();
 	vcmd_release_IO();
 	total_vcmd_core_num =
 		sizeof(vcmd_core_array) / sizeof(struct vcmd_config);
@@ -3838,10 +4210,123 @@ void vers_resume_hw(u32 on)
 
 }
 
+static s32 init_versenc_device(void)
+{
+	s32  r = 0;
+
+	r = register_chrdev(hantrovcmd_major, DEVICE_NAME, &hantrovcmd_fops);
+	if (r <= 0) {
+		enc_pr(LOG_ERROR, "vc8000_vcmd_driver: unable to get major <%d>\n",
+			hantrovcmd_major);
+		return  r;
+	}
+	hantrovcmd_major = r;
+
+	r = class_register(&venc_class);
+	if (r < 0) {
+		enc_pr(LOG_ERROR, "error create vers class.\n");
+		return r;
+	}
+	s_register_flag = 1;
+	device = device_create(&venc_class, NULL,
+					MKDEV(hantrovcmd_major, 0), NULL,
+					DEVICE_NAME);
+
+	if (IS_ERR(device)) {
+		enc_pr(LOG_ERROR, "create multienc device error.\n");
+		class_unregister(&venc_class);
+		return -1;
+	}
+	return r;
+}
+
+static s32 uninit_versenc_device(void)
+{
+	if (device)
+		device_destroy(&venc_class, MKDEV(hantrovcmd_major, 0));
+
+	if (s_register_flag)
+		class_destroy(&venc_class);
+	s_register_flag = 0;
+
+	if (hantrovcmd_major)
+		unregister_chrdev(hantrovcmd_major, DEVICE_NAME);
+	hantrovcmd_major = 0;
+	return 0;
+}
+
 int hantroenc_vcmd_init(struct platform_device *pf_dev)
 {
 	int i, k;
 	int result;
+	s32 err = 0, irq;
+	struct resource res;
+
+	hantrovcmd_major = 0;
+	s_register_flag = 0;
+	venc_file_open_cnt = 0;
+	versenc_pdev = NULL;
+
+	/* get interrupt resource */
+	irq = platform_get_irq_byname(pf_dev, "vc9000e_irq0");
+
+	if (irq < 0) {
+		enc_pr(LOG_ERROR, "get vers irq resource error\n");
+		err = -EFAULT;
+
+		goto err1;
+	}
+
+	/* get vers clks */
+	if (vers_clk_get(&pf_dev->dev, &s_vers_clks)) {
+		enc_pr(LOG_DEBUG, "get vers clks fail.\n");
+		goto err1;
+	} else
+		enc_pr(LOG_DEBUG, "vers. clock get success\n");
+
+	/* get reg base */
+	for (i = VERS_CORE_REG_BASE; i < VERS_REG_MAX; i++) {
+		if (of_address_to_resource(pf_dev->dev.of_node, i, &res)) {
+			enc_pr(LOG_DEBUG, "i=%d, skip ioremap\n", i);
+			vers_reg_map[i] = 0;
+			vers_reg_start[i] = 0;
+			continue;
+		}
+		if (res.start != 0) {
+			vers_reg_map[i] =
+				ioremap(res.start, resource_size(&res));
+			vers_reg_start[i] = res.start;
+			vers_reg_size[i] = res.end - res.start;
+			if (!vers_reg_map[i]) {
+				enc_pr(LOG_ERROR, "cannot map vers registers\n");
+				err = -ENOMEM;
+
+				goto err1;
+			}
+			enc_pr(LOG_DEBUG, "vers map reg source 0x%lx,size=%d to 0x%lx\n",
+				   (unsigned long)res.start,
+				 (int)resource_size(&res),
+				 (unsigned long)vers_reg_map[i]);
+		} else {
+			vers_reg_map[i] = 0;
+			vers_reg_start[i] = 0;
+			enc_pr(LOG_DEBUG, "ignore io source start %lx,size=%d\n",
+				   (unsigned long)res.start, (int)resource_size(&res));
+		}
+
+	}
+	/* reset: vc9000e_core_rstn/vc9000e_areset_n/vc9000e_apb_reset_n */
+	if (vers_rst_get(&pf_dev->dev, &s_vers_rsts)) {
+		enc_pr(LOG_DEBUG, "get vers rsts fail.\n");
+		goto err1;
+	} else
+		enc_pr(LOG_DEBUG, "vers. rsts get success\n");
+
+	versenc_pdev = pf_dev;
+	pm_runtime_enable(&versenc_pdev->dev);
+	/*clk en & power on & reset*/
+	vers_clk_enable(&s_vers_clks);
+	vers_release_internal_reset();
 
 	total_vcmd_core_num =
 		sizeof(vcmd_core_array) / sizeof(struct vcmd_config);
@@ -3912,29 +4397,14 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 		memset(hantrovcmd_data[i].vcmd_reg_mem_virtualAddress, 0, VCMD_REGISTER_SIZE);
 	}
 
-	result = register_chrdev(hantrovcmd_major, "vc8000", &hantrovcmd_fops);
-	if (result < 0) {
-		pr_info("vc8000_vcmd_driver: unable to get major <%d>\n",
-			hantrovcmd_major);
-		goto err1;
-	} else if (result != 0) {
-		/* this is for dynamic major */
-		hantrovcmd_major = result;
-	}
+	/* get the major number of the character device */
+	if (init_versenc_device()) {
+		result = -EBUSY;
+		enc_pr(LOG_ERROR, "could not allocate major number\n");
 
-    ret = class_register(&venc_class);
-	if (ret < 0) {
-        pr_info("hantro: error create venc class!");
-		return ret;
-	}
-
-    device = device_create(&venc_class, NULL, MKDEV(hantrovcmd_major, 0), NULL, DEVICE_NAME);
-    if (IS_ERR(device)) {
-        class_destroy(&venc_class);
-        unregister_chrdev(hantrovcmd_major, DEVICE_NAME);
-        ret = PTR_ERR(device);
 		goto err;
-    }
+	}
+
 	result = vcmd_reserve_IO();
 	if (result < 0)
 		goto err;
@@ -3944,9 +4414,9 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 	for (i = 0; i < total_vcmd_core_num; i++) {
 		if (!hantrovcmd_data[i].hwregs)
 			continue;
-		/* get interrupt resource */
-		hantrovcmd_data[i].vcmd_core_cfg.vcmd_irq =
-			platform_get_irq_byname(pf_dev, "vc9000e_irq0");
+
+		hantrovcmd_data[i].vcmd_core_cfg.vcmd_irq = irq;
+		enc_pr(LOG_DEBUG, "vers -irq: %d\n", hantrovcmd_data[i].vcmd_core_cfg.vcmd_irq);
 		if (hantrovcmd_data[i].vcmd_core_cfg.vcmd_irq != -1) {
 			result = request_irq(
 				hantrovcmd_data[i].vcmd_core_cfg.vcmd_irq,
@@ -4014,11 +4484,22 @@ err:
 	MMU_Kernel_unmap();
 	vcmd_pool_release();
 #endif
-	unregister_chrdev(hantrovcmd_major, "vc8000");
+	uninit_versenc_device();
+
 err1:
+	for (i = VERS_CORE_REG_BASE; i < VERS_REG_MAX; i++) {
+		if (vers_reg_map[i]) {
+			iounmap(vers_reg_map[i]);
+			vers_reg_map[i] = NULL;
+			vers_reg_start[i] = 0;
+			vers_reg_size[i] = 0;
+		}
+	}
 	if (hantrovcmd_data)
 		vfree(hantrovcmd_data);
+	versenc_pdev = NULL;
 	pr_info("vc8000_vcmd_driver: module not inserted\n");
+
 	return result;
 }
 
@@ -4026,6 +4507,8 @@ void hantroenc_vcmd_cleanup(struct platform_device *pf_dev)
 {
 	int i = 0;
 	u32 result;
+	vers_clk_enable(&s_vers_clks);
+	vers_release_internal_reset();
 	for (i = 0; i < total_vcmd_core_num; i++) {
 		if (!hantrovcmd_data[i].hwregs)
 			continue;
@@ -4063,13 +4546,22 @@ void hantroenc_vcmd_cleanup(struct platform_device *pf_dev)
 	MMU_Kernel_unmap();
 	vcmd_pool_release();
 	pr_info("vc8000_vcmd_driver: free resource\n");
-    dma_free_coherent(&pf_dev->dev, alloc_size_byte, vaddr, paddr);
-    if (device)
-		device_destroy(&venc_class, MKDEV(hantrovcmd_major, 0));
+	if (vaddr)
+		dma_free_coherent(&pf_dev->dev, alloc_size_byte, vaddr, paddr);
+	vaddr = NULL;
 
-	class_destroy(&venc_class);
-
-	unregister_chrdev(hantrovcmd_major, "vc8000");
+	for (i = VERS_CORE_REG_BASE; i < VERS_REG_MAX; i++) {
+		if (vers_reg_map[i]) {
+			iounmap(vers_reg_map[i]);
+			vers_reg_map[i] = NULL;
+			vers_reg_start[i] = 0;
+			vers_reg_size[i] = 0;
+		}
+	}
+	vers_clk_disable(&s_vers_clks);
+	vers_clk_put(&versenc_pdev->dev, &s_vers_clks);
+	versenc_pdev = NULL;
+	uninit_versenc_device();
 	pr_info("vc8000_vcmd_driver: module removed\n");
 }
 
@@ -4386,7 +4878,7 @@ static irqreturn_t hantrovcmd_isr(int irq, void *dev_id)
 			if (!new_cmdbuf_node)
 				break;
 			cmdbuf_obj = (struct cmdbuf_obj *)new_cmdbuf_node->data;
-			if ((cmdbuf_obj->cmdbuf_run_done == 0)) {
+			if (cmdbuf_obj->cmdbuf_run_done == 0) {
 				cmdbuf_obj->cmdbuf_run_done = 1;
 				cmdbuf_obj->executing_status = CMDBUF_EXE_STATUS_OK;
 				cmdbuf_processed_num++;
@@ -4451,7 +4943,7 @@ static irqreturn_t hantrovcmd_isr(int irq, void *dev_id)
 			if (!new_cmdbuf_node)
 				break;
 			cmdbuf_obj = (struct cmdbuf_obj *)new_cmdbuf_node->data;
-			if ((cmdbuf_obj->cmdbuf_run_done == 0)) {
+			if (cmdbuf_obj->cmdbuf_run_done == 0) {
 				cmdbuf_obj->cmdbuf_run_done = 1;
 				cmdbuf_obj->executing_status = CMDBUF_EXE_STATUS_OK;
 				cmdbuf_processed_num++;
@@ -4512,7 +5004,7 @@ static irqreturn_t hantrovcmd_isr(int irq, void *dev_id)
 			if (!new_cmdbuf_node)
 				break;
 			cmdbuf_obj = (struct cmdbuf_obj *)new_cmdbuf_node->data;
-			if ((cmdbuf_obj->cmdbuf_run_done == 0)) {
+			if (cmdbuf_obj->cmdbuf_run_done == 0) {
 				cmdbuf_obj->cmdbuf_run_done = 1;
 				cmdbuf_obj->executing_status =
 					CMDBUF_EXE_STATUS_OK;
@@ -4575,7 +5067,7 @@ static irqreturn_t hantrovcmd_isr(int irq, void *dev_id)
 			if (!new_cmdbuf_node)
 				break;
 			cmdbuf_obj = (struct cmdbuf_obj *)new_cmdbuf_node->data;
-			if ((cmdbuf_obj->cmdbuf_run_done == 0)) {
+			if (cmdbuf_obj->cmdbuf_run_done == 0) {
 				cmdbuf_obj->cmdbuf_run_done = 1;
 				cmdbuf_obj->executing_status = CMDBUF_EXE_STATUS_OK;
 				cmdbuf_processed_num++;
@@ -4618,7 +5110,7 @@ static irqreturn_t hantrovcmd_isr(int irq, void *dev_id)
 			if (!new_cmdbuf_node)
 				break;
 			cmdbuf_obj = (struct cmdbuf_obj *)new_cmdbuf_node->data;
-			if ((cmdbuf_obj->cmdbuf_run_done == 0)) {
+			if (cmdbuf_obj->cmdbuf_run_done == 0) {
 				cmdbuf_obj->cmdbuf_run_done = 1;
 				cmdbuf_obj->executing_status = CMDBUF_EXE_STATUS_OK;
 				cmdbuf_processed_num++;

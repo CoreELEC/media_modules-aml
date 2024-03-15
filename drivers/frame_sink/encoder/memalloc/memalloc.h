@@ -71,6 +71,30 @@
 #else
 #define PDEBUG(fmt, args...) /* not debugging: nothing */
 #endif
+
+typedef struct {
+    ulong bus_address;
+    u32 size;
+    ulong translation_offset;
+    u32 mem_type;
+} MemallocParams;
+
+#ifdef CONFIG_COMPAT
+typedef struct {
+    compat_ulong_t bus_address;
+    u32 size;
+    compat_ulong_t translation_offset;
+    u32 mem_type;
+} compat_MemallocParams;
+#endif
+
+#define MEMALLOC_PARAMS_LEN MemallocParams
+
+#ifdef CONFIG_COMPAT
+#define MEMALLOC_PARAMS_LEN32 compat_MemallocParams
+#endif
+
+
 /*
  * Ioctl definitions
  */
@@ -84,20 +108,16 @@
  * X means "eXchange": G and S atomically
  * H means "sHift": T and Q atomically
  */
-typedef struct MemallocParams_t{
-    unsigned int bus_address;
-    unsigned int size;
-    unsigned int translation_offset;
-    unsigned int mem_type;
-} MemallocParams;
-
-#define MEMALLOC_IOCXGETBUFFER _IOWR(MEMALLOC_IOC_MAGIC, 1, struct MemallocParams_t)
-#define MEMALLOC_IOCSFREEBUFFER _IOW(MEMALLOC_IOC_MAGIC, 2, u32)
-#define MEMALLOC_IOCGMEMBASE _IOR(MEMALLOC_IOC_MAGIC, 3, u32)
-
+#define MEMALLOC_IOCXGETBUFFER _IOWR(MEMALLOC_IOC_MAGIC, 1, MEMALLOC_PARAMS_LEN)
+#define MEMALLOC_IOCSFREEBUFFER _IOW(MEMALLOC_IOC_MAGIC, 2, ulong)
+#define MEMALLOC_IOCGMEMBASE _IOR(MEMALLOC_IOC_MAGIC, 3, ulong)
+#ifdef CONFIG_COMPAT
+#define MEMALLOC_IOCXGETBUFFER32 _IOWR(MEMALLOC_IOC_MAGIC, 1, MEMALLOC_PARAMS_LEN32)
+#define MEMALLOC_IOCSFREEBUFFER32 _IOW(MEMALLOC_IOC_MAGIC, 2, compat_ulong_t)
+#define MEMALLOC_IOCGMEMBASE32 _IOR(MEMALLOC_IOC_MAGIC, 3, compat_ulong_t)
+#endif
 /* ... more to come */
 #define MEMALLOC_IOCHARDRESET _IO(MEMALLOC_IOC_MAGIC, 15) /* debugging tool */
-
 #define MEMALLOC_IOC_MAXNR 15
 
 #endif /* MEMALLOC_H */
