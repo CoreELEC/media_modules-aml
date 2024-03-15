@@ -4159,7 +4159,7 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	int tw_mode = get_triple_write_mode(hevc);
 
 	if (!aml_buf) {
-		hevc_print(hevc, 0,
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s aml_buf is NULL\n",
 			__func__);
 		return -1;

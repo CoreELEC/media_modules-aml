@@ -5822,6 +5822,10 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	new_pic->POC = hevc->curr_POC;
 	new_pic->pic_struct = hevc->curr_pic_struct;
 
+	/*Update new GOP IDR poc*/
+	if (hevc->m_nalUnitType == NAL_UNIT_CODED_SLICE_IDR
+			|| hevc->m_nalUnitType == NAL_UNIT_CODED_SLICE_IDR_N_LP)
+			hevc->first_output_poc = new_pic->POC;
 	v4l->aux_infos.bind_sei_buffer(v4l, &new_pic->aux_data_buf,
 		&new_pic->aux_data_size, &new_pic->ctx_buf_idx);
 	v4l->aux_infos.bind_hdr10p_buffer(v4l, &new_pic->hdr10p_data_buf);

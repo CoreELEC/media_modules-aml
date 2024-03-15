@@ -6053,6 +6053,10 @@ static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
 								!disable_ip_mode) ? true : false;
 		new_pic->losless_comp_body_size = hevc->losless_comp_body_size;
 		new_pic->POC = hevc->curr_POC;
+		/*Update new GOP IDR poc*/
+		if (hevc->m_nalUnitType == NAL_UNIT_CODED_SLICE_IDR
+			|| hevc->m_nalUnitType == NAL_UNIT_CODED_SLICE_IDR_N_LP)
+			hevc->first_output_poc = new_pic->POC;
 		new_pic->pic_struct = hevc->curr_pic_struct;
 		if (new_pic->aux_data_buf)
 			release_aux_data(hevc, new_pic);
