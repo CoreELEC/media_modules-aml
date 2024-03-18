@@ -8855,7 +8855,7 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, int flush_flag, bool is_
 	hw->first_sc_checked= 0;
 	hw->eos = 0;
 	hw->valve_count = 0;
-	if (!is_reset || !flush_flag)
+	if (!flush_flag)
 		hw->config_bufmgr_done = 0;
 	hw->start_process_time = 0;
 	hw->has_i_frame = 0;
@@ -8878,7 +8878,7 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, int flush_flag, bool is_
 		hw->vh264_amstream_dec_info.param) >> 16) & 0xffff;
 
 	hw->frame_prog = 0;
-	if (!is_reset || !flush_flag) {
+	if (!flush_flag) {
 		hw->frame_width = hw->vh264_amstream_dec_info.width;
 		hw->frame_height = hw->vh264_amstream_dec_info.height;
 	}
@@ -11747,18 +11747,19 @@ static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag, bool rese
 
 	vh264_local_init(hw, flush_flag, true);
 
-	dpb_init_global(&hw->dpb,
-		DECODE_ID(hw), p_H264_Dpb->mDPB.size, p_H264_Dpb->max_reference_size);
-#if 0
-	if (vh264_set_params(hw,
-		hw->cfg_param1,
-		hw->cfg_param2,
-		hw->cfg_param3,
-		hw->cfg_param4, hw->reset_bufmgr_flag, reset_flags) < 0)
-		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-	else
-		hw->stat &= (~DECODER_FATAL_ERROR_SIZE_OVERFLOW);
-#endif
+	if (flush_flag) {
+		dpb_init_global(&hw->dpb,
+			DECODE_ID(hw), p_H264_Dpb->mDPB.size, p_H264_Dpb->max_reference_size);
+	} else {
+		if (vh264_set_params(hw,
+			hw->cfg_param1,
+			hw->cfg_param2,
+			hw->cfg_param3,
+			hw->cfg_param4, hw->reset_bufmgr_flag, reset_flags) < 0)
+			hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+		else
+			hw->stat &= (~DECODER_FATAL_ERROR_SIZE_OVERFLOW);
+	}
 	/*drop 3 frames after reset bufmgr if bit0 is set 1 */
 	if (first_i_policy & 0x01)
 		hw->first_i_policy = (3 << 8) | first_i_policy;
