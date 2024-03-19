@@ -266,6 +266,18 @@ int stream_buffer_write_vc1(struct file *file,
 		       const char *buf,
 		       size_t count)
 {
-	return stream_buffer_write_ex(file, stbuf, buf, count, 1);
+	int r;
+
+	if (buf == NULL || count == 0)
+		return -EINVAL;
+
+	stbuf->last_write_jiffies64 = jiffies_64;
+	stbuf->is_phybuf = 1;
+
+	r = stbuf->ops->write(stbuf, buf, count);
+	if (r > 0)
+		stbuf->stream_offset += r;
+
+	return r;
 }
 EXPORT_SYMBOL(stream_buffer_write_vc1);
