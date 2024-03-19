@@ -290,6 +290,8 @@ struct vdec_vc1_hw_s {
 	u8 is_decoder_working;
 	u32 last_wp;
 	u32 last_rp;
+	u8 streamon;
+	u8 running;
 };
 
 struct vdec_vc1_hw_s vc1_hw;
@@ -908,6 +910,24 @@ static void reset(struct vdec_s *vdec)
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i;
 	ulong timeout;
+	unsigned long flags;
+
+	hw->streamon = false;
+	timeout = jiffies + HZ / 5;
+WAIT_FINISH_DECODING:
+	if (hw->running)
+		usleep_range(500, 1000);
+
+	spin_lock_irqsave(&hw->lock, flags);
+	if (hw->running) {
+		if (!time_after(jiffies, timeout)) {
+			spin_unlock_irqrestore(&hw->lock, flags);
+			goto WAIT_FINISH_DECODING;
+		} else
+			vc1_print(0, 0,
+				"decodeing...wait timeout!\n");
+	}
+	spin_unlock_irqrestore(&hw->lock, flags);
 
 	if (stat & STAT_VDEC_RUN) {
 		amvdec_stop();
@@ -918,7 +938,7 @@ static void reset(struct vdec_s *vdec)
 	while (hw->is_decoder_working) {
 		if (time_after(jiffies, timeout)) {
 			vc1_print(0, 0,
-			"reset...wait timeout!\n");
+				"reset...wait timeout!\n");
 			break;
 		}
 
@@ -957,7 +977,7 @@ static void reset(struct vdec_s *vdec)
 
 	hw->refs[0]		= -1;
 	hw->refs[1]		= -1;
-	hw->throw_pb_flag = 1;
+	hw->throw_pb_flag	= 1;
 	hw->eos			= 0;
 	hw->aml_buf		= NULL;
 
@@ -1450,6 +1470,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	u32 status_reg;
 	u32 ret = -1;
 	ulong timeout;
+	unsigned long flags;
 
 	if (hw->eos) {
 		WRITE_VREG(DECODE_STATUS, 0);
@@ -1718,27 +1739,31 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	}
 
 	recycle_frames(hw);
-	if (is_available_buffer(hw))
-		ret = vvc1_config_buf(hw);
-
 	timeout = jiffies + HZ;
-	while ((ret == -1) && (stat & STAT_VDEC_RUN)) {
-		if (is_available_buffer(hw))
-			ret = vvc1_config_buf(hw);
+GET_BUF_WAIT:
+	ret = is_available_buffer(hw);
+	if (!ret)
+		msleep(wait_time);
 
-		if (ret == 0)
-			break;
-
-		if (time_after(jiffies, timeout)) {
-			vc1_print(0, 0,
-				"get capture buffer...wait timeout!\n");
-			break;
+	spin_lock_irqsave(&hw->lock, flags);
+	if (hw->streamon) {
+		if (ret && !vvc1_config_buf(hw))
+			vc1_print(0, VC1_DEBUG_DETAIL,
+				"capture buffer config success.\n");
+		else {
+			if (!time_after(jiffies, timeout)) {
+				spin_unlock_irqrestore(&hw->lock, flags);
+				goto GET_BUF_WAIT;
+			} else
+				vc1_print(0, 0, "get capture buffer...timeout\n");
 		}
 
-		msleep(wait_time);
-	}
+		WRITE_VREG(DECODE_STATUS, 0);
+		hw->running = true;
+	} else
+		hw->running = false;
 
-	WRITE_VREG(DECODE_STATUS, 0);
+	spin_unlock_irqrestore(&hw->lock, flags);
 
 	return IRQ_HANDLED;
 }
@@ -2136,6 +2161,8 @@ static void error_do_work(struct work_struct *work)
 static void vvc1_put_timer_func(struct timer_list *timer)
 {
 	struct vdec_vc1_hw_s *hw = &vc1_hw;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	u32 wp, rp;
 
 	if (READ_VREG(VC1_SOS_COUNT) > 10)
@@ -2147,9 +2174,10 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 
 	/* notify decoder */
 	if (!(stat & STAT_VDEC_RUN)) {
-		if (wp - rp > start_decode_buf_level) {
+		if ((wp - rp > start_decode_buf_level) && !ctx->is_stream_off) {
 			amvdec_start();
 			stat |= STAT_VDEC_RUN;
+			hw->streamon = true;
 		}
 	}
 
@@ -2207,6 +2235,7 @@ static s32 vvc1_init(void)
 	int ret = -1;
 	char *buf = vmalloc(0x1000 * 16);
 	int fw_type = VIDEO_DEC_VC1;
+	struct vdec_vc1_hw_s *hw = &vc1_hw;
 
 	if (IS_ERR_OR_NULL(buf))
 		return -ENOMEM;
@@ -2276,6 +2305,7 @@ static s32 vvc1_init(void)
 	amvdec_start();
 
 	stat |= STAT_VDEC_RUN;
+	hw->streamon = true;
 
 	return 0;
 }
@@ -2354,8 +2384,11 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 
 static int amvdec_vc1_remove(struct platform_device *pdev)
 {
+	struct vdec_vc1_hw_s *hw = &vc1_hw;
+
 	cancel_work_sync(&error_wd_work);
 	vc1_print(0, VC1_DEBUG_DETAIL,"%s  %d\n", __func__, stat);
+	hw->streamon = false;
 	if (stat & STAT_VDEC_RUN) {
 		amvdec_stop();
 		stat &= ~STAT_VDEC_RUN;
