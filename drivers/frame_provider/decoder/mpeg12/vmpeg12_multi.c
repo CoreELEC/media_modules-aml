@@ -107,7 +107,7 @@
 
 #define VF_POOL_SIZE        64
 #define DECODE_BUFFER_NUM_MAX 16
-#define DECODE_BUFFER_NUM_DEF 8
+#define DECODE_BUFFER_NUM_DEF 3
 #define MAX_BMMU_BUFFER_NUM (DECODE_BUFFER_NUM_MAX + 1)
 
 #define PUT_INTERVAL        (HZ/100)
@@ -139,7 +139,7 @@ static unsigned int rval;
 #define DUR2PTS(x) ((x)*90/96)
 
 static u32 without_display_mode;
-static u32 dynamic_buf_num_margin = 2;
+static u32 dynamic_buf_num_margin = 6;
 
 #define VMPEG12_DEV_NUM        9
 static unsigned int max_decode_instance_num = VMPEG12_DEV_NUM;

@@ -101,7 +101,7 @@
 
 #define VF_POOL_SIZE          64
 #define DECODE_BUFFER_NUM_MAX 16
-#define DECODE_BUFFER_NUM_DEF 8
+#define DECODE_BUFFER_NUM_DEF 3
 #define PUT_INTERVAL        (HZ/100)
 #define MAX_BMMU_BUFFER_NUM (DECODE_BUFFER_NUM_MAX + 1)
 #define WORKSPACE_SIZE		(12*SZ_64K)
@@ -156,7 +156,7 @@ static unsigned int radr;
 static unsigned int rval;
 /* 0x40bit = 8byte */
 static unsigned int frmbase_cont_bitlevel = 0x40;
-static unsigned int dynamic_buf_num_margin;
+static unsigned int dynamic_buf_num_margin = 6;
 
 #define VMPEG4_DEV_NUM        9
 static unsigned int max_decode_instance_num = VMPEG4_DEV_NUM;
@@ -3212,17 +3212,6 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pdata);
 	hw->platform_dev = pdev;
-
-	if (((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0) && pdata->config_len) {
-		mmpeg4_debug_print(DECODE_ID(hw), 0, "pdata->config: %s\n", pdata->config);
-		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
-			&config_val) == 0)
-			hw->dynamic_buf_num_margin = config_val;
-		else
-			hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
-	} else {
-		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
-	}
 
 	if (pdata->parallel_dec == 1) {
 		int i;

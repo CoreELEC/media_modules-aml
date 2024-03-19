@@ -80,7 +80,7 @@
 
 #define VF_POOL_SIZE          64
 #define DECODE_BUFFER_NUM_MAX		16
-#define DECODE_BUFFER_NUM_DEF		4
+#define DECODE_BUFFER_NUM_DEF		1
 #define MAX_BMMU_BUFFER_NUM		DECODE_BUFFER_NUM_MAX
 
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
@@ -107,7 +107,7 @@ static int notify_v4l_eos(struct vdec_s *vdec);
 static int pre_decode_buf_level = 0x800;
 static int start_decode_buf_level = 0x2000;
 static u32 without_display_mode;
-static u32 dynamic_buf_num_margin;
+static u32 dynamic_buf_num_margin = 6;
 static u32 run_ready_min_buf_num = 1;
 #undef pr_info
 #define pr_info pr_cont

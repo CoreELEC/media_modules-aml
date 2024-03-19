@@ -265,7 +265,9 @@ static struct vframe_provider_s vavs_vf_prov;
 #define LONG_CABAC_RV_AI_BUFF_START_ADDR	 0x00000000
 
 /* 4 buffers not enough for multi inc*/
-static u32 vf_buf_num = 8;
+static u32 vf_buf_num = 3;
+static u32 dynamic_buf_num_margin = 6;
+
 /*static u32 vf_buf_num_used;*/
 static u32 canvas_base = 128;
 #ifdef NV21
@@ -1618,7 +1620,7 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 				);
 			}
 #else
-			for (i = 0; i < hw->vf_buf_num_used; i++)
+			for (i = 0; i < (DECODE_BUFFER_NUM_MAX >> 1); i++)
 				WRITE_VREG(buf_spec_reg[i], 0);
 			for (i = 0; i < hw->vf_buf_num_used; i += 2) {
 				WRITE_VREG(buf_spec_reg[i >> 1],
@@ -1775,7 +1777,7 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 {
 	int i;
 
-	hw->vf_buf_num_used = vf_buf_num;
+	hw->vf_buf_num_used = vf_buf_num + dynamic_buf_num_margin;
 
 	hw->vavs_ratio = hw->vavs_amstream_dec_info.ratio;
 
@@ -4926,6 +4928,10 @@ MODULE_PARM_DESC(stat, "\n amvdec_avs stat\n");
  *MODULE_PARM_DESC(step_flag, "\n step_flag\n");
  *******************************************
  */
+
+module_param(dynamic_buf_num_margin, uint, 0664);
+MODULE_PARM_DESC(dynamic_buf_num_margin, "\n dynamic_buf_num_margin\n");
+
 module_param(step, uint, 0664);
 MODULE_PARM_DESC(step, "\n step\n");
 
