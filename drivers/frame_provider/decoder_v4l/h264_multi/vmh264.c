@@ -388,7 +388,6 @@ static u32 one_packet_multi_frames_multi_run = 1;
 static void vmh264_dump_state(struct vdec_s *vdec);
 static void h264_recycle_dec_resource(void *priv, struct aml_buf *aml_buf);
 
-
 #define is_in_parsing_state(status) \
 		((status == H264_ACTION_SEARCH_HEAD) || \
 			((status & 0xf0) == 0x80))
@@ -1042,6 +1041,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	struct vdec_s *vdec, int from);
 static void v4l_vmh264_collect_stream_info(struct vdec_s *vdec,
 	struct vdec_h264_hw_s *hw);
+
 
 #define		H265_PUT_SAO_4K_SET			0x03
 #define		H265_ABORT_SAO_4K_SET			0x04
@@ -5080,6 +5080,10 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 
 	aml_buf_put_ref(&ctx->bm, aml_buf);
+	if (input_frame_based(vdec)) {
+		ctx->current_timestamp = vf->timestamp;
+		vdec_v4l_post_error_frame_event(ctx);
+	}
 	h264_recycle_dec_resource(hw, aml_buf);
 	vdec_up(vdec);
 	return;
@@ -7626,15 +7630,16 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		vui_config(hw);
 
 		if (slice_header_process_status == -1) {
-			if (p_H264_Dpb->mVideo.dec_picture &&
-				p_H264_Dpb->mVideo.dec_picture->buf_spec_num  != -1)
-				buf_ref_process_for_exception(hw);
 			if (!multi_header_error_frame_flag) {
+				if (p_H264_Dpb->mVideo.dec_picture &&
+					p_H264_Dpb->mVideo.dec_picture->buf_spec_num  != -1)
+				buf_ref_process_for_exception(hw);
 				if (input_frame_based(vdec))
 					vdec_v4l_post_error_frame_event(ctx);
 				else
 					vh264_report_pts(hw);
-			}
+			} else
+				hw->dpb.cur_idx = INVALID_IDX;
 			amvdec_stop();
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
