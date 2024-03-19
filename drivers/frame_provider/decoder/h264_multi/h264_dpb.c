@@ -5855,12 +5855,12 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 		currSlice->frame_num,
 		p_Vid->pre_frame_num,
 		p_Vid->max_frame_num);
+
 		if (p_Vid->recovery_point == 0 &&
 			p_Vid->max_frame_num <= FRAME_NUM_MAX_SIZE &&
 			currSlice->frame_num != p_Vid->pre_frame_num &&
 			currSlice->frame_num !=
 			(p_Vid->pre_frame_num + 1) % p_Vid->max_frame_num) {
-
 			/*if (active_sps->
 			 *gaps_in_frame_num_value_allowed_flag
 			 *== 0) {
@@ -5870,7 +5870,9 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 			 *}
 			 *if (p_Vid->conceal_mode == 0)
 			 */
-			*frame_num_gap = 1;
+			*frame_num_gap = FrameNumGap_Normal;
+			if ((currSlice->frame_num < p_Vid->pre_frame_num) && (currSlice->frame_num != 0))
+				*frame_num_gap = FrameNumGap_Loop;
 		}
 
 		if (currSlice->nal_reference_idc) {

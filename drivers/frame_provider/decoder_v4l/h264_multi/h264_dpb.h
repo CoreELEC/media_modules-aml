@@ -475,6 +475,11 @@ enum FirstInsertFrm_State {
 	FirstInsertFrm_SKIPDONE = 3,
 };
 
+enum FrameNumGap_Value {
+	FrameNumGap_Null = 0,
+	FrameNumGap_Normal = 1,
+	FrameNumGap_Loop = 2  /* loop playback, frame_num become small,and current frame is not idr */
+};
 
 struct SPSParameters {
 	unsigned int profile_idc;

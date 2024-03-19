@@ -7709,11 +7709,12 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					}
 				}
 
-			if (!I_flag && frame_num_gap && !p_H264_Dpb->long_term_reference_flag) {
+			if ((!I_flag && (frame_num_gap == FrameNumGap_Normal) && !p_H264_Dpb->long_term_reference_flag)
+				|| (frame_num_gap == FrameNumGap_Loop)) {
 				if (!(hw->error_proc_policy & 0x800000)) {
 					hw->data_flag |= ERROR_FLAG;
 					p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
-					dpb_print(DECODE_ID(hw), 0, "frame number gap error\n");
+					dpb_print(DECODE_ID(hw), 0, "frame number gap %d error\n", frame_num_gap);
 				}
 			}
 
