@@ -2377,13 +2377,11 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			} else {
 				struct vdec_pic_info pic;
 
-				if (!hw->buf_num) {
-					vdec_v4l_get_pic_info(ctx, &pic);
-					hw->buf_num = pic.dpb_frames +
-						pic.dpb_margin;
-					if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
-						hw->buf_num = DECODE_BUFFER_NUM_MAX;
-				}
+				vdec_v4l_get_pic_info(ctx, &pic);
+				hw->buf_num = pic.dpb_frames +
+					pic.dpb_margin;
+				if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
+					hw->buf_num = DECODE_BUFFER_NUM_MAX;
 
 				WRITE_VREG(AV_SCRATCH_G, 0);
 

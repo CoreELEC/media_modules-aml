@@ -654,8 +654,11 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 
 	if (ctx->enable_di_post &&
 		ctx->picinfo.field != V4L2_FIELD_NONE &&
-		is_vdec_core_fmt(ctx))
+		is_vdec_core_fmt(ctx)) {
+		picinfo->dpb_margin = (picinfo->dpb_margin + 1) >> 1;
+		ctx->dpb_size = picinfo->dpb_frames + picinfo->dpb_margin;
 		ctx->dpb_size *= PAIR_DONE;
+	}
 
 	if (ctx->enable_di_post && (is_vdec_core_fmt(ctx)) &&
 		ctx->dpb_size > 2 * V4L_CAP_BUFF_MAX) {
