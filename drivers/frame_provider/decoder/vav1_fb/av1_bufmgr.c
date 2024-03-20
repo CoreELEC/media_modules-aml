@@ -613,6 +613,7 @@ static void swap_frame_buffers(AV1Decoder *pbi, int frame_decoded) {
 	AV1_COMMON *const cm = pbi->common;
 	BufferPool *const pool = cm->buffer_pool;
 	unsigned long flags;
+	u32 low_latency_flag = get_low_latency_flag(cm);
 
 	if (frame_decoded) {
 	int check_on_show_existing_frame;
@@ -634,7 +635,8 @@ static void swap_frame_buffers(AV1Decoder *pbi, int frame_decoded) {
 	for (mask = cm->current_frame.refresh_frame_flags; mask; mask >>= 1) {
 		decrease_ref_count(pbi, cm->ref_frame_map[ref_index], pool);
 		cm->ref_frame_map[ref_index] = cm->next_ref_frame_map[ref_index];
-		cm->next_ref_frame_map[ref_index] = NULL;
+		if (low_latency_flag == 0)
+			cm->next_ref_frame_map[ref_index] = NULL;
 		++ref_index;
 	}
 
@@ -644,7 +646,8 @@ static void swap_frame_buffers(AV1Decoder *pbi, int frame_decoded) {
 		++ref_index) {
 		decrease_ref_count(pbi, cm->ref_frame_map[ref_index], pool);
 		cm->ref_frame_map[ref_index] = cm->next_ref_frame_map[ref_index];
-		cm->next_ref_frame_map[ref_index] = NULL;
+		if (low_latency_flag == 0)
+			cm->next_ref_frame_map[ref_index] = NULL;
 	}
 	}
 
@@ -3354,24 +3357,29 @@ void av1_set_next_ref_frame_map(AV1Decoder *pbi) {
 	int mask;
 	AV1_COMMON *const cm = pbi->common;
 	int check_on_show_existing_frame;
-	av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s, %d, mask 0x%x, show_existing_frame %d, reset_decoder_state %d\n",
-	__func__, pbi->camera_frame_header_ready,
-	cm->current_frame.refresh_frame_flags,
-	cm->show_existing_frame,
-	pbi->reset_decoder_state
-	);
-	if (!pbi->camera_frame_header_ready) {
-	for (mask = cm->current_frame.refresh_frame_flags; mask; mask >>= 1) {
-	cm->next_used_ref_frame_map[ref_index] = cm->next_ref_frame_map[ref_index];
-	++ref_index;
-	}
+	u32 low_latency_flag = get_low_latency_flag(cm);
 
-	check_on_show_existing_frame =
-		!cm->show_existing_frame || pbi->reset_decoder_state;
-	for (; ref_index < REF_FRAMES && check_on_show_existing_frame;
-		++ref_index) {
-	cm->next_used_ref_frame_map[ref_index] = cm->next_ref_frame_map[ref_index];
-	}
+	av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s, %d, mask 0x%x, show_existing_frame %d, reset_decoder_state %d\n",
+		__func__, pbi->camera_frame_header_ready,
+		cm->current_frame.refresh_frame_flags,
+		cm->show_existing_frame,
+		pbi->reset_decoder_state);
+
+	if (!pbi->camera_frame_header_ready) {
+		for (mask = cm->current_frame.refresh_frame_flags; mask; mask >>= 1) {
+			cm->next_used_ref_frame_map[ref_index] = cm->next_ref_frame_map[ref_index];
+			if (low_latency_flag == 1)
+				cm->next_ref_frame_map[ref_index] = NULL;
+			++ref_index;
+		}
+
+		check_on_show_existing_frame =
+			!cm->show_existing_frame || pbi->reset_decoder_state;
+		for (; ref_index < REF_FRAMES && check_on_show_existing_frame; ++ref_index) {
+			cm->next_used_ref_frame_map[ref_index] = cm->next_ref_frame_map[ref_index];
+			if (low_latency_flag == 1)
+				cm->next_ref_frame_map[ref_index] = NULL;
+		}
 	}
 }
 

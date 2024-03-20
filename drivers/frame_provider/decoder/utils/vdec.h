@@ -915,6 +915,8 @@ void vdec_set_vf_dur(int dur);
 
 int vdec_get_vf_dur(void);
 
+u32 count_ones(u32 n);
+
 void vdec_sync_irq(enum vdec_irq_num num);
 
 void vdec_data_buffer_count_increase(ulong data, int index, int cb_index);

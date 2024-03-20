@@ -1345,6 +1345,10 @@ typedef struct PIC_BUFFER_CONFIG_s {
 
 	u32 triple_write_mode;
 #endif
+  int not_need_display;
+  int temporal_id;
+  int spatial_id;
+  int fence_create;
 } PIC_BUFFER_CONFIG;
 
 /*
@@ -2162,7 +2166,7 @@ typedef struct AV1Decoder {
 
 #define RPM_BEGIN                                              0x200
 #define RPM_END                                                0x280
-#define RPM_VALID_E                                            0x260
+#define RPM_VALID_E                                            0x265
 
 typedef union param_u {
     struct {
@@ -2254,6 +2258,12 @@ typedef union param_u {
 		unsigned short mmu_used_num;
 		unsigned short dw_mmu_used_num;
 		unsigned short seq_flags_2;
+		unsigned short film_grain_present_flag;
+		//bit 3-4 : spatial_id
+		//bit 0-2 : temporal_id
+		unsigned short temporal_spatial_id;
+		unsigned short max_operating_point_idc;
+
         /*ucode end*/
         /*other*/
         unsigned short enable_superres;
@@ -2304,6 +2314,8 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd);
 int post_video_frame_early(AV1Decoder *pbi, struct AV1_Common_s *cm);
 
 int get_free_frame_buffer(struct AV1_Common_s *cm);
+
+unsigned int get_low_latency_flag(struct AV1_Common_s *cm);
 
 void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *cm);
 

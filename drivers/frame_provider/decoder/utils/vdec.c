@@ -324,6 +324,18 @@ int vdec_get_vf_dur(void)
 }
 EXPORT_SYMBOL(vdec_get_vf_dur);
 
+u32 count_ones(u32 n)
+{
+	u32 count = 0;
+
+	while (n) {
+		n &= n - 1;
+		count += 1;
+	}
+	return count;
+}
+EXPORT_SYMBOL(count_ones);
+
 void register_frame_rate_uevent_func(vdec_frame_rate_event_func func)
 {
 	frame_rate_notify = func;

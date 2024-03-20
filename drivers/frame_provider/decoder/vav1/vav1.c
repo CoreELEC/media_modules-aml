@@ -868,6 +868,7 @@ struct AV1HW_s {
 	u32 av1_segment_data[8];
 	u32 av1_dec_info[3];
 	bool enable_ucode_swap;
+	u32 max_spatial_id;
 };
 
 static void av1_dump_state(struct vdec_s *vdec);
@@ -1764,10 +1765,16 @@ static int get_free_fb(AV1_COMMON *cm) {
 			update_hide_frame_timestamp(hw);
 		}
 
-		if (pic)
+		if (pic) {
+			pic->temporal_id = hw->aom_param.p.temporal_spatial_id & 7;
+			pic->spatial_id = (hw->aom_param.p.temporal_spatial_id >> 3) & 3;
+			pic->not_need_display = 0;
+			pic->fence_create = 0;
+
 			av1_print(hw, AV1_DEBUG_OUT_PTS,
-				"%s, idx: %d, ts: %lld, pts %d, pts64 %lld\n",
-				__func__, i, pic->timestamp, pic->pts, pic->pts64);
+				"%s, idx: %d, ts: %lld, pts %d, pts64 %lld temporal_spatial_id = 0x%x\n",
+				__func__, i, pic->timestamp, pic->pts, pic->pts64, hw->aom_param.p.temporal_spatial_id);
+		}
 	}
 
 	unlock_buffer_pool(cm->buffer_pool, flags);
@@ -1782,6 +1789,13 @@ int get_free_frame_buffer(struct AV1_Common_s *cm)
 	put_un_used_mv_bufs(hw);
 
 	return hw->is_used_v4l ? v4l_get_free_fb(hw) : get_free_fb(cm);
+}
+
+unsigned int get_low_latency_flag(struct AV1_Common_s *cm)
+{
+	struct AV1HW_s *hw = container_of(cm, struct AV1HW_s, common);
+
+	return hw->low_latency_flag;
 }
 
 static int get_free_buf_count(struct AV1HW_s *hw)
@@ -1970,6 +1984,8 @@ static u32 buffer_mode = 1;
 /* buffer_mode_dbg: debug only*/
 static u32 buffer_mode_dbg = 0xffff0000;
 /**/
+
+static u32 scalable_enable = 1;
 
 /*
  *bit 0, 1: only display I picture;
@@ -7162,7 +7178,7 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 	struct AV1HW_s *hw = (struct AV1HW_s *)pbi->private_data;
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	sd->stream_offset = pbi->pre_stream_offset;
-	if (hw->enable_fence) {
+	if (hw->enable_fence && (sd->fence_create == 1)) {
 		int i, j, used_size, ret;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
@@ -7196,7 +7212,10 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 			vav1_vf_put(signed_fence[i], vdec);
 		}
 	} else {
-		prepare_display_buf((struct AV1HW_s *)(pbi->private_data), sd);
+		av1_print(hw, AOM_DEBUG_HW_MORE, "Out frame index %d not_need_display %d\n",
+			sd->index, sd->not_need_display);
+		if (sd->not_need_display == 0)
+			prepare_display_buf((struct AV1HW_s *)(pbi->private_data), sd);
 	}
 	pbi->pre_stream_offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 }
@@ -7214,6 +7233,14 @@ int post_video_frame_early(AV1Decoder *pbi, struct AV1_Common_s *cm)
 
 		pic = &cm->cur_frame->buf;
 
+		if (scalable_enable &&
+			hw->max_spatial_id &&
+			(hw->max_spatial_id > (pic->spatial_id + 1))) {
+			av1_print(hw, AOM_DEBUG_HW_MORE, "frame index %d spatial_id %d\n",
+				pic->index, pic->spatial_id);
+			return 0;
+		}
+
 		/* create fence for each buffers. */
 		if (vdec_timeline_create_fence(vdec->sync) < 0)
 			return -1;
@@ -7222,6 +7249,7 @@ int post_video_frame_early(AV1Decoder *pbi, struct AV1_Common_s *cm)
 		pic->bit_depth		= cm->bit_depth;
 		pic->slice_type 	= cm->frame_type;
 		pic->stream_offset	= pbi->pre_stream_offset;
+		pic->fence_create	= 1;
 
 		if (hw->chunk) {
 			pic->pts	= hw->chunk->pts;
@@ -9248,6 +9276,23 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			set_aux_data(hw,
 				&cm->cur_frame->buf, 0, 0);
 			*/
+
+			if (multi_frames_in_one_pack &&
+				hw->frame_decoded &&
+				hw->low_latency_flag &&
+				scalable_enable &&
+				hw->max_spatial_id &&
+				(enable_single_slice == 1) &&
+				READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
+				if (cm->cur_frame && cm->cur_frame->show_frame) {
+					struct PIC_BUFFER_CONFIG_s *frame = &cm->cur_frame->buf;
+
+					frame->not_need_display = 1;
+					av1_print(hw, AOM_DEBUG_HW_MORE, "frame index %d not_need_display %d\n",
+						frame->index, frame->not_need_display);
+				}
+			}
+
 			if (/*hw->vf_pre_count == 0 ||*/ hw->low_latency_flag)
 				av1_postproc(hw);
 
@@ -9377,6 +9422,13 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
     if (obu_type < 0) {
 		hw->process_busy = 0;
 		return IRQ_HANDLED;
+	}
+
+	if (scalable_enable &&
+		(dec_status == AOM_AV1_FRAME_PARSER_DONE)) {
+		hw->max_spatial_id = count_ones(hw->aom_param.p.max_operating_point_idc >> 8);
+
+		av1_print(hw, AV1_DEBUG_BUFMGR, "max_spatial_id %d\n", hw->max_spatial_id);
 	}
 
     if (obu_type == OBU_SEQUENCE_HEADER) {
@@ -9520,13 +9572,32 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 	if (hw->process_state != PROC_STATE_SENDAGAIN
 		) {
-	    if (hw->one_compressed_data_done) {
-	        av1_postproc(hw);
-	        av1_release_bufs(hw);
+		if (hw->one_compressed_data_done) {
+			RefCntBuffer *cur_frame = hw->common.cur_frame;
+
+			if ((cur_frame != NULL) && scalable_enable
+				&& hw->max_spatial_id) {
+				struct PIC_BUFFER_CONFIG_s *frame = &cur_frame->buf;
+				int temporal_id = hw->aom_param.p.temporal_spatial_id & 7;
+				int spatial_id = (hw->aom_param.p.temporal_spatial_id >> 3) & 3;
+
+				av1_print(hw, AOM_DEBUG_HW_MORE, "temporal_spatial_id = 0x%x\n",
+					hw->aom_param.p.temporal_spatial_id);
+
+				if ((frame != NULL) &&
+					(temporal_id == frame->temporal_id) &&
+					(spatial_id > frame->spatial_id)) {
+					frame->not_need_display = 1;
+					av1_print(hw, AOM_DEBUG_HW_MORE, "frame index %d not_need_display %d\n",
+						frame->index, frame->not_need_display);
+				}
+			}
+			av1_postproc(hw);
+			av1_release_bufs(hw);
 #ifndef MV_USE_FIXED_BUF
-	        put_un_used_mv_bufs(hw);
+			put_un_used_mv_bufs(hw);
 #endif
-	    }
+		}
 	}
 
 	if (hw->is_used_v4l) {
@@ -12097,6 +12168,10 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		get_double_write_mode_init(hw) & 0x20 ? 1 : 0;
 
 #endif
+
+	if (low_latency_flag & 0x80000000)
+		hw->low_latency_flag = low_latency_flag & 0xff;
+
 	av1_print(hw, AV1_DEBUG_BUFMGR,
 			"no_head %d  low_latency %d, signal_type 0x%x\n",
 			hw->no_head, hw->low_latency_flag, hw->video_signal_type);
@@ -12442,6 +12517,9 @@ MODULE_PARM_DESC(buf_alloc_size, "\n buf_alloc_size\n");
 
 module_param(buffer_mode, uint, 0664);
 MODULE_PARM_DESC(buffer_mode, "\n buffer_mode\n");
+
+module_param(scalable_enable, uint, 0664);
+MODULE_PARM_DESC(scalable_enable, "\n scalable_enable\n");
 
 module_param(buffer_mode_dbg, uint, 0664);
 MODULE_PARM_DESC(buffer_mode_dbg, "\n buffer_mode_dbg\n");

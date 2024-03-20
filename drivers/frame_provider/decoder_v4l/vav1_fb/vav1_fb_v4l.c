@@ -1033,6 +1033,7 @@ struct AV1HW_s {
 	int v4l_duration;
 	u32 mv_buf_size;
 	bool enable_ucode_swap;
+	u32 max_spatial_id;
 };
 
 #ifdef NEW_FB_CODE
@@ -1942,6 +1943,13 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 		v4l->aux_infos.bind_hdr10p_buffer(v4l, &free_pic->hdr10p_data_buf);
 		free_pic->hdr10p_data_size = 0;
 		free_pic->aux_data_size = 0;
+
+		free_pic->temporal_id = hw->aom_param.p.temporal_spatial_id & 7;
+		free_pic->spatial_id = (hw->aom_param.p.temporal_spatial_id >> 3) & 3;
+		free_pic->not_need_display = 0;
+		free_pic->fence_create = 0;
+		av1_print(hw, AOM_DEBUG_HW_MORE, "temporal_spatial_id = 0x%x\n",
+			hw->aom_param.p.temporal_spatial_id);
 	}
 
 	if (debug & AV1_DEBUG_BUFMGR) {
@@ -1963,6 +1971,13 @@ int get_free_frame_buffer(struct AV1_Common_s *cm)
 	put_un_used_mv_bufs(hw);
 
 	return v4l_get_free_fb(hw);
+}
+
+unsigned int get_low_latency_flag(struct AV1_Common_s *cm)
+{
+	struct AV1HW_s *hw = container_of(cm, struct AV1HW_s, common);
+
+	return hw->low_latency_flag;
 }
 
 static void force_recycle_repeat_frame(struct AV1HW_s *hw)
@@ -2233,6 +2248,8 @@ static u32 buf_alloc_size;
 static u32 buffer_mode = 1;
 /* buffer_mode_dbg: debug only*/
 static u32 buffer_mode_dbg = 0xffff0000;
+
+static u32 scalable_enable = 1;
 
 /*
  *bit 0, 1: only display I picture;
@@ -6987,9 +7004,10 @@ void v4l_submit_vframe(struct AV1HW_s *hw)
 void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)pbi->private_data;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	sd->stream_offset = pbi->pre_stream_offset;
-	if (hw->enable_fence) {
+	if (hw->enable_fence && (sd->fence_create == 1)) {
 		int i, j, used_size, ret;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
@@ -7025,7 +7043,20 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 			av1_recycle_dec_resource(hw, buf);
 		}
 	} else {
-		prepare_display_buf((struct AV1HW_s *)(pbi->private_data), sd);
+		av1_print(hw, AOM_DEBUG_HW_MORE, "Out frame index %d not_need_display %d\n",
+			sd->index, sd->not_need_display);
+		if (sd->not_need_display == 0) {
+			prepare_display_buf((struct AV1HW_s *)(pbi->private_data), sd);
+		} else if (ctx->current_timestamp != sd->timestamp) {
+			av1_print(hw, AOM_DEBUG_HW_MORE, "sd->timestamp %lld ctx->current_timestamp %lld\n",
+				sd->timestamp, ctx->current_timestamp);
+
+			ctx->current_timestamp = sd->timestamp;
+			vdec_v4l_post_error_frame_event(ctx);
+			if (vdec_frame_based(vdec) && (hw->chunk != NULL)) {
+				ctx->current_timestamp = hw->chunk->timestamp;
+			}
+		}
 	}
 	pbi->pre_stream_offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 }
@@ -7043,6 +7074,14 @@ int post_video_frame_early(AV1Decoder *pbi, struct AV1_Common_s *cm)
 
 		pic = &cm->cur_frame->buf;
 
+		if (scalable_enable &&
+			hw->max_spatial_id &&
+			(hw->max_spatial_id > (pic->spatial_id + 1))) {
+			av1_print(hw, AOM_DEBUG_HW_MORE, "frame index %d spatial_id %d\n",
+				pic->index, pic->spatial_id);
+			return 0;
+		}
+
 		/* create fence for each buffers. */
 		if (vdec_timeline_create_fence(vdec->sync) < 0)
 			return -1;
@@ -7051,6 +7090,7 @@ int post_video_frame_early(AV1Decoder *pbi, struct AV1_Common_s *cm)
 		pic->bit_depth		= cm->bit_depth;
 		pic->slice_type 	= cm->frame_type;
 		pic->stream_offset	= pbi->pre_stream_offset;
+		pic->fence_create	= 1;
 
 		if (hw->chunk) {
 			pic->pts	= hw->chunk->pts;
@@ -8871,14 +8911,17 @@ static int v4l_res_change(struct AV1HW_s *hw)
 		struct aml_vdec_ps_infos ps;
 		struct vdec_comp_buf_info comp;
 
-		if ((cm->width != 0 &&
-			cm->height != 0) &&
-			(hw->frame_width != cm->width ||
-			hw->frame_height != cm->height)) {
+		if ((hw->frame_width != 0 &&
+			hw->frame_height != 0) &&
+			(hw->frame_width != cm->seq_params.max_frame_width ||
+			hw->frame_height != cm->seq_params.max_frame_height)) {
 
 			av1_print(hw, 0,
-				"%s (%d,%d)=>(%d,%d)\r\n", __func__, cm->width,
-				cm->height, hw->frame_width, hw->frame_height);
+				"%s (%d,%d)=>(%d,%d)\r\n", __func__, hw->common.seq_params.max_frame_width,
+				cm->seq_params.max_frame_height, hw->frame_width, hw->frame_height);
+
+			hw->frame_width = hw->common.seq_params.max_frame_width;
+			hw->frame_height = hw->common.seq_params.max_frame_height;
 
 			if (get_double_write_mode(hw) != 16) {
 				vav1_get_comp_buf_info(hw, &comp);
@@ -9364,6 +9407,23 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				hw->front_irq_time = local_clock();
 			}
 #endif
+
+			if (multi_frames_in_one_pack &&
+				hw->frame_decoded &&
+				hw->low_latency_flag &&
+				scalable_enable &&
+				hw->max_spatial_id &&
+				(enable_single_slice == 1) &&
+				READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
+				if (cm->cur_frame && cm->cur_frame->show_frame) {
+					struct PIC_BUFFER_CONFIG_s *frame = &cm->cur_frame->buf;
+
+					frame->not_need_display = 1;
+					av1_print(hw, AOM_DEBUG_HW_MORE, "frame index %d not_need_display %d\n",
+						frame->index, frame->not_need_display);
+				}
+			}
+
 			if (hw->low_latency_flag)
 				av1_postproc(hw);
 
@@ -9502,6 +9562,13 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+	if (scalable_enable &&
+		(dec_status == AOM_AV1_FRAME_PARSER_DONE)) {
+		hw->max_spatial_id = count_ones(hw->aom_param.p.max_operating_point_idc >> 8);
+
+		av1_print(hw, AV1_DEBUG_BUFMGR, "max_spatial_id %d\n", hw->max_spatial_id);
+	}
+
 	if (obu_type == OBU_SEQUENCE_HEADER) {
 		int next_lcu_size;
 
@@ -9576,10 +9643,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	ctx->height_aspect_ratio = 1;
 	ctx->width_aspect_ratio = 1;
 
-	hw->frame_width = hw->common.seq_params.max_frame_width;
-	hw->frame_height = hw->common.seq_params.max_frame_height;
-
-	if (input_frame_based(hw_to_vdec(hw)) && is_oversize(hw->frame_width, hw->frame_height)) {
+	if (input_frame_based(hw_to_vdec(hw)) &&
+		is_oversize(hw->common.seq_params.max_frame_width, hw->common.seq_params.max_frame_height)) {
 		av1_buf_ref_process_for_exception(hw);
 		if (vdec_frame_based(hw_to_vdec(hw)))
 			vdec_v4l_post_error_frame_event(ctx);
@@ -9602,6 +9667,10 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			struct vdec_s *vdec = hw_to_vdec(hw);
 
 			pr_info("set ucode parse\n");
+
+			hw->frame_width = hw->common.seq_params.max_frame_width;
+			hw->frame_height = hw->common.seq_params.max_frame_height;
+
 			if (get_double_write_mode(hw) != 16) {
 				vav1_get_comp_buf_info(hw, &comp);
 				vdec_v4l_set_comp_buf_info(ctx, &comp);
@@ -9719,13 +9788,33 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		hw->one_compressed_data_done = 1;
 
 	if (hw->process_state != PROC_STATE_SENDAGAIN) {
-	    if (hw->one_compressed_data_done) {
-	        av1_postproc(hw);
-	        av1_release_bufs(hw);
+		if (hw->one_compressed_data_done) {
+			RefCntBuffer *cur_frame = hw->common.cur_frame;
+
+			if ((cur_frame != NULL) && scalable_enable
+				&& hw->max_spatial_id) {
+				struct PIC_BUFFER_CONFIG_s *frame = &cur_frame->buf;
+				int temporal_id = hw->aom_param.p.temporal_spatial_id & 7;
+				int spatial_id = (hw->aom_param.p.temporal_spatial_id >> 3) & 3;
+
+				av1_print(hw, AOM_DEBUG_HW_MORE, "temporal_spatial_id = 0x%x\n",
+					hw->aom_param.p.temporal_spatial_id);
+
+				if ((frame != NULL) &&
+					(temporal_id == frame->temporal_id) &&
+					(spatial_id > frame->spatial_id)) {
+					frame->not_need_display = 1;
+					av1_print(hw, AOM_DEBUG_HW_MORE, "frame index %d not_need_display %d\n",
+						frame->index, frame->not_need_display);
+				}
+			}
+
+			av1_postproc(hw);
+			av1_release_bufs(hw);
 #ifndef MV_USE_FIXED_BUF
-	        put_un_used_mv_bufs(hw);
+			put_un_used_mv_bufs(hw);
 #endif
-	    }
+		}
 	}
 
 	if (hw->one_package_frame_cnt) {
@@ -12992,6 +13081,10 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	hw->dw_mmu_enable =
 		get_double_write_mode(hw) & 0x20 ? 1 : 0;
 #endif
+
+	if (low_latency_flag & 0x80000000)
+		hw->low_latency_flag = low_latency_flag & 0xff;
+
 	av1_print(hw, AV1_DEBUG_BUFMGR,
 			"no_head %d  low_latency %d video_signal_type 0x%x\n",
 			hw->no_head, hw->low_latency_flag, hw->video_signal_type);
@@ -13365,6 +13458,9 @@ MODULE_PARM_DESC(buf_alloc_size, "\n buf_alloc_size\n");
 
 module_param(buffer_mode, uint, 0664);
 MODULE_PARM_DESC(buffer_mode, "\n buffer_mode\n");
+
+module_param(scalable_enable, uint, 0664);
+MODULE_PARM_DESC(scalable_enable, "\n scalable_enable\n");
 
 module_param(buffer_mode_dbg, uint, 0664);
 MODULE_PARM_DESC(buffer_mode_dbg, "\n buffer_mode_dbg\n");
