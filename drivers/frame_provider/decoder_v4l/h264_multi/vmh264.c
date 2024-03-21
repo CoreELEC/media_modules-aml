@@ -8193,7 +8193,7 @@ send_again:
 		}
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 		WRITE_VREG(DPB_STATUS_REG, H264_SEI_DATA_DONE);
-
+		start_process_time(hw);
 		return IRQ_HANDLED;
 	}
 
