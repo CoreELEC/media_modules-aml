@@ -2863,7 +2863,7 @@ static void dump_aux_buf(struct AV1HW_s *hw)
 	unsigned short *aux_adr = (unsigned short *)hw->aux_addr;
 	unsigned int aux_size = (READ_VREG(HEVC_AUX_DATA_SIZE) >> 16) << 4;
 
-	return;
+	//return;
 	if (hw->prefix_aux_size > 0) {
 		av1_print(hw, 0, "prefix aux: (size %d)\n", aux_size);
 		for (i = 0; i < (aux_size >> 1); i++) {
@@ -7936,9 +7936,11 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 			);
 
 		if (cm->cur_frame) {
+			PIC_BUFFER_CONFIG* cur_pic_config = &cm->cur_frame->buf;
 			if (debug &
 				AOM_DEBUG_AUX_DATA)
 				dump_aux_buf(hw);
+			set_pic_aux_data(hw, cur_pic_config, 0, 0);
 		}
 		config_next_ref_info_hw(hw);
 
