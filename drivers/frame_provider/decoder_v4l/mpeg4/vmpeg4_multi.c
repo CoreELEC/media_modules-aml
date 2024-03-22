@@ -139,6 +139,7 @@
 #define DECODE_STOP_POS         AV_SCRATCH_K
 
 #define INVALID_IDX 		(-1)  /* Invalid buffer index.*/
+#define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
 
 static u32 udebug_flag;
 
@@ -1323,7 +1324,8 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 			"interlace = %d\n", interlace);
 
 		if (input_frame_based(vdec)) {
-			if ((frame_width < 64) || (frame_height < 64)) {
+			if ((frame_width < 64) || (frame_height < 64) ||
+				IS_4K_SIZE(frame_width, frame_height)) {
 				mpeg4_buf_ref_process_for_exception(hw);
 				if (vdec_frame_based(hw_to_vdec(hw)))
 					vdec_v4l_post_error_frame_event(ctx);
