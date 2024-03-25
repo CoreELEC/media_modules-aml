@@ -67,7 +67,7 @@ unsigned long vdec_cav_get_addr(int index);
 
 bool is_support_vdec_canvas(void);
 
-void vdec_canvas_port_register(struct vdec_s *vdec);
+int vdec_canvas_port_register(struct vdec_s *vdec);
 
 #endif
 

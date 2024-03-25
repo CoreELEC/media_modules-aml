@@ -3132,7 +3132,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 		vdec_enable_DMC(vdec);
 	p->cma_dev = vdec_core->cma_dev;
 
-	vdec_canvas_port_register(vdec);
+	r = vdec_canvas_port_register(vdec);
+	if (r < 0) {
+		pr_err("fail to register vdec canvas port\n");
+		return r;
+	}
 
 	p->vdec_fps_detec = vdec_fps_detec;
 	/* todo */

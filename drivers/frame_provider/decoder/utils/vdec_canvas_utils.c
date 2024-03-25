@@ -18,15 +18,15 @@
  * Description:
  */
 #include <linux/types.h>
+#include <linux/slab.h>
 #include "vdec_canvas_utils.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/amlogic/media/canvas/canvas.h>
 #include "vdec.h"
 
-static struct canvas_status_s canvas_stat[CANVAS_MAX_SIZE];
-static struct canvas_status_s mdec_cav_stat[MDEC_CAV_LUT_MAX];
+static struct canvas_status_s *canvas_stat = NULL; //[CANVAS_MAX_SIZE];
+static struct canvas_status_s *mdec_cav_stat = NULL; //[MDEC_CAV_LUT_MAX];
 static struct canvas_config_s *mdec_cav_pool = NULL;
-
 extern u32 vdec_get_debug(void);
 
 static int get_canvas(unsigned int index, unsigned int base)
@@ -391,8 +391,6 @@ void config_cav_lut_ex(u32 index, ulong addr, u32 width,
 	u32 height, u32 wrap, u32 blkmode,
 	u32 endian, enum vdec_type_e core)
 {
-	unsigned long datah_temp, datal_temp;
-
 	if (!is_support_vdec_canvas()) {
 		canvas_config_ex(index, addr, width, height, wrap, blkmode, endian);
 		if (vdec_get_debug() & 0x40000000) {
@@ -400,6 +398,7 @@ void config_cav_lut_ex(u32 index, ulong addr, u32 width,
 				__func__, index, addr, width, height, blkmode, endian);
 		}
 	} else {
+		unsigned long datah_temp, datal_temp;
 		/*
 		datal_temp = (cav_lut.start_addr & 0x1fffffff) |
 			((cav_lut.cav_width & 0x7 ) << 29 );
@@ -457,7 +456,7 @@ void config_cav_lut(int index, struct canvas_config_s *cfg,
 EXPORT_SYMBOL(config_cav_lut);
 
 
-void vdec_canvas_port_register(struct vdec_s *vdec)
+int vdec_canvas_port_register(struct vdec_s *vdec)
 {
 	if (is_support_vdec_canvas()) {
 		vdec->get_canvas = get_internal_cav_lut;
@@ -466,6 +465,13 @@ void vdec_canvas_port_register(struct vdec_s *vdec)
 		if (mdec_cav_pool == NULL) {
 			mdec_cav_pool = vzalloc(sizeof(struct canvas_config_s)
 			* (MDEC_CAV_LUT_MAX + 1));
+		}
+		if (!mdec_cav_stat) {
+			mdec_cav_stat = kzalloc(sizeof(struct canvas_status_s) * MDEC_CAV_LUT_MAX, GFP_KERNEL);
+			if (!mdec_cav_stat) {
+				pr_err("%s, fail to vzalloc mdec_cav_stat !!!!!\n", __func__);
+				return -ENOMEM;
+			}
 		}
 	} else {
 		vdec->get_canvas = get_canvas;
@@ -476,6 +482,15 @@ void vdec_canvas_port_register(struct vdec_s *vdec)
 			vdec->get_canvas_ex = get_canvas_ex;
 			vdec->free_canvas_ex = free_canvas_ex;
 		}
+		if (!canvas_stat) {
+			canvas_stat = kzalloc(sizeof(struct canvas_status_s) * CANVAS_MAX_SIZE, GFP_KERNEL);
+			if (!canvas_stat) {
+				pr_err("%s, fail to vzalloc canvas_stat !!!!!\n", __func__);
+				return -ENOMEM;
+			}
+		}
 	}
+
+	return 0;
 }
 EXPORT_SYMBOL(vdec_canvas_port_register);
