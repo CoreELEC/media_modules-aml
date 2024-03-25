@@ -477,6 +477,12 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 			    struct buf_core_entry *entry,
 			    enum buf_core_user user)
 {
+	mutex_lock(&bc->mutex);
+
+	if (!bc_sanity_check(bc)) {
+		goto out;
+	}
+
 	if (bc->vpp_que && user == BUF_USER_VSINK &&
 		!bc->vpp_que(bc, entry)) {
 		/*
@@ -488,16 +494,8 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 		 * is referenced by DI mgr, wait for DI mgr to be used, and
 		 * then call callback to retrieve the buffer.
 		 */
-		mutex_lock(&bc->mutex);
-		if (!entry->inited || entry->state == BUF_STATE_FREE)
+		if (!entry->inited)
 			goto out;
-		mutex_unlock(&bc->mutex);
-	}
-
-	mutex_lock(&bc->mutex);
-
-	if (!bc_sanity_check(bc)) {
-		goto out;
 	}
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
@@ -597,6 +595,11 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 		bc->state,
 		kref_read(&bc->core_ref),
 		bc->free_num);
+
+	mutex_lock(&bc->workqueue_mutex);
+	flush_workqueue(bc->recycle_buf_ref_workqueue);
+	bc->workqueue_enabled = false;
+	mutex_unlock(&bc->workqueue_mutex);
 
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
 		if (!list_del_entry_valid(bc, entry))
@@ -918,6 +921,15 @@ int buf_core_mgr_init(struct buf_core_mgr_s *bc)
 	INIT_LIST_HEAD(&bc->free_que);
 	mutex_init(&bc->mutex);
 	kref_init(&bc->core_ref);
+	mutex_init(&bc->workqueue_mutex);
+	bc->recycle_buf_ref_workqueue =
+		alloc_ordered_workqueue("recycle-buf-ref-worker",
+			__WQ_LEGACY | WQ_MEM_RECLAIM | WQ_HIGHPRI);
+	if (!bc->recycle_buf_ref_workqueue) {
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+			"Failed to create recycle_buffer workqueue\n");
+		return -1;
+	}
 
 	bc->free_num		= 0;
 	bc->buf_num		= 0;
@@ -952,6 +964,12 @@ EXPORT_SYMBOL(buf_core_mgr_init);
 void buf_core_mgr_release(struct buf_core_mgr_s *bc)
 {
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
+
+	mutex_lock(&bc->workqueue_mutex);
+	flush_workqueue(bc->recycle_buf_ref_workqueue);
+	destroy_workqueue(bc->recycle_buf_ref_workqueue);
+	bc->workqueue_enabled = false;
+	mutex_unlock(&bc->workqueue_mutex);
 
 	kref_put(&bc->core_ref, buf_core_destroy);
 }

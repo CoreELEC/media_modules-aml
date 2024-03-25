@@ -159,6 +159,9 @@ enum buf_pair {
  * @index	: Aml buf index.
  * @inited	: The pairing is completed and enters the free queue.
  * @queued_mask	: Field buffer return times.
+ * @recycle_buf_ref_work
+ *		: Work of recycle-ref for each buffer.
+ * @bc		: Point to bc.
  */
 struct buf_core_entry {
 	ulong			key;
@@ -181,6 +184,8 @@ struct buf_core_entry {
 	u32			index;
 	u32			inited;
 	u32			queued_mask; /* bit0: master; bit1: sub0; bit1: sub1*/
+	struct work_struct 	recycle_buf_ref_work;
+	struct buf_core_mgr_s 	*bc;
 };
 
 /*
@@ -246,6 +251,12 @@ struct buf_core_mem_ops {
  *		: Wake up vdec thread to schedule.
  * @mem_ops	: Set of interfaces for memory-related operations.
  * @buf_ops	: Set of interfaces for buffer operations.
+ * @recycle_buf_ref_workqueue
+ *		: Workqueue of recycle-ref.
+ * @workqueue_enabled
+ *		: Flag of working for workqueue .
+ * @workqueue_mutex
+ *		: Mutex for workqueue.
  */
 struct buf_core_mgr_s {
 	int			id;
@@ -280,6 +291,10 @@ struct buf_core_mgr_s {
 
 	struct buf_core_mem_ops	mem_ops;
 	struct buf_core_ops	buf_ops;
+
+	struct workqueue_struct		*recycle_buf_ref_workqueue;
+	bool 				workqueue_enabled;
+	struct mutex 			workqueue_mutex; /*for recycle buffer work queue*/
 };
 
 /*
