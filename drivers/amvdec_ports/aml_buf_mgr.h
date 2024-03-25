@@ -271,6 +271,15 @@ static inline void aml_buf_set_vframe(struct aml_buf *ambuf, struct vframe_s *vf
 }
 
 /*
+ * aml_buf_workqueue_enable() - Enable workqueue.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ *
+ * Used to Enable workqueue.
+ */
+void aml_buf_workqueue_enable(struct aml_buf_mgr_s *bm);
+
+/*
  * aml_buf_mgr_init() - buffer core management initialization.
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.

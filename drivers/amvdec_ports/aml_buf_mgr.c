@@ -38,6 +38,15 @@
 #define IS_VPP_POST(bm)	(bm->vpp_work_mode == VPP_WORK_MODE_DI_POST)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+void aml_buf_ref_recycle_worker(struct work_struct *work)
+{
+	struct buf_core_entry *entry =
+		container_of(work, struct buf_core_entry, recycle_buf_ref_work);
+	struct buf_core_mgr_s *bc = entry->bc;
+
+	bc->buf_ops.vpp_cb(bc, entry);
+}
+
 static void aml_buf_vpp_callback(void *caller_data, struct file *file, int id)
 {
 	struct buf_core_mgr_s *bc = caller_data;
@@ -52,9 +61,23 @@ static void aml_buf_vpp_callback(void *caller_data, struct file *file, int id)
 		}
 	}
 
-	if (entry && bc->buf_ops.vpp_cb)
-		bc->buf_ops.vpp_cb(bc, entry);
-	else
+	if (entry && bc->buf_ops.vpp_cb) {
+		mutex_lock(&bc->workqueue_mutex);
+		if (bc->workqueue_enabled)
+			queue_work(bc->recycle_buf_ref_workqueue,
+				&entry->recycle_buf_ref_work);
+
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+			"%s, key:%lx, phy:%lx, idx:%d, st:(%d, %d), free:%d\n",
+			__func__,
+			entry->key,
+			entry->phy_addr,
+			entry->index,
+			entry->state,
+			bc->state,
+			bc->free_num);
+		mutex_unlock(&bc->workqueue_mutex);
+	} else
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR, "entry is NULL\n");
 }
 
@@ -707,6 +730,8 @@ static int aml_buf_alloc(struct buf_core_mgr_s *bc,
 	kref_get(&bm->ref);
 
 	*entry = &buf->entry;
+	buf->entry.bc = bc;
+	INIT_WORK(&buf->entry.recycle_buf_ref_work, aml_buf_ref_recycle_worker);
 
 	return 0;
 
@@ -973,6 +998,11 @@ static int aml_buf_get_next_user(struct buf_core_mgr_s *bc,
 	type = buf->task->get_next_user(buf->task, user_to_task(user));
 
 	return task_to_user(type);
+}
+
+void aml_buf_workqueue_enable(struct aml_buf_mgr_s *bm)
+{
+	bm->bc.workqueue_enabled = true;
 }
 
 int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
