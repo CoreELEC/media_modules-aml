@@ -6369,10 +6369,10 @@ static void v4l_hevc_collect_stream_info(struct vdec_s *vdec,
 	str_info->ratio_size.dar_width = -1;
 	str_info->ratio_size.dar_height = -1;
 	str_info->trick_mode = hevc->i_only;
-	str_info->frame_dur = hevc->frame_dur;
-	if (hevc->frame_dur != 0)
-		str_info->frame_rate = ((96000 * 10 / hevc->frame_dur) % 10) < 5 ?
-				96000 / hevc->frame_dur : (96000 / hevc->frame_dur +1);
+	str_info->frame_dur = hevc->last_dur;
+	if (str_info->frame_dur != 0)
+		str_info->frame_rate = ((96000 * 10 / str_info->frame_dur) % 10) < 5 ?
+				96000 / str_info->frame_dur : (96000 / str_info->frame_dur +1);
 	else
 		str_info->frame_rate = -1;
 	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);

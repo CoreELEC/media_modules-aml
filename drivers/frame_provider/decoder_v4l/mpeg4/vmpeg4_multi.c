@@ -1161,10 +1161,10 @@ static void v4l_vmpeg4_collect_stream_info(struct vdec_s *vdec,
 	str_info->bit_depth = 8;
 
 	str_info->trick_mode = hw->i_only;
-	str_info->frame_dur = hw->frame_dur;
-	if (hw->frame_dur != 0)
-		str_info->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
-				96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
+	str_info->frame_dur = hw->last_dur;
+	if (hw->last_dur != 0)
+		str_info->frame_rate = ((96000 * 10 / hw->last_dur) % 10) < 5 ?
+				96000 / hw->last_dur : (96000 / hw->last_dur +1);
 	else
 		str_info->frame_rate = -1;
 	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);
