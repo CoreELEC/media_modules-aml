@@ -7249,7 +7249,6 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 		} else
 			hw->frmbase_cont_flag = 0;
 
-		mutex_lock(&hw->pic_mutex);
 		if (p_H264_Dpb->mVideo.dec_picture) {
 			get_picture_qos_info(p_H264_Dpb->mVideo.dec_picture);
 			hw->gvs.frame_dur = hw->frame_dur;
@@ -7391,12 +7390,10 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 
 
 			if (ret == -1) {
-				mutex_unlock(&hw->pic_mutex);
 				release_cur_decoding_buf(hw);
 				bufmgr_force_recover(p_H264_Dpb);
 				return -1;
 			} else if (ret == -2) {
-				mutex_unlock(&hw->pic_mutex);
 				release_cur_decoding_buf(hw);
 				return -2;
 			} else {
@@ -7438,7 +7435,6 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				}
 			}
 		}
-		mutex_unlock(&hw->pic_mutex);
 		return 0;
 }
 
@@ -8566,6 +8562,9 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	ulong flags;
 
+	if (!hw)
+		return IRQ_HANDLED;
+
 	flags = h264_timeout_lock(hw);
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 
@@ -8578,10 +8577,6 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 
 	h264_timeout_unlock(hw, flags);
 
-	if (!hw) {
-		start_process_time(hw);
-		return IRQ_HANDLED;
-	}
 
 	if (hw->eos) {
 		start_process_time(hw);

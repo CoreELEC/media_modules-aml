@@ -2167,10 +2167,10 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 #endif
 #else
 
-	mutex_lock(&dec->fb_mutex);
 	for (i = 0; (i < pic->list0_num_refp) && (pic->error_mark == 0); i++) {
 		ref_pic = &avs3_dec->pic_pool[pic->list0_index[i]].buf_cfg;
 		if (ref_pic->error_mark) {
+			mutex_lock(&dec->fb_mutex);
 			dec->gvs->error_frame_count++;
 			if (pic->slice_type == SLICE_I) {
 				dec->gvs->i_concealed_frames++;
@@ -2180,6 +2180,7 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 				dec->gvs->b_concealed_frames++;
 			}
 			pic->error_mark = 1;
+			mutex_unlock(&dec->fb_mutex);
 			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L0 ref_pic %d pic error\n",
 				__func__, pic->list0_index[i]);
 		}
@@ -2188,6 +2189,7 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 	for (i = 0; (i < pic->list1_num_refp) && (pic->error_mark == 0); i++) {
 		ref_pic = &avs3_dec->pic_pool[pic->list1_index[i]].buf_cfg;
 		if (ref_pic->error_mark) {
+			mutex_lock(&dec->fb_mutex);
 			dec->gvs->error_frame_count++;
 			if (pic->slice_type == SLICE_I) {
 				dec->gvs->i_concealed_frames++;
@@ -2197,11 +2199,11 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 				dec->gvs->b_concealed_frames++;
 			}
 			pic->error_mark = 1;
+			mutex_unlock(&dec->fb_mutex);
 			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "%s:L1 ref_pic %d pic error\n",
 				__func__, pic->list1_index[i]);
 		}
 	}
-	mutex_unlock(&dec->fb_mutex);
 
 	if (pic->error_mark && (error_handle_policy & 0x4)
 		&& (lcu_percentage_threshold == 0)) {

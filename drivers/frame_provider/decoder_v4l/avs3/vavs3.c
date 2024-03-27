@@ -2609,7 +2609,6 @@ void pic_backend_ref_operation(struct AVS3Decoder_s *dec, avs3_frame_t *pic, boo
 	avs3_frame_t *ref_pic = NULL;
 	int i = 0;
 
-	mutex_lock(&dec->fb_mutex);
 
 	if (add_flag) {
 		pic->backend_ref = 1;
@@ -2623,6 +2622,8 @@ void pic_backend_ref_operation(struct AVS3Decoder_s *dec, avs3_frame_t *pic, boo
 		}
 		pic->back_done_mark = 1;
 	}
+
+	mutex_lock(&dec->fb_mutex);
 
 	for (i = 0; i < pic->list0_num_refp; i++) {
 		ref_pic = &avs3_dec->pic_pool[pic->list0_index[i]].buf_cfg;

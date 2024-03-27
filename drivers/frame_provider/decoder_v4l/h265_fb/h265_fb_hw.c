@@ -959,10 +959,10 @@ int BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		"Start BackEnd Decoding %d (wr pos %d, rd pos %d)\n",
 		hevc->backend_decoded_count, hevc->fb_wr_pos, hevc->fb_rd_pos);
 
-	mutex_lock(&hevc->fb_mutex);
 	for (i = 0; (i < MAX_REF_PIC_NUM) && (pic->error_mark == 0); i++) {
 		if (pic->ref_pic[i]) {
 			if (pic->ref_pic[i]->error_mark) {
+				mutex_lock(&hevc->fb_mutex);
 				hevc->gvs->error_frame_count++;
 				if (pic->slice_type == I_SLICE) {
 					hevc->gvs->i_concealed_frames++;
@@ -972,11 +972,11 @@ int BackEnd_StartDecoding(struct hevc_state_s* hevc)
 					hevc->gvs->b_concealed_frames++;
 				}
 				pic->error_mark = 1;
+				mutex_unlock(&hevc->fb_mutex);
 				break;
 			}
 		}
 	}
-	mutex_unlock(&hevc->fb_mutex);
 
 	if ((pic->error_mark && (hevc->PB_skip_mode != 0)) ||
 		(hevc->front_back_mode != 1 && hevc->front_back_mode != 3) ||
