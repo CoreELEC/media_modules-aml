@@ -1532,7 +1532,6 @@ struct BUF_s {
 #define SLICE_NUM_LEVEL_IDC_4_x		75
 #define SLICE_NUM_LEVEL_IDC_5_x		200
 #define SLICE_NUM_LEVEL_IDC_6_x		600
-#define GET_POC_POS(a, b, c) (int*)((a) + (b) * EACH_SLICE_LEN + (c))
 
 struct PIC_s {
 	int index;
@@ -1554,8 +1553,9 @@ struct PIC_s {
 	unsigned char error_mark;
 	unsigned char dis_mark;
 	int slice_idx;
-	int *m_aiRefPOCList0;
-	int *m_aiRefPOCList1;
+	int *m_aiRefPOCListData;
+	int **m_aiRefPOCList0;
+	int **m_aiRefPOCList1;
 #ifdef SUPPORT_LONG_TERM_RPS
 	unsigned char long_term_ref;
 #endif
@@ -3975,7 +3975,7 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 	return ret;
 }
 
-static int get_slice_size(void)
+static int get_support_slice_num(void)
 {
 	int level_idc = get_h265_idc_level();
 
@@ -3989,15 +3989,16 @@ static int get_slice_size(void)
 
 static void pic_init(struct PIC_s *pic)
 {
-	int slice_size = get_slice_size();
-	int *m_aiRefPOCList0 = pic->m_aiRefPOCList0;
-	int *m_aiRefPOCList1 = pic->m_aiRefPOCList1;
+	int slice_num = get_support_slice_num();
+	int *m_aiRefPOCListData = pic->m_aiRefPOCListData;
+	int **m_aiRefPOCList0 = pic->m_aiRefPOCList0;
+	int **m_aiRefPOCList1 = pic->m_aiRefPOCList1;
 	char *aux_data = pic->aux_data_buf;
 
 	memset(pic, 0, sizeof(struct PIC_s));
-	memset(m_aiRefPOCList0, 0, slice_size * EACH_SLICE_LEN * sizeof(int));
-	memset(m_aiRefPOCList1, 0, slice_size * EACH_SLICE_LEN * sizeof(int));
+	memset(m_aiRefPOCListData, 0, sizeof(int) * EACH_SLICE_LEN * slice_num * 2);
 
+	pic->m_aiRefPOCListData = m_aiRefPOCListData;
 	pic->m_aiRefPOCList0 = m_aiRefPOCList0;
 	pic->m_aiRefPOCList1 = m_aiRefPOCList1;
 	pic->aux_data_buf = aux_data;
@@ -4007,25 +4008,37 @@ static void pic_free(struct PIC_s *pic)
 {
 	aml_media_mem_free(pic->m_aiRefPOCList0);
 	aml_media_mem_free(pic->m_aiRefPOCList1);
+	aml_media_mem_free(pic->m_aiRefPOCListData);
 	aml_media_mem_free(pic);
 }
 
 static struct PIC_s *pic_alloc(void)
 {
 	struct PIC_s *pic;
-	int slice_size = get_slice_size();
+	int index;
+	int slice_num = get_support_slice_num();
+	int list_size = sizeof(int *) * slice_num;
+	int data_size = sizeof(int) * EACH_SLICE_LEN * slice_num * 2;
 
 	pic = aml_media_mem_alloc(sizeof(struct PIC_s), GFP_KERNEL);
-	if (pic == NULL)
+	if (!pic)
 		goto error;
-	pic->m_aiRefPOCList0 =
-		aml_media_mem_alloc(slice_size * EACH_SLICE_LEN * sizeof(int), GFP_KERNEL);
+	pic->m_aiRefPOCList0 = aml_media_mem_alloc(list_size, GFP_KERNEL);
 	if (!pic->m_aiRefPOCList0)
 		goto error;
-	pic->m_aiRefPOCList1 =
-		aml_media_mem_alloc(slice_size * EACH_SLICE_LEN * sizeof(int), GFP_KERNEL);
+	pic->m_aiRefPOCList1 = aml_media_mem_alloc(list_size, GFP_KERNEL);
 	if (!pic->m_aiRefPOCList1)
 		goto error;
+	pic->m_aiRefPOCListData = aml_media_mem_alloc(data_size, GFP_KERNEL);
+	if (!pic->m_aiRefPOCListData)
+		goto error;
+
+	for (index = 0; index < slice_num; index++) {
+		pic->m_aiRefPOCList0[index] =
+				&pic->m_aiRefPOCListData[index * EACH_SLICE_LEN];
+		pic->m_aiRefPOCList1[index] =
+				&pic->m_aiRefPOCListData[(slice_num + index) * EACH_SLICE_LEN];
+	}
 
 	return pic;
 
@@ -4485,7 +4498,7 @@ static int config_mc_buffer(struct hevc_state_s *hevc, struct PIC_s *cur_pic)
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0 << 1) | 1);
 		for (i = 0; i < cur_pic->RefNum_L0; i++) {
 			pic = get_ref_pic_by_POC(hevc,
-				*GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx, i));
+				cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][i]);
 			if (pic) {
 				if ((pic->width != hevc->pic_w) ||
 					(pic->height != hevc->pic_h)) {
@@ -4513,8 +4526,7 @@ static int config_mc_buffer(struct hevc_state_s *hevc, struct PIC_s *cur_pic)
 				hevc_print(hevc, 0,
 					"Error %s, %dth poc (%d) %s",
 					__func__, i,
-					*GET_POC_POS(cur_pic->m_aiRefPOCList0,
-					cur_pic->slice_idx, i),
+					cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][i],
 					pic ? "has error" : "not in list0");
 			}
 		}
@@ -4527,7 +4539,7 @@ static int config_mc_buffer(struct hevc_state_s *hevc, struct PIC_s *cur_pic)
 
 		for (i = 0; i < cur_pic->RefNum_L1; i++) {
 			pic = get_ref_pic_by_POC(hevc,
-				*GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, i));
+				cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][i]);
 			if (pic) {
 				if ((pic->width != hevc->pic_w) ||
 					(pic->height != hevc->pic_h)) {
@@ -4556,7 +4568,7 @@ static int config_mc_buffer(struct hevc_state_s *hevc, struct PIC_s *cur_pic)
 				hevc_print(hevc, 0,
 					"Error %s, %dth poc (%d) %s",
 					__func__, i,
-					*GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, i),
+					cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][i],
 					pic ? "has error" :
 					"not in list1");
 			}
@@ -4739,8 +4751,8 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, st
 #ifdef SUPPORT_LONG_TERM_RPS
 		RefPicSetLtCurr[i] = rps_data->RefPicSetLtCurr[i];
 #endif
-		*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, i) = 0;
-		*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, i) = 0;
+		pic->m_aiRefPOCList0[pic->slice_idx][i] = 0;
+		pic->m_aiRefPOCList1[pic->slice_idx][i] = 0;
 	}
 #ifdef SUPPORT_LONG_TERM_RPS
 	total_num = num_neg + num_pos + num_lt;
@@ -4801,7 +4813,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, st
 					}
 				}
 
-				*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, rIdx) =
+				pic->m_aiRefPOCList0[pic->slice_idx][rIdx] =
 #ifdef SUPPORT_LONG_TERM_RPS
 					cIdx >= (num_neg + num_pos) ?
 						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
@@ -4810,7 +4822,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, st
 					RefPicSetStCurr0[cIdx]);
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 					hevc_print_cont(hevc, 0, "%d ",
-						*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, rIdx));
+						pic->m_aiRefPOCList0[pic->slice_idx][rIdx]);
 				}
 			}
 		} else {
@@ -4818,7 +4830,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, st
 			for (rIdx = 0; rIdx < num_ref_idx_l0_active; rIdx++) {
 				int cIdx = rIdx % total_num;
 
-				*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, rIdx) =
+				pic->m_aiRefPOCList0[pic->slice_idx][rIdx] =
 #ifdef SUPPORT_LONG_TERM_RPS
 					cIdx >= (num_neg + num_pos) ?
 						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
@@ -4827,7 +4839,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, st
 					RefPicSetStCurr0[cIdx]);
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 					hevc_print_cont(hevc, 0, "%d ",
-						*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, rIdx));
+						pic->m_aiRefPOCList0[pic->slice_idx][rIdx]);
 				}
 			}
 		}
@@ -4862,7 +4874,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, st
 							goto set_ref_err;
 						}
 					}
-					*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, rIdx) =
+					pic->m_aiRefPOCList1[pic->slice_idx][rIdx] =
 #ifdef SUPPORT_LONG_TERM_RPS
 					cIdx >= (num_neg + num_pos) ?
 						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
@@ -4872,7 +4884,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, st
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
 						hevc_print_cont(hevc, 0, "%d ",
-							*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, rIdx));
+							pic->m_aiRefPOCList1[pic->slice_idx][rIdx]);
 					}
 				}
 			} else {
@@ -4881,7 +4893,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, st
 					 rIdx++) {
 					int cIdx = rIdx % total_num;
 
-					*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, rIdx) =
+					pic->m_aiRefPOCList1[pic->slice_idx][rIdx] =
 #ifdef SUPPORT_LONG_TERM_RPS
 					cIdx >= (num_neg + num_pos) ?
 						RefPicSetLtCurr[cIdx - num_neg - num_pos] :
@@ -4891,7 +4903,7 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, st
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
 						hevc_print_cont(hevc, 0, "%d ",
-							*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, rIdx));
+							pic->m_aiRefPOCList1[pic->slice_idx][rIdx]);
 					}
 				}
 			}
@@ -5675,12 +5687,12 @@ static void config_mpred_hw(struct hevc_state_s *hevc)
 	data32 = 0;
 	for (i = 0; i < hevc->RefNum_L0; i++) {
 		if (is_ref_long_term(hevc,
-			*GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx, i)))
+			cur_pic->m_aiRefPOCList0[cur_pic->slice_idx][i]))
 			data32 = data32 | (1 << i);
 	}
 	for (i = 0; i < hevc->RefNum_L1; i++) {
 		if (is_ref_long_term(hevc,
-			*GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, i)))
+			cur_pic->m_aiRefPOCList1[cur_pic->slice_idx][i]))
 			data32 = data32 | (1 << (i + 16));
 	}
 	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
@@ -5707,8 +5719,8 @@ static void config_mpred_hw(struct hevc_state_s *hevc)
 	/* below MPRED Ref_POC_xx_Lx registers must follow Ref_POC_xx_L0 ->
 	 *   Ref_POC_xx_L1 in pair write order!!!
 	 */
-	ref_poc_L0 = GET_POC_POS(cur_pic->m_aiRefPOCList0, cur_pic->slice_idx, 0);
-	ref_poc_L1 = GET_POC_POS(cur_pic->m_aiRefPOCList1, cur_pic->slice_idx, 0);
+	ref_poc_L0 = cur_pic->m_aiRefPOCList0[cur_pic->slice_idx];
+	ref_poc_L1 = cur_pic->m_aiRefPOCList1[cur_pic->slice_idx];
 
 	WRITE_VREG(HEVC_MPRED_L0_REF00_POC, ref_poc_L0[0]);
 	WRITE_VREG(HEVC_MPRED_L1_REF00_POC, ref_poc_L1[0]);
@@ -7683,7 +7695,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			hevc->m_tile[hevc->tile_y][hevc->tile_x].height;
 	}
 
-	if (hevc->cur_pic->slice_idx >= get_slice_size()) {
+	if (hevc->cur_pic->slice_idx >= get_support_slice_num()) {
 		hevc_print(hevc, 0,
 			"slice_idx %d invalid\n", hevc->cur_pic->slice_idx);
 		return 3;
@@ -7701,14 +7713,14 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	if (rpm_param->p.slice_type != I_SLICE) {
 		hevc->LDCFlag = 1;
 		for (i = 0; (i < hevc->RefNum_L0) && hevc->LDCFlag; i++) {
-			if (*GET_POC_POS(hevc->cur_pic->m_aiRefPOCList0, hevc->cur_pic->slice_idx, i) >
+			if (hevc->cur_pic->m_aiRefPOCList0[hevc->cur_pic->slice_idx][i] >
 				hevc->curr_POC)
 				hevc->LDCFlag = 0;
 		}
 		if (rpm_param->p.slice_type == B_SLICE) {
 			for (i = 0; (i < hevc->RefNum_L1)
 					&& hevc->LDCFlag; i++) {
-				if (*GET_POC_POS(hevc->cur_pic->m_aiRefPOCList1, hevc->cur_pic->slice_idx, i) >
+				if (hevc->cur_pic->m_aiRefPOCList1[hevc->cur_pic->slice_idx][i] >
 					hevc->curr_POC)
 					hevc->LDCFlag = 0;
 			}
@@ -7738,13 +7750,13 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	if (hevc->list_no == 0) {
 		if (Col_ref < hevc->RefNum_L0) {
 			hevc->Col_POC =
-				*GET_POC_POS(hevc->cur_pic->m_aiRefPOCList0, hevc->cur_pic->slice_idx, Col_ref);
+				hevc->cur_pic->m_aiRefPOCList0[hevc->cur_pic->slice_idx][Col_ref];
 		} else
 			hevc->Col_POC = INVALID_POC;
 	} else {
 		if (Col_ref < hevc->RefNum_L1) {
 			hevc->Col_POC =
-				*GET_POC_POS(hevc->cur_pic->m_aiRefPOCList1, hevc->cur_pic->slice_idx, Col_ref);
+				hevc->cur_pic->m_aiRefPOCList1[hevc->cur_pic->slice_idx][Col_ref];
 		} else
 			hevc->Col_POC = INVALID_POC;
 	}
