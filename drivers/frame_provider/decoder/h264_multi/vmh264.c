@@ -175,6 +175,8 @@ static int check_dirty_data(struct vdec_s *vdec);
 static unsigned int reorder_dpb_size_margin_dv = 16;
 #endif
 static unsigned int reorder_dpb_size_margin = 6;
+static unsigned int interlace_filed_margin = 6;
+
 static unsigned int reference_buf_margin = 4;
 
 #ifdef CONSTRAIN_MAX_BUF_NUM
@@ -956,6 +958,7 @@ struct vdec_h264_hw_s {
 	unsigned int width_aspect_ratio;
 	unsigned int first_i_policy;
 	u32 reorder_dpb_size_margin;
+	u32 interlace_filed_margin;
 	bool wait_reset_done_flag;
 #ifdef DETECT_WRONG_MULTI_SLICE
 	unsigned int multi_slice_pic_check_count;
@@ -6081,6 +6084,13 @@ static u32 get_dynamic_buf_num_margin(struct vdec_h264_hw_s *hw)
 		(reorder_dpb_size_margin & 0x7fffffff);
 }
 
+static u32 get_interlace_filed_margin(struct vdec_h264_hw_s *hw)
+{
+	return((interlace_filed_margin & 0x80000000) == 0) ?
+		hw->interlace_filed_margin :
+		(interlace_filed_margin & 0x7fffffff);
+}
+
 static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	u32 param1, u32 param2, u32 param3, u32 param4, bool buffer_reset_flag, bool reset_flags)
 {
@@ -6305,6 +6315,13 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		p_H264_Dpb->colocated_buf_size = mb_total * 96;
 
+		field_flag = get_field(hw, frame_mbs_only_flag);
+		if (field_flag) { //interlace
+			used_reorder_dpb_size_margin = (hw->interlace_filed_margin + 1) >> 1;
+			dpb_print(DECODE_ID(hw), 0,
+				"h264 interlace use half margin %d\n",used_reorder_dpb_size_margin);
+		}
+
 		dpb_print(DECODE_ID(hw), 0,
 			"restriction_flag=%d, max_dec_frame_buffering=%d, dec_dpb_size=%d num_reorder_frames %d used_reorder_dpb_size_margin %d\n",
 			hw->bitstream_restriction_flag,
@@ -6353,7 +6370,6 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		}
 
 		buf_size = (hw->mb_total << 8) + (hw->mb_total << 7);
-		field_flag = get_field(hw, frame_mbs_only_flag);
 
 		mutex_lock(&vmh264_mutex);
 		if (!hw->mmu_enable) {
@@ -11931,6 +11947,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	}
 
 	hw->reorder_dpb_size_margin = reorder_dpb_size_margin;
+	hw->interlace_filed_margin = interlace_filed_margin;
 
 	if (pdata->config_len) {
 		dpb_print(DECODE_ID(hw), 0, "pdata->config=%s\n", pdata->config);
@@ -11950,6 +11967,11 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			"parm_buffer_margin",
 			&config_val) == 0)
 			hw->reorder_dpb_size_margin = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_interlace_filed_margin",
+			&config_val) == 0)
+			hw->interlace_filed_margin = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_canvas_mem_mode",
@@ -12030,6 +12052,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	if (!hw->is_used_v4l) {
 		hw->reorder_dpb_size_margin = get_dynamic_buf_num_margin(hw);
+		hw->interlace_filed_margin = get_interlace_filed_margin(hw);
 		hw->canvas_mode = mem_map_mode;
 
 		if ((h264_debug_flag & IGNORE_PARAM_FROM_CONFIG) == 0)
@@ -12481,6 +12504,9 @@ MODULE_PARM_DESC(frame_max_data_packet, "\n amvdec_h264 frame_max_data_packet\n"
 
 module_param(reorder_dpb_size_margin, uint, 0664);
 MODULE_PARM_DESC(reorder_dpb_size_margin, "\n ammvdec_h264 reorder_dpb_size_margin\n");
+
+module_param(interlace_filed_margin, uint, 0664);
+MODULE_PARM_DESC(interlace_filed_margin, "\n ammvdec_h264 interlace_filed_margin\n");
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 module_param(reorder_dpb_size_margin_dv, uint, 0664);
