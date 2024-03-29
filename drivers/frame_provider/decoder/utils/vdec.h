@@ -156,6 +156,7 @@ enum e_trace_work_status {
 #define VDEC_CFG_FLAG_DV_NEGATIVE  (1 << 1)
 #define VDEC_CFG_FLAG_HIGH_BANDWIDTH  (1 << 2)
 #define VDEC_CFG_FLAG_DIS_ERR_POLICY (1 << 11)
+#define VDEC_CFG_FLAG_MMU_COPY_DISABLE (1 << 12)
 
 #define VDEC_CFG_FLAG_PROG_ONLY (1 << 16)
 
@@ -956,5 +957,7 @@ int vcodec_profile_register_v2(char *name, enum vformat_e vformat, int is_v4l);
 int is_mmu_copy_enable(void);
 
 void mmu_copy_work(struct mmu_copy_params params);
+
+void vdec_set_mmu_copy_flag(bool need_copy);
 
 #endif				/* VDEC_H */

@@ -1004,6 +1004,7 @@ struct AVS3Decoder_s {
 	struct MVBUF_s m_mv_BUF[FRAME_BUFFERS];
 	u32 mv_buf_size;
 	s32 cur_back_idx;
+	bool mmu_copy_disable;
 };
 
 static int  compute_losless_comp_body_size(
@@ -1110,7 +1111,7 @@ bit 0: search seq again if buffer mgr error occur
 	re_search_seq_threshold)
 bit 1:  1: display from I picture; 0: display from any correct pic;
 bit 2:  1: not output error frame; 0: output error frame;
-
+bit31:  1:the value of bits 0 to 31 is used as the error_handle_policy.
 */
 
 static u32 error_handle_policy = 5;
@@ -2754,7 +2755,8 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 
 	if ((!(error_handle_policy & 0x4))
 		&& (error_handle_mode == 1)
-		&& is_mmu_copy_enable()) {
+		&& is_mmu_copy_enable()
+		&& (dec->mmu_copy_disable == false)) {
 		if (cur_pic->decoded_lcu != dec->avs3_dec.lcu_total) {
 			struct avs3_frame_s *pic = NULL;
 			int index = find_near_pic_index(dec);
@@ -5292,54 +5294,54 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 					pr_info("pic = %p\n", pic);
 				}
 
-			if (debug & AVS3_DBG_PIC_LEAK)
-				debug |= AVS3_DBG_PIC_LEAK_WAIT;
-			return NULL;
-		}
+				if (debug & AVS3_DBG_PIC_LEAK)
+					debug |= AVS3_DBG_PIC_LEAK_WAIT;
+				return NULL;
+			}
 
-		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
-		vf->vf_ud_param.ud_param.buf_len = 0;
-		vf->vf_ud_param.ud_param.pbuf_addr = NULL;
-		vf->vf_ud_param.ud_param.instance_id = vdec->afd_video_id;
+			vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
+			vf->vf_ud_param.ud_param.buf_len = 0;
+			vf->vf_ud_param.ud_param.pbuf_addr = NULL;
+			vf->vf_ud_param.ud_param.instance_id = vdec->afd_video_id;
 
-		vf->vf_ud_param.ud_param.meta_info.duration = vf->duration;
-		vf->vf_ud_param.ud_param.meta_info.flags = (VFORMAT_AVS3 << 3);
-		vf->vf_ud_param.ud_param.meta_info.vpts = vf->pts;
-		if (vf->pts)
-			vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
+			vf->vf_ud_param.ud_param.meta_info.duration = vf->duration;
+			vf->vf_ud_param.ud_param.meta_info.flags = (VFORMAT_AVS3 << 3);
+			vf->vf_ud_param.ud_param.meta_info.vpts = vf->pts;
+			if (vf->pts)
+				vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
 
-		vf->omx_index = atomic_read(&dec->vf_get_count);
-		if (pic && (!(pic->error_mark) || !(error_handle_policy & 0x4)))
-			atomic_add(1, &dec->vf_get_count);
-		else
-			atomic_dec(&dec->vf_pre_count);
+			vf->omx_index = atomic_read(&dec->vf_get_count);
+			if (pic && (!(pic->error_mark) || !(error_handle_policy & 0x4)))
+				atomic_add(1, &dec->vf_get_count);
+			else
+				atomic_dec(&dec->vf_pre_count);
 
-		kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
-		decoder_trace(dec->trace.new_q_name, kfifo_len(&dec->newframe_q), TRACE_BUFFER);
+			kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
+			decoder_trace(dec->trace.new_q_name, kfifo_len(&dec->newframe_q), TRACE_BUFFER);
 
-		if (pic)
-			avs3_print(dec, AVS3_DBG_BUFMGR,
-			"%s vf %p pic %p index 0x%x getcount %d poc %d type 0x%x w/h/depth %d/%d/0x%x, compHeadAddr 0x%08x, pts %d, %lld, decoded_lcu %d\n",
-			__func__, vf, pic, index,
-			//pic->imgtr_fwRefDistance_bak,
-			dec->vf_get_count,
-			pic->poc,
-			vf->type,
-			vf->width, vf->height,
-			vf->bitdepth,
-			vf->compHeadAddr,
-			vf->pts,
-			vf->pts_us64,
-			pic->decoded_lcu);
-		if (dec->front_back_mode == 1)
-			decoder_do_frame_check(hw_to_vdec(dec), vf);
+			if (pic)
+				avs3_print(dec, AVS3_DBG_BUFMGR,
+				"%s vf %p pic %p index 0x%x getcount %d poc %d type 0x%x w/h/depth %d/%d/0x%x, compHeadAddr 0x%08x, pts %d, %lld, decoded_lcu %d\n",
+				__func__, vf, pic, index,
+				//pic->imgtr_fwRefDistance_bak,
+				dec->vf_get_count,
+				pic->poc,
+				vf->type,
+				vf->width, vf->height,
+				vf->bitdepth,
+				vf->compHeadAddr,
+				vf->pts,
+				vf->pts_us64,
+				pic->decoded_lcu);
+			if (dec->front_back_mode == 1)
+				decoder_do_frame_check(hw_to_vdec(dec), vf);
 #ifdef NEW_FB_CODE
-		if ((pic != NULL) &&(dec->front_back_mode == 1)) {
-			fill_frame_info(dec, pic, 0, vf->pts);
-			vdec_fill_vdec_frame(vdec, &pic->vqos, dec->gvs, vf, pic->hw_decode_time);
-		}
+			if ((pic != NULL) &&(dec->front_back_mode == 1)) {
+				fill_frame_info(dec, pic, 0, vf->pts);
+				vdec_fill_vdec_frame(vdec, &pic->vqos, dec->gvs, vf, pic->hw_decode_time);
+			}
 #endif
-		return vf;
+			return vf;
 		}
 	}
 	return NULL;
@@ -7769,6 +7771,15 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		ret = avs3_bufmgr_process(avs3_dec, start_code);
 		if (debug & AVS3_DBG_PRINT_PIC_LIST)
 			print_pic_pool(avs3_dec, "after bufmgr process");
+
+		if (start_code == I_PICTURE_START_CODE) {
+			if (((error_handle_policy & 0x4) == 0) &&
+				!(IS_8K_SIZE(dec->avs3_dec.img.width, dec->avs3_dec.img.height)) &&
+				((dec->mmu_copy_disable == false)))
+				vdec_set_mmu_copy_flag(true);
+			else
+				vdec_set_mmu_copy_flag(false);
+		}
 
 		if (dec->pic_list_init_flag == 0) {
 			init_pic_list(dec);
@@ -10680,6 +10691,22 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 			&config_val) == 0)
 			dec->v4l_duration = config_val;
 
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag",
+			&config_val) == 0) {
+			if (config_val & VDEC_CFG_FLAG_DIS_ERR_POLICY) {
+				error_handle_policy = error_handle_policy & (~(1 << 2));
+				avs3_print(dec, 0, "Error Frame Display\n");
+			} else {
+				error_handle_policy = error_handle_policy | (1 << 2);
+			}
+
+			if (config_val & VDEC_CFG_FLAG_MMU_COPY_DISABLE) {
+				dec->mmu_copy_disable = 1;
+				avs3_print(dec, 0, "mmu_copy disable\n");
+			}
+		}
+
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
 				&& vf_dp.present_flag == 1) {
@@ -10786,6 +10813,16 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 				dec->buf_start,
 				dec->buf_size);
 	}
+
+	if (error_handle_policy & 0x80000000)
+		error_handle_policy = error_handle_policy & 0x7fffffff;
+
+	if ((lcu_percentage_threshold % 101) > 20) {
+		error_handle_policy &= ~(1 << 2);
+	}
+
+	avs3_print(dec, 0, "dec->double_write_mode 0x%x, error_handle_policy 0x%x\n",
+		dec->double_write_mode, error_handle_policy);
 
 	if (pdata->sys_info) {
 		dec->vavs3_amstream_dec_info = *pdata->sys_info;

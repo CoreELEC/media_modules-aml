@@ -2273,6 +2273,7 @@ struct hevc_state_s {
 	struct mh265_csd_main_info_t old_csd_info;
 	u32 old_csd_info_check_count;
 	bool buf_allocated;
+	bool mmu_copy_disable;
 } /*hevc_stru_t */;
 
 static void init_buff_spec(struct hevc_state_s *hevc,
@@ -2529,7 +2530,6 @@ static int front_decpic_done_update(struct hevc_state_s *hevc, uint8_t reset_fla
 		}
 	}
 
-	mutex_lock(&hevc->fb_mutex);
 	if (cur_pic->slice_type != 2) {	/* P and B pic */
 		for (i = 0; i < cur_pic->RefNum_L0; i++) {
 			pic = get_ref_pic_by_POC(hevc,
@@ -2568,13 +2568,13 @@ static int front_decpic_done_update(struct hevc_state_s *hevc, uint8_t reset_fla
 			}
 		}
 	}
-	mutex_unlock(&hevc->fb_mutex);
 
 	pic_backend_ref_operation(hevc, 1);
 
 	if ((hevc->PB_skip_mode == 0)
 		&& (error_handle_mode == 2)
-		&& is_mmu_copy_enable()) {
+		&& is_mmu_copy_enable()
+		&& (hevc->mmu_copy_disable == false)) {
 
 		if (cur_pic->lcu_cnt < ((hevc->lcu_x_num * hevc->lcu_y_num) - 1)) {
 			int index = -1;
@@ -8245,6 +8245,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			hevc->pic_h = rpm_param->p.pic_height_in_luma_samples;
 			hevc->frame_width = hevc->pic_w;
 			hevc->frame_height = hevc->pic_h;
+
 #ifdef LOSLESS_COMPRESS_MODE
 			if ((get_double_write_mode(hevc) & 0x10) == 0) {
 #ifdef NEW_FB_CODE
@@ -13955,6 +13956,17 @@ force_output:
 #endif
 		} else if (ret == 0) {
 			if ((hevc->new_pic) && (hevc->cur_pic)) {
+
+				if (hevc->param.p.slice_type == I_SLICE) {
+					if ((hevc->PB_skip_mode == 0)
+						&& !(IS_8K_SIZE(hevc->param.p.pic_width_in_luma_samples,
+							hevc->param.p.pic_height_in_luma_samples))
+						&& (hevc->mmu_copy_disable == false))
+						vdec_set_mmu_copy_flag(true);
+					else
+						vdec_set_mmu_copy_flag(false);
+				}
+
 				if (hevc->chunk != NULL) {
 					hevc->curr_pic_offset += hevc->chunk->size;
 				} else {
@@ -18192,8 +18204,15 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->metadata_config_flag = config_val;
 			hevc->discard_dv_data = config_val & VDEC_CFG_FLAG_DV_NEGATIVE;
 			hevc->dv_duallayer = config_val & VDEC_CFG_FLAG_DV_TWOLAYER;
+			if (config_val & VDEC_CFG_FLAG_MMU_COPY_DISABLE) {
+				hevc->mmu_copy_disable = 1;
+				hevc_print(hevc, 0, "mmu_copy disable\n");
+			}
 			if (config_val & VDEC_CFG_FLAG_DIS_ERR_POLICY) {
-				hevc->nal_skip_policy = c2_nal_skip_policy;
+				hevc->nal_skip_policy = nal_skip_policy & (~(1 << 1));
+				hevc_print(hevc, 0, "Error Frame Display\n");
+			} else {
+				hevc->nal_skip_policy = nal_skip_policy | (1 << 1);
 			}
 			hevc->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
 			if (hevc->discard_dv_data)
@@ -18224,6 +18243,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	if (nal_skip_policy & 0x80000000)
 		hevc->nal_skip_policy = nal_skip_policy & 0x7fffffff;
 
+	if (lcu_percentage_threshold % 101 > 20)
+		hevc->nal_skip_policy &= ~(1 << 1);
+
+	hevc_print(hevc, 0,
+		"hevc->nal_skip_policy: 0x%x\n", hevc->nal_skip_policy);
+
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3X) {
 		if ((hevc->triple_write_mode) || (triple_write_mode) ||
 			(hevc->double_write_mode & 0x10000) || (double_write_mode & 0x10000)) {
@@ -18234,16 +18259,6 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			pr_err("%s warn: unsupport triple write or p010 mode, force disabled\n", __func__);
 		}
 	}
-
-#ifdef NEW_FB_CODE
-	if (hevc->front_back_mode == 1) {
-		if (lcu_percentage_threshold > 20)
-			hevc->nal_skip_policy &= ~3;
-	}
-#endif
-
-	hevc_print(hevc, 0,
-		"hevc->nal_skip_policy: 0x%x\n", hevc->nal_skip_policy);
 
 	if (force_config_fence) {
 		hevc->enable_fence = true;

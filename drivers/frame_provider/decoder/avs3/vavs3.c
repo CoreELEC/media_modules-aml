@@ -977,6 +977,7 @@ struct AVS3Decoder_s {
 	u32 last_monitor_data;
 	struct MVBUF_s m_mv_BUF[FRAME_BUFFERS];
 	u32 mv_buf_size;
+	bool mmu_copy_disable;
 };
 
 static int  compute_losless_comp_body_size(
@@ -1081,7 +1082,7 @@ bit 0: search seq again if buffer mgr error occur
 	re_search_seq_threshold)
 bit 1:  1: display from I picture; 0: display from any correct pic;
 bit 2:  1: not output error frame; 0: output error frame;
-
+bit31:  1:the value of bits 0 to 31 is used as the error_handle_policy.
 */
 
 static u32 error_handle_policy = 5;
@@ -2570,7 +2571,8 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 
 	if ((!(error_handle_policy & 0x4))
 		&& (error_handle_mode == 1)
-		&& is_mmu_copy_enable()) {
+		&& is_mmu_copy_enable()
+		&& (dec->mmu_copy_disable == false)) {
 		if (cur_pic->decoded_lcu != dec->avs3_dec.lcu_total) {
 			struct avs3_frame_s *pic = NULL;
 			int index = find_near_pic_index(dec);
@@ -7875,6 +7877,14 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		if (debug & AVS3_DBG_PRINT_PIC_LIST)
 			print_pic_pool(avs3_dec, "after bufmgr process");
 
+		if (start_code == I_PICTURE_START_CODE) {
+			if (((error_handle_policy & 0x4) == 0) &&
+				!(IS_8K_SIZE(dec->avs3_dec.img.width, dec->avs3_dec.img.height)) &&
+				(dec->mmu_copy_disable == false))
+				vdec_set_mmu_copy_flag(true);
+			else
+				vdec_set_mmu_copy_flag(false);
+		}
 
 		if ((ret == 0) && (avs3_dec->cur_pic != NULL)) {
 			cur_pic = avs3_dec->cur_pic;
@@ -10913,6 +10923,22 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 				&config_val) == 0)
 			dec->sidebind_channel_id = config_val;
 
+		if (get_config_int(pdata->config,
+			"api_error_policy", &config_val) == 0) {
+			if (config_val == 0) {
+				error_handle_policy = error_handle_policy & (~(1 << 2));
+				avs3_print(dec, 0, "Error Frame Display\n");
+			} else if (config_val == 1) {
+				error_handle_policy = error_handle_policy | (1 << 2);
+			}
+		}
+
+		if (get_config_int(pdata->config,
+			"mmu_copy_disable", &config_val) == 0) {
+			dec->mmu_copy_disable = config_val;
+			avs3_print(dec, 0, "mmu_copy_disable: %d\n", config_val);
+		}
+
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
 				&& vf_dp.present_flag == 1) {
@@ -11020,6 +11046,16 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 				dec->buf_start,
 				dec->buf_size);
 	}
+
+	if (error_handle_policy & 0x80000000)
+		error_handle_policy = error_handle_policy & 0x7fffffff;
+
+	if ((lcu_percentage_threshold % 101) > 20) {
+		error_handle_policy &= ~(1 << 2);
+	}
+
+	avs3_print(dec, 0, "dec->double_write_mode 0x%x, error_handle_policy 0x%x\n",
+		dec->double_write_mode, error_handle_policy);
 
 	if (pdata->sys_info) {
 		dec->vavs3_amstream_dec_info = *pdata->sys_info;

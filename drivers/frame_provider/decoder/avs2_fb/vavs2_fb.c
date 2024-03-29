@@ -319,6 +319,7 @@ static u32 paral_alloc_buffer_mode = 1;
 /*
 bit0: if dpb abnormal, check dpb buffer status and flush dpb.
 bit1: 0:show error frame.
+bit31:1:the value of bits 0 to 31 is used as the error_pro_policy.
 */
 static unsigned int error_proc_policy = 0x3;
 
@@ -959,6 +960,7 @@ struct AVS2Decoder_s {
 	u32 back_timer_check_count;
 	u32 mv_buf_size;
 	u32 error_handle_mode;
+	bool mmu_copy_disable;
 };
 
 static int  compute_losless_comp_body_size(
@@ -2484,7 +2486,9 @@ static int front_decpic_done_update(struct AVS2Decoder_s *dec, uint8_t reset_fla
 
 	if (((get_error_policy(avs2_dec) & 0x2) == 0)
 		&& (error_handle_mode == 1)
-		&& is_mmu_copy_enable()) {
+		&& is_mmu_copy_enable()
+		&& (dec->mmu_copy_disable == false)) {
+
 		if (cur_pic->decoded_lcu < dec->avs2_dec.lcu_total) {
 			int index = -1;
 			struct avs2_frame_s *pic = NULL;
@@ -7494,6 +7498,15 @@ alloc_buffer_done:
 			&& dec->avs2_dec.hc.cur_pic->cuva_data_buf != NULL)
 			release_cuva_data(dec->avs2_dec.hc.cur_pic);
 
+		if (start_code == I_PICTURE_START_CODE) {
+			if (((get_error_policy(avs2_dec) & 0x2) == 0) &&
+				!(IS_8K_SIZE(dec->avs2_dec.img.width, dec->avs2_dec.img.height)) &&
+				(dec->mmu_copy_disable == false))
+				vdec_set_mmu_copy_flag(true);
+			else
+				vdec_set_mmu_copy_flag(false);
+		}
+
 		PRINT_LINE();
 #ifdef I_ONLY_SUPPORT
 		if ((start_code == PB_PICTURE_START_CODE) &&
@@ -10270,6 +10283,24 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 				avs2_print(dec, 0, "high bandwidth\n");
 		}
 
+		if (get_config_int(pdata->config,
+			"mmu_copy_disable", &config_val) == 0) {
+			dec->mmu_copy_disable = config_val;
+			avs2_print(dec, 0, "mmu_copy_disable: %d\n", config_val);
+		}
+
+		if (get_config_int(pdata->config,
+			"api_error_policy", &config_val) == 0) {
+			if (config_val == 0) {
+				dec->error_proc_policy = error_proc_policy & (~(1 << 1));
+				avs2_print(dec, 0, "Error Frame Display\n");
+			} else if (config_val == 1) {
+				dec->error_proc_policy = error_proc_policy | (1 << 1);
+			} else {
+				dec->error_proc_policy = error_proc_policy;
+			}
+		}
+
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
 				&& vf_dp.present_flag == 1) {
@@ -10374,6 +10405,16 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 				dec->buf_start,
 				dec->buf_size);
 	}
+
+	if (error_proc_policy & 0x80000000)
+		dec->error_proc_policy = error_proc_policy & 0x7fffffff;
+
+	if ((lcu_percentage_threshold % 101) > 20) {
+		dec->error_proc_policy &= ~(1 << 1);
+	}
+
+	avs2_print(dec, 0, "dec->double_write_mode 0x%x, dec->error_proc_policy 0x%x\n",
+		dec->double_write_mode, dec->error_proc_policy);
 
 	if (pdata->sys_info) {
 		dec->vavs2_amstream_dec_info = *pdata->sys_info;

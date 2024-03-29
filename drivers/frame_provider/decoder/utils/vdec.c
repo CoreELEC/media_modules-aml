@@ -211,7 +211,7 @@ int code_rate_avg_threshold_hi = 130;
 int rate_time_avg_threshold_hi = 16700;
 int rate_time_avg_threshold_lo = 16700;
 
-static int mmu_copy_enable;
+static int mmu_copy_enable = 1;
 
 st_userdata userdata;
 
@@ -274,6 +274,7 @@ struct vdec_core_s {
 	unsigned long run_flag;
 	int vf_duration;
 	struct vdec_s *last_run_vdec;
+	bool decoder_mmu_copy_flag;
 };
 
 static struct vdec_core_s *vdec_core;
@@ -1283,6 +1284,12 @@ int vdec_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
 	return -1;
 }
 EXPORT_SYMBOL(vdec_set_trickmode);
+
+void vdec_set_mmu_copy_flag(bool need_copy)
+{
+	vdec_core->decoder_mmu_copy_flag = need_copy;
+}
+EXPORT_SYMBOL(vdec_set_mmu_copy_flag);
 
 int vdec_set_isreset(struct vdec_s *vdec, int isreset)
 {
@@ -3794,6 +3801,7 @@ void vdec_release(struct vdec_s *vdec)
 	if (atomic_read(&vdec_core->vdec_nr) == 1) {
 		vdec_disable_DMC(vdec);
 		vdec_set_vf_dur(0);
+		vdec_set_mmu_copy_flag(false);
 	}
 
 	platform_device_unregister(vdec->dev);
@@ -7554,7 +7562,9 @@ EXPORT_SYMBOL(vdec_reset_vld_stbuf);
 
 int is_mmu_copy_enable(void)
 {
-	if (mmu_copy_enable && ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)
+	if (mmu_copy_enable && (atomic_read(&vdec_core->vdec_nr) == 1)
+		&& vdec_core->decoder_mmu_copy_flag
+		&& ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)
 		|| (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)))
 		return 1;
 	else
