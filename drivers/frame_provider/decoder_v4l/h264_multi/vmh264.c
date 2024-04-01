@@ -431,7 +431,7 @@ static inline bool close_to(int a, int b, int m)
 #define DEF_BUF_START_ADDR			0x00000000
 #define mem_sps_base				0x01c3c00
 #define mem_pps_base				0x01cbc00
-u32 V_BUF_ADDR_OFFSET = 0x200000;
+u32 V_BUF_ADDR_OFFSET = 0x200000 + 0x8000/* 32*0x400 */ + 0x20000/* 256*0x200 */ + 0x80;
 #define DCAC_READ_MARGIN	(64 * 1024)
 
 #define EXTEND_SAR                      0xff
@@ -629,6 +629,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 	NAL_SEARCH_CTL: bit 0, enable itu_t35
 	NAL_SEARCH_CTL: bit 1, enable mmu
 	NAL_SEARCH_CTL: bit 2, detect frame_mbs_only_flag whether switch resolution
+	NAL_SEARCH_CTL: bit 3, recover the correct sps pps
 	NAL_SEARCH_CTL: bit 7-14,level_idc
 	NAL_SEARCH_CTL: bit 15,bitstream_restriction_flag
 	*/
@@ -1002,6 +1003,9 @@ struct vdec_h264_hw_s {
 	struct mh264_csd_main_info_t old_csd_info;
 	u32 old_csd_info_check_count;
 	unsigned long mask;
+	u32 csd_error_flag;
+	bool csd_restore_flag;
+	u32 csd_restore_timeout_num;
 };
 
 #define TIMEOUT_INIT 0
@@ -7046,6 +7050,13 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 	}
 
 			check_decoded_pic_error(hw);
+
+			if (p_H264_Dpb->dec_dpb_status == H264_PIC_DATA_DONE
+				&& !(p_H264_Dpb->mVideo.dec_picture->data_flag & ERROR_FLAG)) {
+				hw->csd_restore_flag = false;
+				hw->csd_restore_timeout_num = 0;
+			}
+
 #ifdef ERROR_HANDLE_TEST
 			if ((hw->data_flag & ERROR_FLAG)
 				&& (hw->error_proc_policy & 0x80)) {
@@ -7375,6 +7386,14 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
 		int multi_header_error_frame_flag = 0;
 		hw->frmbase_cont_flag = 0;
+
+		if (hw->csd_restore_flag == true) {
+			if (hw->csd_restore_timeout_num >= 5) {
+				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
+		}
 
 		if ((pic != NULL) && (pic->mb_aff_frame_flag == 1))
 			first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3] * 2;
@@ -8014,6 +8033,10 @@ pic_done_proc:
 			(dec_dpb_status == H264_SEARCH_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_TIMEOUT)) {
+
+			if ((hw->csd_restore_flag == true) && (dec_dpb_status == H264_DECODE_TIMEOUT))
+				hw->csd_restore_timeout_num++;
+
 empty_proc:
 		if ((hw->error_proc_policy & 0x40000) &&
 			((dec_dpb_status == H264_DECODE_TIMEOUT) ||
@@ -8354,6 +8377,9 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 		if (hw->ip_field_error_count > 0)
 			hw->ip_field_error_count = 0;
 	}
+
+	if (hw->csd_restore_flag == true)
+		hw->csd_restore_timeout_num++;
 
 	vdec_schedule_work(&hw->timeout_work);
 }
@@ -8813,7 +8839,7 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 
 	WRITE_VREG(MDEC_PIC_DC_THRESH, 0x404038aa);
 
-	WRITE_VREG(DEBUG_REG1, 0);
+	WRITE_VREG(DEBUG_REG1, 0x1);//reuse in ucode_compatibility,//bit0:csd check
 	WRITE_VREG(DEBUG_REG2, 0);
 
 	/*Because CSD data is not found at playback start,
@@ -8825,7 +8851,8 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 	if (hw->reg_iqidct_control)
 		WRITE_VREG(IQIDCT_CONTROL, hw->reg_iqidct_control);
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
-		"IQIDCT_CONTROL = 0x%x\n", READ_VREG(IQIDCT_CONTROL));
+		"IQIDCT_CONTROL = 0x%x, DEBUG_REG1 0x%x\n",
+		READ_VREG(IQIDCT_CONTROL), READ_VREG(DEBUG_REG1));
 
 	if (hw->reg_vcop_ctrl_reg)
 		WRITE_VREG(VCOP_CTRL_REG, hw->reg_vcop_ctrl_reg);
@@ -10530,7 +10557,10 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				if (ret_is_csd_valid == RES_RET_OVERSIZE)
 					hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 				hw->dec_result = DEC_RESULT_ERROR_DATA;
-				vdec_v4l_post_error_frame_event(ctx);
+
+				hw->csd_error_flag = 1;
+				hw->csd_restore_flag = true;
+				hw->reset_bufmgr_flag = 1;
 				vdec_schedule_work(&hw->work);
 				return;
 			}
@@ -10589,10 +10619,21 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 							if (vh264_set_params(hw, param1,
 								param2, param3, param4, false, false) < 0) {
 								hw->init_flag = 0;
-								dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
-									hw->init_flag);
+
+								hw->csd_error_flag = 1;
+								hw->csd_restore_flag = true;
+								hw->reset_bufmgr_flag = 1;
+								dpb_print(DECODE_ID(hw), 0, "set parameters error0, init_flag: %u, csd_error_flag %d\n",
+										hw->init_flag, hw->csd_error_flag);;
+								hw->dec_result = DEC_RESULT_ERROR_DATA;
+								vdec_schedule_work(&hw->work);
+								return;
 							}
+							hw->csd_error_flag = 0;
+							hw->csd_restore_flag = false;
+							hw->csd_restore_timeout_num = 0;
 						}
+
 						hw->seq_info2_last = param1;
 					} else
 						hw->seq_info2_last = hw->dpb.param1_for_res_change;
@@ -10607,9 +10648,21 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 					if (vh264_set_params(hw, param1,
 						param2, param3, param4, false, false) < 0) {
 						hw->init_flag = 0;
-						dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
-							hw->init_flag);
+
+						hw->csd_error_flag = 1;
+						hw->csd_restore_flag = true;
+						hw->reset_bufmgr_flag = 1;
+						dpb_print(DECODE_ID(hw), 0, "set parameters error1, init_flag: %u, csd_error_flag %d\n",
+									hw->init_flag, hw->csd_error_flag);
+						hw->dec_result = DEC_RESULT_ERROR_DATA;
+						vdec_schedule_work(&hw->work);
+						return;
 					}
+
+					hw->csd_error_flag = 0;
+					hw->csd_restore_flag = false;
+					hw->csd_restore_timeout_num = 0;
+
 					WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
 						(hw->dpb.mDPB.size<<16) |
 						(hw->dpb.mDPB.size<<8));
@@ -10620,10 +10673,22 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		} else {
 			if (vh264_set_params(hw, param1,
 				param2, param3, param4, false, false) < 0) {
-					hw->init_flag = 0;
-					dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
-						hw->init_flag);
-				}
+				hw->init_flag = 0;
+
+				hw->csd_error_flag = 1;
+				hw->csd_restore_flag = true;
+				hw->reset_bufmgr_flag = 1;
+				dpb_print(DECODE_ID(hw), 0, "set parameters error2, init_flag: %u, csd_error_flag %d\n",
+							hw->init_flag, hw->csd_error_flag);
+
+				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_schedule_work(&hw->work);
+				return;
+			}
+
+			hw->csd_error_flag = 0;
+			hw->csd_restore_flag = false;
+			hw->csd_restore_timeout_num = 0;
 
 			WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
 				(hw->dpb.mDPB.size<<16) |
@@ -10904,6 +10969,12 @@ result_done:
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(VLD_MEM_VIFIFO_WP),
 			READ_VREG(VLD_MEM_VIFIFO_RP));
+
+		if (input_frame_based(vdec))
+			vdec_v4l_post_error_frame_event(ctx);
+		else
+			vh264_report_pts(hw);
+
 		amvdec_stop();
 		if (hw->mmu_enable)
 			amhevc_stop();
@@ -11511,7 +11582,11 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			WRITE_VREG(NAL_SEARCH_CTL,
 					READ_VREG(NAL_SEARCH_CTL) & (~0x2));
 	}
-	WRITE_VREG(NAL_SEARCH_CTL, READ_VREG(NAL_SEARCH_CTL) | (1 << 2) | (hw->bitstream_restriction_flag << 15) | (hw->seq_info3&0xff)<<7);
+
+	WRITE_VREG(NAL_SEARCH_CTL, READ_VREG(NAL_SEARCH_CTL) | (1 << 2) |
+				(hw->bitstream_restriction_flag << 15) | ((hw->seq_info3 & 0xff) << 7) |
+				((hw->csd_error_flag & 0x1) << 3));
+	hw->csd_error_flag = 0;
 
 	if ((hw->mmu_enable) && (is_support_dual_core())) {
 		WRITE_VREG(HEVC_ASSIST_FB_CTL,
@@ -11858,6 +11933,8 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	hw->mmu_enable = 0;
 	hw->first_head_check_flag = 0;
 	hw->dw_para_set_flag = false;
+	hw->csd_restore_flag = false;
+	hw->csd_restore_timeout_num = 0;
 
 	if (pdata->sys_info)
 		hw->vh264_amstream_dec_info = *pdata->sys_info;
