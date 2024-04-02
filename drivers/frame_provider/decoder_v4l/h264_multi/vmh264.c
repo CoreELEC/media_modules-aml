@@ -6651,7 +6651,7 @@ static int get_bits(unsigned char buffer[],
 
 static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 							u8 *sei_data_buf,
-							u8 *sei_data_buf_end)
+							u8 *sei_data_buf_end, bool parse_cc)
 {
 	int payload_type;
 	int payload_size;
@@ -6725,7 +6725,7 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 		}
 		break;
 	case SEI_USER_DATA:
-		if (enable_itu_t35) {
+		if (enable_itu_t35 && parse_cc) {
 			int i;
 			int j;
 			int data_len;
@@ -6795,6 +6795,7 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 						0, "\n");
 				}
 			}
+			hw->sei_need_parse = false;
 		}
 		break;
 	case SEI_RECOVERY_POINT:
@@ -6807,7 +6808,7 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 
 static void parse_sei_data(struct vdec_h264_hw_s *hw,
 							u8 *sei_data_buf,
-							int len)
+							int len, bool parse_cc)
 {
 	char *p_sei;
 	char *p_sei_end;
@@ -6818,7 +6819,7 @@ static void parse_sei_data(struct vdec_h264_hw_s *hw,
 	p_sei_end = p_sei + len;
 	parsed_size = 0;
 	while (parsed_size < len) {
-		read_size = parse_one_sei_record(hw, p_sei, p_sei_end);
+		read_size = parse_one_sei_record(hw, p_sei, p_sei_end, parse_cc);
 		p_sei += read_size;
 		parsed_size += read_size;
 		if (*p_sei == 0x80) {
@@ -6826,7 +6827,6 @@ static void parse_sei_data(struct vdec_h264_hw_s *hw,
 			parsed_size++;
 		}
 	}
-	hw->sei_need_parse = false;
 }
 
 static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
@@ -7518,7 +7518,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 
 		if (hw->sei_need_parse == true)
-			parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len);
+			parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len, true);
 
 		if (hw->config_bufmgr_done == 0) {
 			hw->dec_result = DEC_RESULT_DONE;
@@ -8126,7 +8126,7 @@ send_again:
 
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
 				"%s: sei data size: %d, aux_data_len: %d\n",
-				__func__, hw->sei_itu_data_len, aux_data_len);
+				__func__, hw->sei_data_len, aux_data_len);
 
 			if (trans_data_buf[7] == AUX_TAG_SEI) {
 				int left_len;
@@ -8139,7 +8139,7 @@ send_again:
 				else
 					first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3];
 
-				if (first_mb_in_slice == 0) {
+				if ((first_mb_in_slice == 0) && (hw->sei_need_parse == false)) {
 					hw->sei_data_len = 0;
 					hw->sei_itu_data_len = 0;
 				}
@@ -8165,20 +8165,23 @@ send_again:
 						sei_data_buf[i+2] = swap_byte;
 					}
 
-					if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
-						for (i = 0; i < aux_data_len; i++) {
-							dpb_print_cont(DECODE_ID(hw), 0, "%02x ", sei_data_buf[i]);
-							if (((i + 1) & 0xf) == 0)
-								dpb_print_cont(DECODE_ID(hw), 0, "\n");
-						}
-						dpb_print_cont(DECODE_ID(hw), 0, "\n");
-					}
-
 					for (i = aux_data_len-1; i >= 0; i--)
 						if (sei_data_buf[i] != 0)
 							break;
 
 					hw->sei_data_len += i+1;
+
+					if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
+						u8 *tmp = hw->sei_data_buf;
+						dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
+							"%s: sei_data_len: %d, \n",	__func__, hw->sei_data_len);
+						for (i = 0; i < hw->sei_data_len; i++) {
+							dpb_print_cont(DECODE_ID(hw), 0, "%02x ", tmp[i]);
+							if (((i + 1) & 0xf) == 0)
+								dpb_print_cont(DECODE_ID(hw), 0, "\n");
+						}
+						dpb_print_cont(DECODE_ID(hw), 0, "\n");
+					}
 					hw->sei_need_parse = true;
 				} else
 					dpb_print(DECODE_ID(hw),
@@ -10514,8 +10517,9 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 
 		if (trans_data_buf[7] == AUX_TAG_SEI) {
 			int pic_struct;
+
 			if (hw->sei_need_parse == true)
-				parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len);
+				parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len, false);
 			pic_struct = p_H264_Dpb->dpb_param.l.data[PICTURE_STRUCT];
 			hw->is_interlace = ((pic_struct == PIC_TOP) || (pic_struct == PIC_BOT) ||
 				(pic_struct == PIC_TOP_BOT) || (pic_struct == PIC_BOT_TOP) ||
