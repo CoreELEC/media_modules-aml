@@ -953,6 +953,13 @@ static void check_timer_func(struct timer_list *timer)
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 }
 
+static int get_dynamic_buf_num_margin(struct vdec_mjpeg_hw_s *hw)
+{
+	return((dynamic_buf_num_margin & 0x80000000) == 0) ?
+		hw->dynamic_buf_num_margin :
+		(dynamic_buf_num_margin & 0x7fffffff);
+}
+
 static int vmjpeg_get_buf_num(struct vdec_mjpeg_hw_s *hw)
 {
 	int buf_num = DECODE_BUFFER_NUM_DEF;
@@ -1475,7 +1482,7 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 
 	if (((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0) && pdata->config_len) {
 		mmjpeg_debug_print(DECODE_ID(hw), 0, "pdata->config: %s\n", pdata->config);
-		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
+		if (get_config_int(pdata->config, "parm_buffer_margin",
 			&config_val) == 0)
 			hw->dynamic_buf_num_margin = config_val;
 		else
@@ -1507,6 +1514,7 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 	}
 
+	hw->dynamic_buf_num_margin = get_dynamic_buf_num_margin(hw);
 	hw->buf_num = vmjpeg_get_buf_num(hw);
 
 	memcpy(&vf_tmp_ops, &vf_provider_ops, sizeof(struct vframe_operations_s));

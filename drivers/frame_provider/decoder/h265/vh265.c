@@ -14890,7 +14890,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->is_used_v4l = config_val;
 
 		if (get_config_int(pdata->config,
-			"parm_v4l_buffer_margin",
+			"parm_buffer_margin",
 			&config_val) == 0)
 			hevc->dynamic_buf_num_margin = config_val;
 
@@ -14996,10 +14996,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->enable_fence, hevc->fence_usage);
 	}
 
-	if (hevc->save_buffer_mode && dynamic_buf_num_margin > 2)
-		hevc->dynamic_buf_num_margin = dynamic_buf_num_margin -2;
-	else
-		hevc->dynamic_buf_num_margin = dynamic_buf_num_margin;
+	if (hevc->dynamic_buf_num_margin == 0) {
+		if (hevc->save_buffer_mode && dynamic_buf_num_margin > 2)
+			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin -2;
+		else
+			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin;
+	}
 
 	hevc->mem_map_mode = mem_map_mode;
 

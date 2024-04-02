@@ -403,6 +403,12 @@ static unsigned char aspect_ratio_table[16] = {
 };
 
 static void reset_process_time(struct vdec_mpeg4_hw_s *hw);
+static u32 get_dynamic_buf_num_margin(struct vdec_mpeg4_hw_s *hw)
+{
+	return((dynamic_buf_num_margin & 0x80000000) == 0) ?
+		hw->dynamic_buf_num_margin :
+		(dynamic_buf_num_margin & 0x7fffffff);
+}
 
 static int vmpeg4_get_buf_num(struct vdec_mpeg4_hw_s *hw)
 {
@@ -3054,7 +3060,7 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 	if (((debug_enable & IGNORE_PARAM_FROM_CONFIG) == 0) && pdata->config_len) {
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 			 "pdata->config: %s\n", pdata->config);
-		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
+		if (get_config_int(pdata->config, "parm_buffer_margin",
 			&config_val) == 0)
 			hw->dynamic_buf_num_margin = config_val;
 		else
@@ -3091,6 +3097,7 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 			&vf_tmp_ops, pdata);
 	}
 
+	hw->dynamic_buf_num_margin = get_dynamic_buf_num_margin(hw);
 	hw->buf_num = vmpeg4_get_buf_num(hw);
 
 	if (vmmpeg4_init(hw) < 0) {

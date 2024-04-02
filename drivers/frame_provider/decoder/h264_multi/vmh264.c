@@ -6077,6 +6077,13 @@ static void vh264_config_canvs_for_mmu(struct vdec_h264_hw_s *hw)
 	}
 }
 
+static u32 get_dynamic_buf_num_margin(struct vdec_h264_hw_s *hw)
+{
+	return((reorder_dpb_size_margin & 0x80000000) == 0) ?
+		hw->reorder_dpb_size_margin :
+		(reorder_dpb_size_margin & 0x7fffffff);
+}
+
 static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	u32 param1, u32 param2, u32 param3, u32 param4, bool buffer_reset_flag, bool reset_flags)
 {
@@ -11948,6 +11955,8 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	hw->reorder_dpb_size_margin = reorder_dpb_size_margin;
+
 	if (pdata->config_len) {
 		dpb_print(DECODE_ID(hw), 0, "pdata->config=%s\n", pdata->config);
 		/*use ptr config for double_write_mode, etc*/
@@ -11963,7 +11972,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			hw->is_used_v4l = config_val;
 
 		if (get_config_int(pdata->config,
-			"parm_v4l_buffer_margin",
+			"parm_buffer_margin",
 			&config_val) == 0)
 			hw->reorder_dpb_size_margin = config_val;
 
@@ -12045,7 +12054,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	}
 
 	if (!hw->is_used_v4l) {
-		hw->reorder_dpb_size_margin = reorder_dpb_size_margin;
+		hw->reorder_dpb_size_margin = get_dynamic_buf_num_margin(hw);
 		hw->canvas_mode = mem_map_mode;
 
 		if ((h264_debug_flag & IGNORE_PARAM_FROM_CONFIG) == 0)

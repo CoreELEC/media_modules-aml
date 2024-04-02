@@ -6367,6 +6367,13 @@ static void av1_local_uninit(struct AV1HW_s *hw)
 	hw->gvs = NULL;
 }
 
+static u32 get_dynamic_buf_num_margin(struct AV1HW_s *hw)
+{
+	return((dynamic_buf_num_margin & 0x80000000) == 0) ?
+		hw->dynamic_buf_num_margin :
+		(dynamic_buf_num_margin & 0x7fffffff);
+}
+
 static int av1_local_init(struct AV1HW_s *hw)
 {
 	int ret = -1;
@@ -6437,12 +6444,12 @@ static int av1_local_init(struct AV1HW_s *hw)
 
 	hw->mv_buf_margin = mv_buf_margin;
 	if (IS_4K_SIZE(hw->init_pic_w, hw->init_pic_h)) {
-		hw->used_buf_num = MAX_BUF_NUM_LESS + dynamic_buf_num_margin;
+		hw->used_buf_num = MAX_BUF_NUM_LESS + hw->dynamic_buf_num_margin;
 		if (hw->used_buf_num > REF_FRAMES_4K)
 			hw->mv_buf_margin = hw->used_buf_num - REF_FRAMES_4K + 1;
 	}
 	else
-		hw->used_buf_num = max_buf_num + dynamic_buf_num_margin;
+		hw->used_buf_num = max_buf_num + hw->dynamic_buf_num_margin;
 
 	if (hw->is_used_v4l)
 		hw->used_buf_num = 9 + hw->dynamic_buf_num_margin;
@@ -13218,6 +13225,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	hw->platform_dev = pdev;
 	hw->video_signal_type = 0;
 	hw->m_ins_flag = 1;
+	hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 
 	if (pdata->sys_info) {
 		hw->vav1_amstream_dec_info = *pdata->sys_info;
@@ -13301,7 +13309,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			hw->is_used_v4l = config_val;
 
 		if (get_config_int(pdata->config,
-			"parm_v4l_buffer_margin",
+			"parm_buffer_margin",
 			&config_val) == 0)
 			hw->dynamic_buf_num_margin = config_val;
 
@@ -13415,6 +13423,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
 			&vf_tmp_ops, hw);
 	}
+
+	hw->dynamic_buf_num_margin = get_dynamic_buf_num_margin(hw);
 
 	hw->mem_map_mode = mem_map_mode;
 	/* endian can be config from module param */

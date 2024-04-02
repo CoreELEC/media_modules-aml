@@ -5095,6 +5095,13 @@ static void avs3_local_uninit(struct AVS3Decoder_s *dec)
 	dec->gvs = NULL;
 }
 
+static u32 get_dynamic_buf_num_margin(struct AVS3Decoder_s *dec)
+{
+	return((dynamic_buf_num_margin & 0x80000000) == 0) ?
+		dec->dynamic_buf_margin :
+		(dynamic_buf_num_margin & 0x7fffffff);
+}
+
 static int avs3_local_init(struct AVS3Decoder_s *dec)
 {
 	int ret = -1;
@@ -10889,6 +10896,7 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 	dec->platform_dev = pdev;
 	dec->video_signal_type = 0;
 	dec->video_ori_signal_type = 0;
+	dec->dynamic_buf_margin = dynamic_buf_num_margin;
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX)
 		dec->stat |= VP9_TRIGGER_FRAME_ENABLE;
 
@@ -10909,11 +10917,9 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 			dec->triple_write_mode = triple_write_mode;
 #endif
 
-		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
+		if (get_config_int(pdata->config, "parm_buffer_margin",
 			&config_val) == 0)
 			dec->dynamic_buf_margin = config_val;
-		else
-			dec->dynamic_buf_margin = 0;
 
 		if (get_config_int(pdata->config, "sidebind_type",
 				&config_val) == 0)
@@ -10982,13 +10988,14 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 		dec->vavs3_amstream_dec_info.height = 0;
 		dec->vavs3_amstream_dec_info.rate = 30;*/
 		dec->double_write_mode = double_write_mode;
-		dec->dynamic_buf_margin = dynamic_buf_num_margin;
 	}
 	video_signal_type = dec->video_signal_type;
 
 	if (double_write_mode) {
 		dec->double_write_mode = get_double_write_mode(dec);
 	}
+
+	dec->dynamic_buf_margin = get_dynamic_buf_num_margin(dec);
 
 	if ((dec->double_write_mode & 0x10) == 0)
 		dec->mmu_enable = 1;

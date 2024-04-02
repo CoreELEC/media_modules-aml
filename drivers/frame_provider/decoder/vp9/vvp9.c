@@ -7432,6 +7432,13 @@ static bool is_support_4k_vp9(void)
 	return false;
 }
 
+static u32 get_dynamic_buf_num_margin(struct VP9Decoder_s *pbi)
+{
+	return((dynamic_buf_num_margin & 0x80000000) == 0) ?
+		pbi->dynamic_buf_num_margin :
+		(dynamic_buf_num_margin & 0x7fffffff);
+}
+
 static int vp9_local_init(struct VP9Decoder_s *pbi)
 {
 	int ret = -1;
@@ -12183,6 +12190,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->platform_dev = pdev;
 	pbi->video_signal_type = 0;
 	pbi->m_ins_flag = 1;
+	pbi->dynamic_buf_num_margin = dynamic_buf_num_margin;
 	if (is_support_4k_vp9()) {
 		pbi->max_pic_w = 4096;
 		pbi->max_pic_h = 2304;
@@ -12260,7 +12268,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			pbi->is_used_v4l = config_val;
 
 		if (get_config_int(pdata->config,
-			"parm_v4l_buffer_margin",
+			"parm_buffer_margin",
 			&config_val) == 0)
 			pbi->dynamic_buf_num_margin = config_val;
 
@@ -12369,6 +12377,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
 			&vf_tmp_ops, pbi);
 	}
+
+	pbi->dynamic_buf_num_margin = get_dynamic_buf_num_margin(pbi);
 
 	if (no_head & 0x10) {
 		pbi->no_head = (no_head & 0xf);
