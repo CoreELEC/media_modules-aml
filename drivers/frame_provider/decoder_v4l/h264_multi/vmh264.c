@@ -525,6 +525,7 @@ struct buffer_spec_s {
 	dos_addr_t dw_u_v_adr;
 	int fs_idx;
 	int ctx_buf_idx;
+	struct userdata_param_t ud_param[2];
 };
 
 #define AUX_DATA_SIZE(pic) (hw->buffer_spec[pic->buf_spec_num].aux_data_size)
@@ -3302,6 +3303,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	int bForceInterlace = 0;
 	int vf_count = 1;
 	int i;
+	int ud_index;
+	struct buffer_spec_s *pic = &hw->buffer_spec[buffer_index];
 	u32 slice_type = 0;
 	u32 offset = 0;
 	int dw_mode = get_double_write_mode(hw);
@@ -3686,6 +3689,38 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
 			"[%s:%d] i_decoded_frame = %d p_decoded_frame = %d b_decoded_frame = %d\n",
 			__func__, __LINE__,vs.i_decoded_frames,vs.p_decoded_frames,vs.b_decoded_frames);
+		}
+
+		ud_index = i;
+		if (frame->frame != NULL &&
+			(frame->frame->pic_struct == PIC_TOP_BOT ||
+			frame->frame->pic_struct == PIC_BOT_TOP||
+			frame->frame->pic_struct == PIC_TOP_BOT_TOP ||
+			frame->frame->pic_struct == PIC_BOT_TOP_BOT ||
+			frame->frame->pic_struct == PIC_DOUBLE_FRAME ||
+			frame->frame->pic_struct ==  PIC_TRIPLE_FRAME))
+			ud_index = 0;
+
+		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
+		vf->vf_ud_param.ud_param = pic->ud_param[ud_index];
+
+		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_UD_DETAIL))
+		{
+			struct userdata_param_t ud_param = pic->ud_param[ud_index];
+			{
+				int j = 0;
+				u8 *pstart = (u8 *)ud_param.pbuf_addr;
+				PR_INIT(128);
+				dpb_print(DECODE_ID(hw), 0, "%s:userdata len %d. vdec %p video_id %d, ud_index %d\n",
+					__func__,ud_param.buf_len, vdec, ud_param.instance_id, ud_index);
+
+				for (j = 0; j < ud_param.buf_len; j++) {
+					PR_FILL("%02x ", pstart[j]);
+					if (((j + 1) & 0xf) == 0)
+						PR_INFO(DECODE_ID(hw));
+				}
+				PR_INFO(DECODE_ID(hw));
+			}
 		}
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -10203,11 +10238,59 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	int data_length;
 	struct mh264_userdata_record_t *p_userdata_rec;
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct StorablePicture *p = p_H264_Dpb->mVideo.dec_picture;
+	u32 index;
 
 #ifdef MH264_USERDATA_ENABLE
 	struct userdata_meta_info_t meta_info;
 	memset(&meta_info, 0, sizeof(meta_info));
 #endif
+
+	if ((get_cur_slice_picture_struct(p_H264_Dpb) == FRAME)
+			|| (get_cur_slice_picture_struct(p_H264_Dpb) == TOP_FIELD))
+		index = 0;
+	else
+		index = 1;
+
+	if (p != NULL && p->buf_spec_num >= 0) {
+		struct buffer_spec_s *pic = &hw->buffer_spec[p->buf_spec_num];
+		struct userdata_param_t *ud_param = &(pic->ud_param[index]);
+		char *user_data_buf;
+		u32 size = pic->aux_data_size + index * SEI_ITU_DATA_SIZE;
+		user_data_buf = pic->aux_data_buf + size;
+
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_UD_DETAIL,
+				"%s: size %d/%d, index %d, sei_itu_data_len %d\n",
+				__func__, pic->aux_data_size, size, index, hw->sei_itu_data_len);
+
+		if ((size < SEI_BUF_SIZE) && (user_data_buf != NULL)) {
+			memset(user_data_buf, 0, SEI_ITU_DATA_SIZE);
+			if (hw->sei_itu_data_len < SEI_ITU_DATA_SIZE &&
+				(hw->sei_itu_data_len > 0)) {
+				memcpy(user_data_buf, hw->sei_itu_data_buf,
+					hw->sei_itu_data_len);
+				ud_param->buf_len = hw->sei_itu_data_len;
+			} else {
+				ud_param->buf_len = 0;
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_UD_DETAIL,
+					"set sei data len(%d) to 0\n", hw->sei_itu_data_len);
+			}
+		} else {
+			pic->ud_param[index].buf_len = 0;
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_UD_DETAIL,
+					"set sei data len(%d) to 0, size(%d)\n", hw->sei_itu_data_len, size);
+		}
+		ud_param->pbuf_addr = user_data_buf;
+		ud_param->instance_id = vdec->afd_video_id;
+		ud_param->meta_info.duration = hw->frame_dur;
+		ud_param->meta_info.flags = (VFORMAT_H264 << 3);
+		ud_param->meta_info.poc_number =
+			p_H264_Dpb->mVideo.dec_picture->poc;
+		ud_param->meta_info.flags |=
+			p_H264_Dpb->mVideo.dec_picture->pic_struct << 12;
+		ud_param->meta_info.vpts = vpts;
+		ud_param->meta_info.vpts_valid = vpts_valid;
+	}
 
 	if (hw->sei_itu_data_len <= 0)
 		return;

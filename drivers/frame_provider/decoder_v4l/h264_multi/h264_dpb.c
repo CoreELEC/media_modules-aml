@@ -1293,6 +1293,7 @@ static void dpb_combine_field(struct h264_dpb_stru *p_H264_Dpb,
 	fs->frame->colocated_buf_index = fs->top_field->colocated_buf_index;
 	fs->frame->data_flag = fs->top_field->data_flag;
 	fs->frame->slice_type = fs->top_field->slice_type;
+	fs->frame->pic_struct = PIC_INVALID;
 	if (fs->bottom_field)
 		fs->frame->data_flag |= (fs->bottom_field->data_flag & 0xf0);
 

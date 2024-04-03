@@ -231,6 +231,10 @@ struct pic_info_t {
 	u64 timestamp;
 	u64 last_timestamp;
 	u32 poc;
+	char *user_data_buf;
+	struct userdata_param_t ud_param;
+	int user_data_size;
+	int ctx_buf_idx;
 };
 
 struct vdec_mpeg12_hw_s {
@@ -371,6 +375,10 @@ struct vdec_mpeg12_hw_s {
 	u32 chunk_offset;
 	u32 consume_byte;
 	int last_dur;
+	u8  parse_user_data_buf[CCBUF_SIZE];
+	u32 parse_user_data_size;
+	struct userdata_meta_info_t meta_info;
+	u32 vf_ucode_cc_last_wp;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -567,6 +575,9 @@ static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int
 		ctx->id, __func__, canvas, hw->canvas_mode,
 		decbuf_start, decbuf_uv_start,
 		canvas_width, canvas_height);
+
+	ctx->aux_infos.bind_sei_buffer(ctx, &hw->pics[i].user_data_buf,
+			&hw->pics[i].user_data_size, &hw->pics[i].ctx_buf_idx);
 
 	aml_buf_get_ref(&ctx->bm, aml_buf);
 
@@ -1498,7 +1509,9 @@ static void userdata_push_do_work(struct work_struct *work)
 {
 	u32 reg;
 	u8 *pdata;
+	u8 *p_user_data;
 	u8 *psrc_data;
+	u8 *vf_psrc_data;
 	u8 head_info[8];
 	struct userdata_meta_info_t meta_info;
 	u32 wp;
@@ -1508,6 +1521,7 @@ static void userdata_push_do_work(struct work_struct *work)
 	u32 picture_type;
 	u32 temp;
 	u32 data_length;
+	u32 vf_data_length;
 	u32 data_start;
 	int i;
 	u32 offset;
@@ -1553,6 +1567,8 @@ static void userdata_push_do_work(struct work_struct *work)
 
 	if (cur_wp < hw->ucode_cc_last_wp)
 		hw->ucode_cc_last_wp = 0;
+	if (cur_wp < hw->vf_ucode_cc_last_wp)
+		hw->vf_ucode_cc_last_wp = 0;
 
 	offset = READ_VREG(AV_SCRATCH_I);
 
@@ -1579,10 +1595,11 @@ static void userdata_push_do_work(struct work_struct *work)
 	picture_type = (temp >> 10) & 0x7;
 
 	if (debug_enable & PRINT_FLAG_USERDATA_DETAIL)
-		pr_info("index:%d, wp:%d, ref:%d, type:%d, struct:0x%x, u_last_wp:0x%x\n",
+		pr_info("index:%d, wp:%d, ref:%d, type:%d, struct:0x%x, u_last_wp:0x%x, vf_last_wp:0x%x\n",
 			index, wp, reference,
 			picture_type, picture_struct,
-			hw->ucode_cc_last_wp);
+			hw->ucode_cc_last_wp,
+			hw->vf_ucode_cc_last_wp);
 
 	switch (picture_type) {
 	case 1:
@@ -1633,6 +1650,27 @@ static void userdata_push_do_work(struct work_struct *work)
 	if (psrc_data)
 		v4l_vmpeg2_fill_userdata(hw, psrc_data, data_length, meta_info.flags);
 
+	vf_data_length = cur_wp - hw->vf_ucode_cc_last_wp;
+	if (vf_data_length == 0) {
+		hw->vf_ucode_cc_last_wp = hw->ucode_cc_last_wp;
+		vf_data_length = cur_wp - hw->vf_ucode_cc_last_wp;
+	}
+
+	vf_psrc_data = (u8 *)hw->ccbuf_phyAddress_virt + hw->vf_ucode_cc_last_wp;
+	if (debug_enable & PRINT_FLAG_USERDATA_DETAIL)
+	{
+		int i = 0;
+		u8 *pstart = (u8 *)vf_psrc_data;
+		PR_INIT(128);
+		debug_print(DECODE_ID(hw), 0,"%s:data_length %d.\n", __func__, vf_data_length);
+		for (i = 0; i < vf_data_length; i++) {
+			PR_FILL("%02x ", pstart[i]);
+			if (((i + 1) & 0xf) == 0)
+				PR_INFO(DECODE_ID(hw));
+		}
+		PR_INFO(DECODE_ID(hw));
+	}
+
 	pdata = hw->userdata_info.data_buf + hw->userdata_info.last_wp;
 	for (i = 0; i < data_length && hw->ccbuf_phyAddress_virt != NULL && psrc_data; i++) {
 		*pdata++ = *psrc_data++;
@@ -1640,9 +1678,20 @@ static void userdata_push_do_work(struct work_struct *work)
 			pdata = hw->userdata_info.data_buf;
 	}
 
+	p_user_data = hw->parse_user_data_buf + hw->parse_user_data_size;
+	for (i = 0; i < vf_data_length && hw->ccbuf_phyAddress_virt != NULL && vf_psrc_data; i++) {
+		if (hw->parse_user_data_size < CCBUF_SIZE) {
+			*p_user_data++ = *vf_psrc_data++;
+			hw->parse_user_data_size++;
+		} else {
+			debug_print(DECODE_ID(hw), 0,"%s: user data is over %d.\n", __func__, vf_data_length);
+		}
+	}
+
 	pcur_ud_rec = hw->ud_record + hw->cur_ud_idx;
 
 	pcur_ud_rec->meta_info = meta_info;
+	hw->meta_info = meta_info;
 	pcur_ud_rec->rec_start = hw->userdata_info.last_wp;
 	pcur_ud_rec->rec_len = data_length;
 
@@ -1653,6 +1702,7 @@ static void userdata_push_do_work(struct work_struct *work)
 	hw->wait_for_udr_send = 1;
 
 	hw->ucode_cc_last_wp = cur_wp;
+	hw->vf_ucode_cc_last_wp = cur_wp;
 
 	if (debug_enable & PRINT_FLAG_USERDATA_DETAIL)
 		pr_info("cur_wp:%d, rec_start:%d, rec_len:%d, poc %d\n",
@@ -1697,6 +1747,8 @@ void userdata_pushed_drop(struct vdec_mpeg12_hw_s *hw)
 	hw->ucode_cc_last_wp = hw->notify_ucode_cc_last_wp;
 	hw->cur_ud_idx = 0;
 	hw->wait_for_udr_send = 0;
+	hw->parse_user_data_size = 0;
+	memset(hw->parse_user_data_buf, 0, CCBUF_SIZE);
 }
 
 static void v4l_mpeg12_collect_stream_info(struct vdec_s *vdec,
@@ -1854,6 +1906,8 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	}
 
 	user_data_ready_notify(hw, pic->pts, pic->pts_valid);
+	pic->ud_param.meta_info.vpts = pic->pts;
+	pic->ud_param.meta_info.vpts_valid = pic->pts_valid;
 
 	if (hw->frame_prog & PICINFO_PROG) {
 		field_num = 1;
@@ -2013,6 +2067,26 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 					&hw->gvs, vf, pic->hw_decode_time);
 				v4l_mpeg12_update_frame_info(hw, vf, pic);
 			}
+
+			vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
+			vf->vf_ud_param.ud_param = pic->ud_param;
+
+			if (debug_enable & PRINT_FLAG_USERDATA_DETAIL)
+			{
+				struct userdata_param_t ud_param = pic->ud_param;
+				int i = 0;
+				u8 *pstart = (u8 *)ud_param.pbuf_addr;
+				PR_INIT(128);
+				debug_print(DECODE_ID(hw), 0,"%s:userdata len %d. vdec %p video_id %d\n",
+					__func__,ud_param.buf_len, vdec, ud_param.instance_id);
+				for (i = 0; i < ud_param.buf_len; i++) {
+					PR_FILL("%02x ", pstart[i]);
+					if (((i + 1) & 0xf) == 0)
+						PR_INFO(DECODE_ID(hw));
+				}
+				PR_INFO(DECODE_ID(hw));
+			}
+
 			vdec->vdec_fps_detec(vdec->id);
 			if (!vdec->is_v4l && !vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 				/* offset for tsplayer pts lookup */
@@ -2311,6 +2385,47 @@ static void mpeg2_buf_ref_process_for_exception(struct vdec_mpeg12_hw_s *hw)
 	hw->cur_idx = INVALID_IDX;
 }
 
+static void copy_user_data_to_pic(struct vdec_mpeg12_hw_s *hw, struct pic_info_t *pic)
+{
+	struct vdec_s *vdec = hw_to_vdec(hw);
+
+
+	if (pic->user_data_buf != NULL) {
+		memset(pic->user_data_buf, 0, CCBUF_SIZE);
+		if (hw->parse_user_data_size < CCBUF_SIZE) {
+			memcpy(pic->user_data_buf, hw->parse_user_data_buf, hw->parse_user_data_size);
+			pic->ud_param.buf_len = hw->parse_user_data_size;
+		} else {
+			pic->ud_param.buf_len = 0;
+			debug_print(DECODE_ID(hw), 0,
+				"sei data len is over 5k\n", hw->parse_user_data_size);
+		}
+	} else {
+		pic->ud_param.buf_len = 0;
+	}
+	pic->ud_param.pbuf_addr = pic->user_data_buf;
+	pic->ud_param.meta_info = hw->meta_info;
+	pic->ud_param.instance_id = vdec->afd_video_id;
+	pic->ud_param.meta_info.poc_number = pic->poc;
+	pic->ud_param.meta_info.flags &= 0xFFFFFC7F; //bit7~bit9: ud frame type
+
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I)
+		pic->ud_param.meta_info.flags |= (1<<7);
+	else if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)
+		pic->ud_param.meta_info.flags |= (2<<7);
+	else if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B)
+		pic->ud_param.meta_info.flags |= (3<<7);
+	else
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL, "pic type invalid\n");
+
+	debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"%s: poc %d, flags 0x%x\n", __func__,
+			pic->ud_param.meta_info.poc_number, pic->ud_param.meta_info.flags);
+
+	hw->parse_user_data_size = 0;
+	memset(hw->parse_user_data_buf, 0, CCBUF_SIZE);
+}
+
 static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 	u32 reg, index, info, seqinfo, offset, frame_size=0, tmp_h, tmp_w;
@@ -2551,6 +2666,9 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		new_pic->offset = offset;
 		new_pic->index = index;
 		new_pic->poc = READ_VREG(AV_SCRATCH_1) & 0x3ff;
+
+		copy_user_data_to_pic(hw, new_pic);
+
 		if (((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) ||
 			((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)) {
 			if (hw->chunk) {
@@ -4549,6 +4667,12 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		hw->vmpeg12_amstream_dec_info.width,
 		hw->vmpeg12_amstream_dec_info.height,
 		hw->tvp_flag);
+
+	if (hw->v4l2_ctx != NULL) {
+		struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+
+		ctx->aux_infos.alloc_buffer(ctx, SEI_TYPE);
+	}
 
 	if (vmpeg12_init(hw) < 0) {
 		pr_info("ammvdec_mpeg12 init failed.\n");
