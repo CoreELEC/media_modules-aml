@@ -1013,9 +1013,6 @@ struct vdec_h264_hw_s {
 	u32 consume_byte;
 	u32 reserved_byte;
 	u32 sei_present_flag;
-	u32 latest_head_done_rp;
-	u32 latest_dec_status;
-	u32 no_picdone_again_flag;
 	spinlock_t tlock;
 	struct mh264_csd_main_info_t old_csd_info;
 	u32 old_csd_info_check_count;
@@ -7217,8 +7214,6 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 	u32 index;
 	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
 
-	hw->no_picdone_again_flag = DEC_RESULT_DONE;
-
 	if (vdec->mvfrm)
 		vdec->mvfrm->hw_decode_time =
 		local_clock() - vdec->mvfrm->hw_decode_start;
@@ -7552,24 +7547,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 	else if (dec_dpb_status == H264_AUX_DATA_READY)
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_AUX_START);
 
-	if (hw->latest_dec_status == H264_SLICE_HEAD_DONE) {
-		if (dec_dpb_status == H264_CONFIG_REQUEST) {
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-				"%s, cur status 0x%x, latest 0x%x\n",
-				__func__, dec_dpb_status, hw->latest_dec_status);
-			amvdec_stop();
-			if (hw->mmu_enable)
-				amhevc_stop();
-			hw->latest_dec_status = dec_dpb_status;
-			hw->dec_result = DEC_RESULT_AGAIN;
-			hw->no_picdone_again_flag = DEC_RESULT_AGAIN;
-			vdec_schedule_work(&hw->work);
-			return IRQ_HANDLED;
-		}
-	}
-	if (dec_dpb_status != H264_SEI_DATA_READY)
-		hw->latest_dec_status = dec_dpb_status;
-
 	if (dec_dpb_status == H264_CONFIG_REQUEST) {
 #if 1
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
@@ -7675,19 +7652,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		unsigned short first_mb_in_slice;
 		unsigned int decode_mb_count, mby_mbx;
 		struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
-		u32 cur_rp = READ_VREG(VLD_MEM_VIFIFO_RP);
 
 		hw->frmbase_cont_flag = 0;
-
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-			"head done cur rp %x, latest rp %x, again %d\n", cur_rp, hw->latest_head_done_rp, hw->no_picdone_again_flag);
-		if ((hw->no_picdone_again_flag == DEC_RESULT_AGAIN) && (cur_rp <= hw->latest_head_done_rp)) {
-			vh264_pic_done_proc(vdec);
-			hw->dec_result = DEC_RESULT_DONE;
-			vdec_schedule_work(&hw->work);
-			return IRQ_HANDLED;
-		}
-		hw->latest_head_done_rp = cur_rp;
 
 		if ((pic != NULL) && (pic->mb_aff_frame_flag == 1))
 			first_mb_in_slice = p[FIRST_MB_IN_SLICE + 3] * 2;
@@ -10604,6 +10570,9 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						hw->init_flag = 0;
 						dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
 							hw->init_flag);
+						hw->dec_result = DEC_RESULT_ERROR_DATA;
+						vdec_schedule_work(&hw->work);
+						return;
 					}
 
 					WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
@@ -10620,6 +10589,9 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				hw->init_flag = 0;
 				dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
 					hw->init_flag);
+				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_schedule_work(&hw->work);
+				return;
 			}
 
 			WRITE_VREG(AV_SCRATCH_0, (hw->max_reference_size<<24) |
@@ -11427,7 +11399,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			size);
 
 	hw->dec_result = DEC_RESULT_NONE;
-	hw->latest_dec_status = 0;
 	hw->timeout_flag = TIMEOUT_INIT;
 	start_process_time(hw);
 	if (vdec->mc_loaded) {
