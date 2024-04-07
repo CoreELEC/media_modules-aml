@@ -1553,10 +1553,12 @@ typedef struct avs3_frame_s {
 	u32 stream_size; // For stream base mode
 	int mv_buf_index;
 	int mv_size;
-	struct avs3_frame_s *copy_pic;
+	ulong mmu_copy_header_adr;
 	int need_mmu_copy;
 	int cur_mmu_4k_number;
 	int drop_flag;
+	u32 used_4k_num;
+	u32 used_4k_num1;
 #endif
 	u32 tw_y_adr;
 	u32 tw_u_v_adr;

@@ -1674,36 +1674,6 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 	return 0;
 }
 
-static void release_free_mmu_buffers(struct AVS3Decoder_s *dec)
-{
-	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
-	int ii;
-	for (ii = 0; ii < avs3_dec->max_pb_size; ii++) {
-		struct avs3_frame_s *pic = &avs3_dec->pic_pool[ii].buf_cfg;
-		if (pic->used == 0 &&
-			pic->vf_ref == 0 &&
-#ifdef NEW_FRONT_BACK_CODE
-			pic->backend_ref == 0 &&
-#endif
-			pic->mmu_alloc_flag) {
-			struct aml_buf *aml_buf = index_to_aml_buf(dec, pic->index);
-			pic->mmu_alloc_flag = 0;
-			decoder_mmu_box_free_idx(aml_buf->fbc->mmu, aml_buf->fbc->index);
-			avs3_print(dec, AVS3_DBG_BUFMGR_MORE, "%s decoder_mmu_box_free_idx index=%d\n", __func__, aml_buf->fbc->index);
-			if (dec->front_back_mode)
-				decoder_mmu_box_free_idx(aml_buf->fbc->mmu_1, aml_buf->fbc->index);
-#ifdef AVS3_10B_MMU_DW
-			if (dec->dw_mmu_enable && aml_buf->fbc->mmu_dw) {
-				decoder_mmu_box_free_idx(aml_buf->fbc->mmu_dw, aml_buf->fbc->index);
-				avs3_print(dec, AVS3_DBG_BUFMGR_MORE, "%s DW decoder_mmu_box_free_idx index=%d\n", __func__, aml_buf->fbc->index);
-				if (dec->front_back_mode && aml_buf->fbc->mmu_dw_1)
-					decoder_mmu_box_free_idx(aml_buf->fbc->mmu_dw_1, aml_buf->fbc->index);
-			}
-#endif
-		}
-	}
-}
-
 static void print_hevc_b_data_path_monitor(int frame_count)
 {
 	uint32_t total_clk_count;
@@ -1904,12 +1874,8 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 		}
 
 		if (vdec_frame_based(hw_to_vdec(dec))) {
-			u64 timestamp = v4l2_ctx->current_timestamp;
-
 			avs3_buf_ref_process_for_exception(dec, false);
-			v4l2_ctx->current_timestamp = pic->timestamp;
-			vdec_v4l_post_error_frame_event(v4l2_ctx);
-			v4l2_ctx->current_timestamp = timestamp;
+			avs3_report_err_timestamp_for_decoded_pic(v4l2_ctx, pic);
 		}
 		mutex_unlock(&dec->fb_mutex);
 
@@ -1920,6 +1886,7 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 	decoder_mmu_box_alloc_idx(aml_buf->fbc->mmu, aml_buf->fbc->index, aml_buf->fbc->frame_size, dec->frame_mmu_map_addr);
 	decoder_mmu_box_alloc_idx(aml_buf->fbc->mmu_1, aml_buf->fbc->index, aml_buf->fbc->frame_size, dec->frame_mmu_map_addr_1);
 
+	dec->cur_fb_idx_mmu = pic->index;
 	avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 		"%s decoder_mmu_box_alloc_idx index=%d mmu_4k_number %d\n",
 		__func__, aml_buf->fbc->index, aml_buf->fbc->frame_size);
@@ -1927,6 +1894,8 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 	if (dec->dw_mmu_enable) {
 		decoder_mmu_box_alloc_idx(aml_buf->fbc->mmu_dw, aml_buf->fbc->index, aml_buf->fbc->frame_size, dec->dw_frame_mmu_map_addr);
 		decoder_mmu_box_alloc_idx(aml_buf->fbc->mmu_dw_1, aml_buf->fbc->index, aml_buf->fbc->frame_size, dec->dw_frame_mmu_map_addr_1);
+
+		dec->cur_fb_idx_mmu = pic->index;
 
 		avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 			"%s DW decoder_mmu_box_alloc_idx index=%d mmu_4k_number %d\n",

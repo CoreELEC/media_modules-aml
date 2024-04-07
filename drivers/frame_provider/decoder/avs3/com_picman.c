@@ -622,14 +622,22 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 
 			//If the ref pic is found, set it to RPL0
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j] && pm->pic_ref[j]->dtr == refPicDoi) {
-				if (pm->pic_ref[j]->buf_cfg.drop_flag == 0) {
-					set_refp(&refp[i][REFP_0], pm->pic_ref[j]);
-					pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
+				if (((avs3_get_error_policy() & 0x4) && (pm->pic_ref[j]->buf_cfg.error_mark == 0))
+					|| ((avs3_get_error_policy() & 0x4) == 0)) {
+					if (pm->pic_ref[j]->buf_cfg.drop_flag == 0) {
+						set_refp(&refp[i][REFP_0], pm->pic_ref[j]);
+						pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
+					} else {
+						com_picman_unlock(pm, flags);
+						printf("%s: The L0 Reference Picture(%d) drop_flag is 1",
+							__func__, refPicDoi);
+						return COM_ERR;
+					}
 				} else {
 					com_picman_unlock(pm, flags);
-					printf("%s: The L0 Reference Picture(%d) drop_mark is 1",
+					printf("%s: The L0 Reference Picture(%d) error_mark is 1",
 						__func__, refPicDoi);
-					return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+					return COM_ERR;
 				}
 			} else {
 				if (avs3_get_error_policy() & 0x4) {
@@ -709,16 +717,22 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j]->dtr == refPicDoi)
 #endif
 			{
-				if (pm->pic_ref[j]->buf_cfg.drop_flag == 0) {
-					set_refp(&refp[i][REFP_1], pm->pic_ref[j]);
-					pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
+				if (((avs3_get_error_policy() & 0x4) && (pm->pic_ref[j]->buf_cfg.error_mark == 0))
+					|| ((avs3_get_error_policy() & 0x4) == 0)) {
+					if (pm->pic_ref[j]->buf_cfg.drop_flag == 0) {
+						set_refp(&refp[i][REFP_1], pm->pic_ref[j]);
+						pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
+					} else {
+						printf("%s: The L1 Reference Picture(%d) drop_flag is 1",
+							__func__, refPicDoi);
+						return COM_ERR;
+					}
 				} else {
-					printf("%s: The L1 Reference Picture(%d) drop_mark is 1",
+					printf("%s: The L1 Reference Picture(%d) error_mark is 1",
 						__func__, refPicDoi);
-					return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
+					return COM_ERR;
 				}
 			} else {
-
 				if (avs3_get_error_policy() & 0x4) {
 					//set_refp(&refp[i][REFP_0], pm->pic_ref[j]);
 					//pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;

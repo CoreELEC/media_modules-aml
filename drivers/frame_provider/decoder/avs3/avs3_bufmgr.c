@@ -807,6 +807,8 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 		pic->buf_cfg.drop_flag = 0;
 		pic->buf_cfg.need_mmu_copy = 0;
 #endif
+		pic->buf_cfg.used_4k_num = 0;
+		pic->buf_cfg.used_4k_num1 = 0;
 #endif
 
 	}

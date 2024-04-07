@@ -1563,6 +1563,8 @@ typedef struct avs3_frame_s{
 	int need_mmu_copy;
 	int cur_mmu_4k_number;
 	int drop_flag;
+	u32 used_4k_num;
+	u32 used_4k_num1;
 } avs3_frame_t;
 #endif
 /* picture store structure */
