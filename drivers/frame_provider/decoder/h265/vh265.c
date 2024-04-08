@@ -2273,6 +2273,14 @@ static enum ResResult is_csd_valid(struct hevc_state_s *hevc, int w, int h, int 
 	return RES_RET_ABNORMAL;
 }
 
+static inline bool is_10bit_depth(struct hevc_state_s *hevc)
+{
+	if (hevc->bit_depth_luma == 8 && hevc->bit_depth_chroma == 8)
+		return false;
+	else
+		return true;
+}
+
 void check_head_error(struct hevc_state_s *hevc)
 {
 #define pcm_enabled_flag                                  0x040
@@ -3551,7 +3559,7 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 		buf_size += ((mc_buffer_size_u_v_h << 16) * 3);
 	}
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A && is_10bit_depth(hevc)) {
 		buf_size += (mc_buffer_size_u_v_h << 15) * 3;	//s1a ext buf
 	} else {
 		if ((!hevc->mmu_enable) &&
@@ -3860,7 +3868,7 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 		pic->dw_y_adr = pic->mc_y_adr;
 		pic->dw_u_v_adr = pic->mc_u_v_adr;
 
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A && is_10bit_depth(hevc)) {
 			pic->ext_y_adr = pic->dw_u_v_adr + (buf_stru.mc_buffer_size_u_v_h << 16);
 			pic->ext_uv_adr = pic->ext_y_adr + (buf_stru.mc_buffer_size_u_v_h << 16);
 		}
@@ -4117,7 +4125,7 @@ static void init_pic_list_hw(struct hevc_state_s *hevc)
 		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR,
 			(0x1 << 1) | (0x1 << 2));
 #ifdef USE_NV21_EXTRA_BUF
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A && is_10bit_depth(hevc)) {
 			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR_EXTRA,
 				(0x1 << 1) | (0x1 << 2));
 		}
@@ -4156,7 +4164,7 @@ static void init_pic_list_hw(struct hevc_state_s *hevc)
 					| 0x1);
 		}
 #ifdef USE_NV21_EXTRA_BUF
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A && is_10bit_depth(hevc)) {
 			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA_EXTRA,
 				hevc->m_PIC[i]->ext_y_adr >> 5);
 			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA_EXTRA,
@@ -4169,7 +4177,7 @@ static void init_pic_list_hw(struct hevc_state_s *hevc)
 
 	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
 #ifdef USE_NV21_EXTRA_BUF
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A && is_10bit_depth(hevc))
 		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR_EXTRA, 0x1);
 #endif
 
@@ -5753,7 +5761,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 #endif
 
 #ifdef USE_NV21_EXTRA_BUF
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A && is_10bit_depth(hevc)) {
 		WRITE_VREG(HEVC_SAO_Y2_START_ADDR, cur_pic->ext_y_adr);
 		WRITE_VREG(HEVC_SAO_Y2_LENGTH, mc_buffer_size_u_v_h << 16);
 		WRITE_VREG(HEVC_SAO_C2_START_ADDR, cur_pic->ext_uv_adr);
@@ -5881,7 +5889,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	* [12]    CbCr_byte_swap
 	* [31:13] reserved
 	*/
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A && is_10bit_depth(hevc)) {
 		data32 &= ~(0x3ff << 13);
 		data32 |= ((hevc->endian & 0x1f) << 13) | ((hevc->endian & 0x1f) << 18);
 	}
