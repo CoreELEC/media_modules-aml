@@ -17442,7 +17442,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			hevc->data_size = r;
 		}
 		hevc->muti_frame_flag = 0;
-		WRITE_VREG(HEVC_ASSIST_SCRATCH_B, 0);
+		if (hevc->front_back_mode == 0)
+			WRITE_VREG(HEVC_ASSIST_SCRATCH_E, 0);
+		else
+			WRITE_VREG(HEVC_ASSIST_SCRATCH_B, 0);
 	}
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, r);
