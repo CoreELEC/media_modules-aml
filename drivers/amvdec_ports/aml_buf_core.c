@@ -596,11 +596,6 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 		kref_read(&bc->core_ref),
 		bc->free_num);
 
-	mutex_lock(&bc->workqueue_mutex);
-	flush_workqueue(bc->recycle_buf_ref_workqueue);
-	bc->workqueue_enabled = false;
-	mutex_unlock(&bc->workqueue_mutex);
-
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
 		if (!list_del_entry_valid(bc, entry))
 			continue;
