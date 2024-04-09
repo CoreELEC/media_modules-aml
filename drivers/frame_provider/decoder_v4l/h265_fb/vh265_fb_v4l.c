@@ -17824,6 +17824,27 @@ static void reset(struct vdec_s *vdec)
 		if (hevc->afbc_buf_table[i].used)
 			hevc->afbc_buf_table[i].used = 0;
 	}
+
+#ifdef SWAP_HEVC_UCODE
+	if (!fw_tee_enabled() && hevc->is_swap) {
+		hevc->swap_size = (4 * (4 * SZ_1K)); /*max 4 swap code, each 0x400*/
+		if (hevc->mc_cpu_addr == NULL) {
+			hevc->mc_cpu_addr = decoder_dma_alloc_coherent(&hevc->mc_cpu_handle,
+					hevc->swap_size, &hevc->mc_dma_handle, "H265_MC_CPU_BUF");
+			if (!hevc->mc_cpu_addr) {
+				pr_info("vh265 mmu swap ucode alloc fail.\n");
+				return ;
+			}
+
+			memcpy((u8 *) hevc->mc_cpu_addr, hevc->fw->data + SWAP_HEVC_OFFSET,
+				hevc->swap_size);
+
+			hevc_print(hevc, 0,
+				"vh265 mmu ucode swap loaded %x\n", hevc->mc_dma_handle);
+		}
+	}
+#endif
+
 	hevc->dec_result = DEC_RESULT_NONE;
 
 	hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);
