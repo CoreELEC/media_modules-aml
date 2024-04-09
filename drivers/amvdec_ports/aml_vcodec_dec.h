@@ -256,6 +256,6 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf);
 
 ulong get_addr(struct vb2_buffer *vb, int i);
 
-
+void aml_vdec_wake_up(struct aml_vcodec_ctx *ctx);
 
 #endif /* _AML_VCODEC_DEC_H_ */

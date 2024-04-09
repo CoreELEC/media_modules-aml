@@ -2781,6 +2781,11 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 		"vcodec state (AML_STATE_IDLE)\n");
 }
 
+void aml_vdec_wake_up(struct aml_vcodec_ctx *ctx)
+{
+	vdec_thread_wakeup(ctx->ada_ctx);
+}
+
 static int vidioc_vdec_qbuf(struct file *file, void *priv,
 	struct v4l2_buffer *buf)
 {

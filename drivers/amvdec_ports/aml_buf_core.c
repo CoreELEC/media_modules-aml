@@ -260,6 +260,7 @@ static void buf_core_free_que(struct buf_core_mgr_s *bc,
 		return;
 	list_add_tail(&entry->node, &bc->free_que);
 	bc->free_num++;
+	bc->wake_up_vdec(bc);
 }
 
 static void buf_core_get(struct buf_core_mgr_s *bc,

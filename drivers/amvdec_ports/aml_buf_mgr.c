@@ -784,6 +784,14 @@ static void aml_external_process(struct buf_core_mgr_s *bc,
 	aml_vdec_recycle_dec_resource(bm->priv, aml_buf);
 }
 
+static void aml_wake_up_vdec(struct buf_core_mgr_s *bc)
+{
+	struct aml_buf_mgr_s *bm =
+			container_of(bc, struct aml_buf_mgr_s, bc);
+
+	aml_vdec_wake_up(bm->priv);
+}
+
 static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 				struct buf_core_entry *entry)
 {
@@ -983,6 +991,7 @@ int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
 	bm->bc.get_pre_user	= aml_buf_get_pre_user;
 	bm->bc.get_next_user	= aml_buf_get_next_user;
 	bm->bc.external_process	= aml_external_process;
+	bm->bc.wake_up_vdec	= aml_wake_up_vdec;
 	bm->bc.mem_ops.alloc	= aml_buf_alloc;
 	bm->bc.mem_ops.free	= aml_buf_free;
 

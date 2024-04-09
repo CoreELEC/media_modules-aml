@@ -242,6 +242,8 @@ struct buf_core_mem_ops {
  * vpp_que	: Interact with DI mgr to notify the buffer that has been displayed back to the driver.
  * vpp_dque	: The decoded buffer is submitted to DI mgr for post-processing.
  * vpp_reset	: Used to reset the buffer information managed by DI mgr.
+ * @wake_up_vdec
+ *		: Wake up vdec thread to schedule.
  * @mem_ops	: Set of interfaces for memory-related operations.
  * @buf_ops	: Set of interfaces for buffer operations.
  */
@@ -269,6 +271,7 @@ struct buf_core_mgr_s {
 	int	(*vpp_dque)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	int	(*vpp_reset)(struct buf_core_mgr_s *);
 	void    (*external_process)(struct buf_core_mgr_s *, struct buf_core_entry *);
+	void    (*wake_up_vdec)(struct buf_core_mgr_s *);
 	int	(*get_pre_user) (struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	int	(*get_next_user) (struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	void	(*update)(struct buf_core_mgr_s *, struct buf_core_entry *, ulong, enum buf_pair);
