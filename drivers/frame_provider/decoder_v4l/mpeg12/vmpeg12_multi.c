@@ -2703,7 +2703,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		}
 
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"mmpeg12: disp_pic=%d(%c), poc %d, ind=%d, offst=%x, pts=(%d,%lld,%lld)(%d)\n",
+			"mmpeg12: disp_pic=%d(%c), ind=%d, offst=%x, poc %d, pts=(%d,%lld,%lld)(%d)\n",
 			hw->disp_num, GET_SLICE_TYPE(info), index, disp_pic->offset, disp_pic->poc,
 			disp_pic->pts, disp_pic->pts64,
 			disp_pic->timestamp, disp_pic->pts_valid);
