@@ -13440,7 +13440,7 @@ force_output:
 				if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) &&
 					(shiftbyte > 8))
 					shiftbyte -= 8;
-				if (shiftbyte < 0x8 && (hevc->decode_size - shiftbyte) > 0x100) {
+				if (shiftbyte < 0x10 && (hevc->decode_size - shiftbyte) > 0x100) {
 					hevc_print(hevc, 0," shiftbytes 0x%x  decode_size 0x%x\n", shiftbyte, hevc->decode_size);
 					eos_in_head = true;
 				}

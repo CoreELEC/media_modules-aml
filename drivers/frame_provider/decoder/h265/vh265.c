@@ -11082,7 +11082,7 @@ force_output:
 			clear_poc_flag(hevc);
 			if (input_frame_based(vdec)) {
 				u32 shiftbyte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
-				if (shiftbyte < 0x8 && (hevc->decode_size - shiftbyte) > 0x100) {
+				if (shiftbyte < 0x10 && (hevc->decode_size - shiftbyte) > 0x100) {
 					hevc_print(hevc, 0," shiftbytes 0x%x  decode_size 0x%x\n", shiftbyte, hevc->decode_size);
 					eos_in_head = true;
 				}
