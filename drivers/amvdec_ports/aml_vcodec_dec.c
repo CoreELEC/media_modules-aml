@@ -17,6 +17,7 @@
  *
  * Description:
  */
+#define DEBUG
 #include <media/v4l2-event.h>
 #include <media/v4l2-mem2mem.h>
 #include <media/videobuf2-dma-contig.h>
@@ -459,7 +460,7 @@ void __aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes, struct s
 
 	v4l2_event_queue_fh(&ctx->fh, &event);
 	if ((changes != V4L2_EVENT_SRC_CH_HDRINFO) && (changes != V4L2_EVENT_REPORT_DEC_INFO))
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,"Post event: %s\n", event_str);
+		v4l_pr_debug(ctx, V4L_DEBUG_CODEC_PRINFO,"Post event: %s\n", event_str);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,"Post event: %s, type: %x, fun: %s, %d\n",
 		event_str, event.type, param->function, param->line);

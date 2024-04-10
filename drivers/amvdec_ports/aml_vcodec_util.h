@@ -95,12 +95,20 @@ extern int t3x_tw_output;
 			pr_info(fmt, ##args);				\
 	} while (0)
 
+#define __v4l_pr_debug(h, id, fmt, args...)				\
+	do {								\
+		if (h)							\
+			pr_debug("[%d]: " fmt, id, ##args);		\
+		else							\
+			pr_debug(fmt, ##args);				\
+	} while (0)
+
 #define v4l_dbg(h, flags, fmt, args...)						\
 	do {									\
 		struct aml_vcodec_ctx *__ctx = (struct aml_vcodec_ctx *) h;	\
 		if ((flags == V4L_DEBUG_CODEC_ERROR) ||				\
 			(flags == V4L_DEBUG_CODEC_PRINFO) ||			\
-			(debug_mode & flags)) {				\
+			(debug_mode & flags)) {					\
 			if (flags == V4L_DEBUG_CODEC_ERROR) {			\
 				__v4l_dbg(h, __ctx->id, "[ERR]: " fmt, ##args);	\
 			} else	{						\
@@ -109,7 +117,7 @@ extern int t3x_tw_output;
 		}								\
 	} while (0)
 
-#define v4l_dbg_ext(id, flags, fmt, args...)						\
+#define v4l_dbg_ext(id, flags, fmt, args...)					\
 	do {									\
 		if ((flags == V4L_DEBUG_CODEC_ERROR) ||				\
 			(flags == V4L_DEBUG_CODEC_PRINFO) ||			\
@@ -118,6 +126,21 @@ extern int t3x_tw_output;
 				__v4l_dbg(1, id, "[ERR]: " fmt, ##args);	\
 			} else	{						\
 				__v4l_dbg(1, id, fmt, ##args);			\
+			}							\
+		}								\
+	} while (0)
+
+#define v4l_pr_debug(h, flags, fmt, args...)					\
+	do {									\
+		struct aml_vcodec_ctx *__ctx = (struct aml_vcodec_ctx *) h;	\
+		if ((flags == V4L_DEBUG_CODEC_ERROR) ||				\
+			(flags == V4L_DEBUG_CODEC_PRINFO) ||			\
+			(debug_mode & flags)) {					\
+			if (flags == V4L_DEBUG_CODEC_ERROR) {			\
+				__v4l_pr_debug(h, __ctx->id,			\
+					"[ERR]: " fmt, ##args);			\
+			} else	{						\
+				__v4l_pr_debug(h, __ctx->id, fmt, ##args);	\
 			}							\
 		}								\
 	} while (0)

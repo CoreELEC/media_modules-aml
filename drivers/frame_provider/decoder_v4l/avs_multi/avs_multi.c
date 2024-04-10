@@ -3973,7 +3973,7 @@ void avs_buf_ref_process_for_exception(struct vdec_avs_hw_s *hw)
 		return;
 	}
 
-	debug_print(hw, 0,
+	debug_print(hw, PRINT_FLAG_RUN_FLOW,
 			"process_for_exception: dma addr(0x%lx)\n",
 			hw->pics[index].cma_alloc_addr);
 
