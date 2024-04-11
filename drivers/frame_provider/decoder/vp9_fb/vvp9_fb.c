@@ -13024,8 +13024,9 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 			}
 #endif
-			if ((!efficiency_mode) &&
-				pbi->frame_count > 0)
+			if ((!efficiency_mode &&
+				pbi->frame_count > 0) ||
+				pbi->common.show_existing_frame)
 				vp9_bufmgr_postproc(pbi);
 		}
 
