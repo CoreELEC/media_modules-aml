@@ -18214,8 +18214,12 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 				hevc_print(hevc, 0, "mmu_copy disable\n");
 			}
 			if (config_val & VDEC_CFG_FLAG_DIS_ERR_POLICY) {
+#if 1
+				hevc->nal_skip_policy = c2_nal_skip_policy;
+#else
 				hevc->nal_skip_policy = nal_skip_policy & (~(1 << 1));
 				hevc_print(hevc, 0, "Error Frame Display\n");
+#endif
 			} else {
 				hevc->nal_skip_policy = nal_skip_policy | (1 << 1);
 			}
