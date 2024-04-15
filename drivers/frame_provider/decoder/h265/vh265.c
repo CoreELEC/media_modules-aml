@@ -3539,10 +3539,6 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 		}
 	}
 
-	/*in case start adr is not 64k alignment*/
-	if (buf_size > 0)
-		buf_size += 0x10000;
-
 	if (buf_stru) {
 		buf_stru->lcu_total = pic_width_lcu * pic_height_lcu;
 		buf_stru->mc_buffer_size_h = mc_buffer_size_h;
