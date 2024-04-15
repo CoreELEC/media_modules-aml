@@ -57,6 +57,7 @@
 #include "../frame_provider/decoder/utils/aml_buf_helper.h"
 #include "../common/media_utils/media_utils.h"
 #include "../frame_provider/decoder/utils/vdec_v4l2_buffer_ops.h"
+#include "../common/chips/decoder_cpu_ver_info.h"
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 #include <linux/amlogic/media/amdolbyvision/dolby_vision.h>
 #endif
@@ -3216,6 +3217,7 @@ static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 	struct aml_q_data *q_data;
 	unsigned int dw_mode = DM_YUV_ONLY;
 	unsigned int tw_mode = DM_INVALID;
+	int w_align = 64;
 	int ratio = 1;
 
 	q_data = aml_vdec_get_q_data(ctx, type);
@@ -3226,24 +3228,30 @@ static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 	if (ctx->internal_dw_scale)
 		ratio = vdec_get_size_ratio(dw_mode);
 
+	/* If it is h264 mmu, but interlace stream, driver will disable mmu and set DW
+	 * to DM_YUV_ONLY. Driver will set width alignment to 64, also satisfy width
+	 * alignment 32
+	 */
+	if ((!is_vdec_core_fmt(ctx) || (dw_mode != DM_YUV_ONLY)) && is_hevc_align32(0))
+		w_align = 32;
+
 	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
 		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
 		q_data->sizeimage[1] = ctx->picinfo.c_len_sz;
 
-		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
 		q_data->coded_height = ALIGN(ctx->picinfo.coded_height / ratio, 64);
-
-		q_data->bytesperline[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
-		q_data->bytesperline[1] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->bytesperline[0] = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
+		q_data->bytesperline[1] = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
 
 		q_data->bytesperline[0] = q_data->bytesperline[0] << is_output_p010(dw_mode);
 		q_data->bytesperline[1] = q_data->bytesperline[1] << is_output_p010(dw_mode);
 	} else {
-		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
 		q_data->coded_height = ALIGN(ctx->picinfo.coded_height / ratio, 64);
 		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
 		q_data->sizeimage[0] += ctx->picinfo.c_len_sz;
-		q_data->bytesperline[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->bytesperline[0] = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
 		q_data->bytesperline[0] = q_data->bytesperline[0] << is_output_p010(dw_mode);
 	}
 
@@ -3261,20 +3269,19 @@ static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 		q_data->sizeimage_tw[0] = ctx->picinfo.y_len_sz_tw;
 		q_data->sizeimage_tw[1] = ctx->picinfo.c_len_sz_tw;
 
-		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
 		q_data->coded_height = ALIGN(ctx->picinfo.coded_height / ratio, 64);
-
-		q_data->bytesperline_tw[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
-		q_data->bytesperline_tw[1] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->bytesperline_tw[0] = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
+		q_data->bytesperline_tw[1] = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
 
 		q_data->bytesperline_tw[0] = q_data->bytesperline_tw[0] << is_output_p010(tw_mode);
 		q_data->bytesperline_tw[1] = q_data->bytesperline_tw[1] << is_output_p010(tw_mode);
 	} else {
-		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
 		q_data->coded_height = ALIGN(ctx->picinfo.coded_height / ratio, 64);
 		q_data->sizeimage_tw[0] = ctx->picinfo.y_len_sz_tw;
 		q_data->sizeimage_tw[0] += ctx->picinfo.c_len_sz_tw;
-		q_data->bytesperline_tw[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->bytesperline_tw[0] = ALIGN(ctx->picinfo.coded_width / ratio, w_align);
 		q_data->bytesperline_tw[0] = q_data->bytesperline_tw[0] << is_output_p010(tw_mode);
 	}
 }
@@ -3303,6 +3310,9 @@ static void copy_v4l2_format_dimension(struct aml_vcodec_ctx *ctx,
 		pix_mp->height		= q_data->coded_height;
 		pix_mp->num_planes	= q_data->fmt->num_planes;
 		pix_mp->pixelformat	= q_data->fmt->fourcc;
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%d: w: %d, h: %d, size: %d\n",
+			__LINE__, pix_mp->width, pix_mp->height,
+			pix_mp->pixelformat);
 
 		for (i = 0; i < q_data->fmt->num_planes; i++) {
 			pix_mp->plane_fmt[i].bytesperline = q_data->bytesperline[i];
@@ -3319,6 +3329,10 @@ static void copy_v4l2_format_dimension(struct aml_vcodec_ctx *ctx,
 		pix->pixelformat	= q_data->fmt->fourcc;
 		pix->bytesperline	= q_data->bytesperline[0];
 		pix->sizeimage		= q_data->sizeimage[0];
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%d: w: %d, h: %d, size: %d\n",
+			__LINE__, pix_mp->width, pix_mp->height,
+			pix_mp->pixelformat);
 
 		if ((dw_mode == DM_AVBC_ONLY) && tw_mode) {
 			pix->bytesperline	= q_data->bytesperline_tw[0];
