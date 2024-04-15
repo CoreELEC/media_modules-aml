@@ -10460,6 +10460,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vf->timestamp		= ULONG_MAX;
 	vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
 	vf->v4l_mem_handle	= (ulong)aml_buf;
+	vf->index               = pic->index;
 
 #ifdef	NEW_FB_CODE
 	pic->back_done_mark = 1;
