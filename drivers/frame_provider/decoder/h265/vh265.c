@@ -10817,6 +10817,19 @@ pic_done:
 				if (hevc->over_decode)
 					hevc_print(hevc, 0, "!!!Over decode %d\n", __LINE__);
 			}
+
+			if (input_frame_based(hw_to_vdec(hevc)) &&
+				(dec_status == HEVC_DECPIC_DATA_DONE) &&
+				(hevc->cur_pic != NULL) &&
+				(READ_VREG(HEVC_SHIFT_BYTE_COUNT) >
+				(hevc->decode_size + 8 + get_hevc_stream_extra_shift_bytes()))) {
+				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"shift_byte(%d) is over(%d), set cur_pic error_mark\n",
+					READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+					hevc->decode_size + 8 + get_hevc_stream_extra_shift_bytes());
+				hevc->cur_pic->error_mark = 1;
+			}
+
 			if (input_frame_based(hw_to_vdec(hevc)) &&
 				frmbase_cont_bitlevel != 0 &&
 				(hevc->decode_size > READ_VREG(HEVC_SHIFT_BYTE_COUNT)) &&
