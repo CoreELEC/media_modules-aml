@@ -396,6 +396,8 @@ static u32 run_ready_max_buf_num = 0xff;
 #endif
 
 static u32 dynamic_buf_num_margin = 6;
+static u32 interlace_filed_margin = 6;
+
 static u32 buf_alloc_width;
 static u32 buf_alloc_height;
 
@@ -1969,6 +1971,7 @@ struct hevc_state_s {
 #ifdef MULTI_INSTANCE_SUPPORT
 	int double_write_mode;
 	int dynamic_buf_num_margin;
+	int interlace_filed_margin;
 	int start_action;
 	int save_buffer_mode;
 #endif
@@ -2422,6 +2425,15 @@ static int get_dynamic_buf_num_margin(struct hevc_state_s *hevc)
 		hevc->dynamic_buf_num_margin :
 		(dynamic_buf_num_margin & 0x7fffffff);
 }
+
+static int get_interlace_filed_margin(struct hevc_state_s *hevc)
+{
+	return (hevc->m_ins_flag &&
+		((interlace_filed_margin & 0x80000000) == 0)) ?
+		hevc->interlace_filed_margin :
+		(interlace_filed_margin & 0x7fffffff);
+}
+
 #endif
 
 static int get_double_write_mode(struct hevc_state_s *hevc)
@@ -3729,6 +3741,10 @@ static void dealloc_pic_buf(struct hevc_state_s *hevc,
 static int get_work_pic_num(struct hevc_state_s *hevc)
 {
 	int used_buf_num = 0;
+	int margin_num = get_dynamic_buf_num_margin(hevc);
+
+	if (hevc->interlace_flag)
+		margin_num = get_interlace_filed_margin(hevc);
 
 	used_buf_num = hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + 1;
 	/*
@@ -3746,7 +3762,7 @@ static int get_work_pic_num(struct hevc_state_s *hevc)
 			"save buf _mode : dynamic_buf_num_margin %d ----> %d \n",
 			dynamic_buf_num_margin,  hevc->dynamic_buf_num_margin);
 
-	used_buf_num += get_dynamic_buf_num_margin(hevc);
+	used_buf_num += margin_num;
 
 	if (used_buf_num > MAX_BUF_NUM)
 		used_buf_num = MAX_BUF_NUM;
@@ -11364,8 +11380,8 @@ force_output:
 					hevc->param.p.vui_time_scale_hi,
 					hevc->param.p.vui_time_scale_lo);
 				hevc_print(hevc, 0,
-					"margin = %d, sps_max_dec_pic_buffering_minus1_0 = %d, sps_num_reorder_pics_0 = %d\n",
-					get_dynamic_buf_num_margin(hevc),
+					"margin/interlace_margin = %d / %d, sps_max_dec_pic_buffering_minus1_0 = %d, sps_num_reorder_pics_0 = %d\n",
+					get_dynamic_buf_num_margin(hevc), get_interlace_filed_margin(hevc),
 					hevc->param.p.sps_max_dec_pic_buffering_minus1_0,
 					hevc->param.p.sps_num_reorder_pics_0);
 			}
@@ -14956,6 +14972,11 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->dynamic_buf_num_margin = config_val;
 
 		if (get_config_int(pdata->config,
+			"parm_interlace_filed_margin",
+			&config_val) == 0)
+			hevc->interlace_filed_margin = config_val;
+
+		if (get_config_int(pdata->config,
 			"parm_v4l_canvas_mem_mode",
 			&config_val) == 0)
 			hevc->mem_map_mode = config_val;
@@ -15063,6 +15084,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		else
 			hevc->dynamic_buf_num_margin = dynamic_buf_num_margin;
 	}
+
+	if (hevc->interlace_filed_margin == 0)
+		hevc->interlace_filed_margin = interlace_filed_margin;
 
 	hevc->mem_map_mode = mem_map_mode;
 
@@ -15548,6 +15572,9 @@ MODULE_PARM_DESC(buf_alloc_height, "\n buf_alloc_height\n");
 
 module_param(dynamic_buf_num_margin, uint, 0664);
 MODULE_PARM_DESC(dynamic_buf_num_margin, "\n dynamic_buf_num_margin\n");
+
+module_param(interlace_filed_margin, uint, 0664);
+MODULE_PARM_DESC(interlace_filed_margin, "\n ammvdec_h264 interlace_filed_margin\n");
 
 module_param(max_buf_num, uint, 0664);
 MODULE_PARM_DESC(max_buf_num, "\n max_buf_num\n");
