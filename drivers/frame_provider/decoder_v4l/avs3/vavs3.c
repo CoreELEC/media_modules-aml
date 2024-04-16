@@ -6030,13 +6030,13 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	if (without_display_mode == 0) {
 		if (ctx->is_stream_off) {
-			vavs3_vf_put(vavs3_vf_get(dec), dec);
+			vavs3_vf_put(vavs3_vf_get(vdec), vdec);
 			pr_info("[%d] AVS3 EOS notify.\n", ctx->id);
 		} else {
 			v4l_submit_vframe(dec);
 		}
 	} else {
-		vavs3_vf_put(vavs3_vf_get(dec), dec);
+		vavs3_vf_put(vavs3_vf_get(vdec), vdec);
 		pr_info("[%d] AVS3 EOS notify.\n", ctx->id);
 	}
 
@@ -9575,12 +9575,12 @@ static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
 
 	if (without_display_mode == 0) {
 		if (ctx->is_stream_off) {
-			vavs3_vf_put(vavs3_vf_get(dec), dec);
+			vavs3_vf_put(vavs3_vf_get(vdec), vdec);
 		} else {
 			v4l_submit_vframe(dec);
 		}
 	} else
-		vavs3_vf_put(vavs3_vf_get(dec), dec);
+		vavs3_vf_put(vavs3_vf_get(vdec), vdec);
 
 	avs3_dec->backend_decoded_count++;
 

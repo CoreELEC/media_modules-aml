@@ -6350,7 +6350,7 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 					vf_notify_receiver(dec->provider_name,
 						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 			} else
-				vavs3_vf_put(vavs3_vf_get(dec), dec);
+				vavs3_vf_put(vavs3_vf_get(pvdec), pvdec);
 		}
 	}
 /*!NO_DISPLAY*/
@@ -9924,7 +9924,7 @@ static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
 					VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 		}
 	} else
-		vavs3_vf_put(vavs3_vf_get(dec), dec);
+		vavs3_vf_put(vavs3_vf_get(vdec), vdec);
 
 	avs3_dec->backend_decoded_count++;
 

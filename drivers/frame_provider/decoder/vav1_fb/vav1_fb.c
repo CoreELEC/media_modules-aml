@@ -7638,7 +7638,7 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 		for (i = 0; i < signed_count; i++) {
 			if (!signed_fence[i])
 				continue;
-			vav1_vf_put(signed_fence[i], vdec);
+			vav1_vf_put(signed_fence[i], hw);
 		}
 	} else {
 		prepare_display_buf((struct AV1HW_s *)(pbi->private_data), sd);
