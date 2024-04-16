@@ -15544,6 +15544,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			pic->vf_ref = 0;
 			hevc->m_BUF[pic->index].v4l_ref_buf_addr =0;
 			pic->output_mark = 0;
+			pic->error_mark = 0;
 
 			spin_unlock_irqrestore(&h265_lock, flags);
 
