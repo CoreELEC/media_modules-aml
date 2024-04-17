@@ -6264,11 +6264,6 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 		vf->src_fmt.play_id = vdec->inst_cnt;
 
-		if (v4l2_ctx->no_fbc_output &&
-			(v4l2_ctx->picinfo.bitdepth != 0 &&
-			 v4l2_ctx->picinfo.bitdepth != 8))
-			v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
-				aml_buf, vf);
 		av1_inc_vf_ref(hw, pic_config->v4l_buf_index);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		if (pic_config->v4l_buf_index != pic_config->BUF_index)	{
@@ -6326,6 +6321,13 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		ATRACE_COUNTER(hw->trace.disp_q_name, kfifo_len(&hw->display_q));
 
 		atomic_add(1, &hw->vf_pre_count);
+
+		if ((v4l2_ctx->no_fbc_output &&
+			(v4l2_ctx->picinfo.bitdepth != 0 &&
+			v4l2_ctx->picinfo.bitdepth != 8)) ||
+			v4l2_ctx->enable_di_post)
+			v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+				aml_buf, vf);
 		/*count info*/
 		hw->gvs->frame_dur = hw->frame_dur;
 		vdec_count_info(hw->gvs, 0, stream_offset);
@@ -6377,6 +6379,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			if (v4l2_ctx->is_stream_off) {
 				vav1_vf_put(vav1_vf_get(vdec), vdec);
 			} else {
+				aml_buf_set_vframe(aml_buf, vf);
 				vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 				aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 			}
@@ -6431,6 +6434,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vf->v4l_mem_handle	= (ulong)aml_buf;
 
 	vdec_vframe_ready(vdec, vf);
+	aml_buf_set_vframe(aml_buf, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
