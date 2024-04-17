@@ -5595,14 +5595,14 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 	//WRITE_VREG(DEBUG_REG1, 0x0);  //no debug
 	if (first_flag)
 		WRITE_VREG(NAL_SEARCH_CTL, 0x8); //check vps/sps/pps/i-slice in ucode
-		WRITE_VREG(DECODE_STOP_POS, 0x0);
+	WRITE_VREG(DECODE_STOP_POS, 0x0);
 
-		/* clear mailbox interrupt */
-		WRITE_VREG(pbi->ASSIST_MBOX0_CLR_REG, 1);
+	/* clear mailbox interrupt */
+	WRITE_VREG(pbi->ASSIST_MBOX0_CLR_REG, 1);
 
-		/* enable mailbox interrupt */
-		WRITE_VREG(pbi->ASSIST_MBOX0_MASK, 1);
-		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "front irq enabled\n");
+	/* enable mailbox interrupt */
+	WRITE_VREG(pbi->ASSIST_MBOX0_MASK, 1);
+	vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "front irq enabled\n");
 	}
 
 }

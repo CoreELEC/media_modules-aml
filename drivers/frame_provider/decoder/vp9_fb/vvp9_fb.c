@@ -6108,7 +6108,7 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 
 	//WRITE_VREG(DEBUG_REG1, 0x0);  //no debug
 	if (first_flag)
-	WRITE_VREG(NAL_SEARCH_CTL, 0x8); //check vps/sps/pps/i-slice in ucode
+		WRITE_VREG(NAL_SEARCH_CTL, 0x8); //check vps/sps/pps/i-slice in ucode
 	WRITE_VREG(DECODE_STOP_POS, 0x0);
 
 	/* clear mailbox interrupt */

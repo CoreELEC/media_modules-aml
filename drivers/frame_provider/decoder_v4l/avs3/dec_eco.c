@@ -1045,7 +1045,7 @@ int dec_eco_pic_header(union param_u *param, COM_PIC_HEADER * pic_header, COM_SQ
 			if (pic_header->rpl_l0.ref_pic_active_num > MAX_NUM_REF_PICS) {
 				if (avs3_get_debug_flag())
 					pr_info("<1>pic_header->rpl_l0.ref_pic_active_num (%d) is beyond limit, force it to %d\n",
-				pic_header->rpl_l0.ref_pic_active_num, MAX_NUM_REF_PICS);
+					pic_header->rpl_l0.ref_pic_active_num, MAX_NUM_REF_PICS);
 				pic_header->rpl_l0.ref_pic_active_num = MAX_NUM_REF_PICS;
 			}
 #endif
@@ -1057,7 +1057,7 @@ int dec_eco_pic_header(union param_u *param, COM_PIC_HEADER * pic_header, COM_SQ
 				if (pic_header->rpl_l1.ref_pic_active_num > MAX_NUM_REF_PICS) {
 					if (avs3_get_debug_flag())
 						pr_info("<2>pic_header->rpl_l1.ref_pic_active_num (%d) is beyond limit, force it to %d\n",
-					pic_header->rpl_l1.ref_pic_active_num, MAX_NUM_REF_PICS);
+						pic_header->rpl_l1.ref_pic_active_num, MAX_NUM_REF_PICS);
 					pic_header->rpl_l1.ref_pic_active_num = MAX_NUM_REF_PICS;
 				}
 #endif
@@ -1069,7 +1069,7 @@ int dec_eco_pic_header(union param_u *param, COM_PIC_HEADER * pic_header, COM_SQ
 			if (pic_header->rpl_l0.ref_pic_active_num > MAX_NUM_REF_PICS) {
 				if (avs3_get_debug_flag())
 					pr_info("<3>pic_header->rpl_l0.ref_pic_active_num (%d) is beyond limit, force it to %d\n",
-				pic_header->rpl_l0.ref_pic_active_num, MAX_NUM_REF_PICS);
+					pic_header->rpl_l0.ref_pic_active_num, MAX_NUM_REF_PICS);
 				pic_header->rpl_l0.ref_pic_active_num = MAX_NUM_REF_PICS;
 			}
 #endif
@@ -1081,7 +1081,7 @@ int dec_eco_pic_header(union param_u *param, COM_PIC_HEADER * pic_header, COM_SQ
 				if (pic_header->rpl_l1.ref_pic_active_num > MAX_NUM_REF_PICS) {
 					if (avs3_get_debug_flag())
 						pr_info("<4>pic_header->rpl_l1.ref_pic_active_num (%d) is beyond limit, force it to %d\n",
-					pic_header->rpl_l1.ref_pic_active_num, MAX_NUM_REF_PICS);
+						pic_header->rpl_l1.ref_pic_active_num, MAX_NUM_REF_PICS);
 					pic_header->rpl_l1.ref_pic_active_num = MAX_NUM_REF_PICS;
 				}
 #endif
