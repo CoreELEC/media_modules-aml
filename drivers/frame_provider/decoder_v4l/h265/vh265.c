@@ -12150,6 +12150,7 @@ force_output:
 
 			if (hevc->cur_pic != NULL && hevc->buf_allocated) {
 				hevc->cur_pic->drop_mark = 1;
+				hevc->cur_pic->error_mark = 1;
 				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 					"%s, set drop_mark decode_idx %d ts: %llu\n",
 					__func__, hevc->cur_pic->decode_idx, ctx->current_timestamp);
@@ -13230,7 +13231,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			pic->cma_alloc_addr) {
 
 			if ((ctx->vpp_is_need || ctx->enable_di_post) &&
-				!(pic->error_mark && (hevc->nal_skip_policy & 0x2))) {
+				!(pic->drop_mark)) {
 				if (pic->pic_struct == 3 || pic->pic_struct == 4 ||
 					pic->pic_struct == 9 || pic->pic_struct == 10 ||
 					pic->pic_struct == 11 || pic->pic_struct == 12) {
