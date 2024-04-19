@@ -11034,6 +11034,11 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					vf->type |= VIDTYPE_SCATTER;
 			}
 
+			if (!v4l2_ctx->no_fbc_output && pic->double_write_mode != 16 &&
+				((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+				v4l_output_dw_with_compress(hevc, pic->double_write_mode)))
+				vf->type |= VIDTYPE_COMPRESS | VIDTYPE_SCATTER;
+
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hevc->m_ins_flag &&
 				(get_dbg_flag(hevc)
