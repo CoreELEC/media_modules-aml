@@ -23,7 +23,33 @@
 #include <linux/init.h>
 #include <linux/printk.h>
 #include <linux/fs.h>
+#include <linux/version.h>
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
+ssize_t media_write(struct file *file, const void *buf, size_t count, loff_t *pos)
+{
+	return kernel_write(file, buf, count, pos);
+}
+EXPORT_SYMBOL(media_write);
+
+ssize_t media_read(struct file *file, void *bufs, size_t count, loff_t *pos)
+{
+	return kernel_read(file, bufs, count, pos);
+}
+EXPORT_SYMBOL(media_read);
+
+struct file *media_open(const char *filename, int flags, umode_t mode)
+{
+	return filp_open(filename, flags, mode);
+}
+EXPORT_SYMBOL(media_open);
+
+int media_close(struct file *filp, fl_owner_t id)
+{
+	return filp_close(filp, id);
+}
+EXPORT_SYMBOL(media_close);
+#else
 ssize_t media_write(struct file *file, const void *buf, size_t count, loff_t *pos)
 {
 	return 0;
@@ -47,4 +73,4 @@ int media_close(struct file *filp, fl_owner_t id)
 	return 0;
 }
 EXPORT_SYMBOL(media_close);
-
+#endif

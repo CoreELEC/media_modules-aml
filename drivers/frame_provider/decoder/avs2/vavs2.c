@@ -6886,7 +6886,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	avs2_dec->start_time = div64_u64(local_clock(), 1000);
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 

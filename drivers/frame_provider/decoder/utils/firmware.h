@@ -85,7 +85,7 @@ int __weak tee_vp9_prob_process(u32 cur_frame_type, u32 prev_frame_type,
 struct firmware_s {
 	char name[32];
 	unsigned int len;
-	char data[0];
+	char *data;
 };
 
 extern int get_decoder_firmware_data(enum vformat_e type,

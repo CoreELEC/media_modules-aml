@@ -34,6 +34,8 @@
 #include "amports_priv.h"
 #include "../../common/chips/decoder_cpu_ver_info.h"
 #include "../../include/regs/dos_registers.h"
+#include "../../common/media_utils/media_kernel_version.h"
+
 #define INFO_VALID ((astream_dev) && (astream_dev->format))
 
 struct astream_device_s {
@@ -85,7 +87,7 @@ static char *astream_format[] = {
 static const char *na_string = "NA";
 static struct astream_device_s *astream_dev;
 
-static ssize_t format_show(struct class *class, struct class_attribute *attr,
+static ssize_t format_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						   char *buf)
 {
 	if (INFO_VALID && astream_dev->format)
@@ -94,7 +96,7 @@ static ssize_t format_show(struct class *class, struct class_attribute *attr,
 		return sprintf(buf, "%s\n", na_string);
 }
 
-static ssize_t channum_show(struct class *class, struct class_attribute *attr,
+static ssize_t channum_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 							char *buf)
 {
 	if (INFO_VALID)
@@ -103,8 +105,8 @@ static ssize_t channum_show(struct class *class, struct class_attribute *attr,
 		return sprintf(buf, "%s\n", na_string);
 }
 
-static ssize_t samplerate_show(struct class *class,
-				struct class_attribute *attr, char *buf)
+static ssize_t samplerate_show(KV_CLASS_CONST struct class *class,
+				KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	if (INFO_VALID)
 		return sprintf(buf, "%u\n", astream_dev->samplerate);
@@ -112,8 +114,8 @@ static ssize_t samplerate_show(struct class *class,
 		return sprintf(buf, "%s\n", na_string);
 }
 
-static ssize_t datawidth_show(struct class *class,
-				struct class_attribute *attr,
+static ssize_t datawidth_show(KV_CLASS_CONST struct class *class,
+				KV_CLASS_ATTR_CONST struct class_attribute *attr,
 					char *buf)
 {
 	if (INFO_VALID)
@@ -122,7 +124,7 @@ static ssize_t datawidth_show(struct class *class,
 		return sprintf(buf, "%s\n", na_string);
 }
 
-static ssize_t pts_show(struct class *class, struct class_attribute *attr,
+static ssize_t pts_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						char *buf)
 {
 	u32 pts, frame_size;
@@ -138,8 +140,8 @@ static ssize_t pts_show(struct class *class, struct class_attribute *attr,
 		return sprintf(buf, "%s\n", na_string);
 }
 
-static ssize_t addr_offset_show(struct class *class,
-				struct class_attribute *attr, char *buf)
+static ssize_t addr_offset_show(KV_CLASS_CONST struct class *class,
+				KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", astream_dev->offset);
 }

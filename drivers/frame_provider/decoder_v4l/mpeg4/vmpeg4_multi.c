@@ -2662,7 +2662,7 @@ static s32 vmmpeg4_init(struct vdec_mpeg4_hw_s *hw)
 	struct firmware_s *fw = NULL;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 

@@ -25,6 +25,7 @@
 #include <linux/uaccess.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/kfifo.h>
+#include "../../../common/media_utils/media_kernel_version.h"
 
 #define FRAME_CHECK
 #define AUX_DATA_CRC
@@ -140,18 +141,18 @@ int frame_check_init(struct pic_check_mgr_t *mgr, int id);
 
 void frame_check_exit(struct pic_check_mgr_t *mgr);
 
-ssize_t frame_check_show(struct class *class,
-		struct class_attribute *attr, char *buf);
+ssize_t frame_check_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf);
 
-ssize_t frame_check_store(struct class *class,
-		struct class_attribute *attr,
+ssize_t frame_check_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size);
 
-ssize_t dump_yuv_show(struct class *class,
-		struct class_attribute *attr, char *buf);
+ssize_t dump_yuv_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf);
 
-ssize_t dump_yuv_store(struct class *class,
-		struct class_attribute *attr,
+ssize_t dump_yuv_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size);
 
 void vdec_frame_check_exit(struct vdec_s *vdec);

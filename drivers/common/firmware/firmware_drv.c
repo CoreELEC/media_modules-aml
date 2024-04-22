@@ -401,8 +401,8 @@ static void fw_files_info_walk(void)
 	}
 }
 
-static ssize_t info_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t info_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	struct fw_mgr_s *mgr = g_mgr;
@@ -475,8 +475,8 @@ out:
 	return pbuf - buf;
 }
 
-static ssize_t info_store(struct class *cls,
-	struct class_attribute *attr, const char *buf, size_t count)
+static ssize_t info_store(KV_CLASS_CONST struct class *cls,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, const char *buf, size_t count)
 {
 	if (kstrtoint(buf, 0, &detail) < 0)
 		return -EINVAL;
@@ -962,8 +962,8 @@ out:
 }
 EXPORT_SYMBOL(video_fw_reload);
 
-static ssize_t reload_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t reload_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 
@@ -974,8 +974,8 @@ static ssize_t reload_show(struct class *class,
 	return pbuf - buf;
 }
 
-static ssize_t reload_store(struct class *class,
-		struct class_attribute *attr,
+static ssize_t reload_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	int ret = -1;
@@ -992,14 +992,14 @@ static ssize_t reload_store(struct class *class,
 	return size;
 }
 
-static ssize_t debug_show(struct class *cls,
-	struct class_attribute *attr, char *buf)
+static ssize_t debug_show(KV_CLASS_CONST struct class *cls,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%x\n", debug);
 }
 
-static ssize_t debug_store(struct class *cls,
-	struct class_attribute *attr, const char *buf, size_t count)
+static ssize_t debug_store(KV_CLASS_CONST struct class *cls,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, const char *buf, size_t count)
 {
 	if (kstrtoint(buf, 0, &debug) < 0)
 		return -EINVAL;

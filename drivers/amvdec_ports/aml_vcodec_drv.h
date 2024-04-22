@@ -37,6 +37,7 @@
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_ts.h"
+#include "../common/media_utils/media_kernel_version.h"
 
 #define AML_VCODEC_DRV_NAME	"aml_vcodec_drv"
 #define AML_VCODEC_DEC_NAME	"aml-vcodec-dec"

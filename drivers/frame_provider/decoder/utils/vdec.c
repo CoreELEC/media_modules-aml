@@ -5421,8 +5421,8 @@ static struct am_reg am_risc[] = {
 	{"AV_SCRATCH_N", 0x09d7},
 };
 
-static ssize_t amrisc_regs_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t amrisc_regs_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	struct am_reg *regs = am_risc;
@@ -5465,8 +5465,8 @@ static ssize_t amrisc_regs_show(struct class *class,
 	return ret;
 }
 
-static ssize_t dump_trace_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t dump_trace_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	int i;
 	char *pbuf = buf;
@@ -5544,8 +5544,8 @@ static ssize_t dump_trace_show(struct class *class,
 	return ret;
 }
 
-static ssize_t clock_level_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t clock_level_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	size_t ret;
@@ -5562,14 +5562,14 @@ static ssize_t clock_level_show(struct class *class,
 	return ret;
 }
 
-static ssize_t enable_mvdec_info_show(struct class *cla,
-				  struct class_attribute *attr, char *buf)
+static ssize_t enable_mvdec_info_show(KV_CLASS_CONST struct class *cla,
+				  KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", enable_mvdec_info);
 }
 
-static ssize_t enable_mvdec_info_store(struct class *cla,
-				   struct class_attribute *attr,
+static ssize_t enable_mvdec_info_store(KV_CLASS_CONST struct class *cla,
+				   KV_CLASS_ATTR_CONST struct class_attribute *attr,
 				   const char *buf, size_t count)
 {
 	int r;
@@ -5582,8 +5582,8 @@ static ssize_t enable_mvdec_info_store(struct class *cla,
 
 	return count;
 }
-static ssize_t poweron_clock_level_store(struct class *class,
-		struct class_attribute *attr,
+static ssize_t poweron_clock_level_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	unsigned int val;
@@ -5598,8 +5598,8 @@ static ssize_t poweron_clock_level_store(struct class *class,
 	return size;
 }
 
-static ssize_t poweron_clock_level_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t poweron_clock_level_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", poweron_clock_level);
 }
@@ -5609,8 +5609,8 @@ static ssize_t poweron_clock_level_show(struct class *class,
  *always don't release
  *vdec 64 memory for fast play.
  */
-static ssize_t keep_vdec_mem_store(struct class *class,
-		struct class_attribute *attr,
+static ssize_t keep_vdec_mem_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	unsigned int val;
@@ -5624,15 +5624,15 @@ static ssize_t keep_vdec_mem_store(struct class *class,
 	return size;
 }
 
-static ssize_t keep_vdec_mem_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t keep_vdec_mem_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", keep_vdec_mem);
 }
 
 #ifdef VDEC_DEBUG_SUPPORT
-static ssize_t debug_store(struct class *class,
-		struct class_attribute *attr,
+static ssize_t debug_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	struct vdec_s *vdec;
@@ -5692,8 +5692,8 @@ static ssize_t debug_store(struct class *class,
 	return size;
 }
 
-static ssize_t debug_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t debug_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	struct vdec_s *vdec;
@@ -5770,8 +5770,8 @@ static void *pxp_buf_addr = NULL;
 static ulong pxp_buf_phy_addr = 0;
 static ulong pxp_buf_mem_handle = 0;
 
-static ssize_t pxp_buf_store(struct class *class,
-		struct class_attribute *attr,
+static ssize_t pxp_buf_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	ssize_t ret;
@@ -5853,8 +5853,8 @@ static ssize_t pxp_buf_store(struct class *class,
 	return size;
 }
 
-static ssize_t pxp_buf_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t pxp_buf_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return 0;
 }
@@ -5884,8 +5884,8 @@ int show_stream_buffer_status(char *buf,
 }
 EXPORT_SYMBOL(show_stream_buffer_status);
 
-static ssize_t vdec_vfm_path_store(struct class *class,
-		 struct class_attribute *attr,
+static ssize_t vdec_vfm_path_store(KV_CLASS_CONST struct class *class,
+		 KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		 const char *buf, size_t count)
 {
 	char *buf_dup, *ps, *token;
@@ -5943,8 +5943,8 @@ static ssize_t vdec_vfm_path_store(struct class *class,
 	return count;
 }
 
-static ssize_t vdec_vfm_path_show(struct class *class,
-	struct class_attribute *attr, char *buf)
+static ssize_t vdec_vfm_path_show(KV_CLASS_CONST struct class *class,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	int len = 0;
 	int i;
@@ -6196,8 +6196,8 @@ void vdec_set_profile_level(struct vdec_s *vdec, u32 profile_idc, u32 level_idc)
 EXPORT_SYMBOL(vdec_set_profile_level);
 
 static int dump_mode;
-static ssize_t dump_risc_mem_store(struct class *class,
-		struct class_attribute *attr,
+static ssize_t dump_risc_mem_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)/*set*/
 {
 	unsigned int val;
@@ -6246,8 +6246,8 @@ static void dump_lmem(void)
 	}
 }
 
-static ssize_t dump_risc_mem_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t dump_risc_mem_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	int ret;
@@ -6292,7 +6292,7 @@ static ssize_t dump_risc_mem_show(struct class *class,
 	return sprintf(buf, "done\n");
 }
 
-static ssize_t core_show(struct class *class, struct class_attribute *attr,
+static ssize_t core_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 			char *buf)
 {
 	struct vdec_core_s *core = vdec_core;
@@ -6330,8 +6330,8 @@ ssize_t dump_vdec_core(char *buf) {
 	return core_show(NULL, NULL, buf);
 }
 
-static ssize_t vdec_status_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t vdec_status_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	struct vdec_s *vdec;
@@ -6407,8 +6407,8 @@ out:
 	return pbuf - buf;
 }
 
-static ssize_t dump_vdec_blocks_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t dump_vdec_blocks_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	struct vdec_core_s *core = vdec_core;
 	char *pbuf = buf;
@@ -6432,8 +6432,8 @@ ssize_t dump_vdec_blocks(char *buf) {
 	return dump_vdec_blocks_show(NULL, NULL, buf);
 }
 
-static ssize_t dump_vdec_chunks_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t dump_vdec_chunks_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	struct vdec_core_s *core = vdec_core;
 	char *pbuf = buf;
@@ -6457,8 +6457,8 @@ ssize_t dump_vdec_chunks(char *buf) {
 	return dump_vdec_chunks_show(NULL, NULL, buf);
 }
 
-static ssize_t dump_decoder_state_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t dump_decoder_state_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	struct vdec_s *vdec;
@@ -6485,8 +6485,8 @@ ssize_t dump_decoder_state(char *buf) {
 	return dump_decoder_state_show(NULL, NULL, buf);
 }
 
-static ssize_t dump_fps_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t dump_fps_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	struct vdec_core_s *core = vdec_core;
@@ -6502,8 +6502,8 @@ static ssize_t dump_fps_show(struct class *class,
 	return pbuf - buf;
 }
 
-static ssize_t version_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t version_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 
@@ -6665,7 +6665,7 @@ static char * parser_mpeg4_profile(char *pbuf, struct vdec_s *vdec)
 	return pbuf;
 }
 
-static ssize_t profile_idc_show(struct class *class, struct class_attribute *attr,
+static ssize_t profile_idc_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 			char *buf)
 {
 	struct vdec_core_s *core = vdec_core;
@@ -6763,7 +6763,7 @@ static char * parser_mpeg4_level(char *pbuf, struct vdec_s *vdec)
 	return pbuf;
 }
 
-static ssize_t level_idc_show(struct class *class, struct class_attribute *attr,
+static ssize_t level_idc_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 			char *buf)
 {
 	struct vdec_core_s *core = vdec_core;
@@ -6792,8 +6792,8 @@ static ssize_t level_idc_show(struct class *class, struct class_attribute *attr,
 	return pbuf - buf;
 }
 
-static ssize_t dos_dev_info_show(struct class *class,
-	struct class_attribute *attr, char *buf)
+static ssize_t dos_dev_info_show(KV_CLASS_CONST struct class *class,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	pr_dos_infos();
 
@@ -7353,11 +7353,11 @@ void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 	if (vframe_qos)
 		memcpy(&fifo_buf[i].qos, vframe_qos, sizeof(struct vframe_qos_s));
 	if (vinfo) {
-		memcpy(&fifo_buf[i].frame_width, &vinfo->frame_width,
-		        ((char*)&vinfo->reserved[0] - (char*)&vinfo->frame_width));
+		memcpy(&fifo_buf[i].normal_info, &vinfo->normal_info,
+		        sizeof(vinfo->normal_info));
 		/*copy for ipb report*/
-		memcpy(&fifo_buf[i].i_decoded_frames, &vinfo->i_decoded_frames,
-		        ((char*)&vinfo->endipb_line[0] - (char*)&vinfo->i_decoded_frames));
+		memcpy(&fifo_buf[i].ipb, &vinfo->ipb,
+		        sizeof(vinfo->ipb));
 		fifo_buf[i].av_resynch_counter = timestamp_avsync_counter_get();
 	}
 	if (vf) {
@@ -7758,6 +7758,19 @@ void rdma_back_end_work(dma_addr_t back_ddr_phy_addr, u32 size)
 	return;
 }
 EXPORT_SYMBOL(rdma_back_end_work);
+
+struct firmware_s *fw_firmare_s_creat(int fw_size)
+{
+	struct firmware_s *fw = NULL;
+
+	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	if (IS_ERR_OR_NULL(fw))
+		return NULL;
+	fw->data = (char *)(fw + 1);
+
+	return fw;
+}
+EXPORT_SYMBOL(fw_firmare_s_creat);
 
 RESERVEDMEM_OF_DECLARE(vdec, "amlogic, vdec-memory", vdec_mem_setup);
 /*

@@ -58,7 +58,7 @@ struct decoder_bmmu_box {
 	int mem_flags;		/*can overwrite on idx alloc */
 	u32 alloc_flags;
 	struct mm_list_expand exp_mm_list;
-	struct codec_mm_s *mm_list[1];
+	struct codec_mm_s **mm_list;
 };
 
 struct decoder_bmmu_box_mgr {
@@ -142,6 +142,7 @@ void *decoder_bmmu_box_alloc_box(const char *name,
 	box->exp_num = 0;
 	box->exp_mm_list.mm = NULL;
 	box->exp_mm_list.index = -1;
+	box->mm_list = (struct codec_mm_s **)(box + 1);
 	INIT_LIST_HEAD(&box->exp_mm_list.mm_list);
 	mutex_init(&box->mutex);
 	INIT_LIST_HEAD(&box->list);
@@ -668,7 +669,7 @@ static int decoder_bmmu_box_dump_all(void *buf, int size)
 	return tsize;
 }
 
-static ssize_t box_dump_show(struct class *class, struct class_attribute *attr,
+static ssize_t box_dump_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 							 char *buf)
 {
 	ssize_t ret = 0;
@@ -696,8 +697,8 @@ struct decoder_bmmu_box *decoder_bmmu_box_find_box_by_name(char *name)
 }
 
 static ssize_t
-box_dump_store(struct class *class,
-		struct class_attribute *attr,
+box_dump_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	char cmd[16];
@@ -755,8 +756,8 @@ box_dump_store(struct class *class,
 	return size;
 }
 
-static ssize_t debug_show(struct class *class,
-		struct class_attribute *attr,
+static ssize_t debug_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		char *buf)
 {
 	ssize_t size = 0;
@@ -769,8 +770,8 @@ static ssize_t debug_show(struct class *class,
 	return size;
 }
 
-static ssize_t debug_store(struct class *class,
-		struct class_attribute *attr,
+static ssize_t debug_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	unsigned val;

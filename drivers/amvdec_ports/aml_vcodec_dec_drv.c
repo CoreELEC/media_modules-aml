@@ -38,6 +38,7 @@
 #include "aml_vcodec_vpp.h"
 #include "aml_vcodec_dec_infoserver.h"
 #include "../frame_provider/decoder/utils/decoder_report.h"
+#include "../common/media_utils/media_kernel_version.h"
 
 #include <linux/file.h>
 #include <linux/anon_inodes.h>
@@ -482,8 +483,8 @@ static const struct v4l2_file_operations aml_vcodec_fops = {
 	.mmap		= v4l2_m2m_fop_mmap,
 };
 
-static ssize_t status_show(struct class *cls,
-	struct class_attribute *attr, char *buf)
+static ssize_t status_show(KV_CLASS_CONST struct class *cls,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	struct aml_vcodec_dev *dev = container_of(cls,
 		struct aml_vcodec_dev, v4ldec_class);
@@ -517,8 +518,8 @@ ssize_t show_v4ldec_state(void *dev, char *buf) {
 }
 EXPORT_SYMBOL(show_v4ldec_state);
 
-static ssize_t mmu_mem_info_show(struct class *cls,
-	struct class_attribute *attr, char *buf)
+static ssize_t mmu_mem_info_show(KV_CLASS_CONST struct class *cls,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	struct aml_vcodec_dev *dev = container_of(cls,
 		struct aml_vcodec_dev, v4ldec_class);
@@ -541,14 +542,14 @@ out:
 	return pbuf - buf;
 }
 
-static ssize_t dump_path_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t dump_path_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return snprintf(buf, sizeof(dump_path), "%s\n", dump_path);
 }
 
-static ssize_t dump_path_store(struct class *class,
-		struct class_attribute *attr,
+static ssize_t dump_path_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	ssize_t n;
@@ -656,7 +657,9 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 
 	/*init class*/
 	dev->v4ldec_class.name = "v4ldec";
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
 	dev->v4ldec_class.owner = THIS_MODULE;
+#endif
 	dev->v4ldec_class.class_groups = v4ldec_class_groups;
 	ret = class_register(&dev->v4ldec_class);
 	if (ret) {

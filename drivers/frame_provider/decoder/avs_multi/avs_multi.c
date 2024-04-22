@@ -2099,7 +2099,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 	struct firmware_s *fw;
 	u32 fw_size = 0x1000 * 16;
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 
@@ -4285,7 +4285,7 @@ static s32 vavs_init2(struct vdec_avs_hw_s *hw)
 	struct firmware_s *fw;
 	u32 fw_size = 0x1000 * 16;
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 

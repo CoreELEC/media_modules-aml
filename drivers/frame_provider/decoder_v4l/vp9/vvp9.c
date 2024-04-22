@@ -9582,7 +9582,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 	if (vvp9_local_init(pbi) < 0)
 		return -EBUSY;
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 

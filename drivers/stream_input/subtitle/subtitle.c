@@ -30,6 +30,7 @@
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/uaccess.h>
 #include <linux/compat.h>
+#include "../../common/media_utils/media_kernel_version.h"
 //#include "amports_priv.h"
 
 //#include "amlog.h"
@@ -103,13 +104,13 @@ struct subinfo_para_s {
 /* color palette */
 /* width/height */
 
-static ssize_t show_curr(struct class *class, struct class_attribute *attr,
+static ssize_t show_curr(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						 char *buf)
 {
 	return sprintf(buf, "%d: current\n", subtitle_current);
 }
 
-static ssize_t store_curr(struct class *class, struct class_attribute *attr,
+static ssize_t store_curr(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						  const char *buf, size_t size)
 {
 	unsigned int curr;
@@ -125,13 +126,13 @@ static ssize_t store_curr(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_index(struct class *class, struct class_attribute *attr,
+static ssize_t show_index(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						  char *buf)
 {
 	return sprintf(buf, "%d: current\n", subtitle_index);
 }
 
-static ssize_t store_index(struct class *class, struct class_attribute *attr,
+static ssize_t store_index(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						   const char *buf, size_t size)
 {
 	unsigned int curr;
@@ -146,13 +147,13 @@ static ssize_t store_index(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_reset(struct class *class, struct class_attribute *attr,
+static ssize_t show_reset(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						  char *buf)
 {
 	return sprintf(buf, "%d: current\n", subtitle_reset);
 }
 
-static ssize_t store_reset(struct class *class, struct class_attribute *attr,
+static ssize_t store_reset(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						   const char *buf, size_t size)
 {
 	unsigned int reset;
@@ -170,13 +171,13 @@ static ssize_t store_reset(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_type(struct class *class, struct class_attribute *attr,
+static ssize_t show_type(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						 char *buf)
 {
 	return sprintf(buf, "%d: type\n", subtitle_type);
 }
 
-static ssize_t store_type(struct class *class, struct class_attribute *attr,
+static ssize_t store_type(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						  const char *buf, size_t size)
 {
 	unsigned int type;
@@ -191,13 +192,13 @@ static ssize_t store_type(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_width(struct class *class, struct class_attribute *attr,
+static ssize_t show_width(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						  char *buf)
 {
 	return sprintf(buf, "%d: width\n", subtitle_width);
 }
 
-static ssize_t store_width(struct class *class, struct class_attribute *attr,
+static ssize_t store_width(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	unsigned int width;
@@ -212,13 +213,13 @@ static ssize_t store_width(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_height(struct class *class, struct class_attribute *attr,
+static ssize_t show_height(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						   char *buf)
 {
 	return sprintf(buf, "%d: height\n", subtitle_height);
 }
 
-static ssize_t store_height(struct class *class, struct class_attribute *attr,
+static ssize_t store_height(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 				const char *buf, size_t size)
 {
 	unsigned int height;
@@ -233,13 +234,13 @@ static ssize_t store_height(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_total(struct class *class, struct class_attribute *attr,
+static ssize_t show_total(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						  char *buf)
 {
 	return sprintf(buf, "%d: num\n", subtitle_total);
 }
 
-static ssize_t store_total(struct class *class, struct class_attribute *attr,
+static ssize_t store_total(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 				const char *buf, size_t size)
 {
 	unsigned int total;
@@ -254,7 +255,7 @@ static ssize_t store_total(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_enable(struct class *class, struct class_attribute *attr,
+static ssize_t show_enable(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						   char *buf)
 {
 	if (subtitle_enable)
@@ -263,7 +264,7 @@ static ssize_t show_enable(struct class *class, struct class_attribute *attr,
 	return sprintf(buf, "0: disabled\n");
 }
 
-static ssize_t store_enable(struct class *class, struct class_attribute *attr,
+static ssize_t store_enable(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 				const char *buf, size_t size)
 {
 	unsigned int mode;
@@ -278,7 +279,7 @@ static ssize_t store_enable(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_size(struct class *class, struct class_attribute *attr,
+static ssize_t show_size(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						 char *buf)
 {
 	if (subtitle_enable)
@@ -287,7 +288,7 @@ static ssize_t show_size(struct class *class, struct class_attribute *attr,
 	return sprintf(buf, "0: size\n");
 }
 
-static ssize_t store_size(struct class *class, struct class_attribute *attr,
+static ssize_t store_size(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						  const char *buf, size_t size)
 {
 	unsigned int ssize;
@@ -302,13 +303,13 @@ static ssize_t store_size(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_startpts(struct class *class, struct class_attribute *attr,
+static ssize_t show_startpts(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 							 char *buf)
 {
 	return sprintf(buf, "%d: pts\n", subtitle_start_pts);
 }
 
-static ssize_t store_startpts(struct class *class, struct class_attribute *attr,
+static ssize_t store_startpts(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 					const char *buf, size_t size)
 {
 	unsigned int spts;
@@ -323,7 +324,7 @@ static ssize_t store_startpts(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_data(struct class *class, struct class_attribute *attr,
+static ssize_t show_data(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						 char *buf)
 {
 #if 0
@@ -334,7 +335,7 @@ static ssize_t show_data(struct class *class, struct class_attribute *attr,
 	return sprintf(buf, "0: disabled\n");
 }
 
-static ssize_t store_data(struct class *class, struct class_attribute *attr,
+static ssize_t store_data(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						  const char *buf, size_t size)
 {
 	unsigned int address;
@@ -361,13 +362,13 @@ static ssize_t store_data(struct class *class, struct class_attribute *attr,
 	return 1;
 }
 
-static ssize_t show_fps(struct class *class, struct class_attribute *attr,
+static ssize_t show_fps(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						char *buf)
 {
 	return sprintf(buf, "%d: fps\n", subtitle_fps);
 }
 
-static ssize_t store_fps(struct class *class, struct class_attribute *attr,
+static ssize_t store_fps(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						 const char *buf, size_t size)
 {
 	unsigned int ssize;
@@ -382,13 +383,13 @@ static ssize_t store_fps(struct class *class, struct class_attribute *attr,
 	return size;
 }
 
-static ssize_t show_subtype(struct class *class, struct class_attribute *attr,
+static ssize_t show_subtype(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 							char *buf)
 {
 	return sprintf(buf, "%d: subtype\n", subtitle_subtype);
 }
 
-static ssize_t store_subtype(struct class *class, struct class_attribute *attr,
+static ssize_t store_subtype(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 			const char *buf, size_t size)
 {
 	unsigned int ssize;
@@ -628,7 +629,7 @@ static struct class *amsub_clsp;
 static struct cdev *amsub_cdevp;
 #define AMSUBTITLE_DEVICE_COUNT 1
 
-static void create_amsub_attrs(struct class *class)
+static void create_amsub_attrs(KV_CLASS_CONST struct class *class)
 {
 	int i = 0;
 
@@ -638,7 +639,7 @@ static void create_amsub_attrs(struct class *class)
 	}
 }
 
-static void remove_amsub_attrs(struct class *class)
+static void remove_amsub_attrs(KV_CLASS_CONST struct class *class)
 {
 	int i = 0;
 
@@ -658,7 +659,11 @@ int subtitle_init(void)
 		return ret;
 	}
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
 	amsub_clsp = class_create(THIS_MODULE, DEVICE_CLASS_NAME);
+#else
+	amsub_clsp = class_create(DEVICE_CLASS_NAME);
+#endif
 	if (IS_ERR(amsub_clsp)) {
 		ret = PTR_ERR(amsub_clsp);
 		goto err1;

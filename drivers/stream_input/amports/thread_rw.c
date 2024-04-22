@@ -83,7 +83,7 @@ struct threadrw_write_task {
 		struct stream_buf_s *,
 		const char __user *,
 		size_t, int);
-	struct threadrw_buf buf[1];
+	struct threadrw_buf *buf;
 	/*don't add any after buf[] define */
 };
 
@@ -436,6 +436,7 @@ static struct threadrw_write_task *threadrw_alloc_in(int num,
 	task->buffer_size = 0;
 	task->manual_write = flags & 1;
 	task->max_bufs = max_bufs;
+	task->buf = (struct threadrw_buf *)(task + 1);
 	mutex_lock(&task->mutex);
 	ret = alloc_task_buffers_inlock(task, num, block_size);
 	mutex_unlock(&task->mutex);

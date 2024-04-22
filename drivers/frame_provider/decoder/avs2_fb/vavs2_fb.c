@@ -8500,12 +8500,12 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	avs2_dec->decode_idx = 0;
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode == 1 || dec->front_back_mode == 3) {
-		fw_back = vzalloc(sizeof(struct firmware_s) + fw_size);
+		fw_back = fw_firmare_s_creat(fw_size);
 		if (IS_ERR_OR_NULL(fw_back))
 			return -ENOMEM;
 

@@ -8966,7 +8966,7 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 	INIT_WORK(&hw->notify_work, vh264_notify_work);
 	INIT_WORK(&hw->timeout_work, vh264_timeout_work);
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 
@@ -9946,7 +9946,7 @@ int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 
 	{
 		int fw_mmu_size = 0x1000 * 16;
-		struct firmware_s *fw_mmu = vmalloc(sizeof(struct firmware_s) + fw_mmu_size);
+		struct firmware_s *fw_mmu = fw_firmare_s_creat(fw_mmu_size);
 		int size;
 		if (IS_ERR_OR_NULL(fw_mmu))
 			return -ENOMEM;

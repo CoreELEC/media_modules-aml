@@ -3702,7 +3702,7 @@ static s32 vmpeg12_init(struct vdec_mpeg12_hw_s *hw)
 
 	vmpeg12_local_init(hw);
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 

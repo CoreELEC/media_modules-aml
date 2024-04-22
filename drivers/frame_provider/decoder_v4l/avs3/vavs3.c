@@ -8799,12 +8799,12 @@ static s32 vavs3_init(struct vdec_s *vdec)
 
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode == 1 || dec->front_back_mode == 3) {
-		fw_back = vzalloc(sizeof(struct firmware_s) + fw_size);
+		fw_back = fw_firmare_s_creat(fw_size);
 		if (IS_ERR_OR_NULL(fw_back))
 			return -ENOMEM;
 
@@ -10507,8 +10507,6 @@ static void dump_or_fill_phy_buffer(struct AVS3Decoder_s *dec, u32 dump_phy_adr,
 		//msleep(20);
 	}
 	if (fp) {
-		vfs_fsync(fp, 0);
-
 		media_close(fp, current->files);
 	}
 	if (flag == 1)

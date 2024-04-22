@@ -1,4 +1,6 @@
 #include "media_proxy.h"
+#include <linux/version.h>
+#include "../common/media_utils/media_kernel_version.h"
 
 static struct mediaproxy_dev *mediaproxy;
 static struct class *mediaproxy_class;
@@ -332,7 +334,11 @@ static int __init mediaproxy_init_module(void)
     }
     mediaproxy->major = result;
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
     mediaproxy_class = class_create(THIS_MODULE, DEV_NAME);
+#else
+    mediaproxy_class = class_create(DEV_NAME);
+#endif
     if (IS_ERR(mediaproxy_class)) {
         pr_err("Failed to create mediaproxy class\n");
         unregister_chrdev(mediaproxy->major, DEV_NAME);

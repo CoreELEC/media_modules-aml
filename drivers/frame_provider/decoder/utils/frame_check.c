@@ -1641,8 +1641,8 @@ void vdec_frame_check_exit(struct vdec_s *vdec)
 	single_mode_vdec = NULL;
 }
 
-ssize_t dump_yuv_store(struct class *class,
-		struct class_attribute *attr,
+ssize_t dump_yuv_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	struct vdec_s *vdec = NULL;
@@ -1678,8 +1678,8 @@ ssize_t dump_yuv_store(struct class *class,
 EXPORT_SYMBOL(dump_yuv_store);
 
 
-ssize_t dump_yuv_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+ssize_t dump_yuv_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	int i;
 	char *pbuf = buf;
@@ -1694,8 +1694,8 @@ ssize_t dump_yuv_show(struct class *class,
 }
 
 
-ssize_t frame_check_store(struct class *class,
-		struct class_attribute *attr,
+ssize_t frame_check_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	int ret = -1;
@@ -1719,8 +1719,8 @@ ssize_t frame_check_store(struct class *class,
 }
 EXPORT_SYMBOL(frame_check_store);
 
-ssize_t frame_check_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+ssize_t frame_check_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	int i;
 	char *pbuf = buf;

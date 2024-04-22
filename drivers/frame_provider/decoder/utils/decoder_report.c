@@ -122,8 +122,8 @@ static void buff_show(ssize_t size, char *buf, int buff_size)
 	}
 }
 
-static ssize_t status_show(struct class *cls,
-	struct class_attribute *attr, char *buf)
+static ssize_t status_show(KV_CLASS_CONST struct class *cls,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	char *tmpbuf = NULL;

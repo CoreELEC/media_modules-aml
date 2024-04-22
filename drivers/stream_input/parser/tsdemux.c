@@ -1398,8 +1398,8 @@ int get_discontinue_counter(void)
 }
 EXPORT_SYMBOL(get_discontinue_counter);
 
-static ssize_t discontinue_counter_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+static ssize_t discontinue_counter_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", discontinued_counter);
 }

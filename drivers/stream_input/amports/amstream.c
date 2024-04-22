@@ -87,6 +87,7 @@
 #include "../../common/media_utils/media_utils.h"
 #include "../parser/stream_parser.h"
 #include "../../frame_provider/decoder/utils/decoder_report.h"
+#include "../../common/media_utils/media_kernel_version.h"
 
 //#define G12A_BRINGUP_DEBUG
 
@@ -557,9 +558,10 @@ static void video_port_release(struct port_priv_s *priv,
 		if (slave)
 			vdec_release(slave);
 		priv->vdec = NULL;
+		break;
 	/*fallthrough*/
 	case 1:
-		;
+		break;
 	}
 }
 
@@ -3678,7 +3680,7 @@ static long amstream_compat_ioctl(struct file *file,
 }
 #endif
 
-static ssize_t ports_show(struct class *class, struct class_attribute *attr,
+static ssize_t ports_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						  char *buf)
 {
 	int i;
@@ -3790,7 +3792,7 @@ static int show_vbuf_status_cb(struct stream_buf_s *p, char *buf)
 	return pbuf - buf;
 }
 
-static ssize_t bufs_show(struct class *class, struct class_attribute *attr,
+static ssize_t bufs_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST struct class_attribute *attr,
 						 char *buf)
 {
 	int i;
@@ -3947,8 +3949,8 @@ ssize_t show_amstream_bufs(char *buf) {
 }
 EXPORT_SYMBOL(show_amstream_bufs);
 
-static ssize_t videobufused_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t videobufused_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *pbuf = buf;
 	struct stream_buf_s *p = NULL;
@@ -3962,14 +3964,14 @@ static ssize_t videobufused_show(struct class *class,
 	return 1;
 }
 
-static ssize_t vcodec_profile_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t vcodec_profile_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return vcodec_profile_read(buf);
 }
 
-static ssize_t vcodec_feature_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t vcodec_feature_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return vcodec_feature_read(buf);
 }
@@ -3995,8 +3997,8 @@ static int reset_canuse_bufferlevel(int levelx10000)
 	return 0;
 }
 
-static ssize_t canuse_bufferlevel_show(struct class *class,
-			struct class_attribute *attr, char *buf)
+static ssize_t canuse_bufferlevel_show(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	ssize_t size = sprintf(buf,
 		"use_bufferlevel=%d/10000[=(set range[ 0~10000])=\n",
@@ -4004,8 +4006,8 @@ static ssize_t canuse_bufferlevel_show(struct class *class,
 	return size;
 }
 
-static ssize_t canuse_bufferlevel_store(struct class *class,
-			struct class_attribute *attr,
+static ssize_t canuse_bufferlevel_store(KV_CLASS_CONST struct class *class,
+			KV_CLASS_ATTR_CONST struct class_attribute *attr,
 			const char *buf, size_t size)
 {
 	unsigned int val;
@@ -4021,8 +4023,8 @@ static ssize_t canuse_bufferlevel_store(struct class *class,
 	return size;
 }
 
-static ssize_t max_buffer_delay_ms_store(struct class *class,
-		struct class_attribute *attr,
+static ssize_t max_buffer_delay_ms_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	unsigned int val;
@@ -4038,8 +4040,8 @@ static ssize_t max_buffer_delay_ms_store(struct class *class,
 	return size;
 }
 
-static ssize_t max_buffer_delay_ms_show(struct class *class,
-		struct class_attribute *attr,
+static ssize_t max_buffer_delay_ms_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		char *buf)
 {
 	ssize_t size = 0;
@@ -4051,8 +4053,8 @@ static ssize_t max_buffer_delay_ms_show(struct class *class,
 	return size;
 }
 
-static ssize_t reset_audio_port_store(struct class *class,
-	struct class_attribute *attr,
+static ssize_t reset_audio_port_store(KV_CLASS_CONST struct class *class,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr,
 	const char *buf, size_t size)
 {
 	unsigned int val = 0;
@@ -4081,8 +4083,8 @@ static ssize_t reset_audio_port_store(struct class *class,
 	return size;
 }
 
-ssize_t dump_stream_show(struct class *class,
-		struct class_attribute *attr, char *buf)
+ssize_t dump_stream_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	char *p_buf = buf;
 
@@ -4094,8 +4096,8 @@ ssize_t dump_stream_show(struct class *class,
 }
 
 #define DUMP_STREAM_FILE   "/data/tmp/dump_stream.h264"
-ssize_t dump_stream_store(struct class *class,
-		struct class_attribute *attr,
+ssize_t dump_stream_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	struct stream_buf_s *p_buf;
@@ -4325,8 +4327,11 @@ static int amstream_probe(struct platform_device *pdev)
 		goto error2;
 	}
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
 	amstream_dev_class = class_create(THIS_MODULE, DEVICE_NAME);
-
+#else
+	amstream_dev_class = class_create(DEVICE_NAME);
+#endif
 	for (st = &ports[0], i = 0; i < amstream_port_num; i++, st++) {
 		st->class_dev = device_create(amstream_dev_class, NULL,
 				MKDEV(AMSTREAM_MAJOR, i), NULL,

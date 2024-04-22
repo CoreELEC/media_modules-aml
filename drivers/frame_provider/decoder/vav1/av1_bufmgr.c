@@ -2992,8 +2992,9 @@ int aom_decode_frame_from_obus(AV1Decoder *pbi, union param_u *params, int obu_t
         if (byte_alignment(cm, &rb)) return -1;
         AOM_FALLTHROUGH_INTENDED;  // fall through to read tile group.
 #endif
-  default:
-    break;
+        break;
+    default:
+        break;
       }
 	return frame_decoding_finished;
 }

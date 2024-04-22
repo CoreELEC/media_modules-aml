@@ -31,6 +31,7 @@
 #include <linux/slab.h>
 #include <linux/amlogic/media/codec_mm/codec_mm_scatter.h>
 #include <linux/platform_device.h>
+#include "../../../common/media_utils/media_kernel_version.h"
 
 extern int is_mmu_copy_enable(void);
 
@@ -48,7 +49,7 @@ struct decoder_mmu_box {
 	struct mutex mutex;
 	struct list_head list;
 	struct sc_list_expand exp_sc_list;
-	struct codec_mm_scatter *sc_list[1];
+	struct codec_mm_scatter **sc_list;
 };
 #define MAX_KEEP_FRAME 4
 #define START_KEEP_ID 0x9
@@ -126,6 +127,7 @@ void *decoder_mmu_box_alloc_box(const char *name,
 	box->exp_num = 0;
 	box->exp_sc_list.sc = NULL;
 	box->exp_sc_list.index = -1;
+	box->sc_list = (struct codec_mm_scatter **)(box + 1);
 	INIT_LIST_HEAD(&box->exp_sc_list.sc_list);
 
 	mutex_init(&box->mutex);
@@ -474,8 +476,8 @@ static int decoder_mmu_box_dump_all(void *buf, int size)
 
 
 static ssize_t
-box_dump_show(struct class *class,
-		       struct class_attribute *attr, char *buf)
+box_dump_show(KV_CLASS_CONST struct class *class,
+		       KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
 
@@ -502,8 +504,8 @@ struct decoder_mmu_box *decoder_mmu_box_find_box_by_name(char *name)
 }
 
 static ssize_t
-box_dump_store(struct class *class,
-		struct class_attribute *attr,
+box_dump_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size)
 {
 	char cmd[16];

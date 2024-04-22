@@ -10551,7 +10551,7 @@ static int vh265_clear_mmu_config(struct hevc_state_s *hevc)
 		}
 	}
 #endif
-	fw = vzalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -1;
 
@@ -12986,7 +12986,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		get_decoder_firmware_version(), get_decoder_firmware_submit_count(),
 		hevc->enable_ucode_swap);
 
-	fw = vzalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 

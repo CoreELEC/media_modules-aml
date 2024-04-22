@@ -71,6 +71,7 @@
 #include <linux/meson_ion.h>
 #endif
 
+MODULE_IMPORT_NS(DMA_BUF);
 
 #define OUT_FMT_IDX		(0) //default h264
 #define CAP_FMT_IDX		(14) //capture nv21m

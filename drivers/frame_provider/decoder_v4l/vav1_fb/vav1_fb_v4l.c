@@ -10492,7 +10492,7 @@ static s32 vav1_init_back(struct AV1HW_s *hw)
 	ret = init_fb_bufstate(hw);
 	copy_loopbufs_ptr(&pbi->next_bk[pbi->fb_wr_pos], &pbi->fr);
 
-	fw_back = vzalloc(sizeof(struct firmware_s) + fw_size);
+	fw_back = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw_back))
 		return -ENOMEM;
 
@@ -10560,7 +10560,7 @@ static s32 vav1_init(struct AV1HW_s *hw)
 	mutex_init(&hw->slice_header_lock);
 #endif
 
-	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
+	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 
