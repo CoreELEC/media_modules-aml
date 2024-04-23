@@ -4461,16 +4461,22 @@ static void vdec_route_interrupt(struct vdec_s *vdec, unsigned long mask,
 #define DMC_DEV_TYPE_NON_SECURE        0
 #define DMC_DEV_TYPE_SECURE            1
 
+bool is_vdec_dual_core_mode(struct vdec_s *vdec)
+{
+	if ((vdec->core_mask & CORE_MASK_HEVC_BACK) != 0)
+		return true;
+	else
+		return false;
+}
+
 void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 {
 	struct vdec_input_s *input = &vdec->input;
 	int secure = (vdec_secure(vdec)) ? DMC_DEV_TYPE_SECURE :
 			DMC_DEV_TYPE_NON_SECURE;
+	bool front_back_mode = is_vdec_dual_core_mode(vdec);
 
 	vdec_route_interrupt(vdec, mask, true);
-
-	if (!vdec_core_with_input(mask))
-		return;
 
 	if (vdec_stream_based(vdec) && !vdec_secure(vdec))
 	{
@@ -4480,10 +4486,30 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 	if (input->target == VDEC_INPUT_TARGET_VLD) {
 		tee_config_device_state(DMC_DEV_ID_VDEC, secure);
 
-		if (mask & CORE_MASK_HEVC)
-			tee_config_device_state(DMC_DEV_ID_HEVC, secure);
-	} else if (input->target == VDEC_INPUT_TARGET_HEVC)
-		tee_config_device_state(DMC_DEV_ID_HEVC, secure);
+		if (is_support_dual_core()) {
+			if (mask & CORE_MASK_HEVC_BACK)
+				tee_config_device_state(DMC_DEV_ID_HEVC_B, secure);
+		} else {
+			if (mask & CORE_MASK_HEVC)
+				tee_config_device_state(DMC_DEV_ID_HEVC, secure);
+		}
+	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+		if (is_support_dual_core()) {
+			if (mask & CORE_MASK_HEVC) {
+				tee_config_device_state(DMC_DEV_ID_HEVC, secure);
+				if (!front_back_mode)
+					tee_config_device_state(DMC_DEV_ID_HEVC_B, secure);
+			}
+			if (mask & CORE_MASK_HEVC_BACK)
+				tee_config_device_state(DMC_DEV_ID_HEVC_B, secure);
+		} else {
+			if (mask & CORE_MASK_HEVC)
+				tee_config_device_state(DMC_DEV_ID_HEVC, secure);
+		}
+	}
+
+	if (!vdec_core_with_input(mask))
+		return;
 
 	if (vdec_stream_based(vdec) &&
 		((vdec->need_more_data & VDEC_NEED_MORE_DATA_RUN) &&

@@ -38,6 +38,7 @@
 #define DMC_DEV_ID_DI_PRE                                  16
 #define DMC_DEV_ID_DI_POST                                 17
 #define DMC_DEV_ID_GDC                                     18
+#define DMC_DEV_ID_HEVC_B                                  19
 
 bool __weak tee_enabled(void) { return false; }
 
