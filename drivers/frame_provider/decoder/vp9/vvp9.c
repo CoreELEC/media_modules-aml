@@ -10046,24 +10046,6 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
-	if (pbi->m_ins_flag) {
-		if (hw_to_vdec(pbi)->next_status
-			== VDEC_STATUS_DISCONNECTED &&
-			!pbi->is_used_v4l) {
-#ifdef SUPPORT_FB_DECODING
-			if (pbi->run2_busy)
-				return;
-
-			pbi->dec_s1_result = DEC_S1_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&pbi->s1_work);
-#endif
-			pbi->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&pbi->work);
-			pr_debug(
-			"vdec requested to be disconnected\n");
-			return;
-		}
-	}
 	if (pbi->init_flag == 0) {
 		if (pbi->stat & STAT_TIMER_ARM) {
 			timer->expires = jiffies + PUT_INTERVAL;

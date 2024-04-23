@@ -6212,16 +6212,7 @@ static void vavs2_put_timer_func(struct timer_list *timer)
 	unsigned int buf_level;
 
 	enum receiver_start_e state = RECEIVER_INACTIVE;
-	if (dec->m_ins_flag) {
-		if (hw_to_vdec(dec)->next_status
-			== VDEC_STATUS_DISCONNECTED) {
-			dec->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&dec->work);
-			avs2_print(dec, AVS2_DBG_BUFMGR,
-				"vdec requested to be disconnected\n");
-			return;
-		}
-	}
+
 	if (dec->init_flag == 0) {
 		if (dec->stat & STAT_TIMER_ARM) {
 			timer->expires = jiffies + PUT_INTERVAL;

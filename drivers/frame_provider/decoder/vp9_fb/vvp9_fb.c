@@ -13436,17 +13436,6 @@ static void vvp9_put_timer_func_back(struct timer_list *timer)
 	struct VP9Decoder_s *pbi = container_of(timer,
 		struct VP9Decoder_s, timer_back);
 
-	if (pbi->m_ins_flag) {
-		if (hw_to_vdec(pbi)->next_status
-			== VDEC_STATUS_DISCONNECTED &&
-			!pbi->is_used_v4l) {
-			pbi->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&pbi->work_back);
-			pr_debug(
-			"vdec requested to be disconnected\n");
-			return;
-		}
-	}
 	if (pbi->init_flag == 0) {
 		if (pbi->stat & STAT_TIMER_BACK_ARM) {
 			timer->expires = jiffies + PUT_INTERVAL;

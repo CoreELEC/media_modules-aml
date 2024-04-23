@@ -10426,16 +10426,6 @@ static void vav1_check_timer_back_func(struct timer_list *timer)
 	struct AV1HW_s *hw = container_of(timer,
 			struct AV1HW_s, timer_back);
 
-	if (hw->m_ins_flag) {
-		if (hw_to_vdec(hw)->next_status
-			== VDEC_STATUS_DISCONNECTED) {
-			hw->dec_back_result = DEC_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&hw->work_back);
-			pr_debug("vav1 backend: vdec requested to be disconnected\n");
-			return;
-		}
-	}
-
 	if (hw->init_flag == 0) {
 		if (hw->stat & STAT_TIMER_BACK_ARM) {
 			mod_timer(&hw->timer_back, jiffies + PUT_INTERVAL);
