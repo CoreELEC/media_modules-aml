@@ -239,6 +239,7 @@ struct pic_info_t {
 
 struct vdec_vc1_hw_s {
 	spinlock_t lock;
+	struct mutex vvc1_mutex;
 	struct platform_device *platform_dev;
 	s32 vfbuf_use[DECODE_BUFFER_NUM_MAX];
 	unsigned char again_flag;
@@ -911,7 +912,6 @@ static void reset(struct vdec_s *vdec)
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i;
 	ulong timeout;
-	unsigned long flags;
 
 	hw->streamon = false;
 	timeout = jiffies + HZ / 5;
@@ -919,16 +919,16 @@ WAIT_FINISH_DECODING:
 	if (hw->running)
 		usleep_range(500, 1000);
 
-	spin_lock_irqsave(&hw->lock, flags);
+	mutex_lock(&hw->vvc1_mutex);
 	if (hw->running) {
 		if (!time_after(jiffies, timeout)) {
-			spin_unlock_irqrestore(&hw->lock, flags);
+			mutex_unlock(&hw->vvc1_mutex);;
 			goto WAIT_FINISH_DECODING;
 		} else
 			vc1_print(0, 0,
 				"decodeing...wait timeout!\n");
 	}
-	spin_unlock_irqrestore(&hw->lock, flags);
+	mutex_unlock(&hw->vvc1_mutex);
 
 	if (stat & STAT_VDEC_RUN) {
 		amvdec_stop();
@@ -1412,7 +1412,7 @@ void vc1_buf_ref_process_for_exception(struct vdec_vc1_hw_s *hw)
 		return;
 	}
 
-	vc1_print(0, 0,
+	vc1_print(0, VC1_DEBUG_DETAIL,
 		"process_for_exception: dma addr(0x%lx) buf_ref %d vfbuf_use %d ref_use %d buf_use %d\n",
 		hw->pics[index].cma_alloc_addr,
 		atomic_read(&aml_buf->entry.ref),
@@ -1473,7 +1473,6 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	u32 status_reg;
 	u32 ret = -1;
 	ulong timeout;
-	unsigned long flags;
 
 	if (hw->eos) {
 		WRITE_VREG(DECODE_STATUS, 0);
@@ -1748,14 +1747,14 @@ GET_BUF_WAIT:
 	if (!ret)
 		msleep(wait_time);
 
-	spin_lock_irqsave(&hw->lock, flags);
+	mutex_lock(&hw->vvc1_mutex);
 	if (hw->streamon) {
 		if (ret && !vvc1_config_buf(hw))
 			vc1_print(0, VC1_DEBUG_DETAIL,
 				"capture buffer config success.\n");
 		else {
 			if (!time_after(jiffies, timeout)) {
-				spin_unlock_irqrestore(&hw->lock, flags);
+				mutex_unlock(&hw->vvc1_mutex);
 				goto GET_BUF_WAIT;
 			} else
 				vc1_print(0, 0, "get capture buffer...timeout\n");
@@ -1766,8 +1765,7 @@ GET_BUF_WAIT:
 	} else
 		hw->running = false;
 
-	spin_unlock_irqrestore(&hw->lock, flags);
-
+	mutex_unlock(&hw->vvc1_mutex);
 	return IRQ_HANDLED;
 }
 
@@ -2366,6 +2364,7 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 		hw->dynamic_buf_num_margin = default_vc1_margin;
 
 	hw->canvas_mode = pdata->canvas_mode;
+	mutex_init(&hw->vvc1_mutex);
 	pr_info("canvas_mode %d\n", hw->canvas_mode);
 	vc1_hw = *hw;
 
