@@ -284,6 +284,8 @@ static int compute_losless_comp_header_size(int width, int height);
 static void mcrcc_perfcount_reset(void);
 static void decomp_perfcount_reset(void);
 static void vp9_recycle_dec_resource(void *priv, struct aml_buf *aml_buf);
+static void vp9_buf_ref_process_for_exception(struct VP9Decoder_s *pbi);
+
 
 static const char vvp9_dec_id[] = "vvp9-dev";
 
@@ -2691,7 +2693,6 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 	pic->y_crop_width	= pbi->frame_width;
 	pic->y_crop_height	= pbi->frame_height;
 	free_pic		= pic;
-	pbi->cur_idx = pos;
 
 	set_canvas(pbi, pic);
 #ifdef NEW_FB_CODE
@@ -2716,6 +2717,7 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 		pbi->aml_buf->state = FB_ST_DECODER;
 
 		aml_buf_get_ref(&ctx->bm, pbi->aml_buf);
+		pbi->cur_idx = pos;
 		pbi->aml_buf = NULL;
 	}
 
@@ -3211,7 +3213,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		/* create fence for each buffers. */
 		ret = vdec_timeline_create_fence(vdec->sync);
 		if (ret < 0)
-			return ret;
+			return -3;
 
 		pic->fence		= vdec->sync->fence;
 		pic->bit_depth		= cm->bit_depth;
@@ -10734,6 +10736,12 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		pr_info("vp9_bufmgr_process=> %d, VP9_10B_DISCARD_NAL\r\n", ret);
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VP9_10B_DISCARD_NAL);
 		cm->show_frame = 0;
+
+		if (ret != -3) {
+			vp9_buf_ref_process_for_exception(pbi);
+			if (vdec_frame_based(hw_to_vdec(pbi)))
+				vdec_v4l_post_error_frame_event(ctx);
+		}
 #ifdef MULTI_INSTANCE_SUPPORT
 		if (pbi->m_ins_flag) {
 			reset_process_time(pbi);
@@ -11585,12 +11593,16 @@ static void vp9_buf_ref_process_for_exception(struct VP9Decoder_s *pbi)
 	if (pbi->cur_idx != INVALID_IDX) {
 		int cur_idx = pbi->cur_idx;
 		aml_buf = (struct aml_buf *)pbi->m_BUF[cur_idx].v4l_ref_buf_addr;
+		if (aml_buf == NULL) {
+			pbi->cur_idx = INVALID_IDX;
+			vp9_print(pbi, 0,
+				"%s aml_buf is NULL\n", __func__);
+			return;
+		}
 
 		vp9_print(pbi, 0,
 			"%s dma addr 0x%lx\n",
 			__func__, frame_bufs[cur_idx].buf.cma_alloc_addr);
-
-		aml_buf = (struct aml_buf *)pbi->m_BUF[cur_idx].v4l_ref_buf_addr;
 
 		aml_buf_put_ref(&ctx->bm, aml_buf);
 		aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -14217,6 +14229,7 @@ static void run_front(struct vdec_s *vdec)
 	WRITE_VREG(HEVC_DECODE_SIZE, size);
 	WRITE_VREG(HEVC_DECODE_COUNT, pbi->slice_idx);
 	pbi->init_flag = 1;
+	pbi->cur_idx = INVALID_IDX;
 //pyx ucode test
 	WRITE_VREG(DECODE_STOP_POS, udebug_flag);
 	vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
@@ -14577,6 +14590,7 @@ static void  vp9_decoder_ctx_reset(struct VP9Decoder_s *pbi)
 	pbi->eos		= false;
 	pbi->aml_buf		= NULL;
 	pbi->dec_result = DEC_RESULT_NONE;
+	pbi->cur_idx = INVALID_IDX;
 }
 
 static void reset(struct vdec_s *vdec)

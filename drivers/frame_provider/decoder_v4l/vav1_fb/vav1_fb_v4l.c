@@ -1951,7 +1951,6 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 	free_pic		= pic;
 
 	i = pos;
-	hw->cur_idx = i;
 
 	set_canvas(hw, pic);
 #ifdef NEW_FB_CODE
@@ -1990,6 +1989,7 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 		hw->aml_buf->state = FB_ST_DECODER;
 
 		aml_buf_get_ref(&ctx->bm, hw->aml_buf);
+		hw->cur_idx = i;
 		hw->aml_buf = NULL;
 
 		v4l->aux_infos.bind_sei_buffer(v4l, &free_pic->aux_data_buf,
@@ -7910,7 +7910,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		ret = av1_bufmgr_process(pbi, &hw->aom_param,
 			hw->new_compressed_data, obu_type);
 		if (ret < 0)
-			return -1;
+			return ret;
 		av1_print(hw, AOM_DEBUG_HW_MORE,
 			"%s: pbi %p cm %p cur_frame %p\n",
 			__func__, pbi, cm, cm->cur_frame);
@@ -9106,12 +9106,16 @@ static void av1_buf_ref_process_for_exception(struct AV1HW_s *hw)
 	if (hw->cur_idx != INVALID_IDX) {
 		int cur_idx = hw->cur_idx;
 		aml_buf = (struct aml_buf *)hw->m_BUF[cur_idx].v4l_ref_buf_addr;
+		if (aml_buf == NULL) {
+			hw->cur_idx = INVALID_IDX;
+			av1_print(hw, 0,
+				"%s aml_buf is NULL\n", __func__);
+			return;
+		}
 
 		av1_print(hw, 0,
 			"process_for_exception: dma addr(0x%lx)\n",
 			frame_bufs[cur_idx].buf.cma_alloc_addr);
-
-		aml_buf = (struct aml_buf *)hw->m_BUF[cur_idx].v4l_ref_buf_addr;
 
 		aml_buf_put_ref(&ctx->bm, aml_buf);
 		aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -9793,6 +9797,12 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		if (ret >= 0)
 			start_process_time(hw);
 		else {
+
+			if (ret != -3) {
+				av1_buf_ref_process_for_exception(hw);
+				if (vdec_frame_based(hw_to_vdec(hw)))
+					vdec_v4l_post_error_frame_event(ctx);
+			}
 			hw->dec_result = DEC_RESULT_DONE;
 #ifdef NEW_FB_CODE
 			if (hw->front_back_mode == 1)
@@ -11909,6 +11919,7 @@ static void  av1_decode_ctx_reset(struct AV1HW_s *hw)
 	hw->eos			= false;
 	hw->aml_buf		= NULL;
 	hw->dec_result = DEC_RESULT_NONE;
+	hw->cur_idx = INVALID_IDX;
 }
 
 static void reset(struct vdec_s *vdec)

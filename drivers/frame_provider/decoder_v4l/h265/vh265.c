@@ -13246,9 +13246,9 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			aml_buf = (struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
 			hevc_print(hevc, H265_DEBUG_BUFMGR,
-				"%s buf idx: %d pic index: %d dma addr: 0x%lx vb idx: %d vf_ref %d error_mark %d\n",
+				"%s buf idx: %d pic index: %d dma addr: 0x%lx vb idx: %d vf_ref %d drop_mark %d\n",
 				__func__, i, pic->index, pic->cma_alloc_addr,
-				aml_buf->index, pic->vf_ref, pic->error_mark);
+				aml_buf->index, pic->vf_ref, pic->drop_mark);
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 			if (pic->drop_mark && !pic->vf_ref) {
 				aml_buf_put_ref(&ctx->bm, aml_buf);

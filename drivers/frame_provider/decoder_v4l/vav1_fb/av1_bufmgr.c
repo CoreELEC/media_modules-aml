@@ -3367,7 +3367,7 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
 	cm->bit_depth = params->p.bit_depth;
 
 	if (post_video_frame_early(pbi, cm) < 0)
-	  return -1;
+		return -3;
 
 	return frame_decoded;
 }
