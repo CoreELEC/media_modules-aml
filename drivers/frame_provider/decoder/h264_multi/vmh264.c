@@ -1020,6 +1020,7 @@ struct vdec_h264_hw_s {
 	spinlock_t tlock;
 	struct mh264_csd_main_info_t old_csd_info;
 	u32 old_csd_info_check_count;
+	unsigned long mask;
 };
 
 #define TIMEOUT_INIT 0
@@ -12305,18 +12306,17 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 	if (pdata->parallel_dec == 1) {
 		if (hw->mmu_enable == 0)
-			vdec_core_request(pdata, CORE_MASK_VDEC_1);
+			hw->mask = CORE_MASK_VDEC_1;
 		else {
 			if (is_support_dual_core())
-				vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
-					| CORE_MASK_HEVC_BACK | CORE_MASK_COMBINE);
+				hw->mask = CORE_MASK_VDEC_1 | CORE_MASK_HEVC
+					| CORE_MASK_HEVC_BACK | CORE_MASK_COMBINE;
 			else
-				vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
-					| CORE_MASK_COMBINE);
+				hw->mask = CORE_MASK_VDEC_1 | CORE_MASK_HEVC | CORE_MASK_COMBINE;
 		}
 	} else
-		vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
-				| CORE_MASK_COMBINE);
+		hw->mask = CORE_MASK_VDEC_1 | CORE_MASK_HEVC | CORE_MASK_COMBINE;
+	vdec_core_request(pdata, hw->mask);
 
 	atomic_set(&hw->vh264_active, 1);
 	vdec_set_vframe_comm(pdata, DRIVER_NAME);
@@ -12412,19 +12412,7 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 #endif
 
 	atomic_set(&hw->vh264_active, 0);
-	if (vdec->parallel_dec == 1) {
-		if (hw->mmu_enable == 0)
-			vdec_core_release(vdec, CORE_MASK_VDEC_1);
-		else {
-			if (is_support_dual_core())
-				vdec_core_release(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC |
-					CORE_MASK_HEVC_BACK | CORE_MASK_COMBINE);
-			else
-				vdec_core_release(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC |
-					CORE_MASK_COMBINE);
-		}
-	} else
-		vdec_core_release(hw_to_vdec(hw), CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
+	vdec_core_release(vdec, hw->mask);
 
 	vdec_set_status(hw_to_vdec(hw), VDEC_STATUS_DISCONNECTED);
 	if (vdec->parallel_dec == 1) {
