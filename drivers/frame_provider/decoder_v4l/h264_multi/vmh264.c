@@ -10530,6 +10530,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				if (ret_is_csd_valid == RES_RET_OVERSIZE)
 					hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_v4l_post_error_frame_event(ctx);
 				vdec_schedule_work(&hw->work);
 				return;
 			}
