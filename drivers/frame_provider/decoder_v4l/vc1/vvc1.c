@@ -1473,6 +1473,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	u32 status_reg;
 	u32 ret = -1;
 	ulong timeout;
+	bool is_bi_type;
 
 	if (hw->eos) {
 		WRITE_VREG(DECODE_STATUS, 0);
@@ -1595,9 +1596,11 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 
 		repeat_count = READ_VREG(VC1_REPEAT_COUNT);
 		buffer_index = ((reg & 0x7) - 1) & 3;
-		picture_type = (reg >> 3) & 7;//I:0,P:1,B:2
-		vc1_print(0, VC1_DEBUG_DETAIL, "%s: get buffer_index %d, decoding_index %d\n",
-					__func__, buffer_index, hw->decoding_index);
+		is_bi_type = (reg >> 8) & 0x1;
+		if (is_bi_type)
+			picture_type = B_PICTURE + 1;//BI, should set as B_PICTURE
+		else
+			picture_type = (reg >> 3) & 7;//I:0,P:1,B:2
 
 		vdec_v4l_get_pts_info(ctx, &hw->pics[hw->decoding_index].pts64);
 		hw->interlace_flag = (reg & INTERLACE_FLAG) ? 1 : 0;
@@ -1606,7 +1609,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 		hw->pics[hw->decoding_index].buffer_info = reg;
 		hw->pics[hw->decoding_index].index = hw->decoding_index;
 		//hw->pics[hw->decoding_index].decode_pic_count = decode_pic_count;
-		hw->pics[hw->decoding_index].picture_type = (reg >> 3) & 7;
+		hw->pics[hw->decoding_index].picture_type = picture_type;
 		hw->buf_use[hw->decoding_index]++;
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: get buffer_index %d, decoding_index %d, buffer_info 0x%x, index %d, picture_type %d offset %d\n",
 					__func__, buffer_index, hw->decoding_index,

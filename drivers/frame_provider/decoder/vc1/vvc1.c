@@ -892,6 +892,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	u32 debug_tag;
 	u32 status_reg;
 	int ret;
+	bool is_bi_type;
 
 	debug_tag = READ_VREG(DEBUG_REG1);
 	if (debug_tag != 0) {
@@ -987,9 +988,11 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 
 		repeat_count = READ_VREG(VC1_REPEAT_COUNT);
 		buffer_index = ((reg & 0x7) - 1) & 3;
-		picture_type = (reg >> 3) & 7;//I:0,P:1,B:2
-		vc1_print(0, VC1_DEBUG_DETAIL, "%s: get buffer_index %d, decoding_index %d\n",
-					__func__, buffer_index, hw->decoding_index);
+		is_bi_type = (reg >> 8) & 0x1;
+		if (is_bi_type)
+			picture_type = B_PICTURE + 1;//BI, should set as B_PICTURE
+		else
+			picture_type = (reg >> 3) & 7;//I:0,P:1,B:2
 
 		hw->interlace_flag = (reg & INTERLACE_FLAG) ? 1 : 0;
 		hw->pics[hw->decoding_index].offset = READ_VREG(VC1_OFFSET_REG);
@@ -997,7 +1000,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 		hw->pics[hw->decoding_index].buffer_info = reg;
 		hw->pics[hw->decoding_index].index = hw->decoding_index;
 		//hw->pics[hw->decoding_index].decode_pic_count = decode_pic_count;
-		hw->pics[hw->decoding_index].picture_type = (reg >> 3) & 7;
+		hw->pics[hw->decoding_index].picture_type = picture_type;
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: get buffer_index %d, decoding_index %d, buffer_info 0x%x, index %d, picture_type %d\n",
 					__func__, buffer_index, hw->decoding_index,
 					hw->pics[hw->decoding_index].buffer_info,
