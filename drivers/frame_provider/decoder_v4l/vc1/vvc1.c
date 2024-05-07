@@ -206,10 +206,14 @@ enum {
 #define B_PICTURE 2
 #define BI_PICTURE 3
 
-#define VC1_DEBUG_DETAIL                   0x01
+#define VC1_DEBUG_DETAIL		0x01
+#define VC1_DEBUG_WORK_DETAIL		0x02
+#define VC1_DEBUG_BUFMGR		0x04
 
 #define INVALID_IDX -1  /* Invalid buffer index.*/
 #define MAX_SIZE_2K (1920 * 1088)
+
+#define DEC_RESULT_EOS 0
 
 static u32 udebug_flag;
 static int debug;
@@ -241,6 +245,7 @@ struct vdec_vc1_hw_s {
 	spinlock_t lock;
 	struct mutex vvc1_mutex;
 	struct platform_device *platform_dev;
+	struct work_struct work;
 	s32 vfbuf_use[DECODE_BUFFER_NUM_MAX];
 	unsigned char again_flag;
 	unsigned char recover_flag;
@@ -288,11 +293,11 @@ struct vdec_vc1_hw_s {
 	u32 dynamic_buf_num_margin;
 	u32 cur_duration;
 	u32 canvas_mode;
-	u8 is_decoder_working;
 	u32 last_wp;
 	u32 last_rp;
 	u8 streamon;
 	u8 running;
+	int dec_result;
 };
 
 struct vdec_vc1_hw_s vc1_hw;
@@ -309,6 +314,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw, struct pic_info_t *pic)
 static int find_free_buffer(struct vdec_vc1_hw_s *hw);
 static void flush_output(struct vdec_vc1_hw_s * hw);
 static int notify_v4l_eos(void);
+static int vvc1_config_buf(struct vdec_vc1_hw_s *hw);
 
 int vc1_print(int index, int debug_flag, const char *fmt, ...)
 {
@@ -507,10 +513,11 @@ static int vc1_recycle_frame_buffer(struct vdec_vc1_hw_s *hw)
 			aml_buf = (struct aml_buf *)hw->pics[i].v4l_ref_buf_addr;
 
 			vc1_print(0, VC1_DEBUG_DETAIL,
-				"%s buf idx: %d dma addr: 0x%lx fb idx: %d vf_ref %d\n",
+				"%s buf idx: %d dma addr: 0x%lx fb idx: %d vf_ref %d ref_use %d\n",
 				__func__, i, hw->pics[i].cma_alloc_addr,
 				aml_buf->index,
-				hw->vf_ref[i]);
+				hw->vf_ref[i],
+				hw->ref_use[i]);
 			if ((ctx->vpp_is_need || ctx->enable_di_post) &&
 				hw->interlace_flag &&
 				hw->vf_ref[i] < 2)
@@ -580,9 +587,10 @@ static bool is_available_buffer(struct vdec_vc1_hw_s *hw)
 		__func__, free_slot);
 		for (i = 0; i < hw->vf_buf_num_used; ++i) {
 			vc1_print(0, VC1_DEBUG_DETAIL,
-				"%s idx %d ref_count %d vf_ref %d cma_alloc_addr = 0x%lx\n",
+				"%s idx %d ref_use %d vfbuf_use %d vf_ref %d cma_alloc_addr = 0x%lx\n",
 				__func__, i, hw->ref_use[i],
 				hw->vfbuf_use[i],
+				hw->vf_ref[i],
 				hw->pics[i].v4l_ref_buf_addr);
 		}
 
@@ -622,7 +630,7 @@ static bool is_available_buffer(struct vdec_vc1_hw_s *hw)
 	if (hw->aml_buf) {
 		free_count++;
 		free_count += aml_buf_ready_num(&ctx->bm);
-		vc1_print(0, VC1_DEBUG_DETAIL,
+		vc1_print(0, VC1_DEBUG_BUFMGR,
 			"%s get fb: 0x%lx fb idx: %d\n",
 			__func__, hw->aml_buf, hw->aml_buf->index);
 	}
@@ -655,15 +663,15 @@ static int notify_v4l_eos(void)
 
 	while (!is_available_buffer(hw)) {
 		if (time_after(jiffies, expires)) {
-			pr_info("[%d] VC1 isn't enough buff for notify eos.\n", ctx->id);
-			return 0;
+			pr_info("[%d] VC1 isn't enough capture buff for notify eos.\n", ctx->id);
+			return -1;
 		}
 	}
 
 	index = find_free_buffer(hw);
 	if (INVALID_IDX == index) {
-		pr_info("[%d] VC1 EOS get free buff fail.\n", ctx->id);
-		return 0;
+		pr_info("[%d] VC1 EOS get free solt buff fail.\n", ctx->id);
+		return -1;
 	}
 
 	aml_buf = (struct aml_buf *)
@@ -771,6 +779,29 @@ static int vvc1_config_ref_buf(struct vdec_vc1_hw_s *hw)
 	}
 
 	return 0;
+}
+
+static void vvc1_work(struct work_struct *work)
+{
+	struct vdec_vc1_hw_s *hw =
+		container_of(work, struct vdec_vc1_hw_s, work);
+
+	if (hw->dec_result == DEC_RESULT_EOS) {
+		int wp = READ_VREG(VLD_MEM_VIFIFO_WP);
+		int rp = READ_VREG(VLD_MEM_VIFIFO_RP);
+		int size = (wp >= rp) ? (wp - rp) : (wp + vdec->vbuf.buf_size - rp);
+
+		vc1_print(0, VC1_DEBUG_WORK_DETAIL, "%s wp 0x%x rp 0x%x level %d eos %d\n",
+			__func__, wp, rp, size, vdec->input.eos);
+		flush_output(hw);
+		if (notify_v4l_eos()) {
+			vc1_print(0, VC1_DEBUG_BUFMGR, "%s try to notify EOS again \n", __func__);
+			hw->eos = false;
+		} else
+			vc1_print(0, VC1_DEBUG_WORK_DETAIL, "%s notify EOS finish \n", __func__);
+
+		return;
+	}
 }
 
 static int update_reference(struct vdec_vc1_hw_s *hw,	int index)
@@ -913,37 +944,26 @@ static void reset(struct vdec_s *vdec)
 	int i;
 	ulong timeout;
 
-	hw->streamon = false;
-	timeout = jiffies + HZ / 5;
+	timeout = jiffies + HZ / 10;
 WAIT_FINISH_DECODING:
 	if (hw->running)
 		usleep_range(500, 1000);
 
 	mutex_lock(&hw->vvc1_mutex);
+	hw->streamon = false;
 	if (hw->running) {
 		if (!time_after(jiffies, timeout)) {
-			mutex_unlock(&hw->vvc1_mutex);;
+			mutex_unlock(&hw->vvc1_mutex);
 			goto WAIT_FINISH_DECODING;
 		} else
 			vc1_print(0, 0,
 				"decodeing...wait timeout!\n");
 	}
 	mutex_unlock(&hw->vvc1_mutex);
-
+	cancel_work_sync(&hw->work);
 	if (stat & STAT_VDEC_RUN) {
 		amvdec_stop();
 		stat &= ~STAT_VDEC_RUN;
-	}
-
-	timeout = jiffies + HZ / 10;
-	while (hw->is_decoder_working) {
-		if (time_after(jiffies, timeout)) {
-			vc1_print(0, 0,
-				"reset...wait timeout!\n");
-			break;
-		}
-
-		usleep_range(500, 550);
 	}
 
 	vdec_v4l_inst_reset(ctx);
@@ -981,6 +1001,7 @@ WAIT_FINISH_DECODING:
 	hw->throw_pb_flag	= 1;
 	hw->eos			= 0;
 	hw->aml_buf		= NULL;
+	hw->running		= false;
 
 	atomic_set(&hw->get_num, 0);
 	atomic_set(&hw->put_num, 0);
@@ -994,7 +1015,7 @@ static int find_free_buffer(struct vdec_vc1_hw_s *hw)
 	int i;
 
 	for (i = 0; i < hw->vf_buf_num_used; i++) {
-		vc1_print(0, VC1_DEBUG_DETAIL,"%s: i %d, vfbuf_use %d, ref_use %d, buf_use %d\n", __func__,
+		vc1_print(0, VC1_DEBUG_BUFMGR,"%s: i %d, vfbuf_use %d, ref_use %d, buf_use %d\n", __func__,
 			i, hw->vfbuf_use[i], hw->ref_use[i], hw->buf_use[i]);
 		if ((hw->vf_ref[i] == 0) &&
 			(hw->vfbuf_use[i] == 0) &&
@@ -1028,11 +1049,11 @@ static int vvc1_config_buf(struct vdec_vc1_hw_s *hw)
 	}
 	hw->decoding_index = index;
 	canvas1_info = (index2canvas(index) << 8) | index;
-	vc1_print(0, VC1_DEBUG_DETAIL,"%s: decoding_index %d, buf_use %d, canvas1_info 0x%x\n",
+	vc1_print(0, VC1_DEBUG_BUFMGR, "%s: decoding_index %d, buf_use %d, canvas1_info 0x%x\n",
 		__func__, index, hw->buf_use[hw->decoding_index], canvas1_info);
 	WRITE_VREG(CANVAS_BUF_REG, canvas1_info);
-
 	vvc1_config_ref_buf(hw);
+
 	return 0;
 }
 
@@ -1388,8 +1409,6 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		}
 	}
 
-	hw->is_decoder_working = false;
-
 	return 0;
 }
 
@@ -1471,8 +1490,6 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	u32 frame_size;
 	u32 debug_tag;
 	u32 status_reg;
-	u32 ret = -1;
-	ulong timeout;
 	bool is_bi_type;
 
 	if (hw->eos) {
@@ -1549,7 +1566,6 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	if (reg) {
 		v_width = hw->frame_width;//READ_VREG(AV_SCRATCH_J);
 		v_height = hw->frame_height;//READ_VREG(AV_SCRATCH_K);
-		hw->is_decoder_working = true;
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: v_width %d, v_height %d\n",
 					__func__, v_width, v_height);
 
@@ -1744,31 +1760,35 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	}
 
 	recycle_frames(hw);
-	timeout = jiffies + HZ;
 GET_BUF_WAIT:
-	ret = is_available_buffer(hw);
-	if (!ret)
-		msleep(wait_time);
-
-	mutex_lock(&hw->vvc1_mutex);
-	if (hw->streamon) {
-		if (ret && !vvc1_config_buf(hw))
-			vc1_print(0, VC1_DEBUG_DETAIL,
-				"capture buffer config success.\n");
-		else {
-			if (!time_after(jiffies, timeout)) {
+	hw->running = false;
+	if (!ctx->is_out_stream_off) {
+		mutex_lock(&hw->vvc1_mutex);
+		if (hw->streamon) {
+			if (!is_available_buffer(hw)) {
 				mutex_unlock(&hw->vvc1_mutex);
+				vc1_print(0, VC1_DEBUG_BUFMGR, "%s try to get capture buffer again \n", __func__);
+				usleep_range(500, 1000);
 				goto GET_BUF_WAIT;
-			} else
-				vc1_print(0, 0, "get capture buffer...timeout\n");
+			}
+
+			if (!vvc1_config_buf(hw))
+				vc1_print(0, VC1_DEBUG_WORK_DETAIL,
+					"capture buffer config success.\n");
+			else {
+				mutex_unlock(&hw->vvc1_mutex);
+				vc1_print(0, VC1_DEBUG_BUFMGR, "%s try to get slot again \n", __func__);
+				usleep_range(500, 1000);
+				goto GET_BUF_WAIT;
+			}
+
+			WRITE_VREG(DECODE_STATUS, 0);
+			hw->running = true;
 		}
 
-		WRITE_VREG(DECODE_STATUS, 0);
-		hw->running = true;
-	} else
-		hw->running = false;
+		mutex_unlock(&hw->vvc1_mutex);
+	}
 
-	mutex_unlock(&hw->vvc1_mutex);
 	return IRQ_HANDLED;
 }
 
@@ -2166,7 +2186,7 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 	struct vdec_vc1_hw_s *hw = &vc1_hw;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	u32 wp, rp;
+	u32 wp, rp, size;
 
 	if (READ_VREG(VC1_SOS_COUNT) > 10)
 		schedule_work(&error_wd_work);
@@ -2174,10 +2194,11 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 	vc1_set_rp();
 	wp = READ_VREG(VLD_MEM_VIFIFO_WP);
 	rp = READ_VREG(VLD_MEM_VIFIFO_RP);
+	size = (wp >= rp) ? (wp - rp) : (wp + vdec->vbuf.buf_size - rp);
 
 	/* notify decoder */
 	if (!(stat & STAT_VDEC_RUN)) {
-		if ((wp - rp > start_decode_buf_level) && !ctx->is_stream_off) {
+		if ((size > start_decode_buf_level) && !ctx->is_stream_off) {
 			amvdec_start();
 			stat |= STAT_VDEC_RUN;
 			hw->streamon = true;
@@ -2196,34 +2217,14 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 		}
 	}
 
-	if (wp >= rp) {
-		if (((wp - rp < start_decode_buf_level) ||
-			(timeout_times >= 20)) &&
-			!vdec_has_more_input(vdec)) {
-			vc1_print(0, VC1_DEBUG_DETAIL,
-				"%s wp 0x%x rp 0x%x level %d eos %d\n",
-				__func__, wp, rp,
-				wp - rp, vdec->input.eos);
-			flush_output(hw);
-			notify_v4l_eos();
-		}
-	} else {
-		if (((wp + vdec->vbuf.buf_size - rp < start_decode_buf_level) ||
-			(timeout_times >= 20)) &&
-			!vdec_has_more_input(vdec)) {
-			vc1_print(0, VC1_DEBUG_DETAIL,
-				"%s wp 0x%x rp 0x%x level %d eos %d\n",
-				__func__, wp, rp,
-				wp + vdec->vbuf.buf_size - rp, vdec->input.eos);
-			flush_output(hw);
-			notify_v4l_eos();
-		}
+	if (((size < start_decode_buf_level) || (timeout_times >= 10)) &&
+		!vdec_has_more_input(vdec) && !hw->eos) {
+		hw->eos = true;
+		hw->dec_result = DEC_RESULT_EOS;
+		vdec_schedule_work(&hw->work);
 	}
 
-	vc1_print(0, VC1_DEBUG_DETAIL,
-		"%s wp 0x%x rp 0x%x level %d \n",
-		__func__, wp, rp,
-		(wp >= rp) ? (wp - rp) : (wp + vdec->vbuf.buf_size - rp));
+	vc1_print(0, VC1_DEBUG_DETAIL, "%s wp 0x%x rp 0x%x level %d \n", __func__, wp, rp, size);
 
 	if (frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur))
@@ -2245,7 +2246,7 @@ static s32 vvc1_init(void)
 
 	pr_info("vvc1_init, format %d\n", vvc1_amstream_dec_info.format);
 	timer_setup(&recycle_timer, vvc1_put_timer_func, 0);
-
+	INIT_WORK(&hw->work, vvc1_work);
 	stat |= STAT_TIMER_INIT;
 
 	intra_output = 0;
@@ -2316,10 +2317,11 @@ static s32 vvc1_init(void)
 static int amvdec_vc1_probe(struct platform_device *pdev)
 {
 	struct vdec_s *pdata = *(struct vdec_s **)pdev->dev.platform_data;
-	struct vdec_vc1_hw_s *hw = NULL;
+	struct vdec_vc1_hw_s *hw = &vc1_hw;
 	int config_val = 0;
 
 	vc1_print(0, VC1_DEBUG_DETAIL,"%s \n", __func__);
+	memset(hw, 0, sizeof(struct vdec_vc1_hw_s));
 
 	if (pdata == NULL) {
 		pr_info("amvdec_vc1_v4l memory resource undefined.\n");
@@ -2345,9 +2347,7 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 	vdec = pdata;
 
 	/* the ctx from v4l2 driver. */
-	hw = (struct vdec_vc1_hw_s *)vzalloc(sizeof(struct vdec_vc1_hw_s));
 	hw->v4l2_ctx = pdata->private;
-	hw->is_decoder_working = false;
 	if (pdata->config_len) {
 		if (get_config_int(pdata->config, "parm_v4l_buffer_margin",
 			&config_val) == 0)
@@ -2369,7 +2369,6 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 	hw->canvas_mode = pdata->canvas_mode;
 	mutex_init(&hw->vvc1_mutex);
 	pr_info("canvas_mode %d\n", hw->canvas_mode);
-	vc1_hw = *hw;
 
 	vvc1_vdec_info_init();
 
@@ -2409,6 +2408,7 @@ static int amvdec_vc1_remove(struct platform_device *pdev)
 		stat &= ~STAT_TIMER_ARM;
 	}
 
+	cancel_work_sync(&hw->work);
 	cancel_work_sync(&set_clk_work);
 
 	amvdec_disable();
