@@ -3744,6 +3744,45 @@ static void vdec_userdata_ctx_release(struct vdec_s *vdec)
 	return;
 }
 
+static bool is_vdec_dual_core_mode(struct vdec_s *vdec)
+{
+	if (((vdec->core_mask & CORE_MASK_COMBINE) == 0) &&
+		(vdec->core_mask & CORE_MASK_HEVC_BACK))
+		return true;
+	else
+		return false;
+}
+
+static bool vdec_inactive_core_reset(struct vdec_s * vdec)
+{
+	struct vdec_core_s *core = vdec_core;
+	int idle_mask;
+
+	mutex_lock(&vdec_mutex);
+	idle_mask = vdec->core_mask & (~core->sched_mask);
+
+	if (idle_mask) {
+		if (idle_mask & CORE_MASK_VDEC_1) {
+			vdec_reset_core(vdec);
+		}
+		if (is_support_dual_core() && is_vdec_dual_core_mode(vdec)) {
+			if (idle_mask & CORE_MASK_HEVC_FRONT)
+				amhevc_reset_f();
+
+			if (idle_mask & CORE_MASK_HEVC_BACK)
+				amhevc_reset_b();
+		} else {
+			if (idle_mask & CORE_MASK_HEVC)
+				hevc_reset_core(vdec);
+		}
+	}
+	mutex_unlock(&vdec_mutex);
+
+	usleep_range(10, 20);
+
+	return false;
+}
+
 /* vdec_create/init/release/destroy are applied to both dual running decoders
  */
 void vdec_release(struct vdec_s *vdec)
@@ -3807,6 +3846,9 @@ void vdec_release(struct vdec_s *vdec)
 	vdec_frame_check_exit(vdec);
 #endif
 	vdec_fps_clear(vdec->id);
+
+	vdec_inactive_core_reset(vdec);
+
 	if (atomic_read(&vdec_core->vdec_nr) == 1) {
 		vdec_disable_DMC(vdec);
 		vdec_set_vf_dur(0);
@@ -4463,14 +4505,6 @@ static void vdec_route_interrupt(struct vdec_s *vdec, unsigned long mask,
 #define DMC_DEV_TYPE_NON_SECURE        0
 #define DMC_DEV_TYPE_SECURE            1
 
-bool is_vdec_dual_core_mode(struct vdec_s *vdec)
-{
-	if ((vdec->core_mask & CORE_MASK_HEVC_BACK) != 0)
-		return true;
-	else
-		return false;
-}
-
 void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 {
 	struct vdec_input_s *input = &vdec->input;
@@ -4790,7 +4824,7 @@ static int vdec_core_thread(void *data)
 			/* setting active_mask should be atomic.
 			 * it can be modified by decoder driver callbacks.
 			 */
-			 mutex_lock(&vdec_mutex);
+			mutex_lock(&vdec_mutex);
 			while (sched_mask) {
 				i = __ffs(sched_mask);
 				set_bit(i, &vdec->active_mask);
@@ -4805,8 +4839,11 @@ static int vdec_core_thread(void *data)
 				vdec->mc_back_loaded = 0;
 			}
 			vdec_set_status(vdec, VDEC_STATUS_ACTIVE);
-			mutex_unlock(&vdec_mutex);
+
+			//mutex with inactive core reset
 			core->sched_mask |= mask;
+			mutex_unlock(&vdec_mutex);
+
 			if (core->parallel_dec == 1)
 				vdec_save_active_hw(vdec, mask);
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
