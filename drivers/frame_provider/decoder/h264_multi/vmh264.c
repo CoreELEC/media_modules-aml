@@ -4585,12 +4585,11 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 	j = 0;
 	h264_buffer_info_data_write_count = 0;
 
-	//disable this read cache when frame width <= 64 (4MBs)
+	//disable this read cache when frame width <= 256 (16MBs)
 	//IQIDCT_CONTROL, bit[16] dcac_dma_read_cache_disable
-	if (hw->frame_width <= 64) {
-		SET_VREG_MASK(IQIDCT_CONTROL,(1 << 16));
+	if (hw->frame_width <= 256) {
+		SET_VREG_MASK(IQIDCT_CONTROL,(1 << 16)); // Disable DDR_BYTE64_CACHE
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A))
-			// Disable DDR_BYTE64_CACHE
 			WRITE_VREG(DCAC_DDR_BYTE64_CTL,
 			(READ_VREG(DCAC_DDR_BYTE64_CTL) & (~0xf)) | 0xa);
 	}
