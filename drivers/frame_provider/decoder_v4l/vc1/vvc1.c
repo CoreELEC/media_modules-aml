@@ -243,7 +243,6 @@ struct pic_info_t {
 
 struct vdec_vc1_hw_s {
 	spinlock_t lock;
-	struct mutex vvc1_mutex;
 	struct platform_device *platform_dev;
 	struct work_struct work;
 	s32 vfbuf_use[DECODE_BUFFER_NUM_MAX];
@@ -295,9 +294,11 @@ struct vdec_vc1_hw_s {
 	u32 canvas_mode;
 	u32 last_wp;
 	u32 last_rp;
-	u8 streamon;
-	u8 running;
 	int dec_result;
+	volatile bool reset_flag;
+	volatile bool remove_flag;
+	volatile bool reload_task_start;
+	spinlock_t reset_lock;
 };
 
 struct vdec_vc1_hw_s vc1_hw;
@@ -936,34 +937,112 @@ static int v4l_alloc_buff_config_canvas(struct vdec_vc1_hw_s *hw, int i)
 	return 0;
 }
 
+
+static int vc1_reloadmc_ex(void *args)
+{
+	struct vdec_vc1_hw_s *hw = (struct vdec_vc1_hw_s *)args;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	u32 wp, rp, size;
+	unsigned long flags;
+
+	vc1_print(0, VC1_DEBUG_DETAIL,"%s: start stat 0x%x, remove_flag %d, reload_task_start %d, reset_flag %d\n",
+		__func__, stat, hw->remove_flag, hw->reload_task_start, hw->reset_flag);
+	while ((hw->remove_flag == false) && !(stat & STAT_VDEC_RUN)) {
+		wp = READ_VREG(VLD_MEM_VIFIFO_WP);
+		rp = READ_VREG(VLD_MEM_VIFIFO_RP);
+		size = (wp >= rp) ? (wp - rp) : (wp + vdec->vbuf.buf_size - rp);
+
+		if ((size > start_decode_buf_level) && (!ctx->is_stream_off)) {
+			int ret = -1;
+			char *buf = vmalloc(0x1000 * 16);
+			int fw_type = VIDEO_DEC_VC1;
+
+			if (IS_ERR_OR_NULL(buf)) {
+				pr_err("alloc buf fail.");
+				usleep_range(1000, 1500);
+				continue;
+			}
+
+			if (get_firmware_data(fw_type, buf) < 0) {
+				amvdec_disable();
+				pr_err("get firmware fail.");
+				vfree(buf);
+				usleep_range(1000, 1500);
+				continue;
+			}
+
+			ret = amvdec_loadmc_ex(VFORMAT_VC1, NULL, buf);
+			if (ret < 0) {
+				amvdec_disable();
+				vfree(buf);
+				pr_err("VC1: the %s fw loading failed, err: %x\n",
+					fw_tee_enabled() ? "TEE" : "local", ret);
+				usleep_range(1000, 1500);
+				continue;
+			}
+
+			vfree(buf);
+
+			hw->reset_flag = false;
+			spin_lock_irqsave(&vc1_rp_lock, flags);
+			/* enable mailbox interrupt */
+			WRITE_VREG(ASSIST_MBOX1_MASK, 1);
+			amvdec_start();
+			stat |= STAT_VDEC_RUN;
+			spin_unlock_irqrestore(&vc1_rp_lock, flags);
+			vc1_print(0, VC1_DEBUG_DETAIL, "%s: amvdec_start\n", __func__);
+			break;
+		}
+		usleep_range(1000, 1500);
+	}
+
+	hw->reload_task_start = false;
+	vc1_print(0, VC1_DEBUG_DETAIL, "%s: end, remove_flag %d, reload_task_start %d\n",
+		__func__, hw->remove_flag, hw->reload_task_start);
+
+	return 0;
+}
+
+static inline ulong vc1_reset_lock(struct vdec_vc1_hw_s *hw)
+{
+	ulong flags;
+
+	spin_lock_irqsave(&hw->reset_lock, flags);
+
+	return flags;
+}
+
+static inline void vc1_reset_unlock(struct vdec_vc1_hw_s *hw, ulong flags)
+{
+	spin_unlock_irqrestore(&hw->reset_lock, flags);
+}
+
 static void reset(struct vdec_s *vdec)
 {
 	struct vdec_vc1_hw_s *hw = &vc1_hw;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i;
-	ulong timeout;
+	ulong flags;
 
-	timeout = jiffies + HZ / 10;
-WAIT_FINISH_DECODING:
-	if (hw->running)
-		usleep_range(500, 1000);
-
-	mutex_lock(&hw->vvc1_mutex);
-	hw->streamon = false;
-	if (hw->running) {
-		if (!time_after(jiffies, timeout)) {
-			mutex_unlock(&hw->vvc1_mutex);
-			goto WAIT_FINISH_DECODING;
-		} else
-			vc1_print(0, 0,
-				"decodeing...wait timeout!\n");
-	}
-	mutex_unlock(&hw->vvc1_mutex);
 	cancel_work_sync(&hw->work);
 	if (stat & STAT_VDEC_RUN) {
+		WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 		amvdec_stop();
 		stat &= ~STAT_VDEC_RUN;
+
+		flags = vc1_reset_lock(hw);
+		hw->reset_flag = true;
+		vc1_reset_unlock(hw, flags);
+
+		while (process_busy == true) {
+			vc1_print(0, 0, "reset...wait process_busy!\n");
+			usleep_range(1000, 1200);
+		}
+
+		hw->reload_task_start = true;
+		vc1_print(0, VC1_DEBUG_DETAIL, "vdec_post_task, reload_task_start %d\n", hw->reload_task_start);
+		vdec_post_task(vc1_reloadmc_ex, hw);
 	}
 
 	vdec_v4l_inst_reset(ctx);
@@ -1001,7 +1080,6 @@ WAIT_FINISH_DECODING:
 	hw->throw_pb_flag	= 1;
 	hw->eos			= 0;
 	hw->aml_buf		= NULL;
-	hw->running		= false;
 
 	atomic_set(&hw->get_num, 0);
 	atomic_set(&hw->put_num, 0);
@@ -1455,7 +1533,7 @@ static int is_oversize(int w, int h)
 {
 	int max = MAX_SIZE_2K;
 
-	if (w <= 0 || h <= 0)
+	if (w <= 64 || h <= 64)
 		return true;
 
 	if (h != 0 && (w > max / h))
@@ -1490,6 +1568,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	u32 frame_size;
 	u32 debug_tag;
 	u32 status_reg;
+	u32 ret = INVALID_IDX;
 	bool is_bi_type;
 
 	if (hw->eos) {
@@ -1515,6 +1594,16 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 		hw->interlace_flag = (READ_VREG(VC1_PIC_INFO) >> 28) & 0x1;
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: SEQ_HEADER_DONE frame_width %d/%d, interlace_flag %d\n", __func__,
 			hw->frame_width, hw->frame_height, hw->interlace_flag);
+
+		if (is_oversize(hw->frame_width, hw->frame_height)) {
+			vdec_v4l_get_pts_info(ctx, &ctx->current_timestamp);
+			vdec_v4l_post_error_frame_event(ctx);
+			vc1_print(0, VC1_DEBUG_DETAIL, "%s: SEQ_HEADER_DONE oversize timestamp %lld\n",
+				__func__, ctx->current_timestamp);
+			WRITE_VREG(DECODE_STATUS, 0);
+			return IRQ_HANDLED;
+		}
+
 		if (!v4l_res_change(hw)) {
 			if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 				struct aml_vdec_ps_infos ps;
@@ -1760,34 +1849,28 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	}
 
 	recycle_frames(hw);
-GET_BUF_WAIT:
-	hw->running = false;
-	if (!ctx->is_out_stream_off) {
-		mutex_lock(&hw->vvc1_mutex);
-		if (hw->streamon) {
-			if (!is_available_buffer(hw)) {
-				mutex_unlock(&hw->vvc1_mutex);
-				vc1_print(0, VC1_DEBUG_BUFMGR, "%s try to get capture buffer again \n", __func__);
-				usleep_range(500, 1000);
-				goto GET_BUF_WAIT;
+	if (is_available_buffer(hw))
+		ret = vvc1_config_buf(hw);
+
+	if (ret == INVALID_IDX) {
+		do {
+			msleep(wait_time);
+			if (is_available_buffer(hw)) {
+				ret = vvc1_config_buf(hw);
+				vc1_print(0, 0, "%s: ret %d, wait_time %d, stat 0x%x\n",
+						__func__, ret, wait_time, (stat & STAT_VDEC_RUN));
+			} else {
+				vc1_print(0, 0, "%s: isn't enough capture buf, stat 0x%x\n",
+						__func__, (stat & STAT_VDEC_RUN));
 			}
-
-			if (!vvc1_config_buf(hw))
-				vc1_print(0, VC1_DEBUG_WORK_DETAIL,
-					"capture buffer config success.\n");
-			else {
-				mutex_unlock(&hw->vvc1_mutex);
-				vc1_print(0, VC1_DEBUG_BUFMGR, "%s try to get slot again \n", __func__);
-				usleep_range(500, 1000);
-				goto GET_BUF_WAIT;
-			}
-
-			WRITE_VREG(DECODE_STATUS, 0);
-			hw->running = true;
-		}
-
-		mutex_unlock(&hw->vvc1_mutex);
+		} while ((ret == INVALID_IDX) && (stat & STAT_VDEC_RUN));
 	}
+
+	if ((ret == 0) && (stat & STAT_VDEC_RUN))
+		WRITE_VREG(DECODE_STATUS, 0);
+	else
+		vc1_print(0, 0, "%s: end ret %d, stat 0x%x\n",
+					__func__, ret, (stat & STAT_VDEC_RUN));
 
 	return IRQ_HANDLED;
 }
@@ -1805,10 +1888,21 @@ static irqreturn_t vvc1_isr_thread_fn(int irq, void *dev_id)
 
 static irqreturn_t vvc1_isr(int irq, void *dev_id)
 {
+	struct vdec_vc1_hw_s *hw = &vc1_hw;
+	ulong flags;
+
 	if (process_busy)
 		return IRQ_HANDLED;
 
+	flags = vc1_reset_lock(hw);
+	if (hw->reset_flag == true) {
+		vc1_print(0, 0,	"%s: reset_flag %d\n", __func__, hw->reset_flag);
+		vc1_reset_unlock(hw, flags);
+		return IRQ_HANDLED;
+	}
+
 	process_busy = true;
+	vc1_reset_unlock(hw, flags);
 
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 
@@ -2184,8 +2278,6 @@ static void error_do_work(struct work_struct *work)
 static void vvc1_put_timer_func(struct timer_list *timer)
 {
 	struct vdec_vc1_hw_s *hw = &vc1_hw;
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	u32 wp, rp, size;
 
 	if (READ_VREG(VC1_SOS_COUNT) > 10)
@@ -2195,15 +2287,6 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 	wp = READ_VREG(VLD_MEM_VIFIFO_WP);
 	rp = READ_VREG(VLD_MEM_VIFIFO_RP);
 	size = (wp >= rp) ? (wp - rp) : (wp + vdec->vbuf.buf_size - rp);
-
-	/* notify decoder */
-	if (!(stat & STAT_VDEC_RUN)) {
-		if ((size > start_decode_buf_level) && !ctx->is_stream_off) {
-			amvdec_start();
-			stat |= STAT_VDEC_RUN;
-			hw->streamon = true;
-		}
-	}
 
 	/* notify eos after setting EOS */
 	if (vdec->input.eos) {
@@ -2305,11 +2388,13 @@ static s32 vvc1_init(void)
 	add_timer(&recycle_timer);
 
 	stat |= STAT_TIMER_ARM;
+	hw->reset_flag = false;
+	hw->remove_flag = false;
+	hw->reload_task_start = false;
 
 	amvdec_start();
 
 	stat |= STAT_VDEC_RUN;
-	hw->streamon = true;
 
 	return 0;
 }
@@ -2367,8 +2452,8 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 		hw->dynamic_buf_num_margin = default_vc1_margin;
 
 	hw->canvas_mode = pdata->canvas_mode;
-	mutex_init(&hw->vvc1_mutex);
 	pr_info("canvas_mode %d\n", hw->canvas_mode);
+	spin_lock_init(&hw->reset_lock);
 
 	vvc1_vdec_info_init();
 
@@ -2389,10 +2474,11 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 static int amvdec_vc1_remove(struct platform_device *pdev)
 {
 	struct vdec_vc1_hw_s *hw = &vc1_hw;
+	hw->remove_flag = true;
+	vc1_print(0, VC1_DEBUG_DETAIL, "%s start remove_flag %d, reload_task_start %d\n",
+		__func__, hw->remove_flag, hw->reload_task_start);
 
 	cancel_work_sync(&error_wd_work);
-	vc1_print(0, VC1_DEBUG_DETAIL,"%s  %d\n", __func__, stat);
-	hw->streamon = false;
 	if (stat & STAT_VDEC_RUN) {
 		amvdec_stop();
 		stat &= ~STAT_VDEC_RUN;
@@ -2430,6 +2516,14 @@ static int amvdec_vc1_remove(struct platform_device *pdev)
 	kfree(gvs);
 	gvs = NULL;
 	vdec = NULL;
+
+	while (hw->reload_task_start == true) {
+		vc1_print(0, 0, "%s: wait reload_task_start %d\n", __func__, hw->reload_task_start);
+		usleep_range(1000, 1200);
+	}
+
+	vc1_print(0, VC1_DEBUG_DETAIL, "%s end remove_flag %d, reload_task_start %d\n",
+		__func__, hw->remove_flag, hw->reload_task_start);
 
 	return 0;
 }
