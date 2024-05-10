@@ -2058,6 +2058,17 @@ struct hevc_state_s {
 	u32 old_csd_info_check_count;
 } /*hevc_stru_t */;
 
+struct hevc_RPS_s {
+	int num_neg;
+	int num_pos;
+	int RefPicSetStCurr0[16];
+	int RefPicSetStCurr1[16];
+#ifdef SUPPORT_LONG_TERM_RPS
+	int num_lt;
+	int RefPicSetLtCurr[16];
+#endif
+};
+
 #define TIMEOUT_INIT 0
 #define TIMEOUT_PROC 1
 #define TIMEOUT_DONE 2
@@ -4121,6 +4132,69 @@ static unsigned char is_ref_long_term(struct hevc_state_s *hevc, int poc)
 }
 #endif
 
+static int read_ref_pic_set(struct hevc_state_s *hevc, union param_u *params, int poc, struct hevc_RPS_s *rps_data)
+{
+	int i;
+	int total_num = 0;
+	rps_data->num_neg = 0;
+	rps_data->num_pos = 0;
+#ifdef SUPPORT_LONG_TERM_RPS
+	rps_data->num_lt = 0;
+#endif
+
+	for (i = 0; i < 16; i++) {
+		rps_data->RefPicSetStCurr0[i] = 0;
+		rps_data->RefPicSetStCurr1[i] = 0;
+	}
+
+	for (i = 0; i < 16; i++) {
+#ifdef SUPPORT_LONG_TERM_RPS
+		if (params->p.CUR_RPS[i] == RPS_END)
+			break;
+#else
+		if (params->p.CUR_RPS[i] & 0x8000)
+			break;
+#endif
+		if ((params->p.CUR_RPS[i] >> RPS_USED_BIT) & 1) {
+			int delt =
+				params->p.CUR_RPS[i] &
+				((1 << (RPS_USED_BIT - 1)) - 1);
+
+			if ((params->p.CUR_RPS[i] >> (RPS_USED_BIT - 1)) & 1) {
+#ifdef SUPPORT_LONG_TERM_RPS
+				if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
+					rps_data->RefPicSetLtCurr[rps_data->num_lt] =
+						poc - ((1 << (RPS_USED_BIT - 1)) -
+									delt);
+					rps_data->num_lt++;
+					continue;
+				}
+#endif
+				rps_data->RefPicSetStCurr0[rps_data->num_neg] =
+					poc - ((1 << (RPS_USED_BIT - 1)) -
+								delt);
+				rps_data->num_neg++;
+			} else {
+#ifdef SUPPORT_LONG_TERM_RPS
+				if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
+					rps_data->RefPicSetLtCurr[rps_data->num_lt] = poc + delt;
+					rps_data->num_lt++;
+					continue;
+				}
+#endif
+				rps_data->RefPicSetStCurr1[rps_data->num_pos] = poc + delt;
+				rps_data->num_pos++;
+			}
+		}
+	}
+#ifdef SUPPORT_LONG_TERM_RPS
+	total_num = rps_data->num_neg + rps_data->num_pos + rps_data->num_lt;
+#else
+	total_num = rps_data->num_neg + rps_data->num_pos;
+#endif
+	return total_num;
+}
+
 static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 							  union param_u *params)
 {
@@ -4188,12 +4262,12 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 	}
 }
 
-static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
+static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params, struct hevc_RPS_s *rps_data)
 {
 	struct PIC_s *pic = hevc->cur_pic;
 	int i, rIdx;
-	int num_neg = 0;
-	int num_pos = 0;
+	int num_neg = rps_data->num_neg;
+	int num_pos = rps_data->num_pos;
 	int total_num;
 	int num_ref_idx_l0_active =
 		(params->p.num_ref_idx_l0_active >
@@ -4207,56 +4281,19 @@ static int set_ref_pic_list(struct hevc_state_s *hevc, union param_u *params)
 	int RefPicSetStCurr0[16];
 	int RefPicSetStCurr1[16];
 #ifdef SUPPORT_LONG_TERM_RPS
-	int num_lt = 0;
+	int num_lt = rps_data->num_lt;
 	int RefPicSetLtCurr[16];
 #endif
 	PR_INIT(128);
 
 	for (i = 0; i < 16; i++) {
-		RefPicSetStCurr0[i] = 0;
-		RefPicSetStCurr1[i] = 0;
+		RefPicSetStCurr0[i] = rps_data->RefPicSetStCurr0[i];
+		RefPicSetStCurr1[i] = rps_data->RefPicSetStCurr1[i];
+#ifdef SUPPORT_LONG_TERM_RPS
+		RefPicSetLtCurr[i] = rps_data->RefPicSetLtCurr[i];
+#endif
 		*GET_POC_POS(pic->m_aiRefPOCList0, pic->slice_idx, i) = 0;
 		*GET_POC_POS(pic->m_aiRefPOCList1, pic->slice_idx, i) = 0;
-	}
-	for (i = 0; i < 16; i++) {
-#ifdef SUPPORT_LONG_TERM_RPS
-		if (params->p.CUR_RPS[i] == RPS_END)
-			break;
-#else
-		if (params->p.CUR_RPS[i] & 0x8000)
-			break;
-#endif
-		if ((params->p.CUR_RPS[i] >> RPS_USED_BIT) & 1) {
-			int delt =
-				params->p.CUR_RPS[i] &
-				((1 << (RPS_USED_BIT - 1)) - 1);
-
-			if ((params->p.CUR_RPS[i] >> (RPS_USED_BIT - 1)) & 1) {
-#ifdef SUPPORT_LONG_TERM_RPS
-				if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
-					RefPicSetLtCurr[num_lt] =
-						pic->POC - ((1 << (RPS_USED_BIT - 1)) -
-									delt);
-					num_lt++;
-					continue;
-				}
-#endif
-				RefPicSetStCurr0[num_neg] =
-					pic->POC - ((1 << (RPS_USED_BIT - 1)) -
-								delt);
-				num_neg++;
-			} else {
-#ifdef SUPPORT_LONG_TERM_RPS
-				if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
-					RefPicSetLtCurr[num_lt] = pic->POC + delt;
-					num_lt++;
-					continue;
-				}
-#endif
-				RefPicSetStCurr1[num_pos] = pic->POC + delt;
-				num_pos++;
-			}
-		}
 	}
 #ifdef SUPPORT_LONG_TERM_RPS
 	total_num = num_neg + num_pos + num_lt;
@@ -6805,6 +6842,10 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 	int ret_is_csd_valid = 0;
 	int ret;
+	int ref_total_num;
+	struct hevc_RPS_s rps_data;
+
+	memset(&rps_data, 0, sizeof(struct hevc_RPS_s));
 
 	if (hevc->wait_buf == 0) {
 		hevc->sps_num_reorder_pics_0 =
@@ -7003,6 +7044,11 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				}
 			}
 		}
+
+		ref_total_num = read_ref_pic_set(hevc, &hevc->param, hevc->curr_POC, &rps_data);
+		if (ref_total_num > hevc->param.p.sps_max_dec_pic_buffering_minus1_0)
+			hevc->param.p.sps_max_dec_pic_buffering_minus1_0 = ref_total_num;
+
 		hevc->RefNum_L0 =
 			(rpm_param->p.num_ref_idx_l0_active > MAX_REF_ACTIVE) ?
 			MAX_REF_ACTIVE : rpm_param->p.num_ref_idx_l0_active;
@@ -7172,7 +7218,11 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			hevc->new_pic = 0;
 		}
 	} else {
-	if (hevc->wait_buf == 1) {
+		ref_total_num = read_ref_pic_set(hevc, &hevc->param, hevc->curr_POC, &rps_data);
+		if (ref_total_num > hevc->param.p.sps_max_dec_pic_buffering_minus1_0)
+			hevc->param.p.sps_max_dec_pic_buffering_minus1_0 = ref_total_num;
+
+		if (hevc->wait_buf == 1) {
 			pic_list_process(hevc);
 
 			hevc->cur_pic = v4l_get_new_pic(hevc, rpm_param);
@@ -7295,7 +7345,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		return 3;
 	}
 
-	ret = set_ref_pic_list(hevc, rpm_param);
+	ret = set_ref_pic_list(hevc, rpm_param, &rps_data);
 	if (ret < 0) {
 		hevc_print(hevc, 0, "set_ref_pic_list error %d\n", ret);
 		return 3;
