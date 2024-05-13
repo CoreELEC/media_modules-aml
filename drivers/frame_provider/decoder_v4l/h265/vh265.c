@@ -2562,9 +2562,9 @@ static void pic_init(struct PIC_s *pic)
 
 static void pic_free(struct PIC_s *pic)
 {
-	kfree(pic->m_aiRefPOCList0);
-	kfree(pic->m_aiRefPOCList1);
-	kfree(pic);
+	aml_media_mem_free(pic->m_aiRefPOCList0);
+	aml_media_mem_free(pic->m_aiRefPOCList1);
+	aml_media_mem_free(pic);
 }
 
 static struct PIC_s *pic_alloc(void)
@@ -2572,15 +2572,15 @@ static struct PIC_s *pic_alloc(void)
 	struct PIC_s *pic;
 	int slice_size = get_slice_size();
 
-	pic = kzalloc(sizeof(struct PIC_s), GFP_KERNEL);
+	pic = aml_media_mem_alloc(sizeof(struct PIC_s), GFP_KERNEL);
 	if (pic == NULL)
 		goto error;
 	pic->m_aiRefPOCList0 =
-		kzalloc(slice_size * EACH_SLICE_LEN * sizeof(int), GFP_KERNEL);
+		aml_media_mem_alloc(slice_size * EACH_SLICE_LEN * sizeof(int), GFP_KERNEL);
 	if (!pic->m_aiRefPOCList0)
 		goto error;
 	pic->m_aiRefPOCList1 =
-		kzalloc(slice_size * EACH_SLICE_LEN * sizeof(int), GFP_KERNEL);
+		aml_media_mem_alloc(slice_size * EACH_SLICE_LEN * sizeof(int), GFP_KERNEL);
 	if (!pic->m_aiRefPOCList1)
 		goto error;
 

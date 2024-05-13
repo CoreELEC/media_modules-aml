@@ -31,6 +31,7 @@
 
 #include "aml_buf_core.h"
 #include "aml_task_chain.h"
+#include "../common/media_utils/media_utils.h"
 
 /*
 typedef unsigned long long	u64;
@@ -158,8 +159,6 @@ int user_to_task(enum buf_core_user user);
  * todo
  */
 int task_to_user(enum task_type_e task);
-inline void *aml_media_mem_alloc(size_t size, gfp_t flags);
-inline void aml_media_mem_free(const void *addr);
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 15, 0)
 #ifdef __KERNEL__

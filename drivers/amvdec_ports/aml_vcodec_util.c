@@ -95,15 +95,3 @@ int task_to_user(enum task_type_e task)
 }
 EXPORT_SYMBOL(task_to_user);
 
-inline void *aml_media_mem_alloc(size_t size, gfp_t flags)
-{
-	return size >= SZ_8K ? vzalloc(size) : kzalloc(size, flags);
-}
-EXPORT_SYMBOL(aml_media_mem_alloc);
-
-inline void aml_media_mem_free(const void *addr)
-{
-	kvfree(addr);
-}
-EXPORT_SYMBOL(aml_media_mem_free);
-

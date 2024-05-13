@@ -17,18 +17,21 @@
  *
  * Description:
  */
-#ifndef _UTILS_H
-#define _UTILS_H
-#include "../../common/media_utils/media_utils.h"
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/mm.h>
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
 
-#define MAX(a, b)  (((a) > (b)) ? (a) : (b))
-#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
-#define CLAMP(x, low, high) \
-	(((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
-#define BITAT(x, n) ((x & (1 << n)) == (1 << n))
+inline void *aml_media_mem_alloc(size_t size, gfp_t flags)
+{
+	return size >= SZ_8K ? vzalloc(size) : kzalloc(size, flags);
+}
+EXPORT_SYMBOL(aml_media_mem_alloc);
 
-typedef unsigned char uint8_t;
-typedef int int32_t;
-typedef unsigned int uint32_t;
+inline void aml_media_mem_free(const void *addr)
+{
+	kvfree(addr);
+}
+EXPORT_SYMBOL(aml_media_mem_free);
 
-#endif //_UTILS_H

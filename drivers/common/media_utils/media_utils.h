@@ -19,6 +19,9 @@
  */
 #ifndef _MEDIA_FILE_H_
 #define _MEDIA_FILE_H_
+inline void *aml_media_mem_alloc(size_t size, gfp_t flags);
+inline void aml_media_mem_free(const void *addr);
+
 ssize_t media_write(struct file *, const void *, size_t, loff_t *);
 ssize_t media_read(struct file *, void *, size_t, loff_t *);
 struct file *media_open(const char *, int, umode_t);
