@@ -5471,7 +5471,8 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		ctx->internal_dw_scale = dec->cfg.metadata_config_flag & (1 << 13);
 		ctx->second_field_pts_mode = dec->cfg.metadata_config_flag & (1 << 12);
 		ctx->force_di_permission = dec->cfg.metadata_config_flag & (1 << 17);
-		ctx->no_fbc_output = dec->cfg.metadata_config_flag & (1 << 19);
+		if (dec->cfg.double_write_mode != 0x10)
+			ctx->no_fbc_output = dec->cfg.metadata_config_flag & (1 << 19);
 		if (force_di_permission)
 			ctx->force_di_permission = true;
 
