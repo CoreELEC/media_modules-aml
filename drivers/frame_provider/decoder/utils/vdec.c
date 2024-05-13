@@ -4315,7 +4315,6 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 
 	if ((vdec->slave || vdec->master) &&
 		(vdec->sched == 0)) {
-		core->run_flag |= VDEC_NOT_READY;
 		goto error_handle;
 	}
 #ifdef VDEC_DEBUG_SUPPORT
