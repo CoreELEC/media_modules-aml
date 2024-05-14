@@ -3762,18 +3762,21 @@ static bool vdec_inactive_core_reset(struct vdec_s * vdec)
 	idle_mask = vdec->core_mask & (~core->sched_mask);
 
 	if (idle_mask) {
-		if (idle_mask & CORE_MASK_VDEC_1) {
-			vdec_reset_core(vdec);
+		if ((idle_mask & CORE_MASK_VDEC_1)
+			&& (vdec_core->power_ref_count[VDEC_1])) {
+				vdec_reset_core(vdec);
 		}
-		if (is_support_dual_core() && is_vdec_dual_core_mode(vdec)) {
-			if (idle_mask & CORE_MASK_HEVC_FRONT)
-				amhevc_reset_f();
+		if (vdec_core->power_ref_count[VDEC_HEVC]) {
+			if (is_support_dual_core() && is_vdec_dual_core_mode(vdec)) {
+				if (idle_mask & CORE_MASK_HEVC_FRONT)
+					amhevc_reset_f();
 
-			if (idle_mask & CORE_MASK_HEVC_BACK)
-				amhevc_reset_b();
-		} else {
-			if (idle_mask & CORE_MASK_HEVC)
-				hevc_reset_core(vdec);
+				if (idle_mask & CORE_MASK_HEVC_BACK)
+					amhevc_reset_b();
+			} else {
+				if (idle_mask & CORE_MASK_HEVC)
+					hevc_reset_core(vdec);
+			}
 		}
 	}
 	mutex_unlock(&vdec_mutex);
