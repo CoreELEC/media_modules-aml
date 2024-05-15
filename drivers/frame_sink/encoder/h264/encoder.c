@@ -4032,7 +4032,11 @@ static s32 avc_mmap(struct file *filp, struct vm_area_struct *vma)
 	enc_pr(LOG_ALL,
 		"vma_size is %ld , off is %ld, wq:%p.\n",
 		vma_size, off, (void *)wq);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
 	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP | VM_IO;
+#else
+	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP | VM_IO);
+#endif
 	/* vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot); */
 	if (remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
 		vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
@@ -4685,8 +4689,8 @@ static s32 encode_wq_uninit(void)
 	return  r;
 }
 
-static ssize_t encode_status_show(struct class *cla,
-				  struct class_attribute *attr, char *buf)
+static ssize_t encode_status_show(KV_CLASS_CONST struct class *cla,
+				  KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	u32 process_count = 0;
 	u32 free_count = 0;

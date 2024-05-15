@@ -1,7 +1,7 @@
-obj-$(CONFIG_AMLOGIC_MEDIA_VENC_COMMON) += common/
-obj-$(CONFIG_AMLOGIC_MEDIA_VENC_H264)	+=	h264/
-obj-$(CONFIG_AMLOGIC_MEDIA_VENC_H265)	+=	h265/
-obj-$(CONFIG_AMLOGIC_MEDIA_VENC_MULTI) += multi/
-obj-$(CONFIG_AMLOGIC_MEDIA_VENC_JPEG) += jpeg/
-obj-$(CONFIG_AMLOGIC_MEDIA_VENC_MEMALLOC) += memalloc/
-obj-$(CONFIG_AMLOGIC_MEDIA_VENC_VCENC) += vcenc/
+obj-y += common/
+obj-y += h264/
+obj-y += h265/
+obj-y += multi/
+obj-y += jpeg/
+obj-y += memalloc/
+obj-y += vcenc/

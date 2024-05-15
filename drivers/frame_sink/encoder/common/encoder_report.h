@@ -20,6 +20,8 @@
 #ifndef __ENC_REPORT_H__
 #define __ENC_REPORT_H__
 
+MODULE_IMPORT_NS(DMA_BUF);
+
 #define DEBUG_AMVENC_264     "amvenc_264"
 #define DEBUG_AMVENC_265     "amvenc_265"
 #define DEBUG_AMVENC_MULIT   "amvenc_multi"

@@ -121,7 +121,11 @@ static s32 s_interrupt_flag;
 static wait_queue_head_t s_interrupt_wait_q;
 
 static spinlock_t s_vpu_lock = __SPIN_LOCK_UNLOCKED(s_vpu_lock);
-static DEFINE_SEMAPHORE(s_vpu_sem);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
+	static DEFINE_SEMAPHORE(s_vpu_sem);
+#else
+	static DEFINE_SEMAPHORE(s_vpu_sem, 1);
+#endif
 static struct list_head s_vbp_head = LIST_HEAD_INIT(s_vbp_head);
 static struct list_head s_inst_list_head = LIST_HEAD_INIT(s_inst_list_head);
 static struct tasklet_struct hevc_tasklet;
@@ -1863,7 +1867,11 @@ static s32 vpu_map_to_register(struct file *fp, struct vm_area_struct *vm)
 {
 	ulong pfn;
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
 	vm->vm_flags |= VM_IO | VM_RESERVED;
+#else
+	vm_flags_set(vm, VM_IO | VM_RESERVED);
+#endif
 	vm->vm_page_prot =
 		pgprot_noncached(vm->vm_page_prot);
 	pfn = s_vpu_register.phys_addr >> PAGE_SHIFT;
@@ -1875,7 +1883,11 @@ static s32 vpu_map_to_register(struct file *fp, struct vm_area_struct *vm)
 static s32 vpu_map_to_physical_memory(
 	struct file *fp, struct vm_area_struct *vm)
 {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
 	vm->vm_flags |= VM_IO | VM_RESERVED;
+#else
+	vm_flags_set(vm, VM_IO | VM_RESERVED);
+#endif
 	if (vm->vm_pgoff ==
 		(s_common_memory.phys_addr >> PAGE_SHIFT)) {
 		vm->vm_page_prot =
@@ -1903,7 +1915,11 @@ static s32 vpu_map_to_instance_pool_memory(
 	s8 *vmalloc_area_ptr = (s8 *)s_instance_pool.base;
 	ulong pfn;
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
 	vm->vm_flags |= VM_RESERVED;
+#else
+	vm_flags_set(vm, VM_RESERVED);
+#endif
 
 	/* loop over all pages, map it page individually */
 	while (length > 0) {
@@ -2256,8 +2272,8 @@ static const struct file_operations vpu_fops = {
 	.mmap = vpu_mmap,
 };
 
-static ssize_t hevcenc_status_show(struct class *cla,
-				  struct class_attribute *attr, char *buf)
+static ssize_t hevcenc_status_show(KV_CLASS_CONST struct class *cla,
+				  KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
 	return snprintf(buf, 40, "hevcenc_status_show\n");
 }

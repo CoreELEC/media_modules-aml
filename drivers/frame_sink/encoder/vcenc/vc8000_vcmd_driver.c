@@ -111,6 +111,7 @@
 #include <linux/compat.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
+#include "../common/encoder_report.h"
 
 //#define VCMD_DEBUG_INTERNAL
 /*these size need to be modified according to hw config.*/
@@ -437,7 +438,11 @@ static void release_vcmd_non_cachable_memory(void)
                     if (level >= print_level) \
                         printk(x); \
                 } while (0)
-static DEFINE_SEMAPHORE(s_vers_sem);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
+    static DEFINE_SEMAPHORE(s_vers_sem);
+#else
+    static DEFINE_SEMAPHORE(s_vers_sem, 1);
+#endif
 static spinlock_t s_dma_buf_lock = __SPIN_LOCK_UNLOCKED(s_dma_buf_lock);
 static struct list_head s_dma_bufp_head = LIST_HEAD_INIT(s_dma_bufp_head);
 static s32 print_level = LOG_DEBUG;

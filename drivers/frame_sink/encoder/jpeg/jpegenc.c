@@ -550,7 +550,11 @@ static spinlock_t s_dma_buf_lock = __SPIN_LOCK_UNLOCKED(s_dma_buf_lock);
 static struct list_head s_dma_bufp_head = LIST_HEAD_INIT(s_dma_bufp_head);
 
 static spinlock_t s_vpu_lock = __SPIN_LOCK_UNLOCKED(s_vpu_lock);
-static DEFINE_SEMAPHORE(s_vpu_sem);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
+    static DEFINE_SEMAPHORE(s_vpu_sem);
+#else
+    static DEFINE_SEMAPHORE(s_vpu_sem, 1);
+#endif
 static struct list_head s_vbp_head = LIST_HEAD_INIT(s_vbp_head);
 
 static s32 enc_dma_buf_release(struct file *filp);
@@ -4519,7 +4523,11 @@ static s32 jpegenc_mmap(struct file *filp, struct vm_area_struct *vma)
         return -EAGAIN;
     }
     jenc_pr(LOG_INFO, "vma_size is %ld, off is %ld\n", vma_size, off);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
     vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP | VM_IO;
+#else
+    vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP | VM_IO);
+#endif
     /* vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot); */
     if (remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
         vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
@@ -4597,8 +4605,8 @@ static s32 jpegenc_wq_uninit(void)
     return  r;
 }
 
-static ssize_t encode_status_show(struct class *cla,
-    struct class_attribute *attr, char *buf)
+static ssize_t encode_status_show(KV_CLASS_CONST struct class *cla,
+    KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
     s32 irq_num;
     u32 hw_status, width, height;
@@ -4853,13 +4861,13 @@ static s32 enc_free_buffers(struct file *filp)
     return 0;
 }
 
-static ssize_t power_ctrl_show(struct class *cla, struct class_attribute *attr, char *buf) {
+static ssize_t power_ctrl_show(KV_CLASS_CONST struct class *cla, KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf) {
     jenc_pr(LOG_INFO, "power status: %lu\n", pwr_ctrl_status_psci_smc(PDID_T7_DOS_HCODEC));
     jenc_pr(LOG_INFO, "jpeg clk: %ld\n", clk_get_rate(g_jpeg_enc_clks.jpeg_enc_clk));
     return 1;//snprintf(buf, PAGE_SIZE, "power control show done\n");
 }
 
-static ssize_t power_ctrl_store(struct class *class,struct class_attribute *attr,
+static ssize_t power_ctrl_store(KV_CLASS_CONST struct class *class,KV_CLASS_ATTR_CONST struct class_attribute *attr,
         const char *buf, size_t count) {
     if (strncmp(buf, "poweron", 7) == 0) {
         jenc_pr(LOG_INFO, "now powering on:\n");
