@@ -11602,8 +11602,9 @@ static void h264_reconfig(struct vdec_h264_hw_s *hw)
 	unsigned long flags;
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	dpb_print(DECODE_ID(hw), 0,
-	"%s\n", __func__);
+	ulong timeout = jiffies;
+
+	dpb_print(DECODE_ID(hw), 0, "%s\n", __func__);
 	/* after calling flush_dpb() and bufmgr_h264_remove_unused_frame(),
 		all buffers are in display queue (used == 2),
 			or free (used == 0)
@@ -11625,6 +11626,13 @@ static void h264_reconfig(struct vdec_h264_hw_s *hw)
 	bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
 
 	if (hw->collocate_cma_alloc_addr) {
+		timeout = jiffies + HZ/20;
+		while ((READ_VREG(H264_CO_MB_RW_CTL) >> 11) & 0x1) {
+			if (time_after(jiffies, timeout)) {
+				dpb_print(DECODE_ID(hw), 0, "wait co mb timeout\n\n");
+				break;
+			}
+		}
 		decoder_bmmu_box_free_idx(
 			hw->bmmu_box,
 			BMMU_REF_IDX);
