@@ -4529,8 +4529,6 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		ctx->picinfo.dpb_margin,
 		CTX_BUF_TOTAL(ctx));
 
-	aml_vdec_dispatch_event(ctx, V4L2_EVENT_SRC_CH_RESOLUTION);
-
 	mutex_lock(&ctx->state_lock);
 	if (ctx->state == AML_STATE_INIT) {
 		ctx->state = AML_STATE_PROBE;
@@ -4539,6 +4537,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			"vcodec state (AML_STATE_PROBE)\n");
 	}
 	mutex_unlock(&ctx->state_lock);
+
+	aml_vdec_dispatch_event(ctx, V4L2_EVENT_SRC_CH_RESOLUTION);
 }
 
 static void vb2ops_vdec_buf_finish(struct vb2_buffer *vb)
