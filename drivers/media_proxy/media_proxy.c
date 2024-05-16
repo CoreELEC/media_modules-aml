@@ -71,18 +71,26 @@ int mediaproxy_open(struct inode *inode, struct file *filp)
 int mediaproxy_release(struct inode *inode, struct file *filp)
 {
     mp_session *session = filp->private_data;
-    if (session->session_id > 0) {
-        mutex_lock(session->lock);
+    pr_info("release session\n");
+    if (session->session_id >= 0) {
+        //not disconnect, get lock
+        struct mutex *lock = session->lock;
+        mutex_lock(lock);
+        pr_info("release session %s-%d\n", MP_ROLE_STRING(session->role), session->session_id);
         session->session_entry[session->session_id] = NULL;
         if (session->role == MP_ROLE_CONSUMER) {
             mediaproxy->has_consumer--;
         }
-        mutex_lock(session->lock);
-        pr_info("release session %s-%d\n", MP_ROLE_STRING(session->role), session->session_id);
+        kfifo_free(&session->msg_kfifo);
+        kfree(session);
+        filp->private_data = NULL;
+        mutex_unlock(lock);
+    } else {
+        //disconnect only need free filo and session
+        kfifo_free(&session->msg_kfifo);
+        kfree(session);
+        filp->private_data = NULL;
     }
-    kfifo_free(&session->msg_kfifo);
-    kfree(session);
-    filp->private_data = NULL;
     module_put(THIS_MODULE);
     return 0;
 }
@@ -142,18 +150,22 @@ static int mediaproxy_connect(mp_role_e role, mp_session * session) {
 }
 
 static int mediaproxy_disconnect(mp_session * session){
+    if (session == NULL || session->lock == NULL) {
+        pr_info("Session or lock is null when disconnected\n");
+        return 0;
+    }
     mutex_lock(session->lock);
     session->session_entry[session->session_id] = NULL;
     if (session->role == MP_ROLE_CONSUMER) {
         mediaproxy->has_consumer--;
     }
-    mutex_unlock(session->lock);
     pr_info("Session %s-%d is disconnected\n", MP_ROLE_STRING(session->role), session->session_id);
     session->session_id = -1;
     session->role = MP_ROLE_INVALID;
     session->subscribe_msg_type = 0xFF;
-    session->lock = NULL;
     session->session_entry = NULL;
+    mutex_unlock(session->lock);
+    session->lock = NULL;
     return 0;
 }
 
@@ -184,7 +196,7 @@ ssize_t mediaproxy_read(struct file *filp, char __user *buf, size_t count, loff_
         pr_err("consumer kfifo_to_user failed\n");
         return -EFAULT;
     }
-    pr_info("Mediaproxy is read success, copied:%d, fifo len: %d\n", copied, kfifo_len(&session->msg_kfifo));
+    //pr_info("Mediaproxy is read success, copied:%d, fifo len: %d\n", copied, kfifo_len(&session->msg_kfifo));
     return copied;
 }
 
@@ -204,7 +216,7 @@ ssize_t mediaproxy_write(struct file *filp, const char __user *buf, size_t count
     mediaproxy->all_producer_fifo_empty = kfifo_is_empty(&session->msg_kfifo);
     wake_up_interruptible(&mediaproxy->transfer_queue);
     mutex_unlock(&mediaproxy->p_lock);
-    pr_info("mediaproxy write success, copied size: %d fifo len: %d\n", copied, kfifo_len(&session->msg_kfifo));
+    //pr_info("mediaproxy write success, copied size: %d fifo len: %d\n", copied, kfifo_len(&session->msg_kfifo));
     return copied;
 }
 
