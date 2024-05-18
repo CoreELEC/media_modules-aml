@@ -221,15 +221,19 @@ int decoder_mmu_box_alloc_idx(
 	mutex_lock(&box->mutex);
 	sc = decoder_mmu_box_get_sc_from_idx(box, idx);
 	if (sc) {
-		if (sc->page_max_cnt >= num_pages)
+		if (sc->page_max_cnt >= num_pages) {
 			ret = codec_mm_scatter_alloc_want_pages(sc,
 				num_pages);
-		else {
+			if (ret < 0) {
+				mutex_unlock(&box->mutex);
+				pr_err("alloc want pages failed, num %d\n", num_pages);
+				return -1;
+			}
+		} else {
 			codec_mm_scatter_dec_owner_user(sc, 0);
 			decoder_mmu_box_set_sc_from_idx(box, idx, NULL);
 			sc = NULL;
 		}
-
 	}
 	if (!sc) {
 		sc = codec_mm_scatter_alloc(num_pages + 64, num_pages,

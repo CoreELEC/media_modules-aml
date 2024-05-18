@@ -7563,9 +7563,10 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 			(vdec_secure(hw_to_vdec(pbi)))) {
 			u32 prob_addr, id;
 			id = tee_vp9_prob_malloc(&prob_addr);
-			if (prob_addr <= 0)
+			if (prob_addr <= 0) {
 				pr_err("%s, tee[%d] malloc prob buf failed\n", __func__, id);
-			else {
+				return -1;
+			} else {
 				pbi->prob_buffer_phy_addr = prob_addr;
 				pbi->count_buffer_phy_addr = pbi->prob_buffer_phy_addr + PROB_BUF_SIZE;
 			}
