@@ -836,6 +836,8 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	/* re-order the ref buffer according to RPS*/
 	img->num_of_references = hd->curr_RPS.num_of_ref;
 
+	img->PrevPicDistanceLsb = (img->coding_order % 256);
+
 	/*rain*/
 	if (is_avs2_print_bufmgr_detail()) {
 		pr_info("%s: coding_order is %d, curr_IDRcoi is %d\n",
@@ -843,12 +845,18 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 		for (ii = 0; ii < MAXREF; ii++) {
 			pr_info("ref_pic(%d)=%d\n", ii, hd->curr_RPS.ref_pic[ii]);
 		}
+
+		for (ii = 0; ii < MAXREF; ii++) {
+			pr_info("remove_pic(%d)=%d\n", ii, hd->curr_RPS.remove_pic[ii]);
+		}
+
 		for (ii = 0; ii < avs2_dec->ref_maxbuffer; ii++) {
 			pr_info(
-				"fref[%d]: index %d imgcoi_ref %d imgtr_fwRefDistance %d\n",
+				"fref[%d]: index %d imgcoi_ref %d imgtr_fwRefDistance %d refered_by_others %d\n",
 				ii, avs2_dec->fref[ii]->index,
 				avs2_dec->fref[ii]->imgcoi_ref,
-				avs2_dec->fref[ii]->imgtr_fwRefDistance);
+				avs2_dec->fref[ii]->imgtr_fwRefDistance,
+				avs2_dec->fref[ii]->referred_by_others);
 		}
 	}
 
@@ -1172,8 +1180,6 @@ static int frame_postprocessing(struct avs2_decoder *avs2_dec)
 	int32_t j, tmp_min, output_cur_dec_pic, pos = -1;
 	int32_t search_times = avs2_dec->outprint.buffer_num;
 #endif
-	/*pic dist by Grandview Semi. @ [06-07-20 15:25]*/
-	img->PrevPicDistanceLsb = (img->coding_order % 256);
 
 	pointer_tmp = avs2_dec->outprint.buffer_num;
 	p_outdata = &avs2_dec->outprint.stdoutdata[pointer_tmp];
