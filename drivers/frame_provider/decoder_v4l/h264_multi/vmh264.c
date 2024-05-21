@@ -995,7 +995,6 @@ struct vdec_h264_hw_s {
 	u32 consume_byte;
 	u32 reserved_byte;
 	u32 sei_present_flag;
-	int set_mmu_flag;
 	int v4l_duration;
 	spinlock_t tlock;
 	int last_dur;
@@ -9901,7 +9900,6 @@ int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	hw->mmu_enable = 1;
-	hw->set_mmu_flag = 1;
 	{
 		hw->canvas_mode = CANVAS_BLKMODE_LINEAR;
 		hw->double_write_mode &= 0xffff;
@@ -9965,7 +9963,6 @@ int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 static int clear_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 {
 	hw->mmu_enable = 0;
-	hw->set_mmu_flag = 0;
 
 	amhevc_stop();
 	hevc_reset_core(vdec);
@@ -10229,7 +10226,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 
 	if (!ctx->v4l_resolution_change && (ps->field == V4L2_FIELD_INTERLACED) &&
 		hw->dw_para_set_flag &&
-		hw->set_mmu_flag) {
+		hw->mmu_enable) {
 		struct aml_vdec_cfg_infos cfg_info = { 0 };
 		clear_mmu_config(hw, vdec);
 		hw->double_write_mode = DM_YUV_ONLY;
