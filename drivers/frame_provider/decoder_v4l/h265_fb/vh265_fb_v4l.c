@@ -10904,6 +10904,7 @@ static void put_vf_to_display_q(struct hevc_state_s *hevc, struct vframe_s *vf)
 	if (hevc->front_back_mode != 1)
 		decoder_do_frame_check(hw_to_vdec(hevc), vf);
 	vdec_vframe_ready(hw_to_vdec(hevc), vf);
+	vf->type_original = vf->type;
 	hevc->send_frame_flag = 1;
 	kfifo_put(&hevc->display_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hevc->trace.pts_name, vf->timestamp);
@@ -11145,6 +11146,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->src_crop.top = 0;
 			vf->src_crop.left = 0;
 		}
+		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
+			"original(%d, %d), crop(%d, %d)\n",
+			pic->width, pic->height, pic->crop_w, pic->crop_h);
 
 		vf->compWidth = pic->width;
 		vf->compHeight = pic->height;
