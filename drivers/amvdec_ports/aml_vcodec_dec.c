@@ -4835,7 +4835,7 @@ static void m2mops_vdec_job_abort(void *priv)
 {
 	struct aml_vcodec_ctx *ctx = priv;
 
-	v4l2_m2m_job_finish(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
+	//v4l2_m2m_job_finish(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "%s\n", __func__);
 }
 

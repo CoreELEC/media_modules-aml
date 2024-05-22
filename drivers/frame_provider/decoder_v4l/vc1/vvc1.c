@@ -568,8 +568,6 @@ static bool is_available_buffer(struct vdec_vc1_hw_s *hw)
 		}
 	}
 
-	vc1_recycle_frame_buffer(hw);
-
 	/* Wait for the buffer number negotiation to complete. */
 	for (i = 0; i < hw->vf_buf_num_used; ++i) {
 		if ((hw->vf_ref[i] == 0) &&
@@ -671,6 +669,8 @@ static int notify_v4l_eos(void)
 
 	index = find_free_buffer(hw);
 	if (INVALID_IDX == index) {
+		aml_buf_put_ref(&ctx->bm, hw->aml_buf);
+		hw->aml_buf = 0;
 		pr_info("[%d] VC1 EOS get free solt buff fail.\n", ctx->id);
 		return -1;
 	}
@@ -788,12 +788,21 @@ static void vvc1_work(struct work_struct *work)
 		container_of(work, struct vdec_vc1_hw_s, work);
 
 	if (hw->dec_result == DEC_RESULT_EOS) {
-		int wp = READ_VREG(VLD_MEM_VIFIFO_WP);
-		int rp = READ_VREG(VLD_MEM_VIFIFO_RP);
-		int size = (wp >= rp) ? (wp - rp) : (wp + vdec->vbuf.buf_size - rp);
+		if (stat & STAT_VDEC_RUN) {
+			WRITE_VREG(ASSIST_MBOX1_MASK, 0);
+			amvdec_stop();
+			stat &= ~STAT_VDEC_RUN;
+			hw->eos = false;
+			return;
+		}
 
-		vc1_print(0, VC1_DEBUG_WORK_DETAIL, "%s wp 0x%x rp 0x%x level %d eos %d\n",
-			__func__, wp, rp, size, vdec->input.eos);
+		if (hw->aml_buf) {
+			vc1_print(0, VC1_DEBUG_BUFMGR,
+				"%s capture buffer not config finish, EOS should wait \n", __func__);
+			hw->eos = false;
+			return;
+		}
+
 		flush_output(hw);
 		if (notify_v4l_eos()) {
 			vc1_print(0, VC1_DEBUG_BUFMGR, "%s try to notify EOS again \n", __func__);
@@ -1017,6 +1026,35 @@ static inline void vc1_reset_unlock(struct vdec_vc1_hw_s *hw, ulong flags)
 	spin_unlock_irqrestore(&hw->reset_lock, flags);
 }
 
+static void vc1_reset_frame_buffer(struct vdec_vc1_hw_s *hw)
+{
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct aml_buf *aml_buf;
+	int i;
+	ulong flags;
+
+	for (i = 0; i < hw->vf_buf_num_used; i++) {
+		if (hw->pics[i].v4l_ref_buf_addr) {
+			aml_buf = (struct aml_buf *)hw->pics[i].v4l_ref_buf_addr;
+			if (hw->interlace_flag) {
+				aml_buf_put_ref(&ctx->bm, aml_buf);
+				aml_buf_put_ref(&ctx->bm, aml_buf);
+			} else
+				aml_buf_put_ref(&ctx->bm, aml_buf);
+
+			spin_lock_irqsave(&hw->lock, flags);
+			hw->pics[i].v4l_ref_buf_addr = 0;
+			hw->pics[i].cma_alloc_addr = 0;
+			hw->vfbuf_use[i] = 0;
+			hw->ref_use[i] = 0;
+			hw->buf_use[i] = 0;
+			hw->vf_ref[i] = 0;
+			spin_unlock_irqrestore(&hw->lock, flags);
+		}
+	}
+}
+
 static void reset(struct vdec_s *vdec)
 {
 	struct vdec_vc1_hw_s *hw = &vc1_hw;
@@ -1026,7 +1064,7 @@ static void reset(struct vdec_s *vdec)
 	ulong flags;
 
 	cancel_work_sync(&hw->work);
-	if (stat & STAT_VDEC_RUN) {
+	if ((stat & STAT_VDEC_RUN) && !hw->eos) {
 		WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 		amvdec_stop();
 		stat &= ~STAT_VDEC_RUN;
@@ -1066,14 +1104,7 @@ static void reset(struct vdec_s *vdec)
 		kfifo_put(&newframe_q, vf);
 	}
 
-	for (i = 0; i < hw->vf_buf_num_used; i++) {
-		hw->pics[i].v4l_ref_buf_addr = 0;
-		hw->pics[i].cma_alloc_addr = 0;
-		hw->vfbuf_use[i] = 0;
-		hw->ref_use[i] = 0;
-		hw->buf_use[i] = 0;
-		hw->vf_ref[i] = 0;
-	}
+	vc1_reset_frame_buffer(hw);
 
 	hw->refs[0]		= -1;
 	hw->refs[1]		= -1;
@@ -1659,7 +1690,6 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 					__func__, v_width, v_height);
 
 		vc1_set_rp();
-
 		if (v_width && v_width <= 4096
 			&& (v_width != vvc1_amstream_dec_info.width)) {
 			pr_info("frame width changed %d to %d\n",
@@ -1849,28 +1879,31 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	}
 
 	recycle_frames(hw);
-	if (is_available_buffer(hw))
-		ret = vvc1_config_buf(hw);
+	vc1_recycle_frame_buffer(hw);
 
-	if (ret == INVALID_IDX) {
-		do {
-			msleep(wait_time);
-			if (is_available_buffer(hw)) {
-				ret = vvc1_config_buf(hw);
-				vc1_print(0, 0, "%s: ret %d, wait_time %d, stat 0x%x\n",
-						__func__, ret, wait_time, (stat & STAT_VDEC_RUN));
-			} else {
-				vc1_print(0, 0, "%s: isn't enough capture buf, stat 0x%x\n",
-						__func__, (stat & STAT_VDEC_RUN));
+	do {
+		if (is_available_buffer(hw)) {
+			ret = vvc1_config_buf(hw);
+			if (ret) {
+				vc1_print(0, VC1_DEBUG_BUFMGR,
+					"%s: not enough slot, stat 0x%x\n",
+					__func__, (stat & STAT_VDEC_RUN));
+				aml_buf_put_ref(&ctx->bm, hw->aml_buf);
+				hw->aml_buf = 0;
+				msleep(wait_time);
 			}
-		} while ((ret == INVALID_IDX) && (stat & STAT_VDEC_RUN));
-	}
+		} else {
+			vc1_print(0, VC1_DEBUG_BUFMGR, "%s: not enough capture buffer, stat 0x%x\n",
+					__func__, (stat & STAT_VDEC_RUN));
+			msleep(wait_time);
+		}
+	} while ((ret == INVALID_IDX) && (stat & STAT_VDEC_RUN));
 
 	if ((ret == 0) && (stat & STAT_VDEC_RUN))
 		WRITE_VREG(DECODE_STATUS, 0);
 	else
 		vc1_print(0, 0, "%s: end ret %d, stat 0x%x\n",
-					__func__, ret, (stat & STAT_VDEC_RUN));
+			__func__, ret, (stat & STAT_VDEC_RUN));
 
 	return IRQ_HANDLED;
 }
@@ -1890,6 +1923,9 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 {
 	struct vdec_vc1_hw_s *hw = &vc1_hw;
 	ulong flags;
+
+	if (hw->eos)
+		return IRQ_HANDLED;
 
 	if (process_busy)
 		return IRQ_HANDLED;
