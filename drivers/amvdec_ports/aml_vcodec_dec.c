@@ -362,7 +362,7 @@ static void copy_v4l2_format_dimension(struct aml_vcodec_ctx *ctx,
 				       u32 type);
 static void vidioc_vdec_s_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
 static void vidioc_vdec_g_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
-static int is_vdec_core_fmt(struct aml_vcodec_ctx *ctx);
+static int is_vdec_core_fmt(u32 fmt);
 
 
 static ulong aml_vcodec_ctx_lock(struct aml_vcodec_ctx *ctx)
@@ -656,13 +656,13 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 
 	if (ctx->enable_di_post &&
 		ctx->picinfo.field != V4L2_FIELD_NONE &&
-		is_vdec_core_fmt(ctx)) {
+		is_vdec_core_fmt(ctx->output_pix_fmt)) {
 		picinfo->dpb_margin = (picinfo->dpb_margin + 1) >> 1;
 		ctx->dpb_size = picinfo->dpb_frames + picinfo->dpb_margin;
 		ctx->dpb_size *= PAIR_DONE;
 	}
 
-	if (ctx->enable_di_post && (is_vdec_core_fmt(ctx)) &&
+	if (ctx->enable_di_post && (is_vdec_core_fmt(ctx->output_pix_fmt)) &&
 		ctx->dpb_size > 2 * V4L_CAP_BUFF_MAX) {
 		ctx->dpb_size = ctx->dpb_size / PAIR_DONE * 2;
 	}
@@ -2014,7 +2014,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 	struct dma_buf_attachment *dba = NULL;
 
 	if (!ctx->enable_di_post || ctx->picinfo.field == V4L2_FIELD_NONE ||
-		!is_vdec_core_fmt(ctx))
+		!is_vdec_core_fmt(ctx->output_pix_fmt))
 		return 0;
 
 	if ((vb->vb2_buf.memory != VB2_MEMORY_DMABUF) ||
@@ -2724,9 +2724,9 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	ctx->quantization = V4L2_QUANTIZATION_DEFAULT;
 	ctx->xfer_func = V4L2_XFER_FUNC_DEFAULT;
 	ctx->dev->dec_capability = 0;//VCODEC_CAPABILITY_4K_DISABLED;//disable 4k
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
-		ctx->dev->dec_capability = VCODEC_CAPABILITY_4K_DISABLED;
-	}
+	ctx->dev->dec_capability |= (hevc_is_support_8k() ? VCODEC_HEVC_8K_ENABLE :
+		(hevc_is_support_4k()? VCODEC_HEVC_4K_ENABLE : 0));
+	ctx->dev->dec_capability |= (vdec_is_support_4k() ? VCODEC_VDEC_4K_ENABLE : 0);
 
 	if (t3x_tw_output && (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X))
 		ctx->force_tw_output = 1;
@@ -3195,17 +3195,13 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 	return 0;
 }
 
-static int is_vdec_core_fmt(struct aml_vcodec_ctx *ctx)
+static int is_vdec_core_fmt(u32 fmt)
 {
-	if (ctx->output_pix_fmt == V4L2_PIX_FMT_H264 ||
-		ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG ||
-		ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG1 ||
-		ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG2 ||
-		ctx->output_pix_fmt == V4L2_PIX_FMT_MPEG4 ||
-		ctx->output_pix_fmt == V4L2_PIX_FMT_AVS ||
-		ctx->output_pix_fmt == V4L2_PIX_FMT_MJPEG ||
-		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_G ||
-		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_L)
+	if (fmt == V4L2_PIX_FMT_H264 || fmt == V4L2_PIX_FMT_MPEG ||
+		fmt == V4L2_PIX_FMT_MPEG1 || fmt == V4L2_PIX_FMT_MPEG2 ||
+		fmt == V4L2_PIX_FMT_MPEG4 || fmt == V4L2_PIX_FMT_AVS ||
+		fmt == V4L2_PIX_FMT_MJPEG || fmt == V4L2_PIX_FMT_VC1_ANNEX_G ||
+		fmt == V4L2_PIX_FMT_VC1_ANNEX_L)
 		return true;
 
 	return false;
@@ -3232,7 +3228,8 @@ static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 	 * to DM_YUV_ONLY. Driver will set width alignment to 64, also satisfy width
 	 * alignment 32
 	 */
-	if ((!is_vdec_core_fmt(ctx) || (dw_mode != DM_YUV_ONLY)) && is_hevc_align32(0))
+	if ((!is_vdec_core_fmt(ctx->output_pix_fmt) || (dw_mode != DM_YUV_ONLY)) &&
+		is_hevc_align32(0))
 		w_align = 32;
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
@@ -3520,13 +3517,27 @@ static int vidioc_enum_framesizes(struct file *file, void *priv,
 
 		fsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
 		fsize->stepwise = aml_vdec_framesizes[i].stepwise;
-		if (!(ctx->dev->dec_capability &
-				VCODEC_CAPABILITY_4K_DISABLED)) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "4K is enabled\n");
-			fsize->stepwise.max_width =
-					VCODEC_DEC_4K_CODED_WIDTH;
-			fsize->stepwise.max_height =
-					VCODEC_DEC_4K_CODED_HEIGHT;
+		if (is_vdec_core_fmt(fsize->pixel_format)) {
+			if ((ctx->dev->dec_capability & VCODEC_VDEC_4K_ENABLE) &&
+				(fsize->pixel_format == V4L2_PIX_FMT_H264 ||
+				fsize->pixel_format == V4L2_PIX_FMT_MJPEG)) {
+				fsize->stepwise.max_width =
+						VCODEC_DEC_4K_CODED_WIDTH;
+				fsize->stepwise.max_height =
+						VCODEC_DEC_4K_CODED_HEIGHT;
+			}
+		} else {
+			if (ctx->dev->dec_capability & VCODEC_HEVC_8K_ENABLE) {
+				fsize->stepwise.max_width =
+						VCODEC_DEC_8K_CODED_WIDTH;
+				fsize->stepwise.max_height =
+						VCODEC_DEC_8K_CODED_HEIGHT;
+			} else if (ctx->dev->dec_capability & VCODEC_HEVC_4K_ENABLE) {
+				fsize->stepwise.max_width =
+						VCODEC_DEC_4K_CODED_WIDTH;
+				fsize->stepwise.max_height =
+						VCODEC_DEC_4K_CODED_HEIGHT;
+			}
 		}
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 			"%x, %d %d %d %d %d %d\n",
@@ -3773,7 +3784,7 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 				(tw_mode != DM_INVALID) ? q_data->sizeimage_tw[i] :
 				PAGE_SIZE;
 
-			if (ctx->enable_di_post && is_vdec_core_fmt(ctx) &&
+			if (ctx->enable_di_post && is_vdec_core_fmt(ctx->output_pix_fmt) &&
 				ctx->picinfo.field != V4L2_FIELD_NONE)
 				sizes[i] = PAGE_SIZE;
 
@@ -3842,7 +3853,7 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 	q_data = aml_vdec_get_q_data(ctx, vb->vb2_queue->type);
 
 	if (!(ctx->enable_di_post && ctx->picinfo.field != V4L2_FIELD_NONE &&
-		is_vdec_core_fmt(ctx))) {
+		is_vdec_core_fmt(ctx->output_pix_fmt))) {
 		for (i = 0; i < q_data->fmt->num_planes; i++) {
 			if (vb2_plane_size(vb, i) < q_data->sizeimage[i] &&
 				vb2_plane_size(vb, i) != PAGE_SIZE) {
@@ -4846,7 +4857,7 @@ static int get_width_align(struct aml_vcodec_ctx *ctx)
 
 	vdec_v4l_get_dw_mode(ctx, &dw);
 
-	if (is_hevc_align32(0) && (!is_vdec_core_fmt(ctx) ||
+	if (is_hevc_align32(0) && (!is_vdec_core_fmt(ctx->output_pix_fmt) ||
 		(ctx->output_pix_fmt == V4L2_PIX_FMT_H264 &&
 		dw != DM_YUV_ONLY)))
 		align = 32;
