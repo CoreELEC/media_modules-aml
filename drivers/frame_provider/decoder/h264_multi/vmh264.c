@@ -6791,14 +6791,9 @@ static int get_used_buf_count(struct vdec_h264_hw_s *hw)
 
 static bool is_last_buffer_with_one_field(struct vdec_h264_hw_s *hw)
 {
-	int i = 0;
 	int last = 0;
 	if (hw->dpb.mDPB.used_size > 0 && get_used_buf_count(hw) >= hw->dpb.mDPB.size) {
 		last = hw->dpb.mDPB.used_size-1;
-		for (i = 0; i < hw->dpb.mDPB.used_size; i++) {
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
-				"%s hw->dpb.mDPB.fs[%d]->is_used:%d\n",  __func__, i, hw->dpb.mDPB.fs[i]->is_used);
-		}
 		if (hw->dpb.mDPB.fs[last]->is_used == 1 || hw->dpb.mDPB.fs[last]->is_used == 2) {
 			return true;
 		}
@@ -11057,6 +11052,34 @@ static void vh264_timeout_work(struct work_struct *work)
 	vh264_work_implement(hw, vdec, 1);
 }
 
+static int check_dpb_full(struct vdec_s *vdec)
+{
+	int i,ret = 0, frame_outside_count = 0, inner_size = 0;
+	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
+	unsigned long flags;
+
+	spin_lock_irqsave(&hw->bufspec_lock, flags);
+
+	for (i = 0; i < p_Dpb->used_size; i++) {
+		if (p_Dpb->fs[i]->pre_output)
+			frame_outside_count++;
+	}
+	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
+	inner_size = p_Dpb->used_size - frame_outside_count;
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+		"%s inner_size= %d dec_dpb_size = %d\n",__func__, inner_size, p_H264_Dpb->dec_dpb_size);
+
+	if (inner_size >= p_H264_Dpb->dec_dpb_size) {
+		bufmgr_recover(hw);
+		ret = 1;
+	}
+	bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
+
+	return ret;
+}
+
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 {
 	bool ret = 1;
@@ -11158,7 +11181,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				(!save_buffer_in_res_change && ((get_used_buf_count(hw) >
 				hw->dpb.mDPB.size) || (get_used_buf_count(hw) == hw->dpb.mDPB.size &&
 				get_used_buf_count(hw) != hw->dpb.mDPB.used_size)))))
-				ret = 0;
+				ret = check_dpb_full(vdec);
 			else if (run_ready_max_buf_num &&
 				get_used_buf_count(hw) >=
 				run_ready_max_buf_num)
