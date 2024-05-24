@@ -10857,7 +10857,6 @@ pic_done:
 			hevc->start_parser_type = 0;
 			hevc->switch_dvlayer_flag = 0;
 #endif
-			hevc->decoded_poc = hevc->curr_POC;
 			if ((input_frame_based(hw_to_vdec(hevc)) && hevc->discard_dv_data) ||
 				(input_stream_based(hw_to_vdec(hevc)) && !vdec_dual(vdec)) ||
 				aux_data_is_available(hevc))
@@ -10875,6 +10874,7 @@ pic_done:
 
 			amhevc_stop();
 muti_output:
+			hevc->decoded_poc = hevc->curr_POC;
 			if (vdec_frame_based(hw_to_vdec(hevc)) &&
 				(READ_VREG(HEVC_SHIFT_BYTE_COUNT) + 4 < hevc->data_size)
 				 && (frmbase_muti_slice == 1)) {
