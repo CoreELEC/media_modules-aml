@@ -306,6 +306,7 @@ static unsigned int i_only_flag;
 	bit[21] 1: fixed DVB loop playback cause jetter issue.
 	bit[22] 1: In streaming mode, support for discarding data.
 	bit[23] 0: set error flag on frame number gap error and drop it, 1: ignore error.
+	bit[26] 0: output frame from dpb when dpb full, 1: not output frame from dpb when dpb full
 	bit[30] 1: Use driver error policy configuration and ignore the user space configuration
 */
 static unsigned int error_proc_policy = 0x7fCff6; /*0x1f14*/
@@ -1102,6 +1103,12 @@ static inline bool get_field(struct vdec_h264_hw_s *hw, unsigned int frame_mbs_o
 u32 is_save_buffer_mode(void)
 {
 	return save_buffer;
+}
+
+u32 get_error_proc_policy(struct h264_dpb_stru *p_H264_Dpb)
+{
+	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)p_H264_Dpb->vdec->private;
+	return hw->error_proc_policy;
 }
 
 static enum ResResult is_oversize(int w, int h)
@@ -5939,7 +5946,7 @@ static void get_picture_qos_info(struct StorablePicture *picture)
 }
 
 static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
-		int mb_height, int level_idc)
+		int mb_height, int level_idc, int max_reference_size)
 {
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int pic_size = mb_width * mb_height * 384;
@@ -6015,6 +6022,12 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 				size_vui, size);
 		}
 		size = size_vui;
+	} else {
+		if (size < max_reference_size) {
+			dpb_print(DECODE_ID(hw), 0,
+				"Warning: DPB size(%d) is less than max_reference_size(%d), so correct DPB size as max_reference_size\n", size, max_reference_size);
+			size = max_reference_size;
+		}
 	}
 
 	size += 1;	/* need one more buffer */
@@ -6030,6 +6043,7 @@ static int get_dec_dpb_size_active(struct vdec_h264_hw_s *hw, u32 param1, u32 pa
 	int mb_height = 0;
 	int dec_dpb_size;
 	int level_idc = param4 & 0xff;
+	int max_reference_size = (param4 >> 8) & 0xff;
 
 	mb_width = param1 & 0xff;
 	mb_total = (param1 >> 8) & 0xffff;
@@ -6051,7 +6065,7 @@ static int get_dec_dpb_size_active(struct vdec_h264_hw_s *hw, u32 param1, u32 pa
 	hw->error_frame_width = 0;
 	hw->error_frame_height = 0;
 
-	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
+	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height, level_idc, max_reference_size);
 
 	if (hw->no_poc_reorder_flag)
 		dec_dpb_size = 1;
@@ -6294,7 +6308,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		max_reference_size = (reg_val >> 8) & 0xff;
 		hw->dpb.reorder_output = max_reference_size;
 		hw->dpb.dec_dpb_size =
-			get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
+			get_dec_dpb_size(hw , mb_width, mb_height, level_idc, max_reference_size);
 		if (!hw->mmu_enable) {
 			mb_width = (mb_width+3) & 0xfffffffc;
 			mb_height = (mb_height+3) & 0xfffffffc;
@@ -10304,7 +10318,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	hw->error_frame_width = 0;
 	hw->error_frame_height = 0;
 
-	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
+	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height, level_idc, max_reference_size);
 
 	dpb_print(DECODE_ID(hw), 0,
 		"restriction_flag=%d, max_dec_frame_buffering=%d, dec_dpb_size=%d num_reorder_frames %d used_reorder_dpb_size_margin %d\n",

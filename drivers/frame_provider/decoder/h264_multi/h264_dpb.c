@@ -2308,6 +2308,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 	int i;
 	int none_displayed_num = 0;
 	unsigned char fast_output_flag = 0;
+	int inner_dpb_size = 0;
 	if (!flush_flag) {
 		for (i = 0; i < p_Dpb->used_size; i++) {
 			if ((!p_Dpb->fs[i]->is_output) &&
@@ -2351,6 +2352,25 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 					fast_output_flag = 1;
 			}
 		}
+
+		if (!(get_error_proc_policy(p_H264_Dpb) & 0x4000000) &&
+			!p_H264_Dpb->bitstream_restriction_flag) {
+			for (i = 0; i < p_Dpb->used_size; i++) {
+
+				if (p_Dpb->fs[i]->data_flag & ERROR_FLAG) {
+					break;
+				}
+				if ((((!p_Dpb->fs[i]->is_output) &&
+						(!p_Dpb->fs[i]->pre_output)) ||
+						(p_Dpb->fs[i]->is_reference))  &&
+						(p_Dpb->fs[i]->is_used == 3))
+						inner_dpb_size++;
+			}
+
+			if ((i >= p_Dpb->used_size) && (inner_dpb_size >= p_H264_Dpb->dec_dpb_size))
+				fast_output_flag = 1;
+		}
+
 		if (fast_output_flag)
 			;
 		else if (none_displayed_num <

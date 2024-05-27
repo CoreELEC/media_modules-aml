@@ -1024,4 +1024,6 @@ int is_used_for_reference(struct FrameStore *fs);
 
 u32 is_save_buffer_mode(void);
 
+u32 get_error_proc_policy(struct h264_dpb_stru *p_H264_Dpb);
+
 #endif
