@@ -3932,7 +3932,8 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
 
-		post_prepare_process(vdec, frame);
+		if (post_prepare_process(vdec, frame))
+			return -1;
 
 		if (!frame->show_frame)
 			pr_info("do not display.\n");
