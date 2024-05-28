@@ -167,7 +167,7 @@ struct Jpegenc_BuffInfo_s {
 	struct Jpegenc_Buff_s bitstream;
 };
 
-struct enc_dma_cfg {
+struct enc_dma_cfg_jpeg {
 	int fd;
 	size_t size;
 	void *dev;
@@ -201,7 +201,7 @@ struct jpegenc_request_s {
 	u32 v_stride;
 
 	u32 h_stride;
-	struct enc_dma_cfg dma_cfg[3];
+	struct enc_dma_cfg_jpeg dma_cfg[3];
 	u32 plane_num;
 };
 
@@ -245,7 +245,7 @@ struct jpegenc_wq_s {
 #ifdef CONFIG_CMA
 	struct page *venc_pages;
 #endif
-	struct enc_dma_cfg *dma_input;
+	struct enc_dma_cfg_jpeg *dma_input;
 };
 
 struct jpegenc_manager_s {
@@ -276,7 +276,7 @@ struct encdrv_dma_buf_info_t {
 /* To track the occupied dma_buf  */
 struct encdrv_dma_buf_pool_t {
 	struct list_head list;
-	struct enc_dma_cfg dma_cfg;
+	struct enc_dma_cfg_jpeg dma_cfg;
 	struct file *filp;
 };
 

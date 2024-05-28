@@ -2952,21 +2952,24 @@ const u32 fix_mc[] __aligned(8) = {
 
 	spin_unlock_irqrestore(&lock, flags);
 }
+*/
 
 bool amvenc_avc_on(void)
 {
-	bool hcodec_on;
+	bool hcodec_on = false;
 	ulong flags;
 
 	spin_lock_irqsave(&lock, flags);
 
-	hcodec_on = vdec_on(VDEC_HCODEC);
-	hcodec_on &= (encode_manager.wq_count > 0);
+	//hcodec_on = vdec_on(VDEC_HCODEC);
+	hcodec_on |= (encode_manager.wq_count > 0);
 
 	spin_unlock_irqrestore(&lock, flags);
+	enc_pr(LOG_INFO,"avc enc count:%d",encode_manager.wq_count);
 	return hcodec_on;
 }
-*/
+EXPORT_SYMBOL(amvenc_avc_on);
+
 
 static s32 avc_poweron(u32 clock)
 {

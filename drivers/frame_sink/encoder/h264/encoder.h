@@ -501,5 +501,5 @@ extern s32 destroy_encode_work_queue(struct encode_wq_s *encode_work_queue);
 #define HENC_SKIP_RUN_AUTO                     0xffff
 
 
-extern bool amvenc_avc_on(void);
+/*extern */bool amvenc_avc_on(void);
 #endif

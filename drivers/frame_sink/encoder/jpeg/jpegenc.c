@@ -71,8 +71,10 @@
 #define HCODEC_MFDIN_REG18                       0x1020
 #define HCODEC_MFDIN_REG19                       0x1021
 
+#define CONFIG_AM_ENCODER
+
 #ifdef CONFIG_AM_ENCODER
-#include "encoder.h"
+#include "../h264/encoder.h"
 #endif
 
 #define JPEGENC_CANVAS_INDEX 0xE4
@@ -555,7 +557,7 @@ static s32 enc_dma_buf_release(struct file *filp);
 static s32 enc_src_addr_config(struct encdrv_dma_buf_info_t *pinfo,
         struct file *filp);
 static s32 enc_free_buffers(struct file *filp);
-static int enc_dma_buf_get_phys(struct enc_dma_cfg *cfg, unsigned long *addr);
+static int enc_dma_buf_get_phys(struct enc_dma_cfg_jpeg *cfg, unsigned long *addr);
 
 static void set_log_level(const char *module, int level)
 {
@@ -3589,6 +3591,7 @@ static void _jpegenc_stop(void)
 {
     ulong timeout = jiffies + HZ;
 
+    jenc_pr(LOG_INFO, "_jpegenc_stop enter\n");
     WRITE_HREG(HCODEC_MPSR, 0);
     WRITE_HREG(HCODEC_CPSR, 0);
 
@@ -3619,6 +3622,7 @@ static void _jpegenc_stop(void)
     READ_VREG(DOS_SW_RESET1);
     READ_VREG(DOS_SW_RESET1);
     READ_VREG(DOS_SW_RESET1);
+    jenc_pr(LOG_INFO, "_jpegenc_stop end\n");
 }
 
 static void dump_mem(u8 *addr) {
@@ -3843,19 +3847,22 @@ static s32 jpegenc_poweroff(void)
 {
     //ulong flags;
     //spin_lock_irqsave(&lock, flags);
-
+    jenc_pr(LOG_ERROR, "start to jpegenc_poweroff\n");
     if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_C1)
         || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2)) {
         if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) {
+            jenc_pr(LOG_ERROR, "start to disable clk 11111\n");
             jpeg_enc_clk_disable(&g_jpeg_enc_clks);
             pwr_ctrl_psci_smc(PDID_SC2_DOS_HCODEC, false);
         }else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_M8) {
+            jenc_pr(LOG_ERROR, "start to disable clk 22222\n");
             /* enable HCODEC isolation */
             WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
                 READ_AOREG(AO_RTI_GEN_PWR_ISO0) | 0x30);
             /* power off HCODEC memories */
             WRITE_VREG(DOS_MEM_PD_HCODEC, 0xffffffffUL);
         }
+        jenc_pr(LOG_ERROR, "start to disable clk 33333\n");
         /* disable HCODEC clock */
         jpegenc_clock_disable();
 
@@ -3864,12 +3871,14 @@ static s32 jpegenc_poweroff(void)
             WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
                 READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) | 0x3);
         }
-
+        jenc_pr(LOG_ERROR, "start to disable clk 4444\n");
         /* release DOS clk81 clock gating */
         amports_switch_gate("vdec", 0);
     } else {
+        jenc_pr(LOG_ERROR, "start to jpegenc_poweroff_ex\n");
         jpegenc_poweroff_ex();
     }
+    jenc_pr(LOG_ERROR, "end of jpegenc_poweroff\n");
     //spin_unlock_irqrestore(&lock, flags);
 
     return 0;
@@ -3954,7 +3963,7 @@ static s32 convert_cmd(struct jpegenc_wq_s *wq, u32 *cmd_info)
     int i = 0;
     u32 data_offset;
     unsigned long paddr = 0;
-    struct enc_dma_cfg *cfg = NULL;
+    struct enc_dma_cfg_jpeg *cfg = NULL;
     s32 ret = 0;
     if (!wq) {
         jenc_pr(LOG_ERROR, "jpegenc convert_cmd error\n");
@@ -4091,6 +4100,7 @@ static void jpegenc_start_cmd(struct jpegenc_wq_s *wq)
 
 static void jpegenc_stop(void)
 {
+    jenc_pr(LOG_INFO, "jpegenc_stop enter\n");
     if ((gJpegenc.irq_num >= 0) &&
         (gJpegenc.irq_requested == true)) {
         gJpegenc.irq_requested = false;
@@ -4119,9 +4129,11 @@ static s32 jpegenc_open(struct inode *inode, struct file *file)
     s32 r;
     jenc_pr(LOG_INFO, "jpegenc open, filp=%lu\n", (unsigned long)file);
 #ifdef CONFIG_AM_ENCODER
-    if (amvenc_avc_on() == true) {
-        jenc_pr(LOG_ERROR, "hcodec in use for AVC Encode now.\n");
-        return -EBUSY;
+    if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7D) {
+        if (amvenc_avc_on() == true) {
+            jenc_pr(LOG_ERROR, "hcodec in use for AVC Encode now.\n");
+            return -EBUSY;
+        }
     }
 #endif
     file->private_data = NULL;
@@ -4185,7 +4197,7 @@ static s32 jpegenc_open(struct inode *inode, struct file *file)
 static s32 jpegenc_release(struct inode *inode, struct file *file)
 {
     struct jpegenc_wq_s *wq = (struct jpegenc_wq_s *)file->private_data;
-
+    jenc_pr(LOG_ERROR, "jpegenc release enter\n");
     if (wq != &gJpegenc.wq) {
         jenc_pr(LOG_ERROR, "jpegenc release error\n");
         return -1;
@@ -4194,6 +4206,7 @@ static s32 jpegenc_release(struct inode *inode, struct file *file)
         jpegenc_stop();
         gJpegenc.inited = false;
     }
+    jenc_pr(LOG_ERROR, "enc_dma_buf_release dma buf\n");
     enc_dma_buf_release(file);
     enc_free_buffers(file);
     memset(gQuantTable, 0, sizeof(gQuantTable));
@@ -4304,6 +4317,7 @@ static long jpegenc_ioctl(struct file *file, u32 cmd, ulong arg)
         enc_dma_buf_release(file);
         // restore to original input buffer config if dma buffer is revoked
         jpegenc_restore_input(wq);
+        jenc_pr(LOG_DEBUG, "ioctl JPEGENC_IOC_RELEASE_DMA_INPUT END\n");
         break;
     case JPEGENC_IOC_NEW_CMD:
         jenc_pr(LOG_DEBUG, "ioctl JPEGENC_IOC_NEW_CMD\n");
@@ -4642,7 +4656,7 @@ static ssize_t encode_status_show(struct class *cla,
     return snprintf(buf, 40, "max size: %dx%d\n", max_w, max_h);
 }
 
-static int enc_dma_buf_map(struct enc_dma_cfg *cfg)
+static int enc_dma_buf_map(struct enc_dma_cfg_jpeg *cfg)
 {
     long ret = -1;
     int fd = -1;
@@ -4704,7 +4718,7 @@ attach_err:
     return ret;
 }
 
-static int enc_dma_buf_get_phys(struct enc_dma_cfg *cfg, unsigned long *addr)
+static int enc_dma_buf_get_phys(struct enc_dma_cfg_jpeg *cfg, unsigned long *addr)
 {
     struct sg_table *sg_table;
     struct page *page;
@@ -4729,7 +4743,7 @@ static int enc_dma_buf_get_phys(struct enc_dma_cfg *cfg, unsigned long *addr)
     return ret;
 }
 
-static void enc_dma_buf_unmap(struct enc_dma_cfg *cfg)
+static void enc_dma_buf_unmap(struct enc_dma_cfg_jpeg *cfg)
 {
     int fd = -1;
     struct dma_buf *dbuf = NULL;
@@ -4766,7 +4780,7 @@ static s32 enc_src_addr_config(struct encdrv_dma_buf_info_t *pinfo,
 {
     struct encdrv_dma_buf_pool_t *vbp;
     unsigned long phy_addr;
-    struct enc_dma_cfg *cfg;
+    struct enc_dma_cfg_jpeg *cfg;
     s32 ret = 0;
 
     vbp = kzalloc(sizeof(*vbp), GFP_KERNEL);
@@ -4801,7 +4815,7 @@ static s32 enc_src_addr_config(struct encdrv_dma_buf_info_t *pinfo,
 static s32 enc_dma_buf_release(struct file *filp)
 {
     struct encdrv_dma_buf_pool_t *pool, *n;
-    struct enc_dma_cfg vb;
+    struct enc_dma_cfg_jpeg vb;
 
     jenc_pr(LOG_DEBUG, "enc_release_dma_buffers\n");
     list_for_each_entry_safe(pool, n, &s_dma_bufp_head, list) {
