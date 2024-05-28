@@ -6203,13 +6203,13 @@ static void v4l_av1_report_hdr10p_data(struct AV1HW_s *hw, struct PIC_BUFFER_CON
 
 	memcpy(tmp_buf, hdr10p_data_buf, data_size);
 	usd_rep.data_size = data_size;
-	usd_rep.v_addr = tmp_buf;
+	usd_rep.v_addr = (u64)((uintptr_t)tmp_buf);
 	if (debug & AV1_DEBUG_SEI_DETAIL) {
 		int i;
 		av1_print(hw, 0,
 			"%s AUX data: (size %d)\n", __func__, data_size);
 		for (i = 0; i < data_size; i++) {
-			av1_print(hw, 0, "%02x ", ((u8 *)usd_rep.v_addr)[i]);
+			av1_print(hw, 0, "%02x ", (BYTE_PTR_CONVERT(usd_rep.v_addr))[i]);
 			if (((i + 1) & 0xf) == 0)
 				av1_print(hw, 0, "\n");
 		}

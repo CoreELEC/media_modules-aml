@@ -44,6 +44,9 @@
 #define AML_VCODEC_ENC_NAME	"aml-vcodec-enc"
 #define AML_PLATFORM_STR	"platform:amlogic"
 
+#define BYTE_PTR_CONVERT(x) ((char *)((uintptr_t)(x)))
+#define VOID_PTR_CONVERT(x) ((void *)((uintptr_t)(x)))
+
 #define AML_VCODEC_MAX_PLANES	3
 #define AML_V4L2_BENCHMARK	0
 #define WAIT_INTR_TIMEOUT_MS	1000
@@ -287,8 +290,8 @@ struct v4l_userdata_meta_data_t {
 struct sei_usd_param_s {
 	__u32 info_type;  /* CC or AFD or aux data*/
 	__u32 data_size;    /* size of the data domain */
-	void __user *data;     /*  pointer to data domain */
-	void *v_addr;  /* used for kernelspace data */
+	__u64 data_ptr;     /*  pointer to data domain */
+	__u64 v_addr;  /* used for kernelspace data */
 	struct v4l_userdata_meta_data_t meta_data;       /* meta_data */
 };
 

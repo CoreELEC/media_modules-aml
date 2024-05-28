@@ -1399,18 +1399,6 @@ static void v4l_vmpeg2_fill_userdata(struct vdec_mpeg12_hw_s *hw,
 		}
 	}
 
-	if (debug_enable & PRINT_FLAG_USERDATA_DETAIL) {
-		debug_print(DECODE_ID(hw), 0,
-			"%s SEI data: (size %d)\n", __func__,
-			data_len);
-		for (i = 0; i < data_len; i++) {
-			debug_print(DECODE_ID(hw), 0, "%02x ", tmp_buf[i]);
-			if (((i + 1) & 0xf) == 0)
-				debug_print(DECODE_ID(hw), 0, "\n");
-		}
-		debug_print(DECODE_ID(hw), 0, "\n");
-	}
-
 	if (is_afd_data(tmp_buf)) {
 		if (kfifo_is_full(&ctx->dec_intf.afd_done)) {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
@@ -1420,13 +1408,13 @@ static void v4l_vmpeg2_fill_userdata(struct vdec_mpeg12_hw_s *hw,
 		}
 
 		usd_rep.data_size = data_len;
-		usd_rep.v_addr = tmp_buf;
+		usd_rep.v_addr = (u64)((uintptr_t)tmp_buf);
 		if (debug_enable & PRINT_FLAG_USERDATA_DETAIL) {
 			debug_print(DECODE_ID(hw), 0,
 				"%s AFD data: (size %d)\n", __func__,
 				data_len);
 			for (i = 0; i < data_len; i++) {
-				debug_print(DECODE_ID(hw), 0, "%02x ", ((u8 *)usd_rep.v_addr)[i]);
+				debug_print(DECODE_ID(hw), 0, "%02x ", (BYTE_PTR_CONVERT(usd_rep.v_addr))[i]);
 				if (((i + 1) & 0xf) == 0)
 					debug_print(DECODE_ID(hw), 0, "\n");
 			}
@@ -1453,13 +1441,13 @@ static void v4l_vmpeg2_fill_userdata(struct vdec_mpeg12_hw_s *hw,
 			return;
 		}
 		usd_rep.data_size = data_len;
-		usd_rep.v_addr = tmp_buf;
+		usd_rep.v_addr = (u64)((uintptr_t)tmp_buf);
 		if (debug_enable & PRINT_FLAG_USERDATA_DETAIL) {
 			debug_print(DECODE_ID(hw), 0,
 				"%s CC data: (size %d)\n", __func__,
 				data_len);
 			for (i = 0; i < data_len; i++) {
-				debug_print(DECODE_ID(hw), 0, "%02x ", ((u8 *)usd_rep.v_addr)[i]);
+				debug_print(DECODE_ID(hw), 0, "%02x ", (BYTE_PTR_CONVERT(usd_rep.v_addr))[i]);
 				if (((i + 1) & 0xf) == 0)
 					debug_print(DECODE_ID(hw), 0, "\n");
 			}

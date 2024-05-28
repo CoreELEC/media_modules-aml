@@ -2894,8 +2894,8 @@ static int vidioc_vdec_subscribe_evt(struct v4l2_fh *fh,
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(fh);
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
-		"%s, type: %d\n", __func__, sub->type);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d event id %d\n",
+		__func__, sub->type, sub->id);
 
 	switch (sub->type) {
 	case V4L2_EVENT_EOS:
@@ -2918,8 +2918,8 @@ static int vidioc_vdec_event_unsubscribe(struct v4l2_fh *fh,
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(fh);
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d\n",
-		__func__, sub->type);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d event id %d\n",
+		__func__, sub->type, sub->id);
 
 	return v4l2_event_unsubscribe(fh, sub);
 }
@@ -4939,7 +4939,7 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 	} else if (ctrl->id == AML_V4L2_SET_UEVENT_DURATION) {
 		vdec_set_duration(ctrl->val);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
-			"set uevent duration: %x\n", ctrl->val);
+			"set uevent duration: %d\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_SET_VF_DURATION) {
 		vdec_set_vf_duration(ctrl->val);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,

@@ -61,21 +61,24 @@ void aml_vcodec_dec_info_deinit(struct aml_vcodec_ctx *ctx)
 
 	while (kfifo_get(&ctx->dec_intf.afd_done, &ud)) {
 		if (ud->v_addr) {
-			vfree(ud->v_addr);
+			vfree(VOID_PTR_CONVERT(ud->v_addr));
+			ud->v_addr = 0;
 		}
 		kfifo_put(&ctx->dec_intf.afd_free, ud);
 	}
 
 	while (kfifo_get(&ctx->dec_intf.cc_done, &ud)) {
 		if (ud->v_addr) {
-			vfree(ud->v_addr);
+			vfree(VOID_PTR_CONVERT(ud->v_addr));
+			ud->v_addr = 0;
 		}
 		kfifo_put(&ctx->dec_intf.cc_free, ud);
 	}
 
 	while (kfifo_get(&ctx->dec_intf.aux_done, &ud)) {
 		if (ud->v_addr) {
-			vfree(ud->v_addr);
+			vfree(VOID_PTR_CONVERT(ud->v_addr));
+			ud->v_addr = 0;
 		}
 		kfifo_put(&ctx->dec_intf.aux_free, ud);
 	}
@@ -97,7 +100,7 @@ static void vcodec_afd_put(struct aml_vcodec_ctx *ctx,
 		if (debug_mode & V4L_DEBUG_CODEC_EXINFO) {
 			int i;
 			for (i = 0; i < ud->data_size; i++) {
-				pr_info("%02x ", ((char *)(ud->v_addr))[i]);
+				pr_info("%02x ", (BYTE_PTR_CONVERT(ud->v_addr))[i]);
 				if (((i + 1) & 0xf) == 0)
 					pr_info("\n");
 			}
@@ -119,7 +122,7 @@ static void vcodec_cc_data_put(struct aml_vcodec_ctx *ctx,
 		if (debug_mode & V4L_DEBUG_CODEC_EXINFO) {
 			int i;
 			for (i = 0; i < ud->data_size; i++) {
-				pr_info("%02x ", ((char *)(ud->v_addr))[i]);
+				pr_info("%02x ", (BYTE_PTR_CONVERT(ud->v_addr))[i]);
 				if (((i + 1) & 0xf) == 0)
 					pr_info("\n");
 			}
@@ -140,7 +143,7 @@ static void vcodec_aux_data_put(struct aml_vcodec_ctx *ctx,
 		if (debug_mode & V4L_DEBUG_CODEC_EXINFO) {
 			int i;
 			for (i = 0; i < ud->data_size; i++) {
-				pr_info("%02x ", ((char *)(ud->v_addr))[i]);
+				pr_info("%02x ", (BYTE_PTR_CONVERT(ud->v_addr))[i]);
 				if (((i + 1) & 0xf) == 0)
 					pr_info("\n");
 			}
@@ -239,16 +242,19 @@ static int vcodec_get_data_afd(struct aml_vcodec_ctx *ctx,
 	int ret = 0;
 
 	ud_out = &data->u.usd_param;
-	argp = (void __user *)ud_out->data;
+	argp = (void __user *)((uintptr_t)ud_out->data_ptr);
 
 	if (kfifo_get(&ctx->dec_intf.afd_done, &ud)) {
 		int copy_size = MIN(ud->data_size, ud_out->data_size);
-		if ((!ud->v_addr) || copy_to_user(argp, ud->v_addr, copy_size)) {
+		if ((!ud->v_addr) || copy_to_user(argp, VOID_PTR_CONVERT(ud->v_addr), copy_size)) {
 			v4l_dbg(ctx, 0,
 				"AFD data copy to user failed\n");
 			ret = -EINVAL;
 		}
-		vfree(ud->v_addr);
+		memcpy(&ud_out->meta_data, &ud->meta_data, sizeof(struct v4l_userdata_meta_data_t));
+		ud_out->data_size = copy_size;
+		vfree(VOID_PTR_CONVERT(ud->v_addr));
+		ud->v_addr = 0;
 		kfifo_put(&ctx->dec_intf.afd_free, ud);
 	}
 
@@ -265,16 +271,19 @@ static int vcodec_get_data_cc(struct aml_vcodec_ctx *ctx,
 	int ret = 0;
 
 	ud_out = &data->u.usd_param;
-	argp = (void __user *)ud_out->data;
+	argp = (void __user *)((uintptr_t)ud_out->data_ptr);
 
 	if (kfifo_get(&ctx->dec_intf.cc_done, &ud)) {
 		int copy_size = MIN(ud->data_size, ud_out->data_size);
-		if ((!ud->v_addr) || copy_to_user(argp, ud->v_addr, copy_size)) {
+		if ((!ud->v_addr) || copy_to_user(argp, VOID_PTR_CONVERT(ud->v_addr), copy_size)) {
 			v4l_dbg(ctx, 0,
-				"AFD data copy to user failed\n");
+				"CC data copy to user failed\n");
 			ret = -EINVAL;
 		}
-		vfree(ud->v_addr);
+		memcpy(&ud_out->meta_data, &ud->meta_data, sizeof(struct v4l_userdata_meta_data_t));
+		ud_out->data_size = copy_size;
+		vfree(VOID_PTR_CONVERT(ud->v_addr));
+		ud->v_addr = 0;
 		kfifo_put(&ctx->dec_intf.cc_free, ud);
 	}
 
@@ -291,16 +300,19 @@ static int vcodec_get_data_aux_data(struct aml_vcodec_ctx *ctx,
 	int ret = 0;
 
 	ud_out = &data->u.usd_param;
-	argp = (void __user *)ud_out->data;
+	argp = (void __user *)((uintptr_t)ud_out->data_ptr);
 
 	if ((!ud->v_addr) || kfifo_get(&ctx->dec_intf.aux_done, &ud)) {
 		int copy_size = MIN(ud->data_size, ud_out->data_size);
-		if (copy_to_user(argp, ud->v_addr, copy_size)) {
+		if (copy_to_user(argp, VOID_PTR_CONVERT(ud->v_addr), copy_size)) {
 			v4l_dbg(ctx, 0,
-				"AFD data copy to user failed\n");
+				"AUX data copy to user failed\n");
 			ret = -EINVAL;
 		}
-		vfree(ud->v_addr);
+		memcpy(&ud_out->meta_data, &ud->meta_data, sizeof(struct v4l_userdata_meta_data_t));
+		ud_out->data_size = copy_size;
+		vfree(VOID_PTR_CONVERT(ud->v_addr));
+		ud->v_addr = 0;
 		kfifo_put(&ctx->dec_intf.aux_free, ud);
 	}
 

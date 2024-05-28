@@ -9545,21 +9545,6 @@ static void v4l_vmh264_fill_userdata(struct vdec_h264_hw_s *hw,
 		}
 	}
 
-	if (dpb_is_debug(DECODE_ID(hw),
-		PRINT_FLAG_SEI_DETAIL)) {
-		dpb_print(DECODE_ID(hw), 0, "%d sei_itu_data_len %d\n", __LINE__, data_len);
-		for (i = 0; i < data_len; i++) {
-			dpb_print_cont(DECODE_ID(hw), 0,
-				"%02x ", (tmp_buf)[i]);
-			if (((i + 1) & 0xf) == 0)
-				dpb_print_cont(
-				DECODE_ID(hw),
-					0, "\n");
-		}
-		dpb_print_cont(DECODE_ID(hw),
-			0, "\n");
-	}
-
 	if (is_afd_data(tmp_buf)) {
 		if (kfifo_is_full(&ctx->dec_intf.afd_done)) {
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
@@ -9568,13 +9553,13 @@ static void v4l_vmh264_fill_userdata(struct vdec_h264_hw_s *hw,
 			return;
 		}
 		usd_rep.data_size = data_len;
-		usd_rep.v_addr = tmp_buf;
+		usd_rep.v_addr = (u64)((uintptr_t)tmp_buf);
 		if (dpb_is_debug(DECODE_ID(hw),
 			PRINT_FLAG_SEI_DETAIL)) {
 			dpb_print(DECODE_ID(hw), 0, "%s: data_len %d\n", __func__, data_len);
 			for (i = 0; i < data_len; i++) {
 				dpb_print_cont(DECODE_ID(hw), 0,
-					"%02x ", ((u8 *)usd_rep.v_addr)[i]);
+					"%02x ", (BYTE_PTR_CONVERT(usd_rep.v_addr))[i]);
 				if (((i + 1) & 0xf) == 0)
 					dpb_print_cont(
 					DECODE_ID(hw), 0, "\n");
@@ -9601,13 +9586,13 @@ static void v4l_vmh264_fill_userdata(struct vdec_h264_hw_s *hw,
 		}
 
 		usd_rep.data_size = data_len;
-		usd_rep.v_addr = tmp_buf;
+		usd_rep.v_addr = (u64)((uintptr_t)tmp_buf);
 		if (dpb_is_debug(DECODE_ID(hw),
 			PRINT_FLAG_SEI_DETAIL)) {
 			dpb_print(DECODE_ID(hw), 0, "%s: data_len %d\n", __func__, data_len);
 			for (i = 0; i < data_len; i++) {
 				dpb_print_cont(DECODE_ID(hw), 0,
-					"%02x ", ((u8 *)usd_rep.v_addr)[i]);
+					"%02x ", (BYTE_PTR_CONVERT(usd_rep.v_addr))[i]);
 				if (((i + 1) & 0xf) == 0)
 					dpb_print_cont(
 					DECODE_ID(hw), 0, "\n");
