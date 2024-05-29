@@ -11064,18 +11064,7 @@ result_done:
 
 	hw->timeout_flag = TIMEOUT_INIT;
 	/* mark itself has all HW resource released and input released */
-	if (vdec->parallel_dec == 1) {
-		if (hw->mmu_enable == 0)
-			vdec_core_finish_run(vdec, CORE_MASK_VDEC_1);
-		else {
-			if (is_support_dual_core())
-				vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
-					| CORE_MASK_HEVC_BACK);
-			else
-				vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
-		}
-	} else
-		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
+	vdec_core_finish_run(vdec, hw->mask & (~CORE_MASK_COMBINE));
 
 	wake_up_interruptible(&hw->wait_q);
 
