@@ -17,7 +17,6 @@
 static int compute_losless_comp_body_size(struct hevc_state_s *hevc,
 	int width, int height, int mem_saving_mode);
 static int compute_losless_comp_header_size(int width, int height);
-static struct PIC_s *get_ref_pic_by_POC(struct hevc_state_s *hevc, int POC);
 static struct PIC_s *get_pic_by_POC(struct hevc_state_s *hevc, int POC);
 
 static int32_t hevc_hw_init(hevc_stru_t* hevc, uint8_t bit_depth, uint8_t front_flag, uint8_t back_flag);
@@ -1004,6 +1003,7 @@ int BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 			"%s cur_mmu_4k_number %d, poc %d\n", __func__, cur_mmu_4k_number, pic->POC);
 
+		pic->cur_mmu_4k_number = cur_mmu_4k_number;
 		ret = decoder_mmu_box_alloc_idx(
 			hevc->mmu_box,
 			pic->index,

@@ -1180,6 +1180,12 @@
 
 #define HEVC_SAO_CTRL26                     0x3677
 
+#define COPY_REG_R0                         0x3688
+#define COPY_REG_R1                         0x3689
+#define COPY_SEL                            0x368a
+#define COPY_REG_R3                         0x368b
+#define COPY_REG_R4                         0x368c
+#define COPY_REG_R5                         0x368d
 
 /* T3X triple write */
 #define HEVC_SAO_Y_START_ADDR3              0x3698
@@ -1272,12 +1278,7 @@
 #define HEVC_SAO_STATUS5                           (0x3685 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_STATUS6                           (0x3686 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_STATUS7                           (0x3687 | MASK_S5_NEW_REGS)
-#define COPY_REG_R0                                (0x3688 | MASK_S5_NEW_REGS)
-#define COPY_REG_R1                                (0x3689 | MASK_S5_NEW_REGS)
-#define COPY_SEL                                   (0x368a | MASK_S5_NEW_REGS)
-#define COPY_REG_R3                                (0x368b | MASK_S5_NEW_REGS)
-#define COPY_REG_R4                                (0x368c | MASK_S5_NEW_REGS)
-#define COPY_REG_R5                                (0x368d | MASK_S5_NEW_REGS)
+
 #define HEVC_SAO_SHADOWMODE_CNTL                   (0x368e | MASK_S5_NEW_REGS)
 
 #define HEVC_SAO_CRC                               0x3690
