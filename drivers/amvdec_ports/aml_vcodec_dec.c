@@ -2035,14 +2035,13 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"Buffers pairing hasn't been completed! Repair!\n");
-		if (ctx->master_buf == NULL &&
-			am_buf->pair_state != PAIR_DONE) {
-			ctx->master_buf = am_buf;
-			am_buf->pair_state = MASTER_DONE;
-			am_buf->pair = BUF_MASTER;
-			aml_buf_get_ref(&ctx->bm, am_buf);
 
-			goto update;
+		if (am_buf->pair_state == SUB0_DONE) {
+			if (am_buf == master_buf)
+				aml_buf_put(&ctx->bm, am_buf);
+			else {
+				aml_buf_get_ref(&ctx->bm, am_buf);
+			}
 		}
 	}
 
@@ -2151,7 +2150,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 		}
 
 		ctx->master_buf = am_buf;
-		am_buf->pair_state++;
+		am_buf->pair_state = MASTER_DONE;
 		am_buf->pair = BUF_MASTER;
 		aml_buf_get_ref(&ctx->bm, am_buf);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
@@ -2214,7 +2213,6 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 		}
 	}
 
-update:
 	aml_buf_update(&ctx->bm, get_addr(&vb->vb2_buf, 0), am_buf);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
