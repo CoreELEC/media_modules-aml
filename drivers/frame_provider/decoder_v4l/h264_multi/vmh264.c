@@ -7212,6 +7212,134 @@ void vh264_report_pts(struct vdec_h264_hw_s *hw)
 	vdec_v4l_post_error_frame_event(ctx);
 }
 
+static bool h264_params_correct(struct vdec_h264_hw_s *hw, union param *param)
+{
+	int ret = 0, loglevel = 0;
+
+	u32 seq_info2 = READ_VREG(AV_SCRATCH_1);
+	u32 seq_info = READ_VREG(AV_SCRATCH_2);
+	u32 param3 = READ_VREG(AV_SCRATCH_6);
+	u32 param4 = READ_VREG(AV_SCRATCH_B);
+
+	u32 bitstream_restriction_flag = (param->l.data[SPS_FLAGS2] >> 3) & 0x1;
+	u32 num_reorder_frames = param->l.data[NUM_REORDER_FRAMES];
+	u32 max_dec_frame_buffering = param->l.data[MAX_BUFFER_FRAME];
+
+	//u32 chroma_format_idc = (param->l.data[MAX_REFERENCE_FRAME_NUM_IN_MEM] >> 8) & 0x3);
+	u32 chroma_format_idc = (seq_info >> 13) & 0x03;
+	u32 frame_mbs_only_flag = (seq_info >> 15) & 0x01;
+
+	u32 frame_crop_left_offset = param->l.data[FRAME_CROP_LEFT_OFFSET];
+	u32 frame_crop_right_offset = param->l.data[FRAME_CROP_RIGHT_OFFSET];
+	u32 frame_crop_top_offset = param->l.data[FRAME_CROP_TOP_OFFSET];
+	u32 frame_crop_bottom_offset = param->l.data[FRAME_CROP_BOTTOM_OFFSET];
+	u32 profile_idc = (param->l.data[PROFILE_IDC_MMCO] >> 8) & 0xff;
+
+	u32 mb_width = seq_info2 & 0xff;
+	u32 mb_total = (seq_info2 >> 8) & 0xffff;
+	u32 mb_height;
+	u32 frame_w, frame_h;
+
+	int sub_width_c = 0, sub_height_c = 0;
+	int crop_bottom = 0, crop_right = 0, crop_left = 0, crop_top = 0;
+	u32 level_idc = param4 & 0xff;
+	u32 max_reference_size = (param4 >> 8) & 0xff;;
+
+	if (profile_idc < FREXT_CAVLC444 || profile_idc > STEREO_HIGH) {
+		ret = -1;
+		goto param_view;
+	}
+	if (level_idc < 9 || level_idc > 52) {
+		ret = -2;
+		goto param_view;
+	}
+	if (max_reference_size < 0 || max_reference_size > 16) { // only I-frame in stream, the max_reference_size may be 0.
+		ret = -3;
+		goto param_view;
+	}
+	if (bitstream_restriction_flag) {
+		if (max_dec_frame_buffering > 16 || num_reorder_frames > max_dec_frame_buffering) {
+			ret = -4;
+			goto param_view;
+		}
+	}
+
+	if (!mb_width && mb_total) /*for 4k2k*/
+		mb_width = 256;
+	if (mb_width)
+		mb_height = mb_total/mb_width;
+	frame_w = mb_width << 4;
+	frame_h = mb_height << 4;
+	if (is_oversize(frame_w, frame_h) == RES_RET_ABNORMAL) {
+		ret = -5;
+		goto param_view;
+	}
+
+	/* crop check */
+	if (profile_idc != 100 && profile_idc != 110 &&
+		profile_idc != 122 && profile_idc != 144)
+		chroma_format_idc = 1;
+	switch (chroma_format_idc) {
+		case 1:
+			sub_width_c = 2;
+			sub_height_c = 2;
+			break;
+		case 2:
+			sub_width_c = 2;
+			sub_height_c = 1;
+			break;
+		case 3:
+			sub_width_c = 1;
+			sub_height_c = 1;
+			break;
+		default:
+			break;
+	}
+	if (chroma_format_idc == 0) {
+		crop_right = frame_crop_right_offset;
+		crop_bottom = frame_crop_bottom_offset * (2 - frame_mbs_only_flag);
+
+		crop_left = frame_crop_left_offset;
+		crop_top = frame_crop_top_offset * (2 - frame_mbs_only_flag);
+	} else {
+		crop_right = sub_width_c * frame_crop_right_offset;
+		crop_bottom = sub_height_c * frame_crop_bottom_offset *
+			(2 - frame_mbs_only_flag);
+
+		crop_left = sub_width_c * frame_crop_left_offset;
+		crop_top = sub_height_c * frame_crop_top_offset * (2 - frame_mbs_only_flag);
+	}
+
+	if (crop_right < 0 || crop_bottom < 0 || crop_left < 0 || crop_top < 0 ||
+		((crop_left + crop_right) >= frame_w) ||
+		((crop_top + crop_bottom) >= frame_h)) {
+		ret = -6;
+		goto param_view;
+	}
+	loglevel = PRINT_FLAG_VDEC_STATUS;
+
+param_view:
+	dpb_print(DECODE_ID(hw), loglevel,
+		"seq_info2: %x, seq_info %x, param3 %x, param4 %x. crop offset: top %d, bot %d, left %d, right %d\n",
+		seq_info2, seq_info, param3, param4,
+		frame_crop_top_offset, frame_crop_bottom_offset,
+		frame_crop_left_offset, frame_crop_right_offset);
+
+	dpb_print(DECODE_ID(hw), loglevel,
+		"profile %x, level %x, max_ref %d, restrict %d(reorder %d, maxdecbuf %d), w_h(%d,%d), crop(%d, %d, %d, %d)\n",
+		profile_idc, level_idc, max_reference_size,
+		bitstream_restriction_flag, num_reorder_frames, max_dec_frame_buffering,
+		frame_w, frame_h,
+		crop_top, crop_bottom, crop_left, crop_right);
+
+	if (ret < 0) {
+		dpb_print(DECODE_ID(hw), 0, "%s, invalid!! ret %d\n", __func__, ret);
+		return false;
+	}
+
+	return true;
+}
+
 static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
 	int i;
@@ -7268,6 +7396,16 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 							0, "\r\n");
 				}
 			}
+		}
+
+		if (!h264_params_correct(hw, &p_H264_Dpb->dpb_param)) {
+			hw->csd_error_flag = 1;
+			hw->csd_restore_flag = true;
+			hw->reset_bufmgr_flag = 1;
+			hw->init_flag = 0;
+			hw->dec_result = DEC_RESULT_ERROR_DATA;
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
 		}
 
 		if (p_H264_Dpb->bitstream_restriction_flag !=
@@ -10494,43 +10632,6 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		u32 param3 = READ_VREG(AV_SCRATCH_6);
 		u32 param4 = READ_VREG(AV_SCRATCH_B);
 		u8 *trans_data_buf = (u8 *)hw->aux_addr;
-
-		if (input_frame_based(vdec) || input_stream_based(vdec)) {
-			int mb_width = 0;
-			int mb_total = 0;
-			int mb_height = 0;
-			int frame_width = 0;
-			int frame_height = 0;
-			int ret_is_csd_valid = 0;
-			mb_width = param1 & 0xff;
-			mb_total = (param1 >> 8) & 0xffff;
-			if (!mb_width && mb_total) /*for 4k2k*/
-				mb_width = 256;
-			if (mb_width)
-				mb_height = mb_total / mb_width;
-			frame_width = mb_width << 4;
-			frame_height = mb_height << 4;
-
-			ret_is_csd_valid = is_csd_valid(hw, mb_width, mb_height, param2, param4);
-			if (ret_is_csd_valid != RES_RET_NORMAL) {
-				dpb_print(DECODE_ID(hw), 0,
-					"!!!wrong csd info mb_width/mb_height (0x%x/0x%x), w:%d h:%d, ret:%d\r\n",
-					mb_width,
-					mb_height,
-					frame_width,
-					frame_height,
-					ret_is_csd_valid);
-				if (ret_is_csd_valid == RES_RET_OVERSIZE)
-					hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-				hw->dec_result = DEC_RESULT_ERROR_DATA;
-
-				hw->csd_error_flag = 1;
-				hw->csd_restore_flag = true;
-				hw->reset_bufmgr_flag = 1;
-				vdec_schedule_work(&hw->work);
-				return;
-			}
-		}
 
 		if (trans_data_buf[7] == AUX_TAG_SEI) {
 			int pic_struct;
