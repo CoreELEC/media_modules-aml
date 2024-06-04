@@ -584,10 +584,6 @@ static int video_port_init(struct port_priv_s *priv,
 		(priv->vdec->sys_info->height *
 			priv->vdec->sys_info->width) > 1920*1088) {
 		priv->is_4k = true;
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
-				&& port->vformat == VFORMAT_H264) {
-			vdec_poweron(VDEC_HEVC);
-		}
 	} else {
 		priv->is_4k = false;
 	}
@@ -1653,12 +1649,6 @@ static int amstream_release(struct inode *inode, struct file *file)
 
 				vdec_poweroff(VDEC_1);
 #else
-				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
-					&& port->vformat == VFORMAT_H264
-					&& priv->is_4k) {
-					vdec_poweroff(VDEC_HEVC);
-				}
-
 				if (is_core_hevc_fmt(port->vformat)) {
 					vdec_poweroff(VDEC_HEVC);
 				} else {

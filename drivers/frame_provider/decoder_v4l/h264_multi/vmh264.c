@@ -715,7 +715,6 @@ struct vdec_h264_hw_s {
 
 	void *bmmu_box;
 #ifdef H264_MMU
-	void *mmu_box;
 	void *frame_mmu_map_addr;
 	dma_addr_t frame_mmu_map_phy_addr;
 	u32	 hevc_cur_buf_idx;
@@ -11982,12 +11981,12 @@ static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag, bool rese
 	mutex_unlock(&reset_mutex);
 }
 
-int ammvdec_h264_mmu_init(struct vdec_h264_hw_s *hw)
+int ammvdec_h264_bmmu_init(struct vdec_h264_hw_s *hw)
 {
 	int ret = -1;
 	int tvp_flag = vdec_secure(hw_to_vdec(hw)) ? CODEC_MM_FLAGS_TVP : 0;
 
-	pr_debug("ammvdec_h264_mmu_init tvp = 0x%x\n", tvp_flag);
+	pr_debug("ammvdec_h264_bmmu_init tvp = 0x%x\n", tvp_flag);
 	hw->sc_start_time = get_jiffies_64();
 
 	if (!hw->bmmu_box) {
@@ -12167,9 +12166,9 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5)
 		force_enable_mmu = 1;
 
-	if (ammvdec_h264_mmu_init(hw)) {
+	if (ammvdec_h264_bmmu_init(hw)) {
 		h264_free_hw_stru(&pdev->dev, (void *)hw);
-		pr_info("\nammvdec_h264 mmu alloc failed!\n");
+		pr_info("\nammvdec_h264 bmmu alloc failed!\n");
 		return -ENOMEM;
 	}
 
