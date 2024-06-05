@@ -14895,7 +14895,8 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	INIT_WORK(&hevc->notify_work, vh265_notify_work);
 	INIT_WORK(&hevc->set_clk_work, vh265_set_clk);
 
-	if ((get_decoder_firmware_version() <= UCODE_SWAP_VERSION) &&
+	if (get_decoder_firmware_version() &&
+		(get_decoder_firmware_version() <= UCODE_SWAP_VERSION) &&
 		(get_decoder_firmware_submit_count() < UCODE_SWAP_SUBMIT_COUNT)) {
 		hevc->enable_ucode_swap = false;
 		if ((get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) && (!hevc->is_4k)) {
