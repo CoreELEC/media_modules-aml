@@ -3995,9 +3995,11 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 #ifdef MV_USE_FIXED_BUF
 	if (pic && pic->index >= 0) {
 		int mv_size;
-		if (IS_8K_SIZE(pic->width, pic->height))
+		int w = ALIGN(pic->width, 64);
+		int h = ALIGN(pic->height, 64);
+		if (IS_8K_SIZE(w, h))
 			mv_size = MPRED_8K_MV_BUF_SIZE;
-		else if (IS_4K_SIZE(pic->width, pic->height))
+		else if (IS_4K_SIZE(w, h))
 			mv_size = MPRED_4K_MV_BUF_SIZE; /*0x120000*/
 		else
 			mv_size = MPRED_MV_BUF_SIZE;
@@ -4009,9 +4011,18 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	}
 	return 0;
 #else
-	int i;
+	int i, w, h;
 	int ret = -1;
 	int new_size;
+
+	if (pic != NULL) {
+		w = ALIGN(pic->width, 64);
+		h = ALIGN(pic->height, 64);
+	} else {
+		hevc_print(hevc, 0, "%s : pic is null\n", __func__);
+		return 0;
+	}
+
 	if (mv_buf_dynamic_alloc) {
 		int MV_MEM_UNIT =
 			hevc->lcu_size_log2 == 6 ? 0x200 : hevc->lcu_size_log2 ==
@@ -4081,9 +4092,9 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			__func__);
 		}
 	} else {
-		if (IS_8K_SIZE(hevc->pic_w, hevc->pic_h))
+		if (IS_8K_SIZE(w, h))
 			new_size = MPRED_8K_MV_BUF_SIZE;
-		else if (IS_4K_SIZE(hevc->pic_w, hevc->pic_h))
+		else if (IS_4K_SIZE(w, h))
 			new_size = MPRED_4K_MV_BUF_SIZE; /*0x120000*/
 		else
 			new_size = MPRED_MV_BUF_SIZE;

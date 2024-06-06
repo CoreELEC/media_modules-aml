@@ -2230,6 +2230,8 @@ static u32 get_mv_mem_unit(int lcu_size_log2)
 static uint32_t get_mv_buf_size(struct AVS3Decoder_s *dec, int width, int height) {
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 	uint32_t size;
+	int w = ALIGN(width, 64);
+	int h = ALIGN(height, 64);
 	if (mv_buf_dynamic_alloc == 1) {
 		int mv_mem_unit =
 			get_mv_mem_unit(avs3_dec->lcu_size_log2);
@@ -2244,9 +2246,9 @@ static uint32_t get_mv_buf_size(struct AVS3Decoder_s *dec, int width, int height
 		size = (new_size + 0xffff) & (~0xffff);
 
 	} else {
-		if (IS_8K_SIZE(width, height))
+		if (IS_8K_SIZE(w, h))
 			size = CO_MV_BUF_SIZE_8K;
-		else if (IS_4K_SIZE(width, height))
+		else if (IS_4K_SIZE(w, h))
 			size = CO_MV_BUF_SIZE_4K;
 		else
 			size = CO_MV_BUF_SIZE_1080P;
