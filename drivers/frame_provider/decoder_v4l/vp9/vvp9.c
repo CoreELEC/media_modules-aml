@@ -69,6 +69,7 @@
 #include "../../decoder/utils/vdec_ge2d_utils.h"
 #include "vvp9.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
 
 #define MEM_NAME "codec_vp9"
 #define MIX_STREAM_SUPPORT
@@ -615,6 +616,8 @@ struct PIC_BUFFER_CONFIG_s {
 	int v4l_buf_index;
 	int repeat_count;
 	struct PIC_BUFFER_CONFIG_s *repeat_pic;
+	struct aml_buf *am_buf;
+	bool buffer_attached;
 } PIC_BUFFER_CONFIG;
 
 enum BITSTREAM_PROFILE {
@@ -1103,6 +1106,8 @@ struct VP9Decoder_s {
 	DECLARE_KFIFO(newframe_q, struct vframe_s *, VF_POOL_SIZE);
 	DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
 	DECLARE_KFIFO(pending_q, struct vframe_s *, VF_POOL_SIZE);
+	DECLARE_KFIFO(avbc_display_q, struct vframe_s *, VF_POOL_SIZE);
+	struct mutex post_mutex;
 	struct vframe_s vfpool[VF_POOL_SIZE];
 	atomic_t vf_pre_count;
 	atomic_t vf_get_count;
@@ -2322,13 +2327,16 @@ static int get_idle_pos(struct VP9Decoder_s *pbi)
 {
 	struct VP9_Common_s *const cm = &pbi->common;
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	int i;
 
 	for (i = 0; i < pbi->used_buf_num; ++i) {
-		if ((frame_bufs[i].ref_count == 0) &&
+		if ((!ctx->avbcd_work_mode && (frame_bufs[i].ref_count == 0) &&
 			(frame_bufs[i].buf.vf_ref == 0) &&
 			!frame_bufs[i].buf.cma_alloc_addr &&
-			(frame_bufs[i].buf.repeat_count == 0))
+			(frame_bufs[i].buf.repeat_count == 0)) ||
+			(ctx->avbcd_work_mode && pbi->aml_buf &&
+			(frame_bufs[i].buf.am_buf == pbi->aml_buf)))
 			break;
 	}
 
@@ -2375,6 +2383,7 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 
 		pbi->aml_buf->state = FB_ST_DECODER;
 
+		if (!ctx->avbcd_work_mode)
 		aml_buf_get_ref(&ctx->bm, pbi->aml_buf);
 		pbi->cur_idx = pos;
 		pbi->aml_buf = NULL;
@@ -2439,8 +2448,12 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 				(frame_bufs[i].buf.vf_ref == 0) &&
 				!frame_bufs[i].buf.cma_alloc_addr &&
 				(frame_bufs[i].buf.repeat_count == 0) &&
-				(cm->cur_frame != &frame_bufs[i])) {
+				(cm->cur_frame != &frame_bufs[i]) &&
+				((!ctx->avbcd_work_mode && !frame_bufs[i].buf.cma_alloc_addr) ||
+				ctx->avbcd_work_mode)) {
 				free_slot++;
+				if (ctx->avbcd_work_mode)
+					break;
 			}
 		}
 
@@ -2453,6 +2466,27 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 			return false;
 		} else if (free_slot < 2)
 				force_recycle_repeat_frame(pbi);
+		if (ctx->avbcd_work_mode) {
+			free_count = free_slot;
+
+			if (kfifo_len(&pbi->avbc_display_q) > 1) {
+				free_count = 0;
+				goto out;
+			}
+			if (!pbi->aml_buf) {
+				if (!frame_bufs[i].buf.buffer_attached) {
+					frame_bufs[i].buf.am_buf = aml_buf_alloc_avbcd_buf(&ctx->bm);
+					frame_bufs[i].buf.am_buf->task->attach(frame_bufs[i].buf.am_buf->task, &task_dec_ops,  hw_to_vdec(pbi));
+					frame_bufs[i].buf.am_buf->state = FB_ST_DECODER;
+					frame_bufs[i].buf.buffer_attached = true;
+				}
+				pbi->aml_buf = frame_bufs[i].buf.am_buf;
+			} else
+				vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
+					"%s already got buf(%px, %d)!\n",
+						__func__, frame_bufs[i].buf.am_buf, frame_bufs[i].buf.am_buf->index);
+			goto out;
+		}
 
 		if (!pbi->aml_buf && !aml_buf_empty(&ctx->bm)) {
 			pbi->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
@@ -2484,6 +2518,7 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 		}
 	}
 
+out:
 	return free_count;
 }
 
@@ -5030,6 +5065,7 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	int mv_size = cal_mv_buf_size(pbi, pbi->frame_width, pbi->frame_height);
 #endif
 	struct aml_buf *aml_buf = pbi->aml_buf;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 
 	if (!aml_buf) {
 		vp9_print(pbi, 0, "[ERR]aml_buf is NULL!\n");
@@ -5065,6 +5101,7 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 				aml_buf->fbc->index, pbi->m_BUF[i].v4l_ref_buf_addr, i);
 	}
 
+	if (!ctx->avbcd_work_mode) {
 	if (aml_buf->num_planes == 1) {
 		if (dw_mode) {
 			pbi->m_BUF[i].start_adr = aml_buf->planes[0].addr;
@@ -5119,6 +5156,7 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 
 			pic->cma_alloc_addr = aml_buf->planes_tw[0].addr;
 		}
+	}
 	}
 
 	/* config frame buffer */
@@ -7172,13 +7210,15 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 	struct vframe_s *vf;
 	struct vdec_s *vdec = op_arg;
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
 
 	if (step == 2)
 		return NULL;
 	else if (step == 1)
 		step = 2;
 
-	if (kfifo_get(&pbi->display_q, &vf)) {
+	if ((!ctx->avbcd_work_mode && kfifo_get(&pbi->display_q, &vf)) ||
+		(ctx->avbcd_work_mode && kfifo_get(&pbi->avbc_display_q, &vf))) {
 		struct vframe_s *next_vf = NULL;
 		uint8_t index = vf->index & 0xff;
 		ATRACE_COUNTER(pbi->trace.disp_q_name, kfifo_len(&pbi->display_q));
@@ -7202,7 +7242,8 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 			} else
 				vf->next_vf_pts_valid = false;
 
-			kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
+			if (!ctx->avbcd_work_mode)
+				kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(pbi->trace.new_q_name, kfifo_len(&pbi->newframe_q));
 
 			return vf;
@@ -7248,12 +7289,221 @@ static void vp9_recycle_dec_resource(void *priv,
 	return;
 }
 
+static void vp9_avbc_done_cb(struct avbc_output *output)
+{
+	struct aml_avbc_buf *buf = container_of(output, struct aml_avbc_buf, output);
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(buf->ctx);
+	struct vdec_s *vdec = ctx->ada_ctx->vdec;
+	struct VP9Decoder_s *pbi;
+	struct aml_buf	*am_buf = buf->am_buf;
+	int index;
+	struct vframe_s *vf = buf->vf;
+
+	if (ctx->is_stream_off)
+		return;
+
+	pbi = (struct VP9Decoder_s *)vdec->private;
+
+	am_buf->state = FB_ST_AVBCD;
+	aml_buf_done(&ctx->bm, am_buf, BUF_USER_AVBCD);
+
+	if (vf->type & VIDTYPE_V4L_EOS)
+		return;
+
+	decoder_do_frame_check(ctx->ada_ctx->vdec, vf);
+
+	if (pbi->enable_fence && vf->fence) {
+		int ret, i;
+
+		mutex_lock(&pbi->fence_mutex);
+		ret = dma_fence_get_status(vf->fence);
+		if (ret == 0) {
+			for (i = 0; i < VF_POOL_SIZE; i++) {
+				if (pbi->fence_vf_s.fence_vf[i] == NULL) {
+					pbi->fence_vf_s.fence_vf[i] = vf;
+					pbi->fence_vf_s.used_size++;
+					mutex_unlock(&pbi->fence_mutex);
+					return;
+				}
+			}
+		}
+		mutex_unlock(&pbi->fence_mutex);
+	}
+
+	index = vf->index & 0xff;
+
+	if (pbi->enable_fence && vf->fence) {
+		vdec_fence_put(vf->fence);
+		vf->fence = NULL;
+	}
+
+	kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
+	kfifo_put(&vdec->avbc_frame_q, buf);
+	ATRACE_COUNTER(pbi->trace.new_q_name, kfifo_len(&pbi->newframe_q));
+	atomic_add(1, &pbi->vf_put_count);
+
+	vp9_print(pbi, VP9_DEBUG_BUFMGR,
+		"%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
+		__func__, index, vf->type,
+		vf->width, vf->height,
+		vf->pts,
+		vf->pts_us64,
+		vf->timestamp);
+
+	if (index < pbi->used_buf_num) {
+		struct VP9_Common_s *cm = &pbi->common;
+		struct BufferPool_s *pool = cm->buffer_pool;
+		unsigned long flags;
+
+		lock_buffer_pool(pool, flags);
+		if (pool->frame_bufs[index].buf.vf_ref > 0)
+			pool->frame_bufs[index].buf.vf_ref--;
+
+		pbi->last_put_idx = index;
+		pbi->new_frame_displayed++;
+		unlock_buffer_pool(pool, flags);
+	}
+
+	vdec_up(vdec);
+
+	return;
+}
+
+static void vp9_post_avbcd_task(struct VP9Decoder_s *pbi)
+{
+	struct vdec_s *vdec = hw_to_vdec(pbi);
+	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
+	struct avbc_output *out;
+	struct avbc_input *in = &vdec->avbc_in;
+	struct aml_buf *am_buf;
+	struct aml_avbc_buf *buf = NULL;
+	struct vframe_s *vf = NULL;
+	struct aml_buf *dec_buf;
+	ulong nv_order = VIDTYPE_VIU_NV21;
+	int offset;
+	int align_w = 64;
+	int align_h = 64;
+
+	mutex_lock(&pbi->post_mutex);
+
+	if (!ctx->avbcd_work_mode)
+		goto out;
+
+	if (!kfifo_len(&pbi->avbc_display_q))
+		goto out;
+
+	if (!kfifo_peek(&pbi->avbc_display_q, &vf))
+		goto out;
+
+	am_buf = aml_buf_get(&ctx->bm, BUF_USER_AVBCD, false);
+	if (!am_buf) {
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "avbc no frame buffers!\n");
+		goto out;
+	}
+
+	if (!kfifo_get(&vdec->avbc_frame_q, &buf)) {
+		vp9_print(pbi, 0,
+			"fatal error, no available avbc slot.");
+		goto out;
+	}
+
+	dec_buf = (struct aml_buf *)vf->v4l_mem_handle;
+
+	if (pbi->vp9_param.p.bit_depth == 8)
+		vf->bitdepth = BITDEPTH_Y8 | BITDEPTH_U8 | BITDEPTH_V8;
+	if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
+		(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
+		nv_order = VIDTYPE_VIU_NV12;
+
+	vf->type |= VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
+	vf->type |= nv_order;
+
+	vf->canvas0Addr = vf->canvas1Addr = -1;
+	vf->plane_num = 2;
+
+	if (is_hevc_align32(0))
+		align_w = 32;
+
+	vf->canvas0_config[0].block_mode = pbi->mem_map_mode;
+	vf->canvas0_config[0].endian = 0;
+	vf->canvas0_config[1].block_mode = pbi->mem_map_mode;
+	vf->canvas0_config[1].endian = 0;
+	vf->canvas0_config[0].phy_addr = am_buf->planes[0].addr;
+	vf->canvas0_config[0].width = ALIGN(vf->compWidth, align_w);
+	vf->canvas0_config[0].height = vf->compHeight;
+	vf->canvas0_config[1].width = ALIGN(vf->compWidth, align_w);
+	vf->canvas0_config[1].height = vf->compHeight;
+	if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
+			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+	offset = ALIGN(vf->compWidth, align_w) * ALIGN(vf->compHeight, align_h);
+	if (pbi->vp9_param.p.bit_depth == 10)
+		offset *= 2;
+	if (am_buf->num_planes == 1)
+		vf->canvas0_config[1].phy_addr =
+			am_buf->planes[0].addr + offset;
+	else
+		vf->canvas0_config[1].phy_addr = am_buf->planes[1].addr;
+
+	vf->canvas1_config[0] = vf->canvas0_config[0];
+	vf->canvas1_config[1] = vf->canvas0_config[1];
+
+	if (vf->type & VIDTYPE_COMPRESS)
+		vf->type &= ~VIDTYPE_COMPRESS;
+	if (vf->type & VIDTYPE_SCATTER)
+		vf->type &= ~VIDTYPE_SCATTER;
+
+	aml_buf_set_vframe(am_buf, vf);
+	buf->vf = vf;
+	buf->am_buf = am_buf;
+	buf->ctx = ctx;
+	out = &buf->output;
+	out->align_w = align_w;
+	out->align_h = align_h;
+
+	in->header_addr = vf->compHeadAddr;
+	in->header_size = 0;
+	in->width = vf->compWidth;
+	in->height = vf->compHeight;
+	in->bitdepth = vf->bitdepth & BITDEPTH_Y10 ? 10 : 8;
+	if (ctx->avbcd_work_mode & AVBCD_SOFT_KERNEL_MODE) {
+		out->type = AVBCD_MEM_DMABUF;
+		out->m.dbuf = buf->am_buf->vb->planes[0].dbuf;
+	} else if (ctx->avbcd_work_mode & AVBCD_SOFT_USER_MODE) {
+		out->type = AVBCD_MEM_PHYADDR;
+		out->m.phy = vb2_dma_contig_plane_dma_addr(buf->am_buf->vb, 0);
+	}
+	out->avbc_done = vp9_avbc_done_cb;
+	out->length = offset * 3 / 2;
+
+	if (vf->type & VIDTYPE_V4L_EOS)
+		in->header_addr  = 0;
+
+	aml_buf_done(&ctx->bm, dec_buf, BUF_USER_DEC);
+
+	vp9_print(pbi, VP9_DEBUG_BUFMGR,
+			"%s: block mode 0x%x (vf %px header_addr 0x%x y_addr 0x%lx wxh %d x %d bitdepth %d type 0x%lx index %d"
+			" offset %d)\n",
+			__func__, pbi->mem_map_mode, vf, in->header_addr, am_buf->planes[0].addr, in->width, in->height, in->bitdepth,
+			vf->type, vf->index, offset);
+
+	ctx->aml_avbc_decode(out, in, AVBCD_IO_NON_BLOCKING);
+out:
+	mutex_unlock(&pbi->post_mutex);
+}
+
+static void post_avbcd_task(struct vdec_s *vdec)
+{
+	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)vdec->private;
+	vp9_post_avbcd_task(pbi);
+}
+
 static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct vdec_s *vdec = op_arg;
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
 	struct aml_buf *aml_buf;
+	int index;
 
 	if (vf == (&pbi->vframe_dummy))
 		return;
@@ -7262,8 +7512,61 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 		return;
 
 	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
-	aml_buf_put_ref(&ctx->bm, aml_buf);
-	vp9_recycle_dec_resource(pbi, aml_buf);
+	if (!ctx->avbcd_work_mode) {
+		aml_buf_put_ref(&ctx->bm, aml_buf);
+		vp9_recycle_dec_resource(pbi, aml_buf);
+	} else {
+		if (pbi->enable_fence && vf->fence) {
+			int ret, i;
+
+			mutex_lock(&pbi->fence_mutex);
+			ret = dma_fence_get_status(vf->fence);
+			if (ret == 0) {
+				for (i = 0; i < VF_POOL_SIZE; i++) {
+					if (pbi->fence_vf_s.fence_vf[i] == NULL) {
+						pbi->fence_vf_s.fence_vf[i] = vf;
+						pbi->fence_vf_s.used_size++;
+						mutex_unlock(&pbi->fence_mutex);
+						return;
+					}
+				}
+			}
+			mutex_unlock(&pbi->fence_mutex);
+		}
+
+		index = vf->index & 0xff;
+
+		if (pbi->enable_fence && vf->fence) {
+			vdec_fence_put(vf->fence);
+			vf->fence = NULL;
+		}
+
+		kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
+		ATRACE_COUNTER(pbi->trace.new_q_name, kfifo_len(&pbi->newframe_q));
+		atomic_add(1, &pbi->vf_put_count);
+
+		if (debug & VP9_DEBUG_BUFMGR)
+			pr_info("%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
+				__func__, index, vf->type,
+				vf->width, vf->height,
+				vf->pts,
+				vf->pts_us64,
+				vf->timestamp);
+
+		if (index < pbi->used_buf_num) {
+			struct VP9_Common_s *cm = &pbi->common;
+			struct BufferPool_s *pool = cm->buffer_pool;
+			unsigned long flags;
+
+			lock_buffer_pool(pool, flags);
+			if (pool->frame_bufs[index].buf.vf_ref > 0)
+				pool->frame_bufs[index].buf.vf_ref--;
+
+			pbi->last_put_idx = index;
+			pbi->new_frame_displayed++;
+			unlock_buffer_pool(pool, flags);
+		}
+	}
 
 #ifdef MULTI_INSTANCE_SUPPORT
 	vdec_up(vdec);
@@ -7412,6 +7715,17 @@ static inline void pbi_update_gvs(struct VP9Decoder_s *pbi)
 			pbi->gvs->frame_rate = -1;
 	}
 	pbi->gvs->status = pbi->stat | pbi->fatal_error;
+}
+
+static void put_vf_to_avbc_q(struct VP9Decoder_s *pbi, struct vframe_s *vf)
+{
+	if (kfifo_get(&pbi->display_q, &vf)) {
+		kfifo_put(&pbi->avbc_display_q, (const struct vframe_s *)vf);
+		vp9_print(pbi, VP9_DEBUG_BUFMGR,
+			"%s(vf %px type %d index 0x%x avbc_display_q %d display_q %d ts %llu\n",
+			__func__, vf, vf->type, vf->index,
+			kfifo_len(&pbi->avbc_display_q), kfifo_len(&pbi->display_q), vf->timestamp);
+	}
 }
 
 static int prepare_display_buf(struct VP9Decoder_s *pbi,
@@ -7797,7 +8111,8 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				}
 				vdec_ge2d_copy_data(pbi->ge2d, &ge2d_info);
 			}
-			decoder_do_frame_check(pvdec, vf);
+			if (!v4l2_ctx->avbcd_work_mode)
+				decoder_do_frame_check(pvdec, vf);
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(pbi->trace.pts_name, vf->timestamp);
 			ATRACE_COUNTER(pbi->trace.new_q_name, kfifo_len(&pbi->newframe_q));
@@ -7832,17 +8147,22 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			if ((v4l2_ctx->no_fbc_output &&
 				(v4l2_ctx->picinfo.bitdepth != 0 &&
 				v4l2_ctx->picinfo.bitdepth != 8)) ||
-				v4l2_ctx->enable_di_post)
+				(v4l2_ctx->enable_di_post && !v4l2_ctx->avbcd_work_mode))
 				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
 					aml_buf, vf);
 
 			if (without_display_mode == 0) {
-				if (v4l2_ctx->is_stream_off) {
+				if (v4l2_ctx->is_stream_off  && ((!v4l2_ctx->avbcd_work_mode) ||
+					(v4l2_ctx->avbcd_work_mode && atomic_read(&pbi->vf_pre_count) > 1))) {
 					vvp9_vf_put(vvp9_vf_get(pvdec), pvdec);
 				} else {
 					aml_buf_set_vframe(aml_buf, vf);
 					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
-					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
+					if (v4l2_ctx->avbcd_work_mode) {
+						put_vf_to_avbc_q(pbi, vf);
+						vp9_post_avbcd_task(pbi);
+					} else
+						aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}
 			} else
 				vvp9_vf_put(vvp9_vf_get(pvdec), pvdec);
@@ -7863,6 +8183,8 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi);
 static int notify_v4l_eos(struct vdec_s *vdec)
 {
 	struct VP9Decoder_s *hw = (struct VP9Decoder_s *)vdec->private;
+	struct VP9_Common_s *const cm = &hw->common;
+	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = &hw->vframe_dummy;
 	struct aml_buf *aml_buf = NULL;
@@ -7870,7 +8192,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	ulong expires;
 
 	expires = jiffies + msecs_to_jiffies(2000);
-	while (!is_available_buffer(hw)) {
+	while (!is_available_buffer(hw)  && (!ctx->avbcd_work_mode ||
+		(ctx->avbcd_work_mode && aml_buf_empty(&ctx->bm)))) {
 		if (time_after(jiffies, expires)) {
 			pr_err("[%d] VP9 isn't enough buff for notify eos.\n", ctx->id);
 			return 0;
@@ -7884,7 +8207,10 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		return 0;
 	}
 
-	aml_buf = index_to_aml_buf(hw, index);
+	if (ctx->avbcd_work_mode)
+		aml_buf = frame_bufs[index].buf.am_buf;
+	else
+		aml_buf = index_to_aml_buf(hw, index);
 
 	vf->type		|= VIDTYPE_V4L_EOS;
 	vf->timestamp		= ULLONG_MAX;
@@ -7896,7 +8222,11 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
-	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
+	if (ctx->avbcd_work_mode) {
+		put_vf_to_avbc_q(hw, vf);
+		vp9_post_avbcd_task(hw);
+	} else
+		aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 
 	hw->eos = true;
 
@@ -8792,6 +9122,8 @@ static void vvp9_get_comp_buf_info(struct VP9Decoder_s *pbi,
 
 static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *ps)
 {
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
+
 	ps->visible_width 	= pbi->frame_width;
 	ps->visible_height 	= pbi->frame_height;
 	ps->coded_width 	= ALIGN(pbi->frame_width, is_hevc_align32(0) ? 32 : 64);
@@ -8816,6 +9148,17 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 	}
 	ps->field = V4L2_FIELD_NONE;
 	ps->bitdepth = pbi->vp9_param.p.bit_depth;
+
+	if (ctx->avbcd_work_mode && get_double_write_mode(pbi) != DM_AVBC_ONLY) {
+		struct aml_vdec_cfg_infos cfg_info = { 0 };
+
+		pbi->double_write_mode = DM_AVBC_ONLY;
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "avbc mode double_write_mode %d dpb_frames %d\n",
+			pbi->double_write_mode, ps->dpb_frames);
+		vdec_v4l_get_cfg_infos(ctx, &cfg_info);
+		cfg_info.double_write_mode = DM_AVBC_ONLY;
+		vdec_v4l_set_cfg_infos(ctx, &cfg_info);
+	}
 
 	return 0;
 }
@@ -8935,6 +9278,9 @@ static void vp9_buf_ref_process_for_exception(struct VP9Decoder_s *pbi)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	struct aml_buf *aml_buf;
+
+	if (ctx->avbcd_work_mode)
+		return;
 
 	if (pbi->cur_idx != INVALID_IDX) {
 		int cur_idx = pbi->cur_idx;
@@ -9368,6 +9714,8 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				pbi->used_buf_num = pic.dpb_frames +
 					pic.dpb_margin;
 
+				if (ctx->avbcd_work_mode)
+					pbi->used_buf_num = pic.dpb_frames;
 				if (pbi->used_buf_num > MAX_BUF_NUM)
 					pbi->used_buf_num = MAX_BUF_NUM;
 
@@ -9899,6 +10247,7 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 
 	INIT_KFIFO(pbi->display_q);
 	INIT_KFIFO(pbi->newframe_q);
+	INIT_KFIFO(pbi->avbc_display_q);
 
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		const struct vframe_s *vf = &pbi->vfpool[i];
@@ -9907,6 +10256,22 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 		kfifo_put(&pbi->newframe_q, vf);
 	}
 
+	for (i = 0; i < pbi->used_buf_num; ++i) {
+		struct VP9_Common_s *const cm = &pbi->common;
+		struct RefCntBuffer_s *frame_bufs;
+
+		if (ctx->avbcd_work_mode && cm->buffer_pool) {
+			frame_bufs = cm->buffer_pool->frame_bufs;
+			if (frame_bufs[i].buf.buffer_attached && frame_bufs[i].buf.am_buf) {
+				vp9_print(pbi, VP9_DEBUG_BUFMGR,
+						"%s i %d, buf %px\n",
+						__func__, i, frame_bufs[i].buf.am_buf);
+				frame_bufs[i].buf.buffer_attached = false;
+			}
+		}
+	}
+	if (ctx->avbcd_work_mode)
+		aml_buf_reset_avbcd_buf(&ctx->bm);
 
 	ret = vp9_local_init(pbi);
 	if (ret < 0) {
@@ -10607,6 +10972,9 @@ static int vp9_recycle_frame_buffer(struct VP9Decoder_s *pbi)
 	ulong flags;
 	int i;
 
+	if (ctx->avbcd_work_mode)
+		return 0;
+
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if (frame_bufs[i].ref_count == 0 &&
 			frame_bufs[i].buf.cma_alloc_addr &&
@@ -10695,8 +11063,14 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 	if (pbi->used_buf_num == 0) {
 		struct vdec_pic_info pic;
 
+		if (aml_buf_empty(&ctx->bm) && !ctx->avbcd_work_mode)
+			goto out;
+
 		vdec_v4l_get_pic_info(ctx, &pic);
 		pbi->used_buf_num = pic.dpb_frames + pic.dpb_margin;
+
+		if (ctx->avbcd_work_mode)
+			pbi->used_buf_num = pic.dpb_frames;
 
 		if (pbi->used_buf_num > MAX_BUF_NUM)
 			pbi->used_buf_num = MAX_BUF_NUM;
@@ -10710,10 +11084,13 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if ((frame_bufs[i].ref_count == 0) &&
 			(frame_bufs[i].buf.vf_ref == 0) &&
-			!frame_bufs[i].buf.cma_alloc_addr &&
 			(frame_bufs[i].buf.repeat_count == 0) &&
-			(cm->cur_frame != &frame_bufs[i])) {
+			(cm->cur_frame != &frame_bufs[i]) &&
+			((!ctx->avbcd_work_mode && !frame_bufs[i].buf.cma_alloc_addr) ||
+			ctx->avbcd_work_mode)) {
 			free_slot++;
+			if (ctx->avbcd_work_mode)
+				break;
 		}
 	}
 
@@ -10724,8 +11101,32 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 		force_recycle_repeat_frame(pbi);
 
 		return false;
-	} else if (free_slot < 2)
+	} else if (free_slot < 2 && !ctx->avbcd_work_mode)
 		force_recycle_repeat_frame(pbi);
+
+	if (ctx->bm.config.avbcd_work_mode) {
+		if (ctx->state <= AML_STATE_INIT)
+			goto out;
+		free_count = free_slot;
+		if (kfifo_len(&pbi->avbc_display_q) > 1) {
+			free_count = 0;
+			goto out;
+		}
+		if (!pbi->aml_buf) {
+			if (!frame_bufs[i].buf.buffer_attached) {
+				frame_bufs[i].buf.am_buf = aml_buf_alloc_avbcd_buf(&ctx->bm);
+				frame_bufs[i].buf.am_buf->task->attach(frame_bufs[i].buf.am_buf->task, &task_dec_ops,  hw_to_vdec(pbi));
+				frame_bufs[i].buf.am_buf->state = FB_ST_DECODER;
+				frame_bufs[i].buf.buffer_attached = true;
+			}
+			pbi->aml_buf = frame_bufs[i].buf.am_buf;
+		} else
+			vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
+				"%s already got buf(%px, %d)!\n",
+					__func__, frame_bufs[i].buf.am_buf, frame_bufs[i].buf.am_buf->index);
+
+		goto out;
+	}
 
 	if (atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
 		vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
@@ -10753,6 +11154,7 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 		__func__, pbi->aml_buf, pbi->aml_buf->index);
 	}
 
+out:
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return (free_count >= pbi->run_ready_min_buf_num) ? true : false;
@@ -11559,11 +11961,13 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	/* the ctx from v4l2 driver. */
 	pbi->v4l2_ctx = pdata->private;
 	ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
-	ctx->vdec_recycle_dec_resource = vp9_recycle_dec_resource;
+	if (!ctx->avbcd_work_mode)
+		ctx->vdec_recycle_dec_resource = vp9_recycle_dec_resource;
 	pdata->private = pbi;
 	pdata->dec_status = vvp9_dec_status;
 	pdata->run_ready = run_ready;
 	pdata->run = run;
+	pdata->post_avbcd_task = post_avbcd_task;
 	pdata->reset = reset;
 	pdata->irq_handler = vp9_irq_cb;
 	pdata->threaded_irq_handler = vp9_threaded_irq_cb;

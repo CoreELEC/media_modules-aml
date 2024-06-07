@@ -36,6 +36,7 @@
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_vpp.h"
+#include "aml_vcodec_avbc_wrapper.h"
 #include "aml_vcodec_dec_infoserver.h"
 #include "../frame_provider/decoder/utils/decoder_report.h"
 #include "../common/media_utils/media_kernel_version.h"
@@ -161,6 +162,7 @@ static int fops_vcodec_open(struct file *file)
 	ctx->vdec_pic_info_update = aml_vdec_pic_info_update;
 	ctx->cal_compress_buff_info = cal_compress_buff_info;
 	ctx->fbc_transcode_and_set_vf = fbc_transcode_and_set_vf;
+	ctx->aml_avbc_decode = aml_avbc_decode;
 	aml_vcodec_dec_set_default_params(ctx);
 	ctx->is_stream_off = true;
 	ctx->set_ext_buf_flg = false;
@@ -905,6 +907,13 @@ module_param(trace_config, uint, 0644);
 int enable_di_post;
 EXPORT_SYMBOL(enable_di_post);
 module_param(enable_di_post, int, 0644);
+
+int avbcd_work_mode = 2;
+EXPORT_SYMBOL(avbcd_work_mode);
+module_param(avbcd_work_mode, int, 0644);
+
+int crc_dump = 1;
+module_param(crc_dump, int, 0664);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("AML video codec V4L2 decoder driver");

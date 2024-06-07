@@ -187,6 +187,12 @@ enum vdec_dec_mode {
 	DM_YUV_14_11_10BIT_AVBC	= 0x10200,
 };
 
+typedef int (*dbg_info_up)(int, int, struct vframe_s *);
+typedef int (*dbg_data_wr)(const void *, int, int, int);
+
+extern dbg_data_wr debug_port_func_data_wr;
+extern dbg_info_up debug_port_func_info_up;
+
 //fmt
 const char *av_color_space_name(enum AVColorSpace space);
 const char *av_color_primaries_name(enum AVColorPrimaries primaries);

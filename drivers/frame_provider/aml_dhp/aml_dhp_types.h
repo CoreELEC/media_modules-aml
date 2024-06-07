@@ -71,6 +71,8 @@
  * @payload   : Auxiliary data for the memory unit (purpose and content application-specific).
  * @uncached  : Indicates whether the memory region uses uncached memory. Non-zero if true.
  * @syncflag  : Synchronization flags for memory operations, based on DHP_MEM_SYNC_* definitions.
+ * @w_align   : Width alignment value.
+ * @h_align   : Height alignment value.
  */
 struct aml_du_mem {
     __u32 type;
@@ -85,6 +87,8 @@ struct aml_du_mem {
     __u32 payload;
     __u32 uncached;
     __u64 syncflag;
+    __u32 w_align;
+    __u32 h_align;
 } __attribute__((packed));
 
 /*

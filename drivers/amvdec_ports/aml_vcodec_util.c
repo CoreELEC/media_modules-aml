@@ -59,6 +59,9 @@ int user_to_task(enum buf_core_user user)
 	case BUF_USER_GE2D:
 		t = TASK_TYPE_GE2D;
 		break;
+	case BUF_USER_AVBCD:
+		t = TASK_TYPE_AVBCD;
+		break;
 	case BUF_USER_VSINK:
 		t = TASK_TYPE_V4L_SINK;
 		break;
@@ -83,6 +86,9 @@ int task_to_user(enum task_type_e task)
 		break;
 	case TASK_TYPE_GE2D:
 		t = BUF_USER_GE2D;
+		break;
+	case TASK_TYPE_AVBCD:
+		t = BUF_USER_AVBCD;
 		break;
 	case TASK_TYPE_V4L_SINK:
 		t = BUF_USER_VSINK;

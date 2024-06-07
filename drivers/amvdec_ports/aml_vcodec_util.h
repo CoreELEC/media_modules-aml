@@ -87,6 +87,8 @@ extern int t3x_tw_output;
 #define V4L_DEBUG_TASK_CHAIN	(1 << 11)
 #define V4L_DEBUG_GE2D_BUFMGR	(1 << 12)
 #define V4L_DEBUG_GE2D_DETAIL	(1 << 13)
+#define V4L_DEBUG_AVBCD_BUFMGR	(1 << 14)
+
 
 #define __v4l_dbg(h, id, fmt, args...)					\
 	do {								\
@@ -145,6 +147,8 @@ extern int t3x_tw_output;
 			}							\
 		}								\
 	} while (0)
+
+#define v4l_dbg_avbcd v4l_dbg_ext
 
 void aml_vcodec_set_curr_ctx(struct aml_vcodec_dev *dev,
 	struct aml_vcodec_ctx *ctx);

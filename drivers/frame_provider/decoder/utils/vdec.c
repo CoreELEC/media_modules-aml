@@ -3385,6 +3385,40 @@ int vdec_init_stbuf_info(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(vdec_init_stbuf_info);
 
+int vdec_avbc_frame_pool_create(struct vdec_s *vdec)
+{
+	int i;
+	int ret;
+
+	INIT_KFIFO(vdec->avbc_frame_q);
+	ret = kfifo_alloc(&vdec->avbc_frame_q, AVBCD_FRAME_SIZE, GFP_KERNEL);
+	if (ret) {
+		pr_err("alloc avbc_frame_q fifo fail.\n");
+		return -EINVAL;
+	}
+
+	vdec->avbcpool = vzalloc(AVBCD_FRAME_SIZE * sizeof(*vdec->avbcpool));
+	if (!vdec->avbcpool) {
+		pr_err("alloc avbcpool fail.\n");
+		kfifo_free(&vdec->avbc_frame_q);
+		return -EINVAL;
+	}
+
+	for (i = 0 ; i < AVBCD_FRAME_SIZE ; i++) {
+		kfifo_put(&vdec->avbc_frame_q, &vdec->avbcpool[i]);
+	}
+
+	return 0;
+}
+
+void vdec_avbc_frame_pool_release(struct vdec_s *vdec)
+{
+	if (vdec->avbcpool) {
+		vfree(vdec->avbcpool);
+		kfifo_free(&vdec->avbc_frame_q);
+	}
+}
+
 /*
  *register vdec_device
  * create output, vfm or create ionvideo output
@@ -3504,6 +3538,18 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			(is_core_hevc_fmt(vdec->format)) ?
 				VDEC_INPUT_TARGET_HEVC :
 				VDEC_INPUT_TARGET_VLD);
+
+	p->parallel_dec = parallel_decode;
+	vdec_core->parallel_dec = parallel_decode;
+	if (vdec->avbc_mode & (AVBCD_SOFT_KERNEL_MODE | AVBCD_SOFT_USER_MODE))
+		goto skip;
+	else {
+		r = vdec_avbc_frame_pool_create(vdec);
+		if (r < 0) {
+			pr_err("fail to create avbc frame pool!\n");
+			return r;
+		}
+	}
 	if (vdec_single(vdec) ||
 		(vdec_get_debug_flags() & 0x2) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12B))
@@ -3541,10 +3587,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	/* vdec_dev_reg.flag = 0; */
 	if (vdec->id >= 0)
 		id = vdec->id;
-	p->parallel_dec = parallel_decode;
-	p->prog_only = prog_only;
 
-	vdec_core->parallel_dec = parallel_decode;
+	p->prog_only = prog_only;
 	vdec->canvas_mode = CANVAS_BLKMODE_32X32;
 #ifdef FRAME_CHECK
 	vdec_frame_check_init(vdec);
@@ -3948,6 +3992,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 		tee_config_device_state(DMC_DEV_ID_VDEC, 0);
 	}
 	p->dolby_meta_with_el = 0;
+
+skip:
 	if (debug & VDEC_DBG_DETAIL_INFO)
 		pr_debug("vdec_init, vf_provider_name = %s\n", p->vf_provider_name);
 
@@ -4190,6 +4236,8 @@ void vdec_release(struct vdec_s *vdec)
 		vdec->vbuf.ops->release(&vdec->vbuf);
 
 	vdec_userdata_ctx_release(vdec);
+
+	vdec_avbc_frame_pool_release(vdec);
 
 	pr_debug("vdec_release instance %p, total %d\n", vdec,
 		atomic_read(&vdec_core->vdec_nr));
@@ -4693,6 +4741,10 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 #ifdef VDEC_DEBUG_SUPPORT
 	inc_profi_count(mask, vdec->check_count);
 #endif
+
+	if (vdec->post_avbcd_task)
+		vdec->post_avbcd_task(vdec);
+
 	if (vdec_core_with_back_core(mask) &&
 		(!(vdec->core_mask & CORE_MASK_COMBINE))) {
 		if (vdec->check_input_data)

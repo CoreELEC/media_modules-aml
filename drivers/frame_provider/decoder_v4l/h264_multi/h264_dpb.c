@@ -1867,7 +1867,8 @@ static int remove_unused_frame_from_dpb(struct h264_dpb_stru *p_H264_Dpb)
 	}
 
 	for (i = 0; i < p_Dpb->used_size; i++) {
-		if ((p_Dpb->fs[i]->pre_output) &&
+		if (((!p_H264_Dpb->avbcd_work_mode && p_Dpb->fs[i]->pre_output) ||
+			(p_H264_Dpb->avbcd_work_mode && p_Dpb->fs[i]->is_output)) &&
 			(!is_used_for_reference(p_Dpb->fs[i]))) {
 			recycle_frame_buffer(p_H264_Dpb,
 				p_Dpb->fs[i]->buf_spec_num, i);

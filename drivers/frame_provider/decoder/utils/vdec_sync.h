@@ -17,6 +17,9 @@
  *
  * Description:
  */
+ #ifndef VDEC_SYNC_H
+#define VDEC_SYNC_H
+
 #include <linux/list.h>
 #include <linux/rbtree.h>
 #include <linux/spinlock.h>
@@ -104,4 +107,6 @@ void vdec_fence_buffer_count_decrease(struct codec_mm_s *mm, struct codec_mm_cb_
 struct vdec_sync *vdec_sync_get(void);
 
 void vdec_sync_core_init(void);
+
+#endif /* VDEC_SYNC_H */
 

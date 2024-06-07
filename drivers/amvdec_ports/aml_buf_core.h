@@ -49,6 +49,8 @@
 #define SUB1_DONE  (3)
 #define PAIR_DONE  (3)
 
+#define AVBC_BUFFER_NUM  (32)
+
 struct buf_core_mgr_s;
 
 /*
@@ -96,6 +98,7 @@ enum buf_core_user {
 	BUF_USER_DEC,
 	BUF_USER_VPP,
 	BUF_USER_GE2D,
+	BUF_USER_AVBCD,
 	BUF_USER_VSINK,
 	BUF_USER_DI,
 	BUF_USER_MAX
@@ -200,7 +203,15 @@ struct buf_core_entry {
  * @done	: The done interface is called if the user finishes fill the data.
  * @fill	: The fill interface is called if the user consumes the data.
  * @ready_num	: Query the number of buffers in the free queue.
- * @empty	: Check whether the free queue is empty.
+ * @vpp_cb	: DI callback to recycle buffer ref .
+ * @update_holder
+ *		: Update who holding the buffer.
+ * @alloc_avbcd_buf
+ *		: Alloc avbcd buffer containing of header and body.
+ * @release_avbcd_buf
+ *		: Release avbcd buffer.
+ * @reset_avbcd_buf
+ *		: Unbinding the relationship between avbcd buffer and dpb.
  */
 struct buf_core_ops {
 	void	(*get)(struct buf_core_mgr_s *, enum buf_core_user, struct buf_core_entry **, bool);
@@ -214,6 +225,9 @@ struct buf_core_ops {
 	void	(*vpp_cb)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	void	(*update_holder)(struct buf_core_mgr_s *, struct buf_core_entry *,
 		enum buf_core_user, enum buf_direction direction);
+	void	(*alloc_avbcd_buf)(struct buf_core_mgr_s *, struct buf_core_entry **);
+	void	(*release_avbcd_buf)(struct buf_core_mgr_s *);
+	void	(*reset_avbcd_buf)(struct buf_core_mgr_s *);
 };
 
 /*
@@ -238,6 +252,7 @@ struct buf_core_mem_ops {
  * @free_num	: The number of free buffers available.
  * @free_que	: Queue for storing free buffers.
  * @buf_num	: Record the serial number of buffer attached to the buffer manager.
+ * @internal_num: Record the serial number of avbcd buffer.
  * @buf_table	: Used to store the attached buffer.
  * @config	: Interface Settings parameters to buffer manager.
  * @attach	: The interface is used to attach buffer to buffer manager.
@@ -274,6 +289,8 @@ struct buf_core_mem_ops {
 		: The interface is used to update planes information
  * @reconfigure_planes
 		: The interface is used to reconfigure planes information
+ * @entry[AVBC_BUFFER_NUM]
+ *		: Entry for avbcd buffer and cannot be used with yuv entry.
  */
 struct buf_core_mgr_s {
 	int			id;
@@ -286,6 +303,7 @@ struct buf_core_mgr_s {
 	struct list_head	free_que;
 
 	int			buf_num;
+	int			internal_num;
 	DECLARE_HASHTABLE(buf_table, BUF_HASH_BITS);
 
 	void	(*config)(struct buf_core_mgr_s *, void *);
@@ -316,6 +334,7 @@ struct buf_core_mgr_s {
 	struct workqueue_struct		*recycle_buf_ref_workqueue;
 	bool 				workqueue_enabled;
 	struct mutex 			workqueue_mutex; /*for recycle buffer work queue*/
+	struct buf_core_entry 		*entry[AVBC_BUFFER_NUM];
 };
 
 /*

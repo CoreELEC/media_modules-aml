@@ -55,6 +55,7 @@ struct aml_video_stream {
  * @FB_ST_DECODER	: frame buffer be allocted by decoder.
  * @FB_ST_VPP		: frame buffer be allocate by vpp.
  * @FB_ST_DISPLAY	: frame buffer is ready to be displayed.
+ * @FB_ST_AVBCD		: frame buffer is processed by avbcd.
  * @FB_ST_FREE		: frame buffer is not used by decoder any more
  */
 enum vdec_fb_status {
@@ -63,6 +64,7 @@ enum vdec_fb_status {
 	FB_ST_VPP,
 	FB_ST_GE2D,
 	FB_ST_DISPLAY,
+	FB_ST_AVBCD,
 	FB_ST_FREE
 };
 

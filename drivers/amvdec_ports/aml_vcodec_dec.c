@@ -39,6 +39,8 @@
 #include <linux/dma-heap.h>
 #include <uapi/linux/dma-heap.h>
 #include <linux/amlogic/media/meson_uvm_allocator.h>
+#include <linux/amlogic/media/vfm/amlogic_fbc_hook_v1.h>
+#include <linux/crc32.h>
 
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
@@ -48,6 +50,8 @@
 #include "aml_vcodec_vpp.h"
 #include "aml_vcodec_ge2d.h"
 #include "aml_vcodec_dec_infoserver.h"
+#include "aml_vcodec_avbc_wrapper.h"
+
 
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
@@ -100,6 +104,7 @@ MODULE_IMPORT_NS(DMA_BUF);
 #define AML_V4L2_GET_WIDTH_ALIGN (V4L2_CID_USER_AMLOGIC_BASE + 12)
 #define AML_V4L2_GET_DECINFO_SET (V4L2_CID_USER_AMLOGIC_BASE + 13)
 #define AML_V4L2_SET_SCREEN_MODE (V4L2_CID_USER_AMLOGIC_BASE + 15)
+#define AML_V4L2_GET_HEIGHT_ALIGN (V4L2_CID_USER_AMLOGIC_BASE + 16)
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
@@ -370,6 +375,7 @@ extern int bypass_nr_flag;
 extern int es_node_expand;
 extern int force_di_permission;
 extern int enable_di_post;
+extern int avbcd_work_mode;
 
 extern int vdec_get_size_ratio(int dw_mode);
 static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type);
@@ -536,7 +542,7 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 	int width = ctx->picinfo.coded_width;
 	int height = ctx->picinfo.coded_height;
 
-	if (bypass_vpp || ctx->enable_di_post)
+	if (bypass_vpp || ctx->enable_di_post || ctx->avbcd_work_mode)
 		return false;
 
 	if (ctx->vpp_cfg.bypass)
@@ -685,6 +691,8 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctx->dpb_size = picinfo->dpb_frames + picinfo->dpb_margin;
+	if (ctx->avbcd_work_mode)
+		ctx->dpb_size = picinfo->dpb_margin + 1;
 	ctx->vpp_size = vpp->buf_size;
 	ctx->ge2d_size = ge2d->buf_size;
 
@@ -754,6 +762,7 @@ static void aml_buf_configure_update(struct aml_vcodec_ctx *ctx)
 	config.chroma_length_tw	= ctx->picinfo.c_len_sz_tw;
 	config.dw_mode		= dw;
 	config.tw_mode		= tw;
+	config.avbcd_work_mode	= ctx->avbcd_work_mode ? true : false;
 
 	aml_buf_configure(&ctx->bm, &config);
 }
@@ -821,6 +830,7 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	config.chroma_length_tw	= ctx->picinfo.c_len_sz_tw;
 	config.dw_mode			= dw;
 	config.tw_mode			= tw;
+	config.avbcd_work_mode	= ctx->avbcd_work_mode ? true : false;
 
 	aml_buf_configure(&ctx->bm, &config);
 
@@ -1237,7 +1247,10 @@ void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 
 	switch (requester) {
 	case AML_FB_REQ_DEC:
-		if (ctx->ge2d) {
+		if (ctx->avbc_wrapper)
+			/* dec <==> avbcd. */
+			task->attach(task, get_avbc_ops(), ctx->avbc_wrapper);
+		else if (ctx->ge2d) {
 			/* dec <==> ge2d. */
 			task->attach(task, get_ge2d_ops(), ctx->ge2d);
 		} else if (ctx->vpp) {
@@ -1278,6 +1291,12 @@ void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 		/* vpp <==> v4l-sink. */
 		task->attach(task, get_v4l_sink_ops(), ctx);
 		task->attach(task, get_vpp_ops(), ctx->vpp);
+		break;
+
+	case AML_FB_REQ_AVBCD:
+		/* AVBCD <==> v4l-sink. */
+		task->attach(task, get_v4l_sink_ops(), ctx);
+		task->attach(task, get_avbc_ops(), ctx->avbc_wrapper);
 		break;
 
 	default:
@@ -2396,6 +2415,8 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 
 		ctx->is_stream_off = false;
 		aml_buf_workqueue_enable(&ctx->bm);
+		if (ctx->avbc_wrapper)
+			aml_avbc_wrapper_start(ctx->avbc_wrapper);
 	} else {
 		ctx->is_out_stream_off = false;
 		ctx->es_wkr_stop = false;
@@ -2485,6 +2506,8 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 					ctx->state, rb->count, CTX_BUF_TOTAL(ctx));
 			ctx->picinfo.dpb_margin += (rb->count - CTX_BUF_TOTAL(ctx));
 			ctx->dpb_size = ctx->picinfo.dpb_frames + ctx->picinfo.dpb_margin;
+			if (ctx->avbcd_work_mode)
+				ctx->dpb_size = rb->count;
 			vdec_if_set_param(ctx, SET_PARAM_PIC_INFO, &ctx->picinfo);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 					"%s buf updated, dec: %d (%d + %d), vpp %d\n",
@@ -2784,6 +2807,7 @@ void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx)
 	aml_vcodec_ctx_unlock(ctx, flags);
 
 	vdec_if_deinit(ctx);
+	aml_buf_release_avbcd_buf(&ctx->bm);
 }
 
 void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
@@ -4643,6 +4667,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	config.chroma_length_tw	= ctx->picinfo.c_len_sz_tw;
 	config.dw_mode		= dw;
 	config.tw_mode		= tw;
+	config.avbcd_work_mode	= ctx->avbcd_work_mode ? true : false;
 
 	if (ctx->enable_di_post)
 		ctx->bm.vpp_work_mode	= VPP_WORK_MODE_DI_POST;
@@ -4846,6 +4871,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		ctx->in_buff_cnt = 0;
 		ctx->write_frames = 0;
 		ctx->master_buf = NULL;
+		if (ctx->avbc_wrapper)
+			aml_avbc_wrapper_stop(ctx->avbc_wrapper);
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
@@ -4965,6 +4992,9 @@ static int get_width_align(struct aml_vcodec_ctx *ctx)
 	int align = 64;
 	u32 dw;
 
+	if (ctx->avbcd_work_mode)
+		return align;
+
 	vdec_v4l_get_dw_mode(ctx, &dw);
 
 	/*
@@ -4976,6 +5006,13 @@ static int get_width_align(struct aml_vcodec_ctx *ctx)
 		(ctx->output_pix_fmt == V4L2_PIX_FMT_H264 &&
 		dw != DM_YUV_ONLY)))
 		align = 32;
+
+	return align;
+}
+
+static int get_height_align(struct aml_vcodec_ctx *ctx)
+{
+	int align = 64;
 
 	return align;
 }
@@ -5028,6 +5065,11 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		ctrl->val = get_width_align(ctx);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"width_align: %d\n", ctrl->val);
+		break;
+	case AML_V4L2_GET_HEIGHT_ALIGN:
+		ctrl->val = get_height_align(ctx);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+			"height_align: %d\n", ctrl->val);
 		break;
 	case AML_V4L2_GET_DECINFO_SET:
 		if (aml_vcodec_decinfo_get(ctrl, ctx) < 0)
@@ -5274,6 +5316,18 @@ static const struct v4l2_ctrl_config ctrl_get_width_align = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_get_height_align = {
+	.name	= "height align",
+	.id	= AML_V4L2_GET_HEIGHT_ALIGN,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+	.min	= 0,
+	.max	= 256,
+	.step	= 1,
+	.def	= 0,
+};
+
 static const struct v4l2_ctrl_config ctrl_gt_decinfo_set = {
 	.name		= "decoder info_reporter",
 	.id		= AML_V4L2_GET_DECINFO_SET,
@@ -5392,6 +5446,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_get_width_align, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_get_height_align, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;
@@ -5617,10 +5677,17 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 			ctx->force_di_permission = true;
 
 		ctx->enable_di_post = dec->cfg.metadata_config_flag & (1 << 20);
-		if (enable_di_post) {
+		if (enable_di_post)
 			ctx->enable_di_post = true;
-		}
+
 		ctx->alloc_type = dec->cfg.metadata_config_flag & (1 << 21);
+		ctx->avbcd_work_mode = dec->cfg.metadata_config_flag & (1 << 23);
+		if (avbcd_work_mode & 0x8000 || (ctx->avbcd_work_mode && (avbcd_work_mode & 0xf))) {
+			ctx->avbcd_work_mode = avbcd_work_mode;
+			ctx->no_fbc_output = false;
+			aml_avbc_wrapper_init(&ctx->avbc_wrapper);
+			aml_buf_configure_update(ctx);
+		}
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s parms:%x metadata_config_flag: 0x%x\n",
 				__func__, in->parms_status, dec->cfg.metadata_config_flag);

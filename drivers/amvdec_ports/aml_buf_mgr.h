@@ -46,6 +46,7 @@ struct aml_buf_mgr_s;
  * @buf_size		: The size of buffer that should be allocated.
  * @enable_fbc		: Enables the AFBC feature.
  * @enable_secure	: Indicates the secure mode.
+ * @avbcd_work_mode	: Indicates the avbcd mode.
  * @memory_mode		: memory mode used by v4l2 vb queue.
  * @vpp_work_mode	: 0: used DI m2m interface, 1: DI post process mode.
  * @planes		: The number of planes used.
@@ -56,6 +57,7 @@ struct aml_buf_config {
 	bool	enable_extbuf;
 	bool	enable_fbc;
 	bool 	enable_secure;
+	bool	avbcd_work_mode;
 	int	memory_mode;
 	int	planes;
 	u32	luma_length;

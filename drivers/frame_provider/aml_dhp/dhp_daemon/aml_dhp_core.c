@@ -37,13 +37,14 @@ extern unsigned int g_idx;
 static void dump_yuv_data(unsigned int id,
                             unsigned int width,
                             unsigned int height,
-                            unsigned int stride,
+                            unsigned int wstride,
+                            unsigned int hstride,
                             unsigned int depth,
                             unsigned char *src_yuv,
                             unsigned int src_size)
 {
     char file_name[64];
-    unsigned int yuv_size = stride * height * 3 / 2;
+    unsigned int yuv_size = wstride * hstride * 3 / 2;
 
     if ((g_idx != -1) && (g_idx != id))
         return;
@@ -55,8 +56,8 @@ static void dump_yuv_data(unsigned int id,
         "/data/tmp/%dx%d-%dbit-%u-%x.yuv",
         width, height, depth, id, crc_compute(g_crc, src_yuv, yuv_size));
 
-    LOG_INFO("%s, %s, width: %d, height: %d, stride: %d, size:%u\n",
-        __func__, file_name, width, height, stride, yuv_size);
+    LOG_INFO("%s, %s, width: %d, height: %d, wstride: %d, hstride: %d size:%u\n",
+        __func__, file_name, width, height, wstride, hstride, yuv_size);
 
     dump_raw_data(file_name, src_yuv, yuv_size, 0);
 }
@@ -84,8 +85,12 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
 
     // Perform decoding
     struct aml_dhp_ioctl_data iomem = { 0 };
-    unsigned int stride = (avbcd->bitdep == 8) ? avbcd->width : avbcd->width * 2;
-    unsigned int dst_size = stride * avbcd->height * 3 / 2;
+    unsigned int w_align = io->base.dst.w_align;
+    unsigned int h_align = io->base.dst.h_align;
+    unsigned int wstride = w_align ? (((avbcd->width + w_align - 1) / w_align) * w_align) : avbcd->width;
+    unsigned int hstride = h_align ? (((avbcd->height + h_align - 1) / h_align) * h_align) : avbcd->height;
+    wstride = (avbcd->bitdep == 8) ? wstride : wstride * 2;
+    unsigned int dst_size;
     void *dst_yuv = NULL;
 
     iomem.mem.type = AML_MEM_TYPE_PHY_ADDR;
@@ -103,12 +108,13 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
     dst_size = iomem.mem.size;
 
     LOG_DEBUG("Mapping Header buffer:%p, size:%u\n", header, avbcd->hsize);
-    LOG_DEBUG("Mapping YUV buffer:%p, size:%u\n", dst_yuv, dst_size);
+    LOG_DEBUG("Mapping YUV buffer:%p, size:%u stride(w:%d, h:%d)\n", dst_yuv, dst_size, wstride, hstride);
 
     aml_avbc_decode(header,
                    avbcd->width,
                    avbcd->height,
-                   stride,
+                   wstride,
+                   hstride,
                    avbcd->bitdep,
                    dst_yuv,
                    dst_size,
@@ -121,7 +127,7 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
         __func__, elapse_time_ms(&t0, &t1));
 
     if (dump_data)
-        dump_yuv_data(avbcd->pts, avbcd->width, avbcd->height, stride, avbcd->bitdep, dst_yuv, dst_size);
+        dump_yuv_data(avbcd->pts, avbcd->width, avbcd->height, wstride, hstride, avbcd->bitdep, dst_yuv, dst_size);
 
     u64 flags = DHP_MEM_SYNC_READ | DHP_MEM_SYNC_END;
     dhp_mem_sync(dev, io->base.dst.addr, io->base.dst.size, flags);

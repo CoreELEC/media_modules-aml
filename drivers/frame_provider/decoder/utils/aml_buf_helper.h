@@ -280,5 +280,47 @@ static inline int aml_buf_box_init(struct aml_buf_mgr_s *bm)
 	return bm->bc.box_init(&bm->bc);
 }
 
+/*
+ * aml_buf_alloc_avbcd_buf() - Get one avbcd buffer.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ *
+ * Get one avbcd buf.
+ * Return	: returns a buffer entry.
+ *
+ */
+static inline struct aml_buf *aml_buf_alloc_avbcd_buf(struct aml_buf_mgr_s *bm)
+{
+	struct buf_core_entry *entry = NULL;
+
+	bm->bc.buf_ops.alloc_avbcd_buf(&bm->bc, &entry);
+
+	return entry ? entry_to_aml_buf(entry) : NULL;
+}
+
+/*
+ * aml_buf_release_avbcd_buf() - Release one avbcd buffer.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ *
+ * Release one avbcd buffer.
+ */
+static inline void aml_buf_release_avbcd_buf(struct aml_buf_mgr_s *bm)
+{
+	bm->bc.buf_ops.release_avbcd_buf(&bm->bc);
+}
+
+/*
+ * aml_buf_reset_avbcd_buf() - reset avbcd buffer.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ *
+ * Reset avbcd buffer.
+ */
+static inline void aml_buf_reset_avbcd_buf(struct aml_buf_mgr_s *bm)
+{
+	bm->bc.buf_ops.reset_avbcd_buf(&bm->bc);
+}
+
 #endif //_AML_BUF_HELPER_H_
 

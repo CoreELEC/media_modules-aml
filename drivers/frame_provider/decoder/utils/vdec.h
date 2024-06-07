@@ -47,6 +47,7 @@
 #include "../../../media_sync/pts_server/pts_server_core.h"
 #include "../../../amvdec_ports/utils/common.h"
 #include "../../../common/media_utils/media_utils.h"
+#include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
 
 #define NEW_FB_CODE
 #define FB_DEBUG_ON_OLD_CHIP
@@ -405,6 +406,14 @@ struct vdec_info_statistic_s {
 	int ext_info_valid;
 };
 
+struct aml_avbc_buf {
+	struct aml_buf *am_buf;
+	struct avbc_output output;
+	struct vframe_s *vf;
+	void *ctx;
+	int pic_index;
+};
+
 struct vdec_s {
 	u32 magic;
 	struct list_head list;
@@ -489,12 +498,17 @@ struct vdec_s {
 	unsigned long (*check_input_data)(struct vdec_s *vdec, unsigned long mask);
 	void (*run)(struct vdec_s *vdec, unsigned long mask,
 			void (*callback)(struct vdec_s *, void *, int), void *);
+	void (*post_avbcd_task)(struct vdec_s *vdec);
+	void (*run_avbc)(struct vdec_s *vdec, unsigned long mask,
+			void (*callback)(struct vdec_s *, void *, int), void *);
 	void (*reset)(struct vdec_s *vdec);
 	void (*dump_state)(struct vdec_s *vdec);
 	irqreturn_t (*irq_handler)(struct vdec_s *vdec, int irq);
 	irqreturn_t (*threaded_irq_handler)(struct vdec_s *vdec, int irq);
 	irqreturn_t (*back_irq_handler)(struct vdec_s *vdec, int irq);
 	irqreturn_t (*back_threaded_irq_handler)(struct vdec_s *vdec, int irq);
+	irqreturn_t (*avbc_irq_handler)(struct vdec_s *vdec, int irq);
+	irqreturn_t (*avbc_threaded_irq_handler)(struct vdec_s *vdec, int irq);
 	int (*user_data_read)(struct vdec_s *vdec,
 			struct userdata_param_t *puserdata_para);
 	void (*reset_userdata_fifo)(struct vdec_s *vdec, int bInit);
@@ -561,6 +575,15 @@ struct vdec_s {
 	u64 hw_front_decode_start;
 	u64 hw_back_decode_start;
 #endif
+	DECLARE_KFIFO_PTR(avbc_frame_q, typeof(struct aml_avbc_buf*));
+	struct aml_avbc_buf *avbcpool;
+	struct avbc_input avbc_in;
+	u32 avbc_mode;
+	void *wrapper;
+	u32 pic0_done;
+	u32 pic_end;
+	u32 avbc_header_addr;
+	ulong avbc_y_addr;
 	char frame_code_rate_name[32];
 	char decode_hw_front_time_name[32];
 	char decode_hw_back_time_name[32];
@@ -939,12 +962,6 @@ void vdec_up(struct vdec_s *vdec);
 
 #define DEBUG_PORT
 #ifdef DEBUG_PORT
-typedef int (*dbg_info_up)(int, int, struct vframe_s *);
-typedef int (*dbg_data_wr)(const void *, int, int, int);
-
-extern dbg_data_wr debug_port_func_data_wr;
-extern dbg_info_up debug_port_func_info_up;
-
 void vdec_debug_port_register(dbg_data_wr data_write, dbg_info_up info_update);
 
 void vdec_debug_port_unregister(void);

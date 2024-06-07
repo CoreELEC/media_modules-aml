@@ -571,6 +571,8 @@ int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *mode)
 		}
 
 		ret = vdec_v4l2_reset(vdec, *mode);
+		if (ada_ctx->ctx->avbc_wrapper)
+			aml_avbc_wrapper_reset(ada_ctx->ctx->avbc_wrapper);
 		*mode = V4L_RESET_MODE_NORMAL;
 	}
 

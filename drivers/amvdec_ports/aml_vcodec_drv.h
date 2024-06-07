@@ -34,6 +34,7 @@
 #include <media/v4l2-mem2mem.h>
 //#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 
+#include "aml_vcodec_avbc_wrapper.h"
 #include "utils/aml_dec_trace.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_dec.h"
@@ -571,6 +572,7 @@ struct aml_vdec_cfg_infos {
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
 	/*
+	 * bit 23	: avbcd mode flag.
 	 * bit 22	: disable mmu copy.
 	 * bit 21	: buffer alloc flag. 0: dma heap, 1: ion heap.
 	 * bit 20	: di post flag.
@@ -735,6 +737,7 @@ enum aml_fb_requester {
 	AML_FB_REQ_DEC,
 	AML_FB_REQ_VPP,
 	AML_FB_REQ_GE2D,
+	AML_FB_REQ_AVBCD,
 	AML_FB_REQ_MAX
 };
 
@@ -991,6 +994,8 @@ struct aml_v4l2_decinfo_interface {
  * @buffer manager context.
  * @force_report_interlace: the flag for conversion field.
  * @force_tw_output: The flag for T3X output TW YUV.
+ * @avbcd_work_mode: Indicate avbcd mode.
+ * @avbc_wrapper: Point to avbc wrapper context.
  */
 struct aml_vcodec_ctx {
 	int				id;
@@ -1071,6 +1076,7 @@ struct aml_vcodec_ctx {
 	struct aml_fb_map_table		fb_map[32];
 	struct aml_vpp_cfg_infos 	vpp_cfg;
 	void (*vdec_pic_info_update)(struct aml_vcodec_ctx *ctx);
+	int (*aml_avbc_decode)(struct avbc_output *, struct avbc_input *, u32);
 	bool				vpp_is_need;
 	struct list_head		task_chain_pool;
 	struct meta_info		meta_infos;
@@ -1138,6 +1144,8 @@ struct aml_vcodec_ctx {
 	bool			is_multiplanar;
 	bool			resolution_event_done;
 	void			*k_producer_session;
+	int			avbcd_work_mode;
+	void			 *avbc_wrapper;
 };
 
 /**

@@ -1357,6 +1357,8 @@ typedef struct PIC_BUFFER_CONFIG_s {
   u32 hdr10p_data_size;
   char *hdr10p_data_buf;
   struct PIC_BUFFER_CONFIG_s *repeat_pic;
+  struct aml_buf *am_buf;
+  bool buffer_attached;
   int not_need_display;
   int temporal_id;
   int spatial_id;

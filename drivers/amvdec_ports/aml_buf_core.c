@@ -332,6 +332,123 @@ out:
 	mutex_unlock(&bc->mutex);
 }
 
+static void buf_core_alloc_avbcd_buf(struct buf_core_mgr_s *bc,
+			struct buf_core_entry **out_entry)
+{
+	int ret;
+	struct buf_core_entry *entry = NULL;
+	int i;
+
+	mutex_lock(&bc->mutex);
+
+	for (i = 0; i < AVBC_BUFFER_NUM; i++) {
+		if (bc->entry[i] && !bc->entry[i]->inited) {
+			entry = bc->entry[i];
+			bc->entry[i]->inited = true;
+			break;
+		}
+	}
+
+	if (entry == NULL) {
+		ret = bc->mem_ops.alloc(bc, &entry, NULL);
+		if (ret) {
+			goto out;
+		}
+
+		for (i = 0; i < AVBC_BUFFER_NUM; i++) {
+			if (bc->entry[i] == NULL) {
+				bc->entry[i] = entry;
+				bc->entry[i]->inited = true;
+				break;
+			}
+		}
+	}
+
+	entry->user	= BUF_USER_DEC;
+	entry->state	= BUF_STATE_USE;
+	entry->index	= i;
+	bc->state	= BM_STATE_ACTIVE;
+	bc->internal_num++;
+
+	if (bc->prepare)
+		bc->prepare(bc, entry);
+
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d, num:%d\n",
+		__func__, entry->user,
+		entry->key,
+		entry->phy_addr,
+		entry->index,
+		entry->state,
+		bc->state,
+		atomic_read(&entry->ref),
+		kref_read(&bc->core_ref),
+		bc->free_num,
+		bc->internal_num);
+
+out:
+	*out_entry = entry;
+
+	mutex_unlock(&bc->mutex);
+}
+
+static void buf_core_release_avbcd_buf(struct buf_core_mgr_s *bc)
+{
+	int i;
+
+	mutex_lock(&bc->mutex);
+
+	for (i = 0; i < AVBC_BUFFER_NUM; i++) {
+		if (bc->entry[i]) {
+			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+			"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
+			__func__,
+			bc->entry[i]->user,
+			bc->entry[i]->key,
+			bc->entry[i]->phy_addr,
+			bc->entry[i]->index,
+			bc->entry[i]->state,
+			bc->state,
+			atomic_read(&bc->entry[i]->ref),
+			kref_read(&bc->core_ref),
+			bc->free_num);
+
+			bc->entry[i]->state = BUF_STATE_ERR;
+			bc->mem_ops.free(bc, bc->entry[i]);
+		}
+	}
+
+	mutex_unlock(&bc->mutex);
+}
+
+static void buf_core_reset_avbcd_buf(struct buf_core_mgr_s *bc)
+{
+	int i;
+
+	mutex_lock(&bc->mutex);
+
+	for (i = 0; i < AVBC_BUFFER_NUM; i++) {
+		if (bc->entry[i] && bc->entry[i]->inited) {
+			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+			"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
+			__func__,
+			bc->entry[i]->user,
+			bc->entry[i]->key,
+			bc->entry[i]->phy_addr,
+			bc->entry[i]->index,
+			bc->entry[i]->state,
+			bc->state,
+			atomic_read(&bc->entry[i]->ref),
+			kref_read(&bc->core_ref),
+			bc->free_num);
+
+			bc->entry[i]->inited = false;
+		}
+	}
+
+	mutex_unlock(&bc->mutex);
+}
+
 static void buf_core_put(struct buf_core_mgr_s *bc,
 			struct buf_core_entry *entry)
 {
@@ -621,6 +738,7 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 	}
 
 	bc->free_num = 0;
+	bc->internal_num = 0;
 
 	mutex_unlock(&bc->mutex);
 }
@@ -979,6 +1097,9 @@ int buf_core_mgr_init(struct buf_core_mgr_s *bc)
 	bc->buf_ops.empty	= buf_core_empty;
 	bc->buf_ops.vpp_cb	= buf_core_vpp_cb;
 	bc->buf_ops.update_holder = buf_core_update_holder;
+	bc->buf_ops.alloc_avbcd_buf = buf_core_alloc_avbcd_buf;
+	bc->buf_ops.release_avbcd_buf = buf_core_release_avbcd_buf;
+	bc->buf_ops.reset_avbcd_buf = buf_core_reset_avbcd_buf;
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
 

@@ -675,9 +675,12 @@ static int aml_buf_set_default_parms(struct aml_buf_mgr_s *bm,
 {
 	int ret;
 
-	buf->index = bm->bc.buf_num;
+	if (bm->config.avbcd_work_mode)
+		buf->index = bm->bc.internal_num;
+	else
+		buf->index = bm->bc.buf_num;
 
-	if (bm->config.enable_extbuf) {
+	if (bm->config.enable_extbuf && priv) {
 		aml_buf_set_planes_v4l2(bm, buf, priv);
 
 		ret = aml_uvm_buff_attach(buf->vb);
@@ -812,7 +815,8 @@ static int aml_buf_alloc(struct buf_core_mgr_s *bc,
 	}
 
 	/* afbc init. */
-	if (bm->config.enable_fbc) {
+	if (bm->config.enable_fbc &&
+		!(bm->config.avbcd_work_mode && priv)) {
 		ret = aml_buf_fbc_init(bm, buf);
 		if (ret) {
 			goto err1;
@@ -970,22 +974,24 @@ static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 			task_chain_clean(sub_buf[1]->task);
 	}
 
-	if (bm->config.enable_fbc)
-		bm->get_fbc_info(bm, &fbc_info);
+	if (!(bm->config.avbcd_work_mode && entry->vb2)) {
+		if (bm->config.enable_fbc)
+			bm->get_fbc_info(bm, &fbc_info);
 
-	if (buf->fbc &&
-		((fbc_info.frame_size != buf->fbc->frame_size) ||
-		(fbc_info.header_size != buf->fbc->hsize) ||
-		!bm->config.enable_fbc)) {
-		aml_buf_fbc_release(bm, buf);
+		if (buf->fbc &&
+			((fbc_info.frame_size != buf->fbc->frame_size) ||
+			(fbc_info.header_size != buf->fbc->hsize) ||
+			!bm->config.enable_fbc)) {
+			aml_buf_fbc_release(bm, buf);
+		}
+
+		if (bm->config.enable_fbc &&
+			!buf->fbc) {
+			aml_buf_fbc_init(bm, buf);
+		}
 	}
 
-	if (bm->config.enable_fbc &&
-		!buf->fbc) {
-		aml_buf_fbc_init(bm, buf);
-	}
-
-	if (bm->config.enable_extbuf) {
+	if (bm->config.enable_extbuf && entry->vb2) {
 		aml_buf_set_planes_v4l2(bm, buf, entry->vb2);
 	} else {
 		aml_buf_set_planes(bm, buf);

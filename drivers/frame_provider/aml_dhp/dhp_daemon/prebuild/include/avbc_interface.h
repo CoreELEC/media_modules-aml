@@ -142,8 +142,10 @@ typedef struct dhp_mem_ops {
  *               about the encoded frame and its format.
  * @param width Width of the frame in pixels.
  * @param height Height of the frame in pixels.
- * @param stride Stride of the frame (bytes per row), used to calculate
+ * @param wstride Stride of the frame (bytes per row), used to calculate
  *               the memory layout.
+ * @param hstride Stride of the frame (bytes per vertical column), used to
+ * 		 calculate the memory layout.
  * @param bitdepth Bit depth of the YUV frame (e.g., 8, 10 bits per channel).
  * @param dst_yuv Pointer to the destination buffer where the decoded YUV
  *                frame will be stored. The buffer must be large enough
@@ -168,7 +170,8 @@ typedef struct dhp_mem_ops {
 int aml_avbc_decode(void *header,
                     u32 width,
                     u32 height,
-                    u32 stride,
+                    u32 wstride,
+                    u32 hstride,
                     u32 bitdepth,
                     u8 *dst_yuv,
                     u32 dst_size,
