@@ -5342,9 +5342,7 @@ static void debug_buffer_mgr_more(struct AVS2Decoder_s *dec)
 static void avs2_recycle_mmu_buf_tail(struct AVS2Decoder_s *dec)
 {
 	if (dec->cur_fb_idx_mmu != INVALID_IDX) {
-		if (dec->used_4k_num == -1) {
-			dec->used_4k_num =
-			(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+		if (dec->used_4k_num != -1) {
 			if (dec->m_ins_flag)
 				hevc_mmu_dma_check(hw_to_vdec(dec));
 			decoder_mmu_box_free_idx_tail(dec->mmu_box,
