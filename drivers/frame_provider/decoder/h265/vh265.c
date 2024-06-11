@@ -2033,6 +2033,8 @@ struct hevc_state_s {
 	u32 data_size_bak;
 	u32 data_offset_bak;
 	enum  FenceModeBufStatus fence_mode_buf_status;
+	bool check_dv_flag;
+	bool is_dv_flag;
 } /*hevc_stru_t */;
 
 struct hevc_RPS_s {
@@ -8933,6 +8935,35 @@ static int check_hevc_cc_type(char *p_sei)
 }
 #endif
 
+
+#define ATSC_T35_PROV_CODE    0x0031
+#define DVB_T35_PROV_CODE     0x003B
+#define ATSC_USER_ID_CODE     0x47413934
+#define DVB_USER_ID_CODE      0x00000000
+#define DM_MD_USER_TYPE_CODE  0x09
+//b5 00 31 47 41 39 34 09 //b5 00 00 00 00 00 00 09
+static void check_dvb_dv(struct hevc_state_s *hevc, char *p)
+{
+	u32 country_code;
+	u32 provider_code;
+	u32 user_id;
+	u32 user_type_code;
+
+	if (!hevc->check_dv_flag)
+		return;
+
+	country_code = *(p + 0);
+	provider_code = (*(p + 1) << 8) | *(p + 2);
+	user_id = (*(p + 3) << 24) | (*(p + 4) << 16) | (*(p + 5) << 8) | (*(p + 6));
+	user_type_code = *(p + 7);
+
+	if (country_code == 0xB5 &&
+		((provider_code == ATSC_T35_PROV_CODE && user_id == ATSC_USER_ID_CODE) ||
+		(provider_code == DVB_T35_PROV_CODE && user_id == DVB_USER_ID_CODE)) &&
+		user_type_code == DM_MD_USER_TYPE_CODE)
+		hevc->is_dv_flag = true;
+}
+
 static int parse_sei(struct hevc_state_s *hevc,
 	struct PIC_s *pic, char *sei_buf, uint32_t size, bool parse_cc)
 {
@@ -8988,6 +9019,7 @@ static int parse_sei(struct hevc_state_s *hevc,
 				break;
 			case SEI_UserDataITU_T_T35:
 				p_sei = p;
+				check_dvb_dv(hevc, p);
 				if (p_sei[0] == 0xB5
 					&& p_sei[1] == 0x00
 					&& p_sei[2] == 0x3C
@@ -12064,6 +12096,9 @@ force_output:
 							type = (type << 8) | *p++;
 							if (type == 0x02000000) {
 								parse_sei(hevc, pic, p, size, false);
+							} else if (hevc->check_dv_flag && (type == 0x01000000)) {
+								if (p[0] == 0x7c && p[1] == 0x01 && p[2] == 0x19 && p[3] == 0x08)
+									hevc->is_dv_flag = true;
 							}
 							p += size;
 						}
@@ -12850,6 +12885,10 @@ int vh265_dec_status(struct vdec_info *vstatus)
 		vstatus->status = hevc->stat | hevc->fatal_error | DECODER_ES_INPUT_UNDERRUN;
 	else
 		vstatus->status = hevc->stat | hevc->fatal_error;
+
+	if (hevc->is_dv_flag)
+		vstatus->status =  vstatus->status | DECODER_REPORT_DV_FLAG;
+
 	if (!hevc_is_support_4k() &&
 		(IS_4K_SIZE(vstatus->frame_width, vstatus->frame_height)) &&
 		((vstatus->frame_width <= 4096 && vstatus->frame_height <= 2304) ||
@@ -16023,6 +16062,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
 			if (hevc->high_bandwidth_flag)
 				hevc_print(hevc, 0, "high bandwidth\n");
+			hevc->check_dv_flag = config_val & VDEC_CFG_FLAG_DV_AUTO_DETECT;
+			if (hevc->check_dv_flag)
+				hevc_print(hevc, 0, "decode check dv\n");
 		}
 
 		if (get_config_int(pdata->config,
@@ -16248,6 +16290,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	hevc->uninit_list = 0;
 	hevc->fatal_error = 0;
 	hevc->show_frame_num = 0;
+	hevc->is_dv_flag = 0;
 
 	/*
 	 *hevc->mc_buf_spec.buf_end = pdata->mem_end + 1;
