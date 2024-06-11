@@ -135,7 +135,7 @@ int dump_yuv_trig(struct pic_check_mgr_t *mgr,
 
 int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf);
 
-int decoder_do_aux_data_check(struct vdec_s *vdec, char *aux_buffer, int size);
+int decoder_do_aux_data_check(struct vdec_s *vdec, char *aux_buffer, int size, int poc);
 
 int frame_check_init(struct pic_check_mgr_t *mgr, int id);
 
@@ -154,6 +154,12 @@ ssize_t dump_yuv_show(KV_CLASS_CONST struct class *class,
 ssize_t dump_yuv_store(KV_CLASS_CONST struct class *class,
 		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size);
+
+ssize_t aux_check_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
+		const char *buf, size_t size);
+ssize_t aux_check_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf);
 
 void vdec_frame_check_exit(struct vdec_s *vdec);
 int vdec_frame_check_init(struct vdec_s *vdec);

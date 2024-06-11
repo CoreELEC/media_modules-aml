@@ -3814,8 +3814,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		hw->vf_pre_count++;
 		vdec->vdec_fps_detec(vdec->id);
 #ifdef AUX_DATA_CRC
-		decoder_do_aux_data_check(vdec, hw->buffer_spec[buffer_index].aux_data_buf,
-			hw->buffer_spec[buffer_index].aux_data_size);
+		if (hw->buffer_spec[buffer_index].aux_data_size)
+			decoder_do_aux_data_check(vdec, hw->buffer_spec[buffer_index].aux_data_buf,
+				hw->buffer_spec[buffer_index].aux_data_size, frame->poc);
 #endif
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
@@ -7386,12 +7387,13 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 						hw->loop_flag = 0;
 				}
 			}
-				ret = store_picture_in_dpb(p_H264_Dpb,
-					p_H264_Dpb->mVideo.dec_picture,
-					hw->data_flag | hw->dec_flag |
-				p_H264_Dpb->mVideo.dec_picture->data_flag);
 
-
+			p_H264_Dpb->wait_aux_data_flag = (((!hw->discard_dv_data) && hw->frmbase_cont_flag)
+											|| (vdec_stream_based(vdec) && (vdec->slave || vdec->master)));
+			ret = store_picture_in_dpb(p_H264_Dpb,
+				p_H264_Dpb->mVideo.dec_picture,
+				hw->data_flag | hw->dec_flag |
+			p_H264_Dpb->mVideo.dec_picture->data_flag);
 
 			if (ret == -1) {
 				release_cur_decoding_buf(hw);
@@ -10021,6 +10023,11 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 
 	if (hw->sei_itu_data_len <= 0)
 		return;
+
+#ifdef AUX_DATA_CRC
+	decoder_do_aux_data_check(vdec, hw->sei_itu_data_buf,
+			hw->sei_itu_data_len, p_H264_Dpb->mVideo.dec_picture->poc);
+#endif
 
 	pdata = (u8 *)hw->sei_user_data_buffer + hw->sei_user_data_wp;
 	pmax_sei_data_buffer = (u8 *)hw->sei_user_data_buffer + USER_DATA_SIZE;

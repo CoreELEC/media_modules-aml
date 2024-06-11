@@ -74,6 +74,7 @@ enum data_type{
 	TYPE_YUV,
 	TYPE_CRC,
 	TYPE_ES,
+	TYPE_AUX,
 	TYPE_MAX
 };
 

@@ -1483,9 +1483,9 @@ static void userdata_push_do_work(struct work_struct *work)
 	u8 *ptype_str;
 #endif
 	struct mmpeg2_userdata_record_t *pcur_ud_rec;
-
 	struct vdec_mpeg12_hw_s *hw = container_of(work,
 					struct vdec_mpeg12_hw_s, userdata_push_work);
+	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	memset(&meta_info, 0, sizeof(meta_info));
 
@@ -1608,6 +1608,11 @@ static void userdata_push_do_work(struct work_struct *work)
 	data_start = reg & 0xffff;
 	psrc_data = (u8 *)hw->ccbuf_phyAddress_virt + hw->ucode_cc_last_wp;
 
+#ifdef AUX_DATA_CRC
+	if (!hw->last_ud_flag)
+		decoder_do_aux_data_check(vdec, psrc_data + 8, data_length - 8, meta_info.poc_number);
+#endif
+
 	vf_data_length = cur_wp - hw->vf_ucode_cc_last_wp;
 	if (vf_data_length == 0) {
 		hw->vf_ucode_cc_last_wp = hw->ucode_cc_last_wp;
@@ -1696,7 +1701,7 @@ void userdata_pushed_drop_stream(struct vdec_mpeg12_hw_s *hw)
 		hw->last_ud_flag = 1;
 	}
 	debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
-			"%s:last_ud_flag %d, parse_user_data_size %d/%d, cur_ud_idx %d%d\n",
+			"%s:last_ud_flag %d, cur_ud_idx %d/%d, parse_user_data_size %d/%d\n",
 			__func__, hw->last_ud_flag, hw->cur_ud_idx, hw->last_cur_ud_idx,
 			hw->parse_user_data_size, hw->last_parse_user_data_size);
 
@@ -4287,6 +4292,11 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
 					| CORE_MASK_COMBINE);
 	}
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_init(pdata);
+#endif
+
 #ifdef DUMP_USER_DATA
 	amvdec_mmpeg12_init_userdata_dump(hw);
 	reset_user_data_buf(hw);
@@ -4368,6 +4378,10 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 		hw->user_data_buffer = NULL;
 	}
 	vmmpeg2_destroy_userdata_manager(hw);
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_exit(vdec);
+#endif
 
 #ifdef DUMP_USER_DATA
 	amvdec_mmpeg12_uninit_userdata_dump(hw);

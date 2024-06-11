@@ -794,16 +794,29 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 	return ret;
 }
 
-static int aux_data_crc_store(struct aux_data_check_mgr_t *mgr,int crc)
+static int aux_data_crc_store(struct aux_data_check_mgr_t *mgr,int crc, int poc)
 {
 	int ret = 0;
 	char *crc_addr = NULL;
-	int comp_frame = 0, comp_crc;
+	int comp_frame = 0, comp_crc, comp_poc;
 	struct aux_data_check_t *check = &mgr->aux_data_check;
 
+	if (debug_port_func_data_wr) {
+		crc_addr = vzalloc(SIZE_CRC);
+
+		if (crc_addr) {
+			ret = snprintf(crc_addr, SIZE_CRC,
+				"%08d: %08x %08x\n", mgr->frame_cnt, crc, poc);
+
+			debug_port_func_data_wr(crc_addr, strlen(crc_addr), mgr->id, 4);
+			vfree(crc_addr);
+			crc_addr = NULL;
+		}
+	}
+
 	if (kfifo_get(&check->new_chk_q, &crc_addr) == 0) {
-		dbg_print(0, "%08d: %08x\n",
-			mgr->frame_cnt, crc);
+		dbg_print(0, "%08d: %08x %08x\n",
+			mgr->frame_cnt, crc, poc);
 		if (check->check_fp) {
 			dbg_print(0, "crc32 dropped\n");
 		} else {
@@ -812,28 +825,28 @@ static int aux_data_crc_store(struct aux_data_check_mgr_t *mgr,int crc)
 		return -1;
 	}
 	if (check->cmp_crc_cnt > mgr->frame_cnt) {
-		sscanf(crc_addr, "%08u: %8x",
-			&comp_frame, &comp_crc);
+		sscanf(crc_addr, "%08u: %8x %08x",
+			&comp_frame, &comp_crc, &comp_poc);
 
-		dbg_print(0, "%08d: %08x <--> %08d: %08x\n",
-			mgr->frame_cnt, crc,
-			comp_frame, comp_crc);
+		dbg_print(0, "%08d: %08x %08x <--> %08d: %08x %08x\n",
+			mgr->frame_cnt, crc, poc,
+			comp_frame, comp_crc, comp_poc);
 		if (comp_frame == mgr->frame_cnt) {
 			if (comp_crc != crc) {
-					dbg_print(0, "\n\nError: %08d: %08x != %08x \n\n",
-						mgr->frame_cnt, crc, comp_crc);
+					dbg_print(0, "\n\nError: %08d: %08x %08x != %08x %08x\n\n",
+						mgr->frame_cnt, crc, poc, comp_crc, comp_poc);
 			}
 		} else {
 			dbg_print(0, "frame num error: frame_cnt(%d) frame_comp(%d)\n",
 				mgr->frame_cnt, comp_frame);
 		}
 	} else {
-		dbg_print(0, "%08d: %08x\n", mgr->frame_cnt, crc);
+		dbg_print(0, "%08d: %08x %08x\n", mgr->frame_cnt, crc, poc);
 	}
 
 	if ((check->check_fp) && (crc_addr != NULL)) {
 		ret = snprintf(crc_addr, SIZE_CRC,
-			"%08d: %08x\n", mgr->frame_cnt, crc);
+			"%08d: %08x %08x\n", mgr->frame_cnt, crc, poc);
 
 		kfifo_put(&check->wr_chk_q, crc_addr);
 		if ((mgr->frame_cnt & 0xf) == 0)
@@ -983,14 +996,14 @@ static int do_check_yuv16(struct pic_check_mgr_t *mgr,
 }
 
 static int do_check_aux_data_crc(struct aux_data_check_mgr_t *mgr,
-	char *aux_buf, int size)
+	char *aux_buf, int size, int poc)
 {
 	unsigned int crc = 0;
 
 	crc = crc32_le(0, aux_buf, size);
 
 	//pr_info("%s:crc = %08x\n",crc);
-	aux_data_crc_store(mgr,crc);
+	aux_data_crc_store(mgr,crc,poc);
 
 	return 0;
 }
@@ -1203,7 +1216,7 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 }
 EXPORT_SYMBOL(decoder_do_frame_check);
 
-int decoder_do_aux_data_check(struct vdec_s *vdec, char *aux_buffer, int size)
+int decoder_do_aux_data_check(struct vdec_s *vdec, char *aux_buffer, int size, int poc)
 {
 	struct aux_data_check_mgr_t *mgr = NULL;
 	int ret = 0;
@@ -1218,7 +1231,7 @@ int decoder_do_aux_data_check(struct vdec_s *vdec, char *aux_buffer, int size)
 		return 0;
 
 	if (mgr->enable & AUX_MASK)
-		ret = do_check_aux_data_crc(mgr,aux_buffer,size);
+		ret = do_check_aux_data_crc(mgr,aux_buffer,size,poc);
 
 	mgr->frame_cnt++;
 
@@ -1745,6 +1758,56 @@ ssize_t frame_check_show(KV_CLASS_CONST struct class *class,
 	return pbuf - buf;
 }
 
+ssize_t aux_check_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	int ret = -1;
+	int on_off, id;
+
+	ret = sscanf(buf, "%d %d %s", &id, &on_off, crc_yuv_path);
+	if (ret < 0) {
+		pr_info("%s, parse failed\n", buf);
+		return size;
+	}
+	if (id >= MAX_INSTANCE_MUN) {
+		pr_info("%d out of max vdec id\n", id);
+		return size;
+	}
+	if (on_off)
+		aux_enable |= (1 << id);
+	else
+		aux_enable &= ~(1 << id);
+
+	return size;
+}
+EXPORT_SYMBOL(aux_check_store);
+
+ssize_t aux_check_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
+{
+	int i;
+	char *pbuf = buf;
+
+	for (i = 0; i < MAX_INSTANCE_MUN; i++) {
+		pbuf += sprintf(pbuf,
+			"vdec.%d\tcrc: %s\n", i,
+			(aux_enable & (0x01 << i))?"enabled":"--");
+	}
+	pbuf += sprintf(pbuf,
+		"\nUsage:\techo [id]  [1:on/0:off] [crc_yuv_path]> aux_check\n\n");
+
+
+	if (fc_debug & FC_ERR_CRC_BLOCK_MODE) {
+		/* cat aux_check to next frame when block */
+		struct vdec_s *vdec = NULL;
+		vdec = vdec_get_vdec_by_id(__ffs(aux_enable));
+		if (vdec)
+			vdec->vfc.err_crc_block = 0;
+	}
+
+	return pbuf - buf;
+}
 
 module_param_string(comp_crc, comp_crc, 128, 0664);
 MODULE_PARM_DESC(comp_crc, "\n crc_filename\n");

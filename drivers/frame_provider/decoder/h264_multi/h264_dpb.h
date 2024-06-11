@@ -930,6 +930,8 @@ struct h264_dpb_stru {
 	unsigned int first_insert_frame;
 	int first_output_poc;
 	int dpb_frame_count;
+	/* need wait aux data when there is data after pic done in dv stream */
+	bool wait_aux_data_flag;
 	u32 without_display_mode;
 	int long_term_reference_flag;
 	u32 poc_check_count;

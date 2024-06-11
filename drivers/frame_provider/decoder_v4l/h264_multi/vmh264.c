@@ -3626,8 +3626,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		ATRACE_COUNTER(hw->trace.new_q_name, kfifo_len(&hw->newframe_q));
 		vdec->vdec_fps_detec(vdec->id);
 #ifdef AUX_DATA_CRC
-		decoder_do_aux_data_check(vdec, hw->buffer_spec[buffer_index].aux_data_buf,
-			hw->buffer_spec[buffer_index].aux_data_size);
+		if (hw->buffer_spec[buffer_index].aux_data_size)
+			decoder_do_aux_data_check(vdec, hw->buffer_spec[buffer_index].aux_data_buf,
+				hw->buffer_spec[buffer_index].aux_data_size, frame->poc);
 #endif
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
@@ -9749,7 +9750,7 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	int wp;
 	int data_length;
 	struct mh264_userdata_record_t *p_userdata_rec;
-
+	struct vdec_s *vdec = hw_to_vdec(hw);
 
 #ifdef MH264_USERDATA_ENABLE
 	struct userdata_meta_info_t meta_info;
@@ -9758,6 +9759,11 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 
 	if (hw->sei_itu_data_len <= 0)
 		return;
+
+#ifdef AUX_DATA_CRC
+	decoder_do_aux_data_check(vdec, hw->sei_itu_data_buf,
+			hw->sei_itu_data_len, p_H264_Dpb->mVideo.dec_picture->poc);
+#endif
 
 	v4l_vmh264_fill_userdata(hw, p_H264_Dpb, (u8 *)hw->sei_itu_data_buf,
 		hw->sei_itu_data_len);

@@ -7897,7 +7897,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 #ifdef AUX_DATA_CRC
 		if (index < MAX_REF_PIC_NUM)
 			decoder_do_aux_data_check(vdec, hevc->vvc_dec->pic_pool[index].aux_data_buf,
-				hevc->vvc_dec->pic_pool[index].aux_data_size);
+				hevc->vvc_dec->pic_pool[index].aux_data_size, hevc->vvc_dec->pic_pool[index].poc);
 #endif
 
 		hevc_print(hevc, H266_DEBUG_PRINT_SEI,

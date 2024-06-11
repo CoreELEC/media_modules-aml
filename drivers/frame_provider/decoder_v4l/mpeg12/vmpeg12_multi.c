@@ -1493,9 +1493,9 @@ static void userdata_push_do_work(struct work_struct *work)
 	u8 *ptype_str;
 #endif
 	struct mmpeg2_userdata_record_t *pcur_ud_rec;
-
 	struct vdec_mpeg12_hw_s *hw = container_of(work,
 					struct vdec_mpeg12_hw_s, userdata_push_work);
+	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	memset(&meta_info, 0, sizeof(meta_info));
 
@@ -1602,6 +1602,10 @@ static void userdata_push_do_work(struct work_struct *work)
 	data_length = cur_wp - hw->ucode_cc_last_wp;
 	data_start = reg & 0xffff;
 	psrc_data = (u8 *)hw->ccbuf_phyAddress_virt + hw->ucode_cc_last_wp;
+
+#ifdef AUX_DATA_CRC
+	decoder_do_aux_data_check(vdec, psrc_data + 8, data_length - 8, meta_info.poc_number);
+#endif
 
 	if (psrc_data)
 		v4l_vmpeg2_fill_userdata(hw, psrc_data, data_length, meta_info.flags);
@@ -4448,6 +4452,11 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		vdec_core_request(pdata, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
 					| CORE_MASK_COMBINE);
 	}
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_init(pdata);
+#endif
+
 #ifdef DUMP_USER_DATA
 	amvdec_mmpeg12_init_userdata_dump(hw);
 	reset_user_data_buf(hw);
@@ -4513,6 +4522,10 @@ static int ammvdec_mpeg12_remove(struct platform_device *pdev)
 		hw->user_data_buffer = NULL;
 	}
 	vmmpeg2_destroy_userdata_manager(hw);
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_exit(vdec);
+#endif
 
 #ifdef DUMP_USER_DATA
 	amvdec_mmpeg12_uninit_userdata_dump(hw);
