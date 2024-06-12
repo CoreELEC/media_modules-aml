@@ -59,7 +59,6 @@ kernel_module(
         "frame_sink/encoder/memalloc/memalloc.ko",
         "frame_sink/encoder/multi/amvenc_multi.ko",
         "frame_sink/encoder/vcenc/vc8000.ko",
-        "media_proxy/media_proxy.ko",
         "media_sync/av_sync/media_sync.ko",
         "media_sync/pts_server/pts_server.ko",
         "stream_input/parser/hw_demux/aml_hardware_dmx.ko",
