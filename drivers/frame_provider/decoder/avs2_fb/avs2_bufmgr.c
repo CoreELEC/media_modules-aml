@@ -842,7 +842,7 @@ void get_reference_list_info(struct avs2_decoder *avs2_dec, int8_t *str)
 	}
 }
 
-static int check_ref_pic_drop_flag(struct avs2_decoder *avs2_dec)
+static int check_ref_pic_error_drop_flag(struct avs2_decoder *avs2_dec)
 {
 	int i = 0;
 	struct avs2_frame_s *pic = NULL;
@@ -853,49 +853,32 @@ static int check_ref_pic_drop_flag(struct avs2_decoder *avs2_dec)
 	if (avs2_dec->img.type == I_IMG)
 		return 0;
 
-	if (avs2_dec->img.type == P_IMG) {
-		if (is_avs2_print_bufmgr_detail()) {
-			pr_info("Check drop flag for P_IMG\n");
-		}
+	if (is_avs2_print_bufmgr_detail()) {
+		pr_info("Check img.type (%d) drop flag\n", avs2_dec->img.type);
+	}
 
+	if ((avs2_dec->img.type == P_IMG) ||
+		(avs2_dec->img.type == F_IMG)) {
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
 			if (avs2_dec->error_fref[i] != NULL)
 				pic = avs2_dec->error_fref[i];
-			if (pic && pic->drop_flag) {
-				return 1;
-			}
-		}
-
-	} else if (avs2_dec->img.type == F_IMG) {
-		if (is_avs2_print_bufmgr_detail()) {
-			pr_info("Check drop flag for F_IMG\n");
-		}
-
-		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
-			pic = avs2_dec->fref[i];
-			if (avs2_dec->error_fref[i] != NULL)
-				pic = avs2_dec->error_fref[i];
-			if (pic && pic->drop_flag) {
+			if (pic && pic->error_drop_flag) {
 				return 1;
 			}
 		}
 	} else {
-		if (is_avs2_print_bufmgr_detail()) {
-			pr_info("Check drop flag for B_IMG\n");
-		}
-
 		pic = avs2_dec->fref[1];
 		if (avs2_dec->error_fref[1] != NULL)
 			pic = avs2_dec->error_fref[1];
-		if (pic && pic->drop_flag) {
+		if (pic && pic->error_drop_flag) {
 			return 1;
 		}
 
 		pic = avs2_dec->fref[0];
 		if (avs2_dec->error_fref[0] != NULL)
 			pic = avs2_dec->error_fref[0];
-		if (pic && pic->drop_flag) {
+		if (pic && pic->error_drop_flag) {
 			return 1;
 		}
 	}
@@ -927,23 +910,22 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 
 	/*rain*/
 	if (is_avs2_print_bufmgr_detail()) {
-		pr_info("%s: coding_order is %d, curr_IDRcoi is %d\n",
-			__func__, img->coding_order, hd->curr_IDRcoi);
-		for (ii = 0; ii < MAXREF; ii++) {
-			pr_info("ref_pic(%d)=%d\n", ii, hd->curr_RPS.ref_pic[ii]);
-		}
+		pr_info("%s: coding_order is %d, curr_IDRcoi is %d, num_of_references %d\n",
+			__func__, img->coding_order, hd->curr_IDRcoi, img->num_of_references);
 
-		for (ii = 0; ii < MAXREF; ii++) {
-			pr_info("remove_pic(%d)=%d\n", ii, hd->curr_RPS.remove_pic[ii]);
+		for (ii = 0; ii < img->num_of_references; ii++) {
+			pr_info("ref_pic(%d)=%d\n", ii, hd->curr_RPS.ref_pic[ii]);
 		}
 
 		for (ii = 0; ii < avs2_dec->ref_maxbuffer; ii++) {
 			pr_info(
-				"fref[%d]: index %d imgcoi_ref %d imgtr_fwRefDistance %d refered_by_others %d\n",
+				"fref[%d]: index %d imgcoi_ref %d imgtr_fwRefDistance %d refered_by_others %d, error_mark %d error_drop_flag %d\n",
 				ii, avs2_dec->fref[ii]->index,
 				avs2_dec->fref[ii]->imgcoi_ref,
 				avs2_dec->fref[ii]->imgtr_fwRefDistance,
-				avs2_dec->fref[ii]->referred_by_others);
+				avs2_dec->fref[ii]->referred_by_others,
+				avs2_dec->fref[ii]->error_mark,
+				avs2_dec->fref[ii]->error_drop_flag);
 		}
 	}
 
@@ -1012,12 +994,11 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 					pr_info("%d ",avs2_dec->fref[ii]->index);
 				pr_info("\n");
 			}
-		} else if ((get_error_policy(avs2_dec) & 0x2) == 0) {
+		} else if (!(get_error_policy(avs2_dec) & 0x2)) {
 			if (get_error_handle_mode(avs2_dec) == 1) {
 				int32_t imgcoi_ref = img->coding_order - hd->curr_RPS.ref_pic[i];
 				u32 diff = 0xffffffff;
-				int recent_index = 0;
-				int k = 0;
+				int recent_index = -1;
 
 				for (j = 0; j < avs2_dec->ref_maxbuffer; j++) {
 					if ((avs2_dec->fref[j]->imgcoi_ref != imgcoi_ref) &&
@@ -1027,14 +1008,17 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 					}
 				}
 
-				for (k = 0; k < i; k++) {
-					if (avs2_dec->fref[recent_index]->imgcoi_ref
-						== avs2_dec->fref[k]->imgcoi_ref) {
-						avs2_dec->error_fref[i] =
-							avs2_dec->fref[recent_index];
-					}
+				if (is_avs2_print_bufmgr_detail()) {
+					pr_info("%s, recent_index %d, imgcoi_ref %d i %d\n",
+						__func__, recent_index, imgcoi_ref, i);
 				}
+
+				if (recent_index != -1)
+					avs2_dec->error_fref[i] =
+						avs2_dec->fref[recent_index];
 			}
+		} else {
+			error_mark = 1;
 		}
 	}
 	if ((img->type == B_IMG &&
@@ -1055,13 +1039,13 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 			error_mark = 1;
 		}
 	}
-	if (img->type == P_IMG) {
+	if ((img->type == P_IMG) || img->type == F_IMG) {
 		for (ii = 0; ii < img->num_of_references;ii++) {
 			tmp_ref = img->coding_order - hd->curr_RPS.ref_pic[ii];
 			if ((avs2_dec->fref[ii]->imgcoi_ref != tmp_ref) &&
 				(avs2_dec->fref[ii]->imgcoi_ref != (tmp_ref - 256))) {
 				if (get_error_policy(avs2_dec) & 0x2) {
-					pr_info("wrong reference configuration for P frame\n");
+					pr_info("wrong reference configuration for type(%d) frame\n", img->type);
 					pr_info("fref[%d] imgcoi_ref %d, ref_pic[%d] %d\n",
 						ii,avs2_dec->fref[ii]->imgcoi_ref,
 						ii,hd->curr_RPS.ref_pic[ii]);
@@ -1117,8 +1101,8 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 
 	avs2_put_un_used_mv_bufs(avs2_dec);
 
-	if (check_ref_pic_drop_flag(avs2_dec)) {
-		pr_info("%s, ref pic drop flag\n", __func__);
+	if (check_ref_pic_error_drop_flag(avs2_dec)) {
+		pr_info("%s, ref pic error drop flag\n", __func__);
 		return -3;
 	}
 
@@ -1139,12 +1123,15 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	hc->f_rec->poc = img->tr;
 	hc->f_rec->error_mark = error_mark;
 	hc->f_rec->decoded_lcu = 0;
-	hc->f_rec->drop_flag = false;
+	hc->f_rec->error_drop_flag = 0;
 	hc->f_rec->back_done_mark = 1;
 	hc->f_rec->slice_type = img->type;
 	hc->f_rec->time = div64_u64(local_clock(), 1000) - avs2_dec->start_time;
 	avs2_dec->decode_idx++;
 	hc->f_rec->decode_idx = avs2_dec->decode_idx;
+	hc->f_rec->used_4k_num = 0;
+	hc->f_rec->used_4k_num1 = 0;
+	hc->f_rec->need_mmu_copy = 0;
 #endif
 	hc->f_rec->referred_by_others = hd->curr_RPS.referred_by_others;
 	if (is_avs2_print_bufmgr_detail())
@@ -1483,7 +1470,8 @@ void write_frame(struct avs2_decoder *avs2_dec, int32_t pos)
 		pr_info("%s(pos = %d)\n", __func__, pos);
 
 	for (j = 0; j < avs2_dec->ref_maxbuffer; j++) {
-		if (avs2_dec->fref[j]->imgtr_fwRefDistance == pos) {
+		if ((avs2_dec->fref[j]->imgtr_fwRefDistance == pos)
+			&& (avs2_dec->fref[j]->is_output == 1)) {
 			avs2_dec->fref[j]->imgtr_fwRefDistance_bak = pos;
 			avs2_dec->fref[j]->is_output = -1;
 			avs2_dec->fref[j]->to_prepare_disp =

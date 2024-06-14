@@ -310,8 +310,22 @@ static u32 without_display_mode;
 /*
 bit0: if dpb abnormal, check dpb buffer status and flush dpb.
 bit1: 0:show error frame.
+bit31:1:the value of bits 0 to 31 is used as the error_pro_policy.
 */
 static unsigned int error_proc_policy = 0x3;
+
+/*
+ error_handle_mode
+ 1: Use the closest frame to the current frame as the reference frame.
+ */
+static u32 error_handle_mode = 1;
+
+/*
+ lcu_percentage_threshold:
+     0: All Error Frame will be discard.
+   100: All Error Frame will be display.
+ */
+static u32 lcu_percentage_threshold = 0;
 
 static u32 mv_buf_dynamic_alloc;
 
@@ -347,6 +361,7 @@ static void dump_data(struct AVS2Decoder_s *dec, int size);
 static unsigned char get_data_check_sum
 	(struct AVS2Decoder_s *dec, int size);
 static void dump_pic_list(struct AVS2Decoder_s *dec);
+static void error_handle_mmu_copy(struct AVS2Decoder_s *dec, struct avs2_frame_s *pic);
 
 static const char vavs2_dec_id[] = "vavs2-dev";
 
@@ -759,7 +774,7 @@ struct AVS2Decoder_s {
 
 	int     slice_type;
 
-	int decode_idx;
+	u64 decode_idx;
 	int slice_idx;
 	uint8_t wait_buf;
 	uint8_t error_flag;
@@ -773,7 +788,6 @@ struct AVS2Decoder_s {
 
 	struct vdec_info *gvs;
 
-
 	unsigned int dec_status;
 	u32 last_put_idx;
 	int new_frame_displayed;
@@ -783,7 +797,6 @@ struct AVS2Decoder_s {
 	struct firmware_s *fw;
 #ifdef AVS2_10B_MMU
 	int cur_fb_idx_mmu;
-	long used_4k_num;
 #endif
 	struct avs2_decoder avs2_dec;
 #define ALF_NUM_BIT_SHIFT      6
@@ -831,6 +844,9 @@ struct AVS2Decoder_s {
 	int triple_write_mode;
 #endif
 	u32 mv_buf_size;
+	u32 error_handle_mode;
+	bool mmu_copy_disable;
+	s32 cur_idx;
 };
 
 static int  compute_losless_comp_body_size(
@@ -925,6 +941,7 @@ static void start_process_time(struct AVS2Decoder_s *dec)
 }
 
 static void update_decoded_pic(struct AVS2Decoder_s *dec);
+static void check_pic_error(struct AVS2Decoder_s *dec, struct avs2_frame_s *pic);
 
 static void timeout_process(struct AVS2Decoder_s *dec)
 {
@@ -934,10 +951,12 @@ static void timeout_process(struct AVS2Decoder_s *dec)
 	amhevc_stop();
 	avs2_print(dec, 0, "%s decoder timeout\n", __func__);
 
-	if (pic && (pic->error_mark == 0) &&
-		(pic->decoded_lcu == 0)) {
-		update_decoded_pic(dec);
-		pic->error_mark = 1;
+	if (dec->cur_idx != INVALID_IDX) {
+		if (pic) {
+			update_decoded_pic(dec);
+			check_pic_error(dec, pic);
+			pic->error_mark = 1;
+		}
 	}
 
 	dec->dec_result = DEC_RESULT_DONE;
@@ -1078,6 +1097,7 @@ int avs2_alloc_mmu(
 			cur_mmu_4k_number, pic_width, pic_height);
 		return -1;
 	}
+	dec->avs2_dec.hc.cur_pic->cur_mmu_4k_number = cur_mmu_4k_number;
 	return decoder_mmu_box_alloc_idx(
 		dec->mmu_box,
 		cur_buf_idx,
@@ -1144,6 +1164,18 @@ int get_error_policy(struct avs2_decoder *avs2_dec)
 	return dec->error_proc_policy;
 }
 
+int get_error_handle_mode(struct avs2_decoder *avs2_dec)
+{
+	struct AVS2Decoder_s *dec = container_of(avs2_dec, struct AVS2Decoder_s, avs2_dec);
+
+	return dec->error_handle_mode;
+}
+
+int get_lcu_percentage_threshold(void)
+{
+	return lcu_percentage_threshold;
+}
+
 #ifdef CONSTRAIN_MAX_BUF_NUM
 static int get_vf_ref_only_buf_count(struct AVS2Decoder_s *dec)
 {
@@ -1187,7 +1219,6 @@ int avs2_bufmgr_init(struct AVS2Decoder_s *dec, struct BuffInfo_s *buf_spec_i,
 	int i;
 	dec->frame_count = 0;
 #ifdef AVS2_10B_MMU
-	dec->used_4k_num = -1;
 	dec->cur_fb_idx_mmu = INVALID_IDX;
 #endif
 
@@ -1338,7 +1369,7 @@ static u32 re_search_seq_threshold = 0x800; /*0x8;*/
 
 static u32 max_buf_num = (REF_BUFFER + 1);
 
-static u32 run_ready_min_buf_num = 2;
+static u32 run_ready_min_buf_num = 1;
 
 static DEFINE_MUTEX(vavs2_mutex);
 
@@ -1357,6 +1388,11 @@ static DEFINE_MUTEX(vavs2_mutex);
 
 #define AVS2_CUVA_ADR             HEVC_ASSIST_SCRATCH_A
 #define AVS2_CUVA_DATA_SIZE       HEVC_ASSIST_SCRATCH_B
+
+/*
++bit[0] 1: reprot HEVC_DECPIC_DATA_ERROR interrupt
++*/
+//HEVC_ASSIST_SCRATCH_C
 
 #define HEVC_WAIT_FLAG            HEVC_ASSIST_SCRATCH_E
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
@@ -1805,6 +1841,117 @@ static struct BuffInfo_s amvavs2_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 #endif
 	}
 };
+
+int find_near_pic_index(struct AVS2Decoder_s *dec)
+{
+	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
+	struct avs2_frame_s *cur_pic = avs2_dec->hc.cur_pic;
+	int ii = 0;
+	int i = 0;
+	int index = -1;
+	struct avs2_frame_s *tmp_pic = NULL;
+	u32 f_diff = 0xffffffff;
+	u32 b_diff = 0xffffffff;
+	u32 max_diff = 0;
+	int f_index = -1;
+	int b_index = -1;
+	int max_index = -1;
+
+	if (is_avs2_print_bufmgr_detail()) {
+		for (ii = 0; ii < avs2_dec->ref_maxbuffer; ii++) {
+			pr_info("fref[%d]: index %d imgcoi_ref %d imgtr_fwRefDistance %d poc %d refered %d, is_out %d, bg %d, vf_ref %d, ref_pos(%d,%d,%d,%d,%d,%d,%d)\n",
+			ii, avs2_dec->fref[ii]->index,
+			avs2_dec->fref[ii]->imgcoi_ref,
+			avs2_dec->fref[ii]->imgtr_fwRefDistance,
+			avs2_dec->fref[ii]->poc,
+			avs2_dec->fref[ii]->referred_by_others,
+			avs2_dec->fref[ii]->is_output,
+			avs2_dec->fref[ii]->bg_flag,
+			avs2_dec->fref[ii]->vf_ref,
+			avs2_dec->fref[ii]->ref_poc[0],
+			avs2_dec->fref[ii]->ref_poc[1],
+			avs2_dec->fref[ii]->ref_poc[2],
+			avs2_dec->fref[ii]->ref_poc[3],
+			avs2_dec->fref[ii]->ref_poc[4],
+			avs2_dec->fref[ii]->ref_poc[5],
+			avs2_dec->fref[ii]->ref_poc[6]);
+		}
+	}
+
+	if (cur_pic == NULL)
+		return -1;
+
+	if (dec->error_proc_policy & 0x2)
+		return -1;
+
+	for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
+		tmp_pic = avs2_dec->fref[i];
+		if ((tmp_pic == NULL)
+			|| (tmp_pic->index == -1)
+			|| (tmp_pic->imgtr_fwRefDistance == -256))
+			continue;
+
+		if ((tmp_pic->poc < cur_pic->poc)
+			&& ((cur_pic->poc - tmp_pic->poc) < f_diff)) {
+			f_diff = cur_pic->poc - tmp_pic->poc;
+			f_index = i;
+		}
+
+		if ((cur_pic->poc < tmp_pic->poc)
+			&& ((tmp_pic->poc - cur_pic->poc) < b_diff)) {
+			b_diff = tmp_pic->poc - cur_pic->poc;
+			b_index = i;
+		}
+
+		if ((cur_pic->poc < tmp_pic->poc)
+			&& ((tmp_pic->poc - cur_pic->poc) > max_diff)) {
+			max_diff = tmp_pic->poc - cur_pic->poc;
+			max_index = i;
+		}
+	}
+
+	if ((cur_pic->slice_type == I_IMG) &&
+		(cur_pic->poc == 0)) {
+		index = max_index;
+	} else if (f_diff <= b_diff) {
+		index = f_index;
+	} else {
+		index = b_index;
+	}
+
+	//for flush dpb situation
+	if (index == -1) {
+		u32 min_diff = 0xffffffff;
+
+		for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
+			tmp_pic = avs2_dec->fref[i];
+			if ((tmp_pic == NULL)
+				|| (tmp_pic->vf_ref == 0))
+				continue;
+
+			if ((tmp_pic->poc < cur_pic->poc)
+				&& ((cur_pic->poc - tmp_pic->poc) < min_diff)) {
+				min_diff = cur_pic->poc - tmp_pic->poc;
+				index = i;
+			}
+		}
+	}
+
+	return index;
+}
+
+static int check_pic_decoded_lcu(struct AVS2Decoder_s *dec, struct avs2_frame_s *pic)
+{
+	int decoder_lcu = dec->avs2_dec.lcu_total;
+
+	if (pic->decoded_lcu < (decoder_lcu * (100 - lcu_percentage_threshold % 101) / 100)) {
+		avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
+			"%s:decoded_lcu %d drop flag is true\n", __func__, pic->decoded_lcu);
+		return 1;
+	}
+
+	return 0;
+}
 
 #define IS_8K_SIZE(w, h)  (((w) * (h)) > MAX_SIZE_4K)
 #define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
@@ -2669,7 +2816,7 @@ static void dump_pic_list(struct AVS2Decoder_s *dec)
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	for (ii = 0; ii < avs2_dec->ref_maxbuffer; ii++) {
 		avs2_print(dec, 0,
-		"fref[%d]: index %d decode_id %d mvbuf %d imgcoi_ref %d imgtr_fwRefDistance %d referred %d, pre %d is_out %d, bg %d, vf_ref %d error %d lcu %d ref_pos(%d,%d,%d,%d,%d,%d,%d), time %lld\n",
+		"fref[%d]: index %d decode_id %lld mvbuf %d imgcoi_ref %d imgtr_fwRefDistance %d referred %d, pre %d is_out %d, bg %d, vf_ref %d error %d lcu %d ref_pos(%d,%d,%d,%d,%d,%d,%d), time %lld\n",
 		ii, avs2_dec->fref[ii]->index,
 		avs2_dec->fref[ii]->decode_idx,
 		avs2_dec->fref[ii]->mv_buf_index,
@@ -2709,14 +2856,14 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 		avs2_dec->f_bg->mc_canvas_y, avs2_dec->f_bg->mc_canvas_u_v);
 
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
-			(15 << 8) | (0<<1) | 1);   /* L0:BG*/
+			(15 << 8) | (0 << 1) | 1);   /* L0:BG*/
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 			(avs2_dec->f_bg->mc_canvas_u_v << 16) |
 			(avs2_dec->f_bg->mc_canvas_u_v << 8) |
 			avs2_dec->f_bg->mc_canvas_y);
 
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
-			(31 << 8) | (0<<1) | 1);  /* L1:BG*/
+			(31 << 8) | (0 << 1) | 1);  /* L1:BG*/
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 			(avs2_dec->f_bg->mc_canvas_u_v << 16) |
 			(avs2_dec->f_bg->mc_canvas_u_v << 8) |
@@ -2735,10 +2882,12 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 			avs2_dec->img.type);
 		/*refer to prepare_RefInfo()*/
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
-			(0 << 8) | (0<<1) | 1);
+			(0 << 8) | (0 << 1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
-			if (pic->referred_by_others != 1)
+			if (avs2_dec->error_fref[i] != NULL)
+				pic = avs2_dec->error_fref[i];
+			if ((pic->referred_by_others != 1) && (dec->error_proc_policy & 0x2))
 				continue;
 			valid_ref_cnt++;
 			WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
@@ -2766,10 +2915,12 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 			avs2_dec->img.type);
 		/*refer to prepare_RefInfo()*/
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
-			(0 << 8) | (0<<1) | 1);
+			(0 << 8) | (0 << 1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
-			if (pic->referred_by_others != 1)
+			if (avs2_dec->error_fref[i] != NULL)
+				pic = avs2_dec->error_fref[i];
+			if ((pic->referred_by_others != 1) && (dec->error_proc_policy & 0x2))
 				continue;
 			valid_ref_cnt++;
 			WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
@@ -2788,9 +2939,11 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 		if (valid_ref_cnt != avs2_dec->img.num_of_references)
 			cur_pic->error_mark = 1;
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
-			(16 << 8) | (0<<1) | 1);
+			(16 << 8) | (0 << 1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
+			if (avs2_dec->error_fref[i] != NULL)
+				pic = avs2_dec->error_fref[i];
 			WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 				(pic->mc_canvas_u_v << 16) |
 				(pic->mc_canvas_u_v << 8) |
@@ -2804,8 +2957,10 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 			"config_mc_buffer for B_IMG\n");
 		/*refer to prepare_RefInfo()*/
 		pic = avs2_dec->fref[1];
+		if (avs2_dec->error_fref[1] != NULL)
+			pic = avs2_dec->error_fref[1];
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
-			(0 << 8) | (0<<1) | 1);
+			(0 << 8) | (0 << 1) | 1);
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 			(pic->mc_canvas_u_v << 16) |
 			(pic->mc_canvas_u_v << 8) |
@@ -2820,11 +2975,13 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 			pic->error_mark);
 
 		pic = avs2_dec->fref[0];
+		if (avs2_dec->error_fref[0] != NULL)
+			pic = avs2_dec->error_fref[0];
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
-			(16 << 8) | (0<<1) | 1);
+			(16 << 8) | (0 << 1) | 1);
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
-			(pic->mc_canvas_u_v<<16) |
-			(pic->mc_canvas_u_v<<8) |
+			(pic->mc_canvas_u_v << 16) |
+			(pic->mc_canvas_u_v << 8) |
 			pic->mc_canvas_y);
 
 		if (pic->error_mark)
@@ -2909,6 +3066,10 @@ static void config_mpred_hw(struct AVS2Decoder_s *dec)
 	int32_t mv_rd_en;
 	int32_t col_isIntra;
 	int mv_mem_unit;
+
+	if (avs2_dec->error_fref[0] != NULL)
+		col_pic = avs2_dec->error_fref[0];
+
 	if (avs2_dec->img.type != I_IMG) {
 		above_en = 1;
 		mv_wr_en = 1;
@@ -2992,41 +3153,47 @@ static void config_mpred_hw(struct AVS2Decoder_s *dec)
 	/*below MPRED Ref_POC_xx_Lx registers
 		must follow Ref_POC_xx_L0 ->
 		Ref_POC_xx_L1 in pair write order!!!*/
-	WRITE_VREG(HEVC_MPRED_L0_REF00_POC,
-		avs2_dec->fref[0]->imgtr_fwRefDistance);
-	WRITE_VREG(HEVC_MPRED_L1_REF00_POC,
-		avs2_dec->fref[0]->ref_poc[0]);
+	if (avs2_dec->error_fref[0] != 0)
+		WRITE_VREG(HEVC_MPRED_L0_REF00_POC, avs2_dec->error_fref[0]->imgtr_fwRefDistance);
+	else
+		WRITE_VREG(HEVC_MPRED_L0_REF00_POC, avs2_dec->fref[0]->imgtr_fwRefDistance);
+	WRITE_VREG(HEVC_MPRED_L1_REF00_POC, avs2_dec->fref[0]->ref_poc[0]);
 
-	WRITE_VREG(HEVC_MPRED_L0_REF01_POC,
-		avs2_dec->fref[1]->imgtr_fwRefDistance);
-	WRITE_VREG(HEVC_MPRED_L1_REF01_POC,
-		avs2_dec->fref[0]->ref_poc[1]);
+	if (avs2_dec->error_fref[1] != 0)
+		WRITE_VREG(HEVC_MPRED_L0_REF01_POC, avs2_dec->error_fref[1]->imgtr_fwRefDistance);
+	else
+		WRITE_VREG(HEVC_MPRED_L0_REF01_POC, avs2_dec->fref[1]->imgtr_fwRefDistance);
+	WRITE_VREG(HEVC_MPRED_L1_REF01_POC,avs2_dec->fref[0]->ref_poc[1]);
 
-	WRITE_VREG(HEVC_MPRED_L0_REF02_POC,
-		avs2_dec->fref[2]->imgtr_fwRefDistance);
-	WRITE_VREG(HEVC_MPRED_L1_REF02_POC,
-		avs2_dec->fref[0]->ref_poc[2]);
+	if (avs2_dec->error_fref[2] != 0)
+		WRITE_VREG(HEVC_MPRED_L0_REF02_POC, avs2_dec->error_fref[2]->imgtr_fwRefDistance);
+	else
+		WRITE_VREG(HEVC_MPRED_L0_REF02_POC,avs2_dec->fref[2]->imgtr_fwRefDistance);
+	WRITE_VREG(HEVC_MPRED_L1_REF02_POC,avs2_dec->fref[0]->ref_poc[2]);
 
-	WRITE_VREG(HEVC_MPRED_L0_REF03_POC,
-		avs2_dec->fref[3]->imgtr_fwRefDistance);
-	WRITE_VREG(HEVC_MPRED_L1_REF03_POC,
-		avs2_dec->fref[0]->ref_poc[3]);
+	if (avs2_dec->error_fref[3] != 0)
+		WRITE_VREG(HEVC_MPRED_L0_REF03_POC, avs2_dec->error_fref[3]->imgtr_fwRefDistance);
+	else
+		WRITE_VREG(HEVC_MPRED_L0_REF03_POC,avs2_dec->fref[3]->imgtr_fwRefDistance);
+	WRITE_VREG(HEVC_MPRED_L1_REF03_POC,avs2_dec->fref[0]->ref_poc[3]);
 
-	WRITE_VREG(HEVC_MPRED_L0_REF04_POC,
-		avs2_dec->fref[4]->imgtr_fwRefDistance);
-	WRITE_VREG(HEVC_MPRED_L1_REF04_POC,
-		avs2_dec->fref[0]->ref_poc[4]);
+	if (avs2_dec->error_fref[4] != 0)
+		WRITE_VREG(HEVC_MPRED_L0_REF04_POC, avs2_dec->error_fref[4]->imgtr_fwRefDistance);
+	else
+		WRITE_VREG(HEVC_MPRED_L0_REF04_POC,avs2_dec->fref[4]->imgtr_fwRefDistance);
+	WRITE_VREG(HEVC_MPRED_L1_REF04_POC,avs2_dec->fref[0]->ref_poc[4]);
 
-	WRITE_VREG(HEVC_MPRED_L0_REF05_POC,
-		avs2_dec->fref[5]->imgtr_fwRefDistance);
-	WRITE_VREG(HEVC_MPRED_L1_REF05_POC,
-		avs2_dec->fref[0]->ref_poc[5]);
+	if (avs2_dec->error_fref[5] != 0)
+		WRITE_VREG(HEVC_MPRED_L0_REF05_POC, avs2_dec->error_fref[5]->imgtr_fwRefDistance);
+	else
+		WRITE_VREG(HEVC_MPRED_L0_REF05_POC,avs2_dec->fref[5]->imgtr_fwRefDistance);
+	WRITE_VREG(HEVC_MPRED_L1_REF05_POC,avs2_dec->fref[0]->ref_poc[5]);
 
-	WRITE_VREG(HEVC_MPRED_L0_REF06_POC,
-		avs2_dec->fref[6]->imgtr_fwRefDistance);
-	WRITE_VREG(HEVC_MPRED_L1_REF06_POC,
-		avs2_dec->fref[0]->ref_poc[6]);
-
+	if (avs2_dec->error_fref[6] != 0)
+		WRITE_VREG(HEVC_MPRED_L0_REF06_POC, avs2_dec->error_fref[6]->imgtr_fwRefDistance);
+	else
+		WRITE_VREG(HEVC_MPRED_L0_REF06_POC,avs2_dec->fref[6]->imgtr_fwRefDistance);
+	WRITE_VREG(HEVC_MPRED_L1_REF06_POC,avs2_dec->fref[0]->ref_poc[6]);
 
 	WRITE_VREG(HEVC_MPRED_MV_RD_END_ADDR,
 		mpred_mv_rd_end_addr);
@@ -4548,7 +4715,7 @@ static void set_frame_info(struct AVS2Decoder_s *dec, struct vframe_s *vf)
 	vf->signal_type = dec->video_signal_type;
 
 	avs2_print(dec, AVS2_DBG_HDR_INFO,
-			"signal_typesignal_type 0x%x \n",
+			"signal_type 0x%x \n",
 			vf->signal_type);
 
 	pixel_ratio = dec->vavs2_amstream_dec_info.ratio;
@@ -5259,8 +5426,20 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			continue;
 		}
 
-		if (pic->error_mark) {
-			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL, "!!!error pic, skip\n", 0);
+		if (pic->error_mark && lcu_percentage_threshold) {
+			int ret = check_pic_decoded_lcu(dec, pic);
+
+			if (ret == 0) {
+				pic->error_mark = 0;
+				avs2_print(dec, AVS2_DBG_BUFMGR,
+					"Clean pic(%d) error_mark\n", pic->poc);
+			}
+		}
+
+		if (pic->error_drop_flag ||
+			((dec->error_proc_policy & 0x2) && pic->error_mark)) {
+			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL, "!!!error pic poc(%d), skip\n",
+				pic->poc);
 			continue;
 		}
 
@@ -5343,15 +5522,74 @@ static void debug_buffer_mgr_more(struct AVS2Decoder_s *dec)
 #ifdef AVS2_10B_MMU
 static void avs2_recycle_mmu_buf_tail(struct AVS2Decoder_s *dec)
 {
+	struct avs2_frame_s *pic = dec->avs2_dec.hc.cur_pic;
+
+	if (pic == NULL)
+		return ;
+
 	if (dec->cur_fb_idx_mmu != INVALID_IDX) {
-		if (dec->used_4k_num != -1) {
-			if (dec->m_ins_flag)
-				hevc_mmu_dma_check(hw_to_vdec(dec));
-			decoder_mmu_box_free_idx_tail(dec->mmu_box,
-			dec->cur_fb_idx_mmu, dec->used_4k_num);
+		u32 used_4k_num = 0;
+
+		if (pic->need_mmu_copy == 0)
+			used_4k_num = (READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+		else {
+			used_4k_num = pic->used_4k_num;
+			if (used_4k_num == 0)
+				return ;
 		}
+
+		if (dec->m_ins_flag)
+			hevc_mmu_dma_check(hw_to_vdec(dec));
+
+		avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
+			"%s:pic index %d used_4k_num %d\n",
+			__func__, dec->cur_fb_idx_mmu, used_4k_num);
+
+		decoder_mmu_box_free_idx_tail(dec->mmu_box, pic->index, used_4k_num);
+
+#ifdef AVS2_10B_MMU_DW
+		if (dec->dw_mmu_enable) {
+			used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS2) >> 16;
+
+			avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
+				"%s DW decoder_mmu_box_free_idx_tail index %d used_4k_num %d\n",
+				__func__, dec->cur_fb_idx_mmu, used_4k_num);
+
+			decoder_mmu_box_free_idx_tail(dec->dw_mmu_box, pic->index, used_4k_num);
+		}
+#endif
 		dec->cur_fb_idx_mmu = INVALID_IDX;
-		dec->used_4k_num = -1;
+	}
+}
+
+static void release_free_mmu_buffers(struct AVS2Decoder_s *dec)
+{
+	int ii = 0;
+
+	if (!(dec->error_proc_policy & 0x2))
+		return ;
+
+	for (ii = 0; ii < dec->avs2_dec.ref_maxbuffer;ii++) {
+		struct avs2_frame_s *pic = dec->avs2_dec.fref[ii];
+
+		if (pic->bg_flag == 0 &&
+			pic->is_output == -1 &&
+			pic->mmu_alloc_flag &&
+			pic->vf_ref == 0) {
+			if (pic->referred_by_others == 0) {
+
+				pic->mmu_alloc_flag = 0;
+				avs2_print(dec, AVS2_DBG_BUFMGR,
+					"%s pic->index %d\n", __func__, pic->index);
+				decoder_mmu_box_free_idx(dec->mmu_box, pic->index);
+
+#ifdef AVS2_10B_MMU_DW
+				if (dec->dw_mmu_enable && dec->dw_mmu_box) {
+					decoder_mmu_box_free_idx(dec->dw_mmu_box, pic->index);
+				}
+#endif
+			}
+		}
 	}
 }
 
@@ -5361,8 +5599,14 @@ static void avs2_recycle_mmu_buf(struct AVS2Decoder_s *dec)
 		decoder_mmu_box_free_idx(dec->mmu_box,
 			dec->cur_fb_idx_mmu);
 
+#ifdef AVS2_10B_MMU_DW
+		if (dec->dw_mmu_enable && dec->dw_mmu_box) {
+			decoder_mmu_box_free_idx(dec->dw_mmu_box,
+				dec->cur_fb_idx_mmu);
+		}
+#endif
+
 		dec->cur_fb_idx_mmu = INVALID_IDX;
-		dec->used_4k_num = -1;
 	}
 }
 #endif
@@ -5397,12 +5641,44 @@ static void check_pic_error(struct AVS2Decoder_s *dec,
 			__func__, pic->index, pic->imgtr_fwRefDistance,
 			pic->decoded_lcu, dec->avs2_dec.lcu_total);
 		pic->error_mark = 1;
+		if (!(dec->error_proc_policy & 0x2)
+			&& is_mmu_copy_enable()
+			&& (dec->mmu_copy_disable == false)) {
+			struct avs2_decoder *avs2_dec = &dec->avs2_dec;
+			struct avs2_frame_s *tmp_pic = NULL;
+			int index = find_near_pic_index(dec);
+
+			avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
+				"find_near_pic_index return index %d\n", index);
+
+			if (index != -1)
+				tmp_pic = avs2_dec->fref[index];
+
+			if (tmp_pic != NULL) {
+				pic->mmu_copy_header_adr = tmp_pic->header_adr;
+				pic->need_mmu_copy = 1;
+
+				avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
+					"CUR_POC(%d) need use mmu copy POC(%d) index %d\n",
+					pic->poc, tmp_pic->poc, index);
+			}
+		}
 	} else {
 		avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
 			"%s pic(index %d imgtr_fwRefDistance %d) decoded lcu %d (total %d)\n",
 			__func__, pic->index, pic->imgtr_fwRefDistance,
 			pic->decoded_lcu, dec->avs2_dec.lcu_total);
+	}
 
+	if (lcu_percentage_threshold) {
+		pic->error_drop_flag = check_pic_decoded_lcu(dec, pic);
+
+		if (pic->error_drop_flag) {
+			pic->need_mmu_copy = 0;
+			avs2_print(dec, AVS2_DBG_BUFMGR,
+				"Not need check lcu info\n");
+			return ;
+		}
 	}
 }
 static void update_decoded_pic(struct AVS2Decoder_s *dec)
@@ -5914,6 +6190,17 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			else {
 				dec->dec_result = DEC_RESULT_DONE;
 				reset_process_time(dec);
+
+				if (dec->cur_idx != INVALID_IDX) {
+					struct avs2_frame_s *pic = dec->avs2_dec.hc.cur_pic;
+
+					update_decoded_pic(dec);
+					check_pic_error(dec, pic);
+#ifdef AVS2_10B_MMU
+					avs2_recycle_mmu_buf_tail(dec);
+#endif
+				}
+
 				amhevc_stop();
 				vdec_schedule_work(&dec->work);
 			}
@@ -5927,6 +6214,10 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			set_cuva_data(dec);
 			update_decoded_pic(dec);
 			check_pic_error(dec, dec->avs2_dec.hc.cur_pic);
+#ifdef AVS2_10B_MMU
+			avs2_recycle_mmu_buf_tail(dec);
+#endif
+
 			get_picture_qos_info(dec);
 			reset_process_time(dec);
 			dec->dec_result = DEC_RESULT_DONE;
@@ -6010,10 +6301,6 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		PRINT_LINE();
 
 		if (dec->avs2_dec.hc.cur_pic != NULL) {
-			int32_t ii;
-#ifdef AVS2_10B_MMU
-			avs2_recycle_mmu_buf_tail(dec);
-#endif
 			avs2_post_process(&dec->avs2_dec);
 
 			if (debug & AVS2_DBG_PRINT_PIC_LIST)
@@ -6021,24 +6308,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 
 			avs2_prepare_display_buf(dec);
 			dec->avs2_dec.hc.cur_pic = NULL;
-			for (ii = 0; ii < dec->avs2_dec.ref_maxbuffer;
-					ii++) {
-				struct avs2_frame_s *pic =
-					dec->avs2_dec.fref[ii];
-				if (pic->bg_flag == 0 &&
-					pic->is_output == -1 &&
-					pic->mmu_alloc_flag &&
-					pic->vf_ref == 0) {
-					if (pic->referred_by_others == 0) {
-#ifdef AVS2_10B_MMU
-						pic->mmu_alloc_flag = 0;
-
-						decoder_mmu_box_free_idx(dec->mmu_box,
-							pic->index);
-#endif
-					}
-				}
-			}
+			release_free_mmu_buffers(dec);
 		}
 	}
 
@@ -6234,6 +6504,15 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			&& dec->avs2_dec.hc.cur_pic->cuva_data_buf != NULL)
 			release_cuva_data(dec->avs2_dec.hc.cur_pic);
 
+		if (start_code == I_PICTURE_START_CODE) {
+			if (!(dec->error_proc_policy & 0x2) &&
+				!(IS_8K_SIZE(dec->avs2_dec.img.width, dec->avs2_dec.img.height)) &&
+				(dec->mmu_copy_disable == false))
+				vdec_set_mmu_copy_flag(true);
+			else
+				vdec_set_mmu_copy_flag(false);
+		}
+
 		PRINT_LINE();
 #ifdef I_ONLY_SUPPORT
 		if ((start_code == PB_PICTURE_START_CODE) &&
@@ -6242,6 +6521,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 #endif
 
 		if (ret >= 0) {
+			dec->cur_idx = dec->avs2_dec.hc.cur_pic->index;
 #ifdef AVS2_10B_MMU
 			if (dec->mmu_enable) {
 				ret = avs2_alloc_mmu(dec,
@@ -6884,6 +7164,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 		return -EBUSY;
 
 	avs2_dec->start_time = div64_u64(local_clock(), 1000);
+	avs2_dec->decode_idx = 0;
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
 	fw = fw_firmare_s_creat(fw_size);
@@ -7335,7 +7616,7 @@ static void avs2_work(struct work_struct *work)
 
 				avs2_print(dec,
 					PRINT_FLAG_VDEC_DETAIL,
-					"amvdec_vh265: Insufficient data\n");
+					"amvdec_avs2: Insufficient data\n");
 
 				vdec_schedule_work(&dec->work);
 				return;
@@ -7365,7 +7646,7 @@ static void avs2_work(struct work_struct *work)
 			dec->dec_result = DEC_RESULT_GET_DATA_RETRY;
 
 			avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
-				"amvdec_vh265: Insufficient data\n");
+				"amvdec_avs2: Insufficient data\n");
 
 			vdec_schedule_work(&dec->work);
 		}
@@ -7379,10 +7660,11 @@ static void avs2_work(struct work_struct *work)
 		dec->process_state = PROC_STATE_INIT;
 		decode_frame_count[dec->index] = dec->frame_count;
 
+		if (dec->cur_idx != INVALID_IDX) {
 #ifdef AVS2_10B_MMU
-		if (dec->mmu_enable)
-			dec->used_4k_num = (READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+			avs2_recycle_mmu_buf_tail(dec);
 #endif
+		}
 
 		if ((pic != NULL) && (pic->error_mark) &&
 			(dec->dec_result == DEC_RESULT_DONE)) {
@@ -7451,6 +7733,12 @@ static void avs2_work(struct work_struct *work)
 
 	wait_hevc_search_done(dec);
 
+	if (dec->avs2_dec.hc.cur_pic
+		&& dec->avs2_dec.hc.cur_pic->need_mmu_copy
+		&& !(dec->error_proc_policy & 0x2)) {
+		error_handle_mmu_copy(dec, dec->avs2_dec.hc.cur_pic);
+	}
+
 	if (get_dbg_flag(dec) & AVS2_DBG_QOS_INFO) {
 		avs2_print(dec, 0, "%s:frame_count %d, drop_frame_count %d, error_frame_count %d\n",
 			__func__, dec->gvs->frame_count, dec->gvs->drop_frame_count, dec->gvs->error_frame_count);
@@ -7472,11 +7760,130 @@ static void avs2_work(struct work_struct *work)
 		dec->vdec_cb(hw_to_vdec(dec), dec->vdec_cb_arg, CORE_MASK_HEVC);
 }
 
+static void error_handle_mmu_copy(struct AVS2Decoder_s *dec, struct avs2_frame_s *pic)
+{
+	struct mmu_copy_params params;
+	int x_location = 0;
+	int y_location = 0;
+	unsigned int used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
+	int lcu_size = dec->avs2_dec.lcu_size;
+	int lcu_y = pic->decoded_lcu / dec->avs2_dec.lcu_x_num;
+
+	pic->used_4k_num = used_4k_num;
+	avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+		"decoder_tile_cnt %d, POC %d, used_4k_num %d\n",
+		pic->decoded_lcu, pic->poc, used_4k_num);
+
+	x_location = 0;
+	y_location = 0;
+
+	if (lcu_y > 1) {
+		y_location = (lcu_y - 1) * lcu_size;
+	}
+
+	avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+		"decoded_lcu %d, lcu_size %d, lcu_y %d\n",
+		pic->decoded_lcu, lcu_size, lcu_y);
+
+	params.pic_w = dec->frame_width;
+	params.pic_h = dec->frame_height;
+	params.x_location = x_location;
+	params.y_location = y_location;
+	params.err_width = ALIGN((dec->frame_width - x_location), 64);
+	params.err_height = ALIGN((dec->frame_height - y_location), 8);
+
+	avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+		"Pic Size(%d, %d), Copy start pos(%d, %d), Copy Size(%d, %d)\n",
+		params.pic_w, params.pic_h, params.x_location,
+		params.y_location, params.err_width, params.err_height);
+
+	memmove(dec->frame_mmu_map_addr,
+		dec->frame_mmu_map_addr + used_4k_num * 4,
+		(pic->cur_mmu_4k_number - used_4k_num) * 4);
+
+	params.mmu_copy_map_phy_addr = dec->frame_mmu_map_phy_addr;
+	params.mmu_copy_err_header_adr = pic->header_adr;
+	params.mmu_copy_pre_header_adr = pic->mmu_copy_header_adr;
+	mmu_copy_work(params);
+
+	pic->used_4k_num += READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
+
+	avs2_recycle_mmu_buf_tail(dec);
+
+	pic->need_mmu_copy = 0;
+}
+
 static int avs2_hw_ctx_restore(struct AVS2Decoder_s *dec)
 {
 	/* new to do ... */
 	vavs2_prot_init(dec);
 	return 0;
+}
+
+static int avs2_buffer_recovery(struct AVS2Decoder_s *dec)
+{
+	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
+	int i = 0, ret = 0;
+	unsigned long flags;
+	int decode_count = 0;
+
+	if (dec->error_proc_policy & 0x01) {
+		if ((kfifo_len(&dec->display_q) <= 0) &&
+			dec->pic_list_init_flag) {
+			lock_buffer(dec, flags);
+			for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
+				if (avs2_dec->fref[i]->vf_ref == 0) {
+					decode_count ++;
+				}
+			}
+			if (decode_count >= avs2_dec->ref_maxbuffer - 4) {
+				if (dec->error_proc_policy & 0x2) {
+					for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
+						if (avs2_dec->fref[i]->vf_ref == 0) {
+							avs2_dec->fref[i]->imgcoi_ref          = -257;
+							avs2_dec->fref[i]->is_output           = -1;
+							avs2_dec->fref[i]->referred_by_others   = -1;
+							avs2_dec->fref[i]->imgtr_fwRefDistance = -256;
+							avs2_dec->fref[i]->error_mark = 0;
+							memset(avs2_dec->fref[i]->ref_poc, 0, sizeof(avs2_dec->fref[i]->ref_poc));
+						}
+					}
+					ret = 1;
+					avs2_print(dec, AVS2_DBG_BUFMGR, "dpb buff err, clean dpb buff\n");
+				} else {
+					int index = -1;
+					u64 min_idx = 0;
+					struct avs2_frame_s *pic = NULL;
+
+					for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
+						pic = avs2_dec->fref[i];
+
+						if (pic->vf_ref == 0) {
+							if ((min_idx == 0) || (pic->decode_idx < min_idx)) {
+								min_idx = pic->decode_idx;
+								index = i;
+							}
+						}
+					}
+
+					if (index != -1) {
+						avs2_dec->fref[index]->imgcoi_ref		   = -257;
+						avs2_dec->fref[index]->is_output		   = -1;
+						avs2_dec->fref[index]->referred_by_others   = -1;
+						avs2_dec->fref[index]->imgtr_fwRefDistance = -256;
+						avs2_dec->fref[index]->error_mark = 0;
+						memset(avs2_dec->fref[index]->ref_poc, 0, sizeof(avs2_dec->fref[index]->ref_poc));
+						avs2_print(dec, AVS2_DBG_BUFMGR, "dpb buff err, clean dpb poc(%d), index %d\n",
+							avs2_dec->fref[index]->poc, index);
+						ret = 1;
+					}
+				}
+			}
+			unlock_buffer(dec, flags);
+		}
+	}
+
+	return ret;
 }
 
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
@@ -7518,6 +7925,12 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		get_free_buf_count(dec) >=
 		run_ready_min_buf_num)
 		ret = 1;
+
+	if (dec->pic_list_init_flag && (ret == 0))
+		ret = avs2_buffer_recovery(dec);
+
+	avs2_print(dec, PRINT_FLAG_VDEC_DETAIL, "%s ret = %d\n", __func__, ret);
+
 #ifdef CONSTRAIN_MAX_BUF_NUM
 	if (dec->pic_list_init_flag) {
 		if (run_ready_max_vf_only_num > 0 &&
@@ -7576,7 +7989,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		dec->dec_result = DEC_RESULT_AGAIN;
 
 		avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
-			"ammvdec_vh265: Insufficient data\n");
+			"ammvdec_avs2: Insufficient data\n");
 
 		vdec_schedule_work(&dec->work);
 		return;
@@ -7659,6 +8072,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	WRITE_VREG(HEVC_DECODE_SIZE, r);
 	WRITE_VREG(HEVC_DECODE_COUNT, dec->slice_idx);
 	dec->init_flag = 1;
+	dec->cur_idx = INVALID_IDX;
+	WRITE_VREG(HEVC_ASSIST_SCRATCH_C, READ_VREG(HEVC_ASSIST_SCRATCH_C) | 0x1);
 
 	avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
 		"%s: start hevc (%x %x %x)\n",
@@ -7708,10 +8123,11 @@ static void avs2_dump_state(struct vdec_s *vdec)
 	avs2_print(dec, 0, "====== %s\n", __func__);
 
 	avs2_print(dec, 0,
-		"width/height (%d/%d), used_buf_num %d\n",
+		"width/height (%d/%d), used_buf_num %d, ref_maxbuffer %d\n",
 		dec->avs2_dec.img.width,
 		dec->avs2_dec.img.height,
-		dec->used_buf_num);
+		dec->used_buf_num,
+		dec->avs2_dec.ref_maxbuffer);
 
 	avs2_print(dec, 0,
 		"is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d\n",
@@ -7736,7 +8152,7 @@ static void avs2_dump_state(struct vdec_s *vdec)
 	}
 
 	avs2_print(dec, 0,
-		"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), free_buf_count %d (min %d for run_ready)\n",
+		"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), free_buf_count %d (min %d for run_ready), used_cont %d\n",
 		__func__,
 		kfifo_len(&dec->newframe_q),
 		VF_POOL_SIZE,
@@ -7746,17 +8162,19 @@ static void avs2_dump_state(struct vdec_s *vdec)
 		dec->vf_get_count,
 		dec->vf_put_count,
 		get_free_buf_count(dec),
-		run_ready_min_buf_num);
+		run_ready_min_buf_num,
+		get_used_buf_count(dec));
 
 	dump_pic_list(dec);
 
 	for (i = 0; i < MAX_BUF_NUM; i++) {
 		avs2_print(dec, 0,
-			"mv_Buf(%d) start_adr 0x%x size 0x%x used %d\n",
+			"mv_Buf(%d) start_adr 0x%x size 0x%x used %d used_pic_index %d\n",
 			i,
 			dec->m_mv_BUF[i].start_adr,
 			dec->m_mv_BUF[i].size,
-			dec->m_mv_BUF[i].used_flag);
+			dec->m_mv_BUF[i].used_flag,
+			dec->m_mv_BUF[i].used_pic_index);
 	}
 
 	avs2_print(dec, 0,
@@ -7882,6 +8300,8 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	dec->index = pdev->id;
 	dec->m_ins_flag = 1;
 	dec->error_proc_policy = error_proc_policy;
+	dec->error_handle_mode = error_handle_mode;
+
 	if (is_rdma_enable()) {
 		dec->rdma_adr = decoder_dma_alloc_coherent(&dec->rdma_mem_handle,
 				RDMA_SIZE, &dec->rdma_phy_adr, "AVS2_RDMA_BUF");
@@ -7927,6 +8347,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	dec->video_signal_type = 0;
 	dec->video_ori_signal_type = 0;
 	dec->dynamic_buf_margin = dynamic_buf_num_margin;
+
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX)
 		dec->stat |= VP9_TRIGGER_FRAME_ENABLE;
 
@@ -7963,6 +8384,24 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 			dec->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
 			if (dec->high_bandwidth_flag)
 				avs2_print(dec, 0, "high bandwidth\n");
+		}
+
+		if (get_config_int(pdata->config,
+			"mmu_copy_disable", &config_val) == 0) {
+			dec->mmu_copy_disable = config_val;
+			avs2_print(dec, 0, "mmu_copy_disable: %d\n", config_val);
+		}
+
+		if (get_config_int(pdata->config,
+			"api_error_policy", &config_val) == 0) {
+			if (config_val == 0) {
+				dec->error_proc_policy = error_proc_policy & (~(1 << 1));
+				avs2_print(dec, 0, "Error Frame Display\n");
+			} else if (config_val == 1) {
+				dec->error_proc_policy = error_proc_policy | (1 << 1);
+			} else {
+				dec->error_proc_policy = error_proc_policy;
+			}
 		}
 
 		if (get_config_int(pdata->config, "HDRStaticInfo",
@@ -8080,6 +8519,16 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 			   dec->buf_start,
 			   dec->buf_size);
 	}
+
+	if (error_proc_policy & 0x80000000)
+		dec->error_proc_policy = error_proc_policy & 0x7fffffff;
+
+	if ((lcu_percentage_threshold % 101) > 20) {
+		dec->error_proc_policy &= ~(1 << 1);
+	}
+
+	avs2_print(dec, 0, "dec->double_write_mode 0x%x, dec->error_proc_policy 0x%x\n",
+		dec->double_write_mode, dec->error_proc_policy);
 
 	if (pdata->sys_info) {
 		dec->vavs2_amstream_dec_info = *pdata->sys_info;
@@ -8287,6 +8736,9 @@ static void __exit amvdec_avs2_driver_remove_module(void)
 module_param(bit_depth_luma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_luma, "\n amvdec_avs2 bit_depth_luma\n");
 
+module_param(error_proc_policy, uint, 0664);
+MODULE_PARM_DESC(error_proc_policy, "\n amvdec_avs2 error_proc_policy\n");
+
 module_param(bit_depth_chroma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_chroma, "\n amvdec_avs2 bit_depth_chroma\n");
 
@@ -8334,6 +8786,12 @@ MODULE_PARM_DESC(i_only_flag, "\n amvdec_avs2 i_only_flag\n");
 
 module_param(error_handle_policy, uint, 0664);
 MODULE_PARM_DESC(error_handle_policy, "\n amvdec_avs2 error_handle_policy\n");
+
+module_param(error_handle_mode, uint, 0664);
+MODULE_PARM_DESC(error_handle_mode, "\n amvdec_avs2 error_handle_mode\n");
+
+module_param(lcu_percentage_threshold, uint, 0664);
+MODULE_PARM_DESC(lcu_percentage_threshold, "\n amvdec_avs2 lcu_percentage_threshold\n");
 
 module_param(re_search_seq_threshold, uint, 0664);
 MODULE_PARM_DESC(re_search_seq_threshold, "\n amvdec_avs2 re_search_seq_threshold\n");

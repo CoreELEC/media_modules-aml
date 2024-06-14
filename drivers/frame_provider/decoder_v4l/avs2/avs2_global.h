@@ -767,7 +767,7 @@ struct avs2_frame_s {
 	u64 pts64;
 	/**/
 	int vf_ref;
-	int decode_idx;
+	u64 decode_idx;
 	int slice_type;
 	int32_t imgtr_fwRefDistance_bak;
 	int32_t error_mark;
@@ -796,8 +796,14 @@ struct avs2_frame_s {
 	u64 timestamp;
 #ifdef AML
 	u64 time;
-#endif
+	s32 poc;
 	int mv_size;
+	ulong mmu_copy_header_adr;
+	int need_mmu_copy;
+	int error_drop_flag;
+	u32 used_4k_num;
+	u32 cur_mmu_4k_number;
+#endif
 };
 
 
@@ -1648,6 +1654,8 @@ struct avs2_decoder {
 	uint8_t init_fref_flag;
 #ifdef AML
 	u64 start_time;
+	struct avs2_frame_s *error_fref[REF_MAXBUFFER];
+	u64 decode_idx;
 #endif
 };
 
@@ -1670,5 +1678,8 @@ extern bool is_avs2_print_param(void);
 extern bool is_avs2_print_bufmgr_detail(void);
 extern int get_free_frame_buffer(struct avs2_decoder *avs2_dec);
 extern int get_error_policy(struct avs2_decoder *avs2_dec);
+extern int get_error_handle_mode(struct avs2_decoder *avs2_dec);
+extern int get_lcu_percentage_threshold(void);
+
 #endif
 
