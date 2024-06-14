@@ -1428,12 +1428,6 @@ enum SliceType {
 	I_SLICE
 };
 
-enum ResResult {
-	RES_RET_NORMAL = 0,
-	RES_RET_ABNORMAL = 1,
-	RES_RET_OVERSIZE = 2
-};
-
 /*USE_BUF_BLOCK*/
 struct BUF_s {
 	ulong	start_adr;
@@ -2106,54 +2100,18 @@ static int get_frame_mmu_map_size(void)
 	return (MAX_FRAME_4K_NUM * 4);
 }
 
-static enum ResResult is_oversize(struct hevc_state_s *hevc, int w, int h)
+static enum ResResult is_oversize(int w, int h)
 {
-	int max = MAX_SIZE_8K;
+	enum ResResult ret = RES_RET_NORMAL;
 
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		is_cpu_s7() ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7D)) {
-		max = MAX_SIZE_4K;
-		if (w > h) {
-			if (w > 4096 && w <= 8192
-				&& h > 2304 && h <= 4608)
-					return RES_RET_OVERSIZE;
-		} else if (w < h) {
-			if (h > 4096 && h <= 8192
-				&& w > 2304 && w <= 4608)
-					return RES_RET_OVERSIZE;
-		} else {
-			if (w*h > MAX_SIZE_4K
-				&& w*h <= MAX_SIZE_8K)
-				return RES_RET_OVERSIZE;
-		}
-	} else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-		is_cpu_s7_s805x3()) {
-		max = MAX_SIZE_2K;
-		if (w > h) {
-			if (w > 1920 && w <= 4096
-				&& h > 1088 && h <= 2304)
-					return RES_RET_OVERSIZE;
-		} else if (w < h) {
-			if (h > 1920 && h <= 4096
-				&& w > 1088 && w <= 2304)
-					return RES_RET_OVERSIZE;
-		} else {
-			if (w*h > MAX_SIZE_2K
-				&& w*h <= MAX_SIZE_4K)
-				return RES_RET_OVERSIZE;
-		}
-	}
+	ret = format_resolution_fatal_error(VFORMAT_HEVC, w, h);
+	if (ret != RES_RET_NORMAL)
+		return ret;
 
 	if (w < 64 || h < 64)
 		return RES_RET_ABNORMAL;
 
-	if (h != 0 && (w > max / h))
-		return RES_RET_ABNORMAL;
-
-	return RES_RET_NORMAL;
+	return ret;
 }
 
 static int is_crop_valid(struct hevc_state_s *hevc, int w, int h, u32 *p_crop_right, u32 *p_crop_bottom)
@@ -2198,7 +2156,7 @@ static enum ResResult is_csd_valid(struct hevc_state_s *hevc, int w, int h, int 
 	struct mh265_csd_main_info_t curr_info;
 	curr_info.frame_width = w;
 	curr_info.frame_height = h;
-	over_size = is_oversize(hevc, curr_info.frame_width, curr_info.frame_height);
+	over_size = is_oversize(curr_info.frame_width, curr_info.frame_height);
 
 	if (is_from_csd_parer) {
 		crop_valid = is_crop_valid(hevc, w, h, &curr_info.crop_right, &curr_info.crop_bottom);

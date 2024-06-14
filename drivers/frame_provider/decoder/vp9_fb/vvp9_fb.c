@@ -1696,16 +1696,10 @@ static int vp9_debug(struct VP9Decoder_s *pbi,
 
 static int is_oversize(int w, int h)
 {
-	int max = (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)?
-		MAX_SIZE_8K : MAX_SIZE_4K;
-
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
-		max = MAX_SIZE_2K;
-
 	if (w <= 0 || h <= 0)
 		return true;
 
-	if (h != 0 && (w > max / h))
+	if (format_resolution_fatal_error(VFORMAT_VP9, w, h))
 		return true;
 
 	return false;
@@ -10272,7 +10266,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		} else
 #endif
 		if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) {
-			if (vdec_is_support_4k()) {
+			if (hevc_is_support_4k()) {
 				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 					memcpy(cur_buf_info, &amvvp9_workbuff_spec[2],	/* 8k */
 					sizeof(struct BuffInfo_s));
@@ -10283,7 +10277,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 				memcpy(cur_buf_info, &amvvp9_workbuff_spec[0],/* 1080p */
 				sizeof(struct BuffInfo_s));
 		} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2 || is_cpu_tm2_revb()
-			if (vdec_is_support_4k()) {
+			if (hevc_is_support_4k()) {
 				memcpy(cur_buf_info, &amvvp9_workbuff_spec[5],	/* 8k */
 				sizeof(struct BuffInfo_s));
 			} else
@@ -14347,7 +14341,7 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 		config_hevc_irq_num(pbi);
 #endif
 
-	if (!vdec_is_support_4k()) {
+	if (!hevc_is_support_4k()) {
 		pbi->max_pic_w = 1920;
 		pbi->max_pic_h = 1088;
 	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
@@ -16622,7 +16616,7 @@ static int __init amvdec_vp9_driver_init_module(void)
 	struct BuffInfo_s *p_buf_info;
 
 	if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) {
-		if (vdec_is_support_4k()) {
+		if (hevc_is_support_4k()) {
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 				p_buf_info = &amvvp9_workbuff_spec[2];
 			else
@@ -16630,7 +16624,7 @@ static int __init amvdec_vp9_driver_init_module(void)
 		} else
 			p_buf_info = &amvvp9_workbuff_spec[0];
 	} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2 || is_cpu_tm2_revb()
-		if (vdec_is_support_4k())
+		if (hevc_is_support_4k())
 			p_buf_info = &amvvp9_workbuff_spec[5];
 		else
 			p_buf_info = &amvvp9_workbuff_spec[4];

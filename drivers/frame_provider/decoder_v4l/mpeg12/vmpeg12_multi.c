@@ -2244,20 +2244,11 @@ void cal_chunk_offset_and_size(struct vdec_mpeg12_hw_s *hw)
 
 static int is_oversize(int w, int h)
 {
-	int max = MAX_SIZE_2K;
-
 	if (w <= 0 || h <= 0)
 		return true;
 
-	if (w > max / h) {
+	if (format_resolution_fatal_error(VFORMAT_MPEG12, w, h))
 		return true;
-	} else if (w > h) {
-		if (w > 1920 || h > 1088)
-			return true;
-	} else if (w < h) {
-		if (w > 1088 || h > 1920)
-			return true;
-	}
 
 	return false;
 }

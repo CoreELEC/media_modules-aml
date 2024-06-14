@@ -4654,7 +4654,7 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
 		if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) {
-			if (vdec_is_support_4k()) {
+			if (hevc_is_support_4k()) {
 				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 					bufspec_index = 2;
 				else
@@ -4662,7 +4662,7 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 			} else
 				bufspec_index = 0;
 		} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2 || is_cpu_tm2_revb()
-			if (vdec_is_support_4k()) {
+			if (hevc_is_support_4k()) {
 				bufspec_index = 5;
 			} else
 				bufspec_index = 3;
@@ -4703,7 +4703,7 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 	avs2_bufmgr_init(dec, cur_buf_info, &dec->mc_buf_spec);
 #endif
 
-	if (!vdec_is_support_4k()
+	if (!hevc_is_support_4k()
 		&& (buf_alloc_width > 1920 &&  buf_alloc_height > 1088)) {
 		buf_alloc_width = 1920;
 		buf_alloc_height = 1088;
@@ -10170,7 +10170,7 @@ static int __init amvdec_avs2_driver_init_module(void)
 	struct BuffInfo_s *p_buf_info;
 
 	if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) {
-		if (vdec_is_support_4k()) {
+		if (hevc_is_support_4k()) {
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 				p_buf_info = &amvavs2_workbuff_spec[2];
 			else
@@ -10178,7 +10178,7 @@ static int __init amvdec_avs2_driver_init_module(void)
 		} else
 			p_buf_info = &amvavs2_workbuff_spec[0];
 	} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2 || is_cpu_tm2_revb()
-		if (vdec_is_support_4k()) {
+		if (hevc_is_support_4k()) {
 			p_buf_info = &amvavs2_workbuff_spec[5];
 		} else
 			p_buf_info = &amvavs2_workbuff_spec[3];

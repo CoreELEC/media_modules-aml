@@ -856,24 +856,11 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 
 static int is_oversize(int w, int h)
 {
-	int max = MAX_SIZE_2K;
-
 	if (w <= 0 || h <= 0)
 		return true;
 
-	if (h != 0 && (w > max / h))
+	if (format_resolution_fatal_error(VFORMAT_VC1, w, h))
 		return true;
-
-	if (w > h) {
-		if (w > 1920 || h > 1088)
-			return true;
-	} else if (w < h) {
-		if (w > 1088 || h > 1920)
-			return true;
-	} else {
-		if (w*h > 1920 *1088)
-			return true;
-	}
 
 	return false;
 }

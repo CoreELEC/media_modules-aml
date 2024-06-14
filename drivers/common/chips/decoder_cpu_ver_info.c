@@ -264,7 +264,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
-		.hevc_max_resolution = RESOLUTION_8K,
+		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
 		.support_h265_level_idc = IDC_5_1,
 	},
@@ -301,7 +301,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
-		.hevc_max_resolution = RESOLUTION_8K,
+		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
 		.support_h265_level_idc = IDC_5_1,
 	},
@@ -318,7 +318,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
-		.hevc_max_resolution = RESOLUTION_8K,
+		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
 		.support_h265_level_idc = IDC_5_1,
 	},
@@ -501,8 +501,9 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.is_support_h264_mmu	= true,
 		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
-		.hevc_max_resolution = RESOLUTION_8K,
+		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2,
+		.support_h265_level_idc = IDC_5_1,
 	},
 
 	{	/* tm2 revb */
@@ -519,6 +520,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
+		.support_h265_level_idc = IDC_5_1,
 	},
 
 	{
@@ -535,6 +537,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.vdec_max_resolution = RESOLUTION_1080P,
 		.hevc_max_resolution = RESOLUTION_1080P,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
+		.support_h265_level_idc = IDC_4_1,
 	},
 
 	{
@@ -553,6 +556,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,  //fixed endian issue
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
+		.support_h265_level_idc = IDC_5_1,
 	},
 
 	{
@@ -572,6 +576,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.vdec_max_resolution = RESOLUTION_1080P,
 		.hevc_max_resolution = RESOLUTION_1080P,
 		.fmt_support_flags = FMT_VDEC_NO_AVS | FMT_HEVC_VP9_AV1,
+		.support_h265_level_idc = IDC_4_1,
 	},
 };
 
@@ -902,6 +907,7 @@ bit1: force support all video format;
 */
 #define FORCE_VDEC_NO_PARSER     BIT(0)
 #define FORCE_VDEC_SUPPORT_FMT   BIT(1)
+#define FORCE_VDEC_NO_OVERSIZE   BIT(2)
 static u32 force_dos_support;
 
 inline bool is_core_vdec_fmt(int format)
@@ -1000,6 +1006,9 @@ EXPORT_SYMBOL(is_hevc_clk_combined);
 /* ressolution */
 inline int vdec_is_support_4k(void)
 {
+	if (force_dos_support & FORCE_VDEC_NO_OVERSIZE)
+		return true;
+
 	if (platform_dos_dev->vdec_max_resolution > RESOLUTION_1080P)
 		return true;
 	else
@@ -1009,6 +1018,9 @@ EXPORT_SYMBOL(vdec_is_support_4k);
 
 inline int hevc_is_support_4k(void)
 {
+	if (force_dos_support & FORCE_VDEC_NO_OVERSIZE)
+		return true;
+
 	if (platform_dos_dev->hevc_max_resolution > RESOLUTION_1080P)
 		return true;
 	else
@@ -1018,6 +1030,9 @@ EXPORT_SYMBOL(hevc_is_support_4k);
 
 inline int hevc_is_support_8k(void)
 {
+	if (force_dos_support & FORCE_VDEC_NO_OVERSIZE)
+		return true;
+
 	if (platform_dos_dev->hevc_max_resolution > RESOLUTION_4K)
 		return true;
 
@@ -1025,10 +1040,10 @@ inline int hevc_is_support_8k(void)
 }
 EXPORT_SYMBOL(hevc_is_support_8k);
 
-inline bool is_oversize_vdec(int w, int h)
+inline bool is_oversize_vdec(unsigned int w, unsigned int h)
 {
-	if (w < 0 || h < 0)
-		return true;
+	if (force_dos_support & FORCE_VDEC_NO_OVERSIZE)
+		return false;
 
 	if (h != 0 && (w > platform_dos_dev->vdec_max_resolution / h))
 		return true;
@@ -1037,10 +1052,10 @@ inline bool is_oversize_vdec(int w, int h)
 }
 EXPORT_SYMBOL(is_oversize_vdec);
 
-inline bool is_oversize_hevc(int w, int h)
+inline bool is_oversize_hevc(unsigned int w, unsigned int h)
 {
-	if (w < 0 || h < 0)
-		return true;
+	if (force_dos_support & FORCE_VDEC_NO_OVERSIZE)
+		return false;
 
 	if (h != 0 && (w > platform_dos_dev->hevc_max_resolution / h))
 		return true;
@@ -1048,6 +1063,104 @@ inline bool is_oversize_hevc(int w, int h)
 	return false;
 }
 EXPORT_SYMBOL(is_oversize_hevc);
+
+inline u32 get_format_max_resolution(int format)
+{
+	if (force_dos_support & FORCE_VDEC_NO_OVERSIZE)
+		return RESOLUTION_8K;
+
+	switch (format) {
+		case VFORMAT_MPEG12:
+		case VFORMAT_MPEG4:
+		case VFORMAT_VC1:
+		case VFORMAT_AVS:
+			return RESOLUTION_1080P;
+		case VFORMAT_H264:
+		case VFORMAT_MJPEG:
+		case VFORMAT_H264MVC:
+			return platform_dos_dev->vdec_max_resolution;
+		case VFORMAT_AVS2:
+		case VFORMAT_AV1:
+		case VFORMAT_AVS3:
+			return platform_dos_dev->hevc_max_resolution;
+		case VFORMAT_HEVC:
+		case VFORMAT_VP9:
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)
+				return RESOLUTION_1080P;
+			else
+				return platform_dos_dev->hevc_max_resolution;
+		case VFORMAT_REAL:
+		case VFORMAT_JPEG:
+		case VFORMAT_YUV:
+		case VFORMAT_H264_4K2K:
+		default:
+			return 0;
+	}
+}
+EXPORT_SYMBOL(get_format_max_resolution);
+
+enum ResResult format_resolution_fatal_error(int format, int w, int h)
+{
+	u32 max = get_format_max_resolution(format);
+
+	switch (format) {
+		case VFORMAT_MPEG12:
+		case VFORMAT_MPEG4:
+		case VFORMAT_VC1:
+		case VFORMAT_AVS:
+		case VFORMAT_H264:
+		case VFORMAT_MJPEG:
+		case VFORMAT_H264MVC:
+			if (max == RESOLUTION_1080P) {
+				if ((w == h && w * h > MAX_SIZE_2K && w * h <= MAX_SIZE_4K) ||
+				(w > h && RANGE_IN(1920, 4096, w) && RANGE_IN(1088, 2304, h)) ||
+				(w < h && RANGE_IN(1920, 4096, h) && RANGE_IN(1088, 2304, w))) {
+					return RES_RET_OVERSIZE;
+				}
+			}
+			if (((w > h) && (w > 4096 || h > 2304)) ||
+				((w < h) && (w > 2304 || h > 4096)) ||
+				((w * h) > MAX_SIZE_4K) ||
+				((w * h) > max)) {
+				return RES_RET_ABNORMAL;
+			}
+			break;
+		case VFORMAT_HEVC:
+		case VFORMAT_VP9:
+		case VFORMAT_AVS2:
+		case VFORMAT_AV1:
+		case VFORMAT_AVS3:
+			if (max == RESOLUTION_4K) {
+				if ((w == h && w * h > MAX_SIZE_4K && w * h <= MAX_SIZE_8K) ||
+				(w > h && RANGE_IN(4096, 8192, w) && RANGE_IN(2304, 4608, h)) ||
+				(w < h && RANGE_IN(4096, 8192, h) && RANGE_IN(2304, 4608, w))) {
+					return RES_RET_OVERSIZE;
+				}
+			} else if (max == RESOLUTION_1080P) {
+				if ((w == h && w * h > MAX_SIZE_2K && w * h <= MAX_SIZE_4K) ||
+				(w > h && RANGE_IN(1920, 4096, w) && RANGE_IN(1088, 2304, h)) ||
+				(w < h && RANGE_IN(1920, 4096, h) && RANGE_IN(1088, 2304, w))) {
+					return RES_RET_OVERSIZE;
+				}
+			}
+			if (((w > h) && (w > 8192 || h > 4608)) ||
+				((w < h) && (w > 4608 || h > 8192)) ||
+				((w * h) > MAX_SIZE_8K) ||
+				((w * h) > max)) {
+				return RES_RET_ABNORMAL;
+			}
+			break;
+		case VFORMAT_REAL:
+		case VFORMAT_JPEG:
+		case VFORMAT_YUV:
+		case VFORMAT_H264_4K2K:
+		default:
+			break;
+	}
+
+	return RES_RET_NORMAL;
+}
+EXPORT_SYMBOL(format_resolution_fatal_error);
 
 inline bool is_support_no_parser(void)
 {
@@ -1203,7 +1316,6 @@ void dos_info_debug(void)
 	cpu_sub_id = save_sub_id;
 }
 EXPORT_SYMBOL(dos_info_debug);
-
 
 module_param(force_dos_support, uint, 0664);
 

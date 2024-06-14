@@ -1144,27 +1144,14 @@ int avs3_get_error_handle_mode(void)
 
 static int is_oversize(int w, int h)
 {
-	int max = MAX_SIZE_8K;
-	int max_w_h = 8192;
-	int max_h_w = 4608;
-
 	if (w <= 0 || h <= 0)
 		return true;
 
-	if (w > h) {
-		if (w > max_w_h || h > max_h_w)
-			return true;
-	} else if (w < h) {
-		if (w > max_h_w || h > max_w_h)
-			return true;
-	} else {
-		if (w * h > max)
-			return true;
-	}
+	if (format_resolution_fatal_error(VFORMAT_AVS3, w, h))
+		return true;
 
 	return false;
 }
-
 
 static int get_frame_mmu_map_size(void)
 {
@@ -4778,7 +4765,7 @@ static int avs3_local_init(struct AVS3Decoder_s *dec)
 		bufspec_index = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
-		if (vdec_is_support_4k()) {
+		if (hevc_is_support_4k()) {
 			bufspec_index = 2;	/* 8k */
 		} else
 			bufspec_index = 0;/* 1080p */
@@ -4813,7 +4800,7 @@ static int avs3_local_init(struct AVS3Decoder_s *dec)
 #endif
 	dec->pic_list_init_flag = 0;
 	if ((buf_alloc_width & buf_alloc_height) == 0) {
-		if (!vdec_is_support_4k()
+		if (!hevc_is_support_4k()
 			&& (buf_alloc_width > 1920 &&  buf_alloc_height > 1088)) {
 			buf_alloc_width = 1920;
 			buf_alloc_height = 1088;
@@ -11084,7 +11071,7 @@ static int __init amvdec_avs3_driver_init_module(void)
 		bufspec_index = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
-		if (vdec_is_support_4k()) {
+		if (hevc_is_support_4k()) {
 			bufspec_index = 2;	/* 8k */
 		} else
 			bufspec_index = 0;/* 1080p */

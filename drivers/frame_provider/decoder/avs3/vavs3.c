@@ -5122,7 +5122,7 @@ static int avs3_local_init(struct AVS3Decoder_s *dec)
 		bufspec_index = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
-		if (vdec_is_support_4k()) {
+		if (hevc_is_support_4k()) {
 			bufspec_index = 2;	/* 8k */
 		} else
 			bufspec_index = 0;/* 1080p */
@@ -5157,7 +5157,7 @@ static int avs3_local_init(struct AVS3Decoder_s *dec)
 	avs3_dec_init(dec, cur_buf_info, &dec->mc_buf_spec);
 #endif
 	if ((buf_alloc_width & buf_alloc_height) == 0) {
-		if (!vdec_is_support_4k()
+		if (!hevc_is_support_4k()
 			&& (buf_alloc_width > 1920 &&  buf_alloc_height > 1088)) {
 			buf_alloc_width = 1920;
 			buf_alloc_height = 1088;
@@ -11346,7 +11346,7 @@ static int __init amvdec_avs3_driver_init_module(void)
 		bufspec_index = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
-		if (vdec_is_support_4k()) {
+		if (hevc_is_support_4k()) {
 			bufspec_index = 2;	/* 8k */
 		} else
 			bufspec_index = 0;/* 1080p */

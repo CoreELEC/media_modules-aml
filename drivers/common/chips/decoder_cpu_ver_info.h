@@ -104,8 +104,19 @@ enum AM_MESON_CPU_MAJOR_ID {
 
 /* for dos_of_dev_s max resolution define */
 #define RESOLUTION_1080P  (1920 * 1088)
-#define RESOLUTION_4K     (4302 * 2176)  //4k
-#define RESOLUTION_8K     (8192 * 4352)  //8k
+#define RESOLUTION_4K     (4096 * 2304)  //(4302 * 2176)  //4k
+#define RESOLUTION_8K     (8192 * 4608)  //(8192 * 4352)  //8k
+#define RANGE_IN(min, max, val) (((val) > (min)) && ((val) <= (max)))
+
+#define MAX_SIZE_8K (8192 * 4608)
+#define MAX_SIZE_4K (4096 * 2304)
+#define MAX_SIZE_2K (1920 * 1088)
+
+enum ResResult {
+	RES_RET_NORMAL = 0,
+	RES_RET_ABNORMAL = 1,
+	RES_RET_OVERSIZE = 2
+};
 
 /* fmt_support */
 //vdec
@@ -237,9 +248,13 @@ inline int hevc_is_support_4k(void);
 
 inline int hevc_is_support_8k(void);
 
-inline bool is_oversize_vdec(int w, int h);
+inline bool is_oversize_vdec(unsigned int w, unsigned int h);
 
-inline bool is_oversize_hevc(int w, int h);
+inline bool is_oversize_hevc(unsigned int w, unsigned int h);
+
+inline u32 get_format_max_resolution(int format);
+
+enum ResResult format_resolution_fatal_error(int format, int w, int h);
 
 /* hardware features */
 inline bool is_support_no_parser(void);

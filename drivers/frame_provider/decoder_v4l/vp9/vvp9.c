@@ -1290,22 +1290,10 @@ static int vp9_print(struct VP9Decoder_s *pbi,
 
 static int is_oversize(int w, int h)
 {
-	int max = MAX_SIZE_8K;
-
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		is_cpu_s7() ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7D))
-		max = MAX_SIZE_4K;
-	else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-		is_cpu_s7_s805x3())
-		max = MAX_SIZE_2K;
-
 	if (w < 64 || h < 64)
 		return true;
 
-	if (h != 0 && (w > max / h))
+	if (format_resolution_fatal_error(VFORMAT_VP9, w, h))
 		return true;
 
 	return false;

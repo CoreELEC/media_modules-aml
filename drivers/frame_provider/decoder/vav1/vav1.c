@@ -963,21 +963,10 @@ int av1_print2(int flag, const char *fmt, ...)
 
 static int is_oversize(int w, int h)
 {
-	int max = MAX_SIZE_8K;
-
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		is_cpu_s7() ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7D))
-		max = MAX_SIZE_4K;
-	else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
-		is_cpu_s7_s805x3())
-		max = MAX_SIZE_2K;
-
 	if (w <= 0 || h <= 0)
 		return true;
 
-	if (h != 0 && (w > max / h))
+	if (format_resolution_fatal_error(VFORMAT_AV1, w, h))
 		return true;
 
 	return false;
@@ -5986,7 +5975,7 @@ static int av1_local_init(struct AV1HW_s *hw)
 	cur_buf_info = &hw->work_space_buf_store;
     hw->pbi->work_space_buf = cur_buf_info;
 #if 0
-	if (vdec_is_support_4k()) {
+	if (hevc_is_support_4k()) {
 		memcpy(cur_buf_info, &aom_workbuff_spec[1],	/* 8k */
 			sizeof(struct BuffInfo_s));
 	} else
@@ -6003,7 +5992,7 @@ static int av1_local_init(struct AV1HW_s *hw)
 #else
 /*! MULTI_INSTANCE_SUPPORT*/
 #if 0
-	if (vdec_is_support_4k()) {
+	if (hevc_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 			cur_buf_info = &aom_workbuff_spec[1];/* 8k work space */
 		else
@@ -6018,7 +6007,7 @@ static int av1_local_init(struct AV1HW_s *hw)
 	init_buff_spec(hw, cur_buf_info);
 	aom_bufmgr_init(hw, cur_buf_info, NULL);
 
-	if (!vdec_is_support_4k()
+	if (!hevc_is_support_4k()
 		&& (buf_alloc_width > 1920 &&  buf_alloc_height > 1088)) {
 		buf_alloc_width = 1920;
 		buf_alloc_height = 1088;
@@ -10546,7 +10535,7 @@ static int amvdec_av1_probe(struct platform_device *pdev)
 	if (force_bufspec) {
 		hw->buffer_spec_index = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
-	} else if (vdec_is_support_4k()) {
+	} else if (hevc_is_support_4k()) {
 		if (IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h))
 			hw->buffer_spec_index = 2;
 		else if (IS_4K_SIZE(hw->max_pic_w, hw->max_pic_h))
@@ -10573,8 +10562,8 @@ static int amvdec_av1_probe(struct platform_device *pdev)
 	work_buf_size = (p_buf_info->end_adr - p_buf_info->start_adr
 		 + 0xffff) & (~0xffff);
 	av1_print(hw, 0,
-			"vdec_is_support_4k() %d  max_pic_w %d max_pic_h %d buffer_spec_index %d work_buf_size 0x%x\n",
-			vdec_is_support_4k(), hw->max_pic_w, hw->max_pic_h,
+			"support_4k %d  max_pic_w %d max_pic_h %d buffer_spec_index %d work_buf_size 0x%x\n",
+			hevc_is_support_4k(), hw->max_pic_w, hw->max_pic_h,
 			hw->buffer_spec_index, work_buf_size);
 
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -11934,7 +11923,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	if (force_bufspec) {
 		hw->buffer_spec_index = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
-	} else if (vdec_is_support_4k()) {
+	} else if (hevc_is_support_4k()) {
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
 			if (IS_4K_SIZE(hw->max_pic_w, hw->max_pic_h))
 				hw->buffer_spec_index = 4;
@@ -11969,8 +11958,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		 + 0xffff) & (~0xffff);
 
 	av1_print(hw, AV1_DEBUG_BUFMGR,
-			"vdec_is_support_4k() %d  max_pic_w %d max_pic_h %d buffer_spec_index %d work_buf_size 0x%x\n",
-			vdec_is_support_4k(), hw->max_pic_w, hw->max_pic_h,
+			"support_4k %d  max_pic_w %d max_pic_h %d buffer_spec_index %d work_buf_size 0x%x\n",
+			hevc_is_support_4k(), hw->max_pic_w, hw->max_pic_h,
 			hw->buffer_spec_index, work_buf_size);
 
 	if (force_config_fence) {

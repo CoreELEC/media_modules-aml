@@ -226,11 +226,9 @@ static int vcodec_feature_MaxResolution(u8 *buf, int size, int vformat)
 		case VFORMAT_AV1:
 		case VFORMAT_AVS3:
 		case VFORMAT_H266:
-			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
+			if (hevc_is_support_8k())
 				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"8k\",\n");
-			else if (vdec_is_support_4k())
+			else if (hevc_is_support_4k())
 				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"4k60\",\n");
 			else
 				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"1080p60\",\n");

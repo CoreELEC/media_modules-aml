@@ -474,12 +474,6 @@ u32 V_BUF_ADDR_OFFSET = 0x200000 + 0x8000/* 32*0x400 */ + 0x20000/* 256*0x200 */
 #define SLICE_TYPE_P 5
 #define SLICE_TYPE_B 6
 
-enum ResResult {
-	RES_RET_NORMAL = 0,
-	RES_RET_ABNORMAL = 1,
-	RES_RET_OVERSIZE = 2
-};
-
 struct buffer_spec_s {
 	/*
 	used:
@@ -1118,44 +1112,14 @@ u32 get_error_proc_policy(struct h264_dpb_stru *p_H264_Dpb)
 
 static enum ResResult is_oversize(int w, int h)
 {
-	int max = MAX_SIZE_4K;
+	enum ResResult ret = RES_RET_NORMAL;
 
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) ||
-		is_cpu_s7_s805x3()) {
-		max = MAX_SIZE_2K;
-		if (w > h) {
-			if (w > 1920 && w <= 4096
-				&& h > 1088 && h <= 2304)
-					return RES_RET_OVERSIZE;
-		} else if (w < h) {
-			if (h > 1920 && h <= 4096
-				&& w > 1088 && w <= 2304)
-					return RES_RET_OVERSIZE;
-		} else {
-			if (w*h > MAX_SIZE_2K
-				&& w*h <= MAX_SIZE_4K)
-				return RES_RET_OVERSIZE;
-		}
-	}
+	ret = format_resolution_fatal_error(VFORMAT_H264, w, h);
+	if (ret != RES_RET_NORMAL)
+		return ret;
 
 	if (w < 64 || h < 64)
 		return RES_RET_ABNORMAL;
-
-	if (h != 0 && (w > max / h))
-		return RES_RET_ABNORMAL;
-
-	if (w > h) {
-		if (w > 4096 || h > 2304)
-			return RES_RET_ABNORMAL;
-	} else if (w < h) {
-		if (w > 2304 || h > 4096)
-			return RES_RET_ABNORMAL;
-	} else {
-		if (w*h > 4096*2304)
-			return RES_RET_ABNORMAL;
-	}
 
 	return RES_RET_NORMAL;
 }

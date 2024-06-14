@@ -2255,24 +2255,14 @@ static void copy_user_data_to_pic(struct vdec_mpeg12_hw_s *hw, struct pic_info_t
 
 static int is_oversize(int w, int h)
 {
-	int max = MAX_SIZE_2K;
-
 	if (w <= 0 || h <= 0)
 		return true;
 
-	if (w > max / h) {
+	if (format_resolution_fatal_error(VFORMAT_MPEG12, w, h))
 		return true;
-	} else if (w > h) {
-		if (w > 1920 || h > 1088)
-			return true;
-	} else if (w < h) {
-		if (w > 1088 || h > 1920)
-			return true;
-	}
 
 	return false;
 }
-
 
 static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
