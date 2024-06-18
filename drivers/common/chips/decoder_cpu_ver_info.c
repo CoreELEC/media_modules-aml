@@ -532,7 +532,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 	{
 		.chip_id = AM_MESON_CPU_MINOR_ID_S7_S805X3,
 		.reg_compat = s7_mm_registers_compat,
-		.max_vdec_clock  = 800,
+		.max_vdec_clock  = 667,
 		.max_hevcf_clock = 500,
 		.max_hevcb_clock = 500,
 		.hevc_clk_combine_flag  = true,
