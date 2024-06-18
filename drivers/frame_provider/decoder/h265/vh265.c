@@ -4361,7 +4361,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 		(hevc->vf_pre_count == 1) &&
 		(hevc->first_pic_flag == 1 || hevc->first_pic_flag == 2)) {
 		hevc->first_pic_flag = 2;
-		if (pic_display->POC == hevc->first_output_poc)
+		if (pic_display->POC == hevc->first_output_poc && !flush_flag)
 			pic_display = NULL;
 		else if (pic_display->POC < hevc->first_output_poc)
 			pic_display->nodisp_mark = 1;
