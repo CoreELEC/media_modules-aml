@@ -288,7 +288,9 @@ static int vdec_vc1_probe(unsigned long h_vdec,
 	if (ctx->stream_mode) {
 		kfifo_put(&inst->vc1_ts_q, bs->timestamp);
 		vdec_write_stream_data_inner(adapt_vdec, (char *)bs->addr, size, bs->timestamp);
-
+		/* wait ucode parse ending. */
+		wait_for_completion_timeout(&inst->comp,
+			msecs_to_jiffies(1000));
 		return 0;
 	}
 

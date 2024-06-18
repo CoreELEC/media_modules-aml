@@ -581,7 +581,7 @@ static bool is_available_buffer(struct vdec_vc1_hw_s *hw)
 	}
 
 	if (!free_slot) {
-		vc1_print(0, 0,
+		vc1_print(0, VC1_DEBUG_BUFMGR,
 			"%s not enough free_slot %d!\n",
 		__func__, free_slot);
 		for (i = 0; i < hw->vf_buf_num_used; ++i) {
@@ -600,7 +600,7 @@ static bool is_available_buffer(struct vdec_vc1_hw_s *hw)
 		atomic_read(&ctx->vpp_cache_num) > 1) ||
 		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM ||
 		atomic_read(&ctx->ge2d_cache_num) > 1) {
-		vc1_print(0, 0,
+		vc1_print(0, VC1_DEBUG_BUFMGR,
 			"%s vpp or ge2d cache: %d/%d full!\n",
 		__func__, atomic_read(&ctx->vpp_cache_num), atomic_read(&ctx->ge2d_cache_num));
 
@@ -1582,7 +1582,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 	u32 buffer_index;
 	unsigned int pts, pts_valid = 0, offset = 0;
 	u32 v_width, v_height;
-	u64 pts_us64 = 0;
+	u64 pts_us64, timestamp = 0;
 	u32 frame_size;
 	u32 debug_tag;
 	u32 status_reg;
@@ -1614,8 +1614,10 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 			hw->frame_width, hw->frame_height, hw->interlace_flag);
 
 		if (is_oversize(hw->frame_width, hw->frame_height)) {
+			timestamp = ctx->current_timestamp;
 			vdec_v4l_get_pts_info(ctx, &ctx->current_timestamp);
-			vdec_v4l_post_error_frame_event(ctx);
+			if (timestamp != ctx->current_timestamp)
+				vdec_v4l_post_error_frame_event(ctx);
 			vc1_print(0, VC1_DEBUG_DETAIL, "%s: SEQ_HEADER_DONE oversize timestamp %lld\n",
 				__func__, ctx->current_timestamp);
 			WRITE_VREG(DECODE_STATUS, 0);
@@ -1644,29 +1646,41 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 		v_height = (READ_VREG(VC1_PIC_INFO) >> 14) & 0x3fff;
 
 		if (is_oversize(v_width, v_height)) {
+			timestamp = ctx->current_timestamp;
 			vdec_v4l_get_pts_info(ctx, &ctx->current_timestamp);
-			vdec_v4l_post_error_frame_event(ctx);
+			if (timestamp != ctx->current_timestamp)
+				vdec_v4l_post_error_frame_event(ctx);
 			WRITE_VREG(VC1_PIC_INFO, 0);
 			vc1_print(0, VC1_DEBUG_DETAIL, "%s: oversize v_width %d, v_height %d timestamp %lld\n",
 				__func__, v_width, v_height, ctx->current_timestamp);
 		}
+		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed)
+			vdec_v4l_write_frame_sync(ctx);
 		WRITE_VREG(DECODE_STATUS, 0);
 		return IRQ_HANDLED;
 	} else if (status_reg == DECODE_STATUS_PIC_SKIPPED) {//PIC Skipped
+		timestamp = ctx->current_timestamp;
 		vdec_v4l_get_pts_info(ctx, &ctx->current_timestamp);
-		vdec_v4l_post_error_frame_event(ctx);
+		if (timestamp != ctx->current_timestamp)
+			vdec_v4l_post_error_frame_event(ctx);
 		vc1_print(0, VC1_DEBUG_DETAIL,"%s: DECODE_STATUS_PIC_SKIPPED timestamp %lld\n",
 			__func__, ctx->current_timestamp);
+		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed)
+			vdec_v4l_write_frame_sync(ctx);
 		WRITE_VREG(DECODE_STATUS, 0);
 		return IRQ_HANDLED;
 	} else if (status_reg == DECODE_STATUS_BUF_INVALID) {
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: BUF_INVALID \n", __func__);
+		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed)
+			vdec_v4l_write_frame_sync(ctx);
 		WRITE_VREG(DECODE_STATUS, 0);
 		return IRQ_HANDLED;
 	} else if (status_reg == DECODE_STATUS_PIC_HEADER_DONE) {//PIC header done
 		hw->new_type = READ_VREG(AV_SCRATCH_K);
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: PIC_HEADER_DONE picture_type %d(%s)\n", __func__, hw->new_type,
 			((hw->new_type == I_PICTURE) ? "I" : ((hw->new_type == P_PICTURE) ? "P" : "B")));
+		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed)
+			vdec_v4l_write_frame_sync(ctx);
 	}
 
 	reg = READ_VREG(VC1_BUFFEROUT);
