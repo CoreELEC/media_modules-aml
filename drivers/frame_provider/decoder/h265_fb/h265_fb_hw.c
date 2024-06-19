@@ -355,7 +355,7 @@ static int32_t config_mc_buffer_fb(hevc_stru_t* hevc, PIC_t* cur_pic)
 					"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 			} else {
 				if (hevc->PB_skip_mode == 0) {
-					if ((error_handle_mode == 1) && (hevc->ref_pic.dw_y_adr != 0)) {
+					if ((hevc->error_handle_mode == 1) && (hevc->ref_pic.dw_y_adr != 0)) {
 						WRITE_BACK_32(hevc, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 							(hevc->ref_pic.mc_canvas_u_v << 16) | (hevc->ref_pic.mc_canvas_u_v << 8) | hevc->ref_pic.mc_canvas_y);
 						hevc_print(hevc, H265_DEBUG_BUFMGR,
@@ -396,7 +396,7 @@ static int32_t config_mc_buffer_fb(hevc_stru_t* hevc, PIC_t* cur_pic)
 					"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 			} else {
 				if (hevc->PB_skip_mode == 0) {
-					if ((error_handle_mode == 1) && (hevc->ref_pic.dw_y_adr != 0)) {
+					if ((hevc->error_handle_mode == 1) && (hevc->ref_pic.dw_y_adr != 0)) {
 						WRITE_BACK_32(hevc, HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 							(hevc->ref_pic.mc_canvas_u_v << 16) | (hevc->ref_pic.mc_canvas_u_v << 8) | hevc->ref_pic.mc_canvas_y);
 						hevc_print(hevc, H265_DEBUG_BUFMGR,
@@ -970,10 +970,9 @@ int BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		}
 	}
 
-	if ((pic->error_mark && (hevc->PB_skip_mode != 0)) ||
-		(hevc->front_back_mode != 1 && hevc->front_back_mode != 3) ||
-		((pic->drop_flag) && (hevc->PB_skip_mode != 0))) {
-
+	if ((pic->error_mark && (hevc->PB_skip_mode != 0) &&
+		(hevc->lcu_percentage_threshold == 0)) ||
+		(pic->drop_flag)) {
 		mutex_lock(&hevc->fb_mutex);
 		hevc->gvs->drop_frame_count++;
 		if (pic->slice_type == I_SLICE) {
@@ -990,7 +989,8 @@ int BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		hevc_hw_init(hevc, pic->depth, 0, 1);
 
 		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-			"%s pic has error_mark, skip\n", __func__);
+			"%s pic poc(%d) has error_mark, skip\n",
+			__func__, pic->POC);
 
 		return -1;
 	}

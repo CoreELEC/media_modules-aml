@@ -2115,18 +2115,6 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 		"Start BackEnd Decoding %d (wr pos %d, rd pos %d) pic index %d\n",
 		avs3_dec->backend_decoded_count, avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, pic->index);
 
-#if 0
-#ifdef AVS3_10B_MMU
-	alloc_mmu(&avs3_mmumgr_0, pic->index, pic->width, pic->height/2+32+8, ((pic->depth == 0) ? 0 : DEPTH_BITS_10));
-	alloc_mmu(&avs3_mmumgr_1, pic->index, pic->width, pic->height/2+32+8, ((pic->depth == 0) ? 0 : DEPTH_BITS_10));
-#ifdef AVS3_10B_MMU_DW
-	alloc_mmu(&avs3_mmumgr_dw0, pic->index, pic->width, pic->height/2+32+8, ((pic->depth == 0) ? 0 : DEPTH_BITS_10));
-	alloc_mmu(&avs3_mmumgr_dw1, pic->index, pic->width, pic->height/2+32+8, ((pic->depth == 0) ? 0 : DEPTH_BITS_10));
-#endif
-	pic->mmu_alloc_flag = 1;
-#endif
-#else
-
 	for (i = 0; (i < pic->list0_num_refp) && (pic->error_mark == 0); i++) {
 		ref_pic = &avs3_dec->pic_pool[pic->list0_index[i]].buf_cfg;
 		if (ref_pic->error_mark) {
@@ -2165,8 +2153,8 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 		}
 	}
 
-	if (pic->error_mark && (error_handle_policy & 0x4)
-		&& (lcu_percentage_threshold == 0)) {
+	if (pic->error_mark && (dec->error_handle_policy & 0x4)
+		&& (dec->lcu_percentage_threshold == 0)) {
 		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
 			"%s: error pic, skip\n", __func__);
 
@@ -2241,7 +2229,7 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 		__func__, pic->index, cur_mmu_4k_number);
 	}
 	pic->mmu_alloc_flag = 1;
-#endif
+
 	ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_END);
 
 	ATRACE_COUNTER(dec->trace.decode_back_run_time_name, TRACE_RUN_BACK_CONFIGURE_REGISTER_START);

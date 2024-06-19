@@ -1858,8 +1858,8 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 
 	dec->cur_back_idx = pic->index;
 
-	if (pic->error_mark && (error_handle_policy & 0x4)
-		&& (lcu_percentage_threshold == 0)) {
+	if (pic->error_mark && (dec->error_handle_policy & 0x4)
+		&& (dec->lcu_percentage_threshold == 0)) {
 		avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
 			"%s: error pic, skip\n", __func__);
 

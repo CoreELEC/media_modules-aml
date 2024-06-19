@@ -294,6 +294,8 @@ static void vdec_parser_parms(struct vdec_h264_inst *inst)
 			ctx->config.parm.dec.cfg.metadata_config_flag);
 		pbuf += sprintf(pbuf, "parm_v4l_duration:%d;",
 			ctx->config.parm.dec.cfg.duration);
+		pbuf += sprintf(pbuf, "parm_v4l_error_handle_info:%d;",
+			ctx->config.parm.dec.cfg.error_handle_info);
 		ctx->config.length = pbuf - ctx->config.buf;
 	} else {
 		ctx->config.parm.dec.cfg.double_write_mode = 16;

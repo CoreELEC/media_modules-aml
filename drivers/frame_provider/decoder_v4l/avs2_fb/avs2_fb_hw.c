@@ -1732,7 +1732,8 @@ static int BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 	}
 	mutex_unlock(&dec->fb_mutex);
 
-	if ((dec->error_proc_policy & 0x2) && pic->error_mark) {
+	if ((dec->error_proc_policy & 0x2) && pic->error_mark &&
+		(dec->lcu_percentage_threshold == 0)) {
 		mutex_lock(&dec->fb_mutex);
 		dec->gvs->drop_frame_count++;
 		if (pic->slice_type == I_IMG) {

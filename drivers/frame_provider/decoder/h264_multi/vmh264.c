@@ -1023,6 +1023,7 @@ struct vdec_h264_hw_s {
 	u32 csd_error_flag;
 	bool csd_restore_flag;
 	u32 csd_restore_timeout_num;
+	u32 mb_count_threshold;
 };
 
 #define TIMEOUT_INIT 0
@@ -7159,11 +7160,25 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 		p->data_flag |= ERROR_FLAG;
 	}
 
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+		"p->data_flag 0x%x, hw->data_flag 0x%x\n",
+		p->data_flag, hw->data_flag);
+
+	if ((hw->error_proc_policy & 0x20000)
+		&& (hw->mb_count_threshold == 100)
+		&& (p->data_flag & ERROR_FLAG)) {
+		p->data_flag &= ~ERROR_FLAG;
+		hw->data_flag &= ~ERROR_FLAG;
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"clean ERROR_FLAG, hw->data_flag 0x%x, p->data_flag 0x%x\n",
+			p->data_flag, hw->data_flag);
+	}
+
 	if (hw->error_proc_policy & 0x100 && !(p->data_flag & ERROR_FLAG)) {
 		if (decode_mb_count < mb_total) {
 			p->data_flag |= ERROR_FLAG;
 			if (((hw->error_proc_policy & 0x20000) &&
-				decode_mb_count >= mb_total * (100 - mb_count_threshold) / 100)) {
+				decode_mb_count >= mb_total * (100 - hw->mb_count_threshold) / 100)) {
 				p->data_flag &= ~ERROR_FLAG;
 			}
 		}
@@ -7428,7 +7443,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 
 			/* dump_dpb(&p_H264_Dpb->mDPB); */
 			hw->has_i_frame = 1;
-			if (hw->mmu_enable)
+			if ((hw->mmu_enable) && (hw->dec_result != DEC_RESULT_TIMEOUT))
 				hevc_set_frame_done(hw);
 			hw->decode_pic_count++;
 			p_H264_Dpb->poc_check_count++;
@@ -8210,13 +8225,25 @@ pic_done_proc:
 			(dec_dpb_status == H264_DECODE_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_TIMEOUT) ||
 			(!is_multi_frames(hw) && (dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
-			hw->data_flag |= ERROR_FLAG;
-			mutex_lock(&hw->pic_mutex);
-			if (hw->dpb.mVideo.dec_picture)
-				hw->dpb.mVideo.dec_picture->data_flag |= ERROR_FLAG;
-			mutex_unlock(&hw->pic_mutex);
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
-				"%s, mark err_frame\n", __func__);
+			unsigned mby_mbx = READ_VREG(MBY_MBX);
+			unsigned mb_total = (hw->seq_info2 >> 8) & 0xffff;
+			unsigned mb_width = hw->seq_info2 & 0xff;
+			unsigned decode_mb_count;
+
+			if (!mb_width && mb_total) /*for 4k2k*/
+				mb_width = 256;
+			decode_mb_count = ((mby_mbx & 0xff) * mb_width + (((mby_mbx >> 8) & 0xff) + 1));
+			if (((hw->error_proc_policy & 0x20000) &&
+				decode_mb_count < mb_total * (100 - hw->mb_count_threshold) / 100)) {
+				hw->data_flag |= ERROR_FLAG;
+				mutex_lock(&hw->pic_mutex);
+				if (hw->dpb.mVideo.dec_picture)
+					hw->dpb.mVideo.dec_picture->data_flag |= ERROR_FLAG;
+				mutex_unlock(&hw->pic_mutex);
+
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+					"%s, mark err_frame\n", __func__);
+			}
 		}
 		if (dec_dpb_status == H264_DECODE_TIMEOUT &&
 			hw->mmu_enable) {
@@ -12065,6 +12092,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	hw->reorder_dpb_size_margin = reorder_dpb_size_margin;
 	hw->interlace_filed_margin = interlace_filed_margin;
+	hw->mb_count_threshold = mb_count_threshold;
 
 	if (pdata->config_len) {
 		dpb_print(DECODE_ID(hw), 0, "pdata->config=%s\n", pdata->config);
@@ -12137,14 +12165,20 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			"api_error_policy", &config_val) == 0) {
 			if (config_val == 0) {
 				hw->error_proc_policy = H264_ERROR_FRAME_DISPLAY;
+				dpb_print(DECODE_ID(hw), 0, "Error Frame Display\n");
 			} else if (config_val == 1) {
 				hw->error_proc_policy = H264_ERROR_FRAME_DROP;
-				mb_count_threshold = 0;
+				hw->mb_count_threshold = 0;
 			} else {
 				hw->error_proc_policy = error_proc_policy;
 			}
 		} else {
 			hw->error_proc_policy = error_proc_policy;
+		}
+
+		if (get_config_int(pdata->config,
+			"error_handle_info", &config_val) == 0) {
+			hw->mb_count_threshold = config_val & 0xff;
 		}
 	} else {
 		hw->double_write_mode = double_write_mode;
@@ -12153,6 +12187,14 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	if (error_proc_policy & 0x40000000)
 		hw->error_proc_policy = error_proc_policy;
+
+	if (mb_count_threshold)
+		hw->mb_count_threshold = mb_count_threshold;
+	hw->mb_count_threshold = hw->mb_count_threshold % 101;
+
+	dpb_print(DECODE_ID(hw), 0,
+		"%s error_proc_policy 0x%x mb_count_threshold %d\n",
+		__func__, hw->error_proc_policy, hw->mb_count_threshold);
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5)
 		hw->double_write_mode = 3;

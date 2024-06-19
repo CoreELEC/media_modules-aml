@@ -560,6 +560,7 @@ struct aml_vdec_cfg_infos {
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
 	/*
+	 * bit 22	: disable mmu copy.
 	 * bit 21	: buffer alloc flag. 0: dma heap, 1: ion heap.
 	 * bit 20	: di post flag.
 	 * bit 19	: no-surface flag.
@@ -581,7 +582,11 @@ struct aml_vdec_cfg_infos {
 	u32 duration;
 	u32 triple_write_mode;
 	u32 dv_profile;
-	u32 data[2];
+	/*
+	 * bit 0-7	: error percentage.
+	 */
+	u32 error_handle_info;
+	u32 data[1];
 };
 
 struct aml_vdec_ps_infos {

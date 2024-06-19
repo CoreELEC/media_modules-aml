@@ -555,8 +555,8 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw);
 void avs3_cleanup_useless_pic_buffer_in_pm(struct avs3_decoder *hw);
 void print_alf_param(union param_u * param);
 void print_param(union param_u * param);
-int avs3_get_error_policy(void);
-int avs3_get_error_handle_mode(void);
+u32 avs3_get_error_policy(COM_PM *pm);
+u32 avs3_get_error_handle_mode(COM_PM *pm);
 
 #endif
 

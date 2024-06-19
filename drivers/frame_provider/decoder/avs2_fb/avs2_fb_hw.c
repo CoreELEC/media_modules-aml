@@ -1811,7 +1811,7 @@ static int BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 	mutex_unlock(&dec->fb_mutex);
 
 	if ((dec->error_proc_policy & 0x2) && pic->error_mark &&
-		(lcu_percentage_threshold == 0)) {
+		(dec->lcu_percentage_threshold == 0)) {
 		mutex_lock(&dec->fb_mutex);
 		dec->gvs->drop_frame_count++;
 		if (pic->slice_type == I_IMG) {
@@ -1823,11 +1823,9 @@ static int BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 			dec->gvs->b_lost_frames++;
 		}
 		mutex_unlock(&dec->fb_mutex);
-
 		pic->error_drop_flag = 1;
 		avs2_print(dec, AVS2_DBG_BUFMGR, "%s pic poc(%s) has error_mark, skip\n",
 			__func__, pic->poc);
-
 		return 1;
 	}
 

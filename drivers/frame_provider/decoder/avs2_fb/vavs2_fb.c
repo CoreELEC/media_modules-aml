@@ -960,6 +960,7 @@ struct AVS2Decoder_s {
 	u32 error_handle_mode;
 	bool mmu_copy_disable;
 	s32 cur_idx;
+	u32 lcu_percentage_threshold;
 };
 
 static int  compute_losless_comp_body_size(
@@ -1393,23 +1394,25 @@ static int get_free_buf_count(struct AVS2Decoder_s *dec)
 	return count;
 }
 
-int get_error_policy(struct avs2_decoder *avs2_dec)
+u32 get_error_policy(struct avs2_decoder *avs2_dec)
 {
 	struct AVS2Decoder_s *dec = container_of(avs2_dec, struct AVS2Decoder_s, avs2_dec);
 
 	return dec->error_proc_policy;
 }
 
-int get_error_handle_mode(struct avs2_decoder *avs2_dec)
+u32 get_error_handle_mode(struct avs2_decoder *avs2_dec)
 {
 	struct AVS2Decoder_s *dec = container_of(avs2_dec, struct AVS2Decoder_s, avs2_dec);
 
 	return dec->error_handle_mode;
 }
 
-int get_lcu_percentage_threshold(void)
+u32 get_lcu_percentage_threshold(struct avs2_decoder *avs2_dec)
 {
-	return lcu_percentage_threshold;
+	struct AVS2Decoder_s *dec = container_of(avs2_dec, struct AVS2Decoder_s, avs2_dec);
+
+	return dec->lcu_percentage_threshold;
 }
 
 #ifdef CONSTRAIN_MAX_BUF_NUM
@@ -2484,7 +2487,7 @@ static int check_pic_decoded_lcu(struct AVS2Decoder_s *dec, struct avs2_frame_s 
 {
 	int decoder_lcu = dec->avs2_dec.lcu_total;
 
-	if (pic->decoded_lcu < (decoder_lcu * (100 - lcu_percentage_threshold % 101) / 100)) {
+	if (pic->decoded_lcu < (decoder_lcu * (100 - dec->lcu_percentage_threshold) / 100)) {
 		avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
 			"%s:decoded_lcu %d drop flag is true\n", __func__, pic->decoded_lcu);
 		return 1;
@@ -2499,7 +2502,7 @@ static int front_decpic_done_update(struct AVS2Decoder_s *dec, uint8_t reset_fla
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	struct avs2_frame_s *cur_pic = avs2_dec->hc.cur_pic;
 
-	if (lcu_percentage_threshold) {
+	if (dec->lcu_percentage_threshold) {
 		cur_pic->error_drop_flag = check_pic_decoded_lcu(dec, cur_pic);
 		if (cur_pic->error_drop_flag) {
 			return 0;
@@ -5459,7 +5462,6 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 	if (kfifo_get(&dec->display_q, &vf)) {
 		uint8_t index = vf->index & 0xff;
 
-
 		if (index < dec->used_buf_num) {
 			struct avs2_frame_s *pic = get_pic_by_index(dec, index);
 			if (pic == NULL &&
@@ -5481,7 +5483,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 			}
 
 			if (pic) {
-				if (pic->error_mark && lcu_percentage_threshold) {
+				if (pic->error_mark && dec->lcu_percentage_threshold) {
 					int ret = check_pic_decoded_lcu(dec, pic);
 
 					if (ret == 0) {
@@ -6046,7 +6048,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			continue;
 		}
 
-		if (pic->error_mark && lcu_percentage_threshold) {
+		if (pic->error_mark && dec->lcu_percentage_threshold) {
 			int ret = check_pic_decoded_lcu(dec, pic);
 
 			if (ret == 0) {
@@ -6294,9 +6296,10 @@ static void avs2_recycle_mmu_buf(struct AVS2Decoder_s *dec)
 		avs2_print(dec, AVS2_DBG_BUFMGR,
 			"%s cur_fb_idx_mmu %d\n", __func__, dec->cur_fb_idx_mmu);
 
-		decoder_mmu_box_free_idx(dec->mmu_box, dec->cur_fb_idx_mmu);
+		decoder_mmu_box_free_idx(dec->mmu_box,
+			dec->cur_fb_idx_mmu);
 #ifdef NEW_FB_CODE
-		if (dec->front_back_mode && dec->mmu_box_1)
+		if (dec->front_back_mode == 1)
 			decoder_mmu_box_free_idx(dec->mmu_box_1, dec->cur_fb_idx_mmu);
 #endif
 
@@ -6382,7 +6385,7 @@ static void check_pic_error(struct AVS2Decoder_s *dec,
 			pic->decoded_lcu, dec->avs2_dec.lcu_total);
 	}
 
-	if (lcu_percentage_threshold
+	if (dec->lcu_percentage_threshold
 #ifdef NEW_FB_CODE
 		&& (dec->front_back_mode == 0)
 #endif
@@ -10311,6 +10314,8 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	dec->m_ins_flag = 1;
 	dec->error_proc_policy = error_proc_policy;
 	dec->error_handle_mode = error_handle_mode;
+	dec->lcu_percentage_threshold = lcu_percentage_threshold;
+
 	config_hevc_irq_num(dec);
 
 	if (is_rdma_enable()) {
@@ -10432,6 +10437,11 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 			}
 		}
 
+		if (get_config_int(pdata->config,
+			"error_handle_info", &config_val) == 0) {
+			dec->lcu_percentage_threshold = config_val & 0xff;
+		}
+
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
 				&& vf_dp.present_flag == 1) {
@@ -10538,12 +10548,17 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	if (error_proc_policy & 0x80000000)
 		dec->error_proc_policy = error_proc_policy & 0x7fffffff;
 
-	if ((lcu_percentage_threshold % 101) > 20) {
+	if (lcu_percentage_threshold)
+		dec->lcu_percentage_threshold = lcu_percentage_threshold;
+
+	dec->lcu_percentage_threshold = dec->lcu_percentage_threshold % 101;
+	if (dec->lcu_percentage_threshold > 20) {
 		dec->error_proc_policy &= ~(1 << 1);
 	}
 
-	avs2_print(dec, 0, "dec->double_write_mode 0x%x, dec->error_proc_policy 0x%x\n",
-		dec->double_write_mode, dec->error_proc_policy);
+	avs2_print(dec, 0, "double_write_mode 0x%x, error: policy 0x%x mode %d lcu_percentage_threshold %d\n",
+		dec->double_write_mode, dec->error_proc_policy,
+		dec->error_handle_mode, dec->lcu_percentage_threshold);
 
 	if (pdata->sys_info) {
 		dec->vavs2_amstream_dec_info = *pdata->sys_info;

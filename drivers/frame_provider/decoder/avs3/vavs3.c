@@ -978,6 +978,10 @@ struct AVS3Decoder_s {
 	struct MVBUF_s m_mv_BUF[FRAME_BUFFERS];
 	u32 mv_buf_size;
 	bool mmu_copy_disable;
+	s32 cur_idx;
+	u32 error_handle_mode;
+	u32 error_handle_policy;
+	u32 lcu_percentage_threshold;
 };
 
 static int  compute_losless_comp_body_size(
@@ -1070,6 +1074,7 @@ static int avs3_print_cont(struct AVS3Decoder_s *dec,
 #define MAX_FRAME_4K_NUM 0x1200
 #define MAX_FRAME_8K_NUM 0x4800
 #define MAX_SIZE_4K (4096 * 2304)
+#define MAX_SIZE_8K (8192 * 4608)
 #define IS_8K_SIZE(w, h)	(((w) * (h)) > MAX_SIZE_4K)
 #define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
 
@@ -1095,19 +1100,50 @@ static u32 error_handle_mode = 1;
 
 /*
  lcu_percentage_threshold:
-   0: All Error Frame will be display.
- 100: All Error Frame will be discard.
+   0: All Error Frame will be discard.
+ 100: All Error Frame will be display.
  */
 static u32 lcu_percentage_threshold = 0;
 
-int avs3_get_error_policy(void)
+u32 avs3_get_error_policy(COM_PM *pm)
 {
-	return error_handle_policy;
+	DEC_CTX *ctx = container_of(pm, DEC_CTX, dpm);
+	struct avs3_decoder *avs3_dec = container_of(ctx, struct avs3_decoder, ctx);
+	struct AVS3Decoder_s *dec = container_of(avs3_dec, struct AVS3Decoder_s, avs3_dec);
+
+	return dec->error_handle_policy;
 }
 
-int avs3_get_error_handle_mode(void)
+u32 avs3_get_error_handle_mode(COM_PM *pm)
 {
-	return error_handle_mode;
+	DEC_CTX *ctx = container_of(pm, DEC_CTX, dpm);
+	struct avs3_decoder *avs3_dec = container_of(ctx, struct avs3_decoder, ctx);
+	struct AVS3Decoder_s *dec = container_of(avs3_dec, struct AVS3Decoder_s, avs3_dec);
+
+	return dec->error_handle_mode;
+}
+
+static int is_oversize(int w, int h)
+{
+	int max = MAX_SIZE_8K;
+	int max_w_h = 8192;
+	int max_h_w = 4608;
+
+	if (w <= 0 || h <= 0)
+		return true;
+
+	if (w > h) {
+		if (w > max_w_h || h > max_h_w)
+			return true;
+	} else if (w < h) {
+		if (w > max_h_w || h > max_w_h)
+			return true;
+	} else {
+		if (w * h > max)
+			return true;
+	}
+
+	return false;
 }
 
 static int get_frame_mmu_map_size(void)
@@ -1146,7 +1182,7 @@ static void start_process_time(struct AVS3Decoder_s *dec)
 {
 	dec->start_process_time = jiffies;
 	if ((dec->start_process_time != 0) &&
-		!(error_handle_policy & 0x4) &&
+		!(dec->error_handle_policy & 0x4) &&
 		(decode_timeout_val > 0)) {
 		dec->decode_timeout_count = fast_timer_check_count;
 	} else
@@ -1155,27 +1191,41 @@ static void start_process_time(struct AVS3Decoder_s *dec)
 }
 
 static void update_decoded_pic(struct AVS3Decoder_s *dec);
+static void check_pic_error(struct AVS3Decoder_s *dec, struct avs3_frame_s *pic);
 
 static void timeout_process(struct AVS3Decoder_s *dec)
 {
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 	struct avs3_frame_s *cur_pic = avs3_dec->cur_pic;
-	dec->timeout_num++;
-#ifdef NEW_FB_CODE
-	if (dec->front_back_mode == 1) {
-		amhevc_stop_f();
-		cur_pic->drop_flag = 1;
-	} else
-#endif
-	amhevc_stop();
+	DEC_CTX *ctx = &dec->avs3_dec.ctx;
+
 	avs3_print(dec,
 		0, "%s decoder timeout, HEVC_MPC_E=0x%x LCU 0x%x\n",
 		__func__, READ_VREG(HEVC_MPC_E), READ_VREG(HEVC_PARSER_LCU_START));
 
-	if (cur_pic)
-		cur_pic->error_mark = 1;
+	dec->timeout_num++;
+#ifdef NEW_FB_CODE
+	if (dec->front_back_mode == 1) {
+		amhevc_stop_f();
+	} else
+#endif
+	amhevc_stop();
+
+	if (dec->cur_idx != INVALID_IDX) {
+		if (cur_pic) {
+			cur_pic->poc = ctx->info.pic_header.dtr;
+			update_decoded_pic(dec);
+			check_pic_error(dec, cur_pic);
+			cur_pic->error_mark = 1;
+
+#ifdef NEW_FB_CODE
+			if (dec->front_back_mode == 1)
+				cur_pic->drop_flag = 1;
+#endif
+		}
+	}
+
 	dec->dec_result = DEC_RESULT_DONE;
-	update_decoded_pic(dec);
 	reset_process_time(dec);
 	vdec_schedule_work(&dec->work);
 }
@@ -2544,7 +2594,7 @@ static int check_pic_decoded_lcu(struct AVS3Decoder_s *dec, struct avs3_frame_s 
 {
 	int decoder_lcu = dec->avs3_dec.lcu_total;
 
-	if (pic->decoded_lcu < (decoder_lcu * (100 - lcu_percentage_threshold % 101) / 100)) {
+	if (pic->decoded_lcu < (decoder_lcu * (100 - dec->lcu_percentage_threshold) / 100)) {
 		avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
 			"%s:decoded_lcu %d drop flag is true\n", __func__, pic->decoded_lcu);
 		return 1;
@@ -2559,7 +2609,10 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 	avs3_frame_t *cur_pic = avs3_dec->cur_pic;
 
-	if (lcu_percentage_threshold) {
+	if ((dec->error_handle_policy & 0x4) && cur_pic->error_mark)
+		return 0;
+
+	if (dec->lcu_percentage_threshold) {
 		cur_pic->drop_flag = check_pic_decoded_lcu(dec, cur_pic);
 		if (cur_pic->drop_flag) {
 			return 0;
@@ -2575,8 +2628,7 @@ static int front_decpic_done_update(struct AVS3Decoder_s *dec, uint8_t reset_fla
 	if (debug & AVS3_DBG_PRINT_PIC_LIST)
 		print_pic_pool(avs3_dec, "after inc backend_ref");
 
-	if ((!(error_handle_policy & 0x4))
-		&& (error_handle_mode == 1)
+	if ((!(dec->error_handle_policy & 0x4))
 		&& is_mmu_copy_enable()
 		&& (dec->mmu_copy_disable == false)) {
 		if (cur_pic->decoded_lcu != dec->avs3_dec.lcu_total) {
@@ -4847,7 +4899,7 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 	else
 		decode_mode = DECODE_MODE_MULTI_STREAMBASE;
 	if (dec->avs3_dec.bufmgr_error_flag &&
-		(error_handle_policy & 0x1)) {
+		(dec->error_handle_policy & 0x1)) {
 		dec->bufmgr_error_count++;
 		dec->avs3_dec.bufmgr_error_flag = 0;
 		if (dec->bufmgr_error_count >
@@ -4860,7 +4912,7 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 			dec->skip_PB_before_I = 1;
 			avs3_print(dec, 0,
 				"!!Bufmgr error, search seq again (0x%x %d %d)\n",
-				error_handle_policy,
+				dec->error_handle_policy,
 				dec->frame_count,
 				dec->bufmgr_error_count);
 			dec->bufmgr_error_count = 0;
@@ -5748,8 +5800,7 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 				pic->decoded_lcu);
 			}
 
-			if (pic->error_mark && lcu_percentage_threshold
-				&& dec->front_back_mode) {
+			if (pic->error_mark && dec->lcu_percentage_threshold) {
 				int ret = check_pic_decoded_lcu(dec, pic);
 
 				if (ret == 0) {
@@ -5759,7 +5810,7 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 				}
 			}
 
-			if ((pic && (!(pic->error_mark) || !(error_handle_policy & 0x4)))
+			if ((pic && (!(pic->error_mark) || !(dec->error_handle_policy & 0x4)))
 				&& (pic->drop_flag == 0)) {
 #ifdef NEW_FB_CODE
 				if (dec->front_back_mode == 1) {
@@ -5827,7 +5878,7 @@ static void vavs3_vf_put(struct vframe_s *vf, void *op_arg)
 					__func__, index);
 		}
 
-		if (pic && (!(pic->error_mark) || !(error_handle_policy & 0x4)))
+		if (pic && (!(pic->error_mark) || !(dec->error_handle_policy & 0x4)))
 			dec->vf_put_count++;
 
 		avs3_print(dec, AVS3_DBG_BUFMGR,
@@ -6299,10 +6350,20 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 			continue;
 		}
 
-		if (pic->error_mark && (error_handle_policy & 0x4)
-			&& (lcu_percentage_threshold == 0)) {
-			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-				"%s: error pic poc(%d), skip\n", __func__, pic->poc);
+		if (pic->error_mark && dec->lcu_percentage_threshold) {
+			int ret = check_pic_decoded_lcu(dec, pic);
+
+			if (ret == 0) {
+				pic->error_mark = 0;
+				avs3_print(dec, AVS3_DBG_BUFMGR,
+					"Clean pic(%d) error_mark\n", pic->poc);
+			}
+		}
+
+		if (pic->drop_flag ||
+			((dec->error_handle_policy & 0x4) && pic->error_mark)) {
+			avs3_print(dec, AVS3_DBG_BUFMGR, "!!!error pic poc(%d), skip\n",
+				pic->poc);
 			continue;
 		}
 
@@ -6427,11 +6488,11 @@ static void avs3_recycle_mmu_buf_tail(struct AVS3Decoder_s *dec)
 
 		if (pic->need_mmu_copy == 0)
 			used_4k_num = (READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
-		else
+		else {
 			used_4k_num = pic->used_4k_num;
-
-		if (used_4k_num == 0)
-			return ;
+			if (used_4k_num == 0)
+				return ;
+		}
 
 #ifdef NEW_FB_CODE
 		if (dec->front_back_mode == 3) {
@@ -6606,8 +6667,7 @@ static void check_pic_error(struct AVS3Decoder_s *dec,
 			__func__, pic->index, pic->decoded_lcu, dec->avs3_dec.lcu_total);
 		pic->error_mark = 1;
 		if (dec->front_back_mode == 0) {
-			if ((!(error_handle_policy & 0x4))
-				&& (error_handle_mode == 1)
+			if ((!(dec->error_handle_policy & 0x4))
 				&& is_mmu_copy_enable()
 				&& (dec->mmu_copy_disable == false)) {
 				struct avs3_decoder *avs3_dec = &dec->avs3_dec;
@@ -6631,6 +6691,20 @@ static void check_pic_error(struct AVS3Decoder_s *dec,
 		avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 			"%s pic(index %d) decoded lcu %d (total %d)\n",
 			__func__, pic->index, pic->decoded_lcu, dec->avs3_dec.lcu_total);
+	}
+
+	if (dec->lcu_percentage_threshold
+#ifdef NEW_FB_CODE
+		&& (dec->front_back_mode == 0)
+#endif
+		) {
+		pic->drop_flag = check_pic_decoded_lcu(dec, pic);
+
+		if (pic->drop_flag) {
+			pic->need_mmu_copy = 0;
+			avs3_print(dec, AVS3_DBG_BUFMGR,
+				"Not need check lcu info\n");
+		}
 	}
 }
 
@@ -7393,6 +7467,17 @@ static void handle_ucode_dbg(struct AVS3Decoder_s *dec, uint debug_tag)
 	}
 }
 
+int check_rpm_info(struct AVS3Decoder_s *dec)
+{
+	int frame_width = dec->avs3_dec.param.p.sqh_horizontal_size;
+	int frame_height = dec->avs3_dec.param.p.sqh_vertical_size;
+
+	if (is_oversize(frame_width, frame_height))
+		return 1;
+
+	return 0;
+}
+
 static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 {
 	struct AVS3Decoder_s *dec = (struct AVS3Decoder_s *)data;
@@ -7470,6 +7555,20 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			if (!vdec_frame_based(hw_to_vdec(dec)))
 				dec_again_process(dec);
 			else {
+				struct avs3_frame_s *pic = dec->avs3_dec.cur_pic;
+
+				if (dec->cur_idx != INVALID_IDX) {
+					if (pic != NULL)
+						pic->poc = ctx->info.pic_header.dtr;
+					update_decoded_pic(dec);
+					check_pic_error(dec, pic);
+
+#ifdef AVS2_10B_MMU
+					if (dec->front_back_mode == 0)
+						avs2_recycle_mmu_buf_tail(dec);
+#endif
+				}
+
 				dec->dec_result = DEC_RESULT_DONE;
 #ifdef NEW_FB_CODE
 				if (dec->front_back_mode == 1) {
@@ -7558,8 +7657,10 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			update_decoded_pic(dec);
 			check_pic_error(dec, pic);
 
-			if (dec->front_back_mode == 0) {
+			if ((dec->front_back_mode == 0) && (pic->need_mmu_copy == 0)) {
 				avs3_recycle_mmu_buf_tail(dec);
+			} else if ((dec->front_back_mode == 0) && (pic->need_mmu_copy == 2)) {
+				dec->cur_fb_idx_mmu = INVALID_IDX;
 			}
 
 			get_picture_qos_info(dec, false);
@@ -7717,6 +7818,20 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 
 		debug_buffer_mgr_more(dec);
 		get_frame_rate(&dec->avs3_dec.param, dec);
+
+		ret = check_rpm_info(dec);
+		if (ret) {
+			dec->dec_result = DEC_RESULT_DONE;
+#ifdef NEW_FB_CODE
+			if (dec->front_back_mode == 1)
+				amhevc_stop_f();
+			else
+#endif
+			amhevc_stop();
+			avs3_print(dec, 0, "rmp info error ret %d\n", ret);
+			vdec_schedule_work(&dec->work);
+			goto irq_handled_exit;
+		}
 
 		if (dec->avs3_dec.param.p.video_signal_type & (1<<14)) {
 			union param_u *pPara;
@@ -7908,7 +8023,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_ACTION_DONE);
 	} else if (start_code == I_PICTURE_START_CODE ||
 		start_code == PB_PICTURE_START_CODE) {
-		avs3_frame_t *cur_pic;
+		avs3_frame_t *cur_pic = NULL;
 		ret = 0;
 #ifdef NEW_FB_CODE
 		if (dec->m_ins_flag) {
@@ -7958,7 +8073,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			print_pic_pool(avs3_dec, "after bufmgr process");
 
 		if (start_code == I_PICTURE_START_CODE) {
-			if (((error_handle_policy & 0x4) == 0) &&
+			if (((dec->error_handle_policy & 0x4) == 0) &&
 				!(IS_8K_SIZE(dec->avs3_dec.img.width, dec->avs3_dec.img.height)) &&
 				(dec->mmu_copy_disable == false))
 				vdec_set_mmu_copy_flag(true);
@@ -8021,6 +8136,7 @@ alloc_buffer_done:
 			ret = -2;
 #endif
 
+		cur_pic = avs3_dec->cur_pic;
 		if (ret == 0) {
 #ifdef AVS3_10B_MMU
 			if (dec->mmu_enable
@@ -8088,8 +8204,8 @@ alloc_buffer_done:
 #endif
 		if (ret) {
 			avs3_print(dec, AVS3_DBG_BUFMGR,
-				"avs3_bufmgr_process=> %d, AVS3_10B_DISCARD_NAL\r\n",
-				ret);
+				"avs3_bufmgr_process=> %d, AVS3_10B_DISCARD_NAL dec->cur_fb_idx_mmu %d\r\n",
+				ret, dec->cur_fb_idx_mmu);
 			WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_10B_DISCARD_NAL);
 #ifdef AVS3_10B_MMU
 			if (dec->mmu_enable
@@ -8141,6 +8257,7 @@ alloc_buffer_done:
 			goto irq_handled_exit;
 		} else {
 			if (avs3_dec->cur_pic != NULL) {
+				dec->cur_idx = avs3_dec->cur_pic->index;
 				dec->gvs->frame_count++;
 				if (avs3_dec->cur_pic->slice_type == SLICE_I) {
 					dec->gvs->i_decoded_frames++;
@@ -8831,7 +8948,7 @@ static void vavs3_put_timer_func(struct timer_list *timer)
 	}
 
 	if ((dec->start_process_time != 0) &&
-		!(error_handle_policy & 0x4) &&
+		!(dec->error_handle_policy & 0x4) &&
 		(decode_timeout_val > 0)) {
 		int current_lcu_idx =
 			READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff;
@@ -9724,6 +9841,13 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 		dec->process_state = PROC_STATE_INIT;
 		decode_frame_count[dec->index] = dec->frame_count;
 
+		if (dec->cur_idx != INVALID_IDX) {
+#ifdef AVS3_10B_MMU
+			if (dec->front_back_mode == 0)
+				avs3_recycle_mmu_buf_tail(dec);
+#endif
+		}
+
 		if ((pic != NULL) && (pic->error_mark) &&
 			(dec->dec_result == DEC_RESULT_DONE)) {
 #ifdef NEW_FB_CODE
@@ -9840,7 +9964,7 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 	if ((dec->front_back_mode == 0)
 		&& (dec->avs3_dec.cur_pic != NULL)
 		&& (dec->avs3_dec.cur_pic->need_mmu_copy == 1)
-		&& (!(error_handle_policy & 0x4))) {
+		&& (!(dec->error_handle_policy & 0x4))) {
 		error_handle_mmu_copy(dec, dec->avs3_dec.cur_pic);
 	}
 
@@ -9995,7 +10119,7 @@ static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
 
 	if ((pic != NULL)
 		&& (pic->need_mmu_copy == 1)
-		&& (!(error_handle_policy & 0x4))) {
+		&& (!(dec->error_handle_policy & 0x4))) {
 		error_handle_mmu_copy(dec, pic);
 		mutex_lock(&dec->fb_mutex);
 		pic->copy_pic->backend_ref--;
@@ -10508,6 +10632,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	WRITE_VREG(HEVC_DECODE_SIZE, r);
 	WRITE_VREG(HEVC_DECODE_COUNT, dec->slice_idx);
 	dec->init_flag = 1;
+	dec->cur_idx = INVALID_IDX;
 
 	/*
 	avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
@@ -11002,6 +11127,10 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 	dec->video_signal_type = 0;
 	dec->video_ori_signal_type = 0;
 	dec->dynamic_buf_margin = dynamic_buf_num_margin;
+	dec->error_handle_policy = error_handle_policy;
+	dec->error_handle_mode = error_handle_mode;
+	dec->lcu_percentage_threshold = lcu_percentage_threshold;
+
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX)
 		dec->stat |= VP9_TRIGGER_FRAME_ENABLE;
 
@@ -11037,10 +11166,10 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config,
 			"api_error_policy", &config_val) == 0) {
 			if (config_val == 0) {
-				error_handle_policy = error_handle_policy & (~(1 << 2));
+				dec->error_handle_policy = error_handle_policy & (~(1 << 2));
 				avs3_print(dec, 0, "Error Frame Display\n");
 			} else if (config_val == 1) {
-				error_handle_policy = error_handle_policy | (1 << 2);
+				dec->error_handle_policy = error_handle_policy | (1 << 2);
 			}
 		}
 
@@ -11048,6 +11177,11 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 			"mmu_copy_disable", &config_val) == 0) {
 			dec->mmu_copy_disable = config_val;
 			avs3_print(dec, 0, "mmu_copy_disable: %d\n", config_val);
+		}
+
+		if (get_config_int(pdata->config,
+			"error_handle_info", &config_val) == 0) {
+			dec->lcu_percentage_threshold = config_val & 0xff;
 		}
 
 		if (get_config_int(pdata->config, "HDRStaticInfo",
@@ -11164,14 +11298,19 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 	}
 
 	if (error_handle_policy & 0x80000000)
-		error_handle_policy = error_handle_policy & 0x7fffffff;
+		dec->error_handle_policy = error_handle_policy & 0x7fffffff;
 
-	if ((lcu_percentage_threshold % 101) > 20) {
-		error_handle_policy &= ~(1 << 2);
+	if (lcu_percentage_threshold)
+		dec->lcu_percentage_threshold = lcu_percentage_threshold;
+
+	dec->lcu_percentage_threshold = dec->lcu_percentage_threshold % 101;
+	if (dec->lcu_percentage_threshold > 20) {
+		dec->error_handle_policy &= ~(1 << 2);
 	}
 
-	avs3_print(dec, 0, "dec->double_write_mode 0x%x, error_handle_policy 0x%x\n",
-		dec->double_write_mode, error_handle_policy);
+	avs3_print(dec, 0, "double_write_mode 0x%x, error: policy 0x%x mode %d lcu_percentage_threshold %d\n",
+		dec->double_write_mode, dec->error_handle_policy,
+		dec->error_handle_mode, dec->lcu_percentage_threshold);
 
 	if (pdata->sys_info) {
 		dec->vavs3_amstream_dec_info = *pdata->sys_info;

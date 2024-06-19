@@ -435,7 +435,7 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 #endif
 		{
 		ret = com_picman_refpic_marking_decoder(&ctx->dpm, pic_header);
-		if (avs3_get_error_policy() & 0x4)
+		if (avs3_get_error_policy(&ctx->dpm) & 0x4)
 			com_assert_rv(ret == COM_OK, ret);
 		}
 		com_cleanup_useless_pic_buffer_in_pm(&ctx->dpm);
@@ -782,7 +782,7 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 	int i;
 	for (i = 0; i < hw->max_pb_size; i++) {
 		if (hw->pic_pool[i].buf_cfg.used == 0) {
-		break;
+			break;
 		}
 	}
 	if (i < hw->max_pb_size) {

@@ -844,7 +844,7 @@ static int check_ref_pic_error_drop_flag(struct avs2_decoder *avs2_dec)
 	int i = 0;
 	struct avs2_frame_s *pic = NULL;
 
-	if (get_lcu_percentage_threshold() == 0)
+	if (get_lcu_percentage_threshold(avs2_dec) == 0)
 		return 0;
 
 	if (avs2_dec->img.type == I_IMG)

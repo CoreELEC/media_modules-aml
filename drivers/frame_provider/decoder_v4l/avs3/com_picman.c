@@ -577,7 +577,7 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 	if (!pm->libvc_data->library_picture_enable_flag && pic_header->slice_type != SLICE_I)
 #endif
 	{
-		if (avs3_get_error_policy() & 0x4)
+		if (avs3_get_error_policy(pm) & 0x4)
 			com_assert_rv(pm->cur_num_ref_pics > 0, COM_ERR_UNEXPECTED);
 	}
 
@@ -617,8 +617,8 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 
 			//If the ref pic is found, set it to RPL0
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j] && pm->pic_ref[j]->dtr == refPicDoi) {
-				if (((avs3_get_error_policy() & 0x4) && (pm->pic_ref[j]->buf_cfg.error_mark == 0))
-					|| ((avs3_get_error_policy() & 0x4) == 0)) {
+				if (((avs3_get_error_policy(pm) & 0x4) && (pm->pic_ref[j]->buf_cfg.error_mark == 0))
+					|| ((avs3_get_error_policy(pm) & 0x4) == 0)) {
 					if (pm->pic_ref[j]->buf_cfg.drop_flag == 0) {
 						set_refp(&refp[i][REFP_0], pm->pic_ref[j]);
 						pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
@@ -635,34 +635,39 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 					return COM_ERR;
 				}
 			} else {
-				if (avs3_get_error_policy() & 0x4) {
-					//set_refp(&refp[i][REFP_0], pm->pic_ref[j]);
-					//pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
+				if (avs3_get_error_policy(pm) & 0x4) {
 					com_picman_unlock(pm, flags);
 					printf("%s: The L0 Reference Picture(%d) is not find in dpb",
 						__func__, refPicDoi);
 					return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
 				} else {
-					if (avs3_get_error_handle_mode() == 1) {
+					if (avs3_get_error_handle_mode(pm) == 1) {
 						int k = 0;
 						u32 diff = 0xffffffff;
 						int index = -1;
 
-						for (k = 0; k < pm->cur_num_ref_pics; k++) {
-							if (pm->pic_ref[k]->buf_cfg.drop_flag == 1)
-								continue;
-							if (abs(pic_header->poc - pm->pic_ref[k]->ptr) < diff) {
-								diff = abs(pic_header->poc - pm->pic_ref[k]->ptr);
-								index = k;
+						for (k = 0; k < MAX_PB_SIZE; k++) {
+							if (pm->pic[k] != NULL) {
+								if (pm->pic[k]->buf_cfg.drop_flag == 1)
+									continue;
+								if (abs(pic_header->poc - pm->pic[k]->ptr) < diff) {
+									diff = abs(pic_header->poc - pm->pic[k]->ptr);
+									index = k;
+								}
 							}
 						}
 
 						if (index != -1) {
-							set_refp(&refp[i][REFP_0], pm->pic_ref[index]);
+							set_refp(&refp[i][REFP_0], pm->pic[index]);
 							pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
 
-							printf("%s: The L0 Reference Picture dtr(%d) is not find in dpb, use dtr(%d) instead",
-								__func__, refPicDoi, pm->pic_ref[index]->dtr);
+							printf("%s: The L0 Reference Picture dtr(%d) is not find in dpb, use pic dtr(%d) instead",
+								__func__, refPicDoi, pm->pic[index]->dtr);
+						} else {
+							com_picman_unlock(pm, flags);
+							printf("%s: The L0 Reference Picture(%d) is not find in dpb (Error Mode)",
+								__func__, refPicDoi);
+							return COM_ERR;
 						}
 					}
 				}
@@ -714,8 +719,8 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 			if (j < pm->cur_num_ref_pics && pm->pic_ref[j]->dtr == refPicDoi)
 #endif
 			{
-				if (((avs3_get_error_policy() & 0x4) && (pm->pic_ref[j]->buf_cfg.error_mark == 0))
-					|| ((avs3_get_error_policy() & 0x4) == 0)) {
+				if (((avs3_get_error_policy(pm) & 0x4) && (pm->pic_ref[j]->buf_cfg.error_mark == 0))
+					|| ((avs3_get_error_policy(pm) & 0x4) == 0)) {
 					if (pm->pic_ref[j]->buf_cfg.drop_flag == 0) {
 						set_refp(&refp[i][REFP_1], pm->pic_ref[j]);
 						pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
@@ -730,31 +735,37 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 					return COM_ERR;
 				}
 			} else {
-				if (avs3_get_error_policy() & 0x4) {
+				if (avs3_get_error_policy(pm) & 0x4) {
 					printf("%s: The L1 Reference Picture(%d) is not find in dpb",
 						__func__, refPicDoi);
 					return COM_ERR;
 				} else {
-					if (avs3_get_error_handle_mode() == 1) {
+					if (avs3_get_error_handle_mode(pm) == 1) {
 						int k = 0;
 						u32 diff = 0xffffffff;
 						int index = -1;
 
-						for (k = 0; k < pm->cur_num_ref_pics; k++) {
-							if (pm->pic_ref[k]->buf_cfg.drop_flag == 1)
-								continue;
-							if (abs(pic_header->poc - pm->pic_ref[k]->ptr) < diff) {
-								diff = abs(pic_header->poc - pm->pic_ref[k]->ptr);
-								index = k;
+						for (k = 0; k < MAX_PB_SIZE; k++) {
+							if (pm->pic[k] != NULL) {
+								if (pm->pic[k]->buf_cfg.drop_flag == 1)
+									continue;
+								if (abs(pic_header->poc - pm->pic[k]->ptr) < diff) {
+									diff = abs(pic_header->poc - pm->pic[k]->ptr);
+									index = k;
+								}
 							}
 						}
 
 						if (index != -1) {
-							set_refp(&refp[i][REFP_1], pm->pic_ref[index]);
+							set_refp(&refp[i][REFP_1], pm->pic[index]);
 							pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
 
-							printf("%s: The L1 Reference Picture dtr(%d) is not find in dpb, use dtr(%d) instead",
-								__func__, refPicDoi, pm->pic_ref[index]->dtr);
+							printf("%s: The L1 Reference Picture dtr(%d) is not find in dpb, use pic dtr(%d) instead",
+								__func__, refPicDoi, pm->pic[index]->dtr);
+						} else {
+							printf("%s: The L1 Reference Picture(%d) is not find in dpb (Error Mode)",
+								__func__, refPicDoi);
+							return COM_ERR;
 						}
 					}
 				}
@@ -762,7 +773,7 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 		}
 	}
 
-	if ((avs3_get_error_policy() & 0x4) == 0) {
+	if ((avs3_get_error_policy(pm) & 0x4) == 0) {
 		if ((pic_header->rpl_l0.ref_pic_active_num != 0) &&
 			(pm->num_refp[REFP_0] == 0) &&
 			(pic_header->slice_type != SLICE_I)) {
@@ -1333,12 +1344,13 @@ void com_picman_print_state(COM_PM * pm)
 				pos += sprintf(&tmpbuf[pos], ")");
 			}
 
-		printf("%d: pic %p index %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d, list_ptr %s\n",
+		printf("%d: pic %p index %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d, is_display %d list_ptr %s\n",
 			i, pic, pic->buf_cfg.index, pic->dtr, pic->ptr, pic->is_ref,
-				pic->need_for_out, pic->buf_cfg.backend_ref, pic->buf_cfg.vf_ref,
-				pic->picture_output_delay,
-				pic->width_luma, pic->height_luma, pic->temporal_id,
-				tmpbuf);
+			pic->need_for_out, pic->buf_cfg.backend_ref, pic->buf_cfg.vf_ref,
+			pic->picture_output_delay,
+			pic->width_luma, pic->height_luma, pic->temporal_id,
+			pic->buf_cfg.is_display,
+			tmpbuf);
 		}
 	}
 }
