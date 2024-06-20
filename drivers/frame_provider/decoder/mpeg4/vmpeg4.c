@@ -33,13 +33,11 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include "vmpeg4.h"
-#include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../utils/decoder_mmu_box.h"
 #include "../utils/decoder_bmmu_box.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-//#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 

@@ -36,10 +36,8 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-//#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
 
-#include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../utils/vdec_input.h"
 #include "../utils/vdec.h"

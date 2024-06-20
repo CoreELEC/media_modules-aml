@@ -101,16 +101,6 @@
 
 #define H265_MMU_MAP_BUFFER       HEVC_ASSIST_SCRATCH_7
 
-#define HEVC_ASSIST_MMU_MAP_ADDR                   0x3009
-
-#define HEVC_CM_HEADER_START_ADDR                  0x3628
-#define HEVC_SAO_MMU_VH1_ADDR                      0x363b
-#define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-
-#define HEVC_DBLK_CFGB                             0x350b
-#define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
-#define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
-
 #define SWAP_HEVC_OFFSET (3 * 0x1000)
 
 #define MEM_NAME "codec_265"
@@ -230,11 +220,6 @@ static u32 dirty_buffersize_threshold = 0x800000;
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 
 #ifdef SUPPORT_10BIT
-#define HEVC_CM_BODY_START_ADDR                    0x3626
-#define HEVC_CM_BODY_LENGTH                        0x3627
-#define HEVC_CM_HEADER_LENGTH                      0x3629
-#define HEVC_CM_HEADER_OFFSET                      0x362b
-#define HEVC_SAO_CTRL9                             0x362d
 #define LOSLESS_COMPRESS_MODE
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
 /* double_write_mode:
@@ -324,10 +309,6 @@ static u32 pts_unstable;
 #define BMMU_WORKSPACE_ID	(BUF_POOL_SIZE)
 #define MV_BUFFER_IDX(n) (BUF_POOL_SIZE + 1 + n)
 #endif
-
-#define HEVC_MV_INFO   0x310d
-#define HEVC_QP_INFO   0x3137
-#define HEVC_SKIP_INFO 0x3136
 
 const u32 h265_version = 201602101;
 static u32 debug_mask = 0xffffffff;
@@ -2808,10 +2789,6 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 
 #ifdef DETREFILL_ENABLE
 #define DETREFILL_BUF_SIZE (4 * 0x4000)
-#define HEVC_SAO_DBG_MODE0                         0x361e
-#define HEVC_SAO_DBG_MODE1                         0x361f
-#define HEVC_SAO_CTRL10                            0x362e
-#define HEVC_SAO_CTRL11                            0x362f
 static int init_detrefill_buf(struct hevc_state_s *hevc)
 {
 	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
@@ -3935,7 +3912,6 @@ static void init_decode_head_hw(struct hevc_state_s *hevc)
 
 }
 #endif
-
 
 static void init_pic_list_hw(struct hevc_state_s *hevc)
 {

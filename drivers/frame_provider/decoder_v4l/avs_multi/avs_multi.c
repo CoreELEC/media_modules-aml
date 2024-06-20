@@ -32,7 +32,6 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/vfm/vframe.h>
-#include <linux/amlogic/media/registers/register.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/amlogic/tee.h>
@@ -1679,12 +1678,9 @@ static void vavs_recover(struct vdec_avs_hw_s *hw)
 }
 
 #define MBY_MBX                 MB_MOTION_MODE /*0xc07*/
-#define AVS_CO_MB_WR_ADDR        0xc38
-#define AVS_CO_MB_RW_CTL         0xc3d
-#define AVS_CO_MB_RD_ADDR        0xc39
-#define AVSP_IQ_WQ_PARAM_01                        0x0e19
-#define AVSP_IQ_WQ_PARAM_23                        0x0e1a
-#define AVSP_IQ_WQ_PARAM_45                        0x0e1b
+#define AVS_CO_MB_WR_ADDR       VLD_C38
+#define AVS_CO_MB_RW_CTL        VLD_C3D
+#define AVS_CO_MB_RD_ADDR       VLD_C39
 
 static void vavs_save_regs(struct vdec_avs_hw_s *hw)
 {

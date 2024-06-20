@@ -82,34 +82,6 @@
 #define CO_MV_COMPRESS
 
 #include "vavs3.h"
-#define HEVC_SHIFT_LENGTH_PROTECT                  0x313a
-#define HEVC_MPRED_CTRL4                           0x324c
-#define HEVC_DBLK_CFGD                             0x350d
-#define HEVC_CM_HEADER_START_ADDR                  0x3628
-#define HEVC_DBLK_CFGB                             0x350b
-#define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
-#define HEVC_SAO_MMU_VH1_ADDR                      0x363b
-#define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-
-#define HEVC_CM_BODY_LENGTH2                       0x3663
-#define HEVC_CM_HEADER_OFFSET2                     0x3664
-#define HEVC_CM_HEADER_LENGTH2                     0x3665
-
-#define HEVC_ASSIST_MMU_MAP_ADDR                   0x3009
-
-#define HEVC_CM_HEADER_START_ADDR                  0x3628
-#define HEVC_CM_HEADER_START_ADDR2                 0x364a
-#define HEVC_SAO_MMU_VH1_ADDR                      0x363b
-#define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-#define HEVC_SAO_MMU_VH0_ADDR2                     0x364d
-#define HEVC_SAO_MMU_VH1_ADDR2                     0x364e
-
-#define HEVC_SAO_MMU_DMA_CTRL2                     0x364c
-#define HEVC_SAO_MMU_STATUS2                       0x3650
-#define HEVC_DW_VH0_ADDDR                          0x365e
-#define HEVC_DW_VH1_ADDDR                          0x365f
-
-#define HEVC_SAO_CTRL9                             0x362d
 
 /*
  * AVS3_DEC_STATUS define
@@ -1566,11 +1538,6 @@ int avs3_dec_init(struct AVS3Decoder_s *dec, struct BuffInfo_s *buf_spec_i,
 #endif
 	return 0;
 }
-
-#define HEVC_CM_BODY_START_ADDR                    0x3626
-#define HEVC_CM_BODY_LENGTH                        0x3627
-#define HEVC_CM_HEADER_LENGTH                      0x3629
-#define HEVC_CM_HEADER_OFFSET                      0x362b
 
 #define LOSLESS_COMPRESS_MODE
 
@@ -6764,10 +6731,6 @@ static int get_frame_rate(union param_u *params, struct AVS3Decoder_s *dec)
 		dec->frame_dur, params->p.sqh_progressive_sequence);
 	return 0;
 }
-
-#define HEVC_MV_INFO   0x310d
-#define HEVC_QP_INFO   0x3137
-#define HEVC_SKIP_INFO 0x3136
 
 static void get_qos_info(struct AVS3Decoder_s *dec, struct vframe_qos_s* vqos, int pic_number, int core_num)
 {

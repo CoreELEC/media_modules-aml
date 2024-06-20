@@ -70,6 +70,7 @@
 #include "../utils/firmware.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../../../amvdec_ports/vdec_drv_base.h"
+#include "../../../common/register/register.h"
 
 #define P010_ENABLE
 
@@ -111,65 +112,8 @@
 
 #define FGS_TABLE_SIZE  (512 * 128 / 8)
 
-#define AV1_GMC_PARAM_BUFF_ADDR 	               0x316d
-#define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
-#define HEVC_FGS_IDX                               0x3660
-#define HEVC_FGS_DATA                              0x3661
-#define HEVC_FGS_CTRL                              0x3662
-#define AV1_SKIP_MODE_INFO                         0x316c
-#define AV1_QUANT_WR                               0x3146  //VP9_QUANT_WR
-
-#define AV1_SEG_W_ADDR                             0x3165
-#define AV1_SEG_R_ADDR                             0x3166
-#define AV1_REF_SEG_INFO                           0x3171
-#define HEVC_ASSIST_PIC_SIZE_FB_READ               0x300d
-#define PARSER_REF_SCALE_ENBL                      0x316b
-#define HEVC_MPRED_MV_RPTR_1                       0x3263
-#define HEVC_MPRED_MV_RPTR_2                       0x3264
-#define HEVC_SAO_CTRL9                             0x362d
-#define HEVC_FGS_TABLE_START                       0x3666
-#define HEVC_FGS_TABLE_LENGTH                      0x3667
-#define HEVC_DBLK_CDEF0                            0x3515
-#define HEVC_DBLK_CDEF1                            0x3516
-#define HEVC_DBLK_UPS1                             0x351c
-#define HEVC_DBLK_UPS2                             0x351d
-#define HEVC_DBLK_UPS3                             0x351e
-#define HEVC_DBLK_UPS4                             0x351f
-#define HEVC_DBLK_UPS5                             0x3520
-#define AV1_UPSCALE_X0_QN                          0x316e
-#define AV1_UPSCALE_STEP_QN                        0x316f
-#define HEVC_DBLK_DBLK0                            0x3523
-#define HEVC_DBLK_DBLK1                            0x3524
-#define HEVC_DBLK_DBLK2                            0x3525
-
 #define HW_MASK_FRONT    0x1
 #define HW_MASK_BACK     0x2
-
-#define AV1D_MPP_REFINFO_TBL_ACCCONFIG             0x3442
-#define AV1D_MPP_REFINFO_DATA                      0x3443
-#define AV1D_MPP_REF_SCALE_ENBL                    0x3441
-#define HEVC_MPRED_CTRL4                           0x324c
-#define HEVC_CM_HEADER_START_ADDR                  0x3628
-#define HEVC_DBLK_CFGB                             0x350b
-#define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
-#define HEVC_SAO_MMU_VH1_ADDR                      0x363b
-#define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-
-#define HEVC_MV_INFO                               0x310d
-#define HEVC_QP_INFO                               0x3137
-#define HEVC_SKIP_INFO                             0x3136
-
-#define HEVC_CM_BODY_LENGTH2                       0x3663
-#define HEVC_CM_HEADER_OFFSET2                     0x3664
-#define HEVC_CM_HEADER_LENGTH2                     0x3665
-
-#define HEVC_CM_HEADER_START_ADDR2                 0x364a
-#define HEVC_SAO_MMU_DMA_CTRL2                     0x364c
-#define HEVC_SAO_MMU_VH0_ADDR2                     0x364d
-#define HEVC_SAO_MMU_VH1_ADDR2                     0x364e
-#define HEVC_SAO_MMU_STATUS2                       0x3650
-#define HEVC_DW_VH0_ADDDR                          0x365e
-#define HEVC_DW_VH1_ADDDR                          0x365f
 
 #ifdef BUFMGR_ONLY_OLD_CHIP
 #undef AV1_SKIP_MODE_INFO
@@ -409,9 +353,6 @@ static u32 force_dv_enable;
 /*compute_losless_comp_body_size(4096, 2304, 1) = 18874368(0x1200000)*/
 #define MAX_FRAME_4K_NUM 0x1200
 #define MAX_FRAME_8K_NUM 0x4800
-
-#define HEVC_ASSIST_MMU_MAP_ADDR                   0x3009
-
 
 /*USE_BUF_BLOCK*/
 struct BUF_s {
@@ -1924,12 +1865,6 @@ union param_u av1_param;
  *
  ***************************************************
  */
-
-
-#define HEVC_CM_BODY_START_ADDR    			    0x3626
-#define HEVC_CM_BODY_LENGTH    				    0x3627
-#define HEVC_CM_HEADER_LENGTH    				  0x3629
-#define HEVC_CM_HEADER_OFFSET    				  0x362b
 
 #define LOSLESS_COMPRESS_MODE
 

@@ -31,7 +31,6 @@
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/aformat.h>
-#include <linux/amlogic/media/registers/register.h>
 #include "../stream_input/amports/adec.h"
 #include "../stream_input/amports/streambuf.h"
 #include "../stream_input/amports/streambuf_reg.h"

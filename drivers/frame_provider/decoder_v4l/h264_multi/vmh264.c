@@ -72,6 +72,7 @@
 #include "../../../amvdec_ports/aml_vcodec_ts.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
+#include "../../../common/register/register.h"
 
 #define DETECT_WRONG_MULTI_SLICE
 #define MCRCC_ENABLE
@@ -189,9 +190,6 @@ static u32 run_ready_max_buf_num = 0xff;
 
 static u32 run_ready_min_buf_num = 2;
 static u32 save_buffer = 1;
-
-#define VDEC_ASSIST_CANVAS_BLK32		0x5
-
 
 static unsigned int max_alloc_buf_count;
 static unsigned int decode_timeout_val = 100;
@@ -1054,18 +1052,6 @@ static void v4l_vmh264_collect_stream_info(struct vdec_s *vdec,
 #define		H265_CHECK_AXI_INFO_BASE	HEVC_ASSIST_SCRATCH_8
 #define		H265_SAO_4K_SET_BASE	HEVC_ASSIST_SCRATCH_9
 #define		H265_SAO_4K_SET_COUNT	HEVC_ASSIST_SCRATCH_A
-#define		HEVCD_MPP_ANC2AXI_TBL_DATA		0x3464
-
-#define		HEVC_CM_HEADER_START_ADDR		0x3628
-#define		HEVC_CM_BODY_START_ADDR			0x3626
-#define		HEVC_CM_BODY_LENGTH			0x3627
-#define		HEVC_CM_HEADER_LENGTH			0x3629
-#define		HEVC_CM_HEADER_OFFSET			0x362b
-#define		HEVC_SAO_CTRL9				0x362d
-#define		HEVCD_MPP_DECOMP_CTL3			0x34c4
-#define		HEVCD_MPP_VDEC_MCR_CTL			0x34c8
-#define           HEVC_DBLK_CFGB                             0x350b
-#define		HEVC_ASSIST_MMU_MAP_ADDR	0x3009
 
 #define H265_DW_NO_SCALE
 #define H265_MEM_MAP_MODE 0  /*0:linear 1:32x32 2:64x32*/
@@ -4313,7 +4299,6 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
  *   bit 1:0 -- h264_co_mb_info_wr_ptr
  */
 #define H264_CO_MB_RW_CTL         VLD_C3D /* 0xc3d */
-#define DCAC_DDR_BYTE64_CTL                   0x0e1d
 	unsigned long canvas_adr;
 	unsigned int ref_reg_val;
 	unsigned int one_ref_cfg = 0;

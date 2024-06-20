@@ -352,11 +352,6 @@ static int prepare_display_buf(void* hw, struct PIC_s *pic);
 #endif
 
 #if 1 //def USE_OLD_CHIP
-#define HEVC_MV_INFO   0x310d
-#define HEVC_QP_INFO   0x3137
-#define HEVC_SKIP_INFO 0x3136
-
-#define AV1D_MPP_ORDERHINT_CFG                     0x3493
 
 #if 0
 
@@ -421,18 +416,5 @@ static int prepare_display_buf(void* hw, struct PIC_s *pic);
 #define HEVC_DBLK_SUBPIC                           0x354c
 #define HEVC_DBLK_EOT                              0x354d
 #endif
-
-#define HEVC_DBLK_DBLK0                            0x3523
-#define HEVC_DBLK_DBLK1                            0x3524
-#define HEVC_DBLK_DBLK2                            0x3525
-#define HEVC_DBLK_ALF0                             0x3544
-#define AV1_GMC_PARAM_BUFF_ADDR                    0x316d
-#define HEVC_SHIFT_LENGTH_PROTECT                  0x313a
-
-#define HEVC_MPRED_CTRL4                           0x324c
-
-#define HEVC_IQIT_QP_CHROMA_MAP_WADDR              0x373c
-#define HEVC_IQIT_QP_CHROMA_MAP_RADDR              0x373d
-#define HEVC_IQIT_QP_CHROMA_MAP_DATA               0x373e
 
 #endif

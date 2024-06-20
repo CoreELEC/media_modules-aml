@@ -41,7 +41,6 @@
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../frame_provider/decoder/utils/vdec_canvas_utils.h"
 #include <linux/delay.h>
 #include <linux/poll.h>

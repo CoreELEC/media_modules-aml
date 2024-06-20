@@ -114,25 +114,6 @@ to enable DV of frame mode
 
 #define H265_MMU_MAP_BUFFER       HEVC_ASSIST_SCRATCH_7
 
-#define HEVC_ASSIST_MMU_MAP_ADDR                   0x3009
-
-#define HEVC_CM_HEADER_START_ADDR                  0x3628
-#define HEVC_CM_HEADER_START_ADDR2                 0x364a
-#define HEVC_SAO_MMU_VH1_ADDR                      0x363b
-#define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-#define HEVC_SAO_MMU_VH0_ADDR2                     0x364d
-#define HEVC_SAO_MMU_VH1_ADDR2                     0x364e
-
-#define HEVC_SAO_MMU_DMA_CTRL2                     0x364c
-#define HEVC_SAO_MMU_STATUS2                       0x3650
-#define HEVC_DW_VH0_ADDDR                          0x365e
-#define HEVC_DW_VH1_ADDDR                          0x365f
-
-#define HEVC_DBLK_CFGB                             0x350b
-//#define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
-
-#define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
-
 #define SWAP_HEVC_OFFSET (3 * 0x1000)
 
 #define MEM_NAME "codec_265"
@@ -272,16 +253,6 @@ static u32 save_buffer = 1;
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 
 #ifdef SUPPORT_10BIT
-#define HEVC_CM_BODY_START_ADDR                    0x3626
-#define HEVC_CM_BODY_LENGTH                        0x3627
-#define HEVC_CM_HEADER_LENGTH                      0x3629
-#define HEVC_CM_HEADER_OFFSET                      0x362b
-#define HEVC_SAO_CTRL9                             0x362d
-
-#define HEVC_CM_BODY_LENGTH2                       0x3663
-#define HEVC_CM_HEADER_OFFSET2                     0x3664
-#define HEVC_CM_HEADER_LENGTH2                     0x3665
-
 #define LOSLESS_COMPRESS_MODE
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
 /* double_write_mode:
@@ -388,10 +359,6 @@ static u32 pts_unstable;
 #define BMMU_WORKSPACE_ID	(FB_LOOP_BUF_COUNT + BUF_POOL_SIZE)
 #define MV_BUFFER_IDX(n) (FB_LOOP_BUF_COUNT + BUF_POOL_SIZE + 1 + n)
 #endif
-
-#define HEVC_MV_INFO   0x310d
-#define HEVC_QP_INFO   0x3137
-#define HEVC_SKIP_INFO 0x3136
 
 #define HEVC_ERROR_FRAME_DISPLAY 0
 #define HEVC_ERROR_FRAME_DROP 2
@@ -3344,10 +3311,6 @@ static int H265_alloc_mmu_dw(struct hevc_state_s *hevc, struct PIC_s *new_pic,
 
 #ifdef DETREFILL_ENABLE
 #define DETREFILL_BUF_SIZE (4 * 0x4000)
-#define HEVC_SAO_DBG_MODE0                         0x361e
-#define HEVC_SAO_DBG_MODE1                         0x361f
-#define HEVC_SAO_CTRL10                            0x362e
-#define HEVC_SAO_CTRL11                            0x362f
 static int init_detrefill_buf(struct hevc_state_s *hevc)
 {
 	if (hevc->detbuf_adr_virt)

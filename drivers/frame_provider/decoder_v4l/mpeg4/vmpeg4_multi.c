@@ -36,7 +36,6 @@
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <uapi/linux/tee.h>
 #include <linux/sched/clock.h>
-#include <linux/amlogic/media/registers/register.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <media/v4l2-mem2mem.h>
 #include "../../../stream_input/amports/amports_priv.h"

@@ -38,7 +38,6 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include <linux/amlogic/media/registers/register.h>
 #include <media/v4l2-mem2mem.h>
 #include <uapi/linux/tee.h>
 #include "../../../stream_input/amports/amports_priv.h"

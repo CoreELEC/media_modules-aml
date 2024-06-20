@@ -26,7 +26,6 @@
 #include <linux/uio_driver.h>
 #include <linux/amlogic/media/utils/aformat.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
-#include <linux/amlogic/media/registers/register.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../amports/streambuf.h"
 #include <linux/module.h>

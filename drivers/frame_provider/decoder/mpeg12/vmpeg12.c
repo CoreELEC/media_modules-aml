@@ -36,13 +36,11 @@
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 #include "vmpeg12.h"
-#include <linux/amlogic/media/registers/register.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../utils/decoder_mmu_box.h"
 #include "../utils/decoder_bmmu_box.h"
 #include <linux/uaccess.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-//#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
 #include "../utils/amvdec.h"
 #include "../utils/vdec.h"

@@ -76,16 +76,6 @@
 #define CO_MV_COMPRESS
 #define HW_MASK_FRONT    0x1
 #define HW_MASK_BACK     0x2
-#define HEVC_MPRED_CTRL4                           0x324c
-#define HEVC_CM_HEADER_START_ADDR                  0x3628
-#define HEVC_DBLK_CFGB                             0x350b
-#define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
-#define HEVC_SAO_MMU_VH1_ADDR                      0x363b
-#define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-
-#define HEVC_MV_INFO                               0x310d
-#define HEVC_QP_INFO                               0x3137
-#define HEVC_SKIP_INFO                             0x3136
 
 #define VP9_10B_DEC_IDLE                           0
 #define VP9_10B_DEC_FRAME_HEADER                   1
@@ -271,16 +261,7 @@ static u32 on_no_keyframe_skiped;
 #define MAX_FRAME_4K_NUM 0x1200
 #define MAX_FRAME_8K_NUM 0x4800
 
-#define HEVC_ASSIST_MMU_MAP_ADDR                   0x3009
-
 #ifdef SUPPORT_FB_DECODING
-/* register define */
-#define HEVC_ASSIST_HED_FB_W_CTL                   0x3006
-#define HEVC_ASSIST_HED_FB_R_CTL                   0x3007
-#define HEVC_ASSIST_HED_FB_ADDR                    0x3008
-#define HEVC_ASSIST_FB_MMU_MAP_ADDR                0x300a
-#define HEVC_ASSIST_FBD_MMU_MAP_ADDR               0x300b
-
 #define MAX_STAGE_PAGE_NUM 0x1200
 #define STAGE_MMU_MAP_SIZE (MAX_STAGE_PAGE_NUM * 4)
 #endif
@@ -3050,11 +3031,6 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 VP9 buffer management end
 
 ***************************************************/
-
-#define HEVC_CM_BODY_START_ADDR                    0x3626
-#define HEVC_CM_BODY_LENGTH                        0x3627
-#define HEVC_CM_HEADER_LENGTH                      0x3629
-#define HEVC_CM_HEADER_OFFSET                      0x362b
 
 #define LOSLESS_COMPRESS_MODE
 

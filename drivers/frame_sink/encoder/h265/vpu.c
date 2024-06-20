@@ -46,7 +46,6 @@
 #include <linux/amlogic/media/registers/cpu_version.h>
 #include <linux/version.h>
 #include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
-#include <linux/amlogic/media/utils/vdec_reg.h>
 //#include <linux/amlogic/power_ctrl.h>
 #include <dt-bindings/power/sc2-pd.h>
 #include <linux/amlogic/power_domain.h>
@@ -55,7 +54,6 @@
 #include <linux/sched/signal.h>
 #endif
 
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../common/media_clock/switch/amports_gate.h"
 #include "../common/encoder_report.h"
 

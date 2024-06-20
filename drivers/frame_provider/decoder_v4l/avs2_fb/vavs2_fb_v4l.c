@@ -85,17 +85,6 @@
 
 #define CO_MV_COMPRESS
 
-#define HEVC_SHIFT_LENGTH_PROTECT                  0x313a
-#define HEVC_MPRED_CTRL4                           0x324c
-#define HEVC_DBLK_CFGD                             0x350d
-#define HEVC_CM_HEADER_START_ADDR                  0x3628
-#define HEVC_DBLK_CFGB                             0x350b
-#define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
-#define HEVC_SAO_MMU_VH1_ADDR                      0x363b
-#define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-#define HEVC_ASSIST_MMU_MAP_ADDR                   0x3009
-#define HEVC_SAO_CTRL9                             0x362d
-
 /*
  * AVS2_DEC_STATUS define
 */
@@ -1591,11 +1580,6 @@ int avs2_bufmgr_init(struct AVS2Decoder_s *dec, struct BuffInfo_s *buf_spec_i,
 	}
 	return 0;
 }
-
-#define HEVC_CM_BODY_START_ADDR                    0x3626
-#define HEVC_CM_BODY_LENGTH                        0x3627
-#define HEVC_CM_HEADER_LENGTH                      0x3629
-#define HEVC_CM_HEADER_OFFSET                      0x362b
 
 #define LOSLESS_COMPRESS_MODE
 
@@ -6015,10 +5999,6 @@ static int get_frame_rate(union param_u *params, struct AVS2Decoder_s *dec)
 
 	return 0;
 }
-
-#define HEVC_MV_INFO   0x310d
-#define HEVC_QP_INFO   0x3137
-#define HEVC_SKIP_INFO 0x3136
 
 static void get_qos_info(struct AVS2Decoder_s *dec, struct vframe_qos_s* vqos, int poc, int core_num)
 {

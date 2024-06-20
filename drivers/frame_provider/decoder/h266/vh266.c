@@ -167,23 +167,6 @@ to enable DV of frame mode
 
 #define H266_MMU_MAP_BUFFER       HEVC_ASSIST_SCRATCH_7
 
-#define HEVC_ASSIST_MMU_MAP_ADDR                   0x3009
-
-#define HEVC_CM_HEADER_START_ADDR                  0x3628
-#define HEVC_CM_HEADER_START_ADDR2                 0x364a
-#define HEVC_SAO_MMU_VH1_ADDR                      0x363b
-#define HEVC_SAO_MMU_VH0_ADDR                      0x363a
-#define HEVC_SAO_MMU_VH0_ADDR2                     0x364d
-#define HEVC_SAO_MMU_VH1_ADDR2                     0x364e
-
-#define HEVC_SAO_MMU_DMA_CTRL2                     0x364c
-#define HEVC_SAO_MMU_STATUS2                       0x3650
-#define HEVC_DW_VH0_ADDDR                          0x365e
-#define HEVC_DW_VH1_ADDDR                          0x365f
-
-#define HEVC_DBLK_CFGB                             0x350b
-//#define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
-
 #define SWAP_HEVC_OFFSET (3 * 0x1000)
 
 #define MEM_NAME "codec_266"
@@ -287,16 +270,6 @@ static u32 dirty_buffersize_threshold = 0x800000;
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 
 #ifdef SUPPORT_10BIT
-#define HEVC_CM_BODY_START_ADDR                    0x3626
-#define HEVC_CM_BODY_LENGTH                        0x3627
-#define HEVC_CM_HEADER_LENGTH                      0x3629
-#define HEVC_CM_HEADER_OFFSET                      0x362b
-#define HEVC_SAO_CTRL9                             0x362d
-
-#define HEVC_CM_BODY_LENGTH2                       0x3663
-#define HEVC_CM_HEADER_OFFSET2                     0x3664
-#define HEVC_CM_HEADER_LENGTH2                     0x3665
-
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
 /* double_write_mode:
  *	0, no double write;
@@ -3237,7 +3210,6 @@ static void init_decode_head_hw(struct hevc_state_s *hevc)
 
 }
 #endif
-#define HEVCD_MPP_ANC2AXI_TBL_DATA                 0x3464
 
 static void init_pic_list_hw(struct hevc_state_s *hevc)
 {

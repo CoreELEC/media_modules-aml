@@ -35,7 +35,6 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
-#include <linux/amlogic/media/registers/register.h>
 
 #include "../../../stream_input/amports/streambuf_reg.h"
 #include "../../../stream_input/amports/amports_priv.h"
@@ -51,7 +50,6 @@
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
 
-//#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
 #include <linux/delay.h>
 
