@@ -368,6 +368,12 @@ static int loop_times = 5;
 
 static u32 lookup_check_count = 30;
 
+struct ucode_version_s {
+	unsigned int major;
+	unsigned int minor;
+	unsigned int patch;
+};
+extern struct ucode_version_s ucode_version;
 
 /*
  *[3:0] 0: default use config from omx.
@@ -7428,11 +7434,20 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			"%s profile_idc %d\n", __func__, p_H264_Dpb->mSPS.profile_idc);
 
 		/*crop*/
-		p_H264_Dpb->chroma_format_idc = p_H264_Dpb->dpb_param.dpb.chroma_format_idc;
-		p_H264_Dpb->frame_crop_left_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_left_offset;
-		p_H264_Dpb->frame_crop_right_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_right_offset;
-		p_H264_Dpb->frame_crop_top_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_top_offset;
-		p_H264_Dpb->frame_crop_bottom_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_bottom_offset;
+		if ((ucode_version.major > 0) || (ucode_version.minor > 4) || ((ucode_version.minor == 4) && (ucode_version.patch >= 3))) {
+			p_H264_Dpb->chroma_format_idc = (p_H264_Dpb->dpb_param.l.data[MAX_REFERENCE_FRAME_NUM_IN_MEM]>>8 & 0x3);
+			p_H264_Dpb->frame_crop_left_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_LEFT_OFFSET];
+			p_H264_Dpb->frame_crop_right_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_RIGHT_OFFSET];
+			p_H264_Dpb->frame_crop_top_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_TOP_OFFSET];
+			p_H264_Dpb->frame_crop_bottom_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_BOTTOM_OFFSET];
+		}
+		else {
+			p_H264_Dpb->chroma_format_idc = p_H264_Dpb->dpb_param.dpb.chroma_format_idc;
+			p_H264_Dpb->frame_crop_left_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_left_offset;
+			p_H264_Dpb->frame_crop_right_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_right_offset;
+			p_H264_Dpb->frame_crop_top_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_top_offset;
+			p_H264_Dpb->frame_crop_bottom_offset = p_H264_Dpb->dpb_param.dpb.frame_crop_bottom_offset;
+		}
 
 		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 		"%s chroma_format_idc %d crop offset: left %d right %d top %d bottom %d\n",

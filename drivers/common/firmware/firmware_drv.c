@@ -97,6 +97,14 @@ static u32 debug;
 static u32 detail;
 static bool new_package = false;
 
+struct ucode_version_s {
+	unsigned int major;
+	unsigned int minor;
+	unsigned int patch;
+};
+struct ucode_version_s ucode_version = {0, 0, 0};
+EXPORT_SYMBOL(ucode_version);
+
 bool fw_tee_enabled(void)
 {
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)
@@ -1093,6 +1101,35 @@ static void fw_driver_exit(void)
 	kfree(g_mgr);
 }
 
+static void parse_ucode_version(void)
+{
+	struct fw_mgr_s *mgr = g_mgr;
+	struct fw_info_s *info;
+	
+	if (!mgr) {
+		return;
+	}
+
+	if (!list_empty(&mgr->fw_head)) {
+		list_for_each_entry(info, &mgr->fw_head, node) {
+			if (IS_ERR_OR_NULL(info->data))
+				continue;
+
+			if (!strcmp(info->src_from, "video_ucode.bin")) {
+				const char *start;
+
+				start = info->data->head.version;
+
+				// v0.3.31.I1560de6.b60dbcd0
+				sscanf(start, "v%d.%d.%d", &ucode_version.major, &ucode_version.minor, &ucode_version.patch);
+				pr_info("%s, ucode = %d.%d.%d\n", __FUNCTION__,
+					ucode_version.major, ucode_version.minor, ucode_version.patch);
+				break;
+			}
+		}
+	}
+}
+
 static int __init fw_module_init(void)
 {
 	int ret = -1;
@@ -1114,6 +1151,9 @@ static int __init fw_module_init(void)
 		pr_info("Error %d firmware pre load fail.\n", ret);
 		goto err;
 	}
+
+	parse_ucode_version();
+
 err:
 	return ret;
 }
