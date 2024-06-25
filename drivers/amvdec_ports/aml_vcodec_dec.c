@@ -1311,12 +1311,8 @@ ssize_t aml_vdec_basic_information(struct aml_vcodec_ctx *ctx, char *buf)
 
 ssize_t aml_buffer_status(struct aml_vcodec_ctx *ctx, char *buf)
 {
-	struct vb2_v4l2_buffer *vb = NULL;
-	struct aml_v4l2_buf *aml_buff = NULL;
-	struct aml_buf *aml_buf = NULL;
 	struct vb2_queue *q = NULL;
 	ulong flags;
-	int i;
 	char *pbuf = buf;
 
 	flags = aml_vcodec_ctx_lock(ctx);
@@ -1325,18 +1321,6 @@ ssize_t aml_buffer_status(struct aml_vcodec_ctx *ctx, char *buf)
 	if (!q->streaming) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"can't achieve buffers status before start streaming.\n");
-	}
-	if (!ctx->enable_di_post) {
-		pbuf += sprintf(pbuf, "\n==== Show Buffer Status ======== \n");
-		for (i = 0; i < q->num_buffers; ++i) {
-			vb = to_vb2_v4l2_buffer(q->bufs[i]);
-			aml_buff = container_of(vb, struct aml_v4l2_buf, vb);
-			aml_buf = aml_buff->aml_buf;
-
-			/* print out task chain status. */
-			if (aml_buf)
-				pbuf += task_chain_show(aml_buf->task, pbuf);
-		}
 	}
 
 	aml_vcodec_ctx_unlock(ctx, flags);

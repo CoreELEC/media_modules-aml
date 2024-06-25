@@ -22,6 +22,9 @@
 #include <linux/dma-buf.h>
 
 #include "aml_buf_core.h"
+#include "aml_vcodec_drv.h"
+#include "aml_vcodec_dec.h"
+#include "aml_buf_mgr.h"
 #include "aml_vcodec_util.h"
 
 static bool bc_sanity_check(struct buf_core_mgr_s *bc)
@@ -835,6 +838,9 @@ void buf_core_replace(struct buf_core_mgr_s *bc,
 ssize_t buf_core_walk(struct buf_core_mgr_s *bc, char *buf)
 {
 	struct buf_core_entry *entry, *tmp;
+	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
+	struct aml_vcodec_ctx *ctx = container_of(bm,
+		struct aml_vcodec_ctx, bm);
 	struct hlist_node *h_tmp;
 	ulong bucket;
 	int dec_holders = 0;
@@ -845,6 +851,13 @@ ssize_t buf_core_walk(struct buf_core_mgr_s *bc, char *buf)
 	char *pbuf = buf;
 
 	mutex_lock(&bc->mutex);
+
+	if (!ctx->enable_di_post) {
+		pbuf += sprintf(pbuf, "\nVb2 queue elements:\n");
+		hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
+			pbuf += bc->status_walk(bc, entry, pbuf);
+		}
+	}
 
 	pbuf += sprintf(pbuf, "\nFree queue elements:\n");
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {

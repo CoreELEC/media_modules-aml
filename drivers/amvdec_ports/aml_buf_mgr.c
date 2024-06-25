@@ -743,6 +743,17 @@ err1:
 	return ret;
 }
 
+static ssize_t aml_buf_walk(struct buf_core_mgr_s *bc,
+			struct buf_core_entry *entry, char *buf)
+{
+	struct aml_buf *aml_buf = entry_to_aml_buf(entry);
+	char *pbuf = buf;
+
+	pbuf += task_chain_show(aml_buf->task, pbuf);
+
+	return pbuf - buf;
+}
+
 static void aml_buf_free(struct buf_core_mgr_s *bc,
 			struct buf_core_entry *entry)
 {
@@ -1024,6 +1035,7 @@ int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
 	bm->bc.wake_up_vdec	= aml_wake_up_vdec;
 	bm->bc.mem_ops.alloc	= aml_buf_alloc;
 	bm->bc.mem_ops.free	= aml_buf_free;
+	bm->bc.status_walk	= aml_buf_walk;
 
 	kref_init(&bm->ref);
 

@@ -244,9 +244,19 @@ struct buf_core_mem_ops {
  * @prepare	: The interface is used for the preprocessing of buffer data.
  * @input	: The interface uses data input and is triggered after calling the interface fill.
  * @output	: The interface uses data output and is triggered after the interface is called done.
- * vpp_que	: Interact with DI mgr to notify the buffer that has been displayed back to the driver.
- * vpp_dque	: The decoded buffer is submitted to DI mgr for post-processing.
- * vpp_reset	: Used to reset the buffer information managed by DI mgr.
+ * @vpp_que	: Interact with DI mgr to notify the buffer that has been displayed back to the driver.
+ * @vpp_dque	: The decoded buffer is submitted to DI mgr for post-processing.
+ * @vpp_reset	: Used to reset the buffer information managed by DI mgr.
+ * @external_process
+ *		: The interface is used to callback decoder.
+ * @wake_up_vdec: The interface is used to wake up vdec.
+ * @get_pre_user: The interface is used to get the pre user about current buffer.
+ * @get_next_user
+ *		: The interface is used to get the next user about current buffer.
+ * @update	: The interface is used to update vb2 buffer and aml_buf each other.
+ * @replace	: The interface is used to replace vb2 buffer and aml_buf each other.
+ * @put_dma	: The interface is used to put buffer reference.
+ * @status_walk	: The interface is used to dump buffer status.
  * @wake_up_vdec
  *		: Wake up vdec thread to schedule.
  * @mem_ops	: Set of interfaces for memory-related operations.
@@ -288,6 +298,7 @@ struct buf_core_mgr_s {
 	void	(*update)(struct buf_core_mgr_s *, struct buf_core_entry *, ulong, enum buf_pair);
 	void	(*replace)(struct buf_core_mgr_s *, struct buf_core_entry *, void *);
 	void	(*put_dma)(struct buf_core_mgr_s *);
+	ssize_t	(*status_walk)(struct buf_core_mgr_s *, struct buf_core_entry *, char *);
 
 	struct buf_core_mem_ops	mem_ops;
 	struct buf_core_ops	buf_ops;
