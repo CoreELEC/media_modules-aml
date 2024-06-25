@@ -1341,7 +1341,7 @@ long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPt
 
 	return 0;
 }
-EXPORT_SYMBOL(ptsserver_peek_pts_offset);
+EXPORT_SYMBOL_GPL(ptsserver_peek_pts_offset);
 
 long ptsserver_get_last_checkin_pts(s32 pServerInsId,last_checkin_pts* mLastCheckinPts) {
 	PtsServerManage* vPtsServerIns = NULL;
