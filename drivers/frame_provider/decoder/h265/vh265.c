@@ -8181,8 +8181,10 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	if ((hevc->slice_type != 2) && (hevc->i_only & 0x2))
 		return 0xf;
 
-	if (post_picture_early(vdec, hevc->cur_pic->index))
-		return -1;
+	if (hevc->new_pic) {
+		if (post_picture_early(vdec, hevc->cur_pic->index))
+			return -1;
+	}
 
 	return 0;
 }
