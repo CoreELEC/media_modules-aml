@@ -640,6 +640,10 @@ void init_dec(DecApp * p_app)
 	{
 	int i;
 	DecLib *p_declib = &p_app->m_cDecLib;
+	for (i = 0; i < PIC_LIST_SIZE; i ++) {
+		if (p_app->m_cDecLib.m_cListPic.pic[i])
+			free_picture(p_app->m_cDecLib.m_cListPic.pic[i]);
+	}
 	//DecAppCfg
 	memset(p_app, 0, sizeof(DecApp));
 	//p_app->m_outputColourSpaceConvert = IPCOLOURSPACE_UNCHANGED;

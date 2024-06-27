@@ -153,7 +153,7 @@ to enable DV of frame mode
 			/* 4096x2304 , 0x120000 per buffer */
 #define MPRED_8K_MV_BUF_SIZE		(0x120000*4)
 #define MPRED_4K_MV_BUF_SIZE		(0x120000)
-#define MPRED_MV_BUF_SIZE		(0x40000)
+#define MPRED_MV_BUF_SIZE		(0x50000)
 
 #define MMU_COMPRESS_HEADER_SIZE_1080P  0x10000
 #define MMU_COMPRESS_HEADER_SIZE_4K  0x48000
@@ -2525,6 +2525,11 @@ static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
 }
 #endif
 
+static inline u32 get_mv_mem_unit(int lcu_size_log2)
+{
+	return (lcu_size_log2 == 7 ? 2048 : lcu_size_log2 == 6 ? 512 : 128);
+}
+
 int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
 #ifdef MV_USE_FIXED_BUF
@@ -2548,9 +2553,7 @@ int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	int ret = -1;
 	int new_size;
 	if (mv_buf_dynamic_alloc) {
-		int MV_MEM_UNIT =
-			hevc->lcu_size_log2 == 6 ? 0x200 : hevc->lcu_size_log2 ==
-			5 ? 0x80 : 0x20;
+		int MV_MEM_UNIT = get_mv_mem_unit(hevc->lcu_size_log2);
 		int extended_pic_width = (pic->width + hevc->lcu_size -1)
 				& (~(hevc->lcu_size - 1));
 		int extended_pic_height = (pic->height + hevc->lcu_size -1)
@@ -3520,7 +3523,7 @@ static int config_mpred_hw(struct hevc_state_s *hevc, BuffInfo_t* buf_spec)
 	mpred_curr_lcu_x   = data32 & 0xffff;
 	mpred_curr_lcu_y   = (data32 >> 16) & 0xffff;
 
-	MV_MEM_UNIT = vvc_dec->lcu_size_log2 == 6 ? 0x200 : vvc_dec->lcu_size_log2 == 5 ? 0x80 : 0x20;
+	MV_MEM_UNIT = get_mv_mem_unit(vvc_dec->lcu_size_log2);
 	mpred_mv_rd_ptr = mpred_mv_rd_start_addr  + (vvc_dec->slice_addr * MV_MEM_UNIT);
 
 	mpred_mv_rd_ptr_p1  =mpred_mv_rd_ptr+MV_MEM_UNIT;
