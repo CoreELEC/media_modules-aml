@@ -93,6 +93,7 @@ static int hevc_print(struct hevc_state_s *hevc,
 static int hevc_print_cont(struct hevc_state_s *hevc,
 	int debug_flag, const char *fmt, ...);
 static void put_mv_buf(struct PIC_s *pic);
+static int dec_get_used_buf_num(struct hevc_state_s *hevc);
 
 #define H266_DEBUG_BUFMGR                   0x01
 #define H266_DEBUG_BUFMGR_MORE              0x02
@@ -263,6 +264,7 @@ static struct vframe_provider_s vh266_vf_prov;
 #define UCODE_SWAP_VERSION 3
 #define UCODE_SWAP_SUBMIT_COUNT 42
 
+int force_dpb_size = 0;
 
 static u32 enable_swap;
 static u32 bit_depth_luma;
@@ -407,7 +409,7 @@ static u32 dynamic_buf_num_margin = 4;
 static u32 buf_alloc_width;
 static u32 buf_alloc_height;
 
-static u32 max_buf_num = 16;
+static u32 max_buf_num = 24;
 static u32 buf_alloc_size;
 /*static u32 re_config_pic_flag;*/
 /*
@@ -2571,6 +2573,14 @@ int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 #endif
 }
 
+static int dec_get_used_buf_num(struct hevc_state_s *hevc)
+{
+	if (hevc)
+		return hevc->used_buf_num;
+
+	return 0;
+}
+
 static void put_mv_buf(struct PIC_s *pic)
 {
 	struct hevc_state_s *hevc = pic->hevc;
@@ -2881,6 +2891,8 @@ void dealloc_pic_buf(struct hevc_state_s *hevc,
 	}
 }
 #endif
+#if 0
+
 static int get_work_pic_num(struct hevc_state_s *hevc)
 {
 	int used_buf_num = 0;
@@ -2910,7 +2922,7 @@ static int get_work_pic_num(struct hevc_state_s *hevc)
 #endif
 	return used_buf_num;
 }
-#if 0
+
 static int get_alloc_pic_count(struct hevc_state_s *hevc)
 {
 	int alloc_pic_count = 0;
@@ -8522,28 +8534,8 @@ static void hevc_interlace_check(struct hevc_state_s *hevc,
 
 static int v4l_parser_work_pic_num(struct hevc_state_s *hevc)
 {
-	int used_buf_num = 0;
-#if 0
-	pr_debug("margin = %d, sps_max_dec_pic_buffering_minus1_0 = %d\n",
-		get_dynamic_buf_num_margin(hevc),
-		hevc->param.p.sps_max_dec_pic_buffering_minus1_0);
+	int used_buf_num = dec_get_dpb_size(hevc, &hevc->vvc_dec->param);
 
-	used_buf_num = hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + 1;
-	/*
-	1. need one more for multi instance, as apply_ref_pic_set()
-	   has no chanch to run to clear referenced flag in some case
-	2. for eos add more buffer to flush.
-	*/
-	used_buf_num += 1;
-	if (!save_buffer)
-		used_buf_num += 1;
-
-	if (hevc->save_buffer_mode)
-		hevc_print(hevc, 0,
-			"save buf _mode : dynamic_buf_num_margin %d ----> %d \n",
-			dynamic_buf_num_margin,  hevc->dynamic_buf_num_margin);
-#endif
-	used_buf_num = PIC_POOL_SIZE;
 	if (used_buf_num > max_buf_num)
 		used_buf_num = max_buf_num;
 	return used_buf_num;
@@ -10341,7 +10333,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	if (hevc->vvc_dec->init_hw_flag == 0)
 		return 1;
 	spin_lock_irqsave(&h266_lock, flags);
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+	for (i = 0; i < hevc->used_buf_num; i++) {
 		pic = &hevc->vvc_dec->pic_pool[i];
 		if (pic->index == -1)
 			continue;
@@ -10352,7 +10344,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	if (new_pic == NULL) {
 		int decode_count = 0;
 
-		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+		for (i = 0; i < hevc->used_buf_num; i++) {
 			pic = &hevc->vvc_dec->pic_pool[i];
 			if (pic->index == -1)
 				continue;
@@ -11225,7 +11217,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	if (is_log_enable(hevc))
 		add_log(hevc,
-			"%s: size 0x%x sum 0x%x shiftbyte 0x%x",
+			"%s: size %d sum 0x%x shiftbyte 0x%x",
 			__func__, r,
 			check_sum,
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT)
@@ -11236,7 +11228,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hevc->start_shift_bytes = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 
 	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-		"%s: size 0x%x sum 0x%x process_state %d, (%x %x %x %x %x) byte count %x\n",
+		"%s: size %d sum 0x%x process_state %d, (%x %x %x %x %x) byte count %x\n",
 		__func__, r,
 		check_sum,
 		hevc->process_state,
@@ -11815,7 +11807,7 @@ static void vh266_dump_state(struct vdec_s *vdec)
 	hevc->vvc_dec->init_hw_flag,
 	is_new_pic_available(hevc),
 	get_used_buf_count(hevc),
-	get_work_pic_num(hevc));
+	v4l_parser_work_pic_num(hevc));
 
 	print_pic_pool(hevc, "");
 
@@ -12173,11 +12165,6 @@ static int ammvdec_h266_probe(struct platform_device *pdev)
 			"enable fence: %d, fence usage: %d\n",
 			hevc->enable_fence, hevc->fence_usage);
 	}
-
-	if (hevc->save_buffer_mode && dynamic_buf_num_margin > 2)
-		hevc->dynamic_buf_num_margin = dynamic_buf_num_margin -2;
-	else
-		hevc->dynamic_buf_num_margin = dynamic_buf_num_margin;
 
 	hevc->mem_map_mode = mem_map_mode;
 
@@ -12679,6 +12666,9 @@ MODULE_PARM_DESC(double_write_mode, "\n double_write_mode\n");
 
 module_param(buf_alloc_width, uint, 0664);
 MODULE_PARM_DESC(buf_alloc_width, "\n buf_alloc_width\n");
+
+module_param(force_dpb_size, uint, 0664);
+MODULE_PARM_DESC(force_dpb_size, "\n force_dpb_size\n");
 
 module_param(buf_alloc_height, uint, 0664);
 MODULE_PARM_DESC(buf_alloc_height, "\n buf_alloc_height\n");

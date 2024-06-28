@@ -221,7 +221,7 @@
             unsigned short mmu_map_rd_count;
             unsigned short picture_cnt;
             unsigned short debug_flag;
-            unsigned short reserved_d7;
+            unsigned short LevelIdc;
             unsigned short reserved_d8;
             unsigned short reserved_d9;
             unsigned short reserved_da;
@@ -526,7 +526,7 @@
             unsigned short SubLayerLevelIDC_3;
             unsigned short SubLayerLevelIDC_4;
             unsigned short SubLayerLevelIDC_5;
-            unsigned short LevelIdc;
+            unsigned short reserved_208;
             unsigned short FrameOnlyConstraintFlag;
             unsigned short MultiLayerEnabledFlag;
             unsigned short GciPresentFlag;

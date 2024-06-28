@@ -1632,13 +1632,77 @@ void pic_destroy(Picture *pic)
 
 }
 
+extern int force_dpb_size;
+
+int dec_get_dpb_size(void *hevc, union param_u *rpm_param)
+{
+	u32 level_idc = rpm_param->p.LevelIdc;
+	u32 width = rpm_param->p.pic_width_in_luma_samples;
+	u32 height = rpm_param->p.pic_height_in_luma_samples;
+	u32 max_dpb_size = 0;
+	u32 max_luma_ps = 8912896;
+	u32 pic_size_max_in_samples_y = width * height;
+	u32 max_dpb_pic_buf = 8;
+
+	switch (level_idc) {
+		case 16:
+			max_luma_ps = 36864;
+			break;
+		case 32:
+			max_luma_ps = 122880;
+			break;
+		case 35:
+			max_luma_ps = 245760;
+			break;
+		case 48:
+			max_luma_ps = 552960;
+			break;
+		case 51:
+			max_luma_ps = 983040;
+			break;
+		case 64:
+		case 67:
+			max_luma_ps = 2228224;
+			break;
+		case 80:
+		case 83:
+		case 86:
+			max_luma_ps = 8912896;
+			break;
+		default:
+			hevc_print(hevc, H266_DEBUG_BUFMGR,
+				"Warning: %s level_idc:%d is not supported\n",
+				__func__, level_idc);
+			break;
+	}
+
+	if (2 * pic_size_max_in_samples_y <= max_luma_ps)
+		max_dpb_size = 2 * max_dpb_pic_buf;
+	else if (3 * pic_size_max_in_samples_y <= 2 * max_luma_ps)
+		max_dpb_size = 3 * max_dpb_pic_buf / 2;
+	else
+		max_dpb_size = max_dpb_pic_buf;
+
+	max_dpb_size += 1;
+
+	hevc_print(hevc, H266_DEBUG_BUFMGR, "%s level_idc:%d width:%d height:%d max_dpb_size:%d force_dpb_size:%d\n",
+		__func__, level_idc, width, height, max_dpb_size, force_dpb_size);
+
+	if (force_dpb_size)
+		return force_dpb_size;
+
+	return max_dpb_size;
+}
+
 Picture* xGetNewPicBuffer(DecLib *p_declib, SPS *sps, PPS *pps, const uint32_t temporalLayer, const int layerId )
 {
 	int i;
 	Picture * pcPic = nullptr;
 	bool bBufferIsAvailable;
 #ifdef MODIFY_CODE
-	p_declib->m_iMaxRefPicNum = 16;
+	p_declib->m_iMaxRefPicNum = dec_get_used_buf_num(p_declib->hw);
+	if (!p_declib->m_iMaxRefPicNum)
+		p_declib->m_iMaxRefPicNum = dec_get_dpb_size(p_declib->hw, p_declib->param);
 	//p_declib->m_iMaxRefPicNum = 6;
 	//p_declib->m_iMaxRefPicNum = 1;
 #else

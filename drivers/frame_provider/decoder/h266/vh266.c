@@ -82,6 +82,7 @@
 
 static u32 debug_mask = 0xffffffff;
 static u32 debug;
+int force_dpb_size = 0;
 
 struct hevc_state_s;
 struct PIC_s;
@@ -91,6 +92,7 @@ static int hevc_print(struct hevc_state_s *hevc,
 static int hevc_print_cont(struct hevc_state_s *hevc,
 	int debug_flag, const char *fmt, ...);
 static void put_mv_buf(struct PIC_s *pic);
+static int dec_get_used_buf_num(struct hevc_state_s *hevc);
 
 #define H266_DEBUG_BUFMGR                   0x01
 #define H266_DEBUG_BUFMGR_MORE              0x02
@@ -2615,6 +2617,14 @@ int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 #endif
 }
 
+static int dec_get_used_buf_num(struct hevc_state_s *hevc)
+{
+	if (hevc)
+		return hevc->used_buf_num;
+
+	return 0;
+}
+
 static void put_mv_buf(struct PIC_s *pic)
 {
 	struct hevc_state_s *hevc = pic->hevc;
@@ -2912,7 +2922,7 @@ void dealloc_pic_buf(struct hevc_state_s *hevc,
 
 static int get_work_pic_num(struct hevc_state_s *hevc)
 {
-	int used_buf_num = 0;
+	hevc->used_buf_num = dec_get_dpb_size(hevc, &hevc->vvc_dec->param) + get_dynamic_buf_num_margin(hevc);
 #if 0
 	used_buf_num = hevc->param.p.sps_max_dec_pic_buffering_minus1_0 + 1;
 	/*
@@ -2935,9 +2945,10 @@ static int get_work_pic_num(struct hevc_state_s *hevc)
 	if (used_buf_num > MAX_BUF_NUM)
 		used_buf_num = MAX_BUF_NUM;
 #else
-	used_buf_num = PIC_POOL_SIZE;
+	if (hevc->used_buf_num > PIC_POOL_SIZE)
+		hevc->used_buf_num = PIC_POOL_SIZE;
 #endif
-	return used_buf_num;
+	return hevc->used_buf_num;
 }
 #if 0
 static int get_alloc_pic_count(struct hevc_state_s *hevc)
@@ -3070,7 +3081,7 @@ static void init_pic_list(struct hevc_state_s *hevc)
 		}
 	}
 
-	for (i = 0; i < init_buf_num; i++) {
+	for (i = 0; i < PIC_POOL_SIZE; i++) {
 		//struct PIC_s *pic = hevc->m_PIC[i];
 		struct PIC_s *pic = &hevc->vvc_dec->pic_pool[i];
 #if 0
@@ -7986,7 +7997,6 @@ static irqreturn_t vh266_isr_thread_fn(int irq, void *data)
 
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		if (hevc->m_ins_flag) {
-			int ii;
 			if (vdec->mvfrm)
 				vdec->mvfrm->hw_decode_time =
 				local_clock() - vdec->mvfrm->hw_decode_start;
@@ -8050,8 +8060,7 @@ pic_done:
 			}
 			if (dec_status == HEVC_DECPIC_DATA_DONE)
 				h266_bufmgr_post_process(&hevc->vvc_dec->m_decApp);
-
-#ifdef VVC_10B_MMU
+/*
 			for (ii = 0; ii < PIC_POOL_SIZE; ii++) {
 				vvc_frame_t *pic = &hevc->vvc_dec->pic_pool[ii];
 				if (pic->used == 1 && pic->referenced == 0 &&
@@ -8063,7 +8072,7 @@ pic_done:
 					pic_buf_cfg_free(pic);
 				}
 			}
-#endif
+*/
 			hevc->vvc_dec->cur_pic = NULL;
 			if (get_dbg_flag(hevc) & H266_DEBUG_BUFMGR_MORE)
 				print_pic_pool(hevc, "after bufmgr_post_process");
@@ -9532,8 +9541,21 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	/*return 1 if pic_list is not initialized yet*/
 	if (hevc->vvc_dec->init_hw_flag == 0)
 		return 1;
+
 	spin_lock_irqsave(&h266_lock, flags);
-	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+	for (i = 0; i < PIC_POOL_SIZE; i++) {
+		vvc_frame_t *pic = &hevc->vvc_dec->pic_pool[i];
+		if (pic->used == 1 && pic->referenced == 0 &&
+			pic->vf_ref == 0) {
+			if (pic->mmu_alloc_flag) {
+				pic->mmu_alloc_flag = 0;
+				release_pic_mmu_buf(hevc, pic);
+			}
+			pic_buf_cfg_free(pic);
+		}
+	}
+
+	for (i = 0; i < hevc->used_buf_num; i++) {
 		pic = &hevc->vvc_dec->pic_pool[i];
 		if (pic->index == -1)
 			continue;
@@ -10442,7 +10464,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	if (is_log_enable(hevc))
 		add_log(hevc,
-			"%s: size 0x%x sum 0x%x shiftbyte 0x%x",
+			"%s: size %d sum 0x%x shiftbyte 0x%x",
 			__func__, r,
 			check_sum,
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT)
@@ -10453,7 +10475,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hevc->start_shift_bytes = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 
 	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-		"%s: size 0x%x sum 0x%x process_state %d, (%x %x %x %x %x) byte count %x\n",
+		"%s: size %d sum 0x%x process_state %d, (%x %x %x %x %x) byte count %x\n",
 		__func__, r,
 		check_sum,
 		hevc->process_state,
@@ -11947,6 +11969,9 @@ MODULE_PARM_DESC(pre_decode_buf_level, "\n ammvdec_h264 pre_decode_buf_level\n")
 
 module_param(udebug_pause_decode_idx, uint, 0664);
 MODULE_PARM_DESC(udebug_pause_decode_idx, "\n udebug_pause_decode_idx\n");
+
+module_param(force_dpb_size, uint, 0664);
+MODULE_PARM_DESC(force_dpb_size, "\n force_dpb_size\n");
 
 module_param(disp_vframe_valve_level, uint, 0664);
 MODULE_PARM_DESC(disp_vframe_valve_level, "\n disp_vframe_valve_level\n");
