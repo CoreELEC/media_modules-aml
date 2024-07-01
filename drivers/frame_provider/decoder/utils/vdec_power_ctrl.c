@@ -194,11 +194,12 @@ static void pm_vdec_clock_off(int id)
 
 static void dos_local_config(bool is_on, int id)
 {
-	if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S7) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S7D))
+	int chip_id = get_cpu_major_id();
+
+	if ((chip_id < AM_MESON_CPU_MAJOR_ID_S5) ||
+	(chip_id == AM_MESON_CPU_MAJOR_ID_GXLX3) ||
+	(chip_id == AM_MESON_CPU_MAJOR_ID_S1A) ||
+	(chip_id == AM_MESON_CPU_MAJOR_ID_TXHD2))
 		return;
 
 	if (is_on) {

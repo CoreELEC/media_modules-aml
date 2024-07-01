@@ -3304,7 +3304,7 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 		WRITE_VREG(HEVC_SAO_C_START_ADDR, 0xffffffff);
 	}
 #ifdef OW_TRIPLE_WRITE
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) {
+	if (is_support_triple_write()) {
 		if (tw_mode) {
 			WRITE_VREG(HEVC_SAO_Y_START_ADDR3, cur_pic->tw_y_adr);
 			WRITE_VREG(HEVC_SAO_C_START_ADDR3, cur_pic->tw_u_v_adr);
@@ -3485,7 +3485,7 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	}
 #ifdef P010_ENABLE
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) {
+	if (is_support_p010_mode()) {
 		data32 = READ_VREG(HEVC_SAO_CTRL3);
 		if (is_dw_p010(dec)) {
 			data32 |= (1 << 1);
@@ -4415,6 +4415,7 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 	/*int losless_comp_header_size, losless_comp_body_size;*/
 
 	struct BuffInfo_s *cur_buf_info = NULL;
+	struct dec_sysinfo *dec_info = &dec->vavs2_amstream_dec_info;
 
 	cur_buf_info = &dec->work_space_buf_store;
 	if (force_bufspec) {
@@ -4476,14 +4477,10 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 			buf_alloc_height = 2160;
 		}
 	}
-	dec->init_pic_w = buf_alloc_width ? buf_alloc_width :
-		(dec->vavs2_amstream_dec_info.width ?
-		dec->vavs2_amstream_dec_info.width :
-		dec->work_space_buf->max_width);
-	dec->init_pic_h = buf_alloc_height ? buf_alloc_height :
-		(dec->vavs2_amstream_dec_info.height ?
-		dec->vavs2_amstream_dec_info.height :
-		dec->work_space_buf->max_height);
+	dec->init_pic_w = dec_info->width ? dec_info->width :
+		(buf_alloc_width ? buf_alloc_width : cur_buf_info->max_width);
+	dec->init_pic_h = dec_info->height ? dec_info->height :
+		(buf_alloc_height ? buf_alloc_height : cur_buf_info->max_height);
 
 #ifndef AVS2_10B_MMU
 	init_buf_list(dec);
@@ -8478,6 +8475,10 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 
 	if (double_write_mode)
 		dec->double_write_mode = get_double_write_mode(dec);
+
+	dec->endian = HEVC_CONFIG_LITTLE_ENDIAN;
+	if (is_support_vdec_canvas())
+		dec->endian = HEVC_CONFIG_BIG_ENDIAN;
 #ifdef OW_TRIPLE_WRITE
 	if (triple_write_mode)
 		dec->triple_write_mode = get_triple_write_mode(dec);
@@ -8503,7 +8504,11 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		}
 	}
 #endif
+	if (is_dw_p010(dec) || is_tw_p010(dec))
+		dec->endian = HEVC_CONFIG_P010_LE;
 #endif
+	if (endian)
+		dec->endian = endian;
 
 	dec->dynamic_buf_margin = get_dynamic_buf_num_margin(dec);
 
@@ -8573,12 +8578,6 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		dec->vavs2_amstream_dec_info.height = 0;
 		dec->vavs2_amstream_dec_info.rate = 30;
 	}
-
-	dec->endian = HEVC_CONFIG_LITTLE_ENDIAN;
-	if (is_support_vdec_canvas())
-		dec->endian = HEVC_CONFIG_BIG_ENDIAN;
-	if (endian)
-		dec->endian = endian;
 
 	dec->cma_dev = pdata->cma_dev;
 	if (vavs2_init(pdata) < 0) {

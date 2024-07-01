@@ -751,12 +751,25 @@ struct avs2_frame_s {
 	int buf_size;
 	int lcu_total;
 	int comp_body_size;
-	uint32_t dw_y_adr;
-	uint32_t dw_u_v_adr;
+
+	ulong dw_y_adr;
+	ulong dw_u_v_adr;
+
+	ulong tw_y_adr;
+	ulong tw_u_v_adr;
+	u32 luma_size_tw;
+	u32 chroma_size_tw;
+
 	int y_canvas_index;
 	int uv_canvas_index;
 	struct canvas_config_s canvas_config[2];
 	int double_write_mode;
+
+	//int tw_y_canvas_index;
+	//int tw_uv_canvas_index;
+	struct canvas_config_s tw_canvas_config[2];
+	u32 triple_write_mode;
+
 	int bit_depth;
 	unsigned long cma_alloc_addr;
 	int BUF_index;
@@ -794,6 +807,8 @@ struct avs2_frame_s {
 	char *cuva_data_buf;
 	int  cuva_data_size;
 	u64 timestamp;
+	uint32_t luma_size;
+	uint32_t chroma_size;
 #ifdef AML
 	u64 time;
 	s32 poc;

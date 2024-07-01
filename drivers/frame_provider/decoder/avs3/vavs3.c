@@ -4131,7 +4131,7 @@ static void config_dw(struct AVS3Decoder_s *dec, struct avs3_frame_s *pic,
 	if ((dw_mode & 0x10) == 0)
 		WRITE_VREG(HEVC_CM_BODY_START_ADDR, data32);
 #ifdef OW_TRIPLE_WRITE
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) {
+	if (is_support_triple_write()) {
 		if (tw_mode) {
 			WRITE_VREG(HEVC_SAO_Y_START_ADDR3, pic->tw_y_adr);
 			WRITE_VREG(HEVC_SAO_C_START_ADDR3, pic->tw_u_v_adr);

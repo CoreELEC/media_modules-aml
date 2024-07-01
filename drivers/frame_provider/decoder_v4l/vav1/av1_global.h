@@ -1267,56 +1267,69 @@ typedef struct PIC_BUFFER_CONFIG_s {
   int flags;
 
 #ifdef AML
-    int32_t index;
-    int32_t decode_idx;
-    int32_t slice_type;
-    int32_t RefNum_L0;
-    int32_t RefNum_L1;
-    int32_t num_reorder_pic;
-        int32_t stream_offset;
-    uint8_t referenced;
-    uint8_t output_mark;
-    uint8_t recon_mark;
-    uint8_t output_ready;
-    uint8_t error_mark;
-    /**/
-    int32_t slice_idx;
-    /*buffer*/
-    uint32_t fgs_table_adr;
-    uint32_t sfgs_table_phy;
-    char *sfgs_table_ptr;
+  int32_t index;
+  int32_t decode_idx;
+  int32_t slice_type;
+  int32_t RefNum_L0;
+  int32_t RefNum_L1;
+  int32_t num_reorder_pic;
+  int32_t stream_offset;
+  uint8_t referenced;
+  uint8_t output_mark;
+  uint8_t recon_mark;
+  uint8_t output_ready;
+  uint8_t error_mark;
+  /**/
+  int32_t slice_idx;
+  /*buffer*/
+  uint32_t fgs_table_adr;
+  uint32_t sfgs_table_phy;
+  char *sfgs_table_ptr;
 #ifdef AOM_AV1_MMU
-    uint32_t header_adr;
+  uint32_t header_adr;
 #endif
 #ifdef AOM_AV1_MMU_DW
-    uint32_t header_dw_adr;
+  uint32_t header_dw_adr;
 #endif
-    uint32_t mpred_mv_wr_start_addr;
-    uint32_t mc_y_adr;
-    uint32_t mc_u_v_adr;
-    int32_t mc_canvas_y;
-    int32_t mc_canvas_u_v;
+  uint32_t mpred_mv_wr_start_addr;
+  uint32_t mc_y_adr;
+  uint32_t mc_u_v_adr;
+  uint32_t mc_canvas_y;
+  uint32_t mc_canvas_u_v;
 
-    int32_t lcu_total;
-    /**/
-    unsigned int order_hint;
+  int32_t lcu_total;
+  /**/
+  unsigned int order_hint;
 #endif
 #ifdef AML_DEVICE
-     int mv_buf_index;
-      unsigned long cma_alloc_addr;
-      int BUF_index;
-      int buf_size;
-      int comp_body_size;
-      unsigned int dw_y_adr;
-      unsigned int dw_u_v_adr;
-      int double_write_mode;
-      int y_canvas_index;
-      int uv_canvas_index;
-      int vf_ref;
+  int mv_buf_index;
+  unsigned long cma_alloc_addr;
+  int BUF_index;
+  int buf_size;
+  int comp_body_size;
+  u32 dw_y_adr;
+  u32 dw_u_v_adr;
+  int double_write_mode;
+  u32 luma_size;
+  u32 chroma_size;
+
+  u32 tw_y_adr;
+  u32 tw_u_v_adr;
+  u32 triple_write_mode;
+  //int tw_y_canvas_index;
+  //int tw_uv_canvas_index;
+  struct canvas_config_s tw_canvas_config[2];
+
+  u32 luma_size_tw;
+  u32 chroma_size_tw;
+
+  int y_canvas_index;
+  int uv_canvas_index;
+  int vf_ref;
   struct canvas_config_s canvas_config[2];
-    char *aux_data_buf;
-    int aux_data_size;
-    u32 pts;
+  char *aux_data_buf;
+  int aux_data_size;
+  u32 pts;
   u64 pts64;
   /* picture qos information*/
   int max_qp;
