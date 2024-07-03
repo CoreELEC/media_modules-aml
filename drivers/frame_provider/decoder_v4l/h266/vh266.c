@@ -2243,12 +2243,12 @@ static vvc_frame_t * pic_buf_cfg_alloc(struct hevc_state_s *hevc)
 {
 	vvc_frame_t * pic = NULL;
 	int i;
-	for (i = 0; i < PIC_POOL_SIZE; i++) {
+	for (i = 0; i < hevc->used_buf_num; i++) {
 		if (hevc->vvc_dec->pic_pool[i].used == 0) {
 			break;
 		}
 	}
-	if (i < PIC_POOL_SIZE) {
+	if (i < hevc->used_buf_num) {
 		//vvc_frame_t pic_cfg;
 		pic = &hevc->vvc_dec->pic_pool[i];
 		pic->used = 1;
@@ -4289,6 +4289,7 @@ static void parser_cmd_write(void)
 static void lpf_init(struct hevc_state_s *hevc) // lpf initialization :: update for every bitstream
 {
 	uint32_t data32;
+	struct BuffInfo_s *buf_spec = hevc->work_space_buf;
 
 	data32 = READ_VREG(HEVC_DBLK_CFGB);
 	data32 |= (7 << 0);
@@ -4307,7 +4308,10 @@ static void lpf_init(struct hevc_state_s *hevc) // lpf initialization :: update 
 	data32 = READ_VREG(HEVC_DBLK_CFG1) & ~(0x3ff << 20);
 	WRITE_VREG(HEVC_DBLK_CFG1, data32 | (0x3 << 20)); // SPCC enable & using slice address from ucode
 
-	WRITE_VREG(HEVC_DBLK_CFG3, 0x808040); // axi left address offset set for 8k, WARNING TODO TODO TODO REVIEW REVIEW REVIEW
+	if (buf_spec->max_width <= 4096 && buf_spec->max_height <= 2304)
+		WRITE_VREG(HEVC_DBLK_CFG3, 0x804040); //default value
+	else
+		WRITE_VREG(HEVC_DBLK_CFG3, 0x808040); // axi left address offset set for 8k, WARNING TODO TODO TODO REVIEW REVIEW REVIEW
 
 	hevc_print(hevc, H266_DEBUG_REG_CFG, "cfgLPF::Bitstream Initialize ... Done\n");
 }
@@ -6900,15 +6904,12 @@ static void vh266_recycle_dec_resource(void *priv,
 
 static void vh266_vf_put(struct vframe_s *vf, void *op_arg)
 {
-	unsigned long flags;
 #ifdef MULTI_INSTANCE_SUPPORT
 	struct vdec_s *vdec = op_arg;
 	struct hevc_state_s *hevc = (struct hevc_state_s *)vdec->private;
 #else
 	struct hevc_state_s *hevc = (struct hevc_state_s *)op_arg;
 #endif
-	unsigned char index_top;
-	unsigned char index_bot;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 	struct aml_buf *aml_buf;
@@ -6920,54 +6921,15 @@ static void vh266_vf_put(struct vframe_s *vf, void *op_arg)
 	if (vf && (vf_valid_check(vf, hevc) == false))
 		return;
 
-	if (hevc->enable_fence && vf->fence) {
-		int ret, i;
-
-		mutex_lock(&hevc->fence_mutex);
-		ret = dma_fence_get_status(vf->fence);
-		if (ret == 0) {
-			for (i = 0; i < VF_POOL_SIZE; i++) {
-				if (hevc->fence_vf_s.fence_vf[i] == NULL) {
-					hevc->fence_vf_s.fence_vf[i] = vf;
-					hevc->fence_vf_s.used_size++;
-					mutex_unlock(&hevc->fence_mutex);
-					return;
-				}
-			}
-		}
-		mutex_unlock(&hevc->fence_mutex);
-	}
-
-	ATRACE_COUNTER(hevc->trace.vf_put_name, (long)vf);
-#ifdef MULTI_INSTANCE_SUPPORT
-	ATRACE_COUNTER(hevc->trace.put_canvas0_addr, vf->canvas0_config[0].phy_addr);
-#else
-	ATRACE_COUNTER(hevc->trace.put_canvas0_addr, vf->canvas0Addr);
-#endif
-	index_top = vf->index & 0xff;
-	index_bot = (vf->index >> 8) & 0xff;
-	if (get_dbg_flag(hevc) & PRINT_FLAG_VDEC_STATUS)
-		hevc_print(hevc, 0,
-			"%s(vf 0x%p type %d index 0x%x put canvas0 addr:0x%x)\n",
-			__func__, vf, vf->type, vf->index
-#ifdef MULTI_INSTANCE_SUPPORT
-			, vf->canvas0_config[0].phy_addr
-#else
-			, vf->canvas0Addr
-#endif
-			);
 	atomic_add(1, &hevc->vf_put_count);
-	spin_lock_irqsave(&h266_lock, flags);
-	kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
-	ATRACE_COUNTER(hevc->trace.new_q_name, kfifo_len(&hevc->newframe_q));
-	if (hevc->enable_fence && vf->fence) {
-		vdec_fence_put(vf->fence);
-		vf->fence = NULL;
-	}
-	spin_unlock_irqrestore(&h266_lock, flags);
 
 	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 	aml_buf_put_ref(&ctx->bm, aml_buf);
+
+	if (input_frame_based(vdec)) {
+		ctx->current_timestamp = vf->timestamp;
+		vdec_v4l_post_error_frame_event(ctx);
+	}
 	vh266_recycle_dec_resource(hevc, aml_buf);
 #ifdef MULTI_INSTANCE_SUPPORT
 	vdec_up(vdec);
@@ -11443,6 +11405,7 @@ static void  h266_decode_ctx_reset(struct hevc_state_s *hevc)
 		hevc->vvc_dec->pic_pool[i].index = i;
 		hevc->vvc_dec->pic_pool[i].BUF_index = i;
 		hevc->vvc_dec->pic_pool[i].used = 0;
+		hevc->vvc_dec->pic_pool[i].referenced = 0;
 	}
 
 	for (i = 0; i < MAX_REF_PIC_NUM; ++i) {

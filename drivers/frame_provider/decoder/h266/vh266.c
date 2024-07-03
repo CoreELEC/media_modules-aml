@@ -4307,6 +4307,7 @@ static void parser_cmd_write(void)
 static void lpf_init(struct hevc_state_s *hevc) // lpf initialization :: update for every bitstream
 {
 	uint32_t data32;
+	struct BuffInfo_s *buf_spec = hevc->work_space_buf;
 
 	data32 = READ_VREG(HEVC_DBLK_CFGB);
 	data32 |= (7 << 0);
@@ -4325,7 +4326,10 @@ static void lpf_init(struct hevc_state_s *hevc) // lpf initialization :: update 
 	data32 = READ_VREG(HEVC_DBLK_CFG1) & ~(0x3ff << 20);
 	WRITE_VREG(HEVC_DBLK_CFG1, data32 | (0x3 << 20)); // SPCC enable & using slice address from ucode
 
-	WRITE_VREG(HEVC_DBLK_CFG3, 0x808040); // axi left address offset set for 8k, WARNING TODO TODO TODO REVIEW REVIEW REVIEW
+	if (buf_spec->max_width <= 4096 && buf_spec->max_height <= 2304)
+		WRITE_VREG(HEVC_DBLK_CFG3, 0x804040); //default value
+	else
+		WRITE_VREG(HEVC_DBLK_CFG3, 0x808040); // axi left address offset set for 8k, WARNING TODO TODO TODO REVIEW REVIEW REVIEW
 
 	hevc_print(hevc, H266_DEBUG_REG_CFG, "cfgLPF::Bitstream Initialize ... Done\n");
 }

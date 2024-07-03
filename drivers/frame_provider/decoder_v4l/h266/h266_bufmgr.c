@@ -637,13 +637,9 @@ void xCreateDecLib(DecApp * p_app)
 }
 
 void init_dec(DecApp * p_app)
-	{
+{
 	int i;
 	DecLib *p_declib = &p_app->m_cDecLib;
-	for (i = 0; i < PIC_LIST_SIZE; i ++) {
-		if (p_app->m_cDecLib.m_cListPic.pic[i])
-			free_picture(p_app->m_cDecLib.m_cListPic.pic[i]);
-	}
 	//DecAppCfg
 	memset(p_app, 0, sizeof(DecApp));
 	//p_app->m_outputColourSpaceConvert = IPCOLOURSPACE_UNCHANGED;
@@ -4069,7 +4065,7 @@ void xWriteOutput(DecApp *p_app, PicList* pcListPic, uint32_t tId )
 	//const int temporalId = ( p_app->m_iMaxTemporalLayer == -1 || p_app->m_iMaxTemporalLayer >= maxNrSublayers ) ? maxNrSublayers - 1 : p_app->m_iMaxTemporalLayer;
 #ifdef MODIFY_CODE
 	maxNumReorderPicsHighestTid = 6; //4; //0; //
-	maxDecPicBufferingHighestTid = 8; //6; //1; //
+	maxDecPicBufferingHighestTid = dec_get_dpb_size(p_declib->hw, p_declib->param) - 1; //6; //1; //
 #else
 	if ( referredVPS == nullptr || cvector_get(&referredVPS->m_numLayersInOls,referredVPS->m_targetOlsIdx) == 1 ) {
 		maxNumReorderPicsHighestTid = activeSPS->m_maxNumReorderPics[temporalId];
