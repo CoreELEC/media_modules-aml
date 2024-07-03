@@ -11758,6 +11758,29 @@ static void h264_clear_dpb(struct vdec_h264_hw_s *hw)
 }
 #endif
 
+static void reset_dpb_init(struct h264_dpb_stru *p_H264_Dpb,
+	int id, int actual_dpb_size, int max_reference_size)
+{
+	int i;
+
+	memset(&p_H264_Dpb->mDPB, 0, sizeof(struct DecodedPictureBuffer));
+
+	for (i = 0; i < DPB_SIZE_MAX; i++) {
+		memset(&(p_H264_Dpb->mFrameStore[i]), 0,
+			sizeof(struct FrameStore));
+	}
+
+	for (i = 0; i < MAX_PIC_BUF_NUM; i++) {
+		memset(&(p_H264_Dpb->m_PIC[i]), 0,
+			sizeof(struct StorablePicture));
+		p_H264_Dpb->m_PIC[i].index = i;
+	}
+
+	p_H264_Dpb->mDPB.size = actual_dpb_size;
+	p_H264_Dpb->max_reference_size = max_reference_size;
+	p_H264_Dpb->poc_even_odd_flag = 0;
+}
+
 static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag, bool reset_flags)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
@@ -11779,7 +11802,7 @@ static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag, bool rese
 	vh264_local_init(hw, flush_flag, true);
 
 	if (flush_flag) {
-		dpb_init_global(&hw->dpb,
+		reset_dpb_init(&hw->dpb,
 			DECODE_ID(hw), p_H264_Dpb->mDPB.size, p_H264_Dpb->max_reference_size);
 	} else {
 		if (vh264_set_params(hw,
