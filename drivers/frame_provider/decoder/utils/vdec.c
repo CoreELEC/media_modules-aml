@@ -2845,6 +2845,7 @@ void vdec_save_input_context(struct vdec_s *vdec)
 {
 	struct vdec_input_s *input = &vdec->input;
 	u64 total_rd_count_last = 0;
+	ulong timeout = 0;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	vdec_profile(vdec, VDEC_PROFILE_EVENT_SAVE_INPUT, 0);
@@ -2864,8 +2865,14 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			WRITE_VREG(VLD_MEM_SWAP_ADDR,
 				input->swap_page_phys);
 			WRITE_VREG(VLD_MEM_SWAP_CTL, 3);
-			while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7))
-				;
+			timeout = jiffies + HZ/2;
+			while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7)) {
+				if (time_after(jiffies, timeout)) {
+					pr_err("%s timeout, vdec ctrl 0x%x\n",
+						__func__, READ_VREG(VLD_MEM_SWAP_CTL));
+					break;
+				}
+			};
 			WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
 			vdec->input.stream_cookie =
 				READ_VREG(VLD_MEM_VIFIFO_WRAP_COUNT);
@@ -2881,8 +2888,14 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 3);
 
 			/* swap busy ands wap wrrsp*/
-			while (READ_VREG(HEVC_STREAM_SWAP_CTRL) & ((1<<7) | (0xff << 24)))
-				;
+			timeout = jiffies + HZ/2;
+			while (READ_VREG(HEVC_STREAM_SWAP_CTRL) & ((1<<7) | (0xff << 24))) {
+				if (time_after(jiffies, timeout)) {
+					pr_err("%s timeout, hevc ctrl 0x%x\n",
+						__func__, READ_VREG(HEVC_STREAM_SWAP_CTRL));
+					break;
+				}
+			};
 			WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
 
 			vdec->input.stream_cookie =
