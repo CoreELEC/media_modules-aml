@@ -20,6 +20,7 @@
 #define DEBUG
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/string.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
@@ -8233,6 +8234,120 @@ static int parse_sei(struct hevc_state_s *hevc,
 	return 0;
 }
 
+void *memmem(const void *haystack, size_t n, const void *needle, size_t m)
+{
+	if (m > n || !m || !n)
+		return NULL;
+	if (__builtin_expect((m > 1), 1)) {
+		const unsigned char*  y = (const unsigned char*) haystack;
+		const unsigned char*  x = (const unsigned char*) needle;
+		size_t                j = 0;
+		size_t                k = 1, l = 2;
+		if (x[0] == x[1]) {
+			k = 2;
+			l = 1;
+		}
+		while (j <= n-m) {
+			if (x[1] != y[j+1]) {
+				j += k;
+			} else {
+				if (!memcmp(x+2, y+j+2, m-2) && x[0] == y[j])
+					return (void*) &y[j];
+				j += l;
+			}
+		}
+	} else {
+		/* degenerate case */
+		return memchr(haystack, ((unsigned char*)needle)[0], n);
+	}
+	return NULL;
+}
+
+//
+// Special Parser to find ATEME SEI Mastering Display Colour Volume and Content Light Level
+//
+// parse_sei not working correctly with this data, hence seperate parse for now until fixed.
+//
+// This parse will look for the ATEME string (would be inside the user data SEI which appears missing the payload type)
+// Then attempts to find the exact type and size for SEI Mastering Display Colour Volume
+// Then attempts to find the exact type and size for SEI Content Light Level, exactly after the SEI MDCV
+//
+// Only if both SEI are found in the above in the exact order then can be considered good to process.
+//
+void ateme_parse_sei(struct hevc_state_s *hevc, unsigned char* input, size_t input_len) {
+
+	if (!hevc || !input || input_len == 0) return;
+
+	static const char* ateme_id = "ATEME Titan";
+	static const size_t ateme_id_len = 11;
+
+	static const unsigned char sei_mdcv_header[] = {SEI_MasteringDisplayColorVolume, 0x18};
+	static const size_t sei_mdcv_header_len = sizeof(sei_mdcv_header);
+	static const int sei_mdcv_data_len = 24;
+
+	static const unsigned char sei_cll_header[] = {SEI_ContentLightLevel, 0x04};
+	static const size_t sei_cll_header_len = sizeof(sei_cll_header);
+	static const int sei_cll_data_len = 4;
+
+	unsigned char sei_mdcv_data[sei_mdcv_data_len];
+	unsigned char sei_cll_data[sei_cll_data_len];
+
+	unsigned char* ateme_id_pos = memmem(input, input_len, ateme_id, ateme_id_len);
+	if (!ateme_id_pos) return;
+
+	size_t remaining_len = input_len - (ateme_id_pos - input);
+
+	unsigned char* sei_mdcv_pos = memmem(ateme_id_pos, remaining_len, sei_mdcv_header, sei_mdcv_header_len);
+	if (!sei_mdcv_pos) return;
+
+	// Check if there's enough data for mdcv copy
+	if (remaining_len < sei_mdcv_header_len + sei_mdcv_data_len) return;
+
+	memcpy(sei_mdcv_data, sei_mdcv_pos + sei_mdcv_header_len, sei_mdcv_data_len);
+
+	remaining_len -= sei_mdcv_header_len + sei_mdcv_data_len;
+
+	// Check if there's enough data for cll copy
+	if (remaining_len < sei_cll_header_len + sei_cll_data_len) return;
+
+	unsigned char* sei_cll_pos = sei_mdcv_pos + sei_mdcv_header_len + sei_mdcv_data_len;
+
+	// Next must be the sei cll.
+	if (memcmp(sei_cll_pos, sei_cll_header, sei_cll_header_len) != 0) return;
+
+	memcpy(sei_cll_data, sei_cll_pos + sei_cll_header_len, sei_cll_data_len);
+
+	int i;
+	int j;
+
+	unsigned char* p_sei = sei_mdcv_data;
+	for (i = 0; i < 3; i++) {
+		for (j = 0; j < 2; j++) {
+			hevc->primaries[i][j] = (*p_sei<<8) | *(p_sei+1);
+			p_sei += 2;
+		}
+	}
+	for (i = 0; i < 2; i++) {
+		hevc->white_point[i] = (*p_sei<<8) | *(p_sei+1);
+		p_sei += 2;
+	}
+	for (i = 0; i < 2; i++) {
+		hevc->luminance[i] = (*p_sei<<24)
+						| (*(p_sei+1)<<16)
+						| (*(p_sei+2)<<8)
+						| *(p_sei+3);
+		p_sei += 4;
+	}
+	hevc->sei_present_flag |= SEI_MASTER_DISPLAY_COLOR_MASK;
+
+	p_sei = sei_cll_data;
+	hevc->content_light_level[0] = (*p_sei<<8) | *(p_sei+1);
+	p_sei += 2;
+	hevc->content_light_level[1] = (*p_sei<<8) | *(p_sei+1);
+	p_sei += 2;
+	hevc->sei_present_flag |= SEI_CONTENT_LIGHT_LEVEL_MASK;
+}
+
 static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 			struct PIC_s *pic)
 {
@@ -8273,6 +8388,8 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 			type = (type << 8) | *p++;
 			if (type == 0x02000000) {
 				parse_sei(hevc, pic, p, size);
+				if (size > 42) // check for ateme
+					ateme_parse_sei(hevc, p, size);
 			}
 			p += size;
 		}
