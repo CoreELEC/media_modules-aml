@@ -5883,14 +5883,12 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 
 	p_declib->m_pcPic->buf_cfg = pic;
 	pic->canvas_lt_flag = 0;
+	pic->canvas_poc_list_size = PIC_POOL_SIZE;
 	for (i = 0; i < PIC_POOL_SIZE; i++) {
-		if (vvc_dec->pic_pool[i].used <= 0) {
-			pic->canvas_poc_list_size = i;
-			break;
-		}
 		pic->canvas_poc_list[i] = vvc_dec->pic_pool[i].poc;
-
-		if (vvc_dec->pic_pool[i].referenced && h266_is_long_term(vvc_dec, vvc_dec->pic_pool[i].poc))
+		if (vvc_dec->pic_pool[i].used &&
+			vvc_dec->pic_pool[i].referenced &&
+			h266_is_long_term(vvc_dec, vvc_dec->pic_pool[i].poc))
 			pic->canvas_lt_flag |= (1 << i);
 	}
 

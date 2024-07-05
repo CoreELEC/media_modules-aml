@@ -8252,14 +8252,12 @@ muti_output:
 					vvc_dec->cur_pic->has_inter_slice=1;
 				p_declib->m_pcPic->buf_cfg = vvc_dec->cur_pic;
 				vvc_dec->cur_pic->canvas_lt_flag = 0;
+				vvc_dec->cur_pic->canvas_poc_list_size = PIC_POOL_SIZE;
 				for (i = 0; i < PIC_POOL_SIZE; i++) {
-					if (vvc_dec->pic_pool[i].used <= 0) {
-						vvc_dec->cur_pic->canvas_poc_list_size = i;
-						break;
-					}
 					vvc_dec->cur_pic->canvas_poc_list[i] = vvc_dec->pic_pool[i].poc;
-					//vvc_dec->cur_pic->canvas_lt_flag |= (vvc_dec->pic_pool[i].longTerm << i);
-					if (vvc_dec->pic_pool[i].referenced && h266_is_long_term(vvc_dec, vvc_dec->pic_pool[i].poc))
+					if (vvc_dec->pic_pool[i].used &&
+						vvc_dec->pic_pool[i].referenced &&
+						h266_is_long_term(vvc_dec, vvc_dec->pic_pool[i].poc))
 						vvc_dec->cur_pic->canvas_lt_flag |= (1 << i);
 				}
 				if (get_dbg_flag(hevc) & H266_DEBUG_BUFMGR_MORE)
