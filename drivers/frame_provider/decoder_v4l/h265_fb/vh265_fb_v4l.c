@@ -7168,7 +7168,8 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 		struct aml_buf *aml_buf =
 			(struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
-		hevc->afbc_buf_table[aml_buf->fbc->index].POC = new_pic->POC;
+		if (hevc->mmu_enable)
+			hevc->afbc_buf_table[aml_buf->fbc->index].POC = new_pic->POC;
 
 		aml_buf->state = FB_ST_DECODER;
 
