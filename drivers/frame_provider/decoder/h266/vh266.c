@@ -11547,14 +11547,6 @@ static struct platform_driver ammvdec_h266_driver = {
 };
 #endif
 
-static struct codec_profile_t amvdec_h266_profile = {
-	.name = "hevc",
-	.profile = ""
-};
-
-static struct codec_profile_t amvdec_h266_profile_single,
-		amvdec_h266_profile_mult;
-
 static struct mconfig h266_configs[] = {
 	MC_PU32("use_cma", &use_cma),
 	MC_PU32("bit_depth_luma", &bit_depth_luma),
@@ -11651,49 +11643,7 @@ static int __init amvdec_h266_driver_init_module(void)
 		return -ENODEV;
 	}
 
-#if 1/*MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8*/
-	if (!has_hevc_vdec()) {
-		/* not support hevc */
-		amvdec_h266_profile.name = "hevc_unsupport";
-	}
-	if (hevc_is_support_4k()) {
-		if (is_meson_m8m2_cpu()) {
-			/* m8m2 support 4k */
-			amvdec_h266_profile.profile = "4k";
-		} else if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-					(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
-					(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
-			amvdec_h266_profile.profile =
-				"8k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, v4l-uvm, multi_frame_dv";
-		}else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB) {
-			amvdec_h266_profile.profile =
-				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, v4l-uvm, multi_frame_dv";
-		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_MG9TV)
-			amvdec_h266_profile.profile = "4k";
-	} else {
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D || is_cpu_s4_s805x2()) {
-				amvdec_h266_profile.profile =
-					"8bit, 10bit, dwrite, compressed, frame_dv, v4l, multi_frame_dv";
-		} else if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
-				amvdec_h266_profile.profile = "8bit, 10bit";
-		} else {
-				amvdec_h266_profile.profile =
-					"8bit, 10bit, dwrite, compressed, v4l";
-		}
-	}
-#endif
-	if ((codec_mm_get_total_size() < 80 * SZ_1M) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S1A)) {
-		pr_info("amvdec_h266 default mmu enabled.\n");
-		mmu_enable = 1;
-	}
-	vcodec_profile_register(&amvdec_h266_profile);
-	amvdec_h266_profile_single = amvdec_h266_profile;
-	amvdec_h266_profile_single.name = "h266";
-	vcodec_profile_register(&amvdec_h266_profile_single);
-	amvdec_h266_profile_mult = amvdec_h266_profile;
-	amvdec_h266_profile_mult.name = "mh266";
-	vcodec_profile_register(&amvdec_h266_profile_mult);
+	vcodec_profile_register_v2("h266", VFORMAT_H266, 0);
 	INIT_REG_NODE_CONFIGS("media.decoder", &decoder_266_node,
 		"h266", h266_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_H266, 0);

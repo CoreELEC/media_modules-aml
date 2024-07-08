@@ -279,6 +279,23 @@ static int avs3_codec_profile(struct codec_profile_t *vdec_profile)
 	return 0;
 }
 
+static int h266_codec_profile(struct codec_profile_t *vdec_profile)
+{
+	if (is_support_format(VFORMAT_H266)) {
+		if (hevc_is_support_8k()) {
+			vdec_profile->profile = "8k, 10bit, dwrite, compressed";
+		} else if (hevc_is_support_4k()) {
+			vdec_profile->profile = "4k, 10bit, dwrite, compressed";
+		} else {
+			vdec_profile->profile = "10bit, dwrite, compressed";
+		}
+	} else {
+		vdec_profile->name = "h266_unsupport";
+	}
+
+	return 0;
+}
+
 static struct codec_profile decoder_profile[VFORMAT_MAX] =
 {
 	[VFORMAT_MPEG12] = {
@@ -327,6 +344,9 @@ static struct codec_profile decoder_profile[VFORMAT_MAX] =
 
 	[VFORMAT_AVS3] = {
 		.codec_profile_reg = avs3_codec_profile,
+	},
+	[VFORMAT_H266] = {
+		.codec_profile_reg = h266_codec_profile,
 	},
 };
 
