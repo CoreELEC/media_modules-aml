@@ -128,23 +128,7 @@ static int meson_versenc_suspend(struct device *dev)
 
 static int meson_versenc_resume(struct device *dev)
 {
-    meson_versenc_control(to_platform_device(dev), false);
-    return 0;
-}
-
-int meson_versenc_suspend_runtime(struct platform_device *pdev)
-{
-    meson_versenc_control(pdev, false);
-
-    return 0;
-}
-
-int meson_versenc_resume_runtime(struct platform_device *pdev)
-{
-    meson_versenc_control(pdev, true);
-    /*wait versenc work*/
-    msleep(VERSENC_TS_WAIT);
-
+    meson_versenc_control(to_platform_device(dev), true);
     return 0;
 }
 
