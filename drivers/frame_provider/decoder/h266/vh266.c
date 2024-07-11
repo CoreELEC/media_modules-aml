@@ -662,6 +662,7 @@ static u32 mv_buf_dynamic_alloc;
 #define VVC_DECODE_TIMEOUT         0x34
 #define VVC_DECODE_OVER_SIZE       0x35
 
+#define VVC_DECODE_BUFEMPTY2        0x37
 #define HEVC_SEARCH_BUFEMPTY        0x38
 #define HEVC_DECODE_OVER_SIZE       0x39
 #define HEVC_DECODE_PARAMS_ERR      0x3a
@@ -7929,7 +7930,8 @@ static irqreturn_t vh266_isr_thread_fn(int irq, void *data)
 #endif
 	} else if (dec_status == VVC_STARTCODE_SEARCH_DONE) {
 		hevc_print(hevc, H266_DEBUG_BUFMGR, " ==== VVC_STARTCODE_SEARCH_DONE ==== 0x%x\r\n", READ_VREG(CUR_NAL_UNIT_TYPE));
-	} else if (dec_status == VVC_DECODE_BUFEMPTY) {
+	} else if (dec_status == VVC_DECODE_BUFEMPTY ||
+		dec_status == VVC_DECODE_BUFEMPTY2) {
 		if (hevc->m_ins_flag) {
 			read_decode_info(hevc);
 			if (vdec_frame_based(hw_to_vdec(hevc))) {
@@ -9454,6 +9456,7 @@ static void timeout_process(struct hevc_state_s *hevc)
 	 * or in some cases the system become slow,  then come
 	 * this second timeout. In both cases we return.
 	 */
+	 /*
 	if (work_pending(&hevc->work) ||
 	    work_busy(&hevc->work) ||
 	    work_busy(&hevc->timeout_work) ||
@@ -9461,13 +9464,21 @@ static void timeout_process(struct hevc_state_s *hevc)
 		pr_err("%s h266[%d] work pending, do nothing.\n",__func__, hevc->index);
 		return;
 	}
+	*/
+	if (hevc->g_vvc_dec.cur_pic != NULL) {
+		hevc->g_vvc_dec.cur_pic->error_mark = 1;
+	}
 
+	amhevc_stop();
+	reset_process_time(hevc);
 	hevc->timeout_num++;
 	hevc_print(hevc, 0, "%s decoder timeout\n", __func__);
-    WRITE_VREG(HEVC_DEC_STATUS_REG, VVC_DECODE_TIMEOUT);
-    WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
-        0x1);
 
+	hevc->timeout_flag = 1;
+	hevc->g_vvc_dec.cur_pic = NULL;
+
+	hevc->dec_result = DEC_RESULT_DONE;
+	vdec_schedule_work(&hevc->work);
 }
 
 #ifdef CONSTRAIN_MAX_BUF_NUM
