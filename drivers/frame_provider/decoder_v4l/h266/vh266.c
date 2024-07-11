@@ -6079,6 +6079,7 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 		hevc->frame_dw_mmu_map_addr = NULL;
 	}
 #endif
+	free_memory(&hevc->g_vvc_dec);
 }
 
 static int hevc_local_init(struct hevc_state_s *hevc)

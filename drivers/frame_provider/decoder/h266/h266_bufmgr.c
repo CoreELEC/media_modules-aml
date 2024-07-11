@@ -219,6 +219,7 @@ Picture *new_picture(void)
 
 void free_picture(Picture *pic)
 {
+	int i;
 #ifdef AML
 	if (pic->buf_cfg) {
 		put_mv_buf(pic->buf_cfg);
@@ -227,6 +228,15 @@ void free_picture(Picture *pic)
 		pic->buf_cfg = NULL;
 	}
 #endif
+	for (i = 0; i < SLICE_MAX_NUM; i++) {
+		if (pic->slices[i]) {
+			free(pic->slices[i]);
+		}
+	}
+
+	if (pic->cs)
+		free(pic->cs);
+
 	free(pic);
 }
 
@@ -1801,7 +1811,7 @@ void xActivateParameterSets(DecLib *p_declib, NALUnit *nalu )
 {
 	const int layerId = nalu->m_nuhLayerId;
 	Slice *pSlice;
-	PicHeader *picHeader;
+	//PicHeader *picHeader;
 	bool isField;
 	bool isTopField;
 
@@ -1888,13 +1898,14 @@ void xActivateParameterSets(DecLib *p_declib, NALUnit *nalu )
 			print_vvc_picture_list(p_declib, &p_declib->m_cListPic, "After xGetNewPicBuffer()");
 #endif
 
-#if GDR_ENABLED
+#if 0
 		picHeader = malloc(sizeof(PicHeader));
 		//initPicHeader(picHeader);
 		memcpy(picHeader,  &p_declib->m_picHeader, sizeof(PicHeader));
 		p_declib->m_apcSlicePilot->m_pcPicHeader = picHeader; //setPicHeader(picHeader);
 		finalInit(p_declib->m_pcPic, vps, sps, pps, picHeader); //, apss, lmcsAPS, scalinglistAPS);
 #else
+		p_declib->m_apcSlicePilot->m_pcPicHeader =  &p_declib->m_picHeader; //setPicHeader(picHeader);
 		finalInit(p_declib->m_pcPic, vps, sps, pps, &p_declib->m_picHeader); //, apss, lmcsAPS, scalinglistAPS );
 #endif
 #ifdef TO_DO
@@ -5265,6 +5276,51 @@ int h266_bufmgr_process(DecApp *p_app, param_t *param, bool bNewPicture)
 		"[SKIP DEBUG 3] skipFrameCounter = %d, m_iSkipFrame = %d\n",
 		skipFrameCounter, p_app->m_iSkipFrame);
 	return ret;
+}
+
+void free_memory(vvc_decoder_t * vvc_dec)
+{
+	int i;
+	int j;
+	Picture *pic = NULL;
+	DecApp *p_app = &vvc_dec->m_decApp;
+	DecLib *m_cDecLib = &p_app->m_cDecLib;
+	for (i = 0; i < PIC_LIST_SIZE; i ++) {
+		pic = p_app->m_cDecLib.m_cListPic.pic[i];
+		if (pic) {
+			for (j = 0; j < SLICE_MAX_NUM; j++) {
+				if (pic->slices[j]) {
+					free(pic->slices[j]);
+				}
+			}
+			if (pic->cs)
+				free(pic->cs);
+			free(pic);
+		}
+	}
+
+	if (m_cDecLib->m_accessUnitNoOutputPriorPicFlags._data)
+		free(m_cDecLib->m_accessUnitNoOutputPriorPicFlags._data);
+
+	for (i = 0; i < MAX_VPS_LAYERS; i ++) {
+		if (m_cDecLib->m_nalUnitInfo[i]._data)
+			free(m_cDecLib->m_nalUnitInfo[i]._data);
+	}
+
+	if (m_cDecLib->m_accessUnitPicInfo._data)
+		free(m_cDecLib->m_accessUnitPicInfo._data);
+
+	if (m_cDecLib->m_apcSlicePilot)
+		free(m_cDecLib->m_apcSlicePilot);
+
+	if (m_cDecLib->a_cur_vps)
+		free(m_cDecLib->a_cur_vps);
+
+	if (m_cDecLib->a_cur_sps)
+		free(m_cDecLib->a_cur_sps);
+
+	if (m_cDecLib->a_cur_pps)
+		free(m_cDecLib->a_cur_pps);
 }
 
 int h266_bufmgr_post_process(DecApp *p_app)
