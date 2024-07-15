@@ -558,6 +558,7 @@ static int vdec_hevc_get_param(unsigned long h_vdec,
 {
 	int ret = 0;
 	struct vdec_hevc_inst *inst = (struct vdec_hevc_inst *)h_vdec;
+	struct aml_vdec_adapt *vdec = &inst->vdec;
 
 	if (!inst) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
@@ -603,6 +604,12 @@ static int vdec_hevc_get_param(unsigned long h_vdec,
 	case GET_PARAM_CFG_INFO:
 		get_cfg_info(inst, out);
 		break;
+	case GET_PARAM_DECODER_STATUS:
+	{
+		int *mode = out;
+		*mode = vdec_get_decoder_buffer_status(vdec);
+		break;
+	}
 
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,

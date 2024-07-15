@@ -26,6 +26,7 @@
 #include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/media_proxy/AmlVideoUserdata.h>
+#include <linux/amlogic/media/media_proxy/AmlMediaErrorCodes.h>
 //#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "aml_vcodec_util.h"
 #include "aml_task_chain.h"
@@ -265,7 +266,7 @@ void aml_vdec_wake_up(struct aml_vcodec_ctx *ctx);
 
 #ifdef CONFIG_AMLOGIC_MEDIA_PROXY
 void aml_vdec_notify_msg_to_mediaproxy(struct aml_vcodec_ctx *ctx, int type,
-	struct vframe_s *vf);
+	struct vframe_s *vf, int event);
 #endif
 
 #endif /* _AML_VCODEC_DEC_H_ */

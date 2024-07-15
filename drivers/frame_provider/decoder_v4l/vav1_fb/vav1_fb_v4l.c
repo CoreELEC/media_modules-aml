@@ -13005,6 +13005,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			hw->cma_alloc_count * PAGE_SIZE, DRIVER_NAME,
 			&hw->cma_alloc_addr);
 	if (ret < 0) {
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		pdata->dec_status = NULL;
 		ret = -ENOMEM;
 		goto multi_probe_failed2;

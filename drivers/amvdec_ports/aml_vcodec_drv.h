@@ -186,6 +186,7 @@ struct dec_stream_info_s {
 	enum E_ASPECT_RATIO eu_aspect_ratio;  /* aspect ratio (4:3 or 16:9) */
 	struct aspect_ratio_size ratio_size;   /* sar width/height, dar width/height */
 	__u32 frame_dur;
+	__u32 decode_status;
 	char reserved[60];
 };
 

@@ -23,7 +23,6 @@
 #include <linux/printk.h>
 #include <linux/version.h>
 
-
 int vdec_v4l_get_pic_info(struct aml_vcodec_ctx *ctx,
 	struct vdec_pic_info *pic)
 {
@@ -267,7 +266,6 @@ int vdec_v4l_get_tw_mode(struct aml_vcodec_ctx *ctx,
 	return ret;
 }
 EXPORT_SYMBOL(vdec_v4l_get_tw_mode);
-
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 void v4l2_m2m_job_pause(struct v4l2_m2m_dev *m2m_dev,

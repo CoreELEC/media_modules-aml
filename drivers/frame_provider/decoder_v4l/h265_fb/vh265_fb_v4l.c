@@ -18593,6 +18593,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 
 	if (init_mmu_buffers(hevc, 1) < 0) {
 		hevc_print(hevc, 0, "\n 265 mmu init failed!\n");
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		mutex_unlock(&vh265_mutex);
 		if (hevc)
 			vfree((void *)hevc);
@@ -18605,6 +18606,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			DRIVER_NAME, &hevc->buf_start);
 	if (ret < 0) {
 		uninit_mmu_buffers(hevc);
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		/* devm_kfree(&pdev->dev, (void *)hevc); */
 		if (hevc)
 			vfree((void *)hevc);

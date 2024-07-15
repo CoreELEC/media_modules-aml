@@ -1213,9 +1213,10 @@ static enum ResResult is_csd_valid(struct vdec_h264_hw_s *hw, int mb_width, int 
 		return RES_RET_ABNORMAL;
 
 	base_csd_valid = is_base_csd_valid(hw, param4);
-	if (!base_csd_valid)
+	if (!base_csd_valid) {
+		vdec_v4l_post_error_event(hw->v4l2_ctx, DECODER_EMERGENCY_UNSUPPORT);
 		return RES_RET_ABNORMAL;
-
+	}
 	curr_info.frame_width = mb_width << 4;
 	curr_info.frame_height = mb_height << 4;
 	over_size = is_oversize(curr_info.frame_width, curr_info.frame_height);
@@ -3483,6 +3484,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		if (frame->data_flag & ERROR_FLAG ||
 			frame->data_flag & NODISP_FLAG) {
 			vf->frame_type |= V4L2_BUF_FLAG_ERROR;
+			vdec_v4l_post_error_frame_event(hw->v4l2_ctx);
 		}
 
 		if ((hw->crop_bottom != 0) || (hw->crop_right != 0) ||

@@ -959,6 +959,7 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 {
 	int ret = 0;
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
+	struct aml_vdec_adapt *vdec = &inst->vdec;
 
 	if (!inst) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
@@ -1002,6 +1003,14 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 		int h = inst->vsi->pic.coded_height;
 
 		*mode = vdec_get_dec_mode(w, h, m);
+		break;
+	}
+	case GET_PARAM_DECODER_STATUS:
+	{
+		int *mode = out;
+
+		*mode = vdec_get_decoder_buffer_status(vdec);
+
 		break;
 	}
 

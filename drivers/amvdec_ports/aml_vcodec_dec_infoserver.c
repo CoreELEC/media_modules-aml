@@ -23,6 +23,8 @@
 #include "aml_vcodec_adapt.h"
 #include "./decoder/utils.h"
 #include "../frame_provider/decoder/utils/vdec.h"
+#include "aml_vcodec_adapt.h"
+#include "vdec_drv_if.h"
 
 void aml_vcodec_dec_info_init(struct aml_vcodec_ctx *ctx)
 {
@@ -391,6 +393,11 @@ static int vcodec_get_data_statistic(struct aml_vcodec_ctx *ctx,
 static int vcodec_get_data_stream(struct aml_vcodec_ctx *ctx,
 	struct vdec_common_s *data)
 {
+	int status = 0;
+
+	vdec_if_get_param(ctx, GET_PARAM_DECODER_STATUS, &status);
+	ctx->dec_intf.dec_stream.decode_status = status;
+
 	memcpy(&data->u.stream_info, &ctx->dec_intf.dec_stream,
 		sizeof(struct dec_stream_info_s));
 	data->u.stream_info.info_type = AML_STREAM_TYPE;

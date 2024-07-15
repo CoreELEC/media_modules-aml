@@ -434,6 +434,7 @@ void __aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes, struct s
 {
 	struct v4l2_event event = {0};
 	const char *event_str = event_to_string(changes);
+	int events = 0;
 
 	switch (changes) {
 	case V4L2_EVENT_SRC_CH_RESOLUTION:
@@ -448,12 +449,26 @@ void __aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes, struct s
 		break;
 	case V4L2_EVENT_SEND_ERROR:
 		event.type = V4L2_EVENT_PRIVATE_EXT_SEND_ERROR;
+
+#ifdef CONFIG_AMLOGIC_MEDIA_PROXY
+		if (ctx->decoder_status_info.error_type & (1 << 24)) {
+			events = MEDIA_ERRORCODES_VDEC_F_NO_MEMORY;
+		} else if (ctx->decoder_status_info.error_type & (1 << 25)) {
+			events = MEDIA_ERRORCODES_VDEC_E_PROFILELEVEL_NOT_SUPPORTED;
+		}
+
+		aml_vdec_notify_msg_to_mediaproxy(ctx, MEDIA_VIDEO_ERROR_EVENT, NULL, events);
+#endif
 		break;
 	case V4L2_EVENT_REPORT_ERROR_FRAME:
 		event.type = V4L2_EVENT_PRIVATE_EXT_REPORT_ERROR_FRAME;
 		memcpy(event.u.data, &ctx->current_timestamp, sizeof(u64));
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "report error frame timestamp: %llu\n",
 			ctx->current_timestamp);
+#ifdef CONFIG_AMLOGIC_MEDIA_PROXY
+		events = MEDIA_ERRORCODES_VDEC_M_BAD_INPUT;
+		aml_vdec_notify_msg_to_mediaproxy(ctx, MEDIA_VIDEO_ERROR_EVENT, NULL, events);
+#endif
 		break;
 	case V4L2_EVENT_REPORT_DEC_INFO:
 		event.type = V4L2_EVENT_PRIVATE_EXT_REPORT_DECINFO;
@@ -958,26 +973,31 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 
 #ifdef CONFIG_AMLOGIC_MEDIA_PROXY
 void aml_vdec_notify_msg_to_mediaproxy(struct aml_vcodec_ctx *ctx,
-	int type, struct vframe_s *vf)
+	int type, struct vframe_s *vf, int event)
 {
 	struct aml_video_user_data msg;
 
 	memset(&msg, 0, sizeof(struct aml_video_user_data));
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-		"%s bitstreamid: %llu instid: %u frame_index: %u time: %llu\n",
-		__func__, div64_u64(vf->timestamp, 1000000000),
-		vf->decoder_instid, vf->frame_index,
-		ktime_get_real_ns());
-
-	msg.data.frame_info.bitstreamid = div64_u64(vf->timestamp, 1000000000);
-	msg.data.frame_info.decoder_instid = vf->decoder_instid;
-	msg.data.frame_info.frame_index = vf->frame_index;
-	msg.data.frame_info.time = ktime_get_real_ns();
-	msg.data.frame_info.drop = 0;
-
-	if (type == MEDIA_VIDEO_METRICS_FRAME_DECODED_INFO)
+	if (type == MEDIA_VIDEO_METRICS_FRAME_DECODED_INFO) {
 		msg.message_type = MEDIA_VIDEO_METRICS_FRAME_DECODED_INFO;
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+			"%s bitstreamid: %llu instid: %u frame_index: %u time: %llu\n",
+			__func__, div64_u64(vf->timestamp, 1000000000),
+			vf->decoder_instid, vf->frame_index,
+			ktime_get_real_ns());
+
+		msg.data.frame_info.bitstreamid = div64_u64(vf->timestamp, 1000000000);
+		msg.data.frame_info.decoder_instid = vf->decoder_instid;
+		msg.data.frame_info.frame_index = vf->frame_index;
+		msg.data.frame_info.time = ktime_get_real_ns();
+		msg.data.frame_info.drop = 0;
+
+	} else if (type == MEDIA_VIDEO_ERROR_EVENT) {
+		msg.message_type = MEDIA_VIDEO_ERROR_EVENT;
+		msg.data.error_info.error_event = MEDIA_ERRORCODES_VDEC_M_BAD_INPUT;
+	}
 
 	notify_msg_to_mediaproxy(ctx->k_producer_session, 1, &msg);
 }
@@ -1036,7 +1056,7 @@ static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
 	vb2_buf->timestamp = vf->timestamp;
 	dstbuf->vb.flags |= vf->frame_type;
 #ifdef CONFIG_AMLOGIC_MEDIA_PROXY
-	aml_vdec_notify_msg_to_mediaproxy(ctx, MEDIA_VIDEO_METRICS_FRAME_DECODED_INFO, vf);
+	aml_vdec_notify_msg_to_mediaproxy(ctx, MEDIA_VIDEO_METRICS_FRAME_DECODED_INFO, vf, 0);
 #endif
 
 	if ((ctx->picinfo.field == V4L2_FIELD_INTERLACED) && (!ctx->vpp_is_need)) {

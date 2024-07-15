@@ -9993,6 +9993,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 		if ((pic->error_mark) && (hevc->PB_skip_mode != 0)) {
 			vf->frame_type |= V4L2_BUF_FLAG_ERROR;
+			vdec_v4l_post_error_frame_event(hevc->v4l2_ctx);
 		}
 
 		vf->v4l_mem_handle = hevc->m_BUF[pic->index].v4l_ref_buf_addr;
@@ -13572,9 +13573,8 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 	else
 		ret = 0;
 
-	if (ret < 0) {
+	if (ret < 0)
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
-	}
 
 	return ret;
 }
@@ -15408,7 +15408,6 @@ static void vh265_timeout_work(struct work_struct *work)
 	hevc->decoding_pic = NULL;
 	vh265_work_implement(hevc, vdec, 1);
 }
-
 
 static int vh265_hw_ctx_restore(struct hevc_state_s *hevc)
 {

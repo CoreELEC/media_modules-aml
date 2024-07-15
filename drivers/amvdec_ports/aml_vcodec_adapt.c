@@ -806,3 +806,22 @@ void v4l2_set_ext_buf_addr(struct aml_vdec_adapt *ada_ctx, struct dmabuf_dmx_sec
 
 	return;
 }
+
+int vdec_get_decoder_buffer_status(struct aml_vdec_adapt *ada_ctx)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+	struct aml_vcodec_ctx *ctx = ada_ctx->ctx;
+	int buffer_status = 0;
+
+	if (!ctx->v4l_codec_dpb_ready)
+		buffer_status |= DEC_STATUS_OUTPUT_BUFFFER_NOT_READY;
+
+	if ((ctx->vpp_is_need ? ctx->picinfo.vpp_margin : ctx->picinfo.dpb_margin) <
+		(CTX_BUF_TOTAL(ctx) + ctx->out_buff_cnt - ctx->in_buff_cnt))
+		buffer_status |= DEC_STATUS_OUTPUT_UNDERRUN;
+
+	if (!vdec->input.have_frame_num)
+		buffer_status |= DEC_STATUS_INPUT_UNDERRUN;
+
+	return buffer_status;
+}
