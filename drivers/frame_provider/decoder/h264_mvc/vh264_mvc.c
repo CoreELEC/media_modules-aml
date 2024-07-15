@@ -561,7 +561,7 @@ static struct vframe_s *vh264mvc_vf_get(void *op_arg)
 			vf->right_eye.start_y = 0;
 			vf->right_eye.width = vf->width;
 			vf->right_eye.height = vf->height;
-			//vf->trans_fmt = TVIN_TFMT_3D_TB;
+			vf->trans_fmt = TVIN_TFMT_3D_TB;
 
 			if (view_mode == 2) {
 				buf_spec_0 = &buffer_spec1[view1_buf_id];
