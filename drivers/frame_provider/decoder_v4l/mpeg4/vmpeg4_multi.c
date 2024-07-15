@@ -2432,6 +2432,8 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 	if (!hw->init_flag)
 		vmpeg4_workspace_init(hw);
 
+	WRITE_VREG(MEM_OFFSET_REG, hw->buf_start);
+
 	if (hw->v4l_params_parsed) {
 		struct vdec_pic_info pic;
 
@@ -2448,8 +2450,6 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 			return -1;
 
 		hw->cur_idx = index;
-
-		WRITE_VREG(MEM_OFFSET_REG, hw->buf_start);
 
 		for (i = 0; i < hw->buf_num; i++) {
 			if (hw->pic[i].v4l_ref_buf_addr) {
