@@ -3827,14 +3827,11 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 		if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw_mode))
 			return -EINVAL;
 
-		if ((dw_mode == DM_AVBC_ONLY) && (tw_mode == DM_INVALID))
-			*nplanes = 1;
-
 		for (i = 0; i < *nplanes; i++) {
 			alloc_devs[i] = &ctx->dev->plat_dev->dev;
 			sizes[i] = (dw_mode != DM_AVBC_ONLY) ? q_data->sizeimage[i] :
 				(tw_mode != DM_INVALID) ? q_data->sizeimage_tw[i] :
-				PAGE_SIZE;
+				q_data->sizeimage[i];
 
 			if (ctx->enable_di_post && is_vdec_core_fmt(ctx->output_pix_fmt) &&
 				ctx->picinfo.field != V4L2_FIELD_NONE)
@@ -4663,12 +4660,6 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 
 				if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
 					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
-					return -EINVAL;
-				}
-				/* None-DW mode means single layer */
-				if (dw_mode == DM_AVBC_ONLY && i > 0) {
-					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-							"only support single plane in dw mode 0\n");
 					return -EINVAL;
 				}
 				size = vb->planes[i].length;
