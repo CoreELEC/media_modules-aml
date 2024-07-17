@@ -2854,6 +2854,7 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 	unsigned long flags;
 	long retVal = 0;
 	int i = 0;
+	int k = 0;
 	u32 result;
 
 	//PDEBUG("dev closed for process %p\n", (void *)filp);
@@ -3228,6 +3229,9 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 			release_cmdbuf_node_cleanup(&hantrovcmd_data[i].list_manager);
 		}
 
+		for (k = 0; k < MAX_VCMD_TYPE; k++) {
+			vcmd_type_core_num[k] = 0;
+		}
 		//release_process_node_cleanup(&global_process_manager);
 
 #ifdef HANTROMMU_SUPPORT
@@ -4311,6 +4315,9 @@ void vers_resume_hw(u32 on)
 				release_cmdbuf_node_cleanup(&hantrovcmd_data[i].list_manager);
 			}
 
+			for (k = 0; k < MAX_VCMD_TYPE; k++) {
+				vcmd_type_core_num[k] = 0;
+			}
 			//release_process_node_cleanup(&global_process_manager);
 
 #ifdef HANTROMMU_SUPPORT
