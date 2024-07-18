@@ -1286,6 +1286,10 @@ ssize_t aml_vdec_basic_information(struct aml_vcodec_ctx *ctx, char *buf)
 	pbuf += sprintf(pbuf, "\n==== Show Basic Information ==== \n");
 	pbuf += sprintf(pbuf, "Format     : %s\n", outq->fmt->name);
 	pbuf += sprintf(pbuf, "Color space: %s\n", capq->fmt->name);
+	/*
+	 * The variable pic is initialised in vdec_if_get_param.
+	 */
+	/* coverity[uninit_use] */
 	pbuf += sprintf(pbuf, "Scan type  : %s\n",
 		(pic.field == V4L2_FIELD_NONE) ? "Progressive" : "Interlaced");
 	pbuf += sprintf(pbuf, "Resolution : visible(%dx%d), coded(%dx%d)\n",
@@ -1372,6 +1376,10 @@ ssize_t aml_compressed_info_show(struct aml_vcodec_ctx *ctx, char *buf)
 	}
 
 	mutex_lock(&ctx->compressed_buf_info_lock);
+	/*
+	 * The variable pic is initialised in vdec_if_get_param.
+	 */
+	/* coverity[uninit_use_in_call] */
 	pbuf += sprintf(pbuf, "Fmt:%s, DW/TW:(%x, %x), Res:%dx%d, DPB:%d\n",
 		outq->fmt->name,
 		ctx->config.parm.dec.cfg.double_write_mode,
@@ -1535,7 +1543,7 @@ static void aml_vdec_worker(struct work_struct *work)
 	struct aml_v4l2_buf *aml_vb;
 	struct vb2_v4l2_buffer *vb2_v4l2;
 	struct vb2_buffer *vb;
-	struct aml_vcodec_mem buf;
+	struct aml_vcodec_mem buf = {0};
 	bool res_chg = false;
 	int ret;
 
@@ -3579,7 +3587,16 @@ static int vidioc_enum_fmt(struct v4l2_fmtdesc *f, bool output_queue)
 
 		if (j == f->index) {
 			f->pixelformat = fmt->fourcc;
+			/*
+			 * if the length of fmt->name is large than f->description,
+			 * f->description will be force terminated.
+			 */
+			/* coverity[buffer_size_warning] */
 			strncpy(f->description, fmt->name, sizeof(f->description));
+			if (strlen(fmt->name) >= sizeof(f->description)) {
+				v4l_dbg(0, V4L_DEBUG_CODEC_ERROR, "fmt name too long\n");
+				f->description[sizeof(f->description) - 1] = '\0';
+			}
 			return 0;
 		}
 		++j;
@@ -4625,7 +4642,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 	}
 
 	if (!V4L2_TYPE_IS_OUTPUT(vb->type)) {
-		ulong key;
+		ulong key = 0;
 		if (vb->memory == VB2_MEMORY_DMABUF)
 			key = (ulong)vb->planes[0].dbuf;
 		else if (vb->memory == VB2_MEMORY_MMAP)
@@ -4649,8 +4666,8 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 		contig_size = dmabuf_contiguous_size(buf->out_sgt);
 		if (contig_size < vb->planes[0].bytesused) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-				"contiguous mapping is too small %lu/%u\n",
-				contig_size, size);
+				"contiguous mapping is too small %lu\n",
+				contig_size);
 			return -EFAULT;
 		}
 	}
@@ -4853,6 +4870,11 @@ static int get_width_align(struct aml_vcodec_ctx *ctx)
 
 	vdec_v4l_get_dw_mode(ctx, &dw);
 
+	/*
+	 * The variable dw is initialised in vdec_v4l_get_dw_mode.
+	 */
+	/* coverity[uninit_use_in_call] */
+	/* coverity[uninit_use] */
 	if (is_hevc_align32(0) && (!is_vdec_core_fmt(ctx->output_pix_fmt) ||
 		(ctx->output_pix_fmt == V4L2_PIX_FMT_H264 &&
 		dw != DM_YUV_ONLY)))

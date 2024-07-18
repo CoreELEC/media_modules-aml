@@ -529,6 +529,10 @@ static int fw_info_fill(void)
 	if (debug)
 		fw_files_info_walk();
 
+	/*
+	 * Variable files will free in fw_ctx_clean finally.
+	 */
+	/* coverity[leaked_storage] */
 	return ret;
 }
 
@@ -811,6 +815,10 @@ static int fw_code_parse(struct fw_files_s *files,
 
 	fw_add_info(info);
 
+	/*
+	 * Variable info will free in fw_ctx_clean finally.
+	 */
+	/* coverity[leaked_storage] */
 	return 0;
 }
 
@@ -840,7 +848,7 @@ static int fw_data_binding(void)
 	}
 
 	buf = vmalloc(BUFF_SIZE);
-	if (IS_ERR_OR_NULL(buf))
+	if (!buf)
 		return -ENOMEM;
 
 	memset(buf, 0, BUFF_SIZE);

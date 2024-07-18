@@ -54,7 +54,7 @@ static const u8 *type_to_name(enum task_type_e type)
 
 static enum task_type_e name_to_type(const u8 *name)
 {
-	enum task_type_e type;
+	enum task_type_e type = TASK_TYPE_MAX;
 	int i, size = ARRAY_SIZE(iname);
 
 	for (i = 0; i < size; i++) {
@@ -409,6 +409,10 @@ void task_order_attach(struct task_chain_s *task,
 	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
 		"TSK(%px):%d attach item:(%px,%d).\n",
 		task, task->id, item, ops->type);
+	/*
+	 * Variable item will free in task_chain_clean finally.
+	 */
+	/* coverity[leaked_storage] */
 }
 EXPORT_SYMBOL(task_order_attach);
 

@@ -909,7 +909,11 @@ retry:
 					in_buf->aml_vb->aml_buf->index);
 				out_buf->di_buf.flag = in_buf->di_buf.flag;
 				out_buf->di_buf.vf->vf_ext = in_buf->di_buf.vf;
-
+				/*
+				 * di_buf contains in vpp_buf, there is no
+				 * overrun-buffer-val issue for di_buf.
+				 */
+				/* coverity[overrun-buffer-val] */
 				v4l_vpp_fill_output_done(&out_buf->di_buf);
 				v4l_vpp_empty_input_done(&in_buf->di_buf);
 			} else {
@@ -1085,6 +1089,10 @@ int aml_v4l2_vpp_init(
 	if (cfg->is_drm)
 		init.output_format |= DI_OUTPUT_TVP;
 
+	/*
+	 * necessary variable init members had set.
+	 */
+	/* coverity[uninit_use_in_call] */
 	vpp->di_handle = di_create_instance(init);
 	if (vpp->di_handle < 0) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,

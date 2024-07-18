@@ -248,6 +248,10 @@ static void skip_aud_data(u8 **data, u32 *size)
 	int i;
 
 	i = find_start_code(*data, *size);
+	/*
+	 * Variable i can only be 3 or 4 when ++, which is safe.
+	 */
+	/* coverity[deref_overflow] */
 	if (i > 0 && (*data)[i++] == 0x9 && (*data)[i++] == 0xf0) {
 		*size -= i;
 		*data += i;

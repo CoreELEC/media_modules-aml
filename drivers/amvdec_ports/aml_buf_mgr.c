@@ -182,6 +182,10 @@ static int aml_buf_box_alloc(struct aml_buf_mgr_s *bm, void **mmu, void **mmu_1,
 	bm->get_fbc_info(bm, &fbc_info);
 
 	/* init mmu box */
+	/*
+	 * The variable fbc_info.max_size is initialised in get_fbc_info.
+	 */
+	/* coverity[uninit_use] */
 	*mmu = decoder_mmu_box_alloc_box(bm->bc.name,
 		bm->bc.id,
 		BUF_FBC_NUM_MAX,
@@ -299,6 +303,10 @@ static int aml_buf_fbc_init(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 
 	fbc		= &bm->fbc_array[i];
 	fbc->index	= i;
+	/*
+	 * The variable fbc_info is initialised in bm->get_fbc_info.
+	 */
+	/* coverity[uninit_use] */
 	fbc->hsize	= fbc_info.header_size;
 	fbc->hsize_dw   = fbc_info.header_size;
 	fbc->frame_size	= fbc_info.frame_size;
@@ -451,6 +459,10 @@ static void aml_buf_get_fbc_info(struct aml_buf_mgr_s *bm,
 		return;
 	}
 
+	/*
+	 * The variable comp_info is initialised in vdec_if_get_param.
+	 */
+	/* coverity[uninit_use] */
 	info->max_size		= comp_info.max_size;
 	info->header_size	= comp_info.header_size;
 	info->frame_size	= comp_info.frame_buffer_size;
