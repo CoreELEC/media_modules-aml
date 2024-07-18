@@ -6150,7 +6150,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			"colocated_mv_addr_start %x colocated_mv_addr_end %x\n",
 			hw->dpb.colocated_mv_addr_start,
 			hw->dpb.colocated_mv_addr_end);
-		if (hw->mmu_enable) {
+		if (hw->mmu_enable && !reset_flags) {
 			vh264_config_canvs_for_mmu(hw);
 		}
 
