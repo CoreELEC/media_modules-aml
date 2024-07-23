@@ -2307,7 +2307,7 @@ void print_ref_pic_list(DecLib *p_declib, Slice *slice)
 	hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "\n");
 }
 
-void constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
+int constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 {
 	Picture*  pcRefPic = NULL;
 	uint32_t numOfActiveRef = 0;
@@ -2325,7 +2325,7 @@ void constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 		}
 		//memset(slice->m_apcRefPicList, 0, sizeof(slice->m_apcRefPicList));
 		//memset(slice->m_aiNumRefIdx, 0, sizeof(slice->m_aiNumRefIdx));
-		return;
+		return 0;
 	}
 
 	//construct L0
@@ -2340,13 +2340,17 @@ void constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 
 		hevc_print(p_declib->hw, 0, "%d=> interlayer ref_layer %d ref poc %d\n", ii, refLayerId, slice->m_iPOC);
 		hevc_print(p_declib->hw, 0, "Error, interlayer reference not supported!!\n");
-		return; //exit(0);
-		pcRefPic = xGetRefPic(slice, rcListPic, slice->m_iPOC, refLayerId );
-		pcRefPic->longTerm = true;
+		return 0; //exit(0);
+		//pcRefPic = xGetRefPic(slice, rcListPic, slice->m_iPOC, refLayerId );
+		//pcRefPic->longTerm = true;
 		} else if (!slice->m_RPL0.m_isLongtermRefPic[ii]) {
 			hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "%d=> ST ref_layer %d ref poc %d (%d,%d)\n", ii, slice->m_pcPic->layerId, slice->m_iPOC + slice->m_RPL0.m_refPicIdentifier[ii],
 			slice->m_iPOC, slice->m_RPL0.m_refPicIdentifier[ii]);
 			pcRefPic = xGetRefPic(slice, rcListPic, slice->m_iPOC + slice->m_RPL0.m_refPicIdentifier[ii], slice->m_pcPic->layerId);
+			if (!pcRefPic) {
+				hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s i:%d ST m_RPL0 pcRefPic = NULL!!\n", __func__, ii);
+				return -1;
+			}
 			pcRefPic->longTerm = false;
 		} else {
 			int pocBits = slice->m_pcSPS->m_uiBitsForPOC;
@@ -2357,6 +2361,10 @@ void constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 			}
 			hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "%d=> LT ref_layer %d ref poc %d\n", ii, slice->m_pcPic->layerId, ltrpPoc);
 			pcRefPic = xGetLongTermRefPicCandidate(slice, rcListPic, ltrpPoc, slice->m_RPL0.m_deltaPocMSBPresentFlag[ii], slice->m_pcPic->layerId );
+			if (!pcRefPic) {
+				hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s i:%d LT m_RPL0 pcRefPic = NULL!!\n", __func__, ii);
+				return -1;
+			}
 			pcRefPic->longTerm = true;
 		}
 		if (ii < numOfActiveRef) {
@@ -2379,13 +2387,17 @@ void constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 
 			hevc_print(p_declib->hw, 0, "%d=> interlayer ref_layer %d ref poc %d\n", ii, refLayerId, slice->m_iPOC);
 			hevc_print(p_declib->hw, 0, "Error, interlayer reference not supported!!\n");
-			return; //exit(0);
-			pcRefPic = xGetRefPic(slice, rcListPic, slice->m_iPOC, refLayerId );
-			pcRefPic->longTerm = true;
+			return 0; //exit(0);
+			//pcRefPic = xGetRefPic(slice, rcListPic, slice->m_iPOC, refLayerId );
+			//pcRefPic->longTerm = true;
 		} else if (!slice->m_RPL1.m_isLongtermRefPic[ii]) {
 			hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "%d=> ST ref_layer %d ref poc %d (%d,%d)\n", ii, slice->m_pcPic->layerId, slice->m_iPOC + slice->m_RPL1.m_refPicIdentifier[ii],
 			slice->m_iPOC, slice->m_RPL1.m_refPicIdentifier[ii]);
 			pcRefPic = xGetRefPic(slice, rcListPic, slice->m_iPOC + slice->m_RPL1.m_refPicIdentifier[ii], slice->m_pcPic->layerId);
+			if (!pcRefPic) {
+				hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s i:%d ST m_RPL0 pcRefPic = NULL!!\n", __func__, ii);
+				return -1;
+			}
 			pcRefPic->longTerm = false;
 		} else {
 			int pocBits = slice->m_pcSPS->m_uiBitsForPOC;
@@ -2396,6 +2408,10 @@ void constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 			}
 			hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "%d=> LT ref_layer %d ref poc %d\n", ii, slice->m_pcPic->layerId, ltrpPoc);
 			pcRefPic = xGetLongTermRefPicCandidate(slice, rcListPic, ltrpPoc, slice->m_RPL1.m_deltaPocMSBPresentFlag[ii], slice->m_pcPic->layerId );
+			if (!pcRefPic) {
+				hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s i:%d LT m_RPL1 pcRefPic = NULL!!\n", __func__, ii);
+				return -1;
+			}
 			pcRefPic->longTerm = true;
 		}
 		if (ii < numOfActiveRef) {
@@ -2406,6 +2422,8 @@ void constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 			slice->m_bIsUsedAsLongTerm[REF_PIC_LIST_1][ii] = pcRefPic->longTerm;
 		}
 	}
+
+	return 0;
 }
 
 void clearSliceBuffer(Picture *pic)
@@ -2914,7 +2932,7 @@ static int calcPOC(DecLib *p_declib) //refer to c-model HLSyntaxReader::parseSli
 }
 #endif
 
-bool xDecodeSlice(DecApp *p_app, NALUnit *nalu)
+int xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 {
 	DecLib *p_declib = &p_app->m_cDecLib;
 	Picture* scaledRefPic[MAX_NUM_REF] = {};
@@ -3237,7 +3255,7 @@ bool xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 		p_declib->m_maxDecSliceAddrInSubPic = -1;
 		hevc_print(p_declib->hw, H266_DEBUG_DETAIL,
 			"isRandomAccessSkipPicture, %s return false\n", __func__);
-		return false;
+		return 0;
 	}
 	// Skip TFD pictures associated with BLA/BLANT pictures
 	PRINT_LINE();
@@ -3259,7 +3277,7 @@ bool xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 		if (p_declib->m_prevPOC >= p_declib->m_pocRandomAccess) {
 			//DTRACE_UPDATE( g_trace_ctx, std::make_pair( "final", 0 ) );
 			p_declib->m_prevPOC = p_declib->m_apcSlicePilot->m_iPOC;
-			return true;
+			return 1;
 		}
 		p_declib->m_prevPOC = p_declib->m_apcSlicePilot->m_iPOC;
 	} else {
@@ -3291,6 +3309,10 @@ bool xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 						p_declib->m_apcSlicePilot->m_RPL0.m_isInterLayerRefPic[refPicIndex] );
 				}
 			} else {
+				if (!p_declib->m_apcSlicePilot->m_pcPic) {
+					hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s m_RPL0 m_pcPic = NULL!!\n", __func__);
+					return -1;
+				}
 				xCreateLostPicture(p_declib, lostPoc - 1, p_declib->m_apcSlicePilot->m_pcPic->layerId );
 			}
 		}
@@ -3314,6 +3336,10 @@ bool xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 						p_declib->m_apcSlicePilot->m_RPL1.m_isInterLayerRefPic[refPicIndex] );
 				}
 			} else {
+				if (!p_declib->m_apcSlicePilot->m_pcPic) {
+					hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s m_RPL1 m_pcPic = NULL!!\n", __func__);
+					return -1;
+				}
 				xCreateLostPicture(p_declib, lostPoc - 1, p_declib->m_apcSlicePilot->m_pcPic->layerId );
 			}
 		}
@@ -3418,7 +3444,10 @@ bool xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 	pcSlice->m_pcPic->sliceSubpicIdx.push_back(getSubPicIdxFromSubPicId(pps, pcSlice->m_sliceSubPicId));
 	pcSlice->checkCRA(&pcSlice->m_RPL0, &pcSlice->m_RPL1, m_pocCRA[nalu.m_nuhLayerId], m_cListPic);
 #endif
-	constructRefPicList(p_declib, pcSlice, &p_declib->m_cListPic);
+	if (constructRefPicList(p_declib, pcSlice, &p_declib->m_cListPic) == -1) {
+		hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error:constructRefPicList err\n");
+		return -1;
+	}
 #ifdef AML
 	print_ref_pic_list(p_declib, pcSlice);
 #endif
@@ -3693,7 +3722,7 @@ bool xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 
 	freeScaledRefPicList(pcSlice, scaledRefPic );
 	PRINT_LINE();
-	return false;
+	return 0;
 
 }
 
@@ -5229,7 +5258,10 @@ int h266_bufmgr_process(DecApp *p_app, param_t *param, bool bNewPicture)
 		"[SKIP DEBUG 0] skipFrameCounter = %d, m_iSkipFrame = %d\n",
 		skipFrameCounter, p_app->m_iSkipFrame);
 
-	xDecodeSlice(p_app, &p_declib->a_nalu);
+	if (xDecodeSlice(p_app, &p_declib->a_nalu) == -1) {
+		hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error:xDecodeSlice err\n");
+		ret = 1;
+	}
 
 	hevc_print(p_declib->hw, H266_DEBUG_DETAIL,
 		"[SKIP DEBUG 1] skipFrameCounter = %d, m_iSkipFrame = %d\n", skipFrameCounter, p_app->m_iSkipFrame);
