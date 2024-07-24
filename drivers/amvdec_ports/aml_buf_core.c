@@ -449,14 +449,14 @@ static int buf_core_done(struct buf_core_mgr_s *bc,
 
 	entry->state = BUF_STATE_DONE;
 
-	ret = bc->output(bc, entry, user);
-
 	if (bc->vpp_dque && /* Submit to GE2D doesn't call vpp_dque! */
 		bc->get_next_user(bc, entry, user) == BUF_USER_VSINK &&
 		!bc->vpp_dque(bc, entry)) {
 		atomic_inc(&master->ref);
 		buf_core_update_holder(bc, entry, BUF_USER_DI, BUF_GET);
 	}
+
+	ret = bc->output(bc, entry, user);
 
 out:
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
