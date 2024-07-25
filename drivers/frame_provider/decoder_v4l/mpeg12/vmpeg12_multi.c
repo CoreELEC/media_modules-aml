@@ -1998,6 +1998,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		vf->duration += vf->duration_pulldown;
 		vf->type = type;
 		vf->orientation = 0;
+		vf->dec_set_screen_mode = vdec->screen_mode;
 		if (i > 0) {
 			vf->pts = 0;
 			vf->pts_us64 = 0;

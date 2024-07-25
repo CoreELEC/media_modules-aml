@@ -1871,6 +1871,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		vf->type = type;
 		vf->signal_type = hw->reg_signal_type;
 		vf->orientation = 0;
+		vf->dec_set_screen_mode = vdec->screen_mode;
 
 		if (vdec->vbuf.use_ptsserv != MULTI_PTS_SERVER_DECODER_LOOKUP) {
 			if (i > 0) {

@@ -10260,9 +10260,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->sar_width = hevc->cur_pic->sar_width;
 			vf->sar_height = hevc->cur_pic->sar_height;
 		}
-
+		vf->dec_set_screen_mode = vdec->screen_mode;
 		vf->src_fmt.play_id = vdec->inst_cnt;
-
 		vf->width = vf->width /
 			get_double_write_ratio(pic->double_write_mode & 0xf);
 		vf->height = vf->height /

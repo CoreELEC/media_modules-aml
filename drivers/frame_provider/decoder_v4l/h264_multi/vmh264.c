@@ -3651,6 +3651,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
+		vf->dec_set_screen_mode = vdec->screen_mode;
+
 		if (!vdec->is_v4l && !vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 			/* offset for tsplayer pts lookup */
 			if (i == 0) {

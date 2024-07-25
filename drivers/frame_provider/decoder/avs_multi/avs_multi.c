@@ -3318,6 +3318,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			vf->signal_type = 0;
 			vf->index = buffer_index;
 			vf->duration_pulldown = 0;
+			vf->dec_set_screen_mode = vdec->screen_mode;
 			if (force_interlaced_frame) {
 				vf->type = VIDTYPE_INTERLACE_TOP;
 			}else{
@@ -3538,6 +3539,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			vf->signal_type = 0;
 			vf->index = buffer_index;
 			vf->duration_pulldown = 0;
+			vf->dec_set_screen_mode = vdec->screen_mode;
 			vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
 #ifdef NV21
 			vf->type |= VIDTYPE_VIU_NV21;

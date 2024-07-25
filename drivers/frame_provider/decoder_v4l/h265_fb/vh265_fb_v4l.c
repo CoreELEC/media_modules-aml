@@ -11152,6 +11152,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 		vf->compWidth = pic->width;
 		vf->compHeight = pic->height;
+		vf->dec_set_screen_mode = vdec->screen_mode;
+
 		switch (pic->bit_depth_luma) {
 		case 9:
 			vf->bitdepth = BITDEPTH_Y9;

@@ -10219,6 +10219,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 		vf->width = pic->crop_w;
 		vf->height = pic->crop_h;
+		vf->dec_set_screen_mode = vdec->screen_mode;
 
 		if (force_w_h != 0) {
 			vf->width = (force_w_h >> 16) & 0xffff;

@@ -542,6 +542,7 @@ struct vdec_s {
 	int pts_server_id;
 	u32 afd_video_id;
 	u32 inst_cnt;
+	u32 screen_mode;
 	wait_queue_head_t idle_wait;
 	struct vdec_data_info_s *vdata;
 	char frame_size[32];

@@ -841,6 +841,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->pts = pic->pts;
 		vf->pts_us64 = pic->pts64;
 		vf->timestamp = pic->timestamp;
+		vf->dec_set_screen_mode = vdec->screen_mode;
 		vf->duration = vf_dur ? vf_dur : pic->duration;
 		if (vf->duration >= 1600 * 2)
 			vf->duration = vf->duration >> 1;

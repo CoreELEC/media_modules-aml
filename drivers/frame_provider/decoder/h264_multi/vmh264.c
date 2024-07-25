@@ -3760,6 +3760,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
+		vf->dec_set_screen_mode = vdec->screen_mode;
+
 		if ((vdec->vbuf.use_ptsserv == MULTI_PTS_SERVER_UPPER_LOOKUP) && vdec_stream_based(vdec)) {
 			/* offset for tsplayer pts lookup */
 			u64 frame_type = 0;

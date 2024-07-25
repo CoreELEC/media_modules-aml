@@ -6071,7 +6071,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		fill_frame_info(hw, pic_config, frame_size, vf->pts);
 
 		vf->index = 0xff00 | pic_config->v4l_buf_index;
-
+		vf->dec_set_screen_mode = vdec->screen_mode;
 		if (pic_config->double_write_mode & 0x10) {
 			/* double write only */
 			vf->compBodyAddr = 0;

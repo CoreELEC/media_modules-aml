@@ -789,6 +789,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		vf->timestamp = pic->timestamp;
 		vf->duration = pic->duration >> 1;
 		vf->duration_pulldown = 0;
+		vf->dec_set_screen_mode = vdec->screen_mode;
 		vf->type = (pic->pic_info & TOP_FIELD_FIRST_FLAG) ?
 			VIDTYPE_INTERLACE_TOP : VIDTYPE_INTERLACE_BOTTOM;
 #ifdef NV21

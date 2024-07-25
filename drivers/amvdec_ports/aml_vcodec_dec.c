@@ -99,6 +99,7 @@ MODULE_IMPORT_NS(DMA_BUF);
 #define AML_V4L2_SET_VF_DURATION (V4L2_CID_USER_AMLOGIC_BASE + 11)
 #define AML_V4L2_GET_WIDTH_ALIGN (V4L2_CID_USER_AMLOGIC_BASE + 12)
 #define AML_V4L2_GET_DECINFO_SET (V4L2_CID_USER_AMLOGIC_BASE + 13)
+#define AML_V4L2_SET_SCREEN_MODE (V4L2_CID_USER_AMLOGIC_BASE + 15)
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
@@ -5042,6 +5043,14 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 	} else if (ctrl->id == AML_V4L2_GET_DECINFO_SET) {
 		memcpy(&ctx->dec_intf.dec_comm, ctrl->p_new.p, sizeof(struct vdec_common_s));
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "set dec info");
+	} else if (ctrl->id == AML_V4L2_SET_SCREEN_MODE) {
+		if (!ctx->ada_ctx) {
+			v4l_dbg(ctx, 0, "%s ctx->ada_ctx is NULL!\n", __func__);
+			return 0;
+		}
+		vdec_set_screen_mode(ctx->ada_ctx, ctrl->val);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			"set screenmode: %x\n", ctrl->val);
 	}
 	return 0;
 }
@@ -5118,6 +5127,18 @@ static const struct v4l2_ctrl_config ctrl_st_vf_duration = {
 	.flags	= V4L2_CTRL_FLAG_WRITE_ONLY,
 	.min	= 0,
 	.max	= 96000,
+	.step	= 1,
+	.def	= 0,
+};
+
+static const struct v4l2_ctrl_config ctrl_st_screenmode = {
+	.name	= "screenmode",
+	.id	= AML_V4L2_SET_SCREEN_MODE,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_WRITE_ONLY,
+	.min	= 0,
+	.max	= 0xff,
 	.step	= 1,
 	.def	= 0,
 };
@@ -5278,6 +5299,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_vf_duration, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_screenmode, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;

@@ -92,6 +92,8 @@ void vdec_set_vf_duration(s32 duration);
 
 void vdec_write_stream_data(struct aml_vdec_adapt *ada_ctx, dos_addr_t addr, u32 size);
 
+void vdec_set_screen_mode(struct aml_vdec_adapt *ada_ctx, u32 mode);
+
 void vdec_write_stream_data_inner(struct aml_vdec_adapt *ada_ctx, char *addr, u32 size, u64 timestamp);
 
 void v4l2_set_ext_buf_addr(struct aml_vdec_adapt *ada_ctx, struct dmabuf_dmx_sec_es_data *es_data, int offset);

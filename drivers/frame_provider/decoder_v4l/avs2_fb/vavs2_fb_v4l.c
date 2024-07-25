@@ -5374,6 +5374,7 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 	}
 
 	vf->index = 0xff00 | pic->index;
+	vf->dec_set_screen_mode = vdec->screen_mode;
 
 	if (pic->double_write_mode & 0x10) {
 		/* double write only */

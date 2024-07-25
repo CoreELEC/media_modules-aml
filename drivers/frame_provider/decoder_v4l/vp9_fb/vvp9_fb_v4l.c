@@ -10023,6 +10023,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		}
 
 		fill_frame_info(pbi, pic_config, frame_size, vf->pts);
+		vf->dec_set_screen_mode = pvdec->screen_mode;
 
 		pts_save = vf->pts;
 		pts_us64_save = vf->pts_us64;

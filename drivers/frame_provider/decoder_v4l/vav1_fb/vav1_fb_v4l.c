@@ -6674,6 +6674,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		fill_frame_info(hw, pic_config, frame_size, vf->pts);
 		vdec_count_info(hw->gvs, 0, hw->curr_pic_offset);
 		vf->index = 0xff00 | pic_config->index;
+		vf->dec_set_screen_mode = vdec->screen_mode;
 
 		if (pic_config->double_write_mode & 0x10) {
 			/* double write only */
