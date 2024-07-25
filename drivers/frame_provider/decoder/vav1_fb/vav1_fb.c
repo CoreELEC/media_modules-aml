@@ -8520,11 +8520,11 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 
 		av1_print(hw, AOM_DEBUG_HW_MORE,
 			"aom_bufmgr_process=> %d,decode done, AOM_AV1_SEARCH_HEAD\r\n", ret);
-		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
+		//WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
 		pbi->decode_idx++;
 		pbi->bufmgr_proc_count++;
 		hw->frame_decoded = 1;
-		return 0;
+		return ret;
 	} else if (ret < 0) {
 		hw->frame_decoded = 1;
 		av1_print(hw, AOM_DEBUG_HW_MORE,
@@ -10154,6 +10154,21 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	hw->process_busy = 0;
 
 	if (hw->m_ins_flag) {
+		if (ret > 0 && hw->frame_decoded && hw->common.show_existing_frame) {
+			hw->dec_result = DEC_RESULT_DONE;
+			if (READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
+				hw->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+				hw->dec_result = DEC_RESULT_UNFINISH;
+			}
+#ifdef NEW_FB_CODE
+			if (hw->front_back_mode == 1)
+				amhevc_stop_f();
+			else
+#endif
+				amhevc_stop();
+
+			av1_work_implement(hw);
+		}
 		if (ret >= 0) {
 			start_process_time(hw);
 		} else {

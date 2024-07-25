@@ -610,6 +610,7 @@ static int av1_reset_frame_buffer(struct AV1HW_s *hw);
 #endif
 
 static void av1_work(struct work_struct *work);
+static void av1_work_implement(struct AV1HW_s *hw);
 #endif
 
 #define PROC_STATE_INIT			0
@@ -7140,11 +7141,11 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 
 		av1_print(hw, AOM_DEBUG_HW_MORE,
 			"aom_bufmgr_process=> %d,decode done, AOM_AV1_SEARCH_HEAD\r\n", ret);
-		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
+		//WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
 		pbi->decode_idx++;
 		pbi->bufmgr_proc_count++;
 		hw->frame_decoded = 1;
-		return 0;
+		return ret;
 	} else if (ret < 0) {
 		hw->frame_decoded = 1;
 		av1_print(hw, AOM_DEBUG_HW_MORE,
@@ -8400,7 +8401,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 							hw->data_size -= (hw->data_invalid - hw->consume_byte);
 							hw->dec_result = DEC_RESULT_UNFINISH;
 							amhevc_stop();
-							vdec_schedule_work(&hw->work);
+							av1_work_implement(hw);
 							return IRQ_HANDLED;
 						} else {
 							dec_again_process(hw);
@@ -8422,7 +8423,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 						dump_hit_rate(hw);
 #endif
 					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
-					vdec_schedule_work(&hw->work);
+					av1_work_implement(hw);
 				}else {
 #ifdef DEBUG_CRC_ERROR
 					if ((crc_debug_flag & 0x40) && cm->cur_frame)
@@ -8448,7 +8449,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 						hw->data_size -= (hw->data_invalid - hw->consume_byte);
 						hw->dec_result = DEC_RESULT_UNFINISH;
 						amhevc_stop();
-						vdec_schedule_work(&hw->work);
+						av1_work_implement(hw);
 						return IRQ_HANDLED;
 					} else {
 						dec_again_process(hw);
@@ -8474,7 +8475,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					dump_hit_rate(hw);
 #endif
 				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
-				vdec_schedule_work(&hw->work);
+				av1_work_implement(hw);
 			}
 			if (hw->low_latency_flag  && (hw->t5d_fg_run_rotate != T5D_ROTATE_DW21))
 				av1_postproc(hw);
@@ -8826,6 +8827,16 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	hw->process_busy = 0;
 
 	if (hw->m_ins_flag) {
+		if (ret > 0 && hw->frame_decoded && hw->common.show_existing_frame) {
+			hw->dec_result = DEC_RESULT_DONE;
+			if (READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
+				hw->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+				hw->dec_result = DEC_RESULT_UNFINISH;
+			}
+			amhevc_stop();
+			av1_work_implement(hw);
+		}
+
 		if (ret >= 0)
 			start_process_time(hw);
 		else {
@@ -9591,10 +9602,8 @@ static int av1_wait_cap_buf(void *args)
 	return 0;
 }
 
-static void av1_work(struct work_struct *work)
+static void av1_work_implement(struct AV1HW_s *hw)
 {
-	struct AV1HW_s *hw = container_of(work,
-		struct AV1HW_s, work);
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	/* finished decoding one frame or error,
@@ -9838,6 +9847,13 @@ static void av1_work(struct work_struct *work)
 		vdec_core_finish_run(hw_to_vdec(hw), CORE_MASK_VDEC_1
 					| CORE_MASK_HEVC);
 	trigger_schedule(hw);
+}
+
+static void av1_work(struct work_struct *work)
+{
+	struct AV1HW_s *hw = container_of(work,
+		struct AV1HW_s, work);
+	av1_work_implement(hw);
 }
 
 static int av1_hw_ctx_restore(struct AV1HW_s *hw)
