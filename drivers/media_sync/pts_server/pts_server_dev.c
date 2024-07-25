@@ -296,6 +296,10 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
 	}
+	/*
+	 * Variable PServerIns will free when PTSSERVER_IOC_RELEASE.
+	 */
+	/* coverity[leaked_storage] */
 	return ret;
 }
 

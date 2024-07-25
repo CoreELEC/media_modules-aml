@@ -251,6 +251,11 @@ static long mediaproxy_ioctl(struct file *filp, unsigned int cmd, unsigned long 
         result = mediaproxy_get_consumer_count();
         break;
     case MEDIAPROXY_MSG_TYPE__SUBSCRIBE:
+        /*
+         * The variable args.subscribe_msg_type is initialised in
+         * copy_from_user.
+         */
+        /* coverity[uninit_use] */
         session->subscribe_msg_type = args.subscribe_msg_type;
         break;
     default:

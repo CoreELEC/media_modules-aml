@@ -161,6 +161,10 @@ static ssize_t store_reset(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CON
 
 	r = kstrtoint(buf, 0, &reset);
 
+	/*
+	 * The variable reset is initialised in kstrtoint.
+	 */
+	/* coverity[uninit_use_in_call] */
 	pr_info("reset is %d\n", reset);
 	if (r < 0)
 		return -EINVAL;

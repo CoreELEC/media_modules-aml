@@ -213,6 +213,11 @@ static struct vframe_s *mediasync_vf_peek(void *op_arg)
 														dev->isVideoHold);
 	vsyncPolicy.param1 = DUR2US(vf->duration);
 	mediasync_video_process(dev->sync_policy_instance,vPts,&vsyncPolicy);
+	 /*
+	  * The variable vsyncPolicy.videopolicy is initialised in
+	  * mediasync_video_process.
+	  */
+	 /* coverity[uninit_use] */
 	if (vsyncPolicy.videopolicy == MEDIASYNC_VIDEO_HOLD) {
 		return NULL;
 	}
