@@ -1025,7 +1025,6 @@ void amvdec_start(void)
 		READ_RESET_REG(RESET0_REGISTER);
 	}
 	/* #endif */
-
 	WRITE_VREG(MPSR, 0x0001);
 }
 EXPORT_SYMBOL(amvdec_start);
@@ -1077,6 +1076,7 @@ void amhevc_start(void)
 		READ_VREG(DOS_SW_RESET3);
 		READ_VREG(DOS_SW_RESET3);
 
+		SET_VREG_MASK(HEVC_WRRSP_LMEM, (7 << 25));
 		WRITE_VREG(HEVC_MPSR, 0x0001);
 	}
 }
