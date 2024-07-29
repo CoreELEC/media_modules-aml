@@ -2850,6 +2850,7 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	u64 current_timestamp = ctx->current_timestamp;
+	struct aml_buf *am_buf;
 
 	ctx->decoder_status_info.decoder_error_count++;
 	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
@@ -2872,9 +2873,13 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 		!hw->vf_ref[hw->refs[0]]) {
 		hw->ref_use[hw->refs[0]]++;
 		hw->vf_ref[hw->refs[0]]++;
+		am_buf = (struct aml_buf *)hw->pics[hw->refs[0]].v4l_ref_buf_addr;
 		if ((ctx->vpp_is_need || ctx->enable_di_post) &&
-			hw->interlace_flag)
+			hw->interlace_flag) {
 			hw->vf_ref[hw->refs[0]]++;
+			aml_buf_put_ref(&ctx->bm, am_buf);
+		}
+		aml_buf_put_ref(&ctx->bm, am_buf);
 		ctx->current_timestamp = hw->pic_pts[hw->refs[0]].timestamp;
 		vdec_v4l_post_error_frame_event(ctx);
 	}
@@ -2884,9 +2889,13 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 		!hw->vf_ref[hw->refs[1]]) {
 		hw->ref_use[hw->refs[1]]++;
 		hw->vf_ref[hw->refs[1]]++;
+		am_buf = (struct aml_buf *)hw->pics[hw->refs[1]].v4l_ref_buf_addr;
 		if ((ctx->vpp_is_need || ctx->enable_di_post) &&
-			hw->interlace_flag)
+			hw->interlace_flag) {
 			hw->vf_ref[hw->refs[1]]++;
+			aml_buf_put_ref(&ctx->bm, am_buf);
+		}
+		aml_buf_put_ref(&ctx->bm, am_buf);
 		ctx->current_timestamp = hw->pic_pts[hw->refs[1]].timestamp;
 		vdec_v4l_post_error_frame_event(ctx);
 	}
