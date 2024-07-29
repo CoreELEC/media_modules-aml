@@ -2584,7 +2584,8 @@ static void put_un_used_mv_bufs(struct AVS3Decoder_s *dec)
 static void config_hevc_irq_num(struct AVS3Decoder_s *dec)
 {
 #ifdef NEW_FB_CODE
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5 ||
+		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) {
 		dec->ASSIST_MBOX0_IRQ_REG = EE_ASSIST_MBOX0_IRQ_REG;
 		dec->ASSIST_MBOX0_CLR_REG = EE_ASSIST_MBOX0_CLR_REG;
 		dec->ASSIST_MBOX0_MASK    = EE_ASSIST_MBOX0_MASK;
@@ -4242,7 +4243,7 @@ static void avs3_config_work_space_hw(struct AVS3Decoder_s *dec)
 		if (is_dw_p010(dec)) {
 			/* Enable P010 reference read mode for MC */
 			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1,
-				(0x1 << 31) | (1 << 24) | (((dec->endian >> 12) & 0xff) << 16));
+				(0x1 << 31) | (8 << 24) | (((dec->endian >> 12) & 0xff) << 16));
 		} else {
 			/* Enable NV21 reference read mode for MC */
 			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31);
@@ -4556,17 +4557,19 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 		WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b);//enable new mcrcc}
 	}
 #endif
-	/*Send parser_cmd*/
-	WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
-	for (i = 0; i < PARSER_CMD_NUMBER; i++)
-		WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
-	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6) {
+		/*Send parser_cmd*/
+		WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
+		for (i = 0; i < PARSER_CMD_NUMBER; i++)
+			WRITE_VREG(HEVC_PARSER_CMD_WRITE, parser_cmd[i]);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_0, PARSER_CMD_SKIP_CFG_0);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
+		WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
+	}
 	WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 		(1 << 9) | /* parser_alf_if_en*/
-		/*  (1 << 8) |*/ /*sao_sw_pred_enable*/
+		/* (1 << 8) |*/ /*sao_sw_pred_enable*/
 		(1 << 5) | /*parser_sao_if_en*/
 		(1 << 2) | /*parser_mpred_if_en*/
 		(1 << 0) /*parser_scaler_if_en*/
@@ -8723,6 +8726,9 @@ static void vavs3_prot_init(struct AVS3Decoder_s *dec)
 #ifndef FOR_S5
 	WRITE_VREG(HEVC_PSCALE_CTRL, 0);
 #endif
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+		WRITE_VREG(HEVC_PSCALE_CTRL, 0);
+
 	WRITE_VREG(DEBUG_REG1, 0x0);
 	/*check vps/sps/pps/i-slice in ucode*/
 	WRITE_VREG(NAL_SEARCH_CTL, 0x8);
@@ -10845,14 +10851,24 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 	}
 #endif
 
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3X) {
-		if ((dec->triple_write_mode) || (triple_write_mode) ||
-			(dec->double_write_mode & 0x10000) || (double_write_mode & 0x10000)) {
-			double_write_mode &= ~(1 <<16);
-			dec->double_write_mode &= ~(1 <<16);
+	if (!is_support_triple_write()) {
+		if ((dec->triple_write_mode) || (triple_write_mode)) {
 			triple_write_mode = 0;
 			dec->triple_write_mode = 0;
-			pr_err("%s warn: unsupport triple write or p010 mode, force disabled\n", __func__);
+			pr_err("%s warn: unsupport triple write mode, force disable\n", __func__);
+		}
+	}
+
+	if (!is_support_p010_mode()) {
+		if (is_dw_p010(dec)) {
+			double_write_mode &= ~(1 <<16);
+			dec->double_write_mode &= ~(1 <<16);
+			pr_err("%s warn: unsupport dw p010 mode, force disable\n", __func__);
+		}
+		if (is_tw_p010(dec)) {
+			triple_write_mode &= ~(1 <<16);
+			dec->triple_write_mode &= ~(1 <<16);
+			pr_err("%s warn: unsupport tw p010 mode, force disable\n", __func__);
 		}
 	}
 
