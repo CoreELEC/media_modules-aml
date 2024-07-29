@@ -828,9 +828,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			spin_unlock_irqrestore(&hw->lock, flags);
 			return 0;
 		} else {
-			vf->mem_handle =
-				decoder_bmmu_box_get_mem_handle(
-					hw->mm_blk_handle, index);
 			vdec_vframe_ready(vdec, vf);
 			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(hw->pts_name, vf->timestamp);
@@ -924,9 +921,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				(const struct vframe_s *)vf);
 			spin_unlock_irqrestore(&hw->lock, flags);
 		} else {
-			vf->mem_handle =
-				decoder_bmmu_box_get_mem_handle(
-					hw->mm_blk_handle, index);
 			decoder_do_frame_check(vdec, vf);
 			vdec_vframe_ready(vdec, vf);
 			kfifo_put(&hw->display_q,
@@ -1025,9 +1019,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		} else {
 			struct vdec_info vinfo;
 
-			vf->mem_handle =
-				decoder_bmmu_box_get_mem_handle(
-					hw->mm_blk_handle, index);
 			decoder_do_frame_check(vdec, vf);
 			vdec_vframe_ready(vdec, vf);
 			if (v4l2_ctx->enable_di_post)
@@ -2211,7 +2202,7 @@ static int vmpeg4_workspace_init(struct vdec_mpeg4_hw_s *hw)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle,
-		DECODE_BUFFER_NUM_MAX,
+		0,
 		WORKSPACE_SIZE,
 		DRIVER_NAME,
 		&hw->buf_start);
@@ -2643,7 +2634,7 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 	hw->mm_blk_handle = decoder_bmmu_box_alloc_box(
 			DRIVER_NAME,
 			0,
-			MAX_BMMU_BUFFER_NUM,
+			1,
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER | tvp_flag,

@@ -216,7 +216,6 @@ struct vdec_mjpeg_hw_s {
 	u32 dec_result;
 	unsigned long buf_start;
 	u32 buf_size;
-	void *mm_blk_handle;
 	struct dec_sysinfo vmjpeg_amstream_dec_info;
 
 	struct vframe_chunk_s *chunk;
@@ -528,7 +527,6 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	vf->orientation = 0;
 	hw->vfbuf_use[index]++;
 
-	vf->mem_handle = decoder_bmmu_box_get_mem_handle(hw->mm_blk_handle, index);
 	decoder_do_frame_check(vdec, vf);
 	vdec_vframe_ready(vdec, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
@@ -1236,20 +1234,6 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 		kfifo_put(&hw->newframe_q, vf);
 	}
 
-	if (hw->mm_blk_handle) {
-		decoder_bmmu_box_free(hw->mm_blk_handle);
-		hw->mm_blk_handle = NULL;
-	}
-
-	hw->mm_blk_handle = decoder_bmmu_box_alloc_box(
-		DRIVER_NAME,
-		0,
-		MAX_BMMU_BUFFER_NUM,
-		4 + PAGE_SHIFT,
-		CODEC_MM_FLAGS_CMA_CLEAR |
-		CODEC_MM_FLAGS_FOR_VDECODER,
-		BMMU_ALLOC_FLAGS_WAIT);
-
 	timer_setup(&hw->check_timer, check_timer_func, 0);
 	hw->check_timer.expires = jiffies + CHECK_INTERVAL;
 
@@ -1716,15 +1700,6 @@ static int vmjpeg_stop(struct vdec_mjpeg_hw_s *hw)
 	}
 	cancel_work_sync(&hw->work);
 	hw->init_flag = 0;
-
-	if (hw->mm_blk_handle) {
-		void *bmmu_box_tmp = hw->mm_blk_handle;
-		hw->mm_blk_handle = NULL;
-		if (hw->run_flag)
-			usleep_range(1000, 2000);
-		decoder_bmmu_box_free(bmmu_box_tmp);
-		bmmu_box_tmp = NULL;
-	}
 
 	if (hw->fw) {
 		vfree(hw->fw);

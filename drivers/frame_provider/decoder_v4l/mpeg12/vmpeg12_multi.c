@@ -1986,9 +1986,6 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				v4l_mpeg12_update_frame_info(hw, vf, pic);
 			}
 			vdec->vdec_fps_detec(vdec->id);
-			vf->mem_handle =
-				decoder_bmmu_box_get_mem_handle(
-				hw->mm_blk_handle, index);
 			if (!vdec->is_v4l && !vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 				/* offset for tsplayer pts lookup */
 				if (i == 0) {
@@ -3230,7 +3227,7 @@ static void vmpeg12_workspace_init(struct vdec_mpeg12_hw_s *hw)
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle,
-			DECODE_BUFFER_NUM_MAX,
+			0,
 			WORKSPACE_SIZE,
 			DRIVER_NAME,
 			&hw->buf_start);
@@ -3635,7 +3632,7 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 	hw->mm_blk_handle = decoder_bmmu_box_alloc_box(
 			DRIVER_NAME,
 			0,
-			MAX_BMMU_BUFFER_NUM,
+			1,
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
