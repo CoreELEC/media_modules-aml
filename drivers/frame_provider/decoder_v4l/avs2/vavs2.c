@@ -5188,7 +5188,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			decoder_do_frame_check(pvdec, vf);
 
 #ifdef AUX_DATA_CRC
-			decoder_do_aux_data_check(pvdec, pic->cuva_data_buf, pic->cuva_data_size, 0/*pic->poc*/);
+			decoder_do_aux_data_check(pvdec, pic->cuva_data_buf, pic->cuva_data_size, pic->poc);
 #endif
 			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 					"%s: pic %p stream_offset 0x%x, poc %d, cuva_data_size %d, signal_type:0x%x vf:%p\n",
