@@ -1694,13 +1694,18 @@ void stop_pipeline(struct aml_vcodec_ctx *ctx)
 
 void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 {
+	ulong flags;
+
 	/* disable queue output item to worker. */
 	ctx->output_thread_ready = false;
 	ctx->is_stream_off = true;
 
-	/* flush output buffer worker. */
-	cancel_work_sync(&ctx->es_wkr_in);
-	cancel_work_sync(&ctx->es_wkr_out);
+	spin_lock_irqsave(&ctx->es_wkr_slock, flags);
+	ctx->es_wkr_stop = true;
+	spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
+
+	flush_work(&ctx->es_wkr_in);
+	flush_work(&ctx->es_wkr_out);
 
 	/* clean output cache and decoder status . */
 	if (ctx->state > AML_STATE_INIT)
@@ -4751,8 +4756,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		ctx->es_wkr_stop = true;
 		spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
 
-		cancel_work_sync(&ctx->es_wkr_in);
-		cancel_work_sync(&ctx->es_wkr_out);
+		flush_work(&ctx->es_wkr_in);
+		flush_work(&ctx->es_wkr_out);
 		INIT_KFIFO(ctx->dmabuff_recycle);
 
 		while ((vb2_v4l2 = v4l2_m2m_src_buf_remove(ctx->m2m_ctx)))
@@ -4833,17 +4838,8 @@ static void m2mops_vdec_device_run(void *priv)
 {
 	struct aml_vcodec_ctx *ctx = priv;
 	struct aml_vcodec_dev *dev = ctx->dev;
-	ulong flags;
-
-	spin_lock_irqsave(&ctx->es_wkr_slock, flags);
-	if (ctx->es_wkr_stop) {
-		spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
-		return;
-	}
 
 	queue_work(dev->decode_workqueue, &ctx->es_wkr_in);
-
-	spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
 }
 
 static int m2mops_vdec_job_ready(void *m2m_priv)
