@@ -1,5 +1,6 @@
 #include "h266_global.h"
 #define MODIFY_CODE
+//#define NEED_CREATE_LOST_PIC
 
 #define fill_n(a, n, v) \
 	{ \
@@ -2132,6 +2133,10 @@ void xCreateLostPicture(DecLib *p_declib, int iLostPoc, const int layerId )
 		if (abs(rpcPic->poc - iLostPoc) == closestPoc && rpcPic->poc != p_declib->m_apcSlicePilot->m_iPOC) {
 			hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "copying picture %d to %d (%d)\n",rpcPic->poc ,iLostPoc,p_declib->m_apcSlicePilot->m_iPOC);
 			//cFillPic->getRecoBuf().copyFrom( rpcPic->getRecoBuf() );
+#ifdef AML
+			cFillPic->buf_cfg = pic_buf_cfg_alloc(p_declib->hw);
+			//Todo. need copy pic data to buf_cfg
+#endif
 			break;
 		}
 	}
@@ -2139,14 +2144,16 @@ void xCreateLostPicture(DecLib *p_declib, int iLostPoc, const int layerId )
 	//  for (int ctuRsAddr=0; ctuRsAddr<cFillPic->getNumberOfCtusInFrame(); ctuRsAddr++)  { cFillPic->getCtu(ctuRsAddr)->initCtu(cFillPic, ctuRsAddr); }
 	cFillPic->referenced = true;
 	cFillPic->slices[0]->m_iPOC=iLostPoc;
+#if 0
 	xUpdatePreviousTid0POC(p_declib, cFillPic->slices[0]);
+#else
+	cFillPic->poc = iLostPoc;
+	p_declib->m_prevTid0POC = iLostPoc;
+#endif
 	cFillPic->reconstructed = true;
 	cFillPic->neededForOutput = true;
 	if (p_declib->m_pocRandomAccess == MAX_INT) {
-	p_declib->m_pocRandomAccess = iLostPoc;
-#ifdef AML
-	cFillPic->buf_cfg = pic_buf_cfg_alloc(p_declib->hw);
-#endif
+		p_declib->m_pocRandomAccess = iLostPoc;
 	}
 }
 
@@ -2331,7 +2338,13 @@ int constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 	//construct L0
 	numOfActiveRef = slice->m_aiNumRefIdx[REF_PIC_LIST_0];
 	layerIdx = slice->m_pcPic->cs->vps == nullptr ? 0 : slice->m_pcPic->cs->vps->m_generalLayerIdx[slice->m_pcPic->layerId];
-	hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "%s for L0:\n", __func__);
+	hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "%s for L0:ActiveRef:%d Entries:%d\n", __func__,
+		numOfActiveRef, getNumRefEntries(&slice->m_RPL0));
+	if (numOfActiveRef > getNumRefEntries(&slice->m_RPL0)) {
+		hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s m_RPL0 numOfActiveRef %d > getNumRefEntries %d !!\n", __func__,
+			numOfActiveRef, getNumRefEntries(&slice->m_RPL0));
+		return -1;
+	}
 	for (ii = 0; ii < getNumRefEntries(&slice->m_RPL0); ii++) {
 		if (slice->m_RPL0.m_isInterLayerRefPic[ii]) {
 		//CHECK( m_RPL0.m_interLayerRefPicIdx[ii] == NOT_VALID, "Wrong ILRP index" );
@@ -2378,7 +2391,13 @@ int constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 
 	//construct L1
 	numOfActiveRef = slice->m_aiNumRefIdx[REF_PIC_LIST_1];
-	hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "%s for L1:\n", __func__);
+	hevc_print(p_declib->hw, H266_DEBUG_DETAIL, "%s for L1:ActiveRef:%d Entries:%d\n", __func__,
+		numOfActiveRef, getNumRefEntries(&slice->m_RPL1));
+	if (numOfActiveRef > getNumRefEntries(&slice->m_RPL1)) {
+		hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s m_RPL1 numOfActiveRef %d > getNumRefEntries %d !!\n", __func__,
+			numOfActiveRef, getNumRefEntries(&slice->m_RPL1));
+		return -1;
+	}
 	for (ii = 0; ii < getNumRefEntries(&slice->m_RPL1); ii++) {
 		if ( slice->m_RPL1.m_isInterLayerRefPic[ii] ) {
 			//CHECK( m_RPL1.m_interLayerRefPicIdx[ii] == NOT_VALID, "Wrong ILRP index" );
@@ -2948,6 +2967,7 @@ int xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 	SPS *sps;
 	VPS *vps;
 	Slice* pcSlice;
+	ref_set_t *slice_set;
 	p_declib->m_apcSlicePilot->m_pcPicHeader = &p_declib->m_picHeader;
 
 	initSlice(p_declib->m_apcSlicePilot); // the slice pilot is an object to prepare for a new slice
@@ -2974,16 +2994,47 @@ int xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 		param->p.PocLsb, param->p.sps_seq_parameter_set_id);
 #ifdef USE_FULL_REF_LIST_BUFFER
 	if (rpl0_index < 64)
-		update_rpl(&p_declib->m_apcSlicePilot->m_RPL0, &p_app->sps_RPL_set[param->p.sps_seq_parameter_set_id].RPL0_set[rpl0_index]);
+		slice_set = &p_app->sps_RPL_set[param->p.sps_seq_parameter_set_id].RPL0_set[rpl0_index];
 	else
-		update_rpl(&p_declib->m_apcSlicePilot->m_RPL0, &p_app->slice_RPL0_set);
+		slice_set = &p_app->slice_RPL0_set;
+
+	if (slice_set->numStrp + slice_set->numLtrp + slice_set->numIlrp > MAX_NUM_REF_PICS) {
+		hevc_print(p_declib->hw, H266_DEBUG_BUFMGR,
+			"Err: RPL0 numStrp:%d numLtrp:%d numIlrp:%d !\n",
+			slice_set->numStrp, slice_set->numLtrp, slice_set->numIlrp);
+		return -1;
+	}
+	update_rpl(&p_declib->m_apcSlicePilot->m_RPL0, slice_set);
 
 	if (rpl1_index < 64)
-		update_rpl(&p_declib->m_apcSlicePilot->m_RPL1, &p_app->sps_RPL_set[param->p.sps_seq_parameter_set_id].RPL1_set[rpl1_index]);
+		slice_set = &p_app->sps_RPL_set[param->p.sps_seq_parameter_set_id].RPL1_set[rpl1_index];
 	else
-		update_rpl(&p_declib->m_apcSlicePilot->m_RPL1, &p_app->slice_RPL1_set);
+		slice_set = &p_app->slice_RPL1_set;
+
+	if (slice_set->numStrp + slice_set->numLtrp + slice_set->numIlrp > MAX_NUM_REF_PICS) {
+		hevc_print(p_declib->hw, H266_DEBUG_BUFMGR,
+			"Err: RPL1 numStrp:%d numLtrp:%d numIlrp:%d !\n",
+			slice_set->numStrp, slice_set->numLtrp, slice_set->numIlrp);
+		return -1;
+	}
+	update_rpl(&p_declib->m_apcSlicePilot->m_RPL1, slice_set);
 #else
+	slice_set = &p_app->RPL0_set[rpl0_index];
+	if (slice_set->numStrp + slice_set->numLtrp + slice_set->numIlrp > MAX_NUM_REF_PICS) {
+		hevc_print(p_declib->hw, H266_DEBUG_BUFMGR,
+			"Err: RPL0 numStrp:%d numLtrp:%d numIlrp:%d !\n",
+			slice_set->numStrp, slice_set->numLtrp, slice_set->numIlrp);
+		return -1;
+	}
 	update_rpl(&p_declib->m_apcSlicePilot->m_RPL0, &p_app->RPL0_set[rpl0_index]);
+
+	slice_set = &p_app->RPL1_set[rpl1_index];
+	if (slice_set->numStrp + slice_set->numLtrp + slice_set->numIlrp > MAX_NUM_REF_PICS) {
+		hevc_print(p_declib->hw, H266_DEBUG_BUFMGR,
+			"Err: RPL1 numStrp:%d numLtrp:%d numIlrp:%d !\n",
+			slice_set->numStrp, slice_set->numLtrp, slice_set->numIlrp);
+		return -1;
+	}
 	update_rpl(&p_declib->m_apcSlicePilot->m_RPL1, &p_app->RPL1_set[rpl1_index]);
 #endif
 	if ((param->p.slice_type != I_SLICE && getNumRefEntries(&p_declib->m_apcSlicePilot->m_RPL0) > 1) ||
@@ -3309,11 +3360,16 @@ int xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 						p_declib->m_apcSlicePilot->m_RPL0.m_isInterLayerRefPic[refPicIndex] );
 				}
 			} else {
+#ifdef NEED_CREATE_LOST_PIC
 				if (!p_declib->m_apcSlicePilot->m_pcPic) {
 					hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s m_RPL0 m_pcPic = NULL!!\n", __func__);
 					return -1;
 				}
-				xCreateLostPicture(p_declib, lostPoc - 1, p_declib->m_apcSlicePilot->m_pcPic->layerId );
+				xCreateLostPicture(p_declib, lostPoc/*lostPoc - 1*/, p_declib->m_apcSlicePilot->m_pcPic->layerId );
+#else
+				hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s m_RPL0 m_pcPic lost\n", __func__);
+				return -1;
+#endif
 			}
 		}
 		while ((lostPoc = checkThatAllRefPicsAreAvailable(p_declib, p_declib->m_apcSlicePilot,
@@ -3336,11 +3392,16 @@ int xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 						p_declib->m_apcSlicePilot->m_RPL1.m_isInterLayerRefPic[refPicIndex] );
 				}
 			} else {
+#ifdef NEED_CREATE_LOST_PIC
 				if (!p_declib->m_apcSlicePilot->m_pcPic) {
 					hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s m_RPL1 m_pcPic = NULL!!\n", __func__);
 					return -1;
 				}
-				xCreateLostPicture(p_declib, lostPoc - 1, p_declib->m_apcSlicePilot->m_pcPic->layerId );
+				xCreateLostPicture(p_declib, lostPoc/*lostPoc - 1*/, p_declib->m_apcSlicePilot->m_pcPic->layerId );
+#else
+				hevc_print(p_declib->hw, H266_DEBUG_BUFMGR, "Error: %s m_RPL1 m_pcPic lost\n", __func__);
+				return -1;
+#endif
 			}
 		}
 	}

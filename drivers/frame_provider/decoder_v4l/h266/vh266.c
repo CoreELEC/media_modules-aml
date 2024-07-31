@@ -11461,12 +11461,12 @@ static void reset(struct vdec_s *vdec)
 	aml_free_canvas(vdec);
 	if (!hevc->resolution_change) {
 		hevc_local_uninit(hevc);
-		h266_decode_ctx_reset(hevc);
 	}
 
 	if (vh266_local_init(hevc) < 0)
 		pr_debug(" %s local init fail\n", __func__);
 
+	h266_decode_ctx_reset(hevc);
 	hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);
 }
 
