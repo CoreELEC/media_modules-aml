@@ -194,6 +194,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -246,6 +247,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
 		.is_support_axi_ctrl = true,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -263,6 +265,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -283,6 +286,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_rdma     = true,
 		.is_support_mmu_copy = true,
 		.is_support_axi_ctrl = true,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,	//8kp30, rdma, mmu copy
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -300,6 +304,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -317,6 +322,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_vdec_canvas_support = true,
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -337,6 +343,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_axi_ctrl = true,
 		.is_mjpeg_endian_rematch = true,
 		.is_vp9_adapt_prob_hw_mode = true,
+		.is_support_monitor = true,
 		.hevc_stream_extra_shift = 8,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
@@ -357,6 +364,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_dual_core = false,
 		.is_support_axi_ctrl = true,
 		.is_mjpeg_endian_rematch = true,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -380,6 +388,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_vp9_adapt_prob_hw_mode = true,
 		.is_support_triple_write = true,
 		.is_support_p010 = true,
+		.is_support_monitor = true,
 		.hevc_stream_extra_shift = 8,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
@@ -415,6 +424,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = false,
 		.is_support_dual_core = false,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_1080P,
 		.hevc_max_resolution = RESOLUTION_1080P,
 		.fmt_support_flags = FMT_HEVC | FMT_H264 | FMT_MPEG2 | FMT_MPEG4 | FMT_VC1,
@@ -435,6 +445,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_mjpeg_endian_rematch = true,
 		.is_vcpu_clk_set = true,
 		.is_vp9_adapt_prob_hw_mode = true,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_NO_AVS | FMT_HEVC_VP9_AV1,
@@ -456,6 +467,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_mjpeg_endian_rematch = true,
 		.is_vcpu_clk_set = true,
 		.is_vp9_adapt_prob_hw_mode = true,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -479,6 +491,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_vcpu_clk_set = true,
 		.is_vp9_adapt_prob_hw_mode = true,
 		.is_support_p010 = true,
+		.is_support_monitor = true,
 		.hevc_stream_extra_shift = 8,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
@@ -534,6 +547,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_1080P,
 		.hevc_max_resolution = RESOLUTION_1080P,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -553,6 +567,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.is_support_dual_core = false,
 		.is_support_axi_ctrl = true,
 		.is_mjpeg_endian_rematch = true,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,  //fixed endian issue
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1,
@@ -573,6 +588,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.is_mjpeg_endian_rematch = true,
 		.is_vcpu_clk_set = true,
 		.is_vp9_adapt_prob_hw_mode = true,
+		.is_support_monitor = true,
 		.vdec_max_resolution = RESOLUTION_1080P,
 		.hevc_max_resolution = RESOLUTION_1080P,
 		.fmt_support_flags = FMT_VDEC_NO_AVS | FMT_HEVC_VP9_AV1,
@@ -1200,6 +1216,12 @@ inline bool is_support_rdma(void)
 }
 EXPORT_SYMBOL(is_support_rdma);
 
+inline bool is_support_monitor(void)
+{
+	return (platform_dos_dev->is_support_monitor);
+}
+EXPORT_SYMBOL(is_support_monitor);
+
 inline bool is_support_mmu_copy(void)
 {
 	return (platform_dos_dev->is_support_mmu_copy);
@@ -1278,6 +1300,7 @@ void pr_dos_infos(void)
 	pr_info("support rdma        : %d\n", is_support_rdma());
 	pr_info("support mmu copy    : %d\n", is_support_mmu_copy());
 	pr_info("support dos axi ctrl: %d\n", is_support_axi_ctrl());
+	pr_info("support monitor     : %d\n", is_support_monitor());
 	pr_info("support format      : 0x%x\n", platform_dos_dev->fmt_support_flags);
 	pr_info("hevc_stream_extra_shift_bytes: %d\n", get_hevc_stream_extra_shift_bytes());
 	pr_info("mjpeg endian rematch: %d\n", is_mjpeg_endian_rematch());

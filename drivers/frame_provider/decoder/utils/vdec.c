@@ -5180,8 +5180,9 @@ static void hevc_auto_clk_gate_disable(void)
 	/* hevc mpred auto-cg disable */
 	WRITE_VREG(HEVC_MPRED_CTRL1,
 			READ_VREG(HEVC_MPRED_CTRL1) | 0x1000000);
-	WRITE_VREG(HEVC_MPRED_CTRL9,
-			READ_VREG(HEVC_MPRED_CTRL9) | 0xfff0000);
+	/*WRITE_VREG(HEVC_MPRED_CTRL9,
+			READ_VREG(HEVC_MPRED_CTRL9) | 0xfff0000);*/
+	//Need to modify the HEVC_MPRED_REF_NUM register in ucode
 
 	/* hevc iqit auto-cg disable */
 	WRITE_VREG(HEVC_IQIT_CLK_RST_CTRL, (1 << 2));
@@ -6450,6 +6451,125 @@ ssize_t dump_vdec_chunks(char *buf) {
 	return dump_vdec_chunks_show(NULL, NULL, buf);
 }
 
+static ssize_t dump_path_monitor_show(KV_CLASS_CONST struct class *class,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf) {
+	char *pbuf = buf;
+	int i = 0;
+	int j = 0;
+	uint32_t mnt_data = 0;
+	const char* mnt_name[0x35] = {
+		"clk_count", //0x00
+		"parser_iqit_tx_count", //0x01
+		"parser_iqit_wt_count", //0x02
+		"iqit_ipp_tx_count", //0x03
+		"iqit_ipp_wt_count", //0x04
+		"dblk_ipp_tx_count", //0x05
+		"dblk_ipp_wt_count", //0x06
+		"dblk_ow_tx_count", //0x07
+		"dblk_ow_wt_count", //0x08
+		"ddr_tx_count", //0x09
+		"ddr_wt_count", //0x0a
+		"ipm_tx_count", //0x0b
+		"ipm_wt_count", //0x0c
+		"signal_level", //0x0d
+		"cmd_tx_count", //0x0e
+		"cmd_wt_count", //0x0f
+		"mpred_submv_tx_count", //0x10
+		"mpred_submv_wt_count", //0x11
+		"req_count_total", //0x12
+		"ddr3_count_total", //0x13
+		"ddr4_count_total", //0x14
+		"ddr4_amend_wf_count", //0x15
+		"ddr4_amend_wb_count", //0x16
+		"mpp_ipp_tx_count", //0x17
+		"mpp_ipp_wt_count", //0x18
+		"mc_mcr_tx_count", //0x19
+		"mc_mcr_wt_count", //0x1a
+		"mc_mcr_cmd_tx_count", //0x1b
+		"mc_mcr_cmd_wt_count", //0x1c
+		"mc_dblk_tx_count", //0x1d
+		"mc_dblk_wt_count", //0x1e
+		"mc_tn_tx_count", //0x1f
+		"mc_tn_wt_count", //0x20
+		"idct_pscale_tx_count", //0x21
+		"idct_pscale_wt_count", //0x22
+		"mc_picdc_cmd_tx_count", //0x23
+		"mc_picdc_cmd_wt_count", //0x24
+		"vld_mc_cmd_tx_count", //0x25
+		"vld_mc_cmd_wt_count", //0x26
+		"vld_dblk_cmd_tx_count", //0x27
+		"vld_dblk_cmd_wt_count", //0x28
+		"vld_iqdict_cmd_tx_count", //0x29
+		"vld_iqdict_cmd_wt_count", //0x2a
+		"dblk_extif_tx_count", //0x2b
+		"dblk_extif_wt_count", //0x2c
+		"dblk_picdc_tx_count", //0x2d
+		"dblk_picdc_wt_count", //0x2e
+		"extif_lpf_tx_count", //0x2f
+		"extif_lpf_wt_count", //0x30
+		"lpf_mcr_cmd_tx_count", //0x31
+		"lpf_mcr_cmd_wt_count", //0x32
+		"mcr_lpf_tx_count", //0x33
+		"mcr_lpf_wt_count", //0x34
+		};
+	const char* signal_level_type[32] = {
+		"parser_iqit_valid", //bit 0
+		"iqit_ipp_valid", //bit 1
+		"dblk_ipp_valid", //bit 2
+		"dblk_ow_valid", //bit 3
+		"awvalid_axi_hs_b", //bit 4
+		"wvalid_axi_hs_b", //bit 5
+		"arvalid_axi_hs_b", //bit 6
+		"rvalid_axi_hs_b", //bit 7
+		"dblk_puinfo_valid", //bit 8
+		"dblk_tuinfo_valid", //bit 9
+		"imp_valid_imp", //bit 10
+		"reserve_bit_11", //bit 11
+		"reserve_bit_12", //bit 12
+		"reserve_bit_13", //bit 13
+		"reserve_bit_14", //bit 14
+		"reserve_bit_15", //bit 15
+		"parser_iqit_ready", //bit 16
+		"iqit_ipp_ready", //bit 17
+		"dblk_ipp_ready", //bit 18
+		"dblk_ow_ready", //bit 19
+		"awready_axi_hs_b", //bit 20
+		"wready_axi_hs_b", //bit 21
+		"arready_axi_hs_b", //bit 22
+		"rready_axi_hs_b", //bit 23
+		"dblk_puinfo_ready", //bit 24
+		"dblk_tuinfo_ready", //bit 25
+		"imp_rdy_imp", //bit 26
+		"reserve_bit_27", //bit 27
+		"reserve_bit_28", //bit 28
+		"reserve_bit_29", //bit 29
+		"reserve_bit_30", //bit 30
+		"reserve_bit_31", //bit 31
+		};
+
+	if (is_support_monitor()) {
+		WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disable monitor and set rd_idx to 0
+
+		for (i = 0; i <= 0x34; i ++) {
+			mnt_data = READ_VREG(HEVC_PATH_MONITOR_DATA);
+			pbuf += sprintf(pbuf, "%-24s: mnt_idx:0x%02x : 0x%x\n", mnt_name[i], i, mnt_data);
+			if (i == 0xd) {
+				pbuf += sprintf(pbuf, "---------------signal_level---------------\n");
+				for (j = 0; j < 32; j++) {
+					pbuf += sprintf(pbuf, "%-24s: level_bit_%02d : %d\n",
+						signal_level_type[j], j, (mnt_data & (1 << j)) ? 1 : 0);
+				}
+				pbuf += sprintf(pbuf, "------------------------------------------\n");
+			}
+		}
+		WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0x1); // Enable monitor and set rd_idx to 0
+	} else {
+		pbuf += sprintf(pbuf, "Dump monitor is not supported\n");
+	}
+
+	return pbuf - buf;
+}
+
 static ssize_t dump_decoder_state_show(KV_CLASS_CONST struct class *class,
 			KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
 {
@@ -6805,6 +6925,7 @@ static CLASS_ATTR_RO(vdec_status);
 static CLASS_ATTR_RO(dump_vdec_blocks);
 static CLASS_ATTR_RO(dump_vdec_chunks);
 static CLASS_ATTR_RO(dump_decoder_state);
+static CLASS_ATTR_RO(dump_path_monitor);
 #ifdef VDEC_DEBUG_SUPPORT
 static CLASS_ATTR_RW(debug);
 #endif
@@ -6835,6 +6956,7 @@ static struct attribute *vdec_class_attrs[] = {
 	&class_attr_dump_vdec_blocks.attr,
 	&class_attr_dump_vdec_chunks.attr,
 	&class_attr_dump_decoder_state.attr,
+	&class_attr_dump_path_monitor.attr,
 #ifdef VDEC_DEBUG_SUPPORT
 	&class_attr_debug.attr,
 #endif

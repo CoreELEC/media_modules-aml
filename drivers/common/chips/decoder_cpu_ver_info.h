@@ -198,6 +198,7 @@ struct dos_of_dev_s {
 
 	u32 fmt_support_flags;
 	u32 support_h265_level_idc;
+	bool is_support_monitor;
 };
 
 
@@ -268,6 +269,8 @@ inline bool is_support_p010_mode(void);
 inline bool is_support_triple_write(void);
 
 inline bool is_support_rdma(void);
+
+inline bool is_support_monitor(void);
 
 inline bool is_support_mmu_copy(void);
 
