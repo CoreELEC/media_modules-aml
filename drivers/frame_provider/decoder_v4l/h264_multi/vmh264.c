@@ -1583,6 +1583,10 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	hw->losless_comp_header_size =
 			compute_losless_comp_header_size(width, height);
 
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
+		WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b);
+	}
+
 	WRITE_VREG(HEVCD_IPP_TOP_CNTL, 0x1); /*sw reset ipp10b_top*/
 	WRITE_VREG(HEVCD_IPP_TOP_CNTL, 0x0); /*sw reset ipp10b_top*/
 
