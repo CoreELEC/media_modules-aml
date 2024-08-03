@@ -10512,7 +10512,7 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 #endif
 		hevc->show_frame_num++;
 		vf->index_disp = atomic_read(&hevc->vf_get_count);
-		vf->omx_index = atomic_read(&hevc->vf_get_count);
+		vf->frame_index = atomic_read(&hevc->vf_get_count);
 		atomic_add(1, &hevc->vf_get_count);
 
 		if (kfifo_peek(&hevc->display_q, &next_vf) && next_vf) {
@@ -10999,6 +10999,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 		vf->frame_type = 0;
 		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
+		vf->decoder_instid = v4l2_ctx->id;
 
 		if ((pic->error_mark) && (hevc->PB_skip_mode != 0)) {
 			vf->frame_type |= V4L2_BUF_FLAG_ERROR;

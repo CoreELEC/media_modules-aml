@@ -10617,7 +10617,7 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 #endif
 		hevc->show_frame_num++;
 		vf->index_disp = atomic_read(&hevc->vf_get_count);
-		vf->omx_index = atomic_read(&hevc->vf_get_count);
+		vf->frame_index = atomic_read(&hevc->vf_get_count);
 
 
 		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;

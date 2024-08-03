@@ -5525,7 +5525,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 			if (vf->pts)
 				vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
 
-			vf->omx_index = dec->vf_get_count;
+			vf->frame_index = dec->vf_get_count;
 			dec->vf_get_count++;
 			if (pic) {
 				if (dec->front_back_mode == 1) {

@@ -4395,7 +4395,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 			return NULL;
 		}
 		vf->index_disp = atomic_read(&dec->vf_get_count);
-		vf->omx_index = atomic_read(&dec->vf_get_count);
+		vf->frame_index = atomic_read(&dec->vf_get_count);
 		atomic_add(1, &dec->vf_get_count);
 
 		kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
@@ -4910,6 +4910,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			vf->v4l_mem_handle = dec->m_BUF[pic->BUF_index].v4l_ref_buf_addr;
 			aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 			vf->src_fmt.dv_id = v4l2_ctx->dv_id;
+			vf->decoder_instid = v4l2_ctx->id;
 
 			set_vframe(dec, vf, pic, 0);
 			decoder_do_frame_check(pvdec, vf);

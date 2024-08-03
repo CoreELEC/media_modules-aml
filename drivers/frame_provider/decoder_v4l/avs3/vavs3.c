@@ -1008,6 +1008,7 @@ struct AVS3Decoder_s {
 	u32 mv_buf_size;
 	s32 cur_back_idx;
 	bool mmu_copy_disable;
+    u32 error_handle_policy;
 };
 
 static int  compute_losless_comp_body_size(
@@ -5297,8 +5298,8 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 			if (vf->pts)
 				vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
 
-			vf->omx_index = atomic_read(&dec->vf_get_count);
-			if (pic && (!(pic->error_mark) || !(error_handle_policy & 0x4)))
+			vf->frame_index = atomic_read(&dec->vf_get_count);
+			if (pic && (!(pic->error_mark) || !(dec->error_handle_policy & 0x4)))
 				atomic_add(1, &dec->vf_get_count);
 			else
 				atomic_dec(&dec->vf_pre_count);
@@ -5922,6 +5923,7 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 			vf->v4l_mem_handle = (ulong)aml_buf;
 
 			vf->src_fmt.dv_id = v4l2_ctx->dv_id;
+			vf->decoder_instid = v4l2_ctx->id;
 			set_vframe(dec, vf, pic, 0);
 			if (dec->front_back_mode != 1)
 				decoder_do_frame_check(pvdec, vf);

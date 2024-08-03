@@ -1873,6 +1873,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			= hw->pics[index].v4l_ref_buf_addr;
 		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
+		vf->decoder_instid = v4l2_ctx->id;
 		debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 			"[%d] %s, v4l mem handle: 0x%lx\n",
 			((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,

@@ -9698,7 +9698,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 		if (index < pbi->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			vf->index_disp = atomic_read(&pbi->vf_get_count);
-			vf->omx_index = atomic_read(&pbi->vf_get_count);
+			vf->frame_index = atomic_read(&pbi->vf_get_count);
 			atomic_add(1, &pbi->vf_get_count);
 
 			if (debug & VP9_DEBUG_BUFMGR)
@@ -9990,6 +9990,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		aml_buf = index_to_aml_buf(pbi, pic_config->v4l_buf_index);
 		vf->v4l_mem_handle = (ulong)aml_buf;
 		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
+		vf->decoder_instid = v4l2_ctx->id;
 
 		if (!aml_buf) {
 			kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);

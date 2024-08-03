@@ -110,7 +110,7 @@ static int aml_buf_vpp_dque(struct buf_core_mgr_s *bc, struct buf_core_entry *en
 	int ret = -1;
 
 	vf->index_disp	= bm->frm_cnt;
-	vf->omx_index	= bm->frm_cnt;
+	vf->frame_index	= bm->frm_cnt;
 
 	if (!(vf->type & VIDTYPE_V4L_EOS))
 		bm->frm_cnt++;
@@ -120,8 +120,8 @@ static int aml_buf_vpp_dque(struct buf_core_mgr_s *bc, struct buf_core_entry *en
 	ret = buf_mgr_dq_checkin(bm->vpp_handle, buf->planes[0].dbuf->file);
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, set vf(%px, %d) omx_index:%d , ts:%llu, dbuf:%px, buf idx: %d ret: %d\n",
-		__func__, vf, vf->index, vf->omx_index, vf->timestamp,
+		"%s, set vf(%px, %d) frame_index:%d , ts:%llu, dbuf:%px, buf idx: %d ret: %d\n",
+		__func__, vf, vf->index, vf->frame_index, vf->timestamp,
 		buf->planes[0].dbuf, buf->index, ret);
 
 	return ret;

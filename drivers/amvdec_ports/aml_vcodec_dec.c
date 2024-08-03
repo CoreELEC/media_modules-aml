@@ -376,7 +376,6 @@ static void vidioc_vdec_s_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
 static void vidioc_vdec_g_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
 static int is_vdec_core_fmt(u32 fmt);
 
-
 static ulong aml_vcodec_ctx_lock(struct aml_vcodec_ctx *ctx)
 {
 	ulong flags;
@@ -895,7 +894,7 @@ void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
 	}
 	if (!ctx->enable_di_post) {
 		vf->index_disp = ctx->index_disp;
-		vf->omx_index = vf->index_disp;
+		vf->frame_index = vf->index_disp;
 
 		if (vb2_buf->memory == VB2_MEMORY_DMABUF) {
 			struct dma_buf * dma;
@@ -905,8 +904,8 @@ void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
 				/* only Y will contain vframe */
 				comp_buf_set_vframe(ctx, vb2_buf, vf);
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-					"set vf(%px, %d) omx_index %d , into %dth buf, dbuf %px vf_ext %px\n",
-					vf, vf->index, vf->omx_index, vb2_buf->index, dma, vf->vf_ext);
+					"set vf(%px, %d) frame_index %d , into %dth buf, dbuf %px vf_ext %px\n",
+					vf, vf->index, vf->frame_index, vb2_buf->index, dma, vf->vf_ext);
 			}
 		}
 	}
@@ -955,7 +954,34 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 	return pbuf - buf;
 }
 
- static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
+#ifdef CONFIG_AMLOGIC_MEDIA_PROXY
+void aml_vdec_notify_msg_to_mediaproxy(struct aml_vcodec_ctx *ctx,
+	int type, struct vframe_s *vf)
+{
+	struct aml_video_user_data msg;
+
+	memset(&msg, 0, sizeof(struct aml_video_user_data));
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+		"%s bitstreamid: %llu instid: %u frame_index: %u time: %llu\n",
+		__func__, div64_u64(vf->timestamp, 1000000000),
+		vf->decoder_instid, vf->frame_index,
+		ktime_get_real_ns());
+
+	msg.data.frame_info.bitstreamid = div64_u64(vf->timestamp, 1000000000);
+	msg.data.frame_info.decoder_instid = vf->decoder_instid;
+	msg.data.frame_info.frame_index = vf->frame_index;
+	msg.data.frame_info.time = ktime_get_real_ns();
+	msg.data.frame_info.drop = 0;
+
+	if (type == MEDIA_VIDEO_METRICS_FRAME_DECODED_INFO)
+		msg.message_type = MEDIA_VIDEO_METRICS_FRAME_DECODED_INFO;
+
+	notify_msg_to_mediaproxy(ctx->k_producer_session, 1, &msg);
+}
+#endif
+
+static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
 	struct aml_buf *aml_buf)
 {
 	struct vb2_buffer *vb2_buf = aml_buf->vb;
@@ -1004,6 +1030,9 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 
 	vb2_buf->timestamp = vf->timestamp;
 	dstbuf->vb.flags |= vf->frame_type;
+#ifdef CONFIG_AMLOGIC_MEDIA_PROXY
+	aml_vdec_notify_msg_to_mediaproxy(ctx, MEDIA_VIDEO_METRICS_FRAME_DECODED_INFO, vf);
+#endif
 
 	if ((ctx->picinfo.field == V4L2_FIELD_INTERLACED) && (!ctx->vpp_is_need)) {
 		vb->field = V4L2_FIELD_INTERLACED;

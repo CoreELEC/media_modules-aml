@@ -131,6 +131,14 @@ static int fops_vcodec_open(struct file *file)
 	}
 
 	ctx->type = AML_INST_DECODER;
+
+#ifdef CONFIG_AMLOGIC_MEDIA_PROXY
+	if (!ctx->k_producer_session)
+		media_proxy_produce_init(&ctx->k_producer_session,
+			AML_VCODEC_DEC_NAME,
+			MEDIA_VIDEO_METRICS_FRAME_DECODED_INFO);
+#endif
+
 	ret = aml_vcodec_dec_ctrls_setup(ctx);
 	if (ret) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -201,6 +209,10 @@ err_buffer_manager:
 err_m2m_ctx_init:
 	v4l2_ctrl_handler_free(&ctx->ctrl_hdl);
 err_ctrls_setup:
+#ifdef CONFIG_AMLOGIC_MEDIA_PROXY
+	if (ctx->k_producer_session)
+		media_proxy_produce_deinit(ctx->k_producer_session);
+#endif
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
 	vfree(ctx->meta_infos.meta_bufs);
@@ -225,6 +237,10 @@ static int fops_vcodec_release(struct file *file)
 
 	aml_vcodec_dec_info_deinit(ctx);
 	aml_vcodec_dec_release(ctx);
+#ifdef CONFIG_AMLOGIC_MEDIA_PROXY
+	if (ctx->k_producer_session)
+		media_proxy_produce_deinit(ctx->k_producer_session);
+#endif
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
 	v4l2_ctrl_handler_free(&ctx->ctrl_hdl);

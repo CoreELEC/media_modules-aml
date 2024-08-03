@@ -21,6 +21,7 @@
 #define _AML_VCODEC_DRV_H_
 
 #include <linux/kref.h>
+#include <linux/ktime.h>
 #include <linux/platform_device.h>
 #include <linux/videodev2.h>
 #include <linux/kfifo.h>
@@ -1118,6 +1119,7 @@ struct aml_vcodec_ctx {
 	bool			force_tw_output;
 	bool			is_multiplanar;
 	bool			resolution_event_done;
+	void			*k_producer_session;
 };
 
 /**
@@ -1176,6 +1178,11 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 void aml_thread_stop(struct aml_vcodec_ctx *ctx);
 void aml_vdec_recycle_dec_resource(struct aml_vcodec_ctx * ctx,
 					struct aml_buf *aml_buf);
+#ifdef CONFIG_AMLOGIC_MEDIA_PROXY
+extern int notify_msg_to_mediaproxy(void *handle, int num, void *data);
+extern int media_proxy_produce_deinit(void *handle);
+extern int media_proxy_produce_init(void **handle, char *modulename, u32 msg_type);
+#endif
 /*
  * v4l2_m2m_job_pause() - paused the schedule of data which from the job queue.
  *

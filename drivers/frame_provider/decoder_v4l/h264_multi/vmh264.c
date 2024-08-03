@@ -3294,6 +3294,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		vf->frame_type = 0;
 		vf->duration_pulldown = 0;
 		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
+		vf->decoder_instid = v4l2_ctx->id;
 		if (!(is_iframe(frame)) && hw->unstable_pts) {
 			vf->pts = 0;
 			vf->pts_us64 = 0;
@@ -4972,7 +4973,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 		}
 		hw->last_frame_time = time;
 		vf->index_disp = atomic_read(&hw->vf_get_count);
-		vf->omx_index = atomic_read(&hw->vf_get_count);
+		vf->frame_index = atomic_read(&hw->vf_get_count);
 		atomic_add(1, &hw->vf_get_count);
 		if (kfifo_peek(&hw->display_q, &next_vf) && next_vf) {
 			vf->next_vf_pts_valid = true;
