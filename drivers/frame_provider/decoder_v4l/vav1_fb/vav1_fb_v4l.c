@@ -11724,7 +11724,7 @@ static void run_front(struct vdec_s *vdec)
 			int i;
 			WRITE_VREG(VP9_CONTROL, 0x610000); // set av1 mode
 			for (i = 0; i < 8; i++) {
-				WRITE_VREG(AOM_AV1_SEGMENT_FEATURE, hw->common.cur_frame->segment_feature[i]);
+				WRITE_VREG(AOM_AV1_SEGMENT_FEATURE, hw->pbi->prev_frame->segment_feature[i]);
 			}
 		}
 

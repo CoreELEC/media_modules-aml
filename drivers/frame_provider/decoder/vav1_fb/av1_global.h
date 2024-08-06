@@ -2370,6 +2370,7 @@ typedef struct AV1Decoder {
 	ulong imem_mem_handle;
 	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
 	uint32_t  ins_offset;
+	RefCntBuffer *prev_frame;
 #endif
 } AV1Decoder;
 

@@ -782,6 +782,7 @@ static void swap_frame_buffers(AV1Decoder *pbi, int frame_decoded) {
 	decrease_ref_count(pbi, cm->cur_frame, pool);
 	unlock_buffer_pool(pool, flags);
 	}
+	pbi->prev_frame = cm->cur_frame;
 	cm->cur_frame = NULL;
 
 	if (!pbi->camera_frame_header_ready) {
