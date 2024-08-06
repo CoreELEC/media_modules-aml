@@ -6577,7 +6577,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			force_sliding_margin)))
 			bufmgr_recover(hw);
 		else
-			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 1);
+			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
 
 		if (hw->reset_bufmgr_flag == 1)
 			hw->bufmgr_err_flag = 1;
