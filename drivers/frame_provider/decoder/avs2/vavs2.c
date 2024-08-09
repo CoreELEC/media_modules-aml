@@ -5463,6 +5463,24 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			u32 stream_offset = pic->stream_offset;
 			set_vframe(dec, vf, pic, 0);
 			decoder_do_frame_check(pvdec, vf);
+
+#ifdef AUX_DATA_CRC
+			decoder_do_aux_data_check(pvdec, pic->cuva_data_buf, pic->cuva_data_size, 0/*pic->poc*/);
+#endif
+			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
+					"%s: pic %p stream_offset 0x%x, poc %d, cuva_data_size %d, signal_type:0x%x vf:%p\n",
+					__func__, pic, pic->stream_offset, 0/*pic->poc*/, pic->cuva_data_size, vf->signal_type, vf);
+
+			if (get_dbg_flag(dec) & AVS2_DBG_HDR_INFO) {
+				u32 i;
+				for (i = 0; i < pic->cuva_data_size; i++) {
+					pr_info("%02x ", pic->cuva_data_buf[i]);
+					if (((i + 1) & 0xf) == 0)
+						pr_info("\n");
+				}
+				pr_info("\n");
+			}
+
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(dec->pts_name, vf->pts);
@@ -8564,6 +8582,10 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 				| CORE_MASK_COMBINE);
 	}
 
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_init(pdata);
+#endif
+
 	return 0;
 }
 
@@ -8609,6 +8631,10 @@ static int ammvdec_avs2_remove(struct platform_device *pdev)
 	if (is_rdma_enable())
 		decoder_dma_free_coherent(dec->rdma_mem_handle,
 			RDMA_SIZE, dec->rdma_adr, dec->rdma_phy_adr);
+
+#ifdef AUX_DATA_CRC
+	vdec_aux_data_check_exit(pdata);
+#endif
 
 	vfree((void *)dec);
 	return 0;

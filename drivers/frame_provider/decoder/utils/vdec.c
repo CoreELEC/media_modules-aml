@@ -6937,6 +6937,9 @@ static CLASS_ATTR_RW(vdec_vfm_path);
 static CLASS_ATTR_RW(dump_yuv);
 static CLASS_ATTR_RW(frame_check);
 #endif
+#ifdef AUX_DATA_CRC
+static CLASS_ATTR_RW(aux_check);
+#endif
 static CLASS_ATTR_RO(dump_fps);
 static CLASS_ATTR_RO(profile_idc);
 static CLASS_ATTR_RO(level_idc);
@@ -6967,6 +6970,9 @@ static struct attribute *vdec_class_attrs[] = {
 #ifdef FRAME_CHECK
 	&class_attr_dump_yuv.attr,
 	&class_attr_frame_check.attr,
+#endif
+#ifdef AUX_DATA_CRC
+	&class_attr_aux_check.attr,
 #endif
 	&class_attr_dump_fps.attr,
 	&class_attr_profile_idc.attr,

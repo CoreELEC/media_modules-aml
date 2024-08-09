@@ -79,6 +79,16 @@ static int debug_port_set_crc_dump(struct amvdec_debug_port_t *port, int vdec_id
 	return 0;
 }
 
+static int debug_port_set_aux_dump(struct amvdec_debug_port_t *port, int vdec_id, bool on_off)
+{
+	char cmd_buf[64] = {0};
+
+	snprintf(cmd_buf, sizeof(cmd_buf), "%d %d\n", vdec_id, on_off);
+	aux_check_store(NULL, NULL, cmd_buf, sizeof(cmd_buf));
+
+	return 0;
+}
+
 static int debug_port_set_es_dump(struct amvdec_debug_port_t *port, int vdec_id, int mode)
 {
 
@@ -103,6 +113,9 @@ int debug_port_debug_config(struct amvdec_debug_port_t *port, ulong arg)
 		break;
 	case TYPE_ES:
 		debug_port_set_es_dump(port, param.id, param.mode);
+		break;
+	case TYPE_AUX:
+		debug_port_set_aux_dump(port, param.id, 1);
 		break;
 	default:
 		pr_info("%s, can not find debug port config type\n", __func__);

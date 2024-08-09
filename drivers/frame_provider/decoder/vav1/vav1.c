@@ -7114,7 +7114,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 #ifdef AUX_DATA_CRC
 		decoder_do_aux_data_check(hw_to_vdec(hw), pic_config->aux_data_buf,
-			pic_config->aux_data_size);
+			pic_config->aux_data_size, 0);
 #endif
 
 		av1_print(hw, AV1_DEBUG_SEI_DETAIL,
