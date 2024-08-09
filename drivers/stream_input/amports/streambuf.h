@@ -22,10 +22,12 @@
 #include <linux/amlogic/media/utils/amports_config.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
-#include <linux/../uapi/amlogic/amvdec_ioc.h>
+#include <uapi/amlogic/amvdec_ioc.h>
 #else
 #include <uapi/linux/amlogic/amvdec_ioc.h>
 #endif
+
+#include "../../common/media_utils/media_utils.h"
 
 #define BUF_FLAG_ALLOC          0x01
 #define BUF_FLAG_IN_USE         0x02
@@ -71,10 +73,10 @@ struct stream_buf_ops {
 	int (*init) (struct stream_buf_s *, struct vdec_s *);
 	void (*release) (struct stream_buf_s *);
 	int (*write) (struct stream_buf_s *, const u8 *, u32);
-	u32 (*get_wp) (struct stream_buf_s *);
-	void (*set_wp) (struct stream_buf_s *, u32);
-	u32 (*get_rp) (struct stream_buf_s *);
-	void (*set_rp) (struct stream_buf_s *, u32);
+	dos_addr_t (*get_wp) (struct stream_buf_s *);
+	void (*set_wp) (struct stream_buf_s *, dos_addr_t);
+	dos_addr_t (*get_rp) (struct stream_buf_s *);
+	void (*set_rp) (struct stream_buf_s *, dos_addr_t);
 	void (*reset) (struct stream_buf_s *);
 };
 
@@ -83,7 +85,7 @@ struct stream_buf_s {
 	u8 name[16];
 	s32 flag;
 	u32 type;
-	unsigned long buf_start;
+	dos_addr_t buf_start;
 	struct page *buf_pages;
 	int buf_page_num;
 	u32 buf_size;
@@ -94,8 +96,8 @@ struct stream_buf_s {
 	wait_queue_head_t wq;
 	struct timer_list timer;
 	u32 wcnt;
-	u32 buf_wp;
-	u32 buf_rp;
+	dos_addr_t buf_wp;
+	dos_addr_t buf_rp;
 	u32 max_buffer_delay_ms;
 	u64 last_write_jiffies64;
 	void *write_thread;
@@ -107,7 +109,7 @@ struct stream_buf_s {
 	bool is_hevc;
 	char use_ptsserv;
 	u32 drm_flag;
-	ulong ext_buf_addr;
+	dos_addr_t ext_buf_addr;
 	atomic_t payload;
 	u32 stream_offset;
 	struct parser_args pars;
@@ -172,7 +174,7 @@ struct vdec_s;
 extern void *fetchbuf;
 
 extern u32 stbuf_level(struct stream_buf_s *buf);
-extern u32 stbuf_rp(struct stream_buf_s *buf);
+extern u64 stbuf_rp(struct stream_buf_s *buf);
 extern u32 stbuf_space(struct stream_buf_s *buf);
 extern u32 stbuf_size(struct stream_buf_s *buf);
 extern u32 stbuf_canusesize(struct stream_buf_s *buf);
@@ -183,18 +185,18 @@ extern int stbuf_change_size(struct stream_buf_s *buf, int size,
 				bool is_secure);
 extern int stbuf_fetch_init(void);
 extern void stbuf_fetch_release(void);
-extern u32 stbuf_sub_rp_get(void);
+extern dos_addr_t stbuf_sub_rp_get(void);
 extern void stbuf_sub_rp_set(unsigned int sub_rp);
-extern u32 stbuf_sub_wp_get(void);
-extern u32 stbuf_sub_start_get(void);
+extern dos_addr_t stbuf_sub_wp_get(void);
+extern dos_addr_t stbuf_sub_start_get(void);
 extern u32 stbuf_userdata_start_get(void);
 extern struct stream_buf_s *get_stream_buffer(int id);
 
 extern void stbuf_vdec2_init(struct stream_buf_s *buf);
 
-u32 parser_get_wp(struct stream_buf_s *vb);
-void parser_set_wp(struct stream_buf_s *vb, u32 val);
-u32 parser_get_rp(struct stream_buf_s *vb);
-void parser_set_rp(struct stream_buf_s *vb, u32 val);
+dos_addr_t parser_get_wp(struct stream_buf_s *vb);
+void parser_set_wp(struct stream_buf_s *vb, dos_addr_t val);
+dos_addr_t parser_get_rp(struct stream_buf_s *vb);
+void parser_set_rp(struct stream_buf_s *vb, dos_addr_t val);
 
 #endif /* STREAMBUF_H */

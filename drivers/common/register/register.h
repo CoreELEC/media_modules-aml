@@ -40,14 +40,21 @@ struct bus_reg_desc {
 
 #define READ_VREG(addr) read_dos_reg_comp(addr)
 
+#ifdef CONFIG_ARM64
+#define PREFIX_ADDR_MASK(addr)  (0x300000000UL & addr)
+#define PREFIX_ADDR(addr) (PREFIX_ADDR_MASK(addr) >> 32)
+#else
+#define PREFIX_ADDR_MASK(addr)  (0x0UL)
+#define PREFIX_ADDR(addr) (0UL)
+#endif
 
-int read_dos_reg(ulong addr);
-void write_dos_reg(ulong addr, int val);
-void dos_reg_write_bits(unsigned int reg, u32 val, int start, int len);
-
-int read_dos_reg_comp(ulong addr);
-void write_dos_reg_comp(ulong addr, int val);
-
+/* read/write register */
+u32 dos_reg_compat_convert(u32 addr);
+void write_dos_reg(u32 addr, int val);
+int read_dos_reg(u32 addr);
+int read_dos_reg_comp(u32 addr);
+void write_dos_reg_comp(u32 addr, int val);
+void dos_reg_write_bits(u32 reg, u32 val, int start, int len);
 
 #define WRITE_VREG_BITS(r, val, start, len) dos_reg_write_bits(r, val, start, len)
 #define CLEAR_VREG_MASK(r, mask)   write_dos_reg_comp(r, read_dos_reg_comp(r) & ~(mask))
@@ -69,13 +76,6 @@ void t3_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
 void s5_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
 void s7_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
 void s6_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
-
-ulong dos_reg_compat_convert(ulong addr);
-
-void write_dos_reg(ulong addr, int val);
-
-int read_dos_reg(ulong addr);
-
 
 int dos_register_probe(struct platform_device *pdev, reg_compat_func reg_compat_fn);
 

@@ -238,7 +238,7 @@ static int fc_frame_size_get(struct pic_check_mgr_t *pic,
 static int fc_data_addr_prepare(struct pic_check_mgr_t *mgr,
 	struct vframe_s *vf)
 {
-	unsigned long phy_y_addr, phy_uv_addr;
+	dos_addr_t phy_y_addr, phy_uv_addr;
 	int flush_size = ((mgr->canvas_w * mgr->canvas_h) <<
 		(vf->canvas0_config[0].bit_depth ? 1 : 0));    //p010 flush size
 

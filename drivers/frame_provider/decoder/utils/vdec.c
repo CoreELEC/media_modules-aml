@@ -275,6 +275,13 @@ struct vdec_core_s {
 	u32 hevcb_cnt;
 };
 
+struct prefix_s {
+	u64 stream_prefix;
+	u64 bmmu_prefix;
+	u64 dma_prefix;
+};
+struct prefix_s g_prefix;
+
 static struct vdec_core_s *vdec_core;
 
 vdec_frame_rate_event_func frame_rate_notify = NULL;
@@ -1115,6 +1122,224 @@ static void vdec_enable_DMC(struct vdec_s *vdec)
 	pr_debug("%s input->target= 0x%x\n", __func__, input->target);
 }
 
+static void __inline__ stream_prefix_set(ulong prefix)
+{
+	g_prefix.stream_prefix = prefix;
+}
+
+u64 __inline__ stream_prefix_get(void)
+{
+	return g_prefix.stream_prefix;
+}
+EXPORT_SYMBOL(stream_prefix_get);
+
+void hevc_prefix_config(int dma_prefix, int bmmu_prefix)
+{
+	int prefix;
+	int stream_prefix = PREFIX_ADDR(stream_prefix_get());
+
+	if (!is_support_34bit_mode())
+		return;
+
+	prefix = dma_prefix & 0x3;
+	/*
+	 * HEVC_ASSIST_AXIADDR_PREFIX
+	 * bit[21:20] ipp_intralbuf_axiaddr_prefix
+	 * bit[19:18] awaddr_axi_dma_prefix
+	 * bit[17:16] araddr_axi_dma_prefix
+	 * bit[15:14] awaddr_axi_stream_prefix
+	 * bit[13:12] araddr_axi_stream_prefix
+	 * bit[11:10] awaddr_axi_fb_prefix
+	 * bit[9:8]  araddr_axi_fb_prefix
+	 * bit[7:6]  vcpu_lmem_dma_prefix
+	 * bit[5:4]  vcpu_imem_dma_prefix
+	 * bit[3:2]  fb_wr_mmu_map_addr_prefix
+	 * bit[1:0]	 fb_rd_mmu_map_addr_prefix
+	 */
+	WRITE_VREG(HEVC_ASSIST_AXIADDR_PREFIX,
+					(prefix << 0) |
+					(prefix << 2) |  //vcpu_imem_dma
+					(prefix << 6) |
+					(prefix << 8) |
+					(prefix << 10) |
+					(stream_prefix << 12) |
+					(stream_prefix << 14) |
+					(prefix << 16) |
+					(prefix << 18) |
+					(prefix << 20));
+
+	prefix = bmmu_prefix & 0x3;
+	WRITE_VREG(HEVC_MPRED_CTRL11,
+					(prefix << 0) |
+					(prefix << 2) |
+					(prefix << 4));
+	/*
+	 * HEVC_OW_AXIADDR_PREFIX
+	 * bit[1:0]    nv21
+	 * bit[5:4]    dw_vbh
+	 * bit[9:8]    fgs_table
+	 * bit[13:12]  mmu_dma_baddr  (afbc)
+	 * bit[17:16]  vinfo_addr     (afbc)
+	 * bit[21:20]  header_addr    (afbc)
+	 * bit[25:24]  mmu_dma_baddr  (dw cm)
+	 * bit[29:28]  vinfo_addr     (dw cm)
+	 */
+	WRITE_VREG(HEVC_OW_AXIADDR_PREFIX,
+					(prefix << 0) | //nv21
+					(prefix << 4) |
+					(prefix << 12) |
+					(prefix << 16) |
+					(prefix << 20));
+	WRITE_VREG(HEVC_DBLK_PREFIX,
+					(prefix << 0) |
+					(prefix << 2) |
+					(prefix << 4) |
+					(prefix << 6) |
+					(prefix << 8));
+	WRITE_VREG(HEVCD_IPP_AXIADDR_PREFIX,
+					(prefix << 0) |
+					(prefix << 4) |
+					(prefix << 8));
+}
+EXPORT_SYMBOL(hevc_prefix_config);
+
+void vdec_prefix_config(u32 prefix)
+{
+	int stream_prefix = PREFIX_ADDR(stream_prefix_get());
+
+	if (!is_support_34bit_mode())
+		return;
+
+	prefix &= 0x3;
+	/*
+	 * DOS VDEC AXI ID:
+	 * 0x00: VLD
+	 * 0x04: DCAC
+	 * 0x08: PSC
+	 * 0x0c: PIC_DC
+	 * 0x10: Amrisc IMEM
+	 * 0x14: Amrisc LMEM
+	 * 0x19: CO_MB
+	 * 0x1c: DOubleWrite
+	 * 0x21: PIC_DC2
+	 * 0x24: H264TOP
+	 * 0x28: MC_MBBOT
+	 * 0x2c~0x2f: EXTIF BUF0~BUF3 Write
+	 * 0x30~0x33: EXTIF BUF0~BUF3 Read
+	 */
+	WRITE_VREG(VDEC_AXI34_CONFIG_0,
+					(stream_prefix << 14) | (0x00 << 8));
+	WRITE_VREG(VDEC_AXI34_CONFIG_1,
+					(prefix << 14) | (0x08 << 8) |
+					(prefix <<  6) | (0x04 << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_2,
+					(prefix << 14) | (0x14 << 8) |
+					(prefix <<  6) | (0x0c << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_3,
+					(prefix << 14) | (0x1c << 8) |
+					(prefix <<  6) | (0x19 << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_4,
+					(prefix << 14) | (0x24 << 8) |
+					(prefix <<  6) | (0x21 << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_5,
+					(0 << 14) | (0x10 << 8) |     // IMEM 0x10
+					(prefix <<  6) | (0x28 << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_6,
+					(prefix << 14) | (0x2d << 8) |
+					(prefix <<  6) | (0x2c << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_7,
+					(prefix << 14) | (0x2f << 8) |
+					(prefix <<  6) | (0x2e << 0));
+}
+EXPORT_SYMBOL(vdec_prefix_config);
+
+void vdec_mmu_prefix_config(u32 prefix)
+{
+	int stream_prefix = PREFIX_ADDR(stream_prefix_get());
+
+	if (!is_support_34bit_mode())
+		return;
+
+	prefix &= 0x3;
+	WRITE_VREG(VDEC_AXI34_CONFIG_0,
+					(stream_prefix << 14) | (0x00 << 8));
+	WRITE_VREG(VDEC_AXI34_CONFIG_1,
+					(prefix << 14) | (0x0c << 8) |
+					(prefix <<  6) | (0x04 << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_2,
+					(prefix << 14) | (0x19 << 8) |
+					(prefix <<  6) | (0x14 << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_3,
+					(prefix << 14) | (0x28 << 8) |
+					(prefix <<  6) | (0x24 << 0));
+
+	/*extif*/
+	WRITE_VREG(VDEC_AXI34_CONFIG_4,
+					(prefix << 14) | (0x2d << 8) |
+					(prefix <<  6) | (0x2c << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_5,
+					(prefix << 14) | (0x2f << 8) |
+					(prefix <<  6) | (0x2e << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_6,
+					(prefix << 14) | (0x31 << 8) |
+					(prefix <<  6) | (0x30 << 0));
+	WRITE_VREG(VDEC_AXI34_CONFIG_7,
+					(prefix << 14) | (0x33 << 8) |
+					(prefix <<  6) | (0x32 << 0));
+
+	WRITE_VREG(HEVC_ASSIST_AXIADDR_PREFIX,
+					(prefix << 0) |
+					(prefix << 2) |  //vcpu_imem_dma
+					(prefix << 6) |
+					(prefix << 8) |
+					(prefix << 10) |
+					(stream_prefix << 12) |
+					(stream_prefix << 14) |
+					(prefix << 16) |
+					(prefix << 18) |
+					(prefix << 20));
+	WRITE_VREG(HEVC_MPRED_CTRL11,
+					(prefix << 0) |
+					(prefix << 2) |
+					(prefix << 4));
+	WRITE_VREG(HEVC_OW_AXIADDR_PREFIX,
+					(prefix << 0) | //nv21
+					(prefix << 4) |
+					(prefix << 12) |
+					(prefix << 16) |
+					(prefix << 20));
+	WRITE_VREG(HEVC_DBLK_PREFIX,
+					(prefix << 0) |
+					(prefix << 2) |
+					(prefix << 4) |
+					(prefix << 6) |
+					(prefix << 8));
+	WRITE_VREG(HEVCD_IPP_AXIADDR_PREFIX,
+					(prefix << 0) |
+					(prefix << 4) |
+					(prefix << 8));
+}
+EXPORT_SYMBOL(vdec_mmu_prefix_config);
+
+void stream_prefix_config(u32 prefix, u32 target)
+{
+	if (!is_support_34bit_mode())
+		return;
+
+	prefix &= 0x3;
+	stream_prefix_set((ulong)prefix << 32);
+
+	if (target == VDEC_INPUT_TARGET_VLD) {
+		/* bit[14:15]: high-bits | bit[13:8]: axi_id */
+		SET_VREG_MASK(VDEC_AXI34_CONFIG_0, (prefix << 14) | (0 << 8));
+	} else if (target == VDEC_INPUT_TARGET_HEVC) {
+		SET_VREG_MASK(HEVC_ASSIST_AXIADDR_PREFIX, (prefix << 12) | (prefix << 14));
+	} else {
+		pr_err("[%s]error, invalid target:%d\n",
+				__func__, target);
+	}
+}
+
 #if 0
 static int vdec_get_hw_type(int value)
 {
@@ -1806,7 +2031,7 @@ void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size)
 {
 	u32 rp_set;
 	struct vdec_input_s *input = &vdec->input;
-	u32 rp = 0, wp = 0, level;
+	dos_addr_t rp = 0, wp = 0, level;
 
 	rp = STBUF_READ(&vdec->vbuf, get_rp);
 	wp = STBUF_READ(&vdec->vbuf, get_wp);
@@ -1817,7 +2042,7 @@ void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size)
 		level = wp + vdec->input.size - rp ;
 
 	if (level <= skip_size) {
-		pr_err("skip size is error, buffer level = 0x%x, skip size = 0x%x\n", level, skip_size);
+		pr_err("skip size is error, buffer level = 0x%lx, skip size = 0x%x\n", level, skip_size);
 		return;
 	}
 
@@ -1930,6 +2155,7 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 		}
 
 		block = chunk->block;
+		stream_prefix_config(PREFIX_ADDR(block->start), input->target);
 
 		if (input->target == VDEC_INPUT_TARGET_VLD) {
 			WRITE_VREG(VLD_MEM_VIFIFO_START_PTR, block->start);
@@ -1992,11 +2218,12 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 
 	} else {
 		/* stream based */
-		u32 rp = 0, wp = 0, fifo_len = 0, first_set_rp = 0;
-		int size;
+		dos_addr_t rp = 0, wp = 0, first_set_rp = 0;
+		int fifo_len = 0, size;
 		bool swap_valid = input->swap_valid;
-		unsigned long swap_page_phys = input->swap_page_phys;
+		dos_addr_t swap_page_phys = input->swap_page_phys;
 
+		stream_prefix_config(PREFIX_ADDR(input->start) , input->target);
 		if (vdec_dual(vdec) &&
 			((vdec->flag & VDEC_FLAG_SELF_INPUT_CONTEXT) == 0)) {
 			/* keep using previous input context */
@@ -2146,7 +2373,7 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 		else
 			size = wp + input->size - rp + fifo_len;
 		if (size < 0) {
-			pr_info("%s error: input->size %x wp %x rp %x fifo_len %x => size %x\r\n",
+			pr_info("%s error: input->size %x wp %lx rp %lx fifo_len %x => size %x\r\n",
 				__func__, input->size, wp, rp, fifo_len, size);
 			size = 0;
 		}
@@ -2316,7 +2543,7 @@ void vdec_enable_input(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(vdec_enable_input);
 
-int vdec_set_input_buffer(struct vdec_s *vdec, u32 start, u32 size)
+int vdec_set_input_buffer(struct vdec_s *vdec, dos_addr_t start, u32 size)
 {
 	int r = vdec_input_set_buffer(&vdec->input, start, size);
 
@@ -7654,7 +7881,7 @@ void vdec_set_vld_wp(struct vdec_s *vdec, u32 wp)
 }
 EXPORT_SYMBOL(vdec_set_vld_wp);
 
-void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size)
+void vdec_config_vld_reg(struct vdec_s *vdec, dos_addr_t addr, u32 size)
 {
 	if (vdec_single(vdec)) {
 		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);

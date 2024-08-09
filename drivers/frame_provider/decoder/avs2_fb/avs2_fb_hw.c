@@ -13,7 +13,7 @@
 
 /**/
 #ifdef FOR_S5
-ulong dos_reg_compat_convert(ulong adr);
+u32 dos_reg_compat_convert(u32 adr);
 #endif
 #define print_scratch_error(a)
 //#define MEM_MAP_MODE    0

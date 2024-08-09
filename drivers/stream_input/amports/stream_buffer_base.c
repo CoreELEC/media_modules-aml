@@ -140,8 +140,8 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 
 	if ((stbuf->stream_offset == 0) &&
 		(wp == stbuf->ext_buf_addr) &&
-		(meta->stbuf_pktaddr > stbuf->ext_buf_addr)) {
-		u32 first_ptr;
+		(meta->stbuf_pktaddr > (u32)stbuf->ext_buf_addr)) {
+		dos_addr_t first_ptr;
 		u32 round_down_size = 0;
 
 		/*RP max alignment requirement*/
@@ -154,7 +154,7 @@ void stream_buffer_meta_write(struct stream_buf_s *stbuf,
 			first_ptr = stbuf->ext_buf_addr;
 		else {
 			first_ptr = round_down(meta->stbuf_pktaddr, round_down_size);
-			pr_info("warn: first packet_wp(%x round_down %x) is not stbuf start addr(%lx)\n",
+			pr_info("warn: first packet_wp(%x round_down %lx) is not stbuf start addr(%lx)\n",
 				meta->stbuf_pktaddr, first_ptr, stbuf->ext_buf_addr);
 		}
 

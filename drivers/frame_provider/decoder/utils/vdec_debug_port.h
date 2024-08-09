@@ -50,7 +50,7 @@ struct amvdec_debug_port_t {
 	struct list_head head;
 	struct mutex mlock;
 
-	ulong buf_start;  //phy addr
+	dos_addr_t buf_start;  //phy addr
 	u32 buf_size;
 	char *wp;
 	char *rp;

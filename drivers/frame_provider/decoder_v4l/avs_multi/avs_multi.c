@@ -3083,7 +3083,7 @@ static void check_timer_func(struct timer_list *timer)
 			int r = vdec_sync_input(vdec);
 			dbg_cmd = 0;
 			pr_info(
-				"vdec_sync_input=>0x%x, (lev %x, wp %x rp %x, prp %x, pwp %x)\n",
+				"vdec_sync_input=>0x%x, (lev %x, wp %x rp %x, prp %llx, pwp %llx)\n",
 				r,
 				READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 				READ_VREG(VLD_MEM_VIFIFO_WP),

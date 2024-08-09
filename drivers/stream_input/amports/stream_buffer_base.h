@@ -27,7 +27,7 @@
 	u32 ret = 0;					\
 	if ((s) && (s)->ops)				\
 		ret = (s)->ops->func((s), ##args);	\
-	ret;						\
+	ret | PREFIX_ADDR_MASK(stream_prefix_get());	\
 })
 
 #define STBUF_WRITE(s, func, args...)			\

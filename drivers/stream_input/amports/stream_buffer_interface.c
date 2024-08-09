@@ -68,7 +68,7 @@ static int stream_buffer_init(struct stream_buf_s *stbuf, struct vdec_s *vdec)
 	int ret = 0;
 	u32 flags = CODEC_MM_FLAGS_DMA;
 	bool is_secure = 0;
-	u32 addr = 0;
+	dos_addr_t addr = 0;
 	int pages = 0;
 	u32 size;
 
@@ -276,9 +276,9 @@ err:
 static int rb_push_data(struct stream_buf_s *stbuf, const u8 *in, u32 size)
 {
 	int ret, len;
-	u32 wp = stbuf->buf_wp;
-	u32 sp = (stbuf->buf_wp + size);
-	u32 ep = (stbuf->buf_start + stbuf->buf_size);
+	dos_addr_t wp = stbuf->buf_wp;
+	dos_addr_t sp = (stbuf->buf_wp + size);
+	dos_addr_t ep = (stbuf->buf_start + stbuf->buf_size);
 	struct vdec_s *vdec = container_of(stbuf, struct vdec_s, vbuf);
 
 	len = sp > ep ? ep - wp : size;
@@ -329,12 +329,12 @@ static int stream_buffer_write_inner(struct stream_buf_s *stbuf,
 	return rb_push_data(stbuf, in, size);
 }
 
-static u32 stream_buffer_get_wp(struct stream_buf_s *stbuf)
+static dos_addr_t stream_buffer_get_wp(struct stream_buf_s *stbuf)
 {
 	return stbuf->buf_wp;
 }
 
-static void stream_buffer_set_wp(struct stream_buf_s *stbuf, u32 val)
+static void stream_buffer_set_wp(struct stream_buf_s *stbuf, dos_addr_t val)
 {
 	int len = (val >= stbuf->buf_wp) ? (val - stbuf->buf_wp) :
 		(stbuf->buf_size - stbuf->buf_wp + val);
@@ -345,12 +345,12 @@ static void stream_buffer_set_wp(struct stream_buf_s *stbuf, u32 val)
 	atomic_add(len, &stbuf->payload);
 }
 
-static u32 stream_buffer_get_rp(struct stream_buf_s *stbuf)
+static dos_addr_t stream_buffer_get_rp(struct stream_buf_s *stbuf)
 {
 	return stbuf->buf_rp;
 }
 
-static void stream_buffer_set_rp(struct stream_buf_s *stbuf, u32 val)
+static void stream_buffer_set_rp(struct stream_buf_s *stbuf, dos_addr_t val)
 {
 	int len = (val >= stbuf->buf_rp) ? (val - stbuf->buf_rp) :
 		(stbuf->buf_size - stbuf->buf_rp  + val);

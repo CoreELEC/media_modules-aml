@@ -28,6 +28,7 @@
 #include <media/videobuf2-dma-sg.h>
 
 #include "aml_buf_core.h"
+#include "../common/media_utils/media_utils.h"
 
 #define BUF_FBC_NUM_MAX		(64)
 #define BUF_MAX_PLANES		(3)
@@ -79,7 +80,7 @@ struct aml_buf_config {
  */
 struct aml_buf_plane {
 	struct dma_buf	*dbuf;
-	ulong		addr;
+	dos_addr_t	addr;
 	void		*vaddr;
 	u32		length;
 	u32		bytes_used;
@@ -124,9 +125,9 @@ struct aml_buf_fbc {
 	void		*bmmu_dw;
 	void		*mmu_dw;
 	int		ref;
-	ulong		haddr;
+	dos_addr_t	haddr;
 	u32		hsize;
-	ulong		haddr_dw;
+	dos_addr_t	haddr_dw;
 	u32		hsize_dw;
 	u32		frame_size;
 #ifdef NEW_FB_CODE

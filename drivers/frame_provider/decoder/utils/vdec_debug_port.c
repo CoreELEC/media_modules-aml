@@ -131,7 +131,7 @@ static u32 copy_phys_to_buf(char *to, ulong from, u32 size)
 	u32 map_size = SZ_1M;
 	u32 stride = SZ_1M;
 	u32 res = size;
-	u32 phy = from;
+	dos_addr_t phy = from;
 	u32 total = 0;
 	int retry = 0;
 

@@ -29,9 +29,9 @@ struct vframe_block_list_s {
 	u32 magic;
 	int id;
 	struct list_head list;
-	ulong start;
+	dos_addr_t start;
 	void *start_virt;
-	ulong addr;
+	dos_addr_t addr;
 	bool is_mapped;
 	int type;
 	u32 size;
@@ -97,13 +97,13 @@ struct vdec_input_s {
 	u64 total_wr_count;
 	u64 total_rd_count;
 	u64 streaming_rp;
-	u32 swap_rp;
+	dos_addr_t swap_rp;
 	bool last_swap_slave;
 	int dirty_count;
 	u64 sequence;
-	unsigned start;
+	dos_addr_t start;
 	unsigned size;
-	unsigned long last_wp;
+	dos_addr_t last_wp;
 	int default_block_size;
 	int data_size;
 	int frame_max_size;
@@ -149,7 +149,7 @@ extern void vdec_input_set_type(struct vdec_input_s *input, int type,
 	int target);
 
 /* Set stream buffer information for stream based input */
-extern int vdec_input_set_buffer(struct vdec_input_s *input, u32 start,
+extern int vdec_input_set_buffer(struct vdec_input_s *input, dos_addr_t start,
 	u32 size);
 
 /* Add enqueue video data into decoder's input */

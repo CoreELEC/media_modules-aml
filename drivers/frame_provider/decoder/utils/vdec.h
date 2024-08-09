@@ -46,6 +46,7 @@
 #include "decoder_report.h"
 #include "../../../media_sync/pts_server/pts_server_core.h"
 #include "../../../amvdec_ports/utils/common.h"
+#include "../../../common/media_utils/media_utils.h"
 
 #define NEW_FB_CODE
 #define FB_DEBUG_ON_OLD_CHIP
@@ -433,8 +434,8 @@ struct vdec_s {
 	struct completion inactive_done;
 
 	/* config (temp) */
-	unsigned long mem_start;
-	unsigned long mem_end;
+	dos_addr_t mem_start;
+	dos_addr_t mem_end;
 
 	void *mm_blk_handle;
 
@@ -733,7 +734,7 @@ extern void vdec_enable_input(struct vdec_s *vdec);
 extern void vdec_set_prepare_level(struct vdec_s *vdec, int level);
 
 /* set vdec input */
-extern int vdec_set_input_buffer(struct vdec_s *vdec, u32 start, u32 size);
+extern int vdec_set_input_buffer(struct vdec_s *vdec, ulong start, u32 size);
 
 /* check if decoder can get more input */
 extern bool vdec_has_more_input(struct vdec_s *vdec);
@@ -876,7 +877,7 @@ void vdec_set_profile_level(struct vdec_s *vdec, u32 profile_idc, u32 level_idc)
 extern void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size);
 void vdec_set_vld_wp(struct vdec_s *vdec, u32 wp);
 void vdec_reset_vld_stbuf(struct vdec_s *vdec);
-void vdec_config_vld_reg(struct vdec_s *vdec, u32 addr, u32 size);
+void vdec_config_vld_reg(struct vdec_s *vdec, ulong addr, u32 size);
 
 extern u32 timestamp_avsync_counter_get(void);
 
@@ -961,5 +962,15 @@ void mmu_copy_work(struct mmu_copy_params params);
 void vdec_set_mmu_copy_flag(bool need_copy);
 
 struct firmware_s *fw_firmare_s_creat(int fw_size);
+
+u64 stream_prefix_get(void);
+
+void vdec_prefix_config(u32 prefix);
+
+void vdec_mmu_prefix_config(u32 prefix);
+
+void hevc_prefix_config(int dma_prefix, int bmmu_prefix);
+
+struct device *get_vdec_dev(void);
 
 #endif				/* VDEC_H */

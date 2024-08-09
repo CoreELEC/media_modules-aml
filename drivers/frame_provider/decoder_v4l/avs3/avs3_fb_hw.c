@@ -2,7 +2,7 @@
 #include "../../../common/media_utils/media_utils.h"
 
 #ifdef FOR_S5
-ulong dos_reg_compat_convert(ulong adr);
+u32 dos_reg_compat_convert(u32 adr);
 #endif
 
 /* to do */

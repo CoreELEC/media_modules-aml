@@ -90,8 +90,8 @@ struct pic_check_mgr_t{
 	unsigned int last_size_pic;
 	void *y_vaddr;
 	void *uv_vaddr;
-	ulong y_phyaddr;
-	ulong uv_phyaddr;
+	dos_addr_t y_phyaddr;
+	dos_addr_t uv_phyaddr;
 	int err_crc_block;
 
 	int file_cnt;
@@ -107,7 +107,7 @@ struct pic_check_mgr_t{
 	/* for mjpeg u different addr with v */
 	bool mjpeg_flag;
 	void *extra_v_vaddr;
-	ulong extra_v_phyaddr;
+	dos_addr_t extra_v_phyaddr;
 	int yuvsum;
 	u32 width;
 	u32 height;

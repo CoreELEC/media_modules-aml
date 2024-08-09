@@ -24,6 +24,7 @@
 #include <linux/printk.h>
 #include <linux/fs.h>
 #include <linux/version.h>
+#include "media_utils.h"
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
 ssize_t media_write(struct file *file, const void *buf, size_t count, loff_t *pos)

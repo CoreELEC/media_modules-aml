@@ -19,11 +19,15 @@
  */
 #ifndef _MEDIA_FILE_H_
 #define _MEDIA_FILE_H_
+#include <linux/fs.h>
+
+typedef unsigned long dos_addr_t;
+
 inline void *aml_media_mem_alloc(size_t size, gfp_t flags);
 inline void aml_media_mem_free(const void *addr);
 
-ssize_t media_write(struct file *, const void *, size_t, loff_t *);
-ssize_t media_read(struct file *, void *, size_t, loff_t *);
-struct file *media_open(const char *, int, umode_t);
-int media_close(struct file *, fl_owner_t);
+ssize_t media_write(struct file *file, const void *buf, size_t count, loff_t *pos);
+ssize_t media_write(struct file *file, const void *buf, size_t count, loff_t *pos);
+struct file *media_open(const char *filename, int flags, umode_t mode);
+int media_close(struct file *filp, fl_owner_t id);
 #endif

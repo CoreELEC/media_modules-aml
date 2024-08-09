@@ -541,7 +541,7 @@ int vdec_input_dump_chunks(int id, struct vdec_input_s *input,
 
 
 
-int vdec_input_set_buffer(struct vdec_input_s *input, u32 start, u32 size)
+int vdec_input_set_buffer(struct vdec_input_s *input, dos_addr_t start, u32 size)
 {
 	if (input_frame_based(input))
 		return -EINVAL;

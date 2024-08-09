@@ -370,7 +370,7 @@ static int vdec_mpeg12_probe(unsigned long h_vdec,
 
 	if (ctx->stream_mode) {
 		aml_es_write(ctx, bs->dbuf, bs->addr, size, bs->timestamp);
-		vdec_write_stream_data(adapt_vdec, (u32)bs->addr, size);
+		vdec_write_stream_data(adapt_vdec, bs->addr, size);
 		return 0;
 	}
 
@@ -448,7 +448,7 @@ static int vdec_mpeg12_decode(unsigned long h_vdec,
 
 	if (ctx->stream_mode) {
 		aml_es_write(ctx, bs->dbuf, bs->addr, size, bs->timestamp);
-		vdec_write_stream_data(vdec, (u32)bs->addr, size);
+		vdec_write_stream_data(vdec, bs->addr, size);
 		return size;
 	}
 

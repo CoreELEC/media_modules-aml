@@ -1165,7 +1165,8 @@ static ssize_t amstream_mpts_write(struct file *file, const char *buf,
 static ssize_t amstream_sub_read(struct file *file, char __user *buf,
 					size_t count, loff_t *ppos)
 {
-	u32 sub_rp, sub_wp, sub_start, data_size, res;
+	dos_addr_t sub_rp, sub_wp, sub_start;
+	u32 data_size, res;
 	struct stream_buf_s *s_buf = &bufs[BUF_TYPE_SUBTITLE];
 
 	if (sub_port_inited == 0)
@@ -3829,7 +3830,7 @@ static int show_vbuf_status_cb(struct stream_buf_s *p, char *buf)
 				stbuf_level(p));
 		pbuf += sprintf(pbuf, "\tbuf space:%#x\n",
 				stbuf_space(p));
-		pbuf += sprintf(pbuf, "\tbuf read pointer:%#x\n",
+		pbuf += sprintf(pbuf, "\tbuf read pointer:%#llx\n",
 				stbuf_rp(p));
 	} else
 		pbuf += sprintf(pbuf, "\tbuf no used.\n");
@@ -3896,7 +3897,7 @@ static ssize_t bufs_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST
 				pbuf += sprintf(pbuf, "\tbuf space:%#x\n",
 						stbuf_space(p));
 				pbuf += sprintf(pbuf,
-						"\tbuf read pointer:%#x\n",
+						"\tbuf read pointer:%#llx\n",
 						stbuf_rp(p));
 				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_M6) {
 					/* TODO: mod gate */
@@ -3908,10 +3909,10 @@ static ssize_t bufs_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST
 
 			if (p->type == BUF_TYPE_USERDATA) {
 				pbuf += sprintf(pbuf,
-					"\tbuf write pointer:%#x\n",
+					"\tbuf write pointer:%#lx\n",
 					p->buf_wp);
 				pbuf += sprintf(pbuf,
-					"\tbuf read pointer:%#x\n",
+					"\tbuf read pointer:%#lx\n",
 					p->buf_rp);
 			}
 		} else {
@@ -3928,7 +3929,7 @@ static ssize_t bufs_show(KV_CLASS_CONST struct class *class, KV_CLASS_ATTR_CONST
 				sprintf(pbuf, "\tbuf canusesize:%#x\n",
 						p->canusebuf_size);
 			pbuf +=
-				sprintf(pbuf, "\tbuf start:%#x\n",
+				sprintf(pbuf, "\tbuf start:%#lx\n",
 						stbuf_sub_start_get());
 			pbuf += sprintf(pbuf,
 					"\tbuf write pointer:%#x\n", sub_wp);

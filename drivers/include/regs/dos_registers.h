@@ -1161,6 +1161,8 @@
 #define HEVC_SAO_CTRL6                      0x3624
 #define HEVC_SAO_CTRL7                      0x3625
 #define HEVC_SAO_CTRL8                      0x362c
+#define HEVC_DBLK_PREFIX                    0x3526
+
 //axi_idle_thred=sao_ctrl8[15:0]
 #define HEVC_SAO_CTRL9                      0x362d
 

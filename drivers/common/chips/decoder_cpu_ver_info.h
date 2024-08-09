@@ -195,6 +195,7 @@ struct dos_of_dev_s {
 	bool is_vp9_adapt_prob_hw_mode;
 
 	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
+	bool is_support_34bit;
 
 	u32 fmt_support_flags;
 	u32 support_h265_level_idc;
@@ -287,6 +288,8 @@ inline bool is_mjpeg_endian_rematch(void);
 inline bool is_vcpu_clk_set(void);
 
 inline bool is_vp9_adapt_prob_hw_mode(void);
+
+inline bool is_support_34bit_mode(void);
 
 void pr_dos_infos(void);
 

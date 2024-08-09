@@ -128,7 +128,7 @@ void s7_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
 }
 
 //###############################################################################
-ulong dos_reg_compat_convert(ulong addr)
+u32 dos_reg_compat_convert(u32 addr)
 {
 		s32 reg_compat_offset = 0;
 		struct bus_reg_desc *dos_desc = reg_desc[DOS_BUS];
@@ -141,7 +141,7 @@ ulong dos_reg_compat_convert(ulong addr)
 	}
 EXPORT_SYMBOL(dos_reg_compat_convert);
 
-void write_dos_reg(ulong addr, int val)
+void write_dos_reg(u32 addr, int val)
 {
 	void __iomem * reg_adr;
 	s32 reg_compat_offset = 0;
@@ -152,8 +152,8 @@ void write_dos_reg(ulong addr, int val)
 	addr &= (~NEW_REG_CHECK_MASK);
 
 	if (unlikely((reg_compat_offset + addr) < 0)) {
-		pr_err("write dos reg out of range, name %s, addr %lx, offset %d\n",
-			dos_desc[addr].reg_name, addr, reg_compat_offset);
+		pr_err("write dos reg out of range, addr %x, offset %d\n",
+			addr, reg_compat_offset);
 		return;
 	}
 
@@ -161,11 +161,11 @@ void write_dos_reg(ulong addr, int val)
 
 	if (unlikely(register_debug)) {
 		if (register_debug & CODEC_REG_WRITE_DEBUG) {
-			pr_info("write_reg(%lx, %x)\n", (reg_compat_offset + addr), val);
+			pr_info("write_reg(%x, %x)\n", (reg_compat_offset + addr), val);
 		}
 		if (register_debug & CODEC_REG_MAP_DEBUG) {
-			pr_info("%s %px, name %s, addr %lx, offset %d\n",
-				__func__, reg_adr, dos_desc[addr].reg_name, addr, reg_compat_offset);
+			pr_info("%s %px, addr %x, offset %d\n",
+				__func__, reg_adr, addr, reg_compat_offset);
 		}
 	}
 
@@ -173,7 +173,7 @@ void write_dos_reg(ulong addr, int val)
 }
 EXPORT_SYMBOL(write_dos_reg);
 
-int read_dos_reg(ulong addr)
+int read_dos_reg(u32 addr)
 {
 	void __iomem * reg_adr;
 	int value;
@@ -185,8 +185,8 @@ int read_dos_reg(ulong addr)
 	addr &= (~NEW_REG_CHECK_MASK);
 
 	if (unlikely((reg_compat_offset + addr) < 0)) {
-		pr_err("read dos reg out of range, name %s, addr %lx, offset %d\n",
-			dos_desc[addr].reg_name, addr, reg_compat_offset);
+		pr_err("read dos reg out of range, addr %x, offset %d\n",
+			addr, reg_compat_offset);
 		return -ENXIO;
 	}
 
@@ -196,18 +196,18 @@ int read_dos_reg(ulong addr)
 
 	if (unlikely(register_debug)) {
 		if (register_debug & CODEC_REG_READ_DEBUG) {
-			pr_info("read_reg(%lx) = %x\n", (reg_compat_offset + addr), value);
+			pr_info("read_reg(%x) = %x\n", (reg_compat_offset + addr), value);
 		}
 		if (register_debug & CODEC_REG_MAP_DEBUG) {
-			pr_info("%s %px, name %s, addr %lx, offset %d\n",
-				__func__, reg_adr, dos_desc[addr].reg_name, addr, reg_compat_offset);
+			pr_info("%s %px, addr %x, offset %d\n",
+				__func__, reg_adr, addr, reg_compat_offset);
 		}
 	}
 	return value;
 }
 EXPORT_SYMBOL(read_dos_reg);
 
-int read_dos_reg_comp(ulong addr)
+int read_dos_reg_comp(u32 addr)
 {
 	if (is_support_new_dos_dev())
 		return read_dos_reg(addr);
@@ -216,7 +216,7 @@ int read_dos_reg_comp(ulong addr)
 }
 EXPORT_SYMBOL(read_dos_reg_comp);
 
-void write_dos_reg_comp(ulong addr, int val)
+void write_dos_reg_comp(u32 addr, int val)
 {
 	if (is_support_new_dos_dev())
 		write_dos_reg(addr, val);
@@ -225,8 +225,7 @@ void write_dos_reg_comp(ulong addr, int val)
 }
 EXPORT_SYMBOL(write_dos_reg_comp);
 
-
-void dos_reg_write_bits(unsigned int reg, u32 val, int start, int len)
+void dos_reg_write_bits(u32 reg, u32 val, int start, int len)
 {
 	u32 to_val = read_dos_reg_comp(reg);
 	u32 mask = (((1L << (len)) - 1) << (start));

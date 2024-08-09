@@ -173,7 +173,7 @@ struct aml_v4l2_buf {
 	char meta_data[VDEC_META_DATA_SIZE + 4];
 	void *dma_buf;
 	struct sg_table *out_sgt;
-	ulong addr;
+	dos_addr_t addr;
 };
 
 #define AML_ES_REF_MAX (1024)

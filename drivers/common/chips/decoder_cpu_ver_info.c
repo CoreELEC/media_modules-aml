@@ -497,6 +497,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.hevc_max_resolution = RESOLUTION_4K,
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1_AVS3 | FMT_H266,
 		.support_h265_level_idc = IDC_5_2,
+		.is_support_34bit = true,
 	},
 };
 
@@ -1274,6 +1275,12 @@ inline bool is_vp9_adapt_prob_hw_mode(void)
 	return platform_dos_dev->is_vp9_adapt_prob_hw_mode;
 }
 EXPORT_SYMBOL(is_vp9_adapt_prob_hw_mode);
+
+inline bool is_support_34bit_mode(void)
+{
+	return platform_dos_dev->is_support_34bit;
+}
+EXPORT_SYMBOL(is_support_34bit_mode);
 
 void pr_dos_infos(void)
 {
