@@ -774,16 +774,16 @@ bit [3:2]: valid when bit1 == 0;
 #define LMEM_BUF_SIZE (0x500 * 2)
 
 typedef struct buff_s {
-	u32 buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
-	u32 buf_end;
+	dos_addr_t buf_end;
 } buff_t;
 
 typedef struct BuffInfo_s {
     uint32_t max_width;
     uint32_t max_height;
-    uint32_t start_adr;
-    uint32_t end_adr;
+    dos_addr_t start_adr;
+    dos_addr_t end_adr;
     buff_t ipp;
     buff_t sao_abv;
     buff_t sao_vb;
@@ -1285,97 +1285,97 @@ static int init_buff_spec(struct hevc_state_s *hevc,
 
 	if (hevc && get_dbg_flag2(hevc)) {
 		hevc_print(hevc, 0,
-			"%s workspace (%x %x) size = %x\n", __func__,
+			"%s workspace (%lx %lx) size = %x\n", __func__,
 			buf_spec->start_adr, buf_spec->end_adr,
 			buf_spec->end_adr - buf_spec->start_adr);
 
 		hevc_print(hevc, 0,
-			"ipp.buf_start             :%x\n",
+			"ipp.buf_start             :%lx\n",
 			buf_spec->ipp.buf_start);
 		hevc_print(hevc, 0,
-			"sao_abv.buf_start          :%x\n",
+			"sao_abv.buf_start          :%lx\n",
 			buf_spec->sao_abv.buf_start);
 		hevc_print(hevc, 0,
-			"sao_vb.buf_start          :%x\n",
+			"sao_vb.buf_start          :%lx\n",
 			buf_spec->sao_vb.buf_start);
 		hevc_print(hevc, 0,
-			"short_term_rps.buf_start  :%x\n",
+			"short_term_rps.buf_start  :%lx\n",
 			buf_spec->short_term_rps.buf_start);
 		hevc_print(hevc, 0,
-			"rcs.buf_start  :%x\n",
+			"rcs.buf_start  :%lx\n",
 			buf_spec->rcs.buf_start);
 		hevc_print(hevc, 0,
-			"ref_list.buf_start  :%x\n",
+			"ref_list.buf_start  :%lx\n",
 			buf_spec->ref_list.buf_start);
 		hevc_print(hevc, 0,
-			"sps.buf_start             :%x\n",
+			"sps.buf_start             :%lx\n",
 			buf_spec->sps.buf_start);
 		hevc_print(hevc, 0,
-			"subpics_info.buf_start             :%x\n",
+			"subpics_info.buf_start             :%lx\n",
 			buf_spec->subpics_info.buf_start);
 		hevc_print(hevc, 0,
-			"pps.buf_start             :%x\n",
+			"pps.buf_start             :%lx\n",
 			buf_spec->pps.buf_start);
 		hevc_print(hevc, 0,
-			"apsalf.buf_start             :%x\n",
+			"apsalf.buf_start             :%lx\n",
 			buf_spec->apsalf.buf_start);
 		hevc_print(hevc, 0,
-			"apslmcs.buf_start             :%x\n",
+			"apslmcs.buf_start             :%lx\n",
 			buf_spec->apslmcs.buf_start);
 		hevc_print(hevc, 0,
-			"slice_info.buf_start             :%x\n",
+			"slice_info.buf_start             :%lx\n",
 			buf_spec->slice_info.buf_start);
 		hevc_print(hevc, 0,
-			"coeff_hold.buf_start             :%x\n",
+			"coeff_hold.buf_start             :%lx\n",
 			buf_spec->coeff_hold.buf_start);
 		hevc_print(hevc, 0,
-			"entrop_context.buf_start             :%x\n",
+			"entrop_context.buf_start             :%lx\n",
 			buf_spec->entrop_context.buf_start);
 		hevc_print(hevc, 0,
-			"sbac_top.buf_start             :%x\n",
+			"sbac_top.buf_start             :%lx\n",
 			buf_spec->sbac_top.buf_start);
 		hevc_print(hevc, 0,
-			"sao_up.buf_start          :%x\n",
+			"sao_up.buf_start          :%lx\n",
 			buf_spec->sao_up.buf_start);
 		hevc_print(hevc, 0,
-			"swap_buf.buf_start        :%x\n",
+			"swap_buf.buf_start        :%lx\n",
 			buf_spec->swap_buf.buf_start);
 		hevc_print(hevc, 0,
-			"swap_buf2.buf_start       :%x\n",
+			"swap_buf2.buf_start       :%lx\n",
 			buf_spec->swap_buf2.buf_start);
 		hevc_print(hevc, 0,
-			"scalelut.buf_start        :%x\n",
+			"scalelut.buf_start        :%lx\n",
 			buf_spec->scalelut.buf_start);
 		hevc_print(hevc, 0,
-			"dblk_para.buf_start       :%x\n",
+			"dblk_para.buf_start       :%lx\n",
 			buf_spec->dblk_para.buf_start);
 		hevc_print(hevc, 0,
-			"dblk_data.buf_start       :%x\n",
+			"dblk_data.buf_start       :%lx\n",
 			buf_spec->dblk_data.buf_start);
 		hevc_print(hevc, 0,
-			"dblk_data2.buf_start       :%x\n",
+			"dblk_data2.buf_start       :%lx\n",
 			buf_spec->dblk_data2.buf_start);
 		hevc_print(hevc, 0,
-			"mmu_vbh.buf_start       :%x\n",
+			"mmu_vbh.buf_start       :%lx\n",
 			buf_spec->mmu_vbh.buf_start);
 #ifdef VVC_10B_MMU_DW
 		hevc_print(hevc, 0,
-			"mmu_vbh_dw.buf_start       :%x\n",
+			"mmu_vbh_dw.buf_start       :%lx\n",
 			buf_spec->mmu_vbh_dw.buf_start);
 #endif
 		hevc_print(hevc, 0,
-			"mpred_above.buf_start     :%x\n",
+			"mpred_above.buf_start     :%lx\n",
 			buf_spec->mpred_above.buf_start);
 #ifdef MV_USE_FIXED_BUF
 		hevc_print(hevc, 0,
-			"mpred_mv.buf_start        :%x\n",
+			"mpred_mv.buf_start        :%lx\n",
 			  buf_spec->mpred_mv.buf_start);
 #endif
 		if ((get_dbg_flag2(hevc) & H266_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-			hevc_print(hevc, 0, "rpm.buf_start             :%x\n", buf_spec->rpm.buf_start);
+			hevc_print(hevc, 0, "rpm.buf_start             :%lx\n", buf_spec->rpm.buf_start);
 		}
 		hevc_print(hevc, 0,
-			"lmem.buf_start        :%x\n",
+			"lmem.buf_start        :%lx\n",
 			  buf_spec->lmem.buf_start);
 	}
 	if (hevc && (work_buf_size > 0) && (buf_spec->end_adr - buf_spec->start_adr > work_buf_size)) {
@@ -1388,15 +1388,15 @@ static int init_buff_spec(struct hevc_state_s *hevc,
 
 /*USE_BUF_BLOCK*/
 struct BUF_s {
-	ulong	start_adr;
-	u32	size;
-	u32	luma_size;
-	ulong	header_addr;
-	u32 	header_size;
-	int	used_flag;
-	ulong	v4l_ref_buf_addr;
-	ulong	chroma_addr;
-	u32	chroma_size;
+	dos_addr_t	start_adr;
+	u32		size;
+	u32		luma_size;
+	dos_addr_t	header_addr;
+	u32		header_size;
+	int		used_flag;
+	dos_addr_t	v4l_ref_buf_addr;
+	dos_addr_t	chroma_addr;
+	u32		chroma_size;
 } /*BUF_t */;
 
 #define SEI_MASTER_DISPLAY_COLOR_MASK 0x00000001
@@ -1501,7 +1501,7 @@ struct hevc_state_s {
 	struct device *cma_dev;
 	unsigned char m_ins_flag;
 	unsigned char dolby_enhance_flag;
-	unsigned long buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
 	u32 mv_buf_size;
 	u32 curr_pic_offset;
@@ -1514,11 +1514,12 @@ struct hevc_state_s {
 	void *aux_addr;
 	void *rpm_addr;
 	void *lmem_addr;
-    void *ref_list_buffer_addr;
+	void *ref_list_buffer_addr;
 	dma_addr_t aux_phy_addr;
 	dma_addr_t rpm_phy_addr;
 	dma_addr_t lmem_phy_addr;
-    dma_addr_t ref_list_buffer_phy_addr;
+	dma_addr_t ref_list_buffer_phy_addr;
+	dma_addr_t apsalf_buffer_phy_addr;
 
 	unsigned int use_cma_flag;
 
@@ -1806,6 +1807,19 @@ struct hevc_state_s {
 	u8 process_state;
 	u32 dv_profile;
 } /*hevc_stru_t */;
+
+static void vvc_prefix_config(int dma_prefix, int bmmu_prefix)
+{
+	hevc_prefix_config(dma_prefix, bmmu_prefix);
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6)
+		return;
+
+	/* s6 lpf bug, col_prefix need set 0 */
+	WRITE_VREG(HEVC_MPRED_CTRL11,
+				(bmmu_prefix << 0) |
+				(0 << 2) |
+				(bmmu_prefix << 4));
+}
 
 static int get_dbg_flag(struct hevc_state_s * hevc)
 {
@@ -2347,6 +2361,11 @@ static void uninit_mmu_buffers(struct hevc_state_s *hevc)
 		decoder_bmmu_box_free(hevc->bmmu_box);
 		hevc->bmmu_box = NULL;
 	}
+
+	if (hevc->apsalf_buffer_phy_addr) {
+		codec_mm_free_for_dma("apsalf", hevc->apsalf_buffer_phy_addr);
+		hevc->apsalf_buffer_phy_addr = 0;
+	}
 }
 
 /* return in MB */
@@ -2463,15 +2482,22 @@ static void dealloc_mv_bufs(struct hevc_state_s *hevc)
 static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
 {
 	int ret = 0;
+	int flag = -1;
 	/*get_cma_alloc_ref();*/ /*DEBUG_TMP*/
-	if (decoder_bmmu_box_alloc_buf_phy(hevc->bmmu_box,
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+		flag = CODEC_MM_FLAGS_RESERVED_EXT;
+	if (decoder_bmmu_box_alloc_idx_wait(hevc->bmmu_box,
 		MV_BUFFER_IDX(i),
 		hevc->mv_buf_size,
-		DRIVER_NAME,
-		&hevc->m_mv_BUF[i].start_adr) < 0) {
+		-1,
+		flag,
+		BMMU_ALLOC_FLAGS_WAITCLEAR) < 0) {
 		hevc->m_mv_BUF[i].start_adr = 0;
 		ret = -1;
 	} else {
+		hevc->m_mv_BUF[i].start_adr = decoder_bmmu_box_get_phy_addr(
+			hevc->bmmu_box,
+			MV_BUFFER_IDX(i));
 		hevc->m_mv_BUF[i].size = hevc->mv_buf_size;
 		hevc->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
@@ -4554,6 +4580,10 @@ static void hevc_config_work_space_hw(struct hevc_state_s *hevc)
 	WRITE_VREG(VVC_CONTEXT_BUFF, buf_spec->entrop_context.buf_start);
 	WRITE_VREG(VVC_SBAC_TOP_BUFFER, buf_spec->sbac_top.buf_start);
 	WRITE_VREG(HEVC_SAO_UP, buf_spec->sao_up.buf_start);
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+		WRITE_VREG(HEVC_ASSIST_SCRATCH_19, hevc->apsalf_buffer_phy_addr);
+
 #ifdef VVC_10B_MMU
 	WRITE_VREG(H266_MMU_MAP_BUFFER,
 		((hevc->frame_mmu_map_phy_addr + FRAME_MMU_MAP_ALIGNMENT_SIZE - 1)
@@ -5825,6 +5855,19 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		memset(hevc->frame_dw_mmu_map_addr, 0, get_frame_mmu_map_size());
 	}
 #endif
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+		if (!hevc->apsalf_buffer_phy_addr) {
+			hevc->apsalf_buffer_phy_addr =
+				codec_mm_alloc_for_dma("apsalf",
+					PAGE_ALIGN(cur_buf_info->apsalf.buf_size) / PAGE_SIZE,
+					0,
+					CODEC_MM_FLAGS_RESERVED_EXT);
+			if (!hevc->apsalf_buffer_phy_addr) {
+				pr_err("%s: failed to alloc count_buffer\n", __func__);
+				return -ENOMEM;
+			}
+		}
+	}
 	ret = 0;
 	return ret;
 }
@@ -9226,8 +9269,8 @@ static int check_dirty_data(struct vdec_s *vdec)
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)(vdec->private);
 	struct vdec_input_s *input = &vdec->input;
-	u32 wp, rp, level;
-	u32 rp_set;
+	dos_addr_t wp, rp, level;
+	dos_addr_t rp_set;
 
 	rp = STBUF_READ(&vdec->vbuf, get_rp);
 	wp = hevc->pre_parser_wr_ptr;
@@ -10490,6 +10533,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
+	vvc_prefix_config(PREFIX_ADDR(hevc->lmem_phy_addr),
+			PREFIX_ADDR(hevc->buf_start));
 	if (vh266_hw_ctx_restore(hevc) < 0) {
 		vdec_schedule_work(&hevc->work);
 		return;

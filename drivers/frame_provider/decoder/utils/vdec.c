@@ -1177,6 +1177,12 @@ void hevc_prefix_config(int dma_prefix, int bmmu_prefix)
 					(prefix << 20));
 
 	prefix = bmmu_prefix & 0x3;
+	/*
+	 * HEVC_MPRED_CTRL11
+	 * bit[5:4] abv_prefix
+	 * bit[3:2] col_prefix
+	 * bit[1:0] cm_ptr_prefix
+	 */
 	WRITE_VREG(HEVC_MPRED_CTRL11,
 					(prefix << 0) |
 					(prefix << 2) |

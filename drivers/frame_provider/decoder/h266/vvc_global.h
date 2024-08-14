@@ -61,13 +61,13 @@ typedef struct PIC_s {
     int new_picture;
     uint32_t mmu_alloc_flag;
     uint32_t lcu_size_log2;
-    uint32_t header_adr;
-    uint32_t header_dw_adr;
-    uint32_t mc_y_adr;
-    uint32_t mc_u_v_adr;
-    uint32_t mc_canvas_y;
-    uint32_t mc_canvas_u_v;
-    uint32_t mpred_mv_wr_start_addr;
+    dos_addr_t header_adr;
+    dos_addr_t header_dw_adr;
+    dos_addr_t mc_y_adr;
+    dos_addr_t mc_u_v_adr;
+    dos_addr_t mc_canvas_y;
+    dos_addr_t mc_canvas_u_v;
+    dos_addr_t mpred_mv_wr_start_addr;
     u8 bg_flag;
     uint32_t refered_by_others;
     uint32_t is_output;
@@ -124,8 +124,8 @@ typedef struct PIC_s {
 
 #ifdef SUPPORT_10BIT
     /*unsigned int comp_body_size;*/
-    unsigned int dw_y_adr;
-    unsigned int dw_u_v_adr;
+    dos_addr_t dw_y_adr;
+    dos_addr_t dw_u_v_adr;
 #endif
 #ifdef USE_NV21_EXTRA_BUF
     unsigned int ext_y_adr;     //mc_y_4bit_adr
