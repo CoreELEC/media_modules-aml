@@ -4001,6 +4001,78 @@ long mediasync_ins_ext_ctrls_ioctrl(MediaSyncManager* pSyncManage, ulong arg, un
 			}
 			break;
 		}
+		case SET_INNER_EXT_CONTROL:
+		{
+			mediasync_inner_ctl_ext mediasyncCtlExtInnerSet;
+			if (is_compat_ptr == 1) {
+		#ifdef CONFIG_COMPAT
+				mediasyncUserControl.ptr = (ulong)compat_ptr(mediasyncUserControl.ptr);
+		#endif
+			}
+
+			if (mediasyncUserControl.size
+				== sizeof(mediasync_inner_ctl_ext)
+				&& mediasyncUserControl.ptr) {
+				memset(&mediasyncCtlExtInnerSet, 0, sizeof(mediasync_inner_ctl_ext));
+				if (copy_from_user((void *)&mediasyncCtlExtInnerSet,
+						(void *)mediasyncUserControl.ptr,
+						sizeof(mediasync_inner_ctl_ext))) {
+					mediasync_pr_info(0,pInstance->mSyncIndex," SET_INNER_EXT_CONTROL copy_from_user copy fail\n");
+					return -EFAULT;
+				}
+
+				//mediasync_pr_info(0,pInstance->mSyncIndex," mediasyncCtlExtInnerSet set value %lld pInstance value %lld status 0x%x\n" ,
+					//mediasyncCtlExtInnerSet.resumePtsValue64, pInstance->mMediasyncCtlExt.resumePtsValue64, mediasyncCtlExtInnerSet.status);
+				pInstance->mMediasyncCtlExt.status |= mediasyncCtlExtInnerSet.status;
+				if ((pInstance->mMediasyncCtlExt.status & MEDIASYNC_STATUS_VIDEO_DONE)
+					&& (pInstance->mMediasyncCtlExt.status & MEDIASYNC_STATUS_AUDIO_DONE)
+					&& (mediasyncCtlExtInnerSet.resumePtsValue64 == -1)) {
+					memset(&pInstance->mMediasyncCtlExt, 0, sizeof(mediasync_inner_ctl_ext));
+					pInstance->mMediasyncCtlExt.resumePtsValue64 = -1;
+					mediasync_pr_info(0,pInstance->mSyncIndex," pInstance->mResumePlayingCtl.value64 set -1\n" );
+				}
+				else if ((mediasyncCtlExtInnerSet.status & MEDIASYNC_STATUS_VIDEO_INIT)
+						&& (mediasyncCtlExtInnerSet.status & MEDIASYNC_STATUS_AUDIO_INIT)) {
+					pInstance->mMediasyncCtlExt.resumePtsValue64 = mediasyncCtlExtInnerSet.resumePtsValue64;
+					mediasync_pr_info(0,pInstance->mSyncIndex," pInstance->mResumePlayingCtl.value64 set %lld\n" ,pInstance->mMediasyncCtlExt.resumePtsValue64);
+				}
+			}
+			ret = 0;
+			break;
+		}
+		case GET_INNER_EXT_CONTROL:
+		{
+			mediasync_inner_ctl_ext * mediasyncCtlExtInnerGetP = NULL;
+
+			minSize = sizeof(mediasync_inner_ctl_ext);
+			mediasyncCtlExtInnerGetP = &pInstance->mMediasyncCtlExt;
+
+			if (minSize > mediasyncUserControl.size)
+				minSize = mediasyncUserControl.size;
+			if (is_compat_ptr == 1) {
+		#ifdef CONFIG_COMPAT
+				ptr = (ulong)compat_ptr(mediasyncUserControl.ptr);
+		#else
+				ptr = mediasyncUserControl.ptr;
+		#endif
+			} else {
+				ptr = mediasyncUserControl.ptr;
+			}
+			if (copy_to_user((void *)ptr,(void*)mediasyncCtlExtInnerGetP,minSize)) {
+				mediasync_pr_info(0,pInstance->mSyncIndex,"copy_to_user ptr -EFAULT \n");
+				ret = -EFAULT;
+				break;
+			}
+
+			mediasyncUserControl.size = minSize;
+			if (copy_to_user((void *)arg,&mediasyncUserControl,sizeof(mediasyncControl))) {
+				mediasync_pr_info(0,pInstance->mSyncIndex,"copy_to_user arg -EFAULT \n");
+				ret = -EFAULT;
+				break;
+			}
+			ret = 0;
+			break;
+		}
 		default:
 			break;
 	}

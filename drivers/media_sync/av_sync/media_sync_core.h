@@ -101,18 +101,35 @@ typedef enum {
     VIDEO_TRICK_MODE_IONLY = 3          // Decoding and Out I frame only
 } mediasync_video_trick_mode;
 
+#define MEDIASYNC_STATUS_VIDEO_NONE               0x0001
+#define MEDIASYNC_STATUS_VIDEO_INIT               0x0002
+#define MEDIASYNC_STATUS_VIDEO_PROCESSING         0x0004
+#define MEDIASYNC_STATUS_VIDEO_DONE               0x0008
+#define MEDIASYNC_STATUS_AUDIO_NONE               0x0010
+#define MEDIASYNC_STATUS_AUDIO_INIT               0x0020
+#define MEDIASYNC_STATUS_AUDIO_PROCESSING         0x0040
+#define MEDIASYNC_STATUS_AUDIO_DONE               0x0080
+
+typedef struct inner_ctl_ext {
+	int64_t resumePtsValue64;
+	uint32_t status;
+	int64_t reserved[4];
+} mediasync_inner_ctl_ext;
+
 typedef enum {
 	GET_UPDATE_INFO = 0,
 	GET_SLOW_SYNC_ENABLE,
 	GET_TRICK_MODE,
 	GET_AUDIO_WORK_MODE,
 	GET_START_STRATEGY,
+	GET_INNER_EXT_CONTROL,
 	SET_VIDEO_FRAME_ADVANCE = 500,
 	SET_SLOW_SYNC_ENABLE,
 	SET_TRICK_MODE,
 	SET_FREE_RUN_TYPE,
 	SET_VIDEO_HOLD,
 	SET_START_STRATEGY,
+	SET_INNER_EXT_CONTROL,
 } mediasync_control_cmd;
 
 typedef struct m_control {
@@ -348,6 +365,7 @@ typedef struct instance{
 	mediasync_audio_switch mAudioSwitch;
 	mediasync_frameinfo mRcordPcr[RECORD_PCR_NUM];
 	u32 mRcordPcrCount;
+	mediasync_inner_ctl_ext mMediasyncCtlExt;
 }mediasync_ins;
 
 typedef struct Media_Sync_Manage {
