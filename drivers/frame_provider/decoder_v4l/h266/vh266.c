@@ -7926,6 +7926,13 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			if (v4l2_ctx->is_stream_off) {
 				vh266_vf_put(vh266_vf_get(vdec), vdec);
 			} else {
+				if ((v4l2_ctx->no_fbc_output &&
+					(v4l2_ctx->picinfo.bitdepth != 0 &&
+					 v4l2_ctx->picinfo.bitdepth != 8)) ||
+					 v4l2_ctx->enable_di_post)
+				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+						aml_buf, vf);
+				aml_buf_set_vframe(aml_buf, vf);
 				aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 			}
 		} else

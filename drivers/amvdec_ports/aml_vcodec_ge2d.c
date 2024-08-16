@@ -305,6 +305,7 @@ static int v4l_ge2d_fill_output_done(struct aml_v4l2_ge2d_buf *buf)
 
 	vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_4, aml_buf->index);
 
+	aml_buf_set_vframe(aml_buf, buf->vf);
 	aml_buf_done(&ge2d->ctx->bm, aml_buf, BUF_USER_GE2D);
 
 	ge2d->out_num[OUTPUT_PORT]++;
@@ -934,6 +935,11 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 
 	if (vf->type & VIDTYPE_V4L_EOS)
 		in_buf->flag |= GE2D_FLAG_EOS;
+
+	if (ge2d->ctx->enable_di_post) {
+		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
+			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+	}
 
 	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
 		"ge2d_push_vframe: vf:%px, idx:%d, type:%x, ts:%lld\n",
