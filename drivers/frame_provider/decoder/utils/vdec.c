@@ -1327,7 +1327,7 @@ void stream_prefix_config(u32 prefix, u32 target)
 		return;
 
 	prefix &= 0x3;
-	stream_prefix_set((ulong)prefix << 32);
+	stream_prefix_set((u64)prefix << 32);
 
 	if (target == VDEC_INPUT_TARGET_VLD) {
 		/* bit[14:15]: high-bits | bit[13:8]: axi_id */

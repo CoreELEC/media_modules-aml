@@ -2819,8 +2819,8 @@ static void check_timer_func(struct timer_list *timer)
 				READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 				READ_VREG(VLD_MEM_VIFIFO_WP),
 				READ_VREG(VLD_MEM_VIFIFO_RP),
-				STBUF_READ(&vdec->vbuf, get_rp),
-				STBUF_READ(&vdec->vbuf, get_wp));
+				(u64)STBUF_READ(&vdec->vbuf, get_rp),
+				(u64)STBUF_READ(&vdec->vbuf, get_wp));
 		}
 	}
 
