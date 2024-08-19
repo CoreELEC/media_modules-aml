@@ -553,13 +553,7 @@ void av1_upscale_frame_init_be(struct AV1HW_s *hw)
 	WRITE_BACK_8(hw, HEVC_DBLK_UPS3, pic->x0_qn_chroma);       // x0_qn c
 	WRITE_BACK_16(hw, HEVC_DBLK_UPS4, 0, pic->x_step_qn_luma);     // x_step y
 	WRITE_BACK_16(hw, HEVC_DBLK_UPS5, 0, pic->x_step_qn_chroma);   // x_step c
-	WRITE_BACK_32(hw, HEVC_DBLK_UPS1_DBE1, buf_spec->ups_data.buf_start); // ups_temp_address start
-	WRITE_BACK_8(hw, HEVC_DBLK_UPS2_DBE1, pic->x0_qn_luma);         // x0_qn y
-	WRITE_BACK_8(hw, HEVC_DBLK_UPS3_DBE1, pic->x0_qn_chroma);       // x0_qn c
-	WRITE_BACK_16(hw, HEVC_DBLK_UPS4_DBE1, 0, pic->x_step_qn_luma);     // x_step y
-	WRITE_BACK_16(hw, HEVC_DBLK_UPS5_DBE1, 0, pic->x_step_qn_chroma);   // x_step c
 }
-
 #endif
 
 static void print_loopbufs_ptr(char* mark, buff_ptr_t* ptr)
@@ -2774,7 +2768,7 @@ loop_filter_info_n *lfi, struct loopfilter *lf, int32_t pic_width)
 	WRITE_BACK_32(hw, HEVC_DBLK_DBLK0, lf->filter_level[0] | lf->filter_level[1]<<6 | lf->filter_level_u<<12 | lf->filter_level_v<<18);
 #endif
 	for (i =0; i < 10; i++) WRITE_BACK_8(hw, HEVC_DBLK_DBLK1, ((i<2) ? lf->mode_deltas[i&1] : lf->ref_deltas[(i-2)&7]));
-	for (i =0; i < 8; i++) WRITE_BACK_32(hw, HEVC_DBLK_DBLK2, (uint32_t)(seg->seg_lf_info_y[i]) | (uint32_t)(seg->seg_lf_info_c[i]<<16));
+	for (i =0; i < 8; i++) WRITE_BACK_16(hw, HEVC_DBLK_DBLK2, 0, (uint32_t)(seg->seg_lf_info_y[i]) | (uint32_t)(seg->seg_lf_info_c[i]<<16));
 
 	// Set P_HEVC_DBLK_CFGB again
 	//lpf_data32 = READ_VREG(HEVC_DBLK_CFGB);
