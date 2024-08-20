@@ -473,7 +473,7 @@ static void vc1_set_rp(void) {
 
 	spin_lock_irqsave(&vc1_rp_lock, flags);
 	STBUF_WRITE(&vdec->vbuf, set_rp,
-		READ_VREG(VLD_MEM_VIFIFO_RP));
+		(u32)READ_VREG(VLD_MEM_VIFIFO_RP));
 	spin_unlock_irqrestore(&vc1_rp_lock, flags);
 }
 
@@ -1294,6 +1294,10 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
 		decoder_do_frame_check(vdec, vf);
+		vc1_print(0, VC1_DEBUG_DETAIL,
+			"%s [%d]: display_q index %d, pts 0x%x/0x%x, type 0x%x, w %d, h %d\n",
+			__func__, __LINE__,
+			vf->index, vf->pts, vf->pts_us64, vf->type, vf->width, vf->height);
 		kfifo_put(&display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
@@ -1378,7 +1382,10 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			vdec_stream_based(vdec)) {
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
-
+		vc1_print(0, VC1_DEBUG_DETAIL,
+			"%s [%d]: display_q index %d, pts 0x%x/0x%x, type 0x%x, w %d, h %d\n",
+			__func__, __LINE__,
+			vf->index, vf->pts, vf->pts_us64, vf->type, vf->width, vf->height);
 		kfifo_put(&display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 		if (ctx->is_stream_off) {
@@ -1505,15 +1512,19 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
 		decoder_do_frame_check(vdec, vf);
-		vc1_print(0, VC1_DEBUG_DETAIL, "%s: display_q index %d, pts 0x%x/0x%x\n", __func__, vf->index, vf->pts, vf->pts_us64);
-		if (ctx->enable_di_post)
-			ctx->fbc_transcode_and_set_vf(ctx, aml_buf, vf);
+		vc1_print(0, VC1_DEBUG_DETAIL,
+			"%s [%d]: display_q index %d, pts 0x%x/0x%x, type 0x%x, w %d, h %d\n",
+			__func__, __LINE__,
+			vf->index, vf->pts, vf->pts_us64, vf->type, vf->width, vf->height);
 		kfifo_put(&display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
 		if (ctx->is_stream_off) {
 			vvc1_vf_put(vvc1_vf_get(vdec), vdec);
 		} else {
+			if (ctx->enable_di_post)
+				ctx->fbc_transcode_and_set_vf(ctx, aml_buf, vf);
+			aml_buf_set_vframe(aml_buf, vf);
 			aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 		}
 	}

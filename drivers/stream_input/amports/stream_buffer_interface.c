@@ -214,9 +214,9 @@ static int get_free_space(struct stream_buf_s *stbuf)
 	else if (stbuf->buf_wp < stbuf->buf_rp)
 		idle = stbuf->buf_rp - stbuf->buf_wp;
 
-	/*pr_info("[%d]: wp: %x, rp: %x, payload: %d, free space: %d\n",
-		stbuf->id, stbuf->buf_wp, stbuf->buf_rp,
-		atomic_read(&stbuf->payload), idle); */
+	/*pr_info("[%d]: wp: %lx, rp: %lx, size: %d, payload: %d, free space: %d\n",
+		stbuf->id, stbuf->buf_wp, stbuf->buf_rp, len,
+		atomic_read(&stbuf->payload), idle);*/
 
 	return idle;
 }

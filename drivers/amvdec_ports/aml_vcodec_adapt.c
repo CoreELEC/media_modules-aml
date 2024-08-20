@@ -739,6 +739,7 @@ void vdec_write_stream_data_inner(struct aml_vdec_adapt *ada_ctx, char *addr,
 {
 	bool stbuf_around = false;
 	u32 around_size;
+	int ret = 0;
 
 	// calculate whether the remaining space is enougth
 	if (!ada_ctx->vdec) {
@@ -754,19 +755,19 @@ void vdec_write_stream_data_inner(struct aml_vdec_adapt *ada_ctx, char *addr,
 
 	// if not enougth, write two times
 	if (!stbuf_around)
-		stream_buffer_write_vc1(ada_ctx->filp, &ada_ctx->vdec->vbuf,
+		ret += stream_buffer_write_vc1(ada_ctx->filp, &ada_ctx->vdec->vbuf,
 			addr, size);
 	else {
-		stream_buffer_write_vc1(ada_ctx->filp, &ada_ctx->vdec->vbuf,
+		ret += stream_buffer_write_vc1(ada_ctx->filp, &ada_ctx->vdec->vbuf,
 			addr, size - around_size);
 
-		stream_buffer_write_vc1(ada_ctx->filp, &ada_ctx->vdec->vbuf,
+		ret += stream_buffer_write_vc1(ada_ctx->filp, &ada_ctx->vdec->vbuf,
 			addr + size - around_size, around_size);
 	}
 
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
-		"VC1 input: es(add data size %d) -> stbuf(addr 0x%lx wp 0x%x) timestamp: %llu\n",
-		size, ada_ctx->vdec->vbuf.buf_start, ada_ctx->vdec->vbuf.buf_wp, timestamp);
+		"VC1 input: es(add data size %d) -> stbuf(addr 0x%lx wp 0x%lx) timestamp: %llu ret:%d\n",
+		size, ada_ctx->vdec->vbuf.buf_start, ada_ctx->vdec->vbuf.buf_wp, timestamp, ret);
 }
 
 #if 0
