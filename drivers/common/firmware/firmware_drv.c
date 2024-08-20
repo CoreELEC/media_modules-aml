@@ -97,8 +97,14 @@ static u32 debug;
 static u32 detail;
 static bool new_package = false;
 
+static bool dos_tee_enabled = true;
+module_param(dos_tee_enabled, bool, 0664);
+
 bool fw_tee_enabled(void)
 {
+	if (!dos_tee_enabled)
+		return false;
+
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)
 		return false;
 

@@ -4026,7 +4026,8 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 		WRITE_VREG(HEVCD_IPP_DYN_CACHE,0x2b);//enable new mcrcc
 	}
 #endif
-	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6) {
+	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_S6) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X)) {
 		/*Send parser_cmd*/
 		WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
 		for (i = 0; i < PARSER_CMD_NUMBER; i++)

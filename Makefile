@@ -2,6 +2,7 @@ mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 MEDIA_MODULE_PATH := $(dir $(mkfile_path))
 VERSION_CONTROL_CFLAGS := $(shell ${MEDIA_MODULE_PATH}/version_control.sh)
 
+PRODUCT_FULL_DIR ?= ${MAIN_FOLDER}/${PROJECT_CONFIG_DIR}
 ifeq (${wildcard ${PRODUCT_FULL_DIR}/media_modules.build.config.trunk.mk},)
 ${info "media_modules use default config"}
 CONFIGS := CONFIG_AMLOGIC_MEDIA_VDEC_MPEG2_MULTI=m \

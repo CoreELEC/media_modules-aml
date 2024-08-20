@@ -414,8 +414,15 @@ static s32 aml_loadmc_vdec(const u32 *p, int id)
 	timeout = jiffies + HZ;
 
 	WRITE_VREG(IMEM_DMA_ADR, mc_addr_map);
+
 	WRITE_VREG(IMEM_DMA_COUNT, 0x1000);
-	WRITE_VREG(IMEM_DMA_CTRL, (0x8000 | (7 << 16)));
+
+	if (is_vdec_hevc_combine()) {
+		/* t6d */
+		WRITE_VREG(IMEM_DMA_CTRL, (0x8000 | (0xf << 16)));
+	} else {
+		WRITE_VREG(IMEM_DMA_CTRL, (0x8000 | (7 << 16)));
+	}
 
 	while (READ_VREG(IMEM_DMA_CTRL) & 0x8000) {
 		if (time_before(jiffies, timeout))
@@ -470,8 +477,14 @@ static s32 amvdec_loadmc(const u32 *p)
 	timeout = jiffies + HZ;
 
 	WRITE_VREG(IMEM_DMA_ADR, mc_addr_map);
+
 	WRITE_VREG(IMEM_DMA_COUNT, 0x1000);
-	WRITE_VREG(IMEM_DMA_CTRL, (0x8000 | (7 << 16)));
+
+	if (is_vdec_hevc_combine()) {
+		WRITE_VREG(IMEM_DMA_CTRL, (0x8000 | (0xf << 16)));
+	} else {
+		WRITE_VREG(IMEM_DMA_CTRL, (0x8000 | (7 << 16)));
+	}
 
 	while (READ_VREG(IMEM_DMA_CTRL) & 0x8000) {
 		if (time_before(jiffies, timeout))
@@ -633,7 +646,10 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 			format = VIDEO_DEC_H264_MULTI;
 		else if (!strcmp(name, "mh264_mmu")) {
 			format = VIDEO_DEC_H264_MULTI_MMU;
-			vdec = OPTEE_VDEC_HEVC;
+			if (is_vdec_hevc_combine())
+				vdec = OPTEE_VDEC_LEGENCY;
+			else
+				vdec = OPTEE_VDEC_HEVC;
 		} else
 			format = VIDEO_DEC_H264;
 		break;
@@ -874,7 +890,8 @@ static s32 amhevc_loadmc(const u32 *p)
 			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
 			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6))
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) ||
+			is_vdec_hevc_combine())
 			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0xf << 16)));
 		else
 			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0x7 << 16)));
@@ -1025,6 +1042,7 @@ void amvdec_start(void)
 		READ_RESET_REG(RESET0_REGISTER);
 	}
 	/* #endif */
+
 	WRITE_VREG(MPSR, 0x0001);
 }
 EXPORT_SYMBOL(amvdec_start);
@@ -1106,7 +1124,7 @@ void amvdec_stop(void)
 			pr_err("%s, ctrl %x, rsp %x, pc %x status %x,%x\n", __func__,
 				READ_VREG(LMEM_DMA_CTRL),
 				READ_VREG(WRRSP_LMEM),
-				READ_VREG(0x308),
+				READ_VREG(MPC_E),
 				READ_VREG(AV_SCRATCH_J),
 				READ_VREG(AV_SCRATCH_9));
 			break;
@@ -1136,6 +1154,10 @@ void amvdec_stop(void)
 		READ_RESET_REG(RESET0_REGISTER);
 	}
 	/* #endif */
+
+	if (is_vdec_hevc_combine() && is_vcpu_clk_set()) {
+		CLEAR_VREG_MASK(DOS_GCLK_EN3, (1 << 2)); //turn off vcpu clock
+	}
 
 #ifdef CONFIG_WAKELOCK
 	amvdec_wake_unlock();
@@ -1198,7 +1220,7 @@ void amhevc_stop(void)
 				pr_err("%s, ctrl %x, rsp %x, pc %x status %x\n", __func__,
 					READ_VREG(HEVC_LMEM_DMA_CTRL),
 					READ_VREG(HEVC_WRRSP_LMEM),
-					READ_VREG(0x3308),
+					READ_VREG(HEVC_MPC_E),
 					READ_VREG(HEVC_ASSIST_SCRATCH_0));
 				break;
 			}

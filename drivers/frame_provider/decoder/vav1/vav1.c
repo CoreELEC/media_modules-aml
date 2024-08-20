@@ -4720,7 +4720,7 @@ void av1_loop_filter_init(loop_filter_info_n *lfi, struct loopfilter *lf) {
 		"[DBLK DEBUG] CFGB : 0x%x\n", data32);
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)) {
+		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6)) {
 		// if Single CORE, uses line buffer store mode 1 (tile based)
 		uint32_t lpf_data32 = READ_VREG(HEVC_DBLK_CFG0);
 		lpf_data32 |= (0x1 << 18); // line buffer storage mode, 0:ctu width based, 1:tile width based
@@ -5718,7 +5718,7 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 		WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
 		WRITE_VREG(HEVC_DECODE_PIC_NUM_REG, 0x7fffffff); /*to remove*/
 #endif
-		if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6) ||
+		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_S6) &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X)) {
 			/*Send parser_cmd*/
 			WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
@@ -9250,7 +9250,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			if (/*hw->vf_pre_count == 0 ||*/ hw->low_latency_flag)
 				av1_postproc(hw);
 
-			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
 				u32 i;
 				hw->av1_dec_info[0] = READ_VREG(AV1_DEC_INFO);
 				hw->av1_dec_info[1] = READ_VREG(AV1_DEC_INFO_2);
@@ -10110,7 +10110,7 @@ static void vav1_prot_init(struct AV1HW_s *hw, u32 mask)
 #ifdef DYN_CACHE
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)) {
+		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6)) {
 		WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b);//enable new mcrcc
 	}
 #endif
@@ -11020,7 +11020,7 @@ static int av1_hw_ctx_restore(struct AV1HW_s *hw)
 
 	vav1_prot_init(hw, HW_MASK_FRONT | HW_MASK_BACK);
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
 		WRITE_VREG(VP9_CONTROL, READ_VREG(VP9_CONTROL) | (1 << 16));
 		WRITE_VREG(AV1_DEC_INFO, hw->av1_dec_info[0]);
 		WRITE_VREG(AV1_DEC_INFO_2, hw->av1_dec_info[1]);
@@ -11173,6 +11173,9 @@ static void run_front(struct vdec_s *vdec)
 	run_count[hw->index]++;
 	/* hw->chunk = vdec_prepare_input(vdec); */
 	hevc_reset_core(vdec);
+
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVC_CORE_ENABLE, 1);
 
 	if ((vdec_frame_based(vdec)) &&
 		(hw->dec_result == DEC_RESULT_UNFINISH)) {
@@ -11599,10 +11602,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	struct AV1HW_s *hw = NULL;
 	static struct vframe_operations_s vf_tmp_ops;
 
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TM2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) ||
-		((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2) && !is_meson_rev_b()) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
+	if (!is_support_format(VFORMAT_AV1)) {
 		pr_err("av1 unsupported on cpu %d, is_tm2_revb %d\n",
 			get_cpu_major_id(), is_cpu_tm2_revb());
 		return -EINVAL;
@@ -11868,7 +11868,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		hw->vf_dp = vf_dp;
 	} else {
 		u32 force_w, force_h;
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+		if (!hevc_is_support_4k()) {
 			force_w = 1920;
 			force_h = 1088;
 		} else {
@@ -11957,10 +11957,14 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			else
 				hw->buffer_spec_index = 0;
 		}
-	} else
-		hw->buffer_spec_index = 0;
+	} else {
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T6D)
+			hw->buffer_spec_index = 3;
+		else
+			hw->buffer_spec_index = 0;
+	}
 	pr_info("%s, buffer_spec_index %d\n", __func__, hw->buffer_spec_index);
-	if (hw->buffer_spec_index == 0)
+	if ((hw->buffer_spec_index == 0) || (hw->buffer_spec_index == 3))
 		hw->max_one_mv_buffer_size =
 			(get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_SC2) ?
 				MAX_ONE_MV_BUFFER_SIZE_1080P : MAX_ONE_MV_BUFFER_SIZE_1080P_TM2REVB;

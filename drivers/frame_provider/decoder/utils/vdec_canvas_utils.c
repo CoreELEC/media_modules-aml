@@ -303,7 +303,7 @@ static void free_internal_cav_lut(int index, int id)
 	int offset;
 
 	flags = vdec_canvas_lock();
-	if (index > 0 && index < MDEC_CAV_LUT_MAX)
+	if (index >= 0 && index < MDEC_CAV_LUT_MAX)
 		offset = index;
 	else {
 		vdec_canvas_unlock(flags);
@@ -436,7 +436,7 @@ void config_cav_lut_ex(u32 index, ulong addr, u32 width,
 			pr_info("%s %2d) addr: %lx, width: %d, height: %d, blkm: %d, endian: %d\n",
 				__func__, index, addr, width, height, blkmode, endian);
 			pr_info("data(h,l): 0x%8lx, 0x%8lx\n", datah_temp, datal_temp);
-	    }
+		}
 	}
 }
 EXPORT_SYMBOL(config_cav_lut_ex);

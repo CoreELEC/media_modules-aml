@@ -5412,8 +5412,8 @@ static void clear_mpred_hw(struct VP9Decoder_s *pbi)
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)) {
-		 WRITE_VREG(HEVC_MPRED_CTRL3,0x24122412);
+		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6)) {
+		WRITE_VREG(HEVC_MPRED_CTRL3,0x24122412);
 	}
 
 	data32 = READ_VREG(HEVC_MPRED_CTRL4);
@@ -5726,6 +5726,12 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 		data32 |= (1 << 8);
 	} else {
 		data32 |= (2 << 8); /* line align with 64 for dw only */
+	}
+	if (dw_mode & 0x10) {
+		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6)) {
+			data32 &= ~(0x3ff << 13);
+			data32 |= ((pbi->endian & 0x1f) << 13) | ((pbi->endian & 0x1f) << 18);
+		}
 	}
 	/*
 	* [3:0]   little_endian
@@ -6261,7 +6267,8 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 		WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
 		WRITE_VREG(HEVC_DECODE_PIC_NUM_REG, 0x7fffffff); /*to remove*/
 #endif
-		if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6) {
+		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_S6) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X)) {
 			/*Send parser_cmd*/
 			WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
 			for (i = 0; i < PARSER_CMD_NUMBER; i++)
@@ -8073,16 +8080,17 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 	bit_depth_luma = pbi->vp9_param.p.bit_depth;
 	bit_depth_chroma = pbi->vp9_param.p.bit_depth;
 
-	if ((pbi->vp9_param.p.bit_depth >= VPX_BITS_10) &&
-		(get_double_write_mode(pbi) == 0x10)) {
-		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		pr_err("fatal err, bit_depth %d, unsupport dw 0x10\n",
-			pbi->vp9_param.p.bit_depth);
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
-		start_process_time(pbi);
-		return -1;
+	if (!is_dw_p010(pbi)) {
+		if ((pbi->vp9_param.p.bit_depth >= VPX_BITS_10) &&
+			(get_double_write_mode(pbi) == 0x10)) {
+			pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+			pr_err("fatal err, bit_depth %d, unsupport dw 0x10\n",
+				pbi->vp9_param.p.bit_depth);
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+			start_process_time(pbi);
+			return -1;
+		}
 	}
-
 	if (pbi->process_state != PROC_STATE_SENDAGAIN) {
 		ret = vp9_bufmgr_process(pbi, &pbi->vp9_param);
 		if (!pbi->m_ins_flag)
@@ -9033,7 +9041,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 					vp9_bufmgr_postproc(pbi);
 
 				pbi->dec_result = DEC_RESULT_DONE;
-				if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
 					for (i = 0; i < 8; i++) {
 						//pbi->vp9_segment_data[i] = READ_VREG(P_VP9_QUANT_WR) & 0xfff;
 						pbi->vp9_segment_data[i] = READ_VREG(VP9_QUANT_WR);
@@ -9665,11 +9673,11 @@ static void vvp9_prot_init(struct VP9Decoder_s *pbi, u32 mask)
 	if (mask & HW_MASK_BACK)
 		vp9_loop_filter_init(pbi);
 #endif
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
 		data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
 		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
 
-		WRITE_VREG(HEVCD_IPP_DYN_CACHE,0x2b);//enable new mcrcc
+		WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b); //enable new mcrcc
 	}
 
 	if ((mask & HW_MASK_FRONT) == 0)
@@ -10759,6 +10767,9 @@ static void run_front(struct vdec_s *vdec)
 		hevc_reset_core(vdec);
 #endif
 
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVC_CORE_ENABLE, 1);
+
 	if ((vdec_frame_based(vdec)) &&
 		(pbi->dec_result == DEC_RESULT_UNFINISH)) {
 		u32 res_byte = pbi->data_size - pbi->consume_byte;
@@ -10882,7 +10893,7 @@ static void run_front(struct vdec_s *vdec)
 
 	WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
 		u32 i;
 		WRITE_VREG(VP9_CONTROL, 1); // Enable vp9_enable
 		for (i = 0; i < 8; i++) {

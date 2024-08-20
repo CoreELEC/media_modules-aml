@@ -216,6 +216,15 @@ static void dos_local_config(bool is_on, int id)
 				break;
 			case VDEC_HEVCB:
 			case VDEC_HEVC:
+				if (is_vdec_hevc_combine()) {
+					WRITE_VREG(DOS_MEM_PD_VDEC, 0);
+					WRITE_VREG(DOS_SW_RESET0, 0xfffffffc);
+					wait_delay_us(20);
+					WRITE_VREG(DOS_SW_RESET0, 0);
+					wait_delay_us(10);
+					WRITE_VREG(DOS_MEM_PD_VDEC, 0);
+				}
+
 				WRITE_VREG(DOS_MEM_PD_HEVC, 0);
 				if (is_support_dual_core())
 					WRITE_VREG(DOS_MEM_PD_HEVC_DBE, 0);
@@ -245,6 +254,14 @@ static void dos_local_config(bool is_on, int id)
 				break;
 			case VDEC_HEVCB:
 			case VDEC_HEVC:
+				if (is_vdec_hevc_combine()) {
+					WRITE_VREG(DOS_SW_RESET0, 0xfffffffc);
+					wait_delay_us(20);
+					WRITE_VREG(DOS_SW_RESET0, 0);
+					wait_delay_us(10);
+					WRITE_VREG(DOS_MEM_PD_VDEC, 0xffffffffUL);
+				}
+
 				WRITE_VREG(DOS_SW_RESET3, 0xffffffff);
 				wait_delay_us(20);
 				WRITE_VREG(DOS_SW_RESET3, 0);

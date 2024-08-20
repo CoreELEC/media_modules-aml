@@ -80,6 +80,7 @@ enum AM_MESON_CPU_MAJOR_ID {
 	AM_MESON_CPU_MAJOR_ID_S7	= 0x46,
 	AM_MESON_CPU_MAJOR_ID_S7D	= 0x47,
 	AM_MESON_CPU_MAJOR_ID_S6	= 0x48,
+	AM_MESON_CPU_MAJOR_ID_T6D	= 0x49,
 	AM_MESON_CPU_MAJOR_ID_MAX,
 };
 
@@ -193,6 +194,7 @@ struct dos_of_dev_s {
 	int hevc_stream_extra_shift;
 	bool is_vcpu_clk_set;
 	bool is_vp9_adapt_prob_hw_mode;
+	bool is_vdec_hevc_combine;
 
 	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
 	bool is_support_34bit;
@@ -290,6 +292,8 @@ inline bool is_vcpu_clk_set(void);
 inline bool is_vp9_adapt_prob_hw_mode(void);
 
 inline bool is_support_34bit_mode(void);
+
+inline bool is_vdec_hevc_combine(void);
 
 void pr_dos_infos(void);
 

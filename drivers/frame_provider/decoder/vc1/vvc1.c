@@ -210,6 +210,7 @@ static u32 udebug_flag;
 static int debug;
 unsigned int debug_mask = 0xff;
 static u32 wait_time = 5;
+static u32 without_display_mode;
 
 bool process_busy;
 
@@ -632,7 +633,6 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			decoder_bmmu_box_get_mem_handle(
 				mm_blk_handle,
 				buffer_index);
-		//if (is_support_vdec_canvas()) {
 		vf->canvas0Addr = vf->canvas1Addr = -1;
 		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
 		vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
@@ -642,20 +642,23 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
 		vf->plane_num = 3;
 #endif
-		//}
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
 			vdec_stream_based(vdec)) {
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
 
 		decoder_do_frame_check(vdec, vf);
-		kfifo_put(&display_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(MODULE_NAME, vf->pts);
+		if (without_display_mode) {
+			vvc1_vf_put(vf, vdec);
+		} else {
+			kfifo_put(&display_q, (const struct vframe_s *)vf);
+			ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
-		vf_notify_receiver(
-			PROVIDER_NAME,
-			VFRAME_EVENT_PROVIDER_VFRAME_READY,
-			NULL);
+			vf_notify_receiver(
+				PROVIDER_NAME,
+				VFRAME_EVENT_PROVIDER_VFRAME_READY,
+				NULL);
+		}
 
 		if (kfifo_get(&newframe_q, &vf) == 0) {
 			pr_info
@@ -714,7 +717,6 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 				mm_blk_handle,
 				buffer_index);
 
-		//if (is_support_vdec_canvas()) {
 		vf->canvas0Addr = vf->canvas1Addr = -1;
 		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
 		vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
@@ -724,18 +726,20 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
 		vf->plane_num = 3;
 #endif
-		//}
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
 			vdec_stream_based(vdec)) {
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
-		kfifo_put(&display_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(MODULE_NAME, vf->pts);
-
-		vf_notify_receiver(
-				PROVIDER_NAME,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY,
-				NULL);
+		if (without_display_mode) {
+			vvc1_vf_put(vf, vdec);
+		} else {
+			kfifo_put(&display_q, (const struct vframe_s *)vf);
+			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+			vf_notify_receiver(
+					PROVIDER_NAME,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY,
+					NULL);
+		}
 	} else {	/* progressive */
 		hw->throw_pb_flag = 0;
 		if (kfifo_get(&newframe_q, &vf) == 0) {
@@ -827,7 +831,6 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			decoder_bmmu_box_get_mem_handle(
 				mm_blk_handle,
 				buffer_index);
-		//if (is_support_vdec_canvas()) {
 		vf->canvas0Addr = vf->canvas1Addr = -1;
 		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
 		vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
@@ -837,19 +840,23 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		vf->canvas0_config[2] = vc1_canvas_config[buffer_index][2];
 		vf->plane_num = 3;
 #endif
-		//}
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D && vdec->use_vfm_path &&
 			vdec_stream_based(vdec)) {
 			vf->type |= VIDTYPE_FORCE_SIGN_IP_JOINT;
 		}
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: display_q index %d, pts 0x%x/0x%x\n", __func__, vf->index, vf->pts, vf->pts_us64);
-		decoder_do_frame_check(vdec, vf);
-		kfifo_put(&display_q, (const struct vframe_s *)vf);
-		ATRACE_COUNTER(MODULE_NAME, vf->pts);
 
-		vf_notify_receiver(PROVIDER_NAME,
-				VFRAME_EVENT_PROVIDER_VFRAME_READY,
-				NULL);
+		decoder_do_frame_check(vdec, vf);
+		if (without_display_mode) {
+			vvc1_vf_put(vf, vdec);
+		} else {
+			kfifo_put(&display_q, (const struct vframe_s *)vf);
+			ATRACE_COUNTER(MODULE_NAME, vf->pts);
+
+			vf_notify_receiver(PROVIDER_NAME,
+					VFRAME_EVENT_PROVIDER_VFRAME_READY,
+					NULL);
+		}
 	}
 	return 0;
 }
@@ -1271,6 +1278,39 @@ static int vvc1_vdec_info_init(void)
 	return 0;
 }
 
+static void config_canvas_hevc(struct vdec_vc1_hw_s *hw)
+{
+	uint data32 = 0, endian = 0;
+
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0x2); // reset mcrcc
+
+	// program canvas0
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0 << 1) | 0);
+	data32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	data32 = data32 & 0xffff;
+	data32 = data32 | (data32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL2, data32);
+
+	// program canvas1
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (16 << 8) | (1 << 1) | 0);
+	data32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	data32 = data32 & 0xffff;
+	data32 = data32 | (data32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL3, data32);
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0xff0); // enable mcrcc progressive-mode
+
+	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
+	data32 &= (~0x3f);
+	// [5:4] -- address_format 00:linear 01:32x32 10:64x32
+	data32 |= (hw->canvas_mode << 4);
+	if (hw->canvas_mode == CANVAS_BLKMODE_LINEAR)
+		endian = 7;
+	data32 |= (1 << 3) | endian;
+	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
+
+	WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b); // enable new mcrcc
+}
+
 /****************************************/
 static int vvc1_canvas_init(void)
 {
@@ -1305,6 +1345,11 @@ static int vvc1_canvas_init(void)
 		decbuf_size = 0x300000;
 	}
 
+	if (is_vdec_hevc_combine()) {
+		// config fix stride
+		WRITE_VREG(HEVCD_MCR_FIXSIZE_CFG, ((1 << 15) | canvas_width));
+	}
+
 	for (i = 0; i < MAX_BMMU_BUFFER_NUM; i++) {
 		/* workspace mem */
 		if (i == (MAX_BMMU_BUFFER_NUM - 1))
@@ -1337,12 +1382,23 @@ static int vvc1_canvas_init(void)
 			buf_start +
 			decbuf_y_size, canvas_width,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
-			hw->canvas_mode, 0, VDEC_1);
+			hw->canvas_mode, endian, VDEC_1);
 		vc1_canvas_config[i][1].endian = endian;
 		vc1_canvas_config[i][1].width = canvas_width;
 		vc1_canvas_config[i][1].height = canvas_height >> 1;
 		vc1_canvas_config[i][1].block_mode = hw->canvas_mode;
 		vc1_canvas_config[i][1].phy_addr = buf_start + decbuf_y_size;
+
+		if (is_vdec_hevc_combine()) {
+			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, ((2 * i) << 8) | (1 << 1));
+			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, buf_start >> 5);
+
+			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, ((2 * i + 1) << 8) | (1 << 1));
+			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, (buf_start + decbuf_y_size) >> 5);
+
+			WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (i << 8) | 1);
+			WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, ((2 * i + 1) << 8) | (2 * i));
+		}
 #else
 		config_cav_lut_ex(3 * i + 0,
 			buf_start,
@@ -1377,6 +1433,12 @@ static int vvc1_canvas_init(void)
 #endif
 
 	}
+
+	if (is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
+		config_canvas_hevc(hw);
+	}
+
 	return 0;
 }
 
@@ -1404,6 +1466,15 @@ static int vvc1_prot_init(void)
 
 	WRITE_RESET_REG(RESET2_REGISTER, RESET_PIC_DC | RESET_DBLK);
 #endif
+	if (is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL, (0 << 1) | (1 << 0));
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL, (1 << 1) | (0 << 0));
+
+		WRITE_VREG(HEVCD_MPP_VDEC_MCR_CTL, (1 << 4) | 1);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 1 << 31);
+
+		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 18);
+	}
 
 	WRITE_VREG(POWER_CTL_VLD, 0x10);
 	WRITE_VREG_BITS(VLD_MEM_VIFIFO_CONTROL, 2, MEM_FIFO_CNT_BIT, 2);
@@ -1639,6 +1710,9 @@ static s32 vvc1_init(void)
 	intra_output = 0;
 	amvdec_enable();
 
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVC_CORE_ENABLE, 0);
+
 	vvc1_local_init(false);
 
 	if (vvc1_amstream_dec_info.format == VIDEO_DEC_FORMAT_WMV3) {
@@ -1867,6 +1941,9 @@ MODULE_PARM_DESC(debug_mask, "\n amvdec_vc1 debug_mask\n");
 
 module_param(wait_time, uint, 0664);
 MODULE_PARM_DESC(wait_time, "\n amvdec_vc1 wait_time\n");
+
+module_param(without_display_mode, uint, 0664);
+MODULE_PARM_DESC(without_display_mode, "\n amvdec_vc1 without_display_mode\n");
 
 /****************************************/
 module_init(amvdec_vc1_driver_init_module);

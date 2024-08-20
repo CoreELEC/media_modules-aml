@@ -181,7 +181,7 @@ enum e_trace_work_status {
 #define	IS_ERROR_TYPE(error_type)		(((error_type) >> 16) & 0xff)
 #define	IS_EMERGENCY_TYPE(error_type)		(((error_type) >> 24) & 0xff)
 
-#define CORE_MASK_VDEC_1 (1 << VDEC_1)
+#define CORE_MASK_VDEC_1 (1 << (is_vdec_hevc_combine() ? VDEC_HEVC : VDEC_1))
 #define CORE_MASK_HCODEC (1 << VDEC_HCODEC)
 #define CORE_MASK_VDEC_2 (1 << VDEC_2)
 #define CORE_MASK_HEVC (1 << VDEC_HEVC)

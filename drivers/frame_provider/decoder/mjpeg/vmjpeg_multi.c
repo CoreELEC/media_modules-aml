@@ -1174,6 +1174,12 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	hw->run_count++;
 	vdec_reset_core(vdec);
+	if (is_vdec_hevc_combine()) {
+		hevc_reset_core(vdec);
+		WRITE_VREG(HEVC_DBLK_CFGC, 0x80000000);
+		WRITE_VREG(HEVC_CORE_ENABLE, 0);
+	}
+
 	for (i = 0; i < hw->buf_num; i++) {
 		if (hw->vfbuf_use[i] == 0)
 			break;

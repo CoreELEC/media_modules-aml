@@ -512,7 +512,7 @@ struct buffer_spec_s {
 #endif
 	unsigned long cma_alloc_addr;
 	unsigned long buf_adr;
-#ifdef	H264_MMU
+#ifdef H264_MMU
 	unsigned long alloc_header_addr;
 #endif
 	char *aux_data_buf;
@@ -717,16 +717,16 @@ struct vdec_h264_hw_s {
 #ifdef H264_MMU
 	void *frame_mmu_map_addr;
 	dma_addr_t frame_mmu_map_phy_addr;
-	u32	 hevc_cur_buf_idx;
+	u32 hevc_cur_buf_idx;
 	u32 losless_comp_body_size;
 	u32 losless_comp_body_size_sao;
 	u32 losless_comp_header_size;
 	u32 mc_buffer_size_u_v;
 	u32 mc_buffer_size_u_v_h;
-	u32  is_idr_frame;
-	u32  is_new_pic;
-	u32  frame_done;
-	u32  frame_busy;
+	u32 is_idr_frame;
+	u32 is_new_pic;
+	u32 frame_done;
+	u32 frame_busy;
 	unsigned long extif_addr;
 	int double_write_mode;
 	int mmu_enable;
@@ -826,6 +826,8 @@ struct vdec_h264_hw_s {
 	uint mb_total;
 	uint mb_width;
 	uint mb_height;
+	uint mb_width_hevc;
+	uint mb_height_hevc;
 
 	uint i_only;
 	int skip_frame_count;
@@ -1317,12 +1319,12 @@ static int hevc_alloc_mmu(struct vdec_h264_hw_s *hw,
 			mmu_index_adr);
 }
 
-static int  compute_losless_comp_body_size(int width,
+static int compute_losless_comp_body_size(int width,
 					int height, bool is_bit_depth_10)
 {
-	int    width_x64;
-	int    height_x32;
-	int    bsize;
+	int width_x64;
+	int height_x32;
+	int bsize;
 
 	width_x64 = width + 63;
 	width_x64 >>= 6;
@@ -1338,12 +1340,12 @@ static int  compute_losless_comp_body_size(int width,
 	return bsize;
 }
 
-static int  compute_losless_comp_header_size(int width, int height)
+static int compute_losless_comp_header_size(int width, int height)
 {
-	int	width_x64;
-	int	width_x128;
-	int    height_x64;
-	int	hsize;
+	int width_x64;
+	int width_x128;
+	int height_x64;
+	int hsize;
 
 	width_x64 = width + 63;
 	width_x64 >>= 6;
@@ -1354,7 +1356,7 @@ static int  compute_losless_comp_header_size(int width, int height)
 	height_x64 = height + 63;
 	height_x64 >>= 6;
 
-#ifdef	H264_MMU
+#ifdef H264_MMU
 	hsize = 128*width_x64*height_x64;
 #else
 	hsize = 32*width_x128*height_x64;
@@ -1415,8 +1417,12 @@ static void hevc_mcr_config_canv2axitbl(struct vdec_h264_hw_s *hw, int restore)
 	int dw_mode =  get_double_write_mode(hw);
 
 	canvas_addr = ANC0_CANVAS_ADDR;
-	for (i = 0; i < num_buff; i++)
-		WRITE_VREG((canvas_addr + i), i | (i << 8) | (i << 16));
+	for (i = 0; i < num_buff; i++) {
+		if (is_vdec_hevc_combine())
+			WRITE_VREG((canvas_addr + i), (i << 1) | (i << 9) | (i << 17));
+		else
+			WRITE_VREG((canvas_addr + i), i | (i << 8) | (i << 16));
+	}
 
 	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, (0x1 << 1) | (0x1 << 2));
 	size = hw->losless_comp_body_size + hw->losless_comp_header_size;
@@ -1457,7 +1463,7 @@ static void hevc_mcr_config_canv2axitbl(struct vdec_h264_hw_s *hw, int restore)
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, 0);
 	return;
 }
-static void    hevc_mcr_config_mc_ref(struct vdec_h264_hw_s *hw)
+static void hevc_mcr_config_mc_ref(struct vdec_h264_hw_s *hw)
 {
 	u32 i;
 	u32 ref_canv;
@@ -1468,7 +1474,10 @@ static void    hevc_mcr_config_mc_ref(struct vdec_h264_hw_s *hw)
 		if (ref == NULL)
 			return;
 		WRITE_VREG(CURR_CANVAS_CTRL, ref->buf_spec_num<<24);
-		ref_canv = READ_VREG(CURR_CANVAS_CTRL)&0xffffff;
+		if (is_vdec_hevc_combine())
+			ref_canv = (READ_VREG(CURR_CANVAS_CTRL)&0xffffff) >> 1;
+		else
+			ref_canv = READ_VREG(CURR_CANVAS_CTRL)&0xffffff;
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
 					(ref->buf_spec_num & 0x3f) << 8);
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, ref_canv);
@@ -1479,7 +1488,10 @@ static void    hevc_mcr_config_mc_ref(struct vdec_h264_hw_s *hw)
 		if (ref == NULL)
 			return;
 		WRITE_VREG(CURR_CANVAS_CTRL, ref->buf_spec_num<<24);
-		ref_canv = READ_VREG(CURR_CANVAS_CTRL)&0xffffff;
+		if (is_vdec_hevc_combine())
+			ref_canv = (READ_VREG(CURR_CANVAS_CTRL)&0xffffff) >> 1;
+		else
+			ref_canv = READ_VREG(CURR_CANVAS_CTRL)&0xffffff;
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
 					(ref->buf_spec_num & 0x3f) << 8);
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, ref_canv);
@@ -1487,7 +1499,7 @@ static void    hevc_mcr_config_mc_ref(struct vdec_h264_hw_s *hw)
 	return;
 }
 
-static void   hevc_mcr_config_mcrcc(struct vdec_h264_hw_s *hw)
+static void hevc_mcr_config_mcrcc(struct vdec_h264_hw_s *hw)
 {
 	u32 rdata32;
 	u32 rdata32_2;
@@ -1557,7 +1569,7 @@ static void   hevc_mcr_config_mcrcc(struct vdec_h264_hw_s *hw)
 }
 
 
-static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
+static void hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 		u32 width, u32 height) {
 	u32 data32;
 	u32 lcu_x_num, lcu_y_num;
@@ -1599,7 +1611,7 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	/* bitdepth_chroma = 8*/
 	WRITE_VREG(HEVCD_IPP_BITDEPTH_CONFIG, 0x0);/*set bit-depth 8 */
 
-#ifdef	H265_LOSLESS_COMPRESS_MODE
+#ifdef H265_LOSLESS_COMPRESS_MODE
 	WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, (0x1 << 4));
 	WRITE_VREG(HEVCD_MPP_DECOMP_CTL2, 0x0);
 #else
@@ -1622,13 +1634,13 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	WRITE_VREG(HEVCD_IPP_TOP_CNTL, 0x1 << 1);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
-		  WRITE_VREG(HEVC_DBLK_CFG1, 0x2); // set ctusize==16
-		  WRITE_VREG(HEVC_DBLK_CFG2, ((height & 0xffff)<<16) | (width & 0xffff));
-		  if (dw_mode & 0x10)
+		WRITE_VREG(HEVC_DBLK_CFG1, 0x2); // set ctusize==16
+		WRITE_VREG(HEVC_DBLK_CFG2, ((height & 0xffff)<<16) | (width & 0xffff));
+		if (dw_mode & 0x10)
 			WRITE_VREG(HEVC_DBLK_CFGB, 0x40405603);
-		  else if (dw_mode)
+		else if (dw_mode)
 			WRITE_VREG(HEVC_DBLK_CFGB, 0x40405703);
-		  else
+		else
 			WRITE_VREG(HEVC_DBLK_CFGB, 0x40405503);
 	}
 
@@ -1638,7 +1650,7 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	WRITE_VREG(HEVC_SAO_CTRL0, data32);
 	WRITE_VREG(HEVC_SAO_PIC_SIZE, (height & 0xffff) << 16 |
 			(width & 0xffff));
-	data32  = ((lcu_x_num-1) | (lcu_y_num-1) << 16);
+	data32 = ((lcu_x_num-1) | (lcu_y_num-1) << 16);
 
 	WRITE_VREG(HEVC_SAO_PIC_SIZE_LCU, data32);
 	data32  =  (lcu_x_num  | lcu_y_num << 16);
@@ -1688,10 +1700,10 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	*/
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 
-#ifdef	H265_DW_NO_SCALE
+#ifdef H265_DW_NO_SCALE
 	WRITE_VREG(HEVC_SAO_CTRL5, READ_VREG(HEVC_SAO_CTRL5) & ~(0xff << 16));
 	if (hw->mmu_enable && dw_mode) {
-		data32 =	READ_VREG(HEVC_SAO_CTRL5);
+		data32 = READ_VREG(HEVC_SAO_CTRL5);
 		data32 &= (~(0xff << 16));
 		if (dw_mode == 2 ||
 			dw_mode == 3)
@@ -1700,11 +1712,9 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 			data32 |= (0x33<<16);
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	}
-
-
 #endif
 
-#ifdef	H265_LOSLESS_COMPRESS_MODE
+#ifdef H265_LOSLESS_COMPRESS_MODE
 	data32 = READ_VREG(HEVC_SAO_CTRL5);
 	data32 |= (1<<9); /*8-bit smem-mode*/
 	WRITE_VREG(HEVC_SAO_CTRL5, data32);
@@ -1714,7 +1724,7 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	WRITE_VREG(HEVC_CM_HEADER_LENGTH, hw->losless_comp_header_size);
 #endif
 
-#ifdef	H265_LOSLESS_COMPRESS_MODE
+#ifdef H265_LOSLESS_COMPRESS_MODE
 	WRITE_VREG(HEVC_SAO_CTRL9, READ_VREG(HEVC_SAO_CTRL9) | (0x1 << 1));
 	WRITE_VREG(HEVC_SAO_CTRL5, READ_VREG(HEVC_SAO_CTRL5) | (0x1 << 10));
 #endif
@@ -1728,7 +1738,7 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	return;
 }
 
-static void  hevc_sao_set_slice_type(struct vdec_h264_hw_s *hw,
+static void hevc_sao_set_slice_type(struct vdec_h264_hw_s *hw,
 		u32 is_new_pic, u32 is_idr)
 {
 	hw->is_new_pic = is_new_pic;
@@ -1893,7 +1903,7 @@ static void decomp_get_comprate_mmu(struct vdec_h264_hw_s *hw)
 }
 #endif
 
-static void  hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
+static void hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 			struct StorablePicture *pic) {
 	u32 mc_y_adr;
 	u32 mc_u_v_adr;
@@ -1902,8 +1912,11 @@ static void  hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 	u32 canvas_addr;
 	int ret;
 	int  dw_mode = get_double_write_mode(hw);
-	if (hw->is_new_pic != 1)
+	if (hw->is_new_pic != 1) {
+		if (is_vdec_hevc_combine())
+			WRITE_VREG(SYS_COMMAND, 0xff);
 		return;
+	}
 
 #ifdef MCRCC_ENABLE
 	if (pic->poc > 0) {
@@ -1922,10 +1935,18 @@ static void  hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 
 	WRITE_VREG(CURR_CANVAS_CTRL, pic->buf_spec_num << 24);
 	canvas_addr = READ_VREG(CURR_CANVAS_CTRL)&0xffffff;
-	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, (0x0 << 1) |
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, (0x0 << 1) |
+			(0x0 << 2) | ((canvas_addr & 0xff) << 7));
+	else
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, (0x0 << 1) |
 			(0x0 << 2) | ((canvas_addr & 0xff) << 8));
 	mc_y_adr = READ_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA) << 5;
-	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, (0x0 << 1) |
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, (0x0 << 1) |
+			(0x0 << 2) | (((canvas_addr >> 8) & 0xff) << 7));
+	else
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, (0x0 << 1) |
 			(0x0 << 2) | (((canvas_addr >> 8) & 0xff) << 8));
 	mc_u_v_adr = READ_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA) << 5;
 	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
@@ -1938,11 +1959,11 @@ static void  hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 		dw_y_adr = 0;
 		dw_u_v_adr = 0;
 	}
-#ifdef	H265_LOSLESS_COMPRESS_MODE
+#ifdef H265_LOSLESS_COMPRESS_MODE
 	if (dw_mode)
 		WRITE_VREG(HEVC_SAO_Y_START_ADDR, dw_y_adr);
 	WRITE_VREG(HEVC_CM_BODY_START_ADDR, mc_y_adr);
-#ifdef	H264_MMU
+#ifdef H264_MMU
 	WRITE_VREG(HEVC_CM_HEADER_START_ADDR, mc_y_adr);
 #else
 	WRITE_VREG(HEVC_CM_HEADER_START_ADDR,
@@ -2001,7 +2022,10 @@ static void  hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 static void  hevc_set_unused_4k_buff_idx(struct vdec_h264_hw_s *hw,
 		u32 buf_spec_num) {
 	WRITE_VREG(CURR_CANVAS_CTRL, buf_spec_num<<24);
-	hw->hevc_cur_buf_idx = READ_VREG(CURR_CANVAS_CTRL)&0xff;
+	if (is_vdec_hevc_combine())
+		hw->hevc_cur_buf_idx = (READ_VREG(CURR_CANVAS_CTRL)&0xff) >> 1;
+	else
+		hw->hevc_cur_buf_idx = READ_VREG(CURR_CANVAS_CTRL)&0xff;
 	dpb_print(DECODE_ID(hw),
 		PRINT_FLAG_MMU_DETAIL, " %s  cur_buf_idx %d  buf_spec_num %d\n",
 		__func__, hw->hevc_cur_buf_idx, buf_spec_num);
@@ -2078,7 +2102,8 @@ static void  hevc_sao_wait_done(struct vdec_h264_hw_s *hw)
 					}
 			}
 		}
-		amhevc_stop();
+		if (!is_vdec_hevc_combine())
+			amhevc_stop();
 		hw->frame_busy = 0;
 		hw->frame_done = 0;
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_MMU_DETAIL,
@@ -2307,13 +2332,20 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		endian,
 		VDEC_1);
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
-		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
-				(1 << 11) | /* canvas_blk32_wr */
-				(blkmode << 10) | /* canvas_blk32*/
-				 (1 << 8) | /* canvas_index_wr*/
-				(hw->buffer_spec[i].y_canvas_index << 0) /* canvas index*/
-				);
+	if (is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR,
+			(hw->buffer_spec[i].y_canvas_index << 8) | (1 << 1));
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA,
+			hw->buffer_spec[i].y_addr >> 5);
+	} else {
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
+			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
+					(1 << 11) | /* canvas_blk32_wr */
+					(blkmode << 10) | /* canvas_blk32*/
+					 (1 << 8) | /* canvas_index_wr*/
+					(hw->buffer_spec[i].y_canvas_index << 0) /* canvas index*/
+					);
+		}
 	}
 
 	config_cav_lut_ex(hw->buffer_spec[i].
@@ -2326,17 +2358,28 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		endian,
 		VDEC_1);
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
-		WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
-				(1 << 11) |
-				(blkmode << 10) |
-				 (1 << 8) |
-				(hw->buffer_spec[i].u_canvas_index << 0));
+	if (is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR,
+			(hw->buffer_spec[i].u_canvas_index << 8) | (1 << 1));
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA,
+			hw->buffer_spec[i].u_addr >> 5);
+
+		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
+			(hw->buffer_spec[i].y_canvas_index << 7) | 1);
+		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
+			(hw->buffer_spec[i].u_canvas_index << 8) | hw->buffer_spec[i].y_canvas_index);
+	} else {
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
+			WRITE_VREG(VDEC_ASSIST_CANVAS_BLK32,
+					(1 << 11) |
+					(blkmode << 10) |
+					 (1 << 8) |
+					(hw->buffer_spec[i].u_canvas_index << 0));
+		}
 	}
 
 	WRITE_VREG(ANC0_CANVAS_ADDR + hw->buffer_spec[i].canvas_pos,
 		spec2canvas(&hw->buffer_spec[i]));
-
 
 #ifdef  VDEC_DW
 	if (!IS_VDEC_DW(hw))
@@ -2377,6 +2420,39 @@ static void config_decode_canvas(struct vdec_h264_hw_s *hw, int i)
 		}
 	}
 #endif
+}
+
+static void config_canvas_hevc(struct vdec_h264_hw_s *hw)
+{
+	uint data32 = 0, endian = 0;
+
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0x2); // reset mcrcc
+
+	// program canvas0
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0 << 1) | 0);
+	data32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	data32 = data32 & 0xffff;
+	data32 = data32 | (data32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL2, data32);
+
+	// program canvas1
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (16 << 8) | (1 << 1) | 0);
+	data32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	data32 = data32 & 0xffff;
+	data32 = data32 | (data32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL3, data32);
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0xff0); // enable mcrcc progressive-mode
+
+	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
+	data32 &= (~0x3f);
+	// [5:4] -- address_format 00:linear 01:32x32 10:64x32
+	data32 |= (hw->canvas_mode << 4);
+	if (hw->canvas_mode == CANVAS_BLKMODE_LINEAR)
+		endian = 7;
+	data32 |= (1 << 3) | endian;
+	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
+
+	WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b); // enable new mcrcc
 }
 
 static void config_decode_canvas_ex(struct vdec_h264_hw_s *hw, int i)
@@ -2445,6 +2521,10 @@ int v4l_get_free_buf_idx(struct vdec_s *vdec)
 			p_H264_Dpb->cur_idx = idx;
 			break;
 		}
+	}
+	if (!hw->mmu_enable && is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
+		config_canvas_hevc(hw);
 	}
 
 	if (idx != INVALID_IDX) {
@@ -6028,6 +6108,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 				hw->num_reorder_frames,
 				used_reorder_dpb_size_margin);
 		}
+		hw->mb_width_hevc = mb_width;
+		hw->mb_height_hevc = mb_height;
 		if (!hw->mmu_enable) {
 			mb_width = (mb_width+3) & 0xfffffffc;
 			mb_height = (mb_height+3) & 0xfffffffc;
@@ -8053,7 +8135,7 @@ pic_done_proc:
 				vdec_v4l_post_error_frame_event(ctx);
 		}
 		if (dec_dpb_status == H264_DECODE_TIMEOUT &&
-			hw->mmu_enable) {
+			hw->mmu_enable && !is_vdec_hevc_combine()) {
 			amhevc_stop();
 			hevc_reset_core(vdec);
 		}
@@ -8525,7 +8607,7 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 	hw->timeout_num++;
 	amvdec_stop();
 	vdec->mc_loaded = 0;
-	if (hw->mmu_enable) {
+	if (hw->mmu_enable && !is_vdec_hevc_combine()) {
 		amhevc_stop();
 	}
 	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
@@ -8928,10 +9010,15 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 			SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
 	} else {
 		if ((v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21) ||
-			(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
+			(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M)) {
 			SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
-		else
+			if (is_vdec_hevc_combine())
+				SET_VREG_MASK(HEVCD_IPP_AXIIF_CONFIG, 1 << 12);
+		} else {
 			CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+			if (is_vdec_hevc_combine())
+				CLEAR_VREG_MASK(HEVCD_IPP_AXIIF_CONFIG, 1 << 12);
+		}
 	}
 
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 0xbf << 24);
@@ -8977,6 +9064,10 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 				config_decode_canvas(hw, i);
 			if (hw->mmu_enable && get_double_write_mode(hw))
 				config_decode_canvas_ex(hw, i);
+		}
+		if (!hw->mmu_enable && is_vdec_hevc_combine()) {
+			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
+			config_canvas_hevc(hw);
 		}
 	} else {
 		WRITE_VREG(AV_SCRATCH_0, 0);
@@ -9137,6 +9228,34 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, int flush_flag, bool is_
 	return;
 }
 
+static void ucode_copy(void *mc_cpu_addr, char *data)
+{
+	/*header*/
+	memcpy((u8 *)mc_cpu_addr + MC_OFFSET_HEADER,
+		data + 0x4000, MC_SWAP_SIZE);
+	/*data*/
+	memcpy((u8 *)mc_cpu_addr + MC_OFFSET_DATA,
+		data + 0x2000, MC_SWAP_SIZE);
+	/*mmco*/
+	memcpy((u8 *)mc_cpu_addr + MC_OFFSET_MMCO,
+		data + 0x6000, MC_SWAP_SIZE);
+	/*list*/
+	memcpy((u8 *)mc_cpu_addr + MC_OFFSET_LIST,
+		data + 0x3000, MC_SWAP_SIZE);
+	/*slice*/
+	memcpy((u8 *)mc_cpu_addr + MC_OFFSET_SLICE,
+		data + 0x5000, MC_SWAP_SIZE);
+	/*main*/
+	memcpy((u8 *)mc_cpu_addr + MC_OFFSET_MAIN,
+		data, 0x2000);
+	/*data*/
+	memcpy((u8 *)mc_cpu_addr + MC_OFFSET_MAIN + 0x2000,
+		data + 0x2000, 0x1000);
+	/*slice*/
+	memcpy((u8 *)mc_cpu_addr + MC_OFFSET_MAIN + 0x3000,
+		data + 0x5000, 0x1000);
+}
+
 static s32 vh264_init(struct vdec_h264_hw_s *hw)
 {
 	int size = -1;
@@ -9185,30 +9304,7 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 			return -ENOMEM;
 		}
 
-		/*header*/
-		memcpy((u8 *) hw->mc_cpu_addr + MC_OFFSET_HEADER,
-			fw->data + 0x4000, MC_SWAP_SIZE);
-		/*data*/
-		memcpy((u8 *) hw->mc_cpu_addr + MC_OFFSET_DATA,
-			fw->data + 0x2000, MC_SWAP_SIZE);
-		/*mmco*/
-		memcpy((u8 *) hw->mc_cpu_addr + MC_OFFSET_MMCO,
-			fw->data + 0x6000, MC_SWAP_SIZE);
-		/*list*/
-		memcpy((u8 *) hw->mc_cpu_addr + MC_OFFSET_LIST,
-			fw->data + 0x3000, MC_SWAP_SIZE);
-		/*slice*/
-		memcpy((u8 *) hw->mc_cpu_addr + MC_OFFSET_SLICE,
-			fw->data + 0x5000, MC_SWAP_SIZE);
-		/*main*/
-		memcpy((u8 *) hw->mc_cpu_addr + MC_OFFSET_MAIN,
-			fw->data, 0x2000);
-		/*data*/
-		memcpy((u8 *) hw->mc_cpu_addr + MC_OFFSET_MAIN + 0x2000,
-			fw->data + 0x2000, 0x1000);
-		/*slice*/
-		memcpy((u8 *) hw->mc_cpu_addr + MC_OFFSET_MAIN + 0x3000,
-			fw->data + 0x5000, 0x1000);
+		ucode_copy(hw->mc_cpu_addr, fw->data);
 	}
 
 	hw->lmem_addr = (dma_addr_t)decoder_dma_alloc_coherent(&hw->lmem_phy_handle,
@@ -10096,7 +10192,8 @@ int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 	{
 		hw->canvas_mode = CANVAS_BLKMODE_LINEAR;
 		hw->double_write_mode &= 0xffff;
-		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX) {
+		if ((get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX) &&
+			!is_vdec_hevc_combine()) {
 			vdec_poweron(VDEC_HEVC);
 		}
 	}
@@ -10140,7 +10237,13 @@ int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 
 		fw_mmu->len = size;
 		hw->fw_mmu = fw_mmu;
+
+		if (is_vdec_hevc_combine() && !fw_tee_enabled() && hw->mc_cpu_addr) {
+			/* -- ucode loading (amrisc and swap code) */
+			ucode_copy(hw->mc_cpu_addr, hw->fw_mmu->data);
+		}
 	}
+
 	hevc_source_changed(VFORMAT_HEVC, 3840, 2160, 60);
 
 	return 0;
@@ -10150,14 +10253,17 @@ static int clear_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 {
 	hw->mmu_enable = 0;
 
-	amhevc_stop();
-	hevc_reset_core(vdec);
+	if (!is_vdec_hevc_combine()) {
+		amhevc_stop();
+		hevc_reset_core(vdec);
+	}
 
 	if (is_cpu_t7() && hw->enable_fence) {
 		hw->canvas_mode = CANVAS_BLKMODE_32X32;
 	}
 
-	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX) {
+	if ((get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX) &&
+		!is_vdec_hevc_combine()) {
 		vdec_poweroff(VDEC_HEVC);
 	}
 
@@ -10178,16 +10284,23 @@ static int clear_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 		hw->fw_mmu = NULL;
 	}
 
+	if (is_vdec_hevc_combine() && !fw_tee_enabled() && hw->mc_cpu_addr) {
+		/* -- ucode loading (amrisc and swap code) */
+		ucode_copy(hw->mc_cpu_addr, hw->fw->data);
+	}
+
 	vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
 
 	vdec_core_release(vdec, hw->mask);
 	hw->mask = CORE_MASK_VDEC_1;
 	vdec_core_request(vdec, hw->mask);
 
-	if (is_support_dual_core())
-		vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
-	else
-		vdec_core_finish_run(vdec, CORE_MASK_HEVC);
+	if (!is_vdec_hevc_combine()) {
+		if (is_support_dual_core())
+			vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
+		else
+			vdec_core_finish_run(vdec, CORE_MASK_HEVC);
+	}
 
 	return 0;
 }
@@ -10408,10 +10521,12 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 				hw->mask = CORE_MASK_VDEC_1;
 				vdec_core_request(vdec, hw->mask);
 
-				if (is_support_dual_core())
-					vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
-				else
-					vdec_core_finish_run(vdec, CORE_MASK_HEVC);
+				if (!is_vdec_hevc_combine()) {
+					if (is_support_dual_core())
+						vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
+					else
+						vdec_core_finish_run(vdec, CORE_MASK_HEVC);
+				}
 			}
 			hw->double_write_mode = DM_YUV_ONLY;
 			dpb_print(DECODE_ID(hw), 0, "h264 interlace video force to change dw as 0x10\n");
@@ -10594,7 +10709,7 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 			hw->res_ch_flag = 1;
 			ctx->v4l_reqbuff_flag = false;
 			amvdec_stop();
-			if (hw->mmu_enable)
+			if (hw->mmu_enable && !is_vdec_hevc_combine())
 				amhevc_stop();
 			hw->eos = 1;
 			flush_dpb(p_H264_Dpb);
@@ -10754,6 +10869,10 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						hw->seq_info2_last = hw->dpb.param1_for_res_change;
 
 					amvdec_stop();
+
+					if (hw->mmu_enable && !is_vdec_hevc_combine()) {
+						amhevc_stop();
+					}
 					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
 				} else {
 					hw->res_ch_flag = 0;
@@ -11005,7 +11124,7 @@ result_done:
 			return;
 		}
 		amvdec_stop();
-		if (hw->mmu_enable)
+		if (hw->mmu_enable && !is_vdec_hevc_combine())
 			amhevc_stop();
 		hw->no_decoder_buffer_flag = 0;
 		hw->next_again_flag = 1;
@@ -11014,7 +11133,7 @@ result_done:
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s: end of stream\n", __func__);
 		amvdec_stop();
-		if (hw->mmu_enable)
+		if (hw->mmu_enable && !is_vdec_hevc_combine())
 			amhevc_stop();
 		hw->eos = 1;
 		flush_dpb(p_H264_Dpb);
@@ -11035,7 +11154,7 @@ result_done:
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s: force exit\n", __func__);
 		amvdec_stop();
-		if (hw->mmu_enable)
+		if (hw->mmu_enable && !is_vdec_hevc_combine())
 			amhevc_stop();
 		if (hw->stat & STAT_ISR_REG) {
 			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
@@ -11088,7 +11207,7 @@ result_done:
 			vh264_report_pts(hw);
 
 		amvdec_stop();
-		if (hw->mmu_enable)
+		if (hw->mmu_enable && !is_vdec_hevc_combine())
 			amhevc_stop();
 		mutex_lock(&hw->chunks_mutex);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
@@ -11147,8 +11266,11 @@ result_done:
 	wait_vmh264_search_done(hw);
 	ATRACE_COUNTER(hw->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_END);
 	/* mark itself has all HW resource released and input released */
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
+		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S7)) {
 		WRITE_VREG(DCAC_DMA_HW_CTL_CFG, 0);
+	}
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	if (hw->switch_dvlayer_flag) {
 		if (vdec->slave)
@@ -11409,10 +11531,13 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	run_count[DECODE_ID(hw)]++;
 	vdec_reset_core(vdec);
-	if (hw->mmu_enable)
+	if (hw->mmu_enable || is_vdec_hevc_combine())
 		hevc_reset_core(vdec);
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
+
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVC_CORE_ENABLE, 0);
 
 #ifdef DETECT_WRONG_MULTI_SLICE
 	hw->cur_picture_slice_count = 0;
@@ -11603,21 +11728,22 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		WRITE_VREG(AV_SCRATCH_G, hw->reg_g_status);
 	} else {
 		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-		ret = amvdec_vdec_loadmc_ex(VFORMAT_H264, "mh264", vdec, hw->fw->data);
-		if (ret < 0) {
-			amvdec_enable_flag = false;
-			amvdec_disable();
-			hw->vdec_pg_enable_flag = 0;
-			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-				"MH264 the %s fw loading failed, err: %x\n",
-				fw_tee_enabled() ? "TEE" : "local", ret);
-			hw->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-			vdec_schedule_work(&hw->work);
-			return;
+		if (!hw->mmu_enable || !is_vdec_hevc_combine()) {
+			ret = amvdec_vdec_loadmc_ex(VFORMAT_H264, "mh264", vdec, hw->fw->data);
+			if (ret < 0) {
+				amvdec_enable_flag = false;
+				amvdec_disable();
+				hw->vdec_pg_enable_flag = 0;
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+					"MH264 the %s fw loading failed, err: %x\n",
+					fw_tee_enabled() ? "TEE" : "local", ret);
+				hw->dec_result = DEC_RESULT_FORCE_EXIT;
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
+				vdec_schedule_work(&hw->work);
+				return;
+			}
+			vdec->mc_type  = VFORMAT_H264;
 		}
-		vdec->mc_type  = VFORMAT_H264;
-		hw->reg_g_status = READ_VREG(AV_SCRATCH_G);
 		if (hw->mmu_enable) {
 			ret = amhevc_loadmc_ex(VFORMAT_H264, "mh264_mmu",
 				hw->fw_mmu->data);
@@ -11635,6 +11761,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			vdec->mc_type = ((1 << 16) | VFORMAT_H264);
 		}
 		vdec->mc_loaded = 0;
+		hw->reg_g_status = READ_VREG(AV_SCRATCH_G);
 		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 	}
 	vmh264_reset_udr_mgr(hw);
@@ -11714,10 +11841,28 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hw->dpb.first_insert_frame = FirstInsertFrm_SKIPDONE;
 	if (vdec->mvfrm)
 		vdec->mvfrm->hw_decode_start = local_clock();
+
+	if (!hw->mmu_enable && is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL, (0 << 1) | (1 << 0));
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL, (1 << 1) | (0 << 0));
+
+		WRITE_VREG(HEVCD_MPP_VDEC_MCR_CTL, (1 << 4) | 1);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 1 << 31);
+		WRITE_VREG(HEVCD_IPP_TOP_FRMCONFIG,
+			((hw->mb_height_hevc << 4) & 0xffff) << 16 |
+			((hw->mb_width_hevc << 4) & 0xffff));
+
+		// config fix stride
+		WRITE_VREG(HEVCD_MCR_FIXSIZE_CFG, ((1 << 15) | (hw->mb_width << 4)));
+
+		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 18);
+	}
+
 	amvdec_start();
 	if (hw->mmu_enable /*&& !hw->frame_busy && !hw->frame_done*/) {
-		WRITE_VREG(HEVC_ASSIST_SCRATCH_0, 0x0);
-		amhevc_start();
+		WRITE_VREG(SYS_COMMAND, 0x0);
+		if (!is_vdec_hevc_combine())
+			amhevc_start();
 	}
 
 	/* if (hw->init_flag) { */
@@ -11766,7 +11911,7 @@ static void reset(struct vdec_s *vdec)
 	cancel_work_sync(&hw->notify_work);
 	if (hw->stat & STAT_VDEC_RUN) {
 		amvdec_stop();
-		if (hw->mmu_enable)
+		if (hw->mmu_enable && !is_vdec_hevc_combine())
 			amhevc_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
@@ -12446,7 +12591,7 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 	if (hw->enable_fence)
 		vdec_fence_release(hw, vdec->sync);
 
-	if (hw->mmu_enable) {
+	if (hw->mmu_enable && !is_vdec_hevc_combine()) {
 		vdec_poweroff(VDEC_HEVC);
 	}
 
@@ -12469,6 +12614,7 @@ static struct platform_driver ammvdec_h264_driver = {
 	}
 };
 
+#ifndef PXP_DEBUG
 static struct mconfig hm264_configs[] = {
 	MC_PU32("h264_debug_flag", &h264_debug_flag),
 	MC_PI32("start_decode_buf_level", &start_decode_buf_level),
@@ -12500,6 +12646,7 @@ static void set_debug_flag(const char *module, int debug_flags)
 {
 	h264_debug_flag = debug_flags;
 }
+#endif
 
 static int __init ammvdec_h264_driver_init_module(void)
 {
@@ -12511,11 +12658,13 @@ static int __init ammvdec_h264_driver_init_module(void)
 		return -ENODEV;
 	}
 
+#ifndef PXP_DEBUG
 	register_set_debug_flag_func(DEBUG_AMVDEC_H264_V4L, set_debug_flag);
 	vcodec_profile_register_v2("H.264-V4L", VFORMAT_H264, 1);
 	INIT_REG_NODE_CONFIGS("media.decoder", &hm264_node,
 		"mh264-v4l", hm264_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_H264, 1);
+#endif
 
 	return 0;
 }

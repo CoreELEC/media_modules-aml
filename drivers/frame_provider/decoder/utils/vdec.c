@@ -949,6 +949,9 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 	unsigned int mask = 0;
 	unsigned int cpu_type = get_cpu_major_id();
 
+	if (is_vdec_hevc_combine())
+		target = VDEC_INPUT_TARGET_HEVC;
+
 	if (target == VDEC_INPUT_TARGET_VLD) {
 		if ((cpu_type == AM_MESON_CPU_MAJOR_ID_S7) ||
 			(cpu_type == AM_MESON_CPU_MAJOR_ID_S7D) ||
@@ -969,7 +972,8 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 			mask = (1 << 4); /*hevc*/
 			if ((cpu_type >= AM_MESON_CPU_MAJOR_ID_G12A) &&
 				(cpu_type != AM_MESON_CPU_MAJOR_ID_T5W) &&
-				(cpu_type != AM_MESON_CPU_MAJOR_ID_TXHD2))
+				(cpu_type != AM_MESON_CPU_MAJOR_ID_TXHD2) &&
+				(cpu_type != AM_MESON_CPU_MAJOR_ID_T6D))
 				mask |= (1 << 8); /*hevcb */
 		}
 	}
@@ -1023,6 +1027,7 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 			sts_reg_addr = 0xcc;
 			break;
 		case AM_MESON_CPU_MAJOR_ID_S7D:
+		case AM_MESON_CPU_MAJOR_ID_T6D:
 			sts_reg_addr = 0xcf;
 			break;
 		case AM_MESON_CPU_MAJOR_ID_S6:
@@ -5176,6 +5181,10 @@ void vdec_poweron(enum vdec_type_e core)
 	if (core >= VDEC_MAX)
 		return;
 
+	if (is_vdec_hevc_combine() && (core == VDEC_1)) {
+		core = VDEC_HEVC;
+	}
+
 	mutex_lock(&vdec_mutex);
 
 	vdec_core->power_ref_count[core]++;
@@ -5200,6 +5209,10 @@ void vdec_poweroff(enum vdec_type_e core)
 	if (core >= VDEC_MAX)
 		return;
 
+	if (is_vdec_hevc_combine() && (core == VDEC_1)) {
+		core = VDEC_HEVC;
+	}
+
 	mutex_lock(&vdec_mutex);
 	if (vdec_core->power_ref_count[core] == 0) {
 		mutex_unlock(&vdec_mutex);
@@ -5220,6 +5233,9 @@ EXPORT_SYMBOL(vdec_poweroff);
 
 bool vdec_on(enum vdec_type_e core)
 {
+	if (is_vdec_hevc_combine() && (core == VDEC_1)) {
+		core = VDEC_HEVC;
+	}
 	return vdec_core->pm->power_state(vdec_core->cma_dev, core);
 }
 EXPORT_SYMBOL(vdec_on);
@@ -5323,6 +5339,10 @@ EXPORT_SYMBOL(vdec_source_changed);
 
 void vdec_reset_core(struct vdec_s *vdec)
 {
+	if (is_vdec_hevc_combine() && is_vcpu_clk_set()) {
+		SET_VREG_MASK(DOS_GCLK_EN3, (1 << 2)); //turn on vcpu clock
+	}
+
 	if (is_support_axi_ctrl()) {
 		/* t7 no dmc req for vdec only */
 		vdec_dbus_ctrl(0);
@@ -5348,7 +5368,8 @@ void vdec_reset_core(struct vdec_s *vdec)
 	WRITE_VREG(DOS_SW_RESET0, 0);
 
 	// clear mmu config
-	if (vdec && (vdec->core_mask & CORE_MASK_HEVC) == 0) {
+	if ((vdec && (vdec->core_mask & CORE_MASK_HEVC) == 0) ||
+		is_vdec_hevc_combine()) {
 		CLEAR_VREG_MASK(VDEC_ASSIST_MMC_CTRL1, 1 << 3);
 		CLEAR_VREG_MASK(MDEC_PIC_DC_MUX_CTRL, 1 << 31);
 		WRITE_VREG(MDEC_EXTIF_CFG1, 0);
@@ -5520,6 +5541,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) | ((1<<1)|(1<<12)|(1<<13)));
 		break;
 	case AM_MESON_CPU_MAJOR_ID_T5M:
+	case AM_MESON_CPU_MAJOR_ID_T6D:
 		WRITE_RESET_REG((P_RESETCTRL_RESET6_LEVEL),
 				READ_RESET_REG(P_RESETCTRL_RESET6_LEVEL) & (~((1<<1))));
 		WRITE_RESET_REG((P_RESETCTRL_RESET6_LEVEL),

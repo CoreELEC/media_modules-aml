@@ -336,7 +336,7 @@ int vdec_source_changed_for_clk_set(int format, int width, int height, int fps)
 	 *changed to default  min clk.
 	 */
 
-	if (is_core_hevc_fmt(format)) {
+	if (is_core_hevc_fmt(format) || is_vdec_hevc_combine()) {
 		ret_clk = hevc_clock_set(clk);
 		clock_source_wxhxfps_saved[VDEC_HEVC] = width * height * fps;
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A &&

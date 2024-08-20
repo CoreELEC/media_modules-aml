@@ -854,6 +854,39 @@ static struct task_ops_s task_dec_ops = {
 	.put_vframe	= vc1_put_video_frame,
 };
 
+static void config_canvas_hevc(struct vdec_vc1_hw_s *hw)
+{
+	uint data32 = 0, endian = 0;
+
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0x2); // reset mcrcc
+
+	// program canvas0
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0 << 1) | 0);
+	data32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	data32 = data32 & 0xffff;
+	data32 = data32 | (data32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL2, data32);
+
+	// program canvas1
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (16 << 8) | (1 << 1) | 0);
+	data32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	data32 = data32 & 0xffff;
+	data32 = data32 | (data32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL3, data32);
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0xff0); // enable mcrcc progressive-mode
+
+	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
+	data32 &= (~0x3f);
+	// [5:4] -- address_format 00:linear 01:32x32 10:64x32
+	data32 |= (hw->canvas_mode << 4);
+	if (hw->canvas_mode == CANVAS_BLKMODE_LINEAR)
+		endian = 7;
+	data32 |= (1 << 3) | endian;
+	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
+
+	WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b); // enable new mcrcc
+}
+
 static int v4l_alloc_buff_config_canvas(struct vdec_vc1_hw_s *hw, int i)
 {
 	ulong decbuf_start = 0, decbuf_uv_start = 0;
@@ -899,6 +932,11 @@ static int v4l_alloc_buff_config_canvas(struct vdec_vc1_hw_s *hw, int i)
 		aml_buf->planes[1].bytes_used = decbuf_uv_size;
 	}
 
+	if (is_vdec_hevc_combine()) {
+		// config fix stride
+		WRITE_VREG(HEVCD_MCR_FIXSIZE_CFG, ((1 << 15) | canvas_width));
+	}
+
 	/* setting canvas */
 	vc1_canvas_config[i][0].width 		= canvas_width;
 	vc1_canvas_config[i][0].height		= canvas_height;
@@ -927,6 +965,20 @@ static int v4l_alloc_buff_config_canvas(struct vdec_vc1_hw_s *hw, int i)
 		vc1_canvas_config[i][1].block_mode,
 		vc1_canvas_config[i][1].endian,
 		VDEC_1);
+
+	if (is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, ((2 * i) << 8) | (1 << 1));
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, decbuf_start >> 5);
+
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, ((2 * i + 1) << 8) | (1 << 1));
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, decbuf_uv_start >> 5);
+
+		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (i << 8) | 1);
+		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, ((2 * i + 1) << 8) | (2 * i));
+
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
+		config_canvas_hevc(hw);
+	}
 
 	vc1_print(0, VC1_DEBUG_DETAIL, "[%d] %s y: %x uv: %x w: %d h: %d canvas_mode 0x%x endian %d \n",
 		ctx->id, __func__,
@@ -2144,6 +2196,15 @@ static int vvc1_prot_init(void)
 
 	WRITE_RESET_REG(RESET2_REGISTER, RESET_PIC_DC | RESET_DBLK);
 #endif
+	if (is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL, (0 << 1) | (1 << 0));
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL, (1 << 1) | (0 << 0));
+
+		WRITE_VREG(HEVCD_MPP_VDEC_MCR_CTL, (1 << 4) | 1);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 1 << 31);
+
+		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 18);
+	}
 
 	WRITE_VREG(POWER_CTL_VLD, 0x10);
 	WRITE_VREG_BITS(VLD_MEM_VIFIFO_CONTROL, 2, MEM_FIFO_CNT_BIT, 2);
@@ -2382,6 +2443,9 @@ static s32 vvc1_init(void)
 
 	intra_output = 0;
 	amvdec_enable();
+
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVC_CORE_ENABLE, 0);
 
 	vvc1_local_init(false);
 

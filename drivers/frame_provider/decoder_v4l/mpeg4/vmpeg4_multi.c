@@ -419,6 +419,39 @@ static struct task_ops_s task_dec_ops = {
 	.put_vframe	= mpeg4_put_video_frame,
 };
 
+static void config_canvas_hevc(struct vdec_mpeg4_hw_s *hw)
+{
+	uint data32 = 0, endian = 0;
+
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0x2); // reset mcrcc
+
+	// program canvas0
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0 << 1) | 0);
+	data32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	data32 = data32 & 0xffff;
+	data32 = data32 | (data32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL2, data32);
+
+	// program canvas1
+	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (16 << 8) | (1 << 1) | 0);
+	data32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
+	data32 = data32 & 0xffff;
+	data32 = data32 | (data32 << 16);
+	WRITE_VREG(HEVCD_MCRCC_CTL3, data32);
+	WRITE_VREG(HEVCD_MCRCC_CTL1, 0xff0); // enable mcrcc progressive-mode
+
+	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
+	data32 &= (~0x3f);
+	// [5:4] -- address_format 00:linear 01:32x32 10:64x32
+	data32 |= (hw->blkmode << 4);
+	if (hw->blkmode == CANVAS_BLKMODE_LINEAR)
+		endian = 7;
+	data32 |= (1 << 3) | endian;
+	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
+
+	WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b); // enable new mcrcc
+}
+
 static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i)
 {
 	u32 canvas;
@@ -464,6 +497,11 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 		canvas_height	= ALIGN(hw->frame_height, 64);
 		aml_buf->planes[0].bytes_used = decbuf_y_size;
 		aml_buf->planes[1].bytes_used = decbuf_uv_size;
+	}
+
+	if (is_vdec_hevc_combine()) {
+		// config fix stride
+		WRITE_VREG(HEVCD_MCR_FIXSIZE_CFG, ((1 << 15) | canvas_width));
 	}
 
 	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
@@ -514,6 +552,23 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 
 	aml_buf_get_ref(&ctx->bm, aml_buf);
 	hw->aml_buf = NULL;
+
+	if (is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR,
+			(canvas_y(canvas) << 8) | (1 << 1));
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA,
+			hw->canvas_config[i][0].phy_addr >> 5);
+
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR,
+			(canvas_u(canvas) << 8) | (1 << 1));
+		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA,
+			hw->canvas_config[i][1].phy_addr >> 5);
+
+		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
+			(canvas_y(canvas) << 7) | 1);
+		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
+			(canvas_u(canvas) << 8) | canvas_y(canvas));
+	}
 
 	return 0;
 }
@@ -2432,6 +2487,16 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	int i;
 
+	if (is_vdec_hevc_combine()) {
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL, (0 << 1) | (1 << 0));
+		WRITE_VREG(HEVCD_IPP_TOP_CNTL, (1 << 1) | (0 << 0));
+
+		WRITE_VREG(HEVCD_MPP_VDEC_MCR_CTL, (1 << 4) | 1);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 1 << 31);
+
+		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 18);
+	}
+
 	if (!hw->init_flag)
 		vmpeg4_workspace_init(hw);
 
@@ -2460,7 +2525,29 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 					&hw->canvas_config[i][0], VDEC_1);
 				config_cav_lut(canvas_u(hw->canvas_spec[i]),
 					&hw->canvas_config[i][1], VDEC_1);
+
+				if (is_vdec_hevc_combine()) {
+					WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR,
+						(canvas_y(hw->canvas_spec[i]) << 8) | (1 << 1));
+					WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA,
+						hw->canvas_config[i][0].phy_addr >> 5);
+
+					WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR,
+						(canvas_u(hw->canvas_spec[i]) << 8) | (1 << 1));
+					WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA,
+						hw->canvas_config[i][1].phy_addr >> 5);
+
+					WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
+						(canvas_y(hw->canvas_spec[i]) << 7) | 1);
+					WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
+						(canvas_u(hw->canvas_spec[i]) << 8) | canvas_y(hw->canvas_spec[i]));
+				}
 			}
+		}
+
+		if (is_vdec_hevc_combine()) {
+			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
+			config_canvas_hevc(hw);
 		}
 
 		/* prepare REF0 & REF1
@@ -2519,10 +2606,15 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 			SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
 	} else {
 		if ((v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21) ||
-			(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
+			(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M)) {
 			SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
-		else
+			if (is_vdec_hevc_combine())
+				SET_VREG_MASK(HEVCD_IPP_AXIIF_CONFIG, 1 << 12);
+		} else {
 			CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+			if (is_vdec_hevc_combine())
+				CLEAR_VREG_MASK(HEVCD_IPP_AXIIF_CONFIG, 1 << 12);
+		}
 	}
 
 	WRITE_VREG(MDEC_PIC_DC_THRESH, 0x404038aa);
@@ -2932,6 +3024,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
 	vdec_reset_core(vdec);
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVC_CORE_ENABLE, 0);
 
 	if ((vdec_frame_based(vdec)) &&
 		(hw->dec_result == DEC_RESULT_UNFINISH)) {

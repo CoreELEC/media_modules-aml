@@ -499,6 +499,31 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.support_h265_level_idc = IDC_5_2,
 		.is_support_34bit = true,
 	},
+
+	[AM_MESON_CPU_MAJOR_ID_T6D - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_T6D,
+		.reg_compat = NULL,
+		.max_vdec_clock  = 667,
+		.max_hevcf_clock = 667,
+		.max_hevcb_clock = 667,
+		.hevc_clk_combine_flag  = true,
+		.is_hw_parser_support   = false,
+		.is_vdec_canvas_support = true,
+		.is_support_h264_mmu    = true,
+		.is_support_dual_core = false,
+		.is_support_axi_ctrl = false,
+		.is_mjpeg_endian_rematch = true,
+		.is_vcpu_clk_set = true,
+		.is_vp9_adapt_prob_hw_mode = true,
+		.is_support_p010 = true,
+		.is_support_monitor = true,
+		.hevc_stream_extra_shift = 8,
+		.is_vdec_hevc_combine = true,
+		.vdec_max_resolution = RESOLUTION_1080P,
+		.hevc_max_resolution = RESOLUTION_1080P,
+		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AV1,
+		.support_h265_level_idc = IDC_4_1,
+	},
 };
 
 /* sub id features */
@@ -713,6 +738,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-s6",
 		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_S6 - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-t6d",
+		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_T6D - MAJOR_ID_START],
 	},
 	{},
 };
@@ -1147,6 +1176,7 @@ enum ResResult format_resolution_fatal_error(int format, int w, int h)
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
 		case VFORMAT_AVS3:
+		case VFORMAT_H266:
 			if (max == RESOLUTION_4K) {
 				if ((w == h && w * h > MAX_SIZE_4K && w * h <= MAX_SIZE_8K) ||
 				(w > h && RANGE_IN(4096, 8192, w) && RANGE_IN(2304, 4608, h)) ||
@@ -1282,6 +1312,12 @@ inline bool is_support_34bit_mode(void)
 }
 EXPORT_SYMBOL(is_support_34bit_mode);
 
+inline bool is_vdec_hevc_combine(void)
+{
+	return platform_dos_dev->is_vdec_hevc_combine;
+}
+EXPORT_SYMBOL(is_vdec_hevc_combine);
+
 void pr_dos_infos(void)
 {
 	pr_info("dos device info:\n");
@@ -1313,6 +1349,7 @@ void pr_dos_infos(void)
 	pr_info("mjpeg endian rematch: %d\n", is_mjpeg_endian_rematch());
 	pr_info("vcpu clk set        : %d\n", is_vcpu_clk_set());
 	pr_info("vp9 adatp prob hw mode : %d\n", is_vp9_adapt_prob_hw_mode());
+	pr_info("vdec hevc combine   : %d\n", is_vdec_hevc_combine());
 }
 EXPORT_SYMBOL(pr_dos_infos);
 
