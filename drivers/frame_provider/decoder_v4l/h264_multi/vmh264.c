@@ -6485,7 +6485,7 @@ static bool is_last_buffer_with_one_field(struct vdec_h264_hw_s *hw)
 {
 	int i = 0;
 	int last = 0;
-	if (hw->dpb.mDPB.used_size > 0 && get_used_buf_count(hw) >= hw->dpb.mDPB.size) {
+	if (hw->dpb.mDPB.used_size > 0 && (get_used_buf_count(hw) >= hw->dpb.dec_dpb_size)) {
 		last = hw->dpb.mDPB.used_size-1;
 		for (i = 0; i < hw->dpb.mDPB.used_size; i++) {
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
@@ -6504,7 +6504,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
-	int i;
+
 	if ((kfifo_len(&hw->newframe_q) <= 0) ||
 	    ((hw->config_bufmgr_done) && (!is_there_free_buffer(vdec))) ||
 	    ((p_H264_Dpb->mDPB.init_done) &&
@@ -6555,6 +6555,8 @@ static bool is_buffer_available(struct vdec_s *vdec)
 				p_H264_Dpb->mDPB.size))) ||
 			(!is_there_free_buffer(vdec))) &&
 			(hw->discard_dv_data)) {
+			int ret = 0;
+			/*int i;
 			unsigned long flags;
 			spin_lock_irqsave(&hw->bufspec_lock, flags);
 
@@ -6565,16 +6567,24 @@ static bool is_buffer_available(struct vdec_s *vdec)
 					return have_free_buf_spec(vdec, false);
 				}
 			}
-			spin_unlock_irqrestore(&hw->bufspec_lock, flags);
+			spin_unlock_irqrestore(&hw->bufspec_lock, flags);*/
 
-			if ((!one_packet_multi_frames_multi_run &&
+			ret = bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
+			if (ret)
+				return have_free_buf_spec(vdec, false);
+
+			if ((p_H264_Dpb->mDPB.used_size >= p_H264_Dpb->dec_dpb_size) ||
+				!check_num_ref(&p_H264_Dpb->mDPB))
+				bufmgr_recover(hw);
+
+			/*if ((!one_packet_multi_frames_multi_run &&
 					(p_H264_Dpb->mDPB.used_size >= (p_H264_Dpb->mDPB.size - 1))) ||
 				(one_packet_multi_frames_multi_run &&
 					(p_H264_Dpb->mDPB.used_size >= p_H264_Dpb->mDPB.size)) ||
 				!check_num_ref(&p_H264_Dpb->mDPB)) {
 				bufmgr_recover(hw);
 			}
-			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
+			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);*/
 		} else if ((hw->error_proc_policy & 0x8) &&
 			(p_Dpb->ref_frames_in_buffer >
 			(imax(
@@ -11304,7 +11314,9 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 #endif
 
 	if (hw->v4l_params_parsed) {
-		if (is_buffer_available(vdec))
+		if (is_last_buffer_with_one_field(hw))
+			ret = 1;
+		else if (is_buffer_available(vdec))
 			ret = 1;
 		else
 			ret = 0;
@@ -11395,6 +11407,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (hw->reset_bufmgr_flag ||
 		((hw->error_proc_policy & 0x40) &&
 		p_H264_Dpb->buf_alloc_fail)) {
+		if (p_H264_Dpb->buf_alloc_fail)
+			hw->reset_bufmgr_flag = 1;
+
 		h264_reset_bufmgr_v4l(vdec, 1, false);
 		//flag must clear after reset for v4l buf_spec_init use
 		hw->reset_bufmgr_flag = 0;

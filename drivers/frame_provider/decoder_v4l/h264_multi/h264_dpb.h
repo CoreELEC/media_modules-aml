@@ -999,7 +999,7 @@ void bufmgr_force_recover(struct h264_dpb_stru *p_H264_Dpb);
 int get_long_term_flag_by_buf_spec_num(struct h264_dpb_stru *p_H264_Dpb,
 	int buf_spec_num);
 
-void bufmgr_h264_remove_unused_frame(struct h264_dpb_stru *p_H264_Dpb,
+int bufmgr_h264_remove_unused_frame(struct h264_dpb_stru *p_H264_Dpb,
 	u8 force_flag);
 
 void flush_dpb(struct h264_dpb_stru *p_H264_Dpb);
