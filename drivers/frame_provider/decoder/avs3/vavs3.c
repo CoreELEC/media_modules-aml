@@ -24,6 +24,7 @@
 #include <linux/timer.h>
 #include <linux/kfifo.h>
 #include <linux/kthread.h>
+#include <linux/completion.h>
 #include <linux/spinlock.h>
 #include <linux/platform_device.h>
 #include <linux/amlogic/media/vfm/vframe.h>
@@ -954,6 +955,7 @@ struct AVS3Decoder_s {
 	u32 error_handle_mode;
 	u32 error_handle_policy;
 	u32 lcu_percentage_threshold;
+	struct completion complete;
 };
 
 static int  compute_losless_comp_body_size(
@@ -4793,21 +4795,54 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 	int i;
 	/*if (debug & AVS3_DBG_BUFMGR_MORE)
 		pr_info("%s\n", __func__);*/
-	data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
 
-	/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
-	data32 &= ~(7 << 29);
-	data32 |= (3 << 29);
+	if (!efficiency_mode) {
+		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
 
-	data32 = data32 |
-	(1 << 24) |/*stream_buffer_empty_int_amrisc_enable*/
-	(1 << 22) |/*stream_fifo_empty_int_amrisc_enable*/
-	(1 << 7) |/*dec_done_int_cpu_enable*/
-	(1 << 4) |/*startcode_found_int_cpu_enable*/
-	(0 << 3) |/*startcode_found_int_amrisc_enable*/
-	(1 << 0)    /*parser_int_enable*/
-	;
-	WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+		/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
+		data32 &= ~(7 << 29);
+		data32 |= (3 << 29);
+
+		data32 = data32 |
+		(1 << 24) |/*stream_buffer_empty_int_amrisc_enable*/
+		(1 << 22) |/*stream_fifo_empty_int_amrisc_enable*/
+		(1 << 7) |/*dec_done_int_cpu_enable*/
+		(1 << 4) |/*startcode_found_int_cpu_enable*/
+		(0 << 3) |/*startcode_found_int_amrisc_enable*/
+		(1 << 0)    /*parser_int_enable*/
+		;
+		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+
+		WRITE_VREG(HEVC_SHIFT_CONTROL,
+			(6 << 20) | /* emu_push_bits  (6-bits for AVS3)*/
+			(0 << 19) | /* emu_3_enable, maybe turned on in microcode*/
+			(0 << 18) | /* emu_2_enable, maybe turned on in microcode*/
+			(0 << 17) | /* emu_1_enable, maybe turned on in microcode*/
+			(0 << 16) | /* emu_0_enable, maybe turned on in microcode*/
+			(0 << 14) | /*disable_start_code_protect*/
+			(3 << 6) | /* sft_valid_wr_position*/
+			(2 << 4) | /* emulate_code_length_sub_1*/
+			(2 << 1) | /* start_code_length_sub_1*/
+			(1 << 0)   /* stream_shift_enable*/
+			);
+
+		WRITE_VREG(HEVC_SHIFT_LENGTH_PROTECT,
+			(0 << 30) |   /*data_protect_fill_00_enable*/
+			(1 << 29)     /*data_protect_fill_ff_enable*/
+			);
+		WRITE_VREG(HEVC_CABAC_CONTROL,
+			(1 << 0)/*cabac_enable*/
+		);
+
+		WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
+			(1 << 0)/* hevc_parser_core_clk_en*/
+		);
+#ifdef ENABLE_SWAP_TEST
+		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 100);
+#else
+		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
+#endif
+	}
 
 	data32 = READ_VREG(HEVC_SHIFT_STATUS);
 	data32 = data32 |
@@ -4816,49 +4851,25 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 	(1 << 0)/*startcode_check_on*/
 	;
 	WRITE_VREG(HEVC_SHIFT_STATUS, data32);
-	WRITE_VREG(HEVC_SHIFT_CONTROL,
-		(6 << 20) | /* emu_push_bits  (6-bits for AVS3)*/
-		(0 << 19) | /* emu_3_enable, maybe turned on in microcode*/
-		(0 << 18) | /* emu_2_enable, maybe turned on in microcode*/
-		(0 << 17) | /* emu_1_enable, maybe turned on in microcode*/
-		(0 << 16) | /* emu_0_enable, maybe turned on in microcode*/
-		(0 << 14) | /*disable_start_code_protect*/
-		(3 << 6) | /* sft_valid_wr_position*/
-		(2 << 4) | /* emulate_code_length_sub_1*/
-		(2 << 1) | /* start_code_length_sub_1*/
-		(1 << 0)   /* stream_shift_enable*/
-		);
-
-	WRITE_VREG(HEVC_SHIFT_LENGTH_PROTECT,
-		(0 << 30) |   /*data_protect_fill_00_enable*/
-		(1 << 29)     /*data_protect_fill_ff_enable*/
-		);
-	WRITE_VREG(HEVC_CABAC_CONTROL,
-		(1 << 0)/*cabac_enable*/
-	);
-
-	WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
-		(1 << 0)/* hevc_parser_core_clk_en*/
-	);
-
 	WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 
 	/*Initial IQIT_SCALELUT memory -- just to avoid X in simulation*/
-	if (is_rdma_enable())
+	if (is_rdma_enable()) {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<2))));
 		rdma_back_end_work(dec->rdma_phy_adr, RDMA_SIZE);
-	else {
-		if ((debug & AVS3_DBG_DISABLE_IQIT_SCALELUT_INIT) == 0) {
-			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
-			for (i = 0; i < 1024; i++)
-				WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+	} else {
+		if (efficiency_mode)
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<2)));
+		else {
+			if ((debug & AVS3_DBG_DISABLE_IQIT_SCALELUT_INIT) == 0) {
+				WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<2))));
+				WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
+				for (i = 0; i < 1024; i++)
+					WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+			}
 		}
 	}
 
-#ifdef ENABLE_SWAP_TEST
-	WRITE_VREG(HEVC_STREAM_SWAP_TEST, 100);
-#else
-	WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
-#endif
 	if (!dec->m_ins_flag)
 		decode_mode = DECODE_MODE_SINGLE;
 	else if (vdec_frame_based(hw_to_vdec(dec)))
@@ -7169,7 +7180,7 @@ irqreturn_t avs3_back_irq_cb(struct vdec_s *vdec, int irq)
 	ATRACE_COUNTER(dec->trace.decode_back_time_name, DECODER_ISR_PIC_DONE);
 	dec->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 	if (dec->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
-		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_PIC_END, CORE_MASK_HEVC_BACK);
 	}
 
 	/*BackEnd_Handle()*/
@@ -7548,14 +7559,18 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		struct avs3_frame_s *pic = dec->avs3_dec.cur_pic;
 		u32 shiftbytes = 0;
 
+		if (efficiency_mode) {
+			if (!wait_for_completion_timeout(&dec->complete, msecs_to_jiffies(34)))
+				avs3_print(dec, 0, "!!!wait for completion timeout %d\n", __LINE__);
+		}
+
 		if (pic != NULL)
 			pic->poc = ctx->info.pic_header.dtr;
-		mutex_lock(&dec->slice_header_lock);
-		mutex_unlock(&dec->slice_header_lock);
-		if (dec_status == HEVC_DECPIC_DATA_DONE)
-			vdec->front_pic_done = true;
-		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 
+		if (dec_status == HEVC_DECPIC_DATA_DONE) {
+			vdec->front_pic_done = true;
+			vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
+		}
 		if (pic && (vdec_stream_based(hw_to_vdec(dec)))
 			&& (dec_status == HEVC_DECPIC_DATA_DONE))
 			pic->stream_size = vdec_get_stream_size(hw_to_vdec(dec));
@@ -7760,11 +7775,15 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 				&dec->avs3_dec.param);
 		} else {
 			decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_START, TRACE_BASIC);
-			for (i = 0; i < (RPM_VALID_END - RPM_BEGIN); i += 4) {
-				int ii;
-				for (ii = 0; ii < 4; ii++)
-					dec->avs3_dec.param.l.data[i + ii] =
-						dec->rpm_ptr[i + 3 - ii];
+			if (efficiency_mode) {
+				memcpy(dec->avs3_dec.param.l.data, dec->rpm_ptr,
+					(RPM_VALID_END - RPM_BEGIN) * sizeof(dec->rpm_ptr[0]));
+			} else {
+				for (i = 0; i < (RPM_VALID_END - RPM_BEGIN); i += 4) {
+					int ii;
+					for (ii = 0; ii < 4; ii++)
+						dec->avs3_dec.param.l.data[i + ii] = dec->rpm_ptr[i + 3 - ii];
+				}
 			}
 			decoder_trace(dec->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_END, TRACE_BASIC);
 		}
@@ -8512,6 +8531,7 @@ decode_slice:
 			|| (start_code == VIDEO_EDIT_CODE)) {
 			avs3_prepare_display_buf(dec);
 			release_free_mmu_buffers(dec);
+			complete(&dec->complete);
 		}
 	}
 	mutex_unlock(&dec->slice_header_lock);
@@ -8543,13 +8563,14 @@ static irqreturn_t vavs3_isr(int irq, void *data)
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 	if (dec_status == HEVC_DECPIC_DATA_DONE) {
-		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_PIC_END, CORE_MASK_HEVC);
 	}
 
 	WRITE_VREG(dec->ASSIST_MBOX0_CLR_REG, 1);
 
 	if ((dec_status == AVS3_HEAD_PIC_I_READY) ||
 		(dec_status == AVS3_HEAD_PIC_PB_READY)) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_HEADER_END, CORE_MASK_HEVC);
 		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_HEAD_DONE, TRACE_PERFORMANCE_DETAIL);
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_PIC_DONE, TRACE_PERFORMANCE_DETAIL);
@@ -9028,13 +9049,13 @@ static void vavs3_prot_init(struct AVS3Decoder_s *dec)
 		return;
 	}
 #endif
-	WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x00000100);
-	WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000000);
-
-// Set MCR fetch priorities
-	data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
-	WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
-
+	if (!efficiency_mode) {
+		WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x00000100);
+		WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000000);
+		// Set MCR fetch priorities
+		data32 = 0x1 | (0x1 << 2) | (0x1 <<3) | (24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
+		WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
+	}
 #endif
 
 	WRITE_VREG(HEVC_WAIT_FLAG, 1);
@@ -9711,11 +9732,12 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 	struct vdec_s *vdec = hw_to_vdec(dec);
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 
-	/*if (dec->dec_result == DEC_RESULT_DONE)
+	if (dec->dec_result == DEC_RESULT_DONE)
 		decoder_trace(dec->trace.decode_time_name, DECODER_WORKER_START, TRACE_BASIC);
-	else if (dec->dec_result == DEC_RESULT_AGAIN)
-		decoder_trace(dec->trace.decode_time_name, DECODER_WORKER_AGAIN, TRACE_BASIC);*/
-
+	else if (dec->dec_result == DEC_RESULT_AGAIN) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_EVENT_AGAIN, CORE_MASK_HEVC);
+		decoder_trace(dec->trace.decode_time_name, DECODER_WORKER_AGAIN, TRACE_BASIC);
+	}
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
 	 */
@@ -10547,18 +10569,18 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START, TRACE_BASIC);
 #ifdef NEW_FB_CODE
+	/*
+		HEVC_EFFICIENCY_MODE
+		bit[0/1] 1: open efficiency mode, 0: close efficiency mode
+		bit[2] 1: no support rdma, 0: support rdma
+	*/
+	if (efficiency_mode) {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+	} else {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+	}
+
 	if (dec->front_back_mode) {
-
-		/*
-			HEVC_EFFICIENCY_MODE
-			bit[0/1] 1: open efficiency mode, 0: close efficiency mode
-		*/
-		if (efficiency_mode) {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
-		} else {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
-		}
-
 		avs3_hw_init(dec, 1, 0);
 			//config_decode_mode(dec);
 		if (dec->front_back_mode == 1) {
@@ -10618,6 +10640,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	} else
 #endif
 	amhevc_start();
+	vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
+
 	dec->stat |= STAT_VDEC_RUN;
 	decoder_trace(dec->trace.decode_time_name, DECODER_RUN_END, TRACE_PERFORMANCE_DETAIL);
 #ifdef NEW_FB_CODE
@@ -11093,6 +11117,7 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 	dec->error_handle_policy = error_handle_policy;
 	dec->error_handle_mode = error_handle_mode;
 	dec->lcu_percentage_threshold = lcu_percentage_threshold;
+	init_completion(&dec->complete);
 
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX)
 		dec->stat |= VP9_TRIGGER_FRAME_ENABLE;

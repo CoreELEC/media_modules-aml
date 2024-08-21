@@ -1535,6 +1535,7 @@ int32_t  AEC_startcode_follows(int32_t eos_bit);
 #define RPM_BEGIN                                              0x100
 #define ALF_BEGIN                                              0x180
 #define RPM_END                                                0x280
+#define RPM_VALID_END                                          0x236
 
 union param_u {
 	struct {

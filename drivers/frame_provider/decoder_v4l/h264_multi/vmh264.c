@@ -4550,7 +4550,7 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 		 * 01 - top, 10 - bottom, 11 - frame
 		 */
 
-	#ifdef ERROR_CHECK
+#ifdef ERROR_CHECK
 		if (ref == NULL) {
 			hw->data_flag |= ERROR_FLAG;
 			pic->data_flag  |= ERROR_FLAG;
@@ -7664,8 +7664,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					vdec_schedule_work(&hw->work);
 					return IRQ_HANDLED;
 				}
-			}
-			else {
+			} else {
 				mutex_lock(&hw->pic_mutex);
 				if (p_H264_Dpb->mVideo.dec_picture) {
 					if (p_H264_Dpb->mVideo.dec_picture->colocated_buf_index >= 0) {
@@ -7690,7 +7689,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			}
 		}
 #endif
-
 		hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
 		hw->reg_iqidct_control_init_flag = 1;
 		hw->reg_vcop_ctrl_reg = READ_VREG(VCOP_CTRL_REG);
@@ -7721,7 +7719,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 #else
 		dpb_param_bak = p_H264_Dpb->dpb_param;
 		ATRACE_COUNTER(hw->trace.decode_header_time_name, TRACE_HEADER_RPM_START);
-		for (i = 0; i < (RPM_END-RPM_BEGIN); i += 4) {
+		for (i = 0; i < (RPM_VALUE_END-RPM_BEGIN); i += 4) {
 			int ii;
 
 			for (ii = 0; ii < 4; ii++) {
@@ -7741,6 +7739,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 		ATRACE_COUNTER(hw->trace.decode_header_time_name, TRACE_HEADER_RPM_END);
 #endif
+
 #ifdef DETECT_WRONG_MULTI_SLICE
 		if (p_H264_Dpb->mVideo.dec_picture &&
 				hw->multi_slice_pic_flag == 2 &&
@@ -7752,6 +7751,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			vh264_pic_done_proc(vdec);
 		}
 #endif
+
 		data_low = p_H264_Dpb->dpb_param.l.data[VIDEO_SIGNAL_LOW];
 		data_high = p_H264_Dpb->dpb_param.l.data[VIDEO_SIGNAL_HIGH];
 
@@ -7867,7 +7867,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				hw->data_flag = NULL_FLAG;
 				goto pic_done_proc;
 		}
-
 		slice_header_process_status =
 			h264_slice_header_process(p_H264_Dpb, &frame_num_gap);
 		if (hw->mmu_enable)
@@ -8049,7 +8048,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			}
 		}
 		mutex_unlock(&hw->pic_mutex);
-
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 
 		if (slice_header_process_status == 1)
@@ -8466,7 +8464,6 @@ send_again:
 		return IRQ_HANDLED;
 	}
 
-
 	/* ucode debug */
 	debug_tag = READ_VREG(DEBUG_REG1);
 	if (debug_tag & 0x10000) {
@@ -8555,7 +8552,9 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 	p_H264_Dpb->vdec = vdec;
 	p_H264_Dpb->dec_dpb_status = READ_VREG(DPB_STATUS_REG);
 	if (p_H264_Dpb->dec_dpb_status == H264_PIC_DATA_DONE) {
-		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_VDEC_1);
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_PIC_END, CORE_MASK_VDEC_1);
+	} else if (p_H264_Dpb->dec_dpb_status == H264_SLICE_HEAD_DONE) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_HEADER_END, CORE_MASK_VDEC_1);
 	}
 
 	if (p_H264_Dpb->dec_dpb_status == H264_SLICE_HEAD_DONE ||
@@ -9443,7 +9442,7 @@ static void wait_vmh264_search_done(struct vdec_h264_hw_s *hw)
 	u32 vld_rp = READ_VREG(VLD_MEM_VIFIFO_RP);
 	int count = 0;
 	do {
-		usleep_range(100, 101);
+		usleep_range(30, 30);
 		if (vld_rp == READ_VREG(VLD_MEM_VIFIFO_RP))
 			break;
 		if (count > 2000) {
@@ -10755,9 +10754,10 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
-	} else if (hw->dec_result == DEC_RESULT_AGAIN)
+	} else if (hw->dec_result == DEC_RESULT_AGAIN) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_EVENT_AGAIN, CORE_MASK_VDEC_1);
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_AGAIN);
-
+	}
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
 		"%s dec_result %d %x %x %x\n",
 		__func__,
@@ -10884,6 +10884,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						(hw->dpb.mDPB.size<<16) |
 						(hw->dpb.mDPB.size<<8));
 					start_process_time(hw);
+					vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_VDEC_1);
 					return;
 				}
 			}
@@ -10911,6 +10912,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				(hw->dpb.mDPB.size<<16) |
 				(hw->dpb.mDPB.size<<8));
 			start_process_time(hw);
+			vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_VDEC_1);
 			return;
 		}
 	} else
@@ -11574,6 +11576,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (vdec->slave || vdec->master)
 		vdec_set_flag(vdec, VDEC_FLAG_SELF_INPUT_CONTEXT);
 #endif
+
 	if ((vdec_frame_based(vdec)) &&
 		(hw->multi_frame_unfinish)) {
 		u32 data_invalid = 0;
@@ -11750,8 +11753,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hw->reg_g_status = READ_VREG(AV_SCRATCH_G);
 		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 	}
-	vmh264_reset_udr_mgr(hw);
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
+
+	vmh264_reset_udr_mgr(hw);
 	if (vh264_hw_ctx_restore(hw) < 0) {
 		vdec_schedule_work(&hw->work);
 		return;
@@ -11759,7 +11763,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (hw->error_proc_policy & 0x10000) {
 		hw->first_pre_frame_num = p_H264_Dpb->mVideo.pre_frame_num;
 	}
-	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
 	if (input_frame_based(vdec)) {
 		int decode_size = 0;
 
@@ -11812,6 +11815,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			READ_VREG(HEVC_ASSIST_FB_CTL) & (~(1 << 8)));
 	}
 
+	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
 	WRITE_VREG(AV_SCRATCH_K, udebug_flag);
 	hw->stat |= STAT_TIMER_ARM;
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
@@ -11845,6 +11849,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 
 	amvdec_start();
+	vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_VDEC_1);
 	if (hw->mmu_enable /*&& !hw->frame_busy && !hw->frame_done*/) {
 		WRITE_VREG(SYS_COMMAND, 0x0);
 		if (!is_vdec_hevc_combine())

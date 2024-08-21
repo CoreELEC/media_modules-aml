@@ -131,6 +131,9 @@ static int one_pack_multi_f_set_align_size = 0;
  * 0x2  : always reload firmware.
  * 0x4  : vdec canvas debug enable
  * 0x100: enable vdec fence.
+ * 0x400: enable run2cb time (Currently using)
+ * 0x4000: enable hw time    (Currently using)
+ * 0x10000: enable print decoder time
  */
 #define VDEC_DBG_SCHED_PRIO	(0x1)
 #define VDEC_DBG_ALWAYS_LOAD_FW	(0x2)
@@ -3346,6 +3349,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			"decode_%s_spend_time_avg-%d", is_support_dual_core()?"hw_front":"hw", vdec->id);
 	snprintf(vdec->decode_hw_back_spend_time_avg, sizeof(vdec->decode_hw_back_spend_time_avg),
 		"decode_hw_back_spend_time_avg-%d", vdec->id);
+	snprintf(vdec->vdec_stuck_state_name, sizeof(vdec->vdec_stuck_state_name),
+		"vdec_stuck_state-%d", vdec->id);
 	/*
 	 *todo: VFM patch control should be configurable,
 	 * for now all stream based input uses default VFM path.

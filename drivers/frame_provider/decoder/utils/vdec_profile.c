@@ -182,36 +182,42 @@ static void vdec_profile_time_summary(struct vdec_s *vdec, int event, struct vde
 
 
 	if (!back_core_flag) {
-		frame_cnt = (event == VDEC_PROFILE_DECODER_END) ? time_stat->hw_cnt : time_stat->cb_cnt;
+		frame_cnt = (event == VDEC_PROFILE_DECODER_PIC_END) ? time_stat->hw_cnt : time_stat->cb_cnt;
 		i = frame_cnt % rate_time_avg_cnt;
-		if (event == VDEC_PROFILE_DECODER_END)
+		if (event == VDEC_PROFILE_DECODER_PIC_END)
 			time_stat->hw_time[i] = time;
 		else
 			time_stat->run2cb_time[i] = time;
-		time_summary = (event == VDEC_PROFILE_DECODER_END) ? time_stat->hw_time : time_stat->run2cb_time;
-		freeze_time_sum = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->freeze_hw_time_sum : &time_stat->freeze_time_sum;
-		freeze_time_cnt = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->freeze_hw_time_cnt : &time_stat->freeze_time_cnt;
-		print_flag = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->hw_print_flag : &time_stat->run2cb_print_flag;
+		time_summary = (event == VDEC_PROFILE_DECODER_PIC_END) ? time_stat->hw_time : time_stat->run2cb_time;
+		freeze_time_sum = (event == VDEC_PROFILE_DECODER_PIC_END) ? &time_stat->freeze_hw_time_sum : &time_stat->freeze_time_sum;
+		freeze_time_cnt = (event == VDEC_PROFILE_DECODER_PIC_END) ? &time_stat->freeze_hw_time_cnt : &time_stat->freeze_time_cnt;
+		print_flag = (event == VDEC_PROFILE_DECODER_PIC_END) ? &time_stat->hw_print_flag : &time_stat->run2cb_print_flag;
 	} else {
-		frame_cnt = (event == VDEC_PROFILE_DECODER_END) ? time_stat->hw_cnt : time_stat->cb_cnt;
+		frame_cnt = (event == VDEC_PROFILE_DECODER_PIC_END) ? time_stat->hw_cnt : time_stat->cb_cnt;
 		i = frame_cnt % rate_time_avg_cnt;
-		if (event == VDEC_PROFILE_DECODER_END)
+		if (event == VDEC_PROFILE_DECODER_PIC_END)
 			time_stat->hw_time[i] = time;
 		else
 			time_stat->run2cb_time[i] = time;
-		time_summary = (event == VDEC_PROFILE_DECODER_END) ? time_stat->hw_time : time_stat->run2cb_time;
-		freeze_time_sum = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->freeze_hw_time_sum : &time_stat->freeze_time_sum;
-		freeze_time_cnt = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->freeze_hw_time_cnt : &time_stat->freeze_time_cnt;
-		print_flag = (event == VDEC_PROFILE_DECODER_END) ? &time_stat->hw_print_flag : &time_stat->run2cb_print_flag;
+		time_summary = (event == VDEC_PROFILE_DECODER_PIC_END) ? time_stat->hw_time : time_stat->run2cb_time;
+		freeze_time_sum = (event == VDEC_PROFILE_DECODER_PIC_END) ? &time_stat->freeze_hw_time_sum : &time_stat->freeze_time_sum;
+		freeze_time_cnt = (event == VDEC_PROFILE_DECODER_PIC_END) ? &time_stat->freeze_hw_time_cnt : &time_stat->freeze_time_cnt;
+		print_flag = (event == VDEC_PROFILE_DECODER_PIC_END) ? &time_stat->hw_print_flag : &time_stat->run2cb_print_flag;
 	}
 
-	if (event == VDEC_PROFILE_DECODER_END || event == VDEC_PROFILE_EVENT_CB) {
+	if (event == VDEC_PROFILE_DECODER_PIC_END || event == VDEC_PROFILE_EVENT_CB) {
 
 		if (frame_cnt >= rate_time_avg_cnt) {
 			for (j = 0; j < rate_time_avg_cnt; j++)
 				time_sum += time_summary[j];
 			time_avg = div_u64(time_sum, rate_time_avg_cnt);
 
+			if (event == VDEC_PROFILE_EVENT_CB) {
+				if (!back_core_flag)
+					vdec->front_run2cb_time = time_avg;
+				else
+					vdec->back_run2cb_time = time_avg;
+			}
 			if (time_avg >= rate_time_avg_threshold_hi && *print_flag == 0) {
 				*print_flag = 0x1;
 			}
@@ -225,19 +231,19 @@ static void vdec_profile_time_summary(struct vdec_s *vdec, int event, struct vde
 
 			if (*print_flag == 0x1) {
 				pr_info("------------------------%s_start------------------------\n",
-					(event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb");
+					(event == VDEC_PROFILE_DECODER_PIC_END) ? "hw" : "run2cb");
 				pr_info("%s frame cnt %d %s overtime start \n", back_core_flag ? "back_core" : "front_core", frame_cnt - (rate_time_avg_cnt-1),
-					(event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb");
+					(event == VDEC_PROFILE_DECODER_PIC_END) ? "hw" : "run2cb");
 				*print_flag = 0x2;
 			} else if (*print_flag == 0x2) {
 				pr_info("%s %s_time_avg_16 is %llu us \n", back_core_flag ? "back_core" : "front_core",
-					(event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb", time_avg);
+					(event == VDEC_PROFILE_DECODER_PIC_END) ? "hw" : "run2cb", time_avg);
 			} else if (*print_flag == 0x4) {
 				pr_info("%s frame cnt %d overtime end, freeze avg %s time is %llu us freeze cnt %d\n",
-						back_core_flag ? "back_core" : "front_core", frame_cnt, (event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb", freeze_avg,
+						back_core_flag ? "back_core" : "front_core", frame_cnt, (event == VDEC_PROFILE_DECODER_PIC_END) ? "hw" : "run2cb", freeze_avg,
 						*freeze_time_cnt + (rate_time_avg_cnt - 1));
 				pr_info("----------------------------%s_end---------------------------\n",
-						(event == VDEC_PROFILE_DECODER_END) ? "hw" : "run2cb");
+						(event == VDEC_PROFILE_DECODER_PIC_END) ? "hw" : "run2cb");
 				*print_flag = 0;
 				*freeze_time_sum = 0;
 				*freeze_time_cnt = 0;
@@ -261,38 +267,32 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 
 	if (event == VDEC_PROFILE_DECODER_START) {
 		if (!back_core_flag) {
-			if (time_stat->multi_slice_cnt > 0) {
-				time_stat->multi_us_sum += (timestamp - time_stat->hw_lasttimestamp);
-				time_stat->hw_lasttimestamp = timestamp;
-			} else
-				time_stat->hw_lasttimestamp = timestamp;
+			time_stat->hw_lasttimestamp = timestamp;
 			time_stat->multi_slice_cnt++;
 		} else {
 			time_stat->hw_lasttimestamp = timestamp;
 			time_stat->hw_cnt++;
 		}
-	} else if (event == VDEC_PROFILE_DECODER_END) {
+	} else if (event == VDEC_PROFILE_DECODER_HEADER_END) {
+		time_stat->multi_us_sum += (timestamp - time_stat->hw_lasttimestamp);
+		time_stat->hw_lasttimestamp = timestamp;
+	} else if (event == VDEC_PROFILE_DECODER_PIC_END) {
 		if (!back_core_flag) {
 			time_stat->hw_cnt++;
-			if (time_stat->multi_slice_cnt > 1) {
-
-				time_stat->multi_us_sum += (timestamp - time_stat->hw_lasttimestamp);
-				time_stat->hw_time_stat.time_total_us += time_stat->multi_us_sum;
-				ATRACE_COUNTER(vdec->decode_hw_front_time_name, time_stat->multi_us_sum);
-				ATRACE_COUNTER(vdec->decode_hw_front_spend_time_avg, div_u64(time_stat->hw_time_stat.time_total_us, time_stat->hw_cnt));
-				if (vdec_get_debug() & VDEC_DBG_ENABLE_HW_TIME_DEBUG)
-					vdec_profile_time_summary(vdec, event, time_stat, back_core_flag, time_stat->multi_us_sum);
-				time_stat->multi_us_sum = 0;
-			} else {
-				vdec_profile_update_alloc_time(&time_stat->hw_time_stat, time_stat->hw_lasttimestamp, timestamp);
-				ATRACE_COUNTER(vdec->decode_hw_front_time_name, timestamp - time_stat->hw_lasttimestamp);
-				ATRACE_COUNTER(vdec->decode_hw_front_spend_time_avg, div_u64(time_stat->hw_time_stat.time_total_us, time_stat->hw_cnt));
-				if (vdec_get_debug() & VDEC_DBG_ENABLE_HW_TIME_DEBUG)
-					vdec_profile_time_summary(vdec, event, time_stat, back_core_flag, timestamp - time_stat->hw_lasttimestamp);
-			}
+			time_stat->multi_us_sum += (timestamp - time_stat->hw_lasttimestamp);
+			time_stat->hw_time_stat.time_total_us += time_stat->multi_us_sum;
+			if (vdec_get_debug() & VDEC_DBG_ENABLE_PRINT_TIME_DEBUG)
+				pr_info("vdec_profile front hw time : %llu\n", time_stat->multi_us_sum);
+			ATRACE_COUNTER(vdec->decode_hw_front_time_name, time_stat->multi_us_sum);
+			ATRACE_COUNTER(vdec->decode_hw_front_spend_time_avg, div_u64(time_stat->hw_time_stat.time_total_us, time_stat->hw_cnt));
+			if (vdec_get_debug() & VDEC_DBG_ENABLE_HW_TIME_DEBUG)
+				vdec_profile_time_summary(vdec, event, time_stat, back_core_flag, time_stat->multi_us_sum);
+			time_stat->multi_us_sum = 0;
 			time_stat->multi_slice_cnt = 0;
 		} else {
 			vdec_profile_update_alloc_time(&time_stat->hw_time_stat, time_stat->hw_lasttimestamp, timestamp);
+			if (vdec_get_debug() & VDEC_DBG_ENABLE_PRINT_TIME_DEBUG)
+				pr_info("vdec_profile back hw time : %llu\n", timestamp - time_stat->hw_lasttimestamp);
 			ATRACE_COUNTER(vdec->decode_hw_back_time_name, timestamp - time_stat->hw_lasttimestamp);
 			ATRACE_COUNTER(vdec->decode_hw_back_spend_time_avg, div_u64(time_stat->hw_time_stat.time_total_us, time_stat->hw_cnt));
 			if (vdec_get_debug() & VDEC_DBG_ENABLE_HW_TIME_DEBUG)
@@ -326,8 +326,12 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 
 				time_stat->hidden_frame_us_sum += (timestamp - time_stat->run_lasttimestamp);
 				time_stat->hw_time_stat.time_total_us += time_stat->hidden_frame_us_sum;
+				time_stat->multi_us_sum = 0;
+				time_stat->multi_slice_cnt = 0;
 			} else {
 				run2cb_time = (timestamp - time_stat->run_lasttimestamp) + time_stat->hidden_frame_us_sum;
+				if (vdec_get_debug() & VDEC_DBG_ENABLE_PRINT_TIME_DEBUG)
+					pr_info("vdec_profile front run2cb time : %llu\n", run2cb_time);
 				ATRACE_COUNTER(vdec->dec_spend_time, run2cb_time);
 				ATRACE_COUNTER(vdec->dec_spend_time_ave, div_u64(time_stat->run2cb_time_stat.time_total_us, time_stat->cb_cnt));
 				if (vdec_get_debug() & VDEC_DBG_ENABLE_TIME_DEBUG)
@@ -336,6 +340,8 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 			}
 			time_stat->unhidden_frame = 0;
 		} else {
+			if (vdec_get_debug() & VDEC_DBG_ENABLE_PRINT_TIME_DEBUG)
+				pr_info("vdec_profile back run2cb time : %llu\n", timestamp - time_stat->run_lasttimestamp);
 			ATRACE_COUNTER(vdec->dec_back_spend_time, timestamp - time_stat->run_lasttimestamp);
 			ATRACE_COUNTER(vdec->dec_back_spend_time_ave, div_u64(time_stat->run2cb_time_stat.time_total_us, time_stat->cb_cnt));
 			if (vdec_get_debug() & VDEC_DBG_ENABLE_TIME_DEBUG)
@@ -349,6 +355,8 @@ static void vdec_profile_cal(struct vdec_s *vdec, int event, struct vdec_profile
 		time_stat->run_cnt--;
 		vdec_profile_update_alloc_time(&time_stat->again_time_stat, time_stat->run_lasttimestamp, timestamp);
 		time_stat->run_lasttimestamp = -1;
+		time_stat->multi_us_sum = 0;
+		time_stat->multi_slice_cnt = 0;
 	}
 }
 
@@ -366,7 +374,8 @@ static void vdec_profile_statistics(struct vdec_s *vdec, int event, int mask)
 			event != VDEC_PROFILE_DECODED_FRAME &&
 			event != VDEC_PROFILE_EVENT_AGAIN &&
 			event != VDEC_PROFILE_DECODER_START &&
-			event != VDEC_PROFILE_DECODER_END)
+			event != VDEC_PROFILE_DECODER_PIC_END &&
+			event != VDEC_PROFILE_DECODER_HEADER_END)
 		return;
 
 	spin_lock_irqsave(&vdec_profile_spinlock, flags);

@@ -111,6 +111,7 @@
 
 #define RPM_BEGIN			0x0
 #define RPM_END				0x400
+#define RPM_VALUE_END		0x3d2
 
 #define val(s) (s[0]|(s[1]<<16))
 

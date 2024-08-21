@@ -9551,12 +9551,13 @@ static irqreturn_t vav1_isr(int irq, void *data)
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
 	if (dec_status == AOM_AV1_DEC_PIC_END) {
-		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_PIC_END, CORE_MASK_HEVC);
 	}
 
 	if (dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE ||
 		dec_status == AOM_AV1_SEQ_HEAD_PARSER_DONE ||
 		dec_status == AOM_AV1_FRAME_PARSER_DONE) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_HEADER_END, CORE_MASK_HEVC);
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
 	}
 	else if (dec_status == AOM_AV1_DEC_PIC_END ||
@@ -10751,9 +10752,10 @@ static void av1_work_implement(struct AV1HW_s *hw)
 	if (hw->dec_result != AOM_AV1_RESULT_NEED_MORE_BUFFER)
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
 
-	if (hw->dec_result == DEC_RESULT_AGAIN)
+	if (hw->dec_result == DEC_RESULT_AGAIN) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_EVENT_AGAIN, CORE_MASK_HEVC);
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_AGAIN);
-
+	}
 	av1_print(hw, PRINT_FLAG_VDEC_DETAIL,
 		"%s dec_result %d %x %x %x\n",
 		__func__,
@@ -11270,6 +11272,7 @@ static void run_front(struct vdec_s *vdec)
 	hw->stat |= STAT_TIMER_ARM;
 	hw->stat |= STAT_ISR_REG;
 	amhevc_start();
+	vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	hw->stat |= STAT_VDEC_RUN;
 }
 

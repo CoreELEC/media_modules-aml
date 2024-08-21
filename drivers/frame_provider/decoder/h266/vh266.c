@@ -8377,11 +8377,12 @@ static irqreturn_t vh266_isr(int irq, void *data)
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 
 	if (dec_status == VVC_HEAD_SLICE_INFO_READY) {
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_HEADER_END, CORE_MASK_HEVC);
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
 	}
 	else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_PIC_DONE);
-		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_PIC_END, CORE_MASK_HEVC);
 	}
 
 	if (hevc->init_flag == 0) {
@@ -9655,9 +9656,10 @@ static void vh266_work_implement(struct hevc_state_s *hevc,
 {
 	if (hevc->dec_result == DEC_RESULT_DONE) {
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_START);
-	} else if (hevc->dec_result == DEC_RESULT_AGAIN)
+	} else if (hevc->dec_result == DEC_RESULT_AGAIN) {
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_EVENT_AGAIN, CORE_MASK_HEVC);
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_AGAIN);
-
+	}
 	if (hevc->dec_result == DEC_RESULT_FREE_CANVAS &&
 		hevc->uninit_list_done == 0) {
 		/*USE_BUF_BLOCK*/
@@ -10524,6 +10526,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
     WRITE_VREG(HEVCD_IPP_DYN_CACHE,0x2b);//enable new mcrcc
 #endif
 	amhevc_start();
+	vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	hevc->stat |= STAT_VDEC_RUN;
 	hevc->slice_count = 0;
 	ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_RUN_END);

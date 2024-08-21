@@ -28,6 +28,7 @@
 #include <linux/timer.h>
 #include <linux/kfifo.h>
 #include <linux/kthread.h>
+#include <linux/completion.h>
 #include <linux/platform_device.h>
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/utils/amstream.h>
@@ -2277,6 +2278,7 @@ struct hevc_state_s {
 	bool mmu_copy_disable;
 	u32 error_handle_mode;
 	u32 lcu_percentage_threshold;
+	struct completion complete;
 } /*hevc_stru_t */;
 
 struct hevc_RPS_s {
@@ -6213,46 +6215,59 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 	WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x12345678);
 	WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x9abcdef0);
 #endif
-	WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x00000100);
-	WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
+	if (!efficiency_mode) {
+		WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x00000100);
+		WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
 
-	data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
-	data32 &= 0x03ffffff;
-	data32 = data32 | (3 << 29) | (2 << 26) | (1 << 24)
-				|	/* stream_buffer_empty_int_amrisc_enable */
-				(1 << 22) |	/* stream_fifo_empty_int_amrisc_enable*/
-				(1 << 7) |	/* dec_done_int_cpu_enable */
-				(1 << 4) |	/* startcode_found_int_cpu_enable */
-				(0 << 3) |	/* startcode_found_int_amrisc_enable */
-				(1 << 0);	/* parser_int_enable */
+		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+		data32 &= 0x03ffffff;
+		data32 = data32 | (3 << 29) | (2 << 26) | (1 << 24)
+					|	/* stream_buffer_empty_int_amrisc_enable */
+					(1 << 22) |	/* stream_fifo_empty_int_amrisc_enable*/
+					(1 << 7) |	/* dec_done_int_cpu_enable */
+					(1 << 4) |	/* startcode_found_int_cpu_enable */
+					(0 << 3) |	/* startcode_found_int_amrisc_enable */
+					(1 << 0);	/* parser_int_enable */
 
-	WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
-	data32 = READ_VREG(HEVC_SHIFT_STATUS);
-	data32 = data32 | (1 << 1) |	/* emulation_check_on */
-				(1 << 0);		/* startcode_check_on */
+		data32 = READ_VREG(HEVC_SHIFT_STATUS);
+		data32 = data32 | (1 << 1) |	/* emulation_check_on */
+					(1 << 0);		/* startcode_check_on */
 
-	WRITE_VREG(HEVC_SHIFT_STATUS, data32);
+		WRITE_VREG(HEVC_SHIFT_STATUS, data32);
 
-	WRITE_VREG(HEVC_SHIFT_CONTROL, (3 << 6) |/* sft_valid_wr_position */
-				(2 << 4) |	/* emulate_code_length_sub_1 */
-				(2 << 1) |	/* start_code_length_sub_1 */
-				(1 << 0));	/* stream_shift_enable */
+		WRITE_VREG(HEVC_SHIFT_CONTROL, (3 << 6) |/* sft_valid_wr_position */
+					(2 << 4) |	/* emulate_code_length_sub_1 */
+					(2 << 1) |	/* start_code_length_sub_1 */
+					(1 << 0));	/* stream_shift_enable */
 
-	WRITE_VREG(HEVC_CABAC_CONTROL, (1 << 0));	/* cabac_enable */
+		WRITE_VREG(HEVC_CABAC_CONTROL, (1 << 0));	/* cabac_enable */
+
+		WRITE_VREG(HEVC_PARSER_IF_CONTROL,
+					/* (1 << 8) | // sao_sw_pred_enable */
+					(1 << 5) |	/* parser_sao_if_en */
+					(1 << 2) |	/* parser_mpred_if_en */
+					(1 << 0));	/* parser_scaler_if_en */
+	}
 
 	/* hevc_parser_core_clk_en */
 	WRITE_VREG(HEVC_PARSER_CORE_CONTROL, (1 << 0));
-
 	WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 
 	/* Initial IQIT_SCALELUT memory -- just to avoid X in simulation */
-	if (is_rdma_enable())
+	if (is_rdma_enable()) {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
 		rdma_back_end_work(hevc->rdma_phy_adr, RDMA_SIZE);
-	else {
-		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
-		for (i = 0; i < 1024; i++)
-			WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+	} else {
+		if (efficiency_mode)
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+		else {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
+			for (i = 0; i < 1024; i++)
+				WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+		}
 	}
 
 #ifdef ENABLE_SWAP_TEST
@@ -6270,11 +6285,6 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
 	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 #endif
-	WRITE_VREG(HEVC_PARSER_IF_CONTROL,
-				/* (1 << 8) | // sao_sw_pred_enable */
-				(1 << 5) |	/* parser_sao_if_en */
-				(1 << 2) |	/* parser_mpred_if_en */
-				(1 << 0));	/* parser_scaler_if_en */
 
 	/* Changed to Start MPRED in microcode */
 
@@ -12278,7 +12288,7 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 	reset_process_time_back(hevc);
 	hevc->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 	if (hevc->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
-		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_PIC_END, CORE_MASK_HEVC_BACK);
 	}
 	/*BackEnd_Handle()*/
 	if (hevc->front_back_mode != 1) {
@@ -12711,9 +12721,9 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	} else if ((dec_status == HEVC_DECPIC_DATA_DONE) || (dec_status == HEVC_OVER_DECODE)
 													|| (dec_status == HEVC_ONE_RUN_MULTI_FRAME)) {
-		if (efficiency_mode == 1) {
-			mutex_lock(&hevc->slice_header_lock);
-			mutex_unlock(&hevc->slice_header_lock);
+		if (efficiency_mode) {
+			if (!wait_for_completion_timeout(&hevc->complete, msecs_to_jiffies(34)))
+				hevc_print(hevc, 0, "!!!wait for completion timeout %d\n", __LINE__);
 		}
 		if (hevc->m_ins_flag) {
 			struct PIC_s *pic;
@@ -13409,11 +13419,16 @@ force_output:
 				get_rpm_param(&hevc->param);
 			else {
 				ATRACE_COUNTER(hevc->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_START);
-				for (i = 0; i < (RPM_VALID_E - RPM_BEGIN); i += 4) {
-					int ii;
+				if (efficiency_mode) {
+					memcpy(hevc->param.l.data, hevc->rpm_ptr,
+						(RPM_VALID_E - RPM_BEGIN) * sizeof(hevc->rpm_ptr[0]));
+				} else {
+					for (i = 0; i < (RPM_VALID_E - RPM_BEGIN); i += 4) {
+						int ii;
 
-					for (ii = 0; ii < 4; ii++) {
-						hevc->param.l.data[i + ii] = hevc->rpm_ptr[i + 3 - ii];
+						for (ii = 0; ii < 4; ii++) {
+							hevc->param.l.data[i + ii] = hevc->rpm_ptr[i + 3 - ii];
+						}
 					}
 				}
 				ATRACE_COUNTER(hevc->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_END);
@@ -13851,6 +13866,10 @@ force_output:
 				start_process_time(hevc);
 #endif
 			if ((hevc->new_pic) && (hevc->cur_pic != NULL)) {
+				if (efficiency_mode)
+					WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
+				else
+					WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
 				hevc->slice_count++;
 			}
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -14054,6 +14073,7 @@ force_output:
 				}
 			}
 #endif
+			complete(&hevc->complete);
 		}
 	}
 	return IRQ_HANDLED;
@@ -14084,7 +14104,7 @@ static irqreturn_t vh265_isr(int irq, void *data)
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 	if (dec_status == HEVC_DECPIC_DATA_DONE) {
-		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_PIC_END, CORE_MASK_HEVC);
 	}
 
 	if ((debug & HEVC_BE_SIMULATE_IRQ)
@@ -14095,6 +14115,7 @@ static irqreturn_t vh265_isr(int irq, void *data)
 	}
 
 	if (dec_status == HEVC_SLICE_SEGMENT_DONE) {
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_HEADER_END, CORE_MASK_HEVC);
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
 	}
 	else if (dec_status == HEVC_DECPIC_DATA_DONE) {
@@ -15909,9 +15930,10 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 	if (hevc->dec_result == DEC_RESULT_DONE || hevc->dec_result == DEC_RESULT_WAIT_BUFFER
 		|| (hevc->dec_result == DEC_RESULT_DV_DONE)) {
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_START);
-	} else if (hevc->dec_result == DEC_RESULT_AGAIN)
+	} else if (hevc->dec_result == DEC_RESULT_AGAIN) {
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_EVENT_AGAIN, CORE_MASK_HEVC);
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_AGAIN);
-
+	}
 	if (input_stream_based(hw_to_vdec(hevc))
 			&& (vdec->slave || vdec->master)
 			&& (hevc->dec_result != DEC_RESULT_DV_DONE)
@@ -17576,18 +17598,17 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
+	/*
+		HEVC_EFFICIENCY_MODE
+		bit[0] 1: open efficiency mode, 0: close efficiency mode
+	*/
+	if (efficiency_mode) {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
+	} else {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+	}
 #ifdef NEW_FB_CODE
 	if (hevc->front_back_mode) {
-
-		/*
-			HEVC_EFFICIENCY_MODE
-			bit[0] 1: open efficiency mode, 0: close efficiency mode
-		*/
-		if (efficiency_mode) {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
-		} else {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
-		}
 		hevc_hw_init(hevc, 0, 1, 0);
 		config_decode_mode(hevc);
 		config_nal_control_and_aux_buf(hevc);
@@ -17660,6 +17681,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	} else
 #endif
 	amhevc_start();
+	vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
+
 	hevc->stat |= STAT_VDEC_RUN;
 	hevc->slice_count = 0;
 	ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_RUN_END);
@@ -18353,6 +18376,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	hevc->platform_dev = pdev;
 	hevc->error_handle_mode = error_handle_mode;
 	hevc->lcu_percentage_threshold = lcu_percentage_threshold;
+	init_completion(&hevc->complete);
 
 	if (((get_dbg_flag(hevc) & IGNORE_PARAM_FROM_CONFIG) == 0) &&
 			pdata->config_len) {
