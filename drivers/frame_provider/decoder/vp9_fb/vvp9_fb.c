@@ -8094,8 +8094,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 				return ret;
 			}
 
-			if (vdec->vdata == NULL ||
-				atomic_read(&vdec->vdata->use_flag) == 0) {
+			if (vdec->vdata == NULL) {
 				vdec->vdata = vdec_data_get();
 			}
 
@@ -8239,8 +8238,7 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 				return;
 			}
 
-			if (vdec->vdata == NULL ||
-				atomic_read(&vdec->vdata->use_flag) == 0) {
+			if (vdec->vdata == NULL) {
 				vdec->vdata = vdec_data_get();
 			}
 

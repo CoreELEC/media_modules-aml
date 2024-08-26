@@ -1353,8 +1353,7 @@ static void hevc_mcr_config_canv2axitbl(struct vdec_h264_hw_s *hw, int restore, 
 				return;
 			}
 
-			if (vdec->vdata == NULL ||
-				atomic_read(&vdec->vdata->use_flag) == 0) {
+			if (vdec->vdata == NULL) {
 				vdec->vdata = vdec_data_get();
 			}
 
@@ -2183,8 +2182,7 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i, bool field_flag)
 			);
 			return -1;
 		} else {
-			if (vdec->vdata == NULL ||
-				atomic_read(&vdec->vdata->use_flag) == 0) {
+			if (vdec->vdata == NULL) {
 				vdec->vdata = vdec_data_get();
 			}
 
