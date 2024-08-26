@@ -95,8 +95,6 @@ typedef struct {
 	uint32_t tldat_data1_ptr;
 	uint32_t tile_header_param_ptr;
 	uint32_t fgs_ucode_ptr;
-	uint32_t sys_imem_ptr;
-	void *sys_imem_ptr_v;
 } buff_ptr_t;
 #endif
 
@@ -2344,7 +2342,6 @@ typedef struct AV1Decoder {
 	buff_t fb_buf_tldat_data1;
 	buff_t fb_buf_tile_header_param;
 	buff_t fb_buf_fgs_ucode;
-	buff_t fb_buf_sys_imem;
 	uint32_t frontend_decoded_count;
 	uint32_t backend_decoded_count;
 	buff_ptr_t fr;
@@ -2358,11 +2355,7 @@ typedef struct AV1Decoder {
 	uint32_t HEVC_PARSER_HEADER_INFO2_reg_val;
 	/**/
 	/*for WRITE_BACK_RET*/
-	uint32_t sys_imem_ptr;
-	void *sys_imem_ptr_v;
-	void *fb_buf_sys_imem_addr;
-	ulong imem_mem_handle;
-	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
+	uint32_t  instruction[256];
 	uint32_t  ins_offset;
 #endif
 } AV1Decoder;

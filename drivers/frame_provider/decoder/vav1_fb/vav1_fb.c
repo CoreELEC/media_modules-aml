@@ -75,7 +75,6 @@
 
 #define DYN_CACHE
 
-#define LARGE_INSTRUCTION_SPACE_SUPORT
 #define NEW_FB_CODE
 #define NEW_FRONT_BACK_CODE
 //#define FB_BUF_DEBUG_NO_PIPLINE
@@ -8440,6 +8439,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 				for (i = LAST_FRAME; i <= ALTREF_FRAME; i++)
 				cur_pic_config->pic_refs[i] = NULL;
 			}
+			memcpy(&pbi->params[pbi->fb_wr_pos], &hw->aom_param, sizeof(union param_u));
 				for (i = 0; i < REF_FRAMES; i++)
 					cur_pic_config->ref_frame_map[i] = cm->ref_frame_map[i];
 #ifndef FB_BUF_DEBUG_NO_PIPLINE
@@ -8612,61 +8612,6 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 				cm->cur_frame->segment_feature[i] = (0x80000000 | (i << 22));
 			}
 		}
-
-#ifdef NEW_FRONT_BACK_CODE
-		if (hw->front_back_mode == 1 || hw->front_back_mode == 3) {
-			config_pic_size_fb(hw);
-			config_mc_buffer_fb(hw);
-#ifdef MCRCC_ENABLE
-			config_mcrcc_axi_hw_nearest_ref_fb(hw);
-#endif
-			config_sao_hw_fb(hw, &hw->aom_param);
-#ifdef AOM_AV1_DBLK_INIT
-			config_loop_filter_hw_fb(hw, &hw->aom_param);
-#endif
-
-#ifdef AOM_AV1_UPSCALE_INIT
-			av1_upscale_frame_init_be(hw);
-#endif // #ifdef AOM_AV1_UPSCALE_INIT
-		}
-
-		if (hw->front_back_mode == 1 || hw->front_back_mode == 3) {
-
-			WRITE_BACK_RET(hw);
-			av1_print(hw, AOM_DEBUG_HW_MORE,
-				"write system instruction, ins_offset = %d, addr = 0x%x\n",
-				pbi->ins_offset, pbi->fr.sys_imem_ptr);
-			pbi->sys_imem_ptr = pbi->fr.sys_imem_ptr;
-			pbi->sys_imem_ptr_v = pbi->fr.sys_imem_ptr_v;
-			if (pbi->ins_offset > 1024) {
-				av1_print(hw, 0,
-					"!!!!!Error!!!!!!!!, ins_offset %d is too big (>1280)\n", pbi->ins_offset);
-				pbi->ins_offset = 1024;
-			} else if (pbi->ins_offset < 512) {
-				pbi->ins_offset = 512;
-				WRITE_BACK_RET(hw);
-			}
-			memcpy(pbi->sys_imem_ptr_v, (void*)(&pbi->instruction[0]), pbi->ins_offset*4);
-			//pbi->ins_offset = 0; //for next slice
-			//copyToDDR_32bits(hevc->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
-			pbi->sys_imem_ptr += 4 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
-			pbi->sys_imem_ptr_v += 4 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
-
-			if (pbi->sys_imem_ptr >= pbi->fb_buf_sys_imem.buf_end) {
-				av1_print(hw, AOM_DEBUG_HW_MORE,
-					"sys_imem_ptr is 0x%x, wrap around\n", pbi->sys_imem_ptr);
-				pbi->sys_imem_ptr = pbi->fb_buf_sys_imem.buf_start;
-				pbi->sys_imem_ptr_v = pbi->fb_buf_sys_imem_addr;
-			}
-
-			if (hw->front_back_mode == 1) {
-				//WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
-				//WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->sys_imem_ptr);
-				//imem_count++;
-				WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
-			}
-		}
-#endif
 
 		av1_print(hw, AOM_DEBUG_HW_MORE, "HEVC_DEC_STATUS_REG <= AOM_AV1_DECODE_SLICE\n");
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_DECODE_SLICE);
