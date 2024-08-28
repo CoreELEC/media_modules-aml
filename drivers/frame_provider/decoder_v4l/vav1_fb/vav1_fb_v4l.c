@@ -7030,7 +7030,7 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 	struct AV1HW_s *hw = (struct AV1HW_s *)pbi->private_data;
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	sd->stream_offset = pbi->pre_stream_offset;
-	if (!hw->front_back_mode && hw->enable_fence) {
+	if (hw->enable_fence) {
 		int i, j, used_size, ret;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
