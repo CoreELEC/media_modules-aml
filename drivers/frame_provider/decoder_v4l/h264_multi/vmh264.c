@@ -481,18 +481,18 @@ struct buffer_spec_s {
 	unsigned int info0;
 	unsigned int info1;
 	unsigned int info2;
-	unsigned int y_addr;
-	unsigned int u_addr;
-	unsigned int v_addr;
+	dos_addr_t y_addr;
+	dos_addr_t u_addr;
+	dos_addr_t v_addr;
 
 	int y_canvas_index;
 	int u_canvas_index;
 	int v_canvas_index;
 
 #ifdef VDEC_DW
-	unsigned int vdec_dw_y_addr;
-	unsigned int vdec_dw_u_addr;
-	unsigned int vdec_dw_v_addr;
+	dos_addr_t vdec_dw_y_addr;
+	dos_addr_t vdec_dw_u_addr;
+	dos_addr_t vdec_dw_v_addr;
 
 	int vdec_dw_y_canvas_index;
 	int vdec_dw_u_canvas_index;
@@ -509,8 +509,8 @@ struct buffer_spec_s {
 #else
 	struct canvas_config_s canvas_config[3];
 #endif
-	unsigned long cma_alloc_addr;
-	unsigned long buf_adr;
+	dos_addr_t cma_alloc_addr;
+	dos_addr_t buf_adr;
 #ifdef H264_MMU
 	unsigned long alloc_header_addr;
 #endif
@@ -521,8 +521,8 @@ struct buffer_spec_s {
 #endif
 	int canvas_pos;
 	int vf_ref;
-	unsigned int dw_y_adr;
-	unsigned int dw_u_v_adr;
+	dos_addr_t dw_y_adr;
+	dos_addr_t dw_u_v_adr;
 	int fs_idx;
 	int ctx_buf_idx;
 };
@@ -684,8 +684,8 @@ struct vdec_h264_hw_s {
 	spinlock_t bufspec_lock;
 	int id;
 	struct platform_device *platform_dev;
-	unsigned long cma_alloc_addr;
-	unsigned long collocate_cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
+	dos_addr_t collocate_cma_alloc_addr;
 
 	u32 prefix_aux_size;
 	u32 suffix_aux_size;
@@ -707,7 +707,7 @@ struct vdec_h264_hw_s {
 
 	struct StorablePicture *last_dec_picture;
 
-	ulong lmem_phy_addr;
+	dos_addr_t lmem_phy_addr;
 	dma_addr_t lmem_addr;
 
 	void *bmmu_box;
@@ -724,7 +724,7 @@ struct vdec_h264_hw_s {
 	u32 is_new_pic;
 	u32 frame_done;
 	u32 frame_busy;
-	unsigned long extif_addr;
+	dos_addr_t extif_addr;
 	int double_write_mode;
 	int mmu_enable;
 #endif
@@ -2198,7 +2198,7 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 	struct buffer_spec_s *bs = &hw->buffer_spec[idx];
 	struct canvas_config_s *y_canvas_cfg = NULL;
 	struct canvas_config_s *c_canvas_cfg = NULL;
-	unsigned int y_addr = 0, c_addr = 0;
+	dos_addr_t y_addr = 0, c_addr = 0;
 	int dw_ratio = get_double_write_ratio(get_double_write_mode(hw));
 
 	if (!hw->aml_buf) {
@@ -9398,6 +9398,11 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 	CLEAR_VREG_MASK(AV_SCRATCH_F, 1 << 6);
 
 	WRITE_VREG(LMEM_DUMP_ADR, (u32)hw->lmem_phy_addr);
+	if (hw->mmu_enable)
+		vdec_mmu_prefix_config(PREFIX_ADDR(hw->lmem_phy_addr));
+	else
+		vdec_prefix_config(PREFIX_ADDR(hw->lmem_phy_addr));
+
 
 	WRITE_VREG(MDEC_PIC_DC_THRESH, 0x404038aa);
 
@@ -12086,8 +12091,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 	}
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
-
 	vmh264_reset_udr_mgr(hw);
+
 	if (vh264_hw_ctx_restore(hw) < 0) {
 		vdec_schedule_work(&hw->work);
 		return;

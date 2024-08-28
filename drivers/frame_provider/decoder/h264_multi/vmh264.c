@@ -488,18 +488,18 @@ struct buffer_spec_s {
 	unsigned int info0;
 	unsigned int info1;
 	unsigned int info2;
-	unsigned int y_addr;
-	unsigned int u_addr;
-	unsigned int v_addr;
+	dos_addr_t y_addr;
+	dos_addr_t u_addr;
+	dos_addr_t v_addr;
 
 	int y_canvas_index;
 	int u_canvas_index;
 	int v_canvas_index;
 
 #ifdef VDEC_DW
-	unsigned int vdec_dw_y_addr;
-	unsigned int vdec_dw_u_addr;
-	unsigned int vdec_dw_v_addr;
+	dos_addr_t vdec_dw_y_addr;
+	dos_addr_t vdec_dw_u_addr;
+	dos_addr_t vdec_dw_v_addr;
 
 	int vdec_dw_y_canvas_index;
 	int vdec_dw_u_canvas_index;
@@ -516,8 +516,8 @@ struct buffer_spec_s {
 #else
 	struct canvas_config_s canvas_config[3];
 #endif
-	unsigned long cma_alloc_addr;
-	unsigned int buf_adr;
+	dos_addr_t cma_alloc_addr;
+	dos_addr_t buf_adr;
 #ifdef H264_MMU
 	unsigned long alloc_header_addr;
 #endif
@@ -529,8 +529,8 @@ struct buffer_spec_s {
 	int canvas_pos;
 	int vf_ref;
 	/*unsigned int comp_body_size;*/
-	unsigned int dw_y_adr;
-	unsigned int dw_u_v_adr;
+	dos_addr_t dw_y_adr;
+	dos_addr_t dw_u_v_adr;
 	int fs_idx;
 	char*  user_data_buf[2];
 	struct userdata_param_t ud_param[2];
@@ -703,9 +703,9 @@ struct vdec_h264_hw_s {
 	spinlock_t bufspec_lock;
 	int id;
 	struct platform_device *platform_dev;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	/* struct page *collocate_cma_alloc_pages; */
-	unsigned long collocate_cma_alloc_addr;
+	dos_addr_t collocate_cma_alloc_addr;
 
 	u32 prefix_aux_size;
 	u32 suffix_aux_size;
@@ -726,7 +726,7 @@ struct vdec_h264_hw_s {
 	u32 sei_user_data_wp;
 	struct StorablePicture *last_dec_picture;
 
-	ulong lmem_phy_addr;
+	dos_addr_t lmem_phy_addr;
 	dma_addr_t lmem_addr;
 
 	void *bmmu_box;
@@ -744,7 +744,7 @@ struct vdec_h264_hw_s {
 	u32 is_new_pic;
 	u32 frame_done;
 	u32 frame_busy;
-	unsigned long extif_addr;
+	dos_addr_t extif_addr;
 	int double_write_mode;
 	int mmu_enable;
 	int error_proc_policy;
@@ -1403,7 +1403,7 @@ static int get_dw_size(struct vdec_h264_hw_s *hw, u32 *pdw_buffer_size_u_v_h)
 static void alloc_bmmu_buf(struct vdec_h264_hw_s *hw, int i, bool field_flag)
 {
 	int size;
-	unsigned long maddr;
+	dos_addr_t maddr;
 	int dw_size = 0;
 	u32 dw_buffer_size_u_v_h;
 	u32 blkmode = hw->canvas_mode;
@@ -2249,7 +2249,7 @@ static int alloc_one_buf_spec(struct vdec_h264_hw_s *hw, int i, bool field_flag)
 	} else {
 
 		int buf_size = (hw->mb_total << 8) + (hw->mb_total << 7);
-		int addr;
+		dos_addr_t addr;
 #ifdef VDEC_DW
 		int orig_buf_size;
 		orig_buf_size = buf_size;
@@ -2433,7 +2433,7 @@ static int alloc_one_buf_spec_from_queue(struct vdec_h264_hw_s *hw, int idx)
 	struct canvas_config_s *y_canvas_cfg = NULL;
 	struct canvas_config_s *c_canvas_cfg = NULL;
 	struct aml_buf *aml_buf = NULL;
-	unsigned int y_addr = 0, c_addr = 0;
+	dos_addr_t y_addr = 0, c_addr = 0;
 
 	if (IS_ERR_OR_NULL(hw->v4l2_ctx)) {
 		pr_err("the v4l context has err.\n");
@@ -9888,6 +9888,11 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 		CLEAR_VREG_MASK(AV_SCRATCH_F, 1 << 6);
 
 	WRITE_VREG(LMEM_DUMP_ADR, (u32)hw->lmem_phy_addr);
+	if (hw->mmu_enable)
+		vdec_mmu_prefix_config(PREFIX_ADDR(hw->lmem_phy_addr));
+	else
+		vdec_prefix_config(PREFIX_ADDR(hw->lmem_phy_addr));
+
 #if 1 /* #if MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8 */
 	WRITE_VREG(MDEC_PIC_DC_THRESH, 0x404038aa);
 #endif
@@ -12162,6 +12167,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 	vmh264_reset_udr_mgr(hw);
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
+
 	if (vh264_hw_ctx_restore(hw) < 0) {
 		vdec_schedule_work(&hw->work);
 		return;
