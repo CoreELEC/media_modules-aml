@@ -79,9 +79,10 @@
 #define VF_POOL_SIZE          64
 #define DECODE_BUFFER_NUM_MAX		16
 #define DECODE_BUFFER_NUM_DEF		1
-#define MAX_BMMU_BUFFER_NUM		DECODE_BUFFER_NUM_MAX
+#define MAX_BMMU_BUFFER_NUM		(DECODE_BUFFER_NUM_MAX + 1)
 
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
+#define RP_WORKAROUND_SIZE  SZ_4K
 static int debug_enable;
 static u32 udebug_flag;
 #define DECODE_ID(hw) (hw_to_vdec(hw)->id)
@@ -679,6 +680,22 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 		hw->buffer_spec[i].canvas_config[2].endian =
 			endian;
 	}
+
+	if (is_need_fix_streambuf_rp()) {
+		decbuf_size = RP_WORKAROUND_SIZE;
+
+		ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle,
+			DECODE_BUFFER_NUM_MAX, decbuf_size, DRIVER_NAME, &buf_start);
+		if (ret < 0) {
+			pr_err("CMA alloc failed! size 0x%d  idx %d\n",
+				decbuf_size, i);
+			return;
+		}
+		if (!vdec_secure(vdec))
+			codec_mm_memset(buf_start, 0, decbuf_size);
+
+		hw->buf_start = buf_start;
+	}
 }
 
 static void init_scaler(u32 endian)
@@ -1041,6 +1058,10 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 	WRITE_VREG(ASSIST_AMR1_INT8, 8);
 
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
+
+	if (is_need_fix_streambuf_rp()) {
+		WRITE_VREG(AV_SCRATCH_L, hw->buf_start);
+	}
 
 	return 0;
 }

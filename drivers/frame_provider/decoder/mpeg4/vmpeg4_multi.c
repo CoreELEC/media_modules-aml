@@ -104,6 +104,7 @@
 #define PUT_INTERVAL        (HZ/100)
 #define MAX_BMMU_BUFFER_NUM (DECODE_BUFFER_NUM_MAX + 1)
 #define WORKSPACE_SIZE		(12*SZ_64K)
+#define RP_WORKAROUND_SIZE  SZ_4K
 static u32 buf_size = 32 * 1024 * 1024;
 
 #define CTX_LMEM_SWAP_OFFSET    0
@@ -2138,8 +2139,11 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 
 		unsigned canvas;
 
-		if (i == hw->buf_num)
+		if (i == hw->buf_num) {
 			decbuf_size = WORKSPACE_SIZE;
+			if (is_need_fix_streambuf_rp())
+				decbuf_size += RP_WORKAROUND_SIZE;
+		}
 
 		if (hw->is_used_v4l && !(i == hw->buf_num)) {
 			continue;

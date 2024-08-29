@@ -295,6 +295,8 @@ inline bool is_support_34bit_mode(void);
 
 inline bool is_vdec_hevc_combine(void);
 
+inline bool is_need_fix_streambuf_rp(void);
+
 void pr_dos_infos(void);
 
 void dos_info_debug(void);

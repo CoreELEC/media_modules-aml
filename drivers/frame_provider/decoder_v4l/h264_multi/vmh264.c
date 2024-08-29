@@ -431,6 +431,7 @@ static inline bool close_to(int a, int b, int m)
 #define mem_pps_base				0x01cbc00
 u32 V_BUF_ADDR_OFFSET = 0x200000 + 0x8000/* 32*0x400 */ + 0x20000/* 256*0x200 */ + 0x80;
 #define DCAC_READ_MARGIN	(64 * 1024)
+#define RP_WORKAROUND_SIZE  (2 * SZ_4K)
 
 #define EXTEND_SAR                      0xff
 #define BUFSPEC_POOL_SIZE		64
@@ -12393,6 +12394,8 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	vmh264_init_userdata_dump();
 	vmh264_reset_user_data_buf();
 #endif
+	if (is_need_fix_streambuf_rp())
+		V_BUF_ADDR_OFFSET += RP_WORKAROUND_SIZE;
 	if (decoder_bmmu_box_alloc_buf_phy(hw->bmmu_box, BMMU_DPB_IDX,
 		V_BUF_ADDR_OFFSET, DRIVER_NAME, &hw->cma_alloc_addr) < 0) {
 		h264_free_hw_stru(&pdev->dev, (void *)hw);

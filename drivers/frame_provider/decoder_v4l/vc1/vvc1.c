@@ -107,6 +107,7 @@
 #define MAX_BMMU_BUFFER_NUM	(DECODE_BUFFER_NUM_MAX + 1)
 #define VF_BUFFER_IDX(n)	(1 + n)
 #define DCAC_BUFF_START_ADDR	0x01f00000
+#define RP_WORKAROUND_SIZE  SZ_4K
 
 #define PUT_INTERVAL        (HZ/100)
 
@@ -2157,6 +2158,8 @@ static int vvc1_workspace_init(void)
 
 	/* workspace mem */
 	alloc_size = WORKSPACE_SIZE;
+	if (is_need_fix_streambuf_rp())
+		alloc_size += RP_WORKAROUND_SIZE;
 	vc1_print(0, VC1_DEBUG_DETAIL, "%s: alloc_size %d\n", __func__, alloc_size);
 
 	ret = decoder_bmmu_box_alloc_buf_phy(mm_blk_handle, 0,

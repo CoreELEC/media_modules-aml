@@ -115,6 +115,7 @@
 #define CTX_QUANT_MATRIX_OFFSET (CTX_CCBUF_OFFSET + 5*1024)
 #define CTX_CO_MV_OFFSET        (CTX_QUANT_MATRIX_OFFSET + 1*1024)
 #define CTX_DECBUF_OFFSET       (CTX_CO_MV_OFFSET + 0x11000)
+#define RP_WORKAROUND_SIZE      SZ_4K
 
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
 #define INVALID_IDX 		(-1)  /* Invalid buffer index.*/
@@ -3201,8 +3202,11 @@ static int vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 	for (i = 0; i < hw->buf_num + 1; i++) {
 		unsigned canvas;
 
-		if (i == hw->buf_num) /* SWAP&CCBUF&MATIRX&MV */
+		if (i == hw->buf_num) { /* SWAP&CCBUF&MATIRX&MV */
 			decbuf_size = WORKSPACE_SIZE;
+			if (is_need_fix_streambuf_rp())
+				decbuf_size += RP_WORKAROUND_SIZE;
+		}
 
 		if (hw->is_used_v4l && !(i == hw->buf_num)) {
 			continue;

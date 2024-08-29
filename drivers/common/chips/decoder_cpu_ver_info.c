@@ -1318,6 +1318,17 @@ inline bool is_vdec_hevc_combine(void)
 }
 EXPORT_SYMBOL(is_vdec_hevc_combine);
 
+inline bool is_need_fix_streambuf_rp(void)
+{
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
+
+	if (cpu_major_id == AM_MESON_CPU_MAJOR_ID_T6D)
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(is_need_fix_streambuf_rp);
+
 void pr_dos_infos(void)
 {
 	pr_info("dos device info:\n");

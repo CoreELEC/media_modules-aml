@@ -83,6 +83,7 @@
 #define MAX_BMMU_BUFFER_NUM		DECODE_BUFFER_NUM_MAX
 
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
+#define RP_WORKAROUND_SIZE  SZ_4K
 
 #define INVALID_IDX 		(-1)  /* Invalid buffer index.*/
 
@@ -215,6 +216,7 @@ struct vdec_mjpeg_hw_s {
 	u32 dec_result;
 	unsigned long buf_start;
 	u32 buf_size;
+	void *mm_blk_handle;
 	struct dec_sysinfo vmjpeg_amstream_dec_info;
 
 	struct vframe_chunk_s *chunk;
@@ -1117,6 +1119,21 @@ static int find_free_buffer(struct vdec_mjpeg_hw_s *hw)
 	return i;
 }
 
+static void vmjpeg_workspace_init(struct vdec_mjpeg_hw_s *hw)
+{
+	int ret;
+	u32 buf_size;
+
+	buf_size = RP_WORKAROUND_SIZE;
+	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle,
+			0, buf_size, DRIVER_NAME, &hw->buf_start);
+	if (ret < 0) {
+		pr_err("mjpeg workspace alloc size %d failed.\n", buf_size);
+	}
+
+	return;
+}
+
 static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 {
 	int index = -1;
@@ -1179,6 +1196,13 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 
+	if (is_need_fix_streambuf_rp()) {
+		if (!hw->init_flag)
+			vmjpeg_workspace_init(hw);
+
+		WRITE_VREG(AV_SCRATCH_L, hw->buf_start);
+	}
+
 	return 0;
 }
 
@@ -1232,6 +1256,22 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 
 		hw->vfpool[i].index = -1;
 		kfifo_put(&hw->newframe_q, vf);
+	}
+
+	if (is_need_fix_streambuf_rp()) {
+		if (hw->mm_blk_handle) {
+			decoder_bmmu_box_free(hw->mm_blk_handle);
+			hw->mm_blk_handle = NULL;
+		}
+
+		hw->mm_blk_handle = decoder_bmmu_box_alloc_box(
+			DRIVER_NAME,
+			0,
+			1,
+			4 + PAGE_SHIFT,
+			CODEC_MM_FLAGS_CMA_CLEAR |
+			CODEC_MM_FLAGS_FOR_VDECODER,
+			BMMU_ALLOC_FLAGS_WAIT);
 	}
 
 	timer_setup(&hw->check_timer, check_timer_func, 0);
@@ -1705,6 +1745,17 @@ static int vmjpeg_stop(struct vdec_mjpeg_hw_s *hw)
 	}
 	cancel_work_sync(&hw->work);
 	hw->init_flag = 0;
+
+	if (is_need_fix_streambuf_rp()) {
+		if (hw->mm_blk_handle) {
+			void *bmmu_box_tmp = hw->mm_blk_handle;
+			hw->mm_blk_handle = NULL;
+			if (hw->run_flag)
+				usleep_range(1000, 2000);
+			decoder_bmmu_box_free(bmmu_box_tmp);
+			bmmu_box_tmp= NULL;
+		}
+	}
 
 	if (hw->fw) {
 		vfree(hw->fw);

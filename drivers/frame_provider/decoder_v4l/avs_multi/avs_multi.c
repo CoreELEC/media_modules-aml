@@ -263,6 +263,7 @@ static struct vframe_provider_s vavs_vf_prov;
 #else
 #define MAX_BMMU_BUFFER_NUM	(VF_BUF_NUM_MAX + 1)
 #endif
+#define RP_WORKAROUND_SIZE  SZ_4K
 
 #define RV_AI_BUFF_START_ADDR	 0x01a00000
 #define LONG_CABAC_RV_AI_BUFF_START_ADDR	 0x00000000
@@ -1531,6 +1532,7 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 	int i;
 	struct vdec_s *vdec = NULL;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+	u32 buf_size;
 
 	if (hw->m_ins_flag)
 		vdec = hw_to_vdec(hw);
@@ -1560,8 +1562,12 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 	}
 
 	if (hw->wk_space_addr_vir == NULL) {
+		buf_size = WORKSPACE_SIZE;
+		if (is_need_fix_streambuf_rp())
+			buf_size += RP_WORKAROUND_SIZE;
+
 		hw->wk_space_addr_vir = decoder_dma_alloc_coherent(&hw->wk_space_handle,
-			WORKSPACE_SIZE, &hw->wk_space_addr_phy, DRIVER_NAME);
+			buf_size, &hw->wk_space_addr_phy, DRIVER_NAME);
 		if (hw->wk_space_addr_vir == NULL) {
 			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 			return -1;

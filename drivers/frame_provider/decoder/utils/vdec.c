@@ -2401,6 +2401,18 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 		input->last_wp = wp;
 		ATRACE_COUNTER(vdec->stream_buffer_level, size);
 
+		if (is_need_fix_streambuf_rp()) {
+			if (input_stream_based(input)) {
+				if (swap_valid) {
+					if (input->target == VDEC_INPUT_TARGET_VLD) {
+						wp = READ_VREG(VLD_MEM_VIFIFO_WP);
+						if (wp <= (vdec->input.start + 8))
+							return -1;
+					}
+				}
+			}
+		}
+
 		return size;
 	}
 }

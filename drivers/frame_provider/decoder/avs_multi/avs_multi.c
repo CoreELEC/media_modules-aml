@@ -260,6 +260,7 @@ static struct vframe_provider_s vavs_vf_prov;
 #else
 #define MAX_BMMU_BUFFER_NUM	(VF_BUF_NUM_MAX + 1)
 #endif
+#define RP_WORKAROUND_SIZE  SZ_4K
 
 #define RV_AI_BUFF_START_ADDR	 0x01a00000
 #define LONG_CABAC_RV_AI_BUFF_START_ADDR	 0x00000000
@@ -1244,8 +1245,11 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 #endif
 	for (i = 0; i < need_alloc_buf_num; i++) {
 
-		if (i == (need_alloc_buf_num - 1))
+		if (i == (need_alloc_buf_num - 1)) {
 			decbuf_size = WORKSPACE_SIZE;
+			if (is_need_fix_streambuf_rp())
+				decbuf_size += RP_WORKAROUND_SIZE;
+		}
 #ifdef AVSP_LONG_CABAC
 		else if (i == (need_alloc_buf_num - 2))
 			decbuf_size = WORKSPACE_SIZE_A;

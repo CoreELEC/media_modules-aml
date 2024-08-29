@@ -104,6 +104,7 @@
 #define PUT_INTERVAL        (HZ/100)
 #define MAX_BMMU_BUFFER_NUM (DECODE_BUFFER_NUM_MAX + 1)
 #define WORKSPACE_SIZE		(12*SZ_64K)
+#define RP_WORKAROUND_SIZE  SZ_4K
 
 #define CTX_LMEM_SWAP_OFFSET    0
 #define CTX_QUANT_MATRIX_OFFSET 0x800
@@ -2257,25 +2258,28 @@ static int vmpeg4_workspace_init(struct vdec_mpeg4_hw_s *hw)
 	int ret;
 	void *buf = NULL;
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	u32 buf_size;
 
+	buf_size = WORKSPACE_SIZE;
+	if (is_need_fix_streambuf_rp())
+		buf_size += RP_WORKAROUND_SIZE;
 	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle,
 		0,
-		WORKSPACE_SIZE,
+		buf_size,
 		DRIVER_NAME,
 		&hw->buf_start);
 	if (ret < 0) {
 		pr_err("mpeg4 workspace alloc size %d failed.\n",
-			WORKSPACE_SIZE);
+			buf_size);
 		return ret;
 	}
 
 	/* notify ucode the buffer start address */
 	if (!vdec_secure(vdec)) {
-		buf = codec_mm_vmap(hw->buf_start, WORKSPACE_SIZE);
+		buf = codec_mm_vmap(hw->buf_start, buf_size);
 		if (buf) {
-			memset(buf, 0, WORKSPACE_SIZE);
-			codec_mm_dma_flush(buf,
-				WORKSPACE_SIZE, DMA_TO_DEVICE);
+			memset(buf, 0, buf_size);
+			codec_mm_dma_flush(buf, buf_size, DMA_TO_DEVICE);
 			codec_mm_unmap_phyaddr(buf);
 		}
 	}

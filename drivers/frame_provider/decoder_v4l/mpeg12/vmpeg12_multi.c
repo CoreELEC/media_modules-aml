@@ -115,6 +115,7 @@
 #define CTX_QUANT_MATRIX_OFFSET (CTX_CCBUF_OFFSET + 5*1024)
 #define CTX_CO_MV_OFFSET        (CTX_QUANT_MATRIX_OFFSET + 1*1024)
 #define CTX_DECBUF_OFFSET       (CTX_CO_MV_OFFSET + 0x11000)
+#define RP_WORKAROUND_SIZE      SZ_4K
 
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
 
@@ -3251,15 +3252,19 @@ static void vmpeg12_workspace_init(struct vdec_mpeg12_hw_s *hw)
 {
 	int ret;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
+	u32 buf_size;
 
+	buf_size = WORKSPACE_SIZE;
+	if (is_need_fix_streambuf_rp())
+		buf_size += RP_WORKAROUND_SIZE;
 	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle,
 			0,
-			WORKSPACE_SIZE,
+			buf_size,
 			DRIVER_NAME,
 			&hw->buf_start);
 	if (ret < 0) {
 		pr_err("mpeg2 workspace alloc size %d failed.\n",
-			WORKSPACE_SIZE);
+			buf_size);
 		return;
 	}
 

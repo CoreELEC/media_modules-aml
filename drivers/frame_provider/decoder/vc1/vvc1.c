@@ -101,6 +101,7 @@
 #define MAX_BMMU_BUFFER_NUM	(DECODE_BUFFER_NUM_MAX + 1)
 #define VF_BUFFER_IDX(n)	(1 + n)
 #define DCAC_BUFF_START_ADDR	0x01f00000
+#define RP_WORKAROUND_SIZE  SZ_4K
 
  #define PUT_INTERVAL        (HZ/100)
 
@@ -1351,8 +1352,11 @@ static int vvc1_canvas_init(void)
 
 	for (i = 0; i < MAX_BMMU_BUFFER_NUM; i++) {
 		/* workspace mem */
-		if (i == (MAX_BMMU_BUFFER_NUM - 1))
+		if (i == (MAX_BMMU_BUFFER_NUM - 1)) {
 			alloc_size = WORKSPACE_SIZE;
+			if (is_need_fix_streambuf_rp())
+				alloc_size += RP_WORKAROUND_SIZE;
+		}
 		else
 			alloc_size = decbuf_size;
 		vc1_print(0, VC1_DEBUG_DETAIL, "%s: i %d, alloc_size %d\n", __func__, i, alloc_size);
