@@ -278,7 +278,7 @@ struct vdec_mpeg4_hw_s {
 	u32 chunk_size;
 	u32 chunk_frame_count;
 	u32 stat;
-	unsigned long buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
 	/*
 	unsigned long cma_alloc_addr;
@@ -2085,7 +2085,7 @@ static int vmpeg4_canvas_init(struct vdec_mpeg4_hw_s *hw)
 	u32 canvas_width, canvas_height;
 	u32 decbuf_size, decbuf_y_size;
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	unsigned long decbuf_start;
+	dos_addr_t decbuf_start;
 
 	if (buf_size <= 0x00400000) {
 			/* SD only */
@@ -2961,6 +2961,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_MPEG4;
 	}
+
 	if (vmpeg4_hw_ctx_restore(hw) < 0) {
 		hw->dec_result = DEC_RESULT_ERROR;
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
@@ -2968,6 +2969,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hw->run_flag = 0;
 		return;
 	}
+	vdec_prefix_config(PREFIX_ADDR(hw->buf_start));
+
 	if (vdec_frame_based(vdec)) {
 		size = hw->chunk_size +
 			(hw->chunk_offset & (VDEC_FIFO_ALIGN - 1));

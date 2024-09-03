@@ -739,24 +739,24 @@ struct avs2_frame_s {
 	int32_t mmu_alloc_flag;
 	int32_t lcu_size_log2;
 	/*uint32_t header_adr;*/
-	uint32_t mc_y_adr;
-	uint32_t mc_u_v_adr;
+	dos_addr_t mc_y_adr;
+	dos_addr_t mc_u_v_adr;
 	uint32_t mc_canvas_y;
 	uint32_t mc_canvas_u_v;
-	uint32_t mpred_mv_wr_start_addr;
+	dos_addr_t mpred_mv_wr_start_addr;
 	uint8_t bg_flag;
 	uint8_t drop_flag;
 	/**/
-	unsigned long header_adr;
+	dos_addr_t header_adr;
 	int buf_size;
 	int lcu_total;
 	int comp_body_size;
 
-	ulong dw_y_adr;
-	ulong dw_u_v_adr;
+	dos_addr_t dw_y_adr;
+	dos_addr_t dw_u_v_adr;
 
-	ulong tw_y_adr;
-	ulong tw_u_v_adr;
+	dos_addr_t tw_y_adr;
+	dos_addr_t tw_u_v_adr;
 	u32 luma_size_tw;
 	u32 chroma_size_tw;
 
@@ -771,7 +771,7 @@ struct avs2_frame_s {
 	u32 triple_write_mode;
 
 	int bit_depth;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	int BUF_index;
 	int pic_w;
 	int pic_h;
@@ -813,7 +813,7 @@ struct avs2_frame_s {
 	u64 time;
 	s32 poc;
 	int mv_size;
-	ulong mmu_copy_header_adr;
+	dos_addr_t mmu_copy_header_adr;
 	int need_mmu_copy;
 	int error_drop_flag;
 	u32 used_4k_num;

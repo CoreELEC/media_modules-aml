@@ -426,7 +426,7 @@ static void vc1_set_rp(void) {
 
 	spin_lock_irqsave(&vc1_rp_lock, flags);
 	STBUF_WRITE(&vdec->vbuf, set_rp,
-		READ_VREG(VLD_MEM_VIFIFO_RP));
+		((u32)READ_VREG(VLD_MEM_VIFIFO_RP) | stream_prefix_get()));
 	spin_unlock_irqrestore(&vc1_rp_lock, flags);
 }
 
@@ -1317,7 +1317,7 @@ static int vvc1_canvas_init(void)
 	int i, ret;
 	u32 canvas_width, canvas_height;
 	u32 alloc_size, decbuf_size, decbuf_y_size, decbuf_uv_size;
-	unsigned long buf_start;
+	dos_addr_t buf_start;
 	struct vdec_vc1_hw_s *hw = &vc1_hw;
 	int endian = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 
@@ -1436,6 +1436,9 @@ static int vvc1_canvas_init(void)
 #endif
 
 	}
+
+	stream_prefix_config(PREFIX_ADDR(buf_start), VDEC_INPUT_TARGET_VLD);
+	vdec_prefix_config(PREFIX_ADDR(buf_start));
 
 	if (is_vdec_hevc_combine()) {
 		WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);

@@ -269,6 +269,8 @@ int stream_buffer_write_vc1(struct file *file,
 	if (r > 0)
 		stbuf->stream_offset += r;
 
+	stream_prefix_config(PREFIX_ADDR(stbuf->buf_start), VDEC_INPUT_TARGET_VLD);
+
 	return r;
 }
 EXPORT_SYMBOL(stream_buffer_write_vc1);

@@ -261,7 +261,7 @@ struct vdec_mpeg12_hw_s {
 	struct vframe_chunk_s *chunk;
 	u32 stat;
 	u8 init_flag;
-	unsigned long buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
 	u32 vmpeg12_ratio;
 	u64 vmpeg12_ratio64;
@@ -3182,7 +3182,7 @@ static int vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 	int i, ret;
 	u32 canvas_width, canvas_height;
 	u32 decbuf_size, decbuf_y_size, decbuf_uv_size;
-	unsigned long decbuf_start;
+	dos_addr_t decbuf_start;
 	/*u32 disp_addr = 0xffffffff;*/
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
@@ -4198,6 +4198,8 @@ void (*callback)(struct vdec_s *, void *, int),
 		hw->run_flag = 0;
 		return;
 	}
+	vdec_prefix_config(PREFIX_ADDR(hw->buf_start));
+
 	/*wmb();*/
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->stat |= STAT_MC_LOAD;

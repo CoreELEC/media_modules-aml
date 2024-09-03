@@ -1271,7 +1271,8 @@ void vdec_prefix_config(u32 prefix)
 	 * 0x14: Amrisc LMEM
 	 * 0x19: CO_MB
 	 * 0x1c: DOubleWrite
-	 * 0x21: PIC_DC2
+	 * 0x20: PIC_DC2 (mpeg2/mepg4)
+	 * 0x21: PIC_DC2 (h264)
 	 * 0x24: H264TOP
 	 * 0x28: MC_MBBOT
 	 * 0x2c~0x2f: EXTIF BUF0~BUF3 Write
@@ -1298,7 +1299,7 @@ void vdec_prefix_config(u32 prefix)
 					(prefix << 14) | (0x2d << 8) |
 					(prefix <<  6) | (0x2c << 0));
 	WRITE_VREG(VDEC_AXI34_CONFIG_7,
-					(prefix << 14) | (0x2f << 8) |
+					(prefix << 14) | (0x20 << 8) |
 					(prefix <<  6) | (0x2e << 0));
 }
 EXPORT_SYMBOL(vdec_prefix_config);
@@ -1389,6 +1390,7 @@ void stream_prefix_config(u32 prefix, u32 target)
 				__func__, target);
 	}
 }
+EXPORT_SYMBOL(stream_prefix_config);
 
 #if 0
 static int vdec_get_hw_type(int value)

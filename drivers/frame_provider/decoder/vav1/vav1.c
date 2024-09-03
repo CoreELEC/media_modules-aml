@@ -370,21 +370,21 @@ struct BUF_s {
 	unsigned int alloc_flag;
 	/*buffer */
 	unsigned int cma_page_count;
-	unsigned long alloc_addr;
-	unsigned long start_adr;
+	dos_addr_t alloc_addr;
+	dos_addr_t start_adr;
 	unsigned int size;
 
-	unsigned int free_start_adr;
-	ulong v4l_ref_buf_addr;
-	ulong	header_addr;
-	u32 	header_size;
-	u32	luma_size;
-	ulong	chroma_addr;
-	u32	chroma_size;
+	dos_addr_t free_start_adr;
+	dos_addr_t v4l_ref_buf_addr;
+	dos_addr_t header_addr;
+	u32 header_size;
+	u32 luma_size;
+	dos_addr_t chroma_addr;
+	u32 chroma_size;
 } /*BUF_t */;
 
 struct MVBUF_s {
-	unsigned long start_adr;
+	dos_addr_t start_adr;
 	unsigned int size;
 	int used_flag;
 	int used_pic_index;
@@ -643,7 +643,7 @@ struct AV1HW_s {
 	unsigned long buf_start;
 	u32 buf_size;
 	u32 cma_alloc_count;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	uint8_t eos;
 	unsigned long int start_process_time;
 	unsigned last_lcu_idx;
@@ -1549,7 +1549,7 @@ static int get_mv_buf(struct AV1HW_s *hw,
 			(~0xffff);
 		if (debug & AV1_DEBUG_BUFMGR)
 			pr_info(
-			"%s => %d (0x%x) size 0x%x\n",
+			"%s => %d (0x%lx) size 0x%x\n",
 			__func__, ret,
 			pic_config->mpred_mv_wr_start_addr,
 			hw->m_mv_BUF[ret].size);
@@ -2750,55 +2750,55 @@ static void init_buff_spec(struct AV1HW_s *hw,
 	}
 
 	if (debug) {
-		pr_info("%s workspace (%x %x) size = %x\n", __func__,
+		pr_info("%s workspace (%lx %lx) size = %lx\n", __func__,
 			   buf_spec->start_adr, buf_spec->end_adr,
 			   buf_spec->end_adr - buf_spec->start_adr);
 	}
 
 	if (debug) {
-		pr_info("ipp.buf_start    		 :%x\n",
+		pr_info("ipp.buf_start    		 :%lx\n",
 			   buf_spec->ipp.buf_start);
-		pr_info("sao_abv.buf_start    	  :%x\n",
+		pr_info("sao_abv.buf_start    	  :%lx\n",
 			   buf_spec->sao_abv.buf_start);
-		pr_info("sao_vb.buf_start    	  :%x\n",
+		pr_info("sao_vb.buf_start    	  :%lx\n",
 			   buf_spec->sao_vb.buf_start);
-		pr_info("short_term_rps.buf_start  :%x\n",
+		pr_info("short_term_rps.buf_start  :%lx\n",
 			   buf_spec->short_term_rps.buf_start);
-		pr_info("vps.buf_start    		 :%x\n",
+		pr_info("vps.buf_start    		 :%lx\n",
 			   buf_spec->vps.buf_start);
-		pr_info("seg_map.buf_start    	  :%x\n",
+		pr_info("seg_map.buf_start    	  :%lx\n",
 			   buf_spec->seg_map.buf_start);
-		pr_info("daala_top.buf_start    	  :%x\n",
+		pr_info("daala_top.buf_start    	  :%lx\n",
 			   buf_spec->daala_top.buf_start);
-		pr_info("swap_buf.buf_start    	:%x\n",
+		pr_info("swap_buf.buf_start    	:%lx\n",
 			   buf_spec->swap_buf.buf_start);
-		pr_info("cdf_buf.buf_start    	:%x\n",
+		pr_info("cdf_buf.buf_start    	:%lx\n",
 			   buf_spec->cdf_buf.buf_start);
-		pr_info("gmc_buf.buf_start    	:%x\n",
+		pr_info("gmc_buf.buf_start    	:%lx\n",
 			   buf_spec->gmc_buf.buf_start);
-		pr_info("scalelut.buf_start    	:%x\n",
+		pr_info("scalelut.buf_start    	:%lx\n",
 			   buf_spec->scalelut.buf_start);
-		pr_info("dblk_para.buf_start       :%x\n",
+		pr_info("dblk_para.buf_start       :%lx\n",
 			   buf_spec->dblk_para.buf_start);
-		pr_info("dblk_data.buf_start       :%x\n",
+		pr_info("dblk_data.buf_start       :%lx\n",
 			   buf_spec->dblk_data.buf_start);
-		pr_info("cdef_data.buf_start       :%x\n",
+		pr_info("cdef_data.buf_start       :%lx\n",
 				buf_spec->cdef_data.buf_start);
-		pr_info("ups_data.buf_start       :%x\n",
+		pr_info("ups_data.buf_start       :%lx\n",
 				buf_spec->ups_data.buf_start);
 
 #ifdef AOM_AV1_MMU
-		pr_info("mmu_vbh.buf_start     :%x\n",
+		pr_info("mmu_vbh.buf_start     :%lx\n",
 			buf_spec->mmu_vbh.buf_start);
 #endif
-		pr_info("mpred_above.buf_start     :%x\n",
+		pr_info("mpred_above.buf_start     :%lx\n",
 			   buf_spec->mpred_above.buf_start);
 #ifdef MV_USE_FIXED_BUF
-		pr_info("mpred_mv.buf_start    	:%x\n",
+		pr_info("mpred_mv.buf_start    	:%lx\n",
 			   buf_spec->mpred_mv.buf_start);
 #endif
 		if ((debug & AOM_AV1_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-			pr_info("rpm.buf_start    		 :%x\n",
+			pr_info("rpm.buf_start    		 :%lx\n",
 				   buf_spec->rpm.buf_start);
 		}
 	}
@@ -2973,9 +2973,9 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 		pr_info("comp_body_size %x comp_buf_size %x ",
 			pic->comp_body_size,
 			pic->buf_size);
-		pr_info("mpred_mv_wr_start_adr %d\n",
+		pr_info("mpred_mv_wr_start_adr 0x%lx\n",
 			pic->mpred_mv_wr_start_addr);
-		pr_info("dw_y_adr %d, pic_config->dw_u_v_adr =%d\n",
+		pr_info("dw_y_adr 0x%lx, pic_config->dw_u_v_adr =0x%lx\n",
 			pic->dw_y_adr,
 			pic->dw_u_v_adr);
 	}
@@ -3110,7 +3110,7 @@ static int config_pic(struct AV1HW_s *hw,
 
 		}
 		if (debug & AV1_DEBUG_BUFMGR_MORE) {
-			pr_info("MMU dw header_adr (%d, %d) %d: %d\n",
+			pr_info("MMU dw header_adr (%d, %d) %d: 0x%lx\n",
 				hw->dw_mmu_enable,
 				DW_HEADER_BUFFER_IDX(pic_config->index),
 				pic_config->index,
@@ -3119,7 +3119,7 @@ static int config_pic(struct AV1HW_s *hw,
 #endif
 
 		if (debug & AV1_DEBUG_BUFMGR_MORE) {
-			pr_info("MMU header_adr %d: %d\n",
+			pr_info("MMU header_adr[%d] 0x%lx\n",
 				pic_config->index, pic_config->header_adr);
 		}
 	}
@@ -3256,12 +3256,12 @@ static int config_pic(struct AV1HW_s *hw,
 				pic_config->comp_body_size,
 				pic_config->buf_size);
 				pr_info
-				("mpred_mv_wr_start_adr %x\n",
+				("mpred_mv_wr_start_adr 0x%lx\n",
 				pic_config->mpred_mv_wr_start_addr);
-				pr_info("dw_y_adr %x, pic_config->dw_u_v_adr =%x\n",
+				pr_info("dw_y_adr 0x%lx, pic_config->dw_u_v_adr =0x%lx\n",
 					pic_config->dw_y_adr,
 					pic_config->dw_u_v_adr);
-				pr_info("tw y_addr %x, uv_addr %x\n",
+				pr_info("tw y_addr 0x%lx, uv_addr 0x%lx\n",
 					pic_config->tw_y_adr, pic_config->tw_u_v_adr);
 			}
 			ret = 0;
@@ -3327,7 +3327,7 @@ static void init_pic_list(struct AV1HW_s *hw)
 		header_size = vav1_mmu_compress_header_size(hw);
 		/*alloc AV1 compress header first*/
 		for (i = 0; i < hw->used_buf_num; i++) {
-			unsigned long buf_addr;
+			dos_addr_t buf_addr;
 			if (decoder_bmmu_box_alloc_buf_phy
 				(hw->bmmu_box,
 				HEADER_BUFFER_IDX(i), header_size,
@@ -3652,7 +3652,7 @@ static void dump_mv_buffer(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_c
 
 static void mv_buffer_fill_zero(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_config)
 {
-	pr_info("fill dummy data pic index %d colocate addresses %x size %x\n",
+	pr_info("fill dummy data pic index %d colocate addresses 0x%lx size %x\n",
 		pic_config->index, pic_config->mpred_mv_wr_start_addr,
 		hw->m_mv_BUF[pic_config->mv_buf_index].size);
 	d_fill_zero(hw, pic_config->mpred_mv_wr_start_addr,
@@ -5525,6 +5525,8 @@ static void aom_config_work_space_hw(struct AV1HW_s *hw, u32 mask)
 #endif
 
 	WRITE_VREG(LMEM_DUMP_ADR, (u32)hw->lmem_phy_addr);
+	hevc_prefix_config(PREFIX_ADDR(hw->lmem_phy_addr),
+		PREFIX_ADDR(hw->buf_start));
 	if (hw->mmu_enable)
 	    WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL, hw->frame_mmu_map_phy_addr);
 #ifdef AOM_AV1_MMU_DW

@@ -960,16 +960,16 @@ union param_u {
 #define LMEM_BUF_SIZE (0x600 * 2)
 
 struct buff_s {
-	u32 buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
-	u32 buf_end;
+	dos_addr_t buf_end;
 };
 
 struct BuffInfo_s {
 	u32 max_width;
 	u32 max_height;
-	unsigned int start_adr;
-	unsigned int end_adr;
+	dos_addr_t start_adr;
+	dos_addr_t end_adr;
 	struct buff_s ipp;
 	struct buff_s sao_abv;
 	struct buff_s sao_vb;
@@ -1352,14 +1352,14 @@ enum SliceType {
 
 /*USE_BUF_BLOCK*/
 struct BUF_s {
-	ulong	start_adr;
+	dos_addr_t	start_adr;
 	u32	size;
 	u32	luma_size;
-	ulong	header_addr;
+	dos_addr_t	header_addr;
 	u32 	header_size;
 	int	used_flag;
-	ulong	v4l_ref_buf_addr;
-	ulong	chroma_addr;
+	dos_addr_t	v4l_ref_buf_addr;
+	dos_addr_t	chroma_addr;
 	u32	chroma_size;
 	/* triple write buffer info. */
 	ulong	start_adr_tw;
@@ -1404,28 +1404,28 @@ struct PIC_s {
 	unsigned char long_term_ref;
 #endif
 	/*buffer */
-	unsigned int header_adr;
+	dos_addr_t header_adr;
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	unsigned char dv_enhance_exist;
 #endif
 	char *aux_data_buf;
 	int aux_data_size;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	struct page *alloc_pages;
-	unsigned int mpred_mv_wr_start_addr;
+	dos_addr_t mpred_mv_wr_start_addr;
 	int mv_size;
 	unsigned int mc_y_adr;
 	unsigned int mc_u_v_adr;
 #ifdef SUPPORT_10BIT
 	/*unsigned int comp_body_size;*/
-	unsigned int dw_y_adr;
-	unsigned int dw_u_v_adr;
+	dos_addr_t dw_y_adr;
+	dos_addr_t dw_u_v_adr;
 #endif
 	u32	luma_size;
 	u32	chroma_size;
 
-	u32 tw_y_adr;
-	u32 tw_u_v_adr;
+	dos_addr_t tw_y_adr;
+	dos_addr_t tw_u_v_adr;
 	u32	luma_size_tw;
 	u32	chroma_size_tw;
 	int mc_canvas_y;
@@ -1510,8 +1510,8 @@ struct tile_s {
 	int start_cu_x;
 	int start_cu_y;
 
-	unsigned int sao_vb_start_addr;
-	unsigned int sao_abv_start_addr;
+	dos_addr_t sao_vb_start_addr;
+	dos_addr_t sao_abv_start_addr;
 };
 
 #define SEI_MASTER_DISPLAY_COLOR_MASK 0x00000001
@@ -1669,7 +1669,7 @@ struct hevc_state_s {
 	struct device *cma_dev;
 	unsigned char m_ins_flag;
 	unsigned char dolby_enhance_flag;
-	unsigned long buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
 	u32 mv_buf_size;
 
@@ -4034,7 +4034,7 @@ static void dump_pic_list(struct hevc_state_s *hevc)
 		PR_FILL("num_reorder_pic:%d, output_mark:%d, error_mark:%d w/h %d,%d",
 				pic->num_reorder_pic, pic->output_mark, pic->error_mark,
 				pic->width, pic->height);
-		PR_FILL("output_ready:%d, dma addr %lx mv_wr_start %x vf_ref %d",
+		PR_FILL("output_ready:%d, dma addr %lx mv_wr_start %lx vf_ref %d",
 				pic->output_ready, pic->cma_alloc_addr, pic->mpred_mv_wr_start_addr,
 				pic->vf_ref);
 		PR_INFO(hevc->index);
@@ -4988,6 +4988,9 @@ static void hevc_config_work_space_hw(struct hevc_state_s *hevc)
 	WRITE_VREG(HEVC_DBLK_CFGE, buf_spec->dblk_data2.buf_start);
 
 	WRITE_VREG(LMEM_DUMP_ADR, (u32)hevc->lmem_phy_addr);
+
+	hevc_prefix_config(PREFIX_ADDR(hevc->lmem_phy_addr),
+			PREFIX_ADDR(hevc->buf_start));
 }
 
 static void parser_cmd_write(void)
@@ -5740,7 +5743,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 		WRITE_VREG(HEVC_SAO_C_LENGTH, cur_pic->chroma_size);
 
 		if (debug & PRINT_FLAG_V4L_DETAIL) {
-			pr_info("[%d] config dw, id: %d, Y:(%x, %d) C:(%x, %d).\n",
+			pr_info("[%d] config dw, id: %d, Y:(%lx, %d) C:(%lx, %d).\n",
 				v4l2_ctx->id, cur_pic->index,
 				cur_pic->dw_y_adr, cur_pic->luma_size,
 				cur_pic->dw_u_v_adr, cur_pic->chroma_size);
@@ -5752,7 +5755,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 		WRITE_VREG(HEVC_SAO_C_LENGTH3 ,cur_pic->chroma_size_tw);
 
 		if (debug & PRINT_FLAG_V4L_DETAIL) {
-			pr_info("[%d] config tw, id: %d, Y:(%x, %d) C:(%x, %d).\n",
+			pr_info("[%d] config tw, id: %d, Y:(%lx, %d) C:(%lx, %d).\n",
 				v4l2_ctx->id, cur_pic->index,
 				cur_pic->tw_y_adr, cur_pic->luma_size_tw,
 				cur_pic->tw_u_v_adr, cur_pic->chroma_size_tw);
@@ -13806,8 +13809,8 @@ static int check_dirty_data(struct vdec_s *vdec)
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)(vdec->private);
 	struct vdec_input_s *input = &vdec->input;
-	u32 wp, rp, level;
-	u32 rp_set;
+	dos_addr_t wp, rp, level;
+	dos_addr_t rp_set;
 
 	rp = STBUF_READ(&vdec->vbuf, get_rp);
 	wp = hevc->pre_parser_wr_ptr;

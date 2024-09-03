@@ -974,6 +974,8 @@ void vdec_mmu_prefix_config(u32 prefix);
 
 void hevc_prefix_config(int dma_prefix, int bmmu_prefix);
 
+void stream_prefix_config(u32 prefix, u32 target);
+
 struct device *get_vdec_dev(void);
 
 void arb_ctrl_wait_idle(int enable);

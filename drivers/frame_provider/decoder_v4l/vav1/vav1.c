@@ -353,27 +353,27 @@ struct BUF_s {
 	unsigned int alloc_flag;
 	/*buffer */
 	unsigned int cma_page_count;
-	unsigned long alloc_addr;
-	unsigned long start_adr;
+	dos_addr_t alloc_addr;
+	dos_addr_t start_adr;
 	unsigned int size;
 
-	unsigned int free_start_adr;
-	ulong v4l_ref_buf_addr;
-	ulong header_addr;
+	dos_addr_t free_start_adr;
+	dos_addr_t v4l_ref_buf_addr;
+	dos_addr_t header_addr;
 	u32 header_size;
 	u32 luma_size;
-	ulong chroma_addr;
+	dos_addr_t chroma_addr;
 	u32 chroma_size;
-	ulong header_dw_addr;
-	ulong start_adr_tw;
+	dos_addr_t header_dw_addr;
+	dos_addr_t start_adr_tw;
 	u32 size_tw;
 	u32 luma_size_tw;
-	ulong chroma_addr_tw;
+	dos_addr_t chroma_addr_tw;
 	u32 chroma_size_tw;
 } /*BUF_t */;
 
 struct MVBUF_s {
-	unsigned long start_adr;
+	dos_addr_t start_adr;
 	unsigned int size;
 	int used_flag;
 	int used_pic_index;
@@ -636,7 +636,7 @@ struct AV1HW_s {
 	unsigned long buf_start;
 	u32 buf_size;
 	u32 cma_alloc_count;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	bool eos;
 	unsigned long int start_process_time;
 	unsigned last_lcu_idx;
@@ -1609,7 +1609,7 @@ static int get_mv_buf(struct AV1HW_s *hw,
 			(hw->m_mv_BUF[ret].start_adr + 0xffff) &
 			(~0xffff);
 		if (debug & AV1_DEBUG_BUFMGR)
-			pr_info("%s => %d (0x%x) size 0x%x\n", __func__, ret,
+			pr_info("%s => %d (0x%lx) size 0x%x\n", __func__, ret,
 				pic_config->mpred_mv_wr_start_addr, hw->m_mv_BUF[ret].size);
 	} else {
 		pr_info("%s: Error, mv buf is not enough\n", __func__);
@@ -1617,7 +1617,7 @@ static int get_mv_buf(struct AV1HW_s *hw,
 			dump_pic_list(hw);
 			for (i = 0; i < MAX_BUF_NUM; i++) {
 				av1_print(hw, 0,
-					"mv_Buf(%d) start_adr 0x%x size 0x%x used %d used_pic_index %d\n",
+					"mv_Buf(%d) start_adr 0x%lx size 0x%x used %d used_pic_index %d\n",
 					i,
 					hw->m_mv_BUF[i].start_adr,
 					hw->m_mv_BUF[i].size,
@@ -2781,55 +2781,55 @@ static void init_buff_spec(struct AV1HW_s *hw,
 	}
 
 	if (debug) {
-		pr_info("%s workspace (%x %x) size = %x\n", __func__,
+		pr_info("%s workspace (%lx %lx) size = %lx\n", __func__,
 			   buf_spec->start_adr, buf_spec->end_adr,
 			   buf_spec->end_adr - buf_spec->start_adr);
 	}
 
 	if (debug) {
-		pr_info("ipp.buf_start    		 :%x\n",
+		pr_info("ipp.buf_start    		 :%lx\n",
 			   buf_spec->ipp.buf_start);
-		pr_info("sao_abv.buf_start    	  :%x\n",
+		pr_info("sao_abv.buf_start    	  :%lx\n",
 			   buf_spec->sao_abv.buf_start);
-		pr_info("sao_vb.buf_start    	  :%x\n",
+		pr_info("sao_vb.buf_start    	  :%lx\n",
 			   buf_spec->sao_vb.buf_start);
-		pr_info("short_term_rps.buf_start  :%x\n",
+		pr_info("short_term_rps.buf_start  :%lx\n",
 			   buf_spec->short_term_rps.buf_start);
-		pr_info("vps.buf_start    		 :%x\n",
+		pr_info("vps.buf_start    		 :%lx\n",
 			   buf_spec->vps.buf_start);
-		pr_info("seg_map.buf_start    	  :%x\n",
+		pr_info("seg_map.buf_start    	  :%lx\n",
 			   buf_spec->seg_map.buf_start);
-		pr_info("daala_top.buf_start    	  :%x\n",
+		pr_info("daala_top.buf_start    	  :%lx\n",
 			   buf_spec->daala_top.buf_start);
-		pr_info("swap_buf.buf_start    	:%x\n",
+		pr_info("swap_buf.buf_start    	:%lx\n",
 			   buf_spec->swap_buf.buf_start);
-		pr_info("cdf_buf.buf_start    	:%x\n",
+		pr_info("cdf_buf.buf_start    	:%lx\n",
 			   buf_spec->cdf_buf.buf_start);
-		pr_info("gmc_buf.buf_start    	:%x\n",
+		pr_info("gmc_buf.buf_start    	:%lx\n",
 			   buf_spec->gmc_buf.buf_start);
-		pr_info("scalelut.buf_start    	:%x\n",
+		pr_info("scalelut.buf_start    	:%lx\n",
 			   buf_spec->scalelut.buf_start);
-		pr_info("dblk_para.buf_start       :%x\n",
+		pr_info("dblk_para.buf_start       :%lx\n",
 			   buf_spec->dblk_para.buf_start);
-		pr_info("dblk_data.buf_start       :%x\n",
+		pr_info("dblk_data.buf_start       :%lx\n",
 			   buf_spec->dblk_data.buf_start);
-		pr_info("cdef_data.buf_start       :%x\n",
+		pr_info("cdef_data.buf_start       :%lx\n",
 				buf_spec->cdef_data.buf_start);
-		pr_info("ups_data.buf_start       :%x\n",
+		pr_info("ups_data.buf_start       :%lx\n",
 				buf_spec->ups_data.buf_start);
 
 #ifdef AOM_AV1_MMU
-		pr_info("mmu_vbh.buf_start     :%x\n",
+		pr_info("mmu_vbh.buf_start     :%lx\n",
 			buf_spec->mmu_vbh.buf_start);
 #endif
-		pr_info("mpred_above.buf_start     :%x\n",
+		pr_info("mpred_above.buf_start     :%lx\n",
 			   buf_spec->mpred_above.buf_start);
 #ifdef MV_USE_FIXED_BUF
-		pr_info("mpred_mv.buf_start    	:%x\n",
+		pr_info("mpred_mv.buf_start    	:%lx\n",
 			   buf_spec->mpred_mv.buf_start);
 #endif
 		if ((debug & AOM_AV1_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-			pr_info("rpm.buf_start    		 :%x\n",
+			pr_info("rpm.buf_start    		 :%lx\n",
 				   buf_spec->rpm.buf_start);
 		}
 	}
@@ -3074,15 +3074,15 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 
 		pr_info("comp_body_size %x comp_buf_size %x ",
 			pic->comp_body_size, pic->buf_size);
-		pr_info("mpred_mv_wr_start_adr %x\n", pic->mpred_mv_wr_start_addr);
+		pr_info("mpred_mv_wr_start_adr 0x%lx\n", pic->mpred_mv_wr_start_addr);
 
-		pr_info("dw(%x), Y(%x, %u), C(%x, %u), %dbit yuv\n",
+		pr_info("dw(%x), Y(0x%lx, %u), C(0x%lx, %u), %dbit yuv\n",
 			dw_mode,
 			pic->dw_y_adr, pic->luma_size,
 			pic->dw_u_v_adr, pic->chroma_size,
 			is_dw_p010(hw) ? 10 : 8);
 
-		pr_info("TW(%x), Y(%x, %u), C(%x, %u), %dbit\n",
+		pr_info("TW(%x), Y(0x%lx, %u), C(0x%lx, %u), %dbit\n",
 			tw_mode,
 			pic->tw_y_adr, pic->luma_size_tw,
 			pic->tw_u_v_adr, pic->chroma_size_tw,
@@ -3310,7 +3310,7 @@ static void d_dump(struct AV1HW_s *hw, unsigned int phyadr, int size,
 
 static void mv_buffer_fill_zero(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_config)
 {
-	pr_info("fill dummy data pic index %d colocate addresses %x size %x\n",
+	pr_info("fill dummy data pic index %d colocate addresses 0x%lx size %x\n",
 		pic_config->index, pic_config->mpred_mv_wr_start_addr,
 		hw->m_mv_BUF[pic_config->mv_buf_index].size);
 	d_fill_zero(hw, pic_config->mpred_mv_wr_start_addr,
@@ -5093,6 +5093,8 @@ static void aom_config_work_space_hw(struct AV1HW_s *hw, u32 mask)
 #endif
 
 	WRITE_VREG(LMEM_DUMP_ADR, (u32)hw->lmem_phy_addr);
+	hevc_prefix_config(PREFIX_ADDR(hw->lmem_phy_addr),
+		PREFIX_ADDR(hw->buf_start));
 #ifdef CHANGE_REMOVED
 
 		WRITE_VREG(AV1_SEG_MAP_BUFFER, buf_spec->seg_map.buf_start);

@@ -282,9 +282,9 @@ struct inp_par {
 
 //new dual
 struct buff_s {
-	u32 buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
-	u32 buf_end;
+	dos_addr_t buf_end;
 };
 typedef struct buff_s buff_t;
 

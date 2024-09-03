@@ -173,18 +173,18 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define MJPEG_DATA_EMPTY      2
 
 struct buffer_spec_s {
-	unsigned int y_addr;
-	unsigned int u_addr;
-	unsigned int v_addr;
+	dos_addr_t y_addr;
+	dos_addr_t u_addr;
+	dos_addr_t v_addr;
 
 	int y_canvas_index;
 	int u_canvas_index;
 	int v_canvas_index;
 
 	struct canvas_config_s canvas_config[3];
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	int cma_alloc_count;
-	unsigned int buf_adr;
+	dos_addr_t buf_adr;
 	ulong v4l_ref_buf_addr;
 };
 
@@ -1557,6 +1557,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hw->run_flag = 0;
 		return;
 	}
+	vdec_prefix_config(PREFIX_ADDR(hw->buffer_spec[0].cma_alloc_addr));
 
 	hw->stat |= STAT_MC_LOAD;
 	start_process_time(hw);

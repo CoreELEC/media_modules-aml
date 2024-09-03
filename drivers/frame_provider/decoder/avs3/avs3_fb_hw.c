@@ -743,7 +743,7 @@ static u32 dump_fb_mmu_buffer(struct AVS3Decoder_s *dec, void *mmu_map_adr, u32 
 {
 	int i;
 	u8 *adr = (u8 *)mmu_map_adr;
-	u32 page_phy_adr;
+	dos_addr_t page_phy_adr;
 	loff_t off = 0;
 	int mode = O_CREAT | O_WRONLY | O_TRUNC;
 	struct file *fp = NULL;
@@ -770,7 +770,7 @@ static u32 dump_fb_mmu_buffer(struct AVS3Decoder_s *dec, void *mmu_map_adr, u32 
 static void fb_mmu_buffer_fill_zero(struct AVS3Decoder_s *dec, void *mmu_map_adr, u32 mmu_map_size)
 {
 	int i;
-	u32 page_phy_adr;
+	dos_addr_t page_phy_adr;
 	u8 *adr = (u8 *)mmu_map_adr;
 	for (i = 0; i < mmu_map_size; i += 4) {
 		page_phy_adr = (adr[i] | (adr[i+1]<<8) | (adr[i+2]<<16) | (adr[i+3]<<24)) << 12;
@@ -793,8 +793,8 @@ static void dump_loop_buffer(struct AVS3Decoder_s *dec, int count, u8 save_file)
 	char mark[16];
 	for (i=0; i<9; i++) {
 		WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, i);
-		adr = READ_VREG(HEVC_ASSIST_RING_F_START);
-		size = READ_VREG(HEVC_ASSIST_RING_F_END) - adr;
+		adr = READ_VREG(HEVC_ASSIST_RING_F_START) | stream_prefix_get();
+		size = (READ_VREG(HEVC_ASSIST_RING_F_END) | stream_prefix_get()) - adr;
 		if (save_file) {
 		if (count >= 0)
 			sprintf(&file[0], "/data/tmp/%s_%d", name[i], count);
@@ -842,8 +842,8 @@ static void loop_buffer_fill_zero(struct AVS3Decoder_s *dec)
 	uint32_t adr, size;
 	for (i=0; i<9; i++) {
 		WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, i);
-		adr = READ_VREG(HEVC_ASSIST_RING_F_START);
-		size = READ_VREG(HEVC_ASSIST_RING_F_END) - adr;
+		adr = READ_VREG(HEVC_ASSIST_RING_F_START) | stream_prefix_get();
+		size = (READ_VREG(HEVC_ASSIST_RING_F_END) | stream_prefix_get()) - adr;
 		dump_or_fill_phy_buffer(dec, adr, size, NULL, 1, NULL);
 	}
 	fb_mmu_buffer_fill_zero(dec, dec->fb_buf_mmu0_addr, avs3_dec->fb_buf_mmu0.buf_size);
@@ -933,7 +933,7 @@ static void init_fb_bufstate(struct AVS3Decoder_s *dec)
 	int ret;
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 	dma_addr_t tmp_phy_adr;
-	unsigned long tmp_adr;
+	dos_addr_t tmp_adr;
 	int mmu_4k_number = dec->fb_ifbuf_num * avs3_mmu_page_num(dec, dec->init_pic_w, dec->init_pic_h, 1);
 
 	ret = init_mmu_fb_bufstate(dec, mmu_4k_number);

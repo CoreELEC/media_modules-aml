@@ -745,24 +745,24 @@ struct avs2_frame_s {
 	uint32_t mc_u_v_adr;
 	uint32_t mc_canvas_y;
 	uint32_t mc_canvas_u_v;
-	uint32_t mpred_mv_wr_start_addr;
+	dos_addr_t mpred_mv_wr_start_addr;
 	uint8_t bg_flag;
 	/**/
-	unsigned long header_adr;
+	dos_addr_t header_adr;
 	/*AVS2_10B_MMU_DW*/
-	unsigned long dw_header_adr;
+	dos_addr_t dw_header_adr;
 
 	int buf_size;
 	int lcu_total;
 	int comp_body_size;
-	uint32_t dw_y_adr;
-	uint32_t dw_u_v_adr;
+	dos_addr_t dw_y_adr;
+	dos_addr_t dw_u_v_adr;
 	int y_canvas_index;
 	int uv_canvas_index;
 	struct canvas_config_s canvas_config[2];
 	int double_write_mode;
 	int bit_depth;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	int BUF_index;
 	int pic_w;
 	int pic_h;
@@ -811,7 +811,7 @@ struct avs2_frame_s {
 	u64 time;
 	s32 poc;
 	int mv_size;
-	ulong mmu_copy_header_adr;
+	dos_addr_t mmu_copy_header_adr;
 	int need_mmu_copy;
 	int cur_mmu_4k_number;
 	int error_drop_flag;

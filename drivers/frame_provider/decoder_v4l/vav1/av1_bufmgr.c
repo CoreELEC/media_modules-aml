@@ -30,6 +30,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/amlogic/media/canvas/canvas.h>
+#include "av1_global.h"
 
 #undef pr_info
 #define pr_info pr_cont
@@ -3011,7 +3012,7 @@ int get_buffer_index(AV1Decoder *pbi, RefCntBuffer *buffer)
 void dump_buffer(RefCntBuffer *buf)
 {
 	int i;
-	pr_info("ref_count %d, vf_ref %d, order_hint %d, w/h(%d,%d) showable_frame %d frame_type %d canvas(%d,%d) w/h(%d,%d) mi_c/r(%d,%d) header 0x%x ref_deltas(",
+	pr_info("ref_count %d, vf_ref %d, order_hint %d, w/h(%d,%d) showable_frame %d frame_type %d canvas(%d,%d) w/h(%d,%d) mi_c/r(%d,%d) header 0x%lx ref_deltas(",
 	buf->ref_count, buf->buf.vf_ref, buf->order_hint, buf->width, buf->height, buf->showable_frame, buf->frame_type,
 	buf->buf.mc_canvas_y, buf->buf.mc_canvas_u_v,
 	buf->buf.y_crop_width, buf->buf.y_crop_height,
@@ -3059,7 +3060,7 @@ void dump_ref_spec_bufs(AV1Decoder *pbi)
   for (i = 0; i < INTER_REFS_PER_FRAME; ++i) {
     PIC_BUFFER_CONFIG *pic_config = av1_get_ref_frame_spec_buf(cm, LAST_FRAME + i);
     if (pic_config == NULL) continue;
-    pr_info("%d: index %d order_hint %d header 0x%x dw_header 0x%x canvas(%d,%d) mv_wr_start 0x%x lcu_total %d\n",
+    pr_info("%d: index %d order_hint %d header 0x%lx dw_header 0x%lx canvas(%d,%d) mv_wr_start 0x%lx lcu_total %d\n",
       i, pic_config->index,
       pic_config->order_hint,
       pic_config->header_adr,

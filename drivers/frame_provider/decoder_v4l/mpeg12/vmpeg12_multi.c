@@ -253,7 +253,7 @@ struct vdec_mpeg12_hw_s {
 	struct vframe_chunk_s *chunk;
 	u32 stat;
 	u8 init_flag;
-	unsigned long buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
 	u32 reg_pic_width;
 	u32 reg_pic_height;
@@ -4339,6 +4339,7 @@ void (*callback)(struct vdec_s *, void *, int),
 		vdec_schedule_work(&hw->work);
 		return;
 	}
+	vdec_prefix_config(PREFIX_ADDR(hw->buf_start));
 
 	if (hw->dec_result != DEC_RESULT_UNFINISH)
 		hw->dec_result = DEC_RESULT_NONE;

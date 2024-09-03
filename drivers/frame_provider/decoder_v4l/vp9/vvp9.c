@@ -284,27 +284,27 @@ struct BUF_s {
 	unsigned int alloc_flag;
 	/*buffer */
 	unsigned int cma_page_count;
-	unsigned long alloc_addr;
-	unsigned long start_adr;
+	dos_addr_t alloc_addr;
+	dos_addr_t start_adr;
 	unsigned int size;
 
-	unsigned int free_start_adr;
-	ulong v4l_ref_buf_addr;
-	ulong header_addr;
+	dos_addr_t free_start_adr;
+	dos_addr_t v4l_ref_buf_addr;
+	dos_addr_t header_addr;
 	u32 header_size;
 	u32 luma_size;
-	ulong chroma_addr;
+	dos_addr_t chroma_addr;
 	u32 chroma_size;
 
-	ulong start_adr_tw;
+	dos_addr_t start_adr_tw;
 	u32 size_tw;
 	u32 luma_size_tw;
-	ulong chroma_addr_tw;
+	dos_addr_t chroma_addr_tw;
 	u32 chroma_size_tw;
 } /*BUF_t */;
 
 struct MVBUF_s {
-	unsigned long start_adr;
+	dos_addr_t start_adr;
 	unsigned int size;
 	int used_flag;
 } /*MVBUF_t */;
@@ -531,16 +531,16 @@ struct PIC_BUFFER_CONFIG_s {
 
 	int slice_idx;
 	/*buffer*/
-	unsigned long header_adr;
-	unsigned long mpred_mv_wr_start_addr;
+	dos_addr_t header_adr;
+	dos_addr_t mpred_mv_wr_start_addr;
 	int mv_size;
 
-	ulong dw_y_adr;
-	ulong dw_u_v_adr;
+	dos_addr_t dw_y_adr;
+	dos_addr_t dw_u_v_adr;
 	u32 luma_size;
 	u32 chroma_size;
-	ulong tw_y_adr;
-	ulong tw_u_v_adr;
+	dos_addr_t tw_y_adr;
+	dos_addr_t tw_u_v_adr;
 
 	struct canvas_config_s tw_canvas_config[2];
 
@@ -585,7 +585,7 @@ struct PIC_BUFFER_CONFIG_s {
 
 	int corrupted;
 	int flags;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 
 	int double_write_mode;
 
@@ -923,16 +923,16 @@ static void setup_display_size(struct VP9_Common_s *cm, union param_u *params,
 uint8_t print_header_info = 0;
 
 struct buff_s {
-	u32 buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
-	u32 buf_end;
+	dos_addr_t buf_end;
 } buff_t;
 
 struct BuffInfo_s {
 	u32 max_width;
 	u32 max_height;
-	u32 start_adr;
-	u32 end_adr;
+	dos_addr_t start_adr;
+	dos_addr_t end_adr;
 	struct buff_s ipp;
 	struct buff_s sao_abv;
 	struct buff_s sao_vb;
@@ -1046,7 +1046,7 @@ struct VP9Decoder_s {
 	unsigned long buf_start;
 	u32 buf_size;
 	u32 cma_alloc_count;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	bool eos;
 	unsigned long int start_process_time;
 	unsigned last_lcu_idx;
@@ -3745,57 +3745,57 @@ static void init_buff_spec(struct VP9Decoder_s *pbi,
 	}
 
 	if (debug) {
-		pr_info("%s workspace (%x %x) size = %x\n", __func__,
+		pr_info("%s workspace (%lx %lx) size = %lx\n", __func__,
 			   buf_spec->start_adr, buf_spec->end_adr,
 			   buf_spec->end_adr - buf_spec->start_adr);
 	}
 
 	if (debug) {
-		pr_info("ipp.buf_start             :%x\n",
+		pr_info("ipp.buf_start             :%lx\n",
 			   buf_spec->ipp.buf_start);
-		pr_info("sao_abv.buf_start          :%x\n",
+		pr_info("sao_abv.buf_start          :%lx\n",
 			   buf_spec->sao_abv.buf_start);
-		pr_info("sao_vb.buf_start          :%x\n",
+		pr_info("sao_vb.buf_start          :%lx\n",
 			   buf_spec->sao_vb.buf_start);
-		pr_info("short_term_rps.buf_start  :%x\n",
+		pr_info("short_term_rps.buf_start  :%lx\n",
 			   buf_spec->short_term_rps.buf_start);
-		pr_info("vps.buf_start             :%x\n",
+		pr_info("vps.buf_start             :%lx\n",
 			   buf_spec->vps.buf_start);
-		pr_info("sps.buf_start             :%x\n",
+		pr_info("sps.buf_start             :%lx\n",
 			   buf_spec->sps.buf_start);
-		pr_info("pps.buf_start             :%x\n",
+		pr_info("pps.buf_start             :%lx\n",
 			   buf_spec->pps.buf_start);
-		pr_info("sao_up.buf_start          :%x\n",
+		pr_info("sao_up.buf_start          :%lx\n",
 			   buf_spec->sao_up.buf_start);
-		pr_info("swap_buf.buf_start        :%x\n",
+		pr_info("swap_buf.buf_start        :%lx\n",
 			   buf_spec->swap_buf.buf_start);
-		pr_info("swap_buf2.buf_start       :%x\n",
+		pr_info("swap_buf2.buf_start       :%lx\n",
 			   buf_spec->swap_buf2.buf_start);
-		pr_info("scalelut.buf_start        :%x\n",
+		pr_info("scalelut.buf_start        :%lx\n",
 			   buf_spec->scalelut.buf_start);
-		pr_info("dblk_para.buf_start       :%x\n",
+		pr_info("dblk_para.buf_start       :%lx\n",
 			   buf_spec->dblk_para.buf_start);
-		pr_info("dblk_data.buf_start       :%x\n",
+		pr_info("dblk_data.buf_start       :%lx\n",
 			   buf_spec->dblk_data.buf_start);
-		pr_info("seg_map.buf_start       :%x\n",
+		pr_info("seg_map.buf_start       :%lx\n",
 			buf_spec->seg_map.buf_start);
 	if (pbi->mmu_enable) {
-		pr_info("mmu_vbh.buf_start     :%x\n",
+		pr_info("mmu_vbh.buf_start     :%lx\n",
 			buf_spec->mmu_vbh.buf_start);
 	}
-		pr_info("mpred_above.buf_start     :%x\n",
+		pr_info("mpred_above.buf_start     :%lx\n",
 			   buf_spec->mpred_above.buf_start);
 #ifdef MV_USE_FIXED_BUF
-		pr_info("mpred_mv.buf_start        :%x\n",
+		pr_info("mpred_mv.buf_start        :%lx\n",
 			   buf_spec->mpred_mv.buf_start);
 #endif
 		if ((debug & VP9_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-			pr_info("rpm.buf_start             :%x\n",
+			pr_info("rpm.buf_start             :%lx\n",
 				   buf_spec->rpm.buf_start);
 		}
-		pr_info("prob_buf.buf_start        :%x\n",
+		pr_info("prob_buf.buf_start        :%lx\n",
 			   buf_spec->prob_buf.buf_start);
-		pr_info("prob_cnt_buf.buf_start    :%x\n",
+		pr_info("prob_cnt_buf.buf_start    :%lx\n",
 			   buf_spec->prob_cnt_buf.buf_start);
 	}
 }
@@ -5745,7 +5745,7 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 	int losless_comp_header_size, losless_comp_body_size;
 
 	if (debug && pbi->init_flag == 0)
-		pr_info("%s w %d h %d %x %x %x %x %x %x %x %x %x %x %x %x\n",
+		pr_info("%s w %d h %d %lx %lx %lx %lx %lx %lx %lx %lx %lx %lx %lx %lx\n",
 			__func__,
 			buf_spec->max_width,
 			buf_spec->max_height,
@@ -5860,6 +5860,8 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 		WRITE_VREG(VP9_SEG_MAP_BUFFER, buf_spec->seg_map.buf_start);
 
 		WRITE_VREG(LMEM_DUMP_ADR, (u32)pbi->lmem_phy_addr);
+		hevc_prefix_config(PREFIX_ADDR(pbi->lmem_phy_addr),
+				PREFIX_ADDR(pbi->buf_start));
 		WRITE_VREG(VP9_PROB_SWAP_BUFFER, pbi->prob_buffer_phy_addr);
 		WRITE_VREG(VP9_COUNT_SWAP_BUFFER, pbi->count_buffer_phy_addr);
 		if (pbi->mmu_enable) {

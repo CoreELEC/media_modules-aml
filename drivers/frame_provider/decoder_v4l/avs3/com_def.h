@@ -37,6 +37,7 @@
 
 #include "com_typedef.h"
 #include "com_port.h"
+#include "../../../common/media_utils/media_utils.h"
 #include <linux/amlogic/media/utils/amstream.h>
 
 #if TSCPM
@@ -1487,13 +1488,13 @@ typedef struct avs3_frame_s {
 	int used;
 	u32 mmu_alloc_flag;
 	u32 lcu_size_log2;
-	u32 header_adr;
-	u32 header_dw_adr;
+	dos_addr_t header_adr;
+	dos_addr_t header_dw_adr;
 	u32 mc_y_adr;
 	u32 mc_u_v_adr;
 	u32 mc_canvas_y;
 	u32 mc_canvas_u_v;
-	u32 mpred_mv_wr_start_addr;
+	dos_addr_t mpred_mv_wr_start_addr;
 	u8 bg_flag;
 	u32 refered_by_others;
 	u32 is_output;
@@ -1518,14 +1519,14 @@ typedef struct avs3_frame_s {
 	int error_mark;
 	int32_t decoded_lcu;
 
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	int buf_size;
 	int BUF_index;
 	int lcu_total;
 	int comp_body_size;
-	uint32_t dw_y_adr;
-	uint32_t dw_u_v_adr;
-	unsigned long dw_header_adr;
+	dos_addr_t dw_y_adr;
+	dos_addr_t dw_u_v_adr;
+	dos_addr_t dw_header_adr;
 	int y_canvas_index;
 	int uv_canvas_index;
 	struct canvas_config_s canvas_config[2];
@@ -1560,8 +1561,8 @@ typedef struct avs3_frame_s {
 	u32 used_4k_num;
 	u32 used_4k_num1;
 #endif
-	u32 tw_y_adr;
-	u32 tw_u_v_adr;
+	dos_addr_t tw_y_adr;
+	dos_addr_t tw_u_v_adr;
 	u32 luma_size_ex;
 	u32 chroma_size_ex;
 

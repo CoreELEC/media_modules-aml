@@ -401,17 +401,17 @@ struct BUF_s {
 	unsigned int alloc_flag;
 	/*buffer */
 	unsigned int cma_page_count;
-	unsigned long alloc_addr;
-	unsigned long start_adr;
+	dos_addr_t alloc_addr;
+	dos_addr_t start_adr;
 	unsigned int size;
 
-	unsigned int free_start_adr;
+	dos_addr_t free_start_adr;
 
-	ulong v4l_ref_buf_addr;
-	ulong	header_addr;
+	dos_addr_t v4l_ref_buf_addr;
+	dos_addr_t	header_addr;
 	u32 	header_size;
 	u32	luma_size;
-	ulong	chroma_addr;
+	dos_addr_t	chroma_addr;
 	u32	chroma_size;
 
 	ulong start_adr_tw;
@@ -422,7 +422,7 @@ struct BUF_s {
 } /*BUF_t */;
 
 struct MVBUF_s {
-	unsigned long start_adr;
+	dos_addr_t start_adr;
 	unsigned int size;
 	int used_flag;
 	int used_pic_index;
@@ -592,16 +592,16 @@ static void WRITE_VREG_DBG2(unsigned adr, unsigned val)
 #define CO_MV_BUF_SIZE_8K     0x480000
 
 struct buff_s {
-	u32 buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
-	u32 buf_end;
+	dos_addr_t buf_end;
 };
 
 struct BuffInfo_s {
 	u32 max_width;
 	u32 max_height;
-	u32 start_adr;
-	u32 end_adr;
+	dos_addr_t start_adr;
+	dos_addr_t end_adr;
 	struct buff_s ipp;
 	struct buff_s sao_abv;
 	struct buff_s sao_vb;
@@ -677,10 +677,10 @@ struct AVS2Decoder_s {
 	u32 start_shift_bytes;
 
 	struct BuffInfo_s work_space_buf_store;
-	unsigned long buf_start;
+	dos_addr_t buf_start;
 	u32 buf_size;
 	u32 cma_alloc_count;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	bool eos;
 	unsigned long int start_process_time;
 	unsigned last_lcu_idx;
@@ -2308,51 +2308,51 @@ static void init_buff_spec(struct AVS2Decoder_s *dec,
 			pr_err("mem_start_virt failed\n");
 		}
 		if (debug) {
-			pr_info("%s workspace (%x %x) size = %x\n", __func__,
+			pr_info("%s workspace (%lx %lx) size = %lx\n", __func__,
 				buf_spec->start_adr, buf_spec->end_adr,
 				buf_spec->end_adr - buf_spec->start_adr);
 		}
 		if (debug) {
-			pr_info("ipp.buf_start             :%x\n",
+			pr_info("ipp.buf_start             :%lx\n",
 				   buf_spec->ipp.buf_start);
-			pr_info("sao_abv.buf_start          :%x\n",
+			pr_info("sao_abv.buf_start          :%lx\n",
 				   buf_spec->sao_abv.buf_start);
-			pr_info("sao_vb.buf_start          :%x\n",
+			pr_info("sao_vb.buf_start          :%lx\n",
 				   buf_spec->sao_vb.buf_start);
-			pr_info("short_term_rps.buf_start  :%x\n",
+			pr_info("short_term_rps.buf_start  :%lx\n",
 				   buf_spec->short_term_rps.buf_start);
-			pr_info("rcs.buf_start             :%x\n",
+			pr_info("rcs.buf_start             :%lx\n",
 				   buf_spec->rcs.buf_start);
-			pr_info("sps.buf_start             :%x\n",
+			pr_info("sps.buf_start             :%lx\n",
 				   buf_spec->sps.buf_start);
-			pr_info("pps.buf_start             :%x\n",
+			pr_info("pps.buf_start             :%lx\n",
 				   buf_spec->pps.buf_start);
-			pr_info("sao_up.buf_start          :%x\n",
+			pr_info("sao_up.buf_start          :%lx\n",
 				   buf_spec->sao_up.buf_start);
-			pr_info("swap_buf.buf_start        :%x\n",
+			pr_info("swap_buf.buf_start        :%lx\n",
 				   buf_spec->swap_buf.buf_start);
-			pr_info("swap_buf2.buf_start       :%x\n",
+			pr_info("swap_buf2.buf_start       :%lx\n",
 				   buf_spec->swap_buf2.buf_start);
-			pr_info("scalelut.buf_start        :%x\n",
+			pr_info("scalelut.buf_start        :%lx\n",
 				   buf_spec->scalelut.buf_start);
-			pr_info("dblk_para.buf_start       :%x\n",
+			pr_info("dblk_para.buf_start       :%lx\n",
 				   buf_spec->dblk_para.buf_start);
-			pr_info("dblk_data.buf_start       :%x\n",
+			pr_info("dblk_data.buf_start       :%lx\n",
 				   buf_spec->dblk_data.buf_start);
-			pr_info("dblk_data2.buf_start       :%x\n",
+			pr_info("dblk_data2.buf_start       :%lx\n",
 				   buf_spec->dblk_data2.buf_start);
 	#ifdef AVS2_10B_MMU
-			pr_info("mmu_vbh.buf_start     :%x\n",
+			pr_info("mmu_vbh.buf_start     :%lx\n",
 				buf_spec->mmu_vbh.buf_start);
 	#endif
-			pr_info("mpred_above.buf_start     :%x\n",
+			pr_info("mpred_above.buf_start     :%lx\n",
 				   buf_spec->mpred_above.buf_start);
 #ifdef MV_USE_FIXED_BUF
-			pr_info("mpred_mv.buf_start        :%x\n",
+			pr_info("mpred_mv.buf_start        :%lx\n",
 				   buf_spec->mpred_mv.buf_start);
 #endif
 			if ((debug & AVS2_DBG_SEND_PARAM_WITH_REG) == 0) {
-				pr_info("rpm.buf_start             :%x\n",
+				pr_info("rpm.buf_start             :%lx\n",
 					   buf_spec->rpm.buf_start);
 			}
 		}
@@ -7080,6 +7080,8 @@ static void vavs2_prot_init(struct AVS2Decoder_s *dec)
 		init_pic_list_hw(dec);
 
 	avs2_init_decoder_hw(dec);
+	hevc_prefix_config(PREFIX_ADDR(dec->lmem_phy_addr),
+			PREFIX_ADDR(dec->buf_start));
 
 	avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
 		"%s\n", __func__);

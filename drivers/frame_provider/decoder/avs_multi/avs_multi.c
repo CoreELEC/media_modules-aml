@@ -1189,7 +1189,7 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 	int i, ret;
 	u32 canvas_width, canvas_height;
 	u32 decbuf_size, decbuf_y_size, decbuf_uv_size;
-	unsigned long buf_start;
+	dos_addr_t buf_start;
 	int need_alloc_buf_num;
 	struct vdec_s *vdec = NULL;
 
@@ -1836,6 +1836,7 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 				WRITE_VREG(DECODE_MODE, DECODE_MODE_MULTI_STREAMBASE);
 		}
 		WRITE_VREG(DECODE_LMEM_BUF_ADR, (u32)hw->lmem_phy_addr);
+		vdec_prefix_config(PREFIX_ADDR(hw->lmem_phy_addr));
 	} else
 		WRITE_VREG(DECODE_MODE, DECODE_MODE_SINGLE);
 

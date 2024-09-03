@@ -342,8 +342,8 @@ static unsigned char get_data_check_sum
 static struct avs3_frame_s *get_pic_by_index(
 	struct AVS3Decoder_s *dec, int index);
 static int avs3_hw_ctx_restore(struct AVS3Decoder_s *dec);
-static void dump_or_fill_phy_buffer(struct AVS3Decoder_s *dec, u32 phy_adr, u32 size, char *file, u8 flag, char *mark);
-static void d_dump(struct AVS3Decoder_s *dec, unsigned int phy_adr, int size,
+static void dump_or_fill_phy_buffer(struct AVS3Decoder_s *dec, dos_addr_t phy_adr, u32 size, char *file, u8 flag, char *mark);
+static void d_dump(struct AVS3Decoder_s *dec, dos_addr_t phy_adr, int size,
 	struct file *fp, loff_t *wr_off, u32 * total_check_sum, u8 print_flag);
 
 #ifdef NEW_FB_CODE
@@ -429,15 +429,15 @@ struct BUF_s {
 	unsigned int alloc_flag;
 	/*buffer */
 	unsigned int cma_page_count;
-	unsigned long alloc_addr;
-	unsigned long start_adr;
+	dos_addr_t alloc_addr;
+	dos_addr_t start_adr;
 	unsigned int size;
 
-	unsigned int free_start_adr;
+	dos_addr_t free_start_adr;
 } /*BUF_t */;
 
 struct MVBUF_s {
-	unsigned long start_adr;
+	dos_addr_t start_adr;
 	unsigned int size;
 	int used_flag;
 	int used_pic_index;
@@ -645,8 +645,8 @@ static u32 front_back_mode = 1;
 struct BuffInfo_s {
 	u32 max_width;
 	u32 max_height;
-	u32 start_adr;
-	u32 end_adr;
+	dos_addr_t start_adr;
+	dos_addr_t end_adr;
 	struct buff_s ipp;
 #ifdef NEW_FRONT_BACK_CODE
 	struct buff_s ipp1;
@@ -726,7 +726,7 @@ struct AVS3Decoder_s {
 	unsigned long buf_start;
 	u32 buf_size;
 	u32 cma_alloc_count;
-	unsigned long cma_alloc_addr;
+	dos_addr_t cma_alloc_addr;
 	uint8_t eos;
 	unsigned long int start_process_time;
 	unsigned last_lcu_idx;
@@ -2835,59 +2835,59 @@ static void init_buff_spec(struct AVS3Decoder_s *dec,
 			pr_err("mem_start_virt failed\n");
 		}
 		if (debug) {
-			pr_info("%s workspace (%x %x) size = %x\n", __func__,
+			pr_info("%s workspace (%lx %lx) size = %lx\n", __func__,
 				   buf_spec->start_adr, buf_spec->end_adr,
 				   buf_spec->end_adr - buf_spec->start_adr);
 		}
 		if (debug) {
-			pr_info("ipp.buf_start             :%x\n",
+			pr_info("ipp.buf_start             :%lx\n",
 				   buf_spec->ipp.buf_start);
 #ifdef NEW_FRONT_BACK_CODE
-			pr_info("ipp1.buf_start             :%x\n",
+			pr_info("ipp1.buf_start             :%lx\n",
 				   buf_spec->ipp1.buf_start);
 #endif
-			pr_info("sao_abv.buf_start          :%x\n",
+			pr_info("sao_abv.buf_start          :%lx\n",
 				   buf_spec->sao_abv.buf_start);
-			pr_info("sao_vb.buf_start          :%x\n",
+			pr_info("sao_vb.buf_start          :%lx\n",
 				   buf_spec->sao_vb.buf_start);
-			pr_info("short_term_rps.buf_start  :%x\n",
+			pr_info("short_term_rps.buf_start  :%lx\n",
 				   buf_spec->short_term_rps.buf_start);
-			pr_info("rcs.buf_start             :%x\n",
+			pr_info("rcs.buf_start             :%lx\n",
 				   buf_spec->rcs.buf_start);
-			pr_info("sps.buf_start             :%x\n",
+			pr_info("sps.buf_start             :%lx\n",
 				   buf_spec->sps.buf_start);
-			pr_info("pps.buf_start             :%x\n",
+			pr_info("pps.buf_start             :%lx\n",
 				   buf_spec->pps.buf_start);
-			pr_info("sao_up.buf_start          :%x\n",
+			pr_info("sao_up.buf_start          :%lx\n",
 				   buf_spec->sao_up.buf_start);
-			pr_info("swap_buf.buf_start        :%x\n",
+			pr_info("swap_buf.buf_start        :%lx\n",
 				   buf_spec->swap_buf.buf_start);
-			pr_info("swap_buf2.buf_start       :%x\n",
+			pr_info("swap_buf2.buf_start       :%lx\n",
 				   buf_spec->swap_buf2.buf_start);
-			pr_info("scalelut.buf_start        :%x\n",
+			pr_info("scalelut.buf_start        :%lx\n",
 				   buf_spec->scalelut.buf_start);
-			pr_info("dblk_para.buf_start       :%x\n",
+			pr_info("dblk_para.buf_start       :%lx\n",
 				   buf_spec->dblk_para.buf_start);
-			pr_info("dblk_data.buf_start       :%x\n",
+			pr_info("dblk_data.buf_start       :%lx\n",
 				   buf_spec->dblk_data.buf_start);
-			pr_info("dblk_data2.buf_start       :%x\n",
+			pr_info("dblk_data2.buf_start       :%lx\n",
 				   buf_spec->dblk_data2.buf_start);
 	#ifdef AVS3_10B_MMU
-			pr_info("mmu_vbh.buf_start     :%x\n",
+			pr_info("mmu_vbh.buf_start     :%lx\n",
 				buf_spec->mmu_vbh.buf_start);
 	#endif
 	#ifdef AVS3_10B_MMU_DW
-			pr_info("mmu_vbh_dw.buf_start     :%x\n",
+			pr_info("mmu_vbh_dw.buf_start     :%lx\n",
 				buf_spec->mmu_vbh_dw.buf_start);
 	#endif
-			pr_info("mpred_above.buf_start     :%x\n",
+			pr_info("mpred_above.buf_start     :%lx\n",
 				   buf_spec->mpred_above.buf_start);
 #ifdef MV_USE_FIXED_BUF
-			pr_info("mpred_mv.buf_start        :%x\n",
+			pr_info("mpred_mv.buf_start        :%lx\n",
 				   buf_spec->mpred_mv.buf_start);
 #endif
 			if ((debug & AVS3_DBG_SEND_PARAM_WITH_REG) == 0) {
-				pr_info("rpm.buf_start             :%x\n",
+				pr_info("rpm.buf_start             :%lx\n",
 					   buf_spec->rpm.buf_start);
 			}
 		}
@@ -3149,7 +3149,7 @@ static void init_pic_list(struct AVS3Decoder_s *dec,
 #ifdef AVS3_10B_MMU
 	if (dec->mmu_enable) {
 		for (i = 0; i < avs3_dec->max_pb_size; i++) {
-			unsigned long buf_addr;
+			dos_addr_t buf_addr;
 			u32 header_size = get_compress_header_size(dec);
 #ifdef AVS3_10B_MMU_DW
 			if (dec->dw_mmu_enable)
@@ -4635,6 +4635,8 @@ static void avs3_config_work_space_hw(struct AVS3Decoder_s *dec)
 #endif
 
 	WRITE_VREG(LMEM_DUMP_ADR, (u32)dec->lmem_phy_addr);
+	hevc_prefix_config(PREFIX_ADDR(dec->lmem_phy_addr),
+			PREFIX_ADDR(dec->buf_start));
 
 	WRITE_VREG(HEVC_MPRED_ABV_START_ADDR, buf_spec->mpred_above.buf_start);
 
@@ -10947,7 +10949,7 @@ static void avs3_dump_state(struct vdec_s *vdec)
 	}
 }
 
-static void d_dump(struct AVS3Decoder_s *dec, unsigned int phy_adr, int size,
+static void d_dump(struct AVS3Decoder_s *dec, dos_addr_t phy_adr, int size,
 	struct file *fp, loff_t *wr_off, u32 * total_check_sum, u8 print_flag)
 {
 	u8 *vaddr;
@@ -10990,7 +10992,7 @@ static void d_dump(struct AVS3Decoder_s *dec, unsigned int phy_adr, int size,
 	}
 }
 
-static void dump_or_fill_phy_buffer(struct AVS3Decoder_s *dec, u32 dump_phy_adr, u32 dump_phy_size, char *file, u8 flag, char *mark)
+static void dump_or_fill_phy_buffer(struct AVS3Decoder_s *dec, dos_addr_t dump_phy_adr, u32 dump_phy_size, char *file, u8 flag, char *mark)
 {
 	/*
 		flag: 1, fill zero

@@ -19,6 +19,8 @@
  */
 #ifndef AV1_GLOBAL_H_
 #define AV1_GLOBAL_H_
+#include "../../../common/media_utils/media_utils.h"
+
 #define AOM_AV1_MMU_DW
 #ifndef HAVE_NEON
 #define HAVE_NEON 0
@@ -67,17 +69,17 @@
 #define FILM_GRAIN_REG_SIZE  39
 typedef struct buff_s
 {
-    uint32_t buf_start;
+    dos_addr_t buf_start;
     uint32_t buf_size;
-    uint32_t buf_end;
+    dos_addr_t buf_end;
 } buff_t;
 
 typedef struct BuffInfo_s
 {
     uint32_t max_width;
     uint32_t max_height;
-    uint32_t start_adr;
-    uint32_t end_adr;
+    dos_addr_t start_adr;
+    dos_addr_t end_adr;
     buff_t ipp;
     buff_t sao_abv;
     buff_t sao_vb;
@@ -1286,12 +1288,12 @@ typedef struct PIC_BUFFER_CONFIG_s {
   uint32_t sfgs_table_phy;
   char *sfgs_table_ptr;
 #ifdef AOM_AV1_MMU
-  uint32_t header_adr;
+  dos_addr_t header_adr;
 #endif
 #ifdef AOM_AV1_MMU_DW
-  uint32_t header_dw_adr;
+  dos_addr_t header_dw_adr;
 #endif
-  uint32_t mpred_mv_wr_start_addr;
+  dos_addr_t mpred_mv_wr_start_addr;
   uint32_t mc_y_adr;
   uint32_t mc_u_v_adr;
   uint32_t mc_canvas_y;
@@ -1303,18 +1305,18 @@ typedef struct PIC_BUFFER_CONFIG_s {
 #endif
 #ifdef AML_DEVICE
   int mv_buf_index;
-  unsigned long cma_alloc_addr;
+  dos_addr_t cma_alloc_addr;
   int BUF_index;
   int buf_size;
   int comp_body_size;
-  u32 dw_y_adr;
-  u32 dw_u_v_adr;
+  dos_addr_t dw_y_adr;
+  dos_addr_t dw_u_v_adr;
   int double_write_mode;
   u32 luma_size;
   u32 chroma_size;
 
-  u32 tw_y_adr;
-  u32 tw_u_v_adr;
+  dos_addr_t tw_y_adr;
+  dos_addr_t tw_u_v_adr;
   u32 triple_write_mode;
   //int tw_y_canvas_index;
   //int tw_uv_canvas_index;

@@ -2069,6 +2069,7 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 				WRITE_VREG(DECODE_MODE, DECODE_MODE_MULTI_STREAMBASE);
 		}
 		WRITE_VREG(DECODE_LMEM_BUF_ADR, (u32)hw->lmem_phy_addr);
+		vdec_prefix_config(PREFIX_ADDR(hw->lmem_phy_addr));
 	} else
 		WRITE_VREG(DECODE_MODE, DECODE_MODE_SINGLE);
 
