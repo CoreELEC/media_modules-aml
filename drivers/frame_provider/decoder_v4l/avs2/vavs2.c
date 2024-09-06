@@ -2073,8 +2073,7 @@ static int get_mv_buf(struct AVS2Decoder_s *dec, struct avs2_frame_s *pic)
 		pic->mv_buf_index = ret;
 		pic->mv_size = dec->m_mv_BUF[ret].size;
 		dec->m_mv_BUF[ret].used_pic_index = pic->index;
-		pic->mpred_mv_wr_start_addr =
-			(dec->m_mv_BUF[ret].start_adr + 0xffff) & (~0xffff);
+		pic->mpred_mv_wr_start_addr = dec->m_mv_BUF[ret].start_adr;
 		avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
 			"%s => %d (0x%x) pic_index %d size 0x%x\n",
 			__func__, ret,
@@ -7361,7 +7360,7 @@ static int amvdec_avs2_mmu_init(struct AVS2Decoder_s *dec)
 		DRIVER_NAME,
 		dec->index,
 		MAX_BMMU_BUFFER_NUM,
-		4 + PAGE_SHIFT,
+		PAGE_SHIFT,
 		CODEC_MM_FLAGS_CMA_CLEAR |
 		CODEC_MM_FLAGS_FOR_VDECODER |
 		tvp_flag,

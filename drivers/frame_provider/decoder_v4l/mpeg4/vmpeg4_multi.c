@@ -2734,7 +2734,7 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 			DRIVER_NAME,
 			0,
 			1,
-			4 + PAGE_SHIFT,
+			PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER | tvp_flag,
 			BMMU_ALLOC_FLAGS_WAIT);

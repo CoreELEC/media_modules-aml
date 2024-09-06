@@ -3933,7 +3933,7 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 			DRIVER_NAME,
 			0,
 			1,
-			4 + PAGE_SHIFT,
+			PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
 			hw->tvp_flag,

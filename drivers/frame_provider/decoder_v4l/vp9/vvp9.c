@@ -1959,9 +1959,7 @@ static int get_mv_buf(struct VP9Decoder_s *pbi,
 
 		if (alloc_mv_buf(pbi, ret, size) >= 0) {
 			pic_config->mv_buf_index = ret;
-			pic_config->mpred_mv_wr_start_addr =
-				(pbi->m_mv_BUF[ret].start_adr + 0xffff) &
-				(~0xffff);
+			pic_config->mpred_mv_wr_start_addr = pbi->m_mv_BUF[ret].start_adr;
 			pic_config->mv_size = size;
 
 			if (debug & VP9_DEBUG_BUFMGR_MORE)
@@ -1989,9 +1987,7 @@ static int get_mv_buf(struct VP9Decoder_s *pbi,
 
 	if (ret >= 0) {
 		pic_config->mv_buf_index = ret;
-		pic_config->mpred_mv_wr_start_addr =
-			(pbi->m_mv_BUF[ret].start_adr + 0xffff) &
-			(~0xffff);
+		pic_config->mpred_mv_wr_start_addr = pbi->m_mv_BUF[ret].start_adr;
 		pic_config->mv_size = pbi->m_mv_BUF[ret].size;
 		if (debug & VP9_DEBUG_BUFMGR_MORE)
 			pr_info("%s => %d (%lx) size 0x%x\n", __func__, ret,
@@ -10068,7 +10064,7 @@ static int amvdec_vp9_mmu_init(struct VP9Decoder_s *pbi)
 			DRIVER_NAME,
 			pbi->index,
 			MAX_BMMU_BUFFER_NUM,
-			4 + PAGE_SHIFT,
+			PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
 			tvp_flag,

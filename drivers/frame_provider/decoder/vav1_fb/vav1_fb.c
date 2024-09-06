@@ -1749,9 +1749,7 @@ static int get_mv_buf(struct AV1HW_s *hw,
 
 		if (alloc_mv_buf(hw, ret, size) >= 0) {
 			pic_config->mv_buf_index = ret;
-			pic_config->mpred_mv_wr_start_addr =
-				(hw->m_mv_BUF[ret].start_adr + 0xffff) &
-				(~0xffff);
+			pic_config->mpred_mv_wr_start_addr = hw->m_mv_BUF[ret].start_adr;
 		} else {
 			pr_info(
 			"%s: Error, mv buf alloc fail\n",
@@ -1795,9 +1793,7 @@ static int get_mv_buf(struct AV1HW_s *hw,
 	if (ret >= 0) {
 		pic_config->mv_buf_index = ret;
 		hw->m_mv_BUF[ret].used_pic_index = pic_config->index;
-		pic_config->mpred_mv_wr_start_addr =
-			(hw->m_mv_BUF[ret].start_adr + 0xffff) &
-			(~0xffff);
+		pic_config->mpred_mv_wr_start_addr = hw->m_mv_BUF[ret].start_adr;
 		if (debug & AV1_DEBUG_BUFMGR_MORE)
 			pr_info(
 			"%s => %d (0x%lx) size 0x%x\n",
@@ -11428,7 +11424,7 @@ static int amvdec_av1_mmu_init(struct AV1HW_s *hw)
 			DRIVER_NAME,
 			hw->index,
 			MAX_BMMU_BUFFER_NUM,
-			4 + PAGE_SHIFT,
+			PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
 			tvp_flag,

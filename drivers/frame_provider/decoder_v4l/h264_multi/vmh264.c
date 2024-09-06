@@ -12666,7 +12666,7 @@ int ammvdec_h264_bmmu_init(struct vdec_h264_hw_s *hw)
 			DRIVER_NAME,
 			hw->id,
 			BMMU_MAX_BUFFERS,
-			4 + PAGE_SHIFT,
+			PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
 			tvp_flag,
@@ -12692,6 +12692,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	char *tmpbuf;
 	int config_val;
 	struct aml_vcodec_ctx *ctx = NULL;
+	unsigned int align_2n = 16;
 
 	if (pdata == NULL) {
 		pr_info("\nammvdec_h264 memory resource undefined.\n");
@@ -12944,14 +12945,16 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 #endif
 	if (is_need_fix_streambuf_rp())
 		V_BUF_ADDR_OFFSET += RP_WORKAROUND_SIZE;
-	if (decoder_bmmu_box_alloc_buf_phy(hw->bmmu_box, BMMU_DPB_IDX,
-		V_BUF_ADDR_OFFSET, DRIVER_NAME, &hw->cma_alloc_addr) < 0) {
+	if (decoder_bmmu_box_alloc_idx_wait(hw->bmmu_box, BMMU_DPB_IDX,
+		V_BUF_ADDR_OFFSET, align_2n, -1, BMMU_ALLOC_FLAGS_WAIT) < 0) {
 		h264_free_hw_stru(&pdev->dev, (void *)hw);
 		pdata->dec_status = NULL;
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		return -ENOMEM;
 	}
 
+	hw->cma_alloc_addr = decoder_bmmu_box_get_phy_addr(
+		hw->bmmu_box, BMMU_DPB_IDX);
 	hw->buf_offset = hw->cma_alloc_addr - DEF_BUF_START_ADDR +
 			DCAC_READ_MARGIN;
 

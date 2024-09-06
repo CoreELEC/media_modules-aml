@@ -218,7 +218,7 @@ static int aml_buf_box_alloc(struct aml_buf_mgr_s *bm, void **mmu, void **mmu_1,
 	*bmmu = decoder_bmmu_box_alloc_box(bm->bc.name,
 		bm->bc.id,
 		BUF_FBC_NUM_MAX,
-		4 + PAGE_SHIFT,
+		PAGE_SHIFT,
 		bmmu_flag, BMMU_ALLOC_FLAGS_WAIT);
 	if (!(*bmmu)) {
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,

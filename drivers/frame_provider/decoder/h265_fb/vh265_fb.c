@@ -3914,7 +3914,7 @@ static int init_mmu_buffers(struct hevc_state_s *hevc, int bmmu_flag)
 	hevc->bmmu_box = decoder_bmmu_box_alloc_box(DRIVER_NAME,
 			hevc->index,
 			BMMU_MAX_BUFFERS,
-			4 + PAGE_SHIFT,
+			PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER |
 			tvp_flag,
@@ -4166,9 +4166,7 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		if (ret >= 0) {
 			pic->mv_buf_index = ret;
 			pic->mv_size = hevc->m_mv_BUF[ret].size;
-			pic->mpred_mv_wr_start_addr =
-				(hevc->m_mv_BUF[ret].start_adr + 0xffff) &
-				(~0xffff);
+			pic->mpred_mv_wr_start_addr = hevc->m_mv_BUF[ret].start_adr;
 			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
 				"%s => %d (0x%x) size 0x%x\n",
 				__func__, ret,
@@ -4193,8 +4191,7 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 		if (ret >= 0) {
 			pic->mv_buf_index = ret;
 			pic->mv_size = hevc->m_mv_BUF[ret].size;
-			pic->mpred_mv_wr_start_addr =
-				(hevc->m_mv_BUF[ret].start_adr + 0xffff) & (~0xffff);
+			pic->mpred_mv_wr_start_addr = hevc->m_mv_BUF[ret].start_adr;
 			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
 				"%s => %d (0x%x) size 0x%x\n",
 				__func__, ret,
@@ -4249,9 +4246,7 @@ static int get_mv_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 			pic->mv_buf_index = ret;
 			pic->mv_size = hevc->m_mv_BUF[ret].size;
 			hevc->m_mv_BUF[ret].used_pic_index = pic->index;
-			pic->mpred_mv_wr_start_addr =
-				(hevc->m_mv_BUF[ret].start_adr + 0xffff) &
-				(~0xffff);
+			pic->mpred_mv_wr_start_addr = hevc->m_mv_BUF[ret].start_adr;
 			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
 				"%s => %d (0x%x) size 0x%x\n",
 				__func__, ret,
@@ -4635,8 +4630,6 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 			hevc_get_header_size(hevc->pic_w, hevc->pic_h);
 	} else
 		y_adr = hevc->m_BUF[i].start_adr;
-
-	y_adr = ((y_adr + 0xffff) >> 16) << 16; /*64k alignment*/
 
 #ifdef H265_10B_MMU_DW
 	if (hevc->dw_mmu_enable) {

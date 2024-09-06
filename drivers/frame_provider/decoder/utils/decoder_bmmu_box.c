@@ -445,12 +445,15 @@ int decoder_bmmu_box_alloc_idx_wait(
 	int mem_flags,
 	int wait_flags)
 {
+	struct decoder_bmmu_box *box = handle;
 	int have_space;
 	int ret = -1;
 	int kept = 0;
 
+	if (mem_flags == -1)
+		mem_flags = box->mem_flags;
+
 	if (decoder_bmmu_box_get_mem_size(handle, idx) >= size) {
-		struct decoder_bmmu_box *box = handle;
 		struct codec_mm_s *mm;
 		mutex_lock(&box->mutex);
 		mm = decoder_bmmu_box_get_mm_from_idx(box, idx);
