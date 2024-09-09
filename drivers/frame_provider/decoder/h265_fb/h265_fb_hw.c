@@ -1031,6 +1031,7 @@ int BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		}
 		if (ret != 0) {
 			pr_err("%s: can not alloc mmu\n", __func__);
+			pic->need_mmu_copy = 0;
 			return -1;
 		}
 	}
@@ -1054,6 +1055,13 @@ int BackEnd_StartDecoding(struct hevc_state_s* hevc)
 	}
 
 	hevc_hw_init(hevc, pic->depth, 0, 1);
+
+	if ((pic->tile_cnt != 1) && (pic->decoder_tile_cnt == 0)) {
+		pic->need_mmu_copy = 0;
+		hevc_print(hevc, 0,
+			"%s no need decode\n", __func__);
+		return -1;
+	}
 
 	if (hevc->front_back_mode == 3) {
 		WRITE_VREG(hevc->backend_ASSIST_MBOX0_IRQ_REG, 1);

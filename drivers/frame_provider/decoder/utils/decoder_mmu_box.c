@@ -215,11 +215,6 @@ int decoder_mmu_box_alloc_idx(
 		return -1;
 	}
 
-	if (is_mmu_copy_enable())
-		codec_mm_scatter_alloc_flags_config(0, SC_ALLOC_SYS_DMA32);
-	else
-		codec_mm_scatter_alloc_flags_config(0, 0);
-
 	mutex_lock(&box->mutex);
 	sc = decoder_mmu_box_get_sc_from_idx(box, idx);
 	if (sc) {

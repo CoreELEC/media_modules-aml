@@ -1564,6 +1564,8 @@ typedef struct avs3_frame_s{
 	int drop_flag;
 	u32 used_4k_num;
 	u32 used_4k_num1;
+	unsigned long mmu_copy_buf_start;
+	u32 mmu_copy_buf_size;
 #endif
 } avs3_frame_t;
 #endif

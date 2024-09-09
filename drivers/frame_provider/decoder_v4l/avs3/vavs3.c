@@ -619,16 +619,18 @@ static void WRITE_VREG_DBG2(unsigned adr, unsigned val)
 
 #undef MV_USE_FIXED_BUF
 #ifdef MV_USE_FIXED_BUF
-#define MAX_BMMU_BUFFER_NUM (FB_LOOP_BUF_COUNT + (FRAME_BUFFERS + HEADER_FRAME_BUFFERS + 1)+1)
+#define MAX_BMMU_BUFFER_NUM (FB_LOOP_BUF_COUNT + (FRAME_BUFFERS * 2 + HEADER_FRAME_BUFFERS + 1) + 1)
 #define VF_BUFFER_IDX(n) (FB_LOOP_BUF_COUNT + n)
 #define HEADER_BUFFER_IDX(n) (FB_LOOP_BUF_COUNT + FRAME_BUFFERS + n+1)
 #define WORK_SPACE_BUF_ID (FB_LOOP_BUF_COUNT + FRAME_BUFFERS + HEADER_FRAME_BUFFERS+1)
+#define MMU_COPY_IDX(n) (FB_LOOP_BUF_COUNT + FRAME_BUFFERS + HEADER_FRAME_BUFFERS + 1 + n + 1)
 #else
-#define MAX_BMMU_BUFFER_NUM (FB_LOOP_BUF_COUNT + ((FRAME_BUFFERS*2)+HEADER_FRAME_BUFFERS+1)+1)
+#define MAX_BMMU_BUFFER_NUM (FB_LOOP_BUF_COUNT + ((FRAME_BUFFERS * 3) + HEADER_FRAME_BUFFERS + 1) + 1)
 #define VF_BUFFER_IDX(n) (FB_LOOP_BUF_COUNT + n)
 #define HEADER_BUFFER_IDX(n) (FB_LOOP_BUF_COUNT + FRAME_BUFFERS + n+1)
 #define MV_BUFFER_IDX(n) (FB_LOOP_BUF_COUNT + (FRAME_BUFFERS * 2) + n+1)
 #define WORK_SPACE_BUF_ID (FB_LOOP_BUF_COUNT + (FRAME_BUFFERS * 2) + HEADER_FRAME_BUFFERS+1)
+#define MMU_COPY_IDX(n) (FB_LOOP_BUF_COUNT + (FRAME_BUFFERS * 2) + HEADER_FRAME_BUFFERS + 1 + n + 1)
 //#define DW_HEADER_BUFFER_IDX(n) ((FRAME_BUFFERS * 3) + n+1)
 #endif
 
@@ -720,6 +722,11 @@ struct afbc_buf {
 	ulong fb;
 	int   used;
 	int   POC;
+};
+
+struct mmu_copy {
+	unsigned long mmu_copy_buf_start;
+	u32 mmu_copy_buf_size;
 };
 
 struct AVS3Decoder_s {
@@ -985,6 +992,7 @@ struct AVS3Decoder_s {
 	u32 error_handle_policy;
 	u32 lcu_percentage_threshold;
 	struct completion complete;
+	struct mmu_copy mmu_copy_array[BUF_FBC_NUM_MAX];
 };
 
 static int  compute_losless_comp_body_size(
@@ -1178,11 +1186,11 @@ static void timeout_process(struct AVS3Decoder_s *dec)
 	DEC_CTX *ctx = &dec->avs3_dec.ctx;
 	struct aml_vcodec_ctx *v4l2_ctx = (struct aml_vcodec_ctx *)(dec->v4l2_ctx);
 
-	dec->timeout_num++;
-
 	avs3_print(dec,
 		0, "%s decoder timeout, HEVC_MPC_E=0x%x LCU 0x%x\n",
 		__func__, READ_VREG(HEVC_MPC_E), READ_VREG(HEVC_PARSER_LCU_START));
+
+	dec->timeout_num++;
 
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode == 1) {
@@ -1255,7 +1263,9 @@ static void timeout_process_back(struct AVS3Decoder_s *dec)
 		return;
 	}
 	WRITE_VREG(dec->backend_ASSIST_MBOX0_MASK, 0);
-	avs3_print(dec, 0, "%s decoder timeout\n", __func__);
+	avs3_print(dec, 0, "%s decoder timeout HEVC_MPC_E_DBE=0x%x\n",
+		__func__, READ_VREG(HEVC_MPC_E_DBE));
+
 	dec->timeout_num_back++;
 	reset_process_time_back(dec);
 
@@ -6146,7 +6156,7 @@ static void avs3_recycle_mmu_buf_tail(struct AVS3Decoder_s *dec)
 
 		avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 			"%s decoder_mmu_box_free_idx_tail index=%d used_4k_num %d, used_4k_num1 %d\n",
-			__func__, dec->cur_fb_idx_mmu, used_4k_num, used_4k_num1);
+			__func__, aml_buf->fbc->index, used_4k_num, used_4k_num1);
 
 		ctx->cal_compress_buff_info(used_4k_num, ctx);
 		decoder_mmu_box_free_idx_tail(aml_buf->fbc->mmu, aml_buf->fbc->index, used_4k_num);
@@ -6180,7 +6190,8 @@ static void avs3_recycle_mmu_buf_tail(struct AVS3Decoder_s *dec)
 #endif
 		}
 #endif
-		dec->cur_fb_idx_mmu = INVALID_IDX;
+		if (pic->need_mmu_copy == 0)
+			dec->cur_fb_idx_mmu = INVALID_IDX;
 	}
 }
 
@@ -9572,9 +9583,34 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 
 	if ((dec->front_back_mode == 0)
 		&& (dec->avs3_dec.cur_pic != NULL)
-		&& (dec->avs3_dec.cur_pic->need_mmu_copy == 1)
 		&& (!(dec->error_handle_policy & 0x4))) {
-		error_handle_mmu_copy(dec, dec->avs3_dec.cur_pic);
+
+		int index = dec->cur_fb_idx_mmu;
+		struct aml_buf *aml_buf = NULL;
+		struct mmu_copy *mmu_copy = NULL;
+
+		if (index != INVALID_IDX) {
+			aml_buf = index_to_aml_buf(dec, index);
+			mmu_copy = &dec->mmu_copy_array[aml_buf->fbc->index];
+
+			if ((mmu_copy->mmu_copy_buf_start) &&
+				(dec->avs3_dec.cur_pic->need_mmu_copy != 2) &&
+				((!is_mmu_copy_enable()) || is_mmu_copy_dynamic_alloc_buffer())) {
+
+				if (dec->bmmu_box)
+					decoder_bmmu_box_free_idx(dec->bmmu_box,
+						MMU_COPY_IDX(aml_buf->fbc->index));
+				mmu_copy->mmu_copy_buf_start = 0;
+				mmu_copy->mmu_copy_buf_size = 0;
+			}
+		}
+
+		if (dec->avs3_dec.cur_pic->need_mmu_copy == 1) {
+			dec->avs3_dec.cur_pic->used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
+			avs3_recycle_mmu_buf_tail(dec);
+			error_handle_mmu_copy(dec, dec->avs3_dec.cur_pic);
+			dec->cur_fb_idx_mmu = INVALID_IDX;
+		}
 	}
 
 	if (dec->dec_result == DEC_RESULT_DONE)
@@ -9613,28 +9649,100 @@ static void avs3_work(struct work_struct *work)
 	avs3_work_implement(dec);
 }
 
+void get_mmu_copy_map(struct AVS3Decoder_s *dec, struct avs3_frame_s *pic, u32 page_num)
+{
+	int i = 0;
+	u32 *map = (u32 *)dec->frame_mmu_map_addr;
+	u32 first_page = 0;
+	u32 buffer_size = 0;
+	int ret = 0;
+	u32 start_time, end_time;
+	int index = dec->cur_fb_idx_mmu;
+	struct aml_buf *aml_buf = NULL;
+	struct mmu_copy *mmu_copy = NULL;
+
+	if (index != INVALID_IDX) {
+		aml_buf = index_to_aml_buf(dec, index);
+		mmu_copy = &dec->mmu_copy_array[aml_buf->fbc->index];
+	} else {
+		pic->need_mmu_copy = 0;
+		avs3_print(dec, 0,
+			"%s, dec->cur_fb_idx_mmu %d\n",
+			__func__, dec->cur_fb_idx_mmu);
+		return;
+	}
+
+	buffer_size = page_num * PAGE_SIZE;
+	if (buffer_size > mmu_copy->mmu_copy_buf_size) {
+		start_time = div64_u64(local_clock(), 1000);
+		if (mmu_copy->mmu_copy_buf_start && dec->bmmu_box) {
+			decoder_bmmu_box_free_idx(dec->bmmu_box,
+				MMU_COPY_IDX(aml_buf->fbc->index));
+			mmu_copy->mmu_copy_buf_size = 0;
+		}
+
+		ret = decoder_bmmu_box_alloc_buf_phy(dec->bmmu_box,
+			MMU_COPY_IDX(aml_buf->fbc->index),
+			buffer_size, DRIVER_NAME, &mmu_copy->mmu_copy_buf_start);
+		if (ret < 0) {
+			mmu_copy->mmu_copy_buf_start = 0;
+			pic->need_mmu_copy = 0;
+			avs3_print(dec, 0,
+				"%s, size: %d, no mem fatal err\n",
+				__func__, buffer_size);
+			return ;
+		}
+		mmu_copy->mmu_copy_buf_size = buffer_size;
+
+		end_time = div64_u64(local_clock(), 1000);
+		avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
+			"%s, index %d mmu_copy_buf_start 0x%x, buffer_size: %d, cost time = %d\n",
+			__func__, aml_buf->fbc->index, mmu_copy->mmu_copy_buf_start,
+			buffer_size, end_time - start_time);
+	}
+
+	if (mmu_copy->mmu_copy_buf_start) {
+		first_page = mmu_copy->mmu_copy_buf_start >> PAGE_SHIFT;
+	} else {
+		pic->need_mmu_copy = 0;
+		avs3_print(dec, 0,
+			"%s, pic->mmu_copy_buf_start is 0\n", __func__);
+		return ;
+	}
+
+	for (i = 0; i < page_num - 1; i++) {
+		map[i] = (mmu_copy->mmu_copy_buf_start + i * PAGE_SIZE) >> PAGE_SHIFT;
+
+		if (map[i] > 0x100000) {
+			if (mmu_copy->mmu_copy_buf_start && dec->bmmu_box) {
+				decoder_bmmu_box_free_idx(dec->bmmu_box,
+					MMU_COPY_IDX(aml_buf->fbc->index));
+				mmu_copy->mmu_copy_buf_start = 0;
+			}
+			pic->need_mmu_copy = 0;
+			avs3_print(dec, 0,
+				"%s, map[%d]: %d is over 4G\n",
+				__func__, i, map[i]);
+			return ;
+		}
+	}
+
+	for (i = page_num - 1; i < get_frame_mmu_map_size() / 4; i++) {
+		map[i] = first_page;
+	}
+}
+
 static void error_handle_mmu_copy(struct AVS3Decoder_s *dec, struct avs3_frame_s *pic)
 {
 	struct mmu_copy_params params;
 	int x_location = 0;
 	int y_location = 0;
-	unsigned int used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
-	unsigned int used_4k_num1 = 0;
 	int lcu_size = dec->avs3_dec.lcu_size;
 	int lcu_y = pic->decoded_lcu / dec->avs3_dec.lcu_x_num;
+	u32 page_num = 0;
+	u8 bit_depth = (u8)dec->avs3_dec.param.p.sqh_encoding_precision;
 
-	if (dec->front_back_mode == 1)
-		used_4k_num1 = READ_VREG(HEVC_SAO_MMU_STATUS_DBE1) >> 16;
-
-	pic->used_4k_num = used_4k_num;
-	pic->used_4k_num1 = used_4k_num1;
-	avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
-		"decoder_tile_cnt %d, POC %d, used_4k_num %d, used_4k_num1 %d\n",
-		pic->decoded_lcu, pic->poc, used_4k_num, used_4k_num1);
-
-	x_location = 0;
-	y_location = 0;
-
+	bit_depth = (bit_depth == 2) ? 10 : 8;
 	if (lcu_y > 1) {
 		y_location = (lcu_y - 1) * lcu_size;
 	}
@@ -9655,34 +9763,18 @@ static void error_handle_mmu_copy(struct AVS3Decoder_s *dec, struct avs3_frame_s
 		params.pic_w, params.pic_h, params.x_location,
 		params.y_location, params.err_width, params.err_height);
 
-	memmove(dec->frame_mmu_map_addr,
-		dec->frame_mmu_map_addr + used_4k_num * 4,
-		(pic->cur_mmu_4k_number - used_4k_num)* 4);
+	page_num = avs3_mmu_page_num(dec, params.err_width,
+		params.err_height, bit_depth == AVS3_BITS_10);
 
-	if (dec->front_back_mode == 1)
-		memcpy(dec->frame_mmu_map_addr + (pic->cur_mmu_4k_number - used_4k_num)* 4,
-			dec->frame_mmu_map_addr_1 + used_4k_num1 * 4,
-			(pic->cur_mmu_4k_number - used_4k_num1) * 4);
+	get_mmu_copy_map(dec, pic, page_num);
+	if (pic->need_mmu_copy == 0)
+		return ;
 
 	params.mmu_copy_map_phy_addr = dec->frame_mmu_map_phy_addr;
 	params.mmu_copy_err_header_adr = pic->header_adr;
 	params.mmu_copy_pre_header_adr = pic->mmu_copy_header_adr;
+
 	mmu_copy_work(params);
-
-	if (dec->front_back_mode == 0) {
-		pic->used_4k_num += READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
-	} else if (dec->front_back_mode == 1) {
-		u32 tmp_4k_num = pic->cur_mmu_4k_number - pic->used_4k_num;
-
-		used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
-
-		if (used_4k_num > tmp_4k_num) {
-			pic->used_4k_num = pic->cur_mmu_4k_number;
-			pic->used_4k_num1 += (used_4k_num - tmp_4k_num);
-		} else
-			pic->used_4k_num += used_4k_num;
-	}
-	avs3_recycle_mmu_buf_tail(dec);
 
 	pic->need_mmu_copy = 0;
 }
@@ -9728,9 +9820,35 @@ static void avs3_work_back_implement(struct AVS3Decoder_s *dec,
 	}
 
 	if ((pic != NULL)
-		&& (pic->need_mmu_copy == 1)
 		&& (!(dec->error_handle_policy & 0x4))) {
-		error_handle_mmu_copy(dec, pic);
+		int index = dec->cur_fb_idx_mmu;
+		struct aml_buf *aml_buf = NULL;
+		struct mmu_copy *mmu_copy = NULL;
+
+		if (index != INVALID_IDX) {
+			aml_buf = index_to_aml_buf(dec, index);
+			mmu_copy = &dec->mmu_copy_array[aml_buf->fbc->index];
+
+			if ((mmu_copy->mmu_copy_buf_start) &&
+				(pic->need_mmu_copy != 2) &&
+				((!is_mmu_copy_enable()) || is_mmu_copy_dynamic_alloc_buffer())) {
+
+				if (dec->bmmu_box)
+					decoder_bmmu_box_free_idx(dec->bmmu_box,
+						MMU_COPY_IDX(aml_buf->fbc->index));
+				mmu_copy->mmu_copy_buf_start = 0;
+				mmu_copy->mmu_copy_buf_size = 0;
+			}
+		}
+
+		if (pic->need_mmu_copy == 1) {
+			pic->used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
+			pic->used_4k_num1 = READ_VREG(HEVC_SAO_MMU_STATUS_DBE1) >> 16;
+			avs3_recycle_mmu_buf_tail(dec);
+
+			error_handle_mmu_copy(dec, pic);
+			dec->cur_fb_idx_mmu = INVALID_IDX;
+		}
 	}
 
 	if (debug & AVS3_DBG_PRINT_PIC_LIST)

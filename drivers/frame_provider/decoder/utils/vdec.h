@@ -962,6 +962,8 @@ void mmu_copy_work(struct mmu_copy_params params);
 
 void vdec_set_mmu_copy_flag(bool need_copy);
 
+int is_mmu_copy_dynamic_alloc_buffer(void);
+
 struct firmware_s *fw_firmare_s_creat(int fw_size);
 
 u64 stream_prefix_get(void);

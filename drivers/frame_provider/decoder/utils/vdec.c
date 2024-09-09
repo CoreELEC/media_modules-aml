@@ -212,6 +212,7 @@ int rate_time_avg_threshold_hi = 16700;
 int rate_time_avg_threshold_lo = 16700;
 
 static int mmu_copy_enable = 1;
+static int mmu_copy_dynamic_alloc_buffer = 0;
 
 st_userdata userdata;
 
@@ -8010,21 +8011,43 @@ int is_mmu_copy_enable(void)
 {
 	if (mmu_copy_enable && (atomic_read(&vdec_core->vdec_nr) == 1)
 		&& vdec_core->decoder_mmu_copy_flag
-		&& ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)
-		|| (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)))
+		&& (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5))
 		return 1;
 	else
 		return 0;
 }
 EXPORT_SYMBOL(is_mmu_copy_enable);
 
+int is_mmu_copy_dynamic_alloc_buffer(void)
+{
+	return mmu_copy_dynamic_alloc_buffer;
+}
+EXPORT_SYMBOL(is_mmu_copy_dynamic_alloc_buffer);
+
 void mmu_copy_work(struct mmu_copy_params params)
 {
 	uint32_t rdata_copy = 0x00000000;
 	u32 start_time, end_time, cost_time;
+	ulong timeout = 0;
+	u32 data;
 
 	start_time = vdec_get_us_time_system();
 	WRITE_VREG(COPY_SEL, 0x00000001);
+
+	/*disable sao mmu dma */
+	CLEAR_VREG_MASK(HEVC_SAO_MMU_DMA_CTRL, 1 << 0);
+	timeout = jiffies + HZ / 100;
+	while (1) {
+		data  = READ_VREG(HEVC_SAO_MMU_DMA_STATUS);
+		if ((data & 0x1))
+			break;
+		if (time_after(jiffies, timeout)) {
+			pr_err("%s sao mmu dma timeout, num_buf_used = 0x%x\n",
+				__func__, (READ_VREG(HEVC_SAO_MMU_STATUS)));
+			break;
+		}
+	}
+
 	WRITE_VREG(HEVC_SAO_MMU_RESET_CTRL, 0x00000001);
 	WRITE_VREG(HEVC_SAO_MMU_RESET_CTRL, 0x00000000);
 	WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL, params.mmu_copy_map_phy_addr | 1);
@@ -8216,6 +8239,9 @@ MODULE_PARM_DESC(rdma_mode, "\n rdma_enable\n");
 
 module_param(mmu_copy_enable, uint, 0664);
 MODULE_PARM_DESC(mmu_copy_enable, "\n mmu_copy_enable\n");
+
+module_param(mmu_copy_dynamic_alloc_buffer, uint, 0664);
+MODULE_PARM_DESC(mmu_copy_dynamic_alloc_buffer, "\n mmu_copy_dynamic_alloc_buffer\n");
 
 module_param(one_pack_multi_f_set_align_size, uint, 0664);
 MODULE_PARM_DESC(one_pack_multi_f_set_align_size, "\n ammvdec_mpeg12 one_pack_multi_f_set_align_size\n");
