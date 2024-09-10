@@ -4945,7 +4945,7 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 
 	size /= pic_size;
 	size = imin(size, 16);
-	PR_FILL("level_idc = %d pic_size = %d size = %d\n", level_idc, pic_size, size);
+	//PR_FILL("level_idc = %d pic_size = %d size = %d\n", level_idc, pic_size, size);
 	if (p_H264_Dpb->bitstream_restriction_flag) {
 		if ((int)p_H264_Dpb->max_dec_frame_buffering > size) {
 			PR_FILL("%d: max_dec_frame_buffering larger than MaxDpbSize.\n", DECODE_ID(hw));
