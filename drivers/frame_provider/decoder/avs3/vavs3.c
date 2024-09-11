@@ -8975,7 +8975,10 @@ int vavs3_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
-	vstatus->status = dec->stat | dec->fatal_error;
+	if (vdec->input_underrun)
+		vstatus->status = dec->stat | dec->fatal_error | DECODER_ES_INPUT_UNDERRUN;
+	else
+		vstatus->status = dec->stat | dec->fatal_error;
 	vstatus->frame_dur = dec->frame_dur;
 	vstatus->bit_rate = dec->gvs->bit_rate;
 	vstatus->frame_data = dec->gvs->frame_data;
@@ -9893,6 +9896,12 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 			vdec_schedule_work(&dec->work);
 			return;
 		}
+		if (input_stream_based(vdec)) {
+			vdec_set_input_underrun(vdec, true);
+			avs3_print(dec, PRINT_FLAG_VDEC_DETAIL,
+				"%s: set input underrun status to true\n", __func__);
+		}
+
 	} else if (dec->dec_result == DEC_RESULT_EOS) {
 		DEC_CTX *avs3_ctx = &avs3_dec->ctx;
 		avs3_print(dec, 0,

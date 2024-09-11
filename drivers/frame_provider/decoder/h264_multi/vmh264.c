@@ -9689,7 +9689,10 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 		vstatus->frame_rate = -1;
 	vstatus->error_count = hw->gvs.error_frame_count;
 	vstatus->bit_rate = hw->gvs.bit_rate;
-	vstatus->status = hw->stat;
+	if (vdec->input_underrun)
+		vstatus->status = hw->stat | DECODER_ES_INPUT_UNDERRUN;
+	else
+		vstatus->status = hw->stat;
 	if (hw->h264_ar == 0x3ff)
 		ar_tmp = (0x100 *
 			hw->frame_height * hw->height_aspect_ratio) /
@@ -11498,6 +11501,13 @@ result_done:
 			vdec_schedule_work(&hw->work);
 			return;
 		}
+
+		if (input_stream_based(vdec)) {
+			vdec_set_input_underrun(vdec, true);
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+				"%s: set input underrun status to false\n", __func__);
+		}
+
 		if ((vdec_stream_based(vdec)) &&
 			(hw->error_proc_policy & 0x400000) &&
 			check_dirty_data(vdec)) {

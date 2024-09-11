@@ -1909,6 +1909,12 @@ void vdec_set_metadata(struct vdec_s *vdec, ulong meta_ptr)
 }
 EXPORT_SYMBOL(vdec_set_metadata);
 
+void vdec_set_input_underrun(struct vdec_s *vdec, bool set)
+{
+	vdec->input_underrun = set;
+}
+EXPORT_SYMBOL(vdec_set_input_underrun);
+
 int vdec_set_pts64(struct vdec_s *vdec, u64 pts64)
 {
 	vdec->pts64 = pts64;
@@ -2765,6 +2771,8 @@ void vdec_vframe_dirty(struct vdec_s *vdec, struct vframe_chunk_s *chunk)
 
 		vdec->need_more_data |= VDEC_NEED_MORE_DATA_DIRTY;
 		vdec->need_more_data &= ~VDEC_NEED_MORE_DATA;
+
+		vdec_set_input_underrun(vdec, false);
 	}
 }
 EXPORT_SYMBOL(vdec_vframe_dirty);

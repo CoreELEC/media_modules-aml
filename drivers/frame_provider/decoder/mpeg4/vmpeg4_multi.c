@@ -1869,6 +1869,12 @@ static void vmpeg4_work(struct work_struct *work)
 			return;
 		}
 
+		if (input_stream_based(vdec)) {
+			vdec_set_input_underrun(vdec, true);
+			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"%s: set input underrun status to true\n", __func__);
+		}
+
 		if ((vdec_stream_based(vdec)) &&
 			(error_proc_policy & 0x1) &&
 			check_dirty_data(vdec)) {
@@ -2057,7 +2063,10 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(MP4_ERR_COUNT);
-	vstatus->status = hw->stat;
+	if (vdec->input_underrun)
+		vstatus->status = hw->stat | DECODER_ES_INPUT_UNDERRUN;
+	else
+		vstatus->status = hw->stat;
 	vstatus->bit_rate = hw->bit_rate;
 	vstatus->frame_dur = hw->frame_dur;
 	vstatus->error_frame_count = READ_VREG(MP4_ERR_COUNT);

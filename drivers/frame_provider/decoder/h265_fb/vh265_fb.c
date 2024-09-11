@@ -14564,7 +14564,10 @@ int vh265_dec_status(struct vdec_info *vstatus)
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = hevc->gvs->error_frame_count;
-	vstatus->status = hevc->stat | hevc->fatal_error;
+	if (vdec->input_underrun)
+		vstatus->status = hevc->stat | hevc->fatal_error | DECODER_ES_INPUT_UNDERRUN;
+	else
+		vstatus->status = hevc->stat | hevc->fatal_error;
 	if (!hevc_is_support_4k() &&
 		(IS_4K_SIZE(vstatus->frame_width, vstatus->frame_height)) &&
 		((vstatus->frame_width <= 4096 && vstatus->frame_height <= 2304) ||
@@ -16315,6 +16318,12 @@ done_end:
 			hevc->data_offset = hevc->data_offset_bak;
 			hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 				"AGAIN, set unfinsh\n");
+		}
+
+		if (input_stream_based(vdec)) {
+			vdec_set_input_underrun(vdec, true);
+			hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+				"%s: set input underrun status to true\n", __func__);
 		}
 
 #ifdef AGAIN_HAS_THRESHOLD

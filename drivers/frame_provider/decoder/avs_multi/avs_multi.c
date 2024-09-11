@@ -1137,7 +1137,10 @@ static int vavs_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(AV_SCRATCH_C);
-	vstatus->status = hw->stat;
+	if (vdec->input_underrun)
+		vstatus->status = hw->stat | DECODER_ES_INPUT_UNDERRUN;
+	else
+		vstatus->status = hw->stat;
 	vstatus->bit_rate = hw->gvs->bit_rate;
 	vstatus->frame_dur = hw->frame_dur;
 	vstatus->frame_data = hw->gvs->frame_data;
@@ -2620,6 +2623,12 @@ static void vavs_work(struct work_struct *work)
 			hw->dec_result = DEC_RESULT_EOS;
 			vdec_schedule_work(&hw->work);
 			return;
+		}
+
+		if (input_stream_based(vdec)) {
+			vdec_set_input_underrun(vdec, true);
+			debug_print(hw, PRINT_FLAG_VLD_DETAIL,
+				"%s: set input underrun status to false\n", __func__);
 		}
 	}  else if (hw->dec_result == DEC_RESULT_GET_DATA
 		&& (hw_to_vdec(hw)->next_status !=

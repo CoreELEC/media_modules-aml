@@ -2792,6 +2792,13 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			vdec_schedule_work(&hw->work);
 			return;
 		}
+
+		if (input_stream_based(vdec)) {
+			vdec_set_input_underrun(vdec, true);
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"%s: set input underrun status to true\n", __func__);
+		}
+
 		if ((vdec_stream_based(vdec)) &&
 			(error_proc_policy & 0x1) &&
 			check_dirty_data(vdec)) {
@@ -3147,7 +3154,10 @@ static int vmmpeg12_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(AV_SCRATCH_C);
-	vstatus->status = hw->stat;
+	if (vdec->input_underrun)
+		vstatus->status = hw->stat | DECODER_ES_INPUT_UNDERRUN;
+	else
+		vstatus->status = hw->stat;
 	vstatus->bit_rate = hw->gvs.bit_rate;
 	vstatus->frame_dur = hw->frame_dur;
 	vstatus->frame_data = hw->gvs.frame_data;

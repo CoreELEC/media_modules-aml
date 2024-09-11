@@ -8408,7 +8408,10 @@ int vavs2_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
-	vstatus->status = dec->stat | dec->fatal_error;
+	if (vdec->input_underrun)
+		vstatus->status = dec->stat | dec->fatal_error | DECODER_ES_INPUT_UNDERRUN;
+	else
+		vstatus->status = dec->stat | dec->fatal_error;
 	vstatus->frame_dur = dec->frame_dur;
 	vstatus->bit_rate = dec->gvs->bit_rate;
 	vstatus->frame_data = dec->gvs->frame_data;
@@ -9272,6 +9275,12 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 			dec->dec_result = DEC_RESULT_EOS;
 			vdec_schedule_work(&dec->work);
 			return;
+		}
+
+		if (input_stream_based(vdec)) {
+			vdec_set_input_underrun(vdec, true);
+			avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
+				"%s: set input underrun status to true\n", __func__);
 		}
 
 		if (vdec_stream_based(vdec) && !dec->start_decoding_flag) {
