@@ -4253,6 +4253,15 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 			return 0;
 		}
 
+		if (input_stream_based(&vdec->input)) {
+			vdec->input.swap_valid = false;
+			vdec->input.swap_needed = false;
+			if (vdec->vbuf.ops)
+				vdec->vbuf.ops->release(&vdec->vbuf);
+			pr_info("%s: get_wp %lx, get_rp %lx, buf_start %lx\n", __func__,
+				vdec->vbuf.buf_wp, vdec->vbuf.buf_rp, vdec->vbuf.buf_start);
+		}
+
 		vdec_input_release(&vdec->input, false);
 
 		vdec_input_init(&vdec->input, vdec);
@@ -4684,6 +4693,14 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 			if (debug & 0x8)
 				pr_info("%s:%d level 0x%x ready_mask = 0x%lx, mask = 0x%lx\n",
 					__func__, vdec->id, level, ready_mask, mask);
+
+			if (level == 0) {
+				vdec->need_more_data |= VDEC_NEED_MORE_DATA;
+				if (ready_mask)
+					check_run_ready = false;
+				else
+					return false;
+			}
 
 			if ((level < input->prepare_level) &&
 				!vdec_check_rec_num_enough(vdec)) {

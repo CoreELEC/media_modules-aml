@@ -32,6 +32,7 @@ struct pts_server_ops {
 	int (*cal_offset) (s32 ptsserver_id, u64 offset, struct checkoutptsoffset *pts);
 	int (*checkin) (s32 ptsserver_id, u32 pkt_size, u64 pts_val);
 	int (*first_checkin) (u32 format, s32 ptsserver_id, u32 wp, u32 buf_start);
+	int (*reset)(s32 ptsserver_id);
 };
 struct pts_server_ops *get_pts_server_ops(void);
 

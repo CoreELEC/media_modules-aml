@@ -556,6 +556,18 @@ int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *mode)
 			"reset mode: %d, es frames buffering: %d\n",
 			*mode, vdec_frame_number(ada_ctx));
 
+		if (vdec_stream_based(vdec) && (*mode == V4L_RESET_MODE_NORMAL) && (vdec->format != VFORMAT_VC1)) {
+			/* PTS reset */
+			if (ada_ctx->ctx && ada_ctx->ctx->pts_serves_ops)
+				ada_ctx->ctx->pts_serves_ops->reset(ada_ctx->ctx->ptsserver_id);
+
+			vdec->vbuf.buf_rp = vdec->vbuf.buf_wp;
+			if (ada_ctx->ctx->es_free)
+				ada_ctx->ctx->es_free(ada_ctx->ctx, vdec->vbuf.buf_rp);//release all dmabuf ref
+
+			ada_ctx->ctx->set_ext_buf_flg = false;
+		}
+
 		ret = vdec_v4l2_reset(vdec, *mode);
 		*mode = V4L_RESET_MODE_NORMAL;
 	}

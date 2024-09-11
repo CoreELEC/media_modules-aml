@@ -109,11 +109,21 @@ int aml_vcodec_pts_first_checkin(u32 format, s32 ptsserver_id, u32 wp, u32 buf_s
 	return 0;
 }
 
+int aml_vcodec_pts_reset(s32 ptsserver_id)
+{
+	ptsserver_ins_reset(ptsserver_id);
+
+	pr_debug("%s ptsserver_id:%d\n", __func__, ptsserver_id);
+
+	return 0;
+}
+
 static struct pts_server_ops pts_server_ops = {
 	.checkout	= aml_vcodec_pts_checkout,
 	.cal_offset = aml_vcodec_pts_offset,
 	.checkin	= aml_vcodec_pts_checkin,
 	.first_checkin	= aml_vcodec_pts_first_checkin,
+	.reset	= aml_vcodec_pts_reset,
 };
 
 struct pts_server_ops *get_pts_server_ops(void)

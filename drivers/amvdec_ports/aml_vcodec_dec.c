@@ -1651,6 +1651,10 @@ static void aml_vdec_worker(struct work_struct *work)
 		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_L)) {
 		struct dmabuf_dmx_sec_es_data *es_data = (struct dmabuf_dmx_sec_es_data *)aml_vb->dma_buf;
 		int offset = vb->planes[0].data_offset;
+		if (ctx->set_ext_buf_flg == false) {
+			v4l2_set_ext_buf_addr(ctx->ada_ctx, es_data, offset);
+			ctx->set_ext_buf_flg = true;
+		}
 		buf.addr = es_data->data_start + offset;
 		buf.size = vb->planes[0].bytesused - offset;
 		buf.dbuf = vb->planes[0].dbuf;
