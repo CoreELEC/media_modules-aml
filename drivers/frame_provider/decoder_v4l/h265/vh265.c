@@ -11976,7 +11976,9 @@ pic_done:
 			hevc->start_parser_type = 0;
 			hevc->switch_dvlayer_flag = 0;
 #endif
-			if (hevc->discard_dv_data || (!aux_data_is_available(hevc)))
+			if ((input_frame_based(hw_to_vdec(hevc)) && hevc->discard_dv_data) ||
+				(input_stream_based(hw_to_vdec(hevc)) && !vdec_dual(vdec)) ||
+				!aux_data_is_available(hevc))
 				hevc->decoding_pic = NULL;
 
 #ifdef H265_USERDATA_ENABLE
