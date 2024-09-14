@@ -10717,9 +10717,6 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						hw->seq_info2_last = hw->dpb.param1_for_res_change;
 
 					amvdec_stop();
-					if (hw->mmu_enable) {
-						amhevc_stop();
-					}
 					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
 				} else {
 					hw->res_ch_flag = 0;
