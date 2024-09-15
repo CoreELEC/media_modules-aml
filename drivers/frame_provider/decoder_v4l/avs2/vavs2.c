@@ -7822,6 +7822,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec->mc_type = VFORMAT_AVS2;
 	}
 
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7) //disable OW module auto cg on HEVC top for S7
+		SET_VREG_MASK(HEVC_SAO_CTRL11, (1 << 28));
+
 	if (avs2_hw_ctx_restore(dec) < 0) {
 		vdec_schedule_work(&dec->work);
 		return;

@@ -10599,6 +10599,10 @@ static void run_front(struct vdec_s *vdec)
 	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7) //disable OW module auto cg on HEVC top for S7
+		SET_VREG_MASK(HEVC_SAO_CTRL11, (1 << 28));
+
 	if (vp9_hw_ctx_restore(pbi) < 0) {
 		vdec_schedule_work(&pbi->work);
 		return;

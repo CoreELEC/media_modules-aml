@@ -11214,6 +11214,9 @@ static void run_front(struct vdec_s *vdec)
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->start_shift_bytes = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7) //disable OW module auto cg on HEVC top for S7
+		SET_VREG_MASK(HEVC_SAO_CTRL11, (1 << 28));
+
 	av1_frame_mode_cal_dur(hw);
 
 	if (debug & PRINT_FLAG_VDEC_STATUS) {

@@ -15302,6 +15302,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7) //disable OW module auto cg on HEVC top for S7
+		SET_VREG_MASK(HEVC_SAO_CTRL11, (1 << 28));
 	if (vh265_hw_ctx_restore(hevc) < 0) {
 		vdec_schedule_work(&hevc->work);
 		return;
