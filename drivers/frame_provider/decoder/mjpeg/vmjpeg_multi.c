@@ -1401,6 +1401,7 @@ static void vmjpeg_work(struct work_struct *work)
 		}
 	} else if (hw->dec_result == DEC_RESULT_EOS) {
 		pr_info("%s: end of stream\n", __func__);
+		hw->stat |= STAT_EOS;
 		if (hw->stat & STAT_VDEC_RUN) {
 			amvdec_stop();
 			hw->stat &= ~STAT_VDEC_RUN;

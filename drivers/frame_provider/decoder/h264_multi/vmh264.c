@@ -11652,6 +11652,7 @@ result_done:
 		hw->next_again_flag = 1;
 	} else if (hw->dec_result == DEC_RESULT_EOS) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+		hw->stat |= STAT_EOS;
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s: end of stream\n",
 			__func__);

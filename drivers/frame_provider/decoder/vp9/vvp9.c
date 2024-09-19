@@ -11518,6 +11518,7 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
 			"%s: end of stream\n",
 			__func__);
+		pbi->stat |= STAT_EOS;
 		pbi->eos = 1;
 		vp9_bufmgr_postproc(pbi);
 

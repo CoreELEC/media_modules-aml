@@ -9920,6 +9920,7 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 		avs3_print(dec, 0,
 			"%s: end of stream\n",
 			__func__);
+		dec->stat |= STAT_EOS;
 		dec->eos = 1;
 		if (dec->avs3_dec.cur_pic != NULL) {
 			avs3_bufmgr_post_process(&dec->avs3_dec);

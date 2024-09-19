@@ -9997,6 +9997,7 @@ done_end:
 			}
 		}
 	} else if (hevc->dec_result == DEC_RESULT_EOS) {
+		hevc->stat |= STAT_EOS;
 		hevc->eos = 1;
 		check_pic_decoded_error(hevc,
 			hevc->pic_decoded_lcu_idx);

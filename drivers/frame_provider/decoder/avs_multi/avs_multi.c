@@ -2661,6 +2661,7 @@ static void vavs_work(struct work_struct *work)
 			hw->stat &= ~STAT_ISR_REG;
 		}
 	} else if (hw->dec_result == DEC_RESULT_EOS) {
+		hw->stat |= STAT_EOS;
 		debug_print(hw, PRINT_FLAG_DECODING,
 			"%s: end of stream\n", __func__);
 		if (hw->stat & STAT_VDEC_RUN) {

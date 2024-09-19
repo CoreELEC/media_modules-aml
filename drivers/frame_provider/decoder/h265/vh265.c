@@ -14614,6 +14614,7 @@ done_end:
 		}
 	} else if (hevc->dec_result == DEC_RESULT_EOS) {
 		struct PIC_s *pic;
+		hevc->stat |= STAT_EOS;
 		hevc->eos = 1;
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		if ((vdec_dual(vdec)) && aux_data_is_available(hevc))

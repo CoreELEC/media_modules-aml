@@ -2943,6 +2943,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			hw->stat &= ~STAT_ISR_REG;
 		}
 	} else if (hw->dec_result == DEC_RESULT_EOS) {
+		hw->stat |= STAT_EOS;
 		if (hw->stat & STAT_VDEC_RUN) {
 			amvdec_stop();
 			hw->stat &= ~STAT_VDEC_RUN;

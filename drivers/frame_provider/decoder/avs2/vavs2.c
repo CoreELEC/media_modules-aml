@@ -7835,6 +7835,7 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 				"%s: set input underrun status to true\n", __func__);
 		}
 	} else if (dec->dec_result == DEC_RESULT_EOS) {
+		dec->stat |= STAT_EOS;
 		avs2_print(dec, 0, "%s: end of stream\n", __func__);
 		dec->eos = 1;
 		if ( dec->avs2_dec.hc.cur_pic != NULL) {
