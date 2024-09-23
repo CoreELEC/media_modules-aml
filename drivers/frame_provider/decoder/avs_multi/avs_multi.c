@@ -107,12 +107,13 @@
 #define DECODE_MODE_MULTI_STREAMBASE_CONT   0x3
 
 #define DECODE_STATUS	AV_SCRATCH_H
-#define DECODE_STATUS_PIC_DONE    0x1
-#define DECODE_STATUS_DECODE_BUF_EMPTY	0x2
-#define DECODE_STATUS_SEARCH_BUF_EMPTY	0x3
+#define DECODE_STATUS_PIC_DONE          0x1
+#define DECODE_STATUS_DECODE_BUF_EMPTY  0x2
+#define DECODE_STATUS_SEARCH_BUF_EMPTY  0x3
 #define DECODE_STATUS_SKIP_PIC_DONE     0x4
-#define DECODE_STATUS_INFO     0x5
-#define DECODE_SEARCH_HEAD	0xff
+#define DECODE_STATUS_INFO              0x5
+#define DECODE_STATUS_ERROR_RESET       0x6
+#define DECODE_SEARCH_HEAD              0xff
 
 #define DECODE_STOP_POS		AV_SCRATCH_J
 
@@ -3648,6 +3649,95 @@ static void check_ref_error(struct vdec_avs_hw_s *hw, int index)
 	}
 }
 
+static void wait_mc(void)
+{
+	u32 reg;
+
+	dos_wait_status(MC_STATUS0, 1, 0);
+
+	reg = READ_VREG(MC_CTRL1);
+	reg |= (1 << 3) | 1;
+	WRITE_VREG(MC_CTRL1, reg);
+	reg &= ~((1 << 3) | 1);
+	WRITE_VREG(MC_CTRL1, reg);
+}
+
+static void wait_dblk(void)
+{
+	dos_wait_status(MCW_DBLK_WRRSP_CNT, (0xfff << 16), 0);
+	dos_wait_status(DBLK_STATUS, 1, 0);
+}
+
+static void wait_pic_dc(void)
+{
+	u32 reg;
+
+	dos_wait_status(MDEC_PIC_DC_STATUS, 0xffffffff, 0);
+	dos_wait_status(AVS_CO_MB_RW_CTL, (3 << 10), 0);
+
+	reg = READ_VREG(MDEC_PIC_DC_CTRL);
+	reg |= (0x3f << 24) | 1;
+	WRITE_VREG(MDEC_PIC_DC_CTRL, reg);
+	reg &= ~((0x3f << 24) | 1);
+	WRITE_VREG(MDEC_PIC_DC_CTRL, reg);
+}
+
+static void reset_iqidct(void)
+{
+	u32 save_regs[3] = {0};
+
+	dos_wait_status(DCAC_DMA_CTRL, (1 << 15), 1);
+
+	save_regs[0] = READ_VREG(VCOP_CTRL_REG);
+	save_regs[1] = READ_VREG(IQIDCT_CONTROL);
+	save_regs[2] = READ_VREG(RV_AI_MB_COUNT);
+
+	WRITE_VREG(DOS_SW_RESET0, 0x40);
+	WRITE_VREG(DOS_SW_RESET0, 0);
+	udelay(10);
+
+	WRITE_VREG(VCOP_CTRL_REG, save_regs[0]);
+	WRITE_VREG(IQIDCT_CONTROL, save_regs[1]);
+	WRITE_VREG(RV_AI_MB_COUNT, save_regs[2]);
+}
+
+static void decoder_reset_except_vld(void)
+{
+	u32 reg;
+
+	reset_iqidct();
+
+	reg = READ_VREG(MC_CTRL1);
+	reg |= (1 << 2) | 1;
+	WRITE_VREG(MC_CTRL1, reg);
+	reg &= ~((1 << 2) | 1);
+	WRITE_VREG(MC_CTRL1, reg);
+
+	WRITE_VREG(DBLK_RST, 7);
+
+	wait_pic_dc();
+}
+
+static void error_reset_in_c_driver(int num)
+{
+	arb_ctrl_wait_idle(0);
+
+	switch (num) {
+		case 1:
+			wait_mc();
+			WRITE_VREG(SLICE_QP, 0);
+			wait_dblk();
+			wait_pic_dc();
+			break;
+		case 2:
+			decoder_reset_except_vld();
+			break;
+		default:
+			break;
+	}
+
+	arb_ctrl_wait_idle(1);
+}
 
 static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
@@ -3725,6 +3815,11 @@ static irqreturn_t vmavs_isr_thread_fn(struct vdec_s *vdec, int irq)
 		if (reg == DECODE_STATUS_INFO) {
 			WRITE_VREG(DECODE_STATUS, 0);
 			debug_print(hw, PRINT_FLAG_DECODING, "READ_VREG(AVS_PIC_INFO) = 0x%x\n", READ_VREG(AVS_PIC_INFO));
+			return IRQ_HANDLED;
+		} else if ((reg & 0xff) == DECODE_STATUS_ERROR_RESET) {
+			error_reset_in_c_driver((reg >> 16) & 0xffff);
+			WRITE_VREG(DECODE_STATUS, 0xff);
+			start_process_time(hw);
 			return IRQ_HANDLED;
 		}
 

@@ -183,6 +183,7 @@ enum {
 #define MPEG12_DATA_EMPTY   2
 #define MPEG12_SEQ_END      3
 #define MPEG12_DATA_REQUEST 4
+#define MPEG12_ERROR_RESET  5
 
 /*Send by AV_SCRATCH_G*/
 #define MPEG12_V4L2_INFO_NOTIFY 1
@@ -2381,7 +2382,14 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			reset_process_time(hw);
 		}
 		return IRQ_HANDLED;
-	} else {  /* MPEG12_PIC_DONE, MPEG12_SEQ_END */
+	} else if (reg == MPEG12_ERROR_RESET) {
+		/* for t6d error reset in c drvier */
+		userdata_pushed_drop(hw);
+		hw->dec_result = DEC_RESULT_DONE;
+		vdec_schedule_work(&hw->work);
+		return IRQ_HANDLED;
+	} else {
+		/* MPEG12_PIC_DONE, MPEG12_SEQ_END */
 		debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"%s, level %x, wp %x, rp %x, cnt %x\n",
 			__func__,
@@ -3511,10 +3519,16 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 		return;
 	}
 	reset_process_time(hw);
-	amvdec_stop();
+
 	debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-		"%s decoder timeout, status=%d, level=%d\n",
-		__func__, vdec->status, READ_VREG(VLD_MEM_VIFIFO_LEVEL));
+		"%s decoder timeout, pc=%d, status = %d,level=%d\n",
+		__func__,
+		READ_VREG(MPC_E),
+		READ_VREG(MREG_BUFFEROUT),
+		READ_VREG(VLD_MEM_VIFIFO_LEVEL));
+
+	amvdec_stop();
+
 	hw->dec_result = DEC_RESULT_DONE;
 	if ((hw->refs[1] != -1) && (hw->refs[0] != -1))
 		hw->first_i_frame_ready = 0;

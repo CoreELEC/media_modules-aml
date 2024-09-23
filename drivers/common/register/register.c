@@ -35,9 +35,21 @@
 static void __iomem *reg_base[MAX_REG_BUS];
 struct bus_reg_desc *reg_desc[MAX_REG_BUS];
 
-#define CODEC_REG_READ_DEBUG  0x01
-#define CODEC_REG_WRITE_DEBUG 0x02
-#define CODEC_REG_MAP_DEBUG   0x08
+#define DBG_DOS_RD    0x01
+#define DBG_DOS_WR    0x02
+#define DBG_DOS_MAP   0x08
+
+#define DBG_DMC_RD    0x10
+#define DBG_DMC_WR    0x20
+
+#define DBG_SYSCTRL_RD   0x100
+#define DBG_SYSCTRL_WR   0x200
+
+#define dbg_mm_reg(mask, fmt, args...) do {		\
+		if (unlikely(register_debug & (mask)))	\
+			pr_info(fmt, ##args);				\
+		} while (0)
+
 
 #define REG_OFFSET(new, old)  ((signed int)((new) - (old)))
 #define REG_COMPAT_RANGE(start, end)  ((end) - (start) + 1)
@@ -128,81 +140,88 @@ void s7_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
 }
 
 //###############################################################################
+
+/*********************************************
+ * reg : dos register
+ * mask: valid bit mask
+ * idle: wait 0 or 1 for idle
+**********************************************/
+int dos_wait_status(int reg, int mask, int idle)
+{
+	u32 nop_cnt = 10;
+	ulong timeout = jiffies + (HZ/10);
+	u32 val = READ_VREG(reg);
+
+	while ((val & mask) != idle) {
+		if (time_after(jiffies, timeout)) {
+			pr_crit("%s timeout, reg %x, val %x, mask %x\n",
+				__func__, reg, val, mask);
+			return -EBUSY;
+		}
+		val = READ_VREG(reg);
+	}
+	while (nop_cnt--);
+
+	return 0;
+}
+EXPORT_SYMBOL(dos_wait_status);
+
 u32 dos_reg_compat_convert(u32 addr)
 {
-		s32 reg_compat_offset = 0;
+		s32 offset = 0;
 		struct bus_reg_desc *dos_desc = reg_desc[DOS_BUS];
 
 		if (dos_desc && !(addr & NEW_REG_CHECK_MASK))
-			reg_compat_offset = dos_desc[addr].reg_compat_offset;
+			offset = dos_desc[addr].reg_compat_offset;
 		addr &= (~NEW_REG_CHECK_MASK);
 
-		return (addr + reg_compat_offset);
-	}
+		return (addr + offset);
+}
 EXPORT_SYMBOL(dos_reg_compat_convert);
 
 void write_dos_reg(u32 addr, int val)
 {
-	void __iomem * reg_adr;
-	s32 reg_compat_offset = 0;
+	s32 offset = 0;
 	struct bus_reg_desc *dos_desc = reg_desc[DOS_BUS];
 
 	if (dos_desc && !(addr & NEW_REG_CHECK_MASK))
-		reg_compat_offset = dos_desc[addr].reg_compat_offset;
+		offset = dos_desc[addr].reg_compat_offset;
 	addr &= (~NEW_REG_CHECK_MASK);
 
-	if (unlikely((reg_compat_offset + addr) < 0)) {
-		pr_err("write dos reg out of range, addr %x, offset %d\n",
-			addr, reg_compat_offset);
+	if (unlikely((offset + addr) < 0)) {
+		pr_err("%s out of range, addr %x, offset %d\n",
+			__func__, addr, offset);
 		return;
 	}
 
-	reg_adr = reg_base[DOS_BUS] + ((reg_compat_offset + addr) << 2);
+	dbg_mm_reg(DBG_DOS_WR, "%s((0x%x + %d), 0x%x)\n",
+		__func__, addr, offset, val);
 
-	if (unlikely(register_debug)) {
-		if (register_debug & CODEC_REG_WRITE_DEBUG) {
-			pr_info("write_reg(%x, %x)\n", (reg_compat_offset + addr), val);
-		}
-		if (register_debug & CODEC_REG_MAP_DEBUG) {
-			pr_info("%s %px, addr %x, offset %d\n",
-				__func__, reg_adr, addr, reg_compat_offset);
-		}
-	}
-
-	writel(val, reg_adr);
+	writel(val, reg_base[DOS_BUS] + ((offset + addr) << 2));
 }
 EXPORT_SYMBOL(write_dos_reg);
 
 int read_dos_reg(u32 addr)
 {
-	void __iomem * reg_adr;
 	int value;
 	struct bus_reg_desc *dos_desc = reg_desc[DOS_BUS];
-	s32 reg_compat_offset = 0;
+	s32 offset = 0;
 
 	if (dos_desc && !(addr & NEW_REG_CHECK_MASK))
-		reg_compat_offset = dos_desc[addr].reg_compat_offset;
+		offset = dos_desc[addr].reg_compat_offset;
 	addr &= (~NEW_REG_CHECK_MASK);
 
-	if (unlikely((reg_compat_offset + addr) < 0)) {
-		pr_err("read dos reg out of range, addr %x, offset %d\n",
-			addr, reg_compat_offset);
+	if (unlikely((offset + addr) < 0)) {
+		pr_err("%s out of range, addr %x, offset %d\n",
+			__func__, addr, offset);
 		return -ENXIO;
 	}
 
-	reg_adr = reg_base[DOS_BUS] + ((reg_compat_offset + addr) << 2);
+	value = readl(reg_base[DOS_BUS] + ((offset + addr) << 2));
 
-	value = readl(reg_adr);
+	dbg_mm_reg(DBG_DOS_RD, "%s(0x%x + %d) = 0x%x\n",
+		__func__, addr, offset, value);
 
-	if (unlikely(register_debug)) {
-		if (register_debug & CODEC_REG_READ_DEBUG) {
-			pr_info("read_reg(%x) = %x\n", (reg_compat_offset + addr), value);
-		}
-		if (register_debug & CODEC_REG_MAP_DEBUG) {
-			pr_info("%s %px, addr %x, offset %d\n",
-				__func__, reg_adr, addr, reg_compat_offset);
-		}
-	}
 	return value;
 }
 EXPORT_SYMBOL(read_dos_reg);
@@ -236,6 +255,68 @@ void dos_reg_write_bits(u32 reg, u32 val, int start, int len)
 }
 EXPORT_SYMBOL(dos_reg_write_bits);
 
+/***************************************DMC REG*****************************************************/
+void write_dmc_reg(u32 reg, int val)
+{
+	if (reg_base[DMC_BUS] == 0) {
+		pr_err("%s(%x, %x), err iomap\n", __func__, reg, val);
+		return;
+	}
+
+	dbg_mm_reg(DBG_DMC_WR, "%s(%x, %x)\n", __func__, reg, val);
+
+	writel(val, reg_base[DMC_BUS] + (reg << 2));
+}
+EXPORT_SYMBOL(write_dmc_reg);
+
+int read_dmc_reg(u32 reg)
+{
+	int val;
+
+	if (reg_base[DMC_BUS] == 0) {
+		pr_err("%s(%x), err iomap\n", __func__, reg);
+		return -1;
+	}
+
+	val = readl(reg_base[DMC_BUS] + (reg << 2));
+
+	dbg_mm_reg(DBG_DMC_RD, "%s(%x) = %x\n", __func__, reg, val);
+
+	return val;
+}
+EXPORT_SYMBOL(read_dmc_reg);
+
+/***************************************SYSCTRL REG*****************************************************/
+void write_sysctrl_reg(u32 reg, int val)
+{
+	if (reg_base[SYSCTRL_BUS] == 0) {
+		pr_err("%s(%x, %x), err iomap\n", __func__, reg, val);
+		return;
+	}
+
+	dbg_mm_reg(DBG_SYSCTRL_WR, "%s(%x, %x)\n", __func__, reg, val);
+
+	writel(val, reg_base[SYSCTRL_BUS] + (reg << 2));
+}
+EXPORT_SYMBOL(write_sysctrl_reg);
+
+int read_sysctrl_reg(u32 reg)
+{
+	int val;
+
+	if (reg_base[SYSCTRL_BUS] == 0) {
+		pr_err("%s(%x), err iomap\n", __func__, reg);
+		return -1;
+	}
+
+	val = readl(reg_base[SYSCTRL_BUS] + (reg << 2));
+
+	dbg_mm_reg(DBG_SYSCTRL_RD, "%s(%x) = %x\n", __func__, reg, val);
+
+	return val;
+}
+EXPORT_SYMBOL(read_sysctrl_reg);
+
 int dos_register_probe(struct platform_device *pdev, reg_compat_func reg_compat_fn)
 {
 	u32 i;
@@ -260,7 +341,7 @@ int dos_register_probe(struct platform_device *pdev, reg_compat_func reg_compat_
 			__func__, (unsigned long long)res.start,
 			(unsigned long long)res.end, reg_base[i]);
 
-		if (reg_compat_fn) {
+		if ((i == DOS_BUS) && reg_compat_fn) {
 			reg_desc[i] = (struct bus_reg_desc *)kzalloc(res_size *
 				sizeof(struct bus_reg_desc), GFP_KERNEL);
 			if (!reg_desc[i])

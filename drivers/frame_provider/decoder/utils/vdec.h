@@ -976,4 +976,6 @@ void hevc_prefix_config(int dma_prefix, int bmmu_prefix);
 
 struct device *get_vdec_dev(void);
 
+void arb_ctrl_wait_idle(int enable);
+
 #endif				/* VDEC_H */

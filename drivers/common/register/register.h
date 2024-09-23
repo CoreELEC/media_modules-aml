@@ -102,6 +102,8 @@
 
 typedef enum {
 	DOS_BUS,
+	DMC_BUS,
+	SYSCTRL_BUS,
 	MAX_REG_BUS
 } MM_BUS_ENUM;
 
@@ -124,6 +126,8 @@ struct bus_reg_desc {
 #endif
 
 /* read/write register */
+int dos_wait_status(int reg, int mask, int idle);
+
 u32 dos_reg_compat_convert(u32 addr);
 void write_dos_reg(u32 addr, int val);
 int read_dos_reg(u32 addr);
@@ -148,6 +152,16 @@ void dos_reg_write_bits(u32 reg, u32 val, int start, int len);
 //#define SET_HREG_MASK(r, mask) codec_set_dosbus_mask((r) | 0x1000, mask)
 //#define CLEAR_HREG_MASK(r, mask) codec_clear_dosbus_mask((r) | 0x1000, mask)
 #endif
+
+//SYSCTRL REG
+int read_sysctrl_reg(u32 reg);
+
+void write_sysctrl_reg(u32 reg, int val);
+
+//DMC REG
+int read_dmc_reg(u32 reg);
+
+void write_dmc_reg(u32 reg, int val);
 
 //##############################################################
 

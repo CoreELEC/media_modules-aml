@@ -85,10 +85,11 @@
 #define H264_DECODE_TIMEOUT         0x21
 #define H264_SEARCH_BUFEMPTY        0x22
 #define H264_DECODE_OVER_SIZE       0x23
+#define H264_DECODE_ERROR_RESET     0x24
+#define H264_DECODE_INI_RESET       0x25
 
 #define VIDEO_SIGNAL_LOW						0x26
 #define VIDEO_SIGNAL_HIGH						0x27
-
 
 #define H264_FIND_NEXT_PIC_NAL              0x50
 #define H264_FIND_NEXT_DVEL_NAL             0x51
@@ -107,6 +108,7 @@
 #define H264_ACTION_DECODE_SLICE    0xf1
 #define H264_ACTION_CONFIG_DONE     0xf2
 #define H264_ACTION_DECODE_NEWPIC   0xf3
+
 #define H264_ACTION_DECODE_START    0xff
 
 #define RPM_BEGIN			0x0

@@ -892,7 +892,7 @@ static void hevc_arb_ctrl(bool enable, bool dbe1_flag)
 			axi_ctrl &= (~(1 << 6));
 		else
 			axi_ctrl &= (~((1 << 6) | (1 << 14)));
-		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);		//enable front/back arbitor
+		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);		//enable front/back arbiter
 	} else {
 		u32 idle_mask = ((1 << 15) | (1 << 11));
 		ulong timeout;
@@ -908,7 +908,7 @@ static void hevc_arb_ctrl(bool enable, bool dbe1_flag)
 		/* front disable */
 		axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
 		axi_ctrl |= (1 << 6);
-		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable front arbitor
+		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable front arbiter
 
 		timeout = jiffies + HZ / 10;
 		do {
@@ -924,7 +924,7 @@ static void hevc_arb_ctrl(bool enable, bool dbe1_flag)
 		if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) {
 			/* back disable */
 			axi_ctrl |= (1 << 14);
-			WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable back arbitor
+			WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable back arbiter
 			timeout = jiffies + HZ/10;
 			do {
 				axi_status = READ_VREG(back_status_dbe0_reg);
@@ -952,9 +952,6 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 	unsigned int sts_reg_addr = DMC_CHAN_STS;
 	unsigned int mask = 0;
 	unsigned int cpu_type = get_cpu_major_id();
-
-	if (is_vdec_hevc_combine())
-		target = VDEC_INPUT_TARGET_HEVC;
 
 	if (target == VDEC_INPUT_TARGET_VLD) {
 		if ((cpu_type == AM_MESON_CPU_MAJOR_ID_S7) ||
@@ -1047,6 +1044,44 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 	}
 }
 
+void arb_ctrl_wait_idle(int enable)
+{
+#define T6D_SYSCTRL_AXI_PIPE_CTRL0  0x55
+#define T6D_DMC_CHAN_STS            0xcf
+#define T6D_DMC_AXI4_CHAN_STS       0x98
+
+	if (enable) {
+		CLEAR_VREG_MASK(HEVC_ASSIST_AXI_CTRL, ((1 << 6 ) | (1 << 14) | (1 << 22)));
+	} else {
+		SET_VREG_MASK(HEVC_ASSIST_AXI_CTRL, ((1 << 6 ) | (1 << 14) | (1 << 22)));
+
+		dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, (0x3 << 27), 0);
+
+		while ((read_sysctrl_reg(T6D_SYSCTRL_AXI_PIPE_CTRL0) & (1 << 7)) == 0);
+
+		while ((read_dmc_reg(T6D_DMC_CHAN_STS) & (1 << 4)) == 0);
+
+		while (read_dmc_reg(T6D_DMC_AXI4_CHAN_STS) & 0xffff0000);
+	}
+}
+EXPORT_SYMBOL(arb_ctrl_wait_idle);
+
+static void dec_pipeline_idle_ctrl(struct vdec_s *vdec,
+	int target, bool enable)
+{
+	if (is_vdec_hevc_combine()) {
+		arb_ctrl_wait_idle(enable);
+	} else {
+		if (is_support_axi_ctrl()) {
+			if (target == VDEC_INPUT_TARGET_VLD)
+				vdec_dbus_ctrl(enable);
+			else if (target == VDEC_INPUT_TARGET_HEVC)
+				hevc_arb_ctrl(enable, 0);
+		} else
+			dec_dmc_port_ctrl(enable, target);
+	}
+}
+
 #ifdef NEW_FB_CODE
 /* clear unfinished hw status */
 void fb_hw_status_clear(bool is_front)
@@ -1076,15 +1111,6 @@ void fb_hw_status_clear(bool is_front)
 EXPORT_SYMBOL(fb_hw_status_clear);
 #endif
 
-static void hevc_wait_ddr(void)
-{
-	if (is_support_axi_ctrl()) {
-		hevc_arb_ctrl(0, 0);
-	} else {
-		dec_dmc_port_ctrl(0, VDEC_INPUT_TARGET_HEVC);
-	}
-}
-
 static void vdec_disable_DMC(struct vdec_s *vdec)
 {
 	/*close first,then wait pedding end,timing suggestion from vlsi*/
@@ -1094,18 +1120,23 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 	if (!IS_ERR_OR_NULL(vdec->dev))
 		vdec_stop_armrisc(input->target);
 
-	if (is_support_axi_ctrl()) {
-		if (input->target == VDEC_INPUT_TARGET_VLD) {
-			if (!vdec_on(VDEC_1))
-				return;
-			vdec_dbus_ctrl(0);
-		} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
-			if (!vdec_on(VDEC_HEVC))
-				return;
-			hevc_arb_ctrl(0, vdec->mc_back_type ? 1 : 0);	//check dbe1 when loaded backcore ucode
-		}
-	} else
-		dec_dmc_port_ctrl(0, input->target);
+	if (is_vdec_hevc_combine()) {
+		arb_ctrl_wait_idle(1);
+	} else {
+		if (is_support_axi_ctrl()) {
+			if (input->target == VDEC_INPUT_TARGET_VLD) {
+				if (!vdec_on(VDEC_1))
+					return;
+				vdec_dbus_ctrl(0);
+			} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+				if (!vdec_on(VDEC_HEVC))
+					return;
+				hevc_arb_ctrl(0, vdec->mc_back_type ? 1 : 0);	//check dbe1 when loaded backcore ucode
+			}
+		} else
+			dec_dmc_port_ctrl(0, input->target);
+	}
+
 	if (debug & VDEC_DBG_DETAIL_INFO)
 		pr_debug("%s input->target= 0x%x\n", __func__, input->target);
 }
@@ -1114,19 +1145,23 @@ static void vdec_enable_DMC(struct vdec_s *vdec)
 {
 	struct vdec_input_s *input = &vdec->input;
 
-	if (is_support_axi_ctrl()) {
-		if (input->target == VDEC_INPUT_TARGET_VLD)
-			vdec_dbus_ctrl(1);
-		else if (input->target == VDEC_INPUT_TARGET_HEVC)
-			hevc_arb_ctrl(1, 0);
-		return;
+	if (is_vdec_hevc_combine()) {
+		arb_ctrl_wait_idle(1);
+	} else {
+		if (is_support_axi_ctrl()) {
+			if (input->target == VDEC_INPUT_TARGET_VLD)
+				vdec_dbus_ctrl(1);
+			else if (input->target == VDEC_INPUT_TARGET_HEVC)
+				hevc_arb_ctrl(1, 0);
+			return;
+		}
+
+		/*must to be reset the dmc pipeline if it's g12b.*/
+		if (get_cpu_type() == AM_MESON_CPU_MAJOR_ID_G12B)
+			vdec_dmc_pipeline_reset();
+
+		dec_dmc_port_ctrl(1, input->target);
 	}
-
-	/*must to be reset the dmc pipeline if it's g12b.*/
-	if (get_cpu_type() == AM_MESON_CPU_MAJOR_ID_G12B)
-		vdec_dmc_pipeline_reset();
-
-	dec_dmc_port_ctrl(1, input->target);
 
 	pr_debug("%s input->target= 0x%x\n", __func__, input->target);
 }
@@ -2851,7 +2886,7 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			vdec->input.streaming_rp |= vdec->input.stream_cookie;
 			vdec->input.total_rd_count = vdec->input.streaming_rp;
 			if ((vdec->core_mask & CORE_MASK_HEVC_BACK) == 0)
-				hevc_wait_ddr();
+				dec_pipeline_idle_ctrl(vdec, VDEC_INPUT_TARGET_HEVC, 0);
 		}
 
 		input->swap_valid = true;
@@ -5367,12 +5402,8 @@ void vdec_reset_core(struct vdec_s *vdec)
 		SET_VREG_MASK(DOS_GCLK_EN3, (1 << 2)); //turn on vcpu clock
 	}
 
-	if (is_support_axi_ctrl()) {
-		/* t7 no dmc req for vdec only */
-		vdec_dbus_ctrl(0);
-	} else {
-		dec_dmc_port_ctrl(0, VDEC_INPUT_TARGET_VLD);
-	}
+	dec_pipeline_idle_ctrl(vdec, VDEC_INPUT_TARGET_VLD, 0);
+
 	/*
 	 * 2: assist
 	 * 3: vld_reset
@@ -5399,10 +5430,7 @@ void vdec_reset_core(struct vdec_s *vdec)
 		WRITE_VREG(MDEC_EXTIF_CFG1, 0);
 	}
 
-	if (is_support_axi_ctrl())
-		vdec_dbus_ctrl(1);
-	else
-		dec_dmc_port_ctrl(1, VDEC_INPUT_TARGET_VLD);
+	dec_pipeline_idle_ctrl(vdec, VDEC_INPUT_TARGET_VLD, 1);
 }
 EXPORT_SYMBOL(vdec_reset_core);
 
@@ -5489,14 +5517,9 @@ void hevc_reset_core(struct vdec_s *vdec)
 		SET_VREG_MASK(DOS_GCLK_EN3, (1 << 2)); //turn on vcpu clock
 	}
 
-	if (is_support_axi_ctrl()) {
-		/* t7 no dmc req for hevc only */
-		hevc_arb_ctrl(0, 0);
-	} else {
-		WRITE_VREG(HEVC_STREAM_CONTROL, 0);
+	WRITE_VREG(HEVC_STREAM_CONTROL, 0);
 
-		dec_dmc_port_ctrl(0, VDEC_INPUT_TARGET_HEVC);
-	}
+	dec_pipeline_idle_ctrl(vdec, VDEC_INPUT_TARGET_HEVC, 0);
 
 	if (vdec == NULL || input_frame_based(vdec))
 		WRITE_VREG(HEVC_STREAM_CONTROL, 0);
@@ -5583,10 +5606,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 		break;
 	}
 
-	if (is_support_axi_ctrl())
-		hevc_arb_ctrl(1, 0);
-	else
-		dec_dmc_port_ctrl(1, VDEC_INPUT_TARGET_HEVC);
+	dec_pipeline_idle_ctrl(vdec, VDEC_INPUT_TARGET_HEVC, 1);
 
 	if (vdec_get_debug() & VDEC_DBG_AUTO_CLK_GATE_DISABLE) {
 		hevc_auto_clk_gate_disable();
