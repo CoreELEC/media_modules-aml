@@ -78,6 +78,18 @@ static inline void aml_buf_reset(struct aml_buf_mgr_s *bm)
 }
 
 /*
+ * aml_buf_refresh_planes() - Interface used to update buffer planes information.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ *
+ * Interface used to update buffer planes information.
+ */
+static inline void aml_buf_update_planes(struct aml_buf_mgr_s *bm)
+{
+	bm->bc.update_planes(&bm->bc);
+}
+
+/*
  * aml_buf_ready_num() - Query the number of buffers in the free queue.
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.

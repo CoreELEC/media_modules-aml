@@ -4247,6 +4247,7 @@ EXPORT_SYMBOL(vdec_reset);
 int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 {
 	if (flag != 2) {
+		vdec->reset_input_flag = true;
 		if (!vdec->disable_vfm) {
 			if (vdec->vframe_provider.name)
 				vf_unreg_provider(&vdec->vframe_provider);
@@ -4299,6 +4300,7 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 			}
 		}
 	} else {
+		vdec->reset_input_flag = false;
 		if (vdec->reset) {
 			vdec->reset(vdec);
 			if (vdec->slave)

@@ -610,7 +610,7 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 		entry->state = BUF_STATE_INIT;
 		entry->queued_mask = 0;
 		entry->inited = false;
-
+		entry->set_buf_planes_flag = false;
 		if (entry->pair == BUF_MASTER) {
 			atomic_set(&entry->ref, 1);
 			if (entry->sub_entry[0])
@@ -642,6 +642,22 @@ static void buf_core_destroy(struct kref *kref)
 	bc->state	= BM_STATE_EXIT;
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
+}
+
+static void buf_core_update_planes(struct buf_core_mgr_s *bc)
+{
+	struct buf_core_entry *entry;
+	struct hlist_node *h_tmp;
+	ulong bucket;
+
+	mutex_lock(&bc->mutex);
+
+	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
+		if (entry->set_buf_planes_flag)
+			bc->reconfigure_planes(bc, entry);
+	}
+
+	mutex_unlock(&bc->mutex);
 }
 
 static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key,
@@ -950,6 +966,7 @@ int buf_core_mgr_init(struct buf_core_mgr_s *bc)
 	bc->update		= buf_core_update;
 	bc->replace		= buf_core_replace;
 	bc->put_dma		= buf_core_put_dma;
+	bc->update_planes	= buf_core_update_planes;
 
 	/* The interface set of the buffer core operation. */
 	bc->buf_ops.get		= buf_core_get;

@@ -1278,6 +1278,13 @@ struct VP9Decoder_s {
 	u32 vp9_segment_data[8];
 #endif
 	int triple_write_mode;
+	unsigned int report_width;
+	unsigned int report_height;
+	bool unfinish_res;
+	bool has_unfinish;
+	u32 data_size_bak;
+	u32 data_offset_bak;
+	u32 consume_byte_bak;
 };
 
 static int vp9_debug(struct VP9Decoder_s *pbi,
@@ -1810,8 +1817,9 @@ int vp9_alloc_mmu(
 	if (!ret)
 		aml_buf->fbc->used[aml_buf->fbc->index] |= 1;
 
-	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s afbc_index %d, haddr:%lx, dma 0x%lx\n",
-			__func__, aml_buf->fbc->index, aml_buf->fbc->haddr, aml_buf->planes[0].addr);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s afbc_index %d, haddr:%lx, frame_size:%d, dma 0x%lx\n",
+		__func__, aml_buf->fbc->index, aml_buf->fbc->haddr, aml_buf->fbc->frame_size,
+		aml_buf->planes[0].addr);
 
 	ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 	if (ret < 0) {
@@ -8814,6 +8822,55 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 	return 0;
 }
 
+static bool v4l_resolution_double_check(struct VP9Decoder_s *pbi)
+{
+	bool ret = false;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
+	int temp_last_width = pbi->last_width;
+	int temp_last_height = pbi->last_height;
+
+	if (!ctx->v4l_reqbuff_flag) {
+		pbi->res_ch_flag = 0;
+	} else if (ctx->v4l_reqbuff_flag &&
+		pbi->report_height != 0 &&
+		pbi->report_width != 0 &&
+		((pbi->report_height != pbi->frame_height) ||
+		(pbi->report_width != pbi->frame_width))) {
+		pbi->res_ch_flag = 0;
+		pbi->last_width = pbi->report_width;
+		pbi->last_height = pbi->report_height;
+	} else {
+		ret = true;
+	}
+
+	vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+		"%s %s! reqbuff:%d flag:%d report:(w:%d, h:%d), frame:(w:%d, h:%d) last:(w:%d, h:%d)\n",
+		__func__, ret ? "pass" : "fail", ctx->v4l_reqbuff_flag, pbi->res_ch_flag,
+		pbi->report_width, pbi->report_height,
+		pbi->frame_width, pbi->frame_height,
+		temp_last_width, temp_last_height);
+
+	if (ret == false) {
+		struct aml_vdec_ps_infos ps;
+		struct vdec_comp_buf_info comp;
+		pbi->init_pic_w = pbi->last_width;
+		pbi->init_pic_h = pbi->last_height;
+		pbi->frame_width = pbi->last_width;
+		pbi->frame_height = pbi->last_height;
+		if (get_valid_double_write_mode(pbi) != 16) {
+			vvp9_get_comp_buf_info(pbi, &comp);
+			vdec_v4l_set_comp_buf_info(ctx, &comp);
+		}
+		vvp9_get_ps_info(pbi, &ps);
+		/*notice the v4l2 codec.*/
+		vdec_v4l_set_ps_infos(ctx, &ps);
+		vdec_v4l_res_ch_event(ctx);
+		aml_buf_update_planes(&ctx->bm);
+		init_mv_buf_list(pbi);
+	}
+
+	return ret;
+}
 
 static int v4l_res_change(struct VP9Decoder_s *pbi)
 {
@@ -8846,12 +8903,19 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 
 			pbi->init_pic_w = pbi->frame_width;
 			pbi->init_pic_h = pbi->frame_height;
+			pbi->report_width = pbi->frame_width;
+			pbi->report_height = pbi->frame_height;
 			init_mv_buf_list(pbi);
+
+			if (pbi->has_unfinish) {
+				pbi->unfinish_res = true;
+			}
 
 			pbi->process_state = PROC_STATE_INIT;
 			pbi->v4l_params_parsed = false;
 			pbi->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
+			ctx->v4l_reqbuff_flag = false;
 			if (cm->new_fb_idx != INVALID_IDX)
 				vp9_bufmgr_postproc(pbi);
 
@@ -9006,17 +9070,12 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				vp9_buf_ref_process_for_exception(pbi);
 				dec_again_process(pbi);
 			} else {
-				if (pbi->common.show_existing_frame) {
-					pbi->dec_result = DEC_RESULT_DONE;
-					amhevc_stop();
-					vdec_schedule_work(&pbi->work);
+				if (!pbi->common.show_existing_frame) {
+					vdec_v4l_post_error_frame_event(ctx);
 				}
-				else {
-					pbi->dec_result = DEC_RESULT_GET_DATA;
-					if (vdec_frame_based(hw_to_vdec(pbi)))
-						vdec_v4l_post_error_frame_event(ctx);
-					vdec_schedule_work(&pbi->work);
-				}
+				pbi->dec_result = DEC_RESULT_DONE;
+				amhevc_stop();
+				vdec_schedule_work(&pbi->work);
 			}
 		}
 		pbi->process_busy = 0;
@@ -9262,21 +9321,26 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				vvp9_get_comp_buf_info(pbi, &comp);
 				vdec_v4l_set_comp_buf_info(ctx, &comp);
 			}
+			if (v4l_resolution_double_check(pbi)) {
+				vvp9_get_ps_info(pbi, &ps);
+				/*notice the v4l2 codec.*/
+				vdec_v4l_set_ps_infos(ctx, &ps);
 
-			vvp9_get_ps_info(pbi, &ps);
-			/*notice the v4l2 codec.*/
-			vdec_v4l_set_ps_infos(ctx, &ps);
+				pbi->init_pic_w = pbi->frame_width;
+				pbi->init_pic_h = pbi->frame_height;
 
-			pbi->init_pic_w = pbi->frame_width;
-			pbi->init_pic_h = pbi->frame_height;
-
-			pbi->last_width = pbi->frame_width;
-			pbi->last_height = pbi->frame_height;
-
-			ctx->decoder_status_info.frame_height = ps.visible_height;
-			ctx->decoder_status_info.frame_width = ps.visible_width;
-			v4l_vp9_collect_stream_info(vdec, pbi);
-			ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STATISTIC, NULL);
+				pbi->last_width = pbi->frame_width;
+				pbi->last_height = pbi->frame_height;
+				if (pbi->report_width == 0 ||
+					pbi->report_height) {
+					pbi->report_width = pbi->frame_width;
+					pbi->report_height = pbi->frame_height;
+				}
+				ctx->decoder_status_info.frame_height = ps.visible_height;
+				ctx->decoder_status_info.frame_width = ps.visible_width;
+				v4l_vp9_collect_stream_info(vdec, pbi);
+				ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STATISTIC, NULL);
+			}
 			pbi->v4l_params_parsed	= true;
 			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
@@ -10793,8 +10857,22 @@ static void run_front(struct vdec_s *vdec)
 		WRITE_VREG(HEVC_CORE_ENABLE, 1);
 
 	if ((vdec_frame_based(vdec)) &&
-		(pbi->dec_result == DEC_RESULT_UNFINISH)) {
-		u32 res_byte = pbi->data_size - pbi->consume_byte;
+		((pbi->dec_result == DEC_RESULT_UNFINISH) ||
+		(pbi->unfinish_res))) {
+		u32 res_byte = 0;
+
+		if (pbi->unfinish_res) {
+			pbi->consume_byte = pbi->consume_byte_bak;
+			pbi->data_offset = pbi->data_offset_bak;
+			pbi->data_size = pbi->data_size_bak;
+			pbi->unfinish_res = false;
+		} else {
+			pbi->consume_byte_bak = pbi->consume_byte;
+			pbi->data_offset_bak = pbi->data_offset;
+			pbi->data_size_bak = pbi->data_size;
+			pbi->has_unfinish = true;
+		}
+		res_byte = pbi->data_size - pbi->consume_byte;
 
 		vp9_print(pbi, VP9_DEBUG_BUFMGR,
 			"%s before, consume 0x%x, size 0x%x, offset 0x%x, res 0x%x\n", __func__,
@@ -10827,6 +10905,11 @@ static void run_front(struct vdec_s *vdec)
 			pbi->data_offset = pbi->chunk->offset;
 			pbi->data_size = size;
 		}
+		pbi->unfinish_res = false;
+		pbi->has_unfinish = false;
+		pbi->consume_byte_bak = 0;
+		pbi->data_offset_bak = 0;
+		pbi->data_size_bak = 0;
 		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, 0);
 	}
 
@@ -11219,6 +11302,10 @@ static void reset(struct vdec_s *vdec)
 		vp9_print(pbi, 0, "%s local_init failed \r\n", __func__);
 
 	vp9_decoder_ctx_reset(pbi);
+	if (vdec->reset_input_flag) {
+		pbi->unfinish_res = false;
+		vdec->reset_input_flag = false;
+	}
 
 	atomic_set(&pbi->vf_pre_count, 0);
 	atomic_set(&pbi->vf_get_count, 0);
@@ -11427,7 +11514,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pdata->irq_handler = vp9_irq_cb;
 	pdata->threaded_irq_handler = vp9_threaded_irq_cb;
 	pdata->dump_state = vp9_dump_state;
-
+	ctx->v4l_reqbuff_flag = true;
 	pbi->index = pdev->id;
 
 	if (is_rdma_enable()) {

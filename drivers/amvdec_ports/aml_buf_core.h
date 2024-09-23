@@ -162,6 +162,7 @@ enum buf_pair {
  * @recycle_buf_ref_work
  *		: Work of recycle-ref for each buffer.
  * @bc		: Point to bc.
+ * @set_buf_planes_flag	: Mark the buffer in the queue that has executed set_planes.
  */
 struct buf_core_entry {
 	ulong			key;
@@ -186,6 +187,7 @@ struct buf_core_entry {
 	u32			queued_mask; /* bit0: master; bit1: sub0; bit1: sub1*/
 	struct work_struct 	recycle_buf_ref_work;
 	struct buf_core_mgr_s 	*bc;
+	bool			set_buf_planes_flag;
 };
 
 /*
@@ -267,6 +269,10 @@ struct buf_core_mem_ops {
  *		: Flag of working for workqueue .
  * @workqueue_mutex
  *		: Mutex for workqueue.
+ * @update_planes
+		: The interface is used to update planes information
+ * @reconfigure_planes
+		: The interface is used to reconfigure planes information
  */
 struct buf_core_mgr_s {
 	int			id;
@@ -299,6 +305,9 @@ struct buf_core_mgr_s {
 	void	(*replace)(struct buf_core_mgr_s *, struct buf_core_entry *, void *);
 	void	(*put_dma)(struct buf_core_mgr_s *);
 	ssize_t	(*status_walk)(struct buf_core_mgr_s *, struct buf_core_entry *, char *);
+	int	(*box_init)(struct buf_core_mgr_s *);
+	void	(*update_planes)(struct buf_core_mgr_s *);
+	void    (*reconfigure_planes)(struct buf_core_mgr_s *, struct buf_core_entry *);
 
 	struct buf_core_mem_ops	mem_ops;
 	struct buf_core_ops	buf_ops;
