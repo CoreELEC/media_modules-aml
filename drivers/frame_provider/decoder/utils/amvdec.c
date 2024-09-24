@@ -581,6 +581,10 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 		} else if (!strcmp(name, "av1_back")) {
 			format = VIDEO_DEC_AV1_BACK;
 			vdec = OPTEE_VDEC_HEVCB;
+		} else if (!strcmp(name, "av1_mmu_swap")) {
+			format = VIDEO_DEC_AV1_MMU_SWAP;
+			vdec = OPTEE_VDEC_HEVC;
+			is_swap = true;
 		} else {
 			format = VIDEO_DEC_AV1_MMU;
 			vdec = OPTEE_VDEC_HEVC;

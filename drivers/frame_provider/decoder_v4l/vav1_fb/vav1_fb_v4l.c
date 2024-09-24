@@ -273,6 +273,12 @@ bit [3:2]: valid when bit1 == 0;
 #define MULTI_DRIVER_NAME "ammvdec_av1_fb_v4l"
 
 #define AUX_BUF_ALIGN(adr) ((adr + 0xf) & (~0xf))
+
+//v0.4.157-g34f04a6
+#define UCODE_SWAP_VERSION 4
+#define UCODE_SWAP_SUBMIT_COUNT 157
+static u32 enable_swap = 1;
+
 #ifdef DEBUG_UCODE_LOG
 static u32 prefix_aux_buf_size;
 static u32 suffix_aux_buf_size;
@@ -1026,6 +1032,7 @@ struct AV1HW_s {
 	struct mutex fence_mutex;
 	int v4l_duration;
 	u32 mv_buf_size;
+	bool enable_ucode_swap;
 };
 
 #ifdef NEW_FB_CODE
@@ -5340,49 +5347,59 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 	/*if (debug & AV1_DEBUG_BUFMGR_MORE)
 		pr_info("%s\n", __func__);*/
 	if (mask & HW_MASK_FRONT) {
-		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+		if (!efficiency_mode) {
+			data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
 #ifdef CHANGE_REMOVED
-		/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
-		data32 &= ~(7 << 29);
-		data32 |= (3 << 29);
-		data32 = data32 |
-		(1 << 24) |/*stream_buffer_empty_int_amrisc_enable*/
-		(1 << 22) |/*stream_fifo_empty_int_amrisc_enable*/
-		(1 << 7) |/*dec_done_int_cpu_enable*/
-		(1 << 4) |/*startcode_found_int_cpu_enable*/
-		(0 << 3) |/*startcode_found_int_amrisc_enable*/
-		(1 << 0)	/*parser_int_enable*/
-		;
+			/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
+			data32 &= ~(7 << 29);
+			data32 |= (3 << 29);
+			data32 = data32 |
+			(1 << 24) |/*stream_buffer_empty_int_amrisc_enable*/
+			(1 << 22) |/*stream_fifo_empty_int_amrisc_enable*/
+			(1 << 7) |/*dec_done_int_cpu_enable*/
+			(1 << 4) |/*startcode_found_int_cpu_enable*/
+			(0 << 3) |/*startcode_found_int_amrisc_enable*/
+			(1 << 0)	/*parser_int_enable*/
+			;
 #else
-		data32 = data32 & 0x03ffffff;
-		data32 = data32 |
-			(3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
-			(3 << 26) |  // stream_fifo_empty_int_ctl ( 4 interrupt)
-			(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
-			(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+			data32 = data32 & 0x03ffffff;
+			data32 = data32 |
+				(3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
+				(3 << 26) |  // stream_fifo_empty_int_ctl ( 4 interrupt)
+				(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
+				(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
 #ifdef AOM_AV1_HED_FB
 #ifdef DUAL_DECODE
-		// For HALT CCPU test. Use Pull inside CCPU to generate interrupt
-		// (1 << 9) |  // fed_fb_slice_done_int_amrisc_enable
+			// For HALT CCPU test. Use Pull inside CCPU to generate interrupt
+			// (1 << 9) |  // fed_fb_slice_done_int_amrisc_enable
 #else
-			(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
+				(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
 #endif
 #endif
-			(1 << 7) |  // dec_done_int_cpu_enable
-			(1 << 4) |  // startcode_found_int_cpu_enable
-			(0 << 3) |  // startcode_found_int_amrisc_enable
-			(1 << 0)    // parser_int_enable
-			;
+				(1 << 7) |  // dec_done_int_cpu_enable
+				(1 << 4) |  // startcode_found_int_cpu_enable
+				(0 << 3) |  // startcode_found_int_amrisc_enable
+				(1 << 0)    // parser_int_enable
+				;
 #endif
-		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+			WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
-		data32 = READ_VREG(HEVC_SHIFT_STATUS);
-		data32 = data32 |
-		(0 << 1) |/*emulation_check_off AV1
-			do not have emulation*/
-		(1 << 0)/*startcode_check_on*/
-		;
-		WRITE_VREG(HEVC_SHIFT_STATUS, data32);
+			data32 = READ_VREG(HEVC_SHIFT_STATUS);
+			data32 = data32 |
+			(0 << 1) |/*emulation_check_off AV1
+				do not have emulation*/
+			(1 << 0)/*startcode_check_on*/
+			;
+			WRITE_VREG(HEVC_SHIFT_STATUS, data32);
+
+			WRITE_VREG(HEVC_CABAC_CONTROL,
+				(1 << 0)/*cabac_enable*/
+			);
+
+			WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
+				(1 << 0)/* hevc_parser_core_clk_en*/
+			);
+		}
 		WRITE_VREG(HEVC_SHIFT_CONTROL,
 		(0 << 14) | /*disable_start_code_protect*/
 		(1 << 10) | /*length_zero_startcode_en for AV1*/
@@ -5394,26 +5411,24 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 		(1 << 0)   /*stream_shift_enable*/
 		);
 
-		WRITE_VREG(HEVC_CABAC_CONTROL,
-			(1 << 0)/*cabac_enable*/
-		);
-
-		WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
-			(1 << 0)/* hevc_parser_core_clk_en*/
-		);
-
 		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 	}
 
 	if (mask & HW_MASK_BACK) {
 		/*Initial IQIT_SCALELUT memory
 		-- just to avoid X in simulation*/
-		if (is_rdma_enable())
+		if (is_rdma_enable()) {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
 			rdma_back_end_work(hw->rdma_phy_adr, RDMA_SIZE);
-		else {
-			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
-			for (i = 0; i < 1024; i++)
-				WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+		} else {
+			if (efficiency_mode)
+				WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+			else {
+				WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+				WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
+				for (i = 0; i < 1024; i++)
+					WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+			}
 		}
 	}
 
@@ -5450,7 +5465,7 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 	WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
 	WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 #endif
-
+		if (!efficiency_mode)
 		WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 			/*  (1 << 8) |*/ /*sao_sw_pred_enable*/
 			(1 << 5) | /*parser_sao_if_en*/
@@ -5460,23 +5475,25 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 	}
 
 	if (mask & HW_MASK_BACK) {
-		/*Changed to Start MPRED in microcode*/
-		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-			(0 << 1) | /*enable ipp*/
-			(1 << 0)   /*software reset ipp and mpp*/
-		);
+		if (!efficiency_mode) {
+			/*Changed to Start MPRED in microcode*/
+			WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+				(0 << 1) | /*enable ipp*/
+				(1 << 0)   /*software reset ipp and mpp*/
+			);
 #ifdef CHANGE_REMOVED
-		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-			(1 << 1) | /*enable ipp*/
-			(0 << 0)   /*software reset ipp and mpp*/
-		);
+			WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+				(1 << 1) | /*enable ipp*/
+				(0 << 0)   /*software reset ipp and mpp*/
+			);
 #else
-		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-			(3 << 4) | // av1
-			(1 << 1) | /*enable ipp*/
-			(0 << 0)   /*software reset ipp and mpp*/
-		);
+			WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+				(3 << 4) | // av1
+				(1 << 1) | /*enable ipp*/
+				(0 << 0)   /*software reset ipp and mpp*/
+			);
 #endif
+		}
 	if (get_double_write_mode(hw) & 0x10) {
 		if (is_dw_p010(hw)) {
 			/* Enable P010 reference read mode for MC */
@@ -8751,10 +8768,14 @@ static int load_param(struct AV1HW_s *hw, union param_u *params, uint32_t dec_st
 		get_rpm_param(params);
 	}
 	else {
-		for (i = 0; i < (RPM_VALID_E-RPM_BEGIN); i += 4) {
-			int32_t ii;
-			for (ii = 0; ii < 4; ii++) {
-				params->l.data[i+ii]=hw->rpm_ptr[i+3-ii];
+		if (efficiency_mode) {
+			memcpy(params->l.data, hw->rpm_ptr,
+				(RPM_VALID_E - RPM_BEGIN) * sizeof(hw->rpm_ptr[0]));
+		} else {
+			for (i = 0; i < (RPM_VALID_E - RPM_BEGIN); i += 4) {
+				int ii;
+				for (ii = 0; ii < 4; ii++)
+					params->l.data[i+ii]=hw->rpm_ptr[i+3-ii];
 			}
 		}
 	}
@@ -10202,9 +10223,10 @@ static void vav1_prot_init(struct AV1HW_s *hw, u32 mask)
 		WRITE_VREG(HEVC_STREAM_FIFO_CTL, data32);
 	}
 #endif
-	WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x000000001);
-	WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
-
+	if (!efficiency_mode) {
+		WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x000000001);
+		WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
+	}
 	WRITE_VREG(HEVC_WAIT_FLAG, 1);
 
 	/* WRITE_VREG(HEVC_MPSR, 1); */
@@ -10220,7 +10242,7 @@ static void vav1_prot_init(struct AV1HW_s *hw, u32 mask)
 	WRITE_VREG(HEVC_PSCALE_CTRL, 0);
 #endif
 
-	WRITE_VREG(DEBUG_REG1, 0x0);
+	//WRITE_VREG(DEBUG_REG1, 0x0);
 	/*check vps/sps/pps/i-slice in ucode*/
 	WRITE_VREG(NAL_SEARCH_CTL, 0x8);
 
@@ -10496,7 +10518,7 @@ static s32 vav1_init(struct vdec_s *vdec)
 static s32 vav1_init(struct AV1HW_s *hw)
 {
 #endif
-	int ret;
+	int ret, size = -1;
 	int i;
 	int fw_size = 0x1000 * 16;
 	struct firmware_s *fw = NULL;
@@ -10510,11 +10532,25 @@ static s32 vav1_init(struct AV1HW_s *hw)
 	mutex_init(&hw->slice_header_lock);
 #endif
 
+	if (hw->front_back_mode != 1) {
+		if ((get_decoder_firmware_version() <= UCODE_SWAP_VERSION) &&
+			(get_decoder_firmware_submit_count() < UCODE_SWAP_SUBMIT_COUNT)) {
+			hw->enable_ucode_swap = false;
+		} else {
+			if (enable_swap)
+				hw->enable_ucode_swap = true;
+			else
+				hw->enable_ucode_swap = false;
+		}
+		av1_print(hw, 0, "%s ucode version %d.%d, swap enable %d\n", __func__,
+				get_decoder_firmware_version(), get_decoder_firmware_submit_count(),
+				hw->enable_ucode_swap);
+	}
+
 	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 
-	av1_print(hw, AOM_DEBUG_HW_MORE, "%s %d\n", __func__, __LINE__);
 #ifdef NEW_FRONT_BACK_CODE
 	if (hw->front_back_mode == 1) {
 		ret = get_firmware_data(VIDEO_DEC_AV1_FRONT, fw->data);
@@ -10522,8 +10558,25 @@ static s32 vav1_init(struct AV1HW_s *hw)
 	} else
 #endif
 	{
-		ret = get_firmware_data(VIDEO_DEC_AV1_MMU, fw->data);
-		hw->is_swap = false;
+		if (hw->enable_ucode_swap) {
+			size = get_firmware_data(VIDEO_DEC_AV1_MMU_SWAP, fw->data);
+			if (size < 0) {
+				av1_print(hw, 0, "hevc can not get swap fw code\n");
+				size = get_firmware_data(VIDEO_DEC_AV1_MMU, fw->data);
+				hw->enable_ucode_swap = false;
+				hw->is_swap = false;
+			} else if (size)
+				hw->is_swap = true; 	//local fw swap
+		} else {
+			size = get_firmware_data(VIDEO_DEC_AV1_MMU, fw->data);
+
+			if (size < 0) {
+				av1_print(hw, 0, "get firmware fail.\n");
+				vfree(fw);
+				return -1;
+			}
+			hw->is_swap = false;
+		}
 	}
 	if (ret < 0) {
 		pr_err("get firmware fail.\n");
@@ -10531,7 +10584,6 @@ static s32 vav1_init(struct AV1HW_s *hw)
 		vfree(fw);
 		return -1;
 	}
-
 #ifdef SWAP_HEVC_UCODE
 	if (!fw_tee_enabled() && hw->is_swap) {
 		char *swap_data;
@@ -11638,8 +11690,21 @@ static void run_front(struct vdec_s *vdec)
 	} else {
 		if ((hw->front_back_mode == 1) || (hw->front_back_mode == 3))
 			ret = amhevc_loadmc_ex(VFORMAT_AV1, "av1_front", hw->fw->data);
-		else
-			ret = amhevc_loadmc_ex(VFORMAT_AV1, NULL, hw->fw->data);
+		else {
+			if (hw->enable_ucode_swap) {
+				ret = amhevc_loadmc_ex(VFORMAT_AV1,
+						"av1_mmu_swap", hw->fw->data);
+				if (ret < 0) {
+					ret = amhevc_loadmc_ex(VFORMAT_AV1,
+							NULL, hw->fw->data);
+					hw->enable_ucode_swap = false;
+				} else
+					hw->is_swap = true;
+			} else {
+				ret = amhevc_loadmc_ex(VFORMAT_AV1,
+						NULL, hw->fw->data);
+			}
+		}
 		if (ret < 0) {
 			amhevc_disable();
 			av1_print(hw, PRINT_FLAG_ERROR,
@@ -11660,6 +11725,16 @@ static void run_front(struct vdec_s *vdec)
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
+
+	/*
+		HEVC_EFFICIENCY_MODE
+		bit[0] 1: open efficiency mode, 0: close efficiency mode
+	*/
+	if (efficiency_mode) {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
+	} else {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+	}
 #ifdef NEW_FB_CODE
 	if (hw->front_back_mode == 1) {
 		if (hw->pbi->frontend_decoded_count && hw->common.prev_frame) {
@@ -11670,15 +11745,6 @@ static void run_front(struct vdec_s *vdec)
 			}
 		}
 
-		/*
-			HEVC_EFFICIENCY_MODE
-			bit[0] 1: open efficiency mode, 0: close efficiency mode
-		*/
-		if (efficiency_mode) {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
-		} else {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
-		}
 		av1_hw_init(hw, (hw->pbi->frontend_decoded_count == 0), 1, 0);	 //called-->config_bufstate_front_hw
 		config_decode_mode(hw);
 		config_bufstate_front_hw(hw->pbi);
@@ -13453,6 +13519,9 @@ MODULE_PARM_DESC(enable_single_slice, "\n  enable_single_slice\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
+
+module_param(enable_swap, uint, 0664);
+MODULE_PARM_DESC(enable_swap, "\n enable_swap\n");
 
 #ifdef NEW_FB_CODE
 module_param(front_back_debug, uint, 0664);

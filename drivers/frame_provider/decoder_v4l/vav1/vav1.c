@@ -97,6 +97,8 @@
 #define CO_MV_COMPRESS
 
 #define FGS_TABLE_SIZE  (512 * 128 / 8)
+#define SWAP_HEVC_UCODE
+#define SWAP_HEVC_OFFSET (3 * 0x1000)
 
 #define HW_MASK_FRONT    0x1
 #define HW_MASK_BACK     0x2
@@ -183,6 +185,12 @@ Bit[10:8] - film_grain_params_ref_idx, For Write request
 #define MULTI_DRIVER_NAME "ammvdec_av1_v4l"
 
 #define AUX_BUF_ALIGN(adr) ((adr + 0xf) & (~0xf))
+
+//v0.4.157-g34f04a6
+#define UCODE_SWAP_VERSION 4
+#define UCODE_SWAP_SUBMIT_COUNT 157
+static u32 enable_swap = 1;
+
 #ifdef DEBUG_UCODE_LOG
 static u32 prefix_aux_buf_size;
 static u32 suffix_aux_buf_size;
@@ -212,6 +220,8 @@ static u32 force_pts_unstable;
 static u32 mv_buf_margin = REF_FRAMES;
 static u32 mv_buf_dynamic_alloc;
 static u32 force_max_one_mv_buffer_size;
+static u32 efficiency_mode = 1;
+static u32 debug_mask = 0xffffffff;
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
 /* double_write_mode:
@@ -672,6 +682,14 @@ struct AV1HW_s {
 #endif
 	u32 fgs_valid;
 
+#ifdef SWAP_HEVC_UCODE
+	bool is_swap;
+	u32 swap_size;
+	void *swap_virt_addr;
+	ulong swap_phy_addr;
+	ulong swap_mem_handle;
+#endif
+
 	u8 aux_data_dirty;
 	u32 prefix_aux_size;
 	u32 suffix_aux_size;
@@ -858,10 +876,11 @@ struct AV1HW_s {
 
 	u32 av1_segment_data[8];
 	u32 av1_dec_info[3];
+	bool enable_ucode_swap;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
-int av1_print(struct AV1HW_s *hw,
+int av1_debug(struct AV1HW_s *hw,
 	int flag, const char *fmt, ...)
 {
 	unsigned char buf[HEVC_PRINT_BUF];
@@ -881,6 +900,17 @@ int av1_print(struct AV1HW_s *hw,
 	}
 	return 0;
 }
+
+#define av1_print(hw, flag, fmt, args...)					\
+	do {									\
+		if (hw == NULL ||    \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << hw->index)) \
+		&& (debug & flag))) { \
+			av1_debug(hw, flag, fmt, ##args);	\
+			} \
+	} while (0)
 
 unsigned char av1_is_debug(int flag)
 {
@@ -964,11 +994,11 @@ static void trigger_schedule(struct AV1HW_s *hw)
 static void reset_process_time(struct AV1HW_s *hw)
 {
 	if (hw->start_process_time) {
-		unsigned process_time =
-			1000 * (jiffies - hw->start_process_time) / HZ;
+		//unsigned process_time =
+		//	1000 * (jiffies - hw->start_process_time) / HZ;
 		hw->start_process_time = 0;
-		if (process_time > max_process_time[hw->index])
-			max_process_time[hw->index] = process_time;
+		//if (process_time > max_process_time[hw->index])
+		//	max_process_time[hw->index] = process_time;
 	}
 }
 
@@ -2041,12 +2071,17 @@ static struct device *cma_dev;
 #define HEVC_DEC_STATUS_REG       HEVC_ASSIST_SCRATCH_0
 #define HEVC_FG_STATUS			HEVC_ASSIST_SCRATCH_B
 #define HEVC_RPM_BUFFER           HEVC_ASSIST_SCRATCH_1
-#define AOM_AV1_ADAPT_PROB_REG        HEVC_ASSIST_SCRATCH_3
+//#define AOM_AV1_ADAPT_PROB_REG        HEVC_ASSIST_SCRATCH_3
 #define AOM_AV1_MMU_MAP_BUFFER        HEVC_ASSIST_SCRATCH_4 // changed to use HEVC_ASSIST_MMU_MAP_ADDR
 #define AOM_AV1_DAALA_TOP_BUFFER      HEVC_ASSIST_SCRATCH_5
 //#define HEVC_SAO_UP               HEVC_ASSIST_SCRATCH_6
 //#define HEVC_STREAM_SWAP_BUFFER   HEVC_ASSIST_SCRATCH_7
+#ifdef SWAP_HEVC_UCODE
+#define AOM_AV1_CDF_BUFFER_W      HEVC_ASSIST_SCRATCH_3
+#define HEVC_UCODE_SWAP_BUFFER    HEVC_ASSIST_SCRATCH_8
+#else
 #define AOM_AV1_CDF_BUFFER_W      HEVC_ASSIST_SCRATCH_8
+#endif
 #define AOM_AV1_CDF_BUFFER_R      HEVC_ASSIST_SCRATCH_9
 #define AOM_AV1_COUNT_SWAP_BUFFER     HEVC_ASSIST_SCRATCH_A
 #define AOM_AV1_SEG_MAP_BUFFER_W  AV1_SEG_W_ADDR  //    HEVC_ASSIST_SCRATCH_B
@@ -2057,6 +2092,7 @@ static struct device *cma_dev;
 #define HEVC_WAIT_FLAG	          HEVC_ASSIST_SCRATCH_E
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
 //#define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
+#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_G
 
 #ifdef MULTI_INSTANCE_SUPPORT
 #define HEVC_DECODE_COUNT       HEVC_ASSIST_SCRATCH_M
@@ -4796,15 +4832,15 @@ static void config_dblk_hw(struct AV1HW_s *hw)
 		"[test.c] cur_frame : %p prev_frame : %p - %p \n",
 		cm->cur_frame, cm->prev_frame, av1_get_primary_ref_frame_buf(cm));
 	if (cm->cur_frame <= 0) {
-		WRITE_VREG(AOM_AV1_CDF_BUFFER_W, buf_spec->cdf_buf.buf_start);
+		WRITE_VREG(enable_swap?HEVC_ASSIST_SCRATCH_3:HEVC_ASSIST_SCRATCH_8,
+			buf_spec->cdf_buf.buf_start);
 		WRITE_VREG(AOM_AV1_SEG_MAP_BUFFER_W, buf_spec->seg_map.buf_start);
-	}
-	else {
+	} else {
 		av1_print(hw, AOM_DEBUG_HW_MORE,
 			"[test.c] Config WRITE CDF_BUF/SEG_MAP_BUF  : %d\n",
 			cur_pic_config->index);
-		WRITE_VREG(AOM_AV1_CDF_BUFFER_W,
-			buf_spec->cdf_buf.buf_start + (0x8000*cur_pic_config->index));
+		WRITE_VREG(enable_swap?HEVC_ASSIST_SCRATCH_3:HEVC_ASSIST_SCRATCH_8,
+			buf_spec->cdf_buf.buf_start + (0x8000*cur_pic_config->index)); //AOM_AV1_CDF_BUFFER_W
 		WRITE_VREG(AOM_AV1_SEG_MAP_BUFFER_W,
 			buf_spec->seg_map.buf_start + ((buf_spec->seg_map.buf_size / 16) * cur_pic_config->index));
 	}
@@ -5120,49 +5156,59 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 	/*if (debug & AV1_DEBUG_BUFMGR_MORE)
 		pr_info("%s\n", __func__);*/
 	if (mask & HW_MASK_FRONT) {
-		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+		if (!efficiency_mode) {
+			data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
 #ifdef CHANGE_REMOVED
-		/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
-		data32 &= ~(7 << 29);
-		data32 |= (3 << 29);
-		data32 = data32 |
-		(1 << 24) |/*stream_buffer_empty_int_amrisc_enable*/
-		(1 << 22) |/*stream_fifo_empty_int_amrisc_enable*/
-		(1 << 7) |/*dec_done_int_cpu_enable*/
-		(1 << 4) |/*startcode_found_int_cpu_enable*/
-		(0 << 3) |/*startcode_found_int_amrisc_enable*/
-		(1 << 0)	/*parser_int_enable*/
-		;
+			/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
+			data32 &= ~(7 << 29);
+			data32 |= (3 << 29);
+			data32 = data32 |
+			(1 << 24) |/*stream_buffer_empty_int_amrisc_enable*/
+			(1 << 22) |/*stream_fifo_empty_int_amrisc_enable*/
+			(1 << 7) |/*dec_done_int_cpu_enable*/
+			(1 << 4) |/*startcode_found_int_cpu_enable*/
+			(0 << 3) |/*startcode_found_int_amrisc_enable*/
+			(1 << 0)	/*parser_int_enable*/
+			;
 #else
-		data32 = data32 & 0x03ffffff;
-		data32 = data32 |
-			(3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
-			(3 << 26) |  // stream_fifo_empty_int_ctl ( 4 interrupt)
-			(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
-			(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+			data32 = data32 & 0x03ffffff;
+			data32 = data32 |
+				(3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
+				(3 << 26) |  // stream_fifo_empty_int_ctl ( 4 interrupt)
+				(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
+				(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
 #ifdef AOM_AV1_HED_FB
 #ifdef DUAL_DECODE
-		// For HALT CCPU test. Use Pull inside CCPU to generate interrupt
-		// (1 << 9) |  // fed_fb_slice_done_int_amrisc_enable
+			// For HALT CCPU test. Use Pull inside CCPU to generate interrupt
+			// (1 << 9) |  // fed_fb_slice_done_int_amrisc_enable
 #else
-			(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
+				(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
 #endif
 #endif
-			(1 << 7) |  // dec_done_int_cpu_enable
-			(1 << 4) |  // startcode_found_int_cpu_enable
-			(0 << 3) |  // startcode_found_int_amrisc_enable
-			(1 << 0)    // parser_int_enable
-			;
+				(1 << 7) |  // dec_done_int_cpu_enable
+				(1 << 4) |  // startcode_found_int_cpu_enable
+				(0 << 3) |  // startcode_found_int_amrisc_enable
+				(1 << 0)    // parser_int_enable
+				;
 #endif
-		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+			WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
-		data32 = READ_VREG(HEVC_SHIFT_STATUS);
-		data32 = data32 |
-		(0 << 1) |/*emulation_check_off AV1
-			do not have emulation*/
-		(1 << 0)/*startcode_check_on*/
-		;
-		WRITE_VREG(HEVC_SHIFT_STATUS, data32);
+			data32 = READ_VREG(HEVC_SHIFT_STATUS);
+			data32 = data32 |
+			(0 << 1) |/*emulation_check_off AV1
+				do not have emulation*/
+			(1 << 0)/*startcode_check_on*/
+			;
+			WRITE_VREG(HEVC_SHIFT_STATUS, data32);
+
+			WRITE_VREG(HEVC_CABAC_CONTROL,
+				(1 << 0)/*cabac_enable*/
+			);
+
+			WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
+				(1 << 0)/* hevc_parser_core_clk_en*/
+			);
+		}
 		WRITE_VREG(HEVC_SHIFT_CONTROL,
 		(0 << 14) | /*disable_start_code_protect*/
 		(1 << 10) | /*length_zero_startcode_en for AV1*/
@@ -5174,26 +5220,24 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 		(1 << 0)   /*stream_shift_enable*/
 		);
 
-		WRITE_VREG(HEVC_CABAC_CONTROL,
-			(1 << 0)/*cabac_enable*/
-		);
-
-		WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
-			(1 << 0)/* hevc_parser_core_clk_en*/
-		);
-
 		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 	}
 
 	if (mask & HW_MASK_BACK) {
 		/*Initial IQIT_SCALELUT memory
 		-- just to avoid X in simulation*/
-		if (is_rdma_enable())
+		if (is_rdma_enable()) {
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
 			rdma_back_end_work(hw->rdma_phy_adr, RDMA_SIZE);
-		else {
-			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
-			for (i = 0; i < 1024; i++)
-				WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+		} else {
+			if (efficiency_mode)
+				WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+			else {
+				WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+				WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
+				for (i = 0; i < 1024; i++)
+					WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
+			}
 		}
 	}
 
@@ -5232,6 +5276,7 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 			WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 		}
 
+		if (!efficiency_mode)
 		WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 			/*  (1 << 8) |*/ /*sao_sw_pred_enable*/
 			(1 << 5) | /*parser_sao_if_en*/
@@ -5241,23 +5286,25 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 	}
 
 	if (mask & HW_MASK_BACK) {
-		/*Changed to Start MPRED in microcode*/
-		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-			(0 << 1) | /*enable ipp*/
-			(1 << 0)   /*software reset ipp and mpp*/
-		);
+		if (!efficiency_mode) {
+			/*Changed to Start MPRED in microcode*/
+			WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+				(0 << 1) | /*enable ipp*/
+				(1 << 0)   /*software reset ipp and mpp*/
+			);
 #ifdef CHANGE_REMOVED
-		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-			(1 << 1) | /*enable ipp*/
-			(0 << 0)   /*software reset ipp and mpp*/
-		);
+			WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+				(1 << 1) | /*enable ipp*/
+				(0 << 0)   /*software reset ipp and mpp*/
+			);
 #else
-		WRITE_VREG(HEVCD_IPP_TOP_CNTL,
-			(3 << 4) | // av1
-			(1 << 1) | /*enable ipp*/
-			(0 << 0)   /*software reset ipp and mpp*/
-		);
+			WRITE_VREG(HEVCD_IPP_TOP_CNTL,
+				(3 << 4) | // av1
+				(1 << 1) | /*enable ipp*/
+				(0 << 0)   /*software reset ipp and mpp*/
+			);
 #endif
+		}
 	if (get_double_write_mode(hw) & 0x10) {
 		if (is_dw_p010(hw)) {
 			/* Enable P010 reference read mode for MC */
@@ -5439,6 +5486,16 @@ static void av1_local_uninit(struct AV1HW_s *hw, bool reset_flag)
 	}
 
 	vav1_mmu_map_free(hw);
+
+#ifdef SWAP_HEVC_UCODE
+		if (!fw_tee_enabled() && hw->is_swap) {
+			if (hw->swap_virt_addr)
+				codec_mm_dma_free_coherent(hw->swap_mem_handle);
+			hw->swap_mem_handle = 0;
+			hw->swap_virt_addr = NULL;
+			hw->swap_phy_addr = 0;
+		}
+#endif
 
 	if (hw->gvs)
 		vfree(hw->gvs);
@@ -8424,10 +8481,14 @@ static int load_param(struct AV1HW_s *hw, union param_u *params, uint32_t dec_st
 	    get_rpm_param(params);
 	}
 	else {
-		for (i = 0; i < (RPM_END-RPM_BEGIN); i += 4) {
-			int32_t ii;
-			for (ii = 0; ii < 4; ii++) {
-				params->l.data[i+ii]=hw->rpm_ptr[i+3-ii];
+		if (efficiency_mode) {
+			memcpy(params->l.data, hw->rpm_ptr,
+				(RPM_VALID_E - RPM_BEGIN) * sizeof(hw->rpm_ptr[0]));
+		} else {
+			for (i = 0; i < (RPM_VALID_E - RPM_BEGIN); i += 4) {
+				int ii;
+				for (ii = 0; ii < 4; ii++)
+					params->l.data[i+ii]=hw->rpm_ptr[i+3-ii];
 			}
 		}
 	}
@@ -9676,8 +9737,11 @@ static void vav1_prot_init(struct AV1HW_s *hw, u32 mask)
 	    WRITE_VREG(HEVC_STREAM_FIFO_CTL, data32);
 	}
 #endif
+
+	if (!efficiency_mode) {
 	WRITE_VREG(HEVC_SHIFT_STARTCODE, 0x000000001);
 	WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
+	}
 
 	WRITE_VREG(HEVC_WAIT_FLAG, 1);
 
@@ -9692,7 +9756,7 @@ static void vav1_prot_init(struct AV1HW_s *hw, u32 mask)
 	/* disable PSCALE for hardware sharing */
 	WRITE_VREG(HEVC_PSCALE_CTRL, 0);
 
-	WRITE_VREG(DEBUG_REG1, 0x0);
+	//WRITE_VREG(DEBUG_REG1, 0x0);
 	/*check vps/sps/pps/i-slice in ucode*/
 	WRITE_VREG(NAL_SEARCH_CTL, 0x8);
 
@@ -9791,7 +9855,7 @@ static s32 vav1_init(struct vdec_s *vdec)
 static s32 vav1_init(struct AV1HW_s *hw)
 {
 #endif
-	int ret;
+	int ret, size = -1;
 	int i;
 	int fw_size = 0x1000 * 16;
 	struct firmware_s *fw = NULL;
@@ -9801,21 +9865,70 @@ static s32 vav1_init(struct AV1HW_s *hw)
 	if (vav1_local_init(hw, false) < 0)
 		return -EBUSY;
 
+	if ((get_decoder_firmware_version() <= UCODE_SWAP_VERSION) &&
+		(get_decoder_firmware_submit_count() < UCODE_SWAP_SUBMIT_COUNT)) {
+		hw->enable_ucode_swap = false;
+	} else {
+		if (enable_swap)
+			hw->enable_ucode_swap = true;
+		else
+			hw->enable_ucode_swap = false;
+	}
+	av1_print(hw, 0, "%s ucode version %d.%d, swap enable %d\n", __func__,
+		get_decoder_firmware_version(), get_decoder_firmware_submit_count(),
+		hw->enable_ucode_swap);
+
 	fw = fw_firmare_s_creat(fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 
-	av1_print(hw, AOM_DEBUG_HW_MORE, "%s %d\n", __func__, __LINE__);
-#ifdef DEBUG_USE_VP9_DEVICE_NAME
-	if (get_firmware_data(VIDEO_DEC_VP9_MMU, fw->data) < 0) {
-#else
-	if (get_firmware_data(VIDEO_DEC_AV1_MMU, fw->data) < 0) {
-#endif
-		pr_err("get firmware fail.\n");
-		printk("%s %d\n", __func__, __LINE__);
-		vfree(fw);
-		return -1;
+	if (hw->enable_ucode_swap) {
+		size = get_firmware_data(VIDEO_DEC_AV1_MMU_SWAP, fw->data);
+		if (size < 0) {
+			av1_print(hw, 0, "hevc can not get swap fw code\n");
+			size = get_firmware_data(VIDEO_DEC_AV1_MMU, fw->data);
+			hw->enable_ucode_swap = false;
+			hw->is_swap = false;
+		} else if (size)
+			hw->is_swap = true;	//local fw swap
+	} else {
+		size = get_firmware_data(VIDEO_DEC_AV1_MMU, fw->data);
+
+		if (size < 0) {
+			av1_print(hw, 0, "get firmware fail.\n");
+			vfree(fw);
+			return -1;
+		}
+		hw->is_swap = false;
 	}
+
+#ifdef SWAP_HEVC_UCODE
+	if (!fw_tee_enabled() && hw->is_swap) {
+		char *swap_data;
+		hw->swap_size = (4 * (4 * SZ_1K)); /*max 4 swap code, each 0x400*/
+		hw->swap_virt_addr =
+			codec_mm_dma_alloc_coherent(&hw->swap_mem_handle, &hw->swap_phy_addr,
+				hw->swap_size, "AV1_UCODE_SWAP");
+		if (!hw->swap_virt_addr) {
+			amhevc_disable();
+			av1_print(hw, 0, "av1 front swap ucode loaded fail.\n");
+			return -ENOMEM;
+		}
+		memcpy((u8 *)hw->swap_virt_addr, fw->data + SWAP_HEVC_OFFSET,
+				hw->swap_size);
+		swap_data = hw->swap_virt_addr;
+		av1_print(hw, 0, "ucode swap: %02x, %02x, %02x, %02x, \t%02x, %02x, %02x, %02x, \t%02x, %02x, %02x, %02x, \t%02x, %02x, %02x, %02x\n",
+			swap_data[0], swap_data[1], swap_data[2], swap_data[3],
+			swap_data[4], swap_data[5], swap_data[6], swap_data[7],
+			swap_data[8], swap_data[9], swap_data[10], swap_data[11],
+			swap_data[12], swap_data[13], swap_data[14], swap_data[15]);
+
+		av1_print(hw, 0,
+			"av1 front ucode swap loaded %lx\n",
+			hw->swap_phy_addr);
+	}
+#endif
+
 	av1_print(hw, AOM_DEBUG_HW_MORE, "%s %d\n", __func__, __LINE__);
 	fw->len = fw_size;
 
@@ -10817,7 +10930,20 @@ static void run_front(struct vdec_s *vdec)
 	  ignore reload.
 	*/
 	} else {
-		ret = amhevc_loadmc_ex(VFORMAT_AV1, NULL, hw->fw->data);
+		if (hw->enable_ucode_swap) {
+			ret = amhevc_loadmc_ex(VFORMAT_AV1,
+					"av1_mmu_swap", hw->fw->data);
+			if (ret < 0) {
+				ret = amhevc_loadmc_ex(VFORMAT_AV1,
+						NULL, hw->fw->data);
+				hw->enable_ucode_swap = false;
+			} else
+				hw->is_swap = true;
+		} else {
+			ret = amhevc_loadmc_ex(VFORMAT_AV1,
+					NULL, hw->fw->data);
+		}
+
 		if (ret < 0) {
 			amhevc_disable();
 			av1_print(hw, PRINT_FLAG_ERROR,
@@ -10828,12 +10954,29 @@ static void run_front(struct vdec_s *vdec)
 			vdec_schedule_work(&hw->work);
 			return;
 		}
-		vdec->mc_loaded = 1;
+
+		vdec->mc_loaded = 0;
 		vdec->mc_type = VFORMAT_AV1;
+#ifdef SWAP_HEVC_UCODE
+		if (!fw_tee_enabled() && hw->is_swap) {
+			WRITE_VREG(HEVC_UCODE_SWAP_BUFFER, hw->swap_phy_addr);
+		}
+#endif
 	}
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
+
+	/*
+		HEVC_EFFICIENCY_MODE
+		bit[0] 1: open efficiency mode, 0: close efficiency mode
+		bit[1] 1: no support rdma, 0: support rdma
+	*/
+	if (efficiency_mode) {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
+	} else {
+		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+	}
 	if (av1_hw_ctx_restore(hw) < 0) {
 		vdec_schedule_work(&hw->work);
 		return;
@@ -12074,6 +12217,12 @@ MODULE_PARM_DESC(enable_single_slice, "\n  enable_single_slice\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
+
+module_param(enable_swap, uint, 0664);
+MODULE_PARM_DESC(enable_swap, "\n enable_swap\n");
+
+module_param(efficiency_mode, uint, 0664);
+MODULE_PARM_DESC(efficiency_mode, "\n  efficiency_mode\n");
 
 module_init(amvdec_av1_driver_init_module);
 module_exit(amvdec_av1_driver_remove_module);

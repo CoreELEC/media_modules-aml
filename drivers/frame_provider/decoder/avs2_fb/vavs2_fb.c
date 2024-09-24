@@ -7156,7 +7156,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		|| (dec_status == HEVC_DECPIC_DATA_ERROR)) {
 		struct avs2_frame_s *pic = dec->avs2_dec.hc.cur_pic;
 
-		if (efficiency_mode) {
+		if ((dec->front_back_mode == 1) && efficiency_mode) {
 			if (!wait_for_completion_timeout(&dec->complete, msecs_to_jiffies(34)))
 				avs2_print(dec, 0, "!!!wait for completion timeout %d\n", __LINE__);
 		}

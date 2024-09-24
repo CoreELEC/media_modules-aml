@@ -7559,7 +7559,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		struct avs3_frame_s *pic = dec->avs3_dec.cur_pic;
 		u32 shiftbytes = 0;
 
-		if (efficiency_mode) {
+		if ((dec->front_back_mode == 1) && efficiency_mode) {
 			if (!wait_for_completion_timeout(&dec->complete, msecs_to_jiffies(34)))
 				avs3_print(dec, 0, "!!!wait for completion timeout %d\n", __LINE__);
 		}

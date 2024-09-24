@@ -2160,6 +2160,7 @@ typedef struct AV1Decoder {
 
 #define RPM_BEGIN                                              0x200
 #define RPM_END                                                0x280
+#define RPM_VALID_E                                            0x260
 
 typedef union param_u {
     struct {
