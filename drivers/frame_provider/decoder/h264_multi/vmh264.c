@@ -2225,7 +2225,8 @@ static unsigned char is_buf_spec_in_use(struct vdec_h264_hw_s *hw,
 	if (hw->buffer_spec[buf_spec_num].used == 1 ||
 		hw->buffer_spec[buf_spec_num].used == 2 ||
 		hw->buffer_spec[buf_spec_num].used == 3 ||
-		hw->buffer_spec[buf_spec_num].used == 5)
+		hw->buffer_spec[buf_spec_num].used == 5 ||
+		hw->buffer_spec[buf_spec_num].vf_ref)
 		ret = 1;
 	return ret;
 }
