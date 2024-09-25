@@ -547,7 +547,7 @@ struct vdec_avs_hw_s {
 	ulong user_data_handle;
 	ulong lmem_phy_handle;
 	bool force_interlaced_frame;
-	bool pic_put_dpb;
+	bool need_recycle_buf;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -2665,7 +2665,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (level < pre_decode_buf_level) {
 			hw->not_run_ready++;
-			return 0;
+			return PRE_LEVEL_NOT_ENOUGH;
 		}
 	}
 
@@ -3596,6 +3596,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		debug_print(hw, PRINT_FLAG_PTS,
 			"interlace1 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
 
+		decoder_do_frame_check(hw_to_vdec(hw), vf);
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
@@ -4181,7 +4182,7 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 		if (UserDataHandler(hw))
 			return IRQ_HANDLED;
 #endif
-		hw->pic_put_dpb = false;
+		hw->need_recycle_buf = true;
 		reg = READ_VREG(AVS_BUFFEROUT);
 		if (reg) {
 			unsigned short decode_pic_count
@@ -4236,6 +4237,8 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 			}
 #endif
 			hw->res_ch_flag = 0;
+			hw->need_recycle_buf = false;
+
 			if (hw->throw_pb_flag && picture_type != I_PICTURE) {
 				debug_print(hw, PRINT_FLAG_DECODING,
 					"%s WRITE_VREG(AVS_BUFFERIN, 0x%x) for throwing picture with type of %d\n",
@@ -4244,9 +4247,10 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 
 				WRITE_VREG(AVS_BUFFERIN, ~(1 << hw->decoding_index));
 				hw->buf_use[hw->decoding_index]--;
+				avs_buf_ref_process_for_exception(hw);
+				vdec_v4l_post_error_frame_event(ctx);
 			} else {
 				u32 decode_status = READ_VREG(DECODE_STATUS) & 0xff;
-				hw->pic_put_dpb = true;
 
 				if (vdec_frame_based(vdec) && (decode_status == DECODE_STATUS_DECODE_BUF_EMPTY ||
 						decode_status == DECODE_STATUS_SEARCH_BUF_EMPTY)) {
@@ -4305,12 +4309,16 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					hw->decode_decode_cont_start_code = (status_reg >> 8) & 0xff;
 				} else
 					hw->decode_status_skip_pic_done_flag = 0;
-				hw->decode_pic_count++;
-				vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
-				if ((hw->decode_pic_count & 0xffff) == 0) {
-					/*make ucode do not handle it as first picture*/
+
+				if (hw->v4l_params_parsed) {
 					hw->decode_pic_count++;
+					if ((hw->decode_pic_count & 0xffff) == 0) {
+						/*make ucode do not handle it as first picture*/
+						hw->decode_pic_count++;
+					}
 				}
+
+				vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 				reset_process_time(hw);
 				hw->dec_result = DEC_RESULT_DONE;
 #if DEBUG_MULTI_FLAG == 1
@@ -4321,6 +4329,11 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 				vavs_save_regs(hw);
 				if (reg) {
 					hw->buf_use[hw->decoding_index]++;
+				}
+
+				if (hw->need_recycle_buf == true) {
+					avs_buf_ref_process_for_exception(hw);
+					vdec_v4l_post_error_frame_event(ctx);
 				}
 
 				debug_print(hw, PRINT_FLAG_DECODING,
@@ -4358,7 +4371,8 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					vdec_v4l_post_error_frame_event(ctx);
 				} else
 					hw->dec_result = DEC_RESULT_AGAIN;
-				if (!hw->pic_put_dpb)
+
+				if (hw->need_recycle_buf == true)
 					avs_buf_ref_process_for_exception(hw);
 				debug_print(hw, PRINT_FLAG_DECODING,
 					"%s BUF_EMPTY, READ_VREG(DECODE_STATUS) = 0x%x, decode_status 0x%x, buf_status 0x%x, scratch_8 (AVS_BUFFERIN) 0x%x, dec_result = 0x%x, decode_pic_count = %d, bit_cnt=0x%x, hw->decode_status_skip_pic_done_flag = %d, hw->decode_decode_cont_start_code = 0x%x, AV_SCRATCH_B=0x%x\n",
