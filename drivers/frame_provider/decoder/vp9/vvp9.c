@@ -9985,8 +9985,9 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 		}
 
-		if (pbi->vf_pre_count > 0 &&
-			!pbi->low_latency_flag)
+		if ((!pbi->low_latency_flag &&
+			pbi->vf_pre_count > 0) ||
+			pbi->common.show_existing_frame)
 			vp9_bufmgr_postproc(pbi);
 	}
 
