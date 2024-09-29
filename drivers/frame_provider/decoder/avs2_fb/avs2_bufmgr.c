@@ -561,6 +561,12 @@ void Get_PB_Picture_Header(struct avs2_decoder *avs2_dec)
 		predict    = get_param(rpm_param->p.predict, "use RPS in SPS");
 		if (predict) {
 			RPS_idx = get_param(rpm_param->p.RPS_idx, "predict for RPS");
+
+			if (RPS_idx >= MAXGOP) {
+				RPS_idx = MAXGOP - 1;
+				pr_info("Warning, %s: RPS_idx %d beyond range, force to MAXGOP - 1\n",
+					__func__, RPS_idx);
+			}
 			hd->curr_RPS = hd->decod_RPS[RPS_idx];
 		} /*else*/
 		{
@@ -572,6 +578,12 @@ void Get_PB_Picture_Header(struct avs2_decoder *avs2_dec)
 			hd->curr_RPS.num_of_ref =
 				get_param(rpm_param->p.num_of_ref_cur,
 				"num of reference picture");
+
+			if (hd->curr_RPS.num_of_ref > MAXREF) {
+				hd->curr_RPS.num_of_ref = MAXREF;
+				pr_info("Warning, %s: num_of_ref %d beyond range, force to MAXREF\n",
+					__func__, hd->curr_RPS.num_of_ref);
+			}
 			for (j = 0; j < hd->curr_RPS.num_of_ref; j++) {
 				hd->curr_RPS.ref_pic[j] =
 					get_param(rpm_param->p.ref_pic_cur[j],
