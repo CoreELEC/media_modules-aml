@@ -382,7 +382,7 @@ static s32 vpu_free_buffers(struct file *filp)
 	}
 	return 0;
 }
-
+#if 0
 static u32 vpu_is_buffer_cached(struct file *filp, ulong vm_pgoff)
 {
 	struct vpudrv_buffer_pool_t *pool, *n;
@@ -406,7 +406,7 @@ static u32 vpu_is_buffer_cached(struct file *filp, ulong vm_pgoff)
 	enc_pr(LOG_ALL, "[-]vpu_is_buffer_cached, ret:%d\n", cached);
 	return cached;
 }
-
+#endif
 static s32 vpu_multi_dma_buf_release(struct file *filp)
 {
 	struct vpu_multi_dma_buf_pool_t *pool, *n;
@@ -685,6 +685,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 					up(&s_vpu_sem);
 					break;
 				}
+				vbp->vb.base = s_video_memory.phys_addr;
 				ret = copy_to_user((void __user *)arg,
 					&(vbp->vb),
 					sizeof(struct vpudrv_buffer_t));
@@ -751,6 +752,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 					(compat_ulong_t)vbp->vb.phys_addr;
 				buf32.virt_addr =
 					(compat_ulong_t)vbp->vb.virt_addr;
+				buf32.base = (compat_ulong_t)s_video_memory.phys_addr;
 
 				ret = copy_to_user((void __user *)arg,
 					&buf32,
@@ -1114,6 +1116,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 				}
 				if (vpu_alloc_dma_buffer(
 					&s_common_memory) != -1) {
+					s_common_memory.base = s_video_memory.phys_addr;
 					ret = copy_to_user((void __user *)arg,
 						&s_common_memory,
 						sizeof(struct vpudrv_buffer_t));
@@ -1167,6 +1170,7 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 					buf32.virt_addr =
 						(compat_ulong_t)
 						s_common_memory.virt_addr;
+					buf32.base = (compat_ulong_t)s_video_memory.phys_addr;
 					ret = copy_to_user((void __user *)arg,
 						&buf32,
 						sizeof(
@@ -1886,15 +1890,9 @@ static s32 vpu_map_to_physical_memory(
 #else
 	vm_flags_set(vm, VM_IO | VM_RESERVED);
 #endif
-	if (vm->vm_pgoff ==
-		(s_common_memory.phys_addr >> PAGE_SHIFT)) {
-		vm->vm_page_prot =
-			pgprot_noncached(vm->vm_page_prot);
-	} else {
-		if (vpu_is_buffer_cached(fp, vm->vm_pgoff) == 0)
-			vm->vm_page_prot =
-				pgprot_noncached(vm->vm_page_prot);
-	}
+
+	vm->vm_pgoff = (s_video_memory.phys_addr >> PAGE_SHIFT) + vm->vm_pgoff;
+	vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
 	/* vm->vm_page_prot = pgprot_writecombine(vm->vm_page_prot); */
 	if (!pfn_valid(vm->vm_pgoff)) {
 		enc_pr(LOG_ERROR, "%s invalid pfn\n", __FUNCTION__);
@@ -1940,10 +1938,15 @@ static s32 vpu_map_to_instance_pool_memory(
 static s32 vpu_mmap(struct file *fp, struct vm_area_struct *vm)
 {
 	/* if (vm->vm_pgoff == (s_vpu_register.phys_addr >> PAGE_SHIFT)) */
+
 	if ((vm->vm_end - vm->vm_start == s_vpu_register.size + 1) &&
 						(vm->vm_pgoff == 0)) {
 		vm->vm_pgoff = (s_vpu_register.phys_addr >> PAGE_SHIFT);
 		return vpu_map_to_register(fp, vm);
+	}
+
+	if ((vm->vm_end - vm->vm_start == s_common_memory.size)) {
+		return vpu_map_to_physical_memory(fp, vm);
 	}
 
 	if (vm->vm_pgoff == 0)
