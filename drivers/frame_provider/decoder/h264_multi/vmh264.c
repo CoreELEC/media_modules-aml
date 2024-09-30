@@ -6234,11 +6234,11 @@ static int clear_mmu_config(struct vdec_h264_hw_s *hw)
 
 	vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
 
-	vdec_core_release(vdec, hw->mask);
-	hw->mask = CORE_MASK_VDEC_1;
-	vdec_core_request(vdec, hw->mask);
-
 	if (!is_vdec_hevc_combine()) {
+		vdec_core_release(vdec, hw->mask);
+		hw->mask = CORE_MASK_VDEC_1;
+		vdec_core_request(vdec, hw->mask);
+
 		if (is_support_dual_core())
 			vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
 		else
@@ -6330,12 +6330,16 @@ int set_mmu_config(struct vdec_h264_hw_s *hw)
 
 	hevc_source_changed(VFORMAT_HEVC, 3840, 2160, 60);
 
-	if (is_support_dual_core())
-		vdec_core_request(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
-			| CORE_MASK_HEVC_BACK | CORE_MASK_COMBINE);
-	else
-		vdec_core_request(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
-			| CORE_MASK_COMBINE);
+	if (!(hw->mask & CORE_MASK_HEVC) && !is_vdec_hevc_combine()) {
+		vdec_core_release(vdec, hw->mask);
+		if (is_support_dual_core())
+			hw->mask = CORE_MASK_VDEC_1 | CORE_MASK_HEVC
+				| CORE_MASK_HEVC_BACK | CORE_MASK_COMBINE;
+		else
+			hw->mask = CORE_MASK_VDEC_1 | CORE_MASK_HEVC | CORE_MASK_COMBINE;
+		vdec_core_request(vdec, hw->mask);
+	}
+
 	dpb_print(DECODE_ID(hw), 0, "%s mmu_enable %d double_write_mode 0x%x\n",
 		__func__, hw->mmu_enable, hw->double_write_mode);
 
@@ -6361,6 +6365,19 @@ static inline bool pre_proc_for_mmu(struct vdec_h264_hw_s *hw, bool field_flag)
 			if (hw->seq_info2 == 0)
 				hw->init_flag = 0;
 			return true;
+		}
+
+		if ((hw->mask & CORE_MASK_HEVC) && !is_vdec_hevc_combine()) {
+			struct vdec_s *vdec = hw_to_vdec(hw);
+
+			vdec_core_release(vdec, hw->mask);
+			hw->mask = CORE_MASK_VDEC_1;
+			vdec_core_request(vdec, hw->mask);
+
+			if (is_support_dual_core())
+				vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
+			else
+				vdec_core_finish_run(vdec, CORE_MASK_HEVC);
 		}
 	}
 
@@ -11679,18 +11696,7 @@ result_done:
 
 	hw->timeout_flag = TIMEOUT_INIT;
 	/* mark itself has all HW resource released and input released */
-	if (vdec->parallel_dec == 1) {
-		if (hw->mmu_enable == 0)
-			vdec_core_finish_run(vdec, CORE_MASK_VDEC_1);
-		else {
-			if (is_support_dual_core())
-				vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
-					| CORE_MASK_HEVC_BACK);
-			else
-				vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
-		}
-	} else
-		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
+	vdec_core_finish_run(vdec, hw->mask & (~CORE_MASK_COMBINE));
 
 	wake_up_interruptible(&hw->wait_q);
 
@@ -11902,7 +11908,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	else
 		not_run_ready[DECODE_ID(hw)]++;
 	if (vdec->parallel_dec == 1) {
-		if (hw->mmu_enable == 0)
+		if (hw->mmu_enable == 0 && hw->double_write_mode == DM_YUV_ONLY)
 			return ret ? (CORE_MASK_VDEC_1) : 0;
 		else {
 			if (is_support_dual_core())
@@ -12996,8 +13002,8 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		   (u32)sei_data_buffer_remap); */
 	}
 #endif
-	dpb_print(DECODE_ID(hw), 0, "ammvdec_h264 mem-addr=%lx,buff_offset=%x,buf_start=%lx\n",
-		pdata->mem_start, hw->buf_offset, hw->cma_alloc_addr);
+	dpb_print(DECODE_ID(hw), 0, "ammvdec_h264 mem-addr=%lx,buff_offset=%x,buf_start=%lx, dw %d\n",
+		pdata->mem_start, hw->buf_offset, hw->cma_alloc_addr, hw->double_write_mode);
 
 	vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
 
@@ -13020,7 +13026,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
 	if (pdata->parallel_dec == 1) {
-		if (hw->mmu_enable == 0)
+		if (hw->double_write_mode == DM_YUV_ONLY)
 			hw->mask = CORE_MASK_VDEC_1;
 		else {
 			if (is_support_dual_core())

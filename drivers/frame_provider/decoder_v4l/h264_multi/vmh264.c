@@ -10605,11 +10605,11 @@ static int clear_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 
 	vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
 
-	vdec_core_release(vdec, hw->mask);
-	hw->mask = CORE_MASK_VDEC_1;
-	vdec_core_request(vdec, hw->mask);
-
 	if (!is_vdec_hevc_combine()) {
+		vdec_core_release(vdec, hw->mask);
+		hw->mask = CORE_MASK_VDEC_1;
+		vdec_core_request(vdec, hw->mask);
+
 		if (is_support_dual_core())
 			vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
 		else
@@ -10831,11 +10831,11 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		} else {
 			struct aml_vdec_cfg_infos cfg_info = { 0 };
 			if (hw->double_write_mode != DM_YUV_ONLY) {
-				vdec_core_release(vdec, hw->mask);
-				hw->mask = CORE_MASK_VDEC_1;
-				vdec_core_request(vdec, hw->mask);
-
 				if (!is_vdec_hevc_combine()) {
+					vdec_core_release(vdec, hw->mask);
+					hw->mask = CORE_MASK_VDEC_1;
+					vdec_core_request(vdec, hw->mask);
+
 					if (is_support_dual_core())
 						vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
 					else
