@@ -23,6 +23,10 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 
+#include "media_utils.h"
+
+static dhp_func g_dhp_fun;
+
 inline void *aml_media_mem_alloc(size_t size, gfp_t flags)
 {
 	return size >= SZ_8K ? vzalloc(size) : kzalloc(size, flags);
@@ -34,4 +38,36 @@ inline void aml_media_mem_free(const void *addr)
 	kvfree(addr);
 }
 EXPORT_SYMBOL(aml_media_mem_free);
+
+int dhp_func_reg(dhp_func fn)
+{
+	if (g_dhp_fun) {
+		pr_err("error!!,g_dhp_fun have register\n");
+		return -1;
+	}
+	g_dhp_fun = fn;
+
+	return 0;
+}
+EXPORT_SYMBOL(dhp_func_reg);
+
+int dhp_func_unreg(void)
+{
+	g_dhp_fun = NULL;
+
+	return 0;
+}
+EXPORT_SYMBOL(dhp_func_unreg);
+
+int dhp_func_request(void *src, void *dst, void *meta, int size)
+{
+	if (g_dhp_fun) {
+		return g_dhp_fun(src, dst, meta, size);
+	}
+
+	pr_err("DHP task request error.\n");
+
+	return -1;
+}
+EXPORT_SYMBOL(dhp_func_request);
 

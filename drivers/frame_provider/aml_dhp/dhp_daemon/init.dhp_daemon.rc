@@ -1,0 +1,8 @@
+service dhp_daemon /vendor/bin/dhp_daemon
+    class main
+    user root
+    group root system media
+    seclabel u:r:dhp_daemon:s0
+
+on property:sys.boot_completed=1
+    start dhp_daemon

@@ -1,0 +1,37 @@
+cc_prebuilt_library_shared {
+    name: "libavbc_soft_decoder",
+    vendor: true,
+    installable: true,
+    srcs: ["prebuild/lib/libavbc_soft_decoder.so"],
+    export_include_dirs: ["prebuild/include"],
+}
+
+cc_binary {
+    name: "dhp_daemon",
+    vendor: true,
+    srcs: [
+        "aml_dhp_common.c",
+        "aml_dhp_core.c",
+        "aml_dhp_daemon.c",
+    ],
+    shared_libs: [
+        "libavbc_soft_decoder",
+    ],
+    local_include_dirs: [
+        "prebuild/include",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+    ],
+}
+
+prebuilt_etc {
+    name: "init_dhp_daemon_rc",
+    vendor: true,
+    src: "init.dhp_daemon.rc",
+    sub_dir: "init",
+    filename: "init.dhp_daemon.rc",
+}
+
