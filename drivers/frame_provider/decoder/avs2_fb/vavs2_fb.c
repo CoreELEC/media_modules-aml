@@ -9511,10 +9511,6 @@ static void avs2_work_back_implement(struct AVS2Decoder_s *dec,
 
 	avs2_dec->backend_decoded_count++;
 
-	if (dec->front_back_mode == 1 ||
-		dec->front_back_mode == 3)
-		release_free_mmu_buffers(dec);
-
 	mutex_lock(&dec->fb_mutex);
 	avs2_dec->fb_rd_pos++;
 	if (avs2_dec->fb_rd_pos >= dec->fb_ifbuf_num)

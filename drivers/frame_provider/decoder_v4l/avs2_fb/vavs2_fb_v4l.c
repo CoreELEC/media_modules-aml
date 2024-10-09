@@ -5854,43 +5854,6 @@ static void avs2_recycle_mmu_buf_tail(struct AVS2Decoder_s *dec)
 	}
 }
 
-#if 0
-static void release_free_mmu_buffers(struct AVS2Decoder_s *dec)
-{
-	int ii;
-
-	if (!(dec->error_proc_policy & 0x2))
-		return ;
-
-	for (ii = 0; ii < dec->avs2_dec.ref_maxbuffer; ii++) {
-		struct avs2_frame_s *pic = dec->avs2_dec.fref[ii];
-
-		if (pic->bg_flag == 0 &&
-			pic->is_output == -1 &&
-			pic->index != INVALID_IDX &&
-#ifdef NEW_FRONT_BACK_CODE
-			pic->backend_ref == 0 &&
-#endif
-			pic->vf_ref == 0) {
-			if (pic->referred_by_others == 0) {
-				struct aml_buf *aml_buf = index_to_aml_buf(dec, pic->index);
-
-				avs2_print(dec, AVS2_DBG_BUFMGR,
-					"%s pic->index %d\n", __func__, pic->index);
-
-				ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
-				decoder_mmu_box_free_idx(aml_buf->fbc->mmu, aml_buf->fbc->index);
-#ifdef NEW_FB_CODE
-				if (dec->front_back_mode)
-					decoder_mmu_box_free_idx(aml_buf->fbc->mmu_1, aml_buf->fbc->index);
-#endif
-				ATRACE_COUNTER(dec->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
-			}
-		}
-	}
-}
-#endif
-
 static void avs2_recycle_mmu_buf(struct AVS2Decoder_s *dec)
 {
 	if (dec->cur_fb_idx_mmu != INVALID_IDX) {
