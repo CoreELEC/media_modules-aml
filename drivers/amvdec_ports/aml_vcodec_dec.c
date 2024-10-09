@@ -4647,6 +4647,15 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	if (ctx->enable_di_post)
 		ctx->bm.vpp_work_mode	= VPP_WORK_MODE_DI_POST;
 	aml_buf_configure(&ctx->bm, &config);
+	if (ctx->bm.config.enable_fbc) {
+		int ret;
+
+		ret = aml_buf_box_init(&ctx->bm);
+		if (ret < 0) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+				"early box init fail!, ret:%d\n", ret);
+		}
+	}
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 		"Picture buffer count: dec:%u, vpp:%u, ge2d:%u, margin:%u, total:%u\n",

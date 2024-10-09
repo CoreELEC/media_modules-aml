@@ -239,9 +239,10 @@ free_mmubox:
 	return -1;
 }
 
-static int aml_buf_box_init(struct aml_buf_mgr_s *bm)
+static int aml_buf_box_init(struct buf_core_mgr_s *bc)
 {
 	u32 dw_mode = DM_YUV_ONLY;
+	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
 	struct aml_vcodec_ctx *ctx = container_of(bm,
 		struct aml_vcodec_ctx, bm);
 	bool buff_alloc_done = false;
@@ -285,7 +286,7 @@ static int aml_buf_fbc_init(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 	struct aml_buf_fbc *fbc;
 	int ret, i;
 
-	if (aml_buf_box_init(bm))
+	if (aml_buf_box_init(&bm->bc))
 		return -EINVAL;
 
 
@@ -1139,6 +1140,7 @@ int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
 	bm->bc.mem_ops.free	= aml_buf_free;
 	bm->bc.status_walk	= aml_buf_walk;
 	bm->bc.reconfigure_planes	= aml_buf_reconfigure_planes_v4l;
+	bm->bc.box_init		= aml_buf_box_init;
 
 	kref_init(&bm->ref);
 

@@ -268,5 +268,17 @@ static inline void aml_buf_put_dma(struct aml_buf_mgr_s *bm)
 	bm->bc.put_dma(&bm->bc);
 }
 
+/*
+ * aml_buf_box_init() - Ues to alloc mmu box early.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ *
+ * Ues to alloc mmu box early.
+ */
+static inline int aml_buf_box_init(struct aml_buf_mgr_s *bm)
+{
+	return bm->bc.box_init(&bm->bc);
+}
+
 #endif //_AML_BUF_HELPER_H_
 
