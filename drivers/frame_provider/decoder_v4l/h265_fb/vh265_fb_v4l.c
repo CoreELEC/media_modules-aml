@@ -13816,8 +13816,8 @@ force_output:
 
 			if (!v4l_res_change(hevc, &hevc->param)) {
 				if (ctx->param_sets_from_ucode && !hevc->v4l_params_parsed) {
-					struct aml_vdec_ps_infos ps;
-					struct aml_vdec_cfg_infos cfg;
+					struct aml_vdec_ps_infos ps = { 0 };
+					struct aml_vdec_cfg_infos cfg = { 0 };
 					int log = hevc->param.p.log2_min_coding_block_size_minus3;
 					int log_s = hevc->param.p.log2_diff_max_min_coding_block_size;
 
