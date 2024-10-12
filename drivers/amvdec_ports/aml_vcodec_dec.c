@@ -908,7 +908,9 @@ void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
 					vf, vf->index, vf->frame_index, vb2_buf->index, dma, vf->vf_ext);
 			}
 		}
-	}
+	} else
+		vf->flag |= (ctx->config.parm.dec.cfg.low_latency_mode == 7) ?
+			VFRAME_FLAG_GAME_MODE : 0;
 }
 
 ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
