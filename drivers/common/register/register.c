@@ -201,9 +201,9 @@ void write_dos_reg(u32 addr, int val)
 }
 EXPORT_SYMBOL(write_dos_reg);
 
-int read_dos_reg(u32 addr)
+u32 read_dos_reg(u32 addr)
 {
-	int value;
+	u32 value;
 	struct bus_reg_desc *dos_desc = reg_desc[DOS_BUS];
 	s32 offset = 0;
 
@@ -214,7 +214,11 @@ int read_dos_reg(u32 addr)
 	if (unlikely((offset + addr) < 0)) {
 		pr_err("%s out of range, addr %x, offset %d\n",
 			__func__, addr, offset);
-		return -ENXIO;
+		/* The reg addr error only occurs when using a new reg,
+		 * the driver does not check the return value, so it is
+		 * meaningless to return an error code, just return 0.
+		 */
+		return 0;
 	}
 
 	value = readl(reg_base[DOS_BUS] + ((offset + addr) << 2));
@@ -226,12 +230,12 @@ int read_dos_reg(u32 addr)
 }
 EXPORT_SYMBOL(read_dos_reg);
 
-int read_dos_reg_comp(u32 addr)
+u32 read_dos_reg_comp(u32 addr)
 {
 	if (is_support_new_dos_dev())
 		return read_dos_reg(addr);
 	else
-		return aml_read_dosbus((uint)addr);
+		return (u32)aml_read_dosbus(addr);
 }
 EXPORT_SYMBOL(read_dos_reg_comp);
 

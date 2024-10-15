@@ -21,10 +21,6 @@
 #define __MEDIA_KERNEL_VERSION_H__
 
 #include <linux/version.h>
-ssize_t media_write(struct file *, const void *, size_t, loff_t *);
-ssize_t media_read(struct file *, void *, size_t, loff_t *);
-struct file *media_open(const char *, int, umode_t);
-int media_close(struct file *, fl_owner_t);
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
 #define KV_CLASS_CONST
