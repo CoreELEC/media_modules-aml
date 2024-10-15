@@ -3642,6 +3642,14 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
 		}
 
+		if (hw->mmu_enable &&
+			hw->canvas_mode == CANVAS_BLKMODE_LINEAR) {
+			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+			if (vf->type & VIDTYPE_VIU_NV21)
+				vf->type &= ~(VIDTYPE_VIU_NV21);
+			vf->type |= VIDTYPE_VIU_NV12;
+		}
+
 		if (!hw->enable_fence) {
 			hw->buffer_spec[buffer_index].used = 2;
 			if (i == 0)
