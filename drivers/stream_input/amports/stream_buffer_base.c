@@ -115,7 +115,7 @@ void stream_buffer_set_ext_buf(struct stream_buf_s *stbuf,
 	stbuf->buf_size 	= size;
 	stbuf->is_secure	= ((flag & STBUF_META_FLAG_SECURE) != 0);
 
-	switch (flag & 0xff) {
+	switch (flag & 0xa) {
 		case STBUF_META_FLAG_PTS_SERV:
 			stbuf->use_ptsserv = SINGLE_PTS_SERVER_DECODER_LOOKUP;
 			break;
