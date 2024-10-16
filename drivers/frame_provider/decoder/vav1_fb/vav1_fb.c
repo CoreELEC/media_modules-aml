@@ -1960,6 +1960,7 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 			hw->m_BUF[free_pic->index].v4l_ref_buf_addr;
 
 		aml_buf->state = FB_ST_DECODER;
+		free_pic->aux_data_size = 0;
 	}
 
 	if (debug & AV1_DEBUG_OUT_PTS) {
@@ -8497,10 +8498,13 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 
 		set_dv_data(hw);
 		if (cm->show_frame) {
+			set_pic_aux_data(hw, cur_pic_config, 0, 0);
+			av1_print(hw, AOM_DEBUG_AUX_DATA, "%s: aux_data_buf %p, aux_data_size %d, dv_data_size %d\n",
+						__func__, cur_pic_config->aux_data_buf, cur_pic_config->aux_data_size, hw->dv_data_size);
+			if (cur_pic_config->aux_data_size != 0)
+				hw->dv_data_size = 0;
 			if ((hw->dv_data_buf != NULL) && (hw->dv_data_size > 0))
 				copy_dv_data(hw, cur_pic_config);
-			else
-				set_pic_aux_data(hw, cur_pic_config, 0, 0);
 		}
 
 		/* to do:..

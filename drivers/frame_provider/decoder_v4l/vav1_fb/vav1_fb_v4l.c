@@ -1941,6 +1941,7 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 			&free_pic->aux_data_size, &free_pic->ctx_buf_idx);
 		v4l->aux_infos.bind_hdr10p_buffer(v4l, &free_pic->hdr10p_data_buf);
 		free_pic->hdr10p_data_size = 0;
+		free_pic->aux_data_size = 0;
 	}
 
 	if (debug & AV1_DEBUG_BUFMGR) {
@@ -7919,10 +7920,13 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 
 		set_dv_data(hw);
 		if (cm->show_frame) {
+			set_pic_aux_data(hw, cur_pic_config, 0, 0);
+			av1_print(hw, AOM_DEBUG_AUX_DATA, "%s: aux_data_buf %p, aux_data_size %d, dv_data_size %d\n",
+						__func__, cur_pic_config->aux_data_buf, cur_pic_config->aux_data_size, hw->dv_data_size);
+			if (cur_pic_config->aux_data_size != 0)
+				hw->dv_data_size = 0;
 			if ((hw->dv_data_buf != NULL) && (hw->dv_data_size > 0))
 				copy_dv_data(hw, cur_pic_config);
-			else
-				set_pic_aux_data(hw, cur_pic_config, 0, 0);
 		}
 
 		hw->frame_decoded = 0;
