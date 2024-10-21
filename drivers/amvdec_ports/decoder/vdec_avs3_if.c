@@ -381,11 +381,18 @@ static int parse_stream_cpu(struct vdec_avs3_inst *inst, u8 *buf, u32 size)
 static int vdec_avs3_probe(unsigned long h_vdec,
 	struct aml_vcodec_mem *bs)
 {
-	struct vdec_avs3_inst *inst =
-		(struct vdec_avs3_inst *)h_vdec;
+	struct vdec_avs3_inst *inst = (struct vdec_avs3_inst *)h_vdec;
+	struct aml_vdec_adapt *adapt_vdec = &inst->vdec;
+	struct aml_vcodec_ctx *ctx = inst->ctx;
 	u8 *buf = (u8 *)bs->vaddr;
 	u32 size = bs->size;
 	int ret = 0;
+
+	if (ctx->stream_mode) {
+		aml_es_write(ctx, bs->dbuf, bs->addr, size, bs->timestamp);
+		vdec_write_stream_data(adapt_vdec, (u32)bs->addr, size);
+		return 0;
+	}
 
 	if (inst->ctx->output_dma_mode) {
 		if (bs->model == VB2_MEMORY_MMAP) {
@@ -476,12 +483,19 @@ static int vdec_avs3_decode(unsigned long h_vdec,
 {
 	struct vdec_avs3_inst *inst = (struct vdec_avs3_inst *)h_vdec;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
+	struct aml_vcodec_ctx *ctx = inst->ctx;
 	u8 *buf = (u8 *) bs->vaddr;
 	u32 size = bs->size;
 	int ret = -1;
 
 	if (bs == NULL)
 		return -1;
+
+	if (ctx->stream_mode) {
+		aml_es_write(ctx, bs->dbuf, bs->addr, size, bs->timestamp);
+		vdec_write_stream_data(vdec, (u32)bs->addr, size);
+		return size;
+	}
 
 	if (vdec_input_full(vdec)) {
 		return -EAGAIN;

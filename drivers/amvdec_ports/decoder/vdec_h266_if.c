@@ -170,6 +170,7 @@ static u32 vdec_config_default_parms(u8 *parm)
 	pbuf += sprintf(pbuf, "h266_max_pic_h:4608;");
 	pbuf += sprintf(pbuf, "save_buffer_mode:0;");
 	pbuf += sprintf(pbuf, "no_head:0;");
+	pbuf += sprintf(pbuf, "parm_v4l_duration:1600;");
 	pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:0;");
 	pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_endian:0;");
 
@@ -379,11 +380,18 @@ static int parse_stream_cpu(struct vdec_h266_inst *inst, u8 *buf, u32 size)
 static int vdec_h266_probe(unsigned long h_vdec,
 	struct aml_vcodec_mem *bs)
 {
-	struct vdec_h266_inst *inst =
-		(struct vdec_h266_inst *)h_vdec;
+	struct vdec_h266_inst *inst = (struct vdec_h266_inst *)h_vdec;
+	struct aml_vdec_adapt *adapt_vdec = &inst->vdec;
+	struct aml_vcodec_ctx *ctx = inst->ctx;
 	u8 *buf = (u8 *)bs->vaddr;
 	u32 size = bs->size;
 	int ret = 0;
+
+	if (ctx->stream_mode) {
+		aml_es_write(ctx, bs->dbuf, bs->addr, size, bs->timestamp);
+		vdec_write_stream_data(adapt_vdec, (u32)bs->addr, size);
+		return 0;
+	}
 
 	if (inst->ctx->output_dma_mode) {
 		if (bs->model == VB2_MEMORY_MMAP) {
@@ -474,6 +482,7 @@ static int vdec_h266_decode(unsigned long h_vdec,
 {
 	struct vdec_h266_inst *inst = (struct vdec_h266_inst *)h_vdec;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
+	struct aml_vcodec_ctx *ctx = inst->ctx;
 	u8 *buf = (u8 *) bs->vaddr;
 	u32 size = bs->size;
 	int ret = -1;
@@ -483,6 +492,12 @@ static int vdec_h266_decode(unsigned long h_vdec,
 
 	if (vdec_input_full(vdec)) {
 		return -EAGAIN;
+	}
+
+	if (ctx->stream_mode) {
+		aml_es_write(ctx, bs->dbuf, bs->addr, size, bs->timestamp);
+		vdec_write_stream_data(vdec, (u32)bs->addr, size);
+		return size;
 	}
 
 	if (inst->ctx->output_dma_mode) {

@@ -5324,7 +5324,7 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 
 			if (pic)
 				avs3_print(dec, AVS3_DBG_BUFMGR,
-				"%s vf %p pic %p index 0x%x getcount %d poc %d type 0x%x w/h/depth %d/%d/0x%x, compHeadAddr 0x%08x, pts %d, %lld, decoded_lcu %d\n",
+				"%s vf %p pic %p index 0x%x getcount %d poc %d type 0x%x w/h/depth %d/%d/0x%x, compHeadAddr 0x%08x, pts %d, %lld, timestamp %llu, decoded_lcu %d\n",
 				__func__, vf, pic, index,
 				//pic->imgtr_fwRefDistance_bak,
 				dec->vf_get_count,
@@ -5335,6 +5335,7 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 				vf->compHeadAddr,
 				vf->pts,
 				vf->pts_us64,
+				vf->timestamp,
 				pic->decoded_lcu);
 			if (dec->front_back_mode == 1)
 				decoder_do_frame_check(hw_to_vdec(dec), vf);
@@ -5808,10 +5809,39 @@ static void set_vframe(struct AVS3Decoder_s *dec,
 			vf->duration = 0;
 	}
 
-	if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
-		vf->pts_us64 = stream_offset;
-		vf->pts = 0;
+	if (vdec_stream_based(vdec)) {
+		/* lookup by decoder */
+		u64 frame_type = 0;
+		struct checkoutptsoffset pts_st;
+		u64 dur_offset = vf->duration;
+
+		if (pic->slice_type == I_IMG)
+			frame_type = KEYFRAME_FLAG;
+		else if ((pic->slice_type == P_IMG) ||
+			(pic->slice_type == F_IMG))
+			frame_type = PFRAME_FLAG;
+		else if (pic->slice_type == B_IMG)
+			frame_type = BFRAME_FLAG;
+
+		dur_offset = ((dur_offset << 32 | (frame_type << 62)) & 0xffffffff00000000) | stream_offset;
+
+		if (!v4l2_ctx->pts_serves_ops->checkout(v4l2_ctx->ptsserver_id, dur_offset, &pts_st)) {
+			vf->pts = pts_st.pts;
+			vf->pts_us64 = pts_st.pts_64;
+			vf->timestamp = pts_st.pts_64;
+#ifdef DEBUG_PTS
+			dec->pts_hit++;
+#endif
+		} else {
+#ifdef DEBUG_PTS
+			dec->pts_missed++;
+#endif
+			vf->pts = 0;
+			vf->pts_us64 = 0;
+			vf->timestamp = 0;
+		}
 	}
+
 	if (!dummy) {
 		pic->vf_ref = 1;
 	}
@@ -5963,8 +5993,8 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 #endif
 
 			avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL,
-				"%s: com_pic %p stream_offset 0x%x, poc %d, cuva_data_size %d, signal_type:0x%x, vf:%p\n",
-				__func__, com_pic, pic->stream_offset, pic->poc, pic->cuva_data_size, vf->signal_type, vf);
+				"%s: com_pic %p stream_offset 0x%x, poc %d, cuva_data_size %d, signal_type:0x%x, vf:%p timestamp %llu\n",
+				__func__, com_pic, pic->stream_offset, pic->poc, pic->cuva_data_size, vf->signal_type, vf, vf->timestamp);
 
 			if (get_dbg_flag(dec) & AVS3_DBG_HDR_INFO) {
 				u32 i;
@@ -9414,6 +9444,8 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 				READ_VREG(HEVC_STREAM_RD_PTR));
 			vdec_vframe_dirty(vdec, dec->chunk);
 			vdec_clean_input(vdec);
+			if (ctx->es_free)
+				ctx->es_free(ctx, vdec->vbuf.buf_rp);
 		}
 
 		if (get_free_buf_count(dec) >= dec->run_ready_min_buf_num) {
@@ -9521,6 +9553,8 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 		if (dec->dec_status == HEVC_DECPIC_DATA_DONE)
 			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_AGAIN) {
@@ -9546,6 +9580,8 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 		avs3_prepare_display_buf(dec);
 		notify_v4l_eos(hw_to_vdec(dec));
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_FORCE_EXIT) {
 		avs3_print(dec, PRINT_FLAG_VDEC_STATUS, "%s: force exit\n", __func__);

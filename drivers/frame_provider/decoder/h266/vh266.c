@@ -8198,6 +8198,7 @@ muti_output:
 					vvc_dec->cur_pic->hevc = hevc;
 					vvc_dec->cur_pic->has_inter_slice = 0;
 					vvc_dec->cur_pic->new_picture = 1;
+					vvc_dec->cur_pic->stream_offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 					hevc_print(hevc, H266_DEBUG_BUFMGR, "--------------- new pic --------------slice addr 0x%x\n", param->p.sliceAddr);
 				} else
 					vvc_dec->cur_pic->new_picture = 0;
@@ -10024,7 +10025,9 @@ done_end:
 		hevc->dec_again_cnt = 0;
 		decode_frame_count[hevc->index]++;
 
-		if (hevc->mmu_enable && ((hevc->double_write_mode & 0x10) == 0)) {
+		if ((!hevc->timeout_flag) &&
+			hevc->mmu_enable &&
+			((hevc->double_write_mode & 0x10) == 0)) {
 			hevc->used_4k_num =
 				READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
 			if (hevc->used_4k_num >= 0 &&
