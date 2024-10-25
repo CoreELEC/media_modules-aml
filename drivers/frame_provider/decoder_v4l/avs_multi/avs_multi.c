@@ -4318,6 +4318,7 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					hw->last_width = hw->frame_width;
 					hw->last_height = hw->frame_height;
 					hw->v4l_params_parsed = true;
+					hw->decode_pic_count = 0;
 					reset_process_time(hw);
 					v4l_avs_collect_stream_info(vdec, hw);
 					ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STATISTIC, NULL);
@@ -4490,15 +4491,13 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 				} else
 					hw->decode_status_skip_pic_done_flag = 0;
 
-				if (hw->v4l_params_parsed) {
+				hw->decode_pic_count++;
+				if ((hw->decode_pic_count & 0xffff) == 0) {
+					/*make ucode do not handle it as first picture*/
 					hw->decode_pic_count++;
-					if ((hw->decode_pic_count & 0xffff) == 0) {
-						/*make ucode do not handle it as first picture*/
-						hw->decode_pic_count++;
-					}
 				}
-
 				vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
+
 				reset_process_time(hw);
 				hw->dec_result = DEC_RESULT_DONE;
 #if DEBUG_MULTI_FLAG == 1
