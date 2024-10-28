@@ -1846,7 +1846,7 @@ static DEFINE_MUTEX(vavs3_mutex);
 
 #define LMEM_DUMP_ADR             HEVC_ASSIST_SCRATCH_9
 #define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
-#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_L
+#define HEVC_COMPATIBILITY        HEVC_ASSIST_SCRATCH_L
 /*!!!*/
 #define AVS3_CUVA_ADR       HEVC_ASSIST_SCRATCH_M
 #define AVS3_CUVA_DATA_SIZE		HEVC_ASSIST_SCRATCH_N
@@ -4516,14 +4516,14 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 
 	/*Initial IQIT_SCALELUT memory -- just to avoid X in simulation*/
 	if (is_rdma_enable()) {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<2))));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<2))));
 		rdma_back_end_work(dec->rdma_phy_adr, RDMA_SIZE);
 	} else {
 		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<2)));
+			WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) | (1<<2)));
 		else {
 			if ((debug & AVS3_DBG_DISABLE_IQIT_SCALELUT_INIT) == 0) {
-				WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<2))));
+				WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<2))));
 				WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
 				for (i = 0; i < 1024; i++)
 					WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
@@ -10398,14 +10398,14 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START, TRACE_BASIC);
 	/*
-		HEVC_EFFICIENCY_MODE
+		HEVC_COMPATIBILITY
 		bit[0/1] 1: open efficiency mode, 0: close efficiency mode
 		bit[2] 1: no support rdma, 0: support rdma
 	*/
 	if (efficiency_mode) {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) | (1<<1)));
 	} else {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<1))));
 	}
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode) {

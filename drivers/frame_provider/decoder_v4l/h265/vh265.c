@@ -806,7 +806,6 @@ enum NalUnitType {
 
 #define DEBUG_REG1              HEVC_ASSIST_SCRATCH_G
 #define DEBUG_REG2              HEVC_ASSIST_SCRATCH_H
-#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_C
 
 /*
  *ucode parser/search control
@@ -834,6 +833,12 @@ enum NalUnitType {
  *bit [20]: for DOLBY_VISION_META
  *	0, do not fetch DOLBY_VISION_META to aux buf
  *	1, fetch DOLBY_VISION_META to aux buf
+ *bit [21] efficiency mode
+ *	1: open efficiency mode
+ *	0: close efficiency mode
+ *bit [22] is support rdma
+ *	1: no support rdma
+ *	0: support rdma
  */
 #define NAL_SEARCH_CTL            HEVC_ASSIST_SCRATCH_I
 	/*read only*/
@@ -5116,13 +5121,9 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 
 	/* Initial IQIT_SCALELUT memory -- just to avoid X in simulation */
 	if (is_rdma_enable()) {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
 		rdma_back_end_work(hevc->rdma_phy_adr, RDMA_SIZE);
 	} else {
-		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
-		else {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+		if (!efficiency_mode) {
 			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
 			for (i = 0; i < 1024; i++)
 				WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
@@ -12418,6 +12419,11 @@ force_output:
 			start_process_time(hevc);
 #endif
 	} else if (dec_status == HEVC_SLICE_SEGMENT_DONE) {
+		if (efficiency_mode &&
+			hevc->slice_count != 0) {
+			if (!wait_for_completion_timeout(&hevc->complete, msecs_to_jiffies(34)))
+				hevc_print(hevc, 0, "!!!wait for completion timeout %d\n", __LINE__);
+		}
 #ifdef MULTI_INSTANCE_SUPPORT
 		if (hevc->m_ins_flag) {
 			read_decode_info(hevc);
@@ -12454,7 +12460,6 @@ force_output:
 				if (efficiency_mode) {
 					memcpy(hevc->param.l.data, hevc->rpm_ptr,
 						(RPM_VALID_E - RPM_BEGIN) * sizeof(hevc->rpm_ptr[0]));
-					WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
 				} else {
 					for (i = 0; i < (RPM_VALID_E - RPM_BEGIN); i += 4) {
 						int ii;
@@ -12463,7 +12468,6 @@ force_output:
 							hevc->param.l.data[i + ii] = hevc->rpm_ptr[i + 3 - ii];
 						}
 					}
-					WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
 				}
 				ATRACE_COUNTER(hevc->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_END);
 #ifdef SEND_LMEM_WITH_RPM
@@ -12793,10 +12797,6 @@ force_output:
 				start_process_time(hevc);
 #endif
 			if ((hevc->new_pic) && (hevc->cur_pic != NULL)) {
-				if (efficiency_mode)
-					WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
-				else
-					WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
 				hevc->slice_count++;
 			}
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -13487,6 +13487,16 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 		WRITE_VREG(HEVC_SAO_DBG_MODE1, 0);
 	}
 #endif
+
+	if (is_rdma_enable()) {
+		WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) & (~(1<<22))));
+	} else {
+		if (efficiency_mode)
+			WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) | (1<<22)));
+		else {
+			WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) & (~(1<<22))));
+		}
+	}
 }
 
 static int vh265_local_init(struct hevc_state_s *hevc)
@@ -15705,19 +15715,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7) //disable OW module auto cg on HEVC top for S7
 		SET_VREG_MASK(HEVC_SAO_CTRL11, (1 << 28));
-	/*
-		HEVC_EFFICIENCY_MODE
-		bit[0] 1: open efficiency mode, 0: close efficiency mode
-		bit[1] 1: no support rdma, 0: support rdma
-	*/
-	if (efficiency_mode)
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
-	else
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+
 	if (vh265_hw_ctx_restore(hevc) < 0) {
 		vdec_schedule_work(&hevc->work);
 		return;
 	}
+
+	if (efficiency_mode)
+		WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) | (1<<21)));
+	else
+		WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) & (~(1<<21))));
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
 	vdec_enable_input(vdec);
 

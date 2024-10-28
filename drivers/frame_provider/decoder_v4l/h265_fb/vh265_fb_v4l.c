@@ -871,7 +871,7 @@ enum alloc_buffer_status_t {
 
 #define DEBUG_REG1              HEVC_ASSIST_SCRATCH_G
 #define DEBUG_REG2              HEVC_ASSIST_SCRATCH_H
-#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_C
+#define HEVC_COMPATIBILITY      HEVC_ASSIST_SCRATCH_C
 
 //[7 : 0] decoder tile cnt;
 #define DECODER_PICTURE_INFO      HEVC_ASSIST_SCRATCH_17
@@ -902,6 +902,12 @@ enum alloc_buffer_status_t {
  *bit [20]: for DOLBY_VISION_META
  *	0, do not fetch DOLBY_VISION_META to aux buf
  *	1, fetch DOLBY_VISION_META to aux buf
+ *bit [21] single core efficiency mode
+ *	1: open efficiency mode
+ *	0: close efficiency mode
+ *bit [22] single core is support rdma
+ *	1: no support rdma
+ *	0: support rdma
  */
 #define NAL_SEARCH_CTL            HEVC_ASSIST_SCRATCH_I
 	/*read only*/
@@ -5878,13 +5884,9 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 
 	/* Initial IQIT_SCALELUT memory -- just to avoid X in simulation */
 	if (is_rdma_enable()) {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
 		rdma_back_end_work(hevc->rdma_phy_adr, RDMA_SIZE);
 	} else {
-		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
-		else {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+		if (!efficiency_mode) {
 			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
 			for (i = 0; i < 1024; i++)
 				WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
@@ -13651,6 +13653,11 @@ force_output:
 			start_process_time(hevc);
 #endif
 	} else if (dec_status == HEVC_SLICE_SEGMENT_DONE) {
+		if (efficiency_mode &&
+			hevc->slice_count != 0) {
+			if (!wait_for_completion_timeout(&hevc->complete, msecs_to_jiffies(34)))
+				hevc_print(hevc, 0, "!!!wait for completion timeout %d\n", __LINE__);
+		}
 #ifdef MULTI_INSTANCE_SUPPORT
 		if (hevc->m_ins_flag) {
 			read_decode_info(hevc);
@@ -14135,10 +14142,6 @@ force_output:
 				start_process_time(hevc);
 #endif
 			if ((hevc->new_pic) && (hevc->cur_pic != NULL)) {
-				if (efficiency_mode)
-					WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
-				else
-					WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
 				hevc->slice_count++;
 			}
 
@@ -15015,6 +15018,16 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 		WRITE_VREG(HEVC_SAO_CRC, 0);
 		if (hevc->front_back_mode == 1)
 			WRITE_VREG(HEVC_SAO_CRC_DBE1, 0);
+	}
+
+	if (is_rdma_enable()) {
+		WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) & (~(1<<22))));
+	} else {
+		if (efficiency_mode)
+			WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) | (1<<22)));
+		else {
+			WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) & (~(1<<22))));
+		}
 	}
 }
 
@@ -17778,16 +17791,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 
-	/*
-		HEVC_EFFICIENCY_MODE
-		bit[0] 1: open efficiency mode, 0: close efficiency mode
-	*/
-	if (efficiency_mode)
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
-	else
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
 #ifdef NEW_FB_CODE
 	if (hevc->front_back_mode) {
+		/*
+			HEVC_COMPATIBILITY
+			bit[0] 1: open efficiency mode, 0: close efficiency mode
+		*/
+		if (efficiency_mode)
+			WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) | (1<<0)));
+		else
+			WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<0))));
 		hevc_hw_init(hevc, 0, 1, 0);
 		config_decode_mode(hevc);
 		config_nal_control_and_aux_buf(hevc);
@@ -17800,6 +17813,13 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (vh265_hw_ctx_restore(hevc) < 0) {
 		vdec_schedule_work(&hevc->work);
 		return;
+	}
+
+	if (!hevc->front_back_mode) {
+		if (efficiency_mode)
+			WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) | (1<<21)));
+		else
+			WRITE_VREG(NAL_SEARCH_CTL, (READ_VREG(NAL_SEARCH_CTL) & (~(1<<21))));
 	}
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
 

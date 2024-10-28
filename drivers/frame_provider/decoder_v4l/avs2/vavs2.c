@@ -1526,7 +1526,7 @@ static DEFINE_MUTEX(vavs2_mutex);
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
 #define LMEM_DUMP_ADR             HEVC_ASSIST_SCRATCH_9
 #define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
-#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_L
+#define HEVC_COMPATIBILITY        HEVC_ASSIST_SCRATCH_L
 
 /*!!!*/
 #define HEVC_DECODE_COUNT       HEVC_ASSIST_SCRATCH_M
@@ -3992,13 +3992,13 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 
 	/*Initial IQIT_SCALELUT memory -- just to avoid X in simulation*/
 	if (is_rdma_enable()) {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<1))));
 		rdma_back_end_work(dec->rdma_phy_adr, RDMA_SIZE);
 	} else {
 		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+			WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) | (1<<1)));
 		else {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+			WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<1))));
 			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
 			for (i = 0; i < 1024; i++)
 			WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
@@ -8212,14 +8212,14 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7) //disable OW module auto cg on HEVC top for S7
 		SET_VREG_MASK(HEVC_SAO_CTRL11, (1 << 28));
 	/*
-		HEVC_EFFICIENCY_MODE_BACK
+		HEVC_COMPATIBILITY
 		bit[0] 1: open efficiency mode, 0: close efficiency mode
 		bit[1] 1: no support rdma, 0: support rdma
 	*/
 	if (efficiency_mode) {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) | (1<<0)));
 	} else {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<0))));
 	}
 	if (avs2_hw_ctx_restore(dec) < 0) {
 		vdec_schedule_work(&dec->work);

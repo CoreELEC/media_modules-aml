@@ -3919,7 +3919,7 @@ static struct device *cma_dev;
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
 #define LMEM_DUMP_ADR                 HEVC_ASSIST_SCRATCH_F
 #define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
-#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_L
+#define HEVC_COMPATIBILITY        HEVC_ASSIST_SCRATCH_L
 #ifdef MULTI_INSTANCE_SUPPORT
 #define HEVC_DECODE_COUNT       HEVC_ASSIST_SCRATCH_M
 #define HEVC_DECODE_SIZE		HEVC_ASSIST_SCRATCH_N
@@ -9516,13 +9516,13 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 		/*Initial IQIT_SCALELUT memory
 		-- just to avoid X in simulation*/
 		if (is_rdma_enable()) {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+			WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<0))));
 			rdma_back_end_work(pbi->rdma_phy_adr, RDMA_SIZE);
 		} else {
 			if (efficiency_mode) {
-				WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
+				WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) | (1<<0)));
 			} else {
-				WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+				WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<0))));
 				WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);
 				for (i = 0; i < 1024; i++)
 					WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
@@ -15310,13 +15310,13 @@ static void run_front(struct vdec_s *vdec)
 		return;
 	}
 	/*
-		HEVC_EFFICIENCY_MODE
+		HEVC_COMPATIBILITY
 		bit[1] 1: open efficiency mode, 0: close efficiency mode
 	*/
 	if (efficiency_mode) {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) | (1<<1)));
 	} else {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<1))));
 	}
 #ifdef NEW_FB_CODE
 	if (pbi->front_back_mode == 1 || pbi->front_back_mode == 3) {

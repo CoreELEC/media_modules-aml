@@ -1614,7 +1614,7 @@ static DEFINE_MUTEX(vavs2_mutex);
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
 #define LMEM_DUMP_ADR             HEVC_ASSIST_SCRATCH_9
 #define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
-#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_L
+#define HEVC_COMPATIBILITY        HEVC_ASSIST_SCRATCH_L
 /*!!!*/
 #define HEVC_DECODE_COUNT       HEVC_ASSIST_SCRATCH_M
 #define HEVC_DECODE_SIZE		HEVC_ASSIST_SCRATCH_N
@@ -4603,13 +4603,13 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 
 	/*Initial IQIT_SCALELUT memory -- just to avoid X in simulation*/
 	if (is_rdma_enable()) {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<1))));
 		rdma_back_end_work(dec->rdma_phy_adr, RDMA_SIZE);
 	} else {
 		if (efficiency_mode)
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<1)));
+			WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) | (1<<1)));
 		else {
-			WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<1))));
+			WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<1))));
 			WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR, 0);/*cfg_p_addr*/
 			for (i = 0; i < 1024; i++)
 			WRITE_VREG(HEVC_IQIT_SCALELUT_DATA, 0);
@@ -10019,13 +10019,13 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 	/*
-		HEVC_EFFICIENCY_MODE_BACK
+		HEVC_COMPATIBILITY
 		bit[0] 1: open efficiency mode, 0: close efficiency mode
 	*/
 	if (efficiency_mode) {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) | (1<<0)));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) | (1<<0)));
 	} else {
-		WRITE_VREG(HEVC_EFFICIENCY_MODE, (READ_VREG(HEVC_EFFICIENCY_MODE) & (~(1<<0))));
+		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<0))));
 	}
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode) {
