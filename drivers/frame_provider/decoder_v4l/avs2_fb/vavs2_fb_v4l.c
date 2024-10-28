@@ -5561,6 +5561,7 @@ static void v4l_submit_vframe(struct AVS2Decoder_s *dec)
 					__func__, pic->poc);
 				continue;
 			} else {
+				aml_buf_set_vframe(aml_buf, vf);
 				ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
 				aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 			}

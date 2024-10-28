@@ -6963,6 +6963,7 @@ void v4l_submit_vframe(struct AV1HW_s *hw)
 		if (((hw->front_back_mode) && (pic->back_done_mark)) ||
 			(!hw->front_back_mode)) {
 #endif
+			aml_buf_set_vframe(aml_buf, vf);
 			vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 			aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 			if (vf->type & VIDTYPE_V4L_EOS) {

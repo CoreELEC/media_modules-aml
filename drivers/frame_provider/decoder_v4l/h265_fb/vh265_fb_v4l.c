@@ -11644,6 +11644,7 @@ static void v4l_submit_vframe(struct vdec_s *vdec)
 				vh265_vf_put(vh265_vf_get(vdec), vdec);
 				hevc_print(hevc, H265_DEBUG_BUFMGR, "%s pic has error_mark, get err\n", __func__);
 			} else {
+				aml_buf_set_vframe(aml_buf, vf);
 				//ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 				aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 			}
