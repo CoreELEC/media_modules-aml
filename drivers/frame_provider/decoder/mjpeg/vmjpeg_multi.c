@@ -81,6 +81,11 @@
 #define DECODE_BUFFER_NUM_DEF		1
 #define MAX_BMMU_BUFFER_NUM		(DECODE_BUFFER_NUM_MAX + 1)
 
+/*
+ *MJPEG only supports streams with 1:1 horizontal and vertical sampling.
+*/
+#define MJPEG_SUPPORTS_HV_SAMPLE	0x11
+
 #define DEFAULT_MEM_SIZE	(32*SZ_1M)
 #define RP_WORKAROUND_SIZE  SZ_4K
 static int debug_enable;
@@ -161,6 +166,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DEC_RESULT_ERROR            3
 #define DEC_RESULT_FORCE_EXIT       4
 #define DEC_RESULT_EOS              5
+#define DEC_RESULT_ERROR_DATA       6
 #define DEC_DECODE_TIMEOUT         0x21
 
 /*Send by DEC_STATUS_REG*/
@@ -246,6 +252,7 @@ struct vdec_mjpeg_hw_s {
 	char new_q_name[32];
 	char disp_q_name[32];
 	bool run_flag;
+	int unsupport_flag;
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
@@ -323,6 +330,18 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	}
 
 	if (dec_status == MJPEG_CONFIG_REQUEST) {
+		int comps_spec_cb = READ_VREG(AV_SCRATCH_M) & 0xff;
+
+		if (comps_spec_cb != MJPEG_SUPPORTS_HV_SAMPLE) {
+			hw->dec_result = DEC_RESULT_ERROR_DATA;
+			mmjpeg_debug_print(DECODE_ID(hw), 0,
+				"amvdec_mmjpeg: unsupport uv %d:%d\n", comps_spec_cb >> 4, comps_spec_cb&0xf);
+			hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+			vdec_schedule_work(&hw->work);
+			hw->run_flag = 0;
+			hw->unsupport_flag = 1;
+			return IRQ_HANDLED;
+		}
 		WRITE_VREG(DEC_STATUS_REG, 0);
 		return IRQ_HANDLED;
 	} else if (dec_status == MJPEG_DATA_EMPTY) {
@@ -1106,6 +1125,7 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 	hw->input_empty = 0;
 	hw->peek_num = 0;
 	hw->get_num = 0;
+	hw->unsupport_flag = 0;
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++)
 		hw->vfbuf_use[i] = 0;
 
@@ -1153,6 +1173,10 @@ static unsigned long run_ready(struct vdec_s *vdec,
 	hw->not_run_ready++;
 	if (hw->eos)
 		return 0;
+
+	if (hw->unsupport_flag)
+		return 0;
+
 	if (vdec_stream_based(vdec) && (hw->init_flag == 0)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
@@ -1381,6 +1405,10 @@ static void vmjpeg_work(struct work_struct *work)
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
 		vdec_clean_input(hw_to_vdec(hw));
+	} else if (hw->dec_result == DEC_RESULT_ERROR_DATA) {
+		amvdec_stop();
+		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		hw->chunk = NULL;
 	}
 	if (hw->stat & STAT_VDEC_RUN) {
 		amvdec_stop();

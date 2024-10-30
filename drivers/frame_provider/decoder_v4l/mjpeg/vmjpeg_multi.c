@@ -343,7 +343,7 @@ static irqreturn_t vmjpeg_isr(struct vdec_s *vdec, int irq)
 	return IRQ_WAKE_THREAD;
 }
 
-static int vmjpeg_get_ps_info(struct vdec_mjpeg_hw_s *hw, int width, int height, struct aml_vdec_ps_infos *ps)
+static int vmjpeg_get_ps_info(struct vdec_mjpeg_hw_s *hw, int width, int height, int hv_subsample, struct aml_vdec_ps_infos *ps)
 {
 	ps->visible_width	= width;
 	ps->visible_height	= height;
@@ -352,12 +352,13 @@ static int vmjpeg_get_ps_info(struct vdec_mjpeg_hw_s *hw, int width, int height,
 	ps->dpb_size 		= hw->buf_num;
 	ps->dpb_frames		= DECODE_BUFFER_NUM_DEF;
 	ps->dpb_margin		= hw->dynamic_buf_num_margin;
-	ps->field = V4L2_FIELD_NONE;
+	ps->field		= V4L2_FIELD_NONE;
+	ps->profile		= hv_subsample;
 
 	return 0;
 }
 
-static int v4l_res_change(struct vdec_mjpeg_hw_s *hw, int width, int height)
+static int v4l_res_change(struct vdec_mjpeg_hw_s *hw, int width, int height, int hv_subsample)
 {
 	struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -376,7 +377,7 @@ static int v4l_res_change(struct vdec_mjpeg_hw_s *hw, int width, int height)
 				hw->frame_width, hw->frame_height,
 				width,
 				height);
-			vmjpeg_get_ps_info(hw, width, height, &ps);
+			vmjpeg_get_ps_info(hw, width, height, hv_subsample, &ps);
 			vdec_v4l_set_ps_infos(ctx, &ps);
 			vdec_v4l_res_ch_event(ctx);
 			hw->v4l_params_parsed = false;
@@ -416,14 +417,15 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	if (dec_status == MJPEG_CONFIG_REQUEST) {
 		int frame_width = READ_VREG(MREG_PIC_WIDTH);
 		int frame_height = READ_VREG(MREG_PIC_HEIGHT);
+		int hv_subsample = READ_VREG(AV_SCRATCH_M)  & 0xff;
 
-		if (!v4l_res_change(hw, frame_width, frame_height)) {
+		if (!v4l_res_change(hw, frame_width, frame_height, hv_subsample)) {
 			struct aml_vcodec_ctx *ctx =
 				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 			if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 				struct aml_vdec_ps_infos ps;
 
-				vmjpeg_get_ps_info(hw, frame_width, frame_height, &ps);
+				vmjpeg_get_ps_info(hw, frame_width, frame_height, hv_subsample, &ps);
 				hw->v4l_params_parsed = true;
 				vdec_v4l_set_ps_infos(ctx, &ps);
 				ctx->decoder_status_info.frame_height = ps.visible_height;

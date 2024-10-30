@@ -515,6 +515,7 @@ struct aml_enc_params {
  * E.g. suppose picture size is 176x144,
  *      buffer size will be aligned to 176x160.
  * @profile_idc: source profile level
+ *      MJPEG profile_idc stores data for YUV horizontal and vertical sampling
  * @field: frame/field information.
  * @dpb_frames: used for DPB size of calculation.
  * @dpb_margin: extra buffers for decoder.

@@ -115,6 +115,11 @@ MODULE_IMPORT_NS(DMA_BUF);
 
 #define INVALID_IDX -1
 
+/*
+ *MJPEG only supports streams with 1:1 horizontal and vertical sampling.
+*/
+#define MJPEG_SUPPORTS_HV_SAMPLE	0x11
+
 #define call_void_memop(vb, op, args...)				\
 	do {								\
 		if ((vb)->vb2_queue->mem_ops->op)			\
@@ -3726,6 +3731,14 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 			(ctx->picinfo.visible_width < 16 && ctx->picinfo.visible_width > 0)) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 				"The width or height of the stream is less than 16\n");
+			return -EPERM;
+		}
+
+		if ((ctx->picinfo.profile_idc != MJPEG_SUPPORTS_HV_SAMPLE) &&
+			ctx->output_pix_fmt == V4L2_PIX_FMT_MJPEG) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+				"amvdec_mmjpeg: unsupport uv %d:%d\n",
+				ctx->picinfo.profile_idc >> 4, ctx->picinfo.profile_idc & 0xf);
 			return -EPERM;
 		}
 	}
