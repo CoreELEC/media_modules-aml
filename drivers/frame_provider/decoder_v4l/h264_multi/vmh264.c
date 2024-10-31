@@ -2506,7 +2506,8 @@ int v4l_get_free_buf_idx(struct vdec_s *vdec)
 				return INVALID_IDX;
 			}
 
-			config_decode_canvas(hw, i);
+			if (get_double_write_mode(hw))
+				config_decode_canvas(hw, i);
 			idx = i;
 			p_H264_Dpb->cur_idx = idx;
 			break;
