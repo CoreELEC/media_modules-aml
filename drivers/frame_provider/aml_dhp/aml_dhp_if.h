@@ -24,23 +24,73 @@
 
 #include "aml_dhp_types.h"
 
-#define _IOCTL_DHP_MAGIC	'Q'
-
-/* The processed data is returned to userspace as an FD. */
-#define IOCTL_DHP_GET_FD	_IOR(_IOCTL_DHP_MAGIC, 0, __u64)
-
-/* Used for mapping of a page. */
-#define IOCTL_DHP_MMAP		_IOWR(_IOCTL_DHP_MAGIC, 1, __u64)
-
-/* Used for mapping of a page list. */
-#define IOCTL_DHP_SCT_MAP	_IOWR(_IOCTL_DHP_MAGIC, 2, __u64) //TODO
-
-/* Userspace submits a data processing task to the proc driver. */
-#define IOCTL_DHP_SET_TASK	_IOW(_IOCTL_DHP_MAGIC, 3, __u64) //TODO
-
+/*
+ * DHP_VER - Macro to encode the DHP version in a major.minor.patch format.
+ *
+ * @a: Major version number (16 bits).
+ * @b: Minor version number (8 bits).
+ * @c: Patch version number (8 bits).
+ */
 #define DHP_VER(a,b,c)	(((a) << 16) + ((b) << 8) + (c))
 
-// Maximum number of metadata entries for data units
+/*
+ * IOCTL commands for the Data Handler Proxy (DHP) driver:
+ *
+ * - IOCTL_DHP_GET_FD: Retrieves a file descriptor (FD) for processed data, allowing
+ *   userspace applications to access the output.
+ *
+ * - IOCTL_DHP_MMAP: Maps a single memory page for DMA or other operations, enabling
+ *   efficient data processing by the driver.
+ *
+ * - IOCTL_DHP_SGT_MAP: Maps a scatter-gather table, facilitating the handling of
+ *   non-contiguous memory regions for complex data processing tasks.
+ *
+ * - IOCTL_DHP_SET_TASK: Submits a data processing task to the driver. Userspace applications
+ *   provide task descriptors containing operation details (TODO: define task descriptor structure).
+ *
+ * - IOCTL_DHP_MEM_SYNC: Ensures cache coherency between the CPU and device memory for specified
+ *   memory regions. This is critical for accurate data transfer during DMA operations.
+ */
+#define _IOCTL_DHP_MAGIC	'Q'
+#define IOCTL_DHP_GET_FD	_IOR(_IOCTL_DHP_MAGIC, 0, __u64)
+#define IOCTL_DHP_MMAP		_IOWR(_IOCTL_DHP_MAGIC, 1, __u64)
+#define IOCTL_DHP_SGT_MAP	_IOWR(_IOCTL_DHP_MAGIC, 2, __u64)
+#define IOCTL_DHP_SET_TASK	_IOW(_IOCTL_DHP_MAGIC, 3, __u64)
+#define IOCTL_DHP_MEM_SYNC	_IOW(_IOCTL_DHP_MAGIC, 4, __u64)
+
+/*
+ * Memory synchronization flags for the Data Handler Proxy (DHP) driver:
+ *
+ * - DHP_MEM_SYNC_READ: Synchronize memory for reading (device-to-CPU), ensuring
+ *   data in device memory is visible to the CPU.
+ *
+ * - DHP_MEM_SYNC_WRITE: Synchronize memory for writing (CPU-to-device), ensuring
+ *   data in CPU memory is visible to the device.
+ *
+ * - DHP_MEM_SYNC_RW: Combines both read and write synchronization, allowing
+ *   bi-directional cache coherency.
+ *
+ * - DHP_MEM_SYNC_START: Indicates synchronization at the start of memory usage,
+ *   preparing memory for operations.
+ *
+ * - DHP_MEM_SYNC_END: Indicates synchronization at the end of memory usage, finalizing
+ *   memory operations and ensuring data integrity.
+ *
+ * - DHP_MEM_SYNC_VALID_FLAGS_MASK: Defines the valid combination of flags for memory
+ *   synchronization operations, restricting flags to only supported values.
+ */
+#define DHP_MEM_SYNC_READ	(1 << 0)
+#define DHP_MEM_SYNC_WRITE	(2 << 0)
+#define DHP_MEM_SYNC_RW		(DHP_MEM_SYNC_READ | DHP_MEM_SYNC_WRITE)
+#define DHP_MEM_SYNC_START	(0 << 2)
+#define DHP_MEM_SYNC_END	(1 << 2)
+#define DHP_MEM_SYNC_VALID_FLAGS_MASK \
+	(DHP_MEM_SYNC_RW | DHP_MEM_SYNC_END)
+
+/* Specifies the upper limit for data size that can be transferred or processed in a single task. */
+#define IOCTL_DHP_PAYLOAD_MAX	(512)
+
+/* Maximum number of metadata entries for data units. */
 #define AML_DU_META_MAX		(32)
 
 /*
@@ -127,11 +177,11 @@ struct aml_dhp_ioctl_data {
 	union {
 		struct aml_du_base	base;
 		struct aml_du_mem	mem;
-		__u32			data[64];
+		__u8			data[IOCTL_DHP_PAYLOAD_MAX];
 	};
 	__s32	fd;
 	__u32	reserved[16];
-};
+} __attribute__((packed));
 
 /**
  * aml_dhp_request - Perform data processing using source and destination memory buffers.

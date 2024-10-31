@@ -66,6 +66,9 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
     const struct aml_dhp_ioctl_data *io =
         container_of(base, struct aml_dhp_ioctl_data, base);
     struct aml_du_avbcd *avbcd = (struct aml_du_avbcd *)base->meta;
+    DhpMemOps mOps = { .sgt_mmap = dhp_mem_sgt_mmap,
+                       .sgt_msync = dhp_mem_sgt_sync,
+                       .unmmap = dhp_mem_munmap };
     struct timeval t0, t1;
 
     gettimeofday(&t0, NULL);
@@ -88,6 +91,7 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
     iomem.mem.type = AML_MEM_TYPE_PHY_ADDR;
     iomem.mem.addr = io->base.dst.addr;
     iomem.mem.size = io->base.dst.size;
+    iomem.mem.uncached = io->base.dst.uncached;
 
     if (dhp_dev_ioctl(dev, IOCTL_DHP_MMAP, &iomem)) {
         LOG_ERROR("IOCTL_DHP_MMAP failed, addr:%llx\n", iomem.mem.addr);
@@ -98,9 +102,19 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
     dst_yuv = (void *)iomem.mem.uptr;
     dst_size = iomem.mem.size;
 
-    LOG_DEBUG("Mapping YUV buffer: %p, size: %u\n", dst_yuv, dst_size);
+    LOG_DEBUG("Mapping Header buffer:%p, size:%u\n", header, avbcd->hsize);
+    LOG_DEBUG("Mapping YUV buffer:%p, size:%u\n", dst_yuv, dst_size);
 
-    aml_avbc_decode(header, avbcd->width, avbcd->height, stride, avbcd->bitdep, dst_yuv, dst_size, dhp_page_mmap, dev);
+    aml_avbc_decode(header,
+                   avbcd->width,
+                   avbcd->height,
+                   stride,
+                   avbcd->bitdep,
+                   dst_yuv,
+                   dst_size,
+                   io->base.src.uncached,
+                   &mOps,
+                   dev);
 
     gettimeofday(&t1, NULL);
     LOG_VERBOSE("%s, Total elapse: %lu ms.\n",
@@ -108,6 +122,11 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
 
     if (dump_data)
         dump_yuv_data(avbcd->pts, avbcd->width, avbcd->height, stride, avbcd->bitdep, dst_yuv, dst_size);
+
+    u64 flags = DHP_MEM_SYNC_READ | DHP_MEM_SYNC_END;
+    dhp_mem_sync(dev, io->base.dst.addr, io->base.dst.size, flags);
+
+    dhp_dbuf_sync(io->fd, flags);
 
     dhp_dbuf_munmap(header, avbcd->hsize);
     dhp_dbuf_munmap(dst_yuv, dst_size);

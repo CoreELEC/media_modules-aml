@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <linux/version.h>
+#include <linux/dma-buf.h>
 
 #include "aml_dhp_common.h"
 #include "aml_dhp_daemon.h"
@@ -30,8 +31,8 @@
 #define DHP_DAEMON_VER TAG('v', 1, 0, 0)
 
 volatile sig_atomic_t keep_running = 1;
-unsigned int dump_data = 0;
-unsigned int g_idx = -1;
+u32 dump_data = 0;
+u32 g_idx = -1;
 crc_ctx_t *g_crc;
 
 /*
@@ -81,37 +82,151 @@ static void handle_signal(int sig)
     }
 }
 
-void *dhp_dbuf_mmap(int fd, unsigned int len, int prot, int flags, unsigned int offset)
+void *dhp_dbuf_mmap(int fd, u32 len, int prot, int flags, u32 offset)
 {
-    void *addr = mmap(NULL, len, prot, flags, fd, offset);
+    void *addr = NULL;
+
+    LOG_TRACE("%s: DBUF mmap, fd:%d, len:%u, prot:%x, flags:%x, off:%u\n",
+        __func__, fd, len, prot, flags, offset);
+
+    addr = mmap(NULL, len, prot, flags, fd, offset);
     if (addr == MAP_FAILED) {
-        LOG_ERROR("Memory mapping failed: fd=%d, len=%u, offset=%u\n", fd, len, offset);
+        LOG_ERROR("dmabuf mmap failed: fd=%d len=%u offset=%u\n", fd, len, offset);
         return NULL;
     }
     return addr;
 }
 
-void *dhp_page_mmap(void *priv, unsigned int pfn)
+void dhp_dbuf_munmap(void *vaddr, u32 len)
+{
+    LOG_TRACE("%s: DBUF munmap, vaddr:%p, len:%u\n",
+        __func__, vaddr, len);
+
+    if (munmap(vaddr, len) == -1) {
+        LOG_ERROR("dmabuf munmap failed: addr=%p len=%u\n", vaddr, len);
+    }
+}
+
+void dhp_dbuf_sync(int fd, u32 flags)
+{
+    const struct dma_buf_sync sync = { flags };
+
+    LOG_TRACE("%s: DBUF sync, flags:%x, len:%u\n",
+        __func__, flags);
+
+    if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync)) {
+        LOG_ERROR("dmabuf sync failed: fd=%d\n", fd);
+    }
+}
+
+void *dhp_page_mmap(void *priv, u32 pfn, u32 uncached)
 {
     Device *dev = priv;
-    struct aml_dhp_ioctl_data io;
+    struct aml_dhp_ioctl_data io = {0};
 
-    io.mem.type    = AML_MEM_TYPE_PFN;
-    io.mem.pfn     = pfn;
-    io.mem.size    = PAGE_SIZE;
+    io.mem.type = AML_MEM_TYPE_PFN;
+    io.mem.pfn = pfn;
+    io.mem.size = PAGE_SIZE;
+
+    LOG_TRACE("%s: Page mmap, PFN:%lx, uncached:%u\n",
+        __func__, pfn, uncached);
 
     if (dhp_dev_ioctl(dev, IOCTL_DHP_MMAP, &io)) {
-        LOG_ERROR("Failed to map page (PFN: %x)\n", pfn);
+        LOG_ERROR("page mmap failed: PFN=%x\n", pfn);
         return NULL;
     }
 
     return (void *)io.mem.uptr;
 }
 
-void dhp_dbuf_munmap(void *vaddr, unsigned int len)
+void *dhp_mem_mmap(void *priv, u64 addr, u32 size, u32 uncached)
 {
+    Device *dev = priv;
+    struct aml_dhp_ioctl_data io = {0};
+
+    io.mem.type = AML_MEM_TYPE_PHY_ADDR;
+    io.mem.addr = addr;
+    io.mem.size = size;
+    io.mem.uncached = uncached;
+
+    LOG_TRACE("%s: MEM mmap, addr:%llx, size:%u, uncached:%u\n",
+        __func__, addr, size, uncached);
+
+    if (dhp_dev_ioctl(dev, IOCTL_DHP_MMAP, &io)) {
+        LOG_ERROR("mem mmap failed: addr=%lx size=%u\n", addr, size);
+        return NULL;
+    }
+
+    return (void *)io.mem.uptr;
+}
+
+void dhp_mem_sync(void *priv, u64 addr, u32 size, u32 flags)
+{
+    Device *dev = priv;
+    struct aml_dhp_ioctl_data io = {0};
+
+    io.mem.type = AML_MEM_TYPE_PHY_ADDR;
+    io.mem.addr = addr;
+    io.mem.size = size;
+    io.mem.syncflag = flags;
+
+    LOG_TRACE("%s: MEM sync, addr:%llx, size:%u, flags:%x\n",
+        __func__, addr, size, flags);
+
+    if (dhp_dev_ioctl(dev, IOCTL_DHP_MEM_SYNC, &io)) {
+        LOG_ERROR("mem sync failed: addr=%lx size=%u flags=%x\n", addr, size, flags);
+    }
+}
+
+int dhp_mem_sgt_mmap(void *priv, u64 *uptr_array, u64 *pfn_array, u32 num, u32 uncached)
+{
+    Device *dev = priv;
+    struct aml_dhp_ioctl_data io = {0};
+
+    io.base.src.type = AML_MEM_TYPE_SG_TBL;
+    io.base.src.sgt = (unsigned long long)pfn_array;
+    io.base.src.size = num;
+
+    io.base.dst.type = AML_MEM_TYPE_SG_TBL;
+    io.base.dst.sgt = (unsigned long long)uptr_array;
+    io.base.dst.size = num;
+    io.base.dst.uncached = uncached;
+
+    LOG_TRACE("%s: SGT mmap, PFNs:%u, uncached:%u\n",
+        __func__, num, uncached);
+
+    if (dhp_dev_ioctl(dev, IOCTL_DHP_SGT_MAP, &io)) {
+        LOG_ERROR("SGT mmap failed: PFNs=%u\n", num);
+        return -1;
+    }
+
+    return io.base.dst.payload;
+}
+
+void dhp_mem_sgt_sync(void *priv, u64 *pfn_array, u32 num, u32 flags)
+{
+    Device *dev = priv;
+    struct aml_dhp_ioctl_data io = {0};
+
+    io.mem.type = AML_MEM_TYPE_SG_TBL;
+    io.mem.sgt = (unsigned long long)pfn_array;
+    io.mem.size = num;
+    io.mem.syncflag = flags;
+
+    LOG_TRACE("%s: SGT sync, PFNs:%u, flags:%x\n", __func__, num, flags);
+
+    if (dhp_dev_ioctl(dev, IOCTL_DHP_MEM_SYNC, &io)) {
+        LOG_ERROR("SGT sync failed: PFNs=%u flags=%x\n", num, flags);
+    }
+}
+
+void dhp_mem_munmap(void *priv, u8 *vaddr, u32 len)
+{
+    LOG_TRACE("%s: MEM munmmap, vaddr:%p, len:%u\n",
+        __func__, vaddr, len);
+
     if (munmap(vaddr, len) == -1) {
-        LOG_ERROR("Memory unmapping failed for address: %p, length: %u\n", vaddr, len);
+        LOG_ERROR("munmap failed: addr=%p len=%u\n", vaddr, len);
     }
 }
 

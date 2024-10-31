@@ -55,7 +55,30 @@ typedef struct {
  *
  * Return: Pointer to the mapped memory on success, or NULL on failure.
  */
-void *dhp_dbuf_mmap(int fd, unsigned int len, int prot, int flags, unsigned int offset);
+void *dhp_dbuf_mmap(int fd, u32 len, int prot, int flags, u32 offset);
+
+/*
+ * dhp_dbuf_munmap() - Unmaps a previously mapped memory region.
+ *
+ * @vaddr: Pointer to the memory region to unmap.
+ * @len: Length of the memory region.
+ *
+ * This function unmaps a memory region that was previously mapped using `mmap`.
+ * It removes the mapping between the virtual address and the physical memory,
+ * making the region no longer accessible by the process.
+ */
+void dhp_dbuf_munmap(void *vaddr, u32 len);
+
+/*
+ * dhp_dbuf_sync() - Synchronizes the memory buffer with the device or CPU.
+ *
+ * @fd: File descriptor associated with the memory buffer.
+ * @flags: Flags indicating the synchronization type (e.g., read/write).
+ *
+ * This function ensures that the memory buffer associated with the file descriptor
+ * is properly synchronized, ensuring that changes are visible to the device or CPU.
+ */
+void dhp_dbuf_sync(int fd, u32 flags);
 
 /*
  * dhp_page_mmap() - Maps a physical frame number (PFN) into virtual memory.
@@ -69,17 +92,79 @@ void *dhp_dbuf_mmap(int fd, unsigned int len, int prot, int flags, unsigned int 
  *
  * Return: Pointer to the mapped memory on success, or NULL on failure.
  */
-void *dhp_page_mmap(void *priv, unsigned int pfn);
+void *dhp_page_mmap(void *priv, u32 pfn, u32 uncached);
 
 /*
- * dhp_dbuf_munmap() - Unmaps a previously mapped memory region.
+ * dhp_mem_mmap() - Maps a memory region into virtual memory.
  *
- * @vaddr: Pointer to the memory region to unmap.
- * @len: Length of the memory region.
+ * @priv: Pointer to the Device structure.
+ * @addr: Starting address of the memory region to map.
+ * @size: Size of the memory region to map.
+ * @uncached: Flag indicating whether the memory should be mapped as uncached.
  *
- * This function unmaps a memory region that was previously mapped using `mmap`.
+ * This function maps the specified memory region into the process's virtual address
+ * space. The mapping can optionally be made uncached based on the `uncached` flag.
+ *
+ * Return: Pointer to the mapped memory on success, or NULL on failure.
  */
-void dhp_dbuf_munmap(void *vaddr, unsigned int len);
+void *dhp_mem_mmap(void *priv, u64 addr, u32 size, u32 uncached);
+
+/*
+ * dhp_mem_sync() - Synchronizes a memory region between device and CPU.
+ *
+ * @priv: Pointer to the Device structure.
+ * @addr: Starting address of the memory region to synchronize.
+ * @size: Size of the memory region to synchronize.
+ * @flags: Flags indicating the synchronization type (e.g., read/write).
+ *
+ * This function ensures memory consistency between the device and the CPU for the
+ * specified memory region. The `flags` parameter determines whether the memory
+ * should be synchronized for reading, writing, or both.
+ */
+void dhp_mem_sync(void *priv, u64 addr, u32 size, u32 flags);
+
+/*
+ * dhp_mem_sgt_mmap() - Maps a list of physical frame numbers (PFNs) into virtual memory.
+ *
+ * @priv: Pointer to the Device structure.
+ * @uptr_array: Array of user-space pointers to map.
+ * @pfn_array: Array of physical frame numbers to map.
+ * @num: Number of entries in the `uptr_array` and `pfn_array`.
+ * @uncached: Flag indicating whether the memory should be mapped as uncached.
+ *
+ * This function maps a list of physical frame numbers (PFNs) into the process's
+ * virtual address space using an array of user-space pointers and physical
+ * frame numbers. The mapping can be made uncached based on the `uncached` flag.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int dhp_mem_sgt_mmap(void *priv, u64 *uptr_array, u64 *pfn_array, u32 num, u32 uncached);
+
+/*
+ * dhp_mem_sgt_sync() - Synchronizes a list of memory regions between device and CPU.
+ *
+ * @priv: Pointer to the Device structure.
+ * @pfn_array: Array of physical frame numbers to synchronize.
+ * @num: Number of entries in the `pfn_array`.
+ * @flags: Flags indicating the synchronization type (e.g., read/write).
+ *
+ * This function ensures memory consistency between the device and the CPU for a
+ * list of memory regions specified by the `pfn_array`. The `flags` parameter
+ * determines whether the memory should be synchronized for reading, writing, or both.
+ */
+void dhp_mem_sgt_sync(void *priv, u64 *pfn_array, u32 num, u32 flags);
+
+/*
+ * dhp_mem_munmap() - Unmaps a previously mapped memory region.
+ *
+ * @priv: Pointer to the Device structure.
+ * @vaddr: Pointer to the memory region to unmap.
+ * @len: Length of the memory region to unmap.
+ *
+ * This function unmaps a previously mapped memory region, removing the mapping
+ * between the virtual address and the physical memory.
+ */
+void dhp_mem_munmap(void *priv, u8 *vaddr, u32 len);
 
 /*
  * dhp_dev_ioctl() - Performs an IOCTL operation on the device.
