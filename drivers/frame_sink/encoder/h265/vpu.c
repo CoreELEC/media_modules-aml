@@ -382,7 +382,7 @@ static s32 vpu_free_buffers(struct file *filp)
 	}
 	return 0;
 }
-#if 0
+
 static u32 vpu_is_buffer_cached(struct file *filp, ulong vm_pgoff)
 {
 	struct vpudrv_buffer_pool_t *pool, *n;
@@ -406,7 +406,7 @@ static u32 vpu_is_buffer_cached(struct file *filp, ulong vm_pgoff)
 	enc_pr(LOG_ALL, "[-]vpu_is_buffer_cached, ret:%d\n", cached);
 	return cached;
 }
-#endif
+
 static s32 vpu_multi_dma_buf_release(struct file *filp)
 {
 	struct vpu_multi_dma_buf_pool_t *pool, *n;
@@ -1892,7 +1892,15 @@ static s32 vpu_map_to_physical_memory(
 #endif
 
 	vm->vm_pgoff = (s_video_memory.phys_addr >> PAGE_SHIFT) + vm->vm_pgoff;
-	vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
+	if (vm->vm_pgoff ==
+		(s_common_memory.phys_addr >> PAGE_SHIFT)) {
+		vm->vm_page_prot =
+			pgprot_noncached(vm->vm_page_prot);
+	} else {
+		if (vpu_is_buffer_cached(fp, vm->vm_pgoff) == 0)
+			vm->vm_page_prot =
+				pgprot_noncached(vm->vm_page_prot);
+	}
 	/* vm->vm_page_prot = pgprot_writecombine(vm->vm_page_prot); */
 	if (!pfn_valid(vm->vm_pgoff)) {
 		enc_pr(LOG_ERROR, "%s invalid pfn\n", __FUNCTION__);
