@@ -4290,7 +4290,7 @@ static u32 calc_buffer_u_v_h_size(u32 w, u32 h, u32 ratio, u32 lcu_size)
 	int lcu_total_dw = pic_width_lcu_dw * pic_height_lcu_dw;
 	int mc_buffer_size_u_v = (lcu_total_dw * lcu_size * lcu_size) >> 1;	// div 2
 
-	return ((mc_buffer_size_u_v + 0xffff) >> 16);
+	return ((mc_buffer_size_u_v + 0xfff) >> 12);
 }
 
 static int cal_current_buf_size(struct hevc_state_s *hevc,
@@ -4313,7 +4313,7 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 		(hevc, pic_width, pic_height, 0);
 	int mc_buffer_size = losless_comp_header_size
 		+ losless_comp_body_size;
-	int mc_buffer_size_h = (mc_buffer_size + 0xffff) >> 16;
+	int mc_buffer_size_h = (mc_buffer_size + 0xfff) >> 12;
 	int mc_buffer_size_u_v_h = 0;
 
 	int dw_mode = get_double_write_mode(hevc);
@@ -4327,7 +4327,6 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 		buf_size = 0;
 #ifdef H265_10B_MMU_DW
 	if (hevc->dw_mmu_enable) {
-		buf_size = ((buf_size + 0xffff) >> 16) << 16;
 		buf_size <<= 1;
 	}
 #endif
@@ -4336,10 +4335,10 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 			pic_height, get_double_write_ratio(dw_mode), lcu_size);
 
 			/*64k alignment*/
-		buf_size += ((mc_buffer_size_u_v_h << 16) * 3);
+		buf_size += ((mc_buffer_size_u_v_h << 12) * 3);
 #ifdef P010_ENABLE
 		if (is_dw_p010(hevc)) { 	//double size mem for p010 mode
-			buf_size += ((mc_buffer_size_u_v_h << 16) * 3);
+			buf_size += ((mc_buffer_size_u_v_h << 12) * 3);
 		}
 #endif
 	}
@@ -4349,9 +4348,9 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 		mc_buffer_size_u_v_h = calc_buffer_u_v_h_size(pic_width,
 			pic_height, get_double_write_ratio(tw_mode), lcu_size);
 
-		buf_size += ((mc_buffer_size_u_v_h << 16) * 3);
+		buf_size += ((mc_buffer_size_u_v_h << 12) * 3);
 		if (is_tw_p010(hevc)) {
-			buf_size += ((mc_buffer_size_u_v_h << 16) * 3);
+			buf_size += ((mc_buffer_size_u_v_h << 12) * 3);
 		}
 	}
 #endif
@@ -4362,10 +4361,6 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 		need buf for compress decoding*/
 		buf_size += (mc_buffer_size_h << (16 + is_dw_p010(hevc)));
 	}
-
-	/*in case start adr is not 64k alignment*/
-	if (buf_size > 0)
-		buf_size += 0x10000;
 
 	if (buf_stru) {
 		buf_stru->lcu_total = pic_width_lcu * pic_height_lcu;
@@ -4651,12 +4646,12 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 	not get the buffer not decoded*/
 	pic->BUF_index = i;
 
-	dw_uv_size = buf_stru.mc_buffer_size_u_v_h << (16 + is_dw_p010(hevc));
+	dw_uv_size = buf_stru.mc_buffer_size_u_v_h << (12 + is_dw_p010(hevc));
 
 	if ((!hevc->mmu_enable) &&
 		((dw_mode & 0x10) == 0)) {
 		pic->mc_y_adr = y_adr;
-		y_adr += (buf_stru.mc_buffer_size_h << (16 + is_dw_p010(hevc)));
+		y_adr += (buf_stru.mc_buffer_size_h << (12 + is_dw_p010(hevc)));
 	}
 	pic->mc_canvas_y = pic->index;
 	pic->mc_canvas_u_v = pic->index;
@@ -4681,7 +4676,7 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 			pic->tw_y_adr = y_adr;  //base no dw buf addr
 		}
 		pic->tw_u_v_adr = pic->tw_y_adr +
-			(buf_stru.mc_buffer_size_u_v_h << (16 + is_tw_p010(hevc) + 1));
+			(buf_stru.mc_buffer_size_u_v_h << (12 + is_tw_p010(hevc) + 1));
 	}
 #endif
 
