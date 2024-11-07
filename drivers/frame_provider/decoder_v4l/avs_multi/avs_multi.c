@@ -434,8 +434,7 @@ struct vdec_avs_hw_s {
 	u32 seqinfo;
 	u32 ctx_valid;
 	u32 dec_control;
-	ulong wk_space_handle;
-	void *wk_space_addr_vir;
+	void *mm_blk_handle;
 	dma_addr_t wk_space_addr_phy;
 	struct vframe_chunk_s *chunk;
 	u32 stat;
@@ -549,6 +548,7 @@ struct vdec_avs_hw_s {
 	ulong lmem_phy_handle;
 	bool force_interlaced_frame;
 	bool need_recycle_buf;
+	int tvp_flag;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -1530,10 +1530,11 @@ static int vavs_vdec_info_init(struct vdec_avs_hw_s *hw)
 
 static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 {
-	int i;
+	int i, ret;
 	struct vdec_s *vdec = NULL;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	u32 buf_size;
+	dos_addr_t buf_start;
 
 	if (hw->m_ins_flag)
 		vdec = hw_to_vdec(hw);
@@ -1562,23 +1563,24 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 		}
 	}
 
-	if (hw->wk_space_addr_vir == NULL) {
-		buf_size = WORKSPACE_SIZE;
-		if (is_need_fix_streambuf_rp())
-			buf_size += RP_WORKAROUND_SIZE;
+	buf_size = WORKSPACE_SIZE;
+	if (is_need_fix_streambuf_rp())
+		buf_size += RP_WORKAROUND_SIZE;
 
-		hw->wk_space_addr_vir = decoder_dma_alloc_coherent(&hw->wk_space_handle,
-			buf_size, &hw->wk_space_addr_phy, DRIVER_NAME);
-		if (hw->wk_space_addr_vir == NULL) {
-			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-			return -1;
-		}
+	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle,
+		0,
+		buf_size,
+		DRIVER_NAME,
+		&buf_start);
+	if (ret < 0) {
+		vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
+		return -1;
 	}
 
 	if (firmware_sel == 1)
-		hw->buf_offset = hw->wk_space_addr_phy - RV_AI_BUFF_START_ADDR;
+		hw->buf_offset = buf_start - RV_AI_BUFF_START_ADDR;
 	else
-		hw->buf_offset = hw->wk_space_addr_phy - LONG_CABAC_RV_AI_BUFF_START_ADDR;
+		hw->buf_offset = buf_start - LONG_CABAC_RV_AI_BUFF_START_ADDR;
 
 	return 0;
 }
@@ -2132,6 +2134,21 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 
 	if (hw->recover_flag == 1)
 		return;
+
+	if (hw->mm_blk_handle) {
+		decoder_bmmu_box_free(hw->mm_blk_handle);
+		hw->mm_blk_handle = NULL;
+	}
+
+	hw->mm_blk_handle = decoder_bmmu_box_alloc_box(
+			DRIVER_NAME,
+			0,
+			MAX_BMMU_BUFFER_NUM,
+			4 + PAGE_SHIFT,
+			CODEC_MM_FLAGS_CMA_CLEAR |
+			CODEC_MM_FLAGS_FOR_VDECODER |
+			hw->tvp_flag,
+			BMMU_ALLOC_FLAGS_WAIT);
 }
 
 static int vavs_vf_states(struct vframe_states *states, void *op_arg)
@@ -2691,12 +2708,9 @@ static int amvdec_avs_remove(struct platform_device *pdev)
 	}
 
 	hw->pic_type = 0;
-	if (hw->wk_space_handle) {
-		decoder_dma_free_coherent(hw->wk_space_handle,
-			WORKSPACE_SIZE, hw->wk_space_addr_vir, hw->wk_space_addr_phy);
-		hw->wk_space_handle = 0;
-		hw->wk_space_addr_vir = NULL;
-		hw->wk_space_addr_phy = 0;
+	if (hw->mm_blk_handle) {
+		decoder_bmmu_box_free(hw->mm_blk_handle);
+		hw->mm_blk_handle = NULL;
 	}
 #ifdef DEBUG_PTS
 	pr_debug("pts hit %d, pts missed %d, i hit %d, missed %d\n", hw->pts_hit,
@@ -4780,6 +4794,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		goto error1;
 	}
 
+	hw->tvp_flag = vdec_secure(pdata) ? CODEC_MM_FLAGS_TVP : 0;
 	if (pdata->sys_info)
 		hw->vavs_amstream_dec_info = *pdata->sys_info;
 
@@ -4879,6 +4894,8 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 	} else
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 
+	pr_info("dynamic_buf_num_margin: %d, tvp_flag: %d\n", hw->dynamic_buf_num_margin, hw->tvp_flag);
+
 	hw->platform_dev = pdev;
 
 	vdec_set_prepare_level(pdata, start_decode_buf_level);
@@ -4940,12 +4957,9 @@ error1:
 		}
 
 		cancel_work_sync(&hw->work);
-		if (hw->wk_space_handle) {
-			decoder_dma_free_coherent(hw->wk_space_handle,
-				WORKSPACE_SIZE, hw->wk_space_addr_vir, hw->wk_space_addr_phy);
-			hw->wk_space_handle = 0;
-			hw->wk_space_addr_vir = NULL;
-			hw->wk_space_addr_phy = 0;
+		if (hw->mm_blk_handle) {
+			decoder_bmmu_box_free(hw->mm_blk_handle);
+			hw->mm_blk_handle = NULL;
 		}
 
 		if (vdec->parallel_dec == 1)
@@ -5545,12 +5559,9 @@ static int ammvdec_avs_remove2(struct platform_device *pdev)
 	/*vdec_disable_DMC(NULL);*/
 
 	hw->pic_type = 0;
-	if (hw->wk_space_handle) {
-		decoder_dma_free_coherent(hw->wk_space_handle,
-			WORKSPACE_SIZE, hw->wk_space_addr_vir, hw->wk_space_addr_phy);
-		hw->wk_space_handle = 0;
-		hw->wk_space_addr_vir = NULL;
-		hw->wk_space_addr_phy = 0;
+	if (hw->mm_blk_handle) {
+		decoder_bmmu_box_free(hw->mm_blk_handle);
+		hw->mm_blk_handle = NULL;
 	}
 
 #ifdef DEBUG_PTS

@@ -530,6 +530,7 @@ struct vdec_avs_hw_s {
 	ulong lmem_phy_handle;
 	bool process_busy;
 	bool run_flag;
+	int tvp_flag;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -1913,7 +1914,8 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 		MAX_BMMU_BUFFER_NUM,
 		4 + PAGE_SHIFT,
 		CODEC_MM_FLAGS_CMA_CLEAR |
-		CODEC_MM_FLAGS_FOR_VDECODER,
+		CODEC_MM_FLAGS_FOR_VDECODER |
+		hw->tvp_flag,
 		BMMU_ALLOC_FLAGS_WAITCLEAR);
 	if (hw->mm_blk_handle == NULL)
 		pr_info("Error, decoder_bmmu_box_alloc_box fail\n");
@@ -4238,6 +4240,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		goto error1;
 	}
 
+	hw->tvp_flag = vdec_secure(pdata) ? CODEC_MM_FLAGS_TVP : 0;
 	if (pdata->sys_info)
 		hw->vavs_amstream_dec_info = *pdata->sys_info;
 
