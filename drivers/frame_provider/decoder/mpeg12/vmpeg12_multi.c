@@ -2270,6 +2270,56 @@ static int is_oversize(int w, int h)
 	return false;
 }
 
+#define nop_delay(n) do {nop_cnt = (n); while(nop_cnt--); } while (0)
+
+static void mpeg2_idle_axi_reset(struct vdec_mpeg12_hw_s *hw)
+{
+	int nop_cnt;
+	u32 data, vcop_ctrl;
+
+	if (!is_vdec_hevc_combine())
+		return;
+
+	arb_ctrl_wait_idle(0);
+
+	vcop_ctrl = READ_VREG(VCOP_CTRL_REG);
+
+	WRITE_VREG(DOS_SW_RESET0, 0x40);
+	WRITE_VREG(DOS_SW_RESET0, 0);
+
+	data = READ_VREG(MC_CTRL1);
+	data |= ((1 << 0) | (1 << 2) | (1 << 15));
+	WRITE_VREG(MC_CTRL1, data);
+	data &= ~((1 << 0) | (1 << 2) | (1 << 15));
+	WRITE_VREG(MC_CTRL1, data);
+
+	dos_wait_status(MDEC_PIC_DC_STATUS, 0xffffffff, 0);
+
+	data = READ_VREG(MDEC_PIC_DC_CTRL);
+	data |= ((0x27 << 24) | (1 << 0));
+	WRITE_VREG(MDEC_PIC_DC_CTRL, data);
+	data &= ~((0x27 << 24) | (1 << 0));
+	WRITE_VREG(MDEC_PIC_DC_CTRL, data);
+
+
+	data = READ_VREG(VLD_STATUS_CTRL);
+	data &= ~(1 << 6);
+	data |= (1 << 8);
+	WRITE_VREG(VLD_STATUS_CTRL, data);
+
+	SET_VREG_MASK(POWER_CTL_VLD, ((1 << 13)));
+
+	WRITE_VREG(DOS_SW_RESET0, 0x40);
+	WRITE_VREG(DOS_SW_RESET0, 0);
+	WRITE_VREG(MC_CTRL1, 0x65);
+	WRITE_VREG(MC_CTRL1, 0x60);
+	WRITE_VREG(VCOP_CTRL_REG, vcop_ctrl);
+
+	nop_delay(20);
+	arb_ctrl_wait_idle(1);
+	nop_delay(200);
+}
+
 static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 	u32 reg, index, info, seqinfo, offset, pts, frame_size=0, tmp;
@@ -2382,12 +2432,6 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			userdata_pushed_drop_stream(hw);
 			reset_process_time(hw);
 		}
-		return IRQ_HANDLED;
-	} else if (reg == MPEG12_ERROR_RESET) {
-		/* for t6d error reset in c drvier */
-		userdata_pushed_drop(hw);
-		hw->dec_result = DEC_RESULT_DONE;
-		vdec_schedule_work(&hw->work);
 		return IRQ_HANDLED;
 	} else {
 		/* MPEG12_PIC_DONE, MPEG12_SEQ_END */
@@ -2663,6 +2707,28 @@ static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 	}
 
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
+
+	if (READ_VREG(MREG_BUFFEROUT) == MPEG12_ERROR_RESET) {
+		reset_process_time(hw);
+
+		debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
+			"%s: lvl=%x ctrl=%x bcnt=%x reg %x\n",
+			__func__,
+			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+			READ_VREG(VLD_MEM_VIFIFO_CONTROL),
+			READ_VREG(VIFF_BIT_CNT), READ_VREG(MREG_BUFFEROUT));
+		/* for t6d error reset in c drvier */
+		if (vdec_frame_based(vdec))
+			userdata_pushed_drop(hw);
+		else
+			userdata_pushed_drop_stream(hw);
+		mpeg2_idle_axi_reset(hw);
+
+		WRITE_VREG(MREG_BUFFEROUT, 0x100);
+		start_process_time_set(hw);
+		hw->process_busy = false;
+		return IRQ_HANDLED;
+	}
 
 	return IRQ_WAKE_THREAD;
 }
