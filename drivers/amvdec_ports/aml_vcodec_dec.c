@@ -4362,7 +4362,11 @@ static ulong prepare_get_addr(struct dma_buf *dbuf, struct device	 *dev)
 	}
 
 	/* get the associated scatterlist for this buffer */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
 	sgt = dma_buf_map_attachment(dba, DMA_BIDIRECTIONAL);
+#else
+	sgt = dma_buf_map_attachment_unlocked(dba, DMA_BIDIRECTIONAL);
+#endif
 	if (IS_ERR(sgt)) {
 		pr_err("Error getting dmabuf scatterlist\n");
 		return 0;
@@ -4371,7 +4375,11 @@ static ulong prepare_get_addr(struct dma_buf *dbuf, struct device	 *dev)
 	addr = sg_dma_address(sgt->sgl);
 
 	/* unmap attachment and detach dbuf */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
 	dma_buf_unmap_attachment(dba, sgt, DMA_BIDIRECTIONAL);
+#else
+	dma_buf_unmap_attachment_unlocked(dba, sgt, DMA_BIDIRECTIONAL);
+#endif
 	dma_buf_detach(dbuf, dba);
 
 	return addr;
