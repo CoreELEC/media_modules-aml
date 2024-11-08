@@ -1044,6 +1044,27 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 	}
 }
 
+static void arb_dmc_ctrl(bool enable, u32 target)
+{
+	if (target == VDEC_INPUT_TARGET_VLD) {
+		dec_dmc_port_ctrl(enable, target);
+	} else if (target == VDEC_INPUT_TARGET_HEVC) {
+		if (enable) {
+			CLEAR_VREG_MASK(HEVC_ASSIST_AXI_CTRL, ((1 << 6 ) | (1 << 14)));
+		} else {
+			unsigned int mask = (1 << 6) | (1 << 7);
+			unsigned int sts_reg_addr = 0xd8;
+
+			SET_VREG_MASK(HEVC_ASSIST_AXI_CTRL, ((1 << 6 ) | (1 << 14)));
+			dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, (0x3 << 27), 0);
+
+			while (!(codec_dmcbus_read(sts_reg_addr)
+				& mask))
+				;
+		}
+	}
+}
+
 void arb_ctrl_wait_idle(int enable)
 {
 #define T6D_SYSCTRL_AXI_PIPE_CTRL0  0x55
@@ -1073,7 +1094,9 @@ static void dec_pipeline_idle_ctrl(struct vdec_s *vdec,
 		arb_ctrl_wait_idle(enable);
 	} else {
 		if (is_support_axi_ctrl()) {
-			if (target == VDEC_INPUT_TARGET_VLD)
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+				arb_dmc_ctrl(enable, target);
+			else if (target == VDEC_INPUT_TARGET_VLD)
 				vdec_dbus_ctrl(enable);
 			else if (target == VDEC_INPUT_TARGET_HEVC)
 				hevc_arb_ctrl(enable, 0);
@@ -1124,7 +1147,9 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 		arb_ctrl_wait_idle(1);
 	} else {
 		if (is_support_axi_ctrl()) {
-			if (input->target == VDEC_INPUT_TARGET_VLD) {
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+				arb_dmc_ctrl(0, input->target);
+			else if (input->target == VDEC_INPUT_TARGET_VLD) {
 				if (!vdec_on(VDEC_1))
 					return;
 				vdec_dbus_ctrl(0);
@@ -1149,7 +1174,9 @@ static void vdec_enable_DMC(struct vdec_s *vdec)
 		arb_ctrl_wait_idle(1);
 	} else {
 		if (is_support_axi_ctrl()) {
-			if (input->target == VDEC_INPUT_TARGET_VLD)
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+				arb_dmc_ctrl(1, input->target);
+			else if (input->target == VDEC_INPUT_TARGET_VLD)
 				vdec_dbus_ctrl(1);
 			else if (input->target == VDEC_INPUT_TARGET_HEVC)
 				hevc_arb_ctrl(1, 0);

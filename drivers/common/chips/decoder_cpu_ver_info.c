@@ -486,7 +486,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_h264_mmu    = true,
 		.is_support_dual_core = false,
 		.is_support_rdma     = false,
-		.is_support_axi_ctrl = false,
+		.is_support_axi_ctrl = true,
 		.is_mjpeg_endian_rematch = true,
 		.is_vcpu_clk_set = true,
 		.is_vp9_adapt_prob_hw_mode = true,
