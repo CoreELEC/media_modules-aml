@@ -502,8 +502,10 @@ void vdec_vframe_input_free(void *priv, u32 handle)
 	if (ctx->output_dma_mode)
 		aml_recycle_dma_buffers(ctx, handle);
 
-	if (!vdec_input_full(ctx->ada_ctx))
-		v4l2_m2m_try_schedule(ctx->m2m_ctx);
+	if (!vdec_input_full(ctx->ada_ctx)) {
+		if (!ctx->is_out_stream_off)
+			v4l2_m2m_try_schedule(ctx->m2m_ctx);
+	}
 }
 
 int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,

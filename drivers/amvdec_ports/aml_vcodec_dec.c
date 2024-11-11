@@ -4840,15 +4840,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
-		struct vb2_queue * que = v4l2_m2m_get_dst_vq(ctx->m2m_ctx);
-		ulong flags;
+		struct vb2_queue * que = v4l2_m2m_get_dst_vq(ctx->m2m_ctx);;
 
-		spin_lock_irqsave(&ctx->es_wkr_slock, flags);
-		ctx->es_wkr_stop = true;
-		spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
-
-		flush_work(&ctx->es_wkr_in);
-		flush_work(&ctx->es_wkr_out);
 		INIT_KFIFO(ctx->dmabuff_recycle);
 
 		while ((vb2_v4l2 = v4l2_m2m_src_buf_remove(ctx->m2m_ctx)))
@@ -4945,6 +4938,14 @@ static int m2mops_vdec_job_ready(void *m2m_priv)
 static void m2mops_vdec_job_abort(void *priv)
 {
 	struct aml_vcodec_ctx *ctx = priv;
+	ulong flags;
+
+	spin_lock_irqsave(&ctx->es_wkr_slock, flags);
+	ctx->es_wkr_stop = true;
+	spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
+
+	flush_work(&ctx->es_wkr_in);
+	flush_work(&ctx->es_wkr_out);
 
 	//v4l2_m2m_job_finish(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "%s\n", __func__);
