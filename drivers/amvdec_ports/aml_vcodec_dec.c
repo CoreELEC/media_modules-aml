@@ -434,7 +434,9 @@ void __aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes, struct s
 {
 	struct v4l2_event event = {0};
 	const char *event_str = event_to_string(changes);
+#ifdef CONFIG_AMLOGIC_MEDIA_PROXY
 	int events = 0;
+#endif
 
 	switch (changes) {
 	case V4L2_EVENT_SRC_CH_RESOLUTION:
