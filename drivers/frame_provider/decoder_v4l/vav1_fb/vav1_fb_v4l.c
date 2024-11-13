@@ -1188,6 +1188,8 @@ static void start_process_time_back(struct AV1HW_s *hw)
 
 static void timeout_process_back(struct AV1HW_s *hw)
 {
+	reset_process_time_back(hw);
+
 	hw->timeout_num_back++;
 	av1_print(hw, 0, "%s decoder timeout\n", __func__);
 	if (hw->front_back_mode == 1) {
@@ -1208,7 +1210,6 @@ static void timeout_process_back(struct AV1HW_s *hw)
 	hevc->decoding_pic = NULL;
 	hevc->dec_result = DEC_RESULT_DONE;
 #endif
-	reset_process_time_back(hw);
 
 	if (work_pending(&hw->work_back))
 		return;
@@ -9230,7 +9231,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		) {
 		hw->front_irq_time = local_clock();
 		if (hw->m_ins_flag) {
-			reset_process_time(hw);
 			if (!vdec_frame_based(hw_to_vdec(hw))) {
 				av1_buf_ref_process_for_exception(hw);
 				dec_again_process(hw);
@@ -9297,7 +9297,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				hw->config_next_ref_info_flag = 1; /*to do: low_latency_flag  case*/
 			}
 #endif
-			reset_process_time(hw);
 
 #ifdef NEW_FB_CODE
 			if ((hw->front_back_mode != 1) && (hw->front_back_mode != 3)) {
@@ -9466,9 +9465,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	}
 
 	if (dec_status == AOM_EOS) {
-		if (hw->m_ins_flag)
-			reset_process_time(hw);
-
 		av1_print(hw, AOM_DEBUG_HW_MORE, "AV1_EOS, flush buffer\r\n");
 
 		av1_postproc(hw);
@@ -9492,8 +9488,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 		hw->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		hw->process_busy = 0;
-		if (hw->m_ins_flag)
-			reset_process_time(hw);
 		return IRQ_HANDLED;
 	}
 
@@ -9719,9 +9713,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if (hw->frame_decoded)
 		hw->one_compressed_data_done = 1;
 
-	if (hw->m_ins_flag)
-		reset_process_time(hw);
-
 	if (hw->process_state != PROC_STATE_SENDAGAIN) {
 	    if (hw->one_compressed_data_done) {
 	        av1_postproc(hw);
@@ -9928,6 +9919,9 @@ static irqreturn_t vav1_isr(int irq, void *data)
 			return IRQ_HANDLED;
 		}
 	}
+
+	if (hw->m_ins_flag)
+		reset_process_time(hw);
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_END);
 	return IRQ_WAKE_THREAD;
 }
@@ -12047,6 +12041,7 @@ irqreturn_t vav1_back_irq_cb(struct vdec_s *vdec, int irq)
 
 		return IRQ_HANDLED;
 	}
+	reset_process_time_back(hw);
 	return IRQ_WAKE_THREAD;
 }
 #if 1
@@ -12260,7 +12255,6 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			"fg_data0 0x%x fg_data1 0x%x fg_valid %d\n",
 			fg_reg0, fg_reg1, hw->fgs_valid);
 
-		reset_process_time_back(hw);
 		if (hw->front_back_mode == 1) {
 			if (front_back_debug & 2) {
 				printk("BackEnd data done %d, fb_rd_pos %d pic %px, crc (%x, %x), y_crc (%x, %x), c_crc (%x, %x)\n",
