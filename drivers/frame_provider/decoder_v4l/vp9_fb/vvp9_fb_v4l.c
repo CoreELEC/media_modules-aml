@@ -5638,7 +5638,7 @@ static int init_mmu_fb_bufstate(struct VP9Decoder_s *pbi, int mmu_4k_number)
 	return 0;
 }
 
-static void init_fb_bufstate(struct VP9Decoder_s *pbi)
+static int init_fb_bufstate(struct VP9Decoder_s *pbi)
 {
 	int size = 0;
 	int ret;
@@ -5649,7 +5649,7 @@ static void init_fb_bufstate(struct VP9Decoder_s *pbi)
 	ret = init_mmu_fb_bufstate(pbi, mmu_4k_number);
 	if (ret) {
 		vp9_print(pbi, 0, "%s: failed to alloc mmu fb buffer\n", __func__);
-		return;
+		return ret;
 	}
 
 	pbi->fb_buf_sys_imem.buf_size = IFBUF_SYS_IMEM_SIZE * pbi->fb_ifbuf_num;
@@ -5660,7 +5660,7 @@ static void init_fb_bufstate(struct VP9Decoder_s *pbi)
 	pbi->fb_buf_sys_imem.buf_start = tmp_phy_adr;
 	if (pbi->fb_buf_sys_imem_addr == NULL) {
 		pr_err("%s: failed to alloc fb_buf_sys_imem\n", __func__);
-		return;
+		return -ENOMEM;
 	}
 	memset(pbi->fb_buf_sys_imem_addr, 0, pbi->fb_buf_sys_imem.buf_size);
 	pbi->fb_buf_sys_imem.buf_end = pbi->fb_buf_sys_imem.buf_start + pbi->fb_buf_sys_imem.buf_size;
@@ -5670,6 +5670,10 @@ static void init_fb_bufstate(struct VP9Decoder_s *pbi)
 	ret = decoder_bmmu_box_alloc_buf_phy(pbi->bmmu_box,
 			BMMU_IFBUF_LMEM0_ID, pbi->fb_buf_lmem0.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret < 0) {
+		pr_err("fb_buf_lmem0 alloc failed\n");
+		return ret;
+	}
 	pbi->fb_buf_lmem0.buf_start = tmp_adr;
 	pbi->fb_buf_lmem0.buf_end = pbi->fb_buf_lmem0.buf_start + pbi->fb_buf_lmem0.buf_size;
 
@@ -5678,6 +5682,11 @@ static void init_fb_bufstate(struct VP9Decoder_s *pbi)
 	ret = decoder_bmmu_box_alloc_buf_phy(pbi->bmmu_box,
 			BMMU_IFBUFF_MPRED_IMP0_ID, pbi->fb_buf_mpred_imp0.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret < 0) {
+		pr_err("fb_buf_mpred_imp0 alloc failed\n");
+		return ret;
+	}
+
 	pbi->fb_buf_mpred_imp0.buf_start = tmp_adr;
 	pbi->fb_buf_mpred_imp0.buf_end = pbi->fb_buf_mpred_imp0.buf_start + pbi->fb_buf_mpred_imp0.buf_size;
 
@@ -5686,6 +5695,11 @@ static void init_fb_bufstate(struct VP9Decoder_s *pbi)
 	ret = decoder_bmmu_box_alloc_buf_phy(pbi->bmmu_box,
 			BMMU_IFBUFF_MPRED_IMP1_ID, pbi->fb_buf_mpred_imp1.buf_size,
 			DRIVER_NAME, &tmp_adr);
+	if (ret < 0) {
+		pr_err("fb_buf_mpred_imp1 alloc failed\n");
+		return ret;
+	}
+
 	pbi->fb_buf_mpred_imp1.buf_start = tmp_adr;
 	pbi->fb_buf_mpred_imp1.buf_end = pbi->fb_buf_mpred_imp1.buf_start + pbi->fb_buf_mpred_imp1.buf_size;
 
@@ -5707,6 +5721,7 @@ static void init_fb_bufstate(struct VP9Decoder_s *pbi)
 	pbi->bk.sys_imem_ptr = pbi->fb_buf_sys_imem.buf_start;
 	pbi->fr.sys_imem_ptr_v = pbi->fb_buf_sys_imem_addr;
 
+	return 0;
 }
 
 static void uninit_mmu_fb_bufstate(struct VP9Decoder_s* pbi)
@@ -9378,7 +9393,11 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		pbi->fb_wr_pos = 0;
 		pbi->fb_rd_pos = 0;
 		if (!pbi->reset_flag) {
-			init_fb_bufstate(pbi);
+			ret = init_fb_bufstate(pbi);
+			if (ret < 0) {
+				pr_err("vp9 init_fb_bufstate failed\n");
+				return ret;
+			}
 			copy_loopbufs_ptr(&pbi->next_bk[pbi->fb_wr_pos], &pbi->fr);
 		}
 	}

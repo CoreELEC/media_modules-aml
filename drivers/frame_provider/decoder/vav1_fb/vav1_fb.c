@@ -10943,6 +10943,10 @@ static s32 vav1_init_back(struct AV1HW_s *hw)
 	pbi->fb_wr_pos = 0;
 	pbi->fb_rd_pos = 0;
 	ret = init_fb_bufstate(hw);
+	if (ret < 0) {
+		pr_err("init_fb_bufstate failed %d\n", ret);
+		return ret;
+	}
 	copy_loopbufs_ptr(&pbi->next_bk[pbi->fb_wr_pos], &pbi->fr);
 
 	fw_back = fw_firmare_s_creat(fw_size);
