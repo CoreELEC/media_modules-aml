@@ -455,7 +455,7 @@ bool vdec_input_full(struct aml_vdec_adapt *ada_ctx)
 }
 
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx, const char *buf,
-	unsigned int count, u64 timestamp, ulong meta_ptr, chunk_free free)
+	unsigned int count, u64 timestamp, ulong meta_ptr, chunk_free free, char *head_metadata)
 {
 	int ret = -1;
 	struct vdec_s *vdec = ada_ctx->vdec;
@@ -466,7 +466,7 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx, const char *buf,
 	/* set metadata */
 	vdec_set_metadata(vdec, meta_ptr);
 
-	ret = vdec_write_vframe(vdec, buf, count, free, ada_ctx->ctx);
+	ret = vdec_write_vframe(vdec, buf, count, free, ada_ctx->ctx, head_metadata);
 
 	if (slow_input) {
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_PRINFO,
@@ -510,7 +510,7 @@ void vdec_vframe_input_free(void *priv, u32 handle)
 
 int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
 	ulong addr, u32 count, u64 timestamp, u32 handle,
-	chunk_free free, void* priv)
+	chunk_free free, void* priv, char *head_metadata)
 {
 	int ret = -1;
 	struct vdec_s *vdec = ada_ctx->vdec;
@@ -518,7 +518,7 @@ int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
 	vdec_set_timestamp(vdec, timestamp);
 
 	ret = vdec_write_vframe_with_dma(vdec, addr, count,
-		handle, free, priv);
+		handle, free, priv, head_metadata);
 
 	if (slow_input) {
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_PRINFO,

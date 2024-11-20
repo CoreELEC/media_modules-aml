@@ -110,6 +110,8 @@
 #define USER_DATA_BUFF_NUM 128
 #define FRM_INFO_BUFF_NUM 128
 #define AML_USERDATA_SIZE (4 * 1024)
+#define AML_LOW_LATENCY_NO_HEADER     (1 << 3)
+
 
 enum E_DECINFO_TYPE {
 	AML_STREAM_TYPE = 0,
@@ -144,6 +146,7 @@ enum E_DECINFO_CMD_GET {
 	AML_DECINFO_GET_CUVA_TYPE,
 	AML_DECINFO_GET_DV_TYPE,
 	AML_DECINFO_GET_FRAME_TYPE,
+	AML_DECINFO_GET_FEATURE_TYPE,
 	AML_DECINFO_GET_COMPOSITE_TYPE = 30,
 	AML_DECINFO_GET_CMD_BOTTOM = 31,
 };
@@ -324,7 +327,7 @@ struct aux_data_static_t {
 };
 
 struct v4l_dec_data_extension {
-	ulong ptr;  /* for future extension */
+	__u64 ptr;  /* for future extension */
 	__u32 data_size;
 };
 
@@ -559,6 +562,12 @@ struct aml_vdec_cfg_infos {
 	u32 ref_buf_margin;
 	u32 canvas_mem_mode;
 	u32 canvas_mem_endian;
+	/*
+	* bit 3         : low_latency_no_head_mode.
+	* bit 2         : low_latency_display.
+	* bit 1         : low_latency_fence.
+	* bit 0         : low_latency_mode.
+	*/
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
 	/*

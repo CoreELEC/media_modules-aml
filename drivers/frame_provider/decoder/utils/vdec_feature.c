@@ -21,8 +21,10 @@
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
+#include <linux/dma-buf.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/utils/vformat.h>
+#include <linux/amlogic/media/codec_mm/dmabuf_manage.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "vdec.h"
 
@@ -347,10 +349,35 @@ static int vcodec_feature_es_dma_mode(u8 *buf, int size, int vformat, int is_v4l
 	return pbuf - buf;
 }
 
-int vcodec_feature_get_feature(u8 *buf, int vformat, int is_v4l)
+static int force_no_head_mode;
+
+static u32 is_support_no_head_mode(void)
+{
+	if (force_no_head_mode & 0x80)
+		return force_no_head_mode & 0xf;
+
+	return 1;
+}
+
+static int vcodec_feature_no_head_mode(u8 *buf, int size, int vformat, int is_v4l)
 {
 	u8 *pbuf = buf;
-	int size = PAGE_SIZE;
+
+	if (!is_v4l)
+		return 0;
+
+	if (!is_support_no_head_mode() || !dmabuf_manage_support_nohead())
+		return 0;
+
+	if (vformat == VFORMAT_VP9 || vformat == VFORMAT_AV1)
+		pbuf += snprintf(pbuf, size, "        \"No head mode\" : true,\n");
+
+	return pbuf - buf;
+}
+
+int vcodec_feature_get_feature(u8 *buf, int size, int vformat, int is_v4l)
+{
+	u8 *pbuf = buf;
 	int tsize = 0;
 	int s;
 
@@ -430,11 +457,13 @@ int vcodec_feature_get_feature(u8 *buf, int vformat, int is_v4l)
 	tsize += s;
 	pbuf += s;
 
-	s = snprintf(pbuf, size - tsize, "        \"UcodeVersionRequest\" : \"0.3.10\",\n");
-
+	s = vcodec_feature_no_head_mode(pbuf, size - tsize, vformat, is_v4l);
 	tsize += s;
 	pbuf += s;
-
+	/*s = snprintf(pbuf, size - tsize, "        \"UcodeVersionRequest\" : \"0.3.10\",\n");
+	tsize += s;
+	pbuf += s;
+	*/
 	s = snprintf(pbuf, size - tsize, "    },\n");
 	tsize += s;
 	pbuf += s;
@@ -456,7 +485,8 @@ ssize_t vcodec_feature_read(char *buf)
 	if (vcodec_feature_idx > 0) {
 		if (read_count == 0)
 			pbuf += snprintf(pbuf, PAGE_SIZE - (pbuf - buf), "{\n");
-		pbuf += vcodec_feature_get_feature(pbuf, feature[read_count].format, feature[read_count].is_v4l);
+		pbuf += vcodec_feature_get_feature(pbuf, PAGE_SIZE - (pbuf - buf),
+			feature[read_count].format, feature[read_count].is_v4l);
 		read_count++;
 		if (read_count >= vcodec_feature_idx) {
 			read_count = 0;
@@ -468,6 +498,45 @@ ssize_t vcodec_feature_read(char *buf)
 }
 EXPORT_SYMBOL(vcodec_feature_read);
 
+ssize_t vcodec_feature_get(u64 ptr, int size, bool is_v4l)
+{
+	void __user *user_ptr = (void __user *)((uintptr_t)ptr);
+	char *pbuf = NULL;
+	char *buf = NULL;
+	int i;
+
+	if (!size || !user_ptr)
+		return 0;
+
+	buf = kzalloc(sizeof(char) * (size + 1), GFP_KERNEL);
+	if (!buf) {
+		pr_err("failed alloc buf for buff_show\n");
+		return 0;
+	}
+	pbuf = buf;
+	if (size == 1) {
+		pbuf += snprintf(pbuf, size, "1");  //check support
+	} else {
+		pbuf += snprintf(pbuf, size, "{\n");
+		for (i = 0; i < vcodec_feature_idx; i ++) {
+			if (feature[i].is_v4l == is_v4l) {
+				pbuf += vcodec_feature_get_feature(pbuf, size - (pbuf - buf),
+					feature[i].format, feature[i].is_v4l);
+			}
+		}
+		pbuf += snprintf(pbuf, size - (pbuf - buf), "}");
+	}
+	if (copy_to_user(user_ptr, buf, size)) {
+		pr_err("feature data copy to user failed\n");
+	    kfree(buf);
+	    return 0;
+	}
+
+	kfree(buf);
+
+	return pbuf - buf;
+}
+EXPORT_SYMBOL(vcodec_feature_get);
 
 int vcodec_feature_register(int vformat, int is_v4l)
 {
@@ -482,5 +551,7 @@ int vcodec_feature_register(int vformat, int is_v4l)
 }
 EXPORT_SYMBOL(vcodec_feature_register);
 
+module_param(force_no_head_mode, int, 0664);
+MODULE_PARM_DESC(force_no_head_mode, "\n force_no_head_mode\n");
 
 

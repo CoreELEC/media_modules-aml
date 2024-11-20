@@ -2106,6 +2106,7 @@ static struct device *cma_dev;
 //#define HEVC_sao_vb_size          HEVC_ASSIST_SCRATCH_B
 //#define HEVC_SAO_VB               HEVC_ASSIST_SCRATCH_C
 //#define HEVC_SCALELUT             HEVC_ASSIST_SCRATCH_D
+#define AOM_AV1_OBU_LEN              HEVC_ASSIST_SCRATCH_D
 #define HEVC_WAIT_FLAG	          HEVC_ASSIST_SCRATCH_E
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
 //#define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
@@ -8948,7 +8949,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		struct AV1_Common_s *const cm = &hw->common;
 		struct PIC_BUFFER_CONFIG_s *frame = &cm->cur_frame->buf;
 		struct vdec_s *vdec = hw_to_vdec(hw);
-
+		u32 shift_byte = 0;
 		u32 fg_reg0, fg_reg1, num_y_points, num_cb_points, num_cr_points;
 		WRITE_VREG(HEVC_FGS_IDX, 0);
 		fg_reg0 = READ_VREG(HEVC_FGS_DATA);
@@ -9000,6 +9001,13 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				get_picture_qos_info(hw);
 
 			reset_process_time(hw);
+
+			av1_print(hw, PRINT_FLAG_VDEC_STATUS,
+				"%s (===> %d) CRC 0x%x CRC_3 0x%x\n",
+				__func__,
+				hw->frame_count,
+				READ_VREG(HEVC_SAO_CRC),
+				READ_VREG(HEVC_SAO_CRC_3));
 
 			if (hw->m_ins_flag &&
 				(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
@@ -9078,15 +9086,26 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 				}
 			}
 
+			if (hw->no_head) {
+				shift_byte = READ_VREG(AOM_AV1_OBU_LEN);
+			} else {
+				shift_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+			}
 			if (multi_frames_in_one_pack &&
 			hw->frame_decoded &&
-			READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
+			shift_byte + 2 < hw->data_size) { //obu head 1 byte, obu payload 1 byte
 				if (enable_single_slice == 1) {
 					//.hevc_stream_extra_shift = 8, t3x, s6
-					hw->consume_byte =
-						READ_VREG(HEVC_SHIFT_BYTE_COUNT) - get_hevc_stream_extra_shift_bytes() - 4;
+					if (hw->no_head) {
+						hw->consume_byte = shift_byte;
+					} else {
+						hw->consume_byte =
+							shift_byte - get_hevc_stream_extra_shift_bytes() - 4;
+					}
 					hw->dec_result = DEC_RESULT_UNFINISH;
 					amhevc_stop();
+					if (hw->consume_byte == 0)
+						hw->dec_result = DEC_RESULT_DONE;
 #ifdef MCRCC_ENABLE
 					if (mcrcc_cache_alg_flag)
 						dump_hit_rate(hw);
@@ -9484,9 +9503,14 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if (hw->m_ins_flag) {
 		if (ret > 0 && hw->frame_decoded && hw->common.show_existing_frame) {
 			hw->dec_result = DEC_RESULT_DONE;
-			if (READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
-				hw->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
-				hw->dec_result = DEC_RESULT_UNFINISH;
+			if (READ_VREG(HEVC_SHIFT_BYTE_COUNT) + 2 < hw->data_size) { //obu head 1 byte, obu payload 1 byte
+				if (hw->no_head) {
+					hw->consume_byte = READ_VREG(AOM_AV1_OBU_LEN);
+				} else {
+					hw->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+				}
+				if (hw->consume_byte != 0)
+					hw->dec_result = DEC_RESULT_UNFINISH;
 			}
 			amhevc_stop();
 			av1_work_implement(hw);
@@ -11591,12 +11615,6 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			av1_buf_height = config_val;
 		}
 
-		if (get_config_int(pdata->config, "no_head",
-				&config_val) == 0)
-			hw->no_head = config_val;
-		else
-			hw->no_head = no_head;
-
 		/*use ptr config for max_pic_w, etc*/
 		if (get_config_int(pdata->config, "av1_max_pic_w",
 				&config_val) == 0) {
@@ -11641,6 +11659,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			&config_val) == 0) {
 			hw->low_latency_flag = (config_val & 1) ? 1 : 0;
 			hw->enable_fence = (config_val & 2) ? 1 : 0;
+			hw->no_head = (config_val & 8) ? 1 : no_head;
 		}
 
 		if (get_config_int(pdata->config,
@@ -11832,7 +11851,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		get_double_write_mode_init(hw) & 0x20 ? 1 : 0;
 
 #endif
-	av1_print(hw, AV1_DEBUG_BUFMGR,
+	av1_print(hw, 0,
 			"no_head %d  low_latency %d video_signal_type 0x%x\n",
 			hw->no_head, hw->low_latency_flag, hw->video_signal_type);
 

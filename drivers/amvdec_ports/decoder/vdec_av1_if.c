@@ -281,7 +281,6 @@ static void vdec_parser_parms(struct vdec_av1_inst *inst)
 		pbuf += sprintf(pbuf, "av1_buf_width:1920;");
 		pbuf += sprintf(pbuf, "av1_buf_height:1088;");
 		pbuf += sprintf(pbuf, "save_buffer_mode:0;");
-		pbuf += sprintf(pbuf, "no_head:0;");
 		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:%d;",
 			ctx->config.parm.dec.cfg.canvas_mem_mode);
 		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_endian:%d;",
@@ -437,7 +436,7 @@ static int parse_stream_ucode_dma(struct vdec_av1_inst *inst,
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
 	ret = vdec_vframe_write_with_dma(vdec, buf, size, timestamp, handle,
-		vdec_vframe_input_free, inst->ctx);
+		vdec_vframe_input_free, inst->ctx, NULL);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -991,8 +990,9 @@ static int vdec_write_nalu(struct vdec_av1_inst *inst,
 	u8 *data = NULL;
 	u32 length = 0;
 	bool need_prefix = av1_need_prefix;
+	bool is_no_head_mode = inst->ctx->config.parm.dec.cfg.low_latency_mode & 8;
 
-	if (need_prefix) {
+	if (need_prefix && !is_no_head_mode) {
 		u8 meta_buffer[1024] = {0};
 		u32 meta_size = 0;
 		u8 *src = buf;
@@ -1005,13 +1005,13 @@ static int vdec_write_nalu(struct vdec_av1_inst *inst,
 
 		if (length)
 			ret = vdec_vframe_write(vdec, data, length, ts,
-					0, free);
+					0, free, NULL);
 		else
 			ret = -1;
 
 		vfree(data);
 	} else {
-		ret = vdec_vframe_write(vdec, buf, size, ts, 0, free);
+		ret = vdec_vframe_write(vdec, buf, size, ts, 0, free, NULL);
 	}
 
 	return ret;
@@ -1076,13 +1076,13 @@ static int vdec_av1_decode(unsigned long h_vdec,
 				s->len,
 				bs->timestamp,
 				0,
-				vdec_vframe_input_free);
+				vdec_vframe_input_free, NULL);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
 			ret = vdec_vframe_write_with_dma(vdec,
 				bs->addr, size, bs->timestamp,
 				BUFF_IDX(bs, bs->index),
-				vdec_vframe_input_free, inst->ctx);
+				vdec_vframe_input_free, inst->ctx, NULL);
 		}
 	} else {
 		/*checked whether the resolution changes.*/

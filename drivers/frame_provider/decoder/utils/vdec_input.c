@@ -799,7 +799,7 @@ static int	vdec_input_get_free_block(
 }
 
 int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
-		size_t count, u32 handle, chunk_free free, void* priv)
+		size_t count, u32 handle, chunk_free free, void* priv, char *head_metadata)
 {
 	unsigned long flags;
 	struct vframe_chunk_s *chunk;
@@ -931,6 +931,21 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	}
 	vdec->hdr10p_data_valid = false;
 
+	if (head_metadata) {
+		char *new_buf;
+		int size = head_metadata[0] << 24 |
+			head_metadata[1] << 16 |
+			head_metadata[2] << 8 |
+			head_metadata[3];
+		if (size != 0) {
+			new_buf = vzalloc(size);
+			if (new_buf) {
+				memcpy(new_buf, head_metadata, size);
+				chunk->head_meta_buf = new_buf;
+			}
+		}
+	}
+
 	chunk->magic = 0x4b554843;
 	if (vdec->pts_valid) {
 		chunk->pts = vdec->pts;
@@ -1009,7 +1024,7 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 }
 
 int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
-			size_t count, chunk_free free, void* priv)
+			size_t count, chunk_free free, void* priv, char *head_metadata)
 {
 	int ret = 0;
 	struct drm_info drm;
@@ -1026,7 +1041,7 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 				return -EIO; /*must drm info v2 version*/
 			phy_buf = (unsigned long) drm.drm_phy;
 			vdec_input_add_chunk(input, (char *)phy_buf,
-				(size_t)drm.drm_pktsize, drm.handle, NULL, NULL);
+				(size_t)drm.drm_pktsize, drm.handle, NULL, NULL, NULL);
 			count -= sizeof(struct drm_info);
 			ret += sizeof(struct drm_info);
 
@@ -1036,7 +1051,7 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 				vdec->pts_valid = true;
 		}
 	} else {
-		ret = vdec_input_add_chunk(input, buf, count, 0, free, priv);
+		ret = vdec_input_add_chunk(input, buf, count, 0, free, priv, head_metadata);
 	}
 
 	return ret;
@@ -1044,13 +1059,13 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 EXPORT_SYMBOL(vdec_input_add_frame);
 
 int vdec_input_add_frame_with_dma(struct vdec_input_s *input, ulong addr,
-	size_t count, u32 handle, chunk_free free, void* priv)
+	size_t count, u32 handle, chunk_free free, void* priv, char *head_metadata)
 {
 	struct vdec_s *vdec = input->vdec;
 
 	return (vdec_secure(vdec) || vdec_dmabuf(vdec)) ?
 		vdec_input_add_chunk(input,
-			(char *)addr, count, handle, free, priv) : -1;
+			(char *)addr, count, handle, free, priv, head_metadata) : -1;
 }
 EXPORT_SYMBOL(vdec_input_add_frame_with_dma);
 
@@ -1117,6 +1132,11 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 		vfree(chunk->hdr10p_data_buf);
 		chunk->hdr10p_data_buf = NULL;
 		chunk->hdr10p_data_size = 0;
+	}
+
+	if (chunk->head_meta_buf != NULL) {
+		vfree(chunk->head_meta_buf);
+		chunk->head_meta_buf = NULL;
 	}
 
 	list_del(&chunk->list);

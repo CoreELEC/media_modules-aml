@@ -597,7 +597,7 @@ static int parse_stream_ucode(struct vdec_h264_inst *inst,
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
 	ret = vdec_vframe_write(vdec, buf, size, timestamp, 0,
-			vdec_vframe_input_free);
+			vdec_vframe_input_free, NULL);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -618,7 +618,7 @@ static int parse_stream_ucode_dma(struct vdec_h264_inst *inst,
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
 	ret = vdec_vframe_write_with_dma(vdec, buf, size, timestamp, handle,
-		vdec_vframe_input_free, inst->ctx);
+		vdec_vframe_input_free, inst->ctx, NULL);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -784,7 +784,7 @@ static int vdec_write_nalu(struct vdec_h264_inst *inst,
 		inst->vsi->head_offset += inst->vsi->sei_size;
 		ret = size;
 	} else if (inst->vsi->head_offset == 0) {
-		ret = vdec_vframe_write(vdec, buf, size, ts, 0, free);
+		ret = vdec_vframe_write(vdec, buf, size, ts, 0, free, NULL);
 	} else {
 		char *write_buf = vmalloc(inst->vsi->head_offset + size);
 		if (!write_buf) {
@@ -796,7 +796,7 @@ static int vdec_write_nalu(struct vdec_h264_inst *inst,
 		memcpy(write_buf + inst->vsi->head_offset, buf, size);
 
 		ret = vdec_vframe_write(vdec, write_buf,
-			inst->vsi->head_offset + size, ts, 0, free);
+			inst->vsi->head_offset + size, ts, 0, free, NULL);
 
 		memset(inst->vsi->header_buf, 0, HEADER_BUFFER_SIZE);
 		inst->vsi->head_offset = 0;
@@ -898,13 +898,13 @@ static int vdec_h264_decode(unsigned long h_vdec,
 				s->len,
 				bs->timestamp,
 				0,
-				vdec_vframe_input_free);
+				vdec_vframe_input_free, NULL);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
 			ret = vdec_vframe_write_with_dma(vdec,
 				bs->addr, size, bs->timestamp,
 				BUFF_IDX(bs, bs->index),
-				vdec_vframe_input_free, inst->ctx);
+				vdec_vframe_input_free, inst->ctx, NULL);
 		}
 	} else {
 		if (inst->ctx->param_sets_from_ucode) {

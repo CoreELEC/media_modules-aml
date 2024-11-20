@@ -23,6 +23,7 @@
 #include "aml_vcodec_adapt.h"
 #include "./decoder/utils.h"
 #include "../frame_provider/decoder/utils/vdec.h"
+#include "../frame_provider/decoder/utils/vdec_feature.h"
 #include "aml_vcodec_adapt.h"
 #include "vdec_drv_if.h"
 
@@ -412,6 +413,18 @@ static int vcodec_get_data_stream(struct aml_vcodec_ctx *ctx,
 	return 0;
 }
 
+static int vcodec_get_feature(struct aml_vcodec_ctx *ctx,
+	struct vdec_common_s *data)
+{
+	struct v4l_dec_data_extension *ext_out = NULL;
+	int ret = 0;
+
+	ext_out = &data->u.data_ext;
+
+	ret = vcodec_feature_get(ext_out->ptr, ext_out->data_size, true);
+	return ret;
+}
+
 int aml_vcodec_decinfo_get(struct v4l2_ctrl *ctrl,
 	struct aml_vcodec_ctx *ctx)
 {
@@ -454,6 +467,9 @@ int aml_vcodec_decinfo_get(struct v4l2_ctrl *ctrl,
 		break;
 	case AML_DECINFO_GET_FRAME_TYPE:
 		ret = vcodec_get_data_frame(ctx, info);
+		break;
+	case AML_DECINFO_GET_FEATURE_TYPE:
+		ret = vcodec_get_feature(ctx, info);
 		break;
 	default:
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,

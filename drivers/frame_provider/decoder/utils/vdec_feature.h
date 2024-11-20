@@ -24,6 +24,7 @@ int vcodec_feature_register(int vformat, int is_v4l);
 
 ssize_t vcodec_feature_read(char *buf);
 
+ssize_t vcodec_feature_get(u64 ptr, int size, bool is_v4l);
 
 
 #endif /* VDEC_FEATURE_H */

@@ -284,7 +284,7 @@ static int parse_stream_ucode(struct vdec_hevc_inst *inst,
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
 	ret = vdec_vframe_write(vdec, buf, size, timestamp, 0,
-				vdec_vframe_input_free);
+				vdec_vframe_input_free, NULL);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -305,7 +305,7 @@ static int parse_stream_ucode_dma(struct vdec_hevc_inst *inst,
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
 	ret = vdec_vframe_write_with_dma(vdec, buf, size, timestamp, handle,
-		vdec_vframe_input_free, inst->ctx);
+		vdec_vframe_input_free, inst->ctx, NULL);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -419,7 +419,7 @@ static int vdec_write_nalu(struct vdec_hevc_inst *inst,
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
-	ret = vdec_vframe_write(vdec, buf, size, ts, 0, free);
+	ret = vdec_vframe_write(vdec, buf, size, ts, 0, free, NULL);
 
 	return ret;
 }
@@ -503,13 +503,13 @@ static int vdec_hevc_decode(unsigned long h_vdec,
 				s->len,
 				bs->timestamp,
 				0,
-				vdec_vframe_input_free);
+				vdec_vframe_input_free, NULL);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
 			ret = vdec_vframe_write_with_dma(vdec,
 				bs->addr, size, bs->timestamp,
 				BUFF_IDX(bs, bs->index),
-				vdec_vframe_input_free, inst->ctx);
+				vdec_vframe_input_free, inst->ctx, NULL);
 		}
 	} else {
 		if (!inst->ctx->param_sets_from_ucode) {

@@ -2027,17 +2027,17 @@ EXPORT_SYMBOL(vdec_set_receive_id);
 
 /* add frame data to input chain */
 int vdec_write_vframe(struct vdec_s *vdec, const char *buf,
-			size_t count, chunk_free free, void* priv)
+			size_t count, chunk_free free, void* priv, char *head_metadata)
 {
-	return vdec_input_add_frame(&vdec->input, buf, count, free, priv);
+	return vdec_input_add_frame(&vdec->input, buf, count, free, priv, head_metadata);
 }
 EXPORT_SYMBOL(vdec_write_vframe);
 
 int vdec_write_vframe_with_dma(struct vdec_s *vdec,
-	ulong addr, size_t count, u32 handle, chunk_free free, void* priv)
+	ulong addr, size_t count, u32 handle, chunk_free free, void* priv, char *head_metadata)
 {
 	return vdec_input_add_frame_with_dma(&vdec->input,
-		addr, count, handle, free, priv);
+		addr, count, handle, free, priv, head_metadata);
 }
 EXPORT_SYMBOL(vdec_write_vframe_with_dma);
 

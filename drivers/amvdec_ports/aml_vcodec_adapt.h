@@ -58,13 +58,13 @@ int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count);
 
 int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx, const char *buf,
-	unsigned int count, u64 timestamp, ulong meta_ptr, chunk_free free);
+	unsigned int count, u64 timestamp, ulong meta_ptr, chunk_free free, char *head_metadata);
 
 void vdec_vframe_input_free(void *priv, u32 handle);
 
 int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
 	ulong addr, u32 count, u64 timestamp, u32 handle,
-	chunk_free free, void *priv);
+	chunk_free free, void *priv, char *head_metadata);
 
 bool vdec_input_full(struct aml_vdec_adapt *ada_ctx);
 

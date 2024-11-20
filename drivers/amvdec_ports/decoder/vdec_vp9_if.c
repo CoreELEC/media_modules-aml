@@ -22,6 +22,9 @@
 #include <linux/timer.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/dma-buf.h>
+#include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/amlogic/media/codec_mm/dmabuf_manage.h>
 #include <uapi/linux/swab.h>
 #include "../vdec_drv_if.h"
 #include "../aml_vcodec_util.h"
@@ -130,6 +133,9 @@ struct vdec_vp9_inst {
 
 static int vdec_write_nalu(struct vdec_vp9_inst *inst,
 	u8 *buf, u32 size, u64 ts, ulong meta_ptr, chunk_free free);
+static int parser_head_metadata_with_dma(struct aml_vdec_adapt *ada_ctx,
+	ulong addr, u32 count, u64 timestamp, u32 handle,
+	chunk_free free, void* priv);
 
 static void get_pic_info(struct vdec_vp9_inst *inst,
 			 struct vdec_pic_info *pic)
@@ -203,7 +209,6 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 		pbuf += sprintf(pbuf, "vp9_buf_height:%d;",
 			ctx->config.parm.dec.cfg.init_height);
 		pbuf += sprintf(pbuf, "save_buffer_mode:0;");
-		pbuf += sprintf(pbuf, "no_head:0;");
 		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_mode:%d;",
 			ctx->config.parm.dec.cfg.canvas_mem_mode);
 		pbuf += sprintf(pbuf, "parm_v4l_canvas_mem_endian:%d;",
@@ -370,7 +375,7 @@ static int parse_stream_ucode_dma(struct vdec_vp9_inst *inst,
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
-	ret = vdec_vframe_write_with_dma(vdec, buf, size, timestamp, handle,
+	ret = parser_head_metadata_with_dma(vdec, buf, size, timestamp, handle,
 		vdec_vframe_input_free, inst->ctx);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
@@ -528,7 +533,8 @@ static void add_prefix_data(struct vp9_superframe_split *s,
 }
 
 #ifndef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
-static int vp9_superframe_split_filter(struct vp9_superframe_split *s)
+static int vp9_superframe_split_filter(struct vp9_superframe_split *s,
+	int *superframe_len)
 {
 	int i, j, ret, marker;
 	bool is_superframe = false;
@@ -549,6 +555,7 @@ static int vp9_superframe_split_filter(struct vp9_superframe_split *s)
 		int   nb_frames = 1 + (marker & 0x7);
 		int    idx_size = 2 + nb_frames * length_size;
 
+		*superframe_len = idx_size;
 		if (s->data_size >= idx_size &&
 			s->data[s->data_size - idx_size] == marker) {
 			s64 total_size = 0;
@@ -624,11 +631,98 @@ static void trigger_decoder(struct aml_vdec_adapt *vdec, chunk_free free)
 	for (i = 0; i < ARRAY_SIZE(vp9_trigger_framesize); i++) {
 		frame_size = vp9_trigger_framesize[i];
 		ret = vdec_vframe_write(vdec, p,
-			frame_size, 0, 0, free);
+			frame_size, 0, 0, free, NULL);
 		v4l_dbg(vdec->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write trigger frame %d\n", ret);
 		p += frame_size;
 	}
+}
+
+static int parser_head_metadata_with_dma(struct aml_vdec_adapt *ada_ctx,
+	ulong addr, u32 count, u64 timestamp, u32 handle,
+	chunk_free free, void* priv)
+{
+	int ret = -1;
+	struct aml_vcodec_ctx *ctx = ada_ctx->ctx;
+	bool is_no_head_mode = ctx->config.parm.dec.cfg.low_latency_mode & 8;
+	struct vp9_superframe_split s = {0};
+	void *stbuf_vaddr = NULL;
+	int superframe_len = 0;
+	int header_len = 0;
+	u8 *metadata = NULL;
+	u32 meta_size = VDEC_META_DATA_SIZE;
+	int i = 0;
+
+	if (is_no_head_mode) {
+		if (ctx->is_drm_mode) {
+			metadata = vzalloc(VDEC_META_DATA_SIZE);
+			if (!metadata) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"alloc size %d failed.\n", VDEC_META_DATA_SIZE);
+				codec_mm_unmap_phyaddr(stbuf_vaddr);
+				return -1;
+			}
+			ret = dmabuf_manage_vp9_probe_metadata(addr, count, metadata, &meta_size);
+			if (ret) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"dmabuf_manage_vp9_probe_metadata failed.\n");
+			}
+			ret = vdec_vframe_write_with_dma(ada_ctx, addr, count, timestamp,
+				handle, free, priv, metadata);
+		} else {
+			stbuf_vaddr = codec_mm_vmap(addr, count);
+			if (stbuf_vaddr) {
+				s.data = stbuf_vaddr;
+				s.data_size = count;
+				ret = vp9_superframe_split_filter(&s, &superframe_len);
+				if (ret) {
+					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+						"parse frames failed.\n");
+					codec_mm_unmap_phyaddr(stbuf_vaddr);
+					return ret;
+				}
+				if (s.nb_frames > 1) {
+					metadata = vzalloc(VDEC_META_DATA_SIZE);
+					if (!metadata) {
+						v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+							"alloc size %d failed.\n", VDEC_META_DATA_SIZE);
+						codec_mm_unmap_phyaddr(stbuf_vaddr);
+						return -1;
+					}
+					header_len = 8 + s.nb_frames * 4;
+					metadata[0] = (header_len >> 24) & 0xFF;
+					metadata[1] = (header_len >> 16) & 0xFF;
+					metadata[2] = (header_len >> 8) & 0xFF;
+					metadata[3] = header_len & 0xFF;
+					metadata[4] = (s.nb_frames >> 24) & 0xFF;
+					metadata[5] = (s.nb_frames >> 16) & 0xFF;
+					metadata[6] = (s.nb_frames >> 8) & 0xFF;
+					metadata[7] = s.nb_frames & 0xFF;
+
+					for (i = 0; i < s.nb_frames; i++) {
+						metadata[8 + i * 4] = (s.sizes[i] >> 24) & 0xFF;
+						metadata[9 + i * 4] = (s.sizes[i] >> 16) & 0xFF;
+						metadata[10 + i * 4] = (s.sizes[i] >> 8) & 0xFF;
+						metadata[11 + i * 4] = s.sizes[i] & 0xFF;
+					}
+				}
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
+					"size:%d superframe_len:%d nb_frames:%d\n", s.nb_frames, superframe_len, count);
+				ret = vdec_vframe_write_with_dma(ada_ctx, addr, count - superframe_len, timestamp,
+					handle, free, priv, metadata);
+				vfree(metadata);
+				codec_mm_unmap_phyaddr(stbuf_vaddr);
+			} else {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"es buffer (%lx, %u) vmap fail\n", addr, count);
+			}
+		}
+	} else {
+		ret = vdec_vframe_write_with_dma(ada_ctx, addr, count, timestamp,
+			handle, free, priv, metadata);
+	}
+
+	return ret;
 }
 
 static int vdec_write_nalu(struct vdec_vp9_inst *inst,
@@ -639,7 +733,12 @@ static int vdec_write_nalu(struct vdec_vp9_inst *inst,
 	struct vp9_superframe_split s;
 	u8 *data = NULL;
 	u32 length = 0;
+	int header_len = 0;
+	int superframe_len = 0;
 	bool need_prefix = vp9_need_prefix;
+	bool is_no_head_mode = inst->ctx->config.parm.dec.cfg.low_latency_mode & 8;
+	u8 *head_metadata = NULL;
+	int i;
 
 	memset(&s, 0, sizeof(s));
 
@@ -649,23 +748,53 @@ static int vdec_write_nalu(struct vdec_vp9_inst *inst,
 		need_trigger = true;
 	}
 
-	if (need_prefix) {
+	if (need_prefix || is_no_head_mode) {
 		/*parse superframe.*/
 		s.data = buf;
 		s.data_size = size;
-		ret = vp9_superframe_split_filter(&s);
+		ret = vp9_superframe_split_filter(&s, &superframe_len);
 		if (ret) {
 			v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 				"parse frames failed.\n");
 			return ret;
 		}
+		if (is_no_head_mode) {
+			if (s.nb_frames > 1) {
+				head_metadata = vzalloc(VDEC_META_DATA_SIZE);
+				if (!head_metadata) {
+					v4l_dbg(vdec->ctx, V4L_DEBUG_CODEC_ERROR,
+						"alloc size %d failed.\n", VDEC_META_DATA_SIZE);
+					return -1;
+				}
+				header_len = 8 + s.nb_frames * 4;
+				head_metadata[0] = (header_len >> 24) & 0xFF;
+				head_metadata[1] = (header_len >> 16) & 0xFF;
+				head_metadata[2] = (header_len >> 8) & 0xFF;
+				head_metadata[3] = header_len & 0xFF;
+				head_metadata[4] = (s.nb_frames >> 24) & 0xFF;
+				head_metadata[5] = (s.nb_frames >> 16) & 0xFF;
+				head_metadata[6] = (s.nb_frames >> 8) & 0xFF;
+				head_metadata[7] = s.nb_frames & 0xFF;
 
-		/*add headers.*/
-		add_prefix_data(&s, &data, &length);
-		ret = vdec_vframe_write(vdec, data, length, ts, 0, free);
-		vfree(data);
+				for (i = 0; i < s.nb_frames; i++) {
+					head_metadata[8 + i * 4] = (s.sizes[i] >> 24) & 0xFF;
+					head_metadata[9 + i * 4] = (s.sizes[i] >> 16) & 0xFF;
+					head_metadata[10 + i * 4] = (s.sizes[i] >> 8) & 0xFF;
+					head_metadata[11 + i * 4] = s.sizes[i] & 0xFF;
+				}
+			}
+			v4l_dbg(vdec->ctx, V4L_DEBUG_CODEC_INPUT,
+				"size:%d superframe_len:%d nb_frames:%d\n", size, superframe_len, s.nb_frames);
+			ret = vdec_vframe_write(vdec, buf, size - superframe_len, ts, 0, free, head_metadata);
+			vfree(head_metadata);
+		} else {
+			/*add headers.*/
+			add_prefix_data(&s, &data, &length);
+			ret = vdec_vframe_write(vdec, data, length, ts, 0, free, NULL);
+			vfree(data);
+		}
 	} else {
-		ret = vdec_vframe_write(vdec, buf, size, ts, meta_ptr, free);
+		ret = vdec_vframe_write(vdec, buf, size, ts, meta_ptr, free, NULL);
 	}
 
 	return ret;
@@ -730,10 +859,10 @@ static int vdec_vp9_decode(unsigned long h_vdec,
 				s->len,
 				bs->timestamp,
 				0,
-				vdec_vframe_input_free);
+				vdec_vframe_input_free, NULL);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
-			ret = vdec_vframe_write_with_dma(vdec,
+			ret = parser_head_metadata_with_dma(vdec,
 				bs->addr, size, bs->timestamp,
 				BUFF_IDX(bs, bs->index),
 				vdec_vframe_input_free, inst->ctx);

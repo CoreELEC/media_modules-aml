@@ -67,6 +67,7 @@ struct vframe_chunk_s {
 	struct vframe_block_list_s *block;
 	u32 hdr10p_data_size;
 	char *hdr10p_data_buf;
+	char *head_meta_buf;
 };
 
 #define VDEC_INPUT_TARGET_VLD           0
@@ -154,10 +155,10 @@ extern int vdec_input_set_buffer(struct vdec_input_s *input, dos_addr_t start,
 
 /* Add enqueue video data into decoder's input */
 extern int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
-	size_t count, chunk_free free, void* priv);
+	size_t count, chunk_free free, void* priv, char *head_metadata);
 
 extern int vdec_input_add_frame_with_dma(struct vdec_input_s *input, ulong addr,
-	size_t count, u32 handle, chunk_free free, void* priv);
+	size_t count, u32 handle, chunk_free free, void* priv, char *head_metadata);
 
 /* Peek next frame data from decoder's input */
 extern struct vframe_chunk_s *vdec_input_next_chunk(

@@ -712,10 +712,10 @@ extern int vdec_set_receive_id(struct vdec_s *vdec, int receive_id);
 
 /* add frame data to input chain */
 extern int vdec_write_vframe(struct vdec_s *vdec, const char *buf,
-				size_t count, chunk_free free, void* priv);
+				size_t count, chunk_free free, void* priv, char *head_metadata);
 
 extern int vdec_write_vframe_with_dma(struct vdec_s *vdec,
-	ulong addr, size_t count, u32 handle, chunk_free free, void* priv);
+	ulong addr, size_t count, u32 handle, chunk_free free, void* priv, char *head_metadata);
 
 /* mark the vframe_chunk as consumed */
 extern void vdec_vframe_dirty(struct vdec_s *vdec,
