@@ -135,6 +135,7 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 	s64 UpdateTimeThreshold = 0;
 	s64 StartMediaTime = -1;
 	s32 PlayerInstanceId = -1;
+	mediasync_audio_switch AudioSwitch = {0};
 
 	switch (cmd) {
 		case MEDIASYNC_IOC_INSTANCE_ALLOC:
@@ -1426,6 +1427,31 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 								parm.mDemuxId,
 								parm.mPcrPid);
 		break;
+		case MEDIASYNC_IOC_SET_AUDIO_SWITCH:
+			if (copy_from_user((void *)&AudioSwitch,
+						(void *)arg,
+						sizeof(AudioSwitch)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_audio_switch(priv->mSyncIns,
+							AudioSwitch);
+		break;
+		case MEDIASYNC_IOC_GET_AUDIO_SWITCH:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_audio_switch(priv->mSyncIns,
+							&AudioSwitch);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&AudioSwitch,
+						sizeof(AudioSwitch)))
+					return -EFAULT;
+			}
+		break;
 
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
@@ -1539,6 +1565,8 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_SET_CACHE_FRAMES:
 		case MEDIASYNC_IOC_SET_VF_SYNC_ID:
 		case MEDIASYNC_IOC_SET_PCR_AND_DMX_ID:
+		case MEDIASYNC_IOC_SET_AUDIO_SWITCH:
+		case MEDIASYNC_IOC_GET_AUDIO_SWITCH:
 			return mediasync_ioctl_inner(file, cmd,(ulong)compat_ptr(arg),1);
 		default:
 			return -EINVAL;
