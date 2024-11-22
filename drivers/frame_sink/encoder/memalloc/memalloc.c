@@ -539,8 +539,7 @@ int __init enc_memallc_init(void)
         return -1;
     }
     pr_info("enc_mem_init: enc_mem_init\n");
-    platform_driver_register(&venc_mem_driver);
-    return 0;
+    return platform_driver_register(&venc_mem_driver);
 }
 
 void __exit enc_memallc_exit(void)

@@ -98,7 +98,7 @@ int enc_register_set_debug_level_func(const char *module, enc_set_debug_level_fu
 		}
 
 		node->module = kzalloc(strlen(module) + 1, GFP_KERNEL);
-		if (!node) {
+		if (!node->module) {
 			pr_info("failed allocate module for %s\n", module);
 			res = -ENOMEM;
 			goto error;
@@ -110,10 +110,14 @@ int enc_register_set_debug_level_func(const char *module, enc_set_debug_level_fu
 	}
 	mutex_unlock(&debug_lock);
 
+	/*
+	 * Variable node and module will free in enc_report_exit finally.
+	 */
+	/* coverity[leaked_storage] */
 	return 0;
 error:
-	kfree(node->module);
-	kfree(node);
+	if (node)
+		kfree(node);
 	mutex_unlock(&debug_lock);
 	return res;
 }

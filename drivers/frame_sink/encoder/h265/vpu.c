@@ -2191,6 +2191,10 @@ static u32 vpu_multi_src_addr_config(struct vpu_multi_dma_buf_info_t *pinfo,
 	enc_pr(LOG_INFO, "vpu_src_addr_config phy_addr 0x%lx, 0x%lx, 0x%lx\n",
 		pinfo->phys_addr[0], pinfo->phys_addr[1], pinfo->phys_addr[2]);
 
+	/*
+	 * Variable vbp will free in vpu_multi_dma_buf_release finally.
+	 */
+	/* coverity[leaked_storage] */
 	return ret;
 }
 

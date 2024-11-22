@@ -124,8 +124,10 @@ void bi_list_free_node(bi_list_node *node)
 
 void bi_list_insert_node_tail(bi_list *list, bi_list_node *current_node)
 {
-    if (!current_node)
+    if (!current_node) {
         PDEBUG("%s\n", "insert node tail  NULL");
+        return;
+    }
     if (list->tail) {
         current_node->previous = list->tail;
         list->tail->next = current_node;

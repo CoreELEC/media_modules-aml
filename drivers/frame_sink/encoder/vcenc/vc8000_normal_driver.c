@@ -429,7 +429,8 @@ static int CheckEncAnyIrqByPolling(hantroenc_t *dev, CORE_WAIT_OUT *out)
 {
     u32 i;
     int rdy = 0;
-    u32 core_info, irq_status, job_id;
+    u32 core_info, irq_status;
+    u32 job_id = 0;
     u32 core_type = CORE_VC8000E;
 
     for (i = 0; i < total_subsys_num; i++) {
@@ -460,7 +461,8 @@ static int CheckEncAnyIrq(hantroenc_t *dev, CORE_WAIT_OUT *out)
 {
     u32 i;
     int rdy = 0;
-    u32 core_info, irq_status, job_id;
+    u32 core_info, irq_status;
+    u32 job_id = 0;
     u32 core_type = CORE_VC8000E;
 
     for (i = 0; i < total_subsys_num; i++) {
@@ -810,6 +812,7 @@ static long hantroenc_ioctl(struct file *filp, unsigned int cmd, unsigned long a
     case HANTRO_IOCG_CORE_INFO: {
         u32 idx;
         SUBSYS_CORE_INFO in_data;
+        memset(&in_data, 0, sizeof(in_data));
 
         return_val = copy_from_user(&in_data, (void __user *)arg, sizeof(SUBSYS_CORE_INFO));
         idx = in_data.type_info;
@@ -1039,7 +1042,7 @@ static int PcieInit(void)
     }
 
     gBaseHdwr = pci_resource_start(gDev, PCI_H2_BAR);
-    if (gBaseHdwr < 0) {
+    if (gBaseHdwr == 0) {
         pr_info("Init: Base Address not set.\n");
         goto out_pci_disable_device;
     }

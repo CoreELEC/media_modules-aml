@@ -1855,7 +1855,7 @@ static void write_jpeg_huffman_lut_dc(s32 table_num)
 {
     u32 code_len, code_word, pos, addr;
     u32 num_code_len;
-    u32 lut[12];
+    u32 lut[12] = {0};
     u32 i, j;
 
     code_len = 1;
@@ -1899,7 +1899,7 @@ static void write_jpeg_huffman_lut_ac(s32 table_num)
         jenc_pr(LOG_ERROR, "alloc lut failed.\n");
         return;
     }
-
+    memset(lut, 0, 162 * sizeof(u32));
     /* Construct AC Huffman table */
     for (i = 0; i < 16; i++) {
         num_code_len = jpeg_huffman_ac[table_num][i];
@@ -2605,6 +2605,10 @@ static s32 jpegenc_buffspec_init(struct jpegenc_wq_s *wq)
 
         up(&s_vpu_sem);
     }
+    /*
+     * Variable vbp will free in enc_free_buffers finally.
+     */
+    /* coverity[leaked_storage] */
     return 0;
 }
 
@@ -2847,7 +2851,7 @@ static s32 dump_raw_input(struct jpegenc_wq_s *wq, u32 y_addr, u32 u_addr, u32 v
     filp = file_open("/data/encoder.yuv", O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (filp) {
         file_write(filp, 0, (u8*)phys_to_virt(y_addr), canvas_w * picsize_y);
-        file_write(filp, canvas_w * picsize_y, (u8*)phys_to_virt(u_addr), canvas_w * picsize_y / 2);
+        file_write(filp, (unsigned long long)canvas_w * picsize_y, (u8*)phys_to_virt(u_addr), canvas_w * picsize_y / 2);
         file_close(filp);
     } else{
         jenc_pr(LOG_ERROR, "dump file open fail\n");
@@ -4264,6 +4268,10 @@ static s32 jpegenc_reconfig_input(struct jpegenc_wq_s *wq, u32 new_addr, u32 new
 
         up(&s_vpu_sem);
     }
+    /*
+     * Variable vbp will free in enc_free_buffers finally.
+     */
+    /* coverity[leaked_storage] */
     return ret;
 }
 
@@ -4816,6 +4824,10 @@ static s32 enc_src_addr_config(struct encdrv_dma_buf_info_t *pinfo,
     spin_unlock(&s_dma_buf_lock);
     jenc_pr(LOG_INFO, "enc_src_addr_config phy_addr 0x%lx\n",
         pinfo->phys_addr);
+    /*
+     * Variable vbp will free in enc_dma_buf_release finally.
+     */
+    /* coverity[leaked_storage] */
     return ret;
 }
 
