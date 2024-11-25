@@ -16322,7 +16322,7 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	}
 
 	hevc_print(hevc, 0,
-		"error: policy 0x%x mode %d lcu_percentage_threshold %d\n",
+		"Correction: policy 0x%x mode %d lcu_percentage_threshold %d\n",
 		hevc->nal_skip_policy, hevc->error_handle_mode, hevc->lcu_percentage_threshold);
 
 	if (!is_support_triple_write()) {

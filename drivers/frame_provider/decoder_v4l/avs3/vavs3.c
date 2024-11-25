@@ -11259,7 +11259,7 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 		dec->error_handle_policy &= ~(1 << 2);
 	}
 
-	avs3_print(dec, 0, "double_write_mode 0x%x, error: policy 0x%x mode %d lcu_percentage_threshold %d\n",
+	avs3_print(dec, 0, "double_write_mode 0x%x, Correction: policy 0x%x mode %d lcu_percentage_threshold %d\n",
 		dec->double_write_mode, dec->error_handle_policy,
 		dec->error_handle_mode, dec->lcu_percentage_threshold);
 

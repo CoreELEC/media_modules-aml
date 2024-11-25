@@ -4836,6 +4836,12 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 		WRITE_VREG(H264_BUFFER_INFO_DATA, ref_reg_val);
 	}
 
+	if ((pic->data_flag & ERROR_FLAG) && !(hw->send_error_frame_flag)) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
+			" data_flag is ERROR_FLAG return\n");
+		return -1;
+	}
+
 	/* configure co-locate buffer */
 	while ((READ_VREG(H264_CO_MB_RW_CTL) >> 11) & 0x1)
 		;
