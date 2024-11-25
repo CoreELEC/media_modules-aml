@@ -1448,8 +1448,8 @@ struct PIC_s {
 	struct page *alloc_pages;
 	dos_addr_t mpred_mv_wr_start_addr;
 	int mv_size;
-	unsigned int mc_y_adr;
-	unsigned int mc_u_v_adr;
+	dos_addr_t mc_y_adr;
+	dos_addr_t mc_u_v_adr;
 
 #ifdef SUPPORT_10BIT
 	/*unsigned int comp_body_size;*/
@@ -3936,7 +3936,7 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
 	int ret = -1;
 	int i;
-	unsigned int y_adr = 0;
+	dos_addr_t y_adr = 0;
 	struct buf_stru_s buf_stru;
 	int buf_size = cal_current_buf_size(hevc, &buf_stru);
 	int dw_mode = get_double_write_mode(hevc);

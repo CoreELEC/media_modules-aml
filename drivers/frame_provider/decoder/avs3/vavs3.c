@@ -2965,7 +2965,7 @@ static int config_pic(struct AVS3Decoder_s *dec,
 	int32_t pic_height_lcu = ( pic_height %lcu_size ) ? pic_height/lcu_size + 1 : pic_height/lcu_size;
 	int32_t lcu_total       =pic_width_lcu*pic_height_lcu;
 
-	u32 y_adr = 0;
+	dos_addr_t y_adr = 0;
 	int buf_size = 0;
 	int losless_comp_body_size = compute_losless_comp_body_size(
 			dec, pic_width,

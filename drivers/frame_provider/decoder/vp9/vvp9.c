@@ -5604,7 +5604,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 			pbi->work_space_buf->mpred_mv.buf_size;
 	int mv_size = cal_mv_buf_size(pbi, pbi->init_pic_w, pbi->init_pic_h);
 #endif
-	u32 y_adr = 0;
+	dos_addr_t y_adr = 0;
 	int buf_size = 0;
 
 	int losless_comp_header_size =

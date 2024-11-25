@@ -3042,7 +3042,7 @@ static int config_pic(struct AV1HW_s *hw,
 
 #endif
 
-	u32 y_adr = 0;
+	dos_addr_t y_adr = 0;
 	int buf_size = 0;
 
 	int losless_comp_header_size =

@@ -2980,7 +2980,7 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 {
 	int ret = -1;
 	int i;
-	unsigned int y_adr = 0;
+	dos_addr_t y_adr = 0;
 	struct buf_stru_s buf_stru;
 	int buf_size = cal_current_buf_size(hevc, &buf_stru);
 	int dw_mode = get_double_write_mode(hevc);
@@ -4043,7 +4043,7 @@ static void config_sao_hw(struct hevc_state_s *hevc)
 		data32 |= ((hevc->endian >> 8) & 0xfff);
 #else
 	data32 |= ((hevc->endian >> 8) & 0xfff);    /* data32 |= 0x670; Big-Endian per 64-bit */
-
+#endif
 	data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
 	if (dw_mode == 0)
 		data32 |= 0x2; /*disable double write*/
@@ -4111,7 +4111,7 @@ static void config_sao_hw(struct hevc_state_s *hevc)
 	* [31:13] reserved
 	*/
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
-#endif
+
 
 
 #if 0  // moved to with other VH setting
@@ -11317,10 +11317,6 @@ static int ammvdec_h266_probe(struct platform_device *pdev)
 	if (endian)
 		hevc->endian = endian;
 
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) &&
-			(hevc->double_write_mode == 3))
-		hevc->double_write_mode = 0x1000;
-
 	/* get valid double write from node */
 	if (double_write_mode)
 		hevc->double_write_mode = get_double_write_mode(hevc);
@@ -11328,8 +11324,7 @@ static int ammvdec_h266_probe(struct platform_device *pdev)
 	if (mmu_enable_force) {
 		hevc->mmu_enable = 1;
 	} else {
-		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL) ||
-			(hevc->double_write_mode & 0x10))
+		if (hevc->double_write_mode & 0x10)
 			hevc->mmu_enable = 0;
 		else
 			hevc->mmu_enable = 1;
