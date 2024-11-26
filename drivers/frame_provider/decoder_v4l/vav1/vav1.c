@@ -6919,7 +6919,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	aml_buf = index_to_aml_buf(hw, index);
 
 	vf->type		|= VIDTYPE_V4L_EOS;
-	vf->timestamp		= ULONG_MAX;
+	vf->timestamp		= ULLONG_MAX;
 	vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
 	vf->v4l_mem_handle	= (ulong)aml_buf;
 
