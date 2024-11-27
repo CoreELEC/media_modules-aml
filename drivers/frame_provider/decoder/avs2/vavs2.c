@@ -249,7 +249,7 @@ static u32 mv_buf_margin;
 static int pre_decode_buf_level = 0x1000;
 static u32 again_threshold;
 
-static unsigned int efficiency_mode = 1;
+static unsigned int efficiency_mode = 0;
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
 /* double_write_mode:
