@@ -319,7 +319,7 @@ static u32 enable_single_slice = 1;
 
 #ifdef NEW_FB_CODE
 static unsigned int decode_timeout_val_back = 600;
-static u32 efficiency_mode = 1;
+static u32 efficiency_mode = 0;
 #endif
 
 static int start_decode_buf_level = 0x8000;
