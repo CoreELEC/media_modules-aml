@@ -274,7 +274,7 @@ static u32 work_buf_size;
 
 static u32 again_threshold;
 
-static unsigned int efficiency_mode = 1;
+static unsigned int efficiency_mode = 0;
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
 /* double_write_mode:

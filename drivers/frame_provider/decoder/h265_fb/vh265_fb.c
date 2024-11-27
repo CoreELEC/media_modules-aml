@@ -253,7 +253,7 @@ static int poc_error_limit = 30;
 
 static u32 dirty_again_threshold = 100;
 static u32 dirty_buffersize_threshold = 0x800000;
-static u32 efficiency_mode = 1;
+static u32 efficiency_mode = 0;
 static u32 save_buffer = 1;
 static u32 support_no_output_of_prior_pics = 0;
 static u32 rpm_expand = 1;
