@@ -351,7 +351,7 @@ static void error_handle_mmu_copy(struct AVS2Decoder_s *dec, struct avs2_frame_s
 
 #ifdef NEW_FB_CODE
 static unsigned int decode_timeout_val_back = 200;
-static unsigned int efficiency_mode = 1;
+static unsigned int efficiency_mode = 0;
 static unsigned int back_timer_check_count = 3;
 
 static void avs2_work_back(struct work_struct *work);

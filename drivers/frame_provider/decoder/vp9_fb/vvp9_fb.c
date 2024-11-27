@@ -218,7 +218,7 @@ static u32 front_back_mode = 1;
 #define EE_ASSIST_MBOX0_MASK       0x3f72
 
 static u32 fb_ucode_debug;
-static u32 efficiency_mode = 1;
+static u32 efficiency_mode = 0;
 #endif
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
