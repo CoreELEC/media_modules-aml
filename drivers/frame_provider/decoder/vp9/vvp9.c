@@ -167,7 +167,7 @@ static u32 mv_buf_margin;
 
 static u32 mv_buf_dynamic_alloc;
 static u32 debug_mask = 0xffffffff;
-static u32 efficiency_mode = 1;
+static u32 efficiency_mode = 0;
 
 /* DOUBLE_WRITE_MODE is enabled only when NV21 8 bit output is needed */
 /* double_write_mode:
