@@ -4138,6 +4138,24 @@ void aml_bind_hdr10p_buffer(struct aml_vcodec_ctx *ctx, char **addr)
 	}
 }
 
+void aml_unbind_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size, int idx)
+{
+	int index = ctx->aux_infos.sei_index;
+
+	if ((ctx->aux_infos.bufs[idx].sei_buf == *addr) &&
+		(ctx->aux_infos.bufs[idx].sei_state == 2)) {
+		ctx->aux_infos.bufs[idx].sei_state = 1;
+		ctx->aux_infos.sei_index = (index + V4L_CAP_BUFF_MAX - 1) % V4L_CAP_BUFF_MAX;
+	}
+}
+
+void aml_unbind_hdr10p_buffer(struct aml_vcodec_ctx *ctx)
+{
+	int index = ctx->aux_infos.hdr10p_index;
+
+	ctx->aux_infos.hdr10p_index = (index + V4L_CAP_BUFF_MAX - 1) % V4L_CAP_BUFF_MAX;
+}
+
 static void aml_canvas_cache_free(struct canvas_cache *cache)
 {
 	int i = -1;

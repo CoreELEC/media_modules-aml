@@ -11598,6 +11598,10 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 		pic->referenced = 0;
 		pic->BUF_index = -1;
 		pic->POC = INVALID_POC;
+
+		ctx->aux_infos.unbind_sei_buffer(ctx, &pic->aux_data_buf,
+						&pic->aux_data_size, pic->ctx_buf_idx);
+		ctx->aux_infos.unbind_hdr10p_buffer(ctx);
 	}
 }
 

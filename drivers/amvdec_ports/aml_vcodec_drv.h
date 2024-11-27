@@ -797,6 +797,8 @@ struct aux_info {
 	void 	(*bind_sei_buffer)(struct aml_vcodec_ctx *ctx, char **addr, int *size, int *idx);
 	void	(*bind_dv_buffer)(struct aml_vcodec_ctx *ctx, char **comp_buf, char **md_buf);
 	void	(*bind_hdr10p_buffer)(struct aml_vcodec_ctx *ctx, char **addr);
+	void 	(*unbind_sei_buffer)(struct aml_vcodec_ctx *ctx, char **addr, int *size, int idx);
+	void	(*unbind_hdr10p_buffer)(struct aml_vcodec_ctx *ctx);
 };
 
 /*

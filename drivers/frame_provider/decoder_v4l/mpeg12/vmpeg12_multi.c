@@ -2384,6 +2384,9 @@ static void mpeg2_buf_ref_process_for_exception(struct vdec_mpeg12_hw_s *hw)
 	hw->pics[index].v4l_ref_buf_addr = 0;
 	hw->pics[index].cma_alloc_addr = 0;
 	hw->cur_idx = INVALID_IDX;
+
+	ctx->aux_infos.unbind_sei_buffer(ctx, &hw->pics[index].user_data_buf,
+			&hw->pics[index].user_data_size, hw->pics[index].ctx_buf_idx);
 }
 
 static void copy_user_data_to_pic(struct vdec_mpeg12_hw_s *hw, struct pic_info_t *pic)

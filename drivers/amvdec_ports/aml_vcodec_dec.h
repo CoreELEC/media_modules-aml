@@ -243,6 +243,8 @@ void aml_free_one_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size,
 void aml_bind_sei_buffer(struct aml_vcodec_ctx *v4l, char **addr, int *size, int *idx);
 void aml_bind_dv_buffer(struct aml_vcodec_ctx *v4l, char **comp_buf, char **md_buf);
 void aml_bind_hdr10p_buffer(struct aml_vcodec_ctx *v4l, char **addr);
+void aml_unbind_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size, int idx);
+void aml_unbind_hdr10p_buffer(struct aml_vcodec_ctx *v4l);
 
 int aml_canvas_cache_init(struct aml_vcodec_dev *dev);
 void aml_canvas_cache_put(struct aml_vcodec_dev *dev);

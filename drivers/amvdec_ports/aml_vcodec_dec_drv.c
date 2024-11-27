@@ -176,6 +176,8 @@ static int fops_vcodec_open(struct file *file)
 	ctx->aux_infos.bind_dv_buffer = aml_bind_dv_buffer;
 	ctx->aux_infos.free_one_sei_buffer = aml_free_one_sei_buffer;
 	ctx->aux_infos.bind_hdr10p_buffer = aml_bind_hdr10p_buffer;
+	ctx->aux_infos.unbind_sei_buffer = aml_unbind_sei_buffer;
+	ctx->aux_infos.unbind_hdr10p_buffer = aml_unbind_hdr10p_buffer;
 
 	ret = aml_buf_mgr_init(&ctx->bm, "v4ldec-m2m", ctx->id, ctx);
 	if (ret) {
