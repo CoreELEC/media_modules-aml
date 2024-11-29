@@ -1068,7 +1068,7 @@ static void arb_dmc_ctrl(bool enable, u32 target)
 			unsigned int sts_reg_addr = 0xd8;
 
 			SET_VREG_MASK(HEVC_ASSIST_AXI_CTRL, ((1 << 6 ) | (1 << 14)));
-			dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, (0x3 << 27), 0);
+			dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, (0xF << 28), 0);
 
 			while (!(codec_dmcbus_read(sts_reg_addr)
 				& mask))
