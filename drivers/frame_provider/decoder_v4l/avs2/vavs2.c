@@ -855,6 +855,7 @@ struct AVS2Decoder_s {
 	u32 lcu_percentage_threshold;
 	struct completion complete;
 	struct mmu_copy mmu_copy_array[BUF_FBC_NUM_MAX];
+	u32 last_dur;
 };
 
 static int  compute_losless_comp_body_size(
@@ -862,6 +863,7 @@ static int  compute_losless_comp_body_size(
 		bool is_bit_depth_10);
 
 static void put_un_used_mv_bufs(struct AVS2Decoder_s *dec);
+static void v4l_avs2_collect_stream_info(struct vdec_s * vdec,	struct AVS2Decoder_s *dec);
 
 static int avs2_debug(struct AVS2Decoder_s *dec,
 	int flag, const char *fmt, ...)
@@ -4508,6 +4510,14 @@ static void set_frame_info(struct AVS2Decoder_s *dec, struct vframe_s *vf)
 	vf->duration = vf_dur ? vf_dur : dec->frame_dur;
 	vf->duration_pulldown = 0;
 	vf->flag = 0;
+
+	if (dec->last_dur != dec->frame_dur) {
+		avs2_print(dec, 0,
+			"decoder duration change old: %d new: %d\n", dec->last_dur, dec->frame_dur);
+		dec->last_dur = dec->frame_dur;
+		v4l_avs2_collect_stream_info(hw_to_vdec(dec), dec);
+	}
+
 	vf->prop.master_display_colour = dec->vf_dp;
 	if (dec->hdr_flag & HDR_CUVA_MASK)
 		dec->video_signal_type |= 1 << 31;
@@ -5948,14 +5958,44 @@ static void v4l_avs2_collect_stream_info(struct vdec_s * vdec,
 	str_info->error_handle_policy = error_handle_policy;
 	str_info->bit_depth = 8;
 	str_info->fence_enable = 0;
-	str_info->ratio_size.sar_width = -1;
-	str_info->ratio_size.sar_height = -1;
-	str_info->ratio_size.dar_width = -1;
-	str_info->ratio_size.dar_height = -1;
+
+	if (dec->avs2_dec.param.p.aspect_ratio_information == 0) {
+		str_info->ratio_size.dar_width = -1;
+		str_info->ratio_size.dar_height = -1;
+		str_info->ratio_size.sar_width = -1;
+		str_info->ratio_size.sar_height = -1;
+	} else {
+		str_info->ratio_size.sar_width = -1;
+		str_info->ratio_size.sar_height = -1;
+		switch (dec->avs2_dec.param.p.aspect_ratio_information) {
+		case 1:
+			str_info->ratio_size.dar_width = -1;
+			str_info->ratio_size.dar_height = -1;
+			str_info->ratio_size.sar_width = 1;
+			str_info->ratio_size.sar_height = 1;
+			break;
+		case 2:
+			str_info->ratio_size.dar_width = 4;
+			str_info->ratio_size.dar_height = 3;
+			break;
+		case 3:
+			str_info->ratio_size.dar_width = 16;
+			str_info->ratio_size.dar_height = 9;
+			break;
+		case 4:
+			str_info->ratio_size.dar_width = 221;
+			str_info->ratio_size.dar_height = 100;
+			break;
+		default:
+			break;
+		}
+	}
+
 	str_info->trick_mode = dec->i_only;
-	if (dec->frame_dur != 0)
-		str_info->frame_rate = ((96000 * 10 / dec->frame_dur) % 10) < 5 ?
-				96000 / dec->frame_dur : (96000 / dec->frame_dur +1);
+	str_info->frame_dur = dec->last_dur;
+	if (str_info->frame_dur != 0)
+		str_info->frame_rate = ((96000 * 10 / str_info->frame_dur) % 10) < 5 ?
+				96000 / str_info->frame_dur : (96000 / str_info->frame_dur +1);
 	else
 		str_info->frame_rate = -1;
 	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);

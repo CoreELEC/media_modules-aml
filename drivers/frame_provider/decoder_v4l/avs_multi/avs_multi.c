@@ -549,6 +549,7 @@ struct vdec_avs_hw_s {
 	bool force_interlaced_frame;
 	bool need_recycle_buf;
 	int tvp_flag;
+	u32 last_dur;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -1078,6 +1079,7 @@ static void v4l_avs_collect_stream_info(struct vdec_s *vdec,
 {
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	struct dec_stream_info_s *str_info = NULL;
+	unsigned int pixel_ratio;
 
 	if (ctx == NULL) {
 		pr_info("param invalid\n");
@@ -1099,17 +1101,47 @@ static void v4l_avs_collect_stream_info(struct vdec_s *vdec,
 	str_info->crop_left= 0;
 	str_info->crop_right = 0;
 	str_info->double_write_mode = 0;
-	str_info->ratio_size.dar_height = 0;
-	str_info->ratio_size.dar_width = 0;
-	str_info->ratio_size.sar_height = 0;
-	str_info->ratio_size.sar_width = 0;
 	str_info->error_handle_policy = error_handle_policy;
 	str_info->bit_depth = 8;
 
+	pixel_ratio = READ_VREG(AVS_PIC_RATIO);
+	if (pixel_ratio == 0) {
+		str_info->ratio_size.dar_width = -1;
+		str_info->ratio_size.dar_height = -1;
+		str_info->ratio_size.sar_width = -1;
+		str_info->ratio_size.sar_height = -1;
+	} else {
+		str_info->ratio_size.sar_width = -1;
+		str_info->ratio_size.sar_height = -1;
+		switch (pixel_ratio) {
+		case 1:
+			str_info->ratio_size.dar_width = -1;
+			str_info->ratio_size.dar_height = -1;
+			str_info->ratio_size.sar_width = 1;
+			str_info->ratio_size.sar_height = 1;
+			break;
+		case 2:
+			str_info->ratio_size.dar_width = 4;
+			str_info->ratio_size.dar_height = 3;
+			break;
+		case 3:
+			str_info->ratio_size.dar_width = 16;
+			str_info->ratio_size.dar_height = 9;
+			break;
+		case 4:
+			str_info->ratio_size.dar_width = 221;
+			str_info->ratio_size.dar_height = 100;
+			break;
+		default:
+			break;
+		}
+	}
+
 	str_info->trick_mode = 0;
-	if (hw->frame_dur != 0)
-		str_info->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
-				96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
+	str_info->frame_dur = hw->last_dur;
+	if (str_info->frame_dur != 0)
+		str_info->frame_rate = ((96000 * 10 / str_info->frame_dur) % 10) < 5 ?
+				96000 / str_info->frame_dur : (96000 / str_info->frame_dur +1);
 	else
 		str_info->frame_rate = -1;
 	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);
@@ -1170,6 +1202,12 @@ static void set_frame_info(struct vdec_avs_hw_s *hw, struct vframe_s *vf,
 	{
 		*duration = frame_rate_tab[READ_VREG(AVS_FRAME_RATE) & 0xf];
 		hw->frame_dur = *duration;
+		if (hw->last_dur != hw->frame_dur) {
+			debug_print(hw, 0,
+				"decoder duration change old: %d new: %d\n", hw->last_dur, hw->frame_dur);
+			hw->last_dur = hw->frame_dur;
+			v4l_avs_collect_stream_info(hw_to_vdec(hw), hw);
+		}
 	}
 
 	if (hw->vavs_ratio == 0) {
