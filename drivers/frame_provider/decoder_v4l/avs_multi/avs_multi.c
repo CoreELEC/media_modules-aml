@@ -539,7 +539,7 @@ struct vdec_avs_hw_s {
 	u32 last_height;
 	u32 interlace_flag;
 	u32 dynamic_buf_num_margin;
-	struct vframe_s vframe_dummy;
+	struct buf_pool_s vframe_dummy;
 	ulong fb_token;
 	u32 canvas_mode;
 	struct aml_buf *aml_buf;
@@ -4018,7 +4018,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 {
 	struct vdec_avs_hw_s *hw = (struct vdec_avs_hw_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	struct vframe_s *vf = &hw->vframe_dummy;
+	struct vframe_s *vf = &hw->vframe_dummy.vf;
 	struct aml_buf *aml_buf = NULL;
 	int index = INVALID_IDX;
 	ulong expires;
