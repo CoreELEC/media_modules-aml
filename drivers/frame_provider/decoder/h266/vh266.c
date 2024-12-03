@@ -2484,7 +2484,7 @@ static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
 	int ret = 0;
 	int flag = -1;
 	/*get_cma_alloc_ref();*/ /*DEBUG_TMP*/
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6 && is_reserved_ext_support())
 		flag = CODEC_MM_FLAGS_RESERVED_EXT;
 	if (decoder_bmmu_box_alloc_idx_wait(hevc->bmmu_box,
 		MV_BUFFER_IDX(i),
@@ -5855,7 +5855,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		memset(hevc->frame_dw_mmu_map_addr, 0, get_frame_mmu_map_size());
 	}
 #endif
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6 && is_reserved_ext_support()) {
 		if (!hevc->apsalf_buffer_phy_addr) {
 			hevc->apsalf_buffer_phy_addr =
 				codec_mm_alloc_for_dma("apsalf",
