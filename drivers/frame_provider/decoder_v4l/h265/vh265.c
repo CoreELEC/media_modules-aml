@@ -1612,6 +1612,12 @@ struct debug_log_s {
 	uint8_t data; /*will alloc more size*/
 };
 
+enum FenceModeBufStatus {
+	FENCE_MODE_BUF_IDLE = 0,
+	FENCE_MODE_BUF_POSTED = 1,
+	FENCE_MODE_BUF_SIGNALED = 2
+};
+
 struct mh265_fence_vf_t {
 	u32 used_size;
 	struct vframe_s *fence_vf[VF_POOL_SIZE];
@@ -2022,6 +2028,7 @@ struct hevc_state_s {
 	u32 data_size_bak;
 	u32 data_offset_bak;
 	struct mmu_copy mmu_copy_array[BUF_FBC_NUM_MAX];
+	enum FenceModeBufStatus fence_mode_buf_status;
 } /*hevc_stru_t */;
 
 struct hevc_RPS_s {
@@ -10658,6 +10665,7 @@ static int post_picture_early(struct vdec_s *vdec, int index)
 	}
 	pic->show_frame = true;
 	post_video_frame(vdec, pic);
+	hevc->fence_mode_buf_status = FENCE_MODE_BUF_POSTED;
 
 	display_frame_count[hevc->index]++;
 
@@ -10685,18 +10693,24 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 		hevc->m_PIC[frame->index]->vf_ref = 1;
 
 		/* notify signal to wake up wq of fence. */
-		if (fence_drop_error_frame &&
-			(hevc->error_flag ||
-			frame->error_mark ||
-			frame->drop_mark ||
-			frame->drop_flag ||
-			!frame->show_frame)) {
-			vdec_fence_status_set(vdec->sync->fence, -1);
-			hevc_print(hevc, 0,
-				"%s, enable_fence, error_flag:%d, error_mark:%d, drop_mark:%d, drop_flag:%d, show_frame:%d, vdec_fence_status_set error.\n",
-				__FUNCTION__, hevc->error_flag, frame->error_mark, frame->drop_mark, frame->drop_flag, frame->show_frame);
+		if (hevc->enable_fence && (hevc->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+			int ret = dma_fence_get_status(vdec->sync->fence);
+			if (ret == 0) {
+				if (fence_drop_error_frame &&
+					(hevc->error_flag ||
+					frame->error_mark ||
+					frame->drop_mark ||
+					frame->drop_flag ||
+					!frame->show_frame)) {
+					vdec_fence_status_set(vdec->sync->fence, -1);
+					hevc_print(hevc, 0,
+						"%s, enable_fence, error_flag:%d, error_mark:%d, drop_mark:%d, drop_flag:%d, show_frame:%d, vdec_fence_status_set error.\n",
+						__FUNCTION__, hevc->error_flag, frame->error_mark, frame->drop_mark, frame->drop_flag, frame->show_frame);
+				}
+				vdec_timeline_increase(vdec->sync, 1);
+				hevc->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+			}
 		}
-		vdec_timeline_increase(vdec->sync, 1);
 		mutex_lock(&hevc->fence_mutex);
 		used_size = hevc->fence_vf_s.used_size;
 		if (used_size) {
@@ -11545,6 +11559,8 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 		struct PIC_s *pic = hevc->decoding_pic;
 		struct aml_buf *aml_buf =
 		(struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
+		struct vdec_s *vdec = hw_to_vdec(hevc);
+		bool fence_mode_error_frame_buf_posted = false;
 
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s: dma addr(0x%lx)\n", __func__, pic->cma_alloc_addr);
@@ -11560,7 +11576,18 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 		}
 
-		aml_buf_put_ref(&ctx->bm, aml_buf);
+		if (hevc->enable_fence && (hevc->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+			int ret = dma_fence_get_status(vdec->sync->fence);
+			if (ret == 0) {
+				hevc_print(hevc, 0,
+					"%s, enable_fence, frame error and fence is not signaled, and buf posted, only aml_buf_put_ref once instead of remove from dpb.\n",
+					__FUNCTION__);
+				fence_mode_error_frame_buf_posted = true;
+			}
+		}
+
+		if (fence_mode_error_frame_buf_posted == false)
+			aml_buf_put_ref(&ctx->bm, aml_buf);
 		aml_buf_put_ref(&ctx->bm, aml_buf);
 		pic->cma_alloc_addr = 0;
 		hevc->m_BUF[pic->index].v4l_ref_buf_addr =0;
@@ -14577,6 +14604,24 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		hevc->start_parser_type = 0;
 	}
 
+	if (hevc->enable_fence && (hevc->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+		int ret = dma_fence_get_status(vdec->sync->fence);
+		if (ret == 0) {
+			/* notify signal to wake up wq of fence. */
+			if (fence_drop_error_frame) {
+				vdec_fence_status_set(vdec->sync->fence, -1);
+				hevc_print(hevc, 0,
+					"%s, enable_fence, vdec_fence_status_set error.\n",
+					__FUNCTION__);
+			}
+			hevc_print(hevc, 0,
+				"%s, enable_fence, frame error and fence is not signaled, signal once.\n",
+				__FUNCTION__);
+			vdec_timeline_increase(vdec->sync, 1);
+			hevc->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+		}
+	}
+
 	if (hevc->dec_result == DEC_RESULT_FREE_CANVAS) {
 		/*USE_BUF_BLOCK*/
 		uninit_pic_list(hevc);
@@ -15230,27 +15275,30 @@ done_end:
 
 		struct aml_buf *aml_buf = index_to_afbc_aml_buf(hevc,
 			hevc->cur_pic->BUF_index);
-		struct mmu_copy *mmu_copy = &hevc->mmu_copy_array[aml_buf->fbc->index];
 
-		if ((mmu_copy->mmu_copy_buf_start) &&
-			((!is_mmu_copy_enable()) || is_mmu_copy_dynamic_alloc_buffer())) {
-			if (hevc->bmmu_box)
-				decoder_bmmu_box_free_idx(hevc->bmmu_box,
-					MMU_COPY_IDX(aml_buf->fbc->index));
-			mmu_copy->mmu_copy_buf_start = 0;
-			mmu_copy->mmu_copy_buf_size = 0;
-		}
+		if (aml_buf) {
+			struct mmu_copy *mmu_copy = &hevc->mmu_copy_array[aml_buf->fbc->index];
 
-		if (hevc->cur_pic->need_mmu_copy) {
-			struct PIC_s *pic_display = NULL;
+			if ((mmu_copy->mmu_copy_buf_start) &&
+				((!is_mmu_copy_enable()) || is_mmu_copy_dynamic_alloc_buffer())) {
+				if (hevc->bmmu_box)
+					decoder_bmmu_box_free_idx(hevc->bmmu_box,
+						MMU_COPY_IDX(aml_buf->fbc->index));
+				mmu_copy->mmu_copy_buf_start = 0;
+				mmu_copy->mmu_copy_buf_size = 0;
+			}
 
-			hevc->cur_pic->used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
-			recycle_mmu_buf_tail(hevc, hevc->m_ins_flag);
-			error_handle_mmu_copy(hevc, hevc->cur_pic);
+			if (hevc->cur_pic->need_mmu_copy) {
+				struct PIC_s *pic_display = NULL;
 
-			pic_display = output_pic(hevc, 0);
-			if (pic_display)
-				prepare_display_buf(hw_to_vdec(hevc), pic_display);
+				hevc->cur_pic->used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
+				recycle_mmu_buf_tail(hevc, hevc->m_ins_flag);
+				error_handle_mmu_copy(hevc, hevc->cur_pic);
+
+				pic_display = output_pic(hevc, 0);
+				if (pic_display)
+					prepare_display_buf(hw_to_vdec(hevc), pic_display);
+			}
 		}
 	}
 
@@ -15489,6 +15537,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc->next_again_flag = 0;
 	}
 #endif
+
+	hevc->fence_mode_buf_status = FENCE_MODE_BUF_IDLE;
 
 	if ((vdec_frame_based(vdec)) &&
 		(hevc->dec_result == DEC_RESULT_UNFINISH)) {

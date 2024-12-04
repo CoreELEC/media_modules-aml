@@ -82,6 +82,7 @@ static void sync_timeline_free(struct kref *kref)
 	kfree(obj);
 	atomic_set(&sync->use_flag, 0);
 	sync->timeline = NULL;
+	sync->fence = NULL;
 }
 
 static void sync_timeline_get(struct sync_timeline *obj)

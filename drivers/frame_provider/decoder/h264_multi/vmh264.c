@@ -686,6 +686,12 @@ struct mh264_userdata_info_t {
 
 #endif
 
+enum FenceModeBufStatus {
+	FENCE_MODE_BUF_IDLE = 0,
+	FENCE_MODE_BUF_POSTED = 1,
+	FENCE_MODE_BUF_SIGNALED = 2
+};
+
 struct mh264_fence_vf_t {
 	u32 used_size;
 	struct vframe_s *fence_vf[VF_POOL_SIZE];
@@ -1028,6 +1034,7 @@ struct vdec_h264_hw_s {
 	u32 stream_size;
 	u32 status_report_count;
 	u32 multi_frame_in_run;
+	enum FenceModeBufStatus fence_mode_buf_status;
 };
 
 #define TIMEOUT_INIT 0
@@ -3963,6 +3970,7 @@ int post_picture_early(struct vdec_s *vdec, int index)
 	}
 	fs.show_frame = true;
 	post_video_frame(vdec, &fs);
+	hw->fence_mode_buf_status = FENCE_MODE_BUF_POSTED;
 
 	display_frame_count[DECODE_ID(hw)]++;
 	return 0;
@@ -3989,15 +3997,21 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		hw->buffer_spec[frame->buf_spec_num].fs_idx = frame->index;
 
 		/* notify signal to wake up wq of fence. */
-		if ((hw->data_flag & ERROR_FLAG) ||
-			(frame->data_flag & ERROR_FLAG) ||
-			!frame->show_frame) {
-			vdec_fence_status_set(vdec->sync->fence, -1);
-			dpb_print(DECODE_ID(hw), 0,
-				"%s, enable_fence, hw->data_flag:0x%x, frame->data_flag:0x%x, frame->show_frame:%d, vdec_fence_status_set error.\n",
-				__FUNCTION__, hw->data_flag, frame->data_flag, frame->show_frame);
+		if (hw->enable_fence && (hw->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+			int ret = dma_fence_get_status(vdec->sync->fence);
+			if (ret == 0) {
+				if ((hw->data_flag & ERROR_FLAG) ||
+					(frame->data_flag & ERROR_FLAG) ||
+					!frame->show_frame) {
+					vdec_fence_status_set(vdec->sync->fence, -1);
+					dpb_print(DECODE_ID(hw), 0,
+						"%s, enable_fence, hw->data_flag:0x%x, frame->data_flag:0x%x, frame->show_frame:%d, vdec_fence_status_set error.\n",
+						__FUNCTION__, hw->data_flag, frame->data_flag, frame->show_frame);
+				}
+				vdec_timeline_increase(vdec->sync, 1);
+				hw->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+			}
 		}
-		vdec_timeline_increase(vdec->sync, 1);
 
 		mutex_lock(&hw->fence_mutex);
 		used_size = hw->fence_vf_s.used_size;
@@ -11208,6 +11222,22 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		READ_VREG(VLD_MEM_VIFIFO_WP),
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 
+	if (hw->enable_fence && (hw->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+		int ret = dma_fence_get_status(vdec->sync->fence);
+		if (ret == 0) {
+			/* notify signal to wake up wq of fence. */
+			vdec_fence_status_set(vdec->sync->fence, -1);
+			dpb_print(DECODE_ID(hw), 0,
+				"%s, enable_fence, vdec_fence_status_set error.\n",
+				__FUNCTION__);
+			dpb_print(DECODE_ID(hw), 0,
+				"%s, enable_fence, frame error and fence is not signaled, signal once.\n",
+				__FUNCTION__);
+			vdec_timeline_increase(vdec->sync, 1);
+			hw->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+		}
+	}
+
 	mutex_lock(&vmh264_mutex);
 	dealloc_buf_specs(hw, 0);
 	mutex_unlock(&vmh264_mutex);
@@ -11983,6 +12013,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 #ifdef DETECT_WRONG_MULTI_SLICE
 	hw->cur_picture_slice_count = 0;
 #endif
+
+	hw->fence_mode_buf_status = FENCE_MODE_BUF_IDLE;
 
 	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
 		hw->reset_bufmgr_flag = 1;
