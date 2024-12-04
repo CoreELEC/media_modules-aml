@@ -378,6 +378,10 @@ static int loop_times = 5;
  */
 static u32 force_config_fence;
 
+static u32 force_low_latency;
+
+static u32 fence_drop_error_frame = 1;
+
 static u32 adjust_dpb_size = 13;
 
 static u32 one_packet_multi_frames_multi_run = 1;
@@ -3862,9 +3866,11 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 {
 	struct vdec_h264_hw_s *hw =
 		(struct vdec_h264_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (hw->enable_fence) {
-		int i, j, used_size, ret;
+		int i, j, used_size, ret, fence_ref;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
 		struct aml_buf *buf;
@@ -3880,6 +3886,15 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		hw->buffer_spec[frame->buf_spec_num].fs_idx = frame->index;
 
 		/* notify signal to wake up wq of fence. */
+		if (fence_drop_error_frame &&
+			((hw->data_flag & ERROR_FLAG) ||
+			(frame->data_flag & ERROR_FLAG) ||
+			!frame->show_frame)) {
+			vdec_fence_status_set(vdec->sync->fence, -1);
+			dpb_print(DECODE_ID(hw), 0,
+				"%s, enable_fence, hw->data_flag:0x%x, frame->data_flag:0x%x, frame->show_frame:%d, vdec_fence_status_set error.\n",
+				__FUNCTION__, hw->data_flag, frame->data_flag, frame->show_frame);
+		}
 		vdec_timeline_increase(vdec->sync, 1);
 
 		mutex_lock(&hw->fence_mutex);
@@ -3887,8 +3902,14 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		if (used_size) {
 			for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
 				if (hw->fence_vf_s.fence_vf[i] != NULL) {
+
+					dpb_print(DECODE_ID(hw), 0,
+						"%s enable_fence, fence_vf[%d]:%p, fence_vf[%d]->fence:%p, used_size:%d\n",
+						__func__, i, hw->fence_vf_s.fence_vf[i], i, hw->fence_vf_s.fence_vf[i]->fence, used_size);
+
 					ret = dma_fence_get_status(hw->fence_vf_s.fence_vf[i]->fence);
-					if (ret == 1) {
+					fence_ref = kref_read(&hw->fence_vf_s.fence_vf[i]->fence->refcount);
+					if (ret == 1 && fence_ref != 2) {
 						signed_fence[signed_count] = hw->fence_vf_s.fence_vf[i];
 						hw->fence_vf_s.fence_vf[i] = NULL;
 						hw->fence_vf_s.used_size--;
@@ -3904,6 +3925,13 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 				if (!signed_fence[i])
 					continue;
 				buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
+
+				dpb_print(DECODE_ID(hw), 0,
+					"%s enable_fence, aml_buf_put_ref, then h264_recycle_dec_resource\n",
+					__func__);
+
+				aml_buf_put_ref(&ctx->bm , buf);
+
 				h264_recycle_dec_resource(hw, buf);
 				frame->pre_output = 1;
 			}
@@ -5101,20 +5129,30 @@ static void h264_recycle_dec_resource(void *priv,
 						struct aml_buf *aml_buf)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)priv;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = &aml_buf->vframe;
 	int buf_spec_num;
 	int frame_index;
 
 	if (hw->enable_fence && vf->fence) {
-		int ret, i;
+		int ret, i, fence_ref;
 
 		mutex_lock(&hw->fence_mutex);
 		ret = dma_fence_get_status(vf->fence);
-		if (ret == 0) {
+		fence_ref = kref_read(&vf->fence->refcount);
+		if ((ret == 0) ||
+			(ret == 1 && fence_ref == 2)) {
 			for (i = 0; i < VF_POOL_SIZE; i++) {
 				if (hw->fence_vf_s.fence_vf[i] == NULL) {
 					hw->fence_vf_s.fence_vf[i] = vf;
 					hw->fence_vf_s.used_size++;
+
+					dpb_print(DECODE_ID(hw), 0,
+						"%s enable_fence, fence_vf[%d]:%p, fence_vf[%d]->fence:%p, used_size:%d, aml_buf_get_ref\n",
+						__func__, i, hw->fence_vf_s.fence_vf[i], i, hw->fence_vf_s.fence_vf[i]->fence, hw->fence_vf_s.used_size);
+
+					aml_buf_get_ref(&ctx->bm, aml_buf);
+
 					mutex_unlock(&hw->fence_mutex);
 					return;
 				}
@@ -12745,6 +12783,13 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			hw->enable_fence, hw->fence_usage);
 	}
 
+	if (force_low_latency) {
+		hw->low_latency_mode = 0x8;
+		dpb_print(DECODE_ID(hw), 0,
+			"low_latency_mode: %d\n",
+			hw->low_latency_mode);
+	}
+
 	if (hw->v4l2_ctx != NULL) {
 		struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
@@ -13308,6 +13353,12 @@ MODULE_PARM_DESC(loop_times, "\n loop_times\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
+
+module_param(force_low_latency, uint, 0664);
+MODULE_PARM_DESC(force_low_latency, "\n force low latency\n");
+
+module_param(fence_drop_error_frame, uint, 0664);
+MODULE_PARM_DESC(fence_drop_error_frame, "\n fence drop error frame\n");
 
 module_param(adjust_dpb_size, uint, 0664);
 MODULE_PARM_DESC(adjust_dpb_size, "\n adjust dpb size\n");

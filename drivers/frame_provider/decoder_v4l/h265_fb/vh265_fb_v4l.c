@@ -614,6 +614,10 @@ static u32 force_bypass_dvenl;
  */
 static u32 force_config_fence;
 
+static u32 force_low_latency;
+
+static u32 fence_drop_error_frame = 1;
+
 /*
  *The parameter sps_max_dec_pic_buffering_minus1_0+1
  *in SPS is the minimum DPB size required for stream
@@ -10488,19 +10492,29 @@ static void h265_recycle_dec_resource(void *priv,
 						struct aml_buf *aml_buf)
 {
 	struct hevc_state_s *hevc = (struct hevc_state_s *)priv;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 	struct vframe_s *vf = &aml_buf->vframe;
 	unsigned long flags;
 
 	if (hevc->enable_fence && vf->fence) {
-		int ret, i;
+		int ret, i, fence_ref;
 
 		mutex_lock(&hevc->fence_mutex);
 		ret = dma_fence_get_status(vf->fence);
-		if (ret == 0) {
+		fence_ref = kref_read(&vf->fence->refcount);
+		if ((ret == 0) ||
+			(ret == 1 && fence_ref == 2)) {
 			for (i = 0; i < VF_POOL_SIZE; i++) {
 				if (hevc->fence_vf_s.fence_vf[i] == NULL) {
 					hevc->fence_vf_s.fence_vf[i] = vf;
 					hevc->fence_vf_s.used_size++;
+
+					hevc_print(hevc, 0,
+						"%s enable_fence, fence_vf[%d]:%p, fence_vf[%d]->fence:%p, used_size:%d, aml_buf_get_ref\n",
+						__func__, i, hevc->fence_vf_s.fence_vf[i], i, hevc->fence_vf_s.fence_vf[i]->fence, hevc->fence_vf_s.used_size);
+
+					aml_buf_get_ref(&ctx->bm, aml_buf);
+
 					mutex_unlock(&hevc->fence_mutex);
 					return;
 				}
@@ -10893,6 +10907,8 @@ static int post_prepare_process(struct vdec_s *vdec, struct PIC_s *frame)
 		hevc_print(hevc, 0, "discard show frame.\n");
 		return 0;
 	}
+
+	hevc_print(hevc, H265_DEBUG_BUFMGR, "%s, poc %d\n", __func__, frame->POC);
 
 	frame->show_frame = true;
 
@@ -11672,9 +11688,11 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 {
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 
 	if (hevc->enable_fence) {
-		int i, j, used_size, ret;
+		int i, j, used_size, ret, fence_ref;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
 		struct aml_buf *buf;
@@ -11687,14 +11705,31 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 		hevc->m_PIC[frame->index]->vf_ref = 1;
 
 		/* notify signal to wake up wq of fence. */
+		if (fence_drop_error_frame &&
+			(hevc->error_flag ||
+			frame->error_mark ||
+			frame->drop_mark ||
+			frame->drop_flag ||
+			!frame->show_frame)) {
+			vdec_fence_status_set(vdec->sync->fence, -1);
+			hevc_print(hevc, 0,
+				"%s, enable_fence, error_flag:%d, error_mark:%d, drop_mark:%d, drop_flag:%d, show_frame:%d, vdec_fence_status_set error.\n",
+				__FUNCTION__, hevc->error_flag, frame->error_mark, frame->drop_mark, frame->drop_flag, frame->show_frame);
+		}
 		vdec_timeline_increase(vdec->sync, 1);
 		mutex_lock(&hevc->fence_mutex);
 		used_size = hevc->fence_vf_s.used_size;
 		if (used_size) {
 			for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
 				if (hevc->fence_vf_s.fence_vf[i] != NULL) {
+
+					hevc_print(hevc, 0,
+						"%s enable_fence, fence_vf[%d]:%p, fence_vf[%d]->fence:%p, used_size:%d\n",
+						__func__, i, hevc->fence_vf_s.fence_vf[i], i, hevc->fence_vf_s.fence_vf[i]->fence, used_size);
+
 					ret = dma_fence_get_status(hevc->fence_vf_s.fence_vf[i]->fence);
-					if (ret == 1) {
+					fence_ref = kref_read(&hevc->fence_vf_s.fence_vf[i]->fence->refcount);
+					if (ret == 1 && fence_ref != 2) {
 						signed_fence[signed_count] = hevc->fence_vf_s.fence_vf[i];
 						hevc->fence_vf_s.fence_vf[i] = NULL;
 						hevc->fence_vf_s.used_size--;
@@ -11710,6 +11745,12 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 				if (!signed_fence[i])
 					continue;
 				buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
+
+				hevc_print(hevc, 0,
+					"%s enable_fence, aml_buf_put_ref, then h265_recycle_dec_resource\n",
+					__func__);
+
+				aml_buf_put_ref(&ctx->bm , buf);
 				h265_recycle_dec_resource(hevc, buf);
 			}
 		}
@@ -18451,6 +18492,13 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 			hevc->enable_fence, hevc->fence_usage);
 	}
 
+	if (force_low_latency) {
+		hevc->low_latency_flag = 1;
+		hevc_print(hevc, 0,
+			"low_latency_flag: %d\n",
+			hevc->low_latency_flag);
+	}
+
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) &&
 			(hevc->double_write_mode == 3))
 		hevc->double_write_mode = 0x1000;
@@ -19121,6 +19169,12 @@ MODULE_PARM_DESC(dirty_buffersize_threshold, "\n dirty_buffersize_threshold\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
+
+module_param(force_low_latency, uint, 0664);
+MODULE_PARM_DESC(force_low_latency, "\n force low latency\n");
+
+module_param(fence_drop_error_frame, uint, 0664);
+MODULE_PARM_DESC(fence_drop_error_frame, "\n fence drop error frame\n");
 
 module_param(mv_buf_dynamic_alloc, uint, 0664);
 MODULE_PARM_DESC(mv_buf_dynamic_alloc, "\n mv_buf_dynamic_alloc\n");

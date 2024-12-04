@@ -480,6 +480,9 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 			    struct buf_core_entry *entry,
 			    enum buf_core_user user)
 {
+	if (bc->external_process)
+		bc->external_process(bc, entry);
+
 	mutex_lock(&bc->mutex);
 
 	if (!bc_sanity_check(bc)) {
@@ -518,9 +521,6 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 		(entry->state != BUF_STATE_REF))) {
 		goto out;
 	}
-
-	if (bc->external_process)
-		bc->external_process(bc, entry);
 
 	if (!atomic_dec_return(&entry->ref)) {
 		buf_core_free_que(bc, entry);

@@ -9508,11 +9508,13 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 		return;
 
 	if (hevc->enable_fence && vf->fence) {
-		int ret, i;
+		int ret, i, fence_ref;
 
 		mutex_lock(&hevc->fence_mutex);
 		ret = dma_fence_get_status(vf->fence);
-		if (ret == 0) {
+		fence_ref = kref_read(&vf->fence->refcount);
+		if ((ret == 0) ||
+			(ret == 1 && fence_ref == 2)) {
 			for (i = 0; i < VF_POOL_SIZE; i++) {
 				if (hevc->fence_vf_s.fence_vf[i] == NULL) {
 					hevc->fence_vf_s.fence_vf[i] = vf;
@@ -9944,6 +9946,8 @@ static int post_prepare_process(struct vdec_s *vdec, struct PIC_s *frame)
 		hevc_print(hevc, 0, "discard show frame.\n");
 		return 0;
 	}
+
+	hevc_print(hevc, H265_DEBUG_BUFMGR, "%s, poc %d\n", __func__, frame->POC);
 
 	frame->show_frame = true;
 
@@ -10568,7 +10572,7 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 		(struct hevc_state_s *)vdec->private;
 
 	if (hevc->enable_fence) {
-		int i, j, used_size, ret;
+		int i, j, used_size, ret, fence_ref;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
 
@@ -10580,6 +10584,15 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 		hevc->m_PIC[frame->index]->vf_ref = 1;
 
 		/* notify signal to wake up wq of fence. */
+		if (hevc->error_flag ||
+			frame->error_mark ||
+			frame->drop_flag ||
+			!frame->show_frame) {
+			vdec_fence_status_set(vdec->sync->fence, -1);
+			hevc_print(hevc, 0,
+				"%s, enable_fence, error_flag:%d, error_mark:%d, drop_flag:%d, show_frame:%d, vdec_fence_status_set error.\n",
+				__FUNCTION__, hevc->error_flag, frame->error_mark, frame->drop_flag, frame->show_frame);
+		}
 		vdec_timeline_increase(vdec->sync, 1);
 		mutex_lock(&hevc->fence_mutex);
 		used_size = hevc->fence_vf_s.used_size;
@@ -10587,7 +10600,8 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 			for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
 				if (hevc->fence_vf_s.fence_vf[i] != NULL) {
 					ret = dma_fence_get_status(hevc->fence_vf_s.fence_vf[i]->fence);
-					if (ret == 1) {
+					fence_ref = kref_read(&hevc->fence_vf_s.fence_vf[i]->fence->refcount);
+					if (ret == 1 && fence_ref != 2) {
 						signed_fence[signed_count] = hevc->fence_vf_s.fence_vf[i];
 						hevc->fence_vf_s.fence_vf[i] = NULL;
 						hevc->fence_vf_s.used_size--;

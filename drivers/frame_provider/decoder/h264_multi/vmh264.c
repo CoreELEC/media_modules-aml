@@ -3974,7 +3974,7 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		(struct vdec_h264_hw_s *)vdec->private;
 
 	if (hw->enable_fence) {
-		int i, j, used_size, ret;
+		int i, j, used_size, ret, fence_ref;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
 
@@ -3989,6 +3989,14 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		hw->buffer_spec[frame->buf_spec_num].fs_idx = frame->index;
 
 		/* notify signal to wake up wq of fence. */
+		if ((hw->data_flag & ERROR_FLAG) ||
+			(frame->data_flag & ERROR_FLAG) ||
+			!frame->show_frame) {
+			vdec_fence_status_set(vdec->sync->fence, -1);
+			dpb_print(DECODE_ID(hw), 0,
+				"%s, enable_fence, hw->data_flag:0x%x, frame->data_flag:0x%x, frame->show_frame:%d, vdec_fence_status_set error.\n",
+				__FUNCTION__, hw->data_flag, frame->data_flag, frame->show_frame);
+		}
 		vdec_timeline_increase(vdec->sync, 1);
 
 		mutex_lock(&hw->fence_mutex);
@@ -3997,7 +4005,8 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 			for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
 				if (hw->fence_vf_s.fence_vf[i] != NULL) {
 					ret = dma_fence_get_status(hw->fence_vf_s.fence_vf[i]->fence);
-					if (ret == 1) {
+					fence_ref = kref_read(&hw->fence_vf_s.fence_vf[i]->fence->refcount);
+					if (ret == 1 && fence_ref != 2) {
 						signed_fence[signed_count] = hw->fence_vf_s.fence_vf[i];
 						hw->fence_vf_s.fence_vf[i] = NULL;
 						hw->fence_vf_s.used_size--;
@@ -5341,11 +5350,13 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 	if (hw->enable_fence && vf->fence) {
-		int ret, i;
+		int ret, i, fence_ref;
 
 		mutex_lock(&hw->fence_mutex);
 		ret = dma_fence_get_status(vf->fence);
-		if (ret == 0) {
+		fence_ref = kref_read(&vf->fence->refcount);
+		if ((ret == 0) ||
+			(ret == 1 && fence_ref == 2)) {
 			for (i = 0; i < VF_POOL_SIZE; i++) {
 				if (hw->fence_vf_s.fence_vf[i] == NULL) {
 					hw->fence_vf_s.fence_vf[i] = vf;
