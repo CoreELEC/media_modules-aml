@@ -1643,7 +1643,7 @@ struct avs2_decoder {
 	struct Video_Dec_data_s  hd;
 	union param_u param;
 	struct avs2_frame_s frm_pool[AVS2_MAX_BUFFER_NUM];
-	struct avs2_frame_s *fref[REF_MAXBUFFER];
+	struct avs2_frame_s *fref[AVS2_MAX_BUFFER_NUM];
 #ifdef AML
 	/*used for background
 	when background_picture_output_flag is 0*/

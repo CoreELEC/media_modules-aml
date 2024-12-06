@@ -9203,19 +9203,22 @@ static s32 vavs3_init(struct vdec_s *vdec)
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode == 1 || dec->front_back_mode == 3) {
 		fw_back = fw_firmare_s_creat(fw_size);
-		if (IS_ERR_OR_NULL(fw_back))
+		if (!fw_back) {
+			vfree(fw);
 			return -ENOMEM;
+		}
 
 		size = get_firmware_data(VIDEO_DEC_AVS3_FRONT, fw->data);
 
 		fw_back->len = get_firmware_data(VIDEO_DEC_AVS3_BACK, fw_back->data);
 		if (fw_back->len < 0) {
 			pr_err("get back firmware fail.\n");
+			vfree(fw);
 			vfree(fw_back);
 			return -1;
 		}
@@ -9225,6 +9228,9 @@ static s32 vavs3_init(struct vdec_s *vdec)
 	if (size < 0) {
 		pr_err("get firmware fail.\n");
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		return -1;
 	}
 
@@ -9262,12 +9268,18 @@ static s32 vavs3_init(struct vdec_s *vdec)
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		pr_err("AVS3: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
 	vfree(fw);
+#ifdef NEW_FB_CODE
+	vfree(fw_back);
+#endif
 
 	dec->stat |= STAT_MC_LOAD;
 

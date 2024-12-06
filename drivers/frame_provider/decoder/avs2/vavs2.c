@@ -7065,6 +7065,10 @@ static void vavs2_put_timer_func(struct timer_list *timer)
 				struct canvas_s cur_canvas;
 				canvas_read((READ_VCBUS_REG(VD1_IF0_CANVAS0)
 					& 0xff), &cur_canvas);
+				/*
+				 * cur_canvas is initialised in canvas_read
+				 */
+				/* coverity[uninit_use] */
 				disp_laddr = cur_canvas.addr;
 			}
 			pr_info("current displayed buffer address %x\r\n",

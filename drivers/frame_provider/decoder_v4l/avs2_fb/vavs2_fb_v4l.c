@@ -1207,10 +1207,14 @@ static void timeout_process_back(struct AVS2Decoder_s *dec)
 
 static int get_double_write_mode(struct AVS2Decoder_s *dec)
 {
-	unsigned int out;
+	unsigned int out = 0x1;
 	u32 dw = 0x1; /*1:1*/
 
 	vdec_v4l_get_dw_mode(dec->v4l2_ctx, &out);
+	/*
+	 * out has been initialized through vdec_v4l_get_dw_mode.
+	 */
+	/* coverity[uninit_use] */
 	dw = out;
 	return (dw & 0Xffff);
 }
@@ -7398,6 +7402,11 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 							"%s: need realloc cur_mmu_fb_4k_number %d, mmu_4k_number %d\n",
 							__func__, cur_mmu_fb_4k_number, dec->mmu_fb_4k_number);
 						uninit_mmu_fb_bufstate(dec);
+						/*
+						 * The value of cur_mmu_fb_4k_number has been checked
+						 * at this point
+						 */
+						/* coverity[overflow_sink] */
 						init_mmu_fb_bufstate(dec, cur_mmu_fb_4k_number);
 					}
 				}
@@ -7405,7 +7414,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 				dec_again_process(dec);
 				return IRQ_HANDLED;
 			} else {
-				struct vdec_pic_info pic;
+				struct vdec_pic_info pic = {0};
 
 				vdec_v4l_get_pic_info(ctx, &pic);
 				dec->used_buf_num = pic.dpb_frames +
@@ -8347,13 +8356,13 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode == 1 || dec->front_back_mode == 3) {
 		fw_back = fw_firmare_s_creat(fw_size);
-		if (IS_ERR_OR_NULL(fw_back))
+		if (!fw_back)
 			return -ENOMEM;
 
 		size = get_firmware_data(VIDEO_DEC_AVS2_FRONT, fw->data);
@@ -8361,6 +8370,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 		fw_back->len = get_firmware_data(VIDEO_DEC_AVS2_BACK, fw_back->data);
 		if (fw_back->len < 0) {
 			pr_err("get back firmware fail.\n");
+			vfree(fw);
 			vfree(fw_back);
 			return -1;
 		}
@@ -8370,6 +8380,9 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	if (size < 0) {
 		pr_err("get firmware fail.\n");
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		return -1;
 	}
 
@@ -8413,12 +8426,18 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		pr_err("AVS2: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
 	vfree(fw);
+#ifdef NEW_FB_CODE
+	vfree(fw_back);
+#endif
 
 	dec->stat |= STAT_MC_LOAD;
 
@@ -9155,6 +9174,11 @@ static int avs2_recycle_frame_buffer(struct AVS2Decoder_s *dec)
 
 			lock_buffer(dec, flags);
 
+			/*
+			 * There will no be multiple threads running in
+			 * the same avs2_decoder context.
+			 */
+			/* coverity[thread1_overwrites_value_in_field] */
 			pic->cma_alloc_addr = 0;
 			pic->vf_ref = 0;
 			pic->is_display = 0;

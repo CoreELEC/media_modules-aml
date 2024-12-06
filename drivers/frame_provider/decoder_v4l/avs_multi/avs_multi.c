@@ -687,6 +687,11 @@ static int avs_recycle_frame_buffer(struct vdec_avs_hw_s *hw)
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 			spin_lock_irqsave(&hw->lock, flags);
 
+			/*
+			 * There will no be multiple threads running in
+			 * the same vdec_avs_hw_s context.
+			 */
+			/* coverity[thread1_overwrites_value_in_field] */
 			hw->pics[i].v4l_ref_buf_addr = 0;
 			hw->pics[i].cma_alloc_addr = 0;
 			while (hw->vf_ref[i]) {
@@ -731,7 +736,7 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 
 	/* Wait for the buffer number negotiation to complete. */
 	if (hw->vf_buf_num_used == 0) {
-		struct vdec_pic_info pic;
+		struct vdec_pic_info pic = {0};
 
 		vdec_v4l_get_pic_info(ctx, &pic);
 		hw->vf_buf_num_used = pic.dpb_frames + pic.dpb_margin;
@@ -1913,7 +1918,7 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 		WRITE_VREG(AV_SCRATCH_4, index);
 		WRITE_VREG(AV_SCRATCH_B, 0);
 		if (hw->decode_pic_count == 0) {
-			struct vdec_pic_info pic;
+			struct vdec_pic_info pic = {0};
 
 			vdec_v4l_get_pic_info(ctx, &pic);
 			hw->vf_buf_num_used = pic.dpb_frames +
@@ -2420,7 +2425,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 
 	pr_info("vavs_init\n");
@@ -4341,7 +4346,7 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					hw->dec_result = DEC_RESULT_AGAIN;
 					vdec_schedule_work(&hw->work);
 				} else {
-					struct vdec_pic_info pic;
+					struct vdec_pic_info pic = {0};
 
 					vdec_v4l_get_pic_info(ctx, &pic);
 					hw->vf_buf_num_used = pic.dpb_frames +
@@ -4474,6 +4479,10 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					debug_print(hw, PRINT_FLAG_RUN_FLOW,
 						"avs: show num %d, type %d, index %d, offset %x\n",
 						decode_pic_count, picture_type, buffer_index, offset);
+					/*
+					 * Access pic->buffer_info in prepare_display_buf is OK.
+					 */
+					/* coverity[overrun-local] */
 					prepare_display_buf(hw, &hw->pics[buffer_index]);
 				} else {
 					debug_print(hw, PRINT_FLAG_RUN_FLOW,

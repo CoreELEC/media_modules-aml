@@ -2474,9 +2474,13 @@ static int get_pic_poc(struct hevc_state_s *hevc,
 static int get_double_write_mode(struct hevc_state_s *hevc)
 {
 	u32 dw = 0x1; /*1:1*/
-	unsigned int out;
+	unsigned int out = 0x1;
 
 	vdec_v4l_get_dw_mode(hevc->v4l2_ctx, &out);
+	/*
+	 * out has been initialized through vdec_v4l_get_dw_mode.
+	 */
+	/* coverity[uninit_use] */
 	dw = out;
 	return (dw & 0xffff);
 }
@@ -9647,7 +9651,7 @@ static void clear_pair_fb(struct hevc_state_s *hevc)
 void vmh265_report_pts(struct hevc_state_s *hevc)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
-	struct checkoutptsoffset pts_st;
+	struct checkoutptsoffset pts_st = {0};
 	u32 offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 	u64 dur_offset = hevc->frame_dur;
 
@@ -11132,7 +11136,7 @@ static int vh265_clear_mmu_config(struct hevc_state_s *hevc)
 	}
 #endif
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -1;
 
 	hevc->is_swap = false;
@@ -12603,7 +12607,7 @@ force_output:
 					ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 					return IRQ_HANDLED;
 				} else {
-					struct vdec_pic_info pic;
+					struct vdec_pic_info pic = {0};
 
 					vdec_v4l_get_pic_info(ctx, &pic);
 					hevc->used_buf_num = pic.dpb_frames +
@@ -13586,7 +13590,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		hevc->enable_ucode_swap);
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 
 	if (hevc->mmu_enable) {
@@ -13624,6 +13628,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		if (!hevc->mc_cpu_addr) {
 			amhevc_disable();
 			pr_info("vh265 mmu swap ucode loaded fail.\n");
+			vfree(fw);
 			return -ENOMEM;
 		}
 
@@ -13641,6 +13646,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		if (hevc->sei_itu_data_buf == NULL) {
 			pr_err("%s: failed to alloc sei itu data buffer\n",
 				__func__);
+			vfree(fw);
 			return -1;
 		} else if (NULL == hevc->sei_user_data_buffer) {
 			hevc->sei_user_data_buffer = kmalloc(USER_DATA_SIZE, GFP_KERNEL);

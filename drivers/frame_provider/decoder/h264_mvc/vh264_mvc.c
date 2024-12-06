@@ -1626,6 +1626,10 @@ static s32 vh264mvc_init(void)
 		ret = amvdec_loadmc_ex(VFORMAT_H264MVC, NULL, buf);
 
 		/*header*/
+		/*
+		 * The variable buf is initialised in amvdec_loadmc_ex.
+		 */
+		/* coverity[uninit_use_in_call] */
 		memcpy((u8 *) mc_cpu_addr, buf + 0x1000, 0x1000);
 		/*mmco*/
 		memcpy((u8 *) mc_cpu_addr + 0x1000, buf + 0x2000, 0x2000);

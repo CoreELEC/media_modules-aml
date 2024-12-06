@@ -647,7 +647,7 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 	COM_PIC * pic = NULL;
 	int i;
 	i = get_free_frame_buffer(hw);
-	if (i < hw->max_pb_size) {
+	if (i < hw->max_pb_size && i >= 0) {
 		avs3_frame_t pic_cfg;
 		pic = &hw->pic_pool[i];
 		memcpy(&pic_cfg, &pic->buf_cfg, sizeof(avs3_frame_t));

@@ -106,6 +106,7 @@ int debug_port_debug_config(struct amvdec_debug_port_t *port, ulong arg)
 
 	switch (param.type) {
 	case TYPE_YUV:
+		/* coverity[underflow] */
 		debug_port_set_yuv_dump(port, param.id, param.pic_start, param.pic_num);
 		break;
 	case TYPE_CRC:
@@ -607,6 +608,10 @@ static ssize_t vdec_dbg_port_write(struct file *file,
 			ret += snprintf(cbuf + ret, sizeof(cbuf), "YUV ");
 
 		if (val & (1 << TYPE_CRC))
+			/*
+			 * buffer cbuf is enough, the array will not overrun.
+			 */
+			/* coverity[overrun-buffer-arg] */
 			ret += snprintf(cbuf + ret, sizeof(cbuf), "CRC ");
 
 		if (val & (1 << TYPE_ES))

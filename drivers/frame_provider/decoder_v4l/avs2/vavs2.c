@@ -999,10 +999,14 @@ static u32 get_valid_double_write_mode(struct AVS2Decoder_s *dec)
 
 static int get_double_write_mode(struct AVS2Decoder_s *dec)
 {
-	unsigned int out;
+	unsigned int out = 0x1;
 	u32 dw = 0x1; /*1:1*/
 
 	vdec_v4l_get_dw_mode(dec->v4l2_ctx, &out);
+	/*
+	 * out has been initialized through vdec_v4l_get_dw_mode.
+	 */
+	/* coverity[uninit_use] */
 	dw = out;
 	return (dw & 0xffff);
 
@@ -6536,7 +6540,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 				dec_again_process(dec);
 				return IRQ_HANDLED;
 			} else {
-				struct vdec_pic_info pic;
+				struct vdec_pic_info pic = {0};
 
 				vdec_v4l_get_pic_info(ctx, &pic);
 				dec->used_buf_num = pic.dpb_frames +
@@ -7217,7 +7221,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 
 	size = get_firmware_data(VIDEO_DEC_AVS2_MMU, fw->data);

@@ -1301,10 +1301,14 @@ static u32 get_valid_double_write_mode(struct AVS3Decoder_s *dec)
 
 static int get_double_write_mode(struct AVS3Decoder_s *dec)
 {
-	unsigned int out;
+	unsigned int out = 0x1;
 	u32 dw = 0x1; /*1:1*/
 
 	vdec_v4l_get_dw_mode(dec->v4l2_ctx, &out);
+	/*
+	 * out has been initialized through vdec_v4l_get_dw_mode.
+	 */
+	/* coverity[uninit_use] */
 	dw = out;
 
 	return (dw & 0Xffff);
@@ -7867,7 +7871,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 					dec_again_process(dec);
 					return IRQ_HANDLED;
 				} else {
-					struct vdec_pic_info pic;
+					struct vdec_pic_info pic = {0};
 
 					vdec_v4l_get_pic_info(v4l2_ctx, &pic);
 					dec->avs3_dec.max_pb_size = pic.dpb_frames + pic.dpb_margin;
@@ -8707,6 +8711,11 @@ static void vavs3_put_timer_func(struct timer_list *timer)
 			} else {
 				struct canvas_s cur_canvas;
 				canvas_read((READ_VCBUS_REG(VD1_IF0_CANVAS0) & 0xff), &cur_canvas);
+				/*
+				 * The variable cur_canvas is initialised in
+				 * canvas_read.
+				 */
+				/* coverity[uninit_use] */
 				disp_laddr = cur_canvas.addr;
 			}
 			pr_info("current displayed buffer address %x\r\n", disp_laddr);
@@ -8986,19 +8995,22 @@ static s32 vavs3_init(struct vdec_s *vdec)
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode == 1 || dec->front_back_mode == 3) {
 		fw_back = fw_firmare_s_creat(fw_size);
-		if (IS_ERR_OR_NULL(fw_back))
+		if (!fw_back) {
+			vfree(fw);
 			return -ENOMEM;
+		}
 
 		size = get_firmware_data(VIDEO_DEC_AVS3_FRONT, fw->data);
 
 		fw_back->len = get_firmware_data(VIDEO_DEC_AVS3_BACK, fw_back->data);
 		if (fw_back->len < 0) {
 			pr_err("get back firmware fail.\n");
+			vfree(fw);
 			vfree(fw_back);
 			return -1;
 		}
@@ -9008,6 +9020,9 @@ static s32 vavs3_init(struct vdec_s *vdec)
 	if (size < 0) {
 		pr_err("get firmware fail.\n");
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		return -1;
 	}
 
@@ -9040,12 +9055,18 @@ static s32 vavs3_init(struct vdec_s *vdec)
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		pr_err("AVS3: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
 	vfree(fw);
+#ifdef NEW_FB_CODE
+	vfree(fw_back);
+#endif
 
 	dec->stat |= STAT_MC_LOAD;
 
@@ -10035,6 +10056,11 @@ static int avs3_recycle_frame_buffer(struct AVS3Decoder_s *dec)
 
 			lock_buffer(dec, flags);
 
+			/*
+			 * There will no be multiple threads running in
+			 * the same avs3_dec.
+			 */
+			/* coverity[thread1_overwrites_value_in_field] */
 			avs3_dec->pic_pool[i].buf_cfg.cma_alloc_addr = 0;
 			avs3_dec->pic_pool[i].buf_cfg.vf_ref = 0;
 			avs3_dec->pic_pool[i].buf_cfg.is_display = 0;

@@ -2934,9 +2934,13 @@ static int get_dynamic_buf_num_margin(struct hevc_state_s *hevc)
 static int get_double_write_mode(struct hevc_state_s *hevc)
 {
 	u32 dw = 0x1; /*1:1*/
-	unsigned int out;
+	unsigned int out = 0x1;
 
 	vdec_v4l_get_dw_mode(hevc->v4l2_ctx, &out);
+	/*
+	 * out has been initialized through vdec_v4l_get_dw_mode.
+	 */
+	/* coverity[uninit_use] */
 	dw = out;
 	return (dw & 0xffff);
 }
@@ -8127,6 +8131,11 @@ static void get_picture_qos_info(struct hevc_state_s *hevc, bool back_flag)
 #ifdef NEW_FB_CODE
 			get_qos_info(&vqos_1, 1);
 
+			/*
+			 * The variable vqos_1 & vqos_0 is initialised in
+			 * get_qos_info.
+			 */
+			/* coverity[uninit_use] */
 			vqos_0.max_mv = max(vqos_0.max_mv, vqos_1.max_mv);
 			vqos_0.min_mv = min(vqos_0.min_mv, vqos_1.min_mv);
 			vqos_0.max_qp = max(vqos_0.max_qp, vqos_1.max_qp);
@@ -12163,7 +12172,7 @@ static int vh265_clear_mmu_config(struct hevc_state_s *hevc)
 	}
 #endif
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -1;
 
 	hevc->is_swap = false;
@@ -13877,7 +13886,7 @@ force_output:
 					ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 					return IRQ_HANDLED;
 				} else {
-					struct vdec_pic_info pic;
+					struct vdec_pic_info pic = {0};
 
 					vdec_v4l_get_pic_info(ctx, &pic);
 					hevc->used_buf_num = pic.dpb_frames +
@@ -14680,6 +14689,11 @@ static void vh265_check_timer_func(struct timer_list *timer)
 				struct canvas_s cur_canvas;
 
 				canvas_read((READ_VCBUS_REG(VD1_IF0_CANVAS0) & 0xff), &cur_canvas);
+				/*
+				 * The variable cur_canvas.addr is initialised in
+				 * canvas_read.
+				 */
+				/* coverity[uninit_use] */
 				disp_laddr = cur_canvas.addr;
 			}
 			hevc_print(hevc, 0,
@@ -15129,13 +15143,15 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		hevc->enable_ucode_swap);
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 #ifdef NEW_FB_CODE
 	if (hevc->front_back_mode == 1 || hevc->front_back_mode == 3) {
 		fw_back = fw_firmare_s_creat(fw_size);
-		if (IS_ERR_OR_NULL(fw_back))
+		if (!fw_back) {
+			vfree(fw);
 			return -ENOMEM;
+		}
 
 		size = get_firmware_data(VIDEO_DEC_HEVC_FRONT, fw->data);
 #ifndef PXP_NO_SWAP
@@ -15144,6 +15160,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		fw_back->len = get_firmware_data(VIDEO_DEC_HEVC_BACK, fw_back->data);
 		if (fw_back->len < 0) {
 			pr_err("get back firmware fail.\n");
+			vfree(fw);
 			vfree(fw_back);
 			return -1;
 		}
@@ -15168,6 +15185,9 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	if (size < 0) {
 		pr_err("get firmware fail.\n");
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		return -1;
 	}
 
@@ -15181,6 +15201,10 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 					hevc->swap_size, &hevc->mc_dma_handle, "H265_MC_CPU_BUF");
 			if (!hevc->mc_cpu_addr) {
 				amhevc_disable();
+				vfree(fw);
+#ifdef NEW_FB_CODE
+				vfree(fw_back);
+#endif
 				pr_info("vh265 mmu swap ucode loaded fail.\n");
 				return -ENOMEM;
 			}
@@ -15206,6 +15230,10 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		if (hevc->sei_itu_data_buf == NULL) {
 			pr_err("%s: failed to alloc sei itu data buffer\n",
 				__func__);
+			vfree(fw);
+#ifdef NEW_FB_CODE
+			vfree(fw_back);
+#endif
 			return -1;
 		} else if (NULL == hevc->sei_user_data_buffer) {
 			hevc->sei_user_data_buffer = kmalloc(USER_DATA_SIZE, GFP_KERNEL);
@@ -15251,12 +15279,18 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		pr_err("H265: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
 	vfree(fw);
+#ifdef NEW_FB_CODE
+	vfree(fw_back);
+#endif
 
 	hevc->stat |= STAT_MC_LOAD;
 
@@ -15489,6 +15523,11 @@ static int h265_reset_frame_buffer(struct hevc_state_s *hevc)
 
 			pic->show_frame = false;
 			pic->output_ready = 0;
+			/*
+			 * There will no be multiple threads running in
+			 * the same hevc_state_s context.
+			 */
+			/* coverity[thread1_overwrites_value_in_field] */
 			pic->cma_alloc_addr = 0;
 			pic->vf_ref = 0;
 #ifdef NEW_FRONT_BACK_CODE
@@ -15584,6 +15623,11 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			//pic->POC = INVALID_POC;
 			pic->show_frame = false;
 			pic->output_ready = 0;
+			/*
+			 * There will no be multiple threads running in
+			 * the same hevc_state_s context.
+			 */
+			/* coverity[thread1_overwrites_value_in_field] */
 			pic->cma_alloc_addr = 0;
 			pic->vf_ref = 0;
 			hevc->m_BUF[pic->index].v4l_ref_buf_addr =0;

@@ -2158,14 +2158,6 @@ static int get_double_write_mode(struct VP9Decoder_s *pbi)
 	struct VP9_Common_s *cm = &pbi->common;
 	struct PIC_BUFFER_CONFIG_s *cur_pic_config;
 
-	if (pbi->is_used_v4l) {
-		unsigned int out;
-
-		vdec_v4l_get_dw_mode(pbi->v4l2_ctx, &out);
-		dw = out;
-		return dw;
-	}
-
 	/* mask for supporting double write value bigger than 0x100 */
 	if (valid_dw_mode & 0xffffff00) {
 		if (!cm->cur_frame)

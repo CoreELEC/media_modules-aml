@@ -1304,14 +1304,6 @@ static int get_double_write_mode(struct AV1HW_s *hw)
 	if (!cm->cur_frame)
 		return 1;/*no valid frame,*/
 
-	if (hw->is_used_v4l) {
-		unsigned int out;
-
-		vdec_v4l_get_dw_mode(hw->v4l2_ctx, &out);
-		dw = out;
-		return dw;
-	}
-
 	cur_pic_config = &cm->cur_frame->buf;
 	w = cur_pic_config->y_crop_width;
 	h = cur_pic_config->y_crop_height;

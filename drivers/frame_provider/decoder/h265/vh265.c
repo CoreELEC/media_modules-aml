@@ -11188,7 +11188,7 @@ static int vh265_clear_mmu_config(struct hevc_state_s *hevc)
 	}
 #endif
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -1;
 
 	hevc->is_swap = false;
@@ -13169,7 +13169,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		hevc->enable_ucode_swap);
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 
 	if (hevc->mmu_enable) {
@@ -13208,6 +13208,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		if (!hevc->mc_cpu_addr) {
 			amhevc_disable();
 			pr_info("vh265 mmu swap ucode loaded fail.\n");
+			vfree(fw);
 			return -ENOMEM;
 		}
 
@@ -13224,6 +13225,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 			if (hevc->sei_itu_data_buf == NULL) {
 				pr_err("%s: failed to alloc sei itu data buffer\n",
 					__func__);
+				vfree(fw);
 				return -1;
 			} else if (NULL == hevc->sei_user_data_buffer) {
 				hevc->sei_user_data_buffer = kmalloc(USER_DATA_SIZE, GFP_KERNEL);

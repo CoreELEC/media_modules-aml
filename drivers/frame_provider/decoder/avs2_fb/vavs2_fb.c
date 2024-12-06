@@ -7516,13 +7516,15 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			u32 height = dec->avs2_dec.param.p.vertical_size;
 			u8 bit_depth = AVS2_BITS_8;
 			int cur_mmu_fb_4k_number = 0;
+			int page_num = 0;
 
 			if (dec->avs2_dec.param.p.profile_id == BASELINE10_PROFILE) {
 				bit_depth = dec->avs2_dec.param.p.encoding_precision;
 				bit_depth = 6 + bit_depth * 2;
 			}
-			cur_mmu_fb_4k_number = dec->fb_ifbuf_num * avs2_mmu_page_num(dec,
-				width, height, (bit_depth == 10));
+			page_num = avs2_mmu_page_num(dec, width, height, (bit_depth == 10));
+			if (page_num > 0)
+				cur_mmu_fb_4k_number = dec->fb_ifbuf_num * page_num;
 
 			if ((dec->front_back_mode == 1) &&
 				(start_code == I_PICTURE_START_CODE) &&
@@ -8582,19 +8584,22 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode == 1 || dec->front_back_mode == 3) {
 		fw_back = fw_firmare_s_creat(fw_size);
-		if (IS_ERR_OR_NULL(fw_back))
+		if (!fw_back) {
+			vfree(fw);
 			return -ENOMEM;
+		}
 
 		size = get_firmware_data(VIDEO_DEC_AVS2_FRONT, fw->data);
 
 		fw_back->len = get_firmware_data(VIDEO_DEC_AVS2_BACK, fw_back->data);
 		if (fw_back->len < 0) {
 			pr_err("get back firmware fail.\n");
+			vfree(fw);
 			vfree(fw_back);
 			return -1;
 		}
@@ -8604,6 +8609,9 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	if (size < 0) {
 		pr_err("get firmware fail.\n");
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		return -1;
 	}
 
@@ -8638,6 +8646,9 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		pr_err("AVS2: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;

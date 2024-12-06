@@ -2889,6 +2889,10 @@ static int add_log(struct hevc_state_s *hevc,
 		list_add_tail(&log_item->list, &hevc->log_list);
 	}
 	mutex_unlock(&vh265_log_mutex);
+	/*
+	 * Variable log_item will free in dump_log finally.
+	 */
+	/* coverity[leaked_storage] */
 	return 0;
 }
 
@@ -14843,13 +14847,15 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		hevc->enable_ucode_swap);
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 #ifdef NEW_FB_CODE
 	if (hevc->front_back_mode == 1 || hevc->front_back_mode == 3) {
 		fw_back = fw_firmare_s_creat(fw_size);
-		if (IS_ERR_OR_NULL(fw_back))
+		if (!fw_back) {
+			vfree(fw);
 			return -ENOMEM;
+		}
 
 		size = get_firmware_data(VIDEO_DEC_HEVC_FRONT, fw->data);
 #ifndef PXP_NO_SWAP
@@ -14858,6 +14864,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		fw_back->len = get_firmware_data(VIDEO_DEC_HEVC_BACK, fw_back->data);
 		if (fw_back->len < 0) {
 			pr_err("get back firmware fail.\n");
+			vfree(fw);
 			vfree(fw_back);
 			return -1;
 		}
@@ -14884,6 +14891,9 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	if (size < 0) {
 		pr_err("get firmware fail.\n");
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		return -1;
 	}
 
@@ -14899,6 +14909,10 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 					&hevc->mc_dma_handle, "H.265_MC_CPU_BUF");
 			if (!hevc->mc_cpu_addr) {
 				amhevc_disable();
+				vfree(fw);
+#ifdef NEW_FB_CODE
+				vfree(fw_back);
+#endif
 				pr_info("vh265 mmu swap ucode loaded fail.\n");
 				return -ENOMEM;
 			}
@@ -14923,6 +14937,10 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	if (hevc->sei_itu_data_buf == NULL) {
 		pr_err("%s: failed to alloc sei itu data buffer\n",
 			__func__);
+		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		return -1;
 	} else if (NULL == hevc->sei_user_data_buffer) {
 		hevc->sei_user_data_buffer = kmalloc(USER_DATA_SIZE, GFP_KERNEL);
@@ -14968,12 +14986,18 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
+#ifdef NEW_FB_CODE
+		vfree(fw_back);
+#endif
 		pr_err("H265: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
 	vfree(fw);
+#ifdef NEW_FB_CODE
+	vfree(fw_back);
+#endif
 
 	hevc->stat |= STAT_MC_LOAD;
 

@@ -2010,10 +2010,14 @@ static int get_pic_poc(struct hevc_state_s *hevc,
 
 static int get_double_write_mode(struct hevc_state_s *hevc)
 {
-	unsigned int out;
+	unsigned int out = 0x1;
 	u32 dw = 0x1; /*1:1*/
 
 	vdec_v4l_get_dw_mode(hevc->v4l2_ctx, &out);
+	/*
+	 * out has been initialized through vdec_v4l_get_dw_mode.
+	 */
+	/* coverity[uninit_use] */
 	dw = out;
 
 	return (dw & 0Xffff);

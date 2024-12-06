@@ -1237,6 +1237,11 @@ u32 vdec_input_get_freed_handle(struct vdec_s *vdec)
 
 	flags = vdec_input_lock(input);
 	do {
+		/*
+		 * "list", the third parameter, is the struct member name
+		 * rather than the array.
+		 */
+		/* coverity[overrun-local] */
 		block = list_first_entry_or_null(&input->vframe_block_free_list,
 		struct vframe_block_list_s, list);
 		if (!block) {

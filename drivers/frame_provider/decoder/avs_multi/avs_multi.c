@@ -2188,7 +2188,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 	u32 fw_size = 0x1000 * 16;
 
 	fw = fw_firmare_s_creat(fw_size);
-	if (IS_ERR_OR_NULL(fw))
+	if (!fw)
 		return -ENOMEM;
 
 	pr_info("vavs_init\n");

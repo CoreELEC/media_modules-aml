@@ -3351,6 +3351,11 @@ int vdec_init_stbuf_info(struct vdec_s *vdec)
 		}
 
 		if (vdec->slave) {
+			/*
+			 * "const ulong reg_base" in "struct stream_buf_s vbuf"
+			 * is normal to write reg_base here.
+			 */
+			/* coverity[store_writes_const_field] */
 			memcpy(&vdec->slave->vbuf, &vdec->vbuf,
 				sizeof(vdec->vbuf));
 		}

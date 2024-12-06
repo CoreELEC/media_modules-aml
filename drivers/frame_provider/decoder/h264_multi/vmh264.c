@@ -6850,6 +6850,11 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			vh264_config_canvs_for_mmu(hw);
 		}
 
+		/*
+		 * There will no be multiple threads running in
+		 * the same vdec_h264_hw_s context.
+		 */
+		/* coverity[thread1_overwrites_value_in_field] */
 		hw->config_bufmgr_done = 1;
 
 	/*end of  config_bufmgr_done */
