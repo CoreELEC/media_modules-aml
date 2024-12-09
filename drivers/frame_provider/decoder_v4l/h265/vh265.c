@@ -11947,6 +11947,7 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				hevc->last_dec_result != DEC_RESULT_UNFINISH))
 				vdec_v4l_post_error_frame_event(ctx);
 			hevc->dec_result = DEC_RESULT_ERROR_DATA;
+			vh265_buf_ref_process_for_exception(hevc);
 			amhevc_stop();
 			vdec_schedule_work(&hevc->work);
 		}
@@ -12231,6 +12232,8 @@ force_output:
 		return IRQ_HANDLED;
 #endif
 	} else if (dec_status == HEVC_OVER_DECODE) {
+		hevc->decoded_poc = hevc->curr_POC;
+		hevc->decoding_pic = NULL;
 		hevc->over_decode = 1;
 		hevc->dec_result = DEC_RESULT_DONE;
 		vdec_schedule_work(&hevc->work);
@@ -12563,7 +12566,7 @@ force_output:
 			pic_w = hevc->param.p.pic_width_in_luma_samples;
 			pic_h = hevc->param.p.pic_height_in_luma_samples;
 			ret_is_csd_valid = is_csd_valid(hevc, pic_w, pic_h, 1);
-			if (input_frame_based(vdec) && ret_is_csd_valid != RES_RET_NORMAL) {
+			if (ret_is_csd_valid != RES_RET_NORMAL) {
 				hevc_print(hevc, 0,"%s, unsupported size : w:%d h:%d, ret:%d\n", __func__, pic_w, pic_h, ret_is_csd_valid);
 				if (ret_is_csd_valid == RES_RET_OVERSIZE)
 					hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
