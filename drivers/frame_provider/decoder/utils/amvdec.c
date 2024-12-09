@@ -1328,6 +1328,9 @@ EXPORT_SYMBOL(amhevc_stop_b);
 
 void amhevc_reset_f(void)
 {
+	WRITE_VREG(HEVC_ASSIST_FB_CTL,
+		READ_VREG(HEVC_ASSIST_FB_CTL) | ((3 << 7)));
+
 	hevc_arb_ctrl_front_or_back(0, 1);
 	WRITE_VREG(HEVC_STREAM_CONTROL, 0);
 
@@ -1376,7 +1379,7 @@ EXPORT_SYMBOL(amhevc_reset_f);
 void amhevc_reset_b(void)
 {
 	WRITE_VREG(HEVC_ASSIST_FB_CTL,
-		READ_VREG(HEVC_ASSIST_FB_CTL) | ((1 << 8)));
+		READ_VREG(HEVC_ASSIST_FB_CTL) | ((3 << 7)));
 
 	hevc_arb_ctrl_front_or_back(0, 0);
 	/*

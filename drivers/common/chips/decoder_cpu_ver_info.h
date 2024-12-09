@@ -197,6 +197,8 @@ struct dos_of_dev_s {
 	bool is_vdec_hevc_combine;
 
 	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
+	bool is_support_fb_axi;
+	bool is_support_hevc_arb;
 	bool is_support_34bit;
 
 	u32 fmt_support_flags;
@@ -278,6 +280,10 @@ inline bool is_support_monitor(void);
 inline bool is_support_mmu_copy(void);
 
 inline bool is_support_axi_ctrl(void);
+
+inline bool is_support_fb_axi(void);
+
+inline bool is_support_hevc_arb(void);
 
 inline bool is_support_format(int format);
 
