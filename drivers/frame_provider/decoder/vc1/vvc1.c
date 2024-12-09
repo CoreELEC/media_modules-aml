@@ -163,6 +163,7 @@ static u32 total_frame;
 static u32 next_pts;
 static u64 next_pts_us64;
 static bool is_reset;
+static bool is_irq_cancel;
 static struct work_struct set_clk_work;
 static struct work_struct error_wd_work;
 static struct canvas_config_s vc1_canvas_config[DECODE_BUFFER_NUM_MAX][3];
@@ -1128,7 +1129,7 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 			vc1_print(0, VC1_DEBUG_DETAIL, "%s: ret %d, wait_time %d, is_reset %d\n",
 						__func__, ret, wait_time, is_reset);
 
-		} while ((ret == -1) && (!is_reset));
+		} while ((ret == -1) && (!is_reset) && (!is_irq_cancel));
 	}
 	WRITE_VREG(DECODE_STATUS, 0);
 
@@ -1568,6 +1569,7 @@ static void vvc1_local_init(bool is_reset)
 	saved_resolution = 0;
 	frame_width = frame_height = frame_dur = 0;
 	process_busy = false;
+	is_irq_cancel = false;
 #ifdef DEBUG_PTS
 	pts_hit = pts_missed = pts_i_hit = pts_i_missed = 0;
 #endif
@@ -1855,6 +1857,7 @@ static int amvdec_vc1_remove(struct platform_device *pdev)
 	}
 
 	if (stat & STAT_ISR_REG) {
+		is_irq_cancel = true;
 		vdec_free_irq(VDEC_IRQ_1, (void *)vvc1_dec_id);
 		stat &= ~STAT_ISR_REG;
 	}
