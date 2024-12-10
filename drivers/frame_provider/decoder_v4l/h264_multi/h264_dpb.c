@@ -2081,8 +2081,14 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 				if ((p_H264_Dpb->fast_output_enable & 0x2) &&
 					((p_Dpb->fs[i]->poc -
 						p_Dpb->last_output_poc)
-					== 1))
-					fast_output_flag = 1;
+					== 1)) {
+					for (i = 0; i < p_Dpb->used_size; i++) {
+						if (p_Dpb->fs[i]->data_flag & ERROR_FLAG)
+							break;
+
+						fast_output_flag = 1;
+					}
+				}
 				if ((p_H264_Dpb->fast_output_enable & 0x4) &&
 					(p_H264_Dpb->poc_even_odd_flag == 2) &&
 					 (p_Dpb->fs[i]->is_used == 3) &&

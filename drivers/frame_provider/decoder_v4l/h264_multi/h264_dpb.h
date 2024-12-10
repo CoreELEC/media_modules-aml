@@ -64,7 +64,7 @@
 
 #define MAX_LIST_SIZE 33
 
-#define H264_OUTPUT_MODE_NORMAL 0x4
+#define H264_OUTPUT_MODE_NORMAL 0x6
 #define H264_OUTPUT_MODE_FAST   0x8
 
 //#define FALSE 0
