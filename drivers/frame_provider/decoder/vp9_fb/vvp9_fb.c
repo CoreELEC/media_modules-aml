@@ -12787,23 +12787,17 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			if (!vdec_frame_based(hw_to_vdec(pbi)))
 				dec_again_process(pbi);
 			else {
-				if (pbi->common.show_existing_frame) {
-					pbi->dec_result = DEC_RESULT_DONE;
+				pbi->dec_result = DEC_RESULT_DONE;
 #ifdef NEW_FB_CODE
-					if (pbi->front_back_mode == 1) {
-						amhevc_stop_f();
-					}
-					else
+				if (pbi->front_back_mode == 1) {
+					amhevc_stop_f();
+				}
+				else
 #endif
-					{
-					amhevc_stop();
-					}
-					vdec_schedule_work(&pbi->work);
+				{
+				amhevc_stop();
 				}
-				else {
-					pbi->dec_result = DEC_RESULT_GET_DATA;
-					vdec_schedule_work(&pbi->work);
-				}
+				vdec_schedule_work(&pbi->work);
 			}
 		}
 		pbi->process_busy = 0;
@@ -14780,9 +14774,15 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 		pbi->process_state = PROC_STATE_INIT;
 		decode_frame_count[pbi->index] = pbi->frame_count;
 
-		if (pbi->mmu_enable)
+		if (pbi->mmu_enable) {
 			pbi->used_4k_num =
 				(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+			if (pbi->front_back_mode == 0) {
+				ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
+				vp9_recycle_mmu_buf_tail(pbi);
+				ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
+			}
+		}
 		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
 			"%s (===> %d) dec_result %d %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
 			__func__,
@@ -14845,9 +14845,15 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 		pbi->frame_count++;
 		pbi->process_state = PROC_STATE_INIT;
 
-		if (pbi->mmu_enable)
+		if (pbi->mmu_enable) {
 			pbi->used_4k_num =
 				(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+			if (pbi->front_back_mode == 0) {
+				ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
+				vp9_recycle_mmu_buf_tail(pbi);
+				ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
+			}
+		}
 		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - pbi->start_shift_bytes);
 		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
 			"%s (===> %d) dec_result %d %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
