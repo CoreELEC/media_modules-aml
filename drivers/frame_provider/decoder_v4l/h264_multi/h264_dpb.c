@@ -2023,7 +2023,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 {
 	int poc, pos;
 	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
-	int i;
+	int i,j;
 	int none_displayed_num = 0;
 	unsigned char fast_output_flag = 0;
 	int inner_dpb_size = 0;
@@ -2082,8 +2082,8 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 					((p_Dpb->fs[i]->poc -
 						p_Dpb->last_output_poc)
 					== 1)) {
-					for (i = 0; i < p_Dpb->used_size; i++) {
-						if (p_Dpb->fs[i]->data_flag & ERROR_FLAG)
+					for (j = 0; j < p_Dpb->used_size; j++) {
+						if (p_Dpb->fs[j]->data_flag & ERROR_FLAG)
 							break;
 
 						fast_output_flag = 1;
