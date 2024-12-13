@@ -912,6 +912,9 @@ enum alloc_buffer_status_t {
  *bit [22] single core is support rdma
  *	1: no support rdma
  *	0: support rdma
+ *bit [23] single core ucode check multi slice info
+ *	1: no check multi slice info
+ *	0: check multi slice info
  */
 #define NAL_SEARCH_CTL            HEVC_ASSIST_SCRATCH_I
 	/*read only*/
@@ -14869,9 +14872,14 @@ static void config_decode_mode(struct hevc_state_s *hevc)
 #endif
 	unsigned decode_mode;
 #ifdef HEVC_8K_LFTOFFSET_FIX
-	if (hevc->performance_profile)
-		WRITE_VREG(NAL_SEARCH_CTL,
-			READ_VREG(NAL_SEARCH_CTL) | (1 << 21));
+	if (hevc->performance_profile) {
+		if (!hevc->front_back_mode)
+			WRITE_VREG(NAL_SEARCH_CTL,
+				READ_VREG(NAL_SEARCH_CTL) | (1 << 23));
+		else
+			WRITE_VREG(NAL_SEARCH_CTL,
+				READ_VREG(NAL_SEARCH_CTL) | (1 << 21));
+	}
 #endif
 	if (!hevc->m_ins_flag)
 		decode_mode = DECODE_MODE_SINGLE;
