@@ -2053,6 +2053,7 @@ typedef struct AV1_Common_s {
       int intra_only;
       unsigned short bit_depth;
   struct RefCntBuffer_s frame_refs[INTER_REFS_PER_FRAME];
+  int common_error_mark;
 
 #endif
       struct av1_repeat_buf_t repeat_buf;
@@ -2390,6 +2391,8 @@ void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *c
 #define PRINT_FLAG_VDEC_DETAIL    0x40000000
 #define PRINT_FLAG_VDEC_DATA    0x80000000
 #endif
+
+#define RefFrameErr                   0x01
 
 int av1_print2(int flag, const char *fmt, ...);
 

@@ -2318,9 +2318,11 @@ int av1_decode_frame_headers_and_setup(AV1Decoder *pbi, int trailing_bits_presen
           // Compare values derived from delta_frame_id_minus_1 and
           // refresh_frame_flags. Also, check valid for referencing
           if (ref_frame_id != cm->ref_frame_id[ref] ||
-              cm->valid_for_referencing[ref] == 0)
+              cm->valid_for_referencing[ref] == 0) {
+            cm->common_error_mark = RefFrameErr;
             aom_internal_error(&cm->error, AOM_CODEC_CORRUPT_FRAME,
                                "Reference buffer frame ID mismatch");
+          }
         }
       }
 

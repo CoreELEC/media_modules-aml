@@ -1034,6 +1034,7 @@ struct AV1HW_s {
 	u32 mv_buf_size;
 	bool enable_ucode_swap;
 	u32 max_spatial_id;
+	int error_mark;
 };
 
 #ifdef NEW_FB_CODE
@@ -7001,6 +7002,24 @@ void v4l_submit_vframe(struct AV1HW_s *hw)
 #endif
 }
 
+static inline int check_frame_error(struct AV1HW_s *hw)
+{
+	if (hw->common.seq_params.frame_id_numbers_present_flag) {
+		if (hw->common.current_frame.frame_type == KEY_FRAME) {
+			hw->error_mark = 0;
+			hw->common.common_error_mark = 0;
+			return 0;
+		}
+		if (hw->common.common_error_mark == RefFrameErr) {
+			hw->error_mark = 1;
+			av1_print(hw, PRINT_FLAG_ERROR,
+				"%s: cur_idx :%d\n",__func__,hw->common.current_frame_id);
+			return -1;
+		}
+	}
+	return 0;
+}
+
 void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)pbi->private_data;
@@ -7042,6 +7061,10 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 			buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
 			av1_recycle_dec_resource(hw, buf);
 		}
+	}else if(hw->error_mark == 1) {
+		av1_print(hw, PRINT_FLAG_ERROR,
+			"%s, frame err, do not display,idx:%d\n",
+			__func__, hw->common.current_frame_id);
 	} else {
 		av1_print(hw, AOM_DEBUG_HW_MORE, "Out frame index %d not_need_display %d\n",
 			sd->index, sd->not_need_display);
@@ -8276,6 +8299,10 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		} else
 			hw->parallel_exe = 1;
 #endif
+		if (check_frame_error(hw) < 0) {
+			hw->frame_decoded = 1;
+			return -1;
+		}
 
 		av1_print(hw, AOM_DEBUG_HW_MORE, "HEVC_DEC_STATUS_REG <= AOM_AV1_DECODE_SLICE\n");
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_DECODE_SLICE);
@@ -12737,6 +12764,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		hw->backend_ASSIST_MBOX0_MASK = EE_ASSIST_MBOX0_MASK;
 	}
 
+	hw->error_mark = 0;
+	hw->common.common_error_mark = 0;
 	hw->index = pdata->id;
 	if (is_rdma_enable()) {
 		hw->rdma_adr = decoder_dma_alloc_coherent(&hw->rdma_handle,
