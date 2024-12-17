@@ -7328,7 +7328,9 @@ static int get_bits(unsigned char buffer[],
 
 static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 							u8 *sei_data_buf,
-							u8 *sei_data_buf_end, bool parse_cc)
+							u8 *sei_data_buf_end,
+							bool parse_ud_flag,
+							struct buffer_spec_s *pic)
 {
 	int payload_type;
 	int payload_size;
@@ -7402,7 +7404,7 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 		}
 		break;
 	case SEI_USER_DATA:
-		if (enable_itu_t35 && parse_cc) {
+		if (enable_itu_t35 && parse_ud_flag) {
 			int i;
 			int j;
 			int data_len;
@@ -7428,6 +7430,57 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 					}
 					dpb_print_cont(DECODE_ID(hw),
 						0, "\n");
+				}
+			}  else if (
+				(p_sei[0] == 0xB5 && p_sei[1] == 0x00 && p_sei[2] == 0x3A && p_sei[3] == 0x01) ||
+				(p_sei[0] == 0xB5 && p_sei[1] == 0x00 && p_sei[2] == 0x3A && p_sei[3] == 0x00)) {
+				if (pic) {
+					dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
+							"%s: size %d\n", __func__, pic->aux_data_size);
+					#define SEI_DATA_HEADER     0x8
+					#define AUX_TAG_SEI         0x2
+
+					user_data_buf = pic->aux_data_buf + pic->aux_data_size;
+
+					user_data_buf[0] = (payload_size >> 24) & 0xff;
+					user_data_buf[1] = (payload_size >> 16) & 0xff;
+					user_data_buf[2] = (payload_size >> 8) & 0xff;
+					user_data_buf[3] = (payload_size >> 0) & 0xff;
+					user_data_buf[4] = AUX_TAG_SEI;
+					user_data_buf[5] = 0;
+					user_data_buf[6] = 0;
+					user_data_buf[7] = 0;
+
+					user_data_buf = user_data_buf + SEI_DATA_HEADER;
+					for (i = 0; i < payload_size; i++) {
+						if (pic->aux_data_size + i >= SEI_ITU_DATA_SIZE)
+							break; // Avoid out-of-bound writing
+						user_data_buf[i] = p_sei[i];
+					}
+
+					data_len = payload_size + SEI_DATA_HEADER;
+					if (data_len % 8)
+						data_len = ((data_len + 8) >> 3) << 3;
+
+					pic->aux_data_size += data_len;
+					if (pic->aux_data_size >= SEI_ITU_DATA_SIZE)
+						pic->aux_data_size = SEI_ITU_DATA_SIZE;
+
+					if (dpb_is_debug(DECODE_ID(hw),
+						PRINT_FLAG_SEI_DETAIL)) {
+						dpb_print(DECODE_ID(hw), 0, "SL-HDR data size %d\n", pic->aux_data_size);
+						for (i = 0; i < pic->aux_data_size; i++) {
+							dpb_print_cont(DECODE_ID(hw), 0,
+								"%02x ", pic->aux_data_buf[i]);
+							if (((i + 1) & 0xf) == 0)
+								dpb_print_cont(
+								DECODE_ID(hw),
+									0, "\n");
+						}
+						dpb_print_cont(DECODE_ID(hw),
+							0, "\n");
+					}
+					hw->sei_need_parse = false;
 				}
 			} else {
 				user_data_buf
@@ -7472,8 +7525,8 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 					dpb_print_cont(DECODE_ID(hw),
 						0, "\n");
 				}
+				hw->sei_need_parse = false;
 			}
-			hw->sei_need_parse = false;
 		}
 		break;
 	case SEI_RECOVERY_POINT:
@@ -7486,7 +7539,8 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 
 static void parse_sei_data(struct vdec_h264_hw_s *hw,
 							u8 *sei_data_buf,
-							int len, bool parse_cc)
+							int len, bool parse_ud_flag,
+							struct buffer_spec_s *pic)
 {
 	char *p_sei;
 	char *p_sei_end;
@@ -7498,7 +7552,7 @@ static void parse_sei_data(struct vdec_h264_hw_s *hw,
 	p_sei_end = p_sei + len;
 	parsed_size = 0;
 	while (parsed_size < len) {
-		read_size = parse_one_sei_record(hw, p_sei, p_sei_end, parse_cc);
+		read_size = parse_one_sei_record(hw, p_sei, p_sei_end, parse_ud_flag, pic);
 		p_sei += read_size;
 		parsed_size += read_size;
 		if (*p_sei == 0x80) {
@@ -8604,7 +8658,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				data_high);*/
 
 		if (hw->sei_need_parse == true)
-			parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len, true);
+			parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len, true, NULL);
 
 		if (hw->config_bufmgr_done == 0) {
 			hw->dec_result = DEC_RESULT_DONE;
@@ -8707,6 +8761,9 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			unsigned mby_mbx = READ_VREG(MBY_MBX);
 			struct StorablePicture *p =
 				p_H264_Dpb->mVideo.dec_picture;
+
+			if ((hw->sei_need_parse == true) && (p->buf_spec_num >= 0))
+				parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len, true, &hw->buffer_spec[p->buf_spec_num]);
 
 			if (slice_header_process_status == 1) {
 				if (!p_H264_Dpb->mSPS.frame_mbs_only_flag) {
@@ -11281,7 +11338,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			int pic_struct;
 
 			if (hw->sei_need_parse == true)
-				parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len, false);
+				parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len, false, NULL);
 			pic_struct = p_H264_Dpb->dpb_param.l.data[PICTURE_STRUCT];
 			hw->is_interlace = ((pic_struct == PIC_TOP) || (pic_struct == PIC_BOT) ||
 				(pic_struct == PIC_TOP_BOT) || (pic_struct == PIC_BOT_TOP) ||
