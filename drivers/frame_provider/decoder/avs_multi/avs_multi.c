@@ -2630,7 +2630,7 @@ static void vavs_work(struct work_struct *work)
 		if (input_stream_based(vdec)) {
 			vdec_set_input_underrun(vdec, true);
 			debug_print(hw, PRINT_FLAG_VLD_DETAIL,
-				"%s: set input underrun status to false\n", __func__);
+				"%s: set input underrun status to true\n", __func__);
 		}
 	}  else if (hw->dec_result == DEC_RESULT_GET_DATA
 		&& (hw_to_vdec(hw)->next_status !=

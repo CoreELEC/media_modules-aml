@@ -2095,21 +2095,25 @@ static void hevc_set_unused_4k_buff_idx(struct vdec_h264_hw_s *hw,
 static void hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 {
 	ulong timeout = jiffies + HZ / 10;
-	dpb_print(DECODE_ID(hw),
-		PRINT_FLAG_MMU_DETAIL, "hevc_frame_done...set\n");
-	while ((READ_VREG(HEVC_SAO_INT_STATUS) & 0x1) == 0) {
-		if (time_after(jiffies, timeout)) {
-			dpb_print(DECODE_ID(hw),
-			PRINT_FLAG_MMU_DETAIL, " %s..timeout!\n", __func__);
-			break;
+
+	if ((hw->dpb.dec_dpb_status == H264_PIC_DATA_DONE) ||
+		!(is_support_axi_ctrl() || is_support_hevc_arb())) {
+		dpb_print(DECODE_ID(hw),
+			PRINT_FLAG_MMU_DETAIL, "hevc_frame_done...set\n");
+		while ((READ_VREG(HEVC_SAO_INT_STATUS) & 0x1) == 0) {
+			if (time_after(jiffies, timeout)) {
+				dpb_print(DECODE_ID(hw),
+				PRINT_FLAG_MMU_DETAIL, " %s..timeout!\n", __func__);
+				break;
+			}
 		}
-	}
-	timeout = jiffies + HZ / 10;
-	while (READ_VREG(HEVC_CM_CORE_STATUS) & 0x1) {
-		if (time_after(jiffies, timeout)) {
-			dpb_print(DECODE_ID(hw),
-			PRINT_FLAG_MMU_DETAIL, " %s cm_core..timeout!\n", __func__);
-			break;
+		timeout = jiffies + HZ / 10;
+		while (READ_VREG(HEVC_CM_CORE_STATUS) & 0x1) {
+			if (time_after(jiffies, timeout)) {
+				dpb_print(DECODE_ID(hw),
+				PRINT_FLAG_MMU_DETAIL, " %s cm_core..timeout!\n", __func__);
+				break;
+			}
 		}
 	}
 	WRITE_VREG(HEVC_SAO_INT_STATUS, 0x1);
@@ -11576,7 +11580,7 @@ result_done:
 		if (input_stream_based(vdec)) {
 			vdec_set_input_underrun(vdec, true);
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-				"%s: set input underrun status to false\n", __func__);
+				"%s: set input underrun status to true\n", __func__);
 		}
 
 		if ((vdec_stream_based(vdec)) &&
