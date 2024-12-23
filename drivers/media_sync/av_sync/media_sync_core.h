@@ -236,6 +236,16 @@ typedef struct audio_format{
 	int format;
 } mediasync_audio_format;
 
+// speed anchor time
+typedef struct update_speedtime_para {
+	int64_t mMediaTimeUs;
+	int64_t mSystemTimeUs;
+	u32 mForceUpdate;
+	u32 mNumerator;
+	u32 mDenominator;
+	int64_t reserved[4];
+} mediasync_updatespeedtime_para;
+
 typedef enum
 {
 	TS_DEMOD = 0,                          // TS Data input from demod
@@ -494,4 +504,6 @@ long mediasync_ins_set_pcr_and_dmx_id(MediaSyncManager* pSyncManage, s32 sDemuxI
 extern int register_mediasync_video_hold_set_cb(void* pfunc);
 long mediasync_ins_set_audio_switch(MediaSyncManager* pSyncManage, mediasync_audio_switch audioSwitch);
 long mediasync_ins_get_audio_switch(MediaSyncManager* pSyncManage, mediasync_audio_switch* audioSwitch);
+long mediasync_ins_update_speed_mediatime(MediaSyncManager* pSyncManage,
+				mediasync_updatespeedtime_para *para);
 #endif

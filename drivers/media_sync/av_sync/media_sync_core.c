@@ -4352,6 +4352,129 @@ long mediasync_ins_set_audio_switch(MediaSyncManager* pSyncManage, mediasync_aud
 	return 0;
 }
 
+long mediasync_ins_update_speed_mediatime(MediaSyncManager* pSyncManage,
+				mediasync_updatespeedtime_para *para) {
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	u64 current_stc = 0;
+	s64 current_systemtime = 0;
+	s64 diff_system_time = 0;
+	s64 diff_mediatime = 0;
+	u32 k = 0;
+	s64 lMediaTime = 0;
+	s64 lSystemTime = 0;
+	bool forceUpdate = false;
+
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL) {
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+		return -1;
+	}
+
+	pInstance->mSpeed.mNumerator = para->mNumerator;
+	pInstance->mSpeed.mDenominator = para->mDenominator;
+	//pInstance->mStcParmUpdateCount++;
+	lMediaTime = para->mMediaTimeUs;
+	lSystemTime = para->mSystemTimeUs;
+	forceUpdate = para->mForceUpdate;
+
+	current_stc = get_stc_time_us(pInstance);
+	current_systemtime = get_system_time_us();
+	k = pInstance->mSpeed.mNumerator * pInstance->mPcrSlope.mNumerator;
+	k = div_u64(k, pInstance->mSpeed.mDenominator);
+#if 0
+	pInstance->mSyncMode = MEDIA_SYNC_PCRMASTER;
+#endif
+	if (pInstance->mSyncMode == MEDIA_SYNC_PCRMASTER) {
+		if (lSystemTime == 0) {
+			if (current_stc != 0) {
+				diff_system_time = div_u64((current_stc - pInstance->mLastStc) * k, pInstance->mSpeed.mDenominator);
+				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
+			} else {
+				diff_system_time = div_u64((current_systemtime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
+				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
+			}
+			if (pInstance->mSyncModeChange == 1
+				|| diff_mediatime < 0
+				|| ((diff_mediatime > 0)
+				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
+				mediasync_pr_info(0,pInstance->mSyncIndex,"MEDIA_SYNC_PCRMASTER update time\n");
+				pInstance->mLastMediaTime = lMediaTime;
+				pInstance->mLastRealTime = current_systemtime;
+				pInstance->mLastStc = current_stc;
+				pInstance->mSyncModeChange = 0;
+			}
+		} else {
+			if (current_stc != 0ULL) {
+				diff_system_time = div_u64((lSystemTime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
+				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
+			} else {
+				diff_system_time = div_u64((lSystemTime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
+				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
+			}
+
+			if (pInstance->mSyncModeChange == 1
+				|| diff_mediatime < 0
+				|| ((diff_mediatime > 0)
+				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
+				pInstance->mLastMediaTime = lMediaTime;
+				pInstance->mLastRealTime = lSystemTime;
+				pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
+				pInstance->mSyncModeChange = 0;
+			}
+		}
+	} else {
+		if (lSystemTime == 0) {
+			diff_system_time = div_u64((current_systemtime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
+			diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
+
+			if (pInstance->mSyncModeChange == 1
+				|| forceUpdate
+				|| diff_mediatime < 0
+				|| ((diff_mediatime > 0)
+				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
+				mediasync_pr_info(0,pInstance->mSyncIndex,"mSyncMode:%d update time system diff:%lld media diff:%lld current:%lld\n",
+					pInstance->mSyncMode,
+					diff_system_time,
+					diff_mediatime,
+					current_systemtime);
+				pInstance->mLastMediaTime = lMediaTime;
+				pInstance->mLastRealTime = current_systemtime;
+				pInstance->mLastStc = current_stc;
+				pInstance->mSyncModeChange = 0;
+			}
+		} else {
+			diff_system_time = div_u64((lSystemTime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
+			diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
+			if (pInstance->mSyncModeChange == 1
+				|| forceUpdate
+				|| diff_mediatime < 0
+				|| ((diff_mediatime > 0)
+				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
+				mediasync_pr_info(0,pInstance->mSyncIndex,"mSyncMode:%d update time stc diff:%lld media diff:%lld lSystemTime:%lld lMediaTime:%lld,k:%d, mUpdateTimeThreshold:%lld\n",
+					pInstance->mSyncMode,
+					diff_system_time,
+					diff_mediatime,
+					lSystemTime,
+					lMediaTime,
+					k,
+					pInstance->mUpdateTimeThreshold);
+				pInstance->mLastMediaTime = lMediaTime;
+				pInstance->mLastRealTime = lSystemTime;
+				pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
+				pInstance->mSyncModeChange = 0;
+			}
+		}
+	}
+	pInstance->mTrackMediaTime = lMediaTime;
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+	return 0;
+}
+
 long mediasync_ins_get_audio_switch(MediaSyncManager* pSyncManage, mediasync_audio_switch* audioSwitch) {
 
 	mediasync_ins* pInstance = NULL;

@@ -130,6 +130,7 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 	mediasync_alloc_para parm = {0};
 	mediasync_anchor_time_para Anchor_Time = {0};
 	mediasync_updatetime_para UpdateTime = {0};
+	mediasync_updatespeedtime_para UpdateSpeedTime = {0};
 	mediasync_systime_para SystemTime = {0};
 	aml_Source_Type sourceType = TS_DEMOD;
 	s64 UpdateTimeThreshold = 0;
@@ -220,7 +221,18 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 							UpdateTime.mSystemTimeUs,
 							UpdateTime.mForceUpdate);
 		break;
+		case MEDIASYNC_IOC_UPDATE_SPEED_MEDIATIME:
+			if (copy_from_user((void *)&UpdateSpeedTime,
+						(void *)arg,
+						sizeof(UpdateSpeedTime))) {
+				return -EFAULT;
+			}
+			if (priv->mSyncIns == NULL) {
+				return -EFAULT;
+			}
 
+			ret = mediasync_ins_update_speed_mediatime(priv->mSyncIns, &UpdateSpeedTime);
+		break;
 		case MEDIASYNC_IOC_GET_MEDIATIME:
 			if (priv->mSyncIns == NULL) {
 				return -EFAULT;
@@ -1476,6 +1488,7 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_INSTANCE_BINDER:
 		case MEDIASYNC_IOC_INSTANCE_STATIC_BINDER:
 		case MEDIASYNC_IOC_UPDATE_MEDIATIME:
+		case MEDIASYNC_IOC_UPDATE_SPEED_MEDIATIME:
 		case MEDIASYNC_IOC_GET_MEDIATIME:
 		case MEDIASYNC_IOC_GET_SYSTEMTIME:
 		case MEDIASYNC_IOC_GET_NEXTVSYNC_TIME:
