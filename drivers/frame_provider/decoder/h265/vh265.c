@@ -12334,6 +12334,7 @@ force_output:
 			}
 			amhevc_stop();
 			vdec_schedule_work(&hevc->work);
+			return IRQ_HANDLED;
 #endif
 		} else {
 			/* skip, search next start code */
