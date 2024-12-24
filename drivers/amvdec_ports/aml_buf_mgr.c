@@ -35,7 +35,7 @@
 #include <linux/amlogic/media/video_processor/di_proc_buf_mgr.h>
 #endif
 
-#define IS_VPP_POST(bm)	(bm->vpp_work_mode == VPP_WORK_MODE_DI_POST)
+#define IS_VPP_POST(bm)	(bm->config.vpp_work_mode == VPP_WORK_MODE_DI_POST)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 void aml_buf_ref_recycle_worker(struct work_struct *work)

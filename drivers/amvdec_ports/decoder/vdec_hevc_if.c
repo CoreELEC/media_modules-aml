@@ -691,6 +691,7 @@ static void set_cfg_info(struct vdec_hevc_inst *inst,
 	struct aml_vdec_cfg_infos *old_cfg = &inst->parms.cfg;
 	u32 dw_new = new_cfg->double_write_mode;
 	u32 tw_new = new_cfg->triple_write_mode;
+	int enable_di_post_changes;
 	int coded_height;
 
 	if (!memcmp(old_cfg, new_cfg, sizeof(*old_cfg)))
@@ -707,13 +708,14 @@ static void set_cfg_info(struct vdec_hevc_inst *inst,
 	coded_height = ((pic->field == V4L2_FIELD_NONE) || !inst->ctx->enable_di_post) ?
 		pic->coded_height : pic->coded_height >> 1;
 
-	if (old_cfg->double_write_mode != dw_new) {
+	enable_di_post_changes = (old_cfg->metadata_config_flag & (1 << 20)) != inst->ctx->enable_di_post;
+	if (old_cfg->double_write_mode != dw_new || (enable_di_post_changes && !inst->ctx->enable_di_post)) {
 		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, coded_height, dw_new, 64,
 			is_hevc_align32(0) ? 32 : 64);
 		pic->c_len_sz		= pic->y_len_sz >> 1;
 	}
 
-	if (old_cfg->triple_write_mode != tw_new) {
+	if (old_cfg->triple_write_mode != tw_new || (enable_di_post_changes && !inst->ctx->enable_di_post)) {
 		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, coded_height, tw_new, 64, 64);
 		pic->c_len_sz_tw	= pic->y_len_sz_tw >> 1;
 	}

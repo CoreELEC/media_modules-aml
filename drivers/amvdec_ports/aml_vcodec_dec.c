@@ -765,6 +765,8 @@ static void aml_buf_configure_update(struct aml_vcodec_ctx *ctx)
 	config.dw_mode		= dw;
 	config.tw_mode		= tw;
 	config.avbcd_work_mode	= ctx->avbcd_work_mode ? true : false;
+	config.vpp_work_mode	= ctx->enable_di_post ? VPP_WORK_MODE_DI_POST :
+						VPP_WORK_MODE_DI_M2M;
 
 	aml_buf_configure(&ctx->bm, &config);
 }
@@ -833,6 +835,8 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	config.dw_mode			= dw;
 	config.tw_mode			= tw;
 	config.avbcd_work_mode	= ctx->avbcd_work_mode ? true : false;
+	config.vpp_work_mode	= ctx->enable_di_post ? VPP_WORK_MODE_DI_POST :
+						VPP_WORK_MODE_DI_M2M;
 
 	aml_buf_configure(&ctx->bm, &config);
 
@@ -4677,9 +4681,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	config.dw_mode		= dw;
 	config.tw_mode		= tw;
 	config.avbcd_work_mode	= ctx->avbcd_work_mode ? true : false;
-
-	if (ctx->enable_di_post)
-		ctx->bm.vpp_work_mode	= VPP_WORK_MODE_DI_POST;
+	config.vpp_work_mode	= ctx->enable_di_post ? VPP_WORK_MODE_DI_POST :
+						VPP_WORK_MODE_DI_M2M;
 	aml_buf_configure(&ctx->bm, &config);
 	if (ctx->bm.config.enable_fbc) {
 		int ret;
@@ -5633,12 +5636,6 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 			dec->cfg = in->cfg;
 		}
 
-		if (!vdec_if_set_param(ctx, SET_PARAM_CFG_INFO, &dec->cfg) &&
-			!vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->picinfo)) {
-			update_ctx_dimension(ctx, dst_vq->type);
-			aml_buf_configure_update(ctx);
-		}
-
 		if (in->parms_status & V4L2_CONFIG_PARM_DECODE_PSINFO)
 			dec->ps = in->ps;
 		if (in->parms_status & V4L2_CONFIG_PARM_DECODE_HDRINFO)
@@ -5687,6 +5684,11 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		if (force_di_permission)
 			ctx->force_di_permission = true;
 
+		if (ctx->enable_di_post && !(dec->cfg.metadata_config_flag & (1 << 20))) {
+			ctx->enable_di_post = dec->cfg.metadata_config_flag & (1 << 20);
+			aml_buf_configure_update(ctx);
+			v4l_buf_size_decision(ctx);
+		}
 		ctx->enable_di_post = dec->cfg.metadata_config_flag & (1 << 20);
 		if (enable_di_post)
 			ctx->enable_di_post = true;
@@ -5699,6 +5701,12 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 #ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 			aml_avbc_wrapper_init(&ctx->avbc_wrapper);
 #endif
+			aml_buf_configure_update(ctx);
+		}
+
+		if (!vdec_if_set_param(ctx, SET_PARAM_CFG_INFO, &dec->cfg) &&
+			!vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->picinfo)) {
+			update_ctx_dimension(ctx, dst_vq->type);
 			aml_buf_configure_update(ctx);
 		}
 

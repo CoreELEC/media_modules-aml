@@ -47,6 +47,8 @@ struct aml_buf_mgr_s;
  * @enable_fbc		: Enables the AFBC feature.
  * @enable_secure	: Indicates the secure mode.
  * @avbcd_work_mode	: Indicates the avbcd mode.
+ * @dynamic_mode	: Indicates mode of dynamic binding of YUV dma and UVM dma.
+ * @vpp_work_mode	: Indicates the vpp work mode.
  * @memory_mode		: memory mode used by v4l2 vb queue.
  * @vpp_work_mode	: 0: used DI m2m interface, 1: DI post process mode.
  * @planes		: The number of planes used.
@@ -58,6 +60,8 @@ struct aml_buf_config {
 	bool	enable_fbc;
 	bool 	enable_secure;
 	bool	avbcd_work_mode;
+	bool	dynamic_mode;
+	int	vpp_work_mode;
 	int	memory_mode;
 	int	planes;
 	u32	luma_length;
@@ -230,6 +234,7 @@ struct aml_buf_mgr_s {
 	void				*vpp_handle;
 	u32				frm_cnt;
 	int				vpp_work_mode;
+	int				dec_type;
 };
 
 /*
