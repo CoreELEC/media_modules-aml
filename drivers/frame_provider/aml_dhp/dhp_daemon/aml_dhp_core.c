@@ -44,7 +44,12 @@ static void dump_yuv_data(unsigned int id,
                             unsigned int src_size)
 {
     char file_name[64];
-    unsigned int yuv_size = wstride * hstride * 3 / 2;
+    unsigned int yuv_size;
+
+    if (depth == 10)
+        wstride = wstride * 2;
+
+    yuv_size = wstride * hstride * 3 / 2;
 
     if ((g_idx != -1) && (g_idx != id))
         return;
@@ -70,12 +75,21 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
     DhpMemOps mOps = { .sgt_mmap = dhp_mem_sgt_mmap,
                        .sgt_msync = dhp_mem_sgt_sync,
                        .unmmap = dhp_mem_munmap };
+    u32 src_f = AML_PIX_FMT_AVBC;
+    u32 src_w = avbcd->width;
+    u32 src_h = avbcd->height;
+    u32 src_dep = avbcd->bitdep;
+    u32 disp_x = avbcd->crop.left;
+    u32 disp_y = avbcd->crop.top;
+    u32 disp_w = src_w - avbcd->crop.right - disp_x;
+    u32 disp_h = src_h - avbcd->crop.bottom - disp_y;
     struct timeval t0, t1;
+    int ret = 0;
 
     gettimeofday(&t0, NULL);
 
     LOG_DEBUG("AVBCD handle: wxh: %dx%d, dep: %d, pts:%u\n",
-        avbcd->width, avbcd->height, avbcd->bitdep, avbcd->pts);
+        src_w, src_h, src_dep, avbcd->pts);
 
     void *header = dhp_dbuf_mmap(io->fd, avbcd->hsize, PROT_READ | PROT_WRITE, MAP_SHARED, 0);
     if (!header) {
@@ -85,12 +99,13 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
 
     // Perform decoding
     struct aml_dhp_ioctl_data iomem = { 0 };
-    unsigned int w_align = io->base.dst.w_align;
-    unsigned int h_align = io->base.dst.h_align;
-    unsigned int wstride = w_align ? (((avbcd->width + w_align - 1) / w_align) * w_align) : avbcd->width;
-    unsigned int hstride = h_align ? (((avbcd->height + h_align - 1) / h_align) * h_align) : avbcd->height;
-    wstride = (avbcd->bitdep == 8) ? wstride : wstride * 2;
-    unsigned int dst_size;
+    u32 dst_f = io->base.dst.img.format;
+    u32 dst_x = io->base.dst.img.rect.x;
+    u32 dst_y = io->base.dst.img.rect.y;
+    u32 dst_w = io->base.dst.img.rect.width;
+    u32 dst_h = io->base.dst.img.rect.height;
+    u32 dst_dep = io->base.dst.img.bitdep;
+    u32 dst_size;
     void *dst_yuv = NULL;
 
     iomem.mem.type = AML_MEM_TYPE_PHY_ADDR;
@@ -108,26 +123,53 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
     dst_size = iomem.mem.size;
 
     LOG_DEBUG("Mapping Header buffer:%p, size:%u\n", header, avbcd->hsize);
-    LOG_DEBUG("Mapping YUV buffer:%p, size:%u stride(w:%d, h:%d)\n", dst_yuv, dst_size, wstride, hstride);
+    LOG_DEBUG("Mapping YUV buffer:%p, size:%u\n", dst_yuv, dst_size);
 
-    aml_avbc_decode(header,
-                   avbcd->width,
-                   avbcd->height,
-                   wstride,
-                   hstride,
-                   avbcd->bitdep,
-                   dst_yuv,
-                   dst_size,
-                   io->base.src.uncached,
-                   &mOps,
-                   dev);
+    ImageInfo srcParm = { .format       = src_f,
+                          .data         = (unsigned long)header,
+                          .bitdep       = src_dep,
+                          .uncached     = io->base.src.uncached,
+                          .rect.x       = 0,
+                          .rect.y       = 0,
+                          .rect.width   = src_w,
+                          .rect.height  = src_h };
+    ImageInfo dstParm = { .format       = dst_f,
+                          .data         = (unsigned long)dst_yuv,
+                          .size         = dst_size,
+                          .bitdep       = dst_dep,
+                          .uncached     = io->base.src.uncached,
+                          .rect.x       = dst_x,
+                          .rect.y       = dst_y,
+                          .rect.width   = dst_w,
+                          .rect.height  = dst_h };
+    ImageInfo dispParm = { .format       = dst_f,
+                           .bitdep      = dst_dep,
+                           .rect.x      = disp_x,
+                           .rect.y      = disp_y,
+                           .rect.width  = disp_w,
+                           .rect.height = disp_h };
+
+    LOG_DEBUG("SRC-parms: fmt:%s, dep:%u, uncache:%u, Rect[x:%u,y:%u,w:%u,h:%u]\n",
+        fourcc_to_string(srcParm.format), srcParm.bitdep, srcParm.uncached,
+        srcParm.rect.x, srcParm.rect.y, srcParm.rect.width, srcParm.rect.height);
+    LOG_DEBUG("DST-parms: fmt:%s, dep:%u, uncache:%u, Rect[x:%u,y:%u,w:%u,h:%u]\n",
+        fourcc_to_string(dstParm.format), dstParm.bitdep, dstParm.uncached,
+        dstParm.rect.x, dstParm.rect.y, dstParm.rect.width, dstParm.rect.height);
+    LOG_DEBUG("DISP-parms: fmt:%s, dep:%u, uncache:%u, Rect[x:%u,y:%u,w:%u,h:%u]\n",
+        fourcc_to_string(dispParm.format), dispParm.bitdep, dispParm.uncached,
+        dispParm.rect.x, dispParm.rect.y, dispParm.rect.width, dispParm.rect.height);
+
+    ret = aml_avbc_decode(&srcParm, &dstParm, &dispParm, &mOps, dev);
+    if (ret) {
+        LOG_ERROR("AVBC decoding fail.\n");
+    }
 
     gettimeofday(&t1, NULL);
     LOG_VERBOSE("%s, Total elapse: %lu ms.\n",
         __func__, elapse_time_ms(&t0, &t1));
 
     if (dump_data)
-        dump_yuv_data(avbcd->pts, avbcd->width, avbcd->height, wstride, hstride, avbcd->bitdep, dst_yuv, dst_size);
+        dump_yuv_data(avbcd->pts, disp_w, disp_h, dst_w, dst_h, dst_dep, dst_yuv, dst_size);
 
     u64 flags = DHP_MEM_SYNC_READ | DHP_MEM_SYNC_END;
     dhp_mem_sync(dev, io->base.dst.addr, io->base.dst.size, flags);
@@ -137,7 +179,7 @@ int aml_avbcd_handle(void *dev, struct aml_du_base *base)
     dhp_dbuf_munmap(header, avbcd->hsize);
     dhp_dbuf_munmap(dst_yuv, dst_size);
 
-    return 0;
+    return ret;
 }
 
 int aml_data_handle(void *dev, unsigned int type, void *data)

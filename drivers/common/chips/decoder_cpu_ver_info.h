@@ -204,6 +204,7 @@ struct dos_of_dev_s {
 	u32 fmt_support_flags;
 	u32 support_h265_level_idc;
 	bool is_support_monitor;
+	bool is_support_avbc_wrapper;
 };
 
 
@@ -302,6 +303,8 @@ inline bool is_support_34bit_mode(void);
 inline bool is_vdec_hevc_combine(void);
 
 inline bool is_need_fix_streambuf_rp(void);
+
+inline bool is_support_avbc_wrapper(void);
 
 void pr_dos_infos(void);
 

@@ -28,6 +28,7 @@
 #include "../stream_input/amports/streambuf.h"
 #include "../frame_provider/decoder/utils/vdec.h"
 #include "../frame_provider/aml_dhp/aml_dhp_if.h"
+#include "../common/chips/decoder_cpu_ver_info.h"
 
 
 #define MAX_SIZE_8K (8192 * 4608)
@@ -68,27 +69,27 @@ enum AVBCD_FRAME_TYPE_FLAG {
 };
 
 /*
- * struct aml_avbc_wrapper_buf - Parameter AVBCD structure.
+ * struct soft_data_t - Structure to define AVBCD processing parameters.
  *
- * @dst_addr		: Yuv virtual address.
- * @byte_stride		: Align of width for yuv.
- * @width		: Aligned width of yuv buffer.
- * @height		: Aligned height of yuv buffer.
- * @align_w		: Align width for yuv buffer.
- * @align_h		: Align height for yuv buffer.
- * @bitdepth		: Bitdepth of stream.
- * @avbc_width		: Original width.
- * @avbc_height		: Original height.
- * @header_addr		: AVBCD header bufer physic address.
+ * @dst_addr	: Virtual address of the YUV output buffer.
+ * @width	: Aligned width of the YUV buffer in pixels.
+ * @height	: Aligned height of the YUV buffer in pixels.
+ * @stride_w	: Byte stride (aligned width) for the YUV buffer.
+ * @stride_h	: Byte stride (aligned height) for the YUV buffer.
+ * @bitdepth	: Bit depth of the input stream (e.g., 8-bit, 10-bit).
+ * @bitdepth_out : Bit depth of the output YUV frame (e.g., 8-bit, 10-bit).
+ * @avbc_width	: Original width of the AVBC input stream in pixels.
+ * @avbc_height	: Original height of the AVBC input stream in pixels.
+ * @header_addr	: Physical address of the AVBCD header buffer.
  */
 struct soft_data_t {
 	char *dst_addr;
-	int byte_stride;
 	u32 width;
 	u32 height;
-	u32 align_w;
-	u32 align_h;
+	u32 stride_w;
+	u32 stride_h;
 	u32 bitdepth;
+	u32 bitdepth_out;
 	u32 avbc_width;
 	u32 avbc_height;
 	ulong header_addr;
@@ -108,30 +109,31 @@ struct aml_avbc_wrapper_buf {
 };
 
 /*
- * struct aml_avbc_wrapper_buf - Parameter AVBCD structure.
+ * struct aml_avbc_wrapper_s - Structure defining AVBCD wrapper context and parameters.
  *
- * @id			: Instance ID of AVBCD Wrapper context.
- * @ref			: Reference count of AVBCD Wrapper context.
- * @mutex_lock		: Lock is used to ensure interface serialization..
- * @avbc_queue		: Avbcd task queue for process.
- * @port		: ES input port context.
- * @format		: Stream Protocol.
- * @vdec		: Point to vdec context.
- * @vdec_cb		: Vdec callback interface.
- * @vdec_cb_arg		: Parameter of vdec callback interface.
- * @chunk		: vframe_chunk in frame mode.
- * @data_offset		: Chunk of address offset for one frame.
- * @data_size		: Frame size of input.
- * @inputpool		: Input buffer pool.
- * @in			: Data information of frame.
- * @input		: Kfifo of input container.
- * @out			: Kfifo of output buffer.
- * @avbc_workqueue	: Queue to procress work of Post-interrupt.
- * @avbc_work		: Work of Post-interrupt.
- * @dec_result		: AVBCD processed result.
- * @avbc_done		: Wait for finish of AVBCD process .
- * @frame_count		: AVBCD process frame count.
- * @stop_flag		: Stream off flag.
+ * @id              : Instance ID of the AVBCD wrapper context.
+ * @ref             : Reference count for managing the AVBCD wrapper context lifecycle.
+ * @mutex_lock      : Mutex lock to ensure thread-safe access and interface serialization.
+ * @avbc_queue      : Task queue for AVBCD processing.
+ * @port            : ES (Elementary Stream) input port context.
+ * @format          : Stream protocol format (e.g., H.264, VP9).
+ * @vdec            : Pointer to the video decoder (vdec) context.
+ * @vdec_cb         : Callback function for vdec operations.
+ * @vdec_cb_arg     : Argument passed to the vdec callback function.
+ * @chunk           : vframe chunk used in frame-based processing.
+ * @data_offset     : Address offset of the chunk for the current frame.
+ * @data_size       : Size of the input frame in bytes.
+ * @inputpool       : Input buffer pool for AVBCD processing.
+ * @in              : Data information of the input frame.
+ * @input           : KFIFO for storing input buffers.
+ * @in_done_q       : KFIFO queue for completed input buffers (marked as done).
+ * @out             : KFIFO queue for storing output buffers.
+ * @avbc_workqueue  : Workqueue for handling post-interrupt processing tasks.
+ * @avbc_work       : Work structure for post-interrupt tasks.
+ * @dec_result      : Result of the AVBCD decoding process.
+ * @avbc_done       : Completion structure to wait for AVBCD processing to finish.
+ * @frame_count     : Total count of frames processed by AVBCD.
+ * @stop_flag       : Flag indicating whether the stream has been stopped.
  */
 struct aml_avbc_wrapper_s {
 	ulong 				id;
@@ -182,8 +184,8 @@ static void do_vframe_avbc_soft_decode(struct soft_data_t *soft_data)
 	struct timeval start, end;
 	struct fbc_decoder_param param;
 	unsigned long time_use = 0;
-	u32 align_h = soft_data->align_h;
-	u32 hstride = align_h ? ALIGN(soft_data->height, align_h) : soft_data->height;
+	u32 wstride = soft_data->stride_w;
+	u32 hstride = soft_data->stride_h;
 
 	if ((soft_data->bitdepth & BITDEPTH_YMASK)  == BITDEPTH_Y10)
 		bit_10 = 1;
@@ -194,7 +196,7 @@ static void do_vframe_avbc_soft_decode(struct soft_data_t *soft_data)
 	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "width: %d, height: %d, compWidth: %u, compHeight: %u,bit10:%d.\n",
 		 soft_data->width, soft_data->height, soft_data->avbc_width, soft_data->avbc_height, bit_10);
 
-	if (soft_data->byte_stride == soft_data->width && bit_10 == 1) {
+	if (bit_10 && soft_data->bitdepth_out == 8) {
 		bit_10 = 0;
 		convert_to_8bit  = 1;
 		v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "memory not enough,convert 10bit to 8bit.\n");
@@ -253,9 +255,9 @@ static void do_vframe_avbc_soft_decode(struct soft_data_t *soft_data)
 
 	y_dst = soft_data->dst_addr;
 	y_dst_10 = (short *)(soft_data->dst_addr);
-	vu_dst = soft_data->dst_addr + soft_data->byte_stride * hstride;
-	vu_dst_10 = (short *)(soft_data->dst_addr + soft_data->byte_stride * hstride);
-	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "offset uv: %d\n", soft_data->byte_stride * hstride);
+	vu_dst = soft_data->dst_addr + wstride * hstride;
+	vu_dst_10 = (short *)(soft_data->dst_addr + wstride * hstride);
+	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "offset uv: %d\n", wstride * hstride);
 	do_gettimeofday(&start);
 	for (i = 0; i < soft_data->avbc_height; i++) {
 		//PR_INIT(500);
@@ -274,7 +276,7 @@ static void do_vframe_avbc_soft_decode(struct soft_data_t *soft_data)
 				//PR_INFO(0);
 		}
 			//PR_INFO(0);
-			y_dst += soft_data->byte_stride;
+			y_dst += wstride;
 			y_dst_10 = (short *)y_dst;
 			y_src += soft_data->avbc_width;
 	}
@@ -303,7 +305,7 @@ static void do_vframe_avbc_soft_decode(struct soft_data_t *soft_data)
 				//PR_INFO(0);
 		}
 		//PR_INFO(0);
-		vu_dst += soft_data->byte_stride;
+		vu_dst += wstride;
 		vu_dst_10 = (short *)vu_dst;
 		u_src += (soft_data->avbc_width / 2);
 		v_src += (soft_data->avbc_width / 2);
@@ -319,7 +321,7 @@ free:
 		vfree(planes[i]);
 }
 
-int aml_avbcd_process_one_frame(struct avbc_input *input, struct avbc_output	*output)
+int aml_avbcd_process_one_frame(struct avbc_input *input, struct avbc_output *output)
 {
 	int i, j, num_pages;
 	struct mua_buffer *buffer;
@@ -333,7 +335,7 @@ int aml_avbcd_process_one_frame(struct avbc_input *input, struct avbc_output	*ou
 	struct uvm_handle *handle;
 	struct uvm_alloc *ua;
 	struct soft_data_t soft_data;
-	struct dma_buf *dmabuf = output->m.dbuf;
+	struct dma_buf *dmabuf = (struct dma_buf *)output->img.data;
 	int ret = 0;
 
 	handle = dmabuf->priv;
@@ -384,19 +386,19 @@ int aml_avbcd_process_one_frame(struct avbc_input *input, struct avbc_output	*ou
 	memset(&soft_data, 0, sizeof(soft_data));
 
 	soft_data.dst_addr = vaddr;
-	soft_data.byte_stride = buffer->byte_stride;
 	soft_data.width = buffer->width;
 	soft_data.height = buffer->height;
-	soft_data.align_w = output->align_w;
-	soft_data.align_h = output->align_h;
-	soft_data.header_addr = input->header_addr;
-	soft_data.avbc_width = input->width;
-	soft_data.avbc_height = input->height;
-	soft_data.bitdepth = input->bitdepth == 10 ? (BITDEPTH_Y10 | BITDEPTH_U10 | BITDEPTH_V10) :
+	soft_data.stride_w = output->img.rect.width;
+	soft_data.stride_h = output->img.rect.height;
+	soft_data.bitdepth_out = output->img.bitdep;
+	soft_data.header_addr = (ulong)input->img.data;
+	soft_data.avbc_width = input->img.rect.width;
+	soft_data.avbc_height = input->img.rect.height;
+	soft_data.bitdepth = input->img.bitdep == 10 ? (BITDEPTH_Y10 | BITDEPTH_U10 | BITDEPTH_V10) :
 				(BITDEPTH_Y8 | BITDEPTH_U8 | BITDEPTH_V8);
-	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "%s. width=%d height=%d byte_stride=%d align(%d, %d, %d)\n",
+	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "%s. width=%d height=%d byte_stride=%d buf-bounds(%d, %d, %d)\n",
 			__func__, buffer->width, buffer->height,
-			buffer->byte_stride, output->align_w, output->align_h, buffer->align);
+			buffer->byte_stride, output->img.rect.width, output->img.rect.height, buffer->align);
 	do_vframe_avbc_soft_decode(&soft_data);
 	dma_buf_end_cpu_access(buffer->idmabuf[0], DMA_BIDIRECTIONAL);
 	vunmap(vaddr);
@@ -406,24 +408,32 @@ int aml_avbcd_process_one_frame(struct avbc_input *input, struct avbc_output	*ou
 
 static int aml_dhp_avbcd(struct avbc_output *output, struct avbc_input *input, u32 pts)
 {
-	struct aml_du_mem	src;
-	struct aml_du_mem	dst;
+	struct aml_du_mem src = { 0 };
+	struct aml_du_mem dst = { 0 };
 	struct aml_du_avbcd	avbcd;
-	ulong header = input->header_addr;
-	u32 h_size = input->header_size;
-	u32 width = input->width;
-	u32 height = input->height;
-	u32 depth = input->bitdepth;
-	ulong buf = output->m.phy;
-	u32 buf_size = output->length;
-	u32 align_w = output->align_w;
-	u32 align_h = output->align_h;
+	ulong header = (ulong)input->img.data;
+	u32 h_size = input->img.size;
+	u32 width = input->img.rect.width;
+	u32 height = input->img.rect.height;
+	u32 depth = input->img.bitdep;
+	u32 depth_out = output->img.bitdep;
+	ulong buf = (ulong)output->img.data;
+	u32 buf_size = output->img.size;
+	u32 dst_f = output->img.format;
+	u32 dst_x = output->img.rect.x;
+	u32 dst_y = output->img.rect.y;
+	u32 dst_w = output->img.rect.width;
+	u32 dst_h = output->img.rect.height;
 	int ret = 0;
 
 	//fill avbcd pic info
 	avbcd.type	= AML_DHP_TYPE_AVBCD;
 	avbcd.width	= width;
 	avbcd.height	= height;
+	avbcd.crop.top	= input->img.crop.top;
+	avbcd.crop.left	= input->img.crop.left;
+	avbcd.crop.bottom = input->img.crop.bottom;
+	avbcd.crop.right = input->img.crop.right;
 	avbcd.pixel	= 0;
 	avbcd.bitdep	= depth;
 	avbcd.header	= header;
@@ -441,12 +451,17 @@ static int aml_dhp_avbcd(struct avbc_output *output, struct avbc_input *input, u
 	dst.addr	= buf;
 	dst.size	= buf_size;
 	dst.uncached	= 0;
-	dst.w_align	= align_w;
-	dst.h_align	= align_h;
+
+	dst.img.format	= dst_f;
+	dst.img.rect.x	= dst_x;
+	dst.img.rect.y	= dst_y;
+	dst.img.rect.width = dst_w;
+	dst.img.rect.height = dst_h;
+	dst.img.bitdep	= depth_out;
 
 	ret = dhp_func_request(&src, &dst, &avbcd, sizeof(avbcd));
 	if (ret)
-		v4l_dbg_avbcd(0, V4L_DEBUG_CODEC_ERROR, "Do dhp task fail. err:%d\n", ret);
+		v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "Do dhp task fail. err:%d\n", ret);
 
 	return ret;
 }
@@ -466,25 +481,32 @@ static int get_header_size(int w, int h)
 int aml_avbcd_submit_one_frame(struct avbc_input *input, struct avbc_output *output,
 						struct aml_avbc_wrapper_s *wrapper)
 {
-	input->header_size = get_header_size(input->width, input->height);
+	int ret = 0;
+	input->img.size = get_header_size(input->img.rect.width, input->img.rect.height);
 	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR,
-		"h:%lx, hsize:%d, wxh:%ux%u, dep:%d, buf:%lx, size:%u, align(%u, %u), pts:%d.\n",
-		input->header_addr,
-		input->header_size,
-		input->width,
-		input->height,
-		input->bitdepth,
-		output->m.phy,
-		output->length,
-		output->align_w,
-		output->align_h,
+		"h:%lx, hsize:%d, wxh:%ux%u, crop[t:%u,l:%u,b:%u,r:%u], dep:%d, dst-fmt:%x, buf:%lx, size:%u, dst-stride(%u, %u), dst-dep:%d, pts:%d.\n",
+		(ulong)input->img.data,
+		input->img.size,
+		input->img.rect.width,
+		input->img.rect.height,
+		input->img.crop.top,
+		input->img.crop.left,
+		input->img.crop.bottom,
+		input->img.crop.right,
+		input->img.bitdep,
+		output->img.format,
+		(ulong)output->img.data,
+		output->img.size,
+		output->img.rect.width,
+		output->img.rect.height,
+		output->img.bitdep,
 		wrapper->frame_count);
 
-	aml_dhp_avbcd(output, input, wrapper->frame_count);
+	ret = aml_dhp_avbcd(output, input, wrapper->frame_count);
 
 	wrapper->frame_count++;
 
-	return 0;
+	return ret;
 }
 
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
@@ -497,10 +519,10 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	if (!chunk)
 		return 0;
 
-	if (vdec->parallel_dec == 1)
+	if (vdec->avbc_mode & AVBCD_HARDWARE_MODE)
 		return CORE_MASK_HEVC;
 	else
-		return (CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
+		return CORE_MASK_AVBCD_SOFT;
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
@@ -534,16 +556,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (!wrapper->hard_mode || vdec->pic0_done) {
 		struct avbc_output *out;
 		memcpy(&wrapper->in, data, sizeof(struct avbc_input));
-		vdec->avbc_header_addr = wrapper->in.header_addr;
+		vdec->avbc_header_addr = (ulong)wrapper->in.img.data;
 		if (wrapper->hard_mode && kfifo_peek(&wrapper->out, &out))
-			vdec->avbc_y_addr = out->m.phy;
+			vdec->avbc_y_addr = (ulong)out->img.data;
 
 		v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "%s: size 0x%x  header_addr 0x%lx, header_size %u, width %u, height %u y_addr 0x%lx\n",
 			__func__, r,
-			wrapper->in.header_addr,
-			wrapper->in.header_size,
-			wrapper->in.width,
-			wrapper->in.height,
+			(ulong)wrapper->in.img.data,
+			wrapper->in.img.size,
+			wrapper->in.img.rect.width,
+			wrapper->in.img.rect.height,
 			vdec->avbc_y_addr);
 	} else
 		v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "%s: init the first frame!\n", __func__);
@@ -564,7 +586,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			vdec->run_avbc(vdec, mask, callback, arg);
 		} else {
 			wrapper->dec_result = DEC_RESULT_DONE;
-			if (!wrapper->in.header_addr)
+			if (!wrapper->in.img.data)
 				wrapper->dec_result = DEC_RESULT_EOS;
 			queue_work(wrapper->avbc_workqueue, &wrapper->avbc_work);
 		}
@@ -629,6 +651,7 @@ static void aml_buf_avbcd_worker(struct work_struct *work)
 	struct aml_avbc_wrapper_s *wrapper =
 		container_of(work, struct aml_avbc_wrapper_s, avbc_work);
 	struct avbc_output *out;
+	int ret = 0;
 
 	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "%s dec_result %d \n",
 			__func__, wrapper->dec_result);
@@ -640,20 +663,23 @@ static void aml_buf_avbcd_worker(struct work_struct *work)
 		if (kfifo_get(&wrapper->out, &out) && !wrapper->hard_mode) {
 			if (avbcd_work_mode & AVBCD_SOFT_KERNEL_MODE)
 				aml_avbcd_process_one_frame(&wrapper->in, out);
-			else
-				aml_avbcd_submit_one_frame(&wrapper->in, out, wrapper);
+			else {
+				ret = aml_avbcd_submit_one_frame(&wrapper->in, out, wrapper);
+				if (ret)
+					wrapper->dec_result = DEC_RESULT_ERROR;
+			}
 		} else {
 			v4l_dbg_avbcd(0, V4L_DEBUG_CODEC_ERROR, "%s Get out fifo fail!\n", __func__);
 			goto out;
 		}
 
-		if (out->avbc_done && (!wrapper->hard_mode ||
+		if (out->done_func && (!wrapper->hard_mode ||
 			(wrapper->hard_mode && wrapper->frame_count)))
-			out->avbc_done(out);
+			out->done_func(out);
 	} else if (wrapper->dec_result == DEC_RESULT_EOS) {
 		if (kfifo_get(&wrapper->out, &out)) {
-			if (out->avbc_done)
-				out->avbc_done(out);
+			if (out->done_func)
+				out->done_func(out);
 		}
 	} else if (wrapper->dec_result == DEC_RESULT_ERROR) {
 		v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "%s Drop frame!\n", __func__);
@@ -664,10 +690,10 @@ out:
 	wrapper->chunk = NULL;
 	complete(&wrapper->avbc_done);
 
-	if (wrapper->vdec->parallel_dec == 1)
+	if (wrapper->hard_mode)
 		vdec_core_finish_run(wrapper->vdec, CORE_MASK_HEVC);
 	else
-		vdec_core_finish_run(wrapper->vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
+		vdec_core_finish_run(wrapper->vdec, CORE_MASK_AVBCD_SOFT);
 
 	if (wrapper->vdec_cb)
 		wrapper->vdec_cb(wrapper->vdec, wrapper->vdec_cb_arg, CORE_MASK_HEVC);
@@ -695,7 +721,7 @@ static irqreturn_t avbc_isr_thread_fn(int irq, void *data)
 		} else {
 			v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "%s done!\n", __func__);
 			wrapper->dec_result = DEC_RESULT_DONE;
-			if (!wrapper->in.header_addr)
+			if (!wrapper->in.img.data)
 				wrapper->dec_result = DEC_RESULT_EOS;
 			wrapper->frame_count++;
 			queue_work(wrapper->avbc_workqueue, &wrapper->avbc_work);
@@ -731,13 +757,8 @@ static int avbcd_wrapper_probe(struct vdec_s *vdec)
 	vdec_set_prepare_level(vdec, 1);
 	//hevc_source_changed(VFORMAT_AV1, 4096, 2048, 60);
 
-	if (!wrapper->hard_mode) {
-		if (vdec->parallel_dec == 1)
-			vdec_core_request(vdec, CORE_MASK_HEVC);
-		else
-			vdec_core_request(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
-				| CORE_MASK_COMBINE);
-	}
+	if (!wrapper->hard_mode)
+		vdec_core_request(vdec, CORE_MASK_AVBCD_SOFT);
 
 	return 0;
 }
@@ -884,7 +905,7 @@ int aml_avbc_wrapper_init(void **pwrapper)
 	*pwrapper = wrapper;
 
 	if (wrapper->hard_mode)
-		ret = vdec_write_vframe(wrapper->vdec, (const char *)trigger_i_1080, 623, NULL, NULL);
+		ret = vdec_write_vframe(wrapper->vdec, (const char *)trigger_i_1080, 623, NULL, NULL, NULL);
 	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "%s success! size %d\n", __func__, ret);
 
 	mutex_unlock(&avbc_mutex);
@@ -944,27 +965,33 @@ int aml_avbc_decode(struct avbc_output *out, struct avbc_input *in, u32 flag)
 	struct aml_avbc_wrapper_s *wrapper;
 	int ret = -1;
 
+	if (!is_support_avbc_wrapper() && !(avbcd_work_mode & 0x8000))
+		goto out;
+
 	ret = aml_avbc_wrapper_init((void**)&wrapper);
 	if (ret) {
 		v4l_dbg_avbcd(0, V4L_DEBUG_CODEC_ERROR, "[ERR] aml_avbc_wrapper_init fail.\n");
-		return ret;
+		goto out;
 	}
 
 	kfifo_put(&wrapper->out, out);
 
-	ret = vdec_write_vframe(wrapper->vdec, (const char *)in, 69, NULL, NULL);
+	ret = vdec_write_vframe(wrapper->vdec, (const char *)in, sizeof(*in), NULL, NULL, NULL);
 	if (ret < 0) {
 		v4l_dbg_avbcd(0, V4L_DEBUG_CODEC_ERROR, "[ERR] %s fail!\n", __func__);
 		goto out;
 	}
 
-	if (flag & AVBCD_IO_BLOCKING) {
+	ret = 0;
+	if (flag & AVBC_FLAG_IO_BLOCKING) {
 		if(!wait_for_completion_timeout(&wrapper->avbc_done,
 			msecs_to_jiffies(20000))) {
 			ret = -1;
 			goto out;
 		}
 	}
+	if (wrapper->dec_result == DEC_RESULT_ERROR)
+		ret = -1;
 
 out:
 	return ret;

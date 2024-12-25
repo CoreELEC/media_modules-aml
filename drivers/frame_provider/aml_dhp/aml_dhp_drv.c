@@ -824,6 +824,7 @@ int aml_dhp_request(struct aml_du_mem *src, struct aml_du_mem *dst, void *meta, 
 
 	if (list_empty(&g_dev->inst_head)) {
 		LOG_ERR("No dhp service.\n");
+		ret = -EINVAL;
 		goto err;
 	}
 

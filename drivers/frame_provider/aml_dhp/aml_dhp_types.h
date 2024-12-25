@@ -22,6 +22,8 @@
 
 #include <linux/types.h>
 
+#include "../../amvdec_ports/aml_image_info.h"
+
 /*
  * Data Handler Proxy (DHP) supported data types and memory types.
  *
@@ -60,19 +62,17 @@
 /*
  * struct aml_du_mem - Represents memory information for a data unit in the DHP driver.
  *
- * @type      : Type of memory used (e.g., PFN, physical address, etc.), as defined by AML_MEM_TYPE_*.
- * @addr      : Generic address for the memory. This is used when the specific memory type
- *              does not require further specialization (e.g., physical address).
- * @pfn       : Page Frame Number. Used when @type is AML_MEM_TYPE_PFN.
- * @kptr      : Kernel pointer. Reserved for future use when @type is AML_MEM_TYPE_KPTR_ADDR.
- * @uptr      : User pointer. Used when @type is AML_MEM_TYPE_UPTR_ADDR.
- * @sgt       : Scatter-gather table. Reserved for future use when @type is AML_MEM_TYPE_SG_TBL.
+ * @type      : Type of memory (e.g., PFN, physical address, etc.) as defined by AML_MEM_TYPE_*.
+ * @addr      : Generic address for the memory region (used for physical or virtual addresses).
+ * @pfn       : Page Frame Number, used when @type is AML_MEM_TYPE_PFN.
+ * @kptr      : Kernel pointer, reserved for future use when @type is AML_MEM_TYPE_KPTR_ADDR.
+ * @uptr      : User pointer, used when @type is AML_MEM_TYPE_UPTR_ADDR.
+ * @sgt       : Scatter-gather table, used when @type is AML_MEM_TYPE_SG_TBL (reserved for future use).
  * @size      : Size of the memory region in bytes.
- * @payload   : Auxiliary data for the memory unit (purpose and content application-specific).
- * @uncached  : Indicates whether the memory region uses uncached memory. Non-zero if true.
- * @syncflag  : Synchronization flags for memory operations, based on DHP_MEM_SYNC_* definitions.
- * @w_align   : Width alignment value.
- * @h_align   : Height alignment value.
+ * @payload   : Auxiliary data related to the memory unit, purpose/application-specific.
+ * @uncached  : Flag indicating whether the memory region is uncached (non-zero if true).
+ * @syncflag  : Synchronization flags for memory operations, based on DHP_MEM_SYNC_*.
+ * @img       : Image metadata, used when the memory content represents an image.
  */
 struct aml_du_mem {
     __u32 type;
@@ -87,26 +87,34 @@ struct aml_du_mem {
     __u32 payload;
     __u32 uncached;
     __u64 syncflag;
-    __u32 w_align;
-    __u32 h_align;
+    union {
+        struct image_info_s img;
+    };
 } __attribute__((packed));
 
 /*
  * struct aml_du_avbcd - Describes AVBC decoder-related image data.
  *
- * @type     : Type of the AVBC data, used to identify the specific format or encoding method.
- * @width    : Width of the image in pixels; defines the horizontal resolution.
- * @height   : Height of the image in pixels; defines the vertical resolution.
- * @pixel    : Pixel format or sampling mode of the image.
- * @bitdep   : Bit depth of the image.
- * @header   : Pointer to the compression information header.
- * @hsize    : Size of the compression information header, in bytes.
- * @pts      : Presentation timestamp for the image.
+ * @type     : Type of the AVBC data (e.g., H.264, HEVC).
+ * @width    : Width of the image in pixels.
+ * @height   : Height of the image in pixels.
+ * @crop     : Cropping rectangle (top, left, bottom, right).
+ * @pixel    : Pixel format (e.g., YUV420, RGB).
+ * @bitdep   : Bit depth of the image (e.g., 8-bit, 10-bit).
+ * @header   : Pointer to compression information header.
+ * @hsize    : Size of the compression header in bytes.
+ * @pts      : Presentation timestamp, used to identify frames in video..
  */
 struct aml_du_avbcd {
     __u32 type;
     __u32 width;
     __u32 height;
+    struct {
+        __u32 top;
+        __u32 left;
+        __u32 bottom;
+        __u32 right;
+    } crop;
     __u32 pixel;
     __u32 bitdep;
     __u64 header;

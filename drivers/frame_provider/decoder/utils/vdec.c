@@ -453,6 +453,8 @@ static const bool cores_with_input[VDEC_MAX] = {
 	false,  /* VDEC_2 */
 	true,   /* VDEC_HEVC / VDEC_HEVC_FRONT */
 	false,  /* VDEC_HEVC_BACK */
+	false,  /* VDEC_WAVE  */
+	true,  /* VDEC_AVBCD_SOFT */
 };
 
 static const bool cores_used[VDEC_MAX] = {
@@ -461,6 +463,8 @@ static const bool cores_used[VDEC_MAX] = {
 	false,  /* VDEC_2 */
 	true,   /* VDEC_HEVC / VDEC_HEVC_FRONT */
 	true,  /* VDEC_HEVC_BACK */
+	false, /* VDEC_WAVE  */
+	true,  /* VDEC_AVBCD_SOFT */
 };
 
 static const int cores_int[VDEC_MAX] = {
@@ -1478,6 +1482,10 @@ static void vdec_save_active_hw(struct vdec_s *vdec, unsigned long mask)
 
 	if (mask & CORE_MASK_HEVC_BACK) {
 		vdec_core->active_hevc_back = vdec;
+	}
+
+	if (mask & CORE_MASK_AVBCD_SOFT) {
+		vdec_core->active_vdec = vdec;
 	}
 }
 

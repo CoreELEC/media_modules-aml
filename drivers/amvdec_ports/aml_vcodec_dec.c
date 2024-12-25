@@ -1053,7 +1053,7 @@ static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d, seq:%d, idx:%d) vb:(%d, %px), vf:(%d, %px), ts:%llu, flag: 0x%x "
-		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
+		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u) bitdepth %x\n",
 		ctx->ada_ctx->frm_name, aml_buf->state, ctx->out_buff_cnt, aml_buf->index,
 		vb2_buf->index, vb2_buf,
 		vf->index & 0xff, vf,
@@ -1061,7 +1061,8 @@ static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
 		vf->flag,
 		planes[0].addr, planes[0].length,
 		planes[1].addr, planes[1].length,
-		planes[2].addr, planes[2].length);
+		planes[2].addr, planes[2].length,
+		vf->bitdepth);
 	ctx->out_buff_cnt++;
 
 	if (dstbuf->aml_buf->num_planes == 1) {

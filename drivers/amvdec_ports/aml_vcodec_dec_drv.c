@@ -693,6 +693,9 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 		goto err_alloc_canvas;
 	}
 	register_dump_v4ldec_state_func(dev, show_v4ldec_state);
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+	register_amlogic_avbc_wrapper_fun(aml_avbc_decode);
+#endif
 	dev_info(&pdev->dev, "v4ldec registered as /dev/video%d\n", vfd_dec->num);
 
 	return 0;
@@ -718,6 +721,9 @@ static int aml_vcodec_dec_remove(struct platform_device *pdev)
 {
 	struct aml_vcodec_dev *dev = platform_get_drvdata(pdev);
 
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+	unregister_amlogic_avbc_wrapper_fun();
+#endif
 	flush_workqueue(dev->decode_workqueue);
 	destroy_workqueue(dev->decode_workqueue);
 

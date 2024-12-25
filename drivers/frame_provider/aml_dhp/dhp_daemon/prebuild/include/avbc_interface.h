@@ -8,6 +8,7 @@
 #ifndef __AML_AVBC_DEC_IF_H__
 #define __AML_AVBC_DEC_IF_H__
 
+#include "../../../../../amvdec_ports/aml_image_info.h"
 /*
  * Memory synchronization flags for the Data Handler Proxy (DHP) driver:
  *
@@ -124,58 +125,41 @@ typedef struct dhp_mem_ops {
     void (*unmmap)(void *priv, u8 *uptr, u32 size);
 } DhpMemOps;
 
-
-/**
- * @brief Decodes a YUV frame using the AVBC decoder.
+/*
+ * aml_avbc_decode() - Decodes a YUV frame using the AVBC decoder.
  *
- * This function performs decoding of YUV frames from the provided header,
- * width, height, and other parameters. It processes the input data and
- * stores the decoded frame in the provided destination buffer.
+ * @srcParm    : Pointer to the source image parameters (ImageParm) that specify the
+ *               format, size, and region of the input image to be decoded.
+ *               This contains the information about the image to be decoded, such as its format,
+ *               bit depth, and data location.
+ * @dstParm    : Pointer to the destination image parameters (ImageParm) that specify where
+ *               the decoded image will be stored. This includes information like the format,
+ *               bit depth, and memory location where the decoded result should be placed.
+ * @dispParm   : Pointer to the display parameters (ImageParm) that define the region of the
+ *               decoded image to be displayed, including any transformations or cropping
+ *               that should be applied before displaying.
+ * @mOps       : Pointer to the memory operations structure (DhpMemOps), which provides
+ *               necessary operations for handling memory synchronization, transfers, etc.
+ *               This structure is used to abstract the memory management operations such as
+ *               copying data, handling synchronization between CPU and device memory, etc.
+ * @priv       : Pointer to the private driver-specific context, which may contain hardware
+ *               configuration or any additional resources required for the decode operation.
+ *               This is a context passed to facilitate interaction with specific hardware
+ *               resources, such as the video codec or memory manager.
  *
- * The function leverages memory operations (mapping and synchronization)
- * through the `DhpMemOps` structure, which allows for flexible handling
- * of memory and device resources. This is useful when dealing with large
- * video frame buffers or when optimizations related to uncached memory
- * are required.
+ * @return       Returns 0 on success, indicating the frame was successfully decoded
+ *               and stored in the destination buffer. Returns -1 on failure,
+ *               indicating an error during decoding.
  *
- * @param header Pointer to the AVBC frame header, containing information
- *               about the encoded frame and its format.
- * @param width Width of the frame in pixels.
- * @param height Height of the frame in pixels.
- * @param wstride Stride of the frame (bytes per row), used to calculate
- *               the memory layout.
- * @param hstride Stride of the frame (bytes per vertical column), used to
- * 		 calculate the memory layout.
- * @param bitdepth Bit depth of the YUV frame (e.g., 8, 10 bits per channel).
- * @param dst_yuv Pointer to the destination buffer where the decoded YUV
- *                frame will be stored. The buffer must be large enough
- *                to hold the entire decoded frame.
- * @param dst_size Size of the destination buffer in bytes. This should
- *                 be at least the size required for the decoded frame.
- * @param uncached Flag to specify whether the memory should be uncached.
- *                 This is typically set to 1 for performance-critical
- *                 operations or when interacting with certain hardware devices.
- * @param mOps Pointer to a `DhpMemOps` structure that defines the memory
- *             operations (e.g., memory mapping, synchronization) to be used
- *             for the decoding process. This allows the decoder to handle
- *             memory efficiently across different platforms and configurations.
- * @param priv Pointer to private data that may be needed for the memory
- *             operations. This could include device-specific context or
- *             state required by the memory operations functions.
- *
- * @return Returns 0 on success, indicating the frame was successfully decoded
- *         and stored in the destination buffer. Returns -1 on failure,
- *         indicating an error during decoding.
+ * This function decodes an image from the `srcParm` parameters (e.g., compressed format) and
+ * stores the result in the `dstParm` parameters. It then uses `dispParm` to prepare the image
+ * for display on a screen or video output device, applying any necessary transformations, cropping,
+ * or adjustments. During the decoding process, memory operations specified in `mOps` are used to
+ * synchronize memory between the CPU and the device to ensure data consistency.
  */
-int aml_avbc_decode(void *header,
-                    u32 width,
-                    u32 height,
-                    u32 wstride,
-                    u32 hstride,
-                    u32 bitdepth,
-                    u8 *dst_yuv,
-                    u32 dst_size,
-                    u32 uncached,
+int aml_avbc_decode(ImageInfo *srcParm,
+                    ImageInfo *dstParm,
+                    ImageInfo *dispParm,
                     DhpMemOps *mOps,
                     void *priv);
 
@@ -207,17 +191,16 @@ int aml_avbc_decode(void *header,
  *     DhpMemOps mOps = { .sgt_mmap = dhp_mem_sgt_mmap,
  *                        .sgt_msync = dhp_mem_sgt_sync,
  *                        .unmmap = dhp_mem_munmap };
- *     // Decode the frame
- *     int ret = aml_avbc_decode(header,
-                                width,
-                                height,
-                                stride,
-                                bitdepth,
-                                dst_yuv,
-                                dst_size,
-                                uncached,
-                                &mOps,
-                                priv);
+ *     // Fill image parms information.
+ *     ImageParm srcParm = { ...};
+ *     ImageParm dstParm = { ... };
+ *     ImageParm dispParm = { ... };
+ *
+ *     ret = aml_avbc_decode(&srcParm, &dstParm, &dispParm, &mOps, dev);
+ *     if (ret) {
+ *         printf("AVBC decoding fail.\n");
+ *     }
+
  *     if (ret == 0) {
  *         printf("Decoding successful!\n");
  *     } else {
