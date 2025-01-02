@@ -2415,17 +2415,8 @@ void pic_backend_ref_operation(struct AVS2Decoder_s *dec, bool add_flag)
 	mutex_lock(&dec->fb_mutex);
 	if (add_flag) {
 		pic = dec->avs2_dec.hc.cur_pic;
-		pic->backend_ref = 1;
-		pic->back_done_mark = 0;
 	} else {
 		pic = avs2_dec->next_be_decode_pic[avs2_dec->fb_rd_pos];
-		pic->backend_ref--;
-		if (pic->backend_ref < 0) {
-			pic->backend_ref = 0;
-			avs2_print(dec, PRINT_FLAG_VDEC_DETAIL, "%s:pic(%px) backend_ref error\n",
-				__func__, pic);
-		}
-		pic->back_done_mark = 1;
 	}
 
 	for (i = 0; (i < MAXREF) && (pic->ref_pic[i] != NULL); i++) {
@@ -2439,6 +2430,19 @@ void pic_backend_ref_operation(struct AVS2Decoder_s *dec, bool add_flag)
 					__func__, pic->ref_pic[i]);
 			}
 		}
+	}
+
+	if (add_flag) {
+		pic->backend_ref = 1;
+		pic->back_done_mark = 0;
+	} else {
+		pic->backend_ref--;
+		if (pic->backend_ref < 0) {
+			pic->backend_ref = 0;
+			avs2_print(dec, PRINT_FLAG_VDEC_DETAIL, "%s:pic(%px) backend_ref error\n",
+				__func__, pic);
+		}
+		pic->back_done_mark = 1;
 	}
 
 	mutex_unlock(&dec->fb_mutex);

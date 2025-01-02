@@ -2458,19 +2458,6 @@ void pic_backend_ref_operation(struct AVS3Decoder_s *dec, avs3_frame_t *pic, boo
 	avs3_frame_t *ref_pic = NULL;
 	int i = 0;
 
-	if (add_flag) {
-		pic->backend_ref = 1;
-		pic->back_done_mark = 0;
-	} else {
-		pic->backend_ref--;
-		if (pic->backend_ref < 0) {
-			pic->backend_ref = 0;
-			avs3_print(dec, PRINT_FLAG_VDEC_DETAIL, "%s:pic(%px) backend_ref error\n",
-				__func__, pic);
-		}
-		pic->back_done_mark = 1;
-	}
-
 	mutex_lock(&dec->fb_mutex);
 
 	for (i = 0; i < pic->list0_num_refp; i++) {
@@ -2499,6 +2486,19 @@ void pic_backend_ref_operation(struct AVS3Decoder_s *dec, avs3_frame_t *pic, boo
 					__func__, pic->list1_index[i]);
 			}
 		}
+	}
+
+	if (add_flag) {
+		pic->backend_ref = 1;
+		pic->back_done_mark = 0;
+	} else {
+		pic->backend_ref--;
+		if (pic->backend_ref < 0) {
+			pic->backend_ref = 0;
+			avs3_print(dec, PRINT_FLAG_VDEC_DETAIL, "%s:pic(%px) backend_ref error\n",
+				__func__, pic);
+		}
+		pic->back_done_mark = 1;
 	}
 
 	mutex_unlock(&dec->fb_mutex);
