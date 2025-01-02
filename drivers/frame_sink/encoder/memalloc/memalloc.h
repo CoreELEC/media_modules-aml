@@ -94,6 +94,9 @@ typedef struct {
 #define MEMALLOC_PARAMS_LEN32 compat_MemallocParams
 #endif
 
+struct memalloc_drv_context_t {
+    u32 open_count; /*!<< device reference count. Not instance count */
+};
 
 /*
  * Ioctl definitions

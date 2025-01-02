@@ -210,6 +210,13 @@ static struct device*  device;
 #define CMDBUF_VCMD_REGISTER_TOTAL_SIZE   (9 * 1024 * 1024 - CMDBUF_POOL_TOTAL_SIZE * 2)
 #define VCMD_REGISTER_SIZE                (128 * 4)
 
+struct versdrv_t {
+	void *vcmd_base_virt_addr;
+	u32 vcmd_base_mem_size;
+	dma_addr_t vcmd_base_phys_addr;
+	ulong vcmd_base_mem_handle;
+};
+
 struct noncache_mem {
 	u32 *virtualAddress;
 	dma_addr_t busAddress;
@@ -279,7 +286,7 @@ struct hantrovcmd_dev {
  */
 #define VCMD_HW_ID                  0x4342
 
-
+static struct versdrv_t s_versdrv;
 static struct noncache_mem vcmd_buf_mem_pool;
 static struct noncache_mem vcmd_status_buf_mem_pool;
 static struct noncache_mem vcmd_registers_mem_pool;
@@ -310,6 +317,7 @@ static struct semaphore vcmd_reserve_cmdbuf_sem[MAX_VCMD_TYPE]; //for reserve
 /***************************TYPE AND FUNCTION DECLARATION****************/
 
 /* here's all the must remember stuff */
+static int vcmd_pcie_init(struct platform_device *pf_dev);
 
 static int vcmd_reserve_IO(void);
 static void vcmd_release_IO(void);
@@ -470,6 +478,9 @@ static void release_vcmd_non_cachable_memory(void)
                     if (level >= print_level) \
                         printk(x); \
                 } while (0)
+
+static s32 print_level = LOG_ERROR;
+
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
     static DEFINE_SEMAPHORE(s_vers_sem);
 #else
@@ -477,7 +488,6 @@ static void release_vcmd_non_cachable_memory(void)
 #endif
 static spinlock_t s_dma_buf_lock = __SPIN_LOCK_UNLOCKED(s_dma_buf_lock);
 static struct list_head s_dma_bufp_head = LIST_HEAD_INIT(s_dma_bufp_head);
-static s32 print_level = LOG_ERROR;
 static struct platform_device *versenc_pdev;
 
 enum {
@@ -2712,20 +2722,42 @@ static int hantrovcmd_open(struct inode *inode, struct file *filp)
 	struct hantrovcmd_dev *dev = hantrovcmd_data;
 	bi_list_node *process_manager_node;
 	unsigned long flags;
+	bool first_open = false;
 	struct process_manager_obj *process_manager_obj = NULL;
 
-	filp->private_data = (void *)dev;
+	spin_lock_irqsave(&vcmd_process_manager_lock, flags);
 	process_manager_node = create_process_manager_node();
-	if (!process_manager_node)
+	if (!process_manager_node) {
 		return -1;
+		spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
+	}
 	process_manager_obj =
 		(struct process_manager_obj *)process_manager_node->data;
+	enc_pr(LOG_DEBUG, "venc_file_open_cnt=%d\n", venc_file_open_cnt);
+
+	venc_file_open_cnt++;
+	if (venc_file_open_cnt == 1) {
+		first_open = true;
+	}
+	filp->private_data = (void *)dev;
 	process_manager_obj->filp = filp;
-	if (0 == venc_file_open_cnt) {
+	bi_list_insert_node_tail(&global_process_manager, process_manager_node);
+	spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
+	if (first_open) {
 		/*clk en & power on & reset*/
 		vers_clk_enable(&s_vers_clks);
 		vers_release_internal_reset();
+#ifdef PCIE_EN
+		result = vcmd_pcie_init(versenc_pdev);
+		if (result < 0)
+			goto err;
+#endif
 
+		for (i = 0; i < total_vcmd_core_num; i++) {
+			enc_pr(LOG_DEBUG, "vcmd: module init - vcmdcore[%d] addr =0x%llx\n", i,
+				(unsigned long long)vcmd_core_array[i].vcmd_base_addr);
+		}
+		#if 0
 		//init_bi_list(&global_process_manager);
 		result = ConfigAXIFE(1); //1: normal, 2: bypass
 		if (result < 0) {
@@ -2740,6 +2772,7 @@ static int hantrovcmd_open(struct inode *inode, struct file *filp)
 		result = MMU_Kernel_map();
 		if (result < 0)
 			goto err;
+		#endif
 		for (i = 0; i < total_vcmd_core_num; i++) {
 			hantrovcmd_data[i].vcmd_core_cfg = vcmd_core_array[i];
 			hantrovcmd_data[i].hwregs = NULL;
@@ -2754,9 +2787,9 @@ static int hantrovcmd_open(struct inode *inode, struct file *filp)
 			init_waitqueue_head(&abort_queue_vcmd[i]);
 			init_bi_list(&hantrovcmd_data[i].list_manager);
 			hantrovcmd_data[i].duration_without_int = 0;
-			vcmd_manager[vcmd_core_array[i].sub_module_type]
+			/*vcmd_manager[vcmd_core_array[i].sub_module_type]
 					[vcmd_type_core_num[vcmd_core_array[i].sub_module_type]] = &hantrovcmd_data[i];
-			vcmd_type_core_num[vcmd_core_array[i].sub_module_type]++;
+			vcmd_type_core_num[vcmd_core_array[i].sub_module_type]++;*/
 			hantrovcmd_data[i].vcmd_reg_mem_busAddress =
 				vcmd_registers_mem_pool.busAddress + i * VCMD_REGISTER_SIZE - base_ddr_addr;
 			//next todo: split out
@@ -2791,17 +2824,17 @@ static int hantrovcmd_open(struct inode *inode, struct file *filp)
 #endif
 					"versenc-irq", (void *)&hantrovcmd_data[i]);
 				if (result == -EINVAL) {
-					pr_err("vc8000_vcmd_driver: Bad vcmd_irq number or handler. core_id=%d\n", i);
+					enc_pr(LOG_ERROR, "vc8000_vcmd_driver: Bad vcmd_irq number or handler. core_id=%d\n", i);
 					vcmd_release_IO();
 					goto err;
 				} else if (result == -EBUSY) {
-					pr_err("vc8000_vcmd_driver: IRQ <%d> busy, change your config. core_id=%d\n",
+					enc_pr(LOG_ERROR, "vc8000_vcmd_driver: IRQ <%d> busy, change your config. core_id=%d\n",
 						   hantrovcmd_data[i].vcmd_core_cfg.vcmd_irq, i);
 					vcmd_release_IO();
 					goto err;
 				}
 			} else {
-				pr_info("vc8000_vcmd_driver: IRQ not in use!\n");
+				enc_pr(LOG_DEBUG, "vc8000_vcmd_driver: IRQ not in use!\n");
 			}
 		}
 		//cmdbuf pool allocation
@@ -2819,12 +2852,12 @@ static int hantrovcmd_open(struct inode *inode, struct file *filp)
 		cmdbuf_used_residual -= 1;
 
 
-		//create_kernel_process_manager();
+		/*create_kernel_process_manager();
 		for (i = 0; i < MAX_VCMD_TYPE; i++) {
 			if (vcmd_type_core_num[i] == 0)
 				continue;
 			sema_init(&vcmd_reserve_cmdbuf_sem[i], 1);
-		}
+		}*/
 #ifdef IRQ_SIMULATION
 		for (i = 0; i < 10000; i++)
 			timer_reserve[i].timer = NULL;
@@ -2833,25 +2866,40 @@ static int hantrovcmd_open(struct inode *inode, struct file *filp)
 		for (i = 0; i < MAX_VCMD_TYPE; i++) {
 			if (vcmd_type_core_num[i] == 0)
 				continue;
-			PDEBUG("hantrovcmd_init: vcmd_core_type is %d\n", i);
+			enc_pr(LOG_DEBUG, "hantrovcmd_init: vcmd_core_type is %d\n", i);
 			read_main_module_all_registers(i);
 		}
+	} else if (!s_versdrv.vcmd_base_phys_addr) {
+		enc_pr(LOG_ERROR, "hantrovcmd memory is not malloced yet wait & retry!\n");
+		result = -EBUSY;
 	}
 
-	spin_lock_irqsave(&vcmd_process_manager_lock, flags);
-	bi_list_insert_node_tail(&global_process_manager, process_manager_node);
-	venc_file_open_cnt++;
-	spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
-
-	//PDEBUG("dev opened\n");
+	if (result != 0) {
+		spin_lock_irqsave(&vcmd_process_manager_lock, flags);
+		venc_file_open_cnt--;
+		spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
+	}
 	return result;
 err:
+	if (result != 0) {
+		spin_lock_irqsave(&vcmd_process_manager_lock, flags);
+		venc_file_open_cnt--;
+		spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
+	}
 #ifdef HANTROMMU_SUPPORT
 	MMU_Kernel_unmap();
 	vcmd_pool_release();
 #endif
 	if (process_manager_node)
 		free_process_manager_node(process_manager_node);
+	if (s_versdrv.vcmd_base_virt_addr) {
+		codec_mm_dma_free_coherent(s_versdrv.vcmd_base_mem_handle);
+		for (i = 0; i < total_vcmd_core_num; i++) {
+			vcmd_core_array[i].vcmd_base_addr = VCMD_ENC_IO_ADDR_0;
+		}
+		s_versdrv.vcmd_base_virt_addr = NULL;
+		s_versdrv.vcmd_base_phys_addr = 0;
+	}
 	enc_pr(LOG_DEBUG, "[-] %s, ret: %d\n", __func__, result);
 	return result;
 }
@@ -2873,8 +2921,9 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 	unsigned long flags;
 	long retVal = 0;
 	int i = 0;
-	int k = 0;
-	u32 result;
+	//int k = 0;
+	u32 result = 0;
+	u32 open_count;
 
 	//PDEBUG("dev closed for process %p\n", (void *)filp);
 	if (down_interruptible(
@@ -3218,10 +3267,12 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 	//remove node from list
 	bi_list_remove_node(&global_process_manager, process_manager_node);
 	venc_file_open_cnt--;
+	open_count = venc_file_open_cnt;
 	spin_unlock_irqrestore(&vcmd_process_manager_lock, flags);
 	free_process_manager_node(process_manager_node);
-	up(&vcmd_reserve_cmdbuf_sem[dev->vcmd_core_cfg.sub_module_type]);
-	if (0 == venc_file_open_cnt) {
+	enc_pr(LOG_DEBUG, "open_count=%u\n", open_count);
+
+	if (0 == open_count) {
 		for (i = 0; i < total_vcmd_core_num; i++) {
 			if (!hantrovcmd_data[i].hwregs)
 				continue;
@@ -3246,9 +3297,9 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 			release_cmdbuf_node_cleanup(&hantrovcmd_data[i].list_manager);
 		}
 
-		for (k = 0; k < MAX_VCMD_TYPE; k++) {
+		/*for (k = 0; k < MAX_VCMD_TYPE; k++) {
 			vcmd_type_core_num[k] = 0;
-		}
+		}*/
 		//release_process_node_cleanup(&global_process_manager);
 
 #ifdef HANTROMMU_SUPPORT
@@ -3264,8 +3315,17 @@ static int hantrovcmd_release(struct inode *inode, struct file *filp)
 
 		/* disable vers clks.*/
 		vers_clk_disable(&s_vers_clks);
+		if (s_versdrv.vcmd_base_virt_addr) {
+			codec_mm_dma_free_coherent(s_versdrv.vcmd_base_mem_handle);
+			for (i = 0; i < total_vcmd_core_num; i++) {
+				vcmd_core_array[i].vcmd_base_addr = VCMD_ENC_IO_ADDR_0;
+			}
+			s_versdrv.vcmd_base_virt_addr = NULL;
+			s_versdrv.vcmd_base_phys_addr = 0;
+		}
 		enc_pr(LOG_DEBUG, "vc8000_vcmd_driver: free resource\n");
 	}
+	up(&vcmd_reserve_cmdbuf_sem[dev->vcmd_core_cfg.sub_module_type]);
 	return 0;
 }
 
@@ -3282,6 +3342,20 @@ static long venc_compat_ioctl(struct file *filp,
 }
 #endif
 
+static s32 vers_mmap(struct file *filp, struct vm_area_struct *vm)
+{
+	vm->vm_pgoff = (s_versdrv.vcmd_base_phys_addr >> PAGE_SHIFT) + vm->vm_pgoff;
+	vm->vm_page_prot =
+		pgprot_noncached(vm->vm_page_prot);
+
+	if (!pfn_valid(vm->vm_pgoff)) {
+		enc_pr(LOG_ERROR, "%s invalid pfn\n", __FUNCTION__);
+		return -EAGAIN;
+	}
+	return remap_pfn_range(vm, vm->vm_start, vm->vm_pgoff,
+		vm->vm_end - vm->vm_start, vm->vm_page_prot) ? -EAGAIN : 0;
+}
+
 /* VFS methods */
 static const struct file_operations hantrovcmd_fops = {
 	.owner = THIS_MODULE,
@@ -3292,6 +3366,7 @@ static const struct file_operations hantrovcmd_fops = {
 	.compat_ioctl = venc_compat_ioctl,
 #endif
 	.fasync = NULL,
+	.mmap = vers_mmap,
 };
 
 static u32 vcmd_release_AXIFE_IO(void)
@@ -3561,34 +3636,26 @@ static struct class venc_class = {
  * Return type     : int
  *------------------------------------------------------------------------------
  */
-static void *vaddr = NULL;
-static dma_addr_t paddr = 0;
-static int alloc_size_byte = 0;
 static int vcmd_pcie_init(struct platform_device *pf_dev)
 {
 	int i = 0;
-	int ret = 0;
+	int alloc_size_byte = 0;
 
 	alloc_size_byte = 1024 * 1024 * 10;
-	pr_info("============== this is probe func !!!\n");
-	ret = of_reserved_mem_device_init(&pf_dev->dev);
-	if (ret)
-	{
-		pr_info("reserve memory init fail:%d\n", ret);
-		return ret;
+	s_versdrv.vcmd_base_virt_addr = codec_mm_dma_alloc_coherent(&s_versdrv.vcmd_base_mem_handle, (ulong *)&s_versdrv.vcmd_base_phys_addr, alloc_size_byte, DEVICE_NAME);
+	if (!s_versdrv.vcmd_base_virt_addr) {
+		enc_pr(LOG_ERROR, "%s: failed to alloc vcmd buf\n", __func__);
+		return -ENOMEM;
 	}
 
-	/* 8g memory support */
-	dma_coerce_mask_and_coherent(&pf_dev->dev, DMA_BIT_MASK(64));
-
-	vaddr = dma_alloc_coherent(&pf_dev->dev, alloc_size_byte, &paddr, GFP_KERNEL);
-	pr_info("------- vaddr: %p, paddr: %llx\n", vaddr, (u64)paddr);
+	enc_pr(LOG_DEBUG, "------- vaddr: %p, paddr: %llx\n", s_versdrv.vcmd_base_virt_addr, (u64)s_versdrv.vcmd_base_phys_addr);
+	s_versdrv.vcmd_base_mem_size = alloc_size_byte;
 
 	g_vcmd_base_hdwr = vers_reg_start[VERS_CORE_REG_BASE];
-	pr_info("Base hw val 0x%llx\n", (unsigned long long)g_vcmd_base_hdwr);
+	enc_pr(LOG_DEBUG, "Base hw val 0x%llx\n", (unsigned long long)g_vcmd_base_hdwr);
 
 	g_vcmd_base_len = 0x2000;
-	pr_info("Base hw len 0x%x\n", (unsigned int)g_vcmd_base_len);
+	enc_pr(LOG_DEBUG, "Base hw len 0x%x\n", (unsigned int)g_vcmd_base_len);
 
 	for (i = 0; i < total_vcmd_core_num; i++) {
 		vcmd_core_array[i].vcmd_base_addr =
@@ -3600,25 +3667,25 @@ static int vcmd_pcie_init(struct platform_device *pf_dev)
 	vcmd_sram_size = 0x2000;
 
 
-	g_vcmd_base_ddr_hw = paddr;
+	g_vcmd_base_ddr_hw = s_versdrv.vcmd_base_phys_addr;
 
-	pr_info("sam debug >> pyh Base memory val 0x%llx\n",
+	enc_pr(LOG_DEBUG, "sam debug >> pyh Base memory val 0x%llx\n",
 		(unsigned long long)g_vcmd_base_ddr_hw);
 
-    base_ddr_addr = 0;
+	base_ddr_addr = 0;
 
 	vcmd_buf_mem_pool.busAddress = g_vcmd_base_ddr_hw + START_MEM_OFFSET;
 
 	vcmd_buf_mem_pool.size = CMDBUF_POOL_TOTAL_SIZE;
-    pr_info("Init: vcmd_buf_mem_pool.busAddress=0x%llx.\n",
+	enc_pr(LOG_DEBUG, "Init: vcmd_buf_mem_pool.busAddress=0x%llx.\n",
 		(unsigned long long)vcmd_buf_mem_pool.busAddress);
 
-	vcmd_buf_mem_pool.virtualAddress = vaddr;
-	pr_info("Init: vcmd_buf_mem_pool.virtualAddress=0x%lx.\n",
+	vcmd_buf_mem_pool.virtualAddress = s_versdrv.vcmd_base_virt_addr;
+	enc_pr(LOG_DEBUG, "Init: vcmd_buf_mem_pool.virtualAddress=0x%lx.\n",
 		(unsigned long)vcmd_buf_mem_pool.virtualAddress);
 
 	if (!vcmd_buf_mem_pool.virtualAddress) {
-		pr_info("Init: failed to ioremap.\n");
+		enc_pr(LOG_ERROR, "Init: failed to ioremap.\n");
 		return -1;
 	}
 #if 0
@@ -3629,19 +3696,19 @@ static int vcmd_pcie_init(struct platform_device *pf_dev)
 			*(vcmd_buf_mem_pool.virtualAddress+1));
 	//end
 #endif
-    vcmd_status_buf_mem_pool.busAddress = g_vcmd_base_ddr_hw + START_MEM_OFFSET + CMDBUF_POOL_TOTAL_SIZE;
+	vcmd_status_buf_mem_pool.busAddress = g_vcmd_base_ddr_hw + START_MEM_OFFSET + CMDBUF_POOL_TOTAL_SIZE;
 	vcmd_status_buf_mem_pool.size = CMDBUF_POOL_TOTAL_SIZE;
-    pr_info("Init: vcmd_status_buf_mem_pool.busAddress=0x%llx.\n",
+	enc_pr(LOG_DEBUG, "Init: vcmd_status_buf_mem_pool.busAddress=0x%llx.\n",
 		(unsigned long long)vcmd_status_buf_mem_pool.busAddress);
 
-    vcmd_status_buf_mem_pool.virtualAddress = vaddr + START_MEM_OFFSET + CMDBUF_POOL_TOTAL_SIZE;
-    pr_info("Init: vcmd_status_buf_mem_pool.virtualAddress=0x%lx.\n",
+	vcmd_status_buf_mem_pool.virtualAddress = s_versdrv.vcmd_base_virt_addr + START_MEM_OFFSET + CMDBUF_POOL_TOTAL_SIZE;
+	enc_pr(LOG_DEBUG, "Init: vcmd_status_buf_mem_pool.virtualAddress=0x%lx.\n",
 		(unsigned long)vcmd_status_buf_mem_pool.virtualAddress);
 
-    if (!vcmd_status_buf_mem_pool.virtualAddress) {
-        pr_info("Init: failed to ioremap.\n");
-        return -1;
-    }
+	if (!vcmd_status_buf_mem_pool.virtualAddress) {
+		enc_pr(LOG_ERROR, "Init: failed to ioremap.\n");
+		return -1;
+	}
 #if 0
 	//sam test
 	*(vcmd_status_buf_mem_pool.virtualAddress+1) = 0x11;
@@ -3650,25 +3717,25 @@ static int vcmd_pcie_init(struct platform_device *pf_dev)
 			*(vcmd_status_buf_mem_pool.virtualAddress+1));
 	//end
 #endif
-    vcmd_registers_mem_pool.busAddress = g_vcmd_base_ddr_hw +
-					     START_MEM_OFFSET +
-					     CMDBUF_POOL_TOTAL_SIZE * 2;
+	vcmd_registers_mem_pool.busAddress = g_vcmd_base_ddr_hw +
+						 START_MEM_OFFSET +
+						 CMDBUF_POOL_TOTAL_SIZE * 2;
 	vcmd_registers_mem_pool.size = CMDBUF_VCMD_REGISTER_TOTAL_SIZE;
-    pr_info("Init: vcmd_registers_mem_pool.busAddress=0x%llx.\n",
+	enc_pr(LOG_DEBUG, "Init: vcmd_registers_mem_pool.busAddress=0x%llx.\n",
 		(unsigned long long)vcmd_registers_mem_pool.busAddress);
 
-	vcmd_registers_mem_pool.virtualAddress = vaddr + START_MEM_OFFSET + CMDBUF_POOL_TOTAL_SIZE * 2;
-	pr_info("Init: vcmd_registers_mem_pool.virtualAddress=0x%lx.\n",
+	vcmd_registers_mem_pool.virtualAddress = s_versdrv.vcmd_base_virt_addr + START_MEM_OFFSET + CMDBUF_POOL_TOTAL_SIZE * 2;
+	enc_pr(LOG_DEBUG, "Init: vcmd_registers_mem_pool.virtualAddress=0x%lx.\n",
 		(unsigned long)vcmd_registers_mem_pool.virtualAddress);
 
 	if (!vcmd_registers_mem_pool.virtualAddress) {
-		pr_info("Init: failed to ioremap.\n");
+		enc_pr(LOG_DEBUG, "Init: failed to ioremap.\n");
 		return -1;
 	}
 #if 0
 	//sam test
-    *(vcmd_registers_mem_pool.virtualAddress+1) = 0x22;
-    pr_info("sam debug >> virtualAddress1 = 0x%x.\n",
+	*(vcmd_registers_mem_pool.virtualAddress+1) = 0x22;
+	pr_info("sam debug >> virtualAddress1 = 0x%x.\n",
 		*(vcmd_registers_mem_pool.virtualAddress+1));
 	//end
 #endif
@@ -4301,7 +4368,7 @@ static void read_main_module_all_registers(u32 main_module_type)
 
 void vers_resume_hw(u32 on)
 {
-	u32 i = 0, k = 0;
+	u32 i = 0/*, k = 0*/;
 	int result;
 
 	if (venc_file_open_cnt > 0) {
@@ -4327,12 +4394,12 @@ void vers_resume_hw(u32 on)
 					free_irq(hantrovcmd_data[i].vcmd_core_cfg.vcmd_irq,
 						 (void *)&hantrovcmd_data[i]);
 				}
-				release_cmdbuf_node_cleanup(&hantrovcmd_data[i].list_manager);
+				//release_cmdbuf_node_cleanup(&hantrovcmd_data[i].list_manager);
 			}
 
-			for (k = 0; k < MAX_VCMD_TYPE; k++) {
+			/*for (k = 0; k < MAX_VCMD_TYPE; k++) {
 				vcmd_type_core_num[k] = 0;
-			}
+			}*/
 			//release_process_node_cleanup(&global_process_manager);
 
 #ifdef HANTROMMU_SUPPORT
@@ -4371,6 +4438,7 @@ void vers_resume_hw(u32 on)
 		pm_runtime_get_sync(&versenc_pdev->dev);
 		vers_release_internal_reset();
 
+		#if 0
 		//init_bi_list(&global_process_manager);
 		result = ConfigAXIFE(1); //1: normal, 2: bypass
 		if (result < 0) {
@@ -4385,6 +4453,7 @@ void vers_resume_hw(u32 on)
 		result = MMU_Kernel_map();
 		if (result < 0)
 			goto err;
+		#endif
 		for (i = 0; i < total_vcmd_core_num; i++) {
 			hantrovcmd_data[i].vcmd_core_cfg = vcmd_core_array[i];
 			hantrovcmd_data[i].hwregs = NULL;
@@ -4397,11 +4466,11 @@ void vers_resume_hw(u32 on)
 			init_waitqueue_head(&wait_queue_vcmd[i]);
 			hantrovcmd_data[i].wait_abort_queue = &abort_queue_vcmd[i];
 			init_waitqueue_head(&abort_queue_vcmd[i]);
-			init_bi_list(&hantrovcmd_data[i].list_manager);
+			//init_bi_list(&hantrovcmd_data[i].list_manager);
 			hantrovcmd_data[i].duration_without_int = 0;
-			vcmd_manager[vcmd_core_array[i].sub_module_type]
+			/*vcmd_manager[vcmd_core_array[i].sub_module_type]
 					[vcmd_type_core_num[vcmd_core_array[i].sub_module_type]] = &hantrovcmd_data[i];
-			vcmd_type_core_num[vcmd_core_array[i].sub_module_type]++;
+			vcmd_type_core_num[vcmd_core_array[i].sub_module_type]++;*/
 			hantrovcmd_data[i].vcmd_reg_mem_busAddress =
 				vcmd_registers_mem_pool.busAddress + i * VCMD_REGISTER_SIZE - base_ddr_addr;
 			//next todo: split out
@@ -4452,6 +4521,7 @@ void vers_resume_hw(u32 on)
 		//cmdbuf pool allocation
 		//init_vcmd_non_cachable_memory_allocate();
 		//for cmdbuf management
+		#if 0
 		cmdbuf_used_pos = 0;
 		for (k = 0; k < TOTAL_DISCRETE_CMDBUF_NUM; k++) {
 			cmdbuf_used[k] = 0;
@@ -4462,14 +4532,17 @@ void vers_resume_hw(u32 on)
 		cmdbuf_used_pos = 1;
 		cmdbuf_used[0] = 1;
 		cmdbuf_used_residual -= 1;
+		#endif
 
 
 		//create_kernel_process_manager();
+		#if 0
 		for (i = 0; i < MAX_VCMD_TYPE; i++) {
 			if (vcmd_type_core_num[i] == 0)
 				continue;
 			sema_init(&vcmd_reserve_cmdbuf_sem[i], 1);
 		}
+		#endif
 #ifdef IRQ_SIMULATION
 		for (i = 0; i < 10000; i++)
 			timer_reserve[i].timer = NULL;
@@ -4478,7 +4551,7 @@ void vers_resume_hw(u32 on)
 		for (i = 0; i < MAX_VCMD_TYPE; i++) {
 			if (vcmd_type_core_num[i] == 0)
 				continue;
-			PDEBUG("resume: vcmd_core_type is %d\n", i);
+			enc_pr(LOG_DEBUG, "resume: vcmd_core_type is %d\n", i);
 			read_main_module_all_registers(i);
 		}
 		//vers_clk_config(0);
@@ -4551,6 +4624,7 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 	venc_file_open_cnt = 0;
 	versenc_pdev = NULL;
 
+	memset(&s_versdrv, 0, sizeof(struct versdrv_t));
 	memset(&res, 0, sizeof(struct resource));
 	/* get interrupt resource */
 	irq = platform_get_irq_byname(pf_dev, "vc9000e_irq0");
@@ -4611,20 +4685,20 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 	total_vcmd_core_num =
 		sizeof(vcmd_core_array) / sizeof(struct vcmd_config);
 
-#ifdef PCIE_EN
-	result = vcmd_pcie_init(pf_dev);
-	if (result)
-		goto err1;
-#endif
+//#ifdef PCIE_EN
+	//result = vcmd_pcie_init(pf_dev);
+	//if (result)
+		//goto err1;
+//#endif
 
-	for (i = 0; i < total_vcmd_core_num; i++) {
-		pr_info("vcmd: module init - vcmdcore[%d] addr =0x%llx\n", i,
-			(unsigned long long)vcmd_core_array[i].vcmd_base_addr);
-	}
-	pr_info("vc8000_vcmd_driver:vmalloc hantrovcmd_data start\n");
+	//for (i = 0; i < total_vcmd_core_num; i++) {
+		//pr_info("vcmd: module init - vcmdcore[%d] addr =0x%llx\n", i,
+			//(unsigned long long)vcmd_core_array[i].vcmd_base_addr);
+	//}
+	enc_pr(LOG_DEBUG, "vc8000_vcmd_driver:vmalloc hantrovcmd_data start\n");
 	hantrovcmd_data =
 		vmalloc(sizeof(struct hantrovcmd_dev) * total_vcmd_core_num);
-	pr_info("vc8000_vcmd_driver:vmalloc hantrovcmd_data end\n");
+	enc_pr(LOG_DEBUG, "vc8000_vcmd_driver:vmalloc hantrovcmd_data end\n");
 	if (!hantrovcmd_data)
 		goto err1;
 	memset(hantrovcmd_data, 0, sizeof(struct hantrovcmd_dev) * total_vcmd_core_num);
@@ -4636,7 +4710,6 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 	}
 
 	init_bi_list(&global_process_manager);
-#if 0
 	result = ConfigAXIFE(1); //1: normal, 2: bypass
 	if (result < 0) {
 		vcmd_release_AXIFE_IO();
@@ -4667,7 +4740,7 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 		vcmd_manager[vcmd_core_array[i].sub_module_type]
 			    [vcmd_type_core_num[vcmd_core_array[i].sub_module_type]] = &hantrovcmd_data[i];
 		vcmd_type_core_num[vcmd_core_array[i].sub_module_type]++;
-		hantrovcmd_data[i].vcmd_reg_mem_busAddress =
+		/*hantrovcmd_data[i].vcmd_reg_mem_busAddress =
 			vcmd_registers_mem_pool.busAddress + i * VCMD_REGISTER_SIZE - base_ddr_addr;
 		//next todo: split out
 		hantrovcmd_data[i].mmu_vcmd_reg_mem_busAddress =
@@ -4675,9 +4748,8 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 		hantrovcmd_data[i].vcmd_reg_mem_virtualAddress =
 			vcmd_registers_mem_pool.virtualAddress + i * VCMD_REGISTER_SIZE / 4;
 		hantrovcmd_data[i].vcmd_reg_mem_size = VCMD_REGISTER_SIZE;
-		memset(hantrovcmd_data[i].vcmd_reg_mem_virtualAddress, 0, VCMD_REGISTER_SIZE);
+		memset(hantrovcmd_data[i].vcmd_reg_mem_virtualAddress, 0, VCMD_REGISTER_SIZE);*/
 	}
-#endif
 
 	/* get the major number of the character device */
 	if (init_versenc_device()) {
@@ -4743,7 +4815,6 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 		hantrovcmd_major);
 #endif
 	create_kernel_process_manager();
-#if 0
 	for (i = 0; i < MAX_VCMD_TYPE; i++) {
 		if (vcmd_type_core_num[i] == 0)
 			continue;
@@ -4753,6 +4824,7 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 	for (i = 0; i < 10000; i++)
 		timer_reserve[i].timer = NULL;
 #endif
+#if 0
 	/*read all registers for each type of module for analyzing configuration in cwl*/
 	for (i = 0; i < MAX_VCMD_TYPE; i++) {
 		if (vcmd_type_core_num[i] == 0)
@@ -4762,6 +4834,8 @@ int hantroenc_vcmd_init(struct platform_device *pf_dev)
 	}
 #endif
 	versenc_pdev = pf_dev;
+	/* 8g memory support */
+	dma_coerce_mask_and_coherent(&pf_dev->dev, DMA_BIT_MASK(64));
 	pm_runtime_enable(&versenc_pdev->dev);
 
 	return 0;
@@ -4786,7 +4860,7 @@ err1:
 	if (hantrovcmd_data)
 		vfree(hantrovcmd_data);
 	versenc_pdev = NULL;
-	pr_info("vc8000_vcmd_driver: module not inserted\n");
+	enc_pr(LOG_ERROR, "vc8000_vcmd_driver: module not inserted\n");
 
 	return result;
 }
@@ -4836,9 +4910,6 @@ void hantroenc_vcmd_cleanup(struct platform_device *pf_dev)
 	vcmd_pool_release();
 	pr_info("vc8000_vcmd_driver: free resource\n");
 #endif
-	if (vaddr)
-		dma_free_coherent(&pf_dev->dev, alloc_size_byte, vaddr, paddr);
-	vaddr = NULL;
 	if (hantrovcmd_data)
 		vfree(hantrovcmd_data);
 
@@ -4857,7 +4928,7 @@ void hantroenc_vcmd_cleanup(struct platform_device *pf_dev)
 	vers_clk_put(&versenc_pdev->dev, &s_vers_clks);
 	versenc_pdev = NULL;
 	uninit_versenc_device();
-	pr_info("vc8000_vcmd_driver: module removed\n");
+	enc_pr(LOG_DEBUG, "vc8000_vcmd_driver: module removed\n");
 }
 
 static int vcmd_reserve_IO(void)

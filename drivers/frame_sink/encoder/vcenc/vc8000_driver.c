@@ -155,7 +155,6 @@ static struct platform_driver mbd_vce_driver = {.probe = vc9000e_vce_probe,
 
 static int hantroenc_init(struct platform_device *pf_dev)
 {
-    pr_info("vc8000_vcmd_driver: hantroenc_init\n");
     vcmd_supported = 1;
     if (vcmd_supported == 0)
         return hantroenc_normal_init();
@@ -175,13 +174,11 @@ int __init enc_mem_init(void)
         //pr_info("The chip is not support vers!!\n");
         return -1;
     }
-    pr_info("vc8000_vcmd_driver: enc_mem_init\n");
     return platform_driver_register(&mbd_vce_driver);
 }
 
 void __exit enc_mem_exit(void)
 {
-    pr_info("vc8000_vcmd_driver: enc_mem_exit\n");
     platform_driver_unregister(&mbd_vce_driver);
 }
 

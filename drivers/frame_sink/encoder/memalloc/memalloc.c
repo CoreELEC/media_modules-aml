@@ -117,10 +117,30 @@ static struct class vencmem_class = {
 	.class_groups = vencmem_class_groups,
 };
 
+#define LOG_ALL 0
+#define LOG_INFO 1
+#define LOG_DEBUG 2
+#define LOG_ERROR 3
+
+#define enc_pr(level, x...) \
+	do { \
+		if (level >= print_level) \
+			printk(x); \
+	} while (0)
+
+static s32 print_level = LOG_ERROR;
+
 static struct device*  device;
 /* memory size in MBs for MEMALLOC_DYNAMIC */
 static u32 alloc_size = 96;
-static ulong alloc_base = HLINA_START_ADDRESS;
+static ulong alloc_base = 0;
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 3, 13)
+	static DEFINE_SEMAPHORE(s_vpu_sem);
+#else
+	static DEFINE_SEMAPHORE(s_vpu_sem, 1);
+#endif
+static struct memalloc_drv_context_t s_memalloc_drv_context;
 
 /* user space SW will subtract HLINA_TRANSL_OFFSET from the bus address
  * and decoder HW will use the result as the address translated base
@@ -245,26 +265,103 @@ static long memalloc_ioctl(struct file *filp, u32 cmd, ulong arg)
 
 static int memalloc_open(struct inode *inode, struct file *filp)
 {
-    PDEBUG("dev opened\n");
-    return 0;
+	bool first_open = false;
+	s32 r = 0;
+
+	//enc_pr(LOG_DEBUG, "[+] %s, filp=%lu, %lu, f_count=%lld\n", __func__,
+			//(unsigned long)filp, ( ((unsigned long)filp)%8), filp->f_count.counter);
+	spin_lock(&mem_lock);
+	s_memalloc_drv_context.open_count++;
+	if (s_memalloc_drv_context.open_count == 1) {
+		first_open = true;
+	}
+	filp->private_data = (void *)(&s_memalloc_drv_context);
+	spin_unlock(&mem_lock);
+	if (first_open) {
+#ifdef CONFIG_CMA
+		alloc_base = codec_mm_alloc_for_dma(DEVICE_NAME, alloc_size*SZ_1M >> PAGE_SHIFT, 0, 0);
+		if (alloc_base) {
+			enc_pr(LOG_DEBUG, "memalloc: alloc_size = 0x%x,Linear memory base = %px\n", alloc_size,
+					(void *)alloc_base);
+
+			chunks = (alloc_size * 1024 * 1024) / CHUNK_SIZE;
+
+			enc_pr(LOG_DEBUG, "memalloc: Total size %d MB; %d chunks of size %lu\n", alloc_size, (int)chunks,
+					CHUNK_SIZE);
+
+			hlina_chunks = vmalloc(chunks * sizeof(hlina_chunk));
+			if (!hlina_chunks) {
+				enc_pr(LOG_ERROR, "memalloc: cannot allocate hlina_chunks\n");
+				r = -ENOMEM;
+				codec_mm_free_for_dma(DEVICE_NAME, alloc_base);
+				alloc_base = 0;
+			} else {
+				ResetMems();
+			}
+		} else {
+			enc_pr(LOG_ERROR, "%s: failed to alloc alloc_base\n", __func__);
+			r = -ENOMEM;
+		}
+#else
+		enc_pr(LOG_ERROR, "No CMA and reserved memory for memalloc!!!\n");
+		r = -ENOMEM;
+#endif
+	} else if (!alloc_base) {
+		enc_pr(LOG_ERROR, "memalloc memory is not malloced yet wait & retry!\n");
+		r = -EBUSY;
+	}
+	if (r != 0) {
+		spin_lock(&mem_lock);
+		s_memalloc_drv_context.open_count--;
+		spin_unlock(&mem_lock);
+	}
+	enc_pr(LOG_DEBUG, "[-] %s, ret: %d\n", __func__, r);
+	return r;
 }
 
 static s32 memalloc_release(struct inode *inode, struct file *filp)
 {
-    s32 i = 0;
+	s32 ret = 0;
+	u32 open_count;
+	s32 i;
 
-    for (i = 0; i < chunks; i++) {
-        spin_lock(&mem_lock);
-        if (hlina_chunks[i].filp == filp) {
-            pr_warn("memalloc: Found unfreed memory at release time!\n");
+	//enc_pr(LOG_DEBUG, "memalloc_release filp=%lu, f_counter=%lld\n",
+			//(unsigned long)filp, filp->f_count.counter);
+	ret = down_interruptible(&s_vpu_sem);
 
-            hlina_chunks[i].filp = NULL;
-            hlina_chunks[i].chunks_reserved = 0;
-        }
-        spin_unlock(&mem_lock);
-    }
-    PDEBUG("dev closed\n");
-    return 0;
+	if (ret == 0) {
+		spin_lock(&mem_lock);
+		s_memalloc_drv_context.open_count--;
+		open_count = s_memalloc_drv_context.open_count;
+		spin_unlock(&mem_lock);
+
+		enc_pr(LOG_DEBUG, "open_count=%u\n", open_count);
+		for (i = 0; i < chunks; i++) {
+			if (hlina_chunks[i].filp == filp) {
+				enc_pr(LOG_DEBUG, "memalloc: Found unfreed memory at release time!\n");
+
+				hlina_chunks[i].filp = NULL;
+				hlina_chunks[i].chunks_reserved = 0;
+			}
+		}
+
+		if (open_count == 0) {
+			if (alloc_base) {
+				enc_pr(LOG_DEBUG,
+					"memalloc_release, alloc_base 0x%lx\n",
+					alloc_base);
+				codec_mm_free_for_dma(
+					DEVICE_NAME,
+					alloc_base);
+			}
+			alloc_base = 0;
+			if (hlina_chunks)
+				vfree(hlina_chunks);
+			hlina_chunks = NULL;
+		}
+	}
+	up(&s_vpu_sem);
+	return 0;
 }
 
 #ifdef CONFIG_COMPAT
@@ -297,7 +394,7 @@ static s32 init_memalloc_device(void)
 
     r = register_chrdev(memalloc_major, DEVICE_NAME, &memalloc_fops);
     if (r <= 0) {
-        PDEBUG("memalloc: unable to get major <%d>\n", memalloc_major);
+        enc_pr(LOG_ERROR, "memalloc: unable to get major <%d>\n", memalloc_major);
         return r;
     }
 
@@ -305,7 +402,7 @@ static s32 init_memalloc_device(void)
 
     r = class_register(&vencmem_class);
     if (r < 0) {
-        PDEBUG("hantro: error create venc class!");
+        enc_pr(LOG_ERROR, "hantro: error create venc class!");
         return r;
     }
     s_register_flag = 1;
@@ -333,79 +430,30 @@ static s32 uninit_memalloc_device(void)
     return 0;
 }
 
-static dma_addr_t paddr = 0;
-static void *vaddr = NULL;
 static void memalloc_cleanup(struct platform_device *pf_dev)
 {
-    if (hlina_chunks)
-        vfree(hlina_chunks);
-
-    if (vaddr)
-        dma_free_coherent(&pf_dev->dev, alloc_size * SZ_1M, vaddr, paddr);
-    vaddr = NULL;
-
     uninit_memalloc_device();
-    PDEBUG("module removed\n");
+    enc_pr(LOG_DEBUG, "module removed\n");
 }
 
 static s32 memalloc_init(struct platform_device *pf_dev)
 {
     s32 result;
-    s32 ret = 0;
-
-    PDEBUG("module init\n");
-
-    pr_info("memalloc: Linear Memory Allocator\n");
-
-    pr_info("============== memalloc_init this is probe func\n");
 
     memalloc_major = 0;
     s_register_flag = 0;
-    ret = of_reserved_mem_device_init(&pf_dev->dev);
-    if (ret) {
-        pr_info("reserve memory init fail:%d\n", ret);
-        return ret;
+    result = init_memalloc_device();
+    if (result < 0) {
+        enc_pr(LOG_ERROR, "memalloc: could not allocate major number\n");
+        result = -EBUSY;
+        goto err;
     }
     /* 8g memory support */
     dma_coerce_mask_and_coherent(&pf_dev->dev, DMA_BIT_MASK(64));
 
-    vaddr = dma_alloc_coherent(&pf_dev->dev, alloc_size*SZ_1M, &paddr, GFP_KERNEL);
-    pr_info("------- vaddr: %px, paddr: %llx\n", vaddr, (u64)paddr);
-
-    alloc_base = paddr;
-    pr_info("memalloc: alloc_size = 0x%x,Linear memory base = %px\n", alloc_size,
-            (void *)alloc_base);
-
-    chunks = (alloc_size * 1024 * 1024) / CHUNK_SIZE;
-
-    pr_info("memalloc: Total size %d MB; %d chunks of size %lu\n", alloc_size, (int)chunks,
-            CHUNK_SIZE);
-
-    hlina_chunks = vmalloc(chunks * sizeof(hlina_chunk));
-    if (!hlina_chunks) {
-        pr_err("memalloc: cannot allocate hlina_chunks\n");
-        result = -ENOMEM;
-        goto err;
-    }
-
-    result = init_memalloc_device();
-    if (result < 0) {
-        PDEBUG("memalloc: could not allocate major number\n");
-        result = -EBUSY;
-        goto err;
-    }
-
-    ResetMems();
-
     return 0;
 
 err:
-    if (hlina_chunks)
-        vfree(hlina_chunks);
-    if (vaddr)
-        dma_free_coherent(&pf_dev->dev, alloc_size * SZ_1M, vaddr, paddr);
-    vaddr = NULL;
-
     uninit_memalloc_device();
 
     return result;
@@ -504,14 +552,14 @@ static void ResetMems(void)
 
 static s32 encmem_vce_probe(struct platform_device *pf_dev)
 {
-    pr_info("encmem_vce_probe\n");
+    enc_pr(LOG_DEBUG, "encmem_vce_probe\n");
     memalloc_init(pf_dev);
     return 0;
 }
 
 static KV_INT_TO_VOID encmem_vce_remove(struct platform_device *pf_dev)
 {
-    pr_info("encmem_vce_remove:\n");
+    enc_pr(LOG_DEBUG, "encmem_vce_remove:\n");
     memalloc_cleanup(pf_dev);
     return KV_RET_x_TO_VOID(0);
 }
@@ -536,13 +584,11 @@ int __init enc_memallc_init(void)
         //pr_info("The chip is not support vers memalloc!!\n");
         return -1;
     }
-    pr_info("enc_mem_init: enc_mem_init\n");
     return platform_driver_register(&venc_mem_driver);
 }
 
 void __exit enc_memallc_exit(void)
 {
-    pr_info("enc_mem_init: enc_mem_exit\n");
     platform_driver_unregister(&venc_mem_driver);
 }
 
