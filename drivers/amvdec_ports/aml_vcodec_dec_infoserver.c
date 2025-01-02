@@ -360,6 +360,13 @@ static int vcodec_get_data_statistic(struct aml_vcodec_ctx *ctx,
 	struct dec_statistics_info_s *statistic_out = NULL;
 	struct vdec_info_statistic_s vstatistic_out = {0};
 
+	if (ctx->ada_ctx == NULL) {
+		ret = -1;
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"%s : get statics info failed, ada_ctx invalid\n", __func__);
+		return ret;
+	}
+
 	vdec = ctx->ada_ctx->vdec;
 	statistic_out = &data->u.decoder_statistics;
 	statistic_out->info_ype = AML_STATISTIC_TYPE;
