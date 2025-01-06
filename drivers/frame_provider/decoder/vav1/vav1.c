@@ -9587,9 +9587,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if (hw->frame_decoded)
 		hw->one_compressed_data_done = 1;
 
-	if (hw->m_ins_flag)
-		reset_process_time(hw);
-
 	if (hw->process_state != PROC_STATE_SENDAGAIN
 		) {
 		if (hw->one_compressed_data_done) {
@@ -9859,6 +9856,10 @@ static irqreturn_t vav1_isr(int irq, void *data)
 			return IRQ_HANDLED;
 		}
 	}
+
+	if (hw->m_ins_flag)
+		reset_process_time(hw);
+
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_END);
 	return IRQ_WAKE_THREAD;
 }
