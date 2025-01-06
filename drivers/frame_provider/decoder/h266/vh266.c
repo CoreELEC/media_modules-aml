@@ -4581,8 +4581,12 @@ static void hevc_config_work_space_hw(struct hevc_state_s *hevc)
 	WRITE_VREG(VVC_SBAC_TOP_BUFFER, buf_spec->sbac_top.buf_start);
 	WRITE_VREG(HEVC_SAO_UP, buf_spec->sao_up.buf_start);
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
-		WRITE_VREG(HEVC_ASSIST_SCRATCH_19, hevc->apsalf_buffer_phy_addr);
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+		if (!hevc->apsalf_buffer_phy_addr)
+			WRITE_VREG(HEVC_ASSIST_SCRATCH_19, buf_spec->apsalf.buf_start);
+		else
+			WRITE_VREG(HEVC_ASSIST_SCRATCH_19, hevc->apsalf_buffer_phy_addr);
+	}
 
 #ifdef VVC_10B_MMU
 	WRITE_VREG(H266_MMU_MAP_BUFFER,
@@ -5855,17 +5859,30 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		memset(hevc->frame_dw_mmu_map_addr, 0, get_frame_mmu_map_size());
 	}
 #endif
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6 && is_reserved_ext_support()) {
-		if (!hevc->apsalf_buffer_phy_addr) {
-			hevc->apsalf_buffer_phy_addr =
-				codec_mm_alloc_for_dma("apsalf",
-					PAGE_ALIGN(cur_buf_info->apsalf.buf_size) / PAGE_SIZE,
-					0,
-					CODEC_MM_FLAGS_RESERVED_EXT);
-			if (!hevc->apsalf_buffer_phy_addr) {
-				pr_err("%s: failed to alloc count_buffer\n", __func__);
-				return -ENOMEM;
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) &&
+		(PREFIX_ADDR(hevc->buf_start))) {
+
+		if (is_reserved_ext_support()) {
+			int memflags = CODEC_MM_FLAGS_RESERVED_EXT;
+			if (vdec_secure(hw_to_vdec(hevc))) {
+				memflags |= CODEC_MM_FLAGS_TVP;
+				pr_warn("%s, ext res mem alloc tvp apsalf\n", __func__);
 			}
+
+			if (!hevc->apsalf_buffer_phy_addr) {
+				hevc->apsalf_buffer_phy_addr =
+					codec_mm_alloc_for_dma("apsalf",
+						PAGE_ALIGN(cur_buf_info->apsalf.buf_size) / PAGE_SIZE,
+						0,
+						memflags);
+				if (!hevc->apsalf_buffer_phy_addr) {
+					pr_err("%s: failed to alloc count_buffer\n", __func__);
+					return -ENOMEM;
+				}
+			}
+		} else {
+			pr_err("%s, no reserved ext mem pool\n", __func__);
+			return -ENOMEM;
 		}
 	}
 	ret = 0;
