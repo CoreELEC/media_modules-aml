@@ -2160,7 +2160,6 @@ struct hevc_state_s {
 	bool resolution_change;
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
-	bool no_need_aux_data;
 	struct trace_decoder_name trace;
 	u32 nal_skip_policy;
 	bool high_bandwidth_flag;
@@ -11587,13 +11586,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			PR_INFO(hevc->index);
 		}
 
-		if ((hevc->m_PIC[index]->aux_data_size == 0) &&
-			(pic->slice_type == I_SLICE) &&
-			(atomic_read(&hevc->vf_pre_count) == 1)) {
-			hevc->no_need_aux_data = true;
-		}
-
-		if (!hevc->no_need_aux_data) {
+		if (hevc->m_PIC[index]->aux_data_size) {
 			if (!hevc->discard_dv_data)
 				v4l2_ctx->aux_infos.bind_dv_buffer(v4l2_ctx, &vf->src_fmt.comp_buf,
 					&vf->src_fmt.md_buf);
