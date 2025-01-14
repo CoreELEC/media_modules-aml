@@ -12602,6 +12602,7 @@ force_output:
 			}
 			hevc->decoded_poc = hevc->curr_POC;
 			hevc->decoding_pic = NULL;
+			hevc->over_decode = 0;
 			hevc->dec_result = DEC_RESULT_DV_DONE;
 
 			if (hevc->last_dec_result != DEC_RESULT_UNFINISH) {
