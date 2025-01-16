@@ -5056,8 +5056,8 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 			((p_H264_Dpb->colocated_buf_size *
 			pic->colocated_buf_index)
 			>> (use_direct_8x8 ? 2 : 0));
-		if ((colocate_wr_adr + p_H264_Dpb->colocated_buf_size) >
-			p_H264_Dpb->colocated_mv_addr_end) {
+		if ((colocate_adr_offset > p_H264_Dpb->colocated_buf_size) ||
+			((colocate_wr_adr + p_H264_Dpb->colocated_buf_size) > p_H264_Dpb->colocated_mv_addr_end)) {
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"Error, colocate buf is not enough, index is %d\n",
 			pic->colocated_buf_index);
