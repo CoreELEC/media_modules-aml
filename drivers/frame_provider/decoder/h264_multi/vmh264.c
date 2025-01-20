@@ -3612,15 +3612,11 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 		}
 
-		if ((hw->crop_bottom != 0) || (hw->crop_right != 0) ||
-			(hw->crop_top != 0) || (hw->crop_left != 0)) {
-			vf->src_crop.magic_code = SRC_CROP_MAGIC_CODE;
-			vf->src_crop.bottom = hw->crop_bottom;
-			vf->src_crop.right = hw->crop_right;
-			vf->src_crop.top = hw->crop_top;
-			vf->src_crop.left = hw->crop_left;
-		}
-
+		vf->src_crop.magic_code = SRC_CROP_MAGIC_CODE;
+		vf->src_crop.bottom = hw->crop_bottom;
+		vf->src_crop.right = hw->crop_right;
+		vf->src_crop.top = hw->crop_top;
+		vf->src_crop.left = hw->crop_left;
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
 			"original(%d, %d), crop(%d, %d), vf crop val(%d/%d/%d/%d)\n",
 			hw->frame_width, hw->frame_height, hw->src_w, hw->src_h,

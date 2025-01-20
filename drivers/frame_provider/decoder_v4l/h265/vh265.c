@@ -10515,15 +10515,11 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vf->type |= VIDTYPE_SCATTER;
 		}
 
-		if ((hevc->crop_bottom != 0) || (hevc->crop_right != 0) ||
-				(hevc->crop_top != 0) || (hevc->crop_left != 0)) {
-			vf->src_crop.magic_code = SRC_CROP_MAGIC_CODE;
-			vf->src_crop.bottom = hevc->crop_bottom;
-			vf->src_crop.right = hevc->crop_right;
-			vf->src_crop.top = hevc->crop_top;
-			vf->src_crop.left = hevc->crop_left;
-		}
-
+		vf->src_crop.magic_code = SRC_CROP_MAGIC_CODE;
+		vf->src_crop.bottom = hevc->crop_bottom;
+		vf->src_crop.right = hevc->crop_right;
+		vf->src_crop.top = hevc->crop_top;
+		vf->src_crop.left = hevc->crop_left;
 		hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
 			"original(%d, %d), crop(%d, %d), vf crop val(%d/%d/%d/%d)\n",
 			pic->width, pic->height, pic->crop_w, pic->crop_h,
