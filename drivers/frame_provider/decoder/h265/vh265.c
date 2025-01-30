@@ -425,7 +425,7 @@ static u32 buffer_mode_dbg = 0xffff0000;
  *bit[31:16] PB_skip_count_after_decoding (decoding but not display),
  *only for mode 0 and 1.
  */
-static u32 nal_skip_policy = 1;
+static u32 nal_skip_policy = 2;
 
 /*
  *bit 0, 1: only display I picture;
