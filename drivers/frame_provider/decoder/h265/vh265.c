@@ -427,6 +427,10 @@ static u32 buffer_mode_dbg = 0xffff0000;
  */
 static u32 nal_skip_policy = 2;
 
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+static u32 dvel_nal_skip_policy = 1;
+#endif
+
 /*
  *bit 0, 1: only display I picture;
  *bit 1, 1: only decode I picture;
@@ -2584,6 +2588,13 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 		struct BuffInfo_s *buf_spec_i)
 {
 	int i;
+
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+	u32 effective_nal_skip_policy = hevc->dv_duallayer ? dvel_nal_skip_policy : nal_skip_policy;
+#else
+	u32 effective_nal_skip_policy = nal_skip_policy;
+#endif
+
 	INIT_LIST_HEAD(&hevc->log_list);
 	hevc->work_space_buf = buf_spec_i;
 	hevc->prefix_aux_size = 0;
@@ -2633,8 +2644,8 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 	hevc->pts_mode_switching_count = 0;
 	hevc->pts_mode_recovery_count = 0;
 
-	hevc->PB_skip_mode = nal_skip_policy & 0x3;
-	hevc->PB_skip_count_after_decoding = (nal_skip_policy >> 16) & 0xffff;
+	hevc->PB_skip_mode = effective_nal_skip_policy & 0x3;
+	hevc->PB_skip_count_after_decoding = (effective_nal_skip_policy >> 16) & 0xffff;
 	if (hevc->PB_skip_mode == 0)
 		hevc->ignore_bufmgr_error = 0x1;
 	else
@@ -7499,6 +7510,12 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+	u32 effective_nal_skip_policy = hevc->dv_duallayer ? dvel_nal_skip_policy : nal_skip_policy;
+#else
+	u32 effective_nal_skip_policy = nal_skip_policy;
+#endif
+
 	if (hevc->is_used_v4l && ctx->param_sets_from_ucode)
 		hevc->res_ch_flag = 0;
 
@@ -7732,7 +7749,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				   NAL_UNIT_CODED_SLICE_BLA_N_LP)
 			hevc->m_pocRandomAccess = hevc->curr_POC;
 		else if ((hevc->curr_POC < hevc->m_pocRandomAccess) &&
-				(nal_skip_policy >= 3) &&
+				(effective_nal_skip_policy >= 3) &&
 				 (hevc->m_nalUnitType ==
 				  NAL_UNIT_CODED_SLICE_RASL_N ||
 				  hevc->m_nalUnitType ==
