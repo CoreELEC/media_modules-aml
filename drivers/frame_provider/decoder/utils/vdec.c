@@ -46,7 +46,7 @@
 #include <linux/signal.h>
 /*for VDEC_DEBUG_SUPPORT*/
 #include <linux/time.h>
-#include "../../../stream_input/amports/streambuf.h"
+#include "../../../stream_input/amports/amports_priv.h"
 #include "vdec.h"
 #include "vdec_trace.h"
 #include "../../../common/media_utils/media_utils.h"
@@ -5912,8 +5912,12 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 			tee_config_device_state_lock(DMC_DEV_ID_VDEC, secure);
 
 			if (is_support_dual_core()) {
-				if (mask & CORE_MASK_HEVC_BACK)
-					tee_config_device_state_lock(DMC_DEV_ID_HEVC_B, secure);
+				if (mask & CORE_MASK_HEVC_BACK) {
+					if ((ucode_version.major > 0) || (ucode_version.minor > 4) || ((ucode_version.minor == 4) && (ucode_version.patch >= 128)))
+						tee_config_device_state_lock(DMC_DEV_ID_HEVC_B, secure);
+					else
+						tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);
+				}
 			} else {
 				if (mask & CORE_MASK_HEVC)
 					tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);
@@ -5923,10 +5927,17 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 				if (mask & CORE_MASK_HEVC) {
 					tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);
 					if (!front_back_mode)
-						tee_config_device_state_lock(DMC_DEV_ID_HEVC_B, secure);
+						if ((ucode_version.major > 0) || (ucode_version.minor > 4) || ((ucode_version.minor == 4) && (ucode_version.patch >= 128)))
+							tee_config_device_state_lock(DMC_DEV_ID_HEVC_B, secure);
+						else
+							tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);
 				}
-				if (mask & CORE_MASK_HEVC_BACK)
-					tee_config_device_state_lock(DMC_DEV_ID_HEVC_B, secure);
+				if (mask & CORE_MASK_HEVC_BACK) {
+					if ((ucode_version.major > 0) || (ucode_version.minor > 4) || ((ucode_version.minor == 4) && (ucode_version.patch >= 128)))
+						tee_config_device_state_lock(DMC_DEV_ID_HEVC_B, secure);
+					else
+						tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);
+				}
 			} else {
 				if (mask & CORE_MASK_HEVC)
 					tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);

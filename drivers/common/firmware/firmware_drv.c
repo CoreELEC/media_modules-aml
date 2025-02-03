@@ -112,11 +112,6 @@ static struct param_entry firmware_params[] = {
 module_param_cb(firmware, &key_value_param_ops, &firmware_params, 0644);
 #endif
 
-struct ucode_version_s {
-	unsigned int major;
-	unsigned int minor;
-	unsigned int patch;
-};
 struct ucode_version_s ucode_version = {0, 0, 0};
 EXPORT_SYMBOL(ucode_version);
 
