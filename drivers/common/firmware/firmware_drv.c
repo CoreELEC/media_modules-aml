@@ -100,11 +100,6 @@ static bool new_package = false;
 static bool dos_tee_enabled = true;
 module_param(dos_tee_enabled, bool, 0664);
 
-struct ucode_version_s {
-	unsigned int major;
-	unsigned int minor;
-	unsigned int patch;
-};
 struct ucode_version_s ucode_version = {0, 0, 0};
 EXPORT_SYMBOL(ucode_version);
 

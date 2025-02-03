@@ -62,4 +62,11 @@ void amstream_wakeup_userdata_poll(struct vdec_s *vdec);
 struct device *amports_get_dma_device(void);
 struct device *get_codec_cma_device(void);
 
+struct ucode_version_s {
+	unsigned int major;
+	unsigned int minor;
+	unsigned int patch;
+};
+extern struct ucode_version_s ucode_version;
+
 #endif
