@@ -366,13 +366,6 @@ static int loop_times = 5;
 
 static u32 lookup_check_count = 30;
 
-struct ucode_version_s {
-	unsigned int major;
-	unsigned int minor;
-	unsigned int patch;
-};
-extern struct ucode_version_s ucode_version;
-
 /*
  *[3:0] 0: default use config from omx.
  *      1: force enable fence.
