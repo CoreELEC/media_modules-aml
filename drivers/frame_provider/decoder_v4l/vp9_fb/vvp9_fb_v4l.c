@@ -1566,6 +1566,8 @@ struct VP9Decoder_s {
 	int v4l_duration;
 	struct completion complete;
 	bool has_unfinish;
+	u32 Superframes_count;
+	u32 Superframes_size[8];
 };
 
 #ifdef NEW_FRONT_BACK_CODE
@@ -11897,6 +11899,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #endif
 					amhevc_stop();
 				if (vdec_frame_based(hw_to_vdec(pbi)) &&
+					!pbi->no_head &&
 					(READ_VREG(HEVC_SHIFT_BYTE_COUNT) + 4 < pbi->data_size)
 #ifdef NEW_FRONT_BACK_CODE
 					&& pbi->front_back_mode != 3
@@ -11904,6 +11907,12 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				) {
 					pbi->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT) - 8;
 					pbi->dec_result = DEC_RESULT_UNFINISH;
+				} else if (vdec_frame_based(hw_to_vdec(pbi)) && pbi->no_head &&
+					pbi->Superframes_count > 1 &&
+					(pbi->data_invalid + pbi->Superframes_size[pbi->Superframes_count - 1] < pbi->data_size)) {
+					pbi->consume_byte = pbi->data_invalid + pbi->Superframes_size[pbi->Superframes_count - 1];
+					pbi->dec_result = DEC_RESULT_UNFINISH;
+					pbi->Superframes_count --;
 				} else {
 					pbi->data_size = 0;
 					pbi->data_offset = 0;
@@ -11924,6 +11933,13 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #endif
 			}
 		}
+
+		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
+			"%s (===> %d) CRC 0x%x CRC_3 0x%x\n",
+			__func__,
+			pbi->frame_count,
+			READ_VREG(HEVC_SAO_CRC),
+			READ_VREG(HEVC_SAO_CRC_3));
 
 		pbi->process_busy = 0;
 		return IRQ_HANDLED;
@@ -13995,7 +14011,7 @@ static void run_front(struct vdec_s *vdec)
 		pbi->data_offset -= (pbi->data_invalid - pbi->consume_byte);
 		pbi->data_size += (pbi->data_invalid - pbi->consume_byte);
 		size = pbi->data_size;
-		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, pbi->data_invalid);
+		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, pbi->data_invalid + get_hevc_stream_extra_shift_bytes());
 
 		vp9_print(pbi, VP9_DEBUG_BUFMGR,
 			"%s after, consume 0x%x, size 0x%x, offset 0x%x, invalid 0x%x, res 0x%x\n", __func__,
@@ -14017,8 +14033,41 @@ static void run_front(struct vdec_s *vdec)
 			(pbi->chunk != NULL)) {
 			pbi->data_offset = pbi->chunk->offset;
 			pbi->data_size = size;
+			if (pbi->no_head && pbi->chunk->head_meta_buf) {
+				int i;
+				u32 buf_size = pbi->chunk->head_meta_buf[0] << 24 |
+					pbi->chunk->head_meta_buf[1] << 16 |
+					pbi->chunk->head_meta_buf[2] << 8 |
+					pbi->chunk->head_meta_buf[3];
+				if (buf_size >= 8 &&
+					buf_size <= VDEC_META_DATA_SIZE) { //Mate data min size 8
+					pbi->Superframes_count = pbi->chunk->head_meta_buf[4] << 24 |
+						pbi->chunk->head_meta_buf[5] << 16 |
+						pbi->chunk->head_meta_buf[6] << 8 |
+						pbi->chunk->head_meta_buf[7];
+					vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+						"%s Superframes_count:%d\n", __func__, pbi->Superframes_count);
+					if (buf_size == pbi->Superframes_count * 4 + 8) {
+						for (i = 0; i < pbi->Superframes_count; i ++) {
+							//Reverse storage, Superframes_size[0] represents the last frame size
+							pbi->Superframes_size[i] = pbi->chunk->head_meta_buf[buf_size - 1 - i * 4] |
+								pbi->chunk->head_meta_buf[buf_size - 2 - i * 4] << 8 |
+								pbi->chunk->head_meta_buf[buf_size - 3 - i * 4] << 16 |
+								pbi->chunk->head_meta_buf[buf_size - 4 - i * 4] << 24;
+						}
+					} else {
+						vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+							"%s head mete data err size:%d\n", __func__, buf_size);
+					}
+				} else {
+					vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+						"%s head mete data over size:%d, max 256\n", __func__, buf_size);
+				}
+			}
+
 		}
 		pbi->has_unfinish = false;
+		pbi->data_invalid = 0;
 		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, 0);
 	}
 
@@ -14952,12 +15001,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			vp9_buf_height = config_val;
 		}
 
-		if (get_config_int(pdata->config, "no_head",
-				&config_val) == 0)
-			pbi->no_head = config_val;
-		else
-			pbi->no_head = no_head;
-
 		/*use ptr config for max_pic_w, etc*/
 		if (get_config_int(pdata->config, "vp9_max_pic_w",
 				&config_val) == 0) {
@@ -15013,6 +15056,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			&config_val) == 0) {
 			pbi->low_latency_flag = (config_val & 1) ? 1 : 0;
 			pbi->enable_fence = (config_val & 2) ? 1 : 0;
+			pbi->no_head = (config_val & 8) ? 1 : no_head;
 		}
 
 		if (get_config_int(pdata->config,
