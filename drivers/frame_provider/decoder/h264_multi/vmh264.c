@@ -8352,7 +8352,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			"%s profile_idc %d\n", __func__, p_H264_Dpb->mSPS.profile_idc);
 
 		/*crop*/
-		if ((ucode_version.major > 0) || (ucode_version.minor > 4) || ((ucode_version.minor == 4) && (ucode_version.patch >= 3))) {
+		if (decoder_firmware_version_eg(0, 4, 3)) {
 			p_H264_Dpb->chroma_format_idc = (p_H264_Dpb->dpb_param.l.data[MAX_REFERENCE_FRAME_NUM_IN_MEM]>>8 & 0x3);
 			p_H264_Dpb->frame_crop_left_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_LEFT_OFFSET];
 			p_H264_Dpb->frame_crop_right_offset = p_H264_Dpb->dpb_param.l.data[FRAME_CROP_RIGHT_OFFSET];
