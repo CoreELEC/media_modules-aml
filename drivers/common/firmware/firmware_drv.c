@@ -100,9 +100,6 @@ static bool new_package = false;
 static bool dos_tee_enabled = true;
 module_param(dos_tee_enabled, bool, 0664);
 
-struct ucode_version_s ucode_version = {0, 0, 0};
-EXPORT_SYMBOL(ucode_version);
-
 bool fw_tee_enabled(void)
 {
 	if (!dos_tee_enabled)
@@ -321,6 +318,20 @@ int get_decoder_firmware_submit_count(void)
 	return package_head.submit_count;
 }
 EXPORT_SYMBOL(get_decoder_firmware_submit_count);
+
+int decoder_firmware_version_eg(int major, int minor, int batch)
+{
+	int equal_or_greater = 0;
+	int fw_major = (package_head.version >> 16) & 0xff;
+	int fw_minor = (package_head.version & 0xff);
+	int fw_batch = package_head.submit_count;
+
+	equal_or_greater = ((fw_major >  major) || (fw_minor >  minor) ||
+	                   ((fw_minor == minor) && (fw_batch >= batch)));
+
+	return equal_or_greater;
+}
+EXPORT_SYMBOL(decoder_firmware_version_eg);
 
 static unsigned long fw_mgr_lock(struct fw_mgr_s *mgr)
 {
@@ -685,6 +696,13 @@ static int fw_check_pack_version(char *buf)
 	package_head = pack->head;
 	major_fw = (pack->head.version >> 16) & 0xff;
 	minor_fw = pack->head.version & 0xff;
+
+	pr_info("The ucode driver version is %s\n", PACK_VERS);
+	pr_info("The firmware version is %d.%d.%d-g%s\n",
+			major_fw,
+			minor_fw,
+			package_head.submit_count,
+			package_head.commit);
 
 	if (major < major_fw) {
 		pr_info("the pack ver v%d.%d too higher to unsupport.\n",
@@ -1110,35 +1128,6 @@ static void fw_driver_exit(void)
 	kfree(g_mgr);
 }
 
-static void parse_ucode_version(void)
-{
-	struct fw_mgr_s *mgr = g_mgr;
-	struct fw_info_s *info;
-
-	if (!mgr) {
-		return;
-	}
-
-	if (!list_empty(&mgr->fw_head)) {
-		list_for_each_entry(info, &mgr->fw_head, node) {
-			if (IS_ERR_OR_NULL(info->data))
-				continue;
-
-			if (!strcmp(info->src_from, "video_ucode.bin")) {
-				const char *start;
-
-				start = info->data->head.version;
-
-				// v0.3.31.I1560de6.b60dbcd0
-				sscanf(start, "v%d.%d.%d", &ucode_version.major, &ucode_version.minor, &ucode_version.patch);
-				pr_info("%s, ucode = %d.%d.%d\n", __FUNCTION__,
-					ucode_version.major, ucode_version.minor, ucode_version.patch);
-				break;
-			}
-		}
-	}
-}
-
 static int __init fw_module_init(void)
 {
 	int ret = -1;
@@ -1160,8 +1149,6 @@ static int __init fw_module_init(void)
 		pr_info("Error %d firmware pre load fail.\n", ret);
 		goto err;
 	}
-
-	parse_ucode_version();
 
 err:
 	return ret;
