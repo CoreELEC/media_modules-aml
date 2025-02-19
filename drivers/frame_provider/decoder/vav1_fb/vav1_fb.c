@@ -6903,8 +6903,10 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 				unlock_buffer_pool(hw->common.buffer_pool, flags);
 			}
 #endif
-			if (hw->front_back_mode == 1)
+			if (hw->front_back_mode == 1) {
 				update_vf_memhandle(hw, vf, pic);
+				decoder_do_frame_check(hw_to_vdec(hw), vf);
+			}
 
 			return vf;
 		}
