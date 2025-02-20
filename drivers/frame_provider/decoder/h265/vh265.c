@@ -5171,7 +5171,7 @@ set_ref_err:
 	return -1;
 }
 
-static void update_tile_info(struct hevc_state_s *hevc, int pic_width_cu,
+static int update_tile_info(struct hevc_state_s *hevc, int pic_width_cu,
 		int pic_height_cu, int sao_mem_unit,
 		union param_u *params)
 {
@@ -5247,7 +5247,13 @@ static void update_tile_info(struct hevc_state_s *hevc, int pic_width_cu,
 					if (i == (hevc->num_tile_row - 1)) {
 						hevc->m_tile[i][j].height = pic_height_cu - start_cu_y;
 					} else {
-						hevc->m_tile[i][j].height = params->p.tile_height[i];
+						if (i < 8)
+							hevc->m_tile[i][j].height = params->p.tile_height[i];
+						else {
+							hevc_print_cont(hevc, 0, "error, i %d is more than 7(%d)\n",
+								i, hevc->num_tile_row);
+							return -1;
+						}
 					}
 				}
 
@@ -5306,6 +5312,7 @@ static void update_tile_info(struct hevc_state_s *hevc, int pic_width_cu,
 			k++;
 		}
 	}
+	return 0;
 }
 
 static int get_tile_index(struct hevc_state_s *hevc, int cu_adr,
@@ -7934,8 +7941,12 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			dbg_skip_flag = 1;
 
 		hevc->decode_idx++;
-		update_tile_info(hevc, pic_width_cu, pic_height_cu,
+		ret = update_tile_info(hevc, pic_width_cu, pic_height_cu,
 						 sao_mem_unit, rpm_param);
+		if (ret < 0) {
+			hevc_print(hevc, 0, "update_tile_info error %d\n", ret);
+			return 3;
+		}
 
 		config_title_hw(hevc, sao_vb_size, sao_mem_unit);
 	}
