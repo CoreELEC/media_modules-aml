@@ -86,6 +86,7 @@
 
 #define GET_SLICE_TYPE(type)  ("IPB##"[((type&PICINFO_TYPE_MASK)>>16)&0x3])
 #define PICINFO_ERROR       0x80000000
+#define PICINFO_FIELDS_NOT_PAIRED 0x40000000
 #define PICINFO_TYPE_MASK   0x00030000
 #define PICINFO_TYPE_I      0x00000000
 #define PICINFO_TYPE_P      0x00010000
@@ -190,6 +191,7 @@ enum {
 #define DEC_RESULT_GET_DATA_RETRY   7
 #define DEC_RESULT_UNFINISH         11
 #define DEC_RESULT_ERROR_DATA      	12
+#define DEC_RESULT_FIELDS_NOT_PAIRED	13
 
 
 #define DEC_DECODE_TIMEOUT         0x21
@@ -2676,6 +2678,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		hw->dec_num++;
 		hw->dec_result = DEC_RESULT_DONE;
 		new_pic = &hw->pics[index];
+		if (info & PICINFO_FIELDS_NOT_PAIRED)
+			hw->dec_result = DEC_RESULT_FIELDS_NOT_PAIRED;
 
 		// one packet multi frames
 		if (input_frame_based(vdec) &&
@@ -3214,6 +3218,15 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 	} else if (hw->dec_result == DEC_RESULT_UNFINISH) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"%s, DEC_RESULT_UNFINISH\n", __func__);
+		amvdec_stop();
+	} else if (hw->dec_result == DEC_RESULT_FIELDS_NOT_PAIRED) {
+		// not dirty the current package(the 2nd field, is the 1st field of next pic)
+		debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
+			"%s: fields not paired, lvl=%x ctrl=%x bcnt=%x\n",
+			__func__,
+			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+			READ_VREG(VLD_MEM_VIFIFO_CONTROL),
+			READ_VREG(VIFF_BIT_CNT));
 		amvdec_stop();
 	}
 	if (hw->stat & STAT_VDEC_RUN) {
