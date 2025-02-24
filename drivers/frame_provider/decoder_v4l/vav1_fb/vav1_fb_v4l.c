@@ -6065,7 +6065,6 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 						data = data & 0xFFFF00FF;
 						data = data | (0x30<<8);
 						hw->video_signal_type = data;
-						vf->discard_dv_data = true;
 						if ((size > 0) && (size <= HDR10P_BUF_SIZE) &&
 							(pic->hdr10p_data_buf != NULL)) {
 							memcpy(pic->hdr10p_data_buf, p, size);
