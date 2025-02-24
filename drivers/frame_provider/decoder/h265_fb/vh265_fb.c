@@ -1087,7 +1087,7 @@ static u32 fb_ifbuf_num = 3;
 	1: front_back_mode
 	2: front_back_test_mode
 */
-static u32 front_back_mode = 1;
+static u32 front_back_mode = 0;
 #endif
 
 struct BuffInfo_s {
