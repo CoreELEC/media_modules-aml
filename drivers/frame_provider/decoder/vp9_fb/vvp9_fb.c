@@ -210,7 +210,7 @@ static u32 fb_ifbuf_num = 3;
 	1: front_back_mode
 	2: front_back_test_mode
 */
-static u32 front_back_mode = 1;
+static u32 front_back_mode = 0;
 
 #define EE_ASSIST_MBOX0_IRQ_REG    0x3f70
 #define EE_ASSIST_MBOX0_CLR_REG    0x3f71
