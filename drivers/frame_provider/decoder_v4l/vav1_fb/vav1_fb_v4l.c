@@ -433,6 +433,10 @@ static u32 v4l_bitstream_id_enable = 1;
  */
 static u32 force_config_fence;
 
+static u32 force_low_latency;
+
+static u32 fence_drop_error_frame = 1;
+
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 static u32 force_dv_enable;
 #endif
@@ -702,6 +706,12 @@ struct vav1_assist_task {
 struct afbc_buf {
 	ulong fb;
 	int   used;
+};
+
+enum FenceModeBufStatus {
+	FENCE_MODE_BUF_IDLE = 0,
+	FENCE_MODE_BUF_POSTED = 1,
+	FENCE_MODE_BUF_SIGNALED = 2
 };
 
 struct av1_fence_vf_t {
@@ -1035,6 +1045,7 @@ struct AV1HW_s {
 	bool enable_ucode_swap;
 	u32 max_spatial_id;
 	int error_mark;
+	enum FenceModeBufStatus fence_mode_buf_status;
 };
 
 #ifdef NEW_FB_CODE
@@ -6340,19 +6351,29 @@ static void av1_recycle_dec_resource(void *priv,
 						struct aml_buf *aml_buf)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)priv;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = &aml_buf->vframe;
 	uint8_t index;
 
 	if (hw->enable_fence && vf->fence) {
-		int ret, i;
+		int ret, i, fence_ref;
 
 		mutex_lock(&hw->fence_mutex);
 		ret = dma_fence_get_status(vf->fence);
-		if (ret == 0) {
+		fence_ref = kref_read(&vf->fence->refcount);
+		if ((ret == 0) ||
+			(ret == 1 && fence_ref == 2)) {
 			for (i = 0; i < VF_POOL_SIZE; i++) {
 				if (hw->fence_vf_s.fence_vf[i] == NULL) {
 					hw->fence_vf_s.fence_vf[i] = vf;
 					hw->fence_vf_s.used_size++;
+
+					av1_print(hw, 0,
+						"%s enable_fence, fence_vf[%d]:%p, fence_vf[%d]->fence:%p, used_size:%d, aml_buf_get_ref\n",
+						__func__, i, hw->fence_vf_s.fence_vf[i], i, hw->fence_vf_s.fence_vf[i]->fence, hw->fence_vf_s.used_size);
+
+					aml_buf_get_ref(&ctx->bm, aml_buf);
+
 					mutex_unlock(&hw->fence_mutex);
 					return;
 				}
@@ -7024,24 +7045,43 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	sd->stream_offset = pbi->pre_stream_offset;
 	if (hw->enable_fence && (sd->fence_create == 1)) {
-		int i, j, used_size, ret;
+		int i, j, used_size, ret, fence_ref;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
 		struct aml_buf *buf;
 		/* notify signal to wake up wq of fence. */
-		vdec_timeline_increase(vdec->sync, 1);
+		if (hw->enable_fence && (hw->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+			int ret = dma_fence_get_status(vdec->sync->fence);
+			if (ret == 0) {
+				if (fence_drop_error_frame &&
+					(hw->error_mark == 1)) {
+					vdec_fence_status_set(vdec->sync->fence, -1);
+					av1_print(hw, 0,
+						"%s, error_mark:%d, vdec_fence_status_set error.\n",
+						__FUNCTION__, hw->error_mark);
+				}
+				vdec_timeline_increase(vdec->sync, 1);
 
-		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
-			"%s, enable_fence:%d, vdec_timeline_increase() done\n",
-			__func__, hw->enable_fence);
+				av1_print(hw, PRINT_FLAG_VDEC_STATUS,
+					"%s, enable_fence:%d, vdec_timeline_increase() done\n",
+					__func__, hw->enable_fence);
+				hw->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+			}
+		}
 
 		mutex_lock(&hw->fence_mutex);
 		used_size = hw->fence_vf_s.used_size;
 		if (used_size) {
 			for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
 				if (hw->fence_vf_s.fence_vf[i] != NULL) {
+
+					av1_print(hw, 0,
+						"%s enable_fence, fence_vf[%d]:%p, fence_vf[%d]->fence:%p, used_size:%d\n",
+						__func__, i, hw->fence_vf_s.fence_vf[i], i, hw->fence_vf_s.fence_vf[i]->fence, used_size);
+
 					ret = dma_fence_get_status(hw->fence_vf_s.fence_vf[i]->fence);
-					if (ret == 1) {
+					fence_ref = kref_read(&hw->fence_vf_s.fence_vf[i]->fence->refcount);
+					if (ret == 1 && fence_ref != 2) {
 						signed_fence[signed_count] = hw->fence_vf_s.fence_vf[i];
 						hw->fence_vf_s.fence_vf[i] = NULL;
 						hw->fence_vf_s.used_size--;
@@ -7056,6 +7096,12 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 			if (!signed_fence[i])
 				continue;
 			buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
+
+			av1_print(hw, 0,
+				"%s enable_fence, aml_buf_put_ref, then h265_recycle_dec_resource\n",
+				__func__);
+
+			aml_buf_put_ref(&ctx->bm , buf);
 			av1_recycle_dec_resource(hw, buf);
 		}
 	}else if(hw->error_mark == 1) {
@@ -7120,6 +7166,7 @@ int post_video_frame_early(AV1Decoder *pbi, struct AV1_Common_s *cm)
 
 		/* post video vframe. */
 		prepare_display_buf(hw, pic);
+		hw->fence_mode_buf_status = FENCE_MODE_BUF_POSTED;
 
 		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
 			"%s, enable_fence:%d, vdec_timeline_create_fence done\n",
@@ -9130,6 +9177,8 @@ static void av1_buf_ref_process_for_exception(struct AV1HW_s *hw)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct aml_buf *aml_buf;
+	struct vdec_s *vdec = hw_to_vdec(hw);
+	bool fence_mode_error_frame_buf_posted = false;
 
 	if (hw->cur_idx != INVALID_IDX) {
 		int cur_idx = hw->cur_idx;
@@ -9145,7 +9194,18 @@ static void av1_buf_ref_process_for_exception(struct AV1HW_s *hw)
 			"process_for_exception: dma addr(0x%lx)\n",
 			frame_bufs[cur_idx].buf.cma_alloc_addr);
 
-		aml_buf_put_ref(&ctx->bm, aml_buf);
+		if (hw->enable_fence && (hw->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+			int ret = dma_fence_get_status(vdec->sync->fence);
+			if (ret == 0) {
+				av1_print(hw, 0,
+					"%s, enable_fence, frame error and fence is not signaled, and buf posted, only aml_buf_put_ref once instead of remove from dpb.\n",
+					__FUNCTION__);
+				fence_mode_error_frame_buf_posted = true;
+			}
+		}
+
+		if (fence_mode_error_frame_buf_posted == false)
+			aml_buf_put_ref(&ctx->bm, aml_buf);
 		aml_buf_put_ref(&ctx->bm, aml_buf);
 
 		frame_bufs[cur_idx].buf.cma_alloc_addr = 0;
@@ -11091,6 +11151,24 @@ static void av1_work_implement(struct AV1HW_s *hw)
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hw->dec_result);
 
+	if (hw->enable_fence && (hw->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+		int ret = dma_fence_get_status(vdec->sync->fence);
+		if (ret == 0) {
+			/* notify signal to wake up wq of fence. */
+			if (fence_drop_error_frame) {
+				vdec_fence_status_set(vdec->sync->fence, -1);
+				av1_print(hw, 0,
+					"%s, enable_fence, vdec_fence_status_set error.\n",
+					__FUNCTION__);
+			}
+			av1_print(hw, 0,
+				"%s, enable_fence, frame error and fence is not signaled, signal once.\n",
+				__FUNCTION__);
+			vdec_timeline_increase(vdec->sync, 1);
+			hw->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+		}
+	}
+
 	if (hw->dec_result == AOM_AV1_RESULT_NEED_MORE_BUFFER) {
 		av1_recycle_frame_buffer(hw);
 		reset_process_time(hw);
@@ -12017,6 +12095,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			__func__, mask);
 
 		run_count[hw->index]++;
+		hw->fence_mode_buf_status = FENCE_MODE_BUF_IDLE;
 		if (vdec->mvfrm)
 			vdec->mvfrm->hw_decode_start = local_clock();
 		hw->vdec_cb_arg = arg;
@@ -13121,6 +13200,13 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			hw->enable_fence, hw->fence_usage);
 	}
 
+	if (force_low_latency) {
+		hw->low_latency_flag = 1;
+		av1_print(hw, 0,
+			"low_latency_flag: %d\n",
+			hw->low_latency_flag);
+	}
+
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
 		hw->double_write_mode == 0x10)
 		hw->mmu_enable = 0;
@@ -13676,6 +13762,12 @@ MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
 
 module_param(enable_swap, uint, 0664);
 MODULE_PARM_DESC(enable_swap, "\n enable_swap\n");
+
+module_param(force_low_latency, uint, 0664);
+MODULE_PARM_DESC(force_low_latency, "\n force low latency\n");
+
+module_param(fence_drop_error_frame, uint, 0664);
+MODULE_PARM_DESC(fence_drop_error_frame, "\n fence drop error frame\n");
 
 #ifdef NEW_FB_CODE
 module_param(front_back_debug, uint, 0664);

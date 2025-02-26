@@ -712,6 +712,12 @@ struct loopfilter;
 struct segmentation_lf;
 #endif
 
+enum FenceModeBufStatus {
+	FENCE_MODE_BUF_IDLE = 0,
+	FENCE_MODE_BUF_POSTED = 1,
+	FENCE_MODE_BUF_SIGNALED = 2
+};
+
 struct av1_fence_vf_t {
   u32 used_size;
   struct vframe_s *fence_vf[VF_POOL_SIZE];
@@ -1035,6 +1041,8 @@ struct AV1HW_s {
 	u32 mv_buf_size;
 	bool enable_ucode_swap;
 	u32 max_spatial_id;
+	int error_mark;
+	enum FenceModeBufStatus fence_mode_buf_status;
 };
 
 #ifdef NEW_FB_CODE
@@ -6927,11 +6935,13 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 		return;
 
 	if (hw->enable_fence && vf->fence) {
-		int ret, i;
+		int ret, i, fence_ref;
 
 		mutex_lock(&hw->fence_mutex);
 		ret = dma_fence_get_status(vf->fence);
-		if (ret == 0) {
+		fence_ref = kref_read(&vf->fence->refcount);
+		if ((ret == 0) ||
+			(ret == 1 && fence_ref == 2)) {
 			for (i = 0; i < VF_POOL_SIZE; i++) {
 				if (hw->fence_vf_s.fence_vf[i] == NULL) {
 					hw->fence_vf_s.fence_vf[i] = vf;
@@ -7557,21 +7567,51 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 	return 0;
 }
 
+static inline int check_frame_error(struct AV1HW_s *hw)
+{
+	if (hw->common.seq_params.frame_id_numbers_present_flag) {
+		if (hw->common.current_frame.frame_type == KEY_FRAME) {
+			hw->error_mark = 0;
+			hw->common.common_error_mark = 0;
+			return 0;
+		}
+		if (hw->common.common_error_mark == RefFrameErr) {
+			hw->error_mark = 1;
+			av1_print(hw, PRINT_FLAG_ERROR,
+				"%s: cur_idx :%d\n",__func__,hw->common.current_frame_id);
+			return -1;
+		}
+	}
+	return 0;
+}
+
 void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)pbi->private_data;
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	sd->stream_offset = pbi->pre_stream_offset;
 	if (hw->enable_fence && (sd->fence_create == 1)) {
-		int i, j, used_size, ret;
+		int i, j, used_size, ret, fence_ref;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
 		/* notify signal to wake up wq of fence. */
-		vdec_timeline_increase(vdec->sync, 1);
+		if (hw->enable_fence && (hw->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+			int ret = dma_fence_get_status(vdec->sync->fence);
+			if (ret == 0) {
+				if (hw->error_mark == 1) {
+					vdec_fence_status_set(vdec->sync->fence, -1);
+					av1_print(hw, 0,
+						"%s, enable_fence, error_mark:%d, vdec_fence_status_set error.\n",
+						__FUNCTION__, hw->error_mark);
+				}
+				vdec_timeline_increase(vdec->sync, 1);
 
-		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
-			"%s, enable_fence:%d, vdec_timeline_increase() done\n",
-			__func__, hw->enable_fence);
+				av1_print(hw, PRINT_FLAG_VDEC_STATUS,
+					"%s, enable_fence:%d, vdec_timeline_increase() done\n",
+					__func__, hw->enable_fence);
+				hw->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+			}
+		}
 
 		mutex_lock(&hw->fence_mutex);
 		used_size = hw->fence_vf_s.used_size;
@@ -7579,7 +7619,8 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 			for (i = 0, j = 0; i < VF_POOL_SIZE && j < used_size; i++) {
 				if (hw->fence_vf_s.fence_vf[i] != NULL) {
 					ret = dma_fence_get_status(hw->fence_vf_s.fence_vf[i]->fence);
-					if (ret == 1) {
+					fence_ref = kref_read(&hw->fence_vf_s.fence_vf[i]->fence->refcount);
+					if (ret == 1 && fence_ref != 2) {
 						signed_fence[signed_count] = hw->fence_vf_s.fence_vf[i];
 						hw->fence_vf_s.fence_vf[i] = NULL;
 						hw->fence_vf_s.used_size--;
@@ -7595,6 +7636,10 @@ void av1_raw_write_image(AV1Decoder *pbi, PIC_BUFFER_CONFIG *sd)
 				continue;
 			vav1_vf_put(signed_fence[i], hw);
 		}
+	} else if(hw->error_mark == 1) {
+		av1_print(hw, PRINT_FLAG_ERROR,
+			"%s, frame err, do not display,idx:%d\n",
+			__func__, hw->common.current_frame_id);
 	} else {
 		av1_print(hw, AOM_DEBUG_HW_MORE, "Out frame index %d not_need_display %d\n",
 			sd->index, sd->not_need_display);
@@ -7643,6 +7688,7 @@ int post_video_frame_early(AV1Decoder *pbi, struct AV1_Common_s *cm)
 
 		/* post video vframe. */
 		prepare_display_buf(hw, pic);
+		hw->fence_mode_buf_status = FENCE_MODE_BUF_POSTED;
 
 		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
 			"%s, enable_fence:%d, vdec_timeline_create_fence done\n",
@@ -8771,6 +8817,11 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 			for (i = 0; i < 8; i++) {
 				cm->cur_frame->segment_feature[i] = (0x80000000 | (i << 22));
 			}
+		}
+
+		if (check_frame_error(hw) < 0) {
+			hw->frame_decoded = 1;
+			return -1;
 		}
 
 #ifdef NEW_FRONT_BACK_CODE
@@ -11815,6 +11866,22 @@ static void av1_work_implement(struct AV1HW_s *hw)
 		READ_VREG(HEVC_STREAM_WR_PTR),
 		READ_VREG(HEVC_STREAM_RD_PTR));
 
+	if (hw->enable_fence && (hw->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+		int ret = dma_fence_get_status(vdec->sync->fence);
+		if (ret == 0) {
+			/* notify signal to wake up wq of fence. */
+			vdec_fence_status_set(vdec->sync->fence, -1);
+			av1_print(hw, 0,
+				"%s, enable_fence, vdec_fence_status_set error.\n",
+				__FUNCTION__);
+			av1_print(hw, 0,
+				"%s, enable_fence, frame error and fence is not signaled, signal once.\n",
+				__FUNCTION__);
+			vdec_timeline_increase(vdec->sync, 1);
+			hw->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+		}
+	}
+
 	if (hw->dec_result == AOM_AV1_RESULT_NEED_MORE_BUFFER) {
 		reset_process_time(hw);
 		if (get_free_buf_count(hw) <= 0) {
@@ -12505,6 +12572,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			__func__, mask);
 
 		run_count[hw->index]++;
+		hw->fence_mode_buf_status = FENCE_MODE_BUF_IDLE;
 		if (vdec->mvfrm)
 			vdec->mvfrm->hw_decode_start = local_clock();
 		hw->vdec_cb_arg = arg;
@@ -13232,6 +13300,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		hw->backend_ASSIST_MBOX0_MASK = EE_ASSIST_MBOX0_MASK;
 	}
 
+	hw->error_mark = 0;
+	hw->common.common_error_mark = 0;
 	hw->index = pdata->id;
 	if (is_rdma_enable()) {
 		hw->rdma_adr = decoder_dma_alloc_coherent(&hw->rdma_handle,

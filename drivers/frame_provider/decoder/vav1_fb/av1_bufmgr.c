@@ -2301,19 +2301,21 @@ int av1_decode_frame_headers_and_setup(AV1Decoder *pbi, int trailing_bits_presen
 		cm->ref_frame_sign_bias[LAST_FRAME + i] = 0;
 
 		if (seq_params->frame_id_numbers_present_flag) {
-		int frame_id_length = seq_params->frame_id_length;
-		//int diff_len = seq_params->delta_frame_id_length;
-		int delta_frame_id_minus_1 = params->p.delta_frame_id_minus_1[i];//aom_rb_read_literal(rb, diff_len);
-		int ref_frame_id =
-		((cm->current_frame_id - (delta_frame_id_minus_1 + 1) +
-			(1 << frame_id_length)) %
-			(1 << frame_id_length));
-		// Compare values derived from delta_frame_id_minus_1 and
-		// refresh_frame_flags. Also, check valid for referencing
-		if (ref_frame_id != cm->ref_frame_id[ref] ||
-		cm->valid_for_referencing[ref] == 0)
-		aom_internal_error(&cm->error, AOM_CODEC_CORRUPT_FRAME,
-				   "Reference buffer frame ID mismatch");
+			int frame_id_length = seq_params->frame_id_length;
+			//int diff_len = seq_params->delta_frame_id_length;
+			int delta_frame_id_minus_1 = params->p.delta_frame_id_minus_1[i];//aom_rb_read_literal(rb, diff_len);
+			int ref_frame_id =
+			((cm->current_frame_id - (delta_frame_id_minus_1 + 1) +
+				(1 << frame_id_length)) %
+				(1 << frame_id_length));
+			// Compare values derived from delta_frame_id_minus_1 and
+			// refresh_frame_flags. Also, check valid for referencing
+			if (ref_frame_id != cm->ref_frame_id[ref] ||
+			cm->valid_for_referencing[ref] == 0) {
+			cm->common_error_mark = RefFrameErr;
+			aom_internal_error(&cm->error, AOM_CODEC_CORRUPT_FRAME,
+					   "Reference buffer frame ID mismatch");
+			}
 		}
 	}
 
