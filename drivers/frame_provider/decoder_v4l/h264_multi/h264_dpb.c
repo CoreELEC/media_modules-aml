@@ -2100,8 +2100,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 			}
 		}
 
-		if (!(get_error_proc_policy(p_H264_Dpb) & 0x4000000) &&
-			!p_H264_Dpb->bitstream_restriction_flag) {
+		if (!(get_error_proc_policy(p_H264_Dpb) & 0x4000000)) {
 			for (i = 0; i < p_Dpb->used_size; i++) {
 
 				if (p_Dpb->fs[i]->data_flag & ERROR_FLAG) {
