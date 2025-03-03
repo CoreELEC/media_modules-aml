@@ -209,7 +209,7 @@ Bit[10:8] - film_grain_params_ref_idx, For Write request
 //v0.4.157-g34f04a6
 #define UCODE_SWAP_VERSION 4
 #define UCODE_SWAP_SUBMIT_COUNT 157
-static u32 enable_swap = 1;
+static u32 enable_swap = 0;
 
 #ifdef DEBUG_UCODE_LOG
 static u32 prefix_aux_buf_size;
