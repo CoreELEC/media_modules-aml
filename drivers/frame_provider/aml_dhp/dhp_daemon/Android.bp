@@ -2,7 +2,15 @@ cc_prebuilt_library_shared {
     name: "libavbc_soft_decoder",
     vendor: true,
     installable: true,
-    srcs: ["prebuild/lib/libavbc_soft_decoder.so"],
+    compile_multilib: "both",
+    arch: {
+        arm: {
+            srcs: ["prebuild/lib/libavbc_soft_decoder.so"],
+        },
+        arm64: {
+            srcs: ["prebuild/lib64/libavbc_soft_decoder.so"],
+        },
+    },
     export_include_dirs: ["prebuild/include"],
 }
 
