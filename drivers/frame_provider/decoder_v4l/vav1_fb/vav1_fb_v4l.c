@@ -9738,6 +9738,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			"AOM_AV1_SEQ_HEAD_PARSER_DONE, search head ...\n");
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
 
+		start_process_time(hw);
 		hw->process_busy = 0;
 		hw->has_sequence = 1;
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
