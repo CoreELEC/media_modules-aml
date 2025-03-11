@@ -2150,7 +2150,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 				ctx->picinfo.y_len_sz + ctx->picinfo.c_len_sz);
 
 	mbuf->size =  ctx->picinfo.y_len_sz + ctx->picinfo.c_len_sz;
-
+	dbuf->size = mbuf->size;
 	handle = dbuf->priv;
 
 	if (ctx->master_buf) {
