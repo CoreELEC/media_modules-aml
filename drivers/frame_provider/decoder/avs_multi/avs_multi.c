@@ -3208,14 +3208,12 @@ void (*callback)(struct vdec_s *, void *, int),
 		kfifo_len(&hw->recycle_q));
 
 	WRITE_VREG(VIFF_BIT_CNT, size * 8);
+	recycle_frames(hw);
+	avs_pts_check_in(hw, hw->decode_pic_count & 0xffff, hw->chunk);
+
 	if (hw->reset_decode_flag)
 		WRITE_VREG(DECODE_STATUS, 0);
 	else {
-		recycle_frames(hw);
-		avs_pts_check_in(hw,
-			hw->decode_pic_count & 0xffff,
-			hw->chunk);
-
 		WRITE_VREG(DECODE_STATUS,
 			(hw->decode_pic_count & 0xffff) |
 			((~hw->buf_recycle_status) << 16));
