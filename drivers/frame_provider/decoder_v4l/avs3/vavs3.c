@@ -4578,7 +4578,7 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 	}
 #endif
 
-	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S6) {
+	if (is_need_send_parser_cmd()) {
 		/*Send parser_cmd*/
 		WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
 		for (i = 0; i < PARSER_CMD_NUMBER; i++)
@@ -8914,7 +8914,7 @@ static void vavs3_prot_init(struct AVS3Decoder_s *dec)
 #ifndef FOR_S5
 	WRITE_VREG(HEVC_PSCALE_CTRL, 0);
 #endif
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6)
 		WRITE_VREG(HEVC_PSCALE_CTRL, 0);
 
 	WRITE_VREG(DEBUG_REG1, 0x0);
@@ -10413,8 +10413,12 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	} else
 #endif
 	{
-	hevc_reset_core(vdec);
+		hevc_reset_core(vdec);
 	}
+
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVC_CORE_ENABLE, 1);
+
 	if (vdec_stream_based(vdec)) {
 		dec->pre_parser_wr_ptr =
 			STBUF_READ(&vdec->vbuf, get_wp);
@@ -10943,7 +10947,7 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 
 	pr_debug("%s\n", __func__);
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+	if (!is_support_format(VFORMAT_AVS3)) {
 		pr_info("%s, chip id %d is not support avs3\n",
 			__func__, get_cpu_major_id());
 		return -1;

@@ -1423,8 +1423,8 @@ struct PIC_s {
 	struct page *alloc_pages;
 	dos_addr_t mpred_mv_wr_start_addr;
 	int mv_size;
-	unsigned int mc_y_adr;
-	unsigned int mc_u_v_adr;
+	dos_addr_t mc_y_adr;
+	dos_addr_t mc_u_v_adr;
 #ifdef SUPPORT_10BIT
 	/*unsigned int comp_body_size;*/
 	dos_addr_t dw_y_adr;
@@ -5121,7 +5121,7 @@ static void parser_cmd_write(void)
 		0x7C00
 	};
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6)
+	if (!is_need_send_parser_cmd())
 		return;
 
 	/* Send parser_cmd */
@@ -13805,7 +13805,7 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 
 	hevc_init_decoder_hw(hevc, 0, 0xffffffff);
 #ifdef DYN_CACHE
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
+	if (is_use_ipp_dyn_cache()) {
 		WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b);
 	}
 #endif

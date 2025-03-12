@@ -256,6 +256,7 @@ struct vdec_mjpeg_hw_s {
 	bool run_flag;
 	s32 cur_idx;
 	int v4l_duration;
+	int vdec_pg_enable_flag;
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
@@ -971,7 +972,7 @@ static struct task_ops_s task_dec_ops = {
 static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i)
 {
 	u32 canvas;
-	ulong decbuf_start = 0, decbuf_u_start = 0, decbuf_v_start = 0;
+	dos_addr_t decbuf_start = 0, decbuf_u_start = 0, decbuf_v_start = 0;
 	int decbuf_y_size = 0, decbuf_u_size = 0, decbuf_v_size = 0;
 	u32 canvas_width = 0, canvas_height = 0;
 	struct vdec_s *vdec = hw_to_vdec(hw);
@@ -1505,6 +1506,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->run_count++;
 	vdec_reset_core(vdec);
 	if (is_vdec_hevc_combine()) {
+		if (!hw->vdec_pg_enable_flag) {
+			hw->vdec_pg_enable_flag = 1;
+			amvdec_enable();
+		}
 		hevc_reset_core(vdec);
 		WRITE_VREG(HEVC_DBLK_CFGC, 0x80000000);
 		WRITE_VREG(HEVC_CORE_ENABLE, 0);

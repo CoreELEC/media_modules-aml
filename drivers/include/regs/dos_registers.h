@@ -11,8 +11,10 @@
 #define MASK_S5_NEW_REGS   ((AM_MESON_CPU_MAJOR_ID_S5 << 20) & NEW_REG_CHECK_MASK)
 #define MASK_S6_NEW_REGS   ((AM_MESON_CPU_MAJOR_ID_S6 << 20) & NEW_REG_CHECK_MASK)
 
-#ifdef DOS_REGISTERS_V2
+#if defined(DOS_REGISTERS_V2)
 #include "dos_registers_v2.h"
+#elif defined(DOS_REGISTERS_V3)
+#include "dos_registers_v3.h"
 #else
 #include "dos_registers_v1.h"
 #endif

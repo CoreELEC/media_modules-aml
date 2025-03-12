@@ -5466,7 +5466,7 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	int dw_mode = get_double_write_mode_init(pbi);
 	int lcu_total = calc_luc_quantity(pbi->frame_width, pbi->frame_height);
 #ifdef MV_USE_FIXED_BUF
-	u32 mpred_mv_end = pbi->work_space_buf->mpred_mv.buf_start +
+	dos_addr_t mpred_mv_end = pbi->work_space_buf->mpred_mv.buf_start +
 		pbi->work_space_buf->mpred_mv.buf_size;
 	int mv_size = cal_mv_buf_size(pbi, pbi->frame_width, pbi->frame_height);
 #endif
@@ -5596,7 +5596,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 				: pic_height_32 / lcu_size;
 	int lcu_total       = pic_width_lcu * pic_height_lcu;
 #ifdef MV_USE_FIXED_BUF
-	u32 mpred_mv_end = pbi->work_space_buf->mpred_mv.buf_start +
+	dos_addr_t mpred_mv_end = pbi->work_space_buf->mpred_mv.buf_start +
 			pbi->work_space_buf->mpred_mv.buf_size;
 	int mv_size = cal_mv_buf_size(pbi, pbi->init_pic_w, pbi->init_pic_h);
 #endif
@@ -6506,7 +6506,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 		data32 |= (2 << 8); /* line align with 64 for dw only */
 	}
 	if (dw_mode & 0x10) {
-		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6)) {
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
 			data32 &= ~(0x3ff << 13);
 			data32 |= ((pbi->endian & 0x1f) << 13) | ((pbi->endian & 0x1f) << 18);
 		}
@@ -7148,8 +7148,7 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 		WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
 		WRITE_VREG(HEVC_DECODE_PIC_NUM_REG, 0x7fffffff); /*to remove*/
 #endif
-		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_S6) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X)) {
+		if (is_need_send_parser_cmd()) {
 			/*Send parser_cmd*/
 			WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
 			for (i = 0; i < PARSER_CMD_NUMBER; i++)
@@ -12731,7 +12730,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	}
 
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
-		pbi->double_write_mode == 0x10)
+		(pbi->double_write_mode & 0x10))
 		pbi->mmu_enable = 0;
 	else
 		pbi->mmu_enable = 1;

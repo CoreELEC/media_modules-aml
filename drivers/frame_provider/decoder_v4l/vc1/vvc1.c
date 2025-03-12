@@ -888,7 +888,7 @@ static void config_canvas_hevc(struct vdec_vc1_hw_s *hw)
 
 static int v4l_alloc_buff_config_canvas(struct vdec_vc1_hw_s *hw, int i)
 {
-	ulong decbuf_start = 0, decbuf_uv_start = 0;
+	dos_addr_t decbuf_start = 0, decbuf_uv_start = 0;
 	int decbuf_y_size = 0, decbuf_uv_size = 0;
 	u32 canvas_width = 0, canvas_height = 0;
 	struct aml_buf *aml_buf = hw->aml_buf;

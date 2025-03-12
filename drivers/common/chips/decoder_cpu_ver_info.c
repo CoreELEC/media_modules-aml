@@ -536,6 +536,29 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AV1,
 		.support_h265_level_idc = IDC_4_1,
 	},
+
+	[AM_MESON_CPU_MAJOR_ID_GXLX4 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_GXLX4,
+		.reg_compat = NULL,
+		.max_vdec_clock  = 800,
+		.max_hevcf_clock = 800,
+		.max_hevcb_clock = 800,
+		.hevc_clk_combine_flag  = true,
+		.is_hw_parser_support   = false,
+		.is_vdec_canvas_support = true,
+		.is_support_h264_mmu    = true,
+		.is_support_dual_core = false,
+		.is_support_axi_ctrl = false,
+		.is_mjpeg_endian_rematch = true,
+		.is_vcpu_clk_set = true,
+		.is_support_p010 = true,
+		.is_support_monitor = true,
+		.hevc_stream_extra_shift = 8,
+		.is_vdec_hevc_combine = true,
+		.vdec_max_resolution = RESOLUTION_4K,
+		.hevc_max_resolution = RESOLUTION_4K,
+		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC | FMT_AVS2,
+	},
 };
 
 /* sub id features */
@@ -757,6 +780,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-t6d",
 		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_T6D - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-gxlx4",
+		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_GXLX4 - MAJOR_ID_START],
 	},
 	{},
 };
@@ -1143,6 +1170,7 @@ inline u32 get_format_max_resolution(int format)
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
 		case VFORMAT_AVS3:
+		case VFORMAT_H266:
 			return platform_dos_dev->hevc_max_resolution;
 		case VFORMAT_HEVC:
 		case VFORMAT_VP9:
@@ -1361,6 +1389,55 @@ inline bool is_support_avbc_wrapper(void)
 	return platform_dos_dev->is_support_avbc_wrapper;
 }
 EXPORT_SYMBOL(is_support_avbc_wrapper);
+
+inline bool is_use_std_reset_if(void)
+{
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
+
+	if (cpu_major_id >= AM_MESON_CPU_MAJOR_ID_GXLX4)
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(is_use_std_reset_if);
+
+inline bool is_need_send_parser_cmd(void)
+{
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
+
+	if ((cpu_major_id <= AM_MESON_CPU_MAJOR_ID_S6) &&
+		(cpu_major_id != AM_MESON_CPU_MAJOR_ID_T3X))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(is_need_send_parser_cmd);
+
+inline bool is_use_dcac_dma_hw(void)
+{
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
+
+	if ((cpu_major_id == AM_MESON_CPU_MAJOR_ID_S5) ||
+		(cpu_major_id == AM_MESON_CPU_MAJOR_ID_T3X) ||
+		(cpu_major_id >= AM_MESON_CPU_MAJOR_ID_S7))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(is_use_dcac_dma_hw);
+
+inline bool is_use_ipp_dyn_cache(void)
+{
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
+
+	if ((cpu_major_id == AM_MESON_CPU_MAJOR_ID_S5) ||
+		(cpu_major_id == AM_MESON_CPU_MAJOR_ID_T3X) ||
+		(cpu_major_id >= AM_MESON_CPU_MAJOR_ID_S6))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(is_use_ipp_dyn_cache);
 
 void pr_dos_infos(void)
 {

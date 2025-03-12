@@ -139,7 +139,7 @@ void dos_reg_write_bits(u32 reg, u32 val, int start, int len);
 #define CLEAR_VREG_MASK(r, mask)   write_dos_reg_comp(r, read_dos_reg_comp(r) & ~(mask))
 #define SET_VREG_MASK(r, mask)     write_dos_reg_comp(r, read_dos_reg_comp(r) | (mask))
 
-#ifdef DOS_REGISTERS_V2
+#if defined(DOS_REGISTERS_V2) || defined(DOS_REGISTERS_V3)
 #define READ_HREG(r) read_dos_reg_comp(r)
 #define WRITE_HREG(r, val) write_dos_reg_comp(r, val)
 #define WRITE_HREG_BITS(r, val, start, len) \

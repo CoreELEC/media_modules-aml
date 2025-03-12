@@ -253,6 +253,7 @@ struct vdec_mjpeg_hw_s {
 	char disp_q_name[32];
 	bool run_flag;
 	int unsupport_flag;
+	int vdec_pg_enable_flag;
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
@@ -1219,6 +1220,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->run_count++;
 	vdec_reset_core(vdec);
 	if (is_vdec_hevc_combine()) {
+		if (!hw->vdec_pg_enable_flag) {
+			hw->vdec_pg_enable_flag = 1;
+			amvdec_enable();
+		}
 		hevc_reset_core(vdec);
 		WRITE_VREG(HEVC_DBLK_CFGC, 0x80000000);
 		WRITE_VREG(HEVC_CORE_ENABLE, 0);

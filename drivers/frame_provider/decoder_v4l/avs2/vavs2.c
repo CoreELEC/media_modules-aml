@@ -3129,7 +3129,7 @@ static void config_dblk_hw(struct AVS2Decoder_s *dec)
 		? 0 : (rpm_param->p.lcu_size == 5)
 		? 1 : 2) << 0);/*[ 0 +: 2]: lcu_size*/
 #ifdef LPF_SPCC_ENABLE
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6)
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6)
 		data32 |= (0x3 << 20); // SPCC_ENABLE
 #endif
 	WRITE_VREG(HEVC_DBLK_CFG1, data32);
@@ -4056,15 +4056,12 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 	WRITE_VREG(HEVC_DECODE_SIZE, 0);
 	WRITE_VREG(HEVC_DECODE_COUNT, 0);
 #ifdef DYN_CACHE
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
+	if (is_use_ipp_dyn_cache()) {
 		avs2_print(dec, AVS2_DBG_BUFMGR_MORE, "HEVC DYN MCRCC\n");
 		WRITE_VREG(HEVCD_IPP_DYN_CACHE,0x2b);//enable new mcrcc
 	}
 #endif
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_S6) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X)) {
+	if (is_need_send_parser_cmd()) {
 		/*Send parser_cmd*/
 		WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
 		for (i = 0; i < PARSER_CMD_NUMBER; i++)
@@ -4075,18 +4072,20 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 	}
 
 #ifdef MULTI_INSTANCE_SUPPORT
-	WRITE_VREG(HEVC_MPRED_INT_STATUS, (1<<31));
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXLX4) {
+		WRITE_VREG(HEVC_MPRED_INT_STATUS, (1<<31));
 
-	WRITE_VREG(HEVC_PARSER_RESULT_3, 0xffffffff);
+		WRITE_VREG(HEVC_PARSER_RESULT_3, 0xffffffff);
 
-	for (i = 0; i < 8; i++)
-		data32 = READ_VREG(HEVC_MPRED_ABV_START_ADDR);
+		for (i = 0; i < 8; i++)
+			data32 = READ_VREG(HEVC_MPRED_ABV_START_ADDR);
 
-	WRITE_VREG(DOS_SW_RESET3, (1<<18)); /* reset mpred */
-	WRITE_VREG(DOS_SW_RESET3, 0);
-	WRITE_VREG(HEVC_MPRED_ABV_START_ADDR, data32);
-	WRITE_VREG(HEVC_MPRED_ABV_START_ADDR, data32);
-	WRITE_VREG(HEVC_MPRED_ABV_START_ADDR, data32);
+		WRITE_VREG(DOS_SW_RESET3, (1<<18)); /* reset mpred */
+		WRITE_VREG(DOS_SW_RESET3, 0);
+		WRITE_VREG(HEVC_MPRED_ABV_START_ADDR, data32);
+		WRITE_VREG(HEVC_MPRED_ABV_START_ADDR, data32);
+		WRITE_VREG(HEVC_MPRED_ABV_START_ADDR, data32);
+	}
 #endif
 
 	avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
@@ -8175,6 +8174,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	/* dec->chunk = vdec_prepare_input(vdec); */
 	hevc_reset_core(vdec);
 
+	if (is_vdec_hevc_combine())
+		WRITE_VREG(HEVC_CORE_ENABLE, 1);
+
 	if (vdec_stream_based(vdec)) {
 		dec->pre_parser_wr_ptr =
 			STBUF_READ(&vdec->vbuf, get_wp);
@@ -8529,8 +8531,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	struct aml_vcodec_ctx *ctx = NULL;
 
 	pr_debug("%s\n", __func__);
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
+	if (!is_support_format(VFORMAT_AVS2)) {
 		pr_info("%s, chip id %d is not support avs2\n",
 			__func__, get_cpu_major_id());
 		return -1;

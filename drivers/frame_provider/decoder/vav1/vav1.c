@@ -2889,13 +2889,13 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 	int lcu_total = calc_luc_quantity(hw->current_lcu_size,
 		hw->frame_width, hw->frame_height);
 #ifdef MV_USE_FIXED_BUF
-	u32 mpred_mv_end = hw->work_space_buf->mpred_mv.buf_start +
+	dos_addr_t mpred_mv_end = hw->work_space_buf->mpred_mv.buf_start +
 		hw->work_space_buf->mpred_mv.buf_size;
 //#ifdef USE_DYNAMIC_MV_BUFFER
 //	  int32_t MV_MEM_UNIT = (lcu_size == 128) ? (19*4*16) : (19*16);
 //	  int32_t mv_buffer_size = (lcu_total*MV_MEM_UNIT);
 //#else
-	  int32_t mv_buffer_size = hw->max_one_mv_buffer_size;
+	int32_t mv_buffer_size = hw->max_one_mv_buffer_size;
 //#endif
 #endif
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)hw->v4l2_ctx;
@@ -3035,7 +3035,7 @@ static int config_pic(struct AV1HW_s *hw,
 				: pic_height_32 / lcu_size;
 	int lcu_total       = pic_width_lcu * pic_height_lcu;
 #ifdef MV_USE_FIXED_BUF
-	u32 mpred_mv_end = hw->work_space_buf->mpred_mv.buf_start +
+	dos_addr_t mpred_mv_end = hw->work_space_buf->mpred_mv.buf_start +
 			hw->work_space_buf->mpred_mv.buf_size;
 //#ifdef USE_DYNAMIC_MV_BUFFER
 //  int32_t MV_MEM_UNIT = (lcu_size == 128) ? (19*4*16) : (19*16);
@@ -3768,21 +3768,21 @@ static int config_pic_size(struct AV1HW_s *hw, unsigned short bit_depth)
 				(0x1 << 31) | (8 << 24) | (((hw->endian >> 12) & 0xff) << 16));
 		} else {
 			/* Enable NV21 reference read mode for MC */
-		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31);
+			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31);
 		}
 	}
 #else
 	WRITE_VREG(HEVCD_MPP_DECOMP_CTL1,0x1 << 31);
 #endif
 #ifdef AOM_AV1_MMU_DW
-    if (hw->dw_mmu_enable) {
+	if (hw->dw_mmu_enable) {
 		WRITE_VREG(HEVC_CM_BODY_LENGTH2, losless_comp_body_size_dw);
 		WRITE_VREG(HEVC_CM_HEADER_OFFSET2, losless_comp_body_size_dw);
 		WRITE_VREG(HEVC_CM_HEADER_LENGTH2, losless_comp_header_size_dw);
 	}
 #endif
-    return 0;
 
+	return 0;
 }
 
 static int config_mc_buffer(struct AV1HW_s *hw, unsigned short bit_depth, unsigned char inter_flag)
@@ -4529,6 +4529,13 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	}
 	data32 &= (~(3 << 8));
 	data32 |= (2 << 8);
+
+	if (dw_mode & 0x10) {
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
+			data32 &= ~(0x3ff << 13);
+			data32 |= ((hw->endian & 0x1f) << 13) | ((hw->endian & 0x1f) << 18);
+		}
+	}
 	/*
 	* [3:0]   little_endian
 	* [5:4]   address_format 00:linear 01:32x32 10:64x32
@@ -5713,8 +5720,7 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 		WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
 		WRITE_VREG(HEVC_DECODE_PIC_NUM_REG, 0x7fffffff); /*to remove*/
 #endif
-		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_S6) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X)) {
+		if (is_need_send_parser_cmd()) {
 			/*Send parser_cmd*/
 			WRITE_VREG(HEVC_PARSER_CMD_WRITE, (1 << 16) | (0 << 0));
 			for (i = 0; i < PARSER_CMD_NUMBER; i++)
@@ -5787,9 +5793,9 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 #ifdef CHANGE_REMOVED
 #else
 // Set MCR fetch priorities
-    data32 = 0x1 | (0x1 << 2) | (0x1 <<3) |
+	data32 = 0x1 | (0x1 << 2) | (0x1 <<3) |
 	(24 << 4) | (32 << 11) | (24 << 18) | (32 << 25);
-    WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
+	WRITE_VREG(HEVCD_MPP_DECOMP_AXIURG_CTL, data32);
 #endif
 	return;
 }
@@ -10222,9 +10228,7 @@ static void vav1_prot_init(struct AV1HW_s *hw, u32 mask)
 //	WRITE_VREG(HEVC_DBG_LOG_ADR, hw->ucode_log_phy_addr);
 //#endif
 #ifdef DYN_CACHE
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
-		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6)) {
+	if (is_use_ipp_dyn_cache()) {
 		WRITE_VREG(HEVCD_IPP_DYN_CACHE, 0x2b);//enable new mcrcc
 	}
 #endif
@@ -12161,7 +12165,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		hw->buffer_spec_index = force_bufspec & 0xf;
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else if (hevc_is_support_4k()) {
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) {
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S6) {
 			if (IS_4K_SIZE(hw->max_pic_w, hw->max_pic_h))
 				hw->buffer_spec_index = 4;
 			else
@@ -12214,7 +12218,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	}
 
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
-		hw->double_write_mode == 0x10)
+		(hw->double_write_mode & 0x10))
 		hw->mmu_enable = 0;
 	else
 		hw->mmu_enable = 1;

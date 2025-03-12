@@ -7895,7 +7895,7 @@ static bool h264_params_correct(struct vdec_h264_hw_s *hw, union param *param)
 
 	u32 mb_width = seq_info2 & 0xff;
 	u32 mb_total = (seq_info2 >> 8) & 0xffff;
-	u32 mb_height;
+	u32 mb_height = 0;
 	u32 frame_w, frame_h;
 
 	int sub_width_c = 0, sub_height_c = 0;
@@ -12222,9 +12222,7 @@ result_done:
 	wait_vmh264_search_done(hw);
 	ATRACE_COUNTER(hw->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_END);
 	/* mark itself has all HW resource released and input released */
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
-		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S7)) {
+	if (is_use_dcac_dma_hw()) {
 		WRITE_VREG(DCAC_DMA_HW_CTL_CFG, 0);
 	}
 

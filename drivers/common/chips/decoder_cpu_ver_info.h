@@ -81,6 +81,7 @@ enum AM_MESON_CPU_MAJOR_ID {
 	AM_MESON_CPU_MAJOR_ID_S7D	= 0x47,
 	AM_MESON_CPU_MAJOR_ID_S6	= 0x48,
 	AM_MESON_CPU_MAJOR_ID_T6D	= 0x49,
+	AM_MESON_CPU_MAJOR_ID_GXLX4	= 0x4a,
 	AM_MESON_CPU_MAJOR_ID_MAX,
 };
 
@@ -305,6 +306,14 @@ inline bool is_vdec_hevc_combine(void);
 inline bool is_need_fix_streambuf_rp(void);
 
 inline bool is_support_avbc_wrapper(void);
+
+inline bool is_use_std_reset_if(void);
+
+inline bool is_need_send_parser_cmd(void);
+
+inline bool is_use_dcac_dma_hw(void);
+
+inline bool is_use_ipp_dyn_cache(void);
 
 void pr_dos_infos(void);
 

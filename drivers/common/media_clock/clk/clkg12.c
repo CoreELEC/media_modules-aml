@@ -504,7 +504,7 @@ static int vdec_set_clk(int dec, int rate)
 	case VDEC_HEVC:
 		clk = gclk.hevc_mux_node->clk;
 		if (is_vdec_hevc_combine())
-			WRITE_VREG(DOS_GCLK_EN0, 0xffffffff);
+			WRITE_VREG_BITS(DOS_GCLK_EN0, 0x3ff, 0, 10);
 		WRITE_VREG(DOS_GCLK_EN3, 0xffffffff);
 		break;
 
@@ -1075,6 +1075,7 @@ static int vdec_clock_get(enum vdec_type_e core)
 	AM_MESON_CPU_MAJOR_ID_S7D,\
 	AM_MESON_CPU_MAJOR_ID_S6,\
 	AM_MESON_CPU_MAJOR_ID_T6D,\
+	AM_MESON_CPU_MAJOR_ID_GXLX4,\
 	0}
 #include "clk.h"
 

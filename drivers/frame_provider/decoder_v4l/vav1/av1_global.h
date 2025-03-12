@@ -1294,8 +1294,8 @@ typedef struct PIC_BUFFER_CONFIG_s {
   dos_addr_t header_dw_adr;
 #endif
   dos_addr_t mpred_mv_wr_start_addr;
-  uint32_t mc_y_adr;
-  uint32_t mc_u_v_adr;
+  dos_addr_t mc_y_adr;
+  dos_addr_t mc_u_v_adr;
   uint32_t mc_canvas_y;
   uint32_t mc_canvas_u_v;
 

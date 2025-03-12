@@ -1489,8 +1489,8 @@ typedef struct avs3_frame_s{
 	u32 lcu_size_log2;
 	dos_addr_t header_adr;
 	dos_addr_t header_dw_adr;
-	u32 mc_y_adr;
-	u32 mc_u_v_adr;
+	dos_addr_t mc_y_adr;
+	dos_addr_t mc_u_v_adr;
 	u32 mc_canvas_y;
 	u32 mc_canvas_u_v;
 	dos_addr_t mpred_mv_wr_start_addr;

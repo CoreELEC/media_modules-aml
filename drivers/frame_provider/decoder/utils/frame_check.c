@@ -121,11 +121,13 @@ static const char * const format_name[] = {
 	"VP9",
 	"AVS2",
 	"AV1",
+	"AVS3",
+	"H266",
 };
 
 static const char *get_format_name(int format)
 {
-	if (format < 17 && format >= 0)
+	if (format < VFORMAT_MAX && format >= 0)
 		return format_name[format];
 	else
 		return "Unknown";

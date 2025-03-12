@@ -210,4 +210,3 @@ bool check_efuse_chip(int vformat)
 	return false;
 }
 EXPORT_SYMBOL(check_efuse_chip);
-

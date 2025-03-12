@@ -741,8 +741,8 @@ struct avs2_frame_s {
 	int32_t mmu_alloc_flag;
 	int32_t lcu_size_log2;
 	/*uint32_t header_adr;*/
-	uint32_t mc_y_adr;
-	uint32_t mc_u_v_adr;
+	dos_addr_t mc_y_adr;
+	dos_addr_t mc_u_v_adr;
 	uint32_t mc_canvas_y;
 	uint32_t mc_canvas_u_v;
 	dos_addr_t mpred_mv_wr_start_addr;

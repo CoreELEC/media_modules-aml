@@ -484,7 +484,7 @@ static struct task_ops_s task_dec_ops = {
 static int vmpeg12_v4l_alloc_buff_config_canvas(struct vdec_mpeg12_hw_s *hw, int i)
 {
 	u32 canvas;
-	ulong decbuf_start = 0, decbuf_uv_start = 0;
+	dos_addr_t decbuf_start = 0, decbuf_uv_start = 0;
 	int decbuf_y_size = 0, decbuf_uv_size = 0;
 	u32 canvas_width = 0, canvas_height = 0;
 	struct vdec_s *vdec = hw_to_vdec(hw);

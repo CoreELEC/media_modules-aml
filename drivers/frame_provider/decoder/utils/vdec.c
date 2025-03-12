@@ -101,6 +101,7 @@ int ionvideo_assign_map(char **receiver_name, int *inst)
 //#include <dt-bindings/power/sc2-pd.h>
 //#include <linux/amlogic/pwr_ctrl.h>
 #include <linux/of_device.h>
+#include <linux/reset.h>
 #include "vdec_power_ctrl.h"
 #include <linux/amlogic/media/frame_sync/timestamp.h>
 #include "firmware.h"
@@ -254,6 +255,7 @@ struct vdec_core_s {
 	struct semaphore sem;
 	struct task_struct *thread;
 	struct workqueue_struct *vdec_core_wq;
+	struct reset_control *hevc_reset;
 
 	unsigned long sched_mask;
 	struct vdec_isr_context_s isr_context[VDEC_IRQ_MAX];
@@ -475,7 +477,6 @@ static const int cores_int[VDEC_MAX] = {
 	VDEC_IRQ_HEVC_BACK
 };
 
-static struct vdec_core_s *vdec_core;
 static struct vdec_data_core_s vdec_data_core;
 
 static void vdec_data_core_init(void)
@@ -1108,7 +1109,8 @@ void arb_ctrl_wait_idle(int enable)
 
 		while ((read_sysctrl_reg(T6D_SYSCTRL_AXI_PIPE_CTRL0) & (1 << 7)) == 0);
 
-		while ((read_dmc_reg(T6D_DMC_CHAN_STS) & (1 << 4)) == 0);
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T6D)
+			while ((read_dmc_reg(T6D_DMC_CHAN_STS) & (1 << 4)) == 0);
 
 		while (read_dmc_reg(T6D_DMC_AXI4_CHAN_STS) & 0xffff0000);
 	}
@@ -4399,6 +4401,33 @@ void vdec_free_cmabuf(void)
 	mutex_unlock(&vdec_mutex);
 }
 
+
+void dos_gclk_en_set(enum vdec_type_e core, bool enable, bool mmu_enable)
+{
+	if (enable) {
+		switch (core) {
+			case VDEC_1:
+				WRITE_VREG_BITS(DOS_GCLK_EN0, 0x3ff, 0, 10);
+				if (mmu_enable)
+					WRITE_VREG(DOS_GCLK_EN3, 0x1ffa7);
+				else
+					WRITE_VREG(DOS_GCLK_EN3, 0x1f7a7);
+				break;
+			case VDEC_HEVC:
+				CLEAR_VREG_MASK(DOS_GCLK_EN0, 0x3ff);
+				WRITE_VREG(DOS_GCLK_EN3, 0xffffffff);
+				break;
+			default:
+				break;
+		}
+	} else {
+		CLEAR_VREG_MASK(DOS_GCLK_EN0, 0x3ff);
+		/* turn off vcpu clock */
+		CLEAR_VREG_MASK(DOS_GCLK_EN3, (1 << 5));
+	}
+}
+EXPORT_SYMBOL(dos_gclk_en_set);
+
 void vdec_core_request(struct vdec_s *vdec, unsigned long mask)
 {
 	unsigned long flags = 0;
@@ -5756,9 +5785,9 @@ void hevc_reset_core(struct vdec_s *vdec)
 	case AM_MESON_CPU_MAJOR_ID_T5M:
 	case AM_MESON_CPU_MAJOR_ID_T6D:
 		WRITE_RESET_REG((P_RESETCTRL_RESET6_LEVEL),
-				READ_RESET_REG(P_RESETCTRL_RESET6_LEVEL) & (~((1<<1))));
+				READ_RESET_REG(P_RESETCTRL_RESET6_LEVEL) & (~(1<<1)));
 		WRITE_RESET_REG((P_RESETCTRL_RESET6_LEVEL),
-				READ_RESET_REG((P_RESETCTRL_RESET6_LEVEL)) | ((1<<1)));
+				READ_RESET_REG((P_RESETCTRL_RESET6_LEVEL)) | (1<<1));
 		break;
 	case AM_MESON_CPU_MAJOR_ID_S7:
 	case AM_MESON_CPU_MAJOR_ID_S7D:
@@ -5767,6 +5796,10 @@ void hevc_reset_core(struct vdec_s *vdec)
 				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) & (~(1<<12)));
 		WRITE_RESET_REG(P_RESETCTRL_RESET5_LEVEL,
 				READ_RESET_REG(P_RESETCTRL_RESET5_LEVEL) | (1<<12));
+		break;
+	case AM_MESON_CPU_MAJOR_ID_GXLX4:
+		reset_control_assert(vdec_core->hevc_reset);
+		reset_control_deassert(vdec_core->hevc_reset);
 		break;
 	default:
 		break;
@@ -6916,7 +6949,8 @@ static ssize_t dump_path_monitor_show(KV_CLASS_CONST struct class *class,
 	char *pbuf = buf;
 	int i = 0;
 	int j = 0;
-	uint32_t mnt_data = 0;
+	uint32_t mnt_data[0x35] = {0};
+	uint32_t mnt_idx[3] = {0xd, 0x55, 0x56};
 	const char* mnt_name[0x35] = {
 		"clk_count", //0x00
 		"parser_iqit_tx_count", //0x01
@@ -6971,8 +7005,8 @@ static ssize_t dump_path_monitor_show(KV_CLASS_CONST struct class *class,
 		"lpf_mcr_cmd_wt_count", //0x32
 		"mcr_lpf_tx_count", //0x33
 		"mcr_lpf_wt_count", //0x34
-		};
-	const char* signal_level_type[32] = {
+	};
+	const char* signal_level_type[96] = {
 		"parser_iqit_valid", //bit 0
 		"iqit_ipp_valid", //bit 1
 		"dblk_ipp_valid", //bit 2
@@ -7005,24 +7039,110 @@ static ssize_t dump_path_monitor_show(KV_CLASS_CONST struct class *class,
 		"reserve_bit_29", //bit 29
 		"reserve_bit_30", //bit 30
 		"reserve_bit_31", //bit 31
-		};
+
+		"dcm_frm_mcr_rbdat_cbcr_valid", //bit 0
+		"dcm_frm_mcr_rbdat_y_valid", //bit 1
+		"dcm_frm_ref_pack_cmd_valid", //bit 2
+		"dcm_frm_mcr_valid", //bit 3
+		"mcr_fld_rbdat_valid", //bit 4
+		"fld_mcr_valid", //bit 5
+		"mdec_mcr_valid", //bit 6
+		"ipp_iqit_tuinfo_valid", //bit 7
+		"mpptop_imp_valid", //bit 8
+		"mpptop_dblk_mpp_cmd_valid", //bit 9
+		"avl_parser_gmWmMat_valid", //bit 10
+		"avl_delta_lf_fifo_valid", //bit 11
+		"avl_restoration_fifo_valid", //bit 12
+		"avl_cdef_fifo_valid", //bit 13
+		"alf_vld_parser", //bit 14
+		"sao_vld_parser", //bit 15
+		"dcm_frm_mcr_rbdat_cbcr_rdy", //bit 16
+		"dcm_frm_mcr_rbdat_y_rdy", //bit 17
+		"dcm_frm_ref_pack_cmd_rdy", //bit 18
+		"dcm_frm_mcr_rdy", //bit 19
+		"mcr_fld_rbdat_rdy", //bit 20
+		"fld_mcr_rdy", //bit 21
+		"mdec_mcr_rdy", //bit 22
+		"ipp_iqit_tuinfo_rdy", //bit 23
+		"mpptop_imp_rdy", //bit 24
+		"mpptop_dblk_mpp_cmd_rdy", //bit 25
+		"avl_parser_gmWmMat_ready", //bit 26
+		"avl_delta_lf_fifo_ready", //bit 27
+		"avl_restoration_fifo_ready", //bit 28
+		"avl_cdef_fifo_ready", //bit 29
+		"alf_rdy_parser", //bit 30
+		"sao_rdy_parser", //bit 31
+
+		"recon_r_valid", //bit 0
+		"recon_a_valid", //bit 1
+		"mcr_req", //bit 2
+		"mpp_ipp_inter2_valid", //bit 3
+		"mpp_ipp_inter_valid", //bit 4
+		"mpred_parser_req", //bit 5
+		"mpred_parser_req", //bit 6
+		"mpred_submv_valid", //bit 7
+		"reserve_bit_8", //bit 8
+		"reserve_bit_9", //bit 9
+		"reserve_bit_10", //bit 10
+		"reserve_bit_11", //bit 11
+		"reserve_bit_12", //bit 12
+		"reserve_bit_13", //bit 13
+		"reserve_bit_14", //bit 14
+		"reserve_bit_15", //bit 15
+		"recon_r_ready", //bit 16
+		"recon_a_ready", //bit 17
+		"mcr_ack", //bit 18
+		"mpp_ipp_inter2_ready", //bit 19
+		"mpp_ipp_inter_ready", //bit 20
+		"mpred_parser_ack", //bit 21
+		"mpred_parser_ack", //bit 22
+		"mpred_submv_ready", //bit 23
+		"reserve_bit_24", //bit 24
+		"reserve_bit_25", //bit 25
+		"reserve_bit_26", //bit 26
+		"reserve_bit_27", //bit 27
+		"reserve_bit_28", //bit 28
+		"reserve_bit_29", //bit 29
+		"reserve_bit_30", //bit 30
+		"reserve_bit_31", //bit 31
+	};
 
 	if (is_support_monitor()) {
-		WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disable monitor and set rd_idx to 0
+		if (is_vdec_hevc_combine()) {
+			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disable monitor and set rd_idx to 0
+			for (i = 0; i <= 2; i++) {
+				WRITE_VREG(HEVC_PATH_MONITOR_CTRL, mnt_idx[i] << 4);
+				mnt_data[i] = READ_VREG(HEVC_PATH_MONITOR_DATA);
+			}
+			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 1); // Enable monitor and set rd_idx to 0
 
-		for (i = 0; i <= 0x34; i ++) {
-			mnt_data = READ_VREG(HEVC_PATH_MONITOR_DATA);
-			pbuf += sprintf(pbuf, "%-24s: mnt_idx:0x%02x : 0x%x\n", mnt_name[i], i, mnt_data);
-			if (i == 0xd) {
-				pbuf += sprintf(pbuf, "---------------signal_level---------------\n");
+			for (i = 0; i <= 2; i++) {
+				printk("%-27s: mnt_idx:0x%02x : 0x%x\n", mnt_name[0xd], mnt_idx[i], mnt_data[i]);
+				printk("---------------signal_level---------------\n");
 				for (j = 0; j < 32; j++) {
-					pbuf += sprintf(pbuf, "%-24s: level_bit_%02d : %d\n",
-						signal_level_type[j], j, (mnt_data & (1 << j)) ? 1 : 0);
+					printk("%-27s: level_bit_%02d : %d\n",
+						signal_level_type[i*32 + j], j, (mnt_data[i] & (1 << j)) ? 1 : 0);
 				}
-				pbuf += sprintf(pbuf, "------------------------------------------\n");
+				printk("------------------------------------------\n");
+			}
+		} else {
+			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disable monitor and set rd_idx to 0
+			for (i = 0; i <= 0x34; i++)
+				mnt_data[i] = READ_VREG(HEVC_PATH_MONITOR_DATA);
+			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 1); // Enable monitor and set rd_idx to 0
+
+			for (i = 0; i <= 0x34; i++) {
+				pbuf += sprintf(pbuf, "%-24s: mnt_idx:0x%02x : 0x%x\n", mnt_name[i], i, mnt_data[i]);
+				if (i == 0xd) {
+					pbuf += sprintf(pbuf, "---------------signal_level---------------\n");
+					for (j = 0; j < 32; j++) {
+						pbuf += sprintf(pbuf, "%-24s: level_bit_%02d : %d\n",
+							signal_level_type[j], j, (mnt_data[i] & (1 << j)) ? 1 : 0);
+					}
+					pbuf += sprintf(pbuf, "------------------------------------------\n");
+				}
 			}
 		}
-		WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0x1); // Enable monitor and set rd_idx to 0
 	} else {
 		pbuf += sprintf(pbuf, "Dump monitor is not supported\n");
 	}
@@ -7690,6 +7810,14 @@ static int vdec_probe(struct platform_device *pdev)
 		}
 		if (debug & VDEC_DBG_DETAIL_INFO)
 			pr_debug("vdec power init success!\n");
+	}
+
+	if (is_use_std_reset_if()) {
+		vdec_core->hevc_reset = devm_reset_control_get(&pdev->dev, "hevcf_dmc_pipel");
+		if (IS_ERR_OR_NULL(vdec_core->hevc_reset)) {
+			pr_err("get reset control hevcf_dmc_pipel failed\n");
+			return -ENXIO;
+		}
 	}
 
 	return 0;
