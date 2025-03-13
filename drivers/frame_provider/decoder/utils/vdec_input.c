@@ -1128,17 +1128,6 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 		return;
 	}
 
-	if (chunk->hdr10p_data_buf != NULL) {
-		vfree(chunk->hdr10p_data_buf);
-		chunk->hdr10p_data_buf = NULL;
-		chunk->hdr10p_data_size = 0;
-	}
-
-	if (chunk->head_meta_buf != NULL) {
-		vfree(chunk->head_meta_buf);
-		chunk->head_meta_buf = NULL;
-	}
-
 	list_del(&chunk->list);
 	input->have_frame_num--;
 	ATRACE_COUNTER(input->vdec_input_name, input->have_frame_num);
@@ -1175,6 +1164,17 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 	}
 
 	vdec_input_unlock(input, flags);
+
+	if (chunk->hdr10p_data_buf != NULL) {
+		vfree(chunk->hdr10p_data_buf);
+		chunk->hdr10p_data_buf = NULL;
+		chunk->hdr10p_data_size = 0;
+	}
+
+	if (chunk->head_meta_buf != NULL) {
+		vfree(chunk->head_meta_buf);
+		chunk->head_meta_buf = NULL;
+	}
 
 	if (free_cb == 1) {
 		block->free(block->priv, block->handle);
