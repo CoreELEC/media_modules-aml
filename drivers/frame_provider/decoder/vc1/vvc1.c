@@ -96,10 +96,13 @@
   bit1:1 support DECODE_STATUS_PARAM_CHECK*/
 #define NEW_DRV_VER         3
 
-#define VF_POOL_SIZE		16
+static unsigned int canvas_index;
+
+#define VF_POOL_SIZE		32
 #define DECODE_BUFFER_NUM_MAX	4
+#define COPY_DECODE_BUFFER_NUM_MAX 32
 #define WORKSPACE_SIZE		(2 * SZ_1M)
-#define MAX_BMMU_BUFFER_NUM	(DECODE_BUFFER_NUM_MAX + 1)
+#define MAX_BMMU_BUFFER_NUM	(DECODE_BUFFER_NUM_MAX + COPY_DECODE_BUFFER_NUM_MAX + 1)
 #define VF_BUFFER_IDX(n)	(1 + n)
 #define DCAC_BUFF_START_ADDR	0x01f00000
 #define RP_WORKAROUND_SIZE  SZ_4K
@@ -142,8 +145,6 @@ static DECLARE_KFIFO(display_q, struct vframe_s *, VF_POOL_SIZE);
 static DECLARE_KFIFO(recycle_q, struct vframe_s *, VF_POOL_SIZE);
 
 static struct vframe_s vfpool[VF_POOL_SIZE];
-static struct vframe_s vfpool2[VF_POOL_SIZE];
-static int cur_pool_idx;
 static struct timer_list recycle_timer;
 static u32 stat;
 static u32 buf_size = 32 * 1024 * 1024;
@@ -156,7 +157,6 @@ static u32 vvc1_format;
 
 static int ar = 0;
 
-static u32 intra_output;
 static u32 frame_width, frame_height, frame_dur;
 static u32 saved_resolution;
 static u32 pts_by_offset = 1;
@@ -167,7 +167,7 @@ static bool is_reset;
 static bool is_irq_cancel;
 static struct work_struct set_clk_work;
 static struct work_struct error_wd_work;
-static struct canvas_config_s vc1_canvas_config[DECODE_BUFFER_NUM_MAX][3];
+static struct canvas_config_s vc1_canvas_config[DECODE_BUFFER_NUM_MAX + COPY_DECODE_BUFFER_NUM_MAX][3];
 spinlock_t vc1_rp_lock;
 
 #ifdef DEBUG_PTS
@@ -233,7 +233,7 @@ struct pic_info_t {
 
 struct vdec_vc1_hw_s {
 	struct platform_device *platform_dev;
-	s32 vfbuf_use[DECODE_BUFFER_NUM_MAX];
+	s32 vfbuf_use[DECODE_BUFFER_NUM_MAX + COPY_DECODE_BUFFER_NUM_MAX];
 	unsigned char again_flag;
 	unsigned char recover_flag;
 	u32 frame_width;
@@ -295,16 +295,6 @@ int vc1_print(int index, int debug_flag, const char *fmt, ...)
 	return 0;
 }
 
-static inline int pool_index(struct vframe_s *vf)
-{
-	if ((vf >= &vfpool[0]) && (vf <= &vfpool[VF_POOL_SIZE - 1]))
-		return 0;
-	else if ((vf >= &vfpool2[0]) && (vf <= &vfpool2[VF_POOL_SIZE - 1]))
-		return 1;
-	else
-		return -1;
-}
-
 static inline bool close_to(int a, int b, int m)
 {
 	return abs(a - b) < m;
@@ -312,16 +302,9 @@ static inline bool close_to(int a, int b, int m)
 
 static inline u32 index2canvas(u32 index)
 {
-	const u32 canvas_tab[DECODE_BUFFER_NUM_MAX] = {
-#if 1	/* ALWAYS.MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
-	0x010100, 0x030302, 0x050504, 0x070706/*,
-	0x090908, 0x0b0b0a, 0x0d0d0c, 0x0f0f0e*/
-#else
-		0x020100, 0x050403, 0x080706, 0x0b0a09
-#endif
-	};
-
-	return canvas_tab[index];
+	return ((index * 2 + 1 + canvas_index) << 16) |
+	       ((index * 2 + 1 + canvas_index) << 8) |
+	        (index * 2 + canvas_index);
 }
 
 static void set_aspect_ratio(struct vframe_s *vf, unsigned int pixel_ratio)
@@ -632,9 +615,11 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			decoder_bmmu_box_get_mem_handle(
 				mm_blk_handle,
 				buffer_index);
-		vf->canvas0Addr = vf->canvas1Addr = -1;
-		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
-		vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+		if (is_support_vdec_canvas()) {
+			vf->canvas0Addr = vf->canvas1Addr = -1;
+			vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+			vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+		}
 #ifdef NV21
 		vf->plane_num = 2;
 #else
@@ -716,9 +701,11 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 				mm_blk_handle,
 				buffer_index);
 
-		vf->canvas0Addr = vf->canvas1Addr = -1;
-		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
-		vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+		if (is_support_vdec_canvas()) {
+			vf->canvas0Addr = vf->canvas1Addr = -1;
+			vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+			vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+		}
 #ifdef NV21
 		vf->plane_num = 2;
 #else
@@ -830,9 +817,11 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			decoder_bmmu_box_get_mem_handle(
 				mm_blk_handle,
 				buffer_index);
-		vf->canvas0Addr = vf->canvas1Addr = -1;
-		vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
-		vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+		if (is_support_vdec_canvas()) {
+			vf->canvas0Addr = vf->canvas1Addr = -1;
+			vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+			vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+		}
 #ifdef NV21
 		vf->plane_num = 2;
 #else
@@ -1115,6 +1104,8 @@ static irqreturn_t vvc1_isr_thread_handler(int irq, void *dev_id)
 			}
 
 			frame_dur = vvc1_amstream_dec_info.rate;
+			frame_width = vvc1_amstream_dec_info.width;
+			frame_height = vvc1_amstream_dec_info.height;
 			total_frame++;
 
 			/*count info*/
@@ -1174,16 +1165,61 @@ static struct vframe_s *vvc1_vf_get(void *op_arg)
 {
 	struct vframe_s *vf;
 
-	if (kfifo_get(&display_q, &vf))
+	if (kfifo_get(&display_q, &vf)) {
+		struct vdec_vc1_hw_s *hw = &vc1_hw;
+		if (!hw->interlace_flag) {
+			u32 buffer_index, i;
+
+			for (i = 0; i < COPY_DECODE_BUFFER_NUM_MAX; i++) {
+				buffer_index = i + DECODE_BUFFER_NUM_MAX;
+				if (!hw->vfbuf_use[buffer_index]) {
+					break;
+				}
+			}
+
+			if (i == COPY_DECODE_BUFFER_NUM_MAX) {
+				pr_err("vc1: shouldn't happen, but couldn't find a free vbuf!\n");
+				kfifo_put(&recycle_q, vf);
+				return NULL;
+			}
+
+			vc1_print(0, VC1_DEBUG_DETAIL,"%s: copy frame from index %d to %d\n",
+				__func__, vf->index, buffer_index);
+
+			hw->vfbuf_use[buffer_index]++;
+
+			if (--hw->vfbuf_use[vf->index] == 0) {
+				WRITE_VREG(VC1_BUFFERIN, ~(1 << vf->index));
+				hw->buf_use[vf->index]--;
+			}
+
+			memcpy(decoder_bmmu_box_get_virt_addr(mm_blk_handle, buffer_index),
+			       decoder_bmmu_box_get_virt_addr(mm_blk_handle, vf->index),
+			       decoder_bmmu_box_get_mem_size(mm_blk_handle, vf->index));
+			vf->canvas0Addr = vf->canvas1Addr = index2canvas(buffer_index);
+			if (is_support_vdec_canvas()) {
+				vf->canvas0Addr = vf->canvas1Addr = -1;
+				vf->canvas0_config[0] = vc1_canvas_config[buffer_index][0];
+				vf->canvas0_config[1] = vc1_canvas_config[buffer_index][1];
+			}
+			vf->mem_handle = decoder_bmmu_box_get_mem_handle(mm_blk_handle, buffer_index);
+			vf->index = buffer_index;
+		}
+
 		return vf;
+	}
 
 	return NULL;
 }
 
 static void vvc1_vf_put(struct vframe_s *vf, void *op_arg)
 {
-	if (pool_index(vf) == cur_pool_idx)
-		kfifo_put(&recycle_q, (const struct vframe_s *)vf);
+	if (vf->index >= DECODE_BUFFER_NUM_MAX)
+	{
+		struct vdec_vc1_hw_s *hw = &vc1_hw;
+		hw->vfbuf_use[vf->index]--;
+	}
+	kfifo_put(&recycle_q, (const struct vframe_s *)vf);
 }
 
 static int vvc1_vf_states(struct vframe_states *states, void *op_arg)
@@ -1243,7 +1279,7 @@ int vvc1_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 		vstatus->frame_rate = 96000 / vvc1_amstream_dec_info.rate;
 	else
 		vstatus->frame_rate = -1;
-	vstatus->error_count = READ_VREG(AV_SCRATCH_C);
+	vstatus->error_count = READ_VREG(VC1_ERROR_COUNT);
 	vstatus->status = stat;
 	vstatus->bit_rate = gvs->bit_rate;
 	vstatus->frame_dur = vvc1_amstream_dec_info.rate;
@@ -1374,7 +1410,7 @@ static int vvc1_canvas_init(void)
 		}
 
 #ifdef NV21
-		config_cav_lut_ex(2 * i + 0,
+		config_cav_lut_ex(2 * i + 0 + canvas_index,
 			buf_start,
 			canvas_width, canvas_height,
 			CANVAS_ADDR_NOWRAP, hw->canvas_mode, endian, VDEC_1);
@@ -1384,7 +1420,7 @@ static int vvc1_canvas_init(void)
 		vc1_canvas_config[i][0].block_mode = hw->canvas_mode;
 		vc1_canvas_config[i][0].phy_addr = buf_start;
 
-		config_cav_lut_ex(2 * i + 1,
+		config_cav_lut_ex(2 * i + 1 + canvas_index,
 			buf_start +
 			decbuf_y_size, canvas_width,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
@@ -1406,7 +1442,7 @@ static int vvc1_canvas_init(void)
 			WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, ((2 * i + 1) << 8) | (2 * i));
 		}
 #else
-		config_cav_lut_ex(3 * i + 0,
+		config_cav_lut_ex(3 * i + 0 + canvas_index,
 			buf_start,
 			canvas_width, canvas_height,
 			CANVAS_ADDR_NOWRAP, hw->canvas_mode, endian, VDEC_1);
@@ -1415,7 +1451,7 @@ static int vvc1_canvas_init(void)
 		vc1_canvas_config[i][0].height = canvas_height;
 		vc1_canvas_config[i][0].block_mode = hw->canvas_mode;
 		vc1_canvas_config[i][0].phy_addr = buf_start;
-		config_cav_lut_ex(3 * i + 1,
+		config_cav_lut_ex(3 * i + 1 + canvas_index,
 			buf_start +
 			decbuf_y_size, canvas_width / 2,
 			canvas_height / 2, CANVAS_ADDR_NOWRAP,
@@ -1425,7 +1461,7 @@ static int vvc1_canvas_init(void)
 		vc1_canvas_config[i][1].height = canvas_height >> 1;
 		vc1_canvas_config[i][1].block_mode = hw->canvas_mode;
 		vc1_canvas_config[i][1].phy_addr = buf_start + decbuf_y_size;
-		config_cav_lut_ex(3 * i + 2,
+		config_cav_lut_ex(3 * i + 2 + canvas_index,
 			buf_start +
 			decbuf_y_size + decbuf_uv_size,
 			canvas_width / 2, canvas_height / 2,
@@ -1489,14 +1525,19 @@ static int vvc1_prot_init(void)
 	WRITE_VREG_BITS(VLD_MEM_VIFIFO_CONTROL, 2, MEM_FIFO_CNT_BIT, 2);
 	WRITE_VREG_BITS(VLD_MEM_VIFIFO_CONTROL, 8, MEM_LEVEL_CNT_BIT, 6);
 
+	if (is_support_vdec_canvas())
+		canvas_index = 0;
+	else
+		canvas_index = AMVDEC_CANVAS_START_INDEX;
+
 	r = vvc1_canvas_init();
 
 	/* index v << 16 | u << 8 | y */
 #ifdef NV21
-	WRITE_VREG(AV_SCRATCH_0, 0x010100);
-	WRITE_VREG(AV_SCRATCH_1, 0x030302);
-	WRITE_VREG(AV_SCRATCH_2, 0x050504);
-	WRITE_VREG(AV_SCRATCH_3, 0x070706);
+	WRITE_VREG(AV_SCRATCH_0, index2canvas(0));
+	WRITE_VREG(AV_SCRATCH_1, index2canvas(1));
+	WRITE_VREG(AV_SCRATCH_2, index2canvas(2));
+	WRITE_VREG(AV_SCRATCH_3, index2canvas(3));
 /*	WRITE_VREG(AV_SCRATCH_G, 0x090908);
 	WRITE_VREG(AV_SCRATCH_H, 0x0b0b0a);
 	WRITE_VREG(AV_SCRATCH_I, 0x0d0d0c);
@@ -1583,29 +1624,25 @@ static void vvc1_local_init(bool is_reset)
 		hw->refs[1] = -1;
 		hw->throw_pb_flag = 1;
 		hw->vf_buf_num_used = DECODE_BUFFER_NUM_MAX;
-		if (hw->vf_buf_num_used > DECODE_BUFFER_NUM_MAX)
-			hw->vf_buf_num_used = DECODE_BUFFER_NUM_MAX;
 
-		for (i = 0; i < hw->vf_buf_num_used; i++) {
+		for (i = 0; i < hw->vf_buf_num_used + COPY_DECODE_BUFFER_NUM_MAX; i++) {
 			hw->vfbuf_use[i] = 0;
-			hw->buf_use[i] = 0;
-			hw->ref_use[i] = 0;
+			if (i < DECODE_BUFFER_NUM_MAX)
+			{
+				hw->buf_use[i] = 0;
+				hw->ref_use[i] = 0;
+			}
 		}
 
 		INIT_KFIFO(display_q);
 		INIT_KFIFO(recycle_q);
 		INIT_KFIFO(newframe_q);
-		cur_pool_idx ^= 1;
 		for (i = 0; i < VF_POOL_SIZE; i++) {
 			const struct vframe_s *vf;
 
-			if (cur_pool_idx == 0) {
-				vf = &vfpool[i];
-				vfpool[i].index = DECODE_BUFFER_NUM_MAX;
-			} else {
-				vf = &vfpool2[i];
-				vfpool2[i].index = DECODE_BUFFER_NUM_MAX;
-			}
+			vf = &vfpool[i];
+			vfpool[i].index = DECODE_BUFFER_NUM_MAX;
+
 			kfifo_put(&newframe_q, (const struct vframe_s *)vf);
 		}
 	}
@@ -1685,13 +1722,9 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 			if ((vf->index < hw->vf_buf_num_used) &&
 			 (--hw->vfbuf_use[vf->index] == 0)) {
 				hw->buf_use[vf->index]--;
-				vc1_print(0, VC1_DEBUG_DETAIL,	"%s WRITE_VREG(VC1_BUFFERIN, 0x%x) for vf index of %d,  buf_use %d\n",
-					__func__, ~(1 << vf->index), vf->index, hw->buf_use[vf->index]);
-				WRITE_VREG(VC1_BUFFERIN, ~(1 << vf->index));
 				vf->index = hw->vf_buf_num_used;
 			}
-			if (pool_index(vf) == cur_pool_idx)
-				kfifo_put(&newframe_q, (const struct vframe_s *)vf);
+			kfifo_put(&newframe_q, (const struct vframe_s *)vf);
 		}
 
 	}
@@ -1718,7 +1751,6 @@ static s32 vvc1_init(struct vdec_s *vdec)
 
 	stat |= STAT_TIMER_INIT;
 
-	intra_output = 0;
 	amvdec_enable();
 
 	if (is_vdec_hevc_combine())
