@@ -35,6 +35,9 @@ int decoder_bmmu_box_free_idx(void *handle, int idx);
 int decoder_bmmu_box_free(void *handle);
 void *decoder_bmmu_box_get_mem_handle(
 	void *box_handle, int idx);
+	
+int decoder_bmmu_box_get_mem_size(
+	void *box_handle, int idx);
 
 unsigned long decoder_bmmu_box_get_phy_addr(
 	void *box_handle, int idx);
