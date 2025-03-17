@@ -422,7 +422,7 @@ int decoder_bmmu_box_get_mem_size(void *box_handle, int idx)
 		size = mm->buffer_size;
 	return size;
 }
-
+EXPORT_SYMBOL(decoder_bmmu_box_get_mem_size);
 
 unsigned long decoder_bmmu_box_get_phy_addr(void *box_handle, int idx)
 {
@@ -450,6 +450,7 @@ void *decoder_bmmu_box_get_virt_addr(void *box_handle, int idx)
 		return 0;
 	return codec_mm_phys_to_virt(mm->phy_addr);
 }
+EXPORT_SYMBOL(decoder_bmmu_box_get_virt_addr);
 
 /*flags: &0x1 for wait,*/
 int decoder_bmmu_box_check_and_wait_size(int size, int flags, int mem_flags)
