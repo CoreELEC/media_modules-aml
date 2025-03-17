@@ -11815,11 +11815,8 @@ static void run_front(struct vdec_s *vdec)
 
 	if ((vdec_frame_based(vdec)) &&
 		(hw->dec_result == DEC_RESULT_UNFINISH)) {
-		u32 res_byte = 0;
+		u32 res_byte = hw->data_size - hw->consume_byte;
 
-		if (hw->data_invalid)
-			hw->consume_byte -= get_hevc_stream_extra_shift_bytes();
-		res_byte = hw->data_size - hw->consume_byte;
 		av1_print(hw, AV1_DEBUG_BUFMGR,
 			"%s before, consume 0x%x, size 0x%x, offset 0x%x, res 0x%x\n", __func__,
 			hw->consume_byte, hw->data_size, hw->data_offset + hw->consume_byte, res_byte);
@@ -11828,7 +11825,6 @@ static void run_front(struct vdec_s *vdec)
 		hw->data_offset -= (hw->data_invalid - hw->consume_byte);
 		hw->data_size += (hw->data_invalid - hw->consume_byte);
 		size = hw->data_size;
-		hw->data_invalid += get_hevc_stream_extra_shift_bytes();
 		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, hw->data_invalid);
 
 		av1_print(hw, AV1_DEBUG_BUFMGR,
@@ -11851,7 +11847,6 @@ static void run_front(struct vdec_s *vdec)
 			(hw->chunk != NULL)) {
 			hw->data_offset = hw->chunk->offset;
 			hw->data_size = size;
-			hw->data_invalid = 0;
 		}
 		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, 0);
 	}
