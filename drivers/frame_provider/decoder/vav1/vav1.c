@@ -10282,6 +10282,9 @@ static int vav1_local_init(struct AV1HW_s *hw)
 	pr_info("av1: ver (%d,%d) decinfo: %dx%d rate=%d\n", av1_version,
 		   0, width, height, hw->frame_dur);
 
+	if (!decoder_firmware_version_eg(0, UCODE_SWAP_VERSION, UCODE_SWAP_SUBMIT_COUNT))
+		efficiency_mode = 0;
+
 	if (hw->frame_dur == 0)
 		hw->frame_dur = 96000 / 24;
 
