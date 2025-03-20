@@ -1560,8 +1560,10 @@ static int vvc1_prot_init(void)
 
 	WRITE_VREG(VC1_SOS_COUNT, 0);
 	WRITE_VREG(VC1_BUFFERIN, 0);
-	WRITE_VREG(VC1_BUFFEROUT, NEW_DRV_VER);//identify new driver version
-	vc1_print(0, VC1_DEBUG_DETAIL,"%s VC1_BUFFEROUT %d\n", __func__, NEW_DRV_VER);
+	WRITE_VREG(VC1_BUFFEROUT, NEW_DRV_VER &
+		(vvc1_format == VIDEO_DEC_FORMAT_WMV3 ? ~(1 << 1) : ~(0 << 1)));//identify new driver version
+	vc1_print(0, VC1_DEBUG_DETAIL,"%s VC1_BUFFEROUT %d\n", __func__, NEW_DRV_VER &
+		(vvc1_format == VIDEO_DEC_FORMAT_WMV3 ? ~(1 << 1) : ~(0 << 1)));
 
 	/* clear mailbox interrupt */
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
