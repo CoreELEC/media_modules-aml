@@ -659,7 +659,6 @@ static int parser_head_metadata_with_dma(struct aml_vdec_adapt *ada_ctx,
 			if (!metadata) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 					"alloc size %d failed.\n", VDEC_META_DATA_SIZE);
-				codec_mm_unmap_phyaddr(stbuf_vaddr);
 				return -1;
 			}
 			ret = dmabuf_manage_vp9_probe_metadata(addr, count, metadata, &meta_size);
@@ -669,6 +668,7 @@ static int parser_head_metadata_with_dma(struct aml_vdec_adapt *ada_ctx,
 			}
 			ret = vdec_vframe_write_with_dma(ada_ctx, addr, count, timestamp,
 				handle, free, priv, metadata);
+			vfree(metadata);
 		} else {
 			stbuf_vaddr = codec_mm_vmap(addr, count);
 			if (stbuf_vaddr) {
