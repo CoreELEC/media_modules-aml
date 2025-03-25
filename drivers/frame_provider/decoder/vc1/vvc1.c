@@ -1624,6 +1624,8 @@ static void vvc1_local_init(bool is_reset)
 		hw->refs[1] = -1;
 		hw->throw_pb_flag = 1;
 		hw->vf_buf_num_used = DECODE_BUFFER_NUM_MAX;
+		hw->frame_width = 0;
+		hw->frame_height = 0;
 
 		for (i = 0; i < hw->vf_buf_num_used + COPY_DECODE_BUFFER_NUM_MAX; i++) {
 			hw->vfbuf_use[i] = 0;
