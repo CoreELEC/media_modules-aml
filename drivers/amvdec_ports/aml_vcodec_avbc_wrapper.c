@@ -20,7 +20,9 @@
 #include <linux/types.h>
 
 #include "vdec_drv_if.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 #include "aml_vcodec_avbc_wrapper.h"
+#endif
 #include "trigger_data.h"
 #include "utils/common.h"
 #include "../frame_provider/decoder/utils/aml_buf_helper.h"

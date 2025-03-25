@@ -3397,6 +3397,7 @@ EXPORT_SYMBOL(vdec_init_stbuf_info);
 
 int vdec_avbc_frame_pool_create(struct vdec_s *vdec)
 {
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	int i;
 	int ret;
 
@@ -3417,16 +3418,19 @@ int vdec_avbc_frame_pool_create(struct vdec_s *vdec)
 	for (i = 0 ; i < AVBCD_FRAME_SIZE ; i++) {
 		kfifo_put(&vdec->avbc_frame_q, &vdec->avbcpool[i]);
 	}
+#endif
 
 	return 0;
 }
 
 void vdec_avbc_frame_pool_release(struct vdec_s *vdec)
 {
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	if (vdec->avbcpool) {
 		vfree(vdec->avbcpool);
 		kfifo_free(&vdec->avbc_frame_q);
 	}
+#endif
 }
 
 /*
@@ -3551,6 +3555,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 
 	p->parallel_dec = parallel_decode;
 	vdec_core->parallel_dec = parallel_decode;
+
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	if (vdec->avbc_mode & (AVBCD_SOFT_KERNEL_MODE | AVBCD_SOFT_USER_MODE))
 		goto skip;
 	else {
@@ -3560,6 +3566,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			return r;
 		}
 	}
+#endif
 	if (vdec_single(vdec) ||
 		(vdec_get_debug_flags() & 0x2) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12B))

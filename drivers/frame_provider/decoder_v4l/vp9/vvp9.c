@@ -69,7 +69,9 @@
 #include "../../decoder/utils/vdec_ge2d_utils.h"
 #include "vvp9.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
+#endif
 
 #define MEM_NAME "codec_vp9"
 #define MIX_STREAM_SUPPORT
@@ -7288,6 +7290,7 @@ static void vp9_recycle_dec_resource(void *priv,
 	return;
 }
 
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 static void vp9_avbc_done_cb(void *output)
 {
 	struct aml_avbc_buf *buf = container_of(output, struct aml_avbc_buf, output);
@@ -7367,9 +7370,11 @@ static void vp9_avbc_done_cb(void *output)
 
 	return;
 }
+#endif
 
 static void vp9_post_avbcd_task(struct VP9Decoder_s *pbi)
 {
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	struct vdec_s *vdec = hw_to_vdec(pbi);
 	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
 	struct avbc_output *out;
@@ -7500,6 +7505,7 @@ static void vp9_post_avbcd_task(struct VP9Decoder_s *pbi)
 	ctx->aml_avbc_decode(out, in, AVBC_FLAG_IO_NON_BLOCKING);
 out:
 	mutex_unlock(&pbi->post_mutex);
+#endif
 }
 
 static void post_avbcd_task(struct vdec_s *vdec)

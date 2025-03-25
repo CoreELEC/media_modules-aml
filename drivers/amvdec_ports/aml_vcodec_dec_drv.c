@@ -36,7 +36,9 @@
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_vpp.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 #include "aml_vcodec_avbc_wrapper.h"
+#endif
 #include "aml_vcodec_dec_infoserver.h"
 #include "../frame_provider/decoder/utils/decoder_report.h"
 #include "../common/media_utils/media_kernel_version.h"
@@ -162,7 +164,9 @@ static int fops_vcodec_open(struct file *file)
 	ctx->vdec_pic_info_update = aml_vdec_pic_info_update;
 	ctx->cal_compress_buff_info = cal_compress_buff_info;
 	ctx->fbc_transcode_and_set_vf = fbc_transcode_and_set_vf;
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	ctx->aml_avbc_decode = aml_avbc_decode;
+#endif
 	aml_vcodec_dec_set_default_params(ctx);
 	ctx->is_stream_off = true;
 	ctx->set_ext_buf_flg = false;

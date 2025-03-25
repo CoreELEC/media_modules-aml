@@ -50,7 +50,9 @@
 #include "aml_vcodec_vpp.h"
 #include "aml_vcodec_ge2d.h"
 #include "aml_vcodec_dec_infoserver.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 #include "aml_vcodec_avbc_wrapper.h"
+#endif
 
 
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
@@ -1250,7 +1252,9 @@ void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 	case AML_FB_REQ_DEC:
 		if (ctx->avbc_wrapper)
 			/* dec <==> avbcd. */
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 			task->attach(task, get_avbc_ops(), ctx->avbc_wrapper);
+#endif
 		else if (ctx->ge2d) {
 			/* dec <==> ge2d. */
 			task->attach(task, get_ge2d_ops(), ctx->ge2d);
@@ -1297,7 +1301,9 @@ void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 	case AML_FB_REQ_AVBCD:
 		/* AVBCD <==> v4l-sink. */
 		task->attach(task, get_v4l_sink_ops(), ctx);
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 		task->attach(task, get_avbc_ops(), ctx->avbc_wrapper);
+#endif
 		break;
 
 	default:
@@ -2416,8 +2422,10 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 
 		ctx->is_stream_off = false;
 		aml_buf_workqueue_enable(&ctx->bm);
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 		if (ctx->avbc_wrapper)
 			aml_avbc_wrapper_start(ctx->avbc_wrapper);
+#endif
 	} else {
 		ctx->is_out_stream_off = false;
 		ctx->es_wkr_stop = false;
@@ -4872,8 +4880,10 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		ctx->in_buff_cnt = 0;
 		ctx->write_frames = 0;
 		ctx->master_buf = NULL;
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 		if (ctx->avbc_wrapper)
 			aml_avbc_wrapper_stop(ctx->avbc_wrapper);
+#endif
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
@@ -5686,7 +5696,9 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		if (avbcd_work_mode & 0x8000 || (ctx->avbcd_work_mode && (avbcd_work_mode & 0xf))) {
 			ctx->avbcd_work_mode = avbcd_work_mode;
 			ctx->no_fbc_output = false;
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 			aml_avbc_wrapper_init(&ctx->avbc_wrapper);
+#endif
 			aml_buf_configure_update(ctx);
 		}
 

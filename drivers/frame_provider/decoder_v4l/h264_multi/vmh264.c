@@ -73,7 +73,9 @@
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
 #include "../../../common/register/register.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
+#endif
 
 #define DETECT_WRONG_MULTI_SLICE
 #define MCRCC_ENABLE
@@ -2766,6 +2768,7 @@ int recycle_frame_buffer(struct h264_dpb_stru *p_H264_Dpb, int buf_spec_num,
 	return 0;
 }
 
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 static void h264_avbc_done_cb(void *output)
 {
 	struct aml_avbc_buf *buf = container_of(output, struct aml_avbc_buf, output);
@@ -2876,9 +2879,11 @@ static void h264_avbc_done_cb(void *output)
 
 	return;
 }
+#endif
 
 static void h264_post_avbcd_task(struct vdec_h264_hw_s *hw)
 {
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	struct avbc_output *out;
@@ -3012,6 +3017,7 @@ static void h264_post_avbcd_task(struct vdec_h264_hw_s *hw)
 	ctx->aml_avbc_decode(out, in, AVBC_FLAG_IO_NON_BLOCKING);
 out:
 	mutex_unlock(&hw->post_mutex);
+#endif
 }
 
 static void config_buf_specs(struct vdec_s *vdec)
@@ -7177,7 +7183,10 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			if (ret)
 				return have_free_buf_spec(vdec, false);
 
-			if (!(ctx->avbcd_work_mode & (AVBCD_SOFT_KERNEL_MODE | AVBCD_SOFT_USER_MODE)) &&
+			if (
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+			!(ctx->avbcd_work_mode & (AVBCD_SOFT_KERNEL_MODE | AVBCD_SOFT_USER_MODE)) &&
+#endif
 				((p_H264_Dpb->mDPB.used_size >= p_H264_Dpb->dec_dpb_size) ||
 				!check_num_ref(&p_H264_Dpb->mDPB)))
 				bufmgr_recover(hw);

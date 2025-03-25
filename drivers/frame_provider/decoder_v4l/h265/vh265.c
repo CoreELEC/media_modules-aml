@@ -69,8 +69,9 @@
 #include "../../../amvdec_ports/aml_vcodec_ts.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
-
+#endif
 
 #define HEVC_8K_LFTOFFSET_FIX
 #define SUPPORT_LONG_TERM_RPS
@@ -9492,6 +9493,7 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 	return NULL;
 }
 
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 static void h265_avbc_done_cb(void *output)
 {
 	struct aml_avbc_buf *buf = container_of(output, struct aml_avbc_buf, output);
@@ -9583,6 +9585,7 @@ static void h265_avbc_done_cb(void *output)
 
 	return;
 }
+#endif
 
 static bool vf_valid_check(struct vframe_s *vf, struct hevc_state_s *hevc) {
 	int i;
@@ -10173,6 +10176,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct PIC_s *frame)
 
 static void h265_post_avbcd_task(struct hevc_state_s *hevc)
 {
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 	struct aml_vcodec_ctx *ctx = hevc->v4l2_ctx;
 	struct avbc_output *out;
@@ -10306,6 +10310,7 @@ static void h265_post_avbcd_task(struct hevc_state_s *hevc)
 	ctx->aml_avbc_decode(out, in, AVBC_FLAG_IO_NON_BLOCKING);
 out:
 	mutex_unlock(&hevc->post_mutex);
+#endif
 }
 
 static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
@@ -14592,8 +14597,10 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	if (hevc->pic_list_init_flag != 3)
 		return 1;
 
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	if (ctx->avbcd_work_mode & (AVBCD_SOFT_KERNEL_MODE | AVBCD_SOFT_USER_MODE))
 		return has_free_buf;
+#endif
 
 	spin_lock_irqsave(&h265_lock, flags);
 	if ((ctx->param_sets_from_ucode) &&

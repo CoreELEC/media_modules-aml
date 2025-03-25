@@ -47,7 +47,9 @@
 #include "../../../media_sync/pts_server/pts_server_core.h"
 #include "../../../amvdec_ports/utils/common.h"
 #include "../../../common/media_utils/media_utils.h"
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
+#endif
 
 #define NEW_FB_CODE
 #define FB_DEBUG_ON_OLD_CHIP
@@ -408,6 +410,7 @@ struct vdec_info_statistic_s {
 	int ext_info_valid;
 };
 
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 struct aml_avbc_buf {
 	struct aml_buf *am_buf;
 	struct avbc_output output;
@@ -415,6 +418,7 @@ struct aml_avbc_buf {
 	void *ctx;
 	int pic_index;
 };
+#endif
 
 struct vdec_s {
 	u32 magic;
@@ -577,9 +581,11 @@ struct vdec_s {
 	u64 hw_front_decode_start;
 	u64 hw_back_decode_start;
 #endif
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	DECLARE_KFIFO_PTR(avbc_frame_q, typeof(struct aml_avbc_buf*));
 	struct aml_avbc_buf *avbcpool;
 	struct avbc_input avbc_in;
+#endif
 	u32 avbc_mode;
 	void *wrapper;
 	u32 pic0_done;
