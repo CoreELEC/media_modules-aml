@@ -5913,7 +5913,7 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 
 			if (is_support_dual_core()) {
 				if (mask & CORE_MASK_HEVC_BACK) {
-					if (decoder_firmware_version_eg(0, 4, 128))
+					if (decoder_android_firmware_version_eg(0, 4, 128))
 						tee_config_device_state_lock(DMC_DEV_ID_HEVC_B, secure);
 					else
 						tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);
@@ -5927,13 +5927,13 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 				if (mask & CORE_MASK_HEVC) {
 					tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);
 					if (!front_back_mode)
-						if (decoder_firmware_version_eg(0, 4, 128))
+						if (decoder_android_firmware_version_eg(0, 4, 128))
 							tee_config_device_state_lock(DMC_DEV_ID_HEVC_B, secure);
 						else
 							tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);
 				}
 				if (mask & CORE_MASK_HEVC_BACK) {
-					if (decoder_firmware_version_eg(0, 4, 128))
+					if (decoder_android_firmware_version_eg(0, 4, 128))
 						tee_config_device_state_lock(DMC_DEV_ID_HEVC_B, secure);
 					else
 						tee_config_device_state_lock(DMC_DEV_ID_HEVC, secure);
