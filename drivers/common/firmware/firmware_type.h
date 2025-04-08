@@ -114,6 +114,7 @@ int fw_get_cpu(const char *name);
 int get_decoder_firmware_version(void);
 int get_decoder_firmware_submit_count(void);
 int decoder_firmware_version_eg(int major, int minor, int batch);
+int decoder_android_firmware_version_eg(int major, int minor, int batch);
 int fw_check_need_load(const char *name);
 
 #endif
