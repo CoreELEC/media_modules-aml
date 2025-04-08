@@ -92,6 +92,7 @@ static const struct file_operations fw_fops = {
 struct fw_mgr_s *g_mgr;
 struct fw_dev_s *g_dev;
 struct package_head_s package_head;
+struct package_head_s package_head_android = {0};
 
 static u32 debug;
 static u32 detail;
@@ -331,19 +332,30 @@ int get_decoder_firmware_submit_count(void)
 }
 EXPORT_SYMBOL(get_decoder_firmware_submit_count);
 
-int decoder_firmware_version_eg(int major, int minor, int batch)
+int decoder_version_eg(struct package_head_s package, int major, int minor, int batch)
 {
 	int equal_or_greater = 0;
-	int fw_major = (package_head.version >> 16) & 0xff;
-	int fw_minor = (package_head.version & 0xff);
-	int fw_batch = package_head.submit_count;
+	int fw_major = (package.version >> 16) & 0xff;
+	int fw_minor = (package.version & 0xff);
+	int fw_batch = package.submit_count;
 
 	equal_or_greater = ((fw_major >  major) || (fw_minor >  minor) ||
 	                   ((fw_minor == minor) && (fw_batch >= batch)));
 
 	return equal_or_greater;
 }
+
+int decoder_firmware_version_eg(int major, int minor, int batch)
+{
+	return decoder_version_eg(package_head, major, minor, batch);
+}
 EXPORT_SYMBOL(decoder_firmware_version_eg);
+
+int decoder_android_firmware_version_eg(int major, int minor, int batch)
+{
+	return decoder_version_eg(package_head_android, major, minor, batch);
+}
+EXPORT_SYMBOL(decoder_android_firmware_version_eg);
 
 static unsigned long fw_mgr_lock(struct fw_mgr_s *mgr)
 {
@@ -1067,6 +1079,26 @@ static ssize_t debug_store(KV_CLASS_CONST struct class *cls,
 	return count;
 }
 
+static ssize_t android_firmware_version_store(KV_CLASS_CONST struct class *cls,
+	KV_CLASS_ATTR_CONST struct class_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	int minor, batch;
+
+	ret = sscanf(buf, "%d.%d", &minor, &batch);
+	if (ret != 2) {
+		pr_info("Error in reading Android video firmware version");
+		return -EINVAL;
+	}
+
+	package_head_android.version = (minor & 0xff);
+	package_head_android.submit_count = batch;
+
+	pr_info("Received Android firmware version: %d.%d", minor, batch);
+
+	return count;
+}
+
 #if 0 //kernel4.9
 static struct class_attribute fw_class_attrs[] = {
 	__ATTR(info, 0664, info_show, info_store),
@@ -1083,11 +1115,13 @@ static struct class fw_class = {
 static CLASS_ATTR_RW(info);
 static CLASS_ATTR_RW(reload);
 static CLASS_ATTR_RW(debug);
+static CLASS_ATTR_WO(android_firmware_version);
 
 static struct attribute *fw_class_attrs[] = {
 	&class_attr_info.attr,
 	&class_attr_reload.attr,
 	&class_attr_debug.attr,
+	&class_attr_android_firmware_version.attr,
 	NULL
 };
 
