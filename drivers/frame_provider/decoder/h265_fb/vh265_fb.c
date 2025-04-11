@@ -220,9 +220,9 @@ static const struct vframe_operations_s vh265_vf_provider = {
 
 static struct vframe_provider_s vh265_vf_prov;
 
-//0.3.42-g8104942
+//>v0.3.2b.Id21c62b.93202b0
 #define UCODE_SWAP_VERSION 3
-#define UCODE_SWAP_SUBMIT_COUNT 42
+#define UCODE_SWAP_SUBMIT_COUNT 44
 
 static u32 enable_swap = 1;
 static u32 bit_depth_luma;
