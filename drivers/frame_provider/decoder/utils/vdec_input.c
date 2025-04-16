@@ -29,13 +29,13 @@
 #include <linux/crc32.h>
 
 #define VFRAME_BLOCK_SIZE (768 * SZ_1K)/*768KB for 1080p default init.*/
-#define VFRAME_BLOCK_SIZE_4K (2 * SZ_1M) /*2M for 4K default.*/
-#define VFRAME_BLOCK_SIZE_MAX (4 * SZ_1M)
+#define VFRAME_BLOCK_SIZE_4K (3 * SZ_1M) /*3M for 4K-8K default.*/
+#define VFRAME_BLOCK_SIZE_MAX (6 * SZ_1M)
 
 #define VFRAME_BLOCK_PAGEALIGN 4
 #define VFRAME_BLOCK_MIN_LEVEL (2 * SZ_1M)
-#define VFRAME_BLOCK_MAX_LEVEL (8 * SZ_1M)
-#define VFRAME_BLOCK_MAX_TOTAL_SIZE (16 * SZ_1M)
+#define VFRAME_BLOCK_MAX_LEVEL (16 * SZ_1M)
+#define VFRAME_BLOCK_MAX_TOTAL_SIZE (32 * SZ_1M)
 
 /*
 2s for OMX
