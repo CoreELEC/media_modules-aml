@@ -9129,6 +9129,7 @@ pic_done_proc:
 			hw->dec_result = DEC_RESULT_UNFINISH;
 		}
 		vh264_work_implement(hw, vdec, 0);
+		return IRQ_HANDLED;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	} else if (
