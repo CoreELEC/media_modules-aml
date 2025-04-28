@@ -3762,6 +3762,8 @@ static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw)
 	WRITE_VREG(ASSIST_MBOX1_CLR_REG, 1);
 	/* clear buffer IN/OUT registers */
 	WRITE_VREG(MREG_BUFFEROUT, 0);
+	/* clear pic info registers */
+	WRITE_VREG(AV_SCRATCH_G, 0);
 	/* enable mailbox interrupt */
 	WRITE_VREG(ASSIST_MBOX1_MASK, 1);
 	/* set reference width and height */

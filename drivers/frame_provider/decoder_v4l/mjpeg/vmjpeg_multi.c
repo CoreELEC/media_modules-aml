@@ -1196,6 +1196,7 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 	WRITE_VREG(ASSIST_MBOX1_MASK, 1);
 	/* set interrupt mapping for vld */
 	WRITE_VREG(ASSIST_AMR1_INT8, 8);
+	WRITE_VREG(DEC_STATUS_REG, 0);
 
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 

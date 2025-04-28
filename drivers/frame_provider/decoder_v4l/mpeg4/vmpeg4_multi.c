@@ -2596,6 +2596,8 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 
 	/* clear repeat count */
 	WRITE_VREG(MP4_NOT_CODED_CNT, 0);
+	/* clear pic info */
+	WRITE_VREG(MP4_PIC_INFO, 0);
 
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
