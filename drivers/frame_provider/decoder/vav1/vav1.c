@@ -844,6 +844,7 @@ struct AV1HW_s {
 	dma_addr_t rdma_phy_adr;
 	unsigned *rdma_adr;
 	struct trace_decoder_name trace;
+	bool discard_dv_data;
 	bool high_bandwidth_flag;
 	ulong fg_table_handle;
 	u32 data_offset;
@@ -6306,7 +6307,9 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 					metadata_type, size);
 				switch (metadata_type) {
 				case OBU_METADATA_TYPE_ITUT_T35:
+					vf->discard_dv_data = hw->discard_dv_data;
 					if ((p + 5 < pic->aux_data_buf + pic->aux_data_size) &&
+						vf->discard_dv_data &&
 						p[0] == 0xB5 && p[1] == 0x00 && p[2] == 0x3C &&
 						p[3] == 0x00 && p[4] == 0x01 && p[5] == 0x04) {
 						u32 data;
@@ -6314,7 +6317,6 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 						data = data & 0xFFFF00FF;
 						data = data | (0x30<<8);
 						hw->video_signal_type = data;
-						vf->discard_dv_data = true;
 						if ((size > 0) && (size <= HDR10P_BUF_SIZE) &&
 							(pic->hdr10p_data_buf != NULL)) {
 							memcpy(pic->hdr10p_data_buf, p, size);
@@ -6341,6 +6343,35 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 							av1_print(hw, AV1_DEBUG_SEI_DETAIL,
 								"hdr10p data size(%d)\n", size);
 							pic->hdr10p_data_size = 0;
+						}
+					} else if ((p + 5 < pic->aux_data_buf + pic->aux_data_size) &&
+						!vf->discard_dv_data &&
+						p[0] == 0xB5 && p[1] == 0x00 && p[2] == 0x3B &&
+						p[3] == 0x00 && p[4] == 0x00 && p[5] == 0x08 && p[6] == 0x00) {
+						if ((size > 0) && (size <= pic->aux_data_size + 8)) {
+							pic->aux_data_buf[0] = (size >> 24) & 0xff;
+							pic->aux_data_buf[1] = (size >> 16) & 0xff;
+							pic->aux_data_buf[2] = (size >>  8) & 0xff;
+							pic->aux_data_buf[3] = (size >>  0) & 0xff;
+							// AVI_SEI
+							pic->aux_data_buf[4] = 0x14;
+							pic->aux_data_buf[5] = 0x00;
+							pic->aux_data_buf[6] = 0x00;
+							pic->aux_data_buf[7] = 0x00;
+
+							memcpy(pic->aux_data_buf + 8, p, size);
+							pic->aux_data_size = size + 8;
+							if (debug & AV1_DEBUG_SEI_DETAIL) {
+								av1_print(hw, 0,
+									"dv data: (size %d)\n", pic->aux_data_size);
+								for (i = 0; i < pic->aux_data_size; i++) {
+									av1_print_cont(hw, 0,
+										"%02x ", pic->aux_data_buf[i]);
+									if (((i + 1) & 0xf) == 0)
+										av1_print_cont(hw, 0, "\n");
+								}
+								av1_print_cont(hw, 0, "\n");
+							}
 						}
 					}
 					break;
@@ -11981,6 +12012,14 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			"parm_fence_usage",
 			&config_val) == 0)
 			hw->fence_usage = config_val;
+
+		if (get_config_int(pdata->config,
+			"negative_dv",
+			&config_val) == 0) {
+			hw->discard_dv_data = config_val;
+			if (hw->discard_dv_data)
+				av1_print(hw, 0, "discard dv data\n");
+		}
 
 		if (get_config_int(pdata->config,
 			"parm_metadata_config_flag",
