@@ -8466,7 +8466,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					"multi_frame_in_run set, cnt = %d, rp %x\n",
 					hw->status_report_count, READ_VREG(VLD_MEM_VIFIFO_RP));
 
-				if (hw->status_report_count > 1) {
+				if ((hw->multi_slice_pic_flag == 2) &&
+				    (hw->status_report_count > 1)) {
 					hw->multi_frame_in_run = 1;
 					hw->dec_result = DEC_RESULT_AGAIN;
 					vdec_schedule_work(&hw->work);
@@ -9418,10 +9419,11 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 			READ_VREG(VIFF_BIT_CNT),
 			READ_VREG(MBY_MBX));
 
-	if ((p_H264_Dpb->dec_dpb_status == H264_SLICE_HEAD_DONE) ||
+	if ((hw->multi_slice_pic_flag == 2) &&
+		((p_H264_Dpb->dec_dpb_status == H264_SLICE_HEAD_DONE) ||
 		(p_H264_Dpb->dec_dpb_status == H264_AUX_DATA_READY) ||
 		(p_H264_Dpb->dec_dpb_status == H264_SEI_DATA_READY) ||
-		(p_H264_Dpb->dec_dpb_status == H264_CONFIG_REQUEST)) {
+		(p_H264_Dpb->dec_dpb_status == H264_CONFIG_REQUEST))) {
 		if (hw->multi_frame_in_run) {
 			if (hw->status_report_count) {
 				hw->status_report_count--;
@@ -9436,9 +9438,11 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 					return IRQ_HANDLED;
 				}
 			}
-			hw->multi_frame_in_run = 0;
+			else
+				hw->multi_frame_in_run = 0;
 		}
-		hw->status_report_count++;   //cur slice need count after clr status_report_count to 0
+		else
+			hw->status_report_count++;   //cur slice need count after clr status_report_count to 0
 	} else
 		hw->status_report_count = 0;
 
