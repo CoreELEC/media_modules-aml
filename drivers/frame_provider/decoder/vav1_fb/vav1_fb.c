@@ -332,7 +332,7 @@ static u32 efficiency_mode = 0;
 static int start_decode_buf_level = 0x8000;
 static u32 force_pts_unstable;
 static u32 mv_buf_margin = REF_FRAMES;
-static u32 mv_buf_dynamic_alloc;
+static u32 mv_buf_dynamic_alloc = 1;
 static u32 force_max_one_mv_buffer_size;
 static u32 debug_mask = 0xffffffff;
 
