@@ -922,13 +922,13 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	if ((vdec->hdr10p_data_valid == true) &&
 		(vdec->hdr10p_data_size != 0)) {
 		char *new_buf;
-		new_buf = aml_media_mem_alloc(vdec->hdr10p_data_size, GFP_KERNEL);
+		new_buf = kzalloc(vdec->hdr10p_data_size, GFP_ATOMIC);
 		if (new_buf) {
 			memcpy(new_buf, vdec->hdr10p_data_buf, vdec->hdr10p_data_size);
 			chunk->hdr10p_data_buf = new_buf;
 			chunk->hdr10p_data_size = vdec->hdr10p_data_size;
 		} else {
-			pr_err("%s:hdr10p data vzalloc size(%d) failed\n",
+			pr_err("%s:hdr10p data kzalloc size(%d) failed\n",
 				__func__, vdec->hdr10p_data_size);
 			chunk->hdr10p_data_buf = NULL;
 			chunk->hdr10p_data_size = 0;
@@ -962,7 +962,7 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 			head_metadata[2] << 8 |
 			head_metadata[3];
 		if (size != 0) {
-			new_buf = aml_media_mem_alloc(size, GFP_KERNEL);
+			new_buf = kzalloc(size, GFP_ATOMIC);
 			if (new_buf) {
 				memcpy(new_buf, head_metadata, size);
 				chunk->head_meta_buf = new_buf;
