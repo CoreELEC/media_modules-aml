@@ -623,6 +623,8 @@ struct PIC_BUFFER_CONFIG_s {
 #ifdef MULTI_INSTANCE_SUPPORT
 	struct canvas_config_s canvas_config[2];
 #endif
+	char *aux_data_buf;
+	int aux_data_size;
 	int decode_idx;
 	int slice_type;
 	int stream_offset;
@@ -8085,7 +8087,10 @@ static int config_pic(struct VP9Decoder_s *pbi,
 				int j = 0;
 				struct vdec_data_buf_s data_buf = { 0 };
 
-				data_buf.alloc_policy = ALLOC_HDR10P_BUF;
+				data_buf.alloc_policy = ALLOC_AUX_BUF;
+				data_buf.aux_buf_size = SEI_BUF_SIZE;
+
+				data_buf.alloc_policy |= ALLOC_HDR10P_BUF;
 				data_buf.hdr10p_buf_size = HDR10P_BUF_SIZE;
 
 				if (pic_config->vdec_data_index == -1) {
@@ -8098,6 +8103,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 				}
 
 				if (index >= 0) {
+					pic_config->aux_data_buf = vdec->vdata->data[index].aux_data_buf;
 					pic_config->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, j);
 					INIT_LIST_HEAD(&vdec->vdata->release_callback[j].node);
@@ -8229,7 +8235,10 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 			if (vdec->vdata != NULL) {
 				int index = 0;
 				struct vdec_data_buf_s data_buf = { 0 };
-				data_buf.alloc_policy = ALLOC_HDR10P_BUF;
+				data_buf.alloc_policy = ALLOC_AUX_BUF;
+				data_buf.aux_buf_size = SEI_BUF_SIZE;
+
+				data_buf.alloc_policy |= ALLOC_HDR10P_BUF;
 				data_buf.hdr10p_buf_size = HDR10P_BUF_SIZE;
 
 				index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
@@ -8238,6 +8247,7 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 					struct PIC_BUFFER_CONFIG_s *pic;
 					pic = &cm->buffer_pool->frame_bufs[i].buf;
 					pic->vdec_data_index = index;
+					pic->aux_data_buf = vdec->vdata->data[index].aux_data_buf;
 					pic->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
 					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
@@ -10604,9 +10614,10 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 
 	if ((pbi->chunk != NULL) && (pbi->chunk->hdr10p_data_buf != NULL) && (pbi->chunk->hdr10p_data_size > 0) &&
 		(pbi->chunk->hdr10p_data_size < HDR10P_BUF_SIZE) && (pic->hdr10p_data_buf != NULL)) {
+		struct vdec_s *vdec = hw_to_vdec(pbi);
 		memcpy(pic->hdr10p_data_buf, pbi->chunk->hdr10p_data_buf,
 			pbi->chunk->hdr10p_data_size);
-		pic->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
+		vdec->vdata->data[pic->vdec_data_index].hdr10p_buf_size = pbi->chunk->hdr10p_data_size;
 		if (debug & VP9_DEBUG_BUFMGR_MORE) {
 			int i = 0;
 			vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
@@ -10622,6 +10633,9 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 		}
 		vf->hdr10p_data_buf = pic->hdr10p_data_buf;
 		vf->hdr10p_data_size = pic->hdr10p_data_size;
+		pbi->video_signal_type &= 0xFF0000FF;
+		pbi->video_signal_type |= (0x30<<8) | (0x09<<16);
+		vf->signal_type = pbi->video_signal_type;
 	} else {
 		vf->hdr10p_data_buf = NULL;
 		vf->hdr10p_data_size = 0;
@@ -10849,6 +10863,8 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 static int vvp9_event_cb(int type, void *data, void *private_data)
 {
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)private_data;
+	struct vdec_s *vdec = hw_to_vdec(pbi);
+	unsigned long flags;
 
 	if (type & VFRAME_EVENT_RECEIVER_RESET) {
 #if 0
@@ -10874,6 +10890,53 @@ static int vvp9_event_cb(int type, void *data, void *private_data)
 			req->req_result[0] = vdec_secure(hw_to_vdec(pbi));
 		else
 			req->req_result[0] = 0xffffffff;
+	} else if (type & VFRAME_EVENT_RECEIVER_GET_AUX_DATA) {
+		struct provider_aux_req_s *req =
+			(struct provider_aux_req_s *)data;
+		unsigned char index;
+		struct VP9_Common_s *cm = &pbi->common;
+		struct BufferPool_s *pool = cm->buffer_pool;
+		struct PIC_BUFFER_CONFIG_s *pic = NULL;
+
+		lock_buffer_pool(pool, flags);
+
+		index = req->vf->index & 0xff;
+		req->aux_buf = NULL;
+		req->aux_size = 0;
+		req->dv_enhance_exist = 0;
+
+		if (index != 0xff
+			&& index < pbi->used_buf_num) {
+			int size;
+			char *p = NULL;
+			pic = &pool->frame_bufs[index].buf;
+			size = vdec->vdata->data[pic->vdec_data_index].hdr10p_buf_size;
+			p = vdec->vdata->data[pic->vdec_data_index].hdr10p_data_buf;
+
+			if (size > 0 && size + 12 <= SEI_BUF_SIZE) {
+				pic->aux_data_buf[0] = ((size + 4) >> 24) & 0xff;
+				pic->aux_data_buf[1] = ((size + 4) >> 16) & 0xff;
+				pic->aux_data_buf[2] = ((size + 4) >>  8) & 0xff;
+				pic->aux_data_buf[3] = ((size + 4) >>  0) & 0xff;
+				// HDR10P_SEI
+				pic->aux_data_buf[4] = 0x02;
+				pic->aux_data_buf[5] = 0x00;
+				pic->aux_data_buf[6] = 0x00;
+				pic->aux_data_buf[7] = 0x00;
+				// NAL_UNIT_SEI
+				pic->aux_data_buf[8] = ((39<<9)>>8) & 0xff;
+				pic->aux_data_buf[9] = 0x00;
+				// payload type SEI_SYNTAX
+				pic->aux_data_buf[10] = 0x04;
+				// payload size
+				pic->aux_data_buf[11] = size;
+
+				memcpy(pic->aux_data_buf + 12, p, size);
+				req->aux_buf = pic->aux_data_buf;
+				req->aux_size = size + 12;
+			}
+		}
+		unlock_buffer_pool(pool, flags);
 	}
 
 	return 0;
