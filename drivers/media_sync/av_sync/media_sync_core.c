@@ -66,6 +66,7 @@ static MediaSyncManager vMediaSyncInsList[MAX_INSTANCE_NUM];
 static u32 g_inst_uid = 1;
 static u64 last_system;
 static u64 last_pcr;
+static s32 last_allocated_index = -1;
 
 #define VIDEO_FRAME_LIST_SIZE  (8192 * 2)
 #define AUDIO_FRAME_LIST_SIZE  (8192 * 2)
@@ -825,13 +826,16 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	s32 index = 0;
 	mediasync_ins* pInstance = NULL;
 	unsigned long flags = 0;
+	s32 start = (last_allocated_index + 1) % MAX_DYNAMIC_INSTANCE_NUM;
+	s32 tried = 0;
 
 	pInstance = kmalloc(sizeof(mediasync_ins), GFP_KERNEL|__GFP_ZERO);
 	if (pInstance == NULL) {
 		return -1;
 	}
 
-	for (index = 0; index < MAX_DYNAMIC_INSTANCE_NUM; index++) {
+	for (tried = 0; tried < MAX_DYNAMIC_INSTANCE_NUM; tried++) {
+		index = (start + tried) % MAX_DYNAMIC_INSTANCE_NUM;
 		spin_lock_irqsave(&(vMediaSyncInsList[index].m_lock),flags);
 		if (vMediaSyncInsList[index].pInstance == NULL) {
 			vMediaSyncInsList[index].pInstance = pInstance;
@@ -892,6 +896,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			}
 			pInstance->mRcordPcrCount = 0;
 			mediasync_ins_reset_l(pInstance);
+			last_allocated_index = index;
 			spin_unlock_irqrestore(&(vMediaSyncInsList[index].m_lock),flags);
 			break;
 		}
