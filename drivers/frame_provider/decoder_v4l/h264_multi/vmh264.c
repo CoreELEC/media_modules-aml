@@ -11539,6 +11539,19 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		hw->dw_para_set_flag = false;
 	}
 
+	if (!ctx->v4l_resolution_change && (ps->field == V4L2_FIELD_NONE) &&
+		hw->dw_para_set_flag &&
+		!hw->mmu_enable) {
+		hw->double_write_mode = get_double_write_mode(hw);
+		if (hw->double_write_mode != DM_YUV_ONLY) {
+			if (set_mmu_config(hw, vdec)) {
+				dpb_print(DECODE_ID(hw), 0, "h264 set mmu config fail\n");
+				return -1;
+			}
+			dpb_print(DECODE_ID(hw), 0, "follow new dw,h264 set mmu config ok\n");
+		}
+	}
+
 	if (ctx->avbcd_work_mode && hw->double_write_mode != DM_AVBC_ONLY) {
 		struct aml_vdec_cfg_infos cfg_info = { 0 };
 
