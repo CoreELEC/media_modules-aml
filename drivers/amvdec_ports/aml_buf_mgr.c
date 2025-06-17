@@ -63,7 +63,7 @@ static void aml_buf_vpp_callback(void *caller_data, struct file *file, int id)
 
 	if (entry && bc->buf_ops.vpp_cb) {
 		mutex_lock(&bc->workqueue_mutex);
-		if (bc->workqueue_enabled)
+		if (bc->workqueue_enabled && bc->recycle_buf_ref_workqueue)
 			queue_work(bc->recycle_buf_ref_workqueue,
 				&entry->recycle_buf_ref_work);
 
