@@ -3725,12 +3725,12 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 						 VDEC_MAP_NAME_SIZE,
 						 "%s vdetect.0 %s",
 						 vdec->vf_provider_name,
-						 "amlvideo ppmgr deinterlace amvideo");
+						 "amlvideo deinterlace amvideo");
 				else
 					snprintf(vdec->vfm_map_chain,
 						 VDEC_MAP_NAME_SIZE, "%s %s",
 						 vdec->vf_provider_name,
-						 "amlvideo ppmgr deinterlace amvideo");
+						 "amlvideo deinterlace amvideo");
 			}
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
