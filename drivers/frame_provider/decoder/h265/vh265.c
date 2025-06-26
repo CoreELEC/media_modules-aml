@@ -307,9 +307,10 @@ static u32 pts_unstable;
 #endif
 
 #define BUF_POOL_SIZE	32
-#define MAX_BUF_NUM 24
+#define MAX_BUF_NUM	24
 #define MAX_REF_PIC_NUM 24
 #define MAX_REF_ACTIVE  16
+#define MAX_LCU_SIZE	64
 
 #ifdef MV_USE_FIXED_BUF
 #define BMMU_MAX_BUFFERS (BUF_POOL_SIZE * 2 + 1)
@@ -3646,7 +3647,7 @@ static int cal_current_buf_size(struct hevc_state_s *hevc,
 	int buf_size;
 	int pic_width = hevc->pic_w;
 	int pic_height = hevc->pic_h;
-	int lcu_size = hevc->lcu_size;
+	int lcu_size = MAX_LCU_SIZE;
 	int pic_width_lcu = (pic_width % lcu_size) ? pic_width / lcu_size +
 				 1 : pic_width / lcu_size;
 	int pic_height_lcu = (pic_height % lcu_size) ? pic_height / lcu_size +
@@ -6025,16 +6026,16 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	unsigned int data32, data32_2;
 	int misc_flag0 = hevc->misc_flag0;
 	int slice_deblocking_filter_disabled_flag = 0;
-
-	int mc_buffer_size_u_v =
-		(hevc->lcu_total * hevc->lcu_size * hevc->lcu_size) >> 1;
-	int mc_buffer_size_u_v_h = (mc_buffer_size_u_v + 0xffff) >> 16;
+	int lcu_size = MAX_LCU_SIZE;
+	int mc_buffer_size_u_v_h = 0;
 	struct PIC_s *cur_pic = hevc->cur_pic;
 	int dw_mode = get_double_write_mode(hevc);
 #ifdef OW_TRIPLE_WRITE
 	int tw_mode = get_triple_write_mode(hevc);
 #endif
 
+	mc_buffer_size_u_v_h = calc_buffer_u_v_h_size(hevc->pic_w,
+		hevc->pic_h, get_double_write_ratio(dw_mode), lcu_size);
 	data32 = READ_VREG(HEVC_SAO_CTRL0);
 	data32 &= (~0xf);
 	data32 |= hevc->lcu_size_log2;
@@ -6126,12 +6127,12 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 #endif
 #endif  /* LOSLESS_COMPRESS_MODE */
 
-	data32 = mc_buffer_size_u_v_h << (16 + 1 + is_dw_p010(hevc));
+	data32 = mc_buffer_size_u_v_h << (12 + 1 + is_dw_p010(hevc));
 	WRITE_VREG(HEVC_SAO_Y_LENGTH, data32);
 
 #ifdef OW_TRIPLE_WRITE
 	if (tw_mode) {
-		data32 = mc_buffer_size_u_v_h << (16 + 1 + is_tw_p010(hevc));
+		data32 = mc_buffer_size_u_v_h << (12 + 1 + is_tw_p010(hevc));
 		WRITE_VREG(HEVC_SAO_Y_LENGTH3, data32);
 	}
 #endif
@@ -6154,12 +6155,12 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 #endif
 #endif	/* LOSLESS_COMPRESS_MODE */
 
-	data32 = mc_buffer_size_u_v_h << (16 + is_dw_p010(hevc));
+	data32 = mc_buffer_size_u_v_h << (12 + is_dw_p010(hevc));
 	WRITE_VREG(HEVC_SAO_C_LENGTH, data32);
 
 #ifdef OW_TRIPLE_WRITE
 	if (tw_mode) {
-		data32 = mc_buffer_size_u_v_h << (16 + is_tw_p010(hevc));
+		data32 = mc_buffer_size_u_v_h << (12 + is_tw_p010(hevc));
 		WRITE_VREG(HEVC_SAO_C_LENGTH3 ,data32);
 
 		if (debug & H265_DEBUG_REG) {
@@ -6188,7 +6189,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 #ifdef USE_NV21_EXTRA_BUF
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A && is_10bit_depth(hevc)) {
 		WRITE_VREG(HEVC_SAO_Y2_START_ADDR, cur_pic->ext_y_adr);
-		WRITE_VREG(HEVC_SAO_Y2_LENGTH, mc_buffer_size_u_v_h << 16);
+		WRITE_VREG(HEVC_SAO_Y2_LENGTH, mc_buffer_size_u_v_h << 12);
 		WRITE_VREG(HEVC_SAO_C2_START_ADDR, cur_pic->ext_uv_adr);
 		WRITE_VREG(HEVC_SAO_C2_LENGTH, mc_buffer_size_u_v_h << 15);
 	}
