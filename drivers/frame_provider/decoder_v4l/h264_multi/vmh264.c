@@ -385,6 +385,8 @@ static u32 force_low_latency;
 
 static u32 fence_drop_error_frame = 1;
 
+static u32 fence_ignore_gap_error = 1;
+
 static u32 adjust_dpb_size = 13;
 
 static u32 one_packet_multi_frames_multi_run = 1;
@@ -8876,9 +8878,16 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if ((!I_flag && (frame_num_gap == FrameNumGap_Normal) && !p_H264_Dpb->long_term_reference_flag)
 				|| (frame_num_gap == FrameNumGap_Loop)) {
 				if (!(hw->error_proc_policy & 0x800000)) {
-					hw->data_flag |= ERROR_FLAG;
-					p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
-					dpb_print(DECODE_ID(hw), 0, "frame number gap %d error\n", frame_num_gap);
+					if (fence_ignore_gap_error && hw->low_latency_mode && hw->enable_fence) {
+						dpb_print(DECODE_ID(hw),
+							PRINT_FLAG_VDEC_STATUS,
+							"frame number gap %d error, but low_latency_mode(%d) enable_fence(%d), so not mark error frame\n",
+							frame_num_gap, hw->low_latency_mode, hw->enable_fence);
+					} else {
+						hw->data_flag |= ERROR_FLAG;
+						p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
+						dpb_print(DECODE_ID(hw), 0, "frame number gap %d error\n", frame_num_gap);
+					}
 				}
 			}
 
@@ -13942,6 +13951,9 @@ MODULE_PARM_DESC(force_low_latency, "\n force low latency\n");
 
 module_param(fence_drop_error_frame, uint, 0664);
 MODULE_PARM_DESC(fence_drop_error_frame, "\n fence drop error frame\n");
+
+module_param(fence_ignore_gap_error, uint, 0664);
+MODULE_PARM_DESC(fence_ignore_gap_error, "\n fence ignore gap error\n");
 
 module_param(adjust_dpb_size, uint, 0664);
 MODULE_PARM_DESC(adjust_dpb_size, "\n adjust dpb size\n");
