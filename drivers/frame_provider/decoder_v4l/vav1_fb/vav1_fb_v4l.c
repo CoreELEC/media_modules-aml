@@ -5428,16 +5428,29 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 				(1 << 0)/* hevc_parser_core_clk_en*/
 			);
 		}
-		WRITE_VREG(HEVC_SHIFT_CONTROL,
-		(0 << 14) | /*disable_start_code_protect*/
-		(1 << 10) | /*length_zero_startcode_en for AV1*/
-		(1 << 9) | /*length_valid_startcode_en for AV1*/
-		(3 << 6) | /*sft_valid_wr_position*/
-		(2 << 4) | /*emulate_code_length_sub_1*/
-		(3 << 1) | /*start_code_length_sub_1
-		AV1 use 0x00000001 as startcode (4 Bytes)*/
-		(1 << 0)   /*stream_shift_enable*/
-		);
+		if (hw->no_head) {
+			WRITE_VREG(HEVC_SHIFT_CONTROL,
+			(1 << 14) | /*disable_start_code_protect*/
+			(1 << 10) | /*length_zero_startcode_en for AV1*/
+			(1 << 9) | /*length_valid_startcode_en for AV1*/
+			(3 << 6) | /*sft_valid_wr_position*/
+			(2 << 4) | /*emulate_code_length_sub_1*/
+			(3 << 1) | /*start_code_length_sub_1
+			AV1 use 0x00000001 as startcode (4 Bytes)*/
+			(1 << 0)   /*stream_shift_enable*/
+			);
+		} else {
+			WRITE_VREG(HEVC_SHIFT_CONTROL,
+			(0 << 14) | /*disable_start_code_protect*/
+			(1 << 10) | /*length_zero_startcode_en for AV1*/
+			(1 << 9) | /*length_valid_startcode_en for AV1*/
+			(3 << 6) | /*sft_valid_wr_position*/
+			(2 << 4) | /*emulate_code_length_sub_1*/
+			(3 << 1) | /*start_code_length_sub_1
+			AV1 use 0x00000001 as startcode (4 Bytes)*/
+			(1 << 0)   /*stream_shift_enable*/
+			);
+		}
 
 		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 	}

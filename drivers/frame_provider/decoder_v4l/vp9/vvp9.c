@@ -6254,8 +6254,19 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 			WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
 #endif
 		}
-
-		WRITE_VREG(HEVC_SHIFT_CONTROL,
+		if (pbi->no_head) {
+			WRITE_VREG(HEVC_SHIFT_CONTROL,
+			(1 << 14) | /*disable_start_code_protect*/
+			(1 << 10) | /*length_zero_startcode_en for VP9*/
+			(1 << 9) | /*length_valid_startcode_en for VP9*/
+			(3 << 6) | /*sft_valid_wr_position*/
+			(2 << 4) | /*emulate_code_length_sub_1*/
+			(3 << 1) | /*start_code_length_sub_1
+			VP9 use 0x00000001 as startcode (4 Bytes)*/
+			(1 << 0)   /*stream_shift_enable*/
+			);
+		} else {
+			WRITE_VREG(HEVC_SHIFT_CONTROL,
 			(0 << 14) | /*disable_start_code_protect*/
 			(1 << 10) | /*length_zero_startcode_en for VP9*/
 			(1 << 9) | /*length_valid_startcode_en for VP9*/
@@ -6265,6 +6276,7 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 			VP9 use 0x00000001 as startcode (4 Bytes)*/
 			(1 << 0)   /*stream_shift_enable*/
 			);
+		}
 
 		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 	}
