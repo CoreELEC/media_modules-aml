@@ -57,6 +57,7 @@
 
 #define FC_YUV_DEBUG	0x01
 #define FC_CRC_DEBUG	0x02
+#define FC_FS_DEBUG 	0x04
 #define FC_TST_DEBUG	0x80
 #define FC_ERR_CRC_BLOCK_MODE	0x10
 #define FC_CHECK_CRC_LOOP_MODE	0x20
@@ -380,11 +381,11 @@ static struct file* file_open(int mode, const char *str, ...)
 	fp = media_open(file, mode, (mode&O_CREAT)?0666:0);
 	if (IS_ERR(fp)) {
 		fp = NULL;
-		dbg_print(FC_ERROR, "open %s failed\n", file);
+		dbg_print(FC_FS_DEBUG, "open %s failed\n", file);
 		va_end(args);
 		return fp;
 	}
-	dbg_print(FC_ERROR, "open %s success\n", file);
+	dbg_print(FC_FS_DEBUG, "open %s success\n", file);
 	va_end(args);
 
 	return fp;
@@ -454,7 +455,7 @@ static int write_crc_work(struct pic_check_mgr_t *mgr)
 			wr_size += sprintf(&crc_tmp[wr_size], "%s", crc_buf);
 			if (check->compare_fp != NULL) {
 				if (!fget_crc_str(crc_buf, SIZE_CRC, check)) {
-					dbg_print(0, "%s, can't get more compare crc\n", __func__);
+					dbg_print(FC_FS_DEBUG, "%s, can't get more compare crc\n", __func__);
 					media_close(check->compare_fp, current->files);
 					check->compare_fp = NULL;
 				}
@@ -487,7 +488,7 @@ static int write_aux_data_crc_work(struct aux_data_check_mgr_t *mgr)
 			wr_size += sprintf(&crc_tmp[wr_size], "%s", crc_buf);
 			if (check->compare_fp != NULL) {
 				if (!fget_aux_data_crc_str(crc_buf, SIZE_CRC, check)) {
-					dbg_print(0, "%s, can't get more compare crc\n", __func__);
+					dbg_print(FC_FS_DEBUG, "%s, can't get more compare crc\n", __func__);
 					media_close(check->compare_fp, current->files);
 					check->compare_fp = NULL;
 				}
@@ -746,12 +747,12 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 	mgr->yuvsum += crc_y;
 
 	if (kfifo_get(&check->new_chk_q, &crc_addr) == 0) {
-		dbg_print(0, "%08d: %08x %08x\n",
+		dbg_print(FC_CRC_DEBUG, "%08d: %08x %08x\n",
 			mgr->frame_cnt, crc_y, crc_uv);
 		if (check->check_fp) {
-			dbg_print(0, "crc32 dropped\n");
+			dbg_print(FC_FS_DEBUG, "crc32 dropped\n");
 		} else {
-			dbg_print(0, "no opened file to write crc32\n");
+			dbg_print(FC_FS_DEBUG, "no opened file to write crc32\n");
 		}
 		return -1;
 	}
@@ -759,7 +760,7 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 		sscanf(crc_addr, "%08u: %8x %8x",
 			&comp_frame, &comp_crc_y, &comp_crc_uv);
 
-		dbg_print(0, "%08d: %08x %08x <--> %08d: %08x %08x\n",
+		dbg_print(FC_CRC_DEBUG, "%08d: %08x %08x <--> %08d: %08x %08x\n",
 			mgr->frame_cnt, crc_y, crc_uv,
 			comp_frame, comp_crc_y, comp_crc_uv);
 
@@ -768,7 +769,7 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 					mgr->pic_dump.start = 0;
 					if (fc_debug || mgr->pic_dump.num < 3)
 						mgr->pic_dump.num++;
-					dbg_print(0, "\n\nError: %08d: %08x %08x != %08x %08x\n\n",
+					dbg_print(FC_ERROR, "\n\nError: %08d: %08x %08x != %08x %08x\n\n",
 						mgr->frame_cnt, crc_y, crc_uv, comp_crc_y, comp_crc_uv);
 					if (!(vf->type & VIDTYPE_SCATTER))
 						do_yuv_dump(mgr, vf);
@@ -778,11 +779,11 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 			}
 		} else {
 			mgr->usr_cmp_result = -1;
-			dbg_print(0, "frame num error: frame_cnt(%d) frame_comp(%d)\n",
+			dbg_print(FC_ERROR, "frame num error: frame_cnt(%d) frame_comp(%d)\n",
 				mgr->frame_cnt, comp_frame);
 		}
 	} else {
-		dbg_print(0, "%08d: %08x %08x\n", mgr->frame_cnt, crc_y, crc_uv);
+		dbg_print(FC_CRC_DEBUG, "%08d: %08x %08x\n", mgr->frame_cnt, crc_y, crc_uv);
 	}
 
 	if ((check->check_fp) && (crc_addr != NULL)) {
@@ -817,12 +818,12 @@ static int aux_data_crc_store(struct aux_data_check_mgr_t *mgr,int crc, int poc)
 	}
 
 	if (kfifo_get(&check->new_chk_q, &crc_addr) == 0) {
-		dbg_print(0, "%08d: %08x %08x\n",
+		dbg_print(FC_CRC_DEBUG, "%08d: %08x %08x\n",
 			mgr->frame_cnt, crc, poc);
 		if (check->check_fp) {
-			dbg_print(0, "crc32 dropped\n");
+			dbg_print(FC_FS_DEBUG, "crc32 dropped\n");
 		} else {
-			dbg_print(0, "no opened file to write crc32\n");
+			dbg_print(FC_FS_DEBUG, "no opened file to write crc32\n");
 		}
 		return -1;
 	}
@@ -830,20 +831,20 @@ static int aux_data_crc_store(struct aux_data_check_mgr_t *mgr,int crc, int poc)
 		sscanf(crc_addr, "%08u: %8x %08x",
 			&comp_frame, &comp_crc, &comp_poc);
 
-		dbg_print(0, "%08d: %08x %08x <--> %08d: %08x %08x\n",
+		dbg_print(FC_CRC_DEBUG, "%08d: %08x %08x <--> %08d: %08x %08x\n",
 			mgr->frame_cnt, crc, poc,
 			comp_frame, comp_crc, comp_poc);
 		if (comp_frame == mgr->frame_cnt) {
 			if (comp_crc != crc) {
-					dbg_print(0, "\n\nError: %08d: %08x %08x != %08x %08x\n\n",
+					dbg_print(FC_ERROR, "\n\nError: %08d: %08x %08x != %08x %08x\n\n",
 						mgr->frame_cnt, crc, poc, comp_crc, comp_poc);
 			}
 		} else {
-			dbg_print(0, "frame num error: frame_cnt(%d) frame_comp(%d)\n",
+			dbg_print(FC_ERROR, "frame num error: frame_cnt(%d) frame_comp(%d)\n",
 				mgr->frame_cnt, comp_frame);
 		}
 	} else {
-		dbg_print(0, "%08d: %08x %08x\n", mgr->frame_cnt, crc, poc);
+		dbg_print(FC_CRC_DEBUG, "%08d: %08x %08x\n", mgr->frame_cnt, crc, poc);
 	}
 
 	if ((check->check_fp) && (crc_addr != NULL)) {
@@ -1044,7 +1045,7 @@ static int fbc_check_prepare(struct pic_check_t *check,
 		(!check->fbc_planes[1]) ||
 		(!check->fbc_planes[2]) ||
 		(!check->fbc_planes[3])) {
-		dbg_print(0, "vmalloc static_planes failed %lx %lx %lx %lx\n",
+		dbg_print(FC_ERROR, "vmalloc static_planes failed %lx %lx %lx %lx\n",
 			(ulong)check->fbc_planes[0],
 			(ulong)check->fbc_planes[1],
 			(ulong)check->fbc_planes[2],
@@ -1251,12 +1252,12 @@ static int dump_buf_alloc(struct pic_dump_t *dump)
 		(char *)vmalloc(size_yuv_buf);
 	if (!dump->buf_addr) {
 		dump->buf_size = 0;
-		dbg_print(0, "vmalloc yuv buf failed\n");
+		dbg_print(FC_ERROR, "vmalloc yuv buf failed\n");
 		return -ENOMEM;
 	}
 	dump->buf_size = size_yuv_buf;
 
-	dbg_print(0, "%s: buf for yuv is alloced\n", __func__);
+	dbg_print(FC_YUV_DEBUG, "%s: buf for yuv is alloced\n", __func__);
 
 	return 0;
 }
@@ -1339,7 +1340,7 @@ int frame_check_init(struct pic_check_mgr_t *mgr, int id)
 				SIZE_CRC, check);
 			if (rdret == NULL) {
 				if (i < 3)
-					dbg_print(0, "can't get compare crc string\n");
+					dbg_print(FC_FS_DEBUG, "can't get compare crc string\n");
 				if (check->compare_fp) {
 					media_close(check->compare_fp, current->files);
 					check->compare_fp = NULL;
@@ -1350,7 +1351,7 @@ int frame_check_init(struct pic_check_mgr_t *mgr, int id)
 		}
 	}
 	set_enable(mgr, CRC_MASK);
-	dbg_print(0, "%s end\n", __func__);
+	dbg_print(FC_CRC_DEBUG, "%s end\n", __func__);
 
 	return 0;
 }
@@ -1395,7 +1396,7 @@ int aux_data_check_init(struct aux_data_check_mgr_t *mgr, int id)
 				SIZE_CRC, check);
 			if (rdret == NULL) {
 				if (i < 3)
-					dbg_print(0, "can't get compare crc string\n");
+					dbg_print(FC_FS_DEBUG, "can't get compare crc string\n");
 				if (check->compare_fp) {
 					media_close(check->compare_fp, current->files);
 					check->compare_fp = NULL;
@@ -1406,7 +1407,7 @@ int aux_data_check_init(struct aux_data_check_mgr_t *mgr, int id)
 		}
 	}
 	aux_set_enable(mgr, AUX_MASK);
-	dbg_print(0, "%s end\n", __func__);
+	dbg_print(FC_CRC_DEBUG, "%s end\n", __func__);
 
 	return 0;
 }
@@ -1466,7 +1467,7 @@ void frame_check_exit(struct pic_check_mgr_t *mgr)
 		}
 		mgr->file_cnt++;
 		set_disable(mgr, YUV_MASK | CRC_MASK);
-		dbg_print(0, "%s end\n", __func__);
+		dbg_print(FC_CRC_DEBUG, "%s end\n", __func__);
 	}
 }
 
@@ -1499,7 +1500,7 @@ void aux_data_check_exit(struct aux_data_check_mgr_t *mgr)
 
 		mgr->file_cnt++;
 		aux_set_disable(mgr, AUX_MASK);
-		dbg_print(0, "%s end\n", __func__);
+		dbg_print(FC_CRC_DEBUG, "%s end\n", __func__);
 	}
 }
 
