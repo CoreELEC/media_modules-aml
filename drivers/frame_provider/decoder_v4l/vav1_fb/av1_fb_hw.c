@@ -1344,52 +1344,65 @@ static void aom_init_decoder_hw_fb(struct AV1HW_s *hw, int32_t decode_pic_begin,
 
 	av1_print(hw, AOM_DEBUG_HW_MORE, "[test.c] Entering aom_init_decoder_hw\n");
 
-	if (!efficiency_mode && front_flag) {
-	//if (debug&AOM_AV1_DEBUG_BUFMGR)
-		//printk("[test.c] Enable HEVC Parser Interrupt\n");
-	data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
-	data32 = data32 & 0x03ffffff;
-	data32 = data32 |
-		(3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
-		(3 << 26) |  // stream_fifo_empty_int_ctl ( 4 interrupt)
-		(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
-		(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
-		(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
-		(1 << 7) |  // dec_done_int_cpu_enable
-		(1 << 4) |  // startcode_found_int_cpu_enable
-		(0 << 3) |  // startcode_found_int_amrisc_enable
-		(1 << 0)    // parser_int_enable
-		;
-	WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+	if (front_flag) {
+		if (!efficiency_mode) {
+		//if (debug&AOM_AV1_DEBUG_BUFMGR)
+			//printk("[test.c] Enable HEVC Parser Interrupt\n");
+		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+		data32 = data32 & 0x03ffffff;
+		data32 = data32 |
+			(3 << 29) |  // stream_buffer_empty_int_ctl ( 0x200 interrupt)
+			(3 << 26) |  // stream_fifo_empty_int_ctl ( 4 interrupt)
+			(1 << 24) |  // stream_buffer_empty_int_amrisc_enable
+			(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+			(1 << 10) |  // fed_fb_slice_done_int_cpu_enable
+			(1 << 7) |  // dec_done_int_cpu_enable
+			(1 << 4) |  // startcode_found_int_cpu_enable
+			(0 << 3) |  // startcode_found_int_amrisc_enable
+			(1 << 0)    // parser_int_enable
+			;
+		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
-	//if (debug&AOM_AV1_DEBUG_BUFMGR)
-		//printk("[test.c] Enable HEVC Parser Shift\n");
+		//if (debug&AOM_AV1_DEBUG_BUFMGR)
+			//printk("[test.c] Enable HEVC Parser Shift\n");
 
-	data32 = READ_VREG(HEVC_SHIFT_STATUS);
-	data32 = data32 |
-		(0 << 1) |  // emulation_check_off // AOM_AV1 do not have emulation
-		(1 << 0)    // startcode_check_on
-		;
-	WRITE_VREG(HEVC_SHIFT_STATUS, data32);
+		data32 = READ_VREG(HEVC_SHIFT_STATUS);
+		data32 = data32 |
+			(0 << 1) |  // emulation_check_off // AOM_AV1 do not have emulation
+			(1 << 0)    // startcode_check_on
+			;
+		WRITE_VREG(HEVC_SHIFT_STATUS, data32);
 
-	WRITE_VREG(HEVC_SHIFT_CONTROL,
-		(0 << 14) | // disable_start_code_protect
-		(1 << 10) | // length_zero_startcode_en // for AOM_AV1
-		(1 << 9) | // length_valid_startcode_en // for AOM_AV1
-		(3 << 6) | // sft_valid_wr_position
-		(2 << 4) | // emulate_code_length_sub_1
-		(3 << 1) | // start_code_length_sub_1 // AOM_AV1 use 0x00000001 as startcode (4 Bytes)
-		(1 << 0)   // stream_shift_enable
-		);
+		WRITE_VREG(HEVC_CABAC_CONTROL,
+			(1 << 0)   // cabac_enable
+			);
 
-	WRITE_VREG(HEVC_CABAC_CONTROL,
-		(1 << 0)   // cabac_enable
-		);
+		WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
+			(1 << 0)   // hevc_parser_core_clk_en
+			);
 
-	WRITE_VREG(HEVC_PARSER_CORE_CONTROL,
-		(1 << 0)   // hevc_parser_core_clk_en
-		);
-
+		}
+		if (hw->no_head) {
+			WRITE_VREG(HEVC_SHIFT_CONTROL,
+			(1 << 14) | // disable_start_code_protect
+			(1 << 10) | // length_zero_startcode_en // for AOM_AV1
+			(1 << 9) | // length_valid_startcode_en // for AOM_AV1
+			(3 << 6) | // sft_valid_wr_position
+			(2 << 4) | // emulate_code_length_sub_1
+			(3 << 1) | // start_code_length_sub_1 // AOM_AV1 use 0x00000001 as startcode (4 Bytes)
+			(1 << 0)   // stream_shift_enable
+			);
+		} else {
+			WRITE_VREG(HEVC_SHIFT_CONTROL,
+			(0 << 14) | // disable_start_code_protect
+			(1 << 10) | // length_zero_startcode_en // for AOM_AV1
+			(1 << 9) | // length_valid_startcode_en // for AOM_AV1
+			(3 << 6) | // sft_valid_wr_position
+			(2 << 4) | // emulate_code_length_sub_1
+			(3 << 1) | // start_code_length_sub_1 // AOM_AV1 use 0x00000001 as startcode (4 Bytes)
+			(1 << 0)   // stream_shift_enable
+			);
+		}
 	}
 #ifndef NEW_FRONT_BACK_CODE
 	WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
