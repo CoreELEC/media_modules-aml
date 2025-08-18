@@ -1567,25 +1567,17 @@ int32_t g_WqMDefault8x8[64] = {
 		"[test.c] Enable HEVC Parser Shift\n");
 
 		data32 = READ_VREG(HEVC_SHIFT_STATUS);
-	#ifdef AVS3
 		data32 = data32 |
 			(0 << 1) |  // emulation_check_on // AVS3 emulation on/off will be controlled in microcode according to startcode type
-			(1 << 0)    // startcode_check_on
-			;
-	#else
-		data32 = data32 |
-			(1 << 1) |  // emulation_check_on
-			(1 << 0)    // startcode_check_on
-			;
-	#endif
+			(1 << 0);    // startcode_check_on
 		WRITE_VREG(HEVC_SHIFT_STATUS, data32);
 
 		WRITE_VREG(HEVC_SHIFT_CONTROL,
-		(6 << 20) |  // emu_push_bits  (6-bits for AVS3)
-		(0 << 19) |  // emu_3_enable // maybe turned on in microcode
-		(0 << 18) |  // emu_2_enable // maybe turned on in microcode
-		(0 << 17) |  // emu_1_enable // maybe turned on in microcode
-		(0 << 16) |  // emu_0_enable // maybe turned on in microcode
+			(6 << 20) |  // emu_push_bits  (6-bits for AVS3)
+			(0 << 19) |  // emu_3_enable // maybe turned on in microcode
+			(0 << 18) |  // emu_2_enable // maybe turned on in microcode
+			(0 << 17) |  // emu_1_enable // maybe turned on in microcode
+			(0 << 16) |  // emu_0_enable // maybe turned on in microcode
 			(0 << 14) | // disable_start_code_protect
 			(3 << 6) | // sft_valid_wr_position
 			(2 << 4) | // emulate_code_length_sub_1

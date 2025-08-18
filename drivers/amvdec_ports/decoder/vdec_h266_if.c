@@ -612,6 +612,9 @@ static int vdec_h266_get_param(unsigned long h_vdec,
 		get_param_comp_buf_info(inst, out);
 		break;
 
+	case GET_PARAM_DECODER_STATUS:
+		break;
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);

@@ -540,6 +540,9 @@ static int vdec_mpeg12_get_param(unsigned long h_vdec,
 		break;
 	}
 
+	case GET_PARAM_DECODER_STATUS:
+		break;
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);

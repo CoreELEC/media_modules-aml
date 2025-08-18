@@ -467,6 +467,8 @@ static int init_mmu_fb_bufstate(struct AVS2Decoder_s *dec, int mmu_fb_4k_number)
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	dma_addr_t tmp_phy_adr;
 	int mmu_map_size = ((mmu_fb_4k_number * 4) >> 6) << 6;
+	int tvp_flag = vdec_secure(hw_to_vdec(dec)) ?
+			CODEC_MM_FLAGS_TVP : 0;
 
 	avs2_print(dec, AVS2_DBG_BUFMGR,
 		"%s: mmu_fb_4k_number %d\n", __func__, mmu_fb_4k_number);
@@ -475,7 +477,7 @@ static int init_mmu_fb_bufstate(struct AVS2Decoder_s *dec, int mmu_fb_4k_number)
 		return -1;
 
 	dec->mmu_box_fb = decoder_mmu_box_alloc_box(DRIVER_NAME,
-	dec->index, 2, (mmu_fb_4k_number << 12) * 2, 0);
+	dec->index, 2, (mmu_fb_4k_number << 12) * 2, tvp_flag);
 
 	dec->fb_buf_mmu0_addr = dma_alloc_coherent(amports_get_dma_device(),
 		mmu_map_size, &tmp_phy_adr, GFP_KERNEL);
@@ -1167,7 +1169,6 @@ int32_t g_WqMDefault8x8[64] = {
 	WRITE_VREG(HEVC_ASSIST_FB_CTL, data32); // new dual
 #endif
 
-#if 1 //move to ucode
 	if (!efficiency_mode && front_flag) {
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"[test.c] Enable HEVC Parser Interrupt\n");
@@ -1186,17 +1187,11 @@ int32_t g_WqMDefault8x8[64] = {
 		"[test.c] Enable HEVC Parser Shift\n");
 
 		data32 = READ_VREG(HEVC_SHIFT_STATUS);
-#ifdef AVS2
 		data32 = data32 |
 			(0 << 1) |  // emulation_check_on // AVS2 emulation on/off will be controlled in microcode according to startcode type
 			(1 << 0)    // startcode_check_on
 			;
-#else
-		data32 = data32 |
-			(1 << 1) |  // emulation_check_on
-			(1 << 0)    // startcode_check_on
-			;
-#endif
+
 		WRITE_VREG(HEVC_SHIFT_STATUS, data32);
 
 		WRITE_VREG(HEVC_SHIFT_CONTROL,
@@ -1227,7 +1222,6 @@ int32_t g_WqMDefault8x8[64] = {
 
 		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 	}
-#endif
 
 	if (!efficiency_mode && back_flag) {
 #if 0 // Dual Core : back Microcode will always initial SCALELUT
