@@ -2092,11 +2092,30 @@ static void hevc_set_unused_4k_buff_idx(struct vdec_h264_hw_s *hw,
 	return;
 }
 
+static bool vh264_is_mb_decode_complete(struct vdec_h264_hw_s *hw, int mb_count_threshold)
+{
+	bool ret = true;
+	unsigned mby_mbx = READ_VREG(MBY_MBX);
+	unsigned mb_total = (hw->seq_info2 >> 8) & 0xffff;
+	unsigned mb_width = hw->seq_info2 & 0xff;
+	unsigned decode_mb_count = 0;
+
+	if (!mb_width && mb_total) /*for 4k2k*/
+		mb_width = 256;
+	decode_mb_count = ((mby_mbx & 0xff) * mb_width + (((mby_mbx >> 8) & 0xff) + 1));
+	if (decode_mb_count < mb_total * (100 - mb_count_threshold) / 100) {
+		ret = false;
+	}
+
+	return ret;
+}
+
 static void hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 {
 	ulong timeout = jiffies + HZ / 10;
 
-	if ((hw->dpb.dec_dpb_status == H264_PIC_DATA_DONE) ||
+	if ((hw->dpb.dec_dpb_status == H264_PIC_DATA_DONE &&
+		vh264_is_mb_decode_complete(hw, 0)) ||
 		!is_hevc_bus_ctrl()) {
 		dpb_print(DECODE_ID(hw),
 			PRINT_FLAG_MMU_DETAIL, "hevc_frame_done...set\n");
@@ -8960,16 +8979,8 @@ pic_done_proc:
 			(dec_dpb_status == H264_DECODE_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_TIMEOUT) ||
 			(!is_multi_frames(hw) && (dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
-			unsigned mby_mbx = READ_VREG(MBY_MBX);
-			unsigned mb_total = (hw->seq_info2 >> 8) & 0xffff;
-			unsigned mb_width = hw->seq_info2 & 0xff;
-			unsigned decode_mb_count;
-
-			if (!mb_width && mb_total) /*for 4k2k*/
-				mb_width = 256;
-			decode_mb_count = ((mby_mbx & 0xff) * mb_width + (((mby_mbx >> 8) & 0xff) + 1));
 			if (((hw->error_proc_policy & 0x20000) &&
-				decode_mb_count < mb_total * (100 - hw->mb_count_threshold) / 100)) {
+				!vh264_is_mb_decode_complete(hw, hw->mb_count_threshold))) {
 				hw->data_flag |= ERROR_FLAG;
 				mutex_lock(&hw->pic_mutex);
 				if (hw->dpb.mVideo.dec_picture)
