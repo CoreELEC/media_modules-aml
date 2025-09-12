@@ -235,7 +235,7 @@ static u32 efficiency_mode = 0;
  * 0x300, if > 720p, use mode 4, else use mode 1;
  * 0x10000, double write p010 enable
  */
-static u32 double_write_mode;
+static u32 double_write_mode = 0x3;
 
 /* triple_write_mode:
  * 0, no triple write;
