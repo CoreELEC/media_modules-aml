@@ -2047,7 +2047,7 @@ static void  hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 	ulong timeout = jiffies + HZ / 10;
 
 	if ((hw->dpb.dec_dpb_status == H264_PIC_DATA_DONE) ||
-		!(is_support_axi_ctrl() || is_support_hevc_arb())) {
+		!is_hevc_bus_ctrl()) {
 		dpb_print(DECODE_ID(hw),
 			PRINT_FLAG_MMU_DETAIL, "hevc_frame_done...set\n");
 		while ((READ_VREG(HEVC_SAO_INT_STATUS) & 0x1) == 0) {

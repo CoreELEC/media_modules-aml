@@ -126,7 +126,7 @@ struct bus_reg_desc {
 #endif
 
 /* read/write register */
-int dos_wait_status(int reg, int mask, int idle);
+int dos_wait_status(int reg, int mask, bool idle);
 
 u32 dos_reg_compat_convert(u32 addr);
 void write_dos_reg(u32 addr, int val);

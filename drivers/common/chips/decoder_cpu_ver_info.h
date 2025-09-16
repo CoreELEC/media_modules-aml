@@ -120,6 +120,15 @@ enum ResResult {
 	RES_RET_OVERSIZE = 2
 };
 
+/* dos_bus_ctrl */
+#define BUSCTL_DMC     (0)       /* dmc data channel ctrl*/
+#define BUSCTL_VDEC    (BIT(0))  /* vdec wait dbus idle */
+#define BUSCTL_HEVC_F  (BIT(1))  /* hevcf arbiter ctrl, or whole hevc ctrl when no hevcb */
+#define BUSCTL_HEVC_B  (BIT(2))  /* hevcb arbiter ctrl */
+
+#define BUSCTL_HEVC_ONLY (BUSCTL_HEVC_F)
+#define BUSCTL_HEVC_FB   (BUSCTL_HEVC_F | BUSCTL_HEVC_B)
+
 /* fmt_support */
 //vdec
 #define FMT_MPEG2    BIT(VFORMAT_MPEG12)
@@ -197,15 +206,16 @@ struct dos_of_dev_s {
 	bool is_vp9_adapt_prob_hw_mode;
 	bool is_vdec_hevc_combine;
 
-	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
-	bool is_support_fb_axi;
-	bool is_support_hevc_arb;
 	bool is_support_34bit;
 
 	u32 fmt_support_flags;
 	u32 support_h265_level_idc;
-	bool is_support_monitor;
+	bool is_support_path_monitor;    /* hevc path monitor */
 	bool is_support_avbc_wrapper;
+
+	/* bus idle ctrl for reset */
+	int dos_bus_ctrl;
+	int dos_bus_idle_mask;  /* afifo idle mask */
 };
 
 
@@ -277,15 +287,17 @@ inline bool is_support_triple_write(void);
 
 inline bool is_support_rdma(void);
 
-inline bool is_support_monitor(void);
+inline bool is_support_path_monitor(void);
 
 inline bool is_support_mmu_copy(void);
 
-inline bool is_support_axi_ctrl(void);
+inline bool is_vdec_bus_ctrl(void);
 
-inline bool is_support_fb_axi(void);
+inline bool is_hevc_bus_ctrl(void);
 
-inline bool is_support_hevc_arb(void);
+inline bool is_hevc_fb_bus_ctrl(void);
+
+inline int get_hevc_bus_idle_mask(void);
 
 inline bool is_support_format(int format);
 

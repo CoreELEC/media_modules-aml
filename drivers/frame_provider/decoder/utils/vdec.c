@@ -215,6 +215,8 @@ int rate_time_avg_threshold_lo = 16700;
 static int mmu_copy_enable = 1;
 static int mmu_copy_dynamic_alloc_buffer = 0;
 
+static bool is_vdec_dual_core_mode(struct vdec_s *vdec);
+
 st_userdata userdata;
 
 struct am_reg {
@@ -840,159 +842,97 @@ static void vdec_dbus_ctrl(bool enable)
 	}
 }
 
+static int hevcb_dual_core_status_wait(void)
+{
+	ulong timeout;
+	u32 core1_st, core2_st;
+
+	timeout = jiffies + HZ/10;
+	do {
+		core1_st = READ_VREG(HEVC_ASSIST_AXI_STATUS_DBE0_LO);
+		core2_st = READ_VREG(HEVC_ASSIST_AXI_STATUS_DBE1_LO);
+
+		//idle_mask ((1 << 15) | (1 << 11)) = 0x8800
+		if ((core1_st & 0x8800) && (core2_st & 0x8800))
+			break;
+		if (time_after(jiffies, timeout)) {
+			pr_err("%s back timeout %x, %x\n", __func__, core1_st, core2_st);
+			return -1;
+		}
+	} while (1);
+
+	return 0;
+}
+
 void hevc_arb_ctrl_front_or_back(bool enable, bool front_flag)
 {
-	u32 axi_ctrl, axi_status, axi_status2, nop_cnt = 200;
-	u32 mask = 0;
+	u32 nop_cnt = 200;
 
 	if (enable) {
-		axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
-		if (front_flag)
-			axi_ctrl &= (~(1 << 6));
-		else
-			axi_ctrl &= (~(1 << 14));
-		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	//enable front/back arbiter
+		if (front_flag) {
+			CLEAR_VREG_MASK(HEVC_ASSIST_AXI_CTRL, (1 << 6));
+		} else {
+			CLEAR_VREG_MASK(HEVC_ASSIST_AXI_CTRL, (1 << 14)); //enable front/back arbiter
+		}
 	} else {
-		u32 idle_mask = ((1 << 15) | (1 << 11));
-		ulong timeout;
-
 		if (front_flag) {
 			/* front disable */
-			axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
-			axi_ctrl |= (1 << 6);
-			WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable front arbiter
+			SET_VREG_MASK(HEVC_ASSIST_AXI_CTRL, (1 << 6)); // disable front arbiter
 
-			timeout = jiffies + HZ/10;
-			do {
-				axi_status = READ_VREG(HEVC_ASSIST_AXI_STATUS_DFE_LO);
-				if (axi_status & idle_mask)		//read/write disable
-					break;
-				if (time_after(jiffies, timeout)) {
-					pr_err("%s front timeout\n", __func__);
-					break;
-				}
-			} while (1);
+			dos_wait_status(HEVC_ASSIST_AXI_STATUS_DFE_LO, ((1 << 15) | (1 << 11)), 1);
 
-			mask = 1 << 26;
+			dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, (1 << 26), 0);
 		} else {
 			/* back disable */
-			axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
-			axi_ctrl |= (1 << 14);
-			WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable back arbiter
+			SET_VREG_MASK(HEVC_ASSIST_AXI_CTRL, (1 << 14)); // disable back arbiter
 
-			timeout = jiffies + HZ/10;
-			do {
-				axi_status = READ_VREG(HEVC_ASSIST_AXI_STATUS_DBE0_LO);
-				axi_status2 = READ_VREG(HEVC_ASSIST_AXI_STATUS_DBE1_LO);
+			hevcb_dual_core_status_wait();
 
-				if ((axi_status & idle_mask) && (axi_status2 & idle_mask))	//read/write disable
-					break;
-				if (time_after(jiffies, timeout)) {
-					pr_err("%s back timeout %x, %x\n", __func__, axi_status, axi_status2);
-					break;
-				}
-			} while (1);
-
-			mask = 0x1B << 27;
+			dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, (0x1b << 27), 0);
 		}
 
 		while (nop_cnt--);
-
-		if (mask) {
-			dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, mask, 0);
-		}
 	}
 }
 EXPORT_SYMBOL(hevc_arb_ctrl_front_or_back);
 
 static void hevc_arb_ctrl(bool enable)
 {
-	u32 axi_ctrl, axi_status, nop_cnt = 200;
-	u32 front_status_reg = HEVC_ASSIST_AXI_STATUS;
-	u32 back_status_reg = HEVC_ASSIST_AXI_STATUS2_LO;
-	unsigned int cpu_type = get_cpu_major_id();
-	u32 mask = 0;
+	u32 f_st, b_st, mask, nop_cnt = 200;
 
 	if (enable) {
-		axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
-		if (is_support_fb_axi()) {
-			axi_ctrl &= (~((1 << 6) | (1 << 14)));
+		//enable front/back arbiter
+		if (is_hevc_fb_bus_ctrl()) {
+			CLEAR_VREG_MASK(HEVC_ASSIST_AXI_CTRL, ((1 << 6) | (1 << 14)));
 		} else {
-			axi_ctrl &= (~(1 << 6));
+			CLEAR_VREG_MASK(HEVC_ASSIST_AXI_CTRL, (1 << 6));
 		}
-		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);		//enable front/back arbiter
 	} else {
-		u32 idle_mask = ((1 << 15) | (1 << 11));
-		ulong timeout;
-
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) {
-			front_status_reg = HEVC_ASSIST_AXI_STATUS_DFE_LO;
+			f_st = HEVC_ASSIST_AXI_STATUS_DFE_LO;
+			b_st = HEVC_ASSIST_AXI_STATUS_FB_LO;
+		 } else {
+			f_st = HEVC_ASSIST_AXI_STATUS;
+			b_st = HEVC_ASSIST_AXI_STATUS2_LO;
+		 }
+
+		// disable front arbiter
+		SET_VREG_MASK(HEVC_ASSIST_AXI_CTRL, (1 << 6));
+
+		dos_wait_status(f_st, ((1 << 15) | (1 << 11)), 1);
+
+		if (is_hevc_fb_bus_ctrl()) {
+			// disable back arbiter
+			SET_VREG_MASK(HEVC_ASSIST_AXI_CTRL, (1 << 14));
+
+			dos_wait_status(b_st, ((1 << 15) | (1 << 11)), 1);
 		}
 
-		/* front disable */
-		axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
-		axi_ctrl |= (1 << 6);
-		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable front arbiter
-
-		timeout = jiffies + HZ / 10;
-		do {
-			axi_status = READ_VREG(front_status_reg);
-			if (axi_status & idle_mask)		//read/write disable
-				break;
-			if (time_after(jiffies, timeout)) {
-				pr_err("%s front timeout %x\n", __func__, axi_status);
-				break;
-			}
-		} while (1);
-
-		if (is_support_fb_axi() ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)) {
-			if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5) {
-				/* back disable */
-				axi_ctrl |= (1 << 14);
-				WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable back arbiter
-			} else {
-				back_status_reg = HEVC_ASSIST_AXI_STATUS_FB_LO;
-			}
-
-			timeout = jiffies + HZ/10;
-			do {
-				axi_status = READ_VREG(back_status_reg);
-
-				if (axi_status & idle_mask)	//read/write disable
-					break;
-				if (time_after(jiffies, timeout)) {
-					pr_err("%s back timeout %x\n", __func__, axi_status);
-					break;
-				}
-			} while (1);
-		}
-
-		while (nop_cnt--);
-
-		switch (cpu_type) {
-		case AM_MESON_CPU_MAJOR_ID_T7:
-		case AM_MESON_CPU_MAJOR_ID_T3X:
-			mask = 0xb << 28;
-			break;
-		case AM_MESON_CPU_MAJOR_ID_S7D:
-		case AM_MESON_CPU_MAJOR_ID_S7:
-		case AM_MESON_CPU_MAJOR_ID_T5W:
-		case AM_MESON_CPU_MAJOR_ID_S4D:
-		case AM_MESON_CPU_MAJOR_ID_T5D:
-		case AM_MESON_CPU_MAJOR_ID_T5M:
-			mask = 0x1 << 28;
-			break;
-		case AM_MESON_CPU_MAJOR_ID_S6:
-			mask = 0xf << 28;
-			break;
-		case AM_MESON_CPU_MAJOR_ID_S5:
-			mask = 0x31 << 26;
-			break;
-		}
-
+		mask = get_hevc_bus_idle_mask();
 		if (mask)
 			dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, mask, 0);
+
+		while (nop_cnt--);
 	}
 }
 
@@ -1096,23 +1036,18 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 
 void arb_ctrl_wait_idle(int enable)
 {
-#define T6D_SYSCTRL_AXI_PIPE_CTRL0  0x55
-#define T6D_DMC_CHAN_STS            0xcf
-#define T6D_DMC_AXI4_CHAN_STS       0x98
+	int mask;
 
 	if (enable) {
 		CLEAR_VREG_MASK(HEVC_ASSIST_AXI_CTRL, ((1 << 6 ) | (1 << 14) | (1 << 22)));
 	} else {
 		SET_VREG_MASK(HEVC_ASSIST_AXI_CTRL, ((1 << 6 ) | (1 << 14) | (1 << 22)));
 
-		dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, (0x3 << 27), 0);
+		dos_wait_status(HEVC_ASSIST_AXI_STATUS_DFE_LO, ((1 << 11) | (1 << 15)), 1);
 
-		while ((read_sysctrl_reg(T6D_SYSCTRL_AXI_PIPE_CTRL0) & (1 << 7)) == 0);
-
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T6D)
-			while ((read_dmc_reg(T6D_DMC_CHAN_STS) & (1 << 4)) == 0);
-
-		while (read_dmc_reg(T6D_DMC_AXI4_CHAN_STS) & 0xffff0000);
+		mask = get_hevc_bus_idle_mask();
+		if (mask)
+			dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, mask, 0);
 	}
 }
 EXPORT_SYMBOL(arb_ctrl_wait_idle);
@@ -1123,18 +1058,18 @@ static void dec_pipeline_idle_ctrl(struct vdec_s *vdec,
 	if (is_vdec_hevc_combine()) {
 		arb_ctrl_wait_idle(enable);
 	} else {
-		if (is_support_axi_ctrl()) {
-			if (target == VDEC_INPUT_TARGET_VLD)
+		if (target == VDEC_INPUT_TARGET_VLD) {
+			if (is_vdec_bus_ctrl()) {
 				vdec_dbus_ctrl(enable);
-			else if (target == VDEC_INPUT_TARGET_HEVC)
+				return;
+			}
+		} else if (target == VDEC_INPUT_TARGET_HEVC) {
+			if (is_hevc_bus_ctrl()) {
 				hevc_arb_ctrl(enable);
-		} else {
-			if ((target == VDEC_INPUT_TARGET_HEVC)
-				&& is_support_hevc_arb())
-				hevc_arb_ctrl(enable);
-			else
-				dec_dmc_port_ctrl(enable, target);
+				return;
+			}
 		}
+		dec_dmc_port_ctrl(enable, target);
 	}
 }
 
@@ -1177,25 +1112,28 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 		vdec_stop_armrisc(input->target);
 
 	if (is_vdec_hevc_combine()) {
-		arb_ctrl_wait_idle(1);
+		arb_ctrl_wait_idle(0);
 	} else {
-		if (is_support_axi_ctrl()) {
-			if (input->target == VDEC_INPUT_TARGET_VLD) {
+		if (input->target == VDEC_INPUT_TARGET_VLD) {
+			if (is_vdec_bus_ctrl()) {
 				if (!vdec_on(VDEC_1))
 					return;
 				vdec_dbus_ctrl(0);
-			} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+				return;
+			}
+		} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+			if (is_hevc_bus_ctrl()) {
 				if (!vdec_on(VDEC_HEVC))
 					return;
-				hevc_arb_ctrl(0);	//check dbe1 when loaded backcore ucode
+				if (is_vdec_dual_core_mode(vdec)) {
+					hevc_arb_ctrl_front_or_back(0, 1);
+					hevc_arb_ctrl_front_or_back(0, 0);
+				} else
+					hevc_arb_ctrl(0);	//check dbe1 when loaded backcore ucode
+				return;
 			}
-		} else {
-			if ((input->target == VDEC_INPUT_TARGET_HEVC)
-				&& is_support_hevc_arb())
-				hevc_arb_ctrl(0);
-			else
-				dec_dmc_port_ctrl(0, input->target);
 		}
+		dec_dmc_port_ctrl(0, input->target);
 	}
 
 	if (debug & VDEC_DBG_DETAIL_INFO)
@@ -1209,23 +1147,24 @@ static void vdec_enable_DMC(struct vdec_s *vdec)
 	if (is_vdec_hevc_combine()) {
 		arb_ctrl_wait_idle(1);
 	} else {
-		if (is_support_axi_ctrl()) {
-			if (input->target == VDEC_INPUT_TARGET_VLD)
+
+		if (input->target == VDEC_INPUT_TARGET_VLD) {
+			if (is_vdec_bus_ctrl()) {
 				vdec_dbus_ctrl(1);
-			else if (input->target == VDEC_INPUT_TARGET_HEVC)
+				return;
+			}
+		} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+			if (is_hevc_bus_ctrl()) {
 				hevc_arb_ctrl(1);
-			return;
+				return;
+			}
 		}
 
 		/*must to be reset the dmc pipeline if it's g12b.*/
 		if (get_cpu_type() == AM_MESON_CPU_MAJOR_ID_G12B)
 			vdec_dmc_pipeline_reset();
 
-		if ((input->target == VDEC_INPUT_TARGET_HEVC)
-			&& is_support_hevc_arb())
-			hevc_arb_ctrl(1);
-		else
-			dec_dmc_port_ctrl(1, input->target);
+		dec_dmc_port_ctrl(1, input->target);
 	}
 
 	pr_debug("%s input->target= 0x%x\n", __func__, input->target);
@@ -2379,8 +2318,7 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 					swap_page_phys);
 				WRITE_VREG(VLD_MEM_SWAP_CTL, 1);
 
-				while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7))
-					;
+				dos_wait_status(VLD_MEM_SWAP_CTL, (1<<7), 0);
 				WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
 
 				/* restore wrap count */
@@ -2412,8 +2350,7 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 				WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 1);
 
 				/* swap busy ands wap wrrsp*/
-				while (READ_VREG(HEVC_STREAM_SWAP_CTRL) & ((1<<7) | (0xff << 24)))
-					;
+				dos_wait_status(HEVC_STREAM_SWAP_CTRL, ((1<<7) | (0xff << 24)), 0);
 				WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
 
 				/* restore stream offset */
@@ -2937,7 +2874,7 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			timeout = jiffies + HZ/2;
 			while (READ_VREG(VLD_MEM_SWAP_CTL) & (1<<7)) {
 				if (time_after(jiffies, timeout)) {
-					pr_err("%s timeout, vdec ctrl 0x%x\n",
+					pr_err("%s timeout, swap ctrl 0x%x\n",
 						__func__, READ_VREG(VLD_MEM_SWAP_CTL));
 					break;
 				}
@@ -5752,8 +5689,8 @@ void hevc_reset_core(struct vdec_s *vdec)
 		(1<<17)|(1<<18)|(1<<19)|(1<<24)|(1<<26));
 
 	WRITE_VREG(DOS_SW_RESET3, 0);
-	while (READ_VREG(HEVC_WRRSP_LMEM) & 0xfff)
-		;
+	dos_wait_status(HEVC_WRRSP_LMEM, 0xfff, 0);
+
 	WRITE_VREG(HEVC_SAO_MMU_RESET_CTRL,
 			READ_VREG(HEVC_SAO_MMU_RESET_CTRL) & (~1));
 
@@ -7114,7 +7051,7 @@ static ssize_t dump_path_monitor_show(KV_CLASS_CONST struct class *class,
 		"reserve_bit_31", //bit 31
 	};
 
-	if (is_support_monitor()) {
+	if (is_support_path_monitor()) {
 		if (is_vdec_hevc_combine()) {
 			WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disable monitor and set rd_idx to 0
 			for (i = 0; i <= 2; i++) {

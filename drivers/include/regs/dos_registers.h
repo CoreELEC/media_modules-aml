@@ -12,13 +12,16 @@
 #define MASK_S6_NEW_REGS   ((AM_MESON_CPU_MAJOR_ID_S6 << 20) & NEW_REG_CHECK_MASK)
 
 #if defined(DOS_REGISTERS_V2)
+/* T6D, T6W */
 #include "dos_registers_v2.h"
 #elif defined(DOS_REGISTERS_V3)
+/* GXLX4, T6X */
 #include "dos_registers_v3.h"
 #else
+/* S6 and before S6 */
 #include "dos_registers_v1.h"
 #endif
-
+/* S5 */
 #include "dos_registers_fb.h"
 
 #define ASSIST_MBOX1_CLR_REG VDEC_ASSIST_MBOX1_CLR_REG

@@ -146,13 +146,13 @@ void s7_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs)
  * mask: valid bit mask
  * idle: wait 0 or 1 for idle
 **********************************************/
-int dos_wait_status(int reg, int mask, int idle)
+int dos_wait_status(int reg, int mask, bool idle)
 {
 	u32 nop_cnt = 10;
 	ulong timeout = jiffies + (HZ/10);
 	u32 val = READ_VREG(reg);
 
-	while ((val & mask) != idle) {
+	while ((!(val & mask)) == idle) {
 		if (time_after(jiffies, timeout)) {
 			pr_crit("%s timeout, reg %x, val %x, mask %x\n",
 				__func__, reg, val, mask);

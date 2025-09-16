@@ -2097,7 +2097,7 @@ static void hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 	ulong timeout = jiffies + HZ / 10;
 
 	if ((hw->dpb.dec_dpb_status == H264_PIC_DATA_DONE) ||
-		!(is_support_axi_ctrl() || is_support_hevc_arb())) {
+		!is_hevc_bus_ctrl()) {
 		dpb_print(DECODE_ID(hw),
 			PRINT_FLAG_MMU_DETAIL, "hevc_frame_done...set\n");
 		while ((READ_VREG(HEVC_SAO_INT_STATUS) & 0x1) == 0) {
@@ -6505,6 +6505,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		/* hw->seq_info2 is used to distinguish the initial play state */
 		if (hw->seq_info2 == 0 && pre_proc_for_mmu(hw, field_flag))
 			return 0;
+
+		hw->mmu_cfg_changed = false;
 		level_idc = reg_val & 0xff;
 		p_H264_Dpb->mSPS.level_idc = level_idc;
 		max_reference_size = (reg_val >> 8) & 0xff;
@@ -9434,13 +9436,13 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 		(p_H264_Dpb->dec_dpb_status == H264_AUX_DATA_READY) ||
 		(p_H264_Dpb->dec_dpb_status == H264_SEI_DATA_READY) ||
 		(p_H264_Dpb->dec_dpb_status == H264_CONFIG_REQUEST)) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"dec_status 0x%x, multi_frame_in_run %d, count %d, rp %x\n",
+			p_H264_Dpb->dec_dpb_status, hw->multi_frame_in_run, hw->status_report_count, READ_VREG(VLD_MEM_VIFIFO_RP));
+
 		if (hw->multi_frame_in_run) {
 			if (hw->status_report_count) {
 				hw->status_report_count--;
-
-				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-					"dec_status 0x%x, multi_frame_in_run, count %d, rp %x\n",
-					p_H264_Dpb->dec_dpb_status, hw->status_report_count, READ_VREG(VLD_MEM_VIFIFO_RP));
 
 				if (hw->status_report_count) {
 					hw->dec_result = DEC_RESULT_DONE;  //drop dec_again header data;
