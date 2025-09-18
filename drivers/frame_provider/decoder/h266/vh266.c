@@ -2256,26 +2256,20 @@ static vvc_frame_t * pic_buf_cfg_alloc(struct hevc_state_s *hevc)
 	vvc_frame_t * pic = NULL;
 	int i;
 	for (i = 0; i < PIC_POOL_SIZE; i++) {
-		if (hevc->vvc_dec->pic_pool[i].used == 0) {
+		if (hevc->vvc_dec->pic_pool[i].used == 0 && hevc->vvc_dec->pic_pool[i].vf_ref == 0) {
+			pic = &hevc->vvc_dec->pic_pool[i];
+			pic->used = 1;
+#ifdef AML
+			pic->backend_ref = 0;
+#endif
 			break;
 		}
 	}
-	if (i < PIC_POOL_SIZE) {
-		//vvc_frame_t pic_cfg;
-		pic = &hevc->vvc_dec->pic_pool[i];
-		pic->used = 1;
-#ifdef AML
-		pic->vf_ref = 0;
-		pic->backend_ref = 0;
-#endif
 
-	}
 	if (pic)
 		hevc_print(hevc, H266_DEBUG_BUFMGR_MORE, "%s: pic index %d\n", __func__, pic->index);
-	else
-		hevc_print(hevc, 0, "%s: ret NULL\n", __func__);
+
 	return pic;
-	//return com_picbuf_alloc(pa->width, pa->height, pa->pad_l, pa->pad_c, ret);
 }
 
 static void pic_buf_cfg_free(vvc_frame_t *pic)
@@ -3078,11 +3072,10 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 static void init_pic_list(struct hevc_state_s *hevc)
 {
 	int i;
-	int init_buf_num = get_work_pic_num(hevc);
 	int dw_mode = get_double_write_mode(hevc);
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 	/*alloc decoder buf will be delay if work on v4l. */
-	for (i = 0; i < init_buf_num; i++) {
+	for (i = 0; i < PIC_POOL_SIZE; i++) {
 		if (alloc_buf(hevc) < 0) {
 			if (i <= 8) {
 				/*if alloced (i+1) >= 9
@@ -8208,8 +8201,10 @@ muti_output:
 				if (vvc_dec->cur_pic == NULL) {
 					vvc_dec->cur_pic = pic_buf_cfg_alloc(hevc);
 					if (vvc_dec->cur_pic == NULL) {
-						hevc_print(hevc, 0, "Error, VVC_SKIP_DECODING");
-						WRITE_VREG(HEVC_DEC_STATUS_REG, VVC_SKIP_DECODING);
+						hevc_print(hevc, H266_DEBUG_BUFMGR, "Error, VVC_SKIP_DECODING");
+						//WRITE_VREG(HEVC_DEC_STATUS_REG, VVC_SKIP_DECODING);
+						hevc->dec_result = DEC_RESULT_AGAIN;
+						vdec_schedule_work(&hevc->work);
 						return IRQ_HANDLED;
 					}
 					vvc_dec->cur_pic->hevc = hevc;
@@ -9542,21 +9537,17 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	for (i = 0; i < PIC_POOL_SIZE; i++) {
 		vvc_frame_t *pic = &hevc->vvc_dec->pic_pool[i];
 		if (pic->used == 1 && pic->referenced == 0 &&
-			pic->vf_ref == 0) {
-			if (pic->mmu_alloc_flag) {
-				pic->mmu_alloc_flag = 0;
-				release_pic_mmu_buf(hevc, pic);
-			}
+			pic->vf_ref == 0)
 			pic_buf_cfg_free(pic);
-		}
 	}
 
-	for (i = 0; i < hevc->used_buf_num; i++) {
+	for (i = 0; i < PIC_POOL_SIZE; i++) {
 		pic = &hevc->vvc_dec->pic_pool[i];
 		if (pic->index == -1)
 			continue;
 		if (pic->used == 0) {
-            new_pic = pic;
+			new_pic = pic;
+			break;
 		}
 	}
 	if (new_pic == NULL) {
@@ -9718,6 +9709,7 @@ static void vh266_work_implement(struct hevc_state_s *hevc,
 	if (hevc->dec_result == DEC_RESULT_DONE) {
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_START);
 	} else if (hevc->dec_result == DEC_RESULT_AGAIN) {
+		msleep(5);
 		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_EVENT_AGAIN, CORE_MASK_HEVC);
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_AGAIN);
 	}

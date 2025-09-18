@@ -6,8 +6,8 @@
 //#define SIMULATION
 
 //!!make sure VVC_BUFFER_NUM <= 31, from number of  HEVC_MPRED_COL_REF_CANVAS_xx_POC
-//#define REF_MAXBUFFER            (31-1)
-#define REF_MAXBUFFER            (24-1)
+#define REF_MAXBUFFER            (31-1)
+//#define REF_MAXBUFFER            (24-1)
 //#define REF_MAXBUFFER            16
 #define VVC_BUFFER_NUM               (REF_MAXBUFFER + 1)
 #define PIC_POOL_SIZE   VVC_BUFFER_NUM
