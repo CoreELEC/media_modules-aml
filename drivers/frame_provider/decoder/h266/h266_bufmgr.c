@@ -1710,23 +1710,11 @@ Picture* xGetNewPicBuffer(DecLib *p_declib, SPS *sps, PPS *pps, const uint32_t t
 	p_declib->m_iMaxRefPicNum = dec_get_used_buf_num(p_declib->hw);
 	if (!p_declib->m_iMaxRefPicNum)
 		p_declib->m_iMaxRefPicNum = dec_get_dpb_size(p_declib->hw, p_declib->param);
-
-	p_declib->m_iMaxRefPicNum -= 1;
 	//p_declib->m_iMaxRefPicNum = 6;
 	//p_declib->m_iMaxRefPicNum = 1;
 #else
 	p_declib->m_iMaxRefPicNum = ( p_declib->m_vps == nullptr || cvector_get(&p_declib->m_vps->m_numLayersInOls, p_declib->m_vps->m_targetOlsIdx) == 1 ) ? sps->m_uiMaxDecPicBuffering[temporalLayer] : getMaxDecPicBuffering(p_declib->m_vps, temporalLayer);     // m_uiMaxDecPicBuffering has the space for the picture currently being decoded
 #endif
-	if (PicList_size(&p_declib->m_cListPic) < (uint32_t)p_declib->m_iMaxRefPicNum) {
-		pcPic = new_picture();
-#if 1 //def TO_DO
-		//pcPic->create( sps.getChromaFormatIdc(), Size( pps.getPicWidthInLumaSamples(), pps.getPicHeightInLumaSamples() ), sps.getMaxCUWidth(), sps.getMaxCUWidth() + 16, true, layerId );
-		pic_create(pcPic, pps->m_picWidthInLumaSamples, pps->m_picHeightInLumaSamples, sps->m_uiMaxCUWidth, sps->m_uiMaxCUWidth + 16, layerId);
-#endif
-		PicList_push(&p_declib->m_cListPic, pcPic); //.push_back( pcPic );
-
-		return pcPic;
-	}
 
 	bBufferIsAvailable = false;
 	//for (auto * p: m_cListPic)
@@ -1752,6 +1740,17 @@ Picture* xGetNewPicBuffer(DecLib *p_declib, SPS *sps, PPS *pps, const uint32_t t
 	}
 
 	if ( ! bBufferIsAvailable ) {
+		if (PicList_size(&p_declib->m_cListPic) < (uint32_t)p_declib->m_iMaxRefPicNum) {
+			pcPic = new_picture();
+#if 1 //def TO_DO
+			//pcPic->create( sps.getChromaFormatIdc(), Size( pps.getPicWidthInLumaSamples(), pps.getPicHeightInLumaSamples() ), sps.getMaxCUWidth(), sps.getMaxCUWidth() + 16, true, layerId );
+			pic_create(pcPic, pps->m_picWidthInLumaSamples, pps->m_picHeightInLumaSamples, sps->m_uiMaxCUWidth, sps->m_uiMaxCUWidth + 16, layerId);
+#endif
+			PicList_push(&p_declib->m_cListPic, pcPic); //.push_back( pcPic );
+
+			return pcPic;
+		}
+
 	//There is no room for this picture, either because of faulty encoder or dropped NAL. Extend the buffer.
 		p_declib->m_iMaxRefPicNum++;
 
@@ -3037,6 +3036,7 @@ int xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 			slice_set->numStrp, slice_set->numLtrp, slice_set->numIlrp);
 		return -1;
 	}
+	update_rpl(&p_declib->m_apcSlicePilot->m_RPL1, &p_app->RPL1_set[rpl1_index]);
 #endif
 	if ((param->p.slice_type != I_SLICE && getNumRefEntries(&p_declib->m_apcSlicePilot->m_RPL0) > 1) ||
 	(param->p.slice_type == B_SLICE && getNumRefEntries(&p_declib->m_apcSlicePilot->m_RPL1) > 1)) {
