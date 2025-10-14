@@ -2260,7 +2260,7 @@ static struct class aml_stb_class = {
 static int aml_dvb_probe(struct platform_device *pdev)
 {
 	struct aml_dvb *advb;
-	int i, ret = 0;
+	int i, ts, ret = 0;
 	struct devio_aml_platform_data *pd_dvb;
 	struct dvb_adapter *padapter;
 
@@ -2494,6 +2494,17 @@ static int aml_dvb_probe(struct platform_device *pdev)
 		ret = aml_dvb_asyncfifo_init(advb, &advb->asyncfifo[i], i);
 		if (ret < 0)
 			goto error;
+
+		aml_asyncfifo_hw_set_source(&advb->asyncfifo[i], AM_DMX_0 + min(i, advb->async_fifo_total_count));
+	}
+
+	/* assign TS inputs to DMX starting at DMX0 */
+	for (ts = 0, i = 0; i < advb->ts_in_total_count; i++) {
+		if (advb->ts[i].mode == AM_TS_DISABLE)
+			continue;
+		aml_dmx_hw_set_source(advb->dmx[ts].dmxdev.demux, DMX_SOURCE_FRONT0 + i);
+		aml_dmx_hw_set_dump_ts_select(aml_dvb_device.dmx[ts].dmxdev.demux, 1);
+		ts++;
 	}
 
 	aml_regist_dmx_class();
