@@ -2528,6 +2528,9 @@ static int get_double_write_mode(struct hevc_state_s *hevc)
 	int h = hevc->pic_h;
 	u32 dw = 0x1; /*1:1*/
 
+	if (is_meson_g12b_cpu() && is_meson_rev_a())
+		valid_dw_mode = 0x2000;
+
 	switch (valid_dw_mode) {
 	case 0x100:
 		if (w * h > 1920 * 1088)
