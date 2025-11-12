@@ -84,15 +84,36 @@ static u32 debug_mask = 0xffffffff;
 static u32 debug;
 int force_dpb_size = 0;
 
+enum print_mode {
+	print_debug,
+	print_info,
+	print_err
+};
+
 struct hevc_state_s;
 struct PIC_s;
 static int get_dbg_flag(struct hevc_state_s * hevc);
-static int hevc_print(struct hevc_state_s *hevc,
-	int debug_flag, const char *fmt, ...);
+static int hevc_debug(struct hevc_state_s *hevc,
+	int debug_flag, enum print_mode mode, const char *fmt, ...);
 static int hevc_print_cont(struct hevc_state_s *hevc,
 	int debug_flag, const char *fmt, ...);
 static void put_mv_buf(struct PIC_s *pic);
 static int dec_get_used_buf_num(struct hevc_state_s *hevc);
+
+#define hevc_print(hevc, flag, fmt, args...)					\
+	do {									\
+		hevc_debug(hevc, flag, print_debug, fmt, ##args);	\
+	} while (0)
+
+#define hevc_info(hevc, flag, fmt, args...) \
+	do {									\
+		hevc_debug(hevc, flag, print_info, fmt, ##args);	\
+	} while (0)
+
+#define hevc_err(hevc, flag, fmt, args...) \
+	do {									\
+		hevc_debug(hevc, flag, print_err, fmt, ##args);	\
+	} while (0)
 
 #define H266_DEBUG_BUFMGR                   0x01
 #define H266_DEBUG_BUFMGR_MORE              0x02
@@ -1959,7 +1980,7 @@ static int get_valid_double_write_mode(struct hevc_state_s *hevc)
 	if (dw & 0x20) {
 		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3)
 			&& ((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
-			pr_info("MMU double write 1:4 not supported !!!\n");
+			hevc_print(hevc, 0, "MMU double write 1:4 not supported !!!\n");
 			dw = 0;
 		}
 	}
@@ -2024,10 +2045,9 @@ static unsigned char get_idx(struct hevc_state_s *hevc)
 }
 #endif
 
-#undef pr_info
-#define pr_info pr_cont
-static int hevc_print(struct hevc_state_s *hevc,
-	int flag, const char *fmt, ...)
+
+static int hevc_debug(struct hevc_state_s *hevc,
+	int flag, enum print_mode mode, const char *fmt, ...)
 {
 #define HEVC_PRINT_BUF		512
 	unsigned char buf[HEVC_PRINT_BUF];
@@ -2043,9 +2063,11 @@ static int hevc_print(struct hevc_state_s *hevc,
 
 		va_start(args, fmt);
 		if (hevc)
-			len = sprintf(buf, "[%d]", hevc->index);
+			len = sprintf(buf, "%d: ", hevc->index);
+		if (mode == print_err)
+			len += sprintf(buf + len, "[ERR]: ");
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		if (flag == 0)
+		if (mode == print_debug)
 			pr_debug("%s", buf);
 		else
 			pr_info("%s", buf);
@@ -2072,7 +2094,7 @@ static int hevc_print_cont(struct hevc_state_s *hevc,
 
 		va_start(args, fmt);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
+		pr_cont("%s", buf);
 		va_end(args);
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	}
@@ -2362,7 +2384,7 @@ static int init_mmu_buffers(struct hevc_state_s *hevc, int bmmu_flag)
 			buf_size * SZ_1M,
 			tvp_flag);
 		if (!hevc->mmu_box) {
-			pr_err("h266 alloc mmu box failed!!\n");
+			hevc_err(hevc, 0, "h266 alloc mmu box failed!!\n");
 			return -1;
 		}
 #ifdef VVC_10B_MMU_DW
@@ -2404,7 +2426,7 @@ dw_mmu_box_failed:
 		decoder_mmu_box_free(hevc->mmu_box);
 	}
 	hevc->mmu_box = NULL;
-	pr_err("h266 %s failed!!\n", __func__);
+	hevc_err(hevc, 0, "h266 %s failed!!\n", __func__);
 	return -1;
 }
 
@@ -2488,7 +2510,7 @@ static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
 					} else {
 							/*not virt for tvp playing,
 							may need clear on ucode.*/
-							pr_err("ref %s	mem_start_virt failed\n", __func__);
+							hevc_err(hevc, 0, "ref %s	mem_start_virt failed\n", __func__);
 					}
 			}
 		}
@@ -4880,7 +4902,7 @@ static void save_register_context(struct hevc_state_s *hevc)
         pcDecApp->chromaQPmap[i] = READ_VREG(HEVC_IQIT_QP_CHROMA_MAP_DATA);
         hevc_print_cont(hevc, H266_DEBUG_REG_CFG, "%x ", pcDecApp->chromaQPmap[i]);
     }
-    hevc_print(hevc, H266_DEBUG_REG_CFG, "\n");
+    hevc_print_cont(hevc, H266_DEBUG_REG_CFG, "\n");
 
 }
 
@@ -4894,7 +4916,7 @@ static void restore_register_context(struct hevc_state_s *hevc)
         hevc_print_cont(hevc, H266_DEBUG_REG_CFG, "%x ", pcDecApp->chromaQPmap[i]);
         WRITE_VREG(HEVC_IQIT_QP_CHROMA_MAP_DATA, pcDecApp->chromaQPmap[i]);
     }
-    hevc_print(hevc, H266_DEBUG_REG_CFG, "\n");
+    hevc_print_cont(hevc, H266_DEBUG_REG_CFG, "\n");
 }
 
 #else
@@ -5183,7 +5205,7 @@ static void set_aux_data(struct hevc_state_s *hevc,
 	}
 	if (get_dbg_flag(hevc) & H266_DEBUG_PRINT_SEI) {
 		hevc_print(hevc, 0,
-			"%s:pic 0x%p old size %d count %d,suf %d dv_flag %d\r\n",
+			"%s:pic 0x%p old size %d count %d,suf %d dv_flag %d\n",
 			__func__, pic, pic->aux_data_size,
 			aux_count, suffix_flag, dv_meta_flag);
 	}
@@ -5277,11 +5299,14 @@ static void set_aux_data(struct hevc_state_s *hevc,
 
 			if (get_dbg_flag(hevc) & H266_DEBUG_PRINT_SEI) {
 				for (i = 0; i < pic->aux_data_size; i++) {
-					pr_info("%02x ", pic->aux_data_buf[i]);
+					if ((i & 0xf) == 0)
+						hevc_print(hevc, H266_DEBUG_PRINT_SEI, "%02x ", pic->aux_data_buf[i]);
+					else
+						hevc_print_cont(hevc, H266_DEBUG_PRINT_SEI, "%02x ", pic->aux_data_buf[i]);
 					if (((i + 1) & 0xf) == 0)
-						pr_info("\n");
+						hevc_print_cont(hevc, H266_DEBUG_PRINT_SEI, "\n");
 				}
-				pr_info("\n");
+				hevc_print_cont(hevc, H266_DEBUG_PRINT_SEI, "\n");
 			}
 		}
 	}
@@ -5759,7 +5784,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 	if (force_bufspec) {
 		memcpy(cur_buf_info, &amvh266_workbuff_spec[force_bufspec & 0xf],
 		sizeof(struct BuffInfo_s));
-		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
+		hevc_print(hevc, 0, "force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
 		if (hevc_is_support_4k()) {
 			if (1)
@@ -5796,7 +5821,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		hevc->rpm_addr = decoder_dma_alloc_coherent(&hevc->rpm_mem_handle,
 				RPM_BUF_SIZE, &hevc->rpm_phy_addr, "H.266_PRM_BUF");
 		if (hevc->rpm_addr == NULL) {
-			pr_err("%s: failed to alloc rpm buffer\n", __func__);
+			hevc_err(hevc, 0, "%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
 		}
 		hevc->rpm_ptr = hevc->rpm_addr;
@@ -5812,7 +5837,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		hevc->aux_addr = decoder_dma_alloc_coherent(&hevc->aux_mem_handle,
 				aux_buf_size, &hevc->aux_phy_addr, "H.266_AUX_BUF");
 		if (hevc->aux_addr == NULL) {
-			pr_err("%s: failed to alloc aux buffer\n", __func__);
+			hevc_err(hevc, 0, "%s: failed to alloc aux buffer\n", __func__);
 			return -1;
 		}
 	}
@@ -5820,7 +5845,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 	hevc->lmem_addr = decoder_dma_alloc_coherent(&hevc->lmem_phy_handle,
 				LMEM_BUF_SIZE, &hevc->lmem_phy_addr, "H.266_LMEM_BUF");
 	if (hevc->lmem_addr == NULL) {
-		pr_err("%s: failed to alloc lmem buffer\n", __func__);
+		hevc_err(hevc, 0, "%s: failed to alloc lmem buffer\n", __func__);
 		return -1;
 	}
 	hevc->lmem_ptr = hevc->lmem_addr;
@@ -5828,7 +5853,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 	hevc->ref_list_buffer_addr = decoder_dma_alloc_coherent(&hevc->ref_list_buffer_phy_handle,
 		REF_LIST_BUF_SIZE, &hevc->ref_list_buffer_phy_addr, "H.266_REF_LIST_BUFFER");
 	if (hevc->ref_list_buffer_addr == NULL) {
-		pr_err("%s: failed to alloc ref_list_buffer buffer\n", __func__);
+		hevc_err(hevc, 0, "%s: failed to alloc ref_list_buffer buffer\n", __func__);
 		return -1;
 	}
 	memset(hevc->ref_list_buffer_addr, 0, REF_LIST_BUF_SIZE);
@@ -5842,7 +5867,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 				get_frame_mmu_map_size(),
 				&hevc->frame_mmu_map_phy_addr, "H.266_MMU_MAP");
 		if (hevc->frame_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			hevc_err(hevc, 0, "%s: failed to alloc count_buffer\n", __func__);
 			return -1;
 		}
 		hevc_print(hevc, H266_DEBUG_REG_CFG, "frame_mmu_map_phy_addr %x size %x\n",
@@ -5857,7 +5882,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 				get_frame_mmu_map_size(),
 				&hevc->frame_dw_mmu_map_phy_addr, "H.266_DWMMU_MAP");
 		if (hevc->frame_dw_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			hevc_err(hevc, 0, "%s: failed to alloc count_buffer\n", __func__);
 			return -1;
 		}
 		memset(hevc->frame_dw_mmu_map_addr, 0, get_frame_mmu_map_size());
@@ -5880,12 +5905,12 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 						0,
 						memflags);
 				if (!hevc->apsalf_buffer_phy_addr) {
-					pr_err("%s: failed to alloc count_buffer\n", __func__);
+					hevc_err(hevc, 0, "%s: failed to alloc count_buffer\n", __func__);
 					return -ENOMEM;
 				}
 			}
 		} else {
-			pr_err("%s, no reserved ext mem pool\n", __func__);
+			hevc_err(hevc, 0, "%s, no reserved ext mem pool\n", __func__);
 			return -ENOMEM;
 		}
 	}
@@ -6113,7 +6138,7 @@ static int vh266_user_data_read(struct vdec_s *vdec,
 			res = copy_to_user(dest_buf, rec_start, first_len);
 			copy_ok = 1;
 			if (res) {
-				pr_info("%s[1], res %ld, request %d\n", __func__, res, first_len);
+				hevc_print(hevc, 0, "%s[1], res %ld, request %d\n", __func__, res, first_len);
 				copy_ok = 0;
 				rec->rec_len -= (first_len - res);
 				rec->rec_start += (first_len - res);
@@ -6122,7 +6147,7 @@ static int vh266_user_data_read(struct vdec_s *vdec,
 				res = copy_to_user(dest_buf + first_len,
 					hevc->userdata_info.data_buf, data_size - first_len);
 				if (res) {
-					pr_info("%s[2], res %ld, request %d\n", __func__, res, data_size);
+					hevc_print(hevc, 0, "%s[2], res %ld, request %d\n", __func__, res, data_size);
 					copy_ok = 0;
 				}
 				rec->rec_len -= (data_size - res);
@@ -6132,7 +6157,7 @@ static int vh266_user_data_read(struct vdec_s *vdec,
 		} else {
 			res = copy_to_user(dest_buf, rec_start, data_size);
 			if (res) {
-				pr_info("%s[3], res %ld, request %d\n", __func__, res, data_size);
+				hevc_print(hevc, 0, "%s[3], res %ld, request %d\n", __func__, res, data_size);
 				copy_ok = 0;
 			}
 			rec->rec_len -= (data_size - res);
@@ -6152,7 +6177,7 @@ static int vh266_user_data_read(struct vdec_s *vdec,
 							(void *)rec_start,
 							data_size);
 		if (res) {
-			pr_info("%s[4], res %ld, request %d\n",
+			hevc_print(hevc, 0, "%s[4], res %ld, request %d\n",
 				__func__, res, data_size);
 			copy_ok = 0;
 		}
@@ -6186,7 +6211,7 @@ void vh266_reset_userdata_fifo(struct vdec_s *vdec, int bInit)
 
 	if (hevc) {
 		mutex_lock(&hevc->userdata_mutex);
-		pr_info("%s, bInit %d, ri %d, wi %d\n", __func__,
+		hevc_print(hevc, 0, "%s, bInit %d, ri %d, wi %d\n", __func__,
 			bInit, hevc->userdata_info.read_index,
 			hevc->userdata_info.write_index);
 
@@ -6503,8 +6528,12 @@ static struct vframe_s *vh266_vf_get(void *op_arg)
 			if (pic->aux_data_buf && pic->aux_data_size > 0) {
 				int i;
 				for (i = 0; i < pic->aux_data_size; i++) {
-					hevc_print_cont(hevc, 0,
-						"%02x ", pic->aux_data_buf[i]);
+					if ((i & 0xf) == 0)
+						hevc_print(hevc, 0,
+							"%02x ", pic->aux_data_buf[i]);
+					else
+						hevc_print_cont(hevc, 0,
+							"%02x ", pic->aux_data_buf[i]);
 					if (((i + 1) & 0xf) == 0)
 						hevc_print_cont(hevc, 0, "\n");
 				}
@@ -7094,7 +7123,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					else if ((mode == 1 || mode == 2 || mode == 4)
 					&& (debug & H266_DEBUG_OUT_PTS) == 0) {
 						vf->compHeadAddr = pic->header_dw_adr;
-						pr_debug("Use dw mmu for display\n");
+						hevc_print(hevc, 0, "Use dw mmu for display\n");
 					}
 				}
 #endif
@@ -7532,7 +7561,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 		if (hevc->kpi_first_i_decoded == 0) {
 			hevc->kpi_first_i_decoded = 1;
-			pr_debug("[vdec_kpi][%s] First I frame decoded.\n",
+			hevc_print(hevc, 0, "[vdec_kpi][%s] First I frame decoded.\n",
 				__func__);
 		}
 
@@ -7615,7 +7644,7 @@ static int prepare_display_buf(void *hw, struct PIC_s *frame)
 		post_prepare_process(vdec, frame);
 
 		if (!frame->show_frame)
-			pr_info("do not display.\n");
+			hevc_print(hevc, 0, "do not display.\n");
 
 		frame->vf_ref = 1;
 
@@ -7677,7 +7706,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
-		pr_info("[%d] H266 EOS notify.\n", vdec->id);
+		hevc_print(hw, 0, "[%d] H266 EOS notify.\n", vdec->id);
 	}
 
 	return 0;
@@ -7763,7 +7792,10 @@ static void dump_aux_buf(struct hevc_state_s *hevc)
 			return ;
 		}
 		for (i = 0; i < (aux_size >> 1); i++) {
-			hevc_print_cont(hevc, 0, "%04x ", *(aux_adr + i));
+			if ((i & 0xf) == 0)
+				hevc_print(hevc, 0, "%04x ", *(aux_adr + i));
+			else
+				hevc_print_cont(hevc, 0, "%04x ", *(aux_adr + i));
 			if (((i + 1) & 0xf) == 0)
 				hevc_print_cont(hevc, 0, "\n");
 		}
@@ -7778,9 +7810,11 @@ static void dump_aux_buf(struct hevc_state_s *hevc)
 				"%s:aux_size(%d) is over size\n", __func__, aux_size);
 			return ;
 		}
-		for (i = 0; i <
-		(aux_size >> 1); i++) {
-			hevc_print_cont(hevc, 0, "%04x ", *(aux_adr + i));
+		for (i = 0; i < (aux_size >> 1); i++) {
+			if ((i & 0xf) == 0)
+				hevc_print(hevc, 0, "%04x ", *(aux_adr + i));
+			else
+				hevc_print_cont(hevc, 0, "%04x ", *(aux_adr + i));
 			if (((i + 1) & 0xf) == 0)
 				hevc_print_cont(hevc, 0, "\n");
 		}
@@ -7901,14 +7935,14 @@ static irqreturn_t vh266_isr_thread_fn(int irq, void *data)
 	}
 	mutex_unlock(&hevc->chunks_mutex);
 	if (dec_status == VVC_HEAD_SEQ_READY) {
-		hevc_print(hevc, H266_DEBUG_BUFMGR, " ==== VVC_HEAD_SPS_READY ====\r\n");
+		hevc_print(hevc, H266_DEBUG_BUFMGR, " ==== VVC_HEAD_SPS_READY ====\n");
 		hevc->vvc_dec->seq_change_flag = 1;
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VVC_ACTION_DONE);
 	} else if (dec_status == VVC_HEAD_PIC_READY) {
-		hevc_print(hevc, H266_DEBUG_BUFMGR, " ==== VVC_HEAD_PPS_READY ====\r\n");
+		hevc_print(hevc, H266_DEBUG_BUFMGR, " ==== VVC_HEAD_PPS_READY ====\n");
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VVC_ACTION_DONE);
 	} else if (dec_status == VVC_HEAD_SEQ_END_READY) {
-		hevc_print(hevc, H266_DEBUG_BUFMGR, " ==== VVC_HEAD_SEQ_END_READY ====\r\n");
+		hevc_print(hevc, H266_DEBUG_BUFMGR, " ==== VVC_HEAD_SEQ_END_READY ====\n");
 		h266_bufmgr_code_process(&hevc->vvc_dec->m_decApp, SEQUENCE_END_CODE);
 #if 0
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VVC_ACTION_DONE);
@@ -7920,7 +7954,7 @@ static irqreturn_t vh266_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 #endif
 	} else if (dec_status == VVC_STARTCODE_SEARCH_DONE) {
-		hevc_print(hevc, H266_DEBUG_BUFMGR, " ==== VVC_STARTCODE_SEARCH_DONE ==== 0x%x\r\n", READ_VREG(CUR_NAL_UNIT_TYPE));
+		hevc_print(hevc, H266_DEBUG_BUFMGR, " ==== VVC_STARTCODE_SEARCH_DONE ==== 0x%x\n", READ_VREG(CUR_NAL_UNIT_TYPE));
 	} else if (dec_status == VVC_DECODE_BUFEMPTY ||
 		dec_status == VVC_DECODE_BUFEMPTY2) {
 		if (hevc->m_ins_flag) {
@@ -8168,7 +8202,10 @@ muti_output:
 		if (get_dbg_flag(hevc) & H266_DEBUG_DUMP_REF_LIST_BUF) {
 			hevc_print(hevc, H266_DEBUG_DUMP_REF_LIST_BUF, "ref_list_buf_v begin:\n");
 			for (i = 0; i < REF_LIST_BUF_SIZE; i++) {
-				hevc_print_cont(hevc, 0, "%02x ", hevc->vvc_dec->ref_list_buf_v[i]);
+				if ((i & 0xf) == 0)
+					hevc_print(hevc, 0, "%02x ", hevc->vvc_dec->ref_list_buf_v[i]);
+				else
+					hevc_print_cont(hevc, 0, "%02x ", hevc->vvc_dec->ref_list_buf_v[i]);
 				if (((i + 1) & 0xf) == 0)
 					hevc_print_cont(hevc, 0, "\n");
 			}
@@ -8180,13 +8217,16 @@ muti_output:
 			hevc_print(hevc, 0, "rpm_param: (%d)\n", hevc->slice_idx);
 			hevc->slice_idx++;
 			for (i = 0; i < (RPM_END - RPM_BEGIN); i++) {
-				hevc_print_cont(hevc, 0, "%04x ", hevc->vvc_dec->param.l.data[i]);
+				if ((i & 0xf) == 0)
+					hevc_print(hevc, 0, "%04x ", hevc->vvc_dec->param.l.data[i]);
+				else
+					hevc_print_cont(hevc, 0, "%04x ", hevc->vvc_dec->param.l.data[i]);
 				if (((i + 1) & 0xf) == 0)
 					hevc_print_cont(hevc, 0, "\n");
 			}
 		}
 		if (get_dbg_flag(hevc) & H266_DEBUG_BUFMGR_MORE)
-			print_param(&vvc_dec->param);
+			print_param(hevc, &vvc_dec->param);
 
 		if (aux_data_is_available(hevc)) {
 			if (get_dbg_flag(hevc) & H266_DEBUG_PRINT_SEI)
@@ -8530,7 +8570,7 @@ static irqreturn_t vh266_isr(int irq, void *data)
 		for (i = 0; i < temp; i += 4) {
 			int ii;
 			if ((i & 0xf) == 0)
-				hevc_print_cont(hevc, 0, "%03x: ", i);
+				hevc_print(hevc, 0, "%03x: ", i);
 			for (ii = 0; ii < 4; ii++) {
 				hevc_print_cont(hevc, 0, "%04x ", hevc->lmem_ptr[i + 3 - ii]);
 			}
@@ -8584,9 +8624,8 @@ static irqreturn_t vh266_isr(int irq, void *data)
 	if (!hevc->m_ins_flag) {
 		if (dec_status == HEVC_OVER_DECODE) {
 			hevc->over_decode = 1;
-			hevc_print(hevc, 0,
-				"isr: over decode\n"),
-				WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
+			hevc_print(hevc, 0, "isr: over decode\n");
+			WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 			return IRQ_HANDLED;
 		}
 	}
@@ -8702,14 +8741,14 @@ static void vh266_check_timer_func(struct timer_list *timer)
 			int adr = radr & 0xffffff;
 			int i;
 			for (i = 0; i < count; i++)
-				pr_info("READ_VREG(%x)=%x\n", adr+i, READ_VREG(adr+i));
+				hevc_print(hevc, 0, "READ_VREG(%x)=%x\n", adr+i, READ_VREG(adr+i));
 		} else
 #endif
 		if (rval != 0) {
 			WRITE_VREG(radr, rval);
-			pr_info("WRITE_VREG(%x,%x)\n", radr, rval);
+			hevc_print(hevc, 0, "WRITE_VREG(%x,%x)\n", radr, rval);
 		} else
-			pr_info("READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
+			hevc_print(hevc, 0, "READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
 		rval = 0;
 		radr = 0;
 	}
@@ -8729,7 +8768,7 @@ static void vh266_check_timer_func(struct timer_list *timer)
 				disp_laddr = cur_canvas.addr;
 			}
 			hevc_print(hevc, 0,
-				"current displayed buffer address %x\r\n",
+				"current displayed buffer address %x\n",
 				disp_laddr);
 		}
 		dbg_cmd = 0;
@@ -8774,7 +8813,7 @@ int vh266_dec_status(struct vdec_info *vstatus)
 	struct vdec_info_statistic_s *vstatistic = container_of(
 		vstatus, struct vdec_info_statistic_s, vstatus);
 	if (!hevc || !vstatistic) {
-		pr_info("param invalid!\n");
+		hevc_print(hevc, 0, "param invalid!\n");
 		return -1;
 	}
 
@@ -8844,7 +8883,7 @@ static int vh266_vdec_info_init(struct hevc_state_s  *hevc)
 {
 	hevc->gvs = kzalloc(sizeof(struct vdec_info), GFP_KERNEL);
 	if (NULL == hevc->gvs) {
-		pr_info("the struct of vdec status malloc failed.\n");
+		hevc_err(hevc, 0, "the struct of vdec status malloc failed.\n");
 		return -ENOMEM;
 	}
 	vdec_set_vframe_comm(hw_to_vdec(hevc), DRIVER_NAME);
@@ -9060,7 +9099,7 @@ static int vh266_local_init(struct hevc_state_s *hevc)
 	hevc->dec_again_cnt = 0;
 
 	if (is_oversize(hevc->frame_width, hevc->frame_height)) {
-		pr_info("over size : %u x %u.\n",
+		hevc_print(hevc, 0, "over size : %u x %u.\n",
 			hevc->frame_width, hevc->frame_height);
 		hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		return ret;
@@ -9172,19 +9211,19 @@ static s32 vh266_init(struct hevc_state_s *hevc)
 	if (hevc->enable_ucode_swap) {
 		size = get_firmware_data(VIDEO_DEC_HEVC_MMU_SWAP, fw->data);
 		if (size < 0) {
-			pr_info("hevc can not get swap fw code\n");
+			hevc_print(hevc, 0, "hevc can not get swap fw code\n");
 			size = get_firmware_data(VIDEO_DEC_H266_MMU, fw->data);
 			hevc->enable_ucode_swap = false;
 			hevc->is_swap = false;
 		} else if (size)
 			hevc->is_swap = true;	//local fw swap
-		pr_info("get_firmware_data swap size %d swap %d\n", size, hevc->is_swap);
+		hevc_print(hevc, 0, "get_firmware_data swap size %d swap %d\n", size, hevc->is_swap);
 	} else {
 		size = get_firmware_data(VIDEO_DEC_H266_MMU, fw->data);
-		pr_info("get_firmware_data size %d\n", size);
+		hevc_print(hevc, 0, "get_firmware_data size %d\n", size);
 	}
 	if (size < 0) {
-		pr_err("get firmware fail.\n");
+		hevc_err(hevc, 0, "get firmware fail.\n");
 		vfree(fw);
 		return -1;
 	}
@@ -9201,7 +9240,7 @@ static s32 vh266_init(struct hevc_state_s *hevc)
 		if (!hevc->mc_cpu_addr) {
 			amhevc_disable();
 			vfree(fw);
-			pr_info("vh266 mmu swap ucode loaded fail.\n");
+			hevc_err(hevc, 0, "vh266 mmu swap ucode loaded fail.\n");
 			return -ENOMEM;
 		}
 
@@ -9216,14 +9255,14 @@ static s32 vh266_init(struct hevc_state_s *hevc)
 #ifdef H266_USERDATA_ENABLE
 			hevc->sei_itu_data_buf = kmalloc(SEI_ITU_DATA_SIZE, GFP_KERNEL);
 			if (hevc->sei_itu_data_buf == NULL) {
-				pr_err("%s: failed to alloc sei itu data buffer\n",
+				hevc_err(hevc, 0, "%s: failed to alloc sei itu data buffer\n",
 					__func__);
 				vfree(fw);
 				return -1;
 			} else if (NULL == hevc->sei_user_data_buffer) {
 				hevc->sei_user_data_buffer = kmalloc(USER_DATA_SIZE, GFP_KERNEL);
 				if (!hevc->sei_user_data_buffer) {
-					pr_info("%s: Can not allocate sei_data_buffer\n", __func__);
+					hevc_err(hevc, 0, "%s: Can not allocate sei_data_buffer\n", __func__);
 					kfree(hevc->sei_itu_data_buf);
 					hevc->sei_itu_data_buf = NULL;
 				}
@@ -9247,7 +9286,7 @@ static s32 vh266_init(struct hevc_state_s *hevc)
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
-		pr_err("H266: the %s fw loading failed, err: %x\n",
+		hevc_err(hevc, 0, "H266: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
@@ -10390,7 +10429,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	ret = is_new_pic_available(hevc);
 	if (!ret) {
 		hevc_print(hevc,
-		PRINT_FLAG_VDEC_DETAIL, "%s=>%d\r\n",
+		PRINT_FLAG_VDEC_DETAIL, "%s=>%d\n",
 		__func__, ret);
 	}
 
@@ -10711,14 +10750,14 @@ static void reset(struct vdec_s *vdec)
 	aml_free_canvas(vdec);
 	hevc_local_uninit(hevc);
 	if (vh266_local_init(hevc) < 0)
-		pr_debug(" %s local init fail\n", __func__);
+		hevc_err(hevc, 0, " %s local init fail\n", __func__);
 	for (i = 0; i < BUF_POOL_SIZE; i++) {
 		hevc->m_BUF[i].start_adr = 0;
 	}
 
 	hevc->dec_result = DEC_RESULT_NONE;
 
-	hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL, "%s\r\n", __func__);
+	hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL, "%s\n", __func__);
 }
 
 static irqreturn_t vh266_irq_cb(struct vdec_s *vdec, int irq)
@@ -10752,7 +10791,7 @@ static int amvdec_h266_probe(struct platform_device *pdev)
 
 	hevc = vmalloc(sizeof(struct hevc_state_s));
 	if (hevc == NULL) {
-		hevc_print(hevc, 0, "%s vmalloc hevc failed\r\n", __func__);
+		hevc_print(hevc, 0, "%s vmalloc hevc failed\n", __func__);
 		return -ENOMEM;
 	}
 	gHevc = hevc;
@@ -10761,7 +10800,7 @@ static int amvdec_h266_probe(struct platform_device *pdev)
 					H266_DEBUG_DIS_SYS_ERROR_PROC));
 	memset(hevc, 0, sizeof(struct hevc_state_s));
 	if (get_dbg_flag(hevc))
-		hevc_print(hevc, 0, "%s\r\n", __func__);
+		hevc_print(hevc, 0, "%s\n", __func__);
 	mutex_lock(&vh266_mutex);
 
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) &&
@@ -10911,7 +10950,7 @@ static KV_INT_TO_VOID amvdec_h266_remove(struct platform_device *pdev)
 	struct hevc_state_s *hevc = gHevc;
 
 	if (get_dbg_flag(hevc))
-		hevc_print(hevc, 0, "%s\r\n", __func__);
+		hevc_print(hevc, 0, "%s\n", __func__);
 
 	mutex_lock(&vh266_mutex);
 
@@ -11141,13 +11180,13 @@ static int ammvdec_h266_probe(struct platform_device *pdev)
 	static struct vframe_operations_s vf_tmp_ops;
 
 	if (pdata == NULL) {
-		pr_info("\nammvdec_h266 memory resource undefined.\n");
+		pr_info("%d: [ERR]: ammvdec_h266 memory resource undefined.\n", pdev->id);
 		return -EFAULT;
 	}
 
 	hevc = vmalloc(sizeof(struct hevc_state_s));
 	if (hevc == NULL) {
-		pr_info("\nammvdec_h266 device data allocation failed\n");
+		pr_info("%d: [ERR]:ammvdec_h266 device data allocation failed\n", pdev->id);
 		return -ENOMEM;
 	}
 	memset(hevc, 0, sizeof(struct hevc_state_s));
@@ -11434,7 +11473,7 @@ static int ammvdec_h266_probe(struct platform_device *pdev)
 	}
 
 	if (init_mmu_buffers(hevc, 0) < 0) {
-		hevc_print(hevc, 0,
+		hevc_err(hevc, 0,
 			"\n 266 mmu init failed!\n");
 		mutex_unlock(&vh266_mutex);
 		/* devm_kfree(&pdev->dev, (void *)hevc);*/
@@ -11561,7 +11600,7 @@ static void vdec_fence_release(struct hevc_state_s *hw,
 	expires = jiffies + msecs_to_jiffies(2000);
 	while (!check_objs_all_signaled(sync)) {
 		if (time_after(jiffies, expires)) {
-			pr_err("wait fence signaled timeout.\n");
+			hevc_err(hw, 0, "wait fence signaled timeout.\n");
 			break;
 		}
 	}
@@ -11587,7 +11626,7 @@ static KV_INT_TO_VOID ammvdec_h266_remove(struct platform_device *pdev)
 
 	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
 	if (get_dbg_flag(hevc))
-		hevc_print(hevc, 0, "%s\r\n", __func__);
+		hevc_print(hevc, 0, "%s\n", __func__);
 
 	vmh266_stop(hevc);
 #ifdef H266_USERDATA_ENABLE

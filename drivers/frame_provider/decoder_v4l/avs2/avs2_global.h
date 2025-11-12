@@ -1672,9 +1672,38 @@ struct avs2_decoder {
 	u64 start_time;
 	struct avs2_frame_s *error_fref[REF_MAXBUFFER];
 	u64 decode_idx;
+	void *private;
 #endif
 };
 
+struct AVS2Decoder_s;
+
+enum print_mode {
+	print_debug,
+	print_info,
+	print_err
+};
+
+extern	int avs2_debug(struct AVS2Decoder_s *dec,
+	int flag, enum print_mode mode, const char *fmt, ...);
+
+extern	int avs2_print_cont(struct AVS2Decoder_s *dec,
+	int flag, const char *fmt, ...);
+
+#define avs2_print2(avs2_dec, flag, fmt, args...)					\
+	do {									\
+		avs2_debug(avs2_dec->private, flag, print_debug, fmt, ##args);	\
+	} while (0)
+
+#define avs2_err2(avs2_dec, flag, fmt, args...)					\
+	do {									\
+		avs2_debug(avs2_dec->private, flag, print_err, fmt, ##args); \
+	} while (0)
+
+#define avs2_print_cont2(avs2_dec, flag, fmt, args...)					\
+	do {									\
+		avs2_print_cont(avs2_dec->private, flag, fmt, ##args);	\
+	} while (0)
 
 extern void write_frame(struct avs2_decoder *avs2_dec, int32_t pos);
 extern void init_frame_t(struct avs2_frame_s *currfref);

@@ -107,7 +107,7 @@ static int picman_get_num_allocated_pics(COM_PM * pm)
 }
 #endif
 
-static int picman_move_pic(COM_PM *pm, int from, int to)
+static int picman_move_pic(struct avs3_decoder *hw, COM_PM *pm, int from, int to)
 {
 	int i;
 	COM_PIC * pic;
@@ -130,13 +130,13 @@ static int picman_move_pic(COM_PM *pm, int from, int to)
 	}
 
 	if (found_empty_pos != 1) {
-		pr_info("%s pic %p will be discarded\n", __func__, pic);
+		avs3_print2(hw, 0, "%s pic %p will be discarded\n", __func__, pic);
 	}
 	assert(found_empty_pos == 1);
 	return 0;
 }
 
-static void picman_update_pic_ref(COM_PM * pm)
+static void picman_update_pic_ref(struct avs3_decoder *hw, COM_PM * pm)
 {
 	COM_PIC ** pic;
 	COM_PIC ** pic_ref;
@@ -155,7 +155,7 @@ static void picman_update_pic_ref(COM_PM * pm)
 				pic_ref[j++] = pic[i];
 			else {
 				if (avs3_get_debug_flag())
-					pr_info("%s ref pic num(%d) is more than the MAX_NUM_REF_PICS\n",
+					avs3_print2(hw, 0, "%s ref pic num(%d) is more than the MAX_NUM_REF_PICS\n",
 						__func__, j);
 			}
 #else
@@ -172,7 +172,7 @@ static void picman_update_pic_ref(COM_PM * pm)
 #ifdef BUFMGR_SANITY_CHECK
 			if (i >= MAX_NUM_REF_PICS || j >= MAX_NUM_REF_PICS) {
 				if (avs3_get_debug_flag())
-					pr_info("%s pm pic num(%d,%d) is more than the MAX_NUM_REF_PICS\n",
+					avs3_print2(hw, 0, "%s pm pic num(%d,%d) is more than the MAX_NUM_REF_PICS\n",
 						__func__, i, j);
 				return;
 			}
@@ -210,11 +210,11 @@ static COM_PIC * picman_remove_pic_from_pb(COM_PM * pm, int pos)
 }
 #endif
 
-static void picman_set_pic_to_pb(COM_PM * pm, COM_PIC * pic,
+static void picman_set_pic_to_pb(struct avs3_decoder *hw, COM_PM * pm, COM_PIC * pic,
 	COM_REFP(*refp)[REFP_NUM], int pos)
 {
 	int i;
-	printf("%s: pic %p pos %d\n", __func__, pic, pos);
+	avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: pic %p pos %d\n", __func__, pic, pos);
 	for (i = 0; i < pm->num_refp[REFP_0]; i++) {
 #if ETMVP || SUB_TMVP || AWP
 		pic->list_ptr[REFP_0][i] = refp[i][REFP_0].ptr;
@@ -245,7 +245,7 @@ static void picman_set_pic_to_pb(COM_PM * pm, COM_PIC * pic,
 
 			if (i < 0)
 			{
-				printf("pos pic will be discarded\n");
+				avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "pos pic will be discarded\n");
 			}
 		}
 		pm->pic[pos] = pic;
@@ -259,7 +259,7 @@ static void picman_set_pic_to_pb(COM_PM * pm, COM_PIC * pic,
 			}
 		}
 		if (i < 0) {
-			printf("i=%d\n", i);
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "i=%d\n", i);
 			com_assert(i >= 0);
 		}
 	}
@@ -341,7 +341,7 @@ int check_copy_refp(COM_REFP(*refp)[REFP_NUM], int cnt, int lidx, COM_REFP  * re
 }
 
 #if HLS_RPL   //This is implementation of reference picture list construction based on RPL. This is meant to replace function int com_picman_refp_init(COM_PM *pm, int num_ref_pics_act, int slice_type, u32 ptr, u8 layer_id, int last_intra, COM_REFP(*refp)[REFP_NUM])
-int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_REFP(*refp)[REFP_NUM])
+int com_picman_refp_rpl_based_init(struct avs3_decoder *hw, COM_PM *pm, COM_PIC_HEADER *pic_header, COM_REFP(*refp)[REFP_NUM])
 {
 	//MX: IDR?
 	int i;
@@ -351,7 +351,7 @@ int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_R
 		return COM_OK;
 	}
 
-	picman_update_pic_ref(pm);
+	picman_update_pic_ref(hw, pm);
 #if LIBVC_ON
 	if (!pm->libvc_data->library_picture_enable_flag && pic_header->slice_type != SLICE_I)
 #endif
@@ -399,7 +399,7 @@ int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_R
 					pic_header->rpl_l0.ref_pics_ddoi[i] = diff;
 				}
 			} else {
-				printf("%s: The L0 Reference Picture(%d) is not find in dpb",
+				avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L0 Reference Picture(%d) is not find in dpb",
 					__func__, refPicPoc);
 				return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
 			}
@@ -464,7 +464,7 @@ int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_R
 					pic_header->rpl_l1.ref_pics_ddoi[i] = diff;
 				}
 			} else {
-				printf("%s: The L1 Reference Picture(%d) is not find in dpb",
+				avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L1 Reference Picture(%d) is not find in dpb",
 					__func__, refPicPoc);
 				return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
 			}
@@ -497,14 +497,14 @@ int com_picman_refp_rpl_based_init(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_R
 	return COM_OK;  //RPL construction completed
 }
 
-int com_cleanup_useless_pic_buffer_in_pm(COM_PM *pm)
+int com_cleanup_useless_pic_buffer_in_pm(struct avs3_decoder *hw, COM_PM *pm)
 {
 	//remove the pic if it is a unref pic, and has been output.
 	int i;
-	printf("%s\n", __func__);
+	avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s\n", __func__);
 	for (i = 0; i < pm->max_pb_size; i++) {
 		if (pm->pic[i] != NULL)
-			printf("pm pic %p index %d\n", pm->pic[i], i);
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "pm pic %p index %d\n", pm->pic[i], i);
 		if ((pm->pic[i] != NULL) && (pm->pic[i]->need_for_out == 0)
 		&& (pm->pic[i]->is_ref == 0)
 #ifdef AML
@@ -559,15 +559,15 @@ int find_close_pic(COM_PM *pm, COM_PIC_HEADER *pic_header)
 
 //This is implementation of reference picture list construction based on RPL for decoder
 //in decoder, use DOI as pic reference instead of POC
-int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_REFP(*refp)[REFP_NUM])
+int com_picman_refp_rpl_based_init_decoder(struct avs3_decoder *hw, COM_PM *pm, COM_PIC_HEADER *pic_header, COM_REFP(*refp)[REFP_NUM])
 {
 	int i;
-	picman_update_pic_ref(pm);
+	picman_update_pic_ref(hw, pm);
 #ifdef BUFMGR_SANITY_CHECK
 	for (i = 0; i < pm->cur_num_ref_pics; i++) {
 		if (pm->pic_ref[i] == NULL) {
 			if (avs3_get_debug_flag())
-				pr_info("%s error, pm->cur_num_ref_pics = %d,  pm->pic_ref[%d] is NULL\n",
+				avs3_err2(hw, 0, "%s error, pm->cur_num_ref_pics = %d,  pm->pic_ref[%d] is NULL\n",
 					__func__, pm->cur_num_ref_pics, i);
 			return COM_ERR;
 		}
@@ -595,7 +595,7 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 #ifdef BUFMGR_SANITY_CHECK
 			if (pm->pb_libpic == NULL) {
 				if (avs3_get_debug_flag())
-					pr_info("%s error, pm->pb_libpic is NULL\n", __func__);
+					avs3_err2(hw, 0, "%s error, pm->pb_libpic is NULL\n", __func__);
 				return COM_ERR;
 			}
 #endif
@@ -624,20 +624,20 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 						pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
 					} else {
 						com_picman_unlock(pm, flags);
-						printf("%s: The L0 Reference Picture(%d) drop_flag is 1",
+						avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L0 Reference Picture(%d) drop_flag is 1",
 							__func__, refPicDoi);
 						return COM_ERR;
 					}
 				} else {
 					com_picman_unlock(pm, flags);
-					printf("%s: The L0 Reference Picture(%d) error_mark is 1",
+					avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L0 Reference Picture(%d) error_mark is 1",
 						__func__, refPicDoi);
 					return COM_ERR;
 				}
 			} else {
 				if (avs3_get_error_policy(pm) & 0x4) {
 					com_picman_unlock(pm, flags);
-					printf("%s: The L0 Reference Picture(%d) is not find in dpb",
+					avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L0 Reference Picture(%d) is not find in dpb",
 						__func__, refPicDoi);
 					return COM_ERR;   //The refence picture must be available in the DPB, if not found then there is problem
 				} else {
@@ -661,11 +661,11 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 							set_refp(&refp[i][REFP_0], pm->pic[index]);
 							pm->num_refp[REFP_0] = pm->num_refp[REFP_0] + 1;
 
-							printf("%s: The L0 Reference Picture dtr(%d) is not find in dpb, use pic dtr(%d) instead",
+							avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L0 Reference Picture dtr(%d) is not find in dpb, use pic dtr(%d) instead",
 								__func__, refPicDoi, pm->pic[index]->dtr);
 						} else {
 							com_picman_unlock(pm, flags);
-							printf("%s: The L0 Reference Picture(%d) is not find in dpb (Error Mode)",
+							avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L0 Reference Picture(%d) is not find in dpb (Error Mode)",
 								__func__, refPicDoi);
 							return COM_ERR;
 						}
@@ -689,7 +689,7 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 #ifdef BUFMGR_SANITY_CHECK
 			if (pm->pb_libpic == NULL) {
 				if (avs3_get_debug_flag())
-					pr_info("%s error, pm->pb_libpic is NULL\n", __func__);
+					avs3_err2(hw, 0, "%s error, pm->pb_libpic is NULL\n", __func__);
 				return COM_ERR;
 			}
 #endif
@@ -725,18 +725,18 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 						set_refp(&refp[i][REFP_1], pm->pic_ref[j]);
 						pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
 					} else {
-						printf("%s: The L1 Reference Picture(%d) drop_flag is 1",
+						avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L1 Reference Picture(%d) drop_flag is 1",
 							__func__, refPicDoi);
 						return COM_ERR;
 					}
 				} else {
-					printf("%s: The L1 Reference Picture(%d) error_mark is 1",
+					avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L1 Reference Picture(%d) error_mark is 1",
 						__func__, refPicDoi);
 					return COM_ERR;
 				}
 			} else {
 				if (avs3_get_error_policy(pm) & 0x4) {
-					printf("%s: The L1 Reference Picture(%d) is not find in dpb",
+					avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L1 Reference Picture(%d) is not find in dpb",
 						__func__, refPicDoi);
 					return COM_ERR;
 				} else {
@@ -760,10 +760,10 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 							set_refp(&refp[i][REFP_1], pm->pic[index]);
 							pm->num_refp[REFP_1] = pm->num_refp[REFP_1] + 1;
 
-							printf("%s: The L1 Reference Picture dtr(%d) is not find in dpb, use pic dtr(%d) instead",
+							avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L1 Reference Picture dtr(%d) is not find in dpb, use pic dtr(%d) instead",
 								__func__, refPicDoi, pm->pic[index]->dtr);
 						} else {
-							printf("%s: The L1 Reference Picture(%d) is not find in dpb (Error Mode)",
+							avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: The L1 Reference Picture(%d) is not find in dpb (Error Mode)",
 								__func__, refPicDoi);
 							return COM_ERR;
 						}
@@ -801,7 +801,7 @@ int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_heade
 }
 #endif
 
-COM_PIC * com_picman_get_empty_pic(COM_PM * pm, int * err)
+COM_PIC * com_picman_get_empty_pic(struct avs3_decoder *hw, COM_PM * pm, int * err)
 {
 	int ret;
 	COM_PIC * pic = NULL;
@@ -854,7 +854,7 @@ ERR:
 }
 #if HLS_RPL
 /*This is the implementation of reference picture marking based on RPL*/
-int com_picman_refpic_marking(COM_PM *pm, COM_PIC_HEADER *pic_header)
+int com_picman_refpic_marking(struct avs3_decoder *hw, COM_PM *pm, COM_PIC_HEADER *pic_header)
 {
 	int i;
 	COM_PIC * pic;
@@ -862,7 +862,7 @@ int com_picman_refpic_marking(COM_PM *pm, COM_PIC_HEADER *pic_header)
 	int referenced_library_picture_index = -1;
 	int numberOfPicsToCheck;
 
-	picman_update_pic_ref(pm);
+	picman_update_pic_ref(hw, pm);
 #if LIBVC_ON
 	if (!pic_header->rpl_l0.reference_to_library_enable_flag && !pic_header->rpl_l1.reference_to_library_enable_flag && pic_header->slice_type != SLICE_I && pic_header->poc != 0)
 #else
@@ -904,7 +904,7 @@ int com_picman_refpic_marking(COM_PM *pm, COM_PIC_HEADER *pic_header)
 			//If the ref pic is not included in either RPL0 nor RPL1, then mark it as not used for reference. move it to the end of DPB.
 			if (!isIncludedInRPL) {
 				SET_REF_UNMARK(pic);
-				picman_move_pic(pm, i, pm->max_pb_size - 1);
+				picman_move_pic(hw, pm, i, pm->max_pb_size - 1);
 				pm->cur_num_ref_pics--;
 				i--;                                           //We need to decrement i here because it will be increment by i++ at for loop. We want to keep the same i here because after the move, the current ref pic at i position is the i+1 position which we still need to check.
 				numberOfPicsToCheck--;                         //We also need to decrement this variable to avoid checking the moved ref picture twice.
@@ -967,7 +967,7 @@ int com_picman_refpic_marking(COM_PM *pm, COM_PIC_HEADER *pic_header)
 	return COM_OK;
 }
 
-int com_construct_ref_list_doi(COM_PIC_HEADER *pic_header)
+int com_construct_ref_list_doi(struct avs3_decoder *hw, COM_PIC_HEADER *pic_header)
 {
 	int i;
 
@@ -981,7 +981,7 @@ int com_construct_ref_list_doi(COM_PIC_HEADER *pic_header)
 	for (i = 0; i < pic_header->rpl_l0.ref_pic_num; i++) {
 		pic_header->rpl_l0.ref_pics_doi[i] = pic_header->decode_order_index % DOI_CYCLE_LENGTH - pic_header->rpl_l0.ref_pics_ddoi[i];
 		if (is_avs3_print_bufmgr_detail()) {
-			printf("rpl_l0.ref_pics_doi[%d]=%d, pic_header->rpl_l0.ref_pics_ddoi[%d]=%d\n",
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "rpl_l0.ref_pics_doi[%d]=%d, pic_header->rpl_l0.ref_pics_ddoi[%d]=%d\n",
 				i, pic_header->rpl_l0.ref_pics_doi[i], i, pic_header->rpl_l0.ref_pics_ddoi[i]);
 		}
 	}
@@ -990,7 +990,7 @@ int com_construct_ref_list_doi(COM_PIC_HEADER *pic_header)
 	{
 		pic_header->rpl_l1.ref_pics_doi[i] = pic_header->decode_order_index % DOI_CYCLE_LENGTH - pic_header->rpl_l1.ref_pics_ddoi[i];
 		if (is_avs3_print_bufmgr_detail()) {
-			printf("rpl_l1.ref_pics_doi[%d]=%d, pic_header->rpl_l1.ref_pics_ddoi[%d]=%d\n",
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "rpl_l1.ref_pics_doi[%d]=%d, pic_header->rpl_l1.ref_pics_ddoi[%d]=%d\n",
 				i, pic_header->rpl_l1.ref_pics_doi[i], i, pic_header->rpl_l1.ref_pics_ddoi[i]);
 		}
 	}
@@ -999,7 +999,7 @@ int com_construct_ref_list_doi(COM_PIC_HEADER *pic_header)
 
 /*This is the implementation of reference picture marking based on RPL for decoder */
 /*In decoder side, use DOI as pic reference instead of POI */
-int com_picman_refpic_marking_decoder(COM_PM *pm, COM_PIC_HEADER *pic_header)
+int com_picman_refpic_marking_decoder(struct avs3_decoder *hw, COM_PM *pm, COM_PIC_HEADER *pic_header)
 {
 	int i;
 	COM_PIC * pic;
@@ -1007,7 +1007,7 @@ int com_picman_refpic_marking_decoder(COM_PM *pm, COM_PIC_HEADER *pic_header)
 	int count_library_picture = 0;
 	int referenced_library_picture_index = -1;
 
-	picman_update_pic_ref(pm);
+	picman_update_pic_ref(hw, pm);
 #if LIBVC_ON
 	if (!pic_header->rpl_l0.reference_to_library_enable_flag && !pic_header->rpl_l1.reference_to_library_enable_flag && pic_header->slice_type != SLICE_I && pic_header->poc != 0)
 #else
@@ -1049,7 +1049,7 @@ int com_picman_refpic_marking_decoder(COM_PM *pm, COM_PIC_HEADER *pic_header)
 			//If the ref pic is not included in either RPL0 nor RPL1, then mark it as not used for reference. move it to the end of DPB.
 			if (!isIncludedInRPL) {
 				SET_REF_UNMARK(pic);
-				picman_move_pic(pm, i, pm->max_pb_size - 1);
+				picman_move_pic(hw, pm, i, pm->max_pb_size - 1);
 				pm->cur_num_ref_pics--;
 				i--;                                           //We need to decrement i here because it will be increment by i++ at for loop. We want to keep the same i here because after the move, the current ref pic at i position is the i+1 position which we still need to check.
 				numberOfPicsToCheck--;                         //We also need to decrement this variable to avoid checking the moved ref picture twice.
@@ -1158,7 +1158,7 @@ int com_picman_put_libpic(COM_PM * pm, COM_PIC * pic, int slice_type, u32 ptr, u
 }
 #endif
 
-int com_picman_put_pic(COM_PM * pm, COM_PIC * pic, int slice_type, u32 ptr, u32 dtr,
+int com_picman_put_pic(struct avs3_decoder *hw, COM_PM * pm, COM_PIC * pic, int slice_type, u32 ptr, u32 dtr,
 	u32 picture_output_delay, u8 temporal_id, int need_for_output, COM_REFP(*refp)[REFP_NUM])
 {
 	/* manage RPB */
@@ -1170,18 +1170,18 @@ int com_picman_put_pic(COM_PM * pm, COM_PIC * pic, int slice_type, u32 ptr, u32 
 	pic->need_for_out = (u8)need_for_output;
 	/* put picture into listed RPB */
 	if (IS_REF(pic)) {
-		picman_set_pic_to_pb(pm, pic, refp, pm->cur_num_ref_pics);
+		picman_set_pic_to_pb(hw, pm, pic, refp, pm->cur_num_ref_pics);
 		pm->cur_num_ref_pics++;
 #ifdef BUFMGR_SANITY_CHECK
 		if (pm->cur_num_ref_pics > MAX_NUM_REF_PICS) {
 			if (avs3_get_debug_flag())
-			pr_info("pm->cur_num_ref_pics (%d) is beyond limit, force it to %d\n",
+			avs3_print2(hw, 0, "pm->cur_num_ref_pics (%d) is beyond limit, force it to %d\n",
 			pm->cur_num_ref_pics, MAX_NUM_REF_PICS);
 			pm->cur_num_ref_pics = MAX_NUM_REF_PICS;
 		}
 #endif
 	} else {
-		picman_set_pic_to_pb(pm, pic, refp, -1);
+		picman_set_pic_to_pb(hw, pm, pic, refp, -1);
 	}
 	if (pm->pic_lease == pic) {
 		pm->pic_lease = NULL;
@@ -1208,7 +1208,7 @@ int com_picman_out_libpic(COM_PIC * pic, int library_picture_index, COM_PM * pm)
 }
 #endif
 
-static void dump_com_pb(COM_PM * pm)
+static void dump_com_pb(struct avs3_decoder *hw, COM_PM * pm)
 {
 	COM_PIC ** ps;
 	int i;
@@ -1219,7 +1219,7 @@ static void dump_com_pb(COM_PM * pm)
 	ps = pm->pic;
 	for (i = 0; i < pm->max_pb_size; i++) {
 		if (ps[i] != NULL) {
-			avs3_debug(NULL, 0, "[%d] needout %d, dtr %d, outdelay %d, poc %d, ptr %d\n",
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "[%d] needout %d, dtr %d, outdelay %d, poc %d, ptr %d\n",
 				i, ps[i]->need_for_out,
 				ps[i]->dtr, ps[i]->picture_output_delay,
 				ps[i]->buf_cfg.poc, ps[i]->ptr);
@@ -1227,7 +1227,7 @@ static void dump_com_pb(COM_PM * pm)
 	}
 }
 
-COM_PIC * com_picman_out_pic(COM_PM * pm, int * err, int cur_pic_doi, int state)
+COM_PIC * com_picman_out_pic(struct avs3_decoder *hw, COM_PM * pm, int * err, int cur_pic_doi, int state)
 {
 	COM_PIC ** ps;
 	int i, ret, any_need_for_out = 0;
@@ -1255,9 +1255,9 @@ COM_PIC * com_picman_out_pic(COM_PM * pm, int * err, int cur_pic_doi, int state)
 			}
 		}
 		if (exist_pic) {
-			printf("%s, temp poc %d, %d, cur_pic_doi %d\n",
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s, temp poc %d, %d, cur_pic_doi %d\n",
 				__func__, temp_smallest_poc, temp_idx_for_smallest_poc, cur_pic_doi);
-			dump_com_pb(pm);
+			dump_com_pb(hw, pm);
 			ps[temp_idx_for_smallest_poc]->need_for_out = 0;
 			if (err) *err = COM_OK;
 			return ps[temp_idx_for_smallest_poc];
@@ -1353,12 +1353,12 @@ int com_picman_check_repeat_doi(COM_PM * pm, COM_PIC_HEADER * pic_header)
 	return COM_OK;
 }
 
-void com_picman_print_state(COM_PM * pm)
+void com_picman_print_state(struct avs3_decoder *hw, COM_PM * pm)
 {
 	COM_PIC * pic;
 	char tmpbuf[128];
 	int i, ii, j;
-	printf("pm->pic:\n");
+	avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "pm->pic:\n");
 	for (i = 0; i < pm->max_pb_size; i++) {
 		pic = pm->pic[i];
 		if (pic != NULL) {
@@ -1370,7 +1370,7 @@ void com_picman_print_state(COM_PM * pm)
 				pos += sprintf(&tmpbuf[pos], ")");
 			}
 
-		printf("%d: pic %p index %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d, is_display %d list_ptr %s\n",
+		avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%d: pic %p index %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d, is_display %d list_ptr %s\n",
 			i, pic, pic->buf_cfg.index, pic->dtr, pic->ptr, pic->is_ref,
 			pic->need_for_out, pic->buf_cfg.backend_ref, pic->buf_cfg.vf_ref,
 			pic->picture_output_delay,

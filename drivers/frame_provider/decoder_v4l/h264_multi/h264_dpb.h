@@ -959,24 +959,37 @@ struct h264_dpb_stru {
 	int long_term_reference_flag;
 	u32 poc_check_count;
 	u32 avbcd_work_mode;
+	void *hw;
 };
 
 
 extern unsigned int h264_debug_flag;
 extern unsigned int h264_debug_mask;
 
-int dpb_debug(int indext, int debug_flag, const char *fmt, ...);
+enum print_mode {
+	print_debug,
+	print_info,
+	print_err
+};
 
-#define dpb_print(index, flag, fmt, args...) \
+int dpb_debug(void *hw, int debug_flag, enum print_mode mode, const char *fmt, ...);
+
+#define dpb_print(hw, flag, fmt, args...) \
 	do { \
-		if ((flag == 0) || \
-			((h264_debug_mask & (1 << index)) \
-			&& (h264_debug_flag & flag))) { \
-			dpb_debug(index, flag, fmt, ##args); \
-		} \
+		dpb_debug(hw, flag, print_debug, fmt, ##args); \
 	} while (0)
 
-int dpb_print_cont(int index, int debug_flag, const char *fmt, ...);
+#define dpb_info(hw, flag, fmt, args...) \
+	do { \
+		dpb_debug(hw, flag, print_info, fmt, ##args); \
+	} while (0)
+
+#define dpb_err(hw, flag, fmt, args...) \
+	do { \
+		dpb_debug(hw, flag, print_err, fmt, ##args); \
+	} while (0)
+
+int dpb_print_cont(void *hw, int debug_flag, const char *fmt, ...);
 
 unsigned char dpb_is_debug(int index, int debug_flag);
 
@@ -1026,9 +1039,6 @@ int bufmgr_h264_remove_unused_frame(struct h264_dpb_stru *p_H264_Dpb,
 
 void flush_dpb(struct h264_dpb_stru *p_H264_Dpb);
 
-void print_pic_info(int decindex, const char *info,
-			struct StorablePicture *pic,
-			int slice_type);
 void dump_dpb(struct DecodedPictureBuffer *p_Dpb, u8 force);
 
 void dump_pic(struct h264_dpb_stru *p_H264_Dpb);

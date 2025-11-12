@@ -2102,6 +2102,7 @@ typedef struct AV1_Common_s {
 #endif
 	char *qsort_lostk[STKSIZ];
 	char *qsort_histk[STKSIZ];
+	int vdec_id;
 } AV1_COMMON;
 
 /*
@@ -2477,9 +2478,13 @@ void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *c
 
 #define RefFrameErr                   0x01
 
-int av1_print2(int flag, const char *fmt, ...);
+//int av1_print2(int flag, const char *fmt, ...);
 
-unsigned char av1_is_debug(int flag);
+//unsigned char av1_is_debug(int flag);
+
+int av1_print2(AV1_COMMON *cm, int flag, const char *fmt, ...);
+
+int av1_print2_cont(AV1_COMMON *cm, int flag, const char *fmt, ...);
 
 #endif
 

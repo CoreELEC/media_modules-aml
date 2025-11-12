@@ -573,7 +573,7 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 		avs2_dec->fb_buf_sys_imem.buf_size, &tmp_phy_adr, GFP_KERNEL);
 	avs2_dec->fb_buf_sys_imem.buf_start = tmp_phy_adr;
 	if (avs2_dec->fb_buf_sys_imem_addr == NULL) {
-		pr_err("%s: failed to alloc fb_buf_sys_imem\n", __func__);
+		avs2_err(dec, 0, "%s: failed to alloc fb_buf_sys_imem\n", __func__);
 		return;
 	}
 	avs2_dec->fb_buf_sys_imem.buf_end = avs2_dec->fb_buf_sys_imem.buf_start + avs2_dec->fb_buf_sys_imem.buf_size;

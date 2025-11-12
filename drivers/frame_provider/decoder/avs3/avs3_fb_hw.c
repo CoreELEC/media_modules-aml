@@ -61,7 +61,7 @@ static void    mcrcc_perfcount_reset_dual(struct AVS3Decoder_s *dec)
 	return;
 }
 
-static void    mcrcc_get_hitrate_dual(int pic_num)
+static void mcrcc_get_hitrate_dual(struct AVS3Decoder_s *dec, int pic_num)
 {
 	unsigned   tmp;
 	unsigned   raw_mcr_cnt;
@@ -71,9 +71,9 @@ static void    mcrcc_get_hitrate_dual(int pic_num)
 	unsigned   hit_mcr_0_cnt;
 	unsigned   hit_mcr_1_cnt;
 	unsigned   hitrate;
-	printk("[cache_util.c] Entered mcrcc_get_hitrate_dual...\n");
+	avs3_print(dec, 0, "[cache_util.c] Entered mcrcc_get_hitrate_dual...\n");
 
-	printk("[MCRCC CORE ] Picture : %d\n",pic_num);
+	avs3_print(dec, 0, "[MCRCC CORE ] Picture : %d\n",pic_num);
 
 	// CORE 0
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x0<<1));
@@ -85,45 +85,45 @@ static void    mcrcc_get_hitrate_dual(int pic_num)
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x3<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA, &byp_mcr_cnt_nchcanv);
 
-	printk("[MCRCC CORE0] raw_mcr_cnt: %d\n",raw_mcr_cnt);
-	printk("[MCRCC CORE0] hit_mcr_cnt: %d\n",hit_mcr_cnt);
-	printk("[MCRCC CORE0] byp_mcr_cnt_nchoutwin: %d\n",byp_mcr_cnt_nchoutwin);
-	printk("[MCRCC CORE0] byp_mcr_cnt_nchcanv: %d\n",byp_mcr_cnt_nchcanv);
+	avs3_print(dec, 0, "[MCRCC CORE0] raw_mcr_cnt: %d\n",raw_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] hit_mcr_cnt: %d\n",hit_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] byp_mcr_cnt_nchoutwin: %d\n",byp_mcr_cnt_nchoutwin);
+	avs3_print(dec, 0, "[MCRCC CORE0] byp_mcr_cnt_nchcanv: %d\n",byp_mcr_cnt_nchcanv);
 
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x4<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA, &tmp);
-	printk("[MCRCC CORE0] miss_mcr_0_cnt: %d\n",tmp);
+	avs3_print(dec, 0, "[MCRCC CORE0] miss_mcr_0_cnt: %d\n",tmp);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x5<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA, &tmp);
-	printk("[MCRCC CORE0] miss_mcr_1_cnt: %d\n",tmp);
+	avs3_print(dec, 0, "[MCRCC CORE0] miss_mcr_1_cnt: %d\n",tmp);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x6<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA, &hit_mcr_0_cnt);
-	printk("[MCRCC CORE0] hit_mcr_0_cnt: %d\n",hit_mcr_0_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] hit_mcr_0_cnt: %d\n",hit_mcr_0_cnt);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x7<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA, &hit_mcr_1_cnt);
-	printk("[MCRCC CORE0] hit_mcr_1_cnt: %d\n",hit_mcr_1_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] hit_mcr_1_cnt: %d\n",hit_mcr_1_cnt);
 
 	if ( raw_mcr_cnt != 0 ) {
 		hitrate = (hit_mcr_0_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] CANV0_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE0] CANV0_HIT_RATE : %d\n", hitrate);
 		hitrate = (hit_mcr_1_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] CANV1_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE0] CANV1_HIT_RATE : %d\n", hitrate);
 		hitrate = (byp_mcr_cnt_nchcanv *100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] NONCACH_CANV_BYP_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE0] NONCACH_CANV_BYP_RATE : %d\n", hitrate);
 		hitrate = (byp_mcr_cnt_nchoutwin *100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] CACHE_OUTWIN_BYP_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE0] CACHE_OUTWIN_BYP_RATE : %d\n", hitrate);
 	}
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[P%d MCRCC CORE0] MCRCC_HIT_RATE : %d\n", pic_num, hitrate);
+		avs3_print(dec, 0, "[P%d MCRCC CORE0] MCRCC_HIT_RATE : %d\n", pic_num, hitrate);
 		hitrate = ((byp_mcr_cnt_nchoutwin + byp_mcr_cnt_nchcanv) * 100 / raw_mcr_cnt);
-		printk("[P%d MCRCC CORE0] MCRCC_BYP_RATE : %d\n", pic_num, hitrate);
+		avs3_print(dec, 0, "[P%d MCRCC CORE0] MCRCC_BYP_RATE : %d\n", pic_num, hitrate);
 	} else
 	{
-		printk("[P%d MCRCC CORE0] MCRCC_HIT_RATE : na\n", pic_num);
-		printk("[P%d MCRCC CORE0] MCRCC_BYP_RATE : na\n", pic_num);
+		avs3_print(dec, 0, "[P%d MCRCC CORE0] MCRCC_HIT_RATE : na\n", pic_num);
+		avs3_print(dec, 0, "[P%d MCRCC CORE0] MCRCC_BYP_RATE : na\n", pic_num);
 	}
 
 	mcrcc_hit_rate_0 = (hit_mcr_cnt * 100 / raw_mcr_cnt);
@@ -139,45 +139,45 @@ static void    mcrcc_get_hitrate_dual(int pic_num)
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL_DBE1, (unsigned int)(0x3<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA_DBE1, &byp_mcr_cnt_nchcanv);
 
-	printk("[MCRCC CORE1] raw_mcr_cnt: %d\n",raw_mcr_cnt);
-	printk("[MCRCC CORE1] hit_mcr_cnt: %d\n",hit_mcr_cnt);
-	printk("[MCRCC CORE1] byp_mcr_cnt_nchoutwin: %d\n",byp_mcr_cnt_nchoutwin);
-	printk("[MCRCC CORE1] byp_mcr_cnt_nchcanv: %d\n",byp_mcr_cnt_nchcanv);
+	avs3_print(dec, 0, "[MCRCC CORE1] raw_mcr_cnt: %d\n",raw_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] hit_mcr_cnt: %d\n",hit_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] byp_mcr_cnt_nchoutwin: %d\n",byp_mcr_cnt_nchoutwin);
+	avs3_print(dec, 0, "[MCRCC CORE1] byp_mcr_cnt_nchcanv: %d\n",byp_mcr_cnt_nchcanv);
 
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL_DBE1, (unsigned int)(0x4<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA_DBE1, &tmp);
-	printk("[MCRCC CORE1] miss_mcr_0_cnt: %d\n",tmp);
+	avs3_print(dec, 0, "[MCRCC CORE1] miss_mcr_0_cnt: %d\n",tmp);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL_DBE1, (unsigned int)(0x5<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA_DBE1, &tmp);
-	printk("[MCRCC CORE1] miss_mcr_1_cnt: %d\n",tmp);
+	avs3_print(dec, 0, "[MCRCC CORE1] miss_mcr_1_cnt: %d\n",tmp);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL_DBE1, (unsigned int)(0x6<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA_DBE1, &hit_mcr_0_cnt);
-	printk("[MCRCC CORE1] hit_mcr_0_cnt: %d\n",hit_mcr_0_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] hit_mcr_0_cnt: %d\n",hit_mcr_0_cnt);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL_DBE1, (unsigned int)(0x7<<1));
 	C_Reg_Rd(HEVCD_MCRCC_PERFMON_DATA_DBE1, &hit_mcr_1_cnt);
-	printk("[MCRCC CORE1] hit_mcr_1_cnt: %d\n",hit_mcr_1_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] hit_mcr_1_cnt: %d\n",hit_mcr_1_cnt);
 
 	if ( raw_mcr_cnt != 0 ) {
 		hitrate = (hit_mcr_0_cnt * 100 /raw_mcr_cnt);
-		printk("[MCRCC CORE1] CANV0_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE1] CANV0_HIT_RATE : %d\n", hitrate);
 		hitrate = (hit_mcr_1_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] CANV1_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE1] CANV1_HIT_RATE : %d\n", hitrate);
 		hitrate = (byp_mcr_cnt_nchcanv * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] NONCACH_CANV_BYP_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE1] NONCACH_CANV_BYP_RATE : %d\n", hitrate);
 		hitrate = (byp_mcr_cnt_nchoutwin * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] CACHE_OUTWIN_BYP_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE1] CACHE_OUTWIN_BYP_RATE : %d\n", hitrate);
 	}
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[P%d MCRCC CORE1] MCRCC_HIT_RATE : %d\n", pic_num, hitrate);
+		avs3_print(dec, 0, "[P%d MCRCC CORE1] MCRCC_HIT_RATE : %d\n", pic_num, hitrate);
 		hitrate = ((byp_mcr_cnt_nchoutwin + byp_mcr_cnt_nchcanv) * 100 /raw_mcr_cnt);
-		printk("[P%d MCRCC CORE1] MCRCC_BYP_RATE : %d\n", pic_num, hitrate);
+		avs3_print(dec, 0, "[P%d MCRCC CORE1] MCRCC_BYP_RATE : %d\n", pic_num, hitrate);
 	} else
 	{
-		printk("[P%d MCRCC CORE1] MCRCC_HIT_RATE : na\n", pic_num);
-		printk("[P%d MCRCC CORE1] MCRCC_BYP_RATE : na\n", pic_num);
+		avs3_print(dec, 0, "[P%d MCRCC CORE1] MCRCC_HIT_RATE : na\n", pic_num);
+		avs3_print(dec, 0, "[P%d MCRCC CORE1] MCRCC_BYP_RATE : na\n", pic_num);
 	}
 
 	mcrcc_hit_rate_1 = (hit_mcr_cnt * 100 /raw_mcr_cnt);
@@ -197,12 +197,12 @@ static void    decomp_perfcount_reset_dual(struct AVS3Decoder_s *dec)
 	return;
 }
 
-static void    decomp_get_hitrate_dual(int pic_num)
+static void decomp_get_hitrate_dual(struct AVS3Decoder_s *dec, int pic_num)
 {
 	unsigned   raw_mcr_cnt;
 	unsigned   hit_mcr_cnt;
 	unsigned      hitrate;
-	printk("[cache_util.c] Entered decomp_get_hitrate_dual...\n");
+	avs3_print(dec, 0, "[cache_util.c] Entered decomp_get_hitrate_dual...\n");
 
 	// CORE0
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x0<<1));
@@ -210,36 +210,36 @@ static void    decomp_get_hitrate_dual(int pic_num)
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x1<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA, &hit_mcr_cnt);
 
-	printk("[MCRCC CORE0] hcache_raw_cnt_total: %d\n",raw_mcr_cnt);
-	printk("[MCRCC CORE0] hcache_hit_cnt_total: %d\n",hit_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] hcache_raw_cnt_total: %d\n",raw_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] hcache_hit_cnt_total: %d\n",hit_mcr_cnt);
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 /raw_mcr_cnt);
-		printk("[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : %d\n", hitrate);
 	} else
 	{
-		printk("[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : na\n");
+		avs3_print(dec, 0, "[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : na\n");
 	}
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x2<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA, &raw_mcr_cnt);
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x3<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA, &hit_mcr_cnt);
 
-	printk("[MCRCC CORE0] dcache_raw_cnt_total: %d\n",raw_mcr_cnt);
-	printk("[MCRCC CORE0] dcache_hit_cnt_total: %d\n",hit_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] dcache_raw_cnt_total: %d\n",raw_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] dcache_hit_cnt_total: %d\n",hit_mcr_cnt);
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] DECOMP_DCACHE_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE0] DECOMP_DCACHE_HIT_RATE : %d\n", hitrate);
 
 		hitrate = (mcrcc_hit_rate_0 + (mcrcc_bypass_rate_0 * hit_mcr_cnt / raw_mcr_cnt ));
-		printk("[MCRCC CORE0] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE0] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d\n", hitrate);
 
 	} else
 	{
-		printk("[MCRCC CORE0] DECOMP_DCACHE_HIT_RATE : na\n");
+		avs3_print(dec, 0, "[MCRCC CORE0] DECOMP_DCACHE_HIT_RATE : na\n");
 	}
 
 	// CORE1
@@ -248,49 +248,49 @@ static void    decomp_get_hitrate_dual(int pic_num)
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL_DBE1, (unsigned int)(0x1<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA_DBE1, &hit_mcr_cnt);
 
-	printk("[MCRCC CORE1] hcache_raw_cnt_total: %d\n",raw_mcr_cnt);
-	printk("[MCRCC CORE1] hcache_hit_cnt_total: %d\n",hit_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] hcache_raw_cnt_total: %d\n",raw_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] hcache_hit_cnt_total: %d\n",hit_mcr_cnt);
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : %d\n", hitrate);
 	} else
 	{
-		printk("[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : na\n");
+		avs3_print(dec, 0, "[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : na\n");
 	}
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL_DBE1, (unsigned int)(0x2<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA_DBE1, &raw_mcr_cnt);
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL_DBE1, (unsigned int)(0x3<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA_DBE1, &hit_mcr_cnt);
 
-	printk("[MCRCC CORE1] dcache_raw_cnt_total: %d\n",raw_mcr_cnt);
-	printk("[MCRCC CORE1] dcache_hit_cnt_total: %d\n",hit_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] dcache_raw_cnt_total: %d\n",raw_mcr_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] dcache_hit_cnt_total: %d\n",hit_mcr_cnt);
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] DECOMP_DCACHE_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE1] DECOMP_DCACHE_HIT_RATE : %d\n", hitrate);
 
 		hitrate = (mcrcc_hit_rate_1 + (mcrcc_bypass_rate_1 * hit_mcr_cnt / raw_mcr_cnt));
-		printk("[MCRCC CORE1] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d\n", hitrate);
+		avs3_print(dec, 0, "[MCRCC CORE1] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d\n", hitrate);
 
 	} else
 	{
-		printk("[MCRCC CORE1] DECOMP_DCACHE_HIT_RATE : na\n");
+		avs3_print(dec, 0, "[MCRCC CORE1] DECOMP_DCACHE_HIT_RATE : na\n");
 	}
 
 	return;
 }
 
-static void    decomp_get_comprate_dual(int pic_num)
+static void decomp_get_comprate_dual(struct AVS3Decoder_s *dec, int pic_num)
 {
 	unsigned   raw_ucomp_cnt;
 	unsigned   fast_comp_cnt;
 	unsigned   slow_comp_cnt;
 	unsigned      comprate;
 
-	printk("[cache_util.c] Entered decomp_get_comprate_dual...\n");
+	avs3_print(dec, 0, "[cache_util.c] Entered decomp_get_comprate_dual...\n");
 
 	// CORE0
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x4<<1));
@@ -300,17 +300,17 @@ static void    decomp_get_comprate_dual(int pic_num)
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x6<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA, &raw_ucomp_cnt);
 
-	printk("[MCRCC CORE0] decomp_fast_comp_total: %d\n",fast_comp_cnt);
-	printk("[MCRCC CORE0] decomp_slow_comp_total: %d\n",slow_comp_cnt);
-	printk("[MCRCC CORE0] decomp_raw_uncomp_total: %d\n",raw_ucomp_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] decomp_fast_comp_total: %d\n",fast_comp_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] decomp_slow_comp_total: %d\n",slow_comp_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE0] decomp_raw_uncomp_total: %d\n",raw_ucomp_cnt);
 
 	if ( raw_ucomp_cnt != 0 )
 	{
 		comprate = ((fast_comp_cnt + slow_comp_cnt) *100 / raw_ucomp_cnt);
-		printk("[MCRCC CORE0] DECOMP_COMP_RATIO : %d\n", comprate);
+		avs3_print(dec, 0, "[MCRCC CORE0] DECOMP_COMP_RATIO : %d\n", comprate);
 	} else
 	{
-		printk("[MCRCC CORE0] DECOMP_COMP_RATIO : na\n");
+		avs3_print(dec, 0, "[MCRCC CORE0] DECOMP_COMP_RATIO : na\n");
 	}
 
 	// CORE1
@@ -321,27 +321,27 @@ static void    decomp_get_comprate_dual(int pic_num)
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL_DBE1, (unsigned int)(0x6<<1));
 	C_Reg_Rd(HEVCD_MPP_DECOMP_PERFMON_DATA_DBE1, &raw_ucomp_cnt);
 
-	printk("[MCRCC CORE1] decomp_fast_comp_total: %d\n",fast_comp_cnt);
-	printk("[MCRCC CORE1] decomp_slow_comp_total: %d\n",slow_comp_cnt);
-	printk("[MCRCC CORE1] decomp_raw_uncomp_total: %d\n",raw_ucomp_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] decomp_fast_comp_total: %d\n",fast_comp_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] decomp_slow_comp_total: %d\n",slow_comp_cnt);
+	avs3_print(dec, 0, "[MCRCC CORE1] decomp_raw_uncomp_total: %d\n",raw_ucomp_cnt);
 
 	if ( raw_ucomp_cnt != 0 )
 	{
 		comprate = ((fast_comp_cnt + slow_comp_cnt) * 100 /raw_ucomp_cnt);
-		printk("[MCRCC CORE1] DECOMP_COMP_RATIO : %d\n", comprate);
+		avs3_print(dec, 0, "[MCRCC CORE1] DECOMP_COMP_RATIO : %d\n", comprate);
 	} else
 	{
-		printk("[MCRCC CORE1] DECOMP_COMP_RATIO : na\n");
+		avs3_print(dec, 0, "[MCRCC CORE1] DECOMP_COMP_RATIO : na\n");
 	}
 
 	return;
 }
 
-static void print_mcrcc_hit_info(int pic_num) {
+static void print_mcrcc_hit_info(struct AVS3Decoder_s *dec, int pic_num) {
 	//printk("before call mcrcc_get_hitrate\r\n");
-	mcrcc_get_hitrate_dual(pic_num);
-	decomp_get_hitrate_dual(pic_num);
-	decomp_get_comprate_dual(pic_num);
+	mcrcc_get_hitrate_dual(dec, pic_num);
+	decomp_get_hitrate_dual(dec, pic_num);
+	decomp_get_comprate_dual(dec, pic_num);
 }
 
 static void WRITE_BACK_RET(struct avs3_decoder *avs3_dec)
@@ -879,7 +879,7 @@ static int init_mmu_fb_bufstate(struct AVS3Decoder_s *dec, int mmu_fb_4k_number)
 		&tmp_phy_adr, GFP_KERNEL);
 	avs3_dec->fb_buf_mmu0.buf_start = tmp_phy_adr;
 	if (dec->fb_buf_mmu0_addr == NULL) {
-		pr_err("%s: failed to alloc fb_mmu0_map\n", __func__);
+		avs3_err(dec, 0, "%s: failed to alloc fb_mmu0_map\n", __func__);
 		return -1;
 	}
 	memset(dec->fb_buf_mmu0_addr, 0, mmu_map_size);
@@ -892,7 +892,7 @@ static int init_mmu_fb_bufstate(struct AVS3Decoder_s *dec, int mmu_fb_4k_number)
 		&tmp_phy_adr, GFP_KERNEL);
 	avs3_dec->fb_buf_mmu1.buf_start = tmp_phy_adr;
 	if (dec->fb_buf_mmu1_addr == NULL) {
-		pr_err("%s: failed to alloc fb_mmu1_map\n", __func__);
+		avs3_err(dec, 0, "%s: failed to alloc fb_mmu1_map\n", __func__);
 		return -1;
 	}
 	memset(dec->fb_buf_mmu1_addr, 0, mmu_map_size);
@@ -905,7 +905,7 @@ static int init_mmu_fb_bufstate(struct AVS3Decoder_s *dec, int mmu_fb_4k_number)
 		mmu_fb_4k_number,
 		dec->fb_buf_mmu0_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu0 pages\n", __func__);
+		avs3_err(dec, 0, "%s: failed to alloc fb_mmu0 pages\n", __func__);
 		return -1;
 	}
 
@@ -915,7 +915,7 @@ static int init_mmu_fb_bufstate(struct AVS3Decoder_s *dec, int mmu_fb_4k_number)
 		mmu_fb_4k_number,
 		dec->fb_buf_mmu1_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu1 pages\n", __func__);
+		avs3_err(dec, 0, "%s: failed to alloc fb_mmu1 pages\n", __func__);
 		return -1;
 	}
 
@@ -962,7 +962,7 @@ static void init_fb_bufstate(struct AVS3Decoder_s *dec)
 		avs3_dec->fb_buf_sys_imem.buf_size, &tmp_phy_adr, GFP_KERNEL);
 	avs3_dec->fb_buf_sys_imem.buf_start = tmp_phy_adr;
 	if (avs3_dec->fb_buf_sys_imem_addr == NULL) {
-		pr_err("%s: failed to alloc fb_buf_sys_imem\n", __func__);
+		avs3_err(dec, 0, "%s: failed to alloc fb_buf_sys_imem\n", __func__);
 		return;
 	}
 	avs3_dec->fb_buf_sys_imem.buf_end = avs3_dec->fb_buf_sys_imem.buf_start + avs3_dec->fb_buf_sys_imem.buf_size;
@@ -1923,7 +1923,7 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 	return 0;
 }
 
-static void print_hevc_b_data_path_monitor(int frame_count)
+static void print_hevc_b_data_path_monitor(struct AVS3Decoder_s *dec, int frame_count)
 {
 		uint32_t total_clk_count;
 		uint32_t path_transfer_count;
@@ -1931,7 +1931,7 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 		uint32_t path_status;
 	unsigned path_wait_ratio;
 
-		printk("\n[WAITING DATA/CMD] Parser/IQIT/IPP/DBLK/OW/DDR/MPRED_IPP_CMD/IPP_DBLK_CMD\n");
+		avs3_print(dec, 0, "[WAITING DATA/CMD] Parser/IQIT/IPP/DBLK/OW/DDR/MPRED_IPP_CMD/IPP_DBLK_CMD\n");
 
 	//---------------------- CORE 0 -------------------------------
 		WRITE_VREG(HEVC_PATH_MONITOR_CTRL, 0); // Disable monitor and set rd_idx to 0
@@ -1942,10 +1942,10 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 	// parser --> iqit
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
+		avs3_print(dec, 0, "[P%d HEVC CORE0 PATH] ", frame_count);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk("[P%d HEVC CORE0 PATH] WAITING Ratio : %d",
-		frame_count,
+		avs3_print_cont(dec, 0, "WAITING Ratio : %d",
 		path_wait_ratio);
 
 	// iqit --> ipp
@@ -1953,35 +1953,35 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// dblk <-- ipp
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// dblk --> ow
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count *100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// <--> DDR
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 /path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// IMP
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// path status
 	path_status = READ_VREG(HEVC_PATH_MONITOR_DATA);
@@ -1991,7 +1991,7 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 #if 0
 		WRITE_VREG(HEVC_PARSER_IF_MONITOR_CTRL, (2<<4)); // Disable monitor and set rd_idx to 2
@@ -2011,7 +2011,7 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 		printk(" %.2f\n", path_wait_ratio);
 	}
 #else
-	printk("\n");
+	avs3_print_cont(dec, 0, "\n");
 #endif
 	//---------------------- CORE 1 -------------------------------
 		WRITE_VREG(HEVC_PATH_MONITOR_CTRL_DBE1, 0); // Disable monitor and set rd_idx to 0
@@ -2022,10 +2022,10 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 	// parser --> iqit
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
+		avs3_print(dec, 0, "[P%d HEVC CORE1 PATH] ", frame_count);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 /path_transfer_count;
-		printk("[P%d HEVC CORE1 PATH] WAITING Ratio : %d",
-		frame_count,
+		avs3_print_cont(dec, 0, "WAITING Ratio : %d",
 		path_wait_ratio);
 
 	// iqit --> ipp
@@ -2033,35 +2033,35 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// dblk <-- ipp
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 /path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// dblk --> ow
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// <--> DDR
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// IMP
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 	// path status
 	path_status = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
@@ -2071,7 +2071,7 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA_DBE1);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		printk(" %d", path_wait_ratio);
+		avs3_print_cont(dec, 0, " %d", path_wait_ratio);
 
 # if 0
 		WRITE_VREG(HEVC_PARSER_IF_MONITOR_CTRL, (2<<4)); // Disable monitor and set rd_idx to 2
@@ -2091,7 +2091,7 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 		printk(" %.2f\n", path_wait_ratio);
 	}
 #else
-	printk("\n");
+	avs3_print_cont(dec, 0, "\n");
 #endif
 }
 
@@ -2174,7 +2174,7 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 	else
 		max_frame_num = MAX_FRAME_4K_NUM;
 	if (cur_mmu_4k_number > max_frame_num) {
-		pr_err("over max !! cur_mmu_4k_number 0x%x width %d height %d\n",
+		avs3_err(dec, 0, "over max !! cur_mmu_4k_number 0x%x width %d height %d\n",
 		cur_mmu_4k_number, pic->width, pic->height);
 		return 2;
 	}
@@ -2236,8 +2236,8 @@ static int BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 	if (dec->front_back_mode == 1) {
 		if (avs3_dec->backend_decoded_count > 0 &&
 			(debug & AVS3_DBG_CACHE)) {
-			print_hevc_b_data_path_monitor(avs3_dec->backend_decoded_count-1);
-			print_mcrcc_hit_info(avs3_dec->backend_decoded_count-1);
+			print_hevc_b_data_path_monitor(dec, avs3_dec->backend_decoded_count-1);
+			print_mcrcc_hit_info(dec, avs3_dec->backend_decoded_count-1);
 		}
 	}
 #endif

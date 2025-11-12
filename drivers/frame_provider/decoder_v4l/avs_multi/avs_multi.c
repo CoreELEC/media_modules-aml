@@ -17,6 +17,7 @@
  *
  * Description:
  */
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -560,6 +561,7 @@ struct vdec_avs_hw_s {
 	bool need_error_handler;
 	struct mutex vf_mutex;
 	u32 metadata_config_flag;
+	u32 index;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -623,33 +625,81 @@ static void WRITE_VREG_DBG2(unsigned adr, unsigned val)
 #define WRITE_VREG WRITE_VREG_DBG2
 #endif
 
+enum print_mode {
+	print_debug,
+	print_info,
+	print_err
+};
+
+/*
 #undef pr_info
 #define pr_info pr_cont
-static int debug_print(struct vdec_avs_hw_s *hw,
-	int flag, const char *fmt, ...)
-{
+*/
 #define AVS_PRINT_BUF		256
+
+static int avs_print(struct vdec_avs_hw_s *hw,
+	int flag, enum print_mode mode, const char *fmt, ...)
+{
+	struct aml_vcodec_ctx *ctx = NULL;
 	unsigned char buf[AVS_PRINT_BUF];
 	int len = 0;
-	int index = 0;
-	if (hw)
-		index = hw->m_ins_flag ? DECODE_ID(hw) : 0;
+
 	if (hw == NULL ||
 		(flag == 0) ||
 		((debug_mask &
-		(1 << index))
+		(1 << hw->index))
 		&& (debug & flag))) {
 		va_list args;
 
 		va_start(args, fmt);
-		if (hw)
-			len = sprintf(buf, "[%d]", index);
+		if (hw) {
+			ctx = hw->v4l2_ctx;
+			len = sprintf(buf, "[%d] %d: ", ctx->id, hw->index);
+		}
+		if (mode == print_err)
+			len += sprintf(buf + len, "[ERR]: ");
 		vsnprintf(buf + len, AVS_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
+		if (mode == print_debug)
+			pr_debug("%s", buf);
+		else
+			pr_info("%s", buf);
 		va_end(args);
 	}
 	return 0;
 }
+
+#define debug_print(hw, flag, fmt, args...)					\
+	do {									\
+		if (hw == NULL ||    \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << DECODE_ID(hw))) \
+		&& (debug & flag))) { \
+			avs_print(hw, flag, print_debug, fmt, ##args);	\
+			} \
+	} while (0)
+
+#define debug_info(hw, flag, fmt, args...)					\
+	do {									\
+		if (hw == NULL ||    \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << DECODE_ID(hw))) \
+		&& (debug & flag))) { \
+			avs_print(hw, flag, print_info, fmt, ##args);	\
+			} \
+	} while (0)
+
+#define debug_err(hw, flag, fmt, args...)					\
+	do {									\
+		if (hw == NULL ||    \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << DECODE_ID(hw))) \
+		&& (debug & flag))) { \
+			avs_print(hw, flag, print_err, fmt, ##args);	\
+			} \
+	} while (0)
 
 static int debug_print_cont(struct vdec_avs_hw_s *hw,
 	int flag, const char *fmt, ...)
@@ -668,7 +718,7 @@ static int debug_print_cont(struct vdec_avs_hw_s *hw,
 
 		va_start(args, fmt);
 		vsnprintf(buf + len, AVS_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
+		pr_cont("%s", buf);
 		va_end(args);
 	}
 	return 0;
@@ -1117,7 +1167,7 @@ static void v4l_avs_collect_stream_info(struct vdec_s *vdec,
 	unsigned int pixel_ratio;
 
 	if (ctx == NULL) {
-		pr_info("param invalid\n");
+		debug_err(hw, 0, "param invalid\n");
 		return;
 	}
 	str_info = &ctx->dec_intf.dec_stream;
@@ -1328,7 +1378,7 @@ static void userdata_push_process(struct vdec_avs_hw_s *hw)
 		pdata += wp_start;
 		nLeft = user_data_len;
 		while (nLeft >= 8) {
-			pr_info("%02x %02x %02x %02x %02x %02x %02x %02x\n",
+			debug_print(hw, 0, "%02x %02x %02x %02x %02x %02x %02x %02x\n",
 				pdata[0], pdata[1], pdata[2], pdata[3],
 				pdata[4], pdata[5], pdata[6], pdata[7]);
 			nLeft -= 8;
@@ -1342,7 +1392,7 @@ static void userdata_push_process(struct vdec_avs_hw_s *hw)
 		nLeft = USER_DATA_SIZE - wp_start;
 
 		while (nLeft >= 8) {
-			pr_info("%02x %02x %02x %02x %02x %02x %02x %02x\n",
+			debug_print(hw, 0, "%02x %02x %02x %02x %02x %02x %02x %02x\n",
 				pdata[0], pdata[1], pdata[2], pdata[3],
 				pdata[4], pdata[5], pdata[6], pdata[7]);
 			nLeft -= 8;
@@ -1352,7 +1402,7 @@ static void userdata_push_process(struct vdec_avs_hw_s *hw)
 		pdata = (unsigned char *)hw->user_data_buffer;
 		nLeft = user_data_wp;
 		while (nLeft >= 8) {
-			pr_info("%02x %02x %02x %02x %02x %02x %02x %02x\n",
+			debug_print(hw, 0, "%02x %02x %02x %02x %02x %02x %02x %02x\n",
 				pdata[0], pdata[1], pdata[2], pdata[3],
 				pdata[4], pdata[5], pdata[6], pdata[7]);
 			nLeft -= 8;
@@ -1610,7 +1660,7 @@ static int vavs_vdec_info_init(struct vdec_avs_hw_s *hw)
 {
 	hw->gvs = kzalloc(sizeof(struct vdec_info), GFP_KERNEL);
 	if (NULL == hw->gvs) {
-		pr_info("the struct of vdec status malloc failed.\n");
+		debug_err(hw, 0, "the struct of vdec status malloc failed.\n");
 		return -ENOMEM;
 	}
 
@@ -2269,7 +2319,7 @@ static void vavs_local_reset(struct vdec_avs_hw_s *hw)
 {
 	mutex_lock(&vavs_mutex);
 	hw->recover_flag = 1;
-	pr_info("error, local reset\n");
+	debug_err(hw, 0, "error, local reset\n");
 	amvdec_stop();
 	msleep(100);
 	vavs_local_init(hw);
@@ -2291,7 +2341,7 @@ static void vavs_fatal_error_handler(struct work_struct *work)
 	container_of(work, struct vdec_avs_hw_s, fatal_error_wd_work);
 	if (debug & AVS_DEBUG_OLD_ERROR_HANDLE) {
 		mutex_lock(&vavs_mutex);
-		pr_info("vavs fatal error reset !\n");
+		debug_err(hw, 0, "vavs fatal error reset !\n");
 		amvdec_stop();
 #ifdef CONFIG_AMLOGIC_POST_PROCESS_MANAGER
 		vavs_ppmgr_reset();
@@ -2304,7 +2354,7 @@ static void vavs_fatal_error_handler(struct work_struct *work)
 		amvdec_start();
 		mutex_unlock(&vavs_mutex);
 	} else {
-		pr_info("avs fatal_error_handler\n");
+		debug_err(hw, 0, "avs fatal_error_handler\n");
 		vavs_local_reset(hw);
 	}
 	atomic_set(&hw->error_handler_run, 0);
@@ -2354,9 +2404,9 @@ static void vavs_put_timer_func(struct timer_list *arg)
 		if (!error_recovery_mode) {
 			if (!atomic_read(&hw->error_handler_run)) {
 				atomic_set(&hw->error_handler_run, 1);
-				pr_info("AVS_SOS_COUNT = %d\n",
+				debug_print(hw, 0, "AVS_SOS_COUNT = %d\n",
 					READ_VREG(AVS_SOS_COUNT));
-				pr_info("WP = 0x%x, RP = 0x%x, LEVEL = 0x%x, AVAIL = 0x%x, CUR_PTR = 0x%x\n",
+				debug_print(hw, 0, "WP = 0x%x, RP = 0x%x, LEVEL = 0x%x, AVAIL = 0x%x, CUR_PTR = 0x%x\n",
 					READ_VREG(VLD_MEM_VIFIFO_WP),
 					READ_VREG(VLD_MEM_VIFIFO_RP),
 					READ_VREG(VLD_MEM_VIFIFO_LEVEL),
@@ -2370,9 +2420,9 @@ static void vavs_put_timer_func(struct timer_list *arg)
 	if (radr != 0) {
 		if (rval != 0) {
 			WRITE_VREG(radr, rval);
-			pr_info("WRITE_VREG(%x,%x)\n", radr, rval);
+			debug_print(hw, 0, "WRITE_VREG(%x,%x)\n", radr, rval);
 		} else
-			pr_info("READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
+			debug_print(hw, 0, "READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
 		rval = 0;
 		radr = 0;
 	}
@@ -2416,7 +2466,7 @@ static void long_cabac_do_work(struct work_struct *work)
 	int status = 0;
 	struct vdec_avs_hw_s *hw = gw;
 #ifdef PERFORMANCE_DEBUG
-	pr_info("enter %s buf level (new %d, display %d, recycle %d)\r\n",
+	debug_print(hw, 0, "enter %s buf level (new %d, display %d, recycle %d)\n",
 		__func__,
 		kfifo_len(&hw->newframe_q),
 		kfifo_len(&hw->display_q),
@@ -2433,14 +2483,14 @@ static void long_cabac_do_work(struct work_struct *work)
 	long_cabac_busy = 0;
 	mutex_unlock(&vavs_mutex);
 #ifdef PERFORMANCE_DEBUG
-	pr_info("exit %s buf level (new %d, display %d, recycle %d)\r\n",
+	debug_print(hw, 0, "exit %s buf level (new %d, display %d, recycle %d)\n",
 		__func__,
 		kfifo_len(&hw->newframe_q),
 		kfifo_len(&hw->display_q),
 		kfifo_len(&hw->recycle_q));
 #endif
 	if (status < 0) {
-		pr_info("transcoding error, local reset\r\n");
+		debug_err(hw, 0, "transcoding error, local reset\n");
 		vavs_local_reset(hw);
 	}
 
@@ -2510,7 +2560,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 	if (!fw)
 		return -ENOMEM;
 
-	pr_info("vavs_init\n");
+	debug_print(hw, 0, "vavs_init\n");
 
 	vavs_local_init(hw);
 
@@ -2529,7 +2579,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 
 	if (size < 0) {
 		amvdec_disable();
-		pr_err("get firmware fail.");
+		debug_err(hw, 0, "get firmware fail.");
 		vfree(fw);
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		return -1;
@@ -2561,7 +2611,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 	if (ret < 0) {
 		amvdec_disable();
 		/*vfree(buf);*/
-		pr_err("AVS: the %s fw loading failed, err: %x\n",
+		debug_err(hw, 0, "AVS: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		return -EBUSY;
@@ -2580,7 +2630,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 	if (vdec_request_irq(VDEC_IRQ_1, vavs_isr,
 			"vavs-irq", (void *)hw)) {
 		amvdec_disable();
-		pr_info("vavs irq register error.\n");
+		debug_err(hw, 0, "vavs irq register error.\n");
 		return -ENOENT;
 	}
 #endif
@@ -3152,12 +3202,12 @@ static void timeout_process(struct vdec_avs_hw_s *hw)
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	if (hw->process_busy) {
-		pr_info("%s, process busy\n", __func__);
+		debug_print(hw, 0, "%s, process busy\n", __func__);
 		return;
 	}
 	if (work_pending(&hw->work) ||
 		work_busy(&hw->work)) {
-		pr_err("avs multi work on busy\n");
+		debug_err(hw, 0, "avs multi work on busy\n");
 		return;
 	}
 
@@ -3242,9 +3292,9 @@ static void check_timer_func(struct timer_list *timer)
 	if (radr != 0) {
 		if (rval != 0) {
 			WRITE_VREG(radr, rval);
-			pr_info("WRITE_VREG(%x,%x)\n", radr, rval);
+			debug_print(hw, 0, "WRITE_VREG(%x,%x)\n", radr, rval);
 		} else
-			pr_info("READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
+			debug_print(hw, 0, "READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
 		rval = 0;
 		radr = 0;
 	}
@@ -3257,7 +3307,7 @@ static void check_timer_func(struct timer_list *timer)
 		if (dbg_cmd == 1) {
 			int r = vdec_sync_input(vdec);
 			dbg_cmd = 0;
-			pr_info(
+			debug_print(hw, 0,
 				"vdec_sync_input=>0x%x, (lev %x, wp %x rp %x, prp %llx, pwp %llx)\n",
 				r,
 				READ_VREG(VLD_MEM_VIFIFO_LEVEL),
@@ -3396,7 +3446,7 @@ void (*callback)(struct vdec_s *, void *, int),
 		ret = amvdec_vdec_loadmc_buf_ex(VFORMAT_AVS, "avs_multi", vdec,
 			hw->fw->data, hw->fw->len);
 		if (ret < 0) {
-			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
+			debug_err(hw, 0, "[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
 				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
@@ -3659,7 +3709,7 @@ static void reset(struct vdec_s *vdec)
 	atomic_set(&hw->get_num, 0);
 	atomic_set(&hw->put_num, 0);
 
-	pr_info("avs: reset.\n");
+	debug_print(hw, 0, "avs: reset.\n");
 }
 
 static int prepare_display_buf(struct vdec_avs_hw_s *hw,
@@ -3709,7 +3759,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			picture_type);
 
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
-			pr_info("fatal error, no available buffer slot.");
+			debug_err(hw, 0, "fatal error, no available buffer slot.");
 			return IRQ_HANDLED;
 		}
 
@@ -3850,7 +3900,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		}
 
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
-			pr_info("fatal error, no available buffer slot.");
+			debug_err(hw, 0, "fatal error, no available buffer slot.");
 			return IRQ_HANDLED;
 					}
 
@@ -3989,7 +4039,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			"progressive picture type %d\n",
 			picture_type);
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
-			pr_info("fatal error, no available buffer slot.");
+			debug_err(hw, 0, "fatal error, no available buffer slot.");
 			return IRQ_HANDLED;
 		}
 
@@ -4178,7 +4228,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			return 0;
 		}
 		if (time_after(jiffies, expires)) {
-			pr_err("[%d] AVS isn't enough buff for notify eos.\n", ctx->id);
+			debug_err(hw, 0, "[%d] AVS isn't enough buff for notify eos.\n", ctx->id);
 			return 0;
 		}
 		usleep_range(500, 1000);
@@ -4186,7 +4236,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	index = find_free_buffer(hw);
 	if (INVALID_IDX == index) {
-		pr_err("[%d] AVS EOS get free buff fail.\n", ctx->id);
+		debug_err(hw, 0, "[%d] AVS EOS get free buff fail.\n", ctx->id);
 		return 0;
 	}
 
@@ -4206,7 +4256,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	hw->eos = true;
 
-	pr_info("[%d] AVS EOS notify.\n", ctx->id);
+	debug_print(hw, 0, "[%d] AVS EOS notify.\n", ctx->id);
 
 	return 0;
 }
@@ -4253,7 +4303,7 @@ static int v4l_res_change(struct vdec_avs_hw_s *hw)
 			(hw->frame_width != hw->last_width ||
 			hw->frame_height != hw->last_height)) {
 
-			debug_print(hw, 0, "%s (%d,%d)=>(%d,%d)\r\n", __func__, hw->last_width,
+			debug_print(hw, 0, "%s (%d,%d)=>(%d,%d)\n", __func__, hw->last_width,
 				hw->last_height, hw->frame_width, hw->frame_height);
 
 			vavs_get_ps_info(hw, &ps);
@@ -4609,9 +4659,9 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 #ifdef AVSP_LONG_CABAC
 		if (firmware_sel == 0 && READ_VREG(LONG_CABAC_REQ)) {
 #ifdef PERFORMANCE_DEBUG
-			pr_info("%s:schedule long_cabac_wd_work\r\n", __func__);
+			debug_print(hw, 0, "%s:schedule long_cabac_wd_work\n", __func__);
 #endif
-			pr_info("schedule long_cabac_wd_work and requested from %d\n",
+			debug_print(hw, 0, "schedule long_cabac_wd_work and requested from %d\n",
 				(READ_VREG(LONG_CABAC_REQ) >> 8)&0xFF);
 			schedule_work(&long_cabac_wd_work);
 		}
@@ -4866,7 +4916,7 @@ static irqreturn_t vmavs_isr(struct vdec_s *vdec, int irq)
 		(struct vdec_avs_hw_s *)vdec->private;
 
 	if (hw->process_busy) {
-		pr_info("%s, process busy\n", __func__);
+		debug_print(hw, 0, "%s, process busy\n", __func__);
 		return IRQ_HANDLED;
 	}
 	hw->process_busy = true;
@@ -5012,7 +5062,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 					debug_print_cont(hw,
 					PRINT_FRAMEBASE_DATA, "\n");
 			}
-
+			debug_print_cont(hw, PRINT_FRAMEBASE_DATA, "\n");
 			if (!hw->chunk->block->is_mapped)
 				codec_mm_unmap_phyaddr(data);
 		}
@@ -5030,16 +5080,16 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 	if (vdec_get_debug_flags() & 0x8)
 		return amvdec_avs_probe(pdev);
 
-	pr_info("ammvdec_avs probe start.\n");
-
 	if (pdata == NULL) {
 		pr_info("ammvdec_avs platform data undefined.\n");
 		return -EFAULT;
 	}
 
+	pr_debug("%d: ammvdec_avs probe start.\n", pdata->id);
+
 	hw = (struct vdec_avs_hw_s *)vzalloc(sizeof(struct vdec_avs_hw_s));
 	if (hw == NULL) {
-		pr_info("\nammvdec_avs decoder driver alloc failed\n");
+		pr_info("%d: [ERR]: ammvdec_avs decoder driver alloc failed\n", pdata->id);
 		return -ENOMEM;
 	}
 
@@ -5057,7 +5107,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		canvas_base = 0;
 		canvas_num = 3;
 	} else {
-		pr_info("Error, do not support longcabac work around!!!");
+		pr_info("%d: [ERR]: Error, do not support longcabac work around!!!", pdata->id);
 		r = -ENOMEM;
 		goto error1;
 	}
@@ -5082,6 +5132,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 	pdata->threaded_irq_handler = vmavs_isr_thread_fn;
 	pdata->dump_state = vmavs_dump_state;
 	hw->canvas_mode = pdata->canvas_mode;
+	hw->index = pdata->id;
 
 	snprintf(hw->vdec_name, sizeof(hw->vdec_name),
 		"avs-%d", pdev->id);
@@ -5101,12 +5152,12 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 				USER_DATA_SIZE,
 				&hw->user_data_buffer_phys, "AVS_AUX_BUF");
 		if (!hw->user_data_buffer) {
-			pr_info("%s: Can not allocate hw->user_data_buffer\n",
+			pr_info("%d: [ERR]: %s: Can not allocate hw->user_data_buffer\n", pdata->id,
 				   __func__);
 			r = -ENOMEM;
 			goto error2;
 		}
-		pr_debug("hw->user_data_buffer = 0x%p, hw->user_data_buffer_phys = 0x%x\n",
+		pr_debug("%d: hw->user_data_buffer = 0x%p, hw->user_data_buffer_phys = 0x%x\n", pdata->id,
 			hw->user_data_buffer, (u32)hw->user_data_buffer_phys);
 	}
 #endif
@@ -5114,13 +5165,13 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 	hw->lmem_addr = (dma_addr_t)decoder_dma_alloc_coherent(&hw->lmem_phy_handle,
 	               LMEM_BUF_SIZE, (dma_addr_t *)&hw->lmem_phy_addr, "AVS_LMEM_BUF");
 	if (hw->lmem_addr == 0) {
-		pr_err("%s: failed to alloc lmem buffer\n", __func__);
+		pr_info("%d: [ERR]: %s: failed to alloc lmem buffer\n", pdata->id, __func__);
 		r = -1;
 		goto error3;
 	}
 
 	if (vavs_init(hw) < 0) {
-		pr_info("amvdec_avs init failed.\n");
+		pr_info("%d: [ERR]: amvdec_avs init failed.\n", pdata->id);
 		r = -ENODEV;
 		goto error4;
 	}
@@ -5144,7 +5195,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 	platform_set_drvdata(pdev, pdata);
 
 	if (pdata->config_len) {
-		pr_info("pdata->config=%s\n", pdata->config);
+		pr_debug("%d: pdata->config=%s\n", pdata->id, pdata->config);
 		if (get_config_int(pdata->config,
 			"parm_v4l_codec_enable",
 			&config_val) == 0)
@@ -5167,7 +5218,7 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 	} else
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 
-	pr_info("dynamic_buf_num_margin: %d, tvp_flag: %d\n", hw->dynamic_buf_num_margin, hw->tvp_flag);
+	pr_debug("%d: dynamic_buf_num_margin: %d, tvp_flag: %d\n", pdata->id, hw->dynamic_buf_num_margin, hw->tvp_flag);
 
 	hw->platform_dev = pdev;
 
@@ -5271,7 +5322,7 @@ KV_INT_TO_VOID ammvdec_avs_remove(struct platform_device *pdev)
 			hw->fw = NULL;
 		}
 
-		pr_info("ammvdec_avs removed.\n");
+		debug_print(hw, 0, "ammvdec_avs removed.\n");
 		if (hw->gvs) {
 			kfree(hw->gvs);
 			hw->gvs = NULL;
@@ -5321,7 +5372,7 @@ static s32 vavs_init2(struct vdec_avs_hw_s *hw)
 	if (size < 0) {
 		amvdec_disable();
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-		pr_err("get firmware fail.");
+		debug_err(hw, 0, "get firmware fail.");
 		return -1;
 	}
 
@@ -5536,7 +5587,7 @@ static void init_hw(struct vdec_s *vdec)
 	(struct vdec_avs_hw_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	int ret;
-	pr_info("%s, %d\n", __func__, __LINE__);
+	debug_print(hw, 0, "%s, %d\n", __func__, __LINE__);
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM)
 		ret = amvdec_loadmc_ex(vdec, NULL, hw->fw->data);
 	else if (firmware_sel == 1)
@@ -5548,10 +5599,10 @@ static void init_hw(struct vdec_s *vdec)
 		amvdec_disable();
 		/*vfree(buf);*/
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-		pr_err("AVS: the %s fw loading failed, err: %x\n",
+		debug_err(hw, 0, "AVS: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 	}
-	pr_info("%s, %d\n", __func__, __LINE__);
+	debug_print(hw, 0, "%s, %d\n", __func__, __LINE__);
 
 	/*vfree(buf);*/
 
@@ -5561,7 +5612,7 @@ static void init_hw(struct vdec_s *vdec)
 	ret = vavs_prot_init2(hw, 0);
 	if (ret < 0)
 		return;
-	pr_info("%s, %d\n", __func__, __LINE__);
+	debug_print(hw, 0, "%s, %d\n", __func__, __LINE__);
 
 }
 

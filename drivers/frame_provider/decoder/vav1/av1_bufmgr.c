@@ -32,8 +32,8 @@
 #include <linux/amlogic/media/canvas/canvas.h>
 #include "av1_global.h"
 
-#undef pr_info
-#define pr_info pr_cont
+//#undef pr_info
+//#define pr_info pr_cont
 
 #define __COMPARE(context, p1, p2) comp(p1, p2)
 #define __SHORTSORT(lo, hi, width, comp, context) \
@@ -949,7 +949,7 @@ void av1_set_mb_mi(AV1_COMMON *cm, int width, int height) {
   // eg. cdef, which operates on units of 8x8 luma pixels.
   const int aligned_width = ALIGN_POWER_OF_TWO(width, 3);
   const int aligned_height = ALIGN_POWER_OF_TWO(height, 3);
-  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, " [PICTURE] av1_set_mb_mi (%d X %d)\n", width, height);
+  av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, " [PICTURE] av1_set_mb_mi (%d X %d)\n", width, height);
 
   cm->mi_cols = aligned_width >> MI_SIZE_LOG2;
   cm->mi_rows = aligned_height >> MI_SIZE_LOG2;
@@ -1029,7 +1029,7 @@ static void setup_superres(AV1_COMMON *const cm, union param_u *params,
 
   *width = params->p.dec_frame_width;
   *height = params->p.frame_height;
-  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, " [PICTURE] set decoding size to (%d X %d) scaled size to (%d X %d)\n",
+  av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, " [PICTURE] set decoding size to (%d X %d) scaled size to (%d X %d)\n",
 	*width, *height,
 	cm->superres_upscaled_width,
 	cm->superres_upscaled_height);
@@ -1403,7 +1403,7 @@ void av1_setup_motion_field(AV1_COMMON *cm) {
   ref_stamp = MFMV_STACK_SIZE - 1;
 #ifdef AML
   cm->mv_ref_id_index = 0;
-  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s(%d) mi_cols %d mi_rows %d\n",
+  av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, "%s(%d) mi_cols %d mi_rows %d\n",
       __func__, setup_motion_field_debug_count++,
       cm->mi_cols,
       cm->mi_rows
@@ -1442,12 +1442,12 @@ void av1_setup_motion_field(AV1_COMMON *cm) {
 }
 
 
-static void set_ref_frame_info(int *remapped_ref_idx, int frame_idx,
+static void set_ref_frame_info(AV1_COMMON *cm, int *remapped_ref_idx, int frame_idx,
                                REF_FRAME_INFO *ref_info) {
   assert(frame_idx >= 0 && frame_idx < INTER_REFS_PER_FRAME);
 
   remapped_ref_idx[frame_idx] = ref_info->map_idx;
-  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "+++++++++++++%s:remapped_ref_idx[%d]=0x%x\n", __func__, frame_idx, ref_info->map_idx);
+  av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, "+++++++++++++%s:remapped_ref_idx[%d]=0x%x\n", __func__, frame_idx, ref_info->map_idx);
 }
 
 
@@ -1539,7 +1539,7 @@ void av1_set_frame_refs(AV1_COMMON *const cm, int *remapped_ref_idx,
 
   // == ALTREF_FRAME ==
   if (bwd_start_idx <= bwd_end_idx) {
-    set_ref_frame_info(remapped_ref_idx, ALTREF_FRAME - LAST_FRAME,
+    set_ref_frame_info(cm, remapped_ref_idx, ALTREF_FRAME - LAST_FRAME,
                        &ref_frame_info[bwd_end_idx]);
     ref_flag_list[ALTREF_FRAME - LAST_FRAME] = 1;
     bwd_end_idx--;
@@ -1547,7 +1547,7 @@ void av1_set_frame_refs(AV1_COMMON *const cm, int *remapped_ref_idx,
 
   // == BWDREF_FRAME ==
   if (bwd_start_idx <= bwd_end_idx) {
-    set_ref_frame_info(remapped_ref_idx, BWDREF_FRAME - LAST_FRAME,
+    set_ref_frame_info(cm, remapped_ref_idx, BWDREF_FRAME - LAST_FRAME,
                        &ref_frame_info[bwd_start_idx]);
     ref_flag_list[BWDREF_FRAME - LAST_FRAME] = 1;
     bwd_start_idx++;
@@ -1555,7 +1555,7 @@ void av1_set_frame_refs(AV1_COMMON *const cm, int *remapped_ref_idx,
 
   // == ALTREF2_FRAME ==
   if (bwd_start_idx <= bwd_end_idx) {
-    set_ref_frame_info(remapped_ref_idx, ALTREF2_FRAME - LAST_FRAME,
+    set_ref_frame_info(cm, remapped_ref_idx, ALTREF2_FRAME - LAST_FRAME,
                        &ref_frame_info[bwd_start_idx]);
     ref_flag_list[ALTREF2_FRAME - LAST_FRAME] = 1;
   }
@@ -1565,14 +1565,14 @@ void av1_set_frame_refs(AV1_COMMON *const cm, int *remapped_ref_idx,
   for (i = fwd_start_idx; i <= fwd_end_idx; ++i) {
     // == LAST_FRAME ==
     if (ref_frame_info[i].map_idx == lst_map_idx) {
-      set_ref_frame_info(remapped_ref_idx, LAST_FRAME - LAST_FRAME,
+      set_ref_frame_info(cm, remapped_ref_idx, LAST_FRAME - LAST_FRAME,
                          &ref_frame_info[i]);
       ref_flag_list[LAST_FRAME - LAST_FRAME] = 1;
     }
 
     // == GOLDEN_FRAME ==
     if (ref_frame_info[i].map_idx == gld_map_idx) {
-      set_ref_frame_info(remapped_ref_idx, GOLDEN_FRAME - LAST_FRAME,
+      set_ref_frame_info(cm, remapped_ref_idx, GOLDEN_FRAME - LAST_FRAME,
                          &ref_frame_info[i]);
       ref_flag_list[GOLDEN_FRAME - LAST_FRAME] = 1;
     }
@@ -1600,7 +1600,7 @@ void av1_set_frame_refs(AV1_COMMON *const cm, int *remapped_ref_idx,
     }
     if (fwd_start_idx > fwd_end_idx) break;
 
-    set_ref_frame_info(remapped_ref_idx, ref_frame - LAST_FRAME,
+    set_ref_frame_info(cm, remapped_ref_idx, ref_frame - LAST_FRAME,
                        &ref_frame_info[fwd_end_idx]);
     ref_flag_list[ref_frame - LAST_FRAME] = 1;
 
@@ -1611,7 +1611,7 @@ void av1_set_frame_refs(AV1_COMMON *const cm, int *remapped_ref_idx,
   for (; ref_idx < (INTER_REFS_PER_FRAME - 2); ref_idx++) {
     const MV_REFERENCE_FRAME ref_frame = ref_frame_list[ref_idx];
     if (ref_flag_list[ref_frame - LAST_FRAME] == 1) continue;
-    set_ref_frame_info(remapped_ref_idx, ref_frame - LAST_FRAME,
+    set_ref_frame_info(cm, remapped_ref_idx, ref_frame - LAST_FRAME,
                        &ref_frame_info[fwd_start_idx]);
     ref_flag_list[ref_frame - LAST_FRAME] = 1;
   }
@@ -1662,7 +1662,7 @@ void av1_setup_skip_mode_allowed(AV1_COMMON *cm)
 	skip_mode_info->skip_mode_allowed = 0;
 	skip_mode_info->ref_frame_idx_0 = INVALID_IDX;
 	skip_mode_info->ref_frame_idx_1 = INVALID_IDX;
-	av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "av1_setup_skip_mode_allowed %d %d %d\n", order_hint_info->enable_order_hint,
+	av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, "av1_setup_skip_mode_allowed %d %d %d\n", order_hint_info->enable_order_hint,
 		frame_is_intra_only(cm),
 		cm->current_frame.reference_mode);
 	if (!order_hint_info->enable_order_hint || frame_is_intra_only(cm) ||
@@ -1728,7 +1728,7 @@ void av1_setup_skip_mode_allowed(AV1_COMMON *cm)
 			skip_mode_info->ref_frame_idx_1 = AOMMAX(ref_idx[0], ref_idx[1]);
 		}
 	}
-	av1_print2(AV1_DEBUG_BUFMGR_DETAIL,
+	av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL,
 		"skip_mode_info: skip_mode_allowed 0x%x 0x%x 0x%x\n",
 	cm->current_frame.skip_mode_info.skip_mode_allowed,
 	cm->current_frame.skip_mode_info.ref_frame_idx_0,
@@ -2917,8 +2917,7 @@ int aom_decode_frame_from_obus(AV1Decoder *pbi, union param_u *params, int obu_t
 
   obu_header.type = obu_type;
   pbi->cur_obu_type = obu_header.type;
-  if (av1_is_debug(AOM_DEBUG_PRINT_LIST_INFO))
-    dump_params(pbi, params);
+  dump_params(pbi, params);
   switch (obu_header.type) {
     case OBU_SEQUENCE_HEADER:
         decoded_payload_size = read_sequence_header_obu(pbi, params);
@@ -3022,28 +3021,28 @@ int get_buffer_index(AV1Decoder *pbi, RefCntBuffer *buffer)
 	return i;
 }
 
-void dump_buffer(RefCntBuffer *buf)
+void dump_buffer(AV1_COMMON *cm, RefCntBuffer *buf)
 {
 	int i;
-	pr_info("ref_count %d, vf_ref %d, order_hint %d, w/h(%d,%d) showable_frame %d frame_type %d canvas(%d,%d) w/h(%d,%d) mi_c/r(%d,%d) header 0x%lx ref_deltas(",
+	av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "ref_count %d, vf_ref %d, order_hint %d, w/h(%d,%d) showable_frame %d frame_type %d canvas(%d,%d) w/h(%d,%d) mi_c/r(%d,%d) header 0x%lx ref_deltas(",
 	buf->ref_count, buf->buf.vf_ref, buf->order_hint, buf->width, buf->height, buf->showable_frame, buf->frame_type,
 	buf->buf.mc_canvas_y, buf->buf.mc_canvas_u_v,
 	buf->buf.y_crop_width, buf->buf.y_crop_height,
 	buf->mi_cols, buf->mi_rows,
 	buf->buf.header_adr);
 	for (i = 0; i < REF_FRAMES; i++)
-		pr_info("%d,", buf->ref_deltas[i]);
-	pr_info("), ref_order_hints(");
+		av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "%d,", buf->ref_deltas[i]);
+	av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "), ref_order_hints(");
 
 	for (i = 0; i < INTER_REFS_PER_FRAME; i++)
-		pr_info("%d ", buf->ref_order_hints[i]);
-	pr_info(")");
+		av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "%d ", buf->ref_order_hints[i]);
+	av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, ")");
 }
 
 void dump_ref_buffer_info(AV1Decoder *pbi, int i)
 {
 	AV1_COMMON *const cm = pbi->common;
-	pr_info("remapped_ref_idx %d, ref_frame_sign_bias %d, ref_frame_id %d, valid_for_referencing %d ref_frame_side %d ref_frame_map idx %d, next_ref_frame_map idx %d",
+	av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "remapped_ref_idx %d, ref_frame_sign_bias %d, ref_frame_id %d, valid_for_referencing %d ref_frame_side %d ref_frame_map idx %d, next_ref_frame_map idx %d",
 		cm->remapped_ref_idx[i],
 		cm->ref_frame_sign_bias[i],
 		cm->ref_frame_id[i],
@@ -3058,11 +3057,11 @@ void dump_mv_refs(AV1Decoder *pbi)
   int i, j;
   AV1_COMMON *const cm = pbi->common;
   for (i = 0; i < cm->mv_ref_id_index; i++) {
-    pr_info("%d: ref_id %d cal_tpl_mvs %d mv_ref_offset: ",
+   av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "%d: ref_id %d cal_tpl_mvs %d mv_ref_offset: ",
       i, cm->mv_ref_id[i], cm->mv_cal_tpl_mvs[i]);
     for (j = 0; j < REF_FRAMES; j++)
-        pr_info("%d ", cm->mv_ref_offset[i][j]);
-    pr_info("\n");
+        av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "%d ", cm->mv_ref_offset[i][j]);
+    av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "\n");
   }
 }
 
@@ -3073,7 +3072,7 @@ void dump_ref_spec_bufs(AV1Decoder *pbi)
   for (i = 0; i < INTER_REFS_PER_FRAME; ++i) {
     PIC_BUFFER_CONFIG *pic_config = av1_get_ref_frame_spec_buf(cm, LAST_FRAME + i);
     if (pic_config == NULL) continue;
-    pr_info("%d: index %d order_hint %d header 0x%lx dw_header 0x%lx canvas(%d,%d) mv_wr_start 0x%lx lcu_total %d\n",
+    av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "%d: index %d order_hint %d header 0x%lx dw_header 0x%lx canvas(%d,%d) mv_wr_start 0x%lx lcu_total %d\n",
       i, pic_config->index,
       pic_config->order_hint,
       pic_config->header_adr,
@@ -3099,11 +3098,11 @@ void dump_scale_factors(AV1Decoder *pbi)
     struct scale_factors *const sf =
         get_ref_scale_factors(cm, i);
     if (sf)
-      pr_info("%d: is_scaled %d x_scale_fp %d, y_scale_fp %d\n",
+      av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "%d: is_scaled %d x_scale_fp %d, y_scale_fp %d\n",
         i, av1_is_scaled(sf),
         sf->x_scale_fp, sf->y_scale_fp);
     else
-      pr_info("%d: sf null\n", i);
+      av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "%d: sf null\n", i);
   }
 }
 
@@ -3118,44 +3117,44 @@ void dump_buffer_status(AV1Decoder *pbi)
 
 	lock_buffer_pool(pool, flags);
 
-	pr_info("%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
+	av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
 
-	pr_info("Buffer Pool:\n");
+	av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "Buffer Pool:\n");
 	for (i = 0; i < FRAME_BUFFERS; i++) {
 		RefCntBuffer *buf =
 			&cm->buffer_pool->frame_bufs[i];
-		pr_info("%d: ", i);
+		av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "%d: ", i);
 		if (buf)
-			dump_buffer(buf);
-		pr_info("\n");
+			dump_buffer(cm, buf);
+		av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "\n");
 	}
 
 	if (cm->prev_frame) {
-		pr_info("prev_frame (%d): ",
+		av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "prev_frame (%d): ",
 			get_buffer_index(pbi, cm->prev_frame));
-		dump_buffer(cm->prev_frame);
-		pr_info("\n");
+		dump_buffer(cm, cm->prev_frame);
+		av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "\n");
 	}
 	if (cm->cur_frame) {
-		pr_info("cur_frame (%d): ",
+		av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "cur_frame (%d): ",
 			get_buffer_index(pbi, cm->cur_frame));
-		dump_buffer(cm->cur_frame);
-		pr_info("\n");
+		dump_buffer(cm, cm->cur_frame);
+		av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "\n");;
 	}
-	pr_info("REF_FRAMES Info(ref buf is ref_frame_map[remapped_ref_idx[i-1]], i=1~7):\n");
+	av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "REF_FRAMES Info(ref buf is ref_frame_map[remapped_ref_idx[i-1]], i=1~7):\n");
 	for (i = 0; i < REF_FRAMES; i++) {
-		pr_info("%d: ", i);
+		av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "%d: ", i);
 		dump_ref_buffer_info(pbi, i);
-		pr_info("\n");
+		av1_print2_cont(cm, AOM_DEBUG_PRINT_LIST_INFO, "\n");
 	}
-	pr_info("Ref Spec Buffers:\n");
+	av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "Ref Spec Buffers:\n");
 	dump_ref_spec_bufs(pbi);
 
-	pr_info("MV refs:\n");
+	av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "MV refs:\n");
 	dump_mv_refs(pbi);
 
 #ifdef SUPPORT_SCALE_FACTOR
-	pr_info("Scale factors:\n");
+	av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "Scale factors:\n");
 	dump_scale_factors(pbi);
 #endif
 	unlock_buffer_pool(pool, flags);
@@ -3212,16 +3211,17 @@ void dump_params(AV1Decoder *pbi, union param_u *params)
 {
 	int i, j;
 	unsigned char *start_adr = (unsigned char*)params;
+	AV1_COMMON *const cm = pbi->common;
 
-	pr_info("============ params:\n");
+	av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "============ params:\n");
 	for (i = 0; i < sizeof(param_dump_items) / sizeof(param_dump_items[0]); i++) {
 		for (j = 0; j < param_dump_items[i].size; j++) {
 			if (param_dump_items[i].size > 1)
-				pr_info("%s(%d): 0x%x\n",
+				av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "%s(%d): 0x%x\n",
 				param_dump_items[i].name, j,
 				*((unsigned short*)(start_adr + param_dump_items[i].adr_off + j * 2)));
 			else
-				pr_info("%s: 0x%x\n", param_dump_items[i].name,
+				av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "%s: 0x%x\n", param_dump_items[i].name,
 				*((unsigned short*)(start_adr + param_dump_items[i].adr_off + j * 2)));
 		}
 	}
@@ -3248,8 +3248,8 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
   // arguments are invalid.
   BufferPool *const pool = cm->buffer_pool;
   int frame_decoded;
-  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
-  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: new_compressed_data= %d\n", __func__, new_compressed_data);
+  av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
+  av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, "%s: new_compressed_data= %d\n", __func__, new_compressed_data);
   for (j = 0; j < pbi->num_output_frames; j++) {
     decrease_ref_count(pbi, pbi->output_frames[j], pool);
   }
@@ -3261,7 +3261,7 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
       return -1;
     }
     pbi->seen_frame_header = 0;
-    av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "New_compressed_data (%d)\n", new_compressed_data_count++);
+    av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, "New_compressed_data (%d)\n", new_compressed_data_count++);
 
   }
 
@@ -3271,13 +3271,11 @@ int av1_bufmgr_process(AV1Decoder *pbi, union param_u *params,
   if (pbi->cur_obu_type == OBU_FRAME_HEADER ||
           pbi->cur_obu_type == OBU_REDUNDANT_FRAME_HEADER ||
           pbi->cur_obu_type == OBU_FRAME) {
-      if (av1_is_debug(AOM_DEBUG_PRINT_LIST_INFO)) {
-        pr_info("after bufmgr (frame_decoded %d seen_frame_header %d): ",
+       av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "after bufmgr (frame_decoded %d seen_frame_header %d): ",
           frame_decoded, pbi->seen_frame_header);
-        dump_buffer_status(pbi);
-      }
+       dump_buffer_status(pbi);
   }
-  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
+  av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, "%s: pbi %p cm %p cur_frame %p\n", __func__, pbi, cm, cm->cur_frame);
 
   cm->bit_depth = params->p.bit_depth;
 
@@ -3300,6 +3298,7 @@ int av1_bufmgr_postproc(AV1Decoder *pbi, unsigned char frame_decoded)
 {
     PIC_BUFFER_CONFIG *sd = NULL;
     int index;
+    AV1_COMMON *const cm = pbi->common;
 #if 0
     if (frame_decoded) {
       printf("before swap_frame_buffers: ");
@@ -3308,10 +3307,8 @@ int av1_bufmgr_postproc(AV1Decoder *pbi, unsigned char frame_decoded)
 #endif
     swap_frame_buffers(pbi, frame_decoded);
     if (frame_decoded) {
-      if (av1_is_debug(AOM_DEBUG_PRINT_LIST_INFO)) {
-        pr_info("after swap_frame_buffers: ");
+        av1_print2(cm, AOM_DEBUG_PRINT_LIST_INFO, "after swap_frame_buffers: ");
         dump_buffer_status(pbi);
-      }
     }
     if (frame_decoded) {
       pbi->decoding_first_frame = 0;
@@ -3330,7 +3327,7 @@ int av1_bufmgr_postproc(AV1Decoder *pbi, unsigned char frame_decoded)
 int aom_realloc_frame_buffer(AV1_COMMON *cm, PIC_BUFFER_CONFIG *pic,
   int width, int height, unsigned int order_hint)
 {
-  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s, index 0x%x, width 0x%x, height 0x%x order_hint 0x%x\n",
+  av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, "%s, index 0x%x, width 0x%x, height 0x%x order_hint 0x%x\n",
     __func__, pic->index, width, height, order_hint);
   pic->y_crop_width = width;
   pic->y_crop_height = height;
@@ -3368,7 +3365,7 @@ void av1_set_next_ref_frame_map(AV1Decoder *pbi) {
   int check_on_show_existing_frame;
   u32 low_latency_flag = get_low_latency_flag(cm);
 
-  av1_print2(AV1_DEBUG_BUFMGR_DETAIL, "%s, %d, mask 0x%x, show_existing_frame %d, reset_decoder_state %d\n",
+  av1_print2(cm, AV1_DEBUG_BUFMGR_DETAIL, "%s, %d, mask 0x%x, show_existing_frame %d, reset_decoder_state %d\n",
     __func__, pbi->camera_frame_header_ready,
     cm->current_frame.refresh_frame_flags,
     cm->show_existing_frame,

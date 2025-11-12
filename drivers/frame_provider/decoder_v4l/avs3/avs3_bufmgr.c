@@ -111,7 +111,7 @@ static const s8 com_tbl_log2[257] =
 	8
 };
 
-COM_PIC *dec_pull_frm(DEC_CTX *ctx, int state)
+COM_PIC *dec_pull_frm(struct avs3_decoder *hw, DEC_CTX *ctx, int state)
 {
 	int ret;
 	COM_PIC *pic = NULL;
@@ -130,15 +130,15 @@ COM_PIC *dec_pull_frm(DEC_CTX *ctx, int state)
 		}
 
 		if (pic) {
-			printf("%s libvcon output index %d\n", __func__, pic->buf_cfg.index);
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s libvcon output index %d\n", __func__, pic->buf_cfg.index);
 		}
 		return pic;
 	} else
 #endif
 	{
-		pic = com_picman_out_pic( &ctx->dpm, &ret, ctx->info.pic_header.decode_order_index, state ); //MX: doi is not increase mono, but in the range of [0,255]
+		pic = com_picman_out_pic(hw, &ctx->dpm, &ret, ctx->info.pic_header.decode_order_index, state ); //MX: doi is not increase mono, but in the range of [0,255]
 		if (pic) {
-			printf("%s output index %d\n", __func__, pic->buf_cfg.index);
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s output index %d\n", __func__, pic->buf_cfg.index);
 		}
 		return pic;
 	}
@@ -241,7 +241,7 @@ static void sequence_deinit(DEC_CTX * ctx)
 	com_picman_deinit(&ctx->dpm);
 }
 
-static int sequence_init(DEC_CTX * ctx, COM_SQH * sqh, int max_pb_size)
+static int sequence_init(struct avs3_decoder *hw, DEC_CTX * ctx, COM_SQH * sqh, int max_pb_size)
 {
 	int size;
 	int ret;
@@ -280,7 +280,7 @@ static int sequence_init(DEC_CTX * ctx, COM_SQH * sqh, int max_pb_size)
 #if ALF_SHAPE || ALF_IMP
 	ctx->info.pic_header.tool_alf_shape_on = ctx->info.sqh.adaptive_filter_shape_enable_flag;
 #endif
-	create_alf_global_buffer(ctx);
+	create_alf_global_buffer(hw, ctx);
 	ctx->info.pic_header.pic_alf_on = ctx->pic_alf_on;
 
 	return COM_OK;
@@ -290,7 +290,7 @@ ERR:
 	return ret;
 }
 
-int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
+int dec_cnk(struct avs3_decoder *hw, DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 	union param_u *param, int max_pb_size)
 {
 	COM_PIC_HEADER   *pic_header;
@@ -299,7 +299,7 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 	COM_CNKH *cnkh;
 	int        ret = COM_OK;
 	int i;
-	PRINT_LINE();
+	PRINT_LINE(hw);
 	if (stat) {
 		com_mset(stat, 0, sizeof(DEC_STAT));
 	}
@@ -325,22 +325,22 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 #endif
 	if (start_code == 0xB0) {
 		cnkh->ctype = COM_CT_SQH;
-		ret = dec_eco_sqh(param, sqh);
-		PRINT_LINE();
+		ret = dec_eco_sqh(hw, param, sqh);
+		PRINT_LINE(hw);
 		com_assert_rv(COM_SUCCEEDED(ret), ret);
-		PRINT_LINE();
+		PRINT_LINE(hw);
 #if LIBVC_ON
 		ctx->dpm.libvc_data->is_libpic_processing = sqh->library_stream_flag;
 		ctx->dpm.libvc_data->library_picture_enable_flag = sqh->library_picture_enable_flag;
 #endif
-		PRINT_LINE();
+		PRINT_LINE(hw);
 
 		if (!ctx->init_flag) {
-			PRINT_LINE();
-			ret = sequence_init(ctx, sqh, max_pb_size);
-			PRINT_LINE();
+			PRINT_LINE(hw);
+			ret = sequence_init(hw, ctx, sqh, max_pb_size);
+			PRINT_LINE(hw);
 			com_assert_rv(COM_SUCCEEDED(ret), ret);
-			PRINT_LINE();
+			PRINT_LINE(hw);
 			ctx->init_flag = 1;
 		}
 	} else if (start_code == 0xB1) {
@@ -348,14 +348,14 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		cnkh->ctype = COM_CT_SEQ_END;
 	} else if (start_code == 0xB3 || start_code == 0xB6) {
 		int need_minus_256 = 0;
-		PRINT_LINE();
+		PRINT_LINE(hw);
 		cnkh->ctype = COM_CT_PICTURE;
 		if (ctx->init_flag != 1)
 			return COM_ERR_MALFORMED_BITSTREAM;
 
 		/* decode slice header */
 		pic_header->low_delay = sqh->low_delay;
-		ret = dec_eco_pic_header(param, pic_header, sqh, &need_minus_256, start_code);
+		ret = dec_eco_pic_header(hw, param, pic_header, sqh, &need_minus_256, start_code);
 		if (need_minus_256) {
 			com_picman_dpbpic_doi_minus_cycle_length( &ctx->dpm );
 		}
@@ -370,7 +370,7 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 #if EXTENSION_USER_DATA && WRITE_MD5_IN_USER_DATA
 		//extension_and_user_data(ctx, param, 1, sqh, pic_header);
 #endif
-		com_construct_ref_list_doi(pic_header);
+		com_construct_ref_list_doi(hw, pic_header);
 
 		//add by Yuqun Fan, init rpl list at ph instead of sh
 #if HLS_RPL
@@ -378,14 +378,14 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		if (!sqh->library_stream_flag)
 #endif
 		{
-			ret = com_picman_refpic_marking_decoder(&ctx->dpm, pic_header);
+			ret = com_picman_refpic_marking_decoder(hw, &ctx->dpm, pic_header);
 			if (avs3_get_error_policy(&ctx->dpm) & 0x4)
 				com_assert_rv(ret == COM_OK, ret);
 		}
-		com_cleanup_useless_pic_buffer_in_pm(&ctx->dpm);
+		com_cleanup_useless_pic_buffer_in_pm(hw, &ctx->dpm);
 
 		/* reference picture lists construction */
-		ret = com_picman_refp_rpl_based_init_decoder(&ctx->dpm, pic_header, ctx->refp);
+		ret = com_picman_refp_rpl_based_init_decoder(hw, &ctx->dpm, pic_header, ctx->refp);
 
 #if AWP
 		if (ctx->info.pic_header.slice_type == SLICE_P ||
@@ -422,24 +422,24 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 		com_assert_rv(COM_SUCCEEDED(ret), ret);
 
 		if (is_avs3_print_bufmgr_detail())
-			com_picman_print_state(&ctx->dpm);
+			com_picman_print_state(hw, &ctx->dpm);
 		if (pic_header->rpl_l0.ref_pic_active_num > 0) {
 			char tmpbuf[128];
 			int pos = 0;
 			for (i = 0; i < pic_header->rpl_l0.ref_pic_active_num; i++)
 				pos += sprintf(&tmpbuf[pos], "%d ", ctx->refp[i][REFP_0].ptr);
-			printf("rpl_l0 num %d: %s\n", pic_header->rpl_l0.ref_pic_active_num, tmpbuf);
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "rpl_l0 num %d: %s\n", pic_header->rpl_l0.ref_pic_active_num, tmpbuf);
 		}
 		if (pic_header->rpl_l1.ref_pic_active_num > 0) {
 			char tmpbuf[128];
 			int pos = 0;
 			for (i = 0; i < pic_header->rpl_l1.ref_pic_active_num; i++)
 				pos += sprintf(&tmpbuf[pos], "%d ", ctx->refp[i][REFP_1].ptr);
-			printf("rpl_l1 num %d: %s\n", pic_header->rpl_l1.ref_pic_active_num, tmpbuf);
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "rpl_l1 num %d: %s\n", pic_header->rpl_l1.ref_pic_active_num, tmpbuf);
 		}
 
 		/* get available frame buffer for decoded image */
-		ctx->pic = com_picman_get_empty_pic(&ctx->dpm, &ret);
+		ctx->pic = com_picman_get_empty_pic(hw, &ctx->dpm, &ret);
 		com_assert_rv(ctx->pic, ret);
 		/* get available frame buffer for decoded image */
 		ctx->map.map_refi = ctx->pic->map_refi;
@@ -447,13 +447,13 @@ int dec_cnk(DEC_CTX * ctx, DEC_STAT * stat, unsigned char start_code,
 	} else {
 		return COM_ERR_MALFORMED_BITSTREAM;
 	}
-	PRINT_LINE();
+	PRINT_LINE(hw);
 	make_stat(ctx, cnkh->ctype, stat);
-	PRINT_LINE();
+	PRINT_LINE(hw);
 	return ret;
 }
 
-void allocate_alf_param(ALF_PARAM **alf_param, int comp_idx
+void allocate_alf_param(struct avs3_decoder *hw, ALF_PARAM **alf_param, int comp_idx
 #if ALF_SHAPE
 	, int num_coef
 #endif
@@ -493,21 +493,21 @@ void allocate_alf_param(ALF_PARAM **alf_param, int comp_idx
 #endif
 			break;
 		default:
-			printf("Not a legal component ID\n");
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "Not a legal component ID\n");
 			assert(0);
 			exit(-1);
 	}
 #endif
 }
 
-void create_alf_global_buffer(DEC_CTX *ctx)
+void create_alf_global_buffer(struct avs3_decoder *hw, DEC_CTX *ctx)
 {
 	int i;
 #if ALF_SHAPE
 	int num_coef = (ctx->info.sqh.adaptive_filter_shape_enable_flag) ? ALF_MAX_NUM_COEF_SHAPE2 : ALF_MAX_NUM_COEF;
 #endif
 	for (i = 0; i < N_C; i++) {
-		allocate_alf_param(&ctx->info.pic_header.alf_picture_param[i], i
+		allocate_alf_param(hw, &ctx->info.pic_header.alf_picture_param[i], i
 #if ALF_SHAPE
 			, num_coef
 #endif
@@ -531,16 +531,16 @@ void avs3_bufmgr_init(struct avs3_decoder *hw)
 	set_livcdata_dec(&hw->ctx, &hw->libvc_data);
 }
 
-int avs3_param_error_check(union param_u *param)
+int avs3_param_error_check(struct avs3_decoder *hw, union param_u *param)
 {
 	if (param->p.sqh_max_dpb_size > MAX_PB_SIZE) {
-		pr_err("%s, param->p.sqh_max_dpb_size %d error\n", __func__, param->p.sqh_max_dpb_size);
+		avs3_err2(hw, 0, "%s, param->p.sqh_max_dpb_size %d error\n", __func__, param->p.sqh_max_dpb_size);
 		return COM_ERR;
 	}
 
 	if ((param->p.pic_header_rpl_l0_ref_pic_num > MAX_NUM_REF_PICS) ||
 		(param->p.pic_header_rpl_l1_ref_pic_num > MAX_NUM_REF_PICS)) {
-		pr_info("%s, rpl_ref_pic_num %d, %d error\n", __func__,
+		avs3_print2(hw, 0, "%s, rpl_ref_pic_num %d, %d error\n", __func__,
 		param->p.pic_header_rpl_l0_ref_pic_num,
 		param->p.pic_header_rpl_l1_ref_pic_num);
 		return COM_ERR;
@@ -555,19 +555,19 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 	COM_PIC *pic;
 	DEC_CTX *ctx = &hw->ctx;
 	int i;
-	printf("%s start_code 0x%x\n", __func__, start_code);
+	avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s start_code 0x%x\n", __func__, start_code);
 
-	if (avs3_param_error_check(&hw->param))
+	if (avs3_param_error_check(hw, &hw->param))
 		return COM_ERR;
 
-	ret = dec_cnk(&hw->ctx, &hw->stat, start_code, &hw->param, hw->max_pb_size);
+	ret = dec_cnk(hw, &hw->ctx, &hw->stat, start_code, &hw->param, hw->max_pb_size);
 	if (start_code == SEQUENCE_HEADER_CODE) {
 		hw->lcu_size = hw->ctx.info.max_cuwh;
 		hw->lcu_size_log2 = hw->ctx.info.log2_max_cuwh;
 		hw->lcu_x_num = hw->ctx.info.pic_width_in_lcu;
 		hw->lcu_y_num = hw->ctx.info.pic_height_in_lcu;
 		hw->lcu_total = hw->ctx.info.f_lcu;
-		printf("lcu_size %d lcu_size_log2 %d lcu_total %d\n", hw->lcu_size, hw->lcu_size_log2, hw->lcu_total);
+		avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "lcu_size %d lcu_size_log2 %d lcu_total %d\n", hw->lcu_size, hw->lcu_size_log2, hw->lcu_total);
 	} else if (start_code == I_PICTURE_START_CODE || start_code == PB_PICTURE_START_CODE) {
 		//hw->input.sample_bit_depth = hw->ctx.info.bit_depth_input;
 		hw->input.sample_bit_depth = hw->ctx.info.bit_depth_internal;
@@ -580,7 +580,7 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 		pic = ctx->pic;
 		if (pic && (!ret)) {
 			hw->cur_pic = &pic->buf_cfg;
-			printf("set refpic before cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "set refpic before cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
 				hw->cur_pic->index, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
 			hw->cur_pic->list0_num_refp = hw->ctx.dpm.num_refp[REFP_0];
 			for (i = 0; i < hw->ctx.dpm.num_refp[REFP_0]; i++)
@@ -593,7 +593,7 @@ int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code)
 			for (i = 0; i < hw->cur_pic->list1_num_refp; i++)
 				hw->cur_pic->list1_index[i] = hw->ctx.refp[i][REFP_1].pic->buf_cfg.index;
 #endif
-			printf("set refpic after cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "set refpic after cur_pic index %d, pic %p L0 num:%d, L1 num:%d\n",
 				hw->cur_pic->index, hw->cur_pic, hw->cur_pic->list0_num_refp, hw->cur_pic->list1_num_refp);
 		}
 		//Read_ALF_param(hw);
@@ -627,16 +627,16 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw)
 #endif
 	{
 		if ((pic_header->picture_output_delay < PICTURE_OUTPUT_DELAY_MIN) || (pic_header->picture_output_delay > PICTURE_OUTPUT_DELAY_MAX)) {
-			printf("pic_header->picture_output_delay is %d force to 0\n",
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "pic_header->picture_output_delay is %d force to 0\n",
 				pic_header->picture_output_delay);
 			pic_header->picture_output_delay = 0;
 		}
 
-		ret = com_picman_put_pic(&ctx->dpm, ctx->pic, ctx->info.pic_header.slice_type, ctx->ptr, pic_header->decode_order_index,
+		ret = com_picman_put_pic(hw, &ctx->dpm, ctx->pic, ctx->info.pic_header.slice_type, ctx->ptr, pic_header->decode_order_index,
 			pic_header->picture_output_delay, ctx->info.pic_header.temporal_id, 1, ctx->refp);
 #ifdef NEW_FRONT_BACK_CODE
 		if ((&ctx->dpm)->cur_pb_size > sqh->max_dpb_size)
-			printf("!!! (&ctx->dpm)->cur_pb_size %d > sqh->max_dpb_size %d\n",
+			avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "!!! (&ctx->dpm)->cur_pb_size %d > sqh->max_dpb_size %d\n",
 				(&ctx->dpm)->cur_pb_size, sqh->max_dpb_size);
 #else
 		assert((& ctx->dpm)->cur_pb_size <= sqh->max_dpb_size);
@@ -644,13 +644,13 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw)
 	}
 	cnkh->ctype = COM_CT_SLICE;
 	make_stat(ctx, cnkh->ctype, stat);
-	printf("### pic_cnt %d cur_num_ref_pics %d\n", ctx->pic_cnt, ctx->dpm.cur_num_ref_pics);
+	avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "### pic_cnt %d cur_num_ref_pics %d\n", ctx->pic_cnt, ctx->dpm.cur_num_ref_pics);
 	return ret;
 }
 
 void avs3_cleanup_useless_pic_buffer_in_pm(struct avs3_decoder *hw)
 {
-	com_cleanup_useless_pic_buffer_in_pm(&hw->ctx.dpm);
+	com_cleanup_useless_pic_buffer_in_pm(hw, &hw->ctx.dpm);
 }
 
 COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * ret)
@@ -687,9 +687,9 @@ COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * re
 
 	}
 	if (pic)
-		printf("%s: pic index %d\n", __func__, pic->buf_cfg.index);
+		avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: pic index %d\n", __func__, pic->buf_cfg.index);
 	else
-		printf("%s: ret NULL\n", __func__);
+		avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: ret NULL\n", __func__);
 	return pic;
 }
 
@@ -697,7 +697,7 @@ void com_pic_free(struct avs3_decoder *hw, PICBUF_ALLOCATOR *pa, COM_PIC *pic)
 {
 	pic->buf_cfg.used = 0;
 	pic->buf_cfg.in_dpb = 0;
-	printf("%s: pic index %d\n", __func__, pic->buf_cfg.index);
+	avs3_print2(hw, AVS3_DBG_BUFMGR_DETAIL, "%s: pic index %d\n", __func__, pic->buf_cfg.index);
 }
 
 void init_pic_pool(struct avs3_decoder *hw)
@@ -717,80 +717,80 @@ void init_pic_pool(struct avs3_decoder *hw)
 	}
 }
 
-void print_param(union param_u * param)
+void print_param(struct avs3_decoder *hw, union param_u * param)
 {
-	printk("sqh->profile_id = %d (0x%x)\n", param->p.sqh_profile_id, param->p.sqh_profile_id);
-	printk("sqh->level_id = %d (0x%x)\n", param->p.sqh_level_id, param->p.sqh_level_id);
-	printk("sqh->progressive_sequence = %d (0x%x)\n", param->p.sqh_progressive_sequence, param->p.sqh_progressive_sequence);
-	printk("sqh->field_coded_sequence = %d (0x%x)\n", param->p.sqh_field_coded_sequence, param->p.sqh_field_coded_sequence);
-	printk("sqh->library_stream_flag = %d (0x%x)\n", param->p.sqh_library_stream_flag, param->p.sqh_library_stream_flag);
-	printk("sqh->library_picture_enable_flag = %d (0x%x)\n", param->p.sqh_library_picture_enable_flag, param->p.sqh_library_picture_enable_flag);
-	printk("sqh->horizontal_size = %d (0x%x)\n", param->p.sqh_horizontal_size, param->p.sqh_horizontal_size);
-	printk("sqh->vertical_size = %d (0x%x)\n", param->p.sqh_vertical_size, param->p.sqh_vertical_size);
-	printk("sqh->sample_precision = %d (0x%x)\n", param->p.sqh_sample_precision, param->p.sqh_sample_precision);
-	printk("sqh->encoding_precision = %d (0x%x)\n", param->p.sqh_encoding_precision, param->p.sqh_encoding_precision);
-	printk("sqh->aspect_ratio = %d (0x%x)\n", param->p.sqh_aspect_ratio, param->p.sqh_aspect_ratio);
-	printk("sqh->frame_rate_code = %d (0x%x)\n", param->p.sqh_frame_rate_code, param->p.sqh_frame_rate_code);
-	printk("sqh->low_delay = %d (0x%x)\n", param->p.sqh_low_delay, param->p.sqh_low_delay);
-	printk("sqh->temporal_id_enable_flag = %d (0x%x)\n", param->p.sqh_temporal_id_enable_flag, param->p.sqh_temporal_id_enable_flag);
-	printk("sqh->max_dpb_size = %d (0x%x)\n", param->p.sqh_max_dpb_size, param->p.sqh_max_dpb_size);
-	printk("sqh->log2_max_cu_width_height = %d (0x%x)\n", param->p.sqh_log2_max_cu_width_height, param->p.sqh_log2_max_cu_width_height);
-	printk("sqh->adaptive_leveling_filter_enable_flag = %d (0x%x)\n", param->p.sqh_adaptive_leveling_filter_enable_flag, param->p.sqh_adaptive_leveling_filter_enable_flag);
-	printk("sqh->num_of_hmvp_cand = %d (0x%x)\n", param->p.sqh_num_of_hmvp_cand, param->p.sqh_num_of_hmvp_cand);
-	printk("sqh->output_reorder_delay = %d (0x%x)\n", param->p.sqh_output_reorder_delay, param->p.sqh_output_reorder_delay);
-	printk("sqh->cross_patch_loop_filter = %d (0x%x)\n", param->p.sqh_cross_patch_loop_filter, param->p.sqh_cross_patch_loop_filter);
-	printk("pic_header->decode_order_index = %d (0x%x)\n", param->p.pic_header_decode_order_index, param->p.pic_header_decode_order_index);
-	printk("pic_header->picture_output_delay = %d (0x%x)\n", param->p.pic_header_picture_output_delay, param->p.pic_header_picture_output_delay);
-	printk("pic_header->progressive_frame = %d (0x%x)\n", param->p.pic_header_progressive_frame, param->p.pic_header_progressive_frame);
-	printk("pic_header->top_field_first = %d (0x%x)\n", param->p.pic_header_top_field_first, param->p.pic_header_top_field_first);
-	printk("pic_header->repeat_first_field = %d (0x%x)\n", param->p.pic_header_repeat_first_field, param->p.pic_header_repeat_first_field);
-	printk("pic_header->rpl_l0_idx = %d (0x%x)\n", param->p.pic_header_rpl_l0_idx, param->p.pic_header_rpl_l0_idx);
-	printk("pic_header->rpl_l1_idx = %d (0x%x)\n", param->p.pic_header_rpl_l1_idx, param->p.pic_header_rpl_l1_idx);
-	printk("pic_header->rpl_l0.ref_pic_num = %d (0x%x)\n", param->p.pic_header_rpl_l0_ref_pic_num, param->p.pic_header_rpl_l0_ref_pic_num);
-	printk("pic_header->rpl_l1.ref_pic_num = %d (0x%x)\n", param->p.pic_header_rpl_l1_ref_pic_num, param->p.pic_header_rpl_l1_ref_pic_num);
-	printk("pic_header->rpl_l0.reference_to_library_enable_flag = %d (0x%x)\n", param->p.pic_header_rpl_l0_reference_to_library_enable_flag, param->p.pic_header_rpl_l0_reference_to_library_enable_flag);
-	printk("pic_header->rpl_l1.reference_to_library_enable_flag = %d (0x%x)\n", param->p.pic_header_rpl_l1_reference_to_library_enable_flag, param->p.pic_header_rpl_l1_reference_to_library_enable_flag);
-	printk("pic_header->loop_filter_disable_flag = %d (0x%x)\n", param->p.pic_header_loop_filter_disable_flag, param->p.pic_header_loop_filter_disable_flag);
-	printk("pic_header->random_access_decodable_flag = %d (0x%x)\n", param->p.pic_header_random_access_decodable_flag, param->p.pic_header_random_access_decodable_flag);
-	printk("pic_header->slice_type = %d (0x%x)\n", param->p.pic_header_slice_type, param->p.pic_header_slice_type);
-	printk("pic_header->num_ref_idx_active_override_flag = %d (0x%x)\n", param->p.pic_header_num_ref_idx_active_override_flag, param->p.pic_header_num_ref_idx_active_override_flag);
-	printk("pic_header->rpl_l0.ref_pic_active_num = %d (0x%x)\n", param->p.pic_header_rpl_l0_ref_pic_active_num, param->p.pic_header_rpl_l0_ref_pic_active_num);
-	printk("pic_header->rpl_l1.ref_pic_active_num = %d (0x%x)\n", param->p.pic_header_rpl_l1_ref_pic_active_num, param->p.pic_header_rpl_l1_ref_pic_active_num);
-	printk("sqh->adaptive_filter_shape_enable_flag = %d (0x%x)\n", param->p.sqh_adaptive_filter_shape_enable_flag, param->p.sqh_adaptive_filter_shape_enable_flag);
-	printk("pic->header_library_picture_index = %d (0x%x)\n", param->p.pic_header_library_picture_index, param->p.pic_header_library_picture_index);
-	printk("pic->header_top_field_picture_flag = %d (0x%x)\n", param->p.pic_header_top_field_picture_flag, param->p.pic_header_top_field_picture_flag);
-	printk("pic->header->alpha_c_offset = %d (0x%x)\n", param->p.pic_header_alpha_c_offset, param->p.pic_header_alpha_c_offset);
-	printk("pic->header->beta_offset = %d (0x%x)\n", param->p.pic_header_beta_offset, param->p.pic_header_beta_offset);
-	printk("pic->header->chroma_quant_param_delta_cb = %d (0x%x)\n", param->p.pic_header_chroma_quant_param_delta_cb, param->p.pic_header_chroma_quant_param_delta_cb);
-	printk("pic->header->chroma_quant_param_delta_cr = %d (0x%x)\n", param->p.pic_header_chroma_quant_param_delta_cr, param->p.pic_header_chroma_quant_param_delta_cr);
+	avs3_print2(hw, 0, "sqh->profile_id = %d (0x%x)\n", param->p.sqh_profile_id, param->p.sqh_profile_id);
+	avs3_print2(hw, 0, "sqh->level_id = %d (0x%x)\n", param->p.sqh_level_id, param->p.sqh_level_id);
+	avs3_print2(hw, 0, "sqh->progressive_sequence = %d (0x%x)\n", param->p.sqh_progressive_sequence, param->p.sqh_progressive_sequence);
+	avs3_print2(hw, 0, "sqh->field_coded_sequence = %d (0x%x)\n", param->p.sqh_field_coded_sequence, param->p.sqh_field_coded_sequence);
+	avs3_print2(hw, 0, "sqh->library_stream_flag = %d (0x%x)\n", param->p.sqh_library_stream_flag, param->p.sqh_library_stream_flag);
+	avs3_print2(hw, 0, "sqh->library_picture_enable_flag = %d (0x%x)\n", param->p.sqh_library_picture_enable_flag, param->p.sqh_library_picture_enable_flag);
+	avs3_print2(hw, 0, "sqh->horizontal_size = %d (0x%x)\n", param->p.sqh_horizontal_size, param->p.sqh_horizontal_size);
+	avs3_print2(hw, 0, "sqh->vertical_size = %d (0x%x)\n", param->p.sqh_vertical_size, param->p.sqh_vertical_size);
+	avs3_print2(hw, 0, "sqh->sample_precision = %d (0x%x)\n", param->p.sqh_sample_precision, param->p.sqh_sample_precision);
+	avs3_print2(hw, 0, "sqh->encoding_precision = %d (0x%x)\n", param->p.sqh_encoding_precision, param->p.sqh_encoding_precision);
+	avs3_print2(hw, 0, "sqh->aspect_ratio = %d (0x%x)\n", param->p.sqh_aspect_ratio, param->p.sqh_aspect_ratio);
+	avs3_print2(hw, 0, "sqh->frame_rate_code = %d (0x%x)\n", param->p.sqh_frame_rate_code, param->p.sqh_frame_rate_code);
+	avs3_print2(hw, 0, "sqh->low_delay = %d (0x%x)\n", param->p.sqh_low_delay, param->p.sqh_low_delay);
+	avs3_print2(hw, 0, "sqh->temporal_id_enable_flag = %d (0x%x)\n", param->p.sqh_temporal_id_enable_flag, param->p.sqh_temporal_id_enable_flag);
+	avs3_print2(hw, 0, "sqh->max_dpb_size = %d (0x%x)\n", param->p.sqh_max_dpb_size, param->p.sqh_max_dpb_size);
+	avs3_print2(hw, 0, "sqh->log2_max_cu_width_height = %d (0x%x)\n", param->p.sqh_log2_max_cu_width_height, param->p.sqh_log2_max_cu_width_height);
+	avs3_print2(hw, 0, "sqh->adaptive_leveling_filter_enable_flag = %d (0x%x)\n", param->p.sqh_adaptive_leveling_filter_enable_flag, param->p.sqh_adaptive_leveling_filter_enable_flag);
+	avs3_print2(hw, 0, "sqh->num_of_hmvp_cand = %d (0x%x)\n", param->p.sqh_num_of_hmvp_cand, param->p.sqh_num_of_hmvp_cand);
+	avs3_print2(hw, 0, "sqh->output_reorder_delay = %d (0x%x)\n", param->p.sqh_output_reorder_delay, param->p.sqh_output_reorder_delay);
+	avs3_print2(hw, 0, "sqh->cross_patch_loop_filter = %d (0x%x)\n", param->p.sqh_cross_patch_loop_filter, param->p.sqh_cross_patch_loop_filter);
+	avs3_print2(hw, 0, "pic_header->decode_order_index = %d (0x%x)\n", param->p.pic_header_decode_order_index, param->p.pic_header_decode_order_index);
+	avs3_print2(hw, 0, "pic_header->picture_output_delay = %d (0x%x)\n", param->p.pic_header_picture_output_delay, param->p.pic_header_picture_output_delay);
+	avs3_print2(hw, 0, "pic_header->progressive_frame = %d (0x%x)\n", param->p.pic_header_progressive_frame, param->p.pic_header_progressive_frame);
+	avs3_print2(hw, 0, "pic_header->top_field_first = %d (0x%x)\n", param->p.pic_header_top_field_first, param->p.pic_header_top_field_first);
+	avs3_print2(hw, 0, "pic_header->repeat_first_field = %d (0x%x)\n", param->p.pic_header_repeat_first_field, param->p.pic_header_repeat_first_field);
+	avs3_print2(hw, 0, "pic_header->rpl_l0_idx = %d (0x%x)\n", param->p.pic_header_rpl_l0_idx, param->p.pic_header_rpl_l0_idx);
+	avs3_print2(hw, 0, "pic_header->rpl_l1_idx = %d (0x%x)\n", param->p.pic_header_rpl_l1_idx, param->p.pic_header_rpl_l1_idx);
+	avs3_print2(hw, 0, "pic_header->rpl_l0.ref_pic_num = %d (0x%x)\n", param->p.pic_header_rpl_l0_ref_pic_num, param->p.pic_header_rpl_l0_ref_pic_num);
+	avs3_print2(hw, 0, "pic_header->rpl_l1.ref_pic_num = %d (0x%x)\n", param->p.pic_header_rpl_l1_ref_pic_num, param->p.pic_header_rpl_l1_ref_pic_num);
+	avs3_print2(hw, 0, "pic_header->rpl_l0.reference_to_library_enable_flag = %d (0x%x)\n", param->p.pic_header_rpl_l0_reference_to_library_enable_flag, param->p.pic_header_rpl_l0_reference_to_library_enable_flag);
+	avs3_print2(hw, 0, "pic_header->rpl_l1.reference_to_library_enable_flag = %d (0x%x)\n", param->p.pic_header_rpl_l1_reference_to_library_enable_flag, param->p.pic_header_rpl_l1_reference_to_library_enable_flag);
+	avs3_print2(hw, 0, "pic_header->loop_filter_disable_flag = %d (0x%x)\n", param->p.pic_header_loop_filter_disable_flag, param->p.pic_header_loop_filter_disable_flag);
+	avs3_print2(hw, 0, "pic_header->random_access_decodable_flag = %d (0x%x)\n", param->p.pic_header_random_access_decodable_flag, param->p.pic_header_random_access_decodable_flag);
+	avs3_print2(hw, 0, "pic_header->slice_type = %d (0x%x)\n", param->p.pic_header_slice_type, param->p.pic_header_slice_type);
+	avs3_print2(hw, 0, "pic_header->num_ref_idx_active_override_flag = %d (0x%x)\n", param->p.pic_header_num_ref_idx_active_override_flag, param->p.pic_header_num_ref_idx_active_override_flag);
+	avs3_print2(hw, 0, "pic_header->rpl_l0.ref_pic_active_num = %d (0x%x)\n", param->p.pic_header_rpl_l0_ref_pic_active_num, param->p.pic_header_rpl_l0_ref_pic_active_num);
+	avs3_print2(hw, 0, "pic_header->rpl_l1.ref_pic_active_num = %d (0x%x)\n", param->p.pic_header_rpl_l1_ref_pic_active_num, param->p.pic_header_rpl_l1_ref_pic_active_num);
+	avs3_print2(hw, 0, "sqh->adaptive_filter_shape_enable_flag = %d (0x%x)\n", param->p.sqh_adaptive_filter_shape_enable_flag, param->p.sqh_adaptive_filter_shape_enable_flag);
+	avs3_print2(hw, 0, "pic->header_library_picture_index = %d (0x%x)\n", param->p.pic_header_library_picture_index, param->p.pic_header_library_picture_index);
+	avs3_print2(hw, 0, "pic->header_top_field_picture_flag = %d (0x%x)\n", param->p.pic_header_top_field_picture_flag, param->p.pic_header_top_field_picture_flag);
+	avs3_print2(hw, 0, "pic->header->alpha_c_offset = %d (0x%x)\n", param->p.pic_header_alpha_c_offset, param->p.pic_header_alpha_c_offset);
+	avs3_print2(hw, 0, "pic->header->beta_offset = %d (0x%x)\n", param->p.pic_header_beta_offset, param->p.pic_header_beta_offset);
+	avs3_print2(hw, 0, "pic->header->chroma_quant_param_delta_cb = %d (0x%x)\n", param->p.pic_header_chroma_quant_param_delta_cb, param->p.pic_header_chroma_quant_param_delta_cb);
+	avs3_print2(hw, 0, "pic->header->chroma_quant_param_delta_cr = %d (0x%x)\n", param->p.pic_header_chroma_quant_param_delta_cr, param->p.pic_header_chroma_quant_param_delta_cr);
 };
 
-void print_alf_param(union param_u * param)
+void print_alf_param(struct avs3_decoder *hw, union param_u * param)
 {
 	int i, ii;
 	int pos = 0;
 	char tmpbuf[128];
-	printk("picture_alf_enable_Y %d picture_alf_enable_Cb %d picture_alf_enable_Cr %d\n", param->alf.picture_alf_enable_Y, param->alf.picture_alf_enable_Cb, param->alf.picture_alf_enable_Cr);
-	printk("alf_filters_num_m_1 %d dir_index %d\n", param->alf.alf_filters_num_m_1, param->alf.dir_index);
+	avs3_print2(hw, 0, "picture_alf_enable_Y %d picture_alf_enable_Cb %d picture_alf_enable_Cr %d\n", param->alf.picture_alf_enable_Y, param->alf.picture_alf_enable_Cb, param->alf.picture_alf_enable_Cr);
+	avs3_print2(hw, 0, "alf_filters_num_m_1 %d dir_index %d\n", param->alf.alf_filters_num_m_1, param->alf.dir_index);
 	for (i = 0; i < 16; i++)
 		pos += sprintf(&tmpbuf[pos], "%d ", param->alf.region_distance[i]);
-	printk("region_distance: %s\n", tmpbuf);
+	avs3_print2(hw, 0, "region_distance: %s\n", tmpbuf);
 
 	pos = 0;
 	for (i = 0; i < 9; i++)
 		pos += sprintf(&tmpbuf[pos], "%d ", (int16_t)param->alf.alf_cb_coeffmulti[i]);
-	printk("alf_cb_coeffmulti: %s\n", tmpbuf);
+	avs3_print2(hw, 0, "alf_cb_coeffmulti: %s\n", tmpbuf);
 
 	pos = 0;
 	for (i = 0; i < 9; i++)
 		pos += sprintf(&tmpbuf[pos], "%d ", (int16_t)param->alf.alf_cr_coeffmulti[i]);
-	printk("alf_cr_coeffmulti: %s\n", tmpbuf);
+	avs3_print2(hw, 0, "alf_cr_coeffmulti: %s\n", tmpbuf);
 
 	for (ii = 0; ii < 16; ii++) {
 		pos = 0;
 		for (i = 0; i < 9; i++)
 			pos += sprintf(&tmpbuf[pos], "%d ", (int16_t)param->alf.alf_y_coeffmulti[ii][i]);
-		printk("alf_y_coeffmulti[%d][]: %s\n", ii, tmpbuf);
+		avs3_print2(hw, 0, "alf_y_coeffmulti[%d][]: %s\n", ii, tmpbuf);
 	}
 }
 
@@ -824,7 +824,7 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 		}
 	}
 
-	printk("%s----pic_pool (used %d, total %d) cur_num_ref_pics %d pm count %d, pm_ref_count %d diff %d\n", mark, used_count, hw->max_pb_size,
+	avs3_print2(hw, 0, "%s----pic_pool (used %d, total %d) cur_num_ref_pics %d pm count %d, pm_ref_count %d diff %d\n", mark, used_count, hw->max_pb_size,
 		hw->ctx.dpm.cur_num_ref_pics, pm_count, pm_ref_count,  used_count - pm_count);
 
 	for (i = 0; i < hw->max_pb_size; i++) {
@@ -843,7 +843,7 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 #else
 			tmpbuf[0] = 0;
 #endif
-		printk("%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d error_mark %d ref index:%s in_dpb %d time %lld cam addr:%lx, used %d, bg_flag %d\n",
+		avs3_print2(hw, 0, "%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d error_mark %d ref index:%s in_dpb %d time %lld cam addr:%lx, used %d, bg_flag %d\n",
 			i, pic, pic->buf_cfg.index, pic->buf_cfg.depth,
 			pic->dtr, pic->ptr, pic->is_ref,
 			pic->need_for_out,
@@ -864,7 +864,7 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 	for (i = 0; i < pm->max_pb_size; i++)
 	{
 		if (pm->pic[i] != NULL) {
-			printk("pm pic %p index %d\n", pm->pic[i], i);
+			avs3_print2(hw, 0, "pm pic %p index %d\n", pm->pic[i], i);
 		}
 	}
 }

@@ -1030,22 +1030,22 @@ static int32_t config_pic_size_fb(struct AV1HW_s *hw)
 	alloc_mmu(&av1_mmumgr_dw0, cm->cur_frame->buf.index, frame_width, frame_height/2+64+8,  bit_depth); // Last more may have 8lines more
 	alloc_mmu(&av1_mmumgr_dw1, cm->cur_frame->buf.index, frame_width, frame_height/2+64+8,  bit_depth); // Last more may have 8lines more
 #endif
-	losless_comp_header_size_dw = compute_losless_comp_header_size_dw(frame_width, frame_height);
-	losless_comp_body_size_dw = compute_losless_comp_body_size_dw(frame_width, frame_height, (bit_depth == AOM_BITS_10));
+	losless_comp_header_size_dw = compute_losless_comp_header_size_dw(hw, frame_width, frame_height);
+	losless_comp_body_size_dw = compute_losless_comp_body_size_dw(hw, frame_width, frame_height, (bit_depth == AOM_BITS_10));
 #endif
 /*!NEW_FRONT_BACK_CODE*/
 #else
 #ifdef AOM_AV1_MMU_DW
-	losless_comp_header_size_dw = compute_losless_comp_header_size_dw(frame_width, frame_height);
-	losless_comp_body_size_dw = compute_losless_comp_body_size_dw(frame_width, frame_height, (bit_depth == AOM_BITS_10));
+	losless_comp_header_size_dw = compute_losless_comp_header_size_dw(hw, frame_width, frame_height);
+	losless_comp_body_size_dw = compute_losless_comp_body_size_dw(hw, frame_width, frame_height, (bit_depth == AOM_BITS_10));
 #endif
 #endif
 
-	losless_comp_header_size = compute_losless_comp_header_size(frame_width, frame_height);
-	losless_comp_body_size = compute_losless_comp_body_size(frame_width, frame_height, (bit_depth == AOM_BITS_10));
+	losless_comp_header_size = compute_losless_comp_header_size(hw, frame_width, frame_height);
+	losless_comp_body_size = compute_losless_comp_body_size(hw, frame_width, frame_height, (bit_depth == AOM_BITS_10));
 
-	losless_comp_header_size_dw = compute_losless_comp_header_size_dw(frame_width, frame_height);
-	losless_comp_body_size_dw = compute_losless_comp_body_size_dw(frame_width, frame_height, (bit_depth == AOM_BITS_10));
+	losless_comp_header_size_dw = compute_losless_comp_header_size_dw(hw, frame_width, frame_height);
+	losless_comp_body_size_dw = compute_losless_comp_body_size_dw(hw, frame_width, frame_height, (bit_depth == AOM_BITS_10));
 
 	av1_print(hw, AOM_DEBUG_HW_MORE,
 		"%s: width %d height %d depth %d head_size 0x%x body_size 0x%x\r\n",
@@ -1099,10 +1099,10 @@ static void aom_config_work_space_hw_fb(struct AV1HW_s *hw, int front_flag, int 
 	uint32_t data32;
 
 	int losless_comp_header_size =
-		compute_losless_comp_header_size(hw->init_pic_w,
+		compute_losless_comp_header_size(hw, hw->init_pic_w,
 		hw->init_pic_h);
 	int losless_comp_body_size =
-		compute_losless_comp_body_size(hw->init_pic_w,
+		compute_losless_comp_body_size(hw, hw->init_pic_w,
 		hw->init_pic_h, hw->aom_param.p.bit_depth == 10);
 
 //    if (debug) //printk("%s %x %x %x %x %x %x %x %x %x %x %x %x\n", __func__,
@@ -1845,7 +1845,7 @@ static int32_t config_mc_buffer_fb(struct AV1HW_s * hw)
 			pic_config = cur_pic_config;
 #endif
 		if (pic_config) {
-			ref_pic_body_size = compute_losless_comp_body_size(pic_config->y_crop_width, pic_config->y_crop_height, (bit_depth == AOM_BITS_10));
+			ref_pic_body_size = compute_losless_comp_body_size(hw, pic_config->y_crop_width, pic_config->y_crop_height, (bit_depth == AOM_BITS_10));
 
 			WRITE_BACK_32(hw, VP9D_MPP_REFINFO_DATA, pic_config->y_crop_width);
 			WRITE_BACK_32(hw, VP9D_MPP_REFINFO_DATA, pic_config->y_crop_height);

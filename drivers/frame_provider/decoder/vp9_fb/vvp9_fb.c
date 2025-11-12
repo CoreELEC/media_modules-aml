@@ -129,8 +129,8 @@
 
 #define VF_POOL_SIZE        32
 
-#undef pr_info
-#define pr_info pr_cont
+//#undef pr_info
+//#define pr_info pr_cont
 
 #define DECODE_MODE_SINGLE		((0x80 << 24) | 0)
 #define DECODE_MODE_MULTI_STREAMBASE	((0x80 << 24) | 1)
@@ -298,9 +298,9 @@ int vp9_alloc_mmu_dw(
 	unsigned int *mmu_index_adr);
 #endif
 static int vp9_hw_ctx_restore(struct VP9Decoder_s *pbi);
-static int compute_losless_comp_header_size(int width, int height);
-static void mcrcc_perfcount_reset(void);
-static void decomp_perfcount_reset(void);
+static int compute_losless_comp_header_size(struct VP9Decoder_s *pbi, int width, int height);
+static void mcrcc_perfcount_reset(struct VP9Decoder_s *pbi);
+static void decomp_perfcount_reset(struct VP9Decoder_s *pbi);
 
 static const char vvp9_dec_id[] = "vvp9-dev";
 
@@ -1100,7 +1100,7 @@ static void ref_cnt_fb(struct RefCntBuffer_s *bufs, int *idx, int new_idx)
 
 	if (ref_index >= 0 && bufs[ref_index].ref_count > 0) {
 		bufs[ref_index].ref_count--;
-		/*pr_info("[MMU DEBUG 2] dec ref_count[%d] : %d\r\n",
+		/*pr_info("[MMU DEBUG 2] dec ref_count[%d] : %d\n",
 		 *		ref_index, bufs[ref_index].ref_count);
 		 */
 	}
@@ -1108,7 +1108,7 @@ static void ref_cnt_fb(struct RefCntBuffer_s *bufs, int *idx, int new_idx)
 	*idx = new_idx;
 
 	bufs[new_idx].ref_count++;
-	/*pr_info("[MMU DEBUG 3] inc ref_count[%d] : %d\r\n",
+	/*pr_info("[MMU DEBUG 3] inc ref_count[%d] : %d\n",
 	 *			new_idx, bufs[new_idx].ref_count);
 	 */
 }
@@ -1120,28 +1120,6 @@ int vp9_release_frame_buffer(struct vpx_codec_frame_buffer_s *aml_buf)
 	if (int_fb)
 		int_fb->in_use = 0;
 	return 0;
-}
-
-static int  compute_losless_comp_body_size(int width, int height,
-				uint8_t is_bit_depth_10);
-
-static void setup_display_size(struct VP9_Common_s *cm, union param_u *params,
-						int print_header_info)
-{
-	cm->display_width = cm->width;
-	cm->display_height = cm->height;
-	if (params->p.display_size_present) {
-		if (print_header_info)
-			pr_info(" * 1-bit display_size_present read : 1\n");
-		cm->display_width = params->p.display_width;
-		cm->display_height = params->p.display_height;
-		/*vp9_read_frame_size(rb, &cm->display_width,
-		 *					&cm->display_height);
-		 */
-	} else {
-		if (print_header_info)
-			pr_info(" * 1-bit display_size_present read : 0\n");
-	}
 }
 
 uint8_t print_header_info = 0;
@@ -1606,10 +1584,16 @@ void print_hevc_b_data_path_monitor(int frame_count);
 static void  config_mcrcc_axi_hw_new(struct VP9Decoder_s *pbi);
 #endif
 
-static int vp9_debug(struct VP9Decoder_s *pbi,
-	int flag, const char *fmt, ...)
-{
 #define HEVC_PRINT_BUF		512
+enum print_mode {
+	print_debug,
+	print_info,
+	print_err
+};
+
+static int vp9_debug(struct VP9Decoder_s *pbi,
+	int flag, enum print_mode mode, const char *fmt, ...)
+{
 	unsigned char buf[HEVC_PRINT_BUF];
 	int len = 0;
 
@@ -1620,9 +1604,11 @@ static int vp9_debug(struct VP9Decoder_s *pbi,
 
 		va_start(args, fmt);
 		if (pbi)
-			len = sprintf(buf, "[%d]", pbi->index);
+			len = sprintf(buf, "%d: ", pbi->index);
+		if (mode == print_err)
+			len += sprintf(buf + len, "[ERR]: ");
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		if (flag == 0)
+		if (mode == print_debug)
 			pr_debug("%s", buf);
 		else
 			pr_info("%s", buf);
@@ -1633,14 +1619,59 @@ static int vp9_debug(struct VP9Decoder_s *pbi,
 
 #define vp9_print(pbi, flag, fmt, args...)					\
 	do {									\
-		if (pbi == NULL ||    \
+		if (pbi == NULL ||	  \
 			(flag == 0) || \
 			((debug_mask & \
 			(1 << pbi->index)) \
 		&& (debug & flag))) { \
-			vp9_debug(pbi, flag, fmt, ##args);	\
+			vp9_debug(pbi, flag, print_debug, fmt, ##args);	\
 			} \
 	} while (0)
+
+#define vp9_info(pbi, flag, fmt, args...) \
+	do {									\
+		if (pbi == NULL ||	  \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << pbi->index)) \
+		&& (debug & flag))) { \
+			vp9_debug(pbi, flag, print_info, fmt, ##args);	\
+			} \
+	} while (0)
+
+#define vp9_err(pbi, flag, fmt, args...) \
+	do {									\
+		if (pbi == NULL ||	  \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << pbi->index)) \
+		&& (debug & flag))) { \
+			vp9_debug(pbi, flag, print_err, fmt, ##args);	\
+			} \
+	} while (0)
+
+
+static int  compute_losless_comp_body_size(struct VP9Decoder_s *pbi,
+	int width, int height, uint8_t is_bit_depth_10);
+
+static void setup_display_size(struct VP9Decoder_s *pbi,
+	struct VP9_Common_s *cm, union param_u *params, int print_header_info)
+{
+	cm->display_width = cm->width;
+	cm->display_height = cm->height;
+	if (params->p.display_size_present) {
+		if (print_header_info)
+			vp9_print(pbi, 0, " * 1-bit display_size_present read : 1\n");
+		cm->display_width = params->p.display_width;
+		cm->display_height = params->p.display_height;
+		/*vp9_read_frame_size(rb, &cm->display_width,
+		 *					&cm->display_height);
+		 */
+	} else {
+		if (print_header_info)
+			vp9_print(pbi, 0, " * 1-bit display_size_present read : 0\n");
+	}
+}
 
 static int is_oversize(int w, int h)
 {
@@ -1688,7 +1719,7 @@ static void resize_context_buffers(struct VP9Decoder_s *pbi,
 			pbi->vp9_first_pts_ready = 0;
 			pbi->duration_from_pts_done = 0;
 		}
-		pr_debug("%s (%d,%d)=>(%d,%d)\r\n", __func__,
+		vp9_print(pbi, 0, "%s (%d,%d)=>(%d,%d)\n", __func__,
 			cm->width, cm->height,
 			width, height);
 		cm->width = width;
@@ -1745,10 +1776,9 @@ static int setup_frame_size(
 
 	/*vp9_read_frame_size(rb, &width, &height);*/
 	if (print_header_info)
-		pr_info(" * 16-bits w read : %d (width : %d)\n", width, height);
+		vp9_print(pbi, 0, " * 16-bits w read : %d (width : %d)\n", width, height);
 	if (print_header_info)
-		pr_info
-		(" * 16-bits h read : %d (height : %d)\n", width, height);
+		vp9_print(pbi, 0, " * 16-bits h read : %d (height : %d)\n", width, height);
 
 	WRITE_VREG(HEVC_PARSER_PICTURE_SIZE, (height << 16) | width);
 #ifdef VP9_10B_HED_FB
@@ -1767,7 +1797,7 @@ static int setup_frame_size(
 			params->p.bit_depth,
 			mmu_index_adr);
 		if (ret != 0) {
-			pr_err("can't alloc need mmu1,idx %d ret =%d\n",
+			vp9_err(pbi, 0, "can't alloc need mmu1,idx %d ret =%d\n",
 				cm->new_fb_idx,
 				ret);
 			return ret;
@@ -1784,15 +1814,15 @@ static int setup_frame_size(
 			params->p.width, params->p.height,
 			params->p.bit_depth, mmu_dw_index_adr);
 		if (ret != 0) {
-				pr_err("can't alloc need mmu1 dw,idx %d ret =%d\n",
-					cm->new_fb_idx,
-					ret);
-				return ret;
+			vp9_err(pbi, 0, "can't alloc need mmu1 dw,idx %d ret =%d\n",
+				cm->new_fb_idx,
+				ret);
+			return ret;
 		}
 	}
 #endif
 	resize_context_buffers(pbi, cm, width, height);
-	setup_display_size(cm, params, print_header_info);
+	setup_display_size(pbi, cm, params, print_header_info);
 #if 0
 	lock_buffer_pool(pool);
 	if (vp9_realloc_frame_buffer(
@@ -1915,14 +1945,14 @@ static int setup_frame_size_with_refs(
 		 */
 	/*	pr_info
 	 *	("[DEBUG DEBUG]Before alloc_mmu,
-	 *	prev_fb_idx : %d, new_fb_idx : %d\r\n",
+	 *	prev_fb_idx : %d, new_fb_idx : %d\n",
 	 *	cm->prev_fb_idx, cm->new_fb_idx);
 	 */
 		ret = vp9_alloc_mmu(pbi, cm->new_fb_idx,
 				params->p.width, params->p.height,
 		params->p.bit_depth, mmu_index_adr);
 		if (ret != 0) {
-			pr_err("can't alloc need mmu,idx %d\r\n",
+			vp9_err(pbi, 0, "can't alloc need mmu,idx %d\n",
 				cm->new_fb_idx);
 			return ret;
 		}
@@ -1938,7 +1968,7 @@ static int setup_frame_size_with_refs(
 			params->p.width, params->p.height,
 			params->p.bit_depth, mmu_dw_index_adr);
 		if (ret != 0) {
-			pr_err("can't alloc need mmu dw,idx %d\r\n",
+			vp9_err(pbi, 0, "can't alloc need mmu dw,idx %d\n",
 				cm->new_fb_idx);
 			return ret;
 		}
@@ -1956,7 +1986,7 @@ static int setup_frame_size_with_refs(
 			width, height);
 	}
 	if (!has_valid_ref_frame) {
-		pr_err("Error: Referenced frame has invalid size\r\n");
+		vp9_err(pbi, 0, "Error: Referenced frame has invalid size\n");
 		return -1;
 	}
 #if 0
@@ -1970,13 +2000,12 @@ static int setup_frame_size_with_refs(
 				cm->bit_depth,
 				cm->subsampling_x,
 				cm->subsampling_y))
-				pr_err
-				("Referenced frame incompatible color fmt\r\n");
+				vp9_err(pbi, 0, "Referenced frame incompatible color fmt\n");
 				return -1;
 	}
 #endif
 	resize_context_buffers(pbi, cm, width, height);
-	setup_display_size(cm, params, print_header_info);
+	setup_display_size(pbi, cm, params, print_header_info);
 
 #if 0
 	lock_buffer_pool(pool);
@@ -2071,7 +2100,7 @@ static int vp9_print_cont(struct VP9Decoder_s *pbi,
 
 		va_start(args, fmt);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
+		pr_cont("%s", buf);
 		va_end(args);
 	}
 	return 0;
@@ -2136,7 +2165,7 @@ static u32 get_valid_double_write_mode(struct VP9Decoder_s *pbi)
 	if (dw & 0x20) {
 		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T3)
 			&& ((dw & 0xf) == 2 || (dw & 0xf) == 3)) {
-			pr_info("MMU double write 1:4 not supported !!!\n");
+			vp9_err(pbi, 0, "MMU double write 1:4 not supported !!!\n");
 			dw = 0;
 		}
 	}
@@ -2258,13 +2287,13 @@ static int vp9_mmu_page_num(struct VP9Decoder_s *pbi,
 	int picture_size;
 	int cur_mmu_4k_number, max_frame_num;
 
-	picture_size = compute_losless_comp_body_size(w, h, save_mode);
+	picture_size = compute_losless_comp_body_size(pbi, w, h, save_mode);
 	cur_mmu_4k_number = ((picture_size + (PAGE_SIZE - 1)) >> PAGE_SHIFT);
 
 	max_frame_num = (vvp9_frame_mmu_map_size(pbi) >> 2);
 
 	if (cur_mmu_4k_number > max_frame_num) {
-		pr_err("over max !! cur_mmu_4k_number 0x%x width %d height %d\n",
+		vp9_err(pbi, 0, "over max !! cur_mmu_4k_number 0x%x width %d height %d\n",
 			cur_mmu_4k_number, w, h);
 		return -1;
 	}
@@ -2313,7 +2342,7 @@ int vp9_alloc_mmu(
 
 	if (bit_depth >= VPX_BITS_12) {
 		pbi->fatal_error = DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		pr_err("fatal_error, un support bit depth 12!\n\n");
+		vp9_err(pbi, 0, "fatal_error, un support bit depth 12!\n\n");
 		return -1;
 	}
 
@@ -2367,7 +2396,7 @@ int vp9_alloc_mmu_dw(
 
 	if (bit_depth >= VPX_BITS_12) {
 		pbi->fatal_error = DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		pr_err("fatal_error, un support bit depth 12!\n\n");
+		vp9_err(pbi, 0, "fatal_error, un support bit depth 12!\n\n");
 		return -1;
 	}
 
@@ -2395,8 +2424,7 @@ static void dealloc_mv_bufs(struct VP9Decoder_s *pbi)
 	int i;
 	for (i = 0; i < MV_BUFFER_NUM; i++) {
 		if (pbi->m_mv_BUF[i].start_adr) {
-			if (debug)
-				pr_info(
+			vp9_print(pbi, VP9_DEBUG_BUFMGR,
 				"dealloc mv buf(%d) adr %ld size 0x%x used_flag %d\n",
 				i, pbi->m_mv_BUF[i].start_adr,
 				pbi->m_mv_BUF[i].size,
@@ -2433,13 +2461,11 @@ static int alloc_mv_buf(struct VP9Decoder_s *pbi,
 		pbi->m_mv_BUF[i].size = size;
 		pbi->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
-		if (debug) {
-			pr_info(
+		vp9_print(pbi, VP9_DEBUG_BUFMGR,
 			"MV Buffer %d: start_adr %px size %x\n",
 			i,
 			(void *)pbi->m_mv_BUF[i].start_adr,
 			pbi->m_mv_BUF[i].size);
-		}
 	}
 	return ret;
 }
@@ -2477,10 +2503,8 @@ static int init_mv_buf_list(struct VP9Decoder_s *pbi)
 	if (mv_buf_dynamic_alloc)
 		return 0;
 
-	if (debug) {
-		pr_info("%s w:%d, h:%d, count: %d\n",
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s w:%d, h:%d, count: %d\n",
 		__func__, pbi->init_pic_w, pbi->init_pic_h, count);
-	}
 
 	for (i = 0; i < count; i++) {
 		if (alloc_mv_buf(pbi, i, size) < 0) {
@@ -2507,9 +2531,7 @@ static int get_mv_buf(struct VP9Decoder_s *pbi,
 			}
 		}
 		if (i == MV_BUFFER_NUM) {
-			pr_info(
-			"%s: Error, mv buf MV_BUFFER_NUM is not enough\n",
-			__func__);
+			vp9_err(pbi, 0, "%s: Error, mv buf MV_BUFFER_NUM is not enough\n", __func__);
 			return ret;
 		}
 
@@ -2518,16 +2540,13 @@ static int get_mv_buf(struct VP9Decoder_s *pbi,
 			pic_config->mpred_mv_wr_start_addr = pbi->m_mv_BUF[ret].start_adr;
 			pic_config->mv_size = size;
 
-			if (debug & VP9_DEBUG_BUFMGR_MORE)
-				pr_info(
+			vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
 				"%s alloc => %d (%ld) size 0x%x\n",
 				__func__, ret,
 				pic_config->mpred_mv_wr_start_addr,
 				pic_config->mv_size);
 		} else {
-			pr_info(
-			"%s: Error, mv buf alloc fail\n",
-			__func__);
+			vp9_err(pbi, 0, "%s: Error, mv buf alloc fail\n", __func__);
 		}
 		return ret;
 	}
@@ -2545,16 +2564,13 @@ static int get_mv_buf(struct VP9Decoder_s *pbi,
 		pic_config->mv_buf_index = ret;
 		pic_config->mpred_mv_wr_start_addr = pbi->m_mv_BUF[ret].start_adr;
 		pic_config->mv_size = pbi->m_mv_BUF[ret].size;
-		if (debug & VP9_DEBUG_BUFMGR_MORE)
-			pr_info(
+		vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
 			"%s => %d (%lx) size 0x%x\n",
 			__func__, ret,
 			pic_config->mpred_mv_wr_start_addr,
 			pic_config->mv_size);
 	} else {
-		pr_info(
-		"%s: Error, mv buf is not enough\n",
-		__func__);
+		vp9_err(pbi, 0, "%s: Error, mv buf is not enough\n", __func__);
 	}
 	return ret;
 }
@@ -2564,8 +2580,7 @@ static void put_mv_buf(struct VP9Decoder_s *pbi,
 {
 	int i = *mv_buf_index;
 	if (i >= MV_BUFFER_NUM) {
-		if (debug & VP9_DEBUG_BUFMGR_MORE)
-			pr_info(
+		vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
 			"%s: index %d beyond range\n",
 			__func__, i);
 		return;
@@ -2573,8 +2588,7 @@ static void put_mv_buf(struct VP9Decoder_s *pbi,
 
 	if (mv_buf_dynamic_alloc) {
 		if (pbi->m_mv_BUF[i].start_adr) {
-			if (debug)
-				pr_info(
+			vp9_print(pbi, VP9_DEBUG_BUFMGR,
 				"dealloc mv buf(%d) adr %ld size 0x%x used_flag %d\n",
 				i, pbi->m_mv_BUF[i].start_adr,
 				pbi->m_mv_BUF[i].size,
@@ -2589,9 +2603,7 @@ static void put_mv_buf(struct VP9Decoder_s *pbi,
 		*mv_buf_index = -1;
 		return;
 	}
-	if (debug & VP9_DEBUG_BUFMGR_MORE)
-		pr_info(
-		"%s(%d): used_flag(%d)\n",
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "%s(%d): used_flag(%d)\n",
 		__func__, i,
 		pbi->m_mv_BUF[i].used_flag);
 
@@ -2887,13 +2899,11 @@ static int get_free_fb(struct VP9Decoder_s *pbi)
 	unsigned long flags;
 
 	lock_buffer_pool(cm->buffer_pool, flags);
-	if (debug & VP9_DEBUG_BUFMGR_MORE) {
-		for (i = 0; i < pbi->used_buf_num; ++i) {
-			pr_info("%s:%d, ref_count %d vf_ref %d index %d\r\n",
+	for (i = 0; i < pbi->used_buf_num; ++i) {
+		vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,"%s:%d, ref_count %d vf_ref %d index %d\n",
 			__func__, i, frame_bufs[i].ref_count,
 			frame_bufs[i].buf.vf_ref,
 			frame_bufs[i].buf.index);
-		}
 	}
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if ((frame_bufs[i].ref_count == 0) &&
@@ -2908,7 +2918,7 @@ static int get_free_fb(struct VP9Decoder_s *pbi)
 	}
 	if (i != pbi->used_buf_num) {
 		frame_bufs[i].ref_count = 1;
-		/*pr_info("[MMU DEBUG 1] set ref_count[%d] : %d\r\n",
+		/*pr_info("[MMU DEBUG 1] set ref_count[%d] : %d\n",
 					i, frame_bufs[i].ref_count);*/
 	} else {
 		/* Reset i to be INVALID_IDX to indicate
@@ -3017,13 +3027,11 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 		aml_buf->state = FB_ST_DECODER;
 	}
 
-	if (debug & VP9_DEBUG_OUT_PTS) {
-		if (free_pic) {
-			pr_debug("%s, idx: %d, ts: %lld\n",
-				__func__, free_pic->index, free_pic->timestamp);
-		} else {
-			pr_debug("%s, vp9 get free pic null\n", __func__);
-		}
+	if (free_pic) {
+		vp9_print(pbi, VP9_DEBUG_OUT_PTS, "%s, idx: %d, ts: %lld\n",
+			__func__, free_pic->index, free_pic->timestamp);
+	} else {
+		vp9_print(pbi, VP9_DEBUG_OUT_PTS, "%s, vp9 get free pic null\n", __func__);
 	}
 
 	return free_pic ? free_pic->index : INVALID_IDX;
@@ -3075,7 +3083,7 @@ static void decrease_ref_count(int idx, struct RefCntBuffer_s *const frame_bufs,
 {
 	if (idx >= 0) {
 		--frame_bufs[idx].ref_count;
-		/*pr_info("[MMU DEBUG 7] dec ref_count[%d] : %d\r\n", idx,
+		/*pr_info("[MMU DEBUG 7] dec ref_count[%d] : %d\n", idx,
 		 *	frame_bufs[idx].ref_count);
 		 */
 		/*A worker may only get a free framebuffer index when
@@ -3106,7 +3114,7 @@ static void generate_next_ref_frames(struct VP9Decoder_s *pbi)
 		if (mask & 1) {
 			cm->next_ref_frame_map[ref_index] = cm->new_fb_idx;
 			++frame_bufs[cm->new_fb_idx].ref_count;
-			/*pr_info("[MMU DEBUG 4] inc ref_count[%d] : %d\r\n",
+			/*pr_info("[MMU DEBUG 4] inc ref_count[%d] : %d\n",
 			 *cm->new_fb_idx, frame_bufs[cm->new_fb_idx].ref_count);
 			 */
 		} else
@@ -3116,7 +3124,7 @@ static void generate_next_ref_frames(struct VP9Decoder_s *pbi)
 		if (cm->ref_frame_map[ref_index] >= 0) {
 			++frame_bufs[cm->ref_frame_map[ref_index]].ref_count;
 			/*pr_info
-			 *("[MMU DEBUG 5] inc ref_count[%d] : %d\r\n",
+			 *("[MMU DEBUG 5] inc ref_count[%d] : %d\n",
 			 *cm->ref_frame_map[ref_index],
 			 *frame_bufs[cm->ref_frame_map[ref_index]].ref_count);
 			 */
@@ -3130,7 +3138,7 @@ static void generate_next_ref_frames(struct VP9Decoder_s *pbi)
 		/* Current thread holds the reference frame.*/
 		if (cm->ref_frame_map[ref_index] >= 0) {
 			++frame_bufs[cm->ref_frame_map[ref_index]].ref_count;
-			/*pr_info("[MMU DEBUG 6] inc ref_count[%d] : %d\r\n",
+			/*pr_info("[MMU DEBUG 6] inc ref_count[%d] : %d\n",
 			 *cm->ref_frame_map[ref_index],
 			 *frame_bufs[cm->ref_frame_map[ref_index]].ref_count);
 			 */
@@ -3191,7 +3199,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		(params->p.frame_type != KEY_FRAME) &&
 		(!params->p.intra_only)) {
 		on_no_keyframe_skiped++;
-		pr_info("vp9_bufmgr_process no key frame return\n");
+		vp9_print(pbi, 0, "vp9_bufmgr_process no key frame return\n");
 		return -2;
 	}
 	pbi->has_keyframe = 1;
@@ -3215,7 +3223,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		vp9_release_frame_buffer
 			(&frame_bufs[cm->new_fb_idx].raw_frame_buffer);
 	}
-	/*pr_info("Before get_free_fb, prev_fb_idx : %d, new_fb_idx : %d\r\n",
+	/*pr_info("Before get_free_fb, prev_fb_idx : %d, new_fb_idx : %d\n",
 		cm->prev_fb_idx, cm->new_fb_idx);*/
 #ifndef MV_USE_FIXED_BUF
 	put_un_used_mv_bufs(pbi);
@@ -3226,7 +3234,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		v4l_get_free_fb(pbi) :
 		get_free_fb(pbi);
 	if (cm->new_fb_idx == INVALID_IDX) {
-		pr_info("get_free_fb error\r\n");
+		vp9_err(pbi, 0, "get_free_fb error\n");
 		return -1;
 	}
 
@@ -3237,7 +3245,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		if (get_mv_buf(pbi,
 			&pool->frame_bufs[cm->new_fb_idx].
 			buf) < 0) {
-			pr_info("get_mv_buf fail\r\n");
+			vp9_err(pbi, 0, "get_mv_buf fail\n");
 			return -1;
 		}
 		if (debug & VP9_DEBUG_BUFMGR_DETAIL)
@@ -3250,7 +3258,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 	pool->frame_bufs[cm->new_fb_idx].buf.back_done_mark = 0;
 
 	/*if (debug & VP9_DEBUG_BUFMGR)
-		pr_info("[VP9 DEBUG]%s(get_free_fb): %d\r\n", __func__,
+		pr_info("[VP9 DEBUG]%s(get_free_fb): %d\n", __func__,
 				cm->new_fb_idx);*/
 
 	pbi->cur_buf = &frame_bufs[cm->new_fb_idx];
@@ -3266,7 +3274,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 	cm->last_intra_only = cm->intra_only;
 	cm->profile = params->p.profile;
 	if (cm->profile >= MAX_PROFILES) {
-		pr_err("Error: Unsupported profile %d\r\n", cm->profile);
+		vp9_err(pbi, 0, "Error: Unsupported profile %d\n", cm->profile);
 		return -1;
 	}
 	cm->show_existing_frame = params->p.show_existing_frame;
@@ -3276,19 +3284,18 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		int frame_to_show;
 		unsigned long flags;
 		if (frame_to_show_idx >= REF_FRAMES) {
-			pr_info("frame_to_show_idx %d exceed max index\r\n",
+			vp9_print(pbi, 0, "frame_to_show_idx %d exceed max index\n",
 					frame_to_show_idx);
 			return -1;
 		}
 
 		frame_to_show = cm->ref_frame_map[frame_to_show_idx];
-		/*pr_info("frame_to_show %d\r\n", frame_to_show);*/
+		/*pr_info("frame_to_show %d\n", frame_to_show);*/
 		lock_buffer_pool(pool, flags);
 		if (frame_to_show < 0 ||
 			frame_bufs[frame_to_show].ref_count < 1) {
 			unlock_buffer_pool(pool, flags);
-			pr_err
-			("Error:Buffer %d does not contain a decoded frame",
+			vp9_err(pbi, 0, "Error:Buffer %d does not contain a decoded frame",
 			frame_to_show);
 			return -1;
 		}
@@ -3359,11 +3366,9 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 			0 : params->p.reset_frame_context;
 		if (print_header_info) {
 			if (cm->error_resilient_mode)
-				pr_info
-				("reset to 0 error_resilient_mode\n");
+				vp9_print(pbi, 0, "reset to 0 error_resilient_mode\n");
 		else
-			pr_info
-				(" * 2-bits reset_frame_context read : %d\n",
+			vp9_print(pbi, 0, " * 2-bits reset_frame_context read : %d\n",
 				cm->reset_frame_context);
 		}
 
@@ -3419,9 +3424,8 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 			pbi->refresh_frame_flags =
 					params->p.refresh_frame_flags;
 			if (print_header_info)
-				pr_info
-				("*%d-bits refresh_frame read:0x%x\n",
-				REF_FRAMES, pbi->refresh_frame_flags);
+				vp9_print(pbi, 0, "*%d-bits refresh_frame read:0x%x\n",
+					REF_FRAMES, pbi->refresh_frame_flags);
 			for (i = 0; i < REFS_PER_FRAME; ++i) {
 				const int ref =
 					(params->p.ref_info >>
@@ -3432,7 +3436,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 				struct RefBuffer_s * const ref_frame =
 					&cm->frame_refs[i];
 				if (print_header_info)
-					pr_info("*%d-bits ref[%d]read:%d\n",
+					vp9_print(pbi, 0, "*%d-bits ref[%d]read:%d\n",
 						REF_FRAMES_LOG2, i, ref);
 				ref_frame->idx = idx;
 				ref_frame->buf = &frame_bufs[idx].buf;
@@ -3440,7 +3444,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 				= (params->p.ref_info >>
 				((REFS_PER_FRAME-i-1)*4)) & 0x1;
 				if (print_header_info)
-					pr_info("1bit ref_frame_sign_bias");
+					vp9_print(pbi, 0, "1bit ref_frame_sign_bias");
 				/*pr_info
 				 *("%dread: %d\n",
 				 *LAST_FRAME+i,
@@ -3448,7 +3452,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 				 *[LAST_FRAME + i]);
 				 */
 				/*pr_info
-				 *("[VP9 DEBUG]%s(get ref):%d\r\n",
+				 *("[VP9 DEBUG]%s(get ref):%d\n",
 				 *__func__, ref_frame->idx);
 				 */
 
@@ -3492,8 +3496,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 	pic->slice_type = cm->frame_type;
 
 	if (pbi->need_resync) {
-		pr_err
-		("Error: Keyframe/intra-only frame required to reset\r\n");
+		vp9_err(pbi, 0, "Error: Keyframe/intra-only frame required to reset\n");
 		return -1;
 	}
 	generate_next_ref_frames(pbi);
@@ -3574,7 +3577,7 @@ void swap_frame_buffers(struct VP9Decoder_s *pbi)
 		/*if (!pbi->frame_parallel_decode || !cm->show_frame) {*/
 		lock_buffer_pool(pool, flags);
 		--frame_bufs[cm->new_fb_idx].ref_count;
-		/*pr_info("[MMU DEBUG 8] dec ref_count[%d] : %d\r\n", cm->new_fb_idx,
+		/*pr_info("[MMU DEBUG 8] dec ref_count[%d] : %d\n", cm->new_fb_idx,
 		 *	frame_bufs[cm->new_fb_idx].ref_count);
 		 */
 		unlock_buffer_pool(pool, flags);
@@ -3637,8 +3640,7 @@ int vp9_bufmgr_init(struct VP9Decoder_s *pbi, struct BuffInfo_s *buf_spec_i,
 	cm->new_fb_idx = INVALID_IDX;
 	pbi->used_4k_num = -1;
 	cm->cur_fb_idx_mmu = INVALID_IDX;
-	pr_debug
-	("After vp9_bufmgr_init, prev_fb_idx : %d, new_fb_idx : %d\r\n",
+	vp9_print(pbi, 0, "After vp9_bufmgr_init, prev_fb_idx : %d, new_fb_idx : %d\n",
 		cm->prev_fb_idx, cm->new_fb_idx);
 	pbi->need_resync = 1;
 	/* Initialize the references to not point to any frame buffers.*/
@@ -3714,7 +3716,7 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 		cm->current_video_frame++;
 
 	if (vp9_get_raw_frame(pbi, &sd) == 0) {
-		/*pr_info("Display frame index %d\r\n", sd.index);*/
+		/*pr_info("Display frame index %d\n", sd.index);*/
 		sd.stream_offset = pbi->pre_stream_offset;
 
 		if (pbi->enable_fence) {
@@ -3754,7 +3756,7 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 
 /* else
  *		pr_info
- *		("Not display this frame,ready_for_new_data%d show_frame%d\r\n",
+ *		("Not display this frame,ready_for_new_data%d show_frame%d\n",
  *		pbi->ready_for_new_data, cm->show_frame);
  */
 	return 0;
@@ -5011,8 +5013,7 @@ static int32_t config_mc_buffer_fb(struct VP9Decoder_s *pbi, unsigned short bit_
 	struct VP9_Common_s *cm = &pbi->common;
 	struct PIC_BUFFER_CONFIG_s *cur_pic_config = &cm->cur_frame->buf;
 
-	if (debug&VP9_DEBUG_BUFMGR_MORE)
-		pr_info("config_mc_buffer entered .....\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "config_mc_buffer entered .....\n");
 
 	WRITE_BACK_8(pbi, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
 	for (i = 0; i < REFS_PER_FRAME; ++i) {
@@ -5020,8 +5021,7 @@ static int32_t config_mc_buffer_fb(struct VP9Decoder_s *pbi, unsigned short bit_
 		if (!pic_config)
 			continue;
 		WRITE_BACK_32(pbi, HEVCD_MPP_ANC_CANVAS_DATA_ADDR, (pic_config->mc_canvas_u_v<<16)|(pic_config->mc_canvas_u_v<<8)|pic_config->mc_canvas_y);
-		if (debug & VP9_DEBUG_BUFMGR_MORE)
-		printk("refid %x mc_canvas_u_v %x mc_canvas_y %x\n",
+		vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "refid %x mc_canvas_u_v %x mc_canvas_y %x\n",
 			i,pic_config->mc_canvas_u_v,pic_config->mc_canvas_y);
 
 	}
@@ -5047,7 +5047,7 @@ static int32_t config_mc_buffer_fb(struct VP9Decoder_s *pbi, unsigned short bit_
 		pic_config->y_crop_height != cur_pic_config->y_crop_height) {
 		scale_enable |= (1<<i);
 		}
-		ref_pic_body_size = compute_losless_comp_body_size(pic_config->y_crop_width, pic_config->y_crop_height, (bit_depth == VPX_BITS_10));
+		ref_pic_body_size = compute_losless_comp_body_size(pbi, pic_config->y_crop_width, pic_config->y_crop_height, (bit_depth == VPX_BITS_10));
 
 		//printk("%d: ref width/height(%d,%d), cur width/height(%d,%d) ref_pic_body_size 0x%x\n",
 		//  i, pic_config->y_crop_width, pic_config->y_crop_height,
@@ -5080,10 +5080,10 @@ static int32_t config_pic_size_fb(struct VP9Decoder_s *pbi, unsigned short bit_d
 	cur_pic_config->bit_depth = bit_depth;
 	cur_pic_config->double_write_mode = get_double_write_mode(pbi);
 	losless_comp_header_size =
-		compute_losless_comp_header_size(cur_pic_config->y_crop_width,
+		compute_losless_comp_header_size(pbi, cur_pic_config->y_crop_width,
 		cur_pic_config->y_crop_height);
 	losless_comp_body_size =
-		compute_losless_comp_body_size(cur_pic_config->y_crop_width,
+		compute_losless_comp_body_size(pbi, cur_pic_config->y_crop_width,
 		cur_pic_config->y_crop_height, (bit_depth == VPX_BITS_10));
 	cur_pic_config->comp_body_size = losless_comp_body_size;
 	losless_comp_header_size_dw = losless_comp_header_size;
@@ -5095,7 +5095,7 @@ static int32_t config_pic_size_fb(struct VP9Decoder_s *pbi, unsigned short bit_d
 //    losless_comp_body_size_dw = compute_losless_comp_body_size_dw(frame_width, frame_height, (bit_depth == VPX_BITS_10));
 //#endif
 
-	//printk("%s: width %d height %d depth %d head_size 0x%x body_size 0x%x\r\n",
+	//printk("%s: width %d height %d depth %d head_size 0x%x body_size 0x%x\n",
 	//  __func__, frame_width, frame_height, bit_depth,
 	//  losless_comp_header_size, losless_comp_body_size);
 #ifdef LOSLESS_COMPRESS_MODE
@@ -5449,8 +5449,8 @@ static void vp9_init_decoder_hw_fb(struct VP9Decoder_s *pbi, int32_t decode_pic_
 		WRITE_VREG(HEVC_DBLK_MCP_DBE1, 0x5);//dual core - core 1
 
 		// Initialize mcrcc and decomp perf counters
-		mcrcc_perfcount_reset();
-		decomp_perfcount_reset();
+		mcrcc_perfcount_reset(pbi);
+		decomp_perfcount_reset(pbi);
 	}
 
 	if (back_flag && (get_double_write_mode(pbi) & 0x10)) {
@@ -5686,16 +5686,16 @@ static void vp9_config_work_space_hw_fb(struct VP9Decoder_s *pbi, int front_flag
 	struct BuffInfo_s* buf_spec = pbi->work_space_buf;
 	struct VP9_Common_s *const cm = &pbi->common;
 	uint32_t data32;
-	int losless_comp_header_size = compute_losless_comp_header_size(cm->width, cm->height);
-	int losless_comp_body_size = compute_losless_comp_body_size(cm->width, cm->height, cm->bit_depth == 10);
-	int losless_comp_header_size_dw = compute_losless_comp_header_size(cm->width, cm->height);
-	int losless_comp_body_size_dw = compute_losless_comp_body_size(cm->width, cm->height, cm->bit_depth == 10);
+	int losless_comp_header_size = compute_losless_comp_header_size(pbi, cm->width, cm->height);
+	int losless_comp_body_size = compute_losless_comp_body_size(pbi, cm->width, cm->height, cm->bit_depth == 10);
+	int losless_comp_header_size_dw = compute_losless_comp_header_size(pbi, cm->width, cm->height);
+	int losless_comp_body_size_dw = compute_losless_comp_body_size(pbi, cm->width, cm->height, cm->bit_depth == 10);
 
 	if (cm->width == 0) {
-		losless_comp_header_size = compute_losless_comp_header_size(pbi->init_pic_w, pbi->init_pic_h);
-		losless_comp_body_size = compute_losless_comp_body_size(pbi->init_pic_w, pbi->init_pic_h, buf_alloc_depth == 10);
-		losless_comp_header_size_dw = compute_losless_comp_header_size(pbi->init_pic_w, pbi->init_pic_h);
-		losless_comp_body_size_dw = compute_losless_comp_body_size(pbi->init_pic_w, pbi->init_pic_h, buf_alloc_depth == 10);
+		losless_comp_header_size = compute_losless_comp_header_size(pbi, pbi->init_pic_w, pbi->init_pic_h);
+		losless_comp_body_size = compute_losless_comp_body_size(pbi, pbi->init_pic_w, pbi->init_pic_h, buf_alloc_depth == 10);
+		losless_comp_header_size_dw = compute_losless_comp_header_size(pbi, pbi->init_pic_w, pbi->init_pic_h);
+		losless_comp_body_size_dw = compute_losless_comp_body_size(pbi, pbi->init_pic_w, pbi->init_pic_h, buf_alloc_depth == 10);
 	}
 //    if (debug) //printk("%s %x %x %x %x %x %x %x %x %x %x %x %x\n", __func__,
 //			buf_spec->ipp.buf_start,
@@ -5909,8 +5909,8 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 		//WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR2, FRAME_MMU_MAP_ADDR_DW);
 			WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2, pbi->frame_mmu_dw_map_phy_addr);
 			WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2_DBE1, pbi->frame_mmu_dw_map_phy_addr_1); //new dual
-			printk("WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2, 0x%llx\n", (u64)pbi->frame_mmu_dw_map_phy_addr);
-			printk("WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2_DBE1, 0x%llx\n", (u64)pbi->frame_mmu_dw_map_phy_addr_1);
+			vp9_print(pbi, 0, "WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2, 0x%llx\n", (u64)pbi->frame_mmu_dw_map_phy_addr);
+			vp9_print(pbi, 0, "WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2_DBE1, 0x%llx\n", (u64)pbi->frame_mmu_dw_map_phy_addr_1);
 		}
 	}
 	}
@@ -6058,7 +6058,7 @@ static int init_fb_bufstate(struct VP9Decoder_s *pbi)
 	int tvp_flag = vdec_secure(vdec) ? CODEC_MM_FLAGS_TVP : 0;
 
 	if (mmu_4k_number <= 0) {
-		pr_err("%s: invalid mmu_4k_number value: %d\n", __func__, mmu_4k_number);
+		vp9_err(pbi, 0, "%s: invalid mmu_4k_number value: %d\n", __func__, mmu_4k_number);
 		return -1;
 	}
 	pbi->fb_buf_sys_imem.buf_size = IFBUF_SYS_IMEM_SIZE * pbi->fb_ifbuf_num;
@@ -6068,7 +6068,7 @@ static int init_fb_bufstate(struct VP9Decoder_s *pbi)
 		&tmp_phy_adr, GFP_KERNEL);
 	pbi->fb_buf_sys_imem.buf_start = tmp_phy_adr;
 	if (pbi->fb_buf_sys_imem_addr == NULL) {
-		pr_err("%s: failed to alloc fb_buf_sys_imem\n", __func__);
+		vp9_err(pbi, 0, "%s: failed to alloc fb_buf_sys_imem\n", __func__);
 		return -ENOMEM;
 	}
 	memset(pbi->fb_buf_sys_imem_addr, 0, pbi->fb_buf_sys_imem.buf_size);
@@ -6086,7 +6086,7 @@ static int init_fb_bufstate(struct VP9Decoder_s *pbi)
 			&tmp_phy_adr, GFP_KERNEL);
 	pbi->fb_buf_mmu0.buf_start = tmp_phy_adr;
 	if (pbi->fb_buf_mmu0_addr == NULL) {
-		pr_err("%s: failed to alloc fb_mmu0_map\n", __func__);
+		vp9_err(pbi, 0, "%s: failed to alloc fb_mmu0_map\n", __func__);
 		return -ENOMEM;
 	}
 	memset(pbi->fb_buf_mmu0_addr, 0, mmu_map_size);
@@ -6099,7 +6099,7 @@ static int init_fb_bufstate(struct VP9Decoder_s *pbi)
 			&tmp_phy_adr, GFP_KERNEL);
 	pbi->fb_buf_mmu1.buf_start = tmp_phy_adr;
 	if (pbi->fb_buf_mmu1_addr == NULL) {
-		pr_err("%s: failed to alloc fb_mmu1_map\n", __func__);
+		vp9_err(pbi, 0, "%s: failed to alloc fb_mmu1_map\n", __func__);
 		return -ENOMEM;
 	}
 	memset(pbi->fb_buf_mmu1_addr, 0, mmu_map_size);
@@ -6112,7 +6112,7 @@ static int init_fb_bufstate(struct VP9Decoder_s *pbi)
 			mmu_4k_number,
 			pbi->fb_buf_mmu0_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu0 pages", __func__);
+		vp9_err(pbi, 0, "%s: failed to alloc fb_mmu0 pages", __func__);
 		return -ENOMEM;
 	}
 
@@ -6122,7 +6122,7 @@ static int init_fb_bufstate(struct VP9Decoder_s *pbi)
 			mmu_4k_number,
 			pbi->fb_buf_mmu1_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu1 pages", __func__);
+		vp9_err(pbi, 0, "%s: failed to alloc fb_mmu1 pages", __func__);
 		return -ENOMEM;
 	}
 
@@ -6287,8 +6287,8 @@ static int front_decpic_done_update(struct VP9Decoder_s *pbi)
 #endif  //NEW_FRONT_BACK_CODE END
 
 /*Losless compression body buffer size 4K per 64x32 (jt)*/
-static int compute_losless_comp_body_size(int width, int height,
-				uint8_t is_bit_depth_10)
+static int compute_losless_comp_body_size(struct VP9Decoder_s *pbi,
+	int width, int height, uint8_t is_bit_depth_10)
 {
 	int     width_x64;
 	int     height_x32;
@@ -6299,16 +6299,15 @@ static int compute_losless_comp_body_size(int width, int height,
 	height_x32 = height + 31;
 	height_x32 >>= 5;
 	bsize = (is_bit_depth_10?4096:3200)*width_x64*height_x32;
-	if (debug & VP9_DEBUG_BUFMGR_MORE)
-		pr_info("%s(%d,%d,%d)=>%d\n",
-			__func__, width, height,
-			is_bit_depth_10, bsize);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "%s(%d,%d,%d)=>%d\n",
+		__func__, width, height,
+		is_bit_depth_10, bsize);
 
 	return  bsize;
 }
 
 /* Losless compression header buffer size 32bytes per 128x64 (jt)*/
-static int compute_losless_comp_header_size(int width, int height)
+static int compute_losless_comp_header_size(struct VP9Decoder_s *pbi, int width, int height)
 {
 	int     width_x128;
 	int     height_x64;
@@ -6320,10 +6319,9 @@ static int compute_losless_comp_header_size(int width, int height)
 	height_x64 >>= 6;
 
 	hsize = 32 * width_x128 * height_x64;
-	if (debug & VP9_DEBUG_BUFMGR_MORE)
-		pr_info("%s(%d,%d)=>%d\n",
-			__func__, width, height,
-			hsize);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "%s(%d,%d)=>%d\n",
+		__func__, width, height,
+		hsize);
 
 	return  hsize;
 }
@@ -6376,35 +6374,31 @@ static void init_buff_spec_fb(struct VP9Decoder_s *pbi, struct BuffInfo_s* buf_s
 		buf_spec->prob_buf.buf_start 	= buf_spec->rpm.buf_start + buf_spec->rpm.buf_size;
 		buf_spec->prob_cnt_buf.buf_start = buf_spec->prob_buf.buf_start + buf_spec->prob_buf.buf_size;
 		buf_spec->end_adr = buf_spec->prob_cnt_buf.buf_start + buf_spec->prob_cnt_buf.buf_size;
-
-		if (debug)printk("%s workspace (%x %x) size = %x\n", __func__,buf_spec->start_adr, buf_spec->end_adr, buf_spec->end_adr-buf_spec->start_adr);
-		if (debug) {
-			printk("ipp0.buf_start			   :%x\n"  , buf_spec->ipp0.buf_start		  );
-			printk("ipp1.buf_start			   :%x\n"  , buf_spec->ipp1.buf_start		  );
-			printk("sao_abv.buf_start		   :%x\n"  , buf_spec->sao_abv.buf_start		 );
-			printk("sao_vb.buf_start		  :%x\n"  , buf_spec->sao_vb.buf_start		   );
-			printk("short_term_rps.buf_start  :%x\n"  , buf_spec->short_term_rps.buf_start );
-			printk("vps.buf_start			  :%x\n"  , buf_spec->vps.buf_start 		   );
-			printk("sps.buf_start			  :%x\n"  , buf_spec->sps.buf_start 		   );
-			printk("pps.buf_start			  :%x\n"  , buf_spec->pps.buf_start 		   );
-			printk("sao_up.buf_start		  :%x\n"  , buf_spec->sao_up.buf_start		   );
-			printk("swap_buf.buf_start		  :%x\n"  , buf_spec->swap_buf.buf_start	   );
-			printk("swap_buf2.buf_start 	  :%x\n"  , buf_spec->swap_buf2.buf_start	   );
-			printk("scalelut.buf_start		  :%x\n"  , buf_spec->scalelut.buf_start	   );
-			printk("dblk_para.buf_start 	  :%x\n"  , buf_spec->dblk_para.buf_start	   );
-			printk("dblk_data.buf_start 	  :%x\n"  , buf_spec->dblk_data.buf_start	   );
-			printk("mpred_above.buf_start	  :%x\n"  , buf_spec->mpred_above.buf_start    );
-			printk("mpred_mv.buf_start		  :%x\n"  , buf_spec->mpred_mv.buf_start	   );
-			printk("lmem.buf_start		  :%x\n"  , buf_spec->lmem.buf_start	   );
-			printk("frame_header_lmem.buf_start 			:%x\n"	, buf_spec->frame_header_lmem.buf_start 		   );
-			printk("fb_mpred_imp0.buf_start 	:%x\n"	, buf_spec->fb_mpred_imp0.buf_start    );
-			printk("fb_mpred_imp1.buf_start 	:%x\n"	, buf_spec->fb_mpred_imp1.buf_start    );
-			printk("tile_header_param.buf_start :%x\n"	, buf_spec->tile_header_param.buf_start);
-			printk("rpm.buf_start				:%x\n"  , buf_spec->rpm.buf_start 		   );
-			printk("prob_buf.buf_start			:%x\n"  , buf_spec->prob_buf.buf_start	   );
-			printk("prob_cnt_buf.buf_start		:%x\n"  , buf_spec->prob_cnt_buf.buf_start	   );
-		}
-
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s workspace (%x %x) size = %x\n", __func__,buf_spec->start_adr, buf_spec->end_adr, buf_spec->end_adr-buf_spec->start_adr);
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "ipp0.buf_start			   :%x\n"  , buf_spec->ipp0.buf_start		  );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "ipp1.buf_start			   :%x\n"  , buf_spec->ipp1.buf_start		  );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "sao_abv.buf_start		   :%x\n"  , buf_spec->sao_abv.buf_start		 );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "sao_vb.buf_start		  :%x\n"  , buf_spec->sao_vb.buf_start		   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "short_term_rps.buf_start  :%x\n"  , buf_spec->short_term_rps.buf_start );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "vps.buf_start			  :%x\n"  , buf_spec->vps.buf_start 		   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "sps.buf_start			  :%x\n"  , buf_spec->sps.buf_start 		   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "pps.buf_start			  :%x\n"  , buf_spec->pps.buf_start 		   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "sao_up.buf_start		  :%x\n"  , buf_spec->sao_up.buf_start		   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "swap_buf.buf_start		  :%x\n"  , buf_spec->swap_buf.buf_start	   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "swap_buf2.buf_start 	  :%x\n"  , buf_spec->swap_buf2.buf_start	   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "scalelut.buf_start		  :%x\n"  , buf_spec->scalelut.buf_start	   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "dblk_para.buf_start 	  :%x\n"  , buf_spec->dblk_para.buf_start	   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "dblk_data.buf_start 	  :%x\n"  , buf_spec->dblk_data.buf_start	   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "mpred_above.buf_start	  :%x\n"  , buf_spec->mpred_above.buf_start    );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "mpred_mv.buf_start		  :%x\n"  , buf_spec->mpred_mv.buf_start	   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "lmem.buf_start		  :%x\n"  , buf_spec->lmem.buf_start	   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "frame_header_lmem.buf_start 			:%x\n"	, buf_spec->frame_header_lmem.buf_start 		   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "fb_mpred_imp0.buf_start 	:%x\n"	, buf_spec->fb_mpred_imp0.buf_start    );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "fb_mpred_imp1.buf_start 	:%x\n"	, buf_spec->fb_mpred_imp1.buf_start    );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "tile_header_param.buf_start :%x\n"	, buf_spec->tile_header_param.buf_start);
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "rpm.buf_start				:%x\n"  , buf_spec->rpm.buf_start 		   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "prob_buf.buf_start			:%x\n"  , buf_spec->prob_buf.buf_start	   );
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "prob_cnt_buf.buf_start		:%x\n"  , buf_spec->prob_cnt_buf.buf_start	   );
 }
 #endif
 
@@ -6510,52 +6504,49 @@ static void init_buff_spec(struct VP9Decoder_s *pbi,
 			} else {
 				/*not virt for tvp playing,
 				may need clear on ucode.*/
-				pr_err("mem_start_virt failed\n");
+				vp9_err(pbi, 0, "mem_start_virt failed\n");
 			}
 		}
 	}
 
-	if (debug) {
-		pr_info("%s workspace (%x %x) size = %x\n", __func__,
-				buf_spec->start_adr, buf_spec->end_adr,
-				buf_spec->end_adr - buf_spec->start_adr);
-	}
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s workspace (%x %x) size = %x\n", __func__,
+			buf_spec->start_adr, buf_spec->end_adr,
+			buf_spec->end_adr - buf_spec->start_adr);
 
-	if (debug) {
-		pr_info("ipp.buf_start             :%x\n",
-				buf_spec->ipp.buf_start);
-		pr_info("sao_abv.buf_start          :%x\n",
-				buf_spec->sao_abv.buf_start);
-		pr_info("sao_vb.buf_start          :%x\n",
-				buf_spec->sao_vb.buf_start);
-		pr_info("short_term_rps.buf_start  :%x\n",
-				buf_spec->short_term_rps.buf_start);
-		pr_info("vps.buf_start             :%x\n",
-				buf_spec->vps.buf_start);
-		pr_info("sps.buf_start             :%x\n",
-				buf_spec->sps.buf_start);
-		pr_info("pps.buf_start             :%x\n",
-				buf_spec->pps.buf_start);
-		pr_info("sao_up.buf_start          :%x\n",
-				buf_spec->sao_up.buf_start);
-		pr_info("swap_buf.buf_start        :%x\n",
-				buf_spec->swap_buf.buf_start);
-		pr_info("swap_buf2.buf_start       :%x\n",
-				buf_spec->swap_buf2.buf_start);
-		pr_info("scalelut.buf_start        :%x\n",
-				buf_spec->scalelut.buf_start);
-		pr_info("dblk_para.buf_start       :%x\n",
-				buf_spec->dblk_para.buf_start);
-		pr_info("dblk_data.buf_start       :%x\n",
-				buf_spec->dblk_data.buf_start);
-		pr_info("seg_map.buf_start       :%x\n",
-			buf_spec->seg_map.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "ipp.buf_start             :%x\n",
+			buf_spec->ipp.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "sao_abv.buf_start          :%x\n",
+			buf_spec->sao_abv.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "sao_vb.buf_start          :%x\n",
+			buf_spec->sao_vb.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "short_term_rps.buf_start  :%x\n",
+			buf_spec->short_term_rps.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "vps.buf_start             :%x\n",
+			buf_spec->vps.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "sps.buf_start             :%x\n",
+			buf_spec->sps.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "pps.buf_start             :%x\n",
+			buf_spec->pps.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "sao_up.buf_start          :%x\n",
+			buf_spec->sao_up.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "swap_buf.buf_start        :%x\n",
+			buf_spec->swap_buf.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "swap_buf2.buf_start       :%x\n",
+			buf_spec->swap_buf2.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "scalelut.buf_start        :%x\n",
+			buf_spec->scalelut.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "dblk_para.buf_start       :%x\n",
+			buf_spec->dblk_para.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "dblk_data.buf_start       :%x\n",
+			buf_spec->dblk_data.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "seg_map.buf_start       :%x\n",
+		buf_spec->seg_map.buf_start);
 	if (pbi->mmu_enable) {
-		pr_info("mmu_vbh.buf_start     :%x\n",
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "mmu_vbh.buf_start     :%x\n",
 			buf_spec->mmu_vbh.buf_start);
 #ifdef VP9_10B_MMU_DW
 		if (pbi->dw_mmu_enable) {
-			pr_info("mmu_vbh_dw.buf_start     :%x",
+			vp9_print(pbi, VP9_DEBUG_BUFMGR, "mmu_vbh_dw.buf_start     :%x",
 				buf_spec->mmu_vbh_dw.buf_start);
 #if 0
 			pr_info("cm_header_dw.buf_start     :%x",
@@ -6564,21 +6555,20 @@ static void init_buff_spec(struct VP9Decoder_s *pbi,
 		}
 #endif
 	}
-		pr_info("mpred_above.buf_start     :%x\n",
-				buf_spec->mpred_above.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "mpred_above.buf_start     :%x\n",
+			buf_spec->mpred_above.buf_start);
 #ifdef MV_USE_FIXED_BUF
-		pr_info("mpred_mv.buf_start        :%x\n",
-				buf_spec->mpred_mv.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "mpred_mv.buf_start        :%x\n",
+			buf_spec->mpred_mv.buf_start);
 #endif
-		if ((debug & VP9_DEBUG_SEND_PARAM_WITH_REG) == 0) {
-			pr_info("rpm.buf_start             :%x\n",
-				   buf_spec->rpm.buf_start);
-		}
-		pr_info("prob_buf.buf_start        :%x\n",
-				buf_spec->prob_buf.buf_start);
-		pr_info("prob_cnt_buf.buf_start    :%x\n",
-				buf_spec->prob_cnt_buf.buf_start);
+	if ((debug & VP9_DEBUG_SEND_PARAM_WITH_REG) == 0) {
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "rpm.buf_start             :%x\n",
+			   buf_spec->rpm.buf_start);
 	}
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "prob_buf.buf_start        :%x\n",
+			buf_spec->prob_buf.buf_start);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "prob_cnt_buf.buf_start    :%x\n",
+			buf_spec->prob_cnt_buf.buf_start);
 }
 
 /* cache_util.c */
@@ -6586,10 +6576,9 @@ static void init_buff_spec(struct VP9Decoder_s *pbi,
 
 static u32 mcrcc_cache_alg_flag = THODIYIL_MCRCC_CANVAS_ALGX;
 
-static void mcrcc_perfcount_reset(void)
+static void mcrcc_perfcount_reset(struct VP9Decoder_s *pbi)
 {
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[cache_util.c] Entered mcrcc_perfcount_reset...\n");
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[cache_util.c] Entered mcrcc_perfcount_reset...\n");
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)0x1);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)0x0);
 	return;
@@ -6601,7 +6590,7 @@ static unsigned hit_mcr_1_cnt_total_prev;
 static unsigned byp_mcr_cnt_nchcanv_total_prev;
 static unsigned byp_mcr_cnt_nchoutwin_total_prev;
 
-static void mcrcc_get_hitrate(unsigned reset_pre)
+static void mcrcc_get_hitrate(struct VP9Decoder_s *pbi, unsigned reset_pre)
 {
 #ifndef NEW_FRONT_BACK_CODE
 	unsigned delta_hit_mcr_0_cnt;
@@ -6624,8 +6613,7 @@ static void mcrcc_get_hitrate(unsigned reset_pre)
 		byp_mcr_cnt_nchcanv_total_prev = 0;
 		byp_mcr_cnt_nchoutwin_total_prev = 0;
 	}
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[cache_util.c] Entered mcrcc_get_hitrate...\n");
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[cache_util.c] Entered mcrcc_get_hitrate...\n");
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x0<<1));
 	raw_mcr_cnt = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x1<<1));
@@ -6635,18 +6623,14 @@ static void mcrcc_get_hitrate(unsigned reset_pre)
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x3<<1));
 	byp_mcr_cnt_nchcanv = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
 
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("raw_mcr_cnt_total: %d\n",
-			raw_mcr_cnt);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("hit_mcr_cnt_total: %d\n",
-			hit_mcr_cnt);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("byp_mcr_cnt_nchoutwin_total: %d\n",
-			byp_mcr_cnt_nchoutwin);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("byp_mcr_cnt_nchcanv_total: %d\n",
-			byp_mcr_cnt_nchcanv);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "raw_mcr_cnt_total: %d\n",
+		raw_mcr_cnt);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "hit_mcr_cnt_total: %d\n",
+		hit_mcr_cnt);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "byp_mcr_cnt_nchoutwin_total: %d\n",
+		byp_mcr_cnt_nchoutwin);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "byp_mcr_cnt_nchcanv_total: %d\n",
+		byp_mcr_cnt_nchcanv);
 #ifndef NEW_FRONT_BACK_CODE
 	delta_raw_mcr_cnt = raw_mcr_cnt -
 		raw_mcr_cnt_total_prev;
@@ -6660,126 +6644,103 @@ static void mcrcc_get_hitrate(unsigned reset_pre)
 
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x4<<1));
 	tmp = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("miss_mcr_0_cnt_total: %d\n", tmp);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "miss_mcr_0_cnt_total: %d\n", tmp);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x5<<1));
 	tmp = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("miss_mcr_1_cnt_total: %d\n", tmp);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "miss_mcr_1_cnt_total: %d\n", tmp);
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x6<<1));
 	tmp = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("hit_mcr_0_cnt_total: %d\n", tmp);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "hit_mcr_0_cnt_total: %d\n", tmp);
 	delta_hit_mcr_0_cnt = tmp - hit_mcr_0_cnt_total_prev;
 	hit_mcr_0_cnt_total_prev = tmp;
 	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x7<<1));
 	tmp = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("hit_mcr_1_cnt_total: %d\n", tmp);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "hit_mcr_1_cnt_total: %d\n", tmp);
 	delta_hit_mcr_1_cnt = tmp - hit_mcr_1_cnt_total_prev;
 	hit_mcr_1_cnt_total_prev = tmp;
 
 	if (delta_raw_mcr_cnt != 0) {
 		hitrate = 100 * delta_hit_mcr_0_cnt
 			/ delta_raw_mcr_cnt;
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("CANV0_HIT_RATE : %d\n", hitrate);
+		vp9_print(pbi, VP9_DEBUG_CACHE, "CANV0_HIT_RATE : %d\n", hitrate);
 		hitrate = 100 * delta_hit_mcr_1_cnt
 			/ delta_raw_mcr_cnt;
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("CANV1_HIT_RATE : %d\n", hitrate);
+		vp9_print(pbi, VP9_DEBUG_CACHE, "CANV1_HIT_RATE : %d\n", hitrate);
 		hitrate = 100 * delta_mcr_cnt_nchcanv
 			/ delta_raw_mcr_cnt;
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("NONCACH_CANV_BYP_RATE : %d\n", hitrate);
+		vp9_print(pbi, VP9_DEBUG_CACHE, "NONCACH_CANV_BYP_RATE : %d\n", hitrate);
 		hitrate = 100 * delta_mcr_cnt_nchoutwin
 			/ delta_raw_mcr_cnt;
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("CACHE_OUTWIN_BYP_RATE : %d\n", hitrate);
+		vp9_print(pbi, VP9_DEBUG_CACHE, "CACHE_OUTWIN_BYP_RATE : %d\n", hitrate);
 	}
 #endif
 
 	if (raw_mcr_cnt != 0) {
 		hitrate = 100 * hit_mcr_cnt / raw_mcr_cnt;
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("MCRCC_HIT_RATE : %d\n", hitrate);
+		vp9_print(pbi, VP9_DEBUG_CACHE, "MCRCC_HIT_RATE : %d\n", hitrate);
 		hitrate = 100 * (byp_mcr_cnt_nchoutwin + byp_mcr_cnt_nchcanv)
 			/ raw_mcr_cnt;
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("MCRCC_BYP_RATE : %d\n", hitrate);
+		vp9_print(pbi, VP9_DEBUG_CACHE, "MCRCC_BYP_RATE : %d\n", hitrate);
 	} else {
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("MCRCC_HIT_RATE : na\n");
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("MCRCC_BYP_RATE : na\n");
+		vp9_print(pbi, VP9_DEBUG_CACHE, "MCRCC_HIT_RATE : na\n");
+		vp9_print(pbi, VP9_DEBUG_CACHE, "MCRCC_BYP_RATE : na\n");
 	}
 	return;
 }
 
-static void decomp_perfcount_reset(void)
+static void decomp_perfcount_reset(struct VP9Decoder_s *pbi)
 {
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[cache_util.c] Entered decomp_perfcount_reset...\n");
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[cache_util.c] Entered decomp_perfcount_reset...\n");
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)0x1);
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)0x0);
 	return;
 }
 
-static void decomp_get_hitrate(void)
+static void decomp_get_hitrate(struct VP9Decoder_s *pbi)
 {
 	unsigned   raw_mcr_cnt;
 	unsigned   hit_mcr_cnt;
 	int      hitrate;
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[cache_util.c] Entered decomp_get_hitrate...\n");
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[cache_util.c] Entered decomp_get_hitrate...\n");
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x0<<1));
 	raw_mcr_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x1<<1));
 	hit_mcr_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
 
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("hcache_raw_cnt_total: %d\n", raw_mcr_cnt);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("hcache_hit_cnt_total: %d\n", hit_mcr_cnt);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "hcache_raw_cnt_total: %d\n", raw_mcr_cnt);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "hcache_hit_cnt_total: %d\n", hit_mcr_cnt);
 
 	if (raw_mcr_cnt != 0) {
 		hitrate = hit_mcr_cnt * 100 / raw_mcr_cnt;
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("DECOMP_HCACHE_HIT_RATE : %d\n", hitrate);
+		vp9_print(pbi, VP9_DEBUG_CACHE, "DECOMP_HCACHE_HIT_RATE : %d\n", hitrate);
 	} else {
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("DECOMP_HCACHE_HIT_RATE : na\n");
+		vp9_print(pbi, VP9_DEBUG_CACHE, "DECOMP_HCACHE_HIT_RATE : na\n");
 	}
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x2<<1));
 	raw_mcr_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x3<<1));
 	hit_mcr_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
 
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("dcache_raw_cnt_total: %d\n", raw_mcr_cnt);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("dcache_hit_cnt_total: %d\n", hit_mcr_cnt);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "dcache_raw_cnt_total: %d\n", raw_mcr_cnt);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "dcache_hit_cnt_total: %d\n", hit_mcr_cnt);
 
 	if (raw_mcr_cnt != 0) {
 		hitrate = hit_mcr_cnt * 100 / raw_mcr_cnt;
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("DECOMP_DCACHE_HIT_RATE : %d\n", hitrate);
+		vp9_print(pbi, VP9_DEBUG_CACHE, "DECOMP_DCACHE_HIT_RATE : %d\n", hitrate);
 	} else {
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("DECOMP_DCACHE_HIT_RATE : na\n");
+		vp9_print(pbi, VP9_DEBUG_CACHE, "DECOMP_DCACHE_HIT_RATE : na\n");
 	}
 	return;
 }
 
-static void decomp_get_comprate(void)
+static void decomp_get_comprate(struct VP9Decoder_s *pbi)
 {
 	unsigned   raw_ucomp_cnt;
 	unsigned   fast_comp_cnt;
 	unsigned   slow_comp_cnt;
 	int      comprate;
 
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[cache_util.c] Entered decomp_get_comprate...\n");
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[cache_util.c] Entered decomp_get_comprate...\n");
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x4<<1));
 	fast_comp_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x5<<1));
@@ -6787,21 +6748,16 @@ static void decomp_get_comprate(void)
 	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x6<<1));
 	raw_ucomp_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
 
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("decomp_fast_comp_total: %d\n", fast_comp_cnt);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("decomp_slow_comp_total: %d\n", slow_comp_cnt);
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("decomp_raw_uncomp_total: %d\n", raw_ucomp_cnt);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "decomp_fast_comp_total: %d\n", fast_comp_cnt);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "decomp_slow_comp_total: %d\n", slow_comp_cnt);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "decomp_raw_uncomp_total: %d\n", raw_ucomp_cnt);
 
 	if (raw_ucomp_cnt != 0) {
 		comprate = (fast_comp_cnt + slow_comp_cnt)
 		* 100 / raw_ucomp_cnt;
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("DECOMP_COMP_RATIO : %d\n", comprate);
+		vp9_print(pbi, VP9_DEBUG_CACHE, "DECOMP_COMP_RATIO : %d\n", comprate);
 	} else {
-		if (debug & VP9_DEBUG_CACHE)
-			pr_info("DECOMP_COMP_RATIO : na\n");
+		vp9_print(pbi, VP9_DEBUG_CACHE, "DECOMP_COMP_RATIO : na\n");
 	}
 	return;
 }
@@ -7067,7 +7023,8 @@ void   vp9_tree_merge_probs(unsigned int *prev_prob, unsigned int *cur_prob,
 }
 
 /*void adapt_coef_probs(void)*/
-void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
+void adapt_coef_probs(struct VP9Decoder_s *pbi,
+	int pic_count, int prev_kf, int cur_kf, int pre_fc,
 	unsigned int *prev_prob, unsigned int *cur_prob, unsigned int *count)
 {
 	/* 80 * 64bits = 0xF00 ( use 0x1000 4K bytes)
@@ -7109,9 +7066,7 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 
 	int new_prob;
 
-	if (debug & VP9_DEBUG_MERGE)
-		pr_info
-	("\n ##adapt_coef_probs (pre_fc : %d ,prev_kf : %d,cur_kf : %d)##\n\n",
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "\n ##adapt_coef_probs (pre_fc : %d ,prev_kf : %d,cur_kf : %d)##\n\n",
 	pre_fc, prev_kf, cur_kf);
 
 	/*adapt_coef_probs*/
@@ -7240,13 +7195,11 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 
 			if (coef_count_node_start ==
 				VP9_INTRA_INTER_COUNT_START) {
-				if (debug & VP9_DEBUG_MERGE)
-					pr_info(" # merge_intra_inter_prob\n");
+				vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_intra_inter_prob\n");
 				coef_node_start = VP9_INTRA_INTER_START;
 			} else if (coef_count_node_start ==
 				VP9_COMP_INTER_COUNT_START) {
-				if (debug & VP9_DEBUG_MERGE)
-					pr_info(" # merge_comp_inter_prob\n");
+				vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_comp_inter_prob\n");
 				coef_node_start = VP9_COMP_INTER_START;
 			}
 			/*
@@ -7263,38 +7216,31 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 			 */
 			else if (coef_count_node_start ==
 				VP9_TX_MODE_COUNT_START) {
-				if (debug & VP9_DEBUG_MERGE)
-					pr_info(" # merge_tx_mode_probs\n");
+				vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_tx_mode_probs\n");
 				coef_node_start = VP9_TX_MODE_START;
 			} else if (coef_count_node_start ==
 				VP9_SKIP_COUNT_START) {
-				if (debug & VP9_DEBUG_MERGE)
-					pr_info(" # merge_skip_probs\n");
+				vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_skip_probs\n");
 				coef_node_start = VP9_SKIP_START;
 			} else if (coef_count_node_start ==
 				VP9_MV_SIGN_0_COUNT_START) {
-				if (debug & VP9_DEBUG_MERGE)
-					pr_info(" # merge_sign_0\n");
+				vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_sign_0\n");
 				coef_node_start = VP9_MV_SIGN_0_START;
 			} else if (coef_count_node_start ==
 				VP9_MV_SIGN_1_COUNT_START) {
-				if (debug & VP9_DEBUG_MERGE)
-					pr_info(" # merge_sign_1\n");
+				vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_sign_1\n");
 				coef_node_start = VP9_MV_SIGN_1_START;
 			} else if (coef_count_node_start ==
 				VP9_MV_BITS_0_COUNT_START) {
-				if (debug & VP9_DEBUG_MERGE)
-					pr_info(" # merge_bits_0\n");
+				vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_bits_0\n");
 				coef_node_start = VP9_MV_BITS_0_START;
 			} else if (coef_count_node_start ==
 				VP9_MV_BITS_1_COUNT_START) {
-				if (debug & VP9_DEBUG_MERGE)
-					pr_info(" # merge_bits_1\n");
+				vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_bits_1\n");
 				coef_node_start = VP9_MV_BITS_1_START;
 			} else if (coef_count_node_start ==
 					VP9_MV_CLASS0_HP_0_COUNT_START) {
-				if (debug & VP9_DEBUG_MERGE)
-					pr_info(" # merge_class0_hp\n");
+				vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_class0_hp\n");
 				coef_node_start = VP9_MV_CLASS0_HP_0_START;
 			}
 
@@ -7329,8 +7275,7 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 
 		coef_node_start = coef_node_start + 1;
 	}
-	if (debug & VP9_DEBUG_MERGE)
-		pr_info(" # merge_vp9_inter_mode_tree\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_vp9_inter_mode_tree\n");
 	coef_node_start = VP9_INTER_MODE_START;
 	coef_count_node_start = VP9_INTER_MODE_COUNT_START;
 	for (tree_i = 0; tree_i < 7; tree_i++) {
@@ -7368,8 +7313,7 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 		}
 		coef_count_node_start = coef_count_node_start + 4;
 	}
-	if (debug & VP9_DEBUG_MERGE)
-		pr_info(" # merge_vp9_intra_mode_tree\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_vp9_intra_mode_tree\n");
 	coef_node_start = VP9_IF_Y_MODE_START;
 	coef_count_node_start = VP9_IF_Y_MODE_COUNT_START;
 	for (tree_i = 0; tree_i < 14; tree_i++) {
@@ -7471,8 +7415,7 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 		coef_count_node_start = coef_count_node_start + 10;
 	}
 
-	if (debug & VP9_DEBUG_MERGE)
-		pr_info(" # merge_vp9_partition_tree\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_vp9_partition_tree\n");
 	coef_node_start = VP9_PARTITION_P_START;
 	coef_count_node_start = VP9_PARTITION_P_COUNT_START;
 	for (tree_i = 0; tree_i < 16; tree_i++) {
@@ -7511,8 +7454,7 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 		coef_count_node_start = coef_count_node_start + 4;
 	}
 
-	if (debug & VP9_DEBUG_MERGE)
-		pr_info(" # merge_vp9_switchable_interp_tree\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_vp9_switchable_interp_tree\n");
 	coef_node_start = VP9_INTERP_START;
 	coef_count_node_start = VP9_INTERP_COUNT_START;
 	for (tree_i = 0; tree_i < 4; tree_i++) {
@@ -7543,8 +7485,7 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 		coef_count_node_start = coef_count_node_start + 3;
 	}
 
-	if (debug & VP9_DEBUG_MERGE)
-		pr_info("# merge_vp9_mv_joint_tree\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "# merge_vp9_mv_joint_tree\n");
 	coef_node_start = VP9_MV_JOINTS_START;
 	coef_count_node_start = VP9_MV_JOINTS_COUNT_START;
 	for (tree_i = 0; tree_i < 1; tree_i++) {
@@ -7583,8 +7524,7 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 	}
 
 	for (mvd_i = 0; mvd_i < 2; mvd_i++) {
-		if (debug & VP9_DEBUG_MERGE)
-			pr_info(" # merge_vp9_mv_class_tree [%d]  -\n", mvd_i);
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_vp9_mv_class_tree [%d]  -\n", mvd_i);
 		coef_node_start =
 			mvd_i ? VP9_MV_CLASSES_1_START : VP9_MV_CLASSES_0_START;
 		coef_count_node_start =
@@ -7697,8 +7637,7 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 			coef_node_start = coef_node_start + 1;
 		}
 
-		if (debug & VP9_DEBUG_MERGE)
-			pr_info(" # merge_vp9_mv_class0_tree [%d]  -\n", mvd_i);
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_vp9_mv_class0_tree [%d]  -\n", mvd_i);
 		coef_node_start =
 			mvd_i ? VP9_MV_CLASS0_1_START : VP9_MV_CLASS0_0_START;
 		coef_count_node_start =
@@ -7711,8 +7650,7 @@ void adapt_coef_probs(int pic_count, int prev_kf, int cur_kf, int pre_fc,
 
 		vp9_tree_merge_probs(prev_prob, cur_prob, coef_node_start,
 			tree_left, tree_right, tree_i, node);
-		if (debug & VP9_DEBUG_MERGE)
-			pr_info(" # merge_vp9_mv_fp_tree_class0_fp [%d]  -\n",
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, " # merge_vp9_mv_fp_tree_class0_fp [%d]  -\n",
 				mvd_i);
 		coef_node_start =
 			mvd_i ? VP9_MV_CLASS0_FP_1_START :
@@ -7863,10 +7801,8 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 		struct internal_comp_buf *ibuf = v4lfb_to_icomp_buf(pbi, aml_buf);
 
 		pbi->m_BUF[i].header_addr = ibuf->header_addr;
-		if (debug & VP9_DEBUG_BUFMGR_MORE) {
-			pr_info("MMU header_adr %d: %ld\n",
-				i, pbi->m_BUF[i].header_addr);
-		}
+		vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "MMU header_adr %d: %ld\n",
+			i, pbi->m_BUF[i].header_addr);
 	}
 
 #ifdef MV_USE_FIXED_BUF
@@ -7918,19 +7854,17 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 		(pic->index * mv_size);
 	pic->mv_size = mv_size;
 #endif
-	if (debug) {
-		pr_info("%s index %d BUF_index %d ",
-			__func__, pic->index,
-			pic->BUF_index);
-		pr_info("comp_body_size %x comp_buf_size %x ",
-			pic->comp_body_size,
-			pic->buf_size);
-		pr_info("mpred_mv_wr_start_adr %ld\n",
-			pic->mpred_mv_wr_start_addr);
-		pr_info("dw_y_adr %d, pic_config->dw_u_v_adr =%d\n",
-			pic->dw_y_adr,
-			pic->dw_u_v_adr);
-	}
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s index %d BUF_index %d ",
+		__func__, pic->index,
+		pic->BUF_index);
+	vp9_print_cont(pbi, VP9_DEBUG_BUFMGR, "comp_body_size %x comp_buf_size %x ",
+		pic->comp_body_size,
+		pic->buf_size);
+	vp9_print_cont(pbi, VP9_DEBUG_BUFMGR, "mpred_mv_wr_start_adr %ld\n",
+		pic->mpred_mv_wr_start_addr);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "dw_y_adr %d, pic_config->dw_u_v_adr =%d\n",
+		pic->dw_y_adr,
+		pic->dw_u_v_adr);
 #ifdef MV_USE_FIXED_BUF
 	}
 #endif
@@ -7979,9 +7913,9 @@ static int config_pic(struct VP9Decoder_s *pbi,
 	int buf_size = 0;
 
 	int losless_comp_header_size =
-			compute_losless_comp_header_size(pic_width,
+			compute_losless_comp_header_size(pbi, pic_width,
 			pic_height);
-	int losless_comp_body_size = compute_losless_comp_body_size(pic_width,
+	int losless_comp_body_size = compute_losless_comp_body_size(pbi, pic_width,
 			pic_height, buf_alloc_depth == 10);
 	int mc_buffer_size = losless_comp_header_size + losless_comp_body_size;
 	int mc_buffer_size_h = (mc_buffer_size + 0xffff) >> 16;
@@ -8028,20 +7962,16 @@ static int config_pic(struct VP9Decoder_s *pbi,
 		pic_config->header_adr = decoder_bmmu_box_get_phy_addr(
 			pbi->bmmu_box, HEADER_BUFFER_IDX(pic_config->index));
 
-		if (debug & VP9_DEBUG_BUFMGR_MORE) {
-			pr_info("MMU header_adr %d: %ld\n",
-				pic_config->index, pic_config->header_adr);
-		}
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "MMU header_adr %d: %ld\n",
+			pic_config->index, pic_config->header_adr);
 #ifdef VP9_10B_MMU_DW
 		if (pbi->dw_mmu_enable) {
 			pic_config->header_dw_adr = pic_config->header_adr +
 				vvp9_mmu_compress_header_size(pbi->init_pic_w, pbi->init_pic_h);
 
-			if (debug & VP9_DEBUG_BUFMGR_MORE) {
-				pr_info("MMU header_dw_adr %d: %ld size 0x%x\n",
-					pic_config->index, pic_config->header_dw_adr,
-					vvp9_mmu_compress_header_size(pbi->init_pic_w, pbi->init_pic_h));
-			}
+			vp9_print(pbi, VP9_DEBUG_BUFMGR, "MMU header_dw_adr %d: %ld size 0x%x\n",
+				pic_config->index, pic_config->header_dw_adr,
+				vvp9_mmu_compress_header_size(pbi->init_pic_w, pbi->init_pic_h));
 		}
 #endif
 	}
@@ -8055,7 +7985,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 					buf_size, DRIVER_NAME,
 					&pic_config->cma_alloc_addr);
 			if (ret < 0) {
-				pr_info("decoder_bmmu_box_alloc_buf_phy idx %d size %d fail\n",
+				vp9_err(pbi, 0, "decoder_bmmu_box_alloc_buf_phy idx %d size %d fail\n",
 					VF_BUFFER_IDX(i), buf_size);
 				return ret;
 			}
@@ -8103,7 +8033,7 @@ static int config_pic(struct VP9Decoder_s *pbi,
 			if (pic_config->cma_alloc_addr)
 				y_adr = pic_config->cma_alloc_addr;
 			else {
-				pr_info("decoder_bmmu_box_alloc_buf_phy idx %d size %d return null\n",
+				vp9_print(pbi, 0, "decoder_bmmu_box_alloc_buf_phy idx %d size %d return null\n",
 					VF_BUFFER_IDX(i), buf_size);
 				return -1;
 			}
@@ -8151,18 +8081,16 @@ static int config_pic(struct VP9Decoder_s *pbi,
 					(pic_config->index * mv_size);
 			pic_config->mv_size = mv_size;
 #endif
-			if (debug) {
-				pr_info("%s index %d BUF_index %d ",
-					__func__, pic_config->index, pic_config->BUF_index);
-				pr_info("comp_body_size %x comp_buf_size %x ",
-					pic_config->comp_body_size, pic_config->buf_size);
-				pr_info("mpred_mv_wr_start_adr %ld\n",
-					pic_config->mpred_mv_wr_start_addr);
-				pr_info("dw_y_adr %d, pic_config->dw_u_v_adr =%d\n",
-					pic_config->dw_y_adr, pic_config->dw_u_v_adr);
-				pr_info("tw y_addr %x, uv_addr %x\n",
-					pic_config->tw_y_adr, pic_config->tw_u_v_adr);
-			}
+			vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s index %d BUF_index %d ",
+				__func__, pic_config->index, pic_config->BUF_index);
+			vp9_print_cont(pbi, VP9_DEBUG_BUFMGR, "comp_body_size %x comp_buf_size %x ",
+				pic_config->comp_body_size, pic_config->buf_size);
+			vp9_print_cont(pbi, VP9_DEBUG_BUFMGR, "mpred_mv_wr_start_adr %ld\n",
+				pic_config->mpred_mv_wr_start_addr);
+			vp9_print(pbi, VP9_DEBUG_BUFMGR, "dw_y_adr %d, pic_config->dw_u_v_adr =%d\n",
+				pic_config->dw_y_adr, pic_config->dw_u_v_adr);
+			vp9_print(pbi, VP9_DEBUG_BUFMGR, "tw y_addr %x, uv_addr %x\n",
+				pic_config->tw_y_adr, pic_config->tw_u_v_adr);
 			ret = 0;
 		}
 #ifdef MV_USE_FIXED_BUF
@@ -8200,8 +8128,8 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 				HEADER_BUFFER_IDX(i), header_size,
 				DRIVER_HEADER_NAME,
 				&buf_addr) < 0) {
-				pr_info("%s malloc compress header failed %d\n",
-				DRIVER_HEADER_NAME, i);
+				vp9_err(pbi, 0, "%s malloc compress header failed %d\n",
+					DRIVER_HEADER_NAME, i);
 				pbi->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
 				return;
 			}
@@ -8262,9 +8190,8 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 #endif
 		if (!pbi->is_used_v4l) {
 			if (config_pic(pbi, pic_config) < 0) {
-				if (debug)
-					pr_info("Config_pic %d fail\n",
-						pic_config->index);
+				vp9_err(pbi, 0, "Config_pic %d fail\n",
+					pic_config->index);
 				pic_config->index = -1;
 				break;
 			}
@@ -8293,7 +8220,7 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 #endif
 		}
 	}
-	pr_debug("%s ok, used_buf_num = %d\n",
+	vp9_print(pbi, 0, "%s ok, used_buf_num = %d\n",
 		__func__, pbi->used_buf_num);
 }
 
@@ -8395,10 +8322,10 @@ static int config_pic_size(struct VP9Decoder_s *pbi, unsigned short bit_depth)
 	cur_pic_config->bit_depth = bit_depth;
 	cur_pic_config->double_write_mode = get_double_write_mode(pbi);
 	losless_comp_header_size =
-		compute_losless_comp_header_size(cur_pic_config->y_crop_width,
+		compute_losless_comp_header_size(pbi, cur_pic_config->y_crop_width,
 		cur_pic_config->y_crop_height);
 	losless_comp_body_size =
-		compute_losless_comp_body_size(cur_pic_config->y_crop_width,
+		compute_losless_comp_body_size(pbi, cur_pic_config->y_crop_width,
 		cur_pic_config->y_crop_height, (bit_depth == VPX_BITS_10));
 	cur_pic_config->comp_body_size = losless_comp_body_size;
 #ifdef LOSLESS_COMPRESS_MODE
@@ -8460,8 +8387,7 @@ static int config_mc_buffer(struct VP9Decoder_s *pbi, unsigned short bit_depth)
 	struct PIC_BUFFER_CONFIG_s *cur_pic_config = &cm->cur_frame->buf;
 	uint8_t scale_enable = 0;
 
-	if (debug&VP9_DEBUG_BUFMGR_MORE)
-		pr_info("config_mc_buffer entered .....\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "config_mc_buffer entered .....\n");
 
 	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
 			(0 << 8) | (0 << 1) | 1);
@@ -8474,10 +8400,9 @@ static int config_mc_buffer(struct VP9Decoder_s *pbi, unsigned short bit_depth)
 		| (pic_config->mc_canvas_u_v << 8)
 		| pic_config->mc_canvas_y);
 
-		if (debug & VP9_DEBUG_BUFMGR_MORE)
-			pr_info("refid %x mc_canvas_u_v %x mc_canvas_y %x\n",
-				i, pic_config->mc_canvas_u_v,
-				pic_config->mc_canvas_y);
+		vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "refid %x mc_canvas_u_v %x mc_canvas_y %x\n",
+			i, pic_config->mc_canvas_u_v,
+			pic_config->mc_canvas_y);
 	}
 	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
 			(16 << 8) | (0 << 1) | 1);
@@ -8509,7 +8434,7 @@ static int config_mc_buffer(struct VP9Decoder_s *pbi, unsigned short bit_depth)
 		scale_enable |= (1 << i);
 	}
 	ref_pic_body_size =
-		compute_losless_comp_body_size(pic_config->y_crop_width,
+		compute_losless_comp_body_size(pbi, pic_config->y_crop_width,
 		pic_config->y_crop_height, (bit_depth == VPX_BITS_10));
 	WRITE_VREG(VP9D_MPP_REFINFO_DATA,
 		(pic_config->y_crop_width << 14)
@@ -8566,9 +8491,8 @@ static void config_mpred_hw(struct VP9Decoder_s *pbi)
 	mpred_curr_lcu_x   = data32 & 0xffff;
 	mpred_curr_lcu_y   = (data32 >> 16) & 0xffff;
 
-	if (debug & VP9_DEBUG_BUFMGR)
-		pr_info("cur pic_config index %d  col pic_config index %d\n",
-			cur_pic_config->index, last_frame_pic_config->index);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "cur pic_config index %d  col pic_config index %d\n",
+		cur_pic_config->index, last_frame_pic_config->index);
 	WRITE_VREG(HEVC_MPRED_CTRL3, 0x24122412);
 	WRITE_VREG(HEVC_MPRED_ABV_START_ADDR,
 			pbi->work_space_buf->mpred_above.buf_start);
@@ -8639,12 +8563,10 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	if (pbi->is_used_v4l) {
 		WRITE_VREG(HEVC_SAO_Y_LENGTH, pic_config->luma_size);
 		WRITE_VREG(HEVC_SAO_C_LENGTH, pic_config->chroma_size);
-		if (debug & PRINT_FLAG_V4L_DETAIL) {
-			pr_info("[%d] config pic, id: %d, Y:(%x, %d) C:(%x, %d).\n",
-				v4l2_ctx->id, pic_config->index,
-				pic_config->dw_y_adr, pic_config->luma_size,
-				pic_config->dw_u_v_adr, pic_config->chroma_size);
-		}
+		vp9_print(pbi, PRINT_FLAG_V4L_DETAIL, "[%d] config pic, id: %d, Y:(%x, %d) C:(%x, %d).\n",
+			v4l2_ctx->id, pic_config->index,
+			pic_config->dw_y_adr, pic_config->luma_size,
+			pic_config->dw_u_v_adr, pic_config->chroma_size);
 	} else {
 #ifdef VP9_10B_MMU_DW
 		if (pbi->dw_mmu_enable) {
@@ -8896,7 +8818,7 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 	int losless_comp_header_size, losless_comp_body_size;
 
 	if (debug && pbi->init_flag == 0)
-		pr_info("%s w %d h %d %x %x %x %x %x %x %x %x %x %x %x %x\n",
+		vp9_print(pbi, 0, "%s w %d h %d %x %x %x %x %x %x %x %x %x %x %x %x\n",
 			__func__,
 			buf_spec->max_width,
 			buf_spec->max_height,
@@ -8935,10 +8857,10 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 
 #ifdef LOSLESS_COMPRESS_MODE
 	losless_comp_header_size =
-		compute_losless_comp_header_size(pbi->init_pic_w,
+		compute_losless_comp_header_size(pbi, pbi->init_pic_w,
 		pbi->init_pic_h);
 	losless_comp_body_size =
-		compute_losless_comp_body_size(pbi->init_pic_w,
+		compute_losless_comp_body_size(pbi, pbi->init_pic_w,
 		pbi->init_pic_h, buf_alloc_depth == 10);
 #endif
 	WRITE_VREG(HEVCD_IPP_LINEBUFF_BASE,
@@ -8948,8 +8870,7 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) {
 		/* cfg_addr_adp*/
 		WRITE_VREG(HEVC_DBLK_CFGE, buf_spec->dblk_para.buf_start);
-		if (debug & VP9_DEBUG_BUFMGR_MORE)
-			pr_info("Write HEVC_DBLK_CFGE\n");
+		vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "Write HEVC_DBLK_CFGE\n");
 	}
 	/* cfg_p_addr */
 	WRITE_VREG(HEVC_DBLK_CFG4, buf_spec->dblk_para.buf_start);
@@ -9185,8 +9106,7 @@ void vp9_loop_filter_init(struct VP9Decoder_s *pbi)
 	WRITE_VREG(HEVC_DBLK_CFGB, data32);
 	if (pbi->front_back_mode == 1)
 		WRITE_VREG(HEVC_DBLK_CFGB_DBE1, data32);
-	if (debug & VP9_DEBUG_BUFMGR_MORE)
-		pr_info("[DBLK DEBUG] CFGB : 0x%x\n", data32);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "[DBLK DEBUG] CFGB : 0x%x\n", data32);
 }
 	/* perform this function per frame*/
 void vp9_loop_filter_frame_init(struct VP9Decoder_s *pbi, struct segmentation *seg,
@@ -9587,8 +9507,8 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 		/*Initialize mcrcc and decomp perf counters*/
 		if (mcrcc_cache_alg_flag &&
 			pbi->init_flag == 0) {
-			mcrcc_perfcount_reset();
-			decomp_perfcount_reset();
+			mcrcc_perfcount_reset(pbi);
+			decomp_perfcount_reset(pbi);
 		}
 	}
 	return;
@@ -9643,9 +9563,9 @@ static void config_vp9_clk_forced_on(void)
 static void dump_hit_rate(struct VP9Decoder_s *pbi)
 {
 	if (debug & VP9_DEBUG_CACHE_HIT_RATE) {
-		mcrcc_get_hitrate(pbi->m_ins_flag);
-		decomp_get_hitrate();
-		decomp_get_comprate();
+		mcrcc_get_hitrate(pbi, pbi->m_ins_flag);
+		decomp_get_hitrate(pbi);
+		decomp_get_comprate(pbi);
 	}
 }
 
@@ -9664,9 +9584,9 @@ static void  config_mcrcc_axi_hw(struct VP9Decoder_s *pbi)
 	}
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
-		mcrcc_get_hitrate(pbi->m_ins_flag);
-		decomp_get_hitrate();
-		decomp_get_comprate();
+		mcrcc_get_hitrate(pbi, pbi->m_ins_flag);
+		decomp_get_hitrate(pbi);
+		decomp_get_comprate(pbi);
 	}
 
 	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
@@ -9733,9 +9653,8 @@ static void  config_mcrcc_axi_hw_fb(struct VP9Decoder_s *pbi)
 	goldenref_inref = (cm->frame_refs[1].idx != INVALID_IDX) ? 1 : 0;
 	altref_inref = (cm->frame_refs[2].idx != INVALID_IDX) ? 1 : 0;
 
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("%s--0--lastref_inref:%d goldenref_inref:%d altref_inref:%d\n",
-			__func__, lastref_inref, goldenref_inref, altref_inref);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "%s--0--lastref_inref:%d goldenref_inref:%d altref_inref:%d\n",
+		__func__, lastref_inref, goldenref_inref, altref_inref);
 
 	WRITE_BACK_8(pbi, HEVCD_MCRCC_CTL1, 0x2); /* reset mcrcc */
 
@@ -9759,9 +9678,8 @@ static void  config_mcrcc_axi_hw_fb(struct VP9Decoder_s *pbi)
 	goldencanvas = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
 	altrefcanvas = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
 
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[test.c] lastref_canv:%x goldenref_canv:%x altref_canv:%x\n",
-			lastcanvas, goldencanvas, altrefcanvas);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[test.c] lastref_canv:%x goldenref_canv:%x altref_canv:%x\n",
+		lastcanvas, goldencanvas, altrefcanvas);
 
 	altref_inref = ((altref_inref == 1) &&
 			(altrefcanvas != (goldenref_inref
@@ -9771,19 +9689,17 @@ static void  config_mcrcc_axi_hw_fb(struct VP9Decoder_s *pbi)
 	goldenref_inref = ((goldenref_inref == 1) &&
 		(goldencanvas != (lastref_inref ?
 		lastcanvas : 0xffffffff))) ? 1 : 0;
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[test.c]--1--lastref_inref:%d goldenref_inref:%d altref_inref:%d\n",
-			lastref_inref, goldenref_inref, altref_inref);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[test.c]--1--lastref_inref:%d goldenref_inref:%d altref_inref:%d\n",
+		lastref_inref, goldenref_inref, altref_inref);
 
 	altref_delta_picnum = altref_inref ? altref_delta_picnum : 0x7fffffff;
 	goldenref_delta_picnum = goldenref_inref ?
 		goldenref_delta_picnum : 0x7fffffff;
 	lastref_delta_picnum = lastref_inref ?
 		lastref_delta_picnum : 0x7fffffff;
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[test.c]--1--lastref_delta_picnum:%d goldenref_delta_picnum:%d altref_delta_picnum:%d\n",
-			lastref_delta_picnum, goldenref_delta_picnum,
-			altref_delta_picnum);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[test.c]--1--lastref_delta_picnum:%d goldenref_delta_picnum:%d altref_delta_picnum:%d\n",
+		lastref_delta_picnum, goldenref_delta_picnum,
+		altref_delta_picnum);
 	/*ARRAY SORT HERE DELTA/CANVAS ARRAY SORT -- use DELTA*/
 
 	refcanvas_array[0] = lastcanvas;
@@ -9904,9 +9820,8 @@ static void  config_mcrcc_axi_hw_new(struct VP9Decoder_s *pbi)
 	goldenref_inref = (cm->frame_refs[1].idx != INVALID_IDX) ? 1 : 0;
 	altref_inref = (cm->frame_refs[2].idx != INVALID_IDX) ? 1 : 0;
 
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("%s--0--lastref_inref:%d goldenref_inref:%d altref_inref:%d\n",
-			__func__, lastref_inref, goldenref_inref, altref_inref);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "%s--0--lastref_inref:%d goldenref_inref:%d altref_inref:%d\n",
+		__func__, lastref_inref, goldenref_inref, altref_inref);
 
 	WRITE_VREG(HEVCD_MCRCC_CTL1, 0x2); /* reset mcrcc */
 
@@ -9928,9 +9843,8 @@ static void  config_mcrcc_axi_hw_new(struct VP9Decoder_s *pbi)
 	goldencanvas = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
 	altrefcanvas = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
 
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[test.c] lastref_canv:%x goldenref_canv:%x altref_canv:%x\n",
-			lastcanvas, goldencanvas, altrefcanvas);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[test.c] lastref_canv:%x goldenref_canv:%x altref_canv:%x\n",
+		lastcanvas, goldencanvas, altrefcanvas);
 
 	altref_inref = ((altref_inref == 1) &&
 			(altrefcanvas != (goldenref_inref
@@ -9940,19 +9854,17 @@ static void  config_mcrcc_axi_hw_new(struct VP9Decoder_s *pbi)
 	goldenref_inref = ((goldenref_inref == 1) &&
 		(goldencanvas != (lastref_inref ?
 		lastcanvas : 0xffffffff))) ? 1 : 0;
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[test.c]--1--lastref_inref:%d goldenref_inref:%d altref_inref:%d\n",
-			lastref_inref, goldenref_inref, altref_inref);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[test.c]--1--lastref_inref:%d goldenref_inref:%d altref_inref:%d\n",
+		lastref_inref, goldenref_inref, altref_inref);
 
 	altref_delta_picnum = altref_inref ? altref_delta_picnum : 0x7fffffff;
 	goldenref_delta_picnum = goldenref_inref ?
 		goldenref_delta_picnum : 0x7fffffff;
 	lastref_delta_picnum = lastref_inref ?
 		lastref_delta_picnum : 0x7fffffff;
-	if (debug & VP9_DEBUG_CACHE)
-		pr_info("[test.c]--1--lastref_delta_picnum:%d goldenref_delta_picnum:%d altref_delta_picnum:%d\n",
-			lastref_delta_picnum, goldenref_delta_picnum,
-			altref_delta_picnum);
+	vp9_print(pbi, VP9_DEBUG_CACHE, "[test.c]--1--lastref_delta_picnum:%d goldenref_delta_picnum:%d altref_delta_picnum:%d\n",
+		lastref_delta_picnum, goldenref_delta_picnum,
+		altref_delta_picnum);
 	/*ARRAY SORT HERE DELTA/CANVAS ARRAY SORT -- use DELTA*/
 
 	refcanvas_array[0] = lastcanvas;
@@ -10191,7 +10103,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 	if (force_bufspec) {
 		memcpy(cur_buf_info, &amvvp9_workbuff_spec[force_bufspec & 0xf],
 		sizeof(struct BuffInfo_s));
-		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
+		vp9_print(pbi, 0, "force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
 #ifdef NEW_FRONT_BACK_CODE
 		// pyx
@@ -10242,7 +10154,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 #ifndef MV_USE_FIXED_BUF
 	if (!pbi->is_used_v4l) {
 		if (init_mv_buf_list(pbi) < 0) {
-			pr_err("%s: init_mv_buf_list fail\n", __func__);
+			vp9_err(pbi, 0, "%s: init_mv_buf_list fail\n", __func__);
 			return -1;
 		}
 	}
@@ -10269,7 +10181,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 				RPM_BUF_SIZE,
 				&pbi->rpm_phy_addr, "VP9_RPM_BUF");
 		if (pbi->rpm_addr == NULL) {
-			pr_err("%s: failed to alloc rpm buffer\n", __func__);
+			vp9_err(pbi, 0, "%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
 		}
 
@@ -10280,7 +10192,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 			LMEM_BUF_SIZE,
 			&pbi->lmem_phy_addr, "VP9_LMEM_BUF");
 	if (pbi->lmem_addr == NULL) {
-		pr_err("%s: failed to alloc lmem buffer\n", __func__);
+		vp9_err(pbi, 0, "%s: failed to alloc lmem buffer\n", __func__);
 		return -1;
 	}
 	pbi->lmem_ptr = pbi->lmem_addr;
@@ -10296,7 +10208,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 			u32 prob_addr, id;
 			id = tee_vp9_prob_malloc(&prob_addr);
 			if (prob_addr <= 0)
-				pr_err("%s, tee[%d] malloc prob buf failed\n", __func__, id);
+				vp9_err(pbi, 0, "%s, tee[%d] malloc prob buf failed\n", __func__, id);
 			else {
 				pbi->prob_buffer_phy_addr = prob_addr;
 				pbi->count_buffer_phy_addr = pbi->prob_buffer_phy_addr + PROB_BUF_SIZE;
@@ -10308,7 +10220,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 						PROB_BUF_SIZE,
 						&pbi->prob_buffer_phy_addr, "VP9_PROB_BUF");
 			if (pbi->prob_buffer_addr == NULL) {
-				pr_err("%s: failed to alloc prob_buffer\n", __func__);
+				vp9_err(pbi, 0, "%s: failed to alloc prob_buffer\n", __func__);
 				return -1;
 			}
 			memset(pbi->prob_buffer_addr, 0, PROB_BUF_SIZE);
@@ -10316,7 +10228,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 						COUNT_BUF_SIZE,
 						&pbi->count_buffer_phy_addr, "VP9_COUNT_BUF");
 			if (pbi->count_buffer_addr == NULL) {
-				pr_err("%s: failed to alloc count_buffer\n", __func__);
+				vp9_err(pbi, 0, "%s: failed to alloc count_buffer\n", __func__);
 				return -1;
 			}
 			memset(pbi->count_buffer_addr, 0, COUNT_BUF_SIZE);
@@ -10330,7 +10242,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 				mmu_map_size,
 				&pbi->frame_mmu_map_phy_addr, "VP9_MMU_BUF");
 		if (pbi->frame_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			vp9_err(pbi, 0, "%s: failed to alloc count_buffer\n", __func__);
 			return -1;
 		}
 		memset(pbi->frame_mmu_map_addr, 0, mmu_map_size);
@@ -10341,7 +10253,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 				mmu_map_size,
 				&pbi->frame_mmu_map_phy_addr_1, GFP_KERNEL);
 			if (pbi->frame_mmu_map_addr_1 == NULL) {
-				pr_err("%s: failed to alloc count_buffer\n", __func__);
+				vp9_err(pbi, 0, "%s: failed to alloc count_buffer\n", __func__);
 				return IRQ_HANDLED;
 			}
 			memset(pbi->frame_mmu_map_addr_1, 0, mmu_map_size);
@@ -10356,7 +10268,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 				dw_mmu_map_size,
 				&pbi->frame_mmu_dw_map_phy_addr, "VP9_DWMMU_BUF");
 		if (pbi->frame_mmu_dw_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer mmu dw\n", __func__);
+			vp9_err(pbi, 0, "%s: failed to alloc count_buffer mmu dw\n", __func__);
 			return -1;
 		}
 		memset(pbi->frame_mmu_dw_map_addr, 0, dw_mmu_map_size);
@@ -10367,7 +10279,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 				dw_mmu_map_size,
 				&pbi->frame_mmu_dw_map_phy_addr_1, GFP_KERNEL);
 			if (pbi->frame_mmu_dw_map_addr_1 == NULL) {
-				pr_err("%s: failed to alloc count_buffer mmu dw\n", __func__);
+				vp9_err(pbi, 0, "%s: failed to alloc count_buffer mmu dw\n", __func__);
 				return -1;
 			}
 			memset(pbi->frame_mmu_dw_map_addr_1, 0, dw_mmu_map_size);
@@ -10382,7 +10294,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 				STAGE_MMU_MAP_SIZE * STAGE_MAX_BUFFERS,
 				&pbi->stage_mmu_map_phy_addr, "VP9_STAGE_BUF");
 		if (pbi->stage_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			vp9_err(pbi, 0, "%s: failed to alloc count_buffer\n", __func__);
 			return -1;
 		}
 		memset(pbi->stage_mmu_map_addr,
@@ -10400,7 +10312,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		pbi->fb_rd_pos = 0;
 		ret = init_fb_bufstate(pbi);
 		if (ret < 0) {
-			pr_info("init_fb_bufstate failed\n");
+			vp9_err(pbi, 0, "init_fb_bufstate failed\n");
 			return ret;
 		}
 		copy_loopbufs_ptr(&pbi->next_bk[pbi->fb_wr_pos], &pbi->fr);
@@ -10699,13 +10611,12 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 			vf->index_disp = pbi->vf_get_count;
 			vf->frame_index = pbi->vf_get_count;
 			pbi->vf_get_count++;
-			if (debug & VP9_DEBUG_BUFMGR)
-				pr_info("%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
-					__func__, index, vf->type,
-					vf->width, vf->height,
-					vf->pts,
-					vf->pts_us64,
-					vf->timestamp);
+			vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
+				__func__, index, vf->type,
+				vf->width, vf->height,
+				vf->pts,
+				vf->pts_us64,
+				vf->timestamp);
 
 			if (kfifo_peek(&pbi->display_q, &next_vf) && next_vf) {
 				vf->next_vf_pts_valid = true;
@@ -10780,13 +10691,12 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	ATRACE_COUNTER(pbi->trace.new_q_name, kfifo_len(&pbi->newframe_q));
 	pbi->vf_put_count++;
 
-	if (debug & VP9_DEBUG_BUFMGR)
-		pr_info("%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
-			__func__, index, vf->type,
-			vf->width, vf->height,
-			vf->pts,
-			vf->pts_us64,
-			vf->timestamp);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
+		__func__, index, vf->type,
+		vf->width, vf->height,
+		vf->pts,
+		vf->pts_us64,
+		vf->timestamp);
 
 	if (index < pbi->used_buf_num) {
 		struct VP9_Common_s *cm = &pbi->common;
@@ -10854,10 +10764,9 @@ void inc_vf_ref(struct VP9Decoder_s *pbi, int index)
 
 	cm->buffer_pool->frame_bufs[index].buf.vf_ref++;
 
-	if (debug & VP9_DEBUG_BUFMGR_MORE)
-		pr_info("%s index = %d new vf_ref = %d\r\n",
-			__func__, index,
-			cm->buffer_pool->frame_bufs[index].buf.vf_ref);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "%s index = %d new vf_ref = %d\n",
+		__func__, index,
+		cm->buffer_pool->frame_bufs[index].buf.vf_ref);
 }
 
 static int frame_duration_adapt(struct VP9Decoder_s *pbi, struct vframe_s *vf, u32 valid)
@@ -10896,7 +10805,7 @@ static int frame_duration_adapt(struct VP9Decoder_s *pbi, struct vframe_s *vf, u
 			if (close_to(pts_duration, old_duration, 2000)) {
 				pbi->frame_dur = pts_duration;
 				if ((debug & VP9_DEBUG_OUT_PTS) != 0)
-					pr_info("use calc duration %d\n", pts_duration);
+					vp9_print(pbi, 0, "use calc duration %d\n", pts_duration);
 			}
 
 			if (pbi->duration_from_pts_done == 0) {
@@ -11018,10 +10927,9 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 	u32 frame_size = 0;
 	int i = 0;
 
-	if (debug & VP9_DEBUG_BUFMGR)
-		pr_info("%s index = %d\r\n", __func__, pic_config->index);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s index = %d\n", __func__, pic_config->index);
 	if (kfifo_get(&pbi->newframe_q, &vf) == 0) {
-		pr_info("fatal error, no available buffer slot.");
+		vp9_err(pbi, 0, "fatal error, no available buffer slot.");
 		return -1;
 	}
 
@@ -11219,7 +11127,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					else if ((mode == 1 || mode == 2 || mode == 4)
 					&& (debug & VP9_DEBUG_OUT_PTS) == 0) {
 						vf->compHeadAddr = pic_config->header_dw_adr;
-						pr_debug("Use dw mmu for display\n");
+						vp9_print(pbi, 0, "Use dw mmu for display\n");
 					}
 				}
 #endif
@@ -11408,7 +11316,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		} else {
 			pbi->stat |= VP9_TRIGGER_FRAME_DONE;
 			hevc_source_changed(VFORMAT_VP9, 196, 196, 30);
-			pr_debug("[%s %d] drop trigger frame width %d height %d  state 0x%x\n",
+			vp9_print(pbi, 0, "[%s %d] drop trigger frame width %d height %d  state 0x%x\n",
 				__func__, __LINE__, vf->width,
 				vf->height, pbi->stat);
 		}
@@ -11438,7 +11346,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			if (index == INVALID_IDX) {
 				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
 				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &aml_buf, AML_FB_REQ_DEC) < 0) {
-					pr_err("[%d] EOS get free buff fail.\n", ctx->id);
+					vp9_err(hw, 0, "[%d] EOS get free buff fail.\n", ctx->id);
 					return -1;
 				}
 			}
@@ -11460,19 +11368,18 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
 
-		pr_info("[%d] VP9 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
+		vp9_print(hw, 0, "[%d] VP9 EOS notify.\n", (hw->is_used_v4l)?ctx->id:vdec->id);
 	}
 
 	return 0;
 }
 
-static void get_rpm_param(union param_u *params)
+static void get_rpm_param(struct VP9Decoder_s *pbi, union param_u *params)
 {
 	int i;
 	unsigned int data32;
 
-	if (debug & VP9_DEBUG_BUFMGR)
-		pr_info("enter %s\r\n", __func__);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "enter %s\n", __func__);
 	for (i = 0; i < 128; i++) {
 		do {
 			data32 = READ_VREG(RPM_CMD_REG);
@@ -11482,8 +11389,7 @@ static void get_rpm_param(union param_u *params)
 		/*pr_info("%x\n", data32);*/
 		WRITE_VREG(RPM_CMD_REG, 0);
 	}
-	if (debug & VP9_DEBUG_BUFMGR)
-		pr_info("leave %s\r\n", __func__);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "leave %s\n", __func__);
 }
 static void debug_buffer_mgr_more(struct VP9Decoder_s *pbi)
 {
@@ -11491,69 +11397,73 @@ static void debug_buffer_mgr_more(struct VP9Decoder_s *pbi)
 
 	if (!(debug & VP9_DEBUG_BUFMGR_MORE))
 		return;
-	pr_info("vp9_param: (%d)\n", pbi->slice_idx);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "vp9_param: (%d)\n", pbi->slice_idx);
 	for (i = 0; i < (RPM_END-RPM_BEGIN); i++) {
-		pr_info("%04x ", pbi->vp9_param.l.data[i]);
+		if ((i & 0xf) == 0)
+			vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "%04x ", pbi->vp9_param.l.data[i]);
+		else
+			vp9_print_cont(pbi, VP9_DEBUG_BUFMGR_MORE, "%04x ", pbi->vp9_param.l.data[i]);
 		if (((i + 1) & 0xf) == 0)
-			pr_info("\n");
+			vp9_print_cont(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
 	}
-	pr_info("=============param==========\r\n");
-	pr_info("profile               %x\r\n", pbi->vp9_param.p.profile);
-	pr_info("show_existing_frame   %x\r\n",
-	pbi->vp9_param.p.show_existing_frame);
-	pr_info("frame_to_show_idx     %x\r\n",
-	pbi->vp9_param.p.frame_to_show_idx);
-	pr_info("frame_type            %x\r\n", pbi->vp9_param.p.frame_type);
-	pr_info("show_frame            %x\r\n", pbi->vp9_param.p.show_frame);
-	pr_info("e.r.r.o.r_resilient_mode  %x\r\n",
-	pbi->vp9_param.p.error_resilient_mode);
-	pr_info("intra_only            %x\r\n", pbi->vp9_param.p.intra_only);
-	pr_info("display_size_present  %x\r\n",
-	pbi->vp9_param.p.display_size_present);
-	pr_info("reset_frame_context   %x\r\n",
-	pbi->vp9_param.p.reset_frame_context);
-	pr_info("refresh_frame_flags   %x\r\n",
-	pbi->vp9_param.p.refresh_frame_flags);
-	pr_info("bit_depth             %x\r\n", pbi->vp9_param.p.bit_depth);
-	pr_info("width                 %x\r\n", pbi->vp9_param.p.width);
-	pr_info("height                %x\r\n", pbi->vp9_param.p.height);
-	pr_info("display_width         %x\r\n", pbi->vp9_param.p.display_width);
-	pr_info("display_height        %x\r\n", pbi->vp9_param.p.display_height);
-	pr_info("ref_info              %x\r\n", pbi->vp9_param.p.ref_info);
-	pr_info("same_frame_size       %x\r\n", pbi->vp9_param.p.same_frame_size);
+	vp9_print_cont(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "=============param==========\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "profile               %x\n", pbi->vp9_param.p.profile);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "show_existing_frame   %x\n",
+		pbi->vp9_param.p.show_existing_frame);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "frame_to_show_idx     %x\n",
+		pbi->vp9_param.p.frame_to_show_idx);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "frame_type            %x\n", pbi->vp9_param.p.frame_type);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "show_frame            %x\n", pbi->vp9_param.p.show_frame);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "e.r.r.o.r_resilient_mode  %x\n",
+		pbi->vp9_param.p.error_resilient_mode);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "intra_only            %x\n", pbi->vp9_param.p.intra_only);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "display_size_present  %x\n",
+		pbi->vp9_param.p.display_size_present);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "reset_frame_context   %x\n",
+		pbi->vp9_param.p.reset_frame_context);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "refresh_frame_flags   %x\n",
+		pbi->vp9_param.p.refresh_frame_flags);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "bit_depth             %x\n", pbi->vp9_param.p.bit_depth);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "width                 %x\n", pbi->vp9_param.p.width);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "height                %x\n", pbi->vp9_param.p.height);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "display_width         %x\n", pbi->vp9_param.p.display_width);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "display_height        %x\n", pbi->vp9_param.p.display_height);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "ref_info              %x\n", pbi->vp9_param.p.ref_info);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "same_frame_size       %x\n", pbi->vp9_param.p.same_frame_size);
 	if (!(debug & VP9_DEBUG_DBG_LF_PRINT))
 		return;
-	pr_info("mode_ref_delta_enabled: 0x%x\r\n",
-	pbi->vp9_param.p.mode_ref_delta_enabled);
-	pr_info("sharpness_level: 0x%x\r\n",
-	pbi->vp9_param.p.sharpness_level);
-	pr_info("ref_deltas: 0x%x, 0x%x, 0x%x, 0x%x\r\n",
-	pbi->vp9_param.p.ref_deltas[0], pbi->vp9_param.p.ref_deltas[1],
-	pbi->vp9_param.p.ref_deltas[2], pbi->vp9_param.p.ref_deltas[3]);
-	pr_info("mode_deltas: 0x%x, 0x%x\r\n", pbi->vp9_param.p.mode_deltas[0],
-	pbi->vp9_param.p.mode_deltas[1]);
-	pr_info("filter_level: 0x%x\r\n", pbi->vp9_param.p.filter_level);
-	pr_info("seg_enabled: 0x%x\r\n", pbi->vp9_param.p.seg_enabled);
-	pr_info("seg_abs_delta: 0x%x\r\n", pbi->vp9_param.p.seg_abs_delta);
-	pr_info("seg_lf_feature_enabled: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\r\n",
-	(pbi->vp9_param.p.seg_lf_info[0]>>15 & 1),
-	(pbi->vp9_param.p.seg_lf_info[1]>>15 & 1),
-	(pbi->vp9_param.p.seg_lf_info[2]>>15 & 1),
-	(pbi->vp9_param.p.seg_lf_info[3]>>15 & 1),
-	(pbi->vp9_param.p.seg_lf_info[4]>>15 & 1),
-	(pbi->vp9_param.p.seg_lf_info[5]>>15 & 1),
-	(pbi->vp9_param.p.seg_lf_info[6]>>15 & 1),
-	(pbi->vp9_param.p.seg_lf_info[7]>>15 & 1));
-	pr_info("seg_lf_feature_data: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\r\n",
-	(pbi->vp9_param.p.seg_lf_info[0] & 0x13f),
-	(pbi->vp9_param.p.seg_lf_info[1] & 0x13f),
-	(pbi->vp9_param.p.seg_lf_info[2] & 0x13f),
-	(pbi->vp9_param.p.seg_lf_info[3] & 0x13f),
-	(pbi->vp9_param.p.seg_lf_info[4] & 0x13f),
-	(pbi->vp9_param.p.seg_lf_info[5] & 0x13f),
-	(pbi->vp9_param.p.seg_lf_info[6] & 0x13f),
-	(pbi->vp9_param.p.seg_lf_info[7] & 0x13f));
-
+	vp9_print(pbi, VP9_DEBUG_DBG_LF_PRINT, "mode_ref_delta_enabled: 0x%x\n",
+		pbi->vp9_param.p.mode_ref_delta_enabled);
+	vp9_print(pbi, VP9_DEBUG_DBG_LF_PRINT, "sharpness_level: 0x%x\n",
+		pbi->vp9_param.p.sharpness_level);
+	vp9_print(pbi, VP9_DEBUG_DBG_LF_PRINT, "ref_deltas: 0x%x, 0x%x, 0x%x, 0x%x\n",
+		pbi->vp9_param.p.ref_deltas[0], pbi->vp9_param.p.ref_deltas[1],
+		pbi->vp9_param.p.ref_deltas[2], pbi->vp9_param.p.ref_deltas[3]);
+	vp9_print(pbi, VP9_DEBUG_DBG_LF_PRINT, "mode_deltas: 0x%x, 0x%x\n", pbi->vp9_param.p.mode_deltas[0],
+		pbi->vp9_param.p.mode_deltas[1]);
+	vp9_print(pbi, VP9_DEBUG_DBG_LF_PRINT, "filter_level: 0x%x\n", pbi->vp9_param.p.filter_level);
+	vp9_print(pbi, VP9_DEBUG_DBG_LF_PRINT, "seg_enabled: 0x%x\n", pbi->vp9_param.p.seg_enabled);
+	vp9_print(pbi, VP9_DEBUG_DBG_LF_PRINT, "seg_abs_delta: 0x%x\n", pbi->vp9_param.p.seg_abs_delta);
+	vp9_print(pbi, VP9_DEBUG_DBG_LF_PRINT, "seg_lf_feature_enabled: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+		(pbi->vp9_param.p.seg_lf_info[0]>>15 & 1),
+		(pbi->vp9_param.p.seg_lf_info[1]>>15 & 1),
+		(pbi->vp9_param.p.seg_lf_info[2]>>15 & 1),
+		(pbi->vp9_param.p.seg_lf_info[3]>>15 & 1),
+		(pbi->vp9_param.p.seg_lf_info[4]>>15 & 1),
+		(pbi->vp9_param.p.seg_lf_info[5]>>15 & 1),
+		(pbi->vp9_param.p.seg_lf_info[6]>>15 & 1),
+		(pbi->vp9_param.p.seg_lf_info[7]>>15 & 1));
+	vp9_print(pbi, VP9_DEBUG_DBG_LF_PRINT, "seg_lf_feature_data: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+		(pbi->vp9_param.p.seg_lf_info[0] & 0x13f),
+		(pbi->vp9_param.p.seg_lf_info[1] & 0x13f),
+		(pbi->vp9_param.p.seg_lf_info[2] & 0x13f),
+		(pbi->vp9_param.p.seg_lf_info[3] & 0x13f),
+		(pbi->vp9_param.p.seg_lf_info[4] & 0x13f),
+		(pbi->vp9_param.p.seg_lf_info[5] & 0x13f),
+		(pbi->vp9_param.p.seg_lf_info[6] & 0x13f),
+		(pbi->vp9_param.p.seg_lf_info[7] & 0x13f));
 }
 
 static int recycle_mmu_buf_tail(struct VP9Decoder_s *pbi,
@@ -11679,7 +11589,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 	if ((pbi->vp9_param.p.bit_depth >= VPX_BITS_10) &&
 		(get_double_write_mode(pbi) == 0x10)) {
 		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		pr_err("fatal err, bit_depth %d, unsupport dw 0x10\n",
+		vp9_err(pbi, 0, "fatal err, bit_depth %d, unsupport dw 0x10\n",
 			pbi->vp9_param.p.bit_depth);
 		start_process_time(pbi);
 		return -1;
@@ -11705,7 +11615,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 			if (ret >= 0)
 				cm->cur_fb_idx_mmu = cm->new_fb_idx;
 			else
-				pr_err("can't alloc need mmu1,idx %d ret =%d\n",
+				vp9_err(pbi, 0, "can't alloc need mmu1,idx %d ret =%d\n",
 					cm->new_fb_idx,
 					ret);
 
@@ -11718,7 +11628,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 					params->p.bit_depth,
 					pbi->frame_mmu_dw_map_addr);
 				if (ret < 0)
-					pr_err("can't alloc need dw mmu1,idx %d ret =%d\n",
+					vp9_err(pbi, 0, "can't alloc need dw mmu1,idx %d ret =%d\n",
 						cm->new_fb_idx,
 						ret);
 			}
@@ -11731,7 +11641,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		(params->p.height << 16) | params->p.width);
 	}
 	if (ret < 0) {
-		pr_info("vp9_bufmgr_process=> %d, VP9_10B_DISCARD_NAL\r\n",
+		vp9_print(pbi, 0, "vp9_bufmgr_process=> %d, VP9_10B_DISCARD_NAL\n",
 			ret);
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VP9_10B_DISCARD_NAL);
 		cm->show_frame = 0;
@@ -11961,7 +11871,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		/*pr_info("HEVC_DEC_STATUS_REG <= VP9_10B_DECODE_SLICE\n");*/
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VP9_10B_DECODE_SLICE);
 	} else {
-		pr_info("Skip search next start code\n");
+		vp9_print(pbi, 0, "Skip search next start code\n");
 		cm->prev_fb_idx = INVALID_IDX;
 		pbi->start_decoder_flag = 1;
 		/*skip, search next start code*/
@@ -12521,7 +12431,7 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 			(pbi->frame_width != pbi->last_width ||
 			pbi->frame_height != pbi->last_height)) {
 
-			vp9_print(pbi, 0, "%s (%d,%d)=>(%d,%d)\r\n", __func__, pbi->last_width,
+			vp9_print(pbi, 0, "%s (%d,%d)=>(%d,%d)\n", __func__, pbi->last_width,
 				pbi->last_height, pbi->frame_width, pbi->frame_height);
 
 			if (get_valid_double_write_mode(pbi) != 16) {
@@ -12712,7 +12622,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	int i;
 
 	/*if (pbi->wait_buf)
-	 *	pr_info("set wait_buf to 0\r\n");
+	 *	pr_info("set wait_buf to 0\n");
 	 */
 
 	if (dec_status == VP9_HEAD_PARSER_DONE) {
@@ -12847,8 +12757,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 				vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_CB, 0);
-				if (debug & PRINT_FLAG_VDEC_DETAIL)
-					pr_info("%s VP9 frame done \n", __func__);
+				vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL, "%s VP9 frame done \n", __func__);
 #endif
 			}
 		}
@@ -12864,12 +12773,12 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			reset_process_time(pbi);
 #endif
 
-		pr_info("VP9_EOS, flush buffer\r\n");
+		vp9_print(pbi, 0, "VP9_EOS, flush buffer\n");
 
 		if (cm->new_fb_idx != INVALID_IDX)
 			vp9_bufmgr_postproc(pbi);
 
-		pr_info("send VP9_10B_DISCARD_NAL\r\n");
+		vp9_print(pbi, 0, "send VP9_10B_DISCARD_NAL\n");
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VP9_10B_DISCARD_NAL);
 		pbi->process_busy = 0;
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -12889,7 +12798,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #endif
 		return IRQ_HANDLED;
 	} else if (dec_status == HEVC_DECODE_OVER_SIZE) {
-		pr_info("vp9  decode oversize !!\n");
+		vp9_print(pbi, 0, "vp9  decode oversize !!\n");
 		debug |= (VP9_DEBUG_DIS_LOC_ERROR_PROC |
 			VP9_DEBUG_DIS_SYS_ERROR_PROC);
 		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
@@ -12908,7 +12817,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		if (pbi->m_ins_flag &&
 				!get_free_buf_count(pbi)) {
 			pbi->run_ready_min_buf_num = pbi->one_package_frame_cnt + 1;
-			pr_err("need buffer, one package frame count = %d\n", pbi->one_package_frame_cnt + 1);
+			vp9_err(pbi, 0, "need buffer, one package frame count = %d\n", pbi->one_package_frame_cnt + 1);
 			pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
 			vdec_schedule_work(&pbi->work);
 			return IRQ_HANDLED;
@@ -12920,8 +12829,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 		if (pbi->m_ins_flag ==0 && pbi->low_latency_flag) {
 			vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_RUN, 0);
-			if (debug & PRINT_FLAG_VDEC_DETAIL)
-				pr_info("%s VP9 frame header found \n", __func__);
+			vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL, "%s VP9 frame header found \n", __func__);
 		}
 #endif
 		if (pbi->m_ins_flag)
@@ -12951,7 +12859,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		}
 
 		if (debug & VP9_DEBUG_SEND_PARAM_WITH_REG) {
-			get_rpm_param(&pbi->vp9_param);
+			get_rpm_param(pbi, &pbi->vp9_param);
 		} else {
 #ifdef SUPPORT_FB_DECODING
 			if (pbi->used_stage_buf_num > 0) {
@@ -13186,17 +13094,15 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 		return IRQ_HANDLED;
 	pbi->dec_status = dec_status;
 	pbi->process_busy = 1;
-	if (debug & VP9_DEBUG_BUFMGR)
-		pr_info("vp9 isr (%d) dec status  = 0x%x, lcu 0x%x shiftbyte 0x%x (%x %x lev %x, wr %x, rd %x)\n",
-			irq,
-			dec_status, READ_VREG(HEVC_PARSER_LCU_START),
-			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
-			READ_VREG(HEVC_STREAM_START_ADDR),
-			READ_VREG(HEVC_STREAM_END_ADDR),
-			READ_VREG(HEVC_STREAM_LEVEL),
-			READ_VREG(HEVC_STREAM_WR_PTR),
-			READ_VREG(HEVC_STREAM_RD_PTR)
-		);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "vp9 isr (%d) dec status  = 0x%x, lcu 0x%x shiftbyte 0x%x (%x %x lev %x, wr %x, rd %x)\n",
+		irq,
+		dec_status, READ_VREG(HEVC_PARSER_LCU_START),
+		READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+		READ_VREG(HEVC_STREAM_START_ADDR),
+		READ_VREG(HEVC_STREAM_END_ADDR),
+		READ_VREG(HEVC_STREAM_LEVEL),
+		READ_VREG(HEVC_STREAM_WR_PTR),
+		READ_VREG(HEVC_STREAM_RD_PTR));
 #ifdef SUPPORT_FB_DECODING
 	/*if (irq != VDEC_IRQ_0)
 		return IRQ_WAKE_THREAD;*/
@@ -13204,19 +13110,19 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 
 	debug_tag = READ_HREG(DEBUG_REG1);
 	if (debug_tag & 0x10000) {
-		pr_info("LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
+		vp9_print(pbi, 0, "LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
 		for (i = 0; i < 0x400; i += 4) {
 			int ii;
 			if ((i & 0xf) == 0)
-				pr_info("%03x: ", i);
+				vp9_print(pbi, 0, "%03x: ", i);
 			for (ii = 0; ii < 4; ii++) {
-				pr_info("%04x ",
+				vp9_print_cont(pbi, 0, "%04x ",
 					   pbi->lmem_ptr[i + 3 - ii]);
 			}
 			if (((i + ii) & 0xf) == 0)
-				pr_info("\n");
+				vp9_print_cont(pbi, 0, "\n");
 		}
-
+		vp9_print_cont(pbi, 0, "\n");
 		if ((udebug_pause_pos == (debug_tag & 0xffff)) &&
 			(udebug_pause_decode_idx == 0 ||
 			udebug_pause_decode_idx == pbi->slice_idx) &&
@@ -13230,10 +13136,9 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 		else
 			WRITE_HREG(DEBUG_REG1, 0);
 	} else if (debug_tag != 0) {
-		pr_info(
-			"dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
-				READ_HREG(DEBUG_REG2),
-				READ_VREG(HEVC_PARSER_LCU_START));
+		vp9_print(pbi, 0, "dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
+			READ_HREG(DEBUG_REG2),
+			READ_VREG(HEVC_PARSER_LCU_START));
 		if ((udebug_pause_pos == (debug_tag & 0xffff)) &&
 			(udebug_pause_decode_idx == 0 ||
 			udebug_pause_decode_idx == pbi->slice_idx) &&
@@ -13273,7 +13178,7 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 		if (get_free_buf_count(pbi) <= 0) {
 			/*
 			if (pbi->wait_buf == 0)
-				pr_info("set wait_buf to 1\r\n");
+				pr_info("set wait_buf to 1\n");
 			*/
 			pbi->wait_buf = 1;
 			pbi->process_busy = 0;
@@ -13312,7 +13217,7 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 			cur_prob_b = ((uint8_t *)pbi->prob_buffer_addr) + 0x4000;
 			count_b = (uint8_t *)pbi->count_buffer_addr;
 
-			adapt_coef_probs(pbi->pic_count,
+			adapt_coef_probs(pbi, pbi->pic_count,
 				(cm->last_frame_type == KEY_FRAME),
 				pre_fc, (adapt_prob_status >> 8),
 				(unsigned int *)prev_prob_b,
@@ -13475,8 +13380,7 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 	}
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (debug & VP9_DEBUG_FORCE_SEND_AGAIN) {
-		pr_info(
-		"Force Send Again\r\n");
+		vp9_print(pbi, VP9_DEBUG_FORCE_SEND_AGAIN, "Force Send Again\n");
 		debug &= ~VP9_DEBUG_FORCE_SEND_AGAIN;
 		reset_process_time(pbi);
 		pbi->dec_result = DEC_RESULT_AGAIN;
@@ -13526,9 +13430,9 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 	if (radr != 0) {
 		if (rval != 0) {
 			WRITE_VREG(radr, rval);
-			pr_info("WRITE_VREG(%x,%x)\n", radr, rval);
+			vp9_print(pbi, 0, "WRITE_VREG(%x,%x)\n", radr, rval);
 		} else
-			pr_info("READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
+			vp9_print(pbi, 0, "READ_VREG(%x)=%x\n", radr, READ_VREG(radr));
 		rval = 0;
 		radr = 0;
 	}
@@ -13536,20 +13440,21 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 		int i;
 		u32 sum = 0;
 
-		pr_info("pop stream 0x%x shorts\r\n", pop_shorts);
+		vp9_print(pbi, 0, "pop stream 0x%x shorts\n", pop_shorts);
 		for (i = 0; i < pop_shorts; i++) {
 			u32 data =
 			(READ_HREG(HEVC_SHIFTED_DATA) >> 16);
 			WRITE_HREG(HEVC_SHIFT_COMMAND,
 			(1<<7)|16);
 			if ((i & 0xf) == 0)
-				pr_info("%04x:", i);
-			pr_info("%04x ", data);
+				vp9_print(pbi, 0, "%04x:", i);
+			vp9_print_cont(pbi, 0, "%04x ", data);
 			if (((i + 1) & 0xf) == 0)
-				pr_info("\r\n");
+				vp9_print_cont(pbi, 0, "\n");
 			sum += data;
 		}
-		pr_info("\r\nsum = %x\r\n", sum);
+		vp9_print_cont(pbi, 0, "\n");
+		vp9_print(pbi, 0, "sum = %x\n", sum);
 		pop_shorts = 0;
 	}
 	if (dbg_cmd != 0) {
@@ -13567,7 +13472,7 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 					& 0xff), &cur_canvas);
 				disp_laddr = cur_canvas.addr;
 			}
-			pr_info("current displayed buffer address %x\r\n",
+			vp9_print(pbi, 0, "current displayed buffer address %x\n",
 				disp_laddr);
 		}
 		dbg_cmd = 0;
@@ -13678,8 +13583,7 @@ static void vvp9_prot_init(struct VP9Decoder_s *pbi, u32 mask)
 	if ((mask & HW_MASK_FRONT) == 0)
 		return;
 #if 1
-	if (debug & VP9_DEBUG_BUFMGR_MORE)
-		pr_info("%s\n", __func__);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE, "%s\n", __func__);
 #if 0
 	data32 = READ_VREG(HEVC_STREAM_CONTROL);
 	data32 = data32 |
@@ -13792,7 +13696,7 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 
 	pbi->gvs = vzalloc(sizeof(struct vdec_info));
 	if (NULL == pbi->gvs) {
-		pr_info("the struct of vdec status malloc failed.\n");
+		vp9_print(pbi, 0, "the struct of vdec status malloc failed.\n");
 		return -1;
 	}
 	vdec_set_vframe_comm(hw_to_vdec(pbi), DRIVER_NAME);
@@ -13839,7 +13743,7 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 	if (!pbi->pts_unstable) {
 		pbi->pts_unstable =
 		(pbi->vvp9_amstream_dec_info.rate == 0)?1:0;
-		pr_debug("set pts unstable\n");
+		vp9_print(pbi, 0, "set pts unstable\n");
 	}
 
 	return ret;
@@ -13882,14 +13786,14 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 
 		fw_back->len = get_firmware_data(VIDEO_DEC_VP9_BACK, fw_back->data);
 		if (fw_back->len < 0) {
-			pr_err("get back firmware fail.\n");
+			vp9_err(pbi, 0, "get back firmware fail.\n");
 			vfree(fw_back);
 			return -1;
 		}
 	} else
 #endif
 	if (get_firmware_data(VIDEO_DEC_VP9_MMU, fw->data) < 0) {
-		pr_err("get firmware fail.\n");
+		vp9_err(pbi, 0, "get firmware fail.\n");
 		vfree(fw);
 		return -1;
 	}
@@ -13942,7 +13846,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
-		pr_err("VP9: the %s fw loading failed, err: %x\n",
+		vp9_err(pbi, 0, "VP9: the %s fw loading failed, err: %x\n",
 			fw_tee_enabled() ? "TEE" : "local", ret);
 #ifdef NEW_FB_CODE
 		vfree(fw_back);
@@ -13962,7 +13866,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 				vvp9_isr_thread_fn,
 				IRQF_ONESHOT,/*run thread on this irq disabled*/
 				"vvp9-irq", (void *)pbi)) {
-		pr_info("vvp9 irq register error.\n");
+		vp9_err(pbi, 0, "vvp9 irq register error.\n");
 		amhevc_disable();
 #ifdef NEW_FB_CODE
 		vfree(fw_back);
@@ -14015,7 +13919,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 
 	pbi->init_flag = 1;
 	pbi->process_busy = 0;
-	pr_info("%d, vvp9_init, RP=0x%x\n",
+	vp9_print(pbi, 0, "%d, vvp9_init, RP=0x%x\n",
 		__LINE__, READ_VREG(HEVC_STREAM_RD_PTR));
 	return 0;
 }
@@ -14174,7 +14078,7 @@ static int amvdec_vp9_mmu_init(struct VP9Decoder_s *pbi)
 			tvp_flag
 			);
 		if (!pbi->mmu_box) {
-			pr_err("vp9 alloc mmu box failed!!\n");
+			vp9_err(pbi, 0, "vp9 alloc mmu box failed!!\n");
 			return -1;
 		}
 #ifdef NEW_FB_CODE
@@ -14185,7 +14089,7 @@ static int amvdec_vp9_mmu_init(struct VP9Decoder_s *pbi)
 			tvp_flag
 			);
 			if (!pbi->mmu_box_1) {
-				pr_err("vp9 alloc mmu box 1 failed!!\n");
+				vp9_err(pbi, 0, "vp9 alloc mmu box 1 failed!!\n");
 				return -1;
 			}
 		}
@@ -14199,7 +14103,7 @@ static int amvdec_vp9_mmu_init(struct VP9Decoder_s *pbi)
 			tvp_flag
 			);
 		if (!pbi->mmu_box_dw) {
-			pr_err("vp9 alloc mmu dw box failed!!\n");
+			vp9_err(pbi, 0, "vp9 alloc mmu dw box failed!!\n");
 		}
 #ifdef NEW_FB_CODE
 		if (pbi->front_back_mode) {
@@ -14209,7 +14113,7 @@ static int amvdec_vp9_mmu_init(struct VP9Decoder_s *pbi)
 				tvp_flag
 				);
 			if (!pbi->mmu_box_dw_1) {
-				pr_err("vp9 alloc mmu dw box 1 failed!!\n");
+				vp9_err(pbi, 0, "vp9 alloc mmu dw box 1 failed!!\n");
 			}
 		}
 #endif
@@ -14225,7 +14129,7 @@ static int amvdec_vp9_mmu_init(struct VP9Decoder_s *pbi)
 			tvp_flag,
 			BMMU_ALLOC_FLAGS_WAITCLEAR);
 	if (!pbi->bmmu_box) {
-		pr_err("vp9 alloc bmmu box failed!!\n");
+		vp9_err(pbi, 0, "vp9 alloc bmmu box failed!!\n");
 		return -1;
 	}
 	return 0;
@@ -14408,7 +14312,7 @@ static void vdec_fence_release(struct VP9Decoder_s *pbi,
 	expires = jiffies + msecs_to_jiffies(2000);
 	while (!check_objs_all_signaled(sync)) {
 		if (time_after(jiffies, expires)) {
-			pr_err("wait fence signaled timeout.\n");
+			vp9_err(pbi, 0, "wait fence signaled timeout.\n");
 			break;
 		}
 	}
@@ -15059,7 +14963,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		not_run2_ready[pbi->index]++;
 
 	vp9_print(pbi,
-		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx=>%lx (%d %d %d %d)\r\n",
+		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx=>%lx (%d %d %d %d)\n",
 		__func__, mask, ret,
 		get_free_stage_buf_num(pbi),
 		mv_buf_available(pbi),
@@ -15111,7 +15015,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 #endif
 
 	vp9_print(pbi,
-		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx=>%lx\r\n",
+		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx=>%lx\n",
 		__func__, mask, ret);
 	return ret;
 #endif
@@ -15250,7 +15154,7 @@ static void run_front(struct vdec_s *vdec)
 			if (!pbi->chunk->block->is_mapped)
 				codec_mm_unmap_phyaddr(data);
 		}
-		vp9_print_cont(pbi, 0, "\r\n");
+		vp9_print_cont(pbi, 0, "\n");
 	}
 	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
 	if (test_debug == 4) {
@@ -15661,7 +15565,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		(struct VP9Decoder_s *)vdec->private;
 	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_RUN_START);
 	vp9_print(pbi,
-		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx\r\n",
+		PRINT_FLAG_VDEC_DETAIL, "%s mask %lx\n",
 		__func__, mask);
 
 #ifdef NEW_FB_CODE
@@ -15770,11 +15674,11 @@ static void reset(struct vdec_s *vdec)
 
 	vp9_local_uninit(pbi);
 	if (vvp9_local_init(pbi) < 0)
-		vp9_print(pbi, 0, "%s local_init failed \r\n", __func__);
+		vp9_print(pbi, 0, "%s local_init failed \n", __func__);
 
 	vp9_decoder_ctx_reset(pbi);
 
-	vp9_print(pbi, 0, "%s\r\n", __func__);
+	vp9_print(pbi, 0, "%s\n", __func__);
 }
 
 static irqreturn_t vp9_irq_cb(struct vdec_s *vdec, int irq)
@@ -15941,7 +15845,7 @@ static void vp9_dump_state(struct vdec_s *vdec)
 					vp9_print_cont(pbi, 0,
 						"\n");
 			}
-
+			vp9_print_cont(pbi, 0, "\n");
 			if (!pbi->chunk->block->is_mapped)
 				codec_mm_unmap_phyaddr(data);
 		}
@@ -15964,13 +15868,13 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
 		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXL ||
 		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) {
-		pr_info("vp9 unsupported on cpu 0x%x\n", get_cpu_major_id());
+		pr_info("%d: vp9 unsupported on cpu 0x%x\n", pdev->id, get_cpu_major_id());
 		return -EINVAL;
 	}
-	pr_debug("%s_dual\n", __func__);
+	pr_debug("%d: %s_dual\n", pdev->id, __func__);
 
 	if (pdata == NULL) {
-		pr_info("\nammvdec_vp9 memory resource undefined.\n");
+		pr_info("%d: [ERR]: ammvdec_vp9 memory resource undefined.\n", pdev->id);
 		return -EFAULT;
 	}
 	/*pbi = (struct VP9Decoder_s *)devm_kzalloc(&pdev->dev,
@@ -15979,7 +15883,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 
 	pbi = vmalloc(sizeof(struct VP9Decoder_s));
 	if (pbi == NULL) {
-		pr_info("\nammvdec_vp9 device data allocation failed\n");
+		pr_info("%d: [ERR]: ammvdec_vp9 device data allocation failed\n", pdev->id);
 		return -ENOMEM;
 	}
 	memset(pbi, 0, sizeof(struct VP9Decoder_s));
@@ -16251,7 +16155,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			pbi->double_write_mode &= ~(1 <<16);
 			triple_write_mode = 0;
 			pbi->triple_write_mode = 0;
-			pr_err("%s warn: unsupport triple write or p010 mode, force disabled\n", __func__);
+			vp9_err(pbi, 0, "%s warn: unsupport triple write or p010 mode, force disabled\n", __func__);
 		}
 	}
 #endif
@@ -16289,7 +16193,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pbi->run_ready_min_buf_num = run_ready_min_buf_num;
 
 	if (is_oversize(pbi->max_pic_w, pbi->max_pic_h)) {
-		pr_err("over size: %dx%d, probe failed\n",
+		vp9_err(pbi, 0, "over size: %dx%d, probe failed\n",
 			pbi->max_pic_w, pbi->max_pic_h);
 		return -1;
 	}
@@ -16337,7 +16241,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->buf_size = pdata->mem_end - pdata->mem_start + 1;
 #else
 	if (amvdec_vp9_mmu_init(pbi) < 0) {
-		pr_err("vp9 alloc bmmu box failed!!\n");
+		vp9_err(pbi, 0, "vp9 alloc bmmu box failed!!\n");
 		/* devm_kfree(&pdev->dev, (void *)pbi); */
 		vfree((void *)pbi);
 		pdata->dec_status = NULL;
@@ -16378,11 +16282,9 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->fatal_error = 0;
 	pbi->show_frame_num = 0;
 
-	if (debug) {
-		pr_info("===VP9 decoder mem resource 0x%lx size 0x%x\n",
-				pbi->buf_start,
-				pbi->buf_size);
-	}
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "===VP9 decoder mem resource 0x%lx size 0x%x\n",
+		pbi->buf_start,
+		pbi->buf_size);
 
 	pbi->cma_dev = pdata->cma_dev;
 
@@ -16404,7 +16306,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	}
 
 	if (vvp9_init(pdata) < 0) {
-		pr_info("\namvdec_vp9 init failed.\n");
+		vp9_err(pbi, 0, "\namvdec_vp9 init failed.\n");
 		if (pbi->enable_fence)
 			vdec_timeline_put(pdata->sync);
 		vp9_local_uninit(pbi);
@@ -16449,8 +16351,7 @@ static KV_INT_TO_VOID ammvdec_vp9_remove(struct platform_device *pdev)
 		(((struct vdec_s *)(platform_get_drvdata(pdev)))->private);
 	struct vdec_s *vdec = hw_to_vdec(pbi);
 	int i;
-	if (debug)
-		pr_info("amvdec_vp9_remove\n");
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "amvdec_vp9_remove\n");
 
 	vmvp9_stop(pbi);
 
@@ -16487,7 +16388,7 @@ static KV_INT_TO_VOID ammvdec_vp9_remove(struct platform_device *pdev)
 		vdec_fence_release(pbi, vdec->sync);
 
 #ifdef DEBUG_PTS
-	pr_info("pts missed %ld, pts hit %ld, duration %d\n",
+	vp9_print(pbi, 0, "pts missed %ld, pts hit %ld, duration %d\n",
 			pbi->pts_missed, pbi->pts_hit, pbi->frame_dur);
 #endif
 	mem_map_mode = 0;

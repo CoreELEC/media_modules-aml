@@ -5000,7 +5000,10 @@ void get_ref_set_(DecApp *p_app, unsigned char *ref_list_buf_v, ref_set_t *p_ref
 			for (j = 0; j < REF_ENTRY_NUM; j++) {
 				p_ref_set->ref_entry[j] = (p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3];
 				if (get_dbg_flag(hevc) & H266_DEBUG_REF_LIST) {
-					hevc_print_cont(hevc, 0, "%08x ", p_ref_set->ref_entry[j]);
+					if ((j & 0xf) == 0)
+						hevc_print(hevc, 0, "%08x ", p_ref_set->ref_entry[j]);
+					else
+						hevc_print_cont(hevc, 0, "%08x ", p_ref_set->ref_entry[j]);
 					if (j == 16 || j == (REF_ENTRY_NUM-1))
 						hevc_print_cont(hevc, 0, "\n");
 				}
@@ -5065,7 +5068,10 @@ void get_ref_set_fast_(DecApp *p_app, unsigned char *ref_list_buf_v, ref_set_t *
 	for (j = 0; j < REF_ENTRY_NUM; j++) {
 		p_ref_set->ref_entry[j] = (p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3];
 		if (get_dbg_flag(hevc) & H266_DEBUG_REF_LIST) {
-			hevc_print_cont(hevc, 0, "%08x ", p_ref_set->ref_entry[j]);
+			if ((j & 0xf) == 0)
+				hevc_print(hevc, 0, "%08x ", p_ref_set->ref_entry[j]);
+			else
+				hevc_print_cont(hevc, 0, "%08x ", p_ref_set->ref_entry[j]);
 		if (j == 16 || j == (REF_ENTRY_NUM - 1))
 			hevc_print_cont(hevc, 0, "\n");
 		}

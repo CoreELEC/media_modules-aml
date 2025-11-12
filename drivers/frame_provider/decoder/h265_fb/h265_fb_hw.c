@@ -52,7 +52,7 @@ static void WRITE_BACK_8(hevc_stru_t* hevc, uint32_t spr_addr, uint8_t data)
 	hevc->ins_offset++;
 	gbpc = READ_VREG(HEVC_MPC_E_DBE);
 	if ((gbpc >= 0x670 && gbpc < 0xc00) || print_reg_flag)
-		pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
+		hevc_print(hevc, 0, "[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
 }
 
 static void WRITE_BACK_16(hevc_stru_t* hevc, uint32_t spr_addr, uint8_t rd_addr, uint16_t data)
@@ -71,7 +71,7 @@ static void WRITE_BACK_16(hevc_stru_t* hevc, uint32_t spr_addr, uint8_t rd_addr,
 	hevc->ins_offset++;
 	gbpc = READ_VREG(HEVC_MPC_E_DBE);
 	if ((gbpc >= 0x670 && gbpc < 0xc00) || print_reg_flag)
-		pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
+		hevc_print(hevc, 0, "[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
 }
 
 static void WRITE_BACK_32(hevc_stru_t* hevc, uint32_t spr_addr, uint32_t data)
@@ -95,7 +95,7 @@ static void WRITE_BACK_32(hevc_stru_t* hevc, uint32_t spr_addr, uint32_t data)
 	hevc->ins_offset++;
 	gbpc = READ_VREG(HEVC_MPC_E_DBE);
 	if ((gbpc >= 0x670 && gbpc < 0xc00) || print_reg_flag)
-		pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
+		hevc_print(hevc, 0, "[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
 }
 
 static void READ_INS_WRITE(hevc_stru_t* hevc, uint32_t spr_addr0, uint32_t spr_addr1, uint8_t rd_addr, uint8_t position, uint8_t size)
@@ -184,7 +184,7 @@ static void READ_WRITE_DATA16(hevc_stru_t* hevc, uint32_t spr_addr, uint16_t dat
 
 	gbpc = READ_VREG(HEVC_MPC_E_DBE);
 	if ((gbpc >= 0x670 && gbpc < 0xc00) || print_reg_flag)
-		pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
+		hevc_print(hevc, 0, "[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
 }
 
 #if 0
@@ -517,7 +517,7 @@ static int init_mmu_fb_bufstate(struct hevc_state_s* hevc, int mmu_4k_number)
 			mmu_map_size, &tmp_phy_adr, GFP_KERNEL);
 	hevc->fb_buf_mmu0.buf_start = tmp_phy_adr;
 	if (hevc->fb_buf_mmu0_addr == NULL) {
-		pr_err("%s: failed to alloc fb_mmu0_map\n", __func__);
+		hevc_err(hevc, 0, "%s: failed to alloc fb_mmu0_map\n", __func__);
 		return -1;
 	}
 	memset(hevc->fb_buf_mmu0_addr, 0, mmu_map_size);
@@ -529,7 +529,7 @@ static int init_mmu_fb_bufstate(struct hevc_state_s* hevc, int mmu_4k_number)
 			mmu_map_size, &tmp_phy_adr, GFP_KERNEL);
 	hevc->fb_buf_mmu1.buf_start = tmp_phy_adr;
 	if (hevc->fb_buf_mmu1_addr == NULL) {
-		pr_err("%s: failed to alloc fb_mmu1_map\n", __func__);
+		hevc_err(hevc, 0, "%s: failed to alloc fb_mmu1_map\n", __func__);
 		return -1;
 	}
 	memset(hevc->fb_buf_mmu1_addr, 0, mmu_map_size);
@@ -540,7 +540,7 @@ static int init_mmu_fb_bufstate(struct hevc_state_s* hevc, int mmu_4k_number)
 			hevc->mmu_box_fb,
 			0, mmu_4k_number, hevc->fb_buf_mmu0_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu0 pages", __func__);
+		hevc_err(hevc, 0, "%s: failed to alloc fb_mmu0 pages", __func__);
 		return -1;
 	}
 
@@ -548,7 +548,7 @@ static int init_mmu_fb_bufstate(struct hevc_state_s* hevc, int mmu_4k_number)
 			hevc->mmu_box_fb,
 			1, mmu_4k_number, hevc->fb_buf_mmu1_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu1 pages", __func__);
+		hevc_err(hevc, 0, "%s: failed to alloc fb_mmu1 pages", __func__);
 		return -1;
 	}
 
@@ -613,7 +613,7 @@ static int init_fb_bufstate(struct hevc_state_s* hevc)
 			&tmp_phy_adr, GFP_KERNEL);
 	hevc->fb_buf_sys_imem.buf_start = tmp_phy_adr;
 	if (hevc->fb_buf_sys_imem_addr == NULL) {
-		pr_err("%s: failed to alloc fb_buf_sys_imem\n", __func__);
+		hevc_err(hevc, 0, "%s: failed to alloc fb_buf_sys_imem\n", __func__);
 		return -1;
 	}
 	hevc->fb_buf_sys_imem.buf_end = hevc->fb_buf_sys_imem.buf_start + hevc->fb_buf_sys_imem.buf_size;
@@ -623,7 +623,7 @@ static int init_fb_bufstate(struct hevc_state_s* hevc)
 			BMMU_IFBUF_LMEM0_ID, hevc->fb_buf_lmem0.buf_size,
 			DRIVER_NAME, &tmp_adr);
 	if (ret) {
-		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		hevc_err(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
 		return -1;
 	} else {
 		if (!vdec_secure(hw_to_vdec(hevc)))
@@ -637,7 +637,7 @@ static int init_fb_bufstate(struct hevc_state_s* hevc)
 			BMMU_IFBUF_LMEM1_ID, hevc->fb_buf_lmem1.buf_size,
 			DRIVER_NAME, &tmp_adr);
 	if (ret) {
-		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		hevc_err(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
 		return -1;
 	} else {
 		if (!vdec_secure(hw_to_vdec(hevc)))
@@ -651,7 +651,7 @@ static int init_fb_bufstate(struct hevc_state_s* hevc)
 			BMMU_IFBUF_PARSER_SAO0_ID, hevc->fb_buf_parser_sao0.buf_size,
 			DRIVER_NAME, &tmp_adr);
 	if (ret) {
-		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		hevc_err(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
 		return -1;
 	} else {
 		if (!vdec_secure(hw_to_vdec(hevc)))
@@ -665,7 +665,7 @@ static int init_fb_bufstate(struct hevc_state_s* hevc)
 			BMMU_IFBUF_PARSER_SAO1_ID, hevc->fb_buf_parser_sao1.buf_size,
 			DRIVER_NAME, &tmp_adr);
 	if (ret) {
-		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		hevc_err(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
 		return -1;
 	} else {
 		if (!vdec_secure(hw_to_vdec(hevc)))
@@ -679,7 +679,7 @@ static int init_fb_bufstate(struct hevc_state_s* hevc)
 			BMMU_IFBUFF_MPRED_IMP0_ID, hevc->fb_buf_mpred_imp0.buf_size,
 			DRIVER_NAME, &tmp_adr);
 	if (ret) {
-		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		hevc_err(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
 		return -1;
 	} else {
 		if (!vdec_secure(hw_to_vdec(hevc)))
@@ -693,7 +693,7 @@ static int init_fb_bufstate(struct hevc_state_s* hevc)
 			BMMU_IFBUFF_MPRED_IMP1_ID, hevc->fb_buf_mpred_imp1.buf_size,
 			DRIVER_NAME, &tmp_adr);
 	if (ret) {
-		hevc_print(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+		hevc_err(hevc, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
 		return -1;
 	} else {
 		if (!vdec_secure(hw_to_vdec(hevc)))
@@ -1031,7 +1031,7 @@ int BackEnd_StartDecoding(struct hevc_state_s* hevc)
 				hevc->frame_dw_mmu_map_addr_1);
 		}
 		if (ret != 0) {
-			pr_err("%s: can not alloc mmu\n", __func__);
+			hevc_err(hevc, 0, "%s: can not alloc mmu\n", __func__);
 			pic->need_mmu_copy = 0;
 			return -1;
 		}

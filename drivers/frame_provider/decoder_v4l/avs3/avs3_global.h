@@ -388,35 +388,35 @@ typedef struct avs3_decoder {
 	int max_pb_size;
 	int8_t bufmgr_error_flag;
 	u64 start_time;
+	u32 index;
 #endif
 } avs3_decoder_t;
 
 void avs3_bufmgr_init(struct avs3_decoder *hw);
 
 int com_picman_out_libpic(COM_PIC * pic, int library_picture_index, COM_PM * pm);
-COM_PIC * com_picman_out_pic(COM_PM * pm, int * err, int cur_pic_doi, int state);
+COM_PIC * com_picman_out_pic(struct avs3_decoder *hw, COM_PM * pm, int * err, int cur_pic_doi, int state);
 int com_picman_deinit(COM_PM * pm);
 int com_picman_init(COM_PM * pm, int max_pb_size, int max_num_ref_pics, PICBUF_ALLOCATOR * pa);
 int com_picman_dpbpic_doi_minus_cycle_length( COM_PM *pm );
 int com_picman_check_repeat_doi(COM_PM * pm, COM_PIC_HEADER * pic_header);
-int com_construct_ref_list_doi( COM_PIC_HEADER *pic_header );
-int com_picman_refpic_marking_decoder(COM_PM *pm, COM_PIC_HEADER *pic_header);
-int com_cleanup_useless_pic_buffer_in_pm( COM_PM *pm );
-int com_picman_refp_rpl_based_init_decoder(COM_PM *pm, COM_PIC_HEADER *pic_header, COM_REFP(*refp)[REFP_NUM]);
-void com_picman_print_state(COM_PM * pm);
-COM_PIC * com_picman_get_empty_pic(COM_PM * pm, int * err);
+int com_construct_ref_list_doi(struct avs3_decoder *hw, COM_PIC_HEADER *pic_header );
+int com_picman_refpic_marking_decoder(struct avs3_decoder *hw, COM_PM *pm, COM_PIC_HEADER *pic_header);
+int com_cleanup_useless_pic_buffer_in_pm(struct avs3_decoder *hw, COM_PM *pm );
+int com_picman_refp_rpl_based_init_decoder(struct avs3_decoder *hw, COM_PM *pm, COM_PIC_HEADER *pic_header, COM_REFP(*refp)[REFP_NUM]);
+void com_picman_print_state(struct avs3_decoder *hw, COM_PM * pm);
+COM_PIC * com_picman_get_empty_pic(struct avs3_decoder *hw, COM_PM * pm, int * err);
 int com_picman_put_libpic(COM_PM * pm, COM_PIC * pic, int slice_type, u32 ptr, u32 dtr, u8 temporal_id, int need_for_output, COM_REFP(*refp)[REFP_NUM], COM_PIC_HEADER * pic_header);
-int com_picman_put_pic(COM_PM * pm, COM_PIC * pic, int slice_type, u32 ptr, u32 dtr,
+int com_picman_put_pic(struct avs3_decoder *hw, COM_PM * pm, COM_PIC * pic, int slice_type, u32 ptr, u32 dtr,
 	u32 picture_output_delay, u8 temporal_id, int need_for_output, COM_REFP(*refp)[REFP_NUM]);
 void com_pic_free(struct avs3_decoder *hw, PICBUF_ALLOCATOR *pa, COM_PIC *pic);
 COM_PIC * com_pic_alloc(struct avs3_decoder *hw, PICBUF_ALLOCATOR * pa, int * ret);
 
-int dec_eco_pic_header(union param_u *param, COM_PIC_HEADER * pic_header, COM_SQH * sqh, int* need_minus_256, unsigned int start_code);
+int dec_eco_pic_header(struct avs3_decoder *hw, union param_u *param, COM_PIC_HEADER * pic_header, COM_SQH * sqh, int* need_minus_256, unsigned int start_code);
 int dec_eco_patch_header(union param_u *param, COM_SQH *sqh, COM_PIC_HEADER * ph, COM_SH_EXT * sh,PATCH_INFO *patch);
-int dec_eco_sqh(union param_u *param, COM_SQH * sqh);
-int dec_eco_pic_header(union param_u *param, COM_PIC_HEADER * pic_header, COM_SQH * sqh, int* need_minus_256, unsigned int start_code);
-int dec_eco_alf_coeff(union param_u *rpm_param, ALF_PARAM *alf_param);
-int dec_eco_alf_param(union param_u *rpm_param, COM_PIC_HEADER *sh
+int dec_eco_sqh(struct avs3_decoder *hw, union param_u *param, COM_SQH * sqh);
+int dec_eco_alf_coeff(struct avs3_decoder *hw, union param_u *rpm_param, ALF_PARAM *alf_param);
+int dec_eco_alf_param(struct avs3_decoder *hw, union param_u *rpm_param, COM_PIC_HEADER *sh
 #if ALF_SHAPE
 	, int num_coef
 #endif
@@ -468,9 +468,17 @@ bool is_avs3_print_bufmgr_detail(void);
 
 struct AVS3Decoder_s;
 
+enum print_mode {
+	print_debug,
+	print_info,
+	print_err
+};
+
 extern u32 debug_mask;
 extern	int avs3_debug(struct AVS3Decoder_s *dec,
-		int flag, const char *fmt, ...);
+		int flag, enum print_mode mode, const char *fmt, ...);
+extern	int avs3_debug2(struct avs3_decoder *hw,
+		int flag, enum print_mode mode, const char *fmt, ...);
 
 
 #define avs3_print(dec, flag, fmt, args...)					\
@@ -480,8 +488,41 @@ extern	int avs3_debug(struct AVS3Decoder_s *dec,
 			((debug_mask & \
 			(1 << dec->index)) \
 		&& (debug & flag))) { \
-			avs3_debug(dec, flag, fmt, ##args);	\
+			avs3_debug(dec, flag, print_debug, fmt, ##args);	\
 			} \
+	} while (0)
+
+#define avs3_info(dec, flag, fmt, args...)					\
+	do {									\
+		if (dec == NULL ||	  \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << dec->index)) \
+		&& (debug & flag))) { \
+			avs3_debug(dec, flag, print_info, fmt, ##args); \
+			} \
+	} while (0)
+
+
+#define avs3_err(dec, flag, fmt, args...)					\
+	do {									\
+		if (dec == NULL ||	  \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << dec->index)) \
+		&& (debug & flag))) { \
+			avs3_debug(dec, flag, print_err, fmt, ##args); \
+			} \
+	} while (0)
+
+#define avs3_print2(hw, flag, fmt, args...)					\
+	do {									\
+		avs3_debug2(hw, flag, print_debug, fmt, ##args);	\
+	} while (0)
+
+#define avs3_err2(hw, flag, fmt, args...)					\
+	do {									\
+		avs3_debug2(hw, flag, print_err, fmt, ##args); \
 	} while (0)
 
 //int avs3_print(struct AVS3Decoder_s *dec,
@@ -519,24 +560,24 @@ extern	int avs3_debug(struct AVS3Decoder_s *dec,
 		printk(__VA_ARGS__); \
 } while(0)
 
-#define PRINT_LINE() \
+#define PRINT_LINE(hw) \
 do { \
 	if (avs3_get_debug_flag() & AVS3_DBG_PRINT_SOURCE_LINE)\
-		pr_info("%s line %d\n", __func__, __LINE__);\
+		avs3_debug2(hw, AVS3_DBG_PRINT_SOURCE_LINE, print_debug, "%s line %d\n", __func__, __LINE__); \
 } while (0)
 
 #endif
 
-void create_alf_global_buffer(DEC_CTX *ctx);
+void create_alf_global_buffer(struct avs3_decoder *hw, DEC_CTX *ctx);
 //void init_pic_list(struct avs3_decoder *hw);
-COM_PIC *dec_pull_frm(DEC_CTX *ctx, int state);
+COM_PIC *dec_pull_frm(struct avs3_decoder *hw, DEC_CTX *ctx, int state);
 void print_pic_pool(struct avs3_decoder *hw, char *mark);
 void init_pic_pool(struct avs3_decoder *hw);
 int avs3_bufmgr_process(struct avs3_decoder *hw, int start_code);
 int avs3_bufmgr_post_process(struct avs3_decoder *hw);
 void avs3_cleanup_useless_pic_buffer_in_pm(struct avs3_decoder *hw);
-void print_alf_param(union param_u * param);
-void print_param(union param_u * param);
+void print_alf_param(struct avs3_decoder *hw, union param_u * param);
+void print_param(struct avs3_decoder *hw, union param_u * param);
 int get_free_frame_buffer(struct avs3_decoder * avs3_dec);
 u32 avs3_get_error_policy(COM_PM *pm);
 u32 avs3_get_error_handle_mode(COM_PM *pm);
