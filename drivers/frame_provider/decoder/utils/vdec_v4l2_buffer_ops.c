@@ -167,6 +167,22 @@ int __vdec_v4l_post_error_frame_event(struct aml_vcodec_ctx *ctx, u32 type, stru
 }
 EXPORT_SYMBOL(__vdec_v4l_post_error_frame_event);
 
+int __vdec_v4l_post_invisible_frame_event(struct aml_vcodec_ctx *ctx, u32 type,
+	struct set_param_info *param)
+{
+	int ret = 0;
+	u32 event = V4L2_EVENT_REPORT_INVISIBLE_FRAME;
+
+	if (ctx->drv_handle == 0)
+		return -EIO;
+
+	ret = ctx->dec_if->set_param(ctx->drv_handle,
+		SET_PARAM_POST_EVENT, &event, param);
+
+	return ret;
+}
+EXPORT_SYMBOL(__vdec_v4l_post_invisible_frame_event);
+
 int __vdec_v4l_post_event(struct aml_vcodec_ctx *ctx, u32 event, struct set_param_info *param)
 {
 	int ret = 0;

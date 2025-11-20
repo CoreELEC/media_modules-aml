@@ -78,7 +78,7 @@
 #define V4L2_EVENT_SEND_ERROR		(1 << 10)
 #define V4L2_EVENT_REPORT_ERROR_FRAME	(1 << 11)
 #define V4L2_EVENT_RES_CHANGE_CLEAR	(1 << 12)
-
+#define V4L2_EVENT_REPORT_INVISIBLE_FRAME	(1 << 13)
 
 /* eos event */
 #define V4L2_EVENT_SEND_EOS		(1 << 16)

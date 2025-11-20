@@ -167,6 +167,7 @@ static const struct event_info event_strings[] = {
 	{V4L2_EVENT_REPORT_DEC_INFO, 	"dec info"},
 	{V4L2_EVENT_REPORT_ERROR_FRAME,	"frame err",},
 	{V4L2_EVENT_REPORT_SIGNAL_TYPE,	"signal type",},
+	{V4L2_EVENT_REPORT_INVISIBLE_FRAME, "invisible frame"},
 };
 
 const char *event_to_string(int event_Id)

@@ -567,6 +567,7 @@ void __aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes, struct s
 #endif
 		break;
 	case V4L2_EVENT_REPORT_ERROR_FRAME:
+	case V4L2_EVENT_REPORT_INVISIBLE_FRAME:
 		event.type = V4L2_EVENT_PRIVATE_EXT_REPORT_ERROR_FRAME;
 		memcpy(event.u.data, &ctx->current_timestamp, sizeof(u64));
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "report error frame timestamp: %llu\n",

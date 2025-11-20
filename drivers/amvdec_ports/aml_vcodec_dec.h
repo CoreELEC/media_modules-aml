@@ -122,6 +122,9 @@ struct set_param_info {
 #define vdec_v4l_post_error_frame_event(ctx) \
 	__VDEC_EVENT_POST(ctx, V4L2_EVENT_REPORT_ERROR_FRAME, __vdec_v4l_post_error_frame_event)
 
+#define vdec_v4l_post_invisible_frame_event(ctx) \
+	__VDEC_EVENT_POST(ctx, V4L2_EVENT_REPORT_INVISIBLE_FRAME, \
+		__vdec_v4l_post_invisible_frame_event)
 /*
  * struct aml_buf - decoder frame buffer
  * @mem_type	: gather or scatter memory.

@@ -1563,6 +1563,7 @@ struct VP9Decoder_s {
 	u32 Superframes_count;
 	u32 Superframes_size[8];
 	bool init_set_dw_flag;
+	bool exist_showable_frame;
 };
 
 #ifdef NEW_FRONT_BACK_CODE
@@ -11814,6 +11815,29 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 }
 #endif
 
+static void vp9_report_hide_frame_if_need(struct VP9Decoder_s *pbi)
+{
+	struct VP9_Common_s *cm = &pbi->common;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
+
+	if (!vdec_frame_based(hw_to_vdec(pbi))) {
+		return;
+	}
+
+	if (cm->show_frame) {
+		pbi->exist_showable_frame = true;
+	}
+
+	if (pbi->dec_result == DEC_RESULT_DONE) {
+		if (!pbi->exist_showable_frame) {
+			vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
+				"%s has no showable frame, needn't show \n", __func__);
+			vdec_v4l_post_invisible_frame_event(ctx);
+		}
+		pbi->exist_showable_frame = false;
+	}
+}
+
 static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 {
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)data;
@@ -12021,7 +12045,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #endif
 			}
 		}
-
+		vp9_report_hide_frame_if_need(pbi);
 		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
 			"%s (===> %d) CRC 0x%x CRC_3 0x%x\n",
 			__func__,
