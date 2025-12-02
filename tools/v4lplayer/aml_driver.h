@@ -166,7 +166,7 @@ struct aml_vdec_hdr_infos_ {
 };
 
 struct aux_data_static_t {
-	__u32 info_type;    /* HDR10 HLG FMM or IMAX */
+	__u32 info_type;
 	struct aml_vdec_hdr_infos_ hdr_info;
 };
 

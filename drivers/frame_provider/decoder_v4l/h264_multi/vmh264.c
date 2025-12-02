@@ -7748,6 +7748,50 @@ static int get_bits(unsigned char buffer[],
 	return bitcounter;
 }
 
+static void store_sei_data(struct vdec_h264_hw_s *hw,
+	u8 *p_sei, int payload_size)
+{
+	u8 *user_data_buf = NULL;
+	int data_len = 0;
+	int i, j;
+
+	user_data_buf = hw->sei_itu_data_buf + hw->sei_itu_data_len;
+	for (i = 0; i < payload_size; i += 8) {
+		if (hw->sei_itu_data_len + i >= SEI_ITU_DATA_SIZE)
+			break; /* Avoid out-of-bound writing */
+		for (j = 0; j < 8; j++) {
+			int index = i + 7 - j;
+
+			if (index >= payload_size)
+				user_data_buf[i + j] = 0;
+			else
+				user_data_buf[i + j] = p_sei[i + 7 - j];
+		}
+	}
+
+	data_len = payload_size;
+	if (payload_size % 8)
+		data_len = ((payload_size + 8) >> 3) << 3;
+
+	hw->sei_itu_data_len += data_len;
+	if (hw->sei_itu_data_len >= SEI_ITU_DATA_SIZE)
+		hw->sei_itu_data_len = SEI_ITU_DATA_SIZE;
+
+	if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
+		dpb_print_cont(DECODE_ID(hw), 0, "data_len %d, sei_itu_data_len %d\n",
+				data_len, hw->sei_itu_data_len);
+
+		for (i = 0; i < hw->sei_itu_data_len; i++) {
+			dpb_print_cont(DECODE_ID(hw), 0, "%02x ",
+						((u8 *)hw->sei_itu_data_buf)[i]);
+			if (((i + 1) & 0xf) == 0)
+				dpb_print_cont(DECODE_ID(hw), 0, "\n");
+		}
+		dpb_print_cont(DECODE_ID(hw), 0, "\n");
+	}
+	hw->sei_need_parse = false;
+}
+
 static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 							u8 *sei_data_buf,
 							u8 *sei_data_buf_end,
@@ -7830,7 +7874,6 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 	case SEI_USER_DATA:
 		if (enable_itu_t35 && parse_ud_flag) {
 			int i;
-			int j;
 			int data_len;
 			u8 *user_data_buf;
 
@@ -7839,44 +7882,24 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 				&& p_sei[2] == 0x3D
 				&& p_sei[3] == 0x01
 				&& p_sei[4] == 0x00) {
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
+								"FMM data: size %d, ", payload_size);
 				hw->sei_present_flag |= SEI_HDR_FMM_MASK;
 
-				if (dpb_is_debug(DECODE_ID(hw),
-					PRINT_FLAG_SEI_DETAIL)) {
-					dpb_print(DECODE_ID(hw), 0,	"hdr FMM data size %d\n", payload_size);
-					for (i = 0; i < payload_size; i++) {
-						dpb_print_cont(DECODE_ID(hw), 0,
-							"%02x ", p_sei[i]);
-						if (((i + 1) & 0xf) == 0)
-							dpb_print_cont(
-							DECODE_ID(hw),
-								0, "\n");
-					}
-					dpb_print_cont(DECODE_ID(hw),
-						0, "\n");
-				}
+				store_sei_data(hw, p_sei, payload_size);
+
 			} else if (p_sei[0] == 0xB5
 				&& p_sei[1] == 0x58
 				&& p_sei[2] == 0x43
 				&& p_sei[3] == 0x00
 				&& p_sei[4] == 0x00
 				&& p_sei[5] == 0x01) {
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
+								"IMAX data: size %d, ", payload_size);
 				hw->sei_present_flag |= SEI_HDR_IMAX_MASK;
 
-				if (dpb_is_debug(DECODE_ID(hw),
-					PRINT_FLAG_SEI_DETAIL)) {
-					dpb_print(DECODE_ID(hw), 0,	"hdr IMAX data size %d\n", payload_size);
-					for (i = 0; i < payload_size; i++) {
-						dpb_print_cont(DECODE_ID(hw), 0,
-							"%02x ", p_sei[i]);
-						if (((i + 1) & 0xf) == 0)
-							dpb_print_cont(
-							DECODE_ID(hw),
-								0, "\n");
-					}
-					dpb_print_cont(DECODE_ID(hw),
-						0, "\n");
-				}
+				store_sei_data(hw, p_sei, payload_size);
+
 			} else if (
 				(p_sei[0] == 0xB5 && p_sei[1] == 0x00 && p_sei[2] == 0x3A && p_sei[3] == 0x01) ||
 				(p_sei[0] == 0xB5 && p_sei[1] == 0x00 && p_sei[2] == 0x3A && p_sei[3] == 0x00)) {
@@ -7929,48 +7952,11 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 					hw->sei_need_parse = false;
 				}
 			} else {
-				user_data_buf
-					= hw->sei_itu_data_buf + hw->sei_itu_data_len;
-				/* user data length should be align with 8 bytes,
-				if not, then padding with zero*/
-				for (i = 0; i < payload_size; i += 8) {
-					if (hw->sei_itu_data_len + i >= SEI_ITU_DATA_SIZE)
-						break; // Avoid out-of-bound writing
-					for (j = 0; j < 8; j++) {
-						int index;
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
+								"CC data: size %d, ", payload_size);
 
-						index = i+7-j;
-						if (index >= payload_size)
-							user_data_buf[i+j] = 0;
-						else
-							user_data_buf[i+j]
-								= p_sei[i+7-j];
-					}
-				}
+				store_sei_data(hw, p_sei, payload_size);
 
-				data_len = payload_size;
-				if (payload_size % 8)
-					data_len = ((payload_size + 8) >> 3) << 3;
-
-				hw->sei_itu_data_len += data_len;
-				if (hw->sei_itu_data_len >= SEI_ITU_DATA_SIZE)
-					hw->sei_itu_data_len = SEI_ITU_DATA_SIZE;
-
-				if (dpb_is_debug(DECODE_ID(hw),
-					PRINT_FLAG_SEI_DETAIL)) {
-					dpb_print(DECODE_ID(hw), 0,	"hdr CC sei_itu_data_len %d\n", hw->sei_itu_data_len);
-					for (i = 0; i < hw->sei_itu_data_len; i++) {
-						dpb_print_cont(DECODE_ID(hw), 0,
-							"%02x ", ((u8 *)hw->sei_itu_data_buf)[i]);
-						if (((i + 1) & 0xf) == 0)
-							dpb_print_cont(
-							DECODE_ID(hw),
-								0, "\n");
-					}
-					dpb_print_cont(DECODE_ID(hw),
-						0, "\n");
-				}
-				hw->sei_need_parse = false;
 			}
 		}
 		break;
@@ -11564,8 +11550,11 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 		ud_param->meta_info.vpts_valid = vpts_valid;
 	}
 
-	if (hw->sei_itu_data_len <= 0)
+	if (hw->sei_itu_data_len <= 0) {
+		struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+		ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_NO_USERDATA, NULL);
 		return;
+	}
 
 #ifdef AUX_DATA_CRC
 	decoder_do_aux_data_check(vdec, hw->sei_itu_data_buf,

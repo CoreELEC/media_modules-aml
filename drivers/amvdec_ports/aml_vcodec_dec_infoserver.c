@@ -280,6 +280,8 @@ void aml_vcodec_decinfo_event_handler(struct aml_vcodec_ctx *ctx,
 	case AML_DECINFO_EVENT_USERDATA:
 		vcodec_user_data_put(ctx, data);
 		break;
+	case AML_DECINFO_EVENT_NO_USERDATA:
+		break;
 	default:
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"unsupport dec info subcmd %x\n", sub_cmd);

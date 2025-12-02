@@ -151,6 +151,7 @@ enum E_DECINFO_EVENT {
 	AML_DECINFO_EVENT_USERDATA,
 	AML_DECINFO_EVENT_COMPOSITE = 30,
 	AML_DECINFO_EVENT_BOTTOM = 31,
+	AML_DECINFO_EVENT_NO_USERDATA = 32,
 };
 
 enum E_DECINFO_CMD_GET {
@@ -351,7 +352,7 @@ struct aml_vdec_hdr_infos {
 };
 
 struct aux_data_static_t {
-	__u32 info_type;   /* HDR10 HLG FMM or IMAX */
+	__u32 info_type;
 	struct aml_vdec_hdr_infos hdr_info;
 };
 

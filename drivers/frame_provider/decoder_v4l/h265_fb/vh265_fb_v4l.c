@@ -10053,8 +10053,11 @@ static void vh265_userdata_fill_vpts(struct hevc_state_s *hevc,
 	struct h265_userdata_record_t *p_rec;
 	struct userdata_meta_info_t meta_info;
 
-	if (hevc->sei_itu_data_len <= 0)
+	if (hevc->sei_itu_data_len <= 0) {
+		struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+		ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_NO_USERDATA, NULL);
 		return;
+	}
 
 	sei_data_buf = hevc->sei_itu_data_buf;
 	memset(&meta_info, 0, sizeof(meta_info));
@@ -10129,6 +10132,50 @@ static int check_hevc_cc_type(char *p_sei)
 					&& p_sei[3] == 0x44 && p_sei[4] == 0x54 && p_sei[5] == 0x47 && p_sei[6] == 0x31);
 }
 #endif
+
+static void store_sei_data(struct hevc_state_s *hevc,
+	u8 *p_sei, int payload_size)
+{
+	u8 *user_data_buf = NULL;
+	int data_len = 0;
+	int i, j;
+
+	user_data_buf = hevc->sei_itu_data_buf + hevc->sei_itu_data_len;
+	for (i = 0; i < payload_size; i += 8) {
+		if (hevc->sei_itu_data_len + i >= SEI_ITU_DATA_SIZE)
+			break; /* Avoid out-of-bound writing */
+		for (j = 0; j < 8; j++) {
+			int index = i + 7 - j;
+
+			if (index >= payload_size)
+				user_data_buf[i + j] = 0;
+			else
+				user_data_buf[i + j] = p_sei[i + 7 - j];
+		}
+	}
+
+	data_len = payload_size;
+	if (payload_size % 8)
+		data_len = ((payload_size + 8) >> 3) << 3;
+
+	hevc->sei_itu_data_len += data_len;
+	if (hevc->sei_itu_data_len >= SEI_ITU_DATA_SIZE)
+		hevc->sei_itu_data_len = SEI_ITU_DATA_SIZE;
+
+	if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
+		hevc_print_cont(hevc, 0, "data_len %d, sei_itu_data_len %d\n",
+						data_len, hevc->sei_itu_data_len);
+
+		for (i = 0; i < hevc->sei_itu_data_len; i++) {
+			hevc_print_cont(hevc, 0, "%02x ",
+					((u8 *)hevc->sei_itu_data_buf)[i]);
+			if (((i + 1) & 0xf) == 0)
+				hevc_print_cont(hevc, 0, "\n");
+		}
+		hevc_print_cont(hevc, 0, "\n");
+	}
+}
+
 static int parse_sei(struct hevc_state_s *hevc,
 	struct PIC_s *pic, char *sei_buf, uint32_t size, bool parse_hdr10p, bool parse_cc)
 {
@@ -10139,8 +10186,6 @@ static int parse_sei(struct hevc_state_s *hevc,
 	uint16_t payload_type = 0;
 	uint16_t payload_size = 0;
 	int i, j;
-	int data_len;
-	u8 *user_data_buf;
 	const u8 uuid_and_flag_0[20] = {0x68, 0x55, 0x98, 0x4e, 0x49, 0x9e, 0x45, 0xc5, 0x8e, 0x5b, 0xf2, 0x7b, 0xd1, 0xd4, 0xac, 0xe6, 0x44, 0x69, 0x76, 0x58};
 	const u8 uuid_and_flag_1[20] = {0x68, 0x55, 0x98, 0x4e, 0x49, 0x9c, 0x45, 0xc5, 0x8e, 0x5b, 0xf2, 0x7b, 0xd1, 0xd4, 0xac, 0xe6, 0x44, 0x69, 0x76, 0x58};
 
@@ -10213,43 +10258,29 @@ static int parse_sei(struct hevc_state_s *hevc,
 							"hdr10p data size(%d)\n", payload_size);
 						pic->hdr10p_data_size = 0;
 					}
-				} else if (p_sei[0] == 0xB5
+				} else if (parse_cc && (p_sei[0] == 0xB5
 					&& p_sei[1] == 0x00
 					&& p_sei[2] == 0x3D
 					&& p_sei[3] == 0x01
-					&& p_sei[4] == 0x00) {
+					&& p_sei[4] == 0x00)) {
+					hevc_print(hevc, H265_DEBUG_PRINT_SEI,
+								"FMM data: size %d, ", payload_size);
 					pic->sei_present_flag |= SEI_HDR_FMM_MASK;
-					if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
-						PR_INIT(128);
-						hevc_print(hevc, 0,
-							"hdr FMM data: (size %d)\n",
-							payload_size);
-						for (i = 0; i < payload_size; i++) {
-							PR_FILL("%02x ", p_sei[i]);
-							if (((i + 1) & 0xf) == 0)
-								PR_INFO(hevc->index);
-						}
-						PR_INFO(hevc->index);
-					}
-				} else if (p_sei[0] == 0xB5
+
+					store_sei_data(hevc, p_sei, payload_size);
+
+				} else if (parse_cc && (p_sei[0] == 0xB5
 					&& p_sei[1] == 0x58
 					&& p_sei[2] == 0x43
 					&& p_sei[3] == 0x00
 					&& p_sei[4] == 0x00
-					&& p_sei[5] == 0x01) {
+					&& p_sei[5] == 0x01)) {
+					hevc_print(hevc, H265_DEBUG_PRINT_SEI,
+								"IMAX data: size %d, ", payload_size);
 					pic->sei_present_flag |= SEI_HDR_IMAX_MASK;
 
-					if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
-						PR_INIT(128);
-						hevc_print(hevc, 0,
-							"hdr IMAX data: (size %d)\n", payload_size);
-						for (i = 0; i < payload_size; i++) {
-							PR_FILL("%02x ", p_sei[i]);
-							if (((i + 1) & 0xf) == 0)
-								PR_INFO(hevc->index);
-						}
-						PR_INFO(hevc->index);
-					}
+					store_sei_data(hevc, p_sei, payload_size);
+
 				} else if (p_sei[0] == 0x26
 					&& p_sei[1] == 0x00
 					&& p_sei[2] == 0x04
@@ -10271,38 +10302,10 @@ static int parse_sei(struct hevc_state_s *hevc,
 				}
 #else
 				} else if (parse_cc && check_hevc_cc_type(p_sei)) {
-					user_data_buf = hevc->sei_itu_data_buf
-						+ hevc->sei_itu_data_len;
-					/* user data length should be align with 8 bytes,
-						if not, then padding with zero*/
-					for (i = 0; i < payload_size; i += 8) {
-						for (j = 0; j < 8; j++) {
-							int index;
-							index = i+7-j;
-							if (index >= payload_size)
-								user_data_buf[i+j] = 0;
-							else
-								user_data_buf[i+j] = p_sei[i+7-j];
-							/*pr_info("%x ", p_sei[i+j]);*/
-						}
-					}
-					/*pr_info("\n");*/
-					data_len = payload_size;
-					if (payload_size % 8)
-						data_len = ((payload_size + 8) >> 3) << 3;
-					hevc->sei_itu_data_len += data_len;
-					if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
-						user_data_buf = hevc->sei_itu_data_buf;
-						hevc_print(hevc, 0,
-							"CC data: (size %d)\n",
-							hevc->sei_itu_data_len);
-						for (i = 0; i < hevc->sei_itu_data_len; i++) {
-							hevc_print_cont(hevc, 0, "%02x ", user_data_buf[i]);
-							if (((i + 1) & 0xf) == 0)
-								hevc_print_cont(hevc, 0, "\n");
-						}
-						hevc_print_cont(hevc, 0, "\n");
-					}
+					hevc_print(hevc, H265_DEBUG_PRINT_SEI,
+								"CC data: size %d, ", payload_size);
+
+					store_sei_data(hevc, p_sei, payload_size);
 				}
 #endif
 			break;
