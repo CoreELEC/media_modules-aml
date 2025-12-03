@@ -7611,6 +7611,14 @@ static int check_ref_pic_drop_flag(struct hevc_state_s *hevc)
 	return 0;
 }
 
+static bool is_reference_nalu(struct hevc_state_s *hevc)
+{
+	return ((hevc->m_nalUnitType <= NAL_UNIT_RESERVED_15) &&
+		(hevc->m_nalUnitType % 2 != 0)) ||
+		((hevc->m_nalUnitType >= NAL_UNIT_CODED_SLICE_BLA) &&
+		(hevc->m_nalUnitType <= NAL_UNIT_RESERVED_23));
+}
+
 static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		union param_u *rpm_param,
 		int decode_pic_begin)
@@ -7817,7 +7825,10 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				iPOCmsb = 0;
 			}
 			hevc->curr_POC = (iPOCmsb + iPOClsb);
-			if ((hevc->m_temporalId - 1) == 0)
+			if (((hevc->m_temporalId - 1) == 0) &&
+				(is_reference_nalu(hevc) &&
+				(hevc->m_nalUnitType != NAL_UNIT_CODED_SLICE_DLP) &&
+				(hevc->m_nalUnitType != NAL_UNIT_CODED_SLICE_TFD)))
 				hevc->iPrevTid0POC = hevc->curr_POC;
 			else {
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
@@ -13050,7 +13061,7 @@ muti_output:
 			if (vdec_frame_based(hw_to_vdec(hevc)) &&
 				(READ_VREG(HEVC_SHIFT_BYTE_COUNT) + 4 < hevc->data_size)
 				 && (frmbase_multi_slice == 1)) {
-				hevc->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT) - 8;
+				hevc->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 				hevc->dec_result = DEC_RESULT_UNFINISH;
 				if (efficiency_mode)
 					hevc->check_suffix_data = true;
@@ -13061,11 +13072,12 @@ muti_output:
 				hevc->check_suffix_data = false;
 			}
 
-			if ((!input_stream_based(vdec) &&
+			if (fast_output_enable &&
+				((!input_stream_based(vdec) &&
 					atomic_read(&hevc->vf_pre_count) == 0) ||
 					hevc->ip_mode ||
 					(!input_stream_based(vdec) && (hevc->interlace_flag) &&
-					atomic_read(&hevc->vf_pre_count) < 2)) {
+					atomic_read(&hevc->vf_pre_count) < 2))) {
 				decoded_poc = hevc->curr_POC;
 				pic = get_pic_by_POC(hevc, decoded_poc);
 				if (pic && (pic->POC != INVALID_POC)) {
