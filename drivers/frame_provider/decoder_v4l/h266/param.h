@@ -940,7 +940,11 @@ static void print_param(param_t *param)
     printk("alf_cb_coeffmulti = 0x%04x\n", param->p.alf_cb_coeffmulti);
     printk("alf_cr_coeffmulti = 0x%04x\n", param->p.alf_cr_coeffmulti);
     printk("alf_y_coeffmulti = 0x%04x\n", param->p.alf_y_coeffmulti);
-
+    printk("conformance_window_flag = 0x%04x\n", param->p.conformance_window_flag);
+    printk("conf_win_left_offset = 0x%04x\n", param->p.conf_win_left_offset);
+    printk("conf_win_right_offset = 0x%04x\n", param->p.conf_win_right_offset);
+    printk("conf_win_top_offset = 0x%04x\n", param->p.conf_win_top_offset);
+    printk("conf_win_bottom_offset = 0x%04x\n", param->p.conf_win_bottom_offset);
 }
 #endif
 #endif

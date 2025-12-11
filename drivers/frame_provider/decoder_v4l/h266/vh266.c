@@ -2880,7 +2880,7 @@ static int32_t config_mc_buffer(struct hevc_state_s *hevc)
 		"config_mc_buffer entered (slice_type : %d) m_uiSliceSegmentIdx %d .....\n",
 		cur_pic->slice_type, p_declib->m_uiSliceSegmentIdx-1);
 	slice = p_declib->m_pcPic->slices[p_declib->m_uiSliceSegmentIdx - 1];
-	if (cur_pic->slice_type != I_SLICE) { //P and B pic
+	if (slice->m_eSliceType != I_SLICE) { //P and B pic
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
 		hevc_print(hevc, H266_DEBUG_REG_CFG, "slice=%p, slice->m_aiNumRefIdx[REF_PIC_LIST_0] = %d\n",
 			slice, slice->m_aiNumRefIdx[REF_PIC_LIST_0]);
@@ -2911,7 +2911,7 @@ static int32_t config_mc_buffer(struct hevc_state_s *hevc)
 				WRITE_VREG(VVC_MPP_REF0_POC_CFG, pic->poc);
 		}
 	}
-	if (cur_pic->slice_type == B_SLICE) { //B pic
+	if (slice->m_eSliceType == B_SLICE) { //B pic
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (16 << 8) | (0 << 1) | 1);
 		hevc_print(hevc, H266_DEBUG_REG_CFG, "slice=%p, slice->m_aiNumRefIdx[REF_PIC_LIST_1] = %d\n", slice, slice->m_aiNumRefIdx[REF_PIC_LIST_1]);
 		for (i = 0; i  < slice->m_aiNumRefIdx[REF_PIC_LIST_1] && i < MAX_NUM_REF; i++) {
@@ -3142,7 +3142,7 @@ static int config_mpred_hw(struct hevc_state_s *hevc, BuffInfo_t* buf_spec)
 	hevc_print(hevc, H266_DEBUG_REG_CFG, "mv_wr_en %d mv_rd_en %d col_isIntra %d, slice type %d inter_slice_allowed_flag %d, col has_inter_slice %d, col inter_slice_allowed_flag %d\n",
 		cur_pic->mv_wr_en, mv_rd_en, col_isIntra,
 		vvc_dec->slice_type, cur_pic->inter_slice_allowed_flag,
-		col_pic->has_inter_slice || cur_pic->inter_slice_allowed_flag);
+		col_pic->has_inter_slice, col_pic->inter_slice_allowed_flag);
 
 	WRITE_VREG(HEVC_MPRED_MV_WR_START_ADDR, cur_pic->mpred_mv_wr_start_addr);
 
@@ -3776,7 +3776,7 @@ static void print_pic_pool(struct hevc_state_s *hevc, char *mark)
 	hevc_print(hevc, 0, "%s----pic_pool (used %d, total %d):\n", mark, used_count, hevc->used_buf_num);
 	for (i = 0; i < hevc->used_buf_num; i++) {
 		pic = &hevc->vvc_dec->pic_pool[i];
-		hevc_print(hevc, 0, "%d(%d,%d): used %d, decode_idx %d, mv_idx %d, %spoc %d, referenced %d, decode_done %d, error_mark 0x%x, vf_ref %d, w/h/depth(%d,%d,%d), slicetype %d, mv_wr_start 0x%x cam addr:%lx\n",
+		hevc_print(hevc, 0, "%d(%d,%d): used %d, decode_idx %d, mv_idx %d, %spoc %d, referenced %d, decode_done %d, error_mark 0x%x, vf_ref %d, w/h/depth(%d,%d,%d), slicetype %d, mv_wr_start 0x%x cam addr:%lx, show_frame %d\n",
 			i, pic->index, pic->BUF_index, pic->used, pic->decode_idx,
 #ifndef MV_USE_FIXED_BUF
 			pic->mv_buf_index,
@@ -3789,7 +3789,8 @@ static void print_pic_pool(struct hevc_state_s *hevc, char *mark)
 			pic->width, pic->height, pic->depth,
 			pic->slice_type,
 			pic->mpred_mv_wr_start_addr,
-			pic->cma_alloc_addr
+			pic->cma_alloc_addr,
+			pic->show_frame
 			);
 	}
 }
@@ -5446,6 +5447,13 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	pic->poc = p_declib->m_pcPic->poc;
 	pic->inter_slice_allowed_flag = (rpm_param->p.slice_ph_decoding_flags_0 >> 12) & 0x1;
 
+	if (getGDRRecoveryPocReached(p_declib))
+	{
+		pic->show_frame = true;
+	} else {
+		pic->show_frame = false;
+	}
+
 	vvc_dec->vvc_monochrome = (rpm_param->p.sps_chroma_format_idc == 0);
 	vvc_dec->lcu_size_log2 = rpm_param->p.lcu_size;
 	vvc_dec->lcu_size = 1 << vvc_dec->lcu_size_log2;
@@ -6555,7 +6563,7 @@ static void vh266_vf_put(struct vframe_s *vf, void *op_arg)
 #endif
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
-	struct aml_buf *aml_buf;
+	struct aml_buf *aml_buf = NULL;
 
 	if (!vf)
 		return;
@@ -6564,16 +6572,17 @@ static void vh266_vf_put(struct vframe_s *vf, void *op_arg)
 	if (vf && (vf_valid_check(vf, hevc) == false))
 		return;
 
-	atomic_add(1, &hevc->vf_put_count);
-
-	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
-	aml_buf_put_ref(&ctx->bm, aml_buf);
+	if (!ctx->avbcd_work_mode) {
+		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+		aml_buf_put_ref(&ctx->bm, aml_buf);
+	}
 
 	if (input_frame_based(vdec)) {
 		ctx->current_timestamp = vf->timestamp;
 		vdec_v4l_post_error_frame_event(ctx);
 	}
-	vh266_recycle_dec_resource(hevc, aml_buf);
+	if (aml_buf)
+		vh266_recycle_dec_resource(hevc, aml_buf);
 #ifdef MULTI_INSTANCE_SUPPORT
 	vdec_up(vdec);
 #endif
@@ -6894,8 +6903,6 @@ static int post_prepare_process(struct vdec_s *vdec, struct PIC_s *frame)
 		hevc_print(hevc, 0, "discard show frame.\n");
 		return 0;
 	}
-
-	frame->show_frame = true;
 
 	return 0;
 }
@@ -7464,7 +7471,25 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 #else
 		vf->type_original = vf->type;
 		pic->vf_ref = 1;
-		put_vf_to_display_q(hevc, vf);
+		if (pic->show_frame) {
+			put_vf_to_display_q(hevc, vf);
+		} else {
+			vh266_report_err_timestamp_for_decoded_frames(hevc->v4l2_ctx, pic->timestamp);
+			hevc_print(hevc, H266_DEBUG_BUFMGR,
+				"%s(type %d index 0x%x poc %d/%d) pts(%d,%lld(0x%llx)) timestamp %llu, dur %d, show_frame %d\n",
+				__func__, vf->type, vf->index,
+				get_pic_poc(hevc, vf->index & 0xff),
+				get_pic_poc(hevc, (vf->index >> 8) & 0xff),
+				vf->pts, vf->pts_us64, vf->pts_us64, vf->timestamp,
+				vf->duration,
+				pic->show_frame);
+
+			vh266_vf_put(vf, vdec);
+			atomic_add(1, &hevc->vf_get_count);
+			kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
+			hevc->vf_pre_count++;
+			return 0;
+		}
 #endif
 		ATRACE_COUNTER(hevc->trace.new_q_name, kfifo_len(&hevc->newframe_q));
 		ATRACE_COUNTER(hevc->trace.disp_q_name, kfifo_len(&hevc->display_q));
@@ -7573,8 +7598,8 @@ static int prepare_display_buf(void *hw, struct PIC_s *frame)
 
 	if (frame) {
 		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-			"%s(poc %d pic_struct %d error_mark %d) enable_fence %d\n",
-			__func__, frame->poc, frame->pic_struct, frame->error_mark, hevc->enable_fence);
+			"%s(poc %d pic_struct %d error_mark %d) enable_fence %d, show_frame %d\n",
+			__func__, frame->poc, frame->pic_struct, frame->error_mark, hevc->enable_fence, frame->show_frame);
 #ifndef HEVC_PIC_STRUCT_SUPPORT
 		if (frame->pic_struct)
 			hevc_print(hevc, 0, "Error %s, pic_struct is not 0, need #define HEVC_PIC_STRUCT_SUPPORT\n",
@@ -7676,9 +7701,9 @@ static int h266_recycle_frame_buffer(struct hevc_state_s *hevc)
 			aml_buf = (struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
 			hevc_print(hevc, H266_DEBUG_BUFMGR,
-				"%s buf idx: %d pic index: %d dma addr: 0x%lx vb idx: %d vf_ref %d error_mark %d\n",
+				"%s buf idx: %d pic index: %d dma addr: 0x%lx vb idx: %d vf_ref %d error_mark %d show_frame %d, pic_struct %d\n",
 				__func__, i, pic->index, pic->cma_alloc_addr,
-				aml_buf->index, pic->vf_ref, pic->error_mark);
+				aml_buf->index, pic->vf_ref, pic->error_mark, pic->show_frame, pic->pic_struct);
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 			if ((hevc->nal_skip_policy & 0x2) && pic->error_mark &&
 				!pic->vf_ref) {
@@ -8209,8 +8234,8 @@ static int vh266_get_ps_info(struct hevc_state_s *hevc,
 			     struct aml_vdec_ps_infos *ps)
 {
 	u32 SubWidthC, SubHeightC;
-	u32 width = rpm_param->p.pic_width_in_luma_samples;
-	u32 height = rpm_param->p.pic_height_in_luma_samples;
+	u32 width = rpm_param->p.PicWidthInLumaSamples;
+	u32 height = rpm_param->p.PicHeightInLumaSamples;
 	u32 coded_width = width;
 	u32 coded_height = height;
 
@@ -8236,8 +8261,8 @@ static int vh266_get_ps_info(struct hevc_state_s *hevc,
 		(rpm_param->p.conf_win_top_offset +
 		rpm_param->p.conf_win_bottom_offset);
 
-	hevc->last_width = rpm_param->p.pic_width_in_luma_samples;
-	hevc->last_height = rpm_param->p.pic_height_in_luma_samples;
+	hevc->last_width = rpm_param->p.PicWidthInLumaSamples;
+	hevc->last_height = rpm_param->p.PicHeightInLumaSamples;
 
 	height <<= hevc->interlace_flag;
 	coded_height <<= hevc->interlace_flag;
@@ -8280,8 +8305,8 @@ static void get_comp_buf_info(struct hevc_state_s *hevc,
 		struct vdec_comp_buf_info *info)
 {
 	u16 bit_depth = hevc->vvc_dec->param.p.sps_bitdepth_minus8;
-	int w = hevc->vvc_dec->param.p.pic_width_in_luma_samples;
-	int h = hevc->vvc_dec->param.p.pic_height_in_luma_samples;
+	int w = hevc->vvc_dec->param.p.PicWidthInLumaSamples;
+	int h = hevc->vvc_dec->param.p.PicHeightInLumaSamples;
 	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 
 	info->max_size = hevc_max_mmu_buf_size(
@@ -8323,8 +8348,8 @@ static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
 
 	if (ctx->param_sets_from_ucode) {
 		struct aml_vdec_ps_infos ps;
-		int width = rpm_param->p.pic_width_in_luma_samples;
-		int height = rpm_param->p.pic_height_in_luma_samples;
+		int width = rpm_param->p.PicWidthInLumaSamples;
+		int height = rpm_param->p.PicHeightInLumaSamples;
 
 		if ((hevc->last_width != 0 &&
 			hevc->last_height != 0) &&

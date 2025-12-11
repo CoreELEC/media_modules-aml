@@ -74,7 +74,7 @@ typedef struct PIC_s {
     dos_addr_t mpred_mv_wr_start_addr;
     u8 bg_flag;
     uint32_t refered_by_others;
-    uint32_t is_output;
+    uint32_t need_output;
     int poc;
     uint32_t width;
     uint32_t height;

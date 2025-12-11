@@ -2351,11 +2351,11 @@ int constructRefPicList(DecLib *p_declib, Slice *slice, PicList *rcListPic)
 		if (slice->m_RPL0.m_isInterLayerRefPic[ii]) {
 		//CHECK( m_RPL0.m_interLayerRefPicIdx[ii] == NOT_VALID, "Wrong ILRP index" );
 
-		int refLayerId = slice->m_pcPic->cs->vps->m_vpsLayerId[slice->m_pcPic->cs->vps->m_directRefLayerIdx[layerIdx][slice->m_RPL0.m_interLayerRefPicIdx[ii] ] ];
+		//int refLayerId = slice->m_pcPic->cs->vps->m_vpsLayerId[slice->m_pcPic->cs->vps->m_directRefLayerIdx[layerIdx][slice->m_RPL0.m_interLayerRefPicIdx[ii] ] ];
 
-		hevc_print(p_declib->hw, 0, "%d=> interlayer ref_layer %d ref poc %d\n", ii, refLayerId, slice->m_iPOC);
+		//hevc_print(p_declib->hw, 0, "%d=> interlayer ref_layer %d ref poc %d\n", ii, refLayerId, slice->m_iPOC);
 		hevc_print(p_declib->hw, 0, "Error, interlayer reference not supported!!\n");
-		return 0; //exit(0);
+		return -1; //exit(0);
 		//pcRefPic = xGetRefPic(slice, rcListPic, slice->m_iPOC, refLayerId );
 		//pcRefPic->longTerm = true;
 		} else if (!slice->m_RPL0.m_isLongtermRefPic[ii]) {
@@ -3097,6 +3097,25 @@ int xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 		cvector_push(&p_declib->m_accessUnitNoOutputPriorPicFlags, &p_declib->m_apcSlicePilot->m_noOutputOfPriorPicsFlag);
 	}
 
+#ifdef AML
+	if (param->p.slice_ph_decoding_flags_0 & 0x8000) {
+		if (param->p.slice_ph_decoding_flags_0 & 0x2000) {
+			p_declib->m_picHeader.m_gdrPicFlag = 1;
+			p_declib->m_picHeader.m_recoveryPocCnt = param->p.RecoveryPocCnt;
+			hevc_print(p_declib->hw, PRINT_FLAG_VDEC_STATUS,
+				"%s  slice_ph_decoding_flags_0 0x%x RecoveryPocCnt %d\n",
+				__func__, param->p.slice_ph_decoding_flags_0, p_declib->m_picHeader.m_recoveryPocCnt);
+		}
+	}
+#endif
+	hevc_print(p_declib->hw, H266_DEBUG_BUFMGR,
+		"m_gdrPicFlag %d, m_prevGDRInSameLayerPOC %d m_prevGDRInSameLayerRecoveryPOC %d, m_iPOC %d, m_recoveryPocCnt %d\n",
+		p_declib->m_picHeader.m_gdrPicFlag,
+		p_declib->m_prevGDRInSameLayerPOC[nalu->m_nuhLayerId],
+		p_declib->m_prevGDRInSameLayerRecoveryPOC[nalu->m_nuhLayerId],
+		p_declib->m_apcSlicePilot->m_iPOC,
+		p_declib->m_picHeader.m_recoveryPocCnt);
+
 	// Only care about recovery POC if it is the first coded GDR picture in the layer
 	if (p_declib->m_picHeader.m_gdrPicFlag && p_declib->m_prevGDRInSameLayerPOC[nalu->m_nuhLayerId] == -MAX_INT) {
 		p_declib->m_prevGDRInSameLayerRecoveryPOC[nalu->m_nuhLayerId] =
@@ -3200,8 +3219,12 @@ int xDecodeSlice(DecApp *p_app, NALUnit *nalu)
 	PRINT_LINE();
 
 	xUpdatePreviousTid0POC(p_declib, p_declib->m_apcSlicePilot);
-#ifdef TO_DO
+#ifdef AML
+	p_declib->m_prevGDRInSameLayerPOC[nalu->m_nuhLayerId] = p_declib->m_apcSlicePilot->m_iPOC;
+#else
 	m_apcSlicePilot->setPrevGDRInSameLayerPOC(m_prevGDRInSameLayerPOC[nalu.m_nuhLayerId]);
+#endif
+#ifdef TO_DO
 	m_apcSlicePilot->setAssociatedIRAPPOC(m_pocCRA[nalu.m_nuhLayerId]);
 	m_apcSlicePilot->setAssociatedIRAPType(m_associatedIRAPType[nalu.m_nuhLayerId]);
 #endif
