@@ -7451,7 +7451,8 @@ static void vp9_post_avbcd_task(struct VP9Decoder_s *pbi)
 	if (pbi->vp9_param.p.bit_depth == 10) {
 		vf->canvas0_config[0].endian = HEVC_CONFIG_P010_LE;
 		vf->canvas0_config[1].endian = HEVC_CONFIG_P010_LE;
-	} else if (ctx->avbcd_work_mode & AVBCD_HARDWARE_MODE) {
+	} else if (ctx->avbcd_work_mode &
+		(AVBCD_HARDWARE_LEGACY_MODE | AVBCD_HARDWARE_STANDARD_MODE)) {
 		vf->canvas0_config[0].endian = HEVC_CONFIG_LITTLE_ENDIAN;
 		vf->canvas0_config[1].endian = HEVC_CONFIG_LITTLE_ENDIAN;
 	}

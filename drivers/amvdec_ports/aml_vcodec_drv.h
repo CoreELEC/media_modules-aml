@@ -1104,6 +1104,7 @@ struct aml_vcodec_ctx {
 
 	struct work_struct		es_wkr_in;
 	struct work_struct		es_wkr_out;
+	struct work_struct		avbcd_call_wkr;
 	spinlock_t			es_wkr_slock;
 	bool				es_wkr_stop;
 

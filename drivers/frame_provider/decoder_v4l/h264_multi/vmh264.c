@@ -12155,16 +12155,14 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	frame_width = mb_width << 4;
 	frame_height = mb_height << 4;
 
-	frame_width = frame_width - crop_right;
-	frame_height = frame_height - crop_bottom;
 	hw->double_write_mode = get_double_write_mode(hw);
 	hw->bForceInterlace	= check_force_interlace(hw, frame_width, frame_height);
 	ps->profile 		= level_idc;
 	ps->ref_frames 		= max_reference_size;
 	ps->mb_width 		= mb_width;
 	ps->mb_height 		= mb_height;
-	ps->visible_width	= frame_width;
-	ps->visible_height	= frame_height;
+	ps->visible_width	= frame_width - crop_right;
+	ps->visible_height	= frame_height - crop_bottom;
 	ps->coded_width		= vdec_width_align_force(frame_width, hw->canvas_mode);  //ALIGN(mb_width << 4, 64);
 	ps->coded_height	= ALIGN(mb_height << 4, 64);
 	/* +1 for two frames in one packet */

@@ -1425,7 +1425,7 @@ void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 	switch (requester) {
 	case AML_FB_REQ_DEC:
 #ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
-		if (ctx->avbc_wrapper)
+		if (ctx->avbcd_work_mode)
 			/* dec <==> avbcd. */
 			task->attach(task, get_avbc_ops(), ctx->avbc_wrapper);
 		else
@@ -1927,6 +1927,22 @@ out:
 	atomic_dec(&ctx->input_count);
 }
 
+void avbcd_call_worker(struct work_struct *work)
+{
+	struct aml_vcodec_ctx *ctx =
+		container_of(work, struct aml_vcodec_ctx, avbcd_call_wkr);
+	struct avbc_input *avbc_in = vzalloc(sizeof(struct avbc_input));
+
+	if (!aml_avbc_get_wrapper()) {
+		avbc_in->img.rect.width = ctx->picinfo.visible_width;
+		avbc_in->img.rect.height = ctx->picinfo.visible_height;
+
+		aml_avbc_wrapper_init(&ctx->avbc_wrapper, avbc_in);
+	}
+
+	vfree(avbc_in);
+}
+
 static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 {
 	if (ctx->state == AML_STATE_ABORT) {
@@ -1974,6 +1990,7 @@ void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 
 	flush_work(&ctx->es_wkr_in);
 	flush_work(&ctx->es_wkr_out);
+	flush_work(&ctx->avbcd_call_wkr);
 
 	/* clean output cache and decoder status . */
 	if (ctx->state > AML_STATE_INIT)
@@ -2783,7 +2800,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 		ctx->is_stream_off = false;
 		aml_buf_workqueue_enable(&ctx->bm);
 #ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
-		if (ctx->avbc_wrapper)
+		if (ctx->avbcd_work_mode)
 			aml_avbc_wrapper_start(ctx->avbc_wrapper);
 #endif
 	} else {
@@ -4354,6 +4371,7 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 	struct v4l2_format *f)
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
+	struct aml_vcodec_dev *dev = ctx->dev;
 	struct v4l2_pix_format_mplane *pix_mp = &f->fmt.pix_mp;
 	struct v4l2_pix_format *pix = &f->fmt.pix;
 	struct vb2_queue *vq;
@@ -4423,6 +4441,8 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 	    (ctx->state >= AML_STATE_PROBE)) {
 		update_ctx_dimension(ctx, f->type);
 		copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
+		if (!(ctx->avbcd_work_mode & AVBCD_DEBUG_MODE))
+			queue_work(dev->decode_workqueue, &ctx->avbcd_call_wkr);
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		/*
 		 * This is run on OUTPUT
@@ -5825,7 +5845,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		ctx->write_frames = 0;
 		ctx->master_buf = NULL;
 #ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
-		if (ctx->avbc_wrapper)
+		if (ctx->avbcd_work_mode)
 			aml_avbc_wrapper_stop(ctx->avbc_wrapper);
 #endif
 	}

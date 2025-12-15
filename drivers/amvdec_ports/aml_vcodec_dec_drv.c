@@ -129,6 +129,7 @@ static int fops_vcodec_open(struct file *file)
 	init_waitqueue_head(&ctx->cap_wq);
 	init_waitqueue_head(&ctx->post_done_wq);
 	INIT_WORK(&ctx->es_wkr_out, dmabuff_recycle_worker);
+	INIT_WORK(&ctx->avbcd_call_wkr, avbcd_call_worker);
 	INIT_KFIFO(ctx->dmabuff_recycle);
 	INIT_KFIFO(ctx->capture_buffer);
 	atomic_set(&ctx->vpp_cache_num, 0);
@@ -251,6 +252,7 @@ static int fops_vcodec_release(struct file *file)
 	vb2_queue_release(&ctx->m2m_ctx->cap_q_ctx.q);
 	vb2_queue_release(&ctx->m2m_ctx->out_q_ctx.q);
 
+	aml_avbc_wrapper_destroy(aml_avbc_get_wrapper());
 	aml_vcodec_dec_info_deinit(ctx);
 	aml_vcodec_dec_release(ctx);
 #ifdef CONFIG_AMLOGIC_MEDIA_PROXY
@@ -963,7 +965,7 @@ int ge2d_copy = 1;
 EXPORT_SYMBOL(ge2d_copy);
 MEDIA_PARAM(ge2d_copy, int, 0644);
 
-int dec_i_frame_once = 1;
+int dec_i_frame_once;
 EXPORT_SYMBOL(dec_i_frame_once);
 MEDIA_PARAM(dec_i_frame_once, int, 0644);
 
@@ -1030,6 +1032,7 @@ static struct param_entry amvdec_ports_params[] = {
 	PARAM_UINT(trace_config),
 	PARAM_INT(enable_di_post),
 	PARAM_INT(avbcd_work_mode),
+	PARAM_INT(dec_i_frame_once),
 	PARAM_INT(crc_dump),
 	PARAM_INT(scatter_prealloc_size),
 	PARAM_INT(ge2d_copy),

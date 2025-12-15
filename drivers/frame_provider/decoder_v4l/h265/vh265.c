@@ -10320,7 +10320,8 @@ static void h265_post_avbcd_task(struct hevc_state_s *hevc)
 	if (hevc->bit_depth_luma == 10) {
 		vf->canvas0_config[0].endian = HEVC_CONFIG_P010_LE;
 		vf->canvas0_config[1].endian = HEVC_CONFIG_P010_LE;
-	} else if (ctx->avbcd_work_mode & AVBCD_HARDWARE_MODE) {
+	} else if (ctx->avbcd_work_mode &
+		(AVBCD_HARDWARE_LEGACY_MODE | AVBCD_HARDWARE_STANDARD_MODE)) {
 		vf->canvas0_config[0].endian = HEVC_CONFIG_LITTLE_ENDIAN;
 		vf->canvas0_config[1].endian = HEVC_CONFIG_LITTLE_ENDIAN;
 	}

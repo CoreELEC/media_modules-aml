@@ -25,10 +25,13 @@
 
 #define AVBCD_FRAME_SIZE 64
 
-#define AVBCD_SOFT_KERNEL_MODE	(1 << 0)
-#define AVBCD_SOFT_USER_MODE	(1 << 1)
-#define AVBCD_HARDWARE_MODE	(1 << 2)
-#define AVBCD_VICP_MODE		(1 << 3)
+#define AVBCD_SOFT_KERNEL_MODE		(1 << 0)
+#define AVBCD_SOFT_USER_MODE		(1 << 1)
+#define AVBCD_HARDWARE_LEGACY_MODE	(1 << 2)
+#define AVBCD_HARDWARE_STANDARD_MODE	(1 << 3)
+#define AVBCD_AUTO_MODE			(1 << 4)
+#define AVBCD_VICP_MODE			(1 << 5)
+#define AVBCD_DEBUG_MODE		(1 << 15)
 
 
 /*

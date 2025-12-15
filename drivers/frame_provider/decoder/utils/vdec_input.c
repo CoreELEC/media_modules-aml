@@ -30,7 +30,7 @@
 #include <asm/cacheflush.h>
 #include <linux/crc32.h>
 
-#define VFRAME_BLOCK_SIZE_AVBCD (SZ_1K)/*1k for avbcd mode.*/
+#define VFRAME_BLOCK_SIZE_AVBCD (18 * SZ_1K)/*18k for avbcd mode.*/
 #define VFRAME_BLOCK_SIZE (512 * SZ_1K)/*512 for 1080p default init.*/
 #define VFRAME_BLOCK_SIZE_4K (2 * SZ_1M) /*2M for 4K default.*/
 #define VFRAME_BLOCK_SIZE_MAX (4 * SZ_1M)
