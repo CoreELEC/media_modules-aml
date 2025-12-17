@@ -10686,6 +10686,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 		if ((pic->error_mark) && (hevc->PB_skip_mode != 0)) {
 			vf->frame_type |= V4L2_BUF_FLAG_ERROR;
+			v4l2_ctx->current_timestamp = pic->timestamp;
 			vdec_v4l_post_error_frame_event(hevc->v4l2_ctx);
 		}
 

@@ -3989,6 +3989,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		if (frame->data_flag & ERROR_FLAG ||
 			frame->data_flag & NODISP_FLAG) {
 			vf->frame_type |= V4L2_BUF_FLAG_ERROR;
+			v4l2_ctx->current_timestamp = frame->last_field_timestamp;
 			vdec_v4l_post_error_frame_event(hw->v4l2_ctx);
 		}
 
