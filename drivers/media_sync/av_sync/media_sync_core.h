@@ -130,6 +130,8 @@ typedef enum {
 	GET_QUEUE_VIDEO_INTERVAL,
 	GET_AUDIO_PLAYBACK_STATUS,
 	GET_VIDEO_PLAYBACK_STATUS,
+	GET_DISPLAY_LATENCY,
+	GET_SUPPORT_FEATURE,
 	SET_VIDEO_FRAME_ADVANCE = 500,
 	SET_SLOW_SYNC_ENABLE,
 	SET_TRICK_MODE,
@@ -158,7 +160,7 @@ typedef struct m_control {
 
 
 typedef struct speed{
-	u32 mNumerator;
+	s32 mNumerator;
 	u32 mDenominator;
 } mediasync_speed;
 
@@ -307,6 +309,7 @@ typedef struct update_info{
 	u32 isVideoFrameAdvance;
 	u32 mFreeRunType;
 	s32 video_latency;
+	s32 m_display_latency;
 } mediasync_update_info;
 
 typedef struct frame_rec_s {
@@ -362,6 +365,10 @@ typedef struct preplay_slow_sync {
 	int32_t expect_sync_time;
 	int32_t reserved[4];
 } mediasync_preplay_slowsync;
+
+typedef struct support_feature {
+    int support_vc_cb;
+} mediasync_support_feature;
 
 typedef struct instance{
 	s32 mSyncIndex;
@@ -439,6 +446,8 @@ typedef struct instance{
 	mediasync_preplay_slowsync preplay_slow_sync;
 	u32 audio_playback_status;
 	u32 video_playback_status;
+	s32 m_display_latency;
+	s32 support_vc_cb;
 }mediasync_ins;
 
 typedef struct Media_Sync_Manage {
@@ -579,4 +588,5 @@ long mediasync_ins_get_default_threshold(MediaSyncManager *p_sync_manage, medias
 long mediasync_ins_set_preplay_slowsync(MediaSyncManager *p_sync_manage, mediasync_preplay_slowsync threshold);
 long mediasync_ins_get_preplay_slowsync(MediaSyncManager *p_sync_manage, mediasync_preplay_slowsync *threshold);
 bool mediasync_ins_check_syncid_used_by_static_binder(s32 syncInsId);
+long mediasync_ins_get_display_latency(MediaSyncManager *p_sync_manage, int32_t *display_latency);
 #endif

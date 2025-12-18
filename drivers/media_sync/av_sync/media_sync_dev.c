@@ -64,6 +64,16 @@ typedef struct priv_s {
 	MediaSyncManager *mSyncIns;
 }mediasync_priv_s;
 
+typedef struct updateanchor_para {
+	int32_t mSyncmode;
+	bool    mIsVideo;
+	int64_t mMediaTimeUs;
+	int64_t mSystemTimeUs;
+	mediasync_systime_para mStc;
+	bool    mForceUpdate;
+	int32_t mDisplayLatency;
+}mediasync_updateanchor_para;
+
 static int mediasync_open(struct inode *inode, struct file *file)
 {
 	mediasync_priv_s *priv = {0};
@@ -140,6 +150,7 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 	mediasync_audio_switch AudioSwitch = {0};
 	mediasync_default_threshold defaultThreshold = {0};
 	mediasync_preplay_slowsync slowSyncThreshold = {0};
+	mediasync_updateanchor_para UpdateAnchor = {0};
 
 	switch (cmd) {
 		case MEDIASYNC_IOC_INSTANCE_ALLOC:
@@ -1011,7 +1022,7 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 			if (copy_from_user((void *)&StartMediaTime,
 				(void *)arg,
 				sizeof(StartMediaTime)))
-			return -EFAULT;
+				return -EFAULT;
 			ret = mediasync_ins_set_start_media_time(priv->mSyncIns, StartMediaTime);
 		break;
 
@@ -1601,7 +1612,41 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 					return -EFAULT;
 			}
 		break;
+		case MEDIASYNC_IOC_UPDATE_ANCHOR:
+			if (copy_from_user((void *)&UpdateAnchor,
+						(void *)arg,
+						sizeof(UpdateAnchor)))
+				return -EFAULT;
 
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_syncmode(priv->mSyncIns, &(UpdateAnchor.mSyncmode));
+			if (ret == 0) {
+				if ((UpdateAnchor.mIsVideo && UpdateAnchor.mSyncmode == MEDIA_SYNC_VMASTER) ||
+					(!UpdateAnchor.mIsVideo &&
+					(UpdateAnchor.mSyncmode == MEDIA_SYNC_AMASTER ||
+					UpdateAnchor.mSyncmode == MEDIA_SYNC_PCRMASTER)) ||
+					UpdateAnchor.mForceUpdate) {
+					ret = mediasync_ins_update_mediatime(priv->mSyncIns,
+									UpdateAnchor.mMediaTimeUs,
+									UpdateAnchor.mSystemTimeUs,
+									UpdateAnchor.mForceUpdate);
+				}
+			}
+			if (ret == 0) {
+				ret = mediasync_ins_get_display_latency(priv->mSyncIns,
+														&(UpdateAnchor.mDisplayLatency));
+				if (ret == 0) {
+
+					mediasync_ins_get_systemtime(priv->mSyncIns,
+						&(UpdateAnchor.mStc.mStcUs),
+						&(UpdateAnchor.mStc.mSystemTimeUs));
+					if (copy_to_user((void *)arg, &UpdateAnchor, sizeof(UpdateAnchor)))
+						return -EFAULT;
+				}
+			}
+			break;
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 			ret = -EFAULT;
@@ -1726,6 +1771,7 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_CUR_VFRAME_PACKET_INFO:
 		case MEDIASYNC_IOC_SET_CUR_AFRAME_PACKET_INFO:
 		case MEDIASYNC_IOC_GET_CUR_AFRAME_PACKET_INFO:
+		case MEDIASYNC_IOC_UPDATE_ANCHOR:
 			return mediasync_ioctl_inner(file, cmd,(ulong)compat_ptr(arg),1);
 		default:
 			return -EINVAL;

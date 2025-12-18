@@ -36,6 +36,11 @@
 #include <linux/moduleparam.h>
 #include <linux/amlogic/gki_module.h>
 #endif
+#ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+#include <linux/amlogic/media/video_processor/dpss_process_ext.h>
+#include <linux/amlogic/media/video_processor/video_composer_ext.h>
+// #include <linux/amlogic/media/video_processor/videodisplay_ext.h>
+#endif
 
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_MEDIA_SYNC
 #include <trace/events/meson_atrace.h>
@@ -95,7 +100,11 @@ extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
 
 extern int register_mediasync_vpts_set_cb(void* pfunc);
 extern int register_mediasync_apts_set_cb(void* pfunc);
-
+#ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+// extern int mediasync_set_callback(struct mediasync_cb *func);
+// extern int mediasync_set_pararmer(s32 sync_ins_id, enum mediasync_set_parameter_type_e type, void *arg);
+extern int set_display_speed(int sync_ins_id, int speed);
+#endif
 typedef int (*pfun_mediasync_video_hold_set)(int dev_id,s32 flag);
 static pfun_mediasync_video_hold_set mediasync_video_hold_set = NULL;
 static u64 get_llabs(s64 value){
@@ -840,6 +849,12 @@ static void mediasync_ins_reset_l(mediasync_ins* pInstance) {
 		pInstance->preplay_slow_sync.expect_sync_time = media_sync_preplay_slow_sync_expect_sync_time;
 		pInstance->mIsAbnormalAudio = false;
 		pInstance->video_latency = 0;
+		pInstance->m_display_latency = -1;
+#ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+		pInstance->support_vc_cb = 1;
+#else
+		pInstance->support_vc_cb = 0;
+#endif
 		pInstance->mShowFirstFrameNoSync = media_sync_show_firstframe_nosync;
 		pInstance->audio_playback_status = 0;
 		pInstance->video_playback_status = 0;
@@ -855,15 +870,63 @@ static void mediasync_ins_reset_l(mediasync_ins* pInstance) {
 	}
 }
 
+// #ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+// static int mediasync_ins_vc_cb(s32 sync_ins_id, int type, void *arg) {
+// 	int ret = -1;
+// 	mediasync_ins* pInstance = NULL;
+// 	MediaSyncManager* pSyncManage = NULL;
+// 	unsigned long flags = 0;
+// 	s32 sync_id = sync_ins_id & 0xFF;
+// 	pSyncManage = get_media_sync_manager(sync_id,__func__,__LINE__);
+// 	if (pSyncManage == NULL) {
+// 		return -1;
+// 	}
+
+// 	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+// 	pInstance = pSyncManage->pInstance;
+// 	if (pInstance == NULL) {
+// 		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+// 		return -1;
+// 	}
+// 	switch (type) {
+// 		case MEDIASYNC_CB_DISPLAY_DELAY:
+// 		{
+// 			s32 latency = *(s32*)arg;
+// 			if (latency != pInstance->m_display_latency) {
+// 				pInstance->mStcParmUpdateCount++;
+// 				pInstance->m_display_latency = latency;
+// 			}
+// 			break;
+// 		}
+// 		default:
+// 			break;
+// 	}
+
+// 	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+
+// 	return ret;
+// }
+// #endif
 
 long mediasync_init(void) {
 	int index = 0;
+// #ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+// 	struct mediasync_cb vc_cb = {
+// 		.mediasync = mediasync_ins_vc_cb,
+// 		.reserved0 = NULL,
+// 		.reserved1 = NULL,
+// 		.reserved2 = NULL,
+// 	};
+// #endif
 	for (index = 0; index < MAX_INSTANCE_NUM; index++) {
 		vMediaSyncInsList[index].pInstance = NULL;
 		spin_lock_init(&(vMediaSyncInsList[index].m_lock));
 	}
 	register_mediasync_vpts_set_cb(mediasync_ins_set_video_packets_info);
 	register_mediasync_apts_set_cb(mediasync_ins_set_audio_packets_info);
+	// #ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+	// mediasync_set_callback(&vc_cb);
+	// #endif
 	return 0;
 }
 
@@ -921,6 +984,12 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			pInstance->mQueueVptsInterval = -1;
 			pInstance->video_latency = 0;
 			pInstance->last_slope_overall_process = 100;
+			pInstance->m_display_latency = -1;
+#ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+			pInstance->support_vc_cb = 1;
+#else
+			pInstance->support_vc_cb = 0;
+#endif
 			pInstance->mShowFirstFrameNoSync = media_sync_show_firstframe_nosync;
 			pInstance->audio_wait_video_threshold = media_sync_audio_wait_video_threshold; //2s
 			pInstance->video_wait_audio_threshold = media_sync_video_wait_audio_threshold; //2s
@@ -970,7 +1039,6 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	}
 	mediasync_pr_info(0,index,"mediasync_ins_alloc index:%d, demuxid:%d.\n", index, sDemuxId);
 	*pSyncManage = &vMediaSyncInsList[index];
-
 	return 0;
 }
 
@@ -1008,6 +1076,7 @@ long mediasync_static_ins_binder(s32 sSyncInsId,
 	s32 temp_ins;
 	long ret = -1;
 	MediaSyncManager* SyncManage = NULL;
+
 	if (sSyncInsId < MAX_DYNAMIC_INSTANCE_NUM && sSyncInsId >= 0) {
 		ret = mediasync_ins_binder(sSyncInsId, &SyncManage);
 	}
@@ -1041,6 +1110,12 @@ long mediasync_static_ins_binder(s32 sSyncInsId,
 					pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
 					pInstance->mute_flag = false;
 					pInstance->video_latency = 0;
+					pInstance->m_display_latency = -1;
+#ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+					pInstance->support_vc_cb = 1;
+#else
+					pInstance->support_vc_cb = 0;
+#endif
 					pInstance->mSourceType = TS_DEMOD;
 					pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
 					pInstance->mRef++;
@@ -1270,6 +1345,10 @@ long mediasync_ins_set_mediatime_speed(MediaSyncManager* pSyncManage,
 		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
+#ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+	// mediasync_set_pararmer(pInstance->mSyncId, MEDIASYNC_SET_DISPLAY_SPEED, &fSpeed);
+	set_display_speed(pInstance->mSyncId, fSpeed.mNumerator * 10);
+#endif
 	if (pInstance->mSpeed.mNumerator == fSpeed.mNumerator &&
 		pInstance->mSpeed.mDenominator == fSpeed.mDenominator) {
 		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
@@ -4083,6 +4162,7 @@ long mediasync_ins_get_update_info(mediasync_ins* pInstance, mediasync_update_in
 	info->isVideoFrameAdvance = pInstance->isVideoFrameAdvance;
 	info->mFreeRunType = pInstance->mFreeRunType;
 	info->video_latency = pInstance->video_latency;
+	info->m_display_latency = pInstance->m_display_latency;
 	mediasync_ins_check_pcr_slope(pInstance,info);
 	info->mStcParmUpdateCount = pInstance->mStcParmUpdateCount;
 	return 0;
@@ -4098,6 +4178,11 @@ long mediasync_ins_get_tunnel_combined_para(mediasync_ins* pInstance, mediasync_
 	info->denominator = pInstance->mSpeed.mDenominator;
 	info->pause = pInstance->mPaused;
 
+	return 0;
+}
+
+long mediasync_ins_get_support_feature(mediasync_ins* pInstance, mediasync_support_feature* feature) {
+	feature->support_vc_cb = pInstance->support_vc_cb;
 	return 0;
 }
 
@@ -4167,6 +4252,8 @@ long mediasync_ins_ext_ctrls_ioctrl(MediaSyncManager* pSyncManage, ulong arg, un
 		case GET_QUEUE_VIDEO_INTERVAL:
 		case GET_VIDEO_PLAYBACK_STATUS:
 		case GET_AUDIO_PLAYBACK_STATUS:
+		case GET_DISPLAY_LATENCY:
+		case GET_SUPPORT_FEATURE:
 		{
 			ret = mediasync_ins_ext_ctrls(pSyncManage,&mediasyncUserControl);
 			if (copy_to_user((void *)arg,&mediasyncUserControl,sizeof(mediasyncControl))) {
@@ -4500,6 +4587,26 @@ long mediasync_ins_ext_ctrls(MediaSyncManager* pSyncManage,mediasync_control* me
 		case GET_VIDEO_PLAYBACK_STATUS:
 		{
 			mediasyncControl->value = pInstance->video_playback_status;
+			ret = 0;
+			break;
+		}
+		case GET_DISPLAY_LATENCY:
+		{
+			mediasyncControl->value = pInstance->m_display_latency;
+			ret = 0;
+			break;
+		}
+		case GET_SUPPORT_FEATURE:
+		{
+			mediasync_support_feature feature;
+			mediasync_ins_get_support_feature(pInstance,&feature);
+			minSize = sizeof(mediasync_support_feature);
+
+			if (minSize > mediasyncControl->size) {
+				minSize = mediasyncControl->size;
+			}
+			memcpy((mediasync_support_feature*)mediasyncControl->ptr,&feature,minSize);
+			mediasyncControl->size = minSize;
 			ret = 0;
 			break;
 		}
@@ -4992,6 +5099,27 @@ bool mediasync_ins_check_syncid_used_by_static_binder(s32 syncInsId) {
 	}
 
 	return ret;
+}
+
+long mediasync_ins_get_display_latency(MediaSyncManager *p_sync_manage, int32_t *display_latency) {
+	mediasync_ins *p_instance = NULL;
+	unsigned long flags = 0;
+	if (p_sync_manage == NULL || display_latency == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(p_sync_manage->m_lock),flags);
+	p_instance = p_sync_manage->pInstance;
+	if (p_instance == NULL) {
+		spin_unlock_irqrestore(&(p_sync_manage->m_lock),flags);
+		return -1;
+	}
+
+	*display_latency = p_instance->m_display_latency;
+
+	spin_unlock_irqrestore(&(p_sync_manage->m_lock),flags);
+
+	return 0;
 }
 
 int register_mediasync_video_hold_set_cb(void* pfunc) {
