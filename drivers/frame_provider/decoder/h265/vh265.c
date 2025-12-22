@@ -229,6 +229,7 @@ static u32 save_buffer = 1;
 static u32 efficiency_mode = 1;
 static u32 enable_hw_timer = 1;
 static u32 support_no_output_of_prior_pics = 0;
+static u32 rpm_expand = 1;
 
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 
@@ -883,10 +884,10 @@ enum NalUnitType {
 
 #define MAX_INT 0x7FFFFFFF
 
-#define RPM_BEGIN                                              0x100
-#define modification_list_cur                                  0x148
-#define RPM_END                                                0x180
-#define RPM_VALID_E                                            0x17C
+#define RPM_BEGIN                                              0x114
+#define RPM_END                                                0x1b4
+#define RPM_VALID_E                                            0x1a0
+
 
 #ifdef SUPPORT_LONG_TERM_RPS
 
@@ -987,10 +988,15 @@ union param_u {
 		unsigned short overscan_info_present_appropriate_flag;
 		unsigned short no_output_of_prior_pics_flag;
 		unsigned short pic_output_flag;
+		unsigned short CUR_RPS_LT[0x10];
 	} p;
 };
 
+#ifdef SUPPORT_LONG_TERM_RPS
+#define RPM_BUF_SIZE ((RPM_END - RPM_BEGIN)*2)
+#else
 #define RPM_BUF_SIZE (0x80*2)
+#endif
 /* non mmu mode lmem size : 0x400, mmu mode : 0x500*/
 #define LMEM_BUF_SIZE (0x600 * 2)
 
@@ -4887,6 +4893,10 @@ static unsigned char is_ref_long_term(struct hevc_state_s *hevc, int poc)
 static int read_ref_pic_set(struct hevc_state_s *hevc, union param_u *params, int poc, struct hevc_RPS_s *rps_data)
 {
 	int i;
+#ifdef SUPPORT_LONG_TERM_RPS
+	int prevDeltaMSB = 0;
+	int ii;
+#endif
 	int total_num = 0;
 	rps_data->num_neg = 0;
 	rps_data->num_pos = 0;
@@ -4910,30 +4920,55 @@ static int read_ref_pic_set(struct hevc_state_s *hevc, union param_u *params, in
 		if ((params->p.CUR_RPS[i] >> RPS_USED_BIT) & 1) {
 			int delt =
 				params->p.CUR_RPS[i] &
-				((1 << (RPS_USED_BIT - 1)) - 1);
+				((1 << RPS_SIGN_BIT) - 1);
 
-			if ((params->p.CUR_RPS[i] >> (RPS_USED_BIT - 1)) & 1) {
 #ifdef SUPPORT_LONG_TERM_RPS
-				if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
-					rps_data->RefPicSetLtCurr[rps_data->num_lt] =
-						poc - ((1 << (RPS_USED_BIT - 1)) -
-									delt);
-					rps_data->num_lt++;
-					continue;
+			if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
+				int lt_poc;
+				struct PIC_s *pic, *ref_pic = NULL;
+				int iMaxPOClsb =
+					1 << (params->p.log2_max_pic_order_cnt_lsb_minus4 + 4);
+				if (delt != 0) {
+					int iPOClsb = params->p.POClsb;
+					int deltaPocMSBCycleLT = delt + prevDeltaMSB;
+					lt_poc = poc - deltaPocMSBCycleLT * iMaxPOClsb -
+						iPOClsb + params->p.CUR_RPS_LT[i];
+					prevDeltaMSB = deltaPocMSBCycleLT;
+				} else {
+					lt_poc = params->p.CUR_RPS_LT[i];
 				}
+				for (ii = 0; ii < MAX_REF_PIC_NUM; ii++) {
+					pic = hevc->m_PIC[ii];
+					if (pic == NULL ||
+						pic->index == -1 ||
+						pic->BUF_index == -1 ||
+						pic->referenced == 0 ||
+						pic->POC == poc)
+						continue;
+					if (pic->POC == lt_poc)
+						ref_pic = pic;
+					if (ref_pic == NULL &&
+						((pic->POC & (iMaxPOClsb - 1)) == lt_poc))
+						ref_pic = pic;
+				}
+				if (ref_pic == NULL)
+					hevc_print(hevc, H265_DEBUG_BUFMGR,
+						"Warning %s, could not find ref pic for lt poc %d\n",
+						__func__, lt_poc);
+				else
+					hevc_print(hevc, H265_DEBUG_BUFMGR,
+						"%s: find ref pic (poc %d) for lt poc %d\n",
+						__func__, ref_pic->POC, lt_poc);
+				rps_data->RefPicSetLtCurr[rps_data->num_lt] =
+					ref_pic? ref_pic->POC : lt_poc;
+				rps_data->num_lt++;
+			} else
 #endif
+			if ((params->p.CUR_RPS[i] >> RPS_SIGN_BIT) & 1) {
 				rps_data->RefPicSetStCurr0[rps_data->num_neg] =
-					poc - ((1 << (RPS_USED_BIT - 1)) -
-								delt);
+					poc - ((1 << RPS_SIGN_BIT) - delt);
 				rps_data->num_neg++;
 			} else {
-#ifdef SUPPORT_LONG_TERM_RPS
-				if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
-					rps_data->RefPicSetLtCurr[rps_data->num_lt] = poc + delt;
-					rps_data->num_lt++;
-					continue;
-				}
-#endif
 				rps_data->RefPicSetStCurr1[rps_data->num_pos] = poc + delt;
 				rps_data->num_pos++;
 			}
@@ -4954,10 +4989,14 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 	int poc_tmp;
 	struct PIC_s *pic;
 	unsigned char is_referenced;
+#ifdef SUPPORT_LONG_TERM_RPS
+	int jj;
+	int prevDeltaMSB = 0;
+#endif
 
-	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE) {
+	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 		pr_err("cur poc %d\n", cur_poc);
-	}
+
 	for (ii = 0; ii < MAX_REF_PIC_NUM; ii++) {
 		pic = hevc->m_PIC[ii];
 		if (pic == NULL ||
@@ -4971,6 +5010,7 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 		if ((pic->referenced == 0 || pic->POC == cur_poc))
 			continue;
 		is_referenced = 0;
+		prevDeltaMSB = 0;
 
 		for (i = 0; i < 16; i++) {
 			int delt;
@@ -4981,9 +5021,52 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 			if (params->p.CUR_RPS[i] & 0x8000)
 				break;
 #endif
-			delt = params->p.CUR_RPS[i] & ((1 << (RPS_USED_BIT - 1)) - 1);
-			if (params->p.CUR_RPS[i] & (1 << (RPS_USED_BIT - 1))) {
-				poc_tmp = cur_poc - ((1 << (RPS_USED_BIT - 1)) - delt);
+			delt = params->p.CUR_RPS[i] & ((1 << RPS_SIGN_BIT) - 1);
+#ifdef SUPPORT_LONG_TERM_RPS
+			if ((params->p.CUR_RPS[i] >> RPS_LT_BIT) & 1) {
+				struct PIC_s *tmp_pic, *ref_pic=NULL;
+				int iMaxPOClsb =
+					1 << (params->p.log2_max_pic_order_cnt_lsb_minus4 + 4);
+				if (delt != 0) {
+					int iPOClsb = params->p.POClsb;
+					int deltaPocMSBCycleLT = delt + prevDeltaMSB;
+					poc_tmp =
+						cur_poc - deltaPocMSBCycleLT * iMaxPOClsb -
+						iPOClsb + params->p.CUR_RPS_LT[i];
+					prevDeltaMSB = deltaPocMSBCycleLT;
+				} else {
+					poc_tmp = params->p.CUR_RPS_LT[i];
+				}
+				for (jj = 0; jj < MAX_REF_PIC_NUM; jj++) {
+					tmp_pic = hevc->m_PIC[jj];
+					if (tmp_pic == NULL ||
+						tmp_pic->index == -1 ||
+						tmp_pic->BUF_index == -1 ||
+						tmp_pic->referenced == 0 ||
+						tmp_pic->POC == cur_poc)
+						continue;
+					if (tmp_pic->POC == poc_tmp)
+						ref_pic = tmp_pic;
+					if (ref_pic == NULL &&
+						((tmp_pic->POC & (iMaxPOClsb - 1)) == poc_tmp))
+						ref_pic = tmp_pic;
+				}
+				if (ref_pic == NULL)
+					hevc_print(hevc, H265_DEBUG_BUFMGR,
+						"Warning %s, could not find ref pic for lt poc %d\n",
+						__func__, poc_tmp);
+				else
+					hevc_print(hevc, H265_DEBUG_BUFMGR,
+						"%s: find ref pic (poc %d) for lt poc %d\n",
+						__func__, ref_pic->POC, poc_tmp);
+
+				if (ref_pic) {
+					poc_tmp = ref_pic->POC;
+				}
+			} else
+#endif
+			if (params->p.CUR_RPS[i] & (1 << RPS_SIGN_BIT)) {
+				poc_tmp = cur_poc - ((1 << RPS_SIGN_BIT) - delt);
 			} else
 				poc_tmp = cur_poc + delt;
 			if (poc_tmp == pic->POC) {
@@ -5002,9 +5085,8 @@ static void apply_ref_pic_set(struct hevc_state_s *hevc, int cur_poc,
 		if (is_referenced == 0) {
 			pic->referenced = 0;
 			put_mv_buf(hevc, pic);
-			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE) {
+			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 				pr_err("set poc %d reference to 0\n", pic->POC);
-			}
 		}
 	}
 }
@@ -15971,6 +16053,11 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	else
 		nal_search_data &= ~(1 << 24);
 
+	if (rpm_expand)
+		nal_search_data |= 1 << 27;
+	else
+		nal_search_data &= ~(1 << 27);
+
 	WRITE_VREG(NAL_SEARCH_CTL, nal_search_data);
 
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END);
@@ -17355,6 +17442,7 @@ static struct param_entry amvdec_h265_params[] = {
 	PARAM_UINT(efficiency_mode),
 	PARAM_UINT(enable_hw_timer),
 	PARAM_UINT(support_no_output_of_prior_pics),
+	PARAM_UINT(rpm_expand),
 	{ /* sentinel */ }
 };
 module_param_cb(params, &key_value_param_ops, &amvdec_h265_params, 0644);
@@ -17672,6 +17760,9 @@ MODULE_PARM_DESC(enable_hw_timer, "\n  enable_hw_timer\n");
 MEDIA_PARAM(support_no_output_of_prior_pics, uint, 0664);
 MODULE_PARM_DESC(support_no_output_of_prior_pics,
 	"\n support_no_output_of_prior_pics\n");
+
+MEDIA_PARAM(rpm_expand, uint, 0664);
+MODULE_PARM_DESC(rpm_expand, "\n rpm_expand\n");
 
 module_init(amvdec_h265_driver_init_module);
 module_exit(amvdec_h265_driver_remove_module);
