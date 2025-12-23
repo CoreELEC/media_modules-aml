@@ -1139,6 +1139,10 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	expires = jiffies + msecs_to_jiffies(2000);
 
 	while (!is_available_buffer(hw)) {
+		if (ctx->is_stream_off) {
+			pr_info("The capture is streamoff, no longer need eos.\n");
+			return 0;
+		}
 		if (time_after(jiffies, expires)) {
 			pr_info("[%d] VC1 isn't enough capture buff for notify eos.\n", ctx->id);
 			return -1;
