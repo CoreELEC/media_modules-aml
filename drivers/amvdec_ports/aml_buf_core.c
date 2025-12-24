@@ -1107,7 +1107,7 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 		entry = entry->master_entry;
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s(entry %px), user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s(entry %px), user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d, pair_state:%d, inited:%d\n",
 		__func__,
 		entry,
 		user,
@@ -1118,7 +1118,21 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 		bc->state,
 		atomic_read(&entry->ref),
 		kref_read(&bc->core_ref),
-		bc->free_num);
+		bc->free_num,
+		entry->pair_state,
+		entry->inited);
+
+	if (bm->config.dynamic_mode &&
+		(entry->state == BUF_STATE_FREE)) {
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+			"(entry %px), key:%lx, phy:%lx, idx:%d, Has been queued!\n",
+			entry,
+			entry->key,
+			entry->phy_addr,
+			entry->index);
+
+		goto out;
+	}
 
 	if (WARN_ON((entry->state != BUF_STATE_INIT) &&
 		(entry->state != BUF_STATE_DONE) &&

@@ -81,6 +81,9 @@
 #else
 #include <linux/meson_ion.h>
 #endif
+#ifdef CONFIG_AMLOGIC_BUF_MANAGER
+#include <linux/amlogic/media/video_processor/di_proc_buf_mgr.h>
+#endif
 
 MODULE_IMPORT_NS(DMA_BUF);
 
@@ -117,6 +120,7 @@ MODULE_IMPORT_NS(DMA_BUF);
 #define AML_V4L2_SET_INST_ID (V4L2_CID_USER_AMLOGIC_BASE + 18)
 #define AML_V4L2_SET_OUTPUTMODES (V4L2_CID_USER_AMLOGIC_BASE + 19)
 #define AML_V4L2_GET_OUTPUTMODES  (V4L2_CID_USER_AMLOGIC_BASE + 20)
+#define AML_V4L2_GET_DI_POST_SUPPORT (V4L2_CID_USER_AMLOGIC_BASE + 21)
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
@@ -6109,6 +6113,13 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 			sizeof(struct output_mode) * MAX_OUTPUT_MODE_GROUPS);
 		break;
 	}
+	case AML_V4L2_GET_DI_POST_SUPPORT:
+#ifdef CONFIG_AMLOGIC_BUF_MANAGER
+		ctrl->val = get_di_proc_enable();
+#endif
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+			"DI-POST: %d\n", ctrl->val);
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -6499,6 +6510,18 @@ static const struct v4l2_ctrl_config ctrl_gt_decinfo_set = {
 	.dims		= { sizeof(struct vdec_common_s) },
 };
 
+static const struct v4l2_ctrl_config ctrl_get_di_post_support = {
+	.name	= "di post support",
+	.id	= AML_V4L2_GET_DI_POST_SUPPORT,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+	.min	= 0,
+	.max	= 256,
+	.step	= 1,
+	.def	= 0,
+};
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -6647,6 +6670,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_decinfo_set, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_get_di_post_support, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;
