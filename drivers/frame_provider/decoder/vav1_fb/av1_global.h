@@ -2115,7 +2115,7 @@ typedef struct EXTERNAL_REFERENCES {
 
 #define RPM_BEGIN                                              0x200
 #define RPM_END                                                0x280
-#define RPM_VALID_E                                            0x265
+#define RPM_VALID_E                                            0x268
 
 typedef union param_u {
 	struct {
@@ -2212,7 +2212,9 @@ typedef union param_u {
 		//bit 0-2 : temporal_id
 		unsigned short temporal_spatial_id;
 		unsigned short max_operating_point_idc;
-
+		unsigned short render_and_frame_size_different;
+		unsigned short render_width;
+		unsigned short render_height;
 		/*ucode end*/
 		/*other*/
 		unsigned short enable_superres;

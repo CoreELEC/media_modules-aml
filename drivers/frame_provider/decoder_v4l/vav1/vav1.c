@@ -6077,7 +6077,10 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_B
 	vf->flag = 0;
 	vf->prop.master_display_colour = hw->vf_dp;
 	vf->signal_type = hw->video_signal_type;
-	if (vf->compWidth && vf->compHeight)
+
+	if (hw->aom_param.p.render_and_frame_size_different && hw->aom_param.p.render_height && hw->aom_param.p.render_width)
+		hw->frame_ar = hw->aom_param.p.render_height * 0x100 / hw->aom_param.p.render_width;
+	else if (vf->compWidth && vf->compHeight)
 		hw->frame_ar = vf->compHeight * 0x100 / vf->compWidth;
 	ar = min_t(u32, hw->frame_ar, DISP_RATIO_ASPECT_RATIO_MAX);
 	vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
