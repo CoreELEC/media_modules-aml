@@ -2110,6 +2110,7 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 		vdec->video_id = 0xffffffff;
 		if (-1 != inst_id)
 			vdec->resman_ssid = inst_id;
+		vdec->sync_id = 0;
 		vdec_input_init(&vdec->input, vdec);
 		vdec->input.vdec_up = vdec_up;
 		if (master) {
@@ -8900,6 +8901,7 @@ void vdec_vframe_ready(struct vdec_s *vdec, struct vframe_s *vf) {
 	} else {
 		vf->flag &= ~VFRAME_FLAG_VIDEO_SECURE;
 	}
+	vf->syncid = vdec->sync_id;
 }
 EXPORT_SYMBOL(vdec_vframe_ready);
 

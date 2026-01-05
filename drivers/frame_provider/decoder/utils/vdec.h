@@ -662,6 +662,7 @@ struct vdec_s {
 	struct vdec_info_statistic_s vdec_info_statistic;
 	bool avbc_dump_enable;
 	DECLARE_KFIFO(avbc_dump_q, struct vframe_s *, AVBC_DUMP_POOL_SIZE);
+	u32 sync_id;
 };
 
 #define CODEC_MODE(a, b, c, d)\

@@ -2194,6 +2194,10 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		}
 		break;
 
+	case AMSTREAM_SET_MEDIASYNC_ID:
+		priv->vdec->sync_id = parm.data_32;
+		pr_info("AMSTREAM_SET_MEDIASYNC_ID, vdec:%p, sync_id:%x\n", priv->vdec, priv->vdec->sync_id);
+		break;
 	default:
 		r = -ENOIOCTLCMD;
 		break;
