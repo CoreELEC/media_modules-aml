@@ -259,7 +259,6 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			ret = ptsserver_static_ins_binder(priv->mPtsServerInsId, &PServerIns, &allocparm);
 			mutex_unlock(&m_alloc_lock);
 			if (PServerIns == NULL) {
-				pr_info("[%s]:%d\n", __func__, __LINE__);
 				return -EFAULT;
 			}
 			if (priv != NULL) {
@@ -281,7 +280,6 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (copy_from_user((void *)&PServerInsId,
 						(void *)arg,
 						sizeof(PServerInsId))) {
-				pr_info("[%s]:%d\n", __func__, __LINE__);
 				return -EFAULT;
 			}
 			if (priv != NULL) {
@@ -363,7 +361,7 @@ static struct class ptsserver_class = {
 
 static int __init ptsserver_module_init(void)
 {
-	int r;
+	int r, err;
 
 	r = class_register(&ptsserver_class);
 
@@ -375,7 +373,7 @@ static int __init ptsserver_module_init(void)
 	/* create tsync device */
 	r = register_chrdev(PTSSERVER_MAJOR, "ptsserver", &ptsserver_fops);
 	if (r < 0) {
-		pr_info("Can't register major for ptsserver\n");
+		err = -2;
 		goto err2;
 	}
 
@@ -383,7 +381,7 @@ static int __init ptsserver_module_init(void)
 				MKDEV(PTSSERVER_MAJOR, 0), NULL, PTSSERVER_DEVICE_NAME);
 
 	if (IS_ERR(ptsserver_dev)) {
-		pr_err("Can't create ptsserver_dev device\n");
+		err = -1;
 		goto err1;
 	}
 	ptsserver_init();
@@ -394,6 +392,7 @@ err1:
 	unregister_chrdev(PTSSERVER_MAJOR, "ptsserver");
 err2:
 	class_unregister(&ptsserver_class);
+	pr_err("register device fail, err:%d\n", err);
 
 	return 0;
 }

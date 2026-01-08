@@ -26,7 +26,7 @@
 #endif
 
 #define DUR2US(x) ((x)*1000/96)
-#define mediasync_pr_info(dbg_level,inst,fmt,args...) if (dbg_level <= media_sync_vf_debug_level) {pr_info("[MS_Vfm:%d][%d] " fmt,__LINE__, inst,##args);}
+#define mediasync_pr_info(dbg_level,inst,fmt,args...) if (dbg_level <= media_sync_vf_debug_level) {pr_info("[MS_Vfm:%d] " fmt, inst,##args);}
 
 
 static u32 media_sync_vf_debug_level = 0;
@@ -141,39 +141,44 @@ static void mediasync_drop_frame_func(void *op_arg, struct vframe_s *vf_drop) {
 	mediasync_vf_dev *dev = (mediasync_vf_dev *)op_arg;
 	bool is_di_pw = false;
 	int ret = 0;
+	int error = 0;
 	vf = vf_get(dev->vf_receiver_name);
 	if (vf == NULL) {
-		mediasync_pr_info(1,dev->dev_id,"vf is null");
 		return ;
 	}
 
 	if (vf->type & VIDTYPE_DI_PW) {
 		is_di_pw = true; //is di buffer
 	}
-	mediasync_pr_info(2,dev->dev_id,"in vf->pts_us64:%lld vf_drop->pts_us64:%lld diff:%lld",
+
+	//if (vf->pts_us64 != vf_drop->pts_us64) {
+		//mediasync_pr_info(2,dev->dev_id,"not the same_vf\n");
+		//return ;
+	//}
+	mediasync_pr_info(2,dev->dev_id,"pts:%lld drop_pts:%lld diff:%lld same_vf:%d",
 														vf->pts_us64,
 														vf_drop->pts_us64,
-														(vf->pts_us64-vf_drop->pts_us64));
+														(vf->pts_us64-vf_drop->pts_us64),
+														(vf->pts_us64 != vf_drop->pts_us64));
 
-	if (vf->pts_us64 != vf_drop->pts_us64) {
-		mediasync_pr_info(2,dev->dev_id,"drop null,not the same vf \n");
-		//return ;
-	}
 	ret = vf_put(vf, dev->vf_receiver_name);
 	if (ret < 0) {
 		if (is_di_pw) {
 			dim_post_keep_cmd_release2(vf);
-			mediasync_pr_info(0,dev->dev_id,"mediasync_vf_put dim release \n");
 		}
-		mediasync_pr_info(0,dev->dev_id,"vf_put:0x%lx error\n",(ulong)vf);
-		return ;
-	}
-	ret = vf_notify_provider(dev->vf_receiver_name, VFRAME_EVENT_RECEIVER_PUT,
+		error = -1;
+	} else {
+		ret = vf_notify_provider(dev->vf_receiver_name, VFRAME_EVENT_RECEIVER_PUT,
 				NULL);
-	if (ret < 0) {
-		mediasync_pr_info(0,dev->dev_id,"vf_notify_provider error\n");
+		if (ret < 0) {
+			error = -2;
+		}
 	}
-	mediasync_pr_info(2,dev->dev_id,"out drop frame success\n");
+	if (ret < 0) {
+		mediasync_pr_info(0,dev->dev_id,"error:%d di_pw:%d\n",error,is_di_pw);
+	} else {
+		mediasync_pr_info(2,dev->dev_id,"drop ok\n");
+	}
 	return ;
 }
 
@@ -191,7 +196,7 @@ static struct vframe_s *mediasync_vf_peek(void *op_arg)
 	if (dev == NULL) {
 		return NULL;
 	}
-	mediasync_pr_info(3,dev->dev_id,"peek in (Status:%d) isVideoHold:%d \n",dev->frameStatus,dev->isVideoHold);
+	mediasync_pr_info(3,dev->dev_id,"peek (Status:%d) Hold:%d\n",dev->frameStatus,dev->isVideoHold);
 	vf = vf_peek(dev->vf_receiver_name);
 	if (vf == NULL) {
 		return NULL;
@@ -200,7 +205,6 @@ static struct vframe_s *mediasync_vf_peek(void *op_arg)
 	if (dev->frameStatus == 1) {
 		if (dev->isVideoHold == true) {
 			mediasync_drop_frame_func(dev, vf);
-			mediasync_pr_info(2,dev->dev_id,"frameStatus:%d isVideoHold:%d \n",dev->frameStatus,dev->isVideoHold);
 			return NULL;
 		}
 		return vf;
@@ -212,13 +216,10 @@ static struct vframe_s *mediasync_vf_peek(void *op_arg)
 		vPts = vf->pts_us64;
 	}
 
-	mediasync_pr_info(2,dev->dev_id,"vf->pts:%d pts:%lld lastpts:%lld diff:%lld vfPts:%lld isVideoHold:%d",
-														vf->pts,
+	mediasync_pr_info(2,dev->dev_id,"pts:%lld l_pts:%lld diff:%lld",
 														vPts,
 														dev->lastVpts,
-														vPts - dev->lastVpts,
-														vf->pts_us64,
-														dev->isVideoHold);
+														vPts - dev->lastVpts);
 	vsyncPolicy.param1 = DUR2US(vf->duration);
 	mediasync_video_process(dev->sync_policy_instance,vPts,&vsyncPolicy);
 	 /*
@@ -262,19 +263,15 @@ static struct vframe_s *mediasync_vf_get(void *op_arg)
 	}
 
 	systemtime = mediasync_get_system_time_us();
-	if (media_sync_vf_debug_level >= 1) {
-
-		mediasync_pr_info(1,dev->dev_id,"render vf:0x%lx vpts:%lld vfPts:%lld vdiff:%lld sdiff:%lld ",
+	mediasync_pr_info(1,dev->dev_id,"render vf:0x%lx vpts:%lld vdiff:%lld sdiff:%lld",
 														(ulong)vf,
 														lastVpts,
-														vf->pts_us64,
 														lastVpts - dev->lastVpts,
 														systemtime - dev->getSysTimeUs);
-	}
 
 	if (systemtime - dev->getCountSysTimeUs > 1000000 ||
 		dev->outCount == 0) {
-		mediasync_pr_info(1,dev->dev_id,"render outCount:%d duration:%lld us",dev->outCount,systemtime - dev->getCountSysTimeUs);
+		mediasync_pr_info(1,dev->dev_id,"render outCnt:%d dur:%lld us",dev->outCount,systemtime - dev->getCountSysTimeUs);
 		dev->outCount = 0;
 		dev->getCountSysTimeUs = systemtime;
 	}
@@ -285,9 +282,6 @@ static struct vframe_s *mediasync_vf_get(void *op_arg)
 	dev->frameStatus = 0;
 
 	dev->getSysTimeUs = systemtime;
-	//	mediasync_pr_info(0,dev->dev_id,
-	//	"get type:0x%x duration:0x%x pts:0x%x pts_us64:%lld lastVpts:%lld\n",
-	//	vf->type,DUR2PTS(vf->duration),vf->pts,vf->pts_us64,dev->lastVpts);
 	return vf;
 }
 
@@ -295,27 +289,31 @@ static void mediasync_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	mediasync_vf_dev *dev = (mediasync_vf_dev *)op_arg;
 	int ret = 0;
+	int error = 0;
 	bool is_di_pw = false;
 
 	if (vf->type & VIDTYPE_DI_PW) {
 		is_di_pw = true; //is di buffer
 	}
-	mediasync_pr_info(4,dev->dev_id,"vf_put:0x%lx\n",(ulong)vf);
+	mediasync_pr_info(4,dev->dev_id,"put:0x%lx\n",(ulong)vf);
 	ret = vf_put(vf, dev->vf_receiver_name);
 	if (ret < 0) {
 		if (is_di_pw) {
 			dim_post_keep_cmd_release2(vf);
-			mediasync_pr_info(0,dev->dev_id,"mediasync_vf_put dim release \n");
 		}
-		mediasync_pr_info(0,dev->dev_id,"vf_put:0x%lx error\n",(ulong)vf);
-		return;
-	}
-	ret = vf_notify_provider(dev->vf_receiver_name, VFRAME_EVENT_RECEIVER_PUT,
+		error = -1;
+	} else {
+		ret = vf_notify_provider(dev->vf_receiver_name, VFRAME_EVENT_RECEIVER_PUT,
 				NULL);
+		if (ret < 0) {
+			error = -2;
+		}
+	}
 	if (ret < 0) {
-		mediasync_pr_info(0,dev->dev_id,"mediasync_vf_put vf_notify_provider error\n");
+		mediasync_pr_info(0,dev->dev_id,"error:%d di_pw:%d\n",error,is_di_pw);
 	}
 	//dev->frmeStatus = 0;
+	return;
 }
 
 static int mediasync_event_cb(int type, void *data, void *private_data)
@@ -371,8 +369,6 @@ static int mediasync_receiver_event_fun(int type, void *data, void *private_data
 	//struct vframe_s *vf = NULL;
 	//mediasync_pr_info(0,dev->inst,"mediasync_receiver_event_fun type:%d \n",type);
 	if (type == VFRAME_EVENT_PROVIDER_UNREG) {
-		mediasync_pr_info(0,dev->dev_id,"VFRAME_EVENT_PROVIDER_UNREG in \n");
-
 		if (dev->thread != NULL) {
 			dev->running = false;
 			up(&dev->sem);
@@ -391,20 +387,14 @@ static int mediasync_receiver_event_fun(int type, void *data, void *private_data
 
 		vf_unreg_provider(&dev->mediasync_vf_prov);
 
-		mediasync_pr_info(0,dev->dev_id,"unreg  sync_policy_instance：0x%lx\n",dev->sync_policy_instance);
-
 		mediasync_policy_release(dev->sync_policy_instance);
 
+		mediasync_pr_info(0,dev->dev_id,"UNREG ok.inst:0x%lx\n",dev->sync_policy_instance);
 		dev->sync_policy_instance = 0;
-		mediasync_pr_info(0,dev->dev_id,"VFRAME_EVENT_PROVIDER_UNREG out \n");
-
 		//mutex_unlock(&dev->vf_mutex);
 	} else if (type == VFRAME_EVENT_PROVIDER_REG) {
 
 		//mutex_lock(&dev->vf_mutex);
-
-		mediasync_pr_info(0,dev->dev_id,"VFRAME_EVENT_PROVIDER_REG in\n");
-
 		vf_reg_provider(&dev->mediasync_vf_prov);
 
 		dev->frameStatus = 0;
@@ -415,8 +405,7 @@ static int mediasync_receiver_event_fun(int type, void *data, void *private_data
 		dev->getSysTimeUs = mediasync_get_system_time_us();
 		dev->outCount = 0;
 
-		mediasync_pr_info(0,dev->dev_id,"REG sync_policy_instance:0x%lx\n",dev->sync_policy_instance);
-		mediasync_pr_info(0,dev->dev_id,"VFRAME_EVENT_PROVIDER_REG out\n");
+		mediasync_pr_info(0,dev->dev_id,"REG ok.inst:0x%lx\n",dev->sync_policy_instance);
 		//mutex_unlock(&dev->vf_mutex);
 	} else if (type == VFRAME_EVENT_PROVIDER_QUREY_STATE) {
 		//mediasync_vf_states(&states, dev);
@@ -431,15 +420,15 @@ static int mediasync_receiver_event_fun(int type, void *data, void *private_data
 		return RECEIVER_INACTIVE;
 	/*break;*/
 	} else if (type == VFRAME_EVENT_PROVIDER_START) {
-		mediasync_pr_info(0,dev->dev_id,"VFRAME_EVENT_PROVIDER_START\n");
+		mediasync_pr_info(0,dev->dev_id,"PROVIDER_START\n");
 		//mutex_lock(&dev->vf_mutex);
 		vframeName_provider = vf_get_receiver(dev->vf_provider_name);
 		if (vframeName_provider) {
-			mediasync_pr_info(0,dev->dev_id,"provider name=%s", vframeName_provider->name);
+			mediasync_pr_info(0,dev->dev_id,"provider:%s", vframeName_provider->name);
 
 			vframeName_receiver = vf_get_provider(dev->vf_receiver_name);
 			if (vframeName_receiver) {
-				mediasync_pr_info(0,dev->dev_id,"START mediasync receiver:%s \n",vframeName_receiver->name);
+				mediasync_pr_info(0,dev->dev_id,"receiver:%s\n",vframeName_receiver->name);
 			}
 
 			vf_notify_receiver(dev->vf_provider_name,
@@ -497,7 +486,7 @@ int mediasync_vf_set_mediasync_id(int dev_id,s32 SyncInsId) {
 	}
 	if (isFind) {
 		mediasync_policy_bind_instance(dev->sync_policy_instance,SyncInsId,MEDIA_VIDEO);
-		mediasync_pr_info(0,dev->dev_id,"mediasync_policy_bind_instance dev_id:%d 0x%x instance:0x%lx\n",dev_id,SyncInsId,dev->sync_policy_instance);
+		mediasync_pr_info(0,dev->dev_id,"binder dev_id:%d 0x%x\n",dev_id,SyncInsId);
 	}
 	return 0;
 }
@@ -515,7 +504,7 @@ int mediasync_vf_set_video_hold(int dev_id,s32 flag) {
 	}
 	if (isFind) {
 		dev->isVideoHold = flag;
-		mediasync_pr_info(0,dev->dev_id,"set dev_id:%d isVideoHold:%d \n",dev_id,dev->isVideoHold);
+		mediasync_pr_info(0,dev->dev_id,"set dev_id:%d Hold:%d\n",dev_id,dev->isVideoHold);
 	}
 	return 0;
 }
