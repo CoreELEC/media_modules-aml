@@ -161,8 +161,6 @@ static unsigned int decode_timeout_val = 200;
 #define DEC_CONTROL_INTERNAL_MASK                      0x0fff
 #define DEC_CONTROL_FLAG_FORCE_SEQ_INTERLACE           0x1000
 
-#define INTERLACE_SEQ_ALWAYS
-
 #if 1/* MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
 #define NV21
 #endif
@@ -1859,10 +1857,6 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		field_num = 1;
 		type |= VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD | nv_order;
 	} else {
-#ifdef INTERLACE_SEQ_ALWAYS
-		/* once an interlace seq, force interlace, to make di easy. */
-		hw->dec_control |= DEC_CONTROL_FLAG_FORCE_SEQ_INTERLACE;
-#endif
 		hw->frame_rpt_state = FRAME_REPEAT_NONE;
 
 		first_field_type = (info & PICINFO_TOP_FIRST) ?
