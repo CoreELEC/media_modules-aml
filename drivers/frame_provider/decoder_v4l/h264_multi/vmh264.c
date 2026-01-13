@@ -1058,6 +1058,7 @@ struct vdec_h264_hw_s {
 	int overscan_info_present_flag;
 	int overscan_appropriate_flag;
 	bool unsupport_format;
+	bool init_set_dw_flag;
 };
 
 #define TIMEOUT_INIT 0
@@ -11894,33 +11895,25 @@ static void v4l_vmh264_collect_stream_info(struct vdec_s *vdec,
 	ctx->dec_intf.decinfo_event_report(ctx, AML_DECINFO_EVENT_STREAM, NULL);
 }
 
-static int set_double_write_config(struct vdec_h264_hw_s *hw, u32 dw_mode, int field)
+static int set_double_write_config(struct vdec_h264_hw_s *hw, int field)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
-	/* open mmu if progressive and double_write is 0x10*/
-	if ((dw_mode != DM_YUV_ONLY) && (!hw->dw_para_set_flag)) {
-		if (field == V4L2_FIELD_NONE) {
-			if (set_mmu_config(hw, vdec)) {
-				dpb_print(DECODE_ID(hw), 0, "h264 set mmu config fail\n");
-				return -1;
-			}
-			dpb_print(DECODE_ID(hw), 0, "h264 set mmu config ok\n");
-		} else {
+	hw->double_write_mode = get_double_write_mode(hw);
+	if ((hw->double_write_mode != DM_YUV_ONLY) && (!hw->dw_para_set_flag)) {
+		if (field == V4L2_FIELD_INTERLACED) {
 			struct aml_vdec_cfg_infos cfg_info = { 0 };
-			if (dw_mode != DM_YUV_ONLY) {
-				if (!is_vdec_hevc_combine()) {
-					vdec_core_release(vdec, hw->mask);
-					hw->mask = CORE_MASK_VDEC_1;
-					vdec_core_request(vdec, hw->mask);
+			if (!is_vdec_hevc_combine()) {
+				vdec_core_release(vdec, hw->mask);
+				hw->mask = CORE_MASK_VDEC_1;
+				vdec_core_request(vdec, hw->mask);
 
-					if (is_support_dual_core())
-						vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
-					else
-						vdec_core_finish_run(vdec, CORE_MASK_HEVC);
-				}
+				if (is_support_dual_core())
+					vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
+				else
+					vdec_core_finish_run(vdec, CORE_MASK_HEVC);
 			}
 			hw->double_write_mode = DM_YUV_ONLY;
 			dpb_print(DECODE_ID(hw), 0, "h264 interlace video force to change dw as 0x10\n");
@@ -11928,44 +11921,21 @@ static int set_double_write_config(struct vdec_h264_hw_s *hw, u32 dw_mode, int f
 			cfg_info.double_write_mode = DM_YUV_ONLY;
 			vdec_v4l_set_cfg_infos(ctx, &cfg_info);
 		}
-		hw->dw_para_set_flag = true;
 	}
 
 	if (!ctx->v4l_resolution_change && (field == V4L2_FIELD_INTERLACED) &&
 		hw->dw_para_set_flag &&
 		hw->mmu_enable) {
 		struct aml_vdec_cfg_infos cfg_info = { 0 };
-		clear_mmu_config(hw, vdec);
 		hw->double_write_mode = DM_YUV_ONLY;
 		dpb_print(DECODE_ID(hw), 0, "h264 interlace, mmu force disable\n");
 		vdec_v4l_get_cfg_infos(ctx, &cfg_info);
 		cfg_info.double_write_mode = DM_YUV_ONLY;
 		vdec_v4l_set_cfg_infos(ctx, &cfg_info);
-		hw->dw_para_set_flag = false;
-	}
-
-	if (!ctx->v4l_resolution_change && (field == V4L2_FIELD_NONE) &&
-		hw->dw_para_set_flag &&
-		!hw->mmu_enable) {
-		hw->double_write_mode = get_double_write_mode(hw);
-		if (hw->double_write_mode != DM_YUV_ONLY) {
-			if (set_mmu_config(hw, vdec)) {
-				dpb_print(DECODE_ID(hw), 0, "h264 set mmu config fail\n");
-				return -1;
-			}
-			dpb_print(DECODE_ID(hw), 0, "follow new dw,h264 set mmu config ok\n");
-		}
 	}
 
 	if (ctx->avbcd_work_mode && hw->double_write_mode != DM_AVBC_ONLY) {
 		struct aml_vdec_cfg_infos cfg_info = { 0 };
-
-		if (!hw->mmu_enable) {
-			set_mmu_config(hw, vdec);
-			vdec_core_release(vdec, hw->mask);
-			hw->mask = CORE_MASK_VDEC_1 | CORE_MASK_HEVC | CORE_MASK_COMBINE;
-			vdec_core_request(vdec, hw->mask);
-		}
 
 		hw->double_write_mode = DM_AVBC_ONLY;
 		dpb_print(DECODE_ID(hw), 0, "avbc mode double_write_mode %d\n", hw->double_write_mode);
@@ -11973,6 +11943,55 @@ static int set_double_write_config(struct vdec_h264_hw_s *hw, u32 dw_mode, int f
 		cfg_info.double_write_mode = DM_AVBC_ONLY;
 		vdec_v4l_set_cfg_infos(ctx, &cfg_info);
 	}
+
+	return 0;
+}
+
+static int set_mmu_parm_config(struct vdec_h264_hw_s *hw)
+{
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct vdec_s *vdec = hw_to_vdec(hw);
+
+	hw->double_write_mode = get_double_write_mode(hw);
+	if ((hw->double_write_mode != DM_YUV_ONLY) && (!hw->dw_para_set_flag)) {
+		if (set_mmu_config(hw, vdec)) {
+			dpb_print(DECODE_ID(hw), 0, "h264 set mmu config fail\n");
+			return -1;
+		}
+		dpb_print(DECODE_ID(hw), 0, "h264 set mmu config ok\n");
+		hw->dw_para_set_flag = true;
+	} else if (!ctx->v4l_resolution_change && hw->dw_para_set_flag) {
+		if (hw->mmu_enable) {
+			if (hw->double_write_mode == DM_YUV_ONLY) {
+				clear_mmu_config(hw, vdec);
+				hw->dw_para_set_flag = false;
+				dpb_print(DECODE_ID(hw), 0,
+					"h264 progressive been set yuv only, force disable mmu\n");
+			}
+		} else {
+			if (hw->double_write_mode != DM_YUV_ONLY) {
+				if (set_mmu_config(hw, vdec)) {
+					dpb_print(DECODE_ID(hw), 0, "h264 set mmu config fail\n");
+					return -1;
+				}
+				dpb_print(DECODE_ID(hw), 0, "follow new dw,h264 set mmu config ok\n");
+			}
+		}
+	}
+
+	if (ctx->avbcd_work_mode && hw->double_write_mode != DM_AVBC_ONLY) {
+		if (!hw->mmu_enable) {
+			set_mmu_config(hw, vdec);
+			vdec_core_release(vdec, hw->mask);
+			hw->mask = CORE_MASK_VDEC_1 | CORE_MASK_HEVC | CORE_MASK_COMBINE;
+			vdec_core_request(vdec, hw->mask);
+		}
+	}
+
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
+		"%s mmu_enable %d double_write_mode 0x%x\n",
+		__func__, hw->mmu_enable, hw->double_write_mode);
 	return 0;
 }
 
@@ -12136,8 +12155,9 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	ps->field = hw->bForceInterlace ? V4L2_FIELD_INTERLACED : ps->field;
 	ps->bitdepth = hw->dpb.bit_depth_luma;
 
-	if (set_double_write_config(hw, hw->double_write_mode, ps->field))
-		return -1;
+	set_double_write_config(hw, ps->field);
+	if (hw->init_set_dw_flag)
+		set_mmu_parm_config(hw);
 
 	/*
 	 * 4K H264 interlace(MBAFF) streams require conversion field
@@ -12153,7 +12173,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 			__func__, ctx->force_report_interlace);
 	}
 
-	dpb_print(DECODE_ID(hw), 0,
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DPB_DETAIL,
 		"%s mmu_enable %d double_write_mode 0x%x\n",
 		__func__, hw->mmu_enable, hw->double_write_mode);
 
@@ -12462,8 +12482,6 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		u32 param3 = READ_VREG(AV_SCRATCH_6);
 		u32 param4 = READ_VREG(AV_SCRATCH_B);
 		u8 *trans_data_buf = (u8 *)hw->aux_addr;
-		int dw_mode = get_double_write_mode(hw);
-
 		int mb_width = 0;
 		int mb_total = 0;
 		int mb_height = 0;
@@ -12502,17 +12520,6 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			return;
 		}
 
-		if ((hw->frame_width != 0) && (hw->frame_height != 0) && dw_mode != hw->double_write_mode) {
-			if (!set_double_write_config(hw, dw_mode, hw->field))
-				dpb_print(DECODE_ID(hw), 0,
-					"%s dw_mode :%d hw->double_write_mode :%d hw->mmu_enable :%d\n",
-					__func__, dw_mode, hw->double_write_mode, hw->mmu_enable);
-			else {
-				hw->dec_result = DEC_RESULT_ERROR_DATA;
-				vdec_schedule_work(&hw->work);
-				return;
-			}
-		}
 		if (trans_data_buf[7] == AUX_TAG_SEI) {
 			int pic_struct;
 
@@ -13303,6 +13310,17 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	int size, ret = -1;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)hw->v4l2_ctx;
 
+	if (hw->v4l_params_parsed && !hw->init_set_dw_flag) {
+		set_double_write_config(hw, hw->field);
+		if (set_mmu_parm_config(hw)) {
+			hw->dec_result = DEC_RESULT_AGAIN;
+			vdec_schedule_work(&hw->work);
+			dpb_print(DECODE_ID(hw), 0, "%s: error \n", __func__);
+			return;
+		}
+		hw->init_set_dw_flag = true;
+	}
+
 	if (!hw->vdec_pg_enable_flag) {
 		hw->vdec_pg_enable_flag = 1;
 		amvdec_enable();
@@ -14020,6 +14038,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, pdata);
 
 	hw->mmu_enable = 0;
+	hw->init_set_dw_flag = 0;
 	hw->first_head_check_flag = 0;
 	hw->dw_para_set_flag = false;
 	hw->csd_restore_flag = false;

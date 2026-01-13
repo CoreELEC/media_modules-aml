@@ -2895,6 +2895,25 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 		}
 
 		if (rb->count > 0 && ctx->bm.config.enable_fbc) {
+			int ret;
+
+			ret = aml_buf_box_init(&ctx->bm);
+			if (ret < 0) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"early box init fail!, ret:%d\n", ret);
+			}
+
+			if (ctx->bm.config.enable_secure) {
+				int align_2n = decoder_bmmu_box_get_align_2n(ctx->bm.bmmu);
+				int memflags = decoder_bmmu_box_get_memflags(ctx->bm.bmmu);
+
+				/* get header and page size */
+				if (!vdec_if_get_param(ctx, GET_PARAM_COMP_BUF_INFO, &ctx->comp_info)) {
+					submit_prealloc_job(PREALLOC_AVBC_HEADER_TYPE, CTX_BUF_TOTAL(ctx),
+						ctx->comp_info.header_size, align_2n, memflags, ctx->id);
+				}
+			}
+
 			/* get page size */
 			if (!vdec_if_get_param(ctx, GET_PARAM_COMP_BUF_INFO, &ctx->comp_info)) {
 				decoder_mmu_box_set_limited_size(ctx->bm.mmu, rb->count,
@@ -5546,26 +5565,6 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	config.duration		= ctx->duration;
 
 	aml_buf_configure(&ctx->bm, &config);
-	if (ctx->bm.config.enable_fbc) {
-		int ret;
-
-		ret = aml_buf_box_init(&ctx->bm);
-		if (ret < 0) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-				"early box init fail!, ret:%d\n", ret);
-		}
-
-		if (config.enable_secure) {
-			int align_2n = decoder_bmmu_box_get_align_2n(ctx->bm.bmmu);
-			int memflags = decoder_bmmu_box_get_memflags(ctx->bm.bmmu);
-
-			/* get header and page size */
-			if (!vdec_if_get_param(ctx, GET_PARAM_COMP_BUF_INFO, &ctx->comp_info)) {
-				submit_prealloc_job(PREALLOC_AVBC_HEADER_TYPE, CTX_BUF_TOTAL(ctx),
-					ctx->comp_info.header_size, align_2n, memflags, ctx->id);
-			}
-		}
-	}
 
 	if (config.dynamic_mode)
 		aml_buf_init_dma(&ctx->bm);
@@ -6760,6 +6759,8 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		ctx->force_di_permission = dec->cfg.metadata_config_flag & (1 << 17);
 		if (dec->cfg.double_write_mode != 0x10)
 			ctx->no_fbc_output = dec->cfg.metadata_config_flag & (1 << 19);
+		else
+			ctx->no_fbc_output = 0;
 		if (force_di_permission)
 			ctx->force_di_permission = true;
 

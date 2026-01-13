@@ -1789,6 +1789,7 @@ struct hevc_state_s {
 	u32 crop_left;
 	u32 crop_right;
 	u32 last_dur;
+	bool init_set_dw_flag;
 } /*hevc_stru_t */;
 
 static void vvc_prefix_config(int dma_prefix, int bmmu_prefix)
@@ -5650,6 +5651,7 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 					hevc->frame_mmu_map_phy_addr);
 
 		hevc->frame_mmu_map_addr = NULL;
+		hevc->mmu_enable = 0;
 	}
 #ifdef VVC_10B_MMU_DW
 	if (hevc->dw_mmu_enable && hevc->frame_dw_mmu_map_addr) {
@@ -5659,6 +5661,7 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 					hevc->frame_dw_mmu_map_phy_addr);
 
 		hevc->frame_dw_mmu_map_addr = NULL;
+		hevc->dw_mmu_enable = 0;
 	}
 #endif
 	free_memory(&hevc->g_vvc_dec);
@@ -5752,32 +5755,6 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 	hevc_print(hevc, H266_DEBUG_REG_CFG, "ref_list_buffer_addr %p size 0x%x phy_addr 0x%x\n",
 		hevc->ref_list_buffer_addr, REF_LIST_BUF_SIZE, hevc->ref_list_buffer_phy_addr);
 
-	if (hevc->mmu_enable) {
-		hevc->frame_mmu_map_addr =
-				decoder_dma_alloc_coherent(&hevc->frame_mmu_map_handle,
-				get_frame_mmu_map_size(),
-				&hevc->frame_mmu_map_phy_addr, "H.266_MMU_MAP");
-		if (hevc->frame_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
-			return -1;
-		}
-		hevc_print(hevc, H266_DEBUG_REG_CFG, "frame_mmu_map_phy_addr %x size %x\n",
-			hevc->frame_mmu_map_phy_addr, get_frame_mmu_map_size());
-		memset(hevc->frame_mmu_map_addr, 0, get_frame_mmu_map_size());
-	}
-#ifdef VVC_10B_MMU_DW
-	if (hevc->dw_mmu_enable) {
-		hevc->frame_dw_mmu_map_addr =
-				decoder_dma_alloc_coherent(&hevc->frame_dw_mmu_map_handle,
-				get_frame_mmu_map_size(),
-				&hevc->frame_dw_mmu_map_phy_addr, "H.266_DWMMU_MAP");
-		if (hevc->frame_dw_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
-			return -1;
-		}
-		memset(hevc->frame_dw_mmu_map_addr, 0, get_frame_mmu_map_size());
-	}
-#endif
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S6) &&
 		(PREFIX_ADDR(hevc->buf_start))) {
 
@@ -8123,6 +8100,106 @@ static void hevc_interlace_check(struct hevc_state_s *hevc,
 #endif
 }
 
+static int h266_reconfig_mmu_v4l(struct hevc_state_s *hevc, bool enable_mmu, bool enable_dw_mmu)
+{
+
+	if (enable_mmu && !hevc->mmu_enable) {
+		hevc->mmu_enable = 1;
+		hevc->frame_mmu_map_addr =
+				decoder_dma_alloc_coherent(&hevc->frame_mmu_map_handle,
+				get_frame_mmu_map_size(),
+				&hevc->frame_mmu_map_phy_addr, "H.266_MMU_MAP");
+		if (hevc->frame_mmu_map_addr == NULL) {
+			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			return -1;
+		}
+		hevc_print(hevc, H266_DEBUG_REG_CFG, "frame_mmu_map_phy_addr %x size %x\n",
+			hevc->frame_mmu_map_phy_addr, get_frame_mmu_map_size());
+		memset(hevc->frame_mmu_map_addr, 0, get_frame_mmu_map_size());
+	}
+#ifdef VVC_10B_MMU_DW
+	if (enable_dw_mmu && !hevc->dw_mmu_enable) {
+		hevc->dw_mmu_enable = 1;
+		hevc->frame_dw_mmu_map_addr =
+				decoder_dma_alloc_coherent(&hevc->frame_dw_mmu_map_handle,
+				get_frame_mmu_map_size(),
+				&hevc->frame_dw_mmu_map_phy_addr, "H.266_DWMMU_MAP");
+		if (hevc->frame_dw_mmu_map_addr == NULL) {
+			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			return -1;
+		}
+		memset(hevc->frame_dw_mmu_map_addr, 0, get_frame_mmu_map_size());
+	}
+#endif
+
+	if (!enable_mmu && hevc->mmu_enable) {
+		hevc->mmu_enable = 0;
+		if (hevc->frame_mmu_map_phy_addr)
+			decoder_dma_free_coherent(hevc->frame_mmu_map_handle,
+				get_frame_mmu_map_size(), hevc->frame_mmu_map_addr,
+					hevc->frame_mmu_map_phy_addr);
+
+		hevc->frame_mmu_map_addr = NULL;
+	}
+#ifdef VVC_10B_MMU_DW
+	if (!enable_dw_mmu && hevc->dw_mmu_enable) {
+		hevc->dw_mmu_enable = 0;
+		if (hevc->frame_dw_mmu_map_phy_addr)
+			decoder_dma_free_coherent(hevc->frame_dw_mmu_map_handle,
+				get_frame_mmu_map_size(), hevc->frame_dw_mmu_map_addr,
+					hevc->frame_dw_mmu_map_phy_addr);
+
+		hevc->frame_dw_mmu_map_addr = NULL;
+	}
+#endif
+
+	return 0;
+}
+
+static int set_mmu_parm_config(struct hevc_state_s *hevc)
+{
+	int ret = 0;
+	int enable_mmu = 0;
+	int enable_dw_mmu = 0;
+
+	hevc->double_write_mode = get_double_write_mode(hevc);
+	if (mmu_enable_force) {
+		enable_mmu = 1;
+	} else {
+		if (hevc->double_write_mode & 0x10)
+			enable_mmu = 0;
+		else
+			enable_mmu = 1;
+	}
+#ifdef VVC_10B_MMU_DW
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
+		enable_dw_mmu =
+			get_double_write_mode(hevc) & 0x20 ? 1 : 0;
+	} else {
+		enable_dw_mmu = 0;
+	}
+#endif
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
+		hevc->mmu_enable = 0;
+		hevc->dw_mmu_enable = 0;
+		hevc->double_write_mode = 0x10;
+		return 0;
+	}
+
+	if (hevc->mmu_enable != enable_mmu ||
+		hevc->dw_mmu_enable != enable_dw_mmu) {
+		ret = h266_reconfig_mmu_v4l(hevc, enable_mmu, enable_dw_mmu);
+	}
+
+	hevc_print(hevc, H266_DEBUG_DETAIL,
+		"%s mmu_enable %d dw_mmu_enable :%d double_write_mode 0x%x\n",
+		__func__, hevc->mmu_enable, hevc->dw_mmu_enable, hevc->double_write_mode);
+
+	return ret;
+}
+
 static int vh266_get_ps_info(struct hevc_state_s *hevc,
 			     union param_u *rpm_param,
 			     struct aml_vdec_ps_infos *ps)
@@ -8169,6 +8246,8 @@ static int vh266_get_ps_info(struct hevc_state_s *hevc,
 	ps->dpb_margin		= get_dynamic_buf_num_margin(hevc);
 	ps->bitdepth		= (rpm_param->p.sps_bitdepth_minus8 & 0xf) + 8;
 
+	if (hevc->init_set_dw_flag)
+		set_mmu_parm_config(hevc);
 #if 0
 	if (!ctx->is_multiplanar &&
 		hevc->interlace_flag && (ps->bitdepth == 8)) {
@@ -8214,6 +8293,22 @@ static void get_comp_buf_info(struct hevc_state_s *hevc,
 	pr_info("hevc get comp info: %d %d %d\n",
 			info->max_size, info->header_size,
 			info->frame_buffer_size);
+}
+
+static void update_comp_info(struct aml_vcodec_ctx *ctx, void *hw)
+{
+	struct vdec_comp_buf_info info;
+	struct hevc_state_s *hevc = (struct hevc_state_s *)hw;
+	int w = ctx->picinfo.visible_width;
+	int h = ctx->picinfo.visible_height;
+
+	if (!w || !h) {
+		hevc_print(hevc, 0, "comp_info w and h is 0\n");
+		return;
+	}
+	hevc_print(hevc, H266_DEBUG_DETAIL, "h266 update comp info\n");
+	get_comp_buf_info(hevc, &info);
+	vdec_v4l_set_comp_buf_info(ctx, &info);
 }
 
 static int v4l_res_change(struct hevc_state_s *hevc, union param_u *rpm_param)
@@ -10695,6 +10790,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	int r, loadr = 0;
 	unsigned char check_sum = 0;
 
+	if (hevc->v4l_params_parsed && !hevc->init_set_dw_flag) {
+		if (set_mmu_parm_config(hevc)) {
+			hevc->dec_result = DEC_RESULT_AGAIN;
+			vdec_schedule_work(&hevc->work);
+			hevc_print(hevc, 0, "%s: error \n", __func__);
+			return;
+		}
+		hevc->init_set_dw_flag = 1;
+	}
+
 	if (hevc->process_state != PROCESS_STATE_HEAD_AGAIN &&
 		hevc->process_state != PROCESS_STATE_DECODE_AGAIN)
 		hevc->process_state = PROCESS_STATE_INIT;
@@ -11064,6 +11169,7 @@ static void reset(struct vdec_s *vdec)
 	aml_free_canvas(vdec);
 	if (!hevc->resolution_change) {
 		hevc_local_uninit(hevc);
+		set_mmu_parm_config(hevc);
 	}
 
 	if (vh266_local_init(hevc) < 0)
@@ -11528,6 +11634,7 @@ static int ammvdec_h266_probe(struct platform_device *pdev)
 
 	hevc->index = pdev->id;
 	hevc->m_ins_flag = 1;
+	ctx->update_comp_info = update_comp_info;
 
 	if (is_rdma_enable()) {
 		hevc->rdma_adr = decoder_dma_alloc_coherent(&hevc->rdma_mem_handle,
@@ -11746,34 +11853,6 @@ static int ammvdec_h266_probe(struct platform_device *pdev)
 	if (endian)
 		hevc->endian = endian;
 
-	if (mmu_enable_force) {
-		hevc->mmu_enable = 1;
-	} else {
-		if (hevc->double_write_mode & 0x10)
-			hevc->mmu_enable = 0;
-		else
-			hevc->mmu_enable = 1;
-	}
-	if (hevc->double_write_mode & 0x10)
-		hevc->mmu_enable = 0;
-	else
-		hevc->mmu_enable = 1;
-#ifdef VVC_10B_MMU_DW
-	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
-		hevc->dw_mmu_enable =
-			get_double_write_mode(hevc) & 0x20 ? 1 : 0;
-	} else {
-		hevc->dw_mmu_enable = 0;
-	}
-#endif
-
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
-		hevc->mmu_enable = 0;
-		hevc->dw_mmu_enable = 0;
-		hevc->double_write_mode = 0x10;
-	}
-
 	if (init_mmu_buffers(hevc, 1) < 0) {
 		hevc_print(hevc, 0,
 			"\n 266 mmu init failed!\n");
@@ -11812,6 +11891,8 @@ static int ammvdec_h266_probe(struct platform_device *pdev)
 	hevc->uninit_list_done = 0;
 	hevc->fatal_error = 0;
 	hevc->show_frame_num = 0;
+	hevc->mmu_enable = 0;
+	hevc->dw_mmu_enable = 0;
 
 	/*
 	 *hevc->mc_buf_spec.buf_end = pdata->mem_end + 1;

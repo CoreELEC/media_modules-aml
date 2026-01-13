@@ -1010,6 +1010,7 @@ struct AVS3Decoder_s {
 	struct completion complete;
 	struct mmu_copy mmu_copy_array[BUF_FBC_NUM_MAX];
 	u32 last_dur;
+	bool init_set_dw_flag;
 };
 
 static int  compute_losless_comp_body_size(
@@ -4778,6 +4779,8 @@ static void avs3_local_uninit(struct AVS3Decoder_s *dec)
 	if (dec->gvs)
 		vfree(dec->gvs);
 	dec->gvs = NULL;
+	dec->mmu_enable = 0;
+	dec->dw_mmu_enable = 0;
 }
 
 static int avs3_local_init(struct AVS3Decoder_s *dec)
@@ -4899,57 +4902,6 @@ static int avs3_local_init(struct AVS3Decoder_s *dec)
 			__func__, (u32)dec->lmem_phy_addr);
 	dec->lmem_ptr = dec->lmem_addr;
 
-#ifdef AVS3_10B_MMU
-	if (dec->mmu_enable) {
-		dec->frame_mmu_map_addr = decoder_dma_alloc_coherent(&dec->frame_mmu_map_handle,
-					get_frame_mmu_map_size(),
-					&dec->frame_mmu_map_phy_addr, "AVS3_MMU_BUF");
-		if (dec->frame_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
-			return -1;
-		}
-		memset(dec->frame_mmu_map_addr, 0, get_frame_mmu_map_size());
-#ifdef NEW_FB_CODE
-		if (dec->front_back_mode && dec->frame_mmu_map_addr_1 == NULL) {
-			dec->frame_mmu_map_addr_1 =
-				decoder_dma_alloc_coherent(&dec->frame_mmu_map_handle_1,
-				get_frame_mmu_map_size(),
-				&dec->frame_mmu_map_phy_addr_1, "AVS3_MMU_1_BUF");
-			if (dec->frame_mmu_map_addr_1 == NULL) {
-				pr_err("%s: failed to alloc count_buffer\n", __func__);
-				return -1;
-			}
-			memset(dec->frame_mmu_map_addr_1, 0, get_frame_mmu_map_size());
-		}
-#endif
-	}
-#endif
-
-#ifdef AVS3_10B_MMU_DW
-	if (dec->dw_mmu_enable) {
-		dec->dw_frame_mmu_map_addr = decoder_dma_alloc_coherent(&dec->frame_dw_mmu_map_handle,
-					get_frame_mmu_map_size(),
-					&dec->dw_frame_mmu_map_phy_addr, "AVS3_DWMMU_BUF");
-		if (dec->dw_frame_mmu_map_addr == NULL) {
-			pr_err("%s: failed to alloc count_buffer\n", __func__);
-			return -1;
-		}
-		memset(dec->dw_frame_mmu_map_addr, 0, get_frame_mmu_map_size());
-#ifdef NEW_FB_CODE
-		if (dec->front_back_mode) {
-			dec->dw_frame_mmu_map_addr_1 =
-					decoder_dma_alloc_coherent(&dec->frame_dw_mmu_map_handle_1,
-					get_frame_mmu_map_size(),
-					&dec->dw_frame_mmu_map_phy_addr_1, "AVS3_DWMMU_1_BUF");
-			if (dec->dw_frame_mmu_map_addr_1 == NULL) {
-				pr_err("%s: failed to alloc count_buffer\n", __func__);
-				return -1;
-			}
-			memset(dec->dw_frame_mmu_map_addr_1, 0, get_frame_mmu_map_size());
-		}
-#endif
-	}
-#endif
 #ifdef NEW_FB_CODE
 	avs3_dec->wait_working_buf = 0;
 	avs3_dec->front_pause_flag = 0; /*multi pictures in one packe*/
@@ -7339,6 +7291,97 @@ static int vavs3_get_dpb_frames(struct AVS3Decoder_s *dec)
 	return min((int)(avs3_calc_dpb_size(dec) - 1), max_dpb_size_minus1)  + 1; //Out of memory if using 17
 }
 
+static int avs3_set_mmu_config(struct AVS3Decoder_s *dec, bool enable_mmu, bool enable_dw_mmu)
+{
+#ifdef AVS3_10B_MMU
+	if (enable_mmu && !dec->mmu_enable) {
+		dec->mmu_enable = 1;
+		dec->frame_mmu_map_addr = decoder_dma_alloc_coherent(&dec->frame_mmu_map_handle,
+					get_frame_mmu_map_size(),
+					&dec->frame_mmu_map_phy_addr, "AVS3_MMU_BUF");
+		if (dec->frame_mmu_map_addr == NULL) {
+			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			return -1;
+		}
+		memset(dec->frame_mmu_map_addr, 0, get_frame_mmu_map_size());
+#ifdef NEW_FB_CODE
+		if (dec->front_back_mode && dec->frame_mmu_map_addr_1 == NULL) {
+			dec->frame_mmu_map_addr_1 =
+				decoder_dma_alloc_coherent(&dec->frame_mmu_map_handle_1,
+				get_frame_mmu_map_size(),
+				&dec->frame_mmu_map_phy_addr_1, "AVS3_MMU_1_BUF");
+			if (dec->frame_mmu_map_addr_1 == NULL) {
+				pr_err("%s: failed to alloc count_buffer\n", __func__);
+				return -1;
+			}
+			memset(dec->frame_mmu_map_addr_1, 0, get_frame_mmu_map_size());
+		}
+#endif
+	}
+#endif
+
+#ifdef AVS3_10B_MMU_DW
+	if (enable_dw_mmu && !dec->dw_mmu_enable) {
+		dec->dw_mmu_enable = 1;
+		dec->dw_frame_mmu_map_addr = decoder_dma_alloc_coherent(&dec->frame_dw_mmu_map_handle,
+					get_frame_mmu_map_size(),
+					&dec->dw_frame_mmu_map_phy_addr, "AVS3_DWMMU_BUF");
+		if (dec->dw_frame_mmu_map_addr == NULL) {
+			pr_err("%s: failed to alloc count_buffer\n", __func__);
+			return -1;
+		}
+		memset(dec->dw_frame_mmu_map_addr, 0, get_frame_mmu_map_size());
+#ifdef NEW_FB_CODE
+		if (dec->front_back_mode) {
+			dec->dw_frame_mmu_map_addr_1 =
+					decoder_dma_alloc_coherent(&dec->frame_dw_mmu_map_handle_1,
+					get_frame_mmu_map_size(),
+					&dec->dw_frame_mmu_map_phy_addr_1, "AVS3_DWMMU_1_BUF");
+			if (dec->dw_frame_mmu_map_addr_1 == NULL) {
+				pr_err("%s: failed to alloc count_buffer\n", __func__);
+				return -1;
+			}
+			memset(dec->dw_frame_mmu_map_addr_1, 0, get_frame_mmu_map_size());
+		}
+#endif
+	}
+#endif
+
+	return 0;
+}
+
+static int set_mmu_parm_config(struct AVS3Decoder_s *dec)
+{
+	int ret = 0;
+	int enable_mmu = 0;
+	int enable_dw_mmu = 0;
+
+	dec->double_write_mode = get_double_write_mode(dec);
+
+	if ((dec->double_write_mode & 0x10) == 0)
+		enable_mmu = 1;
+	else
+		enable_mmu = 0;
+
+#ifdef AVS3_10B_MMU_DW
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
+		enable_dw_mmu = (get_double_write_mode(dec) & 0x20) ? 1 : 0;
+	} else {
+		enable_dw_mmu = 0;
+	}
+#endif
+
+	if (dec->mmu_enable != enable_mmu ||
+		dec->dw_mmu_enable != enable_dw_mmu) {
+		ret = avs3_set_mmu_config(dec, enable_mmu, enable_dw_mmu);
+	}
+
+	avs3_print(dec, PRINT_FLAG_V4L_DETAIL, "%s mmu_enable:%d dw:%d\n",
+		__func__, dec->mmu_enable, dec->double_write_mode);
+
+	return ret;
+}
+
 static int vavs3_get_ps_info(struct AVS3Decoder_s *dec, struct aml_vdec_ps_infos *ps)
 {
 	ps->visible_width 	= dec->frame_width;
@@ -7357,7 +7400,26 @@ static int vavs3_get_ps_info(struct AVS3Decoder_s *dec, struct aml_vdec_ps_infos
 
 	ps->field = V4L2_FIELD_NONE;
 
+	if (dec->init_set_dw_flag)
+		set_mmu_parm_config(dec);
+
 	return 0;
+}
+
+static void update_comp_info(struct aml_vcodec_ctx *ctx, void *hw)
+{
+	struct vdec_comp_buf_info info;
+	struct AVS3Decoder_s *dec = (struct AVS3Decoder_s *)hw;
+	int w = ctx->picinfo.visible_width;
+	int h = ctx->picinfo.visible_height;
+
+	if (!w || !h) {
+		avs3_print(dec, 0, "comp_info w and h is 0\n");
+		return;
+	}
+	avs3_print(dec, PRINT_FLAG_V4L_DETAIL, "avs3 update comp info\n");
+	vavs3_get_comp_buf_info(dec, &info);
+	vdec_v4l_set_comp_buf_info(ctx, &info);
 }
 
 static int v4l_res_change(struct AVS3Decoder_s *dec)
@@ -9372,13 +9434,6 @@ static int amvdec_avs3_probe(struct platform_device *pdev)
 #endif
 	config_hevc_irq_num(dec);
 
-#ifdef AVS3_10B_MMU_DW
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
-		dec->dw_mmu_enable = (get_double_write_mode(dec) & 0x20) ? 1 : 0;
-	} else {
-		dec->dw_mmu_enable = 0;
-	}
-#endif
 	if (amvdec_avs3_mmu_init(dec) < 0) {
 		mutex_unlock(&vavs3_mutex);
 		pr_err("avs3 alloc bmmu box failed!!\n");
@@ -10485,6 +10540,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	avs3_print(dec, PRINT_FLAG_VDEC_DETAIL, "%s(mask = 0x%lx)\n", __func__, mask);
 	if (dec->front_back_mode == 0 || (mask & CORE_MASK_HEVC)) {
 #endif
+
+	if (dec->v4l_params_parsed && !dec->init_set_dw_flag) {
+		if (set_mmu_parm_config(dec)) {
+			dec->dec_result = DEC_RESULT_AGAIN;
+			vdec_schedule_work(&dec->work);
+			avs3_print(dec, 0, "%s: error \n", __func__);
+			return;
+		}
+		dec->init_set_dw_flag = 1;
+	}
 	if (debug & PRINT_FLAG_VDEC_STATUS)
 		WRITE_VREG(HEVC_STREAM_CRC, 0);
 	run_count[dec->index]++;
@@ -10742,8 +10807,10 @@ static void reset(struct vdec_s *vdec)
 		}
 	}
 
-	if (!dec->resolution_change)
+	if (!dec->resolution_change) {
 		avs3_local_uninit(dec);
+		set_mmu_parm_config(dec);
+	}
 	if (vavs3_local_init(dec) < 0) {
 		avs3_print(dec, 0, "%s local_init failed \r\n", __func__);
 	}
@@ -11093,6 +11160,7 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 	pdata->irq_handler = avs3_irq_cb;
 	pdata->threaded_irq_handler = avs3_threaded_irq_cb;
 	pdata->dump_state = avs3_dump_state;
+	ctx->update_comp_info = update_comp_info;
 
 	/*
 	 * memcpy(&BUF[0], &dec->m_BUF[0], sizeof(struct BUF_s) * MAX_BUF_NUM);
@@ -11279,18 +11347,6 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 		dec->double_write_mode = get_double_write_mode(dec);
 	}
 
-	if ((dec->double_write_mode & 0x10) == 0)
-		dec->mmu_enable = 1;
-
-#ifdef AVS3_10B_MMU_DW
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
-		dec->dw_mmu_enable =
-			(get_double_write_mode(dec) & 0x20) ? 1 : 0;
-	} else {
-		dec->dw_mmu_enable = 0;
-	}
-#endif
-
 	if (!is_support_triple_write()) {
 		if ((dec->triple_write_mode) || (triple_write_mode)) {
 			triple_write_mode = 0;
@@ -11339,6 +11395,9 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 	dec->fatal_error = 0;
 	dec->show_frame_num = 0;
 	dec->run_ready_min_buf_num = run_ready_min_buf_num;
+	dec->init_set_dw_flag = 0;
+	dec->mmu_enable = 0;
+	dec->dw_mmu_enable = 0;
 	if (debug) {
 		pr_info("===AVS3 decoder mem resource 0x%lx size 0x%x\n",
 				dec->buf_start,
