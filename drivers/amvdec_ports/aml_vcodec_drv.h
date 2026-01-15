@@ -599,6 +599,8 @@ struct aml_vdec_cfg_infos {
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
 	/*
+	 * bit 25	: whether heic/avif picture is multi_grid pic
+	 * bit 24	: thumbnail mode flag.
 	 * bit 23	: avbcd mode flag.
 	 * bit 22	: disable mmu copy.
 	 * bit 21	: buffer alloc flag. 0: dma heap, 1: ion heap.
@@ -1208,6 +1210,7 @@ struct aml_vcodec_ctx {
 	u32			signal_type_update;
 	u32			duration;
 	int			local_id;
+	u32			thumbnail_mode;
 };
 
 /**
@@ -1304,5 +1307,8 @@ void v4l2_m2m_job_resume(struct v4l2_m2m_dev *m2m_dev,
             (char)(((fourcc) >> 24) & 0xFF), \
             '\0' \
         })
+
+#define THUMBNAIL_MODE_FLAG (1 << 24)
+#define MULTI_GRID_FLAG     (1 << 25)
 
 #endif /* _AML_VCODEC_DRV_H_ */

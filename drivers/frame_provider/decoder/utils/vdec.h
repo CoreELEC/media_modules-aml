@@ -1107,4 +1107,6 @@ void vdec_recycle_fence_vf(struct vdec_fence_vf_t *fence_vf_s);
 
 int query_decoder_resource(struct resman_cb_param_any_t q);
 
+bool check_dec_res_available(struct vdec_s *vdec, int i_size, int width, int height);
+
 #endif /* VDEC_H */

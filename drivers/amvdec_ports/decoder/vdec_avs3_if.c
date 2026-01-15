@@ -205,6 +205,8 @@ static void vdec_parser_parms(struct vdec_avs3_inst *inst)
 			ctx->config.parm.dec.cfg.canvas_mem_endian);
 		pbuf += sprintf(pbuf, "parm_v4l_low_latency_mode:%d;",
 			ctx->config.parm.dec.cfg.low_latency_mode);
+		pbuf += sprintf(pbuf, "parm_v4l_metadata_config_flag:%d;",
+			ctx->config.parm.dec.cfg.metadata_config_flag);
 		pbuf += sprintf(pbuf, "parm_v4l_duration:%d;",
 			ctx->config.parm.dec.cfg.duration);
 		pbuf += sprintf(pbuf, "parm_v4l_error_handle_info:%d;",

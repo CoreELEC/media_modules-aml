@@ -279,6 +279,7 @@ struct vdec_mjpeg_hw_s {
 	struct buffer_spec_s jpeg_buffer;
 	int hv_subsample;
 	u32 last_dur;
+	u32 metadata_config_flag;
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
@@ -581,6 +582,18 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 			frame_width -= 1;
 		if (frame_height & 1)
 			frame_height -= 1;
+
+		if (hw->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+			int dec_res_available = -1;
+			dec_res_available = check_dec_res_available(vdec, hw->chunk->size, frame_width, frame_height);
+			if (dec_res_available != true) {
+				mmjpeg_debug_print(DECODE_ID(hw), 0, "i_oversize, post unsupport\n");
+				vdec_v4l_post_error_event(v4l2_ctx, DECODER_EMERGENCY_UNSUPPORT);
+				hw->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
+		}
 
 		if (!v4l_res_change(hw, frame_width, frame_height, hv_subsample)) {
 			struct aml_vcodec_ctx *ctx =
@@ -2719,6 +2732,11 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 				hw->out_height = config_val;
 			}
 		}
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag",
+			&config_val) == 0)
+			hw->metadata_config_flag = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_duration",

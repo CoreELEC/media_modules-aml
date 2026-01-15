@@ -13534,6 +13534,20 @@ force_output:
 			}
 
 		}
+
+		if ((hevc->metadata_config_flag & THUMBNAIL_MODE_FLAG) || (hevc->metadata_config_flag & MULTI_GRID_FLAG)) {
+			int dec_res_available = -1;
+			dec_res_available = check_dec_res_available(vdec, hevc->chunk->size, hevc->pic_w, hevc->pic_h);
+			if (dec_res_available != true) {
+				hevc_print(hevc, 0, "i_oversize, post unsupport\n");
+				hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+				hevc->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&hevc->work);
+				return IRQ_HANDLED;
+			}
+		}
+
 		ret = hevc_slice_segment_header_process(hevc, &hevc->param, decode_pic_begin);
 		h265_recycle_frame_buffer(hevc);
 		if (ret < 0) {

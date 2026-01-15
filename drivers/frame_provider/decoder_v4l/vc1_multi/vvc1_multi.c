@@ -372,6 +372,8 @@ struct vdec_vc1_hw_s {
 	u32 report_width;
 	u32 report_height;
 	u32 last_dur;
+
+	u32 metadata_config_flag;
 };
 
 static struct task_ops_s task_dec_ops;
@@ -2309,6 +2311,19 @@ static irqreturn_t vmvc1_isr_thread_handler(struct vdec_s *vdec, int irq)
 		vvc1_config_ref_buf(hw);
 		vvc1_save_regs(hw);
 		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_VDEC_1);
+
+		if (hw->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+			int dec_res_available = -1;
+			dec_res_available = check_dec_res_available(vdec, hw->chunk->size, hw->frame_width, hw->frame_height);
+			if (dec_res_available != true) {
+				vc1_print(DECODE_ID(hw), 0, "i_oversize, post unsupport\n");
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+				amvdec_stop();
+				hw->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
+		}
 	}
 
 	status_reg = READ_VREG(DECODE_STATUS);
@@ -3343,6 +3358,10 @@ static int ammvdec_vc1_probe(struct platform_device *pdev)
 			"parm_v4l_canvas_mem_mode",
 			&config_val) == 0)
 			hw->canvas_mode = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag", &config_val) == 0)
+			hw->metadata_config_flag = config_val;
 
 		if (get_config_int(pdata->config, "parm_v4l_duration",
 			&config_val) == 0)

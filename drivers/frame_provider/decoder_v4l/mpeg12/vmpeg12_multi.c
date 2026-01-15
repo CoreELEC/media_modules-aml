@@ -398,6 +398,7 @@ struct vdec_mpeg12_hw_s {
 	u32 actual_frame_height;
 	u32 last_frame_ud_num;
 	u32 cur_frame_ud_num;
+	u32 metadata_config_flag;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -2656,6 +2657,19 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			hw->dec_result = DEC_RESULT_ERROR_DATA;
 			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
+		}
+
+		if (hw->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+			int dec_res_available = -1;
+			dec_res_available = check_dec_res_available(vdec, hw->chunk->size, frame_width, frame_height);
+			if (dec_res_available != true) {
+				debug_print(DECODE_ID(hw), 0, "i_oversize, post unsupport\n");
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+				amhevc_stop();
+				hw->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
 		}
 
 		if (!v4l_res_change(hw, frame_width, frame_height, frame_prog)) {
@@ -4950,6 +4964,7 @@ static int ammvdec_mpeg12_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config,
 			"parm_v4l_metadata_config_flag",
 			&config_val) == 0) {
+			hw->metadata_config_flag = config_val;
 			hw->force_prog_only = (config_val & VDEC_CFG_FLAG_PROG_ONLY) ? 1 : 0;
 		}
 

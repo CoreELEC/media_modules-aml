@@ -882,6 +882,7 @@ struct AVS2Decoder_s {
 	struct mmu_copy mmu_copy_array[BUF_FBC_NUM_MAX];
 	u32 last_dur;
 	bool init_set_dw_flag;
+	u32 metadata_config_flag;
 };
 
 static int  compute_losless_comp_body_size(
@@ -6660,6 +6661,20 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		dec->frame_height = dec->avs2_dec.param.p.vertical_size;
 		dec->avs2_dec.input.profile_id = get_param(rpm_param->p.profile_id, "profile_id");
 		dec->avs2_dec.input.sample_bit_depth = 8;
+
+		if (dec->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+			int dec_res_available = -1;
+			dec_res_available = check_dec_res_available(hw_to_vdec(dec), dec->chunk->size, dec->frame_width, dec->frame_height);
+			if (dec_res_available != true) {
+				avs2_print(dec, 0, "i_oversize, post unsupport\n");
+				dec->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+				dec->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&dec->work);
+				goto irq_handled_exit;
+			}
+		}
+
 		if (dec->avs2_dec.input.profile_id == BASELINE10_PROFILE) { /* 10bit profile (0x52)*/
 				dec->avs2_dec.input.sample_bit_depth =
 					get_param(rpm_param->p.encoding_precision,
@@ -8796,6 +8811,10 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config, "parm_v4l_codec_enable",
 				&config_val) == 0)
 			dec->is_used_v4l = config_val;
+
+		if (get_config_int(pdata->config, "parm_v4l_metadata_config_flag",
+				&config_val) == 0)
+			dec->metadata_config_flag = config_val;
 
 		if (get_config_int(pdata->config,
 			"parm_v4l_duration",

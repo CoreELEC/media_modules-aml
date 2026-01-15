@@ -8733,6 +8733,21 @@ muti_output:
 			return IRQ_HANDLED;
 		}
 
+		if (hevc->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+			int dec_res_available = -1;
+			dec_res_available = check_dec_res_available(vdec, hevc->chunk->size,
+				hevc->vvc_dec->param.p.pic_width_in_luma_samples,
+				hevc->vvc_dec->param.p.pic_height_in_luma_samples);
+			if (dec_res_available != true) {
+				hevc_print(hevc, 0, "i_oversize, post unsupport\n");
+				vdec_v4l_post_error_event(v4l2_ctx, DECODER_EMERGENCY_UNSUPPORT);
+				amhevc_stop();
+				hevc->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&hevc->work);
+				return IRQ_HANDLED;
+			}
+		}
+
 		if (!v4l_res_change(hevc, &hevc->vvc_dec->param)) {
 			if (v4l2_ctx->param_sets_from_ucode && !hevc->v4l_params_parsed) {
 				struct aml_vdec_ps_infos ps;

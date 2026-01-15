@@ -9009,6 +9009,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		int overscan_info_present_appropriate_flag = 0;
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
 		unsigned mb_width = hw->seq_info2 & 0xff;
+		unsigned int mb_total = (hw->seq_info2 >> 8) & 0xffff;
 		unsigned short first_mb_in_slice;
 		unsigned int decode_mb_count, mby_mbx;
 		struct StorablePicture *pic = p_H264_Dpb->mVideo.dec_picture;
@@ -9163,6 +9164,18 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		}
 		ATRACE_COUNTER(hw->trace.decode_header_time_name, TRACE_HEADER_RPM_END);
 #endif
+
+		if (hw->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+			int dec_res_available = -1;
+			dec_res_available = check_dec_res_available(vdec, hw->chunk->size, mb_width * 16, mb_total/mb_width * 16);
+			if (dec_res_available != true) {
+				dpb_print(DECODE_ID(hw), 0, "i_oversize, post unsupport\n");
+				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
+		}
 
 #ifdef DETECT_WRONG_MULTI_SLICE
 		if (p_H264_Dpb->mVideo.dec_picture &&

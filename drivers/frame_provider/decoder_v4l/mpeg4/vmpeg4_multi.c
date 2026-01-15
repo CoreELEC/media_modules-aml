@@ -378,6 +378,7 @@ struct vdec_mpeg4_hw_s {
 	int dec_again_cnt;
 	int last_dur;
 	bool unsupport_format;
+	u32 metadata_config_flag;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -1645,6 +1646,18 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 			dec_pic->error_mark = true;
 			mmpeg4_debug_print(DECODE_ID(hw), 0,
 				"warn:dec w(%d) or h(%d) is zero\n", dec_w, dec_h);
+		}
+
+		if (hw->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+			int dec_res_available = -1;
+			dec_res_available = check_dec_res_available(vdec, hw->chunk->size, dec_w, dec_h);
+			if (dec_res_available != true) {
+				mmpeg4_debug_print(DECODE_ID(hw), 0, "i_oversize, post unsupport\n");
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+				hw->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
 		}
 
 		hw->res_ch_flag = 0;
@@ -3463,6 +3476,12 @@ static int ammvdec_mpeg4_probe(struct platform_device *pdev)
 			"parm_v4l_canvas_mem_mode",
 			&config_val) == 0)
 			hw->blkmode = config_val;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag",
+			&config_val) == 0)
+			hw->metadata_config_flag = config_val;
+
 	} else
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 

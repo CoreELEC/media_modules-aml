@@ -1011,6 +1011,7 @@ struct AVS3Decoder_s {
 	struct mmu_copy mmu_copy_array[BUF_FBC_NUM_MAX];
 	u32 last_dur;
 	bool init_set_dw_flag;
+	u32 metadata_config_flag;
 };
 
 static int  compute_losless_comp_body_size(
@@ -8020,6 +8021,21 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 
 		dec->frame_width = dec->avs3_dec.param.p.sqh_horizontal_size;
 		dec->frame_height = dec->avs3_dec.param.p.sqh_vertical_size;
+
+		if (dec->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+			int dec_res_available = -1;
+			dec_res_available = check_dec_res_available(vdec, dec->chunk->size, dec->frame_width, dec->frame_height);
+			if (dec_res_available != true) {
+				avs3_print(dec, 0, "i_oversize, post unsupport\n");
+				dec->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+				vdec_v4l_post_error_event(v4l2_ctx, DECODER_EMERGENCY_UNSUPPORT);
+				amhevc_stop();
+				dec->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&dec->work);
+				goto irq_handled_exit;
+			}
+		}
+
 		if ((start_code == I_PICTURE_START_CODE) &&
 			(!is_oversize(dec->frame_width, dec->frame_height))) {
 			if (!v4l_res_change(dec)) {
@@ -11278,6 +11294,7 @@ static int ammvdec_avs3_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config,
 			"parm_v4l_metadata_config_flag",
 			&config_val) == 0) {
+			dec->metadata_config_flag = config_val;
 			if (config_val & VDEC_CFG_FLAG_DIS_ERR_POLICY) {
 				dec->error_handle_policy = error_handle_policy & (~(1 << 2));
 				avs3_print(dec, 0, "Error Frame Display\n");

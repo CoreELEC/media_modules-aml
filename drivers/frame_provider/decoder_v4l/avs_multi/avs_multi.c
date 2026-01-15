@@ -558,6 +558,7 @@ struct vdec_avs_hw_s {
 	u32 last_dur;
 	bool need_error_handler;
 	struct mutex vf_mutex;
+	u32 metadata_config_flag;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -4629,6 +4630,18 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 #endif
 			picture_type = (reg >> 3) & 7;
 			hw->pics[hw->decoding_index].picture_type = picture_type;
+
+			if (hw->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+				int dec_res_available = -1;
+				dec_res_available = check_dec_res_available(vdec, hw->chunk->size, hw->frame_width, hw->frame_height);
+				if (dec_res_available != true) {
+					debug_print(hw, 0, "i_oversize, post unsupport\n");
+					vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+					hw->dec_result = DEC_RESULT_DONE;
+					vdec_schedule_work(&hw->work);
+					return IRQ_HANDLED;
+				}
+			}
 #ifdef DEBUG_PTS
 			if (picture_type == I_PICTURE) {
 				if (!hw->pics[hw->decoding_index].pts_valid)
@@ -5110,6 +5123,10 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 			hw->dynamic_buf_num_margin = config_val;
 		else
 			hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
+
+		if (get_config_int(pdata->config,
+			"parm_v4l_metadata_config_flag", &config_val) == 0)
+			hw->metadata_config_flag = config_val;
 	} else
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
 

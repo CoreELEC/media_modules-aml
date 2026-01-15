@@ -1291,6 +1291,7 @@ struct VP9Decoder_s {
 	u32 Superframes_count;
 	u32 Superframes_size[8];
 	bool init_set_dw_flag;
+	u32 metadata_config_flag;
 };
 
 static int vp9_debug(struct VP9Decoder_s *pbi,
@@ -9878,6 +9879,23 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+	if (pbi->metadata_config_flag & THUMBNAIL_MODE_FLAG) {
+		int dec_res_available = -1;
+		dec_res_available = check_dec_res_available(hw_to_vdec(pbi), pbi->chunk->size,
+							pbi->vp9_param.p.width, pbi->vp9_param.p.height);
+		if (dec_res_available != true) {
+			vp9_print(pbi, 0, "i_oversize, post unsupport\n");
+			pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+			pbi->postproc_done = 0;
+			pbi->process_busy = 0;
+			amhevc_stop();
+			pbi->dec_result = DEC_RESULT_DONE;
+			vdec_schedule_work(&pbi->work);
+			return IRQ_HANDLED;
+		}
+	}
+
 	if (!v4l_res_change(pbi)) {
 		if (ctx->param_sets_from_ucode && !pbi->v4l_params_parsed) {
 			struct aml_vdec_ps_infos ps;
@@ -12398,6 +12416,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config,
 			"parm_v4l_metadata_config_flag",
 			&config_val) == 0) {
+			pbi->metadata_config_flag = config_val;
 			pbi->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
 			if (pbi->high_bandwidth_flag)
 				vp9_print(pbi, 0, "high bandwidth\n");

@@ -832,6 +832,11 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 		ctx->dpb_size = ctx->dpb_size / PAIR_DONE * 2;
 	}
 
+	if (ctx->thumbnail_mode) {
+		picinfo->dpb_frames = 1;
+		picinfo->dpb_margin = 0;
+		ctx->dpb_size = picinfo->dpb_frames + picinfo->dpb_margin;
+	}
 	total_size = ctx->dpb_size + ctx->vpp_size + ctx->ge2d_size;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
@@ -6674,10 +6679,11 @@ static int check_dec_cfginfo(struct aml_vcodec_ctx *ctx, struct aml_vdec_cfg_inf
 		return -1;
 	}
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "DW:%x, TW:%x, Margin:%d\n",
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "DW:%x, TW:%x, Margin:%d, metadata_config_flag: 0x%x\n",
 		cfg->double_write_mode,
 		cfg->triple_write_mode,
-		cfg->ref_buf_margin);
+		cfg->ref_buf_margin,
+		cfg->metadata_config_flag);
 
 	return 0;
 }
@@ -6779,6 +6785,7 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 
 		ctx->alloc_type = dec->cfg.metadata_config_flag & (1 << 21);
 		ctx->avbcd_work_mode = dec->cfg.metadata_config_flag & (1 << 23);
+		ctx->thumbnail_mode = dec->cfg.metadata_config_flag & THUMBNAIL_MODE_FLAG;
 		if (avbcd_work_mode & 0x8000 || (ctx->avbcd_work_mode && (avbcd_work_mode & 0xf))) {
 			ctx->avbcd_work_mode = avbcd_work_mode;
 			ctx->no_fbc_output = false;

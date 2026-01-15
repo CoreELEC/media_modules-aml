@@ -171,6 +171,8 @@ static void vdec_parser_parms(struct vdec_mpeg4_inst *inst)
 			ctx->config.parm.dec.cfg.canvas_mem_mode);
 		pbuf += sprintf(pbuf, "parm_v4l_buffer_margin:%d;",
 			ctx->config.parm.dec.cfg.ref_buf_margin);
+		pbuf += sprintf(pbuf, "parm_v4l_metadata_config_flag:%d;",
+			ctx->config.parm.dec.cfg.metadata_config_flag);
 		pbuf += sprintf(pbuf, "parm_v4l_duration:%d;",
 			ctx->config.parm.dec.cfg.duration);
 		ctx->config.length = pbuf - ctx->config.buf;

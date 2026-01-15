@@ -900,6 +900,7 @@ struct AV1HW_s {
 	int chunk_frame_pos;
 	int last_order_hint;
 	bool init_set_dw_flag;
+	u32 metadata_config_flag;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -10048,6 +10049,22 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+	if ((hw->metadata_config_flag & THUMBNAIL_MODE_FLAG) || (hw->metadata_config_flag & MULTI_GRID_FLAG)) {
+		int dec_res_available = -1;
+		dec_res_available = check_dec_res_available(hw_to_vdec(hw), hw->chunk->size,
+							hw->common.seq_params.max_frame_width,
+							hw->common.seq_params.max_frame_height);
+		if (dec_res_available != true) {
+			av1_print(hw, 0, "i_oversize, post unsupport\n");
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+			hw->dec_result = DEC_RESULT_DONE;
+			hw->process_busy = 0;
+			amhevc_stop();
+			vdec_schedule_work(&hw->work);
+			return IRQ_HANDLED;
+		}
+	}
+
 	if (!v4l_res_change(hw)) {
 		if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 			struct aml_vdec_ps_infos ps;
@@ -12537,6 +12554,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		if (get_config_int(pdata->config,
 			"parm_v4l_metadata_config_flag",
 			&config_val) == 0) {
+			hw->metadata_config_flag = config_val;
 			hw->high_bandwidth_flag = config_val & VDEC_CFG_FLAG_HIGH_BANDWIDTH;
 			if (hw->high_bandwidth_flag)
 				av1_print(hw, 0, "high bandwidth\n");

@@ -246,6 +246,7 @@ static int max_di_instance = 2;
 static int max_supported_di_instance = 4;
 static int mediasync_add_di = 1;
 static int mediasync_add_amlvideo2 = 0;
+static unsigned int iframe_size_threshold = (1536 * 1024);
 
 //static int path_debug = 0;
 
@@ -2513,7 +2514,36 @@ void vdec_stream_skip_data(struct vdec_s *vdec, int skip_size)
 }
 EXPORT_SYMBOL(vdec_stream_skip_data);
 
+bool check_dec_res_available(struct vdec_s *vdec, int i_size, int w, int h)
+{
+	unsigned int format = vdec->format;
+	unsigned int priority = vdec->sched_priority;
+	int has_higher_priority = 0;
+	struct vdec_core_s *core = vdec_core;
+	struct vdec_s *tmp = vdec;
+	unsigned long flags;
 
+	mutex_lock(&vdec_mutex);
+	flags = vdec_core_lock(core);
+	list_for_each_entry(tmp, &core->connected_vdec_list, list) {
+		if (tmp->sched_priority < priority) {
+			has_higher_priority = 1;
+			break;
+		}
+	}
+	vdec_core_unlock(core, flags);
+	mutex_unlock(&vdec_mutex);
+	if (has_higher_priority == 0)
+		return true;
+
+	if (((format == VFORMAT_JPEG) && (w * h >= RESOLUTION_8K)) ||
+		(i_size >= iframe_size_threshold)) {
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(check_dec_res_available);
 
 /*
  *get next frame from input chain
@@ -9350,6 +9380,7 @@ static struct param_entry decoder_common_params[] = {
 	PARAM_UINT(checksum_start_count),
 	PARAM_UINT(checksum_enable),
 	PARAM_INT(vdec_ge2d_debug),
+	PARAM_UINT(iframe_size_threshold),
 	{ /* sentinel */ }
 };
 module_param_cb(params, &key_value_param_ops, &decoder_common_params, 0644);
@@ -9440,6 +9471,9 @@ MODULE_PARM_DESC(checksum_enable, "\n checksum_enable\n");
 
 MEDIA_PARAM(vdec_ge2d_debug, int, 0664);
 MODULE_PARM_DESC(vdec_ge2d_debug, "\n vdec_ge2d_debug\n");
+
+MEDIA_PARAM(iframe_size_threshold, uint, 0664);
+MODULE_PARM_DESC(iframe_size_threshold, "\n iframe_size_threshold\n");
 
 /*
 *module_init(vdec_module_init);
