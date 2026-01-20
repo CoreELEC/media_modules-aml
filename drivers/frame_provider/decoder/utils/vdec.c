@@ -1770,6 +1770,9 @@ int vdec_set_trickmode(struct vdec_s *vdec, unsigned long trickmode)
 {
 	int r;
 
+	if (!vdec)
+		return -1;
+
 	if (vdec->set_trickmode) {
 		r = vdec->set_trickmode(vdec, trickmode);
 

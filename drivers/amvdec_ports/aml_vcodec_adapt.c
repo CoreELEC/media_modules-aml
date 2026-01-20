@@ -185,8 +185,12 @@ static void video_component_release(struct stream_port_s *port)
 		= container_of(port, struct aml_vdec_adapt, port);
 	struct vdec_s *vdec = ada_ctx->vdec;
 
-	vdec_release(vdec);
+	mutex_lock(&ada_ctx->vdec_st_lock);
 
+	vdec_release(vdec);
+	ada_ctx->vdec = NULL;
+
+	mutex_unlock(&ada_ctx->vdec_st_lock);
 }
 
 static int video_component_init(struct stream_port_s *port,
@@ -287,6 +291,7 @@ static void set_vdec_property(struct vdec_s *vdec,
 		PAGE_SIZE ? PAGE_SIZE : ada_ctx->config.length;
 	memcpy(vdec->config, ada_ctx->config.buf, vdec->config_len);
 
+	mutex_init(&ada_ctx->vdec_st_lock);
 	ada_ctx->vdec = vdec;
 }
 
@@ -741,12 +746,17 @@ void vdec_set_screen_mode(struct aml_vdec_adapt *ada_ctx, u32 mode)
 
 int vdec_set_trickmode_adapt(struct aml_vdec_adapt *ada_ctx, u32 value)
 {
-	struct vdec_s *vdec = ada_ctx->vdec;
 	long r = 0;
 
-	r = vdec_set_trickmode(vdec,value);
-	if (r == -1)
+	mutex_lock(&ada_ctx->vdec_st_lock);
+
+	r = vdec_set_trickmode(ada_ctx->vdec,value);
+	if (r == -1) {
+		mutex_unlock(&ada_ctx->vdec_st_lock);
 		return -ENODEV;
+	}
+
+	mutex_unlock(&ada_ctx->vdec_st_lock);
 
 	return r;
 }

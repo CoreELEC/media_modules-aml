@@ -50,6 +50,7 @@ struct aml_vdec_adapt {
 	struct v4l2_config_parm config;
 	int video_type;
 	char *frm_name;
+	struct mutex vdec_st_lock;
 };
 
 enum DEC_STATUS {
