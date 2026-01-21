@@ -28,11 +28,12 @@
 #include <linux/crc32.h>
 
 /*
-before    : v1.0
-2025-10-25: v2.0
+before    : v0.0
+2025-10-25: v1.0
+2026-03-05: v1.1
 */
 #define VDEC_DEBUG_DRV_VERSION  (1)
-#define VDEC_DEBUG_SUB_VERSION  (0)
+#define VDEC_DEBUG_SUB_VERSION  (1)
 
 #define DEVICE_NAME "vdec_debug"
 #define CLASS_NAME  "vdec_debug"
@@ -56,7 +57,9 @@ module_param(dec_debug_buf_size, uint, 0664);
 static u32 debug;
 module_param(debug, uint, 0664);
 
-#define PR_TEST(fmt, args...)  {if (debug) pr_info(fmt, ##args);}
+#define PR_TEST(fmt, args...)  {if (debug & 0x1) pr_info(fmt, ##args);}
+
+#define PR_EMG(fmt, args...)  {if (debug & 0x2) pr_info(fmt, ##args);}
 
 static bool is_vdec_releasing(void)
 {
@@ -129,6 +132,7 @@ static struct vdec_dbg_local_buf *local_buf_init(u32 size)
 	buf->wp = buf->start;
 	buf->last_wp = buf->wp;
 	buf->end = buf->start + size;
+	buf->filled = 0;
 	pr_info("%s, vmaped buf %px, phy %lx, size %x\n", __func__,
 		buf->start, buf->phyadr, size);
 
@@ -157,6 +161,7 @@ static void local_buf_release(struct vdec_dbg_local_buf *buf)
 	}
 
 	buf->size = 0;
+	buf->filled = 0;
 	buf->rp = NULL;
 	buf->wp = NULL;
 	buf->end = NULL;
@@ -171,6 +176,7 @@ static void local_buf_reset(struct vdec_dbg_local_buf *buf)
 	buf->wp = buf->start;
 	buf->end = buf->start + buf->size;
 	buf->last_wp = buf->start;
+	buf->filled = 0;
 	mutex_unlock(&buf->lock);
 
 	pr_info("%s\n", __func__);
@@ -178,22 +184,13 @@ static void local_buf_reset(struct vdec_dbg_local_buf *buf)
 
 static u32 local_buf_remain(struct vdec_dbg_local_buf *buf)
 {
-	int remain;
-
-	mutex_lock(&buf->lock);
-	if (buf->rp > buf->wp)
-		remain = buf->rp - buf->wp;
-	else
-		remain = buf->rp + buf->size - buf->wp;
-	mutex_unlock(&buf->lock);
-
-	return remain;
+	return (buf->size - buf->filled);
 }
 
 static int local_buf_space_wait(struct vdec_dbg_local_buf *buf, u32 size)
 {
-	u32 remain;
 	u32 timeout_cnt = 0;
+	long ret;
 
 	if (size > buf->size) {
 		pr_err("%s, buf_size %x, data %x\n",
@@ -201,25 +198,31 @@ static int local_buf_space_wait(struct vdec_dbg_local_buf *buf, u32 size)
 		return -ENOMEM;
 	}
 
-	/* wait for buf size to write data */
-	do {
-		remain = local_buf_remain(buf);
-
-		vdec_export_ready_notify();
-
+	while (1) {
 		if (is_vdec_releasing())
 			return -EAGAIN;
 
-		if (!wait_event_interruptible_timeout(buf->wqt, (remain >= size),
-				msecs_to_jiffies(50))) {
-			if (++timeout_cnt > 2) {
+		if (local_buf_remain(buf) >= size)
+			break;
+
+		vdec_export_ready_notify();
+
+		ret = wait_event_interruptible_timeout(buf->wqt,
+				(local_buf_remain(buf) >= size),
+				msecs_to_jiffies(200));
+		if (ret < 0)
+			return -EINTR;
+		else if (ret == 0) {
+			if (++timeout_cnt > 3) {
 				pr_err("%s timeout, size 0x%x < 0x%x\n",
-					__func__, remain, size);
+					__func__, local_buf_remain(buf), size);
 				timeout_cnt = 0;
 				return -ENOMEM;
 			}
 		}
-	} while (remain < size);
+		PR_TEST("%s, buf start %px, rp %px, wp %px\n",
+			__func__, buf->start, buf->rp, buf->wp);
+	}
 
 	return 0;
 }
@@ -228,8 +231,8 @@ static int local_buf_status(struct vdec_dbg_local_buf *buf)
 {
 	mutex_lock(&buf->lock);
 	if ((buf->wp < buf->start) || (buf->wp > buf->end) ||
-		(buf->rp < buf->start) || (buf->rp > buf->end) ) {
-			pr_err("%s err, buf start %px, end %px, rp %px, wp %px \n",
+		(buf->rp < buf->start) || (buf->rp >= buf->end) ) {
+			pr_err("%s, buf start %px, end %px, rp %px, wp %px \n",
 				__func__, buf->start, buf->end, buf->rp, buf->wp);
 			mutex_unlock(&buf->lock);
 			return -EINVAL;
@@ -284,22 +287,51 @@ static u32 local_buf_write(struct vdec_dbg_local_buf *buf,
 	}
 
 wr_end:
+	mutex_lock(&buf->lock);
 	buf->last_wp = buf->wp;
 	buf->wp = wp;
+	buf->filled += total;
+	mutex_unlock(&buf->lock);
+
+	if (buf->filled > buf->size) {
+		pr_err("%s, filled size larger than buf size. (%x > %x)\n",
+			__func__, buf->filled, buf->size);
+		local_buf_reset(buf);
+		total = 0;
+	}
+
+	PR_EMG("update_wp, wp %px, filled %x\n", buf->wp, buf->filled);
 
 	return total;
 }
 
 static int local_buf_rp_update(struct vdec_dbg_local_buf *buf, u32 size)
 {
+	bool reset_flag = 0;
+
 	mutex_lock(&buf->lock);
 
-	if ((buf->rp + size) > buf->end)
+	if ((buf->rp + size) >= buf->end)
 		buf->rp = buf->rp + size - buf->end + buf->start;
 	else
 		buf->rp = buf->rp + size;
 
+	if (buf->filled >= size)
+		buf->filled -= size;
+	else {
+		pr_err("filled size is less than read data size (%d < %d)\n",
+			buf->filled, size);
+		reset_flag = 1;
+	}
 	mutex_unlock(&buf->lock);
+
+	if (reset_flag)
+		local_buf_reset(buf);
+
+	local_buf_status(buf);
+
+	PR_EMG("update_rp: rp %px, filled %x\n",
+		buf->rp, buf->filled);
 
 	return 0;
 }
@@ -355,15 +387,15 @@ static int vdec_export_local_buf_packet(struct vdec_dbg_export_s *export,
 
 	flags = vdec_export_packet_lock(export);
 	pusr = &ue->pusr;
-	pusr->header	= PACKET_HEADER;
-	pusr->id		= export->total;
-	pusr->type		= DEV_READ_LOCAL;
+	pusr->header    = PACKET_HEADER;
+	pusr->id        = export->total;
+	pusr->type      = DEV_READ_LOCAL;
 	pusr->data_size = size;
-	pusr->offset	= buf->last_wp - buf->start;
-	pusr->addr_h	= 0;
-	pusr->addr_l	= 0;
+	pusr->offset    = (buf->last_wp == buf->end) ? 0 : (buf->last_wp - buf->start);
+	pusr->addr_h    = 0;
+	pusr->addr_l    = 0;
 #if VDEC_EXPORT_VERIFY
-	pusr->crc		= crc32_le(0, buf->last_wp, size);
+	pusr->crc       = crc32_le(0, buf->last_wp, size);
 #endif
 	memcpy(pusr->file, file, 64);
 	list_add_tail(&ue->list, &export->head_ready);
@@ -371,7 +403,7 @@ static int vdec_export_local_buf_packet(struct vdec_dbg_export_s *export,
 	export->total++;
 	vdec_export_packet_unlock(export, flags);
 
-	PR_TEST("vdec_export_non_block, id %d, size %x, offset %x, file %s\n",
+	PR_TEST("packdata: id %d, size %x, offset %x, file %s\n",
 		pusr->id, size, pusr->offset, file);
 
 	return 0;
@@ -387,6 +419,9 @@ static u32 copy_phys_to_buf(char *to, const void *from, u32 size)
 	dos_addr_t phy = (dos_addr_t)from;
 	u32 total = 0;
 	int retry = 0;
+
+	if (!size)
+		return 0;
 
 	do {
 		stride = (res > map_size)? map_size : res;
@@ -417,6 +452,9 @@ static u32 copy_phys_to_buf(char *to, const void *from, u32 size)
 
 static u32 copy_virt_to_buf(char *to, const void *from, u32 size)
 {
+	if (!size)
+		return 0;
+
 	memcpy(to, from, size);
 
 	return size;
@@ -435,6 +473,11 @@ static int vdec_export_non_block(char *file, const void *src, int size, int adr_
 	ret = local_buf_space_wait(core->buf, size);
 	if (ret < 0)
 		return ret;
+
+	PR_EMG("filled %x, start %px, wp %px, packcnt %d\n",
+		core->buf->filled,
+		core->buf->start,
+		core->buf->wp, core->export->cnt_ready);
 
 	if (adr_type == PHYS_ADDR_TYPE)
 		copy = copy_phys_to_buf;
@@ -672,33 +715,48 @@ static ssize_t vdec_dbg_export_read(struct file *file,
 		struct vdec_dbg_local_buf *buf = core->buf;
 		char *read_pos;
 		u32 read_size;
+		u32 to_copy;
 
-		if (pusr->offset < buf->size) {
-			read_pos = buf->start + pusr->offset;
-
-			PR_TEST("%s, id %d, count %zx, rp %px, offset %ux\n",
-				__func__, pusr->id, count, buf->rp, pusr->offset);
-
-			if (pusr->data_size > (buf->end - read_pos)) {
-				read_size = buf->end - read_pos;
-				res = copy_to_user(usr_buf, read_pos, read_size);
-				if (!res)
-					res = copy_to_user(usr_buf + read_size, buf->start, pusr->data_size - read_size);
-			} else
-				res = copy_to_user(usr_buf, buf->start + pusr->offset, pusr->data_size);
-
-			ret = pusr->data_size - res;
+		if (pusr->offset >= buf->size) {
+			pr_warn("%s: invalid offset %x >= buf size %x\n",
+				__func__, pusr->offset, buf->size);
+			ret = 0;
+			goto recycle;
 		}
-		if (ret && (ret == pusr->data_size)) {
 
-			local_buf_rp_update(buf, pusr->data_size);
+		read_pos = buf->start + pusr->offset;
 
-			wake_up_interruptible(&buf->wqt);
+		PR_TEST("%s, id %d, count %zx, rp %px, offset %x\n",
+			__func__, pusr->id, count, buf->rp, pusr->offset);
+
+		/* Determine how many bytes we can copy */
+		to_copy = pusr->data_size;
+		if (count < to_copy) {
+			pr_debug("%s: count %zx < data_size %u, partial copy\n",
+				__func__, count, pusr->data_size);
+			to_copy = count;
+		}
+
+		if (to_copy > (buf->end - read_pos)) {
+			read_size = buf->end - read_pos;
+			if (read_size > to_copy)
+				read_size = to_copy;
+			res = copy_to_user(usr_buf, read_pos, read_size);
+			if (!res && (to_copy - read_size) > 0)
+				res = copy_to_user(usr_buf + read_size, buf->start, to_copy - read_size);
 		} else
-			pr_warn("%s failed, recycle directly\n", __func__);
+			res = copy_to_user(usr_buf, read_pos, to_copy);
 
+		ret = to_copy - res;
+		if (ret > 0) {
+			local_buf_rp_update(buf, ret);
+			wake_up_interruptible(&buf->wqt);
+		} else {
+			pr_debug("%s: no data copied, recycle\n", __func__);
+		}
+
+recycle:
 		memset(pusr, 0, sizeof(struct vdec_dbg_ex_usr));
-
 		vdec_dbg_export_unit_recycle(export);
 	}
 
@@ -1125,5 +1183,3 @@ module_exit(vdec_debug_module_exit);
 
 MODULE_DESCRIPTION("AMLOGIC vdec debug Driver");
 MODULE_LICENSE("GPL");
-
-

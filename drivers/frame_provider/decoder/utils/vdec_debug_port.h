@@ -19,6 +19,7 @@ struct vdec_dbg_local_buf {
 	struct mutex lock;
 	wait_queue_head_t wqt;
 	char *last_wp;
+	u32 filled;
 };
 
 
