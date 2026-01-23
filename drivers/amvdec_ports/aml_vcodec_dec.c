@@ -2406,9 +2406,11 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 	if (mbuf->idmabuf[0]) {
 		if (!aml_buf_check_uvm_dma_recycled(&ctx->bm, (ulong)mbuf->idmabuf[0], (ulong)dbuf[PLANE_Y]))
 			aml_buf_put_free_dmabuf(&ctx->bm, (ulong)mbuf->idmabuf[0], (ulong)dbuf[PLANE_Y], false);
-		dma_buf_put(mbuf->idmabuf[0]);
-		if (mbuf_uv && mbuf_uv->idmabuf[0])
-			dma_buf_put(mbuf_uv->idmabuf[0]);
+		if ((vb->vb2_buf.num_planes == 1) || ((vb->vb2_buf.num_planes > 1) && (mbuf->size > PAGE_SIZE))) {
+			dma_buf_put(mbuf->idmabuf[0]);
+			if (mbuf_uv && mbuf_uv->idmabuf[0])
+				dma_buf_put(mbuf_uv->idmabuf[0]);
+		}
 	}
 
 	if ((mbuf_uv && mbuf->size < ctx->picinfo.y_len_sz) ||
@@ -2665,6 +2667,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 		mbuf->sg_table	= ua[PLANE_Y]->sgt[0];
 		mbuf->ibuffer[0] = (void *)idbuf[PLANE_Y]->priv;
 		mbuf->idmabuf[0] = idbuf[PLANE_Y];
+		mbuf->ion_flags |= BIT(UVM_DMABUF_REPLACE);
 		if (mbuf_uv) {
 			handle[PLANE_UV] = dbuf[PLANE_UV]->priv;
 			ua[PLANE_UV] = handle[PLANE_UV]->ua;
@@ -2673,6 +2676,7 @@ static int aml_uvm_buf_delay_alloc(struct aml_vcodec_ctx *ctx,
 			mbuf_uv->ibuffer[0] = (void *)idbuf[PLANE_UV]->priv;
 			mbuf_uv->idmabuf[0] = idbuf[PLANE_UV];
 			am_buf->idmabuf[PLANE_UV] = idbuf[PLANE_UV];
+			mbuf_uv->ion_flags |= BIT(UVM_DMABUF_REPLACE);
 
 			aml_uvm_copy_sgt(ua[PLANE_UV]->sgt[0], sgt[PLANE_UV]);
 			am_buf->cap_sgt[PLANE_UV] = ua[PLANE_UV]->sgt[0];
