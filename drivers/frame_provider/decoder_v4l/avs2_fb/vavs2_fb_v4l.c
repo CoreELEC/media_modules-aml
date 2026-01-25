@@ -993,6 +993,7 @@ struct AVS2Decoder_s {
 	struct completion complete;
 	struct mmu_copy mmu_copy_array[BUF_FBC_NUM_MAX];
 	u32 last_dur;
+	bool init_set_dw_flag;
 };
 
 static int  compute_losless_comp_body_size(
@@ -6664,6 +6665,20 @@ static u32 avs2_calc_dpb_size(struct AVS2Decoder_s *dec) {
 	return avs2_calc_dbp_size_with_level_id(dec->avs2_dec.param.p.level_id, MinCuWidth, MinCuHeight) + 1;
 }
 
+static int set_mmu_parm_config(struct AVS2Decoder_s *dec)
+{
+	dec->double_write_mode = get_double_write_mode(dec);
+	if ((dec->double_write_mode & 0x10) == 0)
+		dec->mmu_enable = true;
+	else
+		dec->mmu_enable = false;
+
+	avs2_print(dec, PRINT_FLAG_V4L_DETAIL, "%s mmu_enable:%d dw:%d\n",
+		__func__, dec->mmu_enable, dec->double_write_mode);
+
+	return 0;
+}
+
 static int vavs2_get_ps_info(struct AVS2Decoder_s *dec, struct aml_vdec_ps_infos *ps)
 {
 	ps->visible_width 	= dec->frame_width;
@@ -6685,7 +6700,26 @@ static int vavs2_get_ps_info(struct AVS2Decoder_s *dec, struct aml_vdec_ps_infos
 
 	ps->field = V4L2_FIELD_NONE;
 
+	if (dec->init_set_dw_flag)
+		set_mmu_parm_config(dec);
+
 	return 0;
+}
+
+static void update_comp_info(struct aml_vcodec_ctx *ctx, void *hw)
+{
+	struct vdec_comp_buf_info info;
+	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)hw;
+	int w = ctx->picinfo.visible_width;
+	int h = ctx->picinfo.visible_height;
+
+	if (!w || !h) {
+		avs2_print(dec, 0, "comp_info w and h is 0\n");
+		return;
+	}
+	avs2_print(dec, PRINT_FLAG_V4L_DETAIL, "avs2 update comp info\n");
+	vavs2_get_comp_buf_info(dec, &info);
+	vdec_v4l_set_comp_buf_info(ctx, &info);
 }
 
 static int v4l_res_change(struct AVS2Decoder_s *dec)
@@ -9751,6 +9785,11 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (dec->front_back_mode == 0 || (mask & CORE_MASK_HEVC)) {
 #endif
 
+	if (dec->v4l_params_parsed && !dec->init_set_dw_flag) {
+		set_mmu_parm_config(dec);
+		dec->init_set_dw_flag = 1;
+	}
+
 	run_count[dec->index]++;
 	dec->vdec_cb_arg = arg;
 	dec->vdec_cb = callback;
@@ -10276,6 +10315,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	pdata->irq_handler = avs2_irq_cb;
 	pdata->threaded_irq_handler = avs2_threaded_irq_cb;
 	pdata->dump_state = avs2_dump_state;
+	ctx->update_comp_info = update_comp_info;
 
 	dec->index = pdev->id;
 	dec->m_ins_flag = 1;
@@ -10449,8 +10489,6 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 
 	video_signal_type = dec->video_signal_type;
 
-	if ((dec->double_write_mode & 0x10) == 0)
-		dec->mmu_enable = true;
 	if (amvdec_avs2_mmu_init(dec) < 0) {
 		pr_err("avs2 alloc bmmu box failed!!\n");
 		/* devm_kfree(&pdev->dev, (void *)dec); */
@@ -10478,6 +10516,8 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	dec->fatal_error = 0;
 	dec->show_frame_num = 0;
 	dec->run_ready_min_buf_num = run_ready_min_buf_num;
+	dec->init_set_dw_flag = 0;
+	dec->mmu_enable = 0;
 	if (debug) {
 		pr_info("===AVS2 decoder mem resource 0x%lx size 0x%x\n",
 			dec->buf_start,

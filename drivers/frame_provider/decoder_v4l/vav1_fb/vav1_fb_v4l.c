@@ -1047,6 +1047,7 @@ struct AV1HW_s {
 	int chunk_frame_buf_idx[FRAME_BUFFERS];
 	int chunk_frame_pos;
 	int last_order_hint;
+	bool init_set_dw_flag;
 };
 
 #ifdef NEW_FB_CODE
@@ -5944,9 +5945,6 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 		hw->lmem_ptr = hw->lmem_addr;
 
 		vdec_set_vframe_comm(hw_to_vdec(hw), DRIVER_NAME);
-		ret = vav1_mmu_map_alloc(hw);
-		if (ret < 0)
-			goto dma_alloc_fail;
 
 	}
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
@@ -9042,6 +9040,147 @@ static void vav1_get_comp_buf_info(struct AV1HW_s *hw,
 			bit_depth == AOM_BITS_10);
 }
 
+static int av1_reconfig_mmu_v4l(struct AV1HW_s *hw, bool enable_mmu, bool enable_dw_mmu)
+{
+	u32 mmu_map_size;
+	if (enable_mmu && !hw->mmu_enable) {
+		hw->mmu_enable = 1;
+		mmu_map_size = vav1_frame_mmu_map_size(hw);
+		hw->frame_mmu_map_addr =
+			decoder_dma_alloc_coherent(&hw->frame_mmu_map_handle,
+				mmu_map_size,
+				&hw->frame_mmu_map_phy_addr, "AV1_MMU_MAP");
+		if (hw->frame_mmu_map_addr == NULL) {
+			pr_err("%s: failed to alloc mmu map\n", __func__);
+			return -1;
+		}
+		memset(hw->frame_mmu_map_addr, 0, mmu_map_size);
+#ifdef NEW_FB_CODE
+		if (hw->front_back_mode == 1 || hw->front_back_mode == 3) {
+			hw->frame_mmu_map_addr_1 =
+				decoder_dma_alloc_coherent(&hw->frame_mmu_map_handle_1,
+					mmu_map_size,
+					&hw->frame_mmu_map_phy_addr_1, "AV1_MMU_MAP_1");
+			if (hw->frame_mmu_map_addr_1 == NULL) {
+				pr_err("%s: failed to alloc mmu map 1\n", __func__);
+				return -1;
+			}
+			memset(hw->frame_mmu_map_addr_1, 0, mmu_map_size);
+		}
+#endif
+	}
+#ifdef AOM_AV1_MMU_DW
+	if (enable_dw_mmu && !hw->dw_mmu_enable) {
+		hw->dw_mmu_enable = 1;
+		mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
+		hw->dw_frame_mmu_map_addr =
+			decoder_dma_alloc_coherent(&hw->frame_dw_mmu_map_handle,
+				mmu_map_size,
+				&hw->dw_frame_mmu_map_phy_addr, "AV1_DWMMU_MAP");
+		if (hw->dw_frame_mmu_map_addr == NULL) {
+			pr_err("%s: failed to alloc dw mmu map\n", __func__);
+			return -1;
+		}
+		memset(hw->dw_frame_mmu_map_addr, 0, mmu_map_size);
+#ifdef NEW_FB_CODE
+		if (hw->front_back_mode == 1 || hw->front_back_mode == 3) {
+			hw->dw_frame_mmu_map_addr_1 =
+					dma_alloc_coherent(amports_get_dma_device(),
+					mmu_map_size,
+					&hw->dw_frame_mmu_map_phy_addr_1, GFP_KERNEL);
+			if (hw->dw_frame_mmu_map_addr_1 == NULL) {
+				pr_err("%s: failed to alloc dw mmu map 1\n", __func__);
+				return -1;
+			}
+			memset(hw->dw_frame_mmu_map_addr_1, 0, mmu_map_size);
+		}
+#endif
+	}
+#endif
+
+	if (!enable_mmu && hw->mmu_enable) {
+		hw->mmu_enable = 0;
+		mmu_map_size = vav1_frame_mmu_map_size(hw);
+		if (hw->frame_mmu_map_addr) {
+			if (hw->frame_mmu_map_phy_addr)
+				decoder_dma_free_coherent(hw->frame_mmu_map_handle,
+					mmu_map_size,
+					hw->frame_mmu_map_addr,
+					hw->frame_mmu_map_phy_addr);
+			hw->frame_mmu_map_addr = NULL;
+		}
+#ifdef NEW_FB_CODE
+		if (hw->front_back_mode) {
+			if (hw->frame_mmu_map_addr_1) {
+				decoder_dma_free_coherent(hw->frame_mmu_map_handle_1,
+					mmu_map_size,
+					hw->frame_mmu_map_addr_1,
+					hw->frame_mmu_map_phy_addr_1);
+
+				hw->frame_mmu_map_addr_1 = NULL;
+			}
+		}
+#endif
+	}
+#ifdef AOM_AV1_MMU_DW
+	if (!enable_dw_mmu && hw->dw_mmu_enable) {
+		hw->dw_mmu_enable = 0;
+		mmu_map_size = vaom_dw_frame_mmu_map_size(hw);
+		if (hw->dw_frame_mmu_map_addr) {
+			if (hw->dw_frame_mmu_map_phy_addr)
+				decoder_dma_free_coherent(hw->frame_dw_mmu_map_handle,
+					mmu_map_size,
+					hw->dw_frame_mmu_map_addr,
+					hw->dw_frame_mmu_map_phy_addr);
+			hw->dw_frame_mmu_map_addr = NULL;
+		}
+#ifdef NEW_FB_CODE
+		if (hw->front_back_mode && hw->dw_frame_mmu_map_addr_1) {
+			if (hw->dw_frame_mmu_map_addr_1)
+				dma_free_coherent(amports_get_dma_device(),
+					mmu_map_size, hw->dw_frame_mmu_map_addr_1,
+						hw->dw_frame_mmu_map_phy_addr_1);
+			hw->dw_frame_mmu_map_addr_1 = NULL;
+		}
+#endif
+	}
+#endif
+
+	return 0;
+}
+
+static int set_mmu_parm_config(struct AV1HW_s *hw)
+{
+	int enable_mmu = 0;
+	int enable_dw_mmu = 0;
+	int ret = 0;
+
+	hw->double_write_mode = get_double_write_mode(hw);
+
+	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
+		hw->double_write_mode == 0x10)
+		enable_mmu = 0;
+	else
+		enable_mmu = 1;
+
+#ifdef AOM_AV1_MMU_DW
+	enable_dw_mmu =
+		get_double_write_mode(hw) & 0x20 ? 1 : 0;
+#endif
+
+	if (hw->mmu_enable != enable_mmu ||
+		hw->dw_mmu_enable != enable_dw_mmu) {
+		ret = av1_reconfig_mmu_v4l(hw, enable_mmu, enable_dw_mmu);
+	}
+
+	av1_print(hw, PRINT_FLAG_VDEC_DETAIL,
+		"%s mmu_enable %d double_write_mode 0x%x\n",
+		__func__, hw->mmu_enable, hw->double_write_mode);
+
+	return ret;
+
+}
+
 static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 {
 	ps->visible_width 	= hw->frame_width;
@@ -9065,7 +9204,26 @@ static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 	ps->field = V4L2_FIELD_NONE;
 	ps->bitdepth = hw->aom_param.p.bit_depth;
 
+	if (hw->init_set_dw_flag)
+		set_mmu_parm_config(hw);
+
 	return 0;
+}
+
+static void update_comp_info(struct aml_vcodec_ctx *ctx, void *hw)
+{
+	struct vdec_comp_buf_info info;
+	struct AV1HW_s *av1_hw = (struct AV1HW_s *)hw;
+	int w = ctx->picinfo.visible_width;
+	int h = ctx->picinfo.visible_height;
+
+	if (!w || !h) {
+		av1_print(av1_hw, 0, "comp_info w and h is 0\n");
+		return;
+	}
+	av1_print(av1_hw, PRINT_FLAG_V4L_DETAIL, "av1 update comp info\n");
+	vav1_get_comp_buf_info(av1_hw, &info);
+	vdec_v4l_set_comp_buf_info(ctx, &info);
 }
 
 static void av1_recycle_fence_vf(struct AV1HW_s *hw)
@@ -12236,6 +12394,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	struct AV1HW_s *hw =
 		(struct AV1HW_s *)vdec->private;
 
+	if (hw->v4l_params_parsed && !hw->init_set_dw_flag) {
+		if (set_mmu_parm_config(hw)) {
+			hw->dec_result = DEC_RESULT_AGAIN;
+			vdec_schedule_work(&hw->work);
+			av1_print(hw, 0, "%s: error \n", __func__);
+			return;
+		}
+		hw->init_set_dw_flag = 1;
+	}
+
 #ifdef NEW_FB_CODE
 	if ((hw->front_back_mode == 0) || (mask & CORE_MASK_HEVC)) {
 #endif
@@ -13003,6 +13171,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	pdata->irq_handler = av1_irq_cb;
 	pdata->threaded_irq_handler = av1_threaded_irq_cb;
 	pdata->dump_state = av1_dump_state;
+	ctx->update_comp_info = update_comp_info;
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
@@ -13356,19 +13525,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			hw->low_latency_flag);
 	}
 
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
-		hw->double_write_mode == 0x10)
-		hw->mmu_enable = 0;
-	else
-		hw->mmu_enable = 1;
-
 	video_signal_type = hw->video_signal_type;
-
-
-#ifdef AOM_AV1_MMU_DW
-	hw->dw_mmu_enable =
-		get_double_write_mode(hw) & 0x20 ? 1 : 0;
-#endif
 
 	if (low_latency_flag & 0x80000000)
 		hw->low_latency_flag = low_latency_flag & 0xff;
@@ -13410,6 +13567,9 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	hw->fatal_error = 0;
 	hw->show_frame_num = 0;
 	hw->run_ready_min_buf_num = run_ready_min_buf_num;
+	hw->init_set_dw_flag = false;
+	hw->mmu_enable = 0;
+	hw->dw_mmu_enable = 0;
 
 	if (hw->v4l2_ctx != NULL) {
 		struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;

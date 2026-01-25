@@ -14948,7 +14948,8 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 
 try_parse_head:
 	if (hevc->dec_result != DEC_RESULT_EOS && !hevc->resolution_change &&
-		save_buffer && free_count < run_ready_min_buf_num &&
+		(save_buffer && hevc->init_set_dw_flag) &&
+		free_count < run_ready_min_buf_num &&
 		!hevc->head_pre_parsed) {
 		hevc->try_parsing = 1;
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
