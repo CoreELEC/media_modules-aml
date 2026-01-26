@@ -115,6 +115,8 @@ MODULE_IMPORT_NS(DMA_BUF);
 #define AML_V4L2_GET_HEIGHT_ALIGN (V4L2_CID_USER_AMLOGIC_BASE + 16)
 #define AML_V4L2_SET_CHANNEL_PRIORITY (V4L2_CID_USER_AMLOGIC_BASE + 17)
 #define AML_V4L2_SET_INST_ID (V4L2_CID_USER_AMLOGIC_BASE + 18)
+#define AML_V4L2_SET_OUTPUTMODES (V4L2_CID_USER_AMLOGIC_BASE + 19)
+#define AML_V4L2_GET_OUTPUTMODES  (V4L2_CID_USER_AMLOGIC_BASE + 20)
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
@@ -3604,7 +3606,7 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 		(s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE))
 		return -EINVAL;
 
-	if (ctx->internal_dw_scale) {
+	if (ctx->internal_dw_scale || ctx->set_outputmode_flag) {
 		if (ctx->state >= AML_STATE_PROBE) {
 			u32 dw_mode = DM_YUV_ONLY;
 			u32 tw_mode = DM_INVALID;
@@ -3662,8 +3664,8 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 		s->r.height = q_data->visible_height;
 	}
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d\n",
-		__func__, s->type);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d width: %d height: %d\n",
+		__func__, s->type, s->r.width, s->r.height);
 
 	return 0;
 }
@@ -3680,7 +3682,7 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 	if (s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
-	if (ctx->internal_dw_scale) {
+	if (ctx->internal_dw_scale || ctx->set_outputmode_flag) {
 		if (ctx->state >= AML_STATE_PROBE) {
 			u32 dw_mode = DM_YUV_ONLY;
 			u32 tw_mode = DM_INVALID;
@@ -3856,7 +3858,7 @@ static void copy_v4l2_format_dimension(struct aml_vcodec_ctx *ctx,
 		pix->sizeimage		= q_data->sizeimage[0];
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s: is_multiplanar: %d, w: %d, h: %d, pixelformat: %s\n",
-			__func__, V4L2_TYPE_IS_MULTIPLANAR(type), pix_mp->width, pix_mp->height,
+			__func__, V4L2_TYPE_IS_MULTIPLANAR(type), pix->width, pix->height,
 			FOURCC_TO_STR(pix_mp->pixelformat));
 
 		if ((dw_mode == DM_AVBC_ONLY) && tw_mode) {
@@ -6075,6 +6077,11 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		if (aml_vcodec_decinfo_get(ctrl, ctx) < 0)
 			ret = -EINVAL;
 		break;
+	case AML_V4L2_GET_OUTPUTMODES: {
+		memcpy(ctrl->p_new.p, get_output_mode_by_fmt(ctx->output_mode_ext.fmt),
+			sizeof(struct output_mode) * MAX_OUTPUT_MODE_GROUPS);
+		break;
+	}
 	default:
 		ret = -EINVAL;
 	}
@@ -6173,6 +6180,34 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 		aml_buf_mgr_update_id(&ctx->bm, ctx->id);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 			"set inst id is: %d\n", ctrl->val);
+	} else if (ctrl->id == AML_V4L2_SET_OUTPUTMODES) {
+		int i = 0;
+		struct aml_vdec_cfg_infos cfg_info = { 0 };
+
+		memcpy(&ctx->output_mode_ext, ctrl->p_new.p, sizeof(struct output_mode_ext));
+		ctx->set_outputmode_flag = 1;
+		ctx->output_mode_ext.fmt = v4l2_fourcc_to_vtype(ctx->output_mode_ext.fmt);
+		ctx->output_mode_ext.double_write_mode = parse_output_modes(&ctx->output_mode_ext);
+		vdec_v4l_get_cfg_infos(ctx, &cfg_info);
+		cfg_info.double_write_mode = ctx->output_mode_ext.double_write_mode;
+		vdec_v4l_set_cfg_infos(ctx, &cfg_info);
+		if (debug_mode & V4L_DEBUG_CODEC_EXINFO) {
+			for (i = 0; i < MAX_OUTPUT_MODE_GROUPS; i++) {
+				pr_info("output_mode[%d]: format=%#x, scalar=%d, flags=%#x, reserved=%d\n",
+				i,
+				ctx->output_mode_ext.modes[i].format,
+				ctx->output_mode_ext.modes[i].scalar,
+				ctx->output_mode_ext.modes[i].flags,
+				ctx->output_mode_ext.modes[i].reserved);
+			}
+		}
+		if ((int)ctx->output_mode_ext.double_write_mode < 0) {
+			v4l_dbg(ctx, 0, "%s error outputmode! dw: %d\n",
+				__func__, ctx->output_mode_ext.double_write_mode);
+			return -1;
+		}
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "%s set outputmode dw: %d fmt: %d\n", __func__,
+			ctx->output_mode_ext.double_write_mode, ctx->output_mode_ext.fmt);
 	}
 
 	return 0;
@@ -6289,6 +6324,19 @@ static const struct v4l2_ctrl_config ctrl_st_channel_priority = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_st_outputmodes = {
+	.name	= "outputmodes",
+	.id	= AML_V4L2_SET_OUTPUTMODES,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_COMPOUND_TYPES,
+	.flags	= V4L2_CTRL_FLAG_VOLATILE,
+	.min	= 0,
+	.max	= 0x7fffffff,
+	.step	= 1,
+	.dims	= { sizeof(struct output_mode_ext)},
+
+};
+
 static const struct v4l2_ctrl_config ctrl_stream_mode = {
 	.name	= "stream mode",
 	.id	= AML_V4L2_SET_STREAM_MODE,
@@ -6373,6 +6421,18 @@ static const struct v4l2_ctrl_config ctrl_gt_decoder_info = {
 	.step		= 1,
 	.elem_size	= 1,
 	.dims		= { sizeof(struct aml_decoder_status_info) },
+};
+
+static const struct v4l2_ctrl_config ctrl_gt_output_modes_info = {
+	.name		= "output_modes information",
+	.id		= AML_V4L2_GET_OUTPUTMODES,
+	.ops		= &aml_vcodec_dec_ctrl_ops,
+	.type		= V4L2_CTRL_COMPOUND_TYPES,
+	.flags		= V4L2_CTRL_FLAG_VOLATILE,
+	.min		= 0,
+	.max		= 0x7fffffff,
+	.step		= 1,
+	.dims		= { sizeof(struct output_mode) * MAX_OUTPUT_MODE_GROUPS },
 };
 
 static const struct v4l2_ctrl_config ctrl_get_width_align = {
@@ -6493,6 +6553,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 		goto err;
 	}
 
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_outputmodes, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_stream_mode, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
@@ -6512,6 +6578,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_decoder_info, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_output_modes_info, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;
@@ -6715,6 +6787,11 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		ctx->config.type = V4L2_CONFIG_PARM_DECODE;
 
 		if (in->parms_status & V4L2_CONFIG_PARM_DECODE_CFGINFO) {
+			if (ctx->set_outputmode_flag) {
+				in->cfg.double_write_mode = ctx->output_mode_ext.double_write_mode;
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s use outputmode dw: %d\n",
+				__func__, ctx->output_mode_ext.double_write_mode);
+			}
 			if (check_dec_cfginfo(ctx, &in->cfg))
 				return -EINVAL;
 			dec->cfg = in->cfg;

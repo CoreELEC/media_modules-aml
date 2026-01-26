@@ -20,6 +20,9 @@
 #ifndef VDEC_FEATURE_H
 #define VDEC_FEATURE_H
 
+#define OUTPUT_MODE_VER(major,minor,revision)\
+	(((major) << 16) + ((minor) << 8) + (revision))
+
 int vcodec_feature_register(int vformat, int is_v4l);
 
 ssize_t vcodec_feature_read(char *buf);

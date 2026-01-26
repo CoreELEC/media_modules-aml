@@ -33,6 +33,7 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <media/v4l2-mem2mem.h>
 //#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
+#include "../frame_provider/decoder/utils/vdec_dw.h"
 
 #ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 #include "aml_vcodec_avbc_wrapper.h"
@@ -1211,6 +1212,8 @@ struct aml_vcodec_ctx {
 	u32			duration;
 	int			local_id;
 	u32			thumbnail_mode;
+	struct output_mode_ext	output_mode_ext;
+	bool			set_outputmode_flag;
 };
 
 /**

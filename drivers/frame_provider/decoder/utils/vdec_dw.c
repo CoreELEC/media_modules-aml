@@ -11,22 +11,87 @@
 #include "vdec_dw.h"
 
 enum vdec_dec_mode {
-	DM_INVALID            = 0,
-	DM_AVBC_ONLY          = 0,
-	DM_YUV_1_1_AVBC       = 1,
-	DM_YUV_1_4_AVBC_A     = 2,
-	DM_YUV_1_4_AVBC_B     = 3,
-	DM_YUV_1_2_AVBC       = 4,
-	DM_YUV_1_8_AVBC       = 8,
-	DM_YUV_ONLY           = 0x10,
-	DM_AVBC_1_1           = 0x21,
-	DM_AVBC_1_4           = 0x22,
-	DM_AVBC_1_2           = 0x24,
-	DM_YUV_1_1_10BIT_AVBC = 0x10001,
-	DM_YUV_1_4_10BIT_AVBC = 0x10003,
-	DM_YUV_1_2_10BIT_AVBC = 0x10004,
-	DM_YUV_1_8_10BIT_AVBC = 0x10008,
+	DM_INVALID		= 0,
+	DM_AVBC_ONLY		= 0,
+	DM_YUV_1_1_AVBC		= 1,
+	DM_YUV_1_4_AVBC_A	= 2,
+	DM_YUV_1_4_AVBC_B	= 3,
+	DM_YUV_1_2_AVBC		= 4,
+	DM_YUV_1_8_AVBC		= 8,
+	DM_YUV_ONLY		= 0x10,
+	DM_AVBC_1_1		= 0x21,
+	DM_AVBC_1_4		= 0x22,
+	DM_AVBC_1_2		= 0x24,
+	DM_YUV_AUTO_1_2_AVBC	= 0x100,
+	DM_YUV_AUTO_1_4_AVBC	= 0x200,
+	DM_YUV_AUTO_1_2_AVBC_B	= 0x300,
+	/* (0~540] 1/1, (540~1080] 1/4, (1080~4K] 1/16 */
+	DM_YUV_AUTO_14_12_AVBC	= 0x400,
+	DM_YUV_1_1_10BIT_AVBC	= 0x10001,
+	DM_YUV_1_4_10BIT_AVBC	= 0x10003,
+	DM_YUV_1_2_10BIT_AVBC	= 0x10004,
+	DM_YUV_1_8_10BIT_AVBC	= 0x10008,
+	DM_YUV_P010_ONLY	= 0x10010,
+	/* (0~1080] 1/1, (1080~4K] 1/16 */
+	DM_YUV_14_11_10BIT_AVBC	= 0x10200,
 };
+
+static const int avbc_dw_1_1[] = {
+	DM_AVBC_ONLY,
+	DM_YUV_1_1_AVBC,
+	DM_YUV_1_4_AVBC_A,
+	DM_YUV_1_4_AVBC_B,
+	DM_YUV_1_2_AVBC,
+	DM_YUV_1_8_AVBC,
+	DM_YUV_AUTO_1_2_AVBC,
+	DM_YUV_AUTO_1_4_AVBC,
+	DM_YUV_AUTO_1_2_AVBC_B,
+	DM_YUV_AUTO_14_12_AVBC,
+	DM_YUV_1_1_10BIT_AVBC,
+	DM_YUV_1_4_10BIT_AVBC,
+	DM_YUV_1_2_10BIT_AVBC,
+	DM_YUV_1_8_10BIT_AVBC,
+	DM_YUV_14_11_10BIT_AVBC,
+	DM_AVBC_1_1
+};
+
+enum vformat_e v4l2_fourcc_to_vtype(uint32_t fourcc) {
+	switch (fourcc) {
+		case V4L2_PIX_FMT_H264:
+			return VFORMAT_H264;
+		case V4L2_PIX_FMT_HEVC:
+			return VFORMAT_HEVC;
+		case V4L2_PIX_FMT_VP9:
+			return VFORMAT_VP9;
+		case V4L2_PIX_FMT_MPEG2:
+			return VFORMAT_MPEG12;
+		case V4L2_PIX_FMT_MPEG4:
+			return VFORMAT_MPEG4;
+		case V4L2_PIX_FMT_MJPEG:
+			return VFORMAT_MJPEG;
+		case V4L2_PIX_FMT_AV1:
+			return VFORMAT_AV1;
+		case V4L2_PIX_FMT_AVS:
+			return VFORMAT_AVS;
+		case V4L2_PIX_FMT_AVS2:
+			return VFORMAT_AVS2;
+		case V4L2_PIX_FMT_AVS3:
+			return VFORMAT_AVS3;
+		case V4L2_PIX_FMT_VC1_ANNEX_G:
+			return VFORMAT_VC1;
+		case V4L2_PIX_FMT_VC1_ANNEX_L:
+			return VFORMAT_VC1;
+		case V4L2_PIX_FMT_H266:
+			return VFORMAT_H266;
+		case V4L2_PIX_FMT_MPEG1:
+			return VFORMAT_MPEG12;
+		case V4L2_PIX_FMT_JPEG:
+			return VFORMAT_JPEG;
+	}
+	return VFORMAT_MAX;
+}
+EXPORT_SYMBOL(v4l2_fourcc_to_vtype);
+
 
 static const char * const format_name[] = {
 	"MPEG12",
@@ -333,4 +398,292 @@ void vdec_dos_dw_mode_init(void)
 		}
 	}
 }
+
+struct output_mode *get_output_mode_by_fmt(enum vformat_e fmt)
+{
+	int i;
+	struct dos_hw_output_mode *output_modes = get_dos_output_mode_all();
+
+	for (i = 0; i < VFORMAT_MAX; i++) {
+		if (output_modes[i].fmt == fmt) {
+			return output_modes[i].mode;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(get_output_mode_by_fmt);
+
+void parse_signal_output_mode(struct output_mode *output_mode, int *dw_list, int *list_size)
+{
+	u32 format = output_mode->format;
+	u32 scalar = output_mode->scalar;
+	int count = 0;
+
+	if (format == 0) {
+		*list_size = 0;
+		return;
+	}
+
+	if (format & FORMAT_PIX_YUV_MASK) {
+		if (scalar & SCALAR_1_1) {
+			dw_list[count++] = DM_YUV_ONLY;
+			dw_list[count++] = DM_YUV_1_1_AVBC;
+		}
+		if (scalar & SCALAR_1_4) {
+			dw_list[count++] = DM_YUV_1_2_AVBC;
+		}
+		if (scalar & SCALAR_1_16) {
+			dw_list[count++] = DM_YUV_1_4_AVBC_A;
+			dw_list[count++] = DM_YUV_1_4_AVBC_B;
+		}
+		if (scalar & SCALAR_1_64)
+			dw_list[count++] = DM_YUV_1_8_AVBC;
+		if (scalar & SCALAR_AUTO_1080P_1_4)
+			dw_list[count++] = DM_YUV_AUTO_1_2_AVBC;
+		if (scalar & SCALAR_AUTO_1080P_1_16)
+			dw_list[count++] = DM_YUV_AUTO_1_4_AVBC;
+		if (scalar & SCALAR_AUTO_720P_1_4)
+			dw_list[count++] = DM_YUV_AUTO_1_2_AVBC_B;
+		if (scalar & SCALAR_AUTO_540P)
+			dw_list[count++] = DM_YUV_AUTO_14_12_AVBC;
+	}
+
+    if (format & FORMAT_AVBC) {
+		if (scalar & SCALAR_1_1) {
+			memcpy(&dw_list[count], avbc_dw_1_1, sizeof(avbc_dw_1_1));
+			count += sizeof(avbc_dw_1_1) / sizeof(avbc_dw_1_1[0]);
+		}
+		if (scalar & SCALAR_1_4)
+			dw_list[count++] = DM_AVBC_1_2;
+		if (scalar & SCALAR_1_16)
+			dw_list[count++] = DM_AVBC_1_4;
+	}
+
+	if (format & FORMAT_P010) {
+		if (scalar & SCALAR_1_1)
+			dw_list[count++] = DM_YUV_1_1_10BIT_AVBC;
+		if (scalar & SCALAR_1_4)
+			dw_list[count++] = DM_YUV_1_2_10BIT_AVBC;
+		if (scalar & SCALAR_1_16)
+			dw_list[count++] = DM_YUV_1_4_10BIT_AVBC;
+		if (scalar & SCALAR_1_64)
+			dw_list[count++] = DM_YUV_1_8_10BIT_AVBC;
+		if (scalar & SCALAR_AUTO_1080P_1_16)
+			dw_list[count++] = DM_YUV_14_11_10BIT_AVBC;
+	}
+
+	*list_size = count;
+}
+
+static int dw_list_intersection(int *list1, int size1, int *list2, int size2, int *result_list)
+{
+	int i, j, k;
+	int count = 0;
+	int value;
+	int in_list2;
+	int found;
+
+	if (size1 <= 0 || size2 <= 0) {
+		return 0;
+	}
+
+	for (i = 0; i < size1; i++) {
+		value = list1[i];
+		in_list2 = 0;
+		for (j = 0; j < size2; j++) {
+			if (value == list2[j]) {
+				in_list2 = 1;
+				break;
+			}
+		}
+
+		if (!in_list2) {
+			continue;
+		}
+
+		found = 0;
+		for (k = 0; k < count; k++) {
+			if (result_list[k] == value) {
+				found = 1;
+				break;
+			}
+		}
+
+		if (!found) {
+			result_list[count++] = value;
+		}
+	}
+
+	return count;
+}
+
+static int dw_list_intersection3_skip_empty(int *list1, int size1, int *list2, int size2,
+	int *list3, int size3, int *result_list)
+{
+	int *valid_lists[MAX_OUTPUT_MODE_GROUPS];
+	int valid_sizes[MAX_OUTPUT_MODE_GROUPS];
+	int valid_count = 0;
+	int temp_list[MAX_DW_LIST_SIZE];
+	int temp_size;
+
+	if (size1 > 0) {
+		valid_lists[valid_count] = list1;
+		valid_sizes[valid_count] = size1;
+		valid_count++;
+	}
+
+	if (size2 > 0) {
+		valid_lists[valid_count] = list2;
+		valid_sizes[valid_count] = size2;
+		valid_count++;
+	}
+
+	if (size3 > 0) {
+		valid_lists[valid_count] = list3;
+		valid_sizes[valid_count] = size3;
+		valid_count++;
+	}
+
+	if (valid_count == 0) {
+		return 0;
+	} else if (valid_count == 1) {
+		memcpy(result_list, valid_lists[0], valid_sizes[0] * sizeof(int));
+		return valid_sizes[0];
+	} else if (valid_count == 2) {
+		return dw_list_intersection(valid_lists[0], valid_sizes[0],
+			valid_lists[1], valid_sizes[1],
+			result_list);
+	} else {
+		temp_size = dw_list_intersection(list1, size1, list2, size2, temp_list);
+
+		if (temp_size > 0) {
+			return dw_list_intersection(temp_list, temp_size, list3, size3, result_list);
+		} else {
+			return 0;
+		}
+	}
+}
+
+static int select_min_dw(int *list, int size)
+{
+	int i;
+	int min_dw;
+
+	if (size <= 0) {
+		return -1;
+	}
+
+	/* 1. Prefer to select dw = 16 */
+	for (i = 0; i < size; i++) {
+		if (list[i] == DM_YUV_ONLY) {
+			return DM_YUV_ONLY;
+		}
+	}
+
+	/* 2. Otherwise, select the smallest dw */
+	min_dw = list[0];
+	for (i = 0; i < size; i++) {
+		if (list[i] < min_dw) {
+			min_dw = list[i];
+		}
+	}
+	return min_dw;
+}
+
+static void expand_dos_dw_list(int *src_list, int src_size,
+	int *dst_list, int *dst_size)
+{
+	int i;
+	int has_0x1 = 0, has_0x2 = 0, has_0x3 = 0, has_0x4 = 0;
+
+	*dst_size = 0;
+	for (i = 0; i < src_size; i++) {
+		if (src_list[i] != -1) {
+			dst_list[(*dst_size)++] = src_list[i];
+		}
+	}
+
+	for (i = 0; i < src_size; i++) {
+		if (src_list[i] == DM_YUV_1_1_AVBC)
+			has_0x1 = 1;
+		if (src_list[i] == DM_YUV_1_4_AVBC_A)
+			has_0x2 = 1;
+		if (src_list[i] == DM_YUV_1_4_AVBC_B)
+			has_0x3 = 1;
+		if (src_list[i] == DM_YUV_1_2_AVBC)
+			has_0x4 = 1;
+	}
+
+	if (has_0x1 && has_0x4) {
+		dst_list[(*dst_size)++] = DM_YUV_AUTO_1_2_AVBC;
+		dst_list[(*dst_size)++] = DM_YUV_AUTO_1_2_AVBC_B;
+	}
+
+	if (has_0x1 && has_0x2) {
+		dst_list[(*dst_size)++] = DM_YUV_AUTO_1_4_AVBC;
+		dst_list[(*dst_size)++] = DM_YUV_14_11_10BIT_AVBC;
+	}
+
+	if (has_0x1 && has_0x3 && has_0x4) {
+		dst_list[(*dst_size)++] = DM_YUV_AUTO_14_12_AVBC;
+	}
+}
+
+int parse_output_modes(struct output_mode_ext *output_mode_ext)
+{
+	struct parse_result result;
+	int i;
+	int *dos_dw_list;
+	int temp_list[MAX_DW_LIST_SIZE];
+	int temp_size;
+	int dos_dw_list_size = MAX_DW_LIST_SIZE;
+	int expanded_dos_dw_list[MAX_DW_LIST_SIZE];
+	int expanded_dos_dw_list_size;
+
+	memset(&result, 0, sizeof(result));
+	result.min_dw = -1;
+
+	for (i = 0; i < MAX_OUTPUT_MODE_GROUPS; i++) {
+		parse_signal_output_mode(&output_mode_ext->modes[i],
+			result.dw_list[i], &result.list_size[i]);
+	}
+
+	temp_size = dw_list_intersection3_skip_empty(
+		result.dw_list[0], result.list_size[0],
+		result.dw_list[1], result.list_size[1],
+		result.dw_list[2], result.list_size[2],
+		temp_list);
+
+	if (temp_size <= 0) {
+		pr_info("No temp_size found among the valid modes\n");
+		return -1;
+	}
+
+	dos_dw_list = get_dos_dw_mode(output_mode_ext->fmt);
+	if (!dos_dw_list) {
+		pr_err("No dos_dw_mode found for fmt %d\n", output_mode_ext->fmt);
+		return -1;
+	}
+
+	expand_dos_dw_list(dos_dw_list, dos_dw_list_size,
+		expanded_dos_dw_list, &expanded_dos_dw_list_size);
+
+	result.intersection_size = dw_list_intersection(
+		expanded_dos_dw_list, expanded_dos_dw_list_size,
+		temp_list, temp_size,
+		result.intersection);
+
+	if (result.intersection_size > 0) {
+		result.min_dw = select_min_dw(result.intersection, result.intersection_size);
+	} else {
+		pr_info("No intersection found among the valid modes\n");
+		return -1;
+	}
+
+	return result.min_dw;
+}
+
+EXPORT_SYMBOL(parse_output_modes);
+
 

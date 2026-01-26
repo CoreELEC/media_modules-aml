@@ -27,8 +27,7 @@
 #include <linux/amlogic/media/codec_mm/dmabuf_manage.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "vdec.h"
-
-
+#include "vdec_feature.h"
 
 //static const struct codec_profile_t *vcodec_feature[SUPPORT_VDEC_NUM] = { 0 };
 
@@ -169,6 +168,17 @@ static int vcodec_feature_doublewrite(u8 *buf, int size, int vformat)
 			tsize += s;
 			pbuf += s;
 		}
+	}
+
+	return pbuf - buf;
+}
+
+static int vcodec_feature_outputmodes(u8 *buf, int size, int vformat, int is_v4l)
+{
+	u8 *pbuf = buf;
+
+	if (is_v4l) {
+		pbuf += snprintf(pbuf, size, "        \"outputmode\" : \"%d\",\n",OUTPUT_MODE_VER(1, 0, 0));
 	}
 
 	return pbuf - buf;
@@ -545,6 +555,10 @@ int vcodec_feature_get_feature(u8 *buf, int size, int vformat, int is_v4l)
 	pbuf += s;
 
 	s = vcodec_feature_doublewrite(pbuf, size - tsize, vformat);
+	tsize += s;
+	pbuf += s;
+
+	s = vcodec_feature_outputmodes(pbuf, size - tsize, vformat, is_v4l);
 	tsize += s;
 	pbuf += s;
 
