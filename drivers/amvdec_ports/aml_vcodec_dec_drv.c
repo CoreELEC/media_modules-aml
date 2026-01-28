@@ -965,6 +965,10 @@ int ge2d_copy = 1;
 EXPORT_SYMBOL(ge2d_copy);
 MEDIA_PARAM(ge2d_copy, int, 0644);
 
+int disable_avbcd;
+EXPORT_SYMBOL(disable_avbcd);
+MEDIA_PARAM(disable_avbcd, int, 0644);
+
 int dec_i_frame_once;
 EXPORT_SYMBOL(dec_i_frame_once);
 MEDIA_PARAM(dec_i_frame_once, int, 0644);
@@ -1018,6 +1022,7 @@ static struct param_entry amvdec_ports_params[] = {
 	PARAM_INT(bypass_vpp),
 	PARAM_INT(bypass_ge2d),
 	PARAM_INT(ge2d_mode),
+	PARAM_INT(disable_avbcd),
 	PARAM_INT(max_di_instance),
 	PARAM_INT(bypass_progressive),
 	PARAM_INT(force_di_permission),

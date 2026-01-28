@@ -440,6 +440,7 @@ extern int bypass_progressive;
 extern int force_enable_nr;
 extern int force_enable_di_local_buffer;
 extern int max_di_instance;
+extern int disable_avbcd;
 extern int bypass_nr_flag;
 extern int es_node_expand;
 extern int force_di_permission;
@@ -4441,7 +4442,7 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 	    (ctx->state >= AML_STATE_PROBE)) {
 		update_ctx_dimension(ctx, f->type);
 		copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
-		if (!(ctx->avbcd_work_mode & AVBCD_DEBUG_MODE))
+		if (!disable_avbcd && !(ctx->avbcd_work_mode & AVBCD_DEBUG_MODE))
 			queue_work(dev->decode_workqueue, &ctx->avbcd_call_wkr);
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		/*

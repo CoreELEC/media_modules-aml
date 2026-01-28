@@ -1520,7 +1520,8 @@ void aml_avbc_wrapper_destroy(void *priv)
 	flush_workqueue(wrapper->avbc_workqueue);
 	destroy_workqueue(wrapper->avbc_workqueue);
 
-	vdec_core_release(vdec, CORE_MASK_HEVC);
+	if (!wrapper->hard_mode)
+		vdec_core_release(vdec, CORE_MASK_AVBCD_SOFT);
 
 	vdec_release(vdec);
 	aml_avbc_disable_hardware(&wrapper->port);

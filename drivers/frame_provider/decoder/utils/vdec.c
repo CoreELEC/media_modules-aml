@@ -342,6 +342,7 @@ struct vdec_core_s {
 	bool enable_sched_priority;
 	int max_priority;
 	u32 play_cnt;
+	u32 avbcd_cnt;
 };
 
 struct prefix_s {
@@ -5009,6 +5010,9 @@ void vdec_core_request(struct vdec_s *vdec, unsigned long mask)
 			vdec_core->hevcb_cnt++;
 		if (mask & CORE_MASK_COMBINE)
 			vdec_core->vdec_combine_flag++;
+		if (mask & CORE_MASK_AVBCD_SOFT)
+			vdec_core->avbcd_cnt++;
+
 		vdec_core->power_ref_mask |= (vdec->core_mask & (~CORE_MASK_COMBINE));
 		vdec_core_unlock(vdec_core, flags);
 		if (debug & 0x8)
@@ -5035,6 +5039,8 @@ int vdec_core_release(struct vdec_s *vdec, unsigned long mask)
 			vdec_core->hevc_cnt--;
 		if (mask & CORE_MASK_HEVC_BACK)
 			vdec_core->hevcb_cnt--;
+		if (mask & CORE_MASK_AVBCD_SOFT)
+			vdec_core->avbcd_cnt--;
 
 		if (vdec_core->vdec_cnt == 0)
 			vdec_core->power_ref_mask &= (~CORE_MASK_VDEC_1);
@@ -5042,6 +5048,8 @@ int vdec_core_release(struct vdec_s *vdec, unsigned long mask)
 			vdec_core->power_ref_mask &= (~CORE_MASK_HEVC);
 		if (vdec_core->hevcb_cnt == 0)
 			vdec_core->power_ref_mask &= (~CORE_MASK_HEVC_BACK);
+		if (vdec_core->avbcd_cnt == 0)
+			vdec_core->power_ref_mask &= (~CORE_MASK_AVBCD_SOFT);
 
 		if (mask & CORE_MASK_COMBINE)
 			vdec_core->vdec_combine_flag--;
