@@ -7747,10 +7747,12 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 				avs3_prepare_display_buf(dec, pic);
 			}
 
-			if ((dec->front_back_mode == 0) && (pic->need_mmu_copy == 0)) {
-				avs3_recycle_mmu_buf_tail(dec);
-			} else if ((dec->front_back_mode == 0) && (pic->need_mmu_copy == 2)) {
-				dec->cur_fb_idx_mmu = INVALID_IDX;
+			if (pic) {
+				if ((dec->front_back_mode == 0) && (pic->need_mmu_copy == 0)) {
+					avs3_recycle_mmu_buf_tail(dec);
+				} else if ((dec->front_back_mode == 0) && (pic->need_mmu_copy == 2)) {
+					dec->cur_fb_idx_mmu = INVALID_IDX;
+				}
 			}
 
 			get_picture_qos_info(dec, false);
