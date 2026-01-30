@@ -845,11 +845,8 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 	ctx->vpp_size = vpp->buf_size;
 	ctx->ge2d_size = ge2d->buf_size;
 
-	if (is_dynamic_mode(ctx)) {
-		picinfo->dpb_margin = (picinfo->dpb_margin + 1) >> 1;
-		ctx->dpb_size = picinfo->dpb_frames + picinfo->dpb_margin;
+	if (is_dynamic_mode(ctx))
 		ctx->dpb_size *= PAIR_DONE;
-	}
 
 	if (ctx->enable_di_post && (is_vdec_core_fmt(ctx->output_pix_fmt)) &&
 		ctx->dpb_size > 2 * V4L_CAP_BUFF_MAX) {

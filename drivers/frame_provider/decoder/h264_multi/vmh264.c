@@ -6821,9 +6821,9 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		field_flag = get_field(hw, frame_mbs_only_flag);
 		if (field_flag) { //interlace
-			used_reorder_dpb_size_margin = (hw->interlace_filed_margin + 1) >> 1;
+			used_reorder_dpb_size_margin = hw->interlace_filed_margin;
 			dpb_print(DECODE_ID(hw), 0,
-				"h264 interlace use half margin %d\n",used_reorder_dpb_size_margin);
+				"h264 interlace use margin %d\n",used_reorder_dpb_size_margin);
 		}
 
 		dpb_print(DECODE_ID(hw), 0,
