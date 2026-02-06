@@ -22,8 +22,14 @@
 #include <linux/types.h>
 #include "../../common/media_utils/media_utils.h"
 
-#define MAX(a, b)  (((a) > (b)) ? (a) : (b))
-#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
+#ifndef MAX
+#define MAX(a, b)	(((a) > (b)) ? (a) : (b))
+#endif
+
+#ifndef MIN
+#define MIN(a, b)	(((a) < (b)) ? (a) : (b))
+#endif
+
 #define CLAMP(x, low, high) \
 	(((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 #define BITAT(x, n) ((x & (1 << n)) == (1 << n))
