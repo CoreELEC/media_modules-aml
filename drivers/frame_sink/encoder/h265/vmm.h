@@ -36,7 +36,9 @@
 
 #define VMEM_HEIGHT(_tree) (_tree == NULL ? -1 : _tree->height)
 
+#ifndef MAX
 #define MAX(_a, _b) (_a >= _b ? _a : _b)
+#endif
 
 struct avl_node_t;
 #define vmem_key_t unsigned long long
