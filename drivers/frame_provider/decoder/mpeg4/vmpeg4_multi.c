@@ -371,12 +371,15 @@ struct vdec_mpeg4_hw_s {
 	int dec_again_cnt;
 	bool is_interlace;
 	bool unsupport_format;
+	u32 timeout_flag;
+	spinlock_t timeout_lock;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
 static unsigned char
 	get_data_check_sum(struct vdec_mpeg4_hw_s *hw, int size);
 static void flush_output(struct vdec_mpeg4_hw_s * hw);
+static void reset_process_time(struct vdec_mpeg4_hw_s *hw);
 
 #define PROVIDER_NAME   "vdec.mpeg4"
 
@@ -409,7 +412,25 @@ static unsigned char aspect_ratio_table[16] = {
 	PARC_RESERVED, PARC_EXTENDED
 };
 
-static void reset_process_time(struct vdec_mpeg4_hw_s *hw);
+#define TIMEOUT_INIT 0
+#define TIMEOUT_PROC 1
+#define TIMEOUT_DONE 2
+
+static inline ulong mpeg4_timeout_lock(struct vdec_mpeg4_hw_s *hw)
+{
+	ulong flags;
+
+	spin_lock_irqsave(&hw->timeout_lock, flags);
+
+	return flags;
+}
+
+static inline void mpeg4_timeout_unlock(struct vdec_mpeg4_hw_s *hw, ulong flags)
+{
+	spin_unlock_irqrestore(&hw->timeout_lock, flags);
+}
+
+
 static u32 get_dynamic_buf_num_margin(struct vdec_mpeg4_hw_s *hw)
 {
 	return((dynamic_buf_num_margin & 0x80000000) == 0) ?
@@ -1278,6 +1299,7 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 	u32 repeat_cnt, duration = 3200;
 	struct pic_info_t *dec_pic, *disp_pic;
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)(vdec->private);
+
 	if (hw->eos)
 		return IRQ_HANDLED;
 
@@ -1295,14 +1317,12 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 					vmpeg4_get_ps_info(hw, frame_width, frame_height, &ps);
 					hw->v4l_params_parsed = true;
 					vdec_v4l_set_ps_infos(ctx, &ps);
-					reset_process_time(hw);
 					hw->dec_result = DEC_RESULT_AGAIN;
 					vdec_schedule_work(&hw->work);
 				} else {
 					WRITE_VREG(MP4_PIC_INFO, 0);
 				}
 			} else {
-				reset_process_time(hw);
 				hw->dec_result = DEC_RESULT_AGAIN;
 				vdec_schedule_work(&hw->work);
 			}
@@ -1385,14 +1405,12 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
 		} else {
-			reset_process_time(hw);
 			hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
 		}
 		return IRQ_HANDLED;
 	} else {
 		vdec_profile(vdec, VDEC_PROFILE_DECODER_PIC_END, CORE_MASK_VDEC_1);
-		reset_process_time(hw);
 		vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_VDEC_1);
 		picture_type = (reg >> 3) & 7;
 		repeat_cnt = READ_VREG(MP4_NOT_CODED_CNT);
@@ -1754,6 +1772,15 @@ static irqreturn_t vmpeg4_isr(struct vdec_s *vdec, int irq)
 {
 	struct vdec_mpeg4_hw_s *hw =
 		(struct vdec_mpeg4_hw_s *)(vdec->private);
+	ulong flags;
+
+	flags = mpeg4_timeout_lock(hw);
+	reset_process_time(hw);
+	if (hw->timeout_flag) {
+		mpeg4_timeout_unlock(hw, flags);
+		return IRQ_HANDLED;
+	}
+	mpeg4_timeout_unlock(hw, flags);
 
 	if (hw->eos)
 		return IRQ_HANDLED;
@@ -1954,6 +1981,7 @@ static void vmpeg4_work(struct work_struct *work)
 			vdec_v4l_write_frame_sync(ctx);
 	}
 
+	hw->timeout_flag = TIMEOUT_INIT;
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1);
@@ -2492,6 +2520,7 @@ static void check_timer_func(struct timer_list *timer)
 	struct vdec_mpeg4_hw_s *hw = container_of(timer,
 		struct vdec_mpeg4_hw_s, check_timer);
 	unsigned int timeout_val = decode_timeout_val;
+	ulong flags;
 
 	if (radr != 0) {
 		if (rval != 0) {
@@ -2503,6 +2532,7 @@ static void check_timer_func(struct timer_list *timer)
 		radr = 0;
 	}
 
+	flags = mpeg4_timeout_lock(hw);
 	if (((debug_enable & PRINT_FLAG_TIMEOUT_STATUS) == 0) &&
 		(timeout_val > 0) &&
 		(hw->start_process_time > 0) &&
@@ -2512,9 +2542,15 @@ static void check_timer_func(struct timer_list *timer)
 			if (hw->decode_timeout_count > 0)
 				hw->decode_timeout_count--;
 			if (hw->decode_timeout_count == 0)
-				timeout_process(hw);
+				hw->timeout_flag = TIMEOUT_PROC;
 		}
 		hw->last_vld_level = READ_VREG(VLD_MEM_VIFIFO_LEVEL);
+	}
+	mpeg4_timeout_unlock(hw, flags);
+
+	if (hw->timeout_flag == TIMEOUT_PROC) {
+		timeout_process(hw);
+		hw->timeout_flag = TIMEOUT_DONE;
 	}
 
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
@@ -2735,6 +2771,7 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 	hw->init_flag = 0;
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->timeout_cnt = 0;
+	hw->timeout_flag = TIMEOUT_INIT;
 	hw->process_busy = false;
 	hw->dec_again_cnt = 0;
 
