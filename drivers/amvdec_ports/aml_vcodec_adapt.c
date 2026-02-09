@@ -212,7 +212,6 @@ static int video_component_init(struct stream_port_s *port,
 		ret = vdec_init(vdec, port->is_4k, true);
 		if (ret < 0) {
 			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "failed\n");
-			video_component_release(port);
 			return ret;
 		}
 	}
@@ -291,7 +290,6 @@ static void set_vdec_property(struct vdec_s *vdec,
 	memcpy(vdec->config, ada_ctx->config.buf, vdec->config_len);
 
 	mutex_init(&ada_ctx->vdec_st_lock);
-	ada_ctx->vdec = vdec;
 }
 
 static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
@@ -307,12 +305,13 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 
 	vdec->disable_vfm = true;
 	set_vdec_property(vdec, ada_ctx);
+	ada_ctx->vdec = vdec;
 
 	/* init hw and gate*/
 	ret = enable_hardware(vdec->port);
 	if (ret < 0) {
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "enable hw fail.\n");
-		return ret;
+		goto err0;
 	}
 
 	user_buffer_init();
@@ -333,13 +332,13 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 			if (ret) {
 				v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 					"stream buffer base init failed\n");
-				return ret;
+				goto err1;
 			}
 		}
 		ret = video_component_init(vdec->port, pvbuf);
 		if (ret < 0) {
 			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "video_component_init  failed\n");
-			return ret;
+			goto err1;
 		}
 
 		/* connect vdec at the end after all HW initialization */
@@ -347,6 +346,14 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 	}
 
 	return 0;
+
+err1:
+	disable_hardware(vdec->port);
+err0:
+	ada_ctx->vdec = NULL;
+	vdec_destroy(vdec);
+
+	return ret;
 }
 
 int video_decoder_init(struct aml_vdec_adapt *vdec)

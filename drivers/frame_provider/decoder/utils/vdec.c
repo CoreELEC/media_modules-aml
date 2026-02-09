@@ -4406,7 +4406,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	r = vdec_canvas_port_register(vdec);
 	if (r < 0) {
 		pr_err("fail to register vdec canvas port\n");
-		return r;
+		goto error;
 	}
 
 	p->vdec_fps_detec = vdec_fps_detec;
@@ -4485,7 +4485,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 		inited_vcodec_num--;
 		mutex_unlock(&vdec_mutex);
 
-		goto error;
+		goto error1;
 	}
 
 	if (p->use_vfm_path) {
@@ -4504,7 +4504,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				inited_vcodec_num--;
 				mutex_unlock(&vdec_mutex);
 
-				goto error;
+				goto error1;
 			}
 		}
 
@@ -4536,7 +4536,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				inited_vcodec_num--;
 				mutex_unlock(&vdec_mutex);
 
-				goto error;
+				goto error1;
 			}
 #ifdef CONFIG_AMLOGIC_IONVIDEO
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
@@ -4610,7 +4610,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				mutex_lock(&vdec_mutex);
 				inited_vcodec_num--;
 				mutex_unlock(&vdec_mutex);
-				goto error;
+				goto error1;
 			}
 #ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 			if (v4lvideo_add_ppmgr)
@@ -4681,7 +4681,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				mutex_lock(&vdec_mutex);
 				inited_vcodec_num--;
 				mutex_unlock(&vdec_mutex);
-				goto error;
+				goto error1;
 			}
 #ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
@@ -4717,7 +4717,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				mutex_lock(&vdec_mutex);
 				inited_vcodec_num--;
 				mutex_unlock(&vdec_mutex);
-				goto error;
+				goto error1;
 			}
 #ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
@@ -4786,7 +4786,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			inited_vcodec_num--;
 			mutex_unlock(&vdec_mutex);
 
-			goto error;
+			goto error1;
 		}
 
 		pr_debug("vfm map %s created\n", vdec->vfm_map_id);
@@ -4821,7 +4821,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				mutex_lock(&vdec_mutex);
 				inited_vcodec_num--;
 				mutex_unlock(&vdec_mutex);
-				goto error;
+				goto error1;
 			}
 #ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 			snprintf(vdec->vfm_map_chain, VDEC_MAP_NAME_SIZE,
@@ -4925,7 +4925,15 @@ skip:
 	vdec_set_status(vdec, VDEC_STATUS_DISCONNECTED);
 	return 0;
 
+error1:
+	platform_device_unregister(vdec->dev);
+
 error:
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+	if (!(vdec->avbc_mode & (AVBCD_SOFT_KERNEL_MODE | AVBCD_SOFT_USER_MODE | AVBCD_VICP_MODE)))
+		vdec_avbc_frame_pool_release(vdec);
+#endif
+
 	return r;
 }
 EXPORT_SYMBOL(vdec_init);
