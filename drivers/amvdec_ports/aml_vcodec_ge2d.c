@@ -487,7 +487,6 @@ retry:
 		}
 
 		/* fill outbuf parms. */
-		memcpy(&out_buf->vf, vf_out, sizeof(struct vframe_s));
 		out_buf->flag		= 0;
 		out_buf->caller_data	= ge2d;
 
@@ -604,6 +603,8 @@ retry:
 		if (ge2d->work_mode & GE2D_MODE_CONVERT_NV16) {
 			vf_out->canvas0_config[1].height <<= 1;
 		}
+		memcpy(&out_buf->vf, vf_out, sizeof(struct vframe_s));
+
 		canvas_config_config(ctx->dev->cache.res[4].cid, &vf_out->canvas0_config[1]);
 		canvas_config_config(ctx->dev->cache.res[5].cid, &vf_out->canvas0_config[2]);
 		ge2d_config.dst_para.canvas_index =
