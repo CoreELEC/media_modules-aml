@@ -3895,8 +3895,16 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			}
 			vf->pts = frame->pts;
 			vf->pts_us64 = frame->pts64;
+			/*
+			* If it’s a one-field-per-packet video, GST requires that
+			* the second field uses the original PTS instead of setting it to 0.
+			*/
 			if ((i > 0) && v4l2_ctx->second_field_pts_mode) {
-				vf->timestamp = 0;
+				if (!p_H264_Dpb->mVideo.dec_picture ||
+					(p_H264_Dpb->mVideo.dec_picture->pic_struct != PIC_TOP &&
+					p_H264_Dpb->mVideo.dec_picture->pic_struct != PIC_BOT)) {
+					vf->timestamp = 0;
+				}
 			}
 
 			vf->index = VF_INDEX(frame->index, buffer_index);
