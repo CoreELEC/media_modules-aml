@@ -1522,8 +1522,8 @@ void aml_avbc_wrapper_destroy(void *priv)
 
 	vdec_core_release(vdec, CORE_MASK_HEVC);
 
-	aml_avbc_disable_hardware(&wrapper->port);
 	vdec_release(vdec);
+	aml_avbc_disable_hardware(&wrapper->port);
 	vfree(wrapper->inputpool);
 	kfifo_free(&wrapper->input);
 

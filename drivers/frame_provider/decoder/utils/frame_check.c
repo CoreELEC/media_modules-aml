@@ -124,6 +124,7 @@ static const char * const format_name[] = {
 	"AV1",
 	"AVS3",
 	"H266",
+	"AVBCD",
 };
 
 static const char *get_format_name(int format)
