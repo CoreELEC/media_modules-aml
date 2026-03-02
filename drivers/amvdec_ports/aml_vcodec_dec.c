@@ -5922,7 +5922,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		 * if the capture queue have not start streaming.
 		 */
 		if (!que->streaming &&
-			(vdec_frame_number(ctx->ada_ctx) > 0) &&
+			(ctx->ada_ctx && vdec_frame_number(ctx->ada_ctx) > 0) &&
 			(ctx->state < AML_STATE_ACTIVE)) {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			if (ctx->v4l_resolution_change)

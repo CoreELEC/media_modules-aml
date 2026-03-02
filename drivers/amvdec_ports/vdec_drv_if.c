@@ -90,6 +90,8 @@ int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
 	}
 
 	ret = ctx->dec_if->init(ctx, &ctx->drv_handle);
+	if (ret < 0)
+		ctx->ada_ctx = NULL;
 
 	return ret;
 }
