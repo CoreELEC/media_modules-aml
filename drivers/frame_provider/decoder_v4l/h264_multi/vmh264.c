@@ -6764,8 +6764,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	seq_info3 = param4;
 	hw->seq_info = param2;
 
-	mb_width = seq_info2 & 0xff;
-	mb_total = (seq_info2 >> 8) & 0xffff;
+	mb_width = param3 & 0xfff;
+	mb_total = (param3 >> 12) & 0xfffff;
 	if (!mb_width && mb_total) /*for 4k2k*/
 		mb_width = 256;
 	if (mb_width)
@@ -8425,8 +8425,8 @@ static bool h264_params_correct(struct vdec_h264_hw_s *hw, union param *param)
 	u32 bit_depth_luma = param->l.data[BIT_DEPTH_LUMA_MINUS8] + 8;
 	u32 bit_depth_chroma = param->l.data[BIT_DEPTH_CHROMA_MINUS8] + 8;
 
-	u32 mb_width = seq_info2 & 0xff;
-	u32 mb_total = (seq_info2 >> 8) & 0xffff;
+	u32 mb_width = param3 & 0xfff;
+	u32 mb_total = (param3 >> 12) & 0xfffff;
 	u32 mb_height = 0;
 	u32 frame_w, frame_h;
 
@@ -12507,8 +12507,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		int frame_width = 0;
 		int frame_height = 0;
 		int ret_is_csd_valid = 0;
-		mb_width = param1 & 0xff;
-		mb_total = (param1 >> 8) & 0xffff;
+		mb_width = param3 & 0xfff;
+		mb_total = (param3 >> 12) & 0xfffff;
 		if (!mb_width && mb_total) /*for 4k2k*/
 			mb_width = 256;
 		if (mb_width)

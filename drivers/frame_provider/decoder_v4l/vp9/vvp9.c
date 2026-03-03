@@ -1330,15 +1330,16 @@ static int vp9_debug(struct VP9Decoder_s *pbi,
 			} \
 	} while (0)
 
-static int is_oversize(int w, int h)
+static enum ResResult is_oversize(int w, int h)
 {
+	enum ResResult ret = RES_RET_NORMAL;
+
 	if (w < 64 || h < 64)
-		return true;
+		return RES_RET_ABNORMAL;
 
-	if (format_resolution_fatal_error(VFORMAT_VP9, w, h))
-		return true;
+	ret = format_resolution_fatal_error(VFORMAT_VP9, w, h);
 
-	return false;
+	return ret;
 }
 
 static int vvp9_mmu_compress_header_size(int w, int h)
@@ -9515,6 +9516,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	unsigned int dec_status = pbi->dec_status;
 	int i;
 	uint debug_tag;
+	int ret_is_oversize = 0;
 
 	if (dec_status == VP9_HEAD_PARSER_DONE) {
 		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_START);
@@ -9870,13 +9872,17 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		pbi->frame_height = pbi->vp9_param.p.height;
 	}
 
-	if (is_oversize(pbi->frame_width, pbi->frame_height) ||
+	ret_is_oversize = is_oversize(pbi->frame_width, pbi->frame_height);
+	if ((ret_is_oversize != RES_RET_NORMAL) ||
 		(pbi->vp9_param.p.frame_type != KEY_FRAME &&
 		(pbi->vp9_param.p.width * pbi->vp9_param.p.height >
 		pbi->last_height * pbi->last_width) &&
 		pbi->pic_list_init_done)) {
 		continue_decoding(pbi);
-		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+		if (ret_is_oversize == RES_RET_OVERSIZE) {
+			pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+		}
 		vp9_print(pbi, 0, "pic size(%d x %d) frame_type:%d is oversize\n",
 			pbi->frame_width, pbi->frame_height, pbi->vp9_param.p.frame_type);
 		pbi->postproc_done = 0;

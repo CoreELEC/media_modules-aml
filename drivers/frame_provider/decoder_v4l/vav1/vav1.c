@@ -961,15 +961,16 @@ int av1_print2(int flag, const char *fmt, ...)
 	return 0;
 }
 
-static int is_oversize(int w, int h)
+static enum ResResult is_oversize(int w, int h)
 {
+	enum ResResult ret = RES_RET_NORMAL;
+
 	if (w < 64 || h < 64)
-		return true;
+		return RES_RET_ABNORMAL;
 
-	if (format_resolution_fatal_error(VFORMAT_AV1, w, h))
-		return true;
+	ret = format_resolution_fatal_error(VFORMAT_AV1, w, h);
 
-	return false;
+	return ret;
 }
 
 static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
@@ -9533,6 +9534,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	int ret = 0;
 	uint debug_tag;
 	int i;
+	int ret_is_oversize = 0;
 
 	if (dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE ||
 		dec_status == AOM_AV1_SEQ_HEAD_PARSER_DONE ||
@@ -10045,11 +10047,18 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	ctx->height_aspect_ratio = 1;
 	ctx->width_aspect_ratio = 1;
 
+	ret_is_oversize = is_oversize(hw->common.seq_params.max_frame_width, hw->common.seq_params.max_frame_height);
 	if (input_frame_based(hw_to_vdec(hw)) &&
-		is_oversize(hw->common.seq_params.max_frame_width, hw->common.seq_params.max_frame_height)) {
+		(ret_is_oversize != RES_RET_NORMAL)) {
 		av1_buf_ref_process_for_exception(hw);
 		if (vdec_frame_based(hw_to_vdec(hw)))
 			vdec_v4l_post_error_frame_event(ctx);
+		if (ret_is_oversize == RES_RET_OVERSIZE) {
+			hw->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
+		}
+		av1_print(hw, 0, "pic size(%d x %d) is oversize\n",
+			hw->common.seq_params.max_frame_width, hw->common.seq_params.max_frame_height);
 		hw->dec_result = DEC_RESULT_DISCARD_DATA;
 		hw->process_busy = 0;
 		amhevc_stop();

@@ -1436,16 +1436,22 @@ enum ResResult format_resolution_fatal_error(int format, int w, int h)
 		case VFORMAT_H264:
 		case VFORMAT_MJPEG:
 		case VFORMAT_H264MVC:
-			if (max == RESOLUTION_1080P) {
-				if ((w == h && w * h > MAX_SIZE_2K && w * h <= MAX_SIZE_4K) ||
-				(w > h && RANGE_IN(1920, 4096, w) && RANGE_IN(1088, 2304, h)) ||
-				(w < h && RANGE_IN(1920, 4096, h) && RANGE_IN(1088, 2304, w))) {
+			if (max == RESOLUTION_4K) {
+				if ((w == h && w * h > MAX_SIZE_4K && w * h <= MAX_SIZE_8K) ||
+				(w > h && RANGE_IN(4096, 8192, w) && RANGE_IN(2304, 4608, h)) ||
+				(w < h && RANGE_IN(4096, 8192, h) && RANGE_IN(2304, 4608, w))) {
+					return RES_RET_OVERSIZE;
+				}
+			} else if (max == RESOLUTION_1080P) {
+				if ((w == h && w * h > MAX_SIZE_2K && w * h <= MAX_SIZE_8K) ||
+				(w > h && RANGE_IN(1920, 8192, w) && RANGE_IN(1088, 4608, h)) ||
+				(w < h && RANGE_IN(1920, 8192, h) && RANGE_IN(1088, 4608, w))) {
 					return RES_RET_OVERSIZE;
 				}
 			}
-			if (((w > h) && (w > 4096 || h > 2304)) ||
-				((w < h) && (w > 2304 || h > 4096)) ||
-				((w * h) > MAX_SIZE_4K) ||
+			if (((w > h) && (w > 8192 || h > 4608)) ||
+				((w < h) && (w > 4608 || h > 8192)) ||
+				((w * h) > MAX_SIZE_8K) ||
 				((w * h) > max)) {
 				return RES_RET_ABNORMAL;
 			}
@@ -1463,9 +1469,9 @@ enum ResResult format_resolution_fatal_error(int format, int w, int h)
 					return RES_RET_OVERSIZE;
 				}
 			} else if (max == RESOLUTION_1080P) {
-				if ((w == h && w * h > MAX_SIZE_2K && w * h <= MAX_SIZE_4K) ||
-				(w > h && RANGE_IN(1920, 4096, w) && RANGE_IN(1088, 2304, h)) ||
-				(w < h && RANGE_IN(1920, 4096, h) && RANGE_IN(1088, 2304, w))) {
+				if ((w == h && w * h > MAX_SIZE_2K && w * h <= MAX_SIZE_8K) ||
+				(w > h && RANGE_IN(1920, 8192, w) && RANGE_IN(1088, 4608, h)) ||
+				(w < h && RANGE_IN(1920, 8192, h) && RANGE_IN(1088, 4608, w))) {
 					return RES_RET_OVERSIZE;
 				}
 			}
