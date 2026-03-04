@@ -212,7 +212,6 @@ struct vdec_vc1_hw_s {
 	u32 pic_type;
 
 	u32 vf_buf_num_used;
-	//u32 total_frame;
 	u32 next_pts;
 	u64 next_pts_us64;
 	unsigned char throw_pb_flag;
@@ -270,8 +269,8 @@ struct vdec_vc1_hw_s {
 	int vdec_pg_enable_flag;
 
 	ulong lmem_phy_handle;
-	dma_addr_t lmem_addr;
-	ulong lmem_phy_addr;
+	void *lmem_addr;
+	dma_addr_t lmem_phy_addr;
 
 	u32 reg_scratch_0;
 	u32 reg_scratch_1;
@@ -2232,6 +2231,8 @@ static irqreturn_t vmvc1_isr_thread_handler(struct vdec_s *vdec, int irq)
 		hw->frame_height = (READ_VREG(VC1_PIC_INFO) >> 14) & 0x3fff;
 		hw->interlace_flag = (READ_VREG(VC1_PIC_INFO) >> 28) & 0x1;
 		hw->frame_dur = cal_frame_dur();
+		if (hw->frame_dur == 0)
+			hw->frame_dur = hw->vvc1_amstream_dec_info.rate;
 		vc1_print(DECODE_ID(hw), VC1_DEBUG_DETAIL,
 			"%s: SEQ_HEADER_DONE frame_width %d/%d, interlace_flag %d, frame_dur %d\n", __func__,
 			hw->frame_width, hw->frame_height, hw->interlace_flag, hw->frame_dur);
@@ -2515,9 +2516,6 @@ static irqreturn_t vmvc1_isr_thread_handler(struct vdec_s *vdec, int irq)
 					"%s: drop buffer_index %d\n", __func__, out_buf_index);
 			}
 		}
-
-		hw->frame_dur = hw->vvc1_amstream_dec_info.rate;
-		//hw->total_frame++;
 
 		/*count info*/
 		hw->gvs->frame_dur = hw->frame_dur;
@@ -3379,8 +3377,8 @@ static int ammvdec_vc1_probe(struct platform_device *pdev)
 
 	vvc1_vdec_info_init(hw);
 
-	hw->lmem_addr = (dma_addr_t)decoder_dma_alloc_coherent(&hw->lmem_phy_handle,
-	               LMEM_BUF_SIZE, (dma_addr_t *)&hw->lmem_phy_addr, "VC1_LMEM_BUF");
+	hw->lmem_addr = decoder_dma_alloc_coherent(&hw->lmem_phy_handle,
+						LMEM_BUF_SIZE, &hw->lmem_phy_addr, "VC1_LMEM_BUF");
 	if (hw->lmem_addr == 0) {
 		pr_info("%s: failed to alloc lmem buffer\n", __func__);
 
