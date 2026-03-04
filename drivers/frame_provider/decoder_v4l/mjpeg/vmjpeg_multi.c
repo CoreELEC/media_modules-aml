@@ -1534,20 +1534,20 @@ static void alloc_jpeg_buffer(struct vdec_mjpeg_hw_s *hw)
 			codec_mm_memset(decbuf_start, 0, tmp_size);
 
 		hw->jpeg_buffer.v_addr = decbuf_start;
+	}
 
-		if (vdec->parallel_dec == 1) {
-			if (hw->jpeg_buffer.y_canvas_index == -1)
-				hw->jpeg_buffer.y_canvas_index = vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
-			if (hw->jpeg_buffer.u_canvas_index == -1)
-				hw->jpeg_buffer.u_canvas_index = vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
-			if (hw->jpeg_buffer.v_canvas_index == -1)
-				hw->jpeg_buffer.v_canvas_index = vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
-		} else {
-			canvas = vdec->get_canvas(hw->buf_num + 1, 3);
-			hw->jpeg_buffer.y_canvas_index = canvas_y(canvas);
-			hw->jpeg_buffer.u_canvas_index = canvas_u(canvas);
-			hw->jpeg_buffer.v_canvas_index = canvas_v(canvas);
-		}
+	if (vdec->parallel_dec == 1) {
+		if (hw->jpeg_buffer.y_canvas_index == -1)
+			hw->jpeg_buffer.y_canvas_index = vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
+		if (hw->jpeg_buffer.u_canvas_index == -1)
+			hw->jpeg_buffer.u_canvas_index = vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
+		if (hw->jpeg_buffer.v_canvas_index == -1)
+			hw->jpeg_buffer.v_canvas_index = vdec->get_canvas_ex(CORE_MASK_VDEC_1, vdec->id);
+	} else {
+		canvas = vdec->get_canvas(hw->buf_num + 1, 3);
+		hw->jpeg_buffer.y_canvas_index = canvas_y(canvas);
+		hw->jpeg_buffer.u_canvas_index = canvas_u(canvas);
+		hw->jpeg_buffer.v_canvas_index = canvas_v(canvas);
 	}
 
 	hw->jpeg_buffer.canvas_config[0].phy_addr =
