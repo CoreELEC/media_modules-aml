@@ -326,6 +326,8 @@ static u32 pts_unstable;
 #define HEVC_ERROR_FRAME_DISPLAY 0
 #define HEVC_ERROR_FRAME_DROP 2
 
+#define HEVC_PRINT_BUF		512
+
 const u32 h265_version = 201602101;
 static u32 debug_mask = 0xffffffff;
 static u32 log_mask;
@@ -551,6 +553,7 @@ static unsigned int run_count[MAX_INSTANCE_MUN];
 static unsigned int input_empty[MAX_INSTANCE_MUN];
 static unsigned int not_run_ready[MAX_INSTANCE_MUN];
 static bool ref_frame_mark_flag[MAX_INSTANCE_MUN];
+static DEFINE_PER_CPU(unsigned char, avbcd_print_buf)[HEVC_PRINT_BUF];
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static unsigned char get_idx(struct hevc_state_s *hevc);
@@ -2536,8 +2539,7 @@ static unsigned char get_idx(struct hevc_state_s *hevc)
 static int hevc_debug(struct hevc_state_s *hevc,
 	int flag, const char *fmt, ...)
 {
-#define HEVC_PRINT_BUF		512
-	unsigned char buf[HEVC_PRINT_BUF];
+	unsigned char *buf = get_cpu_var(avbcd_print_buf);
 	int len = 0;
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	if (hevc == NULL ||
@@ -2552,21 +2554,24 @@ static int hevc_debug(struct hevc_state_s *hevc,
 		if (hevc)
 			len = sprintf(buf, "[%d]", hevc->index);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
+		va_end(args);
+
 		if (flag == 0)
 			pr_debug("%s", buf);
 		else
 			pr_info("%s", buf);
-		va_end(args);
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	}
 #endif
+	put_cpu_var(avbcd_print_buf);
+
 	return 0;
 }
 
 static int hevc_print_cont(struct hevc_state_s *hevc,
 	int flag, const char *fmt, ...)
 {
-	unsigned char buf[HEVC_PRINT_BUF];
+	unsigned char *buf = get_cpu_var(avbcd_print_buf);
 	int len = 0;
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	if (hevc == NULL ||
@@ -2579,11 +2584,14 @@ static int hevc_print_cont(struct hevc_state_s *hevc,
 
 		va_start(args, fmt);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
 		va_end(args);
+
+		pr_info("%s", buf);
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	}
 #endif
+	put_cpu_var(avbcd_print_buf);
+
 	return 0;
 }
 
