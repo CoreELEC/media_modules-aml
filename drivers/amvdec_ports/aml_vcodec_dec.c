@@ -4063,21 +4063,6 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 
 		mutex_lock(&ctx->state_lock);
 		if (ctx->state == AML_STATE_IDLE) {
-			if (ctx->is_drm_mode) {
-				struct aml_dec_params *dec = &ctx->config.parm.dec;
-				u32 slot_size = codec_mm_scatter_get_slot_size(CODEC_MM_FLAGS_TVP);
-				int memflags = CODEC_MM_FLAGS_TVP;
-
-				submit_prealloc_job(PREALLOC_YUV_TYPE, PREALLOC_YUV_BUF_NUM,
-					cal_yuv_size(ctx, dec->cfg.double_write_mode),
-						PAGE_SHIFT, memflags, ctx->id);
-
-				if (enable_use_cma_first)
-					memflags |= CODEC_MM_FLAGS_CMA_FIRST;
-				submit_prealloc_job(PREALLOC_SC_TYPE, cal_slot_num(ctx, dec->cfg.double_write_mode, slot_size),
-					slot_size, PAGE_SHIFT, memflags, ctx->id);
-			}
-
 			ret = vdec_if_init(ctx, q_data->fmt->fourcc);
 			if (ret) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -4092,6 +4077,20 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_INIT)\n");
+			if (ctx->is_drm_mode) {
+				struct aml_dec_params *dec = &ctx->config.parm.dec;
+				u32 slot_size = codec_mm_scatter_get_slot_size(CODEC_MM_FLAGS_TVP);
+				int memflags = CODEC_MM_FLAGS_TVP;
+
+				submit_prealloc_job(PREALLOC_YUV_TYPE, PREALLOC_YUV_BUF_NUM,
+					cal_yuv_size(ctx, dec->cfg.double_write_mode),
+						PAGE_SHIFT, memflags, ctx->id);
+
+				if (enable_use_cma_first)
+					memflags |= CODEC_MM_FLAGS_CMA_FIRST;
+				submit_prealloc_job(PREALLOC_SC_TYPE, cal_slot_num(ctx, dec->cfg.double_write_mode, slot_size),
+					slot_size, PAGE_SHIFT, memflags, ctx->id);
+			}
 		}
 		mutex_unlock(&ctx->state_lock);
 #ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
@@ -4124,20 +4123,6 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 
 		mutex_lock(&ctx->state_lock);
 		if (ctx->state == AML_STATE_IDLE) {
-			if (ctx->is_drm_mode) {
-				struct aml_dec_params *dec = &ctx->config.parm.dec;
-				u32 slot_size = codec_mm_scatter_get_slot_size(CODEC_MM_FLAGS_TVP);
-				int memflags = CODEC_MM_FLAGS_TVP;
-
-				submit_prealloc_job(PREALLOC_YUV_TYPE, PREALLOC_YUV_BUF_NUM,
-					cal_yuv_size(ctx, dec->cfg.double_write_mode),
-						PAGE_SHIFT, memflags, ctx->id);
-
-				if (enable_use_cma_first)
-					memflags |= CODEC_MM_FLAGS_CMA_FIRST;
-				submit_prealloc_job(PREALLOC_SC_TYPE, cal_slot_num(ctx, dec->cfg.double_write_mode, slot_size),
-					slot_size, PAGE_SHIFT, memflags, ctx->id);
-			}
 			ret = vdec_if_init(ctx, q_data->fmt->fourcc);
 			if (ret) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -4152,6 +4137,20 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_INIT)\n");
+			if (ctx->is_drm_mode) {
+				struct aml_dec_params *dec = &ctx->config.parm.dec;
+				u32 slot_size = codec_mm_scatter_get_slot_size(CODEC_MM_FLAGS_TVP);
+				int memflags = CODEC_MM_FLAGS_TVP;
+
+				submit_prealloc_job(PREALLOC_YUV_TYPE, PREALLOC_YUV_BUF_NUM,
+					cal_yuv_size(ctx, dec->cfg.double_write_mode),
+						PAGE_SHIFT, memflags, ctx->id);
+
+				if (enable_use_cma_first)
+					memflags |= CODEC_MM_FLAGS_CMA_FIRST;
+				submit_prealloc_job(PREALLOC_SC_TYPE, cal_slot_num(ctx, dec->cfg.double_write_mode, slot_size),
+					slot_size, PAGE_SHIFT, memflags, ctx->id);
+			}
 		}
 		mutex_unlock(&ctx->state_lock);
 	}
