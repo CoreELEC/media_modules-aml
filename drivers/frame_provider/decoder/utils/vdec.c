@@ -8871,7 +8871,7 @@ void vdec_fill_vdec_frame(struct vdec_s *vdec, struct vframe_qos_s *vframe_qos,
 		memcpy(&fifo_buf[i].qos, vframe_qos, sizeof(struct vframe_qos_s));
 	if (vinfo) {
 		memcpy(&fifo_buf[i].normal_info, &vinfo->normal_info,
-		        sizeof(vinfo->normal_info));
+		        sizeof(fifo_buf[i].normal_info));
 		/*copy for ipb report*/
 		memcpy(&fifo_buf[i].ipb, &vinfo->ipb,
 		        sizeof(vinfo->ipb));
