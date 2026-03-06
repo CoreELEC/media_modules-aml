@@ -974,7 +974,7 @@ static u32 get_du_mem_cache_mode(struct aml_du_mem *m)
 static int du_alloc_fd(struct aml_dhp_drv *drv, ulong arg)
 {
 	struct aml_dhp_ioctl_data __user *uarg = (void *)arg;
-	struct aml_dhp_ioctl_data io;
+	struct aml_dhp_ioctl_data *io = NULL;
 	struct aml_du_base *base;
 	struct data_unit *du;
 	bool uncached = false;
@@ -1012,26 +1012,37 @@ static int du_alloc_fd(struct aml_dhp_drv *drv, ulong arg)
 		goto err;
 	}
 
-	io.version	= DHP_DRV_VER;
-	io.type		= get_du_type(base);
-	io.fd		= fd;
-	memcpy(io.data, base, sizeof(*base));
+	io = kzalloc(sizeof(struct aml_dhp_ioctl_data), GFP_KERNEL);
+	if (!io) {
+		dma_buf_put(du->dbuf);
+		put_unused_fd(fd);
+		ret = -EFAULT;
+		LOG_WARN("[%u]: %s no mem for ioctl data\n", drv->uid, __func__);
+		goto err;
+	}
 
-	if (copy_to_user(uarg, &io, sizeof(io))) {
+	io->version	= DHP_DRV_VER;
+	io->type	= get_du_type(base);
+	io->fd		= fd;
+	memcpy(io->data, base, sizeof(*base));
+
+	if (copy_to_user(uarg, io, sizeof(struct aml_dhp_ioctl_data))) {
 		dma_buf_put(du->dbuf);
 		put_unused_fd(fd);
 		ret = -EFAULT;
 		goto err;
 	}
-
 	LOG_DEBUG("[%u]: IOCTL_DHP, Get FD:%d.\n",
 		drv->uid, fd);
+	kfree(io);
 
 	return 0;
 err:
 	LOG_DEBUG("[%u]: put_done, DU:%px, len:%d, \n",
 		drv->uid, du, kfifo_len(&drv->du_done));
 	kfifo_put(&drv->du_done, du);
+	if (io)
+		kfree(io);
 
 	return ret;
 }
@@ -1104,48 +1115,59 @@ free_uptr:
 static int du_mmap(struct aml_dhp_drv *drv, ulong arg)
 {
 	struct aml_dhp_ioctl_data __user *uarg = (void *)arg;
-	struct aml_dhp_ioctl_data io;
+	struct aml_dhp_ioctl_data *io = NULL;
 	bool uncached = false;
 	ulong uptr = 0;
 	ulong pfn = 0;
 	u32 size = 0;
 	int ret = 0;
 
-	if (copy_from_user(&io, uarg, sizeof(io))) {
+	io = kzalloc(sizeof(struct aml_dhp_ioctl_data), GFP_KERNEL);
+	if (!io) {
+		LOG_WARN("[%u]: %s no mem for ioctl data\n", drv->uid, __func__);
 		return -EFAULT;
 	}
 
-	pfn = get_du_mem_pfn(&io.mem);
+	if (copy_from_user(io, uarg, sizeof(struct aml_dhp_ioctl_data))) {
+		kfree(io);
+		return -EFAULT;
+	}
+
+	pfn = get_du_mem_pfn(&io->mem);
 	if (!pfn) {
 		LOG_ERR("DU PFN is invalid.\n");
+		kfree(io);
 		return -EFAULT;
 	}
 
-	size = get_du_mem_size(&io.mem);
+	size = get_du_mem_size(&io->mem);
 	if (!size) {
 		LOG_ERR("DU size is invalid.\n");
+		kfree(io);
 		return -EFAULT;
 	}
 
-	uncached = !!get_du_mem_cache_mode(&io.mem);
+	uncached = !!get_du_mem_cache_mode(&io->mem);
 
 	uptr = __remap_uptr(pfn, size, uncached);
 	if (!uptr && IS_ERR_VALUE(uptr)) {
 		LOG_ERR("Failed to remap userspace addr.\n");
+		kfree(io);
 		return -EFAULT;
 	}
 
-	io.version	= DHP_DRV_VER;
-	io.type		= AML_DHP_TYPE_MEM;
-	io.mem.uptr	= uptr;
+	io->version	= DHP_DRV_VER;
+	io->type	= AML_DHP_TYPE_MEM;
+	io->mem.uptr	= uptr;
 
-	if (copy_to_user(uarg, &io, sizeof(io))) {
+	if (copy_to_user(uarg, io, sizeof(struct aml_dhp_ioctl_data))) {
+		kfree(io);
 		return -EFAULT;
 	}
 
 	LOG_DEBUG("[%u]: DU Mapped addr:%lx at %lx, size %u\n",
 		drv->uid, pfn, uptr, size);
-
+	kfree(io);
 	return ret;
 }
 
@@ -1305,7 +1327,7 @@ err:
 static int du_sgt_mmap(struct aml_dhp_drv *drv, ulong arg)
 {
 	struct aml_dhp_ioctl_data __user *uarg = (void *)arg;
-	struct aml_dhp_ioctl_data io;
+	struct aml_dhp_ioctl_data *io = NULL;
 	bool uncached = false;
 	u64 *pfn_table = NULL;
 	u32 pfn_num;
@@ -1315,27 +1337,38 @@ static int du_sgt_mmap(struct aml_dhp_drv *drv, ulong arg)
 	ktime_t kt_earlier;
 	int ret = 0;
 
-	/* Copy data from user space */
-	if (copy_from_user(&io, uarg, sizeof(io)))
+	io = kzalloc(sizeof(struct aml_dhp_ioctl_data), GFP_KERNEL);
+	if (!io) {
+		LOG_WARN("[%u]: %s no mem for ioctl data\n", drv->uid, __func__);
 		return -EFAULT;
+	}
+
+	/* Copy data from user space */
+	if (copy_from_user(io, uarg, sizeof(struct aml_dhp_ioctl_data))) {
+		kfree(io);
+		return -EFAULT;
+	}
 
 	/* Get memory size for data unit (DU) */
-	pfn_num = get_du_mem_size(&io.base.src);
+	pfn_num = get_du_mem_size(&io->base.src);
 	if (!pfn_num) {
 		LOG_ERR("DU size is invalid.\n");
+		kfree(io);
 		return -EINVAL;
 	}
 
-	uptr_num = get_du_mem_size(&io.base.dst);
+	uptr_num = get_du_mem_size(&io->base.dst);
 	if (pfn_num > uptr_num) {
 		LOG_ERR("dst-tab:%d is smaller than src-tab:%d.\n",
 			uptr_num, pfn_num);
+		kfree(io);
 		return -EINVAL;
 	}
 
 	/* Allocate memory for sg_table and uptr_table */
 	pfn_table = vmalloc(pfn_num * sizeof(u64));
 	if (!pfn_table) {
+		kfree(io);
 		return -ENOMEM;
 	}
 
@@ -1346,12 +1379,12 @@ static int du_sgt_mmap(struct aml_dhp_drv *drv, ulong arg)
 	}
 
 	/* Copy pfn table from user */
-	if (copy_from_user(pfn_table, (void __user *)io.base.src.sgt, pfn_num * sizeof(u64))) {
+	if (copy_from_user(pfn_table, (void __user *)(io->base.src.sgt), pfn_num * sizeof(u64))) {
 		ret = -EFAULT;
 		goto err;
 	}
 
-	uncached = !!get_du_mem_cache_mode(&io.base.dst);
+	uncached = !!get_du_mem_cache_mode(&io->base.dst);
 
 	/* Remap PFNs table */
 	kt_earlier = ktime_get();
@@ -1365,13 +1398,13 @@ static int du_sgt_mmap(struct aml_dhp_drv *drv, ulong arg)
 		drv->uid, ktime_ms_delta(ktime_get(), kt_earlier));
 
 	/* Copy the mapped results back to user space */
-	io.version = DHP_DRV_VER;
-	io.type = AML_DHP_TYPE_MEM;
-	io.base.dst.type = AML_MEM_TYPE_SG_TBL;
-	io.base.dst.payload = uptr_len;
+	io->version = DHP_DRV_VER;
+	io->type = AML_DHP_TYPE_MEM;
+	io->base.dst.type = AML_MEM_TYPE_SG_TBL;
+	io->base.dst.payload = uptr_len;
 
-	if (copy_to_user((void __user *)io.base.dst.sgt, uptr_table, pfn_num * sizeof(u64)) ||
-		copy_to_user(uarg, &io, sizeof(io))) {
+	if (copy_to_user((void __user *)(io->base.dst.sgt), uptr_table, pfn_num * sizeof(u64)) ||
+		copy_to_user(uarg, io, sizeof(struct aml_dhp_ioctl_data))) {
 		vm_munmap(uptr_table[0], uptr_len);
 		ret = -EFAULT;
 	}
@@ -1379,6 +1412,7 @@ static int du_sgt_mmap(struct aml_dhp_drv *drv, ulong arg)
 	LOG_DEBUG("[%u]: DU Mapped SGT to uptr: %lx, size: %u\n",
 		drv->uid, (ulong)uptr_table[0], uptr_len);
 err:
+	kfree(io);
 	if (pfn_table)
 		vfree(pfn_table);
 	if (uptr_table)
@@ -1588,16 +1622,27 @@ static int aml_dhp_mem_end_cpu_access(struct aml_dhp_drv *drv,
 static long aml_dhp_mem_sync(struct aml_dhp_drv *drv, u32 cmd, ulong arg)
 {
 	struct aml_dhp_ioctl_data __user *uarg = (void *)arg;
-	struct aml_dhp_ioctl_data io;
-	struct aml_du_mem *mem = &io.mem;
+	struct aml_dhp_ioctl_data *io = NULL;
+	struct aml_du_mem *mem = NULL;
 	enum dma_data_direction direction;
 	int ret;
 
-	if (copy_from_user(&io, (void __user *) uarg, sizeof(io)))
+	io = kzalloc(sizeof(struct aml_dhp_ioctl_data), GFP_KERNEL);
+	if (!io) {
+		LOG_WARN("[%u]: %s no mem for ioctl data\n", drv->uid, __func__);
 		return -EFAULT;
+	}
 
-	if (mem->syncflag & ~DHP_MEM_SYNC_VALID_FLAGS_MASK)
+	mem = &io->mem;
+	if (copy_from_user(io, (void __user *) uarg, sizeof(struct aml_dhp_ioctl_data))) {
+		kfree(io);
+		return -EFAULT;
+	}
+
+	if (mem->syncflag & ~DHP_MEM_SYNC_VALID_FLAGS_MASK) {
+		kfree(io);
 		return -EINVAL;
+	}
 
 	switch (mem->syncflag & DHP_MEM_SYNC_RW) {
 	case DHP_MEM_SYNC_READ:
@@ -1610,14 +1655,16 @@ static long aml_dhp_mem_sync(struct aml_dhp_drv *drv, u32 cmd, ulong arg)
 		direction = DMA_BIDIRECTIONAL;
 		break;
 	default:
+		kfree(io);
 		return -EINVAL;
 	}
 
-	if (io.mem.syncflag & DHP_MEM_SYNC_END)
+	if (io->mem.syncflag & DHP_MEM_SYNC_END)
 		ret = aml_dhp_mem_end_cpu_access(drv, mem, direction);
 	else
 		ret = aml_dhp_mem_begin_cpu_access(drv, mem, direction);
 
+	kfree(io);
 	return ret;
 }
 
