@@ -252,7 +252,9 @@ static int fops_vcodec_release(struct file *file)
 	vb2_queue_release(&ctx->m2m_ctx->cap_q_ctx.q);
 	vb2_queue_release(&ctx->m2m_ctx->out_q_ctx.q);
 
+#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 	aml_avbc_wrapper_destroy(aml_avbc_get_wrapper());
+#endif
 	aml_vcodec_dec_info_deinit(ctx);
 	aml_vcodec_dec_release(ctx);
 #ifdef CONFIG_AMLOGIC_MEDIA_PROXY

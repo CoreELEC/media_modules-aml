@@ -1362,7 +1362,7 @@ int aml_avbc_wrapper_init(void **pwrapper, void *para)
 		goto err_no_mem;
 	}
 
-	if (!(avbcd_work_mode & 0x8000)) {
+	if (!(avbcd_work_mode & AVBCD_DEBUG_MODE)) {
 		switch (cpu_ver_id) {
 		case AM_MESON_CPU_MAJOR_ID_S6:
 		case AM_MESON_CPU_MAJOR_ID_S5:
@@ -1545,7 +1545,7 @@ int aml_avbc_decode(struct avbc_output *out, struct avbc_input *in, u32 flag)
 	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "is_support_avbc_wrapper(%d). avbcd_work_mode(%d)\n",
 		is_support_avbc_wrapper(), avbcd_work_mode);
 
-	if (!is_support_avbc_wrapper() && !(avbcd_work_mode & 0x8000))
+	if (!is_support_avbc_wrapper() && !(avbcd_work_mode & AVBCD_DEBUG_MODE))
 		goto out;
 
 	ret = aml_avbc_wrapper_init((void**)&wrapper, in);
