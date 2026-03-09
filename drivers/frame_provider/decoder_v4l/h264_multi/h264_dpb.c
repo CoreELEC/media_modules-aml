@@ -27,6 +27,8 @@
 
 #include "h264_dpb.h"
 
+extern u32 fluster;
+
 #define FRAME_NUM_MAX_SIZE 0x10000
 
 #undef pr_info
@@ -296,9 +298,10 @@ void slice_prepare(struct h264_dpb_stru *p_H264_Dpb,
 	sps->num_ref_frames_in_pic_order_cnt_cycle =
 		p_H264_Dpb->
 		dpb_param.l.data[NUM_REF_FRAMES_IN_PIC_ORDER_CNT_CYCLE];
-	for (i = 0; i < 128; i++)
+	for (i = 0; i < MAX_NUM_REF_FRAME_IN_POC_CYCLE; i++)
 		sps->offset_for_ref_frame[i] =
-			(short) p_H264_Dpb->dpb_param.mmco.offset_for_ref_frame_base[i];
+			((int)p_H264_Dpb->dpb_param.mmco.offset_for_ref_frame_base[2 * i + 1] << 16) |
+			(int)p_H264_Dpb->dpb_param.mmco.offset_for_ref_frame_base[2 * i];
 	sps->offset_for_non_ref_pic =
 		(short) p_H264_Dpb->dpb_param.l.data[OFFSET_FOR_NON_REF_PIC];
 	sps->offset_for_top_to_bottom_field =
@@ -321,7 +324,8 @@ void slice_prepare(struct h264_dpb_stru *p_H264_Dpb,
 	pSlice->delta_pic_order_cnt[1] = val(
 		p_H264_Dpb->dpb_param.dpb.delta_pic_order_cnt_1);
 
-	p_Vid->last_has_mmco_5 = 0;
+	if (!fluster)
+		p_Vid->last_has_mmco_5 = 0;
 	/* last memory_management_control_operation is 5 */
 	p_Vid->last_pic_bottom_field = 0;
 	p_Vid->max_frame_num = 1 <<
@@ -807,6 +811,7 @@ void fill_frame_num_gap(struct VideoParameters *p_Vid, struct Slice *currSlice)
 		picture->frame_num = UnusedShortTermFrameNum;
 		picture->non_existing = 1;
 		picture->is_output = 1;
+		picture->idr_flag = 0;
 		dpb_print(p_H264_Dpb->decoder_index,
 				PRINT_FLAG_DPB_DETAIL,
 			"%s is_output %d pre_output %d buf_spec_num %d\n",
@@ -1846,7 +1851,8 @@ static int remove_unused_frame_from_dpb(struct h264_dpb_stru *p_H264_Dpb)
 
 	for (i = 0; i < p_Dpb->used_size; i++) {
 		if (((!p_H264_Dpb->avbcd_work_mode && p_Dpb->fs[i]->pre_output) ||
-			(p_H264_Dpb->avbcd_work_mode && p_Dpb->fs[i]->is_output)) &&
+			(p_H264_Dpb->avbcd_work_mode && p_Dpb->fs[i]->is_output) ||
+			((p_Dpb->fs[i]->buf_spec_num < 0) && p_Dpb->fs[i]->is_output && fluster)) &&
 			(!is_used_for_reference(p_Dpb->fs[i]))) {
 			recycle_frame_buffer(p_H264_Dpb,
 				p_Dpb->fs[i]->buf_spec_num, i);
@@ -2078,6 +2084,10 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 			}
 		}
 
+		//Cancel the fast output strategy for the first I-frame in Fluster.
+		if (fluster)
+			fast_output_flag = 0;
+
 		if (!(get_error_proc_policy(p_H264_Dpb) & 0x4000000)) {
 			for (i = 0; i < p_Dpb->used_size; i++) {
 
@@ -2098,8 +2108,10 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 
 		if (fast_output_flag)
 			;
-		else if (none_displayed_num <
-			p_H264_Dpb->reorder_output)
+		else if (!fluster || p_H264_Dpb->bitstream_restriction_flag) {
+			if (none_displayed_num < p_H264_Dpb->reorder_output)
+				return 0;
+		} else
 			return 0;
 	}
 
@@ -2113,7 +2125,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 			"%s pos %d pos->poc %d  first_output_poc %d \n",
 			__func__, pos, p_Dpb->fs[pos]->poc, p_H264_Dpb->first_output_poc);
 
-		if (p_Dpb->fs[pos]->poc < p_H264_Dpb->first_output_poc)
+		if ((p_Dpb->fs[pos]->poc < p_H264_Dpb->first_output_poc) && !fluster)
 			p_Dpb->fs[pos]->data_flag |= NODISP_FLAG;
 		else if (p_Dpb->last_output_poc != INT_MIN)
 			p_H264_Dpb->first_insert_frame = FirstInsertFrm_SKIPDONE;
@@ -5286,6 +5298,8 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 			currSlice->frame_num != p_Vid->pre_frame_num &&
 			currSlice->frame_num !=
 			(p_Vid->pre_frame_num + 1) % p_Vid->max_frame_num) {
+			if (fluster)
+				fill_frame_num_gap(p_Vid, currSlice);
 			*frame_num_gap = FrameNumGap_Normal;
 			if ((currSlice->frame_num < p_Vid->pre_frame_num) && (currSlice->frame_num != 0))
 				*frame_num_gap = FrameNumGap_Loop;

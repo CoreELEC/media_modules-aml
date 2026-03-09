@@ -192,6 +192,7 @@ static u32 run_ready_max_buf_num = 0xff;
 static u32 run_ready_min_buf_num = 2;
 static u32 save_buffer = 1;
 static u32 save_buffer_in_res_change = 1;
+u32 fluster;
 
 static unsigned int max_alloc_buf_count;
 static unsigned int decode_timeout_val = 100;
@@ -4805,7 +4806,10 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
 					"%s: error ref->buf_spec_num %d \n",
 					__func__, ref->buf_spec_num);
-			return -1;
+			if (fluster)
+				continue;
+			else
+				return -1;
 		}
 
 		if (ref->data_flag & NOOUTPUT_FLAG) {
@@ -13858,6 +13862,7 @@ static struct param_entry amvdec_h264_params[] = {
 	PARAM_UINT(enable_hw_timer),
 	PARAM_UINT(disable_multi_slice_irq),
 	PARAM_UINT(force_max_level_idc_52),
+	PARAM_UINT(fluster),
 	{ /* sentinel */ }
 };
 module_param_cb(params, &key_value_param_ops, &amvdec_h264_params, 0644);
@@ -14086,6 +14091,9 @@ MODULE_PARM_DESC(disable_multi_slice_irq, "\n disable_multi_slice_irq\n");
 
 module_param(force_max_level_idc_52, uint, 0664);
 MODULE_PARM_DESC(force_max_level_idc_52, "\n force_max_level_idc_52\n");
+
+MEDIA_PARAM(fluster, uint, 0664);
+MODULE_PARM_DESC(fluster, "\n fluster\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);

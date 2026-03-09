@@ -196,6 +196,7 @@ static u32 run_ready_max_buf_num = 0xff;
 
 static u32 run_ready_min_buf_num = 2;
 static u32 save_buffer = 1;
+u32 fluster;
 
 static unsigned int max_alloc_buf_count;
 static unsigned int decode_timeout_val = 100;
@@ -2850,12 +2851,16 @@ int recycle_frame_buffer(struct h264_dpb_stru *p_H264_Dpb, int buf_spec_num,
 	unsigned long flags;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)p_H264_Dpb->vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	struct aml_buf *aml_buf = (struct aml_buf *)hw->buffer_spec[buf_spec_num].cma_alloc_addr;
+	struct aml_buf *aml_buf = NULL;
 	struct aml_buf_config config = { 0 };
+
+	if (buf_spec_num < 0 || buf_spec_num >= BUFSPEC_POOL_SIZE)
+		return 0;
 
 	if (ctx->avbcd_work_mode)
 		return 0;
 
+	aml_buf = (struct aml_buf *)hw->buffer_spec[buf_spec_num].cma_alloc_addr;
 	if (!aml_buf) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"fb(buf_spec_num: %d) has been recycled!\n",
@@ -5150,7 +5155,10 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERRORFLAG_DBG,
 					"%s: error ref->buf_spec_num %d \n",
 					__func__, ref->buf_spec_num);
-			return -1;
+			if (fluster)
+				continue;
+			else
+				return -1;
 		}
 
 		if (ref->data_flag & NULL_FLAG)
@@ -14625,6 +14633,7 @@ static struct param_entry amvdec_h264_v4l_params[] = {
 	PARAM_UINT(enable_hw_timer),
 	PARAM_UINT(disable_multi_slice_irq),
 	PARAM_UINT(force_max_level_idc_52),
+	PARAM_UINT(fluster),
 	{ /* sentinel */ }
 };
 module_param_cb(params, &key_value_param_ops, &amvdec_h264_v4l_params, 0644);
@@ -14864,6 +14873,9 @@ MODULE_PARM_DESC(disable_multi_slice_irq, "\n disable_multi_slice_irq\n");
 
 module_param(force_max_level_idc_52, uint, 0664);
 MODULE_PARM_DESC(force_max_level_idc_52, "\n force_max_level_idc_52\n");
+
+MEDIA_PARAM(fluster, uint, 0664);
+MODULE_PARM_DESC(fluster, "\n fluster\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);

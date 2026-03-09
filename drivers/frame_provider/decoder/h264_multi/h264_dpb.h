@@ -501,13 +501,14 @@ enum FrameNumGap_Value {
 	FrameNumGap_Loop = 2  /* loop playback, frame_num become small,and current frame is not idr */
 };
 
+#define MAX_NUM_REF_FRAME_IN_POC_CYCLE  64
 struct SPSParameters {
 	unsigned int profile_idc;
 	unsigned int level_idc;
 	int pic_order_cnt_type;
 	int log2_max_pic_order_cnt_lsb_minus4;
 	int num_ref_frames_in_pic_order_cnt_cycle;
-	short offset_for_ref_frame[128];
+	int offset_for_ref_frame[MAX_NUM_REF_FRAME_IN_POC_CYCLE];
 	short offset_for_non_ref_pic;
 	short offset_for_top_to_bottom_field;
 
