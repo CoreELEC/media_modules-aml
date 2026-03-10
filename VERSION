@@ -1,11 +1,16 @@
 #Developing Version
 Major_V=6
-Minor_V=18
-DevelopingChangeId=I2b62d7d06b65197994172615d00a9b9340fbb051
+Minor_V=19
+DevelopingChangeId=I7c9c3b12a93d00341fe199d3864940c9f947b7b4
 LTS_FLAG=
 RELEASE_FLAG=1
 
 #history version
+#V6.19 Release Notes
+#	JPEG HW decoding support
+#	VC1 Multi-stance support
+#	HW decoding thumbnail
+#V6.18 Release Notes
 #v4l stream mode decoder driver development
 #	Reduced maintenance costs (only one codebase to maintain)
 #	Improved stability
