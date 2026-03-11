@@ -10700,7 +10700,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 #endif
 
 #ifdef HEVC_PIC_STRUCT_SUPPORT
-		if (pic->pic_struct == 3 || pic->pic_struct == 4) {
+		if ((pic->pic_struct == 3 || pic->pic_struct == 4) &&
+			hevc->interlace_flag) {
 			struct vframe_s *vf2;
 
 			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
@@ -10738,8 +10739,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				hevc->vf_pre_count += 2;
 				return 0;
 			}
-		} else if (pic->pic_struct == 5
-			|| pic->pic_struct == 6) {
+		} else if ((pic->pic_struct == 5
+			|| pic->pic_struct == 6) && hevc->interlace_flag) {
 			struct vframe_s *vf2, *vf3;
 
 			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
@@ -10790,8 +10791,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				hevc->vf_pre_count += 3;;
 				return 0;
 			}
-		} else if (pic->pic_struct == 9
-			|| pic->pic_struct == 10) {
+		} else if ((pic->pic_struct == 9
+			|| pic->pic_struct == 10) && hevc->interlace_flag) {
 			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 				hevc_print(hevc, 0,
 					"pic_struct = %d index 0x%x\n",
@@ -10826,8 +10827,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				hevc->vf_pre_count++;
 				return 0;
 			}
-		} else if (pic->pic_struct == 11
-		    || pic->pic_struct == 12) {
+		} else if ((pic->pic_struct == 11
+			|| pic->pic_struct == 12) && hevc->interlace_flag) {
 			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 				hevc_print(hevc, 0,
 					"pic_struct = %d index 0x%x\n",
@@ -10881,18 +10882,22 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vf->duration = vf->duration * 3;
 				break;
 			case 1:
-				vf->height <<= 1;
-				vf->compHeight <<= 1;
-				vf->type = VIDTYPE_INTERLACE_TOP | nv_order | VIDTYPE_VIU_FIELD;
-				process_pending_vframe(hevc, pic, 1);
-				hevc->pre_top_pic = pic;
+				if (hevc->interlace_flag) {
+					vf->height <<= 1;
+					vf->compHeight <<= 1;
+					vf->type = VIDTYPE_INTERLACE_TOP | nv_order | VIDTYPE_VIU_FIELD;
+					process_pending_vframe(hevc, pic, 1);
+					hevc->pre_top_pic = pic;
+				}
 				break;
 			case 2:
-				vf->height <<= 1;
-				vf->compHeight <<= 1;
-				vf->type = VIDTYPE_INTERLACE_BOTTOM | nv_order | VIDTYPE_VIU_FIELD;
-				process_pending_vframe(hevc, pic, 0);
-				hevc->pre_bot_pic = pic;
+				if (hevc->interlace_flag) {
+					vf->height <<= 1;
+					vf->compHeight <<= 1;
+					vf->type = VIDTYPE_INTERLACE_BOTTOM | nv_order | VIDTYPE_VIU_FIELD;
+					process_pending_vframe(hevc, pic, 0);
+					hevc->pre_bot_pic = pic;
+				}
 				break;
 			}
 			if (pic->show_frame) {
