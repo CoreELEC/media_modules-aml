@@ -1345,7 +1345,6 @@ int aml_avbc_wrapper_init(void **pwrapper, void *para)
 {
 	struct vdec_s *vdec = NULL;
 	struct aml_avbc_wrapper_s *wrapper = NULL;
-	struct avbc_input *avbc_in = (struct avbc_input *)para;
 	int ret = -1;
 	int i;
 	int cpu_ver_id = get_cpu_major_id();
@@ -1371,7 +1370,7 @@ int aml_avbc_wrapper_init(void **pwrapper, void *para)
 			break;
 		case AM_MESON_CPU_MAJOR_ID_S7:
 		case AM_MESON_CPU_MAJOR_ID_T6D:
-			avbcd_work_mode = AVBCD_AUTO_MODE;
+			avbcd_work_mode = AVBCD_HARDWARE_LEGACY_MODE;
 			break;
 		case AM_MESON_CPU_MAJOR_ID_T6W:
 		case AM_MESON_CPU_MAJOR_ID_T6X:
@@ -1380,25 +1379,6 @@ int aml_avbc_wrapper_init(void **pwrapper, void *para)
 		default:
 			avbcd_work_mode = AVBCD_SOFT_USER_MODE;
 		}
-	}
-
-	if ((avbcd_work_mode & AVBCD_AUTO_MODE)) {
-		u32 src_w = 0;
-		u32 src_h = 0;
-
-		if (avbc_in) {
-			src_w = avbc_in->img.rect.width;
-			src_h = avbc_in->img.rect.height;
-		}
-
-		if ((src_w == 2560 && src_h == 1090) ||
-			(src_w == 3840 && src_h == 1634) ||
-			(src_w == 256 && src_h == 108) ||
-			(src_w == 854 && src_h == 362) ||
-			(src_w == 1920 && src_h == 818))
-			avbcd_work_mode |= AVBCD_SOFT_USER_MODE;
-		else
-			avbcd_work_mode |= AVBCD_HARDWARE_LEGACY_MODE;
 	}
 
 	init_completion(&wrapper->avbc_done);
@@ -1556,6 +1536,10 @@ int aml_avbc_decode(struct avbc_output *out, struct avbc_input *in, u32 flag)
 
 	kfifo_put(&wrapper->out, out);
 
+	if (wrapper->vdec->avbc_mode & AVBCD_HARDWARE_LEGACY_MODE) {
+		in->img.rect.width = ALIGN(in->img.rect.width, 8);
+		in->img.rect.height = ALIGN(in->img.rect.height, 8);
+	}
 	wrapper->flag = flag;
 	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "%s in:  header_addr 0x%lx, header_size %u, width %u, height %u, bitdepth %u flag %d\n",
 		__func__,
