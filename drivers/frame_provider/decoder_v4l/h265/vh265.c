@@ -1585,7 +1585,7 @@ static int H265_alloc_mmu(struct hevc_state_s *hevc,
 
 static int init_buf_spec(struct hevc_state_s *hevc);
 
-static void vh265_report_err_timestamp_for_decoded_frames(struct aml_vcodec_ctx *ctx, struct PIC_s *pic);
+static void vh265_report_err_timestamp_for_decoded_frames(struct aml_vcodec_ctx *ctx, struct PIC_s *pic, struct hevc_state_s *hevc);
 
 #define H265_USERDATA_ENABLE
 
@@ -4286,13 +4286,13 @@ void output_pic_display(struct hevc_state_s *hevc, unsigned char flush_flag, boo
 				}
 
 				pic_display->drop_mark = 1;
-				vh265_report_err_timestamp_for_decoded_frames(ctx, pic_display);
+				vh265_report_err_timestamp_for_decoded_frames(ctx, pic_display, hevc);
 			} else {
 				if (hevc->i_only & 0x1
 					&& pic_display->slice_type != 2) {
 					pic_display->output_ready = 0;
 					pic_display->drop_mark = 1;
-					vh265_report_err_timestamp_for_decoded_frames(ctx, pic_display);
+					vh265_report_err_timestamp_for_decoded_frames(ctx, pic_display, hevc);
 				} else {
 					prepare_display_buf(hw_to_vdec(hevc),pic_display);
 					if (ones)
@@ -6482,6 +6482,22 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 		hevc->buf_allocated = true;
 		if (hevc->chunk)
 			new_pic->timestamp = hevc->chunk->timestamp;
+		if (vdec_stream_based(vdec)) {
+			struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+			struct checkoutptsoffset pts_st = {0};
+			u32 offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+			u64 dur_offset = hevc->frame_dur;
+
+			dur_offset = ((dur_offset << 32) & 0xffffffff00000000) | offset;
+
+			if (ctx && ctx->pts_serves_ops &&
+				!ctx->pts_serves_ops->cal_offset(ctx->ptsserver_id, dur_offset, &pts_st)) {
+				new_pic->timestamp = pts_st.pts_64;
+			} else {
+				hevc_print(hevc, H265_DEBUG_PIC_STRUCT, 0, "pts cal_offset fail  dur_offset:0x%llx\n",dur_offset);
+				new_pic = 0;
+			}
+		}
 	}
 	v4l_crop_pic(hevc, new_pic);
 
@@ -6522,11 +6538,13 @@ static bool is_pair_pic(struct PIC_s *pic)
 }
 
 static void vh265_report_err_timestamp_for_decoded_frames(struct aml_vcodec_ctx *ctx,
-	struct PIC_s *pic)
+	struct PIC_s *pic, struct hevc_state_s *hevc)
 {
 	u64 timestamp_bak;
 	timestamp_bak = ctx->current_timestamp;
 	ctx->current_timestamp = pic->timestamp;
+	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+		"%s timestamp %llu\n", __func__, ctx->current_timestamp);
 	vdec_v4l_post_error_frame_event(ctx);
 	ctx->decoder_status_info.decoder_error_count++;
 	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
@@ -13629,7 +13647,7 @@ force_output:
 
 			if (!hevc->buf_allocated && hevc->cur_pic) {
 				hevc->cur_pic->drop_mark = 1;
-				vh265_report_err_timestamp_for_decoded_frames(ctx, hevc->cur_pic);
+				vh265_report_err_timestamp_for_decoded_frames(ctx, hevc->cur_pic, hevc);
 				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,"%s prev frame poc %d ts %llu\n",
 					__func__, hevc->cur_pic->POC, hevc->cur_pic->timestamp);
 			}
@@ -15798,8 +15816,11 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 						pic->output_mark = 0;
 						pic->drop_mark = 1;
 						hevc_print(hevc, 0, "DPB poc error, remove error frame\n");
-						ctx->current_timestamp = pic->timestamp;
-						vdec_v4l_post_error_frame_event(ctx);
+						if (vdec_frame_based(hw_to_vdec(hevc))) {
+							ctx->current_timestamp = pic->timestamp;
+							vdec_v4l_post_error_frame_event(ctx);
+						} else
+							vmh265_report_pts(hevc);
 					}
 				}
 			}
@@ -16082,8 +16103,11 @@ done_end:
 						pic->output_mark = 0;
 						pic->drop_mark = 1;
 						hevc_print(hevc, 0, "DPB poc error, remove error frame\n");
-						ctx->current_timestamp = pic->timestamp;
-						vdec_v4l_post_error_frame_event(ctx);
+						if (vdec_frame_based(hw_to_vdec(hevc))) {
+							ctx->current_timestamp = pic->timestamp;
+							vdec_v4l_post_error_frame_event(ctx);
+						} else
+							vmh265_report_pts(hevc);
 					}
 				}
 			}
