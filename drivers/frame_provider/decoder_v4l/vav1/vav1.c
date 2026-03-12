@@ -188,6 +188,8 @@ Bit[10:8] - film_grain_params_ref_idx, For Write request
 
 #define AUX_BUF_ALIGN(adr) ((adr + 0xf) & (~0xf))
 
+#define HEVC_PRINT_BUF		512
+
 //v0.4.157-g34f04a6
 #define UCODE_SWAP_VERSION 4
 #define UCODE_SWAP_SUBMIT_COUNT 157
@@ -215,6 +217,7 @@ static unsigned int not_run_ready[MAX_INSTANCE_MUN];
 #ifdef AOM_AV1_MMU_DW
 static unsigned int dw_mmu_enable[MAX_INSTANCE_MUN];
 #endif
+static DEFINE_PER_CPU(unsigned char, av1_print_buf)[HEVC_PRINT_BUF];
 
 static u32 decode_timeout_val = 600;
 static u32 enable_single_slice = 1;
@@ -597,8 +600,6 @@ static void av1_work_implement(struct AV1HW_s *hw);
 #define PROC_STATE_DECODESLICE	1
 #define PROC_STATE_SENDAGAIN	2
 
-#define HEVC_PRINT_BUF		512
-
 #ifdef DUMP_FILMGRAIN
 u32 fg_dump_index = 0xff;
 #endif
@@ -907,7 +908,7 @@ static void av1_dump_state(struct vdec_s *vdec);
 int av1_debug(struct AV1HW_s *hw,
 	int flag, const char *fmt, ...)
 {
-	unsigned char buf[HEVC_PRINT_BUF];
+	unsigned char *buf = get_cpu_var(av1_print_buf);
 	int len = 0;
 
 	if (hw == NULL ||
@@ -919,9 +920,11 @@ int av1_debug(struct AV1HW_s *hw,
 		if (hw)
 			len = sprintf(buf, "[%d]", hw->index);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
 		va_end(args);
+		pr_info("%s", buf);
 	}
+	put_cpu_var(av1_print_buf);
+
 	return 0;
 }
 
@@ -946,7 +949,7 @@ unsigned char av1_is_debug(int flag)
 
 int av1_print2(int flag, const char *fmt, ...)
 {
-	unsigned char buf[HEVC_PRINT_BUF];
+	unsigned char *buf = get_cpu_var(av1_print_buf);
 	int len = 0;
 
 	if ((flag == 0) ||
@@ -955,9 +958,11 @@ int av1_print2(int flag, const char *fmt, ...)
 
 		va_start(args, fmt);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
 		va_end(args);
+		pr_info("%s", buf);
 	}
+	put_cpu_var(av1_print_buf);
+
 	return 0;
 }
 
@@ -985,7 +990,7 @@ static inline bool close_to(int a, int b, int m)
 static int av1_print_cont(struct AV1HW_s *hw,
 	int flag, const char *fmt, ...)
 {
-	unsigned char buf[HEVC_PRINT_BUF];
+	unsigned char *buf = get_cpu_var(av1_print_buf);
 	int len = 0;
 
 	if (hw == NULL ||
@@ -995,9 +1000,11 @@ static int av1_print_cont(struct AV1HW_s *hw,
 
 		va_start(args, fmt);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
 		va_end(args);
+		pr_info("%s", buf);
 	}
+	put_cpu_var(av1_print_buf);
+
 	return 0;
 }
 

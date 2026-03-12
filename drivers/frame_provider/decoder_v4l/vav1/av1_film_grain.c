@@ -1153,7 +1153,13 @@ int pic_film_grain_run(char *fg_table_addr, u32 fgs_ctrl, u32 *fgs_data)
 int pic_film_grain_run(u32 frame_count, char *fg_table_addr, u32 fgs_ctrl, u32 *fgs_data)
 
 {
-	struct aom_film_grain_t fg_params = { 0 };
+	struct aom_film_grain_t *fg_params = NULL;
+
+	fg_params = kzalloc(sizeof(struct aom_film_grain_t), GFP_KERNEL);
+	if (!fg_params) {
+		pr_err("alloc mem for fg param failed!\n");
+		return -1;
+	}
 
 	if (debug_fgs & DEBUG_FGS_REGS) {
 		int i;
@@ -1163,18 +1169,18 @@ int pic_film_grain_run(u32 frame_count, char *fg_table_addr, u32 fgs_ctrl, u32 *
 		}
 	}
 
-	film_grain_data_parse(&fg_params, fgs_ctrl, fgs_data);
+	film_grain_data_parse(fg_params, fgs_ctrl, fgs_data);
 
 	if (debug_fgs & DEBUG_FGS_REGS_PARSE) {
-		fg_info_print(&fg_params);
+		fg_info_print(fg_params);
 	}
 
-	av1_add_film_grain_run(fg_table_addr, &fg_params);
+	av1_add_film_grain_run(fg_table_addr, fg_params);
 
 	if (debug_fgs & DEBUG_FGS_TABLE_DUMP) {
 		#define FGS_TABLE_SIZE  (512 * 128 / 8)
 		struct file *fg_fp = NULL;
-		char file[256] = {0};
+		char file[128] = {0};
 
 		snprintf(file, sizeof(file), "/data/tmp/fgs_table_%d.bin", frame_count - 1);
 		fg_fp = media_open(file, O_CREAT | O_RDWR | O_TRUNC, 0666);
@@ -1187,6 +1193,8 @@ int pic_film_grain_run(u32 frame_count, char *fg_table_addr, u32 fgs_ctrl, u32 *
 			fg_fp = NULL;
 		}
 	}
+	kfree(fg_params);
+
 	return 0;
 }
 
