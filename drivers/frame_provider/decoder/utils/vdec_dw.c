@@ -122,6 +122,7 @@ static bool is_only_support_yuv_fmt(int format)
 		case VFORMAT_MPEG12:
 		case VFORMAT_MPEG4:
 		case VFORMAT_MJPEG:
+		case VFORMAT_JPEG:
 		case VFORMAT_VC1:
 		case VFORMAT_AVS:
 			return true;
@@ -136,7 +137,6 @@ static bool is_unsupport_dw_format(int format)
 		return true;
 
 	switch (format) {
-		case VFORMAT_JPEG:
 		case VFORMAT_H264MVC:
 		case VFORMAT_AVBCD:
 			return true;
@@ -352,6 +352,7 @@ static void dos_dw_mode_param_init(void)
 			case VFORMAT_MPEG4:
 			case VFORMAT_H264:
 			case VFORMAT_MJPEG:
+			case VFORMAT_JPEG:
 			case VFORMAT_VC1:
 			case VFORMAT_AVS:
 				dw_mode[fmt].hw_dw_mode[0] = DM_YUV_ONLY;
