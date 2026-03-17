@@ -1059,10 +1059,10 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			.buf_size = 0x800,
 		},
 		.sps = {
-			/* SPS STORE AREA - Max 8 SPS, each has 0x100 bytes,
-			 *   total 0x0800 bytes
+			/* SPS STORE AREA - Max 16 SPS, each has 0x100 bytes,
+			 *   total 0x1000 bytes
 			 */
-			.buf_size = 0x800,
+			.buf_size = 0x1000,
 		},
 		.pps = {
 			/* PPS STORE AREA - Max 64 PPS, each has 0x80 bytes,
@@ -1153,10 +1153,10 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			.buf_size = 0x800,
 		},
 		.sps = {
-			/* SPS STORE AREA - Max 8 SPS, each has 0x100 bytes,
-			 *   total 0x0800 bytes
+			/* SPS STORE AREA - Max 16 SPS, each has 0x100 bytes,
+			 *   total 0x1000 bytes
 			 */
-			.buf_size = 0x800,
+			.buf_size = 0x1000,
 		},
 		.pps = {
 			/* PPS STORE AREA - Max 64 PPS, each has 0x80 bytes,
@@ -1242,8 +1242,8 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			.buf_size = 0x800,
 		},
 		.sps = {
-			// SPS STORE AREA - Max 8 SPS, each has 0x100 bytes, total 0x0800 bytes
-			.buf_size = 0x800,
+			// SPS STORE AREA - Max 16 SPS, each has 0x100 bytes, total 0x1000 bytes
+			.buf_size = 0x1000,
 		},
 		.pps = {
 			// PPS STORE AREA - Max 64 PPS, each has 0x80 bytes, total 0x2000 bytes
@@ -1294,7 +1294,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.sao_vb			= {.buf_size = 0}, //0x30000,
 		.short_term_rps		= {.buf_size = 0x800}, //SHORT_TERM_RPS - Max 64 set, 16 entry every set,total 64x16x2 = 2048 bytes (0x800)
 		.vps			= {.buf_size = 0x800}, //VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
-		.sps			= {.buf_size = 0x800}, //SPS STORE AREA - Max 8 SPS, each has 0x100 bytes, total 0x0800 bytes
+		.sps			= {.buf_size = 0x1000}, //SPS STORE AREA - Max 16 SPS, each has 0x100 bytes, total 0x1000 bytes
 		.pps			= {.buf_size = 0x2000}, //PPS STORE AREA - Max 64 PPS, each has 0x80 bytes, total 0x2000 bytes
 		.sao_up			= {.buf_size = 0}, //0x2800, SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
 		.swap_buf		= {.buf_size = 0x800}, //256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
@@ -1319,7 +1319,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.sao_vb			= {.buf_size = 0}, //0x30000,
 		.short_term_rps		= {.buf_size = 0x800}, //SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
 		.vps			= {.buf_size = 0x800}, //VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
-		.sps			= {.buf_size = 0x800}, //SPS STORE AREA - Max 8 SPS, each has 0x100 bytes, total 0x0800 bytes
+		.sps			= {.buf_size = 0x1000}, //SPS STORE AREA - Max 16 SPS, each has 0x100 bytes, total 0x1000 bytes
 		.pps			= {.buf_size = 0x2000}, //PPS STORE AREA - Max 64 PPS, each has 0x80 bytes, total 0x2000 bytes
 		.sao_up			= {.buf_size = 0}, //0x2800 //SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
 		.swap_buf		= {.buf_size = 0x800}, //256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
@@ -1344,7 +1344,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.sao_vb			= {.buf_size = 0}, //0x30000*2,
 		.short_term_rps		= {.buf_size = 0x800}, // SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
 		.vps			= {.buf_size = 0x800}, //VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
-		.sps			= {.buf_size = 0x800}, // SPS STORE AREA - Max 8 SPS, each has 0x100 bytes, total 0x0800 bytes
+		.sps			= {.buf_size = 0x1000}, // SPS STORE AREA - Max 16 SPS, each has 0x100 bytes, total 0x1000 bytes
 		.pps			= {.buf_size = 0x2000}, // PPS STORE AREA - Max 64 PPS, each has 0x80 bytes, total 0x2000 bytes
 		.sao_up			= {.buf_size = 0}, //0x2800*2, SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
 		.swap_buf		= {.buf_size = 0x800}, // 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
