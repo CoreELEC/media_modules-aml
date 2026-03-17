@@ -30,6 +30,10 @@
 #include "pixfmt.h"
 #endif
 
+#define V4LDEC_PRINT_BUF 512
+
+static DEFINE_PER_CPU(unsigned char, v4ldec_hex_print_buf)[V4LDEC_PRINT_BUF];
+
 const u8 ff_zigzag_direct[64] = {
 	0,  1,  8, 16, 9, 2, 3, 10,
 	17, 24, 32, 25, 18, 11, 4, 5,
@@ -240,14 +244,16 @@ u8 *nal_unit_extract_rbsp(const u8 *src, u32 src_len, u32 *dst_len)
 //debug
 static void _pr_hex(const char *fmt, ...)
 {
-	u8 buf[512];
+	unsigned char *buf = get_cpu_var(v4ldec_hex_print_buf);
 	int len = 0;
 
 	va_list args;
 	va_start(args, fmt);
 	vsnprintf(buf + len, 512 - len, fmt, args);
-	printk("%s", buf);
 	va_end(args);
+	printk("%s", buf);
+
+	put_cpu_var(v4ldec_hex_print_buf);
 }
 
 void print_hex_debug(u8 *data, u32 len, int max)

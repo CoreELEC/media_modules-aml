@@ -397,13 +397,20 @@ static int aml_v4l2_ge2d_thread(void* param)
 {
 	struct aml_v4l2_ge2d* ge2d = param;
 	struct aml_vcodec_ctx *ctx = ge2d->ctx;
-	struct config_para_ex_s ge2d_config;
+	struct config_para_ex_s *ge2d_config;
 	u32 src_fmt = 0, dst_fmt = 0;
 	struct canvas_s cd;
 	ulong start_time;
 	int video_type = ctx->ada_ctx->video_type;
 
 	v4l_dbg(ctx, V4L_DEBUG_GE2D_DETAIL, "enter ge2d thread\n");
+
+	ge2d_config = kmalloc(sizeof(struct config_para_ex_s), GFP_KERNEL);
+	if (!ge2d_config) {
+		v4l_dbg(ctx, V4L_DEBUG_GE2D_DETAIL, "no space for alloc config_para_ex_s\n");
+		goto exit;
+	}
+
 	while (ge2d->running) {
 		struct aml_v4l2_ge2d_buf *in_buf;
 		struct aml_v4l2_ge2d_buf *out_buf = NULL;
@@ -492,8 +499,7 @@ retry:
 
 		/* fill inbuf parms. */
 		in_buf->caller_data	= ge2d;
-
-		memset(&ge2d_config, 0, sizeof(ge2d_config));
+		memset(ge2d_config, 0, sizeof(struct config_para_ex_s));
 
 		src_fmt = get_input_format(&in_buf->vf);
 
@@ -549,46 +555,46 @@ retry:
 			canvas_config_config(ctx->dev->cache.res[0].cid, &in_buf->vf.canvas0_config[0]);
 			canvas_config_config(ctx->dev->cache.res[1].cid, &in_buf->vf.canvas0_config[1]);
 			canvas_config_config(ctx->dev->cache.res[2].cid, &in_buf->vf.canvas0_config[2]);
-			ge2d_config.src_para.canvas_index =
+			ge2d_config->src_para.canvas_index =
 				ctx->dev->cache.res[0].cid |
 				ctx->dev->cache.res[1].cid << 8 |
 				ctx->dev->cache.res[2].cid << 16;
 
-			ge2d_config.src_planes[0].addr =
+			ge2d_config->src_planes[0].addr =
 				in_buf->vf.canvas0_config[0].phy_addr;
-			ge2d_config.src_planes[0].w =
+			ge2d_config->src_planes[0].w =
 				in_buf->vf.canvas0_config[0].width;
-			ge2d_config.src_planes[0].h =
+			ge2d_config->src_planes[0].h =
 				in_buf->vf.canvas0_config[0].height;
-			ge2d_config.src_planes[1].addr =
+			ge2d_config->src_planes[1].addr =
 				in_buf->vf.canvas0_config[1].phy_addr;
-			ge2d_config.src_planes[1].w =
+			ge2d_config->src_planes[1].w =
 				in_buf->vf.canvas0_config[1].width;
-			ge2d_config.src_planes[1].h =
+			ge2d_config->src_planes[1].h =
 				in_buf->vf.canvas0_config[1].height;
-			ge2d_config.src_planes[2].addr =
+			ge2d_config->src_planes[2].addr =
 				in_buf->vf.canvas0_config[2].phy_addr;
-			ge2d_config.src_planes[2].w =
+			ge2d_config->src_planes[2].w =
 				in_buf->vf.canvas0_config[2].width;
-			ge2d_config.src_planes[2].h =
+			ge2d_config->src_planes[2].h =
 				in_buf->vf.canvas0_config[2].height;
 		} else {
-			ge2d_config.src_para.canvas_index = in_buf->vf.canvas0Addr;
+			ge2d_config->src_para.canvas_index = in_buf->vf.canvas0Addr;
 		}
-		ge2d_config.src_para.mem_type	= CANVAS_TYPE_INVALID;
-		ge2d_config.src_para.format	= src_fmt;
-		ge2d_config.src_para.fill_color_en = 0;
-		ge2d_config.src_para.fill_mode	= 0;
-		ge2d_config.src_para.x_rev	= 0;
-		ge2d_config.src_para.y_rev	= 0;
-		ge2d_config.src_para.color	= 0xffffffff;
-		ge2d_config.src_para.top	= 0;
-		ge2d_config.src_para.left	= 0;
-		ge2d_config.src_para.width	= in_buf->vf.width;
+		ge2d_config->src_para.mem_type	= CANVAS_TYPE_INVALID;
+		ge2d_config->src_para.format	= src_fmt;
+		ge2d_config->src_para.fill_color_en = 0;
+		ge2d_config->src_para.fill_mode	= 0;
+		ge2d_config->src_para.x_rev	= 0;
+		ge2d_config->src_para.y_rev	= 0;
+		ge2d_config->src_para.color	= 0xffffffff;
+		ge2d_config->src_para.top	= 0;
+		ge2d_config->src_para.left	= 0;
+		ge2d_config->src_para.width	= in_buf->vf.width;
 		if (in_buf->vf.type & VIDTYPE_INTERLACE)
-			ge2d_config.src_para.height = in_buf->vf.height >> 1;
+			ge2d_config->src_para.height = in_buf->vf.height >> 1;
 		else
-			ge2d_config.src_para.height = in_buf->vf.height;
+			ge2d_config->src_para.height = in_buf->vf.height;
 
 		/* dst canvas configure. */
 		if (ge2d->work_mode & GE2D_MODE_CONVERT_RGBA) {
@@ -596,7 +602,7 @@ retry:
 		}
 
 		canvas_config_config(ctx->dev->cache.res[3].cid, &vf_out->canvas0_config[0]);
-		if ((ge2d_config.src_para.format & 0xfffff) == GE2D_FORMAT_M24_YUV420) {
+		if ((ge2d_config->src_para.format & 0xfffff) == GE2D_FORMAT_M24_YUV420) {
 			vf_out->canvas0_config[1].width <<= 1;
 			vf_out->plane_num = 2;
 		}
@@ -607,40 +613,40 @@ retry:
 
 		canvas_config_config(ctx->dev->cache.res[4].cid, &vf_out->canvas0_config[1]);
 		canvas_config_config(ctx->dev->cache.res[5].cid, &vf_out->canvas0_config[2]);
-		ge2d_config.dst_para.canvas_index =
+		ge2d_config->dst_para.canvas_index =
 			ctx->dev->cache.res[3].cid |
 			ctx->dev->cache.res[4].cid << 8;
 		canvas_read(ctx->dev->cache.res[3].cid, &cd);
-		ge2d_config.dst_planes[0].addr	= cd.addr;
-		ge2d_config.dst_planes[0].w	= cd.width;
-		ge2d_config.dst_planes[0].h	= cd.height;
+		ge2d_config->dst_planes[0].addr	= cd.addr;
+		ge2d_config->dst_planes[0].w	= cd.width;
+		ge2d_config->dst_planes[0].h	= cd.height;
 		canvas_read(ctx->dev->cache.res[4].cid, &cd);
-		ge2d_config.dst_planes[1].addr	= cd.addr;
-		ge2d_config.dst_planes[1].w	= cd.width;
-		ge2d_config.dst_planes[1].h	= cd.height;
+		ge2d_config->dst_planes[1].addr	= cd.addr;
+		ge2d_config->dst_planes[1].w	= cd.width;
+		ge2d_config->dst_planes[1].h	= cd.height;
 
-		ge2d_config.dst_para.format	=  dst_fmt;
-		ge2d_config.dst_para.width	= in_buf->vf.width;
-		ge2d_config.dst_para.height	= in_buf->vf.height;
-		ge2d_config.dst_para.mem_type	= CANVAS_TYPE_INVALID;
-		ge2d_config.dst_para.fill_color_en = 0;
-		ge2d_config.dst_para.fill_mode	= 0;
-		ge2d_config.dst_para.x_rev	= 0;
-		ge2d_config.dst_para.y_rev	= 0;
-		ge2d_config.dst_para.color	= 0;
-		ge2d_config.dst_para.top	= 0;
-		ge2d_config.dst_para.left	= 0;
+		ge2d_config->dst_para.format	=  dst_fmt;
+		ge2d_config->dst_para.width	= in_buf->vf.width;
+		ge2d_config->dst_para.height	= in_buf->vf.height;
+		ge2d_config->dst_para.mem_type	= CANVAS_TYPE_INVALID;
+		ge2d_config->dst_para.fill_color_en = 0;
+		ge2d_config->dst_para.fill_mode	= 0;
+		ge2d_config->dst_para.x_rev	= 0;
+		ge2d_config->dst_para.y_rev	= 0;
+		ge2d_config->dst_para.color	= 0;
+		ge2d_config->dst_para.top	= 0;
+		ge2d_config->dst_para.left	= 0;
 
 		/* other ge2d parameters configure. */
-		ge2d_config.src_key.key_enable	= 0;
-		ge2d_config.src_key.key_mask	= 0;
-		ge2d_config.src_key.key_mode	= 0;
-		ge2d_config.alu_const_color	= 0;
-		ge2d_config.bitmask_en		= 0;
-		ge2d_config.src1_gb_alpha	= 0;
-		ge2d_config.dst_xy_swap		= 0;
-		ge2d_config.src2_para.mem_type	= CANVAS_TYPE_INVALID;
-		ge2d_config.mem_sec	= ctx->is_drm_mode ? 1 : 0;
+		ge2d_config->src_key.key_enable	= 0;
+		ge2d_config->src_key.key_mask	= 0;
+		ge2d_config->src_key.key_mode	= 0;
+		ge2d_config->alu_const_color	= 0;
+		ge2d_config->bitmask_en		= 0;
+		ge2d_config->src1_gb_alpha	= 0;
+		ge2d_config->dst_xy_swap		= 0;
+		ge2d_config->src2_para.mem_type	= CANVAS_TYPE_INVALID;
+		ge2d_config->mem_sec	= ctx->is_drm_mode ? 1 : 0;
 
 		vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_3,
 			in_buf->aml_vb->aml_buf->index);
@@ -666,7 +672,7 @@ retry:
 			kfifo_len(&ge2d->in_done_q),
 			kfifo_len(&ge2d->out_done_q));
 
-		if (ge2d_context_config_ex(ge2d->ge2d_context, &ge2d_config) < 0) {
+		if (ge2d_context_config_ex(ge2d->ge2d_context, ge2d_config) < 0) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 				"ge2d_context_config_ex error.\n");
 			mutex_unlock(&ctx->dev->cache.lock);
@@ -698,6 +704,7 @@ exit:
 	while (!kthread_should_stop()) {
 		usleep_range(1000, 2000);
 	}
+	kfree(ge2d_config);
 
 	v4l_dbg(ctx, V4L_DEBUG_GE2D_DETAIL, "exit ge2d thread\n");
 
