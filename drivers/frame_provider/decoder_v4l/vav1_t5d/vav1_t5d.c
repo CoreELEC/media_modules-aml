@@ -598,6 +598,8 @@ static void av1_work_implement(struct AV1HW_s *hw);
 u32 fg_dump_index = 0xff;
 #endif
 
+static DEFINE_PER_CPU(unsigned char, av1_print_buf)[HEVC_PRINT_BUF];
+
 #ifdef AOM_AV1_DBLK_INIT
 struct loop_filter_info_n_s;
 struct loopfilter;
@@ -915,7 +917,7 @@ static void av1_dump_state(struct vdec_s *vdec);
 int av1_debug(struct AV1HW_s *hw,
 	int flag, const char *fmt, ...)
 {
-	unsigned char buf[HEVC_PRINT_BUF];
+	unsigned char *buf = get_cpu_var(av1_print_buf);
 	int len = 0;
 
 	if (hw == NULL ||
@@ -927,9 +929,11 @@ int av1_debug(struct AV1HW_s *hw,
 		if (hw)
 			len = sprintf(buf, "[%d]", hw->index);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
 		va_end(args);
+		pr_info("%s", buf);
 	}
+	put_cpu_var(av1_print_buf);
+
 	return 0;
 }
 
@@ -954,7 +958,7 @@ unsigned char av1_is_debug(int flag)
 
 int av1_print2(int flag, const char *fmt, ...)
 {
-	unsigned char buf[HEVC_PRINT_BUF];
+	unsigned char *buf = get_cpu_var(av1_print_buf);
 	int len = 0;
 
 	if ((flag == 0) ||
@@ -963,9 +967,11 @@ int av1_print2(int flag, const char *fmt, ...)
 
 		va_start(args, fmt);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
 		va_end(args);
+		pr_info("%s", buf);
 	}
+	put_cpu_var(av1_print_buf);
+
 	return 0;
 }
 
@@ -992,7 +998,7 @@ static inline bool close_to(int a, int b, int m)
 static int av1_print_cont(struct AV1HW_s *hw,
 	int flag, const char *fmt, ...)
 {
-	unsigned char buf[HEVC_PRINT_BUF];
+	unsigned char *buf = get_cpu_var(av1_print_buf);
 	int len = 0;
 
 	if (hw == NULL ||
@@ -1002,9 +1008,11 @@ static int av1_print_cont(struct AV1HW_s *hw,
 
 		va_start(args, fmt);
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
-		pr_info("%s", buf);
 		va_end(args);
+		pr_info("%s", buf);
 	}
+	put_cpu_var(av1_print_buf);
+
 	return 0;
 }
 
