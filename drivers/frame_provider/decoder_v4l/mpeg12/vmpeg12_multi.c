@@ -3649,21 +3649,23 @@ static int vmmpeg12_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	struct vdec_mpeg12_hw_s *hw =
 	(struct vdec_mpeg12_hw_s *)vdec->private;
+	int vf_dur = vdec_get_vf_dur();
 
 	if (!hw)
 		return -1;
 
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
-	if (hw->frame_dur != 0)
-		vstatus->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
-		                    96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
+	vf_dur = vf_dur ? vf_dur: hw->frame_dur;
+	if (vf_dur != 0)
+		vstatus->frame_rate = ((96000 * 10 / vf_dur) % 10) < 5 ?
+			96000 / vf_dur : (96000 / vf_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(AV_SCRATCH_C);
 	vstatus->status = hw->stat;
 	vstatus->bit_rate = hw->gvs.bit_rate;
-	vstatus->frame_dur = hw->frame_dur;
+	vstatus->frame_dur = vf_dur;
 	vstatus->frame_data = hw->gvs.frame_data;
 	vstatus->total_data = hw->gvs.total_data;
 	vstatus->frame_count = hw->gvs.frame_count;

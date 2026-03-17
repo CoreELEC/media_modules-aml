@@ -14377,21 +14377,23 @@ int vh265_dec_status(struct vdec_info *vstatus)
 #else
 	struct hevc_state_s *hevc = gHevc;
 #endif
+	int vf_dur = vdec_get_vf_dur();
 	if (!hevc)
 		return -1;
 
 	vstatus->frame_width = hevc->crop_w;
 	/* for hevc interlace for disp height x2 */
 	vstatus->frame_height = (hevc->crop_h << hevc->interlace_flag);
-	if (hevc->frame_dur != 0)
-		vstatus->frame_rate = ((96000 * 10 / hevc->frame_dur) % 10) < 5 ?
-				96000 / hevc->frame_dur : (96000 / hevc->frame_dur +1);
+	vf_dur = vf_dur ? vf_dur : hevc->frame_dur;
+	if (vf_dur != 0)
+		vstatus->frame_rate = ((96000 * 10 / vf_dur) % 10) < 5 ?
+				96000 / vf_dur : (96000 / vf_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = hevc->gvs->error_frame_count;
 	vstatus->status = hevc->stat | hevc->fatal_error;
 	vstatus->bit_rate = hevc->gvs->bit_rate;
-	vstatus->frame_dur = hevc->frame_dur;
+	vstatus->frame_dur = vf_dur;
 	if (hevc->gvs) {
 		vstatus->bit_rate = hevc->gvs->bit_rate;
 		vstatus->frame_data = hevc->gvs->frame_data;

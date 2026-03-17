@@ -7210,6 +7210,7 @@ int vavs2_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
+	int vf_dur = vdec_get_vf_dur();
 
 	if (!dec)
 		return -1;
@@ -7217,14 +7218,15 @@ int vavs2_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->frame_width = dec->frame_width;
 	vstatus->frame_height = dec->frame_height;
 
-	if (dec->frame_dur != 0)
-		vstatus->frame_rate = ((96000 * 10 / dec->frame_dur) % 10) < 5 ?
-			96000 / dec->frame_dur : (96000 / dec->frame_dur +1);
+	vf_dur = vf_dur ? vf_dur : dec->frame_dur;
+	if (vf_dur != 0)
+		vstatus->frame_rate = ((96000 * 10 / vf_dur) % 10) < 5 ?
+			96000 / vf_dur : (96000 / vf_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
 	vstatus->status = dec->stat | dec->fatal_error;
-	vstatus->frame_dur = dec->frame_dur;
+	vstatus->frame_dur = vf_dur;
 	vstatus->bit_rate = dec->gvs->bit_rate;
 	vstatus->frame_data = dec->gvs->frame_data;
 	vstatus->total_data = dec->gvs->total_data;

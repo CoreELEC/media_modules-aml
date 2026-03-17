@@ -9287,6 +9287,7 @@ int vh266_dec_status(struct vdec_info *vstatus)
 #endif
 	struct vdec_info_statistic_s *vstatistic = container_of(
 		vstatus, struct vdec_info_statistic_s, vstatus);
+	int vf_dur = vdec_get_vf_dur();
 	if (!hevc || !vstatistic) {
 		pr_info("param invalid!\n");
 		return -1;
@@ -9296,9 +9297,10 @@ int vh266_dec_status(struct vdec_info *vstatus)
 	/* for hevc interlace for disp height x2 */
 	vstatus->frame_height =
 		(hevc->crop_h << hevc->interlace_flag);
-	if (hevc->frame_dur != 0)
-		vstatus->frame_rate = ((96000 * 10 / hevc->frame_dur) % 10) < 5 ?
-				96000 / hevc->frame_dur : (96000 / hevc->frame_dur +1);
+	vf_dur = vf_dur ? vf_dur : hevc->frame_dur;
+	if (vf_dur != 0)
+		vstatus->frame_rate = ((96000 * 10 / vf_dur) % 10) < 5 ?
+				96000 / vf_dur : (96000 / vf_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = hevc->gvs->error_frame_count;
@@ -9310,7 +9312,7 @@ int vh266_dec_status(struct vdec_info *vstatus)
 	}
 
 	vstatus->bit_rate = hevc->gvs->bit_rate;
-	vstatus->frame_dur = hevc->frame_dur;
+	vstatus->frame_dur = vf_dur;
 	if (hevc->gvs) {
 		vstatus->bit_rate = hevc->gvs->bit_rate;
 		vstatus->frame_data = hevc->gvs->frame_data;

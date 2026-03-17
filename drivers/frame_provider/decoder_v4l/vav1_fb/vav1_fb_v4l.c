@@ -10648,20 +10648,22 @@ int vav1_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	struct AV1HW_s *av1 =
 		(struct AV1HW_s *)vdec->private;
+	int vf_dur = vdec_get_vf_dur();
 
 	if (!av1)
 		return -1;
 
 	vstatus->frame_width = frame_width;
 	vstatus->frame_height = frame_height;
-	if (av1->frame_dur != 0)
-		vstatus->frame_rate = 96000 / av1->frame_dur;
+	vf_dur = vf_dur ? vf_dur : av1->frame_dur;
+	if (vf_dur != 0)
+		vstatus->frame_rate = 96000 / vf_dur;
 	else
 		vstatus->frame_rate = -1;
 	vstatus->bit_rate = av1->gvs->bit_rate;
 	vstatus->error_count = 0;
 	vstatus->status = av1->stat | av1->fatal_error;
-	vstatus->frame_dur = av1->frame_dur;
+	vstatus->frame_dur = vf_dur;
 	vstatus->bit_rate = av1->gvs->bit_rate;
 	vstatus->frame_data = av1->gvs->frame_data;
 	vstatus->total_data = av1->gvs->total_data;

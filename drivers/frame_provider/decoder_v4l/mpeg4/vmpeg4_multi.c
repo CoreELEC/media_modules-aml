@@ -2341,21 +2341,23 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	struct vdec_mpeg4_hw_s *hw =
 		(struct vdec_mpeg4_hw_s *)vdec->private;
+	int vf_dur = vdec_get_vf_dur();
 
 	if (!hw)
 		return -1;
 
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
-	if (0 != hw->vmpeg4_amstream_dec_info.rate)
-		vstatus->frame_rate = ((DURATION_UNIT * 10 / hw->vmpeg4_amstream_dec_info.rate) % 10) < 5 ?
-		DURATION_UNIT / hw->vmpeg4_amstream_dec_info.rate : (DURATION_UNIT / hw->vmpeg4_amstream_dec_info.rate +1);
+	vf_dur = vf_dur ? vf_dur : hw->frame_dur;
+	if (0 != vf_dur)
+		vstatus->frame_rate = ((DURATION_UNIT * 10 / vf_dur) % 10) < 5 ?
+		DURATION_UNIT / vf_dur : (DURATION_UNIT / vf_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(MP4_ERR_COUNT);
 	vstatus->status = hw->stat;
 	vstatus->bit_rate = hw->bit_rate;
-	vstatus->frame_dur = hw->frame_dur;
+	vstatus->frame_dur = vf_dur ? vf_dur : hw->frame_dur;
 	vstatus->error_frame_count = READ_VREG(MP4_ERR_COUNT);
 	vstatus->drop_frame_count = hw->drop_frame_count;
 	vstatus->frame_count =hw->frame_num;

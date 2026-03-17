@@ -2687,20 +2687,22 @@ static int vvc1_event_cb(int type, void *data, void *private_data)
 int vvc1_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	struct vdec_vc1_hw_s *hw = (struct vdec_vc1_hw_s *)vdec->private;
+	int vf_dur = vdec_get_vf_dur();
 
 	if (!(hw->stat & STAT_VDEC_RUN))
 		return -1;
 
 	vstatus->frame_width = hw->vvc1_amstream_dec_info.width;
 	vstatus->frame_height = hw->vvc1_amstream_dec_info.height;
-	if (hw->vvc1_amstream_dec_info.rate != 0)
-		vstatus->frame_rate = 96000 / hw->vvc1_amstream_dec_info.rate;
+	vf_dur = vf_dur ? vf_dur : hw->frame_dur;
+	if (vf_dur != 0)
+		vstatus->frame_rate = 96000 / vf_dur;
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(AV_SCRATCH_C);
 	vstatus->status = hw->stat;
 	vstatus->bit_rate = hw->gvs->bit_rate;
-	vstatus->frame_dur = hw->vvc1_amstream_dec_info.rate;
+	vstatus->frame_dur = vf_dur;
 	vstatus->frame_data = hw->gvs->frame_data;
 	vstatus->total_data = hw->gvs->total_data;
 	vstatus->frame_count = hw->gvs->frame_count;

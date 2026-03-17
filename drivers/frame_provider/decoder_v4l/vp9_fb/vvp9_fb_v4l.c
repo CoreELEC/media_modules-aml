@@ -12725,6 +12725,7 @@ int vvp9_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	struct VP9Decoder_s *vp9 =
 		(struct VP9Decoder_s *)vdec->private;
+	int vf_dur = vdec_get_vf_dur();
 
 	if (!vp9)
 		return -1;
@@ -12737,14 +12738,15 @@ int vvp9_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 		vstatus->frame_height = vp9->error_frame_height;
 	}
 
-	if (vp9->frame_dur != 0)
-		vstatus->frame_rate = ((96000 * 10 / vp9->frame_dur) % 10) < 5 ?
-				96000 / vp9->frame_dur : (96000 / vp9->frame_dur +1);
+	vf_dur = vf_dur ? vf_dur : vp9->frame_dur;
+	if (vf_dur != 0)
+		vstatus->frame_rate = ((96000 * 10 / vf_dur) % 10) < 5 ?
+				96000 / vf_dur : (96000 / vf_dur +1);
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
 	vstatus->status = vp9->stat | vp9->fatal_error;
-	vstatus->frame_dur = vp9->frame_dur;
+	vstatus->frame_dur = vf_dur;
 	vstatus->bit_rate = vp9->gvs->bit_rate;
 	vstatus->frame_data = vp9->gvs->frame_data;
 	vstatus->total_data = vp9->gvs->total_data;

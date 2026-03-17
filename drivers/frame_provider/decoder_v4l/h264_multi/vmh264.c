@@ -10422,6 +10422,7 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	u32 ar, ar_tmp;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	int vf_dur = vdec_get_vf_dur();
 
 	if (!hw)
 		return -1;
@@ -10434,11 +10435,11 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 		vstatus->frame_height = hw->error_frame_height;
 	}
 
-	hw->frame_dur = hw->v4l_duration ? hw->v4l_duration : hw->frame_dur;
-	if (hw->frame_dur != 0) {
-		vstatus->frame_dur = hw->frame_dur;
-		vstatus->frame_rate = ((96000 * 10 / hw->frame_dur) % 10) < 5 ?
-		                    96000 / hw->frame_dur : (96000 / hw->frame_dur +1);
+	vf_dur = vf_dur ? vf_dur : hw->v4l_duration ? hw->v4l_duration : hw->frame_dur;
+	if (vf_dur != 0) {
+		vstatus->frame_dur = vf_dur;
+		vstatus->frame_rate = ((96000 * 10 / vf_dur) % 10) < 5 ?
+			96000 / vf_dur : (96000 / vf_dur +1);
 	}
 	else
 		vstatus->frame_rate = -1;

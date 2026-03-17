@@ -930,14 +930,16 @@ static int vmjpeg_vf_states(struct vframe_states *states, void *op_arg)
 static int vmjpeg_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 {
 	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)vdec->private;
+	int vf_dur = vdec_get_vf_dur();
 
 	if (!hw)
 		return -1;
 
 	vstatus->frame_width = hw->frame_width;
 	vstatus->frame_height = hw->frame_height;
-	if (0 != hw->frame_dur)
-		vstatus->frame_rate = 96000 / hw->frame_dur;
+	vf_dur = vf_dur ? vf_dur : hw->frame_dur;
+	if (0 != vf_dur)
+		vstatus->frame_rate = 96000 / vf_dur;
 	else
 		vstatus->frame_rate = 96000;
 	vstatus->error_count = 0;
