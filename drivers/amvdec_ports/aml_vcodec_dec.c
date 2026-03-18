@@ -1554,6 +1554,7 @@ ssize_t aml_vdec_basic_information(struct aml_vcodec_ctx *ctx, char *buf)
 	pbuf += sprintf(pbuf, "\n==== Show Basic Information ==== \n");
 	pbuf += sprintf(pbuf, "Format     : %s\n", outq->fmt->name);
 	pbuf += sprintf(pbuf, "Color space: %s\n", capq->fmt->name);
+	pbuf += sprintf(pbuf, "V4l2/Vdec id: %d/%d\n", ctx->id, ctx->ada_ctx->vdec->id);
 	/*
 	 * The variable pic is initialised in vdec_if_get_param.
 	 */
@@ -1567,14 +1568,15 @@ ssize_t aml_vdec_basic_information(struct aml_vcodec_ctx *ctx, char *buf)
 		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
 		ctx->picinfo.dpb_margin, CTX_BUF_TOTAL(ctx));
 
-	pbuf += sprintf(pbuf, "Config     : DW/TW:(0x%x, 0x%x), drm:%d, byp:%d, lc:%d, nr:%d, ge2d:%x\n",
+	pbuf += sprintf(pbuf, "Config     : DW/TW:(0x%x, 0x%x), drm:%d, byp:%d, lc:%d, nr:%d, ge2d:%x, DI-post:%d\n",
 		dw_mode,
 		tw_mode,
 		ctx->is_drm_mode,
 		ctx->vpp_cfg.is_bypass_p,
 		ctx->vpp_cfg.enable_local_buf,
 		ctx->vpp_cfg.enable_nr,
-		ctx->ge2d_cfg.mode);
+		ctx->ge2d_cfg.mode,
+		ctx->enable_di_post);
 	pbuf += sprintf(pbuf, "write frames : %d, out_buff : %d in_buff : %d checkin : %u\n",
 		ctx->write_frames, ctx->out_buff_cnt, ctx->in_buff_cnt, ctx->bm.bc.checkin_num - ctx->bm.bc.checkout_num);
 
@@ -1591,7 +1593,7 @@ ssize_t aml_buffer_status(struct aml_vcodec_ctx *ctx, char *buf)
 
 	q = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 	if (!q->streaming) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 			"can't achieve buffers status before start streaming.\n");
 	}
 
@@ -3015,7 +3017,7 @@ static int aml_es_ref_que(struct aml_es_mgr *stmgr, struct dma_buf *dbuf,
 
 	/* 1.Get stbuf from free pool. */
 	if (!kfifo_get(&stmgr->free_q, &elem)) {
-		v4l_dbg(stmgr->ctx, 0, "Get elem from free queue fail.\n");
+		v4l_dbg(stmgr->ctx, V4L_DEBUG_CODEC_INPUT, "Get elem from free queue fail.\n");
 		return -EBADSLT;
 	}
 
