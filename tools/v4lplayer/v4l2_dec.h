@@ -56,5 +56,6 @@ int v4l2_dec_frame_done();
 int capture_buffer_recycle(void* handle);
 int v4l2_dec_eos();
 void dump_v4l2_decode_state();
+void set_vc1_subformat(int format);
 
 #endif

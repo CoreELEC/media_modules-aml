@@ -1154,6 +1154,8 @@ static void usage()
 	printf("\t bit:1  play_mode: 0 for frame mode , 1 for stream mode\n");
 	printf(" -h, --help,   usage\n");
 	printf("example : v4lplayer -f 2 -d 16 -i /data/h264.es -s /data/h264.fsz\n");
+	printf("--subformat, additional arg for vc1 video\n");
+	printf("\t0: WMV3 video\t1: WVC1 video\n");
 }
 
 static const char short_options[] = "i:s:d:f:l:o:n:p:m:h";
@@ -1170,6 +1172,7 @@ long_options[] = {
 	{ "help",   no_argument,       NULL, 'h' },
 	{ "mem_and_mode", required_argument, NULL, 'm' },
 	{ "pix_fmt",  required_argument, NULL, 'p' },
+	{ "subformat", required_argument, NULL, 0 },
 	{ 0, 0, 0, 0 }
 };
 
@@ -1188,6 +1191,16 @@ static int parse_para(int argc, char *argv[])
 
 		switch (c) {
 			case 0: /* getopt_long() flag */
+				if (strcmp(long_options[idx].name, "subformat") == 0) {
+					value = atoi(optarg);
+					if (!(value == 0 || value == 1)) {
+						debug_print(DEBUG_ERROR, "invalid subformat %d\n",
+							value);
+
+						exit(EXIT_FAILURE);
+					}
+					set_vc1_subformat(value);
+				}
 				break;
 			case 'l':
 				g_log_level = atoi(optarg);

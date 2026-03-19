@@ -176,11 +176,19 @@ static enum vformat_e v4l2_fourcc_to_vtype(uint32_t fourcc) {
 		case V4L2_PIX_FMT_AVS3:
 			return VFORMAT_AVS3;
 		case V4L2_PIX_FMT_VC1_ANNEX_G:
+		case V4L2_PIX_FMT_VC1_ANNEX_L:
 			return VFORMAT_VC1;
 		case V4L2_PIX_FMT_H266:
 			return VFORMAT_H266;
 	}
 	return VFORMAT_MAX;
+}
+
+static VC1_SUBFORMAT vc1_subformat = VC1_SUBFORMAT_INVALID;
+
+void set_vc1_subformat(int format)
+{
+	vc1_subformat = format;
 }
 
 #define V4L2_CID_USER_AMLOGIC_BASE (V4L2_CID_USER_BASE + 0x1100)
@@ -1520,6 +1528,19 @@ int config_sys_node(const char* path, const char* value)
 	return 0;
 }
 
+static int subformat_to_v4l2_fourcc(VC1_SUBFORMAT subformat)
+{
+	switch (subformat) {
+		case VC1_WMV3:
+			return V4L2_PIX_FMT_VC1_ANNEX_G;
+		case VC1_WVC1:
+			return V4L2_PIX_FMT_VC1_ANNEX_L;
+		default:
+			debug_print(DEBUG_ERROR, "invalid subformat %d\n", subformat);
+			return 0;
+	}
+}
+
 int v4l2_dec_init(enum vformat_e type, decode_finish_fn cb)
 {
 	int ret = -1;
@@ -1576,6 +1597,9 @@ int v4l2_dec_init(enum vformat_e type, decode_finish_fn cb)
 		if (v4l2_fourcc_to_vtype(fdesc.pixelformat) == type) {
 			supported = true;
 			output_p.pixelformat = fdesc.pixelformat;
+			if (type == VFORMAT_VC1) {
+				output_p.pixelformat = subformat_to_v4l2_fourcc(vc1_subformat);
+			}
 			break;
 		}
 		fdesc.index++;
@@ -1585,8 +1609,7 @@ int v4l2_dec_init(enum vformat_e type, decode_finish_fn cb)
 		goto error;
 	}
 
-	/* VC1 need set stream mode*/
-	if (type == VFORMAT_VC1 || g_play_mode == V4LPLAYER_STREAM_MODE) {
+	if (g_play_mode == V4LPLAYER_STREAM_MODE) {
 	    struct v4l2_queryctrl queryctrl;
 	    struct v4l2_control control;
 

@@ -96,6 +96,11 @@ enum v4lplayer_mem_type {
 	V4LPLAYER_MEM_TYPE_DMA = 1,
 };
 
+typedef enum {
+	VC1_SUBFORMAT_INVALID = -1,
+	VC1_WMV3,
+	VC1_WVC1,
+} VC1_SUBFORMAT;
 
 int debug_print(int flag, const char *fmt, ...);
 uint32_t crc32_le(uint32_t crc, unsigned char const *p, int len);

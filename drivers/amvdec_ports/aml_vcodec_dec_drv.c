@@ -1022,6 +1022,7 @@ static struct param_entry amvdec_ports_params[] = {
 	PARAM_BOOL(param_sets_from_ucode),
 	PARAM_BOOL(enable_drm_mode),
 	PARAM_INT(bypass_vpp),
+	PARAM_INT(force_nv12),
 	PARAM_INT(bypass_ge2d),
 	PARAM_INT(ge2d_mode),
 	PARAM_INT(disable_avbcd),
