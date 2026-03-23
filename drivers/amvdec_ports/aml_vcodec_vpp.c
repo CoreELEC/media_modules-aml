@@ -1248,7 +1248,10 @@ int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp)
 		cancel_work_sync(&vpp->worker);
 		up(&vpp->sem_in);
 		up(&vpp->sem_out);
-		kthread_stop(vpp->task);
+		if (vpp->task) {
+			kthread_stop(vpp->task);
+			vpp->task = NULL;
+		}
 	}
 
 	kfifo_reset(&vpp->input);
@@ -1281,12 +1284,13 @@ int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp)
 	sema_init(&vpp->sem_in, 0);
 	sema_init(&vpp->sem_out, 0);
 
+	vpp->running = true;
 	vpp->task = kthread_run(aml_v4l2_vpp_thread, vpp,
 		"%s", "aml-v4l2-vpp");
 	if (IS_ERR(vpp->task)) {
+		vpp->running = false;
 		return PTR_ERR(vpp->task);
 	}
-	vpp->running = true;
 
 	sched_setscheduler_nocheck(vpp->task, SCHED_FIFO, &param);
 
@@ -1485,13 +1489,15 @@ int aml_v4l2_vpp_init(
 	sema_init(&vpp->sem_out, 0);
 	atomic_set(&vpp->local_buf_out, 0);
 
+	vpp->running = true;
 	vpp->task = kthread_run(aml_v4l2_vpp_thread, vpp,
 		"aml-%s", "aml-v4l2-vpp");
 	if (IS_ERR(vpp->task)) {
+		vpp->running = false;
 		ret = PTR_ERR(vpp->task);
 		goto error9;
 	}
-	vpp->running = true;
+
 	sched_setscheduler_nocheck(vpp->task, SCHED_FIFO, &param);
 
 	vpp->di_ibuf_num = di_get_input_buffer_num(vpp->di_handle);
@@ -1549,7 +1555,10 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 		cancel_work_sync(&vpp->worker);
 		up(&vpp->sem_in);
 		up(&vpp->sem_out);
-		kthread_stop(vpp->task);
+		if (vpp->task) {
+			kthread_stop(vpp->task);
+			vpp->task = NULL;
+		}
 	}
 
 	if (vpp->dpss_index >= 0) {
@@ -1590,7 +1599,10 @@ int aml_v4l2_vpp_thread_stop(struct aml_v4l2_vpp* vpp)
 		vpp->running = false;
 		up(&vpp->sem_in);
 		up(&vpp->sem_out);
-		kthread_stop(vpp->task);
+		if (vpp->task) {
+			kthread_stop(vpp->task);
+			vpp->task = NULL;
+		}
 	}
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_DETAIL,
