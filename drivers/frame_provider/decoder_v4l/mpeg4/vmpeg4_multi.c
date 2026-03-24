@@ -2631,7 +2631,8 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 		WRITE_VREG(HEVCD_MPP_VDEC_MCR_CTL, (1 << 4) | 1);
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 1 << 31);
 
-		WRITE_VREG(HEVCD_IPP_TOP_FRMCONFIG, (hw->frame_height << 16 | hw->frame_width));
+		WRITE_VREG(HEVCD_IPP_TOP_FRMCONFIG,
+			(ALIGN(hw->frame_height, 16) << 16 | ALIGN(hw->frame_width, 16)));
 		WRITE_VREG(HEVCD_MCR_FIXSIZE_CFG, ((1 << 15) | canvas_width));
 		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 18);
 	}
