@@ -4140,6 +4140,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 		CANVAS_BLKMODE_32X32 : CANVAS_BLKMODE_LINEAR;
 #ifdef FRAME_CHECK
 	vdec_frame_check_init(vdec);
+	INIT_KFIFO(vdec->avbc_dump_q);
 #endif
 
 	/* stream buffer init. */
@@ -8281,6 +8282,7 @@ static CLASS_ATTR_RW(pxp_buf);
 static CLASS_ATTR_RW(vdec_vfm_path);
 #ifdef FRAME_CHECK
 static CLASS_ATTR_RW(dump_yuv);
+static CLASS_ATTR_RW(dump_avbc);
 static CLASS_ATTR_RW(frame_check);
 #endif
 #ifdef AUX_DATA_CRC
@@ -8318,6 +8320,7 @@ static struct attribute *vdec_class_attrs[] = {
 	&class_attr_vdec_vfm_path.attr,
 #ifdef FRAME_CHECK
 	&class_attr_dump_yuv.attr,
+	&class_attr_dump_avbc.attr,
 	&class_attr_frame_check.attr,
 #endif
 #ifdef AUX_DATA_CRC

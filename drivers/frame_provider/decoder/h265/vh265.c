@@ -10983,6 +10983,11 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				__func__);
 		}
 
+		if (vdec->avbc_dump_enable &&
+			((vf->index & 0xff) != 0xff)) {
+			hevc->m_PIC[vf->index & 0xff]->vf_ref++;
+			kfifo_put(&vdec->avbc_dump_q, (const struct vframe_s *)vf);
+		}
 		if (without_display_mode == 0) {
 			vf_notify_receiver(hevc->provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -15615,6 +15620,21 @@ done_end:
 		}
 	}
 
+	if (vdec->avbc_dump_enable) {
+		struct vframe_s *vf = NULL;
+		while (kfifo_get(&vdec->avbc_dump_q, &vf)) {
+			if (vf) {
+				decoder_do_avbc_check(vdec, vf);
+				hevc->m_PIC[vf->index & 0xff]->vf_ref--;
+				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"%s:avbc dump buf_index:%d\n",
+					__func__, vf->index & 0xff);
+			} else {
+				hevc_print(hevc, 0, "%s:avbc dump err vf:0x%x\n",
+					__func__, vf);
+			}
+		}
+	}
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	if (hevc->switch_dvlayer_flag) {
 		if (vdec->slave)

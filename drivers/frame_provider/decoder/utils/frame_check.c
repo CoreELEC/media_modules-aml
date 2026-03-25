@@ -52,6 +52,7 @@
 #include <asm/cacheflush.h>
 #include <linux/fs.h>
 #include "../../../common/media_utils/media_utils.h"
+#include "decoder_dma_alloc.h"
 
 #define FC_ERROR	0x0
 
@@ -63,10 +64,12 @@
 #define FC_CHECK_CRC_LOOP_MODE	0x20
 #define AD_CHECK_CRC_LOOP_MODE	0x40
 #define DUMP_YUV_LOOP_MODE	0x200
+#define DUMP_AVBC_LOOP_MODE	0x2000
 
 #define YUV_MASK	0x01
 #define CRC_MASK	0x02
 #define AUX_MASK	0x04
+#define AVBC_MASK	0x08
 
 
 #define MAX_YUV_SIZE (4096 * 2304)
@@ -74,6 +77,14 @@
 #define YUV_DEF_NUM	 1
 
 #define MAX_SIZE_AFBC_PLANES 	(4096 * 2048)
+#define MAX_FRAME_4K_NUM 0x1200
+#define MAX_FRAME_1080P_NUM 0x900
+
+#define MAX_COMPRESS_HEADER_SIZE_4K  0x48000
+#define MAX_COMPRESS_BODY_SIZE_4K (MAX_FRAME_4K_NUM * 4096)
+#define MAX_COMPRESS_HEADER_SIZE_1080P  0x10000
+#define MAX_COMPRESS_BODY_SIZE_1080P (MAX_FRAME_1080P_NUM * 4096)
+
 
 #define VMAP_STRIDE_SIZE  (1024*1024)
 
@@ -93,10 +104,12 @@ static char aux_comp_crc[128] = "aux";
 
 static struct vdec_s *single_mode_vdec = NULL;
 
-static unsigned int yuv_enable, check_enable;
+static unsigned int yuv_enable, check_enable, avbc_enable;
 extern unsigned int aux_enable;
 static unsigned int yuv_start[MAX_INSTANCE_MUN];
 static unsigned int yuv_num[MAX_INSTANCE_MUN];
+static unsigned int avbc_start[MAX_INSTANCE_MUN];
+static unsigned int avbc_num[MAX_INSTANCE_MUN];
 
 #define CHECKSUM_PATH  "/data/local/tmp/"
 extern char checksum_info[128] ;
@@ -722,6 +735,85 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 	return 0;
 }
 
+static int do_avbc_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
+{
+	int ret = 0, i = 0;
+	u32 mbw = 0, mbh = 0, mb_count = 0, header_size = 0, max_page_num = 0;
+	u32 use_page_num = 0;
+	struct pic_dump_t *dump = &mgr->pic_dump;
+	struct mmu_copy_params params = {0};
+	u32 *map = (u32 *)dump->frame_mmu_map_addr;
+	u32 dump_buf_size = 0;
+	dma_addr_t mmu_copy_buf_start = 0;
+
+	if (dump->avbc_start > 0) {
+		dump->avbc_start--;
+		return 0;
+	}
+
+	if (dump->avbc_dump_cnt >= dump->avbc_num) {
+		mgr->enable &= (~AVBC_MASK);
+		dump->avbc_num = 0;
+		dump->avbc_dump_cnt = 0;
+		return 0;
+	}
+
+	if (!vf)
+		return -EINVAL;
+
+	mbw = (vf->compWidth + 31) / 32;
+	mbh = (vf->compHeight + 3) / 4;
+	mb_count = mbw * mbh;
+	header_size = ((mb_count * 4) + 4095) / 4096 * 4096;
+
+	params.pic_w = vf->compWidth;
+	params.pic_h = vf->compHeight;
+	params.x_location = 0;
+	params.y_location = 0;
+	params.err_width = vf->compWidth;
+	params.err_height = vf->compHeight;
+
+	mmu_copy_buf_start = header_size + dump->avbc_buf_phy_addr;
+	if (hevc_is_support_4k()) {
+		max_page_num = MAX_FRAME_4K_NUM;
+	} else {
+		max_page_num = MAX_FRAME_1080P_NUM;
+	}
+
+	dbg_print(0, "mmu_copy_buf_start 0x%llx, header_size:%d, avbc_buf_phy_addr 0x%llx 0x%llx\n",
+		mmu_copy_buf_start, header_size, dump->avbc_buf_phy_addr, dump->avbc_buf_phy_addr);
+
+	for (i = 0; i < max_page_num; i++) {
+		map[i] = (mmu_copy_buf_start + i * PAGE_SIZE) >> PAGE_SHIFT;
+
+		if (map[i] > 0x100000) {
+			dbg_print(FC_ERROR, "%s, map[%d]: %d is over 4G\n",
+				__func__, i, map[i]);
+			return -EINVAL;
+		}
+	}
+
+	params.mmu_copy_map_phy_addr = dump->frame_mmu_map_phy_addr;
+	params.mmu_copy_err_header_adr = dump->avbc_buf_phy_addr;
+	params.mmu_copy_pre_header_adr = vf->compHeadAddr;
+	mmu_copy_work(params);
+
+	use_page_num = (READ_VREG(HEVC_SAO_MMU_STATUS) >> 16) + 1;
+	dump_buf_size = header_size + (use_page_num * 4096);
+
+	dump->avbc_dump_cnt++;
+	dbg_print(0, "----->avbc dump %dst, (%d x %d) depth:%d, dec total %d\n",
+		dump->avbc_dump_cnt, vf->compWidth, vf->compHeight, vf->bitdepth, mgr->avbc_cnt);
+
+	vdec_dbg_virt_write(dump->avbc_buf_addr, dump_buf_size, mgr->id,
+		"%s_%dx%d_0x%x_%d_%d_%d.avbc", (vf->bitdepth & BITDEPTH_Y10) ?
+		"P010" : ((vf->type & VIDTYPE_VIU_NV12) ? "NV12" : "NV21"),
+		vf->compWidth, vf->compHeight, dump->avbc_buf_phy_addr, mgr->id,
+		mgr->format, mgr->avbc_cnt);
+
+	return ret;
+}
+
 static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 	int crc_y, int crc_uv)
 {
@@ -1146,7 +1238,7 @@ int __nocfi decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 		return -EFAULT;
 
 	mgr = &vdec->vfc;
-	if (!mgr->enable)
+	if ((mgr->enable & 0x7) == 0)
 		return 0;
 
 	if ((vf->type & VIDTYPE_VIU_FIELD) &&
@@ -1229,6 +1321,57 @@ int __nocfi decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 }
 EXPORT_SYMBOL(decoder_do_frame_check);
 
+
+int __nocfi decoder_do_avbc_check(struct vdec_s *vdec, struct vframe_s *vf)
+{
+	struct pic_check_mgr_t *mgr = NULL;
+	int ret = 0;
+	struct pic_dump_t *dump = NULL;
+
+	if (!vdec)
+		vdec = single_mode_vdec;
+
+	if (!vdec || !vf)
+		return -ENODEV;
+
+	if (!vdec_single(vdec) && unlikely(in_interrupt()))
+		return -EFAULT;
+
+	mgr = &vdec->vfc;
+	if ((mgr->enable & AVBC_MASK) == 0)
+		return 0;
+
+	mgr->format = vdec->format;
+
+	if  ((vf->type & VIDTYPE_SCATTER) &&
+		(mgr->enable & AVBC_MASK)) {
+		ret = do_avbc_dump(mgr, vf);
+		if ((mgr->enable & AVBC_MASK) == 0) {
+			dump = &mgr->pic_dump;
+			vdec->avbc_dump_enable = false;
+			if (dump->avbc_buf_addr) {
+				decoder_dma_free_coherent(dump->avbc_buf_handle,
+					dump->avbc_buf_size, dump->avbc_buf_addr,
+					dump->avbc_buf_phy_addr);
+				dump->avbc_buf_addr = NULL;
+				dump->avbc_buf_size = 0;
+			}
+			if (dump->frame_mmu_map_addr) {
+				decoder_dma_free_coherent(dump->frame_mmu_map_handle,
+					dump->frame_mmu_map_size, dump->frame_mmu_map_addr,
+					dump->frame_mmu_map_phy_addr);
+				dump->frame_mmu_map_addr = NULL;
+				dump->frame_mmu_map_size = 0;
+			}
+		}
+	}
+
+	mgr->avbc_cnt++;
+
+	return ret;
+}
+EXPORT_SYMBOL(decoder_do_avbc_check);
+
 int decoder_do_aux_data_check(struct vdec_s *vdec, char *aux_buffer, int size, int poc)
 {
 	struct aux_data_check_mgr_t *mgr = NULL;
@@ -1272,6 +1415,48 @@ static int dump_buf_alloc(struct pic_dump_t *dump)
 	return 0;
 }
 
+static int dump_avbc_buff_alloc(struct pic_dump_t *dump)
+{
+	u32 avbc_buf_size = 0;
+	u32 frame_mmu_map_size = 0;
+
+	if ((dump->avbc_buf_addr != NULL) &&
+		(dump->avbc_buf_size != 0))
+		return 0;
+
+	if (hevc_is_support_4k()) {
+		avbc_buf_size = MAX_COMPRESS_BODY_SIZE_4K + MAX_COMPRESS_HEADER_SIZE_4K;
+		frame_mmu_map_size = MAX_FRAME_4K_NUM * 4;
+	} else {
+		avbc_buf_size = MAX_COMPRESS_BODY_SIZE_1080P + MAX_COMPRESS_HEADER_SIZE_1080P;
+		frame_mmu_map_size = MAX_FRAME_1080P_NUM * 4;
+	}
+
+	dump->avbc_buf_addr = decoder_dma_alloc_coherent(&dump->avbc_buf_handle,
+			avbc_buf_size,
+			&dump->avbc_buf_phy_addr, "AVBC_DUMP_BUF");
+	if (dump->avbc_buf_addr == NULL) {
+		dump->avbc_buf_size = 0;
+		dbg_print(FC_ERROR, "vmalloc avbc buf failed\n");
+		return -ENOMEM;
+	}
+	dump->avbc_buf_size = avbc_buf_size;
+
+	dump->frame_mmu_map_addr = decoder_dma_alloc_coherent(&dump->frame_mmu_map_handle,
+			frame_mmu_map_size,
+			&dump->frame_mmu_map_phy_addr, "AVBC_DUMP_BUF");
+	if (dump->avbc_buf_addr == NULL) {
+		dump->frame_mmu_map_size = 0;
+		dbg_print(FC_ERROR, "vmalloc avbc frame mmu map failed\n");
+		return -ENOMEM;
+	}
+
+	dump->frame_mmu_map_size = frame_mmu_map_size;
+	dbg_print(FC_YUV_DEBUG, "%s: buf for avbc dump is alloced\n", __func__);
+
+	return 0;
+}
+
 int dump_yuv_trig(struct pic_check_mgr_t *mgr,
 	int id, int start, int num)
 {
@@ -1297,6 +1482,30 @@ int dump_yuv_trig(struct pic_check_mgr_t *mgr,
 	}
 	dbg_print(0, "dump yuv trigger, from %d to %d frame\n",
 		dump->start, dump->end);
+	return 0;
+}
+
+int dump_avbc_trig(struct pic_check_mgr_t *mgr,
+	int id, int start, int num)
+{
+	struct pic_dump_t *dump = &mgr->pic_dump;
+
+	if (!dump->avbc_num) {
+		mgr->id = id;
+		dump->avbc_start = start;
+		dump->avbc_num = num;
+		dump->avbc_end = start + num;
+		dump->avbc_dump_cnt = 0;
+		dump->avbc_fp = NULL;
+		dump_avbc_buff_alloc(dump);
+		str_strip(comp_crc);
+		set_enable(mgr, AVBC_MASK);
+	} else {
+		dbg_print(FC_ERROR, "avbc dump now, trig later\n");
+		return -EBUSY;
+	}
+	dbg_print(0, "dump avbc trigger, from %d to %d frame\n",
+		dump->avbc_start, dump->avbc_end);
 	return 0;
 }
 
@@ -1476,8 +1685,22 @@ void frame_check_exit(struct pic_check_mgr_t *mgr)
 			vfree(dump->buf_addr);
 			dump->buf_addr = NULL;
 		}
+		if (dump->avbc_buf_addr) {
+			decoder_dma_free_coherent(dump->avbc_buf_handle,
+				dump->avbc_buf_size, dump->avbc_buf_addr,
+				dump->avbc_buf_phy_addr);
+			dump->avbc_buf_addr = NULL;
+			dump->avbc_buf_size = 0;
+		}
+		if (dump->frame_mmu_map_addr) {
+			decoder_dma_free_coherent(dump->frame_mmu_map_handle,
+				dump->frame_mmu_map_size, dump->frame_mmu_map_addr,
+				dump->frame_mmu_map_phy_addr);
+			dump->frame_mmu_map_addr = NULL;
+			dump->frame_mmu_map_size = 0;
+		}
 		mgr->file_cnt++;
-		set_disable(mgr, YUV_MASK | CRC_MASK);
+		set_disable(mgr, YUV_MASK | CRC_MASK | AVBC_MASK);
 		dbg_print(FC_CRC_DEBUG, "%s end\n", __func__);
 	}
 }
@@ -1532,10 +1755,11 @@ int vdec_frame_check_init(struct vdec_s *vdec)
 	vdec->vfc.err_crc_block = 0;
 	//single_mode_vdec = (vdec_single(vdec))? vdec : NULL;
 
-	if (!check_enable && !yuv_enable)
+	if (!check_enable && !yuv_enable && !avbc_enable)
 		return 0;
 
-	vdec->canvas_mode = CANVAS_BLKMODE_LINEAR;
+	if (check_enable || yuv_enable)
+		vdec->canvas_mode = CANVAS_BLKMODE_LINEAR;
 	id = vdec->id;
 	size_yuv_buf = (YUV_DEF_SIZE * YUV_DEF_NUM);
 
@@ -1561,6 +1785,22 @@ int vdec_frame_check_init(struct vdec_s *vdec)
 			yuv_start[id] = 0;
 			yuv_enable &= ~(0x01 << id);
 		}
+	}
+
+	if (avbc_enable & (0x01 << id)) {
+		ret = dump_avbc_trig(&vdec->vfc,
+			id, avbc_start[id], avbc_num[id]);
+		if (ret < 0)
+			pr_info("dump avbc init failed\n");
+		else {
+			pr_info("dump avbc init ok, total %d\n", avbc_num[id]);
+		}
+		if ((fc_debug & DUMP_AVBC_LOOP_MODE) == 0) {
+			avbc_num[id] = 0;
+			avbc_start[id] = 0;
+			avbc_enable &= ~(0x01 << id);
+		}
+		vdec->avbc_dump_enable = true;
 	}
 
 	return ret;
@@ -1716,6 +1956,65 @@ ssize_t dump_yuv_show(KV_CLASS_CONST struct class *class,
 	}
 	pbuf += sprintf(pbuf,
 		"\nUsage: echo [id] [start] [num] > dump_yuv\n\n");
+	return pbuf - buf;
+}
+
+ssize_t dump_avbc_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct vdec_s *vdec = NULL;
+	unsigned int id = 0, num = AVBC_DUMP_NUM, start = 0;
+	int ret = -1;
+
+	ret = sscanf(buf, "%d %d %d", &id, &start, &num);
+	if (ret < 0) {
+		pr_info("%s, parse failed\n", buf);
+		return size;
+	}
+	if (num == 0) {
+		pr_info("required avbc num %d\n", num);
+		return size;
+	}
+
+	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T6X) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T6W)) {
+		pr_info("avbc dump is not supported\n");
+		return size;
+	}
+
+	vdec = vdec_get_vdec_by_id(id);
+	if (vdec == NULL) {
+		avbc_start[id] = start;
+		avbc_num[id] = num;
+		avbc_enable |= (1 << id);
+		pr_info("no connected vdec.%d now, set dump ok\n", id);
+		return size;
+	}
+
+	ret = dump_avbc_trig(&vdec->vfc, id, start, num);
+	if (ret < 0) {
+		pr_info("trigger dump avbc failed\n");
+		return size;
+	} else
+		pr_info("trigger dump avbc init ok, total %d frames\n", num);
+
+	vdec->avbc_dump_enable = true;
+	return size;
+}
+
+ssize_t dump_avbc_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf)
+{
+	int i = 0;
+	char *pbuf = buf;
+
+	for (i = 0; i < MAX_INSTANCE_MUN; i++) {
+		pbuf += pr_info("vdec.%d, start: %d, total: %d frames\n",
+			i, avbc_start[i], avbc_num[i]);
+	}
+	pbuf += sprintf(pbuf, "\nUsage: echo [id] [start] [num] > dump_avbc\n");
+	pbuf += sprintf(pbuf, "Note: AVBC dump is under development\n\n");
 	return pbuf - buf;
 }
 

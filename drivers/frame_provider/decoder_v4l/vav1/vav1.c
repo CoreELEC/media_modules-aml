@@ -7239,6 +7239,10 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			} else {
 				aml_buf_set_vframe(aml_buf, vf);
 				vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
+				if (vdec->avbc_dump_enable) {
+					aml_buf_get_ref(&v4l2_ctx->bm, aml_buf);
+					kfifo_put(&vdec->avbc_dump_q, (const struct vframe_s *)vf);
+				}
 				if (v4l2_ctx->avbcd_work_mode) {
 					put_vf_to_avbc_q(hw, vf);
 					av1_post_avbcd_task(hw);
@@ -11450,7 +11454,26 @@ static void av1_work_implement(struct AV1HW_s *hw)
 		del_timer_sync(&hw->timer);
 		hw->stat &= ~STAT_TIMER_ARM;
 	}
+
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_END);
+
+	if (vdec->avbc_dump_enable) {
+		struct vframe_s *vf = NULL;
+		struct aml_buf *aml_buf = NULL;
+		while (kfifo_get(&vdec->avbc_dump_q, &vf)) {
+			if (vf) {
+				aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+				decoder_do_avbc_check(vdec, vf);
+				aml_buf_put_ref(&ctx->bm, aml_buf);
+				av1_print(hw, PRINT_FLAG_VDEC_STATUS,
+					"%s:avbc dump buf_index:%d aml_buf:0x%x\n",
+					__func__, vf->index & 0xff, aml_buf);
+			} else {
+				av1_print(hw, 0, "%s:avbc dump err vf:0x%x\n",
+					__func__, vf);
+			}
+		}
+	}
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(vdec, CORE_MASK_HEVC);

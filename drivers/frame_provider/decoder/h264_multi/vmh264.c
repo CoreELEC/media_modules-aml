@@ -3990,6 +3990,13 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				false, vdec->vf_provider_name, NULL);
 		}
 
+		if (vdec->avbc_dump_enable &&
+			(BUFSPEC_INDEX(vf->index) != 0xff) &&
+			vf->compHeadAddr) {
+			u32 buf_index = BUFSPEC_INDEX(vf->index);
+			hw->buffer_spec[buf_index].vf_ref++;
+			kfifo_put(&vdec->avbc_dump_q, (const struct vframe_s *)vf);
+		}
 		if (without_display_mode == 0) {
 			if (hw->is_used_v4l) {
 				if (v4l2_ctx->is_stream_off) {
@@ -12225,6 +12232,23 @@ result_done:
 		WRITE_VREG(GCLK_EN, 0x3ff);
 	}
 
+	if (vdec->avbc_dump_enable) {
+		struct vframe_s *vf = NULL;
+		u32 buf_index = 0;
+		while (kfifo_get(&vdec->avbc_dump_q, &vf)) {
+			if (vf) {
+				buf_index = BUFSPEC_INDEX(vf->index);
+				decoder_do_avbc_check(vdec, vf);
+				hw->buffer_spec[buf_index].vf_ref--;
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+					"%s:avbc dump buf_index:%d\n",
+					__func__, buf_index);
+			} else {
+				dpb_print(DECODE_ID(hw), 0, "%s:avbc dump err vf:0x%x\n",
+					__func__, vf);
+			}
+		}
+	}
 	hw->timeout_flag = TIMEOUT_INIT;
 	/* mark itself has all HW resource released and input released */
 	vdec_core_finish_run(vdec, hw->mask & (~CORE_MASK_COMBINE));

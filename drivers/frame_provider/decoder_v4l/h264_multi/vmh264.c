@@ -4374,6 +4374,11 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 								aml_buf, vf);
 					aml_buf_set_vframe(aml_buf, vf);
 					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
+					if (vdec->avbc_dump_enable && vf->compHeadAddr) {
+						aml_buf_get_ref(&v4l2_ctx->bm, aml_buf);
+						kfifo_put(&vdec->avbc_dump_q,
+							(const struct vframe_s *)vf);
+					}
 					if (v4l2_ctx->avbcd_work_mode) {
 						put_vf_to_avbc_q(hw, vf);
 						h264_post_avbcd_task(hw);
@@ -13144,6 +13149,24 @@ result_done:
 
 	if (hw->dec_result == DEC_RESULT_DONE || hw->dec_result == DEC_RESULT_CONFIG_PARAM) {
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_END);
+	}
+
+	if (vdec->avbc_dump_enable) {
+		struct vframe_s *vf = NULL;
+		struct aml_buf *aml_buf = NULL;
+		while (kfifo_get(&vdec->avbc_dump_q, &vf)) {
+			if (vf) {
+				aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+				decoder_do_avbc_check(vdec, vf);
+				aml_buf_put_ref(&ctx->bm, aml_buf);
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+					"%s:avbc dump buf_index:%d aml_buf:0x%x\n",
+					__func__, BUFSPEC_INDEX(vf->index), aml_buf);
+			} else {
+				dpb_print(DECODE_ID(hw), 0,
+					"%s:avbc dump err vf:0x%x\n", __func__, vf);
+			}
+		}
 	}
 
 	hw->timeout_flag = TIMEOUT_INIT;

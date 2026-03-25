@@ -5244,6 +5244,11 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec, struct avs2_frame
 				if (v4l2_ctx->is_stream_off) {
 					vavs2_vf_put(vavs2_vf_get(pvdec), pvdec);
 				} else {
+					if (pvdec->avbc_dump_enable) {
+						aml_buf_get_ref(&v4l2_ctx->bm, aml_buf);
+						kfifo_put(&pvdec->avbc_dump_q,
+							(const struct vframe_s *)vf);
+					}
 					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}
 			} else
@@ -7801,6 +7806,23 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 		}
 	}
 
+	if (vdec->avbc_dump_enable) {
+		struct vframe_s *vf = NULL;
+		struct aml_buf *aml_buf = NULL;
+		while (kfifo_get(&vdec->avbc_dump_q, &vf)) {
+			if (vf) {
+				aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+				decoder_do_avbc_check(vdec, vf);
+				aml_buf_put_ref(&ctx->bm, aml_buf);
+				avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+					"%s:avbc dump buf_index:%d aml_buf:0x%x\n",
+					__func__, vf->index & 0xff, aml_buf);
+			} else {
+				avs2_print(dec, 0, "%s:avbc dump err vf:0x%x\n",
+					__func__, vf);
+			}
+		}
+	}
 	if (get_dbg_flag(dec) & AVS2_DBG_QOS_INFO) {
 		avs2_print(dec, 0, "%s:frame_count %d, drop_frame_count %d, error_frame_count %d\n",
 			__func__, dec->gvs->frame_count, dec->gvs->drop_frame_count, dec->gvs->error_frame_count);

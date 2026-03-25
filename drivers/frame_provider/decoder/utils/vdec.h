@@ -368,6 +368,7 @@ enum vformat_t;
 
 #define VDEC_DATA_MAX_INSTANCE_NUM (MAX_INSTANCE_MUN * 2)
 #define VDEC_DATA_NUM 64
+#define AVBC_DUMP_POOL_SIZE  32
 
 #define VDEC_DBG_SCHED_PRIO	(0x1)
 #define VDEC_DBG_ALWAYS_LOAD_FW	(0x2)
@@ -659,6 +660,8 @@ struct vdec_s {
 	char sched_priority;
 	int mediasync_vfm_dev_id;
 	struct vdec_info_statistic_s vdec_info_statistic;
+	bool avbc_dump_enable;
+	DECLARE_KFIFO(avbc_dump_q, struct vframe_s *, AVBC_DUMP_POOL_SIZE);
 };
 
 #define CODEC_MODE(a, b, c, d)\

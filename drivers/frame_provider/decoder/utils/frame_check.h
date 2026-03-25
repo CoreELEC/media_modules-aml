@@ -32,6 +32,7 @@
 
 
 #define YUV_DUMP_NUM  20
+#define AVBC_DUMP_NUM  20
 
 #define SIZE_CRC	64
 #define SIZE_CHECK_Q 128
@@ -48,6 +49,22 @@ struct pic_dump_t{
 
 	unsigned int buf_size;
 	char *buf_addr;
+
+	/* AVBC dump */
+	struct file *avbc_fp;
+	loff_t avbc_pos;
+	unsigned int avbc_start;
+	unsigned int avbc_num;
+	unsigned int avbc_end;
+	unsigned int avbc_dump_cnt;
+	unsigned int avbc_buf_size;
+	void *avbc_buf_addr;
+	dma_addr_t avbc_buf_phy_addr;
+	ulong avbc_buf_handle;
+	void *frame_mmu_map_addr;
+	dma_addr_t frame_mmu_map_phy_addr;
+	ulong frame_mmu_map_handle;
+	u32 frame_mmu_map_size;
 };
 
 struct pic_check_t{
@@ -114,6 +131,8 @@ struct pic_check_mgr_t{
 	unsigned char interlace_flag;
 	int format;
 	char crc_file_name[32];
+	unsigned int avbc_cnt;
+	u32 avbc_buff_size;
 };
 
 struct aux_data_check_mgr_t{
@@ -135,7 +154,12 @@ struct aux_data_check_mgr_t{
 int dump_yuv_trig(struct pic_check_mgr_t *mgr,
 	int id, int start, int num);
 
+int dump_avbc_trig(struct pic_check_mgr_t *mgr,
+	int id, int start, int num);
+
 int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf);
+
+int decoder_do_avbc_check(struct vdec_s *vdec, struct vframe_s *vf);
 
 int decoder_do_aux_data_check(struct vdec_s *vdec, char *aux_buffer, int size, int poc);
 
@@ -154,6 +178,13 @@ ssize_t dump_yuv_show(KV_CLASS_CONST struct class *class,
 		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf);
 
 ssize_t dump_yuv_store(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr,
+		const char *buf, size_t size);
+
+ssize_t dump_avbc_show(KV_CLASS_CONST struct class *class,
+		KV_CLASS_ATTR_CONST struct class_attribute *attr, char *buf);
+
+ssize_t dump_avbc_store(KV_CLASS_CONST struct class *class,
 		KV_CLASS_ATTR_CONST struct class_attribute *attr,
 		const char *buf, size_t size);
 

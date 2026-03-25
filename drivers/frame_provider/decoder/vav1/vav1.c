@@ -7221,6 +7221,10 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		tmp4x.bit_depth_chroma = bit_depth_chroma;
 		tmp4x.double_write_mode = pic_config->double_write_mode;
 		vdec_fill_vdec_frame(hw_to_vdec(hw), &hw->vframe_qos, &tmp4x, vf, pic_config->hw_decode_time);
+		if (vdec->avbc_dump_enable) {
+			hw->common.buffer_pool->frame_bufs[vf->index & 0xff].buf.vf_ref++;
+			kfifo_put(&vdec->avbc_dump_q, (const struct vframe_s *)vf);
+		}
 		if (without_display_mode == 0) {
 			if (hw->is_used_v4l) {
 				if (v4l2_ctx->is_stream_off) {
@@ -11313,6 +11317,21 @@ static void av1_work_implement(struct AV1HW_s *hw)
 		hw->stat &= ~STAT_TIMER_ARM;
 	}
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_END);
+
+	if (vdec->avbc_dump_enable) {
+		struct vframe_s *vf = NULL;
+		while (kfifo_get(&vdec->avbc_dump_q, &vf)) {
+			if (vf) {
+				decoder_do_avbc_check(vdec, vf);
+				hw->common.buffer_pool->frame_bufs[vf->index & 0xff].buf.vf_ref--;
+				av1_print(hw, PRINT_FLAG_VDEC_STATUS, "%s:avbc dump buf_index:%d\n",
+					__func__, vf->index & 0xff);
+			} else {
+				av1_print(hw, 0, "%s:avbc dump err vf:0x%x\n",
+					__func__, vf);
+			}
+		}
+	}
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(vdec, CORE_MASK_HEVC);

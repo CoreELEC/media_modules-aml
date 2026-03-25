@@ -5558,6 +5558,11 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec, struct avs2_frame
 			tmp4x.double_write_mode = pic->double_write_mode;
 			vdec_fill_vdec_frame(pvdec, &dec->vframe_qos, &tmp4x, vf, pic->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
+			if (pvdec->avbc_dump_enable) {
+				struct avs2_frame_s *pic = get_pic_by_index(dec, vf->index & 0xff);
+				pic->vf_ref++;
+				kfifo_put(&pvdec->avbc_dump_q, (const struct vframe_s *)vf);
+			}
 			if (without_display_mode == 0) {
 				vf_notify_receiver(dec->provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -7964,6 +7969,24 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 			avs2_recycle_mmu_buf_tail(dec);
 
 			error_handle_mmu_copy(dec, dec->avs2_dec.hc.cur_pic);
+		}
+	}
+
+	if (vdec->avbc_dump_enable) {
+		struct vframe_s *vf = NULL;
+		struct avs2_frame_s *pic = NULL;
+		while (kfifo_get(&vdec->avbc_dump_q, &vf)) {
+			if (vf) {
+				pic = get_pic_by_index(dec, vf->index & 0xff);
+				decoder_do_avbc_check(vdec, vf);
+				pic->vf_ref--;
+				avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+					"%s:avbc dump buf_index:%d\n",
+					__func__, vf->index & 0xff);
+			} else {
+				avs2_print(dec, 0, "%s:avbc dump err vf:0x%x\n",
+					__func__, vf);
+			}
 		}
 	}
 

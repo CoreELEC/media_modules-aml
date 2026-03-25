@@ -8746,6 +8746,10 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vdec_fill_vdec_frame(pvdec, &pbi->vframe_qos, &tmp4x,
 				vf, pic_config->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
+			if (pvdec->avbc_dump_enable) {
+				pbi->common.buffer_pool->frame_bufs[vf->index & 0xff].buf.vf_ref++;
+				kfifo_put(&pvdec->avbc_dump_q, (const struct vframe_s *)vf);
+			}
 			if (without_display_mode == 0) {
 				if (pbi->is_used_v4l) {
 					if (v4l2_ctx->is_stream_off) {
@@ -11591,6 +11595,20 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 	}
 	/* mark itself has all HW resource released and input released */
 	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_WORKER_END);
+
+	if (vdec->avbc_dump_enable) {
+		struct vframe_s *vf = NULL;
+		while (kfifo_get(&vdec->avbc_dump_q, &vf)) {
+			if (vf) {
+				decoder_do_avbc_check(vdec, vf);
+				pbi->common.buffer_pool->frame_bufs[vf->index & 0xff].buf.vf_ref--;
+				vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
+					"%s:avbc dump buf_index:%d\n", __func__, vf->index & 0xff);
+			} else {
+				vp9_print(pbi, 0, "%s:avbc dump err vf:0x%x\n", __func__, vf);
+			}
+		}
+	}
 #ifdef SUPPORT_FB_DECODING
 	if (pbi->used_stage_buf_num > 0)
 		vdec_core_finish_run(hw_to_vdec(pbi), CORE_MASK_HEVC_BACK);

@@ -7557,6 +7557,10 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
 						aml_buf, vf);
 				aml_buf_set_vframe(aml_buf, vf);
+				if (vdec->avbc_dump_enable) {
+					aml_buf_get_ref(&v4l2_ctx->bm, aml_buf);
+					kfifo_put(&vdec->avbc_dump_q, (const struct vframe_s *)vf);
+				}
 				aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 			}
 		} else
@@ -10687,6 +10691,23 @@ done_end:
 			hevc->gvs->p_decoded_frames, hevc->gvs->p_lost_frames, hevc->gvs->p_concealed_frames);
 		hevc_print(hevc, 0, "b decoded_frames %d, lost_frames %d, concealed_frames %d\n",
 			hevc->gvs->b_decoded_frames, hevc->gvs->b_lost_frames, hevc->gvs->b_concealed_frames);
+	}
+
+	if (vdec->avbc_dump_enable) {
+		struct vframe_s *vf = NULL;
+		struct aml_buf *aml_buf = NULL;
+		while (kfifo_get(&vdec->avbc_dump_q, &vf)) {
+			if (vf) {
+				aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+				decoder_do_avbc_check(vdec, vf);
+				aml_buf_put_ref(&ctx->bm, aml_buf);
+				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"%s:avbc dump buf_index:%d aml_buf:0x%x\n",
+					__func__, vf->index & 0xff, aml_buf);
+			} else {
+				hevc_print(hevc, 0, "%s:avbc dump err vf:0x%x\n", __func__, vf);
+			}
+		}
 	}
 
 	/* mark itself has all HW resource released and input released */
