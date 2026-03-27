@@ -7713,6 +7713,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			update_decoded_pic(dec);
 			check_pic_error(dec, pic);
 			if (pic && dec->avs3_dec.ctx.pic_cnt == 1) {
+				dec->avs3_dec.ctx.pic->is_ref = 1;
 				avs3_prepare_display_buf(dec, pic);
 			}
 
