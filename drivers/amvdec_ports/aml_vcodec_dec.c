@@ -4377,9 +4377,6 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 	struct v4l2_format *f)
 {
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
-	struct aml_vcodec_dev *dev = ctx->dev;
-#endif
 	struct v4l2_pix_format_mplane *pix_mp = &f->fmt.pix_mp;
 	struct v4l2_pix_format *pix = &f->fmt.pix;
 	struct vb2_queue *vq;
@@ -4451,7 +4448,7 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 		copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
 #ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
 		if (!disable_avbcd && !(ctx->avbcd_work_mode & AVBCD_DEBUG_MODE))
-			queue_work(dev->decode_workqueue, &ctx->avbcd_call_wkr);
+			schedule_work(&ctx->avbcd_call_wkr);
 #endif
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		/*
