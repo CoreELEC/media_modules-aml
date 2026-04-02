@@ -4678,7 +4678,7 @@ static struct PIC_s *output_pic(struct hevc_state_s *hevc,
 		}
 	}
 
-	if (pic_display && hevc->sps_num_reorder_pics_0 &&
+	if (pic_display && !hevc->ip_mode &&
 		(hevc->vf_pre_count == 1) &&
 		(hevc->first_pic_flag == 1 || hevc->first_pic_flag == 2)) {
 		hevc->first_pic_flag = 2;
