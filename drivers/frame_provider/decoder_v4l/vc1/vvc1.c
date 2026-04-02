@@ -2118,9 +2118,10 @@ static struct vframe_s *vvc1_vf_get(void *op_arg)
 
 	if (kfifo_get(&display_q, &vf)) {
 		if (vf) {
-			if (ctx->enable_di_post)
+			if (ctx->enable_di_post) {
 				ctx->bm.get_bm_frm_cnt(&ctx->bm, vf);
-			else
+				ctx->bm.frm_cnt++;
+			} else
 				vf->index_disp = atomic_read(&hw->get_num);
 			atomic_add(1, &hw->get_num);
 

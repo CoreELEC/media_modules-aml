@@ -1474,9 +1474,10 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 	mutex_lock(&hw->vf_mutex);
 	if (kfifo_get(&hw->display_q, &vf)) {
 		if (vf) {
-			if (ctx->enable_di_post)
+			if (ctx->enable_di_post) {
 				ctx->bm.get_bm_frm_cnt(&ctx->bm, vf);
-			else
+				ctx->bm.frm_cnt++;
+			} else
 				vf->index_disp = atomic_read(&hw->get_num);
 			atomic_add(1, &hw->get_num);
 			if (force_fps & 0x100) {
