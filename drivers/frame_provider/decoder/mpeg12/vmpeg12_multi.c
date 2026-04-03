@@ -4106,8 +4106,10 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 #ifdef AGAIN_HAS_THRESHOLD
 		if (hw->next_again_flag&&
 			(!vdec_frame_based(vdec))) {
-			u32 parser_wr_ptr =
-				STBUF_READ(&vdec->vbuf, get_wp);
+			u32 parser_wr_ptr = STBUF_READ(&vdec->vbuf, get_wp);
+			u32 parser_rd_ptr = STBUF_READ(&vdec->vbuf, get_rp);
+			u32 again_level = 0;
+
 			if (parser_wr_ptr >= hw->pre_parser_wr_ptr &&
 				(parser_wr_ptr - hw->pre_parser_wr_ptr) <
 				again_threshold) {
@@ -4117,11 +4119,15 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				__func__, r);
 				return 0;
 			}
+			if (parser_wr_ptr < parser_rd_ptr)
+				again_level = vdec->input.size + parser_wr_ptr - parser_rd_ptr;
+			else
+				again_level = parser_wr_ptr - parser_rd_ptr;
 
 			if ((is_support_no_parser()) && (hw->pre_parser_wr_ptr != 0) &&
-			(parser_wr_ptr == hw->pre_parser_wr_ptr)) {
+			(parser_wr_ptr == hw->pre_parser_wr_ptr) && (again_level < vdec->input.size / 2) ) {
 				debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-					"%s: no stream data!\n", __func__);
+					"%s: no stream data!, level:%x, input_size:%x\n", __func__, again_level, vdec->input.size);
 				return PRE_LEVEL_NOT_ENOUGH;
 		}
 		}
