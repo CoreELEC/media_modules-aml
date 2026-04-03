@@ -3218,13 +3218,15 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			data = ((u8 *)hw->chunk->block->start_virt) +
 				hw->chunk->offset;
 
-		vc1_print(DECODE_ID(hw), VC1_DEBUG_DETAIL,
-			"%s size 0x%x sum 0x%x %02x %02x %02x %02x %02x %02x .. %02x %02x %02x %02x\n",
-			__func__, size, get_data_check_sum(hw, size),
-			data[0], data[1], data[2], data[3],
-			data[4], data[5], data[size - 4],
-			data[size - 3],	data[size - 2],
-			data[size - 1]);
+		if (debug & VC1_DEBUG_DETAIL)
+			vc1_print(DECODE_ID(hw), VC1_DEBUG_DETAIL,
+				"%s size 0x%x sum 0x%x %02x %02x %02x %02x %02x %02x .. "
+				"%02x %02x %02x %02x\n",
+				__func__, size, get_data_check_sum(hw, size),
+				data[0], data[1], data[2], data[3],
+				data[4], data[5], data[size - 4],
+				data[size - 3], data[size - 2],
+				data[size - 1]);
 
 		if (!hw->chunk->block->is_mapped)
 			codec_mm_unmap_phyaddr(data);
