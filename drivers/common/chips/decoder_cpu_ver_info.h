@@ -240,7 +240,7 @@ inline bool is_core_hevc_fmt(int format);
 
 inline bool is_hevc_align32(int blkmod);
 
-inline bool is_not_support_di_front_mode(void);
+inline bool is_di_postlink_enabled(void);
 
 inline bool is_support_dpss_front_mode(void);
 

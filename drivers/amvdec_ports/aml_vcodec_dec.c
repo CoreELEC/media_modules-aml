@@ -642,7 +642,7 @@ bool is_ge2d_mode(struct aml_vcodec_ctx *ctx)
 		ctx->output_pix_fmt == V4L2_PIX_FMT_AVS ||
 		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_L ||
 		ctx->output_pix_fmt == V4L2_PIX_FMT_VC1_ANNEX_G) &&
-		is_not_support_di_front_mode())
+		is_di_postlink_enabled())
 		return true;
 
 	if (ge2d_mode) {

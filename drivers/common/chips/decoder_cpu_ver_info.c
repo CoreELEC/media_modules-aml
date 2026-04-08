@@ -32,6 +32,8 @@
 #include "../register/register.h"
 #include "../media_utils/media_kernel_version.h"
 #include "chips.h"
+#include <linux/amlogic/media/vfm/vframe.h>
+#include <linux/amlogic/media/di/di.h>
 
 #define AM_SUCCESS 0
 #define MAJOR_ID_START AM_MESON_CPU_MAJOR_ID_M6
@@ -1245,19 +1247,15 @@ inline bool is_hevc_align32(int blkmod)
 }
 EXPORT_SYMBOL(is_hevc_align32);
 
-inline bool is_not_support_di_front_mode(void)
+inline bool is_di_postlink_enabled(void)
 {
-	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
-
-	if ((cpu_major_id == AM_MESON_CPU_MAJOR_ID_T5D) ||
-		(cpu_major_id == AM_MESON_CPU_MAJOR_ID_T6D) ||
-		(cpu_major_id == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-		(cpu_major_id == AM_MESON_CPU_MAJOR_ID_GXLX4))
-		return true;
-
-	return false;
+	/*
+	* DI post link attribute is configured in dts,
+	* if it's enabled, also represents do not support DI front mode.
+	*/
+	return dim_get_post_link();
 }
-EXPORT_SYMBOL(is_not_support_di_front_mode);
+EXPORT_SYMBOL(is_di_postlink_enabled);
 
 inline bool is_support_dpss_front_mode(void)
 {
