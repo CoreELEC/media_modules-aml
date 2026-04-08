@@ -359,7 +359,7 @@ static unsigned int mb_count_threshold = 5; /*percentage*/
 	0x10000: vdec dw horizontal 1/2
 	0x20000: vdec dw horizontal/vertical  1/2
 */
-static u32 double_write_mode = 3;
+static u32 double_write_mode = 0x10;
 static u32 without_display_mode;
 
 static int loop_playback_poc_threshold = 300;
