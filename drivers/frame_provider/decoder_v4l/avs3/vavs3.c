@@ -5060,7 +5060,9 @@ static void set_canvas(struct AVS3Decoder_s *dec,
 
 static void set_frame_info(struct AVS3Decoder_s *dec, struct vframe_s *vf)
 {
-	int vf_dur = vdec_get_vf_dur();
+	struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
+	int vf_dur = ctx->duration;
 	unsigned int ar = 0;
 	unsigned int pixel_ratio = 0;
 

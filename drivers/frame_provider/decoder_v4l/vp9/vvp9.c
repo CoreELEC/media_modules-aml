@@ -7111,7 +7111,7 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 {
 	unsigned int ar;
 	struct aml_vcodec_ctx * ctx = pbi->v4l2_ctx;
-	int vf_dur = vdec_get_vf_dur();
+	int vf_dur = ctx->duration;
 
 	vf->duration = vf_dur ? vf_dur : pbi->frame_dur;
 	vf->duration_pulldown = 0;

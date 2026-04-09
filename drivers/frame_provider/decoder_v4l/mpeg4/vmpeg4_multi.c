@@ -848,7 +848,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 	int index = pic->index;
 	bool pb_skip = false;
 	unsigned long flags;
-	int vf_dur = vdec_get_vf_dur();
+	int vf_dur = v4l2_ctx->duration;
 	struct aml_buf *sub0_buf = NULL;
 	struct aml_buf *sub1_buf = NULL;
 

@@ -903,7 +903,6 @@ void aml_buf_configure_update(struct aml_vcodec_ctx *ctx)
 	config.vpp_work_mode	= ctx->enable_di_post ? VPP_WORK_MODE_DI_POST :
 						VPP_WORK_MODE_DI_M2M;
 	config.priority		= ctx->priority;
-	config.duration = ctx->duration;
 
 	if (config.enable_fbc && ctx->update_comp_info)
 		ctx->update_comp_info(ctx, ctx->ada_ctx->vdec->private);
@@ -982,7 +981,6 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	config.vpp_work_mode	= ctx->enable_di_post ? VPP_WORK_MODE_DI_POST :
 						VPP_WORK_MODE_DI_M2M;
 	config.priority		= ctx->priority;
-	config.duration		= ctx->duration;
 
 	aml_buf_configure(&ctx->bm, &config);
 
@@ -1216,8 +1214,6 @@ static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
 		VFRAME_FLAG_GAME_MODE : 0;
 
 	vf->priority = ctx->priority;
-	if (ctx->duration)
-		vf->duration = ctx->duration;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d, seq:%d, idx:%d) vb:(%d, %px), vf:(%d, %px), ts:%llu, flag: 0x%x "
@@ -5598,7 +5594,6 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	config.vpp_work_mode	= ctx->enable_di_post ? VPP_WORK_MODE_DI_POST :
 						VPP_WORK_MODE_DI_M2M;
 	config.priority		= ctx->priority;
-	config.duration		= ctx->duration;
 
 	aml_buf_configure(&ctx->bm, &config);
 
@@ -6143,11 +6138,7 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 			"set uevent duration: %d\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_SET_VF_DURATION) {
-		struct aml_buf_config config = { 0 };
 		ctx->duration = ctrl->val;
-		aml_buf_get_configure(&ctx->bm, &config);
-		config.duration = ctx->duration;
-		aml_buf_configure(&ctx->bm, &config);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 			"set vf duration: %x\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_SET_INPUT_BUFFER_NUM_CACHE) {

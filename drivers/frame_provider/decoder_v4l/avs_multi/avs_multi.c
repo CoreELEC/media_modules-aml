@@ -3649,7 +3649,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 	u32 buffer_index = pic->index;
 	u32 dur;
 	unsigned short decode_pic_count = pic->decode_pic_count;
-	int vf_dur = vdec_get_vf_dur();
+	int vf_dur = v4l2_ctx->duration;
 	struct aml_buf *sub0_buf = NULL;
 	struct aml_buf *sub1_buf = NULL;
 

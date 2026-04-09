@@ -6251,7 +6251,9 @@ static void v4l_av1_report_hdr10p_data(struct AV1HW_s *hw, struct PIC_BUFFER_CON
 static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
 	unsigned int ar;
-	int vf_dur = vdec_get_vf_dur();
+	struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	int vf_dur = ctx->duration;
 
 	parse_metadata(hw, vf, pic);
 

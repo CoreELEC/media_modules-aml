@@ -160,8 +160,6 @@ static int aml_buf_vpp_dque(struct buf_core_mgr_s *bc, struct buf_core_entry *en
 	vf->index_disp	= bm->frm_cnt;
 	vf->frame_index	= bm->frm_cnt;
 	vf->priority	= bm->config.priority;
-	if (bm->config.duration)
-		vf->duration = bm->config.duration;
 
 	dmabuf_set_vframe(buf->planes[0].dbuf, &buf->vframe, VF_SRC_DECODER);
 

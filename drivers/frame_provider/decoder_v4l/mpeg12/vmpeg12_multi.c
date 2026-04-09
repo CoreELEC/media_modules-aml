@@ -807,7 +807,7 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 	u32 buffer_index = vf->index;
 	struct aml_vdec_hdr_infos hdr;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	int vf_dur = vdec_get_vf_dur();
+	int vf_dur = ctx->duration;
 
 	vf->width = hw->pics[buffer_index].width;
 	vf->height = hw->pics[buffer_index].height;

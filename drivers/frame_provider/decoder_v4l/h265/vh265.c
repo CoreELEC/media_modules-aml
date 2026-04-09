@@ -9521,11 +9521,11 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	char *p;
 	unsigned size = 0;
 	unsigned type = 0;
-	int vf_dur = vdec_get_vf_dur();
 	struct vframe_master_display_colour_s *vf_dp
 		= &vf->prop.master_display_colour;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+	int vf_dur = ctx->duration;
 
 	vf->width = pic->width /
 		get_double_write_ratio(pic->double_write_mode);

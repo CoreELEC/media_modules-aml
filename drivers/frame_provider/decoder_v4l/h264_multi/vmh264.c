@@ -6040,7 +6040,9 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 		else
 			vf->duration = 96000/force_rate;
 	} else {
-		int vf_dur = vdec_get_vf_dur();
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+		int vf_dur = ctx->duration;
 
 		vf->duration = vf_dur ? vf_dur : hw->frame_dur;
 	}

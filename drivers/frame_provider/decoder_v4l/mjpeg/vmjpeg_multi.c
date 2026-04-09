@@ -358,7 +358,9 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 {
 	u32 width, height;
 	u32 temp_endian;
-	int vf_dur = vdec_get_vf_dur();
+	struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	int vf_dur = ctx->duration;
 
 	width = READ_VREG(MREG_PIC_WIDTH);
 	height = READ_VREG(MREG_PIC_HEIGHT);
