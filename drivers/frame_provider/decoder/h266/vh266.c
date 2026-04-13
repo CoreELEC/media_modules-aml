@@ -286,7 +286,7 @@ static u32 dirty_buffersize_threshold = 0x800000;
  *	0x1000,if > 1080p,use mode 3, else if > 960*540, use mode 4, else use mode 1;
  *	0x10000, double write p010 enable
  */
-static u32 double_write_mode = 0x3;
+static u32 double_write_mode;
 
 static u32 mem_map_mode; /* 0:linear 1:32x32 2:64x32 ; m8baby test1902 */
 static u32 enable_mem_saving = 1;

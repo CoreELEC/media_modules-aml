@@ -267,7 +267,7 @@ static unsigned int efficiency_mode = 0;
  *	0x2000,if > 2160p, use mode 4, else use mode 0;
  *	0x10000, double write p010 enable
  */
-static u32 double_write_mode = 0x2000;
+static u32 double_write_mode;
 
 /* triple_write_mode:
  * 0, no triple write;

@@ -272,7 +272,7 @@ static u32 save_buffer = 1;
  * 0x1000,if > 1080p,use mode 3, else if > 960*540, use mode 4, else use mode 1;
  * 0x10000, double write p010 enable
  */
-static u32 double_write_mode = 0x3;
+static u32 double_write_mode;
 
 /* triple_write_mode:
  * 0, no triple write;
