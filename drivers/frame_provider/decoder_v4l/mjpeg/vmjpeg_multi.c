@@ -422,7 +422,10 @@ static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
-	vf->codec_vfmt = VFORMAT_MJPEG;
+	if (hw->jpeg_flag)
+		vf->codec_vfmt = VFORMAT_JPEG;
+	else
+		vf->codec_vfmt = VFORMAT_MJPEG;
 }
 
 static irqreturn_t vmjpeg_isr(struct vdec_s *vdec, int irq)
