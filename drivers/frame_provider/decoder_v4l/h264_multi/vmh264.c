@@ -405,6 +405,12 @@ static u32 fence_drop_error_frame = 1;
 
 static u32 fence_ignore_gap_error = 1;
 
+/*
+ * 0: default, trigger fence after picture done or after post buffer in work
+ * 1: early trigger fence after post buffer in slice header done
+ */
+static u32 fence_early_trigger;
+
 static u32 adjust_dpb_size = 13;
 
 static u32 one_packet_multi_frames_multi_run = 1;
@@ -4422,6 +4428,22 @@ int post_picture_early(struct vdec_s *vdec, int index)
 	hw->fence_mode_buf_status = FENCE_MODE_BUF_POSTED;
 
 	display_frame_count[DECODE_ID(hw)]++;
+
+	/* early trigger fence after post buffer in slice header done */
+	if (fence_early_trigger) {
+		/* notify signal to wake up wq of fence. */
+		if (hw->enable_fence && (hw->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+			int ret = dma_fence_get_status(vdec->sync->fence);
+			if (ret == 0) {
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+					"%s, early trigger fence (fence=%p)\n",
+					__func__, vdec->sync->fence);
+				vdec_timeline_increase(vdec->sync, 1);
+				hw->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+			}
+		}
+	}
+
 	return 0;
 }
 
@@ -4461,6 +4483,9 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 						"%s, enable_fence, hw->data_flag:0x%x, frame->data_flag:0x%x, frame->show_frame:%d, vdec_fence_status_set error.\n",
 						__FUNCTION__, hw->data_flag, frame->data_flag, frame->show_frame);
 				}
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+					"%s, trigger fence after picture done by default (fence=%p)\n",
+					__func__,  vdec->sync->fence);
 				vdec_timeline_increase(vdec->sync, 1);
 				hw->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
 			}
@@ -14628,6 +14653,7 @@ static struct param_entry amvdec_h264_v4l_params[] = {
 	PARAM_UINT(force_low_latency),
 	PARAM_UINT(fence_drop_error_frame),
 	PARAM_UINT(fence_ignore_gap_error),
+	PARAM_UINT(fence_early_trigger),
 	PARAM_UINT(adjust_dpb_size),
 	PARAM_UINT(one_packet_multi_frames_multi_run),
 	PARAM_UINT(high_bandwidth_dynamic_enabled),
@@ -14854,6 +14880,9 @@ MODULE_PARM_DESC(fence_drop_error_frame, "\n fence drop error frame\n");
 
 MEDIA_PARAM(fence_ignore_gap_error, uint, 0664);
 MODULE_PARM_DESC(fence_ignore_gap_error, "\n fence ignore gap error\n");
+
+MEDIA_PARAM(fence_early_trigger, uint, 0664);
+MODULE_PARM_DESC(fence_early_trigger, "\n fence early trigger\n");
 
 MEDIA_PARAM(adjust_dpb_size, uint, 0664);
 MODULE_PARM_DESC(adjust_dpb_size, "\n adjust dpb size\n");

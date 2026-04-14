@@ -615,6 +615,12 @@ static u32 force_low_latency;
 static u32 fence_drop_error_frame = 1;
 
 /*
+ * 0: default, trigger fence after picture done or after post buffer in work
+ * 1: early trigger fence after post buffer in slice header done
+ */
+static u32 fence_early_trigger;
+
+/*
  *The parameter sps_max_dec_pic_buffering_minus1_0+1
  *in SPS is the minimum DPB size required for stream
  *(note: this parameter does not include the frame
@@ -12041,6 +12047,21 @@ static int post_picture_early(struct vdec_s *vdec, int index)
 
 	display_frame_count[hevc->index]++;
 
+	/* early trigger fence after post buffer in slice header done */
+	if (fence_early_trigger) {
+		/* notify signal to wake up wq of fence. */
+		if (hevc->enable_fence && (hevc->fence_mode_buf_status == FENCE_MODE_BUF_POSTED) && vdec->sync->fence) {
+			int ret = dma_fence_get_status(vdec->sync->fence);
+			if (ret == 0) {
+				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"%s, early trigger fence (fence=%p)\n",
+					__func__, vdec->sync->fence);
+				vdec_timeline_increase(vdec->sync, 1);
+				hevc->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
+			}
+		}
+	}
+
 	return 0;
 }
 
@@ -12079,6 +12100,9 @@ static int prepare_display_buf(struct vdec_s *vdec, struct PIC_s *frame)
 						"%s, enable_fence, error_flag:%d, error_mark:%d, drop_mark:%d, drop_flag:%d, show_frame:%d, vdec_fence_status_set error.\n",
 						__FUNCTION__, hevc->error_flag, frame->error_mark, frame->drop_mark, frame->drop_flag, frame->show_frame);
 				}
+				hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"%s, trigger fence after picture done by default (fence=%p)\n",
+					__func__, vdec->sync->fence);
 				vdec_timeline_increase(vdec->sync, 1);
 				hevc->fence_mode_buf_status = FENCE_MODE_BUF_SIGNALED;
 			}
@@ -19757,6 +19781,7 @@ static struct param_entry amvdec_h265_fb_v4l_params[] = {
 	PARAM_UINT(force_config_fence),
 	PARAM_UINT(force_low_latency),
 	PARAM_UINT(fence_drop_error_frame),
+	PARAM_UINT(fence_early_trigger),
 	PARAM_UINT(mv_buf_dynamic_alloc),
 	PARAM_UINT(detect_stuck_buffer_margin),
 	PARAM_UINT(frmbase_multi_slice),
@@ -20062,6 +20087,9 @@ MODULE_PARM_DESC(force_low_latency, "\n force low latency\n");
 
 MEDIA_PARAM(fence_drop_error_frame, uint, 0664);
 MODULE_PARM_DESC(fence_drop_error_frame, "\n fence drop error frame\n");
+
+MEDIA_PARAM(fence_early_trigger, uint, 0664);
+MODULE_PARM_DESC(fence_early_trigger, "\n fence early trigger\n");
 
 MEDIA_PARAM(mv_buf_dynamic_alloc, uint, 0664);
 MODULE_PARM_DESC(mv_buf_dynamic_alloc, "\n mv_buf_dynamic_alloc\n");
