@@ -1151,6 +1151,7 @@ static int get_double_write_mode_init(struct AV1HW_s *hw)
 #define FILM_GRAIN_TASK
 #ifdef FILM_GRAIN_TASK
 static u32 use_sfgs;
+static u32 use_lmem_cp_fg = 1;
 
 static void film_grain_task_wakeup(struct AV1HW_s *hw)
 {
@@ -1223,14 +1224,20 @@ static int film_grain_task(void *args)
 	return 0;
 }
 
+static inline int sc2_use_lmem_cp_fg(struct AV1HW_s *hw)
+{
+	return ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) &&
+		vdec_secure(hw_to_vdec(hw)) && use_lmem_cp_fg);
+}
+
 static int film_grain_task_create(struct AV1HW_s *hw)
 {
 	struct vav1_assist_task *assist = &hw->assist_task;
 
 	mutex_init(&assist->assist_mutex);
 
-	if ((!vdec_secure(hw_to_vdec(hw)) || (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2))
-		&& !use_sfgs)
+	if (((!vdec_secure(hw_to_vdec(hw)) || (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2))
+		&& !use_sfgs) || sc2_use_lmem_cp_fg(hw))
 		return 0;
 
 	assist->use_sfgs = 1;
@@ -2126,6 +2133,7 @@ static struct device *cma_dev;
 #define AOM_AV1_MMU_MAP_BUFFER        HEVC_ASSIST_SCRATCH_4 // changed to use HEVC_ASSIST_MMU_MAP_ADDR
 #define AOM_AV1_DAALA_TOP_BUFFER      HEVC_ASSIST_SCRATCH_5
 //#define HEVC_SAO_UP               HEVC_ASSIST_SCRATCH_6
+#define AV1_NORMAL_FG_ADDR          HEVC_ASSIST_SCRATCH_6
 //#define HEVC_STREAM_SWAP_BUFFER   HEVC_ASSIST_SCRATCH_7
 #ifdef SWAP_HEVC_UCODE
 #define AOM_AV1_CDF_BUFFER_W      HEVC_ASSIST_SCRATCH_3
@@ -3111,7 +3119,7 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 			pic->index, pic->fgs_table_adr);
 		} else {
 #endif
-			if (hw->assist_task.use_sfgs) {
+			if (hw->assist_task.use_sfgs || sc2_use_lmem_cp_fg(hw)) {
 				pic->sfgs_table_phy = hw->fg_phy_addr + (pic->index * FGS_TABLE_SIZE);
 				pic->sfgs_table_ptr = hw->fg_ptr + (pic->index * FGS_TABLE_SIZE);
 			}
@@ -4008,6 +4016,8 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	// WRITE_VREG(HEVC_FGS_TABLE_START, pic_config->fgs_table_adr);
 #else
 	WRITE_VREG(HEVC_FGS_TABLE_START, pic_config->fgs_table_adr);
+	if (sc2_use_lmem_cp_fg(hw))
+		WRITE_VREG(AV1_NORMAL_FG_ADDR, pic_config->sfgs_table_phy);
 #endif
 	WRITE_VREG(HEVC_FGS_TABLE_LENGTH, FGS_TABLE_SIZE * 8);
 	av1_print(hw, AOM_DEBUG_HW_MORE,
@@ -6919,8 +6929,9 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				(get_double_write_mode(hw) != 0x10)) {
 				vf->compBodyAddr = 0;
 				vf->compHeadAddr = pic_config->header_adr;
-				if (((get_debug_fgs() & DEBUG_FGS_BYPASS) == 0)
-					&& hw->assist_task.use_sfgs)
+				if ((((get_debug_fgs() & DEBUG_FGS_BYPASS) == 0)
+					&& hw->assist_task.use_sfgs) ||
+					sc2_use_lmem_cp_fg(hw))
 					vf->fgs_table_adr = pic_config->sfgs_table_phy;
 				else
 					vf->fgs_table_adr = pic_config->fgs_table_adr;
@@ -12032,6 +12043,10 @@ static void run_front(struct vdec_s *vdec)
 	} else {
 		WRITE_VREG(HEVC_COMPATIBILITY, (READ_VREG(HEVC_COMPATIBILITY) & (~(1<<0))));
 	}
+	if (sc2_use_lmem_cp_fg(hw))
+		SET_VREG_MASK(HEVC_COMPATIBILITY, (1 << 2));
+	else
+		CLEAR_VREG_MASK(HEVC_COMPATIBILITY, (1 << 2));
 	if (av1_hw_ctx_restore(hw) < 0) {
 		vdec_schedule_work(&hw->work);
 		return;
@@ -13124,6 +13139,7 @@ static struct param_entry amvdec_av1_v4l_params[] = {
 	PARAM_UINT(save_buffer),
 #ifdef FILM_GRAIN_TASK
 	PARAM_UINT(use_sfgs),
+	PARAM_UINT(use_lmem_cp_fg),
 #endif
 	{ /* sentinel */ }
 };
@@ -13363,6 +13379,9 @@ MEDIA_PARAM(debug_fgs, uint, 0664);
 #ifdef FILM_GRAIN_TASK
 MEDIA_PARAM(use_sfgs, uint, 0664);
 MODULE_PARM_DESC(use_sfgs, "\n amvdec_av1 use_sfgs\n");
+
+MEDIA_PARAM(use_lmem_cp_fg, uint, 0664);
+MODULE_PARM_DESC(use_lmem_cp_fg, "\n amvdec_av1 use_lmem_cp_fg\n");
 #endif
 module_init(amvdec_av1_driver_init_module);
 module_exit(amvdec_av1_driver_remove_module);
