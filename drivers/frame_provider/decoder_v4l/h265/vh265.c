@@ -12547,16 +12547,36 @@ static void aspect_ratio_set(struct hevc_state_s *hevc, u32 *out_frame_ar,
 static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+	struct aml_buf *aml_buf = NULL;
 
 	if (hevc->decoding_pic && hevc->buf_allocated) {
 		struct PIC_s *pic = hevc->decoding_pic;
-		struct aml_buf *aml_buf =
-		(struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 		struct vdec_s *vdec = hw_to_vdec(hevc);
 		bool fence_mode_error_frame_buf_posted = false;
 
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s: dma addr(0x%lx)\n", __func__, pic->cma_alloc_addr);
+
+		if (hevc->mmu_enable
+			&& !(get_double_write_mode(hevc) & 0x10)
+			&& pic->scatter_alloc) {
+			aml_buf = index_to_afbc_aml_buf(hevc, pic->BUF_index);
+			if (aml_buf) {
+				hevc_print(hevc, H265_DEBUG_BUFMGR,
+					"%s: decoder_mmu_box_free_idx_tail index %d\n",
+					__func__, aml_buf->fbc->index);
+				decoder_mmu_box_free_idx_tail(
+					aml_buf->fbc->mmu, aml_buf->fbc->index, -1
+				);
+			} else {
+				hevc_print(hevc, H265_DEBUG_BUFMGR,
+					"%s: [WARN] scatter_alloc=%d but aml_buf is NULL (BUF_index=%d)\n",
+					__func__, pic->scatter_alloc, pic->BUF_index);
+			}
+			pic->scatter_alloc = 0;
+		}
+
+		aml_buf = (struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
 		if (aml_buf == NULL)
 			return;
