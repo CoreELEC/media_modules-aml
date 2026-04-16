@@ -908,6 +908,7 @@ void aml_buf_configure_update(struct aml_vcodec_ctx *ctx)
 		ctx->update_comp_info(ctx, ctx->ada_ctx->vdec->private);
 
 	aml_buf_configure(&ctx->bm, &config);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "%s success!\n", __func__);
 }
 
 void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
@@ -6209,12 +6210,23 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 			"set inst id is: %d\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_SET_OUTPUTMODES) {
 		int i = 0;
+		u32 dw;
 		struct aml_vdec_cfg_infos cfg_info = { 0 };
 
 		memcpy(&ctx->output_mode_ext, ctrl->p_new.p, sizeof(struct output_mode_ext));
 		ctx->set_outputmode_flag = 1;
 		ctx->output_mode_ext.fmt = v4l2_fourcc_to_vtype(ctx->output_mode_ext.fmt);
-		ctx->output_mode_ext.double_write_mode = parse_output_modes(&ctx->output_mode_ext);
+
+		vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "%s current outputmode dw: %d\n",
+			__func__, dw);
+		if (dw != DM_YUV_AUTO_1_2_AVBC &&
+			dw != DM_YUV_AUTO_1_4_AVBC &&
+			dw != DM_YUV_AUTO_1_2_AVBC_B &&
+			dw != DM_YUV_AUTO_14_12_AVBC)
+			ctx->output_mode_ext.double_write_mode = parse_output_modes(&ctx->output_mode_ext);
+		else
+			ctx->output_mode_ext.double_write_mode = dw;
 		vdec_v4l_get_cfg_infos(ctx, &cfg_info);
 		cfg_info.double_write_mode = ctx->output_mode_ext.double_write_mode;
 		vdec_v4l_set_cfg_infos(ctx, &cfg_info);
