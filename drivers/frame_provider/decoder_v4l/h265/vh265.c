@@ -9567,6 +9567,11 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 		vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 		vf->ratio_control <<= hevc->interlace_flag;
 	}
+
+	if (hevc->overscan_info_present_flag &&
+		!hevc->overscan_appropriate_flag)
+		vf->ratio_control |= DISP_RATIO_DISABLE_OVERSCAN;
+
 	hevc->ratio_control = vf->ratio_control;
 	if (pic->aux_data_buf
 		&& pic->aux_data_size) {

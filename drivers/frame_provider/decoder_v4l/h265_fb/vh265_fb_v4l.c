@@ -999,6 +999,10 @@ enum alloc_buffer_status_t {
 #define SLICE_SAO_CHROMA_FLAG_BIT           9
 #define SLICE_LOOP_FILTER_ACROSS_SLICES_ENABLED_FLAG_BIT 10
 
+#define OVERSCAN_APPROPRIATE	0x1
+#define OVERSCAN_INFO_PRESENT	0x2
+#define OVERSCAN_INFO_ENABLE	0x4
+
 union param_u {
 	struct {
 		unsigned short data[RPM_END - RPM_BEGIN];
@@ -2303,6 +2307,8 @@ struct hevc_state_s {
 	bool first_slice_in_bitstream;
 	u32 m_pocCRA;
 	u32 m_associatedIRAPType;
+	int overscan_info_present_flag;
+	int overscan_appropriate_flag;
 } /*hevc_stru_t */;
 
 struct hevc_RPS_s {
@@ -10534,6 +10540,11 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 		vf->ratio_control = (ar << DISP_RATIO_ASPECT_RATIO_BIT);
 		vf->ratio_control <<= hevc->interlace_flag;
 	}
+
+	if (hevc->overscan_info_present_flag &&
+		!hevc->overscan_appropriate_flag)
+		vf->ratio_control |= DISP_RATIO_DISABLE_OVERSCAN;
+
 	hevc->ratio_control = vf->ratio_control;
 	if (pic->aux_data_buf
 		&& pic->aux_data_size) {
@@ -14403,6 +14414,7 @@ force_output:
 			u32 vui_num_units_in_tick;
 			unsigned char reconfig_flag = 0;
 			int ret_is_csd_valid = 0;
+			int overscan_info_present_appropriate_flag = 0;
 
 			if (get_dbg_flag(hevc) & H265_DEBUG_SEND_PARAM_WITH_REG)
 				get_rpm_param(&hevc->param);
@@ -14522,6 +14534,12 @@ force_output:
 				amhevc_stop();
 				vdec_schedule_work(&hevc->work);
 				return IRQ_HANDLED;
+			}
+
+			overscan_info_present_appropriate_flag = hevc->param.p.overscan_info_present_appropriate_flag;
+			if (overscan_info_present_appropriate_flag & OVERSCAN_INFO_ENABLE) {
+				hevc->overscan_info_present_flag = (overscan_info_present_appropriate_flag & OVERSCAN_INFO_PRESENT) >> 1;
+				hevc->overscan_appropriate_flag = overscan_info_present_appropriate_flag & OVERSCAN_APPROPRIATE;
 			}
 
 			if (!v4l_res_change(hevc, &hevc->param)) {

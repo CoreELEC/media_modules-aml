@@ -6093,6 +6093,11 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 			ar_tmp,
 			DISP_RATIO_ASPECT_RATIO_MAX)) <<
 		DISP_RATIO_ASPECT_RATIO_BIT;
+
+	if (hw->overscan_info_present_flag &&
+		!hw->overscan_appropriate_flag)
+		vf->ratio_control |= DISP_RATIO_DISABLE_OVERSCAN;
+
 	vf->orientation = hw->vh264_rotation;
 
 	vf->sidebind_type = hw->sidebind_type;
