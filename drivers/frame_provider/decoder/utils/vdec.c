@@ -2104,7 +2104,8 @@ struct vdec_s *vdec_create(struct stream_port_s *port,
 
 		atomic_inc(&vdec_core->vdec_nr);
 #ifdef CONFIG_AMLOGIC_V4L_VIDEO3
-		v4lvideo_dec_count_increase();
+		if (port->vformat != VFORMAT_AVBCD)
+			v4lvideo_dec_count_increase();
 #endif
 		vdec->id = id;
 		vdec->video_id = 0xffffffff;
@@ -3766,14 +3767,15 @@ int vdec_destroy(struct vdec_s *vdec)
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	vdec_profile_flush(vdec);
 #endif
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
+	if (!vdec->avbc_mode)
+		v4lvideo_dec_count_decrease();
+#endif
 	ida_simple_remove(&vdec_core->ida, vdec->id);
 	if (vdec->mvfrm)
 		vfree(vdec->mvfrm);
 	vfree(vdec);
 
-#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
-	v4lvideo_dec_count_decrease();
-#endif
 	atomic_dec(&vdec_core->vdec_nr);
 
 	return 0;

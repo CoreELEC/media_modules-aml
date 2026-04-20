@@ -1392,14 +1392,15 @@ int aml_avbc_wrapper_init(void **pwrapper, void *para)
 		goto err_queue_alloc_fail;
 	}
 
+	wrapper->format = VFORMAT_AVBCD;
+	wrapper->port.vformat = wrapper->format;
 	/* create the vdec instance.*/
 	vdec = vdec_create(&wrapper->port, NULL, 0);
 	if (IS_ERR_OR_NULL(vdec))
 		goto vdec_create_fail;
 
-	wrapper->format 	= VFORMAT_AVBCD;
-	vdec->port		= &wrapper->port;
-	vdec->format		= wrapper->format;
+	vdec->port = &wrapper->port;
+	vdec->format = wrapper->format;
 
 	vdec->sys_info_store.format = vdec->format;
 	vdec->sys_info_store.width = 1920;
