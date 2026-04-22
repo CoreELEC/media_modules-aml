@@ -6640,6 +6640,10 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			p_H264_Dpb->num_reorder_frames <= p_H264_Dpb->max_dec_frame_buffering &&
 			p_H264_Dpb->num_reorder_frames >= 0) {
 			hw->dpb.reorder_output = hw->num_reorder_frames + 1;
+			if ((hw->dpb.reorder_output == 1) &&
+					(p_H264_Dpb->max_dec_frame_buffering > 1) &&
+					(p_H264_Dpb->mSPS.profile_idc != BASELINE))
+						hw->dpb.reorder_output++;
 		}
 	}
 
@@ -6809,6 +6813,10 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			p_H264_Dpb->num_reorder_frames <= p_H264_Dpb->max_dec_frame_buffering &&
 			p_H264_Dpb->num_reorder_frames >= 0) {
 			hw->dpb.reorder_output = hw->num_reorder_frames + 1;
+			if ((hw->dpb.reorder_output == 1) &&
+					(p_H264_Dpb->max_dec_frame_buffering > 1) &&
+					(p_H264_Dpb->mSPS.profile_idc != BASELINE))
+						hw->dpb.reorder_output++;
 		}
 
 		active_buffer_spec_num =
