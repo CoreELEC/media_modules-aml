@@ -2120,6 +2120,12 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 	if (pos == -1)
 		return 0;
 
+	if ((!flush_flag) &&
+		!(p_Dpb->fs[pos]->is_used == 3 ||
+		((p_Dpb->fs[pos]->data_flag & ERROR_FLAG) &&
+		(p_Dpb->fs[pos]->data_flag & FIELD_DISP_FLAG))))
+		return 0;
+
 	if (p_H264_Dpb->first_insert_frame == FirstInsertFrm_OUT) {
 		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 			"%s pos %d pos->poc %d  first_output_poc %d \n",
