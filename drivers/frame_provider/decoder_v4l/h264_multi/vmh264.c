@@ -6680,7 +6680,7 @@ static void vh264_config_canvs_for_mmu(struct vdec_h264_hw_s *hw)
 	}
 }
 
-static int check_ip_change(struct vdec_h264_hw_s *hw, u32 param1, u32 param2)
+static u32  retrieve_filed_of_stream(struct vdec_h264_hw_s *hw, u32 param1, u32 param2)
 {
 	int mb_width, mb_total;
 	int mb_height = 0;
@@ -6717,8 +6717,7 @@ static int check_ip_change(struct vdec_h264_hw_s *hw, u32 param1, u32 param2)
 	 * bit 15: frame_mbs_only_flag
 	 * bit 13-14: chroma_format_idc
 	 */
-	hw->seq_info = param2;
-	frame_mbs_only_flag = (hw->seq_info >> 15) & 0x01;
+	frame_mbs_only_flag = (param2 >> 15) & 0x01;
 	if (hw->dpb.mSPS.profile_idc != 100 &&
 		hw->dpb.mSPS.profile_idc != 110 &&
 		hw->dpb.mSPS.profile_idc != 122 &&
@@ -6773,8 +6772,14 @@ static int check_ip_change(struct vdec_h264_hw_s *hw, u32 param1, u32 param2)
 		V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 	field = check_force_interlace(hw, frame_width, frame_height) ?
 		V4L2_FIELD_INTERLACED : field;
+	return field;
+}
 
-	return (hw->field != field);
+static int check_ip_change(struct vdec_h264_hw_s *hw, u32 param1, u32 param2)
+{
+	hw->seq_info = param2;
+	return hw->field != V4L2_FIELD_ANY
+			&&  hw->field != retrieve_filed_of_stream(hw, param1, param2);
 }
 
 static int vh264_set_params(struct vdec_h264_hw_s *hw,
@@ -12284,7 +12289,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		}
 	}
 
-	hw->field = ps->field;
+
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 		"Res:%dx%d, DPB size:%d, margin:%d, scan:%s\n",
 		ps->visible_width, ps->visible_height,
@@ -12476,6 +12481,7 @@ static bool v4l_resolution_double_check(struct vdec_h264_hw_s *hw,
 			hw->dpb.dec_dpb_size = hw->report_res_info.dpb_size;
 			hw->last_res_info.param1 = hw->report_res_info.param1;
 			hw->last_res_info.param4 = hw->report_res_info.param4;
+			hw->field = retrieve_filed_of_stream(hw, param1, param2);
 		} else {
 			ret = true;
 		}
@@ -12688,6 +12694,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						}
 						hw->last_res_info.param1 = param1;
 						hw->last_res_info.param4 = param4;
+						hw->field = retrieve_filed_of_stream(hw, param1, param2);
 						hw->last_res_info.max_ref_size = (param1 >> 24) & 0xf;
 						hw->last_res_info.is_interlace = hw->is_interlace;
 					}
