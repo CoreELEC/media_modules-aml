@@ -79,6 +79,9 @@ struct aml_v4l2_vpp {
 	struct aml_v4l2_vpp_buf *ivbpool;
 	struct task_struct *task;
 	bool running;
+	bool is_first_frame;
+	bool is_first_dpss_output_done;
+	bool is_first_dpss_input_done;
 	struct semaphore sem_in, sem_out;
 	struct work_struct worker;
 

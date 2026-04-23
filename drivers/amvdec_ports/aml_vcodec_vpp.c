@@ -753,6 +753,13 @@ static enum DPSS_ERRORTYPE dpss_empty_input_done(void *arg, struct vframe_s *vf)
 		return DPSS_ERR_UNDEFINED;
 	}
 
+	if (vpp->is_first_dpss_input_done) {
+		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_EXINFO,
+			"%s dpss first dirty frame, discard\n", __func__);
+		vpp->is_first_dpss_input_done = 0;
+		return DPSS_ERR_UNDEFINED;
+	}
+
 	vpp_buf	= container_of(vf, struct aml_v4l2_vpp_buf, vf);
 	aml_buf = vpp_buf->aml_vb->aml_buf;
 	eos	= (vf->flag & VIDTYPE_V4L_EOS);
@@ -808,6 +815,13 @@ static enum DPSS_ERRORTYPE dpss_fill_output_done(void *arg, struct vframe_s *vf)
 		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_EXINFO,
 			"vpp discard submit frame %s %d vpp:%p\n",
 			__func__, __LINE__, vpp);
+		return DPSS_ERR_UNDEFINED;
+	}
+
+	if (vpp->is_first_dpss_output_done) {
+		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_EXINFO,
+			"%s dpss first dirty frame, discard\n", __func__);
+		vpp->is_first_dpss_output_done = 0;
 		return DPSS_ERR_UNDEFINED;
 	}
 
@@ -868,9 +882,9 @@ int aml_v4l2_create_di_instance(struct aml_vcodec_ctx *ctx,
 	int output_format;
 
 	if ((cfg->fmt == V4L2_PIX_FMT_NV21M) || (cfg->fmt == V4L2_PIX_FMT_NV21))
-		output_format = DPSS_OUTPUT_NV21 | DPSS_OUTPUT_LINEAR;
+		output_format = DPSS_OUTPUT_NV21;
 	else
-		output_format = DPSS_OUTPUT_NV12 | DPSS_OUTPUT_LINEAR;
+		output_format = DPSS_OUTPUT_NV12;
 
 	if (cfg->is_drm)
 		output_format |= DI_OUTPUT_TVP;
@@ -1006,6 +1020,7 @@ retry:
 
 		if (vpp->dpss_index >= 0) {
 			struct vframe_s *out = &out_buf->vf;
+			u32 resend_cnt;
 
 			/* submit I to DI. */
 			aml_buf = out_buf->aml_vb->aml_buf;
@@ -1059,16 +1074,23 @@ retry:
 				kfifo_len(&vpp->in_done_q),
 				kfifo_len(&vpp->out_done_q),
 				out->fgs_valid);
-
+			if (vpp->is_prog || !vpp->is_first_frame)
+				resend_cnt = 1;
+			else
+				resend_cnt = 2;
 #ifdef CONFIG_AMLOGIC_MEDIA_DEINTERLACE
-			vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_3,
-					out_buf->aml_vb->aml_buf->index);
+			while (resend_cnt > 0) {
+				vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_3,
+						out_buf->aml_vb->aml_buf->index);
 
-			dpss_empty_out_buffer(vpp->dpss_index, &out_buf->vf);
+				dpss_empty_out_buffer(vpp->dpss_index, &out_buf->vf);
 
-			vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_4,
-					in_buf->aml_vb->aml_buf->index);
-			dpss_empty_input_buffer(vpp->dpss_index, &in_buf->vf);
+				vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_4,
+						in_buf->aml_vb->aml_buf->index);
+				dpss_empty_input_buffer(vpp->dpss_index, &in_buf->vf);
+				resend_cnt--;
+			}
+			vpp->is_first_frame = 0;
 #endif
 		} else {
 			mutex_lock(&vpp->output_lock);
@@ -1261,6 +1283,9 @@ int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp)
 	kfifo_reset(&vpp->out_done_q);
 	kfifo_reset(&vpp->in_done_q);
 	kfifo_reset(&vpp->processing);
+	vpp->is_first_frame = 1;
+	vpp->is_first_dpss_input_done = 1;
+	vpp->is_first_dpss_output_done = 1;
 
 	for (i = 0 ; i < VPP_FRAME_SIZE ; i++) {
 		memset(&vpp->ivbpool[i], 0, sizeof(struct aml_v4l2_vpp_buf));
@@ -1399,6 +1424,9 @@ int aml_v4l2_vpp_init(
 	INIT_KFIFO(vpp->out_done_q);
 	INIT_KFIFO(vpp->in_done_q);
 	INIT_KFIFO(vpp->processing);
+	vpp->is_first_frame = 1;
+	vpp->is_first_dpss_input_done = 1;
+	vpp->is_first_dpss_output_done = 1;
 
 	vpp->ctx = ctx;
 	vpp->is_prog = cfg->is_prog;
