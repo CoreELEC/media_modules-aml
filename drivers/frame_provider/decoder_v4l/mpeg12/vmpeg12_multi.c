@@ -337,6 +337,7 @@ struct vdec_mpeg12_hw_s {
 	struct mmpeg2_userdata_info_t userdata_info;
 	struct mmpeg2_userdata_record_t ud_record[MAX_UD_RECORDS];
 	int cur_ud_idx;
+	int last_cur_ud_idx;
 	u8 *user_data_buffer;
 	int wait_for_udr_send;
 	u32 ucode_cc_last_wp;
@@ -390,6 +391,8 @@ struct vdec_mpeg12_hw_s {
 	int last_dur;
 	u8  parse_user_data_buf[CCBUF_SIZE];
 	u32 parse_user_data_size;
+	u32 last_parse_user_data_size;
+	u32 last_ud_flag;
 	struct userdata_meta_info_t meta_info;
 	u32 vf_ucode_cc_last_wp;
 	bool stream_multi_frame_flag;
@@ -398,6 +401,8 @@ struct vdec_mpeg12_hw_s {
 	u32 actual_frame_height;
 	u32 last_frame_ud_num;
 	u32 cur_frame_ud_num;
+	u32 last_frame_ud_poc;
+	u32 cur_frame_ud_poc;
 	u32 metadata_config_flag;
 	u32 timeout_flag;
 	spinlock_t timeout_lock;
@@ -1587,8 +1592,8 @@ static void userdata_push_do_work(struct work_struct *work)
 
 	cur_wp = reg & 0x7fff;
 	if (cur_wp == hw->ucode_cc_last_wp || (cur_wp >= AUX_BUF_ALIGN(CCBUF_SIZE))) {
-		debug_print(DECODE_ID(hw), 0,
-			"Null or Over size user data package: wp = %d\n", cur_wp);
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"Null or Over size user data package: wp = %d/%d\n", cur_wp, hw->ucode_cc_last_wp);
 		WRITE_VREG(AV_SCRATCH_J, 0);
 		return;
 	}
@@ -1602,8 +1607,10 @@ static void userdata_push_do_work(struct work_struct *work)
 	}
 
 	hw->cur_frame_ud_num++;
+	hw->cur_frame_ud_poc = meta_info.poc_number;
 
-	if (hw->cur_frame_ud_num <= hw->last_frame_ud_num) {
+	if ((hw->cur_frame_ud_num <= hw->last_frame_ud_num) &&
+		(hw->cur_frame_ud_poc == hw->last_frame_ud_poc)) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
 			"user data package duplicate retrieval, skip it, poc %d \n", meta_info.poc_number);
 		hw->ucode_cc_last_wp = cur_wp;
@@ -1691,7 +1698,8 @@ static void userdata_push_do_work(struct work_struct *work)
 	psrc_data = (u8 *)hw->ccbuf_phyAddress_virt + hw->ucode_cc_last_wp;
 
 #ifdef AUX_DATA_CRC
-	decoder_do_aux_data_check(vdec, psrc_data + 8, data_length - 8, meta_info.poc_number);
+	if (!hw->last_ud_flag)
+		decoder_do_aux_data_check(vdec, psrc_data + 8, data_length - 8, meta_info.poc_number);
 #endif
 
 	vf_data_length = cur_wp - hw->vf_ucode_cc_last_wp;
@@ -1818,6 +1826,22 @@ void userdata_pushed_drop(struct vdec_mpeg12_hw_s *hw)
 	hw->wait_for_udr_send = 0;
 	hw->parse_user_data_size = 0;
 	memset(hw->parse_user_data_buf, 0, CCBUF_SIZE);
+}
+
+void userdata_pushed_drop_stream(struct vdec_mpeg12_hw_s *hw)
+{
+	if (hw->parse_user_data_size) {
+		hw->last_cur_ud_idx = hw->cur_ud_idx;
+		hw->last_parse_user_data_size = hw->parse_user_data_size;
+		hw->last_ud_flag = 1;
+	}
+	debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"%s:last_ud_flag %d, cur_ud_idx %d/%d, parse_user_data_size %d/%d\n",
+			__func__, hw->last_ud_flag, hw->cur_ud_idx, hw->last_cur_ud_idx,
+			hw->parse_user_data_size, hw->last_parse_user_data_size);
+
+	hw->cur_ud_idx = 0;
+	hw->parse_user_data_size = 0;
 }
 
 static void v4l_mpeg12_collect_stream_info(struct vdec_s *vdec,
@@ -2824,7 +2848,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 #endif
 			hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
-			userdata_pushed_drop(hw);
+			userdata_pushed_drop_stream(hw);
 		}
 		return IRQ_HANDLED;
 	}else {  /* MPEG12_PIC_DONE, MPEG12_SEQ_END */
@@ -2919,6 +2943,18 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		new_pic->offset = offset;
 		new_pic->index = index;
 		new_pic->poc = READ_VREG(AV_SCRATCH_1) & 0x3ff;
+
+		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
+			"%s: wait_for_udr_send %d, user_data_size %d/%d, cur_ud_idx %d/%d, last_ud_flag %d\n",
+			__func__,
+			hw->wait_for_udr_send, hw->parse_user_data_size, hw->last_parse_user_data_size,
+			hw->cur_ud_idx, hw->last_cur_ud_idx, hw->last_ud_flag);
+
+		if (input_stream_based(vdec) && hw->wait_for_udr_send && (hw->last_ud_flag == 1)) {
+			hw->parse_user_data_size = hw->last_parse_user_data_size;
+			hw->cur_ud_idx = hw->last_cur_ud_idx;
+			hw->last_ud_flag = 0;
+		}
 
 		copy_user_data_to_pic(hw, new_pic);
 
@@ -3323,6 +3359,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 
 		if (input_stream_based(vdec)) {
 			hw->last_frame_ud_num = hw->cur_frame_ud_num;
+			hw->last_frame_ud_poc = hw->cur_frame_ud_poc;
 		}
 	} else if (hw->dec_result == DEC_RESULT_GET_DATA &&
 		vdec->next_status != VDEC_STATUS_DISCONNECTED) {
@@ -4236,6 +4273,7 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 	hw->cur_idx = INVALID_IDX;
 	hw->process_busy = false;
 	hw->timeout_flag = TIMEOUT_INIT;
+	hw->last_ud_flag = 0;
 
 	atomic_set(&hw->disp_num, 0);
 	atomic_set(&hw->put_num, 0);

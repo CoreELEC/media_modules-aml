@@ -392,6 +392,8 @@ struct vdec_mpeg12_hw_s {
 	u32 consume_byte;
 	u32 last_frame_ud_num;
 	u32 cur_frame_ud_num;
+	u32 last_frame_ud_poc;
+	u32 cur_frame_ud_poc;
 	bool is_interlace;
 	u32 timeout_flag;
 	spinlock_t timeout_lock;
@@ -1553,8 +1555,10 @@ static void userdata_push_do_work(struct work_struct *work)
 	}
 
 	hw->cur_frame_ud_num++;
+	hw->cur_frame_ud_poc = meta_info.poc_number;
 
-	if (hw->cur_frame_ud_num <= hw->last_frame_ud_num) {
+	if ((hw->cur_frame_ud_num <= hw->last_frame_ud_num) &&
+		(hw->cur_frame_ud_poc == hw->last_frame_ud_poc)) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL,
 			"user data package duplicate retrieval, skip it, poc %d \n", meta_info.poc_number);
 		hw->ucode_cc_last_wp = cur_wp;
@@ -2944,6 +2948,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 
 		if (input_stream_based(vdec)) {
 			hw->last_frame_ud_num = hw->cur_frame_ud_num;
+			hw->last_frame_ud_poc = hw->cur_frame_ud_poc;
 			vdec_set_input_underrun(vdec, true);
 			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 				"%s: set input underrun status to true\n", __func__);
