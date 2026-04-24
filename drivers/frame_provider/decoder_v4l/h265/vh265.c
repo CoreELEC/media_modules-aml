@@ -9643,7 +9643,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	}
 
 	hevc->video_signal_type_debug = vf->signal_type;
-	if (vf->signal_type) {
+	if (vf->signal_type && (ctx->signal_type_info.signal_type != vf->signal_type)) {
 		ctx->signal_type_info.signal_type = vf->signal_type;
 		ctx->signal_type_info.timestamp = pic->timestamp;
 		vdec_v4l_post_event(ctx, V4L2_EVENT_REPORT_SIGNAL_TYPE);
