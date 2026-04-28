@@ -600,6 +600,7 @@ struct aml_vdec_cfg_infos {
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
 	/*
+	 * bit 26	: High-performance screenshot. 0: disable, 1: enable.
 	 * bit 25	: whether heic/avif picture is multi_grid pic
 	 * bit 24	: thumbnail mode flag.
 	 * bit 23	: avbcd mode flag.
@@ -1213,6 +1214,7 @@ struct aml_vcodec_ctx {
 	u32			duration;
 	int			local_id;
 	u32			thumbnail_mode;
+	u32			perf_screenshot;
 	struct output_mode_ext	output_mode_ext;
 	bool			set_outputmode_flag;
 };

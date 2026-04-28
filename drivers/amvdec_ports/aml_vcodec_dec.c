@@ -3750,6 +3750,19 @@ static int is_vdec_core_fmt(u32 fmt)
 	return false;
 }
 
+static int is_none_mmu_fmt(u32 fmt)
+{
+	if (fmt == V4L2_PIX_FMT_MPEG || fmt == V4L2_PIX_FMT_MPEG1 ||
+		fmt == V4L2_PIX_FMT_MPEG2 || fmt == V4L2_PIX_FMT_MPEG4 ||
+		fmt == V4L2_PIX_FMT_AVS || fmt == V4L2_PIX_FMT_MJPEG ||
+		fmt == V4L2_PIX_FMT_JPEG || fmt == V4L2_PIX_FMT_VC1_ANNEX_G ||
+		fmt == V4L2_PIX_FMT_VC1_ANNEX_L)
+		return true;
+
+	return false;
+}
+
+
 static bool is_dynamic_mode(struct aml_vcodec_ctx *ctx)
 {
 	if (ctx->enable_di_post &&
@@ -4446,7 +4459,9 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 		update_ctx_dimension(ctx, f->type);
 		copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
 #if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
-		if (!disable_avbcd && !(ctx->avbcd_work_mode & AVBCD_DEBUG_MODE))
+		if (!is_none_mmu_fmt(ctx->output_pix_fmt) &&
+				ctx->perf_screenshot &&
+				!(ctx->avbcd_work_mode & AVBCD_DEBUG_MODE))
 			schedule_work(&ctx->avbcd_call_wkr);
 #endif
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
@@ -6920,6 +6935,9 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		ctx->alloc_type = dec->cfg.metadata_config_flag & (1 << 21);
 		ctx->avbcd_work_mode = dec->cfg.metadata_config_flag & (1 << 23);
 		ctx->thumbnail_mode = dec->cfg.metadata_config_flag & THUMBNAIL_MODE_FLAG;
+		ctx->perf_screenshot = dec->cfg.metadata_config_flag & (1 << 26);
+		if (disable_avbcd)
+			ctx->perf_screenshot = false;
 #if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 		if (avbcd_work_mode & AVBCD_DEBUG_MODE || (ctx->avbcd_work_mode && (avbcd_work_mode & 0xf))) {
 			ctx->avbcd_work_mode = avbcd_work_mode;
