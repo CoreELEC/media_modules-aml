@@ -132,6 +132,8 @@
 
 #define MAX_SIZE_2K (1920 * 1088)
 
+#define AFD_BUF_LEN_MAX        16
+
 static int pre_decode_buf_level = 0x800;
 static int start_decode_buf_level = 0x4000;
 static u32 dec_control;
@@ -406,6 +408,8 @@ struct vdec_mpeg12_hw_s {
 	u32 metadata_config_flag;
 	u32 timeout_flag;
 	spinlock_t timeout_lock;
+	u8  afd_buf_bak[AFD_BUF_LEN_MAX];
+	u32 afd_size_bak;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -2239,6 +2243,24 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 
 			vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
 			vf->vf_ud_param.ud_param = pic->ud_param;
+
+			/* fix AFD data loss due to frame drops after decoded frame output */
+			if (pic->ud_param.buf_len == 0) {
+				if (pic->ud_param.meta_info.poc_number == 0) {
+					memset(hw->afd_buf_bak, 0, sizeof(hw->afd_buf_bak));
+					hw->afd_size_bak = 0;
+				} else if (hw->afd_size_bak) {
+					memcpy(vf->vf_ud_param.ud_param.pbuf_addr,
+							hw->afd_buf_bak, hw->afd_size_bak);
+					vf->vf_ud_param.ud_param.buf_len = hw->afd_size_bak;
+				}
+			} else {
+				if (pic->ud_param.buf_len > AFD_BUF_LEN_MAX)
+					hw->afd_size_bak = AFD_BUF_LEN_MAX;
+				else
+					hw->afd_size_bak = pic->ud_param.buf_len;
+				memcpy(hw->afd_buf_bak, pic->ud_param.pbuf_addr, hw->afd_size_bak);
+			}
 
 			if (debug_enable & PRINT_FLAG_USERDATA_DETAIL)
 			{

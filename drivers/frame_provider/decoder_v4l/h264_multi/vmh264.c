@@ -498,6 +498,8 @@ u32 V_BUF_ADDR_OFFSET = 0x200000 + 0x8000/* 32*0x400 */ + 0x20000/* 256*0x200 */
 #define SLICE_TYPE_P 5
 #define SLICE_TYPE_B 6
 
+#define AFD_BUF_LEN_MAX        16
+
 struct buffer_spec_s {
 	/*
 	used:
@@ -1066,6 +1068,9 @@ struct vdec_h264_hw_s {
 	int overscan_appropriate_flag;
 	bool unsupport_format;
 	bool init_set_dw_flag;
+
+	u8  afd_buf_bak[AFD_BUF_LEN_MAX];
+	u32 afd_size_bak;
 };
 
 #define TIMEOUT_INIT 0
@@ -4270,6 +4275,24 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
 		vf->vf_ud_param.ud_param = pic->ud_param[ud_index];
+
+		/* fix AFD data loss due to frame drops after decoded frame output */
+		if (pic->ud_param[ud_index].buf_len == 0) {
+			if (pic->ud_param[ud_index].meta_info.poc_number == 0) {
+				memset(hw->afd_buf_bak, 0, sizeof(hw->afd_buf_bak));
+				hw->afd_size_bak = 0;
+			} else if (hw->afd_size_bak) {
+				memcpy(vf->vf_ud_param.ud_param.pbuf_addr,
+						hw->afd_buf_bak, hw->afd_size_bak);
+				vf->vf_ud_param.ud_param.buf_len = hw->afd_size_bak;
+			}
+		} else {
+			if (pic->ud_param[ud_index].buf_len > AFD_BUF_LEN_MAX)
+				hw->afd_size_bak = AFD_BUF_LEN_MAX;
+			else
+				hw->afd_size_bak = pic->ud_param[ud_index].buf_len;
+			memcpy(hw->afd_buf_bak, pic->ud_param[ud_index].pbuf_addr, hw->afd_size_bak);
+		}
 
 		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_UD_DETAIL))
 		{
