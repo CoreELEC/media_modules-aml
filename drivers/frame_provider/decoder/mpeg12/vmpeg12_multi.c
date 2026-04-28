@@ -1240,8 +1240,9 @@ static void user_data_ready_notify(struct vdec_mpeg12_hw_s *hw,
 			hw->ud_record[i].meta_info.vpts = pts;
 			hw->ud_record[i].meta_info.vpts_64 = pts_64;
 			debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
-				"%s, pts %lld, pts_valid %d, poc %d\n",
+				"%s, pts %lld, pts_valid %d, vpts_64 %llu, poc %d\n",
 				__func__, pts, pts_valid,
+				hw->ud_record[i].meta_info.vpts_64,
 				hw->ud_record[i].meta_info.poc_number);
 
 			*p_userdata_rec = hw->ud_record[i];
@@ -1827,7 +1828,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 
 		if (!ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
 			vpts = pts_info.pts;
-			vpts_64 = pts_info.pts_64;
+			vpts_64 = USERDATA_PTS64_TO_90K(pts_info.pts_64);
 			vpts_valid = 1;
 		}
 	}

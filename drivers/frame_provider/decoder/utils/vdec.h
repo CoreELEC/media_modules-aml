@@ -230,6 +230,7 @@ enum e_userdata_frame_type {
  * div64_u64(pts64 * 9, 100): convert pts64 to 90k units
  * 1000: pts64 integrate with v4l2 framework
  */
+#define USERDATA_PTS64_TO_90K(pts64)  div64_u64(pts64 * 9, 100)
 #define USERDATA_PTS64_TO_90K_V4L2(pts64)  div64_u64(pts64 * 9, 100 * 1000)
 
 /* same size with SEI_BUF_SIZE in aml_vcodec_dec.h */

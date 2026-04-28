@@ -12511,6 +12511,9 @@ static int userdata_prepare(struct hevc_state_s *hevc)
 				vpts = 0;
 				pts64 = 0;
 				pts_valid = 0;
+			} else {
+				pts_valid = 1;
+				pts64 = USERDATA_PTS64_TO_90K(pts64);
 			}
 		}
 		vh265_userdata_fill_vpts(hevc, vpts, pts64, pts_valid, pic->POC);

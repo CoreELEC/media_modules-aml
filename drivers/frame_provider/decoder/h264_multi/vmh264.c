@@ -7988,7 +7988,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 					pts_info.offset = (((u64)hw->frame_dur << 32) & 0xffffffff00000000) | offset;
 					if (!ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
 						vpts = pts_info.pts;
-						vpts_64 = pts_info.pts_64;
+						vpts_64 = USERDATA_PTS64_TO_90K(pts_info.pts_64);
 						vpts_valid = 1;
 					}
 				}
@@ -11145,6 +11145,7 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	meta_info.flags |= (VFORMAT_H264 << 3);
 
 	meta_info.vpts = vpts;
+	meta_info.vpts_64 = vpts_64;
 	meta_info.vpts_valid = vpts_valid;
 	meta_info.poc_number =
 		p_H264_Dpb->mVideo.dec_picture->poc;
@@ -11183,8 +11184,10 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	hw->userdata_info.write_index++;
 	if (hw->userdata_info.write_index >= USERDATA_FIFO_NUM)
 		hw->userdata_info.write_index = 0;
-	dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL, "%s: poc %d, rec_len %d, vpts %llu, vpts_valid %d, write_index %d\n",
-		__func__, hw->ud_record.meta_info.poc_number, p_userdata_rec->rec_len, hw->ud_record.meta_info.vpts,
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
+		"%s: poc %d, rec_len %d, vpts %llu, vpts_64 %llu, vpts_valid %d, write_index %d\n",
+		__func__, hw->ud_record.meta_info.poc_number, p_userdata_rec->rec_len,
+		hw->ud_record.meta_info.vpts, hw->ud_record.meta_info.vpts_64,
 		hw->ud_record.meta_info.vpts_valid, hw->userdata_info.write_index);
 
 	mutex_unlock(&hw->userdata_mutex);
@@ -11242,6 +11245,7 @@ static int vmh264_user_data_read(struct vdec_s *vdec,
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL, "%s:poc %d, rec_len %d, vpts %llu, vpts_valid %d, (ri/wi) %d/%d\n",
 		__func__, p_userdata_rec->meta_info.poc_number, rec_len,
 		p_userdata_rec->meta_info.vpts, p_userdata_rec->meta_info.vpts_valid, rec_ri, rec_wi);
+
 	if (rec_len <= puserdata_para->buf_len) {
 		/* dvb user data buffer is enought to
 		copy the whole recored. */

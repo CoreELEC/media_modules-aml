@@ -11486,7 +11486,7 @@ static int userdata_prepare(struct hevc_state_s *hevc)
 				pts_info.offset = (((u64)hevc->frame_dur << 32) & 0xffffffff00000000) | pic->stream_offset;
 				if (!ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
 					vpts = pts_info.pts;
-					pts64 = pts_info.pts_64;
+					pts64 = USERDATA_PTS64_TO_90K(pts_info.pts_64);
 					pts_valid = 1;
 				}
 			}
