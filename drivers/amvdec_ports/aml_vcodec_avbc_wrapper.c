@@ -27,7 +27,7 @@
 #include <linux/types.h>
 
 #include "vdec_drv_if.h"
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "aml_vcodec_avbc_wrapper.h"
 #endif
 #include "trigger_data.h"

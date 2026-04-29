@@ -79,7 +79,7 @@
 #include "../../../common/media_utils/media_utils.h"
 #include "../../decoder/utils/vdec_ge2d_utils.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
 #endif
 
@@ -6228,7 +6228,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 	return NULL;
 }
 
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 static void av1_avbc_done_cb(void *output)
 {
 	struct aml_avbc_buf *buf = container_of(output, struct aml_avbc_buf, output);
@@ -6316,7 +6316,7 @@ static void av1_avbc_done_cb(void *output)
 
 static void av1_post_avbcd_task(struct AV1HW_s *hw)
 {
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	struct avbc_output *out;

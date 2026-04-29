@@ -54,7 +54,7 @@
 #include "aml_vcodec_vpp.h"
 #include "aml_vcodec_ge2d.h"
 #include "aml_vcodec_dec_infoserver.h"
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "aml_vcodec_avbc_wrapper.h"
 #endif
 
@@ -1425,7 +1425,7 @@ void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 
 	switch (requester) {
 	case AML_FB_REQ_DEC:
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 		if (ctx->avbcd_work_mode)
 			/* dec <==> avbcd. */
 			task->attach(task, get_avbc_ops(), ctx->avbc_wrapper);
@@ -1477,7 +1477,7 @@ void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 	case AML_FB_REQ_AVBCD:
 		/* AVBCD <==> v4l-sink. */
 		task->attach(task, get_v4l_sink_ops(), ctx);
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 		task->attach(task, get_avbc_ops(), ctx->avbc_wrapper);
 #endif
 		break;
@@ -1932,7 +1932,7 @@ out:
 
 void avbcd_call_worker(struct work_struct *work)
 {
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 	struct aml_vcodec_ctx *ctx =
 		container_of(work, struct aml_vcodec_ctx, avbcd_call_wkr);
 	struct avbc_input *avbc_in = vzalloc(sizeof(struct avbc_input));
@@ -2804,7 +2804,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 
 		ctx->is_stream_off = false;
 		aml_buf_workqueue_enable(&ctx->bm);
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 		if (ctx->avbcd_work_mode)
 			aml_avbc_wrapper_start(ctx->avbc_wrapper);
 #endif
@@ -4091,7 +4091,7 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 			}
 		}
 		mutex_unlock(&ctx->state_lock);
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 		if (ctx->avbcd_work_mode & AVBCD_DEBUG_MODE) {
 			aml_avbc_wrapper_destroy(aml_avbc_get_wrapper());
 			aml_avbc_wrapper_init(&ctx->avbc_wrapper, NULL);
@@ -4444,7 +4444,7 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 	    (ctx->state >= AML_STATE_PROBE)) {
 		update_ctx_dimension(ctx, f->type);
 		copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 		if (!disable_avbcd && !(ctx->avbcd_work_mode & AVBCD_DEBUG_MODE))
 			schedule_work(&ctx->avbcd_call_wkr);
 #endif
@@ -5848,7 +5848,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		ctx->in_buff_cnt = 0;
 		ctx->write_frames = 0;
 		ctx->master_buf = NULL;
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 		if (ctx->avbcd_work_mode)
 			aml_avbc_wrapper_stop(ctx->avbc_wrapper);
 #endif
@@ -6908,7 +6908,7 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		ctx->alloc_type = dec->cfg.metadata_config_flag & (1 << 21);
 		ctx->avbcd_work_mode = dec->cfg.metadata_config_flag & (1 << 23);
 		ctx->thumbnail_mode = dec->cfg.metadata_config_flag & THUMBNAIL_MODE_FLAG;
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 		if (avbcd_work_mode & AVBCD_DEBUG_MODE || (ctx->avbcd_work_mode && (avbcd_work_mode & 0xf))) {
 			ctx->avbcd_work_mode = avbcd_work_mode;
 			ctx->no_fbc_output = false;

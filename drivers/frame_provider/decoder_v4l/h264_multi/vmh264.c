@@ -73,7 +73,7 @@
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
 #include "../../../common/register/register.h"
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
 #endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
@@ -2908,7 +2908,7 @@ int recycle_frame_buffer(struct h264_dpb_stru *p_H264_Dpb, int buf_spec_num,
 	return 0;
 }
 
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 static void h264_avbc_done_cb(void *output)
 {
 	struct aml_avbc_buf *buf = container_of(output, struct aml_avbc_buf, output);
@@ -3023,7 +3023,7 @@ static void h264_avbc_done_cb(void *output)
 
 static void h264_post_avbcd_task(struct vdec_h264_hw_s *hw)
 {
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	struct avbc_output *out;
@@ -7514,7 +7514,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 #endif
 	if ((kfifo_len(&hw->newframe_q) <= 0) ||
@@ -7586,7 +7586,7 @@ static bool is_buffer_available(struct vdec_s *vdec)
 				return have_free_buf_spec(vdec, false);
 
 			if (
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 			!ctx->avbcd_work_mode &&
 #endif
 				((p_H264_Dpb->mDPB.used_size >= p_H264_Dpb->dec_dpb_size) ||

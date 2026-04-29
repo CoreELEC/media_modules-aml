@@ -35,7 +35,7 @@
 //#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "../frame_provider/decoder/utils/vdec_dw.h"
 
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "aml_vcodec_avbc_wrapper.h"
 #endif
 #include "utils/aml_dec_trace.h"
@@ -1126,7 +1126,7 @@ struct aml_vcodec_ctx {
 	struct aml_fb_map_table		fb_map[32];
 	struct aml_vpp_cfg_infos 	vpp_cfg;
 	void (*vdec_pic_info_update)(struct aml_vcodec_ctx *ctx);
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 	int (*aml_avbc_decode)(struct avbc_output *, struct avbc_input *, u32);
 #endif
 	void (*vdec_configure_update)(struct aml_vcodec_ctx *ctx);

@@ -47,7 +47,7 @@
 #include "../../../media_sync/pts_server/pts_server_core.h"
 #include "../../../amvdec_ports/utils/common.h"
 #include "../../../common/media_utils/media_utils.h"
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
 #endif
 #include <linux/amlogic/media/resource_mgr/resourcemanage.h>
@@ -441,7 +441,7 @@ struct vdec_info_statistic_s {
 	u32 bit_depth;
 };
 
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 struct aml_avbc_buf {
 	struct aml_buf *am_buf;
 	struct avbc_output output;
@@ -631,7 +631,7 @@ struct vdec_s {
 	u64 hw_front_decode_start;
 	u64 hw_back_decode_start;
 #endif
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 	DECLARE_KFIFO_PTR(avbc_frame_q, typeof(struct aml_avbc_buf*));
 	struct aml_avbc_buf *avbcpool;
 	struct avbc_input avbc_in;

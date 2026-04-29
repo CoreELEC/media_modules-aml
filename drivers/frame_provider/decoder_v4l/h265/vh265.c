@@ -69,7 +69,7 @@
 #include "../../../amvdec_ports/aml_vcodec_ts.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
 #endif
 
@@ -9840,7 +9840,7 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 	return NULL;
 }
 
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 static void h265_avbc_done_cb(void *output)
 {
 	struct aml_avbc_buf *buf = container_of(output, struct aml_avbc_buf, output);
@@ -10531,7 +10531,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct PIC_s *frame)
 
 static void h265_post_avbcd_task(struct hevc_state_s *hevc)
 {
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 	struct aml_vcodec_ctx *ctx = hevc->v4l2_ctx;
 	struct avbc_output *out;
@@ -15339,7 +15339,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	if (hevc->pic_list_init_flag != 3)
 		return 1;
 
-#ifdef CONFIG_AMLOGIC_MEDIA_WRAPPER
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 	if (ctx->avbcd_work_mode)
 		return has_free_buf;
 #endif
