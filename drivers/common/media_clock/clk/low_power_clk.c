@@ -42,7 +42,8 @@ static void lp_clk_on_avbcd_v2(void)
 		(0x0	<< 17) | //lcevc
 		(0x0	<< 24)	 //reserved
 		));
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T6X) {
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T6X) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_A9)) {
 		SET_VREG_MASK(HEVC_LPF_CG_OFF2, 1 << 16);
 	}
 }
@@ -95,7 +96,13 @@ static void lp_clk_on_vp9_v2(void)// Enable DOS Clocks
 
 	WRITE_VREG(DOS_GCLK_EN3, 0x1ffff);
 
-	WRITE_VREG(HEVC_SW_PARSER_CLK_ENABLE, 0x0000e0e0);
+	if (is_support_format(VFORMAT_H266)) {
+		// VVC Enable -- VP9 will not share AV1 resource
+		WRITE_VREG(HEVC_SW_PARSER_CLK_ENABLE, 0x0000e0e0);
+	} else {
+		// VVC Disabled -- VP9 share AV1 resource, need to clock on clk_av1_parser_core/av1_dma_ctl
+		WRITE_VREG(HEVC_SW_PARSER_CLK_ENABLE, 0x0000c060);
+	}
 
 	WRITE_VREG(HEVCD_IPP_GCLKGATE_CONFIG, ((0x0 << 0) | //av1_avs3_vvc_enable
 		(0x0 << 1)   //vvc_enable
@@ -350,7 +357,8 @@ static void lp_clk_off_common_v2(void)
 	WRITE_VREG(GCLK_EN, 0);
 	CLEAR_VREG_MASK(DOS_GCLK_EN0, 0xc00003ff);
 	WRITE_VREG(DOS_GCLK_EN3, 0x0);
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T6X) {
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T6X) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_A9)) {
 		CLEAR_VREG_MASK(HEVC_LPF_CG_OFF2, 1 << 16);
 	}
 }

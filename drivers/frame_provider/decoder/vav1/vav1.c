@@ -10492,12 +10492,12 @@ static s32 vav1_init(struct AV1HW_s *hw)
 			av1_print(hw, 0, "av1 front swap ucode loaded fail.\n");
 			return -ENOMEM;
 		}
+		memcpy((u8 *)hw->swap_virt_addr, fw->data + SWAP_HEVC_OFFSET,
+			hw->swap_size);
 #ifdef PXP_DEBUG_34BIT
 		hw->swap_phy_addr = dma_map_single(get_vdec_device(),
 				hw->swap_virt_addr, hw->swap_size, DMA_TO_DEVICE);
 #endif
-		memcpy((u8 *)hw->swap_virt_addr, fw->data + SWAP_HEVC_OFFSET,
-			hw->swap_size);
 		swap_data = hw->swap_virt_addr;
 		av1_print(hw, 0, "ucode swap: %02x, %02x, %02x, %02x, \t%02x, %02x, %02x, %02x, \t%02x, %02x, %02x, %02x, \t%02x, %02x, %02x, %02x\n",
 			swap_data[0], swap_data[1], swap_data[2], swap_data[3],

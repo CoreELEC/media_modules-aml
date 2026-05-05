@@ -84,6 +84,8 @@ enum AM_MESON_CPU_MAJOR_ID {
 	AM_MESON_CPU_MAJOR_ID_T6D	= 0x49,
 	AM_MESON_CPU_MAJOR_ID_GXLX4	= 0x4a,
 	AM_MESON_CPU_MAJOR_ID_T6X	= 0x4b,
+	AM_MESON_CPU_MAJOR_ID_RES_0x4c,
+	AM_MESON_CPU_MAJOR_ID_A9	= 0x4d,
 	AM_MESON_CPU_MAJOR_ID_MAX,
 };
 
@@ -143,6 +145,7 @@ enum ResResult {
 #define DOS_CLK_666M  (667)
 #define DOS_CLK_800M  (800)
 #define DOS_CLK_840M  (840)
+#define DOS_CLK_850M  (852)
 #define DOS_CLK_1000M (1000)
 
 /* dos hardware feature define. */
@@ -182,6 +185,8 @@ struct dos_of_dev_s {
 
 	bool is_vp9_hw_adapt_prob;
 	bool is_vdec_hevc_combine;  /* vdec merged in hevc */
+
+	bool is_support_afgs;
 
 	bool is_support_path_monitor;    /* hevc path monitor */
 	bool is_support_bandwidth_msr; /* bandwidth measure in path monitor */
@@ -336,6 +341,8 @@ inline bool is_amrisc_imem_size_6k(void);
 inline bool is_support_axi_monitor(void);
 
 inline u32 get_dos_dw_capability(void);
+
+inline bool is_support_afgs(void);
 
 void pr_dos_infos(void);
 

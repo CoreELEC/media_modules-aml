@@ -2076,10 +2076,12 @@ static int hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 	/*Reset SAO + Enable SAO slice_start*/
 	if (hw->mmu_enable  && get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
 		WRITE_VREG(HEVC_DBLK_CFG0, 0x1); // reset buffer32x4 in lpf for every picture
-	WRITE_VREG(HEVC_SAO_INT_STATUS,
-			READ_VREG(HEVC_SAO_INT_STATUS) | 0x1 << 28);
-	WRITE_VREG(HEVC_SAO_INT_STATUS,
-			READ_VREG(HEVC_SAO_INT_STATUS) | 0x1 << 31);
+	if (!is_support_afgs()) {
+		WRITE_VREG(HEVC_SAO_INT_STATUS,
+				READ_VREG(HEVC_SAO_INT_STATUS) | 0x1 << 28);
+		WRITE_VREG(HEVC_SAO_INT_STATUS,
+				READ_VREG(HEVC_SAO_INT_STATUS) | 0x1 << 31);
+	}
 	/*Send command to hevc-code to supply 4k buffers to sao*/
 
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) {

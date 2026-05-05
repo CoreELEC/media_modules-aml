@@ -661,6 +661,33 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_amrisc_imem_size_6k = true,
 		.dos_dw_capability = YUV_1_2_4 | P010_1_2_4 | AV1_H266_YUV_ONLY,
 	},
+
+	[AM_MESON_CPU_MAJOR_ID_A9 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_A9,
+		.reg_compat = NULL,
+		.max_vdec_clock  = DOS_CLK_850M,
+		.max_hevcf_clock = DOS_CLK_850M,
+		.max_hevcb_clock = DOS_CLK_850M,
+		.hevc_clk_combine_flag  = true,
+		.is_vdec_canvas_support = true,
+		.is_support_h264_mmu    = true,
+		.is_mjpeg_endian_rematch = true,
+		.is_vcpu_clk_set = true,
+		.is_vp9_hw_adapt_prob = true,
+		.is_support_p010 = true,
+		.is_support_path_monitor = true,
+		.is_vdec_hevc_combine = true,
+		.is_support_avbc_wrapper = true,
+		.dos_bus_ctrl = BUSCTL_HEVC_FB,
+		.dos_bus_idle_mask = (1 << 29),
+		.vdec_max_resolution = RESOLUTION_4K,
+		.hevc_max_resolution = RESOLUTION_4K,
+		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1_AVS3,
+		.is_support_34bit = true,
+		.is_amrisc_imem_size_6k = true,
+		.is_support_afgs = true,
+		.dos_dw_capability = YUV_1_2_4 | P010_1_2_4 | AV1_YUV_ONLY,
+	},
 };
 
 /* sub id features */
@@ -901,6 +928,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-t6x",
 		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_T6X - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-a9",
+		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_A9 - MAJOR_ID_START],
 	},
 	{},
 };
@@ -1728,6 +1759,12 @@ inline u32 get_dos_dw_capability(void)
 	return platform_dos_dev->dos_dw_capability;
 }
 EXPORT_SYMBOL(get_dos_dw_capability);
+
+inline bool is_support_afgs(void)
+{
+	return platform_dos_dev->is_support_afgs;
+}
+EXPORT_SYMBOL(is_support_afgs);
 
 void pr_dos_infos(void)
 {

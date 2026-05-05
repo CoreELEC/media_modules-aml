@@ -14002,13 +14002,14 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 			vfree(fw);
 			return -ENOMEM;
 		}
+
+		memcpy((u8 *) hevc->mc_cpu_addr, fw->data + SWAP_HEVC_OFFSET,
+			hevc->swap_size);
+
 #ifdef PXP_DEBUG_34BIT
 		hevc->mc_dma_handle = dma_map_single(get_vdec_device(),
 					hevc->mc_cpu_addr, hevc->swap_size, DMA_TO_DEVICE);
 #endif
-
-		memcpy((u8 *) hevc->mc_cpu_addr, fw->data + SWAP_HEVC_OFFSET,
-			hevc->swap_size);
 
 		hevc_print(hevc, 0,
 			"vh265 mmu ucode swap loaded %x\n", hevc->mc_dma_handle);

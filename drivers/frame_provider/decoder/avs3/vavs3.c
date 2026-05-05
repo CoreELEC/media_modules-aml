@@ -2830,18 +2830,21 @@ static void init_buff_spec(struct AVS3Decoder_s *dec,
 		WORKBUF_ALIGN(buf_spec->lmem.buf_start + buf_spec->lmem.buf_size);
 
 	if (dec) {
-		mem_start_virt =
-			codec_mm_phys_to_virt(buf_spec->dblk_para.buf_start);
-		if (mem_start_virt) {
-			memset(mem_start_virt, 0, buf_spec->dblk_para.buf_size);
-			codec_mm_dma_flush(mem_start_virt,
-				buf_spec->dblk_para.buf_size,
-				DMA_TO_DEVICE);
-		} else {
-			/*not virt for tvp playing,
-			may need clear on ucode.*/
-			pr_err("mem_start_virt failed\n");
+		if (!vdec_secure(hw_to_vdec(dec))) {
+			mem_start_virt =
+				codec_mm_phys_to_virt(buf_spec->dblk_para.buf_start);
+			if (mem_start_virt) {
+				memset(mem_start_virt, 0, buf_spec->dblk_para.buf_size);
+				codec_mm_dma_flush(mem_start_virt,
+					buf_spec->dblk_para.buf_size,
+					DMA_TO_DEVICE);
+			} else {
+				/*not virt for tvp playing,
+				may need clear on ucode.*/
+				pr_err("mem_start_virt failed\n");
+			}
 		}
+
 		if (debug) {
 			pr_info("%s workspace (%lx %lx) size = %lx\n", __func__,
 				   buf_spec->start_adr, buf_spec->end_adr,
@@ -9760,6 +9763,9 @@ static unsigned char get_data_check_sum
 	int sum = 0;
 	u8 *data = NULL;
 
+	if (vdec_secure(hw_to_vdec(dec)))
+		return 0;
+
 	if (!dec->chunk->block->is_mapped)
 		data = codec_mm_vmap(dec->chunk->block->start +
 			dec->chunk->offset, size);
@@ -9781,6 +9787,9 @@ static void dump_data(struct AVS3Decoder_s *dec, int size)
 	u8 *data = NULL;
 	int padding_size = dec->chunk->offset &
 		(VDEC_FIFO_ALIGN - 1);
+
+	if (vdec_secure(hw_to_vdec(dec)))
+		return;
 
 	if (!dec->chunk->block->is_mapped)
 		data = codec_mm_vmap(dec->chunk->block->start +
@@ -10733,7 +10742,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			READ_VREG(HEVC_STREAM_WR_PTR),
 			READ_VREG(HEVC_STREAM_RD_PTR),
 			dec->start_shift_bytes);
-		if (vdec_frame_based(vdec) && dec->chunk) {
+		if (vdec_frame_based(vdec) && dec->chunk && !vdec_secure(vdec)) {
 			u8 *data = NULL;
 			if (!dec->chunk->block->is_mapped)
 				data = codec_mm_vmap(dec->chunk->block->start +

@@ -1078,6 +1078,7 @@ static int vdec_clock_get(enum vdec_type_e core)
 	AM_MESON_CPU_MAJOR_ID_T6D,\
 	AM_MESON_CPU_MAJOR_ID_GXLX4,\
 	AM_MESON_CPU_MAJOR_ID_T6X,\
+	AM_MESON_CPU_MAJOR_ID_A9,\
 	0}
 #include "clk.h"
 

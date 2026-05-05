@@ -2898,7 +2898,7 @@ static s32 vvc1_init(struct vdec_vc1_hw_s *hw)
 {
 	struct firmware_s *fw;
 	u32 fw_size = 0x1000 * 16;
-	int fw_type = VIDEO_DEC_VC1;
+	int fw_type = VIDEO_DEC_VC1_MULTI;
 	int size = -1;
 
 	pr_info("vvc1_init, format %d\n", hw->vvc1_amstream_dec_info.format);

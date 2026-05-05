@@ -2103,10 +2103,12 @@ static int hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 	/*Reset SAO + Enable SAO slice_start*/
 	if (hw->mmu_enable  && get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A)
 		WRITE_VREG(HEVC_DBLK_CFG0, 0x1); // reset buffer32x4 in lpf for every picture
-	WRITE_VREG(HEVC_SAO_INT_STATUS,
-			READ_VREG(HEVC_SAO_INT_STATUS) | 0x1 << 28);
-	WRITE_VREG(HEVC_SAO_INT_STATUS,
-			READ_VREG(HEVC_SAO_INT_STATUS) | 0x1 << 31);
+	if (!is_support_afgs()) {
+		WRITE_VREG(HEVC_SAO_INT_STATUS,
+				READ_VREG(HEVC_SAO_INT_STATUS) | 0x1 << 28);
+		WRITE_VREG(HEVC_SAO_INT_STATUS,
+				READ_VREG(HEVC_SAO_INT_STATUS) | 0x1 << 31);
+	}
 	/*pr_info("hevc_sao_set_pic_buffer:mc_y_adr: %x\n", mc_y_adr);*/
 	/*Send command to hevc-code to supply 4k buffers to sao*/
 
@@ -10543,12 +10545,13 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 			return -ENOMEM;
 		}
 
+		ucode_copy(hw->mc_cpu_addr, fw->data);
+
 #ifdef PXP_DEBUG_34BIT
 		hw->mc_dma_handle = dma_map_single(get_vdec_device(),
 				hw->mc_cpu_addr, MC_TOTAL_SIZE, DMA_TO_DEVICE);
-		pr_info("%s, alloc imem mc phy addr %lx\n", __func__, hw->mc_dma_handle);
+		pr_info("%s, alloc imem mc phy addr 0x%llx\n", __func__, hw->mc_dma_handle);
 #endif
-		ucode_copy(hw->mc_cpu_addr, fw->data);
 	}
 
 #if 1 /* #ifdef  BUFFER_MGR_IN_C */

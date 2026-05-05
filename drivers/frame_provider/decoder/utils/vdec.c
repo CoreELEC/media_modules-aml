@@ -96,7 +96,7 @@
 #else
 int ionvideo_assign_map(char **receiver_name, int *inst)
 {
-       return -1;
+	return -1;
 }
 #endif
 
@@ -200,7 +200,7 @@ EXPORT_SYMBOL(use_t5d_driver_set);
 
 u32 vdec_get_debug(void)
 {
-    return debug;
+	return debug;
 }
 EXPORT_SYMBOL(vdec_get_debug);
 
@@ -4838,7 +4838,7 @@ void vdec_release(struct vdec_s *vdec)
 
 	vdec_avbc_frame_pool_release(vdec);
 
-	pr_debug("vdec_release instance %p, total %d\n", vdec,
+	pr_info("vdec_release instance %p, total %d\n", vdec,
 		atomic_read(&vdec_core->vdec_nr));
 
 	mutex_lock(&vdec_mutex);
@@ -6921,7 +6921,7 @@ static ssize_t pxp_buf_store(KV_CLASS_CONST struct class *class,
 				return size;
 			}
 		}
-		pr_info("alloc pxp_buf (phy adr 0x%x, size 0x%x)\n",
+		pr_info("alloc pxp_buf (phy adr 0x%lx, size 0x%x)\n",
 			pxp_buf_phy_addr, pxp_buf_alloc_size);
 
 	} else if (strcmp(cbuf, "free") == 0) {
@@ -6935,7 +6935,7 @@ static ssize_t pxp_buf_store(KV_CLASS_CONST struct class *class,
 	} else if (strcmp(cbuf, "info") == 0) {
 		pr_info("pxp_buf_alloc_size = 0x%x\n", pxp_buf_alloc_size);
 		pr_info("pxp_buf_addr = 0x%p\n", pxp_buf_addr);
-		pr_info("pxp_buf_phy_addr = 0x%p\n", pxp_buf_phy_addr);
+		pr_info("pxp_buf_phy_addr = 0x%lx\n", pxp_buf_phy_addr);
 	} else if (strcmp(cbuf, "show") == 0) {
 		unsigned char* ptr = (unsigned char *)pxp_buf_addr;
 		pr_info("0x%x: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
