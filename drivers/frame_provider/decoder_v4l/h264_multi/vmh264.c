@@ -1106,7 +1106,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	struct vdec_s *vdec, int from);
 static void v4l_vmh264_collect_stream_info(struct vdec_s *vdec,
 				struct vdec_h264_hw_s *hw, struct aml_vdec_ps_infos *ps);
-
+static void vdec_fence_release(struct vdec_h264_hw_s *hw,
+	struct vdec_sync *sync);
 
 #define		H265_PUT_SAO_4K_SET			0x03
 #define		H265_ABORT_SAO_4K_SET			0x04
@@ -6928,6 +6929,15 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		p_H264_Dpb->poc_check_count = 0;
 		p_H264_Dpb->fast_output_enable = fast_output_enable;
 		/*mb_mv_byte = (seq_info2 & 0x80000000) ? 24 : 96;*/
+
+		if ((hw->field == V4L2_FIELD_INTERLACED) &&
+			hw->enable_fence) {
+			vdec_fence_release(hw, vdec->sync);
+			hw->enable_fence = 0;
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+				"field = %d, enable_fence, disable fence\n",
+				hw->field);
+		}
 
 		if (hw->enable_fence)
 			p_H264_Dpb->fast_output_enable = H264_OUTPUT_MODE_FAST;
