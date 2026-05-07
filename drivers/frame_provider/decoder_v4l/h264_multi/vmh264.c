@@ -2695,9 +2695,7 @@ int v4l_get_free_buf_idx(struct vdec_s *vdec)
 				p_H264_Dpb->mVideo.dec_picture) {
 				pic_struct = p_H264_Dpb->mVideo.dec_picture->pic_struct;
 				structure = p_H264_Dpb->mVideo.dec_picture->structure;
-				if (v4l->picinfo.field == V4L2_FIELD_INTERLACED || //frame_mbs_only_flag
-					pic_struct == PIC_TOP_BOT ||
-					pic_struct == PIC_BOT_TOP) {
+				if (v4l->picinfo.field == V4L2_FIELD_INTERLACED) { //frame_mbs_only_flag
 					aml_buf_get_ref(&v4l->bm, aml_buf);
 				} else if (check_force_interlace(hw, hw->frame_width, hw->frame_height)) {
 					aml_buf_get_ref(&v4l->bm, hw->aml_buf);
@@ -8397,9 +8395,7 @@ void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
 			if (aml_buf_is_dynamic_mode_inited(&ctx->bm) ||
 				ctx->vpp_is_need ||
 				ctx->ge2d_is_need) {//frame_mbs_only_flag
-				if (pic_struct == PIC_TOP_BOT ||
-					pic_struct == PIC_BOT_TOP ||
-					ctx->picinfo.field == V4L2_FIELD_INTERLACED) {
+				if (ctx->picinfo.field == V4L2_FIELD_INTERLACED) {
 					aml_buf_put_ref(&ctx->bm, aml_buf);
 				} else if (check_force_interlace(hw, hw->frame_width, hw->frame_height)) {
 					aml_buf_put_ref(&ctx->bm, aml_buf);
