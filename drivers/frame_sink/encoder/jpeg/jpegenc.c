@@ -3683,7 +3683,8 @@ s32 jpegenc_loadmc(const char *p)
     WRITE_HREG(HCODEC_IMEM_DMA_ADR, mc_addr_map);
     WRITE_HREG(HCODEC_IMEM_DMA_COUNT, 0x1000);
 
-    if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5))
+    if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) || \
+        (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_A9))
         WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (0xf << 16))); // ucode test c is 0x8000 | (0xf << 16)
     else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) || \
         (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S7D) || \
@@ -5140,7 +5141,8 @@ static s32 jpegenc_probe(struct platform_device *pdev)
         return -EFAULT;
     }
 
-    if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)  || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)) {
+    if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)  || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) || \
+        (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_A9)) {
         #if 0
         switch (manual_irq_num) {
             case 0:
