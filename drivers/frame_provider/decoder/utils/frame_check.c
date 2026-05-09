@@ -781,7 +781,8 @@ static int do_avbc_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 	}
 
 	dbg_print(0, "mmu_copy_buf_start 0x%llx, header_size:%d, avbc_buf_phy_addr 0x%llx 0x%llx\n",
-		mmu_copy_buf_start, header_size, dump->avbc_buf_phy_addr, dump->avbc_buf_phy_addr);
+		(unsigned long long)mmu_copy_buf_start, header_size,
+		(unsigned long long)dump->avbc_buf_phy_addr, (unsigned long long)dump->avbc_buf_phy_addr);
 
 	for (i = 0; i < max_page_num; i++) {
 		map[i] = (mmu_copy_buf_start + i * PAGE_SIZE) >> PAGE_SHIFT;
@@ -806,10 +807,10 @@ static int do_avbc_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 		dump->avbc_dump_cnt, vf->compWidth, vf->compHeight, vf->bitdepth, mgr->avbc_cnt);
 
 	vdec_dbg_virt_write(dump->avbc_buf_addr, dump_buf_size, mgr->id,
-		"%s_%dx%d_0x%x_%d_%d_%d.avbc", (vf->bitdepth & BITDEPTH_Y10) ?
+		"%s_%dx%d_0x%llx_%d_%d_%d.avbc", (vf->bitdepth & BITDEPTH_Y10) ?
 		"P010" : ((vf->type & VIDTYPE_VIU_NV12) ? "NV12" : "NV21"),
-		vf->compWidth, vf->compHeight, dump->avbc_buf_phy_addr, mgr->id,
-		mgr->format, mgr->avbc_cnt);
+		vf->compWidth, vf->compHeight, (unsigned long long)dump->avbc_buf_phy_addr,
+		mgr->id, mgr->format, mgr->avbc_cnt);
 
 	return ret;
 }
