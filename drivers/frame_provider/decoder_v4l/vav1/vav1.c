@@ -9520,7 +9520,7 @@ static void av1_buf_ref_process_for_exception(struct AV1HW_s *hw)
 			return;
 		}
 
-		av1_print(hw, 0,
+		av1_print(hw, AV1_DEBUG_BUFMGR,
 			"process_for_exception: dma addr(0x%lx)\n",
 			frame_bufs[cur_idx].buf.cma_alloc_addr);
 

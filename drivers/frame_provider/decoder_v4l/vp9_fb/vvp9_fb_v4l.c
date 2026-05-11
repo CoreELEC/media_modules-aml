@@ -11675,7 +11675,7 @@ static void vp9_buf_ref_process_for_exception(struct VP9Decoder_s *pbi)
 			return;
 		}
 
-		vp9_print(pbi, 0,
+		vp9_print(pbi, VP9_DEBUG_BUFMGR,
 			"%s dma addr 0x%lx\n",
 			__func__, frame_bufs[cur_idx].buf.cma_alloc_addr);
 

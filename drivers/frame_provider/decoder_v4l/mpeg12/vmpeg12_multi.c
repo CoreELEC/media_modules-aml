@@ -2563,7 +2563,7 @@ static void mpeg2_buf_ref_process_for_exception(struct vdec_mpeg12_hw_s *hw)
 		return;
 	}
 
-	debug_print(DECODE_ID(hw), 0,
+	debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 			"process_for_exception: dma addr(0x%lx)\n",
 			hw->pics[index].cma_alloc_addr);
 

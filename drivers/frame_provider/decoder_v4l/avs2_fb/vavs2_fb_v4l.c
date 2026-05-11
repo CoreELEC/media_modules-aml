@@ -6783,7 +6783,7 @@ static void avs2_buf_ref_process_for_exception(struct AVS2Decoder_s *dec)
 	if (dec->cur_idx != INVALID_IDX) {
 		int cur_idx = dec->cur_idx;
 
-		avs2_print(dec, 0,
+		avs2_print(dec, AVS2_DBG_BUFMGR,
 			"process_for_exception: dma addr(0x%lx)\n",
 			avs2_dec->frm_pool[cur_idx].cma_alloc_addr);
 

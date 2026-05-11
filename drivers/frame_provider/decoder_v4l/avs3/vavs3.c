@@ -7493,7 +7493,7 @@ static void avs3_buf_ref_process_for_exception(struct AVS3Decoder_s *dec, bool i
 	if (cur_idx != INVALID_IDX) {
 		aml_buf = (struct aml_buf *)dec->m_BUF[cur_idx].v4l_ref_buf_addr;
 
-		avs3_print(dec, 0,
+		avs3_print(dec, AVS3_DBG_BUFMGR,
 			"process_for_exception: dma addr(0x%lx)\n",
 			avs3_dec->pic_pool[cur_idx].buf_cfg.cma_alloc_addr);
 

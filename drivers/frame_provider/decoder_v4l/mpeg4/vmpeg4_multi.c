@@ -1413,7 +1413,7 @@ static void mpeg4_buf_ref_process_for_exception(struct vdec_mpeg4_hw_s *hw)
 		return;
 	}
 
-	mmpeg4_debug_print(DECODE_ID(hw), 0,
+	mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 			"process_for_exception: dma addr(0x%lx)\n",
 			hw->pic[index].cma_alloc_addr);
 
