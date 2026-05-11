@@ -10215,6 +10215,12 @@ static void vh265_userdata_fill_vpts(struct hevc_state_s *hevc,
 	meta_info.vpts_64 = vpts_64;
 	meta_info.vpts_valid = pts_valid;
 	meta_info.poc_number = poc;
+	if (hevc->cur_pic->slice_type == I_SLICE)
+		meta_info.flags |= USERDATA_I_SLICE;
+	else if (hevc->cur_pic->slice_type == P_SLICE)
+		meta_info.flags |= USERDATA_P_SLICE;
+	else if (hevc->cur_pic->slice_type == B_SLICE)
+		meta_info.flags |= USERDATA_B_SLICE;
 
 	/*pr_info("one record ready pts %d, poc %d\n", vpts, meta_info.poc_number);*/
 	wp = hevc->sei_user_data_wp;

@@ -11429,6 +11429,7 @@ static void v4l_vmh264_fill_userdata(struct vdec_h264_hw_s *hw,
 	usd_rep.meta_data.vpts_64 = meta_info->vpts_64;
 	usd_rep.meta_data.vpts_valid = meta_info->vpts_valid;
 	usd_rep.meta_data.pic_struct = (meta_info->flags >> 12) & 0x3;
+	usd_rep.meta_data.frame_type = (meta_info->flags >> 7) & 0x7;
 	usd_rep.meta_data.duration = meta_info->duration;
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL, "%s: poc %d vpts 0x%x, vpts_64 %lld\n",
 			__func__, usd_rep.meta_data.poc_number, usd_rep.meta_data.vpts,
@@ -11474,6 +11475,12 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	meta_info.vpts_valid = vpts_valid;
 	meta_info.poc_number = p_H264_Dpb->mVideo.dec_picture->poc;
 	meta_info.flags |= p_H264_Dpb->mVideo.dec_picture->pic_struct << 12;
+	if (p_H264_Dpb->mSlice.slice_type == I_SLICE)
+		meta_info.flags |= USERDATA_I_SLICE;
+	else if (p_H264_Dpb->mSlice.slice_type == P_SLICE)
+		meta_info.flags |= USERDATA_P_SLICE;
+	else if (p_H264_Dpb->mSlice.slice_type == B_SLICE)
+		meta_info.flags |= USERDATA_B_SLICE;
 #endif
 
 	if ((get_cur_slice_picture_struct(p_H264_Dpb) == FRAME)

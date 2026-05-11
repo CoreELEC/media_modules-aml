@@ -1657,25 +1657,25 @@ static void userdata_push_do_work(struct work_struct *work)
 
 	switch (picture_type) {
 	case 1:
-			meta_info.flags |= (1<<7);
+			meta_info.flags |= USERDATA_I_SLICE;
 #ifdef PRINT_HEAD_INFO
 			ptype_str = " I";
 #endif
 			break;
 	case 2:
-			meta_info.flags |= (2<<7);
+			meta_info.flags |= USERDATA_P_SLICE;
 #ifdef PRINT_HEAD_INFO
 			ptype_str = " P";
 #endif
 			break;
 	case 3:
-			meta_info.flags |= (3<<7);
+			meta_info.flags |= USERDATA_B_SLICE;
 #ifdef PRINT_HEAD_INFO
 			ptype_str = " B";
 #endif
 			break;
 	case 4:
-			meta_info.flags |= (4<<7);
+			meta_info.flags |= USERDATA_D_SLICE;
 #ifdef PRINT_HEAD_INFO
 			ptype_str = " D";
 #endif
@@ -2588,11 +2588,11 @@ static void copy_user_data_to_pic(struct vdec_mpeg12_hw_s *hw, struct pic_info_t
 	pic->ud_param.meta_info.flags &= 0xFFFFFC7F; //bit7~bit9: ud frame type
 
 	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I)
-		pic->ud_param.meta_info.flags |= (1<<7);
+		pic->ud_param.meta_info.flags |= USERDATA_I_SLICE;
 	else if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)
-		pic->ud_param.meta_info.flags |= (2<<7);
+		pic->ud_param.meta_info.flags |= USERDATA_P_SLICE;
 	else if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B)
-		pic->ud_param.meta_info.flags |= (3<<7);
+		pic->ud_param.meta_info.flags |= USERDATA_B_SLICE;
 	else
 		debug_print(DECODE_ID(hw), PRINT_FLAG_USERDATA_DETAIL, "pic type invalid\n");
 

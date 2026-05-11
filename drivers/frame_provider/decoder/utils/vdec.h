@@ -159,6 +159,13 @@ enum e_trace_work_status {
 	TRACE_WORK_WAIT_SEARCH_DONE_END   = 2,
 };
 
+/* flags bit7~9, struct userdata_meta_info_t define in amvdec_ioc.h */
+enum e_userdata_frame_type {
+	USERDATA_I_SLICE = 1 << 7,
+	USERDATA_B_SLICE = 2 << 7,
+	USERDATA_P_SLICE = 3 << 7,
+	USERDATA_D_SLICE = 4 << 7,
+};
 
 #define VDEC_CFG_FLAG_DV_TWOLAYER (1 << 0)
 #define VDEC_CFG_FLAG_DV_NEGATIVE  (1 << 1)
