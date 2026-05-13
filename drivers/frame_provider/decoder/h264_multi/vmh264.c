@@ -6234,6 +6234,12 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 				"Warning: max_dec_frame_buffering(%d) is less than DPB size(%d) calculated from Profile/Level.\n",
 				size_vui, size);
 		}
+		if (p_H264_Dpb->num_reorder_frames > p_H264_Dpb->max_dec_frame_buffering) {
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+				"num_reorder_frames:%d >max_dec_frame_buffering %d, set dpb_size to level_calc_based_size:%d\n",
+				p_H264_Dpb->num_reorder_frames,  p_H264_Dpb->max_dec_frame_buffering, size);
+			size_vui = size;
+		}
 		size = size_vui;
 	} else {
 		if (size < max_reference_size) {
@@ -8184,7 +8190,12 @@ static bool h264_params_correct(struct vdec_h264_hw_s *hw, union param *param)
 		goto param_view;
 	}
 	if (bitstream_restriction_flag) {
-		if (max_dec_frame_buffering > 16 || num_reorder_frames > max_dec_frame_buffering) {
+		if (max_dec_frame_buffering == 0 && num_reorder_frames > max_dec_frame_buffering) {
+			// here just bypass params check, when stream syntax is wrong
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+				"syntax error, max_dec_frame_buffering:%u, num_reorder_frames:%u",
+				max_dec_frame_buffering, num_reorder_frames);
+		} else if (max_dec_frame_buffering > 16 || num_reorder_frames > max_dec_frame_buffering) {
 			ret = -4;
 			goto param_view;
 		}
