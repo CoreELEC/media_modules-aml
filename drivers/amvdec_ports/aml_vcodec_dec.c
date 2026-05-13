@@ -3750,6 +3750,7 @@ static int is_vdec_core_fmt(u32 fmt)
 	return false;
 }
 
+#if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 static int is_none_mmu_fmt(u32 fmt)
 {
 	if (fmt == V4L2_PIX_FMT_MPEG || fmt == V4L2_PIX_FMT_MPEG1 ||
@@ -3761,7 +3762,7 @@ static int is_none_mmu_fmt(u32 fmt)
 
 	return false;
 }
-
+#endif
 
 static bool is_dynamic_mode(struct aml_vcodec_ctx *ctx)
 {
