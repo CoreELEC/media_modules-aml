@@ -141,6 +141,11 @@ MODULE_IMPORT_NS(DMA_BUF);
 #define INVALID_IDX -1
 #define DEMUX_ES_MAGIC_NUM 0x5a5a5a5a
 
+#define BUFFER_SIZE_576P_WIDTH 1024
+#define BUFFER_SIZE_576P_HEIGHT 576
+#define BUFFER_SIZE_1080P_WIDTH 2048
+#define BUFFER_SIZE_1080P_HEIGHT 1152
+
 enum sei_state_type {
 	SEI_STATE_INVALID = 0,
 	SEI_STATE_ALLOC,
@@ -3636,6 +3641,8 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
 	struct aml_q_data *q_data;
 	int ratio = 1;
+	u32 dw_mode = DM_YUV_ONLY;
+	u32 tw_mode = DM_INVALID;
 
 	if ((s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) &&
 		(s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE))
@@ -3643,9 +3650,6 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 
 	if (ctx->internal_dw_scale || ctx->set_outputmode_flag) {
 		if (ctx->state >= AML_STATE_PROBE) {
-			u32 dw_mode = DM_YUV_ONLY;
-			u32 tw_mode = DM_INVALID;
-
 			if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
 				return -EBUSY;
 
@@ -3674,6 +3678,15 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 		s->r.top = 0;
 		s->r.width = ctx->picinfo.coded_width / ratio;
 		s->r.height = ctx->picinfo.coded_height / ratio;
+		if (ctx->set_outputmode_flag) {
+			if (ctx->output_mode_ext.double_write_mode == DM_YUV_AUTO_14_12_AVBC) {
+				s->r.width = BUFFER_SIZE_576P_WIDTH;
+				s->r.height = BUFFER_SIZE_576P_HEIGHT;
+			} else if (ctx->output_mode_ext.double_write_mode == DM_YUV_AUTO_1_4_AVBC) {
+				s->r.width = BUFFER_SIZE_1080P_WIDTH;
+				s->r.height = BUFFER_SIZE_1080P_HEIGHT;
+			}
+		}
 		break;
 	case V4L2_SEL_TGT_CROP_DEFAULT:
 		s->r.left = 0;
@@ -3699,8 +3712,8 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 		s->r.height = q_data->visible_height;
 	}
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d width: %d height: %d\n",
-		__func__, s->type, s->r.width, s->r.height);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d target: 0x%x dw_mode: %d width: %d height: %d\n",
+		__func__, s->type, s->target, ctx->output_mode_ext.double_write_mode, s->r.width, s->r.height);
 
 	return 0;
 }
