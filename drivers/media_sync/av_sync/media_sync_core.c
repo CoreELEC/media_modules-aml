@@ -1336,6 +1336,7 @@ long mediasync_ins_set_mediatime_speed(MediaSyncManager* pSyncManage,
 					mediasync_speed fSpeed) {
 	mediasync_ins* pInstance = NULL;
 	unsigned long flags = 0;
+	s32 syncId = 0;
 
 	if (pSyncManage == NULL) {
 		return -1;
@@ -1346,20 +1347,18 @@ long mediasync_ins_set_mediatime_speed(MediaSyncManager* pSyncManage,
 		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
-#ifdef CONFIG_AMLOGIC_DPSS_PROCESS
-	// mediasync_set_pararmer(pInstance->mSyncId, MEDIASYNC_SET_DISPLAY_SPEED, &fSpeed);
-	set_display_speed(pInstance->mSyncId, fSpeed.mNumerator * 10);
-#endif
-	if (pInstance->mSpeed.mNumerator == fSpeed.mNumerator &&
-		pInstance->mSpeed.mDenominator == fSpeed.mDenominator) {
-		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
-		return 0;
+	syncId = pInstance->mSyncId;
+	if (pInstance->mSpeed.mNumerator != fSpeed.mNumerator ||
+		pInstance->mSpeed.mDenominator != fSpeed.mDenominator) {
+		pInstance->mSpeed.mNumerator = fSpeed.mNumerator;
+		pInstance->mSpeed.mDenominator = fSpeed.mDenominator;
+		pInstance->mStcParmUpdateCount++;
 	}
-
-	pInstance->mSpeed.mNumerator = fSpeed.mNumerator;
-	pInstance->mSpeed.mDenominator = fSpeed.mDenominator;
-	pInstance->mStcParmUpdateCount++;
 	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+#ifdef CONFIG_AMLOGIC_DPSS_PROCESS
+	// mediasync_set_pararmer(syncId, MEDIASYNC_SET_DISPLAY_SPEED, &fSpeed);
+	set_display_speed(syncId, fSpeed.mNumerator * 10);
+#endif
 
 	return 0;
 }
