@@ -1569,7 +1569,6 @@ static void userdata_push_do_work(struct work_struct *work)
 	u32 vf_data_length;
 	u32 data_start;
 	int i;
-	u32 offset;
 	u32 cur_wp;
 #ifdef PRINT_HEAD_INFO
 	u8 *ptype_str;
@@ -1628,7 +1627,6 @@ static void userdata_push_do_work(struct work_struct *work)
 	if (cur_wp < hw->vf_ucode_cc_last_wp)
 		hw->vf_ucode_cc_last_wp = 0;
 
-	offset = READ_VREG(AV_SCRATCH_I);
 
 	codec_mm_dma_flush(
 		hw->ccbuf_phyAddress_virt,
