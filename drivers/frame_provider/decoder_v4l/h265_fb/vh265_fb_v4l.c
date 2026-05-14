@@ -10620,6 +10620,13 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 		vf->ext_signal_type = 0;
 	}
 	hevc->video_signal_type_debug = vf->signal_type;
+	if (vf->signal_type && (ctx->signal_type_info.signal_type != vf->signal_type)) {
+		ctx->signal_type_info.signal_type = vf->signal_type;
+		ctx->signal_type_info.timestamp = pic->timestamp;
+		vdec_v4l_post_event(ctx, V4L2_EVENT_REPORT_SIGNAL_TYPE);
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,"%s signal_type(%x), timestamp(%llx)\n",
+			__func__, vf->signal_type, pic->timestamp);
+	}
 
 	/* master_display_colour */
 	if (hevc->sei_hdr10_flag & SEI_MASTER_DISPLAY_COLOR_MASK) {
