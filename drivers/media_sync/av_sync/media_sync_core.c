@@ -3823,7 +3823,7 @@ void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_in
 		}
 		pInstance->mLastCheckSlopeSystemtime = CurTimeUs;
 		pInstance->mlastCheckVideocacheDuration = 0;
-		pInstance->mCheckSlopeSytemtimeThreshold = CHECK_SLOPE_SYSTEM_TIME_500MS;
+		pInstance->mCheckSlopeSytemtimeThreshold = CHECK_SLOPE_SYSTEM_TIME_3S;
 		return ;
 	}
 
@@ -3969,12 +3969,11 @@ void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_in
 
 		pInstance->mLastCheckSlopeSystemtime = CurTimeUs;
 		pInstance->mLastCheckSlopeDemuxPts = pcr_ns;
-		if (/*i < RECORD_SLOPE_NUM*/
-			pInstance->mSyncInfo.state != MEDIASYNC_RUNNING) {
+		if (i < RECORD_SLOPE_NUM) {
 			return;
 		}
 
-		avgslope = div_u64(avgslope,i);
+		avgslope = div_u64(avgslope,RECORD_SLOPE_NUM);
 
 		mCheckSlopeSytemtimeThreshold90k = div_u64(pInstance->mCheckSlopeSytemtimeThreshold * 9,100);
 		if (pInstance->mHasVideo == 1) {
