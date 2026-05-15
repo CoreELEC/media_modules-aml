@@ -70,6 +70,7 @@ enum vformat_e v4l2_fourcc_to_vtype(uint32_t fourcc) {
 		case V4L2_PIX_FMT_MJPEG:
 			return VFORMAT_MJPEG;
 		case V4L2_PIX_FMT_AV1:
+		case V4L2_PIX_FMT_AV01:
 			return VFORMAT_AV1;
 		case V4L2_PIX_FMT_AVS:
 			return VFORMAT_AVS;

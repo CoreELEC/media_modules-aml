@@ -221,6 +221,12 @@ static struct aml_video_fmt aml_video_formats[] = {
 		.num_planes = 1,
 	},
 	{
+		.name = "AV1",
+		.fourcc = V4L2_PIX_FMT_AV01,
+		.type = AML_FMT_DEC,
+		.num_planes = 1,
+	},
+	{
 		.name = "AVS2",
 		.fourcc = V4L2_PIX_FMT_AVS2,
 		.type = AML_FMT_DEC,
@@ -354,6 +360,11 @@ static const struct aml_codec_framesizes aml_vdec_framesizes[] = {
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_AV1,
+		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
+				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_AV01,
 		.stepwise = {  AML_VDEC_MIN_W, AML_VDEC_MAX_W, 2,
 				AML_VDEC_MIN_H, AML_VDEC_MAX_H, 2},
 	},
@@ -3924,7 +3935,8 @@ int cal_yuv_size(struct aml_vcodec_ctx *ctx, u32 dw)
 
 	if ((ctx->output_pix_fmt != V4L2_PIX_FMT_HEVC) &&
 		(ctx->output_pix_fmt != V4L2_PIX_FMT_VP9) &&
-		(ctx->output_pix_fmt != V4L2_PIX_FMT_AV1))
+		(ctx->output_pix_fmt != V4L2_PIX_FMT_AV1) &&
+		(ctx->output_pix_fmt != V4L2_PIX_FMT_AV01))
 		return 0;
 
 	if (dw == 2 || dw == 3) {
@@ -3962,7 +3974,8 @@ u32 cal_slot_num(struct aml_vcodec_ctx *ctx, u32 dw, int slot_size)
 
 	if ((ctx->output_pix_fmt != V4L2_PIX_FMT_HEVC) &&
 		(ctx->output_pix_fmt != V4L2_PIX_FMT_VP9) &&
-		(ctx->output_pix_fmt != V4L2_PIX_FMT_AV1))
+		(ctx->output_pix_fmt != V4L2_PIX_FMT_AV1) &&
+		(ctx->output_pix_fmt != V4L2_PIX_FMT_AV01))
 		return 0;
 
 	if (dw == DM_YUV_ONLY)
@@ -4284,6 +4297,7 @@ u32 check_video_format_support(u32 fourcc)
 		format = VFORMAT_AVS;
 		break;
 	case V4L2_PIX_FMT_AV1:
+	case V4L2_PIX_FMT_AV01:
 		format = VFORMAT_AV1;
 		break;
 	case V4L2_PIX_FMT_AVS2:

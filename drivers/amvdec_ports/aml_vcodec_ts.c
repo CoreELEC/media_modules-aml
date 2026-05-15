@@ -96,7 +96,8 @@ int aml_vcodec_pts_first_checkin(u32 format, s32 ptsserver_id, u32 wp, u32 buf_s
 	start_offset mSartOffset;
 
 	if ((format == V4L2_PIX_FMT_HEVC) || (format == V4L2_PIX_FMT_VP9) || (format == V4L2_PIX_FMT_AV1)
-		|| (format == V4L2_PIX_FMT_AVS2) || (format == V4L2_PIX_FMT_AVS3) || (format == V4L2_PIX_FMT_H266)) {
+		|| (format == V4L2_PIX_FMT_AVS2) || (format == V4L2_PIX_FMT_AVS3)
+		|| (format == V4L2_PIX_FMT_H266) || (format == V4L2_PIX_FMT_AV01)) {
 		mAlignmentOffset  = wp % 0x80;
 		mBaseffset = 0;
 	} else {

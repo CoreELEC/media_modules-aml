@@ -13,6 +13,7 @@
 #define MAX_OUTPUT_MODE_GROUPS	3
 
 #define V4L2_PIX_FMT_AV1      v4l2_fourcc('A', 'V', '1', '0') /* av1 */
+#define V4L2_PIX_FMT_AV01     v4l2_fourcc('A', 'V', '0', '1') /* av1 */
 #define V4L2_PIX_FMT_AVS      v4l2_fourcc('A', 'V', 'S', '0') /* avs */
 #define V4L2_PIX_FMT_AVS2     v4l2_fourcc('A', 'V', 'S', '2') /* avs2 */
 #define V4L2_PIX_FMT_AVS3     v4l2_fourcc('A', 'V', 'S', '3') /* avs3 */

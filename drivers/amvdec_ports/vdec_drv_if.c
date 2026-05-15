@@ -66,6 +66,7 @@ int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
 		ctx->dec_if = get_mjpeg_dec_comm_if();
 		break;
 	case V4L2_PIX_FMT_AV1:
+	case V4L2_PIX_FMT_AV01:
 		ctx->dec_if = get_av1_dec_comm_if();
 		break;
 	case V4L2_PIX_FMT_AVS:
