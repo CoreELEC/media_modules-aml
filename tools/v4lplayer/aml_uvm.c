@@ -131,7 +131,7 @@ static int amuvm_allocate(int uvmfd, int size, uint32_t width, uint32_t height, 
 	}
 
 	if (ret < 0) {
-		debug_print(DEBUG_ERROR, "uvm alloc error ret=%d\n", ret);
+		debug_print(DEBUG_ERROR, "uvm alloc error, %s\n", strerror(errno));
 		return -1;
 	}
 	if (strncmp(sysinfo.release, "6.", 2) == 0) {

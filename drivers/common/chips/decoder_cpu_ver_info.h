@@ -86,6 +86,7 @@ enum AM_MESON_CPU_MAJOR_ID {
 	AM_MESON_CPU_MAJOR_ID_T6X	= 0x4b,
 	AM_MESON_CPU_MAJOR_ID_RES_0x4c,
 	AM_MESON_CPU_MAJOR_ID_A9	= 0x4d,
+	AM_MESON_CPU_MAJOR_ID_C5	= 0x4e,
 	AM_MESON_CPU_MAJOR_ID_MAX,
 };
 
@@ -186,7 +187,7 @@ struct dos_of_dev_s {
 	bool is_vp9_hw_adapt_prob;
 	bool is_vdec_hevc_combine;  /* vdec merged in hevc */
 
-	bool is_support_afgs;
+	bool is_support_afgs;		/* film grain */
 
 	bool is_support_path_monitor;    /* hevc path monitor */
 	bool is_support_bandwidth_msr; /* bandwidth measure in path monitor */

@@ -1159,17 +1159,21 @@ void arb_ctrl_wait_idle(int enable)
 	} else {
 		SET_VREG_MASK(HEVC_ASSIST_AXI_CTRL, ((1 << 6 ) | (1 << 14) | (1 << 22)));
 
-		dos_wait_status(HEVC_ASSIST_AXI_STATUS_DFE_LO, ((1 << 11) | (1 << 15)), 1);
+		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C5) {
+			dos_wait_status(HEVC_ASSIST_AXI_CTRL, (1 << 31), 1);
+		} else {
+			dos_wait_status(HEVC_ASSIST_AXI_STATUS_DFE_LO, ((1 << 11) | (1 << 15)), 1);
 
-		mask = get_hevc_bus_idle_mask();
-		if (mask)
-			dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, mask, 0);
+			mask = get_hevc_bus_idle_mask();
+			if (mask)
+				dos_wait_status(HEVC_ASSIST_AFIFO_CTRL, mask, 0);
 
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T6X) {
-			val = read_sysctrl_reg(SYSCTRL_AXI_PIPE_CTRL0);
-			write_sysctrl_reg(SYSCTRL_AXI_PIPE_CTRL0, val & ~(1 << 6));
+			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T6X) {
+				val = read_sysctrl_reg(SYSCTRL_AXI_PIPE_CTRL0);
+				write_sysctrl_reg(SYSCTRL_AXI_PIPE_CTRL0, val & ~(1 << 6));
 
-			sysctrl_wait_status(SYSCTRL_AXI_PIPE_CTRL0, (1 << 7), 1);
+				sysctrl_wait_status(SYSCTRL_AXI_PIPE_CTRL0, (1 << 7), 1);
+			}
 		}
 	}
 }
@@ -6886,7 +6890,7 @@ ssize_t dump_vdec_debug(char *buf) {
 #endif
 
 #ifdef PXP_DEBUG
-static unsigned pxp_buf_alloc_size = 0;
+static unsigned int pxp_buf_alloc_size = 0;
 static void *pxp_buf_addr = NULL;
 static ulong pxp_buf_phy_addr = 0;
 static ulong pxp_buf_mem_handle = 0;

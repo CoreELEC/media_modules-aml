@@ -87,6 +87,8 @@
 #define HEVC_LPF_CG_OFF2                   PSEUDODEF_REG
 #define HEVC_IQIT_CRC_1                    PSEUDODEF_REG
 #define HEVC_IQIT_CRC_2                    PSEUDODEF_REG
+#define HEVC_SAO_2D_OFFSET                 PSEUDODEF_REG
+#define HEVC_SAO_2D_SIZE                   PSEUDODEF_REG
 
 #endif
 

@@ -115,6 +115,7 @@ static int codec_level_idc_init(int format)
 		{AM_MESON_CPU_MAJOR_ID_T6W,   0,   5,   52,  0,    0,    0,   0,   0,   0,   51,  51,  51,  0,      0,     0,   0,    51,  0,    51,   0},
 		{AM_MESON_CPU_MAJOR_ID_T6X,   0,   5,   52,  0,    0,    0,   0,   0,   0,   51,  51,  51,  0,      0,     0,   0,    51,  0,    51,   0},
 		{AM_MESON_CPU_MAJOR_ID_A9,    0,   5,   52,  0,    0,    0,   0,   0,   0,   51,  51,  52,  0,      0,     0,   0,    52,  0,    0,    0},
+		{AM_MESON_CPU_MAJOR_ID_C5,    0,   5,   51,  0,    0,    0,   0,   0,   0,   51,  51,  51,  0,      0,     0,   0,     0,  0,    0,    0},
 	};
 	static const u32 sub_chip_level[][1 + VFORMAT_MAX] = {
 		/* chip,                          mp2, mp4, 264, mjpg, real, jpg, vc1, avs, yuv, mvc, 2k4k, 265, 264enc, jpenc, vp9, avs2, av1, avs3, vvc, avbcd*/

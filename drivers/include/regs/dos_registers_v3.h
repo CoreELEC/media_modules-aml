@@ -1778,6 +1778,9 @@
 #define HEVC_SAO_PIC_DONE_RESET                    0x26a5
 #define HEVC_SAO_CTRL34                            0x26a6
 
+#define HEVC_SAO_2D_OFFSET                         0x26a6
+#define HEVC_SAO_2D_SIZE                           0x26a7
+
 //------------------------------------------------------------------------------
 // HEVC_IQIT and dual core IQIT1 module level register offset
 //------------------------------------------------------------------------------

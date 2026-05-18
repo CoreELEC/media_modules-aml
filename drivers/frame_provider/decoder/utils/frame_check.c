@@ -1754,7 +1754,7 @@ int vdec_frame_check_init(struct vdec_s *vdec)
 #endif
 
 	vdec->vfc.err_crc_block = 0;
-	//single_mode_vdec = (vdec_single(vdec))? vdec : NULL;
+	size_yuv_buf = (YUV_DEF_SIZE * YUV_DEF_NUM);
 
 	if (!check_enable && !yuv_enable && !avbc_enable)
 		return 0;
@@ -1762,7 +1762,6 @@ int vdec_frame_check_init(struct vdec_s *vdec)
 	if (check_enable || yuv_enable)
 		vdec->canvas_mode = CANVAS_BLKMODE_LINEAR;
 	id = vdec->id;
-	size_yuv_buf = (YUV_DEF_SIZE * YUV_DEF_NUM);
 
 	if (check_enable & (0x01 << id)) {
 		frame_check_init(&vdec->vfc, id);

@@ -117,7 +117,8 @@ bool fw_tee_enabled(void)
 	if (!dos_tee_enabled)
 		return false;
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A ||
+		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_C5)
 		return false;
 
 	return tee_enabled();
