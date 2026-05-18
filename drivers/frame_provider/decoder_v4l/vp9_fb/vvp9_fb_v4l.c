@@ -13052,7 +13052,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 
 	init_pic_list(pbi);
 
-	ret = amhevc_loadmc_ex(VFORMAT_VP9, NULL, fw->data);
+	ret = amhevc_loadmc_ex(vdec, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
@@ -14283,11 +14283,10 @@ static void run_front(struct vdec_s *vdec)
 	} else {
 #ifdef NEW_FB_CODE
 			if (pbi->front_back_mode == 1 || pbi->front_back_mode == 3)
-				ret = amhevc_loadmc_ex(VFORMAT_VP9,
-						"vp9_front", pbi->fw->data);
+				ret = amhevc_loadmc_ex(vdec, "vp9_front", pbi->fw->data);
 			else
 #endif
-				ret = amhevc_loadmc_ex(VFORMAT_VP9, NULL, pbi->fw->data);
+				ret = amhevc_loadmc_ex(vdec, NULL, pbi->fw->data);
 			if (ret < 0) {
 			amhevc_disable();
 			vp9_print(pbi, PRINT_FLAG_ERROR,
@@ -14607,9 +14606,7 @@ static void run_back_fb(struct vdec_s *vdec, void (*callback)(struct vdec_s *, v
 #endif
 	} else {
 		if (pbi->front_back_mode == 1) {
-			loadr = amhevc_loadmc_ex(VFORMAT_VP9,
-					"vp9_back", pbi->fw_back->data);
-
+			loadr = amhevc_loadmc_ex(vdec, "vp9_back", pbi->fw_back->data);
 			if (loadr < 0) {
 				amhevc_disable();
 				vp9_print(pbi, 0, "vp9: the %s back fw loading failed, err: %x\n",
@@ -14631,8 +14628,7 @@ static void run_back_fb(struct vdec_s *vdec, void (*callback)(struct vdec_s *, v
 			//vdec->mc_back_loaded = 1;
 			vdec->mc_back_type = VFORMAT_VP9;
 		} else if (fb_ucode_debug == 1) {
-			loadr = amhevc_loadmc_ex(VFORMAT_VP9,
-						"vp9_back", pbi->fw_back->data);
+			loadr = amhevc_loadmc_ex(vdec, "vp9_back", pbi->fw_back->data);
 			vp9_print(pbi, 0, "fb_ucode_debug test load\n");
 			if (loadr < 0) {
 				amhevc_disable();

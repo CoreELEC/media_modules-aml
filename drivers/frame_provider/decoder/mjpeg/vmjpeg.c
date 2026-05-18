@@ -727,7 +727,7 @@ static void vmjpeg_local_init(void)
 		BMMU_ALLOC_FLAGS_WAITCLEAR);
 }
 
-static s32 vmjpeg_init(void)
+static s32 vmjpeg_init(struct vdec_s *vdec)
 {
 	int ret = -1, size = -1;
 	char *buf = vmalloc(0x1000 * 16);
@@ -751,7 +751,7 @@ static s32 vmjpeg_init(void)
 		return -1;
 	}
 
-	ret = amvdec_loadmc_ex(VFORMAT_MJPEG, NULL, buf);
+	ret = amvdec_loadmc_ex(vdec, NULL, buf);
 	if (ret < 0) {
 		amvdec_disable();
 		vfree(buf);
@@ -838,7 +838,7 @@ static int amvdec_mjpeg_probe(struct platform_device *pdev)
 	is_reset = 0;
 	vmjpeg_vdec_info_init();
 
-	if (vmjpeg_init() < 0) {
+	if (vmjpeg_init(pdata) < 0) {
 		amlog_level(LOG_LEVEL_ERROR, "amvdec_mjpeg init failed.\n");
 		mutex_unlock(&vmjpeg_mutex);
 		kfree(gvs);

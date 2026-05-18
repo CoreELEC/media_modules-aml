@@ -1028,7 +1028,7 @@ static void vmpeg4_local_init(void)
 			BMMU_ALLOC_FLAGS_WAITCLEAR);
 }
 
-static s32 vmpeg4_init(void)
+static s32 vmpeg4_init(struct vdec_s *vdec)
 {
 	int trickmode_fffb = 0;
 	int size = -1, ret = -1;
@@ -1060,7 +1060,7 @@ static s32 vmpeg4_init(void)
 		return -1;
 	}
 
-	ret = amvdec_loadmc_ex(VFORMAT_MPEG4, fw_name, buf);
+	ret = amvdec_loadmc_ex(vdec, fw_name, buf);
 	if (ret < 0) {
 		amvdec_disable();
 		vfree(buf);
@@ -1162,7 +1162,7 @@ static int amvdec_mpeg4_probe(struct platform_device *pdev)
 
 	vmpeg4_vdec_info_init();
 
-	if (vmpeg4_init() < 0) {
+	if (vmpeg4_init(pdata) < 0) {
 		amlog_level(LOG_LEVEL_ERROR, "amvdec_mpeg4 init failed.\n");
 		kfree(gvs);
 		gvs = NULL;

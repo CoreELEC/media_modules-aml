@@ -13483,6 +13483,50 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (is_vdec_hevc_combine())
 		WRITE_VREG(HEVC_CORE_ENABLE, 0);
 
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+		WRITE_VREG(AV_SCRATCH_G, hw->reg_g_status);
+	} else {
+		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
+		if (!hw->mmu_enable || !is_vdec_hevc_combine()) {
+			ret = amvdec_vdec_loadmc_ex(VFORMAT_H264, "mh264", vdec, hw->fw->data);
+			if (ret < 0) {
+				amvdec_enable_flag = false;
+				amvdec_disable();
+				hw->vdec_pg_enable_flag = 0;
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+					"MH264 the %s fw loading failed, err: %x\n",
+					fw_tee_enabled() ? "TEE" : "local", ret);
+				hw->dec_result = DEC_RESULT_FORCE_EXIT;
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
+				vdec_schedule_work(&hw->work);
+				return;
+			}
+			vdec->mc_type  = VFORMAT_H264;
+		}
+		if (hw->mmu_enable) {
+			ret = amhevc_loadmc_ex(vdec, "mh264_mmu", hw->fw_mmu->data);
+			if (ret < 0) {
+				amvdec_enable_flag = false;
+				amhevc_disable();
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
+					"MH264_MMU the %s fw loading failed, err: %x\n",
+					fw_tee_enabled() ? "TEE" : "local", ret);
+				hw->dec_result = DEC_RESULT_FORCE_EXIT;
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
+				vdec_schedule_work(&hw->work);
+				return;
+			}
+			vdec->mc_type = ((1 << 16) | VFORMAT_H264);
+		}
+		vdec->mc_loaded = 0;
+		hw->reg_g_status = READ_VREG(AV_SCRATCH_G);
+		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
+	}
+
 #ifdef DETECT_WRONG_MULTI_SLICE
 	hw->cur_picture_slice_count = 0;
 #endif
@@ -13676,50 +13720,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hw->dec_result = DEC_RESULT_NONE;
 	hw->timeout_flag = TIMEOUT_INIT;
 	start_process_time(hw);
-	if (vdec->mc_loaded) {
-			/*firmware have load before,
-			  and not changes to another.
-			  ignore reload.
-			*/
-		WRITE_VREG(AV_SCRATCH_G, hw->reg_g_status);
-	} else {
-		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-		if (!hw->mmu_enable || !is_vdec_hevc_combine()) {
-			ret = amvdec_vdec_loadmc_ex(VFORMAT_H264, "mh264", vdec, hw->fw->data);
-			if (ret < 0) {
-				amvdec_enable_flag = false;
-				amvdec_disable();
-				hw->vdec_pg_enable_flag = 0;
-				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-					"MH264 the %s fw loading failed, err: %x\n",
-					fw_tee_enabled() ? "TEE" : "local", ret);
-				hw->dec_result = DEC_RESULT_FORCE_EXIT;
-				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-				vdec_schedule_work(&hw->work);
-				return;
-			}
-			vdec->mc_type  = VFORMAT_H264;
-		}
-		if (hw->mmu_enable) {
-			ret = amhevc_loadmc_ex(VFORMAT_H264, "mh264_mmu",
-				hw->fw_mmu->data);
-			if (ret < 0) {
-				amvdec_enable_flag = false;
-				amhevc_disable();
-				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-					"MH264_MMU the %s fw loading failed, err: %x\n",
-					fw_tee_enabled() ? "TEE" : "local", ret);
-				hw->dec_result = DEC_RESULT_FORCE_EXIT;
-				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-				vdec_schedule_work(&hw->work);
-				return;
-			}
-			vdec->mc_type = ((1 << 16) | VFORMAT_H264);
-		}
-		vdec->mc_loaded = 0;
-		hw->reg_g_status = READ_VREG(AV_SCRATCH_G);
-		ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
-	}
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 
 	vmh264_reset_udr_mgr(hw);

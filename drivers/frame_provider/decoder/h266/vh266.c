@@ -9243,15 +9243,7 @@ static s32 vh266_init(struct hevc_state_s *hevc)
 #endif
 	amhevc_enable();
 
-	if (hevc->enable_ucode_swap) {
-		//ret = amhevc_loadmc_ex(VFORMAT_H266, "hevc_mmu_swap", fw->data);
-		if (ret < 0)
-			ret = amhevc_loadmc_ex(VFORMAT_H266, "h266_mmu", fw->data);
-		else
-			hevc->is_swap = true;
-	} else {
-		ret = amhevc_loadmc_ex(VFORMAT_H266, "h266_mmu", fw->data);
-	}
+	ret = amhevc_loadmc_ex(vdec, "h266_mmu", fw->data);
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
@@ -10479,6 +10471,45 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (is_vdec_hevc_combine())
 		WRITE_VREG(HEVC_CORE_ENABLE, 1);
 
+	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+		if (fw_tee_enabled() && hevc->is_swap)
+			WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->swap_addr);
+	} else {
+		if (hevc->enable_ucode_swap) {
+			loadr = amhevc_vdec_loadmc_ex(VFORMAT_H266, vdec,
+					"h266_mmu_swap", hevc->fw->data);
+			if (loadr < 0) {
+				loadr = amhevc_vdec_loadmc_ex(VFORMAT_H266, vdec,
+					"h266_mmu", hevc->fw->data);
+				hevc->enable_ucode_swap = false;
+			} else
+				hevc->is_swap = true;
+		} else {
+			loadr = amhevc_vdec_loadmc_ex(VFORMAT_H266, vdec,
+					"h266_mmu", hevc->fw->data);
+		}
+
+		if (loadr < 0) {
+			amhevc_disable();
+			hevc_print(hevc, 0, "H266: the %s fw loading failed, err: %x\n",
+				fw_tee_enabled() ? "TEE" : "local", loadr);
+			hevc->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_schedule_work(&hevc->work);
+			return;
+		}
+
+		if (fw_tee_enabled() && hevc->is_swap)
+			hevc->swap_addr = READ_VREG(HEVC_STREAM_SWAP_BUFFER2);
+		vdec->mc_loaded = 1;
+		vdec->mc_type = VFORMAT_H266;
+	}
+	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
+
 #ifdef AGAIN_HAS_THRESHOLD
 	if (vdec_stream_based(vdec)) {
 		hevc->pre_parser_wr_ptr =
@@ -10592,46 +10623,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		if (!hevc->chunk->block->is_mapped)
 			codec_mm_unmap_phyaddr(data);
 	}
-	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-	if (vdec->mc_loaded) {
-		/*firmware have load before,
-		  and not changes to another.
-		  ignore reload.
-		*/
-		if (fw_tee_enabled() && hevc->is_swap)
-			WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->swap_addr);
-	} else {
-		//pr_info("%s, load h266 ucode. swap %d\n", __func__, hevc->enable_ucode_swap);
-		if (hevc->enable_ucode_swap) {
-			loadr = amhevc_vdec_loadmc_ex(VFORMAT_H266, vdec,
-					"h266_mmu_swap", hevc->fw->data);
-			if (loadr < 0) {
-				loadr = amhevc_vdec_loadmc_ex(VFORMAT_H266, vdec,
-					"h266_mmu", hevc->fw->data);
-				hevc->enable_ucode_swap = false;
-			} else
-				hevc->is_swap = true;
-		} else {
-			loadr = amhevc_vdec_loadmc_ex(VFORMAT_H266, vdec,
-					"h266_mmu", hevc->fw->data);
-		}
-
-		if (loadr < 0) {
-			amhevc_disable();
-			hevc_print(hevc, 0, "H266: the %s fw loading failed, err: %x\n",
-				fw_tee_enabled() ? "TEE" : "local", loadr);
-			hevc->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&hevc->work);
-			return;
-		}
-
-		if (fw_tee_enabled() && hevc->is_swap)
-			hevc->swap_addr = READ_VREG(HEVC_STREAM_SWAP_BUFFER2);
-		vdec->mc_loaded = 1;
-		vdec->mc_type = VFORMAT_H266;
-	}
-
-	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 	vvc_prefix_config(PREFIX_ADDR(hevc->lmem_phy_addr),

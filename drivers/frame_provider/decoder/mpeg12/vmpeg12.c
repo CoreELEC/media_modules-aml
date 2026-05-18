@@ -1939,7 +1939,7 @@ static void vmpeg12_local_init(void)
 	dec_control &= DEC_CONTROL_INTERNAL_MASK;
 }
 
-static s32 vmpeg12_init(void)
+static s32 vmpeg12_init(struct vdec_s *vdec)
 {
 	int ret = -1, size = -1;
 	char *buf = vmalloc(0x1000 * 16);
@@ -1962,7 +1962,7 @@ static s32 vmpeg12_init(void)
 		return -1;
 	}
 
-	ret = amvdec_loadmc_ex(VFORMAT_MPEG12, "mpeg12", buf);
+	ret = amvdec_loadmc_ex(vdec, "mpeg12", buf);
 	if (ret < 0) {
 		amvdec_disable();
 		vfree(buf);
@@ -2062,7 +2062,7 @@ static int amvdec_mpeg12_probe(struct platform_device *pdev)
 	vmpeg12_vdec_info_init();
 
 	INIT_WORK(&set_clk_work, vmpeg12_set_clk);
-	if (vmpeg12_init() < 0) {
+	if (vmpeg12_init(pdata) < 0) {
 		amlog_level(LOG_LEVEL_ERROR, "amvdec_mpeg12 init failed.\n");
 		kfree(gvs);
 		gvs = NULL;

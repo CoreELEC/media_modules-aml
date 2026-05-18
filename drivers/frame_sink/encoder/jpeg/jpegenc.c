@@ -3940,7 +3940,7 @@ static s32 jpegenc_init(void)
         }
         WRITE_HREG(HCODEC_MPSR, 0);
         WRITE_HREG(HCODEC_CPSR, 0);
-        ret = amvdec_loadmc_ex(VFORMAT_JPEG_ENC, NULL, buf);
+        ret = amenc_loadmc_ex(VFORMAT_JPEG_ENC, NULL, buf);
 
         if (ret < 0) {
             //amvdec_disable();

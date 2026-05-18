@@ -11319,7 +11319,7 @@ static s32 vav1_init(struct AV1HW_s *hw)
 	/*single mode code */
 	amhevc_enable();
 
-	ret = amhevc_loadmc_ex(VFORMAT_AV1, NULL, fw->data);
+	ret = amhevc_loadmc_ex(vdec, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
@@ -12494,20 +12494,17 @@ static void run_front(struct vdec_s *vdec)
 		/*firmware have load before,and not changes to another. ignore reload.*/
 	} else {
 		if ((hw->front_back_mode == 1) || (hw->front_back_mode == 3)) {
-			ret = amhevc_loadmc_ex(VFORMAT_AV1, "av1_front", hw->fw->data);
+			ret = amhevc_loadmc_ex(vdec, "av1_front", hw->fw->data);
 		} else {
 			if (hw->enable_ucode_swap) {
-				ret = amhevc_loadmc_ex(VFORMAT_AV1,
-						"av1_mmu_swap", hw->fw->data);
+				ret = amhevc_loadmc_ex(vdec, "av1_mmu_swap", hw->fw->data);
 				if (ret < 0) {
-					ret = amhevc_loadmc_ex(VFORMAT_AV1,
-							NULL, hw->fw->data);
+					ret = amhevc_loadmc_ex(vdec, NULL, hw->fw->data);
 					hw->enable_ucode_swap = false;
 				} else
 					hw->is_swap = true;
 			} else {
-				ret = amhevc_loadmc_ex(VFORMAT_AV1,
-						NULL, hw->fw->data);
+				ret = amhevc_loadmc_ex(vdec, NULL, hw->fw->data);
 			}
 		}
 		if (ret < 0) {
@@ -12617,7 +12614,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 	hw->back_start_time = local_clock();
 	if (((fb_ucode_debug == 1) && (hw->front_back_mode == 2)) ||
 		(hw->front_back_mode == 1)) {
-			loadr = amhevc_loadmc_ex(VFORMAT_AV1, "av1_back", hw->fw_back->data);
+			loadr = amhevc_loadmc_ex(vdec, "av1_back", hw->fw_back->data);
 	}
 	if (loadr < 0) {
 		amhevc_disable();

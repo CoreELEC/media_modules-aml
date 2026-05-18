@@ -16001,16 +16001,16 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 
 	if (hevc->mmu_enable) {
 		if (hevc->enable_ucode_swap) {
-			ret = amhevc_loadmc_ex(VFORMAT_HEVC, "hevc_mmu_swap", fw->data);
+			ret = amhevc_loadmc_ex(vdec, "hevc_mmu_swap", fw->data);
 			if (ret < 0)
-				ret = amhevc_loadmc_ex(VFORMAT_HEVC, "h265_mmu", fw->data);
+				ret = amhevc_loadmc_ex(vdec, "h265_mmu", fw->data);
 			else
 				hevc->is_swap = true;
 		} else {
-			ret = amhevc_loadmc_ex(VFORMAT_HEVC, "h265_mmu", fw->data);
+			ret = amhevc_loadmc_ex(vdec, "h265_mmu", fw->data);
 		}
 	} else
-		ret = amhevc_loadmc_ex(VFORMAT_HEVC, NULL, fw->data);
+		ret = amhevc_loadmc_ex(vdec, NULL, fw->data);
 
 	if (ret < 0) {
 		amhevc_disable();

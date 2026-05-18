@@ -2271,6 +2271,32 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		WRITE_VREG(HEVC_CORE_ENABLE, 0);
 	}
 
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+	} else {
+		if (hw->jpeg_flag) {
+			ret = amvdec_vdec_loadmc_ex(VFORMAT_JPEG, "jpeg", vdec, hw->fw->data);
+			vdec->mc_type = VFORMAT_JPEG;
+		} else {
+			ret = amvdec_vdec_loadmc_ex(VFORMAT_MJPEG, "mmjpeg", vdec, hw->fw->data);
+			vdec->mc_type = VFORMAT_MJPEG;
+		}
+		if (ret < 0) {
+			pr_err("[%d] %s: the %s fw loading failed, err: %x\n",
+				vdec->id, hw->jpeg_flag ? "jpeg" : "mmjpeg",
+				fw_tee_enabled() ? "TEE" : "local", ret);
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
+			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_schedule_work(&hw->work);
+			hw->run_flag = 0;
+			return;
+		}
+		vdec->mc_loaded = 1;
+	}
+
 	ret = vdec_prepare_input(vdec, &hw->chunk);
 
 	if (input_frame_based(vdec) && !(vdec_secure(vdec)) && hw->chunk) {
@@ -2314,31 +2340,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	hw->input_empty = 0;
 	hw->dec_result = DEC_RESULT_NONE;
-	if (vdec->mc_loaded) {
-	/*firmware have load before,
-	  and not changes to another.
-	  ignore reload.
-	*/
-	} else {
-		if (hw->jpeg_flag) {
-			ret = amvdec_vdec_loadmc_ex(VFORMAT_JPEG, "jpeg", vdec, hw->fw->data);
-			vdec->mc_type = VFORMAT_JPEG;
-		} else {
-			ret = amvdec_vdec_loadmc_ex(VFORMAT_MJPEG, "mmjpeg", vdec, hw->fw->data);
-			vdec->mc_type = VFORMAT_MJPEG;
-		}
-		if (ret < 0) {
-			pr_err("[%d] %s: the %s fw loading failed, err: %x\n",
-				vdec->id, hw->jpeg_flag ? "jpeg" : "mmjpeg" , fw_tee_enabled() ? "TEE" : "local", ret);
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-			hw->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&hw->work);
-			hw->run_flag = 0;
-			return;
-		}
-		vdec->mc_loaded = 1;
-	}
-
 	if (vmjpeg_hw_ctx_restore(hw) < 0) {
 		hw->dec_result = DEC_RESULT_ERROR;
 		mmjpeg_debug_print(DECODE_ID(hw), 0,

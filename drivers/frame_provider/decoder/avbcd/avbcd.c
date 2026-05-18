@@ -9385,16 +9385,16 @@ static s32 avbcd_init(struct vdec_s *vdec)
 
 	if (hevc->mmu_enable) {
 		if (hevc->enable_ucode_swap) {
-			ret = amhevc_loadmc_ex(VFORMAT_HEVC, "hevc_mmu_swap", fw->data);
+			ret = amhevc_loadmc_ex(vdec, "hevc_mmu_swap", fw->data);
 			if (ret < 0)
-				ret = amhevc_loadmc_ex(VFORMAT_HEVC, "h265_mmu", fw->data);
+				ret = amhevc_loadmc_ex(vdec, "h265_mmu", fw->data);
 			else
 				hevc->is_swap = true;
 		} else {
-			ret = amhevc_loadmc_ex(VFORMAT_HEVC, "h265_mmu", fw->data);
+			ret = amhevc_loadmc_ex(vdec, "h265_mmu", fw->data);
 		}
 	} else {
-		ret = amhevc_loadmc_ex(VFORMAT_HEVC, NULL, fw->data);
+		ret = amhevc_loadmc_ex(vdec, NULL, fw->data);
 		hevc->is_swap = true;
 	}
 	if (ret < 0) {
@@ -10789,12 +10789,61 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	hevc->fence_mode_buf_status = FENCE_MODE_BUF_IDLE;
 	if (!is_avbcd_only(vdec)) {
 #ifdef AGAIN_HAS_THRESHOLD
-	if (vdec_stream_based(vdec)) {
-		hevc->pre_parser_wr_ptr =
-			STBUF_READ(&vdec->vbuf, get_wp);
-		hevc->next_again_flag = 0;
-	}
+		if (vdec_stream_based(vdec)) {
+			hevc->pre_parser_wr_ptr =
+				STBUF_READ(&vdec->vbuf, get_wp);
+			hevc->next_again_flag = 0;
+		}
 #endif
+
+		ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
+		if (vdec->mc_loaded) {
+			/* firmware have load before,
+			 * and not changes to another.
+			 * ignore reload.
+			 */
+			if (fw_tee_enabled() && hevc->is_swap)
+				WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->swap_addr);
+		} else {
+			if (hevc->mmu_enable) {
+				if (hevc->enable_ucode_swap) {
+					loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
+							"hevc_mmu_swap", hevc->fw->data);
+					if (loadr < 0) {
+						loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
+							"h265_mmu", hevc->fw->data);
+						hevc->enable_ucode_swap = false;
+					} else
+						hevc->is_swap = true;
+				} else {
+					loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
+							"h265_mmu", hevc->fw->data);
+				}
+			} else {
+				loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
+						NULL, hevc->fw->data);
+				hevc->is_swap = true;
+			}
+			if (loadr < 0) {
+				amhevc_disable();
+				hevc_print(hevc, 0, "AVBCD: the %s fw loading failed, err: %x\n",
+					fw_tee_enabled() ? "TEE" : "local", loadr);
+				hevc->dec_result = DEC_RESULT_FORCE_EXIT;
+				vdec_schedule_work(&hevc->work);
+				return;
+			}
+
+			if (fw_tee_enabled() && hevc->is_swap)
+				hevc->swap_addr = READ_VREG(HEVC_STREAM_SWAP_BUFFER2);
+#ifdef DETREFILL_ENABLE
+			if (hevc->is_swap && get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
+				init_detrefill_buf(hevc);
+#endif
+			vdec->mc_loaded = 1;
+			vdec->mc_type = VFORMAT_HEVC;
+		}
+		ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
+
 		if ((vdec_frame_based(vdec)) &&
 			(hevc->dec_result == DEC_RESULT_UNFINISH)) {
 			u32 res_byte = hevc->data_size - hevc->consume_byte;
@@ -10900,53 +10949,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			if (!hevc->chunk->block->is_mapped)
 				codec_mm_unmap_phyaddr(data);
 		}
-		ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-
-		if (vdec->mc_loaded) {
-			/*firmware have load before,
-			  and not changes to another.
-			  ignore reload.
-			*/
-			if (fw_tee_enabled() && hevc->is_swap)
-				WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->swap_addr);
-		} else {
-			if (hevc->mmu_enable) {
-				if (hevc->enable_ucode_swap) {
-					loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
-							"hevc_mmu_swap", hevc->fw->data);
-					if (loadr < 0) {
-						loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
-							"h265_mmu", hevc->fw->data);
-						hevc->enable_ucode_swap = false;
-					} else
-						hevc->is_swap = true;
-				} else {
-					loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
-							"h265_mmu", hevc->fw->data);
-				}
-			} else {
-				loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
-						NULL, hevc->fw->data);
-				hevc->is_swap = true;
-			}
-			if (loadr < 0) {
-				amhevc_disable();
-				hevc_print(hevc, 0, "AVBCD: the %s fw loading failed, err: %x\n",
-					fw_tee_enabled() ? "TEE" : "local", loadr);
-				hevc->dec_result = DEC_RESULT_FORCE_EXIT;
-				vdec_schedule_work(&hevc->work);
-				return;
-			}
-
-			if (fw_tee_enabled() && hevc->is_swap)
-				hevc->swap_addr = READ_VREG(HEVC_STREAM_SWAP_BUFFER2);
-#ifdef DETREFILL_ENABLE
-			if (hevc->is_swap && get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
-				init_detrefill_buf(hevc);
-#endif
-			vdec->mc_loaded = 1;
-			vdec->mc_type = VFORMAT_HEVC;
-		}
 	}
 	hevc->dec_result = DEC_RESULT_NONE;
 
@@ -10998,8 +11000,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc_print(hevc, AVBCD_DEBUG_BUFMGR, "%s: head addr 0x%x \n",
 				__func__, vdec->avbc_info.avbc_header_addr);
 	}
-
-	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(hevc->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 

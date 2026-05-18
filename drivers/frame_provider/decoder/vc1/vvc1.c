@@ -1701,7 +1701,7 @@ static void vvc1_put_timer_func(struct timer_list *timer)
 	add_timer(timer);
 }
 
-static s32 vvc1_init(void)
+static s32 vvc1_init(struct vdec_s *vdec)
 {
 	int ret = -1;
 	char *buf = vmalloc(0x1000 * 16);
@@ -1741,7 +1741,7 @@ static s32 vvc1_init(void)
 		return -1;
 	}
 
-	ret = amvdec_loadmc_ex(VFORMAT_VC1, NULL, buf);
+	ret = amvdec_loadmc_ex(vdec, NULL, buf);
 	if (ret < 0) {
 		amvdec_disable();
 		vfree(buf);
@@ -1830,13 +1830,14 @@ static int amvdec_vc1_probe(struct platform_device *pdev)
 
 	vc1_hw.canvas_mode = pdata->canvas_mode;
 	vc1_hw.platform_dev = pdev;
+	platform_set_drvdata(pdev, pdata);
 
 	vvc1_vdec_info_init();
 
 	INIT_WORK(&error_wd_work, error_do_work);
 	INIT_WORK(&set_clk_work, vvc1_set_clk);
 	spin_lock_init(&vc1_rp_lock);
-	if (vvc1_init() < 0) {
+	if (vvc1_init(pdata) < 0) {
 		pr_info("amvdec_vc1 init failed.\n");
 		kfree(gvs);
 		gvs = NULL;

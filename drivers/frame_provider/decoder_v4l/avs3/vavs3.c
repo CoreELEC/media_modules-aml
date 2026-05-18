@@ -9275,7 +9275,7 @@ static s32 vavs3_init(struct vdec_s *vdec)
 	spin_lock_init(&dec->buffer_lock);
 	amhevc_enable();
 
-	ret = amhevc_loadmc_ex(VFORMAT_AVS3, NULL, fw->data);
+	ret = amhevc_loadmc_ex(vdec, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
@@ -10617,6 +10617,32 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (is_vdec_hevc_combine())
 		WRITE_VREG(HEVC_CORE_ENABLE, 1);
 
+	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START, TRACE_BASIC);
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+	} else {
+#ifdef NEW_FB_CODE
+		int loadr = 0;
+		if (dec->front_back_mode == 1 || dec->front_back_mode == 3)
+			loadr = amhevc_vdec_loadmc_ex(VFORMAT_AVS3, vdec, "avs3_front", dec->fw->data);
+		else
+#endif
+		if (amhevc_loadmc_ex(vdec, "avs3_mmu", dec->fw->data) < 0) {
+			vdec->mc_loaded = 0;
+			amhevc_disable();
+			avs3_print(dec, 0, "%s: Error amvdec_loadmc avs3_mmu fail \n", __func__);
+			dec->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_schedule_work(&dec->work);
+			return;
+		}
+		//vdec->mc_loaded = 1;
+		vdec->mc_type = VFORMAT_AVS3;
+	}
+	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END, TRACE_BASIC);
+
 	if (vdec_stream_based(vdec)) {
 		dec->pre_parser_wr_ptr =
 			STBUF_READ(&vdec->vbuf, get_wp);
@@ -10674,32 +10700,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		}
 		avs3_print_cont(dec, 0, "\r\n");
 	}
-
-	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START, TRACE_BASIC);
-	if (vdec->mc_loaded) {
-		/*firmware have load before,
-			and not changes to another.
-			ignore reload.
-		*/
-	} else {
-#ifdef NEW_FB_CODE
-		int loadr = 0;
-		if (dec->front_back_mode == 1 || dec->front_back_mode == 3)
-			loadr = amhevc_vdec_loadmc_ex(VFORMAT_AVS3, vdec, "avs3_front", dec->fw->data);
-		else
-#endif
-		if (amhevc_loadmc_ex(VFORMAT_AVS3, "avs3_mmu", dec->fw->data) < 0) {
-			vdec->mc_loaded = 0;
-			amhevc_disable();
-			avs3_print(dec, 0, "%s: Error amvdec_loadmc avs3_mmu fail \n", __func__);
-			dec->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&dec->work);
-			return;
-		}
-		//vdec->mc_loaded = 1;
-		vdec->mc_type = VFORMAT_AVS3;
-	}
-	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END, TRACE_BASIC);
 
 	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START, TRACE_BASIC);
 	/*

@@ -9877,7 +9877,7 @@ static s32 vav1_init(struct AV1HW_s *hw)
 #endif
 	amhevc_enable();
 
-	ret = amhevc_loadmc_ex(VFORMAT_AV1, NULL, fw->data);
+	ret = amhevc_loadmc_ex(vdec, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
@@ -10860,17 +10860,14 @@ static void run_front(struct vdec_s *vdec)
 	*/
 	} else {
 		if (hw->enable_ucode_swap) {
-			ret = amhevc_loadmc_ex(VFORMAT_AV1,
-					"av1_mmu_swap", hw->fw->data);
+			ret = amhevc_loadmc_ex(vdec, "av1_mmu_swap", hw->fw->data);
 			if (ret < 0) {
-				ret = amhevc_loadmc_ex(VFORMAT_AV1,
-						NULL, hw->fw->data);
+				ret = amhevc_loadmc_ex(vdec, NULL, hw->fw->data);
 				hw->enable_ucode_swap = false;
 			} else
 				hw->is_swap = true;
 		} else {
-			ret = amhevc_loadmc_ex(VFORMAT_AV1,
-					NULL, hw->fw->data);
+			ret = amhevc_loadmc_ex(vdec, NULL, hw->fw->data);
 		}
 
 		if (ret < 0) {

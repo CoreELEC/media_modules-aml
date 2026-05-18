@@ -518,7 +518,7 @@ static s32 amvdec_loadmc(const u32 *p)
 	return ret;
 }
 
-s32 optee_load_fw(enum vformat_e type, const char *fw_name)
+s32 optee_load_fw(enum vformat_e type, const char *fw_name, int secure)
 {
 	s32 ret = -1;
 	unsigned int format = FIRMWARE_MAX;
@@ -610,6 +610,7 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 		break;
 
 	case VFORMAT_HEVC:
+	case VFORMAT_AVBCD:
 		if (!strcmp(name, "h265_mmu"))
 			format = VIDEO_DEC_HEVC_MMU;
 		else if (!strcmp(name, "hevc_mmu_swap")) {
@@ -711,10 +712,12 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 	}
 
 	if (format < FIRMWARE_MAX) {
+		if (!is_support_secure_remap())
+			secure = 0;
 		if (is_swap)
-			ret = tee_load_video_fw_swap(format, vdec, is_swap);
+			ret = tee_load_video_fw_swap(format, (secure << 31) | vdec, is_swap);
 		else
-			ret = tee_load_video_fw(format, vdec);
+			ret = tee_load_video_fw(format, (secure << 31) | vdec);
 	}
 
 	if (ret < 0) {
@@ -726,12 +729,12 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 }
 EXPORT_SYMBOL(optee_load_fw);
 
-s32 amvdec_loadmc_ex(enum vformat_e type, const char *name, char *def)
+s32 amvdec_loadmc_ex(struct vdec_s *vdec, const char *name, char *def)
 {
 	if (fw_tee_enabled())
-		return optee_load_fw(type, name);
+		return optee_load_fw(vdec->format, name, vdec_secure(vdec) ? 1 : 0);
 	else
-		return am_loadmc_ex(type, name, def, &amvdec_loadmc);
+		return am_loadmc_ex(vdec->format, name, def, &amvdec_loadmc);
 }
 EXPORT_SYMBOL(amvdec_loadmc_ex);
 
@@ -739,7 +742,7 @@ s32 amvdec_vdec_loadmc_ex(enum vformat_e type, const char *name,
 	struct vdec_s *vdec, char *def)
 {
 	if (fw_tee_enabled())
-		return optee_load_fw(type, name);
+		return optee_load_fw(type, name, vdec_secure(vdec) ? 1 : 0);
 	else
 		return am_loadmc_vdec_ex(vdec, name, def, &aml_loadmc_vdec);
 }
@@ -749,7 +752,7 @@ s32 amvdec_vdec_loadmc_buf_ex(enum vformat_e type, const char *name,
 	struct vdec_s *vdec, char *buf, int size)
 {
 	if (fw_tee_enabled())
-		return optee_load_fw(type, name);
+		return optee_load_fw(type, name, vdec_secure(vdec) ? 1 : 0);
 	else
 		return am_vdec_loadmc_buf_ex(vdec, buf, size, &amvdec_loadmc);
 }
@@ -866,6 +869,15 @@ s32 amhcodec_loadmc_ex(enum vformat_e type, const char *name, char *def)
 	return am_loadmc_ex(type, name, def, &amhcodec_loadmc);
 }
 EXPORT_SYMBOL(amhcodec_loadmc_ex);
+
+s32 amenc_loadmc_ex(enum vformat_e type, const char *name, char *def)
+{
+	if (fw_tee_enabled())
+		return optee_load_fw(type, name, 0);
+	else
+		return am_loadmc_ex(type, name, def, &amvdec_loadmc);
+}
+EXPORT_SYMBOL(amenc_loadmc_ex);
 
 static s32 amhevc_loadmc(const u32 *p)
 {
@@ -995,16 +1007,16 @@ static s32 amhevc_back_loadmc(const u32 *p)
 	return ret;
 }
 
-s32 amhevc_loadmc_ex(enum vformat_e type, const char *name, char *def)
+s32 amhevc_loadmc_ex(struct vdec_s *vdec, const char *name, char *def)
 {
 	if (has_hevc_vdec())
 		if (fw_tee_enabled()) {
-			return optee_load_fw(type, name);
+			return optee_load_fw(vdec->format, name, vdec_secure(vdec) ? 1 : 0);
 		} else {
 			if (name && strstr(name, "back") != NULL) {
-				return am_loadmc_ex(type, name, def, &amhevc_back_loadmc);
+				return am_loadmc_ex(vdec->format, name, def, &amhevc_back_loadmc);
 			} else
-				return am_loadmc_ex(type, name, def, &amhevc_loadmc);
+				return am_loadmc_ex(vdec->format, name, def, &amhevc_loadmc);
 		}
 	else
 		return -1;
@@ -1016,7 +1028,7 @@ s32 amhevc_vdec_loadmc_ex(enum vformat_e type, struct vdec_s *vdec,
 {
 	if (has_hevc_vdec())
 		if (fw_tee_enabled())
-			return optee_load_fw(type, name);
+			return optee_load_fw(type, name, vdec_secure(vdec) ? 1 : 0);
 		else {
 			if (name && strstr(name, "back") != NULL) {
 				return am_vdec_loadmc_back_ex(vdec, name, def, &amhevc_back_loadmc);

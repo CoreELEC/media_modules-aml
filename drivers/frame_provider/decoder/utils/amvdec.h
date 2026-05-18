@@ -39,7 +39,7 @@ extern void amvdec_start(void);
 extern void amvdec_stop(void);
 extern void amvdec_enable(void);
 extern void amvdec_disable(void);
-s32 amvdec_loadmc_ex(enum vformat_e type, const char *name, char *def);
+s32 amvdec_loadmc_ex(struct vdec_s *vdec, const char *name, char *def);
 s32 amvdec_vdec_loadmc_ex(enum vformat_e type, const char *name,
 	struct vdec_s *vdec, char *def);
 
@@ -63,7 +63,7 @@ extern void amhevc_reset_f(void);
 extern void amhevc_reset_b(void);
 #endif
 
-s32 amhevc_loadmc_ex(enum vformat_e type, const char *name, char *def);
+s32 amhevc_loadmc_ex(struct vdec_s *vdec, const char *name, char *def);
 s32 amhevc_vdec_loadmc_ex(enum vformat_e type, struct vdec_s *vdec,
 	const char *name, char *def);
 s32 amvdec_vdec_loadmc_buf_ex(enum vformat_e type, const char *name,
@@ -73,6 +73,7 @@ extern void amhcodec_start(void);
 extern void amhcodec_stop(void);
 s32 amhcodec_loadmc(const u32 *p);
 s32 amhcodec_loadmc_ex(enum vformat_e type, const char *name, char *def);
+s32 amenc_loadmc_ex(enum vformat_e type, const char *name, char *def);
 
 extern int amvdev_pause(void);
 extern int amvdev_resume(void);

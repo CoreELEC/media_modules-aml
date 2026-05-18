@@ -2952,6 +2952,26 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		WRITE_VREG(HEVC_CORE_ENABLE, 0);
 	}
 
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+	} else {
+		ret = amvdec_vdec_loadmc_buf_ex(VFORMAT_MPEG4,hw->fw->name, vdec,
+			hw->fw->data, hw->fw->len);
+		if (ret < 0) {
+			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
+				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
+			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_schedule_work(&hw->work);
+			hw->run_flag = 0;
+			return;
+		}
+		vdec->mc_loaded = 1;
+		vdec->mc_type = VFORMAT_MPEG4;
+	}
+
 	if ((vdec_frame_based(vdec)) &&
 		(hw->dec_result == DEC_RESULT_UNFINISH)) {
 		vmpeg4_prepare_input(hw);
@@ -3042,25 +3062,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 
 	hw->dec_result = DEC_RESULT_NONE;
-	if (vdec->mc_loaded) {
-	/*firmware have load before,
-	  and not changes to another.
-	  ignore reload.
-	*/
-	} else {
-		ret = amvdec_vdec_loadmc_buf_ex(VFORMAT_MPEG4,hw->fw->name, vdec,
-			hw->fw->data, hw->fw->len);
-		if (ret < 0) {
-			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
-				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
-			hw->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&hw->work);
-			hw->run_flag = 0;
-			return;
-		}
-		vdec->mc_loaded = 1;
-		vdec->mc_type = VFORMAT_MPEG4;
-	}
 
 	if (vmpeg4_hw_ctx_restore(hw) < 0) {
 		hw->dec_result = DEC_RESULT_ERROR;

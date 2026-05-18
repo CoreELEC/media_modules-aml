@@ -8734,7 +8734,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 
 	amhevc_enable();
 
-	ret = amhevc_loadmc_ex(VFORMAT_AVS2, NULL, fw->data);
+	ret = amhevc_loadmc_ex(vdec, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
@@ -10121,7 +10121,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 					"avs2_front", dec->fw->data);
 		else
 #endif
-		if (amhevc_loadmc_ex(VFORMAT_AVS2, NULL, dec->fw->data) < 0) {
+		if (amhevc_loadmc_ex(vdec, NULL, dec->fw->data) < 0) {
 			vdec->mc_loaded = 0;
 			amhevc_disable();
 			avs2_print(dec, 0,

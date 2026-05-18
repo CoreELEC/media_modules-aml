@@ -10927,7 +10927,7 @@ static s32 vav1_init(struct AV1HW_s *hw)
 #endif
 	amhevc_enable();
 
-	ret = amhevc_loadmc_ex(VFORMAT_AV1, NULL, fw->data);
+	ret = amhevc_loadmc_ex(vdec, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
@@ -11893,6 +11893,45 @@ static void run_front(struct vdec_s *vdec)
 	if (is_vdec_hevc_combine())
 		WRITE_VREG(HEVC_CORE_ENABLE, 1);
 
+	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+	} else {
+		if (hw->enable_ucode_swap) {
+			ret = amhevc_loadmc_ex(vdec, "av1_mmu_swap", hw->fw->data);
+			if (ret < 0) {
+				ret = amhevc_loadmc_ex(vdec, NULL, hw->fw->data);
+				hw->enable_ucode_swap = false;
+			} else
+				hw->is_swap = true;
+		} else {
+			ret = amhevc_loadmc_ex(vdec, NULL, hw->fw->data);
+		}
+
+		if (ret < 0) {
+			amhevc_disable();
+			av1_print(hw, PRINT_FLAG_ERROR,
+				"AV1: the %s fw loading failed, err: %x\n",
+				fw_tee_enabled() ? "TEE" : "local", ret);
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
+			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+
+		vdec->mc_loaded = 0;
+		vdec->mc_type = VFORMAT_AV1;
+#ifdef SWAP_HEVC_UCODE
+		if (!fw_tee_enabled() && hw->is_swap) {
+			WRITE_VREG(HEVC_UCODE_SWAP_BUFFER, hw->swap_phy_addr);
+		}
+#endif
+	}
+	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
+
 	if ((vdec_frame_based(vdec)) &&
 		(hw->dec_result == DEC_RESULT_UNFINISH)) {
 		u32 res_byte = hw->data_size - hw->consume_byte;
@@ -11989,47 +12028,6 @@ static void run_front(struct vdec_s *vdec)
 				hw->start_shift_bytes);
 		}
 	}
-	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-	if (vdec->mc_loaded) {
-	/*firmware have load before,
-	  and not changes to another.
-	  ignore reload.
-	*/
-	} else {
-		if (hw->enable_ucode_swap) {
-			ret = amhevc_loadmc_ex(VFORMAT_AV1,
-					"av1_mmu_swap", hw->fw->data);
-			if (ret < 0) {
-				ret = amhevc_loadmc_ex(VFORMAT_AV1,
-						NULL, hw->fw->data);
-				hw->enable_ucode_swap = false;
-			} else
-				hw->is_swap = true;
-		} else {
-			ret = amhevc_loadmc_ex(VFORMAT_AV1,
-					NULL, hw->fw->data);
-		}
-
-		if (ret < 0) {
-			amhevc_disable();
-			av1_print(hw, PRINT_FLAG_ERROR,
-				"AV1: the %s fw loading failed, err: %x\n",
-				fw_tee_enabled() ? "TEE" : "local", ret);
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-			hw->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_schedule_work(&hw->work);
-			return;
-		}
-
-		vdec->mc_loaded = 0;
-		vdec->mc_type = VFORMAT_AV1;
-#ifdef SWAP_HEVC_UCODE
-		if (!fw_tee_enabled() && hw->is_swap) {
-			WRITE_VREG(HEVC_UCODE_SWAP_BUFFER, hw->swap_phy_addr);
-		}
-#endif
-	}
-	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 

@@ -208,6 +208,8 @@ struct dos_of_dev_s {
 	/* avbcd */
 	bool is_support_avbc_wrapper;  /**/
 
+	bool is_support_secure_remap;
+
 	/* bus idle ctrl for reset */
 	int dos_bus_ctrl;
 	int dos_bus_idle_mask;  /* afifo idle mask */
@@ -344,6 +346,8 @@ inline bool is_support_axi_monitor(void);
 inline u32 get_dos_dw_capability(void);
 
 inline bool is_support_afgs(void);
+
+inline bool is_support_secure_remap(void);
 
 void pr_dos_infos(void);
 

@@ -1596,7 +1596,7 @@ static s32 vh264mvc_init(void)
 	amvdec_enable();
 
 	if (fw_tee_enabled()) {
-		ret = amvdec_loadmc_ex(VFORMAT_H264MVC, NULL, buf);
+		ret = amvdec_loadmc_ex(vdec, NULL, buf);
 		if (ret != 0) {
 			amvdec_disable();
 			vfree(buf);
@@ -1623,7 +1623,7 @@ static s32 vh264mvc_init(void)
 			return -1;
 		}
 
-		ret = amvdec_loadmc_ex(VFORMAT_H264MVC, NULL, buf);
+		ret = amvdec_loadmc_ex(vdec, NULL, buf);
 		if (ret < 0) {
 			amvdec_disable();
 			vfree(buf);

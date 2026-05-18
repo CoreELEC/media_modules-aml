@@ -10616,7 +10616,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 
 	init_pic_list(pbi);
 
-	ret = amhevc_loadmc_ex(VFORMAT_VP9, NULL, fw->data);
+	ret = amhevc_loadmc_ex(vdec, NULL, fw->data);
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
@@ -11627,6 +11627,29 @@ static void run_front(struct vdec_s *vdec)
 	if (is_vdec_hevc_combine())
 		WRITE_VREG(HEVC_CORE_ENABLE, 1);
 
+	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+	} else {
+			ret = amhevc_loadmc_ex(vdec, NULL, pbi->fw->data);
+			if (ret < 0) {
+			amhevc_disable();
+			vp9_print(pbi, PRINT_FLAG_ERROR,
+				"VP9: the %s fw loading failed, err: %x\n",
+				fw_tee_enabled() ? "TEE" : "local", ret);
+			pbi->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
+			vdec_schedule_work(&pbi->work);
+			return;
+		}
+		vdec->mc_loaded = 1;
+		vdec->mc_type = VFORMAT_VP9;
+	}
+	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
+
 	if ((vdec_frame_based(vdec)) &&
 		((pbi->dec_result == DEC_RESULT_UNFINISH) ||
 		(pbi->unfinish_res))) {
@@ -11768,28 +11791,6 @@ static void run_front(struct vdec_s *vdec)
 		}
 		vp9_print_cont(pbi, 0, "\r\n");
 	}
-	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-	if (vdec->mc_loaded) {
-	/*firmware have load before,
-	  and not changes to another.
-	  ignore reload.
-	*/
-	} else {
-			ret = amhevc_loadmc_ex(VFORMAT_VP9, NULL, pbi->fw->data);
-			if (ret < 0) {
-			amhevc_disable();
-			vp9_print(pbi, PRINT_FLAG_ERROR,
-				"VP9: the %s fw loading failed, err: %x\n",
-				fw_tee_enabled() ? "TEE" : "local", ret);
-			pbi->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-			vdec_schedule_work(&pbi->work);
-			return;
-		}
-		vdec->mc_loaded = 1;
-		vdec->mc_type = VFORMAT_VP9;
-	}
-	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
 
 	ATRACE_COUNTER(pbi->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 

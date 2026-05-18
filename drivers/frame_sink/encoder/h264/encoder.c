@@ -2955,7 +2955,7 @@ s32 amvenc_loadmc(const char *p, struct encode_wq_s *wq)
 
         WRITE_HREG(HCODEC_MPSR, 0);
         WRITE_HREG(HCODEC_CPSR, 0);
-        ret = amvdec_loadmc_ex(VFORMAT_H264_ENC, p, buf);
+        ret = amenc_loadmc_ex(VFORMAT_H264_ENC, p, buf);
 
         if (ret < 0) {
             //amvdec_disable();

@@ -4691,6 +4691,27 @@ void (*callback)(struct vdec_s *, void *, int),
 		hevc_reset_core(vdec);
 		WRITE_VREG(HEVC_CORE_ENABLE, 0);
 	}
+
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+	} else {
+		ret = amvdec_vdec_loadmc_buf_ex(VFORMAT_MPEG12, "mmpeg12", vdec,
+			hw->fw->data, hw->fw->len);
+		if (ret < 0) {
+			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
+				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
+			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+		vdec->mc_loaded = 1;
+		vdec->mc_type = VFORMAT_MPEG12;
+	}
+
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
 
@@ -4870,26 +4891,6 @@ void (*callback)(struct vdec_s *, void *, int),
 			STBUF_READ(&vdec->vbuf, get_rp),
 			STBUF_READ(&vdec->vbuf, get_wp),
 			size, READ_VREG(VIFF_BIT_CNT));
-	}
-
-	if (vdec->mc_loaded) {
-	/*firmware have load before,
-	  and not changes to another.
-	  ignore reload.
-	*/
-	} else {
-		ret = amvdec_vdec_loadmc_buf_ex(VFORMAT_MPEG12, "mmpeg12", vdec,
-			hw->fw->data, hw->fw->len);
-		if (ret < 0) {
-			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
-				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
-			hw->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-			vdec_schedule_work(&hw->work);
-			return;
-		}
-		vdec->mc_loaded = 1;
-		vdec->mc_type = VFORMAT_MPEG12;
 	}
 
 	if (vmpeg12_hw_ctx_restore(hw) < 0) {

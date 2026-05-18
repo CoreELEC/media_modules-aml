@@ -3180,6 +3180,28 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc_reset_core(vdec);
 		WRITE_VREG(HEVC_CORE_ENABLE, 0);
 	}
+
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+	} else {
+		ret = amvdec_vdec_loadmc_buf_ex(VFORMAT_VC1, "vc1_multi", vdec,
+			hw->fw->data, hw->fw->len);
+		if (ret < 0) {
+			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
+				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
+
+			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+		vdec->mc_loaded = 1;
+		vdec->mc_type = VFORMAT_VC1;
+	}
+
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
 
@@ -3244,29 +3266,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			size, READ_VREG(VIFF_BIT_CNT));
 
 	hw->dec_result = DEC_RESULT_NONE;
-	/*vdec->mc_loaded = 0;*/
-	if (vdec->mc_loaded) {
-	/*firmware have load before,
-	  and not changes to another.
-	  ignore reload.
-	*/
-	} else {
-		ret = amvdec_vdec_loadmc_buf_ex(VFORMAT_VC1, "vc1_multi", vdec,
-			hw->fw->data, hw->fw->len);
-		if (ret < 0) {
-			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
-				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
-
-			//hw->run_flag = 0;
-			hw->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-			vdec_schedule_work(&hw->work);
-			return;
-		}
-		vdec->mc_loaded = 1;
-		vdec->mc_type = VFORMAT_VC1;
-	}
-
 	if (vc1_hw_ctx_restore(hw) < 0) {
 		hw->dec_result = DEC_RESULT_ERROR;
 		vdec_schedule_work(&hw->work);

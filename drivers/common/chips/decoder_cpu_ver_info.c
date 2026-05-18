@@ -686,6 +686,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_34bit = true,
 		.is_amrisc_imem_size_6k = true,
 		.is_support_afgs = true,
+		.is_support_secure_remap = true,
 		.dos_dw_capability = YUV_1_2_4 | P010_1_2_4 | AV1_YUV_ONLY,
 	},
 
@@ -1238,17 +1239,18 @@ bool is_support_4k_h265(void)
 }
 EXPORT_SYMBOL(is_support_4k_h265);
 
-/*
-	feature from dos dev functions
-*/
-/*
-bit0: force support no_parser;
-bit1: force support all video format;
-*/
+/* feature from dos dev functions
+ * bit0: force support no_parser;
+ * bit1: force support all video format;
+ * bit2: force support resolution oversize;
+ * bit3: force width align 64
+ * bit4: force secure use legacy config
+ */
 #define FORCE_VDEC_NO_PARSER     BIT(0)
 #define FORCE_VDEC_SUPPORT_FMT   BIT(1)
 #define FORCE_VDEC_NO_OVERSIZE   BIT(2)
 #define FORCE_VDEC_ALIGN64       BIT(3)
+#define FORCE_VDEC_SECURE_LEGACY BIT(4)
 extern u32 force_dos_support;
 
 inline bool is_core_vdec_fmt(int format)
@@ -1793,6 +1795,15 @@ inline bool is_support_afgs(void)
 }
 EXPORT_SYMBOL(is_support_afgs);
 
+inline bool is_support_secure_remap(void)
+{
+	if (force_dos_support & FORCE_VDEC_SECURE_LEGACY)
+		return false;
+
+	return platform_dos_dev->is_support_secure_remap;
+}
+EXPORT_SYMBOL(is_support_secure_remap);
+
 void pr_dos_infos(void)
 {
 	pr_info("dos device info:\n");
@@ -1827,6 +1838,8 @@ void pr_dos_infos(void)
 	pr_info("vp9 hw adatp prob   : %d\n", is_vp9_adapt_prob_hw_mode());
 	pr_info("vdec hevc combine   : %d\n", is_vdec_hevc_combine());
 	pr_info("is support axi monitor: %d\n", is_support_axi_monitor());
+	pr_info("support afgs        : %d\n", is_support_afgs());
+	pr_info("support secure remap: %d\n", is_support_secure_remap());
 
 	show_profile_level_idc(&platform_dos_dev->profile_level_idc);
 }

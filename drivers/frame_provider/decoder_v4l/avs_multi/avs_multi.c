@@ -2551,11 +2551,11 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 	}
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM)
-		ret = amvdec_loadmc_ex(VFORMAT_AVS, NULL, fw->data);
+		ret = amvdec_loadmc_ex(hw_to_vdec(hw), NULL, fw->data);
 	else if (firmware_sel == 1)
-		ret = amvdec_loadmc_ex(VFORMAT_AVS, "avs_no_cabac", fw->data);
+		ret = amvdec_loadmc_ex(hw_to_vdec(hw), "avs_no_cabac", fw->data);
 	else
-		ret = amvdec_loadmc_ex(VFORMAT_AVS, NULL, fw->data);
+		ret = amvdec_loadmc_ex(hw_to_vdec(hw), NULL, fw->data);
 
 	if (ret < 0) {
 		amvdec_disable();
@@ -3371,6 +3371,26 @@ void (*callback)(struct vdec_s *, void *, int),
 	}
 #endif
 
+	if (vdec->mc_loaded) {
+		/* firmware have load before,
+		 * and not changes to another.
+		 * ignore reload.
+		 */
+	} else {
+		ret = amvdec_vdec_loadmc_buf_ex(VFORMAT_AVS, "avs_multi", vdec,
+			hw->fw->data, hw->fw->len);
+		if (ret < 0) {
+			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
+				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
+			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+		vdec->mc_loaded = 1;
+		vdec->mc_type = VFORMAT_AVS;
+	}
+
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
 
@@ -3459,25 +3479,6 @@ void (*callback)(struct vdec_s *, void *, int),
 
 	hw->dec_result = DEC_RESULT_NONE;
 
-	if (vdec->mc_loaded) {
-	/*firmware have load before,
-	  and not changes to another.
-	  ignore reload.
-	*/
-	} else {
-		ret = amvdec_vdec_loadmc_buf_ex(VFORMAT_AVS, "avs_multi", vdec,
-			hw->fw->data, hw->fw->len);
-		if (ret < 0) {
-			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
-				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
-			hw->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
-			vdec_schedule_work(&hw->work);
-			return;
-		}
-		vdec->mc_loaded = 1;
-		vdec->mc_type = VFORMAT_AVS;
-	}
 	debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "vf_ref:\n");
 	for (i = 0; i < hw->vf_buf_num_used; i++)
 		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "%d: vf_ref %d\n",
@@ -3517,9 +3518,7 @@ void (*callback)(struct vdec_s *, void *, int),
 			ctx->current_timestamp = hw->chunk->timestamp;
 		}
 
-
 	vdec_enable_input(vdec);
-	/**/
 
 	/*wmb();*/
 	hw->stat |= STAT_MC_LOAD;
@@ -5508,11 +5507,11 @@ static void init_hw(struct vdec_s *vdec)
 	int ret;
 	pr_info("%s, %d\n", __func__, __LINE__);
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM)
-		ret = amvdec_loadmc_ex(VFORMAT_AVS, NULL, hw->fw->data);
+		ret = amvdec_loadmc_ex(vdec, NULL, hw->fw->data);
 	else if (firmware_sel == 1)
-		ret = amvdec_loadmc_ex(VFORMAT_AVS, "avs_no_cabac", hw->fw->data);
+		ret = amvdec_loadmc_ex(vdec, "avs_no_cabac", hw->fw->data);
 	else
-		ret = amvdec_loadmc_ex(VFORMAT_AVS, NULL, hw->fw->data);
+		ret = amvdec_loadmc_ex(vdec, NULL, hw->fw->data);
 
 	if (ret < 0) {
 		amvdec_disable();
