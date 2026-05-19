@@ -15137,7 +15137,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			size, (hevc->need_cache_size >> PAGE_SHIFT),
 			(int)(get_jiffies_64() - hevc->sc_start_time) * 1000/HZ);
 	}
-	if (vdec_stream_based(vdec) && (hevc->init_flag == 0)
+	if (vdec_stream_based(vdec)
 			&& pre_decode_buf_level != 0) {
 			u32 rp, wp, level;
 
