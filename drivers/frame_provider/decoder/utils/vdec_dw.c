@@ -351,12 +351,17 @@ static void dos_dw_mode_param_init(void)
 		switch (fmt) {
 			case VFORMAT_MPEG12:
 			case VFORMAT_MPEG4:
-			case VFORMAT_H264:
 			case VFORMAT_MJPEG:
 			case VFORMAT_JPEG:
 			case VFORMAT_VC1:
 			case VFORMAT_AVS:
 				dw_mode[fmt].hw_dw_mode[0] = DM_YUV_ONLY;
+				output_mode[fmt].mode[0].format = FORMAT_PIX_NV12;
+				output_mode[fmt].mode[0].scalar = SCALAR_1_1;
+				break;
+			case VFORMAT_H264:
+				dw_mode[fmt].hw_dw_mode[0] = DM_AVBC_ONLY;
+				dw_mode[fmt].hw_dw_mode[1] = DM_YUV_ONLY;
 				output_mode[fmt].mode[0].format = FORMAT_PIX_NV12;
 				output_mode[fmt].mode[0].scalar = SCALAR_1_1;
 				break;
