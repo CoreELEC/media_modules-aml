@@ -611,7 +611,7 @@ int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *mode)
 			ada_ctx->ctx->set_ext_buf_flg = false;
 		}
 
-		ada_ctx->ctx->aux_infos.reset_sei_buffer(ada_ctx->ctx);
+		ada_ctx->ctx->aux_infos.reset_sei_buffer(ada_ctx->ctx, *mode);
 
 		ret = vdec_v4l2_reset(vdec, *mode);
 #if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)

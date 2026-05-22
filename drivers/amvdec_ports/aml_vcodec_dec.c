@@ -4932,9 +4932,14 @@ void aml_unbind_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size, i
 	}
 }
 
-void aml_reset_sei_buffer(struct aml_vcodec_ctx *ctx)
+void aml_reset_sei_buffer(struct aml_vcodec_ctx *ctx, int reset_mode)
 {
 	int count = 0;
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+			"%s, reset_mode %d\n", __func__, reset_mode);
+	if (reset_mode == V4L_RESET_MODE_LIGHT)
+		return;
 
 	for (count = 0; count < V4L_CAP_BUFF_MAX; count++) {
 		if ((ctx->aux_infos.bufs[count].sei_buf != NULL) &&
