@@ -3214,7 +3214,6 @@ static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 			READ_VREG(VLD_MEM_VIFIFO_CONTROL),
 			READ_VREG(VIFF_BIT_CNT), READ_VREG(MREG_BUFFEROUT));
 		/* for t6d error reset in c drvier */
-		userdata_pushed_drop(hw);
 
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T6X) {
 			return IRQ_WAKE_THREAD;
