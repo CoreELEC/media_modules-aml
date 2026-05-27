@@ -11411,10 +11411,26 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 	}
 
 	if (free_slot < pbi->run_ready_min_buf_num) {
+		struct aml_vdec_ps_infos ps = {0};
+		int decode_count = 0;
+		vvp9_get_ps_info(pbi, &ps);
+
 		vp9_print(pbi,
 		PRINT_FLAG_VDEC_DETAIL, "%s not enough free_slot %d!\n",
 		__func__, free_slot);
 		force_recycle_repeat_frame(pbi);
+
+		for (i = 0; i < pbi->used_buf_num; ++i) {
+			if (frame_bufs[i].ref_count != 0) {
+				decode_count ++;
+			}
+		}
+
+		if (decode_count > ps.dpb_frames) {
+			flush_output(pbi);
+			vp9_print(pbi, VP9_DEBUG_BUFMGR,
+				"%s flush dpb! decode_count:%d dpb_frames:%d\n", __func__, decode_count, ps.dpb_frames);
+		}
 
 		return false;
 	} else if (free_slot < 2 && !ctx->avbcd_work_mode)
