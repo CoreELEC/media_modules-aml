@@ -194,7 +194,6 @@ struct aml_avbc_wrapper_s {
 };
 
 static DEFINE_MUTEX(avbc_mutex);
-static DEFINE_MUTEX(task_mutex);
 
 struct aml_avbc_wrapper_s *g_wrapper;
 static struct freq_qos_request media_copy_qos_req;
@@ -1521,17 +1520,21 @@ int aml_avbc_decode(struct avbc_output *out, struct avbc_input *in, u32 flag)
 	struct aml_avbc_wrapper_s *wrapper;
 	int ret = -1;
 
-	mutex_lock(&task_mutex);
-
 	v4l_dbg_avbcd(0, V4L_DEBUG_AVBCD_BUFMGR, "is_support_avbc_wrapper(%d). avbcd_work_mode(%d)\n",
 		is_support_avbc_wrapper(), avbcd_work_mode);
 
 	if (!is_support_avbc_wrapper() && !(avbcd_work_mode & AVBCD_DEBUG_MODE))
-		goto out;
+		return ret;
 
 	ret = aml_avbc_wrapper_init((void**)&wrapper, in);
 	if (ret) {
 		v4l_dbg_avbcd(0, V4L_DEBUG_CODEC_ERROR, "[ERR] aml_avbc_wrapper_init fail.\n");
+		return ret;
+	}
+
+	mutex_lock(&avbc_mutex);
+	if (!g_wrapper) {
+		v4l_dbg_avbcd(0, V4L_DEBUG_CODEC_ERROR, "AVBC wrapper has been destroyed!\n");
 		goto out;
 	}
 
@@ -1577,7 +1580,7 @@ int aml_avbc_decode(struct avbc_output *out, struct avbc_input *in, u32 flag)
 		ret = -1;
 
 out:
-	mutex_unlock(&task_mutex);
+	mutex_unlock(&avbc_mutex);
 
 	return ret;
 }
