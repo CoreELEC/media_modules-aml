@@ -65,7 +65,8 @@ void aml_buf_combine_worker(struct work_struct *work)
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
 	if (ctx->vdec_combine_buffer) {
 		mutex_lock(&ctx->combine_lock);
-		ctx->vdec_combine_buffer(ctx);
+		if (!ctx->is_stream_off)
+			ctx->vdec_combine_buffer(ctx);
 		mutex_unlock(&ctx->combine_lock);
 	}
 }

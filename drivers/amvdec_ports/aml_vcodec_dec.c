@@ -1973,12 +1973,14 @@ static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 
 	aml_codec_disconnect(ctx->ada_ctx);
 
+	mutex_lock(&ctx->combine_lock);
 	if (aml_codec_reset(ctx->ada_ctx, &ctx->reset_flag)) {
 		ctx->state = AML_STATE_ABORT;
 		vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 			"vcodec state (AML_STATE_ABORT).\n");
 	}
+	mutex_unlock(&ctx->combine_lock);
 out:
 	complete(&ctx->comp);
 }
