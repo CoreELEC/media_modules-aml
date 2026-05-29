@@ -2465,6 +2465,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				return IRQ_HANDLED;
 			}
 			WRITE_VREG(AV_SCRATCH_G, 0);
+			start_process_time_set(hw);
 		}
 		return IRQ_HANDLED;
 	}
@@ -2472,6 +2473,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 	reg = READ_VREG(AV_SCRATCH_J);
 	if (reg & (1<<16)) {
 		vdec_schedule_work(&hw->userdata_push_work);
+		start_process_time_set(hw);
 		return IRQ_HANDLED;
 	}
 
