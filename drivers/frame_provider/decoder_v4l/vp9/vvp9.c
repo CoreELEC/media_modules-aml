@@ -8215,6 +8215,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					(v4l2_ctx->avbcd_work_mode && atomic_read(&pbi->vf_pre_count) > 1))) {
 					vvp9_vf_put(vvp9_vf_get(pvdec), pvdec);
 				} else {
+					set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, v4l2_ctx);
 					aml_buf_set_vframe(aml_buf, vf);
 					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 					if (pvdec->avbc_dump_enable) {

@@ -976,6 +976,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					if (v4l2_ctx->enable_di_post)
 						v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
 							aml_buf, vf);
+					set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, v4l2_ctx);
 					aml_buf_set_vframe(aml_buf, vf);
 					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}
@@ -1075,6 +1076,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					if (v4l2_ctx->enable_di_post)
 						v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
 							aml_buf, vf);
+					set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, v4l2_ctx);
 					aml_buf_set_vframe(aml_buf, vf);
 					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}
@@ -1178,6 +1180,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				if (v4l2_ctx->is_stream_off) {
 					vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 				} else {
+					set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, v4l2_ctx);
 					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}

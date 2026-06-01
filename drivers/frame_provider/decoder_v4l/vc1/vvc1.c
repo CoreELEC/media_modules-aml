@@ -1437,6 +1437,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		} else {
 			if (ctx->enable_di_post)
 				ctx->fbc_transcode_and_set_vf(ctx, aml_buf, vf);
+			set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, ctx);
 			aml_buf_set_vframe(aml_buf, vf);
 			aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 		}
@@ -1518,6 +1519,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 				aml_buf = sub0_buf;
 			if (ctx->enable_di_post)
 				ctx->fbc_transcode_and_set_vf(ctx, aml_buf, vf);
+			set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, ctx);
 			aml_buf_set_vframe(aml_buf, vf);
 			aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 		}
@@ -1639,6 +1641,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		} else {
 			if (ctx->enable_di_post)
 				ctx->fbc_transcode_and_set_vf(ctx, aml_buf, vf);
+			set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, ctx);
 			aml_buf_set_vframe(aml_buf, vf);
 			aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 		}

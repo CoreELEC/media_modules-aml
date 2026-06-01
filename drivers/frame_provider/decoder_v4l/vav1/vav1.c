@@ -7248,6 +7248,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 					(v4l2_ctx->avbcd_work_mode && atomic_read(&hw->vf_pre_count) > 1))) {
 				vav1_vf_put(vav1_vf_get(vdec), vdec);
 			} else {
+				set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, v4l2_ctx);
 				aml_buf_set_vframe(aml_buf, vf);
 				vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 				if (vdec->avbc_dump_enable) {

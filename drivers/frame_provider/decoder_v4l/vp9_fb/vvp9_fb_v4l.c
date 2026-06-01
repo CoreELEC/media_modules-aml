@@ -10355,6 +10355,7 @@ void v4l_submit_vframe(struct VP9Decoder_s *pbi)
 		if (((pbi->front_back_mode) && (pic->back_done_mark)) ||
 			(!pbi->front_back_mode)) {
 #endif
+			set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, ctx);
 			aml_buf_set_vframe(aml_buf, vf);
 			vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 			aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
