@@ -8648,6 +8648,18 @@ pic_done:
 				}
 			}
 #endif
+			if ((!hevc->timeout_flag) &&
+				hevc->mmu_enable &&
+				((hevc->double_write_mode & 0x10) == 0)) {
+				hevc->used_4k_num =
+					READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
+				if (hevc->used_4k_num >= 0 &&
+					hevc->vvc_dec->cur_pic &&
+					hevc->vvc_dec->cur_pic->scatter_alloc
+					== 1) {
+					recycle_mmu_buf_tail(hevc, hevc->m_ins_flag);
+				}
+			}
 			hevc->vvc_dec->cur_pic = NULL;
 			if (get_dbg_flag(hevc) & H266_DEBUG_BUFMGR_MORE)
 				print_pic_pool(hevc, "after bufmgr_post_process");
