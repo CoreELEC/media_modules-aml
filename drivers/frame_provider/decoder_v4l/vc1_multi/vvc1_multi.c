@@ -1723,6 +1723,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw, struct pic_info_t *pic)
 		vf->height = hw->vvc1_amstream_dec_info.height;
 		vf->bufWidth = 1920;
 		vf->flag = 0;
+		vf->decoder_instid = v4l2_ctx->id;
 #if 0
 		if (pts_valid) {
 			vf->pts = pts;
@@ -1937,6 +1938,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw, struct pic_info_t *pic)
 		vf->height = hw->vvc1_amstream_dec_info.height;
 		vf->bufWidth = 1920;
 		vf->flag = 0;
+		vf->decoder_instid = v4l2_ctx->id;
 #if 0
 		if (pts_valid) {
 			vf->pts = pts;
