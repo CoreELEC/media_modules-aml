@@ -11062,7 +11062,8 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 			vdec_v4l_post_error_frame_event(ctx);
 			pbi->timeout = false;
 		}
-		pbi->slice_idx++;
+		if (pbi->cur_idx != INVALID_IDX)
+			pbi->slice_idx++;
 		pbi->frame_count++;
 		pbi->process_state = PROC_STATE_INIT;
 		decode_frame_count[pbi->index] = pbi->frame_count;
@@ -11076,8 +11077,9 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 		}
 		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
-			"%s (===> %d) dec_result %d %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
+			"%s (===> %d) slice_idx %d dec_result %d %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
 			__func__,
+			pbi->slice_idx,
 			pbi->frame_count,
 			pbi->dec_result,
 			READ_VREG(HEVC_STREAM_LEVEL),
