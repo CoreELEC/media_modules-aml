@@ -12344,13 +12344,8 @@ static int check_dpb_full(struct vdec_s *vdec)
 	spin_lock_irqsave(&hw->bufspec_lock, flags);
 
 	for (i = 0; i < p_Dpb->used_size; i++) {
-		if (p_Dpb->fs[i]->pre_output) {
+		if (p_Dpb->fs[i]->pre_output)
 			frame_outside_count++;
-		} else if (p_Dpb->fs[i]->is_output && !is_used_for_reference(p_Dpb->fs[i])) {
-			spin_unlock_irqrestore(&hw->bufspec_lock, flags);
-			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
-			return !have_free_buf_spec(vdec);
-		}
 	}
 	spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 	inner_size = p_Dpb->used_size - frame_outside_count;
@@ -12473,9 +12468,11 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				hw->dpb.mDPB.size && get_used_buf_count(hw) != hw->dpb.mDPB.used_size) ||
 				(!save_buffer_in_res_change && ((get_used_buf_count(hw) >
 				hw->dpb.mDPB.size) || (get_used_buf_count(hw) == hw->dpb.mDPB.size &&
-				get_used_buf_count(hw) != hw->dpb.mDPB.used_size)))))
-				ret = check_dpb_full(vdec);
-			else if (run_ready_max_buf_num &&
+				get_used_buf_count(hw) != hw->dpb.mDPB.used_size))))) {
+				ret = bufmgr_h264_remove_unused_frame(&hw->dpb, 0);
+				if (ret == 0)
+					ret = check_dpb_full(vdec);
+			} else if (run_ready_max_buf_num &&
 				get_used_buf_count(hw) >=
 				run_ready_max_buf_num)
 				ret = 0;
