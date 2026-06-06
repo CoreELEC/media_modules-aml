@@ -2178,7 +2178,7 @@ typedef struct AV1Decoder {
 
 #define RPM_BEGIN                                              0x200
 #define RPM_END                                                0x280
-#define RPM_VALID_E                                            0x268
+#define RPM_VALID_E                                            0x26a
 
 typedef union param_u {
     struct {
@@ -2279,6 +2279,8 @@ typedef union param_u {
 		unsigned short render_and_frame_size_different;
 		unsigned short render_width;
 		unsigned short render_height;
+		unsigned short expected_decode_size_lo;
+		unsigned short expected_decode_size_hi;
         /*ucode end*/
         /*other*/
         unsigned short enable_superres;

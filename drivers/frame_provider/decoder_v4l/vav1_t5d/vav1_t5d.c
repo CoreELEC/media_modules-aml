@@ -8734,6 +8734,25 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					}
 				}
 
+				if (cm->cur_frame != NULL) {
+					u32 expected_decode_size = hw->aom_param.p.expected_decode_size_lo + (hw->aom_param.p.expected_decode_size_hi << 16);
+					u32 actual_decode_size = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+
+					av1_print(hw, AOM_DEBUG_HW_MORE,
+						"Decoding done (index %d), data_size 0x%x expected_decode_size 0x%x actual_decode_size 0x%x\n",
+						cm->cur_frame? cm->cur_frame->buf.index:-1,
+						hw->data_size,
+						expected_decode_size, actual_decode_size);
+
+					if (over_decoder_shiftbytes && expected_decode_size && (expected_decode_size > actual_decode_size)
+						&& ((expected_decode_size - actual_decode_size) > over_decoder_shiftbytes)) {
+						cm->cur_frame->buf.error_mark = 1;
+						av1_print(hw, AOM_DEBUG_HW_MORE,
+							"Decoding done (index %d), data_size 0x%x set cur_pic error\n",
+							cm->cur_frame? cm->cur_frame->buf.index:-1);
+					}
+				}
+
 				hw->config_next_ref_info_flag = 1; /*to do: low_latency_flag  case*/
 			}
 #endif
