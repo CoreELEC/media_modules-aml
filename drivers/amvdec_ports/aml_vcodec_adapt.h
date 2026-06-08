@@ -51,6 +51,7 @@ struct aml_vdec_adapt {
 	int video_type;
 	char *frm_name;
 	struct mutex vdec_st_lock;
+	bool is_scatter_input_mode;
 };
 
 enum DEC_STATUS {

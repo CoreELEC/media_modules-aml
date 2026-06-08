@@ -397,6 +397,12 @@ static void hevc_amrisc_gate_on(void)
 	SET_VREG_MASK(DOS_GCLK_EN3, (1 << 2)); //turn on vcpu clock
 }
 
+void scatter_input_low_power_clk_on(void)
+{
+	WRITE_VREG(DOS_GCLK_EN3, 0x1ffff);//ddr, mcr, lpf, cbus
+}
+EXPORT_SYMBOL(scatter_input_low_power_clk_on);
+
 void *low_power_clk_off_get(int format, int mmu_flag)
 {
 	struct low_power_ctrl_t *lpc = dos_low_power_ctrl_get();

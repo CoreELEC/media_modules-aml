@@ -43,7 +43,7 @@
 #include <linux/crc32.h>
 #include "../common/media_utils/media_utils.h"
 #include "../frame_provider/decoder/utils/aml_buf_helper.h"
-
+#include "../frame_provider/decoder/utils/scatter_input.h"
 #define DEFAULT_VIDEO_BUFFER_SIZE		(1024 * 1024 * 3)
 #define DEFAULT_VIDEO_BUFFER_SIZE_4K		(1024 * 1024 * 6)
 #define DEFAULT_VIDEO_BUFFER_SIZE_TVP		(1024 * 1024 * 10)
@@ -60,7 +60,6 @@ extern int dump_output_frame;
 extern char dump_path[32];
 extern u32 dump_output_start_position;
 extern void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx, u32 handle);
-
 static int slow_input = 0;
 
 static struct stream_buf_s bufs[BUF_MAX_NUM] = {
@@ -494,7 +493,10 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx, const char *buf,
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
 		"write frames[%d], vbuf: %p, size: %u, ret: %d, crc: %x, ts: %llu, id[%d]\n",
 		ada_ctx->ctx->write_frames, buf, count, ret,
-		crc32_le(0, buf, count), timestamp, vdec->id);
+		(vdec->is_scatter_input_mode ?
+			scatter_input_crc32((void*)buf, count) : crc32_le(0, buf, count)),
+		timestamp, vdec->id);
+
 
 	if (!ada_ctx->ctx->write_frames) {
 		PR_PIPE_KPI_INFO("TP_V4L2_InputBuf_First_Get", ada_ctx->ctx->id, MAIN_INFO,
@@ -509,7 +511,7 @@ void vdec_vframe_input_free(void *priv, u32 handle)
 {
 	struct aml_vcodec_ctx *ctx = priv;
 
-	if (ctx->output_dma_mode)
+	if (ctx->output_dma_mode || ctx->ada_ctx->vdec->is_scatter_input_mode)
 		aml_recycle_dma_buffers(ctx, handle);
 
 	if (!vdec_input_full(ctx->ada_ctx)) {
@@ -821,7 +823,15 @@ void vdec_write_stream_data(struct aml_vdec_adapt *ada_ctx, dos_addr_t addr, u32
 	struct stream_buffer_metainfo stbuf_data = { 0 };
 	stbuf_data.stbuf_pktaddr = addr;
 	stbuf_data.stbuf_pktsize = size;
-	stream_buffer_meta_write(&ada_ctx->vdec->vbuf, &stbuf_data);
+	if (ada_ctx->vdec->is_scatter_input_mode) {
+		struct scatter_map_update_params param = {0};
+		param.addr = addr;
+		param.data_size = size;
+		ada_ctx->vdec->scatter_input_ctx->map_ops->scatter_input_write_data_to_map(
+			ada_ctx->vdec->scatter_input_ctx, &param);
+	} else {
+		stream_buffer_meta_write(&ada_ctx->vdec->vbuf, &stbuf_data);
+	}
 
 	if (dump_es_output_frame) {
 		vdec_dump_strea_data(ada_ctx, addr, size);

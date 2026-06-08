@@ -22,6 +22,7 @@ ${MODULE_NAME}-objs	+=	vdec_res/mpeg12_res.o vdec_res/mpeg4_res.o vdec_res/mjpeg
 ${MODULE_NAME}-objs	+=	vdec_res/avs2_res.o vdec_res/avs3_res.o vdec_res/vc1_res.o
 ${MODULE_NAME}-objs	+=	vdec_dw.o
 ${MODULE_NAME}-objs	+=	sec_extractor.o
+${MODULE_NAME}-objs	+=	scatter_input.o
 
 MODULE_NAME = amvdec_debug_port
 obj-m	+=	${MODULE_NAME}.o

@@ -69,6 +69,7 @@
 #include "../../decoder/utils/vdec_ge2d_utils.h"
 #include "vvp9.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#include "../../decoder/utils/scatter_input.h"
 #if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
 #endif
@@ -1662,7 +1663,8 @@ static void timeout_process(struct VP9Decoder_s *pbi)
 		return;
 	}
 	amhevc_stop();
-	vp9_print(pbi, 0, "%s decoder timeout\n", __func__);
+	vp9_print(pbi, 0, "%s decoder timeout, HEVC_MPC_E=0x%x, shift_byte:0x%x\n",
+		__func__, READ_VREG(HEVC_MPC_E), READ_VREG(HEVC_SHIFT_BYTE_COUNT));
 
 	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 
@@ -6222,6 +6224,7 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 	if (mask & HW_MASK_FRONT) {
 		if (!efficiency_mode) {
 			unsigned int data32;
+			struct vdec_s *vdec = hw_to_vdec(pbi);
 			data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
 			/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
 			data32 &= ~(7 << 29);
@@ -6241,6 +6244,12 @@ static void vp9_init_decoder_hw(struct VP9Decoder_s *pbi, u32 mask)
 				   data32 |= (1 << 10);
 #endif
 #endif
+			if (vdec->is_scatter_input_mode) {
+				data32 &= ~(1 << 24);
+				data32 &= ~(1 << 21);
+				data32 &= ~(1 << 4);
+				data32 |= (1 << 2);
+			}
 			WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
 			data32 = READ_VREG(HEVC_SHIFT_STATUS);
@@ -10645,7 +10654,6 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 	}
 
 	pbi->stat |= STAT_ISR_REG;
-
 	pbi->provider_name = PROVIDER_NAME;
 #ifndef MULTI_INSTANCE_SUPPORT
 	vf_provider_init(&vvp9_vf_prov, PROVIDER_NAME, &vvp9_vf_provider,
@@ -10762,9 +10770,14 @@ static unsigned char get_data_check_sum
 	int jj;
 	int sum = 0;
 	u8 *data = NULL;
+	struct vdec_s *vdec = hw_to_vdec(pbi);
 
 	if (vdec_secure(hw_to_vdec(pbi)))
 		return 0;
+
+	if (vdec->is_scatter_input_mode) {
+		return scatter_input_crc32(pbi->chunk->scatter_input_data_package->sgt, size);
+	}
 
 	if (!pbi->chunk->block->is_mapped)
 		data = codec_mm_vmap(pbi->chunk->block->start +
@@ -11166,6 +11179,9 @@ static void vp9_work_implement(struct VP9Decoder_s *pbi)
 	if (pbi->stat & STAT_TIMER_ARM) {
 		del_timer_sync(&pbi->timer);
 		pbi->stat &= ~STAT_TIMER_ARM;
+	}
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
 	}
 	if (pbi->dec_result != DEC_RESULT_NEED_MORE_BUFFER)
 		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_WORKER_END);
@@ -11858,6 +11874,7 @@ static void run_front(struct vdec_s *vdec)
 	mod_timer(&pbi->timer, jiffies);
 	pbi->stat |= STAT_TIMER_ARM;
 	pbi->stat |= STAT_ISR_REG;
+
 	amhevc_start();
 	vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	pbi->stat |= STAT_VDEC_RUN;

@@ -478,7 +478,8 @@
 #define VDEC_VLD_CRC_CTL                           0x1660
 #define VDEC_VLD_CRC_SEED                          0x1661
 #define VDEC_VLD_CRC                               0x1662
-
+// A9 Register
+#define VDEC_SHIFT_COUNT                           0x1663
 //========================================================================
 //  IQ/IDCT module level register offset
 //========================================================================
@@ -1112,6 +1113,8 @@
 #define HEVC_STREAM_CONTROL                        0x2101
 #define HEVC_STREAM_START_ADDR                     0x2102
 #define HEVC_STREAM_END_ADDR                       0x2103
+#define HEVC_STREAM_MAP_START_ADDR                 0x2102
+#define HEVC_STREAM_MAP_END_ADDR                   0x2103
 #define HEVC_STREAM_WR_PTR                         0x2104
 #define HEVC_STREAM_RD_PTR                         0x2105
 #define HEVC_STREAM_LEVEL                          0x2106
@@ -1246,7 +1249,10 @@
 //T6X Register
 #define HEVC_SCATTER_MAP_FIFO_LEVEL                HEVC_SCATTER_DATA_START_ADDR
 #define HEVC_SW_PARSER_CLK_ENABLE                  0x218f
-
+//a9 Register
+#define HEVC_SCATTER_MANUAL_CONTROL                0x217f
+#define HEVC_SCATTER_MANUAL_DATA1                  0x2181
+#define HEVC_SCATTER_MANUAL_DATA2                  0x2182
 //------------------------------------------------------------------------------
 // HEVC_MPRED module level register offset
 //------------------------------------------------------------------------------

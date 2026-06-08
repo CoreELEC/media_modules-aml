@@ -69,7 +69,7 @@
 #include "../../../common/media_utils/media_utils.h"
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../decoder/utils/vdec_profile.h"
-
+#include "../../decoder/utils/scatter_input.h"
 //#define TMP_DEBUG
 
 //#define USE_FRONT_ISR_HANDLE_FOR_BACK
@@ -4348,7 +4348,7 @@ static void avs2_init_decoder_hw(struct AVS3Decoder_s *dec)
 	unsigned int data32;
 	unsigned int decode_mode;
 	int i;
-
+	struct vdec_s *vdec = hw_to_vdec(dec);
 	data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
 
 	/* set bit 31~29 to 3 if HEVC_STREAM_FIFO_CTL[29] is 1 */
@@ -4362,7 +4362,12 @@ static void avs2_init_decoder_hw(struct AVS3Decoder_s *dec)
 		(1 << 4) |/*startcode_found_int_cpu_enable*/
 		(0 << 3) |/*startcode_found_int_amrisc_enable*/
 		(1 << 0);    /*parser_int_enable*/
-
+	if (vdec->is_scatter_input_mode) {
+		data32 &= ~(1 << 24);
+		data32 &= ~(1 << 21);
+		data32 &= ~(1 << 4);
+		data32 |= (1 << 2);
+	}
 	WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
 	data32 = READ_VREG(HEVC_SHIFT_STATUS);
@@ -4468,6 +4473,7 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 	unsigned int data32;
 	unsigned int decode_mode;
 	int i;
+	struct vdec_s *vdec = hw_to_vdec(dec);
 	/*if (debug & AVS3_DBG_BUFMGR_MORE)
 	pr_info("%s\n", __func__);*/
 	if (!efficiency_mode) {
@@ -4485,6 +4491,12 @@ void avs3_init_decoder_hw(struct AVS3Decoder_s *dec)
 			(0 << 3) |/*startcode_found_int_amrisc_enable*/
 			(1 << 0)    /*parser_int_enable*/
 			;
+		if (vdec->is_scatter_input_mode) {
+			data32 &= ~(1 << 24);
+			data32 &= ~(1 << 21);
+			data32 &= ~(1 << 4);
+			data32 |= (1 << 2);
+		}
 		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
 		WRITE_VREG(HEVC_SHIFT_CONTROL,
@@ -9566,6 +9578,10 @@ static unsigned char get_data_check_sum
 	if (vdec_secure(hw_to_vdec(dec)))
 		return 0;
 
+	if (hw_to_vdec(dec)->is_scatter_input_mode) {
+		return scatter_input_crc32_sum(dec->chunk->scatter_input_data_package->sgt, size);
+	}
+
 	if (!dec->chunk->block->is_mapped)
 		data = codec_mm_vmap(dec->chunk->block->start +
 			dec->chunk->offset, size);
@@ -9692,6 +9708,8 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 			vdec_clean_input(vdec);
 			if (ctx->es_free)
 				ctx->es_free(ctx, vdec->vbuf.buf_rp);
+			if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 		}
 
 		if (get_free_buf_count(dec) >= dec->run_ready_min_buf_num) {
@@ -9801,6 +9819,8 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 		if (dec->dec_status == HEVC_DECPIC_DATA_DONE)
 			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_AGAIN) {
@@ -9828,6 +9848,8 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 		vdec_vframe_dirty(hw_to_vdec(dec), dec->chunk);
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_FORCE_EXIT) {
 		avs3_print(dec, PRINT_FLAG_VDEC_STATUS, "%s: force exit\n", __func__);
@@ -9864,9 +9886,11 @@ static void avs3_work_implement(struct AVS3Decoder_s *dec)
 		del_timer_sync(&dec->timer);
 		dec->stat &= ~STAT_TIMER_ARM;
 	}
-
-	wait_hevc_search_done(dec);
-
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
+	} else {
+		wait_hevc_search_done(dec);
+	}
 	if ((dec->front_back_mode == 0)
 		&& (dec->avs3_dec.cur_pic != NULL)
 		&& (!(dec->error_handle_policy & 0x4))) {
@@ -10445,7 +10469,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	}
 
 	if (dec->next_again_flag &&
-		(!vdec_frame_based(vdec))) {
+		(!vdec_frame_based(vdec)) && !vdec->is_scatter_input_mode) {
 		u32 parser_wr_ptr = STBUF_READ(&vdec->vbuf, get_wp);
 		if (parser_wr_ptr >= dec->pre_parser_wr_ptr &&
 			(parser_wr_ptr - dec->pre_parser_wr_ptr) < again_threshold) {
@@ -10685,7 +10709,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			READ_VREG(HEVC_STREAM_WR_PTR),
 			READ_VREG(HEVC_STREAM_RD_PTR),
 			dec->start_shift_bytes);
-		if (vdec_frame_based(vdec) && dec->chunk && !vdec_secure(vdec)) {
+
+		if (vdec_frame_based(vdec) && dec->chunk && !vdec_secure(vdec) && !vdec->is_scatter_input_mode) {
+
 			u8 *data = NULL;
 			if (!dec->chunk->block->is_mapped)
 				data = codec_mm_vmap(dec->chunk->block->start + dec->chunk->offset, 8);
@@ -10731,7 +10757,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	decoder_trace(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_END, TRACE_BASIC);
 
 	vdec_enable_input(vdec);
-
 	//WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_SEARCH_NEW_PIC);
 
 	if (vdec_frame_based(vdec) && dec->chunk) {

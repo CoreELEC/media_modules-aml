@@ -379,10 +379,19 @@ static int vdec_hevc_probe(unsigned long h_vdec,
 			}
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
-			ret = parse_stream_ucode_dma(inst, bs->addr, size,
-				bs->timestamp, BUFF_IDX(bs, bs->index));
+			if (inst->ctx->ada_ctx->is_scatter_input_mode)  {
+				ret = parse_stream_ucode_dma(inst, (ulong)buf, size,
+						bs->timestamp, BUFF_IDX(bs, bs->index));
+			}else {
+				ret = parse_stream_ucode_dma(inst, bs->addr, size,
+						bs->timestamp, BUFF_IDX(bs, bs->index));
+			}
 		}
-	} else {
+	} else  if (inst->ctx->ada_ctx->is_scatter_input_mode) {
+		// buf type: sg_table*
+		ret = parse_stream_ucode_dma(inst, (ulong)buf, size,
+				bs->timestamp, BUFF_IDX(bs, bs->index));
+	} else{
 		if (inst->ctx->param_sets_from_ucode) {
 			ret = parse_stream_ucode(inst, buf, size, bs->timestamp);
 		} else {
@@ -506,11 +515,17 @@ static int vdec_hevc_decode(unsigned long h_vdec,
 				vdec_vframe_input_free, NULL);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
-			ret = vdec_vframe_write_with_dma(vdec,
-				bs->addr, size, bs->timestamp,
-				BUFF_IDX(bs, bs->index),
-				vdec_vframe_input_free, inst->ctx, NULL, 0);
+			if (inst->ctx->ada_ctx->is_scatter_input_mode) {
+				ret = vdec_vframe_write_with_dma(vdec, (ulong)bs->vaddr, size, bs->timestamp,
+						BUFF_IDX(bs, bs->index), vdec_vframe_input_free, inst->ctx, NULL,0);
+			} else {
+				ret = vdec_vframe_write_with_dma(vdec, bs->addr, size, bs->timestamp,
+						BUFF_IDX(bs, bs->index), vdec_vframe_input_free, inst->ctx, NULL, 0);
+			}
 		}
+	} else if (inst->ctx->ada_ctx->is_scatter_input_mode) {
+		ret = vdec_vframe_write_with_dma(vdec, (ulong)bs->vaddr, size, bs->timestamp,
+				BUFF_IDX(bs, bs->index), vdec_vframe_input_free, inst->ctx, NULL,0);
 	} else {
 		if (!inst->ctx->param_sets_from_ucode) {
 			/*checked whether the resolution changes.*/

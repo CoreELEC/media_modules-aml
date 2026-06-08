@@ -81,7 +81,7 @@
 #else
 #include <linux/amlogic/media/meson_uvm_allocator.h>
 #endif
-
+#include "../../decoder/utils/scatter_input.h"
 #define DETECT_WRONG_MULTI_SLICE
 
 /*
@@ -9751,13 +9751,13 @@ pic_done_proc:
 		}
 		amvdec_stop();
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-			"%s %s decode slice count %d\n",
+			"%s %s decode slice count %d, out_crc:0x%x\n",
 			__func__,
 			(dec_dpb_status == H264_PIC_DATA_DONE) ?
 			"H264_PIC_DATA_DONE" :
 			(dec_dpb_status == H264_FIND_NEXT_PIC_NAL) ?
 			"H264_FIND_NEXT_PIC_NAL" : "H264_FIND_NEXT_DVEL_NAL",
-			hw->decode_pic_count);
+			hw->decode_pic_count, READ_VREG(MDEC_CRCW));
 		if (hw->kpi_first_i_decoded == 0) {
 			hw->kpi_first_i_decoded = 1;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
@@ -10622,7 +10622,23 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1<<17);
 #endif
-
+	{
+		struct vdec_s *vdec = hw_to_vdec(hw);
+		if (vdec->is_scatter_input_mode) {
+			u32 data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+			data32 = data32 |  // in scatter input mode, set to 0
+				(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+				//(1 << 21) |  // stream_map_empty_int_cpu_enable
+				(1 << 7) |  // dec_done_int_amrisc_enable
+				(0 << 4) |  // disable startcode interrupt when SCATTER_ENABLE
+				(0 << 3) |  // startcode_found_int_amrisc_enable
+				(1 << 2) |  // use parser_int_cpu_level instead of pulse to detect interrupt
+				(1 << 0);    // parser_int_enable
+			data32 &= ~(1 << 24);
+			data32 &= ~(1 << 4);
+			WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+		}
+	}
 	/* cbcr_merge_swap_en */
 	if (is_cpu_t7()) {
 		if ((v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21) ||
@@ -12816,6 +12832,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			mutex_unlock(&hw->chunks_mutex);
 			if (ctx->es_free)
 				ctx->es_free(ctx, vdec->vbuf.buf_rp);
+			if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 			vdec_clean_input(vdec);
 			hw->multi_frame_unfinish = 0;
 		}
@@ -12993,6 +13011,8 @@ result_done:
 		mutex_unlock(&hw->chunks_mutex);
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+			ctx->scatter_es_free(ctx);
 		hw->multi_frame_unfinish = 0;
 	} else if (hw->dec_result == DEC_RESULT_AGAIN) {
 		/*
@@ -13029,6 +13049,8 @@ result_done:
 		mutex_unlock(&hw->chunks_mutex);
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+			ctx->scatter_es_free(ctx);
 		vdec_clean_input(vdec);
 		hw->multi_frame_unfinish = 0;
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
@@ -13096,6 +13118,8 @@ result_done:
 		mutex_unlock(&hw->chunks_mutex);
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+			ctx->scatter_es_free(ctx);
 		hw->multi_frame_unfinish = 0;
 	} else if (hw->dec_result == DEC_RESULT_UNFINISH) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -13160,7 +13184,11 @@ result_done:
 		hw->last_picture_slice_count = 0;
 #endif
 	ATRACE_COUNTER(hw->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_START);
-	wait_vmh264_search_done(hw);
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
+	} else {
+		wait_vmh264_search_done(hw);
+	}
 	ATRACE_COUNTER(hw->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_END);
 	/* mark itself has all HW resource released and input released */
 	if (is_use_dcac_dma_hw()) {
@@ -13298,14 +13326,18 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	if (vdec_stream_based(vdec) && (hw->init_flag == 0)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
-
-		rp = STBUF_READ(&vdec->vbuf, get_rp);
-		wp = STBUF_READ(&vdec->vbuf, get_wp);
-		if (wp < rp)
-			level = vdec->input.size + wp - rp;
-		else
-			level = wp - rp;
-
+		if ( vdec->is_scatter_input_mode) {
+				level = scatter_input_get_data_level(vdec->scatter_input_ctx,
+					scatter_input_get_wp(vdec->scatter_input_ctx),
+					scatter_input_get_shift_byte(vdec->scatter_input_ctx));
+		} else {
+			rp = STBUF_READ(&vdec->vbuf, get_rp);
+			wp = STBUF_READ(&vdec->vbuf, get_wp);
+			if (wp < rp)
+				level = vdec->input.size + wp - rp;
+			else
+				level = wp - rp;
+		}
 		if (level < pre_decode_buf_level)
 			return PRE_LEVEL_NOT_ENOUGH;
 	}
@@ -13330,7 +13362,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			return 0;
 	}
 	if (hw->next_again_flag &&
-		(!vdec_frame_based(vdec))) {
+		(!vdec_frame_based(vdec))  && !vdec->is_scatter_input_mode) {
 		u32 parser_wr_ptr = STBUF_READ(&vdec->vbuf, get_wp);
 		if (parser_wr_ptr >= hw->pre_parser_wr_ptr &&
 			(parser_wr_ptr - hw->pre_parser_wr_ptr) <
@@ -13426,8 +13458,13 @@ static unsigned char get_data_check_sum
 	(struct vdec_h264_hw_s *hw, int size)
 {
 	int jj;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 	int sum = 0;
 	u8 *data = NULL;
+
+	if (vdec->is_scatter_input_mode) {
+		return scatter_input_crc32_sum(hw->chunk->scatter_input_data_package->sgt, size);
+	}
 
 	if (!hw->chunk->block->is_mapped)
 		data = codec_mm_vmap(hw->chunk->block->start +
@@ -13644,7 +13681,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		READ_VREG(VLD_MEM_VIFIFO_WP));
 #endif
 
-	if (input_frame_based(vdec) && !(vdec_secure(vdec))) {
+	if (input_frame_based(vdec) && !(vdec_secure(vdec)) && !vdec->is_scatter_input_mode) {
 		u8 *data = NULL;
 
 		if (!hw->chunk->block->is_mapped)
@@ -13824,7 +13861,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 
 	vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_VDEC_1);
-
+	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 4);
 	amvdec_start();
 	if (hw->mmu_enable /*&& !hw->frame_busy && !hw->frame_done*/) {
 		WRITE_VREG(SYS_COMMAND, 0x0);

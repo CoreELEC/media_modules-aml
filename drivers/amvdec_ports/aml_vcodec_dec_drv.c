@@ -998,6 +998,10 @@ MEDIA_PARAM(avbcd_work_mode, int, 0644);
 int crc_dump = 1;
 MEDIA_PARAM(crc_dump, int, 0664);
 
+u32 scatter_input_mode = 0;
+EXPORT_SYMBOL(scatter_input_mode);
+MEDIA_PARAM(scatter_input_mode, uint, 0644);
+
 int scatter_prealloc_size = 0;
 EXPORT_SYMBOL(scatter_prealloc_size);
 MEDIA_PARAM(scatter_prealloc_size, int, 0644);
@@ -1044,6 +1048,7 @@ static struct param_entry amvdec_ports_params[] = {
 	PARAM_INT(crc_dump),
 	PARAM_INT(scatter_prealloc_size),
 	PARAM_INT(ge2d_copy),
+	PARAM_UINT(scatter_input_mode),
 	{ /* sentinel */ }
 };
 module_param_cb(amvdec_ports, &key_value_param_ops, &amvdec_ports_params, 0644);

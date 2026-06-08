@@ -299,6 +299,35 @@ static int setup_mmap_buf(int fd, int req_cnt) {
 	return 0;
 }
 
+static int setup_user_ptr_buf(int req_cnt)
+{
+	int i = 0;
+	for (i = 0; i < req_cnt; i++) {
+		struct frame_buffer* pb = output_p.buf[i];
+		pb->v4lbuf.index = i;
+		pb->v4lbuf.type = output_p.type;
+		pb->v4lbuf.memory = sInMemMode;
+		pb->v4lbuf.length = output_p.plane_num;
+		pb->v4lbuf.m.planes = pb->v4lplane;
+		// XXX: user_ptr need not to alloc extra buf to copy, but for same data-write api in v4lplayer,
+		// here we alloc extra buf and use it in user_ptr mode, it need be fixed in the future.
+		pb->vaddr[0] = malloc(ES_BUF_SIZE);
+		if (!pb->vaddr[0]) {
+			debug_print(DEBUG_ERROR, "setup_user_ptr_buf failed\n");
+			goto err_alloc;
+		}
+	}
+	return 0;
+err_alloc:
+	for (i = 0; i < req_cnt; i++) {
+		if (output_p.buf[i]->vaddr[0]) {
+			free(output_p.buf[i]->vaddr[0]);
+			output_p.buf[i]->vaddr[0] = NULL;
+		}
+	}
+	return -1;
+}
+
 static int setup_output_port(int fd)
 {
 	int i,ret;
@@ -307,7 +336,7 @@ static int setup_output_port(int fd)
 	req.count = OUTPUT_BUF_CNT;
 	req.memory = sInMemMode;
 	req.type = output_p.type;
-
+	debug_print(0, "setup_output_port, buf type:%d \n", sInMemMode);
 	ret = ioctl(fd, VIDIOC_REQBUFS, &req);
 	if (ret < 0) {
 		debug_print(DEBUG_ERROR, "output VIDIOC_REQBUFS fail ret:%d\n", ret);
@@ -325,7 +354,9 @@ static int setup_output_port(int fd)
 		output_p.buf[i] = calloc(1, sizeof(struct frame_buffer));
 	if (g_play_mode == V4LPLAYER_STREAM_MODE) {
 		ret = setup_stream_mode_buf(req.count);
-	}else if (sInMemMode == V4L2_MEMORY_DMABUF) {
+	}else if (sInMemMode == V4L2_MEMORY_USERPTR){
+		ret = setup_user_ptr_buf(req.count);
+	} else if (sInMemMode == V4L2_MEMORY_DMABUF) {
 		ret = setup_dma_buf(fd, req.count);
 	}else if (sInMemMode == V4L2_MEMORY_MMAP) {
 		ret = setup_mmap_buf(fd, req.count);
@@ -1551,7 +1582,7 @@ int v4l2_dec_init(enum vformat_e type, decode_finish_fn cb)
 	if (!cb)
 		return 1;
 	decode_finish_cb = cb;
-	sInMemMode =  g_mem_type == V4LPLAYER_MEM_TYPE_MMAP ? V4L2_MEMORY_MMAP : V4L2_MEMORY_DMABUF;
+	sInMemMode = (enum v4l2_memory)g_mem_type;
 	if (g_play_mode == V4LPLAYER_STREAM_MODE) {
 		g_mem_type = V4LPLAYER_MEM_TYPE_DMA;
 		sInMemMode = V4L2_MEMORY_DMABUF;
@@ -1786,22 +1817,28 @@ int v4l2_dec_write_es(const uint8_t *data, int size)
 		}
 		p->v4lbuf.m.planes[0].m.fd = fd;
 	} else {
-		if ((sInMemMode == V4L2_MEMORY_MMAP &&
-			(p->used + size) > p->v4lplane[0].length) ||
-			(sInMemMode == V4L2_MEMORY_DMABUF &&
-			(p->used + size) > ES_BUF_SIZE)) {
-			debug_print(DEBUG_ERROR, "fatal frame too big %d\n", size + p->used);
-			return 0;
-		}
-		if (sInMemMode == V4L2_MEMORY_DMABUF) {
-			if (size + p->used <= PAGE_SIZE) {
-				memset(p->vaddr[0] + p->used, 0, PAGE_SIZE - p->used);
-			} else {
-				memset(p->vaddr[0] + p->used, 0, ROUND((size + p->used), 64) - p->used);
+		if (sInMemMode == V4L2_MEMORY_USERPTR) {
+			p->v4lbuf.m.planes[0].m.userptr = (unsigned long)p->vaddr[0];
+			memcpy(p->vaddr[0] + p->used, data, size);
+		} else {
+			if ((sInMemMode == V4L2_MEMORY_MMAP &&
+				(p->used + size) > p->v4lplane[0].length) ||
+				(sInMemMode == V4L2_MEMORY_DMABUF &&
+				(p->used + size) > ES_BUF_SIZE)) {
+				debug_print(DEBUG_ERROR, "fatal frame too big %d\n", size + p->used);
+				return 0;
 			}
+			if (sInMemMode == V4L2_MEMORY_DMABUF) {
+				if (size + p->used <= PAGE_SIZE) {
+					memset(p->vaddr[0] + p->used, 0, PAGE_SIZE - p->used);
+				} else {
+					memset(p->vaddr[0] + p->used, 0, ROUND((size + p->used), 64) - p->used);
+				}
+			}
+			memcpy(p->vaddr[0] + p->used, data, size);
 		}
-		memcpy(p->vaddr[0] + p->used, data, size);
 	}
+
 	p->used += size;
 #ifdef DEBUG_FRAME
 	if (g_log_level & DEBUG_FRAME) {
@@ -1830,6 +1867,9 @@ int v4l2_dec_frame_done()
 
 	if (sInMemMode == V4L2_MEMORY_DMABUF) {
 		p->v4lbuf.m.planes[0].length = p->used;
+		p->v4lbuf.m.planes[0].data_offset = 0;
+	}else if (sInMemMode == V4L2_MEMORY_USERPTR) {
+		p->v4lbuf.m.planes[0].length = ES_BUF_SIZE;
 		p->v4lbuf.m.planes[0].data_offset = 0;
 	}
 

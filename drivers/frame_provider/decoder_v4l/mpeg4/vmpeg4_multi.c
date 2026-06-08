@@ -58,7 +58,7 @@
 #include "../../decoder/utils/vdec_feature.h"
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../decoder/utils/vdec_profile.h"
-
+#include "../../decoder/utils/scatter_input.h"
 #define DRIVER_NAME "ammvdec_mpeg4_v4l"
 
 #define MEM_NAME "codec_mmpeg4"
@@ -2208,6 +2208,9 @@ static void vmpeg4_work(struct work_struct *work)
 		vdec_v4l_write_frame_sync(ctx);
 
 	hw->timeout_flag = TIMEOUT_INIT;
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
+	}
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1);
@@ -2539,7 +2542,6 @@ static void start_process_time(struct vdec_mpeg4_hw_s *hw)
 static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
-
 	if (hw->process_busy) {
 		pr_debug("%s, process_busy\n", __func__);
 		return;
@@ -2764,7 +2766,20 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 	}
 
 	WRITE_VREG(MDEC_PIC_DC_THRESH, 0x404038aa);
-
+	if (hw_to_vdec(hw)->is_scatter_input_mode) {
+		u32 data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+		data32 = data32 |  // in scatter input mode, set to 0
+			(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+			//(1 << 21) |  // stream_map_empty_int_cpu_enable
+			(1 << 7) |  // dec_done_int_amrisc_enable
+			(0 << 4) |  // disable startcode interrupt when SCATTER_ENABLE
+			(0 << 3) |  // startcode_found_int_amrisc_enable
+			(1 << 2) |  // use parser_int_cpu_level instead of pulse to detect interrupt
+			(1 << 0);    // parser_int_enable
+		data32 &= ~(1 << 24);
+		data32 &= ~(1 << 4);
+		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+	}
 	WRITE_VREG(MP4_PIC_WH, (hw->ctx_valid) ?
 		hw->reg_mp4_pic_wh :
 		((hw->frame_width << 16) | hw->frame_height));
@@ -3120,12 +3135,18 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = STBUF_READ(&vdec->vbuf, get_rp);
-		wp = STBUF_READ(&vdec->vbuf, get_wp);
-		if (wp < rp)
-			level = vdec->input.size + wp - rp;
-		else
-			level = wp - rp;
+		if (vdec->is_scatter_input_mode) {
+			level = scatter_input_get_data_level(vdec->scatter_input_ctx,
+						scatter_input_get_wp(vdec->scatter_input_ctx),
+						scatter_input_get_shift_byte(vdec->scatter_input_ctx));
+		} else {
+			rp = STBUF_READ(&vdec->vbuf, get_rp);
+			wp = STBUF_READ(&vdec->vbuf, get_wp);
+			if (wp < rp)
+				level = vdec->input.size + wp - rp;
+			else
+				level = wp - rp;
+		}
 		if (level < pre_decode_buf_level) {
 			hw->not_run_ready++;
 			return PRE_LEVEL_NOT_ENOUGH;
@@ -3228,7 +3249,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, size);
 
-	if (vdec_frame_based(vdec) && !(vdec_secure(vdec) || vdec_dmabuf(vdec))) {
+	if (vdec_frame_based(vdec) && !(vdec_secure(vdec) || vdec_dmabuf(vdec) || vdec->is_scatter_input_mode)) {
 		/* HW needs padding (NAL start) for frame ending */
 		char* tail = (char *)hw->chunk->block->start_virt;
 
@@ -3239,7 +3260,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		tail[3] = 0xb6;
 		codec_mm_dma_flush(tail, 4, DMA_TO_DEVICE);
 	}
-	if (vdec_frame_based(vdec) && !vdec_secure(vdec) &&
+	if (vdec_frame_based(vdec) && !vdec_secure(vdec) && !vdec->is_scatter_input_mode &&
 		(debug_enable & 0xc00)) {
 		u8 *data = NULL;
 
@@ -3310,11 +3331,11 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (vdec_frame_based(vdec)) {
 		size = hw->chunk_size +
 			(hw->chunk_offset & (VDEC_FIFO_ALIGN - 1));
-		WRITE_VREG(VIFF_BIT_CNT, size * 8);
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = hw->chunk->size;
 		ctx->current_timestamp = hw->chunk->timestamp;
 	}
+	WRITE_VREG(VIFF_BIT_CNT, size * 8);
 	hw->input_empty = 0;
 	hw->last_vld_level = 0;
 	start_process_time(hw);

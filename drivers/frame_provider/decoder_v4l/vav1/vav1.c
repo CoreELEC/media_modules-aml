@@ -82,6 +82,7 @@
 #if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
 #endif
+#include "../../decoder/utils/scatter_input.h"
 
 //#define DEBUG_CMD
 #define DEBUG_CRC_ERROR
@@ -1055,8 +1056,8 @@ static void timeout_process(struct AV1HW_s *hw)
 	}
 	hw->timeout_num++;
 	hw->timeout = true;
-	av1_print(hw, 0, "%s decoder timeout HEVC_MPC_E=0x%x\n",
-		__func__, READ_VREG(HEVC_MPC_E));
+	av1_print(hw, 0, "%s decoder timeout HEVC_MPC_E=0x%x,  shift_byte:0x%x, shift_data:0x%x\n",
+		__func__, READ_VREG(HEVC_MPC_E),  READ_VREG(HEVC_SHIFT_BYTE_COUNT), READ_VREG(HEVC_SHIFTED_DATA));
 	amhevc_stop();
 	if (hw->cur_idx != INVALID_IDX)
 		hw->frame_decoded = 1;
@@ -5295,6 +5296,7 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 {
 	unsigned int data32;
 	int i;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 	const unsigned short parser_cmd[PARSER_CMD_NUMBER] = {
 		0x0401, 0x8401, 0x0800, 0x0402, 0x9002, 0x1423,
 		0x8CC3, 0x1423, 0x8804, 0x9825, 0x0800, 0x04FE,
@@ -5343,6 +5345,12 @@ static void aom_init_decoder_hw(struct AV1HW_s *hw, u32 mask)
 				(1 << 0)    // parser_int_enable
 				;
 #endif
+			if (vdec->is_scatter_input_mode) {
+				data32 &= ~(1 << 24);
+				data32 &= ~(1 << 21);
+				data32 &= ~(1 << 4);
+				data32 |= (1 << 2);
+			}
 			WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
 			data32 = READ_VREG(HEVC_SHIFT_STATUS);
@@ -9638,9 +9646,10 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			WRITE_HREG(DEBUG_REG1, 0);
 	} else if (debug_tag != 0) {
 		pr_info(
-			"dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
-			   READ_HREG(DEBUG_REG2),
-			   READ_VREG(HEVC_PARSER_LCU_START));
+			"dbg%x: %x lcu %x, shift_data:%x\n", READ_HREG(DEBUG_REG1),
+				READ_HREG(DEBUG_REG2),
+				READ_VREG(HEVC_PARSER_LCU_START),
+				READ_VREG(HEVC_SHIFTED_DATA));
 
 		if (((udebug_pause_pos & 0xffff)
 			== (debug_tag & 0xffff)) &&
@@ -11099,6 +11108,11 @@ static unsigned int get_data_check_sum
 {
 	int sum = 0;
 	u8 *data = NULL;
+	struct vdec_s *vdec = hw_to_vdec(hw);
+
+	if (vdec->is_scatter_input_mode) {
+		return scatter_input_crc32(hw->chunk->scatter_input_data_package->sgt, size);
+	}
 
 	if (!hw->chunk->block->is_mapped)
 		data = codec_mm_vmap(hw->chunk->block->start +
@@ -11486,6 +11500,10 @@ static void av1_work_implement(struct AV1HW_s *hw)
 			}
 		}
 	}
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
+	}
+
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1)
 		vdec_core_finish_run(vdec, CORE_MASK_HEVC);
@@ -11981,8 +11999,8 @@ static void run_front(struct vdec_s *vdec)
 		SET_VREG_MASK(HEVC_SAO_CTRL11, (1 << 28));
 
 	av1_frame_mode_pts_save(hw);
-	if (debug & PRINT_FLAG_VDEC_STATUS) {
-		if (vdec_frame_based(vdec) && hw->chunk && !(vdec_secure(vdec))) {
+	if ((debug & PRINT_FLAG_VDEC_STATUS)) {
+		if (vdec_frame_based(vdec) && hw->chunk && !(vdec_secure(vdec)) && !vdec->is_scatter_input_mode) {
 			u8 *data = NULL;
 
 			if (!hw->chunk->block->is_mapped)

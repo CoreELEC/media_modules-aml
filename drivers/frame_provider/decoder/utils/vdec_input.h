@@ -22,6 +22,7 @@
 
 struct vdec_s;
 struct vdec_input_s;
+struct scatter_input_data_package_t;
 
 typedef void (*chunk_free)(void *priv, u32 handle);
 
@@ -65,6 +66,7 @@ struct vframe_chunk_s {
 	bool timestamp_valid;
 	u64 sequence;
 	struct vframe_block_list_s *block;
+	struct scatter_input_data_package_t* scatter_input_data_package;
 	u32 hdr10p_data_size;
 	char *hdr10p_data_buf;
 	char *head_meta_buf;

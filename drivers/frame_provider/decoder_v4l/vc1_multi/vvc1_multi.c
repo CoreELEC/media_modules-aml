@@ -57,7 +57,7 @@
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
 #include "../../../common/media_utils/media_utils.h"
-
+#include "../../decoder/utils/scatter_input.h"
 #include <uapi/linux/tee.h>
 #include <linux/delay.h>
 
@@ -815,7 +815,9 @@ static void vvc1_work_implement(struct vdec_vc1_hw_s *hw, int from)
 	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	del_timer_sync(&hw->check_timer);
 	hw->stat &= ~STAT_TIMER_ARM;
-
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
+	}
 	if (from == 1) {
 		/*This is a timeout work*/
 		if (work_pending(&hw->work)) {
@@ -3142,6 +3144,10 @@ static unsigned char get_data_check_sum
 	int sum = 0;
 	u8 *data = NULL;
 
+	if (hw_to_vdec(hw)->is_scatter_input_mode) {
+		return scatter_input_crc32_sum(hw->chunk->scatter_input_data_package->sgt, size);
+	}
+
 	if (!hw->chunk->block->is_mapped)
 		data = codec_mm_vmap(hw->chunk->block->start +
 			hw->chunk->offset, size);
@@ -3234,7 +3240,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			READ_VREG(VIFF_BIT_CNT), hw->start_bit_cnt, ctx->current_timestamp);
 	}
 
-	if (input_frame_based(vdec) && !(vdec_secure(vdec))) {
+	if (input_frame_based(vdec) && !(vdec_secure(vdec)) && !vdec->is_scatter_input_mode) {
 		u8 *data = NULL;
 
 		if (!hw->chunk->block->is_mapped)
@@ -3274,7 +3280,21 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		//hw->run_flag = 0;
 		return;
 	}
-
+	if (vdec->is_scatter_input_mode) {
+		u32 data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+		data32 = data32 |  // in scatter input mode, set to 0
+			(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+			//(1 << 21) |  // stream_map_empty_int_cpu_enable
+			(1 << 7) |  // dec_done_int_amrisc_enable
+			(0 << 4) |  // disable startcode interrupt when SCATTER_ENABLE
+			(0 << 3) |  // startcode_found_int_amrisc_enable
+			(1 << 2) |  // use parser_int_cpu_level instead of pulse to detect interrupt
+			(1 << 0);    // parser_int_enable
+		data32 &= ~(1 << 24);
+		data32 &= ~(1 << 4);
+		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, READ_VREG(VLD_MEM_VIFIFO_CONTROL) & (0xffff));
+	}
 	/*
 		This configuration of VC1_CONTROL_REG will
 		pop bits (even no data in the stream buffer) if input is enabled,
@@ -3566,6 +3586,7 @@ static struct param_entry ammvdec_vc1_v4l_params[] = {
 	PARAM_UINT(debug),
 	PARAM_UINT(debug_mask),
 	PARAM_UINT(wait_time),
+	PARAM_UINT(decode_timeout_val),
 	{ /* sentinel */ }
 };
 module_param_cb(params, &key_value_param_ops, &ammvdec_vc1_v4l_params, 0644);

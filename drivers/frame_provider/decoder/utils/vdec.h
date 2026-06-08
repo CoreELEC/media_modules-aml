@@ -393,6 +393,7 @@ enum vformat_t;
 
 #define FENCE_VF_POOL_SIZE    64
 
+struct scatter_input_ctx_t;
 struct vdec_data_buf_s {
 	int alloc_policy; /*bit0:aux buf, bit1:user buf, bit2:hdr10p buf */
 	u32 aux_buf_size;
@@ -671,6 +672,8 @@ struct vdec_s {
 	bool avbc_dump_enable;
 	DECLARE_KFIFO(avbc_dump_q, struct vframe_s *, AVBC_DUMP_POOL_SIZE);
 	u32 sync_id;
+	bool is_scatter_input_mode;
+	struct scatter_input_ctx_t* scatter_input_ctx;
 };
 
 #define CODEC_MODE(a, b, c, d)\

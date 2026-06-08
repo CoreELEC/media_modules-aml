@@ -27,6 +27,7 @@
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "vdec.h"
 #include "vdec_input.h"
+#include "scatter_input.h"
 #include <asm/cacheflush.h>
 #include <linux/crc32.h>
 
@@ -813,7 +814,7 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 
 	int need_padding_size = MIN_FRAME_PADDING_SIZE;
 
-	if (vdec_secure(vdec) || vdec_dmabuf(vdec)) {
+	if (vdec_secure(vdec) || vdec_dmabuf(vdec) || vdec->is_scatter_input_mode) {
 		block = vdec_input_alloc_new_block(input, (ulong)buf,
 			PAGE_ALIGN(count + HEVC_PADDING_SIZE + 1),
 			free, priv); /*Add padding large than HEVC_PADDING_SIZE */
@@ -991,7 +992,7 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	vdec->pts_valid = false;
 	INIT_LIST_HEAD(&chunk->list);
 
-	if (vdec_secure(vdec) || vdec_dmabuf(vdec)) {
+	if (vdec_secure(vdec) || vdec_dmabuf(vdec) || vdec->is_scatter_input_mode) {
 		chunk->offset = 0;
 		chunk->size = count;
 		chunk->padding_size = PAGE_ALIGN(chunk->size + need_padding_size) -
@@ -1013,6 +1014,20 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 
 	}
 
+	if (vdec->is_scatter_input_mode) {
+		struct scatter_map_update_params param = {0};
+		chunk->scatter_input_data_package = kzalloc(sizeof(struct scatter_input_data_package_t), GFP_KERNEL);
+		if (chunk->scatter_input_data_package == NULL) {
+			pr_err("alloc scatter_input_data_package failed\n");
+			kfree(chunk);
+			return -EFAULT;
+		}
+		chunk->scatter_input_data_package->data_size = count;
+		param.pack = chunk->scatter_input_data_package;
+		param.sgt = (void*)buf;
+		param.data_size = count;
+		vdec->scatter_input_ctx->map_ops->scatter_input_write_data_to_map(vdec->scatter_input_ctx, &param);
+	}
 
 	flags = vdec_input_lock(input);
 
@@ -1088,7 +1103,7 @@ int vdec_input_add_frame_with_dma(struct vdec_input_s *input, ulong addr,
 {
 	struct vdec_s *vdec = input->vdec;
 
-	return (vdec_secure(vdec) || vdec_dmabuf(vdec)) ?
+	return (vdec_secure(vdec) || vdec_dmabuf(vdec) || vdec->is_scatter_input_mode) ?
 		vdec_input_add_chunk(input,
 			(char *)addr, count, handle, free, priv, head_metadata) : -1;
 }
@@ -1137,6 +1152,7 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 	unsigned long flags;
 	struct vframe_block_list_s *block = chunk->block;
 	struct vframe_block_list_s *tofreeblock = NULL;
+	struct vdec_s* vdec = container_of(input, struct vdec_s, input);
 	u32 free_cb = 0;
 	flags = vdec_input_lock(input);
 
@@ -1214,6 +1230,13 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 
 	if (tofreeblock)
 		vframe_block_free_block(tofreeblock);
+
+	if (vdec->is_scatter_input_mode) {
+		struct scatter_map_update_params param;
+		param.pack =  chunk->scatter_input_data_package;
+		vdec->scatter_input_ctx->map_ops->scatter_input_free_data(vdec->scatter_input_ctx, &param);
+		kfree(chunk->scatter_input_data_package);
+	}
 	kfree(chunk);
 }
 EXPORT_SYMBOL(vdec_input_release_chunk);

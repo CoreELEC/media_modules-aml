@@ -86,6 +86,7 @@
 #include "../../../amvdec_ports/aml_vcodec_drv.h"
 #include "../../../common/media_utils/media_utils.h"
 #include "../../../media_sync/pts_server/pts_server_core.h"
+#include "scatter_input.h"
 #ifdef DDK_DEFINE
 #include "vdec_version.h"
 #endif
@@ -349,6 +350,7 @@ struct prefix_s {
 	u64 stream_prefix;
 	u64 bmmu_prefix;
 	u64 dma_prefix;
+	u32 scatter_input_prefix;
 };
 struct prefix_s g_prefix;
 
@@ -1308,11 +1310,22 @@ inline u64 stream_prefix_get(void)
 }
 EXPORT_SYMBOL(stream_prefix_get);
 
+static void __inline__ scatter_input_prefix_set(ulong prefix)
+{
+	g_prefix.scatter_input_prefix = prefix;
+}
+
+u32 __inline__ scatter_input_prefix_get(void)
+{
+	return g_prefix.scatter_input_prefix;
+}
+EXPORT_SYMBOL(scatter_input_prefix_get);
+
 void hevc_prefix_config(int dma_prefix, int bmmu_prefix)
 {
 	int prefix;
 	int stream_prefix = PREFIX_ADDR(stream_prefix_get());
-
+	int scatter_input_prefix = scatter_input_prefix_get();
 	if (!is_support_34bit_mode())
 		return;
 
@@ -1333,7 +1346,8 @@ void hevc_prefix_config(int dma_prefix, int bmmu_prefix)
 					(stream_prefix << 16) |
 					(stream_prefix << 18) |
 					(prefix << 20) |
-					(prefix << 22));
+					(prefix << 22) |
+					(scatter_input_prefix << 24));
 
 		prefix = bmmu_prefix & 0x3;
 
@@ -1418,7 +1432,8 @@ void hevc_prefix_config(int dma_prefix, int bmmu_prefix)
 						(stream_prefix << 14) |
 						(prefix << 16) |
 						(prefix << 18) |
-						(prefix << 20));
+						(prefix << 20) |
+						(scatter_input_prefix << 24));
 
 		prefix = bmmu_prefix & 0x3;
 		/*
@@ -1547,7 +1562,7 @@ EXPORT_SYMBOL(vdec_prefix_config);
 void vdec_mmu_prefix_config(u32 prefix)
 {
 	int stream_prefix = PREFIX_ADDR(stream_prefix_get());
-
+	int scatter_input_prefix = scatter_input_prefix_get();
 	if (!is_support_34bit_mode())
 		return;
 
@@ -1618,7 +1633,8 @@ void vdec_mmu_prefix_config(u32 prefix)
 						(stream_prefix << 14) |
 						(prefix << 16) |
 						(prefix << 18) |
-						(prefix << 20));
+						(prefix << 20) |
+						(scatter_input_prefix << 24));
 		WRITE_VREG(HEVC_MPRED_CTRL11,
 						(prefix << 0) |
 						(prefix << 2) |
@@ -2423,11 +2439,17 @@ static void vdec_sync_input_read(struct vdec_s *vdec)
 				READ_VREG(HEVC_STREAM_RD_PTR));
 		}
 	} else if (vdec->input.target == VDEC_INPUT_TARGET_VLD) {
-		STBUF_WRITE(&vdec->vbuf, set_rp,
-			READ_VREG(VLD_MEM_VIFIFO_RP));
+		if (vdec->is_scatter_input_mode) {
+			scatter_input_set_shift_byte(vdec->scatter_input_ctx, READ_VREG(VDEC_SHIFT_COUNT));
+		} else {
+			STBUF_WRITE(&vdec->vbuf, set_rp, READ_VREG(VLD_MEM_VIFIFO_RP));
+		}
 	} else if (vdec->input.target == VDEC_INPUT_TARGET_HEVC) {
-		STBUF_WRITE(&vdec->vbuf, set_rp,
-			READ_VREG(HEVC_STREAM_RD_PTR));
+		if (vdec->is_scatter_input_mode) {
+			scatter_input_set_shift_byte(vdec->scatter_input_ctx, READ_VREG(HEVC_SHIFT_BYTE_COUNT));
+		} else {
+			STBUF_WRITE(&vdec->vbuf, set_rp, READ_VREG(HEVC_STREAM_RD_PTR));
+		}
 	}
 }
 
@@ -2439,11 +2461,27 @@ static void vdec_sync_input_write(struct vdec_s *vdec)
 	if (vdec->input.target == VDEC_INPUT_TARGET_VLD) {
 		if (is_support_no_parser()) {
 			if (!vdec->master) {
-				WRITE_VREG(VLD_MEM_VIFIFO_WP,
-					STBUF_READ(&vdec->vbuf, get_wp));
+				if (vdec->is_scatter_input_mode) {
+					uint32_t wp = scatter_input_get_wp(vdec->scatter_input_ctx);
+					if (vdec->vbuf.no_parser) {
+						SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+					}
+					SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+					SCATTER_SET_WP(HEVC_SCATTER_CONTROL, wp);
+				} else {
+					WRITE_VREG(VLD_MEM_VIFIFO_WP, STBUF_READ(&vdec->vbuf, get_wp));
+				}
 			} else {
-				STBUF_WRITE(&vdec->vbuf, set_wp,
-					STBUF_READ(&vdec->master->vbuf, get_wp));
+				if (vdec->is_scatter_input_mode) {
+					uint32_t wp = scatter_input_get_wp(vdec->scatter_input_ctx);
+					if (vdec->vbuf.no_parser) {
+						SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+					}
+					SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+					SCATTER_SET_WP(HEVC_SCATTER_CONTROL, wp);
+				} else {
+					STBUF_WRITE(&vdec->vbuf, set_wp, STBUF_READ(&vdec->master->vbuf, get_wp));
+				}
 			}
 		} else {
 			WRITE_VREG(VLD_MEM_VIFIFO_WP,
@@ -2451,16 +2489,30 @@ static void vdec_sync_input_write(struct vdec_s *vdec)
 		}
 	} else if (vdec->input.target == VDEC_INPUT_TARGET_HEVC) {
 		if (is_support_no_parser()) {
-			if (!vdec->master) {
-				WRITE_VREG(HEVC_STREAM_WR_PTR,
-					STBUF_READ(&vdec->vbuf, get_wp));
+				if (!vdec->master) {
+					if (vdec->is_scatter_input_mode) {
+					uint32_t wp = scatter_input_get_wp(vdec->scatter_input_ctx);
+					if (vdec->vbuf.no_parser)
+						SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+					SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+					SCATTER_SET_WP(HEVC_SCATTER_CONTROL, wp);
+				} else{
+					WRITE_VREG(HEVC_STREAM_WR_PTR, STBUF_READ(&vdec->vbuf, get_wp));
+				}
 			} else {
 				STBUF_WRITE(&vdec->vbuf, set_wp,
 					STBUF_READ(&vdec->master->vbuf, get_wp));
 			}
 		} else {
-			WRITE_VREG(HEVC_STREAM_WR_PTR,
-				STBUF_READ(&vdec->vbuf, get_wp));
+			if (vdec->is_scatter_input_mode) {
+				uint32_t wp = scatter_input_get_wp(vdec->scatter_input_ctx);
+				if (vdec->vbuf.no_parser)
+					SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+				SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+				SCATTER_SET_WP(HEVC_SCATTER_CONTROL, wp);
+			} else {
+				WRITE_VREG(HEVC_STREAM_WR_PTR, STBUF_READ(&vdec->vbuf, get_wp));
+			}
 		}
 	}
 }
@@ -2580,6 +2632,20 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 		WRITE_VREG(DOS_SW_RESET0, 0);
 		if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2)
 			dummy = READ_RESET_REG(RESET0_REGISTER);
+
+		if (vdec->is_scatter_input_mode) {
+			//reset HEVC core to verify swap function in vdec core
+			WRITE_VREG(DOS_SW_RESET3,
+				(1<<3)|(1<<4)|(1<<5)| // parser | parser_state | x
+				(1<<6)|(1<<7)|(1<<8)|(1<<9)| // x | x | dblk | x
+				(1<<10)|(1<<11)|(1<<12)|(1<<14)| // x | vcpu | x | iqit
+				(1<<15)|(1<<17)|(1<<18)| // ipp / qdct / mpred
+				(1<<19)  // ow
+			);
+			WRITE_VREG(DOS_SW_RESET3, 0);
+			// the follow function used in pxp, and pxp test pass
+			//hevc_mcr_sao_global_hw_init(pic_width, pic_height, 0);
+		}
 		WRITE_VREG(POWER_CTL_VLD, 1 << 4);
 	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
 #if 0
@@ -2609,6 +2675,18 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 #endif
 	}
 
+	//hw_axi_monitor_config();
+
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_set_prefix(vdec->scatter_input_ctx);
+		scatter_input_prefix_set(scatter_input_get_prefix(vdec->scatter_input_ctx));
+		//SET_VREG_MASK(HEVC_PARSER_INT_STATUS, 1 << 8); //disable map empty
+	} else {
+		scatter_input_prefix_set(0);
+	}
+	if (is_support_scatter_input())
+		scatter_input_set_enable(vdec->is_scatter_input_mode);
+
 	/*
 	 *setup HW decoder input buffer (VLD context)
 	 * based on input->type and input->target
@@ -2622,73 +2700,128 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 		}
 
 		block = chunk->block;
-		stream_prefix_config(PREFIX_ADDR(block->start), input->target);
+
+		if (vdec->is_scatter_input_mode) {
+			stream_prefix_config(0, input->target);
+		} else {
+			stream_prefix_config(PREFIX_ADDR(block->start) , input->target);
+		}
 
 		if (input->target == VDEC_INPUT_TARGET_VLD) {
-			WRITE_VREG(VLD_MEM_VIFIFO_START_PTR, block->start);
-			WRITE_VREG(VLD_MEM_VIFIFO_END_PTR, block->start +
-					block->size - 8);
-			WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
-					round_down(block->start + chunk->offset,
+			if (vdec->is_scatter_input_mode) {
+
+				struct scatter_map_update_params param = {0};
+				param.pack = chunk->scatter_input_data_package;
+				param.offset = 0;
+				vdec->scatter_input_ctx->map_ops->scatter_input_write_data_to_device(vdec->scatter_input_ctx, &param);
+				WRITE_VREG(HEVC_STREAM_START_ADDR, vdec->scatter_input_ctx->map_start_phy_addr);
+				WRITE_VREG(HEVC_STREAM_END_ADDR, vdec->scatter_input_ctx->map_start_phy_addr + SCATTER_INPUT_MAP_SIZE);
+				WRITE_VREG(HEVC_STREAM_RD_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+				WRITE_VREG(HEVC_STREAM_WR_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+				SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+				SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+
+				scatter_input_add_hw_padding_if_need(vdec->scatter_input_ctx);
+				SCATTER_SET_WP(HEVC_SCATTER_CONTROL, chunk->scatter_input_data_package->map_item_count);
+				SET_VREG_MASK(HEVC_PARSER_INT_STATUS, 1 << 8); //disable map empty
+
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 3);
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, (0x1 << 16) | (1<<10));
+			} else {
+				WRITE_VREG(VLD_MEM_VIFIFO_START_PTR, block->start);
+				WRITE_VREG(VLD_MEM_VIFIFO_END_PTR, block->start +
+						block->size - 8);
+				WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
+						round_down(block->start + chunk->offset,
+							VDEC_FIFO_ALIGN));
+
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+				/* set to manual mode */
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+				WRITE_VREG(VLD_MEM_VIFIFO_RP,
+						round_down(block->start + chunk->offset,
+							VDEC_FIFO_ALIGN));
+				dummy = chunk->offset + chunk->size +
+					VLD_PADDING_SIZE;
+				if (dummy >= block->size)
+					dummy -= block->size;
+				WRITE_VREG(VLD_MEM_VIFIFO_WP,
+					round_down(block->start + dummy,
 						VDEC_FIFO_ALIGN));
 
-			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
-			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 3);
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
 
-			/* set to manual mode */
-			WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
-			WRITE_VREG(VLD_MEM_VIFIFO_RP,
-					round_down(block->start + chunk->offset,
-						VDEC_FIFO_ALIGN));
-			dummy = chunk->offset + chunk->size +
-				VLD_PADDING_SIZE;
-			if (dummy >= block->size)
-				dummy -= block->size;
-			WRITE_VREG(VLD_MEM_VIFIFO_WP,
-				round_down(block->start + dummy,
-					VDEC_FIFO_ALIGN));
-
-			WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 3);
-			WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
-
-			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
-				(0x11 << 16) | (1<<10) | (7<<3));
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
+					(0x11 << 16) | (1<<10) | (7<<3));
+			}
 
 		} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
-			WRITE_VREG(HEVC_STREAM_START_ADDR, block->start);
-			WRITE_VREG(HEVC_STREAM_END_ADDR, block->start +
-					block->size);
-			WRITE_VREG(HEVC_STREAM_RD_PTR, block->start +
-					chunk->offset);
-			dummy = chunk->offset + chunk->size +
-					HEVC_PADDING_SIZE;
-			if (dummy >= block->size)
-				dummy -= block->size;
-			WRITE_VREG(HEVC_STREAM_WR_PTR,
-				round_down(block->start + dummy,
-					VDEC_FIFO_ALIGN));
-
 			/* set endian */
 			SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+			if (vdec->is_scatter_input_mode) {
+				struct scatter_map_update_params param = {0};
+				param.pack = chunk->scatter_input_data_package;
+				param.offset = 0;
+				vdec->scatter_input_ctx->map_ops->scatter_input_write_data_to_device(vdec->scatter_input_ctx, &param);
+				WRITE_VREG(HEVC_STREAM_START_ADDR, vdec->scatter_input_ctx->map_start_phy_addr);
+				WRITE_VREG(HEVC_STREAM_END_ADDR, vdec->scatter_input_ctx->map_start_phy_addr + SCATTER_INPUT_MAP_SIZE);
+				WRITE_VREG(HEVC_STREAM_RD_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+				WRITE_VREG(HEVC_STREAM_WR_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+				scatter_input_add_hw_padding_if_need(vdec->scatter_input_ctx);
+				SCATTER_SET_WP(HEVC_SCATTER_CONTROL, chunk->scatter_input_data_package->map_item_count);
+				SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+				SET_VREG_MASK(HEVC_PARSER_INT_STATUS, 1 << 8); //disable map empty
+			} else {
+				WRITE_VREG(HEVC_STREAM_START_ADDR, block->start);
+				WRITE_VREG(HEVC_STREAM_END_ADDR, block->start +
+						block->size);
+				WRITE_VREG(HEVC_STREAM_RD_PTR, block->start +
+						chunk->offset);
+				dummy = chunk->offset + chunk->size +
+						HEVC_PADDING_SIZE;
+				if (dummy >= block->size)
+					dummy -= block->size;
+				WRITE_VREG(HEVC_STREAM_WR_PTR,
+					round_down(block->start + dummy,
+						VDEC_FIFO_ALIGN));
+			}
+
 		}
 #ifdef DEBUG_PORT
 		if (is_es_dump_enabled(vdec->id)) {
-			if (input->last_wp != (block->start + chunk->offset)) {
-				char *size_addr = vzalloc(64);
-				if (size_addr) {
-					snprintf(size_addr, 64, "%d\n", chunk->size);
-					vdec_dbg_virt_write(size_addr, strlen(size_addr), vdec->id,
-						"%d_%d_%d.sz", vdec->id, vdec->format, get_play_cnt());
-					vfree(size_addr);
-					size_addr = NULL;
+			if (vdec->is_scatter_input_mode) {
+				scatter_input_frame_mode_dump_data(vdec->scatter_input_ctx,
+					chunk->scatter_input_data_package, get_play_cnt());
+			} else {
+				if (input->last_wp != (block->start + chunk->offset)) {
+					char *size_addr = vzalloc(64);
+					if (size_addr) {
+						snprintf(size_addr, 64, "%d\n", chunk->size);
+						vdec_dbg_virt_write(size_addr, strlen(size_addr), vdec->id,
+							"%d_%d_%d.sz", vdec->id, vdec->format, get_play_cnt());
+						vfree(size_addr);
+						size_addr = NULL;
+					}
+					vdec_dbg_phys_write((block->start + chunk->offset),
+						chunk->size, vdec->id, "%d_%d_%d_dump.es",
+						vdec->id, vdec->format, get_play_cnt());
 				}
-
-				vdec_dbg_phys_write((block->start + chunk->offset),
-					chunk->size, vdec->id, "%d_%d_%d_dump.es",
-					vdec->id, vdec->format, get_play_cnt());
 			}
 		}
-		input->last_wp = block->start + chunk->offset;
+		if (vdec->is_scatter_input_mode) {
+			scatter_input_set_last_dump_wp(vdec->scatter_input_ctx,
+				chunk->scatter_input_data_package->map_idx);
+		} else {
+			input->last_wp = block->start + chunk->offset;
+		}
+
 #endif
 		*p = chunk;
 		return chunk->size;
@@ -2699,8 +2832,14 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 		int fifo_len = 0, size;
 		bool swap_valid = input->swap_valid;
 		dos_addr_t swap_page_phys = input->swap_page_phys;
+		__u64 shift_byte = 0;
 
-		stream_prefix_config(PREFIX_ADDR(input->start) , input->target);
+		if (vdec->is_scatter_input_mode) {
+			stream_prefix_config(0, input->target);
+		} else {
+			stream_prefix_config(PREFIX_ADDR(input->start) , input->target);
+		}
+
 		if (vdec_dual(vdec) &&
 			((vdec->flag & VDEC_FLAG_SELF_INPUT_CONTEXT) == 0)) {
 			/* keep using previous input context */
@@ -2718,74 +2857,120 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 
 		if (swap_valid) {
 			if (input->target == VDEC_INPUT_TARGET_VLD) {
-				if (vdec->format == VFORMAT_H264)
+				if (vdec->is_scatter_input_mode) {
+					if (vdec->format == VFORMAT_H264)
+						SET_VREG_MASK(POWER_CTL_VLD,
+							(1 << 9));
+
+					SET_VREG_MASK(HEVC_STREAM_CONTROL, 1);
+					CLEAR_VREG_MASK(HEVC_SCATTER_MANUAL_CONTROL, 1 << 31);
+
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+					/* restore read side */
+					WRITE_VREG(VLD_MEM_SWAP_ADDR,
+						swap_page_phys);
+					WRITE_VREG(VLD_MEM_SWAP_CTL, 1);
+
+					dos_wait_status(VLD_MEM_SWAP_CTL, (1<<7), 0);
+					WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
+
+					SET_VREG_MASK(HEVC_SCATTER_MANUAL_CONTROL, 1 << 31);
+
+					/* restore wrap count */
+					WRITE_VREG(VLD_MEM_VIFIFO_WRAP_COUNT,
+						input->stream_cookie);
+
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, (0x1 << 16) | (1<<10));
+					fifo_len = READ_VREG(HEVC_SCATTER_MAP_FIFO_LEVEL) & 0x3fff;
+
+					if (vdec->vbuf.no_parser)
+						SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+					SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28);
+					/* sync with front end */
+					vdec_sync_input_read(vdec);
+					vdec_sync_input_write(vdec);
+					pr_info("%s, set_endian, %d\n",__func__, vdec->vbuf.no_parser);
+					shift_byte = scatter_input_get_shift_byte(vdec->scatter_input_ctx);
+					wp = scatter_input_get_wp(vdec->scatter_input_ctx);
+				} else {
+					if (vdec->format == VFORMAT_H264)
 					SET_VREG_MASK(POWER_CTL_VLD,
 						(1 << 9));
 
-				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
 
-				/* restore read side */
-				WRITE_VREG(VLD_MEM_SWAP_ADDR,
-					swap_page_phys);
-				WRITE_VREG(VLD_MEM_SWAP_CTL, 1);
+					/* restore read side */
+					WRITE_VREG(VLD_MEM_SWAP_ADDR,
+						swap_page_phys);
+					WRITE_VREG(VLD_MEM_SWAP_CTL, 1);
 
-				dos_wait_status(VLD_MEM_SWAP_CTL, (1<<7), 0);
-				WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
+					dos_wait_status(VLD_MEM_SWAP_CTL, (1<<7), 0);
+					WRITE_VREG(VLD_MEM_SWAP_CTL, 0);
 
-				/* restore wrap count */
-				WRITE_VREG(VLD_MEM_VIFIFO_WRAP_COUNT,
-					input->stream_cookie);
+					/* restore wrap count */
+					WRITE_VREG(VLD_MEM_VIFIFO_WRAP_COUNT,
+						input->stream_cookie);
 
-				rp = READ_VREG(VLD_MEM_VIFIFO_RP);
-				fifo_len = READ_VREG(VLD_MEM_VIFIFO_LEVEL);
+					rp = READ_VREG(VLD_MEM_VIFIFO_RP);
+					fifo_len = READ_VREG(VLD_MEM_VIFIFO_LEVEL);
 
-				/* enable */
-				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
-					(0x11 << 16) | (1<<10));
+					/* enable */
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
+						(0x11 << 16) | (1<<10));
 
-				if (vdec->vbuf.no_parser)
-					SET_VREG_MASK(VLD_MEM_VIFIFO_CONTROL,
-						7 << 3);
+					if (vdec->vbuf.no_parser)
+						SET_VREG_MASK(VLD_MEM_VIFIFO_CONTROL,
+							7 << 3);
 
-				/* sync with front end */
-				vdec_sync_input_read(vdec);
-				vdec_sync_input_write(vdec);
+					/* sync with front end */
+					vdec_sync_input_read(vdec);
+					vdec_sync_input_write(vdec);
 
-				wp = READ_VREG(VLD_MEM_VIFIFO_WP);
+					wp = READ_VREG(VLD_MEM_VIFIFO_WP);
+				}
 			} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
-				SET_VREG_MASK(HEVC_STREAM_CONTROL, 1);
+					SET_VREG_MASK(HEVC_STREAM_CONTROL, 1);
+					if (vdec->is_scatter_input_mode) {
+						CLEAR_VREG_MASK(HEVC_SCATTER_MANUAL_CONTROL, 1 << 31);
+					}
+					/* restore read side */
+					WRITE_VREG(HEVC_STREAM_SWAP_ADDR,
+						swap_page_phys);
+					WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 1);
 
-				/* restore read side */
-				WRITE_VREG(HEVC_STREAM_SWAP_ADDR,
-					swap_page_phys);
-				WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 1);
+					/* swap busy ands wap wrrsp*/
+					dos_wait_status(HEVC_STREAM_SWAP_CTRL, ((1<<7) | (0xff << 24)), 0);
+					WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
+					if (vdec->is_scatter_input_mode) {
+						SET_VREG_MASK(HEVC_SCATTER_MANUAL_CONTROL, 1 << 31);
+					}
+					/* restore stream offset */
+					WRITE_VREG(HEVC_SHIFT_BYTE_COUNT,
+						input->stream_cookie);
 
-				/* swap busy ands wap wrrsp*/
-				dos_wait_status(HEVC_STREAM_SWAP_CTRL, ((1<<7) | (0xff << 24)), 0);
-				WRITE_VREG(HEVC_STREAM_SWAP_CTRL, 0);
-
-				/* restore stream offset */
-				WRITE_VREG(HEVC_SHIFT_BYTE_COUNT,
-					input->stream_cookie);
-
-				rp = READ_VREG(HEVC_STREAM_RD_PTR);
-				fifo_len = (READ_VREG(HEVC_STREAM_FIFO_CTL)
-						>> 16) & 0x7f;
+					rp = READ_VREG(HEVC_STREAM_RD_PTR);
+					fifo_len = (READ_VREG(HEVC_STREAM_FIFO_CTL)
+							>> 16) & 0x7f;
 
 
-				/* enable */
+					/* enable */
+					if (vdec->vbuf.no_parser)
+						SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+					if (vdec->is_scatter_input_mode)
+						SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
 
-				/* sync with front end */
-				vdec_sync_input_read(vdec);
-				vdec_sync_input_write(vdec);
-
-				wp = READ_VREG(HEVC_STREAM_WR_PTR);
-
-				if (vdec->vbuf.no_parser)
-					SET_VREG_MASK(HEVC_STREAM_CONTROL,
-						7 << 4);
-				/*pr_info("vdec: restore context\r\n");*/
-			}
+					/* sync with front end */
+					vdec_sync_input_read(vdec);
+					vdec_sync_input_write(vdec);
+					if (vdec->is_scatter_input_mode) {
+						shift_byte = scatter_input_get_shift_byte(vdec->scatter_input_ctx);
+						wp = scatter_input_get_wp(vdec->scatter_input_ctx);
+					} else {
+						wp = READ_VREG(HEVC_STREAM_WR_PTR);
+					}
+					/*pr_info("vdec: restore context\r\n");*/
+				}
 
 		} else {
 			if (vdec->vbuf.ext_buf_addr)
@@ -2797,79 +2982,128 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 					first_set_rp = input->start;
 			}
 			if (input->target == VDEC_INPUT_TARGET_VLD) {
-				WRITE_VREG(VLD_MEM_VIFIFO_START_PTR,
+				if (vdec->is_scatter_input_mode) {
+					u32 scatter_wp = 0;
+					WRITE_VREG(HEVC_STREAM_START_ADDR, vdec->scatter_input_ctx->map_start_phy_addr);
+					WRITE_VREG(HEVC_STREAM_END_ADDR, vdec->scatter_input_ctx->map_start_phy_addr + SCATTER_INPUT_MAP_SIZE);
+
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+					scatter_wp = scatter_input_get_wp(vdec->scatter_input_ctx);
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, (0x1 << 16) | (1<<10));
+
+					if (vdec->vbuf.no_parser)
+						SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+					SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+					SCATTER_SET_WP(HEVC_SCATTER_CONTROL, scatter_wp);
+					WRITE_VREG(HEVC_STREAM_RD_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+					WRITE_VREG(HEVC_STREAM_WR_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+					fifo_len = READ_VREG(HEVC_SCATTER_MAP_FIFO_LEVEL) & 0x3fff;
+					shift_byte = scatter_input_get_shift_byte(vdec->scatter_input_ctx);
+					wp = scatter_input_get_wp(vdec->scatter_input_ctx);
+					pr_info("%s, set_endian, %d\n",__func__, vdec->vbuf.no_parser);
+				} else {
+					WRITE_VREG(VLD_MEM_VIFIFO_START_PTR,
 					input->start);
-				WRITE_VREG(VLD_MEM_VIFIFO_END_PTR,
-					input->start + input->size - 8);
-				WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
-					first_set_rp);
+					WRITE_VREG(VLD_MEM_VIFIFO_END_PTR,
+						input->start + input->size - 8);
+					WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
+						first_set_rp);
 
-				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
-				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
 
-				/* set to manual mode */
-				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
-				WRITE_VREG(VLD_MEM_VIFIFO_RP, first_set_rp);
-				WRITE_VREG(VLD_MEM_VIFIFO_WP,
-					STBUF_READ(&vdec->vbuf, get_wp));
-				rp = READ_VREG(VLD_MEM_VIFIFO_RP);
+					/* set to manual mode */
+					WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+					WRITE_VREG(VLD_MEM_VIFIFO_RP, first_set_rp);
+					WRITE_VREG(VLD_MEM_VIFIFO_WP,
+						STBUF_READ(&vdec->vbuf, get_wp));
+					rp = READ_VREG(VLD_MEM_VIFIFO_RP);
 
-				/* enable */
-				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
-					(0x11 << 16) | (1<<10));
-				if (vdec->vbuf.no_parser)
-					SET_VREG_MASK(VLD_MEM_VIFIFO_CONTROL,
-						7 << 3);
+					/* enable */
+					WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
+						(0x11 << 16) | (1<<10));
+					if (vdec->vbuf.no_parser)
+						SET_VREG_MASK(VLD_MEM_VIFIFO_CONTROL,
+							7 << 3);
 
-				wp = READ_VREG(VLD_MEM_VIFIFO_WP);
-
+					wp = READ_VREG(VLD_MEM_VIFIFO_WP);
+				}
 			} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
-				WRITE_VREG(HEVC_STREAM_START_ADDR,
-					input->start);
-				WRITE_VREG(HEVC_STREAM_END_ADDR,
-					input->start + input->size);
-				WRITE_VREG(HEVC_STREAM_RD_PTR,
-					first_set_rp);
-				WRITE_VREG(HEVC_STREAM_WR_PTR,
-					STBUF_READ(&vdec->vbuf, get_wp));
-				rp = READ_VREG(HEVC_STREAM_RD_PTR);
-				wp = READ_VREG(HEVC_STREAM_WR_PTR);
-				fifo_len = (READ_VREG(HEVC_STREAM_FIFO_CTL)
-						>> 16) & 0x7f;
-				if (vdec->vbuf.no_parser)
-					SET_VREG_MASK(HEVC_STREAM_CONTROL,
-						7 << 4);
-				/* enable */
+				if (vdec->is_scatter_input_mode) {
+					WRITE_VREG(HEVC_STREAM_START_ADDR, vdec->scatter_input_ctx->map_start_phy_addr);
+					WRITE_VREG(HEVC_STREAM_END_ADDR, vdec->scatter_input_ctx->map_start_phy_addr + SCATTER_INPUT_MAP_SIZE);
+					if (vdec->vbuf.no_parser)
+						SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+					SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+					SCATTER_SET_WP(HEVC_SCATTER_CONTROL,scatter_input_get_wp(vdec->scatter_input_ctx));
+					WRITE_VREG(HEVC_STREAM_RD_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+					WRITE_VREG(HEVC_STREAM_WR_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+					fifo_len = READ_VREG(HEVC_SCATTER_MAP_FIFO_LEVEL) & 0x3fff;
+					shift_byte = scatter_input_get_shift_byte(vdec->scatter_input_ctx);
+					wp = scatter_input_get_wp(vdec->scatter_input_ctx);
+				} else {
+					WRITE_VREG(HEVC_STREAM_START_ADDR, input->start);
+					WRITE_VREG(HEVC_STREAM_END_ADDR, input->start + input->size);
+					WRITE_VREG(HEVC_STREAM_RD_PTR, first_set_rp);
+					WRITE_VREG(HEVC_STREAM_WR_PTR, STBUF_READ(&vdec->vbuf, get_wp));
+					rp = READ_VREG(HEVC_STREAM_RD_PTR);
+					wp = READ_VREG(HEVC_STREAM_WR_PTR);
+					fifo_len = (READ_VREG(HEVC_STREAM_FIFO_CTL) >> 16) & 0x7f;
+					if (vdec->vbuf.no_parser)
+						SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+					/* enable */
+				}
 			}
 		}
 		*p = NULL;
-		if (wp >= rp)
-			size = wp - rp + fifo_len;
-		else
-			size = wp + input->size - rp + fifo_len;
-		if (size < 0) {
-			pr_info("%s error: input->size %x wp %lx rp %lx fifo_len %x => size %x\r\n",
-				__func__, input->size, wp, rp, fifo_len, size);
-			size = 0;
+		if (vdec->is_scatter_input_mode) {
+			size = scatter_input_get_data_level(vdec->scatter_input_ctx,
+				SCATTER_GET_WP(HEVC_SCATTER_CONTROL), shift_byte);
+			if (size < 0) {
+				size = 0;
+				pr_info("%s error size: 0 HEVC_SCATTER_CONTROL:0x%x\n",
+					__func__, READ_VREG(HEVC_SCATTER_CONTROL));
+			}
+		} else {
+			if (wp >= rp)
+				size = wp - rp + fifo_len;
+			else
+				size = wp + input->size - rp + fifo_len;
+			if (size < 0) {
+				pr_info("%s error: input->size %x wp %lx rp %lx fifo_len %x => size %x\r\n",
+					__func__, input->size, wp, rp, fifo_len, size);
+				size = 0;
+			}
 		}
 #ifdef DEBUG_PORT
 		if (is_es_dump_enabled(vdec->id)) {
-			if (wp >= input->last_wp) {
+			if (vdec->is_scatter_input_mode) {
+				scatter_input_stream_mode_dump_data(vdec->scatter_input_ctx, wp, get_play_cnt());
+			} else {
+				if (wp >= input->last_wp) {
 				vdec_dbg_phys_write(input->last_wp,
 					wp - input->last_wp, vdec->id,
 					"%d_%d_%d_dump.es", vdec->id, vdec->format, get_play_cnt());
-			} else {
-				vdec_dbg_phys_write(input->last_wp,
-					(vdec->vbuf.buf_start + vdec->vbuf.buf_size - input->last_wp), vdec->id,
-					"%d_%d_%d_dump.es", vdec->id, vdec->format, get_play_cnt());
+				} else {
+					vdec_dbg_phys_write(input->last_wp,
+						(vdec->vbuf.buf_start + vdec->vbuf.buf_size - input->last_wp), vdec->id,
+						"%d_%d_%d_dump.es", vdec->id, vdec->format, get_play_cnt());
 
-				vdec_dbg_phys_write(vdec->vbuf.buf_start,
-					wp - vdec->vbuf.buf_start, vdec->id,
-					"%d_%d_%d_dump.es", vdec->id, vdec->format, get_play_cnt());
+					vdec_dbg_phys_write(vdec->vbuf.buf_start,
+						wp - vdec->vbuf.buf_start, vdec->id,
+						"%d_%d_%d_dump.es", vdec->id, vdec->format, get_play_cnt());
+				}
 			}
 		}
 #endif
-		input->last_wp = wp;
+		if (vdec->is_scatter_input_mode) {
+			scatter_input_set_last_dump_wp(vdec->scatter_input_ctx, wp);
+		} else {
+			input->last_wp = wp;
+		}
+
 		ATRACE_COUNTER(vdec->stream_buffer_level, size);
 
 		if (is_need_fix_streambuf_rp()) {
@@ -2899,6 +3133,8 @@ u32 vdec_offset_prepare_input(struct vdec_s *vdec, u32 consume_byte, u32 data_of
 	header_data_size = data_size;
 	data_offset += consume_byte;
 	data_size = res_byte;
+	if (is_support_scatter_input())
+		scatter_input_set_enable(vdec->is_scatter_input_mode);
 
 	if (input->target == VDEC_INPUT_TARGET_VLD) {
 		if (vdec_get_debug_flags() & 0x10000000)
@@ -2934,38 +3170,61 @@ u32 vdec_offset_prepare_input(struct vdec_s *vdec, u32 consume_byte, u32 data_of
 			struct vframe_chunk_s *chunk = vdec_input_next_chunk(&vdec->input);
 			struct vframe_block_list_s *block = NULL;
 			int dummy;
+			if (vdec->is_scatter_input_mode) {
+				struct scatter_map_update_params param = {0};
+				param.pack = chunk->scatter_input_data_package;
+				param.offset = data_offset;
+				dummy = vdec->scatter_input_ctx->map_ops->scatter_input_write_data_to_device(vdec->scatter_input_ctx, &param);
+				WRITE_VREG(HEVC_STREAM_START_ADDR, vdec->scatter_input_ctx->map_start_phy_addr);
+				WRITE_VREG(HEVC_STREAM_END_ADDR, vdec->scatter_input_ctx->map_start_phy_addr + SCATTER_INPUT_MAP_SIZE);
+				WRITE_VREG(HEVC_STREAM_RD_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+				WRITE_VREG(HEVC_STREAM_WR_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+				SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+				SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
 
-			block = chunk->block;
+				scatter_input_add_hw_padding_if_need(vdec->scatter_input_ctx);
+				SCATTER_SET_WP(HEVC_SCATTER_CONTROL, dummy);
+				SET_VREG_MASK(HEVC_PARSER_INT_STATUS, 1 << 8); //disable map empty
 
-			WRITE_VREG(VLD_MEM_VIFIFO_START_PTR, block->start);
-			WRITE_VREG(VLD_MEM_VIFIFO_END_PTR, block->start +
-					block->size - 8);
-			WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
-					round_down(block->start + data_offset,
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 3);
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
+					(0x1 << 16) | (1<<10));
+			} else {
+				block = chunk->block;
+
+				WRITE_VREG(VLD_MEM_VIFIFO_START_PTR, block->start);
+				WRITE_VREG(VLD_MEM_VIFIFO_END_PTR, block->start +
+						block->size - 8);
+				WRITE_VREG(VLD_MEM_VIFIFO_CURR_PTR,
+						round_down(block->start + data_offset,
+							VDEC_FIFO_ALIGN));
+
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+
+				/* set to manual mode */
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
+				WRITE_VREG(VLD_MEM_VIFIFO_RP,
+						round_down(block->start + data_offset,
+							VDEC_FIFO_ALIGN));
+				dummy = data_offset + data_size +
+					VLD_PADDING_SIZE;
+				if (dummy >= block->size)
+					dummy -= block->size;
+				WRITE_VREG(VLD_MEM_VIFIFO_WP,
+					round_down(block->start + dummy,
 						VDEC_FIFO_ALIGN));
 
-			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1);
-			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 0);
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 3);
+				WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
 
-			/* set to manual mode */
-			WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
-			WRITE_VREG(VLD_MEM_VIFIFO_RP,
-					round_down(block->start + data_offset,
-						VDEC_FIFO_ALIGN));
-			dummy = data_offset + data_size +
-				VLD_PADDING_SIZE;
-			if (dummy >= block->size)
-				dummy -= block->size;
-			WRITE_VREG(VLD_MEM_VIFIFO_WP,
-				round_down(block->start + dummy,
-					VDEC_FIFO_ALIGN));
-
-			WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 3);
-			WRITE_VREG(VLD_MEM_VIFIFO_BUF_CNTL, 2);
-
-			WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
-				(0x11 << 16) | (1<<10) | (7<<3));
-
+				WRITE_VREG(VLD_MEM_VIFIFO_CONTROL,
+					(0x11 << 16) | (1<<10) | (7<<3));
+			}
 		}
 	} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
 		data_invalid = data_offset - round_down(data_offset, 0x40);
@@ -2982,21 +3241,37 @@ u32 vdec_offset_prepare_input(struct vdec_s *vdec, u32 consume_byte, u32 data_of
 			struct vframe_chunk_s *chunk = vdec_input_next_chunk(&vdec->input);
 			struct vframe_block_list_s *block = NULL;
 			int dummy;
-
-			block = chunk->block;
-			WRITE_VREG(HEVC_STREAM_START_ADDR, block->start);
-			WRITE_VREG(HEVC_STREAM_END_ADDR, block->start +
-					block->size);
-			WRITE_VREG(HEVC_STREAM_RD_PTR, block->start +
-					data_offset);
-			dummy = data_offset + data_size +
-					HEVC_PADDING_SIZE;
-			if (dummy >= block->size)
-				dummy -= block->size;
-			WRITE_VREG(HEVC_STREAM_WR_PTR,
-				round_down(block->start + dummy,
-					VDEC_FIFO_ALIGN));
-
+			//u32 data32;
+			if (vdec->is_scatter_input_mode) {
+				struct scatter_map_update_params param = {0};
+				param.pack = chunk->scatter_input_data_package;
+				param.offset = data_offset;
+				dummy = vdec->scatter_input_ctx->map_ops->scatter_input_write_data_to_device(vdec->scatter_input_ctx, &param);
+				WRITE_VREG(HEVC_STREAM_START_ADDR, vdec->scatter_input_ctx->map_start_phy_addr);
+				WRITE_VREG(HEVC_STREAM_END_ADDR, vdec->scatter_input_ctx->map_start_phy_addr + SCATTER_INPUT_MAP_SIZE);
+				WRITE_VREG(HEVC_STREAM_RD_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+				WRITE_VREG(HEVC_STREAM_WR_PTR, vdec->scatter_input_ctx->map_start_phy_addr);
+				scatter_input_add_hw_padding_if_need(vdec->scatter_input_ctx);
+				if (vdec->vbuf.no_parser)
+					SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
+				SET_VREG_MASK(HEVC_SCATTER_CONTROL, 7 << 28); //scatter endian
+				SCATTER_SET_WP(HEVC_SCATTER_CONTROL, dummy);
+				SET_VREG_MASK(HEVC_PARSER_INT_STATUS, 1 << 8); //disable map empty
+			} else {
+				block = chunk->block;
+				WRITE_VREG(HEVC_STREAM_START_ADDR, block->start);
+				WRITE_VREG(HEVC_STREAM_END_ADDR, block->start +
+						block->size);
+				WRITE_VREG(HEVC_STREAM_RD_PTR, block->start +
+						data_offset);
+				dummy = data_offset + data_size +
+						HEVC_PADDING_SIZE;
+				if (dummy >= block->size)
+					dummy -= block->size;
+				WRITE_VREG(HEVC_STREAM_WR_PTR,
+					round_down(block->start + dummy,
+						VDEC_FIFO_ALIGN));
+			}
 			/* set endian */
 			SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
 		}
@@ -3012,8 +3287,17 @@ void vdec_enable_input(struct vdec_s *vdec)
 	if (vdec->status != VDEC_STATUS_ACTIVE)
 		return;
 
-	if (input->target == VDEC_INPUT_TARGET_VLD)
+	if (input->target == VDEC_INPUT_TARGET_VLD) {
+		if (vdec->is_scatter_input_mode) {
+			u32 data32 = READ_VREG(HEVC_STREAM_CONTROL);
+			data32 = data32 |
+						(0xf << 25) | // arwlen_axi_max
+						(1 << 0) // stream_fetch_enable
+						;
+			WRITE_VREG(HEVC_STREAM_CONTROL, data32);
+		}
 		SET_VREG_MASK(VLD_MEM_VIFIFO_CONTROL, (1<<2) | (1<<1));
+	}
 	else if (input->target == VDEC_INPUT_TARGET_HEVC) {
 		if (vdec_stream_based(vdec)) {
 			if (vdec->vbuf.no_parser)
@@ -3062,16 +3346,17 @@ bool vdec_has_more_input(struct vdec_s *vdec)
 	if (input_frame_based(input))
 		return vdec_input_next_input_chunk(input) != NULL;
 	else {
-		dos_addr_t wp = 0;
-		if (input->target == VDEC_INPUT_TARGET_VLD) {
-			wp = READ_VREG(VLD_MEM_VIFIFO_WP) | PREFIX_ADDR_MASK(stream_prefix_get());
-
-			return wp != STBUF_READ(&vdec->vbuf, get_wp);
+		if (vdec->is_scatter_input_mode) {
+			return SCATTER_GET_WP(HEVC_SCATTER_CONTROL) != scatter_input_get_wp(vdec->scatter_input_ctx);
 		} else {
-			wp = READ_VREG(HEVC_STREAM_WR_PTR) | PREFIX_ADDR_MASK(stream_prefix_get());
-
-			return (wp & ~0x3) !=
-				(STBUF_READ(&vdec->vbuf, get_wp) & ~0x3);
+			dos_addr_t wp = 0;
+			if (input->target == VDEC_INPUT_TARGET_VLD) {
+				wp = READ_VREG(VLD_MEM_VIFIFO_WP) | PREFIX_ADDR_MASK(stream_prefix_get());
+				return wp != STBUF_READ(&vdec->vbuf, get_wp);
+			} else {
+				wp = READ_VREG(HEVC_STREAM_WR_PTR) | PREFIX_ADDR_MASK(stream_prefix_get());
+				return (wp & ~0x3) != (STBUF_READ(&vdec->vbuf, get_wp) & ~0x3);
+			}
 		}
 	}
 }
@@ -3378,6 +3663,8 @@ static void vdec_low_power_clk_on_cm(struct vdec_s *vdec)
 {
 	if (vdec->low_power_clk_on)
 		vdec->low_power_clk_on();
+	if (vdec->is_scatter_input_mode)
+		scatter_input_low_power_clk_on();
 }
 
 static void vdec_low_power_clock_off(struct vdec_s *vdec)
@@ -3410,6 +3697,9 @@ void vdec_save_input_context(struct vdec_s *vdec)
 
 	if (input->target == VDEC_INPUT_TARGET_VLD)
 		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1<<15);
+
+	if (vdec->is_scatter_input_mode)
+		CLEAR_VREG_MASK(HEVC_SCATTER_MANUAL_CONTROL, 1 << 31);
 
 	if (input_stream_based(input) && (input->swap_needed)) {
 		total_rd_count_last = vdec->input.total_rd_count;
@@ -3778,6 +4068,12 @@ int vdec_destroy(struct vdec_s *vdec)
 	ida_simple_remove(&vdec_core->ida, vdec->id);
 	if (vdec->mvfrm)
 		vfree(vdec->mvfrm);
+
+	if (vdec->is_scatter_input_mode && vdec->scatter_input_ctx) {
+		scatter_input_destroy(vdec->scatter_input_ctx);
+		vfree(vdec->scatter_input_ctx);
+	}
+
 	vfree(vdec);
 
 	atomic_dec(&vdec_core->vdec_nr);
@@ -5285,7 +5581,17 @@ thread_isr_done:
 
 static irqreturn_t scatter_map_empty_isr(int irq, void *dev_id)
 {
-	//pr_info("%s in \n", __func__);
+	u32 data32 = READ_VREG(HEVC_SCATTER_CONTROL);
+	u32 map_wp = SCATTER_GET_WP(HEVC_SCATTER_CONTROL);
+	u32 map_rp = SCATTER_GET_RP(HEVC_SCATTER_CONTROL);
+	u32 parser_status = READ_VREG(HEVC_PARSER_INT_STATUS);
+	u32 map_empty_status = (parser_status & (1 << 8));
+	if ((data32 & 0x1) && map_empty_status) {
+		WRITE_VREG(HEVC_PARSER_INT_STATUS, map_empty_status); //disable map empty interrupt
+		pr_info("%s in SCATTER_CONTROL:0x%x, PARSER_INT_STATUS:(old 0x%x, new 0x%x) map_wp:%d map_rp:%d\n",
+			__func__, data32, parser_status, READ_VREG(HEVC_PARSER_INT_STATUS), map_wp, map_rp);
+	}
+
 	return IRQ_HANDLED;
 }
 
@@ -5412,14 +5718,18 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 		/* check streaming prepare level threshold if not EOS */
 		if (input && input_stream_based(input) && !input->eos) {
 			u32 rp, wp, level;
-
-			rp = STBUF_READ(&vdec->vbuf, get_rp);
-			wp = STBUF_READ(&vdec->vbuf, get_wp);
-			if (wp < rp)
-				level = input->size + wp - rp;
-			else
-				level = wp - rp;
-
+			if (vdec->is_scatter_input_mode) {
+				level = scatter_input_get_data_level(vdec->scatter_input_ctx,
+							scatter_input_get_wp(vdec->scatter_input_ctx),
+							scatter_input_get_shift_byte(vdec->scatter_input_ctx));
+			} else {
+				rp = STBUF_READ(&vdec->vbuf, get_rp);
+				wp = STBUF_READ(&vdec->vbuf, get_wp);
+				if (wp < rp)
+					level = input->size + wp - rp;
+				else
+					level = wp - rp;
+			}
 			if (debug & 0x8)
 				pr_info("%s:%d level 0x%x ready_mask = 0x%lx, mask = 0x%lx\n",
 					__func__, vdec->id, level, ready_mask, mask);
@@ -5431,26 +5741,27 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 				else
 					return false;
 			}
-
-			if ((level < input->prepare_level) &&
-				!vdec_check_rec_num_enough(vdec)) {
-				vdec->need_more_data |= VDEC_NEED_MORE_DATA;
+			if (!vdec->is_scatter_input_mode) {
+				if ((level < input->prepare_level) &&
+					!vdec_check_rec_num_enough(vdec)) {
+					vdec->need_more_data |= VDEC_NEED_MORE_DATA;
 #ifdef VDEC_DEBUG_SUPPORT
-				inc_profi_count(mask & (~ready_mask), vdec->input_underrun_count);
-				if (step_mode & 0x200) {
-					if ((step_mode & 0xff) == vdec->id) {
-						step_mode |= 0xff;
-						return mask;
+					inc_profi_count(mask & (~ready_mask), vdec->input_underrun_count);
+					if (step_mode & 0x200) {
+						if ((step_mode & 0xff) == vdec->id) {
+							step_mode |= 0xff;
+							return mask;
+						}
 					}
-				}
 #endif
-				if (ready_mask)
-					check_run_ready = false;
-				else
-					return false;
+					if (ready_mask)
+						check_run_ready = false;
+					else
+						return false;
 
-			} else if (level > input->prepare_level)
-				vdec->need_more_data &= ~VDEC_NEED_MORE_DATA;
+				} else if (level > input->prepare_level)
+					vdec->need_more_data &= ~VDEC_NEED_MORE_DATA;
+			}
 		}
 	}
 

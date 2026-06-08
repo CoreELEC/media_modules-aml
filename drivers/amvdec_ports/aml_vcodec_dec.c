@@ -59,6 +59,7 @@
 #endif
 
 #include "../frame_provider/decoder/utils/vdec.h"
+#include "../frame_provider/decoder/utils/scatter_input.h"
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
 #include "../common/chips/decoder_cpu_ver_info.h"
@@ -1879,12 +1880,15 @@ static void aml_vdec_worker(struct work_struct *work)
 		buf.dbuf = vb->planes[0].dbuf;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "stream update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%llx ts %llu\n",
 			buf.addr, buf.size, offset, es_data->data_start, vb->timestamp);
+	} else if (ctx->ada_ctx->vdec->is_scatter_input_mode) {
+		buf.vaddr   = (void*)aml_vb->out_sgt;
+		buf.size	= vb->planes[0].bytesused;
 	} else {
 		buf.addr	= aml_vb->addr ? aml_vb->addr : sg_dma_address(aml_vb->out_sgt->sgl);
 		buf.size	= vb->planes[0].bytesused;
 	}
 	buf.index	= vb->index;
-	if (!ctx->is_drm_mode)
+	if (!ctx->is_drm_mode && !ctx->ada_ctx->vdec->is_scatter_input_mode)
 		buf.vaddr = vb2_plane_vaddr(vb, 0);
 
 	buf.model	= vb->memory;
@@ -1919,7 +1923,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 		/* frame mode and non-dbuf mode. */
-		if (ctx->stream_mode || !ctx->output_dma_mode) {
+		if (ctx->stream_mode || (!ctx->output_dma_mode && !ctx->ada_ctx->vdec->is_scatter_input_mode)) {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_8, buf.size);
 			v4l2_buff_done(&aml_vb->vb,
 				VB2_BUF_STATE_DONE);
@@ -1928,7 +1932,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 		/* frame mode and non-dbuf mode. */
-		if (ctx->stream_mode || !ctx->output_dma_mode) {
+		if (ctx->stream_mode || (!ctx->output_dma_mode && !ctx->ada_ctx->vdec->is_scatter_input_mode)) {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_10, buf.size);
 			v4l2_buff_done(&aml_vb->vb,
 				VB2_BUF_STATE_ERROR);
@@ -2891,7 +2895,7 @@ static int vidioc_decoder_streamoff(struct file *file, void *priv,
 
 	return v4l2_m2m_ioctl_streamoff(file, priv, i);
 }
-
+extern u32 scatter_input_mode;
 static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 	struct v4l2_requestbuffers *rb)
 {
@@ -2984,6 +2988,16 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 		}
 		vdec_set_dmabuf_type(ctx->ada_ctx, ctx->output_dma_mode);
 
+		ctx->ada_ctx->vdec->is_scatter_input_mode = scatter_input_mode == 1;
+		ctx->ada_ctx->ctx->ada_ctx->is_scatter_input_mode = ctx->ada_ctx->vdec->is_scatter_input_mode;
+		if (ctx->ada_ctx->vdec->is_scatter_input_mode && ctx->ada_ctx->vdec->scatter_input_ctx == NULL) {
+			ctx->ada_ctx->vdec->scatter_input_ctx = vzalloc(sizeof(struct scatter_input_ctx_t));
+			if (ctx->ada_ctx->vdec->scatter_input_ctx == NULL) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "%s failed to alloc scatter_input_ctx!\n", __func__);
+				return -EINVAL;
+			}
+			scatter_input_init(ctx->ada_ctx->vdec->scatter_input_ctx, ctx->ada_ctx->vdec);
+		}
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
 			"output buffer memory mode is %d\n", rb->memory);
 	}
@@ -3173,6 +3187,32 @@ int aml_es_write(struct aml_vcodec_ctx *ctx, struct dma_buf *dbuf,
 	return ret;
 }
 
+void scatter_input_es_free(struct aml_vcodec_ctx *ctx)
+{
+	struct aml_es_ref_elem *elem = NULL;
+	struct aml_es_mgr *stmgr = &ctx->es_mgr;
+	struct scatter_input_ctx_t* scatter_ctx = ctx->ada_ctx->vdec->scatter_input_ctx;
+	int free_count = -1;
+	struct scatter_map_update_params param = {0};
+	u32 rp = SCATTER_GET_RP(HEVC_SCATTER_CONTROL);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "scatter_input Put-ref-start, : Rp:%u\n", rp);
+
+	/* Get stbuf from management queue. */
+	if (kfifo_is_empty(&stmgr->ref_q)) {
+		v4l_dbg(ctx, 0, "There is no ref elem to process.\n");
+		return;
+	}
+
+	param.rp = rp;
+	free_count = scatter_ctx->map_ops->scatter_input_free_data(scatter_ctx, &param);
+	while (free_count-- > 0) {
+		if (!kfifo_get(&stmgr->ref_q, &elem)) {
+			v4l_dbg(ctx, 0, "Get elem from ref queue fail.\n");
+			return;
+		}
+		aml_es_put_ref(stmgr, elem);
+	}
+}
 void aml_es_input_free(struct aml_vcodec_ctx *ctx, ulong addr)
 {
 	aml_es_ref_dque(&ctx->es_mgr, addr);
@@ -4578,7 +4618,7 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 			if (!V4L2_TYPE_IS_OUTPUT(vq->type) &&
 				(vq->memory == VB2_MEMORY_MMAP))
 				alloc_devs[i] = v4l_get_dev_from_codec_mm();
-			else if (vq->memory == VB2_MEMORY_MMAP)
+			else if (vq->memory == VB2_MEMORY_MMAP || vq->memory == VB2_MEMORY_USERPTR)
 				dma_coerce_mask_and_coherent(alloc_devs[i], DMA_BIT_MASK(64));
 		}
 	} else {
@@ -4614,7 +4654,7 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 				else
 					sizes[i] = q_data->sizeimage[i];
 
-				if (vq->memory == VB2_MEMORY_MMAP)
+				if (vq->memory == VB2_MEMORY_MMAP || vq->memory == VB2_MEMORY_USERPTR)
 					dma_coerce_mask_and_coherent(alloc_devs[i], DMA_BIT_MASK(64));
 			} else
 				alloc_devs[i] = v4l_get_dev_from_codec_mm();
@@ -5493,7 +5533,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		aml_combine_free_uvm_dma_buffer(ctx);
 
 		return;
-	} else if (ctx->output_dma_mode) {
+	} else if (ctx->output_dma_mode && !ctx->ada_ctx->vdec->is_scatter_input_mode) {
 		struct dma_buf *dbuf = vb->planes[0].dbuf;
 		struct device *dev = vb->vb2_queue->alloc_devs[0] ? :
 							vb->vb2_queue->dev;
@@ -5554,10 +5594,13 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		int offset = vb->planes[0].data_offset;
 		if (ctx->set_ext_buf_flg == false) {
 			v4l2_set_ext_buf_addr(ctx->ada_ctx, es_data, offset);
-			ctx->es_free = aml_es_input_free;
+			if (ctx->ada_ctx->vdec->is_scatter_input_mode) {
+				ctx->scatter_es_free = scatter_input_es_free;
+			} else {
+				ctx->es_free = aml_es_input_free;
+			}
 			ctx->set_ext_buf_flg = true;
 		}
-
 		src_mem.addr = es_data->data_start + offset;
 		src_mem.size = vb->planes[0].bytesused - offset;
 		src_mem.dbuf = vb->planes[0].dbuf;
@@ -5565,7 +5608,11 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%llx pts %llu\n",
 			src_mem.addr, src_mem.size, offset, es_data->data_start, vb->timestamp);
 
-	} else {
+	} else if (ctx->ada_ctx->vdec->is_scatter_input_mode) {
+		// here we use sgt as buf, so we need not modify  struct src_mem
+		src_mem.vaddr	= (void*)buf->out_sgt;
+		src_mem.size	= vb->planes[0].bytesused;
+	} else{
 		src_mem.addr	= buf->addr ? buf->addr :
 				sg_dma_address(buf->out_sgt->sgl);
 		src_mem.size	= vb->planes[0].bytesused;
@@ -5573,8 +5620,10 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			codec_mm_set_info_by_phy_addr(ctx->id, CODEC_MM_MODULE_DECODER,
 				CODEC_MM_TYPE_ES, src_mem.addr);
 	}
+
 	src_mem.index	= vb->index;
-	if (!ctx->is_drm_mode)
+	// user_ptr mode can't get plane's virtual address
+	if (!ctx->is_drm_mode && !ctx->ada_ctx->vdec->is_scatter_input_mode)
 		src_mem.vaddr = vb2_plane_vaddr(vb, 0);
 
 	src_mem.model	= vb->memory;
@@ -5585,7 +5634,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 		/* frame mode and non-dbuf mode. */
-		if (ctx->stream_mode || !ctx->output_dma_mode) {
+		if (ctx->stream_mode || (!ctx->output_dma_mode && !ctx->ada_ctx->vdec->is_scatter_input_mode)) {
 			v4l2_buff_done(to_vb2_v4l2_buffer(vb),
 				VB2_BUF_STATE_DONE);
 		}
@@ -5600,7 +5649,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 	/* frame mode and non-dbuf mode. */
-	if (ctx->stream_mode || !ctx->output_dma_mode) {
+	if (ctx->stream_mode || (!ctx->output_dma_mode && !ctx->ada_ctx->vdec->is_scatter_input_mode)) {
 		v4l2_buff_done(to_vb2_v4l2_buffer(vb),
 			VB2_BUF_STATE_DONE);
 	}
@@ -5818,12 +5867,14 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 
 		buf->out_sgt = vb2_dma_sg_plane_desc(vb, 0);
 
-		contig_size = dmabuf_contiguous_size(buf->out_sgt);
-		if (contig_size < vb->planes[0].bytesused) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-				"contiguous mapping is too small %lu\n",
-				contig_size);
-			return -EFAULT;
+		if (!ctx->ada_ctx->vdec->is_scatter_input_mode) {
+			contig_size = dmabuf_contiguous_size(buf->out_sgt);
+			if (contig_size < vb->planes[0].bytesused) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+					"contiguous mapping is too small %lu\n",
+					contig_size);
+				return -EFAULT;
+			}
 		}
 	}
 

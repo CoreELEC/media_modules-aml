@@ -92,8 +92,9 @@ enum v4lplayer_play_mode {
 };
 
 enum v4lplayer_mem_type {
-	V4LPLAYER_MEM_TYPE_MMAP = 0,
-	V4LPLAYER_MEM_TYPE_DMA = 1,
+	V4LPLAYER_MEM_TYPE_MMAP = 1,
+	V4LPLAYER_MEM_TYPE_USER_PTR = 2,
+	V4LPLAYER_MEM_TYPE_DMA = 4,
 };
 
 typedef enum {

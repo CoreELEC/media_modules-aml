@@ -213,6 +213,7 @@ struct dos_of_dev_s {
 	/* bus idle ctrl for reset */
 	int dos_bus_ctrl;
 	int dos_bus_idle_mask;  /* afifo idle mask */
+	bool is_support_scatter_input;
 };
 
 /* export functions */
@@ -353,4 +354,5 @@ void pr_dos_infos(void);
 
 void dos_info_debug(void);
 
+inline bool is_support_scatter_input(void);
 #endif

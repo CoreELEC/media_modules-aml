@@ -70,7 +70,7 @@
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
-
+#include "../../decoder/utils/scatter_input.h"
 #define MEM_NAME "codec_avs2"
 #define I_ONLY_SUPPORT
 #define MIX_STREAM_SUPPORT
@@ -3969,7 +3969,7 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 	unsigned int data32;
 	unsigned int decode_mode;
 	int i;
-
+	struct vdec_s *vdec = hw_to_vdec(dec);
 	if (!efficiency_mode) {
 		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
 
@@ -3984,6 +3984,12 @@ static void avs2_init_decoder_hw(struct AVS2Decoder_s *dec)
 				(0 << 3) |/*startcode_found_int_amrisc_enable*/
 				(1 << 0)    /*parser_int_enable*/
 				;
+		if (vdec->is_scatter_input_mode) {
+			data32 &= ~(1 << 24);
+			data32 &= ~(1 << 21);
+			data32 &= ~(1 << 4);
+			data32 |= (1 << 2);
+		}
 		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
 		WRITE_VREG(HEVC_SHIFT_CONTROL,
@@ -6326,9 +6332,9 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			WRITE_HREG(DEBUG_REG1, 0);
 		}
 	} else if (debug_tag != 0) {
-		pr_info("dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
-			   READ_HREG(DEBUG_REG2),
-			   READ_VREG(HEVC_PARSER_LCU_START));
+		pr_info("dbg%x: %x lcu %x, shift:0x%x\n", READ_VREG(DEBUG_REG1),
+				READ_VREG(DEBUG_REG2),
+				READ_VREG(HEVC_PARSER_LCU_START), READ_VREG(HEVC_SHIFT_BYTE_COUNT));
 		if (((udebug_pause_pos & 0xffff)
 			== (debug_tag & 0xffff)) &&
 			(udebug_pause_decode_idx == 0 ||
@@ -7534,6 +7540,10 @@ static unsigned char get_data_check_sum
 	if (vdec_secure(hw_to_vdec(dec)))
 		return 0;
 
+	if (hw_to_vdec(dec)->is_scatter_input_mode) {
+		return scatter_input_crc32_sum(dec->chunk->scatter_input_data_package->sgt, size);
+	}
+
 	if (!dec->chunk->block->is_mapped)
 		data = codec_mm_vmap(dec->chunk->block->start +
 			dec->chunk->offset, size);
@@ -7642,6 +7652,8 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 			vdec_clean_input(vdec);
 			if (ctx->es_free)
 				ctx->es_free(ctx, vdec->vbuf.buf_rp);
+			if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 		}
 
 		if (get_free_buf_count(dec) >=
@@ -7733,6 +7745,8 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 		dec->chunk = NULL;
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 		if (dec->dec_status == HEVC_DECPIC_DATA_DONE)
 			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_AGAIN) {
@@ -7758,6 +7772,8 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 		dec->chunk = NULL;
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+			ctx->scatter_es_free(ctx);
 		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
 	} else if (dec->dec_result == DEC_RESULT_FORCE_EXIT) {
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS, "%s: force exit\n", __func__);
@@ -7779,7 +7795,11 @@ static void avs2_work_implement(struct AVS2Decoder_s *dec)
 		dec->stat &= ~STAT_TIMER_ARM;
 	}
 	ATRACE_COUNTER(dec->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_START);
-	wait_hevc_search_done(dec);
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
+	} else {
+		wait_hevc_search_done(dec);
+	}
 	ATRACE_COUNTER(dec->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_END);
 
 	if (dec->dec_result == DEC_RESULT_DONE)
@@ -8426,7 +8446,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			READ_VREG(HEVC_STREAM_WR_PTR),
 			READ_VREG(HEVC_STREAM_RD_PTR),
 			dec->start_shift_bytes);
-		if (vdec_frame_based(vdec) && dec->chunk && !vdec_secure(vdec)) {
+
+		if (vdec_frame_based(vdec) && dec->chunk && !vdec_secure(vdec) && !vdec->is_scatter_input_mode) {
+
 			u8 *data = NULL;
 			if (!dec->chunk->block->is_mapped)
 				data = codec_mm_vmap(dec->chunk->block->start +

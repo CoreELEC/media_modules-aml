@@ -60,7 +60,7 @@
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
-
+#include "../../decoder/utils/scatter_input.h"
 #define DEBUG_MULTI_FLAG  0
 
 #define USE_DYNAMIC_BUF_NUM
@@ -98,6 +98,7 @@
 #define AVS_SOS_COUNT     AV_SCRATCH_7
 #define AVS_BUFFERIN       AV_SCRATCH_8
 #define AVS_BUFFEROUT      AV_SCRATCH_9
+
 #define AVS_REPEAT_COUNT    AV_SCRATCH_A
 #define AVS_TIME_STAMP      AV_SCRATCH_B
 #define AVS_OFFSET_REG      AV_SCRATCH_C
@@ -2838,13 +2839,18 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = STBUF_READ(&vdec->vbuf, get_rp);
-		wp = STBUF_READ(&vdec->vbuf, get_wp);
-		if (wp < rp)
-			level = vdec->input.size + wp - rp;
-		else
-			level = wp - rp;
-
+		if (vdec->is_scatter_input_mode) {
+			level = scatter_input_get_data_level(vdec->scatter_input_ctx,
+						scatter_input_get_wp(vdec->scatter_input_ctx),
+						scatter_input_get_shift_byte(vdec->scatter_input_ctx));
+		} else {
+			rp = STBUF_READ(&vdec->vbuf, get_rp);
+			wp = STBUF_READ(&vdec->vbuf, get_wp);
+			if (wp < rp)
+				level = vdec->input.size + wp - rp;
+			else
+				level = wp - rp;
+		}
 		if (level < pre_decode_buf_level) {
 			hw->not_run_ready++;
 			return PRE_LEVEL_NOT_ENOUGH;
@@ -2930,6 +2936,8 @@ static void vavs_work(struct work_struct *work)
 		hw->chunk = NULL;
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 	} else if (hw->dec_result == DEC_RESULT_AGAIN
 		&& (hw_to_vdec(hw)->next_status != VDEC_STATUS_DISCONNECTED)) {
 		/*
@@ -2960,6 +2968,8 @@ static void vavs_work(struct work_struct *work)
 			vdec_clean_input(hw_to_vdec(hw));
 			if (ctx->es_free)
 				ctx->es_free(ctx, vdec->vbuf.buf_rp);
+			if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 		return;
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
 		debug_print(hw, PRINT_FLAG_ERROR,
@@ -2983,7 +2993,8 @@ static void vavs_work(struct work_struct *work)
 		vdec_clean_input(hw_to_vdec(hw));
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
-
+		if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 		flush_output(hw);
 		notify_v4l_eos(hw_to_vdec(hw));
 		debug_print(hw, 0,
@@ -2994,6 +3005,8 @@ static void vavs_work(struct work_struct *work)
 		hw->chunk = NULL;
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 	}
 	if (hw->stat & STAT_VDEC_RUN) {
 #if DEBUG_MULTI_FLAG == 1
@@ -3003,6 +3016,9 @@ static void vavs_work(struct work_struct *work)
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
 	/*wait_vmmpeg12_search_done(hw);*/
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
+	}
 	if (hw->stat & STAT_TIMER_ARM) {
 		del_timer_sync(&hw->check_timer);
 		hw->stat &= ~STAT_TIMER_ARM;
@@ -3416,7 +3432,7 @@ void (*callback)(struct vdec_s *, void *, int),
 			return;
 		}
 	}
-	if (input_frame_based(vdec)) {
+	if (input_frame_based(vdec) && !vdec->is_scatter_input_mode) {
 		u8 *data = NULL;
 
 		if (!hw->chunk->block->is_mapped)
@@ -3502,7 +3518,21 @@ void (*callback)(struct vdec_s *, void *, int),
 		vdec_schedule_work(&hw->work);
 		return;
 	}
-
+	if (vdec->is_scatter_input_mode) {
+		u32 data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+		data32 = data32 |  // in scatter input mode, set to 0
+			(1 << 22) |  // stream_fifo_empty_int_amrisc_enablew
+			//(1 << 21) |  // stream_map_empty_int_cpu_enable
+			(1 << 7) |  // dec_done_int_amrisc_enable
+			(0 << 4) |  // disable startcode interrupt when SCATTER_ENABLE
+			(0 << 3) |  // startcode_found_int_amrisc_enable
+			(1 << 2) |  // use parser_int_cpu_level instead of pulse to detect interrupt
+			(1 << 0);    // parser_int_enable
+		data32 &= ~(1 << 24);
+		data32 &= ~(1 << 4);
+		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, READ_VREG(VLD_MEM_VIFIFO_CONTROL) & (0xffff));
+	}
 	/*
 		This configuration of VC1_CONTROL_REG will
 		pop bits (even no data in the stream buffer) if input is enabled,
@@ -3518,6 +3548,7 @@ void (*callback)(struct vdec_s *, void *, int),
 			ctx->current_timestamp = hw->chunk->timestamp;
 		}
 
+	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 4);
 	vdec_enable_input(vdec);
 
 	/*wmb();*/

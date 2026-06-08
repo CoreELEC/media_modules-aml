@@ -1284,11 +1284,15 @@ static int parse_para(int argc, char *argv[])
 					g_mem_type = V4LPLAYER_MEM_TYPE_DMA;
 				}
 
+				if (value & 0b100) {
+					g_mem_type = V4LPLAYER_MEM_TYPE_USER_PTR;
+					g_play_mode = V4LPLAYER_FRAME_MODE; // force  frame mode
+				}
+
 				if (value & 0b10) {
 					g_play_mode = V4LPLAYER_STREAM_MODE;
 					g_mem_type = V4LPLAYER_MEM_TYPE_DMA; // force dma
 				}
-
 				break;
 			default:
 				usage();

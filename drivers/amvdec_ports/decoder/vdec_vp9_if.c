@@ -135,7 +135,7 @@ static int vdec_write_nalu(struct vdec_vp9_inst *inst,
 	u8 *buf, u32 size, u64 ts, ulong meta_ptr, chunk_free free);
 static int parser_head_metadata_with_dma(struct aml_vdec_adapt *ada_ctx,
 	ulong addr, u32 count, u64 timestamp, u32 handle,
-	chunk_free free, void* priv, ulong meta_ptr);
+	chunk_free free, void* priv, ulong meta_ptr, bool scatter_input);
 
 static void get_pic_info(struct vdec_vp9_inst *inst,
 			 struct vdec_pic_info *pic)
@@ -378,7 +378,7 @@ static int parse_stream_ucode_dma(struct vdec_vp9_inst *inst,
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
 	ret = parser_head_metadata_with_dma(vdec, buf, size, timestamp, handle,
-		vdec_vframe_input_free, inst->ctx, meta_ptr);
+		vdec_vframe_input_free, inst->ctx, meta_ptr, false);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -444,9 +444,17 @@ static int vdec_vp9_probe(unsigned long h_vdec,
 			}
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
-			ret = parse_stream_ucode_dma(inst, bs->addr, size,
-				bs->timestamp, BUFF_IDX(bs, bs->index), bs->meta_ptr);
+			if (inst->ctx->ada_ctx->is_scatter_input_mode) {
+				ret = parse_stream_ucode_dma(inst, (ulong)buf, size,
+						bs->timestamp, BUFF_IDX(bs, bs->index), bs->meta_ptr);
+			}else {
+				ret = parse_stream_ucode_dma(inst, bs->addr, size,
+						bs->timestamp, BUFF_IDX(bs, bs->index), bs->meta_ptr);
+			}
 		}
+	}else if (inst->ctx->ada_ctx->is_scatter_input_mode) {
+		ret = parse_stream_ucode_dma(inst, (ulong)buf, size,
+				bs->timestamp, BUFF_IDX(bs, bs->index), bs->meta_ptr);
 	} else {
 		if (inst->ctx->param_sets_from_ucode) {
 			ret = parse_stream_ucode(inst, buf, size, bs->timestamp, bs->meta_ptr);
@@ -622,6 +630,21 @@ static int vp9_superframe_split_filter(struct vp9_superframe_split *s,
 fail:
 	return ret;
 }
+static int vp9_superframe_split_filter_sg(struct vp9_superframe_split *s, int *superframe_len)
+{
+	struct sg_table* sgt = (struct sg_table*)s->data;
+	char* buf = vmalloc(s->data_size);
+	int ret = 0;
+	if (sg_copy_to_buffer(sgt->sgl, sgt->nents, buf, s->data_size) <= 0 ) {
+		pr_err("%s, copy err\n", __func__);
+		vfree(buf);
+		return -1;
+	}
+	s->data = buf;
+	ret = vp9_superframe_split_filter(s, superframe_len);
+	vfree(buf);
+	return ret;
+}
 #endif
 
 static void trigger_decoder(struct aml_vdec_adapt *vdec, chunk_free free)
@@ -642,7 +665,7 @@ static void trigger_decoder(struct aml_vdec_adapt *vdec, chunk_free free)
 
 static int parser_head_metadata_with_dma(struct aml_vdec_adapt *ada_ctx,
 	ulong addr, u32 count, u64 timestamp, u32 handle,
-	chunk_free free, void* priv, ulong meta_ptr)
+	chunk_free free, void* priv, ulong meta_ptr, bool scatter_input)
 {
 	int ret = -1;
 	struct aml_vcodec_ctx *ctx = ada_ctx->ctx;
@@ -677,56 +700,64 @@ static int parser_head_metadata_with_dma(struct aml_vdec_adapt *ada_ctx,
 			}
 			kvfree(metadata);
 		} else {
-			stbuf_vaddr = codec_mm_vmap(addr, count);
-			if (stbuf_vaddr) {
-				s.data = stbuf_vaddr;
+			if (scatter_input) {
+				s.data = (void*)addr;
 				s.data_size = count;
-				ret = vp9_superframe_split_filter(&s, &superframe_len);
+				ret = vp9_superframe_split_filter_sg(&s, &superframe_len);
 				if (ret) {
-					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-						"parse frames failed.\n");
-					codec_mm_unmap_phyaddr(stbuf_vaddr);
+					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "parse frames failed.\n");
 					return ret;
 				}
-				if (s.nb_frames > 1) {
-					metadata = aml_media_mem_alloc(VDEC_META_DATA_SIZE, GFP_KERNEL);
-					if (!metadata) {
-						v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-							"alloc size %d failed.\n", VDEC_META_DATA_SIZE);
-						codec_mm_unmap_phyaddr(stbuf_vaddr);
-						return -1;
-					}
-					header_len = 8 + s.nb_frames * 4;
-					metadata[0] = (header_len >> 24) & 0xFF;
-					metadata[1] = (header_len >> 16) & 0xFF;
-					metadata[2] = (header_len >> 8) & 0xFF;
-					metadata[3] = header_len & 0xFF;
-					metadata[4] = (s.nb_frames >> 24) & 0xFF;
-					metadata[5] = (s.nb_frames >> 16) & 0xFF;
-					metadata[6] = (s.nb_frames >> 8) & 0xFF;
-					metadata[7] = s.nb_frames & 0xFF;
-
-					for (i = 0; i < s.nb_frames; i++) {
-						metadata[8 + i * 4] = (s.sizes[i] >> 24) & 0xFF;
-						metadata[9 + i * 4] = (s.sizes[i] >> 16) & 0xFF;
-						metadata[10 + i * 4] = (s.sizes[i] >> 8) & 0xFF;
-						metadata[11 + i * 4] = s.sizes[i] & 0xFF;
-					}
-				}
-				v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
-					"size:%d superframe_len:%d nb_frames:%d\n", s.nb_frames, superframe_len, count);
-				ret = vdec_vframe_write_with_dma(ada_ctx, addr, count - superframe_len, timestamp,
-					handle, free, priv, metadata, meta_ptr);
-				if (ctx->signal_type_update) {
-					aml_vdec_dispatch_event(ctx, V4L2_EVENT_REPORT_SIGNAL_TYPE);
-					ctx->signal_type_update = 0;
-				}
-				kvfree(metadata);
-				codec_mm_unmap_phyaddr(stbuf_vaddr);
 			} else {
-				v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-					"es buffer (%lx, %u) vmap fail\n", addr, count);
+				stbuf_vaddr = codec_mm_vmap(addr, count);
+				if (stbuf_vaddr) {
+					s.data = stbuf_vaddr;
+					s.data_size = count;
+					ret = vp9_superframe_split_filter(&s, &superframe_len);
+					codec_mm_unmap_phyaddr(stbuf_vaddr);
+					if (ret) {
+						v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "parse frames failed.\n");
+						return ret;
+					}
+				} else {
+					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "es buffer (%lx, %u) vmap fail\n", addr, count);
+					return ret;
+				}
 			}
+
+			if (s.nb_frames > 1) {
+				metadata = aml_media_mem_alloc(VDEC_META_DATA_SIZE, GFP_KERNEL);
+				if (!metadata) {
+					v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+						"alloc size %d failed.\n", VDEC_META_DATA_SIZE);
+					return -1;
+				}
+				header_len = 8 + s.nb_frames * 4;
+				metadata[0] = (header_len >> 24) & 0xFF;
+				metadata[1] = (header_len >> 16) & 0xFF;
+				metadata[2] = (header_len >> 8) & 0xFF;
+				metadata[3] = header_len & 0xFF;
+				metadata[4] = (s.nb_frames >> 24) & 0xFF;
+				metadata[5] = (s.nb_frames >> 16) & 0xFF;
+				metadata[6] = (s.nb_frames >> 8) & 0xFF;
+				metadata[7] = s.nb_frames & 0xFF;
+
+				for (i = 0; i < s.nb_frames; i++) {
+					metadata[8 + i * 4] = (s.sizes[i] >> 24) & 0xFF;
+					metadata[9 + i * 4] = (s.sizes[i] >> 16) & 0xFF;
+					metadata[10 + i * 4] = (s.sizes[i] >> 8) & 0xFF;
+					metadata[11 + i * 4] = s.sizes[i] & 0xFF;
+				}
+			}
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
+				"size:%d superframe_len:%d nb_frames:%d, scatter_input:%d\n", s.nb_frames, superframe_len, count, scatter_input);
+			ret = vdec_vframe_write_with_dma(ada_ctx, addr, count - superframe_len, timestamp,
+				handle, free, priv, metadata, meta_ptr);
+			if (ctx->signal_type_update) {
+				aml_vdec_dispatch_event(ctx, V4L2_EVENT_REPORT_SIGNAL_TYPE);
+				ctx->signal_type_update = 0;
+			}
+			kvfree(metadata);
 		}
 	} else {
 		ret = vdec_vframe_write_with_dma(ada_ctx, addr, count, timestamp,
@@ -877,11 +908,21 @@ static int vdec_vp9_decode(unsigned long h_vdec,
 				vdec_vframe_input_free, NULL);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
-			ret = parser_head_metadata_with_dma(vdec,
+			if (inst->ctx->ada_ctx->is_scatter_input_mode) {
+				ret = parser_head_metadata_with_dma(vdec,
+				(ulong)buf, size, bs->timestamp,
+				BUFF_IDX(bs, bs->index),
+				vdec_vframe_input_free, inst->ctx, bs->meta_ptr, true);
+			} else {
+				ret = parser_head_metadata_with_dma(vdec,
 				bs->addr, size, bs->timestamp,
 				BUFF_IDX(bs, bs->index),
-				vdec_vframe_input_free, inst->ctx, bs->meta_ptr);
+				vdec_vframe_input_free, inst->ctx, bs->meta_ptr, false);
+			}
 		}
+	} else if (inst->ctx->ada_ctx->is_scatter_input_mode) {
+		ret = parser_head_metadata_with_dma(vdec, (ulong)buf, size, bs->timestamp,
+				BUFF_IDX(bs, bs->index), vdec_vframe_input_free, inst->ctx, bs->meta_ptr, true);
 	} else {
 		/*checked whether the resolution changes.*/
 		if ((!inst->ctx->param_sets_from_ucode) &&

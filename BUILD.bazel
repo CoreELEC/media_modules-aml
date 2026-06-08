@@ -347,6 +347,8 @@ ddk_module(
             "drivers/frame_provider/decoder/utils/vdec_dw.h",
             "drivers/frame_provider/decoder/utils/sec_extractor.c",
             "drivers/frame_provider/decoder/utils/sec_extractor.h",
+            "drivers/frame_provider/decoder/utils/scatter_input.h",
+            "drivers/frame_provider/decoder/utils/scatter_input.c",
         ],
     ),
     hdrs = [

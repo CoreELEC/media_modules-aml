@@ -20,5 +20,5 @@ struct low_power_ctrl_t {
 struct low_power_ctrl_t *dos_low_power_ctrl_init(void);
 void *low_power_clk_on_get(int format, int mmu_flag);
 void *low_power_clk_off_get(int format, int mmu_flag);
-
+void scatter_input_low_power_clk_on(void);
 #endif

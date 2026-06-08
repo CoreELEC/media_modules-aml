@@ -69,6 +69,7 @@
 #include "../../../amvdec_ports/aml_vcodec_ts.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../decoder/utils/vdec_profile.h"
+#include "../../decoder/utils/scatter_input.h"
 #if IS_ENABLED(CONFIG_AMLOGIC_MEDIA_WRAPPER)
 #include "../../../amvdec_ports/aml_vcodec_avbc_wrapper.h"
 #endif
@@ -5387,7 +5388,7 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 {
 	unsigned int data32;
 	int i;
-
+	struct vdec_s *vdec = hw_to_vdec(hevc);
 	/* m8baby test1902 */
 	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
 		hevc_print(hevc, 0,
@@ -5454,6 +5455,13 @@ static void hevc_init_decoder_hw(struct hevc_state_s *hevc,
 				 (0 << 3) |	/* startcode_found_int_amrisc_enable */
 				 (1 << 0)	/* parser_int_enable */
 				 ;
+
+		if (vdec->is_scatter_input_mode) {
+			data32 &= ~(1 << 24);
+			data32 &= ~(1 << 21);
+			data32 &= ~(1 << 4);
+			data32 |= (1 << 2);
+		}
 		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
 
 		data32 = READ_VREG(HEVC_SHIFT_STATUS);
@@ -12753,17 +12761,19 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 
 	if (is_log_enable(hevc))
 		add_log(hevc,
-			"isr: status = 0x%x dec info 0x%x lcu 0x%x shiftbyte 0x%x shiftstatus 0x%x",
+			"isr: status = 0x%x dec info 0x%x lcu 0x%x shiftbyte 0x%x data:0x%x, shiftstatus 0x%x",
 			dec_status, READ_HREG(HEVC_DECODE_INFO),
 			READ_VREG(HEVC_MPRED_CURR_LCU),
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFTED_DATA),
 			READ_VREG(HEVC_SHIFT_STATUS));
 
 	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
 		hevc_print(hevc, 0,
-			"265 isr dec status = 0x%x dec info 0x%x shiftbyte 0x%x shiftstatus 0x%x\n",
+			"265 isr dec status = 0x%x dec info 0x%x shiftbyte 0x%x, data:0x%x,shiftstatus 0x%x\n",
 			dec_status, READ_HREG(HEVC_DECODE_INFO),
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFTED_DATA),
 			READ_VREG(HEVC_SHIFT_STATUS));
 
 	debug_tag = READ_HREG(DEBUG_REG1);
@@ -13049,6 +13059,8 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 					hevc->delrefill_check = 2;
 			}
 #endif
+			hevc_print(hevc, PRINT_FLAG_VDEC_STATUS, "%s sao_crc:0x%x sao_crc_3:0x%x shift:0x%x\n", __func__,
+				READ_VREG(HEVC_SAO_CRC), READ_VREG(HEVC_SAO_CRC_3), READ_VREG(HEVC_SHIFT_BYTE_COUNT));
 			hevc->empty_flag = 0;
 			vdec_profile(vdec, VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 pic_done:
@@ -15039,8 +15051,8 @@ static void timeout_process(struct hevc_state_s *hevc)
 {
 	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 
-	hevc_print(hevc, 0, "%s decoder timeout HEVC_MPC_E=0x%x\n",
-		__func__, READ_VREG(HEVC_MPC_E));
+	hevc_print(hevc, 0, "%s decoder timeout HEVC_MPC_E=0x%x, shift_byte:0x%x, shift_data:0x%x\n",
+		__func__, READ_VREG(HEVC_MPC_E), READ_VREG(HEVC_SHIFT_BYTE_COUNT), READ_VREG(HEVC_SHIFT_STATUS));
 
 	reset_process_time(hevc);
 
@@ -15509,7 +15521,12 @@ static unsigned char get_data_check_sum
 	(struct hevc_state_s *hevc, int size)
 {
 	int sum = 0;
+	struct vdec_s *vdec = hw_to_vdec(hevc);
 	u8 *data = NULL;
+
+	if (vdec->is_scatter_input_mode) {
+		return scatter_input_crc32(hevc->chunk->scatter_input_data_package->sgt, size);
+	}
 
 	if (!hevc->chunk->block->is_mapped)
 		data = codec_mm_vmap(hevc->chunk->block->start +
@@ -16001,6 +16018,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			vdec_clean_input(vdec);
 			if (ctx->es_free)
 				ctx->es_free(ctx, vdec->vbuf.buf_rp);
+			if (ctx->scatter_es_free)
+				ctx->scatter_es_free(ctx);
 		}
 
 		if (run_ready(vdec, VDEC_HEVC)) {
@@ -16233,6 +16252,8 @@ done_end:
 		mutex_unlock(&hevc->chunks_mutex);
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+			ctx->scatter_es_free(ctx);
 	} else if (hevc->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -16252,7 +16273,7 @@ done_end:
 				"AGAIN, set unfinsh\n");
 		}
 
-		if (input_stream_based(vdec)) {
+		if (input_stream_based(vdec) && !vdec->is_scatter_input_mode) {
 			u32 rp, wp, level;
 			struct vdec_input_s *input = &vdec->input;
 			rp = STBUF_READ(&vdec->vbuf, get_rp);;
@@ -16288,6 +16309,8 @@ done_end:
 				mutex_unlock(&hevc->chunks_mutex);
 				if (ctx->es_free)
 					ctx->es_free(ctx, vdec->vbuf.buf_rp);
+				if (ctx->scatter_es_free)
+					ctx->scatter_es_free(ctx);
 			} else if ((((error_handle_policy & 0x200) == 0) &&
 						(hevc->pic_list_init_flag == 0))) {
 				check_dirty_data(vdec);
@@ -16332,6 +16355,8 @@ done_end:
 		mutex_unlock(&hevc->chunks_mutex);
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+			ctx->scatter_es_free(ctx);
 	} else if (hevc->dec_result == DEC_RESULT_FORCE_EXIT) {
 		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS, "%s: force exit\n", __func__);
 		if (hevc->stat & STAT_VDEC_RUN) {
@@ -16363,6 +16388,8 @@ done_end:
 		mutex_unlock(&hevc->chunks_mutex);
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
+		if (ctx->scatter_es_free)
+			ctx->scatter_es_free(ctx);
 	} else if (hevc->dec_result == DEC_RESULT_UNFINISH) {
 			int i;
 
@@ -16532,7 +16559,12 @@ done_end:
 			ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_END);
 
 	ATRACE_COUNTER(hevc->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_START);
-	wait_hevc_search_done(hevc);
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
+	} else {
+		wait_hevc_search_done(hevc);
+	}
+
 	ATRACE_COUNTER(hevc->trace.decode_work_time_name, TRACE_WORK_WAIT_SEARCH_DONE_END);
 
 	if (hevc->cur_pic
@@ -16678,6 +16710,7 @@ static int vh265_hw_ctx_restore(struct hevc_state_s *hevc)
 	vh265_prot_init(hevc);
 	return 0;
 }
+
 static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 {
 	struct hevc_state_s *hevc =
@@ -16724,24 +16757,29 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			size, (hevc->need_cache_size >> PAGE_SHIFT),
 			(get_jiffies_64() - hevc->sc_start_time) * (1000/HZ));
 	}
+
 	if (vdec_stream_based(vdec) && (hevc->init_flag == 0)
 			&& pre_decode_buf_level != 0) {
 			u32 rp, wp, level;
-
-			rp = STBUF_READ(&vdec->vbuf, get_rp);
-			wp = STBUF_READ(&vdec->vbuf, get_wp);
-			if (wp < rp)
-				level = vdec->input.size + wp - rp;
-			else
-				level = wp - rp;
-
+			if ( vdec->is_scatter_input_mode) {
+				level = scatter_input_get_data_level(vdec->scatter_input_ctx,
+						scatter_input_get_wp(vdec->scatter_input_ctx),
+						scatter_input_get_shift_byte(vdec->scatter_input_ctx));
+			} else {
+				rp = STBUF_READ(&vdec->vbuf, get_rp);
+				wp = STBUF_READ(&vdec->vbuf, get_wp);
+				if (wp < rp)
+					level = vdec->input.size + wp - rp;
+				else
+					level = wp - rp;
+			}
 			if (level < pre_decode_buf_level)
 				return PRE_LEVEL_NOT_ENOUGH;
 	}
 
 #ifdef AGAIN_HAS_THRESHOLD
 	if (hevc->next_again_flag &&
-		(!vdec_frame_based(vdec))) {
+		(!vdec_frame_based(vdec)) && !vdec->is_scatter_input_mode) {
 		u32 parser_wr_ptr =
 			STBUF_READ(&vdec->vbuf, get_wp);
 		if (parser_wr_ptr >= hevc->pre_parser_wr_ptr &&
@@ -16984,7 +17022,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc->start_shift_bytes);
 	if ((get_dbg_flag(hevc) & PRINT_FRAMEBASE_DATA) &&
 		input_frame_based(vdec) &&
-		!(vdec_secure(vdec))) {
+		!(vdec_secure(vdec)) && !vdec->is_scatter_input_mode) {
 		int jj;
 		u8 *data = NULL;
 		PR_INIT(128);

@@ -89,11 +89,15 @@
 #define HEVC_IQIT_CRC_2                    PSEUDODEF_REG
 #define HEVC_SAO_2D_OFFSET                 PSEUDODEF_REG
 #define HEVC_SAO_2D_SIZE                   PSEUDODEF_REG
-
+#define VDEC_SHIFT_COUNT                   PSEUDODEF_REG
+#define HEVC_SCATTER_MANUAL_CONTROL        PSEUDODEF_REG
+#define HEVC_SCATTER_MANUAL_DATA1          PSEUDODEF_REG
+#define HEVC_SCATTER_MANUAL_DATA2          PSEUDODEF_REG
 #endif
 
 #if !defined(DOS_REGISTERS_V3) &&  !defined(DOS_REGISTERS_V2)
 #define  AXI_ADDR_34                       PSEUDODEF_REG
+#define HEVC_SCATTER_CONTROL               PSEUDODEF_REG
 #endif
 
 /* SYS_CTRL */

@@ -687,6 +687,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_amrisc_imem_size_6k = true,
 		.is_support_afgs = true,
 		.is_support_secure_remap = true,
+		.is_support_scatter_input = true,
 		.dos_dw_capability = YUV_1_2_4 | P010_1_2_4 | AV1_YUV_ONLY,
 	},
 
@@ -1878,3 +1879,8 @@ void dos_info_debug(void)
 }
 EXPORT_SYMBOL(dos_info_debug);
 
+bool is_support_scatter_input(void)
+{
+	return platform_dos_dev->is_support_scatter_input;
+}
+EXPORT_SYMBOL(is_support_scatter_input);

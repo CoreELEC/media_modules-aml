@@ -52,7 +52,7 @@
 #include "../../decoder/utils/vdec_profile.h"
 
 #include "../../decoder/utils/vdec_ge2d_utils.h"
-
+#include "../../decoder/utils/scatter_input.h"
 #define MEM_NAME "codec_mmjpeg"
 
 #define DRIVER_NAME "ammvdec_mjpeg_v4l"
@@ -1390,8 +1390,12 @@ static void timeout_process(struct vdec_mjpeg_hw_s *hw)
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
-		"%s decoder timeout, pc 0x%x\n",
-		__func__, READ_VREG(MPC_E));
+		"%s decoder timeout, pc=%x, level=%d, VIFF_BIT_CNT:0x%x\n",
+		__func__,
+		READ_VREG(MPC_E),
+		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+		READ_VREG(VIFF_BIT_CNT));
+
 
 	hw->vfbuf_use[hw->cur_idx]++;
 	vdec_v4l_post_error_frame_event(ctx);
@@ -1941,7 +1945,20 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 	WRITE_VREG(DEC_STATUS_REG, 0);
 
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
-
+	if (hw_to_vdec(hw)->is_scatter_input_mode) {
+		u32 data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
+		data32 = data32 |  // in scatter input mode, set to 0
+			(1 << 22) |  // stream_fifo_empty_int_amrisc_enable
+			//(1 << 21) |  // stream_map_empty_int_cpu_enable
+			(1 << 7) |  // dec_done_int_amrisc_enable
+			(0 << 4) |  // disable startcode interrupt when SCATTER_ENABLE
+			(0 << 3) |  // startcode_found_int_amrisc_enable
+			(1 << 2) |  // use parser_int_cpu_level instead of pulse to detect interrupt
+			(1 << 0);    // parser_int_enable
+		data32 &= ~(1 << 24);
+		data32 &= ~(1 << 4);
+		WRITE_VREG(HEVC_PARSER_INT_CONTROL, data32);
+	}
 	if (is_need_fix_streambuf_rp()) {
 		if (!hw->init_flag)
 			vmjpeg_workspace_init(hw);
@@ -2223,13 +2240,18 @@ static unsigned long run_ready(struct vdec_s *vdec,
 		&& pre_decode_buf_level != 0) {
 		u32 rp, wp, level;
 
-		rp = STBUF_READ(&vdec->vbuf, get_rp);
-		wp = STBUF_READ(&vdec->vbuf, get_wp);
-		if (wp < rp)
-			level = vdec->input.size + wp - rp;
-		else
-			level = wp - rp;
-
+		if (vdec->is_scatter_input_mode) {
+			level = scatter_input_get_data_level(vdec->scatter_input_ctx,
+						scatter_input_get_wp(vdec->scatter_input_ctx),
+						scatter_input_get_shift_byte(vdec->scatter_input_ctx));
+		} else {
+			rp = STBUF_READ(&vdec->vbuf, get_rp);
+			wp = STBUF_READ(&vdec->vbuf, get_wp);
+			if (wp < rp)
+				level = vdec->input.size + wp - rp;
+			else
+				level = wp - rp;
+		}
 		if (level < pre_decode_buf_level)
 			return PRE_LEVEL_NOT_ENOUGH;
 	}
@@ -2299,7 +2321,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	ret = vdec_prepare_input(vdec, &hw->chunk);
 
-	if (input_frame_based(vdec) && !(vdec_secure(vdec)) && hw->chunk) {
+	if (input_frame_based(vdec) && !(vdec_secure(vdec)) && hw->chunk && !vdec->is_scatter_input_mode) {
 		u8 *data = NULL;
 
 		if (!hw->chunk->block->is_mapped)
@@ -2335,7 +2357,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		return;
 	}
 	ctx->current_timestamp = hw->chunk->timestamp;
-
+	WRITE_VREG(VIFF_BIT_CNT, ret * 8);
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, ret);
 
 	hw->input_empty = 0;
@@ -2521,7 +2543,11 @@ static void vmjpeg_work(struct work_struct *work)
 	}
 	/*disable mbox interrupt */
 	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
-	wait_vmjpeg_search_done(hw);
+	if (vdec->is_scatter_input_mode) {
+		scatter_input_wait_idle();
+	} else {
+		wait_vmjpeg_search_done(hw);
+	}
 
 	if (ctx->param_sets_from_ucode &&
 		!hw->v4l_params_parsed)
