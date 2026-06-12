@@ -26,7 +26,7 @@
 #ifdef SUPPORT_V4L_VPP
 #include <linux/amlogic/media/di/di_interface.h>
 #endif
-#ifdef CONFIG_AMLOGIC_MEDIA_DEINTERLACE
+#ifdef CONFIG_AMLOGIC_MEDIA_DPSS
 #include <linux/amlogic/media/di/dpss_interface.h>
 #endif
 #include "aml_vcodec_drv.h"
@@ -63,7 +63,7 @@ struct aml_v4l2_vpp {
 	u32 buffer_mode;
 	/* for dpss */
 	int dpss_index;
-#ifdef CONFIG_AMLOGIC_MEDIA_DEINTERLACE
+#ifdef CONFIG_AMLOGIC_MEDIA_DPSS
 	struct dpss_init_parm dpss_parm;
 #endif
 	DECLARE_KFIFO_PTR(input, typeof(struct aml_v4l2_vpp_buf*));

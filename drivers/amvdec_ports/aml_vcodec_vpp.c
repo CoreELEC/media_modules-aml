@@ -731,7 +731,7 @@ void aml_v4l2_vpp_recycle(struct aml_v4l2_vpp *vpp, struct aml_v4l2_buf *aml_vb)
 	}
 }
 
-#ifdef CONFIG_AMLOGIC_MEDIA_DEINTERLACE
+#ifdef CONFIG_AMLOGIC_MEDIA_DPSS
 static enum DPSS_ERRORTYPE dpss_empty_input_done(void *arg, struct vframe_s *vf)
 {
 	struct aml_v4l2_vpp *vpp = (struct aml_v4l2_vpp *)arg;
@@ -1078,7 +1078,7 @@ retry:
 				resend_cnt = 1;
 			else
 				resend_cnt = 2;
-#ifdef CONFIG_AMLOGIC_MEDIA_DEINTERLACE
+#ifdef CONFIG_AMLOGIC_MEDIA_DPSS
 			while (resend_cnt > 0) {
 				vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_3,
 						out_buf->aml_vb->aml_buf->index);
@@ -1353,7 +1353,7 @@ int aml_v4l2_vpp_init(
 
 	if (is_support_dpss_front_mode()) {
 		vpp->buffer_mode = BUFFER_MODE_MAX;
-#ifdef CONFIG_AMLOGIC_MEDIA_DEINTERLACE
+#ifdef CONFIG_AMLOGIC_MEDIA_DPSS
 		ret = aml_v4l2_create_di_instance(ctx, cfg, vpp);
 		if (ret < 0) {
 			aml_media_mem_free(vpp);
@@ -1590,7 +1590,7 @@ int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp)
 	}
 
 	if (vpp->dpss_index >= 0) {
-#ifdef CONFIG_AMLOGIC_MEDIA_DEINTERLACE
+#ifdef CONFIG_AMLOGIC_MEDIA_DPSS
 		aml_v4l2_destroy_di_instance(vpp->ctx, vpp);
 #endif
 	} else {
