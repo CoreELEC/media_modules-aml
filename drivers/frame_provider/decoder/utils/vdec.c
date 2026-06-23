@@ -1310,12 +1310,12 @@ inline u64 stream_prefix_get(void)
 }
 EXPORT_SYMBOL(stream_prefix_get);
 
-static void __inline__ scatter_input_prefix_set(ulong prefix)
+inline static void scatter_input_prefix_set(ulong prefix)
 {
 	g_prefix.scatter_input_prefix = prefix;
 }
 
-u32 __inline__ scatter_input_prefix_get(void)
+inline u32 scatter_input_prefix_get(void)
 {
 	return g_prefix.scatter_input_prefix;
 }
