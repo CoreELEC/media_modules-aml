@@ -15509,17 +15509,20 @@ static void reset(struct vdec_s *vdec)
 		(struct hevc_state_s *)vdec->private;
 	int i;
 
-	cancel_work_sync(&hevc->work);
-	cancel_work_sync(&hevc->notify_work);
+	if (hevc->stat & STAT_TIMER_ARM) {
+		del_timer_sync(&hevc->timer);
+		hevc->stat &= ~STAT_TIMER_ARM;
+	}
+
 	if (hevc->stat & STAT_VDEC_RUN) {
 		amhevc_stop();
 		hevc->stat &= ~STAT_VDEC_RUN;
 	}
 
-	if (hevc->stat & STAT_TIMER_ARM) {
-		del_timer_sync(&hevc->timer);
-		hevc->stat &= ~STAT_TIMER_ARM;
-	}
+	cancel_work_sync(&hevc->notify_work);
+	cancel_work_sync(&hevc->set_clk_work);
+	cancel_work_sync(&hevc->timeout_work);
+	cancel_work_sync(&hevc->work);
 	hevc->dec_result = DEC_RESULT_NONE;
 	hevc->timeout_flag = TIMEOUT_INIT;
 	reset_process_time(hevc);
