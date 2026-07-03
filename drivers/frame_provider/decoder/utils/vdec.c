@@ -3998,6 +3998,7 @@ static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_
 	struct vdec_s *vdec, *tmp;
 	unsigned long flags;
 
+	mutex_lock(&vdec_mutex);
 	flags = vdec_core_lock(core);
 
 	list_for_each_entry_safe(vdec, tmp,
@@ -4027,6 +4028,7 @@ static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_
 	}
 
 	vdec_core_unlock(core, flags);
+	mutex_unlock(&vdec_mutex);
 }
 
 st_userdata *get_vdec_userdata_ctx(void)
