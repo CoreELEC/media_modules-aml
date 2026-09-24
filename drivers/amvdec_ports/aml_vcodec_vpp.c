@@ -224,13 +224,13 @@ static void update_vpp_num_cache(struct aml_v4l2_vpp *vpp)
 static int is_di_input_buff_full(struct aml_v4l2_vpp *vpp)
 {
 	return ((vpp->in_num[INPUT_PORT] - vpp->in_num[OUTPUT_PORT])
-		> vpp->di_ibuf_num) ? true : false;
+		>= vpp->di_ibuf_num) ? true : false;
 }
 
 static int is_di_output_buff_full(struct aml_v4l2_vpp *vpp)
 {
 	return ((vpp->out_num[INPUT_PORT] - vpp->out_num[OUTPUT_PORT])
-		> vpp->di_obuf_num) ? true : false;
+		>= vpp->di_obuf_num) ? true : false;
 }
 
 static enum DI_ERRORTYPE
