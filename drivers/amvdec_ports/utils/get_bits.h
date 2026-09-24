@@ -142,7 +142,7 @@ struct get_bits_context {
 #define SHOW_SBITS(name, gb, num) SHOW_SBITS_BE(name, gb, num)
 #endif
 
-static inline const int sign_extend(int val, u32 bits)
+static inline int sign_extend(int val, u32 bits)
 {
 	u32 shift = 8 * sizeof(int) - bits;
 
