@@ -405,6 +405,8 @@ err:
 	if (inst)
 		aml_media_mem_free(inst);
 	*h_vdec = 0;
+	/* avoid dangling pointer, backported from yocto 6.12. */
+	ctx->ada_ctx = NULL;
 
 	return ret;
 }
@@ -1009,6 +1011,7 @@ static int vdec_write_nalu(struct vdec_av1_inst *inst,
 		else
 			ret = -1;
 
+		vfree(meta_buffer);
 		vfree(data);
 	} else {
 		ret = vdec_vframe_write(vdec, buf, size, ts, 0, free, NULL);
