@@ -1352,7 +1352,8 @@ void amstream_wakeup_userdata_poll(struct vdec_s *vdec)
 	mutex_lock(&userdata->mutex);
 
 	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-		if (userdata->set_id_flag && (userdata->id[i] == vdec->video_id)) {
+		if (userdata->set_id_flag && (vdec->video_id != 0xffffffff) &&
+			(userdata->id[i] == vdec->video_id)) {
 			userdata->ready_flag[i] = 1;
 			if (vdec_get_debug_flags() & 0x10000000)
 				pr_info("%s, wakeup! id = %d\n", __func__, vdec->video_id);
