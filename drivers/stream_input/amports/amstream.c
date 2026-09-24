@@ -500,7 +500,9 @@ static void amstream_change_vbufsize(struct port_priv_s *priv,
 			pvbuf->buf_size = pvbuf->buf_size >> 1;
 		}
 	} else if (pvbuf->buf_size > def_vstreambuf_sizeM * SZ_1M) {
-		pvbuf->buf_size = def_vstreambuf_sizeM * SZ_1M;
+		/* do not clamp the user requested buffer size, let DRM/TVP
+		 * streams keep the requested size. Backported from yocto 6.12.
+		 */
 		if (priv->vdec->port_flag & PORT_FLAG_DRM)
 			pvbuf->buf_size = DEFAULT_VIDEO_BUFFER_SIZE_TVP;
 	} else {
