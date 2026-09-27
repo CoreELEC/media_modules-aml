@@ -1862,6 +1862,15 @@ static long amstream_ioctl_get(struct port_priv_s *priv, ulong arg)
 	return r;
 
 }
+
+static u32 vbuf_checkin_offset(struct stream_buf_s *vbuf)
+{
+	/* stream_offset lags write() by the data still queued in threadrw */
+	if (vbuf->write_thread)
+		return threadrw_dataoffset(vbuf);
+	return vbuf->stream_offset;
+}
+
 static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 {
 	struct  stream_port_s *this = priv->port;
@@ -2005,7 +2014,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 			struct stream_buf_s *vbuf = &priv->vdec->vbuf;
 			if (vbuf->no_parser) {
 				pts_checkin_offset(PTS_TYPE_VIDEO,
-					vbuf->stream_offset, parm.data_32);
+					vbuf_checkin_offset(vbuf), parm.data_32);
 			} else {
 				r = es_vpts_checkin(vbuf, parm.data_32);
 			}
@@ -2853,7 +2862,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			struct stream_buf_s *vbuf = &priv->vdec->vbuf;
 			if (vbuf->no_parser) {
 				pts_checkin_offset(PTS_TYPE_VIDEO,
-					vbuf->stream_offset, arg);
+					vbuf_checkin_offset(vbuf), arg);
 			} else {
 				r = es_vpts_checkin(vbuf, arg);
 			}
@@ -2883,7 +2892,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 					struct stream_buf_s *vbuf = &priv->vdec->vbuf;
 					if (vbuf->no_parser && !vdec_single(priv->vdec)) {
 						pts_checkin_offset_us64(PTS_TYPE_VIDEO,
-							vbuf->stream_offset, pts);
+							vbuf_checkin_offset(vbuf), pts);
 					} else {
 						r = es_vpts_checkin_us64(
 						&priv->vdec->vbuf, pts);
