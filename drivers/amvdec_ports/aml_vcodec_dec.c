@@ -2990,9 +2990,10 @@ static int vidioc_vdec_querycap(struct file *file, void *priv,
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(priv);
 	struct video_device *vfd_dec = video_devdata(file);
 
-	strlcpy(cap->driver, AML_VCODEC_DEC_NAME, sizeof(cap->driver));
-	strlcpy(cap->bus_info, AML_PLATFORM_STR, sizeof(cap->bus_info));
-	strlcpy(cap->card, AML_PLATFORM_STR, sizeof(cap->card));
+	/* strlcpy was removed in kernel 6.8+, use strscpy. */
+	strscpy(cap->driver, AML_VCODEC_DEC_NAME, sizeof(cap->driver));
+	strscpy(cap->bus_info, AML_PLATFORM_STR, sizeof(cap->bus_info));
+	strscpy(cap->card, AML_PLATFORM_STR, sizeof(cap->card));
 	cap->device_caps = vfd_dec->device_caps;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, %s\n", __func__, cap->card);
@@ -4378,7 +4379,7 @@ int aml_uvm_buff_attach(struct vb2_buffer * vb)
 {
 	int ret = 0;
 	struct dma_buf *dbuf = vb->planes[0].dbuf;
-	struct uvm_hook_mod_info u_info;
+	struct uvm_hook_mod_info u_info = {0};
 	struct aml_vcodec_ctx *ctx =
 		vb2_get_drv_priv(vb->vb2_queue);
 	struct aml_uvm_buff_ref *ubuf = NULL;

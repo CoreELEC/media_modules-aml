@@ -280,7 +280,7 @@ static void dos_local_config(bool is_on, int id)
 		}
 	}
 
-	pr_info("%s end, id %d, is_on %d\n", __func__, id, is_on);
+	pr_debug("%s end, id %d, is_on %d\n", __func__, id, is_on);
 }
 
 static void pm_vdec_power_domain_power_on(struct device *dev, int id)
@@ -402,7 +402,7 @@ static void pm_vdec_legacy_power_on(struct device *dev, int id)
 {
 	void *decomp_addr = NULL;
 	ulong decomp_dma_addr;
-	ulong mem_handle;
+	ulong mem_handle = 0;
 	u32 decomp_addr_aligned = 0;
 	int hevc_loop = 0;
 	int sleep_val, iso_val;

@@ -337,12 +337,20 @@ static void task_item_release(struct kref *kref)
 	struct task_item_s *item;
 
 	item = container_of(kref, struct task_item_s, ref);
-	list_del(&item->node);
+	/*
+	 * The item may already be dequeued (released once). Guard against
+	 * removing the node twice which corrupts the task list.
+	 * Backported from yocto 6.12 (task_chain_put).
+	 */
+	if (list_empty(&item->node)) {
+		v4l_dbg(item->task->ctx, 0, "TSK: task item released.\n");
+	} else {
+		list_del(&item->node);
 
-	v4l_dbg(item->task->ctx, V4L_DEBUG_TASK_CHAIN,
-		"TSK(%px):%d task item:(%px,%d) released.\n",
-		item->task, item->task->id, item, item->ops->type);
-
+		v4l_dbg(item->task->ctx, V4L_DEBUG_TASK_CHAIN,
+			"TSK(%px):%d task item:(%px,%d) released.\n",
+			item->task, item->task->id, item, item->ops->type);
+	}
 	kref_put(&item->task->ref, task_chain_destroy);
 
 	aml_media_mem_free(item);

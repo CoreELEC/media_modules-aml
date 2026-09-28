@@ -500,7 +500,9 @@ static void amstream_change_vbufsize(struct port_priv_s *priv,
 			pvbuf->buf_size = pvbuf->buf_size >> 1;
 		}
 	} else if (pvbuf->buf_size > def_vstreambuf_sizeM * SZ_1M) {
-		pvbuf->buf_size = def_vstreambuf_sizeM * SZ_1M;
+		/* do not clamp the user requested buffer size, let DRM/TVP
+		 * streams keep the requested size. Backported from yocto 6.12.
+		 */
 		if (priv->vdec->port_flag & PORT_FLAG_DRM)
 			pvbuf->buf_size = DEFAULT_VIDEO_BUFFER_SIZE_TVP;
 	} else {
@@ -1352,7 +1354,8 @@ void amstream_wakeup_userdata_poll(struct vdec_s *vdec)
 	mutex_lock(&userdata->mutex);
 
 	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-		if (userdata->set_id_flag && (userdata->id[i] == vdec->video_id)) {
+		if (userdata->set_id_flag && (vdec->video_id != 0xffffffff) &&
+			(userdata->id[i] == vdec->video_id)) {
 			userdata->ready_flag[i] = 1;
 			if (vdec_get_debug_flags() & 0x10000000)
 				pr_info("%s, wakeup! id = %d\n", __func__, vdec->video_id);
