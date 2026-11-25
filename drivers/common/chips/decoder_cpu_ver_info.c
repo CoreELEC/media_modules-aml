@@ -384,7 +384,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.dos_bus_idle_mask = (0x31 << 26),
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
-		.fmt_support_flags = FMT_VDEC_ALL | FMT_HEVC_VP9_AVS2_AV1_AVS3,
+		.fmt_support_flags = (FMT_VDEC_ALL & ~FMT_MVC) | FMT_HEVC_VP9_AVS2_AV1_AVS3,
 		.is_amrisc_imem_size_6k = true,
 		.dos_dw_capability = YUV_1_2_4_8 | AVBC_1_2_4,
 	},
